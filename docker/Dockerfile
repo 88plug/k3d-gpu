@@ -18,15 +18,11 @@ RUN apt-get update && apt-get install -y curl \
 COPY --from=k3s / / --exclude=/bin/
 COPY --from=k3s /bin /bin
 
-# Deploy the nvidia driver plugin on startup
-COPY plugin/device-plugin-daemonset.yaml /var/lib/rancher/k3s/server/manifests/nvidia-device-plugin-daemonset.yaml
-
 VOLUME /var/lib/kubelet
 VOLUME /var/lib/rancher/k3s
 VOLUME /var/lib/cni
 VOLUME /var/log
 
-# DIFF: resolve fsnotify issues
 RUN sysctl -w fs.inotify.max_user_watches=100000
 RUN sysctl -w fs.inotify.max_user_instances=100000
 
