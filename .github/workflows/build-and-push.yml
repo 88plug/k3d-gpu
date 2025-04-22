@@ -19,20 +19,30 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
+      # ─── 1. Fetch the latest k3s tag matching *-amd64 ───────────────────
       - name: Get latest k3s tag
         id: k3s
         run: |
-          echo "::set-output name=latest::$(curl -s \
-            https://registry.hub.docker.com/v2/repositories/rancher/k3s/tags?page_size=1 \
-            | jq -r '.results[0].name')"
+          latest=$(curl -s \
+            "https://registry.hub.docker.com/v2/repositories/rancher/k3s/tags?page_size=100" \
+            | jq -r '.results[].name' \
+            | grep -E 'amd64$' \
+            | sort -V \
+            | tail -n1)
+          echo "::set-output name=latest::$latest"
 
+      # ─── 2. Fetch the latest CUDA tag matching *-base-ubuntu24.04 ───────
       - name: Get latest CUDA tag
         id: cuda
         run: |
-          echo "::set-output name=latest::$(curl -s \
-            https://registry.hub.docker.com/v2/repositories/nvidia/cuda/tags?page_size=1 \
-            | jq -r '.results[0].name')"
-
+          latest=$(curl -s \
+            "https://registry.hub.docker.com/v2/repositories/nvidia/cuda/tags?page_size=100" \
+            | jq -r '.results[].name' \
+            | grep -E 'base-ubuntu24\.04$' \
+            | sort -V \
+            | tail -n1)
+          echo "::set-output name=latest::$latest"
+          
       - name: Read current ARGs
         id: current
         run: |
