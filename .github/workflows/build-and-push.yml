@@ -12,11 +12,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # ─── 1. Extract the ARG values ───────────────────────────────────────
+      # ─── 1. Extract the ARG values (stripping quotes) ────────────────────
       - name: Extract ARG values
         run: |
-          echo "CUDA_TAG=$(grep '^ARG CUDA_TAG' Dockerfile | cut -d'=' -f2)" >> $GITHUB_ENV
-          echo "K3S_TAG=$(grep '^ARG K3S_TAG' Dockerfile | cut -d'=' -f2)" >> $GITHUB_ENV
+          CUDA_TAG=$(grep '^ARG CUDA_TAG' Dockerfile \
+                     | cut -d= -f2 \
+                     | tr -d '"')
+          K3S_TAG=$(grep '^ARG K3S_TAG' Dockerfile \
+                     | cut -d= -f2 \
+                     | tr -d '"')
+          echo "CUDA_TAG=$CUDA_TAG" >> $GITHUB_ENV
+          echo "K3S_TAG=$K3S_TAG" >> $GITHUB_ENV
 
       # ─── 2. QEMU & Buildx setup ─────────────────────────────────────────
       - name: Set up QEMU
