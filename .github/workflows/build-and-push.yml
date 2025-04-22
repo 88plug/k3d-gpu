@@ -57,7 +57,7 @@ jobs:
 
       - name: No changes? Abort
         if: steps.need.outputs.update == 'false'
-        run: echo "✅ Up‑to‑date: no action needed."
+        run: echo "Up‑to‑date: no action needed."
 
       # ─── 4. Update Dockerfile & README ────────────────────────────────────
       - name: Bump Dockerfile ARGs
