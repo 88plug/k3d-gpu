@@ -1,0 +1,43 @@
+name: Build and Push Docker Image
+on:
+  push:
+    branches: [ main ]
+  release:
+    types: [ published ]
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # ─── 1. Extract the ARG values ───────────────────────────────────────
+      - name: Extract ARG values
+        run: |
+          echo "CUDA_TAG=$(grep '^ARG CUDA_TAG' Dockerfile | cut -d'=' -f2)" >> $GITHUB_ENV
+          echo "K3S_TAG=$(grep '^ARG K3S_TAG' Dockerfile | cut -d'=' -f2)" >> $GITHUB_ENV
+
+      # ─── 2. QEMU & Buildx setup ─────────────────────────────────────────
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      # ─── 3. Login to Docker Hub ─────────────────────────────────────────
+      - name: Login to DockerHub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # ─── 4. Build & push with dynamic tags ──────────────────────────────
+      - name: Build and push
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: |
+            cryptoandcoffee/k3d-gpu:${{ env.CUDA_TAG }}-${{ env.K3S_TAG }}
+            cryptoandcoffee/k3d-gpu:latest
