@@ -1,45 +1,118 @@
-name: Build and Push Docker Image
+name: Auto‑update, Build & Release
+
+# every day at 06:00 UTC, plus manual trigger
 on:
-  push:
-    branches: [ main ]
-  release:
-    types: [ published ]
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write    # allow committing back to the repo
+  packages: write    # allow pushing to Docker Hub via build-push-action
 
 jobs:
-  build-push:
+  update-build-release:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout main
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          persist-credentials: true   # so we can push commits
 
-      # ─── 1. Extract the ARG values (stripping quotes) ────────────────────
-      - name: Extract ARG values
+      # ─── 1. Fetch the upstream tags ────────────────────────────────────────
+      - name: Get latest k3s tag
+        id: k3s
         run: |
-          CUDA_TAG=$(grep '^ARG CUDA_TAG' Dockerfile \
-                     | cut -d= -f2 \
-                     | tr -d '"')
-          K3S_TAG=$(grep '^ARG K3S_TAG' Dockerfile \
-                     | cut -d= -f2 \
-                     | tr -d '"')
-          echo "CUDA_TAG=$CUDA_TAG" >> $GITHUB_ENV
-          echo "K3S_TAG=$K3S_TAG" >> $GITHUB_ENV
+          echo "::set-output name=latest::$(curl -s \
+            https://registry.hub.docker.com/v2/repositories/rancher/k3s/tags?page_size=1 \
+            | jq -r '.results[0].name')"
 
-      # ─── 2. QEMU & Buildx setup ─────────────────────────────────────────
+      - name: Get latest CUDA tag
+        id: cuda
+        run: |
+          echo "::set-output name=latest::$(curl -s \
+            https://registry.hub.docker.com/v2/repositories/nvidia/cuda/tags?page_size=1 \
+            | jq -r '.results[0].name')"
+
+      # ─── 2. Read current ARGs from Dockerfile ─────────────────────────────
+      - name: Read current ARGs
+        id: current
+        run: |
+          ct=$(grep '^ARG CUDA_TAG' Dockerfile | cut -d= -f2 | tr -d '"')
+          kt=$(grep '^ARG K3S_TAG'  Dockerfile | cut -d= -f2 | tr -d '"')
+          echo "::set-output name=cuda::$ct"
+          echo "::set-output name=k3s::$kt"
+
+      # ─── 3. Decide if we need an update ───────────────────────────────────
+      - name: Check for updates
+        id: need
+        run: |
+          if [[ "${{ steps.cuda.outputs.latest }}" != "${{ steps.current.outputs.cuda }}" ]] || \
+             [[ "${{ steps.k3s.outputs.latest }}"  != "${{ steps.current.outputs.k3s }}" ]]; then
+            echo "::set-output name=update::true"
+          else
+            echo "::set-output name=update::false"
+          fi
+
+      - name: No changes? Abort
+        if: steps.need.outputs.update == 'false'
+        run: echo "✅ Up‑to‑date: no action needed."
+
+      # ─── 4. Update Dockerfile & README ────────────────────────────────────
+      - name: Bump Dockerfile ARGs
+        if: steps.need.outputs.update == 'true'
+        run: |
+          sed -i \
+            -e "s|^ARG CUDA_TAG=.*|ARG CUDA_TAG=\"${{ steps.cuda.outputs.latest }}\"|" \
+            -e "s|^ARG K3S_TAG=.*|ARG K3S_TAG=\"${{ steps.k3s.outputs.latest }}\"|" \
+            Dockerfile
+
+      - name: Append to README Release History
+        if: steps.need.outputs.update == 'true'
+        run: |
+          today=$(date -u +'%Y-%m-%d')
+          line="| $today | ${{ steps.cuda.outputs.latest }} | ${{ steps.k3s.outputs.latest }} |"
+          awk -v e="$line" '
+            /^## Release History/ { print; getline; print; print e; next }
+            { print }
+          ' README.md > README.md.new && mv README.md.new README.md
+
+      # ─── 5. Commit & push the bump PR directly to main ────────────────────
+      - name: Commit & Push
+        if: steps.need.outputs.update == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Dockerfile README.md
+          git commit -m "chore: bump CUDA→${{ steps.cuda.outputs.latest }} & K3s→${{ steps.k3s.outputs.latest }}"
+          git push origin HEAD:main
+
+      # ─── 6. Extract those new ARGs again into env ─────────────────────────
+      - name: Export updated ARGs to env
+        if: steps.need.outputs.update == 'true'
+        run: |
+          echo "CUDA_TAG=${{ steps.cuda.outputs.latest }}" >> $GITHUB_ENV
+          echo "K3S_TAG=${{ steps.k3s.outputs.latest }}" >> $GITHUB_ENV
+
+      # ─── 7. Build & Push the Docker image ────────────────────────────────
       - name: Set up QEMU
+        if: steps.need.outputs.update == 'true'
         uses: docker/setup-qemu-action@v2
 
       - name: Set up Docker Buildx
+        if: steps.need.outputs.update == 'true'
         uses: docker/setup-buildx-action@v2
 
-      # ─── 3. Login to Docker Hub ─────────────────────────────────────────
       - name: Login to DockerHub
+        if: steps.need.outputs.update == 'true'
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # ─── 4. Build & push with dynamic tags ──────────────────────────────
-      - name: Build and push
+      - name: Build and push image
+        if: steps.need.outputs.update == 'true'
         uses: docker/build-push-action@v4
         with:
           context: .
@@ -47,3 +120,16 @@ jobs:
           tags: |
             cryptoandcoffee/k3d-gpu:${{ env.CUDA_TAG }}-${{ env.K3S_TAG }}
             cryptoandcoffee/k3d-gpu:latest
+
+      # ─── 8. Create a GitHub Release ───────────────────────────────────────
+      - name: Create GitHub Release
+        if: steps.need.outputs.update == 'true'
+        uses: actions/create-release@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: ${{ env.CUDA_TAG }}-${{ env.K3S_TAG }}
+          release_name: 'k3d-gpu ${{ env.CUDA_TAG }} & ${{ env.K3S_TAG }}'
+          body: |
+            🚀 Published new k3d-gpu image:
+            - `cryptoandcoffee/k3d-gpu:${{ env.CUDA_TAG }}-${{ env.K3S_TAG }}`
+            - `cryptoandcoffee/k3d-gpu:latest`
