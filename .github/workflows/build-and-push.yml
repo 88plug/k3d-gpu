@@ -26,8 +26,8 @@ jobs:
           latest=$(curl -s \
             "https://registry.hub.docker.com/v2/repositories/rancher/k3s/tags?page_size=100" \
             | jq -r '.results[].name' \
-            | grep -E '-amd64$' \
-            | grep -v '-rc' \
+            | grep -E 'amd64$' \
+            | grep -v 'rc' \
             | sort -V \
             | tail -n1)
           echo "::set-output name=latest::$latest"
