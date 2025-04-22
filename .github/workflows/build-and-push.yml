@@ -122,23 +122,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push image
+      - name: Build and push image to DockerHub and GHCR
         if: steps.need.outputs.update == 'true'
         uses: docker/build-push-action@v4
         with:
           context: .
           push: true
+          platforms: linux/amd64
           tags: |
             cryptoandcoffee/k3d-gpu:${{ env.CUDA_TAG }}-${{ env.K3S_TAG }}
             cryptoandcoffee/k3d-gpu:latest
-
-      - name: Build and push to GHCR
-        if: steps.need.outputs.update == 'true'
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          push: true
-          tags: |
             ghcr.io/${{ github.repository_owner }}/k3d-gpu:${{ env.CUDA_TAG }}-${{ env.K3S_TAG }}
             ghcr.io/${{ github.repository_owner }}/k3d-gpu:latest
 
@@ -151,6 +144,13 @@ jobs:
           tag_name: ${{ steps.cuda.outputs.latest }}-${{ steps.k3s.outputs.latest }}
           release_name: k3d-gpu-${{ steps.cuda.outputs.latest }}-${{ steps.k3s.outputs.latest }}
           body: |
-            🚀 Published new k3d-gpu image:
+            ## 🚀 New k3d-gpu Release
+            **Docker Hub**
             - `cryptoandcoffee/k3d-gpu:${{ steps.cuda.outputs.latest }}-${{ steps.k3s.outputs.latest }}`
             - `cryptoandcoffee/k3d-gpu:latest`
+
+            **GitHub Container Registry (GHCR)**
+            - `ghcr.io/${{ github.repository_owner }}/k3d-gpu:${{ steps.cuda.outputs.latest }}-${{ steps.k3s.outputs.latest }}`
+            - `ghcr.io/${{ github.repository_owner }}/k3d-gpu:latest`
+
+
