@@ -1,6 +1,6 @@
 ARG K3S_TAG="v1.34.1-k3s1-amd64"
 #https://hub.docker.com/r/rancher/k3s/tags
-ARG CUDA_TAG="13.0.2-base-ubuntu24.04"
+ARG CUDA_TAG="13.1.0-base-ubuntu24.04"
 #https://hub.docker.com/r/nvidia/cuda/tags
 
 FROM rancher/k3s:$K3S_TAG AS k3s
