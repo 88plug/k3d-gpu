@@ -51,7 +51,7 @@ jobs:
           latest=$(curl -s \
             "https://api.github.com/repos/NVIDIA/k8s-device-plugin/releases/latest" \
             | jq -r '.tag_name')
-          echo "::set-output name=latest::$latest"
+          echo "latest=$latest" >> $GITHUB_OUTPUT
 
       - name: Read current ARGs
         id: current
