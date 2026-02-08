@@ -30,7 +30,7 @@ jobs:
             | grep -v 'rc' \
             | sort -V \
             | tail -n1)
-          echo "::set-output name=latest::$latest"
+          echo "latest=$latest" >> $GITHUB_OUTPUT
 
       # ─── 2. Fetch the latest CUDA tag matching *-base-ubuntu24.04 ───────
       - name: Get latest CUDA tag
@@ -42,7 +42,7 @@ jobs:
             | grep -E 'base-ubuntu24\.04$' \
             | sort -V \
             | tail -n1)
-          echo "::set-output name=latest::$latest"
+          echo "latest=$latest" >> $GITHUB_OUTPUT
 
       # ─── 3. Fetch the latest NVIDIA device plugin version ───────────────
       - name: Get latest NVIDIA device plugin version
@@ -58,17 +58,17 @@ jobs:
         run: |
           ct=$(grep '^ARG CUDA_TAG' Dockerfile | cut -d= -f2 | tr -d '"')
           kt=$(grep '^ARG K3S_TAG' Dockerfile  | cut -d= -f2 | tr -d '"')
-          echo "::set-output name=cuda::$ct"
-          echo "::set-output name=k3s::$kt"
+          echo "cuda=$ct" >> $GITHUB_OUTPUT
+          echo "k3s=$kt" >> $GITHUB_OUTPUT
 
       - name: Determine if update is needed
         id: need
         run: |
           if [[ "${{ steps.cuda.outputs.latest }}" != "${{ steps.current.outputs.cuda }}" ]] || \
              [[ "${{ steps.k3s.outputs.latest }}"  != "${{ steps.current.outputs.k3s }}" ]]; then
-            echo "::set-output name=update::true"
+            echo "update=true" >> $GITHUB_OUTPUT
           else
-            echo "::set-output name=update::false"
+            echo "update=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Abort if nothing to do
@@ -92,7 +92,7 @@ jobs:
               -v k3s="${{ steps.k3s.outputs.latest }}" \
               -v cuda="${{ steps.cuda.outputs.latest }}" \
               -v nvidia_plugin="${{ steps.nvidia_plugin.outputs.latest }}" '
-            /^## Release History/ { print; getline; print; print e; next }
+            /^\|----------/ { print; print e; next }
             /^\| `K3S_TAG`/ { sub(/`v[0-9][^`]*-amd64`/, "`" k3s "`"); print; next }
             /^\| `CUDA_TAG`/ { sub(/`[0-9][^`]*-base-ubuntu[0-9.]*`/, "`" cuda "`"); print; next }
             /kubectl apply -f https:\/\/raw\.githubusercontent\.com\/NVIDIA\/k8s-device-plugin\// {
