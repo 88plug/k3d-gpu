@@ -43,7 +43,16 @@ jobs:
             | sort -V \
             | tail -n1)
           echo "::set-output name=latest::$latest"
-          
+
+      # ─── 3. Fetch the latest NVIDIA device plugin version ───────────────
+      - name: Get latest NVIDIA device plugin version
+        id: nvidia_plugin
+        run: |
+          latest=$(curl -s \
+            "https://api.github.com/repos/NVIDIA/k8s-device-plugin/releases/latest" \
+            | jq -r '.tag_name')
+          echo "::set-output name=latest::$latest"
+
       - name: Read current ARGs
         id: current
         run: |
@@ -81,10 +90,14 @@ jobs:
           entry="| $today | ${{ steps.cuda.outputs.latest }} | ${{ steps.k3s.outputs.latest }} |"
           awk -v e="$entry" \
               -v k3s="${{ steps.k3s.outputs.latest }}" \
-              -v cuda="${{ steps.cuda.outputs.latest }}" '
+              -v cuda="${{ steps.cuda.outputs.latest }}" \
+              -v nvidia_plugin="${{ steps.nvidia_plugin.outputs.latest }}" '
             /^## Release History/ { print; getline; print; print e; next }
             /^\| `K3S_TAG`/ { sub(/`v[0-9][^`]*-amd64`/, "`" k3s "`"); print; next }
             /^\| `CUDA_TAG`/ { sub(/`[0-9][^`]*-base-ubuntu[0-9.]*`/, "`" cuda "`"); print; next }
+            /kubectl apply -f https:\/\/raw\.githubusercontent\.com\/NVIDIA\/k8s-device-plugin\// {
+              sub(/v[0-9]+\.[0-9]+\.[0-9]+/, nvidia_plugin); print; next
+            }
             { print }
           ' README.md > README.md.new && mv README.md.new README.md
 

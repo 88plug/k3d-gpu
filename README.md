@@ -95,7 +95,7 @@ k3d cluster create gpu-cluster \
 To schedule GPU workloads, install the NVIDIA device plugin DaemonSet in your cluster:
 
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/v0.13.0/nvidia-device-plugin.yml
+kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/v0.18.2/nvidia-device-plugin.yml
 ```  
 
 ---
