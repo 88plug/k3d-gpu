@@ -74,13 +74,17 @@ jobs:
             -e "s|^ARG K3S_TAG=.*|ARG K3S_TAG=\"${{ steps.k3s.outputs.latest }}\"|" \
             Dockerfile
 
-      - name: Append to README Release History
+      - name: Update README
         if: steps.need.outputs.update == 'true'
         run: |
           today=$(date -u +'%Y-%m-%d')
           entry="| $today | ${{ steps.cuda.outputs.latest }} | ${{ steps.k3s.outputs.latest }} |"
-          awk -v e="$entry" '
+          awk -v e="$entry" \
+              -v k3s="${{ steps.k3s.outputs.latest }}" \
+              -v cuda="${{ steps.cuda.outputs.latest }}" '
             /^## Release History/ { print; getline; print; print e; next }
+            /^\| `K3S_TAG`/ { sub(/`v[0-9][^`]*-amd64`/, "`" k3s "`"); print; next }
+            /^\| `CUDA_TAG`/ { sub(/`[0-9][^`]*-base-ubuntu[0-9.]*`/, "`" cuda "`"); print; next }
             { print }
           ' README.md > README.md.new && mv README.md.new README.md
 
