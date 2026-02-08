@@ -83,8 +83,8 @@ jobs:
               -v k3s="${{ steps.k3s.outputs.latest }}" \
               -v cuda="${{ steps.cuda.outputs.latest }}" '
             /^## Release History/ { print; getline; print; print e; next }
-            /^\| `K3S_TAG`/ { sub(/`v[0-9][^`]*-amd64`/, "`" k3s "`") }
-            /^\| `CUDA_TAG`/ { sub(/`[0-9][^`]*-base-ubuntu[0-9.]*`/, "`" cuda "`") }
+            /^\| `K3S_TAG`/ { sub(/`v[0-9][^`]*-amd64`/, "`" k3s "`"); print; next }
+            /^\| `CUDA_TAG`/ { sub(/`[0-9][^`]*-base-ubuntu[0-9.]*`/, "`" cuda "`"); print; next }
             { print }
           ' README.md > README.md.new && mv README.md.new README.md
 
