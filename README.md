@@ -14,7 +14,8 @@ A Docker-based solution for building a [rancher/k3s](https://hub.docker.com/r/ra
 6. [Testing GPU Access](#testing-gpu-access)  
 7. [References](#references)  
 8. [Contributing](#contributing)  
-9. [License](#license)  
+9. [Release History](#release-history)  
+10. [License](#license)  
 
 ---
 
@@ -128,6 +129,13 @@ Successful `nvidia-smi` output confirms that your GPU is accessible from within 
 ## Contributing
 
 Contributions, issues, and feature requests are welcome! Please fork the repository and submit a pull request.
+
+---
+
+## Release History
+
+| Date       | CUDA Tag                     | K3s Tag               |
+|------------|------------------------------|-----------------------|
 
 ---
 
