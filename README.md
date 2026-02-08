@@ -149,10 +149,6 @@ Contributions, issues, and feature requests are welcome! Please fork the reposit
 
 ## Release History
 
-Release history is automatically tracked by our CI/CD workflow. Each time K3s or CUDA versions are updated, a new release is created.
-
-For detailed release information, see [GitHub Releases](https://github.com/88plug/k3d-gpu/releases).
-
 | Date       | CUDA Tag                     | K3s Tag               |
 |------------|------------------------------|-----------------------|
 
