@@ -13,18 +13,16 @@ RUN apt-get update && apt-get install -y curl \
       sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
       tee /etc/apt/sources.list.d/nvidia-container-toolkit.list \
     && apt-get update && apt-get install -y nvidia-container-toolkit-base nvidia-container-toolkit nvidia-container-runtime util-linux \
-    && nvidia-ctk runtime configure --runtime=containerd
+    && nvidia-ctk runtime configure --runtime=containerd \
+    && rm -rf /var/lib/apt/lists/*
 
-COPY --from=k3s / / --exclude=/bin/
+COPY --from=k3s / /
 COPY --from=k3s /bin /bin
 
 VOLUME /var/lib/kubelet
 VOLUME /var/lib/rancher/k3s
 VOLUME /var/lib/cni
 VOLUME /var/log
-
-RUN sysctl -w fs.inotify.max_user_watches=100000
-RUN sysctl -w fs.inotify.max_user_instances=100000
 
 ENV PATH="$PATH:/bin/aux"
 

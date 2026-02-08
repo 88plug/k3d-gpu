@@ -41,8 +41,8 @@ A Docker-based solution for building a [rancher/k3s](https://hub.docker.com/r/ra
 
 | Variable    | Default                                | Description                                           |
 |-------------|----------------------------------------|-------------------------------------------------------|
-| `K3S_TAG`   | `v1.29.15-k3s1-amd64`                  | K3s image tag to use from `rancher/k3s`               |
-| `CUDA_TAG`  | `12.8.1-base-ubuntu24.04`              | CUDA base image tag from `nvidia/cuda`                |
+| `K3S_TAG`   | `v1.34.1-k3s1-amd64`                   | K3s image tag to use from `rancher/k3s`               |
+| `CUDA_TAG`  | `13.1.1-base-ubuntu24.04`              | CUDA base image tag from `nvidia/cuda`                |
 
 You can override these when building:
 
@@ -89,6 +89,21 @@ k3d cluster create gpu-cluster \
 ```
 
 > **Note:** The `--gpus all` flag exposes every host GPU to the server and agent containers.
+
+### Host System Configuration
+
+For optimal performance, you may need to increase inotify limits on your **host system** (not in containers):
+
+```bash
+# Temporarily (until reboot):
+sudo sysctl -w fs.inotify.max_user_watches=100000
+sudo sysctl -w fs.inotify.max_user_instances=100000
+
+# Permanently (survives reboots):
+echo "fs.inotify.max_user_watches=100000" | sudo tee -a /etc/sysctl.conf
+echo "fs.inotify.max_user_instances=100000" | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
+```
 
 ### NVIDIA Device Plugin
 
