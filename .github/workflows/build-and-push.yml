@@ -74,6 +74,14 @@ jobs:
             -e "s|^ARG K3S_TAG=.*|ARG K3S_TAG=\"${{ steps.k3s.outputs.latest }}\"|" \
             Dockerfile
 
+      - name: Update README version numbers
+        if: steps.need.outputs.update == 'true'
+        run: |
+          sed -i \
+            -e 's@^| `K3S_TAG`   | `v[^`]*`.*@| `K3S_TAG`   | `${{ steps.k3s.outputs.latest }}`                  | K3s image tag to use from `rancher/k3s`               |@' \
+            -e 's@^| `CUDA_TAG`  | `[^`]*`.*@| `CUDA_TAG`  | `${{ steps.cuda.outputs.latest }}`              | CUDA base image tag from `nvidia/cuda`                |@' \
+            README.md
+
       - name: Append to README Release History
         if: steps.need.outputs.update == 'true'
         run: |
