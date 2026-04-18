@@ -41,9 +41,10 @@ A Docker-based solution for building a [rancher/k3s](https://hub.docker.com/r/ra
 
 | Variable    | Default                                | Description                                           |
 |-------------|----------------------------------------|-------------------------------------------------------|
+| 2026-04-18 | 13.2.1-base-ubuntu24.04 | v1.34.1-k3s1-amd64 |
 | 2026-03-17 | 13.2.0-base-ubuntu24.04 | v1.34.1-k3s1-amd64 |
 | `K3S_TAG`   | `v1.34.1-k3s1-amd64`                   | K3s image tag to use from `rancher/k3s`               |
-| `CUDA_TAG`  | `13.2.0-base-ubuntu24.04`              | CUDA base image tag from `nvidia/cuda`                |
+| `CUDA_TAG`  | `13.2.1-base-ubuntu24.04`              | CUDA base image tag from `nvidia/cuda`                |
 
 You can override these when building:
 
@@ -111,7 +112,7 @@ sudo sysctl -p
 To schedule GPU workloads, install the NVIDIA device plugin DaemonSet in your cluster:
 
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/v0.18.2/nvidia-device-plugin.yml
+kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/v0.19.0/nvidia-device-plugin.yml
 ```  
 
 ---
@@ -152,6 +153,7 @@ Contributions, issues, and feature requests are welcome! Please fork the reposit
 
 | Date       | CUDA Tag                     | K3s Tag               |
 |------------|------------------------------|-----------------------|
+| 2026-04-18 | 13.2.1-base-ubuntu24.04 | v1.34.1-k3s1-amd64 |
 | 2026-03-17 | 13.2.0-base-ubuntu24.04 | v1.34.1-k3s1-amd64 |
 
 ---
