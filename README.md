@@ -1,5 +1,9 @@
 # k3d-gpu
 
+[![AUR](https://img.shields.io/aur/version/k3d-gpu?label=AUR&style=flat-square)](https://aur.archlinux.org/packages/k3d-gpu)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square)](LICENSE)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/88plug/k3d-gpu)
+
 A Docker-based solution for building a [rancher/k3s](https://hub.docker.com/r/rancher/k3s) + [nvidia/cuda](https://hub.docker.com/r/nvidia/cuda) image that enables a k3d cluster to access your host’s NVIDIA CUDA‑capable GPU(s).
 
 ---
