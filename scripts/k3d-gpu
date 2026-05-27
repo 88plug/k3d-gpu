@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # k3d-gpu — bootstrap a GPU-ready k3d cluster using the cryptoandcoffee/k3d-gpu image
+# Manage GPU-ready k3d clusters. https://github.com/88plug/k3d-gpu
 #
 # Subcommands:
 #   up      create cluster, apply NVIDIA device plugin, verify
