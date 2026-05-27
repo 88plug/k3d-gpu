@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  shellcheck:
+    name: Shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: ./scripts
+          severity: warning
+
+  hadolint:
+    name: Dockerfile lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: hadolint/hadolint-action@v3.3.0
+        with:
+          dockerfile: Dockerfile
+          failure-threshold: error
+
+  pkgbuild-lint:
+    name: Lint PKGBUILD in Arch container
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install tools
+        run: pacman -Sy --noconfirm namcap base-devel
+      - name: Create builder user
+        run: |
+          useradd -m builder
+          chown -R builder .
+      - name: Validate .SRCINFO
+        run: |
+          cd packaging/aur
+          su builder -c 'makepkg --printsrcinfo' > /tmp/srcinfo-actual
+          diff -u .SRCINFO /tmp/srcinfo-actual || { echo "::error::.SRCINFO drift — regenerate"; exit 1; }
+      - name: namcap
+        run: namcap packaging/aur/PKGBUILD || true

@@ -1,0 +1,54 @@
+name: Auto-release AUR
+
+# Auto-tag the AUR package on changes to packaging/ or scripts/ or share/.
+# Tag format: aur-vX.Y.Z (distinct from the Docker image tags CUDA-K3S-* used by build-and-push.yml).
+# After tagging, dispatches aur-deploy.yml directly to bypass the GITHUB_TOKEN downstream-trigger limit.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packaging/**'
+      - 'scripts/**'
+      - 'share/**'
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  release:
+    if: "github.actor != '88plug-bot' && !contains(github.event.head_commit.message, '[skip release]')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Compute next AUR patch version
+        id: ver
+        run: |
+          LATEST=$(git tag -l 'aur-v*' --sort=-v:refname | head -1)
+          if [ -z "$LATEST" ]; then
+            NEXT="aur-v0.1.0"
+          else
+            VER=${LATEST#aur-v}
+            MAJ=$(echo "$VER" | cut -d. -f1)
+            MIN=$(echo "$VER" | cut -d. -f2)
+            PATCH=$(echo "$VER" | cut -d. -f3)
+            NEXT="aur-v${MAJ}.${MIN}.$((PATCH+1))"
+          fi
+          echo "tag=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "ver=${NEXT#aur-v}" >> "$GITHUB_OUTPUT"
+
+      - name: Tag and push
+        run: |
+          git config user.name  "88plug-bot"
+          git config user.email "andrew@88plug.com"
+          git tag ${{ steps.ver.outputs.tag }}
+          git push origin ${{ steps.ver.outputs.tag }}
+
+      - name: Dispatch AUR Deploy
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run aur-deploy.yml -f version=${{ steps.ver.outputs.ver }}

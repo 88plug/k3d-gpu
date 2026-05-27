@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+# k3d-gpu — bootstrap a GPU-ready k3d cluster using the cryptoandcoffee/k3d-gpu image
+#
+# Subcommands:
+#   up      create cluster, apply NVIDIA device plugin, verify
+#   down    delete cluster
+#   test    run a CUDA pod and print nvidia-smi
+#   doctor  preflight: GPU present, docker running, nvidia runtime, k3d installed
+#   logs    tail server container logs
+
+set -euo pipefail
+
+CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
+IMAGE="${K3D_GPU_IMAGE:-cryptoandcoffee/k3d-gpu:latest}"
+PLUGIN_MANIFEST="${K3D_GPU_PLUGIN:-/usr/share/k3d-gpu/nvidia-device-plugin.yml}"
+VERSION="0.1.0"
+
+RED=$'\e[31m' GRN=$'\e[32m' YLW=$'\e[33m' RST=$'\e[0m'
+err()  { echo "${RED}ERROR:${RST} $*" >&2; exit 1; }
+info() { echo "${GRN}==>${RST} $*"; }
+warn() { echo "${YLW}WARN:${RST} $*"; }
+
+usage() {
+    cat <<EOF
+k3d-gpu ${VERSION} — GPU-ready k3d clusters
+
+Usage: k3d-gpu <command>
+
+  up        Create cluster '${CLUSTER}' with GPU passthrough
+  down      Delete cluster '${CLUSTER}'
+  test      Run a CUDA pod, print nvidia-smi output
+  doctor    Diagnostic preflight checks
+  logs      Tail k3s server container logs
+  version   Show version
+  help      Show this message
+
+Environment:
+  K3D_GPU_CLUSTER  cluster name        (default: gpu)
+  K3D_GPU_IMAGE    k3s+CUDA image      (default: cryptoandcoffee/k3d-gpu:latest)
+  K3D_GPU_PLUGIN   device plugin yaml  (default: /usr/share/k3d-gpu/nvidia-device-plugin.yml)
+
+Docs: https://github.com/88plug/k3d-gpu
+EOF
+}
+
+require() {
+    command -v "$1" >/dev/null 2>&1 || err "'$1' not found in PATH — see 'k3d-gpu doctor'"
+}
+
+doctor() {
+    local fail=0
+    info "Checking docker..."
+    if command -v docker >/dev/null 2>&1; then
+        if docker info >/dev/null 2>&1; then
+            echo "  ok: docker running"
+        else
+            echo "  ${RED}fail${RST}: docker installed but daemon unreachable (sudo systemctl start docker)"
+            fail=1
+        fi
+    else
+        echo "  ${RED}fail${RST}: docker not installed (sudo pacman -S docker)"
+        fail=1
+    fi
+
+    info "Checking k3d..."
+    if command -v k3d >/dev/null 2>&1; then
+        echo "  ok: $(k3d version | head -1)"
+    else
+        echo "  ${RED}fail${RST}: k3d not installed (yay -S k3d-git)"
+        fail=1
+    fi
+
+    info "Checking kubectl..."
+    command -v kubectl >/dev/null 2>&1 && echo "  ok" || { echo "  ${RED}fail${RST}: kubectl not installed (sudo pacman -S kubectl)"; fail=1; }
+
+    info "Checking NVIDIA GPU..."
+    if [ -e /dev/nvidia0 ] || [ -e /dev/nvidiactl ]; then
+        echo "  ok: /dev/nvidia* present"
+    else
+        echo "  ${RED}fail${RST}: no /dev/nvidia* devices (driver not loaded?)"
+        fail=1
+    fi
+
+    info "Checking nvidia-container-toolkit..."
+    if command -v nvidia-container-runtime >/dev/null 2>&1 \
+       || command -v nvidia-ctk >/dev/null 2>&1; then
+        echo "  ok"
+    else
+        echo "  ${RED}fail${RST}: nvidia-container-toolkit not installed"
+        echo "         install: https://github.com/NVIDIA/nvidia-container-toolkit"
+        fail=1
+    fi
+
+    info "Checking docker NVIDIA runtime..."
+    if docker info 2>/dev/null | grep -q "nvidia"; then
+        echo "  ok: nvidia runtime registered"
+    else
+        echo "  ${YLW}warn${RST}: nvidia runtime not listed (sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker)"
+    fi
+
+    echo ""
+    [ $fail -eq 0 ] && info "All checks passed." || { err "One or more checks failed."; }
+}
+
+cmd_up() {
+    require docker
+    require k3d
+    require kubectl
+
+    info "Creating k3d cluster '${CLUSTER}' with image ${IMAGE}..."
+    k3d cluster create "${CLUSTER}" \
+        --image="${IMAGE}" \
+        --gpus=all \
+        --no-lb \
+        --k3s-arg="--disable=traefik@server:0"
+
+    info "Waiting for nodes Ready..."
+    kubectl wait --for=condition=Ready nodes --all --timeout=120s
+
+    info "Applying NVIDIA device plugin..."
+    if [ -f "${PLUGIN_MANIFEST}" ]; then
+        kubectl apply -f "${PLUGIN_MANIFEST}"
+    else
+        warn "${PLUGIN_MANIFEST} missing — applying upstream from GitHub"
+        kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/main/deployments/static/nvidia-device-plugin.yml
+    fi
+
+    info "Done. Try: k3d-gpu test"
+}
+
+cmd_down() {
+    require k3d
+    info "Deleting k3d cluster '${CLUSTER}'..."
+    k3d cluster delete "${CLUSTER}"
+}
+
+cmd_test() {
+    require kubectl
+    info "Deploying nvidia-smi test pod..."
+    kubectl run nvidia-smi-test --rm -i --restart=Never \
+        --image=nvidia/cuda:12.4.1-base-ubuntu22.04 \
+        --overrides='{"spec":{"containers":[{"name":"nvidia-smi-test","image":"nvidia/cuda:12.4.1-base-ubuntu22.04","resources":{"limits":{"nvidia.com/gpu":1}},"command":["nvidia-smi"]}]}}' \
+        --command nvidia-smi || err "Test pod failed — run 'k3d-gpu doctor'"
+}
+
+cmd_logs() {
+    require docker
+    docker logs -f "k3d-${CLUSTER}-server-0"
+}
+
+case "${1:-help}" in
+    up)      cmd_up      ;;
+    down)    cmd_down    ;;
+    test)    cmd_test    ;;
+    doctor)  doctor      ;;
+    logs)    cmd_logs    ;;
+    version|--version|-v) echo "k3d-gpu ${VERSION}" ;;
+    help|--help|-h) usage ;;
+    *) usage; exit 1 ;;
+esac

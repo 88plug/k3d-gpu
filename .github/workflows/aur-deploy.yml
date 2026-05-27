@@ -1,0 +1,47 @@
+name: AUR Deploy
+
+on:
+  push:
+    tags:
+      - 'aur-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'AUR pkgver without leading v (e.g. 0.1.0)'
+        required: true
+        type: string
+
+jobs:
+  deploy:
+    name: Publish k3d-gpu to AUR
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.version && format('aur-v{0}', inputs.version) || github.ref }}
+
+      - name: Determine version
+        id: ver
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            REF="${GITHUB_REF_NAME#aur-v}"
+            echo "version=$REF" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update PKGBUILD
+        run: |
+          sed -i "s/^pkgver=.*/pkgver=${{ steps.ver.outputs.version }}/" packaging/aur/PKGBUILD
+          sed -i "s/^pkgrel=.*/pkgrel=1/" packaging/aur/PKGBUILD
+
+      - name: Publish to AUR
+        uses: KSXGitHub/github-actions-deploy-aur@v4.1.3
+        with:
+          pkgname: k3d-gpu
+          pkgbuild: packaging/aur/PKGBUILD
+          commit_username: 88plug
+          commit_email: andrew@88plug.com
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: "Update to ${{ steps.ver.outputs.version }}"
+          force_push: true
