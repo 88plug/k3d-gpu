@@ -13,7 +13,7 @@ optdepends=(
     'kubectl: query and apply manifests'
     'nvidia-container-toolkit: GPU container runtime for Docker'
 )
-source=("git+https://github.com/88plug/k3d-gpu.git#tag=v${pkgver}")
+source=("git+https://github.com/88plug/k3d-gpu.git#tag=aur-v${pkgver}")
 sha256sums=('SKIP')
 
 package() {
