@@ -18,6 +18,12 @@ spec:
       labels:
         name: nvidia-device-plugin-ds
     spec:
+      # Run the plugin under the nvidia container runtime so NVML can load and
+      # GPUs are advertised. k3s auto-creates this RuntimeClass when it detects
+      # the nvidia runtime; without it the plugin runs under runc and reports
+      # zero GPUs. Redundant once the node default runtime is nvidia, but keeps
+      # this manifest correct when applied to a cluster that isn't.
+      runtimeClassName: nvidia
       tolerations:
         - key: nvidia.com/gpu
           operator: Exists

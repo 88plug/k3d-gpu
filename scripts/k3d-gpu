@@ -110,11 +110,17 @@ cmd_up() {
     require kubectl
 
     info "Creating k3d cluster '${CLUSTER}' with image ${IMAGE}..."
+    # --default-runtime=nvidia flips the node's embedded containerd default from
+    # runc to the auto-detected nvidia runtime, so every pod gets the GPU driver
+    # libraries. Without it the device plugin runs under runc, NVML can't load,
+    # and the cluster advertises zero GPUs. This is k3s's supported mechanism and
+    # survives the config.toml regeneration that a baked-in default does not.
     k3d cluster create "${CLUSTER}" \
         --image="${IMAGE}" \
         --gpus=all \
         --no-lb \
-        --k3s-arg="--disable=traefik@server:0"
+        --k3s-arg="--disable=traefik@server:0" \
+        --k3s-arg="--default-runtime=nvidia@server:0"
 
     info "Waiting for nodes Ready..."
     kubectl wait --for=condition=Ready nodes --all --timeout=120s
@@ -127,7 +133,35 @@ cmd_up() {
         kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/main/deployments/static/nvidia-device-plugin.yml
     fi
 
-    info "Done. Try: k3d-gpu test"
+    verify_gpus
+}
+
+# Assert the cluster actually exposes GPUs to the scheduler. A "Done" message is
+# worthless if nvidia.com/gpu is 0 — the most common k3d-gpu failure mode is a
+# cluster that comes up healthy but advertises no GPUs.
+verify_gpus() {
+    info "Verifying GPUs are schedulable..."
+    kubectl -n kube-system rollout status daemonset/nvidia-device-plugin-daemonset \
+        --timeout=120s || warn "device plugin rollout did not finish cleanly"
+
+    local total=0 deadline=$((SECONDS + 90))
+    while [ "${SECONDS}" -lt "${deadline}" ]; do
+        total=$(kubectl get nodes \
+            -o 'jsonpath={range .items[*]}{.status.allocatable.nvidia\.com/gpu}{"\n"}{end}' 2>/dev/null \
+            | awk '{s += $1} END {print s + 0}') || total=0
+        [ "${total:-0}" -gt 0 ] && break
+        sleep 3
+    done
+
+    if [ "${total:-0}" -gt 0 ]; then
+        info "GPUs schedulable: nvidia.com/gpu=${total}. Try: k3d-gpu test"
+    else
+        err "Cluster is up but advertises 0 GPUs (nvidia.com/gpu).
+       The device plugin could not initialize NVML — the node's containerd is
+       not using the nvidia runtime. Inspect:
+         kubectl -n kube-system logs -l name=nvidia-device-plugin-ds
+       then run 'k3d-gpu doctor'."
+    fi
 }
 
 cmd_down() {
@@ -143,7 +177,7 @@ cmd_test() {
     # --image is still required by `kubectl run` but the overrides spec wins.
     kubectl run nvidia-smi-test --rm -i --restart=Never \
         --image="${TEST_IMAGE}" \
-        --overrides="{\"spec\":{\"containers\":[{\"name\":\"nvidia-smi-test\",\"image\":\"${TEST_IMAGE}\",\"resources\":{\"limits\":{\"nvidia.com/gpu\":1}},\"command\":[\"nvidia-smi\"]}]}}" \
+        --overrides="{\"spec\":{\"runtimeClassName\":\"nvidia\",\"containers\":[{\"name\":\"nvidia-smi-test\",\"image\":\"${TEST_IMAGE}\",\"resources\":{\"limits\":{\"nvidia.com/gpu\":1}},\"command\":[\"nvidia-smi\"]}]}}" \
         || err "Test pod failed — run 'k3d-gpu doctor'"
 }
 

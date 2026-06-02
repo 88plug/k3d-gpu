@@ -119,10 +119,22 @@ k3d cluster create gpu-cluster \
   --image cryptoandcoffee/k3d-gpu \
   --servers 1 --agents 1 \
   --gpus all \
-  --port 6443:6443@loadbalancer
+  --port 6443:6443@loadbalancer \
+  --k3s-arg "--default-runtime=nvidia@server:*" \
+  --k3s-arg "--default-runtime=nvidia@agent:*"
 ```
 
-> **Note:** The `--gpus all` flag exposes every host GPU to the server and agent containers.
+> **Note:** The `--gpus all` flag exposes every host GPU to the node containers.
+>
+> **`--default-runtime=nvidia` is required.** k3s auto-detects the nvidia
+> containerd runtime but still leaves `runc` as the default, so pods start
+> without the GPU driver libraries — the device plugin then fails with
+> `Failed to initialize NVML: ERROR_LIBRARY_NOT_FOUND` and the cluster
+> advertises **zero** GPUs even though `docker exec … nvidia-smi` works on the
+> node. This flag makes nvidia the default runtime on every node. The
+> [`k3d-gpu` launcher](#quick-start-k3d-gpu-cli) sets it for you. If you cannot
+> change the default runtime, set `runtimeClassName: nvidia` on each GPU pod
+> instead (the bundled device-plugin manifest already does).
 
 ### Host System Configuration
 
@@ -157,13 +169,20 @@ Once your cluster and plugin are running, verify GPU visibility:
 # On the server node:
 docker exec -it k3d-gpu-cluster-server-0 nvidia-smi
 
-# In a pod:
+# In a pod (runtimeClassName is required unless nvidia is the node default):
 kubectl run cuda-test --rm -it --restart=Never \
   --image=nvidia/cuda:13.1.2-base-ubuntu24.04 \
+  --overrides='{"spec":{"runtimeClassName":"nvidia"}}' \
   -- nvidia-smi
 ```
 
 Successful `nvidia-smi` output confirms that your GPU is accessible from within the cluster.
+
+> **Note:** If `nvidia-smi` reports `Failed to initialize NVML` or a non-zero
+> `result=` while `docker exec … nvidia-smi` on the node works, the CUDA image
+> is newer than the host driver. Pin the test image to a tag your driver
+> supports (e.g. via `K3D_GPU_TEST_IMAGE` for the launcher) — see the
+> [CUDA/driver compatibility matrix](https://docs.nvidia.com/deploy/cuda-compatibility/).
 
 ---
 
