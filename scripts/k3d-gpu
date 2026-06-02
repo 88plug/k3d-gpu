@@ -15,7 +15,7 @@ CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 IMAGE="${K3D_GPU_IMAGE:-cryptoandcoffee/k3d-gpu:latest}"
 PLUGIN_MANIFEST="${K3D_GPU_PLUGIN:-/usr/share/k3d-gpu/nvidia-device-plugin.yml}"
 TEST_IMAGE="${K3D_GPU_TEST_IMAGE:-nvidia/cuda:13.1.2-base-ubuntu24.04}"
-VERSION="0.1.0"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.1"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 
 RED=$'\e[31m' GRN=$'\e[32m' YLW=$'\e[33m' RST=$'\e[0m'
 err()  { echo "${RED}ERROR:${RST} $*" >&2; exit 1; }

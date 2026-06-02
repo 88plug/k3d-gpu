@@ -93,6 +93,15 @@ jobs:
             -e "s|k8s-device-plugin:v[0-9]*\.[0-9]*\.[0-9]*|k8s-device-plugin:${{ steps.nvidia_plugin.outputs.latest }}|" \
             share/nvidia-device-plugin.yml
 
+      - name: Bump launcher test-image default
+        if: steps.need.outputs.update == 'true'
+        run: |
+          # Keep the k3d-gpu test pod on the same CUDA tag as the cluster image,
+          # so the test image never drifts behind the auto-bumped Dockerfile ARG.
+          sed -i \
+            -e "s|K3D_GPU_TEST_IMAGE:-nvidia/cuda:[^}]*|K3D_GPU_TEST_IMAGE:-nvidia/cuda:${{ steps.cuda.outputs.latest }}|" \
+            scripts/k3d-gpu
+
       - name: Update README
         if: steps.need.outputs.update == 'true'
         run: |
@@ -106,6 +115,8 @@ jobs:
             in_rh && /^\|----------/ { print; print e; in_rh = 0; next }
             /^\| `K3S_TAG`/ { sub(/`v[0-9][^`]*-amd64`/, "`" k3s "`"); print; next }
             /^\| `CUDA_TAG`/ { sub(/`[0-9][^`]*-base-ubuntu[0-9.]*`/, "`" cuda "`"); print; next }
+            /^\| `K3D_GPU_TEST_IMAGE`/ { sub(/nvidia\/cuda:[0-9][^`]*/, "nvidia/cuda:" cuda); print; next }
+            /--image=nvidia\/cuda:[0-9]/ { sub(/nvidia\/cuda:[0-9][^ ]*/, "nvidia/cuda:" cuda); print; next }
             /kubectl apply -f https:\/\/raw\.githubusercontent\.com\/NVIDIA\/k8s-device-plugin\// {
               sub(/v[0-9]+\.[0-9]+\.[0-9]+/, nvidia_plugin); print; next
             }
@@ -117,7 +128,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Dockerfile README.md share/nvidia-device-plugin.yml
+          git add Dockerfile README.md share/nvidia-device-plugin.yml scripts/k3d-gpu
           git commit -m "chore: bump CUDA→${{ steps.cuda.outputs.latest }} & K3s→${{ steps.k3s.outputs.latest }} & device-plugin→${{ steps.nvidia_plugin.outputs.latest }}"
           git push origin HEAD:main
 
