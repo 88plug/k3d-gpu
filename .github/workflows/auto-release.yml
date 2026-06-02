@@ -41,10 +41,30 @@ jobs:
           echo "tag=$NEXT" >> "$GITHUB_OUTPUT"
           echo "ver=${NEXT#aur-v}" >> "$GITHUB_OUTPUT"
 
-      - name: Tag and push
+      - name: Sync version into tracked files
+        env:
+          VER: ${{ steps.ver.outputs.ver }}
+        run: |
+          # Keep the launcher's VERSION, PKGBUILD pkgver, and .SRCINFO in lockstep
+          # with the AUR tag. .SRCINFO is edited by sed (not makepkg) so the lines
+          # match exactly what `makepkg --printsrcinfo` produces — the ci.yml drift
+          # check then passes. pkgrel stays 1.
+          sed -i "s|^VERSION=\".*\"|VERSION=\"${VER}\"|" scripts/k3d-gpu
+          sed -i "s|^pkgver=.*|pkgver=${VER}|" packaging/aur/PKGBUILD
+          sed -i \
+            -e "s|^\tpkgver = .*|\tpkgver = ${VER}|" \
+            -e "s|#tag=aur-v.*|#tag=aur-v${VER}|" \
+            packaging/aur/.SRCINFO
+
+      - name: Commit, tag and push
+        env:
+          VER: ${{ steps.ver.outputs.ver }}
         run: |
           git config user.name  "88plug-bot"
           git config user.email "andrew@88plug.com"
+          git add scripts/k3d-gpu packaging/aur/PKGBUILD packaging/aur/.SRCINFO
+          git commit -m "release: aur-v${VER} [skip release]"
+          git push origin HEAD:main
           git tag ${{ steps.ver.outputs.tag }}
           git push origin ${{ steps.ver.outputs.tag }}
 

@@ -58,14 +58,17 @@ jobs:
         run: |
           ct=$(grep '^ARG CUDA_TAG' Dockerfile | cut -d= -f2 | tr -d '"')
           kt=$(grep '^ARG K3S_TAG' Dockerfile  | cut -d= -f2 | tr -d '"')
+          pp=$(grep -oE 'k8s-device-plugin:v[0-9]+\.[0-9]+\.[0-9]+' share/nvidia-device-plugin.yml | cut -d: -f2)
           echo "cuda=$ct" >> $GITHUB_OUTPUT
           echo "k3s=$kt" >> $GITHUB_OUTPUT
+          echo "plugin=$pp" >> $GITHUB_OUTPUT
 
       - name: Determine if update is needed
         id: need
         run: |
           if [[ "${{ steps.cuda.outputs.latest }}" != "${{ steps.current.outputs.cuda }}" ]] || \
-             [[ "${{ steps.k3s.outputs.latest }}"  != "${{ steps.current.outputs.k3s }}" ]]; then
+             [[ "${{ steps.k3s.outputs.latest }}"  != "${{ steps.current.outputs.k3s }}" ]] || \
+             [[ "${{ steps.nvidia_plugin.outputs.latest }}" != "${{ steps.current.outputs.plugin }}" ]]; then
             echo "update=true" >> $GITHUB_OUTPUT
           else
             echo "update=false" >> $GITHUB_OUTPUT
@@ -83,6 +86,13 @@ jobs:
             -e "s|^ARG K3S_TAG=.*|ARG K3S_TAG=\"${{ steps.k3s.outputs.latest }}\"|" \
             Dockerfile
 
+      - name: Bump bundled device-plugin manifest
+        if: steps.need.outputs.update == 'true'
+        run: |
+          sed -i \
+            -e "s|k8s-device-plugin:v[0-9]*\.[0-9]*\.[0-9]*|k8s-device-plugin:${{ steps.nvidia_plugin.outputs.latest }}|" \
+            share/nvidia-device-plugin.yml
+
       - name: Update README
         if: steps.need.outputs.update == 'true'
         run: |
@@ -92,7 +102,8 @@ jobs:
               -v k3s="${{ steps.k3s.outputs.latest }}" \
               -v cuda="${{ steps.cuda.outputs.latest }}" \
               -v nvidia_plugin="${{ steps.nvidia_plugin.outputs.latest }}" '
-            /^\|----------/ { print; print e; next }
+            /^## Release History/ { in_rh = 1 }
+            in_rh && /^\|----------/ { print; print e; in_rh = 0; next }
             /^\| `K3S_TAG`/ { sub(/`v[0-9][^`]*-amd64`/, "`" k3s "`"); print; next }
             /^\| `CUDA_TAG`/ { sub(/`[0-9][^`]*-base-ubuntu[0-9.]*`/, "`" cuda "`"); print; next }
             /kubectl apply -f https:\/\/raw\.githubusercontent\.com\/NVIDIA\/k8s-device-plugin\// {
@@ -106,8 +117,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Dockerfile README.md
-          git commit -m "chore: bump CUDA→${{ steps.cuda.outputs.latest }} & K3s→${{ steps.k3s.outputs.latest }}"
+          git add Dockerfile README.md share/nvidia-device-plugin.yml
+          git commit -m "chore: bump CUDA→${{ steps.cuda.outputs.latest }} & K3s→${{ steps.k3s.outputs.latest }} & device-plugin→${{ steps.nvidia_plugin.outputs.latest }}"
           git push origin HEAD:main
 
       - name: Prepare build tags

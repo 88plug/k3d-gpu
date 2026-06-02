@@ -10,16 +10,46 @@ A Docker-based solution for building a [rancher/k3s](https://hub.docker.com/r/ra
 
 ## Table of Contents
 
-1. [Features](#features)  
-2. [Prerequisites](#prerequisites)  
-3. [Environment Variables](#environment-variables)  
-4. [Building & Pushing the Image](#building--pushing-the-image)  
-5. [k3d Cluster Setup](#k3d-cluster-setup)  
-6. [Testing GPU Access](#testing-gpu-access)  
-7. [References](#references)  
-8. [Contributing](#contributing)  
-9. [Release History](#release-history)  
-10. [License](#license)  
+1. [Quick Start (k3d-gpu CLI)](#quick-start-k3d-gpu-cli)  
+2. [Features](#features)  
+3. [Prerequisites](#prerequisites)  
+4. [Environment Variables](#environment-variables)  
+5. [Building & Pushing the Image](#building--pushing-the-image)  
+6. [k3d Cluster Setup](#k3d-cluster-setup)  
+7. [Testing GPU Access](#testing-gpu-access)  
+8. [References](#references)  
+9. [Contributing](#contributing)  
+10. [Release History](#release-history)  
+11. [License](#license)  
+
+---
+
+## Quick Start (k3d-gpu CLI)
+
+The Arch package installs a `k3d-gpu` launcher that wraps the whole workflow — no
+need to remember `k3d cluster create` flags:
+
+```bash
+yay -S k3d-gpu          # or build from packaging/aur/PKGBUILD
+
+k3d-gpu doctor          # preflight: GPU, docker, nvidia runtime, k3d, kubectl
+k3d-gpu up              # create the cluster + apply the NVIDIA device plugin
+k3d-gpu test            # run a CUDA pod and print nvidia-smi
+k3d-gpu logs            # tail the k3s server container logs
+k3d-gpu down            # delete the cluster
+```
+
+Behaviour is tunable via environment variables:
+
+| Variable             | Default                                   | Description                          |
+|----------------------|-------------------------------------------|--------------------------------------|
+| `K3D_GPU_CLUSTER`    | `gpu`                                     | cluster name                         |
+| `K3D_GPU_IMAGE`      | `cryptoandcoffee/k3d-gpu:latest`          | k3s + CUDA image                     |
+| `K3D_GPU_PLUGIN`     | `/usr/share/k3d-gpu/nvidia-device-plugin.yml` | bundled device-plugin manifest   |
+| `K3D_GPU_TEST_IMAGE` | `nvidia/cuda:13.1.2-base-ubuntu24.04`     | image used by `k3d-gpu test`         |
+
+The rest of this README documents the underlying image and the manual `k3d`
+commands the launcher runs for you.
 
 ---
 
@@ -45,9 +75,6 @@ A Docker-based solution for building a [rancher/k3s](https://hub.docker.com/r/ra
 
 | Variable    | Default                                | Description                                           |
 |-------------|----------------------------------------|-------------------------------------------------------|
-| 2026-05-02 | 13.1.2-base-ubuntu24.04 | v1.34.1-k3s1-amd64 |
-| 2026-04-18 | 13.2.1-base-ubuntu24.04 | v1.34.1-k3s1-amd64 |
-| 2026-03-17 | 13.2.0-base-ubuntu24.04 | v1.34.1-k3s1-amd64 |
 | `K3S_TAG`   | `v1.34.1-k3s1-amd64`                   | K3s image tag to use from `rancher/k3s`               |
 | `CUDA_TAG`  | `13.1.2-base-ubuntu24.04`              | CUDA base image tag from `nvidia/cuda`                |
 
@@ -117,7 +144,7 @@ sudo sysctl -p
 To schedule GPU workloads, install the NVIDIA device plugin DaemonSet in your cluster:
 
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/v0.19.1/nvidia-device-plugin.yml
+kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/v0.19.2/nvidia-device-plugin.yml
 ```  
 
 ---
@@ -132,7 +159,7 @@ docker exec -it k3d-gpu-cluster-server-0 nvidia-smi
 
 # In a pod:
 kubectl run cuda-test --rm -it --restart=Never \
-  --image=nvidia/cuda:12.0-base-ubuntu22.04 \
+  --image=nvidia/cuda:13.1.2-base-ubuntu24.04 \
   -- nvidia-smi
 ```
 
@@ -166,5 +193,5 @@ Contributions, issues, and feature requests are welcome! Please fork the reposit
 
 ## License
 
-Apache 2.0 © 2025 Crypto & Coffee Development Team
+[FSL-1.1-ALv2](LICENSE.md) © 2025 Crypto & Coffee Development Team
 
