@@ -4,7 +4,7 @@
 [![License: FSL-1.1-ALv2](https://img.shields.io/badge/license-FSL--1.1--ALv2-blue?style=flat-square)](LICENSE.md)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/88plug/k3d-gpu)
 
-A Docker-based solution for building a [rancher/k3s](https://hub.docker.com/r/rancher/k3s) + [nvidia/cuda](https://hub.docker.com/r/nvidia/cuda) image that enables a k3d cluster to access your host’s NVIDIA CUDA‑capable GPU(s).
+A Docker-based [rancher/k3s](https://hub.docker.com/r/rancher/k3s) node image on an [Ubuntu](https://hub.docker.com/_/ubuntu) base with the NVIDIA container toolkit baked in, so a k3d cluster can schedule your host’s NVIDIA GPU(s) — GPUs are exposed on `up` with no `kubectl apply`. Built for **Ubuntu 26.04** (default) and **24.04**.
 
 ---
 
@@ -33,7 +33,7 @@ need to remember `k3d cluster create` flags:
 yay -S k3d-gpu          # or build from packaging/aur/PKGBUILD
 
 k3d-gpu doctor          # preflight: GPU, docker, nvidia runtime, k3d, kubectl
-k3d-gpu up              # create the cluster + apply the NVIDIA device plugin
+k3d-gpu up              # create the cluster (device plugin auto-deploys), verify GPUs>0
 k3d-gpu test            # run a CUDA pod and print nvidia-smi
 k3d-gpu logs            # tail the k3s server container logs
 k3d-gpu down            # delete the cluster
@@ -44,8 +44,8 @@ Behaviour is tunable via environment variables:
 | Variable             | Default                                   | Description                          |
 |----------------------|-------------------------------------------|--------------------------------------|
 | `K3D_GPU_CLUSTER`    | `gpu`                                     | cluster name                         |
-| `K3D_GPU_IMAGE`      | `cryptoandcoffee/k3d-gpu:latest`          | k3s + CUDA image                     |
-| `K3D_GPU_PLUGIN`     | `/usr/share/k3d-gpu/nvidia-device-plugin.yml` | bundled device-plugin manifest   |
+| `K3D_GPU_IMAGE`      | `cryptoandcoffee/k3d-gpu:latest`          | node image (`latest` = ubuntu26.04)  |
+| `K3D_GPU_PLUGIN`     | `/usr/share/k3d-gpu/nvidia-device-plugin.yml` | fallback manifest (only used if a custom image lacks the baked one) |
 | `K3D_GPU_TEST_IMAGE` | `nvidia/cuda:13.1.2-base-ubuntu24.04`     | image used by `k3d-gpu test`         |
 
 The rest of this README documents the underlying image and the manual `k3d`
@@ -55,11 +55,12 @@ commands the launcher runs for you.
 
 ## Features
 
-- Combines K3s and NVIDIA CUDA support in a single container image  
-- Pre‑configured with NVIDIA Container Toolkit for containerd  
-- Exposes standard K3s entrypoint (`/bin/k3s agent`)  
-- Mounts volumes for kubelet, k3s state, CNI, and logs  
-- Tunable via build arguments for K3s and CUDA versions  
+- K3s + NVIDIA Container Toolkit on an Ubuntu base — **26.04** (default) and **24.04**  
+- NVIDIA device plugin **baked into k3s auto-deploy** — `up` exposes GPUs with no `kubectl apply`  
+- Pre‑configured nvidia containerd runtime; `--default-runtime=nvidia` for zero-config GPU pods  
+- No CUDA toolkit in the node image — driver libs are injected from the host, workloads bring their own CUDA  
+- Exposes the standard K3s entrypoint (`/bin/k3s agent`); volumes for kubelet, k3s state, CNI, logs  
+- Tunable via build arguments for the K3s and Ubuntu versions  
 
 ---
 
@@ -67,24 +68,25 @@ commands the launcher runs for you.
 
 - **Docker** (20.10+), configured with NVIDIA GPU support (i.e., `nvidia-docker2` or Docker’s built‑in `--gpus`)  
 - **k3d** (v5.0.0 or later) to manage local K3s clusters  
-- A host NVIDIA GPU with up‑to‑date drivers & CUDA toolkit  
+- A host NVIDIA GPU with an up‑to‑date driver (the node image needs no CUDA toolkit)  
 
 ---
 
 ## Environment Variables
 
-| Variable    | Default                                | Description                                           |
-|-------------|----------------------------------------|-------------------------------------------------------|
-| `K3S_TAG`   | `v1.34.1-k3s1-amd64`                   | K3s image tag to use from `rancher/k3s`               |
-| `CUDA_TAG`  | `13.1.2-base-ubuntu24.04`              | CUDA base image tag from `nvidia/cuda`                |
+These are Docker **build args** (not runtime env):
 
-You can override these when building:
+| Build arg    | Default               | Description                                  |
+|--------------|-----------------------|----------------------------------------------|
+| `K3S_TAG`    | `v1.34.1-k3s1-amd64`  | K3s image tag from `rancher/k3s` (auto-bumped) |
+| `UBUNTU_TAG` | `26.04`               | Ubuntu base tag (`26.04` default; `24.04` also published) |
+
+Build a specific Ubuntu base:
 
 ```bash
 docker build \
-  --build-arg K3S_TAG="v1.28.8-k3s1" \
-  --build-arg CUDA_TAG="12.4.1-base-ubuntu22.04" \
-  -t cryptoandcoffee/k3d-gpu .
+  --build-arg UBUNTU_TAG="24.04" \
+  -t cryptoandcoffee/k3d-gpu:ubuntu24.04 .
 ```
 
 ---
@@ -153,35 +155,38 @@ sudo sysctl -p
 
 ### NVIDIA Device Plugin
 
-To schedule GPU workloads, install the NVIDIA device plugin DaemonSet in your cluster:
+The device plugin is **baked into the image** at
+`/var/lib/rancher/k3s/server/manifests/`, so k3s auto-deploys it on startup —
+nothing to install. The bundled manifest sets `runtimeClassName: nvidia`, so GPUs
+are advertised even without changing the node default runtime.
+
+Only if you run a **custom base image** that doesn't ship it, apply the upstream
+manifest yourself:
 
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/v0.19.2/nvidia-device-plugin.yml
-```  
+kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/main/deployments/static/nvidia-device-plugin.yml
+```
 
 ---
 
 ## Testing GPU Access
 
-Once your cluster and plugin are running, verify GPU visibility:
+Verify GPU visibility:
 
 ```bash
-# On the server node:
-docker exec -it k3d-gpu-cluster-server-0 nvidia-smi
+k3d-gpu test            # runs a CUDA pod (runtimeClassName: nvidia) and prints nvidia-smi
 
-# In a pod (runtimeClassName is required unless nvidia is the node default):
-kubectl run cuda-test --rm -it --restart=Never \
-  --image=nvidia/cuda:13.1.2-base-ubuntu24.04 \
-  --overrides='{"spec":{"runtimeClassName":"nvidia"}}' \
-  -- nvidia-smi
+# or check the scheduler directly — must be > 0:
+kubectl get nodes -o jsonpath='{.items[*].status.allocatable.nvidia\.com/gpu}{"\n"}'
 ```
 
-Successful `nvidia-smi` output confirms that your GPU is accessible from within the cluster.
+`k3d-gpu up` already asserts `nvidia.com/gpu > 0` and fails loudly if not, so a
+clean `up` means GPUs are schedulable.
 
 > **Note:** If `nvidia-smi` reports `Failed to initialize NVML` or a non-zero
-> `result=` while `docker exec … nvidia-smi` on the node works, the CUDA image
-> is newer than the host driver. Pin the test image to a tag your driver
-> supports (e.g. via `K3D_GPU_TEST_IMAGE` for the launcher) — see the
+> `result=` while `docker exec … nvidia-smi` on the node works, the test pod's
+> CUDA image is newer than the host driver. Point `K3D_GPU_TEST_IMAGE` at a tag
+> your driver supports — see the
 > [CUDA/driver compatibility matrix](https://docs.nvidia.com/deploy/cuda-compatibility/).
 
 ---
@@ -202,11 +207,9 @@ Contributions, issues, and feature requests are welcome! Please fork the reposit
 
 ## Release History
 
-| Date       | CUDA Tag                     | K3s Tag               |
-|------------|------------------------------|-----------------------|
-| 2026-05-02 | 13.1.2-base-ubuntu24.04 | v1.34.1-k3s1-amd64 |
-| 2026-04-18 | 13.2.1-base-ubuntu24.04 | v1.34.1-k3s1-amd64 |
-| 2026-03-17 | 13.2.0-base-ubuntu24.04 | v1.34.1-k3s1-amd64 |
+| Date       | K3s Tag             | Device Plugin |
+|------------|---------------------|---------------|
+| 2026-06-02 | v1.34.1-k3s1-amd64  | v0.19.2       |
 
 ---
 

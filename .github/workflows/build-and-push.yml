@@ -19,12 +19,12 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
-      # ─── 1. Fetch the latest k3s tag matching *-amd64 ───────────────────
+      # ─── 1. Latest k3s tag (*-amd64) ────────────────────────────────────
       - name: Get latest k3s tag
         id: k3s
         run: |
-          # name= filter scopes the scan to amd64 tags, then paginate via .next so a
-          # high version can't be hidden past page 1 (push-order != version-order).
+          # name= filter scopes the scan, then paginate via .next so a high
+          # version can't be hidden past page 1 (push-order != version-order).
           latest=$(
             url="https://registry.hub.docker.com/v2/repositories/rancher/k3s/tags?page_size=100&name=amd64"
             for _ in $(seq 1 20); do
@@ -37,28 +37,7 @@ jobs:
           [ -n "$latest" ] || { echo "::error::no k3s tag resolved from registry"; exit 1; }
           echo "latest=$latest" >> "$GITHUB_OUTPUT"
 
-      # ─── 2. Fetch the latest CUDA tag matching *-base-ubuntu24.04 ───────
-      - name: Get latest CUDA tag (newest base-ubuntu LTS)
-        id: cuda
-        run: |
-          # Track the newest CUDA on the newest Ubuntu base NVIDIA publishes. Today
-          # that resolves to base-ubuntu24.04; when NVIDIA ships base-ubuntu26.04 it
-          # is adopted automatically — sort -V ranks higher CUDA first, then higher
-          # Ubuntu. The name= filter + pagination is what fixes the historical
-          # 13.2.1 -> 13.1.2 regression (a higher version sitting past page 1).
-          latest=$(
-            url="https://registry.hub.docker.com/v2/repositories/nvidia/cuda/tags?page_size=100&name=base-ubuntu"
-            for _ in $(seq 1 20); do
-              [ -z "$url" ] && break; [ "$url" = "null" ] && break
-              resp=$(curl -fsSL "$url") || break
-              printf '%s\n' "$resp" | jq -r '.results[].name'
-              url=$(printf '%s' "$resp" | jq -r '.next')
-            done | grep -E '^[0-9][0-9.]*-base-ubuntu[0-9.]+$' | sort -V | tail -n1
-          )
-          [ -n "$latest" ] || { echo "::error::no CUDA tag resolved from registry"; exit 1; }
-          echo "latest=$latest" >> "$GITHUB_OUTPUT"
-
-      # ─── 3. Fetch the latest NVIDIA device plugin version ───────────────
+      # ─── 2. Latest NVIDIA device plugin release (baked into the image) ───
       - name: Get latest NVIDIA device plugin version
         id: nvidia_plugin
         run: |
@@ -68,73 +47,67 @@ jobs:
           [ -n "$latest" ] && [ "$latest" != "null" ] || { echo "::error::no device-plugin release resolved"; exit 1; }
           echo "latest=$latest" >> "$GITHUB_OUTPUT"
 
-      - name: Read current ARGs
+      # ─── 3. Latest CUDA base — used ONLY for the `k3d-gpu test` pod image, ─
+      #        not the node base (the node runs on Ubuntu now).
+      - name: Get latest CUDA tag for the test pod image
+        id: cuda
+        run: |
+          latest=$(
+            url="https://registry.hub.docker.com/v2/repositories/nvidia/cuda/tags?page_size=100&name=base-ubuntu"
+            for _ in $(seq 1 20); do
+              [ -z "$url" ] && break; [ "$url" = "null" ] && break
+              resp=$(curl -fsSL "$url") || break
+              printf '%s\n' "$resp" | jq -r '.results[].name'
+              url=$(printf '%s' "$resp" | jq -r '.next')
+            done | grep -E '^[0-9][0-9.]*-base-ubuntu[0-9.]+$' | sort -V | tail -n1
+          )
+          [ -n "$latest" ] || { echo "::error::no CUDA test-image tag resolved"; exit 1; }
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+
+      - name: Read current pinned versions
         id: current
         run: |
-          ct=$(grep '^ARG CUDA_TAG' Dockerfile | cut -d= -f2 | tr -d '"')
-          kt=$(grep '^ARG K3S_TAG' Dockerfile  | cut -d= -f2 | tr -d '"')
+          kt=$(grep '^ARG K3S_TAG' Dockerfile | cut -d= -f2 | tr -d '"')
           pp=$(grep -oE 'k8s-device-plugin:v[0-9]+\.[0-9]+\.[0-9]+' share/nvidia-device-plugin.yml | cut -d: -f2)
-          echo "cuda=$ct" >> $GITHUB_OUTPUT
-          echo "k3s=$kt" >> $GITHUB_OUTPUT
-          echo "plugin=$pp" >> $GITHUB_OUTPUT
+          ti=$(grep -oE 'K3D_GPU_TEST_IMAGE:-nvidia/cuda:[^}]*' scripts/k3d-gpu | sed 's#.*nvidia/cuda:##')
+          echo "k3s=$kt" >> "$GITHUB_OUTPUT"
+          echo "plugin=$pp" >> "$GITHUB_OUTPUT"
+          echo "testcuda=$ti" >> "$GITHUB_OUTPUT"
 
       - name: Determine if update is needed
         id: need
         run: |
-          if [[ "${{ steps.cuda.outputs.latest }}" != "${{ steps.current.outputs.cuda }}" ]] || \
-             [[ "${{ steps.k3s.outputs.latest }}"  != "${{ steps.current.outputs.k3s }}" ]] || \
-             [[ "${{ steps.nvidia_plugin.outputs.latest }}" != "${{ steps.current.outputs.plugin }}" ]]; then
-            echo "update=true" >> $GITHUB_OUTPUT
+          if [ "${{ steps.k3s.outputs.latest }}" != "${{ steps.current.outputs.k3s }}" ] || \
+             [ "${{ steps.nvidia_plugin.outputs.latest }}" != "${{ steps.current.outputs.plugin }}" ] || \
+             [ "${{ steps.cuda.outputs.latest }}" != "${{ steps.current.outputs.testcuda }}" ]; then
+            echo "update=true" >> "$GITHUB_OUTPUT"
           else
-            echo "update=false" >> $GITHUB_OUTPUT
+            echo "update=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Abort if nothing to do
         if: steps.need.outputs.update == 'false'
         run: exit 0
 
-      - name: Bump Dockerfile ARGs
+      - name: Bump pinned versions
         if: steps.need.outputs.update == 'true'
         run: |
-          sed -i \
-            -e "s|^ARG CUDA_TAG=.*|ARG CUDA_TAG=\"${{ steps.cuda.outputs.latest }}\"|" \
-            -e "s|^ARG K3S_TAG=.*|ARG K3S_TAG=\"${{ steps.k3s.outputs.latest }}\"|" \
-            Dockerfile
-
-      - name: Bump bundled device-plugin manifest
-        if: steps.need.outputs.update == 'true'
-        run: |
-          sed -i \
-            -e "s|k8s-device-plugin:v[0-9]*\.[0-9]*\.[0-9]*|k8s-device-plugin:${{ steps.nvidia_plugin.outputs.latest }}|" \
-            share/nvidia-device-plugin.yml
-
-      - name: Bump launcher test-image default
-        if: steps.need.outputs.update == 'true'
-        run: |
-          # Keep the k3d-gpu test pod on the same CUDA tag as the cluster image,
-          # so the test image never drifts behind the auto-bumped Dockerfile ARG.
-          sed -i \
-            -e "s|K3D_GPU_TEST_IMAGE:-nvidia/cuda:[^}]*|K3D_GPU_TEST_IMAGE:-nvidia/cuda:${{ steps.cuda.outputs.latest }}|" \
-            scripts/k3d-gpu
+          sed -i "s|^ARG K3S_TAG=.*|ARG K3S_TAG=\"${{ steps.k3s.outputs.latest }}\"|" Dockerfile
+          sed -i "s|k8s-device-plugin:v[0-9]*\.[0-9]*\.[0-9]*|k8s-device-plugin:${{ steps.nvidia_plugin.outputs.latest }}|" share/nvidia-device-plugin.yml
+          sed -i "s|K3D_GPU_TEST_IMAGE:-nvidia/cuda:[^}]*|K3D_GPU_TEST_IMAGE:-nvidia/cuda:${{ steps.cuda.outputs.latest }}|" scripts/k3d-gpu
 
       - name: Update README
         if: steps.need.outputs.update == 'true'
         run: |
           today=$(date -u +'%Y-%m-%d')
-          entry="| $today | ${{ steps.cuda.outputs.latest }} | ${{ steps.k3s.outputs.latest }} |"
+          entry="| $today | ${{ steps.k3s.outputs.latest }} | ${{ steps.nvidia_plugin.outputs.latest }} |"
           awk -v e="$entry" \
               -v k3s="${{ steps.k3s.outputs.latest }}" \
-              -v cuda="${{ steps.cuda.outputs.latest }}" \
-              -v nvidia_plugin="${{ steps.nvidia_plugin.outputs.latest }}" '
+              -v plugin="${{ steps.nvidia_plugin.outputs.latest }}" '
             /^## Release History/ { in_rh = 1 }
             in_rh && /^\|----------/ { print; print e; in_rh = 0; next }
             /^\| `K3S_TAG`/ { sub(/`v[0-9][^`]*-amd64`/, "`" k3s "`"); print; next }
-            /^\| `CUDA_TAG`/ { sub(/`[0-9][^`]*-base-ubuntu[0-9.]*`/, "`" cuda "`"); print; next }
-            /^\| `K3D_GPU_TEST_IMAGE`/ { sub(/nvidia\/cuda:[0-9][^`]*/, "nvidia/cuda:" cuda); print; next }
-            /--image=nvidia\/cuda:[0-9]/ { sub(/nvidia\/cuda:[0-9][^ ]*/, "nvidia/cuda:" cuda); print; next }
-            /kubectl apply -f https:\/\/raw\.githubusercontent\.com\/NVIDIA\/k8s-device-plugin\// {
-              sub(/v[0-9]+\.[0-9]+\.[0-9]+/, nvidia_plugin); print; next
-            }
+            /k8s-device-plugin\/v[0-9]/ { sub(/v[0-9]+\.[0-9]+\.[0-9]+/, plugin); print; next }
             { print }
           ' README.md > README.md.new && mv README.md.new README.md
 
@@ -144,18 +117,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Dockerfile README.md share/nvidia-device-plugin.yml scripts/k3d-gpu
-          git commit -m "chore: bump CUDA→${{ steps.cuda.outputs.latest }} & K3s→${{ steps.k3s.outputs.latest }} & device-plugin→${{ steps.nvidia_plugin.outputs.latest }}"
+          git commit -m "chore: bump k3s→${{ steps.k3s.outputs.latest }} & device-plugin→${{ steps.nvidia_plugin.outputs.latest }}"
           git push origin HEAD:main
-
-      - name: Prepare build tags
-        if: steps.need.outputs.update == 'true'
-        run: |
-          echo "CUDA_TAG=${{ steps.cuda.outputs.latest }}" >> $GITHUB_ENV
-          echo "K3S_TAG=${{ steps.k3s.outputs.latest }}" >> $GITHUB_ENV
-
-      - name: Set up QEMU
-        if: steps.need.outputs.update == 'true'
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         if: steps.need.outputs.update == 'true'
@@ -176,18 +139,39 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push image to DockerHub and GHCR
+      # Ubuntu 26.04 is the default (:latest); 24.04 is also published. Each
+      # carries the baked device plugin, so clusters expose GPUs with no apply.
+      - name: Build & push — Ubuntu 26.04 (default / latest)
         if: steps.need.outputs.update == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           platforms: linux/amd64
+          build-args: |
+            UBUNTU_TAG=26.04
           tags: |
-            cryptoandcoffee/k3d-gpu:${{ env.CUDA_TAG }}-${{ env.K3S_TAG }}
             cryptoandcoffee/k3d-gpu:latest
-            ghcr.io/${{ github.repository_owner }}/k3d-gpu:${{ env.CUDA_TAG }}-${{ env.K3S_TAG }}
+            cryptoandcoffee/k3d-gpu:ubuntu26.04
+            cryptoandcoffee/k3d-gpu:${{ steps.k3s.outputs.latest }}-ubuntu26.04
             ghcr.io/${{ github.repository_owner }}/k3d-gpu:latest
+            ghcr.io/${{ github.repository_owner }}/k3d-gpu:ubuntu26.04
+            ghcr.io/${{ github.repository_owner }}/k3d-gpu:${{ steps.k3s.outputs.latest }}-ubuntu26.04
+
+      - name: Build & push — Ubuntu 24.04 (variant)
+        if: steps.need.outputs.update == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          build-args: |
+            UBUNTU_TAG=24.04
+          tags: |
+            cryptoandcoffee/k3d-gpu:ubuntu24.04
+            cryptoandcoffee/k3d-gpu:${{ steps.k3s.outputs.latest }}-ubuntu24.04
+            ghcr.io/${{ github.repository_owner }}/k3d-gpu:ubuntu24.04
+            ghcr.io/${{ github.repository_owner }}/k3d-gpu:${{ steps.k3s.outputs.latest }}-ubuntu24.04
 
       - name: Create GitHub Release
         if: steps.need.outputs.update == 'true'
@@ -195,16 +179,22 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ steps.cuda.outputs.latest }}-${{ steps.k3s.outputs.latest }}
-          release_name: k3d-gpu-${{ steps.cuda.outputs.latest }}-${{ steps.k3s.outputs.latest }}
+          tag_name: ${{ steps.k3s.outputs.latest }}-ndp${{ steps.nvidia_plugin.outputs.latest }}
+          name: k3d-gpu ${{ steps.k3s.outputs.latest }} (device-plugin ${{ steps.nvidia_plugin.outputs.latest }})
           body: |
-            ## 🚀 New k3d-gpu Release
+            ## 🚀 k3d-gpu release
+
+            Ubuntu node base — **26.04** (default) and **24.04**. k3s
+            `${{ steps.k3s.outputs.latest }}`, NVIDIA device plugin
+            `${{ steps.nvidia_plugin.outputs.latest }}` (baked in — GPUs are
+            exposed on `up` with no `kubectl apply`).
+
             **Docker Hub**
-            - `cryptoandcoffee/k3d-gpu:${{ steps.cuda.outputs.latest }}-${{ steps.k3s.outputs.latest }}`
-            - `cryptoandcoffee/k3d-gpu:latest`
+            - `cryptoandcoffee/k3d-gpu:latest` (= ubuntu26.04)
+            - `cryptoandcoffee/k3d-gpu:ubuntu26.04`
+            - `cryptoandcoffee/k3d-gpu:ubuntu24.04`
 
-            **GitHub Container Registry (GHCR)**
-            - `ghcr.io/${{ github.repository_owner }}/k3d-gpu:${{ steps.cuda.outputs.latest }}-${{ steps.k3s.outputs.latest }}`
+            **GHCR**
             - `ghcr.io/${{ github.repository_owner }}/k3d-gpu:latest`
-
-
+            - `ghcr.io/${{ github.repository_owner }}/k3d-gpu:ubuntu26.04`
+            - `ghcr.io/${{ github.repository_owner }}/k3d-gpu:ubuntu24.04`

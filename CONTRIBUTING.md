@@ -35,16 +35,13 @@ Include relevant details:
    ./build.sh
    
    # Test with k3d (--default-runtime=nvidia is required, or the cluster
-   # advertises zero GPUs even though the node can see them — see README)
+   # advertises zero GPUs even though the node can see them — see README).
+   # The device plugin is baked into the image, so no kubectl apply is needed.
    k3d cluster create test-gpu --image cryptoandcoffee/k3d-gpu --gpus all \
      --k3s-arg "--default-runtime=nvidia@server:*"
-   kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/v0.19.2/nvidia-device-plugin.yml
-
-   # Verify GPU access on the node
-   docker exec -it k3d-test-gpu-server-0 nvidia-smi
 
    # Verify GPUs are schedulable (must be > 0)
-   kubectl get nodes -o jsonpath='{.items[*].status.allocatable.nvidia\.com/gpu}'
+   kubectl get nodes -o jsonpath='{.items[*].status.allocatable.nvidia\.com/gpu}{"\n"}'
    
    # Cleanup
    k3d cluster delete test-gpu
