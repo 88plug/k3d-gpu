@@ -4,17 +4,17 @@ Thank you for your interest in contributing to k3d-gpu! We welcome contributions
 
 ## How to Contribute
 
-### Reporting Issues
+### Reporting Bugs & Requests
 
-If you encounter a bug or have a feature request:
+This repository has the GitHub issue tracker and Discussions disabled. To report
+a bug or request a feature, open a [Pull Request](https://github.com/88plug/k3d-gpu/pulls)
+— either with a fix, or with a clear description and a minimal repro in the PR body.
+Include relevant details:
 
-1. Check existing [Issues](https://github.com/88plug/k3d-gpu/issues) to avoid duplicates
-2. Create a new issue with a clear title and description
-3. Include relevant details:
-   - Your environment (OS, Docker version, k3d version, GPU model)
-   - Steps to reproduce (for bugs)
-   - Expected vs actual behavior
-   - Relevant logs or error messages
+- Your environment (OS, Docker version, k3d version, GPU model)
+- Steps to reproduce (for bugs)
+- Expected vs actual behavior
+- Relevant logs or error messages
 
 ### Submitting Changes
 
@@ -34,12 +34,17 @@ If you encounter a bug or have a feature request:
    # Build the image
    ./build.sh
    
-   # Test with k3d
-   k3d cluster create test-gpu --image cryptoandcoffee/k3d-gpu --gpus all
-   kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/v0.18.2/nvidia-device-plugin.yml
-   
-   # Verify GPU access
+   # Test with k3d (--default-runtime=nvidia is required, or the cluster
+   # advertises zero GPUs even though the node can see them — see README)
+   k3d cluster create test-gpu --image cryptoandcoffee/k3d-gpu --gpus all \
+     --k3s-arg "--default-runtime=nvidia@server:*"
+   kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/v0.19.2/nvidia-device-plugin.yml
+
+   # Verify GPU access on the node
    docker exec -it k3d-test-gpu-server-0 nvidia-smi
+
+   # Verify GPUs are schedulable (must be > 0)
+   kubectl get nodes -o jsonpath='{.items[*].status.allocatable.nvidia\.com/gpu}'
    
    # Cleanup
    k3d cluster delete test-gpu
@@ -103,4 +108,4 @@ Feel free to open an issue for questions or reach out to the maintainers.
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the Apache 2.0 License.
+By contributing, you agree that your contributions will be licensed under the [FSL-1.1-ALv2](LICENSE.md) license.
