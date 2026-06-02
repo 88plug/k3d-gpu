@@ -126,9 +126,15 @@ cmd_up() {
     kubectl wait --for=condition=Ready nodes --all --timeout=120s
 
     # The cryptoandcoffee/k3d-gpu image bakes the device plugin into k3s's
-    # auto-deploy dir, so k3s applies it on startup — no action needed here. Only
-    # apply it ourselves if a custom image (K3D_GPU_IMAGE) didn't ship it.
-    if kubectl -n kube-system get daemonset nvidia-device-plugin-daemonset >/dev/null 2>&1; then
+    # auto-deploy dir, so k3s applies it on startup — no action needed here. Give
+    # the addon a moment to appear; only apply it ourselves if a custom image
+    # (K3D_GPU_IMAGE) didn't ship it.
+    local baked=0 dl=$((SECONDS + 20))
+    while [ "${SECONDS}" -lt "${dl}" ]; do
+        kubectl -n kube-system get daemonset nvidia-device-plugin-daemonset >/dev/null 2>&1 && { baked=1; break; }
+        sleep 2
+    done
+    if [ "${baked}" -eq 1 ]; then
         info "Device plugin auto-deployed by k3s."
     elif [ -f "${PLUGIN_MANIFEST}" ]; then
         info "Applying NVIDIA device plugin (${PLUGIN_MANIFEST})..."
