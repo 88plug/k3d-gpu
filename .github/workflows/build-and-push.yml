@@ -23,35 +23,50 @@ jobs:
       - name: Get latest k3s tag
         id: k3s
         run: |
-          latest=$(curl -s \
-            "https://registry.hub.docker.com/v2/repositories/rancher/k3s/tags?page_size=100" \
-            | jq -r '.results[].name' \
-            | grep -E 'amd64$' \
-            | grep -v 'rc' \
-            | sort -V \
-            | tail -n1)
-          echo "latest=$latest" >> $GITHUB_OUTPUT
+          # name= filter scopes the scan to amd64 tags, then paginate via .next so a
+          # high version can't be hidden past page 1 (push-order != version-order).
+          latest=$(
+            url="https://registry.hub.docker.com/v2/repositories/rancher/k3s/tags?page_size=100&name=amd64"
+            for _ in $(seq 1 20); do
+              [ -z "$url" ] && break; [ "$url" = "null" ] && break
+              resp=$(curl -fsSL "$url") || break
+              printf '%s\n' "$resp" | jq -r '.results[].name'
+              url=$(printf '%s' "$resp" | jq -r '.next')
+            done | grep -E 'amd64$' | grep -v 'rc' | sort -V | tail -n1
+          )
+          [ -n "$latest" ] || { echo "::error::no k3s tag resolved from registry"; exit 1; }
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
 
       # ─── 2. Fetch the latest CUDA tag matching *-base-ubuntu24.04 ───────
-      - name: Get latest CUDA tag
+      - name: Get latest CUDA tag (newest base-ubuntu LTS)
         id: cuda
         run: |
-          latest=$(curl -s \
-            "https://registry.hub.docker.com/v2/repositories/nvidia/cuda/tags?page_size=100" \
-            | jq -r '.results[].name' \
-            | grep -E 'base-ubuntu24\.04$' \
-            | sort -V \
-            | tail -n1)
-          echo "latest=$latest" >> $GITHUB_OUTPUT
+          # Track the newest CUDA on the newest Ubuntu base NVIDIA publishes. Today
+          # that resolves to base-ubuntu24.04; when NVIDIA ships base-ubuntu26.04 it
+          # is adopted automatically — sort -V ranks higher CUDA first, then higher
+          # Ubuntu. The name= filter + pagination is what fixes the historical
+          # 13.2.1 -> 13.1.2 regression (a higher version sitting past page 1).
+          latest=$(
+            url="https://registry.hub.docker.com/v2/repositories/nvidia/cuda/tags?page_size=100&name=base-ubuntu"
+            for _ in $(seq 1 20); do
+              [ -z "$url" ] && break; [ "$url" = "null" ] && break
+              resp=$(curl -fsSL "$url") || break
+              printf '%s\n' "$resp" | jq -r '.results[].name'
+              url=$(printf '%s' "$resp" | jq -r '.next')
+            done | grep -E '^[0-9][0-9.]*-base-ubuntu[0-9.]+$' | sort -V | tail -n1
+          )
+          [ -n "$latest" ] || { echo "::error::no CUDA tag resolved from registry"; exit 1; }
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
 
       # ─── 3. Fetch the latest NVIDIA device plugin version ───────────────
       - name: Get latest NVIDIA device plugin version
         id: nvidia_plugin
         run: |
-          latest=$(curl -s \
+          latest=$(curl -fsSL \
             "https://api.github.com/repos/NVIDIA/k8s-device-plugin/releases/latest" \
             | jq -r '.tag_name')
-          echo "latest=$latest" >> $GITHUB_OUTPUT
+          [ -n "$latest" ] && [ "$latest" != "null" ] || { echo "::error::no device-plugin release resolved"; exit 1; }
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
 
       - name: Read current ARGs
         id: current
