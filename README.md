@@ -209,6 +209,7 @@ Contributions, issues, and feature requests are welcome! Please fork the reposit
 
 | Date       | K3s Tag             | Device Plugin |
 |------------|---------------------|---------------|
+| 2026-06-03 | v1.34.1-k3s1-amd64 | v0.19.2 |
 | 2026-06-02 | v1.34.1-k3s1-amd64  | v0.19.2       |
 
 ---
