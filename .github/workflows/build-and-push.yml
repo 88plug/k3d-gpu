@@ -29,7 +29,7 @@ jobs:
             url="https://registry.hub.docker.com/v2/repositories/rancher/k3s/tags?page_size=100&name=amd64"
             for _ in $(seq 1 20); do
               [ -z "$url" ] && break; [ "$url" = "null" ] && break
-              resp=$(curl -fsSL "$url") || break
+              resp=$(curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 "$url") || break
               printf '%s\n' "$resp" | jq -r '.results[].name'
               url=$(printf '%s' "$resp" | jq -r '.next')
             done | grep -E 'amd64$' | grep -v 'rc' | sort -V | tail -n1
@@ -41,7 +41,7 @@ jobs:
       - name: Get latest NVIDIA device plugin version
         id: nvidia_plugin
         run: |
-          latest=$(curl -fsSL \
+          latest=$(curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 \
             "https://api.github.com/repos/NVIDIA/k8s-device-plugin/releases/latest" \
             | jq -r '.tag_name')
           [ -n "$latest" ] && [ "$latest" != "null" ] || { echo "::error::no device-plugin release resolved"; exit 1; }
@@ -56,7 +56,7 @@ jobs:
             url="https://registry.hub.docker.com/v2/repositories/nvidia/cuda/tags?page_size=100&name=base-ubuntu"
             for _ in $(seq 1 20); do
               [ -z "$url" ] && break; [ "$url" = "null" ] && break
-              resp=$(curl -fsSL "$url") || break
+              resp=$(curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 "$url") || break
               printf '%s\n' "$resp" | jq -r '.results[].name'
               url=$(printf '%s' "$resp" | jq -r '.next')
             done | grep -E '^[0-9][0-9.]*-base-ubuntu[0-9.]+$' | sort -V | tail -n1
