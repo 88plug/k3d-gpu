@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '0 6 * * *'
   workflow_dispatch:
+    inputs:
+      force:
+        description: 'Rebuild + push even if tracked versions are unchanged (e.g. Dockerfile/base change)'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -82,7 +87,8 @@ jobs:
       - name: Determine if update is needed
         id: need
         run: |
-          if [ "${{ steps.k3s.outputs.latest }}" != "${{ steps.current.outputs.k3s }}" ] || \
+          if [ "${{ inputs.force }}" = "true" ] || \
+             [ "${{ steps.k3s.outputs.latest }}" != "${{ steps.current.outputs.k3s }}" ] || \
              [ "${{ steps.nvidia_plugin.outputs.latest }}" != "${{ steps.current.outputs.plugin }}" ] || \
              [ "${{ steps.cuda.outputs.latest }}" != "${{ steps.current.outputs.testcuda }}" ]; then
             echo "update=true" >> "$GITHUB_OUTPUT"
@@ -122,8 +128,12 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Dockerfile README.md share/nvidia-device-plugin.yml scripts/k3d-gpu
-          git commit -m "chore: bump k3s→${{ steps.k3s.outputs.latest }} & device-plugin→${{ steps.nvidia_plugin.outputs.latest }}"
-          git push origin HEAD:main
+          if git diff --cached --quiet; then
+            echo "no version changes to commit (forced rebuild)"
+          else
+            git commit -m "chore: bump k3s→${{ steps.k3s.outputs.latest }} & device-plugin→${{ steps.nvidia_plugin.outputs.latest }}"
+            git push origin HEAD:main
+          fi
 
       - name: Set up Docker Buildx
         if: steps.need.outputs.update == 'true'
