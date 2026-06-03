@@ -40,8 +40,13 @@ jobs:
       # ─── 2. Latest NVIDIA device plugin release (baked into the image) ───
       - name: Get latest NVIDIA device plugin version
         id: nvidia_plugin
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Authenticate to api.github.com — the runner's shared IP blows the 60/hr
+          # anonymous limit; an authenticated token gets 5000/hr.
           latest=$(curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
             "https://api.github.com/repos/NVIDIA/k8s-device-plugin/releases/latest" \
             | jq -r '.tag_name')
           [ -n "$latest" ] && [ "$latest" != "null" ] || { echo "::error::no device-plugin release resolved"; exit 1; }
