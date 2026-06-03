@@ -24,8 +24,15 @@ RUN apt-get update && apt-get install -y curl gnupg ca-certificates \
     && nvidia-ctk runtime configure --runtime=containerd \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=k3s / /
-COPY --from=k3s /bin /bin
+# Copy the k3s userland into the merged-usr targets (/bin and friends are
+# symlinks to /usr/* on Ubuntu). Copying k3s's real /bin dir onto the /bin
+# symlink fails under BuildKit ("cannot copy to non-directory"); copying into
+# /usr/bin merges cleanly and the symlinks resolve to it. k3s ships a static
+# binary plus its multiplex symlinks (kubectl/crictl/ctr/containerd -> k3s) and
+# /bin/aux; its /usr is just /usr/share. We keep Ubuntu's glibc and the
+# apt-installed NVIDIA toolkit (k3s carries no glibc and no conflicting names).
+COPY --from=k3s /bin/ /usr/bin/
+COPY --from=k3s /usr/share/ /usr/share/
 
 # Bake the NVIDIA device plugin into k3s's auto-deploy manifests dir. k3s applies
 # everything here on startup, so the cluster comes up with GPUs already exposed —
