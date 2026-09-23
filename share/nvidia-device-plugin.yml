@@ -30,7 +30,7 @@ spec:
           effect: NoSchedule
       priorityClassName: "system-node-critical"
       containers:
-        - image: nvcr.io/nvidia/k8s-device-plugin:v0.20.0
+        - image: nvcr.io/nvidia/k8s-device-plugin:v0.20.1
           name: nvidia-device-plugin-ctr
           env:
             - name: FAIL_ON_INIT_ERROR
