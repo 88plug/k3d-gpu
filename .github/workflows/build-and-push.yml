@@ -3,12 +3,23 @@ name: Auto-update, Build & Release
 on:
   schedule:
     - cron: '0 6 * * *'
+  # Image contents changed on main (new/updated baked plugin, Dockerfile): rebuild
+  # even though no tracked upstream version moved.
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - 'share/**'
   workflow_dispatch:
     inputs:
       force:
         description: 'Rebuild + push even if tracked versions are unchanged (e.g. Dockerfile/base change)'
         type: boolean
         default: false
+
+concurrency:
+  group: build-and-push
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -120,12 +131,19 @@ jobs:
       - name: Determine if update is needed
         id: need
         run: |
-          if [ "${{ inputs.force }}" = "true" ] || \
-             [ "${{ steps.k3s.outputs.latest }}" != "${{ steps.current.outputs.k3s }}" ] || \
+          # changed: a tracked upstream version moved (bump files + README row).
+          # update:  rebuild the image — on a change, a forced dispatch, or a push to
+          #          main that touched the image contents.
+          changed=false
+          if [ "${{ steps.k3s.outputs.latest }}" != "${{ steps.current.outputs.k3s }}" ] || \
              [ "${{ steps.nvidia_plugin.outputs.latest }}" != "${{ steps.current.outputs.plugin }}" ] || \
              [ "${{ steps.intel_plugin.outputs.latest }}" != "${{ steps.current.outputs.intel }}" ] || \
              [ "${{ steps.gaudi_plugin.outputs.latest }}" != "${{ steps.current.outputs.gaudi }}" ] || \
              [ "${{ steps.cuda.outputs.latest }}" != "${{ steps.current.outputs.testcuda }}" ]; then
+            changed=true
+          fi
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+          if [ "$changed" = "true" ] || [ "${{ inputs.force }}" = "true" ] || [ "${{ github.event_name }}" = "push" ]; then
             echo "update=true" >> "$GITHUB_OUTPUT"
           else
             echo "update=false" >> "$GITHUB_OUTPUT"
@@ -141,13 +159,15 @@ jobs:
           sed -i "s|^ARG K3S_TAG=.*|ARG K3S_TAG=\"${{ steps.k3s.outputs.latest }}\"|" Dockerfile
           sed -i "s|k8s-device-plugin:v[0-9]*\.[0-9]*\.[0-9]*|k8s-device-plugin:${{ steps.nvidia_plugin.outputs.latest }}|" share/nvidia-device-plugin.yml
           sed -i "s|intel-gpu-plugin:[0-9]*\.[0-9]*\.[0-9]*|intel-gpu-plugin:${{ steps.intel_plugin.outputs.latest }}|" share/intel-gpu-plugin.yml
-          # The NPU plugin ships in the same intel-device-plugins release as the GPU plugin.
-          sed -i "s|intel-npu-plugin:[0-9]*\.[0-9]*\.[0-9]*|intel-npu-plugin:${{ steps.intel_plugin.outputs.latest }}|" share/intel-npu-plugin.yml
+          # NPU/DSA/IAA/QAT plugins ship in the same intel-device-plugins release as the GPU plugin.
+          for p in npu dsa iaa qat; do
+            sed -i "s|intel-$p-plugin:[0-9]*\.[0-9]*\.[0-9]*|intel-$p-plugin:${{ steps.intel_plugin.outputs.latest }}|" "share/intel-$p-plugin.yml"
+          done
           sed -i "s|gaudi-device-plugin:[0-9]*\.[0-9]*\.[0-9]*-[0-9]*|gaudi-device-plugin:${{ steps.gaudi_plugin.outputs.latest }}|" share/gaudi-device-plugin.yml
           sed -i "s|K3D_GPU_TEST_IMAGE:-nvidia/cuda:[^}]*|K3D_GPU_TEST_IMAGE:-nvidia/cuda:${{ steps.cuda.outputs.latest }}|" scripts/k3d-gpu
 
       - name: Update README
-        if: steps.need.outputs.update == 'true'
+        if: steps.need.outputs.changed == 'true'
         run: |
           today=$(date -u +'%Y-%m-%d')
           entry="| $today | ${{ steps.k3s.outputs.latest }} | ${{ steps.nvidia_plugin.outputs.latest }} | v${{ steps.intel_plugin.outputs.latest }} | ${{ steps.gaudi_plugin.outputs.latest }} |"
@@ -166,7 +186,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Dockerfile README.md share/nvidia-device-plugin.yml share/intel-gpu-plugin.yml share/intel-npu-plugin.yml share/gaudi-device-plugin.yml scripts/k3d-gpu
+          git add Dockerfile README.md share/nvidia-device-plugin.yml share/intel-*-plugin.yml share/gaudi-device-plugin.yml scripts/k3d-gpu
           if git diff --cached --quiet; then
             echo "no version changes to commit (forced rebuild)"
           else

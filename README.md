@@ -47,11 +47,12 @@ Behaviour is tunable via environment variables:
 | `K3D_GPU_CLUSTER`    | `gpu`                                     | cluster name                         |
 | `K3D_GPU_IMAGE`      | `cryptoandcoffee/k3d-gpu:latest`          | node image (`latest` = ubuntu26.04)  |
 | `K3D_GPU_SHARE`      | `/usr/share/k3d-gpu`                      | dir of fallback plugin manifests     |
-| `K3D_GPU_VENDORS`    | `auto`                                    | `auto` detects; or a list of `nvidia,intel,npu,gaudi` |
+| `K3D_GPU_VENDORS`    | `auto`                                    | `auto` detects; or a list of `nvidia,intel,npu,gaudi,dsa,iaa,qat,amx` |
 | `K3D_GPU_PLUGIN`     | `/usr/share/k3d-gpu/nvidia-device-plugin.yml` | fallback manifest (only used if a custom image lacks the baked one) |
 | `K3D_GPU_INTEL_PLUGIN` | `/usr/share/k3d-gpu/intel-gpu-plugin.yml` | same, for the Intel GPU plugin |
 | `K3D_GPU_GAUDI_PLUGIN` | `/usr/share/k3d-gpu/gaudi-device-plugin.yml` | same, for the Gaudi plugin |
 | `K3D_GPU_NPU_PLUGIN` | `/usr/share/k3d-gpu/intel-npu-plugin.yml` | same, for the Intel NPU plugin |
+| `K3D_GPU_DSA_PLUGIN` / `_IAA_` / `_QAT_` | `/usr/share/k3d-gpu/intel-{dsa,iaa,qat}-plugin.yml` | same, for the Xeon accelerator plugins |
 | `K3D_GPU_DEVICE_TEST_IMAGE` | `busybox:1.37`                     | image used by `k3d-gpu test` for Intel GPU/NPU and Gaudi |
 | `K3D_GPU_TEST_IMAGE` | `nvidia/cuda:13.4.2-base-ubuntu26.04`     | image used by `k3d-gpu test`         |
 
@@ -65,7 +66,7 @@ commands the launcher runs for you.
 - K3s + NVIDIA Container Toolkit on an Ubuntu base — **26.04** (default) and **24.04**  
 - NVIDIA, **Intel GPU** (Arc, Battlemage, Core Ultra integrated GPUs, Crescent Island — `xe` or `i915`), **Intel NPU** (Core Ultra) and **Intel Gaudi 3 (HPU)** device plugins **baked into k3s auto-deploy** — `up` exposes them with no `kubectl apply`. The launcher labels nodes so each plugin only runs where its hardware is  
 - Auto-detection on the host from sysfs: `/dev/nvidia*`, Intel DRM render nodes (`xe`/`i915`), and `/dev/accel/accel*` nodes told apart by PCI vendor (`8086` + `intel_vpu` = NPU, `1da3` = Gaudi). `k3d-gpu detect` prints what it found  
-- `k3d-gpu doctor` checks kernel and firmware per platform, names the `xe.force_probe=<id>` needed for parts newer than your kernel, and reports Xeon built-in accelerators (AMX, DSA, IAA, QAT)  
+- `k3d-gpu doctor` checks kernel and firmware per platform, names the `xe.force_probe=<id>` needed for parts newer than your kernel, and checks Xeon built-in accelerators (AMX, DSA, IAA, QAT) — deployed automatically once the host side is configured  
 - CDI-ready: containerd 2.x scans `/etc/cdi` and `/var/run/cdi` (CDI on by default), so future vendors that emit CDI specs need no node changes  
 - Pre‑configured nvidia containerd runtime; `--default-runtime=nvidia` for zero-config GPU pods  
 - No CUDA toolkit in the node image — driver libs are injected from the host, workloads bring their own CUDA  
@@ -96,22 +97,28 @@ for GPUs, the [NPU driver](https://github.com/intel/linux-npu-driver) + OpenVINO
 for the NPU. Gaudi runs in the plugin's plain mode, which hands pods the devices
 without the habana container runtime; full Gaudi workloads may still expect it.
 
-Force or limit vendors with `K3D_GPU_VENDORS=nvidia,intel,npu,gaudi`.
+Force or limit vendors with `K3D_GPU_VENDORS=nvidia,intel,npu,gaudi,dsa,iaa,qat,amx`.
 A loaded `nvidia` or `habanalabs` kernel module counts as present even before
 its device nodes appear; `doctor` then flags the missing nodes.
 
 ### Xeon built-in accelerators
 
-`k3d-gpu doctor` reports these but `up` does not deploy plugins for them: each
-needs host-side setup that a k3d node should not do on the host's behalf.
+Auto-detected too. `up` deploys their plugins once the host side is set up — the
+launcher never changes host configuration itself; `k3d-gpu doctor` says exactly
+what is missing.
 
-| Accelerator | What doctor reports | To use it in the cluster |
-|-------------|---------------------|--------------------------|
-| **AMX** (Sapphire Rapids+) | `amx_*` CPU flags | Nothing — CPU instructions, usable in any pod |
-| **DSA / IAA** (`idxd`) | devices and user work queues | configure work queues with `accel-config`, then deploy `intel-dsa-plugin` / `intel-iaa-plugin` |
-| **QAT** 4xxx/420xx/6xxx | physical functions and VF count | create VFs, bind to `vfio-pci`, deploy `intel-qat-plugin` |
+| Vendor key | Accelerator | Active when the host has | Kubernetes exposes |
+|------------|-------------|--------------------------|--------------------|
+| `amx`  | **AMX** (Sapphire Rapids and newer) | `amx_*` CPU flags | node labels `feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true` etc. (NFD names) — no device needed |
+| `dsa`  | **DSA** (`idxd`) | user work queues `/dev/dsa/wq*` (`accel-config`) | `dsa.intel.com/wq-user-dedicated` / `wq-user-shared` |
+| `iaa`  | **IAA** (`idxd`) | user work queues `/dev/iax/wq*` (`accel-config`) | `iaa.intel.com/wq-user-dedicated` / `wq-user-shared` |
+| `qat`  | **QAT** C62x, 4xxx, 420xx, 6xxx | PF bound to its QAT driver with SR-IOV VFs (`sriov_numvfs`), `vfio-pci` loaded, IOMMU on | `qat.intel.com/cy`, `dc`, … (per the PF's `cfg_services`) |
 
-The DLB plugin was removed upstream in intel-device-plugins v0.37.0.
+For DSA/IAA the launcher bind-mounts the host's `/dev/char` into the node: the
+plugin only accepts a work queue whose udev `/dev/char/<major>:<minor>` link
+exists, and a privileged container has none of its own. QAT userspace (qatlib)
+needs locked memory in the workload pod. The DLB plugin was removed upstream in
+intel-device-plugins v0.37.0, so DLB is not supported.
 
 ---
 

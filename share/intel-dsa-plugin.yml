@@ -1,0 +1,84 @@
+# Intel DSA (Data Streaming Accelerator) device plugin DaemonSet (Xeon Sapphire Rapids and newer)
+# Source: https://github.com/intel/intel-device-plugins-for-kubernetes (deployments/dsa_plugin/base)
+# Advertises dsa.intel.com/wq-user-dedicated and dsa.intel.com/wq-user-shared, one per
+# user work queue the host configured with accel-config (/dev/dsa/wqX.Y).
+# Scheduled only onto nodes labelled intel.feature.node.kubernetes.io/dsa=true
+# (upstream's NFD label), which the k3d-gpu launcher sets when the host side is
+# ready. Auto-bumped by the build-and-push workflow (same release as the GPU plugin).
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: intel-dsa-plugin
+  namespace: kube-system
+  labels:
+    app: intel-dsa-plugin
+spec:
+  selector:
+    matchLabels:
+      app: intel-dsa-plugin
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: intel-dsa-plugin
+    spec:
+      automountServiceAccountToken: false
+      priorityClassName: "system-node-critical"
+      containers:
+      - name: intel-dsa-plugin
+        env:
+          - name: NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+        image: intel/intel-dsa-plugin:0.37.1
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          seLinuxOptions:
+            type: "container_device_plugin_t"
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+        resources:
+          requests:
+            memory: "25Mi"
+            cpu: 50m
+          limits:
+            memory: "65Mi"
+            cpu: 100m
+        volumeMounts:
+        - name: devfs
+          mountPath: /dev/dsa
+          readOnly: true
+        - name: chardevs
+          mountPath: /dev/char
+          readOnly: true
+        - name: sysfs
+          mountPath: /sys/bus/dsa
+          readOnly: true
+        - name: kubeletsockets
+          mountPath: /var/lib/kubelet/device-plugins
+      volumes:
+      - name: devfs
+        hostPath:
+          path: /dev/dsa
+      - name: chardevs
+        hostPath:
+          path: /dev/char
+      - name: sysfs
+        hostPath:
+          path: /sys/bus/dsa
+      - name: kubeletsockets
+        hostPath:
+          path: /var/lib/kubelet/device-plugins
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        intel.feature.node.kubernetes.io/dsa: "true"
