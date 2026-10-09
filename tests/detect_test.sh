@@ -216,6 +216,16 @@ kernel "${r}" 6.9-rc3
 pci "${r}" 0000:03:00.0 0x8086 0xe20b xe; render "${r}" 0000:03:00.0 128
 doctor_says "6.9-rc3 is older than 6.12 for Battlemage" "${r}" 'Battlemage.*6\.12'
 
+r=$(newroot not-bmg)
+kernel "${r}" 6.11.2
+pci "${r}" 0000:03:00.0 0x8086 0xe214 xe; render "${r}" 0000:03:00.0 128
+doctor_says "0xe214 is not a Battlemage id in the kernel" "${r}" 'Intel Battlemage \(' negate
+
+r=$(newroot arl-s)
+kernel "${r}" 6.10.4
+pci "${r}" 0000:00:02.0 0x8086 0xb640 i915; render "${r}" 0000:00:02.0 128
+doctor_says "Arrow Lake-S 0xb640 needs kernel 6.12" "${r}" 'Arrow Lake.*6\.12'
+
 r=$(newroot nvidia-dev)
 kernel "${r}" 6.12.10
 mkdir -p "${r}/sys/module/nvidia"; touch "${r}/dev/nvidiactl"

@@ -155,9 +155,10 @@ has_gaudi_pci() {
 intel_gpu_platform() {
     case "$1" in
         0x7d40|0x7d45|0x7d55|0x7d60|0x7dd5) echo "Meteor Lake|6.7|i915/mtl_guc_" ;;
-        0x7d41|0x7d51|0x7dd1|0x7d67|0xb640) echo "Arrow Lake|6.9|i915/mtl_guc_" ;;
+        0x7d41|0x7d51|0x7dd1|0x7d67)        echo "Arrow Lake|6.9|i915/mtl_guc_" ;;
+        0xb640)                             echo "Arrow Lake-S|6.12|i915/mtl_guc_" ;;
         0x6420|0x64a0|0x64b0)               echo "Lunar Lake|6.12|xe/lnl_guc_" ;;
-        0xe20[29bcd]|0xe21[0-6]|0xe22[0-3]) echo "Battlemage|6.12|xe/bmg_guc_" ;;
+        0xe20[29bcd]|0xe21[0126]|0xe22[0-3]) echo "Battlemage|6.12|xe/bmg_guc_" ;;
         0xb08[0-7f]|0xb090|0xb0a0|0xb0b0)   echo "Panther Lake|6.17|xe/ptl_guc_" ;;
         0xfd80|0xfd81)                      echo "Wildcat Lake|6.18|xe/ptl_guc_" ;;
         0xd74[0-35ab])                      echo "Nova Lake-S|7.3|xe/nvl_guc_" ;;
