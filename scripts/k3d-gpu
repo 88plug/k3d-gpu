@@ -34,7 +34,7 @@ VENDORS_REQUEST="${K3D_GPU_VENDORS:-auto}"
 FAIL=0           # set by doctor_* checks
 INTEL_DRIVERS=() # "<driver> <pci-device-id>" per Intel render node (filled by detect_intel)
 NPU_IDS=()       # PCI device id per Intel NPU accel node (filled by detect_npu)
-VERSION="0.1.3"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.4"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 
 RED=$'\e[31m' GRN=$'\e[32m' YLW=$'\e[33m' RST=$'\e[0m'
 err()  { echo "${RED}ERROR:${RST} $*" >&2; exit 1; }
