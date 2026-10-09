@@ -47,6 +47,9 @@ COPY share/nvidia-device-plugin.yml /var/lib/rancher/k3s/server/manifests/nvidia
 # label habana.ai/gaudi.present=true, which the launcher sets when it detects Gaudi.
 COPY share/intel-gpu-plugin.yml /var/lib/rancher/k3s/server/manifests/intel-gpu-plugin.yaml
 COPY share/gaudi-device-plugin.yml /var/lib/rancher/k3s/server/manifests/gaudi-device-plugin.yaml
+# Intel NPU (Core Ultra) plugin, gated by intel.feature.node.kubernetes.io/npu=true,
+# which the launcher sets when it detects an NPU.
+COPY share/intel-npu-plugin.yml /var/lib/rancher/k3s/server/manifests/intel-npu-plugin.yaml
 
 # CDI spec directories. containerd 2.x (k3s 1.34) enables CDI by default and scans
 # these paths, so vendor plugins/tools that emit CDI specs work without any

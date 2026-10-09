@@ -32,7 +32,8 @@ need to remember `k3d cluster create` flags:
 ```bash
 yay -S k3d-gpu          # or build from packaging/aur/PKGBUILD
 
-k3d-gpu doctor          # preflight: detected accelerators, docker, runtimes, k3d, kubectl
+k3d-gpu detect          # list accelerators on this host and their k8s resources
+k3d-gpu doctor          # preflight: accelerators, kernel/firmware, docker, runtimes, k3d, kubectl
 k3d-gpu up              # create the cluster (device plugins auto-deploy), verify each accelerator > 0
 k3d-gpu test            # per accelerator: nvidia-smi pod / device-node listing pod
 k3d-gpu logs            # tail the k3s server container logs
@@ -46,11 +47,12 @@ Behaviour is tunable via environment variables:
 | `K3D_GPU_CLUSTER`    | `gpu`                                     | cluster name                         |
 | `K3D_GPU_IMAGE`      | `cryptoandcoffee/k3d-gpu:latest`          | node image (`latest` = ubuntu26.04)  |
 | `K3D_GPU_SHARE`      | `/usr/share/k3d-gpu`                      | dir of fallback plugin manifests     |
-| `K3D_GPU_VENDORS`    | `auto`                                    | `auto` detects; or a list such as `nvidia,intel,gaudi` |
+| `K3D_GPU_VENDORS`    | `auto`                                    | `auto` detects; or a list of `nvidia,intel,npu,gaudi` |
 | `K3D_GPU_PLUGIN`     | `/usr/share/k3d-gpu/nvidia-device-plugin.yml` | fallback manifest (only used if a custom image lacks the baked one) |
 | `K3D_GPU_INTEL_PLUGIN` | `/usr/share/k3d-gpu/intel-gpu-plugin.yml` | same, for the Intel GPU plugin |
 | `K3D_GPU_GAUDI_PLUGIN` | `/usr/share/k3d-gpu/gaudi-device-plugin.yml` | same, for the Gaudi plugin |
-| `K3D_GPU_DEVICE_TEST_IMAGE` | `busybox:1.37`                     | image used by `k3d-gpu test` for Intel/Gaudi |
+| `K3D_GPU_NPU_PLUGIN` | `/usr/share/k3d-gpu/intel-npu-plugin.yml` | same, for the Intel NPU plugin |
+| `K3D_GPU_DEVICE_TEST_IMAGE` | `busybox:1.37`                     | image used by `k3d-gpu test` for Intel GPU/NPU and Gaudi |
 | `K3D_GPU_TEST_IMAGE` | `nvidia/cuda:13.4.2-base-ubuntu26.04`     | image used by `k3d-gpu test`         |
 
 The rest of this README documents the underlying image and the manual `k3d`
@@ -61,8 +63,9 @@ commands the launcher runs for you.
 ## Features
 
 - K3s + NVIDIA Container Toolkit on an Ubuntu base — **26.04** (default) and **24.04**  
-- NVIDIA, **Intel GPU (Arc / Xe2 Battlemage via `xe`, plus `i915`)** and **Intel Gaudi 3 (HPU)** device plugins **baked into k3s auto-deploy** — `up` exposes them with no `kubectl apply`; each plugin idles on a node without its hardware  
-- Auto-detection on the host: `/dev/nvidia*`, Intel DRM render nodes (`xe`/`i915`), Gaudi `/dev/accel/accel*` / PCI vendor `1da3`  
+- NVIDIA, **Intel GPU** (Arc, Battlemage, Core Ultra integrated GPUs, Crescent Island — `xe` or `i915`), **Intel NPU** (Core Ultra) and **Intel Gaudi 3 (HPU)** device plugins **baked into k3s auto-deploy** — `up` exposes them with no `kubectl apply`. The launcher labels nodes so each plugin only runs where its hardware is  
+- Auto-detection on the host from sysfs: `/dev/nvidia*`, Intel DRM render nodes (`xe`/`i915`), and `/dev/accel/accel*` nodes told apart by PCI vendor (`8086` + `intel_vpu` = NPU, `1da3` = Gaudi). `k3d-gpu detect` prints what it found  
+- `k3d-gpu doctor` checks kernel and firmware per platform, names the `xe.force_probe=<id>` needed for parts newer than your kernel, and reports Xeon built-in accelerators (AMX, DSA, IAA, QAT)  
 - CDI-ready: containerd 2.x scans `/etc/cdi` and `/var/run/cdi` (CDI on by default), so future vendors that emit CDI specs need no node changes  
 - Pre‑configured nvidia containerd runtime; `--default-runtime=nvidia` for zero-config GPU pods  
 - No CUDA toolkit in the node image — driver libs are injected from the host, workloads bring their own CUDA  
@@ -76,16 +79,39 @@ commands the launcher runs for you.
 | Vendor | Hardware | Kubernetes resource | Host requirement |
 |--------|----------|---------------------|------------------|
 | NVIDIA | any CUDA GPU | `nvidia.com/gpu` | driver + nvidia-container-toolkit, Docker `--gpus` |
-| Intel  | Arc / Xe2 **Battlemage** (`xe` driver) | `gpu.intel.com/xe` | kernel 6.12+, `xe` bound, `/dev/dri/renderD*`, recent linux-firmware |
-| Intel  | Arc / Flex / Max on `i915` | `gpu.intel.com/i915` | `/dev/dri/renderD*` |
-| Intel  | **Gaudi 3** (HPU, PCI `1da3`) | `habana.ai/gaudi` | Habana `habanalabs` driver, `/dev/accel/accel*` |
+| Intel  | Arc **Battlemage** (Xe2, `xe`) | `gpu.intel.com/xe` | kernel 6.12+, linux-firmware with `xe/bmg_guc_*` |
+| Intel  | Core Ultra iGPU: **Lunar Lake** (Xe2) / **Panther Lake** (Xe3) / Wildcat Lake (`xe`) | `gpu.intel.com/xe` | kernel 6.12+ / 6.17+ / 6.18+ |
+| Intel  | Core Ultra iGPU: **Meteor Lake** / **Arrow Lake** (`i915`), Arc / Flex / Max on `i915` | `gpu.intel.com/i915` | kernel 6.7+ / 6.9+ |
+| Intel  | **Crescent Island** (Xe3P data-center GPU), Nova Lake | `gpu.intel.com/xe` | `xe` driver; still needs `xe.force_probe=<id>` (see `doctor`) |
+| Intel  | **NPU** in Core Ultra: Meteor / Arrow / Lunar / Panther / Wildcat Lake | `npu.intel.com/accel` | `intel_vpu` driver (kernel 6.3+ MTL … 6.13+ PTL), `intel/vpu/vpu_*` firmware |
+| Intel  | **Gaudi 3** (HPU, PCI `1da3`) | `habana.ai/gaudi` | Intel's out-of-tree `habanalabs` driver (mainline stops at Gaudi 2), `/dev/accel/accel*` |
 
 k3d node containers are privileged, so host `/dev/dri` and `/dev/accel` are
 visible with no extra flag; the vendor plugins hand the device nodes to pods.
 Devices must exist when the cluster is created — recreate the cluster after
 loading a driver. Request them in a pod like any extended resource:
-`resources.limits: {gpu.intel.com/xe: 1}` or `{habana.ai/gaudi: 1}`.
-Gaudi runs in the plugin's plain mode (no habana container runtime required).
+`resources.limits: {gpu.intel.com/xe: 1}`, `{npu.intel.com/accel: 1}` or `{habana.ai/gaudi: 1}`.
+Workload images bring their own user space: Intel compute-runtime / Level Zero
+for GPUs, the [NPU driver](https://github.com/intel/linux-npu-driver) + OpenVINO
+for the NPU. Gaudi runs in the plugin's plain mode, which hands pods the devices
+without the habana container runtime; full Gaudi workloads may still expect it.
+
+Force or limit vendors with `K3D_GPU_VENDORS=nvidia,intel,npu,gaudi`.
+A loaded `nvidia` or `habanalabs` kernel module counts as present even before
+its device nodes appear; `doctor` then flags the missing nodes.
+
+### Xeon built-in accelerators
+
+`k3d-gpu doctor` reports these but `up` does not deploy plugins for them: each
+needs host-side setup that a k3d node should not do on the host's behalf.
+
+| Accelerator | What doctor reports | To use it in the cluster |
+|-------------|---------------------|--------------------------|
+| **AMX** (Sapphire Rapids+) | `amx_*` CPU flags | Nothing — CPU instructions, usable in any pod |
+| **DSA / IAA** (`idxd`) | devices and user work queues | configure work queues with `accel-config`, then deploy `intel-dsa-plugin` / `intel-iaa-plugin` |
+| **QAT** 4xxx/420xx/6xxx | physical functions and VF count | create VFs, bind to `vfio-pci`, deploy `intel-qat-plugin` |
+
+The DLB plugin was removed upstream in intel-device-plugins v0.37.0.
 
 ---
 
