@@ -9,6 +9,11 @@
 #   npu     Intel NPU in Core Ultra (Meteor/Arrow/Lunar/Panther Lake and newer)
 #                                                         -> npu.intel.com/accel
 #   gaudi   Intel Gaudi (HPU, Gaudi 3)                    -> habana.ai/gaudi
+#   dsa     Intel DSA work queues (Xeon)                  -> dsa.intel.com/wq-user-*
+#   iaa     Intel IAA work queues (Xeon, Panther Lake)    -> iaa.intel.com/wq-user-*
+#   qat     Intel QAT virtual functions (Xeon)            -> qat.intel.com/<services>
+#   amx     Intel AMX (Xeon CPU instructions)             -> node labels feature.node.kubernetes.io/cpu-cpuid.AMX*
+#           DSA/IAA/QAT need host setup first (work queues / SR-IOV VFs); doctor says what is missing.
 #
 # Subcommands:
 #   up      create cluster, verify each detected accelerator is schedulable
@@ -27,6 +32,9 @@ PLUGIN_MANIFEST="${K3D_GPU_PLUGIN:-${SHARE_DIR}/nvidia-device-plugin.yml}"
 INTEL_PLUGIN_MANIFEST="${K3D_GPU_INTEL_PLUGIN:-${SHARE_DIR}/intel-gpu-plugin.yml}"
 GAUDI_PLUGIN_MANIFEST="${K3D_GPU_GAUDI_PLUGIN:-${SHARE_DIR}/gaudi-device-plugin.yml}"
 NPU_PLUGIN_MANIFEST="${K3D_GPU_NPU_PLUGIN:-${SHARE_DIR}/intel-npu-plugin.yml}"
+DSA_PLUGIN_MANIFEST="${K3D_GPU_DSA_PLUGIN:-${SHARE_DIR}/intel-dsa-plugin.yml}"
+IAA_PLUGIN_MANIFEST="${K3D_GPU_IAA_PLUGIN:-${SHARE_DIR}/intel-iaa-plugin.yml}"
+QAT_PLUGIN_MANIFEST="${K3D_GPU_QAT_PLUGIN:-${SHARE_DIR}/intel-qat-plugin.yml}"
 SYSROOT="${K3D_GPU_SYSROOT:-}" # prefix for /sys and /dev reads (tests point it at a fake tree)
 TEST_IMAGE="${K3D_GPU_TEST_IMAGE:-nvidia/cuda:13.4.2-base-ubuntu26.04}"
 DEVICE_TEST_IMAGE="${K3D_GPU_DEVICE_TEST_IMAGE:-busybox:1.37}"
@@ -43,7 +51,7 @@ warn() { echo "${YLW}WARN:${RST} $*" >&2; }
 
 usage() {
     cat <<EOF
-k3d-gpu ${VERSION} — accelerator-ready k3d clusters (NVIDIA, Intel GPU/iGPU, Intel NPU, Intel Gaudi)
+k3d-gpu ${VERSION} — accelerator-ready k3d clusters (NVIDIA, Intel GPU/iGPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX)
 
 Usage: k3d-gpu <command>
 
@@ -59,12 +67,15 @@ Usage: k3d-gpu <command>
 Environment:
   K3D_GPU_CLUSTER       cluster name         (default: gpu)
   K3D_GPU_IMAGE         k3s node image       (default: cryptoandcoffee/k3d-gpu:latest)
-  K3D_GPU_VENDORS       auto | comma list of nvidia,intel,npu,gaudi  (default: auto = detect)
+  K3D_GPU_VENDORS       auto | comma list of nvidia,intel,npu,gaudi,dsa,iaa,qat,amx (default: auto)
   K3D_GPU_SHARE         dir holding the fallback plugin yamls (default: /usr/share/k3d-gpu)
   K3D_GPU_PLUGIN        NVIDIA plugin yaml   (default: ${SHARE_DIR}/nvidia-device-plugin.yml)
   K3D_GPU_INTEL_PLUGIN  Intel GPU plugin yaml  (default: ${SHARE_DIR}/intel-gpu-plugin.yml)
   K3D_GPU_GAUDI_PLUGIN  Gaudi plugin yaml    (default: ${SHARE_DIR}/gaudi-device-plugin.yml)
   K3D_GPU_NPU_PLUGIN    Intel NPU plugin yaml  (default: ${SHARE_DIR}/intel-npu-plugin.yml)
+  K3D_GPU_DSA_PLUGIN    Intel DSA plugin yaml  (default: ${SHARE_DIR}/intel-dsa-plugin.yml)
+  K3D_GPU_IAA_PLUGIN    Intel IAA plugin yaml  (default: ${SHARE_DIR}/intel-iaa-plugin.yml)
+  K3D_GPU_QAT_PLUGIN    Intel QAT plugin yaml  (default: ${SHARE_DIR}/intel-qat-plugin.yml)
 
 Docs: https://github.com/88plug/k3d-gpu
 EOF
@@ -146,6 +157,43 @@ has_gaudi_pci() {
     return 1
 }
 
+# DSA/IAA: user work queues configured on the host (accel-config) show up as
+# /dev/dsa/wqX.Y and /dev/iax/wqX.Y. Devices without queues expose nothing.
+has_dsa() { compgen -G "${SYSROOT}/dev/dsa/wq*" >/dev/null; }
+has_iaa() { compgen -G "${SYSROOT}/dev/iax/wq*" >/dev/null; }
+
+# QAT physical function ids (C62x, 4xxx, 401xx, 402xx, 420xx, 6xxx) and the PF
+# drivers the plugin pairs with its kernel VF drivers.
+QAT_PF_IDS="0x37c8 0x4940 0x4942 0x4944 0x4946 0x4948"
+QAT_PF_DRIVERS="c6xx 4xxx 420xx 6xxx"
+
+# QAT: a PF bound to its QAT driver with SR-IOV VFs created. The plugin binds the
+# VFs to vfio-pci itself, so creating them is the only host step it needs.
+has_qat() {
+    local dev
+    for dev in "${SYSROOT}"/sys/bus/pci/devices/*; do
+        [[ " ${QAT_PF_DRIVERS} " == *" $(bound_driver "${dev}") "* ]] || continue
+        compgen -G "${dev}/virtfn*" >/dev/null && return 0
+    done
+    return 1
+}
+
+# AMX feature flags from /proc/cpuinfo, sorted, one line (empty when absent).
+amx_flags() {
+    local flags
+    flags=$(grep -m1 '^flags' "${SYSROOT}/proc/cpuinfo" 2>/dev/null || true)
+    tr ' ' '\n' <<< "${flags#*:}" | grep '^amx_' | sort | paste -sd' ' || true
+}
+
+# NFD-style node labels for the host's AMX flags (amx_tile -> ...cpu-cpuid.AMXTILE=true).
+amx_labels() {
+    local f
+    for f in $(amx_flags); do
+        f=${f//_/}
+        echo "feature.node.kubernetes.io/cpu-cpuid.${f^^}=true"
+    done
+}
+
 # ---- platform tables (doctor only) --------------------------------------------
 # IDs, default-driver kernels and firmware names from the kernel's
 # include/drm/intel/pciids.h, xe_pci.c, xe_uc_fw.c and drivers/accel/ivpu.
@@ -211,13 +259,17 @@ resolve_vendors() {
         elif has_gaudi_pci; then
             warn "Gaudi PCI device found but the habanalabs driver is not loaded — skipping Gaudi (Gaudi 3 needs Intel's out-of-tree habanalabs driver; mainline only covers up to Gaudi 2)"
         fi
+        if has_dsa; then ACTIVE+=(dsa); fi
+        if has_iaa; then ACTIVE+=(iaa); fi
+        if has_qat; then ACTIVE+=(qat); fi
+        if [ -n "$(amx_flags)" ]; then ACTIVE+=(amx); fi
     else
         IFS=',' read -r -a req <<< "${VENDORS_REQUEST// /}"
         for v in "${req[@]}"; do
             case "${v}" in
                 "") ;;
-                nvidia|intel|npu|gaudi) is_active "${v}" || ACTIVE+=("${v}") ;;
-                *) err "unknown vendor '${v}' in K3D_GPU_VENDORS (use nvidia,intel,npu,gaudi)" ;;
+                nvidia|intel|npu|gaudi|dsa|iaa|qat|amx) is_active "${v}" || ACTIVE+=("${v}") ;;
+                *) err "unknown vendor '${v}' in K3D_GPU_VENDORS (use nvidia,intel,npu,gaudi,dsa,iaa,qat,amx)" ;;
             esac
         done
     fi
@@ -230,12 +282,19 @@ is_active() {
     return 1
 }
 
-# Kubernetes extended resources a vendor advertises (one per line).
+# Kubernetes extended resources a vendor advertises (one per line). A trailing *
+# is a prefix: DSA/IAA name resources after the queue mode, QAT after the PF's
+# configured services (cy, dc, asym-dc, ... or generic). AMX has no resource; it
+# lists the node labels the launcher sets instead.
 vendor_resources() {
     case "$1" in
         nvidia) echo "nvidia.com/gpu" ;;
         npu)    echo "npu.intel.com/accel" ;;
         gaudi)  echo "habana.ai/gaudi" ;;
+        dsa)    echo "dsa.intel.com/*" ;;
+        iaa)    echo "iaa.intel.com/*" ;;
+        qat)    echo "qat.intel.com/*" ;;
+        amx)    amx_labels ;;
         intel)
             # One resource per bound driver; both when nothing is detected
             # (explicit K3D_GPU_VENDORS=intel on a host we cannot read).
@@ -255,6 +314,9 @@ vendor_daemonset() {  # prints: namespace name manifest
         intel)  echo "kube-system intel-gpu-plugin ${INTEL_PLUGIN_MANIFEST}" ;;
         npu)    echo "kube-system intel-npu-plugin ${NPU_PLUGIN_MANIFEST}" ;;
         gaudi)  echo "habana-system habanalabs-device-plugin-daemonset ${GAUDI_PLUGIN_MANIFEST}" ;;
+        dsa)    echo "kube-system intel-dsa-plugin ${DSA_PLUGIN_MANIFEST}" ;;
+        iaa)    echo "kube-system intel-iaa-plugin ${IAA_PLUGIN_MANIFEST}" ;;
+        qat)    echo "kube-system intel-qat-plugin ${QAT_PLUGIN_MANIFEST}" ;;
     esac
 }
 
@@ -405,41 +467,55 @@ doctor_intel_unbound() {
     printf '%s' "${lines}"
 }
 
-# Xeon built-in accelerators. Reported only: their plugins depend on host-owned
-# setup (SR-IOV VFs, vfio-pci, accel-config work queues, IOMMU mode) that a k3d
-# node cannot do safely on the host's behalf.
+# Xeon built-in accelerators. `up` deploys DSA/IAA/QAT plugins once the host
+# side is set up (work queues, SR-IOV VFs); this says what is still missing.
 doctor_cpu_accels() {
-    local flags amx dev bdf vfs n wqs kind name prefix devdir lines=""
-    flags=$(grep -m1 '^flags' "${SYSROOT}/proc/cpuinfo" 2>/dev/null || true)
-    amx=$(tr ' ' '\n' <<< "${flags#*:}" | grep '^amx_' | sort | paste -sd' ' || true)
-    [ -z "${amx}" ] || lines+="  ok: AMX (${amx}) — CPU instructions, usable in any pod with no device plugin"$'\n'
+    local amx dev bdf vfs n wqs kind name prefix devdir lines=""
+    amx=$(amx_flags)
+    [ -z "${amx}" ] || lines+="  ok: AMX (${amx}) — CPU instructions, usable in any pod; up labels nodes feature.node.kubernetes.io/cpu-cpuid.AMX*"$'\n'
 
     for kind in "DSA dsa dsa" "IAA iax iax"; do
         read -r name prefix devdir <<< "${kind}"
         n=$({ compgen -G "${SYSROOT}/sys/bus/dsa/devices/${prefix}[0-9]*" || true; } | wc -l)
-        [ "${n}" -gt 0 ] || continue
         wqs=$({ compgen -G "${SYSROOT}/dev/${devdir}/wq*" || true; } | wc -l)
         if [ "${wqs}" -gt 0 ]; then
-            lines+="  ok: ${name}: ${n} device(s), ${wqs} user work queue(s) — deploy intel-${name,,}-plugin to schedule them"$'\n'
-        else
+            lines+="  ok: ${name}: ${n} device(s), ${wqs} user work queue(s) — deployed by 'k3d-gpu up' (intel-${name,,}-plugin)"$'\n'
+        elif [ "${n}" -gt 0 ]; then
             lines+="  ${YLW}warn${RST}: ${name}: ${n} device(s) but no user work queues — configure them on the host with accel-config"$'\n'
+        fi
+        if is_active "${name,,}" && [ "${wqs}" -eq 0 ]; then
+            lines+="  ${RED}fail${RST}: ${name} requested but no /dev/${devdir}/wq* work queues"$'\n'
+            FAIL=1
         fi
     done
 
     for dev in "${SYSROOT}"/sys/bus/pci/devices/*; do
         [ "$(cat "${dev}/vendor" 2>/dev/null)" = "0x8086" ] || continue
-        case "$(cat "${dev}/device" 2>/dev/null)" in 0x4940|0x4942|0x4944|0x4946|0x4948) ;; *) continue ;; esac
+        [[ " ${QAT_PF_IDS} " == *" $(cat "${dev}/device" 2>/dev/null) "* ]] || continue
         bdf=$(basename "${dev}")
-        vfs=$(cat "${dev}/sriov_numvfs" 2>/dev/null || echo 0)
-        if [ "${vfs}" -gt 0 ]; then
-            lines+="  ok: QAT ${bdf}: ${vfs} VF(s) — bind them to vfio-pci and deploy intel-qat-plugin to schedule them"$'\n'
+        vfs=$({ compgen -G "${dev}/virtfn*" || true; } | wc -l)
+        if [ -z "$(bound_driver "${dev}")" ]; then
+            lines+="  ${YLW}warn${RST}: QAT ${bdf}: no driver bound — load the QAT driver (qat_4xxx / qat_420xx / qat_6xxx / qat_c62x)"$'\n'
+        elif [ "${vfs}" -gt 0 ]; then
+            lines+="  ok: QAT ${bdf}: ${vfs} VF(s) — deployed by 'k3d-gpu up' (intel-qat-plugin binds them to vfio-pci)"$'\n'
         else
-            lines+="  ${YLW}warn${RST}: QAT ${bdf}: no VFs — enable on the host (echo N > /sys/bus/pci/devices/${bdf}/sriov_numvfs, then bind to vfio-pci)"$'\n'
+            lines+="  ${YLW}warn${RST}: QAT ${bdf}: no VFs — enable on the host: echo N > /sys/bus/pci/devices/${bdf}/sriov_numvfs"$'\n'
         fi
     done
+    if has_qat && [ ! -d "${SYSROOT}/sys/bus/pci/drivers/vfio-pci" ]; then
+        lines+="  ${YLW}warn${RST}: vfio-pci is not loaded — the QAT plugin needs it (sudo modprobe vfio-pci; IOMMU on: intel_iommu=on)"$'\n'
+    fi
+    if is_active qat && ! has_qat; then
+        lines+="  ${RED}fail${RST}: QAT requested but no QAT PF with VFs"$'\n'
+        FAIL=1
+    fi
+    if is_active amx && [ -z "${amx}" ]; then
+        lines+="  ${RED}fail${RST}: AMX requested but the CPU reports no amx_* flags"$'\n'
+        FAIL=1
+    fi
 
     [ -n "${lines}" ] || return 0
-    info "Intel CPU built-in accelerators (reported only; not deployed by k3d-gpu)..."
+    info "Intel CPU built-in accelerators..."
     printf '%s' "${lines}"
 }
 
@@ -450,7 +526,7 @@ doctor() {
 
     if [ "${#ACTIVE[@]}" -eq 0 ]; then
         echo ""
-        echo "  ${RED}fail${RST}: no supported accelerator detected (NVIDIA, Intel GPU, Intel NPU, Intel Gaudi)"
+        echo "  ${RED}fail${RST}: no supported accelerator detected (NVIDIA, Intel GPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX)"
         FAIL=1
     else
         info "Detected accelerators: ${ACTIVE[*]}"
@@ -472,7 +548,7 @@ cmd_up() {
     require kubectl
 
     resolve_vendors
-    [ "${#ACTIVE[@]}" -gt 0 ] || err "no supported accelerator detected (NVIDIA, Intel GPU, Intel NPU, Intel Gaudi) — run 'k3d-gpu doctor' or set K3D_GPU_VENDORS"
+    [ "${#ACTIVE[@]}" -gt 0 ] || err "no supported accelerator detected (NVIDIA, Intel GPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX) — run 'k3d-gpu doctor' or set K3D_GPU_VENDORS"
     info "Accelerators: ${ACTIVE[*]}"
 
     local create_args=(
@@ -506,6 +582,26 @@ cmd_up() {
     if is_active npu; then
         create_args+=(--k3s-node-label="intel.feature.node.kubernetes.io/npu=true@server:*;agent:*")
     fi
+    # DSA/IAA/QAT plugins are gated by upstream's NFD labels the same way.
+    local v label
+    for v in dsa iaa qat; do
+        if is_active "${v}"; then
+            create_args+=(--k3s-node-label="intel.feature.node.kubernetes.io/${v}=true@server:*;agent:*")
+        fi
+    done
+    # The DSA/IAA plugins only accept a work queue whose /dev/char/<major>:<minor>
+    # udev symlink exists. A privileged container gets the device nodes but no
+    # /dev/char, so share the host's (its links are relative and resolve to the
+    # node's own /dev/dsa and /dev/iax).
+    if { is_active dsa || is_active iaa; } && [ -d /dev/char ]; then
+        create_args+=(--volume="/dev/char:/dev/char:ro@server:*;agent:*")
+    fi
+    # AMX is a CPU feature: no plugin, just NFD-style labels pods can select on.
+    if is_active amx; then
+        while read -r label; do
+            [ -n "${label}" ] && create_args+=(--k3s-node-label="${label}@server:*;agent:*")
+        done < <(amx_labels)
+    fi
     if is_active intel && ! compgen -G '/dev/dri/renderD*' >/dev/null; then
         warn "no /dev/dri/renderD* on host — Intel GPU will not be visible in the node"
     fi
@@ -523,9 +619,10 @@ cmd_up() {
     # auto-deploy dir, so k3s applies them on startup — no action needed here. Give
     # each addon a moment to appear; only apply it ourselves if a custom image
     # (K3D_GPU_IMAGE) didn't ship it.
-    local v ns ds manifest
+    local ns ds manifest
     for v in "${ACTIVE[@]}"; do
         read -r ns ds manifest <<< "$(vendor_daemonset "${v}")"
+        [ -n "${ds}" ] || continue
         ensure_plugin "${v}" "${ns}" "${ds}" "${manifest}"
     done
 
@@ -552,12 +649,30 @@ ensure_plugin() {
     fi
 }
 
-# Sum an extended resource across all nodes' allocatable.
-resource_total() {
-    local esc=${1//./\\.}
-    { kubectl get nodes \
-        -o "jsonpath={range .items[*]}{.status.allocatable.${esc}}{\"\\n\"}{end}" 2>/dev/null || true; } \
-        | awk '{s += $1} END {print s + 0}'
+# "<resource> <count>" per extended resource matching a name, or a prefix when
+# the name ends in *, summed across all nodes' allocatable. Zero counts dropped.
+resource_counts() {
+    { kubectl get nodes -o go-template='{{range .items}}{{range $k, $v := .status.allocatable}}{{$k}} {{$v}}{{"\n"}}{{end}}{{end}}' 2>/dev/null || true; } \
+        | awk -v want="$1" '
+            (want ~ /\*$/ && index($1, substr(want, 1, length(want) - 1)) == 1) || $1 == want { s[$1] += $2 }
+            END { for (k in s) if (s[k] > 0) print k, s[k] }' | sort
+}
+
+resource_total() { resource_counts "$1" | awk '{s += $2} END {print s + 0}'; }
+
+# Schedulable units for a vendor: summed resources, or for AMX the number of
+# nodes carrying its labels.
+vendor_total() {
+    local res total=0
+    while read -r res; do
+        [ -n "${res}" ] || continue
+        if [ "$1" = "amx" ]; then
+            total=$((total + $({ kubectl get nodes -l "${res}" -o name 2>/dev/null || true; } | wc -l)))
+        else
+            total=$((total + $(resource_total "${res}")))
+        fi
+    done < <(vendor_resources "$1")
+    echo "${total}"
 }
 
 # Assert the cluster actually exposes every detected accelerator to the
@@ -565,19 +680,18 @@ resource_total() {
 # common failure mode is a cluster that comes up healthy but advertises nothing.
 verify_gpus() {
     info "Verifying accelerators are schedulable..."
-    local v ns ds manifest res total deadline summary="" failed=""
+    local v ns ds manifest total deadline summary="" failed=""
     for v in "${ACTIVE[@]}"; do
         read -r ns ds manifest <<< "$(vendor_daemonset "${v}")"
-        kubectl -n "${ns}" rollout status "daemonset/${ds}" --timeout=120s \
-            || warn "${v} device plugin rollout did not finish cleanly"
+        if [ -n "${ds}" ]; then
+            kubectl -n "${ns}" rollout status "daemonset/${ds}" --timeout=120s \
+                || warn "${v} device plugin rollout did not finish cleanly"
+        fi
 
         total=0
         deadline=$((SECONDS + 90))
         while [ "${SECONDS}" -lt "${deadline}" ]; do
-            total=0
-            while read -r res; do
-                total=$((total + $(resource_total "${res}")))
-            done < <(vendor_resources "${v}")
+            total=$(vendor_total "${v}")
             [ "${total}" -gt 0 ] && break
             sleep 3
         done
@@ -587,7 +701,7 @@ verify_gpus() {
         else
             failed+=" ${v}"
             warn "cluster advertises 0 ${v} devices ($(vendor_resources "${v}" | tr '\n' ' '))
-       Inspect: kubectl -n ${ns} logs ds/${ds}  — then run 'k3d-gpu doctor'."
+       Inspect: ${ds:+kubectl -n ${ns} logs ds/${ds}  — then run }'k3d-gpu doctor'."
         fi
     done
     # An explicit K3D_GPU_VENDORS request must fully succeed. In auto mode one
@@ -619,7 +733,7 @@ cmd_test() {
     require kubectl
     resolve_vendors
     [ "${#ACTIVE[@]}" -gt 0 ] || err "no supported accelerator detected — run 'k3d-gpu doctor'"
-    local res
+    local res v path
     if is_active nvidia; then
         info "Deploying nvidia-smi test pod (${TEST_IMAGE})..."
         # The container command + GPU resource limit live entirely in --overrides;
@@ -640,6 +754,22 @@ cmd_test() {
     fi
     if is_active gaudi; then
         device_test "gaudi-test" "habana.ai/gaudi" /dev/accel
+    fi
+    local kind
+    for kind in "dsa /dev/dsa" "iaa /dev/iax" "qat /dev/vfio"; do
+        read -r v path <<< "${kind}"
+        is_active "${v}" || continue
+        res=$(resource_counts "$(vendor_resources "${v}")" | awk 'NR == 1 {print $1}')
+        [ -n "${res}" ] || err "cluster advertises no ${v} resources — run 'k3d-gpu doctor'"
+        device_test "${v}-test" "${res}" "${path}"
+    done
+    if is_active amx; then
+        res=$(amx_labels | head -n1)
+        info "Deploying AMX test pod (${DEVICE_TEST_IMAGE}, nodeSelector ${res})..."
+        kubectl run amx-test --rm -i --restart=Never \
+            --image="${DEVICE_TEST_IMAGE}" \
+            --overrides="{\"spec\":{\"nodeSelector\":{\"${res%=*}\":\"true\"},\"containers\":[{\"name\":\"amx-test\",\"image\":\"${DEVICE_TEST_IMAGE}\",\"command\":[\"grep\",\"-m1\",\"-o\",\"amx_tile\",\"/proc/cpuinfo\"]}]}}" \
+            || err "AMX test pod failed — run 'k3d-gpu doctor'"
     fi
 }
 

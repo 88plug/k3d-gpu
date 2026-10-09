@@ -157,6 +157,48 @@ intel gpu.intel.com/i915 gpu.intel.com/xe" K3D_GPU_VENDORS=" npu, intel ,npu"
 
 expect_fail "unknown vendor in K3D_GPU_VENDORS is rejected" "${r}" K3D_GPU_VENDORS="intel,tpu"
 
+# xeon <root>: Sapphire Rapids-style host with AMX flags, a DSA and an IAA device
+# with one user work queue each, and a 4xxx QAT PF with one VF.
+xeon() {
+    local r=$1
+    mkdir -p "${r}/proc" "${r}/sys/bus/dsa/devices/dsa0" "${r}/sys/bus/dsa/devices/iax1" "${r}/dev/dsa" "${r}/dev/iax"
+    printf 'processor\t: 0\nflags\t\t: fpu avx512f amx_bf16 amx_tile amx_int8\n' > "${r}/proc/cpuinfo"
+    touch "${r}/dev/dsa/wq0.0" "${r}/dev/iax/wq1.0"
+    pci "${r}" 0000:6b:00.0 0x8086 0x4940 4xxx 0x0b4000
+    pci "${r}" 0000:6b:00.1 0x8086 0x4941 4xxxvf 0x0b4000
+    ln -sfn "${r}/sys/devices/pci0000:00/0000:6b:00.1" "${r}/sys/devices/pci0000:00/0000:6b:00.0/virtfn0"
+}
+
+r=$(newroot xeon-ready)
+xeon "${r}"
+expect "Xeon: DSA/IAA work queues, QAT VFs and AMX are detected" "${r}" \
+"dsa dsa.intel.com/*
+iaa iaa.intel.com/*
+qat qat.intel.com/*
+amx feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true feature.node.kubernetes.io/cpu-cpuid.AMXINT8=true feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true"
+
+r=$(newroot xeon-unconfigured)
+mkdir -p "${r}/sys/bus/dsa/devices/dsa0" "${r}/sys/bus/dsa/devices/iax1"
+pci "${r}" 0000:6b:00.0 0x8086 0x4940 4xxx 0x0b4000
+expect "DSA/IAA without work queues and QAT without VFs are not active" "${r}" ""
+
+r=$(newroot qat-unbound)
+pci "${r}" 0000:6b:00.0 0x8086 0x4940 "" 0x0b4000
+pci "${r}" 0000:6b:00.1 0x8086 0x4941 "" 0x0b4000
+ln -sfn "${r}/sys/devices/pci0000:00/0000:6b:00.1" "${r}/sys/devices/pci0000:00/0000:6b:00.0/virtfn0"
+expect "QAT PF with no driver is not active" "${r}" ""
+
+r=$(newroot qat-c62x)
+pci "${r}" 0000:3d:00.0 0x8086 0x37c8 c6xx 0x0b4000
+pci "${r}" 0000:3d:01.0 0x8086 0x37c9 c6xxvf 0x0b4000
+ln -sfn "${r}/sys/devices/pci0000:00/0000:3d:01.0" "${r}/sys/devices/pci0000:00/0000:3d:00.0/virtfn0"
+expect "C62x QAT PF with VFs is active" "${r}" "qat qat.intel.com/*"
+
+r=$(newroot amd-epyc)
+mkdir -p "${r}/proc"
+printf 'processor\t: 0\nflags\t\t: fpu avx512f avx512_bf16\n' > "${r}/proc/cpuinfo"
+expect "CPU without AMX flags is not amx" "${r}" ""
+
 # ---- doctor diagnostics -------------------------------------------------------
 
 r=$(newroot cri-unbound)
@@ -268,6 +310,19 @@ kernel "${r}" 6.18.1
 pci "${r}" 0000:03:00.0 0x8086 0xe20b xe; render "${r}" 0000:03:00.0 128
 mkdir -p "${r}/usr/lib/firmware/xe"; touch "${r}/usr/lib/firmware/xe/bmg_guc_70.bin.zst"
 doctor_says "compressed firmware under usr/lib/firmware is found" "${r}" 'ok: xe/bmg_guc_'
+
+r=$(newroot xeon-doc)
+kernel "${r}" 6.18.1
+xeon "${r}"
+doctor_says "ready DSA is reported as deployed by up" "${r}" 'ok: DSA: .*deployed by .k3d-gpu up.'
+doctor_says "ready QAT is reported as deployed by up" "${r}" 'ok: QAT .*1 VF.*deployed by .k3d-gpu up.'
+doctor_says "QAT without vfio-pci loaded warns" "${r}" 'warn.*vfio-pci'
+mkdir -p "${r}/sys/bus/pci/drivers/vfio-pci"
+doctor_says "QAT with vfio-pci loaded does not warn about it" "${r}" 'warn.*vfio-pci' negate
+
+r=$(newroot dsa-forced)
+kernel "${r}" 6.18.1
+doctor_says "forced dsa with no work queues fails doctor" "${r}" 'fail.*DSA' "" K3D_GPU_VENDORS=dsa
 
 r=$(newroot gaudi-doc)
 kernel "${r}" 6.18.1

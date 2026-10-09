@@ -50,6 +50,11 @@ COPY share/gaudi-device-plugin.yml /var/lib/rancher/k3s/server/manifests/gaudi-d
 # Intel NPU (Core Ultra) plugin, gated by intel.feature.node.kubernetes.io/npu=true,
 # which the launcher sets when it detects an NPU.
 COPY share/intel-npu-plugin.yml /var/lib/rancher/k3s/server/manifests/intel-npu-plugin.yaml
+# Xeon DSA / IAA / QAT plugins, gated by intel.feature.node.kubernetes.io/{dsa,iaa,qat}=true,
+# which the launcher sets once the host has work queues / SR-IOV VFs configured.
+COPY share/intel-dsa-plugin.yml /var/lib/rancher/k3s/server/manifests/intel-dsa-plugin.yaml
+COPY share/intel-iaa-plugin.yml /var/lib/rancher/k3s/server/manifests/intel-iaa-plugin.yaml
+COPY share/intel-qat-plugin.yml /var/lib/rancher/k3s/server/manifests/intel-qat-plugin.yaml
 
 # CDI spec directories. containerd 2.x (k3s 1.34) enables CDI by default and scans
 # these paths, so vendor plugins/tools that emit CDI specs work without any

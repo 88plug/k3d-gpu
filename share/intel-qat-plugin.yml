@@ -1,0 +1,85 @@
+# Intel QAT (QuickAssist) device plugin DaemonSet (C62x, 4xxx/401xx/402xx, 420xx, 6xxx)
+# Source: https://github.com/intel/intel-device-plugins-for-kubernetes (deployments/qat_plugin/base)
+# Advertises qat.intel.com/<services> (cy, dc, asym-dc, ... or generic) per SR-IOV VF
+# of a PF the host enabled (sriov_numvfs). The plugin binds the VFs to vfio-pci itself.
+# Scheduled only onto nodes labelled intel.feature.node.kubernetes.io/qat=true
+# (upstream's NFD label), which the k3d-gpu launcher sets when the host side is
+# ready. Auto-bumped by the build-and-push workflow (same release as the GPU plugin).
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: intel-qat-plugin
+  namespace: kube-system
+  labels:
+    app: intel-qat-plugin
+spec:
+  selector:
+    matchLabels:
+      app: intel-qat-plugin
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: intel-qat-plugin
+    spec:
+      automountServiceAccountToken: false
+      priorityClassName: "system-node-critical"
+      containers:
+      - name: intel-qat-plugin
+        env:
+          - name: NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+        image: intel/intel-qat-plugin:0.37.1
+        # Upstream default is 4xxxvf,420xxvf; also cover 6xxx and C62x.
+        args: ["-kernel-vf-drivers=4xxxvf,420xxvf,6xxxvf,c6xxvf"]
+        securityContext:
+          seLinuxOptions:
+            type: "container_device_plugin_t"
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            memory: "15Mi"
+            cpu: 70m
+          limits:
+            memory: "50Mi"
+            cpu: 140m
+        volumeMounts:
+        - name: devdir
+          mountPath: /dev/vfio
+          readOnly: true
+        - name: debugfsdir
+          mountPath: /sys/kernel/debug
+          readOnly: true
+        - name: pcidir
+          mountPath: /sys/bus/pci
+        - name: kubeletsockets
+          mountPath: /var/lib/kubelet/device-plugins
+      volumes:
+      - name: devdir
+        hostPath:
+          path: /dev/vfio
+      - name: debugfsdir
+        hostPath:
+          path: /sys/kernel/debug
+      - name: pcidir
+        hostPath:
+          path: /sys/bus/pci
+      - name: kubeletsockets
+        hostPath:
+          path: /var/lib/kubelet/device-plugins
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        intel.feature.node.kubernetes.io/qat: "true"
