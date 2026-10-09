@@ -14,8 +14,15 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ludeeus/action-shellcheck@master
         with:
-          scandir: ./scripts
+          scandir: .
           severity: warning
+
+  detect-tests:
+    name: Detection tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: tests/detect_test.sh
 
   hadolint:
     name: Dockerfile lint

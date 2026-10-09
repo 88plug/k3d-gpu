@@ -2,6 +2,10 @@
 # Source: https://github.com/NVIDIA/k8s-device-plugin
 # Bundled here to avoid a network fetch during 'k3d-gpu up'.
 # Auto-bumped by the build-and-push workflow when upstream releases a new version.
+# Skips nodes labelled nvidia.com/gpu.present=false, which the k3d-gpu launcher
+# sets when the host has no NVIDIA GPU (the image also serves Intel/Gaudi hosts,
+# where this pod could never start). Unlabelled nodes still run it, so a plain
+# `k3d cluster create --gpus all` keeps working.
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -29,6 +33,14 @@ spec:
           operator: Exists
           effect: NoSchedule
       priorityClassName: "system-node-critical"
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: nvidia.com/gpu.present
+                    operator: NotIn
+                    values: ["false"]
       containers:
         - image: nvcr.io/nvidia/k8s-device-plugin:v0.20.1
           name: nvidia-device-plugin-ctr

@@ -141,6 +141,8 @@ jobs:
           sed -i "s|^ARG K3S_TAG=.*|ARG K3S_TAG=\"${{ steps.k3s.outputs.latest }}\"|" Dockerfile
           sed -i "s|k8s-device-plugin:v[0-9]*\.[0-9]*\.[0-9]*|k8s-device-plugin:${{ steps.nvidia_plugin.outputs.latest }}|" share/nvidia-device-plugin.yml
           sed -i "s|intel-gpu-plugin:[0-9]*\.[0-9]*\.[0-9]*|intel-gpu-plugin:${{ steps.intel_plugin.outputs.latest }}|" share/intel-gpu-plugin.yml
+          # The NPU plugin ships in the same intel-device-plugins release as the GPU plugin.
+          sed -i "s|intel-npu-plugin:[0-9]*\.[0-9]*\.[0-9]*|intel-npu-plugin:${{ steps.intel_plugin.outputs.latest }}|" share/intel-npu-plugin.yml
           sed -i "s|gaudi-device-plugin:[0-9]*\.[0-9]*\.[0-9]*-[0-9]*|gaudi-device-plugin:${{ steps.gaudi_plugin.outputs.latest }}|" share/gaudi-device-plugin.yml
           sed -i "s|K3D_GPU_TEST_IMAGE:-nvidia/cuda:[^}]*|K3D_GPU_TEST_IMAGE:-nvidia/cuda:${{ steps.cuda.outputs.latest }}|" scripts/k3d-gpu
 
@@ -164,7 +166,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Dockerfile README.md share/nvidia-device-plugin.yml share/intel-gpu-plugin.yml share/gaudi-device-plugin.yml scripts/k3d-gpu
+          git add Dockerfile README.md share/nvidia-device-plugin.yml share/intel-gpu-plugin.yml share/intel-npu-plugin.yml share/gaudi-device-plugin.yml scripts/k3d-gpu
           if git diff --cached --quiet; then
             echo "no version changes to commit (forced rebuild)"
           else
@@ -240,7 +242,7 @@ jobs:
             `${{ steps.k3s.outputs.latest }}`, NVIDIA device plugin
             `${{ steps.nvidia_plugin.outputs.latest }}` (baked in — GPUs are
             exposed on `up` with no `kubectl apply`). Intel GPU plugin
-            `v${{ steps.intel_plugin.outputs.latest }}` (Arc / Xe2 Battlemage) and Gaudi
+            `v${{ steps.intel_plugin.outputs.latest }}` (Arc, Battlemage, Core Ultra iGPU), Intel NPU plugin (same version) and Gaudi
             plugin `${{ steps.gaudi_plugin.outputs.latest }}` (Gaudi 3 HPU) are baked in too.
 
             **Docker Hub**

@@ -2,7 +2,10 @@
 # Source: https://github.com/HabanaAI/gaudi-device-plugin (habana-k8s-device-plugin.yaml)
 # Advertises habana.ai/gaudi. Plain (non-CDI) mode: the plugin hands kubelet the
 # /dev/accel/accelN + accel_controlDN device specs and the HABANA_VISIBLE_DEVICES
-# env, so no habana container runtime is needed. The plugin exits or spins when
+# env, so pods get the devices without the habana container runtime. Full Gaudi
+# workloads may still expect the runtime's hook (habana-container-runtime), as
+# Intel's docs configure it. Gaudi 3 needs Intel's out-of-tree habanalabs
+# driver; mainline only covers up to Gaudi 2. The plugin exits or spins when
 # no Gaudi driver is present, so it only schedules onto nodes labelled
 # habana.ai/gaudi.present=true (the k3d-gpu launcher sets it when Gaudi is detected).
 # Auto-bumped by the build-and-push workflow when upstream releases a new version.

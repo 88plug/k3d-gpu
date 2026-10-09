@@ -3,14 +3,18 @@
 # Manage GPU/HPU-ready k3d clusters. https://github.com/88plug/k3d-gpu
 #
 # Supported accelerators (auto-detected on the host, no flags needed):
-#   nvidia  NVIDIA GPUs            -> nvidia.com/gpu
-#   intel   Intel Arc/Xe2 Battlemage (xe) and i915 GPUs -> gpu.intel.com/xe, gpu.intel.com/i915
-#   gaudi   Intel Gaudi (HPU, Gaudi 3)                   -> habana.ai/gaudi
+#   nvidia  NVIDIA GPUs                                   -> nvidia.com/gpu
+#   intel   Intel GPUs: Arc/Battlemage/Crescent Island and the integrated GPU in
+#           Core Ultra APUs (xe or i915)                  -> gpu.intel.com/xe, gpu.intel.com/i915
+#   npu     Intel NPU in Core Ultra (Meteor/Arrow/Lunar/Panther Lake and newer)
+#                                                         -> npu.intel.com/accel
+#   gaudi   Intel Gaudi (HPU, Gaudi 3)                    -> habana.ai/gaudi
 #
 # Subcommands:
 #   up      create cluster, verify each detected accelerator is schedulable
 #   down    delete cluster
 #   test    run a pod per detected accelerator and print the device view
+#   detect  print the accelerators found on this host and their k8s resources
 #   doctor  preflight: accelerators present, docker running, runtimes, k3d installed
 #   logs    tail server container logs
 
@@ -22,27 +26,31 @@ SHARE_DIR="${K3D_GPU_SHARE:-/usr/share/k3d-gpu}"
 PLUGIN_MANIFEST="${K3D_GPU_PLUGIN:-${SHARE_DIR}/nvidia-device-plugin.yml}"
 INTEL_PLUGIN_MANIFEST="${K3D_GPU_INTEL_PLUGIN:-${SHARE_DIR}/intel-gpu-plugin.yml}"
 GAUDI_PLUGIN_MANIFEST="${K3D_GPU_GAUDI_PLUGIN:-${SHARE_DIR}/gaudi-device-plugin.yml}"
+NPU_PLUGIN_MANIFEST="${K3D_GPU_NPU_PLUGIN:-${SHARE_DIR}/intel-npu-plugin.yml}"
+SYSROOT="${K3D_GPU_SYSROOT:-}" # prefix for /sys and /dev reads (tests point it at a fake tree)
 TEST_IMAGE="${K3D_GPU_TEST_IMAGE:-nvidia/cuda:13.4.2-base-ubuntu26.04}"
 DEVICE_TEST_IMAGE="${K3D_GPU_DEVICE_TEST_IMAGE:-busybox:1.37}"
 VENDORS_REQUEST="${K3D_GPU_VENDORS:-auto}"
 FAIL=0           # set by doctor_* checks
 INTEL_DRIVERS=() # "<driver> <pci-device-id>" per Intel render node (filled by detect_intel)
+NPU_IDS=()       # PCI device id per Intel NPU accel node (filled by detect_npu)
 VERSION="0.1.3"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 
 RED=$'\e[31m' GRN=$'\e[32m' YLW=$'\e[33m' RST=$'\e[0m'
 err()  { echo "${RED}ERROR:${RST} $*" >&2; exit 1; }
 info() { echo "${GRN}==>${RST} $*"; }
-warn() { echo "${YLW}WARN:${RST} $*"; }
+warn() { echo "${YLW}WARN:${RST} $*" >&2; }
 
 usage() {
     cat <<EOF
-k3d-gpu ${VERSION} — accelerator-ready k3d clusters (NVIDIA, Intel Xe2/Arc, Intel Gaudi)
+k3d-gpu ${VERSION} — accelerator-ready k3d clusters (NVIDIA, Intel GPU/iGPU, Intel NPU, Intel Gaudi)
 
 Usage: k3d-gpu <command>
 
   up        Create cluster '${CLUSTER}' with passthrough for every detected accelerator
   down      Delete cluster '${CLUSTER}'
   test      Run a pod per detected accelerator and print its device view
+  detect    Print accelerators found on this host and their Kubernetes resources
   doctor    Diagnostic preflight checks
   logs      Tail k3s server container logs
   version   Show version
@@ -51,11 +59,12 @@ Usage: k3d-gpu <command>
 Environment:
   K3D_GPU_CLUSTER       cluster name         (default: gpu)
   K3D_GPU_IMAGE         k3s node image       (default: cryptoandcoffee/k3d-gpu:latest)
-  K3D_GPU_VENDORS       auto | comma list of nvidia,intel,gaudi  (default: auto = detect)
+  K3D_GPU_VENDORS       auto | comma list of nvidia,intel,npu,gaudi  (default: auto = detect)
   K3D_GPU_SHARE         dir holding the fallback plugin yamls (default: /usr/share/k3d-gpu)
   K3D_GPU_PLUGIN        NVIDIA plugin yaml   (default: ${SHARE_DIR}/nvidia-device-plugin.yml)
   K3D_GPU_INTEL_PLUGIN  Intel GPU plugin yaml  (default: ${SHARE_DIR}/intel-gpu-plugin.yml)
   K3D_GPU_GAUDI_PLUGIN  Gaudi plugin yaml    (default: ${SHARE_DIR}/gaudi-device-plugin.yml)
+  K3D_GPU_NPU_PLUGIN    Intel NPU plugin yaml  (default: ${SHARE_DIR}/intel-npu-plugin.yml)
 
 Docs: https://github.com/88plug/k3d-gpu
 EOF
@@ -70,58 +79,142 @@ require() {
 
 # NVIDIA: device nodes appear only after first use on some hosts, so also accept
 # the loaded kernel module.
-has_nvidia() { [ -e /dev/nvidiactl ] || [ -e /dev/nvidia0 ] || [ -d /sys/module/nvidia ]; }
+has_nvidia() {
+    [ -e "${SYSROOT}/dev/nvidiactl" ] || [ -e "${SYSROOT}/dev/nvidia0" ] || [ -d "${SYSROOT}/sys/module/nvidia" ]
+}
+
+# Name of the kernel driver bound to a sysfs device dir, or empty.
+bound_driver() {
+    local link
+    link=$(readlink -f "$1/driver" 2>/dev/null) || return 0
+    [ -n "${link}" ] && [ -e "${link}" ] && basename "${link}"
+    return 0
+}
 
 # Fills INTEL_DRIVERS with "<driver> <pci-device-id>" per Intel DRM render node
 # bound to xe or i915.
 detect_intel() {
     INTEL_DRIVERS=()
     local dev drv
-    for dev in /sys/class/drm/renderD*/device; do
+    for dev in "${SYSROOT}"/sys/class/drm/renderD*/device; do
         [ -r "${dev}/vendor" ] || continue
         [ "$(cat "${dev}/vendor")" = "0x8086" ] || continue
-        drv=$(basename "$(readlink -f "${dev}/driver" 2>/dev/null)") || continue
+        drv=$(bound_driver "${dev}")
         case "${drv}" in xe|i915) INTEL_DRIVERS+=("${drv} $(cat "${dev}/device" 2>/dev/null)") ;; esac
     done
     return 0
 }
 
-# Gaudi: a loaded habanalabs driver exposes accel nodes (or legacy /dev/hl*).
+# Print "<pci-vendor> <driver> <pci-device-id>" per /dev/accel/accelN compute
+# node. The Intel NPU (intel_vpu, 0x8086) and Gaudi (habanalabs, 0x1da3) both
+# register here, so the node name alone never identifies the accelerator.
+accel_nodes() {
+    local dev
+    for dev in "${SYSROOT}"/sys/class/accel/accel[0-9]*/device; do
+        [ -r "${dev}/vendor" ] || continue
+        echo "$(cat "${dev}/vendor") $(bound_driver "${dev}") $(cat "${dev}/device" 2>/dev/null)"
+    done
+}
+
+# Fills NPU_IDS with the PCI device id of each Intel NPU bound to intel_vpu.
+detect_npu() {
+    NPU_IDS=()
+    local vendor drv id
+    while read -r vendor drv id; do
+        [ "${vendor}" = "0x8086" ] && [ "${drv}" = "intel_vpu" ] && NPU_IDS+=("${id}")
+    done < <(accel_nodes)
+    return 0
+}
+
+# Gaudi: an accel node owned by a Habana device, a loaded habanalabs driver, or
+# legacy /dev/hl* nodes from older out-of-tree drivers.
 has_gaudi() {
-    [ -d /sys/module/habanalabs ] \
-        || compgen -G '/dev/accel/accel[0-9]*' >/dev/null \
-        || compgen -G '/dev/hl[0-9]*' >/dev/null
+    # Not grep -q: an early exit SIGPIPEs accel_nodes and pipefail turns a match into failure.
+    accel_nodes | grep '^0x1da3 ' >/dev/null \
+        || [ -d "${SYSROOT}/sys/module/habanalabs" ] \
+        || compgen -G "${SYSROOT}/dev/hl[0-9]*" >/dev/null
 }
 
 # Habana PCI device present (vendor 0x1da3) regardless of driver state.
 has_gaudi_pci() {
     local v
-    for v in /sys/bus/pci/devices/*/vendor; do
+    for v in "${SYSROOT}"/sys/bus/pci/devices/*/vendor; do
         [ -r "${v}" ] || continue
         [ "$(cat "${v}")" = "0x1da3" ] && return 0
     done
     return 1
 }
 
+# ---- platform tables (doctor only) --------------------------------------------
+# IDs, default-driver kernels and firmware names from the kernel's
+# include/drm/intel/pciids.h, xe_pci.c, xe_uc_fw.c and drivers/accel/ivpu.
+
+# Intel GPU id -> "<name>|<first kernel binding it by default>|<GuC firmware glob>".
+# An empty kernel field means the kernel still requires xe.force_probe.
+intel_gpu_platform() {
+    case "$1" in
+        0x7d40|0x7d45|0x7d55|0x7d60|0x7dd5) echo "Meteor Lake|6.7|i915/mtl_guc_" ;;
+        0x7d41|0x7d51|0x7dd1|0x7d67|0xb640) echo "Arrow Lake|6.9|i915/mtl_guc_" ;;
+        0x6420|0x64a0|0x64b0)               echo "Lunar Lake|6.12|xe/lnl_guc_" ;;
+        0xe20[29bcd]|0xe21[0-6]|0xe22[0-3]) echo "Battlemage|6.12|xe/bmg_guc_" ;;
+        0xb08[0-7f]|0xb090|0xb0a0|0xb0b0)   echo "Panther Lake|6.17|xe/ptl_guc_" ;;
+        0xfd80|0xfd81)                      echo "Wildcat Lake|6.18|xe/ptl_guc_" ;;
+        0xd74[0-35ab])                      echo "Nova Lake-S|7.3|xe/nvl_guc_" ;;
+        0xd75[0-7f])                        echo "Nova Lake-P||" ;;
+        0x674[c-f]|0x6750)                  echo "Crescent Island||" ;;
+    esac
+}
+
+# Intel NPU id -> "<name>|<first kernel with the id>|<firmware generation>".
+npu_platform() {
+    case "$1" in
+        0x7d1d) echo "Meteor Lake|6.3|37xx" ;;
+        0xad1d) echo "Arrow Lake|6.6|37xx" ;;
+        0x643e) echo "Lunar Lake|6.6|40xx" ;;
+        0xb03e) echo "Panther Lake|6.13|50xx" ;;
+        0xfd3e) echo "Wildcat Lake|6.17|50xx" ;;
+        0xd71d) echo "Nova Lake|6.19|60xx" ;;
+    esac
+}
+
+kernel_release() { cat "${SYSROOT}/proc/sys/kernel/osrelease" 2>/dev/null || uname -r; }
+
+# kernel_lt <major.minor>: true when the running kernel is older.
+kernel_lt() {
+    local maj min wmaj wmin
+    IFS=. read -r maj min _ <<< "$(kernel_release)"
+    IFS=. read -r wmaj wmin <<< "$1"
+    min=${min//[!0-9]/}
+    [ "${maj:-0}" -lt "${wmaj}" ] || { [ "${maj:-0}" -eq "${wmaj}" ] && [ "${min:-0}" -lt "${wmin}" ]; }
+}
+
+# firmware_present <path prefix under lib/firmware>: matches .bin, .zst, .xz, ...
+firmware_present() {
+    compgen -G "${SYSROOT}/lib/firmware/$1*" >/dev/null || compgen -G "${SYSROOT}/usr/lib/firmware/$1*" >/dev/null
+}
+
 # Resolve the active vendor list into ACTIVE (array). Honors K3D_GPU_VENDORS.
 resolve_vendors() {
     ACTIVE=()
     detect_intel
+    detect_npu
     local v req
     if [ "${VENDORS_REQUEST}" = "auto" ]; then
         if has_nvidia; then ACTIVE+=(nvidia); fi
         if [ "${#INTEL_DRIVERS[@]}" -gt 0 ]; then ACTIVE+=(intel); fi
+        if [ "${#NPU_IDS[@]}" -gt 0 ]; then ACTIVE+=(npu); fi
         if has_gaudi; then
             ACTIVE+=(gaudi)
         elif has_gaudi_pci; then
-            warn "Gaudi PCI device found but the habanalabs driver is not loaded — skipping Gaudi"
+            warn "Gaudi PCI device found but the habanalabs driver is not loaded — skipping Gaudi (Gaudi 3 needs Intel's out-of-tree habanalabs driver; mainline only covers up to Gaudi 2)"
         fi
     else
         IFS=',' read -r -a req <<< "${VENDORS_REQUEST// /}"
         for v in "${req[@]}"; do
             case "${v}" in
-                nvidia|intel|gaudi) is_active "${v}" || ACTIVE+=("${v}") ;;
-                *) err "unknown vendor '${v}' in K3D_GPU_VENDORS (use nvidia,intel,gaudi)" ;;
+                "") ;;
+                nvidia|intel|npu|gaudi) is_active "${v}" || ACTIVE+=("${v}") ;;
+                *) err "unknown vendor '${v}' in K3D_GPU_VENDORS (use nvidia,intel,npu,gaudi)" ;;
             esac
         done
     fi
@@ -138,11 +231,14 @@ is_active() {
 vendor_resources() {
     case "$1" in
         nvidia) echo "nvidia.com/gpu" ;;
+        npu)    echo "npu.intel.com/accel" ;;
         gaudi)  echo "habana.ai/gaudi" ;;
         intel)
+            # One resource per bound driver; both when nothing is detected
+            # (explicit K3D_GPU_VENDORS=intel on a host we cannot read).
             local e drivers=""
             for e in ${INTEL_DRIVERS[@]+"${INTEL_DRIVERS[@]}"}; do
-                case "${e}" in xe|i915) drivers+="${e}"$'\n' ;; esac
+                drivers+="${e%% *}"$'\n'
             done
             [ -n "${drivers}" ] || drivers=$'xe\ni915\n'
             printf '%s' "${drivers}" | sort -u | sed 's#^#gpu.intel.com/#'
@@ -154,6 +250,7 @@ vendor_daemonset() {  # prints: namespace name manifest
     case "$1" in
         nvidia) echo "kube-system nvidia-device-plugin-daemonset ${PLUGIN_MANIFEST}" ;;
         intel)  echo "kube-system intel-gpu-plugin ${INTEL_PLUGIN_MANIFEST}" ;;
+        npu)    echo "kube-system intel-npu-plugin ${NPU_PLUGIN_MANIFEST}" ;;
         gaudi)  echo "habana-system habanalabs-device-plugin-daemonset ${GAUDI_PLUGIN_MANIFEST}" ;;
     esac
 }
@@ -206,7 +303,7 @@ doctor_nvidia() {
     fi
 
     info "Checking docker NVIDIA runtime..."
-    if docker info 2>/dev/null | grep -q "nvidia"; then
+    if docker info 2>/dev/null | grep "nvidia" >/dev/null; then
         echo "  ok: nvidia runtime registered"
     else
         echo "  ${YLW}warn${RST}: nvidia runtime not listed (sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker)"
@@ -214,50 +311,128 @@ doctor_nvidia() {
 }
 
 doctor_intel() {
-    info "Checking Intel GPU (Arc / Xe2 Battlemage)..."
+    info "Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)..."
     if [ "${#INTEL_DRIVERS[@]}" -eq 0 ]; then
         echo "  ${RED}fail${RST}: no Intel DRM render node bound to xe/i915 (driver not loaded? check /dev/dri and /sys/class/drm)"
         FAIL=1
         return
     fi
-    local e drv id bmg=0 bmg_on_i915=0 kmaj kmin
+    local e drv id name mink fw
     for e in "${INTEL_DRIVERS[@]}"; do
         read -r drv id <<< "${e}"
-        echo "  ok: Intel render node ${id:-?} bound to ${drv}"
-        # Battlemage (Xe2) device IDs are 0xe20x-0xe22x.
-        case "${id}" in
-            0xe20*|0xe21*|0xe22*) bmg=1; [ "${drv}" = "i915" ] && bmg_on_i915=1 ;;
-        esac
+        IFS='|' read -r name mink fw <<< "$(intel_gpu_platform "${id}")"
+        echo "  ok: Intel ${name:-GPU} (${id:-?}) bound to ${drv}"
+        if [ -n "${mink}" ] && kernel_lt "${mink}"; then
+            echo "  ${YLW}warn${RST}: ${name} (${id}) needs kernel ${mink}+ (running $(kernel_release)); older kernels need xe.force_probe=${id#0x}"
+        fi
+        if [ -n "${fw}" ]; then
+            if firmware_present "${fw}"; then
+                echo "  ok: ${fw}* firmware present"
+            else
+                echo "  ${YLW}warn${RST}: ${fw}* firmware not found (update linux-firmware)"
+            fi
+        fi
     done
-    [ "${bmg}" -eq 1 ] || return 0
-    [ "${bmg_on_i915}" -eq 0 ] || echo "  ${YLW}warn${RST}: Battlemage bound to i915 — it needs the xe driver (gpu.intel.com/xe)"
-    IFS=. read -r kmaj kmin _ <<< "$(uname -r)"
-    kmin=${kmin//[!0-9]/}
-    if [ "${kmaj:-0}" -lt 6 ] || { [ "${kmaj}" -eq 6 ] && [ "${kmin:-0}" -lt 12 ]; }; then
-        echo "  ${YLW}warn${RST}: kernel $(uname -r) < 6.12 — Battlemage needs 6.12+ (or xe.force_probe=<devid> on 6.11)"
-    fi
-    if compgen -G '/lib/firmware/xe/bmg_guc_*' >/dev/null || compgen -G '/usr/lib/firmware/xe/bmg_guc_*' >/dev/null; then
-        echo "  ok: Battlemage GuC firmware present"
-    else
-        echo "  ${YLW}warn${RST}: xe/bmg_guc_* firmware not found (update linux-firmware)"
-    fi
+}
+
+doctor_npu() {
+    info "Checking Intel NPU (Core Ultra)..."
+    local id name mink gen
+    for id in ${NPU_IDS[@]+"${NPU_IDS[@]}"}; do
+        IFS='|' read -r name mink gen <<< "$(npu_platform "${id}")"
+        echo "  ok: Intel NPU ${name:-(unknown generation)} (${id}) bound to intel_vpu"
+        if [ -n "${mink}" ] && kernel_lt "${mink}"; then
+            echo "  ${YLW}warn${RST}: ${name} NPU needs kernel ${mink}+ (running $(kernel_release))"
+        fi
+        [ -n "${gen}" ] || continue
+        if firmware_present "intel/vpu/vpu_${gen}_"; then
+            echo "  ok: intel/vpu/vpu_${gen}_* firmware present"
+        else
+            echo "  ${YLW}warn${RST}: intel/vpu/vpu_${gen}_* firmware not found (install linux-firmware or intel-fw-npu)"
+        fi
+    done
+    echo "  note: workload images need the NPU user-space driver (github.com/intel/linux-npu-driver) and Level Zero"
 }
 
 doctor_gaudi() {
     info "Checking Intel Gaudi (HPU)..."
-    if compgen -G '/dev/accel/accel[0-9]*' >/dev/null; then
-        echo "  ok: /dev/accel/accel* present"
-    elif compgen -G '/dev/hl[0-9]*' >/dev/null; then
+    local n
+    n=$(accel_nodes | grep -c '^0x1da3 ' || true)
+    if [ "${n}" -gt 0 ]; then
+        echo "  ok: ${n} Gaudi accel node(s) under /dev/accel"
+    elif compgen -G "${SYSROOT}/dev/hl[0-9]*" >/dev/null; then
         echo "  ${YLW}warn${RST}: legacy /dev/hl* nodes only — the Gaudi plugin expects /dev/accel/accel*; update the habanalabs driver"
     else
-        echo "  ${RED}fail${RST}: no /dev/accel/accel* (habanalabs driver not loaded? lsmod | grep habanalabs)"
+        echo "  ${RED}fail${RST}: no Gaudi accel node (habanalabs driver not loaded? lsmod | grep habanalabs)"
         FAIL=1
     fi
-    if compgen -G '/dev/accel/accel_controlD*' >/dev/null; then
+    if compgen -G "${SYSROOT}/dev/accel/accel_controlD*" >/dev/null; then
         echo "  ok: /dev/accel/accel_controlD* present"
     else
         echo "  ${YLW}warn${RST}: no /dev/accel/accel_controlD* nodes"
     fi
+}
+
+# Intel GPUs and NPUs the kernel saw but no driver claimed. They have no device
+# node, so detection cannot see them; the usual cause is a part newer than the
+# kernel's default support (xe.force_probe) or a driver module that is not loaded.
+doctor_intel_unbound() {
+    local dev id class name mink gen lines=""
+    for dev in "${SYSROOT}"/sys/bus/pci/devices/*; do
+        [ "$(cat "${dev}/vendor" 2>/dev/null)" = "0x8086" ] || continue
+        class=$(cat "${dev}/class" 2>/dev/null) || continue
+        case "${class}" in 0x03*|0x12*) ;; *) continue ;; esac
+        [ -z "$(bound_driver "${dev}")" ] || continue
+        id=$(cat "${dev}/device" 2>/dev/null) || continue
+        if [ -n "$(npu_platform "${id}")" ]; then
+            IFS='|' read -r name mink gen <<< "$(npu_platform "${id}")"
+            lines+="  ${YLW}warn${RST}: Intel NPU ${name} (${id}) has no driver — load intel_vpu (kernel ${mink}+): sudo modprobe intel_vpu"$'\n'
+        else
+            IFS='|' read -r name mink gen <<< "$(intel_gpu_platform "${id}")"
+            lines+="  ${YLW}warn${RST}: Intel ${name:-GPU/accelerator} (${id}) has no driver — if dmesg says xe does not support it yet, boot with xe.force_probe=${id#0x} i915.force_probe=!${id#0x}"$'\n'
+        fi
+    done
+    [ -n "${lines}" ] || return 0
+    info "Intel devices with no driver bound..."
+    printf '%s' "${lines}"
+}
+
+# Xeon built-in accelerators. Reported only: their plugins depend on host-owned
+# setup (SR-IOV VFs, vfio-pci, accel-config work queues, IOMMU mode) that a k3d
+# node cannot do safely on the host's behalf.
+doctor_cpu_accels() {
+    local flags amx dev bdf vfs n wqs kind name prefix devdir lines=""
+    flags=$(grep -m1 '^flags' "${SYSROOT}/proc/cpuinfo" 2>/dev/null || true)
+    amx=$(tr ' ' '\n' <<< "${flags#*:}" | grep '^amx_' | sort | paste -sd' ' || true)
+    [ -z "${amx}" ] || lines+="  ok: AMX (${amx}) — CPU instructions, usable in any pod with no device plugin"$'\n'
+
+    for kind in "DSA dsa dsa" "IAA iax iax"; do
+        read -r name prefix devdir <<< "${kind}"
+        n=$({ compgen -G "${SYSROOT}/sys/bus/dsa/devices/${prefix}[0-9]*" || true; } | wc -l)
+        [ "${n}" -gt 0 ] || continue
+        wqs=$({ compgen -G "${SYSROOT}/dev/${devdir}/wq*" || true; } | wc -l)
+        if [ "${wqs}" -gt 0 ]; then
+            lines+="  ok: ${name}: ${n} device(s), ${wqs} user work queue(s) — deploy intel-${name,,}-plugin to schedule them"$'\n'
+        else
+            lines+="  ${YLW}warn${RST}: ${name}: ${n} device(s) but no user work queues — configure them on the host with accel-config"$'\n'
+        fi
+    done
+
+    for dev in "${SYSROOT}"/sys/bus/pci/devices/*; do
+        [ "$(cat "${dev}/vendor" 2>/dev/null)" = "0x8086" ] || continue
+        case "$(cat "${dev}/device" 2>/dev/null)" in 0x4940|0x4942|0x4944|0x4946|0x4948) ;; *) continue ;; esac
+        bdf=$(basename "${dev}")
+        vfs=$(cat "${dev}/sriov_numvfs" 2>/dev/null || echo 0)
+        if [ "${vfs}" -gt 0 ]; then
+            lines+="  ok: QAT ${bdf}: ${vfs} VF(s) — bind them to vfio-pci and deploy intel-qat-plugin to schedule them"$'\n'
+        else
+            lines+="  ${YLW}warn${RST}: QAT ${bdf}: no VFs — enable on the host (echo N > /sys/bus/pci/devices/${bdf}/sriov_numvfs, then bind to vfio-pci)"$'\n'
+        fi
+    done
+
+    [ -n "${lines}" ] || return 0
+    info "Intel CPU built-in accelerators (reported only; not deployed by k3d-gpu)..."
+    printf '%s' "${lines}"
 }
 
 doctor() {
@@ -267,14 +442,17 @@ doctor() {
 
     if [ "${#ACTIVE[@]}" -eq 0 ]; then
         echo ""
-        echo "  ${RED}fail${RST}: no supported accelerator detected (NVIDIA, Intel Arc/Xe2, Intel Gaudi)"
+        echo "  ${RED}fail${RST}: no supported accelerator detected (NVIDIA, Intel GPU, Intel NPU, Intel Gaudi)"
         FAIL=1
     else
         info "Detected accelerators: ${ACTIVE[*]}"
-        is_active nvidia && doctor_nvidia
-        is_active intel  && doctor_intel
-        is_active gaudi  && doctor_gaudi
+        if is_active nvidia; then doctor_nvidia; fi
+        if is_active intel;  then doctor_intel;  fi
+        if is_active npu;    then doctor_npu;    fi
+        if is_active gaudi;  then doctor_gaudi;  fi
     fi
+    doctor_intel_unbound
+    doctor_cpu_accels
 
     echo ""
     [ "${FAIL}" -eq 0 ] && info "All checks passed." || { err "One or more checks failed."; }
@@ -286,7 +464,7 @@ cmd_up() {
     require kubectl
 
     resolve_vendors
-    [ "${#ACTIVE[@]}" -gt 0 ] || err "no supported accelerator detected (NVIDIA, Intel Arc/Xe2, Intel Gaudi) — run 'k3d-gpu doctor' or set K3D_GPU_VENDORS"
+    [ "${#ACTIVE[@]}" -gt 0 ] || err "no supported accelerator detected (NVIDIA, Intel GPU, Intel NPU, Intel Gaudi) — run 'k3d-gpu doctor' or set K3D_GPU_VENDORS"
     info "Accelerators: ${ACTIVE[*]}"
 
     local create_args=(
@@ -302,21 +480,29 @@ cmd_up() {
     # host with no NVIDIA docker runtime, so they are added only when NVIDIA is active.
     if is_active nvidia; then
         create_args+=(--gpus=all --k3s-arg="--default-runtime=nvidia@server:0")
+    else
+        # Keeps the baked NVIDIA plugin off the node; it cannot start without NVML.
+        create_args+=(--k3s-node-label="nvidia.com/gpu.present=false@server:*;agent:*")
     fi
     # Intel (/dev/dri) and Gaudi (/dev/accel): k3d node containers run privileged,
     # so the host /dev tree (including these nodes) is visible with no extra flag.
     # Their device plugins are baked into the image and hand the nodes to pods.
     # Devices that appear after the node container is created need a cluster
     # recreate to show up.
-    # The Gaudi plugin only schedules onto nodes labelled habana.ai/gaudi.present.
+    # The Gaudi and NPU plugins mount /dev/accel and /sys/class/accel, which are
+    # absent on hosts without an accel driver, so they only schedule onto nodes
+    # carrying their label. The NPU label is upstream's NFD label.
     if is_active gaudi; then
         create_args+=(--k3s-node-label="habana.ai/gaudi.present=true@server:*;agent:*")
+    fi
+    if is_active npu; then
+        create_args+=(--k3s-node-label="intel.feature.node.kubernetes.io/npu=true@server:*;agent:*")
     fi
     if is_active intel && ! compgen -G '/dev/dri/renderD*' >/dev/null; then
         warn "no /dev/dri/renderD* on host — Intel GPU will not be visible in the node"
     fi
-    if is_active gaudi && ! compgen -G '/dev/accel/accel[0-9]*' >/dev/null; then
-        warn "no /dev/accel/accel* on host — Gaudi will not be visible in the node"
+    if { is_active gaudi || is_active npu; } && ! compgen -G '/dev/accel/accel[0-9]*' >/dev/null; then
+        warn "no /dev/accel/accel* on host — Gaudi/NPU will not be visible in the node"
     fi
 
     info "Creating k3d cluster '${CLUSTER}' with image ${IMAGE}..."
@@ -441,9 +627,21 @@ cmd_test() {
             device_test "intel-gpu-test" "${res}" /dev/dri
         done < <(vendor_resources intel)
     fi
+    if is_active npu; then
+        device_test "npu-test" "npu.intel.com/accel" /dev/accel
+    fi
     if is_active gaudi; then
         device_test "gaudi-test" "habana.ai/gaudi" /dev/accel
     fi
+}
+
+# One line per active accelerator: "<vendor> <resource> [<resource>...]".
+cmd_detect() {
+    resolve_vendors
+    local v
+    for v in ${ACTIVE[@]+"${ACTIVE[@]}"}; do
+        echo "${v} $(vendor_resources "${v}" | paste -sd' ')"
+    done
 }
 
 cmd_logs() {
@@ -455,6 +653,7 @@ case "${1:-help}" in
     up)      cmd_up      ;;
     down)    cmd_down    ;;
     test)    cmd_test    ;;
+    detect)  cmd_detect  ;;
     doctor)  doctor      ;;
     logs)    cmd_logs    ;;
     version|--version|-v) echo "k3d-gpu ${VERSION}" ;;
