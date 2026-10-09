@@ -57,6 +57,37 @@ jobs:
           [ -n "$latest" ] && [ "$latest" != "null" ] || { echo "::error::no device-plugin release resolved"; exit 1; }
           echo "latest=$latest" >> "$GITHUB_OUTPUT"
 
+      # ─── 2b. Latest Intel GPU device plugin (Arc / Xe2 Battlemage) ───────
+      - name: Get latest Intel GPU device plugin version
+        id: intel_plugin
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Docker Hub image tags drop the leading "v" the GitHub release tag carries.
+          latest=$(curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            "https://api.github.com/repos/intel/intel-device-plugins-for-kubernetes/releases/latest" \
+            | jq -r '.tag_name | ltrimstr("v")')
+          [[ "$latest" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::no Intel GPU plugin release resolved (got '$latest')"; exit 1; }
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+
+      # ─── 2c. Latest Intel Gaudi (HPU) device plugin ──────────────────────
+      - name: Get latest Gaudi device plugin version
+        id: gaudi_plugin
+        run: |
+          # Tags look like 1.24.2-481 (software release - build). Published on Docker Hub.
+          latest=$(
+            url="https://registry.hub.docker.com/v2/repositories/intel/gaudi-device-plugin/tags?page_size=100"
+            for _ in $(seq 1 5); do
+              [ -z "$url" ] && break; [ "$url" = "null" ] && break
+              resp=$(curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 "$url") || break
+              printf '%s\n' "$resp" | jq -r '.results[].name'
+              url=$(printf '%s' "$resp" | jq -r '.next')
+            done | grep -E '^[0-9]+\.[0-9]+\.[0-9]+-[0-9]+$' | sort -V | tail -n1
+          )
+          [ -n "$latest" ] || { echo "::error::no Gaudi device-plugin tag resolved"; exit 1; }
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+
       # ─── 3. Latest CUDA base — used ONLY for the `k3d-gpu test` pod image, ─
       #        not the node base (the node runs on Ubuntu now).
       - name: Get latest CUDA tag for the test pod image
@@ -82,6 +113,8 @@ jobs:
           ti=$(grep -oE 'K3D_GPU_TEST_IMAGE:-nvidia/cuda:[^}]*' scripts/k3d-gpu | sed 's#.*nvidia/cuda:##')
           echo "k3s=$kt" >> "$GITHUB_OUTPUT"
           echo "plugin=$pp" >> "$GITHUB_OUTPUT"
+          echo "intel=$(grep -oE 'intel-gpu-plugin:[0-9]+\.[0-9]+\.[0-9]+' share/intel-gpu-plugin.yml | cut -d: -f2)" >> "$GITHUB_OUTPUT"
+          echo "gaudi=$(grep -oE 'gaudi-device-plugin:[0-9]+\.[0-9]+\.[0-9]+-[0-9]+' share/gaudi-device-plugin.yml | cut -d: -f2)" >> "$GITHUB_OUTPUT"
           echo "testcuda=$ti" >> "$GITHUB_OUTPUT"
 
       - name: Determine if update is needed
@@ -90,6 +123,8 @@ jobs:
           if [ "${{ inputs.force }}" = "true" ] || \
              [ "${{ steps.k3s.outputs.latest }}" != "${{ steps.current.outputs.k3s }}" ] || \
              [ "${{ steps.nvidia_plugin.outputs.latest }}" != "${{ steps.current.outputs.plugin }}" ] || \
+             [ "${{ steps.intel_plugin.outputs.latest }}" != "${{ steps.current.outputs.intel }}" ] || \
+             [ "${{ steps.gaudi_plugin.outputs.latest }}" != "${{ steps.current.outputs.gaudi }}" ] || \
              [ "${{ steps.cuda.outputs.latest }}" != "${{ steps.current.outputs.testcuda }}" ]; then
             echo "update=true" >> "$GITHUB_OUTPUT"
           else
@@ -105,13 +140,15 @@ jobs:
         run: |
           sed -i "s|^ARG K3S_TAG=.*|ARG K3S_TAG=\"${{ steps.k3s.outputs.latest }}\"|" Dockerfile
           sed -i "s|k8s-device-plugin:v[0-9]*\.[0-9]*\.[0-9]*|k8s-device-plugin:${{ steps.nvidia_plugin.outputs.latest }}|" share/nvidia-device-plugin.yml
+          sed -i "s|intel-gpu-plugin:[0-9]*\.[0-9]*\.[0-9]*|intel-gpu-plugin:${{ steps.intel_plugin.outputs.latest }}|" share/intel-gpu-plugin.yml
+          sed -i "s|gaudi-device-plugin:[0-9]*\.[0-9]*\.[0-9]*-[0-9]*|gaudi-device-plugin:${{ steps.gaudi_plugin.outputs.latest }}|" share/gaudi-device-plugin.yml
           sed -i "s|K3D_GPU_TEST_IMAGE:-nvidia/cuda:[^}]*|K3D_GPU_TEST_IMAGE:-nvidia/cuda:${{ steps.cuda.outputs.latest }}|" scripts/k3d-gpu
 
       - name: Update README
         if: steps.need.outputs.update == 'true'
         run: |
           today=$(date -u +'%Y-%m-%d')
-          entry="| $today | ${{ steps.k3s.outputs.latest }} | ${{ steps.nvidia_plugin.outputs.latest }} |"
+          entry="| $today | ${{ steps.k3s.outputs.latest }} | ${{ steps.nvidia_plugin.outputs.latest }} | v${{ steps.intel_plugin.outputs.latest }} | ${{ steps.gaudi_plugin.outputs.latest }} |"
           awk -v e="$entry" \
               -v k3s="${{ steps.k3s.outputs.latest }}" \
               -v plugin="${{ steps.nvidia_plugin.outputs.latest }}" '
@@ -127,7 +164,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Dockerfile README.md share/nvidia-device-plugin.yml scripts/k3d-gpu
+          git add Dockerfile README.md share/nvidia-device-plugin.yml share/intel-gpu-plugin.yml share/gaudi-device-plugin.yml scripts/k3d-gpu
           if git diff --cached --quiet; then
             echo "no version changes to commit (forced rebuild)"
           else
@@ -202,7 +239,9 @@ jobs:
             Ubuntu node base — **26.04** (default) and **24.04**. k3s
             `${{ steps.k3s.outputs.latest }}`, NVIDIA device plugin
             `${{ steps.nvidia_plugin.outputs.latest }}` (baked in — GPUs are
-            exposed on `up` with no `kubectl apply`).
+            exposed on `up` with no `kubectl apply`). Intel GPU plugin
+            `v${{ steps.intel_plugin.outputs.latest }}` (Arc / Xe2 Battlemage) and Gaudi
+            plugin `${{ steps.gaudi_plugin.outputs.latest }}` (Gaudi 3 HPU) are baked in too.
 
             **Docker Hub**
             - `cryptoandcoffee/k3d-gpu:latest` (= ubuntu26.04)

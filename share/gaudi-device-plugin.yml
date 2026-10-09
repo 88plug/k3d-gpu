@@ -1,0 +1,48 @@
+# Intel Gaudi (HPU, Gaudi 3) device plugin DaemonSet
+# Source: https://github.com/HabanaAI/gaudi-device-plugin (habana-k8s-device-plugin.yaml)
+# Advertises habana.ai/gaudi. Plain (non-CDI) mode: the plugin hands kubelet the
+# /dev/accel/accelN + accel_controlDN device specs and the HABANA_VISIBLE_DEVICES
+# env, so no habana container runtime is needed. The plugin exits or spins when
+# no Gaudi driver is present, so it only schedules onto nodes labelled
+# habana.ai/gaudi.present=true (the k3d-gpu launcher sets it when Gaudi is detected).
+# Auto-bumped by the build-and-push workflow when upstream releases a new version.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: habana-system
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: habanalabs-device-plugin-daemonset
+  namespace: habana-system
+spec:
+  selector:
+    matchLabels:
+      name: habanalabs-device-plugin-ds
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        name: habanalabs-device-plugin-ds
+    spec:
+      priorityClassName: "system-node-critical"
+      nodeSelector:
+        habana.ai/gaudi.present: "true"
+      tolerations:
+        - key: habana.ai/gaudi
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: habanalabs-device-plugin-ctr
+          image: docker.io/intel/gaudi-device-plugin:1.24.2-481
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: device-plugin
+              mountPath: /var/lib/kubelet/device-plugins
+      volumes:
+        - name: device-plugin
+          hostPath:
+            path: /var/lib/kubelet/device-plugins

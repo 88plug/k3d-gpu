@@ -40,6 +40,20 @@ COPY --from=k3s /usr/share/ /usr/share/
 # initial contents (copied from the image) include it.
 COPY share/nvidia-device-plugin.yml /var/lib/rancher/k3s/server/manifests/nvidia-device-plugin.yaml
 
+# Intel GPU (Arc/Battlemage Xe2 via xe, i915) and Intel Gaudi (HPU, Gaudi 3)
+# device plugins ride along the same way, so the image exposes whatever
+# accelerator the host passes in with no per-vendor image. The Intel GPU plugin
+# idles on a node without an Intel GPU; the Gaudi plugin is gated by the node
+# label habana.ai/gaudi.present=true, which the launcher sets when it detects Gaudi.
+COPY share/intel-gpu-plugin.yml /var/lib/rancher/k3s/server/manifests/intel-gpu-plugin.yaml
+COPY share/gaudi-device-plugin.yml /var/lib/rancher/k3s/server/manifests/gaudi-device-plugin.yaml
+
+# CDI spec directories. containerd 2.x (k3s 1.34) enables CDI by default and scans
+# these paths, so vendor plugins/tools that emit CDI specs work without any
+# containerd config change. /var/run/cdi is tmpfs at runtime, so device plugins
+# create it via a DirectoryOrCreate hostPath; only the persistent /etc/cdi is made here.
+RUN mkdir -p /etc/cdi
+
 VOLUME /var/lib/kubelet
 VOLUME /var/lib/rancher/k3s
 VOLUME /var/lib/cni

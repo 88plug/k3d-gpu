@@ -4,7 +4,7 @@
 [![License: FSL-1.1-ALv2](https://img.shields.io/badge/license-FSL--1.1--ALv2-blue?style=flat-square)](LICENSE.md)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/88plug/k3d-gpu)
 
-A Docker-based [rancher/k3s](https://hub.docker.com/r/rancher/k3s) node image on an [Ubuntu](https://hub.docker.com/_/ubuntu) base with the NVIDIA container toolkit baked in, so a k3d cluster can schedule your host’s NVIDIA GPU(s) — GPUs are exposed on `up` with no `kubectl apply`. Built for **Ubuntu 26.04** (default) and **24.04**.
+A Docker-based [rancher/k3s](https://hub.docker.com/r/rancher/k3s) node image on an [Ubuntu](https://hub.docker.com/_/ubuntu) base with the NVIDIA container toolkit baked in, so a k3d cluster can schedule your host’s accelerators — **NVIDIA GPUs, Intel Arc / Xe2 (Battlemage) GPUs, and Intel Gaudi 3 (HPU)** — exposed on `up` with no `kubectl apply`. The launcher auto-detects what the host has. Built for **Ubuntu 26.04** (default) and **24.04**.
 
 ---
 
@@ -32,9 +32,9 @@ need to remember `k3d cluster create` flags:
 ```bash
 yay -S k3d-gpu          # or build from packaging/aur/PKGBUILD
 
-k3d-gpu doctor          # preflight: GPU, docker, nvidia runtime, k3d, kubectl
-k3d-gpu up              # create the cluster (device plugin auto-deploys), verify GPUs>0
-k3d-gpu test            # run a CUDA pod and print nvidia-smi
+k3d-gpu doctor          # preflight: detected accelerators, docker, runtimes, k3d, kubectl
+k3d-gpu up              # create the cluster (device plugins auto-deploy), verify each accelerator > 0
+k3d-gpu test            # per accelerator: nvidia-smi pod / device-node listing pod
 k3d-gpu logs            # tail the k3s server container logs
 k3d-gpu down            # delete the cluster
 ```
@@ -45,8 +45,13 @@ Behaviour is tunable via environment variables:
 |----------------------|-------------------------------------------|--------------------------------------|
 | `K3D_GPU_CLUSTER`    | `gpu`                                     | cluster name                         |
 | `K3D_GPU_IMAGE`      | `cryptoandcoffee/k3d-gpu:latest`          | node image (`latest` = ubuntu26.04)  |
+| `K3D_GPU_SHARE`      | `/usr/share/k3d-gpu`                      | dir of fallback plugin manifests     |
+| `K3D_GPU_VENDORS`    | `auto`                                    | `auto` detects; or a list such as `nvidia,intel,gaudi` |
 | `K3D_GPU_PLUGIN`     | `/usr/share/k3d-gpu/nvidia-device-plugin.yml` | fallback manifest (only used if a custom image lacks the baked one) |
-| `K3D_GPU_TEST_IMAGE` | `nvidia/cuda:13.1.2-base-ubuntu24.04`     | image used by `k3d-gpu test`         |
+| `K3D_GPU_INTEL_PLUGIN` | `/usr/share/k3d-gpu/intel-gpu-plugin.yml` | same, for the Intel GPU plugin |
+| `K3D_GPU_GAUDI_PLUGIN` | `/usr/share/k3d-gpu/gaudi-device-plugin.yml` | same, for the Gaudi plugin |
+| `K3D_GPU_DEVICE_TEST_IMAGE` | `busybox:1.37`                     | image used by `k3d-gpu test` for Intel/Gaudi |
+| `K3D_GPU_TEST_IMAGE` | `nvidia/cuda:13.4.2-base-ubuntu26.04`     | image used by `k3d-gpu test`         |
 
 The rest of this README documents the underlying image and the manual `k3d`
 commands the launcher runs for you.
@@ -56,11 +61,31 @@ commands the launcher runs for you.
 ## Features
 
 - K3s + NVIDIA Container Toolkit on an Ubuntu base — **26.04** (default) and **24.04**  
-- NVIDIA device plugin **baked into k3s auto-deploy** — `up` exposes GPUs with no `kubectl apply`  
+- NVIDIA, **Intel GPU (Arc / Xe2 Battlemage via `xe`, plus `i915`)** and **Intel Gaudi 3 (HPU)** device plugins **baked into k3s auto-deploy** — `up` exposes them with no `kubectl apply`; each plugin idles on a node without its hardware  
+- Auto-detection on the host: `/dev/nvidia*`, Intel DRM render nodes (`xe`/`i915`), Gaudi `/dev/accel/accel*` / PCI vendor `1da3`  
+- CDI-ready: containerd 2.x scans `/etc/cdi` and `/var/run/cdi` (CDI on by default), so future vendors that emit CDI specs need no node changes  
 - Pre‑configured nvidia containerd runtime; `--default-runtime=nvidia` for zero-config GPU pods  
 - No CUDA toolkit in the node image — driver libs are injected from the host, workloads bring their own CUDA  
 - Exposes the standard K3s entrypoint (`/bin/k3s agent`); volumes for kubelet, k3s state, CNI, logs  
 - Tunable via build arguments for the K3s and Ubuntu versions  
+
+---
+
+## Supported accelerators
+
+| Vendor | Hardware | Kubernetes resource | Host requirement |
+|--------|----------|---------------------|------------------|
+| NVIDIA | any CUDA GPU | `nvidia.com/gpu` | driver + nvidia-container-toolkit, Docker `--gpus` |
+| Intel  | Arc / Xe2 **Battlemage** (`xe` driver) | `gpu.intel.com/xe` | kernel 6.12+, `xe` bound, `/dev/dri/renderD*`, recent linux-firmware |
+| Intel  | Arc / Flex / Max on `i915` | `gpu.intel.com/i915` | `/dev/dri/renderD*` |
+| Intel  | **Gaudi 3** (HPU, PCI `1da3`) | `habana.ai/gaudi` | Habana `habanalabs` driver, `/dev/accel/accel*` |
+
+k3d node containers are privileged, so host `/dev/dri` and `/dev/accel` are
+visible with no extra flag; the vendor plugins hand the device nodes to pods.
+Devices must exist when the cluster is created — recreate the cluster after
+loading a driver. Request them in a pod like any extended resource:
+`resources.limits: {gpu.intel.com/xe: 1}` or `{habana.ai/gaudi: 1}`.
+Gaudi runs in the plugin's plain mode (no habana container runtime required).
 
 ---
 
@@ -207,19 +232,18 @@ Contributions, issues, and feature requests are welcome! Please fork the reposit
 
 ## Release History
 
-| Date       | K3s Tag             | Device Plugin |
-|------------|---------------------|---------------|
-| 2026-09-30 | v1.34.1-k3s1-amd64 | v0.20.1 |
-| 2026-09-23 | v1.34.1-k3s1-amd64 | v0.20.1 |
-| 2026-09-19 | v1.34.1-k3s1-amd64 | v0.20.0 |
-| 2026-08-20 | v1.34.1-k3s1-amd64 | v0.20.0 |
-| 2026-07-29 | v1.34.1-k3s1-amd64 | v0.19.3 |
-| 2026-06-23 | v1.34.1-k3s1-amd64 | v0.19.3 |
-| 2026-06-04 | v1.34.1-k3s1-amd64 | v0.19.2 |
-| 2026-06-03 | v1.34.1-k3s1-amd64 | v0.19.2 |
-| 2026-06-03 | v1.34.1-k3s1-amd64 | v0.19.2 |
-| 2026-06-02 | v1.34.1-k3s1-amd64  | v0.19.2       |
-
+| Date       | K3s Tag             | NVIDIA Plugin | Intel GPU Plugin | Gaudi Plugin |
+|------------|---------------------|---------------|------------------|--------------|
+| 2026-09-30 | v1.34.1-k3s1-amd64 | v0.20.1 | — | — |
+| 2026-09-23 | v1.34.1-k3s1-amd64 | v0.20.1 | — | — |
+| 2026-09-19 | v1.34.1-k3s1-amd64 | v0.20.0 | — | — |
+| 2026-08-20 | v1.34.1-k3s1-amd64 | v0.20.0 | — | — |
+| 2026-07-29 | v1.34.1-k3s1-amd64 | v0.19.3 | — | — |
+| 2026-06-23 | v1.34.1-k3s1-amd64 | v0.19.3 | — | — |
+| 2026-06-04 | v1.34.1-k3s1-amd64 | v0.19.2 | — | — |
+| 2026-06-03 | v1.34.1-k3s1-amd64 | v0.19.2 | — | — |
+| 2026-06-03 | v1.34.1-k3s1-amd64 | v0.19.2 | — | — |
+| 2026-06-02 | v1.34.1-k3s1-amd64  | v0.19.2       | — | — |
 ---
 
 ## License
