@@ -1,20 +1,32 @@
 #!/usr/bin/env bash
-# k3d-gpu — bootstrap a GPU-ready k3d cluster using the cryptoandcoffee/k3d-gpu image
-# Manage GPU-ready k3d clusters. https://github.com/88plug/k3d-gpu
+# k3d-gpu — bootstrap an accelerator-ready k3d cluster using the cryptoandcoffee/k3d-gpu image
+# Manage GPU/HPU-ready k3d clusters. https://github.com/88plug/k3d-gpu
+#
+# Supported accelerators (auto-detected on the host, no flags needed):
+#   nvidia  NVIDIA GPUs            -> nvidia.com/gpu
+#   intel   Intel Arc/Xe2 Battlemage (xe) and i915 GPUs -> gpu.intel.com/xe, gpu.intel.com/i915
+#   gaudi   Intel Gaudi (HPU, Gaudi 3)                   -> habana.ai/gaudi
 #
 # Subcommands:
-#   up      create cluster, apply NVIDIA device plugin, verify
+#   up      create cluster, verify each detected accelerator is schedulable
 #   down    delete cluster
-#   test    run a CUDA pod and print nvidia-smi
-#   doctor  preflight: GPU present, docker running, nvidia runtime, k3d installed
+#   test    run a pod per detected accelerator and print the device view
+#   doctor  preflight: accelerators present, docker running, runtimes, k3d installed
 #   logs    tail server container logs
 
 set -euo pipefail
 
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 IMAGE="${K3D_GPU_IMAGE:-cryptoandcoffee/k3d-gpu:latest}"
-PLUGIN_MANIFEST="${K3D_GPU_PLUGIN:-/usr/share/k3d-gpu/nvidia-device-plugin.yml}"
+SHARE_DIR="${K3D_GPU_SHARE:-/usr/share/k3d-gpu}"
+PLUGIN_MANIFEST="${K3D_GPU_PLUGIN:-${SHARE_DIR}/nvidia-device-plugin.yml}"
+INTEL_PLUGIN_MANIFEST="${K3D_GPU_INTEL_PLUGIN:-${SHARE_DIR}/intel-gpu-plugin.yml}"
+GAUDI_PLUGIN_MANIFEST="${K3D_GPU_GAUDI_PLUGIN:-${SHARE_DIR}/gaudi-device-plugin.yml}"
 TEST_IMAGE="${K3D_GPU_TEST_IMAGE:-nvidia/cuda:13.4.2-base-ubuntu26.04}"
+DEVICE_TEST_IMAGE="${K3D_GPU_DEVICE_TEST_IMAGE:-busybox:1.37}"
+VENDORS_REQUEST="${K3D_GPU_VENDORS:-auto}"
+FAIL=0           # set by doctor_* checks
+INTEL_DRIVERS=() # "<driver> <pci-device-id>" per Intel render node (filled by detect_intel)
 VERSION="0.1.2"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 
 RED=$'\e[31m' GRN=$'\e[32m' YLW=$'\e[33m' RST=$'\e[0m'
@@ -24,22 +36,26 @@ warn() { echo "${YLW}WARN:${RST} $*"; }
 
 usage() {
     cat <<EOF
-k3d-gpu ${VERSION} — GPU-ready k3d clusters
+k3d-gpu ${VERSION} — accelerator-ready k3d clusters (NVIDIA, Intel Xe2/Arc, Intel Gaudi)
 
 Usage: k3d-gpu <command>
 
-  up        Create cluster '${CLUSTER}' with GPU passthrough
+  up        Create cluster '${CLUSTER}' with passthrough for every detected accelerator
   down      Delete cluster '${CLUSTER}'
-  test      Run a CUDA pod, print nvidia-smi output
+  test      Run a pod per detected accelerator and print its device view
   doctor    Diagnostic preflight checks
   logs      Tail k3s server container logs
   version   Show version
   help      Show this message
 
 Environment:
-  K3D_GPU_CLUSTER  cluster name        (default: gpu)
-  K3D_GPU_IMAGE    k3s+CUDA image      (default: cryptoandcoffee/k3d-gpu:latest)
-  K3D_GPU_PLUGIN   device plugin yaml  (default: /usr/share/k3d-gpu/nvidia-device-plugin.yml)
+  K3D_GPU_CLUSTER       cluster name         (default: gpu)
+  K3D_GPU_IMAGE         k3s node image       (default: cryptoandcoffee/k3d-gpu:latest)
+  K3D_GPU_VENDORS       auto | comma list of nvidia,intel,gaudi  (default: auto = detect)
+  K3D_GPU_SHARE         dir holding the fallback plugin yamls (default: /usr/share/k3d-gpu)
+  K3D_GPU_PLUGIN        NVIDIA plugin yaml   (default: ${SHARE_DIR}/nvidia-device-plugin.yml)
+  K3D_GPU_INTEL_PLUGIN  Intel GPU plugin yaml  (default: ${SHARE_DIR}/intel-gpu-plugin.yml)
+  K3D_GPU_GAUDI_PLUGIN  Gaudi plugin yaml    (default: ${SHARE_DIR}/gaudi-device-plugin.yml)
 
 Docs: https://github.com/88plug/k3d-gpu
 EOF
@@ -49,19 +65,111 @@ require() {
     command -v "$1" >/dev/null 2>&1 || err "'$1' not found in PATH — see 'k3d-gpu doctor'"
 }
 
-doctor() {
-    local fail=0
+# ---- accelerator detection --------------------------------------------------
+# Each detector reads the host only (device nodes / sysfs), never the cluster.
+
+# NVIDIA: device nodes appear only after first use on some hosts, so also accept
+# the loaded kernel module.
+has_nvidia() { [ -e /dev/nvidiactl ] || [ -e /dev/nvidia0 ] || [ -d /sys/module/nvidia ]; }
+
+# Fills INTEL_DRIVERS with "<driver> <pci-device-id>" per Intel DRM render node
+# bound to xe or i915.
+detect_intel() {
+    INTEL_DRIVERS=()
+    local dev drv
+    for dev in /sys/class/drm/renderD*/device; do
+        [ -r "${dev}/vendor" ] || continue
+        [ "$(cat "${dev}/vendor")" = "0x8086" ] || continue
+        drv=$(basename "$(readlink -f "${dev}/driver" 2>/dev/null)") || continue
+        case "${drv}" in xe|i915) INTEL_DRIVERS+=("${drv} $(cat "${dev}/device" 2>/dev/null)") ;; esac
+    done
+    return 0
+}
+
+# Gaudi: a loaded habanalabs driver exposes accel nodes (or legacy /dev/hl*).
+has_gaudi() {
+    [ -d /sys/module/habanalabs ] \
+        || compgen -G '/dev/accel/accel[0-9]*' >/dev/null \
+        || compgen -G '/dev/hl[0-9]*' >/dev/null
+}
+
+# Habana PCI device present (vendor 0x1da3) regardless of driver state.
+has_gaudi_pci() {
+    local v
+    for v in /sys/bus/pci/devices/*/vendor; do
+        [ -r "${v}" ] || continue
+        [ "$(cat "${v}")" = "0x1da3" ] && return 0
+    done
+    return 1
+}
+
+# Resolve the active vendor list into ACTIVE (array). Honors K3D_GPU_VENDORS.
+resolve_vendors() {
+    ACTIVE=()
+    detect_intel
+    local v req
+    if [ "${VENDORS_REQUEST}" = "auto" ]; then
+        if has_nvidia; then ACTIVE+=(nvidia); fi
+        if [ "${#INTEL_DRIVERS[@]}" -gt 0 ]; then ACTIVE+=(intel); fi
+        if has_gaudi; then
+            ACTIVE+=(gaudi)
+        elif has_gaudi_pci; then
+            warn "Gaudi PCI device found but the habanalabs driver is not loaded — skipping Gaudi"
+        fi
+    else
+        IFS=',' read -r -a req <<< "${VENDORS_REQUEST// /}"
+        for v in "${req[@]}"; do
+            case "${v}" in
+                nvidia|intel|gaudi) is_active "${v}" || ACTIVE+=("${v}") ;;
+                *) err "unknown vendor '${v}' in K3D_GPU_VENDORS (use nvidia,intel,gaudi)" ;;
+            esac
+        done
+    fi
+    return 0
+}
+
+is_active() {
+    local v
+    for v in ${ACTIVE[@]+"${ACTIVE[@]}"}; do [ "${v}" = "$1" ] && return 0; done
+    return 1
+}
+
+# Kubernetes extended resources a vendor advertises (one per line).
+vendor_resources() {
+    case "$1" in
+        nvidia) echo "nvidia.com/gpu" ;;
+        gaudi)  echo "habana.ai/gaudi" ;;
+        intel)
+            local e drivers=""
+            for e in ${INTEL_DRIVERS[@]+"${INTEL_DRIVERS[@]}"}; do
+                case "${e}" in xe|i915) drivers+="${e}"$'\n' ;; esac
+            done
+            [ -n "${drivers}" ] || drivers=$'xe\ni915\n'
+            printf '%s' "${drivers}" | sort -u | sed 's#^#gpu.intel.com/#'
+            ;;
+    esac
+}
+
+vendor_daemonset() {  # prints: namespace name manifest
+    case "$1" in
+        nvidia) echo "kube-system nvidia-device-plugin-daemonset ${PLUGIN_MANIFEST}" ;;
+        intel)  echo "kube-system intel-gpu-plugin ${INTEL_PLUGIN_MANIFEST}" ;;
+        gaudi)  echo "habana-system habanalabs-device-plugin-daemonset ${GAUDI_PLUGIN_MANIFEST}" ;;
+    esac
+}
+
+doctor_common() {
     info "Checking docker..."
     if command -v docker >/dev/null 2>&1; then
         if docker info >/dev/null 2>&1; then
             echo "  ok: docker running"
         else
             echo "  ${RED}fail${RST}: docker installed but daemon unreachable (sudo systemctl start docker)"
-            fail=1
+            FAIL=1
         fi
     else
         echo "  ${RED}fail${RST}: docker not installed (sudo pacman -S docker)"
-        fail=1
+        FAIL=1
     fi
 
     info "Checking k3d..."
@@ -69,18 +177,22 @@ doctor() {
         echo "  ok: $(k3d version | head -1)"
     else
         echo "  ${RED}fail${RST}: k3d not installed (yay -S k3d-git)"
-        fail=1
+        FAIL=1
     fi
 
     info "Checking kubectl..."
-    command -v kubectl >/dev/null 2>&1 && echo "  ok" || { echo "  ${RED}fail${RST}: kubectl not installed (sudo pacman -S kubectl)"; fail=1; }
+    command -v kubectl >/dev/null 2>&1 && echo "  ok" || { echo "  ${RED}fail${RST}: kubectl not installed (sudo pacman -S kubectl)"; FAIL=1; }
+}
 
+doctor_nvidia() {
     info "Checking NVIDIA GPU..."
-    if [ -e /dev/nvidia0 ] || [ -e /dev/nvidiactl ]; then
+    if [ -e /dev/nvidiactl ] || [ -e /dev/nvidia0 ]; then
         echo "  ok: /dev/nvidia* present"
+    elif has_nvidia; then
+        echo "  ${YLW}warn${RST}: nvidia module loaded but no /dev/nvidia* yet (run: sudo nvidia-modprobe -u -c0)"
     else
         echo "  ${RED}fail${RST}: no /dev/nvidia* devices (driver not loaded?)"
-        fail=1
+        FAIL=1
     fi
 
     info "Checking nvidia-container-toolkit..."
@@ -90,7 +202,7 @@ doctor() {
     else
         echo "  ${RED}fail${RST}: nvidia-container-toolkit not installed"
         echo "         install: https://github.com/NVIDIA/nvidia-container-toolkit"
-        fail=1
+        FAIL=1
     fi
 
     info "Checking docker NVIDIA runtime..."
@@ -99,9 +211,73 @@ doctor() {
     else
         echo "  ${YLW}warn${RST}: nvidia runtime not listed (sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker)"
     fi
+}
+
+doctor_intel() {
+    info "Checking Intel GPU (Arc / Xe2 Battlemage)..."
+    if [ "${#INTEL_DRIVERS[@]}" -eq 0 ]; then
+        echo "  ${RED}fail${RST}: no Intel DRM render node bound to xe/i915 (driver not loaded? check /dev/dri and /sys/class/drm)"
+        FAIL=1
+        return
+    fi
+    local e drv id bmg=0 bmg_on_i915=0 kmaj kmin
+    for e in "${INTEL_DRIVERS[@]}"; do
+        read -r drv id <<< "${e}"
+        echo "  ok: Intel render node ${id:-?} bound to ${drv}"
+        # Battlemage (Xe2) device IDs are 0xe20x-0xe22x.
+        case "${id}" in
+            0xe20*|0xe21*|0xe22*) bmg=1; [ "${drv}" = "i915" ] && bmg_on_i915=1 ;;
+        esac
+    done
+    [ "${bmg}" -eq 1 ] || return 0
+    [ "${bmg_on_i915}" -eq 0 ] || echo "  ${YLW}warn${RST}: Battlemage bound to i915 — it needs the xe driver (gpu.intel.com/xe)"
+    IFS=. read -r kmaj kmin _ <<< "$(uname -r)"
+    kmin=${kmin//[!0-9]/}
+    if [ "${kmaj:-0}" -lt 6 ] || { [ "${kmaj}" -eq 6 ] && [ "${kmin:-0}" -lt 12 ]; }; then
+        echo "  ${YLW}warn${RST}: kernel $(uname -r) < 6.12 — Battlemage needs 6.12+ (or xe.force_probe=<devid> on 6.11)"
+    fi
+    if compgen -G '/lib/firmware/xe/bmg_guc_*' >/dev/null || compgen -G '/usr/lib/firmware/xe/bmg_guc_*' >/dev/null; then
+        echo "  ok: Battlemage GuC firmware present"
+    else
+        echo "  ${YLW}warn${RST}: xe/bmg_guc_* firmware not found (update linux-firmware)"
+    fi
+}
+
+doctor_gaudi() {
+    info "Checking Intel Gaudi (HPU)..."
+    if compgen -G '/dev/accel/accel[0-9]*' >/dev/null; then
+        echo "  ok: /dev/accel/accel* present"
+    elif compgen -G '/dev/hl[0-9]*' >/dev/null; then
+        echo "  ${YLW}warn${RST}: legacy /dev/hl* nodes only — the Gaudi plugin expects /dev/accel/accel*; update the habanalabs driver"
+    else
+        echo "  ${RED}fail${RST}: no /dev/accel/accel* (habanalabs driver not loaded? lsmod | grep habanalabs)"
+        FAIL=1
+    fi
+    if compgen -G '/dev/accel/accel_controlD*' >/dev/null; then
+        echo "  ok: /dev/accel/accel_controlD* present"
+    else
+        echo "  ${YLW}warn${RST}: no /dev/accel/accel_controlD* nodes"
+    fi
+}
+
+doctor() {
+    FAIL=0
+    resolve_vendors
+    doctor_common
+
+    if [ "${#ACTIVE[@]}" -eq 0 ]; then
+        echo ""
+        echo "  ${RED}fail${RST}: no supported accelerator detected (NVIDIA, Intel Arc/Xe2, Intel Gaudi)"
+        FAIL=1
+    else
+        info "Detected accelerators: ${ACTIVE[*]}"
+        is_active nvidia && doctor_nvidia
+        is_active intel  && doctor_intel
+        is_active gaudi  && doctor_gaudi
+    fi
 
     echo ""
-    [ $fail -eq 0 ] && info "All checks passed." || { err "One or more checks failed."; }
+    [ "${FAIL}" -eq 0 ] && info "All checks passed." || { err "One or more checks failed."; }
 }
 
 cmd_up() {
@@ -109,70 +285,123 @@ cmd_up() {
     require k3d
     require kubectl
 
-    info "Creating k3d cluster '${CLUSTER}' with image ${IMAGE}..."
+    resolve_vendors
+    [ "${#ACTIVE[@]}" -gt 0 ] || err "no supported accelerator detected (NVIDIA, Intel Arc/Xe2, Intel Gaudi) — run 'k3d-gpu doctor' or set K3D_GPU_VENDORS"
+    info "Accelerators: ${ACTIVE[*]}"
+
+    local create_args=(
+        --image="${IMAGE}"
+        --no-lb
+        --k3s-arg="--disable=traefik@server:0"
+    )
+    # NVIDIA: --gpus=all hands the host GPUs to the node container, and
     # --default-runtime=nvidia flips the node's embedded containerd default from
-    # runc to the auto-detected nvidia runtime, so every pod gets the GPU driver
-    # libraries. Without it the device plugin runs under runc, NVML can't load,
-    # and the cluster advertises zero GPUs. This is k3s's supported mechanism and
-    # survives the config.toml regeneration that a baked-in default does not.
-    k3d cluster create "${CLUSTER}" \
-        --image="${IMAGE}" \
-        --gpus=all \
-        --no-lb \
-        --k3s-arg="--disable=traefik@server:0" \
-        --k3s-arg="--default-runtime=nvidia@server:0"
+    # runc to the auto-detected nvidia runtime so every pod gets the driver
+    # libraries. Without it the device plugin runs under runc, NVML can't load, and
+    # the cluster advertises zero GPUs. Both are NVIDIA-only: --gpus fails on a
+    # host with no NVIDIA docker runtime, so they are added only when NVIDIA is active.
+    if is_active nvidia; then
+        create_args+=(--gpus=all --k3s-arg="--default-runtime=nvidia@server:0")
+    fi
+    # Intel (/dev/dri) and Gaudi (/dev/accel): k3d node containers run privileged,
+    # so the host /dev tree (including these nodes) is visible with no extra flag.
+    # Their device plugins are baked into the image and hand the nodes to pods.
+    # Devices that appear after the node container is created need a cluster
+    # recreate to show up.
+    # The Gaudi plugin only schedules onto nodes labelled habana.ai/gaudi.present.
+    if is_active gaudi; then
+        create_args+=(--k3s-node-label="habana.ai/gaudi.present=true@server:*;agent:*")
+    fi
+    if is_active intel && ! compgen -G '/dev/dri/renderD*' >/dev/null; then
+        warn "no /dev/dri/renderD* on host — Intel GPU will not be visible in the node"
+    fi
+    if is_active gaudi && ! compgen -G '/dev/accel/accel[0-9]*' >/dev/null; then
+        warn "no /dev/accel/accel* on host — Gaudi will not be visible in the node"
+    fi
+
+    info "Creating k3d cluster '${CLUSTER}' with image ${IMAGE}..."
+    k3d cluster create "${CLUSTER}" "${create_args[@]}"
 
     info "Waiting for nodes Ready..."
     kubectl wait --for=condition=Ready nodes --all --timeout=120s
 
-    # The cryptoandcoffee/k3d-gpu image bakes the device plugin into k3s's
-    # auto-deploy dir, so k3s applies it on startup — no action needed here. Give
-    # the addon a moment to appear; only apply it ourselves if a custom image
+    # The cryptoandcoffee/k3d-gpu image bakes every device plugin into k3s's
+    # auto-deploy dir, so k3s applies them on startup — no action needed here. Give
+    # each addon a moment to appear; only apply it ourselves if a custom image
     # (K3D_GPU_IMAGE) didn't ship it.
-    local baked=0 dl=$((SECONDS + 20))
-    while [ "${SECONDS}" -lt "${dl}" ]; do
-        kubectl -n kube-system get daemonset nvidia-device-plugin-daemonset >/dev/null 2>&1 && { baked=1; break; }
-        sleep 2
+    local v ns ds manifest
+    for v in "${ACTIVE[@]}"; do
+        read -r ns ds manifest <<< "$(vendor_daemonset "${v}")"
+        ensure_plugin "${v}" "${ns}" "${ds}" "${manifest}"
     done
-    if [ "${baked}" -eq 1 ]; then
-        info "Device plugin auto-deployed by k3s."
-    elif [ -f "${PLUGIN_MANIFEST}" ]; then
-        info "Applying NVIDIA device plugin (${PLUGIN_MANIFEST})..."
-        kubectl apply -f "${PLUGIN_MANIFEST}"
-    else
-        warn "${PLUGIN_MANIFEST} missing — applying upstream from GitHub"
-        kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/main/deployments/static/nvidia-device-plugin.yml
-    fi
 
     verify_gpus
 }
 
-# Assert the cluster actually exposes GPUs to the scheduler. A "Done" message is
-# worthless if nvidia.com/gpu is 0 — the most common k3d-gpu failure mode is a
-# cluster that comes up healthy but advertises no GPUs.
-verify_gpus() {
-    info "Verifying GPUs are schedulable..."
-    kubectl -n kube-system rollout status daemonset/nvidia-device-plugin-daemonset \
-        --timeout=120s || warn "device plugin rollout did not finish cleanly"
-
-    local total=0 deadline=$((SECONDS + 90))
-    while [ "${SECONDS}" -lt "${deadline}" ]; do
-        total=$(kubectl get nodes \
-            -o 'jsonpath={range .items[*]}{.status.allocatable.nvidia\.com/gpu}{"\n"}{end}' 2>/dev/null \
-            | awk '{s += $1} END {print s + 0}') || total=0
-        [ "${total:-0}" -gt 0 ] && break
-        sleep 3
+ensure_plugin() {
+    local vendor=$1 ns=$2 ds=$3 manifest=$4
+    local baked=0 dl=$((SECONDS + 20))
+    while [ "${SECONDS}" -lt "${dl}" ]; do
+        kubectl -n "${ns}" get daemonset "${ds}" >/dev/null 2>&1 && { baked=1; break; }
+        sleep 2
     done
-
-    if [ "${total:-0}" -gt 0 ]; then
-        info "GPUs schedulable: nvidia.com/gpu=${total}. Try: k3d-gpu test"
+    if [ "${baked}" -eq 1 ]; then
+        info "${vendor} device plugin auto-deployed by k3s."
+    elif [ -f "${manifest}" ]; then
+        info "Applying ${vendor} device plugin (${manifest})..."
+        kubectl apply -f "${manifest}"
+    elif [ "${vendor}" = "nvidia" ]; then
+        warn "${manifest} missing — applying upstream from GitHub"
+        kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/main/deployments/static/nvidia-device-plugin.yml
     else
-        err "Cluster is up but advertises 0 GPUs (nvidia.com/gpu).
-       The device plugin could not initialize NVML — the node's containerd is
-       not using the nvidia runtime. Inspect:
-         kubectl -n kube-system logs -l name=nvidia-device-plugin-ds
-       then run 'k3d-gpu doctor'."
+        err "${vendor} device plugin missing from image and ${manifest} not found"
     fi
+}
+
+# Sum an extended resource across all nodes' allocatable.
+resource_total() {
+    local esc=${1//./\\.}
+    { kubectl get nodes \
+        -o "jsonpath={range .items[*]}{.status.allocatable.${esc}}{\"\\n\"}{end}" 2>/dev/null || true; } \
+        | awk '{s += $1} END {print s + 0}'
+}
+
+# Assert the cluster actually exposes every detected accelerator to the
+# scheduler. A "Done" message is worthless if the resource count is 0 — the most
+# common failure mode is a cluster that comes up healthy but advertises nothing.
+verify_gpus() {
+    info "Verifying accelerators are schedulable..."
+    local v ns ds manifest res total deadline summary="" failed=""
+    for v in "${ACTIVE[@]}"; do
+        read -r ns ds manifest <<< "$(vendor_daemonset "${v}")"
+        kubectl -n "${ns}" rollout status "daemonset/${ds}" --timeout=120s \
+            || warn "${v} device plugin rollout did not finish cleanly"
+
+        total=0
+        deadline=$((SECONDS + 90))
+        while [ "${SECONDS}" -lt "${deadline}" ]; do
+            total=0
+            while read -r res; do
+                total=$((total + $(resource_total "${res}")))
+            done < <(vendor_resources "${v}")
+            [ "${total}" -gt 0 ] && break
+            sleep 3
+        done
+
+        if [ "${total}" -gt 0 ]; then
+            summary+=" ${v}=${total}"
+        else
+            failed+=" ${v}"
+            warn "cluster advertises 0 ${v} devices ($(vendor_resources "${v}" | tr '\n' ' '))
+       Inspect: kubectl -n ${ns} logs ds/${ds}  — then run 'k3d-gpu doctor'."
+        fi
+    done
+    # An explicit K3D_GPU_VENDORS request must fully succeed. In auto mode one
+    # working accelerator is enough (e.g. a spare iGPU that never registers).
+    if [ -n "${failed}" ] && { [ "${VENDORS_REQUEST}" != "auto" ] || [ -z "${summary}" ]; }; then
+        err "accelerator(s) not schedulable:${failed}"
+    fi
+    info "Accelerators schedulable:${summary}. Try: k3d-gpu test"
 }
 
 cmd_down() {
@@ -181,15 +410,40 @@ cmd_down() {
     k3d cluster delete "${CLUSTER}"
 }
 
+# Run a one-shot pod requesting one device of the given resource and listing the
+# device nodes the plugin injected.
+device_test() {
+    local name=$1 resource=$2 path=$3
+    info "Deploying ${name} test pod (${DEVICE_TEST_IMAGE}, ${resource})..."
+    kubectl run "${name}" --rm -i --restart=Never \
+        --image="${DEVICE_TEST_IMAGE}" \
+        --overrides="{\"spec\":{\"containers\":[{\"name\":\"${name}\",\"image\":\"${DEVICE_TEST_IMAGE}\",\"resources\":{\"limits\":{\"${resource}\":1}},\"command\":[\"ls\",\"-l\",\"${path}\"]}]}}" \
+        || err "${name} test pod failed — run 'k3d-gpu doctor'"
+}
+
 cmd_test() {
     require kubectl
-    info "Deploying nvidia-smi test pod (${TEST_IMAGE})..."
-    # The container command + GPU resource limit live entirely in --overrides;
-    # --image is still required by `kubectl run` but the overrides spec wins.
-    kubectl run nvidia-smi-test --rm -i --restart=Never \
-        --image="${TEST_IMAGE}" \
-        --overrides="{\"spec\":{\"runtimeClassName\":\"nvidia\",\"containers\":[{\"name\":\"nvidia-smi-test\",\"image\":\"${TEST_IMAGE}\",\"resources\":{\"limits\":{\"nvidia.com/gpu\":1}},\"command\":[\"nvidia-smi\"]}]}}" \
-        || err "Test pod failed — run 'k3d-gpu doctor'"
+    resolve_vendors
+    [ "${#ACTIVE[@]}" -gt 0 ] || err "no supported accelerator detected — run 'k3d-gpu doctor'"
+    local res
+    if is_active nvidia; then
+        info "Deploying nvidia-smi test pod (${TEST_IMAGE})..."
+        # The container command + GPU resource limit live entirely in --overrides;
+        # --image is still required by `kubectl run` but the overrides spec wins.
+        kubectl run nvidia-smi-test --rm -i --restart=Never \
+            --image="${TEST_IMAGE}" \
+            --overrides="{\"spec\":{\"runtimeClassName\":\"nvidia\",\"containers\":[{\"name\":\"nvidia-smi-test\",\"image\":\"${TEST_IMAGE}\",\"resources\":{\"limits\":{\"nvidia.com/gpu\":1}},\"command\":[\"nvidia-smi\"]}]}}" \
+            || err "Test pod failed — run 'k3d-gpu doctor'"
+    fi
+    if is_active intel; then
+        while read -r res; do
+            [ "$(resource_total "${res}")" -gt 0 ] || continue
+            device_test "intel-gpu-test" "${res}" /dev/dri
+        done < <(vendor_resources intel)
+    fi
+    if is_active gaudi; then
+        device_test "gaudi-test" "habana.ai/gaudi" /dev/accel
+    fi
 }
 
 cmd_logs() {
