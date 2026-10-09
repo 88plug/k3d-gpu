@@ -97,6 +97,8 @@ for the NPU. Gaudi runs in the plugin's plain mode, which hands pods the devices
 without the habana container runtime; full Gaudi workloads may still expect it.
 
 Force or limit vendors with `K3D_GPU_VENDORS=nvidia,intel,npu,gaudi`.
+A loaded `nvidia` or `habanalabs` kernel module counts as present even before
+its device nodes appear; `doctor` then flags the missing nodes.
 
 ### Xeon built-in accelerators
 

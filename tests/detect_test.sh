@@ -48,11 +48,12 @@ kernel() { mkdir -p "$1/proc/sys/kernel"; echo "$2" > "$1/proc/sys/kernel/osrele
 # firmware <root> <relpath>: a firmware file under lib/firmware.
 firmware() { mkdir -p "$(dirname "$1/lib/firmware/$2")"; touch "$1/lib/firmware/$2"; }
 
-# doctor_says <name> <root> <ERE> [negate]: doctor output (any exit code) must
+# doctor_says <name> <root> <ERE> [negate] [env assignments...]: doctor output (any exit code) must
 # match <ERE>, or must not when a 4th argument is given.
 doctor_says() {
     local name=$1 root=$2 re=$3 negate=${4:-} out hit=0
-    out=$(env K3D_GPU_SYSROOT="${root}" PATH="${STUB_BIN}:${PATH}" bash "${K3D_GPU}" doctor 2>&1)
+    shift 4 2>/dev/null || shift $#
+    out=$(env K3D_GPU_SYSROOT="${root}" PATH="${STUB_BIN}:${PATH}" "$@" bash "${K3D_GPU}" doctor 2>&1)
     grep -E -- "${re}" <<< "${out}" >/dev/null && hit=1
     if { [ -z "${negate}" ] && [ "${hit}" -eq 1 ]; } || { [ -n "${negate}" ] && [ "${hit}" -eq 0 ]; }; then
         PASS=$((PASS + 1)); echo "ok   ${name}"
@@ -204,6 +205,59 @@ doctor_says "Xeon AMX flags are reported" "${r}" 'AMX.*amx_bf16.*amx_int8.*amx_t
 doctor_says "DSA without work queues points at accel-config" "${r}" 'DSA.*accel-config'
 doctor_says "IAA without work queues points at accel-config" "${r}" 'IAA.*accel-config'
 doctor_says "QAT PF with no VFs points at sriov_numvfs" "${r}" 'QAT.*sriov_numvfs'
+
+r=$(newroot ptl-rc-kernel)
+kernel "${r}" 6.16-rc3
+pci "${r}" 0000:00:02.0 0x8086 0xb080 xe; render "${r}" 0000:00:02.0 128
+doctor_says "release-candidate kernel 6.16-rc3 still warns for Panther Lake" "${r}" 'Panther Lake.*6\.17'
+
+r=$(newroot bmg-old-kernel)
+kernel "${r}" 6.9-rc3
+pci "${r}" 0000:03:00.0 0x8086 0xe20b xe; render "${r}" 0000:03:00.0 128
+doctor_says "6.9-rc3 is older than 6.12 for Battlemage" "${r}" 'Battlemage.*6\.12'
+
+r=$(newroot nvidia-dev)
+kernel "${r}" 6.12.10
+mkdir -p "${r}/sys/module/nvidia"; touch "${r}/dev/nvidiactl"
+doctor_says "doctor sees /dev/nvidiactl under the sysroot" "${r}" 'ok: /dev/nvidia'
+
+r=$(newroot npu-forced)
+kernel "${r}" 6.12.10
+doctor_says "forced npu with no NPU fails doctor" "${r}" 'fail.*NPU' "" K3D_GPU_VENDORS=npu
+
+r=$(newroot npu-twice)
+pci "${r}" 0000:00:0b.0 0x8086 0x643e intel_vpu; accel "${r}" 0000:00:0b.0 0
+pci "${r}" 0000:00:0c.0 0x8086 0x643e intel_vpu; accel "${r}" 0000:00:0c.0 1
+pci "${r}" 0000:03:00.0 0x8086 0xe20b xe;        render "${r}" 0000:03:00.0 128
+pci "${r}" 0000:04:00.0 0x8086 0xe20b xe;        render "${r}" 0000:04:00.0 129
+expect "two NPUs and two xe GPUs list each resource once" "${r}" \
+"intel gpu.intel.com/xe
+npu npu.intel.com/accel"
+
+r=$(newroot dangling)
+pci "${r}" 0000:03:00.0 0x8086 0xe20b xe; render "${r}" 0000:03:00.0 128
+rm -rf "${r}/sys/bus/pci/drivers/xe"
+expect "dangling driver symlink counts as unbound" "${r}" ""
+
+r=$(newroot vfio)
+pci "${r}" 0000:03:00.0 0x8086 0xe20b vfio-pci; render "${r}" 0000:03:00.0 128
+expect "Intel GPU bound to vfio-pci is not an xe/i915 GPU" "${r}" ""
+
+r=$(newroot npu-unbound-accel)
+pci "${r}" 0000:00:0b.0 0x8086 0x643e; accel "${r}" 0000:00:0b.0 0
+expect "accel node with no driver is not an NPU" "${r}" ""
+
+r=$(newroot empty-items)
+mkdir -p "${r}/sys/module/nvidia"
+expect "empty items in K3D_GPU_VENDORS are skipped" "${r}" \
+"nvidia nvidia.com/gpu
+gaudi habana.ai/gaudi" K3D_GPU_VENDORS="nvidia,,gaudi"
+
+r=$(newroot fw-zst)
+kernel "${r}" 6.18.1
+pci "${r}" 0000:03:00.0 0x8086 0xe20b xe; render "${r}" 0000:03:00.0 128
+mkdir -p "${r}/usr/lib/firmware/xe"; touch "${r}/usr/lib/firmware/xe/bmg_guc_70.bin.zst"
+doctor_says "compressed firmware under usr/lib/firmware is found" "${r}" 'ok: xe/bmg_guc_'
 
 r=$(newroot gaudi-doc)
 kernel "${r}" 6.18.1

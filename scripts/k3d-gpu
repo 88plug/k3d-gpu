@@ -109,10 +109,11 @@ detect_intel() {
 # node. The Intel NPU (intel_vpu, 0x8086) and Gaudi (habanalabs, 0x1da3) both
 # register here, so the node name alone never identifies the accelerator.
 accel_nodes() {
-    local dev
+    local dev drv
     for dev in "${SYSROOT}"/sys/class/accel/accel[0-9]*/device; do
         [ -r "${dev}/vendor" ] || continue
-        echo "$(cat "${dev}/vendor") $(bound_driver "${dev}") $(cat "${dev}/device" 2>/dev/null)"
+        drv=$(bound_driver "${dev}")
+        echo "$(cat "${dev}/vendor") ${drv:--} $(cat "${dev}/device" 2>/dev/null)"
     done
 }
 
@@ -184,7 +185,8 @@ kernel_lt() {
     local maj min wmaj wmin
     IFS=. read -r maj min _ <<< "$(kernel_release)"
     IFS=. read -r wmaj wmin <<< "$1"
-    min=${min//[!0-9]/}
+    # Leading digits only: "9-rc3" is minor 9, "12" of "6.12.108-1-MANJARO" is 12.
+    maj=${maj%%[!0-9]*} min=${min%%[!0-9]*}
     [ "${maj:-0}" -lt "${wmaj}" ] || { [ "${maj:-0}" -eq "${wmaj}" ] && [ "${min:-0}" -lt "${wmin}" ]; }
 }
 
@@ -283,7 +285,7 @@ doctor_common() {
 
 doctor_nvidia() {
     info "Checking NVIDIA GPU..."
-    if [ -e /dev/nvidiactl ] || [ -e /dev/nvidia0 ]; then
+    if [ -e "${SYSROOT}/dev/nvidiactl" ] || [ -e "${SYSROOT}/dev/nvidia0" ]; then
         echo "  ok: /dev/nvidia* present"
     elif has_nvidia; then
         echo "  ${YLW}warn${RST}: nvidia module loaded but no /dev/nvidia* yet (run: sudo nvidia-modprobe -u -c0)"
@@ -338,6 +340,11 @@ doctor_intel() {
 doctor_npu() {
     info "Checking Intel NPU (Core Ultra)..."
     local id name mink gen
+    if [ "${#NPU_IDS[@]}" -eq 0 ]; then
+        echo "  ${RED}fail${RST}: no Intel NPU accel node bound to intel_vpu (driver not loaded? lsmod | grep intel_vpu)"
+        FAIL=1
+        return
+    fi
     for id in ${NPU_IDS[@]+"${NPU_IDS[@]}"}; do
         IFS='|' read -r name mink gen <<< "$(npu_platform "${id}")"
         echo "  ok: Intel NPU ${name:-(unknown generation)} (${id}) bound to intel_vpu"
