@@ -764,7 +764,7 @@ cmd_test() {
         device_test "${v}-test" "${res}" "${path}"
     done
     if is_active amx; then
-        res=$(amx_labels | head -n1)
+        res=$(amx_labels | sed -n 1p)  # not head: early exit SIGPIPEs amx_labels under pipefail
         info "Deploying AMX test pod (${DEVICE_TEST_IMAGE}, nodeSelector ${res})..."
         kubectl run amx-test --rm -i --restart=Never \
             --image="${DEVICE_TEST_IMAGE}" \
