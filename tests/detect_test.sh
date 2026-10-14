@@ -67,7 +67,22 @@ doctor_says() {
 # doctor shells out to docker/k3d/kubectl; stub them so output is host-independent.
 STUB_BIN="${WORK}/bin"
 mkdir -p "${STUB_BIN}"
-for tool in docker k3d kubectl; do printf '#!/bin/sh\nexit 0\n' > "${STUB_BIN}/${tool}"; chmod +x "${STUB_BIN}/${tool}"; done
+for tool in k3d kubectl; do printf '#!/bin/sh\nexit 0\n' > "${STUB_BIN}/${tool}"; chmod +x "${STUB_BIN}/${tool}"; done
+# The docker stub answers `docker info --format` from STUB_DOCKER_RUNTIMES (runtime
+# names) and STUB_DOCKER_CDI (CDI device IDs), so doctor's runtime checks are testable.
+cat > "${STUB_BIN}/docker" <<'EOF'
+#!/bin/sh
+[ "$1" = info ] || exit 0
+case "$*" in
+    *Runtimes*) for r in ${STUB_DOCKER_RUNTIMES:-}; do echo "${r}"; done ;;
+    *DiscoveredDevices*) for id in ${STUB_DOCKER_CDI:-}; do echo "${id}"; done ;;
+    *--format*) ;;
+    *)  # plain `docker info`, shaped like Docker 29's
+        echo " Runtimes: ${STUB_DOCKER_RUNTIMES:-}"
+        for id in ${STUB_DOCKER_CDI:-}; do echo "  cdi: ${id}"; done ;;
+esac
+EOF
+chmod +x "${STUB_BIN}/docker"
 
 # expect <name> <root> <expected stdout> [env assignments...]
 expect() {
@@ -328,6 +343,19 @@ r=$(newroot gaudi-doc)
 kernel "${r}" 6.18.1
 pci "${r}" 0000:00:0b.0 0x8086 0x643e intel_vpu; accel "${r}" 0000:00:0b.0 0
 doctor_says "an NPU accel node does not satisfy the Gaudi check" "${r}" 'Checking Intel Gaudi' negate
+
+# Docker 29 lists CDI devices (cdi: nvidia.com/gpu=all) in `docker info`; that is
+# not a registered nvidia runtime, and doctor must not say it is.
+r=$(newroot nvidia-rt)
+mkdir -p "${r}/sys/module/nvidia"; touch "${r}/dev/nvidiactl"
+doctor_says "nvidia runtime registered is reported" "${r}" 'ok: nvidia runtime registered' "" \
+    STUB_DOCKER_RUNTIMES="io.containerd.runc.v2 nvidia runc"
+doctor_says "CDI-only host is not reported as having the nvidia runtime" "${r}" 'nvidia runtime registered' negate \
+    STUB_DOCKER_RUNTIMES="io.containerd.runc.v2 runc" STUB_DOCKER_CDI="nvidia.com/gpu=0 nvidia.com/gpu=all"
+doctor_says "CDI-only host is ok via CDI" "${r}" 'ok: .*CDI' "" \
+    STUB_DOCKER_RUNTIMES="io.containerd.runc.v2 runc" STUB_DOCKER_CDI="nvidia.com/gpu=0 nvidia.com/gpu=all"
+doctor_says "no runtime and no CDI warns" "${r}" 'warn.*nvidia-ctk' "" \
+    STUB_DOCKER_RUNTIMES="io.containerd.runc.v2 runc"
 
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
