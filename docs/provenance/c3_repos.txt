@@ -1,0 +1,78 @@
+=== [2026-10-16] gh search repos 'enterprise agent toolkit' -> 20 hits 
+  intel/enterprise-agent-toolkit	*41	2026-10-16	A comprehensive, enterprise-ready toolkit for deploying Agentic AI systems on Intel® Xeon processors and Intel
+  gleanwork/glean-agent-toolkit	*67	2026-10-07	AI Agent toolkit for adapting Glean's enterprise tools across multiple frameworks
+  jabrena/plinth	*451	2026-10-15	Plinth is an AI-native engineering toolkit for modern Java enterprise SDLC, built around reusable Commands, Ag
+  Arman-Kudaibergenov/1c-ai-development-kit	*166	2026-10-04	Comprehensive AI agents, skills and rules toolkit for 1C:Enterprise development in Cursor IDE
+  vgtitov/bsl-ai-toolkit	*30	2026-10-16	AI agent toolkit for 1C:Enterprise 8.3 (BSL): rules, skills and MCP servers so the agent works from your real 
+  tractorjuice/arckit-codex	*17	2026-10-12	ArcKit Enterprise Architecture Toolkit - Codex CLI Extension with skills, agents, and MCP servers
+  Muredsa/1C-Enterprise-Agent-Toolkit	*23	2026-10-11	Универсальные безопасные Agent Skills для любых конфигураций 1С / Universal safe Agent Skills for any 1C:Enter
+  maree217/enterprise-agent-toolkit	*4	2026-09-15	Professional AI consultancy toolkit with case studies, templates, and reference implementations
+  Future-CX/AI-Architecture-Toolkit	*7	2026-10-12	Open-source AI agents, skills, templates, and workflows for software architects and enterprise architecture te
+  thibaultyou/prompt-blueprint	*25	2026-08-21	Enterprise-grade prompt engineering toolkit: Distilled best practices, production-ready meta-prompts, and a pr
+  mugisha1555/Aeon-Flux-DeepSeek	*54	2026-10-16	🚀 DeepSeek-V4-Pro Agentic AI Automation Toolkit for Enterprise Apps 2026
+  Kornienkoal/aws-agentcore-enterprise-toolkit	*0	2025-12-08	
+  shark6438/servicemind	*17	2026-10-10	Enterprise ITSM agent platform on LangGraph: governed, auditable multi-agent runs for GLPI tickets, with hybri
+  techwavedev/agi-agent-kit	*4	2026-07-23	Enterprise-Grade Agentic Framework - Modular skill-based AI assistant toolkit with deterministic execution and
+  anahata-os/anahata-asi	*28	2026-10-13	Anahata ASI - Artificial Super Intelligence - Cross-Platform, Modular, Enterprise Ready, Open Source, Pure Jav
+  MarkNaderKamel/CerberusX-Framework	*10	2026-10-09	Cerberus Agents is a production-grade, enterprise-ready red team toolkit built for security professionals who 
+  sannavajjala/copilot-studio-enterprise-readiness-kit	*3	2026-09-10	A practical, community-driven toolkit for evaluating whether Microsoft Copilot Studio agents are ready for ent
+  shivanikabu/Enterprise-Agent-Toolkit	*0	2025-12-22	
+  shivanikabu/AWS_Agents_Enterprise_Toolkit	*0	2025-11-29	
+  Shriharsh03/enterprise-ai-agent-automated-data-analysis	*2	2026-08-10	Capstone project for Google's 5-Day AI Agents Intensive — Enterprise Agent that automates EDA, cleaning, featu
+=== [2026-10-16] gh search repos 'enterprise-agent-toolkit' -> 20 hits 
+  intel/enterprise-agent-toolkit	*41	2026-10-16	A comprehensive, enterprise-ready toolkit for deploying Agentic AI systems on Intel® Xeon processors and Intel
+  jabrena/plinth	*451	2026-10-15	Plinth is an AI-native engineering toolkit for modern Java enterprise SDLC, built around reusable Commands, Ag
+  Arman-Kudaibergenov/1c-ai-development-kit	*166	2026-10-04	Comprehensive AI agents, skills and rules toolkit for 1C:Enterprise development in Cursor IDE
+  gleanwork/glean-agent-toolkit	*67	2026-10-07	AI Agent toolkit for adapting Glean's enterprise tools across multiple frameworks
+  tractorjuice/arckit-codex	*17	2026-10-12	ArcKit Enterprise Architecture Toolkit - Codex CLI Extension with skills, agents, and MCP servers
+  Muredsa/1C-Enterprise-Agent-Toolkit	*23	2026-10-11	Универсальные безопасные Agent Skills для любых конфигураций 1С / Universal safe Agent Skills for any 1C:Enter
+  maree217/enterprise-agent-toolkit	*4	2026-09-15	Professional AI consultancy toolkit with case studies, templates, and reference implementations
+  thibaultyou/prompt-blueprint	*25	2026-08-21	Enterprise-grade prompt engineering toolkit: Distilled best practices, production-ready meta-prompts, and a pr
+  vgtitov/bsl-ai-toolkit	*30	2026-10-16	AI agent toolkit for 1C:Enterprise 8.3 (BSL): rules, skills and MCP servers so the agent works from your real 
+  mugisha1555/Aeon-Flux-DeepSeek	*54	2026-10-16	🚀 DeepSeek-V4-Pro Agentic AI Automation Toolkit for Enterprise Apps 2026
+  Kornienkoal/aws-agentcore-enterprise-toolkit	*0	2025-12-08	
+  shark6438/servicemind	*17	2026-10-10	Enterprise ITSM agent platform on LangGraph: governed, auditable multi-agent runs for GLPI tickets, with hybri
+  anahata-os/anahata-asi	*28	2026-10-13	Anahata ASI - Artificial Super Intelligence - Cross-Platform, Modular, Enterprise Ready, Open Source, Pure Jav
+  techwavedev/agi-agent-kit	*4	2026-07-23	Enterprise-Grade Agentic Framework - Modular skill-based AI assistant toolkit with deterministic execution and
+  MarkNaderKamel/CerberusX-Framework	*10	2026-10-09	Cerberus Agents is a production-grade, enterprise-ready red team toolkit built for security professionals who 
+  shivanikabu/Enterprise-Agent-Toolkit	*0	2025-12-22	
+  shivanikabu/AWS_Agents_Enterprise_Toolkit	*0	2025-11-29	
+  appliedailearner/enterprise-agentic-ai-readiness-toolkit	*0	2026-06-13	enterprise-agentic-ai-readiness-toolkit
+  sannavajjala/copilot-studio-enterprise-readiness-kit	*3	2026-09-10	A practical, community-driven toolkit for evaluating whether Microsoft Copilot Studio agents are ready for ent
+  christianshibeshi23/copilot-agent-toolkit	*0	2026-07-10	Enterprise toolkit for building and managing Copilot Studio agents
+=== [2026-10-16] gh search repos 'intel enterprise inference' -> 20 hits 
+  opea-project/Enterprise-Inference	*47	2026-09-18	Intel® AI for Enterprise Inference optimizes AI inference services on Intel hardware using Kubernetes Orchestr
+  intel/enterprise-inference	*6	2026-10-16	Enterprise-grade, high-performance LLM serving on Kubernetes. OpenAI-compatible inference powered by vLLM and 
+  intel/enterprise-ai-solutions	*8	2026-10-16	Production-ready platform for deploying OpenAI-compatible LLM inference on Kubernetes. A one-command installer
+  intel/intel-technology-enabling-for-openshift	*22	2026-07-11	The project delivers a comprehensive full-stack solution for the Intel® Enterprise AI Foundation on the OpenSh
+  rhpds/showroom-enterprise-rag-intel-continuum	*0	2026-08-27	Showroom lab for Enterprise RAG across the Intel inference continuum
+  Mushtaq-BGA/ei_workshop	*0	2025-09-16	Repository for Intel AI for Enterprise Inference workshops
+  SanjayManjunath/enterprise_intelligence	*0	2026-06-27	Production-grade Agentic AI backend for automated enterprise auditing. Features decoupled ML inference (Celery
+  Ibraheemolasupogit/aws-enterprise-risk-intelligence-platform	*0	2026-06-02	AWS-oriented ML platform for fraud detection, churn prediction, anomaly detection, experimentation, monitoring
+  mohamedmahersaid/Enterprise-AI-and-Intelligent-Systems	*0	2026-10-04	Enterprise AI engineering covering local inference, Azure OpenAI, RAG, agents, MCP, evaluation, security, and 
+  shahishaan-commits/enterprise-intelligence-agent	*0	2026-09-30	A multi-source RAG application built on Databricks that ingests public enterprise filings, performs hybrid sem
+  NatthidaSirapongkulpoj/enterprise-cloud-ml-incident-intelligence	*0	2026-08-27	Machine learning platform for cloud incident root-cause classification using temporal feature engineering, dis
+  manuelbomi/TOGAF-Enterprise-AI-Powered-Fault-Diagnosis-Knowledge-Intelligence-Platform	*0	2025-11-05	Forensic image fault classification • vector similarity search • LLM-RAG engineering knowledge retrieval • GPU
+  HARDY1499/Enterprise-Market-Intelligence-Copilot-v2	*0	2026-05-14	A locally-hosted agentic AI copilot that answers complex enterprise market-intelligence questions by reasoning
+  abdulharishaneefa-bit/HelixOS-AI-Powered-Enterprise-Intelligence-Platform	*0	2026-08-05	AI-powered enterprise intelligence platform built as 17 microservices (Java + Python) with local LLM inference
+  thundivalappil/Enterprise-Grade-Transformer-for-Intelligent-Ticket-Routing	*1	2026-02-02	This project implements a production-ready Transformer-based NLP system for intelligent ticket routing. Design
+  heleena-web/secure_doc_intelligence	*0	2026-10-11	Privacy-focused, permission-aware document intelligence platform with Enterprise RAG, local Ollama inference, 
+  AVINASH-storm/Retail-Promotion-Intelligence-and-Campaign-Optimization	*0	2026-10-05	End-to-End Enterprise Analytics, Econometric Causal Inference (DiD/PSM), and Machine Learning Project on Dunnh
+  Bodhi8/brian-curry-artificial-intelligence-causal-economics-machine-learning	*0	2025-11-27	AI Strategist, Marketing Economist & Applied Researcher. Founder, Vector1 Research. Enterprise analytics leade
+  pnikhilchandra595-bot/PRELUDE-INTELLIGENCE	*0	2026-09-28	Autonomous cross-functional enterprise intelligence hub powered by Vectorize Hindsight persistent memory & Gro
+  MetehanKayaa/-End-to-End-Enterprise-AI-Sentiment-Analysis-Pipeline-Automated-Intelligence-Platform	*0	2026-08-31	End-to-end, hardware-adaptive enterprise AI sentiment analysis pipeline & reporting engine. Dynamically levera
+=== [2026-10-16] gh search repos 'enterprise-inference k3s' -> 0 hits 
+=== [2026-10-16] gh search repos 'intel agentic k3s' -> 0 hits 
+=== [2026-10-16] gh search repos 'opea k3s' -> 0 hits 
+=== [2026-10-16] gh search repos 'opea kind' -> 0 hits 
+=== [2026-10-16] gh search repos 'opea minikube' -> 0 hits 
+=== [2026-10-16] gh search repos 'GenAIExamples k3s' -> 0 hits 
+=== [2026-10-16] gh search repos 'opea laptop' -> 0 hits 
+=== [2026-10-16] gh search repos 'intel ai pc kubernetes' -> 0 hits 
+=== [2026-10-16] gh search repos 'agentic stack k3d' -> 2 hits 
+  J0hn-B/k8s_opa	*5	2024-12-30	GitOps template with K3d, ArgoCD, ELK stack and Open Policy Agent
+  raj-sf/raj-ai-lab	*0	2026-07-28	Full-stack AI platform (k3d) — local proving ground for Myriad Genetics' generative & agentic AI initiative. R
+=== [2026-10-16] gh search repos 'litellm k3d' -> 3 hits 
+  notfolder/litellm-agent-gateway-lab	*0	2026-10-12	LiteLLM を AI エージェント向けゲートウェイとして使うための検証リポジトリ（MCP ユーザー別 OAuth、ツールコール審査、k3d でのスケール検証）
+  firoala18/llm-inference-lab	*0	2026-08-04	A university-scale LLM serving platform in miniature: vLLM on cloud GPU, LiteLLM gateway with per-faculty gove
+  codemonkey-df/mlops-hands-on-course	*1	2026-10-15	A 12-module course that builds a complete on-prem MLOps platform on a k3d Kubernetes cluster: Dagster, MLflow,

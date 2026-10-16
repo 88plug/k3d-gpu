@@ -1,0 +1,6 @@
+=== [2026-10-16] ddg 'k3d Intel GPU device plugin NPU Gaudi local cluster' -> 0 reviewed
+=== [2026-10-16] ddg 'kubernetes pin pods to E-cores P-cores Intel hybrid' -> 0 reviewed
+=== [2026-10-16] ddg 'nri balloons preferCoreType k3s' -> 0 reviewed
+=== [2026-10-16] ddg 'enterprise-agent-toolkit k3s' -> 0 reviewed
+=== [2026-10-16] ddg 'OpenVINO Model Server kubernetes NPU iGPU auto select device' -> 0 reviewed
+=== [2026-10-16] ddg 'kind cluster Intel iGPU device plugin' -> 0 reviewed

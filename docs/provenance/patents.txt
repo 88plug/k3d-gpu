@@ -1,0 +1,116 @@
+=== [2026-10-16] patents '(container OR pod) (kubernetes OR orchestrat*) ("performance core" OR "efficiency core" OR "efficient core") pin*' -> 31 total, 25 reviewed
+  patent/US10949260B2/en	prio 2015-12-04	Execution time prediction for energy-efficient computer systems
+  patent/US11977924B2/en	prio 2017-12-26	High performance distributed system of record with distributed random oracle
+  patent/CN107992330B/en	prio 2012-12-31	Processor, method, processing system, and machine-readable medium for &hellip;
+  patent/US20250371424A1/en	prio 2024-05-28	Systems and methods for enhancing autoencoder performance and interpretability &hellip;
+  patent/US20210294641A1/en	prio 2021-06-08	Dynamic interrupt steering and processor unit idle state demotion
+  patent/US20250151210A1/en	prio 2012-03-30	Housing with multi-functional modules
+  patent/CN119739598A/en	prio 2023-09-29	Circuit system and method for enhanced selection of performance monitoring
+  patent/US20250036589A1/en	prio 2023-07-25	Heterogeneous accelerated compute
+  patent/US20240118739A1/en	prio 2023-12-15	Method and apparatus to manage processor power consumption based on message &hellip;
+  patent/US20250060809A1/en	prio 2023-08-18	Throttling for power and thermal management
+  patent/CA3283389A1/en	prio 2024-08-14	&hellip;  intelligence-based property information processing system and method pinhole &hellip;
+  patent/US20240264880A1/en	prio 2022-11-25	System and method for serverless parallel deployments
+  patent/CN120234042A/en	prio 2023-12-30	Software-defined supercore
+  patent/CN119493645A/en	prio 2023-08-19	Hardware guidance for efficiently scheduling workloads to optimal compute &hellip;
+  patent/US20250217146A1/en	prio 2023-12-30	Software defined super cores
+  patent/US20250217154A1/en	prio 2023-12-30	Software defined super cores
+  patent/US20250061003A1/en	prio 2023-08-19	Hardware guidance for efficiently scheduling workloads to the optimal compute &hellip;
+  patent/KR20250175472A/en	prio 2024-06-10	Containor deployment device and hybrid containor deployment method
+  patent/US20260134485A1/en	prio 2024-08-14	Virtual underwriting and adjustment tool
+  patent/CA3283387A1/en	prio 2024-08-14	Roof age determination using ai models
+  patent/US20250278272A1/en	prio 2024-03-04	Circuitry and methods for enhanced performance monitoring
+  patent/US20260161452A1/en	prio 2024-12-06	Technologies to schedule execution of threads in a dynamically re-configurable &hellip;
+  patent/US20250217158A1/en	prio 2023-12-30	Software defined super cores
+  patent/US20250217160A1/en	prio 2023-12-30	Software defined super cores
+  patent/US20250004766A1/en	prio 2023-12-30	Software splitting for software defined cores
+=== [2026-10-16] patents '("hybrid processor" OR "heterogeneous cores") container ("core type") (affinity OR cpuset)' -> 8 total, 8 reviewed
+  patent/US12066853B2/en	prio 2017-02-24	Configuration of base clock frequency of processor based on usage parameters
+  patent/EP3563235B1/en	prio 2016-12-31	Systems, methods, and apparatuses for heterogeneous computing
+  patent/KR102427067B1/en	prio 2014-09-26	Heterogeneous thread scheduling
+  patent/KR101854520B1/en	prio 2015-06-26	Hardware processors and methods for tightly-coupled heterogeneous computing
+  patent/TW201643706A/en	prio 2014-12-23	Instruction and logic to perform a single cycle increment-compare-jump
+  patent/CN111752616A/en	prio 2019-03-26	System, apparatus and method for symbolic memory address generation
+  patent/US7451459B2/en	prio 2003-05-05	Systems, methods, and apparatus for indicating processor hierarchical topology
+  patent/CN122547499A/en	prio 2026-07-08	Heterogeneous Multi-core Video Task Scheduling System for Embedded Operating &hellip;
+=== [2026-10-16] patents '(kubernetes OR "container orchestration") "core type" (label OR annotation) scheduling' -> 11 total, 11 reviewed
+  patent/CN118689639B/en	prio 2024-06-06	Cloud resource intelligent recovery method, system and terminal equipment
+  patent/CN119938341B/en	prio 2025-04-03	A CPU core binding method and system for cloud native applications
+  patent/CN121433917A/en	prio 2025-12-30	A method, device, medium, and product for scheduling heterogeneous resources in &hellip;
+  patent/NL2033285A/en	prio 2021-11-16	Intent-based orchestration in heterogenous compute platforms
+  patent/CN116820777A/en	prio 2023-07-13	Heterogeneous processor core scheduling method, device, equipment and medium
+  patent/US20240403107A1/en	prio 2024-08-06	Method and apparatus for scheduling access to multiple accelerators
+  patent/CN121810200A/en	prio 2025-11-27	RPA-based enterprise appeal automatic circulation processing method and system
+  patent/CN122470180A/en	prio 2026-06-25	MaaS platform large model nano-tube method and system based on intelligent &hellip;
+  patent/US20240362080A1/en	prio 2023-04-28	Power management for virtual network functions or containerized network &hellip;
+  patent/CN121262099B/en	prio 2025-12-03	Network optimization method and system based on generation type correction &hellip;
+  patent/CN122247996A/en	prio 2026-04-30	A method and system for elastic scaling of a cloud service platform for &hellip;
+=== [2026-10-16] patents '"device plugin" kubernetes (detect* OR discover*) (GPU AND NPU) cluster creat*' -> 19 total, 19 reviewed
+  patent/CN121455696B/en	prio 2026-01-05	A heterogeneous GPU resource management and scheduling method
+  patent/CN122111570A/en	prio 2026-02-28	Container nesting operation method and system for realizing safety isolation &hellip;
+  patent/CN116684421A/en	prio 2023-06-29	Service deployment method, management platform, equipment and media of hybrid &hellip;
+  patent/CN120469812A/en	prio 2025-05-29	An AI chip adaptive deployment method and system based on dynamic heterogeneous &hellip;
+  patent/CN115827253A/en	prio 2023-02-06	Chip resource calculation allocation method, device, equipment and storage &hellip;
+  patent/CN111090438A/en	prio 2019-11-07	Method, equipment and medium for FPGA virtualization training based on &hellip;
+  patent/CN119690594B/en	prio 2025-02-24	Resource management method, electronic device and storage medium
+  patent/CN119248486A/en	prio 2024-09-19	A method, device, equipment and storage medium for intelligent computing &hellip;
+  patent/CN121166282A/en	prio 2025-09-17	Container and virtual machine mixed scheduling method and device based on &hellip;
+  patent/CN120909609A/en	prio 2024-11-12	Multi-architecture-based intelligent computing platform deployment and &hellip;
+  patent/CN122195688A/en	prio 2026-05-18	Heterogeneous computing resource allocation method, related device and storage &hellip;
+  patent/CN122195688B/en	prio None	Heterogeneous computing resource allocation method, related device and storage &hellip;
+  patent/CN122363905A/en	prio 2026-04-14	A resource allocation method and container orchestration system
+  patent/CN122111576A/en	prio 2026-04-27	Heterogeneous computing force instance scheduling and state management method, &hellip;
+  patent/CN121233139A/en	prio 2025-09-09	Methods, devices, equipment, and storage media for upgrading K8s processor &hellip;
+  patent/CN120295641A/en	prio 2025-03-07	AI component management method, device and equipment based on K8s
+  patent/CN120832209A/en	prio 2024-04-18	Task scheduling method based on kubernetes cluster
+  patent/CN120950139A/en	prio 2025-07-25	A system and method for batch filling of large-scale integrated models
+  patent/CN117215779A/en	prio 2023-09-06	Resource calling method, device, computer equipment and storage medium
+=== [2026-10-16] patents '"local cluster" (kubernetes OR k3s) accelerator (auto-detect OR "automatically detect") GPU' -> 21 total, 21 reviewed
+  patent/CN111629061A/en	prio 2020-05-28	Inference service system based on Kubernetes
+  patent/KR20220164727A/en	prio 2020-03-12	self-organizing network
+  patent/CN121210151A/en	prio 2025-11-28	Real-time computing system resource coordination and decision engine system, &hellip;
+  patent/US20230045110A1/en	prio 2022-10-24	Import of deployable containers and source code in cloud development &hellip;
+  patent/CN116601624B/en	prio 2020-12-08	A method to improve global query performance in edge networks
+  patent/US12489821B2/en	prio 2023-02-28	Distributed cloud system, and data processing method and storage medium of &hellip;
+  patent/US12047405B2/en	prio 2021-10-12	Dynamically throttling snapshot capture rates
+  patent/CN121033127A/en	prio 2025-10-28	A method for automatic calculation and quality verification of road width in &hellip;
+  patent/US20250260735A1/en	prio 2024-02-08	Container image streaming among peers in a dynamically scalable p2p cluster
+  patent/KR20240133516A/en	prio 2023-02-28	Distributed cloud system, distributed cloud system data processing method and &hellip;
+  patent/US20260145334A1/en	prio 2024-11-28	Robot operation apparatus and method in multi-cluster-based cloud environment
+  patent/CN122452654A/en	prio 2025-01-23	Distributed training and testing of AI systems and applications
+  patent/US20260212189A1/en	prio 2025-01-23	Distributed training and testing of ai systems and applications
+  patent/US20260212192A1/en	prio 2025-01-23	Distributed infrastructure for training and testing of ai systems and &hellip;
+  patent/US20260212190A1/en	prio 2025-01-23	Concurrent workflow for distributed training and testing of ai systems and &hellip;
+  patent/US20260212191A1/en	prio 2025-01-23	Distributed infrastructure for training and testing of ai systems and &hellip;
+  patent/CN122614595A/en	prio None	A method, system, device, and medium for heterogeneous computing power pooling &hellip;
+  patent/CN118981367A/en	prio 2024-08-19	A management and scheduling method for model training tasks and related devices
+  patent/KR20260083183A/en	prio 2024-11-28	Apparatus and method operating robot in multi-cluster-based cloud environment
+  patent/US20260135773A1/en	prio 2024-11-14	Machine Learning Systems and Methods for Computer Modeling and Optimization of &hellip;
+  patent/US20220358489A1/en	prio 2021-05-10	Cost management in distributed computing teams
+=== [2026-10-16] patents '"inference server" (kubernetes OR cluster) "allocatable" (GPU OR NPU) "target device" select*' -> 0 total, 0 reviewed
+=== [2026-10-16] patents '(OpenVINO OR "inference server") (NPU OR "neural processing unit") (kubernetes OR "extended resource") select* device' -> 89 total, 25 reviewed
+  patent/US20200249936A1/en	prio 2019-02-04	Method and system for a platform for api based user supplied algorithm &hellip;
+  patent/CN114979246B/en	prio 2022-05-18	&hellip;  management method, system, configuration server and edge computing device
+  patent/US20220300418A1/en	prio 2022-06-09	Maximizing resource bandwidth with efficient temporal arbitration
+  patent/US12585990B2/en	prio 2022-04-01	Heterogeneous compute-based artificial intelligence model partitioning
+  patent/EP4138045A1/en	prio 2021-08-20	Resource-efficient video coding and motion estimation
+  patent/US20250371426A1/en	prio 2024-06-02	Mapping latent space of vector quantized variational autoencoders to functional &hellip;
+  patent/US20240053973A1/en	prio 2022-10-24	Deployable container scheduling and execution on cloud development environment
+  patent/US20230045110A1/en	prio 2022-10-24	Import of deployable containers and source code in cloud development &hellip;
+  patent/CN120431940A/en	prio 2024-02-02	Neural Networks Generating Speech
+  patent/US20260147685A1/en	prio 2024-11-26	User-configurable optimizations of agentic ai system
+  patent/CN122535927A/en	prio 2023-12-25	A neural network for identifying objects in modified images.
+  patent/CN121210151A/en	prio 2025-11-28	&hellip;  system resource coordination and decision engine system, method, and equipment &hellip;
+  patent/US20250299020A1/en	prio 2024-03-25	Neural network generation
+  patent/KR20230036945A/en	prio 2021-09-08	Method and apparatus for managing resouce in edge computing environment
+  patent/DE102025143939A1/en	prio 2024-10-28	QUERY CHANGES BY NEURAL NETWORKS
+  patent/US20260111286A1/en	prio 2024-10-22	Dynamic neural network resource selection
+  patent/US20260057636A1/en	prio 2024-08-22	Enhanced multi-modal large language model for referring expression segmentation
+  patent/US20260147955A1/en	prio 2024-11-28	Simulating wireless communication
+  patent/US20260154372A1/en	prio 2024-11-29	Matrix multiplication data consumer technique
+  patent/US20260228560A1/en	prio 2025-02-04	Modifying neural network hyperparameters
+  patent/WO2026152362A1/en	prio 2025-01-17	User-editable thread configuration
+  patent/US20260163765A1/en	prio 2024-12-10	Using signal-to-noise ratio to select a neural network
+  patent/CN122160812A/en	prio 2024-12-03	Emulation mobile device
+  patent/US20260220454A1/en	prio 2025-01-26	Randomized quantization of neural networks
+  patent/US20260161927A1/en	prio 2024-12-06	Encoding input data according to similarity using a neural network

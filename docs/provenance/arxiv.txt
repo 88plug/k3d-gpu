@@ -1,0 +1,78 @@
+=== [2026-10-16] arxiv 'all:kubernetes AND all:"hybrid CPU"' -> 1 total, 1 reviewed
+  http://arxiv.org/abs/2505.19739v1	2025-05-26	Justin: Hybrid CPU/Memory Elastic Scaling for Distributed Stream Processing
+=== [2026-10-16] arxiv 'all:kubernetes AND (all:"P-core" OR all:"E-core" OR all:"efficiency cores")' -> 0 total, 0 reviewed
+=== [2026-10-16] arxiv 'all:container AND all:"heterogeneous cores" AND all:intel' -> 0 total, 0 reviewed
+=== [2026-10-16] arxiv 'all:"asymmetric multicore" AND all:container AND all:scheduling' -> 0 total, 0 reviewed
+=== [2026-10-16] arxiv 'all:kubernetes AND all:"big.LITTLE"' -> 0 total, 0 reviewed
+=== [2026-10-16] arxiv 'all:kubernetes AND all:"device plugin" AND all:accelerator' -> 0 total, 0 reviewed
+=== [2026-10-16] arxiv 'all:kubernetes AND all:GPU AND all:"local development"' -> 0 total, 0 reviewed
+=== [2026-10-16] arxiv 'all:kubernetes AND all:NPU' -> 0 total, 0 reviewed
+=== [2026-10-16] arxiv 'all:OpenVINO AND all:kubernetes' -> 0 total, 0 reviewed
+=== [2026-10-16] arxiv 'all:"OpenVINO Model Server"' -> 0 total, 0 reviewed
+=== [2026-10-16] arxiv 'all:"agentic" AND all:kubernetes AND all:"single node"' -> 0 total, 0 reviewed
+=== [2026-10-16] arxiv 'all:k3s AND all:accelerator' -> 6 total, 6 reviewed
+  http://arxiv.org/abs/2607.24653v2	2026-07-27	Kimi K3: Open Frontier Intelligence
+  http://arxiv.org/abs/2502.12428v3	2025-02-18	K3 surfaces of any Artin-Mazur height over $\mathbb{F}_5$ and $\mathbb{F}_7$ via quasi-$F$-split singularities and GPU acceleration
+  http://arxiv.org/abs/astro-ph/0606311v2	2006-06-13	Discovery of the two wings of the Kookaburra complex in VHE gamma -rays with H.E.S.S
+  http://arxiv.org/abs/2607.20490v1	2026-06-08	CRAWO: Custom Resources for Adaptive Workload Orchestration
+  http://arxiv.org/abs/2608.27513v2	2026-08-27	DAMP: Decay-Aware Mixed-Precision Recurrent-State Quantization
+  http://arxiv.org/abs/2608.12114v2	2026-08-12	The Ingestion Tax: Adopting File-Backed Weights in Tensor Frameworks
+=== [2026-10-16] arxiv 'all:"Intel Gaudi" AND all:kubernetes' -> 0 total, 0 reviewed
+=== [2026-10-16] arxiv 'all:"Node Resource Interface"' -> 1 total, 1 reviewed
+  http://arxiv.org/abs/2506.23628v1	2025-06-30	The Kubernetes Network Driver Model: A Composable Architecture for High-Performance Networking
+=== [2026-10-16] arxiv 'all:kubernetes AND all:"core type"' -> 0 total, 0 reviewed
+=== [2026-10-16] arxiv 'abs:"Alder Lake" AND abs:scheduling' -> 0 total, 0 reviewed
+=== [2026-10-16] arxiv 'abs:"performance cores" AND abs:"efficient cores"' -> 3 total, 3 reviewed
+  http://arxiv.org/abs/2504.01347v1	2025-04-02	MEEK: Re-thinking Heterogeneous Parallel Error Detection Architecture for Real-World OoO Superscalar Processors
+  http://arxiv.org/abs/2606.27098v1	2026-06-25	Residual GPU Cache State on Apple M4 Pro
+  http://arxiv.org/abs/2508.07252v3	2025-08-10	Tasa: Thermal-aware 3D-Stacked Architecture Design with Bandwidth Sharing for LLM Inference
+=== [2026-10-16] arxiv 'abs:"P-cores" AND abs:"E-cores"' -> 1 total, 1 reviewed
+  http://arxiv.org/abs/2403.02200v1	2024-03-04	Scheduling Garbage Collection for Energy Efficiency on Asymmetric Multicore Processors
+=== [2026-10-16] arxiv 'abs:kubernetes AND abs:heterogeneous AND abs:cpu AND abs:pinning' -> 0 total, 0 reviewed
+=== [2026-10-16] arxiv 'abs:"device plugin" AND abs:kubernetes' -> 0 total, 0 reviewed
+=== [2026-10-16] arxiv 'abs:openvino AND abs:serving' -> 3 total, 3 reviewed
+  http://arxiv.org/abs/2608.19147v1	2026-08-19	Pre-Compiled Pipeline Shards for Distributed LLM Inference on Intel AI PC Fleets
+  http://arxiv.org/abs/2606.09672v1	2026-06-08	Correlation Is Not Enough: Embedding Human Metadata for Individual Causal Discovery
+  http://arxiv.org/abs/2610.07219v1	2026-10-05	Cascadia: Resident 975B MoE Inference on Eleven AI PCs
+=== [2026-10-16] arxiv 'abs:kubernetes AND abs:"edge" AND abs:"integrated GPU"' -> 0 total, 0 reviewed
+=== [2026-10-16] arxiv 'abs:"Intel Gaudi"' -> 6 total, 6 reviewed
+  http://arxiv.org/abs/2503.09975v3	2025-03-13	Faster Inference of LLMs using FP8 on the Intel Gaudi
+  http://arxiv.org/abs/2501.00210v2	2024-12-31	Debunking the CUDA Myth Towards GPU-based AI Systems
+  http://arxiv.org/abs/2507.01031v1	2025-06-20	PyTorch-based Geometric Learning with Non-CUDA Processing Units: Experiences from Intel Gaudi-v2 HPUs
+  http://arxiv.org/abs/2502.01070v4	2025-02-03	An Inquiry into Datacenter TCO for LLM Inference with FP8
+  http://arxiv.org/abs/2505.13060v1	2025-05-19	Automatic mixed precision for optimizing gained time with constrained loss mean-squared-error based on model partition to sequential sub-gra
+  http://arxiv.org/abs/2603.08274v1	2026-03-09	How Much Do LLMs Hallucinate in Document Q&amp;A Scenarios? A 172-Billion-Token Study Across Temperatures, Context Lengths, and Hardware Pla
+=== [2026-10-16] arxiv 'abs:"agentic" AND abs:kubernetes' -> 88 total, 25 reviewed
+  http://arxiv.org/abs/2610.02861v1	2026-10-02	Containing the Autonomous Operator: A Defense-in-Depth Framework and Reference Architecture for Securing AI Agents on Kubernetes
+  http://arxiv.org/abs/2607.25076v1	2026-07-27	Towards an Agent Operating System - Lessons from Classical and Cloud OS
+  http://arxiv.org/abs/2603.12031v4	2026-03-12	Agentic-Kube: A Graph-Enhanced Multi-Agent Reinforcement Learning Framework for Multi-Objective Kubernetes Scheduling
+  http://arxiv.org/abs/2608.23084v1	2026-08-24	ARGUS: MCP-Grounded Root Cause Analysis for Kubernetes Incidents
+  http://arxiv.org/abs/2604.11017v1	2026-04-13	NimbusGuard: A Novel Framework for Proactive Kubernetes Autoscaling Using Deep Q-Networks
+  http://arxiv.org/abs/2602.13692v3	2026-02-14	ThunderAgent: A Simple, Fast and Program-Aware Agentic Inference System
+  http://arxiv.org/abs/2607.02925v1	2026-07-03	Agentic Orchestration of HPC Applications in Cloud
+  http://arxiv.org/abs/2510.25863v2	2025-10-29	AAGATE: A NIST AI RMF-Aligned Governance Platform for Agentic AI
+  http://arxiv.org/abs/2604.26997v1	2026-04-29	Agent Name Service (ANS): A Proof-of-Concept Trust Layer for Secure AI Agent Discovery, Identity, and Governance in Kubernetes
+  http://arxiv.org/abs/2604.21910v1	2026-04-23	From Research Question to Scientific Workflow: Leveraging Agentic AI for Science Automation
+  http://arxiv.org/abs/2405.15342v1	2024-05-24	Implementation of New Security Features in CMSWEB Kubernetes Cluster at CERN
+  http://arxiv.org/abs/2609.19936v1	2026-09-17	VERA: Reinforcement Learning for Dynamic Memory Scaling of HPC Workloads in Kubernetes
+  http://arxiv.org/abs/2510.17874v1	2025-10-17	Repairing Tool Calls Using Post-tool Execution Reflection and RAG
+  http://arxiv.org/abs/2509.02449v1	2025-09-02	KubeIntellect: A Modular LLM-Orchestrated Agent Framework for End-to-End Kubernetes Management
+  http://arxiv.org/abs/2603.07607v1	2026-03-08	MAS-H2: A Hierarchical Multi-Agent System for Holistic Cloud-Native Autoscaling
+  http://arxiv.org/abs/2604.12874v1	2026-04-14	LIFE -- an energy efficient advanced continual learning agentic AI framework for frontier systems
+  http://arxiv.org/abs/2501.11107v2	2025-01-19	ChaosEater: Fully Automating Chaos Engineering with Large Language Models
+  http://arxiv.org/abs/2511.07865v1	2025-11-11	LLM-Powered Fully Automated Chaos Engineering: Towards Enabling Anyone to Build Resilient Software Systems at Low Cost
+  http://arxiv.org/abs/2605.27575v2	2026-05-26	Agyn: An Open-Source Platform for AI Agents with Scalable On-Demand Execution, Agent Definition as a Code, and Zero-Trust Access
+  http://arxiv.org/abs/2604.11623v3	2026-04-13	Context Kubernetes: Declarative Orchestration of Enterprise Knowledge for Agentic AI Systems
+  http://arxiv.org/abs/2603.28790v2	2026-03-21	Learning to Remember: Attentive Reinforcement Learning for Edge Serverless Autoscaling
+  http://arxiv.org/abs/2505.23805v1	2025-05-27	ADA: Automated Moving Target Defense for AI Workloads via Ephemeral Infrastructure-Native Rotation in Kubernetes
+  http://arxiv.org/abs/2606.06460v4	2026-06-04	Will the Agent Recuse, and Will It Stop? Measuring LLM-Agent Compliance with In-Band Governance Signals at the Access Door and Mid-Flight
+  http://arxiv.org/abs/2608.14580v1	2026-06-12	OGX: An Open-Source, Vendor-Neutral Generative AI Application Server
+  http://arxiv.org/abs/2607.19182v2	2026-07-21	ARBITER: Guarded Agentic Control for SLO-Oriented Kubernetes Remediation
+=== [2026-10-16] arxiv 'abs:"k3s" AND abs:GPU' -> 6 total, 6 reviewed
+  http://arxiv.org/abs/2603.23942v3	2026-03-25	The Missing Adapter Layer for Research Computing
+  http://arxiv.org/abs/2205.04320v1	2022-05-09	NEPTUNE: Network- and GPU-aware Management of Serverless Functions at the Edge
+  http://arxiv.org/abs/2608.12114v2	2026-08-12	The Ingestion Tax: Adopting File-Backed Weights in Tensor Frameworks
+  http://arxiv.org/abs/2602.24155v1	2026-02-27	Newton strata realization for hypersurfaces via explicit p-adic cohomology
+  http://arxiv.org/abs/2608.27513v2	2026-08-27	DAMP: Decay-Aware Mixed-Precision Recurrent-State Quantization
+  http://arxiv.org/abs/2610.20980v1	2026-10-14	How to Train Your Little Dragon: Teaching a Small Language Model to Construct and Refine GPU Optimization Scripts
+=== [2026-10-16] arxiv 'abs:"cpu manager" AND abs:kubernetes AND abs:topology' -> 0 total, 0 reviewed
