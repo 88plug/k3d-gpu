@@ -181,6 +181,33 @@ Intel's Enterprise Agent Toolkit CPU balloons).
 the core types: head on E-cores, a P-core and an E-core CPU worker group, and an
 iGPU worker group.
 
+### Optional: KServe + OpenVINO Model Server
+
+`examples/kserve/install.sh` adds [KServe](https://kserve.github.io/website/)
+v0.21.0 in Standard mode (plain Deployments and Services, no Knative or Istio)
+with cert-manager v1.21.2, both from their pinned OCI Helm charts. It then
+serves `OpenVINO/Qwen3-4B-int4-ov` on the Intel GPU through KServe's
+OpenVINO Model Server runtime (OVMS 2026.4.1), with tool calling:
+
+```bash
+examples/kserve/install.sh          # needs kubectl, helm 3.8+, /dev/dri/renderD*
+curl http://qwen3-predictor.llm.svc/v3/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"qwen3","messages":[{"role":"user","content":"hi"}]}'   # from a pod
+```
+
+| File | What it is |
+|------|------------|
+| `kserve-values.yaml` | `kserve-resources` chart values: Standard mode, no Ingress objects |
+| `openvino-runtime.yaml` | `kserve-openvino` ClusterServingRuntime from KServe v0.21.0 `config/runtimes` (not in that release's charts), image pinned to `openvino/model_server:2026.4.1-gpu` by digest |
+| `qwen3-isvc.yaml` | namespace `llm` and InferenceService `qwen3`: `gpu.intel.com/i915: 1`, pod label `k3d-gpu.io/cores=performance`, model pinned to a Hugging Face revision |
+
+The OVMS container runs as uid 5000, so `install.sh` adds the host's render
+group id to the pod. Use `gpu.intel.com/xe` for an xe-driver GPU.
+`tests/kserve_test.sh` checks the install against stub `helm`/`kubectl` and,
+with `kubeconform` and `helm` on `PATH`, validates the manifests and rendered
+charts at Kubernetes 1.34 and 1.35.
+
 ---
 
 ## Prerequisites

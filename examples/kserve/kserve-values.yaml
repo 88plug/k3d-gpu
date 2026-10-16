@@ -1,0 +1,8 @@
+# Values for the kserve-resources v0.21.0 chart: Standard mode (plain
+# Deployment + Service, no Knative or Istio) and no Ingress objects. Clients reach
+# a model in-cluster at http://<isvc>-predictor.<namespace>.svc (port 80).
+kserve:
+  controller:
+    deploymentMode: Standard
+    gateway:
+      disableIngressCreation: true

@@ -1,0 +1,59 @@
+# OpenVINO Model Server ClusterServingRuntime for KServe.
+# Source: kserve/kserve v0.21.0 config/runtimes/kserve-openvino.yaml (added in
+# kserve#4592). That file is not in the v0.21.0 runtimes kustomization or the
+# release charts, so it ships here. Changes from upstream: the Helm ownership
+# annotation and label are dropped (Helm does not install it here), and the
+# placeholder image openvino/model_server:replace is pinned to the GPU build.
+apiVersion: serving.kserve.io/v1alpha1
+kind: ClusterServingRuntime
+metadata:
+  annotations:
+    serving.kserve.io/server-type: ovms
+  name: kserve-openvino
+spec:
+  annotations:
+    prometheus.kserve.io/path: /metrics
+    prometheus.kserve.io/port: "8080"
+  containers:
+  - args:
+    - --model_name={{.Name}}
+    - --model_path=/mnt/models
+    - --port=9000
+    - --rest_port=8080
+    - --file_system_poll_wait_seconds=0
+    image: openvino/model_server:2026.4.1-gpu@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58
+    name: kserve-container
+    resources:
+      limits:
+        cpu: "1"
+        memory: 2Gi
+      requests:
+        cpu: "1"
+        memory: 2Gi
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      privileged: false
+      runAsNonRoot: true
+      runAsUser: 5000
+  protocolVersions:
+  - v1
+  - v2
+  - grpc-v2
+  supportedModelFormats:
+  - autoSelect: true
+    name: openvino
+    priority: 1
+    version: "10"
+  - autoSelect: true
+    name: onnx
+    priority: 2
+    version: "1"
+  - autoSelect: true
+    name: tensorflow
+    priority: 3
+    version: "1"
+  - autoSelect: true
+    name: huggingface
