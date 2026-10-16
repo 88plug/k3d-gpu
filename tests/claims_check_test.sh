@@ -153,6 +153,9 @@ check "an escaped pipe in the Claim cell does not shift the Source column" "${r}
 r=$(repo 'It hits 42 tok/s [provenance:P4].')
 printf '%s\n' '| P4 | a \| b | https://example.com | x |' >> "${r}/docs/provenance.md"
 check "an escaped pipe with a real Source still backs a claim" "${r}" 0
+r=$(repo 'It hits 42 tok/s [ledger:H2].')
+sed -i 's/| \*\*SUPPORTED\*\* |/| REFUTED \\| SUPPORTED |/' "${r}/EXPERIMENTS.md"
+check "an escaped pipe in a verdict cell does not split off a SUPPORTED" "${r}" fail 'H2'
 
 # --- read errors fail closed ---------------------------------------------------
 if [ "$(id -u)" -ne 0 ]; then
@@ -168,10 +171,17 @@ fi
 check "N times faster fails" "$(repo 'Pinning is 10 times faster.')" fail 'README.md:1'
 check "t/s fails" "$(repo 'It serves 40 t/s.')" fail 'README.md:1'
 check "TPS fails" "$(repo 'It serves 42 TPS.')" fail 'README.md:1'
+check "tok/sec fails" "$(repo 'It serves 42 tok/sec.')" fail 'README.md:1'
+check "t/sec fails" "$(repo 'It serves 40 t/sec.')" fail 'README.md:1'
+check "a unit that only starts like tokens/s is not a claim" "$(repo 'Keep 40 tokens/session cached.')" 0
 check "doubles throughput fails" "$(repo 'Pinning doubles throughput.')" fail 'README.md:1'
 check "a claim split across two lines fails" "$(repo $'Pinning is 3x\nfaster than before.')" fail 'README.md:2'
 check "a claim split across two lines backed on either line passes" \
     "$(repo $'Pinning is 3x [ledger:H2]\nfaster than before.')" 0
+check "a split claim backed only on its first line passes" \
+    "$(repo $'[ledger:H2] Pinning is 3x\nfaster than before.')" 0
+check "a split claim with a PENDING reference on its first line fails" \
+    "$(repo $'[ledger:H1] Pinning is 3x\nfaster than before.')" fail 'README.md:2'
 check "a paragraph break ends a split claim" "$(repo $'Step 3x\n\nfaster setup notes.')" 0
 check "an HTML comment inside a claim is ignored" "$(repo '3x <!-- note --> faster')" fail 'README.md:1'
 check "a claim inside a multi-line HTML comment is not rendered and passes" \

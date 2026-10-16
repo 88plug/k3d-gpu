@@ -2,11 +2,11 @@
 # Claims guard for the docs. Fails when a line of README.md or docs/*.md makes a
 # performance claim without a reference that backs it.
 #
-# A claim is a number with a performance unit (tok/s, t/s, TPS, tokens per second,
-# J/token, "3x faster", "10 times faster", "30%"), a "doubles throughput" style
-# multiplier, or a superlative about the project ("fastest", "first-ever",
-# "the only tool", "world's first", "first to"). A claim split over two lines of
-# one paragraph counts too.
+# A claim is a number with a performance unit (tok/s, tok/sec, t/s, TPS, tokens
+# per second, J/token, "3x faster", "10 times faster", "30%"), a "doubles
+# throughput" style multiplier, or a superlative about the project ("fastest",
+# "first-ever", "the only tool", "world's first", "first to"). A claim split over
+# two lines of one paragraph counts too.
 #
 # A claim is backed when the same line (for a split claim, either of its two lines)
 # carries at least one of:
@@ -95,7 +95,7 @@ for f in "${files[@]}"; do
             load(ledger, L); load(prov, P)
             num = "[0-9][0-9.,]*"
             NRE = 10
-            claim_re[1] = num " *(tok/s|t/s|tokens?/s(ec)?|tokens? per second|tps)([^a-z]|$)"
+            claim_re[1] = num " *(tok/s(ec)?|t/s(ec)?|tokens?/s(ec)?|tokens? per second|tps)([^a-z]|$)"
             claim_re[2] = num " *(j/tok|j per token|joules? per token)"
             claim_re[3] = num " *(x|×|times) *(faster|slower|quicker|speed-?ups?|throughput|more|less|higher|lower|better)"
             claim_re[4] = num " *%"
