@@ -12,8 +12,17 @@ kubectl -n k3d-gpu-telemetry port-forward svc/prometheus 9090
 kubectl delete namespace k3d-gpu-telemetry        # remove everything
 ```
 
+The AUR package installs the same files under `/usr/share/k3d-gpu/telemetry/`; use that
+path instead of `share/telemetry/` outside a repo checkout.
+
+`dcgm-exporter.yml` schedules only onto nodes without the `nvidia.com/gpu.present=false`
+label, which the launcher sets when NVIDIA is not active. `intel-gpu-exporter.yml` has no
+such gate: per the drm-exporter README the pod exits on a node with no GPU, so on a
+host without an Intel GPU it goes into CrashLoopBackOff. Skip that file there, or
+delete it afterwards with `kubectl -n k3d-gpu-telemetry delete ds/drm-exporter`.
+
 A future `k3d-gpu telemetry up|down` wraps these commands. `up` should apply
-`dcgm-exporter.yml` only when NVIDIA GPUs are present, and `optional/intel-xpumd.yml`
+`intel-gpu-exporter.yml` only when an Intel GPU is present, and `optional/intel-xpumd.yml`
 only for a supported Intel dGPU. Everything in the stack is pinned:
 
 | File | Component | Version (image) | Port | Runs as |
@@ -42,7 +51,9 @@ them the same way to bump a version.
   the hybrid PMU CPU lists (`/sys/devices/cpu_core/cpus` and `cpu_atom/cpus`, the same
   lists `k3d-gpu doctor` reads). It writes `k3d_gpu_cpu_core_type{cpu,type}` for the
   textfile collector, where `type` is `performance` or `efficient`, matching the
-  `k3d-gpu.io/cores` pod label values. A non-hybrid CPU gets no series.
+  `k3d-gpu.io/cores` pod label values. A non-hybrid CPU gets no series. The init
+  container runs once, at pod start: after a CPU is hotplugged or brought on or offline,
+  the series stay stale until `kubectl -n k3d-gpu-telemetry rollout restart ds/node-exporter`.
 - **Recording rules** (in `prometheus.yml`, unit-tested by `tests/telemetry_test.sh`):
 
   | Rule | Meaning |
@@ -58,11 +69,15 @@ them the same way to bump a version.
   `reservedPoolNamespaces` or label the exporter pods `k3d-gpu.io/cores=efficient`.
 - **Per-balloon metrics.** The balloons policy serves `:8891/metrics` and its pod carries
   `prometheus.io/scrape: "true"`, but the baked BalloonsPolicy sets
-  `instrumentation.prometheusExport: false`, so the endpoint exports nothing. Setting it
-  to `true` exports a `balloons` gauge with `balloon_type`, `cpus`, `cpu_class`,
-  `containers` and `tot_req_millicpu` attributes (source: `cmd/plugins/balloons/policy/metrics.go`
-  at v0.14.0). The `kube-system-annotated` scrape job picks it up; until then that
-  target reads as down.
+  `instrumentation.prometheusExport: false`. With no metrics exporter configured,
+  `metrics.Start` returns before registering `/metrics` (`pkg/instrumentation/metrics/metrics.go`
+  at v0.14.0), while the HTTP server on `:8891` still runs with only `/healthz`. So
+  `/metrics` answers 404, and the `kube-system-annotated` scrape job shows that target
+  as down. Setting `prometheusExport: true` registers `/metrics` and exports a
+  `balloons` gauge with `balloon_type`, `cpus`, `cpu_class`, `containers` and
+  `tot_req_millicpu` attributes (`cmd/plugins/balloons/policy/metrics.go`). Read from
+  source, unverified live. Probe:
+  `curl -s -o /dev/null -w '%{http_code}\n' <balloons-pod-ip>:8891/metrics` should print `404`.
 - **Multi-node clusters.** Every k3d node is a container on the same host. Each
   node_exporter, drm-exporter and dcgm-exporter pod therefore reports the same host CPUs
   and GPUs. Aggregate one node, or pin the DaemonSets to the server node.
@@ -229,7 +244,8 @@ then `kubectl -n k3d-gpu-telemetry port-forward ds/dcgm-exporter 9400` and
 Run without a cluster:
 
 - `tests/telemetry_test.sh`: core-type script against fake sysfs trees (hybrid, gaps,
-  E-cores offline, non-hybrid). When `promtool` is on PATH, it also runs
+  E-cores offline, non-hybrid), and the AUR `package()` function, which must install
+  every manifest under `/usr/share/k3d-gpu/telemetry/`. When `promtool` is on PATH, it also runs
   `promtool check metrics` on the script output and `promtool test rules` on the
   recording rules with `tests/telemetry-rules.test.yml`. CI does not run it yet; the job that installs promtool 3.15.0 needs a push with the GitHub `workflow` scope.
 - `kubeconform -kubernetes-version 1.34.1 -strict share/telemetry share/telemetry/optional`

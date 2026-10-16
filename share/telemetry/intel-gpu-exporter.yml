@@ -7,7 +7,8 @@
 # integrated Gen12 parts such as the UHD 770 that xpumd does not list as supported.
 # Privileged instead of a GPU resource request: no gpu.intel.com resource is consumed
 # and the pod needs PERFMON (engine PMU) and SYS_RAWIO + /dev/cpu (MSR package
-# temperature, RAPL fallback). On a node without an Intel or AMD GPU the pod exits.
+# temperature, RAPL fallback). On a node without an Intel or AMD GPU the pod exits
+# and restarts (CrashLoopBackOff); do not apply this file on such a host.
 # Serves :8081/metrics.
 #
 # values:

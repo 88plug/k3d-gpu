@@ -87,6 +87,24 @@ check "empty atom list: no efficient" 0 "$(grep -c 'type="efficient"' <<< "${out
 # Non-hybrid CPU: neither PMU directory exists.
 check "non-hybrid: no file" "<none>" "$(core_type flat - -)"
 
+# The AUR package must ship every telemetry manifest under /usr/share/k3d-gpu/telemetry.
+# Runs the PKGBUILD package() function against this checkout into a scratch pkgdir,
+# under errexit as makepkg does (outside an `if`, where errexit would be ignored).
+mkdir -p "${WORK}/src" "${WORK}/pkg"
+ln -s "${ROOT}" "${WORK}/src/k3d-gpu"
+(srcdir="${WORK}/src" pkgdir="${WORK}/pkg"; . "${ROOT}/packaging/aur/PKGBUILD"; set -e; package) >/dev/null 2>&1
+pkg_rc=$?
+if [ "${pkg_rc}" -eq 0 ]; then
+    missing=""
+    for f in "${ROOT}"/share/telemetry/*.yml "${ROOT}"/share/telemetry/optional/*.yml; do
+        rel=${f#"${ROOT}/share/"}
+        [ -f "${WORK}/pkg/usr/share/k3d-gpu/${rel}" ] || missing+=" ${rel}"
+    done
+    check "PKGBUILD installs every telemetry manifest" "" "${missing# }"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL PKGBUILD package() runs (exit ${pkg_rc})"
+fi
+
 # The output must parse as Prometheus text exposition when promtool is available.
 if command -v promtool >/dev/null 2>&1; then
     core_type lint 0-15 16-31 | grep -v '^<' > "${WORK}/lint.prom"
