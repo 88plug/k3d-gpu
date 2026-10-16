@@ -1,0 +1,5 @@
+dsa dsa.intel.com/*
+iaa iaa.intel.com/*
+qat qat.intel.com/*
+amx feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true feature.node.kubernetes.io/cpu-cpuid.AMXINT8=true feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true
+exit=0

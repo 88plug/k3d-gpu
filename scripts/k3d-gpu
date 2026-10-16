@@ -665,7 +665,7 @@ cmd_up() {
     # udev symlink exists. A privileged container gets the device nodes but no
     # /dev/char, so share the host's (its links are relative and resolve to the
     # node's own /dev/dsa and /dev/iax).
-    if { is_active dsa || is_active iaa; } && [ -d /dev/char ]; then
+    if { is_active dsa || is_active iaa; } && [ -d "${SYSROOT}/dev/char" ]; then
         create_args+=(--volume="/dev/char:/dev/char:ro@server:*;agent:*")
     fi
     # Hybrid P/E cores: the baked NRI balloons policy is gated by this label. NRI is
@@ -681,10 +681,10 @@ cmd_up() {
             [ -n "${label}" ] && create_args+=(--k3s-node-label="${label}@server:*;agent:*")
         done < <(amx_labels)
     fi
-    if is_active intel && ! compgen -G '/dev/dri/renderD*' >/dev/null; then
+    if is_active intel && ! compgen -G "${SYSROOT}/dev/dri/renderD*" >/dev/null; then
         warn "no /dev/dri/renderD* on host — Intel GPU will not be visible in the node"
     fi
-    if { is_active gaudi || is_active npu; } && ! compgen -G '/dev/accel/accel[0-9]*' >/dev/null; then
+    if { is_active gaudi || is_active npu; } && ! compgen -G "${SYSROOT}/dev/accel/accel[0-9]*" >/dev/null; then
         warn "no /dev/accel/accel* on host — Gaudi/NPU will not be visible in the node"
     fi
 

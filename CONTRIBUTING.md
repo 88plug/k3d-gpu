@@ -73,6 +73,24 @@ Include relevant details:
 - Pin versions for reproducibility
 - Test on actual GPU hardware when possible
 
+### Launcher Changes (`scripts/k3d-gpu`)
+
+- `tests/detect_test.sh` holds focused cases built on small fake sysfs trees.
+- `tests/sim_matrix_test.sh` runs `detect`, `doctor` and `up` (docker, k3d and
+  kubectl stubbed) against every platform in `tests/fixtures/` — Gaudi 3, Panther
+  Lake, Arrow Lake, Battlemage, Sapphire Rapids DSA/IAA/QAT/AMX, Raptor Lake +
+  NVIDIA — and diffs the output, exit code, `k3d cluster create` arguments and
+  kubectl calls against each platform's `*.golden` files. CI runs one job per platform.
+- When a change is meant to alter that output, regenerate and review the goldens:
+  `tests/sim_matrix_test.sh --update && git diff tests/fixtures`.
+- Have hardware the matrix lacks? Capture it (reads ids, driver bindings, device
+  node names, CPU flags, kernel release and firmware file names only):
+  ```bash
+  tests/fixtures/capture.sh tests/fixtures/<platform>/sysroot
+  ```
+  then add `SOURCES` (what the machine is), `allocatable` (`<resource> <count>`
+  lines the device plugins report), an optional `env`, and run `--update`.
+
 ### Documentation
 
 - Update README.md for user-facing changes

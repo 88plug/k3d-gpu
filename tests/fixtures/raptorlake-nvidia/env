@@ -1,0 +1,4 @@
+# Docker state of the captured host
+STUB_DOCKER_RUNTIMES=io.containerd.runc.v2 runc
+STUB_DOCKER_CDI=nvidia.com/gpu=0 nvidia.com/gpu=1 nvidia.com/gpu=all
+HOST_TOOLS=nvidia-ctk nvidia-container-runtime

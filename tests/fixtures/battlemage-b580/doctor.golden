@@ -1,0 +1,13 @@
+==> Checking docker...
+  ok: docker running
+==> Checking k3d...
+  ok: k3d version v0.0.0-stub
+==> Checking kubectl...
+  ok
+==> Detected accelerators: intel
+==> Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...
+  ok: Intel Battlemage (0xe20b) bound to xe
+  ok: xe/bmg_guc_* firmware present
+
+==> All checks passed.
+exit=0

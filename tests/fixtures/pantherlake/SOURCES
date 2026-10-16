@@ -1,0 +1,23 @@
+Platform: Core Ultra Series 3 (Panther Lake) laptop: Xe3 iGPU on xe, NPU 5 on
+intel_vpu, hybrid P/E cores, firmware installed.
+
+Sources (kernel paths are Linux v6.18 (torvalds/linux tag v6.18)):
+- 0x8086 0xb080 "Panther Lake [Arc B390]": pci.ids 2026.10.15; INTEL_PTL_IDS in
+  include/drm/intel/pciids.h.
+- 0x8086 0xb03e NPU: drivers/accel/ivpu/ivpu_drv.h (PCI_DEVICE_ID_PTL_P); listed in
+  intel-device-plugins v0.37.1 cmd/npu_plugin/npu_plugin.go; class 0x1200 per its
+  NFD rule (deployments/nfd/overlays/node-feature-rules).
+- accel0 and /dev/accel/accel0: Documentation/accel/introduction.rst.
+- xe/ptl_guc_70.bin, intel/vpu/vpu_50xx_v1.bin: linux-firmware tag 20260916 WHENCE.
+- /sys/devices/cpu_core/cpus and cpu_atom/cpus: tools/perf/Documentation/intel-hybrid.txt.
+- iGPU at 00:02.0, NPU at 00:0b.0: Intel client BDFs (the captured raptorlake-nvidia
+  iGPU is at 00:02.0 too).
+
+Layout: sysfs paths and relative symlinks follow the driver core's naming
+(class devices under <pci dev>/<class>/<name>; /sys/class/<class>/<name> and
+/sys/bus/pci/devices/<bdf> as relative links; <dev>/driver -> bus/pci/drivers/<drv>),
+in exactly the form tests/fixtures/capture.sh writes (the matrix test re-captures
+each tree and requires an identical result).
+
+Not from hardware: the P/E CPU numbering (4 P then 12 E/LP-E, contiguous), the
+kernel release string, and the cpuinfo flags line.

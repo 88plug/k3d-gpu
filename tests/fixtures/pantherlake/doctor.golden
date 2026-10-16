@@ -1,0 +1,19 @@
+==> Checking docker...
+  ok: docker running
+==> Checking k3d...
+  ok: k3d version v0.0.0-stub
+==> Checking kubectl...
+  ok
+==> Detected accelerators: intel npu hybrid
+==> Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...
+  ok: Intel Panther Lake (0xb080) bound to xe
+  ok: xe/ptl_guc_* firmware present
+==> Checking Intel NPU (Core Ultra)...
+  ok: Intel NPU Panther Lake (0xb03e) bound to intel_vpu
+  ok: intel/vpu/vpu_50xx_* firmware present
+  note: workload images need the NPU user-space driver (github.com/intel/linux-npu-driver) and Level Zero
+==> Intel CPU built-in accelerators...
+  ok: hybrid CPU: P-cores 0-3, E-cores 4-15 — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient
+
+==> All checks passed.
+exit=0

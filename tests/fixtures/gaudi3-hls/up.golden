@@ -1,0 +1,24 @@
+==> Accelerators: gaudi amx
+==> Creating k3d cluster 'gpu' with image cryptoandcoffee/k3d-gpu:latest...
+==> Waiting for nodes Ready...
+==> gaudi device plugin auto-deployed by k3s.
+==> Verifying accelerators are schedulable...
+==> Accelerators schedulable: gaudi=8 amx=3. Try: k3d-gpu test
+exit=0
+--- calls
+k3d cluster create gpu
+  --image=cryptoandcoffee/k3d-gpu:latest
+  --no-lb
+  --k3s-arg=--disable=traefik@server:0
+  --k3s-node-label=nvidia.com/gpu.present=false@server:*;agent:*
+  --k3s-node-label=habana.ai/gaudi.present=true@server:*;agent:*
+  --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true@server:*;agent:*
+  --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AMXINT8=true@server:*;agent:*
+  --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true@server:*;agent:*
+kubectl wait --for=condition=Ready nodes --all --timeout=120s
+kubectl -n habana-system get daemonset habanalabs-device-plugin-daemonset
+kubectl -n habana-system rollout status daemonset/habanalabs-device-plugin-daemonset --timeout=120s
+kubectl get nodes -o go-template={{range .items}}{{range $k, $v := .status.allocatable}}{{$k}} {{$v}}{{"\n"}}{{end}}{{end}}
+kubectl get nodes -l feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true -o name
+kubectl get nodes -l feature.node.kubernetes.io/cpu-cpuid.AMXINT8=true -o name
+kubectl get nodes -l feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true -o name

@@ -1,0 +1,4 @@
+cpu 24
+pods 110
+gpu.intel.com/i915 1
+npu.intel.com/accel 1

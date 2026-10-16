@@ -1,0 +1,18 @@
+Platform: Intel Arc B580 (Battlemage G21) in a desktop with a non-Intel CPU,
+bound to xe, GuC firmware installed.
+
+Sources (kernel paths are Linux v6.18 (torvalds/linux tag v6.18)):
+- 0x8086 0xe20b "Battlemage G21 [Arc B580]": pci.ids 2026.10.15;
+  include/drm/intel/pciids.h INTEL_BMG_IDS.
+- xe/bmg_guc_70.bin: linux-firmware tag 20260916 WHENCE (kernel-firmware/linux-firmware).
+- card0 + renderD128 under <pci dev>/drm: drm core naming, same shape as the
+  captured raptorlake-nvidia fixture.
+
+Layout: sysfs paths and relative symlinks follow the driver core's naming
+(class devices under <pci dev>/<class>/<name>; /sys/class/<class>/<name> and
+/sys/bus/pci/devices/<bdf> as relative links; <dev>/driver -> bus/pci/drivers/<drv>),
+in exactly the form tests/fixtures/capture.sh writes (the matrix test re-captures
+each tree and requires an identical result).
+
+Not from hardware: BDF and PCIe path (the card's internal switch ports are
+omitted), the kernel release string, and the cpuinfo flags line.
