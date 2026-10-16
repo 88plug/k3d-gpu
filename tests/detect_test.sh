@@ -573,7 +573,7 @@ i915gt() {
 
 # The stubbed nvidia-smi prints STUB_NVSMI (";"-separated CSV rows); the stubbed
 # sudo records that it ran, which the read-only test forbids.
-printf '#!/bin/sh\necho "${STUB_NVSMI:-}" | tr ";" "\\n"\n' > "${STUB_BIN}/nvidia-smi"
+printf '#!/bin/sh\necho "${STUB_NVSMI:-}" | tr ";" "\\n"\nexit "${STUB_NVSMI_RC:-0}"\n' > "${STUB_BIN}/nvidia-smi"
 printf '#!/bin/sh\necho "$*" >> "%s/sudo-called"\n' "${WORK}" > "${STUB_BIN}/sudo"
 chmod +x "${STUB_BIN}/nvidia-smi" "${STUB_BIN}/sudo"
 
@@ -700,6 +700,65 @@ cpufreq "${r}" 0-1 powersave "" 3000000 3000000
 for c in 0 1; do put "${r}" "/sys/devices/system/cpu/cpu${c}/cpufreq/scaling_driver" acpi-cpufreq; done
 perf_says "perf: acpi-cpufreq powersave governor warns" "${r}" 'warn: CPUs 0-1: governor powersave'
 perf_says "perf: empty host has nothing to suggest" "$(newroot perf-empty)" '^==> 0 suggestion\(s\)\. Read-only'
+
+# intel_pstate active without HWP: its own powersave algorithm scales with load.
+r=$(newroot perf-pstate-nohwp)
+put "${r}" /sys/devices/system/cpu/online 0-1
+put "${r}" /sys/devices/system/cpu/intel_pstate/status active
+cpufreq "${r}" 0-1 powersave "" 3000000 3000000
+perf_says "perf: intel_pstate non-HWP powersave is ok" "${r}" 'ok: +CPUs 0-1: governor powersave \(intel_pstate active, no HWP' 
+perf_says "perf: intel_pstate non-HWP powersave is not flagged" "${r}" 'warn: CPUs 0-1: governor' negate
+
+# EPP mixed within a group: classified per CPU, revert restores each CPU's value.
+r=$(newroot perf-epp-mixed-ok)
+put "${r}" /sys/devices/system/cpu/online 0-2
+cpufreq "${r}" 0 powersave performance 3000000 3000000
+cpufreq "${r}" 1 powersave balance_performance 3000000 3000000
+cpufreq "${r}" 2 powersave 64 3000000 3000000
+perf_says "perf: mixed EPP that is all ok is not flagged" "${r}" '^==> 0 suggestion\(s\)\. Read-only'
+r=$(newroot perf-epp-mixed-bad)
+put "${r}" /sys/devices/system/cpu/online 0-4
+cpufreq "${r}" 0 powersave power 3000000 3000000
+cpufreq "${r}" 1 powersave balance_power 3000000 3000000
+cpufreq "${r}" 2 powersave performance 3000000 3000000
+cpufreq "${r}" 3 powersave power 3000000 3000000
+cpufreq "${r}" 4 performance power 3000000 3000000
+perf_says "perf: mixed EPP warns on the low-energy CPUs only" "${r}" 'warn: CPUs 0-1,3: EPP balance_power on 1, power on 0,3 \(governor powersave\)'
+perf_says "perf: mixed EPP apply targets those CPUs" "${r}" "apply:  echo performance \| sudo tee ${C}/cpu\{0,1,3\}/cpufreq/energy_performance_preference"
+perf_says "perf: mixed EPP revert restores each CPU's value" "${r}" "revert: echo balance_power \| sudo tee ${C}/cpu1/cpufreq/energy_performance_preference && echo power \| sudo tee ${C}/cpu\{0,3\}/cpufreq/energy_performance_preference"
+perf_says "perf: mixed EPP revert is never a placeholder" "${r}" 'values were mixed' negate
+r=$(newroot perf-gov-mixed)
+put "${r}" /sys/devices/system/cpu/online 0-2
+cpufreq "${r}" 0-2 powersave "" 3000000 3000000
+put "${r}" /sys/devices/system/cpu/cpu1/cpufreq/scaling_governor ondemand
+put "${r}" /sys/devices/system/cpu/cpu2/cpufreq/scaling_governor schedutil
+for c in 0 1 2; do put "${r}" "/sys/devices/system/cpu/cpu${c}/cpufreq/scaling_driver" acpi-cpufreq; done
+perf_says "perf: mixed governor revert restores each CPU's value" "${r}" "revert: echo ondemand \| sudo tee ${C}/cpu1/cpufreq/scaling_governor && echo powersave \| sudo tee ${C}/cpu0/cpufreq/scaling_governor"
+
+# nvidia-smi that fails (NVML mismatch after a driver upgrade) is reported, not parsed.
+NVML_ENV=(STUB_NVSMI_RC=9 "STUB_NVSMI=Failed to initialize NVML: Driver/library version mismatch")
+perf_says "perf: nvidia-smi failure is reported" "${bad}" 'warn: nvidia-smi failed \(exit 9\): Failed to initialize NVML: Driver/library version mismatch' "" "${NVML_ENV[@]}"
+perf_says "perf: nvidia-smi error text is not parsed as a GPU" "${bad}" 'GPU Failed|-i Failed' negate "${NVML_ENV[@]}"
+
+# Unparsable or missing sysfs values never abort the run.
+r=$(newroot perf-bad-sysfs)
+hybrid "${r}" 0-2 3
+cpufreq "${r}" 0-1 powersave performance 5100000 5100000
+cpufreq "${r}" 3 powersave performance 3900000 3900000
+put "${r}" /sys/devices/system/cpu/cpu1/cpufreq/cpuinfo_max_freq '<unknown>'
+perf_says "perf: non-numeric cpuinfo_max_freq does not abort" "${r}" '^==> [0-9]+ suggestion\(s\)\. Read-only'
+rapl "${r}" intel-rapl:0 1 65000000 35000000 '<unknown>'
+perf_says "perf: non-numeric RAPL limit does not abort" "${r}" 'ok: +intel-rapl:0 package-0: long_term 65 W, short_term <unknown>'
+perf_says "perf: offline CPU adds no 0 MHz hardware max" "${r}" 'ok: +P-cores 0-2: no frequency cap \(hardware max 5100 MHz\)'
+
+# irqbalance revert matches the observed unit state.
+r=$(newroot perf-irq-enabled)
+put "${r}" /proc/4242/comm sshd
+mkdir -p "${r}/etc/systemd/system/multi-user.target.wants"
+ln -s /usr/lib/systemd/system/irqbalance.service "${r}/etc/systemd/system/multi-user.target.wants/irqbalance.service"
+perf_says "perf: irqbalance enabled but stopped reverts with stop only" "${r}" 'revert: sudo systemctl stop irqbalance$'
+perf_says "perf: irqbalance disabled reverts with disable --now" "${bad}" 'revert: sudo systemctl disable --now irqbalance$' "" "${BAD_ENV[@]}"
+perf_says "perf: devicemapper named as removed in Engine 25.0" "${good}" 'devicemapper as removed in Docker Engine 25\.0' "" STUB_DOCKER_DRIVER=devicemapper
 
 # Read-only: the run leaves the fake tree byte-identical and never calls sudo.
 before=$(cd "${bad}" && find . -type f -exec md5sum {} + | sort)
