@@ -205,6 +205,23 @@ hybrid_cpus() { cat "${SYSROOT}/sys/devices/cpu_$1/cpus" 2>/dev/null || true; }
 has_hybrid() { [ -n "$(hybrid_cpus core)" ] && [ -n "$(hybrid_cpus atom)" ]; }
 HYBRID_LABEL="k3d-gpu.io/hybrid-cpu=true"
 
+# Kernel CPU list ("0-3,8,10-11") -> one CPU number per line.
+cpulist_expand() {
+    local part
+    for part in ${1//,/ }; do
+        if [[ "${part}" == *-* ]]; then seq "${part%-*}" "${part#*-}"; else echo "${part}"; fi
+    done
+}
+
+# True when every CPU in list $1 is also in list $2 (and $1 is not empty).
+cpulist_within() {
+    [ -n "$1" ] || return 1
+    local cpu
+    for cpu in $(cpulist_expand "$1"); do
+        grep -qx "${cpu}" <<< "$(cpulist_expand "$2")" || return 1
+    done
+}
+
 # ---- platform tables (doctor only) --------------------------------------------
 # IDs, default-driver kernels and firmware names from the kernel's
 # include/drm/intel/pciids.h, xe_pci.c, xe_uc_fw.c and drivers/accel/ivpu.
@@ -672,7 +689,12 @@ ensure_plugin() {
         info "${vendor} device plugin auto-deployed by k3s."
     elif [ -f "${manifest}" ]; then
         info "Applying ${vendor} device plugin (${manifest})..."
-        kubectl apply -f "${manifest}"
+        # A manifest that ships its own CRD (nri-balloons) fails on its custom
+        # objects until the CRD is established; wait for it, then apply again.
+        if ! kubectl apply -f "${manifest}"; then
+            kubectl wait --for=condition=Established crd --all --timeout=60s
+            kubectl apply -f "${manifest}"
+        fi
     elif [ "${vendor}" = "nvidia" ]; then
         warn "${manifest} missing — applying upstream from GitHub"
         kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/main/deployments/static/nvidia-device-plugin.yml
@@ -787,7 +809,7 @@ cmd_test() {
     require kubectl
     resolve_vendors
     [ "${#ACTIVE[@]}" -gt 0 ] || err "no supported accelerator detected — run 'k3d-gpu doctor'"
-    local res v path
+    local res v path out got
     if is_active nvidia; then
         info "Deploying nvidia-smi test pod (${TEST_IMAGE})..."
         # The container command + GPU resource limit live entirely in the overrides;
@@ -827,9 +849,14 @@ cmd_test() {
         for kind in "performance core" "efficient atom"; do
             read -r v path <<< "${kind}"
             info "Deploying ${v}-core test pod (${DEVICE_TEST_IMAGE}; host ${v} CPUs: $(hybrid_cpus "${path}"))..."
-            run_pod "cores-${v}-test" "${DEVICE_TEST_IMAGE}" \
-                "{\"metadata\":{\"labels\":{\"k3d-gpu.io/cores\":\"${v}\"}},\"spec\":{\"containers\":[{\"name\":\"cores-${v}-test\",\"image\":\"${DEVICE_TEST_IMAGE}\",\"resources\":{\"requests\":{\"cpu\":\"1\"},\"limits\":{\"cpu\":\"1\"}},\"command\":[\"grep\",\"Cpus_allowed_list\",\"/proc/self/status\"]}]}}" \
-                || err "${v}-core test pod failed — run 'k3d-gpu doctor'"
+            out=$(run_pod "cores-${v}-test" "${DEVICE_TEST_IMAGE}" \
+                "{\"metadata\":{\"labels\":{\"k3d-gpu.io/cores\":\"${v}\"}},\"spec\":{\"containers\":[{\"name\":\"cores-${v}-test\",\"image\":\"${DEVICE_TEST_IMAGE}\",\"resources\":{\"requests\":{\"cpu\":\"1\"},\"limits\":{\"cpu\":\"1\"}},\"command\":[\"grep\",\"Cpus_allowed_list\",\"/proc/self/status\"]}]}}") \
+                || { printf '%s\n' "${out}"; err "${v}-core test pod failed — run 'k3d-gpu doctor'"; }
+            printf '%s\n' "${out}"
+            # The grep alone passes with NRI off; the CPU list must sit inside the core type.
+            got=$(sed -n 's/^Cpus_allowed_list:[[:space:]]*//p' <<< "${out}")
+            cpulist_within "${got}" "$(hybrid_cpus "${path}")" \
+                || err "${v}-core test pod ran on CPUs '${got}', not on the ${v} CPUs $(hybrid_cpus "${path}") — check: kubectl -n kube-system logs ds/nri-resource-policy-balloons"
         done
     fi
 }

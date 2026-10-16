@@ -396,7 +396,8 @@ cat > "${KSTUB}/kubectl" <<'EOF'
 #!/bin/sh
 case "$1" in
     get)  case "$*" in *phase*) echo "${STUB_POD_PHASE}" ;; esac ;;
-    logs) printf %s "${STUB_POD_LOGS}" ;;  # no final newline, like nvidia-smi stderr
+    # no final newline, like nvidia-smi stderr; STUB_POD_LOGS_<pod name, - as _> overrides per pod
+    logs) eval "out=\${STUB_POD_LOGS_$(echo "$2" | tr -- - _):-\${STUB_POD_LOGS}}"; printf %s "${out}" ;;
 esac
 exit 0
 EOF
@@ -428,6 +429,18 @@ test_says "test fails when the nvidia-smi pod fails, and still shows its output"
 test_says "pod output without a final newline does not glue onto the next line" "${r}" 0 \
     '^(.\[[0-9;]*m)?==>.*Deploying gaudi-test' \
     STUB_POD_PHASE=Succeeded STUB_POD_LOGS="ERROR: noise" K3D_GPU_VENDORS=nvidia,gaudi
+
+r=$(newroot hybrid-test)
+hybrid "${r}" 0-15 16-31
+test_says "hybrid test passes when each pod lands on its core type" "${r}" 0 'Cpus_allowed_list' \
+    STUB_POD_PHASE=Succeeded STUB_POD_LOGS_cores_performance_test="Cpus_allowed_list:	0-1" \
+    STUB_POD_LOGS_cores_efficient_test="Cpus_allowed_list:	20,24-25" K3D_GPU_VENDORS=hybrid
+test_says "hybrid test fails when a performance pod is not on P-cores" "${r}" fail 'not on the performance CPUs' \
+    STUB_POD_PHASE=Succeeded STUB_POD_LOGS_cores_performance_test="Cpus_allowed_list:	0-15,17-31" \
+    STUB_POD_LOGS_cores_efficient_test="Cpus_allowed_list:	20" K3D_GPU_VENDORS=hybrid
+test_says "hybrid test fails when an efficient pod is not on E-cores" "${r}" fail 'not on the efficient CPUs' \
+    STUB_POD_PHASE=Succeeded STUB_POD_LOGS_cores_performance_test="Cpus_allowed_list:	0" \
+    STUB_POD_LOGS_cores_efficient_test="Cpus_allowed_list:	3" K3D_GPU_VENDORS=hybrid
 
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
