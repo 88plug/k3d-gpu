@@ -1514,6 +1514,8 @@ dmi17() {
     echo "${size} ${b[18]} ${b[14]} ${spd} ${cfg} $(( b[8] | b[9] << 8 )) $(( b[10] | b[11] << 8 )) $(( b[27] & 15 ))"
 }
 
+mts() { if [ "$1" -gt 0 ]; then echo "$1 MT/s"; else echo unknown; fi; }
+
 dram_type() {
     case "$1" in
         24) echo DDR3 ;; 26) echo DDR4 ;; 29) echo LPDDR3 ;; 30) echo LPDDR4 ;; 34) echo DDR5 ;; 35) echo LPDDR5 ;;
@@ -1567,7 +1569,7 @@ dram_por() {
 }
 
 perf_dram() {
-    local e raw rec slots=0 n=0 size type form spd cfg tw dw rk desc="" cmin="" rated="" ecc=1 widths=0
+    local e raw rec slots=0 n=0 size type form spd cfg tw dw rk desc="" cmin="" rated="" ecc=1 eccu=0 widths=0
     local line ch=2 dpc per por row peak t1 hb mc ce ue mcs="" mcf=""
     for e in "${SYSROOT}"/sys/firmware/dmi/entries/17-*; do
         [ -d "${e}" ] || continue
@@ -1583,8 +1585,8 @@ perf_dram() {
         if [[ " ${desc} " != *"|${t1}|"* ]]; then desc+="|${t1}|"; fi
         if [ -z "${cmin}" ] || [ "${cfg}" -lt "${cmin}" ]; then cmin=${cfg}; fi
         if [ -z "${rated}" ] || [ "${spd}" -lt "${rated}" ]; then rated=${spd}; fi
-        if [ "${tw}" -eq 65535 ] || [ "${dw}" -eq 65535 ] || [ "${tw}" -le "${dw}" ]; then ecc=0; fi
-        widths=$((widths + dw / 8))
+        if [ "${tw}" -eq 65535 ] || [ "${dw}" -eq 65535 ]; then eccu=1; elif [ "${tw}" -le "${dw}" ]; then ecc=0; fi
+        if [ "${dw}" -lt 65535 ]; then widths=$((widths + dw / 8)); fi
     done
     [ "${slots}" -gt 0 ] || return 0
     perf_section "DRAM speed, bandwidth and ECC" \
@@ -1600,18 +1602,22 @@ perf_dram() {
     fi
     desc=${desc#|}; desc=${desc%|}; desc=${desc//||/, }
     form=$(dram_form "${form}")
-    perf_info "${n}x ${desc}$([ "${ecc}" -eq 1 ] && echo ", ECC (${tw}/${dw}-bit)"): rated ${rated} MT/s, configured ${cmin} MT/s; ${n} of ${slots} slots populated" \
+    perf_info "${n}x ${desc}$([ "${ecc}${eccu}" = 10 ] && echo ", ECC (${tw}/${dw}-bit)"): rated $(mts "${rated}"), configured $(mts "${cmin}"); ${n} of ${slots} slots populated" \
         "/sys/firmware/dmi/entries/17-*/raw (root)"
 
     line=$(client_line)
-    if [ -n "${line}" ]; then
+    if [ "${cmin}" -eq 0 ]; then
+        perf_info "configured speed not reported by firmware: no POR comparison or peak bandwidth" "/sys/firmware/dmi/entries/17-*/raw (root)"
+    elif [ -n "${line}" ]; then
         dpc=$(( (slots + ch - 1) / ch ))
         per=1; if [ "${n}" -gt "${ch}" ]; then per=2; fi
         por=$(dram_por "${line}" "${form}" "${dpc}" "${per}" "${rk}")
         if [ -z "${por}" ] && [ "${dpc}" -ge 2 ] && [ "${form}" = SODIMM ] && [[ "${line}" == *S ]]; then
             por=$(dram_por "${line}" DIMM "${dpc}" "${per}" "${rk}")
-            perf_info "SODIMMs at 2 slots per channel are not a supported configuration on the ${line%S}th Gen Core S line (743844 table 25 note 9); the nearest POR row, UDIMM ${por#*|}, is ${por%%|*} MT/s" \
-                "/proc/cpuinfo (model ${line}), /sys/firmware/dmi/entries/17-*/raw"
+            if [ -n "${por}" ]; then
+                perf_info "SODIMMs at 2 slots per channel are not a supported configuration on the ${line%S}th Gen Core S line (743844 table 25 note 9); the nearest POR row, UDIMM ${por#*|}, is ${por%%|*} MT/s" \
+                    "/proc/cpuinfo (model ${line}), /sys/firmware/dmi/entries/17-*/raw"
+            fi
         fi
         if [ -n "${por}" ]; then
             row=${por#*|}; por=${por%%|*}
@@ -1655,7 +1661,9 @@ perf_dram() {
                 "none on the host: run a memory test and replace the failing module (edac-util or the kernel log names the DIMM)" "none"
         fi
     done
-    if [ "${ecc}" -eq 0 ]; then
+    if [ "${eccu}" -eq 1 ]; then
+        perf_info "module widths not reported by firmware: ECC state unknown" "/sys/firmware/dmi/entries/17-*/raw (root)"
+    elif [ "${ecc}" -eq 0 ]; then
         perf_info "non-ECC modules: memory errors are neither corrected nor counted (dram.ecc=none)" "/sys/firmware/dmi/entries/17-*/raw (total width = data width)"
     elif [ -n "${mcs}" ]; then
         perf_ok "ECC modules with EDAC reporting (dram.ecc=active): ${mcs}" "/sys/devices/system/edac/mc/mc*/{ce,ue}_count"
@@ -1995,7 +2003,7 @@ perf_isolation() {
 
     # Split-lock detection
     if cpu_flag split_lock_detect || cpu_flag bus_lock_detect; then
-        sld=$(tr ' ' '\n' < "${SYSROOT}/proc/cmdline" 2>/dev/null | sed -n 's/^split_lock_detect=//p' | tail -n1 || true)
+        sld=$(rf "${SYSROOT}/proc/cmdline" | awk '{for (i = 1; i <= NF; i++) if (index($i, "split_lock_detect=") == 1) v = substr($i, 19)} END {print v}')
         mit=$(rd /proc/sys/kernel/split_lock_mitigate)
         if [ "${sld}" = off ]; then
             perf_flag warn "split-lock detection is off (split_lock_detect=off on the kernel command line)" "/proc/cmdline" \

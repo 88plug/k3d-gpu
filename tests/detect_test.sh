@@ -1314,6 +1314,7 @@ perf_says "perf: split-lock default warn is ok" "${cool}" 'ok: +split-lock detec
 perf_says "perf: MSRs skipped without root" "${cool}" 'info: MSR decode \(0x19C, 0x1B1, 0x64F\) skipped: /dev/cpu/0/msr needs root'
 perf_says "perf: TME state needs root without the MSR" "${cool}" 'tme flag set: TME capable\. Whether firmware enabled it needs root'
 perf_says "perf: xfs root gets no 4 KiB note" "${cool}" 'mapped with 4 KiB pages' negate
+perf_says "perf: missing /proc/cmdline prints no shell error" "${cool}" 'No such file|line [0-9]+:' negate
 
 # Uncorrected errors warn; root-only SMBIOS records; a 13th Gen HX below POR; an
 # unknown platform falls back to data width.
@@ -1334,6 +1335,19 @@ dimm "${r}" 1 16384 34 13 5600 4800 64 64 1
 perf_says "perf: configured below POR warns" "${r}" 'warn: configured 4800 MT/s is below the 5600 MT/s POR for 1DPC 1R \(modules rated 5600\)'
 perf_says "perf: below-POR apply names the POR speed" "${r}" 'apply:  BIOS: set the memory frequency to 5600 MT/s'
 perf_says "perf: non-ECC modules reported" "${r}" 'info: non-ECC modules'
+r=$(newroot perf-dmi-nospeed)
+kernel "${r}" 6.6.0
+printf 'cpu family\t: 6\nmodel\t\t: 183\nmodel name\t: 13th Gen Intel(R) Core(TM) i9-13900T\n' > "${r}/proc/cpuinfo"
+dimm "${r}" 0 16384 34 9 0 0 65535 65535 1
+perf_says "perf: unreported speed is not compared with POR" "${r}" 'info: configured speed not reported by firmware'
+perf_says "perf: unreported speed gives no POR warning or peak" "${r}" 'below the|peak DRAM bandwidth|ECC \(|non-ECC' negate
+perf_says "perf: unreported widths leave ECC unknown" "${r}" 'info: module widths not reported by firmware: ECC state unknown'
+r=$(newroot perf-4r)
+kernel "${r}" 6.6.0
+printf 'cpu family\t: 6\nmodel\t\t: 183\nmodel name\t: 13th Gen Intel(R) Core(TM) i9-13900T\n' > "${r}/proc/cpuinfo"
+for c in 0 1 2 3; do dimm "${r}" "${c}" 32768 34 13 4800 3600 64 64 4; done
+perf_says "perf: a rank with no POR row prints no empty row" "${r}" 'UDIMM ,|is  MT/s|POR for  ' negate
+perf_says "perf: a rank with no POR row still gets the peak" "${r}" 'info: peak DRAM bandwidth 57\.6 GB/s'
 r=$(newroot perf-xeon-mem)
 kernel "${r}" 6.6.0
 printf 'cpu family\t: 6\nmodel\t\t: 143\nmodel name\t: Intel(R) Xeon(R) Platinum 8480+\n' > "${r}/proc/cpuinfo"

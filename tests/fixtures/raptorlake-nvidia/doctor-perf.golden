@@ -164,7 +164,6 @@
         from: /sys/class/iommu/, /sys/kernel/iommu_groups/*/type
   info: CET flags: user_shstk, ibt; IA32_S_CET 0x0000000000000004: kernel IBT on; user shadow stacks are opt-in per process (glibc.cpu.x86_shstk tunable)
         from: /proc/cpuinfo, /dev/cpu/0/msr (root)
-<repo>/scripts/k3d-gpu: line 1661: tail: command not found
   ok:   split-lock detection warn (default), split_lock_mitigate=1
         from: /proc/cpuinfo, /proc/cmdline, /proc/sys/kernel/split_lock_mitigate
   info: TME capable but off (IA32_TME_ACTIVATE 0x0000000000000001: lock=1 enable=0; mem-encryption=tme-capable-off). Enabling is a BIOS setting

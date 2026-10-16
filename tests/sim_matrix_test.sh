@@ -131,6 +131,13 @@ check() {
         echo "wrote ${golden#"${REPO}"/}"
         return
     fi
+    # A shell error (a tool missing from the fixed PATH, a bad redirect) is a bug,
+    # even when a golden recorded it.
+    if grep -E '^<repo>/scripts/k3d-gpu: line [0-9]+: ' <<< "${got}" > "${WORK}/diff"; then
+        FAILS=$((FAILS + 1)); echo "FAIL ${name}: ${cmd} printed a shell error"
+        sed 's/^/  | /' "${WORK}/diff"
+        return
+    fi
     if [ -f "${golden}" ] && diff -u "${golden}" <(printf '%s\n' "${got}") > "${WORK}/diff"; then
         PASS=$((PASS + 1)); echo "ok   ${name}: ${cmd}"
     else
