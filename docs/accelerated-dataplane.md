@@ -22,9 +22,9 @@ also passes `envoy --mode validate` with `envoyproxy/envoy:contrib-v1.40.0`. See
 
 | Data-plane piece | DSA | IAA | QAT | Usable today? |
 |---|---|---|---|---|
-| **Redis / Valkey** (LiteLLM cache) | DTO via `LD_PRELOAD` | none (no compression in Redis) | TLS through an OpenSSL provider | **Hypothesis.** No published Redis+DTO result exists. |
+| **Redis / Valkey** (LiteLLM cache) | DTO via `LD_PRELOAD` | none (no compression in Redis) | TLS through an OpenSSL provider | **Hypothesis.** No published Redis+DTO result found as of 2026-10-16. |
 | **PostgreSQL + pgvector** | blocked in the server process | not in the server process. `pg_dump` gzip via zlib-accel works; host zswap works | same as IAA | **Backups: proven elsewhere.** Server: no hook. |
-| **RAG pipeline** (ingest, chunk, embed) | DTO for large copies | zlib-accel for gzip-heavy steps | zlib-accel / QATzip | **Hypothesis.** No vector store uses QPL. |
+| **RAG pipeline** (ingest, chunk, embed) | DTO for large copies | zlib-accel for gzip-heavy steps | zlib-accel / QATzip | **Hypothesis.** No vector store using QPL found as of 2026-10-16. |
 | **LiteLLM** | indirect (its Redis) | none | indirect (Envoy/Istio edge) | Needs no change, and gains nothing on its own. |
 | **TLS edge and response compression** | n/a | n/a | Envoy QAT key provider and qatzip; Istio gateway; nginx/HAProxy via QAT_Engine | **Proven elsewhere** for HAProxy/nginx. Envoy/Istio are alpha but buildable today. |
 | **Memory pressure** (any pod) | n/a | host zswap on `deflate-iaa` | host zswap on `qat_deflate` / `qat_zstd` | **Proven elsewhere** (kernel). Pods need `LimitedSwap`. |
@@ -33,8 +33,9 @@ In short: the accelerators reach this tier **from outside the database and
 cache engines**. That means interposed libraries (DTO, zlib-accel), the
 proxies (Envoy, Istio, HAProxy, nginx) and the kernel (zswap). None of
 PostgreSQL, pgvector, Redis, Valkey or LiteLLM has a hook that calls QPL,
-QATzip or DML directly. ClickHouse had the only database codecs for these
-devices (`DEFLATE_QPL`, `ZSTD_QAT`). It **removed them in 26.1**.
+QATzip or DML directly. ClickHouse had built-in codecs for these devices
+(`DEFLATE_QPL`, `ZSTD_QAT`) and **removed them in 26.1**. Outside the
+engines above, RocksDB has an IAA compressor plugin (`intel/iaa-plugin-rocksdb`).
 
 ## The container contract
 
@@ -90,10 +91,16 @@ How DTO works:
 
 - It only submits to **shared** WQs (`dto.c` rejects any WQ whose `mode` is
   not `shared`).
-- It offloads calls of **`DTO_MIN_BYTES` (default 16384) or more**. Smaller
-  calls go to the CPU.
+- It offloads calls of **`DTO_MIN_BYTES` or more**. Smaller calls go to the
+  CPU. The code default is 65536 (`dto.c`: `DTO_DEFAULT_MIN_SIZE`); the
+  README says 16384.
+- Auto-tuning (`DTO_AUTO_ADJUST_KNOBS`) is **on by default**. Under load it
+  moves the threshold between 6144 and 65536 bytes (`MIN_DSA_MIN_SIZE`,
+  `MAX_DSA_MIN_SIZE`), so `DTO_MIN_BYTES` is only a starting point unless
+  auto-tuning is set to 0. The manifest sets it to 0.
 - It waits by busy-polling by default (`dto.c`: `wait_method = WAIT_BUSYPOLL`).
-  The README's env list says "yield", but the code is authoritative.
+  The README contradicts itself: its env list says "yield", its prose says
+  "busypoll". The code is authoritative.
 - Without accel-config it needs `DTO_WQ_LIST`. Its CMake adds `-march=native`,
   so **build the image on the target CPU**.
 
@@ -108,8 +115,10 @@ Evidence:
 - **Untested hypothesis:** `LD_PRELOAD`ing DTO into Redis cuts the CPU cost
   of large GET/SET values. LiteLLM stores each cached response as a single
   `json.dumps()` string (`litellm/caching/redis_cache.py`). An embedding of
-  1536 floats serialises to tens of KB, so it falls in DTO's range. Chat
-  completions mostly fall below 16 KB and stay on the CPU.
+  1536 floats serialises to tens of KB, above the manifest's fixed 16 KiB
+  threshold. Chat completions mostly fall below 16 KiB and stay on the CPU.
+  With auto-tuning left on, a loaded DSA can push the threshold to 64 KiB
+  and keep those embeddings on the CPU too.
 - **Risk:** Redis runs its event loop on one thread. A synchronous DSA wait
   still blocks that thread, so the gain is only real if the DSA-plus-CPU
   split finishes a copy sooner than the CPU alone. The A/B probe measures
@@ -125,6 +134,7 @@ containers:
   args: [redis-server, --requirepass, $(REDIS_PASSWORD)]
   env:
   - {name: DTO_MIN_BYTES, value: "16384"}
+  - {name: DTO_AUTO_ADJUST_KNOBS, value: "0"}   # keep the threshold fixed (on by default)
   - {name: DTO_USESTDC_CALLS, value: "0"}       # "1" = same binary on CPU only (A/B baseline)
   resources:
     limits: {dsa.intel.com/wq-user-shared: 1}
@@ -232,7 +242,7 @@ containers:
 - **No transparent path for zstd or lz4.** PostgreSQL's `wal_compression`
   (pglz, lz4, zstd) and TOAST (pglz, lz4) call those libraries in-process.
   Using QAT for them would mean patching PostgreSQL to register QAT-ZSTD. That
-  is an untested hypothesis, and nothing has been proposed upstream.
+  is an untested hypothesis, and no upstream proposal was found as of 2026-10-16.
 
 The QAT variant of the zlib-accel pod adds two things to the spec above:
 
@@ -569,7 +579,9 @@ redis-benchmark -h redis-dto -a "$PW" -t set,get -d <size> -n 200000 -c 50 -P 16
 
 Record ops/s, p99 and the Redis container's CPU seconds
 (`kubectl top` or cgroup `cpu.stat`). Rerun with `DTO_COLLECT_STATS=1` once
-to confirm calls ≥ 16 KiB land in the "dsa (success)" columns.
+to confirm calls ≥ 16 KiB land in the "dsa (success)" columns. This holds
+only because the manifest sets `DTO_AUTO_ADJUST_KNOBS=0`; keep it at 0 for
+both runs.
 
 Pass: the DTO run uses less CPU per op, or reaches a higher p99-bounded
 throughput, at ≥ 64 KiB. At 4 KiB it should match the baseline, because
@@ -663,7 +675,7 @@ Launchpad and Debian's archive APIs.
 - LightDSA (Redis RDB with DSA): https://dl.acm.org/doi/pdf/10.1145/3767295.3769356
 - idxd `CAP_SYS_RAWIO` gate and device table: `drivers/dma/idxd/cdev.c`, `drivers/dma/idxd/init.c`; `pasid_enabled`: `drivers/dma/idxd/sysfs.c` (torvalds/linux master)
 - vfio memlock bypass: `drivers/vfio/vfio_iommu_type1.c` (`lock_cap`)
-- IAA crypto: `Documentation/driver-api/crypto/iaa/iaa-crypto.rst`; `mm/zswap.c`; zram backends `drivers/block/zram/` (commit 84112e314f69, in v6.12); QAT acomp `drivers/crypto/intel/qat/qat_common/qat_comp_algs.c` (zstd: commit 879a4f78ea3f, in v7.1)
+- IAA crypto: `Documentation/driver-api/crypto/iaa/iaa-crypto.rst`; `mm/zswap.c`; zram backends `drivers/block/zram/` (commit 917a59e81c34 "zram: introduce custom comp backends API" drops `crypto_alloc_comp`, in v6.12); QAT acomp `drivers/crypto/intel/qat/qat_common/qat_comp_algs.c` (zstd: commit 879a4f78ea3f, in v7.1)
 - Intel device plugins v0.37.1: https://github.com/intel/intel-device-plugins-for-kubernetes (`cmd/{dsa,iaa,qat}_plugin/README.md`, `pkg/idxd/plugin.go`, `cmd/qat_plugin/dpdkdrv/dpdkdrv.go`, `demo/*`, `deployments/qat_dpdk_app/`)
 - qatlib 26.08.0 `INSTALL` (memlock, standalone mode, `QAT_POLICY`): https://github.com/intel/qatlib
 - QAT_Engine v2.3.0 (`dockerfiles/README.md`): https://github.com/intel/QAT_Engine

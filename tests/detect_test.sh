@@ -442,6 +442,22 @@ test_says "hybrid test fails when an efficient pod is not on E-cores" "${r}" fai
     STUB_POD_PHASE=Succeeded STUB_POD_LOGS_cores_performance_test="Cpus_allowed_list:	0" \
     STUB_POD_LOGS_cores_efficient_test="Cpus_allowed_list:	3" K3D_GPU_VENDORS=hybrid
 
+# DTO's auto-tuner (on by default) moves the offload threshold between 6 KiB and
+# 64 KiB under load (intel/DTO dto.c). The Redis A/B probe needs a fixed
+# DTO_MIN_BYTES, so the manifest and the doc's pod snippet must turn it off.
+ROOT="$(dirname "${K3D_GPU}")/.."
+dto_knobs_pinned() {
+    local name=$1 got
+    got=$(grep -A1 -E 'DTO_AUTO_ADJUST_KNOBS' "$2" | grep -oE '"[01]"' | head -n1)
+    if [ "${got}" = '"0"' ]; then
+        PASS=$((PASS + 1)); echo "ok   ${name}"
+    else
+        FAILS=$((FAILS + 1)); echo "FAIL ${name} (DTO_AUTO_ADJUST_KNOBS=${got:-unset})"
+    fi
+}
+dto_knobs_pinned "redis-dto.yaml pins the DTO offload threshold" "${ROOT}/examples/dataplane/redis-dto.yaml"
+dto_knobs_pinned "dataplane doc pod snippet pins the DTO offload threshold" "${ROOT}/docs/accelerated-dataplane.md"
+
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

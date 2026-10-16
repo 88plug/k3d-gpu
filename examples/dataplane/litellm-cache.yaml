@@ -1,7 +1,7 @@
 # LiteLLM proxy v1.105.1 with its response cache in the DTO-preloaded Redis
 # (redis-dto.yaml). LiteLLM stores each cached response as one json.dumps() string
 # (litellm/caching/redis_cache.py), so a cached embedding (1536 floats as JSON,
-# tens of KB) is a single large SET/GET: the size range DTO offloads.
+# tens of KB) is a single large SET/GET, above redis-dto.yaml's fixed 16 KiB threshold.
 # LiteLLM itself needs no accelerator and no change; the hypothesis under test is
 # only whether Redis-side copies of those values get faster or cheaper.
 #

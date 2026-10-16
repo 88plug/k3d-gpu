@@ -56,11 +56,13 @@ spec:
             secretKeyRef:
               name: redis-auth
               key: password
-        # DTO knobs (intel/DTO README). Latency profile: auto-tune + busypoll.
+        # DTO knobs (intel/DTO dto.c @fbf41a6). The code default threshold is 64 KiB
+        # (the README says 16 KiB). Auto-tune is on by default and moves the threshold
+        # between 6 KiB and 64 KiB under load, so it is off here: fixed 16 KiB for the A/B.
         - name: DTO_MIN_BYTES
           value: "16384"
         - name: DTO_AUTO_ADJUST_KNOBS
-          value: "1"
+          value: "0"
         - name: DTO_WAIT_METHOD
           value: busypoll
         # 1 = CPU only (the A/B baseline with the same image and binary).
