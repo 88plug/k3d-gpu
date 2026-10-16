@@ -63,6 +63,8 @@ Behaviour is tunable via environment variables:
 | `K3D_GPU_NPU_PLUGIN` | `/usr/share/k3d-gpu/intel-npu-plugin.yml` | same, for the Intel NPU plugin |
 | `K3D_GPU_DSA_PLUGIN` / `_IAA_` / `_QAT_` | `/usr/share/k3d-gpu/intel-{dsa,iaa,qat}-plugin.yml` | same, for the Xeon accelerator plugins |
 | `K3D_GPU_HYBRID_PLUGIN` | `/usr/share/k3d-gpu/nri-balloons.yml` | same, for the NRI balloons policy (hybrid and NUMA hosts) |
+| `K3D_GPU_PREFILL_GUARD` | off | opt-in, hybrid CPUs: cap E-cores of the `efficient` balloon at a kHz value or a percent of the E-core max ([prefill guard](docs/prefill-guard.md)); writes host cpufreq, `down` restores it |
+| `K3D_GPU_STATE_DIR` | `${XDG_STATE_HOME:-~/.local/state}/k3d-gpu` | where the prefill guard keeps its rendered policy and the recorded `scaling_max_freq` per cluster |
 | `K3D_GPU_DEVICE_TEST_IMAGE` | `busybox:1.37`                     | image used by `k3d-gpu test` for Intel GPU/NPU and Gaudi |
 | `K3D_GPU_TEST_IMAGE` | `nvidia/cuda:13.4.2-base-ubuntu26.04`     | image used by `k3d-gpu test`         |
 
@@ -196,8 +198,12 @@ spec:
 Unlabelled pods land in a `shared` balloon that uses every idle CPU, so nothing
 else loses capacity. kube-system runs on a one-CPU reserve. k3s turns NRI on in
 containerd for a privileged node, and the node sees the host's core-type PMUs.
-The policy only changes cpusets inside the node's cgroup. It never touches
-cpufreq, C-states or RDT. Only one NRI resource policy can own a node, so drop
+By default the policy only changes cpusets inside the node's cgroup. It never
+touches cpufreq, C-states or RDT. The one exception is opt-in: the
+[prefill guard](docs/prefill-guard.md) (`K3D_GPU_PREFILL_GUARD=50% k3d-gpu up`)
+caps the max frequency of the E-cores running `efficient` pods, because P- and
+E-cores share one package power and thermal budget. `k3d-gpu doctor --perf`
+suggests it when the package throttles. Only one NRI resource policy can own a node, so drop
 `hybrid` (and `numa`) from `K3D_GPU_VENDORS` if another stack installs its own (for example,
 Intel's Enterprise Agent Toolkit CPU balloons).
 
