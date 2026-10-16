@@ -6,6 +6,13 @@
 
 A Docker-based [rancher/k3s](https://hub.docker.com/r/rancher/k3s) node image on an [Ubuntu](https://hub.docker.com/_/ubuntu) base with the NVIDIA container toolkit baked in, so a k3d cluster can schedule your host’s accelerators — **NVIDIA GPUs, Intel Arc / Xe2 (Battlemage) GPUs, and Intel Gaudi 3 (HPU)** — exposed on `up` with no `kubectl apply`. The launcher auto-detects what the host has. Built for **Ubuntu 26.04** (default) and **24.04**.
 
+> **Intel platforms:** one `k3d-gpu up` detects and schedules `i915` Intel GPUs
+> and pins pods to P-cores or E-cores on hybrid CPUs; both have run on a real
+> i9-13900T host. It also detects and schedules `xe` Intel GPUs, the Core Ultra
+> NPU, Gaudi 3 and Xeon DSA / IAA / QAT / AMX, which so far are tested only
+> against a simulated sysfs. See **[docs/intel.md](docs/intel.md)** for the capability matrix, how
+> P/E pinning works, and how it compares with other local Kubernetes.
+
 ---
 
 ## Table of Contents
