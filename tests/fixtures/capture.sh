@@ -10,13 +10,14 @@
 #
 # Reads only vendor/device/class ids, driver bindings, device node names, GPU
 # engine names and capabilities, NUMA node CPU lists, socket ids and PCI NUMA
-# nodes, CPU 0's L3 sharing list, IMC event strings, the CPU family, model and
-# flags, the kernel release and firmware file names, plus the tuning, thermal,
-# memory, PCIe-link, IOMMU and isolation state `doctor --perf` reads. No serial
-# numbers, MACs or firmware contents are copied: SMBIOS memory records keep their
-# numeric fields only. Run as root to include the root-only inputs (CPU 0 MSRs,
-# SMBIOS type 17); /proc/1/mounts gives the host's root mount even from a
-# container with the host tree mounted as <source-root>.
+# nodes, each CPU's L2/L3 sharing lists, SMT siblings and CPPC highest_perf, IMC
+# event strings, the CPU family, model and flags, the kernel release and
+# firmware file names, plus the tuning, thermal, memory, PCIe-link, IOMMU and
+# isolation state `doctor --perf` reads. No serial numbers, MACs or firmware
+# contents are copied: SMBIOS memory records keep their numeric fields only. Run
+# as root to include the root-only inputs (CPU 0 MSRs, SMBIOS type 17);
+# /proc/1/mounts gives the host's root mount even from a container with the host
+# tree mounted as <source-root>.
 
 set -euo pipefail
 
@@ -106,7 +107,7 @@ for m in nvidia habanalabs intel_vpu xe i915 idxd; do
 done
 
 # Hybrid CPU PMUs.
-for pmu in cpu_core cpu_atom; do
+for pmu in cpu_core cpu_atom cpu_lowpower; do
     [ -d "${SRC}/sys/devices/${pmu}" ] || continue
     mkdir -p "${OUT}/sys/devices/${pmu}"
     attr "${SRC}/sys/devices/${pmu}" cpus
@@ -117,6 +118,22 @@ if [ -r "${SRC}/sys/kernel/sched_ext/state" ]; then
     mkdir -p "${OUT}/sys/kernel/sched_ext"
     attr "${SRC}/sys/kernel/sched_ext" state
 fi
+
+# Per-CPU topology: SMT siblings, CPPC highest_perf, and the L2/L3 caches
+# (level and shared_cpu_list of each cache index at level 2 or 3).
+for cpu in "${SRC}"/sys/devices/system/cpu/cpu[0-9]*; do
+    [ -d "${cpu}" ] || continue
+    for sub in topology acpi_cppc; do
+        [ -d "${cpu}/${sub}" ] || continue
+        dir "${cpu}/${sub}"
+        attr "${cpu}/${sub}" core_cpus_list highest_perf
+    done
+    for idx in "${cpu}"/cache/index*; do
+        case "$(cat "${idx}/level" 2>/dev/null)" in 2|3) ;; *) continue ;; esac
+        dir "${idx}"
+        attr "${idx}" level shared_cpu_list
+    done
+done
 
 # First CPU's family, model, model name and flags, and the kernel release.
 if [ -r "${SRC}/proc/cpuinfo" ]; then

@@ -2,15 +2,25 @@
 # Source: https://github.com/containers/nri-plugins (helm chart nri-resource-policy-balloons v0.14.0),
 # rendered with `helm template --include-crds` and the values below. Re-render to bump.
 # Scheduled only onto nodes labelled k3d-gpu.io/hybrid-cpu=true, which the k3d-gpu
-# launcher sets when /sys/devices/cpu_core and cpu_atom both list online CPUs, or
-# carrying k3d-gpu.io/numa-nodes, which it sets when the host has more than one
-# NUMA node (multi-socket or SNC Xeon, HBM/CXL memory nodes).
+# launcher sets when /sys/devices/cpu_core lists online CPUs and cpu_atom or
+# cpu_lowpower does too, or carrying k3d-gpu.io/numa-nodes, which it sets when the
+# host has more than one NUMA node (multi-socket or SNC Xeon, HBM/CXL memory nodes).
 #
-# Balloon types (first match wins):
-#   performance  pods labelled k3d-gpu.io/cores=performance -> P-cores (preferCoreType)
-#   efficient    pods labelled k3d-gpu.io/cores=efficient   -> E-cores
-#   shared       everything else, one balloon that shares every idle CPU, so
-#                unlabelled pods keep the whole machine
+# Balloon types (first match wins; the pod label is k3d-gpu.io/cores=<type>):
+#   performance     P-cores (preferCoreType)
+#   efficient       E-cores
+#   lowpower        E-core kind, for idle supervisors and heartbeats. nri-plugins
+#                   v0.14.0 has two core kinds (cpu_core, cpu_atom), so it cannot
+#                   tell an LP E-core from an E-core; `k3d-gpu doctor` lists which
+#                   CPUs are LP E-cores
+#   ecluster        4 E-cores, at most one balloon per L2 (the ecluster-l2 load),
+#                   so one balloon is one 4-core E-core cluster
+#   pcore-physical  P-cores; containers see one thread per physical core
+#                   (hideHyperthreads), the sibling stays idle
+#   latency         like pcore-physical, at most 2 CPUs per balloon; `up` also
+#                   annotates nodes k3d-gpu.io/favored-cpus with the top-CPPC CPUs
+#   shared          everything else, one balloon that shares every idle CPU, so
+#                   unlabelled pods keep the whole machine
 # A balloon is sized by its pods' CPU requests; kube-system runs on the 1-CPU reserve.
 # Only cpusets inside the node's cgroup change: no cpufreq, C-state or RDT controls.
 #
@@ -39,6 +49,8 @@
 #       podResourceAPI: true
 #     allocatorTopologyBalancing: true
 #     reservedPoolNamespaces: [kube-system]
+#     loadClasses:
+#     - {name: ecluster-l2, level: l2cache}
 #     balloonTypes:
 #     # -- NUMA replica (k3d-gpu numa vendor) --
 #     - name: replica
@@ -58,6 +70,30 @@
 #       preferCoreType: efficient
 #       matchExpressions:
 #       - {key: pod/labels/k3d-gpu.io/cores, operator: Equals, values: [efficient]}
+#     - name: lowpower
+#       preferCoreType: efficient
+#       matchExpressions:
+#       - {key: pod/labels/k3d-gpu.io/cores, operator: Equals, values: [lowpower]}
+#     - name: ecluster
+#       preferCoreType: efficient
+#       minCPUs: 4
+#       maxCPUs: 4
+#       loads: [ecluster-l2]
+#       matchExpressions:
+#       - {key: pod/labels/k3d-gpu.io/cores, operator: Equals, values: [ecluster]}
+#     - name: pcore-physical
+#       preferCoreType: performance
+#       preferSpreadOnPhysicalCores: false
+#       hideHyperthreads: true
+#       matchExpressions:
+#       - {key: pod/labels/k3d-gpu.io/cores, operator: Equals, values: [pcore-physical]}
+#     - name: latency
+#       preferCoreType: performance
+#       preferSpreadOnPhysicalCores: false
+#       hideHyperthreads: true
+#       maxCPUs: 2
+#       matchExpressions:
+#       - {key: pod/labels/k3d-gpu.io/cores, operator: Equals, values: [latency]}
 #     - name: shared
 #       shareIdleCPUsInSame: system
 #       maxBalloons: 1
@@ -1919,6 +1955,43 @@ spec:
     name: efficient
     preferCoreType: efficient
   - matchExpressions:
+    - key: pod/labels/k3d-gpu.io/cores
+      operator: Equals
+      values:
+      - lowpower
+    name: lowpower
+    preferCoreType: efficient
+  - loads:
+    - ecluster-l2
+    matchExpressions:
+    - key: pod/labels/k3d-gpu.io/cores
+      operator: Equals
+      values:
+      - ecluster
+    maxCPUs: 4
+    minCPUs: 4
+    name: ecluster
+    preferCoreType: efficient
+  - hideHyperthreads: true
+    matchExpressions:
+    - key: pod/labels/k3d-gpu.io/cores
+      operator: Equals
+      values:
+      - pcore-physical
+    name: pcore-physical
+    preferCoreType: performance
+    preferSpreadOnPhysicalCores: false
+  - hideHyperthreads: true
+    matchExpressions:
+    - key: pod/labels/k3d-gpu.io/cores
+      operator: Equals
+      values:
+      - latency
+    maxCPUs: 2
+    name: latency
+    preferCoreType: performance
+    preferSpreadOnPhysicalCores: false
+  - matchExpressions:
     - key: name
       operator: AlwaysTrue
     maxBalloons: 1
@@ -1970,6 +2043,9 @@ spec:
     prometheusExport: false
     reportPeriod: 60s
     samplingRatePerMillion: 0
+  loadClasses:
+  - level: l2cache
+    name: ecluster-l2
   log:
     debug:
     - none

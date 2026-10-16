@@ -27,3 +27,11 @@ each tree and requires an identical result).
 Not from hardware: the IAA BDF (00:0c.0), the char-device minor, the P/E CPU
 numbering (4 P then 12 E/LP-E, contiguous), the kernel release string, and the
 cpuinfo flags line.
+
+CPU topology (G3/G4 in docs/intel-capability-map.md): 4 P (Cougar Cove, no SMT)
++ 8 E in two 4-core clusters + 4 LP E, the H-series 4+8+4 tile (Wikipedia
+"Panther Lake (microprocessor)", core counts). PTL is hybrid_big_small in
+arch/x86/events/intel/core.c, so LP E-cores are in cpu_atom. Not from hardware:
+the cache/index*/ and topology/core_cpus_list files. The LP E-cores 12-15 carry no
+L3 entry, as on the Meteor Lake and Arrow Lake LP island; that Panther Lake's
+LP E-cores report no L3 is UNVERIFIED (no Panther Lake capture yet).

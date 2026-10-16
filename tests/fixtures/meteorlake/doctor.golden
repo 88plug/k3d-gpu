@@ -1,0 +1,14 @@
+==> Checking docker...
+  ok: docker running
+==> Checking k3d...
+  ok: k3d version v0.0.0-stub
+==> Checking kubectl...
+  ok
+==> Detected accelerators: hybrid
+==> Intel CPU built-in accelerators...
+  ok: hybrid CPU: P-cores 0-11, E-cores 12-19, LP E-cores 20-21 — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient|lowpower|ecluster|pcore-physical|latency
+  ok: E-core clusters (shared L2): 12-15 16-19 — k3d-gpu.io/cores=ecluster gives a pod 4 E-cores of one cluster
+  ok: physical P-cores (one thread per core): 0,2,4,6,8,10 — k3d-gpu.io/cores=pcore-physical and latency show pods one thread per core
+
+==> All checks passed.
+exit=0

@@ -114,7 +114,7 @@ the plugins, and asserts the result, with no manual step.
 | QAT (C62x, 4xxx, 420xx, 6xxx) | `qat.intel.com/*` | yes | yes | no | 4xxx and C62x PF with VFs, no VFs, unbound PF, `vfio-pci` check |
 | AMX | `feature.node.kubernetes.io/cpu-cpuid.AMX*=true` (labels, no plugin) | yes | yes (labels) | no | AMX flags detected and reported; CPU without AMX |
 | CPU ISA (AVX-VNNI, AVX-512, VAES, GFNI, SHA, CET) | `feature.node.kubernetes.io/cpu-cpuid.<NAME>=true` (NFD names, labels only) | yes | yes (labels) | labels read on the UHD 770 host by `doctor`; not applied to a live cluster | NFD name mapping, `pku` unlabelled, no-flag CPU |
-| Hybrid P/E cores | `k3d-gpu.io/hybrid-cpu=true`; pod label `k3d-gpu.io/cores` | yes | yes | **yes** at `109154d`: performance pod on CPU 0, efficient pod on CPU 20. The strict placement check in `test` is sim-only so far. | detection, no online E-cores, non-hybrid, forced, `doctor` lists, `test` placement pass and both failure modes |
+| Hybrid P/E cores | `k3d-gpu.io/hybrid-cpu=true`; pod label `k3d-gpu.io/cores` | yes | yes | **yes** at `109154d`: performance pod on CPU 0, efficient pod on CPU 20. The strict placement check in `test` is sim-only so far. The `lowpower`, `ecluster`, `pcore-physical` and `latency` balloons and the Arrow Lake-H `cpu_lowpower` override are sim-only (UNVERIFIED live). | detection, no online E-cores, non-hybrid, forced, `doctor` lists, `test` placement pass and both failure modes; `cpu_lowpower` and no-L3 LP E-cores, E-core clusters, physical P-cores, favored CPUs from CPPC and MSR `0x771` |
 
 The `xe`, NPU, Gaudi and Xeon rows have not run on hardware. If you have one of
 these platforms, `k3d-gpu doctor && k3d-gpu up && k3d-gpu test` is the probe that
@@ -164,20 +164,76 @@ are copied from the ledger and nowhere else.
 
 Intel hybrid CPUs (Alder Lake and newer) expose two perf PMUs:
 `/sys/devices/cpu_core/cpus` lists the P-cores and `/sys/devices/cpu_atom/cpus`
-the E-cores. When both list online CPUs, the launcher labels the node
+the E-cores. Arrow Lake-H adds a third, `/sys/devices/cpu_lowpower/cpus`, for its
+LP E-cores (kernel 6.13 and newer, `arch/x86/events/intel/core.c`). When
+`cpu_core` and one of the E-core PMUs list online CPUs, the launcher labels the node
 `k3d-gpu.io/hybrid-cpu=true`. That label lets the baked
 `nri-resource-policy-balloons` DaemonSet schedule. k3s already enables NRI in
 its containerd for a privileged node, and the node container sees the host's
 PMUs, so neither the host nor containerd needs changes.
 
 The `BalloonsPolicy` `default` in `kube-system` (`share/nri-balloons.yml`) has
-three balloon types. The first match wins:
+seven balloon types. Each but `shared` matches one value of the pod label
+`k3d-gpu.io/cores`. The first match wins:
 
-| Balloon | Matches | CPUs |
-|---------|---------|------|
-| `performance` | pod label `k3d-gpu.io/cores=performance` | P-cores (`preferCoreType: performance`) |
-| `efficient` | pod label `k3d-gpu.io/cores=efficient` | E-cores (`preferCoreType: efficient`) |
+| Balloon | Pod label value | CPUs |
+|---------|-----------------|------|
+| `performance` | `performance` | P-cores (`preferCoreType: performance`) |
+| `efficient` | `efficient` | E-cores (`preferCoreType: efficient`) |
+| `lowpower` | `lowpower` | E-core kind (`preferCoreType: efficient`), for idle supervisors and heartbeats |
+| `ecluster` | `ecluster` | 4 E-cores (`minCPUs` = `maxCPUs` = 4); the `ecluster-l2` load (`level: l2cache`) keeps two such balloons off one L2, so each is one 4-core E-core cluster |
+| `pcore-physical` | `pcore-physical` | P-cores, one thread per physical core visible to the pod (`hideHyperthreads`); the sibling stays idle |
+| `latency` | `latency` | as `pcore-physical`, at most 2 CPUs (`maxCPUs: 2`), for a sampler, tokenizer, event loop or GPU feeder thread |
 | `shared` | everything else (`AlwaysTrue`, `maxBalloons: 1`) | every idle CPU (`shareIdleCPUsInSame: system`) |
+
+On a part with SMT, a `pcore-physical` or `latency` pod requests 2 CPUs per
+physical core it wants, since the balloon holds both threads and shows one.
+Every option above is in the balloons CRD of nri-plugins v0.14.0;
+`tests/nri_balloons_check.py` checks the shipped policy against the CRD in
+the same file, because the API server drops unknown fields without an error.
+
+What nri-plugins v0.14.0 cannot do, and what the launcher does instead:
+
+- **Two core kinds only.** `pkg/sysfs/system.go` reads `cpu_core` and `cpu_atom`
+  and refuses to start while an online CPU is in neither (`checkCoreKinds`). On
+  Arrow Lake-H, `up` therefore sets `OVERRIDE_SYS_ATOM_CPUS` (cpu_atom plus
+  cpu_lowpower) on the DaemonSet with `kubectl set env`. The same two kinds mean
+  the `lowpower` balloon is an E-core balloon: nri-plugins cannot tell an LP
+  E-core from an E-core. `k3d-gpu doctor` lists the LP E-cores (the
+  `cpu_lowpower` CPUs, and the `cpu_atom` CPUs with no L3 in
+  `cache/index*/level`, the Meteor Lake LP E-core layout).
+- **No CPPC ranking.** The allocator ranks CPUs by base frequency and EPP, not by
+  `acpi_cppc/highest_perf`. `up` annotates every node
+  `k3d-gpu.io/favored-cpus=<list>` with the CPUs at the top `highest_perf`
+  (bits 7:0 of MSR `0x771` when no CPU has CPPC and `/dev/cpu/N/msr` is
+  readable). On the i9-13900T that is `8-11` (68, against 65 on the other
+  P-cores and 39 on the E-cores). The `latency` balloon lands on P-cores; that
+  it lands on the favored ones is not guaranteed.
+
+`k3d-gpu doctor` prints what it found: LP E-cores, E-core clusters (distinct
+`cache/index2/shared_cpu_list`), physical P-cores (first CPU of each
+`topology/core_cpus_list`) and favored CPUs.
+
+The four new balloon types and the Arrow Lake-H override are UNVERIFIED on a
+live cluster: the sim matrix checks detection, `doctor` and the `up` calls,
+not where nri-plugins puts the cpusets. The probe, on a warm `k3d-gpu up`
+cluster:
+
+```bash
+for t in lowpower ecluster pcore-physical latency; do
+  kubectl run "cores-${t}" --image=busybox:1.37 --restart=Never --labels="k3d-gpu.io/cores=${t}" \
+    --overrides='{"spec":{"containers":[{"name":"c","image":"busybox:1.37","command":["grep","Cpus_allowed_list","/proc/self/status"],"resources":{"requests":{"cpu":"2"},"limits":{"cpu":"2"}}}]}}'
+done
+sleep 20; for t in lowpower ecluster pcore-physical latency; do echo "${t}: $(kubectl logs "cores-${t}")"; done
+kubectl get nodes -o jsonpath='{.items[*].metadata.annotations.k3d-gpu\.io/favored-cpus}'; echo
+kubectl delete pod cores-lowpower cores-ecluster cores-pcore-physical cores-latency
+```
+
+On the i9-13900T the expected result is: `lowpower` inside `16-31`;
+`ecluster` exactly one of `16-19`, `20-23`, `24-27`, `28-31`; `pcore-physical`
+and `latency` one CPU of one P-core pair (for example `0`); the annotation
+`8-11`. On Arrow Lake-H, `kubectl -n kube-system logs ds/nri-resource-policy-balloons`
+must not contain `neither marked to be of any core type`.
 
 A balloon is sized by its pods' CPU requests. `kube-system` runs on a 1-CPU
 reserve (`reservedResources.cpu: 1000m`). The policy only sets cpusets inside
@@ -196,6 +252,7 @@ flowchart LR
         ds["DaemonSet<br/>nri-resource-policy-balloons v0.14.0"] -->|NRI| ctrd["k3s containerd"]
         ctrd --> perf["balloon: performance<br/>cpuset on P-cores"]
         ctrd --> eff["balloon: efficient<br/>cpuset on E-cores"]
+        ctrd --> more["balloons: lowpower, ecluster,<br/>pcore-physical, latency"]
         ctrd --> shared["balloon: shared<br/>all idle CPUs"]
     end
     p1["pod<br/>k3d-gpu.io/cores=performance"] --> perf
@@ -223,7 +280,8 @@ spec:
 ```
 
 `k3d-gpu test` runs one such pod per core type. It fails unless the pod's
-`Cpus_allowed_list` sits inside the host's P-core or E-core list. A plain grep
+`Cpus_allowed_list` sits inside the host's P-core or E-core list (on Arrow
+Lake-H the E-core list includes `cpu_lowpower`). A plain grep
 would also pass with NRI off. On the i9-13900T, under the earlier grep-only
 `test` (`109154d`), the performance pod ran on CPU 0, the efficient pod on
 CPU 20, and an unlabelled pod could use `0-15,17-31`, every CPU except the

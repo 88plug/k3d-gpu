@@ -558,6 +558,86 @@ r=$(newroot hybrid-doc-forced)
 kernel "${r}" 6.18.1
 doctor_says "forced hybrid on a non-hybrid CPU fails doctor" "${r}" 'fail.*hybrid' "" K3D_GPU_VENDORS=hybrid
 
+# CPU topology sysfs (Documentation/ABI/stable/sysfs-devices-system-cpu,
+# Documentation/ABI/testing/sysfs-devices-system-cpu).
+# cpucache <root> <cpu> <level> <shared_cpu_list>: cpu<cpu>/cache/index<level>.
+cpucache() {
+    local d="$1/sys/devices/system/cpu/cpu$2/cache/index$3"
+    mkdir -p "${d}"; echo "$3" > "${d}/level"; echo "$4" > "${d}/shared_cpu_list"
+}
+# corecpus <root> <cpu> <core_cpus_list>; cppc <root> <cpu> <highest_perf>.
+corecpus() { mkdir -p "$1/sys/devices/system/cpu/cpu$2/topology"; echo "$3" > "$1/sys/devices/system/cpu/cpu$2/topology/core_cpus_list"; }
+cppc() { mkdir -p "$1/sys/devices/system/cpu/cpu$2/acpi_cppc"; echo "$3" > "$1/sys/devices/system/cpu/cpu$2/acpi_cppc/highest_perf"; }
+
+# Arrow Lake-H: LP E-cores in a third PMU, cpu_lowpower (events/intel/core.c, 6.13+).
+r=$(newroot arl-h)
+kernel "${r}" 6.18.1
+hybrid "${r}" 0-5 6-13
+mkdir -p "${r}/sys/devices/cpu_lowpower"; echo 14-15 > "${r}/sys/devices/cpu_lowpower/cpus"
+expect "P + E + cpu_lowpower is hybrid" "${r}" "hybrid k3d-gpu.io/hybrid-cpu=true"
+doctor_says "doctor lists cpu_lowpower CPUs as LP E-cores" "${r}" 'ok: hybrid CPU: P-cores 0-5, E-cores 6-13, LP E-cores 14-15 '
+r=$(newroot p-and-lp-only)
+hybrid "${r}" 0-5 ""
+mkdir -p "${r}/sys/devices/cpu_lowpower"; echo 6-7 > "${r}/sys/devices/cpu_lowpower/cpus"
+expect "P-cores plus LP E-cores only is hybrid" "${r}" "hybrid k3d-gpu.io/hybrid-cpu=true"
+
+# Meteor Lake / Panther Lake: LP E-cores sit in cpu_atom but have no L3.
+r=$(newroot mtl)
+kernel "${r}" 6.18.1
+hybrid "${r}" 0-11 12-21
+for c in $(seq 0 19); do cpucache "${r}" "${c}" 3 0-19; done
+for c in $(seq 0 2 10); do for t in "${c}" $((c + 1)); do cpucache "${r}" "${t}" 2 "${c}-$((c + 1))"; corecpus "${r}" "${t}" "${c}-$((c + 1))"; done; done
+for c in $(seq 12 15); do cpucache "${r}" "${c}" 2 12-15; corecpus "${r}" "${c}" "${c}"; done
+for c in $(seq 16 19); do cpucache "${r}" "${c}" 2 16-19; corecpus "${r}" "${c}" "${c}"; done
+for c in 20 21; do cpucache "${r}" "${c}" 2 20-21; corecpus "${r}" "${c}" "${c}"; done
+doctor_says "atom CPUs without an L3 are LP E-cores" "${r}" 'ok: hybrid CPU: P-cores 0-11, E-cores 12-19, LP E-cores 20-21 '
+doctor_says "doctor offers the new core labels" "${r}" 'k3d-gpu.io/cores=performance\|efficient\|lowpower\|ecluster\|pcore-physical\|latency'
+doctor_says "E-core clusters come from the shared L2" "${r}" 'ok: E-core clusters \(shared L2\): 12-15 16-19 '
+doctor_says "physical P-cores are the first thread of each core" "${r}" 'ok: physical P-cores \(one thread per core\): 0,2,4,6,8,10 '
+doctor_says "no CPPC data, no favored CPUs" "${r}" 'favored' negate
+for c in $(seq 0 21); do
+    mkdir -p "${r}/sys/devices/system/cpu/cpu${c}/cpufreq"
+    echo powersave > "${r}/sys/devices/system/cpu/cpu${c}/cpufreq/scaling_governor"
+    echo balance_performance > "${r}/sys/devices/system/cpu/cpu${c}/cpufreq/energy_performance_preference"
+    echo intel_pstate > "${r}/sys/devices/system/cpu/cpu${c}/cpufreq/scaling_driver"
+done
+perf_mtl() { env K3D_GPU_SYSROOT="${r}" PATH="${STUB_BIN}:${PATH}" bash "${K3D_GPU}" doctor --perf 2>&1; }
+if grep -qE 'ok: +LP E-cores 20-21: governor powersave, EPP balance_performance' <<< "$(perf_mtl)"; then
+    PASS=$((PASS + 1)); echo "ok   perf: LP E-cores are their own group"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL perf: LP E-cores are their own group"; perf_mtl | sed 's/^/  | /'
+fi
+
+r=$(newroot mtl-no-cache)
+kernel "${r}" 6.18.1
+hybrid "${r}" 0-11 12-21
+doctor_says "without cache sysfs no atom CPU is called LP" "${r}" 'ok: hybrid CPU: P-cores 0-11, E-cores 12-21 '
+doctor_says "without cache sysfs no LP line" "${r}" 'LP E-cores' negate
+
+# Favored cores (ITMT): CPPC highest_perf, 68 on 8-11 vs 65 on the other P-cores
+# and 39 on E-cores, as read on the i9-13900T development host.
+r=$(newroot favored)
+kernel "${r}" 6.18.1
+hybrid "${r}" 0-15 16-31
+for c in $(seq 0 31); do cppc "${r}" "${c}" 65; done
+for c in 8 9 10 11; do cppc "${r}" "${c}" 68; done
+for c in $(seq 16 31); do cppc "${r}" "${c}" 39; done
+doctor_says "argmax of acpi_cppc/highest_perf is the favored set" "${r}" 'ok: favored CPUs 8-11 \(highest_perf 68, next 65\)'
+r=$(newroot not-favored)
+kernel "${r}" 6.18.1
+hybrid "${r}" 0-3 4-7
+for c in $(seq 0 7); do cppc "${r}" "${c}" 40; done
+doctor_says "equal highest_perf everywhere means no favored CPUs" "${r}" 'favored' negate
+# No CPPC: IA32_HWP_CAPABILITIES (MSR 0x771) bits 7:0 through a readable /dev/cpu/N/msr.
+r=$(newroot favored-msr)
+kernel "${r}" 6.18.1
+hybrid "${r}" 0-1 2-3
+for c in 0 1 2 3; do
+    mkdir -p "${r}/dev/cpu/${c}"
+    { head -c $((0x771)) /dev/zero; printf "\\$(printf '%03o' "$([ "${c}" = 1 ] && echo 70 || echo 50)")"; head -c 7 /dev/zero; } > "${r}/dev/cpu/${c}/msr"
+done
+doctor_says "MSR 0x771 highest perf is the fallback" "${r}" 'ok: favored CPUs 1 \(highest_perf 70, next 50\)'
+
 # ---- NUMA / SNC (Xeon) ----------------------------------------------------------
 
 # node <root> <n> <cpulist> [package]: NUMA node n; "" is a memory-only node (HBM,
@@ -899,6 +979,12 @@ test_says "hybrid test fails when a performance pod is not on P-cores" "${r}" fa
 test_says "hybrid test fails when an efficient pod is not on E-cores" "${r}" fail 'not on the efficient CPUs' \
     STUB_POD_PHASE=Succeeded STUB_POD_LOGS_cores_performance_test="Cpus_allowed_list:	0" \
     STUB_POD_LOGS_cores_efficient_test="Cpus_allowed_list:	3" K3D_GPU_VENDORS=hybrid
+# On Arrow Lake-H up hands cpu_lowpower to the balloons E-core kind, so an
+# efficient pod may land there.
+mkdir -p "${r}/sys/devices/cpu_lowpower"; echo 32-33 > "${r}/sys/devices/cpu_lowpower/cpus"
+test_says "hybrid test accepts an efficient pod on a cpu_lowpower CPU" "${r}" 0 'Cpus_allowed_list' \
+    STUB_POD_PHASE=Succeeded STUB_POD_LOGS_cores_performance_test="Cpus_allowed_list:	0" \
+    STUB_POD_LOGS_cores_efficient_test="Cpus_allowed_list:	32" K3D_GPU_VENDORS=hybrid
 
 # DTO's auto-tuner (on by default) moves the offload threshold between 6 KiB and
 # 64 KiB under load (intel/DTO dto.c). The Redis A/B probe needs a fixed
@@ -915,6 +1001,27 @@ dto_knobs_pinned() {
 }
 dto_knobs_pinned "redis-dto.yaml pins the DTO offload threshold" "${ROOT}/examples/dataplane/redis-dto.yaml"
 dto_knobs_pinned "dataplane doc pod snippet pins the DTO offload threshold" "${ROOT}/docs/accelerated-dataplane.md"
+
+# The API server drops balloon options its CRD schema does not list, so every
+# option in the shipped BalloonsPolicy must be in the CRD shipped beside it.
+if python3 -c 'import yaml' 2>/dev/null; then
+    if out=$(python3 "${ROOT}/tests/nri_balloons_check.py" 2>&1); then
+        PASS=$((PASS + 1)); echo "ok   nri-balloons.yml BalloonsPolicy matches its CRD schema"
+    else
+        FAILS=$((FAILS + 1)); echo "FAIL nri-balloons.yml BalloonsPolicy matches its CRD schema"; sed 's/^/  | /' <<< "${out}"
+    fi
+else
+    echo "skip nri-balloons.yml schema check (python3 yaml module missing)"
+fi
+# Each k3d-gpu.io/cores value doctor offers has a balloon type of that name.
+for t in performance efficient lowpower ecluster pcore-physical latency; do
+    if grep -qx "    name: ${t}" "${ROOT}/share/nri-balloons.yml" \
+       && grep -q -- "- {key: pod/labels/k3d-gpu.io/cores, operator: Equals, values: \[${t}\]}" "${ROOT}/share/nri-balloons.yml"; then
+        PASS=$((PASS + 1)); echo "ok   nri-balloons.yml has balloon type ${t}"
+    else
+        FAILS=$((FAILS + 1)); echo "FAIL nri-balloons.yml has balloon type ${t}"
+    fi
+done
 
 # ---- docs ---------------------------------------------------------------------
 

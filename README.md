@@ -197,7 +197,7 @@ so a pod picks its core type with one label:
 ```yaml
 metadata:
   labels:
-    k3d-gpu.io/cores: performance   # or: efficient
+    k3d-gpu.io/cores: performance   # or: efficient, lowpower, ecluster, pcore-physical, latency
 spec:
   containers:
   - name: app
@@ -206,7 +206,7 @@ spec:
 
 | Vendor key | Active when the host has | Kubernetes exposes |
 |------------|--------------------------|--------------------|
-| `hybrid` | online CPUs in both `/sys/devices/cpu_core` and `/sys/devices/cpu_atom` | node label `k3d-gpu.io/hybrid-cpu=true`; pod label `k3d-gpu.io/cores=performance\|efficient` pins to P- or E-cores |
+| `hybrid` | online CPUs in `/sys/devices/cpu_core` and in `/sys/devices/cpu_atom` or `cpu_lowpower` | node label `k3d-gpu.io/hybrid-cpu=true`; pod label `k3d-gpu.io/cores=performance\|efficient` pins to P- or E-cores; `lowpower\|ecluster\|pcore-physical\|latency` are further balloon types ([how](docs/intel.md#how-hybrid-pe-pinning-works)); node annotation `k3d-gpu.io/favored-cpus` when CPPC ranks some CPUs above the rest |
 
 Unlabelled pods land in a `shared` balloon that uses every idle CPU, so nothing
 else loses capacity. kube-system runs on a one-CPU reserve. k3s turns NRI on in

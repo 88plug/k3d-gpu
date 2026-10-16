@@ -12,18 +12,12 @@
 ==> Checking docker NVIDIA runtime...
   ok: no nvidia runtime, but nvidia.com/gpu CDI devices are registered (--gpus uses CDI)
 ==> Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...
-  ok: Intel Raptor Lake-S (0xa780) bound to i915
-  ok: i915/tgl_guc_* firmware present
-  ok: card0 media engines: vcs0 (hevc sfc), vcs1 (hevc sfc), vecs0 (sfc)
-  ok: up labels the node gpu.intel.com/xmx=false gpu.intel.com/media-vcs=2 gpu.intel.com/media-vecs=1
+  ok: Intel GPU (0xa780) bound to i915
 ==> Intel CPU built-in accelerators...
-  ok: CPU ISA: AVXVNNI CETIBT CETSS GFNI SHA VAES — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
-  ok: hybrid CPU: P-cores 0-15, E-cores 16-31 — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient
-==> Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...
-  ok: dra available (auto)
-  ok: image-volume available (auto)
+  ok: hybrid CPU: P-cores 0-15, E-cores 16-31 — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient|lowpower|ecluster|pcore-physical|latency
+  ok: E-core clusters (shared L2): 16-19 20-23 24-27 28-31 — k3d-gpu.io/cores=ecluster gives a pod 4 E-cores of one cluster
+  ok: physical P-cores (one thread per core): 0,2,4,6,8,10,12,14 — k3d-gpu.io/cores=pcore-physical and latency show pods one thread per core
+  ok: favored CPUs 8-11 (highest_perf 68, next 65) — up annotates nodes k3d-gpu.io/favored-cpus=8-11
 
 ==> All checks passed.
 exit=0
---- calls
-kubectl --context k3d-gpu --request-timeout=5s get nodes -o name

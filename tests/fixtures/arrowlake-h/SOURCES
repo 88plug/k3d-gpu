@@ -1,5 +1,6 @@
 Platform: Core Ultra 9 285H laptop (Arrow Lake-H): Xe-LPG+ iGPU with XMX on i915,
-NPU 3 on intel_vpu, hybrid P/E cores, firmware installed.
+NPU 3 on intel_vpu, firmware installed, and a hybrid CPU of 6 P-cores without SMT,
+8 E-cores in two 4-core clusters and 2 LP E-cores.
 
 Sources (kernel paths are Linux v6.18 (torvalds/linux tag v6.18) unless a tag is named):
 - 0x8086 0x7d51 "Arrow Lake-P [Arc Pro 130T/140T]": pci.ids 2026.10.15; INTEL_ARL_H_IDS
@@ -17,6 +18,18 @@ Sources (kernel paths are Linux v6.18 (torvalds/linux tag v6.18) unless a tag is
   It is a guest's view: it carries "hypervisor" and lacks the CET and PKU flags a
   bare-metal kernel would print.
 - cpu_core/cpu_atom files: tools/perf/Documentation/intel-hybrid.txt.
+- 6 P + 8 E + 2 LP E, 16 threads: Intel ark, Core Ultra 9 285H (product 241747),
+  as listed in Wikipedia "Arrow Lake (microprocessor)", Arrow Lake-H table.
+- The LP E-cores are SoC-tile Crestmont cores with no L3 (same article, SoC tile).
+- cpu_lowpower: INTEL_ARROWLAKE_H is intel_pmu_init_hybrid(hybrid_big_small_tiny)
+  in arch/x86/events/intel/core.c, and hybrid_tiny is the "cpu_lowpower" PMU;
+  CPUs with the Crestmont native model id go there, Skymont ones to cpu_atom.
+  The name first appears in v6.13.
+- cache/index*/level and shared_cpu_list, topology/core_cpus_list:
+  Documentation/ABI/testing/sysfs-devices-system-cpu.
+- up sets OVERRIDE_SYS_ATOM_CPUS on the balloons DaemonSet: nri-plugins v0.14.0
+  pkg/sysfs/system.go reads only cpu_core and cpu_atom and fails checkCoreKinds
+  when an online CPU is in neither.
 
 Layout: sysfs paths and relative symlinks follow the driver core's naming
 (class devices under <pci dev>/<class>/<name>; /sys/class/<class>/<name> and
@@ -24,7 +37,7 @@ Layout: sysfs paths and relative symlinks follow the driver core's naming
 in exactly the form tests/fixtures/capture.sh writes (the matrix test re-captures
 each tree and requires an identical result).
 
-Not from hardware: the kernel release string, the P/E CPU numbering (6 P-cores 0-5,
-8 E-cores 6-13; the 2 low-power E-cores are not listed in cpu_core or cpu_atom),
-the iGPU at 00:02.0 and NPU at 00:0b.0 (Intel client BDFs), and the absence of
-i915 engine directories.
+Not from hardware: the kernel release string, the CPU numbering (P 0-5, E 6-13,
+LP E 14-15), the cache index numbering, the iGPU at 00:02.0 and NPU at 00:0b.0
+(Intel client BDFs), and the absence of i915 engine directories. No acpi_cppc
+files, so no favored CPUs are reported.
