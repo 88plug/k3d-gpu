@@ -202,7 +202,8 @@ def corunner(w, wl, engine):
 
 def kappa_probe(w, comp):
     """Two-point clock-scaling run of a P-core component, alone: caps 5.3 and 3.0 GHz."""
-    t = lambda f: comp["C"] * comp.get("l2x", 1.0) / f + comp["B"] / comp["bw1"] + comp.get("io_s", 0.0)
+    def t(f):
+        return comp["C"] * comp.get("l2x", 1.0) / f + comp["B"] / comp["bw1"] + comp.get("io_s", 0.0)
     return pt.kappa_from_scaling(w.jitter(t(5.3), 0.01), w.jitter(t(3.0), 0.01), 5.3, 3.0)
 
 

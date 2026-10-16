@@ -109,7 +109,8 @@ class Models(unittest.TestCase):
 class Kappa(unittest.TestCase):
     def test_scaling_recovers_compute_share(self):
         for share in (0.0, 0.3, 0.8, 1.0):
-            t = lambda f: share * 5.3 / f + (1 - share)   # 1 s at 5.3 GHz, share scales with clock
+            def t(f, share=share):   # 1 s at 5.3 GHz; `share` of it scales with clock
+                return share * 5.3 / f + (1 - share)
             self.assertAlmostEqual(pt.kappa_from_scaling(t(5.3), t(3.0), 5.3, 3.0), share, places=12)
 
     def test_kappa_on_e(self):
