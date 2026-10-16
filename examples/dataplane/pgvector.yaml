@@ -1,0 +1,90 @@
+# pgvector 0.8.7 on PostgreSQL 18: the agent's vector / RAG store.
+#
+# No accelerator in this pod, on purpose. PostgreSQL has no pluggable compression
+# hook (TOAST: pglz or lz4; wal_compression: pglz, lz4, zstd, all in-process
+# software), and pgvector declares vector, halfvec and sparsevec STORAGE = external,
+# so vector columns are stored out of line but never compressed. Paths that do
+# reach DSA/IAA/QAT for this tier sit outside the server process:
+#   - backups: pgvector-backup.yaml (pg_dump --compress=gzip through zlib-accel);
+#   - memory pressure: host zswap on IAA (iaa_crypto) or QAT (qat_deflate/qat_zstd),
+#     which this Burstable pod reaches only with kubelet swap set to LimitedSwap.
+# See docs/accelerated-dataplane.md, "PostgreSQL and pgvector".
+#
+#   kubectl create secret generic pgvector-auth -n dataplane --from-literal=password=<pw>
+#   kubectl apply -f examples/dataplane/pgvector.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: pgvector
+  namespace: dataplane
+  labels:
+    app: pgvector
+spec:
+  serviceName: pgvector
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pgvector
+  template:
+    metadata:
+      labels:
+        app: pgvector
+    spec:
+      containers:
+      - name: postgres
+        image: pgvector/pgvector:0.8.7-pg18-trixie
+        args:
+        - -c
+        - wal_compression=lz4
+        - -c
+        - default_toast_compression=lz4
+        env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: pgvector-auth
+              key: password
+        - name: POSTGRES_DB
+          value: rag
+        ports:
+        - name: postgres
+          containerPort: 5432
+        readinessProbe:
+          exec:
+            command: ["pg_isready", "-U", "postgres", "-d", "rag"]
+          periodSeconds: 5
+        resources:
+          requests:
+            cpu: "1"
+            memory: 2Gi
+          limits:
+            memory: 4Gi
+        volumeMounts:
+        # PostgreSQL 18 images keep PGDATA at /var/lib/postgresql/18/docker and
+        # expect the volume one level up (docker-library/postgres 18 Dockerfile).
+        - name: data
+          mountPath: /var/lib/postgresql
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: local-path
+      resources:
+        requests:
+          storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgvector
+  namespace: dataplane
+  labels:
+    app: pgvector
+spec:
+  selector:
+    app: pgvector
+  ports:
+  - name: postgres
+    port: 5432
+    targetPort: postgres

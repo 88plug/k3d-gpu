@@ -1,0 +1,197 @@
+# Nightly pg_dump of the pgvector database with gzip done by QAT or IAA, through
+# Intel zlib-accel preloaded into pg_dump (no PostgreSQL change).
+# PROVEN ELSEWHERE: zlib-accel v1.1.0 README lists "pg_dump --format=directory
+# --compress=gzip" as a tested use case. UNTESTED on k3d.
+#
+# Use --format=directory: its per-table files go through gzopen()/gzwrite()
+# (pg_dump compress_gzip.c), which zlib-accel buffers into whole gzip members it can
+# offload. The custom format (-Fc) streams deflate(Z_NO_FLUSH), which zlib-accel
+# leaves on software zlib for QAT and IAA (only IGZIP takes streaming calls).
+#
+# Pick ONE CronJob: pgdump-qat needs a QAT PF configured for "dc";
+# pgdump-iaa needs an IAA user work queue. Image: images/pg-zlib-accel.Dockerfile.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: zlib-accel-config
+  namespace: dataplane
+data:
+  # Keys and defaults from intel/zlib-accel config/default_config (v1.1.0).
+  # Software zlib stays enabled as the fallback for anything not offloadable.
+  qat.conf: |
+    use_qat_compress = 1
+    use_qat_uncompress = 1
+    use_iaa_compress = 0
+    use_iaa_uncompress = 0
+    use_zlib_compress = 1
+    use_zlib_uncompress = 1
+    qat_periodical_polling = 0
+    qat_compression_level = 1
+    qat_compression_allow_chunking = 0
+    log_level = 2
+    log_file = /backup/zlib-accel-qat.log
+  iaa.conf: |
+    use_qat_compress = 0
+    use_qat_uncompress = 0
+    use_iaa_compress = 1
+    use_iaa_uncompress = 1
+    use_zlib_compress = 1
+    use_zlib_uncompress = 1
+    log_level = 2
+    log_file = /backup/zlib-accel-iaa.log
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pgvector-backup
+  namespace: dataplane
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pgdump-qat
+  namespace: dataplane
+  labels:
+    app: pgdump
+    accel: qat
+spec:
+  schedule: "17 3 * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            app: pgdump
+            accel: qat
+        spec:
+          restartPolicy: Never
+          containers:
+          - name: pgdump
+            image: k3d-gpu/pg-zlib-accel:18-zla1.1.0
+            imagePullPolicy: Never
+            command: ["/bin/sh", "-c"]
+            args:
+            - >-
+              out=/backup/rag-$(date +%Y%m%dT%H%M%S)-qat &&
+              LD_PRELOAD=/usr/local/lib/libzlib-accel.so
+              pg_dump -h pgvector.dataplane.svc -U postgres -d rag
+              --format=directory --compress=gzip:1 --jobs=4 --file="${out}" &&
+              du -sh "${out}"
+            env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: pgvector-auth
+                  key: password
+            # qatlib standalone mode (no qatmgr in the container); 1 = one VF per process.
+            - name: QAT_POLICY
+              value: "1"
+            resources:
+              requests:
+                cpu: "4"
+                memory: 1Gi
+              limits:
+                memory: 2Gi
+                qat.intel.com/dc: 1
+            securityContext:
+              runAsUser: 0
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+                add:
+                # vfio type1 pins qatlib's DMA buffers; CAP_IPC_LOCK skips the
+                # RLIMIT_MEMLOCK check (qatlib wants >= 16 MiB per VF plus the app's
+                # buffers, and pods inherit dockerd's limit, often 8 MiB).
+                - IPC_LOCK
+            volumeMounts:
+            - name: backup
+              mountPath: /backup
+            - name: zlib-accel-config
+              mountPath: /etc/zlib-accel.conf
+              subPath: qat.conf
+          volumes:
+          - name: backup
+            persistentVolumeClaim:
+              claimName: pgvector-backup
+          - name: zlib-accel-config
+            configMap:
+              name: zlib-accel-config
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pgdump-iaa
+  namespace: dataplane
+  labels:
+    app: pgdump
+    accel: iaa
+spec:
+  schedule: "47 3 * * *"
+  suspend: true
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            app: pgdump
+            accel: iaa
+        spec:
+          restartPolicy: Never
+          containers:
+          - name: pgdump
+            image: k3d-gpu/pg-zlib-accel:18-zla1.1.0
+            imagePullPolicy: Never
+            command: ["/bin/sh", "-c"]
+            args:
+            - >-
+              out=/backup/rag-$(date +%Y%m%dT%H%M%S)-iaa &&
+              LD_PRELOAD=/usr/local/lib/libzlib-accel.so
+              pg_dump -h pgvector.dataplane.svc -U postgres -d rag
+              --format=directory --compress=gzip:1 --jobs=4 --file="${out}" &&
+              du -sh "${out}"
+            env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: pgvector-auth
+                  key: password
+            resources:
+              requests:
+                cpu: "4"
+                memory: 1Gi
+              limits:
+                memory: 2Gi
+                iaa.intel.com/wq-user-dedicated: 1
+            securityContext:
+              # Same idxd CAP_SYS_RAWIO gate as DSA (INTEL-SA-01084).
+              runAsUser: 0
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+                add:
+                - SYS_RAWIO
+            volumeMounts:
+            - name: backup
+              mountPath: /backup
+            - name: zlib-accel-config
+              mountPath: /etc/zlib-accel.conf
+              subPath: iaa.conf
+          volumes:
+          - name: backup
+            persistentVolumeClaim:
+              claimName: pgvector-backup
+          - name: zlib-accel-config
+            configMap:
+              name: zlib-accel-config
