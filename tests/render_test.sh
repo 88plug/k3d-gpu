@@ -120,6 +120,18 @@ fi
 run "${r}" demo
 verdict "${RC}" "the pins --latest wrote verify on a plain render" "${OUT}"
 
+r=$(newroot brokenvalues 1.0.0 "${SUM100}")
+printf 'greeting: [unclosed\n' > "${r}/hack/components/demo/values.yaml"
+run "${r}" --latest demo
+conf="${r}/hack/components/demo/component.conf"
+if [ "${RC}" -ne 0 ] && grep -qx 'CHART_VERSION=1.0.0' "${conf}" && grep -qx "CHART_SHA256=${SUM100}" "${conf}" \
+    && [ ! -e "${r}/share/demo.yml" ]; then
+    ok "--latest leaves the pins alone when the render fails"
+else
+    fail "--latest leaves the pins alone when the render fails" "rc=${RC} ${OUT}
+$(cat "${conf}")"
+fi
+
 r=$(newroot ahead 9.0.0 "${SUM100}")
 run "${r}" --latest demo
 if [ "${RC}" -ne 0 ] && grep -q 'older than pinned 9.0.0' <<< "${OUT}" \

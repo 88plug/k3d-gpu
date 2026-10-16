@@ -65,10 +65,7 @@ render_helm() {
     [ -n "${tgz}" ] || die "${NAME}: helm pull of ${CHART} ${CHART_VERSION} produced no chart"
     sum=$(sha256sum "${tgz}" | cut -d' ' -f1)
 
-    if [ "${latest}" = 1 ]; then
-        set_pin "${dir}/component.conf" CHART_VERSION "${CHART_VERSION}"
-        set_pin "${dir}/component.conf" CHART_SHA256 "${sum}"
-    elif [ "${sum}" != "${CHART_SHA256}" ]; then
+    if [ "${latest}" = 0 ] && [ "${sum}" != "${CHART_SHA256}" ]; then
         die "${NAME}: ${CHART} ${CHART_VERSION} has sha256 ${sum}, pinned ${CHART_SHA256}"
     fi
 
@@ -80,6 +77,11 @@ render_helm() {
     } > "${tmp}/out.yml"
     mkdir -p "$(dirname "${ROOT}/${OUTPUT}")"
     mv "${tmp}/out.yml" "${ROOT}/${OUTPUT}"
+    # Pins move only once the render succeeded, so they always match OUTPUT.
+    if [ "${latest}" = 1 ]; then
+        set_pin "${dir}/component.conf" CHART_VERSION "${CHART_VERSION}"
+        set_pin "${dir}/component.conf" CHART_SHA256 "${sum}"
+    fi
     echo "rendered ${NAME} ${CHART_VERSION} -> ${OUTPUT}"
 }
 
