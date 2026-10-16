@@ -318,7 +318,9 @@ with no host constants:
   once per `--interval`; package thermal-throttle counts for the binding limit;
 * output: `capacity.json` (schema `k3d-gpu.capacity/1`) plus the `apb.py`
   run layout (`steps/`, `rapl.log`, `nvidia.log`, `idle.json`), so
-  `apb.py report RUN_DIR` also reads it.
+  `apb.py report RUN_DIR` also reads it. APB at the secondary SLOs is
+  reported only for SLOs <= `--stop-slo` (the ramp never ran the steps that
+  could break a looser one), each with `lower_bound` when no step exceeded it.
 
 Running it as the per-arm driver of this protocol (after the arm is up, one
 arm at a time):

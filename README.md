@@ -536,8 +536,9 @@ k3d-gpu capacity --url http://127.0.0.1:8000/v3/chat/completions --model Qwen3-4
 
 * **Endpoint**: found in the cluster (an OVMS or vLLM Deployment/StatefulSet
   behind a Service; `k3d-gpu agent up`'s `k3d-gpu-agent/ovms` wins a tie) and
-  reached through `kubectl port-forward`. The engine (cpu, igpu, npu, nvidia)
-  is read from the pod's device requests and `--target_device`. Pick one with
+  reached through `kubectl port-forward`. The engine (cpu, igpu, npu, gaudi, nvidia)
+  is read from the pod's device requests and `--target_device`; Gaudi HPU power
+  is not sampled, so a Gaudi report's J per turn has no accelerator term. Pick one with
   `--engine` or `--endpoint NAMESPACE/SERVICE`.
 * **Quiet check**: before any load it samples CPU busy, CPU package power
   against the box's own PL1, and NVIDIA GPU utilization and power against the

@@ -94,7 +94,7 @@ Usage: k3d-gpu <command>
   agent up|down|status|manifest
             OpenAI-compatible LLM server (OpenVINO Model Server) in the current
             cluster: on its Intel GPU if that GPU has XMX, else on the CPU (P-cores)
-  capacity [--slo 10] [--trace support] [--max 32] [--engine auto|cpu|igpu|npu|nvidia]
+  capacity [--slo 10] [--trace support] [--max 32] [--engine auto|cpu|igpu|npu|gaudi|nvidia]
             Agents per box: ramps closed-loop agents against the cluster's OVMS/vLLM
             chat endpoint until the p95 turn latency breaks the SLO; prints agents
             per box, p50/p95/p99, J per turn and the binding limit, writes JSON.
