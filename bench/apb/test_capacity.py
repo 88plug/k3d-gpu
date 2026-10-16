@@ -334,6 +334,15 @@ class DiscoverTest(unittest.TestCase):
         (c,) = cap.discover(vllm_items(gpu=False, args=["--model", "m/x", "--served-model-name", "x"]))
         self.assertEqual(c["model"], "x")
 
+    def test_gaudi_from_habana_resource(self):
+        items = vllm_items(gpu=False)
+        items[0]["spec"]["template"]["spec"]["containers"][0]["resources"] = {"limits": {"habana.ai/gaudi": 8}}
+        (c,) = cap.discover(items)
+        self.assertEqual(c["engine"], "gaudi")
+        self.assertEqual(cap.choose([c], "gaudi")["engine"], "gaudi")
+        with self.assertRaises(cap.CapacityError):
+            cap.choose([c], "cpu")
+
     def test_unready_and_unrelated_are_reported(self):
         items = ovms_items(ready=0) + [{"kind": "Deployment", "metadata": {"name": "web", "namespace": "a"},
                                         "spec": {"template": {"metadata": {"labels": {"app": "web"}},
@@ -375,6 +384,36 @@ class DiscoverTest(unittest.TestCase):
         self.assertIn("agent up", str(e.exception))
 
 
+class SecondaryApbTest(unittest.TestCase):
+    """APB at a secondary SLO is only known up to --stop-slo: past it the ramp
+    never ran the steps that could break the looser SLO."""
+
+    def steps(self, *pairs):
+        return [{"agents": n, "p95_s": p, "verdict": "pass" if p <= 10 else "fail"} for n, p in pairs]
+
+    def test_tighter_slo_is_exact_and_looser_ones_are_not_reported(self):
+        got = cap.secondary_apb(self.steps((1, 3.0), (2, 4.0), (4, 8.0), (8, 12.0)), stop_slo=10.0)
+        self.assertEqual(got, {"5.0": {"agents_per_box": 2, "lower_bound": False}})
+
+    def test_stop_slo_30_reports_every_secondary(self):
+        got = cap.secondary_apb(self.steps((1, 3.0), (2, 4.0), (4, 8.0), (8, 12.0), (12, 31.0)),
+                                stop_slo=30.0)
+        self.assertEqual(sorted(got), ["15.0", "20.0", "30.0", "5.0"])
+        self.assertEqual(got["15.0"], {"agents_per_box": 8, "lower_bound": False})
+        self.assertEqual(got["30.0"], {"agents_per_box": 8, "lower_bound": False})
+
+    def test_ramp_that_never_broke_is_a_lower_bound(self):
+        got = cap.secondary_apb(self.steps((1, 1.0), (2, 1.0)), stop_slo=30.0)
+        self.assertEqual(got["30.0"], {"agents_per_box": 2, "lower_bound": True})
+        self.assertEqual(got["5.0"], {"agents_per_box": 2, "lower_bound": True})
+
+    def test_insufficient_step_ends_the_count(self):
+        st = self.steps((1, 1.0), (2, 1.0))
+        st[1]["verdict"] = "insufficient"
+        got = cap.secondary_apb(st, stop_slo=10.0)
+        self.assertEqual(got["5.0"], {"agents_per_box": 1, "lower_bound": True})
+
+
 # ------------------------------------------------------------------ quiet check
 class QuietTest(unittest.TestCase):
     def test_quiet_box_passes(self):
@@ -411,6 +450,92 @@ class QuietTest(unittest.TestCase):
         self.assertAlmostEqual(cap.cpu_busy(a, b), 0.5)
         self.assertEqual(cap.cpu_busy(a, a), 0.0)
 
+    def test_cpu_busy_counts_guest_time_once(self):
+        # guest/guest_nice are already inside user/nice (proc(5)); a busy VM
+        # host must not read as more than 100% busy.
+        a = "cpu  100 0 0 900 0 0 0 0 100 0"
+        b = "cpu  200 0 0 900 0 0 0 0 200 0"
+        self.assertAlmostEqual(cap.cpu_busy(a, b), 1.0)
+        a = "cpu  100 0 100 800 0 0 0 0 50 0"
+        b = "cpu  150 0 150 900 0 0 0 0 100 0"
+        self.assertAlmostEqual(cap.cpu_busy(a, b), 0.5)
+
+
+class HostReadTest(unittest.TestCase):
+    """Two-socket host (Xeon): throttle counts once per package, RAPL sums
+    every package-* zone and its PL1."""
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.root)
+        for c, pkg, thr in ((0, 0, 10), (1, 0, 10), (2, 1, 7), (3, 1, 7)):
+            d = f"{self.root}/sys/devices/system/cpu/cpu{c}"
+            write(f"{d}/topology/physical_package_id", f"{pkg}\n")
+            write(f"{d}/thermal_throttle/package_throttle_count", f"{thr}\n")
+        for i, (name, pl1) in enumerate((("package-0", 250), ("package-1", 250), ("dram", 0))):
+            z = f"{self.root}/sys/class/powercap/intel-rapl:{i}"
+            write(f"{z}/name", name + "\n")
+            write(f"{z}/constraint_0_name", "long_term\n")
+            write(f"{z}/constraint_0_power_limit_uw", f"{pl1 * 1000000}\n")
+        write(f"{self.root}/sys/class/powercap/intel-rapl:0:0/name", "dram\n")
+
+    def test_throttle_counted_once_per_package(self):
+        self.assertEqual(cap.throttle_count(self.root), 17)
+
+    def test_rapl_sums_package_zones(self):
+        z = cap.rapl_zones(self.root)
+        self.assertEqual([os.path.basename(p) for p in z["pkg"]], ["intel-rapl:0", "intel-rapl:1"])
+        self.assertEqual(z["pl1_w"], 500.0)
+        self.assertIsNone(z["psys"])
+
+
+class ConfoundsTest(unittest.TestCase):
+    def rep(self, engine):
+        return {"endpoint": {"engine": engine}, "idle": None, "steps": [], "drift_check": None,
+                "max_agents": 8, "quiet_check": {"forced": False, "checks": []},
+                "binding_limit": {"kind": "slo"}}
+
+    def test_gaudi_energy_gap_is_stated(self):
+        sampler = type("S", (), {"rapl_mode": "direct", "nvidia_seen": False})()
+        c = cap.confounds(self.rep("gaudi"), False, sampler, True)
+        self.assertTrue(any("Gaudi" in x for x in c))
+        c = cap.confounds(self.rep("cpu"), False, sampler, True)
+        self.assertFalse(any("Gaudi" in x for x in c))
+
+
+class NvidiaQueryTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp)
+        self.env = {k: os.environ.get(k) for k in ("K3D_GPU_SYSROOT", "K3D_GPU_NVIDIA_SMI")}
+        os.environ["K3D_GPU_SYSROOT"] = os.path.join(self.tmp, "root")
+        self.addCleanup(self.restore)
+
+    def restore(self):
+        for k, v in self.env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+    def test_falls_back_to_clocks_throttle_reasons(self):
+        # Drivers older than the clocks_event_reasons rename reject the whole
+        # query; the clocks_throttle_reasons names are accepted by both.
+        os.environ["K3D_GPU_NVIDIA_SMI"] = stub_bin(self.tmp, "nvidia-smi", (
+            'case "$*" in *clocks_event_reasons*) echo "Field is not a valid field" >&2; exit 2 ;; esac\n'
+            "echo '0, 300.5, 350.00, 99, 80, Active, Not Active, Active, Not Active'\n"))
+        s = cap.Sampler(self.tmp)
+        (g,) = s._gpus()
+        self.assertEqual((g["index"], g["power_w"], g["limit_w"]), (0, 300.5, 350.0))
+        self.assertTrue(g["power_cap"] and g["thermal"])
+        self.assertEqual(len(s._gpus()), 1)
+
+    def test_no_gpu_stops_asking(self):
+        os.environ["K3D_GPU_NVIDIA_SMI"] = stub_bin(self.tmp, "nvidia-smi", "exit 9\n")
+        s = cap.Sampler(self.tmp)
+        self.assertEqual(s._gpus(), [])
+        self.assertIsNone(s.nvidia)
+
 
 # ------------------------------------------------------------------ binding limit
 class BindingTest(unittest.TestCase):
@@ -436,6 +561,12 @@ class BindingTest(unittest.TestCase):
         b = cap.binding_limit([{"agents": 1, "verdict": "fail", "p95_s": 1.0, "hardware": {},
                                 "reasons": ["tool validity 0.500 < N=1 0.900 - 0.1"]}], max_agents=8)
         self.assertEqual(b["kind"], "tool_validity")
+
+    def test_insufficient_data(self):
+        b = cap.binding_limit([{"agents": 1, "verdict": "pass", "reasons": [], "p95_s": 1.0, "hardware": {}},
+                               {"agents": 2, "verdict": "insufficient", "p95_s": 1.0, "hardware": {},
+                                "reasons": ["pooled n 40 < 60"]}], max_agents=8)
+        self.assertEqual((b["kind"], b["at_agents"]), ("insufficient_data", 2))
 
     def test_gpu_power_cap(self):
         b = cap.binding_limit([{"agents": 8, "verdict": "fail", "p95_s": 11.0, "reasons": ["p95 11 > SLO 10"],

@@ -53,7 +53,7 @@ import apb  # noqa: E402
 SCHEMA = "k3d-gpu.capacity/1"
 EXIT_USAGE, EXIT_NOT_QUIET, EXIT_ENDPOINT = 2, 5, 6
 AGENT_NAMESPACE = "k3d-gpu-agent"  # `k3d-gpu agent up`
-ENGINES = ("auto", "cpu", "igpu", "npu", "nvidia")
+ENGINES = ("auto", "cpu", "igpu", "npu", "gaudi", "nvidia")
 EXTRA_BODY = {"chat_template_kwargs": {"enable_thinking": False}}
 
 # Quiet check limits, relative to the box's own ceilings (no host constants).
@@ -70,6 +70,9 @@ DRIFT_BAND = 0.15
 NVIDIA_FIELDS = ("index,power.draw,enforced.power.limit,utilization.gpu,temperature.gpu,"
                  "clocks_event_reasons.sw_power_cap,clocks_event_reasons.sw_thermal_slowdown,"
                  "clocks_event_reasons.hw_thermal_slowdown,clocks_event_reasons.hw_slowdown")
+# Older drivers know these flags only as clocks_throttle_reasons.*; current
+# ones accept both names (nvidia-smi --help-query-gpu).
+NVIDIA_FIELDS_OLD = NVIDIA_FIELDS.replace("clocks_event_reasons", "clocks_throttle_reasons")
 
 
 class CapacityError(Exception):
@@ -174,6 +177,8 @@ def _engine(pod, containers):
         return "igpu"
     if any(k.startswith("npu.intel.com/") for k in keys):
         return "npu"
+    if any(k.startswith("habana.ai/") for k in keys):
+        return "gaudi"
     dev = ((pod.get("metadata") or {}).get("annotations") or {}).get("k3d-gpu.io/agent-device")
     spec = pod.get("spec") or {}
     if not dev:
@@ -349,7 +354,9 @@ def _read(path):
 def cpu_busy(stat_a, stat_b):
     """Busy fraction of all CPUs between two /proc/stat 'cpu' lines."""
     def split(line):
-        v = [int(x) for x in line.split()[1:]]
+        # user nice system idle iowait irq softirq steal; guest and guest_nice
+        # are already counted in user and nice (proc(5)).
+        v = [int(x) for x in line.split()[1:9]]
         idle = v[3] + (v[4] if len(v) > 4 else 0)
         return sum(v) - idle, sum(v)
     ba, ta = split(stat_a)
@@ -415,6 +422,7 @@ class Sampler:
         self.rapl_mode = self._rapl_mode()
         self.nvidia = shutil.which(os.environ.get("K3D_GPU_NVIDIA_SMI", "nvidia-smi"))
         self.nvidia_seen = False
+        self.nvidia_fields = NVIDIA_FIELDS
         self.lock = threading.Lock()
         self.stop_ev = threading.Event()
         self.signals = []
@@ -453,11 +461,17 @@ class Sampler:
     def _gpus(self):
         if not self.nvidia:
             return []
-        try:
-            p = subprocess.run([self.nvidia, f"--query-gpu={NVIDIA_FIELDS}", "--format=csv,noheader,nounits"],
-                               capture_output=True, text=True, timeout=5)
-        except (OSError, subprocess.TimeoutExpired):
-            p = None
+        def query(fields):
+            try:
+                return subprocess.run([self.nvidia, f"--query-gpu={fields}", "--format=csv,noheader,nounits"],
+                                      capture_output=True, text=True, timeout=5)
+            except (OSError, subprocess.TimeoutExpired):
+                return None
+        p = query(self.nvidia_fields)
+        if (p is None or p.returncode != 0) and not self.nvidia_seen and self.nvidia_fields == NVIDIA_FIELDS:
+            p2 = query(NVIDIA_FIELDS_OLD)
+            if p2 is not None and p2.returncode == 0:
+                self.nvidia_fields, p = NVIDIA_FIELDS_OLD, p2
         if p is None or p.returncode != 0:
             if not self.nvidia_seen:
                 self.nvidia = None  # never answered: stop asking
@@ -636,6 +650,22 @@ def binding_limit(steps, max_agents):
             "hardware": hardware_flags(stop.get("hardware"))}
 
 
+def secondary_apb(steps, stop_slo):
+    """APB at each apb.SECONDARY_SLOS <= stop_slo, from step p95 alone. A
+    looser SLO is left out: the ramp stopped before the steps that could break
+    it. lower_bound: the count ended without a step whose p95 exceeds the SLO
+    (ramp end, an insufficient step, or a stop for errors)."""
+    out = {}
+    for x in apb.SECONDARY_SLOS:
+        if x > stop_slo:
+            continue
+        curve = [(s["agents"], s["p95_s"] if s["verdict"] != "insufficient" else None) for s in steps]
+        best = apb.apb_from_p95(curve, x)
+        broke = any(p is not None and p > x for _n, p in curve)
+        out[str(x)] = {"agents_per_box": best, "lower_bound": not broke}
+    return out
+
+
 # ---------------------------------------------------------------- report
 def step_record(s, energy, hw):
     turns = energy.get("turns") or 0
@@ -689,6 +719,8 @@ def confounds(rep, forwarded, sampler, engine_known):
         out.append("CPU package energy (RAPL) includes the iGPU and excludes DRAM and discrete GPUs")
     if sampler.nvidia_seen:
         out.append("GPU energy integrates nvidia-smi power.draw of every NVIDIA GPU in the box")
+    if rep["endpoint"].get("engine") == "gaudi":
+        out.append("Gaudi HPU power is not sampled: J per turn has no accelerator term")
     if rep["idle"]:
         out.append("net J subtracts the quiet-window power and assumes the background stays constant")
     q = rep["quiet_check"]
@@ -924,10 +956,7 @@ def run(a, ep, forwarded):
         rep["steps"] = steps
         rep["agents_per_box"], rep["agents_per_box_interpolated"] = best, interp
         rep["binding_limit"] = binding_limit(steps, a.max)
-        rep["apb_at_secondary_slo_p95_only"] = {
-            str(x): apb.apb_from_p95([(s["agents"], s["p95_s"] if s["verdict"] != "insufficient" else None)
-                                      for s in steps], x)
-            for x in apb.SECONDARY_SLOS if x >= a.slo}
+        rep["apb_at_secondary_slo_p95_only"] = secondary_apb(steps, a.stop_slo)
         drift = apb.load_run(os.path.join(run_dir, "drift")).get(1)
         if drift and steps:
             d = apb.score_step(drift, a.slo)

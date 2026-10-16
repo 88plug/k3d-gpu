@@ -78,7 +78,7 @@ Usage: k3d-gpu <command>
             the pinned install commands for Intel GPU/NPU and the NVIDIA container
             toolkit + CDI (Ubuntu 24.04/26.04, Fedora, Arch, Manjaro). --apply runs
             them after a y/N prompt
-  capacity [--slo 10] [--trace support] [--max 32] [--engine auto|cpu|igpu|npu|nvidia]
+  capacity [--slo 10] [--trace support] [--max 32] [--engine auto|cpu|igpu|npu|gaudi|nvidia]
             Agents per box: ramps closed-loop agents against the cluster's OVMS/vLLM
             chat endpoint until the p95 turn latency breaks the SLO; prints agents
             per box, p50/p95/p99, J per turn and the binding limit, writes JSON.
