@@ -1,8 +1,11 @@
 """MkDocs hooks for the k3d-gpu docs site.
 
 * README.md is rendered as the home page and CONTRIBUTING.md as a page, so
-  each has one source. Their relative links are rewritten: ``docs/x.md``
-  becomes the site page ``x.md``; any other repo path becomes a GitHub link.
+  each has one source.
+* Relative links on every page are read the way GitHub reads them, from the
+  source file's place in the repo. A link to a file in docs/ stays a site
+  link (``docs/x.md`` in README becomes ``x.md``); a link to any other repo
+  path, or to a directory, becomes a GitHub link.
 * ``nav`` may list pages that are not in docs/ yet. Those entries are dropped
   with an info message ("not yet published") instead of failing --strict, so
   the nav can be laid out ahead of the branches that add the pages. Links to
@@ -11,6 +14,7 @@
 
 import logging
 import os
+import posixpath
 import re
 
 from mkdocs.exceptions import PluginError
@@ -22,6 +26,8 @@ HOME = "index.md"
 # Site page -> repo-root source file.
 GENERATED = {HOME: "README.md", "contributing.md": "CONTRIBUTING.md"}
 BRANCH = "main"
+# Repo directory that docs_dir points at.
+DOCS = "docs"
 
 # Nav pages skipped by the last on_config, as docs-relative paths.
 _unpublished = set()
@@ -62,16 +68,28 @@ def prune_nav(items, docs_dir, skipped=None):
     return kept
 
 
-def rewrite_links(markdown, repo_url):
-    """Point repo-relative links in a root file at site pages or GitHub."""
-    base = repo_url.rstrip("/") + "/blob/" + BRANCH + "/"
+def rewrite_links(markdown, repo_url, src_dir, page_dir):
+    """Rewrite relative links for GitHub-style repo paths.
+
+    ``src_dir`` is the repo directory of the source file and ``page_dir`` the
+    repo directory the page is served from (docs/ or a subdirectory of it).
+    A target inside docs/ is made relative to ``page_dir``; any other target,
+    or one ending in ``/``, becomes a GitHub blob or tree URL.
+    """
+    base = repo_url.rstrip("/") + "/"
 
     def fix(match):
         target = match.group(2)
-        if target.startswith("docs/"):
-            target = target[len("docs/"):]
+        path, hash_, frag = target.partition("#")
+        repo_path = posixpath.normpath(posixpath.join(src_dir, path))
+        if repo_path.startswith("../"):
+            return match.group(0)
+        if path.endswith("/"):
+            target = base + "tree/" + BRANCH + "/" + repo_path + "/" + hash_ + frag
+        elif repo_path.startswith(DOCS + "/"):
+            target = posixpath.relpath(repo_path, page_dir) + hash_ + frag
         else:
-            target = base + target
+            target = base + "blob/" + BRANCH + "/" + repo_path + hash_ + frag
         return match.group(1) + target + match.group(3)
 
     return _LINK.sub(fix, markdown)
@@ -98,17 +116,26 @@ def on_files(files, config):
         if files.get_file_from_path(page) is not None:
             raise PluginError(f"docs/{page} must not exist: it is generated from {source}")
         with open(os.path.join(root, source), encoding="utf-8") as fh:
-            content = rewrite_links(fh.read(), config.repo_url)
-        files.append(File.generated(config, page, content=content))
+            files.append(File.generated(config, page, content=fh.read()))
     return files
 
 
 def on_page_markdown(markdown, page, config, files):
-    source = GENERATED.get(page.file.src_uri)
+    src_uri = page.file.src_uri
+    page_dir = posixpath.join(DOCS, posixpath.dirname(src_uri)).rstrip("/")
+    source = GENERATED.get(src_uri)
     if source:
         page.edit_url = config.repo_url.rstrip("/") + "/edit/" + BRANCH + "/" + source
-    # Pages sit at the docs root, so a link to a sibling is its bare path.
-    linked = {p for p in _unpublished if "](" + p in markdown}
-    for target in sorted(linked):
-        log.info("%s: link to unpublished %s rendered as text", page.file.src_uri, target)
+        src_dir = posixpath.dirname(source)
+    else:
+        src_dir = page_dir
+    markdown = rewrite_links(markdown, config.repo_url, src_dir, page_dir)
+    # Links to an unpublished page, as written relative to this page.
+    linked = {}
+    for target in _unpublished:
+        rel = posixpath.relpath(posixpath.join(DOCS, target), page_dir)
+        if "](" + rel in markdown:
+            linked[rel] = target
+    for rel in sorted(linked):
+        log.info("%s: link to unpublished %s rendered as text", src_uri, linked[rel])
     return unlink(markdown, linked)

@@ -23,7 +23,13 @@ nav:
   - Intel platforms: intel.md
   - Operations:
       - Telemetry: telemetry.md
+      - Failure modes: failure-modes.md
+      - Power envelope: power-envelope.md
       - Accelerated dataplane: accelerated-dataplane.md
+  - Integrations:
+      - GPUStack: integrations/gpustack.md
+  - Design:
+      - Speculative decoding: design/speculative-decoding.md
   - Evidence:
       - Benchmark landscape: benchmark-landscape.md
       - Provenance: provenance.md

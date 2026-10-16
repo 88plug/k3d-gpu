@@ -116,6 +116,8 @@ Include relevant details:
   the quick start lives only in README.md. Longer pages go in `docs/*.md` and
   need a `nav` entry in `mkdocs.yml`; `mkdocs build --strict` fails on a page
   missing from `nav`. A `nav` entry whose page is not in `docs/` yet is skipped.
+  Link repo files the GitHub way (`../Dockerfile`, `../scripts/k3d-gpu`); the
+  site turns links that leave `docs/`, and links to directories, into GitHub links.
 - Check the site with `tests/docs_test.sh` after
   `pip install --require-hashes -r docs-build/requirements.txt`
 

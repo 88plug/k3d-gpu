@@ -69,18 +69,62 @@ check "page added to docs/ is published" "$d" test -f "$d/site/provenance/index.
 check "page added to docs/ appears in nav" "$d" grep -q 'href="provenance/"' "$d/site/index.html"
 check "README docs/ link maps to the site page" "$d" grep -q 'href="provenance/">provenance</a>' "$d/site/index.html"
 
-# --- Guards that must fail the build ------------------------------------------
+# --- docs/ pages that link repo files the GitHub way (../path) ----------------
+# Mirrors the links on in-flight pages: ../Dockerfile, ../share/x.yml#L3, a
+# docs/ directory (provenance/), and pages in docs/ subdirectories.
+d=$(tree repolinks)
+mkdir -p "$d/docs/provenance" "$d/docs/integrations" "$d/docs/design"
+printf 'log\n' > "$d/docs/provenance/arxiv.txt"
+printf '# Provenance\n\nLogs are in [`docs/provenance/`](provenance/).\n' > "$d/docs/provenance.md"
+printf '# Failure modes\n\nSee [Dockerfile](../Dockerfile) and [policy](../share/nri-balloons.yml#L3).\n' \
+    > "$d/docs/failure-modes.md"
+printf '# Power envelope\n\nModel: [envelope](../bench/envelope_model.py).\n' > "$d/docs/power-envelope.md"
+printf '# GPUStack\n\nSee [failure modes](../failure-modes.md) and [launcher](../../scripts/k3d-gpu).\n' \
+    > "$d/docs/integrations/gpustack.md"
+printf '# Speculative decoding\n\nStub.\n' > "$d/docs/design/speculative-decoding.md"
+check "docs pages with ../repo links build with --strict" "$d" build "$d"
+check "../file link points at GitHub blob" "$d" \
+    grep -q 'href="https://github.com/88plug/k3d-gpu/blob/main/Dockerfile"' "$d/site/failure-modes/index.html"
+check "../file#anchor link keeps its anchor" "$d" \
+    grep -q 'href="https://github.com/88plug/k3d-gpu/blob/main/share/nri-balloons.yml#L3"' "$d/site/failure-modes/index.html"
+check "docs/ directory link points at GitHub tree" "$d" \
+    grep -q 'href="https://github.com/88plug/k3d-gpu/tree/main/docs/provenance/"' "$d/site/provenance/index.html"
+check "subdir page ../../file link points at GitHub blob" "$d" \
+    grep -q 'href="https://github.com/88plug/k3d-gpu/blob/main/scripts/k3d-gpu"' "$d/site/integrations/gpustack/index.html"
+check "subdir page link to a docs page stays on the site" "$d" \
+    grep -q 'href="../../failure-modes/"' "$d/site/integrations/gpustack/index.html"
+for page in failure-modes power-envelope integrations/gpustack design/speculative-decoding; do
+    check "docs/${page}.md is in nav" "$d" grep -q "href=\"${page}/\"" "$d/site/index.html"
+done
+
+# --- A subdir page's link to an unpublished page renders as text --------------
+d=$(tree subdir-unpublished)
+rm -f "$d/docs/provenance.md"
+mkdir -p "$d/docs/integrations"
+printf '# GPUStack\n\nSee [the log](../provenance.md#sources).\n' > "$d/docs/integrations/gpustack.md"
+check "subdir page linking unpublished page builds" "$d" build "$d"
+check "subdir link to unpublished page renders as text" "$d" \
+    grep -q '<p>See the log.</p>' "$d/site/integrations/gpustack/index.html"
+
+# --- Guards that must fail the build, each for its own reason ----------------
+# fails_with <dir> <pattern>: strict build fails and build.log has <pattern>.
+fails_with() { ! build "$1" && grep -qF -- "$2" "$1/build.log"; }
+
 d=$(tree unlisted)
 printf '# Orphan\n' > "$d/docs/orphan.md"
-check "page in docs/ but not in nav fails --strict" "$d" bash -c "! (cd '$d' && mkdocs build --strict > build.log 2>&1)"
+check "page in docs/ but not in nav fails --strict" "$d" \
+    fails_with "$d" 'are not included in the "nav" configuration:'
+check "nav failure names the orphan page" "$d" grep -q -- '- orphan.md' "$d/build.log"
 
 d=$(tree index)
 printf '# Home\n' > "$d/docs/index.md"
-check "docs/index.md beside the README home fails" "$d" bash -c "! (cd '$d' && mkdocs build --strict > build.log 2>&1)"
+check "docs/index.md beside the README home fails" "$d" \
+    fails_with "$d" 'docs/index.md must not exist: it is generated from README.md'
 
 d=$(tree badanchor)
 printf '\n[broken](#no-such-heading)\n' >> "$d/README.md"
-check "broken README anchor fails --strict" "$d" bash -c "! (cd '$d' && mkdocs build --strict > build.log 2>&1)"
+check "broken README anchor fails --strict" "$d" \
+    fails_with "$d" "contains a link '#no-such-heading', but there is no such anchor on this page"
 
 echo
 echo "${PASS} passed, ${FAILS} failed"
