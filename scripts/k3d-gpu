@@ -25,6 +25,7 @@
 #   test    run a pod per detected accelerator and print the device view
 #   detect  print the accelerators found on this host and their k8s resources
 #   doctor  preflight: accelerators present, docker running, runtimes, k3d installed
+#           --perf: read-only host tuning advisor for inference serving
 #   logs    tail server container logs
 #   host-setup  check the host userspace and print (--apply: run) the pinned install commands
 
@@ -66,6 +67,9 @@ Usage: k3d-gpu <command>
   test      Run a pod per detected accelerator and print its device view
   detect    Print accelerators found on this host and their Kubernetes resources
   doctor    Diagnostic preflight checks
+  doctor --perf [--model-gb N]
+            Read-only host tuning advisor for inference (CPU/GPU clocks, power
+            limits, THP, swap, IRQs, persistence): evidence, why, apply + revert
   logs      Tail k3s server container logs
   host-setup [--apply] [--distro D]
             Check the host drivers/userspace (vainfo, clinfo, libva, libstdc++) and print
@@ -88,6 +92,7 @@ Environment:
   K3D_GPU_IAA_PLUGIN    Intel IAA plugin yaml  (default: ${SHARE_DIR}/intel-iaa-plugin.yml)
   K3D_GPU_QAT_PLUGIN    Intel QAT plugin yaml  (default: ${SHARE_DIR}/intel-qat-plugin.yml)
   K3D_GPU_HYBRID_PLUGIN NRI balloons yaml    (default: ${SHARE_DIR}/nri-balloons.yml)
+  K3D_GPU_MODEL_GB      model size checked by doctor --perf (same as --model-gb)
 
 Docs: https://github.com/88plug/k3d-gpu
 EOF
@@ -612,6 +617,557 @@ doctor() {
 
     echo ""
     [ "${FAIL}" -eq 0 ] && info "All checks passed." || { err "One or more checks failed."; }
+}
+
+# ---- doctor --perf: host tuning advisor --------------------------------------
+# Reads sysfs/procfs (and asks docker / nvidia-smi) only. Every finding names the
+# file it came from; every suggestion prints the one-line command to apply it and
+# the one to put the current value back. Nothing here writes to the host.
+
+PERF_SUGGESTIONS=0
+PERF_MODEL_GB="${K3D_GPU_MODEL_GB:-}"
+
+# rd <path>: first line of ${SYSROOT}<path>, empty when missing or unreadable.
+rd() { local v; v=$(head -n1 "${SYSROOT}$1" 2>/dev/null) || return 0; printf '%s' "${v}"; }
+
+# rf <file>: whole file, empty when missing or unreadable (absolute path).
+rf() { cat "$1" 2>/dev/null || true; }
+
+# meminfo_kb <field>: a /proc/meminfo value in kB.
+meminfo_kb() { awk -v k="$1:" '$1 == k {print $2; exit}' "${SYSROOT}/proc/meminfo" 2>/dev/null || true; }
+
+# lt <a> <b>: true when both are integers and a < b.
+lt() { [[ "$1" =~ ^[0-9]+$ && "$2" =~ ^[0-9]+$ ]] && [ "$1" -lt "$2" ]; }
+
+# bracketed <"a [b] c">: the selected word of a sysfs choice list -> "b".
+bracketed() { sed -n 's/.*\[\(.*\)\].*/\1/p' <<< "$1"; }
+
+# kb_gib <kB>: one-decimal GiB.
+kb_gib() { awk -v k="${1:-0}" 'BEGIN {printf "%.1f", k / 1048576}'; }
+
+# Kernel CPU list -> a shell glob word for /sys/devices/system/cpu/cpu<word>:
+# "16-31" -> "{16..31}", "0,2-3" -> "{0,2,3}", "5" -> "5".
+cpu_word() {
+    if [[ "$1" =~ ^[0-9]+-[0-9]+$ ]]; then echo "{${1%-*}..${1#*-}}"
+    elif [[ "$1" =~ ^[0-9]+$ ]]; then echo "$1"
+    else echo "{$(cpulist_expand "$1" | paste -sd,)}"; fi
+}
+
+# The CPU groups the advisor reports on: P-cores and E-cores on hybrid parts.
+perf_groups() {
+    if has_hybrid; then
+        echo "P-cores|$(hybrid_cpus core)"
+        echo "E-cores|$(hybrid_cpus atom)"
+    else
+        echo "CPUs|$(rd /sys/devices/system/cpu/online)"
+    fi
+}
+
+# group_values <cpulist> <cpufreq attr>: "value" when every CPU agrees, else
+# "mixed: a x N, b x M". Empty when no CPU has the attribute.
+group_values() {
+    local cpu
+    for cpu in $(cpulist_expand "$1"); do rd "/sys/devices/system/cpu/cpu${cpu}/cpufreq/$2"; echo; done \
+        | awk 'NF {n[$0]++} END {k = 0; for (v in n) k++; if (k == 1) for (v in n) print v;
+               else if (k > 1) {s = "mixed:"; for (v in n) s = s " " v " x" n[v]; print s}}'
+}
+
+# cpulist_compress <"0,1,3">: CPU numbers (comma/space separated) -> kernel list "0-1,3".
+cpulist_compress() {
+    tr -cs '0-9' '\n' <<< "$1" | awk 'NF' | sort -n | awk '
+        {if (NR > 1 && $1 == e + 1) {e = $1; next}
+         if (NR > 1) o = o (o == "" ? "" : ",") (s == e ? s : s "-" e); s = e = $1}
+        END {if (NR) print o (o == "" ? "" : ",") (s == e ? s : s "-" e)}'
+}
+
+# value_groups: "<cpu> <value>" lines -> "<value>|<cpulist>" lines, one per value.
+value_groups() {
+    local v l
+    sort -k2,2 -k1,1n | awk 'NF {if ($2 != v) {if (n++) print v "|" l; v = $2; l = $1} else l = l "," $1}
+                             END {if (n) print v "|" l}' \
+        | while IFS='|' read -r v l; do echo "${v}|$(cpulist_compress "${l}")"; done
+}
+
+# values_desc <pairs>: "power" when one value, else "a on 0-1, b on 3".
+values_desc() {
+    local v l out=""
+    while IFS='|' read -r v l; do out+="${out:+, }${v} on ${l}"; done < <(value_groups <<< "$1")
+    if [[ "${out}" == *", "* ]]; then echo "${out}"; else echo "${out% on *}"; fi
+}
+
+# values_revert <pairs> <cpufreq attr>: commands that write each CPU's observed value back.
+values_revert() {
+    local v l out=""
+    while IFS='|' read -r v l; do
+        out+="${out:+ && }echo ${v} | sudo tee /sys/devices/system/cpu/cpu$(cpu_word "${l}")/cpufreq/$2"
+    done < <(value_groups <<< "$1")
+    echo "${out}"
+}
+
+# cpus_of <pairs>: the kernel CPU list of the pairs.
+cpus_of() { cpulist_compress "$(awk 'NF {print $1}' <<< "$1" | paste -sd,)"; }
+
+perf_section() { info "$1"; echo "  good: $2"; echo "  src:  $3"; }
+perf_ok()      { echo "  ok:   $1"; echo "        from: $2"; }
+perf_info()    { echo "  info: $1"; echo "        from: $2"; }
+# perf_flag <warn|note> <finding> <evidence> <why> <apply> <revert>
+perf_flag() {
+    local tag="${YLW}warn${RST}"
+    [ "$1" = warn ] || tag="note"
+    echo "  ${tag}: $2"
+    echo "        from:   $3"
+    echo "        why:    $4"
+    [ -z "$5" ] || echo "        apply:  $5"
+    [ -z "$6" ] || echo "        revert: $6"
+    PERF_SUGGESTIONS=$((PERF_SUGGESTIONS + 1))
+}
+
+perf_cpu() {
+    local base=/sys/devices/system/cpu pst status driver label list w gov epp nt mx mn smax cmax dyn cpu capped cvals hw cw undo bad_epp bad_gov cg ce cdrv cl
+    pst="${base}/intel_pstate"
+    status=$(rd "${pst}/status")
+    driver=$(rd "${base}/cpu0/cpufreq/scaling_driver")
+    perf_section "CPU frequency (driver ${driver:-none}${status:+, mode ${status}})" \
+        "cores ramp to full turbo the moment a request arrives: EPP performance or balance_performance, turbo on, no frequency caps — token generation is a latency-bound loop and every ramp-up shows in time-to-first-token" \
+        "https://docs.kernel.org/admin-guide/pm/intel_pstate.html#energy-vs-performance-hints, https://docs.kernel.org/admin-guide/pm/cpufreq.html"
+    if [ -z "${driver}" ]; then
+        perf_info "no cpufreq policy exposed (VM or cpufreq disabled) — nothing to tune here" "${base}/cpu0/cpufreq/"
+        return
+    fi
+
+    while IFS='|' read -r label list; do
+        [ -n "${list}" ] || continue
+        w="${base}/cpu$(cpu_word "${list}")/cpufreq"
+        gov=$(group_values "${list}" scaling_governor)
+        epp=$(group_values "${list}" energy_performance_preference)
+        # Classify each CPU on its own values; a group can hold mixed settings.
+        # intel_pstate active + HWP: the governor only picks how EPP is set;
+        # performance forces EPP 0, powersave passes the sysfs EPP through.
+        # Raw EPP numbers: 0 = performance, 128 = balance_performance, 255 = power.
+        # intel_pstate active without HWP (no EPP file): its powersave algorithm
+        # picks P-states proportional to CPU utilization, like schedutil.
+        bad_epp=""; bad_gov=""
+        for cpu in $(cpulist_expand "${list}"); do
+            cg=$(rd "${base}/cpu${cpu}/cpufreq/scaling_governor")
+            ce=$(rd "${base}/cpu${cpu}/cpufreq/energy_performance_preference")
+            cdrv=$(rd "${base}/cpu${cpu}/cpufreq/scaling_driver")
+            if [ -n "${ce}" ]; then
+                [ "${cg}" != performance ] || continue
+                if [[ "${ce}" =~ ^[0-9]{1,9}$ ]] && [ "${ce}" -le 128 ]; then continue; fi
+                case "${ce}" in performance|balance_performance) continue ;; esac
+                bad_epp+="${cpu} ${ce}"$'\n'
+            else
+                case "${cg}" in ""|performance|schedutil) continue ;; esac
+                [ "${cg}:${cdrv}" != powersave:intel_pstate ] || continue
+                bad_gov+="${cpu} ${cg}"$'\n'
+            fi
+        done
+        if [ -n "${bad_epp}" ]; then
+            cl=$(cpus_of "${bad_epp}")
+            perf_flag warn "${label} ${cl}: EPP $(values_desc "${bad_epp}") (governor $(group_values "${cl}" scaling_governor)) — HWP is told to favour energy over speed" \
+                "${base}/cpu$(cpu_word "${cl}")/cpufreq/energy_performance_preference" \
+                "with HWP the CPU picks its own P-state from the EPP hint; balance_power/power keep it from ramping up quickly. Kernel docs: set the same hint on all CPUs or tasks migrating between them behave inconsistently" \
+                "echo performance | sudo tee ${base}/cpu$(cpu_word "${cl}")/cpufreq/energy_performance_preference" \
+                "$(values_revert "${bad_epp}" energy_performance_preference)"
+        fi
+        if [ -n "${bad_gov}" ]; then
+            cl=$(cpus_of "${bad_gov}")
+            perf_flag warn "${label} ${cl}: governor $(values_desc "${bad_gov}")" "${base}/cpu$(cpu_word "${cl}")/cpufreq/scaling_governor" \
+                "without HWP the generic powersave governor requests the LOWEST frequency; ondemand/conservative ramp late. performance requests the highest within scaling_max_freq" \
+                "echo performance | sudo tee ${base}/cpu$(cpu_word "${cl}")/cpufreq/scaling_governor" \
+                "$(values_revert "${bad_gov}" scaling_governor)"
+        fi
+        if [ -z "${bad_epp}${bad_gov}" ] && [ -n "${gov}" ]; then
+            if [ -n "${epp}" ] && [ "${gov}" = performance ]; then
+                perf_ok "${label} ${list}: governor performance (forces EPP 0)" "${w}/scaling_governor"
+            elif [ -n "${epp}" ]; then
+                perf_ok "${label} ${list}: governor ${gov}, EPP ${epp}" "${w}/energy_performance_preference"
+            elif [ "${gov}" = powersave ] && [ "${driver}" = intel_pstate ]; then
+                perf_ok "${label} ${list}: governor powersave (intel_pstate active, no HWP: P-state follows CPU utilization)" "${w}/scaling_governor"
+            else
+                perf_ok "${label} ${list}: governor ${gov}" "${w}/scaling_governor"
+            fi
+        fi
+
+        # Per CPU: favoured cores can have a higher hardware max than their siblings.
+        capped=""; cvals=""; hw=""; undo=""
+        for cpu in $(cpulist_expand "${list}"); do
+            smax=$(rd "${base}/cpu${cpu}/cpufreq/scaling_max_freq")
+            cmax=$(rd "${base}/cpu${cpu}/cpufreq/cpuinfo_max_freq")
+            [[ "${cmax}" =~ ^[0-9]{1,12}$ ]] || continue   # offline CPU or unparsable value
+            [[ " ${hw} " == *" $((cmax / 1000)) "* ]] || hw+=" $((cmax / 1000))"
+            if lt "${smax}" "${cmax}"; then
+                capped+="${capped:+,}${cpu}"; cvals+=" ${cpu}:$((smax / 1000))"
+                undo+="${undo:+ && }echo ${smax} | sudo tee ${base}/cpu${cpu}/cpufreq/scaling_max_freq"
+            fi
+        done
+        mn=$(group_values "${list}" scaling_min_freq)
+        if [ -n "${capped}" ]; then
+            cw="${base}/cpu$(cpu_word "${capped}")/cpufreq"
+            perf_flag warn "${label} ${capped}: scaling_max_freq below the hardware max (cpu:MHz${cvals}; hardware max${hw} MHz)" \
+                "${cw}/scaling_max_freq" \
+                "the policy cap stops turbo short of what the part can do" \
+                "for p in ${cw}; do sudo tee \$p/scaling_max_freq < \$p/cpuinfo_max_freq; done" \
+                "${undo}"
+        elif [ -n "${hw// /}" ] && [ "${hw// /}" != 0 ]; then
+            perf_ok "${label} ${list}: no frequency cap (hardware max${hw} MHz)$([[ "${mn}" =~ ^[0-9]+$ ]] && echo ", min $((mn / 1000)) MHz")" "${w}/{scaling,cpuinfo}_max_freq"
+        fi
+    done < <(perf_groups)
+
+    nt=$(rd "${pst}/no_turbo")
+    if [ "${nt}" = 1 ]; then
+        perf_flag warn "turbo is disabled (no_turbo=1)" "${pst}/no_turbo" \
+            "no_turbo forbids every turbo P-state, so cores stay at base clock" \
+            "echo 0 | sudo tee ${pst}/no_turbo" "echo 1 | sudo tee ${pst}/no_turbo"
+    elif [ "${nt}" = 0 ]; then
+        perf_ok "turbo enabled (no_turbo=0)" "${pst}/no_turbo"
+    fi
+
+    mx=$(rd "${pst}/max_perf_pct"); mn=$(rd "${pst}/min_perf_pct")
+    if lt "${mx}" 100; then
+        perf_flag warn "max_perf_pct=${mx}: P-states capped at ${mx}% of max turbo" "${pst}/max_perf_pct" \
+            "a global cap below 100 limits every CPU's top P-state" \
+            "echo 100 | sudo tee ${pst}/max_perf_pct" "echo ${mx} | sudo tee ${pst}/max_perf_pct"
+    elif [ -n "${mx}" ]; then
+        perf_ok "max_perf_pct=${mx}, min_perf_pct=${mn}" "${pst}/max_perf_pct"
+    fi
+
+    dyn=$(rd "${pst}/hwp_dynamic_boost")
+    if [ "${dyn}" = 0 ]; then
+        perf_flag note "hwp_dynamic_boost=0" "${pst}/hwp_dynamic_boost" \
+            "when 1, a task waking from I/O wait gets a short min-P-state boost; it can help request handlers that block on the network or disk. Unmeasured for inference here — benchmark before keeping it" \
+            "echo 1 | sudo tee ${pst}/hwp_dynamic_boost" "echo 0 | sudo tee ${pst}/hwp_dynamic_boost"
+    elif [ "${dyn}" = 1 ]; then
+        perf_ok "hwp_dynamic_boost=1" "${pst}/hwp_dynamic_boost"
+    fi
+}
+
+perf_cstates() {
+    local base=/sys/devices/system/cpu drv maxc s name lat dis deep="" deep_names="" deepest=""
+    drv=$(rd "${base}/cpuidle/current_driver")
+    [ -n "${drv}" ] || return 0
+    maxc=$(rd /sys/module/intel_idle/parameters/max_cstate)
+    perf_section "CPU idle states (${drv}${maxc:+, intel_idle.max_cstate=${maxc}})" \
+        "for latency-critical serving, no idle state whose exit latency is large next to a token step; for throughput or power budgets, leave them all on" \
+        "https://docs.kernel.org/admin-guide/pm/cpuidle.html#representation-of-idle-states, https://docs.kernel.org/admin-guide/pm/intel_idle.html"
+    for s in "${SYSROOT}${base}"/cpu0/cpuidle/state[0-9]*; do
+        [ -d "${s}" ] || continue
+        name=$(rf "${s}/name"); lat=$(rf "${s}/latency"); dis=$(rf "${s}/disable")
+        [ "${dis}" = 0 ] || continue
+        deepest="${name} (${lat} us exit latency)"
+        if ! lt "${lat}" 100 && [[ "${lat}" =~ ^[0-9]+$ ]]; then
+            deep+="${deep:+,}${s##*state}"; deep_names+="${deep_names:+ }${name}/${lat}us"
+        fi
+    done
+    if [ -z "${deep}" ]; then
+        perf_ok "deepest enabled state ${deepest:-none}" "${base}/cpu0/cpuidle/state*/latency"
+        return
+    fi
+    local w="${base}/cpu*/cpuidle/state${deep}"
+    [[ "${deep}" == *,* ]] && w="${base}/cpu*/cpuidle/state{${deep}}"
+    perf_flag note "enabled idle states with >=100 us exit latency: ${deep_names}" \
+        "${base}/cpu0/cpuidle/state*/{name,latency,disable}" \
+        "a core woken from these pays that latency before it runs; disabling them trims tail latency at the cost of idle power. The 100 us cut-off is this tool's heuristic, not a kernel rule. Runtime disable needs no reboot (intel_idle.max_cstate does)" \
+        "echo 1 | sudo tee ${w}/disable" "echo 0 | sudo tee ${w}/disable"
+}
+
+perf_rapl() {
+    local z name en zn i cname lim max found=0 d
+    for z in "${SYSROOT}"/sys/class/powercap/intel-rapl:[0-9] "${SYSROOT}"/sys/class/powercap/intel-rapl-mmio:[0-9]; do
+        [ -d "${z}" ] || continue
+        name=$(rf "${z}/name")
+        [[ "${name}" == package* ]] || continue
+        if [ "${found}" -eq 0 ]; then
+            perf_section "CPU package power limits (RAPL)" \
+                "PL1 (long_term) at or above the thermal spec power (TDP, reported as constraint_0_max_power_uw) so sustained inference is not clamped below spec; PL1 decides the clock under a long run, PL2 only covers short bursts" \
+                "https://docs.kernel.org/power/powercap/powercap.html, kernel source drivers/powercap/intel_rapl_common.c (PL1 max_power = PKG_POWER_INFO thermal spec power)"
+            found=1
+        fi
+        zn=${z#"${SYSROOT}"}
+        en=$(rf "${z}/enabled")
+        if [ "${en}" != 1 ]; then
+            perf_info "${zn##*/} ${name}: PL1 not enabled on this interface (enabled=${en:-?})" "${zn}/enabled"
+            continue
+        fi
+        d=""
+        for i in 0 1 2; do
+            cname=$(rf "${z}/constraint_${i}_name"); [ -n "${cname}" ] || continue
+            lim=$(rf "${z}/constraint_${i}_power_limit_uw")
+            if [[ "${lim}" =~ ^[0-9]{1,15}$ ]]; then d+="${d:+, }${cname} $((lim / 1000000)) W"; else d+="${d:+, }${cname} ${lim:-?}"; fi
+        done
+        max=$(rf "${z}/constraint_0_max_power_uw")
+        lim=$(rf "${z}/constraint_0_power_limit_uw")
+        if lt "${lim}" "${max}"; then
+            perf_flag warn "${zn##*/} ${name}: PL1 $((lim / 1000000)) W is below the $((max / 1000000)) W thermal spec power (${d})" \
+                "${zn}/constraint_0_power_limit_uw" \
+                "under a long run the package settles at PL1, so a PL1 under TDP clocks every core below its rated sustained speed. Firmware may re-apply its own value on reboot" \
+                "echo ${max} | sudo tee ${zn}/constraint_0_power_limit_uw" \
+                "echo ${lim} | sudo tee ${zn}/constraint_0_power_limit_uw"
+        else
+            perf_ok "${zn##*/} ${name}: ${d}$(lt 0 "${max}" && echo " (thermal spec power $((max / 1000000)) W)")" "${zn}/constraint_*_power_limit_uw"
+        fi
+    done
+}
+
+perf_memory() {
+    local thp defrag sw total avail stot sfree used hp hpsz hfree
+    thp=$(rd /sys/kernel/mm/transparent_hugepage/enabled)
+    defrag=$(rd /sys/kernel/mm/transparent_hugepage/defrag)
+    if [ -n "${thp}" ]; then
+        perf_section "Transparent huge pages" \
+            "enabled = always or madvise (fewer TLB misses over multi-GB weight and KV buffers), defrag != always (no allocation stalls mid-request)" \
+            "https://docs.kernel.org/admin-guide/mm/transhuge.html#global-thp-controls"
+        local mode dmode
+        mode=$(bracketed "${thp}"); dmode=$(bracketed "${defrag}")
+        case "${mode}" in
+            never)
+                perf_flag warn "THP enabled=never" /sys/kernel/mm/transparent_hugepage/enabled \
+                    "huge pages cut TLB misses for large buffers; never also ignores apps that opt in with madvise(MADV_HUGEPAGE) — e.g. PyTorch's CPU allocator with THP_MEM_ALLOC_ENABLE=1 (c10/core/impl/alloc_cpu.cpp)" \
+                    "echo madvise | sudo tee /sys/kernel/mm/transparent_hugepage/enabled" \
+                    "echo never | sudo tee /sys/kernel/mm/transparent_hugepage/enabled" ;;
+            *) perf_ok "THP enabled=${mode}" /sys/kernel/mm/transparent_hugepage/enabled ;;
+        esac
+        case "${dmode}" in
+            always)
+                perf_flag warn "THP defrag=always" /sys/kernel/mm/transparent_hugepage/defrag \
+                    "always makes a THP allocation stall in direct reclaim + compaction when no huge page is free — a latency spike inside a request. madvise limits that to opted-in regions" \
+                    "echo madvise | sudo tee /sys/kernel/mm/transparent_hugepage/defrag" \
+                    "echo always | sudo tee /sys/kernel/mm/transparent_hugepage/defrag" ;;
+            "") ;;
+            *) perf_ok "THP defrag=${dmode}" /sys/kernel/mm/transparent_hugepage/defrag ;;
+        esac
+    fi
+
+    hp=$(meminfo_kb HugePages_Total); hfree=$(meminfo_kb HugePages_Free); hpsz=$(meminfo_kb Hugepagesize)
+    if [ -n "${hp}" ]; then
+        perf_section "Reserved huge pages (hugetlbfs)" \
+            "0 unless a server is configured to use hugetlbfs — reserved pages cannot be used for anything else, and OpenVINO, PyTorch and llama.cpp do not use them by default" \
+            "https://docs.kernel.org/admin-guide/mm/hugetlbpage.html"
+        if [ "${hp}" -gt 0 ] && [ "${hfree:-0}" -gt 0 ]; then
+            perf_flag note "${hp} huge pages reserved, ${hfree} free = $(kb_gib $((hfree * ${hpsz:-2048}))) GiB held back from model weights" \
+                /proc/meminfo \
+                "pages in the hugetlb pool are reserved inside the kernel and cannot be used for other purposes (and never swap); only keep them if a server mmaps hugetlbfs" \
+                "echo 0 | sudo tee /proc/sys/vm/nr_hugepages" "echo ${hp} | sudo tee /proc/sys/vm/nr_hugepages"
+        else
+            perf_ok "HugePages_Total=${hp}${hfree:+, free ${hfree}}" /proc/meminfo
+        fi
+    fi
+
+    total=$(meminfo_kb MemTotal); avail=$(meminfo_kb MemAvailable)
+    stot=$(meminfo_kb SwapTotal); sfree=$(meminfo_kb SwapFree)
+    sw=$(rd /proc/sys/vm/swappiness)
+    [ -n "${total}" ] || return 0
+    perf_section "Memory and swap" \
+        "the model plus KV cache fits in MemAvailable with headroom and nothing is swapped; swapped-out buffers fault back in at random-I/O speed" \
+        "https://docs.kernel.org/admin-guide/sysctl/vm.html#swappiness, https://docs.openvino.ai/2026/openvino-workflow/running-inference/optimize-inference/optimizing-latency.html"
+    perf_info "MemTotal $(kb_gib "${total}") GiB, MemAvailable $(kb_gib "${avail}") GiB, swap $(kb_gib "${stot:-0}") GiB, vm.swappiness=${sw:-?}" /proc/meminfo
+    used=$(( ${stot:-0} - ${sfree:-0} ))
+    if [ "${used}" -ge 1048576 ]; then
+        local apply=""
+        [ "${avail:-0}" -gt $((used + 1048576)) ] \
+            && apply="sudo swapoff -a && sudo swapon -a   # pulls swapped pages back into RAM; MemAvailable covers them"
+        perf_flag warn "$(kb_gib "${used}") GiB of swap in use — the host is under memory pressure" /proc/meminfo \
+            "anything a server keeps in anonymous memory (KV cache, runtime buffers, weights it copied) is paged back from disk when touched. Free memory or serve a smaller model before benchmarking$([ -n "${apply}" ] || echo "; MemAvailable is too small to pull the swapped pages back in right now")" \
+            "${apply}" ""
+    else
+        perf_ok "swap in use: $(kb_gib "${used}") GiB" /proc/meminfo
+    fi
+    if [ -n "${sw}" ] && [ "${sw}" -gt 60 ]; then
+        perf_flag note "vm.swappiness=${sw} (kernel default 60)" /proc/sys/vm/swappiness \
+            "higher values make the kernel swap anonymous memory sooner. The kernel docs call the right value workload-dependent; note OpenVINO mmaps model files by default, so its weights are page cache and lowering swappiness does not protect them" \
+            "sudo sysctl vm.swappiness=60" "sudo sysctl vm.swappiness=${sw}"
+    fi
+
+    if [ -n "${PERF_MODEL_GB}" ]; then
+        local need_kb
+        need_kb=$(awk -v g="${PERF_MODEL_GB}" 'BEGIN {printf "%d", g * 1.2 * 1048576}')
+        if lt "${avail:-0}" "${need_kb}"; then
+            perf_flag warn "a ${PERF_MODEL_GB} GiB model needs ~$(kb_gib "${need_kb}") GiB (model + 20% for KV cache/runtime, this tool's heuristic); MemAvailable is $(kb_gib "${avail}") GiB" \
+                /proc/meminfo \
+                "a model that does not fit is paged in from disk or swap on every pass. Integrated GPUs (UHD/Iris Xe/Arc iGPU) and the NPU share system RAM, so this applies to them too" \
+                "" ""
+        else
+            perf_ok "a ${PERF_MODEL_GB} GiB model (+20% headroom = $(kb_gib "${need_kb}") GiB) fits in MemAvailable $(kb_gib "${avail}") GiB" /proc/meminfo
+        fi
+    else
+        perf_info "pass --model-gb <size> (or K3D_GPU_MODEL_GB) to check a model against MemAvailable" /proc/meminfo
+    fi
+}
+
+perf_irqbalance() {
+    local c running=0 enabled=0
+    compgen -G "${SYSROOT}/proc/[0-9]*/comm" >/dev/null || return 0
+    compgen -G "${SYSROOT}/etc/systemd/system/*.wants/irqbalance.service" >/dev/null && enabled=1
+    perf_section "IRQ balancing" \
+        "irqbalance running, so interrupt load (NIC, NVMe, GPU) is spread over CPUs instead of piling onto the cores that serve tokens" \
+        "https://github.com/Irqbalance/irqbalance"
+    for c in "${SYSROOT}"/proc/[0-9]*/comm; do
+        [ "$(rf "${c}")" = irqbalance ] && { running=1; break; }
+    done
+    if [ "${running}" -eq 1 ]; then
+        perf_ok "irqbalance is running" "/proc/*/comm"
+    else
+        if [ "${enabled}" -eq 1 ]; then
+            perf_flag note "irqbalance is enabled but not running" "/proc/*/comm, /etc/systemd/system/*.wants/irqbalance.service" \
+                "irqbalance spreads the highest-volume interrupt sources across CPUs. It matters most on a busy NIC or many NVMe queues; a single-user desktop sees little difference" \
+                "sudo systemctl start irqbalance" "sudo systemctl stop irqbalance"
+        else
+            perf_flag note "irqbalance is not running" "/proc/*/comm, /etc/systemd/system/*.wants/irqbalance.service" \
+                "irqbalance spreads the highest-volume interrupt sources across CPUs. It matters most on a busy NIC or many NVMe queues; a single-user desktop sees little difference" \
+                "sudo systemctl enable --now irqbalance   # install the irqbalance package first if the unit is missing" \
+                "sudo systemctl disable --now irqbalance"
+        fi
+    fi
+}
+
+perf_igpu() {
+    local card gt f drv cur mn mx boost rp0 rpn act thr d profile slpc huc found=0
+    for card in "${SYSROOT}"/sys/class/drm/card[0-9]*; do
+        [[ "${card##*/}" =~ ^card[0-9]+$ ]] || continue
+        drv=$(basename "$(readlink "${card}/device/driver" 2>/dev/null)")
+        [ "$(rf "${card}/device/vendor")" = 0x8086 ] || continue
+        for gt in "${card}"/gt/gt[0-9]* "${card}"/device/tile[0-9]*/gt[0-9]*/freq0; do
+            [ -d "${gt}" ] || continue
+            d=${gt#"${SYSROOT}"}
+            if [ "${found}" -eq 0 ]; then
+                perf_section "Intel GPU frequency" \
+                    "max request at RP0 (no cap); boost at RP0 so a waiting client gets full clock; under GuC SLPC the firmware picks the frequency between min and max" \
+                    "kernel source drivers/gpu/drm/i915/gt/intel_gt_sysfs_pm.c + uc/intel_guc_slpc.c (i915), https://docs.kernel.org/gpu/xe/xe_gt_freq.html (xe)"
+                found=1
+            fi
+            if [ -f "${gt}/rps_cur_freq_mhz" ]; then
+                cur=$(rf "${gt}/rps_cur_freq_mhz"); act=$(rf "${gt}/rps_act_freq_mhz")
+                mn=$(rf "${gt}/rps_min_freq_mhz"); mx=$(rf "${gt}/rps_max_freq_mhz")
+                boost=$(rf "${gt}/rps_boost_freq_mhz"); rp0=$(rf "${gt}/rps_RP0_freq_mhz"); rpn=$(rf "${gt}/rps_RPn_freq_mhz")
+                # i915 creates slpc_ignore_eff_freq only when GuC SLPC owns frequency.
+                if [ -f "${gt}/slpc_ignore_eff_freq" ]; then slpc="GuC SLPC"; else slpc="host RPS (no GuC SLPC)"; fi
+                perf_info "${card##*/} ${drv} ${gt##*/}: ${slpc}; cur ${cur} / act ${act:-?} MHz, min ${mn}, max ${mx}, boost ${boost:-?}, RPn ${rpn}, RP0 ${rp0}" "${d}/rps_*_freq_mhz"
+                if lt "${mx}" "${rp0}"; then
+                    perf_flag warn "${card##*/} ${gt##*/}: max ${mx} MHz is below RP0 ${rp0} MHz" "${d}/rps_max_freq_mhz" \
+                        "the max request caps every kernel the GPU runs" \
+                        "echo ${rp0} | sudo tee ${d}/rps_max_freq_mhz" "echo ${mx} | sudo tee ${d}/rps_max_freq_mhz"
+                fi
+                if lt "${boost}" "${rp0}"; then
+                    perf_flag warn "${card##*/} ${gt##*/}: boost ${boost} MHz is below RP0 ${rp0} MHz" "${d}/rps_boost_freq_mhz" \
+                        "when a client waits on the GPU, i915 (and SLPC waitboost) raises the min request to the boost frequency" \
+                        "echo ${rp0} | sudo tee ${d}/rps_boost_freq_mhz" "echo ${boost} | sudo tee ${d}/rps_boost_freq_mhz"
+                fi
+                if lt "${mn}" "${rp0}"; then
+                    perf_flag note "${card##*/} ${gt##*/}: min ${mn} MHz — the GPU ramps from there on each burst" "${d}/rps_min_freq_mhz" \
+                        "pinning min to RP0 removes the ramp for bursty single-user inference but holds full clock (and power) while idle; on a shared-TDP part it also takes power budget from the CPU cores. Benchmark both" \
+                        "echo ${rp0} | sudo tee ${d}/rps_min_freq_mhz" "echo ${mn} | sudo tee ${d}/rps_min_freq_mhz"
+                fi
+                thr=$(rf "${gt}/throttle_reason_status")
+                if [ "${thr}" = 1 ]; then
+                    local r reasons=""
+                    for r in pl1 pl2 pl4 prochot ratl thermal vr_tdc vr_thermalert; do
+                        [ "$(rf "${gt}/throttle_reason_${r}")" = 1 ] && reasons+=" ${r}"
+                    done
+                    perf_info "${card##*/} ${gt##*/}: throttled right now:${reasons:- (reason not reported)}" "${d}/throttle_reason_*"
+                fi
+            else
+                cur=$(rf "${gt}/cur_freq"); act=$(rf "${gt}/act_freq")
+                mn=$(rf "${gt}/min_freq"); mx=$(rf "${gt}/max_freq")
+                rp0=$(rf "${gt}/rp0_freq"); rpn=$(rf "${gt}/rpn_freq")
+                perf_info "${card##*/} ${drv} ${d#*device/}: GuC SLPC (xe); cur ${cur} / act ${act} MHz, min ${mn}, max ${mx}, RPn ${rpn}, RP0 ${rp0}" "${d}/*_freq"
+                if lt "${mx}" "${rp0}"; then
+                    perf_flag warn "${card##*/}: max ${mx} MHz is below RP0 ${rp0} MHz" "${d}/max_freq" \
+                        "the max request caps every kernel the GPU runs" \
+                        "echo ${rp0} | sudo tee ${d}/max_freq" "echo ${mx} | sudo tee ${d}/max_freq"
+                fi
+                profile=$(rf "${gt}/power_profile")
+                if [[ "${profile}" == *"[power_saving]"* ]]; then
+                    perf_flag warn "${card##*/}: SLPC power_profile is power_saving" "${d}/power_profile" \
+                        "power_saving tells GuC SLPC to favour energy; base is the default balance" \
+                        "echo base | sudo tee ${d}/power_profile" "echo power_saving | sudo tee ${d}/power_profile"
+                fi
+            fi
+        done
+    done
+    [ "${found}" -eq 1 ] || return 0
+    huc=$(cat "${SYSROOT}"/sys/kernel/debug/dri/*/gt0/uc/huc_info 2>/dev/null | grep -m1 -i 'status' || true)
+    perf_info "HuC: ${huc:-not readable (debugfs needs root: sudo cat /sys/kernel/debug/dri/*/gt0/uc/huc_info)} — HuC is the HEVC/AVC media microcontroller, not used by inference" \
+        "/sys/kernel/debug/dri/*/gt0/uc/huc_info (see https://docs.kernel.org/gpu/i915.html#huc)"
+}
+
+perf_nvidia() {
+    has_nvidia || return 0
+    command -v nvidia-smi >/dev/null 2>&1 || return 0
+    local idx name pm daemon=0 c out rc=0
+    perf_section "NVIDIA persistence" \
+        "driver state kept initialized between jobs, so a new pod does not pay seconds of GPU init; NVIDIA's preferred way is nvidia-persistenced, legacy is nvidia-smi -pm 1" \
+        "https://docs.nvidia.com/deploy/driver-persistence/persistence-mode-legacy.html, https://docs.nvidia.com/deploy/driver-persistence/background.html"
+    for c in "${SYSROOT}"/proc/[0-9]*/comm; do
+        [ "$(rf "${c}")" = nvidia-persiste ] && { daemon=1; break; }
+    done
+    [ "${daemon}" -eq 0 ] || perf_ok "nvidia-persistenced is running" "/proc/*/comm"
+    out=$(nvidia-smi --query-gpu=index,name,persistence_mode --format=csv,noheader 2>&1) || rc=$?
+    if [ "${rc}" -ne 0 ] || { [ -n "${out//[[:space:]]/}" ] && ! grep -qE '^[0-9]+,' <<< "${out}"; }; then
+        perf_flag warn "nvidia-smi failed (exit ${rc}): $(head -n1 <<< "${out}")" "nvidia-smi --query-gpu=persistence_mode" \
+            "the driver could not be queried, so persistence was not checked. 'Driver/library version mismatch' after a driver upgrade means the loaded kernel module is older than the userspace library; a reboot loads the matching module" \
+            "" ""
+        return 0
+    fi
+    while IFS=',' read -r idx name pm; do
+        name="${name# }"; pm="${pm# }"
+        [ -n "${idx}" ] || continue
+        if [ "${pm}" = Enabled ]; then
+            perf_ok "GPU ${idx} ${name}: persistence ${pm}" "nvidia-smi --query-gpu=persistence_mode"
+        else
+            perf_flag warn "GPU ${idx} ${name}: persistence ${pm}" "nvidia-smi --query-gpu=persistence_mode" \
+                "with no client attached the driver tears GPU state down; the next CUDA job re-initializes it, which NVIDIA puts at seconds" \
+                "sudo systemctl enable --now nvidia-persistenced   # or: sudo nvidia-smi -i ${idx} -pm 1" \
+                "sudo systemctl disable --now nvidia-persistenced   # or: sudo nvidia-smi -i ${idx} -pm 0"
+        fi
+    done < <(grep -E '^[0-9]+,' <<< "${out}")
+}
+
+perf_docker() {
+    command -v docker >/dev/null 2>&1 || return 0
+    local drv
+    drv=$(docker info --format '{{.Driver}}' 2>/dev/null) || return 0
+    [ -n "${drv}" ] || return 0
+    perf_section "Docker storage driver" \
+        "overlay2 (or the containerd overlayfs snapshotter): multi-GB inference images unpack and start without full copies" \
+        "https://docs.docker.com/engine/storage/drivers/select-storage-driver/, https://docs.docker.com/engine/deprecated/"
+    case "${drv}" in
+        vfs|devicemapper)
+            perf_flag warn "storage driver ${drv}" "docker info --format '{{.Driver}}'" \
+                "Docker documents vfs as poor performance and not for production (it copies every layer), and devicemapper as removed in Docker Engine 25.0 (deprecated since 18.09)" \
+                "set \"storage-driver\": \"overlay2\" in /etc/docker/daemon.json, then sudo systemctl restart docker (images stored under ${drv} are not visible to overlay2)" \
+                "set \"storage-driver\": \"${drv}\" back in /etc/docker/daemon.json, then sudo systemctl restart docker" ;;
+        *) perf_ok "storage driver ${drv}" "docker info --format '{{.Driver}}'" ;;
+    esac
+}
+
+doctor_perf() {
+    perf_cpu
+    perf_cstates
+    perf_rapl
+    perf_memory
+    perf_irqbalance
+    perf_igpu
+    perf_nvidia
+    perf_docker
+    echo ""
+    info "${PERF_SUGGESTIONS} suggestion(s). Read-only: nothing on this host was changed."
+}
+
+cmd_doctor() {
+    local perf=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --perf) perf=1 ;;
+            --model-gb) [ $# -ge 2 ] || err "--model-gb needs a size in GiB"; PERF_MODEL_GB=$2; shift ;;
+            --model-gb=*) PERF_MODEL_GB=${1#*=} ;;
+            *) err "unknown doctor option: $1 (use --perf [--model-gb N])" ;;
+        esac
+        shift
+    done
+    if [ -n "${PERF_MODEL_GB}" ] && ! [[ "${PERF_MODEL_GB}" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+        err "--model-gb must be a number of GiB, got '${PERF_MODEL_GB}'"
+    fi
+    if [ "${perf}" -eq 1 ]; then doctor_perf; else doctor; fi
 }
 
 cmd_up() {
@@ -1364,7 +1920,7 @@ case "${1:-help}" in
     down)    cmd_down    ;;
     test)    cmd_test    ;;
     detect)  cmd_detect  ;;
-    doctor)  doctor      ;;
+    doctor)  shift; cmd_doctor "$@" ;;
     logs)    cmd_logs    ;;
     host-setup) shift; cmd_host_setup "$@" ;;
     version|--version|-v) echo "k3d-gpu ${VERSION}" ;;
