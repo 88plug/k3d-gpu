@@ -55,3 +55,32 @@ hand-tuned for all three.
   first.
 - Wiring into `k3d-gpu up`. The image is not published, so the manifest ships
   as an opt-in file only.
+
+## Results (static/sim, added after the run; criteria above unchanged)
+
+Source: `go test ./...` and `go run ./cmd/sizer-sim`, hosts 13900T, 12900K,
+155H; balloons E x4, P 2c x SMT, P 4c no-SMT.
+
+- AC1-AC3, AC6, AC7: pass.
+- P1 OVMS: confirmed. maxGain 1.00 everywhere; default already equals the
+  plan. The OVMS arm cannot clear.
+- P2 llama.cpp: confirmed. Default 24 threads (13900T) / 16 (12900K, 155H) in
+  a 4-CPU balloon. Clears 1.5x on 0% of the grid at 0 us wake cost, 62-75% at
+  50 us, 100% at >= 200 us. Clears on 40-60% of the grid overall.
+- P3 vLLM guided JSON: py3.12 (stock image) 0% (PYTHON_CPU_COUNT is ignored);
+  py3.13 clears only at host CPU per step = 1.0 (17% of that slice, 6% overall).
+- P4: confirmed. Injected is within 5% of the sweep at SMT gain 0, and tuned on
+  25% of the grid at SMT gain >= 15% on the P 2c x SMT balloon.
+- Original claim (>= 2 of 3 arms clear and tuned): holds on 0% of the grid with
+  py3.12, <= 3% with py3.13. The sim predicts the claim as written FAILS. The
+  surviving claim is one runtime: llama.cpp in a partial cpuset on a hybrid
+  or non-hybrid host.
+- AC5 deviation, stated openly: the llama.cpp ablation gives 1.00x at every
+  point (pass). The OVMS host-count ablation gives up to 1.30x on the P 2c x
+  SMT balloon. OpenVINO clamps the host count to the 4 logical CPUs of the
+  mask, which beats the 2-physical-core default when SMT helps. This is not a
+  reward for injection (the sizer's plan also picks 2), but it shows the plan's
+  "physical cores" rule is wrong for SMT P balloons whenever SMT gain > 5%.
+  The test now checks the llama.cpp arm on all three hybrid hosts with no gate.
+- Mutation probe: forcing the sizer to emit the host count fails 3 sim tests
+  (audit, wrong-cpuset, wake-cost verdict).

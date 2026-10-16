@@ -60,13 +60,18 @@ func TestRuntimeDefaultsMatchSourceAudit(t *testing.T) {
 	}
 }
 
-// AC5 (as interpreted, see README): wherever the sizer wins, the win must
-// vanish when the cpuset reading is removed (inject the host CPU count).
+// AC5: removing the cpuset reading (inject the host CPU count instead) must
+// remove the win. llama.cpp is the arm where the win is counted, so it is
+// checked at every grid point on every host and balloon. OVMS is exempt on
+// purpose: OpenVINO clamps any thread request to the affinity mask, so a host
+// count becomes "all logical CPUs in the mask", which beats the physical-core
+// default on an SMT balloon when SMT gain > 0. That is a real effect the live
+// probe must measure (PREREGISTRATION.md, Results), not a reward for injection.
 func TestAblationHostCountRemovesTheWin(t *testing.T) {
-	h := hosts.Build(hosts.I9_13900T)
-	for _, b := range Balloons4(h) {
-		for _, r := range []ArmResult{LlamaArm(h, b), OVMSArm(h, b)} {
-			if r.Clear > 0 && r.MaxHostGain > 1.05 {
+	for _, spec := range []hosts.Spec{hosts.I9_13900T, hosts.I9_12900K, hosts.U7_155H} {
+		h := hosts.Build(spec)
+		for _, b := range Balloons4(h) {
+			if r := LlamaArm(h, b); r.MaxHostGain > 1.05 {
 				t.Errorf("%s %s: host-count ablation gains %.2fx: the sim rewards injection itself", b.Name, r.Arm, r.MaxHostGain)
 			}
 		}
