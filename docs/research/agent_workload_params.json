@@ -1,0 +1,45 @@
+{
+  "_doc": "Agent-workload parameters for the agents-per-box ceiling model (Sweep C). Every value cites a primary source. tag: verified = read in the source text; derived = arithmetic on verified values; discovery = new inference, needs a live probe.",
+  "turns_per_session": {
+    "swe_bench_mini_swe_agent_gpt5": {"mean": 10.9, "sd": 2.1, "tag": "verified", "src": "arXiv:2511.02230 Table 2"},
+    "bfcl_v4_websearch_gpt5": {"mean": 6.3, "sd": 2.3, "tag": "verified", "src": "arXiv:2511.02230 Table 2"},
+    "swe_agent_gpt4_resolved_mean": 14.71, "swe_agent_gpt4_resolved_median_steps": 12, "swe_agent_gpt4_unresolved_mean_steps": 21,
+    "_swe_agent_src": "arXiv:2405.15793 sec B.3"
+  },
+  "tool_wait_s": {
+    "swe_bench_shell": {"mean": 0.925, "sd": 3.55, "tail": "slowest 10% of `cd` calls = 94.1% of total tool delay", "tag": "verified", "src": "arXiv:2511.02230 Table 2, Fig 5"},
+    "bfcl_web_search": {"mean": 1.923, "sd": 2.133, "tail": "slowest 10% of fetch_url = 52.5% of delay", "tag": "verified", "src": "arXiv:2511.02230 Table 2, Fig 5"},
+    "qa_wikipedia_api": {"mean": 0.69, "var": 0.17, "calls_per_req": 2.52, "tag": "verified", "src": "arXiv:2402.01869 Table 1"},
+    "alfworld_env": {"mean": 0.09, "calls_per_req": 28.18, "tag": "verified", "src": "arXiv:2402.01869 Table 1"},
+    "calculator": {"mean": 9e-5, "calls_per_req": 3.75, "tag": "verified", "src": "arXiv:2402.01869 Table 1"},
+    "hotpotqa_wikipedia": {"mean": 1.2, "webshop_local": 0.02, "tag": "verified", "src": "arXiv:2506.04301 sec on latency breakdown"},
+    "chatbot_human_think": {"mean": 28.6, "tag": "verified (estimated in source)", "src": "arXiv:2402.01869 Table 1"}
+  },
+  "llm_time_fraction": {
+    "a100_llama31_8b_avg": {"llm": 0.694, "tool": 0.302, "tag": "verified", "src": "arXiv:2506.04301"},
+    "this_box_cpu_toolbench_like": {"llm": 0.83, "tag": "derived", "how": "turn LLM time (300/172 + 43/15.7 = 4.5 s) vs SWE tool mean 0.925 s"},
+    "this_box_cpu_swe_like": {"llm": 0.96, "tag": "derived", "how": "1500/172 + 200/15.7 = 21.5 s vs 0.925 s tool"}
+  },
+  "prompt_shape": {
+    "toolbench": {"prompt_tok": 1835, "output_tok": 43, "shared_prefix_frac": 0.85, "tag": "verified", "src": "arXiv:2407.00023 Table 1"},
+    "embodied_agent": {"prompt_tok": 2285, "output_tok": 16, "shared_prefix_frac": 0.97, "tag": "verified", "src": "arXiv:2407.00023 Table 1"},
+    "programming": {"prompt_tok": 3871, "output_tok": 190, "shared_prefix_frac": 0.97, "tag": "verified", "src": "arXiv:2407.00023 Table 1"},
+    "deepresearch_system_prompt_tok": {"value": 10000, "tag": "verified", "src": "arXiv:2601.06007 abstract"},
+    "tokens_per_program": {"swe_bench": [70126, 19732], "bfcl_v4": [93256, 68687], "tag": "verified (mean, sd); input/output split not stated", "src": "arXiv:2511.02230 Table 2"},
+    "context_at_interception": {"qa": 1846, "alfworld": 2185, "math": 1422, "tag": "verified", "src": "arXiv:2402.01869 Table 1"}
+  },
+  "prefix_cache_value": {
+    "api_cost_cut": [0.41, 0.80], "ttft_cut": [0.13, 0.31], "tag": "verified (hosted APIs; not this box)", "src": "arXiv:2601.06007",
+    "this_box_cold_10k_prefix_s": {"value": 58, "tag": "derived", "how": "10000 / 172 tok/s prefill"}
+  },
+  "cascade_router": {
+    "routellm_mtbench_cpt50_mf": {"strong_calls": 0.134, "note": "95% of GPT-4 MT-Bench at CPT(50%)", "tag": "verified", "src": "arXiv:2406.18665 Table 1 (arena+judge)"},
+    "routellm_mmlu_best_vs_random": {"apgr_gain": 0.049, "note": "routers ~ random on MMLU w/o golden data", "tag": "verified", "src": "arXiv:2406.18665"},
+    "frugalgpt_best_case_cost_cut": {"value": 0.98, "note": "HEADLINES dataset, not agentic", "tag": "verified", "src": "arXiv:2305.05176"},
+    "slm_replaceable_calls_estimate": {"metagpt": 0.60, "open_operator": 0.40, "cradle": 0.70, "tag": "verified as quoted; estimates, not measured", "src": "arXiv:2506.02153 App B"}
+  },
+  "caching": {
+    "semantic_cache_hit": [0.616, 0.688], "positive_hit_precision": 0.97, "note": "single-turn FAQ queries; agent turns carry unique growing context, hit rate there unmeasured", "tag": "verified", "src": "arXiv:2411.05276",
+    "agentic_plan_cache": {"cost_cut": 0.5031, "latency_cut": 0.2728, "accuracy_kept": 0.9661, "tag": "verified", "src": "arXiv:2506.14852"}
+  }
+}
