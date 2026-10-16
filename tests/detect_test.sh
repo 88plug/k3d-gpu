@@ -3034,6 +3034,20 @@ r=$(newroot native-up)
 pci "${r}" 0000:03:00.0 0x8086 0xe20b xe; render "${r}" 0000:03:00.0 128
 up_args "up on native Linux does not mount /usr/lib/wsl" "${r}" 'usr/lib/wsl' negate STUB_ALLOC="gpu.intel.com/xe 1"
 
+# Every intel-device-plugins image ships from one release, and the plugins share
+# its CRDs and APIs, so the manifests must all carry the GPU plugin's tag. The CI
+# auto-bump rewrites each file with its own sed; one it misses shows up here.
+SHARE="$(dirname "${K3D_GPU}")/../share"
+gpu_tag=$(grep -ho 'intel/intel-gpu-plugin:[0-9.]*' "${SHARE}/intel-gpu-plugin.yml" | head -n1)
+gpu_tag=${gpu_tag##*:}
+drift=$(grep -Ho 'intel/intel-[a-z-]*:[0-9][0-9.]*' "${SHARE}"/*.yml | grep -v ":${gpu_tag}\$" || true)
+if [ -n "${gpu_tag}" ] && [ -z "${drift}" ]; then
+    PASS=$((PASS + 1)); echo "ok   every intel-device-plugins image matches intel-gpu-plugin:${gpu_tag}"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL intel-device-plugins images differ from intel-gpu-plugin:${gpu_tag}"
+    sed 's/^/  | /' <<< "${drift}"
+fi
+
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]
