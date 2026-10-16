@@ -50,12 +50,12 @@ attr() {
     done
 }
 
-# PCI functions: ids, class, bound driver, SR-IOV VFs.
+# PCI functions: ids, class, bound driver, SR-IOV VFs, NPU scheduler mode.
 for dev in "${SRC}"/sys/bus/pci/devices/*; do
     [ -e "${dev}" ] || continue
     link "${dev}"
     dir "${dev}"
-    attr "${dev}" vendor device class sriov_numvfs
+    attr "${dev}" vendor device class sriov_numvfs sriov_totalvfs sched_mode
     if [ -L "${dev}/driver" ]; then
         link "${dev}/driver"
         if [ -d "${dev}/driver" ]; then dir "${dev}/driver"; fi
@@ -95,6 +95,12 @@ for pmu in cpu_core cpu_atom; do
     mkdir -p "${OUT}/sys/devices/${pmu}"
     attr "${SRC}/sys/devices/${pmu}" cpus
 done
+
+# sched_ext state (Linux 6.12+), read by the scx experimental feature.
+if [ -r "${SRC}/sys/kernel/sched_ext/state" ]; then
+    mkdir -p "${OUT}/sys/kernel/sched_ext"
+    attr "${SRC}/sys/kernel/sched_ext" state
+fi
 
 # First CPU's model and flags, and the kernel release.
 if [ -r "${SRC}/proc/cpuinfo" ]; then

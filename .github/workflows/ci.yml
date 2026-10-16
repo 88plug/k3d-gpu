@@ -24,6 +24,7 @@ jobs:
       - uses: actions/checkout@v6
       - run: tests/detect_test.sh
       - run: tests/host_setup_test.sh
+      - run: tests/experimental_test.sh
 
   claims-check:
     name: Docs claims guard

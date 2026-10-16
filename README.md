@@ -212,6 +212,18 @@ Service `ovms` gives the agent-stack address shape,
 with `kubeconform` and `helm` on `PATH`, validates the manifests and rendered
 charts at Kubernetes 1.34 and 1.35.
 
+### Experimental features (opt-in)
+
+Some upstream features are still alpha, beta or preview: Kubernetes DRA and
+ImageVolume gates, OpenVINO KV-cache and NPU properties, sched_ext, xe SR-IOV and
+`force_probe`. `K3D_GPU_EXPERIMENTAL=<name,...>` turns them on. They are off by
+default, and an unknown name is an error. `K3D_GPU_EXPERIMENTAL=list k3d-gpu detect`
+or `k3d-gpu doctor --experimental` shows what this host can use and why.
+k3d-gpu only sets cluster-side options: feature gates, node labels and an
+OpenVINO plugin-config ConfigMap. A feature that needs a host kernel or module
+change prints the command and its revert, and k3d-gpu never runs it. See
+**[docs/experimental.md](docs/experimental.md)** for the ranking and sources.
+
 ---
 
 ## Prerequisites
