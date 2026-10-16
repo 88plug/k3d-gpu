@@ -483,7 +483,8 @@ is deleted.
 `share/agent-chat-ui.yml` (installed as `/usr/share/k3d-gpu/agent-chat-ui.yml`)
 runs [Open WebUI](https://github.com/open-webui/open-webui) v0.12.2, pinned by
 digest, in front of the agent's OpenVINO Model Server. It is not deployed by
-`up`; apply it when you want it:
+`up`; apply it when you want it. Its only backend is the `svc/ovms` that
+`k3d-gpu agent up` creates, so start the agent first:
 
 ```bash
 # Optional, before the first apply: create the admin account up front.

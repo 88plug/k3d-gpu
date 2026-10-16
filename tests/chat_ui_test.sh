@@ -40,6 +40,12 @@ expect_env() {
 # Image pinned by digest, never by a moving tag.
 has   "image pinned by digest" '^ +image: ghcr\.io/open-webui/open-webui@sha256:[0-9a-f]{64}$'
 lacks "no tag-only image"      '^ +image: [^@]+:[^@]+$'
+# The exact index digest of ghcr.io/open-webui/open-webui:v0.12.2, and the
+# version the header comment names. A bump changes all three together.
+OWUI_VERSION=v0.12.2
+OWUI_DIGEST=sha256:10e6a78ba2d172493460a9e8a92c496aaa7a64dc4d26d622a2e95e0c736081c9
+has "image is ${OWUI_VERSION} digest" "^ +image: ghcr\.io/open-webui/open-webui@${OWUI_DIGEST}$"
+has "header names ${OWUI_VERSION}"    "^# Source: https://github\.com/open-webui/open-webui ${OWUI_VERSION//./\\.}\."
 
 # E-core placement through the NRI balloons label, sized by a CPU request.
 has "pod label cores=efficient" '^ +k3d-gpu\.io/cores: efficient$'
