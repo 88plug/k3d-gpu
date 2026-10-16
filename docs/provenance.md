@@ -1,7 +1,6 @@
 # Provenance search: what k3d-gpu claims, and who did it first
 
-Search date: **2026-10-16**. Method: the provenance protocol from the
-scientific-method skill (`references/invent.md` §2). Each claim is split into
+Search date: **2026-10-16**. Method: each claim is split into
 elements. Each element is searched with at least three query families across
 GitHub, the web, arXiv and Google Patents. Then two tests run against what was
 found: **anticipated** (one source teaches every element) and
@@ -9,9 +8,12 @@ found: **anticipated** (one source teaches every element) and
 sources and expect it to work).
 
 Every verdict below is relative to the corpus searched, never absolute. The
-raw machine logs are in [`docs/provenance/`](provenance/). Each file has one
-`===` line per query, with the date, the venue, the query, the hit count and
-every hit reviewed.
+raw machine logs for the GitHub, arXiv, Google Patents and DuckDuckGo venues
+are in [`docs/provenance/`](provenance/). In those files, each query has one
+`===` line with the date, the venue, the query and the hit count, followed by
+every hit reviewed. Exa, WebSearch and SearXNG have no raw log file: they are
+recorded only as summary rows in §6 (the 8 SearXNG queries as one row, without
+per-query text).
 
 ## Verdicts at a glance
 
@@ -25,7 +27,7 @@ every hit reviewed.
 **Prior art found, said plainly:**
 
 - **C4:** the canonical policy already exists. OVMS's own device auto-detect (v2026.3) uses the same order we use.
-- **C2:** the mechanism already exists. nri-plugins `preferCoreType` (2024) and dra-driver-cpu `coreType` (2025) are published primitives with worked examples. Intel's edge blueprint has *planned* P/E pinning for K3s since 2026-05-25.
+- **C2:** the mechanism already exists. nri-plugins `preferCoreType` (2024) and dra-driver-cpu `coreType` (2025) are published primitives with worked examples. Intel's edge blueprint has described P/E core allocation for K3s since 2026-05-25, but its scripts do not implement it.
 
 None of these anticipates a claim as worded. All of them shrink what we can honestly call new.
 
@@ -41,9 +43,9 @@ None of these anticipates a claim as worded. All of them shrink what we can hone
 | GitHub direct reads | `gh api` READMEs, releases, commits, forks; shallow clones | about 40 reads | OK. Logs: `readmes_*.txt`, `eat_fork*.txt` |
 | arXiv | `export.arxiv.org/api/query` | 26 | OK. Log: `arxiv.txt` |
 | Google Patents | `patents.google.com/xhr/query` | 7 | Search OK. Abstract pages often returned **503**. Log: `patents.txt`, `patent_abstracts.txt` |
-| Exa (semantic web) | `web_search_exa` + `web_fetch_exa` | 9 searches, 2 fetches | OK. Logged in §6 |
-| WebSearch (built-in) | 4 queries | 4 | OK. Logged in §6 |
-| SearXNG | `search_many` | 8 | **Degraded.** Bing-only junk (restaurants, car dealers), nothing relevant. Logged as a gap. |
+| Exa (semantic web) | `web_search_exa` + `web_fetch_exa` | 9 searches, 2 fetches | OK. Summary rows in §6 only; no raw log file |
+| WebSearch (built-in) | 4 queries | 4 | OK. Summary rows in §6 only; no raw log file |
+| SearXNG | `search_many` | 8 | **Degraded.** Bing-only junk (restaurants, car dealers), nothing relevant. One summary row in §6; no raw log file or per-query text. Logged as a gap. |
 | DuckDuckGo HTML | `html.duckduckgo.com` | 6 | **Unreachable.** A bot-challenge page, 0 results. Log: `ddg.txt` |
 
 **Not searched (coverage gaps):**
@@ -155,9 +157,9 @@ found", not "new idea".
 | Source (date) | What it teaches | Missing elements |
 |---|---|---|
 | **containers/nri-plugins v0.7.1 release notes** (2024-09-23; PR #354; core-type sysfs support from commit `9a580472`, 2024-03-12) | Balloon types with `preferCoreType: efficient` for `logging`/`monitoring` namespaces and `performance` for a high-priority type. This is **the mechanism E3, with a worked example**. | E5 (no local-cluster packaging). E2 is shown by namespace, not by pod label, though label `matchExpressions` are a documented balloon feature. |
-| **kubernetes-sigs/dra-driver-cpu** (`dra.cpu/coreType` = `standard`/`p-core`/`e-core` since the first kubelet-plugin commit `97d1e510`, 2025-08-05; docs show a CEL selector `coreType == "p-core"`) | A second, independent primitive: DRA claims for P-cores. | E3 (a different mechanism), E4, E5 |
-| **open-edge-platform/edge-node-infrastructure-blueprint** design proposal (2026-05-25) | Plans "P/E core pinning via kernel boot parameters (`isolcpus`, `cpuset`)" for K3s on Core Ultra, and a "verify P/E core pinning" step. | Host-level boot params, not per-pod. **Not implemented**: grep of its install/provision scripts for `isolcpus\|core.pin\|p/e` is empty (@66c85ab). |
-| **Intel Edge Orchestrator 3.0 release notes** | States "The Product does not differentiate P-cores and E-cores in Intel Core processor-based platforms." | (Intel's own gap statement.) |
+| **kubernetes-sigs/dra-driver-cpu** (`dra.cpu/coreType` = `p-core`/`e-core` since the first kubelet-plugin commit `97d1e510`, 2025-08-05; a third value `standard` was added later and is present at `f267a051` in `pkg/cpuinfo/cpuinfo.go` and `docs/user/device-attributes.md`; docs show a CEL selector `coreType == "p-core"`) | A second, independent primitive: DRA claims for P-cores. | E3 (a different mechanism), E4, E5 |
+| **open-edge-platform/edge-node-infrastructure-blueprint** design proposal (2026-05-25) | States the image "supports … P/E core allocation" (`infrastructure/docs/design-proposals/en-infrastructure-blueprint.md:13` @66c85ab). Describes "P/E core allocation via kernel boot parameters (`isolcpus`, `cpuset`)" (line 56) and "P/E core pinning via `isolcpus` and `cpuset`" in cloud-init (line 285) for K3s on Core Ultra, and a "P/E core pinning functionality" test step (line 288). `tools/system-info/system-info.sh` detects and reports P-core and E-core counts from sysfs `core_type`. | Host-level boot params, not per-pod. **Pinning not implemented**: grep of its install/provision scripts for `isolcpus\|core.pin\|p/e` is empty (@66c85ab). Detection exists only as a reporting tool. |
+| **Intel Edge Orchestrator 3.0 release notes** (`open-edge-platform/edge-manage-docs` `docs/release_notes/3.0/rel_notes_3.0.rst:507` @bd2478b, 2025-09-16) | States "The Product does not differentiate P-cores and E-cores in Intel Core processor-based platforms." | (Intel's own gap statement.) |
 | **kubernetes/kubernetes#106157** (2021, closed stale) | A feature request for P/E core grouping; SIG Node asked for use cases. | Request only |
 | **fabriziosalmi/proxmox-lxc-autoscale** (`p-cores`/`e-cores` groups, 2026-03/09); **canonical/lxd#16404** (open, 2025-09) | P/E pinning for LXC containers | Not k8s |
 | **intel/enterprise-agent-toolkit** NRI role (@0ecf67a) | Installs balloons on its own cluster, with no core-type use. Grep for P/E/core type across the clone is empty. | E1, E2, E3 (core type) |
@@ -166,7 +168,7 @@ found", not "new idea".
 - `gh search code` for `isolcpus` / `preferCoreType` / `balloons` across `open-edge-platform` found no core-type use.
 - `intel/cri-resource-manager` has no `CoreKind`/`PreferCoreType`.
 - arXiv: 1 hit (GC scheduling on asymmetric multicore, 2403.02200), not k8s.
-- Patents: data-centre heterogeneous scheduling (Intel "software defined super cores", CN core-binding for cloud-native apps). None packages core-type pinning for a local k8s. Two candidate abstracts (CN119938341B, KR20250175472A) returned 503 and were **not reviewed** (gap).
+- Patents: data-centre heterogeneous scheduling (Intel "software defined super cores", CN core-binding for cloud-native apps). None packages core-type pinning for a local k8s. Four candidate abstracts were **not reviewed** (gap): CN119938341B and KR20250175472A returned 503; CN116820777A returned no abstract, then 503 on retry; CN121433917A returned no abstract (`patent_abstracts.txt`).
 
 ### C2 tests
 
@@ -184,10 +186,10 @@ found", not "new idea".
 **Verdict (C2):** closest found: containers/nri-plugins v0.7.1 `preferCoreType`
 (2024-09-23) and kubernetes-sigs/dra-driver-cpu `coreType` (2025-08-05). They
 differ in this: they are primitives with examples, and neither is packaged or
-auto-enabled in any local/dev cluster. Intel's edge K3s blueprint only plans
-host-level `isolcpus` pinning, and Intel's Edge Orchestrator says it does not
-tell P from E. No anticipating reference in the searched corpus (venues and
-dates in §1; gaps: two patent abstracts unread, CN web, non-default branches).
+auto-enabled in any local/dev cluster. Intel's edge K3s blueprint describes
+P/E core allocation and reports P/E core counts, but implements no pinning, and
+Intel's Edge Orchestrator says it does not tell P from E. No anticipating reference in the searched corpus (venues and
+dates in §1; gaps: four patent abstracts unread, CN web, non-default branches).
 It is taught as a combination, so the claim is "first packaging found".
 
 ---
@@ -248,11 +250,11 @@ wave. Nothing here may be called "runs on k3d" until the probe in §7 passes.
 
 ## 5. C4: OVMS that picks iGPU/NPU/CPU from k8s allocatable resources
 
-**What the code on `claude/agent-stack` (commit `0e0c141`) actually does:**
+**What the code on `claude/agent-stack` (commit `8385dc2`, `agent_device()` in `scripts/k3d-gpu`) actually does:**
 
 - It reads `.status.allocatable` of every node.
 - It picks `gpu.intel.com/xe`, then `gpu.intel.com/i915`, else CPU.
-- **It never picks the NPU on `auto`.** The NPU is used only when `K3D_GPU_AGENT_DEVICE=NPU` is set.
+- **It never picks the NPU on `auto`.** The NPU is used only when `K3D_GPU_AGENT_DEVICE=NPU` is set. `GPU` or `NPU` set explicitly fails if the cluster advertises no such device.
 - It sets the resource limit and `--target_device` to match.
 
 **Elements:**
@@ -351,7 +353,7 @@ against the v0.7.1 release body.
    - Unverified in this wave.
 5. **Gaps that could hide prior art:**
    - GitLab, Gitee and Codeberg were not searched.
-   - Chinese-language engineering blogs were not searched. Several CN patents on core binding for cloud-native apps exist, and two of their abstracts (CN119938341B, KR20250175472A) were unreadable (HTTP 503).
+   - Chinese-language engineering blogs were not searched. Several CN patents on core binding for cloud-native apps exist, and four candidate abstracts were unread: CN119938341B and KR20250175472A (HTTP 503), CN116820777A (no abstract, then 503) and CN121433917A (no abstract).
    - GitHub code search sees default branches only.
    - Docker Hub image READMEs were not searched.
    - Private Intel forks of EAT are invisible.
