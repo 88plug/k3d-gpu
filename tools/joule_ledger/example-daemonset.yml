@@ -1,4 +1,7 @@
-# Joule Ledger node daemon (PROTOTYPE, not deployed by the launcher yet).
+# EXAMPLE ONLY. Joule Ledger node daemon. Not shipped in share/, not packaged,
+# not applied by the launcher. The image below is NOT published: build it from
+# tools/joule_ledger/Dockerfile, push it, and set the reference before applying.
+#
 # One pod per node: RAPL and NVML counters are per socket / per device, so a
 # per-pod sidecar would read the same counter many times over.
 #
@@ -7,10 +10,14 @@
 #   NVML total energy (driver libs come from the node's default nvidia runtime
 #   when k3d-gpu found NVIDIA; elsewhere the daemon runs RAPL-only)
 #   /proc/<pid>/fdinfo DRM usage keys            (hostPID: the k3d node's PID ns)
-# Serves fresh counter edges and span bounds on :9810 (see tools/joule_ledger/daemon.py).
 #
-# The image is built from tools/joule_ledger/Dockerfile and is not published yet;
-# set the tag when it is.
+# Serves per-span bounds only (no raw counter edges) on the pod IP, port 9810.
+# Access: bearer token from Secret joule-ledger-token, and a NetworkPolicy that
+# admits only pods labelled k3d-gpu.io/energy-reader: "true" (k3s enforces
+# NetworkPolicy with its embedded kube-router controller unless started with
+# --disable-network-policy). Create the token first:
+#   kubectl -n k3d-gpu-energy create secret generic joule-ledger-token \
+#     --from-literal=token="$(openssl rand -hex 32)"
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -33,14 +40,20 @@ spec:
         app.kubernetes.io/name: joule-ledger
     spec:
       hostPID: true
+      automountServiceAccountToken: false
       priorityClassName: system-node-critical
       tolerations:
       - operator: Exists
       containers:
       - name: joule-ledger
-        image: ghcr.io/88plug/k3d-gpu-joule-ledger:0.1.0
-        args: ["--tick", "0.010", "--latency", "0.025", "--listen", "0.0.0.0:9810"]
+        image: ghcr.io/88plug/k3d-gpu-joule-ledger:UNPUBLISHED
+        args: ["--tick", "0.010", "--latency", "0.025",
+               "--listen", "$(POD_IP):9810", "--token-file", "/run/joule-ledger/token"]
         env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
         - name: NVIDIA_VISIBLE_DEVICES
           value: all
         - name: NVIDIA_DRIVER_CAPABILITIES
@@ -61,10 +74,36 @@ spec:
         - name: sys
           mountPath: /sys
           readOnly: true
+        - name: token
+          mountPath: /run/joule-ledger
+          readOnly: true
       volumes:
       - name: sys
         hostPath:
           path: /sys
+      - name: token
+        secret:
+          secretName: joule-ledger-token
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: joule-ledger
+  namespace: k3d-gpu-energy
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: joule-ledger
+  policyTypes: [Ingress]
+  ingress:
+  - from:
+    - namespaceSelector: {}
+      podSelector:
+        matchLabels:
+          k3d-gpu.io/energy-reader: "true"
+    ports:
+    - protocol: TCP
+      port: 9810
 ---
 apiVersion: v1
 kind: Service

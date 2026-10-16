@@ -1,6 +1,8 @@
 """Falsifying simulation for the Joule Ledger. Scores against prereg.py.
 
-Run:  python3 tests/joule_ledger/sim.py [--draws N] [--seed S]
+Run:  python3 tests/joule_ledger/sim.py [--draws N] [--seed S] [--c5-seeds N]
+Deps: tests/joule_ledger/requirements.txt (numpy and scipy pinned; the README
+      numbers come from those versions).
 
 Hidden physics (the ledger never sees it, and its model is deliberately NOT
 the ledger's model):
@@ -21,6 +23,10 @@ Decisions fixed before the first run (prereg.py left them open):
     (kepler docs/user/configuration.md, --monitor.interval default 5s); the
     1 s variant is reported, not scored. It reads the same stale counter at
     its interval and is handed the TRUE idle power. One pod owns every span.
+    It charges every in-flight span the full pod power, so it double counts
+    under concurrency by construction. A split-aware variant (pod power at
+    each instant divided equally among in-flight spans, the ledger's own
+    weighting) is reported, not scored, at 5 s and 1 s.
   * C3 is scored on draws whose busy-time mean concurrency is >= 2, as
     sum(span estimates) / pod active energy over the whole run.
   * C5 "decoupled control" = per-type rails at fixed per-type frequency (the
@@ -145,6 +151,26 @@ def kepler_estimates(spans, polls, shown, p_idle, interval):
     return np.array(est), float(np.sum(act) * interval)
 
 
+def kepler_split_estimates(reqs, polls, shown, p_idle, interval):
+    """Kepler-style pod power per interval, split equally among in-flight spans.
+
+    Returns per-span estimates and the pod active energy over the run. Span
+    estimates sum to at most the pod active energy (no double count).
+    """
+    edges = np.arange(0.0, T + interval, interval)
+    reads = np.interp(edges, polls, shown, left=0.0)
+    act = np.maximum(np.diff(reads) - p_idle * interval, 0.0) / interval
+    n = int(T / DT)
+    inflight = np.zeros(n)
+    for s, e in reqs:
+        inflight[int(s / DT):int(e / DT)] += 1
+    cell = np.minimum((np.arange(n) * DT // interval).astype(int), len(act) - 1)
+    share = np.where(inflight > 0, act[cell] / np.maximum(inflight, 1), 0.0) * DT
+    cum = np.concatenate([[0.0], np.cumsum(share)])
+    est = np.array([cum[int(e / DT)] - cum[int(s / DT)] for s, e in reqs])
+    return est, float(np.sum(act) * interval)
+
+
 def mape(est, truth):
     return float(np.median(np.abs(est - truth) / truth))
 
@@ -181,6 +207,11 @@ def run_draw(seed, ledger_latency=L_CONF):
     ape = np.abs(est - truth_dyn) / truth_dyn
     k5, pod5 = kepler_estimates(spans, polls, shown, p["p_idle"], 5.0)
     k1, pod1 = kepler_estimates(spans, polls, shown, p["p_idle"], 1.0)
+    ks5, _ = kepler_split_estimates(reqs, polls, shown, p["p_idle"], 5.0)
+    ks1, _ = kepler_split_estimates(reqs, polls, shown, p["p_idle"], 1.0)
+    # C1 tightness: coverage alone says nothing about how wide [lo, hi] is.
+    lo = np.array([r["device_window_lo_joules"] if r else 0.0 for r in recs])
+    hiw = np.array([r["device_window_hi_joules"] if r else np.inf for r in recs])
 
     # Busy-time mean concurrency.
     n = len(power)
@@ -201,6 +232,13 @@ def run_draw(seed, ledger_latency=L_CONF):
         "c2_ledger": mape(est[long_], truth_dyn[long_]) if long_.any() else float("nan"),
         "c2_kepler5": mape(k5[long_], truth_dyn[long_]) if long_.any() else float("nan"),
         "c2_kepler1": mape(k1[long_], truth_dyn[long_]) if long_.any() else float("nan"),
+        "c2_kepler5_split": mape(ks5[long_], truth_dyn[long_]) if long_.any() else float("nan"),
+        "c2_kepler1_split": mape(ks1[long_], truth_dyn[long_]) if long_.any() else float("nan"),
+        "c1_hi_over_truth": float(np.median(hiw / truth_win)),
+        "c1_width_over_truth": float(np.median((hiw - lo) / truth_win)),
+        "c1_lo_zero_frac": float(np.mean(lo <= 0.0)),
+        "c1_lo_zero_frac_short": float(np.mean(lo[short] <= 0.0)) if short.any() else float("nan"),
+        "c1_mf": [float(x) for x in np.quantile(mf, [0.1, 0.5, 0.9])],
         "c3_kepler5_ratio": float(k5.sum() / pod5) if pod5 > 0 else float("nan"),
         "c3_ledger_ratio": float((est.sum() + buckets["unattributed"]) /
                                  (total - buckets["idle"])),
@@ -272,6 +310,18 @@ def c5(seed):
     return summ
 
 
+def c5_seeds(seed, n):
+    """C5 worlds over n CPU seeds (seed, seed+1, ...): min / median / max."""
+    runs = [c5(seed + i) for i in range(n)]
+    out = {}
+    for name in runs[0]:
+        acc = np.array([r[name]["accept_frac"] for r in runs])
+        err = np.array([r[name]["naive_err"] for r in runs])
+        out[name] = {"refuse": [float(f(1 - acc)) for f in (np.min, np.median, np.max)],
+                     "naive_err": [float(f(err)) for f in (np.min, np.median, np.max)]}
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--draws", type=int, default=DRAWS)
@@ -279,6 +329,9 @@ def main():
     ap.add_argument("--ledger-latency", type=float, default=L_CONF,
                     help="latency bound handed to the ledger; true latency is drawn in "
                          "[0, %.3f] s. Set it lower to see coverage break." % L_CONF)
+    ap.add_argument("--c5-seeds", type=int, default=0,
+                    help="also report C5 min/median/max over this many CPU seeds "
+                         "(seed, seed+1, ...); reported, not scored")
     args = ap.parse_args()
     C = CRITERIA
     rs = [run_draw(args.seed + i, args.ledger_latency) for i in range(args.draws)]
@@ -307,8 +360,20 @@ def main():
     res["C2_median_ledger"] = float(np.median([r["c2_ledger"] for r in rs]))
     res["C2_median_kepler5"] = float(np.median([r["c2_kepler5"] for r in rs]))
     res["C2_median_kepler1"] = float(np.median([r["c2_kepler1"] for r in rs]))
+    # Reported, not scored: the double-count-free comparator and the per-draw
+    # C2 pass rate. The pooled C2 pass is marginal (see README).
+    res["C2_median_kepler5_split"] = float(np.median([r["c2_kepler5_split"] for r in rs]))
+    res["C2_median_kepler1_split"] = float(np.median([r["c2_kepler1_split"] for r in rs]))
+    res["C2_ratio_kepler5_split"] = res["C2_median_kepler5_split"] / res["C2_median_ledger"]
+    res["C2_ratio_kepler1_split"] = res["C2_median_kepler1_split"] / res["C2_median_ledger"]
     res["C2"] = (res["C2_median_ledger"] <= C["C2_ledger_mape_max"] and
                  res["C2_median_kepler5"] >= C["C2_kepler_ratio_min"] * res["C2_median_ledger"])
+    res["C1_median_hi_over_truth"] = float(np.median([r["c1_hi_over_truth"] for r in rs]))
+    res["C1_median_width_over_truth"] = float(np.median([r["c1_width_over_truth"] for r in rs]))
+    res["C1_lo_zero_frac"] = float(np.median([r["c1_lo_zero_frac"] for r in rs]))
+    res["C1_lo_zero_frac_short"] = float(np.nanmedian([r["c1_lo_zero_frac_short"] for r in rs]))
+    res["C1_mf_p10_p50_p90"] = [round(float(np.median([r["c1_mf"][i] for r in rs])), 3)
+                                for i in range(3)]
     hc = [r for r in rs if r["conc"] >= 2.0]
     res["C3_draws"] = len(hc)
     res["C3_kepler5_ratio_median"] = float(np.median([r["c3_kepler5_ratio"] for r in hc])) if hc else float("nan")
@@ -328,6 +393,12 @@ def main():
     for name, v in w.items():
         print(f"C5 {name:16s} accept={v['accept_frac']:.2f} naive_err={v['naive_err']:.3f} "
               f"accepted_err={v['accepted_err']:.3f}")
+    if args.c5_seeds:
+        for name, v in c5_seeds(args.seed, args.c5_seeds).items():
+            print(f"C5x{args.c5_seeds} {name:16s} refuse min/med/max="
+                  f"{v['refuse'][0]:.2f}/{v['refuse'][1]:.2f}/{v['refuse'][2]:.2f} "
+                  f"naive_err min/med/max={v['naive_err'][0]:.3f}/{v['naive_err'][1]:.3f}/"
+                  f"{v['naive_err'][2]:.3f}")
     res["C5"] = (w["coupled_dvfs"]["naive_err"] >= C["C5_coupled_naive_err_min"] and
                  1 - w["coupled_dvfs"]["accept_frac"] >= C["C5_coupled_refuse_min"] and
                  w["decoupled_fixed"]["accept_frac"] >= C["C5_decoupled_accept_min"] and

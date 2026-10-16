@@ -1,16 +1,22 @@
 """Node daemon: poll every energy counter on a fixed tick, keep fresh edges,
-serve them over HTTP for the collector-side processor.
+serve per-span bounds over HTTP for the collector-side processor.
 
     GET /v1/domains                      -> ["rapl.package-0", "nvidia.0", ...]
     GET /v1/bounds?domain=D&start=S&end=E  (unix seconds)
                                          -> {"lo": J, "hi": J, "measured_fraction": f}
                                             or 202 {"pending": true}
-    GET /v1/edges?domain=D&since=S       -> [[a, b, joules], ...]
 
-Run: python3 -m joule_ledger.daemon --listen 0.0.0.0:9810
+Raw counter edges are not served. Since CVE-2020-8694 (Platypus) Linux makes
+RAPL energy_uj root-only; republishing its 10 ms edges would hand that signal
+to every pod that can reach the port.
+
+With --token-file every request needs "Authorization: Bearer <token>".
+
+Run: python3 -m joule_ledger.daemon --listen 127.0.0.1:9810 --token-file /run/token
 """
 
 import argparse
+import hmac
 import json
 import threading
 import time
@@ -51,8 +57,9 @@ class Ledger:
                 c.trim(now - KEEP_S)
 
 
-def serve(ledger, listen):
+def make_server(ledger, listen, token=None):
     host, port = listen.rsplit(":", 1)
+    want = f"Bearer {token}".encode() if token else None
 
     class H(BaseHTTPRequestHandler):
         def log_message(self, *a):
@@ -67,6 +74,9 @@ def serve(ledger, listen):
             self.wfile.write(data)
 
         def do_GET(self):
+            if want is not None and not hmac.compare_digest(
+                    self.headers.get("Authorization", "").encode(), want):
+                return self._send(401, {"error": "unauthorized"})
             u = urlparse(self.path)
             q = {k: v[0] for k, v in parse_qs(u.query).items()}
             with ledger.lock:
@@ -83,14 +93,21 @@ def serve(ledger, listen):
                         lo, hi = b
                         return self._send(200, {"lo": lo, "hi": hi,
                                                 "measured_fraction": lo / hi if hi > 0 else 1.0})
-                    if u.path == "/v1/edges":
-                        since = float(q.get("since", 0))
-                        return self._send(200, [[e.a, e.b, e.value] for e in c.edges if e.b >= since])
                 except (KeyError, ValueError):
                     return self._send(400, {"error": "bad query"})
             return self._send(404, {"error": "not found"})
 
-    ThreadingHTTPServer((host, int(port)), H).serve_forever()
+    return ThreadingHTTPServer((host, int(port)), H)
+
+
+def read_token(path):
+    if not path:
+        return None
+    with open(path) as f:
+        tok = f.read().strip()
+    if not tok:
+        raise SystemExit(f"--token-file {path} is empty")
+    return tok
 
 
 def main():
@@ -100,10 +117,13 @@ def main():
     ap.add_argument("--latency", type=float, default=0.025,
                     help="bound on counter publish latency, s (measure it: live probe P2)")
     ap.add_argument("--nvml", default="libnvidia-ml.so.1")
-    ap.add_argument("--listen", default="0.0.0.0:9810")
+    ap.add_argument("--listen", default="127.0.0.1:9810")
+    ap.add_argument("--token-file", default="",
+                    help="file holding a bearer token every request must present")
     args = ap.parse_args()
     ledger = Ledger(args.sysroot, args.latency, args.nvml)
-    threading.Thread(target=serve, args=(ledger, args.listen), daemon=True).start()
+    srv = make_server(ledger, args.listen, read_token(args.token_file))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
     nxt = time.monotonic()
     while True:
         ledger.tick()
