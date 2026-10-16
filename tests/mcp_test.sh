@@ -205,6 +205,11 @@ out=$(session "${d}" "$(call 1 accelerators)")
 check "report --json exiting 0 with invalid JSON falls back to detect" "${out}" \
     'sc(1)["schema"] == "k3d-gpu.mcp-fallback/v1" and sc(1)["detected"] == [{"vendor": "nvidia", "resources": ["nvidia.com/gpu"]}]'
 
+echo '["not", "an", "object"]' > "${d}/report.json"
+out=$(session "${d}" "$(call 1 accelerators)")
+check "report --json printing valid JSON that is not an object falls back to detect" "${out}" \
+    'sc(1)["schema"] == "k3d-gpu.mcp-fallback/v1" and sc(1)["detected"] == [{"vendor": "nvidia", "resources": ["nvidia.com/gpu"]}]'
+
 d=$(fixtures timeout)
 out=$(session "${d}" "$(call 1 accelerators)" STUB_SLEEP=5 K3D_GPU_MCP_TIMEOUT=0.5)
 check "a launcher call past K3D_GPU_MCP_TIMEOUT is a tool error naming the timeout" "${out}" \
@@ -274,6 +279,9 @@ check "no cluster: placement from host detection, with a note" "${out}" \
 check "unknown workload is a tool error the model can read" "${out}" \
     'r[2]["result"]["isError"] is True and "llm" in r[2]["result"]["content"][0]["text"]'
 check "unknown argument is a tool error" "${out}" 'r[3]["result"]["isError"] is True and "gpus" in r[3]["result"]["content"][0]["text"]'
+out=$(session "${d}" "$(call 1 recommend_placement)")
+check "missing required workload is a tool error naming it" "${out}" \
+    'r[1]["result"]["isError"] is True and "workload" in r[1]["result"]["content"][0]["text"]'
 
 # ---- agent_endpoint -------------------------------------------------------------
 
