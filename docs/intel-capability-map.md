@@ -91,17 +91,17 @@ The table is wide; scroll sideways.
 | Media: AV1 decode / AV1 encode | dec Y / enc N; 2 VDBox (hevc,sfc) + 1 VEBox | Y / Y | Y / Y | Y / Y | Y / Y | Y / N | Y / N ? | n/a | n/a | n/a | **Gap G8.** Count `engine/vcs*`, read `capabilities`, `vainfo` entrypoints → labels `gpu.intel.com/media-vcs`, `av1-enc`. |
 | USM zero-copy, shared LLC with CPU | USM Y; LLC shared (Mesa GFX12) | USM Y; LLC N | USM Y; LLC N | USM Y; LLC N | USM Y; LLC N | USM Y; LLC Y | Y ? | n/a | n/a | n/a | Label `gpu.intel.com/usm`. Doctor warning: iGPU and CPU share DRAM bandwidth. |
 | iGPU SR-IOV | `sriov_totalvfs=7`, i915 6.6 has no PF provisioning (?) | xe ? | ? | ? | ? | capability Y, driver ? | ? | n/a | n/a | n/a | Report `igpu.sriov-capable=N`. Never write `sriov_numvfs` automatically. |
-| NPU | N | NPU 4, `0x643e`, 48 TOPS (VENDOR) | S: `0xad1d`; H/U: `0x7d1d` (pci.ids), ~13 TOPS (VENDOR) | NPU 3, `0x7d1d` | NPU 5, `0xb03e` | N | N | N | N | N | **Today:** detected. **Gap G2:** `0x7d1d` labelled "Meteor Lake" also on ARL-H/U. Add `npu.gen` label; NPU = 1 LLM stream (OVMS Stateful, sequential, 1024-token default prompt). |
+| NPU | N | NPU 4, `0x643e`, 48 TOPS (VENDOR) | S: `0xad1d` (`ivpu_drv.h` `PCI_DEVICE_ID_ARL`); H: `0x7d1d` (pci.ids "Core Ultra 200H/200V"); U: ?; ~13 TOPS (VENDOR) | NPU 3, `0x7d1d` | NPU 5, `0xb03e` | N | N | N | N | N | **Today:** detected. **Gap G2:** `0x7d1d` labelled "Meteor Lake" also on ARL-H/U. Add `npu.gen` label; NPU = 1 LLM stream (OVMS Stateful, sequential, 1024-token default prompt). |
 | GNA | ARK says 3.0, not enumerated in `lspci`, no `intel_gna` module | n/a (NPU replaced it) | ARK 3.5 | ARK 3.5 | n/a | ARK 3.0 | ? | N | N | N | **Do nothing.** OpenVINO discontinued the GNA plugin in 2024. Log only. |
-| DSA / IAA | N / N | N / N | N / N | N / N | N / IAA Y (`IAA_PTL` in idxd) | N | N | 1 / 1 default (8480+ On Demand up to 4) | 4 / 4 (6980P) | 2 / 2 (6780E) | **Today:** bus-based detect (gen-agnostic). Add PTL-IAA and GNR-D fixtures, doctor "N devices = SKU default" line. |
-| QAT | N | N | N | N | N | N | N | 1 (4xxx) | 4 (4xxx/420xx ?) | 2 | **Today:** PF ids `0x37c8 0x4940-0x4948`. Add 420xx fixture; Envoy mTLS offload. |
+| DSA / IAA | N / N | N / N | N / N | N / N | N / IAA Y (`IAA_PTL` in idxd) | N | N | 1 / 1 default (8480+ ARK; ARK lists On Demand activation model "No" for this SKU) | 4 / 4 (6980P ARK) | 2 / 2 (6780E ARK) | **Today:** bus-based detect (gen-agnostic). Add PTL-IAA and GNR-D fixtures, doctor "N devices = SKU default" line. |
+| QAT | N | N | N | N | N | N | N | 1 (8480+ ARK; 4xxx) | 4 (6980P ARK; 4xxx/420xx ?) | 2 (6780E ARK) | **Today:** PF ids `0x37c8 0x4940-0x4948`. Add 420xx fixture; Envoy mTLS offload. |
 | DLB | n/a | n/a | n/a | n/a | n/a | n/a | n/a | 1 | 4 | 2 | Unsupported (plugin removed in 0.37.0). Doctor "present, not exposed". |
 
 ### 1c. Memory
 
 | Ability | Host | LNL | ARL | MTL | PTL | ADL/RPL | N | SPR/EMR | GNR | SRF | k3d-gpu: detect → exploit |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| Channels × speed → peak GB/s (COMPUTED) | 2ch DDR5 **3600** configured (rated 4800), 2DPC 2R → **57.6** | LPDDR5X-8533 on-package → ~136.5 (ARK ?) | S: DDR5-6400 → 102.4; H: DDR5-5600 → 89.6 (ARK ?) | DDR5-5600 → 89.6 / LPDDR5X-7467 → ~119 (ARK ?) | LPDDR5X-9600 → ~153.6 (VENDOR ?) | DDR5-4800/5600 → 76.8/89.6 (ARK ?) | 1ch DDR5-4800 → 38.4 (ARK ?) | SPR 8ch-4800 → 307; EMR 8ch-5600 → 358 | 6900P 12ch-6400 → 614; MRDIMM-8800 → 845 | 8ch, speed ? | **Gap G10.** Doctor parses `dmidecode -t17`: configured vs rated vs POR; label `k3d-gpu.io/dram.peak-gbps`. Use it as the agents-per-node cap for CPU/iGPU decode. |
+| Channels × speed → peak GB/s (COMPUTED) | 2ch DDR5 **3600** configured (rated 4800), 2DPC 2R → **57.6** | LPDDR5X-8533 on-package → ~136.5 (ARK ?) | S: DDR5-6400 → 102.4; H: DDR5-5600 → 89.6 (ARK ?) | DDR5-5600 → 89.6 / LPDDR5X-7467 → ~119 (ARK ?) | LPDDR5X-9600 → ~153.6 (VENDOR ?) | DDR5-4800/5600 → 76.8/89.6 (ARK ?) | 1ch DDR5-4800 → 38.4 (ARK ?) | SPR 8ch-4800 → 307; EMR 8ch-5600 → 358 | 6900P 12ch-6400 → 614; MRDIMM-8800 → 845 | 6780E 8ch DDR5-6400 (ARK) → 409.6 | **Gap G10.** Doctor parses `dmidecode -t17`: configured vs rated vs POR; label `k3d-gpu.io/dram.peak-gbps`. Use it as the agents-per-node cap for CPU/iGPU decode. |
 | IMC bandwidth counters | Y: `uncore_imc_free_running_{0,1}` data_read/write; 1 s sample under load ≈ 14.2 GB/s | Y (`lnl_uncore_init`, SRC) | Y (`mtl_uncore_init`) | Y | Y (`ptl_uncore_init`) | Y (`adl_uncore_init`) | Y ? | `uncore_imc_N` `cas_count_*` | Y (`gnr_uncore_init`) | Y (`gnr_uncore_init`) | **Gap G14.** Exporter reads `.scale`/`.unit`; admission stops CPU-decode pods above a measured knee. Needs `CAP_PERFMON`. |
 | ECC with EDAC reporting | ECC DIMMs (80/64-bit), **no EDAC** on 6.6 for `8086:a700`; master `ie31200_edac` has it | IBECC (igen6) ? | S on W880: Y ? | IBECC ? | ? | W680: Y; mobile IBECC ? | IBECC ? | Y | Y | Y | **Gap G10.** Label `dram.ecc=active|unmonitored|none`; taint on `ue_count > 0`. |
 | THP for weights | Anon THP `always`; ext4 + 6.6: read-only weight mmap stays 4 KiB (SRC `file_thp_enabled` needs `VM_EXEC`) | same kernel rule | same | same | same | same | same | same | same | same | **Gap G16.** Huge-tmpfs model cache (`huge=within_size`), bind-mounted read-only. |
@@ -115,7 +115,7 @@ The table is wide; scroll sideways.
 | Ability | Host | LNL | ARL | MTL | PTL | ADL/RPL | N | SPR/EMR | GNR | SRF | k3d-gpu: detect → exploit |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | HWP + per-CPU EPP | Y; all EPP `performance`; **power-profiles-daemon active** (overrides writes) | Y | Y | Y | Y | Y | Y | Y | Y | Y | **Today:** doctor reads EPP. Add PPD-override note; opt-in E-core `balance_performance`. |
-| RAPL package / psys / uncore domains | PL1=PL2=**117 W** vs TDP **35 W**, PL4 230 W, unlocked | Y | Y | Y | Y | Y | Y | pkg + DRAM | TPMI RAPL ? | TPMI ? | **Gap G10.** `perf_rapl` warns only on PL1 < TDP; add the inverse: PL1 far above TDP **and** throttling. |
+| RAPL package / psys / uncore domains | PL1=PL2=**117 W** (MSR `0x610`, unit 1/8 W from `0x606`) vs ARK base power **35 W** and ARK max turbo power **106 W**, so PL2 is set above Intel's spec by the OEM; PL4 230 W, unlocked | Y | Y | Y | Y | Y | Y | pkg + DRAM | TPMI RAPL ? | TPMI ? | **Gap G10.** `perf_rapl` warns only on PL1 < TDP; add the inverse: PL1 far above TDP **and** throttling. |
 | Throttle telemetry (`0x19C`, `0x1B1`, `0x64F`, `thermal_throttle`) | **Active.** `package_throttle_count=22048145`; PROCHOT, ThermStatus, Amps, PL2 logged; TCC point 95 C | Y | Y | Y | Y | Y | Y | addresses differ ? | ? | ? | **Gap G10.** New `perf_thermal`: sysfs unprivileged; MSRs when root; never clear sticky log bits. |
 | Uncore (ring/mesh) frequency | 0.8-4.7 GHz range, ring 2.9 GHz at sample | Y ? | Y | Y | Y ? | Y | ? | MSR | TPMI | TPMI | Report; opt-in `uncore-max` in sweeps only. |
 | DPTF processor participant | `tcc_offset=5`, `workload_request` (sustained/bursty…), no `workload_hint` | `workload_hint` | `workload_hint` ? | `workload_hint` | ? | `workload_request` | ? | N | N | N | Report; opt-in `tune --workload sustained` with printed revert. Gain UNVERIFIED. |
@@ -129,11 +129,11 @@ The table is wide; scroll sideways.
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | VT-x + EPT + APICv, `/dev/kvm`, vsock | Y; `kvm_intel` nested=Y apicv=Y; `/dev/vhost-vsock` 0666 | Y | Y | Y | Y | Y | VT-x Y, VT-d per SKU ? | Y | Y | Y | **Gap G17.** Label `k3d-gpu.io/kvm`; opt-in `up --sandbox kata` RuntimeClass (k3d docker-in-docker shim UNVERIFIED). |
 | VT-d + per-GPU IOMMU groups | Y; 15 groups; RTX 4000, RTX 2000E and iGPU each alone | Y | Y | Y | Y | Y | ? | Y | Y | Y | Label `gpu.<idx>.iommu-isolated`; prerequisite for GPU passthrough into microVMs. Never recommend `pcie_acs_override`. |
-| CET: user shadow stack + kernel IBT | Y; kernel IBT active (`IA32_S_CET=0x4`); user SHSTK not enabled for ordinary processes | Y | Y | Y | Y | Y | ? | Y | Y | Y ? | Label `cpu-cet.shstk`; sandbox pods `GLIBC_TUNABLES=glibc.cpu.x86_shstk=on`; doctor checks `x86_Thread_features`. |
+| CET: user shadow stack + kernel IBT | Y; kernel IBT active (`IA32_S_CET=0x4`); user SHSTK not enabled for ordinary processes | Y | Y | Y | Y | Y | ? | Y | Y | Y ? | Label `cpu-cet.shstk`; doctor checks `x86_Thread_features`. Never set `glibc.cpu.x86_shstk=on` blind: glibc's manual says `on` enables SHSTK even for unmarked executables and libraries. `permissive` turns SHSTK off on dlopen of a non-CET library instead of failing it. |
 | PKU | Y (`pku`, `ospke`) | Y | Y | Y | Y | Y | ? | Y | Y | Y ? | Label only. |
 | Split-lock detect / bus-lock detect | Y / N; `split_lock_mitigate=1` | Y / ? | Y / ? | Y / ? | Y / ? | Y / N | ? | Y / Y | Y / Y | ? | Doctor info; warn if `split_lock_detect=off`. |
-| TME / TME-MK | TME capable, **locked off** (`0x982=0x1`) | vPro ? | vPro ? | vPro ? | ? | vPro ? | ? | TME-MK | TME-MK | TME-MK ? | Label `mem-encryption=tme-active|tme-capable-off|none`. Enabling is BIOS-only. |
-| SGX / TDX | N / N | N / N | N / N | N / N | N / N | N / N | N / N | SGX Y; TDX limited SKUs ? | TDX ? per SKU | TDX ? | Detect `/dev/sgx_enclave`, `kvm_intel` `tdx`; Xeon only: `kata-qemu-tdx` RuntimeClass. |
+| TME / TME-MK | TME capable (ARK: TME-MK Yes), **locked off** (`0x982=0x1`) | vPro ? | vPro ? | vPro ? | ? | vPro ? | ? | TME-MK | TME-MK | TME-MK ? | Label `mem-encryption=tme-active|tme-capable-off|none`. Enabling is BIOS-only. |
+| SGX / TDX | N / N | N / N | N / N | N / N | N / N | N / N | N / N | SGX Y (8480+ ARK: "Yes with Intel SPS"); TDX not listed for 8480+, other SKUs ? | TDX Y (6980P ARK), other SKUs ? | SGX Y, TDX Y (6780E ARK) | Detect `/dev/sgx_enclave`, `kvm_intel` `tdx`; Xeon only: `kata-qemu-tdx` RuntimeClass. |
 | AMT / CSME (MEI) | MEI Y, SOL function present (AMT-capable), provisioning UNVERIFIED | vPro only | vPro only | vPro only | vPro only | vPro only | N | BMC instead | BMC | BMC | Doctor reports AMT-capable. Never pass `/dev/mei0` into agent pods. |
 | GPU context isolation (PPGTT, preempt timeout, OA paranoia) | rcs0 preempt 7500 ms; `perf_stream_paranoid=1`; `/dev/dri/renderD128` 0666 | xe | i915/xe | i915 | xe | i915 | i915 | n/a | n/a | n/a | Doctor warns on `perf_stream_paranoid=0`; render node only via device plugin, never hostPath. |
 
@@ -141,7 +141,7 @@ The table is wide; scroll sideways.
 
 | Ability | Host finding | Exploit |
 |---|---|---|
-| GPU PCIe link | RTX 4000 SFF: Gen4 x16 behind CPU port `00:01.0`. **RTX 2000E: device x8, root port `00:06.0` is Gen4 x4 → capped at x4.** NVMe sits behind PCH ports, so model loads cross DMI 4.0 x8. Links read Gen1 at idle (ASPM); compare `max_*` only. | **Gap G10:** per-GPU `pcie.gen/width/bottleneck` labels from `max_link_*` of device and root port. |
+| GPU PCIe link | RTX 4000 SFF: Gen4 x16 device behind CPU port `00:01.0` (the port itself is Gen5 x16). **RTX 2000E: device x8, root port `00:06.0` is Gen4 x4 → capped at x4.** NVMe sits behind PCH ports, so model loads cross DMI 4.0 x8. Links read Gen1 at idle (ASPM); compare `max_*` only. | **Gap G10:** per-GPU `pcie.gen/width/bottleneck` labels from `max_link_*` of device and root port. |
 | GPU peer-to-peer | `nvidia-smi topo -p2p r` = **NS** (not supported), path PHB; ACS redirect on both root ports. | Label `gpu-p2p=none`; one replica per GPU, no tensor parallel across the pair. |
 | Resizable BAR | RTX 4000 BAR1 32 GB, RTX 2000E BAR1 16 GB (full). | Doctor: warn when BAR1 is 256 MB and VRAM is larger. |
 
@@ -178,7 +178,7 @@ Ordered by value. Line numbers refer to `scripts/k3d-gpu` on `main` at `1e73f47`
 | # | Gap | Concrete change | Fixture needed |
 |---|---|---|---|
 | **G1** | ADL/RPL/ADL-N iGPU ids missing (`intel_gpu_platform`, L259-272). Host doctor prints `Intel GPU (0xa780)` with no name and no GuC check. | Add cases bound by **i915** with firmware from `intel_uc_fw.c`: `0x468[028ab]\|0x469[023]` → `Alder Lake-S\|<k>\|i915/tgl_guc_`; `0x46a[0-368a]\|0x462[68a]\|0x46b[0-3]\|0x46c[0-3]` → `Alder Lake-P\|<k>\|i915/adlp_guc_`; `0xa78[0-38-9ab]` → `Raptor Lake-S\|<k>\|i915/tgl_guc_`; `0xa72[01]\|0xa7a[0189a-d]` → `Raptor Lake-P/U\|<k>\|i915/adlp_guc_`; `0x46d[0-4]` → `Alder Lake-N\|<k>\|i915/adlp_guc_`. **Do not leave `<k>` empty** (empty means "needs `xe.force_probe`"); fill it from `git log -S INTEL_RPLS_IDS` etc. before merging. | Update `raptorlake-nvidia/doctor.golden` to expect `Raptor Lake-S (0xa780)` + tgl_guc line. New `alderlake-n` fixture (no `cpu_core`/`cpu_atom`, iGPU `0x46d1`). |
-| **G2** | `npu_platform` (L275) names `0x7d1d` "Meteor Lake"; pci.ids says the id is also ARL-H/U. | Label `Meteor Lake / Arrow Lake-H/U`; optional disambiguation by CPU model (`INTEL_ARROWLAKE_H/U`). Add `npu.gen` label from the existing `gen` field. | `arrowlake-h` fixture with NPU `0x7d1d` and a cpuinfo model of ARL-H. |
+| **G2** | `npu_platform` (L275) names `0x7d1d` "Meteor Lake"; pci.ids labels the id "Core Ultra 200H/200V Series Processors NPU", so it is also ARL-H. (The "200V" half of that label conflicts with `ivpu_drv.h`, which gives Lunar Lake `0x643e`; ARL-U is UNVERIFIED.) | Label `Meteor Lake / Arrow Lake-H`; optional disambiguation by CPU model (`INTEL_ARROWLAKE_H`). Add `npu.gen` label from the existing `gen` field. | `arrowlake-h` fixture with NPU `0x7d1d` and a cpuinfo model of ARL-H. |
 | **G3** | LP E-cores lost or mixed: `hybrid_cpus` (L225) reads only `cpu_core`/`cpu_atom`. ARL-H puts LP E-cores in `cpu_lowpower` (dropped); MTL/PTL put them in `cpu_atom` without L3 (pollute `efficient`). | `hybrid_cpus lowpower`; plus `atom` CPUs whose `cache/index3` is absent move to `lowpower`. Third balloon type `lowpower` in `share/nri-balloons.yml`; pod label `k3d-gpu.io/cores=lowpower`. | `arrowlake-h` (with `cpu_lowpower/cpus`), new `meteorlake`, and add `cache/index3`-less LP CPUs to `pantherlake`. |
 | **G4** | No cache-cluster or physical-core balloons. | Read `cache/index2/shared_cpu_list` for E-clusters and `topology/core_cpus_list` for physical P-cores. Balloon types `ecluster` (4 CPUs, cluster-aligned) and `pcore-physical`. | Add `cache/index{2,3}` and `topology/core_cpus_list` to `raptorlake-nvidia` sysroot (values from this host). |
 | **G5** | Favored cores not detected. | `favored_cpus()`: argmax over `acpi_cppc/highest_perf`; fallback MSR `0x771` bits 7:0 when root. Annotation `k3d-gpu.io/favored-cpus=8-11`; `latency` balloon of 1-2 favored primaries. | `raptorlake-nvidia`: add `acpi_cppc/highest_perf` (68 on 8-11, 65 other P, 39 E). |
@@ -189,7 +189,7 @@ Ordered by value. Line numbers refer to `scripts/k3d-gpu` on `main` at `1e73f47`
 | **G10** | `doctor --perf` misses the facts that cap this host. | New checks, each with `perf_section` source and printed revert: **`perf_thermal`** (throttle counters, TCC offset, MSR `0x19C/0x1B1/0x64F` decode when root); **`perf_rapl`** inverse case (PL1 > 2× TDP while throttling); **`perf_memory`** DRAM configured vs rated vs POR + peak GB/s, ECC/EDAC state, THP-on-ext4 note, KSM report; **`perf_pcie`** per-GPU max link vs root port, P2P, ReBAR; **`perf_isolation`** KVM/IOMMU groups/CET/split-lock/TME/`perf_stream_paranoid`; **`perf_cpu`** note when power-profiles-daemon overrides EPP; **`perf_igpu`** add RP1 (efficient freq) and waitboost count. | `raptorlake-nvidia` sysroot: add `thermal_throttle/*`, `powercap` with PL1 117 W / TDP 35 W, `dmi` type-17 dump, PCI link files, `iommu_groups`; update `doctor.golden`. |
 | **G11** | No NUMA/SNC placement on Xeon (balloons only on hybrid, L226). | Vendor `numa` when `node*` count > 1; labels `k3d-gpu.io/numa-nodes`, `snc`. Balloon type `replica` with `pinMemory`, `preferCloseToDevices`, `allocatorTopologyBalancing`, `shareIdleCPUsInSame: numa` (all in the shipped CRD v0.14.0). resctrl classes where `rdt_a` exists. | New `xeon-gnr-snc` (2 sockets, SNC, 12 ch), `xeon-srf` (1 socket); add memory-only node to a Xeon Max variant. |
 | **G12** | Only one Xeon fixture. | — | `xeon-gnr`, `xeon-srf`, `xeon-gnrd` (DSA `0x11fb`, 0 IAA), `qat-420xx` (PF `0x4946`), `pantherlake` + IAA (`IAA_PTL`); add `uncore_imc_N/events/cas_count_read` to `xeon-spr-accel`. |
-| **G13** | Accelerator counts unexplained (8480+ shows 1 DSA, silicon has 4). | Doctor prints per-socket count vs ARK default; if `intel_vsec.sdsi.*` exists, note On Demand (SPR/EMR only, program discontinued per press). | `xeon-spr-accel`: add `sys/bus/auxiliary/devices/intel_vsec.sdsi.0`. |
+| **G13** | Accelerator counts unexplained (8480+ ARK default is 1 of each; SPR XCC silicon is reported to carry up to 4, UNVERIFIED). | Doctor prints per-socket count vs ARK default; if `intel_vsec.sdsi.*` exists, note On Demand (SPR/EMR only, program discontinued per press). | `xeon-spr-accel`: add `sys/bus/auxiliary/devices/intel_vsec.sdsi.0`. |
 | **G14** | No node telemetry on `main`. | Pinned exporter DaemonSet with `CAP_PERFMON`: IMC bytes, RAPL incl. `uncore` (iGPU), i915/xe PMU busy and RC6, throttle counters, PSI memory, DRM fdinfo per pod. Admission signal = PSI `some avg10` + IMC utilisation. | Unit test against fixture PMU dirs (`uncore_imc_free_running_*`, `i915`). |
 | **G15** | OpenVINO knobs not emitted per balloon. | Annotation `k3d-gpu.io/ov-config` per balloon: decode `PCORE_ONLY` + `ENABLE_HYPER_THREADING=false` + pinning; embeddings `ECORE_ONLY` + `INFERENCE_NUM_THREADS=4` per E-cluster. OpenVINO reads the cgroup cpuset, so knobs must match the balloon. | Golden of rendered pod spec. |
 | **G16** | No shared model cache. | Optional `--model-cache tmpfs-huge`: host tmpfs `huge=within_size`, bind-mounted read-only; warm-up pod owns the page-cache charge. | `up.golden` for the flag. |
@@ -201,7 +201,16 @@ Ordered by value. Line numbers refer to `scripts/k3d-gpu` on `main` at `1e73f47`
 
 **Do not run any write below before 17:00.** Live benchmarks own the host until then. Each
 item is reversible and non-persistent across reboot, and each needs a measured A/B before it
-becomes a default. The diagnosis behind most of them: the host is **thermal- and
+becomes a default.
+
+**These are not free on a shared host.** The host runs about 50 production containers.
+Q4-Q8 are host-wide writes (package power limit, EPP on every E-core, stopping a system
+daemon, firmware workload hint, per-CPU idle latency, uncore ceiling). Each one changes the
+performance of every container on the box, not only the agent stack under test. Run them
+only in an owner-approved window. Record each file's current value first and revert to that
+recorded value, not to the value printed here. The revert values below match what the host
+read on 2026-10-16: `workload_type=none`, `pm_qos_resume_latency_us=0` (0 means "no
+constraint"), uncore `initial_max_freq_khz=4700000`, EPP `performance`, PL1 `117000000`. The diagnosis behind most of them: the host is **thermal- and
 current-limited, not power-limited**. Throttle counts are in the tens of millions, PROCHOT
 and current-limit bits are logged, and the package sat at the 95 C TCC point under load,
 while PL1 is set to 117 W on a 35 W TDP part.
@@ -218,7 +227,7 @@ while PL1 is set to 117 W on a 35 W TDP part.
 | Q6 | Tell firmware the load is sustained. | `echo sustained \| sudo tee /sys/bus/pci/devices/0000:00:04.0/workload_request/workload_type` | `echo none \| sudo tee …/workload_type` |
 | Q7 | Per-CPU idle-exit cap on decode CPUs only (not a global C-state disable). | `echo 100 \| sudo tee /sys/devices/system/cpu/cpu{0..15}/power/pm_qos_resume_latency_us` | `echo 0 \| sudo tee …/pm_qos_resume_latency_us` |
 | Q8 | Cap uncore when the run is GPU-bound (sweep only). | `echo 3500000 \| sudo tee /sys/devices/system/cpu/intel_uncore_frequency/package_00_die_00/max_freq_khz` | `echo 4700000 \| sudo tee …/max_freq_khz` |
-| Q9 | Opt sandbox processes into CET shadow stack. | Pod env `GLIBC_TUNABLES=glibc.cpu.x86_shstk=on` (only engages when every loaded ELF carries the SHSTK note). Verify `grep x86_Thread_features /proc/<pid>/status`. | Drop the env var. |
+| Q9 | Opt sandbox processes into CET shadow stack. | Not a host write. Test in one pod first with `GLIBC_TUNABLES=glibc.cpu.x86_shstk=permissive`. Do not use `on`: the glibc manual says `on` turns SHSTK on even when the executable and its libraries are not SHSTK-marked, so unmarked code can crash. Verify with `grep x86_Thread_features /proc/<pid>/status`. Whether this host's glibc 2.43 build enables SHSTK at all is UNVERIFIED (`x86_Thread_features` is empty for ordinary processes today). | Drop the env var. |
 | Q10 | Read-only checks to run any time. | `sudo perf stat -a -e uncore_imc_free_running_0/data_total/,uncore_imc_free_running_1/data_total/ sleep 1`; `cat /sys/devices/system/cpu/cpu0/thermal_throttle/package_throttle_count` | — |
 
 ### Needs BIOS or the owner
@@ -310,7 +319,7 @@ Mesa, media, OpenVINO, OVMS, plugins:
 - GPU plugin flags: https://github.com/intel/intel-device-plugins-for-kubernetes/blob/main/cmd/gpu_plugin/README.md
 - Kata: https://github.com/kata-containers/kata-containers/blob/main/docs/install/README.md
 
-Intel product pages (UNVERIFIED-FETCH, reached via search summaries):
+Intel product pages. The i9-13900T, 8480+, 6980P and 6780E pages were fetched on 2026-10-16 during review (base/turbo power, memory, accelerator default counts, SGX/TDX, TME-MK). The rest stay UNVERIFIED-FETCH (reached via search summaries):
 
 - i9-13900T: https://www.intel.com/content/www/us/en/products/sku/230498/intel-core-i913900t-processor-36m-cache-up-to-5-30-ghz/specifications.html
 - Xeon 8480+: https://www.intel.com/content/www/us/en/products/sku/231746/intel-xeon-platinum-8480-processor-105m-cache-2-00-ghz/specifications.html
