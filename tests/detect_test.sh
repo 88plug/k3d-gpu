@@ -2962,6 +2962,8 @@ wsl "${r}" iigd_dch.inf_amd64_8a3b1c6f2e0d4a17
 doctor_says "doctor reports /dev/dxg on WSL2" "${r}" 'ok: WSL2 .*/dev/dxg'
 doctor_says "doctor names the Intel driver store package" "${r}" 'ok: .*iigd_dch\.inf_amd64_8a3b1c6f2e0d4a17'
 doctor_says "doctor does not ask for xe.force_probe on WSL2" "${r}" 'force_probe' negate
+doctor_says "doctor says a driver store package does not prove a live Intel GPU" "${r}" \
+    'note: .*driver package.*not .*live Intel GPU.*Device Manager'
 rm "${r}/usr/lib/wsl/lib/libdxcore.so"
 doctor_says "doctor warns when libdxcore.so is missing" "${r}" 'warn.*libdxcore'
 

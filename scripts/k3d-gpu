@@ -1146,6 +1146,7 @@ doctor_wsl() {
     drivers=$(wsl_intel_drivers)
     if [ -n "${drivers}" ]; then
         while read -r d; do echo "  ok: Intel driver store ${WSL_LIB}/drivers/${d##*/}"; done <<< "${drivers}"
+        echo "  note: the driver package is not proof of a live Intel GPU; if up reports 0 gpu.intel.com/dxg, check the GPU in Windows Device Manager and the intel-gpu-levelzero log"
     else
         echo "  ${YLW}warn${RST}: no Intel graphics driver (iigd_dch*) under ${WSL_LIB}/drivers — install the current Intel Arc & Iris Xe graphics driver on Windows, then wsl --shutdown"
     fi
