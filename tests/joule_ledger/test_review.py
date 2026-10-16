@@ -107,7 +107,7 @@ class SimReportTest(unittest.TestCase):
     def setUpClass(cls):
         import sim
         cls.sim = sim
-        cls.draw = sim.run_draw(SEED + 11)   # conc >= 2 draw
+        cls.draw = sim.run_draw(SEED + 11)
         cls.readme = open(README).read()
 
     def test_split_kepler_never_double_counts(self):
@@ -123,6 +123,17 @@ class SimReportTest(unittest.TestCase):
         self.assertAlmostEqual(pod, pod_full)
         self.assertLessEqual(est.sum(), pod * (1 + 1e-9))
         self.assertGreater(full.sum(), est.sum())
+
+    def test_split_kepler_shares_pod_power(self):
+        # Two spans over the whole run at a constant 100 W: each gets half.
+        import numpy as np
+        sim = self.sim
+        polls = np.linspace(0.0, sim.T, 241)
+        est, pod = self.sim.kepler_split_estimates(
+            [(0.0, sim.T), (0.0, sim.T)], polls, 100.0 * polls, 0.0, 5.0)
+        self.assertAlmostEqual(pod, 100.0 * sim.T, places=6)
+        for e in est:
+            self.assertAlmostEqual(e, pod / 2, delta=pod * 1e-3)
 
     def test_c1_tightness_reported(self):
         d = self.draw
