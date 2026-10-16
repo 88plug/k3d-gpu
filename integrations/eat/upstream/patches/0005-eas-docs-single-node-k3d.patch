@@ -1,0 +1,160 @@
+From ac6d249fb7da40e02ff9e1206354933ea165f2f8 Mon Sep 17 00:00:00 2001
+From: Andrew Mello <andrew@88plug.com>
+Date: Fri, 16 Oct 2026 04:47:56 -0700
+Subject: [PATCH] docs: add "Single-Node Dev on k3d"
+
+A walkthrough for running the platform on one developer machine through
+the existing BYO path (existing_kubernetes) on a k3d cluster: cluster
+create flags (Traefik off, host 80/443 mapped through k3d's load
+balancer), the global_config.yaml settings that differ on k3s
+(metallb_enabled: false for ServiceLB, istio_platform: k3d,
+local-path from k3s, best-effort when NRI is unavailable or already
+owned), /etc/hosts on loopback, and teardown.
+
+Linked from docs/README.md under Deploy. The page notes the istio and
+envoy_gateway changes it depends on.
+---
+ docs/README.md     |   1 +
+ docs/deploy/k3d.md | 118 +++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 119 insertions(+)
+ create mode 100644 docs/deploy/k3d.md
+
+diff --git a/docs/README.md b/docs/README.md
+index 186dbe9..3427922 100644
+--- a/docs/README.md
++++ b/docs/README.md
+@@ -33,6 +33,7 @@ Install the platform, serve a model, deploy RAG, and go beyond a single node.
+ | [Deployment Guide](deploy/install_platform.md) | Step-by-step platform install — no Kubernetes experience needed |
+ | [Deploy a Model](deploy/deploy_models.md) | Deploying, accessing, and managing LLM inference with `model-manager` |
+ | [Multi-Node & BYO Cluster](deploy/topologies.md) | Deploying across several machines, or onto an existing cluster |
++| [Single-Node Dev on k3d](deploy/k3d.md) | Running the platform on one machine inside k3d (k3s in Docker) for development |
+ | [NetApp ONTAP and Trident](deploy/netapp_ontap.md) | Deploying with Trident + ONTAP as the storage backend |
+ | [Network Architecture](deploy/networking.md) | Network topology, IP allocation, and how a request reaches a model |
+ 
+diff --git a/docs/deploy/k3d.md b/docs/deploy/k3d.md
+new file mode 100644
+index 0000000..6c806d7
+--- /dev/null
++++ b/docs/deploy/k3d.md
+@@ -0,0 +1,118 @@
++# Single-Node Dev on k3d
++
++[← Docs Index](../README.md)
++
++Run the platform on one machine inside [k3d](https://k3d.io) (k3s in Docker) for development, demos and CI. This is the [bring-your-own cluster](topologies.md#bring-your-own-kubernetes-byo) path: k3d creates the cluster, and the installer deploys the platform and the layers above it onto that cluster. It is a development topology, not a production one.
++
++> [!NOTE]
++> The settings on this page need `istio_platform` in the istio role and the control-plane affinity in the envoy_gateway role. Without them, keep `istio_enabled: false`, and expect the Envoy DaemonSet to schedule no pods on k3s (it selects `node-role.kubernetes.io/control-plane: ""`, k3s sets `"true"`).
++
++---
++
++## What differs on k3d
++
++| Concern | On k3d / k3s | Setting |
++|---|---|---|
++| Cluster provisioning | k3d creates the cluster; Kubespray is skipped | `existing_kubernetes: <kubeconfig>` |
++| `LoadBalancer` Services | k3s ServiceLB answers them on the node | `metallb_enabled: false` |
++| Storage | k3s ships the `local-path` provisioner as the default StorageClass | `storage_backend: local-path` (the default) |
++| Istio CNI paths | CNI config lives in `/var/lib/rancher/k3s/agent/etc/cni/net.d`, binaries in `/bin` | `istio_platform: k3d` |
++| Ingress controller | k3s bundles Traefik, which would claim ports 80 and 443 | `--disable=traefik` at cluster create |
++| CPU pinning | containerd NRI is on unless k3s runs in a user namespace (rootless) | default `nri-balloons`; `best-effort` if NRI is off or another NRI policy already owns the node |
++| Control-plane label | k3s labels servers `node-role.kubernetes.io/control-plane=true` | none |
++
++The hardware minimums in [Prerequisites](../quickstart/prerequisites.md#hardware-minimums) apply to the host. k3d sets no CPU or memory limit on its node containers unless asked to.
++
++---
++
++## Step 1 — Create the cluster
++
++Requires Docker and k3d v5. One server and no agents gives a single-node cluster, so node topology labels are a no-op.
++
++```bash
++k3d cluster create eas \
++  --image rancher/k3s:v1.34.12-k3s1 \
++  --k3s-arg '--disable=traefik@server:*' \
++  -p '80:80@loadbalancer' \
++  -p '443:443@loadbalancer' \
++  --wait
++
++mkdir -p ~/.kube
++k3d kubeconfig get eas > ~/.kube/k3d-eas.yaml
++chmod 600 ~/.kube/k3d-eas.yaml
++kubectl --kubeconfig ~/.kube/k3d-eas.yaml get nodes
++```
++
++The `-p` mappings forward ports 80 and 443 on the host, through k3d's load balancer container, to the ServiceLB pods on the node. The gateway is then reachable on `127.0.0.1`.
++
++---
++
++## Step 2 — Create and configure the environment
++
++```bash
++./es_auto_installer.sh configure
++./es_auto_installer.sh init inference
++```
++
++In `env/local/global_config.yaml`:
++
++```yaml
++existing_kubernetes: "/home/<you>/.kube/k3d-eas.yaml"   # absolute path to the kubeconfig from Step 1
++metallb_enabled: false        # k3s ServiceLB serves LoadBalancer Services
++istio_platform: k3d           # istio-cni uses k3s's CNI directories
++storage_backend: local-path   # provided by k3s
++# kubernetes_cpu_policy: best-effort   # only when NRI is off or another NRI policy owns the node
++```
++
++Only one NRI resource policy can run on a node. If the k3d node already runs one (for example a balloons or topology-aware policy installed with the cluster), set `kubernetes_cpu_policy: best-effort` so the installer does not install a second.
++
++---
++
++## Step 3 — Install
++
++```bash
++./es_auto_installer.sh install inference --env local
++```
++
++---
++
++## Step 4 — Reach the services
++
++ServiceLB reports the node's Docker network address as the gateway IP. With the port mappings from Step 1, point the hostnames at the host's loopback instead:
++
++```bash
++DOMAIN=$(yq '.base_domain_name' env/local/global_config.yaml)
++echo "127.0.0.1  ${DOMAIN} grafana.${DOMAIN} keycloak.${DOMAIN} litellm.${DOMAIN}" | sudo tee -a /etc/hosts
++```
++
++Import the self-signed CA as described in [Getting Started](../quickstart/quickstart.md#access-the-services).
++
++---
++
++## Teardown
++
++```bash
++./es_auto_installer.sh teardown infrastructure --env local
++k3d cluster delete eas
++```
++
++On a BYO cluster, `teardown infrastructure` removes the layers the installer deployed and the node labels it added, and never resets the cluster itself. `k3d cluster delete` removes the cluster.
++
++---
++
++## Limits
++
++- One node only: `local-path` volumes are bound to that node. For more than one node, follow [Multi-Node & BYO Cluster](topologies.md).
++- Rootless Docker or Podman: k3s turns NRI off in a user namespace, so use `kubernetes_cpu_policy: best-effort`.
++- Inference runs on the host CPU through the k3d node; throughput matches the host, not a Xeon server.
++
++---
++
++## Related Docs
++
++| If you want to… | Go to |
++|---|---|
++| Understand the BYO path this page builds on | [Multi-Node & BYO Cluster](topologies.md#bring-your-own-kubernetes-byo) |
++| See every `global_config.yaml` option | [Configuration Reference](../customize/configuration.md) |
++| Deploy a model once the platform is up | [Deploy a Model](deploy_models.md) |
++| Understand CPU pinning and when it applies | [NRI CPU Balloons](../customize/nri_cpu_balloons.md) |
+-- 
+2.53.0
+
