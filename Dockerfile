@@ -47,6 +47,10 @@ COPY share/nvidia-device-plugin.yml /var/lib/rancher/k3s/server/manifests/nvidia
 # label habana.ai/gaudi.present=true, which the launcher sets when it detects Gaudi.
 COPY share/intel-gpu-plugin.yml /var/lib/rancher/k3s/server/manifests/intel-gpu-plugin.yaml
 COPY share/gaudi-device-plugin.yml /var/lib/rancher/k3s/server/manifests/gaudi-device-plugin.yaml
+# Intel GPU DRA driver, the K3D_GPU_DRA=1 alternative to intel-gpu-plugin. The
+# launcher passes k3s --disable=intel-gpu-dra (default) or --disable=intel-gpu-plugin
+# (DRA mode), so a cluster applies exactly one of the two.
+COPY share/intel-gpu-dra.yml /var/lib/rancher/k3s/server/manifests/intel-gpu-dra.yaml
 # Intel NPU (Core Ultra) plugin, gated by intel.feature.node.kubernetes.io/npu=true,
 # which the launcher sets when it detects an NPU.
 COPY share/intel-npu-plugin.yml /var/lib/rancher/k3s/server/manifests/intel-npu-plugin.yaml

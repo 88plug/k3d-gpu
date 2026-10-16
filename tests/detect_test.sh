@@ -442,6 +442,142 @@ test_says "hybrid test fails when an efficient pod is not on E-cores" "${r}" fai
     STUB_POD_PHASE=Succeeded STUB_POD_LOGS_cores_performance_test="Cpus_allowed_list:	0" \
     STUB_POD_LOGS_cores_efficient_test="Cpus_allowed_list:	3" K3D_GPU_VENDORS=hybrid
 
+# ---- Intel GPU DRA mode (K3D_GPU_DRA=1) ---------------------------------------
+# DSTUB's kubectl answers what `up` and `test` ask in DRA mode: STUB_K8S_VERSION
+# (/version), STUB_API_VERSIONS, STUB_SLICES (rendered `get resourceslices`
+# lines: driver pool generation kmd taint-effects), STUB_ALLOCATABLE, the pod
+# phase and logs. It appends every call to STUB_LOG and saves `apply -f -` input
+# to STUB_APPLIED. Its k3d appends its arguments, one per line, to STUB_LOG.
+DSTUB="${WORK}/dbin"
+mkdir -p "${DSTUB}"
+cat > "${DSTUB}/kubectl" <<'EOF'
+#!/bin/sh
+echo "kubectl $*" >> "${STUB_LOG}"
+case "$*" in
+    "get --raw /version") printf '{\n  "major": "1",\n  "gitVersion": "%s"\n}\n' "${STUB_K8S_VERSION}" ;;
+    api-versions) for a in ${STUB_API_VERSIONS}; do echo "${a}"; done ;;
+    "get resourceslices"*) printf '%s' "${STUB_SLICES:-}" ;;
+    "get nodes"*) printf '%s' "${STUB_ALLOCATABLE:-}" ;;
+    "apply -f -") cat > "${STUB_APPLIED}" ;;
+    "get pod"*) echo "${STUB_POD_PHASE:-Succeeded}" ;;
+    logs*) printf %s "${STUB_POD_LOGS:-}" ;;
+esac
+exit 0
+EOF
+printf '#!/bin/sh\nfor a in "$@"; do echo "k3d-arg $a"; done >> "${STUB_LOG}"\n' > "${DSTUB}/k3d"
+cp "${STUB_BIN}/docker" "${DSTUB}/docker"
+chmod +x "${DSTUB}"/*
+
+DRA_APIS="apps/v1 v1 resource.k8s.io/v1 resource.k8s.io/v1beta2"
+# One untainted xe GPU in pool generation 3, next to devices a gpu.intel.com
+# claim cannot get: an older generation, a tainted GPU, a vfio-pci GPU, another driver.
+DRA_SLICES="gpu.intel.com node0 2 xe
+gpu.intel.com node0 3 xe
+gpu.intel.com node0 3 i915 NoSchedule,
+gpu.intel.com node0 3 vfio-pci
+gpu.example.com node0 9 xe
+"
+DRA_NONE="gpu.intel.com node0 3 xe NoExecute,
+gpu.intel.com node0 3 vfio-pci
+"
+CASE=0
+
+# run_says <cmd> <name> <root> <want rc: 0|fail> <ERE> [env assignments...]: run a
+# subcommand against DSTUB. Leaves the call log in ${LOG} and applied YAML in ${APPLIED}.
+run_says() {
+    local cmd=$1 name=$2 root=$3 want=$4 re=$5 out rc
+    shift 5
+    CASE=$((CASE + 1)); LOG="${WORK}/dra-${CASE}.log"; APPLIED="${WORK}/dra-${CASE}.yaml"
+    : > "${LOG}"
+    out=$(env K3D_GPU_SYSROOT="${root}" PATH="${DSTUB}:${PATH}" STUB_LOG="${LOG}" STUB_APPLIED="${APPLIED}" \
+        STUB_K8S_VERSION=v1.34.1+k3s1 STUB_API_VERSIONS="${DRA_APIS}" "$@" bash "${K3D_GPU}" "${cmd}" 2>&1)
+    rc=$?
+    if grep -E -- "${re}" <<< "${out}" >/dev/null \
+       && { { [ "${want}" = 0 ] && [ "${rc}" -eq 0 ]; } || { [ "${want}" = fail ] && [ "${rc}" -ne 0 ]; }; }; then
+        PASS=$((PASS + 1)); echo "ok   ${name}"
+    else
+        FAILS=$((FAILS + 1))
+        echo "FAIL ${name} (rc=${rc}, want ${want}, /${re}/)"
+        sed 's/^/  | /' <<< "${out}"
+    fi
+}
+
+# file_has <name> <file> <ERE> [negate]: <file> must contain a line matching <ERE>
+# (must not when a 4th argument is given).
+file_has() {
+    local name=$1 file=$2 re=$3 negate=${4:-} hit=0
+    grep -E -- "${re}" "${file}" >/dev/null 2>&1 && hit=1
+    if { [ -z "${negate}" ] && [ "${hit}" -eq 1 ]; } || { [ -n "${negate}" ] && [ "${hit}" -eq 0 ]; }; then
+        PASS=$((PASS + 1)); echo "ok   ${name}"
+    else
+        FAILS=$((FAILS + 1))
+        echo "FAIL ${name} (${negate:+not }matching /${re}/ in ${file})"
+        sed 's/^/  | /' "${file}" 2>/dev/null
+    fi
+}
+
+r=$(newroot dra-intel)
+kernel "${r}" 6.18.1
+pci "${r}" 0000:03:00.0 0x8086 0xe20b xe; render "${r}" 0000:03:00.0 128
+
+expect "DRA mode lists the Intel DeviceClass instead of extended resources" "${r}" \
+    "intel deviceclass/gpu.intel.com" K3D_GPU_DRA=1
+expect "K3D_GPU_DRA=0 keeps the device plugin resources" "${r}" "intel gpu.intel.com/xe" K3D_GPU_DRA=0
+expect_fail "K3D_GPU_DRA other than 0 or 1 is rejected" "${r}" K3D_GPU_DRA=yes
+
+doctor_says "doctor reports DRA mode with an Intel GPU" "${r}" 'ok: up deploys the Intel GPU DRA driver' "" K3D_GPU_DRA=1
+r2=$(newroot dra-no-intel)
+kernel "${r2}" 6.18.1
+mkdir -p "${r2}/sys/module/nvidia"; touch "${r2}/dev/nvidiactl"
+doctor_says "doctor fails DRA mode without an Intel GPU" "${r2}" 'fail.*K3D_GPU_DRA=1 but no Intel GPU' "" K3D_GPU_DRA=1
+
+run_says up "up in DRA mode verifies by counting ResourceSlice devices" "${r}" 0 'schedulable: intel=1\.' \
+    K3D_GPU_DRA=1 STUB_SLICES="${DRA_SLICES}"
+file_has "DRA up disables the intel-gpu-plugin addon" "${LOG}" '^k3d-arg --k3s-arg=--disable=intel-gpu-plugin@server:0$'
+file_has "DRA up keeps the DRA driver addon" "${LOG}" 'disable=intel-gpu-dra' negate
+file_has "DRA up waits for the kubelet plugin rollout" "${LOG}" \
+    '^kubectl -n intel-gpu-resource-driver rollout status daemonset/intel-gpu-resource-driver-kubelet-plugin'
+file_has "DRA up checks for resource.k8s.io/v1" "${LOG}" '^kubectl api-versions$'
+
+run_says up "up without DRA disables the DRA addon and verifies allocatable" "${r}" 0 'schedulable: intel=2\.' \
+    STUB_ALLOCATABLE="gpu.intel.com/xe 2
+"
+file_has "non-DRA up disables the intel-gpu-dra addon" "${LOG}" '^k3d-arg --k3s-arg=--disable=intel-gpu-dra@server:0$'
+file_has "non-DRA up keeps intel-gpu-plugin" "${LOG}" 'disable=intel-gpu-plugin' negate
+file_has "non-DRA up never reads ResourceSlices" "${LOG}" 'resourceslices' negate
+
+run_says up "DRA on Kubernetes 1.34 warns that upstream supports 1.36+" "${r}" 0 'v1\.34\.1\+k3s1.*supported upstream on 1\.36\+' \
+    K3D_GPU_DRA=1 STUB_SLICES="${DRA_SLICES}"
+out=$(env K3D_GPU_SYSROOT="${r}" PATH="${DSTUB}:${PATH}" STUB_LOG=/dev/null STUB_K8S_VERSION=v1.36.5+k3s1 \
+    STUB_API_VERSIONS="${DRA_APIS}" STUB_SLICES="${DRA_SLICES}" K3D_GPU_DRA=1 bash "${K3D_GPU}" up 2>&1)
+if grep 'supported upstream' <<< "${out}" >/dev/null; then
+    FAILS=$((FAILS + 1)); echo "FAIL DRA on 1.36 prints no version warning"; sed 's/^/  | /' <<< "${out}"
+else
+    PASS=$((PASS + 1)); echo "ok   DRA on 1.36 prints no version warning"
+fi
+run_says up "DRA without resource.k8s.io/v1 fails with the cluster version" "${r}" fail \
+    'needs resource\.k8s\.io/v1 \(Kubernetes 1\.34\+\), cluster runs v1\.33\.5\+k3s1' \
+    K3D_GPU_DRA=1 STUB_K8S_VERSION=v1.33.5+k3s1 STUB_API_VERSIONS="apps/v1 v1 resource.k8s.io/v1beta2"
+run_says up "DRA without an Intel GPU fails before creating a cluster" "${r2}" fail 'K3D_GPU_DRA=1 needs an Intel GPU' \
+    K3D_GPU_DRA=1
+file_has "no cluster is created when DRA has no Intel GPU" "${LOG}" '^k3d-arg' negate
+
+run_says test "DRA test pod gets a GPU through a ResourceClaimTemplate" "${r}" 0 'renderD128' \
+    K3D_GPU_DRA=1 STUB_SLICES="${DRA_SLICES}" STUB_POD_LOGS="crw-rw---- 1 root render 226, 128 Oct 16 12:00 renderD128"
+file_has "test creates a v1 ResourceClaimTemplate" "${APPLIED}" '^kind: ResourceClaimTemplate$'
+file_has "the template requests the gpu.intel.com DeviceClass" "${APPLIED}" 'deviceClassName: gpu\.intel\.com$'
+file_has "the test pod claims through the template" "${LOG}" \
+    '^kubectl run intel-gpu-dra-test .*"resourceClaimTemplateName":"intel-gpu-dra-test".*"claims":\[\{"name":"gpu"\}\]'
+file_has "the template is deleted after the test" "${LOG}" '^kubectl delete resourceclaimtemplate intel-gpu-dra-test'
+file_has "DRA test never requests an extended resource" "${LOG}" 'gpu\.intel\.com/(xe|i915)' negate
+
+run_says test "DRA test fails when the claim pod fails, and cleans up" "${r}" fail 'intel-gpu-dra-test pod failed' \
+    K3D_GPU_DRA=1 STUB_SLICES="${DRA_SLICES}" STUB_POD_PHASE=Failed STUB_POD_LOGS="ls: /dev/dri: No such file or directory"
+file_has "a failed DRA test still deletes the template" "${LOG}" '^kubectl delete resourceclaimtemplate intel-gpu-dra-test'
+run_says test "DRA test fails when only tainted or vfio GPUs are published" "${r}" fail 'no allocatable gpu\.intel\.com device' \
+    K3D_GPU_DRA=1 STUB_SLICES="${DRA_NONE}"
+file_has "no DRA pod runs without an allocatable device" "${LOG}" '^kubectl run' negate
+
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

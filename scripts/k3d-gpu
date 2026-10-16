@@ -19,6 +19,11 @@
 #           the NRI balloons policy (nri-plugins), everything else keeps every CPU
 #           DSA/IAA/QAT need host setup first (work queues / SR-IOV VFs); doctor says what is missing.
 #
+# Intel GPU DRA mode (K3D_GPU_DRA=1, Kubernetes 1.34+): the Intel GPU DRA driver
+# (intel-resource-drivers-for-kubernetes) replaces intel-gpu-plugin. GPUs are
+# published as ResourceSlices and requested through ResourceClaims for DeviceClass
+# gpu.intel.com instead of the gpu.intel.com/xe|i915 extended resources.
+#
 # Subcommands:
 #   up      create cluster, verify each detected accelerator is schedulable
 #   down    delete cluster
@@ -40,6 +45,9 @@ DSA_PLUGIN_MANIFEST="${K3D_GPU_DSA_PLUGIN:-${SHARE_DIR}/intel-dsa-plugin.yml}"
 IAA_PLUGIN_MANIFEST="${K3D_GPU_IAA_PLUGIN:-${SHARE_DIR}/intel-iaa-plugin.yml}"
 QAT_PLUGIN_MANIFEST="${K3D_GPU_QAT_PLUGIN:-${SHARE_DIR}/intel-qat-plugin.yml}"
 HYBRID_PLUGIN_MANIFEST="${K3D_GPU_HYBRID_PLUGIN:-${SHARE_DIR}/nri-balloons.yml}"
+INTEL_DRA_MANIFEST="${K3D_GPU_INTEL_DRA:-${SHARE_DIR}/intel-gpu-dra.yml}"
+DRA="${K3D_GPU_DRA:-0}"        # 1: Intel GPUs through the DRA driver instead of intel-gpu-plugin
+INTEL_DRA_DRIVER="gpu.intel.com" # DRA driver name, also the name of its DeviceClass
 SYSROOT="${K3D_GPU_SYSROOT:-}" # prefix for /sys and /dev reads (tests point it at a fake tree)
 TEST_IMAGE="${K3D_GPU_TEST_IMAGE:-nvidia/cuda:13.4.2-base-ubuntu26.04}"
 DEVICE_TEST_IMAGE="${K3D_GPU_DEVICE_TEST_IMAGE:-busybox:1.37}"
@@ -73,6 +81,7 @@ Environment:
   K3D_GPU_CLUSTER       cluster name         (default: gpu)
   K3D_GPU_IMAGE         k3s node image       (default: cryptoandcoffee/k3d-gpu:latest)
   K3D_GPU_VENDORS       auto | comma list of nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid (default: auto)
+  K3D_GPU_DRA           1 = Intel GPUs via the DRA driver instead of the device plugin, k8s 1.34+ (default: 0)
   K3D_GPU_SHARE         dir holding the fallback plugin yamls (default: /usr/share/k3d-gpu)
   K3D_GPU_PLUGIN        NVIDIA plugin yaml   (default: ${SHARE_DIR}/nvidia-device-plugin.yml)
   K3D_GPU_INTEL_PLUGIN  Intel GPU plugin yaml  (default: ${SHARE_DIR}/intel-gpu-plugin.yml)
@@ -82,6 +91,7 @@ Environment:
   K3D_GPU_IAA_PLUGIN    Intel IAA plugin yaml  (default: ${SHARE_DIR}/intel-iaa-plugin.yml)
   K3D_GPU_QAT_PLUGIN    Intel QAT plugin yaml  (default: ${SHARE_DIR}/intel-qat-plugin.yml)
   K3D_GPU_HYBRID_PLUGIN NRI balloons yaml    (default: ${SHARE_DIR}/nri-balloons.yml)
+  K3D_GPU_INTEL_DRA     Intel GPU DRA driver yaml (default: ${SHARE_DIR}/intel-gpu-dra.yml)
 
 Docs: https://github.com/88plug/k3d-gpu
 EOF
@@ -274,6 +284,7 @@ firmware_present() {
 
 # Resolve the active vendor list into ACTIVE (array). Honors K3D_GPU_VENDORS.
 resolve_vendors() {
+    case "${DRA}" in 0|1) ;; *) err "K3D_GPU_DRA must be 0 or 1 (got '${DRA}')" ;; esac
     ACTIVE=()
     detect_intel
     detect_npu
@@ -311,6 +322,9 @@ is_active() {
     return 1
 }
 
+# Intel GPUs go through the DRA driver (K3D_GPU_DRA=1, validated by resolve_vendors).
+intel_dra() { [ "${DRA}" = 1 ]; }
+
 # Kubernetes extended resources a vendor advertises (one per line). A trailing *
 # is a prefix: DSA/IAA name resources after the queue mode, QAT after the PF's
 # configured services (cy, dc, asym-dc, ... or generic). AMX and hybrid have no
@@ -326,6 +340,8 @@ vendor_resources() {
         amx)    amx_labels ;;
         hybrid) echo "${HYBRID_LABEL}" ;;
         intel)
+            # DRA: no extended resource; pods claim devices of this DeviceClass.
+            if intel_dra; then echo "deviceclass/${INTEL_DRA_DRIVER}"; return; fi
             # One resource per bound driver; both when nothing is detected
             # (explicit K3D_GPU_VENDORS=intel on a host we cannot read).
             local e drivers=""
@@ -341,7 +357,12 @@ vendor_resources() {
 vendor_daemonset() {  # prints: namespace name manifest
     case "$1" in
         nvidia) echo "kube-system nvidia-device-plugin-daemonset ${PLUGIN_MANIFEST}" ;;
-        intel)  echo "kube-system intel-gpu-plugin ${INTEL_PLUGIN_MANIFEST}" ;;
+        intel)
+            if intel_dra; then
+                echo "intel-gpu-resource-driver intel-gpu-resource-driver-kubelet-plugin ${INTEL_DRA_MANIFEST}"
+            else
+                echo "kube-system intel-gpu-plugin ${INTEL_PLUGIN_MANIFEST}"
+            fi ;;
         npu)    echo "kube-system intel-npu-plugin ${NPU_PLUGIN_MANIFEST}" ;;
         gaudi)  echo "habana-system habanalabs-device-plugin-daemonset ${GAUDI_PLUGIN_MANIFEST}" ;;
         dsa)    echo "kube-system intel-dsa-plugin ${DSA_PLUGIN_MANIFEST}" ;;
@@ -479,6 +500,16 @@ doctor_gaudi() {
     fi
 }
 
+doctor_dra() {
+    info "Checking Intel GPU DRA mode (K3D_GPU_DRA=1)..."
+    if is_active intel; then
+        echo "  ok: up deploys the Intel GPU DRA driver (DeviceClass ${INTEL_DRA_DRIVER}) instead of intel-gpu-plugin; needs Kubernetes 1.34+"
+    else
+        echo "  ${RED}fail${RST}: K3D_GPU_DRA=1 but no Intel GPU is active"
+        FAIL=1
+    fi
+}
+
 # Intel GPUs and NPUs the kernel saw but no driver claimed. They have no device
 # node, so detection cannot see them; the usual cause is a part newer than the
 # kernel's default support (xe.force_probe) or a driver module that is not loaded.
@@ -577,6 +608,7 @@ doctor() {
         if is_active npu;    then doctor_npu;    fi
         if is_active gaudi;  then doctor_gaudi;  fi
     fi
+    if intel_dra; then doctor_dra; fi
     doctor_intel_unbound
     doctor_cpu_accels
 
@@ -592,12 +624,23 @@ cmd_up() {
     resolve_vendors
     [ "${#ACTIVE[@]}" -gt 0 ] || err "no supported accelerator detected (NVIDIA, Intel GPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX, hybrid P/E cores) — run 'k3d-gpu doctor' or set K3D_GPU_VENDORS"
     info "Accelerators: ${ACTIVE[*]}"
+    if intel_dra && ! is_active intel; then
+        err "K3D_GPU_DRA=1 needs an Intel GPU and none is active (${ACTIVE[*]}) — run 'k3d-gpu doctor' or set K3D_GPU_VENDORS"
+    fi
 
     local create_args=(
         --image="${IMAGE}"
         --no-lb
         --k3s-arg="--disable=traefik@server:0"
     )
+    # The image bakes both Intel GPU stacks; a cluster runs exactly one. k3s
+    # --disable=<name> deletes <name>.yaml from its auto-deploy manifests and never
+    # applies it, so the other stack's objects are never created.
+    if intel_dra; then
+        create_args+=(--k3s-arg="--disable=intel-gpu-plugin@server:0")
+    else
+        create_args+=(--k3s-arg="--disable=intel-gpu-dra@server:0")
+    fi
     # NVIDIA: --gpus=all hands the host GPUs to the node container, and
     # --default-runtime=nvidia flips the node's embedded containerd default from
     # runc to the auto-detected nvidia runtime so every pod gets the driver
@@ -663,6 +706,7 @@ cmd_up() {
 
     info "Waiting for nodes Ready..."
     kubectl wait --for=condition=Ready nodes --all --timeout=120s
+    if intel_dra; then check_dra_api; fi
 
     # The cryptoandcoffee/k3d-gpu image bakes every device plugin into k3s's
     # auto-deploy dir, so k3s applies them on startup — no action needed here. Give
@@ -676,6 +720,21 @@ cmd_up() {
     done
 
     verify_gpus
+}
+
+# DRA mode needs the GA resource.k8s.io/v1 API (Kubernetes 1.34+). The pinned
+# driver release is supported upstream on 1.36+.
+check_dra_api() {
+    local ver minor
+    ver=$(kubectl get --raw /version 2>/dev/null | sed -n 's/.*"gitVersion": *"\(v[^"]*\)".*/\1/p')
+    # Not grep -q: an early exit SIGPIPEs kubectl and pipefail turns a match into failure.
+    kubectl api-versions 2>/dev/null | grep -x 'resource.k8s.io/v1' >/dev/null \
+        || err "K3D_GPU_DRA=1 needs resource.k8s.io/v1 (Kubernetes 1.34+), cluster runs ${ver:-an unknown version} — use a newer K3D_GPU_IMAGE or K3D_GPU_DRA=0"
+    minor=$(sed -n 's/^v1\.\([0-9]*\).*/\1/p' <<< "${ver}")
+    if [ -n "${minor}" ] && [ "${minor}" -lt 36 ]; then
+        warn "Kubernetes ${ver}: the Intel GPU DRA driver gpu-v0.12.1 is supported upstream on 1.36+"
+    fi
+    return 0
 }
 
 ensure_plugin() {
@@ -714,10 +773,30 @@ resource_counts() {
 
 resource_total() { resource_counts "$1" | awk '{s += $2} END {print s + 0}'; }
 
+# Intel GPUs the DRA driver publishes in ResourceSlices across all nodes that a
+# claim for DeviceClass gpu.intel.com can get: bound to xe or i915 (the class's
+# selector), in each pool's newest generation (older slices are being replaced),
+# and without a NoSchedule or NoExecute taint.
+intel_dra_devices() {
+    local tmpl='{{range .items}}{{$s := .spec}}{{range .spec.devices}}{{$s.driver}} {{$s.pool.name}} {{$s.pool.generation}} '
+    tmpl+='{{with .attributes}}{{with .driver}}{{.string}}{{else}}-{{end}}{{else}}-{{end}} {{range .taints}}{{.effect}},{{end}}{{"\n"}}{{end}}{{end}}'
+    { kubectl get resourceslices -o go-template="${tmpl}" 2>/dev/null || true; } \
+        | awk -v want="${INTEL_DRA_DRIVER}" '
+            $1 != want { next }
+            { n++; pool[n] = $2; gen[n] = $3; kmd[n] = $4; taint[n] = $5
+              if (!($2 in max) || $3 + 0 > max[$2] + 0) max[$2] = $3 }
+            END {
+                for (i = 1; i <= n; i++)
+                    if (gen[i] + 0 == max[pool[i]] + 0 && kmd[i] ~ /^(xe|i915)$/ && taint[i] !~ /NoSchedule|NoExecute/) c++
+                print c + 0
+            }'
+}
+
 # Schedulable units for a vendor: summed resources, or for AMX and hybrid the
 # number of nodes carrying their labels.
 vendor_total() {
     local res total=0
+    if [ "$1" = intel ] && intel_dra; then intel_dra_devices; return; fi
     while read -r res; do
         [ -n "${res}" ] || continue
         if [ "$1" = "amx" ] || [ "$1" = "hybrid" ]; then
@@ -797,6 +876,43 @@ run_pod() {
     [ "${phase}" = Succeeded ]
 }
 
+DRA_TEST="intel-gpu-dra-test"
+
+# ResourceClaimTemplate for one device of the Intel GPU DeviceClass. Each pod
+# naming it gets its own ResourceClaim, which is deleted with the pod.
+dra_claim_template() {
+    cat <<EOF
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata:
+  name: ${DRA_TEST}
+spec:
+  spec:
+    devices:
+      requests:
+      - name: gpu
+        exactly:
+          deviceClassName: ${INTEL_DRA_DRIVER}
+EOF
+}
+
+dra_test_overrides() {
+    echo "{\"spec\":{\"resourceClaims\":[{\"name\":\"gpu\",\"resourceClaimTemplateName\":\"${DRA_TEST}\"}],\"containers\":[{\"name\":\"${DRA_TEST}\",\"image\":\"${DEVICE_TEST_IMAGE}\",\"resources\":{\"claims\":[{\"name\":\"gpu\"}]},\"command\":[\"ls\",\"-l\",\"/dev/dri\"]}]}}"
+}
+
+# A pod that gets an Intel GPU through a ResourceClaim and lists the /dev/dri
+# nodes the driver's CDI spec injected. Without an allocation there is no /dev/dri.
+dra_test() {
+    local rc=0
+    [ "$(intel_dra_devices)" -gt 0 ] \
+        || err "no allocatable ${INTEL_DRA_DRIVER} device in any ResourceSlice (kubectl get resourceslices) — run 'k3d-gpu doctor'"
+    info "Deploying ${DRA_TEST} test pod (${DEVICE_TEST_IMAGE}, ResourceClaimTemplate for DeviceClass ${INTEL_DRA_DRIVER})..."
+    dra_claim_template | kubectl apply -f - >/dev/null || err "could not create ResourceClaimTemplate ${DRA_TEST}"
+    run_pod "${DRA_TEST}" "${DEVICE_TEST_IMAGE}" "$(dra_test_overrides)" || rc=1
+    kubectl delete resourceclaimtemplate "${DRA_TEST}" --ignore-not-found >/dev/null 2>&1 || true
+    [ "${rc}" -eq 0 ] || err "${DRA_TEST} pod failed — kubectl get resourceclaims; kubectl -n intel-gpu-resource-driver logs ds/intel-gpu-resource-driver-kubelet-plugin"
+}
+
 device_test() {
     local name=$1 resource=$2 path=$3
     info "Deploying ${name} test pod (${DEVICE_TEST_IMAGE}, ${resource})..."
@@ -818,7 +934,9 @@ cmd_test() {
             "{\"spec\":{\"runtimeClassName\":\"nvidia\",\"containers\":[{\"name\":\"nvidia-smi-test\",\"image\":\"${TEST_IMAGE}\",\"resources\":{\"limits\":{\"nvidia.com/gpu\":1}},\"command\":[\"nvidia-smi\"]}]}}" \
             || err "Test pod failed — run 'k3d-gpu doctor'"
     fi
-    if is_active intel; then
+    if is_active intel && intel_dra; then
+        dra_test
+    elif is_active intel; then
         while read -r res; do
             [ "$(resource_total "${res}")" -gt 0 ] || continue
             device_test "intel-gpu-test" "${res}" /dev/dri
