@@ -948,6 +948,78 @@ doctor_cpu_accels() {
     printf '%s' "${lines}"
 }
 
+# kubectl against this launcher's cluster (k3d names the context k3d-<cluster>),
+# with a short timeout so doctor never hangs on a stopped cluster.
+kc() { kubectl --context "k3d-${CLUSTER}" --request-timeout=5s "$@"; }
+
+# doctor_ds <label> <namespace> <daemonset>: one line on the DaemonSet's readiness.
+# Returns 1 (and sets FAIL) unless every scheduled pod is Ready.
+doctor_ds() {
+    local what=$1 ns=$2 ds=$3 st desired ready
+    st=$(kc -n "${ns}" get daemonset "${ds}" -o jsonpath='{.status.desiredNumberScheduled} {.status.numberReady}' 2>/dev/null || true)
+    read -r desired ready <<< "${st}"
+    if [ -z "${st}" ]; then
+        echo "  ${RED}fail${RST}: ${what}: DaemonSet ${ns}/${ds} not found"
+    elif [ "${desired:-0}" -eq 0 ]; then
+        echo "  ${RED}fail${RST}: ${what}: scheduled on no node (node label missing?) — kubectl -n ${ns} describe ds/${ds}"
+    elif [ "${ready:-0}" -lt "${desired}" ]; then
+        echo "  ${RED}fail${RST}: ${what}: ${ready:-0}/${desired} Ready — kubectl -n ${ns} logs ds/${ds}"
+    else
+        echo "  ok: ${what}: ${ready}/${desired} Ready"
+        return 0
+    fi
+    FAIL=1
+    return 1
+}
+
+# Live-cluster checks, run only when the k3d-gpu cluster answers. Each one detects
+# a failure mode described in docs/failure-modes.md.
+doctor_cluster() {
+    local v ns ds manifest policies node
+    command -v kubectl >/dev/null 2>&1 || return 0
+    [ -n "$(kc get nodes -o name 2>/dev/null || true)" ] || return 0
+    info "Checking cluster k3d-${CLUSTER}..."
+
+    # A device plugin that is down leaves its resource unschedulable.
+    for v in ${ACTIVE[@]+"${ACTIVE[@]}"}; do
+        [ "${v}" = hybrid ] && continue
+        read -r ns ds manifest <<< "$(vendor_daemonset "${v}")"
+        [ -n "${ds}" ] || continue
+        doctor_ds "${v} device plugin" "${ns}" "${ds}" || true
+    done
+
+    # containerd creates containers with whatever NRI plugins are connected, so with
+    # balloons down a k3d-gpu.io/cores pod starts on every CPU and nothing errors.
+    if [ -n "$({ kc get nodes -l "${HYBRID_LABEL}" -o name 2>/dev/null || true; })" ]; then
+        if ! doctor_ds "NRI balloons policy" kube-system nri-resource-policy-balloons; then
+            echo "    pods labelled k3d-gpu.io/cores start unpinned until it is Ready (containerd NRI fails open)"
+            if command -v docker >/dev/null 2>&1 && ! docker exec "k3d-${CLUSTER}-server-0" test -S /var/run/nri/nri.sock >/dev/null 2>&1; then
+                echo "  ${RED}fail${RST}: no /var/run/nri/nri.sock in k3d-${CLUSTER}-server-0 — containerd NRI is disabled or refuses external plugins (disable / disable_connections in its config)"
+            fi
+        fi
+    fi
+
+    # Two resource policies both set the cpuset; NRI rejects the container.
+    policies=$({ kc get daemonsets -A -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}{"\n"}{end}' 2>/dev/null || true; } \
+        | grep '/nri-resource-policy-' || true)
+    if [ "$(grep -c . <<< "${policies}")" -gt 1 ]; then
+        echo "  ${RED}fail${RST}: $(grep -c . <<< "${policies}") NRI resource policies installed ($(paste -sd' ' <<< "${policies}")) — containers they both pin fail to create; keep one"
+        FAIL=1
+    fi
+
+    # kubelet keeps a disconnected plugin's devices in capacity but not in allocatable.
+    while read -r node v cap alloc; do
+        [ -n "${v}" ] || continue
+        if [ "${alloc}" -eq 0 ]; then
+            echo "  ${RED}fail${RST}: ${node}: ${v} allocatable 0 of capacity ${cap} — its device plugin disconnected (kubelet drops the resource after 5 min) or reports every device unhealthy"
+            FAIL=1
+        else
+            echo "  ${YLW}warn${RST}: ${node}: ${v} allocatable ${alloc} of capacity ${cap} — the device plugin reports unhealthy devices"
+        fi
+    done < <({ kc get nodes -o go-template='{{range .items}}{{$n := .}}{{range $k, $v := .status.capacity}}{{$n.metadata.name}} {{$k}} {{$v}} {{index $n.status.allocatable $k}}{{"\n"}}{{end}}{{end}}' 2>/dev/null || true; } \
+        | awk '$2 ~ /\// && $3 ~ /^[0-9]+$/ && ($4 + 0) < ($3 + 0) { print $1, $2, $3, $4 + 0 }')
+}
+
 doctor() {
     FAIL=0
     resolve_vendors
@@ -966,6 +1038,7 @@ doctor() {
     fi
     doctor_intel_unbound
     doctor_cpu_accels
+    doctor_cluster
 
     echo ""
     [ "${FAIL}" -eq 0 ] && info "All checks passed." || { err "One or more checks failed."; }
