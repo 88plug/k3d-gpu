@@ -187,7 +187,10 @@ found", not "new idea".
 (2024-09-23) and kubernetes-sigs/dra-driver-cpu `coreType` (2025-08-05). They
 differ in this: they are primitives with examples, and neither is packaged or
 auto-enabled in any local/dev cluster. Intel's edge K3s blueprint describes
-P/E core allocation and reports P/E core counts, but implements no pinning, and
+P/E core allocation and reports P/E core counts, but implements no per-pod or
+core_type-based pinning (its `tools/power-tuning/set_power_profile.sh` @66c85ab,
+lines 501-515, confines host work to hard-coded low-index CPUs via `intel_lpmd`
+at 5-20 W, which is host-wide, not per pod and not core_type-aware), and
 Intel's Edge Orchestrator says it does not tell P from E. No anticipating reference in the searched corpus (venues and
 dates in §1; gaps: four patent abstracts unread, CN web, non-default branches).
 It is taught as a combination, so the claim is "first packaging found".
