@@ -1,0 +1,69 @@
+# Example: a CPU decode pod on the P-core balloon with the limiter-ledger sidecar.
+# Research prototype; see docs/limiter-ledger.md. Not applied by `k3d-gpu up`.
+#
+#   kubectl create configmap limiter-ledger --from-file=bench/limiter_ledger.py
+#   kubectl apply -f share/limiter-ledger-pod.yml
+#
+# The decode container connects to /run/limiter/ledger.sock and writes "M <step>" after every
+# token and "S" at the end (limiter_ledger.Client). Rows land in /run/limiter/ledger.jsonl.
+#
+# The sidecar is in the same pod, so the balloons policy places it on the same P-core balloon,
+# and it reads APERF/MPERF on its own affinity mask. Limit-reason bits are package scope (Intel
+# SDM vol. 4 Table 2-39): they describe the package while this pod ran, not this pod.
+#
+# Host requirements: `modprobe msr` on the host, and /dev/cpu/*/msr visible inside the k3d node
+# container. The node containers k3d creates are privileged. privileged: true below is there
+# because the container device cgroup otherwise refuses /dev/cpu/*/msr (live probe P1 checks
+# whether CAP_SYS_RAWIO alone is enough).
+# --clear makes every step's log bits exact, but each MSR write taints the kernel
+# (TAINT_CPU_OUT_OF_SPEC). Drop --clear for a write-free ledger that samples the status bits.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: decode-with-ledger
+  labels:
+    k3d-gpu.io/cores: performance
+spec:
+  restartPolicy: Never
+  volumes:
+    - name: ledger-sock
+      emptyDir: {}
+    - name: ledger-code
+      configMap:
+        name: limiter-ledger
+    - name: dev-cpu
+      hostPath:
+        path: /dev/cpu
+        type: Directory
+    - name: cpu-sysfs
+      hostPath:
+        path: /sys/devices/system/cpu
+        type: Directory
+  containers:
+    - name: decode
+      # Replace with the decode workload; it must import limiter_ledger.Client or speak the
+      # two-line protocol on the socket.
+      image: python:3.13.16-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f
+      command: ["sleep", "infinity"]
+      resources: {requests: {cpu: "4"}, limits: {cpu: "4"}}
+      volumeMounts:
+        - {name: ledger-sock, mountPath: /run/limiter}
+        - {name: ledger-code, mountPath: /opt/ledger}
+    - name: limiter-ledger
+      image: python:3.13.16-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f
+      command:
+        - python3
+        - /opt/ledger/limiter_ledger.py
+        - serve
+        - --socket=/run/limiter/ledger.sock
+        - --out=/run/limiter/ledger.jsonl
+        - --clear
+      securityContext:
+        privileged: true
+        capabilities: {add: ["SYS_RAWIO"]}
+      resources: {requests: {cpu: "100m"}, limits: {cpu: "100m"}}
+      volumeMounts:
+        - {name: ledger-sock, mountPath: /run/limiter}
+        - {name: ledger-code, mountPath: /opt/ledger}
+        - {name: dev-cpu, mountPath: /dev/cpu}
+        - {name: cpu-sysfs, mountPath: /sys/devices/system/cpu, readOnly: true}
