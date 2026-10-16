@@ -1,0 +1,131 @@
+# Steerable variants of one MCP tool (embed) for receipt-driven placement.
+# Each variant is the same image in its own Deployment. The MCP server's Steerer picks one per
+# tools/call, then asks the ledger for that pod's cgroup energy over the call window.
+#   embed-p     nri-balloons "performance" balloon (share/nri-balloons.yml) -> P-cores
+#   embed-e     "efficient" balloon -> E-cores
+#   embed-igpu  Intel iGPU via the GPU plugin (UHD 770 on Raptor Lake binds i915)
+#   embed-nv0   one NVIDIA GPU
+# Render: TOOL_IMAGE=<image:tag> envsubst < tool-variants.yaml | kubectl apply -f -
+# Prototype only, not applied on the live host (benchmarks running). CPU requests equal limits
+# on the pinned variants so each gets whole cores from its balloon.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: embed-p
+  labels: {k3d-gpu.io/tool: embed, k3d-gpu.io/variant: p}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {k3d-gpu.io/tool: embed, k3d-gpu.io/variant: p}
+  template:
+    metadata:
+      labels: {k3d-gpu.io/tool: embed, k3d-gpu.io/variant: p, k3d-gpu.io/cores: performance}
+    spec:
+      containers:
+        - name: tool
+          image: ${TOOL_IMAGE}
+          env: [{name: K3DGPU_VARIANT, value: p}, {name: K3DGPU_DEVICE, value: cpu}]
+          ports: [{containerPort: 8080}]
+          resources:
+            requests: {cpu: "2", memory: 1Gi}
+            limits: {cpu: "2", memory: 1Gi}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: embed-e
+  labels: {k3d-gpu.io/tool: embed, k3d-gpu.io/variant: e}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {k3d-gpu.io/tool: embed, k3d-gpu.io/variant: e}
+  template:
+    metadata:
+      labels: {k3d-gpu.io/tool: embed, k3d-gpu.io/variant: e, k3d-gpu.io/cores: efficient}
+    spec:
+      containers:
+        - name: tool
+          image: ${TOOL_IMAGE}
+          env: [{name: K3DGPU_VARIANT, value: e}, {name: K3DGPU_DEVICE, value: cpu}]
+          ports: [{containerPort: 8080}]
+          resources:
+            requests: {cpu: "2", memory: 1Gi}
+            limits: {cpu: "2", memory: 1Gi}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: embed-igpu
+  labels: {k3d-gpu.io/tool: embed, k3d-gpu.io/variant: igpu}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {k3d-gpu.io/tool: embed, k3d-gpu.io/variant: igpu}
+  template:
+    metadata:
+      labels: {k3d-gpu.io/tool: embed, k3d-gpu.io/variant: igpu}
+    spec:
+      containers:
+        - name: tool
+          image: ${TOOL_IMAGE}
+          env: [{name: K3DGPU_VARIANT, value: igpu}, {name: K3DGPU_DEVICE, value: igpu}]
+          ports: [{containerPort: 8080}]
+          resources:
+            requests: {cpu: "1", memory: 1Gi}
+            limits: {memory: 1Gi, gpu.intel.com/i915: 1}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: embed-nv0
+  labels: {k3d-gpu.io/tool: embed, k3d-gpu.io/variant: nv0}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {k3d-gpu.io/tool: embed, k3d-gpu.io/variant: nv0}
+  template:
+    metadata:
+      labels: {k3d-gpu.io/tool: embed, k3d-gpu.io/variant: nv0}
+    spec:
+      runtimeClassName: nvidia
+      containers:
+        - name: tool
+          image: ${TOOL_IMAGE}
+          env: [{name: K3DGPU_VARIANT, value: nv0}, {name: K3DGPU_DEVICE, value: nvidia}]
+          ports: [{containerPort: 8080}]
+          resources:
+            requests: {cpu: "1", memory: 2Gi}
+            limits: {memory: 2Gi, nvidia.com/gpu: 1}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: embed-p
+spec:
+  selector: {k3d-gpu.io/tool: embed, k3d-gpu.io/variant: p}
+  ports: [{port: 8080}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: embed-e
+spec:
+  selector: {k3d-gpu.io/tool: embed, k3d-gpu.io/variant: e}
+  ports: [{port: 8080}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: embed-igpu
+spec:
+  selector: {k3d-gpu.io/tool: embed, k3d-gpu.io/variant: igpu}
+  ports: [{port: 8080}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: embed-nv0
+spec:
+  selector: {k3d-gpu.io/tool: embed, k3d-gpu.io/variant: nv0}
+  ports: [{port: 8080}]
