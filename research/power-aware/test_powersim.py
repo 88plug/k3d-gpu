@@ -111,6 +111,13 @@ class Baselines(unittest.TestCase):
         b = ps.run_controller(plant, sc, random.Random(9))
         self.assertEqual(a, b)
 
+    def test_v2_memory_settles_on_stationary_load(self):
+        plant = ps.draw_plant(random.Random(6000))  # v1 made 20 switches on this plant
+        x1, sw1 = ps.run_controller(plant, ps.SCENARIOS["S1_stationary"], random.Random(0))
+        x2, sw2 = ps.run_controller(plant, ps.SCENARIOS["S1_stationary"], random.Random(0), memory=True)
+        self.assertGreater(len(sw1), 10)
+        self.assertLessEqual(sum(1 for s in sw2 if s >= 300), 3)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -16,7 +16,6 @@ Every coefficient below is an unfitted prior. See DESIGN.md section 8 for the pr
 fit them.
 """
 import json
-import math
 import random
 import statistics
 import sys
@@ -219,10 +218,15 @@ def phase_at(scenario, t):
 
 
 def run_controller(plant, scenario, rng, coupled=True, period=20, hyst=0.03,
-                   d_cpu=5, d_gpu=30, horizon=100):
+                   d_cpu=5, d_gpu=30, horizon=100, memory=False):
+    """memory=False is controller v1 (model only). memory=True is v2: measured throughput
+    of placements already visited in the current context replaces the model's prediction,
+    and the model is rescaled by its current measured/predicted ratio."""
     est = Estimator(prior_midpoint())
     cfg, old, since = NAIVE, NAIVE, -10 ** 9
     total, switches = 0.0, []
+    seen, ctx, x_sum, x_n = {}, None, 0.0, 0
+    err, pending = 0.05, None
     length = sum(d for d, _, _ in scenario)
     for t in range(length):
         m, t_amb = phase_at(scenario, t)
@@ -231,13 +235,38 @@ def run_controller(plant, scenario, rng, coupled=True, period=20, hyst=0.03,
         total += st["X"]
         est.update(observe(st, m, rng), eff)
         warm = t - since >= max(d_cpu, d_gpu)
-        if t % period == period - 1 and warm:
+        if memory and warm:
+            if ctx is None or abs(est.m - ctx[0]) > 0.1 or abs(est.cap - ctx[1]) > 5.0:
+                # mix or cap moved away from where the measurements were taken
+                seen, ctx, x_sum, x_n = {}, (est.m, est.cap), 0.0, 0
+            x_sum += st["X"] * (1 + rng.gauss(0, 0.03))  # agent steps/s as the stack reports it
+            x_n += 1
+            seen[cfg] = x_sum / x_n
+        if t % period == period - 1 and warm and (not memory or x_n >= 10):
             x_cur = steady(est.p, cfg, est.m, est.cap, coupled)["X"]
-            cand, x_new = best_config(est.p, est.m, est.cap, coupled)
+            if memory:
+                if pending is not None:  # how wrong was the model about the last jump?
+                    err += 0.3 * (abs(seen[cfg] / pending - 1) - err)
+                    pending = None
+                scale = seen[cfg] / x_cur if x_cur > 0 else 1.0
+                margin = 1 + 2 * err  # an unmeasured placement must beat the model's own error
+                cand, x_new, score = None, -1.0, -1.0
+                for c in CONFIGS:
+                    x = seen[c] if c in seen else scale * steady(est.p, c, est.m, est.cap, coupled)["X"]
+                    s = x if c in seen else x / margin
+                    if s > score:
+                        cand, x_new, score = c, x, s
+                x_cur = seen[cfg]
+            else:
+                cand, x_new = best_config(est.p, est.m, est.cap, coupled)
+                score = x_new
             moved = sum(abs(a - b) for a, b in zip(cfg[:4], cand[:4])) / (N_P + N_E)
             cost = x_cur * (moved * d_cpu + (d_gpu if cand[4] > cfg[4] else 0) / 5)
-            if cand != cfg and x_new > x_cur * (1 + hyst) and (x_new - x_cur) * horizon > cost:
+            if cand != cfg and score > x_cur * (1 + hyst) and (x_new - x_cur) * horizon > cost:
+                if memory and cand not in seen:
+                    pending = x_new
                 old, cfg, since = cfg, cand, t
+                x_sum, x_n = 0.0, 0
                 switches.append(t)
     return total / length, switches
 
@@ -271,7 +300,7 @@ def pct(xs, q):
     return xs[min(len(xs) - 1, max(0, round(q * (len(xs) - 1))))]
 
 
-def campaign(n_plants=40, seed=6):
+def campaign(n_plants=40, seed=6, memory=False):
     out = {}
     for name, sc in SCENARIOS.items():
         rows = []
@@ -279,12 +308,13 @@ def campaign(n_plants=40, seed=6):
             plant = draw_plant(random.Random(seed * 1000 + i))
             scores, oracle = static_scores(plant, sc)
             tuned = max(scores.values())
-            x_full, sw = run_controller(plant, sc, random.Random(i))
-            x_abl, _ = run_controller(plant, sc, random.Random(i), coupled=False)
+            x_full, sw = run_controller(plant, sc, random.Random(i), memory=memory)
+            x_abl, _ = run_controller(plant, sc, random.Random(i), coupled=False, memory=memory)
             rows.append({"tuned": tuned, "naive": scores[NAIVE], "oracle": oracle,
                          "ctrl": x_full, "ablated": x_abl,
                          "switches_after_300": sum(1 for s in sw if s >= 300)})
-        r = lambda k, base: [row[k] / row[base] for row in rows]
+        def r(k, base):
+            return [row[k] / row[base] for row in rows]
         out[name] = {
             "ctrl/tuned_median": statistics.median(r("ctrl", "tuned")),
             "ctrl/tuned_p10": pct(r("ctrl", "tuned"), 0.10),
@@ -311,6 +341,9 @@ def verdict(res):
 
 
 if __name__ == "__main__":
+    # usage: powersim.py [n_plants] [seed] [v1|v2]
     n = int(sys.argv[1]) if len(sys.argv) > 1 else 40
-    res = campaign(n)
-    print(json.dumps({"results": res, "verdict": verdict(res)}, indent=2))
+    seed = int(sys.argv[2]) if len(sys.argv) > 2 else 6
+    version = sys.argv[3] if len(sys.argv) > 3 else "v1"
+    res = campaign(n, seed, memory=version == "v2")
+    print(json.dumps({"version": version, "seed": seed, "results": res, "verdict": verdict(res)}, indent=2))
