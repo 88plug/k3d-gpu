@@ -1,7 +1,8 @@
 # Static validation for k3d-gpu. No cluster, no GPU, no running services.
 #
 #   make check            run every validator with the tools on PATH
-#   make check-container  build .devcontainer and run `make check` inside it
+#   make check-container  build .devcontainer/Dockerfile and run `make check` inside it
+#                         (plain docker build: devcontainer.json features are not applied)
 #
 # The pinned toolchain lives in .devcontainer/Dockerfile.
 

@@ -4,7 +4,9 @@
     "dockerfile": "Dockerfile"
   },
   "features": {
-    "ghcr.io/devcontainers/features/docker-in-docker:4.1.3": {}
+    "ghcr.io/devcontainers/features/docker-in-docker:4.1.3": {
+      "moby": false
+    }
   },
   "remoteUser": "vscode",
   "customizations": {

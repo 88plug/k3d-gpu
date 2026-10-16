@@ -56,4 +56,5 @@ RUN case "${TARGETARCH:-amd64}" in \
     && rm -rf /tmp/tools
 
 WORKDIR /workspaces/k3d-gpu
-USER vscode
+# vscode (uid 1000 in the base image); numeric so the host can resolve it.
+USER 1000

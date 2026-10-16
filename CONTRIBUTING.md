@@ -38,7 +38,7 @@ Include relevant details:
    host with Docker:
    ```bash
    make check             # tools on PATH (inside the dev container)
-   make check-container   # builds .devcontainer, runs make check inside it
+   make check-container   # builds .devcontainer/Dockerfile (no features), runs make check
    ```
 
    Then test on real hardware:
