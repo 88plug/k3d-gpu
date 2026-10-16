@@ -1,0 +1,77 @@
+# Hybrid P-core / E-core NRI balloons profile for Intel's Enterprise Agent Toolkit
+# (EAT) on a k3d-gpu cluster. Values for the nri-resource-policy-balloons chart v0.14.0
+# (https://containers.github.io/nri-plugins), installed under the release name EAT
+# uses, so EAT's own role sees the same release:
+#
+#   K3D_GPU_BALLOONS=external k3d-gpu up
+#   helm upgrade --install nri-resource-policy-balloons nri-resource-policy-balloons \
+#     --repo https://containers.github.io/nri-plugins --version v0.14.0 \
+#     --namespace kube-system -f contrib/eat/hybrid-values.yaml
+#
+# and set deploy_nri_balloon_policy=no in EAT's agentic-config.cfg, so EAT does not
+# reinstall the chart with its single-type Xeon policy.
+#
+# Balloon types (first match wins):
+#   reserved             kube-system, on E-cores
+#   vllm-balloon         EAT's vLLM pods (container "vllm", or the annotation
+#                        balloon.balloons.resource-policy.nri.io: vllm-balloon), on P-cores
+#   performance          pods labelled k3d-gpu.io/cores=performance -> P-cores
+#   efficient            pods labelled k3d-gpu.io/cores=efficient   -> E-cores
+#   agent-control-plane  EAT's agent services, on E-cores (namespaces from EAT @0ecf67a:
+#                        genai-gateway = LiteLLM + Langfuse, deploy-genai-gateway.yml;
+#                        redis, redis-controller.sh; pgvector, pgvector-controller.sh;
+#                        agent-sandbox-system, inference_agent_sandbox.yml;
+#                        openshell-system + openshell-sandboxes, inference_openshell.yml;
+#                        flowise, agenticai-plugin-vars.yml)
+#   shared               everything else, one balloon on every idle CPU
+# EAT's own policy puts every non-vLLM pod in "reserved" (namespaces: ["*"]); this
+# profile drops that so unlabelled pods keep the rest of the machine.
+nodeSelector:
+  k3d-gpu.io/hybrid-cpu: "true"
+config:
+  reservedResources:
+    cpu: 1000m
+  agent:
+    nodeResourceTopology: true
+    podResourceAPI: false
+  allocatorTopologyBalancing: true
+  pinCPU: true
+  pinMemory: false
+  reservedPoolNamespaces: [kube-system]
+  balloonTypes:
+  - name: reserved
+    preferCoreType: efficient
+  - name: vllm-balloon
+    preferCoreType: performance
+    allocatorPriority: high
+    minCPUs: 1
+    maxCPUs: 1024
+    matchExpressions:
+    - {key: name, operator: In, values: [vllm]}
+  - name: performance
+    preferCoreType: performance
+    matchExpressions:
+    - {key: pod/labels/k3d-gpu.io/cores, operator: Equals, values: [performance]}
+  - name: efficient
+    preferCoreType: efficient
+    matchExpressions:
+    - {key: pod/labels/k3d-gpu.io/cores, operator: Equals, values: [efficient]}
+  - name: agent-control-plane
+    preferCoreType: efficient
+    minCPUs: 2
+    maxBalloons: 1
+    namespaces:
+    - genai-gateway
+    - redis
+    - pgvector
+    - agent-sandbox-system
+    - openshell-system
+    - openshell-sandboxes
+    - flowise
+  - name: shared
+    shareIdleCPUsInSame: system
+    maxBalloons: 1
+    matchExpressions:
+    - {key: name, operator: AlwaysTrue}
+  log:
+    debug: [none]
