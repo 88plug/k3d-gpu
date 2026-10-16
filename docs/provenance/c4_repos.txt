@@ -1,0 +1,36 @@
+=== [2026-10-16] gh search repos 'ovms kubernetes' -> 0 hits 
+=== [2026-10-16] gh search repos 'openvino model server helm' -> 2 hits 
+  amahab/openvino-demo	*0	2022-05-20	Deploy OpenVINO model server Helm Chart using GitOps on an Azure Arc-enabled Kubernetes cluster
+  saravananoppila/deploy-OpenVINO-Model-Server-in-AWS-EKS-using-Terraform	*0	2023-04-10	This repository shows how to provision provision AWS EKS using Terraform and deploy OpenVINO model server usin
+=== [2026-10-16] gh search repos 'openvino model server npu' -> 8 hits 
+  Quazmoz/InferBridge	*46	2026-10-14	Windows-first OpenAI-compatible local LLM server powered by OpenVINO GenAI for Intel CPU/GPU/NPU, with chat UI
+  dataO1/mneme	*4	2026-08-18	Local NPU-accelerated semantic memory exposed over MCP — single NixOS flake (Qdrant + OpenVINO Model Server + 
+  lutyjj/jev-openvino-npu-server	*0	2026-09-26	Jev-style models OpenVINO NPU server
+  Nandkishore-04/n8n-nodes-openvino	*0	2026-08-20	n8n custom nodes for OpenVINO Model Server. Run agentic AI workflows locally on Intel CPU/GPU/NPU — no cloud.
+  PrabhanshuChouhan/smart-ag-vision	*0	2026-06-19	Dual-model Edge AI server for real-time crop diagnostics using YOLOv8, TinyLlama INT4, and Intel OpenVINO NPU 
+  eoc-llm-tooling/local-llm-serve	*0	2026-10-09	Starts OVMS, Ollama (Intel Vulkan) and llama.cpp, and prepares the models those servers load.
+  CloudedQuartz/opencode-ovms-autostart-wsl	*0	2026-04-20	Auto starts and manages openvino model server on wsl. use windows executable to allow running embedding models
+  pwsh/whisper-lxc	*0	2026-08-31	Standalone speech-to-text appliance: OpenVINO Model Server serving Whisper on an Intel iGPU and NPU inside a P
+=== [2026-10-16] gh search repos 'openvino kubernetes npu' -> 0 hits 
+=== [2026-10-16] gh search repos 'ovms igpu' -> 0 hits 
+=== [2026-10-16] gh search repos 'openvino operator' -> 8 hits 
+  openvinotoolkit/operator	*22	2026-06-05	OpenVINO operator for OpenShift and Kubernetes
+  intel-iot-devkit/machine-operator-monitor-cpp	*8	2023-01-03	Monitor a machine operator and detect the emotional state of an operator. Send an alert if the operator is dis
+  Rhaedyr/machine-operator-monitor-go	*0	2020-12-18	This machine operator monitor application is one of a series of reference implementations for Computer Vision 
+  mmgaggle/openvino-operator	*1	2020-12-01	
+  yuki-inaho/openvino_xml_operator_extractor	*0	2025-04-21	
+  8Dionysus/ATM10-Agent	*1	2026-09-05	Local-first ATM10 companion for Windows 11: vision, RAG/KAG memory, dry-run automation, voice, and a gateway-b
+  ApolinarCastro/TukeVision	*1	2026-10-06	Local-first, vendor-neutral CCTV operational intelligence platform. Turns existing video streams into traceabl
+  Graiphic/ONNX-Runtime-Execution-Providers-Tester	*2	2026-05-20	It is the compatibility engine behind the SOTA LabVIEW Deep Learning Toolkit, ensuring that every ONNX operato
+=== [2026-10-16] gh search repos 'openvino model server k3s' -> 0 hits 
+=== [2026-10-16] gh search repos 'ovms auto device' -> 0 hits 
+=== [2026-10-16] gh search repos 'openvino kubernetes gpu' -> 2 hits 
+  korabcenaj/dual-gpu-ai-orchestrator	*0	2026-07-23	Heterogeneous Intel/AMD GPU inference platform with FastAPI, Celery, Kubernetes, OpenVINO, Vulkan, and observa
+  qbarrand/kubecon-na-2023-demo	*4	2023-11-29	KubeCon NA 2023 demo
+=== [2026-10-16] gh search repos 'openvino genai kubernetes' -> 2 hits 
+  openvinotoolkit/model_server	*947	2026-10-15	A scalable inference server for models optimized with OpenVINO™
+  intel/enterprise-inference	*6	2026-10-16	Enterprise-grade, high-performance LLM serving on Kubernetes. OpenAI-compatible inference powered by vLLM and 
+=== [2026-10-16] gh search repos 'ovms openai' -> 2 hits 
+  Jermalk/stormvino	*3	2026-06-24	OpenAI API server for OpenVino - when OVMS is too big
+  gzhytar/ovms-to-cc	*0	2026-06-12	This proxy translates between Claude Code (Anthropic Messages API) and OpenVINO Model Server (uses the OpenAI 
+=== [2026-10-16] gh search repos 'openvino npu device plugin' -> 0 hits 

@@ -1,0 +1,240 @@
+=== [2026-10-16] gh search repos 'k3d gpu' -> 15 hits 
+  justinthelaw/k3d-gpu-support	*9	2026-03-25	Containerized k3s CUDA support for k3d bootstrapping
+  piaobeizu/k3d-gpu-image	*2	2025-04-08	适用于gpuk3d
+  danielcamposramos/Knowledge3D	*39	2026-10-15	Web knowledge is fragmented — duplicated across fonts, embeddings, metadata, and renderings. Humans see pixels
+  twobombs/k3d-image	*0	2021-11-17	GPU, Longhorn Integration
+  v-wan/k3d-gpu	*1	2024-06-06	custom k3d image to run cuda workloads
+  jakkaj/k3d-gpu	*1	2024-11-01	Get GPU going in k3d (and k3s really)
+  markgeejw/k3d-gpu	*0	2021-08-26	Just a k3d image with GPU support
+  PengyiZhang/k3d-gpu-cluster	*0	2026-09-26	
+  kralicky/nvidia-k3d-scripts	*0	2021-07-02	Build scripts for gpu-enabled k3d images
+  techmakersco/k3d-gpu-ubuntu24_04	*1	2025-04-15	Creating a GPU-Accelerated Kubernetes Cluster with K3D on Ubuntu 24.04 with latest versions
+  88plug/k3d-bin	*0	2026-07-15	AUR package for k3d — run k3s in Docker. Multi-arch (x86_64/aarch64/armv7h). Auto-tracks upstream releases.
+  RahulRachhoya/llm-serving-k8s	*0	2026-09-28	A QLoRA fine-tuned Qwen2.5 intent classifier served with vLLM on a k3d GPU cluster: accuracy parity, concurren
+  szl-holdings/warhacker-demo	*0	2026-08-31	ARCHIVED WarHacker-2026 RTX 4060 Ti tower dry-run snapshot: GPU k3d/UDS, air-gap, thermal guard, Khipu kill-mo
+  firoala18/llm-inference-lab	*0	2026-08-04	A university-scale LLM serving platform in miniature: vLLM on cloud GPU, LiteLLM gateway with per-faculty gove
+  mtnvencenzo/platform-ops	*0	2026-10-02	Platform engineering toolkit for deploying and managing cloud-native or onprem stacks. Includes scripts, templ
+=== [2026-10-16] gh search repos 'k3d nvidia' -> 4 hits 
+  mysticrenji/nvidia-k3d	*0	2025-11-11	
+  autolyticus/k3d-nvidia-runtime	*1	2025-05-14	A custom Docker image which enables K3d to run CUDA containers.
+  kralicky/nvidia-k3d-scripts	*0	2021-07-02	Build scripts for gpu-enabled k3d images
+  RahulRachhoya/llm-serving-k8s	*0	2026-09-28	A QLoRA fine-tuned Qwen2.5 intent classifier served with vLLM on a k3d GPU cluster: accuracy parity, concurren
+=== [2026-10-16] gh search repos 'k3d intel' -> 0 hits 
+=== [2026-10-16] gh search repos 'kind gpu' -> 20 hits 
+  fzi-forschungszentrum-informatik/gpu-voxels	*318	2026-09-17	GPU-Voxels is a CUDA based library which allows high resolution volumetric collision detection between animate
+  open-edge-platform/edge-developer-kit-reference-scripts	*54	2026-10-16	Developer kits reference setup scripts for various kinds of Intel platforms and GPUs
+  CGCL-codes/YiTu	*254	2026-04-08	YiTu is an easy-to-use runtime to fully exploit the hybrid parallelism of different hardwares (e.g., GPU) to e
+  maryamtahhan/kind-gpu-sim	*6	2026-10-06	Simulate NVIDIA/AMD GPUs in Kind (Kubernetes in docker)
+  drivendataorg/zamba	*162	2026-10-04	A Python package for identifying hundreds of kinds of animals, training custom models, and estimating distance
+  NVIDIA/nv-sflow	*43	2026-10-07	A declarative workflow orchestrator for massive GPU clusters of any kind, including slurm, K8S and docker. Top
+  Zhanyl-tech/k8s-gpu-scheduler-lab	*4	2026-10-14	A reproducible comparison of Kubernetes GPU schedulers (Kueue, Volcano, KAI) on identical workload traces — kw
+  viti95/V95Bench	*11	2025-11-08	Benchmark designed to test all kind of graphics cards in DOS environments.
+  IANW-Projects/ConservationLaws	*3	2019-06-19	A set of tools for numerically solving different kinds of conservation or balance laws with OpenCL.
+  termdock/termdock-issues	*160	2026-10-14	Let AI write the code — you own the view. Termdock: the AI-native terminal for macOS & Windows. Claude Code / 
+  giuliocalzo/gpu-labs	*6	2026-07-31	GPU Labs
+  PStarH/LLM-boost-recognition	*63	2026-10-09	OCR and Voice Recognition Module: Effortlessly convert documents and audio into actionable text using advanced
+  SeineAI/nvidia-kind-deploy	*6	2026-02-15	A comprehensive toolkit for setting up a Kind (Kubernetes in Docker) cluster with NVIDIA GPU support, includin
+  moezdil/siltide	*34	2026-10-16	Terminal fleet monitor for GPUs, NPUs, and 13 other accelerator kinds, from utilization down to which pod is u
+  xiaoran007/GPU-Insights	*3	2026-09-30	GPU Insights, repository for all kinds of code related to GPUs
+  TheGoodIn/ZotacStockChecker	*4	2021-04-18	Great for finding GPU's of any kind
+  Bilalkhanten/llm-rolling-update-k8s	*3	2026-10-11	Reproduce GPU rolling-update failures on Kubernetes with kind and fake GPUs.
+  dasbd72/kind-gpu	*0	2026-03-15	Guide to enable gpu in kind kubernetes cluster.
+  fishingfly/kwok-gpu-simulator	*2	2026-05-19	Use kwok and kind to simulate a 100,000-GPU-node cluster to test scheduler performance.
+  alanzw/sharerender	*14	2024-10-17	ShareRender is a cloud gaming system that enables fine-grained resource sharing at the frame-level.  Existing 
+=== [2026-10-16] gh search repos 'minikube gpu' -> 10 hits 
+  pydemia/minikube-nvidia-gpu	*0	2021-07-30	
+  loncarales/minikube-ollama-lab	*2	2025-12-27	Zero-config deployment of Ollama and OpenWebUI on Minikube with Ingress and TLS support. One command setup for
+  AntoineBuz/stable-diffusion-minikube	*1	2024-05-30	This project gives resources to deploy a gpu-enabled stable-diffusion app with Minikube
+  Curt-Park/k8s-gpu-sharing-pods	*1	2024-08-24	Tricks for GPU sharing pods on Kubernetes without any use of middleware like HAMi or DRA
+  v-code01/gpuoversub	*0	2026-07-09	Kubernetes GPU time-slicing is just the scheduler bin-packing an integer it can't see through: one GPU adverti
+  Shravani123576/MLOps-Demo-Image-Classification-with-Auto-Scaling-Deployment	*0	2025-12-09	training pipeline, model conversion to ONNX, serving via FastAPI + GPU (if available), autoscaling Docker Comp
+  SleepingTalent/vllm-example	*0	2026-06-19	Local vLLM inference stack on Kubernetes (Minikube) — deploys Qwen2.5-0.5B-Instruct via the vllm-project produ
+  qbarrand/oss-japan-2023-demo	*0	2023-11-29	Open Source Summit Japan 2023 demo 
+  szevy/k8s-llm-serving	*0	2026-07-10	Kubernetes serving pattern for an LLM, demonstrated with a small model (llama.cpp) on minikube - Deployment, S
+  aminbayat3/LLM-Bench	*0	2025-10-20	A Kubernetes-based benchmarking framework for deploying and stress-testing LLMs across different runtimes (Oll
+=== [2026-10-16] gh search repos 'k3s gpu' -> 20 hits 
+  xiftai/jetson_nano_k3s_cluster_gpu	*26	2025-03-10	Jetson Nano K3S Kubernetes Cluster with GPU Support on JetPack 4.5 / L4T 3.5.0 
+  UntouchedWagons/K3S-NVidia	*59	2026-09-15	A guide on using NVidia GPUs for transcoding or AI in Kubernetes 
+  justinthelaw/k3d-gpu-support	*9	2026-03-25	Containerized k3s CUDA support for k3d bootstrapping
+  vdups/jetsonnano-k3s-gpu	*10	2024-01-06	My notes setting up a K3s Kubernetes cluster on my Nvidia Jetson Nano
+  ld-singh/ai-factory-ops-lab	*19	2026-10-11	Hands-on GPU/HPC infrastructure operations: K8s GPU scheduling, HAMi sharing, Slurm, observability & vLLM infe
+  UntouchedWagons/K3S-Intel	*18	2026-06-10	A guide on using intel GPUs for transcoding in Kubernetes
+  hoangsonww/AegisVision-Computer-Vision-System	*10	2026-10-06	🛰️ A distributed, GPU-native visual-intelligence OS. Ingests any video, runs detection and reasoning on partit
+  celesrenata/nixos-k3s-configs	*17	2026-10-09	Intel 185H Kubernetes with SR-IOV GPU Passthrough to cluster w/ various projects. Now with working Intel SR-IO
+  OscarAraque/k3s-docker-gpu	*5	2026-10-13	K3s Docker GPU project for GPU-accelerated Python workloads in containers. It ships UV, CUDA 12.2, CuPy, NVIDI
+  aerugo/brev-data-platform	*3	2026-03-26	GPU data platform on NVIDIA Brev with K3S, ArgoCD, Dagster, LakeFS, MinIO, and NVIDIA AI Enterprise
+  colinjlacy/tofu-proxmox-gpu-ubuntu-k3s	*2	2026-08-26	An OpenTofu project that stands up Ubuntu images in Proxmox with passthrough GPU and K3s mounted on top
+  sypticus/nvidia-k3s-cuda	*2	2025-11-19	Scripts and instructions to get an NVIDIA GPU running on K3S
+  TheNoise2Signal/dgx-spark-k8s-operators	*2	2026-08-01	DGX Spark + k3s: GPU & multi-node RDMA (RoCE) Helm Charts
+  data-max-hq/cost-effective-ml	*3	2025-01-10	MultiGPU model training setup with Kubernetes, Ray and Kubeflow
+  momin09/k3s-gpu-cluster	*0	2026-08-02	
+  Phillezi/k3s-gpu-timeslicing	*0	2024-11-11	a little repo for playing around with timeslicing of gpus in a k3s cluster
+  korabcenaj/gpu-inference-k3s	*0	2026-08-10	Migrating a bare-metal AMD GPU node into a self-managed k3s cluster with a real-time speech transcription stac
+  N4tsoni/k3s-gpu-lab	*0	2026-07-04	Hands-on lab to learn Kubernetes (k3s) with GPU scheduling: install scripts, notes, and ready-to-apply manifes
+  crothmeier/k3s-gpu-platform	*0	2026-03-22	K3s GPU platform with monitoring, health automation, and heterogeneous NVIDIA scheduling
+  jakkaj/k3d-gpu	*1	2024-11-01	Get GPU going in k3d (and k3s really)
+=== [2026-10-16] gh search repos 'k3s intel gpu' -> 2 hits 
+  UntouchedWagons/K3S-Intel	*18	2026-06-10	A guide on using intel GPUs for transcoding in Kubernetes
+  celesrenata/nixos-k3s-configs	*17	2026-10-09	Intel 185H Kubernetes with SR-IOV GPU Passthrough to cluster w/ various projects. Now with working Intel SR-IO
+=== [2026-10-16] gh search repos 'intel device plugins' -> 20 hits 
+  intel/intel-device-plugins-for-kubernetes	*150	2026-10-15	Collection of Intel device plugins for Kubernetes
+  k8snetworkplumbingwg/sriov-network-device-plugin	*531	2026-10-15	SRIOV network device plugin for Kubernetes
+  JetBrains/intellij-micropython	*544	2026-09-30	Plugin for MicroPython devices in PyCharm and IntelliJ
+  AliyunContainerService/sgx-device-plugin	*75	2025-12-10	Kubernetes Device Plugin for Intel SGX
+  fbdlampayan/tpm-k8s-device-plugin	*3	2024-06-27	custom kubernetes device plugin using Intel's library
+  intel/adq-k8s-plugins	*16	2024-11-28	Application Device Queues (ADQ) plugins is a software system that integrates with Kubernetes and allows dedica
+  sebva/sgx-device-plugin	*11	2024-07-27	Device plugin for Kubernetes that enables the usage of Intel SGX in pods.
+  intel/torchlib-xpu	*4	2026-10-15	This project contains a set of plugins for PyTorch* ecosystem libraries which enable hardware acceleration on 
+  canonical/intel-device-plugins-k8s-operator	*0	2024-08-14	A Kubernetes charm for managing Intel device plugins
+  TKVH-Infra/intel-device-plugins	*0	2026-04-02	Kubernetes deployment with all secrets hidden in an Hashicorp Vault.
+  starlingx/app-intel-device-plugins	*0	2026-05-01	
+  charlesthomas/homelab-intel-device-plugins-operator	*0	2026-02-25	
+  plutolove/intel-device-plugins-for-kubernetes	*1	2020-03-30	
+  RGayathri99/intel-device-plugins-for-kubernetes	*0	2021-11-22	
+  charlesthomas/homelab-intel-device-plugins-gpu	*0	2025-11-02	
+  adaptant-labs/ncs2-device-plugin	*1	2022-10-18	Intel NCS2 device plugin for Kubernetes
+  jkdhn/devicetree-intellij-plugin	*0	2023-07-02	WIP DeviceTree plugin for CLion
+  shuoyanshen/qat_plugin	*0	2023-08-09	Intel QAT Device Plugin for ACK
+  b-com/k8s-accelerator-devplugin	*3	2021-07-01	k8s-accelerator-devplugin is a device plugin for kubernetes to manage AWS or Intel FPGA accelerators units
+  privilegedescalation/headlamp-intel-gpu-plugin	*0	2026-07-28	Headlamp plugin for Intel GPU device visibility and resource monitoring in Kubernetes
+=== [2026-10-16] gh search repos 'kubernetes gpu autodetect' -> 0 hits 
+=== [2026-10-16] gh search repos 'npu kubernetes' -> 20 hits 
+  Project-HAMi/ascend-device-plugin	*41	2026-10-09	Kubernetes device plugin for Ascend NPUs, supporting hard and soft NPU slicing with HAMi and Volcano.
+  data-infra/cube-studio	*2557	2026-10-16	cubestudio开源云原生一站式机器学习/深度学习/大模型AI平台/MaaS/mlops/人工智能平台/训推平台，算法全链路流程，多租户，算力租赁平台，token中转，拖拉拽任务流pipeline编排，多机多卡分布式
+  Project-HAMi/ascend-dra-driver	*7	2026-10-08	Kubernetes DRA Driver for Ascend NPUs, supporting soft NPU slicing with hami-vnpu-core
+  schwankner/talos-rk3588-npu	*4	2026-07-18	Talos Linux system extension + Kubernetes CDI device plugin for the Rockchip RK3588 NPU
+  furiosa-ai/libfuriosa-kubernetes	*3	2026-06-22	Library for the Furiosa NPU Kubernetes stack
+  tencentmusic/cube-studio	*5083	2026-10-16	cube studio开源云原生一站式机器学习/深度学习/大模型AI平台，mlops算法链路全流程，算力租赁平台，notebook在线开发，拖拉拽任务流pipeline编排，多机多卡分布式训练，超参搜索，推理服务VGPU
+  RBLN-SW/rbln-npu-operator	*2	2026-10-15	⚙️ RBLN NPU Operator automates the full lifecycle of RBLN NPUs across Kubernetes clusters
+  RBLN-SW/rbln-metrics-exporter	*3	2026-10-12	📊 We collect real-time RBLN NPU health and utilization metrics and expose them as Prometheus gauges.
+  freed-dev-llc/turing-rk1-cluster	*11	2026-10-05	4-node bare-metal Kubernetes cluster on Turing RK1 (RK3588) with Talos Linux, Longhorn storage, and RKNN NPU s
+  SNU-RTOS/hailo-device-plugin	*3	2026-08-27	kubernetes device plugin for hailo npu using CDI
+  gclawes/rockchip-dra-driver	*3	2026-10-09	Kubernetes DRA driver for Rockchip RK3588 features (GPU, NPU)
+  elct9620/rknpu-device-plugin	*2	2026-03-19	RockChip NPU device plugin for Kubernetes
+  moezdil/siltide	*34	2026-10-16	Terminal fleet monitor for GPUs, NPUs, and 13 other accelerator kinds, from utilization down to which pod is u
+  jrzayev/kubenpu	*2	2026-10-10	Per-pod visibility into NPU and accelerator usage on Kubernetes
+  RBLN-SW/rbln-k8s-dra-driver	*0	2026-10-12	Kubernetes DRA Driver for Rebellions NPUs
+  jac-76/npu-container	*0	2026-09-03	Containerized AMD Ryzen AI NPU inference stack — reproducible digest-pinned Docker build, verification harness
+  RBLN-SW/rbln-npu-feature-discovery	*1	2026-10-06	⚡ We discover RBLN NPUs across your Kubernetes nodes to surface accurate resource annotations
+  yancanmao/npu-private-cloud-ops-skill	*0	2026-10-02	Ascend NPU private cloud operations skill for Coder, Kubernetes, KubeRay, Ray, Longhorn, Volcano and observabi
+  idekube-project/idekube-container	*3	2026-09-29	Self-hosted IDE & AI-agent fleet for Kubernetes — JupyterLab, Coder, VS Code, noVNC desktop, ROS 2, Ascend NPU
+  freed-dev-llc/turing-ansible-cluster	*2	2026-10-09	Infrastructure-as-code for K3s clusters on Turing Pi RK1 with NPU support. Terraform + Ansible.
+=== [2026-10-16] gh search repos 'kind nvidia' -> 20 hits 
+  maryamtahhan/kind-gpu-sim	*6	2026-10-06	Simulate NVIDIA/AMD GPUs in Kind (Kubernetes in docker)
+  SeineAI/nvidia-kind-deploy	*6	2026-02-15	A comprehensive toolkit for setting up a Kind (Kubernetes in Docker) cluster with NVIDIA GPU support, includin
+  TheGoodIn/ZotacStockChecker	*4	2021-04-18	Great for finding GPU's of any kind
+  moezdil/siltide	*34	2026-10-16	Terminal fleet monitor for GPUs, NPUs, and 13 other accelerator kinds, from utilization down to which pod is u
+  AshwinRamaniPsg/mock_ufm_kind_demo	*0	2026-08-18	mock nvidia ufm demo
+  anjilinux/kind-cluster-create-laptop-Kind-Kubernetes-Cluster-with-NVIDIA-GPU	*1	2026-08-17	Kind Kubernetes Cluster with NVIDIA GPU Support
+  person198319/nvidia-medical-imaging	*0	2026-04-28	CT Organ Segmentation · TensorRT FP16/INT8 · Triton Inference Server (5 backends) · NVFLARE Federated Learning
+  Billour/nvidia_jetson_nano_mynote	*0	2023-08-28	There are my note about what developed I to do, What kind of issues happend, and how to solve it.
+  mamy-CS/nvidia-k8s-mps-experiments	*0	2025-06-11	NVIDIA MPS in Kubernetes KIND cluster with the NVIDIA GPU Operator using the NVIDIA device plugin for Kubernet
+  maxfraieho/kindle-butch-gen-x86	*0	2026-07-24	Kindle Butch Gen x86_64 / Windows 11 WSL2 / NVIDIA CUDA - Autonomous Book & Manga Translation Engine
+  walidbr/jax_nvkind_playground	*1	2026-10-02	Experiment with GPU distributed compute on an nvidia through Kind 
+  ChrisAdkin8/k8s-ai-observability	*4	2026-09-25	Build and validate GPU and LLM dashboards, alerts and SLOs cheaply - simulated NVIDIA GPU and vLLM stacks plus
+  parallelArchitect/cupti-activity-collector	*2	2026-08-31	GB10-aware CUPTI Activity collector — runtime kind detection, phase management, and JSON output for hardware-c
+  christian-dussol-ai-native/dynamic-resource-allocation	*0	2026-07-18	Hands-on tutorials for Dynamic Resource Allocation (DRA): declarative GPU tier fallback on Kubernetes, runnabl
+  tatsuS10/Food_Classification	*0	2025-08-01	This is my NVIDIA project. It can classify what kind of food an image is.
+  vbhchua/defects-gen	*0	2026-07-13	Synthetic defect images for AOI on your own GPU — NVIDIA Cosmos AnomalyGen on a local OSMO/kind cluster.
+  alexboscolo954/llm-serving-k8s	*0	2026-10-10	vLLM + LiteLLM on Kubernetes: runnable CPU path on kind, GPU path with FP8, time-slicing and OpenCost
+  AndreasDeveloper/Tech-Hub	*0	2018-09-02	Fictional website related to showing off the newest tech. Including GPU's (Nvidia) and other kind of hardware.
+  gulamsabri/kiwix-rag	*0	2026-07-05	Building a RAG chat based on kiwix libraries - running this on a Raspberry Pi 5 and an NVidia Jetson Orin Nano
+  parallelArchitect/cupti-uma-probe	*0	2026-04-26	CUPTI UVM activity API diagnostic for GB10 / DGX Spark — determines whether CUPTI_ACTIVITY_KIND_UNIFIED_MEMORY
+=== [2026-10-16] gh search repos 'gaudi kubernetes' -> 5 hits 
+  last9/gpu-telemetry	*75	2026-10-14	GPU Observability with workload attribution. One OTLP agent per node ties hardware metrics (NVIDIA, AMD, Intel
+  intel/intel-technology-enabling-for-openshift	*22	2026-07-11	The project delivers a comprehensive full-stack solution for the Intel® Enterprise AI Foundation on the OpenSh
+  HabanaAI/gaudi-base-operator	*0	2026-10-09	Intel Gaudi Base Operator for Kubernetes automates the management of all necessary Intel Gaudi software compon
+  HabanaAI/gaudi-device-plugin	*0	2026-10-09	Gaudi device plugin for Kubernetes is a Daemonset that allows you to automatically expose the number of Gaudi 
+  HabanaAI/gaudi-feature-discovery	*0	2026-10-09	Gaudi Feature Discovery for Kubernetes is a software component that allows you to automatically generate label
+=== [2026-10-16] gh search repos 'habana kubernetes' -> 1 hits 
+  HabanaAI/habanalabs-k8s-device-plugin	*4	2024-08-22	HABANA device plugin for Kubernetes
+=== [2026-10-16] gh search repos 'local kubernetes gpu' -> 20 hits 
+  defilantech/llmkube-bench	*5	2026-10-03	Reproducible llama.cpp vs vLLM benchmark on Kubernetes for local LLM inference. Manifests, load harness, and f
+  bruler/kub-setup	*4	2020-02-15	local kubernetes-based ml setup
+  peopleforrester/cloud-native-ai-lab	*7	2026-10-16	Seven hands-on labs for running AI workloads on Kubernetes: GPU scheduling, distributed training, model servin
+  abhishek3100/ai-infra-local-k8s	*0	2026-09-08	Local AI Infrastructure on Kubernetes with NVIDIA GPUs
+  ZoomPhant/monitoring	*17	2026-10-13	Zoomphant is the next-generation free monitoring tool. Integrates cloud and on-premise deployment. Supporting 
+  david6983/k8s-gpu-scheduler-lab	*0	2026-08-17	A local Kubernetes lab to learn GPU scheduling without owning GPU Hardware
+  amirhosssein0/ai-platform-lab	*14	2026-09-28	Production-grade, security-first AI platform on a single local K8s cluster — GitOps (ArgoCD), Vault, Kyverno, 
+  santura-dev/local-inference-operator	*1	2026-09-12	Kubernetes operator for managing local LLM inference services with CRD-based deployment and GPU scheduling
+  chenhunghan/lens-llm-extension	*0	2023-08-02	Local, GPU powered LLM in Lens
+  Basmuta/mini-ai-platform	*0	2026-10-14	Local GPU inference gateway with Docker Compose, monitoring, and Kubernetes rollback practice
+  mbakalarski/rtx-ai-platform	*0	2026-05-19	GitOps-first Kubernetes platform for local AI workloads on NVIDIA RTX GPUs.
+  brojaza/kind-ai-cluster	*0	2026-08-09	A local, GPU-accelerated LLM AI model running entirely on your machine via Kubernetes
+  excellaco/macos-gpu-ai-stack	*1	2026-03-18	This stack runs a local Kubernetes cluster on an M-Series Mac using Podman with GPU passthrough via krunkit/li
+  edumgt/k8s-jupyter-lab	*2	2026-07-03	Air-gapped AI Agent platform on VMware OVA: GPU-based local LLM (Ollama/vLLM/TGI), JupyterHub, and Kubernetes 
+  puniomp/k8s-pytorch-ddp-reference	*0	2026-05-18	Kubernetes reference pattern for running PyTorch DDP training jobs with Helm, local CPU validation, and GPU-re
+  aleibovici/krm-quota-planner	*2	2026-10-16	Visual planner for KAI Resource Management (KRM) GPU quotas: rebalance departments and projects, catch over-co
+  barrawi/sangan-ai-watcher	*0	2026-05-13	Security-first local AI agent that monitors Kubernetes cluster health using a self-hosted LLM on GPU. No data 
+  Pughal77/k3s-ollama-AMD-GPU-demo	*0	2026-02-17	A demonstration project showing how to set up k3s (lightweight Kubernetes) on a local machine with AMD GPU (Ra
+  Trolleroof/nozomio-hackathon	*0	2026-05-16	AnyGPU local-first GPU control plane and Crucible Compute agent layer for model registration, provider invento
+  arshitchoubey18/AIOps-Self-Healing-Kubernetes-Platform	*0	2026-05-19	I built an AIOps Self-Healing Kubernetes Platform that detects pod failures, asks a local LLM for root-cause a
+=== [2026-10-16] gh search repos 'k3s nvidia' -> 20 hits 
+  UntouchedWagons/K3S-NVidia	*59	2026-09-15	A guide on using NVidia GPUs for transcoding or AI in Kubernetes 
+  vroomfondel/dgxarley	*12	2026-10-16	Ansible playbooks for a 4-node K3s cluster with NVIDIA DGX Spark nodes for distributed LLM inference
+  vdups/jetsonnano-k3s-gpu	*10	2024-01-06	My notes setting up a K3s Kubernetes cluster on my Nvidia Jetson Nano
+  aerugo/brev-data-platform	*3	2026-03-26	GPU data platform on NVIDIA Brev with K3S, ArgoCD, Dagster, LakeFS, MinIO, and NVIDIA AI Enterprise
+  webees/K3S_NVIDIA_MPS	*2	2024-10-12	
+  sypticus/nvidia-k3s-cuda	*2	2025-11-19	Scripts and instructions to get an NVIDIA GPU running on K3S
+  OscarAraque/k3s-docker-gpu	*5	2026-10-13	K3s Docker GPU project for GPU-accelerated Python workloads in containers. It ships UV, CUDA 12.2, CuPy, NVIDI
+  ld-singh/ai-factory-ops-lab	*19	2026-10-11	Hands-on GPU/HPC infrastructure operations: K8s GPU scheduling, HAMi sharing, Slurm, observability & vLLM infe
+  toxicoder/nvidia-dgx-spark-lab	*3	2026-09-14	Safe lab infrastructure for large-model inference on 1–4 node NVIDIA DGX Spark clusters. K3s + NVIDIA GPU Oper
+  hoangsonww/AegisVision-Computer-Vision-System	*10	2026-10-06	🛰️ A distributed, GPU-native visual-intelligence OS. Ingests any video, runs detection and reasoning on partit
+  Edge-Computing-LLM/k3s-nvidia-edge	*0	2026-07-19	Layer 1: Ubuntu and k3s NVIDIA GPU infrastructure, runtime wiring, GPU Operator, and CUDA validation.
+  jliang87/jetson	*0	2021-10-27	K3s on nVIDIA Jetson Board
+  uaiso-serious/infra	*6	2026-10-03	uaiso serious ai lab
+  daffahilmyf/k3s-nixos-nvidia	*0	2026-05-13	
+  dmkif/lemonade-nvidia	*0	2026-10-05	Lemonade server + libEGL/libXext for NVIDIA Vulkan (k3s GPU worker)
+  vanHeemstraSystems/nvidia-jetson-nano-cluster-with-k3s-headstart	*0	2022-10-17	NVIDIA Jetson powered cluster running k3s - Headstart
+  coulof/eib-nvidia-build	*0	2026-04-30	SUSE Edge Image Builder configuration for K3s + NVIDIA GPU support on SLE Micro
+  unict-cclab/k3s-jetson	*0	2025-11-08	Scripts for installing k3s on NVIDIA Jetson nodes
+  manny-ovena/kube-nvidia-monitoring	*0	2026-10-15	Helm-based k3s setup for monitoring NVIDIA GPU workloads with DCGM Exporter, Prometheus, and Grafana.
+  crothmeier/k3s-gpu-platform	*0	2026-03-22	K3s GPU platform with monitoring, health automation, and heterogeneous NVIDIA scheduling
+=== [2026-10-16] gh search repos 'intel qat kubernetes' -> 1 hits 
+  intel/intel-technology-enabling-for-openshift	*22	2026-07-11	The project delivers a comprehensive full-stack solution for the Intel® Enterprise AI Foundation on the OpenSh
+=== [2026-10-16] gh search repos 'amx kubernetes' -> 0 hits 
+=== [2026-10-16] gh search repos 'local cluster accelerators' -> 1 hits 
+  RealPhantomLee/OffGrid-AI_Dual-Pi-Local-AI-Cluster	*0	2026-07-22	Sovereign, cloud-free local AI stack on dual Raspberry Pi 5 + Hailo-8 accelerator running a 24B-param LLM via 
+=== [2026-10-16] gh search repos 'nvkind' -> 3 hits 
+  NVIDIA/nvkind	*213	2026-10-11	
+  8458697-ai/nvkinda	*0	2025-11-18	
+  walidbr/jax_nvkind_playground	*1	2026-10-02	Experiment with GPU distributed compute on an nvidia through Kind 
+=== [2026-10-16] gh search repos 'microk8s gpu' -> 6 hits 
+  bikramgupta/Kubernetes-for-Machine-Learning	*35	2026-08-10	Hands-on Machine Learning Infrastructure on Kubernetes. Using Microk8s/Ubuntu on Paperspace Cloud.
+  DeepakDeorari/k8s-vllm-rag-ai-observability	*11	2026-10-10	A complete self-hosted AI platform deployed on AWS EC2 using MicroK8s, NVIDIA GPU Operator, vLLM, Open WebUI, 
+  adelorenzo-portainer/microk8s_gpu	*0	2023-04-21	
+  dwetmore/gpu-observability-gitops	*0	2026-02-20	Pure GitOps (Path A) GPU observability stack for single-node MicroK8s on a laptop (RTX 5000). Everything MUST 
+  m4xx3d0ut/platform-nvidia-compute	*0	2026-01-30	Documentation and test scripts for Microk8s GPU compute features.
+  ynotopec/gpu-cluster	*0	2026-07-17	GPU cluster management — k8s-based AI compute cluster with NVIDIA GPUs
+=== [2026-10-16] gh search repos 'k3d-gpu' -> 12 hits 
+  justinthelaw/k3d-gpu-support	*9	2026-03-25	Containerized k3s CUDA support for k3d bootstrapping
+  piaobeizu/k3d-gpu-image	*2	2025-04-08	适用于gpuk3d
+  v-wan/k3d-gpu	*1	2024-06-06	custom k3d image to run cuda workloads
+  jakkaj/k3d-gpu	*1	2024-11-01	Get GPU going in k3d (and k3s really)
+  markgeejw/k3d-gpu	*0	2021-08-26	Just a k3d image with GPU support
+  PengyiZhang/k3d-gpu-cluster	*0	2026-09-26	
+  techmakersco/k3d-gpu-ubuntu24_04	*1	2025-04-15	Creating a GPU-Accelerated Kubernetes Cluster with K3D on Ubuntu 24.04 with latest versions
+  kralicky/nvidia-k3d-scripts	*0	2021-07-02	Build scripts for gpu-enabled k3d images
+  RahulRachhoya/llm-serving-k8s	*0	2026-09-28	A QLoRA fine-tuned Qwen2.5 intent classifier served with vLLM on a k3d GPU cluster: accuracy parity, concurren
+  szl-holdings/warhacker-demo	*0	2026-08-31	ARCHIVED WarHacker-2026 RTX 4060 Ti tower dry-run snapshot: GPU k3d/UDS, air-gap, thermal guard, Khipu kill-mo
+  firoala18/llm-inference-lab	*0	2026-08-04	A university-scale LLM serving platform in miniature: vLLM on cloud GPU, LiteLLM gateway with per-faculty gove
+  mtnvencenzo/platform-ops	*0	2026-10-02	Platform engineering toolkit for deploying and managing cloud-native or onprem stacks. Includes scripts, templ
+=== [2026-10-16] gh search repos 'intel gpu kubernetes' -> 15 hits 
+  last9/gpu-telemetry	*75	2026-10-14	GPU Observability with workload attribution. One OTLP agent per node ties hardware metrics (NVIDIA, AMD, Intel
+  intel/gpu-base-operator	*2	2026-10-16	Intel GPU Base operator allows automatic deployment of GPU related components to enable use of Intel GPU hardw
+  intel/intel-technology-enabling-for-openshift	*22	2026-07-11	The project delivers a comprehensive full-stack solution for the Intel® Enterprise AI Foundation on the OpenSh
+  UntouchedWagons/K3S-Intel	*18	2026-06-10	A guide on using intel GPUs for transcoding in Kubernetes
+  celesrenata/nixos-k3s-configs	*17	2026-10-09	Intel 185H Kubernetes with SR-IOV GPU Passthrough to cluster w/ various projects. Now with working Intel SR-IO
+  aslanxie/IntelGPUK8sPlugin	*0	2026-03-23	Setup Intel GPU Plugin for Kubernetes
+  GoingOffRoading/Plex-on-Kubernetes-with-Intel-GPU	*0	2024-08-22	A deployment YML for dropping Plex onto Kubernetes while using Intel's Kubernetes GPU plugin
+  privilegedescalation/headlamp-intel-gpu-plugin	*0	2026-07-28	Headlamp plugin for Intel GPU device visibility and resource monitoring in Kubernetes
+  MichaelTrip/kgpudash-failed	*1	2026-09-28	Kubernetes GPU Dashboard — real-time monitoring for NVIDIA, AMD and Intel GPUs
+  korabcenaj/dual-gpu-ai-orchestrator	*0	2026-07-23	Heterogeneous Intel/AMD GPU inference platform with FastAPI, Celery, Kubernetes, OpenVINO, Vulkan, and observa
+  Onchana01/GPU-Build-Intelligence---AI-Powered-CI-CD-Platform	*0	2026-02-02	Intelligent CI/CD Platform for ROCm PyTorch Builds | Automated Failure Triage with ML |  Kubernetes-Native GPU
+  Haseeb-Arshad-Dev/sysfs-gpu-exporter	*0	2026-09-20	Prometheus exporter for AMD and Intel GPUs, read from sysfs. Never wakes a suspended card to measure it.
+  MBaranekTech/talos-homelab-core	*0	2026-02-19	A production-grade, immutable Kubernetes home lab setup on bare metal using Talos Linux. Featuring automated I
+  qbarrand/oss-japan-2023-demo	*0	2023-11-29	Open Source Summit Japan 2023 demo 
+  DeepLM/Baseline	*0	2026-04-15	Baseline your GPU cluster's real performance in one run. Tests compute throughput (TFLOPS, HBM bandwidth, ther
+=== [2026-10-16] gh search repos 'igpu kubernetes' -> 0 hits 
+=== [2026-10-16] gh search repos 'node feature discovery intel' -> 1 hits 
+  VimalN2005/Intelligent-E-commerce-AI-Store	*0	2026-10-02	An AI-powered e-commerce platform built with Django, React, PostgreSQL, Node.js, and Generative AI featuring p

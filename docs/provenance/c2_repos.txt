@@ -1,0 +1,90 @@
+=== [2026-10-16] gh search repos 'nri balloons' -> 0 hits 
+=== [2026-10-16] gh search repos 'nri-plugins' -> 17 hits 
+  containers/nri-plugins	*117	2026-10-16	A collection of community maintained NRI plugins
+  containers/nri-plugins-operator	*4	2026-08-27	
+  lengrongfu/snapshots-quota	*5	2026-02-01	Containerd snapshots quota NRI plugin, user can set every container ephemeral storage, but in ephemeral storag
+  saschagrunert/nri-supply-chain	*4	2026-10-15	NRI plugin for supply chain attestation verification of container images.
+  astronomonov/nri-plugins	*0	2023-05-15	
+  openeuler-mirror/resaware_nri_plugins	*0	2026-06-05	
+  amritansh1502/nri-plugins-operator	*0	2026-07-03	
+  fmuyassarov/nri-plugins-unified-operator	*0	2023-11-03	An operator for automating nri-plugins deployment.
+  jiusanzhou/k8s-rdma-device-plugin	*3	2026-08-13	Kubernetes device plugin for RDMA NIC resource management with NRI device injection and GPU-RDMA PCIe affinity
+  enp0s3/swap-nri-plugin	*0	2025-11-15	NRI plugin for per-workload Kubernetes swap configuration
+  grosskur/basic-nri-plugin	*1	2025-07-11	A demo repository for a container runtime NRI plugin
+  piraeusdatastore/nri-volume-qos	*0	2026-10-12	NRI plugin for per-volume IO QoS limits on Kubernetes
+  towe75/nri-plugin-systemd	*1	2026-02-22	A NRI plugin that enables systemd containers to run in Kubernetes
+  revanupoju/Wealth-Stack	*3	2026-04-26	WealthStack — Open-source AI wealth management plugin for Indian investors. PMS/AIF analysis, NRI tax planning
+  converged-computing/uid-nri-plugin	*0	2026-05-01	containerd NRI plugin that injects deterministic uid/gid mappings into every container's OCI spec
+  antaloala/nri-cpuset-partition	*0	2026-10-14	NRI plugin that turns the cgroup of a container holding exclusively assigned cpus into a cgroup v2 cpuset part
+  brybry192/nri-autodiscover-config-rds	*0	2026-03-02	Auto discovery the endpoints to monitor with the nri-postgresql plugin using New Relic NerdGraph API to filter
+=== [2026-10-16] gh search repos 'p-core e-core' -> 20 hits 
+  joaocarvalhoopen/parallel_for__in_Odin	*6	2026-10-07	A parallel_for( ) with work stealling technique to utilize all the performance of hybrid CPUs with p-cores and
+  dmaitz/ProcessorAffinityMgr	*1	2025-03-18	Easy to use Windows-Service for Process Processor-Affinity handling
+  alexandrecolombobr/cpu-core-selector	*0	2026-03-05	Automatic P-core / E-core selection based on power profile.
+  WIDEProgramming/HybridHelper	*0	2025-10-04	Set thread affinity on specific core (P-Core and E-Core)
+  limbj/processor-scheduling-simulator	*0	2026-10-04	P-Core/E-Core 멀티코어 환경에서 프로세스 스케줄링과 전력 사용량을 비교하는 PyQt 시뮬레이터
+  Marco-Parisi/ProcMimax12	*0	2024-06-07	Console app to set processor min and max percentage for E-Core and P-Core.
+  tsarev-is/pe-cores	*0	2026-05-21	Toggle Intel P-cores and E-cores on Linux to save battery or unlock full performance
+  QinnShou/RM-CPUPerCoreGraph	*1	2023-12-06	Raimeter per-core graph that also distinct between P-core and E-core through different coloring.
+  TheProdigyLeague/d1g174l-gtek33pr	*0	2025-09-06	compatibility issue with the hybrid architecture of the CPU's P-cores (Performance) and E-cores (Efficiency)
+  GeoffreyWang1117/PaimonCore-Boost	*0	2026-03-18	Genshin-inspired Windows CPU optimizer: P/E core scheduling + memory management. +6.11% avg / +11.69% peak C++
+  abbychau/cpu-process-affinity	*1	2025-04-02	A Windows benchmarking tool for measuring performance differences between P-cores and E-cores on Intel hybrid 
+  devel-retar-jp/PCore_ECore_Check	*0	2023-11-17	Intel 12世代以降のP Core、E Coreの個数をチェックするサンプルコード
+  abdulkadirturkan/p-core-vs-e-core-master-thesis	*0	2026-05-13	Performance Parity of Performance-Cores and Efficient-Cores in OpenMP Parallel Image Filtering: A Benchmarking
+  mannmehta04/CPU-Analyzer	*0	2024-03-06	Predict score of Intel’s 12th Gen onwards Desktop or Mobile CPUs based on it’s P-Cores, E-Cores and Base Speed
+  Brad-Devices/BradISA	*0	2026-10-08	BradISA — the Brad Devices CPU instruction set architecture: the shared software contract behind every BradCor
+  tasadilet-ctrl/monte-carlo-lp-ball	*0	2026-09-01	Monte Carlo L_p-ball volume estimation (serial + OpenMP), validated against closed-form ground truth: curse of
+  NagireddiYashaswini/Pacer	*0	2026-10-10	An adaptive user-space scheduling daemon that dynamically steers threads between P-cores and E-cores using onl
+  SapphireRapids/pecore-bench	*0	2026-10-02	P-core vs E-core benchmark for Windows 11 hybrid CPUs: per-core int/FP/AVX2/AVX-VNNI/AVX-512 latency & through
+  Ziptino9098/Win10HybridCPUScheduler	*2	2026-08-24	This adds support for hybrid CPU scheduling to Windows 10 (For CPUs like i9-14900K, i5-12600F) and allows for 
+  7zrs/CoreLasso	*0	2026-10-15	A Process-Lasso-style CPU affinity / CPU-Set manager for hybrid Intel CPUs. Built for this machine: **i7-13650
+=== [2026-10-16] gh search repos 'hybrid cpu kubernetes' -> 4 hits 
+  Abdelazizessa77/Hybrid_Forecasting_for_Kubernetes_Autoscaling	*2	2026-07-01	Hybrid forecasting framework using Prophet and LSTM for predictive autoscaling in Kubernetes. Includes request
+  vkayatas/llm-inference-k8s	*0	2026-07-23	Enterprise Hybrid LLM Inference Engine & Kubernetes Deployment Framework . Scalable, cost-aware deployment arc
+  jkmahavidyalaya/ktop	*0	2026-10-12	📊 Monitor system resources in terminal with detailed GPU, CPU, memory, network stats, and process tracking for
+  csheha/edge-cloud-latency-experimental-study	*0	2026-08-02	An experimental research project using a Kubernetes-based edge and cloud environment to compare performance. I
+=== [2026-10-16] gh search repos 'performance efficient cores kubernetes' -> 0 hits 
+=== [2026-10-16] gh search repos 'core type pinning' -> 20 hits 
+  imtannu/BankAccountApp-Core-java-Console-App	*3	2026-03-27	Application Functinality:   #Accept the Full Name, Aadhaar Card No, Account type, Initial Deposit Amount #Crea
+  jprendes/cpu-pin	*0	2026-06-11	Cross-platform CPU core type detection (P/E cores) and thread pinning
+  HirakM/CoreNetwork-Android	*0	2026-09-03	OkHttp client for Android. Typed JSON, bearer auth, SSL pinning, and retries — the Android counterpart of Core
+  hiramvazquez/CoreNetworking	*1	2026-09-16	Capa de red para apps iOS: APIService con typed throws, SSL pinning SPKI, reintentos idempotentes e intercepto
+  RaysoftTechnologiesInc/SerialWireOutLibraryMbed	*0	2023-05-24	Technically SWO is a single trace pin which is used to stream out data packets with a certain clock rate, deri
+  basmael-faki/atm-management-system	*0	2026-09-20	A Java console application that simulates core ATM operations, including user login with PIN verification and 
+  Saturnremabtc64/supreme-octo-roboticeyx	*29	2026-09-10	 Gear61 / Random-Number-Generator Code Issues 5 Pull requests 0 Projects 0 Wiki Pulse projectFilesBackup/.idea
+  AhsanKhaan/4rthSemesterDataStrucureProject	*0	2018-07-13	We have Implemented Core Concepts Of Data Strucure Which are as follows: Dictionary,linklist,Huffmancoding,tri
+  Phamdung2009/xxx	*20	2026-10-13	<!DOCTYPE html> <html lang="en">   <head>     <title>Bitbucket</title>     <meta id="bb-bootstrap" data-curren
+  Nixy1234/dfdfd	*16	2026-09-29	# All paths in this configuration file are relative to Dynmap's data-folder: minecraft_server/dynmap/  # All m
+  Sfedfcv/redesigned-pancake	*268	2026-10-12	Skip to content github / docs Code Issues 80 Pull requests 35 Discussions Actions Projects 2 Security Insights
+  SallowJacob/Pharmaceutical-Aseptic-Fill-Finish-CMO-Market-Size-Share-Trend-Volume-Key-Players-Production-	*2	2025-02-23	Global "Pharmaceutical Aseptic Fill & Finish CMO Market" 2022 research report evaluates the important characte
+  SallowJacob/Palladium-Coated-Copper-Bonding-Wires-Market-Size-Share-Trend-Growth-Rate-Value-Volume-By-Prod	*0	2022-03-03	Global "Palladium Coated Copper Bonding Wires Market" 2022 research report offers a comprehensive analysis of 
+  SallowJacob/Assessment-Services-Market-2022-Global-Industry-Size-Statistics-Share-Growth-Rate-Future-Trends-	*0	2022-03-03	Global "Assessment Services Market" 2022 presents a point by point analysis of the key trends, opportunities, 
+  SallowJacob/PTFE-CCL-Market-2022-Global-Industry-Size-Statistics-Share-Growth-Rate-Future-Trends-Regional-A	*0	2026-07-15	Global "PTFE CCL Market" 2022 compromises many advantages that have accelerated the adoption of absorption amo
+  denman2328/Help	*26	2026-09-15	------------------ System Information ------------------ Time of this report: 8/10/2013, 08:36:20        Machi
+  SallowJacob/Electric-Vehicles-and-Fuel-Cell-Vehicles-Market-2022-Global-Size-Share-Trends-Development-Growth	*1	2025-11-23	Global "Electric Vehicles and Fuel Cell Vehicles Market" 2022 presents a point by point analysis of the key tr
+  mercerheather476/turbo-garbanzo	*40	2026-10-14	![AppAuth for Android](https://rawgit.com/openid/AppAuth-Android/master/appauth_lockup.svg)  [![Download](http
+  dovnel/Win-7	*14	2026-10-03	------------------ System Information ------------------ Time of this report: 9/2/2015, 19:28:59        Machin
+  arashstar1/bot-lua	*43	2026-09-14	Code  Issues 0  Pull requests 0  Pulse  MaTaDoR/ 3233fdf V 5.7 MaTaDoR @MaTaDoRTeaMMaTaDoRTeaM committed on Gi
+=== [2026-10-16] gh search repos 'big.little kubernetes' -> 1 hits 
+  janearc/big-little-mesh	*0	2026-07-23	san francisco big tech shaped service mesh on your macbook
+=== [2026-10-16] gh search repos 'cpu pinning k3s' -> 0 hits 
+=== [2026-10-16] gh search repos 'intel hybrid scheduler' -> 6 hits 
+  vedant-jadhav-23/hybrid_intelligent_agent	*0	2026-07-15	A deterministic, state-driven AI scheduling assistant built with LangGraph and FastAPI for zero-hallucination 
+  egeoguzz/local-intelligence	*0	2026-01-17	A privacy-first, on-device AI agenda assistant utilizing Llama 3.2 1B and Apple MLX. Implements a hybrid RAG a
+  Hammadkhan04/MeetIntel-AI	*0	2026-08-18	AI-powered university governance & meeting management prototype — multi-level approval routing (Dept → Dean → 
+  srikaran7/Advanced-Workforce-Productivity-Shift-Management-Intelligence-System	*0	2025-08-09	Advanced Workforce Productivity & Shift Management Intelligence System monitors attendance, evaluates shift ad
+  jchau88/Urban-Intelligence	*0	2026-04-17	1. Feature engineering that goes beyond raw GPS coordinates to capture motion dynamics.  2. A hybrid CNN and B
+  ericrenone/ERIE-Emergent-Reality-Intelligence-Ecosystem	*0	2026-04-25	Built Embodiment of Vertical-Aerial-Pedestrian Public Realm, the Workplace and Hybrid Schedule as the Cognitiv
+=== [2026-10-16] gh search repos 'preferCoreType' -> 0 hits 
+=== [2026-10-16] gh search repos 'e-cores containers' -> 2 hits 
+  samuueel/PageConfig	*0	2022-09-30	Container com opções de mudar o tema (dark/light) e cores principais da pagina!
+  JustJoka/BUTTONS-GENERATOR	*0	2025-12-05	Gerador de botões aleatórios usando Python e CustomTkinter. O usuário escolhe quantos botões quer e eles apare
+=== [2026-10-16] gh search repos 'alder lake kubernetes' -> 1 hits 
+  amoyrtil/talos-ufs	*1	2026-09-14	Talos Linux with UFS storage support for x86_64 devices (Intel Alder Lake-N, etc.)
+=== [2026-10-16] gh search repos 'raptor lake kubernetes' -> 0 hits 
+=== [2026-10-16] gh search repos 'cri-resource-manager' -> 3 hits 
+  intel/cri-resource-manager	*179	2026-05-26	Kubernetes Container Runtime Interface proxy service with hardware resource aware workload placement policies
+  intel/gardener-extension-cri-resmgr	*9	2025-03-25	Gardener extension controller for the https://github.com/intel/cri-resource-manager container runtime proxy
+  DeeEll-X/cri-resource-manager	*0	2022-03-18	
+=== [2026-10-16] gh search repos 'nri resource policy' -> 0 hits 
+=== [2026-10-16] gh search repos 'heterogeneous cores containers' -> 0 hits 

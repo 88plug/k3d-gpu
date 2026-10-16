@@ -1,0 +1,11 @@
+CN119938341B ERR HTTP Error 503: Service Unavailable
+== CN116820777A Heterogeneous processor core scheduling method, device, equipment and medium
+   (no abstract)
+KR20250175472A ERR HTTP Error 503: Service Unavailable
+== NL2033285A Intent-based orchestration in heterogenous compute platforms
+   Various systems and methods for implementing intent-based orchestration in heterogenous compute platforms are described herein. An orchestration system is configured to: receive, at the orchestration system, a workload request for a workload, the workload request including an intent-based service level objective (SLO); generate rules for resource allocation based on the workload request; generate a deployment plan using the rules for resource allocation and the intent-based SLO; deploy the workload using the deployment plan; monitor performance of the workload using real-time telemetry; and modify the rules for resource allocation and the deployment plan based on the real-time telemetry.
+== CN121433917A A method, device, medium, and product for scheduling heterogeneous resources in a cloud data center.
+   (no abstract)
+CN119938341B ERR HTTP Error 503: Service Unavailable
+KR20250175472A ERR HTTP Error 503: Service Unavailable
+CN116820777A ERR HTTP Error 503: Service Unavailable

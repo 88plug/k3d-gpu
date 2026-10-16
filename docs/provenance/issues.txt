@@ -1,0 +1,141 @@
+=== [2026-10-16] gh search issues 'preferCoreType||--repo=containers/nri-plugins' -> 0 hits 
+=== [2026-10-16] gh search issues 'hybrid||--repo=containers/nri-plugins' -> 0 hits 
+=== [2026-10-16] gh search issues 'e-core||--repo=containers/nri-plugins' -> 2 hits 
+  containers/nri-plugins	2024-06-24	failed to get set of E-core cpus / failed to get set of P-core cpus	https://github.com/containers/nri-plugins/issues/341
+  containers/nri-plugins	2023-06-02	Balloon policy:  failed to look up current node resource topology CR	https://github.com/containers/nri-plugins/issues/52
+=== [2026-10-16] gh search issues 'k3s||--repo=containers/nri-plugins' -> 1 hits 
+  containers/nri-plugins	2026-08-10	Balloons: Exclusive CPU - move IRQs and other interference away from balloon CPUs	https://github.com/containers/nri-plugins/issues/669
+=== [2026-10-16] gh search issues 'kind||--repo=containers/nri-plugins' -> 5 hits 
+  containers/nri-plugins	2026-06-15	topology-aware: cpu limits are not considered in scoring when no pool remains with enough shared pool capacity	https://github.com/containers/nri-plugins/issues/670
+  containers/nri-plugins	2024-12-21	off-the-shelf configuration results in warnings	https://github.com/containers/nri-plugins/issues/111
+  containers/nri-plugins	2023-07-26	The balloon policy can't adjust CPU frequency	https://github.com/containers/nri-plugins/issues/57
+  containers/nri-plugins	2023-06-15	Topology-aware affinity/anti-affinity policy doesn't work	https://github.com/containers/nri-plugins/issues/65
+  containers/nri-plugins	2023-06-02	Balloon policy:  failed to look up current node resource topology CR	https://github.com/containers/nri-plugins/issues/52
+=== [2026-10-16] gh search issues 'k3s||--repo=intel/enterprise-agent-toolkit' -> 0 hits 
+=== [2026-10-16] gh search issues 'laptop||--repo=intel/enterprise-agent-toolkit' -> 0 hits 
+=== [2026-10-16] gh search issues 'kind||--repo=intel/enterprise-agent-toolkit' -> 1 hits 
+  intel/enterprise-agent-toolkit	2026-08-13	vLLM chart's default config (apisix.enabled: false) ships with no authentication; catalog includes a matching 	https://github.com/intel/enterprise-agent-toolkit/issues/9
+=== [2026-10-16] gh search issues 'single node||--repo=intel/enterprise-inference' -> 0 hits 
+=== [2026-10-16] gh search issues 'k3s||--repo=intel/enterprise-inference' -> 0 hits 
+=== [2026-10-16] gh search issues 'npu||--repo=openvinotoolkit/model_server' -> 14 hits 
+  openvinotoolkit/model_server	2026-10-07	OVMS 2026.3 exits 139 (SIGSEGV) with no error message when loading an IR that requires a newer OpenVINO — repr	https://github.com/openvinotoolkit/model_server/issues/4461
+  openvinotoolkit/model_server	2026-10-02	OVMS tools call for Gemma 4 E4B failed	https://github.com/openvinotoolkit/model_server/issues/4586
+  openvinotoolkit/model_server	2026-10-09	SIGSEGV in continuous batching when a streaming client disconnects mid-generation (block_manager.hpp:633 asser	https://github.com/openvinotoolkit/model_server/issues/4428
+  openvinotoolkit/model_server	2026-09-30	OVMS requiring manual WEIGHTS_PATH	https://github.com/openvinotoolkit/model_server/issues/4580
+  openvinotoolkit/model_server	2026-07-30	OVMS crash when prompting model on CometLake-U GT2 [UHD Graphics]	https://github.com/openvinotoolkit/model_server/issues/3635
+  openvinotoolkit/model_server	2026-09-03	Continuous batching: a GPU lane can reach a state where the servable stays up and every request hangs indefini	https://github.com/openvinotoolkit/model_server/issues/4503
+  openvinotoolkit/model_server	2026-07-15	Enable_prefix_caching: Suspected cache inaccuracy during prefix reuse in Linear Attention Models	https://github.com/openvinotoolkit/model_server/issues/4376
+  openvinotoolkit/model_server	2026-05-11	can't run lfm2	https://github.com/openvinotoolkit/model_server/issues/4202
+  openvinotoolkit/model_server	2025-12-03	Error when setting max_prompt_len	https://github.com/openvinotoolkit/model_server/issues/3703
+  openvinotoolkit/model_server	2025-09-13	Phi-4-mini failed to run on NPU device	https://github.com/openvinotoolkit/model_server/issues/3557
+  openvinotoolkit/model_server	2025-07-30	The first time result of `rerank` is wrong each time restarting the `ovms`	https://github.com/openvinotoolkit/model_server/issues/3224
+  openvinotoolkit/model_server	2025-07-31	Command line arguments for loading a local LLM in single model mode	https://github.com/openvinotoolkit/model_server/issues/3492
+  openvinotoolkit/model_server	2025-05-11	About endpoint /v3/chat/completions	https://github.com/openvinotoolkit/model_server/issues/3285
+  openvinotoolkit/model_server	2024-08-27	Can't run model_server on Ultra 7-155H / Ubuntu 24 	https://github.com/openvinotoolkit/model_server/issues/2642
+=== [2026-10-16] gh search issues 'kubernetes npu||--repo=openvinotoolkit/model_server' -> 0 hits 
+=== [2026-10-16] gh search issues 'k3s||--repo=intel/intel-device-plugins-for-kubernetes' -> 13 hits 
+  intel/intel-device-plugins-for-kubernetes	2026-06-10	Unable to deploy pod that uses gpu-device-plugin, `failed to generate spec: failed to mkdir`	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/2296
+  intel/intel-device-plugins-for-kubernetes	2024-09-18	GPU crashing on 1 node.	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/1628
+  intel/intel-device-plugins-for-kubernetes	2026-10-02	intel gpu device plugin show allocatable resource error	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/2208
+  intel/intel-device-plugins-for-kubernetes	2026-06-24	Unsupported value: "gpu.intel.com/i915": supported values: "cpu", "hugepages-", "memory"	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/2305
+  intel/intel-device-plugins-for-kubernetes	2026-01-08	Intel_npu_plugin for PTL system fails to detect the NPU for the node	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/2197
+  intel/intel-device-plugins-for-kubernetes	2026-01-07	Intel_gpu_plugin for PTL system fails to detect the gpu	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/2196
+  intel/intel-device-plugins-for-kubernetes	2024-12-03	intel-gpu-plugin installed but the i915 device is not shown as allocatable from the node.	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/1915
+  intel/intel-device-plugins-for-kubernetes	2024-12-14	gpu-device-plugin does not respect tolerations	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/1921
+  intel/intel-device-plugins-for-kubernetes	2024-09-02	GPU: i915 resources are not being added to nodes on Talos	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/1826
+  intel/intel-device-plugins-for-kubernetes	2024-08-31	Pod cannot detect Arc A380 GPU	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/1798
+  intel/intel-device-plugins-for-kubernetes	2023-12-08	gpu_plugin failing on k3s with kubelet.crt error	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/1609
+  intel/intel-device-plugins-for-kubernetes	2023-08-31	Ubuntu 22.04.3/kernel 6.2.0-31 reporting 0 `gpu.intel.com/i915: "0"`	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/1514
+  intel/intel-device-plugins-for-kubernetes	2023-08-23	doc: [sgx] theoretically, the screencast of the SGX demo is not replicable	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/968
+=== [2026-10-16] gh search issues 'kind||--repo=intel/intel-device-plugins-for-kubernetes' -> 20 hits 
+  intel/intel-device-plugins-for-kubernetes	2026-08-05	Image mirroring fails	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/2325
+  intel/intel-device-plugins-for-kubernetes	2026-10-16	Arc A310 GPU not detected in 0.37.1 on NixOS	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/2386
+  intel/intel-device-plugins-for-kubernetes	2022-11-17	revisit set-version flows	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/1007
+  intel/intel-device-plugins-for-kubernetes	2025-06-24	GPU product node label supports only one product type	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/1659
+  intel/intel-device-plugins-for-kubernetes	2026-05-27	Can't install intel-device-plugins-gpu on kubernetes v1.30.0	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/1947
+  intel/intel-device-plugins-for-kubernetes	2026-02-27	GPU Max 1100 doesn't support querying the available free memory	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/2158
+  intel/intel-device-plugins-for-kubernetes	2026-02-13	gpu: study and implement a way to limit Pod's i915 count	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/1408
+  intel/intel-device-plugins-for-kubernetes	2025-12-15	GPU Resources arent made available after Updated to newest intel-basekitpackages	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/1940
+  intel/intel-device-plugins-for-kubernetes	2025-05-25	Device Plugins Operator does not have an ARM image...	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/2063
+  intel/intel-device-plugins-for-kubernetes	2025-05-20	[QAT] No devices found in container without privilege	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/1700
+  intel/intel-device-plugins-for-kubernetes	2024-12-03	intel-gpu-plugin installed but the i915 device is not shown as allocatable from the node.	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/1915
+  intel/intel-device-plugins-for-kubernetes	2024-12-14	gpu-device-plugin does not respect tolerations	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/1921
+  intel/intel-device-plugins-for-kubernetes	2024-09-26	GPU device plugin deployment issue (non default namespace)	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/1840
+  intel/intel-device-plugins-for-kubernetes	2024-11-15	Requesting Intel ARC GPU Resource	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/1907
+  intel/intel-device-plugins-for-kubernetes	2024-03-21	operator: service selectors are vague and overlap with other operators	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/1676
+  intel/intel-device-plugins-for-kubernetes	2024-03-21	Allow custom tolerations with operator	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/1617
+  intel/intel-device-plugins-for-kubernetes	2023-12-07	Intel SGX nodes not displaying expected EPC status values	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/1611
+  intel/intel-device-plugins-for-kubernetes	2023-11-13	Qat: Ability to do node configurations in cluster with large number of QAT nodes more easily	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/1529
+  intel/intel-device-plugins-for-kubernetes	2023-12-08	Cannot mount /dev/dri in Pod: invalid volume specification	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/1612
+  intel/intel-device-plugins-for-kubernetes	2023-09-19	Support SHA Digests for container image in the device plugin CRD	https://github.com/intel/intel-device-plugins-for-kubernetes/issues/1390
+=== [2026-10-16] gh search issues 'p-core e-core kubernetes' -> 20 hits 
+  krateo-platformops/plumbing	2026-10-13	crdgen: emits cost-estimated CEL without bounds, and silently drops `not` it cannot translate	https://github.com/krateo-platformops/plumbing/issues/48
+  skel84/freshkube	2026-10-16	Next crates on measured seams: delivery with applications out of core, a navigation crate, then resources and 	https://github.com/skel84/freshkube/issues/583
+  tosin2013/local-knowledge-vault	2026-10-10	Add a repeatable perf check (scripts/perf-typing) for keystroke latency, idle IPC and startup	https://github.com/tosin2013/local-knowledge-vault/issues/297
+  loopingz/webda.io	2026-10-10	feat: Knative support (KnativeDeployer, Cloud Run compatible + CloudEvents receiver for Knative Eventing)	https://github.com/loopingz/webda.io/issues/831
+  ovn-kubernetes/ovn-kubernetes	2026-10-12	Memory is not released by OVN/OVS after resource deletion	https://github.com/ovn-kubernetes/ovn-kubernetes/issues/6948
+  loopingz/webda.io	2026-10-12	feat(kubernetes): KubernetesStore (Models as CRDs) + KubernetesOperator reconciler	https://github.com/loopingz/webda.io/issues/884
+  StarExecMiami/StarExec	2026-09-30	Legacy E---3.3.0.zip contains E 3.0.0 and lacks scientific provenance	https://github.com/StarExecMiami/StarExec/issues/288
+  DandyDeveloper/charts	2026-09-17	[chart/redis-ha][Make per-pod announce Services headless to avoid Sentinel CPU loops after pod replacement]	https://github.com/DandyDeveloper/charts/issues/422
+  HolmesGPT/holmesgpt	2026-08-07	Script-based toolset tools (kubernetes/core, etc.) can hang forever — subprocess.run() has no timeout	https://github.com/HolmesGPT/holmesgpt/issues/2365
+  wso2/fhir-server	2026-10-12	Two replicas starting together against a DB without an IG each load only part of its search parameters (v2.1.0	https://github.com/wso2/fhir-server/issues/70
+  andrecesco/DevXpertMicroService	2026-09-22	MBA DevXpert: Feedback Final - Module 5	https://github.com/andrecesco/DevXpertMicroService/issues/91
+  rancher/rancher	2026-09-21	[BUG]  cattle-cluster-agent's chart checkout makes containerd burn a CPU core on every node it runs on	https://github.com/rancher/rancher/issues/57472
+  MW8-ai/CloudIntelMatrix	2026-09-02	Cloud Matrix update review - 2026-09-02	https://github.com/MW8-ai/CloudIntelMatrix/issues/151
+  openanalytics/shinyproxy	2026-07-08	Orphaned kubernetes pods when api times out	https://github.com/openanalytics/shinyproxy/issues/596
+  gke-labs/kube-agents	2026-10-14	[WIP / Draft] [Research / RFC] Dynamic Evaluation Harness & Standard Benchmark Framework for kube-agents	https://github.com/gke-labs/kube-agents/issues/1098
+  ObrienlabsDev/biometric-backend	2026-09-07	biometric-nbi on RKE2 on IA64 (13900k)	https://github.com/ObrienlabsDev/biometric-backend/issues/46
+  skel84/freshkube	2026-10-14	Typed read failures everywhere in core: finish the FailureKind adoption, retire Result<_, String>	https://github.com/skel84/freshkube/issues/584
+  MW8-ai/CloudIntelMatrix	2026-08-26	Cloud Matrix update review - 2026-08-26	https://github.com/MW8-ai/CloudIntelMatrix/issues/149
+  codepath/pathreview-ai301-fa26-s1	2026-10-06	Implement a webhook system that notifies users when their review is ready	https://github.com/codepath/pathreview-ai301-fa26-s1/issues/35
+  velero-io/velero	2026-10-15	Allow Multiple Key Properties	https://github.com/velero-io/velero/issues/10627
+=== [2026-10-16] gh search issues 'efficiency cores kubernetes' -> 20 hits 
+  nginx/kubernetes-ingress	2026-09-22	[Bug]: Is worker_processes of NGINX Ingress automatically set according to node’s physical cores instead of po	https://github.com/nginx/kubernetes-ingress/issues/8500
+  canonical/lxd	2025-09-08	Support for pinning to P or E cores	https://github.com/canonical/lxd/issues/16404
+  apel/apel	2020-12-21	add support for fractional CPU cores	https://github.com/apel/apel/issues/228
+  kubernetes-sigs/dra-driver-cpu	2026-06-10	Ensure cpuinfo support for other hardware architectures	https://github.com/kubernetes-sigs/dra-driver-cpu/issues/13
+  djosh34/tigerstore	2026-10-12	Load generator and speed metrics	https://github.com/djosh34/tigerstore/issues/45
+  aws/containers-roadmap	2026-08-11	[EKS]: Make kube-proxy EKS managed addon have configurable limits and requests for different instance types	https://github.com/aws/containers-roadmap/issues/2852
+  ljqcodelove/ContTune	2025-08-14	Questions regarding experimental setup and results	https://github.com/ljqcodelove/ContTune/issues/3
+  gardener/etcd-druid	2026-04-20	Improve Node Utilization by Avoiding "safe-to-evict" Annotation for Druid-Managed Pods	https://github.com/gardener/etcd-druid/issues/766
+  tileverse-io/tileverse-rangereader	2025-07-04	[REQ-QUAL] Scalability Requirements for Enterprise and Cloud Deployments	https://github.com/tileverse-io/tileverse-rangereader/issues/17
+  spiffe/spiffe	2025-04-22	Secret Store CSI Provider for SPIRE	https://github.com/spiffe/spiffe/issues/336
+  ollama/ollama	2026-08-21	Ollama only using half of available CPU cores with NUMA multi-socket systems	https://github.com/ollama/ollama/issues/2929
+  adrianwedd/ordr.fm	2025-08-05	🏋️ Production load testing with realistic datasets	https://github.com/adrianwedd/ordr.fm/issues/74
+  longhorn/longhorn	2025-11-04	[FEATURE] Support v2 volume without dedicated CPU cores	https://github.com/longhorn/longhorn/issues/7064
+  lakehq/sail	2025-11-04	[EPIC] Distributed Processing Improvements	https://github.com/lakehq/sail/issues/989
+  m2ms/fragalysis-frontend	2026-02-12	Synthetic load tests for fragalysis API	https://github.com/m2ms/fragalysis-frontend/issues/1952
+  keycloak/keycloak	2026-10-13	Document database proxy (PgBouncer, RDS Proxy) guidance and limitations for Keycloak	https://github.com/keycloak/keycloak/issues/53452
+  open-telemetry/otel-arrow	2026-07-29	df_engine: all pipeline cores die under real OTLP load (boo panic in metrics record encoder + arrow Dictionary	https://github.com/open-telemetry/otel-arrow/issues/3561
+  pacoxu/kubernetes	2020-12-14	resolve https://github.com/kubernetes/kubernetes/issues/96515 and add a conditio...	https://github.com/pacoxu/kubernetes/issues/677
+  tkestack/gpu-manager	2024-05-24	Nvidia node mismatch for pod, pick up:/dev/nvidia6  predicate: /dev/nvidia1, which is unexpected.	https://github.com/tkestack/gpu-manager/issues/37
+  quarkusio/spring-quarkus-perf-comparison	2026-05-20	Heap capacity is way too generous than what's actually needed (for Quarkus)	https://github.com/quarkusio/spring-quarkus-perf-comparison/issues/521
+=== [2026-10-16] gh search issues 'k3d intel gpu' -> 20 hits 
+  ryanpetris/elsewhere-innkeeper	2026-09-08	Implement Kubernetes session management with persistent desktops	https://github.com/ryanpetris/elsewhere-innkeeper/issues/1
+  travisvroman/kohi	2026-07-03	[BUG] Don't know how to obtain the .kbi files	https://github.com/travisvroman/kohi/issues/281
+  rumblpak/helm-charts	2024-10-07	Renovate Dashboard	https://github.com/rumblpak/helm-charts/issues/337
+  rumblpak/helm-charts	2024-02-05	Renovate Dashboard	https://github.com/rumblpak/helm-charts/issues/243
+  rumblpak/helm-charts	2024-01-29	Renovate Dashboard	https://github.com/rumblpak/helm-charts/issues/241
+  rumblpak/helm-charts	2024-01-22	Renovate Dashboard	https://github.com/rumblpak/helm-charts/issues/240
+  rumblpak/helm-charts	2024-01-15	Renovate Dashboard	https://github.com/rumblpak/helm-charts/issues/239
+  rumblpak/helm-charts	2024-01-08	Renovate Dashboard	https://github.com/rumblpak/helm-charts/issues/238
+  rumblpak/helm-charts	2024-01-01	Renovate Dashboard	https://github.com/rumblpak/helm-charts/issues/236
+  rumblpak/helm-charts	2023-12-25	Renovate Dashboard	https://github.com/rumblpak/helm-charts/issues/235
+  rumblpak/helm-charts	2024-11-04	Renovate Dashboard	https://github.com/rumblpak/helm-charts/issues/344
+  rumblpak/helm-charts	2024-10-28	Renovate Dashboard	https://github.com/rumblpak/helm-charts/issues/342
+  rumblpak/helm-charts	2024-10-21	Renovate Dashboard	https://github.com/rumblpak/helm-charts/issues/340
+  rumblpak/helm-charts	2024-10-14	Renovate Dashboard	https://github.com/rumblpak/helm-charts/issues/339
+  rumblpak/helm-charts	2024-02-12	Renovate Dashboard	https://github.com/rumblpak/helm-charts/issues/247
+  ryanpetris/elsewhere-innkeeper	2026-09-08	Support Docker and Kubernetes through a shared session backend	https://github.com/ryanpetris/elsewhere-innkeeper/issues/6
+  rumblpak/helm-charts	2025-02-03	Renovate Dashboard	https://github.com/rumblpak/helm-charts/issues/42
+  rumblpak/helm-charts	2025-01-27	Renovate Dashboard	https://github.com/rumblpak/helm-charts/issues/361
+  rumblpak/helm-charts	2025-01-27	Renovate Dashboard	https://github.com/rumblpak/helm-charts/issues/360
+  rumblpak/helm-charts	2025-01-20	Renovate Dashboard	https://github.com/rumblpak/helm-charts/issues/358
+=== [2026-10-16] gh search issues 'k3d npu' -> 7 hits 
+  triton-lang/triton-ascend	2026-10-09	[Bug]: silent miscompile — tl.sum(acc, 0) over 3-D tile [RBLOCK,X1,X0] reduces the wrong memory axis on 910B (	https://github.com/triton-lang/triton-ascend/issues/2291
+  AuntKong/test	2026-09-21	对战日志: 2026-09-21_15-29-28_trailblazer_vs_你家没啦_A0_B3_teamB.log	https://github.com/AuntKong/test/issues/61
+  jasiu-rozowyczlowiek-gotowanie/new_speedtest_6_restore_test	2023-08-24	750	https://github.com/jasiu-rozowyczlowiek-gotowanie/new_speedtest_6_restore_test/issues/12
+  AuntKong/test	2026-09-23	对战日志: 2026-09-23_09-34-30_你说的一点都队_vs_你家没啦_A0_B3_teamB.log	https://github.com/AuntKong/test/issues/75
+  AuntKong/test	2026-09-23	对战日志: 2026-09-23_15-22-02_什莫队_vs_你家没啦_A3_B0_teamB.log	https://github.com/AuntKong/test/issues/79
+  khandpurarsh-sys/dj-ops	2026-10-16	full	https://github.com/khandpurarsh-sys/dj-ops/issues/3
+  jasiu-rozowyczlowiek-gotowanie/new_speedtest_6_restore_test	2025-02-12	750	https://github.com/jasiu-rozowyczlowiek-gotowanie/new_speedtest_6_restore_test/issues/6
