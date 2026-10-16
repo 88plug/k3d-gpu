@@ -91,9 +91,11 @@ def gen_run(rng, cls, driver, p):
             tr.add(("cpu", ENGINE), t, t + h, 1.0)
             t += h
         wait = (t - t_turn) * rho / (1 - rho) * rng.uniform(0.5, 1.5)
-        tr.add(("cpu", ENGINE), t, t + wait, 0.02)
+        if not (has_tool and p["tool_inproc"]):
+            tr.add(("cpu", ENGINE), t, t + wait, 0.02)
         if has_tool:
-            tr.add(("cpu", TOOL), t, t + wait * rng.uniform(0.3, 1.0), rng.uniform(2, 6))
+            who = ENGINE if p["tool_inproc"] else TOOL
+            tr.add(("cpu", who), t, t + wait * rng.uniform(0.3, 1.0), rng.uniform(2, 6))
         t += wait
     tr.add(("cpu", SIDECAR), 0, t, 0.01)
     return tr, t
@@ -165,7 +167,8 @@ RULES = {
     "B1_any_busy": {"kind": "any_busy"},
     "B2_fixed_ratio": {"kind": "fixed_ratio", "min_busy_over_wall": 0.7, "max_cpu_cores": 1.5},
 }
-BASE = {"u": (0.25, 0.95), "f": (0.10, 0.50), "threads": (2, 8), "spin_max": 1.0, "period": 0.1}
+BASE = {"u": (0.25, 0.95), "f": (0.10, 0.50), "threads": (2, 8), "spin_max": 1.0, "period": 0.1,
+        "tool_inproc": False}
 
 
 def campaign(runs, seed, p=None, rules=RULES, classes=("CLEAN", "PARTIAL", "FULL", "WRONG")):
@@ -221,6 +224,7 @@ def main(argv):
         ("fallback f 0.02-0.10", {"f": (0.02, 0.10)}, seed),
         ("spin up to 2 cores", {"spin_max": 2.0}, seed),
         ("decode u 0.05-0.25", {"u": (0.05, 0.25)}, seed),
+        ("tool runs inside the engine process", {"tool_inproc": True}, seed),
     ]
     sub = {k: RULES[k] for k in ("witness", "A1_aggregate", "A2_pod_cpu", "B2_fixed_ratio")}
     res["sweeps"] = {}

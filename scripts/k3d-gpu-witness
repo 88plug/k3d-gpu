@@ -210,10 +210,7 @@ def intervals(snaps, claim, rule, pidmap=None):
             c = parse_fdinfo(text)
             if not c:
                 continue
-            ident = (c["pdev"], c["client"])  # spec de-dup: dup'd fds share the id
-            if ident in clients:
-                continue
-            clients[ident] = c
+            clients[(c["pdev"], c["client"])] = c  # spec de-dup: dup'd fds share the id
         cpu = {pid: parse_stat(t) for pid, t in s["stat"].items()}
         if i == 0:
             for ident, c in clients.items():
@@ -324,6 +321,7 @@ def evaluate(snaps, claim, rule, pidmap=None, reduced=None):
 # ---------------------------------------------------------------- bundle --
 
 def make_bundle(rule, claim, snaps, pidmap=None):
+    rule = json.loads(canonical(rule))  # the bundle owns its copy of the rule
     b = {"schema": SCHEMA, "claim": claim, "rule": rule, "rule_sha256": rule_sha256(rule),
          "pidmap": pidmap, "snapshots": snaps}
     b["verdict"] = evaluate(snaps, claim, rule, pidmap)

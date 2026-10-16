@@ -1,0 +1,86 @@
+== main campaign: 200 runs/class, seed 1 (flag rate; CLEAN = false flags)
+rule                CLEAN  PARTIAL     FULL    WRONG
+witness              0.0%    91.0%   100.0%   100.0%
+A1_aggregate         0.0%    29.5%   100.0%   100.0%
+A2_pod_cpu          45.5%    95.5%   100.0%   100.0%
+B1_any_busy          0.0%     0.0%   100.0%   100.0%
+B2_fixed_ratio      96.5%   100.0%   100.0%   100.0%
+
+witness by driver: {"i915": {"CLEAN": "0/67", "PARTIAL": "59/67", "FULL": "67/67", "WRONG": "67/67"}, "xe": {"CLEAN": "0/67", "PARTIAL": "62/67", "FULL": "67/67", "WRONG": "67/67"}, "nvidia": {"CLEAN": "0/66", "PARTIAL": "61/66", "FULL": "66/66", "WRONG": "66/66"}}
+== sweep: seed 2 (50 runs/class)
+rule                CLEAN  PARTIAL
+witness              0.0%    90.0%
+A1_aggregate         0.0%    26.0%
+A2_pod_cpu          50.0%    92.0%
+B2_fixed_ratio      98.0%   100.0%
+
+== sweep: seed 3 (50 runs/class)
+rule                CLEAN  PARTIAL
+witness              0.0%    90.0%
+A1_aggregate         0.0%    14.0%
+A2_pod_cpu          52.0%   100.0%
+B2_fixed_ratio     100.0%   100.0%
+
+== sweep: period 50 ms (50 runs/class)
+rule                CLEAN  PARTIAL
+witness              0.0%    92.0%
+A1_aggregate         0.0%    28.0%
+A2_pod_cpu          54.0%    96.0%
+B2_fixed_ratio      94.0%   100.0%
+
+== sweep: period 250 ms (50 runs/class)
+rule                CLEAN  PARTIAL
+witness              0.0%    92.0%
+A1_aggregate         0.0%    28.0%
+A2_pod_cpu          46.0%    94.0%
+B2_fixed_ratio      98.0%   100.0%
+
+== sweep: period 1 s (50 runs/class)
+rule                CLEAN  PARTIAL
+witness              0.0%    68.0%
+A1_aggregate         0.0%    22.0%
+A2_pod_cpu          40.0%    86.0%
+B2_fixed_ratio      96.0%   100.0%
+
+== sweep: period 2 s (50 runs/class)
+rule                CLEAN  PARTIAL
+witness              0.0%    52.0%
+A1_aggregate         0.0%    24.0%
+A2_pod_cpu          38.0%    76.0%
+B2_fixed_ratio     100.0%   100.0%
+
+== sweep: fallback 1 thread (50 runs/class)
+rule                CLEAN  PARTIAL
+witness              0.0%     0.0%
+A1_aggregate         0.0%    10.0%
+A2_pod_cpu          60.0%    40.0%
+B2_fixed_ratio     100.0%   100.0%
+
+== sweep: fallback f 0.02-0.10 (50 runs/class)
+rule                CLEAN  PARTIAL
+witness              0.0%    10.0%
+A1_aggregate         0.0%     0.0%
+A2_pod_cpu          40.0%    50.0%
+B2_fixed_ratio      98.0%    98.0%
+
+== sweep: spin up to 2 cores (50 runs/class)
+rule                CLEAN  PARTIAL
+witness             34.0%    92.0%
+A1_aggregate        18.0%    30.0%
+A2_pod_cpu          62.0%    96.0%
+B2_fixed_ratio      98.0%   100.0%
+
+== sweep: decode u 0.05-0.25 (50 runs/class)
+rule                CLEAN  PARTIAL
+witness              0.0%    86.0%
+A1_aggregate        14.0%    22.0%
+A2_pod_cpu          50.0%    94.0%
+B2_fixed_ratio     100.0%   100.0%
+
+== sweep: tool runs inside the engine process (50 runs/class)
+rule                CLEAN  PARTIAL
+witness             40.0%    94.0%
+A1_aggregate        14.0%    44.0%
+A2_pod_cpu          40.0%    94.0%
+B2_fixed_ratio      98.0%   100.0%
+

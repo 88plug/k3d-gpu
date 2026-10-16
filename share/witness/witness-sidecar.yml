@@ -1,0 +1,67 @@
+# Execution-path witness sidecar: an example pod.
+#
+# The witness runs next to the inference container in one shared PID namespace.
+# It samples DRM fdinfo and /proc/<pid>/stat for the run and writes a bundle that
+# `k3d-gpu-witness verify` can recompute from raw counters (docs/witness.md).
+#
+# Load the script and the pre-registered rule first:
+#   kubectl create configmap k3d-gpu-witness \
+#     --from-file=k3d-gpu-witness=scripts/k3d-gpu-witness \
+#     --from-file=rule.json=share/witness/rule.json
+#
+# Replace the `inference` container with your workload. The witness reads
+# /proc/<pid>/fdinfo and /proc/<pid>/fd of the other containers, and the kernel
+# requires ptrace read access for both (fs/proc/fd.c, ptrace_may_access with
+# PTRACE_MODE_READ_FSCREDS). The sidecar below gets that access as root with only
+# CAP_SYS_PTRACE. The other option is to run it under the same UID as the workload.
+#
+# NVIDIA: nvidia-smi pmon reports host PIDs. Pass --nvidia-pmon plus a host-to-pod
+# --pidmap. Without both, an nvidia: claim verifies as INCONCLUSIVE.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: witness-example
+spec:
+  shareProcessNamespace: true
+  restartPolicy: Never
+  containers:
+    - name: inference
+      image: your-inference-image   # placeholder: the workload under test
+      resources:
+        limits:
+          gpu.intel.com/i915: 1
+    - name: witness
+      image: python:3.13.13-alpine3.23@sha256:420cd0bf0f3998275875e02ecd5808168cf0843cbb4d3c536432f729247b2acc
+      command:
+        - python3
+        - /witness/k3d-gpu-witness
+        - sample
+        - --rule
+        - /witness/rule.json
+        - --expect-rule-sha256
+        - 596f9f888fa9b99de84fffc3b351d61a284b0349ad4b2ac49753f460cd223f97
+        # PCI address of the GPU the device plugin handed to the inference container
+        - --claim
+        - "0000:00:02.0"
+        - --out
+        - /out/bundle.json
+      securityContext:
+        runAsUser: 0
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+          add: ["SYS_PTRACE"]
+      resources:
+        requests: {cpu: 20m, memory: 32Mi}
+        limits: {cpu: 200m, memory: 64Mi}
+      volumeMounts:
+        - {name: witness, mountPath: /witness, readOnly: true}
+        - {name: out, mountPath: /out}
+  volumes:
+    - name: witness
+      configMap:
+        name: k3d-gpu-witness
+        defaultMode: 0555
+    - name: out
+      emptyDir: {}
