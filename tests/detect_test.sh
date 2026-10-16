@@ -458,6 +458,22 @@ dto_knobs_pinned() {
 dto_knobs_pinned "redis-dto.yaml pins the DTO offload threshold" "${ROOT}/examples/dataplane/redis-dto.yaml"
 dto_knobs_pinned "dataplane doc pod snippet pins the DTO offload threshold" "${ROOT}/docs/accelerated-dataplane.md"
 
+# ---- docs ---------------------------------------------------------------------
+
+# Every relative link in README.md and docs/*.md must name a file in this tree.
+REPO="$(dirname "${K3D_GPU}")/.."
+dead=""
+for md in "${REPO}/README.md" "${REPO}"/docs/*.md; do
+    while read -r target; do
+        [ -e "$(dirname "${md}")/${target}" ] || dead+=" ${md#"${REPO}"/}:${target}"
+    done < <(grep -oE '\]\([^)#[:space:]]+' "${md}" | sed 's/^](//' | grep -vE '^[a-z]+:')
+done
+if [ -z "${dead}" ]; then
+    PASS=$((PASS + 1)); echo "ok   relative doc links resolve"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL relative doc links resolve; dead:${dead}"
+fi
+
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

@@ -11,7 +11,7 @@ This page is for Intel's open-source, AI PC and partner engineering teams. It
 says what is shipped, what has run on real hardware, and what has only run
 against a simulated sysfs. Measured results are filled in from a ledger and are
 never estimated. Every "no other" claim refers to the search log in
-[provenance.md](provenance.md).
+[provenance.md](https://github.com/88plug/k3d-gpu/blob/cbbc84e55d7f9a8270ccce9a7cec870304b76597/docs/provenance.md).
 
 - [What it adds](#what-it-adds)
 - [Local Kubernetes landscape](#local-kubernetes-landscape)
@@ -29,16 +29,22 @@ never estimated. Every "no other" claim refers to the search log in
   [intel-device-plugins-for-kubernetes](https://github.com/intel/intel-device-plugins-for-kubernetes)
   `0.37.1` (GPU, NPU, DSA, IAA, QAT), `intel/gaudi-device-plugin:1.24.2-481` and
   [nri-plugins](https://github.com/containers/nri-plugins/releases/tag/v0.14.0)
-  balloons `v0.14.0`. Nothing is `kubectl apply`'d at run time.
+  balloons `v0.14.0`. With the default image nothing is `kubectl apply`'d at
+  run time. If a custom `K3D_GPU_IMAGE` lacks a baked DaemonSet, `up` applies
+  the manifest from `K3D_GPU_SHARE`; for NVIDIA with no local manifest it falls
+  back to the upstream `main` branch manifest from GitHub, which is unpinned.
 - **Detection from sysfs.** The launcher reads PCI vendor/device IDs, the bound
   driver, DRM render nodes and `/dev/accel` nodes. That is how it tells an NPU
   (`8086` + `intel_vpu`) from a Gaudi (`1da3` + `habanalabs`) behind the same
   `/dev/accel/accel*` path.
-- **Label gating.** Each plugin only schedules onto nodes carrying its label
-  (the upstream NFD label where one exists, e.g.
-  `intel.feature.node.kubernetes.io/npu=true`). The launcher sets the label only
-  when the hardware and host setup are present. No plugin crashloops on a host
-  that lacks its device.
+- **Label gating.** The NPU, DSA, IAA, QAT, Gaudi and hybrid DaemonSets only
+  schedule onto nodes carrying their label (the upstream NFD label where one
+  exists, e.g. `intel.feature.node.kubernetes.io/npu=true`). The launcher sets
+  the label only when the hardware and host setup are present. Two plugins are
+  not gated by a positive label: the Intel GPU plugin runs on every amd64 node
+  and idles, registering nothing, when there is no Intel GPU; the NVIDIA plugin
+  runs unless the node carries `nvidia.com/gpu.present=false`, which `up` sets
+  when NVIDIA is not active.
 - **Platform-aware `doctor`.** Kernel and firmware checks per platform (Meteor,
   Arrow, Lunar, Panther and Wildcat Lake, Battlemage, Nova Lake), the
   `xe.force_probe=<id>` needed for parts newer than the kernel, and the missing
@@ -53,17 +59,18 @@ never estimated. Every "no other" claim refers to the search log in
 - **P/E-core placement for pods.** One pod label,
   `k3d-gpu.io/cores: performance|efficient`, pins a pod to P-cores or E-cores.
   We found no other local Kubernetes that ships core-type-aware placement
-  ([provenance.md](provenance.md)).
+  ([provenance.md, C2](https://github.com/88plug/k3d-gpu/blob/cbbc84e55d7f9a8270ccce9a7cec870304b76597/docs/provenance.md#3-c2-automatic-p-coree-core-pod-pinning-in-a-local-k8s)).
 
 ## Local Kubernetes landscape
 
-Searched 2026-10-16 against each project's source at the commit linked. Scope:
+Searched 2026-10-16 against each project's source at the commit linked. Where a
+version is named, the link is that release tag's commit. Scope:
 Kubernetes you run on one developer machine.
 
 | Project | Accelerator support found | Intel GPU / NPU / Gaudi | Source |
 |---------|---------------------------|-------------------------|--------|
-| minikube v1.39.0 | `--gpus` accepts only `nvidia`, `nvidia.com`, `amd` or `all`, with the Docker driver and Docker runtime only. GPU addons are NVIDIA and AMD device plugins. | none | [`start.go#L1509`](https://github.com/kubernetes/minikube/blob/258f826ebdc18d10dd58f4d1c1d91c30df54a394/cmd/minikube/cmd/start.go#L1502-L1511), [`addons.go#L446-L476`](https://github.com/kubernetes/minikube/blob/258f826ebdc18d10dd58f4d1c1d91c30df54a394/pkg/minikube/assets/addons.go#L446-L476) |
-| k3d v5.9.0 (upstream) | `--gpus` forwards Docker `DeviceRequests` (NVIDIA). The only accelerator doc is CUDA. No Intel mention in `docs/`, `cmd/` or `pkg/`. | none | [`docs/usage/advanced/`](https://github.com/k3d-io/k3d/tree/46f3480daa747ba71c155d0f619ce6aba7b95db9/docs/usage/advanced), [`translate.go#L107-L112`](https://github.com/k3d-io/k3d/blob/46f3480daa747ba71c155d0f619ce6aba7b95db9/pkg/runtimes/docker/translate.go#L107-L112) |
+| minikube v1.39.0 | `--gpus` accepts only `nvidia`, `nvidia.com`, `amd` or `all`, with the Docker driver and Docker runtime only. GPU addons are NVIDIA and AMD device plugins. | none | [`start.go#L1509`](https://github.com/kubernetes/minikube/blob/7a9f6a841470a207de8cf4bafcccee0969d8ba10/cmd/minikube/cmd/start.go#L1502-L1511), [`addons.go#L446-L476`](https://github.com/kubernetes/minikube/blob/7a9f6a841470a207de8cf4bafcccee0969d8ba10/pkg/minikube/assets/addons.go#L446-L476) |
+| k3d v5.9.0 (upstream) | `--gpus` forwards Docker `DeviceRequests` (NVIDIA). The only accelerator doc is CUDA. No Intel mention in `docs/`, `cmd/` or `pkg/`. | none | [`docs/usage/advanced/`](https://github.com/k3d-io/k3d/tree/15dd1e2dbd62c53ed990fce9b7332335e8cb053c/docs/usage/advanced), [`translate.go#L107-L112`](https://github.com/k3d-io/k3d/blob/15dd1e2dbd62c53ed990fce9b7332335e8cb053c/pkg/runtimes/docker/translate.go#L107-L112) |
 | MicroK8s | Core addons `nvidia` and `gpu` ("Alias to nvidia add-on"); community addon `amd`. Neither repo lists an Intel addon. | none | [core `addons.yaml#L72-L83`](https://github.com/canonical/microk8s-core-addons/blob/0f192230dc3df263eb95b6be4c3f00a6ea037879/addons.yaml#L72-L83), [community `addons.yaml#L237-L240`](https://github.com/canonical/microk8s-community-addons/blob/151b98e87dc7c29411cac7127170dc1c7605ec33/addons.yaml#L237-L240) |
 | Rancher Desktop v1.24.0 | None. The Rancher Desktop 2 alpha announcement says "GPU support isn't built yet"; GPU requests are open issues ([#5561](https://github.com/rancher-sandbox/rancher-desktop/issues/5561), [#8487](https://github.com/rancher-sandbox/rancher-desktop/issues/8487), [#3968](https://github.com/rancher-sandbox/rancher-desktop/issues/3968)). | none | [blog post, L46-L48](https://github.com/rancher-sandbox/docs.rancherdesktop.io/blob/0a32ddb28ccba0ee344b587fb61a9b53e2281619/blog/2026-06-19-welcome-to-rancher-desktop-2.md?plain=1#L46-L48) |
 | kind | None. "Device plugin, e.g. GPU" is listed under lowest-priority scope; [#3164](https://github.com/kubernetes-sigs/kind/issues/3164) "Support GPUs" is open. | none | [`project-scope.md#L104`](https://github.com/kubernetes-sigs/kind/blob/214d9fd1426470dcfa0d8aa1c5dda03bfea835cb/site/content/docs/contributing/project-scope.md?plain=1#L104) |
@@ -84,10 +91,13 @@ the plugins, and asserts the result, with no manual step.
   so far is an i9-13900T (P-cores 0-15, E-cores 16-31) with a UHD 770 iGPU
   (`8086:a780`, `i915`) and 2 NVIDIA GPUs, recorded in the
   [PR #9 test plan](https://github.com/88plug/k3d-gpu/pull/9): `up` reported
-  `nvidia=2, intel=1, hybrid=1`.
+  `nvidia=2, intel=1, hybrid=1`. That run used commit `109154d`. The hybrid
+  `test` there only checked that each pod printed its `Cpus_allowed_list`; the
+  stricter check that the list sits inside the P-core or E-core list landed
+  after it (`fb5c17d`) and has not yet run on hardware.
 - **Verified by sim**: `tests/detect_test.sh` builds a fake sysfs/devfs tree,
   sets `K3D_GPU_SYSROOT`, and runs `detect`, `doctor` or `test` against it, with
-  `docker`, `k3d` and `kubectl` stubbed. 63 cases pass. Sim covers detection,
+  `docker`, `k3d` and `kubectl` stubbed. 64 cases pass. Sim covers detection,
   diagnostics and the `test` pass/fail logic. It does not prove a plugin
   advertises the device.
 
@@ -102,7 +112,7 @@ the plugins, and asserts the result, with no manual step.
 | IAA | `iaa.intel.com/wq-user-*` | yes | yes | no | user work queues, no-work-queue case, `accel-config` hint |
 | QAT (C62x, 4xxx, 420xx, 6xxx) | `qat.intel.com/*` | yes | yes | no | 4xxx and C62x PF with VFs, no VFs, unbound PF, `vfio-pci` check |
 | AMX | `feature.node.kubernetes.io/cpu-cpuid.AMX*=true` (labels, no plugin) | yes | yes (labels) | no | AMX flags detected and reported; CPU without AMX |
-| Hybrid P/E cores | `k3d-gpu.io/hybrid-cpu=true`; pod label `k3d-gpu.io/cores` | yes | yes | **yes**, performance pod on CPU 0, efficient pod on CPU 20 | detection, no online E-cores, non-hybrid, forced, `doctor` lists, `test` placement pass and both failure modes |
+| Hybrid P/E cores | `k3d-gpu.io/hybrid-cpu=true`; pod label `k3d-gpu.io/cores` | yes | yes | **yes** at `109154d`: performance pod on CPU 0, efficient pod on CPU 20. The strict placement check in `test` is sim-only so far. | detection, no online E-cores, non-hybrid, forced, `doctor` lists, `test` placement pass and both failure modes |
 
 The `xe`, NPU, Gaudi and Xeon rows have not run on hardware. If you have one of
 these platforms, `k3d-gpu doctor && k3d-gpu up && k3d-gpu test` is the probe that
@@ -212,9 +222,11 @@ spec:
 
 `k3d-gpu test` runs one such pod per core type. It fails unless the pod's
 `Cpus_allowed_list` sits inside the host's P-core or E-core list. A plain grep
-would also pass with NRI off. On the i9-13900T the performance pod ran on CPU 0,
-the efficient pod on CPU 20, and an unlabelled pod could use `0-15,17-31`,
-every CPU except the reserve.
+would also pass with NRI off. On the i9-13900T, under the earlier grep-only
+`test` (`109154d`), the performance pod ran on CPU 0, the efficient pod on
+CPU 20, and an unlabelled pod could use `0-15,17-31`, every CPU except the
+reserve. Those placements satisfy the strict check, but the strict `test` itself
+has not run on that host yet.
 
 ---
 
