@@ -1,0 +1,17 @@
+# k3d-gpu values for EAT's vLLM chart (core/helm-charts/vllm), merged over EAT's
+# own xeon-values.yaml by brownfield.sh before `brownfield.sh model <id>` runs.
+# Every key here is one the chart already reads; nothing in EAT is edited.
+
+# vLLM's CPU engine sizes its pool from the container's memory limit, and
+# without one it sees the whole host. With a limit, a KV cache that does not fit
+# is refused at start-up ("Available memory ... is less than requested memory
+# for kv") instead of growing into memory other containers need.
+memory: 16Gi
+
+# The chart's own balloon annotation, balloon.balloons.resource-policy.nri.io,
+# names a balloon type of whatever NRI balloons policy runs on the node. On a
+# k3d-gpu hybrid node that is k3d-gpu's policy, and "performance" is its P-core
+# balloon. The balloon is sized from the pod's CPU request, so cpu sets how many
+# P-core CPUs vLLM gets. EAT's own policy (deploy_nri_balloon_policy) stays off.
+cpu_balloon_annotation: performance
+cpu: "8"
