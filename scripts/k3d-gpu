@@ -331,10 +331,11 @@ numa_sockets() {
     for n in $(numa_nodes); do node_package "${n}"; done | sort -un
 }
 
-# Sub-NUMA clustering, by the kernel's own rule (snc_get_config() in
-# arch/x86/kernel/cpu/resctrl/monitor.c): CPUs sharing CPU 0's L3 divided by the
-# CPUs of CPU 0's node. The kernel accepts 1, 2, 3, 4 and 6 and reads anything
-# else as 1. Empty when either list is missing or malformed.
+# Sub-NUMA clustering: CPUs sharing CPU 0's L3 divided by the CPUs of CPU 0's node,
+# the rule snc_get_config() in arch/x86/kernel/cpu/resctrl/monitor.c used through
+# Linux 6.19 (7.0 divides NUMA nodes by packages instead, which also counts HBM/CXL
+# memory-only nodes). Like the kernel, 1, 2, 3, 4 and 6 are accepted and anything
+# else reads as 1. Empty when either list is missing or malformed.
 snc_per_l3() {
     local l3 n cpus="" ratio
     l3=$(cpulist_expand "$(head -n1 "${SYSROOT}/sys/devices/system/cpu/cpu0/cache/index3/shared_cpu_list" 2>/dev/null)") || return 0
@@ -388,18 +389,25 @@ pci_socket() {
     echo "${pkg}"
 }
 
-# "<socket> <DSA|IAA|QAT>" per DSA/IAA device (dsa bus) and QAT physical function.
+# DSA and IAA PCI ids: idxd_pci_tbl in drivers/dma/idxd/init.c (SPR0, GNRD, DMR;
+# IAX SPR0, DMR, PTL, WCL) with the values from include/linux/pci_ids.h and
+# drivers/dma/idxd/registers.h.
+DSA_PCI_IDS="0x0b25 0x11fb 0x1212"
+IAA_PCI_IDS="0x0cfe 0x1216 0xb02d 0xfd2d"
+
+# "<socket> <DSA|IAA|QAT>" per DSA/IAA PCI function and QAT physical function, by
+# PCI id, so a device counts whether or not its driver is loaded.
 accel_sockets() {
-    local dev kind
-    for dev in "${SYSROOT}"/sys/bus/dsa/devices/dsa[0-9]* "${SYSROOT}"/sys/bus/dsa/devices/iax[0-9]*; do
-        [ -e "${dev}" ] || continue
-        case "${dev##*/}" in dsa*) kind=DSA ;; *) kind=IAA ;; esac
-        echo "$(pci_socket "$(dirname "$(readlink -f "${dev}")")") ${kind}"
-    done
+    local dev id kind
     for dev in "${SYSROOT}"/sys/bus/pci/devices/*; do
         [ "$(cat "${dev}/vendor" 2>/dev/null)" = "0x8086" ] || continue
-        [[ " ${QAT_PF_IDS} " == *" $(cat "${dev}/device" 2>/dev/null) "* ]] || continue
-        echo "$(pci_socket "${dev}") QAT"
+        id=$(cat "${dev}/device" 2>/dev/null) || continue
+        if [[ " ${DSA_PCI_IDS} " == *" ${id} "* ]]; then kind=DSA
+        elif [[ " ${IAA_PCI_IDS} " == *" ${id} "* ]]; then kind=IAA
+        elif [[ " ${QAT_PF_IDS} " == *" ${id} "* ]]; then kind=QAT
+        else continue
+        fi
+        echo "$(pci_socket "${dev}") ${kind}"
     done
 }
 

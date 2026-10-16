@@ -149,7 +149,8 @@ pod requirements and the probes still to run on Sapphire Rapids, see
 [docs/accelerated-dataplane.md](docs/accelerated-dataplane.md) and
 [examples/dataplane/](examples/dataplane/).
 
-`doctor` also counts DSA, IAA and QAT per socket and prints the SKU's
+`doctor` also counts DSA, IAA and QAT PCI functions per socket (by PCI id, so a
+device counts before its driver loads) and prints the SKU's
 "default devices" from its ark.intel.com page when the CPU is in its table
 (8480+, 6980P, 6960P, 6780E). A socket below that default gets a warning; the
 BIOS may have the device disabled. When `/sys/bus/auxiliary/devices/intel_vsec.sdsi.*`
@@ -226,8 +227,10 @@ podresourceapi:*/*`, which needs the policy's `agent.podResourceAPI: true`).
 |------------|--------------------------|--------------------|
 | `numa` | more than one `/sys/devices/system/node/node*` | node labels `k3d-gpu.io/numa-nodes=<n>`, `k3d-gpu.io/snc=<nodes per L3>`; pod label `k3d-gpu.io/cores=replica` |
 
-`snc` follows the kernel's own rule: CPUs sharing CPU 0's L3 divided by the CPUs of
-CPU 0's node (`snc_get_config()` in `arch/x86/kernel/cpu/resctrl/monitor.c`). `doctor`
+`snc` is CPUs sharing CPU 0's L3 divided by the CPUs of CPU 0's node, the rule
+`snc_get_config()` in `arch/x86/kernel/cpu/resctrl/monitor.c` used through Linux 6.19.
+Linux 7.0 divides NUMA nodes by packages instead, which also counts memory-only nodes,
+so the label reads from CPU nodes on every kernel. `doctor`
 names memory-only nodes. When the CPU has `rdt_a`, `doctor` prints how to turn on the
 policy's resctrl classes. The policy ships with RDT off because it rewrites host-wide
 cache allocation, which the launcher never does.

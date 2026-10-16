@@ -589,6 +589,28 @@ node "${r}" 0 0-7 0; node "${r}" 1 8-15 0; l3 "${r}" 0-15
 expect "hybrid and numa are independent" "${r}" "hybrid k3d-gpu.io/hybrid-cpu=true
 numa k3d-gpu.io/numa-nodes=2 k3d-gpu.io/snc=2"
 
+# `up` on a host that is both hybrid and NUMA waits for the one balloons DaemonSet once.
+UP_BIN="${WORK}/upbin"
+mkdir -p "${UP_BIN}"
+cat > "${UP_BIN}/kubectl" <<'EOF'
+#!/bin/sh
+echo "kubectl $*" >> "${STUB_LOG}"
+case "$*" in "get nodes -l "*" -o name") echo "node/k3d-gpu-server-0" ;; esac
+exit 0
+EOF
+chmod +x "${UP_BIN}/kubectl"
+r=$(newroot numa-hybrid-up)
+hybrid "${r}" 0-7 8-15
+node "${r}" 0 0-7 0; node "${r}" 1 8-15 0; l3 "${r}" 0-15
+env K3D_GPU_SYSROOT="${r}" STUB_LOG="${r}/calls" PATH="${UP_BIN}:${STUB_BIN}:${PATH}" \
+    bash "${K3D_GPU}" up >/dev/null 2>&1
+n=$(grep -c 'rollout status daemonset/nri-resource-policy-balloons' "${r}/calls" 2>/dev/null)
+if [ "${n}" = 1 ]; then
+    PASS=$((PASS + 1)); echo "ok   hybrid + numa: the balloons DaemonSet is rolled out once"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL hybrid + numa: balloons DaemonSet rolled out ${n:-0} time(s), want 1"
+fi
+
 r=$(newroot numa-doc)
 kernel "${r}" 6.18.1
 node "${r}" 0 0-3 0; node "${r}" 1 4-7 1; node "${r}" 2 ""; l3 "${r}" 0-3
@@ -698,6 +720,19 @@ node "${r}" 0 0-3 0; node "${r}" 1 4-7 1
 idxd_dev "${r}" 0000:e7:01.0 0x0b25 dsa0 -1
 doctor_says "a device with no NUMA node on a two-socket host is socket ?" "${r}" \
     'info: per socket: socket 0: DSA 0, IAA 0, QAT 0; socket 1: DSA 0, IAA 0, QAT 0; socket \?: DSA 1, IAA 0, QAT 0'
+
+# DSA/IAA functions are counted from the PCI bus by id, like QAT: a host whose idxd
+# module is not loaded has no dsa bus, and that is not a disabled device.
+r=$(newroot socket-counts-unbound)
+kernel "${r}" 6.18.1
+model "${r}" "Intel(R) Xeon(R) Platinum 8480+"
+node "${r}" 0 0-3 0; l3 "${r}" 0-3
+pci "${r}" 0000:e7:01.0 0x8086 0x0b25 "" 0x088000
+pci "${r}" 0000:e7:02.0 0x8086 0x0cfe "" 0x088000
+pci "${r}" 0000:6b:00.0 0x8086 0x4940 "" 0x0b4000
+doctor_says "DSA/IAA without idxd loaded are still counted per socket" "${r}" \
+    'info: per socket: socket 0: DSA 1, IAA 1, QAT 1 \(ARK default'
+doctor_says "DSA/IAA without idxd loaded are not flagged below the ARK default" "${r}" 'below the ARK default' negate
 
 r=$(newroot socket-counts-none)
 kernel "${r}" 6.18.1
