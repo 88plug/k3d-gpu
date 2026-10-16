@@ -1849,6 +1849,15 @@ up_says "K3D_GPU_NODE_LABELS second label is passed too" 0 \
     K3D_GPU_NODE_LABELS="ei-infra-eligible=true, ei-inference-eligible=true"
 up_says "K3D_GPU_NODE_LABELS rejects an entry without =" fail 'ei-infra-eligible' negate \
     K3D_GPU_NODE_LABELS="ei-infra-eligible"
+up_says "up without extra k3s args keeps servicelb" 0 'servicelb' negate
+up_says "K3D_GPU_K3S_ARGS passes each flag to every server" 0 \
+    '^--k3s-arg=--disable=servicelb@server:\*$' "" \
+    K3D_GPU_K3S_ARGS="--disable=servicelb --kubelet-arg=max-pods=250"
+up_says "K3D_GPU_K3S_ARGS keeps a flag's own commas" 0 \
+    '^--k3s-arg=--disable=servicelb,metrics-server@server:\*$' "" \
+    K3D_GPU_K3S_ARGS="--disable=servicelb,metrics-server"
+up_says "K3D_GPU_K3S_ARGS rejects a word that is not a flag" fail 'servicelb' negate \
+    K3D_GPU_K3S_ARGS="--disable servicelb"
 
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
