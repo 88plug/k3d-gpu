@@ -3188,6 +3188,147 @@ doctor_says "doctor says K3D_GPU_BALLOONS=external leaves the policy to another 
 doctor_says "doctor says a hybrid CPU left out of K3D_GPU_VENDORS gets no policy" "${r}" \
     'leaves the NRI balloons policy to another stack .*K3D_GPU_VENDORS=amx' "" K3D_GPU_VENDORS=amx
 
+# ---- Intel GPU sharing ----------------------------------------------------------
+
+# Integrated GPU at 00:02.0 (UHD 770 on Raptor Lake, i915) and a Battlemage dGPU.
+r=$(newroot igpu-share)
+kernel "${r}" 6.18.1
+pci "${r}" 0000:00:02.0 0x8086 0xa780 i915; render "${r}" 0000:00:02.0 128
+doctor_says "iGPU-only host shares the GPU 8 ways by default" "${r}" 'ok: GPU sharing on: up to 8 pods per Intel GPU, balanced allocation'
+doctor_says "explicit K3D_GPU_INTEL_SHARED=1 turns sharing off" "${r}" 'ok: GPU sharing off' "" K3D_GPU_INTEL_SHARED=1
+doctor_says "K3D_GPU_INTEL_ALLOCATION=packed is reported" "${r}" 'up to 8 pods .*packed allocation' "" K3D_GPU_INTEL_ALLOCATION=packed
+for bad in 0 04 -2 abc 1.5 " 3"; do
+    doctor_says "K3D_GPU_INTEL_SHARED='${bad}' fails doctor" "${r}" "fail.*K3D_GPU_INTEL_SHARED='${bad}'" "" K3D_GPU_INTEL_SHARED="${bad}"
+done
+doctor_says "unknown K3D_GPU_INTEL_ALLOCATION fails doctor" "${r}" "fail.*K3D_GPU_INTEL_ALLOCATION='spread'" "" K3D_GPU_INTEL_ALLOCATION=spread
+doctor_says "K3D_GPU_INTEL_MONITORING=yes fails doctor" "${r}" "fail.*K3D_GPU_INTEL_MONITORING='yes'" "" K3D_GPU_INTEL_MONITORING=yes
+doctor_says "K3D_GPU_INTEL_MONITORING=1 is reported" "${r}" 'ok: gpu.intel.com/monitoring enabled' "" K3D_GPU_INTEL_MONITORING=1
+
+r=$(newroot dgpu-share)
+kernel "${r}" 6.18.1
+pci "${r}" 0000:03:00.0 0x8086 0xe20b xe; render "${r}" 0000:03:00.0 128
+doctor_says "discrete GPU stays exclusive by default" "${r}" 'ok: GPU sharing off: one pod per Intel GPU \(K3D_GPU_INTEL_SHARED=auto\)'
+doctor_says "discrete GPU can be shared explicitly" "${r}" 'up to 3 pods per Intel GPU' "" K3D_GPU_INTEL_SHARED=3
+
+r=$(newroot mixed-share)
+kernel "${r}" 6.18.1
+pci "${r}" 0000:00:02.0 0x8086 0xa780 i915; render "${r}" 0000:00:02.0 128
+pci "${r}" 0000:03:00.0 0x8086 0xe20b xe;   render "${r}" 0000:03:00.0 129
+doctor_says "iGPU plus dGPU stays exclusive by default (one count covers both)" "${r}" 'ok: GPU sharing off'
+
+# `up` against stubbed k3d/docker/kubectl. STUB_NODE is the server node's
+# filesystem: docker exec reads and writes under it. kubectl reports the plugin
+# DaemonSet's args from the node's manifest (as k3s would apply it), records
+# `apply -f -` input in STUB_NODE/applied.yaml, and STUB_ALLOCATABLE as node allocatable.
+USTUB="${WORK}/ubin"
+mkdir -p "${USTUB}"
+printf '#!/bin/sh\nexit 0\n' > "${USTUB}/k3d"
+cat > "${USTUB}/docker" <<'EOF'
+#!/bin/sh
+[ "$1" = exec ] || exit 0
+shift
+[ "$1" = -i ] && shift
+shift  # node name
+case "$1" in
+    cat) exec cat "${STUB_NODE}$2" ;;
+    sh)  exec sh -c "$(printf '%s' "$3" | sed "s#'/var/#'${STUB_NODE}/var/#g")" ;;
+esac
+exit 1
+EOF
+cat > "${USTUB}/kubectl" <<'EOF'
+#!/bin/sh
+case "$*" in
+    *"get nodes -o go-template"*) printf '%s\n' "${STUB_ALLOCATABLE}" ;;
+    *"get daemonset intel-gpu-plugin -o jsonpath"*)
+        f="${STUB_NODE}/var/lib/rancher/k3s/server/manifests/intel-gpu-plugin.yaml"
+        printf '[%s]' "$(sed -n 's/^ *- \("-.*"\)$/\1/p' "${f}" | paste -sd, -)" ;;
+    "apply -f -") cat > "${STUB_NODE}/applied.yaml" ;;
+esac
+exit 0
+EOF
+chmod +x "${USTUB}/k3d" "${USTUB}/docker" "${USTUB}/kubectl"
+
+# node_with_manifest <name>: a node fs holding the baked intel-gpu-plugin.yaml.
+node_with_manifest() {
+    local n="${WORK}/node-$1"
+    mkdir -p "${n}/var/lib/rancher/k3s/server/manifests"
+    cp "$(dirname "${K3D_GPU}")/../share/intel-gpu-plugin.yml" "${n}/var/lib/rancher/k3s/server/manifests/intel-gpu-plugin.yaml"
+    echo "${n}"
+}
+
+# up_check <name> <root> <node> <want rc: 0|fail> <file under node> <want text, or "unchanged"> [env...]:
+# run `up`, then the file must contain <want text> verbatim (or match the baked manifest).
+up_check() {
+    local name=$1 root=$2 node=$3 want=$4 file=$5 text=$6 out rc ok=1
+    shift 6
+    out=$(env K3D_GPU_SYSROOT="${root}" PATH="${USTUB}:${PATH}" STUB_NODE="${node}" \
+        STUB_ALLOCATABLE="gpu.intel.com/i915 8" K3D_GPU_VENDORS=intel "$@" bash "${K3D_GPU}" up 2>&1)
+    rc=$?
+    { [ "${want}" = 0 ] && [ "${rc}" -eq 0 ]; } || { [ "${want}" = fail ] && [ "${rc}" -ne 0 ]; } || ok=0
+    if [ "${text}" = unchanged ]; then
+        cmp -s "${node}/${file}" "$(dirname "${K3D_GPU}")/../share/intel-gpu-plugin.yml" || ok=0
+    elif [ -n "${text}" ]; then
+        # Whole-block match: grep -F would accept any one of the lines.
+        [[ "$(cat "${node}/${file}" 2>/dev/null)" == *"${text}"* ]] || ok=0
+    fi
+    if [ "${ok}" -eq 1 ]; then
+        PASS=$((PASS + 1)); echo "ok   ${name}"
+    else
+        FAILS=$((FAILS + 1))
+        echo "FAIL ${name} (rc=${rc}, want ${want})"
+        sed 's/^/  | /' <<< "${out}"
+        sed 's/^/  > /' "${node}/${file}" 2>/dev/null
+    fi
+}
+
+MF=var/lib/rancher/k3s/server/manifests/intel-gpu-plugin.yaml
+r=$(newroot igpu-up)
+pci "${r}" 0000:00:02.0 0x8086 0xa780 i915; render "${r}" 0000:00:02.0 128
+
+n=$(node_with_manifest igpu-auto)
+up_check "up adds shared-dev-num and allocation-policy under the plugin image" "${r}" "${n}" 0 "${MF}" \
+'          image: intel/intel-gpu-plugin:0.37.1
+          args:
+            - "-shared-dev-num=8"
+            - "-allocation-policy=balanced"
+          imagePullPolicy: IfNotPresent'
+if compgen -G "${n}/var/lib/rancher/k3s/server/manifests/.*" >/dev/null; then
+    FAILS=$((FAILS + 1)); echo "FAIL up leaves no temp file in the k3s manifests dir"
+else
+    PASS=$((PASS + 1)); echo "ok   up leaves no temp file in the k3s manifests dir"
+fi
+
+n=$(node_with_manifest igpu-mon)
+up_check "up adds -enable-monitoring alone when sharing is off" "${r}" "${n}" 0 "${MF}" \
+'          args:
+            - "-enable-monitoring"
+          imagePullPolicy' K3D_GPU_INTEL_SHARED=1 K3D_GPU_INTEL_MONITORING=1
+
+n=$(node_with_manifest igpu-off)
+up_check "up leaves the baked manifest alone with sharing off and no monitoring" "${r}" "${n}" 0 "${MF}" unchanged \
+    K3D_GPU_INTEL_SHARED=1
+
+n=$(node_with_manifest igpu-bad)
+up_check "up rejects a bad K3D_GPU_INTEL_SHARED before creating anything" "${r}" "${n}" fail "${MF}" unchanged \
+    K3D_GPU_INTEL_SHARED=0
+
+n=$(node_with_manifest igpu-has-args)
+sed -i 's#^\(          image: intel/intel-gpu-plugin:.*\)$#\1\n          args: ["-v=2"]#' "${n}/${MF}"
+cp "${n}/${MF}" "${WORK}/has-args.yaml"
+up_check "up fails rather than doubling an existing args list" "${r}" "${n}" fail "${MF}" '          args: ["-v=2"]'
+if cmp -s "${n}/${MF}" "${WORK}/has-args.yaml"; then
+    PASS=$((PASS + 1)); echo "ok   failed rewrite leaves the node manifest intact"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL failed rewrite leaves the node manifest intact"
+fi
+
+# Custom image with no baked manifest: the launcher applies the share/ copy with args.
+n="${WORK}/node-bare"; mkdir -p "${n}"
+up_check "custom image without the baked manifest gets the args via kubectl apply" "${r}" "${n}" 0 applied.yaml \
+'            - "-shared-dev-num=4"
+            - "-allocation-policy=packed"' K3D_GPU_INTEL_SHARED=4 K3D_GPU_INTEL_ALLOCATION=packed \
+    K3D_GPU_INTEL_PLUGIN="$(dirname "${K3D_GPU}")/../share/intel-gpu-plugin.yml"
+
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]
