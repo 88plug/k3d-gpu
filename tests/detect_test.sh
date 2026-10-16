@@ -1458,6 +1458,115 @@ else
     PASS=$((PASS + 1)); echo "ok   perf: non-numeric --model-gb is rejected"
 fi
 
+# ---- agent: device selection and manifest rendering ---------------------------
+# `agent manifest` reads the cluster through kubectl. The stub answers the
+# allocatable query from STUB_ALLOC ("<resource> <count>" lines) and a label
+# selector query with one node when the label is listed in STUB_NODE_LABELS.
+ASTUB="${WORK}/abin"
+mkdir -p "${ASTUB}"
+cat > "${ASTUB}/kubectl" <<'EOF'
+#!/bin/sh
+case "$*" in
+    *allocatable*) printf '%s\n' "${STUB_ALLOC:-}" ;;
+    "get nodes -l "*)
+        for l in ${STUB_NODE_LABELS:-}; do [ "$l" = "$4" ] && echo node/k3d-agent-server-0; done ;;
+esac
+exit 0
+EOF
+chmod +x "${ASTUB}/kubectl"
+
+# agent_says <name> <root> <want rc: 0|fail> <ERE> [negate] [env assignments...]: `agent manifest`
+# output (stdout + stderr) must match <ERE>, or must not when a 5th argument is given.
+agent_says() {
+    local name=$1 root=$2 want=$3 re=$4 negate=${5:-} out rc hit=0
+    shift 5 2>/dev/null || shift $#
+    out=$(env K3D_GPU_SYSROOT="${root}" PATH="${ASTUB}:${PATH}" "$@" bash "${K3D_GPU}" agent manifest 2>&1)
+    rc=$?
+    grep -E -- "${re}" <<< "${out}" >/dev/null && hit=1
+    if { { [ -z "${negate}" ] && [ "${hit}" -eq 1 ]; } || { [ -n "${negate}" ] && [ "${hit}" -eq 0 ]; }; } \
+       && { { [ "${want}" = 0 ] && [ "${rc}" -eq 0 ]; } || { [ "${want}" = fail ] && [ "${rc}" -ne 0 ]; }; }; then
+        PASS=$((PASS + 1)); echo "ok   ${name}"
+    else
+        FAILS=$((FAILS + 1))
+        echo "FAIL ${name} (rc=${rc}, want ${want}, ${negate:+not }/${re}/)"
+        awk '{print "  | " $0}' <<< "${out}"
+    fi
+}
+
+r=$(newroot agent-igpu)
+pci "${r}" 0000:00:02.0 0x8086 0xa780 i915; render "${r}" 0000:00:02.0 128
+gid=$(stat -c %g "${r}/dev/dri/renderD128")
+agent_says "agent picks GPU when the cluster advertises gpu.intel.com/i915" "${r}" 0 \
+    '--target_device=GPU' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1'
+agent_says "agent GPU pod requests one gpu.intel.com/i915" "${r}" 0 \
+    'gpu\.intel\.com/i915: "?1"?' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1'
+agent_says "agent GPU pod joins the host render group" "${r}" 0 \
+    "supplementalGroups: \[${gid}\]" "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1'
+agent_says "agent picks gpu.intel.com/xe when that is what the cluster has" "${r}" 0 \
+    'gpu\.intel\.com/xe: "?1"?' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/xe 2'
+agent_says "agent falls back to CPU when no Intel GPU is allocatable" "${r}" 0 \
+    '--target_device=CPU' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 0'
+agent_says "agent CPU pod requests no GPU" "${r}" 0 \
+    'gpu\.intel\.com' negate STUB_ALLOC='cpu 32'
+agent_says "agent ignores a host GPU the cluster does not advertise" "${r}" 0 \
+    '--target_device=CPU' "" STUB_ALLOC='cpu 32'
+agent_says "K3D_GPU_AGENT_DEVICE=CPU overrides an available GPU" "${r}" 0 \
+    '--target_device=CPU' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' K3D_GPU_AGENT_DEVICE=CPU
+agent_says "the override is case-insensitive" "${r}" 0 \
+    '--target_device=CPU' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' K3D_GPU_AGENT_DEVICE=cpu
+agent_says "K3D_GPU_AGENT_DEVICE=GPU with no allocatable Intel GPU fails" "${r}" fail \
+    'no Intel GPU' "" STUB_ALLOC='cpu 32' K3D_GPU_AGENT_DEVICE=GPU
+agent_says "an unknown K3D_GPU_AGENT_DEVICE is rejected" "${r}" fail \
+    'TPU' "" STUB_ALLOC='cpu 32' K3D_GPU_AGENT_DEVICE=TPU
+agent_says "auto never picks the NPU" "${r}" 0 \
+    '--target_device=NPU' negate STUB_ALLOC=$'cpu 32\nnpu.intel.com/accel 1'
+
+r=$(newroot agent-npu)
+pci "${r}" 0000:00:0b.0 0x8086 0x643e intel_vpu; accel "${r}" 0000:00:0b.0 0
+gid=$(stat -c %g "${r}/dev/accel/accel0")
+agent_says "K3D_GPU_AGENT_DEVICE=NPU requests npu.intel.com/accel" "${r}" 0 \
+    'npu\.intel\.com/accel: "?1"?' "" STUB_ALLOC=$'cpu 8\nnpu.intel.com/accel 1' K3D_GPU_AGENT_DEVICE=NPU
+agent_says "NPU pod joins the accel node's group" "${r}" 0 \
+    "supplementalGroups: \[${gid}\]" "" STUB_ALLOC=$'cpu 8\nnpu.intel.com/accel 1' K3D_GPU_AGENT_DEVICE=NPU
+agent_says "K3D_GPU_AGENT_DEVICE=NPU with no allocatable NPU fails" "${r}" fail \
+    'no Intel NPU' "" STUB_ALLOC='cpu 8' K3D_GPU_AGENT_DEVICE=NPU
+
+r=$(newroot agent-hybrid)
+hybrid "${r}" 0-15 16-31
+pci "${r}" 0000:00:02.0 0x8086 0xa780 i915; render "${r}" 0000:00:02.0 128
+agent_says "on a hybrid node the server pod is pinned to P-cores" "${r}" 0 \
+    'k3d-gpu.io/cores: performance' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' STUB_NODE_LABELS=k3d-gpu.io/hybrid-cpu=true
+agent_says "a non-hybrid cluster gets no core-type label" "${r}" 0 \
+    'k3d-gpu.io/cores' negate STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1'
+agent_says "hybrid CPU inference sizes the balloon to every P-core CPU" "${r}" 0 \
+    'cpu: "16"' "" STUB_ALLOC='cpu 32' STUB_NODE_LABELS=k3d-gpu.io/hybrid-cpu=true
+agent_says "GPU inference on a hybrid node asks for a small P-core balloon" "${r}" 0 \
+    'cpu: "2"' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' STUB_NODE_LABELS=k3d-gpu.io/hybrid-cpu=true
+agent_says "K3D_GPU_AGENT_CPUS overrides the CPU request" "${r}" 0 \
+    'cpu: "6"' "" STUB_ALLOC='cpu 32' STUB_NODE_LABELS=k3d-gpu.io/hybrid-cpu=true K3D_GPU_AGENT_CPUS=6
+
+r=$(newroot agent-xeon)
+agent_says "non-hybrid CPU inference requests half the allocatable CPUs" "${r}" 0 \
+    'cpu: "28"' "" STUB_ALLOC='cpu 56'
+agent_says "millicore allocatable is understood" "${r}" 0 \
+    'cpu: "15"' "" STUB_ALLOC='cpu 31500m'
+agent_says "CPU inference lands on an AMX node when there is one" "${r}" 0 \
+    'feature.node.kubernetes.io/cpu-cpuid.AMXTILE: "true"' "" \
+    STUB_ALLOC='cpu 56' STUB_NODE_LABELS=feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true
+agent_says "GPU inference is not tied to AMX nodes" "${r}" 0 \
+    'AMXTILE' negate STUB_ALLOC=$'cpu 56\ngpu.intel.com/xe 1' STUB_NODE_LABELS=feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true
+
+r=$(newroot agent-model)
+agent_says "default model is Qwen3-4B" "${r}" 0 '--source_model=OpenVINO/Qwen3-4B-int4-ov$' "" STUB_ALLOC='cpu 8'
+agent_says "default model gets the hermes3 tool parser" "${r}" 0 '--tool_parser=hermes3$' "" STUB_ALLOC='cpu 8'
+agent_says "default model gets the qwen3 reasoning parser" "${r}" 0 '--reasoning_parser=qwen3$' "" STUB_ALLOC='cpu 8'
+agent_says "an empty K3D_GPU_AGENT_TOOL_PARSER turns the parser off" "${r}" 0 'tool_parser' negate \
+    STUB_ALLOC='cpu 8' K3D_GPU_AGENT_TOOL_PARSER=
+agent_says "the model cache lives on the models volume" "${r}" 0 '--cache_dir=/models/\.ov_cache' "" STUB_ALLOC='cpu 8'
+agent_says "the server image is pinned by digest" "${r}" 0 'image: openvino/model_server@sha256:[0-9a-f]{64}' "" STUB_ALLOC='cpu 8'
+agent_says "a custom model leaves parser choice to OVMS" "${r}" 0 'tool_parser' negate \
+    STUB_ALLOC='cpu 8' K3D_GPU_AGENT_MODEL=OpenVINO/Phi-4-mini-instruct-int4-ov
+
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

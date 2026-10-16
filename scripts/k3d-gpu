@@ -34,6 +34,8 @@
 #           --perf: read-only host tuning advisor for inference serving
 #   logs    tail server container logs
 #   host-setup  check the host userspace and print (--apply: run) the pinned install commands
+#   agent   up|down|status|manifest: OpenAI-compatible LLM server (OpenVINO Model
+#           Server) on the cluster's best Intel engine (GPU, else CPU; NPU on request)
 
 set -euo pipefail
 
@@ -82,6 +84,9 @@ Usage: k3d-gpu <command>
             the pinned install commands for Intel GPU/NPU and the NVIDIA container
             toolkit + CDI (Ubuntu 24.04/26.04, Fedora, Arch, Manjaro). --apply runs
             them after a y/N prompt
+  agent up|down|status|manifest
+            OpenAI-compatible LLM server (OpenVINO Model Server) in the current
+            cluster, on its Intel GPU if it has one, else CPU
   version   Show version
   help      Show this message
 
@@ -99,6 +104,8 @@ Environment:
   K3D_GPU_QAT_PLUGIN    Intel QAT plugin yaml  (default: ${SHARE_DIR}/intel-qat-plugin.yml)
   K3D_GPU_HYBRID_PLUGIN NRI balloons yaml for hybrid and numa (default: ${SHARE_DIR}/nri-balloons.yml)
   K3D_GPU_MODEL_GB      model size checked by doctor --perf (same as --model-gb)
+  K3D_GPU_AGENT_DEVICE  agent device: auto | CPU | GPU | NPU (default: auto)
+  K3D_GPU_AGENT_MODEL   agent Hugging Face model (default: OpenVINO/Qwen3-4B-int4-ov)
 
 Docs: https://github.com/88plug/k3d-gpu
 EOF
@@ -2257,11 +2264,15 @@ ensure_plugin() {
     fi
 }
 
+# "<resource> <quantity>" per allocatable resource of every node.
+node_allocatable() {
+    kubectl get nodes -o go-template='{{range .items}}{{range $k, $v := .status.allocatable}}{{$k}} {{$v}}{{"\n"}}{{end}}{{end}}' 2>/dev/null || true
+}
+
 # "<resource> <count>" per extended resource matching a name, or a prefix when
 # the name ends in *, summed across all nodes' allocatable. Zero counts dropped.
 resource_counts() {
-    { kubectl get nodes -o go-template='{{range .items}}{{range $k, $v := .status.allocatable}}{{$k}} {{$v}}{{"\n"}}{{end}}{{end}}' 2>/dev/null || true; } \
-        | awk -v want="$1" '
+    node_allocatable | awk -v want="$1" '
             (want ~ /\*$/ && index($1, substr(want, 1, length(want) - 1)) == 1) || $1 == want { s[$1] += $2 }
             END { for (k in s) if (s[k] > 0) print k, s[k] }' | sort
 }
@@ -2883,6 +2894,301 @@ cmd_host_setup() {
     info "Host setup done. Check again with: k3d-gpu host-setup && k3d-gpu doctor"
 }
 
+# ---- agent: OpenAI-compatible inference on the best Intel engine -------------
+# OpenVINO Model Server (OVMS) serves one LLM over the OpenAI API at /v3. The
+# device is read from what the running cluster actually advertises, never from
+# the host alone: an Intel GPU the cluster cannot schedule is not a choice.
+
+AGENT_NS="k3d-gpu-agent"
+# openvino/model_server:2026.4.1-gpu (CPU, GPU and NPU plugins, compute-runtime inside).
+AGENT_IMAGE="${K3D_GPU_AGENT_IMAGE:-openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58}"
+AGENT_DEFAULT_MODEL="OpenVINO/Qwen3-4B-int4-ov"
+AGENT_MODEL="${K3D_GPU_AGENT_MODEL:-${AGENT_DEFAULT_MODEL}}"
+AGENT_MODEL_NAME="${K3D_GPU_AGENT_MODEL_NAME:-${AGENT_MODEL##*/}}"
+AGENT_STORAGE="${K3D_GPU_AGENT_STORAGE:-20Gi}"
+AGENT_MEMORY="${K3D_GPU_AGENT_MEMORY:-6Gi}"
+AGENT_TIMEOUT="${K3D_GPU_AGENT_TIMEOUT:-1800}" # seconds: first run downloads the model
+# Qwen3 emits hermes-style tool calls and <think> reasoning. Any other model gets
+# OVMS's own parser detection from its chat template unless these are set (an
+# empty value turns a parser off).
+if [ "${AGENT_MODEL}" = "${AGENT_DEFAULT_MODEL}" ]; then
+    AGENT_TOOL_PARSER="${K3D_GPU_AGENT_TOOL_PARSER-hermes3}"
+    AGENT_REASONING_PARSER="${K3D_GPU_AGENT_REASONING_PARSER-qwen3}"
+else
+    AGENT_TOOL_PARSER="${K3D_GPU_AGENT_TOOL_PARSER-}"
+    AGENT_REASONING_PARSER="${K3D_GPU_AGENT_REASONING_PARSER-}"
+fi
+AGENT_PROXY="/api/v1/namespaces/${AGENT_NS}/services/ovms:http/proxy"
+
+# Nodes carrying a label (names, one per line).
+labelled_nodes() { kubectl get nodes -l "$1" -o name 2>/dev/null || true; }
+
+# Largest allocatable CPU count of any node, whole CPUs ("31500m" counts as 31).
+max_node_cpus() {
+    node_allocatable | awk '$1 == "cpu" { v = $2; if (v ~ /m$/) v = substr(v, 1, length(v) - 1) / 1000; if (v > m) m = v }
+               END { print int(m) }'
+}
+
+# Number of CPUs in a sysfs CPU list ("0-15,20,22-23" -> 19).
+cpu_list_count() {
+    local n=0 r parts
+    IFS=, read -r -a parts <<< "$1"
+    for r in ${parts[@]+"${parts[@]}"}; do
+        [ -n "${r}" ] && n=$((n + ${r#*-} - ${r%-*} + 1))
+    done
+    echo "${n}"
+}
+
+# "<OVMS device> <extended resource or ->". K3D_GPU_AGENT_DEVICE forces one.
+# auto: an allocatable Intel GPU (xe first: Battlemage/Lunar Lake and newer),
+# else CPU. auto never picks the NPU, as OVMS's own detection does not: LLMs on
+# the NPU run the stateful pipeline only (no continuous batching).
+agent_device() {
+    local want=${K3D_GPU_AGENT_DEVICE:-auto} res
+    case "${want^^}" in
+        AUTO|GPU)
+            for res in gpu.intel.com/xe gpu.intel.com/i915; do
+                if [ "$(resource_total "${res}")" -gt 0 ]; then echo "GPU ${res}"; return 0; fi
+            done
+            [ "${want^^}" = AUTO ] || err "K3D_GPU_AGENT_DEVICE=GPU but the cluster advertises no Intel GPU (gpu.intel.com/xe or i915) — check 'k3d-gpu detect' and recreate the cluster"
+            echo "CPU -"
+            ;;
+        NPU)
+            [ "$(resource_total npu.intel.com/accel)" -gt 0 ] \
+                || err "K3D_GPU_AGENT_DEVICE=NPU but the cluster advertises no Intel NPU (npu.intel.com/accel)"
+            echo "NPU npu.intel.com/accel"
+            ;;
+        CPU) echo "CPU -" ;;
+        *) err "unknown K3D_GPU_AGENT_DEVICE '${want}' (use CPU, GPU or NPU)" ;;
+    esac
+}
+
+# Group owning the device node the pod is handed: the Intel render node for GPU,
+# the NPU accel node for NPU. k3d nodes share the host /dev, so the host GID is
+# the one the pod sees. Empty when there is no such node to read.
+agent_device_gid() {
+    local dev node
+    case "$1" in
+        GPU)
+            for dev in "${SYSROOT}"/sys/class/drm/renderD*/device; do
+                [ "$(cat "${dev}/vendor" 2>/dev/null)" = "0x8086" ] || continue
+                case "$(bound_driver "${dev}")" in xe|i915) ;; *) continue ;; esac
+                node=${dev%/device}
+                stat -c %g "${SYSROOT}/dev/dri/${node##*/}" 2>/dev/null && return 0
+            done
+            ;;
+        NPU)
+            for dev in "${SYSROOT}"/sys/class/accel/accel[0-9]*/device; do
+                [ "$(cat "${dev}/vendor" 2>/dev/null)" = "0x8086" ] || continue
+                [ "$(bound_driver "${dev}")" = intel_vpu ] || continue
+                node=${dev%/device}
+                stat -c %g "${SYSROOT}/dev/accel/${node##*/}" 2>/dev/null && return 0
+            done
+            ;;
+    esac
+    return 0
+}
+
+# CPU request, which is also the size of the balloon on a hybrid node. CPU
+# inference takes every P-core (hybrid) or half the node; GPU/NPU inference only
+# needs host threads for tokenizing and scheduling.
+agent_cpus() {
+    local device=$1 hybrid=$2 n
+    if [ -n "${K3D_GPU_AGENT_CPUS:-}" ]; then echo "${K3D_GPU_AGENT_CPUS}"; return 0; fi
+    if [ "${device}" != CPU ]; then echo 2; return 0; fi
+    if [ -n "${hybrid}" ]; then
+        n=$(cpu_list_count "$(hybrid_cpus core)")
+    else
+        n=$(( $(max_node_cpus) / 2 ))
+    fi
+    [ "${n}" -ge 1 ] || n=1
+    echo "${n}"
+}
+
+# Prints the namespace, model PVC, Deployment and Service. Choices go to stderr.
+agent_manifest() {
+    local sel device res gid="" hybrid="" amx="" cpus
+    sel=$(agent_device)
+    read -r device res <<< "${sel}"
+    [ -z "$(labelled_nodes "${HYBRID_LABEL}")" ] || hybrid=1
+    if [ "${device}" = CPU ] && [ -n "$(labelled_nodes feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true)" ]; then
+        amx=1
+    fi
+    cpus=$(agent_cpus "${device}" "${hybrid}")
+    [ "${device}" = CPU ] || gid=$(agent_device_gid "${device}")
+    info "agent: ${AGENT_MODEL} as '${AGENT_MODEL_NAME}' on ${device}${res#-}${amx:+ (AMX node)}${hybrid:+, P-cores}, ${cpus} CPU(s)" >&2
+
+    local item="            - " args
+    args="${item}--target_device=${device}"
+    [ -z "${AGENT_TOOL_PARSER}" ] || args+=$'\n'"${item}--tool_parser=${AGENT_TOOL_PARSER}"
+    [ -z "${AGENT_REASONING_PARSER}" ] || args+=$'\n'"${item}--reasoning_parser=${AGENT_REASONING_PARSER}"
+    # Optional pod fields, built here: quotes inside ${x:+...} in a heredoc are removed.
+    local podlabels="" podspec=""
+    [ -z "${hybrid}" ] || podlabels=$'\n        k3d-gpu.io/cores: performance'
+    [ -z "${gid}" ] || podspec+=$'\n        supplementalGroups: ['"${gid}"']'
+    [ -z "${amx}" ] || podspec+=$'\n      nodeSelector:\n        feature.node.kubernetes.io/cpu-cpuid.AMXTILE: "true"'
+
+    cat <<EOF
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${AGENT_NS}
+---
+# Models and the compiled-model cache live here, so restarts never re-download.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ovms-models
+  namespace: ${AGENT_NS}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: ${AGENT_STORAGE}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ovms
+  namespace: ${AGENT_NS}
+  labels:
+    app: ovms
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ovms
+  template:
+    metadata:
+      labels:
+        app: ovms${podlabels}
+      annotations:
+        k3d-gpu.io/agent-device: ${device}
+    spec:
+      securityContext:
+        runAsUser: 5000
+        runAsGroup: 5000
+        fsGroup: 5000${podspec}
+      initContainers:
+        # --pull downloads the model once and writes its graph.pbtxt (device,
+        # parsers). On later starts the files are already there and only the
+        # graph is rewritten, so a device change takes effect with no download.
+        - name: pull
+          image: ${AGENT_IMAGE}
+          imagePullPolicy: IfNotPresent
+          args:
+            - --pull
+            - --source_model=${AGENT_MODEL}
+            - --model_repository_path=/models
+            - --model_name=${AGENT_MODEL_NAME}
+            - --task=text_generation
+${args}
+          volumeMounts:
+            - name: models
+              mountPath: /models
+      containers:
+        - name: ovms
+          image: ${AGENT_IMAGE}
+          imagePullPolicy: IfNotPresent
+          args:
+            - --rest_port=8000
+            - --model_path=/models/${AGENT_MODEL}
+            - --model_name=${AGENT_MODEL_NAME}
+            - --cache_dir=/models/.ov_cache
+            - --log_level=INFO
+          ports:
+            - name: http
+              containerPort: 8000
+          # No liveness probe: compiling a model for a GPU takes minutes.
+          readinessProbe:
+            httpGet:
+              path: /v2/health/ready
+              port: http
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: "${cpus}"
+              memory: ${AGENT_MEMORY}
+EOF
+    [ "${res}" = - ] || printf '            limits:\n              %s: 1\n' "${res}"
+    cat <<EOF
+          volumeMounts:
+            - name: models
+              mountPath: /models
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: ovms-models
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ovms
+  namespace: ${AGENT_NS}
+spec:
+  selector:
+    app: ovms
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+EOF
+}
+
+# One short chat completion through the API server's service proxy: loads
+# anything still lazy and proves generation end to end. Prints the reply.
+agent_warmup() {
+    local body reply
+    body="{\"model\":\"${AGENT_MODEL_NAME}\",\"max_tokens\":32,\"chat_template_kwargs\":{\"enable_thinking\":false},\"messages\":[{\"role\":\"user\",\"content\":\"Reply with one short sentence: what are you?\"}]}"
+    reply=$(kubectl create --raw "${AGENT_PROXY}/v3/chat/completions" -f - <<< "${body}" 2>&1) \
+        || err "warm-up request failed: ${reply}"
+    info "warm-up reply: $(sed -n 's/.*"content":"\([^"]*\)".*/\1/p' <<< "${reply}" | sed -n 1p)"
+}
+
+cmd_agent_up() {
+    require kubectl
+    kubectl get nodes >/dev/null 2>&1 || err "no cluster reachable — run 'k3d-gpu up' first"
+    local manifest
+    manifest=$(agent_manifest)
+    kubectl apply -f - <<< "${manifest}"
+    info "Waiting for the model to download and load (first run fetches it into the PVC; up to ${AGENT_TIMEOUT}s)..."
+    kubectl -n "${AGENT_NS}" rollout status deployment/ovms --timeout="${AGENT_TIMEOUT}s" \
+        || err "server not ready — kubectl -n ${AGENT_NS} logs deploy/ovms -c pull; kubectl -n ${AGENT_NS} logs deploy/ovms"
+    agent_warmup
+    info "OpenAI API ready, model '${AGENT_MODEL_NAME}':
+       kubectl -n ${AGENT_NS} port-forward svc/ovms 8000:8000
+       curl http://localhost:8000/v3/chat/completions -H 'Content-Type: application/json' \\
+         -d '{\"model\":\"${AGENT_MODEL_NAME}\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}'"
+}
+
+cmd_agent_status() {
+    require kubectl
+    kubectl -n "${AGENT_NS}" get deployment,pod,pvc,service -o wide
+    info "device: $(kubectl -n "${AGENT_NS}" get deployment ovms -o jsonpath='{.spec.template.metadata.annotations.k3d-gpu\.io/agent-device}' 2>/dev/null || echo '?')"
+    info "models (/v1/config):"
+    kubectl get --raw "${AGENT_PROXY}/v1/config" 2>/dev/null || warn "server not answering yet"
+    echo ""
+}
+
+# Leaves the PVC so the next 'agent up' reuses the downloaded model.
+cmd_agent_down() {
+    require kubectl
+    kubectl -n "${AGENT_NS}" delete deployment/ovms service/ovms --ignore-not-found
+    info "Model cache kept in pvc/ovms-models. Remove everything: kubectl delete namespace ${AGENT_NS}"
+}
+
+cmd_agent() {
+    case "${1:-}" in
+        up)       cmd_agent_up ;;
+        down)     cmd_agent_down ;;
+        status)   cmd_agent_status ;;
+        manifest) agent_manifest ;;
+        *) err "usage: k3d-gpu agent up|down|status|manifest" ;;
+    esac
+}
+
 case "${1:-help}" in
     up)      cmd_up      ;;
     down)    cmd_down    ;;
@@ -2891,6 +3197,7 @@ case "${1:-help}" in
     doctor)  shift; cmd_doctor "$@" ;;
     logs)    cmd_logs    ;;
     host-setup) shift; cmd_host_setup "$@" ;;
+    agent)   cmd_agent "${2:-}" ;;
     version|--version|-v) echo "k3d-gpu ${VERSION}" ;;
     help|--help|-h) usage ;;
     *) usage; exit 1 ;;
