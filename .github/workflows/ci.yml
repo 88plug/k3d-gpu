@@ -180,6 +180,34 @@ jobs:
           hack/render-component
           git diff --exit-code -- share/ || { echo "::error::share/ differs from hack/render-component output; re-render and commit"; exit 1; }
 
+  packaging-tests:
+    name: Packaging consistency tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: tests/packaging_test.sh
+
+  deb-rpm:
+    name: Build and test .deb + .rpm (nfpm)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: packaging/check.sh nfpm
+
+  homebrew:
+    name: Homebrew formula style, audit, install, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: packaging/check.sh brew
+
+  nix-flake:
+    name: Nix flake check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: packaging/check.sh nix
+
   hadolint:
     name: Dockerfile lint
     runs-on: ubuntu-latest
