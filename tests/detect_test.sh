@@ -1353,6 +1353,14 @@ r=$(newroot perf-arc-x16)
 arc_card "${r}" 16
 perf_says "perf: card switch in an x16 slot is ok up to the root port" "${r}" 'ok: +0000:03:00\.0 \[8086:e20b\]: Gen1 x1 behind port 0000:02:01\.0 \(Gen1 x1\): the link can reach the device maximum; no narrower link up to root port 0000:00:01\.0'
 perf_says "perf: card switch in an x16 slot does not warn" "${r}" 'warn: 0000:03:00\.0' negate
+# Two narrowing hops: the one nearest the GPU is reported.
+r=$(newroot perf-two-hops)
+kernel "${r}" 6.6.0
+hop "${r}" 0000:00:01.0 0x060400 "16.0 GT/s PCIe" 4
+hop "${r}" 0000:00:01.0/0000:01:00.0 0x060400 "16.0 GT/s PCIe" 8
+hop "${r}" 0000:00:01.0/0000:01:00.0/0000:02:01.0 0x060400 "8.0 GT/s PCIe" 16
+hop "${r}" 0000:00:01.0/0000:01:00.0/0000:02:01.0/0000:03:00.0 0x030000 "16.0 GT/s PCIe" 16 0x8086 0xe20b
+perf_says "perf: two narrow hops report the one nearest the GPU" "${r}" 'warn: 0000:03:00\.0 \[8086:e20b\]: device Gen4 x16, upstream port 0000:02:01\.0 Gen3 x16: the link trains at most Gen3 x16'
 
 # IA32_TME_ACTIVATE: active only when locked (bit 0) and enabled (bit 1), as the
 # kernel's detect_tme_early() reads it.
