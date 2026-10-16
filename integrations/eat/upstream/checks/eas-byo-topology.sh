@@ -64,6 +64,9 @@ echo "[${SERVER},$(agent 0),$(agent 1)]" > "${WORK}/three.json"
 # agent-1 already carries a workload-class label set by hand.
 HAND='{"metadata":{"name":"agent-1","labels":{"workload-class":"gpu"}}}'
 echo "[${SERVER},$(agent 0),${HAND}]" > "${WORK}/hand.json"
+# Three control-plane nodes and no workers: only the control-plane label task runs.
+cpnode() { printf '{"metadata":{"name":"server-%s","labels":{"node-role.kubernetes.io/control-plane":""}}}' "$1"; }
+echo "[$(cpnode 0),$(cpnode 1),$(cpnode 2)]" > "${WORK}/allcp.json"
 
 for tasks in install apply_node_topology; do
     cat > "${WORK}/${tasks}.yml" <<EOF
@@ -113,5 +116,7 @@ check "BYO 3 nodes, one hand label" install hand.json "agent-0=inference server-
 DENY=k8s_info check "BYO, no node list RBAC"  install three.json "" -e existing_kubernetes=/k -e node_topology_enabled=true
 DENY=k8s check "BYO, no node patch RBAC"      install three.json "" -e existing_kubernetes=/k -e node_topology_enabled=true
 DENY=k8s check "managed, no node patch RBAC"  apply_node_topology three.json "playbook-fails" -e _k8s_needs_ssh=true
+check "managed all-CP"              apply_node_topology allcp.json "server-0=platform server-1=platform server-2=platform " -e _k8s_needs_ssh=true
+DENY=k8s check "managed all-CP, no patch RBAC" apply_node_topology allcp.json "playbook-fails" -e _k8s_needs_ssh=true
 
 [ "${FAILS}" -eq 0 ]
