@@ -400,13 +400,22 @@ resources:
   limits: {gpu.intel.com/dxg: 1}
 ```
 
-**NVIDIA.** This uses the normal `nvidia` path. NVIDIA Container Toolkit sees
-`libdxcore.so` and switches to WSL mode. `nvidia-ctk cdi generate` then writes one
-`nvidia.com/gpu=all` device with `/dev/dxg`, the libraries from `/usr/lib/wsl/lib`
-and the driver-store files. A hook links `/usr/bin/nvidia-smi` to the driver store.
-`--gpus=all` gives the node those files. The NVIDIA device plugin (v0.19.1+)
-reports one `all` device on WSL. Docker Desktop ships the toolkit itself. A
-`dockerd` inside the WSL distro needs `nvidia-container-toolkit` installed there.
+**NVIDIA.** This uses the normal `nvidia` path, which works in two layers.
+First, `--gpus=all` gives the node container the GPU. Docker does that with
+either the legacy `nvidia-container-runtime-hook` (libnvidia-container) or, when
+the daemon resolves `--gpus` through CDI, a spec from `nvidia-ctk cdi generate`.
+Both find `libdxcore.so` and switch to WSL mode: they mount `/dev/dxg`, the
+libraries from `/usr/lib/wsl/lib` and the NVIDIA driver-store files. Second,
+inside the node, k3s containerd runs pods with the image's `nvidia` runtime, which
+has to detect WSL mode again from the `/dev/dxg` and `libdxcore.so` the first
+layer gave the node. The NVIDIA device plugin (v0.19.1+) reports one `all` device
+on WSL. Docker Desktop ships the toolkit itself. A `dockerd` inside the WSL
+distro needs `nvidia-container-toolkit` installed there.
+
+With both vendors, the node gets the read-only `/usr/lib/wsl` bind and the
+toolkit's mounts of files inside that same tree. The toolkit only mounts over
+paths that already exist in the bind (same source tree), which a read-only
+parent allows; it would fail only on a path missing from the bind.
 
 **Docker Desktop or `dockerd` in the distro.** Both run on the same WSL2 kernel,
 so `/dev/dxg` exists for either one. With Docker Desktop, the `/usr/lib/wsl` bind
@@ -423,6 +432,8 @@ documents GPU support for NVIDIA only.
 > docker run --rm -v /usr/lib/wsl:/usr/lib/wsl:ro busybox:1.37 ls /usr/lib/wsl/lib   # bind source resolves (Docker Desktop too)
 > k3d-gpu detect && k3d-gpu up && k3d-gpu test                               # expect wsl=1, /dev/dxg listed
 > kubectl -n kube-system logs ds/intel-gpu-plugin-wsl -c intel-gpu-levelzero  # Level Zero found the Intel GPU
+> kubectl describe node | grep nvidia.com/gpu                                # NVIDIA on WSL: node runtime resolved WSL mode
+> docker exec k3d-gpu-server-0 nvidia-smi                                    # Intel + NVIDIA: node started, toolkit mounts landed
 > ```
 >
 > The last proof is a pod with `gpu.intel.com/dxg: 1` running `clinfo` from

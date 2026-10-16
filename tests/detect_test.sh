@@ -3047,7 +3047,7 @@ if [ -n "${gpu_tag}" ] && [ -z "${drift}" ]; then
     PASS=$((PASS + 1)); echo "ok   every intel-device-plugins image matches intel-gpu-plugin:${gpu_tag}"
 else
     FAILS=$((FAILS + 1)); echo "FAIL intel-device-plugins images differ from intel-gpu-plugin:${gpu_tag}"
-    sed 's/^/  | /' <<< "${drift}"
+    while read -r line; do echo "  | ${line}"; done <<< "${drift}"
 fi
 
 echo ""
