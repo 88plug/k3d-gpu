@@ -45,9 +45,10 @@ never estimated. Every "no other" claim refers to the search log in
   and idles, registering nothing, when there is no Intel GPU; the NVIDIA plugin
   runs unless the node carries `nvidia.com/gpu.present=false`, which `up` sets
   when NVIDIA is not active.
-- **Platform-aware `doctor`.** Kernel and firmware checks per platform (Meteor,
-  Arrow, Lunar, Panther and Wildcat Lake, Battlemage, Nova Lake), the
-  `xe.force_probe=<id>` needed for parts newer than the kernel, and the missing
+- **Platform-aware `doctor`.** Kernel and firmware checks per platform (Alder,
+  Raptor, Meteor, Arrow, Lunar, Panther and Wildcat Lake, Battlemage, Nova Lake),
+  the `xe.force_probe=<id>` or `i915.force_probe=<id>` needed for parts newer than
+  the kernel, and the missing
   host step for DSA/IAA work queues (`accel-config`) and QAT VFs
   (`sriov_numvfs`, `vfio-pci`). The launcher never changes host configuration
   itself.
@@ -104,14 +105,15 @@ the plugins, and asserts the result, with no manual step.
 | Engine | Kubernetes resource / label | Detected | Scheduled | Verified on hardware | Verified by sim (cases in `tests/detect_test.sh`) |
 |--------|-----------------------------|----------|-----------|----------------------|------------------------------------------------|
 | NVIDIA GPU | `nvidia.com/gpu` | yes | yes | **yes**, 2 GPUs; `nvidia-smi` pod passed | loaded module; `/dev/nvidiactl`; runtime vs. CDI-only; `test` output and failure |
-| Intel GPU, `i915` | `gpu.intel.com/i915` | yes | yes | **yes**, UHD 770; device-listing pod passed | Meteor Lake, Arrow Lake-S kernel check, mixed `i915` + `xe` |
+| Intel GPU, `i915` | `gpu.intel.com/i915`; node labels `gpu.intel.com/xmx`, `media-vcs`, `media-vecs` | yes | yes | **yes**, UHD 770; device-listing pod passed | Alder / Raptor Lake names, kernels and GuC firmware, Meteor Lake, Arrow Lake-H/-S, mixed `i915` + `xe`, XMX and media-engine labels |
 | Intel GPU, `xe` (Battlemage, Lunar / Panther Lake, Crescent Island) | `gpu.intel.com/xe` | yes | yes | no | Lunar Lake, Battlemage dGPU, kernel/firmware checks, `xe.force_probe` hints, `vfio-pci` excluded |
-| Intel NPU | `npu.intel.com/accel` | yes | yes | no | Lunar / Meteor Lake, NPU vs. Gaudi, unbound NPU, firmware checks, forced `npu` fails `doctor` |
+| Intel NPU | `npu.intel.com/accel`; node label `k3d-gpu.io/npu.gen` | yes | yes | no | Lunar / Meteor Lake, `0x7d1d` named by CPU model (Meteor Lake vs. Arrow Lake-H), NPU vs. Gaudi, unbound NPU, firmware checks, forced `npu` fails `doctor` |
 | Gaudi 3 | `habana.ai/gaudi` | yes | yes (plain mode, no habana runtime) | no | `habanalabs` accel nodes, no-driver case, NPU + Gaudi on one host |
 | DSA | `dsa.intel.com/wq-user-*` | yes | yes | no | user work queues, no-work-queue case, `accel-config` hint, forced `dsa` fails `doctor` |
 | IAA | `iaa.intel.com/wq-user-*` | yes | yes | no | user work queues, no-work-queue case, `accel-config` hint |
 | QAT (C62x, 4xxx, 420xx, 6xxx) | `qat.intel.com/*` | yes | yes | no | 4xxx and C62x PF with VFs, no VFs, unbound PF, `vfio-pci` check |
 | AMX | `feature.node.kubernetes.io/cpu-cpuid.AMX*=true` (labels, no plugin) | yes | yes (labels) | no | AMX flags detected and reported; CPU without AMX |
+| CPU ISA (AVX-VNNI, AVX-512, VAES, GFNI, SHA, CET) | `feature.node.kubernetes.io/cpu-cpuid.<NAME>=true` (NFD names, labels only) | yes | yes (labels) | labels read on the UHD 770 host by `doctor`; not applied to a live cluster | NFD name mapping, `pku` unlabelled, no-flag CPU |
 | Hybrid P/E cores | `k3d-gpu.io/hybrid-cpu=true`; pod label `k3d-gpu.io/cores` | yes | yes | **yes** at `109154d`: performance pod on CPU 0, efficient pod on CPU 20. The strict placement check in `test` is sim-only so far. | detection, no online E-cores, non-hybrid, forced, `doctor` lists, `test` placement pass and both failure modes |
 
 The `xe`, NPU, Gaudi and Xeon rows have not run on hardware. If you have one of

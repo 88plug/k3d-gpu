@@ -9,6 +9,15 @@ Sources (kernel paths are Linux v6.18 (torvalds/linux tag v6.18)):
 - i915/mtl_guc_70.bin, intel/vpu/vpu_37xx_v1.bin: linux-firmware tag 20260916 WHENCE.
 - 8 P + 16 E cores: Intel ark, Core Ultra 9 285K (product 241060); cpu_core/cpu_atom
   files per tools/perf/Documentation/intel-hybrid.txt.
+- cpu family 6, model 198: INTEL_ARROWLAKE IFM(6, 0xC6) in
+  arch/x86/include/asm/intel-family.h.
+- No XMX: Mesa main include/pci_ids/iris_pci_ids.h maps 0x7d67 to arl_u, whose
+  src/intel/dev/intel_device_info.c entry (MTL_CONFIG) sets has_systolic = false.
+- card0/engine/{rcs0,vcs0,vcs1,vecs0}/capabilities: i915 engine sysfs
+  (drivers/gpu/drm/i915/gt/sysfs_engines.c). The MTL-derived media GT has VCS0,
+  VCS2 and VECS0 (xelpmp_extra_gt in drivers/gpu/drm/i915/i915_pci.c), exposed as
+  vcs0, vcs1 and vecs0; every VCS lists hevc from graphics version 11
+  (intel_engine_cs.c __setup_engine_capabilities); rcs0 lists nothing.
 
 Layout: sysfs paths and relative symlinks follow the driver core's naming
 (class devices under <pci dev>/<class>/<name>; /sys/class/<class>/<name> and
@@ -17,4 +26,6 @@ in exactly the form tests/fixtures/capture.sh writes (the matrix test re-capture
 each tree and requires an identical result).
 
 Not from hardware: the P/E CPU numbering (0-7 P, 8-23 E), the kernel release
-string, and the cpuinfo flags line.
+string, the cpuinfo flags line, and the sfc capability on each VCS and the VECS
+(Xe_HP and newer media read SFC presence from a fuse register; the values copy
+the captured raptorlake-nvidia UHD 770).

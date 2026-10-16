@@ -7,6 +7,7 @@
 ==> Detected accelerators: dsa iaa qat amx
 ==> Intel CPU built-in accelerators...
   ok: AMX (amx_bf16 amx_int8 amx_tile) — CPU instructions, usable in any pod; up labels nodes feature.node.kubernetes.io/cpu-cpuid.AMX*
+  ok: CPU ISA: AVX512BF16 AVX512F AVX512VNNI — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
   ok: DSA: 2 device(s), 1 user work queue(s) — deployed by 'k3d-gpu up' (intel-dsa-plugin)
   ok: IAA: 2 device(s), 1 user work queue(s) — deployed by 'k3d-gpu up' (intel-iaa-plugin)
   ok: QAT 0000:6b:00.0: 4 VF(s) — deployed by 'k3d-gpu up' (intel-qat-plugin binds them to vfio-pci)

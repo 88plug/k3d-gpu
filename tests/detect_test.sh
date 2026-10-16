@@ -284,6 +284,159 @@ kernel "${r}" 6.10.4
 pci "${r}" 0000:00:02.0 0x8086 0xb640 i915; render "${r}" 0000:00:02.0 128
 doctor_says "Arrow Lake-S 0xb640 needs kernel 6.12" "${r}" 'Arrow Lake.*6\.12'
 
+# cpuinfo <root> <family> <model> <flags>: the first CPU's family, model and flags.
+cpuinfo() {
+    mkdir -p "$1/proc"
+    printf 'processor\t: 0\ncpu family\t: %s\nmodel\t\t: %s\nmodel name\t: Fake CPU\nflags\t\t: %s\n' "$2" "$3" "$4" > "$1/proc/cpuinfo"
+}
+
+# engine <root> <bdf> <card> <engine> [capabilities]: an i915 engine dir under
+# /sys/class/drm/<card>/engine (drivers/gpu/drm/i915/gt/sysfs_engines.c).
+engine() {
+    local d="$1/sys/devices/pci0000:00/$2/drm/$3"
+    mkdir -p "${d}/engine/$4"
+    ln -sfn "$1/sys/devices/pci0000:00/$2" "${d}/device"
+    ln -sfn "${d}" "$1/sys/class/drm/$3"
+    printf '%s' "${5:+$5$'\n'}" > "${d}/engine/$4/capabilities"
+}
+
+# Alder Lake / Raptor Lake iGPUs on i915: name, default-binding kernel, GuC firmware.
+r=$(newroot rpl-s)
+kernel "${r}" 6.6.128
+pci "${r}" 0000:00:02.0 0x8086 0xa780 i915; render "${r}" 0000:00:02.0 128
+firmware "${r}" i915/tgl_guc_70.bin
+doctor_says "Raptor Lake-S UHD 770 (0xa780) is named" "${r}" 'ok: Intel Raptor Lake-S \(0xa780\) bound to i915'
+doctor_says "Raptor Lake-S checks the tgl GuC firmware" "${r}" 'ok: i915/tgl_guc_\* firmware present'
+doctor_says "Raptor Lake-S on 6.6 has no kernel warning" "${r}" 'needs kernel' negate
+
+r=$(newroot adl-p-nofw)
+kernel "${r}" 6.8.0
+pci "${r}" 0000:00:02.0 0x8086 0x46a6 i915; render "${r}" 0000:00:02.0 128
+doctor_says "Alder Lake-P iGPU wants the adlp GuC firmware" "${r}" 'warn.*i915/adlp_guc_\* firmware not found'
+
+r=$(newroot adl-n-old)
+kernel "${r}" 6.8.0
+pci "${r}" 0000:00:02.0 0x8086 0x46d3 i915; render "${r}" 0000:00:02.0 128
+doctor_says "Alder Lake-N 0x46d3 needs kernel 6.9 and names i915.force_probe" "${r}" 'Alder Lake-N \(0x46d3\) needs kernel 6\.9\+.*i915\.force_probe=46d3'
+r=$(newroot adl-n)
+kernel "${r}" 6.8.0
+pci "${r}" 0000:00:02.0 0x8086 0x46d1 i915; render "${r}" 0000:00:02.0 128
+doctor_says "Alder Lake-N 0x46d1 is bound by default on 6.8" "${r}" 'needs kernel' negate
+
+r=$(newroot rpl-u-old)
+kernel "${r}" 6.6.10
+pci "${r}" 0000:00:02.0 0x8086 0xa7ac i915; render "${r}" 0000:00:02.0 128
+doctor_says "Raptor Lake-U 0xa7ac needs kernel 6.7" "${r}" 'Raptor Lake-P/U \(0xa7ac\) needs kernel 6\.7\+'
+
+r=$(newroot rpl-unbound)
+kernel "${r}" 6.6.128
+pci "${r}" 0000:00:02.0 0x8086 0xa780 "" 0x030000
+doctor_says "unbound Raptor Lake-S iGPU points at i915" "${r}" 'Raptor Lake-S \(0xa780\) has no driver .*modprobe i915'
+doctor_says "unbound i915 part is not told to block i915" "${r}" 'i915\.force_probe=!' negate
+
+r=$(newroot adl-s-old)
+kernel "${r}" 5.15.0
+pci "${r}" 0000:00:02.0 0x8086 0x4680 i915; render "${r}" 0000:00:02.0 128
+doctor_says "Alder Lake-S needs kernel 5.16 (i915 force_probe dropped)" "${r}" 'Alder Lake-S \(0x4680\) needs kernel 5\.16\+'
+
+# Every i915 row's default-binding kernel: one release older warns with
+# i915.force_probe, the release itself does not. Kernels: the first release whose
+# i915_pciids.h lists the id and whose i915_pci.c does not require force_probe.
+while read -r id name older mink; do
+    name=${name//_/ }
+    r=$(newroot "i915-${id}-old")
+    kernel "${r}" "${older}.0"
+    pci "${r}" 0000:00:02.0 0x8086 "${id}" i915; render "${r}" 0000:00:02.0 128
+    doctor_says "${name} ${id} on ${older} needs kernel ${mink}" "${r}" "${name} \\(${id}\\) needs kernel ${mink//./\\.}\\+.*i915\\.force_probe=${id#0x}"
+    r=$(newroot "i915-${id}")
+    kernel "${r}" "${mink}.0"
+    pci "${r}" 0000:00:02.0 0x8086 "${id}" i915; render "${r}" 0000:00:02.0 128
+    doctor_says "${name} ${id} is bound by default on ${mink}" "${r}" 'needs kernel' negate
+done <<'ROWS'
+0x4680 Alder_Lake-S 5.15 5.16
+0x468b Alder_Lake-S 6.0 6.1
+0x46a6 Alder_Lake-P 5.16 5.17
+0x46d1 Alder_Lake-N 5.17 5.18
+0x46d3 Alder_Lake-N 6.8 6.9
+0xa780 Raptor_Lake-S 5.16 5.17
+0xa78a Raptor_Lake-S 5.18 5.19
+0xa7a0 Raptor_Lake-P/U 5.18 5.19
+0xa7ac Raptor_Lake-P/U 6.6 6.7
+0x7d55 Meteor_Lake 6.6 6.7
+0x7d51 Arrow_Lake-H 6.8 6.9
+0x7d41 Arrow_Lake-U 6.8 6.9
+0x7d67 Arrow_Lake-S 6.6 6.7
+ROWS
+
+# NPU 0x7d1d is Meteor Lake and Arrow Lake-H; the CPU model tells them apart.
+r=$(newroot npu-7d1d-arlh)
+kernel "${r}" 6.14.0
+cpuinfo "${r}" 6 197 "fpu avx_vnni"
+pci "${r}" 0000:00:0b.0 0x8086 0x7d1d intel_vpu; accel "${r}" 0000:00:0b.0 0
+doctor_says "NPU 0x7d1d on an Arrow Lake-H CPU (model 197) is Arrow Lake-H" "${r}" 'ok: Intel NPU Arrow Lake-H \(0x7d1d\)'
+doctor_says "NPU generation is a node label" "${r}" 'up labels the node k3d-gpu\.io/npu\.gen=37xx'
+r=$(newroot npu-7d1d-mtl)
+kernel "${r}" 6.14.0
+cpuinfo "${r}" 6 170 "fpu"
+pci "${r}" 0000:00:0b.0 0x8086 0x7d1d intel_vpu; accel "${r}" 0000:00:0b.0 0
+doctor_says "NPU 0x7d1d on a Meteor Lake CPU (model 170) is Meteor Lake" "${r}" 'ok: Intel NPU Meteor Lake \(0x7d1d\)'
+r=$(newroot npu-7d1d-unknown)
+kernel "${r}" 6.14.0
+pci "${r}" 0000:00:0b.0 0x8086 0x7d1d intel_vpu; accel "${r}" 0000:00:0b.0 0
+doctor_says "NPU 0x7d1d with no CPU model names both platforms" "${r}" 'ok: Intel NPU Meteor Lake / Arrow Lake-H \(0x7d1d\)'
+r=$(newroot npu-7d1d-other-family)
+kernel "${r}" 6.14.0
+cpuinfo "${r}" 18 197 "fpu"
+pci "${r}" 0000:00:0b.0 0x8086 0x7d1d intel_vpu; accel "${r}" 0000:00:0b.0 0
+doctor_says "model 197 outside family 6 is not Arrow Lake-H" "${r}" 'ok: Intel NPU Meteor Lake / Arrow Lake-H \(0x7d1d\)'
+
+# XMX label from the platform: Arrow Lake-H has XMX, Arrow Lake-S does not.
+r=$(newroot xmx-arlh)
+kernel "${r}" 6.14.0
+pci "${r}" 0000:00:02.0 0x8086 0x7d51 i915; render "${r}" 0000:00:02.0 128
+doctor_says "Arrow Lake-H iGPU 0x7d51 is named" "${r}" 'ok: Intel Arrow Lake-H \(0x7d51\)'
+doctor_says "Arrow Lake-H iGPU gets xmx=true" "${r}" 'up labels the node gpu\.intel\.com/xmx=true'
+r=$(newroot xmx-arls)
+kernel "${r}" 6.14.0
+pci "${r}" 0000:00:02.0 0x8086 0x7d67 i915; render "${r}" 0000:00:02.0 128
+doctor_says "Arrow Lake-S iGPU 0x7d67 is named" "${r}" 'ok: Intel Arrow Lake-S \(0x7d67\)'
+doctor_says "Arrow Lake-S iGPU gets xmx=false" "${r}" 'up labels the node gpu\.intel\.com/xmx=false'
+r=$(newroot xmx-mixed)
+kernel "${r}" 6.14.0
+pci "${r}" 0000:00:02.0 0x8086 0x7d55 i915; render "${r}" 0000:00:02.0 128
+pci "${r}" 0000:03:00.0 0x8086 0xe20b xe;   render "${r}" 0000:03:00.0 129
+doctor_says "Meteor Lake iGPU + Battlemage dGPU node has XMX" "${r}" 'gpu\.intel\.com/xmx=true'
+r=$(newroot xmx-unknown)
+kernel "${r}" 7.3.0
+pci "${r}" 0000:17:00.0 0x8086 0x674c xe; render "${r}" 0000:17:00.0 128
+doctor_says "a GPU with no XMX entry gets no xmx label" "${r}" 'xmx=' negate
+
+# Media engines from i915's engine/*/capabilities (values from the captured UHD 770).
+r=$(newroot media)
+kernel "${r}" 6.6.128
+pci "${r}" 0000:00:02.0 0x8086 0xa780 i915; render "${r}" 0000:00:02.0 128
+engine "${r}" 0000:00:02.0 card0 rcs0
+engine "${r}" 0000:00:02.0 card0 vcs0 "hevc sfc"
+engine "${r}" 0000:00:02.0 card0 vcs1 "hevc sfc"
+engine "${r}" 0000:00:02.0 card0 vecs0 sfc
+doctor_says "media engines are listed with their capabilities" "${r}" 'ok: card0 media engines: vcs0 \(hevc sfc\), vcs1 \(hevc sfc\), vecs0 \(sfc\)'
+doctor_says "media engine counts are node labels" "${r}" 'gpu\.intel\.com/xmx=false gpu\.intel\.com/media-vcs=2 gpu\.intel\.com/media-vecs=1'
+r=$(newroot media-xe)
+kernel "${r}" 6.18.1
+pci "${r}" 0000:03:00.0 0x8086 0xe20b xe; render "${r}" 0000:03:00.0 128
+doctor_says "xe GPU without an engine dir gets no media label" "${r}" 'media-vcs' negate
+
+# CPU ISA labels under NFD's names (klauspost/cpuid feature ids).
+r=$(newroot isa)
+kernel "${r}" 6.6.128
+cpuinfo "${r}" 6 143 "fpu sha_ni user_shstk avx_vnni pku gfni vaes ibt avx512f avx512_vnni avx512_bf16 amx_tile avx_vnni_x AVX_VNNI"
+doctor_says "CPU ISA flags are reported under NFD names" "${r}" 'ok: CPU ISA: AVX512BF16 AVX512F AVX512VNNI AVXVNNI CETIBT CETSS GFNI SHA VAES — up labels'
+doctor_says "pku has no NFD name and is not labelled" "${r}" 'PKU' negate
+r=$(newroot isa-none)
+kernel "${r}" 6.6.128
+cpuinfo "${r}" 6 143 "fpu sse2"
+doctor_says "a CPU with none of the ISA flags prints no ISA line" "${r}" 'CPU ISA' negate
+
 r=$(newroot nvidia-dev)
 kernel "${r}" 6.12.10
 mkdir -p "${r}/sys/module/nvidia"; touch "${r}/dev/nvidiactl"

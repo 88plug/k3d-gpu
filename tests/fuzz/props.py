@@ -257,12 +257,14 @@ def gen_sysfs(r):
                 "device": mutate(r, r.choice(["0x7d55", "0x643e", "0x1060", "0xe20b"])),
                 "driver": r.choice(drivers)}
     cpus = lambda: None if r.random() < 0.2 else mutate(r, gen_cpulist(r, 31))
-    flags = ["fpu", "vme", "amx_tile", "amx_bf16", "amx_int8", "amx_fp16", "sse4_2"]
+    flags = ["fpu", "vme", "amx_tile", "amx_bf16", "amx_int8", "amx_fp16", "sse4_2",
+             "avx_vnni", "sha_ni", "ibt", "user_shstk", "pku", "gfni", "avx512_bf16"]
     cpuinfo = None
     if r.random() < 0.8:
         fl = " ".join(r.sample(flags, r.randint(0, len(flags))))
         if r.random() < 0.3:
-            fl += r.choice([" amx_A.b/c", " amx_x@y;z", " amx_", "\tamx_tile", " amx_é"])
+            fl += r.choice([" amx_A.b/c", " amx_x@y;z", " amx_", "\tamx_tile", " amx_é",
+                            "\tavx_vnni", " AVX_VNNI", " avx_vnni_x", " sha_ni\t", " gfni\r"])
         cpuinfo = r.choice(["processor\t: 0\n", ""]) + "flags\t\t: " + fl + "\n" \
             + r.choice(["", "flags\t\t: amx_complex\n"])
     return {
@@ -485,8 +487,28 @@ def check_sysfs(trees):
             continue
         labels = shim("amx_labels", [], root)[0][1]
         badl = [ln for ln in labels.split("\n") if ln and not LABEL.fullmatch(ln)]
-        out.append("invalid AMX node label %r" % badl[0] if badl else None)
+        if badl:
+            out.append("invalid AMX node label %r" % badl[0])
+            continue
+        isa = shim("cpu_isa_labels", [], root)[0][1]
+        want = oracle_isa(t)
+        out.append(None if isa.split("\n") == (want or [""]) else "ISA labels %r, oracle %r" % (isa[:200], want))
     return out
+
+
+# Kernel flag -> NFD cpuid name (klauspost/cpuid feature id), per NFD v0.20.0.
+NFD_CPUID = {"avx_vnni": "AVXVNNI", "avx512f": "AVX512F", "avx512_vnni": "AVX512VNNI",
+             "avx512_bf16": "AVX512BF16", "vaes": "VAES", "gfni": "GFNI", "sha_ni": "SHA",
+             "ibt": "CETIBT", "user_shstk": "CETSS"}
+
+
+def oracle_isa(t):
+    """ISA labels from the first flags line; tokens split on single spaces, matched exactly."""
+    if t["cpuinfo"] is None:
+        return []
+    line = next((ln for ln in t["cpuinfo"].split("\n") if re.match(r"flags[ \t]*:", ln)), "")
+    names = {NFD_CPUID[tok] for tok in line.partition(":")[2].split(" ") if tok in NFD_CPUID}
+    return ["feature.node.kubernetes.io/cpu-cpuid.%s=true" % n for n in sorted(names)]
 
 
 # ---- known launcher bugs -----------------------------------------------------------

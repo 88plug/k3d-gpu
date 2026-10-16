@@ -15,6 +15,11 @@ k3d cluster create gpu
   --k3s-node-label=nvidia.com/gpu.present=false@server:*;agent:*
   --k3s-node-label=intel.feature.node.kubernetes.io/npu=true@server:*;agent:*
   --k3s-node-label=k3d-gpu.io/hybrid-cpu=true@server:*;agent:*
+  --k3s-node-label=gpu.intel.com/xmx=false@server:*;agent:*
+  --k3s-node-label=gpu.intel.com/media-vcs=2@server:*;agent:*
+  --k3s-node-label=gpu.intel.com/media-vecs=1@server:*;agent:*
+  --k3s-node-label=k3d-gpu.io/npu.gen=37xx@server:*;agent:*
+  --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AVXVNNI=true@server:*;agent:*
 kubectl wait --for=condition=Ready nodes --all --timeout=120s
 kubectl -n kube-system get daemonset intel-gpu-plugin
 kubectl -n kube-system get daemonset intel-npu-plugin

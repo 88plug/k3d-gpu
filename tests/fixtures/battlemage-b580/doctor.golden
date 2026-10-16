@@ -8,6 +8,9 @@
 ==> Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...
   ok: Intel Battlemage (0xe20b) bound to xe
   ok: xe/bmg_guc_* firmware present
+  ok: up labels the node gpu.intel.com/xmx=true
+==> Intel CPU built-in accelerators...
+  ok: CPU ISA: AVX512BF16 AVX512F AVX512VNNI — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
 
 ==> All checks passed.
 exit=0

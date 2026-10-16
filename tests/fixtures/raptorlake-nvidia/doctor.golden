@@ -12,8 +12,12 @@
 ==> Checking docker NVIDIA runtime...
   ok: no nvidia runtime, but nvidia.com/gpu CDI devices are registered (--gpus uses CDI)
 ==> Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...
-  ok: Intel GPU (0xa780) bound to i915
+  ok: Intel Raptor Lake-S (0xa780) bound to i915
+  ok: i915/tgl_guc_* firmware present
+  ok: card0 media engines: vcs0 (hevc sfc), vcs1 (hevc sfc), vecs0 (sfc)
+  ok: up labels the node gpu.intel.com/xmx=false gpu.intel.com/media-vcs=2 gpu.intel.com/media-vecs=1
 ==> Intel CPU built-in accelerators...
+  ok: CPU ISA: AVXVNNI CETIBT CETSS GFNI SHA VAES — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
   ok: hybrid CPU: P-cores 0-15, E-cores 16-31 — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient
 
 ==> All checks passed.

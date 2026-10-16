@@ -4,7 +4,10 @@ SFF Ada, 0x28b0 RTX 2000 Ada) on the nvidia driver, kernel 6.6, Docker 29 with
 NVIDIA CDI devices registered but no nvidia runtime.
 
 Source: CAPTURED from real hardware (the k3d-gpu development host, 2026-10-16)
-with tests/fixtures/capture.sh; nothing under sysroot/ was edited by hand.
+with tests/fixtures/capture.sh; nothing under sysroot/ was edited by hand. The
+cpuinfo family/model lines and the i915 card0/engine/*/capabilities files come from
+a later capture of the same host (same day) after capture.sh learned to read them;
+every other entry of that capture was identical.
 env records that host's Docker state (`docker info` runtimes: io.containerd.runc.v2
 runc; CDI ids nvidia.com/gpu=0, =1, =all; per-GPU UUID ids dropped) and that
 nvidia-ctk and nvidia-container-runtime are installed. Device names: pci.ids 2026.10.15.

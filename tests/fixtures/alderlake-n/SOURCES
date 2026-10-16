@@ -1,0 +1,28 @@
+Platform: Intel N100 mini PC (Alder Lake-N, 4 E-cores, no P-cores, no SMT, no NPU):
+UHD Graphics iGPU on i915, GuC firmware installed, Ubuntu 24.04 HWE-style kernel.
+
+Sources (kernel paths are Linux v6.18 (torvalds/linux tag v6.18) unless a tag is named):
+- 0x8086 0x46d1 "Alder Lake-N [UHD Graphics]": pci.ids 2026.10.15; INTEL_ADLN_IDS in
+  include/drm/intel/pciids.h, first listed in include/drm/i915_pciids.h at v5.18 and
+  bound through adl_p_info, which has had no require_force_probe since v5.17
+  (drivers/gpu/drm/i915/i915_pci.c).
+- i915/adlp_guc_70.bin: drivers/gpu/drm/i915/gt/uc/intel_uc_fw.c (ALDERLAKE_P ->
+  guc_maj(adlp, 70, ...)); linux-firmware tag 20260916 WHENCE.
+- cpu family 6, model 190: INTEL_ATOM_GRACEMONT IFM(6, 0xBE) "Alderlake N" in
+  arch/x86/include/asm/intel-family.h; CPUID B06E0 in the source below.
+- flags line: lscpu "Flags:" of a real N100 (kernel 6.1.27), sbc-bench result
+  https://raw.githubusercontent.com/ThomasKaiser/sbc-bench/master/results/4vxM.txt
+  (lscpu prints the /proc/cpuinfo flags). That kernel predates user_shstk (6.6).
+- No /sys/devices/cpu_core or cpu_atom: the kernel registers hybrid PMUs only on
+  hybrid parts (tools/perf/Documentation/intel-hybrid.txt), and Alder Lake-N is E-core only.
+
+Layout: sysfs paths and relative symlinks follow the driver core's naming
+(class devices under <pci dev>/<class>/<name>; /sys/class/<class>/<name> and
+/sys/bus/pci/devices/<bdf> as relative links; <dev>/driver -> bus/pci/drivers/<drv>),
+in exactly the form tests/fixtures/capture.sh writes (the matrix test re-captures
+each tree and requires an identical result).
+
+Not from hardware: the kernel release string, the iGPU at 00:02.0 (the Intel client
+iGPU BDF, as on the captured raptorlake-nvidia host), and the absence of i915
+engine directories (the N-series VDBox fusing is not verified, so no media engines
+are modelled).

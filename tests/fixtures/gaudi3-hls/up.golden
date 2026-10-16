@@ -15,6 +15,9 @@ k3d cluster create gpu
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true@server:*;agent:*
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AMXINT8=true@server:*;agent:*
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true@server:*;agent:*
+  --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AVX512BF16=true@server:*;agent:*
+  --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AVX512F=true@server:*;agent:*
+  --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AVX512VNNI=true@server:*;agent:*
 kubectl wait --for=condition=Ready nodes --all --timeout=120s
 kubectl -n habana-system get daemonset habanalabs-device-plugin-daemonset
 kubectl -n habana-system rollout status daemonset/habanalabs-device-plugin-daemonset --timeout=120s
