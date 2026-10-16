@@ -43,8 +43,13 @@
 
 set -euo pipefail
 
+VERSION="0.1.21"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
-IMAGE="${K3D_GPU_IMAGE:-cryptoandcoffee/k3d-gpu:latest}"
+# The node image defaults to the tag built from this launcher's own release
+# (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
+# move together. K3D_GPU_IMAGE=<repo>:latest opts into the floating tag.
+IMAGE_REPO="cryptoandcoffee/k3d-gpu"
+IMAGE="${K3D_GPU_IMAGE:-${IMAGE_REPO}:${VERSION}}"
 SHARE_DIR="${K3D_GPU_SHARE:-/usr/share/k3d-gpu}"
 PLUGIN_MANIFEST="${K3D_GPU_PLUGIN:-${SHARE_DIR}/nvidia-device-plugin.yml}"
 INTEL_PLUGIN_MANIFEST="${K3D_GPU_INTEL_PLUGIN:-${SHARE_DIR}/intel-gpu-plugin.yml}"
@@ -64,7 +69,6 @@ K3S_ARGS="${K3D_GPU_K3S_ARGS:-}"       # extra k3s server flags, space-separated
 FAIL=0           # set by doctor_* checks
 INTEL_DRIVERS=() # "<driver> <pci-device-id>" per Intel render node (filled by detect_intel)
 NPU_IDS=()       # PCI device id per Intel NPU accel node (filled by detect_npu)
-VERSION="0.1.21"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 
 RED=$'\e[31m' GRN=$'\e[32m' YLW=$'\e[33m' RST=$'\e[0m'
 err()  { echo "${RED}ERROR:${RST} $*" >&2; exit 1; }
@@ -105,7 +109,7 @@ Usage: k3d-gpu <command>
 
 Environment:
   K3D_GPU_CLUSTER       cluster name         (default: gpu)
-  K3D_GPU_IMAGE         k3s node image       (default: cryptoandcoffee/k3d-gpu:latest)
+  K3D_GPU_IMAGE         k3s node image       (default: ${IMAGE_REPO}:${VERSION}; ${IMAGE_REPO}:latest floats)
   K3D_GPU_VENDORS       auto | comma list of nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa (default: auto)
   K3D_GPU_NODE_LABELS   extra node labels, comma list of key=value (default: none)
   K3D_GPU_K3S_ARGS      extra k3s server flags, space-separated, e.g. --disable=servicelb (default: none)
@@ -1239,6 +1243,9 @@ doctor_cluster() {
     command -v kubectl >/dev/null 2>&1 || return 0
     [ -n "$(kc get nodes -o name 2>/dev/null || true)" ] || return 0
     info "Checking cluster k3d-${CLUSTER}..."
+
+    # An older launcher made this cluster from its own default image; k3d keeps it.
+    if command -v docker >/dev/null 2>&1; then node_image_check || true; fi
 
     # A device plugin that is down leaves its resource unschedulable.
     for v in ${ACTIVE[@]+"${ACTIVE[@]}"}; do
@@ -2953,6 +2960,12 @@ cmd_up() {
     done < <(exp_k3d_args)
     exp_print_host
 
+    # k3d cannot change an existing cluster's node image; name the image it runs.
+    if node_image >/dev/null; then
+        node_image_check || true
+        err "cluster '${CLUSTER}' already exists — to recreate it with ${IMAGE}: k3d-gpu down && k3d-gpu up (deletes its state)"
+    fi
+    ensure_image
     info "Creating k3d cluster '${CLUSTER}' with image ${IMAGE}..."
     k3d cluster create "${CLUSTER}" "${create_args[@]}"
 
@@ -2990,6 +3003,54 @@ cmd_up() {
     exp_post_up
 
     verify_gpus
+}
+
+# k3d pulls the node image only when it is absent locally (k3d-io/k3d
+# pkg/runtimes/docker/container.go: pullImage on client.IsErrNotFound), so a
+# cached floating tag is reused as-is. A missing image is pulled here so an
+# unpublished tag fails with the opt-in named.
+ensure_image() {
+    local ref=${IMAGE##*/}
+    if [[ "${IMAGE}" != *@* ]] && { [[ "${ref}" != *:* ]] || [[ "${ref}" == *:latest ]]; }; then
+        warn "node image ${IMAGE} is a floating tag; a cached copy is used as-is, refresh it with 'docker pull ${IMAGE}'"
+    fi
+    docker image inspect "${IMAGE}" >/dev/null 2>&1 && return 0
+    info "Pulling node image ${IMAGE}..."
+    docker pull "${IMAGE}" \
+        || err "cannot pull node image ${IMAGE} — if this release's image is not published yet, set K3D_GPU_IMAGE=${IMAGE_REPO}:latest"
+}
+
+# node_image: "<ref> <image id> [<release>]" of cluster ${CLUSTER}'s server node
+# container; fails when there is none. <release> is the image's
+# org.opencontainers.image.version label, set by versioned release builds only.
+node_image() {
+    local out
+    out=$(docker container inspect -f '{{.Config.Image}} {{.Image}} {{with .Config.Labels}}{{index . "org.opencontainers.image.version"}}{{end}}' \
+        "k3d-${CLUSTER}-server-0" 2>/dev/null) || return 1
+    [[ "${out}" == ?*" sha256:"* ]] || return 1
+    printf '%s\n' "${out}"
+}
+
+# node_image_check: compare the image cluster ${CLUSTER} was created from with
+# the one this launcher uses, as doctor-style ok/warn lines. Returns 1 when they
+# differ: another ref (an older launcher's default, e.g. :latest), or the same
+# ref now naming a different local image (a re-pulled floating tag).
+node_image_check() {
+    local ref="" id="" rel="" cur what
+    read -r ref id rel <<< "$(node_image || true)"
+    [ -n "${ref}" ] || return 0
+    what="node image ${ref} (release ${rel})"
+    [ -n "${rel}" ] || what="node image ${ref} (unversioned: built before versioned releases)"
+    cur=$(docker image inspect -f '{{.Id}}' "${IMAGE}" 2>/dev/null || true)
+    if [ "${ref}" != "${IMAGE}" ]; then
+        echo "  ${YLW}warn${RST}: ${what}; this launcher (${VERSION}) uses ${IMAGE} — recreate to switch: k3d-gpu down && k3d-gpu up"
+    elif [ -n "${cur}" ] && [ "${cur}" != "${id}" ]; then
+        echo "  ${YLW}warn${RST}: ${what}; ${IMAGE} now names image ${cur:7:12} locally, the cluster runs ${id:7:12} — recreate to switch: k3d-gpu down && k3d-gpu up"
+    else
+        echo "  ok: ${what}"
+        return 0
+    fi
+    return 1
 }
 
 ensure_plugin() {

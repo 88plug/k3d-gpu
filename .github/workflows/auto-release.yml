@@ -1,8 +1,11 @@
 name: Auto-release AUR
 
-# Auto-tag the AUR package on changes to packaging/ or scripts/ or share/.
-# Tag format: aur-vX.Y.Z (distinct from the Docker image tags CUDA-K3S-* used by build-and-push.yml).
-# After tagging, dispatches aur-deploy.yml directly to bypass the GITHUB_TOKEN downstream-trigger limit.
+# Auto-tag a release on changes to packaging/, scripts/, share/ or the Dockerfile,
+# and when build-and-push.yml's nightly check bumps upstream pins (dispatch).
+# Tag format: aur-vX.Y.Z. The launcher at that tag defaults to node image
+# cryptoandcoffee/k3d-gpu:X.Y.Z, so after tagging this dispatches build-and-push.yml
+# with release=X.Y.Z; that run publishes the image and then dispatches aur-deploy.yml.
+# Dispatches bypass the GITHUB_TOKEN downstream-trigger limit.
 
 on:
   push:
@@ -11,6 +14,8 @@ on:
       - 'packaging/**'
       - 'scripts/**'
       - 'share/**'
+      - 'Dockerfile'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -68,7 +73,7 @@ jobs:
           git tag ${{ steps.ver.outputs.tag }}
           git push origin ${{ steps.ver.outputs.tag }}
 
-      - name: Dispatch AUR Deploy
+      - name: Dispatch image build for the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh workflow run aur-deploy.yml -f version=${{ steps.ver.outputs.ver }}
+        run: gh workflow run build-and-push.yml --ref main -f release=${{ steps.ver.outputs.ver }}
