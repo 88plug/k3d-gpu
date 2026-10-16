@@ -3,11 +3,24 @@ with its UHD 770 iGPU (0xa780) on i915 and two NVIDIA RTX Ada GPUs (0x27b0 RTX 4
 SFF Ada, 0x28b0 RTX 2000 Ada) on the nvidia driver, kernel 6.6, Docker 29 with
 NVIDIA CDI devices registered but no nvidia runtime.
 
-Source: CAPTURED from real hardware (the k3d-gpu development host, 2026-10-16)
-with tests/fixtures/capture.sh; nothing under sysroot/ was edited by hand. The
-cpuinfo family/model lines and the i915 card0/engine/*/capabilities files come from
-a later capture of the same host (same day) after capture.sh learned to read them;
-every other entry of that capture was identical.
+Source: CAPTURED from real hardware (the k3d-gpu development host) with
+tests/fixtures/capture.sh; nothing under sysroot/ was edited by hand. First
+capture 2026-10-16 (ids, drivers, nodes, firmware). Recaptured later on 2026-10-16
+with the doctor --perf inputs added to capture.sh, run as root inside a throwaway
+container (`docker run --privileged --network none -v /:/host:ro`, then
+`capture.sh <out> /host`) so the root-only inputs are real: CPU 0 MSRs 0x19C,
+0x1B1, 0x64F, 0x6A2, 0x982 (read through the msr driver) and the four SMBIOS
+type 17 records (numeric fields only; the string set with locators, serials and
+part numbers is dropped). /proc entries come from the host's procfs (host PID
+namespace); the root mount from /proc/1/mounts. The cpuinfo family/model lines
+and the i915 card0/engine/*/capabilities files come from a capture of the same
+host (same day) after capture.sh learned to read them. Every other file outside
+the doctor --perf inputs is byte-identical to the first capture.
+
+Throttle counters, temperatures, uptime, meminfo and the MSR status/log bits are
+a snapshot taken while a benchmark ran on the host, so the thermal section shows
+active throttling.
+
 env records that host's Docker state (`docker info` runtimes: io.containerd.runc.v2
 runc; CDI ids nvidia.com/gpu=0, =1, =all; per-GPU UUID ids dropped) and that
 nvidia-ctk and nvidia-container-runtime are installed. Device names: pci.ids 2026.10.15.

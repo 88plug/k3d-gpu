@@ -119,7 +119,16 @@ per core type, turbo and frequency caps, `hwp_dynamic_boost`, idle-state exit
 latencies, RAPL PL1/PL2 against the thermal spec power, THP and hugetlb pages,
 swap in use and `vm.swappiness`, irqbalance, Intel GPU frequency (i915 RPS / GuC
 SLPC, xe `freq0`), NVIDIA persistence, the Docker storage driver, and whether a
-model of N GiB fits in `MemAvailable`. Each finding names the file it came from
+model of N GiB fits in `MemAvailable`. It also reports thermal throttling (the
+kernel's throttle counters, the TCC activation point, and as root a decode of
+MSRs `0x19C`/`0x1B1`/`0x64F` that leaves their sticky log bits alone), a PL1 far
+above TDP on a package that throttles, DRAM configured vs rated vs platform POR
+speed with the computed peak bandwidth and ECC/EDAC state (SMBIOS type 17, root),
+4 KiB mappings of model files on ext4 before Linux 6.16, KSM, each GPU's PCIe link
+against its upstream port, Resizable BAR, NVIDIA peer-to-peer, sandbox isolation
+(`/dev/kvm`, IOMMU groups, CET, split-lock detection, TME, the GPU observation
+sysctls), power-profiles-daemon rewriting EPP, and the i915 RP1 floor and
+waitboost count. Each finding names the file it came from
 and cites its source; each suggestion prints a one-line apply command and the
 command that restores the value it found. It never writes to the host, and it
 exits 0 — the suggestions are advice, not failures.
