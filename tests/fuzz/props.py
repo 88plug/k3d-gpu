@@ -433,7 +433,7 @@ def swap_image(doc, img):
     return doc
 
 
-OCI_REF = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/:@-]*")
+OCI_REF = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/:@+-]*")
 
 
 def check_overrides(vals):

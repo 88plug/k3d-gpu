@@ -477,12 +477,13 @@ dto_knobs_pinned "dataplane doc pod snippet pins the DTO offload threshold" "${R
 # ---- docs ---------------------------------------------------------------------
 
 # Every relative link in README.md and docs/*.md must name a file in this tree.
+# Code spans and fenced blocks are skipped: regexes there are not links.
 REPO="$(dirname "${K3D_GPU}")/.."
 dead=""
 for md in "${REPO}/README.md" "${REPO}"/docs/*.md; do
     while read -r target; do
         [ -e "$(dirname "${md}")/${target}" ] || dead+=" ${md#"${REPO}"/}:${target}"
-    done < <(grep -oE '\]\([^)#[:space:]]+' "${md}" | sed 's/^](//' | grep -vE '^[a-z]+:')
+    done < <(sed '/^```/,/^```/d; s/`[^`]*`//g' "${md}" | grep -oE '\]\([^)#[:space:]]+' | sed 's/^](//' | grep -vE '^[a-z]+:')
 done
 if [ -z "${dead}" ]; then
     PASS=$((PASS + 1)); echo "ok   relative doc links resolve"

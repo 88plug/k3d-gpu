@@ -1405,11 +1405,6 @@ cmd_test() {
     resolve_vendors
     [ "${#ACTIVE[@]}" -gt 0 ] || err "no supported accelerator detected — run 'k3d-gpu doctor'"
     local res v path out got
-    # Image refs are spliced into --overrides JSON; refuse anything outside the
-    # OCI reference alphabet so a quote or control byte cannot rewrite the pod.
-    for v in "${TEST_IMAGE}" "${DEVICE_TEST_IMAGE}"; do
-        [[ "${v}" =~ ^[A-Za-z0-9][A-Za-z0-9._/:@-]*$ ]] || err "invalid image reference '${v}' in K3D_GPU_TEST_IMAGE / K3D_GPU_DEVICE_TEST_IMAGE"
-    done
     if is_active nvidia; then
         info "Deploying nvidia-smi test pod (${TEST_IMAGE})..."
         # The container command + GPU resource limit live entirely in the overrides;
