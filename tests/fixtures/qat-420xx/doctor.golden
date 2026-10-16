@@ -7,6 +7,7 @@
 ==> Detected accelerators: qat amx
 ==> Intel CPU built-in accelerators...
   ok: AMX (amx_bf16 amx_fp16 amx_int8 amx_tile) — CPU instructions, usable in any pod; up labels nodes feature.node.kubernetes.io/cpu-cpuid.AMX*
+  ok: CPU ISA: AVX512BF16 AVX512F AVX512VNNI AVXVNNI — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
   ok: QAT 0000:76:00.0: 4 VF(s) — deployed by 'k3d-gpu up' (intel-qat-plugin binds them to vfio-pci)
   ok: QAT 0000:f3:00.0: 4 VF(s) — deployed by 'k3d-gpu up' (intel-qat-plugin binds them to vfio-pci)
   info: RDT allocation (rdt_a: cat_l3 cdp_l3 mba) — resctrl classes are available but left off: the balloons policy ships control.rdt.enable: false because enabling it rewrites the host's /sys/fs/resctrl. To opt in, mount resctrl on the host (mount -t resctrl resctrl /sys/fs/resctrl) and set control.rdt.enable: true in nri-balloons.yml; usePodQoSAsDefaultClass then gives BestEffort/Burstable/Guaranteed pods 33%/66%/100% of the L3

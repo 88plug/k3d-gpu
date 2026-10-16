@@ -8,11 +8,14 @@
 ==> Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...
   ok: Intel Panther Lake (0xb080) bound to xe
   ok: xe/ptl_guc_* firmware present
+  ok: up labels the node gpu.intel.com/xmx=true
 ==> Checking Intel NPU (Core Ultra)...
   ok: Intel NPU Panther Lake (0xb03e) bound to intel_vpu
   ok: intel/vpu/vpu_50xx_* firmware present
+  ok: up labels the node k3d-gpu.io/npu.gen=50xx
   note: workload images need the NPU user-space driver (github.com/intel/linux-npu-driver) and Level Zero
 ==> Intel CPU built-in accelerators...
+  ok: CPU ISA: AVXVNNI — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
   ok: IAA: 1 device(s), 1 user work queue(s) — deployed by 'k3d-gpu up' (intel-iaa-plugin)
   ok: hybrid CPU: P-cores 0-3, E-cores 4-15 — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient
   info: per socket: socket 0: DSA 0, IAA 1, QAT 0 (no ARK default on file for this CPU)
