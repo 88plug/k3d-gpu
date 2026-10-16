@@ -1,0 +1,81 @@
+# Joule Ledger node daemon (PROTOTYPE, not deployed by the launcher yet).
+# One pod per node: RAPL and NVML counters are per socket / per device, so a
+# per-pod sidecar would read the same counter many times over.
+#
+# Reads, read-only:
+#   /sys/class/powercap/intel-rapl:*/energy_uj   (root-only -> privileged)
+#   NVML total energy (driver libs come from the node's default nvidia runtime
+#   when k3d-gpu found NVIDIA; elsewhere the daemon runs RAPL-only)
+#   /proc/<pid>/fdinfo DRM usage keys            (hostPID: the k3d node's PID ns)
+# Serves fresh counter edges and span bounds on :9810 (see tools/joule_ledger/daemon.py).
+#
+# The image is built from tools/joule_ledger/Dockerfile and is not published yet;
+# set the tag when it is.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: k3d-gpu-energy
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: joule-ledger
+  namespace: k3d-gpu-energy
+  labels:
+    app.kubernetes.io/name: joule-ledger
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: joule-ledger
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: joule-ledger
+    spec:
+      hostPID: true
+      priorityClassName: system-node-critical
+      tolerations:
+      - operator: Exists
+      containers:
+      - name: joule-ledger
+        image: ghcr.io/88plug/k3d-gpu-joule-ledger:0.1.0
+        args: ["--tick", "0.010", "--latency", "0.025", "--listen", "0.0.0.0:9810"]
+        env:
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: all
+        - name: NVIDIA_DRIVER_CAPABILITIES
+          value: utility
+        securityContext:
+          privileged: true
+          readOnlyRootFilesystem: true
+        ports:
+        - name: ledger
+          containerPort: 9810
+        resources:
+          requests:
+            cpu: 20m
+            memory: 64Mi
+          limits:
+            memory: 256Mi
+        volumeMounts:
+        - name: sys
+          mountPath: /sys
+          readOnly: true
+      volumes:
+      - name: sys
+        hostPath:
+          path: /sys
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: joule-ledger
+  namespace: k3d-gpu-energy
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: joule-ledger
+  ports:
+  - name: ledger
+    port: 9810
+    targetPort: 9810
