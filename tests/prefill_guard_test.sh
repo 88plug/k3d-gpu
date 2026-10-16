@@ -225,6 +225,29 @@ ENVS=(K3D_GPU_PREFILL_GUARD=500)
 run "${r}" "${WORK}/state-bad" up
 has "a cap below the E-core minimum names the minimum" '800000' "${OUT}"
 
+# ACPI processor passive cooling lowers scaling_max_freq through its own freq QoS
+# request; reading it then would record the cooled value, and 'down' would write
+# it back as the user cap, keeping it after the cooling ends. Refuse to record.
+r=$(raptor up-cooling)
+put "${r}" /sys/class/thermal/cooling_device0/type "TCC Offset"
+put "${r}" /sys/class/thermal/cooling_device0/cur_state 4
+put "${r}" /sys/class/thermal/cooling_device7/type Processor
+put "${r}" /sys/class/thermal/cooling_device7/cur_state 0
+ENVS=(K3D_GPU_PREFILL_GUARD=50%)
+run "${r}" "${WORK}/state-cool0" up
+check "idle processor cooling does not block the guard (rc=${RC})" test "${RC}" -eq 0
+put "${r}" /sys/class/thermal/cooling_device7/cur_state 2
+run "${r}" "${WORK}/state-cool" up
+check "active processor cooling refuses the guard" test "${RC}" -ne 0
+has "the refusal names the cooling device" 'cooling_device7' "${OUT}"
+check "active processor cooling records nothing" test ! -e "${WORK}/state-cool"
+hasnt "active processor cooling creates no cluster" '^k3d cluster create' "${CALLS}"
+# An earlier record already holds the pre-guard values: nothing is read, nothing refused.
+mkdir -p "${WORK}/state-cool-keep/gpu"
+printf '20 3900000\n' > "${WORK}/state-cool-keep/gpu/scaling_max_freq"
+run "${r}" "${WORK}/state-cool-keep" up
+check "active cooling with an existing record proceeds (rc=${RC})" test "${RC}" -eq 0
+
 # Not hybrid: a single core type has no E-cores to cap.
 x="${WORK}/xeon"
 mkdir -p "${x}/sys" "${x}/dev/dsa"

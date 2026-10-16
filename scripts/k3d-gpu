@@ -340,6 +340,19 @@ guard_record() {
     done
 }
 
+# guard_cooling_active: print the first ACPI processor cooling device in a nonzero
+# state. It caps cpufreq through its own freq QoS request, so scaling_max_freq
+# reads the cooled value while it is active (drivers/acpi/processor_thermal.c).
+guard_cooling_active() {
+    local d s
+    for d in "${SYSROOT}"/sys/class/thermal/cooling_device*; do
+        [ "$(head -n1 "${d}/type" 2>/dev/null)" = Processor ] || continue
+        s=$(head -n1 "${d}/cur_state" 2>/dev/null)
+        [[ "${s}" =~ ^[0-9]+$ ]] && [ "${s}" -gt 0 ] && { echo "${d##*/} cur_state ${s}"; return 0; }
+    done
+    return 1
+}
+
 # guard_record_valid <file>: non-empty, and every line is "<cpu> <kHz>".
 guard_record_valid() { [ -s "$1" ] && ! grep -qvE '^[0-9]{1,5} [0-9]{1,9}$' "$1"; }
 
@@ -355,7 +368,7 @@ guard_manual_restore() {
 # (once: an existing record holds the pre-guard values), render the guard policy
 # into ${STATE_DIR}/<cluster>/ and print its path. Messages go to stderr.
 guard_prepare() {
-    local khz hmax dir rec emax other
+    local khz hmax dir rec emax other cool
     has_hybrid || err "K3D_GPU_PREFILL_GUARD needs a hybrid CPU (P-cores + E-cores): it caps the E-cores of the efficient balloon, and this host has no cpu_core + cpu_atom split. On Xeon see docs/prefill-guard.md"
     is_active hybrid || err "K3D_GPU_PREFILL_GUARD needs the hybrid vendor; add hybrid to K3D_GPU_VENDORS"
     khz=$(guard_khz "${PREFILL_GUARD}") || err "${khz}"
@@ -374,6 +387,9 @@ guard_prepare() {
     [[ "${CLUSTER}" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] || err "K3D_GPU_CLUSTER '${CLUSTER}' must be a DNS label"
     dir="${STATE_DIR}/${CLUSTER}"
     rec="${dir}/scaling_max_freq"
+    if [ ! -s "${rec}" ] && cool=$(guard_cooling_active); then
+        err "prefill guard: ACPI processor passive cooling is active (${cool}), so scaling_max_freq reads a cooled value; recording it would make 'down' keep that cap. Retry when the CPU is cooler"
+    fi
     mkdir -p "${dir}"
     if [ -s "${rec}" ]; then
         info "prefill guard: keeping the restore record ${rec} from an earlier guarded cluster" >&2

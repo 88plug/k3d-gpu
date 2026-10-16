@@ -64,6 +64,17 @@ the pre-guard values and is kept). `down` feeds that record through
 writes each value back before it deletes the cluster. If that fails, `down`
 keeps the record and prints the same restore as a `sudo tee` loop to run by hand.
 
+`scaling_max_freq` reads the resolved limit, the lowest of every frequency QoS
+request on the CPU, while a write sets only the user request
+([cpufreq.c](https://github.com/torvalds/linux/blob/v6.6/drivers/cpufreq/cpufreq.c),
+`refresh_frequency_limits`/`store_scaling_max_freq`). ACPI processor passive
+cooling adds its own QoS request
+([processor_thermal.c](https://github.com/torvalds/linux/blob/v6.6/drivers/acpi/processor_thermal.c)).
+A record taken while that cooling is active would hold the cooled value, and
+`down` would write it back as the user cap, which stays after the cooling ends.
+So `up` refuses to record while any `Processor` cooling device in
+`/sys/class/thermal` has a nonzero `cur_state`; retry when the CPU is cooler.
+
 The guard policy is the default policy plus two CPU classes. The guard file is
 rendered with `helm template` of the same pinned chart
 (nri-resource-policy-balloons v0.14.0) by `scripts/render-nri-balloons.sh`, from
