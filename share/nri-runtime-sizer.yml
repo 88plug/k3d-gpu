@@ -1,0 +1,70 @@
+# EXPERIMENTAL, opt-in, not deployed by `k3d-gpu up`: the image below is not
+# published yet. Build it from nri-sizer/ and import it into the cluster:
+#   docker build -t "$IMAGE" nri-sizer && k3d image import "$IMAGE" -c <cluster>
+#
+# NRI plugin "k3d-gpu-sizer" at index 95, after the balloons policy (90). For
+# pods labelled k3d-gpu.io/cores=performance|efficient it reads the cpuset the
+# balloons policy assigned and injects, when the cpuset is one core type:
+#   OMP_NUM_THREADS MKL_NUM_THREADS OPENBLAS_NUM_THREADS LLAMA_ARG_THREADS
+#                       = physical cores in the cpuset
+#   PYTHON_CPU_COUNT K3D_GPU_CPUS = logical CPUs (PYTHON_CPU_COUNT: Python >= 3.13 only)
+#   K3D_GPU_CPUSET K3D_GPU_CORE_TYPE
+#   K3D_GPU_OV_PLUGIN_CONFIG = {"INFERENCE_NUM_THREADS":"N","SCHEDULING_CORE_TYPE":"PCORE_ONLY|ECORE_ONLY"}
+#                       (pass to ovms --plugin_config "$K3D_GPU_OV_PLUGIN_CONFIG")
+# Env the pod already sets is never overridden. Every pinned container also gets
+# /run/k3d-gpu/cpus.json (read-only), rewritten when the cpuset changes.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: nri-runtime-sizer
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: nri-runtime-sizer
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nri-runtime-sizer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nri-runtime-sizer
+    spec:
+      nodeSelector:
+        kubernetes.io/os: linux
+        k3d-gpu.io/hybrid-cpu: "true"
+      priorityClassName: system-node-critical
+      containers:
+        - name: nri-runtime-sizer
+          image: ghcr.io/88plug/k3d-gpu-nri-sizer:dev
+          imagePullPolicy: IfNotPresent
+          args: ["--host-root", "/host", "--dir", "/run/k3d-gpu/cpus", "--idx", "95"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+          volumeMounts:
+            - name: hostsysfs
+              mountPath: /host/sys
+              readOnly: true
+            - name: nrisockets
+              mountPath: /var/run/nri
+              readOnly: true
+            - name: cpus
+              mountPath: /run/k3d-gpu/cpus
+      volumes:
+        - name: hostsysfs
+          hostPath:
+            path: /sys
+            type: Directory
+        - name: nrisockets
+          hostPath:
+            path: /var/run/nri
+            type: DirectoryOrCreate
+        - name: cpus
+          hostPath:
+            path: /run/k3d-gpu/cpus
+            type: DirectoryOrCreate
