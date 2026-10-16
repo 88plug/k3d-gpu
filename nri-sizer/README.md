@@ -48,3 +48,23 @@ ablation at index 85 sees no cpuset and injects nothing.
 
 `PREREGISTRATION.md` holds the acceptance criteria and predictions. It was
 committed before any code.
+
+CI does not run these tests yet. The branch token lacks the `workflow` scope,
+so the job below must be added to `.github/workflows/ci.yml` by hand:
+
+```yaml
+  nri-sizer:
+    name: nri-sizer (go vet + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nri-sizer
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: nri-sizer/go.mod
+      - run: test -z "$(gofmt -l .)"
+      - run: go vet ./...
+      - run: go test ./...
+```
