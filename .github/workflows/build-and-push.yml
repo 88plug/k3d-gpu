@@ -43,7 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout main
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: main
           fetch-depth: 0
@@ -242,7 +242,7 @@ jobs:
           [[ "$RELEASE" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::release '$RELEASE' is not X.Y.Z"; exit 1; }
 
       - name: Checkout release tag
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: aur-v${{ inputs.release }}
 
@@ -260,16 +260,16 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Login to DockerHub
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -288,7 +288,7 @@ jobs:
       # Ubuntu 26.04 is the default (:latest and :X.Y.Z); 24.04 is also published.
       # Each carries the baked device plugins, so clusters expose GPUs with no apply.
       - name: Build & push — Ubuntu 26.04 (default / latest)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           push: true
@@ -311,7 +311,7 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/k3d-gpu:${{ steps.current.outputs.k3s }}-ubuntu26.04
 
       - name: Build & push — Ubuntu 24.04 (variant)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           push: true
@@ -330,7 +330,7 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/k3d-gpu:${{ steps.current.outputs.k3s }}-ubuntu24.04
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -366,3 +366,91 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh workflow run aur-deploy.yml --ref main -f version=${{ inputs.release }}
+
+  # ─── Rendered components (hack/components/*) ─────────────────────────────
+  # Each component is a pinned upstream chart rendered into a manifest under
+  # share/, which the Dockerfile bakes into the image (nothing is fetched at
+  # runtime). Daily: move each pin to the newest stable upstream release,
+  # re-render with the pinned helm, run the tests, and open or update one PR per
+  # component on branch autobump/<name>. Merging it changes share/** on main,
+  # which auto-release.yml turns into a launcher release, and that release
+  # dispatches the `release` job above to build the image. A PR opened with
+  # GITHUB_TOKEN starts no CI workflows, so the tests run here before it opens.
+  # A new component is a new hack/components/<name>/ dir; the matrix picks it up.
+  list-components:
+    if: ${{ !inputs.release }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      names: ${{ steps.list.outputs.names }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: List components
+        id: list
+        run: echo "names=$(hack/render-component --list | jq -Rnc '[inputs]')" >> "$GITHUB_OUTPUT"
+
+  bump-components:
+    needs: list-components
+    if: needs.list-components.outputs.names != '[]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    strategy:
+      fail-fast: false
+      matrix:
+        component: ${{ fromJSON(needs.list-components.outputs.names) }}
+    env:
+      COMPONENT: ${{ matrix.component }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Install pinned helm
+        run: |
+          hack/install-helm "$RUNNER_TEMP/bin"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Move the pin to the newest upstream release and re-render
+        id: render
+        run: |
+          out=$(hack/render-component --latest "$COMPONENT")
+          echo "$out"
+          # "rendered <name> <version> -> <output>"
+          version=$(awk -v n="$COMPONENT" '$1 == "rendered" && $2 == n { print $3 }' <<< "$out")
+          [ -n "$version" ] || { echo "::error::render-component reported no version for $COMPONENT"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          git diff --stat
+
+      - name: Detection tests
+        run: tests/detect_test.sh
+
+      - name: Render tests
+        run: tests/render_test.sh
+
+      - name: Open or update the bump PR
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          branch: autobump/${{ matrix.component }}
+          delete-branch: true
+          add-paths: |
+            share/
+            hack/components/${{ matrix.component }}/
+          commit-message: "chore(${{ matrix.component }}): bump to ${{ steps.render.outputs.version }}"
+          title: "chore(${{ matrix.component }}): bump to ${{ steps.render.outputs.version }}"
+          labels: dependencies
+          body: |
+            Re-rendered `${{ matrix.component }}` from its pinned upstream at
+            `${{ steps.render.outputs.version }}` with `hack/render-component --latest`.
+
+            - Pins (version + sha256) moved in `hack/components/${{ matrix.component }}/component.conf`.
+            - `tests/detect_test.sh` and `tests/render_test.sh` passed in the workflow run
+              that opened this PR.
+            - Merging rebuilds the node image with the new manifest baked in.
+
+            Review the manifest diff for new CRDs, RBAC, images and flags before merging.

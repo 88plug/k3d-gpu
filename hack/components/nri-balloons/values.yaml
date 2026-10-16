@@ -1,0 +1,25 @@
+nodeSelector:
+  k3d-gpu.io/hybrid-cpu: "true"
+config:
+  reservedResources:
+    cpu: 1000m
+  agent:
+    nodeResourceTopology: true
+  allocatorTopologyBalancing: true
+  reservedPoolNamespaces: [kube-system]
+  balloonTypes:
+  - name: performance
+    preferCoreType: performance
+    matchExpressions:
+    - {key: pod/labels/k3d-gpu.io/cores, operator: Equals, values: [performance]}
+  - name: efficient
+    preferCoreType: efficient
+    matchExpressions:
+    - {key: pod/labels/k3d-gpu.io/cores, operator: Equals, values: [efficient]}
+  - name: shared
+    shareIdleCPUsInSame: system
+    maxBalloons: 1
+    matchExpressions:
+    - {key: name, operator: AlwaysTrue}
+  log:
+    debug: [none]

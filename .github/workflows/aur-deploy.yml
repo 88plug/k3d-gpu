@@ -16,7 +16,7 @@ jobs:
     name: Publish k3d-gpu to AUR
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ inputs.version && format('aur-v{0}', inputs.version) || github.ref }}
 
@@ -36,7 +36,7 @@ jobs:
           sed -i "s/^pkgrel=.*/pkgrel=1/" packaging/aur/PKGBUILD
 
       - name: Publish to AUR
-        uses: KSXGitHub/github-actions-deploy-aur@v4.1.3
+        uses: KSXGitHub/github-actions-deploy-aur@da03e160361ce01bf087e790b6ffd196d7dccff7 # v4.1.3
         with:
           pkgname: k3d-gpu
           pkgbuild: packaging/aur/PKGBUILD

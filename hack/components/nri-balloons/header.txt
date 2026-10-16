@@ -1,0 +1,14 @@
+# NRI balloons resource policy for Intel hybrid CPUs (P-cores + E-cores)
+# Source: https://github.com/containers/nri-plugins (helm chart nri-resource-policy-balloons @VERSION@),
+# rendered by `hack/render-component nri-balloons` (helm template --include-crds) with the values below.
+# Scheduled only onto nodes labelled k3d-gpu.io/hybrid-cpu=true, which the k3d-gpu
+# launcher sets when /sys/devices/cpu_core and cpu_atom both list online CPUs.
+#
+# Balloon types (first match wins):
+#   performance  pods labelled k3d-gpu.io/cores=performance -> P-cores (preferCoreType)
+#   efficient    pods labelled k3d-gpu.io/cores=efficient   -> E-cores
+#   shared       everything else, one balloon that shares every idle CPU, so
+#                unlabelled pods keep the whole machine
+# A balloon is sized by its pods' CPU requests; kube-system runs on the 1-CPU reserve.
+# Only cpusets inside the node's cgroup change: no cpufreq, C-state or RDT controls.
+#

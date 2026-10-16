@@ -978,6 +978,23 @@ docker build --platform linux/amd64 \
 docker push cryptoandcoffee/k3d-gpu
 ```
 
+### Rendered components
+
+Manifests rendered from an upstream helm chart (today `share/nri-balloons.yml`) are
+generated, not hand-edited. Each one has a dir under `hack/components/` pinning the
+chart version and sha256, its values and its header:
+
+```bash
+hack/install-helm ~/.local/bin        # the helm pinned in hack/tools.env
+hack/render-component                 # re-render every component from its pins
+hack/render-component --latest nri-balloons   # move the pins to upstream latest
+tests/render_test.sh
+```
+
+CI fails when a committed manifest differs from its pinned render. The daily
+build-and-push workflow runs `--latest` for every component and opens one PR per
+component (branch `autobump/<name>`); merging it rebuilds the image.
+
 ---
 
 ## k3d Cluster Setup
