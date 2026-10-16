@@ -47,12 +47,13 @@ Behaviour is tunable via environment variables:
 | `K3D_GPU_CLUSTER`    | `gpu`                                     | cluster name                         |
 | `K3D_GPU_IMAGE`      | `cryptoandcoffee/k3d-gpu:latest`          | node image (`latest` = ubuntu26.04)  |
 | `K3D_GPU_SHARE`      | `/usr/share/k3d-gpu`                      | dir of fallback plugin manifests     |
-| `K3D_GPU_VENDORS`    | `auto`                                    | `auto` detects; or a list of `nvidia,intel,npu,gaudi,dsa,iaa,qat,amx` |
+| `K3D_GPU_VENDORS`    | `auto`                                    | `auto` detects; or a list of `nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid` |
 | `K3D_GPU_PLUGIN`     | `/usr/share/k3d-gpu/nvidia-device-plugin.yml` | fallback manifest (only used if a custom image lacks the baked one) |
 | `K3D_GPU_INTEL_PLUGIN` | `/usr/share/k3d-gpu/intel-gpu-plugin.yml` | same, for the Intel GPU plugin |
 | `K3D_GPU_GAUDI_PLUGIN` | `/usr/share/k3d-gpu/gaudi-device-plugin.yml` | same, for the Gaudi plugin |
 | `K3D_GPU_NPU_PLUGIN` | `/usr/share/k3d-gpu/intel-npu-plugin.yml` | same, for the Intel NPU plugin |
 | `K3D_GPU_DSA_PLUGIN` / `_IAA_` / `_QAT_` | `/usr/share/k3d-gpu/intel-{dsa,iaa,qat}-plugin.yml` | same, for the Xeon accelerator plugins |
+| `K3D_GPU_HYBRID_PLUGIN` | `/usr/share/k3d-gpu/nri-balloons.yml` | same, for the hybrid-CPU NRI balloons policy |
 | `K3D_GPU_DEVICE_TEST_IMAGE` | `busybox:1.37`                     | image used by `k3d-gpu test` for Intel GPU/NPU and Gaudi |
 | `K3D_GPU_TEST_IMAGE` | `nvidia/cuda:13.4.2-base-ubuntu26.04`     | image used by `k3d-gpu test`         |
 
@@ -97,7 +98,7 @@ for GPUs, the [NPU driver](https://github.com/intel/linux-npu-driver) + OpenVINO
 for the NPU. Gaudi runs in the plugin's plain mode, which hands pods the devices
 without the habana container runtime; full Gaudi workloads may still expect it.
 
-Force or limit vendors with `K3D_GPU_VENDORS=nvidia,intel,npu,gaudi,dsa,iaa,qat,amx`.
+Force or limit vendors with `K3D_GPU_VENDORS=nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid`.
 A loaded `nvidia` or `habanalabs` kernel module counts as present even before
 its device nodes appear; `doctor` then flags the missing nodes.
 
@@ -119,6 +120,34 @@ plugin only accepts a work queue whose udev `/dev/char/<major>:<minor>` link
 exists, and a privileged container has none of its own. QAT userspace (qatlib)
 needs locked memory in the workload pod. The DLB plugin was removed upstream in
 intel-device-plugins v0.37.0, so DLB is not supported.
+
+### Hybrid P-core / E-core placement
+
+On Intel hybrid CPUs (Alder Lake and newer client parts, e.g. Core i9-13900),
+`up` deploys the [NRI balloons policy](https://github.com/containers/nri-plugins)
+so a pod picks its core type with one label:
+
+```yaml
+metadata:
+  labels:
+    k3d-gpu.io/cores: performance   # or: efficient
+spec:
+  containers:
+  - name: app
+    resources: {requests: {cpu: "4"}, limits: {cpu: "4"}}   # requests size the balloon
+```
+
+| Vendor key | Active when the host has | Kubernetes exposes |
+|------------|--------------------------|--------------------|
+| `hybrid` | online CPUs in both `/sys/devices/cpu_core` and `/sys/devices/cpu_atom` | node label `k3d-gpu.io/hybrid-cpu=true`; pod label `k3d-gpu.io/cores=performance\|efficient` pins to P- or E-cores |
+
+Unlabelled pods land in a `shared` balloon that uses every idle CPU, so nothing
+else loses capacity. kube-system runs on a one-CPU reserve. k3s turns NRI on in
+containerd for a privileged node, and the node sees the host's core-type PMUs.
+The policy only changes cpusets inside the node's cgroup. It never touches
+cpufreq, C-states or RDT. Only one NRI resource policy can own a node, so drop
+`hybrid` from `K3D_GPU_VENDORS` if another stack installs its own (for example,
+Intel's Enterprise Agent Toolkit CPU balloons).
 
 ---
 

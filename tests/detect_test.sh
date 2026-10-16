@@ -344,6 +344,36 @@ kernel "${r}" 6.18.1
 pci "${r}" 0000:00:0b.0 0x8086 0x643e intel_vpu; accel "${r}" 0000:00:0b.0 0
 doctor_says "an NPU accel node does not satisfy the Gaudi check" "${r}" 'Checking Intel Gaudi' negate
 
+# hybrid <root> <P cpus> <E cpus>: Intel hybrid CPU sysfs (Alder Lake and newer).
+hybrid() {
+    mkdir -p "$1/sys/devices/cpu_core" "$1/sys/devices/cpu_atom"
+    echo "$2" > "$1/sys/devices/cpu_core/cpus"
+    echo "$3" > "$1/sys/devices/cpu_atom/cpus"
+}
+
+r=$(newroot hybrid)
+hybrid "${r}" 0-15 16-31
+expect "hybrid P/E CPU is detected" "${r}" "hybrid k3d-gpu.io/hybrid-cpu=true"
+
+r=$(newroot hybrid-no-ecores)
+hybrid "${r}" 0-15 ""
+expect "hybrid PMU with no online E-cores is not hybrid" "${r}" ""
+
+r=$(newroot not-hybrid)
+mkdir -p "${r}/sys/devices/cpu"
+expect "non-hybrid CPU is not hybrid" "${r}" ""
+
+r=$(newroot hybrid-forced)
+expect "forced hybrid is accepted" "${r}" "hybrid k3d-gpu.io/hybrid-cpu=true" K3D_GPU_VENDORS=hybrid
+
+r=$(newroot hybrid-doc)
+kernel "${r}" 6.18.1
+hybrid "${r}" 0-15 16-31
+doctor_says "doctor reports P-core and E-core CPU lists" "${r}" 'ok: hybrid CPU: P-cores 0-15, E-cores 16-31'
+r=$(newroot hybrid-doc-forced)
+kernel "${r}" 6.18.1
+doctor_says "forced hybrid on a non-hybrid CPU fails doctor" "${r}" 'fail.*hybrid' "" K3D_GPU_VENDORS=hybrid
+
 # Docker 29 lists CDI devices (cdi: nvidia.com/gpu=all) in `docker info`; that is
 # not a registered nvidia runtime, and doctor must not say it is.
 r=$(newroot nvidia-rt)
@@ -366,7 +396,8 @@ cat > "${KSTUB}/kubectl" <<'EOF'
 #!/bin/sh
 case "$1" in
     get)  case "$*" in *phase*) echo "${STUB_POD_PHASE}" ;; esac ;;
-    logs) printf %s "${STUB_POD_LOGS}" ;;  # no final newline, like nvidia-smi stderr
+    # no final newline, like nvidia-smi stderr; STUB_POD_LOGS_<pod name, - as _> overrides per pod
+    logs) eval "out=\${STUB_POD_LOGS_$(echo "$2" | tr -- - _):-\${STUB_POD_LOGS}}"; printf %s "${out}" ;;
 esac
 exit 0
 EOF
@@ -398,6 +429,18 @@ test_says "test fails when the nvidia-smi pod fails, and still shows its output"
 test_says "pod output without a final newline does not glue onto the next line" "${r}" 0 \
     '^(.\[[0-9;]*m)?==>.*Deploying gaudi-test' \
     STUB_POD_PHASE=Succeeded STUB_POD_LOGS="ERROR: noise" K3D_GPU_VENDORS=nvidia,gaudi
+
+r=$(newroot hybrid-test)
+hybrid "${r}" 0-15 16-31
+test_says "hybrid test passes when each pod lands on its core type" "${r}" 0 'Cpus_allowed_list' \
+    STUB_POD_PHASE=Succeeded STUB_POD_LOGS_cores_performance_test="Cpus_allowed_list:	0-1" \
+    STUB_POD_LOGS_cores_efficient_test="Cpus_allowed_list:	20,24-25" K3D_GPU_VENDORS=hybrid
+test_says "hybrid test fails when a performance pod is not on P-cores" "${r}" fail 'not on the performance CPUs' \
+    STUB_POD_PHASE=Succeeded STUB_POD_LOGS_cores_performance_test="Cpus_allowed_list:	0-15,17-31" \
+    STUB_POD_LOGS_cores_efficient_test="Cpus_allowed_list:	20" K3D_GPU_VENDORS=hybrid
+test_says "hybrid test fails when an efficient pod is not on E-cores" "${r}" fail 'not on the efficient CPUs' \
+    STUB_POD_PHASE=Succeeded STUB_POD_LOGS_cores_performance_test="Cpus_allowed_list:	0" \
+    STUB_POD_LOGS_cores_efficient_test="Cpus_allowed_list:	3" K3D_GPU_VENDORS=hybrid
 
 echo ""
 echo "${PASS} passed, ${FAILS} failed"

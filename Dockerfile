@@ -55,6 +55,10 @@ COPY share/intel-npu-plugin.yml /var/lib/rancher/k3s/server/manifests/intel-npu-
 COPY share/intel-dsa-plugin.yml /var/lib/rancher/k3s/server/manifests/intel-dsa-plugin.yaml
 COPY share/intel-iaa-plugin.yml /var/lib/rancher/k3s/server/manifests/intel-iaa-plugin.yaml
 COPY share/intel-qat-plugin.yml /var/lib/rancher/k3s/server/manifests/intel-qat-plugin.yaml
+# NRI balloons policy for hybrid P/E-core CPUs, gated by k3d-gpu.io/hybrid-cpu=true.
+# k3s enables NRI in containerd for a privileged node; the policy pins pods
+# labelled k3d-gpu.io/cores=performance|efficient onto P- or E-cores.
+COPY share/nri-balloons.yml /var/lib/rancher/k3s/server/manifests/nri-balloons.yaml
 
 # CDI spec directories. containerd 2.x (k3s 1.34) enables CDI by default and scans
 # these paths, so vendor plugins/tools that emit CDI specs work without any
