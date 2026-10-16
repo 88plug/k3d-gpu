@@ -528,6 +528,182 @@ r=$(newroot hybrid-doc-forced)
 kernel "${r}" 6.18.1
 doctor_says "forced hybrid on a non-hybrid CPU fails doctor" "${r}" 'fail.*hybrid' "" K3D_GPU_VENDORS=hybrid
 
+# ---- NUMA / SNC (Xeon) ----------------------------------------------------------
+
+# node <root> <n> <cpulist> [package]: NUMA node n; "" is a memory-only node (HBM,
+# CXL). The node's first CPU gets topology/physical_package_id <package>.
+node() {
+    local d="$1/sys/devices/system/node/node$2" first
+    mkdir -p "${d}"
+    echo "$3" > "${d}/cpulist"
+    [ -n "$3" ] && [ -n "${4:-}" ] || return 0
+    first=${3%%[-,]*}
+    mkdir -p "$1/sys/devices/system/cpu/cpu${first}/topology"
+    echo "$4" > "$1/sys/devices/system/cpu/cpu${first}/topology/physical_package_id"
+}
+# l3 <root> <cpulist>: the CPUs sharing CPU 0's L3 cache.
+l3() {
+    mkdir -p "$1/sys/devices/system/cpu/cpu0/cache/index3"
+    echo "$2" > "$1/sys/devices/system/cpu/cpu0/cache/index3/shared_cpu_list"
+}
+NUMA2="numa k3d-gpu.io/numa-nodes=2 k3d-gpu.io/snc=1"
+
+r=$(newroot numa-2s)
+node "${r}" 0 0-3,8-11 0; node "${r}" 1 4-7,12-15 1; l3 "${r}" 0-3,8-11
+expect "two sockets are a NUMA host with SNC off" "${r}" "${NUMA2}"
+
+r=$(newroot numa-1)
+node "${r}" 0 0-15 0; l3 "${r}" 0-15
+expect "one NUMA node is not numa" "${r}" ""
+
+r=$(newroot numa-snc3)
+for n in 0 1 2 3 4 5; do node "${r}" "${n}" "$((n * 2))-$((n * 2 + 1))" "$((n / 3))"; done
+l3 "${r}" 0-5
+expect "SNC3 is CPU 0's L3 CPUs over its node's CPUs" "${r}" \
+    "numa k3d-gpu.io/numa-nodes=6 k3d-gpu.io/snc=3"
+
+r=$(newroot numa-snc-improbable)
+for n in 0 1 2 3 4 5; do node "${r}" "${n}" "${n}" 0; done
+l3 "${r}" 0-4
+expect "an improbable L3/node ratio (5) reads as SNC off, like the kernel" "${r}" \
+    "numa k3d-gpu.io/numa-nodes=6 k3d-gpu.io/snc=1"
+
+r=$(newroot numa-no-l3)
+node "${r}" 0 0-3 0; node "${r}" 1 4-7 1
+expect "no L3 sharing list: NUMA without an SNC label" "${r}" "numa k3d-gpu.io/numa-nodes=2"
+
+r=$(newroot numa-garbled)
+node "${r}" 0 'x-3' 0; node "${r}" 1 4-7 1; l3 "${r}" 0-3
+expect "a garbled node CPU list gives no SNC label" "${r}" "numa k3d-gpu.io/numa-nodes=2"
+
+r=$(newroot numa-memory-only)
+node "${r}" 0 0-7 0; node "${r}" 1 ""; l3 "${r}" 0-7
+expect "a memory-only node (HBM/CXL) counts as a NUMA node" "${r}" "${NUMA2}"
+
+r=$(newroot numa-forced)
+expect "forced numa is accepted" "${r}" "numa k3d-gpu.io/numa-nodes=0" K3D_GPU_VENDORS=numa
+
+r=$(newroot numa-hybrid)
+hybrid "${r}" 0-7 8-15
+node "${r}" 0 0-7 0; node "${r}" 1 8-15 0; l3 "${r}" 0-15
+expect "hybrid and numa are independent" "${r}" "hybrid k3d-gpu.io/hybrid-cpu=true
+numa k3d-gpu.io/numa-nodes=2 k3d-gpu.io/snc=2"
+
+r=$(newroot numa-doc)
+kernel "${r}" 6.18.1
+node "${r}" 0 0-3 0; node "${r}" 1 4-7 1; node "${r}" 2 ""; l3 "${r}" 0-3
+doctor_says "doctor reports NUMA nodes, SNC and sockets" "${r}" \
+    'ok: NUMA: 3 node\(s\) \(2 with CPUs\), SNC 1 per L3, 2 socket\(s\) — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=replica'
+doctor_says "doctor names memory-only NUMA nodes" "${r}" 'info: NUMA node\(s\) 2 have memory but no CPUs'
+doctor_says "no rdt_a flag: no resctrl guidance" "${r}" 'RDT' negate
+mkdir -p "${r}/proc"
+printf 'processor\t: 0\nflags\t\t: fpu cat_l3 cdp_l3 rdt_a mba\n' > "${r}/proc/cpuinfo"
+doctor_says "rdt_a gives resctrl class guidance" "${r}" \
+    'info: RDT allocation \(rdt_a: cat_l3 cdp_l3 mba\) — .*control\.rdt\.enable'
+
+r=$(newroot numa-doc-forced)
+kernel "${r}" 6.18.1
+node "${r}" 0 0-7 0
+doctor_says "forced numa on one node fails doctor" "${r}" 'fail.*NUMA' "" K3D_GPU_VENDORS=numa
+
+# The balloons policy deploys on hybrid and on NUMA nodes, and ships a replica
+# balloon type whose every field exists in the bundled v0.14.0 CRD.
+BALLOONS="$(dirname "${K3D_GPU}")/../share/nri-balloons.yml"
+balloons_check() {
+    python3 - "${BALLOONS}" <<'EOF'
+import sys
+try:
+    import yaml
+except ImportError:
+    print("skip: PyYAML missing"); sys.exit(0)
+docs = [d for d in yaml.safe_load_all(open(sys.argv[1])) if d]
+by = {(d["kind"], d["metadata"]["name"]): d for d in docs}
+ds = by[("DaemonSet", "nri-resource-policy-balloons")]["spec"]["template"]["spec"]
+assert "k3d-gpu.io/hybrid-cpu" not in ds.get("nodeSelector", {}), "nodeSelector still hybrid-only"
+terms = ds["affinity"]["nodeAffinity"]["requiredDuringSchedulingIgnoredDuringExecution"]["nodeSelectorTerms"]
+exprs = [t["matchExpressions"][0] for t in terms]
+assert {"key": "k3d-gpu.io/hybrid-cpu", "operator": "In", "values": ["true"]} in exprs, exprs
+assert {"key": "k3d-gpu.io/numa-nodes", "operator": "Exists"} in exprs, exprs
+pol = by[("BalloonsPolicy", "default")]["spec"]
+assert pol["agent"]["podResourceAPI"] is True
+types = pol["balloonTypes"]
+assert types[-1]["name"] == "shared", "shared (AlwaysTrue) must stay last"
+rep = next(t for t in types if t["name"] == "replica")
+want = {"pinMemory": True, "allocatorTopologyBalancing": True, "shareIdleCPUsInSame": "numa",
+        "preferNewBalloons": True, "preferCloseToDevices": ["podresourceapi:*/*"]}
+for k, v in want.items():
+    assert rep.get(k) == v, (k, rep.get(k))
+assert rep["matchExpressions"] == [{"key": "pod/labels/k3d-gpu.io/cores", "operator": "Equals", "values": ["replica"]}]
+crd = by[("CustomResourceDefinition", "balloonspolicies.config.nri")]
+props = crd["spec"]["versions"][0]["schema"]["openAPIV3Schema"]["properties"]["spec"]["properties"]
+bt = props["balloonTypes"]["items"]["properties"]
+for k in rep:
+    assert k in bt, "replica field %s not in the CRD" % k
+assert "numa" in bt["shareIdleCPUsInSame"]["enum"]
+assert "podResourceAPI" in props["agent"]["properties"]
+print("ok")
+EOF
+}
+if out=$(balloons_check 2>&1) && [ "${out}" = ok ]; then
+    PASS=$((PASS + 1)); echo "ok   balloons deploy on hybrid or NUMA nodes; replica type matches the CRD"
+elif [[ "${out}" == skip:* ]]; then
+    echo "skip balloons manifest check (${out#skip: })"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL balloons manifest: ${out}"
+fi
+
+# ---- accelerators per socket vs ARK default (Xeon) -------------------------------
+
+# idxd_dev <root> <bdf> <id> <name> <numa node> [wq]: a DSA/IAA PCI function bound to
+# idxd, its <name> device on the dsa bus, and optionally one user work queue.
+idxd_dev() {
+    pci "$1" "$2" 0x8086 "$3" idxd 0x088000
+    echo "$5" > "$1/sys/devices/pci0000:00/$2/numa_node"
+    mkdir -p "$1/sys/devices/pci0000:00/$2/$4" "$1/sys/bus/dsa/devices"
+    ln -sfn "$1/sys/devices/pci0000:00/$2/$4" "$1/sys/bus/dsa/devices/$4"
+}
+model() {
+    mkdir -p "$1/proc"
+    printf 'processor\t: 0\nmodel name\t: %s\nflags\t\t: fpu amx_tile\n' "$2" > "$1/proc/cpuinfo"
+}
+
+r=$(newroot socket-counts)
+kernel "${r}" 6.18.1
+model "${r}" "Intel(R) Xeon(R) Platinum 8480+"
+node "${r}" 0 0-3 0; node "${r}" 1 4-7 1; l3 "${r}" 0-3
+idxd_dev "${r}" 0000:e7:01.0 0x0b25 dsa0 0
+idxd_dev "${r}" 0000:e7:02.0 0x0cfe iax1 0
+idxd_dev "${r}" 0000:f2:01.0 0x0b25 dsa2 1
+pci "${r}" 0000:6b:00.0 0x8086 0x4940 4xxx 0x0b4000
+echo 0 > "${r}/sys/devices/pci0000:00/0000:6b:00.0/numa_node"
+doctor_says "doctor counts accelerators per socket against the ARK default" "${r}" \
+    'info: per socket: socket 0: DSA 1, IAA 1, QAT 1; socket 1: DSA 1, IAA 0, QAT 0 \(ARK default for 8480\+: DSA 1, IAA 1, QAT 1 per socket\)'
+doctor_says "a socket below the ARK default is flagged" "${r}" \
+    'warn.*: socket 1: IAA 0, QAT 0 below the ARK default for 8480\+'
+doctor_says "no On Demand note without intel_vsec.sdsi" "${r}" 'On Demand' negate
+mkdir -p "${r}/sys/bus/auxiliary/devices/intel_vsec.sdsi.0"
+doctor_says "intel_vsec.sdsi gives the On Demand note" "${r}" \
+    'info: Intel On Demand interface present \(intel_vsec\.sdsi\.0\)'
+
+r=$(newroot socket-counts-unknown)
+kernel "${r}" 6.18.1
+idxd_dev "${r}" 0000:00:0c.0 0x11fb dsa0 -1
+doctor_says "an unknown SKU gets counts without an ARK default" "${r}" \
+    'info: per socket: socket 0: DSA 1, IAA 0, QAT 0 \(no ARK default on file for this CPU\)'
+doctor_says "an unknown SKU is never flagged below default" "${r}" 'below the ARK default' negate
+
+r=$(newroot socket-counts-unplaced)
+kernel "${r}" 6.18.1
+node "${r}" 0 0-3 0; node "${r}" 1 4-7 1
+idxd_dev "${r}" 0000:e7:01.0 0x0b25 dsa0 -1
+doctor_says "a device with no NUMA node on a two-socket host is socket ?" "${r}" \
+    'info: per socket: socket 0: DSA 0, IAA 0, QAT 0; socket 1: DSA 0, IAA 0, QAT 0; socket \?: DSA 1, IAA 0, QAT 0'
+
+r=$(newroot socket-counts-none)
+kernel "${r}" 6.18.1
+model "${r}" "Intel(R) Xeon(R) 6980P"
+doctor_says "no DSA/IAA/QAT device: no per-socket line" "${r}" 'per socket' negate
+
 # Docker 29 lists CDI devices (cdi: nvidia.com/gpu=all) in `docker info`; that is
 # not a registered nvidia runtime, and doctor must not say it is.
 r=$(newroot nvidia-rt)
@@ -644,7 +820,7 @@ else
     FAILS=$((FAILS + 1)); echo "FAIL relative doc links resolve; dead:${dead}"
 fi
 
-# vendor_total counts AMX/hybrid as distinct labelled nodes, not one per label:
+# vendor_total counts AMX/hybrid/NUMA as distinct labelled nodes, not one per label:
 # labels L1 and L2 are both on nodes a and b, L3 on none, so the answer is 2.
 # Two nodes under two labels also catches node lists joined without a newline.
 VT_FN=$(sed -n '/^vendor_total() {/,/^}/p' "${K3D_GPU}")
@@ -654,7 +830,7 @@ vt() {
         kubectl() { [ "${STUB_NONE:-}" ] && return 1; case "$4" in L1|L2) printf "node/a\nnode/b\n" ;; esac; }
         vendor_total "$1"' _ "$1"
 }
-for case in "amx 2" "hybrid 2" "amx 0 none"; do
+for case in "amx 2" "hybrid 2" "numa 2" "amx 0 none"; do
     read -r v want none <<< "${case}"
     got=$(STUB_NONE="${none:-}" vt "${v}" 2>&1)
     if [ "${got}" = "${want}" ]; then

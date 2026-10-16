@@ -1,0 +1,16 @@
+==> Checking docker...
+  ok: docker running
+==> Checking k3d...
+  ok: k3d version v0.0.0-stub
+==> Checking kubectl...
+  ok
+==> Detected accelerators: dsa iaa
+==> Intel CPU built-in accelerators...
+  ok: DSA: 2 device(s), 1 user work queue(s) — deployed by 'k3d-gpu up' (intel-dsa-plugin)
+  ok: IAA: 2 device(s), 1 user work queue(s) — deployed by 'k3d-gpu up' (intel-iaa-plugin)
+  info: RDT allocation (rdt_a: cat_l3 cdp_l3 mba) — resctrl classes are available but left off: the balloons policy ships control.rdt.enable: false because enabling it rewrites the host's /sys/fs/resctrl. To opt in, mount resctrl on the host (mount -t resctrl resctrl /sys/fs/resctrl) and set control.rdt.enable: true in nri-balloons.yml; usePodQoSAsDefaultClass then gives BestEffort/Burstable/Guaranteed pods 33%/66%/100% of the L3
+  info: per socket: socket 0: DSA 2, IAA 2, QAT 0 (ARK default for 6780E: DSA 2, IAA 2, QAT 2 per socket)
+  warn: socket 0: QAT 0 below the ARK default for 6780E — the BIOS may have the device disabled; check its accelerator settings
+
+==> All checks passed.
+exit=0

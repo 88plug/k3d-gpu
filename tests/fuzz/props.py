@@ -27,7 +27,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 SHIM = os.path.join(HERE, "shim.sh")
 LAUNCHER = os.path.join(REPO, "scripts", "k3d-gpu")
-VENDORS = ["nvidia", "intel", "npu", "gaudi", "dsa", "iaa", "qat", "amx", "hybrid"]
+VENDORS = ["nvidia", "intel", "npu", "gaudi", "dsa", "iaa", "qat", "amx", "hybrid", "numa"]
 SEED = int(os.environ.get("FUZZ_SEED", random.SystemRandom().randrange(2**32)))
 N = int(os.environ.get("FUZZ_N", "300"))
 WORK = tempfile.mkdtemp(prefix="k3d-gpu-fuzz-")

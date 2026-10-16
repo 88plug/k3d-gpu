@@ -1,0 +1,22 @@
+Platform: one-socket Xeon host with two QAT 420xx physical functions, each bound to
+the 420xx driver with 4 SR-IOV VFs, vfio-pci loaded.
+
+Sources (kernel paths are Linux v6.18 (torvalds/linux tag v6.18)):
+- PF 0x4946 / VF 0x4947, driver name "420xx" (ADF_420XX_DEVICE_NAME):
+  drivers/crypto/intel/qat/qat_common/adf_accel_devices.h; module qat_420xx:
+  drivers/crypto/intel/qat/Kconfig. pci.ids names 4946 "420xx Series QAT" and 4947
+  "420xx Series QAT Virtual Function".
+- The plugin maps VF id 4947 to the 420xxvf kernel driver and accepts it as a QAT
+  Gen4 VF: intel-device-plugins v0.37.1 cmd/qat_plugin/dpdkdrv/dpdkdrv.go.
+- virtfn<n> links on the PF, sriov_numvfs: Documentation/ABI/testing/sysfs-bus-pci.
+- allocatable qat.intel.com/cy: the "sym;asym" cfg_services mapping in
+  dpdkdrv.go, as in xeon-spr-accel.
+
+Layout: sysfs paths and relative symlinks follow the driver core's naming, in
+exactly the form tests/fixtures/capture.sh writes (the matrix test re-captures each
+tree and requires an identical result).
+
+Not from hardware: which Xeon carries 420xx (not settled in a primary source read
+for this fixture, so there is no model name line and no ARK default), BDFs, the
+core count, the kernel release string and the cpuinfo flags line (the xeon-gnr
+subset).

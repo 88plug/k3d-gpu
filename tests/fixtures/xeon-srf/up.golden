@@ -1,0 +1,24 @@
+==> Accelerators: dsa iaa
+==> Creating k3d cluster 'gpu' with image cryptoandcoffee/k3d-gpu:latest...
+==> Waiting for nodes Ready...
+==> dsa device plugin auto-deployed by k3s.
+==> iaa device plugin auto-deployed by k3s.
+==> Verifying accelerators are schedulable...
+==> Accelerators schedulable: dsa=1 iaa=1. Try: k3d-gpu test
+exit=0
+--- calls
+k3d cluster create gpu
+  --image=cryptoandcoffee/k3d-gpu:latest
+  --no-lb
+  --k3s-arg=--disable=traefik@server:0
+  --k3s-node-label=nvidia.com/gpu.present=false@server:*;agent:*
+  --k3s-node-label=intel.feature.node.kubernetes.io/dsa=true@server:*;agent:*
+  --k3s-node-label=intel.feature.node.kubernetes.io/iaa=true@server:*;agent:*
+  --volume=/dev/char:/dev/char:ro@server:*;agent:*
+kubectl wait --for=condition=Ready nodes --all --timeout=120s
+kubectl -n kube-system get daemonset intel-dsa-plugin
+kubectl -n kube-system get daemonset intel-iaa-plugin
+kubectl -n kube-system rollout status daemonset/intel-dsa-plugin --timeout=120s
+kubectl get nodes -o go-template={{range .items}}{{range $k, $v := .status.allocatable}}{{$k}} {{$v}}{{"\n"}}{{end}}{{end}}
+kubectl -n kube-system rollout status daemonset/intel-iaa-plugin --timeout=120s
+kubectl get nodes -o go-template={{range .items}}{{range $k, $v := .status.allocatable}}{{$k}} {{$v}}{{"\n"}}{{end}}{{end}}

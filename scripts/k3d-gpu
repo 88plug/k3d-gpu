@@ -17,6 +17,10 @@
 #                                                         -> node label k3d-gpu.io/hybrid-cpu=true; pods
 #           labelled k3d-gpu.io/cores=performance|efficient are pinned to P- or E-cores by
 #           the NRI balloons policy (nri-plugins), everything else keeps every CPU
+#   numa    more than one NUMA node (multi-socket or SNC Xeon, HBM/CXL memory nodes)
+#                                                         -> node labels k3d-gpu.io/numa-nodes=<n>,
+#           k3d-gpu.io/snc=<nodes per L3>; pods labelled k3d-gpu.io/cores=replica get a
+#           balloon inside one NUMA node, memory pinned to it, near their devices
 #           DSA/IAA/QAT need host setup first (work queues / SR-IOV VFs); doctor says what is missing.
 #   up also labels nodes with CPU ISA extensions (NFD cpu-cpuid names), Intel GPU XMX and
 #   media engine counts, and the NPU generation; doctor prints the labels.
@@ -60,7 +64,7 @@ warn() { echo "${YLW}WARN:${RST} $*" >&2; }
 
 usage() {
     cat <<EOF
-k3d-gpu ${VERSION} — accelerator-ready k3d clusters (NVIDIA, Intel GPU/iGPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX, hybrid P/E cores)
+k3d-gpu ${VERSION} — accelerator-ready k3d clusters (NVIDIA, Intel GPU/iGPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX/NUMA, hybrid P/E cores)
 
 Usage: k3d-gpu <command>
 
@@ -84,7 +88,7 @@ Usage: k3d-gpu <command>
 Environment:
   K3D_GPU_CLUSTER       cluster name         (default: gpu)
   K3D_GPU_IMAGE         k3s node image       (default: cryptoandcoffee/k3d-gpu:latest)
-  K3D_GPU_VENDORS       auto | comma list of nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid (default: auto)
+  K3D_GPU_VENDORS       auto | comma list of nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa (default: auto)
   K3D_GPU_SHARE         dir holding the fallback plugin yamls (default: /usr/share/k3d-gpu)
   K3D_GPU_PLUGIN        NVIDIA plugin yaml   (default: ${SHARE_DIR}/nvidia-device-plugin.yml)
   K3D_GPU_INTEL_PLUGIN  Intel GPU plugin yaml  (default: ${SHARE_DIR}/intel-gpu-plugin.yml)
@@ -93,7 +97,7 @@ Environment:
   K3D_GPU_DSA_PLUGIN    Intel DSA plugin yaml  (default: ${SHARE_DIR}/intel-dsa-plugin.yml)
   K3D_GPU_IAA_PLUGIN    Intel IAA plugin yaml  (default: ${SHARE_DIR}/intel-iaa-plugin.yml)
   K3D_GPU_QAT_PLUGIN    Intel QAT plugin yaml  (default: ${SHARE_DIR}/intel-qat-plugin.yml)
-  K3D_GPU_HYBRID_PLUGIN NRI balloons yaml    (default: ${SHARE_DIR}/nri-balloons.yml)
+  K3D_GPU_HYBRID_PLUGIN NRI balloons yaml for hybrid and numa (default: ${SHARE_DIR}/nri-balloons.yml)
   K3D_GPU_MODEL_GB      model size checked by doctor --perf (same as --model-gb)
 
 Docs: https://github.com/88plug/k3d-gpu
@@ -294,6 +298,143 @@ cpulist_within() {
     ! grep -qvxF -f <(printf '%s\n' "${b}") <<< "${a}"
 }
 
+# ---- NUMA / SNC -------------------------------------------------------------------
+# NUMA nodes from /sys/devices/system/node/node<N>, sorted, one per line. Nodes
+# with memory and no CPUs (HBM in flat mode, CXL expanders) count too.
+numa_nodes() {
+    local d n
+    for d in "${SYSROOT}"/sys/devices/system/node/node[0-9]*; do
+        n=${d##*/node}
+        if [ -d "${d}" ] && [[ "${n}" =~ ^(0|[1-9][0-9]{0,4})$ ]]; then echo "${n}"; fi
+    done | sort -n
+}
+numa_count() { numa_nodes | awk 'END {print NR}'; }
+has_numa() { [ "$(numa_count)" -gt 1 ]; }
+
+# numa_cpus <node>: the node's CPU list, empty for a memory-only node.
+numa_cpus() { head -n1 "${SYSROOT}/sys/devices/system/node/node$1/cpulist" 2>/dev/null || true; }
+
+# node_package <node>: physical package (socket) of the node's first CPU, or empty.
+node_package() {
+    local cpu pkg
+    cpu=$(numa_cpus "$1")
+    cpu=${cpu%%[-,]*}
+    [[ "${cpu}" =~ ^(0|[1-9][0-9]{0,4})$ ]] || return 0
+    pkg=$(head -n1 "${SYSROOT}/sys/devices/system/cpu/cpu${cpu}/topology/physical_package_id" 2>/dev/null || true)
+    [[ "${pkg}" =~ ^(0|[1-9][0-9]{0,3})$ ]] && echo "${pkg}"
+    return 0
+}
+
+# Distinct sockets of the CPU nodes, sorted, one per line.
+numa_sockets() {
+    local n
+    for n in $(numa_nodes); do node_package "${n}"; done | sort -un
+}
+
+# Sub-NUMA clustering, by the kernel's own rule (snc_get_config() in
+# arch/x86/kernel/cpu/resctrl/monitor.c): CPUs sharing CPU 0's L3 divided by the
+# CPUs of CPU 0's node. The kernel accepts 1, 2, 3, 4 and 6 and reads anything
+# else as 1. Empty when either list is missing or malformed.
+snc_per_l3() {
+    local l3 n cpus="" ratio
+    l3=$(cpulist_expand "$(head -n1 "${SYSROOT}/sys/devices/system/cpu/cpu0/cache/index3/shared_cpu_list" 2>/dev/null)") || return 0
+    for n in $(numa_nodes); do
+        cpus=$(cpulist_expand "$(numa_cpus "${n}")") || continue
+        grep -qx 0 <<< "${cpus}" && break
+        cpus=""
+    done
+    [ -n "${cpus}" ] && [ -n "${l3}" ] || return 0
+    ratio=$(( $(wc -l <<< "${l3}") / $(wc -l <<< "${cpus}") ))
+    case "${ratio}" in 1|2|3|4|6) echo "${ratio}" ;; *) echo 1 ;; esac
+}
+
+# Node labels for a NUMA host: node count, and SNC when it can be read.
+numa_labels() {
+    local snc
+    echo "k3d-gpu.io/numa-nodes=$(numa_count)"
+    snc=$(snc_per_l3)
+    [ -z "${snc}" ] || echo "k3d-gpu.io/snc=${snc}"
+}
+
+# ---- accelerators per socket (doctor only) -----------------------------------------
+# Xeon processor number -> "<number> <DSA> <IAA> <QAT>": default devices per socket
+# from each SKU's ark.intel.com specifications page (Advanced Technologies).
+#   8480+ https://www.intel.com/content/www/us/en/products/sku/231746/intel-xeon-platinum-8480-processor-105m-cache-2-00-ghz/specifications.html
+#   6980P https://www.intel.com/content/www/us/en/products/sku/240777/intel-xeon-6980p-processor-504m-cache-2-00-ghz/specifications.html
+#   6960P https://www.intel.com/content/www/us/en/products/sku/240775/intel-xeon-6960p-processor-432m-cache-2-70-ghz/specifications.html
+#   6780E https://www.intel.com/content/www/us/en/products/sku/240362/intel-xeon-6780e-processor-108m-cache-2-20-ghz/specifications.html
+xeon_ark_accels() {
+    case " $1 " in
+        *" 8480+ "*) echo "8480+ 1 1 1" ;;
+        *" 6980P "*) echo "6980P 4 4 4" ;;
+        *" 6960P "*) echo "6960P 4 4 4" ;;
+        *" 6780E "*) echo "6780E 2 2 2" ;;
+    esac
+}
+
+cpu_model() {
+    sed -n 's/^model name[[:space:]]*:[[:space:]]*//p' "${SYSROOT}/proc/cpuinfo" 2>/dev/null | head -n1
+}
+
+# pci_socket <pci dev dir>: socket of the device's NUMA node; 0 on a one-socket
+# host when the node is unknown (numa_node -1); "?" otherwise.
+pci_socket() {
+    local node pkg=""
+    node=$(head -n1 "$1/numa_node" 2>/dev/null || true)
+    [[ "${node}" =~ ^(0|[1-9][0-9]{0,4})$ ]] && pkg=$(node_package "${node}")
+    if [ -z "${pkg}" ]; then
+        if [ "$(numa_sockets | awk 'END {print NR}')" -le 1 ]; then pkg=0; else pkg="?"; fi
+    fi
+    echo "${pkg}"
+}
+
+# "<socket> <DSA|IAA|QAT>" per DSA/IAA device (dsa bus) and QAT physical function.
+accel_sockets() {
+    local dev kind
+    for dev in "${SYSROOT}"/sys/bus/dsa/devices/dsa[0-9]* "${SYSROOT}"/sys/bus/dsa/devices/iax[0-9]*; do
+        [ -e "${dev}" ] || continue
+        case "${dev##*/}" in dsa*) kind=DSA ;; *) kind=IAA ;; esac
+        echo "$(pci_socket "$(dirname "$(readlink -f "${dev}")")") ${kind}"
+    done
+    for dev in "${SYSROOT}"/sys/bus/pci/devices/*; do
+        [ "$(cat "${dev}/vendor" 2>/dev/null)" = "0x8086" ] || continue
+        [[ " ${QAT_PF_IDS} " == *" $(cat "${dev}/device" 2>/dev/null) "* ]] || continue
+        echo "$(pci_socket "${dev}") QAT"
+    done
+}
+
+# Doctor lines, appended to the caller's ${lines}: DSA/IAA/QAT per socket next to
+# the SKU's ARK default, a warning for each socket below it, and a note when the
+# On Demand (SDSi) interface exists.
+doctor_accel_sockets() {
+    local pairs sockets s k n want sku="" d_dsa="" d_iaa="" d_qat="" below line="" extra="" sdsi
+    pairs=$(accel_sockets)
+    if [ -n "${pairs}" ]; then
+        sockets=$({ numa_sockets; awk '{print $1}' <<< "${pairs}"; } | LC_ALL=C sort -u)
+        read -r sku d_dsa d_iaa d_qat <<< "$(xeon_ark_accels "$(cpu_model)")"
+        while read -r s; do
+            line+="${line:+; }socket ${s}:"
+            below=""
+            for k in DSA IAA QAT; do
+                n=$(grep -cxF "${s} ${k}" <<< "${pairs}" || true)
+                line+=" ${k} ${n},"
+                case "${k}" in DSA) want=${d_dsa} ;; IAA) want=${d_iaa} ;; *) want=${d_qat} ;; esac
+                if [ -n "${want}" ] && [ "${n}" -lt "${want}" ]; then below+="${below:+, }${k} ${n}"; fi
+            done
+            line=${line%,}
+            [ -z "${below}" ] || extra+="  ${YLW}warn${RST}: socket ${s}: ${below} below the ARK default for ${sku} — the BIOS may have the device disabled; check its accelerator settings"$'\n'
+        done <<< "${sockets}"
+        if [ -n "${sku}" ]; then
+            line+=" (ARK default for ${sku}: DSA ${d_dsa}, IAA ${d_iaa}, QAT ${d_qat} per socket)"
+        else
+            line+=" (no ARK default on file for this CPU)"
+        fi
+        lines+="  info: per socket: ${line}"$'\n'"${extra}"
+    fi
+    sdsi=$({ compgen -G "${SYSROOT}/sys/bus/auxiliary/devices/intel_vsec.sdsi.*" || true; } | sed 's#.*/##' | paste -sd, | sed 's/,/, /g')
+    [ -z "${sdsi}" ] || lines+="  info: Intel On Demand interface present (${sdsi}): on On Demand SKUs, instances above the ARK default are activated by a license (https://github.com/intel/intel-sdsi); ask the platform vendor whether activation is offered"$'\n'
+}
+
 # ---- platform tables (doctor only) --------------------------------------------
 # IDs, default-driver kernels and firmware names from the kernel's
 # include/drm/intel/pciids.h, i915_pci.c, intel_uc_fw.c, xe_pci.c, xe_uc_fw.c and
@@ -462,13 +603,14 @@ resolve_vendors() {
         if has_qat; then ACTIVE+=(qat); fi
         if [ -n "$(amx_flags)" ]; then ACTIVE+=(amx); fi
         if has_hybrid; then ACTIVE+=(hybrid); fi
+        if has_numa; then ACTIVE+=(numa); fi
     else
         IFS=',' read -r -a req <<< "${VENDORS_REQUEST}"
         for v in "${req[@]}"; do
             case "${v}" in
                 "") ;;
-                nvidia|intel|npu|gaudi|dsa|iaa|qat|amx|hybrid) is_active "${v}" || ACTIVE+=("${v}") ;;
-                *) err "unknown vendor '${v}' in K3D_GPU_VENDORS (use nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid)" ;;
+                nvidia|intel|npu|gaudi|dsa|iaa|qat|amx|hybrid|numa) is_active "${v}" || ACTIVE+=("${v}") ;;
+                *) err "unknown vendor '${v}' in K3D_GPU_VENDORS (use nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa)" ;;
             esac
         done
     fi
@@ -483,8 +625,8 @@ is_active() {
 
 # Kubernetes extended resources a vendor advertises (one per line). A trailing *
 # is a prefix: DSA/IAA name resources after the queue mode, QAT after the PF's
-# configured services (cy, dc, asym-dc, ... or generic). AMX and hybrid have no
-# resource; they list the node labels the launcher sets instead.
+# configured services (cy, dc, asym-dc, ... or generic). AMX, hybrid and numa have
+# no resource; they list the node labels the launcher sets instead.
 vendor_resources() {
     case "$1" in
         nvidia) echo "nvidia.com/gpu" ;;
@@ -495,6 +637,7 @@ vendor_resources() {
         qat)    echo "qat.intel.com/*" ;;
         amx)    amx_labels ;;
         hybrid) echo "${HYBRID_LABEL}" ;;
+        numa)   numa_labels ;;
         intel)
             # One resource per bound driver; both when nothing is detected
             # (explicit K3D_GPU_VENDORS=intel on a host we cannot read).
@@ -518,6 +661,8 @@ vendor_daemonset() {  # prints: namespace name manifest
         iaa)    echo "kube-system intel-iaa-plugin ${IAA_PLUGIN_MANIFEST}" ;;
         qat)    echo "kube-system intel-qat-plugin ${QAT_PLUGIN_MANIFEST}" ;;
         hybrid) echo "kube-system nri-resource-policy-balloons ${HYBRID_PLUGIN_MANIFEST}" ;;
+        # The same balloons policy; listed once when the host is hybrid too.
+        numa)   is_active hybrid || echo "kube-system nri-resource-policy-balloons ${HYBRID_PLUGIN_MANIFEST}" ;;
     esac
 }
 
@@ -691,6 +836,33 @@ doctor_intel_unbound() {
     printf '%s' "${lines}"
 }
 
+# NUMA placement and RDT, appended to the caller's ${lines}. RDT is guidance only:
+# turning it on rewrites the host's resctrl groups, which the launcher never does.
+doctor_numa() {
+    local count cpu_nodes="" mem_only="" n snc sockets flags rdt=""
+    count=$(numa_count)
+    for n in $(numa_nodes); do
+        if [ -n "$(numa_cpus "${n}")" ]; then cpu_nodes+=" ${n}"; else mem_only+=" ${n}"; fi
+    done
+    if has_numa; then
+        snc=$(snc_per_l3)
+        sockets=$(numa_sockets | awk 'END {print NR}')
+        [ "${sockets}" -gt 0 ] || sockets="?"
+        lines+="  ok: NUMA: ${count} node(s) ($(wc -w <<< "${cpu_nodes}") with CPUs), SNC ${snc:-unknown} per L3, ${sockets} socket(s) — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=replica for a balloon inside one NUMA node, memory pinned to it, near the pod's devices"$'\n'
+        [ -z "${mem_only}" ] || lines+="  info: NUMA node(s)$(sed 's/ /, /g; s/^,//' <<< "${mem_only}") have memory but no CPUs (HBM flat mode or CXL); replica pods follow the kernel's node distances, and a balloon type with memoryTypes [HBM] or [DRAM] narrows them"$'\n'
+    elif is_active numa; then
+        lines+="  ${RED}fail${RST}: NUMA requested but the host has ${count} NUMA node(s) (/sys/devices/system/node)"$'\n'
+        FAIL=1
+    fi
+    flags=$(grep -m1 '^flags[[:space:]]*:' "${SYSROOT}/proc/cpuinfo" 2>/dev/null || true)
+    if [[ " ${flags#*:} " == *" rdt_a "* ]]; then
+        for n in cat_l2 cat_l3 cdp_l2 cdp_l3 mba; do
+            [[ " ${flags#*:} " == *" ${n} "* ]] && rdt+=" ${n}"
+        done
+        lines+="  info: RDT allocation (rdt_a:${rdt}) — resctrl classes are available but left off: the balloons policy ships control.rdt.enable: false because enabling it rewrites the host's /sys/fs/resctrl. To opt in, mount resctrl on the host (mount -t resctrl resctrl /sys/fs/resctrl) and set control.rdt.enable: true in nri-balloons.yml; usePodQoSAsDefaultClass then gives BestEffort/Burstable/Guaranteed pods 33%/66%/100% of the L3"$'\n'
+    fi
+}
+
 # Xeon built-in accelerators. `up` deploys DSA/IAA/QAT plugins once the host
 # side is set up (work queues, SR-IOV VFs); this says what is still missing.
 doctor_cpu_accels() {
@@ -741,6 +913,8 @@ doctor_cpu_accels() {
         lines+="  ${RED}fail${RST}: hybrid requested but the CPU has no online P-core and E-core PMUs (/sys/devices/cpu_core, cpu_atom)"$'\n'
         FAIL=1
     fi
+    doctor_numa
+    doctor_accel_sockets
     if is_active amx && [ -z "${amx}" ]; then
         lines+="  ${RED}fail${RST}: AMX requested but the CPU reports no amx_* flags"$'\n'
         FAIL=1
@@ -1386,6 +1560,14 @@ cmd_up() {
     if is_active hybrid; then
         create_args+=(--k3s-node-label="${HYBRID_LABEL}@server:*;agent:*")
     fi
+    # NUMA (multi-socket, SNC, HBM/CXL memory nodes): the same balloons policy also
+    # schedules on nodes labelled k3d-gpu.io/numa-nodes, and its replica balloon
+    # type keeps a pod's CPUs and memory inside one NUMA node, near its devices.
+    if is_active numa; then
+        while read -r label; do
+            [ -n "${label}" ] && create_args+=(--k3s-node-label="${label}@server:*;agent:*")
+        done < <(numa_labels)
+    fi
     # AMX is a CPU feature: no plugin, just NFD-style labels pods can select on.
     if is_active amx; then
         while read -r label; do
@@ -1462,20 +1644,20 @@ resource_counts() {
 
 resource_total() { resource_counts "$1" | awk '{s += $2} END {print s + 0}'; }
 
-# Schedulable units for a vendor: summed resources, or for AMX and hybrid the
-# number of distinct nodes carrying any of their labels (a node with
+# Schedulable units for a vendor: summed resources, or for AMX, hybrid and numa
+# the number of distinct nodes carrying any of their labels (a node with
 # AMXBF16, AMXINT8 and AMXTILE counts once).
 vendor_total() {
     local res total=0 nodes=""
     while read -r res; do
         [ -n "${res}" ] || continue
-        if [ "$1" = "amx" ] || [ "$1" = "hybrid" ]; then
+        if [[ " amx hybrid numa " == *" $1 "* ]]; then
             nodes+=$({ kubectl get nodes -l "${res}" -o name 2>/dev/null || true; })$'\n'
         else
             total=$((total + $(resource_total "${res}")))
         fi
     done < <(vendor_resources "$1")
-    if [ "$1" = "amx" ] || [ "$1" = "hybrid" ]; then
+    if [[ " amx hybrid numa " == *" $1 "* ]]; then
         total=$(printf '%s' "${nodes}" | awk 'NF && !seen[$0]++ { n++ } END { print n + 0 }')
     fi
     echo "${total}"

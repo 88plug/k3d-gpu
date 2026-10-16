@@ -37,7 +37,7 @@ never estimated. Every "no other" claim refers to the search log in
   driver, DRM render nodes and `/dev/accel` nodes. That is how it tells an NPU
   (`8086` + `intel_vpu`) from a Gaudi (`1da3` + `habanalabs`) behind the same
   `/dev/accel/accel*` path.
-- **Label gating.** The NPU, DSA, IAA, QAT, Gaudi and hybrid DaemonSets only
+- **Label gating.** The NPU, DSA, IAA, QAT, Gaudi and hybrid/NUMA DaemonSets only
   schedule onto nodes carrying their label (the upstream NFD label where one
   exists, e.g. `intel.feature.node.kubernetes.io/npu=true`). The launcher sets
   the label only when the hardware and host setup are present. Two plugins are
@@ -139,7 +139,7 @@ Facts from that snapshot that shape a k3d run:
 - No code path requests `gpu.intel.com`, `habana.ai` or `/dev/dri`. The OVMS
   chart defaults to `targetDevice: CPU` (`core/helm-charts/ovms/values.yaml:77`).
 - The toolkit installs its own `nri-resource-policy-balloons` release in
-  `kube-system`. Only one NRI resource policy can own a node, so drop `hybrid`
+  `kube-system`. Only one NRI resource policy can own a node, so drop `hybrid` and `numa`
   from `K3D_GPU_VENDORS` before installing it.
 
 Measured on the i9-13900T host above. Values come from the run ledger; a

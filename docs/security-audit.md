@@ -45,13 +45,13 @@ No High findings.
 | M-6 | Medium | `build-and-push.yml:68,139,160,173,193` | Unvalidated upstream release tag interpolated into `run:` scripts |
 | M-7 | Info | `scripts/k3d-gpu:804,818,845,853` | Pod JSON built by string interpolation; `kubectl run --image` blocks the env-image vector |
 | M-8 | Low | `scripts/k3d-gpu:782-797` | `test` creates and deletes pods in whatever kube-context is current |
-| M-9 | Low | `share/nri-balloons.yml:1786-1787` | `ENABLE_TEST_APIS=1` shipped (upstream chart bug) |
-| M-10 | Low | `share/nri-balloons.yml:1802-1805,1820-1827` | Balloons gets read-write host `/sys` and `/proc` as uid 0 |
+| M-9 | Low | `share/nri-balloons.yml:1824-1825` | `ENABLE_TEST_APIS=1` shipped (upstream chart bug) |
+| M-10 | Low | `share/nri-balloons.yml:1840-1843,1858-1865` | Balloons gets read-write host `/sys` and `/proc` as uid 0 |
 | M-11 | Low | `share/gaudi-device-plugin.yml:32-44`, `share/nvidia-device-plugin.yml:24-61` | SA token automounted; Gaudi plugin privileged |
 | M-12 | Low | `Dockerfile:18-25` | apt key fetched without a fingerprint check; toolkit version unpinned; `curl -s` without `-f` |
 | M-13 | Low | `packaging/aur/PKGBUILD:16-17` | Source is a mutable tag with `sha256sums=('SKIP')` |
 | M-14 | Low | `dependabot-auto-merge.yml:11-15` | Gate is `github.actor`, and every update type is merged |
-| M-15 | Info | `share/nri-balloons.yml:1645-1666` | Balloons ClusterRole patches status on every node |
+| M-15 | Info | `share/nri-balloons.yml:1672-1693` | Balloons ClusterRole patches status on every node |
 | M-16 | Info | `scripts/k3d-gpu:613-614` | k3d nodes are privileged, and no Pod Security admission is set |
 | A-1 | Medium | agent-stack `scripts/k3d-gpu:1060-1068,1090-1102` | OVMS `/v3` unauthenticated on `0.0.0.0:8000`, reachable from every pod |
 | A-2 | Medium | agent-stack `scripts/k3d-gpu:870,1047-1048` | Model pulled from the moving Hugging Face HEAD, with no revision pin |
@@ -155,7 +155,7 @@ should print `0.0.0.0:<port>` today and `127.0.0.1:<port>` after the fix.
 | `share/intel-iaa-plugin.yml:38` | `intel/intel-iaa-plugin:0.37.1` | `sha256:6391dcd3b2f3ca487675503e850db5ec77ec3dd2054867e1de196d4986bc60bc` |
 | `share/intel-qat-plugin.yml:38` | `intel/intel-qat-plugin:0.37.1` | `sha256:4751706168d6d0e100e6391e3bb288fc9386920c5c2f733f2073d04f830c7418` |
 | `share/gaudi-device-plugin.yml:42` | `docker.io/intel/gaudi-device-plugin:1.24.2-481` | `sha256:386e6bec28b3f25a0e4e1c0fb726f026e8ed199bd74e4aa0fb226631359f7daf` |
-| `share/nri-balloons.yml:1788` | `ghcr.io/containers/nri-plugins/nri-resource-policy-balloons:v0.14.0` | `sha256:a8c8297c72744f25dbcf70fdb4a64bb787f428a3f9ab4dfabb0eb1377da0070f` |
+| `share/nri-balloons.yml:1826` | `ghcr.io/containers/nri-plugins/nri-resource-policy-balloons:v0.14.0` | `sha256:a8c8297c72744f25dbcf70fdb4a64bb787f428a3f9ab4dfabb0eb1377da0070f` |
 | `scripts/k3d-gpu:44` | `nvidia/cuda:13.4.2-base-ubuntu26.04` | `sha256:ac2289b83fba0b38cddf6513f3703d132135ae070cc1b7c63234b90dca4c60f2` |
 | `scripts/k3d-gpu:45` | `busybox:1.37` | `sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e` |
 | `ci.yml:40` | `archlinux:latest` | `sha256:3c64b538588416593f69a1aebd2f2ec0f2541b29159f32556fa7def2167147a0` |
@@ -298,7 +298,7 @@ report-bench already uses the safer form,
 
 ### M-9 Low: `ENABLE_TEST_APIS=1` shipped in the balloons manifest
 
-`share/nri-balloons.yml:1786-1787`:
+`share/nri-balloons.yml:1824-1825`:
 
 ```yaml
           - name: ENABLE_TEST_APIS
@@ -315,7 +315,7 @@ With the variable set, nri-plugins v0.14.0 does two things:
 
 - It registers `/e2e-test-controller-state` on the instrumentation HTTP server
   (`pkg/resmgr/control/e2e-test/e2e-test.go:146-147`). That server listens on
-  `httpEndpoint: :8891` (`share/nri-balloons.yml:1919`).
+  `httpEndpoint: :8891` (`share/nri-balloons.yml:1969`).
 - It accepts fake topology hints from any pod's `test.` annotation
   (`pkg/resmgr/cache/container.go:197,278-297`).
 
@@ -331,7 +331,7 @@ UNVERIFIED (needs a live hybrid node):
 
 ### M-10 Low: balloons gets read-write host `/sys` and `/proc` as uid 0
 
-`share/nri-balloons.yml:1802-1805` (mounts) and `1820-1827` (hostPaths) mount
+`share/nri-balloons.yml:1840-1843` (mounts) and `1858-1865` (hostPaths) mount
 `/sys` and `/proc` at `/host/sys` and `/host/proc` with no `readOnly`. In a k3d
 node, `/sys` is the host's sysfs, because the node is privileged. The image runs
 as `User: "0"` (from the image config of the pinned digest). The container drops
@@ -440,7 +440,7 @@ Make sure branch protection requires CI, so `--auto` waits for CI to pass.
 
 ### M-15 Info: balloons ClusterRole breadth
 
-`share/nri-balloons.yml:1645-1666` grants:
+`share/nri-balloons.yml:1672-1693` grants:
 
 - `nodes`: `get`, `watch`;
 - `nodes/status`: `get`, `patch`, `update`, on all nodes;
