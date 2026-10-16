@@ -331,7 +331,8 @@ def oracle_sysfs(t):
         found.append("gaudi")
     if t["cpuinfo"] is not None:
         line = next((ln for ln in t["cpuinfo"].split("\n") if ln.startswith("flags")), "")
-        if any(tok.startswith("amx_") for tok in line.partition(":")[2].split(" ")):
+        # kernel flag names use [a-z0-9_] only (x86_cap_flags); other tokens are not flags
+        if any(re.fullmatch(r"amx_[a-z0-9_]+", tok) for tok in line.partition(":")[2].split(" ")):
             found.append("amx")
     if t["core"] is not None and t["atom"] is not None and val(t["core"]) and val(t["atom"]):
         found.append("hybrid")
@@ -432,6 +433,9 @@ def swap_image(doc, img):
     return doc
 
 
+OCI_REF = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/:@-]*")
+
+
 def check_overrides(vals):
     ref = overrides_reference()
     if isinstance(ref, str):
@@ -439,6 +443,11 @@ def check_overrides(vals):
     res = shim("overrides", vals, EMPTY_ROOT_HYBRID)
     out = []
     for v, (rc, text) in zip(vals, res):
+        # Refusing a string outside the OCI reference alphabet is as safe as escaping
+        # it (such an image can never be pulled); refusing a valid ref is a bug.
+        if rc != 0 and text == "":  # cmd_test refused before building any pod spec
+            out.append(None if not OCI_REF.fullmatch(v) else "valid image ref %r refused" % v)
+            continue
         lines = text.split("\n")
         try:
             docs = [json.loads(line) for line in lines]
@@ -490,35 +499,9 @@ def hostile_ws(t):
 
 
 KNOWN = {
-    "within-vacuous": ("within_fail_closed",
-                       lambda v, f: subprocess.run(["bash", "-c", FUNCS + 'cpulist_expand "$1"', "_", v[0]],
-                                                   capture_output=True, cwd=CWD, text=True).stdout.strip() == "",
-                       (",", "0-3"),
-                       "cpulist_within succeeds when list A expands to nothing (',', '3-1', '5-', '-')"),
-    "within-lenient": ("within_fail_closed", lambda v, f: True, ("1 2", "0-3"),
-                       "cpulist_within accepts non-kernel spellings (spaces, '07', '1e2', '0x1', globs)"),
-    "within-unbounded": ("bounded", lambda v, f: f.startswith("timeout"),
-                         ("0-99999999999999999999999", "0-3"),
-                         "cpulist_expand hands any a-b range to seq, so a huge range never finishes"),
-    "vendors-newline": ("vendors", lambda v, f: "\n" in v and launcher_vendors(v) == observed_vendors(v),
-                        "nvidia\nintel", "K3D_GPU_VENDORS: entries after a newline are silently dropped"),
-    "vendors-tab": ("vendors", lambda v, f: "\t" in v and launcher_vendors(v) == observed_vendors(v),
-                    "nvidia,\tintel", "K3D_GPU_VENDORS: a tab is kept as part of the entry (spaces are stripped)"),
-    "vendors-auto-ws": ("vendors", lambda v, f: re.sub(r"\s", "", v) == "auto" and v != "auto", " auto",
-                        "K3D_GPU_VENDORS=' auto' is rejected as unknown vendor 'auto'"),
-    "overrides-json": ("overrides", lambda v, f: re.search(r'["\\\x00-\x1f]', v) is not None,
-                       'x","securityContext":{"privileged":true},"imagePullPolicy":"Never',
-                       "test image env is interpolated into --overrides JSON unescaped"),
-    "sysfs-whitespace": ("sysfs", lambda v, f: hostile_ws(v),
-                         {"render": [], "accel": [{"vendor": "0x1da3\n0x8086", "device": "0x643e",
-                                                   "driver": "intel_vpu"}],
-                          "core": None, "atom": None, "cpuinfo": None},
-                         "accel_nodes re-splits vendor attributes on whitespace ('0x1da3 ' is Gaudi, "
-                         "'0x1da3\\n0x8086' adds an NPU); detect_intel compares exactly"),
-    "amx-label": ("sysfs", lambda v, f: f.startswith("invalid AMX node label"),
-                  {"render": [], "accel": [], "core": None, "atom": None,
-                   "cpuinfo": "flags\t\t: amx_x@y;z\n"},
-                  "amx_labels turns any amx_* cpuinfo token into a node label unvalidated"),
+    # Launcher bugs still open go here: name -> (property, match(value, failure),
+    # pinned repro, description). Every bug this harness found is fixed; the
+    # properties now guard them.
 }
 
 # ---- shrinking ----------------------------------------------------------------------

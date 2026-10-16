@@ -125,12 +125,20 @@ detect_intel() {
 # Print "<pci-vendor> <driver> <pci-device-id>" per /dev/accel/accelN compute
 # node. The Intel NPU (intel_vpu, 0x8086) and Gaudi (habanalabs, 0x1da3) both
 # register here, so the node name alone never identifies the accelerator.
+# A sysfs PCI id attribute ("0x8086"), or "-" when it is missing or malformed.
+# Callers split the output on whitespace, so nothing else may pass through.
+pci_id() {
+    local v
+    v=$(cat "$1" 2>/dev/null) || v=""
+    [[ "${v}" =~ ^0x[0-9a-fA-F]{4}$ ]] && echo "${v}" || echo "-"
+}
+
 accel_nodes() {
     local dev drv
     for dev in "${SYSROOT}"/sys/class/accel/accel[0-9]*/device; do
         [ -r "${dev}/vendor" ] || continue
         drv=$(bound_driver "${dev}")
-        echo "$(cat "${dev}/vendor") ${drv:--} $(cat "${dev}/device" 2>/dev/null)"
+        echo "$(pci_id "${dev}/vendor") ${drv:--} $(pci_id "${dev}/device")"
     done
 }
 
@@ -187,8 +195,10 @@ has_qat() {
 # AMX feature flags from /proc/cpuinfo, sorted, one line (empty when absent).
 amx_flags() {
     local flags
-    flags=$(grep -m1 '^flags' "${SYSROOT}/proc/cpuinfo" 2>/dev/null || true)
-    tr ' ' '\n' <<< "${flags#*:}" | grep '^amx_' | sort | paste -sd' ' || true
+    flags=$(grep -m1 '^flags[[:space:]]*:' "${SYSROOT}/proc/cpuinfo" 2>/dev/null || true)
+    # Kernel flag names are [a-z0-9_]; anything else is not a flag and must not
+    # become a node label.
+    tr ' ' '\n' <<< "${flags#*:}" | LC_ALL=C grep -E '^amx_[a-z0-9_]+$' | sort | paste -sd' ' || true
 }
 
 # NFD-style node labels for the host's AMX flags (amx_tile -> ...cpu-cpuid.AMXTILE=true).
@@ -205,21 +215,28 @@ hybrid_cpus() { cat "${SYSROOT}/sys/devices/cpu_$1/cpus" 2>/dev/null || true; }
 has_hybrid() { [ -n "$(hybrid_cpus core)" ] && [ -n "$(hybrid_cpus atom)" ]; }
 HYBRID_LABEL="k3d-gpu.io/hybrid-cpu=true"
 
-# Kernel CPU list ("0-3,8,10-11") -> one CPU number per line.
+# Kernel CPU list ("0-3,8,10-11") -> one CPU number per line. Only what the
+# kernel prints is accepted (decimal, no leading zeros, a <= b, CPU ids below
+# CPULIST_MAX); anything else prints nothing and fails, so a garbled list can
+# never pass a check by expanding to an empty set or an unbounded range.
+CPULIST_MAX=65536
 cpulist_expand() {
-    local part
-    for part in ${1//,/ }; do
-        if [[ "${part}" == *-* ]]; then seq "${part%-*}" "${part#*-}"; else echo "${part}"; fi
+    local n='(0|[1-9][0-9]{0,4})' part lo hi parts
+    [[ "$1" =~ ^${n}(-${n})?(,${n}(-${n})?)*$ ]] || return 1
+    IFS=',' read -r -a parts <<< "$1"
+    for part in "${parts[@]}"; do
+        lo=${part%-*} hi=${part#*-}
+        { [ "${lo}" -le "${hi}" ] && [ "${hi}" -lt "${CPULIST_MAX}" ]; } || return 1
     done
+    for part in "${parts[@]}"; do seq "${part%-*}" "${part#*-}"; done
 }
 
-# True when every CPU in list $1 is also in list $2 (and $1 is not empty).
+# True when list $1 is a valid, non-empty list whose every CPU is also in list $2.
 cpulist_within() {
-    [ -n "$1" ] || return 1
-    local cpu
-    for cpu in $(cpulist_expand "$1"); do
-        grep -qx "${cpu}" <<< "$(cpulist_expand "$2")" || return 1
-    done
+    local a b
+    a=$(cpulist_expand "$1") && [ -n "${a}" ] || return 1
+    b=$(cpulist_expand "$2") || return 1
+    ! grep -qvxF -f <(printf '%s\n' "${b}") <<< "${a}"
 }
 
 # ---- platform tables (doctor only) --------------------------------------------
@@ -275,6 +292,8 @@ firmware_present() {
 # Resolve the active vendor list into ACTIVE (array). Honors K3D_GPU_VENDORS.
 resolve_vendors() {
     ACTIVE=()
+    VENDORS_REQUEST="${VENDORS_REQUEST//[[:space:]]/}" # any whitespace, newlines included, is ignored
+    [ -n "${VENDORS_REQUEST}" ] || VENDORS_REQUEST=auto
     detect_intel
     detect_npu
     local v req
@@ -293,7 +312,7 @@ resolve_vendors() {
         if [ -n "$(amx_flags)" ]; then ACTIVE+=(amx); fi
         if has_hybrid; then ACTIVE+=(hybrid); fi
     else
-        IFS=',' read -r -a req <<< "${VENDORS_REQUEST// /}"
+        IFS=',' read -r -a req <<< "${VENDORS_REQUEST}"
         for v in "${req[@]}"; do
             case "${v}" in
                 "") ;;
@@ -810,6 +829,11 @@ cmd_test() {
     resolve_vendors
     [ "${#ACTIVE[@]}" -gt 0 ] || err "no supported accelerator detected — run 'k3d-gpu doctor'"
     local res v path out got
+    # Image refs are spliced into --overrides JSON; refuse anything outside the
+    # OCI reference alphabet so a quote or control byte cannot rewrite the pod.
+    for v in "${TEST_IMAGE}" "${DEVICE_TEST_IMAGE}"; do
+        [[ "${v}" =~ ^[A-Za-z0-9][A-Za-z0-9._/:@-]*$ ]] || err "invalid image reference '${v}' in K3D_GPU_TEST_IMAGE / K3D_GPU_DEVICE_TEST_IMAGE"
+    done
     if is_active nvidia; then
         info "Deploying nvidia-smi test pod (${TEST_IMAGE})..."
         # The container command + GPU resource limit live entirely in the overrides;
