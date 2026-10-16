@@ -106,8 +106,9 @@ Evidence:
   returns only Grafana dashboard labels and that config file.
 - `intel/enterprise-agent-toolkit` on 2026-10-16: 41 stars, 21 forks, two
   issues ever filed (#2 repo organisation, #9 vLLM chart ships with
-  `apisix.enabled: false` and no auth). Discussions are disabled. The forks
-  belong to Intel staff accounts.
+  `apisix.enabled: false` and no auth). Discussions are disabled. None of
+  the fork owners checked (gh api, 2026-10-16) is provably an Intel account,
+  and none has published results.
 - One third-party derivative exists: `navchetna/tender-eval`. Its README calls
   it "an extension of the Intel AI for Enterprise Agent Toolkit" with models
   served by vLLM on Xeon. It publishes no tok/s or TTFT. Its single-machine
