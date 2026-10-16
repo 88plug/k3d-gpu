@@ -1803,6 +1803,53 @@ rm "${r}/sys/kernel/debug/dri/0/gt0/uc/guc_info"
 report_says "report: readable debugfs with no GuC says so, not 'run as root'" "${r}" \
     '(g := r["host"]["intel_gpus"][0]["guc"]) and g["status"] is None and g["note"] == "GuC not supported"'
 
+# `up` passes K3D_GPU_NODE_LABELS to k3d as extra node labels. k3d is stubbed to
+# record its arguments; kubectl answers `get nodes -l` with one node so the
+# hybrid verify step finds its labelled node.
+USTUB="${WORK}/ubin"
+mkdir -p "${USTUB}"
+cat > "${USTUB}/k3d" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$@" > "${STUB_K3D_ARGS}"
+EOF
+cat > "${USTUB}/kubectl" <<'EOF'
+#!/bin/sh
+case "$*" in *"get nodes -l"*) echo node/k3d-stub-server-0 ;; esac
+exit 0
+EOF
+cp "${STUB_BIN}/docker" "${USTUB}/docker"
+chmod +x "${USTUB}"/*
+
+# up_says <name> <want rc: 0|fail> <ERE on the recorded k3d args> [negate] [env assignments...]
+up_says() {
+    local name=$1 want=$2 re=$3 negate=${4:-} args="${WORK}/k3d-args" out rc hit=0
+    shift 4 2>/dev/null || shift $#
+    rm -f "${args}"
+    out=$(env K3D_GPU_SYSROOT="$(newroot up-empty)" PATH="${USTUB}:${PATH}" STUB_K3D_ARGS="${args}" \
+        K3D_GPU_VENDORS=hybrid "$@" bash "${K3D_GPU}" up 2>&1)
+    rc=$?
+    [ -f "${args}" ] && grep -E -- "${re}" "${args}" >/dev/null && hit=1
+    if { { [ "${want}" = 0 ] && [ "${rc}" -eq 0 ]; } || { [ "${want}" = fail ] && [ "${rc}" -ne 0 ]; }; } \
+       && { { [ -z "${negate}" ] && [ "${hit}" -eq 1 ]; } || { [ -n "${negate}" ] && [ "${hit}" -eq 0 ]; }; }; then
+        PASS=$((PASS + 1)); echo "ok   ${name}"
+    else
+        FAILS=$((FAILS + 1))
+        echo "FAIL ${name} (rc=${rc}, want ${want}, ${negate:+not }/${re}/)"
+        awk '{print "  | " $0}' <<< "${out}"
+        [ -f "${args}" ] && sed 's/^/  k3d> /' "${args}"
+    fi
+}
+
+up_says "up without extra labels adds none" 0 'ei-infra-eligible' negate
+up_says "K3D_GPU_NODE_LABELS adds each label to every node" 0 \
+    '^--k3s-node-label=ei-infra-eligible=true@server:\*;agent:\*$' "" \
+    K3D_GPU_NODE_LABELS="ei-infra-eligible=true, ei-inference-eligible=true"
+up_says "K3D_GPU_NODE_LABELS second label is passed too" 0 \
+    '^--k3s-node-label=ei-inference-eligible=true@server:\*;agent:\*$' "" \
+    K3D_GPU_NODE_LABELS="ei-infra-eligible=true, ei-inference-eligible=true"
+up_says "K3D_GPU_NODE_LABELS rejects an entry without =" fail 'ei-infra-eligible' negate \
+    K3D_GPU_NODE_LABELS="ei-infra-eligible"
+
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

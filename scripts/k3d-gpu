@@ -55,6 +55,7 @@ SYSROOT="${K3D_GPU_SYSROOT:-}" # prefix for /sys and /dev reads (tests point it 
 TEST_IMAGE="${K3D_GPU_TEST_IMAGE:-nvidia/cuda:13.4.2-base-ubuntu26.04}"
 DEVICE_TEST_IMAGE="${K3D_GPU_DEVICE_TEST_IMAGE:-busybox:1.37}"
 VENDORS_REQUEST="${K3D_GPU_VENDORS:-auto}"
+NODE_LABELS="${K3D_GPU_NODE_LABELS:-}" # extra key=value node labels, comma-separated
 FAIL=0           # set by doctor_* checks
 INTEL_DRIVERS=() # "<driver> <pci-device-id>" per Intel render node (filled by detect_intel)
 NPU_IDS=()       # PCI device id per Intel NPU accel node (filled by detect_npu)
@@ -97,6 +98,7 @@ Environment:
   K3D_GPU_CLUSTER       cluster name         (default: gpu)
   K3D_GPU_IMAGE         k3s node image       (default: cryptoandcoffee/k3d-gpu:latest)
   K3D_GPU_VENDORS       auto | comma list of nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa (default: auto)
+  K3D_GPU_NODE_LABELS   extra node labels, comma list of key=value (default: none)
   K3D_GPU_SHARE         dir holding the fallback plugin yamls (default: /usr/share/k3d-gpu)
   K3D_GPU_PLUGIN        NVIDIA plugin yaml   (default: ${SHARE_DIR}/nvidia-device-plugin.yml)
   K3D_GPU_INTEL_PLUGIN  Intel GPU plugin yaml  (default: ${SHARE_DIR}/intel-gpu-plugin.yml)
@@ -2215,6 +2217,14 @@ cmd_up() {
     done < <(if is_active intel; then intel_gpu_labels; fi
              if is_active npu; then npu_labels; fi
              cpu_isa_labels)
+    # Extra labels for stacks that place pods by their own node labels, e.g. Intel's
+    # Enterprise Agent Toolkit: ei-infra-eligible=true,ei-inference-eligible=true.
+    local extra
+    IFS=',' read -r -a extra <<< "${NODE_LABELS// /}"
+    for label in ${extra[@]+"${extra[@]}"}; do
+        [[ "${label}" == ?*=* ]] || err "K3D_GPU_NODE_LABELS entry '${label}' is not key=value"
+        create_args+=(--k3s-node-label="${label}@server:*;agent:*")
+    done
     if is_active intel && ! compgen -G "${SYSROOT}/dev/dri/renderD*" >/dev/null; then
         warn "no /dev/dri/renderD* on host — Intel GPU will not be visible in the node"
     fi
