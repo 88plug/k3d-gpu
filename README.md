@@ -400,6 +400,61 @@ state lives in debugfs, which only root can read: without root the report says
 `status: null` with a note rather than guessing. `energy_uj` is root-only too.
 The document carries `"schema": "k3d-gpu.report/v1"`.
 
+### Measurement harness (`bench/`)
+
+Three small tools for measuring workloads on a k3d-gpu cluster. They are not
+installed by the package; run them from a checkout.
+
+**`bench/energy.sh`** — energy one command used, from a RAPL counter (default
+`intel-rapl:0`, the CPU package, which includes the iGPU on client parts):
+
+```bash
+bench/energy.sh [--zone intel-rapl:0] [--interval 5] [--json out.json] -- <command> [args...]
+# energy: zone=intel-rapl:0 (package-0) joules=148.882 seconds=2.015 avg_watts=73.873 command_seconds=2.001 samples=2 exit=0
+```
+
+The command runs as you; only the counter reads run as root, in one `sudo`
+reader process. With no terminal, set `SUDO_ASKPASS` to a program that prints
+the password. The counter wraps at `max_energy_range_uj`; the reader samples it
+every `--interval` seconds and every step's delta is summed, so wraps are
+counted. Package power includes everything else running on the host, so
+measure an idle baseline the same way (`-- sleep 60`) and subtract it.
+
+**`bench/llm_load.py`** — streams chat requests at an OpenAI-compatible
+endpoint (Python 3 standard library only). `--base-url` is the API root:
+`http://HOST:PORT/v3` for OpenVINO Model Server, `.../v1` for vLLM, llama.cpp
+and Ollama.
+
+```bash
+bench/llm_load.py --base-url http://127.0.0.1:8000/v3 --model MODEL \
+    --requests 16 --concurrency 1,4 --max-tokens 128 [--ignore-eos] --out run.json
+```
+
+Each concurrency level is a phase. Per request it records `first_chunk_s`,
+`ttft_s` (first content), `latency_s`, `output_tokens` (from
+`stream_options.include_usage`, `null` if the server sends no usage),
+`tokens_per_s` and `decode_tokens_per_s`. Per phase it records median / p90 /
+min / max of each, plus wall time and aggregate tokens/s. OVMS sends a
+role-only first chunk as soon as the first token exists, and its usage chunk
+only comes from continuous-batching servables.
+
+**`bench/noisy.sh`** — a CPU-burning neighbour pod
+(`stress-ng` 0.22.01, pinned by digest) in the current kube context:
+
+```bash
+bench/noisy.sh start --cores efficient --workers 4   # or performance, or none (unlabelled)
+bench/noisy.sh status
+bench/noisy.sh stop
+```
+
+`--cores` sets `k3d-gpu.io/cores`, so on a hybrid node the balloons policy
+pins it. CPU request = limit = `--workers` unless `--cpu` says otherwise.
+`start` waits until the pod runs and prints its `Cpus_allowed_list`.
+`KUBECTL_ARGS="--context k3d-NAME"` picks the cluster.
+
+`tests/bench_test.sh` tests all three without root, a cluster or a model,
+using a fake RAPL tree and `tests/openai_stub.py`, a streaming stub server.
+
 ---
 
 ## Prerequisites
