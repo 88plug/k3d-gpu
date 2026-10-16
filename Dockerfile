@@ -1,9 +1,11 @@
-ARG K3S_TAG="v1.34.1-k3s1-amd64"
-#https://hub.docker.com/r/rancher/k3s/tags
+ARG K3S_TAG="v1.37.1-k3s1"
+ARG K3S_DIGEST="sha256:ca7f37d993d82ef0dcdcfecb2e0e2618ea541dbaffc620c8cedebe01a82acd0d"
+#https://hub.docker.com/r/rancher/k3s/tags  (multi-arch index digest of K3S_TAG;
+# rancher stopped publishing per-arch "-amd64" tags after v1.34.1-k3s1)
 ARG UBUNTU_TAG="26.04"
 #https://hub.docker.com/_/ubuntu/tags  (26.04 = default/latest; 24.04 also built)
 
-FROM rancher/k3s:$K3S_TAG AS k3s
+FROM rancher/k3s:$K3S_TAG@$K3S_DIGEST AS k3s
 
 # A k3s NODE image does not need the CUDA toolkit. The node only runs containerd
 # + the NVIDIA container runtime; GPU pods get the driver libraries injected from

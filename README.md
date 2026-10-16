@@ -508,7 +508,8 @@ These are Docker **build args** (not runtime env):
 
 | Build arg    | Default               | Description                                  |
 |--------------|-----------------------|----------------------------------------------|
-| `K3S_TAG`    | `v1.34.1-k3s1-amd64`  | K3s image tag from `rancher/k3s` (auto-bumped) |
+| `K3S_TAG`    | `v1.37.1-k3s1`        | K3s image tag from `rancher/k3s` (auto-bumped) |
+| `K3S_DIGEST` | `sha256:ca7f37d9…`    | index digest of `K3S_TAG` (auto-bumped with it) |
 | `UBUNTU_TAG` | `26.04`               | Ubuntu base tag (`26.04` default; `24.04` also published) |
 
 Build a specific Ubuntu base:
