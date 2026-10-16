@@ -42,6 +42,25 @@ check "nfpm version comes from \$VERSION" grep -qx 'version: ${VERSION}' "${NFPM
 check "nfpm is arch-independent" grep -qx 'arch: all' "${NFPM}"
 check "formula installs share/*.yml" grep -qF 'pkgshare.install Dir["share/*.yml"]' "${FORMULA}"
 check "formula points K3D_GPU_SHARE at pkgshare" grep -qF 'K3D_GPU_SHARE: "${K3D_GPU_SHARE:-#{pkgshare}}"' "${FORMULA}"
+check "formula test asserts a user K3D_GPU_SHARE wins" \
+    grep -qF 'assert_match "/x/nvidia-device-plugin.yml", shell_output("K3D_GPU_SHARE=/x #{bin}/k3d-gpu help")' "${FORMULA}"
+
+# Render bin/k3d-gpu the way Homebrew's Pathname#write_env_script does (brew 7.0.9,
+# Library/Homebrew/extend/pathname.rb: KEY="value" exec "target" "$@") and run it.
+share_value=$(sed -n 's/.*write_env_script libexec\/"k3d-gpu", K3D_GPU_SHARE: "\(.*\)"$/\1/p' "${FORMULA}")
+check "formula wrapper value found" test -n "${share_value}"
+brew_wrapper() {
+    local value=${share_value//#\{pkgshare\}/\/opt\/pkgshare}
+    printf '#!/bin/bash\nK3D_GPU_SHARE="%s" exec "%s" "$@"\n' "${value}" "${ROOT}/scripts/k3d-gpu"
+}
+wrap_dir=$(mktemp -d)
+brew_wrapper > "${wrap_dir}/k3d-gpu" && chmod +x "${wrap_dir}/k3d-gpu"
+check "brew wrapper defaults K3D_GPU_SHARE to pkgshare" \
+    grep -qF /opt/pkgshare/nvidia-device-plugin.yml <("${wrap_dir}/k3d-gpu" help)
+check "brew wrapper keeps a user K3D_GPU_SHARE" \
+    grep -qF /x/nvidia-device-plugin.yml <(K3D_GPU_SHARE=/x "${wrap_dir}/k3d-gpu" help)
+rm -rf "${wrap_dir}"
+
 check "formula url is an aur-v release tarball" \
     grep -Eq '^  url "https://github.com/88plug/k3d-gpu/archive/refs/tags/aur-v[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz"$' "${FORMULA}"
 check "formula sha256 is 64 hex" grep -Eq '^  sha256 "[0-9a-f]{64}"$' "${FORMULA}"

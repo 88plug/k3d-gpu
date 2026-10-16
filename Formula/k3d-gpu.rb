@@ -21,6 +21,7 @@ class K3dGpu < Formula
   test do
     assert_match "k3d-gpu #{version}", shell_output("#{bin}/k3d-gpu version")
     assert_match "#{pkgshare}/nvidia-device-plugin.yml", shell_output("#{bin}/k3d-gpu help")
+    assert_match "/x/nvidia-device-plugin.yml", shell_output("K3D_GPU_SHARE=/x #{bin}/k3d-gpu help")
     assert_path_exists pkgshare/"nvidia-device-plugin.yml"
   end
 end
