@@ -8,9 +8,10 @@
 #   <out-dir>      fixture sysroot to write (must not exist)
 #   [source-root]  tree to read from (default: the running host, /)
 #
-# Reads only vendor/device/class ids, driver bindings, device node names, CPU
-# flags, the kernel release and firmware file names. No serial numbers, MACs or
-# firmware contents are copied.
+# Reads only vendor/device/class ids, driver bindings, device node names, GPU
+# engine names and capabilities, the CPU family, model and flags, the kernel
+# release and firmware file names. No serial numbers, MACs or firmware contents
+# are copied.
 
 set -euo pipefail
 
@@ -73,6 +74,12 @@ for node in "${SRC}"/sys/class/drm/* "${SRC}"/sys/class/accel/*; do
     link "${node}"
     dir "${node}"
     if [ -L "${node}/device" ]; then link "${node}/device"; fi
+    # i915 lists each GPU engine and its capabilities under cardN/engine.
+    for eng in "${node}"/engine/*; do
+        [ -d "${eng}" ] || continue
+        dir "${eng}"
+        attr "${eng}" capabilities
+    done
 done
 
 # DSA/IAA devices and work queues.
@@ -96,11 +103,13 @@ for pmu in cpu_core cpu_atom; do
     attr "${SRC}/sys/devices/${pmu}" cpus
 done
 
-# First CPU's model and flags, and the kernel release.
+# First CPU's family, model, model name and flags, and the kernel release.
 if [ -r "${SRC}/proc/cpuinfo" ]; then
     mkdir -p "${OUT}/proc"
     {
         printf 'processor\t: 0\n'
+        grep -m1 '^cpu family[[:space:]]*:' "${SRC}/proc/cpuinfo" || true
+        grep -m1 '^model[[:space:]]*:' "${SRC}/proc/cpuinfo" || true
         grep -m1 '^model name' "${SRC}/proc/cpuinfo" || true
         grep -m1 '^flags' "${SRC}/proc/cpuinfo" || true
     } > "${OUT}/proc/cpuinfo"

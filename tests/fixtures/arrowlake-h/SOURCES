@@ -1,0 +1,30 @@
+Platform: Core Ultra 9 285H laptop (Arrow Lake-H): Xe-LPG+ iGPU with XMX on i915,
+NPU 3 on intel_vpu, hybrid P/E cores, firmware installed.
+
+Sources (kernel paths are Linux v6.18 (torvalds/linux tag v6.18) unless a tag is named):
+- 0x8086 0x7d51 "Arrow Lake-P [Arc Pro 130T/140T]": pci.ids 2026.10.15; INTEL_ARL_H_IDS
+  in include/drm/intel/pciids.h, in i915's MTL id list from v6.9.
+- XMX: Mesa main include/pci_ids/iris_pci_ids.h maps 0x7d51 to arl_h, and
+  src/intel/dev/intel_device_info.c sets has_systolic = true for arl_h only among
+  the MTL-derived parts.
+- 0x8086 0x7d1d NPU: drivers/accel/ivpu/ivpu_drv.h (PCI_DEVICE_ID_MTL, 37xx IP);
+  pci.ids 2026.10.15 names it "Core Ultra 200H/200V Series Processors NPU".
+- cpu family 6, model 197: INTEL_ARROWLAKE_H IFM(6, 0xC5) in
+  arch/x86/include/asm/intel-family.h.
+- i915/mtl_guc_70.bin, intel/vpu/vpu_37xx_v1.bin: linux-firmware tag 20260916 WHENCE.
+- flags line: lscpu "Flags:" in a WSL2 guest on a Core Ultra 9 285H (kernel 6.6.87),
+  https://raw.githubusercontent.com/huyurong-ruc/openmp-csr-spmv/main/results/perf/environment.txt.
+  It is a guest's view: it carries "hypervisor" and lacks the CET and PKU flags a
+  bare-metal kernel would print.
+- cpu_core/cpu_atom files: tools/perf/Documentation/intel-hybrid.txt.
+
+Layout: sysfs paths and relative symlinks follow the driver core's naming
+(class devices under <pci dev>/<class>/<name>; /sys/class/<class>/<name> and
+/sys/bus/pci/devices/<bdf> as relative links; <dev>/driver -> bus/pci/drivers/<drv>),
+in exactly the form tests/fixtures/capture.sh writes (the matrix test re-captures
+each tree and requires an identical result).
+
+Not from hardware: the kernel release string, the P/E CPU numbering (6 P-cores 0-5,
+8 E-cores 6-13; the 2 low-power E-cores are not listed in cpu_core or cpu_atom),
+the iGPU at 00:02.0 and NPU at 00:0b.0 (Intel client BDFs), and the absence of
+i915 engine directories.

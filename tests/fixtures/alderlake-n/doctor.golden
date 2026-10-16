@@ -1,0 +1,16 @@
+==> Checking docker...
+  ok: docker running
+==> Checking k3d...
+  ok: k3d version v0.0.0-stub
+==> Checking kubectl...
+  ok
+==> Detected accelerators: intel
+==> Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...
+  ok: Intel Alder Lake-N (0x46d1) bound to i915
+  ok: i915/adlp_guc_* firmware present
+  ok: up labels the node gpu.intel.com/xmx=false
+==> Intel CPU built-in accelerators...
+  ok: CPU ISA: AVXVNNI CETIBT GFNI SHA VAES — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
+
+==> All checks passed.
+exit=0

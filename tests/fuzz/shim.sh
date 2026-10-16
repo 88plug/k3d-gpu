@@ -9,6 +9,7 @@
 #        shim.sh vendors <sysroot>    records: K3D_GPU_VENDORS value
 #        shim.sh overrides <sysroot>  records: image reference
 #        shim.sh amx_labels <sysroot> no records
+#        shim.sh cpu_isa_labels <sysroot> no records
 
 # The globals assigned below are read by the sourced launcher functions.
 # shellcheck disable=SC2034
@@ -54,6 +55,9 @@ case "${mode}" in
         done ;;
     amx_labels)
         out=$(amx_labels)
+        emit "$?" "${out}" ;;
+    cpu_isa_labels)
+        out=$(cpu_isa_labels)
         emit "$?" "${out}" ;;
     *) echo "unknown mode ${mode}" >&2; exit 2 ;;
 esac

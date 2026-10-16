@@ -149,6 +149,23 @@ pod requirements and the probes still to run on Sapphire Rapids, see
 [docs/accelerated-dataplane.md](docs/accelerated-dataplane.md) and
 [examples/dataplane/](examples/dataplane/).
 
+### Node labels from the host
+
+`up` also labels the node with hardware facts a pod can select on. No flag
+turns them on; `k3d-gpu doctor` prints the labels this host gets.
+
+| Label | Set when | Source |
+|-------|----------|--------|
+| `feature.node.kubernetes.io/cpu-cpuid.<NAME>=true` | always, for each of `avx_vnni`, `avx512f`, `avx512_vnni`, `avx512_bf16`, `vaes`, `gfni`, `sha_ni`, `ibt`, `user_shstk` in `/proc/cpuinfo` | NFD's names: `AVXVNNI`, `AVX512F`, `AVX512VNNI`, `AVX512BF16`, `VAES`, `GFNI`, `SHA`, `CETIBT`, `CETSS` |
+| `gpu.intel.com/xmx=true\|false` | `intel` is active; `true` if any Intel GPU has XMX matrix engines, `false` only when every one is known to lack them | per platform, from Mesa's `has_systolic` |
+| `gpu.intel.com/media-vcs=<n>`, `gpu.intel.com/media-vecs=<n>` | `intel` is active on `i915` | video decode/encode and video enhancement engines under `/sys/class/drm/card*/engine` |
+| `k3d-gpu.io/npu.gen=37xx\|40xx\|50xx\|60xx` | `npu` is active | the NPU's firmware generation |
+
+Kernels do not print `avx_ifma`, `amx_fp16`, `avx_vnni_int8`, `avx_vnni_int16` or
+`avx_ne_convert` in `/proc/cpuinfo`, so they get no label here. NFD has no `pku`
+feature, so `pku` gets none either. The `xe` driver has no per-engine sysfs
+directory, so `xe` GPUs get no media labels.
+
 ### Hybrid P-core / E-core placement
 
 On Intel hybrid CPUs (Alder Lake and newer client parts, e.g. Core i9-13900),

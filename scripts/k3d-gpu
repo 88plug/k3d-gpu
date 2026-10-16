@@ -18,6 +18,8 @@
 #           labelled k3d-gpu.io/cores=performance|efficient are pinned to P- or E-cores by
 #           the NRI balloons policy (nri-plugins), everything else keeps every CPU
 #           DSA/IAA/QAT need host setup first (work queues / SR-IOV VFs); doctor says what is missing.
+#   up also labels nodes with CPU ISA extensions (NFD cpu-cpuid names), Intel GPU XMX and
+#   media engine counts, and the NPU generation; doctor prints the labels.
 #
 # Subcommands:
 #   up      create cluster, verify each detected accelerator is schedulable
@@ -203,13 +205,18 @@ has_qat() {
     return 1
 }
 
-# AMX feature flags from /proc/cpuinfo, sorted, one line (empty when absent).
-amx_flags() {
+# The first CPU's /proc/cpuinfo flags, one per line.
+cpu_flags() {
     local flags
     flags=$(grep -m1 '^flags[[:space:]]*:' "${SYSROOT}/proc/cpuinfo" 2>/dev/null || true)
+    tr ' ' '\n' <<< "${flags#*:}"
+}
+
+# AMX feature flags from /proc/cpuinfo, sorted, one line (empty when absent).
+amx_flags() {
     # Kernel flag names are [a-z0-9_]; anything else is not a flag and must not
     # become a node label.
-    tr ' ' '\n' <<< "${flags#*:}" | LC_ALL=C grep -E '^amx_[a-z0-9_]+$' | sort | paste -sd' ' || true
+    cpu_flags | LC_ALL=C grep -E '^amx_[a-z0-9_]+$' | sort | paste -sd' ' || true
 }
 
 # NFD-style node labels for the host's AMX flags (amx_tile -> ...cpu-cpuid.AMXTILE=true).
@@ -219,6 +226,43 @@ amx_labels() {
         f=${f//_/}
         echo "feature.node.kubernetes.io/cpu-cpuid.${f^^}=true"
     done
+}
+
+# NFD's cpuid label name for a /proc/cpuinfo flag, or nothing. NFD names its
+# cpu-cpuid labels after klauspost/cpuid feature ids (NFD v0.20.0
+# source/cpu/cpuid_amd64.go: cpuid.CPU.FeatureSet(), cpuid v2.4.0). Listed: the
+# flags that kernels 6.6 and newer print (arch/x86/include/asm/cpufeatures.h) and
+# that NFD names. avx_ifma and amx_fp16 are hidden from cpuinfo, avx_vnni_int8,
+# avx_vnni_int16 and avx_ne_convert are KVM-only, and pku has no NFD feature, so
+# none of them is here. amx_* flags belong to the amx vendor (amx_labels).
+nfd_cpuid_name() {
+    case "$1" in
+        avx_vnni)    echo AVXVNNI ;;
+        avx512f)     echo AVX512F ;;
+        avx512_vnni) echo AVX512VNNI ;;
+        avx512_bf16) echo AVX512BF16 ;;
+        vaes)        echo VAES ;;
+        gfni)        echo GFNI ;;
+        sha_ni)      echo SHA ;;
+        ibt)         echo CETIBT ;;
+        user_shstk)  echo CETSS ;;
+    esac
+}
+
+# NFD-style node labels for the CPU's ISA extensions (avx_vnni -> ...cpu-cpuid.AVXVNNI=true), sorted.
+cpu_isa_labels() {
+    local f n
+    while IFS= read -r f; do
+        n=$(nfd_cpuid_name "${f}")
+        [ -z "${n}" ] || echo "feature.node.kubernetes.io/cpu-cpuid.${n}=true"
+    done < <(cpu_flags) | LC_ALL=C sort -u
+}
+
+# "<cpu family> <model>" of the first CPU in decimal; nothing when cpuinfo lacks either.
+cpu_family_model() {
+    awk -F: '/^cpu family[[:space:]]*:/ && f == "" { f = $2 + 0 }
+             /^model[[:space:]]*:/ && m == "" { m = $2 + 0 }
+             END { if (f != "" && m != "") print f, m }' "${SYSROOT}/proc/cpuinfo" 2>/dev/null || true
 }
 
 # Hybrid CPUs register one PMU per core type; each lists its online CPUs.
@@ -252,14 +296,29 @@ cpulist_within() {
 
 # ---- platform tables (doctor only) --------------------------------------------
 # IDs, default-driver kernels and firmware names from the kernel's
-# include/drm/intel/pciids.h, xe_pci.c, xe_uc_fw.c and drivers/accel/ivpu.
+# include/drm/intel/pciids.h, i915_pci.c, intel_uc_fw.c, xe_pci.c, xe_uc_fw.c and
+# drivers/accel/ivpu.
 
 # Intel GPU id -> "<name>|<first kernel binding it by default>|<GuC firmware glob>".
-# An empty kernel field means the kernel still requires xe.force_probe.
+# An empty kernel field means the kernel still requires xe.force_probe. For an
+# i915 part the kernel is the first release whose pciids header lists the id and
+# whose i915_pci.c no longer sets require_force_probe for its platform (ADL-S
+# from 5.16; ADL-P, and so ADL-N and RPL-P/U, from 5.17; MTL from 6.7).
 intel_gpu_platform() {
     case "$1" in
+        0x468[028a]|0x469[023])             echo "Alder Lake-S|5.16|i915/tgl_guc_" ;;
+        0x468b)                             echo "Alder Lake-S|6.1|i915/tgl_guc_" ;;
+        0x46a[0-368a]|0x462[68a]|0x46b[0-3]|0x46c[0-3]) echo "Alder Lake-P|5.17|i915/adlp_guc_" ;;
+        0x46d[0-2])                         echo "Alder Lake-N|5.18|i915/adlp_guc_" ;;
+        0x46d[34])                          echo "Alder Lake-N|6.9|i915/adlp_guc_" ;;
+        0xa78[0-389])                       echo "Raptor Lake-S|5.17|i915/tgl_guc_" ;;
+        0xa78[ab])                          echo "Raptor Lake-S|5.19|i915/tgl_guc_" ;;
+        0xa72[01]|0xa7a[0189])              echo "Raptor Lake-P/U|5.19|i915/adlp_guc_" ;;
+        0xa7a[a-d])                         echo "Raptor Lake-P/U|6.7|i915/adlp_guc_" ;;
         0x7d40|0x7d45|0x7d55|0x7d60|0x7dd5) echo "Meteor Lake|6.7|i915/mtl_guc_" ;;
-        0x7d41|0x7d51|0x7dd1|0x7d67)        echo "Arrow Lake|6.9|i915/mtl_guc_" ;;
+        0x7d51|0x7dd1)                      echo "Arrow Lake-H|6.9|i915/mtl_guc_" ;;
+        0x7d41)                             echo "Arrow Lake-U|6.9|i915/mtl_guc_" ;;
+        0x7d67)                             echo "Arrow Lake-S|6.7|i915/mtl_guc_" ;;
         0xb640)                             echo "Arrow Lake-S|6.12|i915/mtl_guc_" ;;
         0x6420|0x64a0|0x64b0)               echo "Lunar Lake|6.12|xe/lnl_guc_" ;;
         0xe20[29bcd]|0xe21[0126]|0xe22[0-3]) echo "Battlemage|6.12|xe/bmg_guc_" ;;
@@ -271,10 +330,30 @@ intel_gpu_platform() {
     esac
 }
 
+# Whether a GPU platform (an intel_gpu_platform name) has XMX systolic matrix
+# engines: Mesa's has_systolic (src/intel/dev/intel_device_info.c) for the ids in
+# include/pci_ids/iris_pci_ids.h. Prints nothing for a platform Mesa does not list.
+gpu_xmx() {
+    case "$1" in
+        "Arrow Lake-H"|"Lunar Lake"|Battlemage|"Panther Lake"|"Wildcat Lake"|"Nova Lake-S"|"Nova Lake-P") echo true ;;
+        "Alder Lake-S"|"Alder Lake-P"|"Alder Lake-N"|"Raptor Lake-S"|"Raptor Lake-P/U"|"Meteor Lake"|"Arrow Lake-U"|"Arrow Lake-S") echo false ;;
+    esac
+}
+
+# NPU 0x7d1d (ivpu PCI_DEVICE_ID_MTL) ships in Meteor Lake and Arrow Lake-H; the
+# CPU family and model (arch/x86/include/asm/intel-family.h) say which.
+npu_7d1d_name() {
+    case "$(cpu_family_model)" in
+        "6 170"|"6 172") echo "Meteor Lake" ;;   # INTEL_METEORLAKE_L 0xAA, INTEL_METEORLAKE 0xAC
+        "6 197")         echo "Arrow Lake-H" ;;  # INTEL_ARROWLAKE_H 0xC5
+        *)               echo "Meteor Lake / Arrow Lake-H" ;;
+    esac
+}
+
 # Intel NPU id -> "<name>|<first kernel with the id>|<firmware generation>".
 npu_platform() {
     case "$1" in
-        0x7d1d) echo "Meteor Lake|6.3|37xx" ;;
+        0x7d1d) echo "$(npu_7d1d_name)|6.3|37xx" ;;
         0xad1d) echo "Arrow Lake|6.6|37xx" ;;
         0x643e) echo "Lunar Lake|6.6|40xx" ;;
         0xb03e) echo "Panther Lake|6.13|50xx" ;;
@@ -303,6 +382,62 @@ firmware_present() {
         compgen -G "${SYSROOT}/${d}/$1*" >/dev/null && return 0
     done
     return 1
+}
+
+# Intel DRM cards with an i915 per-engine directory, /sys/class/drm/cardN/engine
+# (drivers/gpu/drm/i915/gt/sysfs_engines.c). xe has no such directory.
+intel_engine_cards() {
+    local card
+    for card in "${SYSROOT}"/sys/class/drm/card[0-9]*; do
+        [[ "${card##*/}" =~ ^card[0-9]+$ ]] || continue
+        if [ "$(cat "${card}/device/vendor" 2>/dev/null)" = 0x8086 ] && [ -d "${card}/engine" ]; then
+            echo "${card}"
+        fi
+    done
+    return 0
+}
+
+# engine_count <card dir> <class prefix>: engines named <prefix><instance> (vcs0, vcs1, ...).
+engine_count() { local n; n=$({ compgen -G "$1/engine/$2[0-9]*" || true; } | wc -l); echo $((n)); }
+
+# Node labels for the detected Intel GPUs. gpu.intel.com/xmx is true when any GPU
+# has XMX and false when every GPU is known to lack it. gpu.intel.com/media-vcs and
+# media-vecs count the video decode/encode and video enhancement engines of the
+# i915 card with the most video engines.
+intel_gpu_labels() {
+    local e name x xmx=false unknown=0 card vcs best=-1 vecs=0
+    for e in ${INTEL_DRIVERS[@]+"${INTEL_DRIVERS[@]}"}; do
+        IFS='|' read -r name _ <<< "$(intel_gpu_platform "${e#* }")"
+        x=$(gpu_xmx "${name}")
+        case "${x}" in true) xmx=true ;; false) ;; *) unknown=1 ;; esac
+    done
+    if [ "${#INTEL_DRIVERS[@]}" -gt 0 ] && { [ "${xmx}" = true ] || [ "${unknown}" -eq 0 ]; }; then
+        echo "gpu.intel.com/xmx=${xmx}"
+    fi
+    while read -r card; do
+        [ -n "${card}" ] || continue
+        vcs=$(engine_count "${card}" vcs)
+        if [ "${vcs}" -gt "${best}" ]; then best=${vcs}; vecs=$(engine_count "${card}" vecs); fi
+    done <<< "$(intel_engine_cards)"
+    if [ "${best}" -ge 0 ]; then
+        echo "gpu.intel.com/media-vcs=${best}"
+        echo "gpu.intel.com/media-vecs=${vecs}"
+    fi
+}
+
+# Node label for the NPU firmware generation (37xx, 40xx, ...), when every
+# detected NPU has the same known one.
+npu_labels() {
+    local id gen gens=""
+    for id in ${NPU_IDS[@]+"${NPU_IDS[@]}"}; do
+        IFS='|' read -r _ _ gen <<< "$(npu_platform "${id}")"
+        [ -z "${gen}" ] || gens+="${gen}"$'\n'
+    done
+    gens=$(printf '%s' "${gens}" | sort -u)
+    if [ -n "${gens}" ] && [ "${gens}" = "${gens%%$'\n'*}" ]; then
+        echo "k3d-gpu.io/npu.gen=${gens}"
+    fi
+    return 0
 }
 
 # Resolve the active vendor list into ACTIVE (array). Honors K3D_GPU_VENDORS.
@@ -453,13 +588,15 @@ doctor_intel() {
         FAIL=1
         return
     fi
-    local e drv id name mink fw
+    local e drv id name mink fw opt card eng caps engines labels
     for e in "${INTEL_DRIVERS[@]}"; do
         read -r drv id <<< "${e}"
         IFS='|' read -r name mink fw <<< "$(intel_gpu_platform "${id}")"
         echo "  ok: Intel ${name:-GPU} (${id:-?}) bound to ${drv}"
         if [ -n "${mink}" ] && kernel_lt "${mink}"; then
-            echo "  ${YLW}warn${RST}: ${name} (${id}) needs kernel ${mink}+ (running $(kernel_release)); older kernels need xe.force_probe=${id#0x}"
+            opt=xe
+            [ "${fw#i915/}" = "${fw}" ] || opt=i915
+            echo "  ${YLW}warn${RST}: ${name} (${id}) needs kernel ${mink}+ (running $(kernel_release)); older kernels need ${opt}.force_probe=${id#0x}"
         fi
         if [ -n "${fw}" ]; then
             if firmware_present "${fw}"; then
@@ -469,6 +606,18 @@ doctor_intel() {
             fi
         fi
     done
+    while read -r card; do
+        [ -n "${card}" ] || continue
+        engines=""
+        for eng in "${card}"/engine/vcs[0-9]* "${card}"/engine/vecs[0-9]*; do
+            [ -d "${eng}" ] || continue
+            caps=$(cat "${eng}/capabilities" 2>/dev/null || true)
+            engines+="${engines:+, }${eng##*/}${caps:+ (${caps})}"
+        done
+        echo "  ok: ${card##*/} media engines: ${engines:-none}"
+    done <<< "$(intel_engine_cards)"
+    labels=$(intel_gpu_labels | paste -sd' ')
+    [ -z "${labels}" ] || echo "  ok: up labels the node ${labels}"
 }
 
 doctor_npu() {
@@ -492,6 +641,8 @@ doctor_npu() {
             echo "  ${YLW}warn${RST}: intel/vpu/vpu_${gen}_* firmware not found (install linux-firmware or intel-fw-npu)"
         fi
     done
+    gen=$(npu_labels)
+    [ -z "${gen}" ] || echo "  ok: up labels the node ${gen}"
     echo "  note: workload images need the NPU user-space driver (github.com/intel/linux-npu-driver) and Level Zero"
 }
 
@@ -518,7 +669,7 @@ doctor_gaudi() {
 # node, so detection cannot see them; the usual cause is a part newer than the
 # kernel's default support (xe.force_probe) or a driver module that is not loaded.
 doctor_intel_unbound() {
-    local dev id class name mink gen lines=""
+    local dev id class name mink gen fw lines=""
     for dev in "${SYSROOT}"/sys/bus/pci/devices/*; do
         [ "$(cat "${dev}/vendor" 2>/dev/null)" = "0x8086" ] || continue
         class=$(cat "${dev}/class" 2>/dev/null) || continue
@@ -528,8 +679,10 @@ doctor_intel_unbound() {
         if [ -n "$(npu_platform "${id}")" ]; then
             IFS='|' read -r name mink gen <<< "$(npu_platform "${id}")"
             lines+="  ${YLW}warn${RST}: Intel NPU ${name} (${id}) has no driver — load intel_vpu (kernel ${mink}+): sudo modprobe intel_vpu"$'\n'
+        elif IFS='|' read -r name mink fw <<< "$(intel_gpu_platform "${id}")" && [ "${fw#i915/}" != "${fw}" ]; then
+            # A GuC firmware under i915/ means i915 is the default driver for the part.
+            lines+="  ${YLW}warn${RST}: Intel ${name} (${id}) has no driver — load i915 (kernel ${mink}+): sudo modprobe i915"$'\n'
         else
-            IFS='|' read -r name mink gen <<< "$(intel_gpu_platform "${id}")"
             lines+="  ${YLW}warn${RST}: Intel ${name:-GPU/accelerator} (${id}) has no driver — if dmesg says xe does not support it yet, boot with xe.force_probe=${id#0x} i915.force_probe=!${id#0x}"$'\n'
         fi
     done
@@ -541,9 +694,11 @@ doctor_intel_unbound() {
 # Xeon built-in accelerators. `up` deploys DSA/IAA/QAT plugins once the host
 # side is set up (work queues, SR-IOV VFs); this says what is still missing.
 doctor_cpu_accels() {
-    local amx dev bdf vfs n wqs kind name prefix devdir lines=""
+    local amx isa dev bdf vfs n wqs kind name prefix devdir lines=""
     amx=$(amx_flags)
     [ -z "${amx}" ] || lines+="  ok: AMX (${amx}) — CPU instructions, usable in any pod; up labels nodes feature.node.kubernetes.io/cpu-cpuid.AMX*"$'\n'
+    isa=$(cpu_isa_labels | sed 's#^feature\.node\.kubernetes\.io/cpu-cpuid\.##; s#=true$##' | paste -sd' ')
+    [ -z "${isa}" ] || lines+="  ok: CPU ISA: ${isa} — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)"$'\n'
 
     for kind in "DSA dsa dsa" "IAA iax iax"; do
         read -r name prefix devdir <<< "${kind}"
@@ -1237,6 +1392,13 @@ cmd_up() {
             [ -n "${label}" ] && create_args+=(--k3s-node-label="${label}@server:*;agent:*")
         done < <(amx_labels)
     fi
+    # Facts pods can select on: Intel GPU XMX and media engines, the NPU
+    # generation, and the CPU's other ISA extensions under NFD's names.
+    while read -r label; do
+        [ -n "${label}" ] && create_args+=(--k3s-node-label="${label}@server:*;agent:*")
+    done < <(if is_active intel; then intel_gpu_labels; fi
+             if is_active npu; then npu_labels; fi
+             cpu_isa_labels)
     if is_active intel && ! compgen -G "${SYSROOT}/dev/dri/renderD*" >/dev/null; then
         warn "no /dev/dri/renderD* on host — Intel GPU will not be visible in the node"
     fi
