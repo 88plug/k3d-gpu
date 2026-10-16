@@ -1620,6 +1620,154 @@ status_says "agent status prints the downloaded model commit" "model revision: $
 status_says "agent status says unknown for a non-sha revision" 'model revision: unknown' STUB_EXEC=garbage
 status_says "agent status says unknown when the pod cannot be read" 'model revision: unknown'
 
+# ---- report -------------------------------------------------------------------
+# `report --json` prints one JSON document describing the host (and the cluster
+# when its kubeconfig context exists). report_says checks it with a python
+# expression over the parsed document `r`; the JSON must parse.
+
+# Stub kubectl for report: STUB_CONTEXTS is what `config get-contexts -o name`
+# lists, STUB_NODES (tab-separated go-template lines) what `get nodes` prints.
+RSTUB="${WORK}/rbin"
+mkdir -p "${RSTUB}"
+cat > "${RSTUB}/kubectl" <<'EOF'
+#!/bin/sh
+case "$*" in
+    *get-contexts*) for c in ${STUB_CONTEXTS:-}; do echo "${c}"; done ;;
+    *"get nodes"*)  [ -n "${STUB_NODES:-}" ] || exit 1; printf '%b' "${STUB_NODES}" ;;
+esac
+exit 0
+EOF
+chmod +x "${RSTUB}/kubectl"
+
+# report_says <name> <root> <python expr over r> [env assignments...]
+report_says() {
+    local name=$1 root=$2 expr=$3 out rc
+    shift 3
+    out=$(env K3D_GPU_SYSROOT="${root}" PATH="${RSTUB}:${PATH}" "$@" bash "${K3D_GPU}" report --json 2>"${WORK}/report.err")
+    rc=$?
+    if [ "${rc}" -eq 0 ] && python3 -c '
+import json, sys
+r = json.loads(sys.stdin.read())
+sys.exit(0 if eval(sys.argv[1]) else 1)' "${expr}" <<< "${out}"; then
+        PASS=$((PASS + 1)); echo "ok   ${name}"
+    else
+        FAILS=$((FAILS + 1))
+        echo "FAIL ${name} (rc=${rc}, want: ${expr})"
+        { echo "${out}"; cat "${WORK}/report.err"; } | sed 's/^/  | /'
+    fi
+}
+
+# Raptor Lake desktop: hybrid i9 with an i915 UHD 770 (GuC/HuC running, readable
+# debugfs), one NVIDIA GPU and RAPL package + core zones.
+r=$(newroot report-rpl)
+kernel "${r}" 6.6.128-1-MANJARO
+hybrid "${r}" 0-15 16-31
+mkdir -p "${r}/proc" "${r}/sys/devices/system/cpu"
+printf 'processor\t: 0\nmodel name\t: 13th Gen Intel(R) Core(TM) i9-13900T\nflags\t\t: fpu sse4_2 avx f16c fma avx2 avx_vnni sha_ni\n' > "${r}/proc/cpuinfo"
+printf 'MemTotal:       131072000 kB\nMemFree:  1 kB\nMemAvailable:   73400320 kB\n' > "${r}/proc/meminfo"
+echo 0-31 > "${r}/sys/devices/system/cpu/online"
+pci "${r}" 0000:00:02.0 0x8086 0xa780 i915; render "${r}" 0000:00:02.0 128
+mkdir -p "${r}/sys/class/drm/card0"
+ln -sfn "${r}/sys/devices/pci0000:00/0000:00:02.0" "${r}/sys/class/drm/card0/device"
+mkdir -p "${r}/sys/class/drm/card0-DP-1"
+for e in "rcs0 " "bcs0 " "vcs0 hevc sfc" "vecs0 sfc"; do
+    read -r en caps <<< "${e}"
+    mkdir -p "${r}/sys/class/drm/card0/engine/${en}"
+    echo "${caps}" > "${r}/sys/class/drm/card0/engine/${en}/capabilities"
+done
+mkdir -p "${r}/sys/kernel/debug/dri/0/gt0/uc"
+printf 'GuC firmware: i915/tgl_guc_70.bin\n\tstatus: RUNNING\n\tversion: wanted 70.0.0\n\tversion: found 70.49.4\n' > "${r}/sys/kernel/debug/dri/0/gt0/uc/guc_info"
+printf 'HuC firmware: i915/tgl_huc.bin\n\tstatus: RUNNING\n\tversion: found 7.9.3\n' > "${r}/sys/kernel/debug/dri/0/gt0/uc/huc_info"
+mkdir -p "${r}/sys/module/nvidia" "${r}/proc/driver/nvidia/gpus/0000:01:00.0"
+echo 590.48.01 > "${r}/sys/module/nvidia/version"
+pci "${r}" 0000:01:00.0 0x10de 0x27b0 nvidia
+printf 'Model: \t\t NVIDIA RTX 4000 SFF Ada Generation\nBus Location: \t 0000:01:00.0\nDevice Minor: \t 0\n' > "${r}/proc/driver/nvidia/gpus/0000:01:00.0/information"
+for z in "intel-rapl:0 package-0" "intel-rapl:0:0 core"; do
+    read -r zone zname <<< "${z}"
+    mkdir -p "${r}/sys/class/powercap/${zone}"
+    echo "${zname}" > "${r}/sys/class/powercap/${zone}/name"
+    echo 262143328850 > "${r}/sys/class/powercap/${zone}/max_energy_range_uj"
+done
+
+report_says "report: schema and version" "${r}" \
+    'r["schema"] == "k3d-gpu.report/v1" and r["k3d_gpu_version"] and r["host"]["kernel"] == "6.6.128-1-MANJARO"'
+report_says "report: CPU model, P/E core lists and counts" "${r}" \
+    '(c := r["host"]["cpu"]) and c["model"] == "13th Gen Intel(R) Core(TM) i9-13900T" and c["logical_cpus"] == 32 and c["hybrid"] is True and c["p_cores"] == "0-15" and c["e_cores"] == "16-31" and c["p_core_cpus"] == 16 and c["e_core_cpus"] == 16'
+report_says "report: AI ISA flags, no AVX-512 or AMX" "${r}" \
+    '(c := r["host"]["cpu"]) and c["isa"] == ["avx", "avx2", "avx_vnni", "f16c", "fma"] and c["avx_vnni"] is True and c["avx512"] is False and c["amx"] == []'
+report_says "report: memory from meminfo" "${r}" \
+    'r["host"]["memory"] == {"total_kib": 131072000, "available_kib": 73400320}'
+report_says "report: i915 iGPU with render node, engines and GuC/HuC" "${r}" \
+    'len(r["host"]["intel_gpus"]) == 1 and (g := r["host"]["intel_gpus"][0]) and g["card"] == "card0" and g["render_node"] == "renderD128" and g["pci"] == "0000:00:02.0" and g["device_id"] == "0xa780" and g["driver"] == "i915" and [e["name"] for e in g["engines"]] == ["bcs0", "rcs0", "vcs0", "vecs0"] and g["engines"][2]["capabilities"] == ["hevc", "sfc"] and g["guc"] == {"status": "RUNNING", "firmware": "i915/tgl_guc_70.bin", "version": "70.49.4"} and g["huc"]["status"] == "RUNNING" and g["huc"]["version"] == "7.9.3"'
+report_says "report: NVIDIA GPU from procfs" "${r}" \
+    '(n := r["host"]["nvidia"]) and n["driver"] == "590.48.01" and n["gpus"] == [{"pci": "0000:01:00.0", "model": "NVIDIA RTX 4000 SFF Ada Generation", "device_id": "0x27b0", "minor": 0}]'
+report_says "report: RAPL zones with names and wrap range" "${r}" \
+    '[(z["zone"], z["name"], z["max_energy_range_uj"]) for z in r["host"]["rapl"]] == [("intel-rapl:0", "package-0", 262143328850), ("intel-rapl:0:0", "core", 262143328850)] and r["host"]["rapl"][0]["energy_readable"] is False'
+report_says "report: absent engines are empty, not missing" "${r}" \
+    '(h := r["host"]) and h["npus"] == [] and h["gaudi"] == {"accel_nodes": 0, "pci_devices": 0, "driver_loaded": False} and h["dsa"] == {"devices": 0, "work_queues": 0} and h["iaa"] == {"devices": 0, "work_queues": 0} and h["qat"] == []'
+report_says "report: detected vendors and resources" "${r}" \
+    '[(d["vendor"], d["resources"]) for d in r["detected"]] == [("nvidia", ["nvidia.com/gpu"]), ("intel", ["gpu.intel.com/i915"]), ("hybrid", ["k3d-gpu.io/hybrid-cpu=true"])]'
+report_says "report: no kubeconfig context means cluster absent with a reason" "${r}" \
+    '(c := r["cluster"]) and c["name"] == "rpt" and c["context"] == "k3d-rpt" and c["present"] is False and "k3d-rpt" in c["reason"] and c["nodes"] == []' \
+    K3D_GPU_CLUSTER=rpt STUB_CONTEXTS="k3d-other"
+report_says "report: unreachable API means cluster absent with a reason" "${r}" \
+    '(c := r["cluster"]) and c["present"] is False and "unreachable" in c["reason"]' \
+    K3D_GPU_CLUSTER=rpt STUB_CONTEXTS="k3d-rpt"
+report_says "report: cluster allocatable and k3d-gpu labels per node" "${r}" \
+    '(c := r["cluster"]) and c["present"] is True and c["nodes"] == [{"name": "k3d-rpt-server-0", "allocatable": {"cpu": "32", "gpu.intel.com/i915": "1", "nvidia.com/gpu": "2"}, "labels": {"k3d-gpu.io/hybrid-cpu": "true", "nvidia.com/gpu.present": ""}}]' \
+    K3D_GPU_CLUSTER=rpt STUB_CONTEXTS="k3d-rpt" \
+    STUB_NODES='N\tk3d-rpt-server-0\nA\tk3d-rpt-server-0\tcpu\t32\nA\tk3d-rpt-server-0\tgpu.intel.com/i915\t1\nA\tk3d-rpt-server-0\tnvidia.com/gpu\t2\nL\tk3d-rpt-server-0\tkubernetes.io/os\tlinux\nL\tk3d-rpt-server-0\tk3d-gpu.io/hybrid-cpu\ttrue\nL\tk3d-rpt-server-0\tnvidia.com/gpu.present\t\n'
+
+# Lunar Lake + Xeon-style extras: xe iGPU (engines per class under tile/gt, no
+# readable debugfs), an NPU, a Gaudi PCI function without driver, DSA/IAA queues
+# and a QAT PF with one VF. Plus a CPU model that needs JSON escaping.
+r=$(newroot report-xe)
+xeon "${r}"
+printf 'processor\t: 0\nmodel name\t: Fake "Quoted" \\ CPU\nflags\t\t: fpu avx512f avx512_bf16 amx_bf16 amx_tile\n' > "${r}/proc/cpuinfo"
+pci "${r}" 0000:00:02.0 0x8086 0x64a0 xe; render "${r}" 0000:00:02.0 128
+mkdir -p "${r}/sys/class/drm/card1"
+ln -sfn "${r}/sys/devices/pci0000:00/0000:00:02.0" "${r}/sys/class/drm/card1/device"
+mkdir -p "${r}/sys/devices/pci0000:00/0000:00:02.0/tile0/gt0/engines/"{rcs,bcs,ccs,.defaults}
+pci "${r}" 0000:00:0b.0 0x8086 0x643e intel_vpu; accel "${r}" 0000:00:0b.0 0
+pci "${r}" 0000:4d:00.0 0x1da3 0x1060
+
+report_says "report: JSON-escaped CPU model" "${r}" \
+    'r["host"]["cpu"]["model"] == "Fake \"Quoted\" \\ CPU" and r["host"]["cpu"]["hybrid"] is False and r["host"]["cpu"]["p_cores"] is None'
+report_says "report: AVX-512 and AMX flags" "${r}" \
+    '(c := r["host"]["cpu"]) and c["avx512"] is True and c["amx"] == ["amx_bf16", "amx_tile"] and "avx512_bf16" in c["isa"]'
+report_says "report: xe engines by class; GuC unknown without root" "${r}" \
+    '(g := r["host"]["intel_gpus"][0]) and g["driver"] == "xe" and g["platform"] == "Lunar Lake" and [e["name"] for e in g["engines"]] == ["bcs", "ccs", "rcs"] and g["guc"]["status"] is None and "root" in g["guc"]["note"]'
+report_says "report: NPU, Gaudi without driver, DSA/IAA queues, QAT VFs" "${r}" \
+    '(h := r["host"]) and h["npus"] == [{"accel": "accel0", "pci": "0000:00:0b.0", "device_id": "0x643e", "driver": "intel_vpu", "platform": "Lunar Lake"}] and h["gaudi"] == {"accel_nodes": 0, "pci_devices": 1, "driver_loaded": False} and h["dsa"] == {"devices": 1, "work_queues": 1} and h["iaa"] == {"devices": 1, "work_queues": 1} and h["qat"] == [{"pci": "0000:6b:00.0", "device_id": "0x4940", "driver": "4xxx", "vfs": 1}]'
+report_says "report: no NVIDIA and no RAPL are empty" "${r}" \
+    'r["host"]["nvidia"] == {"driver": None, "gpus": []} and r["host"]["rapl"] == []'
+
+# Default mode writes the JSON and a self-contained HTML that embeds the same JSON.
+out_dir="${WORK}/report-out"
+mkdir -p "${out_dir}"
+if env K3D_GPU_SYSROOT="${r}" PATH="${RSTUB}:${PATH}" bash "${K3D_GPU}" report "${out_dir}" > "${WORK}/report.txt" 2>&1 \
+   && python3 - "${out_dir}" <<'EOF'
+import json, re, sys
+d = sys.argv[1]
+j = json.load(open(d + "/k3d-gpu-report.json"))
+h = open(d + "/k3d-gpu-report.html").read()
+m = re.search(r'<script id="report" type="application/json">(.*?)</script>', h, re.S)
+assert m and json.loads(m.group(1)) == j, "embedded JSON differs"
+assert not re.search(r'<(script|link)[^>]+(src|href)=', h), "HTML loads external resources"
+EOF
+then
+    PASS=$((PASS + 1)); echo "ok   report: writes JSON and self-contained HTML with the same data"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL report: writes JSON and self-contained HTML with the same data"
+    sed 's/^/  | /' "${WORK}/report.txt"
+fi
+if grep -q 'Lunar Lake' "${WORK}/report.txt" && grep -q 'cluster.*not' "${WORK}/report.txt"; then
+    PASS=$((PASS + 1)); echo "ok   report: text summary names the GPU and the cluster state"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL report: text summary names the GPU and the cluster state"
+    sed 's/^/  | /' "${WORK}/report.txt"
+fi
+
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

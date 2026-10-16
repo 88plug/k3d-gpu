@@ -43,6 +43,7 @@ k3d-gpu detect          # list accelerators on this host and their k8s resources
 k3d-gpu doctor          # preflight: accelerators, kernel/firmware, docker, runtimes, k3d, kubectl
 k3d-gpu host-setup      # check host drivers/userspace, print pinned install commands (--apply runs them)
 k3d-gpu doctor --perf   # read-only host tuning advisor for inference (add --model-gb N)
+k3d-gpu report          # what the host and the cluster have, per engine (text + JSON + HTML)
 k3d-gpu up              # create the cluster (device plugins auto-deploy), verify each accelerator > 0
 k3d-gpu test            # per accelerator: nvidia-smi pod / device-node listing pod
 k3d-gpu logs            # tail the k3s server container logs
@@ -372,6 +373,32 @@ is deleted.
 | `K3D_GPU_AGENT_TIMEOUT` | `1800` | seconds `agent up` waits for download + load |
 | `K3D_GPU_AGENT_LOG_LEVEL` | `INFO` | `DEBUG` also logs the compiled model's execution device (and every request) |
 | `K3D_GPU_AGENT_IMAGE` | `openvino/model_server@sha256:a928…fc58` (2026.4.1-gpu) | server image |
+
+### Inventory report
+
+`k3d-gpu report` says what this host and cluster actually have, engine by
+engine. It reads sysfs, procfs, debugfs (GuC/HuC firmware, root only) and the
+cluster's node objects and nothing else, runs no benchmarks and takes well under a second. It prints a summary
+and writes `k3d-gpu-report.json` and a self-contained `k3d-gpu-report.html`
+(no external assets) into the current directory, or into `k3d-gpu report DIR`.
+`k3d-gpu report --json` prints only the JSON.
+
+| JSON key | Contents | Source |
+|----------|----------|--------|
+| `host.cpu` | model, online CPUs, P-core / E-core lists and counts, AI ISA flags (`avx*`, `avx_vnni`, `avx512*`, `amx_*`, `fma`, `f16c`) | `/proc/cpuinfo`, `/sys/devices/cpu_core\|cpu_atom/cpus` |
+| `host.memory` | total and available KiB | `/proc/meminfo` |
+| `host.intel_gpus[]` | card, render node, PCI address and id, driver, engines, GuC/HuC status, firmware and version | `/sys/class/drm/card*`: i915 `engine/<name>/capabilities`; xe `device/tile*/gt*/engines/<class>`; GuC/HuC from debugfs `dri/<n>/gt*/uc/{guc,huc}_info` |
+| `host.npus[]`, `host.gaudi`, `host.dsa`, `host.iaa`, `host.qat[]` | NPU accel nodes; Gaudi PCI devices / accel nodes / driver; DSA/IAA devices and user work queues; QAT PFs and VF counts | `/sys/class/accel`, `/sys/bus/pci`, `/sys/bus/dsa`, `/dev/dsa`, `/dev/iax` |
+| `host.nvidia` | driver version; per GPU: PCI address, model, device id, minor | `/sys/module/nvidia/version`, `/proc/driver/nvidia/gpus/*/information` (no `nvidia-smi`) |
+| `host.rapl[]` | zone, name, wrap point (`max_energy_range_uj`), whether `energy_uj` is readable | `/sys/class/powercap/intel-rapl*` |
+| `detected[]` | the accelerators `up` would enable and their resources | same detection as `k3d-gpu detect` |
+| `cluster` | `present`, or the `reason` it is not; per node: every allocatable resource and the accelerator labels (`k3d-gpu.io/*`, `nvidia.com/*`, `habana.ai/*`, NFD `*feature.node.kubernetes.io/*`) | `kubectl --context k3d-<K3D_GPU_CLUSTER> get nodes` |
+
+`cluster` always uses the `k3d-<K3D_GPU_CLUSTER>` context, never whatever
+context is current, so the report cannot describe the wrong cluster. GuC/HuC
+state lives in debugfs, which only root can read: without root the report says
+`status: null` with a note rather than guessing. `energy_uj` is root-only too.
+The document carries `"schema": "k3d-gpu.report/v1"`.
 
 ---
 
