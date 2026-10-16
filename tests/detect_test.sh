@@ -1705,7 +1705,8 @@ case "$*" in
     *allocatable*) printf '%s\n' "${STUB_ALLOC:-}" ;;
     "get nodes -l "*)
         for l in ${STUB_NODE_LABELS:-}; do [ "$l" = "$4" ] && echo node/k3d-agent-server-0; done ;;
-    apply*) echo applied >> "${STUB_APPLY_LOG:-/dev/null}" ;;
+    apply*) echo applied >> "${STUB_APPLY_LOG:-/dev/null}"
+        if [ -n "${STUB_LOG:-}" ]; then cat >> "${STUB_LOG}"; else cat >/dev/null; fi ;;
     *" exec "*) [ -n "${STUB_EXEC:-}" ] || exit 1; printf '%s\n' "${STUB_EXEC}" ;;
     "create --raw "*) cat >/dev/null; [ -n "${STUB_EXEC:-}" ] || exit 1; printf '%s\n' "${STUB_EXEC}" ;;
 esac
@@ -2484,7 +2485,21 @@ agent_log_has() {
 }
 if [ "${rc}" -eq 0 ]; then PASS=$((PASS + 1)); echo "ok   agent up with vllm succeeds against a stub cluster"
 else FAILS=$((FAILS + 1)); echo "FAIL agent up with vllm (rc=${rc})"; awk '{print "  | " $0}' <<< "${out}"; fi
-agent_log_has "agent up with vllm stops the OVMS server first" 'delete deployment/ovms service/ovms'
+agent_log_has "agent up with vllm applies the vllm Deployment" '^  name: vllm$'
+# agent_log_before <name> <ERE a> <ERE b>: the first log line matching a precedes the first matching b.
+agent_log_before() {
+    local name=$1 a b
+    a=$(grep -n -E -m1 -- "$2" "${log}" | cut -d: -f1)
+    b=$(grep -n -E -m1 -- "$3" "${log}" | cut -d: -f1)
+    if [ -n "${a}" ] && [ -n "${b}" ] && [ "${a}" -lt "${b}" ]; then
+        PASS=$((PASS + 1)); echo "ok   ${name}"
+    else
+        FAILS=$((FAILS + 1)); echo "FAIL ${name} (/$2/ at line ${a:-none}, /$3/ at line ${b:-none})"
+        awk '{print "  | " $0}' "${log}"
+    fi
+}
+agent_log_before "agent up with vllm stops the OVMS server before applying" \
+    'delete deployment/ovms service/ovms' '^kubectl apply -f -$'
 agent_log_has "agent up with vllm waits for deployment/vllm" 'rollout status deployment/vllm'
 agent_log_has "agent up with vllm warms up through /v1/chat/completions" \
     'create --raw /api/v1/namespaces/k3d-gpu-agent/services/vllm:http/proxy/v1/chat/completions'
@@ -2495,7 +2510,9 @@ agent_log_has "agent down removes the OVMS server" 'delete deployment/ovms servi
 : > "${log}"
 env K3D_GPU_SYSROOT="${r}" PATH="${ASTUB}:${PATH}" STUB_ALLOC="${XE1}" STUB_LOG="${log}" STUB_EXEC="${WARM}" \
     bash "${K3D_GPU}" agent up >/dev/null 2>&1
-agent_log_has "agent up with OVMS stops the vllm server first" 'delete deployment/vllm service/vllm'
+agent_log_has "agent up with OVMS applies the ovms Deployment" '^  name: ovms$'
+agent_log_before "agent up with OVMS stops the vllm server before applying" \
+    'delete deployment/vllm service/vllm' '^kubectl apply -f -$'
 agent_log_has "agent up with OVMS warms up inside its pod at /v3/chat/completions" \
     'exec deployment/ovms -c ovms -- curl .*http://127\.0\.0\.1:8000/v3/chat/completions'
 

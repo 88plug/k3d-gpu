@@ -4430,6 +4430,9 @@ EOF
 #     exec-form entrypoint; llm-scaler sources setvars in its own entrypoint;
 #   - no VLLM_USE_V1 / VLLM_ATTENTION_BACKEND (gone from vLLM's envs.py) nor
 #     TORCH_LLM_ALLREDUCE (IPEX; neither image uses IPEX).
+# CCL_ZE_IPC_EXCHANGE=pidfd needs no CAP_SYS_PTRACE: each oneCCL rank calls
+# prctl(PR_SET_PTRACER, getppid()), and yama ptrace_scope=1 lets descendants of
+# that parent (the sibling vLLM workers) pidfd_getfd from it.
 # Caches go to the models volume so restarts reuse downloads and compiled kernels.
 VLLM_XPU_ENV=(
     VLLM_NO_USAGE_STATS=1
