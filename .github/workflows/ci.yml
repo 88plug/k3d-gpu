@@ -23,6 +23,41 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - run: tests/detect_test.sh
+      - run: tests/host_setup_test.sh
+
+  kuberay-example:
+    name: KubeRay example (static)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: sudo apt-get update && sudo apt-get install -y python3-yaml
+      - run: tests/kuberay_test.sh
+
+  # One job per tests/fixtures/<platform>, so a new fixture joins the matrix
+  # without editing this file.
+  sim-fixtures:
+    name: Simulated hardware list
+    runs-on: ubuntu-latest
+    outputs:
+      platforms: ${{ steps.list.outputs.platforms }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: list
+        run: echo "platforms=$(tests/sim_matrix_test.sh --list-json)" >> "$GITHUB_OUTPUT"
+
+  sim-matrix:
+    name: Simulated hardware (${{ matrix.platform }})
+    needs: sim-fixtures
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJSON(needs.sim-fixtures.outputs.platforms) }}
+    steps:
+      - uses: actions/checkout@v6
+      - env:
+          PLATFORM: ${{ matrix.platform }}
+        run: tests/sim_matrix_test.sh "$PLATFORM"
 
   hadolint:
     name: Dockerfile lint
