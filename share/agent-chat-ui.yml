@@ -1,0 +1,141 @@
+# Open WebUI chat front end for the k3d-gpu agent (OpenVINO Model Server).
+# Source: https://github.com/open-webui/open-webui v0.12.2. The image is pinned by
+# its multi-arch index digest; bump both the comment and the digest together.
+#
+#   kubectl apply -f /usr/share/k3d-gpu/agent-chat-ui.yml
+#   kubectl -n k3d-gpu-agent port-forward svc/open-webui 8080:8080   # http://localhost:8080
+#
+# - Talks to the agent's OpenAI API at http://ovms.k3d-gpu-agent.svc:8000/v3 (OVMS
+#   serves it under /v3, not /v1) and lists whatever models OVMS serves.
+# - Sign-in is required (WEBUI_AUTH). With the optional Secret open-webui-admin
+#   (keys: email, password) the admin account is created on first start and
+#   self sign-up is turned off; without it, the first account to sign up becomes
+#   admin and later sign-ups wait for approval (DEFAULT_USER_ROLE=pending).
+# - The session-signing key is generated on first start into the data volume, so
+#   no secret lives in this file and sessions survive restarts.
+# - The Service is ClusterIP only; port-forward binds to 127.0.0.1.
+# - On Intel hybrid CPUs the pod runs on E-cores (k3d-gpu.io/cores=efficient),
+#   leaving the P-cores to OVMS. Elsewhere the label does nothing.
+# - Chats, users and settings live on a local-path PVC mounted at /data. The data
+#   dir is moved off /app/backend/data so the embedding models baked into that
+#   path in the image stay visible; OFFLINE_MODE then never downloads them.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: k3d-gpu-agent
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: open-webui-data
+  namespace: k3d-gpu-agent
+spec:
+  storageClassName: local-path
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: open-webui
+  namespace: k3d-gpu-agent
+  labels:
+    app: open-webui
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate        # the RWO volume and SQLite take one writer at a time
+  selector:
+    matchLabels:
+      app: open-webui
+  template:
+    metadata:
+      labels:
+        app: open-webui
+        k3d-gpu.io/cores: efficient
+    spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: open-webui
+          # ghcr.io/open-webui/open-webui:v0.12.2
+          image: ghcr.io/open-webui/open-webui@sha256:10e6a78ba2d172493460a9e8a92c496aaa7a64dc4d26d622a2e95e0c736081c9
+          imagePullPolicy: IfNotPresent
+          # The image runs as root and writes under /app/backend at runtime.
+          securityContext:
+            allowPrivilegeEscalation: false
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: DATA_DIR
+              value: /data
+            - name: WEBUI_SECRET_KEY_FILE
+              value: /data/.webui_secret_key
+            - name: WEBUI_AUTH
+              value: "True"
+            - name: DEFAULT_USER_ROLE
+              value: pending
+            - name: WEBUI_ADMIN_EMAIL
+              valueFrom:
+                secretKeyRef: {name: open-webui-admin, key: email, optional: true}
+            - name: WEBUI_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: open-webui-admin, key: password, optional: true}
+            - name: ENABLE_OLLAMA_API
+              value: "False"
+            - name: ENABLE_OPENAI_API
+              value: "True"
+            - name: OPENAI_API_BASE_URL
+              value: http://ovms.k3d-gpu-agent.svc:8000/v3
+            # OVMS runs without an API key; any value is accepted.
+            - name: OPENAI_API_KEY
+              value: none
+            - name: DEFAULT_MODELS
+              value: Qwen3-4B-int4-ov
+            - name: OFFLINE_MODE
+              value: "True"
+            - name: ENABLE_COMMUNITY_SHARING
+              value: "False"
+          # First start runs the database migrations; give it five minutes.
+          startupProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 30
+            failureThreshold: 4
+          resources:
+            requests:
+              cpu: "1"          # sizes the E-core balloon on hybrid nodes
+              memory: 1Gi
+            limits:
+              memory: 4Gi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: open-webui-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: open-webui
+  namespace: k3d-gpu-agent
+spec:
+  type: ClusterIP
+  selector:
+    app: open-webui
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
