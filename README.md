@@ -212,6 +212,46 @@ Service `ovms` gives the agent-stack address shape,
 with `kubeconform` and `helm` on `PATH`, validates the manifests and rendered
 charts at Kubernetes 1.34 and 1.35.
 
+### Agents per box (`k3d-gpu capacity`)
+
+`k3d-gpu capacity` answers "how many tool-using agents can this box serve
+before their LLM turns get slow?" for whatever chat endpoint the cluster runs.
+It ramps closed-loop agents (send a turn, wait for the streamed reply, wait the
+tool time, send the next turn) and stops at the first agent count whose p95
+turn latency breaks the SLO.
+
+```bash
+k3d-gpu capacity                          # SLO p95 <= 10 s, support trace, up to 32 agents
+k3d-gpu capacity --slo 5 --max 64 --engine igpu
+k3d-gpu capacity --dry-run                # discover + quiet check + plan; sends nothing
+k3d-gpu capacity --url http://127.0.0.1:8000/v3/chat/completions --model Qwen3-4B-int4-ov
+```
+
+* **Endpoint**: found in the cluster (an OVMS or vLLM Deployment/StatefulSet
+  behind a Service; `k3d-gpu agent up`'s `k3d-gpu-agent/ovms` wins a tie) and
+  reached through `kubectl port-forward`. The engine (cpu, igpu, npu, nvidia)
+  is read from the pod's device requests and `--target_device`. Pick one with
+  `--engine` or `--endpoint NAMESPACE/SERVICE`.
+* **Quiet check**: before any load it samples CPU busy, CPU package power
+  against the box's own PL1, and NVIDIA GPU utilization and power against the
+  GPU's own limit. A busy box is refused (exit 5); `--force` measures anyway and
+  lists the failed checks as confounds.
+* **Output**: `AGENTS PER BOX: N`, p50/p95/p99 per step, J per turn (RAPL
+  package energy when readable, `sudo -v` first if `energy_uj` is root-only;
+  NVIDIA `power.draw` when present), the binding limit (SLO, errors, tool-call
+  validity, or `--max` reached) with hardware flags seen in that step (CPU
+  package thermal throttling, package power at PL1, GPU power cap or thermal
+  slowdown), and the confounds. JSON goes to
+  `$XDG_STATE_HOME/k3d-gpu/capacity/ENGINE-TIME/capacity.json` (`--json`).
+* **Scoring** is the pre-registered rule set in
+  [`bench/apb/PROTOCOL.md`](bench/apb/PROTOCOL.md): steady window per rep,
+  pooled nearest-rank p95, at least 60 window requests per step, and agents per
+  box = the largest N such that every step up to N passes.
+
+`python3 bench/apb/test_capacity.py` tests the ramp, the stop rule, the
+agents-per-box rule, discovery and the JSON against a stub OpenAI server whose
+latency grows with the requests in flight.
+
 ---
 
 ## Prerequisites

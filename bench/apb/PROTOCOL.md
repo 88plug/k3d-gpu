@@ -297,6 +297,45 @@ With the stop rule: A1 ~1 h, A2 ~1.5 h, A3 ~1 h (steps 1-4 at ~20 s per turn),
 A4 under 1 h, plus model downloads and bring-up. Without a stop, the flat-curve
 worst case is 2.5 h (A1), 5 h (A2), 11 h (A3).
 
+## 11. Product command: `k3d-gpu capacity`
+
+`bench/apb/capacity.py` (`k3d-gpu capacity`) runs the same trace builder,
+step runner and scoring (`apb.py` section 6 rules, unchanged) for any box,
+with no host constants:
+
+* the endpoint comes from the cluster (OVMS/vLLM workload behind a Service,
+  `kubectl port-forward`), or `--url`/`--model`;
+* a quiet check (CPU busy <= 0.10 of all CPUs, package W <= 0.35 x the box's
+  PL1, NVIDIA util <= 10 and power <= 0.5 x its limit) refuses a busy box
+  (exit 5) unless `--force`, which writes the failed checks as confounds;
+* the ramp stops at the first step failing `--stop-slo` (default `--slo`);
+  steps 1, 2 and 4 are not forced, and an insufficient step gets extra reps
+  (up to 2 x `--reps`) before it ends the ramp;
+* energy: RAPL `package-*` zones summed (plus psys), read directly or through
+  `sudo -n cat`; `nvidia-smi` power, limit, utilization and the
+  `clocks_event_reasons.{sw_power_cap,sw_thermal_slowdown,hw_thermal_slowdown,hw_slowdown}`
+  fields (all listed by `nvidia-smi --help-query-gpu` on driver 590.48.01),
+  once per `--interval`; package thermal-throttle counts for the binding limit;
+* output: `capacity.json` (schema `k3d-gpu.capacity/1`) plus the `apb.py`
+  run layout (`steps/`, `rapl.log`, `nvidia.log`, `idle.json`), so
+  `apb.py report RUN_DIR` also reads it.
+
+Running it as the per-arm driver of this protocol (after the arm is up, one
+arm at a time):
+
+```sh
+sudo -v
+scripts/k3d-gpu capacity --endpoint NAMESPACE/SERVICE --slo 10 --stop-slo 30 \
+    --max 32 --reps 3 --quiet-s 60 --interval 0.5 --out bench/apb/runs/ARM-capacity
+```
+
+`NAMESPACE/SERVICE`: A1/A2 `k3d-gpu-agent/ovms`, A4 `apb-vllm/vllm`, A3 the
+EAT vLLM Service. Differences from `run.sh ramp`: no forced steps 1, 2, 4
+(with `--stop-slo 30` the stop rule is the same otherwise), a 2-session
+warm-up instead of a full N=1 rep, and `facts.txt` is not written (run
+`run.sh facts DIR` beside it). With the production containers running, the
+quiet check is expected to refuse this host; `--force` then records it.
+
 ## Files
 
 * `bench/apb/run.sh`: facts, ramp, report.
@@ -307,6 +346,7 @@ worst case is 2.5 h (A1), 5 h (A2), 11 h (A3).
   errors scored as 0 s, first cohort kept in the window, RAPL wrap ignored, no
   concurrency cap, floor instead of ceil in the percentile) each fail the suite.
 * `bench/apb/vllm-cuda.yaml`: arm A4 Deployment + Service.
+* `bench/apb/capacity.py`, `bench/apb/test_capacity.py`: `k3d-gpu capacity` (section 11) and its tests (stub server with load-dependent latency, fake powercap/proc tree, stub kubectl and nvidia-smi).
 * `bench/agent_trace*.py`, `bench/AGENT_TRACE.md`: unchanged copy of `5a1e541`.
 
 ## Sources (read 2026-10-16)
