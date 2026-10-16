@@ -3240,6 +3240,7 @@ cat > "${USTUB}/kubectl" <<'EOF'
 case "$*" in
     *"get nodes -o go-template"*) printf '%s\n' "${STUB_ALLOCATABLE}" ;;
     *"get daemonset intel-gpu-plugin -o jsonpath"*)
+        [ -n "${STUB_DS_NO_ARGS:-}" ] && exit 0  # k3s never applied the edit
         f="${STUB_NODE}/var/lib/rancher/k3s/server/manifests/intel-gpu-plugin.yaml"
         printf '[%s]' "$(sed -n 's/^ *- \("-.*"\)$/\1/p' "${f}" | paste -sd, -)" ;;
     "apply -f -") cat > "${STUB_NODE}/applied.yaml" ;;
@@ -3258,6 +3259,7 @@ node_with_manifest() {
 
 # up_check <name> <root> <node> <want rc: 0|fail> <file under node> <want text, or "unchanged"> [env...]:
 # run `up`, then the file must contain <want text> verbatim (or match the baked manifest).
+# A successful run must also see the DaemonSet pick up the args (no "not applied" warning).
 up_check() {
     local name=$1 root=$2 node=$3 want=$4 file=$5 text=$6 out rc ok=1
     shift 6
@@ -3265,6 +3267,7 @@ up_check() {
         STUB_ALLOCATABLE="gpu.intel.com/i915 8" K3D_GPU_VENDORS=intel "$@" bash "${K3D_GPU}" up 2>&1)
     rc=$?
     { [ "${want}" = 0 ] && [ "${rc}" -eq 0 ]; } || { [ "${want}" = fail ] && [ "${rc}" -ne 0 ]; } || ok=0
+    if [ "${want}" = 0 ] && [[ "${out}" == *"has not applied the new intel-gpu-plugin args"* ]]; then ok=0; fi
     if [ "${text}" = unchanged ]; then
         cmp -s "${node}/${file}" "$(dirname "${K3D_GPU}")/../share/intel-gpu-plugin.yml" || ok=0
     elif [ -n "${text}" ]; then
@@ -3321,6 +3324,26 @@ if cmp -s "${n}/${MF}" "${WORK}/has-args.yaml"; then
 else
     FAILS=$((FAILS + 1)); echo "FAIL failed rewrite leaves the node manifest intact"
 fi
+
+# k3s never re-applies the edited file: up warns instead of reporting the args live.
+n=$(node_with_manifest igpu-stale)
+out=$(env K3D_GPU_SYSROOT="${r}" PATH="${USTUB}:${PATH}" STUB_NODE="${n}" STUB_DS_NO_ARGS=1 \
+    STUB_ALLOCATABLE="gpu.intel.com/i915 1" K3D_GPU_VENDORS=intel K3D_GPU_INTEL_APPLY_TIMEOUT=1 \
+    bash "${K3D_GPU}" up 2>&1)
+if [[ "${out}" == *"has not applied the new intel-gpu-plugin args after 1s"* ]]; then
+    PASS=$((PASS + 1)); echo "ok   up warns when the DaemonSet never picks up the new args"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL up warns when the DaemonSet never picks up the new args"
+    while IFS= read -r l; do echo "  | ${l}"; done <<< "${out}"
+fi
+
+# A digest-pinned plugin image still gets its args.
+n=$(node_with_manifest igpu-digest)
+sed -i 's#^\(          image: intel/intel-gpu-plugin\):[^ ]*$#\1@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef#' "${n}/${MF}"
+up_check "up adds args under a digest-pinned plugin image" "${r}" "${n}" 0 "${MF}" \
+'          image: intel/intel-gpu-plugin@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+          args:
+            - "-shared-dev-num=8"'
 
 # Custom image with no baked manifest: the launcher applies the share/ copy with args.
 n="${WORK}/node-bare"; mkdir -p "${n}"
