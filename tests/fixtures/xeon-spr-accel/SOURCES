@@ -1,6 +1,8 @@
-Platform: Sapphire Rapids Xeon with its built-in accelerators set up: one DSA and
-one IAA work queue configured (accel-config), a second DSA/IAA pair without
-queues, a QAT 4xxx PF with 4 SR-IOV VFs, vfio-pci loaded, AMX.
+Platform: two-socket Xeon Platinum 8480+ (Sapphire Rapids) with its built-in
+accelerators set up: one DSA and one IAA work queue configured (accel-config) on
+socket 0, a second DSA/IAA pair without queues on socket 1, a QAT 4xxx PF with 4
+SR-IOV VFs on socket 0, vfio-pci loaded, AMX, RDT allocation, SNC off (two NUMA
+nodes), the On Demand (SDSi) interface per socket and IMC CAS-count events.
 
 Sources (kernel paths are Linux v6.18 (torvalds/linux tag v6.18)):
 - DSA 0x0b25 / IAA 0x0cfe, driver idxd, dsa<n>/iax<n> on the dsa bus, work queues
@@ -18,7 +20,26 @@ Sources (kernel paths are Linux v6.18 (torvalds/linux tag v6.18)):
 - allocatable qat.intel.com/cy: v0.37.1 cmd/qat_plugin/dpdkdrv/dpdkdrv.go maps
   cfg_services "sym;asym" (the value shown in Documentation/ABI/testing/
   sysfs-driver-qat) to "cy". dsa.intel.com/wq-user-dedicated: cmd/dsa_plugin/README.md.
-- amx_*: arch/x86/include/asm/cpufeatures.h; ASPEED 0x1a03:0x2000: pci.ids 2026.10.15.
+- amx_*, rdt_a, cat_l3, cdp_l3, mba: arch/x86/include/asm/cpufeatures.h; ASPEED
+  0x1a03:0x2000: pci.ids 2026.10.15.
+- Xeon Platinum 8480+: 56 cores / 112 threads, 2S, QAT/DLB/DSA/IAA "1 default
+  devices", Intel On Demand Activation Model "No", Intel RDT Yes:
+  https://www.intel.com/content/www/us/en/products/sku/231746/intel-xeon-platinum-8480-processor-105m-cache-2-00-ghz/specifications.html
+  (one DSA and one IAA per socket matches the default; the single QAT PF leaves
+  socket 1 below it).
+- node<N>/cpulist, cpu<N>/topology/physical_package_id, cache/index3/shared_cpu_list,
+  PCI numa_node: Documentation/ABI/stable/sysfs-devices-node,
+  Documentation/ABI/stable/sysfs-devices-system-cpu, Documentation/ABI/testing/sysfs-bus-pci.
+  SNC off: CPU 0's L3 list equals node0 (arch/x86/kernel/cpu/resctrl/monitor.c
+  snc_get_config()).
+- intel_vsec.sdsi.<n> under the OOBMSM function 0x09a7 bound to intel_vsec, one per
+  socket: Documentation/ABI/testing/sysfs-driver-intel_sdsi,
+  drivers/platform/x86/intel/vsec.c (PCI_DEVICE_ID_INTEL_VSEC_OOBMSM, the
+  "%s.%s.%d" auxiliary name). /sys/bus/auxiliary/devices/<name> as a relative link
+  to the parent PCI device, as read on a live host (intel_vsec.telemetry.0).
+- uncore_imc_<n>/events/cas_count_{read,write} with .scale 6.103515625e-5 and .unit
+  MiB, printed with no trailing newline: spr_uncore_imc_events in
+  arch/x86/events/intel/uncore_snbep.c, uncore_event_show() in uncore.c.
 
 Layout: sysfs paths and relative symlinks follow the driver core's naming
 (class devices under <pci dev>/<class>/<name>; /sys/class/<class>/<name> and
@@ -26,5 +47,8 @@ Layout: sysfs paths and relative symlinks follow the driver core's naming
 in exactly the form tests/fixtures/capture.sh writes (the matrix test re-captures
 each tree and requires an identical result).
 
-Not from hardware: BDFs, char-device minors, the kernel release string, and the
-cpuinfo flags line (a representative subset in cpufeatures.h order).
+Not from hardware: BDFs, char-device minors, the kernel release string, the CPU
+numbering (cores 0-111 by socket, SMT siblings +112), the OOBMSM class code, the
+number of uncore_imc units (two of a socket's set), the brand string in model name
+(built from the ARK processor number), and the cpuinfo flags line (a
+representative subset in cpufeatures.h order).

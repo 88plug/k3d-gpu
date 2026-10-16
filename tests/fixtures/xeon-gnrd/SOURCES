@@ -1,0 +1,22 @@
+Platform: Xeon 6 SoC (Granite Rapids-D) edge server: one NUMA node, one DSA with a
+user work queue, no IAA, AMX.
+
+Sources (kernel paths are Linux v6.18 (torvalds/linux tag v6.18)):
+- DSA 0x11fb: drivers/dma/idxd/registers.h (PCI_DEVICE_ID_INTEL_DSA_GNRD, first in
+  v6.13) and its entry in drivers/dma/idxd/init.c. No IAA: idxd lists no
+  Granite Rapids-D IAA id (its IAA ids are IAX_SPR0, IAA_DMR, IAA_PTL, IAA_WCL).
+- node0/cpulist, cpu0/topology/physical_package_id, cache/index3/shared_cpu_list,
+  PCI numa_node (-1: no NUMA information): Documentation/ABI/stable/sysfs-devices-node,
+  Documentation/ABI/stable/sysfs-devices-system-cpu, Documentation/ABI/testing/sysfs-bus-pci.
+- dsa<n> and wq<dev>.<n>, /dev/dsa/wq<dev>.<n>: drivers/dma/idxd/cdev.c,
+  Documentation/ABI/stable/sysfs-driver-dma-idxd; /dev/char link as in xeon-spr-accel.
+- amx_* flags: arch/x86/include/asm/cpufeatures.h.
+
+Layout: sysfs paths and relative symlinks follow the driver core's naming, in
+exactly the form tests/fixtures/capture.sh writes (the matrix test re-captures each
+tree and requires an identical result).
+
+Not from hardware: the BDF, the core count (64 CPUs), the char-device minor, the
+kernel release string and the cpuinfo flags line (the xeon-gnr subset). No model
+name line: no Granite Rapids-D SKU page was read, so doctor shows the per-socket
+count with no ARK default.

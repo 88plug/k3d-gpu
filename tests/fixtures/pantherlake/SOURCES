@@ -1,5 +1,6 @@
 Platform: Core Ultra Series 3 (Panther Lake) laptop: Xe3 iGPU on xe, NPU 5 on
-intel_vpu, hybrid P/E cores, firmware installed.
+intel_vpu, IAA on idxd with one user work queue, hybrid P/E cores, firmware
+installed, one NUMA node.
 
 Sources (kernel paths are Linux v6.18 (torvalds/linux tag v6.18)):
 - 0x8086 0xb080 "Panther Lake [Arc B390]": pci.ids 2026.10.15; INTEL_PTL_IDS in
@@ -9,6 +10,10 @@ Sources (kernel paths are Linux v6.18 (torvalds/linux tag v6.18)):
   NFD rule (deployments/nfd/overlays/node-feature-rules).
 - accel0 and /dev/accel/accel0: Documentation/accel/introduction.rst.
 - xe/ptl_guc_70.bin, intel/vpu/vpu_50xx_v1.bin: linux-firmware tag 20260916 WHENCE.
+- IAA 0xb02d: drivers/dma/idxd/registers.h (PCI_DEVICE_ID_INTEL_IAA_PTL, first in
+  v6.14) and its entry in drivers/dma/idxd/init.c; iax<n>/wq<dev>.<n> naming and
+  /dev/iax, /dev/char links as in xeon-spr-accel. PCI numa_node -1 and one
+  node0: Documentation/ABI/testing/sysfs-bus-pci, Documentation/ABI/stable/sysfs-devices-node.
 - /sys/devices/cpu_core/cpus and cpu_atom/cpus: tools/perf/Documentation/intel-hybrid.txt.
 - iGPU at 00:02.0, NPU at 00:0b.0: Intel client BDFs (the captured raptorlake-nvidia
   iGPU is at 00:02.0 too).
@@ -19,5 +24,6 @@ Layout: sysfs paths and relative symlinks follow the driver core's naming
 in exactly the form tests/fixtures/capture.sh writes (the matrix test re-captures
 each tree and requires an identical result).
 
-Not from hardware: the P/E CPU numbering (4 P then 12 E/LP-E, contiguous), the
-kernel release string, and the cpuinfo flags line.
+Not from hardware: the IAA BDF (00:0c.0), the char-device minor, the P/E CPU
+numbering (4 P then 12 E/LP-E, contiguous), the kernel release string, and the
+cpuinfo flags line.

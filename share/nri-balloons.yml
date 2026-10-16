@@ -1,8 +1,10 @@
-# NRI balloons resource policy for Intel hybrid CPUs (P-cores + E-cores)
+# NRI balloons resource policy for Intel hybrid CPUs (P-cores + E-cores) and NUMA hosts
 # Source: https://github.com/containers/nri-plugins (helm chart nri-resource-policy-balloons v0.14.0),
 # rendered with `helm template --include-crds` and the values below. Re-render to bump.
 # Scheduled only onto nodes labelled k3d-gpu.io/hybrid-cpu=true, which the k3d-gpu
-# launcher sets when /sys/devices/cpu_core and cpu_atom both list online CPUs.
+# launcher sets when /sys/devices/cpu_core and cpu_atom both list online CPUs, or
+# carrying k3d-gpu.io/numa-nodes, which it sets when the host has more than one
+# NUMA node (multi-socket or SNC Xeon, HBM/CXL memory nodes).
 #
 # Balloon types (first match wins):
 #   performance  pods labelled k3d-gpu.io/cores=performance -> P-cores (preferCoreType)
@@ -12,17 +14,42 @@
 # A balloon is sized by its pods' CPU requests; kube-system runs on the 1-CPU reserve.
 # Only cpusets inside the node's cgroup change: no cpufreq, C-state or RDT controls.
 #
+# NUMA (k3d-gpu numa vendor): listed first, it matches only its own label.
+#   replica      pods labelled k3d-gpu.io/cores=replica -> a new balloon inside one
+#                NUMA node (allocatorTopologyBalancing spreads replicas across
+#                nodes), memory pinned to that node (pinMemory), idle CPUs shared
+#                only within it, and placed next to the devices the kubelet gave
+#                the pod (podresourceapi:*/* matches every extended resource;
+#                needs agent.podResourceAPI)
+#
 # values:
-#   nodeSelector:
-#     k3d-gpu.io/hybrid-cpu: "true"
+#   affinity:
+#     nodeAffinity:
+#       requiredDuringSchedulingIgnoredDuringExecution:
+#         nodeSelectorTerms:
+#         - matchExpressions:
+#           - {key: k3d-gpu.io/hybrid-cpu, operator: In, values: ["true"]}
+#         - matchExpressions:
+#           - {key: k3d-gpu.io/numa-nodes, operator: Exists}
 #   config:
 #     reservedResources:
 #       cpu: 1000m
 #     agent:
 #       nodeResourceTopology: true
+#       podResourceAPI: true
 #     allocatorTopologyBalancing: true
 #     reservedPoolNamespaces: [kube-system]
 #     balloonTypes:
+#     # -- NUMA replica (k3d-gpu numa vendor) --
+#     - name: replica
+#       pinMemory: true
+#       allocatorTopologyBalancing: true
+#       shareIdleCPUsInSame: numa
+#       preferNewBalloons: true
+#       preferCloseToDevices: ["podresourceapi:*/*"]
+#       matchExpressions:
+#       - {key: pod/labels/k3d-gpu.io/cores, operator: Equals, values: [replica]}
+#     # -- end NUMA replica --
 #     - name: performance
 #       preferCoreType: performance
 #       matchExpressions:
@@ -1763,10 +1790,21 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8891"
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: k3d-gpu.io/hybrid-cpu
+                operator: In
+                values:
+                - "true"
+            - matchExpressions:
+              - key: k3d-gpu.io/numa-nodes
+                operator: Exists
       serviceAccount: nri-resource-policy-balloons
       nodeSelector:
         kubernetes.io/os: "linux"
-        k3d-gpu.io/hybrid-cpu: "true"
       containers:
         - name: nri-resource-policy-balloons
           args:
@@ -1851,9 +1889,21 @@ metadata:
 spec:
   agent:
     nodeResourceTopology: true
-    podResourceAPI: false
+    podResourceAPI: true
   allocatorTopologyBalancing: true
   balloonTypes:
+  - allocatorTopologyBalancing: true
+    matchExpressions:
+    - key: pod/labels/k3d-gpu.io/cores
+      operator: Equals
+      values:
+      - replica
+    name: replica
+    pinMemory: true
+    preferCloseToDevices:
+    - podresourceapi:*/*
+    preferNewBalloons: true
+    shareIdleCPUsInSame: numa
   - matchExpressions:
     - key: pod/labels/k3d-gpu.io/cores
       operator: Equals

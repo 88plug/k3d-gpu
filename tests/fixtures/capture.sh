@@ -9,9 +9,10 @@
 #   [source-root]  tree to read from (default: the running host, /)
 #
 # Reads only vendor/device/class ids, driver bindings, device node names, GPU
-# engine names and capabilities, the CPU family, model and flags, the kernel
-# release and firmware file names. No serial numbers, MACs or firmware contents
-# are copied.
+# engine names and capabilities, NUMA node CPU lists, socket ids and PCI NUMA
+# nodes, CPU 0's L3 sharing list, IMC event strings, the CPU family, model and
+# flags, the kernel release and firmware file names. No serial numbers, MACs or
+# firmware contents are copied.
 
 set -euo pipefail
 
@@ -130,6 +131,40 @@ done
 for node in "${SRC}"/dev/char/*; do
     [ -L "${node}" ] || continue
     case "$(readlink "${node}")" in ../dsa/*|../iax/*) link "${node}" ;; esac
+done
+
+# NUMA: each node's CPU list, the socket of its first CPU, CPU 0's L3 sharing list
+# (SNC = L3 CPUs / node CPUs) and each PCI function's node; the On Demand (SDSi)
+# interface; the IMC CAS-count events.
+for node in "${SRC}"/sys/devices/system/node/node[0-9]*; do
+    [ -d "${node}" ] || continue
+    dir "${node}"
+    attr "${node}" cpulist
+    first=$(head -n1 "${node}/cpulist" 2>/dev/null || true)
+    first=${first%%[-,]*}
+    if [ -n "${first}" ] && [ -d "${SRC}/sys/devices/system/cpu/cpu${first}/topology" ]; then
+        dir "${SRC}/sys/devices/system/cpu/cpu${first}/topology"
+        attr "${SRC}/sys/devices/system/cpu/cpu${first}/topology" physical_package_id
+    fi
+done
+if [ -d "${SRC}/sys/devices/system/cpu/cpu0/cache/index3" ]; then
+    dir "${SRC}/sys/devices/system/cpu/cpu0/cache/index3"
+    attr "${SRC}/sys/devices/system/cpu/cpu0/cache/index3" shared_cpu_list
+fi
+for dev in "${SRC}"/sys/bus/pci/devices/*; do
+    if [ -e "${dev}/numa_node" ]; then attr "${dev}" numa_node; fi
+done
+for aux in "${SRC}"/sys/bus/auxiliary/devices/intel_vsec.sdsi.*; do
+    [ -L "${aux}" ] || continue
+    link "${aux}"
+    dir "${aux}"
+done
+for pmu in "${SRC}"/sys/bus/event_source/devices/uncore_imc_[0-9]*; do
+    [ -r "${pmu}/events/cas_count_read" ] || continue
+    link "${pmu}"
+    dir "${pmu}/events"
+    attr "${pmu}/events" cas_count_read cas_count_read.scale cas_count_read.unit \
+        cas_count_write cas_count_write.scale cas_count_write.unit
 done
 
 # GPU GuC and NPU firmware file names (empty files). A merged /lib -> usr/lib stays a link.

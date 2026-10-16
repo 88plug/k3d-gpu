@@ -56,13 +56,13 @@ Behaviour is tunable via environment variables:
 | `K3D_GPU_CLUSTER`    | `gpu`                                     | cluster name                         |
 | `K3D_GPU_IMAGE`      | `cryptoandcoffee/k3d-gpu:latest`          | node image (`latest` = ubuntu26.04)  |
 | `K3D_GPU_SHARE`      | `/usr/share/k3d-gpu`                      | dir of fallback plugin manifests     |
-| `K3D_GPU_VENDORS`    | `auto`                                    | `auto` detects; or a list of `nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid` |
+| `K3D_GPU_VENDORS`    | `auto`                                    | `auto` detects; or a list of `nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa` |
 | `K3D_GPU_PLUGIN`     | `/usr/share/k3d-gpu/nvidia-device-plugin.yml` | fallback manifest (only used if a custom image lacks the baked one) |
 | `K3D_GPU_INTEL_PLUGIN` | `/usr/share/k3d-gpu/intel-gpu-plugin.yml` | same, for the Intel GPU plugin |
 | `K3D_GPU_GAUDI_PLUGIN` | `/usr/share/k3d-gpu/gaudi-device-plugin.yml` | same, for the Gaudi plugin |
 | `K3D_GPU_NPU_PLUGIN` | `/usr/share/k3d-gpu/intel-npu-plugin.yml` | same, for the Intel NPU plugin |
 | `K3D_GPU_DSA_PLUGIN` / `_IAA_` / `_QAT_` | `/usr/share/k3d-gpu/intel-{dsa,iaa,qat}-plugin.yml` | same, for the Xeon accelerator plugins |
-| `K3D_GPU_HYBRID_PLUGIN` | `/usr/share/k3d-gpu/nri-balloons.yml` | same, for the hybrid-CPU NRI balloons policy |
+| `K3D_GPU_HYBRID_PLUGIN` | `/usr/share/k3d-gpu/nri-balloons.yml` | same, for the NRI balloons policy (hybrid and NUMA hosts) |
 | `K3D_GPU_DEVICE_TEST_IMAGE` | `busybox:1.37`                     | image used by `k3d-gpu test` for Intel GPU/NPU and Gaudi |
 | `K3D_GPU_TEST_IMAGE` | `nvidia/cuda:13.4.2-base-ubuntu26.04`     | image used by `k3d-gpu test`         |
 
@@ -107,7 +107,7 @@ for GPUs, the [NPU driver](https://github.com/intel/linux-npu-driver) + OpenVINO
 for the NPU. Gaudi runs in the plugin's plain mode, which hands pods the devices
 without the habana container runtime; full Gaudi workloads may still expect it.
 
-Force or limit vendors with `K3D_GPU_VENDORS=nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid`.
+Force or limit vendors with `K3D_GPU_VENDORS=nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa`.
 A loaded `nvidia` or `habanalabs` kernel module counts as present even before
 its device nodes appear; `doctor` then flags the missing nodes.
 
@@ -148,6 +148,13 @@ pgvector backups through zlib-accel, zswap on IAA, Envoy and Istio TLS on QAT), 
 pod requirements and the probes still to run on Sapphire Rapids, see
 [docs/accelerated-dataplane.md](docs/accelerated-dataplane.md) and
 [examples/dataplane/](examples/dataplane/).
+
+`doctor` also counts DSA, IAA and QAT PCI functions per socket (by PCI id, so a
+device counts before its driver loads) and prints the SKU's
+"default devices" from its ark.intel.com page when the CPU is in its table
+(8480+, 6980P, 6960P, 6780E). A socket below that default gets a warning; the
+BIOS may have the device disabled. When `/sys/bus/auxiliary/devices/intel_vsec.sdsi.*`
+exists, `doctor` notes the Intel On Demand interface. It never writes to it.
 
 ### Node labels from the host
 
@@ -191,8 +198,42 @@ else loses capacity. kube-system runs on a one-CPU reserve. k3s turns NRI on in
 containerd for a privileged node, and the node sees the host's core-type PMUs.
 The policy only changes cpusets inside the node's cgroup. It never touches
 cpufreq, C-states or RDT. Only one NRI resource policy can own a node, so drop
-`hybrid` from `K3D_GPU_VENDORS` if another stack installs its own (for example,
+`hybrid` (and `numa`) from `K3D_GPU_VENDORS` if another stack installs its own (for example,
 Intel's Enterprise Agent Toolkit CPU balloons).
+
+### NUMA placement (multi-socket and SNC Xeon)
+
+A host with more than one NUMA node (two sockets, Sub-NUMA Clustering, or HBM/CXL
+memory nodes) turns on the `numa` vendor. `up` labels the node and deploys the same
+NRI balloons policy, so a pod asks for one NUMA node with one label:
+
+```yaml
+metadata:
+  labels:
+    k3d-gpu.io/cores: replica
+spec:
+  containers:
+  - name: llm
+    resources: {requests: {cpu: "16"}, limits: {cpu: "16"}}
+```
+
+Each `replica` pod gets its own balloon inside one NUMA node. Its memory is pinned to
+that node (`pinMemory`), it shares idle CPUs only within that node, and new replicas
+spread across nodes (`allocatorTopologyBalancing`). A pod that holds a device
+(`nvidia.com/gpu`, `dsa.intel.com/*`, …) gets CPUs next to it (`preferCloseToDevices:
+podresourceapi:*/*`, which needs the policy's `agent.podResourceAPI: true`).
+
+| Vendor key | Active when the host has | Kubernetes exposes |
+|------------|--------------------------|--------------------|
+| `numa` | more than one `/sys/devices/system/node/node*` | node labels `k3d-gpu.io/numa-nodes=<n>`, `k3d-gpu.io/snc=<nodes per L3>`; pod label `k3d-gpu.io/cores=replica` |
+
+`snc` is CPUs sharing CPU 0's L3 divided by the CPUs of CPU 0's node, the rule
+`snc_get_config()` in `arch/x86/kernel/cpu/resctrl/monitor.c` used through Linux 6.19.
+Linux 7.0 divides NUMA nodes by packages instead, which also counts memory-only nodes,
+so the label reads from CPU nodes on every kernel. `doctor`
+names memory-only nodes. When the CPU has `rdt_a`, `doctor` prints how to turn on the
+policy's resctrl classes. The policy ships with RDT off because it rewrites host-wide
+cache allocation, which the launcher never does.
 
 [`examples/kuberay`](examples/kuberay/README.md) lays a KubeRay `RayCluster` across
 the core types: head on E-cores, a P-core and an E-core CPU worker group, and an

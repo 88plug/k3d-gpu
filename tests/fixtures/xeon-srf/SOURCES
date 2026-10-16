@@ -1,0 +1,28 @@
+Platform: one-socket Xeon 6780E (Sierra Forest, Xeon 6 E-core) server, SNC off:
+one NUMA node, two DSA and two IAA (one work queue each on the first pair), no
+AMX or AVX-512, RDT allocation.
+
+Sources (kernel paths are Linux v6.18 (torvalds/linux tag v6.18)):
+- Xeon 6780E: 144 cores / 144 threads (no SMT), QAT/DLB/DSA/IAA "2 default devices",
+  instruction set AVX2, Intel RDT Yes:
+  https://www.intel.com/content/www/us/en/products/sku/240362/intel-xeon-6780e-processor-108m-cache-2-20-ghz/specifications.html
+- SNC off: one node, so CPU 0's L3 list and node0 both hold every CPU
+  (arch/x86/kernel/cpu/resctrl/monitor.c snc_get_config(), which lists
+  ATOM_CRESTMONT_X in snc_cpu_ids).
+- node<N>/cpulist, cpu<N>/topology/physical_package_id, cache/index3/shared_cpu_list,
+  PCI numa_node: Documentation/ABI/stable/sysfs-devices-node,
+  Documentation/ABI/stable/sysfs-devices-system-cpu, Documentation/ABI/testing/sysfs-bus-pci.
+- DSA 0x0b25 / IAA 0x0cfe on idxd: include/linux/pci_ids.h, drivers/dma/idxd/init.c.
+  idxd has no Sierra Forest entry of its own, so the devices carry the SPR ids it
+  binds; inferred from that table, not captured.
+- avx_vnni, rdt_a, cat_l3, cdp_l3, mba: arch/x86/include/asm/cpufeatures.h.
+
+Layout: sysfs paths and relative symlinks follow the driver core's naming, in
+exactly the form tests/fixtures/capture.sh writes (the matrix test re-captures each
+tree and requires an identical result).
+
+Not from hardware: BDFs, char-device minors, the kernel release string, the brand
+string in model name (built from the ARK processor number) and the cpuinfo flags
+line (a subset in cpufeatures.h order). QAT is left out: the PCI id Sierra Forest's
+QAT enumerates as is not in a primary source read for this fixture, so doctor
+reports QAT 0 of the ARK default.

@@ -1,0 +1,20 @@
+Platform: one-socket Xeon CPU Max 9480 (Sapphire Rapids with on-package HBM) in
+HBM flat mode with SNC4: NUMA nodes 0-3 hold the CPUs and the DDR5, nodes 4-7 are
+memory-only HBM nodes. No DSA/IAA/QAT work queues or VFs are set up.
+
+Sources (kernel paths are Linux v6.18 (torvalds/linux tag v6.18)):
+- A memory-only node lists an empty cpulist: Documentation/ABI/stable/sysfs-devices-node
+  (node<N>/cpulist), drivers/base/node.c.
+- SNC: arch/x86/kernel/cpu/resctrl/monitor.c snc_get_config() (CPU 0's L3 CPUs /
+  its node's CPUs; SAPPHIRERAPIDS_X is in snc_cpu_ids): 112 / 28 = 4.
+- amx_*, rdt_a, cat_l3, cdp_l3, mba: arch/x86/include/asm/cpufeatures.h.
+- Balloon memory types DRAM/HBM/PMEM and pinMemory: the bundled nri-plugins
+  v0.14.0 CRD (share/nri-balloons.yml, balloonTypes.memoryTypes).
+
+Layout: sysfs paths and relative symlinks follow the driver core's naming, in
+exactly the form tests/fixtures/capture.sh writes (the matrix test re-captures each
+tree and requires an identical result).
+
+Not from hardware: the core count and CPU numbering (56 cores, siblings +56), the
+HBM node numbers, the brand string in model name, the kernel release string and the
+cpuinfo flags line (the xeon-spr-accel subset).

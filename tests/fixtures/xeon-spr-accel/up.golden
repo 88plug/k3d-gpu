@@ -1,11 +1,12 @@
-==> Accelerators: dsa iaa qat amx
+==> Accelerators: dsa iaa qat amx numa
 ==> Creating k3d cluster 'gpu' with image cryptoandcoffee/k3d-gpu:latest...
 ==> Waiting for nodes Ready...
 ==> dsa device plugin auto-deployed by k3s.
 ==> iaa device plugin auto-deployed by k3s.
 ==> qat device plugin auto-deployed by k3s.
+==> numa device plugin auto-deployed by k3s.
 ==> Verifying accelerators are schedulable...
-==> Accelerators schedulable: dsa=1 iaa=1 qat=4 amx=1. Try: k3d-gpu test
+==> Accelerators schedulable: dsa=1 iaa=1 qat=4 amx=1 numa=1. Try: k3d-gpu test
 exit=0
 --- calls
 k3d cluster create gpu
@@ -17,6 +18,8 @@ k3d cluster create gpu
   --k3s-node-label=intel.feature.node.kubernetes.io/iaa=true@server:*;agent:*
   --k3s-node-label=intel.feature.node.kubernetes.io/qat=true@server:*;agent:*
   --volume=/dev/char:/dev/char:ro@server:*;agent:*
+  --k3s-node-label=k3d-gpu.io/numa-nodes=2@server:*;agent:*
+  --k3s-node-label=k3d-gpu.io/snc=1@server:*;agent:*
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true@server:*;agent:*
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AMXINT8=true@server:*;agent:*
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true@server:*;agent:*
@@ -27,6 +30,7 @@ kubectl wait --for=condition=Ready nodes --all --timeout=120s
 kubectl -n kube-system get daemonset intel-dsa-plugin
 kubectl -n kube-system get daemonset intel-iaa-plugin
 kubectl -n kube-system get daemonset intel-qat-plugin
+kubectl -n kube-system get daemonset nri-resource-policy-balloons
 kubectl -n kube-system rollout status daemonset/intel-dsa-plugin --timeout=120s
 kubectl get nodes -o go-template={{range .items}}{{range $k, $v := .status.allocatable}}{{$k}} {{$v}}{{"\n"}}{{end}}{{end}}
 kubectl -n kube-system rollout status daemonset/intel-iaa-plugin --timeout=120s
@@ -36,3 +40,6 @@ kubectl get nodes -o go-template={{range .items}}{{range $k, $v := .status.alloc
 kubectl get nodes -l feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true -o name
 kubectl get nodes -l feature.node.kubernetes.io/cpu-cpuid.AMXINT8=true -o name
 kubectl get nodes -l feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true -o name
+kubectl -n kube-system rollout status daemonset/nri-resource-policy-balloons --timeout=120s
+kubectl get nodes -l k3d-gpu.io/numa-nodes=2 -o name
+kubectl get nodes -l k3d-gpu.io/snc=1 -o name
