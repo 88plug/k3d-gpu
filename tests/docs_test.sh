@@ -87,7 +87,7 @@ check "README docs/ link maps to the site page" "$d" grep -q 'href="provenance/"
 d=$(tree repolinks)
 mkdir -p "$d/docs/provenance" "$d/docs/integrations" "$d/docs/design"
 printf 'log\n' > "$d/docs/provenance/arxiv.txt"
-printf '# Provenance\n\nLogs are in [`docs/provenance/`](provenance/).\n' > "$d/docs/provenance.md"
+printf '# Provenance\n\nLogs are in [docs/provenance/](provenance/).\n' > "$d/docs/provenance.md"
 printf '# Failure modes\n\nSee [Dockerfile](../Dockerfile) and [policy](../share/nri-balloons.yml#L3).\n' \
     > "$d/docs/failure-modes.md"
 printf '# Power envelope\n\nModel: [envelope](../bench/envelope_model.py).\n' > "$d/docs/power-envelope.md"
