@@ -1741,7 +1741,7 @@ pcie_gen() {
 }
 
 perf_pcie() {
-    local d dn bdf up ub dg dw ug uw eg ew found=0 r line poss bit max start end cur best="" bestn ids nv=0 out
+    local d dn bdf up ub dg dw ug uw eg ew c cb cg cw hop bad fb rb msg found=0 r line poss bit max start end cur best="" bestn ids nv=0 out
     for d in "${SYSROOT}"/sys/bus/pci/devices/*; do
         [[ "$(rf "${d}/class")" == 0x03* ]] || continue
         bdf=${d##*/}
@@ -1755,22 +1755,40 @@ perf_pcie() {
                 "https://docs.kernel.org/PCI/sysfs-pci.html, kernel source drivers/pci/pci-sysfs.c (max_link_*, resourceN_resize) and drivers/pci/pci.c pci_rebar_get_possible_sizes (bit 0 = 1 MB)"
             found=1
         fi
-        # Link: device max vs the max of the port above it. current_link_* drops at idle.
-        up=$(dirname "$(readlink -f "${d}")"); ub=${up##*/}
-        if [ -n "${dg}" ] && [[ "${dw}" =~ ^[0-9]{1,2}$ ]] && [[ "${ub}" =~ ^[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-7]$ ]]; then
-            ug=$(pcie_gen "$(rf "${up}/max_link_speed")"); uw=$(rf "${up}/max_link_width")
-            if [ -n "${ug}" ] && [[ "${uw}" =~ ^[0-9]{1,2}$ ]]; then
-                eg=$(( dg < ug ? dg : ug )); ew=$(( dw < uw ? dw : uw ))
-                if [ "${eg}" -lt "${dg}" ] || [ "${ew}" -lt "${dw}" ]; then
-                    perf_flag warn "${bdf} [${ids}]: device Gen${dg} x${dw}, upstream port ${ub} Gen${ug} x${uw}: the link trains at most Gen${eg} x${ew}" \
-                        "${dn}/max_link_{speed,width}, /sys/bus/pci/devices/${ub}/max_link_{speed,width}" \
-                        "a link trains to the lower speed and width of its two ends. current_link_* reads lower at idle (link power management), so only max_* is compared. Keep this GPU's weights and KV cache resident (nothing streamed over the link) and give the widest link to the GPU that moves the most data" \
-                        "hardware: move the card to a slot whose port is at least x${dw} (no host command changes the link width)" \
-                        "hardware: move it back"
-                else
-                    perf_ok "${bdf} [${ids}]: Gen${dg} x${dw} behind port ${ub} (Gen${ug} x${uw}): the link can reach the device maximum" \
-                        "${dn}/max_link_{speed,width}, /sys/bus/pci/devices/${ub}/max_link_{speed,width}"
+        # Links: every hop from the device up to its root port, so a card with its own
+        # switch (Arc A/B dGPUs) is judged at the slot link above that switch. The first
+        # hop whose port is slower or narrower than the device below it is reported.
+        # current_link_* drops at idle, so only max_* is compared.
+        if [ -n "${dg}" ] && [[ "${dw}" =~ ^[0-9]{1,2}$ ]]; then
+            c=$(readlink -f "${d}"); hop=0; bad=""; fb=""; rb=""
+            while up=$(dirname "${c}"); ub=${up##*/}; [[ "${ub}" =~ ^[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-7]$ ]]; do
+                cg=$(pcie_gen "$(rf "${c}/max_link_speed")"); cw=$(rf "${c}/max_link_width")
+                ug=$(pcie_gen "$(rf "${up}/max_link_speed")"); uw=$(rf "${up}/max_link_width")
+                if [ -n "${cg}" ] && [[ "${cw}" =~ ^[0-9]{1,2}$ ]] && [ -n "${ug}" ] && [[ "${uw}" =~ ^[0-9]{1,2}$ ]]; then
+                    hop=$((hop + 1)); rb=${ub}
+                    [ "${hop}" -gt 1 ] || fb="${ub} (Gen${ug} x${uw})"
+                    if [ -z "${bad}" ] && { [ "${ug}" -lt "${cg}" ] || [ "${uw}" -lt "${cw}" ]; }; then
+                        bad="${c##*/} ${cg} ${cw} ${ub} ${ug} ${uw}"
+                    fi
                 fi
+                c=${up}
+            done
+            if [ -n "${bad}" ]; then
+                read -r cb cg cw ub ug uw <<< "${bad}"
+                eg=$(( cg < ug ? cg : ug )); ew=$(( cw < uw ? cw : uw ))
+                if [ "${cb}" = "${bdf}" ]; then
+                    msg="device Gen${dg} x${dw}, upstream port ${ub} Gen${ug} x${uw}: the link trains at most Gen${eg} x${ew}"
+                else
+                    msg="${cb} Gen${cg} x${cw} on its path to the root port sits behind port ${ub} Gen${ug} x${uw}: the GPU's traffic crosses a link of at most Gen${eg} x${ew}"
+                fi
+                perf_flag warn "${bdf} [${ids}]: ${msg}" \
+                    "/sys/bus/pci/devices/${cb}/max_link_{speed,width}, /sys/bus/pci/devices/${ub}/max_link_{speed,width}" \
+                    "a link trains to the lower speed and width of its two ends. current_link_* reads lower at idle (link power management), so only max_* is compared. Keep this GPU's weights and KV cache resident (nothing streamed over the link) and give the widest link to the GPU that moves the most data" \
+                    "hardware: move the card to a slot whose port is at least x${cw} (no host command changes the link width)" \
+                    "hardware: move it back"
+            elif [ "${hop}" -gt 0 ]; then
+                perf_ok "${bdf} [${ids}]: Gen${dg} x${dw} behind port ${fb}: the link can reach the device maximum$([ "${rb}" = "${fb%% *}" ] || echo "; no narrower link up to root port ${rb}")" \
+                    "${dn}/max_link_{speed,width}, /sys/bus/pci/devices/${fb%% *}/max_link_{speed,width}$([ "${rb}" = "${fb%% *}" ] || echo " and each port up to ${rb}")"
             fi
         fi
         # Resizable BAR: the BAR with the largest supported size, against its current size.

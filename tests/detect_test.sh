@@ -1327,6 +1327,33 @@ perf_says "perf: TME state needs root without the MSR" "${cool}" 'tme flag set: 
 perf_says "perf: xfs root gets no 4 KiB note" "${cool}" 'mapped with 4 KiB pages' negate
 perf_says "perf: missing /proc/cmdline prints no shell error" "${cool}" 'No such file|line [0-9]+:' negate
 
+# A card with its own PCIe switch (Arc A/B dGPUs: root port -> card upstream port
+# -> downstream port -> GPU): the slot link is the upstream port's, two hops above
+# the GPU. Link values below are synthetic.
+# hop <root> <path under pci0000:00> <class> <speed> <width> [vendor device]
+hop() {
+    local d="$1/sys/devices/pci0000:00/$2"
+    mkdir -p "${d}" "$1/sys/bus/pci/devices"
+    echo "${6:-0x8086}" > "${d}/vendor"; echo "${7:-0x0000}" > "${d}/device"; echo "$3" > "${d}/class"
+    echo "$4" > "${d}/max_link_speed"; echo "$5" > "${d}/max_link_width"
+    ln -sfn "${d}" "$1/sys/bus/pci/devices/${2##*/}"
+}
+arc_card() {
+    kernel "$1" 6.6.0
+    hop "$1" 0000:00:01.0 0x060400 "16.0 GT/s PCIe" "$2"
+    hop "$1" 0000:00:01.0/0000:01:00.0 0x060400 "16.0 GT/s PCIe" 8
+    hop "$1" 0000:00:01.0/0000:01:00.0/0000:02:01.0 0x060400 "2.5 GT/s PCIe" 1
+    hop "$1" 0000:00:01.0/0000:01:00.0/0000:02:01.0/0000:03:00.0 0x030000 "2.5 GT/s PCIe" 1 0x8086 0xe20b
+}
+r=$(newroot perf-arc-x4)
+arc_card "${r}" 4
+perf_says "perf: card switch in an x4 slot warns at the slot link" "${r}" 'warn: 0000:03:00\.0 \[8086:e20b\]: 0000:01:00\.0 Gen4 x8 on its path to the root port sits behind port 0000:00:01\.0 Gen4 x4: the GPU.s traffic crosses a link of at most Gen4 x4'
+perf_says "perf: card switch in an x4 slot gets no ok link line" "${r}" 'ok: +0000:03:00\.0 \[8086:e20b\]: Gen' negate
+r=$(newroot perf-arc-x16)
+arc_card "${r}" 16
+perf_says "perf: card switch in an x16 slot is ok up to the root port" "${r}" 'ok: +0000:03:00\.0 \[8086:e20b\]: Gen1 x1 behind port 0000:02:01\.0 \(Gen1 x1\): the link can reach the device maximum; no narrower link up to root port 0000:00:01\.0'
+perf_says "perf: card switch in an x16 slot does not warn" "${r}" 'warn: 0000:03:00\.0' negate
+
 # IA32_TME_ACTIVATE: active only when locked (bit 0) and enabled (bit 1), as the
 # kernel's detect_tme_early() reads it.
 r=$(newroot perf-tme-on)
