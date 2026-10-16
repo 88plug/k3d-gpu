@@ -111,7 +111,7 @@ Include relevant details:
 - Back every performance claim in README.md or docs/ (tok/s, J/token, "Nx faster",
   "%", "first", "only", "fastest") on the same line with `[ledger:Hn]` (a SUPPORTED
   row of EXPERIMENTS.md) or `[provenance:Pn]` (a sourced row of docs/provenance.md).
-  CI runs `tests/claims_check.sh` to enforce it
+  Run `tests/claims_check.sh` to check it before you push
 
 ### Workflow Changes
 

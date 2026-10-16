@@ -130,6 +130,64 @@ check "missing provenance file makes provenance references fail" "${r}" fail 'P1
 
 check "every offending line is reported" "$(repo $'3x faster\nfastest\n42 tok/s')" fail '3 unbacked'
 
+# --- code fences follow CommonMark --------------------------------------------
+check "inline triple-backtick code does not open a fence" \
+    "$(repo $'```k3d-gpu up``` runs it.\nThe fastest launcher, 42 tok/s.')" fail 'README.md:2:'
+check "a backtick line does not close a tilde fence" \
+    "$(repo $'~~~md\n```\n~~~\nIt is 3x faster.')" fail 'README.md:4:'
+check "a shorter fence does not close a longer one" \
+    "$(repo $'````md\n```\n42 tok/s inside the outer fence\n```\n````\nok')" 0
+check "content after a longer fence closes is scanned" \
+    "$(repo $'````md\n```\n````\nIt is 3x faster.')" fail 'README.md:4:'
+
+# --- verdicts and table cells --------------------------------------------------
+r=$(repo 'It hits 42 tok/s [ledger:H2].')
+sed -i 's/| \*\*SUPPORTED\*\* |/| SUPPORTED-ish? no: PENDING |/' "${r}/EXPERIMENTS.md"
+check "a verdict that only starts with SUPPORTED does not back a claim" "${r}" fail 'H2'
+r=$(repo 'It hits 42 tok/s [ledger:H2].')
+sed -i 's/| \*\*SUPPORTED\*\* |/| ~~SUPPORTED~~ REFUTED |/' "${r}/EXPERIMENTS.md"
+check "a struck-out SUPPORTED does not back a claim" "${r}" fail 'H2'
+r=$(repo 'It hits 42 tok/s [provenance:P4].')
+printf '%s\n' '| P4 | a \| b |  | x |' >> "${r}/docs/provenance.md"
+check "an escaped pipe in the Claim cell does not shift the Source column" "${r}" fail 'P4.*no source'
+r=$(repo 'It hits 42 tok/s [provenance:P4].')
+printf '%s\n' '| P4 | a \| b | https://example.com | x |' >> "${r}/docs/provenance.md"
+check "an escaped pipe with a real Source still backs a claim" "${r}" 0
+
+# --- read errors fail closed ---------------------------------------------------
+if [ "$(id -u)" -ne 0 ]; then
+    r=$(repo 'It is 3x faster.'); chmod 000 "${r}/README.md"
+    check "an unreadable doc is an error" "${r}" fail 'cannot read'
+    r=$(repo 'ok'); chmod 000 "${r}/EXPERIMENTS.md"
+    check "an unreadable ledger is an error" "${r}" fail 'cannot read'
+    r=$(repo 'ok'); chmod 000 "${r}/docs/provenance.md"
+    check "an unreadable provenance file is an error" "${r}" fail 'cannot read'
+fi
+
+# --- more claim wording ----------------------------------------------------------
+check "N times faster fails" "$(repo 'Pinning is 10 times faster.')" fail 'README.md:1'
+check "t/s fails" "$(repo 'It serves 40 t/s.')" fail 'README.md:1'
+check "TPS fails" "$(repo 'It serves 42 TPS.')" fail 'README.md:1'
+check "doubles throughput fails" "$(repo 'Pinning doubles throughput.')" fail 'README.md:1'
+check "a claim split across two lines fails" "$(repo $'Pinning is 3x\nfaster than before.')" fail 'README.md:2'
+check "a claim split across two lines backed on either line passes" \
+    "$(repo $'Pinning is 3x [ledger:H2]\nfaster than before.')" 0
+check "a paragraph break ends a split claim" "$(repo $'Step 3x\n\nfaster setup notes.')" 0
+check "an HTML comment inside a claim is ignored" "$(repo '3x <!-- note --> faster')" fail 'README.md:1'
+check "a claim inside a multi-line HTML comment is not rendered and passes" \
+    "$(repo $'<!--\nIt is 3x faster.\n-->\nok')" 0
+
+# --- docs only claim CI enforcement when CI runs the guard ---------------------
+root="$(cd "$(dirname "$0")/.." && pwd)"
+ci_claim=$(grep -lE 'CI (runs|enforces).*claims_check|claims_check.*(enforces|enforced).* in CI' \
+    "${root}/EXPERIMENTS.md" "${root}/CONTRIBUTING.md" 2>/dev/null)
+if [ -z "${ci_claim}" ] || grep -q 'claims_check.sh' "${root}"/.github/workflows/*.yml; then
+    PASS=$((PASS + 1)); echo "ok   docs claim CI enforcement only when a workflow runs the guard"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL docs claim CI enforcement only when a workflow runs the guard"
+    echo "  | docs that say CI enforces the guard: ${ci_claim//$'\n'/ }"
+fi
+
 # --- the real repo -----------------------------------------------------------
 check "this repo's own docs pass" "$(cd "$(dirname "$0")/.." && pwd)" 0
 

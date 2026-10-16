@@ -4,7 +4,7 @@ The ledger for every performance claim this project makes. A claim in `README.md
 or `docs/*.md` (a tok/s, J/token, "Nx faster" or "%" number, or a "first",
 "only" or "fastest" superlative) must cite a row here as `[ledger:Hn]` whose
 verdict is **SUPPORTED**, or a sourced row of [`docs/provenance.md`](docs/provenance.md)
-as `[provenance:Pn]`. `tests/claims_check.sh` enforces this in CI.
+as `[provenance:Pn]`. Run `tests/claims_check.sh` to check this before you push.
 
 Method: state the hypothesis and its prediction before measuring, name the probe
 that could refute it, then record the verdict. A hypothesis is only marked
