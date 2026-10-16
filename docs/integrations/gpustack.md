@@ -12,7 +12,7 @@ Everything here was checked against these pinned upstream versions (October 2026
 | Helm chart | `oci://registry-1.docker.io/gpustack/gpustack-chart` **2.2.3** | digest `sha256:b660ab0ba7224def2aa12559803c776272dd854c7af264dee2529772f9299641` |
 | Server/worker image | `gpustack/gpustack:v2.2.3` | index digest `sha256:55ecc762950a32641b6a4d96195c0662ef72998eaeeda31bba0e8e218d41afef` |
 | gpustack-runtime (device detection) | 0.2.1 (pinned by v2.2.3); 0.2.6 on `main` | |
-| gpustack-operator | v0.5.4 (pinned by v2.2.3) | installs NFD 0.18.3 and Kueue 0.17.6 |
+| gpustack-operator | v0.5.4 (pinned by v2.2.3) | installs NFD 0.18.3 and Kueue 0.17.6. The NFD chart is baked from `thxcode.github.io/node-feature-discovery` (a maintainer's mirror, [Dockerfile](https://github.com/gpustack/gpustack-operator/blob/v0.5.4/pack/gpustack-operator/Dockerfile#L294)), not from `kubernetes-sigs`; Kueue comes from `kubernetes-sigs/kueue` releases |
 | k3d-gpu node | k3s `v1.34.1-k3s1` | chart needs Kubernetes >= 1.30 |
 
 ## Summary
@@ -107,7 +107,28 @@ feature.node.kubernetes.io/pci-10de.present: "true"`. NFD sets that label once
 the operator has installed it, so the worker stays `Pending` for the first few
 minutes. That is expected.
 
-Open the UI and get the admin password:
+The operator's device-manager DaemonSet has the same `nodeSelector`
+([daemonset.yaml](https://github.com/gpustack/gpustack-operator/blob/v0.5.4/deploy/gpustack-operator/chart/templates/device-manager/daemonset.yaml#L44-L46)),
+so GPUStack advertises `nvidia.com/gpu` only after NFD sets that label. The
+operator configures NFD's `pci` source with `deviceLabelFields: [vendor]`, which
+yields `pci-10de` for NVIDIA. NFD runs inside the k3d node container and reads
+PCI devices from sysfs there. **Not verified on a k3d-gpu cluster:** that it sees
+the GPU and sets the label. Check it before relying on the node:
+
+```bash
+kubectl get nodes -L feature.node.kubernetes.io/pci-10de.present,feature.gpustack.ai/acceleratable
+kubectl get nodes -o custom-columns='NODE:.metadata.name,GPU:.status.allocatable.nvidia\.com/gpu'
+```
+
+Expect `pci-10de.present=true` and a GPU count above zero. If the label never
+appears (or `acceleratable` reads `false`), the node has no plugin serving
+`nvidia.com/gpu`: the baked one is already off. Bring it back with
+`kubectl label nodes --all nvidia.com/gpu.present-`.
+
+Open the UI and get the admin password. With chart defaults the server writes an
+auto-generated password to `initial_admin_password`. If you pin one with
+`server.bootstrapPasswordSecret.password`, that file is not created; use the
+pinned value instead:
 
 ```bash
 kubectl -n gpustack-system exec gpustack-server-0 -- \
