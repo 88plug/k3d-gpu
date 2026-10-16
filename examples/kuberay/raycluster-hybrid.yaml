@@ -1,0 +1,113 @@
+# RayCluster for k3d-gpu on an Intel hybrid CPU (P-cores + E-cores) with an iGPU.
+#
+#   head        E-cores (k3d-gpu.io/cores=efficient), coordinator only: num-cpus=0
+#   cpu-p       Ray workers on P-cores (k3d-gpu.io/cores=performance)
+#   cpu-e       Ray workers on E-cores (k3d-gpu.io/cores=efficient)
+#   igpu        Ray worker holding one Intel iGPU (gpu.intel.com/i915)
+#
+# The NRI balloons policy that k3d-gpu deploys reads the k3d-gpu.io/cores pod label
+# and sizes each balloon from the pod's CPU requests, so CPU requests equal limits
+# in whole CPUs. Each CPU group advertises a Ray custom resource (p_core / e_core)
+# equal to its CPU count, and the iGPU group advertises intel_gpu, so Ray tasks pick
+# a group with resources={"p_core": 1}, {"e_core": 1} or {"intel_gpu": 1}.
+#
+# Pinned to the versions Intel's Enterprise Agent Toolkit (EAT) deploys:
+#   KubeRay operator 1.3.0 (helm chart kuberay-operator 1.3.0, CRD ray.io/v1)
+#   rayproject/ray:2.40.0-py312 (linux/amd64, image user 1000)
+# See examples/kuberay/README.md for install and verification steps.
+apiVersion: ray.io/v1
+kind: RayCluster
+metadata:
+  name: hybrid
+  namespace: ray
+spec:
+  rayVersion: "2.40.0"
+  headGroupSpec:
+    rayStartParams:
+      num-cpus: "0"
+      dashboard-host: "0.0.0.0"
+    template:
+      metadata:
+        labels:
+          k3d-gpu.io/cores: efficient
+      spec:
+        nodeSelector:
+          k3d-gpu.io/hybrid-cpu: "true"
+        containers:
+        - name: ray-head
+          image: rayproject/ray:2.40.0-py312@sha256:ad8df8a5f18fb09815b47e94a5baf0ec3be1536bdae28d202f48575f9b9abbad
+          resources:
+            requests: {cpu: "1", memory: 2Gi}
+            limits: {cpu: "1", memory: 2Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities: {drop: [ALL]}
+  workerGroupSpecs:
+  - groupName: cpu-p
+    replicas: 1
+    minReplicas: 0
+    maxReplicas: 4
+    rayStartParams:
+      resources: '"{\"p_core\": 4}"'
+    template:
+      metadata:
+        labels:
+          k3d-gpu.io/cores: performance
+      spec:
+        nodeSelector:
+          k3d-gpu.io/hybrid-cpu: "true"
+        containers:
+        - name: ray-worker
+          image: rayproject/ray:2.40.0-py312@sha256:ad8df8a5f18fb09815b47e94a5baf0ec3be1536bdae28d202f48575f9b9abbad
+          resources:
+            requests: {cpu: "4", memory: 8Gi}
+            limits: {cpu: "4", memory: 8Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities: {drop: [ALL]}
+  - groupName: cpu-e
+    replicas: 1
+    minReplicas: 0
+    maxReplicas: 4
+    rayStartParams:
+      resources: '"{\"e_core\": 2}"'
+    template:
+      metadata:
+        labels:
+          k3d-gpu.io/cores: efficient
+      spec:
+        nodeSelector:
+          k3d-gpu.io/hybrid-cpu: "true"
+        containers:
+        - name: ray-worker
+          image: rayproject/ray:2.40.0-py312@sha256:ad8df8a5f18fb09815b47e94a5baf0ec3be1536bdae28d202f48575f9b9abbad
+          resources:
+            requests: {cpu: "2", memory: 4Gi}
+            limits: {cpu: "2", memory: 4Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities: {drop: [ALL]}
+  # gpu.intel.com/i915 is the i915 driver's resource (Meteor Lake / Arrow Lake iGPU).
+  # Lunar Lake and Panther Lake iGPUs run on xe: use gpu.intel.com/xe there.
+  # No core label: the pod runs in the policy's shared balloon.
+  - groupName: igpu
+    replicas: 1
+    minReplicas: 0
+    maxReplicas: 1
+    rayStartParams:
+      resources: '"{\"intel_gpu\": 1}"'
+    template:
+      spec:
+        containers:
+        - name: ray-worker
+          image: rayproject/ray:2.40.0-py312@sha256:ad8df8a5f18fb09815b47e94a5baf0ec3be1536bdae28d202f48575f9b9abbad
+          resources:
+            requests: {cpu: "2", memory: 8Gi, gpu.intel.com/i915: 1}
+            limits: {cpu: "2", memory: 8Gi, gpu.intel.com/i915: 1}
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities: {drop: [ALL]}

@@ -162,6 +162,10 @@ cpufreq, C-states or RDT. Only one NRI resource policy can own a node, so drop
 `hybrid` from `K3D_GPU_VENDORS` if another stack installs its own (for example,
 Intel's Enterprise Agent Toolkit CPU balloons).
 
+[`examples/kuberay`](examples/kuberay/README.md) lays a KubeRay `RayCluster` across
+the core types: head on E-cores, a P-core and an E-core CPU worker group, and an
+iGPU worker group.
+
 ---
 
 ## Prerequisites
