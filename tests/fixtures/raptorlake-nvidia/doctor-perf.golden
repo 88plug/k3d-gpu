@@ -41,9 +41,9 @@
         why:    therm_throt counts each time the package raised its thermal or PROCHOT status; while it is set the cores run below the frequency they request, so sustained inference speed follows the cooler, not the clock settings. The 1%-of-uptime cut-off is this tool's heuristic
         apply:  none on the host: improve cooling (airflow, heatsink, BIOS fan or thermal profile); the host-side lever is a lower PL1, see CPU package power limits
         revert: none
-  info: MSR 0x1B1 IA32_PACKAGE_THERM_STATUS 0x000000008805080b: now thermal; logged thermal, PROCHOT, power limit; 5 C below TCC activation
+  info: MSR 0x1B1 IA32_PACKAGE_THERM_STATUS 0x000000008805080b: now thermal; logged thermal, PROCHOT, power limit; 5 C below TjMax
         from: /dev/cpu/0/msr (root)
-  info: MSR 0x19C IA32_THERM_STATUS (CPU 0) 0x00000000880b2a88: now none; logged PROCHOT, threshold #1, threshold #2, power limit, current limit; 11 C below TCC activation
+  info: MSR 0x19C IA32_THERM_STATUS (CPU 0) 0x00000000880b2a88: now none; logged PROCHOT, threshold #1, threshold #2, power limit, current limit; 11 C below TjMax
         from: /dev/cpu/0/msr (root)
   info: MSR 0x64F MSR_CORE_PERF_LIMIT_REASONS 0x0000000019030002: now thermal; logged PROCHOT, thermal, other (electrical), PL2, max turbo limit
         from: /dev/cpu/0/msr (root)

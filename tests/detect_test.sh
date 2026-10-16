@@ -1252,8 +1252,8 @@ HOT_ENV=("STUB_NVSMI_TOPO= 	GPU0	GPU1;GPU0	X	NS;GPU1	NS	X")
 PC=/sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw
 perf_says "perf: throttle share of uptime warns" "${hot}" 'warn: package thermally throttled 4% of uptime: 22048145 events, 101468880 ms in total, longest 224 ms; core events peak at 8495804 on cpu8' "" "${HOT_ENV[@]}"
 perf_says "perf: TCC activation from TjMax and offset" "${hot}" 'info: TCC activation 95 C \(TjMax 100 C - TCC offset 5 C\); package now 96 C' "" "${HOT_ENV[@]}"
-perf_says "perf: 0x1B1 decoded, logged bits named" "${hot}" 'MSR 0x1B1 IA32_PACKAGE_THERM_STATUS 0x00000000880b0a88: now none; logged PROCHOT, threshold #1, threshold #2, power limit; 11 C below TCC activation' "" "${HOT_ENV[@]}"
-perf_says "perf: 0x19C decoded with current limit" "${hot}" 'MSR 0x19C IA32_THERM_STATUS \(CPU 0\) 0x0000000088143a88: now current limit; logged PROCHOT, threshold #1, threshold #2, power limit, current limit; 20 C below TCC activation' "" "${HOT_ENV[@]}"
+perf_says "perf: 0x1B1 decoded, logged bits named" "${hot}" 'MSR 0x1B1 IA32_PACKAGE_THERM_STATUS 0x00000000880b0a88: now none; logged PROCHOT, threshold #1, threshold #2, power limit; 11 C below TjMax' "" "${HOT_ENV[@]}"
+perf_says "perf: 0x19C decoded with current limit" "${hot}" 'MSR 0x19C IA32_THERM_STATUS \(CPU 0\) 0x0000000088143a88: now current limit; logged PROCHOT, threshold #1, threshold #2, power limit, current limit; 20 C below TjMax' "" "${HOT_ENV[@]}"
 perf_says "perf: 0x64F decoded per SDM table 2-39" "${hot}" 'MSR 0x64F MSR_CORE_PERF_LIMIT_REASONS 0x0000000019030100: now other \(electrical\); logged PROCHOT, thermal, other \(electrical\), PL2, max turbo limit$' "" "${HOT_ENV[@]}"
 perf_says "perf: sticky log bits are only read" "${hot}" 'the log bits are sticky' "" "${HOT_ENV[@]}"
 perf_says "perf: PL1 far above TDP while throttling warns" "${hot}" 'warn: intel-rapl:0 package-0: PL1 117 W is 3\.3x the 35 W thermal spec power while the package is thermally throttled 4% of uptime' "" "${HOT_ENV[@]}"
@@ -1266,6 +1266,17 @@ perf_says "perf: 1DPC alternative capped by the rated speed" "${hot}" 'would run
 perf_says "perf: peak DRAM bandwidth computed" "${hot}" 'info: peak DRAM bandwidth 57\.6 GB/s = 2 channels x 3600 MT/s x 8 B' "" "${HOT_ENV[@]}"
 perf_says "perf: ECC without EDAC is unmonitored" "${hot}" 'note: ECC modules, but no EDAC memory controller is registered.*dram\.ecc=unmonitored' "" "${HOT_ENV[@]}"
 perf_says "perf: EDAC apply names ie31200_edac from 6.16" "${hot}" 'apply:  boot Linux 6\.16 or newer \(ie31200_edac binds host bridge 8086:a700 from 6\.16\), then: sudo modprobe ie31200_edac' "" "${HOT_ENV[@]}"
+# ie31200_edac binds 8086:a703/4640/4630 from 6.15, 8086:a700/4660 from 6.16.
+r=$(newroot perf-edac-a703)
+g10_common "${r}"
+pci "${r}" 0000:00:00.0 0x8086 0xa703 "" 0x060000
+perf_says "perf: EDAC for 8086:a703 needs 6.15" "${r}" 'apply:  boot Linux 6\.15 or newer \(ie31200_edac binds host bridge 8086:a703 from 6\.15\), then: sudo modprobe ie31200_edac'
+kernel "${r}" 6.15.2
+perf_says "perf: EDAC for 8086:a703 on 6.15 loads directly" "${r}" 'apply:  sudo modprobe ie31200_edac$'
+r=$(newroot perf-edac-4660)
+g10_common "${r}"
+pci "${r}" 0000:00:00.0 0x8086 0x4660 "" 0x060000
+perf_says "perf: EDAC for 8086:4660 needs 6.16" "${r}" 'apply:  boot Linux 6\.16 or newer \(ie31200_edac binds host bridge 8086:4660 from 6\.16\)'
 perf_says "perf: ext4 on 6.6 maps weights with 4 KiB pages" "${hot}" 'note: root filesystem is ext4 on Linux 6\.6\.128-1-MANJARO: model files mmapped from it are mapped with 4 KiB pages' "" "${HOT_ENV[@]}"
 perf_says "perf: huge tmpfs apply and revert" "${hot}" 'revert: sudo umount /mnt/k3d-gpu-models' "" "${HOT_ENV[@]}"
 perf_says "perf: huge tmpfs sized from --model-gb" "${hot}" 'huge=within_size,size=31G' "" "${HOT_ENV[@]}" K3D_GPU_MODEL_GB=30

@@ -1324,11 +1324,11 @@ perf_thermal() {
     fi
     local -a st=(0:thermal 2:PROCHOT "4:critical temperature" "6:threshold #1" "8:threshold #2" "10:power limit")
     local -a lg=(1:thermal 3:PROCHOT "5:critical temperature" "7:threshold #1" "9:threshold #2" "11:power limit")
-    perf_info "MSR 0x1B1 IA32_PACKAGE_THERM_STATUS 0x${pkg}: now $(msr_bits "${pkg}" "${st[@]}"); logged $(msr_bits "${pkg}" "${lg[@]}"); $(( (16#${pkg} >> 16) & 0x7f )) C below TCC activation" \
+    perf_info "MSR 0x1B1 IA32_PACKAGE_THERM_STATUS 0x${pkg}: now $(msr_bits "${pkg}" "${st[@]}"); logged $(msr_bits "${pkg}" "${lg[@]}"); $(( (16#${pkg} >> 16) & 0x7f )) C below TjMax" \
         "/dev/cpu/0/msr (root)"
     core=$(msr 0 0x19C)
     if [ -n "${core}" ]; then
-        perf_info "MSR 0x19C IA32_THERM_STATUS (CPU 0) 0x${core}: now $(msr_bits "${core}" "${st[@]}" "12:current limit" "14:cross-domain limit"); logged $(msr_bits "${core}" "${lg[@]}" "13:current limit" "15:cross-domain limit")$( (( (16#${core} >> 31) & 1 )) && echo "; $(( (16#${core} >> 16) & 0x7f )) C below TCC activation")" \
+        perf_info "MSR 0x19C IA32_THERM_STATUS (CPU 0) 0x${core}: now $(msr_bits "${core}" "${st[@]}" "12:current limit" "14:cross-domain limit"); logged $(msr_bits "${core}" "${lg[@]}" "13:current limit" "15:cross-domain limit")$( (( (16#${core} >> 31) & 1 )) && echo "; $(( (16#${core} >> 16) & 0x7f )) C below TjMax")" \
             "/dev/cpu/0/msr (root)"
     fi
     plr=$(msr 0 0x64F)
@@ -1670,12 +1670,18 @@ perf_dram() {
     else
         hb=$(rf "${SYSROOT}/sys/bus/pci/devices/0000:00:00.0/device")
         local apply="load the EDAC driver for host bridge 8086:${hb#0x} if this kernel has one (ls /lib/modules/\$(uname -r)/kernel/drivers/edac)" revert="unload that driver again"
+        # ie31200_edac device IDs: Raptor Lake-S a703/4640/4630 from 6.15; a700 and
+        # Alder Lake-S 4660 from 6.16 (drivers/edac/ie31200_edac.c at v6.15, v6.16).
+        local kv=""
         case "${hb}" in
-            0xa700|0xa703|0x4640|0x4630)
-                if kernel_lt 6.16; then apply="boot Linux 6.16 or newer (ie31200_edac binds host bridge 8086:${hb#0x} from 6.16), then: sudo modprobe ie31200_edac"
-                else apply="sudo modprobe ie31200_edac"; fi
-                revert="sudo modprobe -r ie31200_edac" ;;
+            0xa703|0x4640|0x4630) kv=6.15 ;;
+            0xa700|0x4660) kv=6.16 ;;
         esac
+        if [ -n "${kv}" ]; then
+            if kernel_lt "${kv}"; then apply="boot Linux ${kv} or newer (ie31200_edac binds host bridge 8086:${hb#0x} from ${kv}), then: sudo modprobe ie31200_edac"
+            else apply="sudo modprobe ie31200_edac"; fi
+            revert="sudo modprobe -r ie31200_edac"
+        fi
         perf_flag note "ECC modules, but no EDAC memory controller is registered: corrected and uncorrected errors are not counted (dram.ecc=unmonitored)" \
             "/sys/devices/system/edac/mc/ (no mc*), /sys/firmware/dmi/entries/17-*/raw" \
             "without an EDAC driver a failing module shows up only as crashes or silent corruption; with one, ce_count/ue_count give early warning" \
@@ -2027,7 +2033,7 @@ perf_isolation() {
             perf_info "TME capable but off (IA32_TME_ACTIVATE 0x${tme}: lock=$(( 16#${tme} & 1 )) enable=$(( (16#${tme} >> 1) & 1 )); mem-encryption=tme-capable-off). Enabling is a BIOS setting" "/dev/cpu/0/msr (root)"
         fi
     elif cpu_flag tme; then
-        perf_info "tme flag set: TME capable. Whether firmware enabled it needs root (MSR 0x982); kernels up to at least 6.8 keep the flag either way, 6.12 clears it when firmware left TME off" "/proc/cpuinfo"
+        perf_info "tme flag set: TME capable. Whether firmware enabled it needs root (MSR 0x982); kernels before 6.10 keep the flag either way, 6.10 and later clear it when firmware left TME off" "/proc/cpuinfo"
     fi
 
     # GPU observation streams
