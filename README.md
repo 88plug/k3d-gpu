@@ -82,6 +82,7 @@ commands the launcher runs for you.
 - NVIDIA, **Intel GPU** (Arc, Battlemage, Core Ultra integrated GPUs, Crescent Island — `xe` or `i915`), **Intel NPU** (Core Ultra) and **Intel Gaudi 3 (HPU)** device plugins **baked into k3s auto-deploy** — `up` exposes them with no `kubectl apply`. The launcher labels nodes so each plugin only runs where its hardware is  
 - Auto-detection on the host from sysfs: `/dev/nvidia*`, Intel DRM render nodes (`xe`/`i915`), and `/dev/accel/accel*` nodes told apart by PCI vendor (`8086` + `intel_vpu` = NPU, `1da3` = Gaudi). `k3d-gpu detect` prints what it found  
 - `k3d-gpu doctor` checks kernel and firmware per platform, names the `xe.force_probe=<id>` needed for parts newer than your kernel, and checks Xeon built-in accelerators (AMX, DSA, IAA, QAT) — deployed automatically once the host side is configured  
+- [Node Feature Discovery](#node-feature-discovery) with Intel's NodeFeatureRules on every node: CPU flags (`cpu-cpuid.*`), kernel, PCI and `intel.feature.node.kubernetes.io/*` labels read from the host  
 - CDI-ready: containerd 2.x scans `/etc/cdi` and `/var/run/cdi` (CDI on by default), so future vendors that emit CDI specs need no node changes  
 - Pre‑configured nvidia containerd runtime; `--default-runtime=nvidia` for zero-config GPU pods  
 - No CUDA toolkit in the node image — driver libs are injected from the host, workloads bring their own CUDA  
@@ -252,6 +253,45 @@ cache allocation, which the launcher never does.
 [`examples/kuberay`](examples/kuberay/README.md) lays a KubeRay `RayCluster` across
 the core types: head on E-cores, a P-core and an E-core CPU worker group, and an
 iGPU worker group.
+
+### Node Feature Discovery
+
+Every cluster also runs [Node Feature Discovery](https://github.com/kubernetes-sigs/node-feature-discovery)
+v0.19.0 with Intel's
+[NodeFeatureRules](https://github.com/intel/intel-device-plugins-for-kubernetes/tree/v0.37.1/deployments/nfd/overlays/node-feature-rules)
+v0.37.1, baked into the image (namespace `node-feature-discovery`). About 30 s
+after `up`, nodes carry the host's CPU, kernel and PCI features. On an
+i9-13900T with a UHD 770 and two RTX Ada cards, for example:
+
+```
+feature.node.kubernetes.io/cpu-cpuid.AVXVNNI=true      # 55 cpu-cpuid labels in all
+feature.node.kubernetes.io/cpu-cpuid.HYBRID_CPU=true
+feature.node.kubernetes.io/cpu-model.id=183
+feature.node.kubernetes.io/kernel-version.full=6.6.128-1-MANJARO
+feature.node.kubernetes.io/pci-0300_10de.present=true
+feature.node.kubernetes.io/pci-0380_8086.present=true
+feature.node.kubernetes.io/system-os_release.ID=manjaro
+gpu.intel.com/device-id.0380-a780.present=true
+intel.feature.node.kubernetes.io/gpu=true
+```
+
+nfd-worker reads the kernel config, the builtin-module list and os-release from
+the host. Inside a k3d node those paths hold the node image's own files, so `up`
+bind-mounts the host's `/lib/modules`, `/boot` and `/etc/os-release` read-only
+at `/k3d-gpu/host` in the node, and the baked worker reads them from there.
+Stock NFD in a k3d node reports the node image's OS (`ubuntu`) and drops its
+enabled-module feature, so Intel's `intel.feature.node.kubernetes.io/gpu` rule
+never matches. A cluster made from this image with plain `k3d cluster create`
+(no launcher mounts) still gets the CPU, PCI and kernel-version labels, but no
+os-release labels and no `intel.feature.node.kubernetes.io/gpu`.
+
+The launcher keeps setting its own labels (`npu`, `dsa`, `iaa`, `qat`,
+`cpu-cpuid.AMX*`, `k3d-gpu.io/hybrid-cpu`). They exist from node registration
+on, so plugins schedule at once and still schedule when the NFD image cannot be
+pulled. NFD only removes labels it set itself. Intel's `dsa`, `iaa` and `qat`
+rules fire on the PCI device plus its driver, before any work queue or VF is
+configured. On such a Xeon NFD may label the node first and schedule the
+plugin, which then advertises nothing until the host is set up.
 
 ### Optional: KServe + OpenVINO Model Server
 

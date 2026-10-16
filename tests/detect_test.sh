@@ -1862,6 +1862,31 @@ up_says "K3D_GPU_K3S_ARGS keeps a flag's own commas" 0 \
 up_says "K3D_GPU_K3S_ARGS rejects a word that is not a flag" fail 'servicelb' negate \
     K3D_GPU_K3S_ARGS="--disable servicelb"
 
+# Node Feature Discovery reads the host's kernel config, builtin modules and
+# os-release; the node image has its own /boot, /lib and /etc, so `up` mounts
+# the host's copies read-only under /k3d-gpu/host.
+r=$(newroot up-nfd)
+mkdir -p "${r}/lib/modules/6.18.1" "${r}/boot" "${r}/etc"
+echo "ID=manjaro" > "${r}/etc/os-release"
+up_says "up mounts the host's /lib/modules for NFD" 0 \
+    "^--volume=${r}/lib/modules:/k3d-gpu/host/lib/modules:ro@server:\*;agent:\*$" "" K3D_GPU_SYSROOT="${r}"
+up_says "up mounts the host's /boot for NFD" 0 \
+    "^--volume=${r}/boot:/k3d-gpu/host/boot:ro@server:\*;agent:\*$" "" K3D_GPU_SYSROOT="${r}"
+up_says "up mounts the host's /etc/os-release for NFD" 0 \
+    "^--volume=${r}/etc/os-release:/k3d-gpu/host/etc/os-release:ro@server:\*;agent:\*$" "" K3D_GPU_SYSROOT="${r}"
+up_says "up still sets the hybrid label itself" 0 \
+    '^--k3s-node-label=k3d-gpu.io/hybrid-cpu=true@server:\*;agent:\*$' "" K3D_GPU_SYSROOT="${r}"
+up_says "up skips host paths that do not exist" 0 '/k3d-gpu/host/' negate
+
+# AMX labels stay launcher-set: they exist from node registration on, before
+# (or without) NFD.
+r=$(newroot up-amx)
+mkdir -p "${r}/proc"
+echo "flags : fpu amx_bf16 amx_tile amx_int8" > "${r}/proc/cpuinfo"
+up_says "up still sets AMX labels as an NFD fallback" 0 \
+    '^--k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true@server:\*;agent:\*$' "" \
+    K3D_GPU_SYSROOT="${r}" K3D_GPU_VENDORS=hybrid,amx
+
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

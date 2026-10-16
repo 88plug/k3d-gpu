@@ -287,6 +287,7 @@ cpu_family_model() {
 hybrid_cpus() { cat "${SYSROOT}/sys/devices/cpu_$1/cpus" 2>/dev/null || true; }
 has_hybrid() { [ -n "$(hybrid_cpus core)" ] && [ -n "$(hybrid_cpus atom)" ]; }
 HYBRID_LABEL="k3d-gpu.io/hybrid-cpu=true"
+NFD_HOST_DIR="/k3d-gpu/host" # in the node: host /lib/modules, /boot, /etc/os-release for nfd-worker
 
 # Kernel CPU list ("0-3,8,10-11") -> one CPU number per line. Only what the
 # kernel prints is accepted (decimal, no leading zeros, a <= b, CPU ids below
@@ -2235,6 +2236,17 @@ cmd_up() {
     for flag in ${flags[@]+"${flags[@]}"}; do
         [[ "${flag}" == -* ]] || err "K3D_GPU_K3S_ARGS word '${flag}' is not a flag (use --flag=value)"
         create_args+=(--k3s-arg="${flag}@server:*")
+    done
+    # Node Feature Discovery (baked) labels the node from the host kernel. The node
+    # image has its own /boot, /lib and /etc, so share the host's kernel config,
+    # builtin-module list and os-release read-only under /k3d-gpu/host, where the
+    # baked nfd-worker looks. A separate path keeps the host's modules out of the
+    # node's own /lib/modules, so nothing in the node can modprobe them.
+    local src
+    for src in lib/modules boot etc/os-release; do
+        if [ -e "${SYSROOT}/${src}" ]; then
+            create_args+=(--volume="${SYSROOT}/${src}:${NFD_HOST_DIR}/${src}:ro@server:*;agent:*")
+        fi
     done
     if is_active intel && ! compgen -G "${SYSROOT}/dev/dri/renderD*" >/dev/null; then
         warn "no /dev/dri/renderD* on host — Intel GPU will not be visible in the node"

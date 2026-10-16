@@ -63,8 +63,13 @@ COPY share/intel-qat-plugin.yml /var/lib/rancher/k3s/server/manifests/intel-qat-
 # k3d-gpu.io/cores=performance|efficient onto P- or E-cores, and =replica into
 # one NUMA node.
 COPY share/nri-balloons.yml /var/lib/rancher/k3s/server/manifests/nri-balloons.yaml
+# Node Feature Discovery plus Intel's NodeFeatureRules, on every node: labels CPU
+# features (cpu-cpuid.*), PCI devices and intel.feature.node.kubernetes.io/* from
+# the host. The launcher's own labels stay as a fallback that exists from node
+# registration on.
+COPY share/node-feature-discovery.yml /var/lib/rancher/k3s/server/manifests/node-feature-discovery.yaml
 
-# CDI spec directories. containerd 2.x (k3s 1.34) enables CDI by default and scans
+# CDI spec directories. containerd 2.x (k3s 1.34 and newer) enables CDI by default and scans
 # these paths, so vendor plugins/tools that emit CDI specs work without any
 # containerd config change. /var/run/cdi is tmpfs at runtime, so device plugins
 # create it via a DirectoryOrCreate hostPath; only the persistent /etc/cdi is made here.
