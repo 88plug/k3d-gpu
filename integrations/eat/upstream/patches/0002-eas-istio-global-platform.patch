@@ -1,0 +1,84 @@
+From 7a76f9abb5865158b01961a5ace47b17066b77eb Mon Sep 17 00:00:00 2001
+From: Andrew Mello <andrew@88plug.com>
+Date: Fri, 16 Oct 2026 04:42:31 -0700
+Subject: [PATCH] istio: pass global.platform through to the Istio chart
+
+Istio's cni chart picks the host CNI conf/bin directories from a
+platform profile (charts/istio -> cni 1.27.3, templates/zzz_profile.yaml,
+files/profile-platform-<name>.yaml). Without global.platform it mounts
+/etc/cni/net.d and /opt/cni/bin, which do not exist on k3s, k3d,
+microk8s, minikube or GKE, so ambient mode cannot chain into the
+cluster's CNI there. Istio's platform prerequisites page requires
+global.platform=k3d / k3s for those clusters.
+
+Add istio_platform (default "", which renders exactly as today) and pass
+it as global.platform on install and upgrade, so an existing_kubernetes
+cluster on one of those platforms can keep istio_enabled: true.
+Checked with helm template on the vendored chart: "k3d" mounts /bin and
+/var/lib/rancher/k3s/agent/etc/cni/net.d, "" keeps the default paths,
+and an unknown value fails with "unknown platform".
+---
+ configs/defaults/global_config.yaml | 2 ++
+ roles/istio/defaults/main.yaml      | 7 +++++++
+ roles/istio/tasks/install.yaml      | 1 +
+ roles/istio/tasks/upgrade.yaml      | 1 +
+ 4 files changed, 11 insertions(+)
+
+diff --git a/configs/defaults/global_config.yaml b/configs/defaults/global_config.yaml
+index 4b89136..9149d40 100644
+--- a/configs/defaults/global_config.yaml
++++ b/configs/defaults/global_config.yaml
+@@ -59,6 +59,8 @@ gateway_request_timeout: "600s"           # Envoy default is 15s — too short f
+ 
+ # --- Components ---
+ istio_enabled: true
++# istio_platform: ""                      # k3d | k3s | microk8s | minikube | gke | openshift:
++#                                         # CNI paths for clusters off /etc/cni/net.d (e.g. BYO k3s/k3d)
+ observability_enabled: true
+ velero_enabled: false                     # opt-in: backup/restore. Requires CSI-snapshot storage
+ 
+diff --git a/roles/istio/defaults/main.yaml b/roles/istio/defaults/main.yaml
+index b2e0882..40455ad 100644
+--- a/roles/istio/defaults/main.yaml
++++ b/roles/istio/defaults/main.yaml
+@@ -32,6 +32,13 @@ istio_helm_release_name: "istio"
+ istio_helm_default_values_file: "{{ istio_helm_chart_directory }}/values.yaml"
+ istio_wait_timeout: "300s"
+ 
++# Istio platform profile, passed to the chart as global.platform. Istio's
++# k3d, k3s, microk8s, minikube, gke and openshift profiles point istio-cni at
++# that platform's CNI conf/bin directories; ambient mode needs this on any
++# platform that does not use /etc/cni/net.d and /opt/cni/bin. Empty = chart
++# default paths. Istio's chart fails the install on an unknown value.
++istio_platform: ""
++
+ # =============================================================================
+ # cert-manager-istio-csr
+ # =============================================================================
+diff --git a/roles/istio/tasks/install.yaml b/roles/istio/tasks/install.yaml
+index 6aafac3..ed774bd 100644
+--- a/roles/istio/tasks/install.yaml
++++ b/roles/istio/tasks/install.yaml
+@@ -79,6 +79,7 @@
+         release_namespace: "{{ istio_namespace }}"
+         create_namespace: true
+         values_files: "{{ [istio_helm_default_values_file] }}"
++        values: "{{ {'global': {'platform': istio_platform}} if istio_platform | length > 0 else {} }}"
+         dependency_update: true
+         wait: "{{ helm_wait }}"
+         timeout: "{{ istio_wait_timeout }}"
+diff --git a/roles/istio/tasks/upgrade.yaml b/roles/istio/tasks/upgrade.yaml
+index 3e0fc4a..61efa40 100644
+--- a/roles/istio/tasks/upgrade.yaml
++++ b/roles/istio/tasks/upgrade.yaml
+@@ -14,6 +14,7 @@
+     chart_ref: "{{ istio_helm_chart_directory }}"
+     release_namespace: "{{ istio_namespace }}"
+     values_files: "{{ [istio_helm_default_values_file] }}"
++    values: "{{ {'global': {'platform': istio_platform}} if istio_platform | length > 0 else {} }}"
+     dependency_update: true
+     wait: "{{ helm_wait }}"
+     timeout: "{{ istio_wait_timeout }}"
+-- 
+2.53.0
+

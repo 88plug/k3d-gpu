@@ -1,0 +1,53 @@
+From a8829f95eb5b968fa3fc6d2de2b8dbae92eecd96 Mon Sep 17 00:00:00 2001
+From: Andrew Mello <andrew@88plug.com>
+Date: Fri, 16 Oct 2026 04:48:53 -0700
+Subject: [PATCH] brownfield: detect k3s clusters as vanilla Kubernetes
+
+detect_kubernetes_platform() and setup-bastion.yml's cluster_detection
+task classify a cluster as vanilla only when serverVersion.gitVersion
+matches ^vX.Y.Z$. k3s reports a build suffix (v1.34.12+k3s1), so a
+k3s or k3d cluster falls through to "unknown" and the brownfield path
+stops at the interactive platform prompt, where "Vanilla Kubernetes"
+is the answer anyway.
+
+Accept an optional +k3sN suffix in both places. Other suffixed
+versions still fall through to the prompt as before.
+
+Checked with a stub kubectl: v1.34.3 and v1.34.12+k3s1 -> vanilla,
+EKS/GKE versions unchanged, v1.34.12+k3sX and +rke2r1 still prompt.
+ShellCheck v0.11.0 output and ansible-lint 26.8.0 findings for the two
+files are identical before and after.
+---
+ core/lib/brownfield/brownfield_deployment.sh | 2 +-
+ core/playbooks/setup-bastion.yml             | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/core/lib/brownfield/brownfield_deployment.sh b/core/lib/brownfield/brownfield_deployment.sh
+index 6bf4248..641a3c7 100644
+--- a/core/lib/brownfield/brownfield_deployment.sh
++++ b/core/lib/brownfield/brownfield_deployment.sh
+@@ -121,7 +121,7 @@ detect_kubernetes_platform() {
+             echo "gke"
+         elif kubectl version --request-timeout=5s -o json 2>/dev/null | grep -qi "aks"; then
+             echo "aks"
+-        elif kubectl version --request-timeout=5s -o json 2>/dev/null | jq -r '.serverVersion.gitVersion' 2>/dev/null | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$' && \
++        elif kubectl version --request-timeout=5s -o json 2>/dev/null | jq -r '.serverVersion.gitVersion' 2>/dev/null | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(\+k3s[0-9]+)?$' && \
+              ! kubectl version --request-timeout=5s -o json 2>/dev/null | grep -qiE '(eks|gke|aks|openshift)'; then
+             echo "vanilla"
+         else
+diff --git a/core/playbooks/setup-bastion.yml b/core/playbooks/setup-bastion.yml
+index f49686c..8f0dc9b 100644
+--- a/core/playbooks/setup-bastion.yml
++++ b/core/playbooks/setup-bastion.yml
+@@ -280,7 +280,7 @@
+           echo "Google GKE"
+         elif kubectl version -o json 2>/dev/null | grep -qi "aks"; then
+           echo "Azure AKS"
+-        elif kubectl version -o json 2>/dev/null | jq -r '.serverVersion.gitVersion' 2>/dev/null | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$' && \
++        elif kubectl version -o json 2>/dev/null | jq -r '.serverVersion.gitVersion' 2>/dev/null | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(\+k3s[0-9]+)?$' && \
+              ! kubectl version -o json 2>/dev/null | grep -qiE '(eks|gke|aks|openshift)'; then
+           echo "Vanilla Kubernetes"
+         else
+-- 
+2.53.0
+

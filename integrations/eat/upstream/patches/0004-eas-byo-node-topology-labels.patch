@@ -1,0 +1,162 @@
+From bab4c01b4e0c796eaa542c9fcf41dd9f09bf16c3 Mon Sep 17 00:00:00 2001
+From: Andrew Mello <andrew@88plug.com>
+Date: Fri, 16 Oct 2026 04:45:36 -0700
+Subject: [PATCH] kubernetes: apply node-topology labels on BYO clusters
+
+With existing_kubernetes set, the kubernetes role ends before
+post_install, so apply_node_topology.yaml never runs and a multi-node
+BYO cluster gets no workload-class labels. The soft affinity built in
+preflight.yaml then has nothing to prefer. teardown.yaml already
+removes workload-class from BYO nodes ("removes only labels we
+added"), so install and teardown disagree, and the docs tell users to
+label by hand.
+
+Run apply_node_topology.yaml from the BYO branch when
+node_topology_enabled is true. With no inventory to read on BYO, the
+multi-node decision comes from the node count the cluster reports;
+the managed path still uses _k8s_needs_ssh, and single-node stays a
+no-op. Control-plane detection is unchanged: it tests the label for
+presence, so it matches both kubeadm ("") and k3s ("true") nodes.
+
+Exercised on localhost against a stub kubernetes.core: BYO 1 node -> no
+patches; BYO 3 nodes -> server=platform, agents=inference; topology
+off -> no patches; managed single- and multi-node unchanged.
+---
+ docs/customize/node_topology.md               | 11 ++++--
+ docs/deploy/topologies.md                     |  2 +-
+ .../kubernetes/tasks/apply_node_topology.yaml | 37 +++++++++++++------
+ roles/kubernetes/tasks/install.yaml           |  8 ++++
+ 4 files changed, 43 insertions(+), 15 deletions(-)
+
+diff --git a/docs/customize/node_topology.md b/docs/customize/node_topology.md
+index 7f4bd3a..7d9b11c 100644
+--- a/docs/customize/node_topology.md
++++ b/docs/customize/node_topology.md
+@@ -34,7 +34,7 @@ Set to `false` to disable workload separation (all pods can land anywhere).
+ |------|----------|
+ | **Localhost** (default) | No-op (all pods co-located) |
+ | **Remote/Multi-node** (inventory has remote hosts) | Labels applied, soft affinity active |
+-| **Existing cluster (BYO)** | User must label nodes manually if desired |
++| **Existing cluster (BYO)** | Multi-node: labels applied from the cluster's own control-plane role label, soft affinity active. Single-node: no-op |
+ 
+ ## How It Works
+ 
+@@ -195,7 +195,12 @@ kubectl describe node <node-name>
+ 
+ ### Existing Cluster (BYO Mode)
+ 
+-If using an existing cluster, labels are **not applied automatically**. Label manually:
++On an existing cluster with more than one node, the installer labels nodes the
++same way it does for a managed cluster: nodes carrying
++`node-role.kubernetes.io/control-plane` (any value) get `workload-class=platform`,
++the rest get `workload-class=inference`. `teardown` removes the labels again.
++
++To label differently, set `node_topology_enabled: false` and label by hand:
+ 
+ ```bash
+ # Label control-plane nodes
+@@ -205,7 +210,7 @@ kubectl label nodes master1 master2 master3 workload-class=platform
+ kubectl label nodes worker1 worker2 worker3 workload-class=inference
+ ```
+ 
+-Then redeploy components for affinity to take effect:
++Labels changed after install take effect once components are redeployed:
+ ```bash
+ ./es_auto_installer.sh teardown platform --env <name>
+ ./es_auto_installer.sh install platform --env <name>
+diff --git a/docs/deploy/topologies.md b/docs/deploy/topologies.md
+index 054f7c4..a36b070 100644
+--- a/docs/deploy/topologies.md
++++ b/docs/deploy/topologies.md
+@@ -211,7 +211,7 @@ Then install as normal:
+ ./es_auto_installer.sh install inference --env myenv
+ ```
+ 
+-> **BYO node topology:** node labels (`workload-class=platform/inference`) are not applied automatically. Apply them manually if you want workload placement:
++> **BYO node topology:** on a multi-node cluster the installer applies `workload-class=platform` to control-plane nodes and `workload-class=inference` to the rest, as it does for a managed cluster, and `teardown` removes them. To place workloads differently, set `node_topology_enabled: false` and label by hand:
+ >
+ > ```bash
+ > kubectl label nodes master1 master2 workload-class=platform
+diff --git a/roles/kubernetes/tasks/apply_node_topology.yaml b/roles/kubernetes/tasks/apply_node_topology.yaml
+index c1a0931..007eb2a 100644
+--- a/roles/kubernetes/tasks/apply_node_topology.yaml
++++ b/roles/kubernetes/tasks/apply_node_topology.yaml
+@@ -2,8 +2,9 @@
+ # =============================================================================
+ # Node topology — soft affinity for workload placement (label-based, no taints)
+ # =============================================================================
+-# Active only in custom_inventory mode (multi-node). In localhost mode this
+-# is a no-op.
++# Active in custom_inventory mode (multi-node) and on multi-node BYO clusters
++# (existing_kubernetes), where the node count comes from the cluster itself.
++# Single-node is a no-op either way.
+ #
+ # Effect (SOFT AFFINITY - no hard enforcement):
+ #   - Control-plane nodes get label: workload-class=platform
+@@ -24,21 +25,35 @@
+ # Idempotent: re-runs are safe; kubernetes.core.k8s overwrites in place.
+ # =============================================================================
+ 
++# A BYO cluster has no inventory to read, so multi-node is decided from the
++# nodes the cluster reports.
++- name: "node-topology | Set mode"
++  ansible.builtin.set_fact:
++    _topo_byo: "{{ existing_kubernetes | default('') | trim | length > 0 }}"
++
++- name: "node-topology | Discover nodes"
++  kubernetes.core.k8s_info:
++    api_version: v1
++    kind: Node
++  register: _topo_nodes
++  when: (_topo_byo | bool) or (_k8s_needs_ssh | default(false) | bool)
++
++- name: "node-topology | Decide whether to apply"
++  ansible.builtin.set_fact:
++    _topo_apply: >-
++      {{ (_topo_nodes.resources | default([]) | length > 1)
++         if (_topo_byo | bool)
++         else (_k8s_needs_ssh | bool) }}
++
+ - name: "node-topology | Skip — single-node"
+   ansible.builtin.debug:
+-    msg: "Single-node inventory — node topology not applied."
+-  when: not (_k8s_needs_ssh | bool)
++    msg: "Single-node cluster — node topology not applied."
++  when: not (_topo_apply | bool)
+ 
+ - name: "node-topology | Apply (multi-node)"
+-  when: _k8s_needs_ssh | bool
++  when: _topo_apply | bool
+   block:
+ 
+-    - name: "node-topology | Discover worker nodes"
+-      kubernetes.core.k8s_info:
+-        api_version: v1
+-        kind: Node
+-      register: _topo_nodes
+-
+     # Build control-plane and worker node lists
+     - name: "node-topology | Build control-plane list"
+       vars:
+diff --git a/roles/kubernetes/tasks/install.yaml b/roles/kubernetes/tasks/install.yaml
+index edc1566..e023c67 100644
+--- a/roles/kubernetes/tasks/install.yaml
++++ b/roles/kubernetes/tasks/install.yaml
+@@ -20,6 +20,14 @@
+ 
+ # ─── Mode detection ──────────────────────────────────────────────────────────
+ 
++# BYO clusters skip provisioning and post_install, so the node-topology labels
++# that teardown.yaml removes on BYO are applied here instead.
++- name: "kubernetes | BYO cluster — apply node topology"
++  ansible.builtin.include_tasks: apply_node_topology.yaml
++  when:
++    - existing_kubernetes | default('') | trim | length > 0
++    - node_topology_enabled | default(false) | bool
++
+ - name: "kubernetes | BYO cluster — skip provisioning"
+   ansible.builtin.meta: end_role
+   when: existing_kubernetes | default('') | trim | length > 0
+-- 
+2.53.0
+
