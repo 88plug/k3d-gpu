@@ -1,0 +1,39 @@
+# Numerics contracts — example objects (prototype, see docs/numerics-contracts.md).
+#
+# 1. The evidence ConfigMap. Empty here on purpose: records are produced by measurement,
+#    never hand-written. Fill it with:
+#      llama-perplexity -m <reference.gguf> -f golden.txt --kl-divergence-base ref.kld
+#      llama-perplexity -m <candidate.gguf> --kl-divergence-base ref.kld --kl-divergence > cand.log
+#      k3d-gpu-numerics ingest-kld --model M --realisation R --format q4_k_m \
+#          --engine-digest "$ENGINE_DIGEST" --reference "$REFERENCE" --golden-set "$GOLDEN_SHA" \
+#          --n-tokens N cand.log > rec.json
+#      k3d-gpu-numerics configmap --name k3d-gpu-numerics-evidence rec.json... | kubectl apply -f -
+#    Keys are <model>.<realisation>.sha256-<engine digest>; a new engine digest has no key,
+#    so its realisation reads as stale until re-measured.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k3d-gpu-numerics-evidence
+  namespace: default
+  labels:
+    k3d-gpu.io/numerics-evidence: "true"
+data: {}
+---
+# 2. A workload declaring its tolerance. The class names map to max_kl/min_top1 in
+#    scripts/k3d-gpu-numerics (CLASSES); an inline JSON contract can also require
+#    tool-call parse rate and accept top-k-truncated KL:
+#      k3d-gpu.io/numerics: '{"max_kl":0.01,"min_top1":0.95,"min_tool_parse":0.99,"kl_methods":["full"]}'
+#    `k3d-gpu-numerics resolve` returns the realisation plus the two stamped annotations
+#    (k3d-gpu.io/realisation, k3d-gpu.io/numerics-evidence: sha256 of the record used),
+#    or exit 3 with a per-candidate reason.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: agent-llm
+  annotations:
+    k3d-gpu.io/numerics: bf16-equivalent
+spec:
+  containers:
+    - name: llm
+      image: busybox:1.37
+      command: ["sleep", "infinity"]

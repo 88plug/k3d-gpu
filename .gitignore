@@ -16,3 +16,6 @@ Thumbs.db
 
 # Build artifacts
 *.log
+
+# Python
+__pycache__/

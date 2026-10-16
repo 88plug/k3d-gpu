@@ -1,0 +1,229 @@
+#!/usr/bin/env python3
+"""k3d-gpu-numerics: numerics-contract resolver for multi-engine model placement.
+
+A realisation is one way to run a model: engine image (pinned by digest) + device +
+numeric format. A conformance record says how far that realisation's next-token
+distribution is from a reference realisation on a golden prompt set (per-token KL,
+top-1 agreement, both teacher-forced). A spec declares a tolerance. The resolver
+keeps only realisations whose evidence is present, measured on the current engine
+digest, measured with an accepted method, and within tolerance, then applies the
+preference order. Nothing qualifying -> reject with a reason per candidate.
+
+Subcommands:
+  resolve     --spec SPEC --realisations R.json --evidence CM.json
+              SPEC is a class name or a JSON object. R.json is a JSON list in
+              preference order: [{"name","format","engine_digest"}, ...].
+              CM.json is `kubectl get cm -o json` output (or {"data": {...}}).
+              Prints the decision as JSON. Exit 0 placed, 3 rejected.
+  ingest-kld  --model M --realisation R --format F --engine-digest D
+              --reference REF --golden-set G LOG
+              Builds a conformance record from `llama-perplexity --kl-divergence`
+              output (full-vocab, teacher-forced by construction).
+  configmap   --name NAME RECORD.json...
+              Emits a ConfigMap (JSON, kubectl-applyable) holding the records.
+
+Python 3 stdlib only.
+"""
+import argparse
+import hashlib
+import json
+import re
+import sys
+
+ANNOTATION_SPEC = "k3d-gpu.io/numerics"
+ANNOTATION_EVIDENCE = "k3d-gpu.io/numerics-evidence"
+ANNOTATION_REALISATION = "k3d-gpu.io/realisation"
+
+# Named classes. Thresholds are policy choices, not measurements; Q4_K_M's
+# llama.cpp-published KLD (~0.031, 91.9% same top) sits inside draft-ok only.
+CLASSES = {
+    "exact": {"max_kl": 0.002, "min_top1": 0.98},
+    "bf16-equivalent": {"max_kl": 0.01, "min_top1": 0.95},
+    "draft-ok": {"max_kl": 0.1, "min_top1": 0.85},
+}
+DEFAULT_KL_METHODS = ("full",)
+DEFAULT_MIN_TOKENS = 2048
+
+
+def parse_spec(spec):
+    """Class name, JSON object string, or dict -> normalised contract dict."""
+    if isinstance(spec, str):
+        s = spec.strip()
+        if s in CLASSES:
+            spec = dict(CLASSES[s], **{"class": s})
+        elif s.startswith("{"):
+            spec = json.loads(s)
+        else:
+            raise ValueError(f"unknown numerics class '{s}' (known: {', '.join(CLASSES)})")
+    c = dict(spec)
+    if "class" in c and c["class"] in CLASSES:
+        c = dict(CLASSES[c["class"]], **c)
+    if "max_kl" not in c or "min_top1" not in c:
+        raise ValueError("numerics contract needs max_kl and min_top1 (or a class)")
+    c.setdefault("kl_methods", list(DEFAULT_KL_METHODS))
+    c.setdefault("min_tokens", DEFAULT_MIN_TOKENS)
+    return c
+
+
+def evidence_key(model, realisation, engine_digest):
+    """ConfigMap data key: [-._a-zA-Z0-9]+, so the ':' in sha256:... becomes '-'."""
+    key = f"{model}.{realisation}.{engine_digest.replace(':', '-')}"
+    if not re.fullmatch(r"[-._a-zA-Z0-9]+", key) or len(key) > 253:
+        raise ValueError(f"invalid evidence key '{key}'")
+    return key
+
+
+def evidence_digest(record):
+    canon = json.dumps(record, sort_keys=True, separators=(",", ":"))
+    return "sha256:" + hashlib.sha256(canon.encode()).hexdigest()
+
+
+def load_evidence(cm):
+    """ConfigMap JSON (or bare {key: record}) -> {key: record dict}."""
+    data = cm.get("data", cm) if isinstance(cm, dict) else {}
+    out = {}
+    for k, v in data.items():
+        out[k] = json.loads(v) if isinstance(v, str) else v
+    return out
+
+
+def _check(contract, cand, model, evidence):
+    """None if the candidate qualifies, else the reason it does not."""
+    digest = cand["engine_digest"]
+    rec = evidence.get(evidence_key(model, cand["name"], digest))
+    if rec is None:
+        if any(r.get("model") == model and r.get("realisation") == cand["name"]
+               for r in evidence.values()):
+            return "stale: evidence exists only for another engine digest"
+        return "missing: no conformance record"
+    if rec.get("engine_digest") != digest:
+        return "stale: record engine_digest does not match the realisation"
+    if rec.get("format") and rec["format"] != cand.get("format"):
+        return f"mismatch: record format {rec['format']} != realisation format {cand.get('format')}"
+    if rec.get("kl_method") not in contract["kl_methods"]:
+        return f"method: kl_method {rec.get('kl_method')} not accepted (spec accepts {contract['kl_methods']})"
+    if not rec.get("teacher_forced", False):
+        return "method: not teacher-forced, top-1 agreement after the first divergence is meaningless"
+    if rec.get("n_tokens", 0) < contract["min_tokens"]:
+        return f"thin: {rec.get('n_tokens', 0)} scored tokens < {contract['min_tokens']}"
+    if "reference" in contract and rec.get("reference") != contract["reference"]:
+        return f"reference: measured against {rec.get('reference')}, spec wants {contract['reference']}"
+    if rec["kl_mean"] > contract["max_kl"]:
+        return f"tolerance: kl_mean {rec['kl_mean']:.4g} > max_kl {contract['max_kl']:.4g}"
+    if rec["top1"] < contract["min_top1"]:
+        return f"tolerance: top1 {rec['top1']:.4f} < min_top1 {contract['min_top1']:.4f}"
+    if "min_tool_parse" in contract:
+        tp = rec.get("tool_parse_rate")
+        if tp is None:
+            return "tolerance: spec needs tool_parse_rate, record has none"
+        if tp < contract["min_tool_parse"]:
+            return f"tolerance: tool_parse_rate {tp:.4f} < min_tool_parse {contract['min_tool_parse']:.4f}"
+    return None
+
+
+def resolve(spec, model, realisations, evidence):
+    """Filter by evidence, then take the first survivor in preference order."""
+    contract = parse_spec(spec)
+    reasons = {}
+    for cand in realisations:
+        why = _check(contract, cand, model, evidence)
+        if why is None:
+            rec = evidence[evidence_key(model, cand["name"], cand["engine_digest"])]
+            return {
+                "placed": cand["name"],
+                "annotations": {
+                    ANNOTATION_REALISATION: cand["name"],
+                    ANNOTATION_EVIDENCE: evidence_digest(rec),
+                },
+                "skipped": reasons,
+            }
+        reasons[cand["name"]] = why
+    detail = "; ".join(f"{n}: {r}" for n, r in reasons.items()) or "no realisations offered"
+    return {
+        "placed": None,
+        "reason": f"no realisation of {model} meets numerics contract "
+                  f"max_kl={contract['max_kl']} min_top1={contract['min_top1']} ({detail})",
+        "skipped": reasons,
+    }
+
+
+# llama-perplexity --kl-divergence summary lines (tools/perplexity/perplexity.cpp):
+#   "Mean    KLD: %10.6lf ± %10.6lf", "99.0%   KLD: %10.6f",
+#   "Same top p: %6.3lf ± %5.3lf %%". Chunk count comes from "[N]" progress or is absent,
+#   so the caller passes n_tokens when the log lacks it.
+_KLD_MEAN = re.compile(r"^Mean\s+KLD:\s*([0-9.eE+-]+)", re.M)
+_KLD_P99 = re.compile(r"^99\.0%\s+KLD:\s*([0-9.eE+-]+)", re.M)
+_SAME_TOP = re.compile(r"^Same top p:\s*([0-9.eE+-]+)", re.M)
+
+
+def parse_kld_log(text):
+    m, t = _KLD_MEAN.search(text), _SAME_TOP.search(text)
+    if not m or not t:
+        raise ValueError("not llama-perplexity --kl-divergence output (no 'Mean    KLD' / 'Same top p')")
+    out = {"kl_mean": float(m.group(1)), "top1": float(t.group(1)) / 100.0}
+    p = _KLD_P99.search(text)
+    if p:
+        out["kl_p99"] = float(p.group(1))
+    return out
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="k3d-gpu-numerics", description=__doc__.split("\n")[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    r = sub.add_parser("resolve")
+    r.add_argument("--spec", required=True)
+    r.add_argument("--model", required=True)
+    r.add_argument("--realisations", required=True)
+    r.add_argument("--evidence", required=True)
+    k = sub.add_parser("ingest-kld")
+    for f in ("model", "realisation", "format", "engine-digest", "reference", "golden-set"):
+        k.add_argument(f"--{f}", required=True)
+    k.add_argument("--n-tokens", type=int, required=True)
+    k.add_argument("--measured-at", default="")
+    k.add_argument("log")
+    c = sub.add_parser("configmap")
+    c.add_argument("--name", required=True)
+    c.add_argument("--namespace", default="default")
+    c.add_argument("records", nargs="+")
+    a = ap.parse_args(argv)
+
+    if a.cmd == "resolve":
+        with open(a.realisations) as f:
+            reals = json.load(f)
+        with open(a.evidence) as f:
+            ev = load_evidence(json.load(f))
+        d = resolve(a.spec, a.model, reals, ev)
+        print(json.dumps(d, indent=2, sort_keys=True))
+        return 0 if d["placed"] else 3
+    if a.cmd == "ingest-kld":
+        with open(a.log) as f:
+            m = parse_kld_log(f.read())
+        rec = {
+            "model": a.model, "realisation": a.realisation, "format": a.format,
+            "engine_digest": a.engine_digest, "reference": a.reference,
+            "golden_set": a.golden_set, "n_tokens": a.n_tokens,
+            "kl_method": "full", "teacher_forced": True, **m,
+        }
+        if a.measured_at:
+            rec["measured_at"] = a.measured_at
+        print(json.dumps(rec, indent=2, sort_keys=True))
+        return 0
+    data = {}
+    for p in a.records:
+        with open(p) as f:
+            rec = json.load(f)
+        data[evidence_key(rec["model"], rec["realisation"], rec["engine_digest"])] = \
+            json.dumps(rec, sort_keys=True, separators=(",", ":"))
+    print(json.dumps({"apiVersion": "v1", "kind": "ConfigMap",
+                      "metadata": {"name": a.name, "namespace": a.namespace,
+                                   "labels": {"k3d-gpu.io/numerics-evidence": "true"}},
+                      "data": data}, indent=2, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except (ValueError, KeyError, OSError, json.JSONDecodeError) as e:
+        print(f"k3d-gpu-numerics: {e}", file=sys.stderr)
+        sys.exit(2)
