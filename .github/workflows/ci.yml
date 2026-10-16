@@ -26,6 +26,15 @@ jobs:
       - run: tests/host_setup_test.sh
       - run: tests/eat_test.sh
 
+  capacity-tests:
+    name: Capacity ramp tests (stub server)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: python3 bench/apb/test_capacity.py
+      - run: python3 bench/apb/test_apb.py
+      - run: python3 bench/test_agent_trace.py
+
   claims-check:
     name: Docs claims guard
     runs-on: ubuntu-latest

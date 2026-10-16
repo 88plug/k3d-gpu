@@ -142,7 +142,8 @@ run_rep() {
 cmd_ramp() {
     ARM=${1:?usage: run.sh ramp ARM URL MODEL}; URL=${2:?URL}; MODEL=${3:?MODEL}
     [[ "${ARM}" =~ ^[A-Za-z0-9._-]+$ ]] || die "ARM must be [A-Za-z0-9._-]"
-    local d="${OUT}/${ARM}-$(date +%Y%m%d-%H%M%S)"
+    local d
+    d="${OUT}/${ARM}-$(date +%Y%m%d-%H%M%S)"
     mkdir -p "${d}"
     cmd_facts "${d}"
     printf '{"arm":"%s","url":"%s","model":"%s","family":"%s","steps":"%s","reps":%s,"slo":%s,"stop_slo":%s,"timeout":%s,"time_scale":%s,"extra_body":%s}\n' \

@@ -37,6 +37,8 @@
 #   host-setup  check the host userspace and print (--apply: run) the pinned install commands
 #   agent   up|down|status|manifest: OpenAI-compatible LLM server (OpenVINO Model
 #           Server) on the cluster's best Intel engine (an XMX GPU, else CPU on P-cores; NPU on request)
+#   capacity    agents per box: closed-loop agent ramp against the cluster's chat endpoint
+#           (bench/apb/capacity.py), prints the agent count at a p95 turn SLO and writes JSON
 
 set -euo pipefail
 
@@ -92,6 +94,11 @@ Usage: k3d-gpu <command>
   agent up|down|status|manifest
             OpenAI-compatible LLM server (OpenVINO Model Server) in the current
             cluster: on its Intel GPU if that GPU has XMX, else on the CPU (P-cores)
+  capacity [--slo 10] [--trace support] [--max 32] [--engine auto|cpu|igpu|npu|nvidia]
+            Agents per box: ramps closed-loop agents against the cluster's OVMS/vLLM
+            chat endpoint until the p95 turn latency breaks the SLO; prints agents
+            per box, p50/p95/p99, J per turn and the binding limit, writes JSON.
+            Refuses a box that is not quiet (--force). Full options: capacity --help
   version   Show version
   help      Show this message
 
@@ -113,6 +120,7 @@ Environment:
   K3D_GPU_MODEL_GB      model size checked by doctor --perf (same as --model-gb)
   K3D_GPU_AGENT_DEVICE  agent device: auto | CPU | GPU | NPU (default: auto)
   K3D_GPU_AGENT_MODEL   agent Hugging Face model (default: OpenVINO/Qwen3-4B-int4-ov)
+  K3D_GPU_BENCH         dir holding apb/capacity.py (default: the repo's bench/, then ${SHARE_DIR}/bench)
 
 Docs: https://github.com/88plug/k3d-gpu
 EOF
@@ -3654,6 +3662,29 @@ cmd_agent() {
     esac
 }
 
+# ---- capacity: agents per box at a p95 turn SLO -----------------------------
+# The ramp is bench/apb/capacity.py (Python stdlib only). Found next to a repo
+# checkout first, then in the packaged copy under ${SHARE_DIR}/bench.
+capacity_script() {
+    local d self
+    self=$(readlink -f "${BASH_SOURCE[0]}")
+    for d in "${K3D_GPU_BENCH:-}" "$(dirname "${self}")/../bench" "${SHARE_DIR}/bench"; do
+        if [ -n "${d}" ] && [ -f "${d}/apb/capacity.py" ]; then
+            echo "${d}/apb/capacity.py"
+            return 0
+        fi
+    done
+    return 1
+}
+
+cmd_capacity() {
+    local script
+    script=$(capacity_script) \
+        || err "capacity: apb/capacity.py not found in the repo's bench/ or ${SHARE_DIR}/bench (set K3D_GPU_BENCH)"
+    require python3
+    exec python3 "${script}" "$@"
+}
+
 case "${1:-help}" in
     up)      cmd_up      ;;
     down)    cmd_down    ;;
@@ -3664,6 +3695,7 @@ case "${1:-help}" in
     logs)    cmd_logs    ;;
     host-setup) shift; cmd_host_setup "$@" ;;
     agent)   cmd_agent "${2:-}" ;;
+    capacity) shift; cmd_capacity "$@" ;;
     version|--version|-v) echo "k3d-gpu ${VERSION}" ;;
     help|--help|-h) usage ;;
     *) usage; exit 1 ;;
