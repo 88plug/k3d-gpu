@@ -89,8 +89,10 @@ check "ISVC requests the Intel GPU" has 'gpu.intel.com/i915: "1"' "${STDIN_OUT}"
 # Agent-stack consumers call http://ovms.<ns>.svc:8000/v3 (port name "http").
 doc_of Service ovms "${STDIN_OUT}" > "${WORK}/ovms-svc.yaml"
 check "ovms alias Service in namespace llm" has '^  namespace: llm$' "${WORK}/ovms-svc.yaml"
+# One PCRE across lines: a pattern with real newlines is split into several
+# patterns by grep, and the empty one after the last newline matches any file.
 check "ovms alias Service: port http 8000 -> OVMS rest port 8080" \
-    grep -qzE -- $'- name: http\n +port: 8000\n +targetPort: 8080\n' "${WORK}/ovms-svc.yaml"
+    grep -qzP -- '- name: http\n +port: 8000\n +targetPort: 8080\n' "${WORK}/ovms-svc.yaml"
 check "ovms selector names the ISVC" has '^    serving.kserve.io/inferenceservice: qwen3$' "${WORK}/ovms-svc.yaml"
 check "ovms selector names the predictor" has '^    component: predictor$' "${WORK}/ovms-svc.yaml"
 check "ISVC carries the hybrid-core label" has 'k3d-gpu.io/cores: performance' "${STDIN_OUT}"
