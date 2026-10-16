@@ -43,7 +43,7 @@ No High findings.
 | M-4 | Medium | `share/*.yml`, `Dockerfile:1-14`, `scripts/k3d-gpu:44-45` | Every image pinned by tag only, none by digest |
 | M-5 | Medium | `.github/workflows/*.yml` | Actions pinned by mutable tag; shellcheck by `@master` |
 | M-6 | Medium | `build-and-push.yml:68,139,160,173,193` | Unvalidated upstream release tag interpolated into `run:` scripts |
-| M-7 | Low | `scripts/k3d-gpu:805,818,845,853` | Pod JSON built by string interpolation from `K3D_GPU_*` env (PoC below) |
+| M-7 | Info | `scripts/k3d-gpu:804,818,845,853` | Pod JSON built by string interpolation; `kubectl run --image` blocks the env-image vector |
 | M-8 | Low | `scripts/k3d-gpu:782-797` | `test` creates and deletes pods in whatever kube-context is current |
 | M-9 | Low | `share/nri-balloons.yml:1786-1787` | `ENABLE_TEST_APIS=1` shipped (upstream chart bug) |
 | M-10 | Low | `share/nri-balloons.yml:1802-1805,1820-1827` | Balloons gets read-write host `/sys` and `/proc` as uid 0 |
@@ -209,7 +209,8 @@ Git ref names allow `$(` and backticks: `git check-ref-format 'refs/tags/v1;$(id
 succeeds. So a tag named `v0.21.0$(...)` on NVIDIA's repo would execute in a job
 that holds `contents: write`, `packages: write` and the Docker Hub token.
 
-The Intel step already validates its value (line 82). The k3s, Gaudi and CUDA
+The Intel step already validates its value (line 82, `^[0-9]+\.[0-9]+\.[0-9]+$`
+after `ltrimstr("v")` strips the prefix at line 81). The k3s, Gaudi and CUDA
 values are Docker Hub tags, whose charset (`[A-Za-z0-9_.-]`) cannot carry shell
 syntax.
 
@@ -223,30 +224,49 @@ and pushes `:latest` in one unattended run (lines 156-233). Nothing reviews or
 tests the bump before it ships. Consider opening a PR for bumps and letting CI
 gate them.
 
-### M-7 Low: pod overrides JSON built by string interpolation from env
+### M-7 Info: pod overrides JSON built by string interpolation
 
-`scripts/k3d-gpu:805`:
+`scripts/k3d-gpu:804`:
 
 ```bash
         "{\"spec\":{\"containers\":[{\"name\":\"${name}\",\"image\":\"${DEVICE_TEST_IMAGE}\",\"resources\":{\"limits\":{\"${resource}\":1}},\"command\":[\"ls\",\"-l\",\"${path}\"]}]}}" \
 ```
 
-Lines 818 (`TEST_IMAGE`), 845 (`DEVICE_TEST_IMAGE`, plus a label from
-`/proc/cpuinfo`) and 853 follow the same pattern.
+Lines 818 (`TEST_IMAGE`), 845 (`DEVICE_TEST_IMAGE`, plus a label built from
+`/proc/cpuinfo` flags) and 853 follow the same pattern.
 `K3D_GPU_DEVICE_TEST_IMAGE`/`K3D_GPU_TEST_IMAGE` come from the environment
-(lines 44-45) and are pasted into JSON unescaped. Verified with a stub
-`kubectl` that records `--overrides`:
+(lines 44-45) and are pasted into the JSON unescaped. With a stub `kubectl`
+that records `--overrides`, a value that closes the string and reopens it in a
+real container field (`imagePullPolicy`, so no unknown field is involved)
+yields valid JSON with an added `securityContext`:
 
 ```
-$ K3D_GPU_VENDORS=npu K3D_GPU_DEVICE_TEST_IMAGE='busybox:1.37","securityContext":{"privileged":true},"x":"' k3d-gpu test
---overrides={"spec":{"containers":[{"name":"npu-test","image":"busybox:1.37","securityContext":{"privileged":true},"x":"","resources":{"limits":{"npu.intel.com/accel":1}},"command":["ls","-l","/dev/accel"]}]}}
+$ K3D_GPU_VENDORS=npu K3D_GPU_DEVICE_TEST_IMAGE='busybox:1.37","securityContext":{"privileged":true},"imagePullPolicy":"IfNotPresent' k3d-gpu test
+--overrides={"spec":{"containers":[{"name":"npu-test","image":"busybox:1.37","securityContext":{"privileged":true},"imagePullPolicy":"IfNotPresent","resources":{"limits":{"npu.intel.com/accel":1}},"command":["ls","-l","/dev/accel"]}]}}
 ```
 
-This is Low because the person who sets the environment already holds the
-kubeconfig. The risk is an env file, CI variable or wrapper passing an
-untrusted value through.
+The real `kubectl` never sends it. `run_pod` (line 783) passes the same value
+as `--image`, and `kubectl run` checks `--image` against the anchored
+`distribution/reference` pattern in `Validate()` before it contacts the
+apiserver (`kubectl/pkg/cmd/run/run.go:301` on master; line 280 at
+`kubernetes-1.20.0`). Checked with kubectl v1.35.2 against a closed port, no
+cluster:
 
-**Fix:** validate image references once at startup, as one function:
+```
+$ kubectl --server=http://127.0.0.1:1 run npu-test --restart=Never --image='busybox:1.37","securityContext":{"privileged":true},"imagePullPolicy":"IfNotPresent' --overrides='{}'
+Error: Invalid image name "busybox:1.37\",\"securityContext\":{\"privileged\":true},\"imagePullPolicy\":\"IfNotPresent": invalid reference format
+```
+
+A clean `--image=busybox:1.37` gets past that check and fails only on the
+connection, so the rejection is the image check. The other interpolated values
+are constants, resource names from `vendor_resources`, or label keys built from
+`/proc/cpuinfo` flags; none carries a quote. So no env value reaches the pod
+spec. This is Info: the safety rests on `kubectl run` validating `--image`, not
+on the script.
+
+**Fix (hardening):** validate image references once at startup, so a bad value
+fails with a clear message and a future change to `run_pod` cannot reopen the
+injection:
 
 ```bash
 valid_image() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._/:@+-]*$ ]]; }
@@ -255,7 +275,7 @@ valid_image "${DEVICE_TEST_IMAGE}" || err "K3D_GPU_DEVICE_TEST_IMAGE '${DEVICE_T
 ```
 
 Add a case to `tests/detect_test.sh` that asserts `k3d-gpu test` errors on the
-PoC value above.
+value above.
 
 ### M-8 Low: `test` acts on whatever kube-context is current
 
@@ -738,6 +758,9 @@ How each finding was checked:
   - k3d v5.9.0;
   - k3s v1.34.1+k3s1.
 - **Injection PoCs (M-7, A-3):** run against the real scripts with a stub
-  `kubectl` on `PATH`. No cluster and no network were involved.
+  `kubectl` on `PATH`. No cluster and no network were involved. A stub skips
+  `kubectl`'s own client-side checks, so M-7 was then re-run with the real
+  `kubectl` v1.35.2 against a closed port; its `--image` check rejects the
+  payload (see M-7).
 - **Not run:** no cluster, k3d or inference server was started for this audit.
   Each item marked UNVERIFIED names its live probe.
