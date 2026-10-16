@@ -1,0 +1,175 @@
+==> CPU frequency (driver intel_pstate, mode active)
+  good: cores ramp to full turbo the moment a request arrives: EPP performance or balance_performance, turbo on, no frequency caps — token generation is a latency-bound loop and every ramp-up shows in time-to-first-token
+  src:  https://docs.kernel.org/admin-guide/pm/intel_pstate.html#energy-vs-performance-hints, https://docs.kernel.org/admin-guide/pm/cpufreq.html
+  ok:   P-cores 0-15: governor powersave, EPP performance
+        from: /sys/devices/system/cpu/cpu{0..15}/cpufreq/energy_performance_preference
+  ok:   P-cores 0-15: no frequency cap (hardware max 5100 5300 MHz), min 800 MHz
+        from: /sys/devices/system/cpu/cpu{0..15}/cpufreq/{scaling,cpuinfo}_max_freq
+  ok:   E-cores 16-31: governor powersave, EPP performance
+        from: /sys/devices/system/cpu/cpu{16..31}/cpufreq/energy_performance_preference
+  ok:   E-cores 16-31: no frequency cap (hardware max 3900 MHz), min 800 MHz
+        from: /sys/devices/system/cpu/cpu{16..31}/cpufreq/{scaling,cpuinfo}_max_freq
+  note: power-profiles-daemon is running: it sets the governor and EPP itself, so an EPP or governor write here lasts only until its next profile change
+        from:   /proc/*/comm
+        why:    power-profiles-daemon's README (https://gitlab.freedesktop.org/upower/power-profiles-daemon, 'Operations on Intel-based machines'): on intel_pstate in active mode it applies the selected profile through the governor and the energy-performance hints. Either keep it and pick its performance profile (powerprofilesctl set performance), or stop it for a benchmark run so EPP writes stick
+        apply:  sudo systemctl stop power-profiles-daemon
+        revert: sudo systemctl start power-profiles-daemon
+  ok:   turbo enabled (no_turbo=0)
+        from: /sys/devices/system/cpu/intel_pstate/no_turbo
+  ok:   max_perf_pct=100, min_perf_pct=16
+        from: /sys/devices/system/cpu/intel_pstate/max_perf_pct
+  note: hwp_dynamic_boost=0
+        from:   /sys/devices/system/cpu/intel_pstate/hwp_dynamic_boost
+        why:    when 1, a task waking from I/O wait gets a short min-P-state boost; it can help request handlers that block on the network or disk. Unmeasured for inference here — benchmark before keeping it
+        apply:  echo 1 | sudo tee /sys/devices/system/cpu/intel_pstate/hwp_dynamic_boost
+        revert: echo 0 | sudo tee /sys/devices/system/cpu/intel_pstate/hwp_dynamic_boost
+==> CPU idle states (intel_idle, intel_idle.max_cstate=9)
+  good: for latency-critical serving, no idle state whose exit latency is large next to a token step; for throughput or power budgets, leave them all on
+  src:  https://docs.kernel.org/admin-guide/pm/cpuidle.html#representation-of-idle-states, https://docs.kernel.org/admin-guide/pm/intel_idle.html
+  note: enabled idle states with >=100 us exit latency: C2_ACPI/127us C3_ACPI/1048us
+        from:   /sys/devices/system/cpu/cpu0/cpuidle/state*/{name,latency,disable}
+        why:    a core woken from these pays that latency before it runs; disabling them trims tail latency at the cost of idle power. The 100 us cut-off is this tool's heuristic, not a kernel rule. Runtime disable needs no reboot (intel_idle.max_cstate does)
+        apply:  echo 1 | sudo tee /sys/devices/system/cpu/cpu*/cpuidle/state{2,3}/disable
+        revert: echo 0 | sudo tee /sys/devices/system/cpu/cpu*/cpuidle/state{2,3}/disable
+==> CPU thermal throttling
+  good: no throttle time under load: the package stays below its TCC activation point (TjMax minus the TCC offset), so cores keep the frequency they request
+  src:  kernel source drivers/thermal/intel/therm_throt.c (thermal_throttle/*), drivers/thermal/intel/int340x_thermal/processor_thermal_device.c (tcc_offset_degree_celsius), drivers/hwmon/coretemp.c (tempN_crit = TjMax), Intel SDM vol. 4 335592-093 (IA32_THERM_STATUS 19CH, IA32_PACKAGE_THERM_STATUS 1B1H, MSR_CORE_PERF_LIMIT_REASONS 64FH in table 2-39)
+  info: TCC activation 95 C (TjMax 100 C - TCC offset 5 C); package now 95 C
+        from: /sys/class/hwmon/hwmon4/temp1_{crit,input}, /sys/bus/pci/devices/0000:00:04.0/tcc_offset_degree_celsius
+  warn: package thermally throttled 4% of uptime: 22190052 events, 101915027 ms in total, longest 417 ms; core events peak at 8502475 on cpu8
+        from:   /sys/devices/system/cpu/cpu0/thermal_throttle/package_throttle_{count,total_time_ms,max_time_ms}, /proc/uptime
+        why:    therm_throt counts each time the package raised its thermal or PROCHOT status; while it is set the cores run below the frequency they request, so sustained inference speed follows the cooler, not the clock settings. The 1%-of-uptime cut-off is this tool's heuristic
+        apply:  none on the host: improve cooling (airflow, heatsink, BIOS fan or thermal profile); the host-side lever is a lower PL1, see CPU package power limits
+        revert: none
+  info: MSR 0x1B1 IA32_PACKAGE_THERM_STATUS 0x000000008805080b: now thermal; logged thermal, PROCHOT, power limit; 5 C below TjMax
+        from: /dev/cpu/0/msr (root)
+  info: MSR 0x19C IA32_THERM_STATUS (CPU 0) 0x00000000880b2a88: now none; logged PROCHOT, threshold #1, threshold #2, power limit, current limit; 11 C below TjMax
+        from: /dev/cpu/0/msr (root)
+  info: MSR 0x64F MSR_CORE_PERF_LIMIT_REASONS 0x0000000019030002: now thermal; logged PROCHOT, thermal, other (electrical), PL2, max turbo limit
+        from: /dev/cpu/0/msr (root)
+  info: the log bits are sticky: the SDM says they stay set until software writes 0, so they cover the time since boot or the last clear. doctor --perf only reads them
+        from: Intel SDM vol. 4 335592-093 (R/WC0 log bits)
+==> CPU package power limits (RAPL)
+  good: PL1 (long_term) at or above the thermal spec power (TDP, reported as constraint_0_max_power_uw) so sustained inference is not clamped below spec; PL1 decides the clock under a long run, PL2 only covers short bursts. On a package that thermally throttles, a PL1 far above TDP only moves the limit from power to temperature
+  src:  https://docs.kernel.org/power/powercap/powercap.html, kernel source drivers/powercap/intel_rapl_common.c (PL1 max_power = PKG_POWER_INFO thermal spec power)
+  warn: intel-rapl:0 package-0: PL1 117 W is 3.3x the 35 W thermal spec power while the package is thermally throttled 4% of uptime (long_term 117 W, short_term 117 W, peak_power 230 W)
+        from:   /sys/class/powercap/intel-rapl:0/constraint_0_{power_limit_uw,max_power_uw}, /sys/devices/system/cpu/cpu0/thermal_throttle/package_throttle_total_time_ms
+        why:    PL1 is the sustained package power. Set above what the cooler removes, it never binds: the package runs into its TCC point and throttles on temperature instead (see CPU thermal throttling). A PL1 the cooler can hold trades peak clocks for steady ones. 2x the thermal spec power is this tool's first step for a sweep, not an Intel figure: measure tokens/s at each step before keeping one. Firmware may re-apply its own value on reboot
+        apply:  echo 70000000 | sudo tee /sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw
+        revert: echo 117000000 | sudo tee /sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw
+  info: intel-rapl-mmio:0 package-0: PL1 not enabled on this interface (enabled=0)
+        from: /sys/class/powercap/intel-rapl-mmio:0/enabled
+==> Transparent huge pages
+  good: enabled = always or madvise (fewer TLB misses over multi-GB weight and KV buffers), defrag != always (no allocation stalls mid-request)
+  src:  https://docs.kernel.org/admin-guide/mm/transhuge.html#global-thp-controls
+  ok:   THP enabled=always
+        from: /sys/kernel/mm/transparent_hugepage/enabled
+  ok:   THP defrag=madvise
+        from: /sys/kernel/mm/transparent_hugepage/defrag
+  note: root filesystem is ext4 on Linux 6.6.128-1-MANJARO: model files mmapped from it are mapped with 4 KiB pages, whatever THP enabled says
+        from:   /proc/mounts, /proc/sys/kernel/osrelease
+        why:    on this kernel ext4 page cache holds no large folios (fs/ext4/inode.c calls mapping_set_large_folios from 6.16), and khugepaged collapses file pages only in executable mappings (include/linux/huge_mm.h file_thp_enabled needs VM_EXEC). OpenVINO and llama.cpp mmap weights by default, so THP covers only anonymous copies. A tmpfs with huge=within_size serves the weights from huge pages (docs.kernel.org/admin-guide/mm/transhuge.html, hugepages in tmpfs/shmem); copy the model in and point the server at it
+        apply:  sudo mkdir -p /mnt/k3d-gpu-models && sudo mount -t tmpfs -o huge=within_size,size=<model GiB + 1>G tmpfs /mnt/k3d-gpu-models
+        revert: sudo umount /mnt/k3d-gpu-models
+==> Reserved huge pages (hugetlbfs)
+  good: 0 unless a server is configured to use hugetlbfs — reserved pages cannot be used for anything else, and OpenVINO, PyTorch and llama.cpp do not use them by default
+  src:  https://docs.kernel.org/admin-guide/mm/hugetlbpage.html
+  ok:   HugePages_Total=0, free 0
+        from: /proc/meminfo
+==> Memory and swap
+  good: the model plus KV cache fits in MemAvailable with headroom and nothing is swapped; swapped-out buffers fault back in at random-I/O speed
+  src:  https://docs.kernel.org/admin-guide/sysctl/vm.html#swappiness, https://docs.openvino.ai/2026/openvino-workflow/running-inference/optimize-inference/optimizing-latency.html
+  info: MemTotal 125.4 GiB, MemAvailable 61.2 GiB, swap 187.5 GiB, vm.swappiness=60
+        from: /proc/meminfo
+  warn: 107.6 GiB of swap in use — the host is under memory pressure
+        from:   /proc/meminfo
+        why:    anything a server keeps in anonymous memory (KV cache, runtime buffers, weights it copied) is paged back from disk when touched. Free memory or serve a smaller model before benchmarking; MemAvailable is too small to pull the swapped pages back in right now
+  info: pass --model-gb <size> (or K3D_GPU_MODEL_GB) to check a model against MemAvailable
+        from: /proc/meminfo
+==> DRAM speed, bandwidth and ECC
+  good: modules at the platform's plan-of-record (POR) speed for how the slots are populated; single-stream CPU and iGPU decode is bound by DRAM bandwidth. Memory errors counted by an EDAC driver
+  src:  SMBIOS DSP0134 7.18 (type 17, as dmidecode.c decodes it), Intel datasheet 743844 rev. 015 table 25 (13th/14th Gen Core DDR support matrix, https://cdrdv2.intel.com/v1/dl/getContent/743844), https://docs.kernel.org/driver-api/edac.html
+  info: 4x DDR5 SODIMM 32 GiB 2R, ECC (80/64-bit): rated 4800 MT/s, configured 3600 MT/s; 4 of 4 slots populated
+        from: /sys/firmware/dmi/entries/17-*/raw (root)
+  info: SODIMMs at 2 slots per channel are not a supported configuration on the 13th Gen Core S line (743844 table 25 note 9); the nearest POR row, UDIMM 2DPC, 2 DIMMs 2R, is 3600 MT/s
+        from: /proc/cpuinfo (model 13S), /sys/firmware/dmi/entries/17-*/raw
+  ok:   configured 3600 MT/s is at the 3600 MT/s POR for 2DPC, 2 DIMMs 2R
+        from: /sys/firmware/dmi/entries/17-*/raw (root)
+  info: at one module per channel these modules would run at 4800 MT/s (the lower of rated 4800 and the 1DPC 2R POR): 76.8 GB/s peak, with 2 of the 4 modules (less capacity)
+        from: 743844 table 25
+  info: peak DRAM bandwidth 57.6 GB/s = 2 channels x 3600 MT/s x 8 B (computed; CPU and iGPU decode share it)
+        from: /sys/firmware/dmi/entries/17-*/raw (root)
+  note: ECC modules, but no EDAC memory controller is registered: corrected and uncorrected errors are not counted (dram.ecc=unmonitored)
+        from:   /sys/devices/system/edac/mc/ (no mc*), /sys/firmware/dmi/entries/17-*/raw
+        why:    without an EDAC driver a failing module shows up only as crashes or silent corruption; with one, ce_count/ue_count give early warning
+        apply:  boot Linux 6.16 or newer (ie31200_edac binds host bridge 8086:a700 from 6.16), then: sudo modprobe ie31200_edac
+        revert: sudo modprobe -r ie31200_edac
+==> Kernel samepage merging (KSM)
+  good: off (run=0, the kernel default) on a node that runs other tenants' pods: merged pages are shared copy-on-write, and the write fault on a merged page is a timing signal another tenant can observe
+  src:  https://docs.kernel.org/admin-guide/mm/ksm.html, Suzaki et al., Memory Deduplication as a Threat to the Guest OS, EuroSec 2011
+  ok:   KSM off (run=0, pages_sharing=0)
+        from: /sys/kernel/mm/ksm/run
+==> IRQ balancing
+  good: irqbalance running, so interrupt load (NIC, NVMe, GPU) is spread over CPUs instead of piling onto the cores that serve tokens
+  src:  https://github.com/Irqbalance/irqbalance
+  note: irqbalance is not running
+        from:   /proc/*/comm, /etc/systemd/system/*.wants/irqbalance.service
+        why:    irqbalance spreads the highest-volume interrupt sources across CPUs. It matters most on a busy NIC or many NVMe queues; a single-user desktop sees little difference
+        apply:  sudo systemctl enable --now irqbalance   # install the irqbalance package first if the unit is missing
+        revert: sudo systemctl disable --now irqbalance
+==> GPU PCIe links and BAR sizes
+  good: each GPU's link trains at the device's own maximum (its upstream port is not slower or narrower), and the large BAR maps all of VRAM (Resizable BAR)
+  src:  https://docs.kernel.org/PCI/sysfs-pci.html, kernel source drivers/pci/pci-sysfs.c (max_link_*, resourceN_resize) and drivers/pci/pci.c pci_rebar_get_possible_sizes (bit 0 = 1 MB)
+  ok:   0000:01:00.0 [10de:27b0]: Gen4 x16 behind port 0000:00:01.0 (Gen5 x16): the link can reach the device maximum
+        from: /sys/bus/pci/devices/0000:01:00.0/max_link_{speed,width}, /sys/bus/pci/devices/0000:00:01.0/max_link_{speed,width}
+  ok:   0000:01:00.0 [10de:27b0]: BAR1 32 GiB, the largest size it supports
+        from: /sys/bus/pci/devices/0000:01:00.0/resource, /sys/bus/pci/devices/0000:01:00.0/resource1_resize
+  warn: 0000:02:00.0 [10de:28b0]: device Gen4 x8, upstream port 0000:00:06.0 Gen4 x4: the link trains at most Gen4 x4
+        from:   /sys/bus/pci/devices/0000:02:00.0/max_link_{speed,width}, /sys/bus/pci/devices/0000:00:06.0/max_link_{speed,width}
+        why:    a link trains to the lower speed and width of its two ends. current_link_* reads lower at idle (link power management), so only max_* is compared. Keep this GPU's weights and KV cache resident (nothing streamed over the link) and give the widest link to the GPU that moves the most data
+        apply:  hardware: move the card to a slot whose port is at least x8 (no host command changes the link width)
+        revert: hardware: move it back
+  ok:   0000:02:00.0 [10de:28b0]: BAR1 16 GiB, the largest size it supports
+        from: /sys/bus/pci/devices/0000:02:00.0/resource, /sys/bus/pci/devices/0000:02:00.0/resource1_resize
+  info: GPU peer-to-peer not checked: nvidia-smi not found
+        from: nvidia-smi topo -p2p r
+==> Intel GPU frequency
+  good: max request at RP0 (no cap); boost at RP0 so a waiting client gets full clock; under GuC SLPC the firmware picks the frequency between min and max
+  src:  kernel source drivers/gpu/drm/i915/gt/intel_gt_sysfs_pm.c + uc/intel_guc_slpc.c + intel_gt_pm_debugfs.c (i915: RP1 floor, waitboost counters), https://docs.kernel.org/gpu/xe/xe_gt_freq.html (xe)
+  info: card0 i915 gt0: GuC SLPC; cur 1650 / act 0 MHz, min 300, max 1650, boost 1650, RPn 300, RP1 700, RP0 1650
+        from: /sys/class/drm/card0/gt/gt0/rps_*_freq_mhz
+  info: card0 gt0: slpc_ignore_eff_freq=0, so GuC SLPC keeps the efficient frequency RP1 700 MHz as its floor while busy, above min 300 MHz (i915 drops the floor to min only when the flag is 1)
+        from: /sys/class/drm/card0/gt/gt0/slpc_ignore_eff_freq, /sys/class/drm/card0/gt/gt0/rps_RP1_freq_mhz
+  info: card0 gt0: waitboost count not readable (debugfs needs root: sudo cat /sys/kernel/debug/dri/0/gt0/uc/guc_slpc_info)
+        from: /sys/kernel/debug/dri/0/gt0/uc/guc_slpc_info
+  note: card0 gt0: min 300 MHz — the GPU ramps from there on each burst
+        from:   /sys/class/drm/card0/gt/gt0/rps_min_freq_mhz
+        why:    pinning min to RP0 removes the ramp for bursty single-user inference but holds full clock (and power) while idle; on a shared-TDP part it also takes power budget from the CPU cores. Benchmark both
+        apply:  echo 1650 | sudo tee /sys/class/drm/card0/gt/gt0/rps_min_freq_mhz
+        revert: echo 300 | sudo tee /sys/class/drm/card0/gt/gt0/rps_min_freq_mhz
+  info: HuC: not readable (debugfs needs root: sudo cat /sys/kernel/debug/dri/*/gt0/uc/huc_info) — HuC is the HEVC/AVC media microcontroller, not used by inference
+        from: /sys/kernel/debug/dri/*/gt0/uc/huc_info (see https://docs.kernel.org/gpu/i915.html#huc)
+==> Isolation for sandboxed agents
+  good: /dev/kvm usable for microVM sandboxes, each GPU alone in its IOMMU group, split-lock detection on, CET known, GPU observation streams limited to CAP_PERFMON
+  src:  https://docs.kernel.org/driver-api/vfio.html (IOMMU groups), https://docs.kernel.org/admin-guide/kernel-parameters.html (split_lock_detect), https://docs.kernel.org/admin-guide/sysctl/kernel.html (split_lock_mitigate), kernel source drivers/gpu/drm/i915/i915_perf.c and drivers/gpu/drm/xe/xe_observation.c (paranoid sysctls), Intel SDM vol. 4 335592-093 (IA32_S_CET 6A2H, IA32_TME_ACTIVATE 982H)
+  info: /dev/kvm present; kvm_intel nested=Y enable_apicv=Y ept=Y: microVM sandboxes (Kata, Firecracker) can run here
+        from: /dev/kvm, /sys/module/kvm_intel/parameters/*
+  ok:   0000:00:02.0: alone in IOMMU group 0 (with its own functions and upstream ports): can be passed to a microVM by itself
+        from: /sys/bus/pci/devices/0000:00:02.0/iommu_group/devices/
+  ok:   0000:01:00.0: alone in IOMMU group 2 (with its own functions and upstream ports): can be passed to a microVM by itself
+        from: /sys/bus/pci/devices/0000:01:00.0/iommu_group/devices/
+  ok:   0000:02:00.0: alone in IOMMU group 4 (with its own functions and upstream ports): can be passed to a microVM by itself
+        from: /sys/bus/pci/devices/0000:02:00.0/iommu_group/devices/
+  info: 2 IOMMU unit(s); default domain type: identity
+        from: /sys/class/iommu/, /sys/kernel/iommu_groups/*/type
+  info: CET flags: user_shstk, ibt; IA32_S_CET 0x0000000000000004: kernel IBT on; user shadow stacks are opt-in per process (glibc.cpu.x86_shstk tunable)
+        from: /proc/cpuinfo, /dev/cpu/0/msr (root)
+  ok:   split-lock detection warn (default), split_lock_mitigate=1
+        from: /proc/cpuinfo, /proc/cmdline, /proc/sys/kernel/split_lock_mitigate
+  info: TME capable but off (IA32_TME_ACTIVATE 0x0000000000000001: lock=1 enable=0; mem-encryption=tme-capable-off). Enabling is a BIOS setting
+        from: /dev/cpu/0/msr (root)
+  ok:   dev.i915.perf_stream_paranoid=1
+        from: /proc/sys/dev/i915/perf_stream_paranoid
+
+==> 11 suggestion(s). Read-only: nothing on this host was changed.
+exit=0

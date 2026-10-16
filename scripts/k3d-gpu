@@ -1059,6 +1059,54 @@ perf_flag() {
     PERF_SUGGESTIONS=$((PERF_SUGGESTIONS + 1))
 }
 
+# msr <cpu> <address>: the MSR as 16 hex digits, read through the msr driver
+# (/dev/cpu/<cpu>/msr needs root and the msr module). Empty when unreadable.
+msr() {
+    local f="${SYSROOT}/dev/cpu/$1/msr" v=""
+    [ -r "${f}" ] || return 0
+    v=$(dd if="${f}" bs=8 count=1 skip=$(($2)) iflag=skip_bytes status=none 2>/dev/null | od -An -tx8 2>/dev/null) || true
+    v=${v//[[:space:]]/}
+    if [[ "${v}" =~ ^[0-9a-f]{16}$ ]]; then printf '%s' "${v}"; fi
+}
+
+# msr_bits <hex> <bit:name>...: the names whose bit is set, comma separated ("none").
+msr_bits() {
+    local v=$((16#$1)) b out=""
+    shift
+    for b in "$@"; do
+        if (( (v >> ${b%%:*}) & 1 )); then out+="${out:+, }${b#*:}"; fi
+    done
+    printf '%s' "${out:-none}"
+}
+
+# cpuinfo_field <name>: the first CPU's value of a /proc/cpuinfo field.
+cpuinfo_field() {
+    awk -F': *' -v k="$1" '{sub(/[ \t]+$/, "", $1)} $1 == k {print $2; exit}' "${SYSROOT}/proc/cpuinfo" 2>/dev/null || true
+}
+cpu_flag() { [[ " $(cpuinfo_field flags) " == *" $1 "* ]]; }
+
+# proc_running <comm>: true when a process with that comm (15 characters at most) runs.
+proc_running() {
+    local c
+    for c in "${SYSROOT}"/proc/[0-9]*/comm; do
+        [ "$(rf "${c}")" = "$1" ] && return 0
+    done
+    return 1
+}
+
+# throttle_pct: whole percent of uptime the package spent thermally throttled; empty when unknown.
+throttle_pct() {
+    local t up
+    t=$(rd /sys/devices/system/cpu/cpu0/thermal_throttle/package_throttle_total_time_ms)
+    up=$(rd /proc/uptime); up=${up%%[. ]*}
+    if [[ "${t}" =~ ^[0-9]{1,15}$ && "${up}" =~ ^[1-9][0-9]{0,11}$ ]]; then echo $(( t / (up * 10) )); fi
+}
+
+# bytes_h <bytes>: "256 MiB" / "32 GiB".
+bytes_h() {
+    if [ "$1" -ge 1073741824 ]; then echo "$(( $1 / 1073741824 )) GiB"; else echo "$(( $1 / 1048576 )) MiB"; fi
+}
+
 perf_cpu() {
     local base=/sys/devices/system/cpu pst status driver label list w gov epp nt mx mn smax cmax dyn cpu capped cvals hw cw undo bad_epp bad_gov cg ce cdrv cl
     pst="${base}/intel_pstate"
@@ -1151,6 +1199,14 @@ perf_cpu() {
         fi
     done < <(perf_groups)
 
+    # power-profiles-daemon drives the governor and EPP itself on intel_pstate active.
+    if [ "${status}" = active ] && proc_running power-profiles-; then
+        perf_flag note "power-profiles-daemon is running: it sets the governor and EPP itself, so an EPP or governor write here lasts only until its next profile change" \
+            "/proc/*/comm" \
+            "power-profiles-daemon's README (https://gitlab.freedesktop.org/upower/power-profiles-daemon, 'Operations on Intel-based machines'): on intel_pstate in active mode it applies the selected profile through the governor and the energy-performance hints. Either keep it and pick its performance profile (powerprofilesctl set performance), or stop it for a benchmark run so EPP writes stick" \
+            "sudo systemctl stop power-profiles-daemon" "sudo systemctl start power-profiles-daemon"
+    fi
+
     nt=$(rd "${pst}/no_turbo")
     if [ "${nt}" = 1 ]; then
         perf_flag warn "turbo is disabled (no_turbo=1)" "${pst}/no_turbo" \
@@ -1208,15 +1264,101 @@ perf_cstates() {
         "echo 1 | sudo tee ${w}/disable" "echo 0 | sudo tee ${w}/disable"
 }
 
+perf_thermal() {
+    local tt=/sys/devices/system/cpu/cpu0/thermal_throttle pc ptot pmax pct c v cmax=0 ccpu="" desc
+    local h l n tj="" now="" hwf="" f off="" offf="" tcc pkg core plr fam model
+    pc=$(rd "${tt}/package_throttle_count")
+    for h in "${SYSROOT}"/sys/class/hwmon/hwmon*; do
+        [ "$(rf "${h}/name")" = coretemp ] || continue
+        for l in "${h}"/temp*_label; do
+            [ "$(rf "${l}")" = "Package id 0" ] || continue
+            n=${l%_label}; tj=$(rf "${n}_crit"); now=$(rf "${n}_input"); hwf=${n#"${SYSROOT}"}
+        done
+    done
+    for f in "${SYSROOT}"/sys/bus/pci/devices/*/tcc_offset_degree_celsius; do
+        [ -f "${f}" ] || continue
+        off=$(rf "${f}"); offf=${f#"${SYSROOT}"}; break
+    done
+    pkg=$(msr 0 0x1B1)
+    [ -n "${pc}${tj}${off}${pkg}" ] || return 0
+    perf_section "CPU thermal throttling" \
+        "no throttle time under load: the package stays below its TCC activation point (TjMax minus the TCC offset), so cores keep the frequency they request" \
+        "kernel source drivers/thermal/intel/therm_throt.c (thermal_throttle/*), drivers/thermal/intel/int340x_thermal/processor_thermal_device.c (tcc_offset_degree_celsius), drivers/hwmon/coretemp.c (tempN_crit = TjMax), Intel SDM vol. 4 335592-093 (IA32_THERM_STATUS 19CH, IA32_PACKAGE_THERM_STATUS 1B1H, MSR_CORE_PERF_LIMIT_REASONS 64FH in table 2-39)"
+    if [[ "${tj}" =~ ^[0-9]{1,9}$ ]]; then
+        tcc="TjMax $((tj / 1000)) C"
+        if [[ "${off}" =~ ^[0-9]{1,3}$ ]]; then tcc="TCC activation $((tj / 1000 - off)) C (${tcc} - TCC offset ${off} C)"; fi
+        if [[ "${now}" =~ ^[0-9]{1,9}$ ]]; then tcc+="; package now $((now / 1000)) C"; fi
+        perf_info "${tcc}" "${hwf}_{crit,input}${offf:+, ${offf}}"
+    elif [ -n "${off}" ]; then
+        perf_info "TCC offset ${off} C" "${offf}"
+    fi
+
+    if [[ "${pc}" =~ ^[0-9]{1,15}$ ]]; then
+        ptot=$(rd "${tt}/package_throttle_total_time_ms"); pmax=$(rd "${tt}/package_throttle_max_time_ms")
+        pct=$(throttle_pct)
+        for c in "${SYSROOT}"/sys/devices/system/cpu/cpu[0-9]*/thermal_throttle/core_throttle_count; do
+            v=$(rf "${c}")
+            if [[ "${v}" =~ ^[0-9]{1,15}$ ]] && [ "${v}" -gt "${cmax}" ]; then
+                cmax=${v}; ccpu=${c%/thermal_throttle/*}; ccpu=${ccpu##*/}
+            fi
+        done
+        desc="${pc} events, ${ptot:-?} ms in total, longest ${pmax:-?} ms; core events peak at ${cmax}${ccpu:+ on ${ccpu}}"
+        if [ -n "${pct}" ] && [ "${pct}" -ge 1 ]; then
+            perf_flag warn "package thermally throttled ${pct}% of uptime: ${desc}" \
+                "${tt}/package_throttle_{count,total_time_ms,max_time_ms}, /proc/uptime" \
+                "therm_throt counts each time the package raised its thermal or PROCHOT status; while it is set the cores run below the frequency they request, so sustained inference speed follows the cooler, not the clock settings. The 1%-of-uptime cut-off is this tool's heuristic" \
+                "none on the host: improve cooling (airflow, heatsink, BIOS fan or thermal profile); the host-side lever is a lower PL1, see CPU package power limits" \
+                "none"
+        elif [ "${pc}" -gt 0 ]; then
+            perf_info "package throttle events: ${desc}${pct:+ (${pct}% of uptime)}" "${tt}/package_throttle_*"
+        else
+            perf_ok "no package throttle events since boot" "${tt}/package_throttle_count"
+        fi
+    fi
+
+    if [ -z "${pkg}" ]; then
+        if [ -n "${pc}" ]; then
+            perf_info "MSR decode (0x19C, 0x1B1, 0x64F) skipped: /dev/cpu/0/msr needs root and the msr module (sudo modprobe msr; sudo k3d-gpu doctor --perf)" "/dev/cpu/0/msr"
+        fi
+        return 0
+    fi
+    local -a st=(0:thermal 2:PROCHOT "4:critical temperature" "6:threshold #1" "8:threshold #2" "10:power limit")
+    local -a lg=(1:thermal 3:PROCHOT "5:critical temperature" "7:threshold #1" "9:threshold #2" "11:power limit")
+    perf_info "MSR 0x1B1 IA32_PACKAGE_THERM_STATUS 0x${pkg}: now $(msr_bits "${pkg}" "${st[@]}"); logged $(msr_bits "${pkg}" "${lg[@]}"); $(( (16#${pkg} >> 16) & 0x7f )) C below TjMax" \
+        "/dev/cpu/0/msr (root)"
+    core=$(msr 0 0x19C)
+    if [ -n "${core}" ]; then
+        perf_info "MSR 0x19C IA32_THERM_STATUS (CPU 0) 0x${core}: now $(msr_bits "${core}" "${st[@]}" "12:current limit" "14:cross-domain limit"); logged $(msr_bits "${core}" "${lg[@]}" "13:current limit" "15:cross-domain limit")$( (( (16#${core} >> 31) & 1 )) && echo "; $(( (16#${core} >> 16) & 0x7f )) C below TjMax")" \
+            "/dev/cpu/0/msr (root)"
+    fi
+    plr=$(msr 0 0x64F)
+    fam=$(cpuinfo_field "cpu family"); model=$(cpuinfo_field model)
+    if [ -n "${plr}" ] && [ "${fam}" = 6 ]; then
+        case "${model}" in
+            92|95|122)  # Goldmont: a different layout (SDM table 2-12)
+                perf_info "MSR 0x64F 0x${plr}: not decoded (Goldmont layout)" "/dev/cpu/0/msr (root)" ;;
+            *)
+                local -a pl=(0:PROCHOT 1:thermal "4:residency state regulation" "5:running average thermal limit" "6:VR thermal alert" "7:VR thermal design current" "8:other (electrical)" 10:PL1 11:PL2 "12:max turbo limit" "13:turbo transition attenuation")
+                local -a pll=() b
+                for b in "${pl[@]}"; do pll+=("$(( ${b%%:*} + 16 )):${b#*:}"); done
+                perf_info "MSR 0x64F MSR_CORE_PERF_LIMIT_REASONS 0x${plr}: now $(msr_bits "${plr}" "${pl[@]}"); logged $(msr_bits "${plr}" "${pll[@]}")" \
+                    "/dev/cpu/0/msr (root)" ;;
+        esac
+    fi
+    perf_info "the log bits are sticky: the SDM says they stay set until software writes 0, so they cover the time since boot or the last clear. doctor --perf only reads them" \
+        "Intel SDM vol. 4 335592-093 (R/WC0 log bits)"
+}
+
 perf_rapl() {
-    local z name en zn i cname lim max found=0 d
+    local z name en zn i cname lim max found=0 d pct
+    pct=$(throttle_pct)
     for z in "${SYSROOT}"/sys/class/powercap/intel-rapl:[0-9] "${SYSROOT}"/sys/class/powercap/intel-rapl-mmio:[0-9]; do
         [ -d "${z}" ] || continue
         name=$(rf "${z}/name")
         [[ "${name}" == package* ]] || continue
         if [ "${found}" -eq 0 ]; then
             perf_section "CPU package power limits (RAPL)" \
-                "PL1 (long_term) at or above the thermal spec power (TDP, reported as constraint_0_max_power_uw) so sustained inference is not clamped below spec; PL1 decides the clock under a long run, PL2 only covers short bursts" \
+                "PL1 (long_term) at or above the thermal spec power (TDP, reported as constraint_0_max_power_uw) so sustained inference is not clamped below spec; PL1 decides the clock under a long run, PL2 only covers short bursts. On a package that thermally throttles, a PL1 far above TDP only moves the limit from power to temperature" \
                 "https://docs.kernel.org/power/powercap/powercap.html, kernel source drivers/powercap/intel_rapl_common.c (PL1 max_power = PKG_POWER_INFO thermal spec power)"
             found=1
         fi
@@ -1239,6 +1381,12 @@ perf_rapl() {
                 "${zn}/constraint_0_power_limit_uw" \
                 "under a long run the package settles at PL1, so a PL1 under TDP clocks every core below its rated sustained speed. Firmware may re-apply its own value on reboot" \
                 "echo ${max} | sudo tee ${zn}/constraint_0_power_limit_uw" \
+                "echo ${lim} | sudo tee ${zn}/constraint_0_power_limit_uw"
+        elif lt 0 "${max}" && lt $((2 * max)) "${lim}" && [ -n "${pct}" ] && [ "${pct}" -ge 1 ]; then
+            perf_flag warn "${zn##*/} ${name}: PL1 $((lim / 1000000)) W is $(awk -v a="${lim}" -v b="${max}" 'BEGIN {printf "%.1f", a / b}')x the $((max / 1000000)) W thermal spec power while the package is thermally throttled ${pct}% of uptime (${d})" \
+                "${zn}/constraint_0_{power_limit_uw,max_power_uw}, /sys/devices/system/cpu/cpu0/thermal_throttle/package_throttle_total_time_ms" \
+                "PL1 is the sustained package power. Set above what the cooler removes, it never binds: the package runs into its TCC point and throttles on temperature instead (see CPU thermal throttling). A PL1 the cooler can hold trades peak clocks for steady ones. 2x the thermal spec power is this tool's first step for a sweep, not an Intel figure: measure tokens/s at each step before keeping one. Firmware may re-apply its own value on reboot" \
+                "echo $((2 * max)) | sudo tee ${zn}/constraint_0_power_limit_uw" \
                 "echo ${lim} | sudo tee ${zn}/constraint_0_power_limit_uw"
         else
             perf_ok "${zn##*/} ${name}: ${d}$(lt 0 "${max}" && echo " (thermal spec power $((max / 1000000)) W)")" "${zn}/constraint_*_power_limit_uw"
@@ -1273,6 +1421,19 @@ perf_memory() {
             "") ;;
             *) perf_ok "THP defrag=${dmode}" /sys/kernel/mm/transparent_hugepage/defrag ;;
         esac
+        # File-backed weights: ext4 gained large folios in 6.16; before that only
+        # executable file mappings are collapsed into huge pages.
+        local rootfs
+        rootfs=$(awk '$2 == "/" {print $3; exit}' "${SYSROOT}/proc/mounts" 2>/dev/null || true)
+        if [ "${rootfs}" = ext4 ] && kernel_lt 6.16; then
+            local sz="<model GiB + 1>"
+            if [ -n "${PERF_MODEL_GB}" ]; then sz=$(awk -v g="${PERF_MODEL_GB}" 'BEGIN {printf "%d", g + 1.999}'); fi
+            perf_flag note "root filesystem is ext4 on Linux $(kernel_release): model files mmapped from it are mapped with 4 KiB pages, whatever THP enabled says" \
+                "/proc/mounts, /proc/sys/kernel/osrelease" \
+                "on this kernel ext4 page cache holds no large folios (fs/ext4/inode.c calls mapping_set_large_folios from 6.16), and khugepaged collapses file pages only in executable mappings (include/linux/huge_mm.h file_thp_enabled needs VM_EXEC). OpenVINO and llama.cpp mmap weights by default, so THP covers only anonymous copies. A tmpfs with huge=within_size serves the weights from huge pages (docs.kernel.org/admin-guide/mm/transhuge.html, hugepages in tmpfs/shmem); copy the model in and point the server at it" \
+                "sudo mkdir -p /mnt/k3d-gpu-models && sudo mount -t tmpfs -o huge=within_size,size=${sz}G tmpfs /mnt/k3d-gpu-models" \
+                "sudo umount /mnt/k3d-gpu-models"
+        fi
     fi
 
     hp=$(meminfo_kb HugePages_Total); hfree=$(meminfo_kb HugePages_Free); hpsz=$(meminfo_kb Hugepagesize)
@@ -1331,6 +1492,222 @@ perf_memory() {
     fi
 }
 
+# dmi17 <raw file>: "<size MiB> <type> <form> <rated MT/s> <configured MT/s> <total width>
+# <data width> <ranks>" of one SMBIOS type 17 (Memory Device) record. Offsets per
+# SMBIOS (DSP0134) 7.18, as dmidecode.c decodes them.
+dmi17() {
+    local -a b
+    local len size spd cfg
+    read -r -a b <<< "$(od -An -tu1 -v "$1" 2>/dev/null | tr '\n' ' ')" || true
+    [ "${b[0]:-}" = 17 ] || return 0
+    len=${b[1]:-0}
+    { [ "${len}" -ge 34 ] && [ "${#b[@]}" -ge "${len}" ]; } || return 0
+    size=$(( b[12] | b[13] << 8 ))
+    if [ "${size}" -eq 32767 ]; then size=$(( b[28] | b[29] << 8 | b[30] << 16 | (b[31] & 127) << 24 ))
+    elif [ "${size}" -eq 65535 ]; then size=0
+    elif (( size & 32768 )); then size=$(( (size & 32767) / 1024 ))
+    fi
+    spd=$(( b[21] | b[22] << 8 ))
+    if [ "${spd}" -eq 65535 ] && [ "${len}" -ge 92 ]; then spd=$(( b[84] | b[85] << 8 | b[86] << 16 | b[87] << 24 )); fi
+    cfg=$(( b[32] | b[33] << 8 ))
+    if [ "${cfg}" -eq 65535 ] && [ "${len}" -ge 92 ]; then cfg=$(( b[88] | b[89] << 8 | b[90] << 16 | b[91] << 24 )); fi
+    echo "${size} ${b[18]} ${b[14]} ${spd} ${cfg} $(( b[8] | b[9] << 8 )) $(( b[10] | b[11] << 8 )) $(( b[27] & 15 ))"
+}
+
+mts() { if [ "$1" -gt 0 ]; then echo "$1 MT/s"; else echo unknown; fi; }
+
+dram_type() {
+    case "$1" in
+        24) echo DDR3 ;; 26) echo DDR4 ;; 29) echo LPDDR3 ;; 30) echo LPDDR4 ;; 34) echo DDR5 ;; 35) echo LPDDR5 ;;
+        *) echo "type $1" ;;
+    esac
+}
+dram_form() {
+    case "$1" in 9) echo DIMM ;; 11) echo "row of chips" ;; 13) echo SODIMM ;; 16) echo die ;; *) echo "form $1" ;; esac
+}
+
+# client_line: "13S", "13HX", "13HPU", "14S" or "14HX" for 13th/14th Gen Core (Raptor
+# Lake family 6 models 0xB7, 0xBA) from the model number and brand string. Model
+# 0xBF (the 8+8 C0 and 6+0 H0 dies) runs 12th Gen DDR5 speeds (743844 table 25
+# note 16), so it gets no line.
+client_line() {
+    local model name gen sfx
+    [ "$(cpuinfo_field "cpu family")" = 6 ] || return 0
+    model=$(cpuinfo_field model); name=$(cpuinfo_field "model name")
+    [[ "${name}" =~ i[3579]-(1[34])[0-9]{3}([A-Z]*) ]] || return 0
+    gen=${BASH_REMATCH[1]}; sfx=${BASH_REMATCH[2]}
+    case "${model}" in
+        183) if [ "${sfx}" = HX ]; then echo "${gen}HX"; else echo "${gen}S"; fi ;;
+        186) if [ "${gen}" = 13 ]; then echo 13HPU; fi ;;
+    esac
+    return 0
+}
+
+# dram_por <line> <DIMM|SODIMM> <slots per channel> <modules per channel> <ranks>:
+# "<MT/s>|<row>" of DDR5 table 25 in Intel datasheet 743844 rev. 015 (13th/14th Gen
+# Core); empty when the table has no such row.
+dram_por() {
+    local line=$1 form=$2 dpc=$3 per=$4 rank=$5 r
+    if [ "${dpc}" -le 1 ]; then
+        case "${line}:${form}:${rank}" in
+            13S:DIMM:1|13S:SODIMM:1|13HX:SODIMM:1) echo "5600|1DPC 1R" ;;
+            13S:DIMM:2|13S:SODIMM:2|13HX:SODIMM:2) echo "5200|1DPC 2R" ;;
+            13HPU:SODIMM:[12]) echo "5200|1DPC ${rank}R" ;;
+            14S:DIMM:[12]|14S:SODIMM:[12]|14HX:SODIMM:[12]) echo "5600|1DPC ${rank}R" ;;
+        esac
+        return 0
+    fi
+    case "${line}:${form}" in
+        13S:DIMM|14S:DIMM) r=(4400 4000 3600) ;;
+        13HX:SODIMM) r=(4000 4000 3600) ;;
+        14HX:SODIMM) r=(4400 4400 4000) ;;
+        *) return 0 ;;
+    esac
+    if [ "${per}" -le 1 ]; then echo "${r[0]}|2DPC, 1 DIMM"
+    elif [ "${rank}" -eq 1 ]; then echo "${r[1]}|2DPC, 2 DIMMs 1R"
+    elif [ "${rank}" -eq 2 ]; then echo "${r[2]}|2DPC, 2 DIMMs 2R"
+    fi
+    return 0
+}
+
+perf_dram() {
+    local e raw rec slots=0 n=0 size type form spd cfg tw dw rk desc="" cmin="" rated="" ecc=1 eccu=0 widths=0
+    local line ch=2 dpc per por row peak t1 hb mc ce ue mcs="" mcf=""
+    for e in "${SYSROOT}"/sys/firmware/dmi/entries/17-*; do
+        [ -d "${e}" ] || continue
+        slots=$((slots + 1))
+        [ -r "${e}/raw" ] && raw=1 || raw=0
+        [ "${raw}" -eq 1 ] || continue
+        rec=$(dmi17 "${e}/raw")
+        [ -n "${rec}" ] || continue
+        read -r size type form spd cfg tw dw rk <<< "${rec}"
+        [ "${size}" -gt 0 ] || continue
+        n=$((n + 1))
+        t1="$(dram_type "${type}") $(dram_form "${form}") $(( size / 1024 )) GiB ${rk}R"
+        if [[ " ${desc} " != *"|${t1}|"* ]]; then desc+="|${t1}|"; fi
+        if [ -z "${cmin}" ] || [ "${cfg}" -lt "${cmin}" ]; then cmin=${cfg}; fi
+        if [ -z "${rated}" ] || [ "${spd}" -lt "${rated}" ]; then rated=${spd}; fi
+        if [ "${tw}" -eq 65535 ] || [ "${dw}" -eq 65535 ]; then eccu=1; elif [ "${tw}" -le "${dw}" ]; then ecc=0; fi
+        if [ "${dw}" -lt 65535 ]; then widths=$((widths + dw / 8)); fi
+    done
+    [ "${slots}" -gt 0 ] || return 0
+    perf_section "DRAM speed, bandwidth and ECC" \
+        "modules at the platform's plan-of-record (POR) speed for how the slots are populated; single-stream CPU and iGPU decode is bound by DRAM bandwidth. Memory errors counted by an EDAC driver" \
+        "SMBIOS DSP0134 7.18 (type 17, as dmidecode.c decodes it), Intel datasheet 743844 rev. 015 table 25 (13th/14th Gen Core DDR support matrix, https://cdrdv2.intel.com/v1/dl/getContent/743844), https://docs.kernel.org/driver-api/edac.html"
+    if [ "${n}" -eq 0 ]; then
+        if [ "${raw}" -eq 0 ]; then
+            perf_info "SMBIOS memory records are root-only: sudo k3d-gpu doctor --perf (or sudo dmidecode -t 17)" "/sys/firmware/dmi/entries/17-*/raw"
+        else
+            perf_info "no populated memory device in SMBIOS (VM or firmware without type 17)" "/sys/firmware/dmi/entries/17-*/raw"
+        fi
+        return 0
+    fi
+    desc=${desc#|}; desc=${desc%|}; desc=${desc//||/, }
+    form=$(dram_form "${form}")
+    perf_info "${n}x ${desc}$([ "${ecc}${eccu}" = 10 ] && echo ", ECC (${tw}/${dw}-bit)"): rated $(mts "${rated}"), configured $(mts "${cmin}"); ${n} of ${slots} slots populated" \
+        "/sys/firmware/dmi/entries/17-*/raw (root)"
+
+    line=$(client_line)
+    if [ "${cmin}" -eq 0 ]; then
+        perf_info "configured speed not reported by firmware: no POR comparison or peak bandwidth" "/sys/firmware/dmi/entries/17-*/raw (root)"
+    elif [ -n "${line}" ]; then
+        dpc=$(( (slots + ch - 1) / ch ))
+        per=1; if [ "${n}" -gt "${ch}" ]; then per=2; fi
+        por=$(dram_por "${line}" "${form}" "${dpc}" "${per}" "${rk}")
+        if [ -z "${por}" ] && [ "${dpc}" -ge 2 ] && [ "${form}" = SODIMM ] && [[ "${line}" == *S ]]; then
+            por=$(dram_por "${line}" DIMM "${dpc}" "${per}" "${rk}")
+            if [ -n "${por}" ]; then
+                perf_info "SODIMMs at 2 slots per channel are not a supported configuration on the ${line%S}th Gen Core S line (743844 table 25 note 9); the nearest POR row, UDIMM ${por#*|}, is ${por%%|*} MT/s" \
+                    "/proc/cpuinfo (model ${line}), /sys/firmware/dmi/entries/17-*/raw"
+            fi
+        fi
+        if [ -n "${por}" ]; then
+            row=${por#*|}; por=${por%%|*}
+            if lt "${cmin}" "${por}" && lt "${cmin}" "${rated}"; then
+                perf_flag warn "configured ${cmin} MT/s is below the ${por} MT/s POR for ${row} (modules rated ${rated})" \
+                    "/sys/firmware/dmi/entries/17-*/raw (root)" \
+                    "peak DRAM bandwidth scales with the transfer rate; the platform supports ${por} MT/s for this population (743844 table 25). That POR is the top SKU's speed (743844 table 25 note 17); a lower SKU can be specified lower: check ark.intel.com for $(cpuinfo_field "model name") before raising it" \
+                    "BIOS: set the memory frequency to $(( por < rated ? por : rated )) MT/s (or Auto/JEDEC), then reboot" \
+                    "BIOS: set it back to ${cmin} MT/s"
+            else
+                perf_ok "configured ${cmin} MT/s is at the ${por} MT/s POR for ${row}" "/sys/firmware/dmi/entries/17-*/raw (root)"
+            fi
+            if [ "${dpc}" -ge 2 ] && [ "${per}" -ge 2 ]; then
+                t1=$(dram_por "${line}" "${form}" 1 1 "${rk}"); t1=${t1%%|*}
+                if [ -n "${t1}" ]; then
+                    t1=$(( t1 < rated ? t1 : rated ))
+                    if [ "${t1}" -gt "${cmin}" ]; then
+                        perf_info "at one module per channel these modules would run at ${t1} MT/s (the lower of rated ${rated} and the 1DPC ${rk}R POR): $(awk -v m="${t1}" 'BEGIN {printf "%.1f", 2 * m * 8 / 1000}') GB/s peak, with ${ch} of the ${n} modules (less capacity)" \
+                            "743844 table 25"
+                    fi
+                fi
+            fi
+        fi
+        peak=$(awk -v c="$(( n < ch ? n : ch ))" -v m="${cmin}" 'BEGIN {printf "%.1f", c * m * 8 / 1000}')
+        perf_info "peak DRAM bandwidth ${peak} GB/s = $(( n < ch ? n : ch )) channels x ${cmin} MT/s x 8 B (computed; CPU and iGPU decode share it)" \
+            "/sys/firmware/dmi/entries/17-*/raw (root)"
+    else
+        peak=$(awk -v w="${widths}" -v m="${cmin}" 'BEGIN {printf "%.1f", w * m / 1000}')
+        perf_info "peak DRAM bandwidth ${peak} GB/s = ${cmin} MT/s x ${widths} B of data width (computed, assuming one module per channel; this tool has no POR table for this CPU)" \
+            "/sys/firmware/dmi/entries/17-*/raw (root)"
+    fi
+
+    for mc in "${SYSROOT}"/sys/devices/system/edac/mc/mc[0-9]*; do
+        [ -d "${mc}" ] || continue
+        ce=$(rf "${mc}/ce_count"); ue=$(rf "${mc}/ue_count")
+        mcs+="${mcs:+, }${mc##*/} $(rf "${mc}/mc_name") ce ${ce:-?} ue ${ue:-?}"
+        mcf="${mc#"${SYSROOT}"}"
+        if lt 0 "${ue}"; then
+            perf_flag warn "${mc##*/}: ${ue} uncorrected memory errors since boot" "${mcf}/ue_count" \
+                "an uncorrected error means corrupted data reached software; on an inference node that can be wrong weights or KV cache" \
+                "none on the host: run a memory test and replace the failing module (edac-util or the kernel log names the DIMM)" "none"
+        fi
+    done
+    if [ "${eccu}" -eq 1 ]; then
+        perf_info "module widths not reported by firmware: ECC state unknown" "/sys/firmware/dmi/entries/17-*/raw (root)"
+    elif [ "${ecc}" -eq 0 ]; then
+        perf_info "non-ECC modules: memory errors are neither corrected nor counted (dram.ecc=none)" "/sys/firmware/dmi/entries/17-*/raw (total width = data width)"
+    elif [ -n "${mcs}" ]; then
+        perf_ok "ECC modules with EDAC reporting (dram.ecc=active): ${mcs}" "/sys/devices/system/edac/mc/mc*/{ce,ue}_count"
+    else
+        hb=$(rf "${SYSROOT}/sys/bus/pci/devices/0000:00:00.0/device")
+        local apply="load the EDAC driver for host bridge 8086:${hb#0x} if this kernel has one (ls /lib/modules/\$(uname -r)/kernel/drivers/edac)" revert="unload that driver again"
+        # ie31200_edac device IDs: Raptor Lake-S a703/4640/4630 from 6.15; a700 and
+        # Alder Lake-S 4660 from 6.16 (drivers/edac/ie31200_edac.c at v6.15, v6.16).
+        local kv=""
+        case "${hb}" in
+            0xa703|0x4640|0x4630) kv=6.15 ;;
+            0xa700|0x4660) kv=6.16 ;;
+        esac
+        if [ -n "${kv}" ]; then
+            if kernel_lt "${kv}"; then apply="boot Linux ${kv} or newer (ie31200_edac binds host bridge 8086:${hb#0x} from ${kv}), then: sudo modprobe ie31200_edac"
+            else apply="sudo modprobe ie31200_edac"; fi
+            revert="sudo modprobe -r ie31200_edac"
+        fi
+        perf_flag note "ECC modules, but no EDAC memory controller is registered: corrected and uncorrected errors are not counted (dram.ecc=unmonitored)" \
+            "/sys/devices/system/edac/mc/ (no mc*), /sys/firmware/dmi/entries/17-*/raw" \
+            "without an EDAC driver a failing module shows up only as crashes or silent corruption; with one, ce_count/ue_count give early warning" \
+            "${apply}" "${revert}"
+    fi
+}
+
+perf_ksm() {
+    local run share
+    run=$(rd /sys/kernel/mm/ksm/run)
+    [ -n "${run}" ] || return 0
+    perf_section "Kernel samepage merging (KSM)" \
+        "off (run=0, the kernel default) on a node that runs other tenants' pods: merged pages are shared copy-on-write, and the write fault on a merged page is a timing signal another tenant can observe" \
+        "https://docs.kernel.org/admin-guide/mm/ksm.html, Suzaki et al., Memory Deduplication as a Threat to the Guest OS, EuroSec 2011"
+    share=$(rd /sys/kernel/mm/ksm/pages_sharing)
+    if [ "${run}" = 1 ]; then
+        perf_flag note "KSM is running (run=1, pages_sharing=${share:-?})" /sys/kernel/mm/ksm/run \
+            "KSM merges identical pages of processes that opted in with madvise(MADV_MERGEABLE) or prctl. Fine for one trusted tenant; on a shared node it opens the dedup timing side channel. run=2 stops ksmd and unmerges every merged page" \
+            "echo 2 | sudo tee /sys/kernel/mm/ksm/run" "echo 1 | sudo tee /sys/kernel/mm/ksm/run"
+    else
+        perf_ok "KSM off (run=${run}${share:+, pages_sharing=${share}})" /sys/kernel/mm/ksm/run
+    fi
+}
+
 perf_irqbalance() {
     local c running=0 enabled=0
     compgen -G "${SYSROOT}/proc/[0-9]*/comm" >/dev/null || return 0
@@ -1357,8 +1734,120 @@ perf_irqbalance() {
     fi
 }
 
+# pcie_gen <"16.0 GT/s PCIe">: the PCIe generation of a link speed, empty when unknown.
+pcie_gen() {
+    case "${1%% *}" in 2.5) echo 1 ;; 5.0) echo 2 ;; 8.0) echo 3 ;; 16.0) echo 4 ;; 32.0) echo 5 ;; 64.0) echo 6 ;; esac
+    return 0
+}
+
+perf_pcie() {
+    local d dn bdf up ub dg dw ug uw eg ew c cb cg cw hop bad fb rb msg found=0 r line poss bit max start end cur best="" bestn ids nv=0 out
+    for d in "${SYSROOT}"/sys/bus/pci/devices/*; do
+        [[ "$(rf "${d}/class")" == 0x03* ]] || continue
+        bdf=${d##*/}
+        ids="$(rf "${d}/vendor" | sed 's/^0x//'):$(rf "${d}/device" | sed 's/^0x//')"
+        [ "$(rf "${d}/vendor")" != 0x10de ] || nv=$((nv + 1))
+        dg=$(pcie_gen "$(rf "${d}/max_link_speed")"); dw=$(rf "${d}/max_link_width")
+        dn=${d#"${SYSROOT}"}
+        if [ "${found}" -eq 0 ] && { [ -n "${dg}" ] || compgen -G "${d}/resource[0-5]_resize" >/dev/null; }; then
+            perf_section "GPU PCIe links and BAR sizes" \
+                "each GPU's link trains at the device's own maximum (its upstream port is not slower or narrower), and the large BAR maps all of VRAM (Resizable BAR)" \
+                "https://docs.kernel.org/PCI/sysfs-pci.html, kernel source drivers/pci/pci-sysfs.c (max_link_*, resourceN_resize) and drivers/pci/pci.c pci_rebar_get_possible_sizes (bit 0 = 1 MB)"
+            found=1
+        fi
+        # Links: every hop from the device up to its root port, so a card with its own
+        # switch (Arc A/B dGPUs) is judged at the slot link above that switch. The first
+        # hop whose port is slower or narrower than the device below it is reported.
+        # current_link_* drops at idle, so only max_* is compared.
+        if [ -n "${dg}" ] && [[ "${dw}" =~ ^[0-9]{1,2}$ ]]; then
+            c=$(readlink -f "${d}"); hop=0; bad=""; fb=""; rb=""
+            while up=$(dirname "${c}"); ub=${up##*/}; [[ "${ub}" =~ ^[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-7]$ ]]; do
+                cg=$(pcie_gen "$(rf "${c}/max_link_speed")"); cw=$(rf "${c}/max_link_width")
+                ug=$(pcie_gen "$(rf "${up}/max_link_speed")"); uw=$(rf "${up}/max_link_width")
+                if [ -n "${cg}" ] && [[ "${cw}" =~ ^[0-9]{1,2}$ ]] && [ -n "${ug}" ] && [[ "${uw}" =~ ^[0-9]{1,2}$ ]]; then
+                    hop=$((hop + 1)); rb=${ub}
+                    [ "${hop}" -gt 1 ] || fb="${ub} (Gen${ug} x${uw})"
+                    if [ -z "${bad}" ] && { [ "${ug}" -lt "${cg}" ] || [ "${uw}" -lt "${cw}" ]; }; then
+                        bad="${c##*/} ${cg} ${cw} ${ub} ${ug} ${uw}"
+                    fi
+                fi
+                c=${up}
+            done
+            if [ -n "${bad}" ]; then
+                read -r cb cg cw ub ug uw <<< "${bad}"
+                eg=$(( cg < ug ? cg : ug )); ew=$(( cw < uw ? cw : uw ))
+                if [ "${cb}" = "${bdf}" ]; then
+                    msg="device Gen${dg} x${dw}, upstream port ${ub} Gen${ug} x${uw}: the link trains at most Gen${eg} x${ew}"
+                else
+                    msg="${cb} Gen${cg} x${cw} on its path to the root port sits behind port ${ub} Gen${ug} x${uw}: the GPU's traffic crosses a link of at most Gen${eg} x${ew}"
+                fi
+                perf_flag warn "${bdf} [${ids}]: ${msg}" \
+                    "/sys/bus/pci/devices/${cb}/max_link_{speed,width}, /sys/bus/pci/devices/${ub}/max_link_{speed,width}" \
+                    "a link trains to the lower speed and width of its two ends. current_link_* reads lower at idle (link power management), so only max_* is compared. Keep this GPU's weights and KV cache resident (nothing streamed over the link) and give the widest link to the GPU that moves the most data" \
+                    "hardware: move the card to a slot whose port is at least x${cw} (no host command changes the link width)" \
+                    "hardware: move it back"
+            elif [ "${hop}" -gt 0 ]; then
+                perf_ok "${bdf} [${ids}]: Gen${dg} x${dw} behind port ${fb}: the link can reach the device maximum$([ "${rb}" = "${fb%% *}" ] || echo "; no narrower link up to root port ${rb}")" \
+                    "${dn}/max_link_{speed,width}, /sys/bus/pci/devices/${fb%% *}/max_link_{speed,width}$([ "${rb}" = "${fb%% *}" ] || echo " and each port up to ${rb}")"
+            fi
+        fi
+        # Resizable BAR: the BAR with the largest supported size, against its current size.
+        best=""; bestn=""
+        for r in "${d}"/resource[0-5]_resize; do
+            [ -f "${r}" ] || continue
+            poss=$(rf "${r}"); [[ "${poss}" =~ ^[0-9a-f]{1,16}$ ]] || continue
+            poss=$((16#${poss})); [ "${poss}" -gt 0 ] || continue
+            bit=0; while [ $((poss >> (bit + 1))) -gt 0 ]; do bit=$((bit + 1)); done
+            max=$(( (1 << 20) << bit ))
+            if [ -z "${best}" ] || [ "${max}" -gt "${best}" ]; then best=${max}; bestn=${r##*/resource}; bestn=${bestn%_resize}; fi
+        done
+        if [ -n "${best}" ]; then
+            line=$(sed -n "$((bestn + 1))p" "${d}/resource" 2>/dev/null || true)
+            read -r start end _ <<< "${line}"
+            if [[ "${start}" =~ ^0x[0-9a-f]{1,16}$ && "${end}" =~ ^0x[0-9a-f]{1,16}$ ]] && [ "$((start))" -gt 0 ]; then
+                cur=$(( end - start + 1 ))
+                if [ "${cur}" -lt "${best}" ]; then
+                    perf_flag warn "${bdf} [${ids}]: BAR${bestn} is $(bytes_h "${cur}"); the device can map up to $(bytes_h "${best}") (Resizable BAR not in use)" \
+                        "${dn}/resource, ${dn}/resource${bestn}_resize" \
+                        "the CPU reaches VRAM through this BAR; a small BAR means the driver remaps a window for host-to-device copies instead of mapping all of VRAM. Resizing needs firmware support (Above 4G decoding)" \
+                        "BIOS: enable Above 4G Decoding and Re-Size BAR Support, then reboot" \
+                        "BIOS: disable Re-Size BAR Support, then reboot"
+                else
+                    perf_ok "${bdf} [${ids}]: BAR${bestn} $(bytes_h "${cur}"), the largest size it supports" "${dn}/resource, ${dn}/resource${bestn}_resize"
+                fi
+            fi
+        fi
+    done
+    [ "${found}" -eq 1 ] || return 0
+    if [ "${nv}" -ge 2 ]; then
+        if command -v nvidia-smi >/dev/null 2>&1; then
+            out=$(nvidia-smi topo -p2p r 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' || true)
+            local -a row
+            local pairs="" i j
+            while read -r -a row; do
+                [[ "${row[0]:-}" =~ ^GPU([0-9]+)$ ]] || continue
+                i=${BASH_REMATCH[1]}
+                for ((j = 1; j < ${#row[@]}; j++)); do
+                    [ $((j - 1)) -gt "${i}" ] || continue
+                    pairs+="${pairs:+, }GPU${i}-GPU$((j - 1)) ${row[j]}"
+                done
+            done <<< "${out}"
+            if [ -z "${pairs}" ]; then
+                perf_info "GPU peer-to-peer: nvidia-smi topo -p2p r printed no matrix" "nvidia-smi topo -p2p r"
+            elif [[ "${pairs}" =~ \ (NS|CNS|GNS|TNS|U)(,|$) ]]; then
+                perf_info "GPU peer-to-peer reads: ${pairs} (NS/CNS/TNS = not supported): tensor parallel across these GPUs goes through host memory; run one replica per GPU instead" \
+                    "nvidia-smi topo -p2p r"
+            else
+                perf_ok "GPU peer-to-peer reads: ${pairs}" "nvidia-smi topo -p2p r"
+            fi
+        else
+            perf_info "GPU peer-to-peer not checked: nvidia-smi not found" "nvidia-smi topo -p2p r"
+        fi
+    fi
+}
+
 perf_igpu() {
-    local card gt f drv cur mn mx boost rp0 rpn act thr d profile slpc huc found=0
+    local card gt f drv cur mn mx boost rp0 rp1 rpn act thr d profile slpc huc wb wbf wbk found=0
     for card in "${SYSROOT}"/sys/class/drm/card[0-9]*; do
         [[ "${card##*/}" =~ ^card[0-9]+$ ]] || continue
         drv=$(basename "$(readlink "${card}/device/driver" 2>/dev/null)")
@@ -1369,7 +1858,7 @@ perf_igpu() {
             if [ "${found}" -eq 0 ]; then
                 perf_section "Intel GPU frequency" \
                     "max request at RP0 (no cap); boost at RP0 so a waiting client gets full clock; under GuC SLPC the firmware picks the frequency between min and max" \
-                    "kernel source drivers/gpu/drm/i915/gt/intel_gt_sysfs_pm.c + uc/intel_guc_slpc.c (i915), https://docs.kernel.org/gpu/xe/xe_gt_freq.html (xe)"
+                    "kernel source drivers/gpu/drm/i915/gt/intel_gt_sysfs_pm.c + uc/intel_guc_slpc.c + intel_gt_pm_debugfs.c (i915: RP1 floor, waitboost counters), https://docs.kernel.org/gpu/xe/xe_gt_freq.html (xe)"
                 found=1
             fi
             if [ -f "${gt}/rps_cur_freq_mhz" ]; then
@@ -1378,7 +1867,21 @@ perf_igpu() {
                 boost=$(rf "${gt}/rps_boost_freq_mhz"); rp0=$(rf "${gt}/rps_RP0_freq_mhz"); rpn=$(rf "${gt}/rps_RPn_freq_mhz")
                 # i915 creates slpc_ignore_eff_freq only when GuC SLPC owns frequency.
                 if [ -f "${gt}/slpc_ignore_eff_freq" ]; then slpc="GuC SLPC"; else slpc="host RPS (no GuC SLPC)"; fi
-                perf_info "${card##*/} ${drv} ${gt##*/}: ${slpc}; cur ${cur} / act ${act:-?} MHz, min ${mn}, max ${mx}, boost ${boost:-?}, RPn ${rpn}, RP0 ${rp0}" "${d}/rps_*_freq_mhz"
+                rp1=$(rf "${gt}/rps_RP1_freq_mhz")
+                perf_info "${card##*/} ${drv} ${gt##*/}: ${slpc}; cur ${cur} / act ${act:-?} MHz, min ${mn}, max ${mx}, boost ${boost:-?}, RPn ${rpn}${rp1:+, RP1 ${rp1}}, RP0 ${rp0}" "${d}/rps_*_freq_mhz"
+                if [ "$(rf "${gt}/slpc_ignore_eff_freq")" = 0 ] && lt "${mn}" "${rp1}"; then
+                    perf_info "${card##*/} ${gt##*/}: slpc_ignore_eff_freq=0, so GuC SLPC keeps the efficient frequency RP1 ${rp1} MHz as its floor while busy, above min ${mn} MHz (i915 drops the floor to min only when the flag is 1)" \
+                        "${d}/slpc_ignore_eff_freq, ${d}/rps_RP1_freq_mhz"
+                fi
+                # Waitboost count: debugfs (root). SLPC: uc/guc_slpc_info; host RPS: rps_boost.
+                wbf="/sys/kernel/debug/dri/${card##*/card}/${gt##*/}/rps_boost"; wbk="Wait boosts:"
+                if [ "${slpc}" = "GuC SLPC" ]; then wbf="/sys/kernel/debug/dri/${card##*/card}/${gt##*/}/uc/guc_slpc_info"; wbk="waitboosts:"; fi
+                wb=$(awk -v k="${wbk}" 'index($0, k) {sub(/.*: */, ""); print; exit}' "${SYSROOT}${wbf}" 2>/dev/null || true)
+                if [ -n "${wb}" ]; then
+                    perf_info "${card##*/} ${gt##*/}: ${wb} waitboosts since boot (a client waiting on the GPU raised the frequency to boost ${boost:-?} MHz)" "${wbf} (root)"
+                else
+                    perf_info "${card##*/} ${gt##*/}: waitboost count not readable (debugfs needs root: sudo cat ${wbf})" "${wbf}"
+                fi
                 if lt "${mx}" "${rp0}"; then
                     perf_flag warn "${card##*/} ${gt##*/}: max ${mx} MHz is below RP0 ${rp0} MHz" "${d}/rps_max_freq_mhz" \
                         "the max request caps every kernel the GPU runs" \
@@ -1459,6 +1962,114 @@ perf_nvidia() {
     done < <(grep -E '^[0-9]+,' <<< "${out}")
 }
 
+perf_isolation() {
+    local km p v kv="" units=0 u d bdf g gn m mb others cls types="" sld mit flags tme cet sc pf f
+    [ -n "$(cpuinfo_field flags)" ] || return 0   # procfs files report size 0, so no -s test
+    perf_section "Isolation for sandboxed agents" \
+        "/dev/kvm usable for microVM sandboxes, each GPU alone in its IOMMU group, split-lock detection on, CET known, GPU observation streams limited to CAP_PERFMON" \
+        "https://docs.kernel.org/driver-api/vfio.html (IOMMU groups), https://docs.kernel.org/admin-guide/kernel-parameters.html (split_lock_detect), https://docs.kernel.org/admin-guide/sysctl/kernel.html (split_lock_mitigate), kernel source drivers/gpu/drm/i915/i915_perf.c and drivers/gpu/drm/xe/xe_observation.c (paranoid sysctls), Intel SDM vol. 4 335592-093 (IA32_S_CET 6A2H, IA32_TME_ACTIVATE 982H)"
+
+    # KVM
+    km=/sys/module/kvm_intel/parameters
+    for p in nested enable_apicv ept; do
+        v=$(rd "${km}/${p}"); [ -z "${v}" ] || kv+=" ${p}=${v}"
+    done
+    if [ -e "${SYSROOT}/dev/kvm" ]; then
+        perf_info "/dev/kvm present${kv:+; kvm_intel${kv}}: microVM sandboxes (Kata, Firecracker) can run here" "/dev/kvm, ${km}/*"
+    elif cpu_flag vmx; then
+        perf_flag note "the CPU has VT-x (vmx) but /dev/kvm is missing: no microVM sandboxes" "/proc/cpuinfo (vmx), /dev/kvm" \
+            "kvm_intel creates /dev/kvm; without it Kata or Firecracker cannot start a VM" \
+            "sudo modprobe kvm_intel" "sudo modprobe -r kvm_intel"
+    else
+        perf_info "no VT-x (vmx flag) exposed: no microVM sandboxes (VT-x off in BIOS, or a VM without nested virtualization)" "/proc/cpuinfo"
+    fi
+
+    # IOMMU and per-GPU groups
+    for u in "${SYSROOT}"/sys/class/iommu/*; do [ -e "${u}" ] && units=$((units + 1)); done
+    if [ "${units}" -eq 0 ]; then
+        if cpu_flag vmx; then
+            perf_flag note "no IOMMU unit registered: no DMA isolation between devices, no GPU passthrough into a microVM" "/sys/class/iommu/" \
+                "VFIO hands a device to a VM only with its IOMMU group; without VT-d enabled there are no groups" \
+                "BIOS: enable VT-d, then add intel_iommu=on to the kernel command line and reboot" \
+                "remove intel_iommu=on from the kernel command line and reboot"
+        fi
+    else
+        for d in "${SYSROOT}"/sys/bus/pci/devices/*; do
+            [[ "$(rf "${d}/class")" == 0x03* ]] || continue
+            [ -L "${d}/iommu_group" ] || continue
+            bdf=${d##*/}; g=$(readlink -f "${d}/iommu_group"); gn=${g##*/}
+            [ -z "$(rf "${g}/type")" ] || [[ " ${types} " == *" $(rf "${g}/type") "* ]] || types+=" $(rf "${g}/type")"
+            others=""
+            for m in "${g}"/devices/*; do
+                mb=${m##*/}
+                [ "${mb%.*}" != "${bdf%.*}" ] || continue        # the GPU's own functions
+                cls=$(rf "${m}/class")
+                [[ "${cls}" != 0x0604* ]] || continue             # PCIe bridges/ports
+                others+="${others:+, }${mb} (class ${cls:-?})"
+            done
+            if [ -n "${others}" ]; then
+                perf_flag warn "${bdf}: IOMMU group ${gn} also holds ${others}" "/sys/bus/pci/devices/${bdf}/iommu_group/devices/" \
+                    "VFIO assigns whole groups, so this GPU can go into a microVM only together with those devices; the group is the smallest unit the hardware isolates. Never use pcie_acs_override: it reports isolation the hardware does not enforce" \
+                    "hardware: a slot behind a root port with ACS (or a BIOS ACS option)" "hardware: move it back"
+            else
+                perf_ok "${bdf}: alone in IOMMU group ${gn} (with its own functions and upstream ports): can be passed to a microVM by itself" \
+                    "/sys/bus/pci/devices/${bdf}/iommu_group/devices/"
+            fi
+        done
+        perf_info "${units} IOMMU unit(s); default domain type:${types:- ?}" "/sys/class/iommu/, /sys/kernel/iommu_groups/*/type"
+    fi
+
+    # CET
+    flags=""; for f in user_shstk ibt; do if cpu_flag "${f}"; then flags+="${flags:+, }${f}"; fi; done
+    cet=$(msr 0 0x6A2)
+    if [ -n "${flags}" ] || [ -n "${cet}" ]; then
+        perf_info "CET flags: ${flags:-none}$([ -n "${cet}" ] && echo "; IA32_S_CET 0x${cet}: kernel IBT $( (( (16#${cet} >> 2) & 1 )) && echo on || echo off)")$(cpu_flag user_shstk && echo "; user shadow stacks are opt-in per process (glibc.cpu.x86_shstk tunable)")" \
+            "/proc/cpuinfo${cet:+, /dev/cpu/0/msr (root)}"
+    fi
+
+    # Split-lock detection
+    if cpu_flag split_lock_detect || cpu_flag bus_lock_detect; then
+        sld=$(rf "${SYSROOT}/proc/cmdline" | awk '{for (i = 1; i <= NF; i++) if (index($i, "split_lock_detect=") == 1) v = substr($i, 19)} END {print v}')
+        mit=$(rd /proc/sys/kernel/split_lock_mitigate)
+        if [ "${sld}" = off ]; then
+            perf_flag warn "split-lock detection is off (split_lock_detect=off on the kernel command line)" "/proc/cmdline" \
+                "each split lock stalls memory traffic system-wide; one tenant's code can slow every other pod. warn (the default) logs and throttles the offender" \
+                "remove split_lock_detect=off from the kernel command line and reboot" "add split_lock_detect=off back and reboot"
+        elif [ "${mit}" = 0 ]; then
+            perf_flag note "split_lock_mitigate=0: split lockers are logged but not slowed" /proc/sys/kernel/split_lock_mitigate \
+                "the kernel docs: 0 exposes the system to denial of service from split lockers; 1 (default) makes them wait and serializes split locks" \
+                "sudo sysctl kernel.split_lock_mitigate=1" "sudo sysctl kernel.split_lock_mitigate=0"
+        else
+            perf_ok "split-lock detection ${sld:-warn (default)}${mit:+, split_lock_mitigate=${mit}}" "/proc/cpuinfo, /proc/cmdline, /proc/sys/kernel/split_lock_mitigate"
+        fi
+    fi
+
+    # TME
+    tme=$(msr 0 0x982)
+    if [ -n "${tme}" ]; then
+        if (( (16#${tme} & 3) == 3 )); then
+            perf_info "TME active (IA32_TME_ACTIVATE 0x${tme}: locked, encryption enabled; mem-encryption=tme-active)" "/dev/cpu/0/msr (root)"
+        elif cpu_flag tme || (( 16#${tme} & 1 )); then
+            perf_info "TME capable but off (IA32_TME_ACTIVATE 0x${tme}: lock=$(( 16#${tme} & 1 )) enable=$(( (16#${tme} >> 1) & 1 )); mem-encryption=tme-capable-off). Enabling is a BIOS setting" "/dev/cpu/0/msr (root)"
+        fi
+    elif cpu_flag tme; then
+        perf_info "tme flag set: TME capable. Whether firmware enabled it needs root (MSR 0x982); kernels before 6.10 keep the flag either way, 6.10 and later clear it when firmware left TME off" "/proc/cpuinfo"
+    fi
+
+    # GPU observation streams
+    for pf in /proc/sys/dev/i915/perf_stream_paranoid /proc/sys/dev/xe/observation_paranoid; do
+        v=$(rd "${pf}"); [ -n "${v}" ] || continue
+        sc=${pf#/proc/sys/}; sc=${sc//\//.}
+        if [ "${v}" = 0 ]; then
+            perf_flag warn "${sc}=0: any user can open system-wide GPU observation (OA) streams" "${pf}" \
+                "the driver gates system-wide OA counters on this sysctl or CAP_PERFMON; with 0 a pod with the render node can watch other tenants' GPU activity" \
+                "sudo sysctl ${sc}=1" "sudo sysctl ${sc}=0"
+        else
+            perf_ok "${sc}=${v}" "${pf}"
+        fi
+    done
+}
+
 perf_docker() {
     command -v docker >/dev/null 2>&1 || return 0
     local drv
@@ -1480,11 +2091,16 @@ perf_docker() {
 doctor_perf() {
     perf_cpu
     perf_cstates
+    perf_thermal
     perf_rapl
     perf_memory
+    perf_dram
+    perf_ksm
     perf_irqbalance
+    perf_pcie
     perf_igpu
     perf_nvidia
+    perf_isolation
     perf_docker
     echo ""
     info "${PERF_SUGGESTIONS} suggestion(s). Read-only: nothing on this host was changed."

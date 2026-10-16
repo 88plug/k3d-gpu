@@ -954,7 +954,7 @@ i915gt() {
 
 # The stubbed nvidia-smi prints STUB_NVSMI (";"-separated CSV rows); the stubbed
 # sudo records that it ran, which the read-only test forbids.
-printf '#!/bin/sh\necho "${STUB_NVSMI:-}" | tr ";" "\\n"\nexit "${STUB_NVSMI_RC:-0}"\n' > "${STUB_BIN}/nvidia-smi"
+printf '#!/bin/sh\n[ "$1" = topo ] && { echo "${STUB_NVSMI_TOPO:-}" | tr ";" "\\n"; exit 0; }\necho "${STUB_NVSMI:-}" | tr ";" "\\n"\nexit "${STUB_NVSMI_RC:-0}"\n' > "${STUB_BIN}/nvidia-smi"
 printf '#!/bin/sh\necho "$*" >> "%s/sudo-called"\n' "${WORK}" > "${STUB_BIN}/sudo"
 chmod +x "${STUB_BIN}/nvidia-smi" "${STUB_BIN}/sudo"
 
@@ -1140,6 +1140,303 @@ ln -s /usr/lib/systemd/system/irqbalance.service "${r}/etc/systemd/system/multi-
 perf_says "perf: irqbalance enabled but stopped reverts with stop only" "${r}" 'revert: sudo systemctl stop irqbalance$'
 perf_says "perf: irqbalance disabled reverts with disable --now" "${bad}" 'revert: sudo systemctl disable --now irqbalance$' "" "${BAD_ENV[@]}"
 perf_says "perf: devicemapper named as removed in Engine 25.0" "${good}" 'devicemapper as removed in Docker Engine 25\.0' "" STUB_DOCKER_DRIVER=devicemapper
+
+# ---- doctor --perf: thermal, RAPL inverse, DRAM, KSM, PCIe, isolation, PPD, iGPU RP1 --
+# Values of the hot host follow the k3d-gpu development host (13th Gen i9-13900T,
+# tests/fixtures/raptorlake-nvidia); the cool host is the same box tuned.
+
+# msrset <root> <address> <16 hex digits>: one MSR, little-endian at its address in
+# <root>/dev/cpu/0/msr, as the msr driver serves it.
+msrset() {
+    local f="$1/dev/cpu/0/msr" le="" i
+    mkdir -p "$(dirname "${f}")"
+    [ -f "${f}" ] || head -c 2442 /dev/zero > "${f}"
+    for ((i = 14; i >= 0; i -= 2)); do le+="\\x${3:i:2}"; done
+    printf '%b' "${le}" | dd of="${f}" bs=1 seek=$(($2)) conv=notrunc status=none
+}
+
+# dimm <root> <entry> <size MiB> <type> <form> <rated MT/s> <configured MT/s> <total width> <data width> <ranks>:
+# one SMBIOS type 17 record (92-byte formatted area, empty string set) at
+# /sys/firmware/dmi/entries/17-<entry>/raw. size 0 = empty slot.
+dimm() {
+    local -a b
+    local i out="" sz=$3
+    for ((i = 0; i < 92; i++)); do b[i]=0; done
+    b[0]=17; b[1]=92
+    b[8]=$(($8 & 255)); b[9]=$(($8 >> 8)); b[10]=$(($9 & 255)); b[11]=$(($9 >> 8))
+    if [ "${sz}" -ge 32767 ]; then
+        b[12]=255; b[13]=127; b[28]=$((sz & 255)); b[29]=$(((sz >> 8) & 255)); b[30]=$(((sz >> 16) & 255))
+    else
+        b[12]=$((sz & 255)); b[13]=$((sz >> 8))
+    fi
+    b[14]=$5; b[18]=$4
+    b[21]=$(($6 & 255)); b[22]=$(($6 >> 8)); b[27]=${10}; b[32]=$(($7 & 255)); b[33]=$(($7 >> 8))
+    for ((i = 0; i < 92; i++)); do out+=$(printf '\\x%02x' "${b[i]}"); done
+    mkdir -p "$1/sys/firmware/dmi/entries/17-$2"
+    printf '%b\0\0' "${out}" > "$1/sys/firmware/dmi/entries/17-$2/raw"
+}
+
+# gpu_behind <root> <port bdf> <port speed> <port width> <gpu bdf> <vendor> <device> <speed> <width> <group>:
+# a GPU under a PCIe port, both in IOMMU group <group>.
+gpu_behind() {
+    local p="$1/sys/devices/pci0000:00/$2" g="$1/sys/devices/pci0000:00/$2/$5" ig="$1/sys/kernel/iommu_groups/${10}"
+    mkdir -p "${p}" "${g}" "$1/sys/bus/pci/devices" "${ig}/devices"
+    echo 0x8086 > "${p}/vendor"; echo 0x060400 > "${p}/class"; echo "$3" > "${p}/max_link_speed"; echo "$4" > "${p}/max_link_width"
+    echo "$6" > "${g}/vendor"; echo "$7" > "${g}/device"; echo 0x030000 > "${g}/class"
+    echo "$8" > "${g}/max_link_speed"; echo "$9" > "${g}/max_link_width"
+    ln -sfn "${p}" "$1/sys/bus/pci/devices/$2"; ln -sfn "${g}" "$1/sys/bus/pci/devices/$5"
+    ln -sfn "${ig}" "${p}/iommu_group"; ln -sfn "${ig}" "${g}/iommu_group"
+    ln -sfn "${p}" "${ig}/devices/$2"; ln -sfn "${g}" "${ig}/devices/$5"
+    echo identity > "${ig}/type"
+}
+
+# g10_common <root>: what the hot and the cool host share.
+g10_common() {
+    local c
+    kernel "$1" 6.6.128-1-MANJARO
+    printf 'processor\t: 0\ncpu family\t: 6\nmodel\t\t: 183\nmodel name\t: 13th Gen Intel(R) Core(TM) i9-13900T\nflags\t\t: fpu vmx ept split_lock_detect user_shstk avx_vnni tme ibt\n' > "$1/proc/cpuinfo"
+    put "$1" /proc/uptime "2084121.99 61526561.14"
+    put "$1" /sys/class/hwmon/hwmon4/name coretemp
+    put "$1" /sys/class/hwmon/hwmon4/temp1_label "Package id 0"
+    put "$1" /sys/class/hwmon/hwmon4/temp1_crit 100000
+    put "$1" /sys/class/hwmon/hwmon4/temp1_input 96000
+    pci "$1" 0000:00:04.0 0x8086 0xa71d proc_thermal_pci 0x118000
+    put "$1" /sys/devices/pci0000:00/0000:00:04.0/tcc_offset_degree_celsius 5
+    pci "$1" 0000:00:00.0 0x8086 0xa700 "" 0x060000
+    put "$1" /proc/mounts "/dev/nvme1n1p2 / ext4 rw,noatime 0 0"
+    touch "$1/dev/kvm"
+    for c in nested:Y enable_apicv:Y ept:Y; do put "$1" "/sys/module/kvm_intel/parameters/${c%%:*}" "${c#*:}"; done
+    mkdir -p "$1/sys/class/iommu/dmar0"
+    put "$1" /proc/sys/kernel/split_lock_mitigate 1
+    for c in 0 1 2 3; do dimm "$1" "${c}" 32768 34 13 4800 3600 80 64 2; done
+}
+
+# Hot host: throttling, PL1 3.3x TDP, ECC unmonitored, x4-capped GPU with a small
+# BAR sharing its IOMMU group, KSM on, paranoid 0, split-lock detection off, PPD.
+hot=$(newroot perf-hot)
+g10_common "${hot}"
+TT=/sys/devices/system/cpu/cpu0/thermal_throttle
+put "${hot}" "${TT}/package_throttle_count" 22048145
+put "${hot}" "${TT}/package_throttle_total_time_ms" 101468880
+put "${hot}" "${TT}/package_throttle_max_time_ms" 224
+put "${hot}" "${TT}/core_throttle_count" 645409
+put "${hot}" /sys/devices/system/cpu/cpu8/thermal_throttle/core_throttle_count 8495804
+rapl "${hot}" intel-rapl:0 1 117000000 35000000 117000000
+msrset "${hot}" 0x19C 0000000088143a88
+msrset "${hot}" 0x1B1 00000000880b0a88
+msrset "${hot}" 0x64F 0000000019030100
+msrset "${hot}" 0x6A2 0000000000000004
+msrset "${hot}" 0x982 0000000000000001
+put "${hot}" /sys/kernel/mm/transparent_hugepage/enabled "[always] madvise never"
+put "${hot}" /sys/kernel/mm/ksm/run 1
+put "${hot}" /sys/kernel/mm/ksm/pages_sharing 4096
+gpu_behind "${hot}" 0000:00:06.0 "16.0 GT/s PCIe" 4 0000:02:00.0 0x10de 0x28b0 "16.0 GT/s PCIe" 8 4
+G2=/sys/devices/pci0000:00/0000:00:06.0/0000:02:00.0
+printf '0x0000000093000000 0x0000000093ffffff 0x0000000000040200\n0x0000006c00000000 0x0000006c0fffffff 0x000000000014220c\n' > "${hot}${G2}/resource"
+put "${hot}" "${G2}/resource1_resize" 0000000000007fc0
+pci "${hot}" 0000:03:00.0 0x144d 0xa80a nvme 0x010802
+ln -sfn "${hot}/sys/devices/pci0000:00/0000:03:00.0" "${hot}/sys/kernel/iommu_groups/4/devices/0000:03:00.0"
+gpu_behind "${hot}" 0000:00:01.0 "32.0 GT/s PCIe" 16 0000:01:00.0 0x10de 0x27b0 "16.0 GT/s PCIe" 16 2
+put "${hot}" /proc/sys/dev/i915/perf_stream_paranoid 0
+put "${hot}" /proc/cmdline "BOOT_IMAGE=/vmlinuz split_lock_detect=off quiet"
+put "${hot}" /sys/devices/system/cpu/intel_pstate/status active
+cpufreq "${hot}" 0-1 powersave performance 5100000 5100000
+put "${hot}" /proc/19859/comm power-profiles-
+pci "${hot}" 0000:00:02.0 0x8086 0xa780 i915 0x038000
+i915gt "${hot}" 0000:00:02.0 card0 1650 300 1650 1650 300 1650 slpc
+put "${hot}" /sys/class/drm/card0/gt/gt0/rps_RP1_freq_mhz 700
+printf '\tSLPC state: running\n\twaitboosts: 1234\n' > "${hot}/guc_slpc_info"
+mkdir -p "${hot}/sys/kernel/debug/dri/0/gt0/uc"; mv "${hot}/guc_slpc_info" "${hot}/sys/kernel/debug/dri/0/gt0/uc/"
+HOT_ENV=("STUB_NVSMI_TOPO= 	GPU0	GPU1;GPU0	X	NS;GPU1	NS	X")
+
+PC=/sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw
+perf_says "perf: throttle share of uptime warns" "${hot}" 'warn: package thermally throttled 4% of uptime: 22048145 events, 101468880 ms in total, longest 224 ms; core events peak at 8495804 on cpu8' "" "${HOT_ENV[@]}"
+perf_says "perf: TCC activation from TjMax and offset" "${hot}" 'info: TCC activation 95 C \(TjMax 100 C - TCC offset 5 C\); package now 96 C' "" "${HOT_ENV[@]}"
+perf_says "perf: 0x1B1 decoded, logged bits named" "${hot}" 'MSR 0x1B1 IA32_PACKAGE_THERM_STATUS 0x00000000880b0a88: now none; logged PROCHOT, threshold #1, threshold #2, power limit; 11 C below TjMax' "" "${HOT_ENV[@]}"
+perf_says "perf: 0x19C decoded with current limit" "${hot}" 'MSR 0x19C IA32_THERM_STATUS \(CPU 0\) 0x0000000088143a88: now current limit; logged PROCHOT, threshold #1, threshold #2, power limit, current limit; 20 C below TjMax' "" "${HOT_ENV[@]}"
+perf_says "perf: 0x64F decoded per SDM table 2-39" "${hot}" 'MSR 0x64F MSR_CORE_PERF_LIMIT_REASONS 0x0000000019030100: now other \(electrical\); logged PROCHOT, thermal, other \(electrical\), PL2, max turbo limit$' "" "${HOT_ENV[@]}"
+perf_says "perf: sticky log bits are only read" "${hot}" 'the log bits are sticky' "" "${HOT_ENV[@]}"
+perf_says "perf: PL1 far above TDP while throttling warns" "${hot}" 'warn: intel-rapl:0 package-0: PL1 117 W is 3\.3x the 35 W thermal spec power while the package is thermally throttled 4% of uptime' "" "${HOT_ENV[@]}"
+perf_says "perf: PL1 inverse apply is 2x TDP" "${hot}" "apply:  echo 70000000 \| sudo tee ${PC}" "" "${HOT_ENV[@]}"
+perf_says "perf: PL1 inverse revert restores 117 W" "${hot}" "revert: echo 117000000 \| sudo tee ${PC}" "" "${HOT_ENV[@]}"
+perf_says "perf: DRAM population decoded from SMBIOS" "${hot}" 'info: 4x DDR5 SODIMM 32 GiB 2R, ECC \(80/64-bit\): rated 4800 MT/s, configured 3600 MT/s; 4 of 4 slots populated' "" "${HOT_ENV[@]}"
+perf_says "perf: SODIMM 2DPC on the S line is off-POR (note 9)" "${hot}" 'not a supported configuration on the 13th Gen Core S line \(743844 table 25 note 9\); the nearest POR row, UDIMM 2DPC, 2 DIMMs 2R, is 3600 MT/s' "" "${HOT_ENV[@]}"
+perf_says "perf: configured speed at POR is ok" "${hot}" 'ok: +configured 3600 MT/s is at the 3600 MT/s POR for 2DPC, 2 DIMMs 2R' "" "${HOT_ENV[@]}"
+perf_says "perf: 1DPC alternative capped by the rated speed" "${hot}" 'would run at 4800 MT/s \(the lower of rated 4800 and the 1DPC 2R POR\): 76\.8 GB/s peak' "" "${HOT_ENV[@]}"
+perf_says "perf: peak DRAM bandwidth computed" "${hot}" 'info: peak DRAM bandwidth 57\.6 GB/s = 2 channels x 3600 MT/s x 8 B' "" "${HOT_ENV[@]}"
+perf_says "perf: ECC without EDAC is unmonitored" "${hot}" 'note: ECC modules, but no EDAC memory controller is registered.*dram\.ecc=unmonitored' "" "${HOT_ENV[@]}"
+perf_says "perf: EDAC apply names ie31200_edac from 6.16" "${hot}" 'apply:  boot Linux 6\.16 or newer \(ie31200_edac binds host bridge 8086:a700 from 6\.16\), then: sudo modprobe ie31200_edac' "" "${HOT_ENV[@]}"
+# ie31200_edac binds 8086:a703/4640/4630 from 6.15, 8086:a700/4660 from 6.16.
+r=$(newroot perf-edac-a703)
+g10_common "${r}"
+pci "${r}" 0000:00:00.0 0x8086 0xa703 "" 0x060000
+perf_says "perf: EDAC for 8086:a703 needs 6.15" "${r}" 'apply:  boot Linux 6\.15 or newer \(ie31200_edac binds host bridge 8086:a703 from 6\.15\), then: sudo modprobe ie31200_edac'
+kernel "${r}" 6.15.2
+perf_says "perf: EDAC for 8086:a703 on 6.15 loads directly" "${r}" 'apply:  sudo modprobe ie31200_edac$'
+r=$(newroot perf-edac-4660)
+g10_common "${r}"
+pci "${r}" 0000:00:00.0 0x8086 0x4660 "" 0x060000
+perf_says "perf: EDAC for 8086:4660 needs 6.16" "${r}" 'apply:  boot Linux 6\.16 or newer \(ie31200_edac binds host bridge 8086:4660 from 6\.16\)'
+perf_says "perf: ext4 on 6.6 maps weights with 4 KiB pages" "${hot}" 'note: root filesystem is ext4 on Linux 6\.6\.128-1-MANJARO: model files mmapped from it are mapped with 4 KiB pages' "" "${HOT_ENV[@]}"
+perf_says "perf: huge tmpfs apply and revert" "${hot}" 'revert: sudo umount /mnt/k3d-gpu-models' "" "${HOT_ENV[@]}"
+perf_says "perf: huge tmpfs sized from --model-gb" "${hot}" 'huge=within_size,size=31G' "" "${HOT_ENV[@]}" K3D_GPU_MODEL_GB=30
+perf_says "perf: KSM running noted with unmerge apply" "${hot}" 'apply:  echo 2 \| sudo tee /sys/kernel/mm/ksm/run' "" "${HOT_ENV[@]}"
+perf_says "perf: GPU behind an x4 port warns" "${hot}" 'warn: 0000:02:00\.0 \[10de:28b0\]: device Gen4 x8, upstream port 0000:00:06\.0 Gen4 x4: the link trains at most Gen4 x4' "" "${HOT_ENV[@]}"
+perf_says "perf: GPU at its own maximum is ok" "${hot}" 'ok: +0000:01:00\.0 \[10de:27b0\]: Gen4 x16 behind port 0000:00:01\.0 \(Gen5 x16\)' "" "${HOT_ENV[@]}"
+perf_says "perf: small BAR with ReBAR capability warns" "${hot}" 'warn: 0000:02:00\.0 \[10de:28b0\]: BAR1 is 256 MiB; the device can map up to 16 GiB' "" "${HOT_ENV[@]}"
+perf_says "perf: P2P NS reported from nvidia-smi topo" "${hot}" 'info: GPU peer-to-peer reads: GPU0-GPU1 NS' "" "${HOT_ENV[@]}"
+perf_says "perf: shared IOMMU group warns, bridges ignored" "${hot}" 'warn: 0000:02:00\.0: IOMMU group 4 also holds 0000:03:00\.0 \(class 0x010802\)$' "" "${HOT_ENV[@]}"
+perf_says "perf: GPU alone in its group is ok" "${hot}" 'ok: +0000:01:00\.0: alone in IOMMU group 2' "" "${HOT_ENV[@]}"
+perf_says "perf: KVM reported with kvm_intel params" "${hot}" 'info: /dev/kvm present; kvm_intel nested=Y enable_apicv=Y ept=Y' "" "${HOT_ENV[@]}"
+perf_says "perf: kernel IBT from IA32_S_CET" "${hot}" 'IA32_S_CET 0x0000000000000004: kernel IBT on' "" "${HOT_ENV[@]}"
+perf_says "perf: split_lock_detect=off warns" "${hot}" 'warn: split-lock detection is off' "" "${HOT_ENV[@]}"
+perf_says "perf: TME capable but locked off" "${hot}" 'TME capable but off \(IA32_TME_ACTIVATE 0x0000000000000001: lock=1 enable=0; mem-encryption=tme-capable-off\)' "" "${HOT_ENV[@]}"
+perf_says "perf: perf_stream_paranoid=0 warns with revert" "${hot}" 'revert: sudo sysctl dev\.i915\.perf_stream_paranoid=0' "" "${HOT_ENV[@]}"
+perf_says "perf: power-profiles-daemon override noted" "${hot}" 'note: power-profiles-daemon is running: it sets the governor and EPP itself' "" "${HOT_ENV[@]}"
+perf_says "perf: PPD revert restarts the daemon" "${hot}" 'revert: sudo systemctl start power-profiles-daemon' "" "${HOT_ENV[@]}"
+perf_says "perf: i915 RP1 in the frequency line" "${hot}" 'RPn 300, RP1 700, RP0 1650' "" "${HOT_ENV[@]}"
+perf_says "perf: SLPC floor at RP1 when eff freq not ignored" "${hot}" 'GuC SLPC keeps the efficient frequency RP1 700 MHz as its floor while busy' "" "${HOT_ENV[@]}"
+perf_says "perf: SLPC waitboost count from debugfs" "${hot}" 'info: card0 gt0: 1234 waitboosts since boot' "" "${HOT_ENV[@]}"
+
+# Cool host: same box with every G10 check where it should be.
+cool=$(newroot perf-cool)
+g10_common "${cool}"
+put "${cool}" "${TT}/package_throttle_count" 0
+put "${cool}" "${TT}/package_throttle_total_time_ms" 0
+rapl "${cool}" intel-rapl:0 1 117000000 35000000 117000000
+put "${cool}" /sys/kernel/mm/ksm/run 0
+mkdir -p "${cool}/sys/devices/system/edac/mc/mc0"
+put "${cool}" /sys/devices/system/edac/mc/mc0/mc_name "Raptor Lake-S"
+put "${cool}" /sys/devices/system/edac/mc/mc0/ce_count 0
+put "${cool}" /sys/devices/system/edac/mc/mc0/ue_count 0
+put "${cool}" /proc/mounts "/dev/nvme1n1p2 / xfs rw,noatime 0 0"
+gpu_behind "${cool}" 0000:00:01.0 "32.0 GT/s PCIe" 16 0000:01:00.0 0x10de 0x27b0 "16.0 GT/s PCIe" 16 2
+G1=/sys/devices/pci0000:00/0000:00:01.0/0000:01:00.0
+printf '0x0000000095000000 0x0000000095ffffff 0x0000000000040200\n0x0000006000000000 0x00000067ffffffff 0x000000000014220c\n' > "${cool}${G1}/resource"
+put "${cool}" "${G1}/resource1_resize" 000000000000ffc0
+put "${cool}" /proc/sys/dev/i915/perf_stream_paranoid 1
+perf_says "perf: cool G10 host has no suggestions" "${cool}" '^==> 0 suggestion\(s\)\. Read-only'
+perf_says "perf: no throttle events is ok" "${cool}" 'ok: +no package throttle events since boot'
+perf_says "perf: high PL1 without throttling is ok" "${cool}" 'ok: +intel-rapl:0 package-0: long_term 117 W'
+perf_says "perf: ECC with EDAC is active" "${cool}" 'ok: +ECC modules with EDAC reporting \(dram\.ecc=active\): mc0 Raptor Lake-S ce 0 ue 0'
+perf_says "perf: full BAR is ok" "${cool}" 'ok: +0000:01:00\.0 \[10de:27b0\]: BAR1 32 GiB, the largest size it supports'
+perf_says "perf: KSM off is ok" "${cool}" 'ok: +KSM off \(run=0\)'
+perf_says "perf: split-lock default warn is ok" "${cool}" 'ok: +split-lock detection warn \(default\), split_lock_mitigate=1'
+perf_says "perf: MSRs skipped without root" "${cool}" 'info: MSR decode \(0x19C, 0x1B1, 0x64F\) skipped: /dev/cpu/0/msr needs root'
+perf_says "perf: TME state needs root without the MSR" "${cool}" 'tme flag set: TME capable\. Whether firmware enabled it needs root'
+perf_says "perf: xfs root gets no 4 KiB note" "${cool}" 'mapped with 4 KiB pages' negate
+perf_says "perf: missing /proc/cmdline prints no shell error" "${cool}" 'No such file|line [0-9]+:' negate
+
+# A card with its own PCIe switch (Arc A/B dGPUs: root port -> card upstream port
+# -> downstream port -> GPU): the slot link is the upstream port's, two hops above
+# the GPU. Link values below are synthetic.
+# hop <root> <path under pci0000:00> <class> <speed> <width> [vendor device]
+hop() {
+    local d="$1/sys/devices/pci0000:00/$2"
+    mkdir -p "${d}" "$1/sys/bus/pci/devices"
+    echo "${6:-0x8086}" > "${d}/vendor"; echo "${7:-0x0000}" > "${d}/device"; echo "$3" > "${d}/class"
+    echo "$4" > "${d}/max_link_speed"; echo "$5" > "${d}/max_link_width"
+    ln -sfn "${d}" "$1/sys/bus/pci/devices/${2##*/}"
+}
+arc_card() {
+    kernel "$1" 6.6.0
+    hop "$1" 0000:00:01.0 0x060400 "16.0 GT/s PCIe" "$2"
+    hop "$1" 0000:00:01.0/0000:01:00.0 0x060400 "16.0 GT/s PCIe" 8
+    hop "$1" 0000:00:01.0/0000:01:00.0/0000:02:01.0 0x060400 "2.5 GT/s PCIe" 1
+    hop "$1" 0000:00:01.0/0000:01:00.0/0000:02:01.0/0000:03:00.0 0x030000 "2.5 GT/s PCIe" 1 0x8086 0xe20b
+}
+r=$(newroot perf-arc-x4)
+arc_card "${r}" 4
+perf_says "perf: card switch in an x4 slot warns at the slot link" "${r}" 'warn: 0000:03:00\.0 \[8086:e20b\]: 0000:01:00\.0 Gen4 x8 on its path to the root port sits behind port 0000:00:01\.0 Gen4 x4: the GPU.s traffic crosses a link of at most Gen4 x4'
+perf_says "perf: card switch in an x4 slot gets no ok link line" "${r}" 'ok: +0000:03:00\.0 \[8086:e20b\]: Gen' negate
+r=$(newroot perf-arc-x16)
+arc_card "${r}" 16
+perf_says "perf: card switch in an x16 slot is ok up to the root port" "${r}" 'ok: +0000:03:00\.0 \[8086:e20b\]: Gen1 x1 behind port 0000:02:01\.0 \(Gen1 x1\): the link can reach the device maximum; no narrower link up to root port 0000:00:01\.0'
+perf_says "perf: card switch in an x16 slot does not warn" "${r}" 'warn: 0000:03:00\.0' negate
+# Two narrowing hops: the one nearest the GPU is reported.
+r=$(newroot perf-two-hops)
+kernel "${r}" 6.6.0
+hop "${r}" 0000:00:01.0 0x060400 "16.0 GT/s PCIe" 4
+hop "${r}" 0000:00:01.0/0000:01:00.0 0x060400 "16.0 GT/s PCIe" 8
+hop "${r}" 0000:00:01.0/0000:01:00.0/0000:02:01.0 0x060400 "8.0 GT/s PCIe" 16
+hop "${r}" 0000:00:01.0/0000:01:00.0/0000:02:01.0/0000:03:00.0 0x030000 "16.0 GT/s PCIe" 16 0x8086 0xe20b
+perf_says "perf: two narrow hops report the one nearest the GPU" "${r}" 'warn: 0000:03:00\.0 \[8086:e20b\]: device Gen4 x16, upstream port 0000:02:01\.0 Gen3 x16: the link trains at most Gen3 x16'
+
+# IA32_TME_ACTIVATE: active only when locked (bit 0) and enabled (bit 1), as the
+# kernel's detect_tme_early() reads it.
+r=$(newroot perf-tme-on)
+g10_common "${r}"
+msrset "${r}" 0x982 0000000000000003
+perf_says "perf: TME locked and enabled is active" "${r}" 'info: TME active \(IA32_TME_ACTIVATE 0x0000000000000003: locked, encryption enabled'
+r=$(newroot perf-tme-unlocked)
+g10_common "${r}"
+msrset "${r}" 0x982 0000000000000002
+perf_says "perf: TME enabled but unlocked is not active" "${r}" 'TME capable but off \(IA32_TME_ACTIVATE 0x0000000000000002: lock=0 enable=1;'
+perf_says "perf: TME enabled but unlocked is not reported active" "${r}" 'TME active' negate
+
+# Uncorrected errors warn; root-only SMBIOS records; a 13th Gen HX below POR; an
+# unknown platform falls back to data width.
+r=$(newroot perf-ue)
+g10_common "${r}"
+mkdir -p "${r}/sys/devices/system/edac/mc/mc0"
+put "${r}" /sys/devices/system/edac/mc/mc0/ue_count 3
+perf_says "perf: uncorrected memory errors warn" "${r}" 'warn: mc0: 3 uncorrected memory errors since boot'
+r=$(newroot perf-dmi-user)
+kernel "${r}" 6.6.0
+mkdir -p "${r}/sys/firmware/dmi/entries/17-0" "${r}/sys/firmware/dmi/entries/17-1"
+perf_says "perf: SMBIOS records need root" "${r}" 'info: SMBIOS memory records are root-only'
+r=$(newroot perf-hx-slow)
+kernel "${r}" 6.6.0
+printf 'cpu family\t: 6\nmodel\t\t: 183\nmodel name\t: 13th Gen Intel(R) Core(TM) i9-13980HX\n' > "${r}/proc/cpuinfo"
+dimm "${r}" 0 16384 34 13 5600 4800 64 64 1
+dimm "${r}" 1 16384 34 13 5600 4800 64 64 1
+perf_says "perf: configured below POR warns" "${r}" 'warn: configured 4800 MT/s is below the 5600 MT/s POR for 1DPC 1R \(modules rated 5600\)'
+perf_says "perf: below-POR apply names the POR speed" "${r}" 'apply:  BIOS: set the memory frequency to 5600 MT/s'
+perf_says "perf: below-POR says the POR is the top SKU's (note 17)" "${r}" 'why: .*POR is the top SKU.s speed \(743844 table 25 note 17\); a lower SKU can be specified lower: check ark\.intel\.com for 13th Gen Intel\(R\) Core\(TM\) i9-13980HX'
+perf_says "perf: non-ECC modules reported" "${r}" 'info: non-ECC modules'
+# Model 0xBF is the 8+8 (C0) and 6+0 (H0) die: 743844 table 25 note 16 puts it at
+# 12th Gen DDR5 speeds, so the 13th/14th Gen POR rows do not apply.
+r=$(newroot perf-rpl-bf)
+kernel "${r}" 6.6.0
+printf 'cpu family\t: 6\nmodel\t\t: 191\nmodel name\t: 13th Gen Intel(R) Core(TM) i5-13400\n' > "${r}/proc/cpuinfo"
+dimm "${r}" 0 16384 34 9 5600 4800 64 64 1
+dimm "${r}" 1 16384 34 9 5600 4800 64 64 1
+perf_says "perf: model 0xBF gets no 13th Gen POR warning (note 16)" "${r}" 'below the|POR for' negate
+perf_says "perf: model 0xBF falls back to the data-width peak" "${r}" 'info: peak DRAM bandwidth 76\.8 GB/s = 4800 MT/s x 16 B of data width'
+r=$(newroot perf-dmi-nospeed)
+kernel "${r}" 6.6.0
+printf 'cpu family\t: 6\nmodel\t\t: 183\nmodel name\t: 13th Gen Intel(R) Core(TM) i9-13900T\n' > "${r}/proc/cpuinfo"
+dimm "${r}" 0 16384 34 9 0 0 65535 65535 1
+perf_says "perf: unreported speed is not compared with POR" "${r}" 'info: configured speed not reported by firmware'
+perf_says "perf: unreported speed gives no POR warning or peak" "${r}" 'below the|peak DRAM bandwidth|ECC \(|non-ECC' negate
+perf_says "perf: unreported widths leave ECC unknown" "${r}" 'info: module widths not reported by firmware: ECC state unknown'
+r=$(newroot perf-4r)
+kernel "${r}" 6.6.0
+printf 'cpu family\t: 6\nmodel\t\t: 183\nmodel name\t: 13th Gen Intel(R) Core(TM) i9-13900T\n' > "${r}/proc/cpuinfo"
+for c in 0 1 2 3; do dimm "${r}" "${c}" 32768 34 13 4800 3600 64 64 4; done
+perf_says "perf: a rank with no POR row prints no empty row" "${r}" 'UDIMM ,|is  MT/s|POR for  ' negate
+perf_says "perf: a rank with no POR row still gets the peak" "${r}" 'info: peak DRAM bandwidth 57\.6 GB/s'
+r=$(newroot perf-xeon-mem)
+kernel "${r}" 6.6.0
+printf 'cpu family\t: 6\nmodel\t\t: 143\nmodel name\t: Intel(R) Xeon(R) Platinum 8480+\n' > "${r}/proc/cpuinfo"
+for c in 0 1 2 3 4 5 6 7; do dimm "${r}" "${c}" 65536 34 9 4800 4800 80 64 2; done
+perf_says "perf: unknown platform peak assumes 1 DIMM per channel" "${r}" 'info: peak DRAM bandwidth 307\.2 GB/s = 4800 MT/s x 64 B of data width \(computed, assuming one module per channel'
+
+# Real procfs files report size 0: the isolation checks still run on them.
+r=$(newroot perf-procfs)
+mkdir -p "${r}/proc"; ln -s /proc/cpuinfo "${r}/proc/cpuinfo"
+perf_says "perf: isolation runs on a size-0 procfs cpuinfo" "${r}" '^==> Isolation for sandboxed agents'
+
+# Hot host stays read-only too: MSR file, SMBIOS records and sysfs unchanged, no sudo.
+before=$(cd "${hot}" && find . -type f -exec md5sum {} + | sort)
+rm -f "${WORK}/sudo-called"
+env K3D_GPU_SYSROOT="${hot}" PATH="${STUB_BIN}:${PATH}" "${HOT_ENV[@]}" bash "${K3D_GPU}" doctor --perf >/dev/null 2>&1
+after=$(cd "${hot}" && find . -type f -exec md5sum {} + | sort)
+if [ "${before}" = "${after}" ] && [ ! -e "${WORK}/sudo-called" ]; then
+    PASS=$((PASS + 1)); echo "ok   perf: G10 checks are read-only (tree unchanged, sudo never run)"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL perf: G10 checks are read-only (tree changed or sudo ran)"
+fi
 
 # Read-only: the run leaves the fake tree byte-identical and never calls sudo.
 before=$(cd "${bad}" && find . -type f -exec md5sum {} + | sort)

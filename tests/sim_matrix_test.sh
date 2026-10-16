@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Hardware simulation matrix. Each tests/fixtures/<platform>/sysroot is a fake
 # /sys, /dev, /proc and firmware tree in the layout tests/fixtures/capture.sh
-# writes. Per platform this runs `k3d-gpu detect`, `doctor` and `up` against it,
-# with docker, k3d and kubectl stubbed and PATH limited to a fixed tool set, and
-# compares each transcript (output, exit code, every k3d create argument and
-# kubectl call) with the platform's *.golden files.
+# writes. Per platform this runs `k3d-gpu detect`, `doctor`, `doctor --perf` and
+# `up` against it, with docker, k3d and kubectl stubbed and PATH limited to a
+# fixed tool set, and compares each transcript (output, exit code, every k3d
+# create argument and kubectl call) with the platform's *.golden files.
 #
 # Usage: tests/sim_matrix_test.sh [platform...]       run all or the named platforms
 #        tests/sim_matrix_test.sh --update [platform...]  rewrite the golden files
@@ -16,7 +16,7 @@
 #   allocatable   "<resource> <count>" lines the stubbed cluster reports per node
 #   env           optional KEY=VALUE lines passed to k3d-gpu; HOST_TOOLS=<names>
 #                 puts stub commands of those names on PATH (e.g. nvidia-ctk)
-#   detect.golden doctor.golden up.golden   expected transcripts
+#   detect.golden doctor.golden doctor-perf.golden up.golden   expected transcripts
 
 set -uo pipefail
 
@@ -48,7 +48,7 @@ PASS=0 FAILS=0
 # binaries (nvidia-ctk, a real kubectl) cannot change the result.
 BASE_BIN="${WORK}/bin"
 mkdir -p "${BASE_BIN}"
-for tool in bash cat readlink basename dirname grep tr sort paste seq uname sed awk wc head sleep; do
+for tool in bash cat readlink basename dirname grep tr sort paste seq uname sed awk wc head sleep dd od; do
     ln -s "$(command -v "${tool}")" "${BASE_BIN}/${tool}"
 done
 
@@ -83,10 +83,13 @@ exit 0
 EOF
 chmod +x "${BASE_BIN}/k3d" "${BASE_BIN}/kubectl" "${BASE_BIN}/docker"
 
-# transcript <platform> <command>: run k3d-gpu <command> against the fixture and
-# print output, exit code and (for up) the stub call log, with paths normalised.
+# transcript <platform> <command>: run k3d-gpu <command> (split on spaces) against
+# the fixture and print output, exit code and (for up) the stub call log, with
+# paths normalised.
 transcript() {
-    local name=$1 cmd=$2 fx="${FIXTURES}/$1" run="${WORK}/$1" bin rc out tool
+    local name=$1 fx="${FIXTURES}/$1" run="${WORK}/$1" bin rc out tool
+    local -a argv
+    read -r -a argv <<< "$2"
     local -a extra=()
     bin="${run}/bin"
     rm -rf "${run}"
@@ -108,7 +111,7 @@ transcript() {
     out=$(cd "${run}" && env -i HOME="${run}/home" PATH="${bin}" \
         K3D_GPU_SYSROOT="${fx}/sysroot" K3D_GPU_SHARE="${REPO}/share" \
         STUB_LOG="${run}/calls" STUB_ALLOCATABLE="${fx}/allocatable" \
-        ${extra[@]+"${extra[@]}"} "${bin}/bash" "${K3D_GPU}" "${cmd}" 2>&1)
+        ${extra[@]+"${extra[@]}"} "${bin}/bash" "${K3D_GPU}" "${argv[@]}" 2>&1)
     rc=$?
     {
         printf '%s\n' "${out}"
@@ -121,11 +124,18 @@ transcript() {
 }
 
 check() {
-    local name=$1 cmd=$2 golden="${FIXTURES}/$1/$2.golden" got
+    local name=$1 cmd=$2 golden="${FIXTURES}/$1/${2// --/-}.golden" got
     got=$(transcript "${name}" "${cmd}")
     if [ "${UPDATE}" -eq 1 ]; then
         printf '%s\n' "${got}" > "${golden}"
         echo "wrote ${golden#"${REPO}"/}"
+        return
+    fi
+    # A shell error (a tool missing from the fixed PATH, a bad redirect) is a bug,
+    # even when a golden recorded it.
+    if grep -E '^<repo>/scripts/k3d-gpu: line [0-9]+: ' <<< "${got}" > "${WORK}/diff"; then
+        FAILS=$((FAILS + 1)); echo "FAIL ${name}: ${cmd} printed a shell error"
+        sed 's/^/  | /' "${WORK}/diff"
         return
     fi
     if [ -f "${golden}" ] && diff -u "${golden}" <(printf '%s\n' "${got}") > "${WORK}/diff"; then
@@ -157,7 +167,7 @@ for p in "${SELECTED[@]}"; do
     for f in SOURCES allocatable; do
         [ -f "${FIXTURES}/${p}/${f}" ] || { FAILS=$((FAILS + 1)); echo "FAIL ${p}: missing ${f}"; }
     done
-    for c in detect doctor up; do check "${p}" "${c}"; done
+    for c in detect doctor 'doctor --perf' up; do check "${p}" "${c}"; done
     [ "${UPDATE}" -eq 1 ] || check_capture "${p}"
 done
 
