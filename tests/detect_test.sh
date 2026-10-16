@@ -474,6 +474,25 @@ else
     FAILS=$((FAILS + 1)); echo "FAIL relative doc links resolve; dead:${dead}"
 fi
 
+# vendor_total counts AMX/hybrid as distinct labelled nodes, not one per label:
+# label L1 is on nodes a and b, L2 on b, L3 on none, so the answer is 2.
+VT_FN=$(sed -n '/^vendor_total() {/,/^}/p' "${K3D_GPU}")
+vt() {
+    bash -euo pipefail -c "${VT_FN}"'
+        vendor_resources() { printf "L1\nL2\nL3\n"; }
+        kubectl() { [ "${STUB_NONE:-}" ] && return 1; case "$4" in L1) printf "node/a\nnode/b\n" ;; L2) echo node/b ;; esac; }
+        vendor_total "$1"' _ "$1"
+}
+for case in "amx 2" "hybrid 2" "amx 0 none"; do
+    read -r v want none <<< "${case}"
+    got=$(STUB_NONE="${none:-}" vt "${v}" 2>&1)
+    if [ "${got}" = "${want}" ]; then
+        PASS=$((PASS + 1)); echo "ok   vendor_total ${case} counts distinct nodes"
+    else
+        FAILS=$((FAILS + 1)); echo "FAIL vendor_total ${case}: got '${got}', want '${want}'"
+    fi
+done
+
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

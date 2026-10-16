@@ -3,7 +3,7 @@
 ==> Waiting for nodes Ready...
 ==> gaudi device plugin auto-deployed by k3s.
 ==> Verifying accelerators are schedulable...
-==> Accelerators schedulable: gaudi=8 amx=3. Try: k3d-gpu test
+==> Accelerators schedulable: gaudi=8 amx=1. Try: k3d-gpu test
 exit=0
 --- calls
 k3d cluster create gpu

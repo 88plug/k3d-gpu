@@ -745,17 +745,21 @@ resource_counts() {
 resource_total() { resource_counts "$1" | awk '{s += $2} END {print s + 0}'; }
 
 # Schedulable units for a vendor: summed resources, or for AMX and hybrid the
-# number of nodes carrying their labels.
+# number of distinct nodes carrying any of their labels (a node with
+# AMXBF16, AMXINT8 and AMXTILE counts once).
 vendor_total() {
-    local res total=0
+    local res total=0 nodes=""
     while read -r res; do
         [ -n "${res}" ] || continue
         if [ "$1" = "amx" ] || [ "$1" = "hybrid" ]; then
-            total=$((total + $({ kubectl get nodes -l "${res}" -o name 2>/dev/null || true; } | wc -l)))
+            nodes+=$({ kubectl get nodes -l "${res}" -o name 2>/dev/null || true; })$'\n'
         else
             total=$((total + $(resource_total "${res}")))
         fi
     done < <(vendor_resources "$1")
+    if [ "$1" = "amx" ] || [ "$1" = "hybrid" ]; then
+        total=$(printf '%s' "${nodes}" | awk 'NF && !seen[$0]++ { n++ } END { print n + 0 }')
+    fi
     echo "${total}"
 }
 
