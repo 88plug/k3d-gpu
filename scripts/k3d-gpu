@@ -13,6 +13,10 @@
 #   iaa     Intel IAA work queues (Xeon, Panther Lake)    -> iaa.intel.com/wq-user-*
 #   qat     Intel QAT virtual functions (Xeon)            -> qat.intel.com/<services>
 #   amx     Intel AMX (Xeon CPU instructions)             -> node labels feature.node.kubernetes.io/cpu-cpuid.AMX*
+#   hybrid  Intel hybrid CPUs (P-cores + E-cores, Alder Lake and newer)
+#                                                         -> node label k3d-gpu.io/hybrid-cpu=true; pods
+#           labelled k3d-gpu.io/cores=performance|efficient are pinned to P- or E-cores by
+#           the NRI balloons policy (nri-plugins), everything else keeps every CPU
 #           DSA/IAA/QAT need host setup first (work queues / SR-IOV VFs); doctor says what is missing.
 #
 # Subcommands:
@@ -35,6 +39,7 @@ NPU_PLUGIN_MANIFEST="${K3D_GPU_NPU_PLUGIN:-${SHARE_DIR}/intel-npu-plugin.yml}"
 DSA_PLUGIN_MANIFEST="${K3D_GPU_DSA_PLUGIN:-${SHARE_DIR}/intel-dsa-plugin.yml}"
 IAA_PLUGIN_MANIFEST="${K3D_GPU_IAA_PLUGIN:-${SHARE_DIR}/intel-iaa-plugin.yml}"
 QAT_PLUGIN_MANIFEST="${K3D_GPU_QAT_PLUGIN:-${SHARE_DIR}/intel-qat-plugin.yml}"
+HYBRID_PLUGIN_MANIFEST="${K3D_GPU_HYBRID_PLUGIN:-${SHARE_DIR}/nri-balloons.yml}"
 SYSROOT="${K3D_GPU_SYSROOT:-}" # prefix for /sys and /dev reads (tests point it at a fake tree)
 TEST_IMAGE="${K3D_GPU_TEST_IMAGE:-nvidia/cuda:13.4.2-base-ubuntu26.04}"
 DEVICE_TEST_IMAGE="${K3D_GPU_DEVICE_TEST_IMAGE:-busybox:1.37}"
@@ -51,7 +56,7 @@ warn() { echo "${YLW}WARN:${RST} $*" >&2; }
 
 usage() {
     cat <<EOF
-k3d-gpu ${VERSION} — accelerator-ready k3d clusters (NVIDIA, Intel GPU/iGPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX)
+k3d-gpu ${VERSION} — accelerator-ready k3d clusters (NVIDIA, Intel GPU/iGPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX, hybrid P/E cores)
 
 Usage: k3d-gpu <command>
 
@@ -67,7 +72,7 @@ Usage: k3d-gpu <command>
 Environment:
   K3D_GPU_CLUSTER       cluster name         (default: gpu)
   K3D_GPU_IMAGE         k3s node image       (default: cryptoandcoffee/k3d-gpu:latest)
-  K3D_GPU_VENDORS       auto | comma list of nvidia,intel,npu,gaudi,dsa,iaa,qat,amx (default: auto)
+  K3D_GPU_VENDORS       auto | comma list of nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid (default: auto)
   K3D_GPU_SHARE         dir holding the fallback plugin yamls (default: /usr/share/k3d-gpu)
   K3D_GPU_PLUGIN        NVIDIA plugin yaml   (default: ${SHARE_DIR}/nvidia-device-plugin.yml)
   K3D_GPU_INTEL_PLUGIN  Intel GPU plugin yaml  (default: ${SHARE_DIR}/intel-gpu-plugin.yml)
@@ -76,6 +81,7 @@ Environment:
   K3D_GPU_DSA_PLUGIN    Intel DSA plugin yaml  (default: ${SHARE_DIR}/intel-dsa-plugin.yml)
   K3D_GPU_IAA_PLUGIN    Intel IAA plugin yaml  (default: ${SHARE_DIR}/intel-iaa-plugin.yml)
   K3D_GPU_QAT_PLUGIN    Intel QAT plugin yaml  (default: ${SHARE_DIR}/intel-qat-plugin.yml)
+  K3D_GPU_HYBRID_PLUGIN NRI balloons yaml    (default: ${SHARE_DIR}/nri-balloons.yml)
 
 Docs: https://github.com/88plug/k3d-gpu
 EOF
@@ -194,6 +200,11 @@ amx_labels() {
     done
 }
 
+# Hybrid CPUs register one PMU per core type; each lists its online CPUs.
+hybrid_cpus() { cat "${SYSROOT}/sys/devices/cpu_$1/cpus" 2>/dev/null || true; }
+has_hybrid() { [ -n "$(hybrid_cpus core)" ] && [ -n "$(hybrid_cpus atom)" ]; }
+HYBRID_LABEL="k3d-gpu.io/hybrid-cpu=true"
+
 # ---- platform tables (doctor only) --------------------------------------------
 # IDs, default-driver kernels and firmware names from the kernel's
 # include/drm/intel/pciids.h, xe_pci.c, xe_uc_fw.c and drivers/accel/ivpu.
@@ -263,13 +274,14 @@ resolve_vendors() {
         if has_iaa; then ACTIVE+=(iaa); fi
         if has_qat; then ACTIVE+=(qat); fi
         if [ -n "$(amx_flags)" ]; then ACTIVE+=(amx); fi
+        if has_hybrid; then ACTIVE+=(hybrid); fi
     else
         IFS=',' read -r -a req <<< "${VENDORS_REQUEST// /}"
         for v in "${req[@]}"; do
             case "${v}" in
                 "") ;;
-                nvidia|intel|npu|gaudi|dsa|iaa|qat|amx) is_active "${v}" || ACTIVE+=("${v}") ;;
-                *) err "unknown vendor '${v}' in K3D_GPU_VENDORS (use nvidia,intel,npu,gaudi,dsa,iaa,qat,amx)" ;;
+                nvidia|intel|npu|gaudi|dsa|iaa|qat|amx|hybrid) is_active "${v}" || ACTIVE+=("${v}") ;;
+                *) err "unknown vendor '${v}' in K3D_GPU_VENDORS (use nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid)" ;;
             esac
         done
     fi
@@ -284,8 +296,8 @@ is_active() {
 
 # Kubernetes extended resources a vendor advertises (one per line). A trailing *
 # is a prefix: DSA/IAA name resources after the queue mode, QAT after the PF's
-# configured services (cy, dc, asym-dc, ... or generic). AMX has no resource; it
-# lists the node labels the launcher sets instead.
+# configured services (cy, dc, asym-dc, ... or generic). AMX and hybrid have no
+# resource; they list the node labels the launcher sets instead.
 vendor_resources() {
     case "$1" in
         nvidia) echo "nvidia.com/gpu" ;;
@@ -295,6 +307,7 @@ vendor_resources() {
         iaa)    echo "iaa.intel.com/*" ;;
         qat)    echo "qat.intel.com/*" ;;
         amx)    amx_labels ;;
+        hybrid) echo "${HYBRID_LABEL}" ;;
         intel)
             # One resource per bound driver; both when nothing is detected
             # (explicit K3D_GPU_VENDORS=intel on a host we cannot read).
@@ -317,6 +330,7 @@ vendor_daemonset() {  # prints: namespace name manifest
         dsa)    echo "kube-system intel-dsa-plugin ${DSA_PLUGIN_MANIFEST}" ;;
         iaa)    echo "kube-system intel-iaa-plugin ${IAA_PLUGIN_MANIFEST}" ;;
         qat)    echo "kube-system intel-qat-plugin ${QAT_PLUGIN_MANIFEST}" ;;
+        hybrid) echo "kube-system nri-resource-policy-balloons ${HYBRID_PLUGIN_MANIFEST}" ;;
     esac
 }
 
@@ -514,6 +528,12 @@ doctor_cpu_accels() {
         lines+="  ${RED}fail${RST}: QAT requested but no QAT PF with VFs"$'\n'
         FAIL=1
     fi
+    if has_hybrid; then
+        lines+="  ok: hybrid CPU: P-cores $(hybrid_cpus core), E-cores $(hybrid_cpus atom) — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient"$'\n'
+    elif is_active hybrid; then
+        lines+="  ${RED}fail${RST}: hybrid requested but the CPU has no online P-core and E-core PMUs (/sys/devices/cpu_core, cpu_atom)"$'\n'
+        FAIL=1
+    fi
     if is_active amx && [ -z "${amx}" ]; then
         lines+="  ${RED}fail${RST}: AMX requested but the CPU reports no amx_* flags"$'\n'
         FAIL=1
@@ -531,7 +551,7 @@ doctor() {
 
     if [ "${#ACTIVE[@]}" -eq 0 ]; then
         echo ""
-        echo "  ${RED}fail${RST}: no supported accelerator detected (NVIDIA, Intel GPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX)"
+        echo "  ${RED}fail${RST}: no supported accelerator detected (NVIDIA, Intel GPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX, hybrid P/E cores)"
         FAIL=1
     else
         info "Detected accelerators: ${ACTIVE[*]}"
@@ -553,7 +573,7 @@ cmd_up() {
     require kubectl
 
     resolve_vendors
-    [ "${#ACTIVE[@]}" -gt 0 ] || err "no supported accelerator detected (NVIDIA, Intel GPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX) — run 'k3d-gpu doctor' or set K3D_GPU_VENDORS"
+    [ "${#ACTIVE[@]}" -gt 0 ] || err "no supported accelerator detected (NVIDIA, Intel GPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX, hybrid P/E cores) — run 'k3d-gpu doctor' or set K3D_GPU_VENDORS"
     info "Accelerators: ${ACTIVE[*]}"
 
     local create_args=(
@@ -600,6 +620,13 @@ cmd_up() {
     # node's own /dev/dsa and /dev/iax).
     if { is_active dsa || is_active iaa; } && [ -d /dev/char ]; then
         create_args+=(--volume="/dev/char:/dev/char:ro@server:*;agent:*")
+    fi
+    # Hybrid P/E cores: the baked NRI balloons policy is gated by this label. NRI is
+    # on in k3s's containerd for a privileged (non-userns) node, and the node sees
+    # the host's cpu_core/cpu_atom PMUs, so balloons can pin by core type. Only the
+    # node's own cgroup cpusets change; nothing host-wide (cpufreq, RDT) is touched.
+    if is_active hybrid; then
+        create_args+=(--k3s-node-label="${HYBRID_LABEL}@server:*;agent:*")
     fi
     # AMX is a CPU feature: no plugin, just NFD-style labels pods can select on.
     if is_active amx; then
@@ -665,13 +692,13 @@ resource_counts() {
 
 resource_total() { resource_counts "$1" | awk '{s += $2} END {print s + 0}'; }
 
-# Schedulable units for a vendor: summed resources, or for AMX the number of
-# nodes carrying its labels.
+# Schedulable units for a vendor: summed resources, or for AMX and hybrid the
+# number of nodes carrying their labels.
 vendor_total() {
     local res total=0
     while read -r res; do
         [ -n "${res}" ] || continue
-        if [ "$1" = "amx" ]; then
+        if [ "$1" = "amx" ] || [ "$1" = "hybrid" ]; then
             total=$((total + $({ kubectl get nodes -l "${res}" -o name 2>/dev/null || true; } | wc -l)))
         else
             total=$((total + $(resource_total "${res}")))
@@ -795,6 +822,15 @@ cmd_test() {
         run_pod amx-test "${DEVICE_TEST_IMAGE}" \
             "{\"spec\":{\"nodeSelector\":{\"${res%=*}\":\"true\"},\"containers\":[{\"name\":\"amx-test\",\"image\":\"${DEVICE_TEST_IMAGE}\",\"command\":[\"grep\",\"-m1\",\"-o\",\"amx_tile\",\"/proc/cpuinfo\"]}]}}" \
             || err "AMX test pod failed — run 'k3d-gpu doctor'"
+    fi
+    if is_active hybrid; then
+        for kind in "performance core" "efficient atom"; do
+            read -r v path <<< "${kind}"
+            info "Deploying ${v}-core test pod (${DEVICE_TEST_IMAGE}; host ${v} CPUs: $(hybrid_cpus "${path}"))..."
+            run_pod "cores-${v}-test" "${DEVICE_TEST_IMAGE}" \
+                "{\"metadata\":{\"labels\":{\"k3d-gpu.io/cores\":\"${v}\"}},\"spec\":{\"containers\":[{\"name\":\"cores-${v}-test\",\"image\":\"${DEVICE_TEST_IMAGE}\",\"resources\":{\"requests\":{\"cpu\":\"1\"},\"limits\":{\"cpu\":\"1\"}},\"command\":[\"grep\",\"Cpus_allowed_list\",\"/proc/self/status\"]}]}}" \
+                || err "${v}-core test pod failed — run 'k3d-gpu doctor'"
+        done
     fi
 }
 

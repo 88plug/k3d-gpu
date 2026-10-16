@@ -344,6 +344,36 @@ kernel "${r}" 6.18.1
 pci "${r}" 0000:00:0b.0 0x8086 0x643e intel_vpu; accel "${r}" 0000:00:0b.0 0
 doctor_says "an NPU accel node does not satisfy the Gaudi check" "${r}" 'Checking Intel Gaudi' negate
 
+# hybrid <root> <P cpus> <E cpus>: Intel hybrid CPU sysfs (Alder Lake and newer).
+hybrid() {
+    mkdir -p "$1/sys/devices/cpu_core" "$1/sys/devices/cpu_atom"
+    echo "$2" > "$1/sys/devices/cpu_core/cpus"
+    echo "$3" > "$1/sys/devices/cpu_atom/cpus"
+}
+
+r=$(newroot hybrid)
+hybrid "${r}" 0-15 16-31
+expect "hybrid P/E CPU is detected" "${r}" "hybrid k3d-gpu.io/hybrid-cpu=true"
+
+r=$(newroot hybrid-no-ecores)
+hybrid "${r}" 0-15 ""
+expect "hybrid PMU with no online E-cores is not hybrid" "${r}" ""
+
+r=$(newroot not-hybrid)
+mkdir -p "${r}/sys/devices/cpu"
+expect "non-hybrid CPU is not hybrid" "${r}" ""
+
+r=$(newroot hybrid-forced)
+expect "forced hybrid is accepted" "${r}" "hybrid k3d-gpu.io/hybrid-cpu=true" K3D_GPU_VENDORS=hybrid
+
+r=$(newroot hybrid-doc)
+kernel "${r}" 6.18.1
+hybrid "${r}" 0-15 16-31
+doctor_says "doctor reports P-core and E-core CPU lists" "${r}" 'ok: hybrid CPU: P-cores 0-15, E-cores 16-31'
+r=$(newroot hybrid-doc-forced)
+kernel "${r}" 6.18.1
+doctor_says "forced hybrid on a non-hybrid CPU fails doctor" "${r}" 'fail.*hybrid' "" K3D_GPU_VENDORS=hybrid
+
 # Docker 29 lists CDI devices (cdi: nvidia.com/gpu=all) in `docker info`; that is
 # not a registered nvidia runtime, and doctor must not say it is.
 r=$(newroot nvidia-rt)
