@@ -1,0 +1,586 @@
+#!/usr/bin/env python3
+"""k3d-gpu-mcp — MCP server that lets AI agents discover and use a k3d-gpu cluster's engines.
+
+stdio transport, newline-delimited JSON-RPC 2.0, Python standard library only.
+
+Protocol: dual-era server per the MCP specification, revision 2026-07-28
+(https://modelcontextprotocol.io/specification/2026-07-28):
+  modern  per-request `_meta` (io.modelcontextprotocol/protocolVersion and
+          clientCapabilities), `server/discover`, `resultType` on every result,
+          `ttlMs`/`cacheScope` on tools/list and server/discover.
+  legacy  the `initialize` handshake of 2025-11-25 and earlier, for clients
+          that predate 2026-07-28.
+
+Tools (all read-only):
+  accelerators        `k3d-gpu report --json`, or detect + node allocatable when
+                      the launcher has no report subcommand
+  recommend_placement pod-spec fragment for llm|embeddings|media|batch
+  agent_endpoint      OVMS OpenAI /v3 base URL and models from `k3d-gpu agent up`
+  cluster_health      node readiness and device-plugin DaemonSet rollout
+
+Environment:
+  K3D_GPU_BIN          k3d-gpu launcher (default: next to this file, else PATH)
+  K3D_GPU_CLUSTER      cluster name; kubectl uses context k3d-<name> (default: gpu)
+  K3D_GPU_MCP_TIMEOUT  seconds per kubectl/launcher call (default: 60)
+"""
+
+import json
+import os
+import shutil
+import subprocess
+import sys
+
+SERVER_NAME = "k3d-gpu-mcp"
+
+MODERN_VERSIONS = ["2026-07-28"]
+LEGACY_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
+SUPPORTED_VERSIONS = MODERN_VERSIONS + LEGACY_VERSIONS
+
+META_VERSION = "io.modelcontextprotocol/protocolVersion"
+META_CAPS = "io.modelcontextprotocol/clientCapabilities"
+META_SERVER = "io.modelcontextprotocol/serverInfo"
+
+PARSE_ERROR, INVALID_REQUEST, METHOD_NOT_FOUND, INVALID_PARAMS, INTERNAL_ERROR = \
+    -32700, -32600, -32601, -32602, -32603
+UNSUPPORTED_PROTOCOL_VERSION = -32022
+
+SERVER_INFO = {"name": SERVER_NAME, "title": "k3d-gpu", "version": "unknown"}  # version: launcher's, set in main
+CAPABILITIES = {"tools": {"listChanged": False}}
+INSTRUCTIONS = (
+    "Inspect and place work on a local k3d-gpu Kubernetes cluster (NVIDIA, Intel GPU/NPU/Gaudi, "
+    "Xeon AMX, hybrid P/E cores). Call accelerators first to see what the host and cluster "
+    "offer, then recommend_placement to get the pod-spec fragment for a workload. "
+    "agent_endpoint returns the OpenAI-compatible URL of the in-cluster model server if "
+    "'k3d-gpu agent up' deployed one. All tools are read-only."
+)
+
+CLUSTER = os.environ.get("K3D_GPU_CLUSTER", "gpu")
+CONTEXT = "k3d-" + CLUSTER
+TIMEOUT = float(os.environ.get("K3D_GPU_MCP_TIMEOUT", "60"))
+
+# `k3d-gpu agent up` (OpenVINO Model Server): namespace, Service and its port name.
+AGENT_NS, AGENT_SVC, AGENT_PORT_NAME = "k3d-gpu-agent", "ovms", "http"
+AGENT_DEVICE_ANNOTATION = "k3d-gpu.io/agent-device"
+
+HYBRID_LABEL = "k3d-gpu.io/hybrid-cpu"
+CORES_LABEL = "k3d-gpu.io/cores"
+AMX_LABEL = "feature.node.kubernetes.io/cpu-cpuid.AMXTILE"
+
+# Device-plugin DaemonSets the launcher deploys, as (namespace, name).
+PLUGIN_DAEMONSETS = [
+    ("kube-system", "nvidia-device-plugin-daemonset"),
+    ("kube-system", "intel-gpu-plugin"),
+    ("kube-system", "intel-npu-plugin"),
+    ("habana-system", "habanalabs-device-plugin-daemonset"),
+    ("kube-system", "intel-dsa-plugin"),
+    ("kube-system", "intel-iaa-plugin"),
+    ("kube-system", "intel-qat-plugin"),
+    ("kube-system", "nri-resource-policy-balloons"),
+]
+
+# Engines, best first, per workload and objective. "cpu" is always available.
+ENGINES = {
+    "gaudi": {"resource": "habana.ai/gaudi", "what": "Intel Gaudi HPU"},
+    "nvidia": {"resource": "nvidia.com/gpu", "what": "NVIDIA GPU"},
+    "intel-gpu-xe": {"resource": "gpu.intel.com/xe", "what": "Intel GPU (xe driver)"},
+    "intel-gpu-i915": {"resource": "gpu.intel.com/i915", "what": "Intel GPU (i915 driver)"},
+    "npu": {"resource": "npu.intel.com/accel", "what": "Intel NPU"},
+    "cpu": {"resource": None, "what": "CPU"},
+}
+PREFERENCES = {
+    "llm": {
+        "latency": ["gaudi", "nvidia", "intel-gpu-xe", "intel-gpu-i915", "cpu"],
+        "throughput": ["gaudi", "nvidia", "intel-gpu-xe", "intel-gpu-i915", "cpu"],
+        "efficiency": ["intel-gpu-xe", "intel-gpu-i915", "npu", "gaudi", "nvidia", "cpu"],
+    },
+    "embeddings": {
+        "latency": ["intel-gpu-xe", "intel-gpu-i915", "nvidia", "gaudi", "npu", "cpu"],
+        "throughput": ["gaudi", "nvidia", "intel-gpu-xe", "intel-gpu-i915", "npu", "cpu"],
+        "efficiency": ["npu", "intel-gpu-xe", "intel-gpu-i915", "cpu"],
+    },
+    "media": {
+        "latency": ["intel-gpu-xe", "intel-gpu-i915", "nvidia", "cpu"],
+        "throughput": ["intel-gpu-xe", "intel-gpu-i915", "nvidia", "cpu"],
+        "efficiency": ["intel-gpu-xe", "intel-gpu-i915", "cpu"],
+    },
+    "batch": {"latency": ["cpu"], "throughput": ["cpu"], "efficiency": ["cpu"]},
+}
+WORKLOADS = list(PREFERENCES)
+OBJECTIVES = ["latency", "throughput", "efficiency"]
+
+TOOLS = [
+    {
+        "name": "accelerators",
+        "title": "Accelerators",
+        "description": "Accelerators on the host and what the k3d-gpu cluster advertises: the "
+                       "k3d-gpu report JSON (host devices, detected vendors with their Kubernetes "
+                       "resources, and per-node allocatable resources and accelerator labels).",
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+    },
+    {
+        "name": "recommend_placement",
+        "title": "Recommend placement",
+        "description": "Pick the best available engine for a workload and return the pod-spec "
+                       "fragment that places it: extended-resource limits, the k3d-gpu.io/cores "
+                       "label (P-cores or E-cores on hybrid CPUs) and any nodeSelector. Merge the "
+                       "fragment into your Pod or Deployment template.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "workload": {"type": "string", "enum": WORKLOADS,
+                             "description": "llm: text generation; embeddings: embedding or "
+                                            "rerank models; media: video decode/encode/transcode; "
+                                            "batch: CPU-bound jobs."},
+                "objective": {"type": "string", "enum": OBJECTIVES, "default": "latency",
+                              "description": "latency: fastest single request; throughput: "
+                                             "most work per second; efficiency: least power."},
+            },
+            "required": ["workload"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+    },
+    {
+        "name": "agent_endpoint",
+        "title": "Agent endpoint",
+        "description": "OpenAI-compatible base URL (/v3) and served models of the OpenVINO Model "
+                       "Server that 'k3d-gpu agent up' deploys, with in-cluster and host access.",
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+    },
+    {
+        "name": "cluster_health",
+        "title": "Cluster health",
+        "description": "Whether the k3d-gpu cluster is reachable, every node Ready and every "
+                       "deployed device plugin fully rolled out, with per-node accelerator counts.",
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+    },
+]
+TOOL_NAMES = [t["name"] for t in TOOLS]
+
+
+class ToolError(Exception):
+    """A failure the model can act on, returned as a result with isError."""
+
+
+# ---- external commands -------------------------------------------------------
+
+def launcher():
+    env = os.environ.get("K3D_GPU_BIN")
+    if env:
+        return env
+    sibling = os.path.join(os.path.dirname(os.path.realpath(__file__)), "k3d-gpu")
+    if os.access(sibling, os.X_OK):
+        return sibling
+    return shutil.which("k3d-gpu") or "k3d-gpu"
+
+
+def launcher_version():
+    """The launcher's release ("k3d-gpu 0.1.7" -> "0.1.7"); this server ships with it."""
+    rc, out, _ = run([launcher(), "version"])
+    parts = out.split()
+    return parts[1] if rc == 0 and len(parts) == 2 and parts[0] == "k3d-gpu" else "unknown"
+
+
+def run(argv):
+    """(returncode, stdout, stderr); returncode 127 when the program is missing."""
+    try:
+        p = subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                           timeout=TIMEOUT)
+    except FileNotFoundError:
+        return 127, "", argv[0] + ": not found"
+    except subprocess.TimeoutExpired:
+        return 124, "", f"{argv[0]} timed out after {TIMEOUT:g}s"
+    return p.returncode, p.stdout, p.stderr.strip()
+
+
+def kubectl(*args):
+    return run(["kubectl", "--context", CONTEXT, "--request-timeout=10s"] + list(args))
+
+
+def kubectl_json(*args):
+    """Parsed JSON of `kubectl ... -o json`, or (None, reason)."""
+    rc, out, errtext = kubectl(*(list(args) + ["-o", "json"]))
+    if rc != 0:
+        return None, errtext or f"kubectl exited {rc}"
+    try:
+        return json.loads(out), None
+    except ValueError:
+        return None, "kubectl returned invalid JSON"
+
+
+def context_present():
+    rc, out, _ = run(["kubectl", "config", "get-contexts", "-o", "name"])
+    return rc == 0 and CONTEXT in out.split()
+
+
+# ---- accelerators ---------------------------------------------------------------
+
+def cluster_nodes():
+    """The report's `cluster` object built from kubectl, for launchers without `report`."""
+    cluster = {"name": CLUSTER, "context": CONTEXT, "present": False, "reason": None, "nodes": []}
+    if not context_present():
+        cluster["reason"] = f"no kubeconfig context {CONTEXT} (cluster not created, or KUBECONFIG points elsewhere)"
+        return cluster
+    data, reason = kubectl_json("get", "nodes")
+    if data is None:
+        cluster["reason"] = f"API server unreachable through context {CONTEXT}: {reason}"
+        return cluster
+    cluster["present"] = True
+    for item in data.get("items", []):
+        meta = item.get("metadata", {})
+        labels = {k: v for k, v in (meta.get("labels") or {}).items()
+                  if k.startswith(("k3d-gpu.io/", "nvidia.com/", "habana.ai/",
+                                   "intel.feature.node.kubernetes.io/", "feature.node.kubernetes.io/"))}
+        cluster["nodes"].append({"name": meta.get("name"),
+                                 "allocatable": item.get("status", {}).get("allocatable", {}),
+                                 "labels": labels})
+    return cluster
+
+
+def accelerators():
+    exe = launcher()
+    rc, out, errtext = run([exe, "report", "--json"])
+    if rc == 0:
+        try:
+            return json.loads(out)
+        except ValueError:
+            pass
+    # Launcher without `report`: host view from `detect`, cluster view from kubectl.
+    rc, out, errtext = run([exe, "detect"])
+    if rc != 0:
+        raise ToolError(f"'{exe} detect' failed: {errtext or f'exit {rc}'}")
+    detected = []
+    for line in out.splitlines():
+        parts = line.split()
+        if parts:
+            detected.append({"vendor": parts[0], "resources": parts[1:]})
+    return {"schema": "k3d-gpu.mcp-fallback/v1", "source": "k3d-gpu detect + kubectl",
+            "cluster_name": CLUSTER, "detected": detected, "cluster": cluster_nodes()}
+
+
+def quantity(value):
+    try:
+        return int(str(value))
+    except ValueError:
+        return 0
+
+
+def inventory(report):
+    """({resource: count or None}, {label: value}, source). Counts are None when known
+    only from host detection (the cluster is not running)."""
+    resources, labels = {}, {}
+    cluster = report.get("cluster") or {}
+    if cluster.get("present"):
+        for node in cluster.get("nodes", []):
+            for key, val in (node.get("allocatable") or {}).items():
+                if "/" in key:
+                    resources[key] = resources.get(key, 0) + quantity(val)
+            for key, val in (node.get("labels") or {}).items():
+                labels[key] = val
+        return {k: v for k, v in resources.items() if v > 0}, labels, "cluster"
+    for entry in report.get("detected", []):
+        for res in entry.get("resources", []):
+            if "=" in res:
+                key, _, val = res.partition("=")
+                labels[key] = val
+            elif "*" not in res:
+                resources[res] = None
+    return resources, labels, "host"
+
+
+# ---- recommend_placement --------------------------------------------------------
+
+def recommend(args, report):
+    workload = args.get("workload")
+    objective = args.get("objective", "latency")
+    if workload not in PREFERENCES:
+        raise ToolError(f"workload must be one of {', '.join(WORKLOADS)}, got {workload!r}")
+    if objective not in OBJECTIVES:
+        raise ToolError(f"objective must be one of {', '.join(OBJECTIVES)}, got {objective!r}")
+    extra = sorted(set(args) - {"workload", "objective"})
+    if extra:
+        raise ToolError(f"unknown argument(s): {', '.join(extra)}")
+
+    resources, labels, source = inventory(report)
+    available = [e for e in PREFERENCES[workload][objective]
+                 if ENGINES[e]["resource"] is None or ENGINES[e]["resource"] in resources]
+    engine = available[0]
+    res = ENGINES[engine]["resource"]
+    hybrid = labels.get(HYBRID_LABEL) == "true"
+    amx = labels.get(AMX_LABEL) == "true"
+
+    notes = []
+    pod_labels, node_selector, limits = {}, {}, {}
+    if res:
+        limits[res] = "1"
+    if hybrid:
+        # P-cores for latency and for feeding model inference at throughput; E-cores for
+        # power, for media (the GPU does the work) and for wide batch jobs.
+        fast = objective == "latency" or (objective == "throughput" and workload in ("llm", "embeddings"))
+        cores = "performance" if fast else "efficient"
+        pod_labels[CORES_LABEL] = cores
+        where = "P-cores" if cores == "performance" else "E-cores"
+        notes.append(f"{CORES_LABEL}={cores} pins the pod to {where} via the NRI balloons policy.")
+    if engine == "cpu" and amx and workload in ("llm", "embeddings", "batch"):
+        node_selector[AMX_LABEL] = "true"
+        notes.append("CPU path on an AMX node: use an AMX-enabled runtime (OpenVINO, oneDNN, PyTorch).")
+    if engine in ("intel-gpu-xe", "intel-gpu-i915", "npu"):
+        notes.append("Non-root containers also need the host group of the device node "
+                     "(/dev/dri/renderD* or /dev/accel/accel*) in securityContext.supplementalGroups.")
+    if workload == "llm" and engine == "npu":
+        notes.append("OVMS runs LLMs on the NPU with the stateful pipeline only (no continuous batching).")
+    if source == "host":
+        notes.append(f"Cluster {CLUSTER} is not running: engines come from host detection; run 'k3d-gpu up'.")
+    else:
+        prefs = PREFERENCES[workload][objective]
+        host = inventory({"detected": report.get("detected", [])})[0]
+        for better in prefs[:prefs.index(engine)]:
+            if ENGINES[better]["resource"] in host:
+                notes.append(f"The host has a {ENGINES[better]['what']} but the cluster advertises no "
+                             f"{ENGINES[better]['resource']}: its device plugin is not ready (see cluster_health).")
+
+    container = {"name": "main"}
+    if limits:
+        container["resources"] = {"limits": limits}
+    fragment = {"spec": {"containers": [container]}}
+    if pod_labels:
+        fragment["metadata"] = {"labels": pod_labels}
+    if node_selector:
+        fragment["spec"]["nodeSelector"] = node_selector
+    return {
+        "workload": workload, "objective": objective,
+        "engine": engine, "engineDescription": ENGINES[engine]["what"], "resource": res,
+        "alternatives": available[1:], "inventorySource": source,
+        "podSpecFragment": fragment, "notes": notes,
+    }
+
+
+# ---- agent_endpoint --------------------------------------------------------------
+
+def agent_endpoint():
+    proxy = f"/api/v1/namespaces/{AGENT_NS}/services/{AGENT_SVC}:{AGENT_PORT_NAME}/proxy"
+    result = {"deployed": False, "ready": False, "namespace": AGENT_NS, "service": AGENT_SVC,
+              "device": None, "baseUrl": None, "hostAccess": None, "apiServerProxy": proxy + "/v3",
+              "models": [], "reason": None}
+    if not context_present():
+        result["reason"] = f"no kubeconfig context {CONTEXT} — run 'k3d-gpu up'"
+        return result
+    svc, reason = kubectl_json("-n", AGENT_NS, "get", "service", AGENT_SVC)
+    if svc is None:
+        result["reason"] = f"service {AGENT_NS}/{AGENT_SVC} not found — deploy it with 'k3d-gpu agent up' ({reason})"
+        return result
+    result["deployed"] = True
+    port = next((p.get("port") for p in svc.get("spec", {}).get("ports", [])
+                 if p.get("name") == AGENT_PORT_NAME), None)
+    if port:
+        result["baseUrl"] = f"http://{AGENT_SVC}.{AGENT_NS}.svc.cluster.local:{port}/v3"
+        result["hostAccess"] = {
+            "command": f"kubectl --context {CONTEXT} -n {AGENT_NS} port-forward svc/{AGENT_SVC} {port}:{port}",
+            "baseUrl": f"http://localhost:{port}/v3",
+        }
+    deploy, _ = kubectl_json("-n", AGENT_NS, "get", "deployment", AGENT_SVC)
+    if deploy:
+        tmpl = deploy.get("spec", {}).get("template", {}).get("metadata", {})
+        result["device"] = (tmpl.get("annotations") or {}).get(AGENT_DEVICE_ANNOTATION)
+        result["ready"] = (deploy.get("status", {}).get("readyReplicas") or 0) >= 1
+    rc, out, errtext = kubectl("get", "--raw", proxy + "/v3/models")
+    if rc == 0:
+        try:
+            result["models"] = [m.get("id") for m in json.loads(out).get("data", [])]
+        except (ValueError, AttributeError):
+            result["reason"] = "/v3/models returned invalid JSON"
+    else:
+        result["ready"] = False
+        result["reason"] = f"server not answering /v3/models yet: {errtext or f'exit {rc}'}"
+    return result
+
+
+# ---- cluster_health ---------------------------------------------------------------
+
+def cluster_health():
+    health = {"cluster": CLUSTER, "context": CONTEXT, "reachable": False, "healthy": False,
+              "nodes": [], "plugins": [], "problems": []}
+    if not context_present():
+        health["problems"].append(f"no kubeconfig context {CONTEXT} — run 'k3d-gpu up'")
+        return health
+    nodes, reason = kubectl_json("get", "nodes")
+    if nodes is None:
+        health["problems"].append(f"API server unreachable: {reason}")
+        return health
+    health["reachable"] = True
+    for item in nodes.get("items", []):
+        name = item.get("metadata", {}).get("name")
+        status = item.get("status", {})
+        ready = any(c.get("type") == "Ready" and c.get("status") == "True"
+                    for c in status.get("conditions", []))
+        accel = {k: quantity(v) for k, v in (status.get("allocatable") or {}).items()
+                 if "/" in k and quantity(v) > 0}
+        health["nodes"].append({"name": name, "ready": ready, "accelerators": accel})
+        if not ready:
+            health["problems"].append(f"node {name} is not Ready")
+    if not health["nodes"]:
+        health["problems"].append("cluster has no nodes")
+    dsets, reason = kubectl_json("get", "daemonsets", "--all-namespaces")
+    if dsets is None:
+        health["problems"].append(f"cannot list DaemonSets: {reason}")
+    else:
+        known = set(PLUGIN_DAEMONSETS)
+        for ds in dsets.get("items", []):
+            meta = ds.get("metadata", {})
+            key = (meta.get("namespace"), meta.get("name"))
+            if key not in known:
+                continue
+            st = ds.get("status", {})
+            desired, ready = st.get("desiredNumberScheduled", 0), st.get("numberReady", 0)
+            health["plugins"].append({"namespace": key[0], "name": key[1],
+                                      "desired": desired, "ready": ready})
+            if desired == 0:
+                health["problems"].append(f"{key[0]}/{key[1]} schedules on no node (missing node label?)")
+            elif ready < desired:
+                health["problems"].append(f"{key[0]}/{key[1]}: {ready}/{desired} pods ready")
+    health["healthy"] = not health["problems"]
+    return health
+
+
+# ---- MCP / JSON-RPC ----------------------------------------------------------------
+
+def call_tool(name, args):
+    if name == "accelerators":
+        return accelerators()
+    if name == "recommend_placement":
+        return recommend(args, accelerators())
+    if name == "agent_endpoint":
+        return agent_endpoint()
+    return cluster_health()
+
+
+def tool_result(name, args):
+    try:
+        data = call_tool(name, args)
+    except ToolError as e:
+        return {"content": [{"type": "text", "text": str(e)}], "isError": True}
+    return {"content": [{"type": "text", "text": json.dumps(data, indent=2, sort_keys=True)}],
+            "structuredContent": data, "isError": False}
+
+
+class RpcError(Exception):
+    def __init__(self, code, message, data=None):
+        super().__init__(message)
+        self.code, self.message, self.data = code, message, data
+
+
+class Server:
+    def __init__(self):
+        self.legacy_version = None  # protocol version negotiated by `initialize`, if any
+
+    def check_meta(self, params):
+        """Validate modern per-request metadata; a legacy session after `initialize` may omit it."""
+        meta = params.get("_meta")
+        if not isinstance(meta, dict) or META_VERSION not in meta:
+            if self.legacy_version:
+                return
+            raise RpcError(INVALID_PARAMS,
+                           f"missing _meta.{META_VERSION} (or send initialize first); "
+                           f"supported versions: {', '.join(SUPPORTED_VERSIONS)}")
+        version = meta[META_VERSION]
+        if version not in SUPPORTED_VERSIONS:
+            raise RpcError(UNSUPPORTED_PROTOCOL_VERSION, "Unsupported protocol version",
+                           {"supported": SUPPORTED_VERSIONS, "requested": version})
+        if not isinstance(meta.get(META_CAPS), dict):
+            raise RpcError(INVALID_PARAMS, f"missing _meta.{META_CAPS}")
+
+    def handle(self, method, params):
+        if method == "initialize":
+            requested = params.get("protocolVersion")
+            self.legacy_version = requested if requested in LEGACY_VERSIONS else LEGACY_VERSIONS[0]
+            return {"protocolVersion": self.legacy_version, "capabilities": CAPABILITIES,
+                    "serverInfo": SERVER_INFO, "instructions": INSTRUCTIONS}
+        if method == "ping":  # legacy only; removed in 2026-07-28
+            return {}
+        if method == "server/discover":
+            self.check_meta(params)
+            return {"supportedVersions": SUPPORTED_VERSIONS, "capabilities": CAPABILITIES,
+                    "instructions": INSTRUCTIONS, "ttlMs": 3600000, "cacheScope": "public"}
+        if method == "tools/list":
+            self.check_meta(params)
+            return {"tools": TOOLS, "ttlMs": 3600000, "cacheScope": "public"}
+        if method == "tools/call":
+            self.check_meta(params)
+            name = params.get("name")
+            if name not in TOOL_NAMES:
+                raise RpcError(INVALID_PARAMS, f"Unknown tool: {name}")
+            args = params.get("arguments") or {}
+            if not isinstance(args, dict):
+                raise RpcError(INVALID_PARAMS, "arguments must be an object")
+            return tool_result(name, args)
+        raise RpcError(METHOD_NOT_FOUND, f"Method not found: {method}")
+
+    def message(self, line):
+        """Response object for one input line, or None (notification / response)."""
+        try:
+            msg = json.loads(line)
+        except ValueError:
+            return error_response(None, PARSE_ERROR, "Parse error")
+        if not isinstance(msg, dict) or msg.get("jsonrpc") != "2.0":
+            return error_response(None, INVALID_REQUEST, "Invalid Request: one JSON-RPC 2.0 object per line")
+        if "method" not in msg:
+            return None  # a response from the client; this server sends no requests
+        if "id" not in msg:
+            return None  # notifications: initialized, cancelled — nothing to do
+        rid, method = msg["id"], msg["method"]
+        valid_id = isinstance(rid, str) or (isinstance(rid, int) and not isinstance(rid, bool))
+        if not valid_id or not isinstance(method, str):
+            return error_response(rid if valid_id else None, INVALID_REQUEST,
+                                  "Invalid Request: id must be a string or integer, method a string")
+        params = msg.get("params", {})
+        if params is not None and not isinstance(params, dict):
+            return error_response(rid, INVALID_PARAMS, "params must be an object")
+        try:
+            result = self.handle(method, params or {})
+        except RpcError as e:
+            return error_response(rid, e.code, e.message, e.data)
+        except Exception as e:  # keep serving; the client sees the failure
+            print(f"{SERVER_NAME}: {method} {type(e).__name__}: {e!r}", file=sys.stderr)
+            return error_response(rid, INTERNAL_ERROR, f"Internal error: {type(e).__name__}")
+        result["resultType"] = "complete"
+        result["_meta"] = {META_SERVER: SERVER_INFO}
+        return {"jsonrpc": "2.0", "id": rid, "result": result}
+
+
+def error_response(rid, code, message, data=None):
+    err = {"code": code, "message": message}
+    if data is not None:
+        err["data"] = data
+    return {"jsonrpc": "2.0", "id": rid, "error": err}
+
+
+def main():
+    server = Server()
+    SERVER_INFO["version"] = launcher_version()
+    sys.stdin.reconfigure(encoding="utf-8", errors="replace")
+    sys.stdout.reconfigure(encoding="utf-8")
+    try:
+        for line in sys.stdin:
+            if not line.strip():
+                continue
+            reply = server.message(line)
+            if reply is not None:
+                sys.stdout.write(json.dumps(reply, separators=(",", ":")) + "\n")
+                sys.stdout.flush()
+    except BrokenPipeError:  # the client closed our stdout: shut down quietly
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+    except KeyboardInterrupt:
+        pass
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] in ("-h", "--help"):
+        print(__doc__.strip())
+        sys.exit(0)
+    if len(sys.argv) > 1 and sys.argv[1] in ("-v", "--version"):
+        print(f"{SERVER_NAME} {launcher_version()}")
+        sys.exit(0)
+    main()
