@@ -367,9 +367,14 @@ doctor_nvidia() {
         FAIL=1
     fi
 
+    # Match the runtime name exactly: Docker 29 also lists CDI devices
+    # (cdi: nvidia.com/gpu=all) in `docker info`, which is not a runtime. Either
+    # one is enough for --gpus=all; Docker falls back to the CDI spec.
     info "Checking docker NVIDIA runtime..."
-    if docker info 2>/dev/null | grep "nvidia" >/dev/null; then
+    if docker info --format '{{range $k, $v := .Runtimes}}{{$k}}{{"\n"}}{{end}}' 2>/dev/null | grep -qx nvidia; then
         echo "  ok: nvidia runtime registered"
+    elif docker info --format '{{range .DiscoveredDevices}}{{.ID}}{{"\n"}}{{end}}' 2>/dev/null | grep -q '^nvidia\.com/gpu='; then
+        echo "  ok: no nvidia runtime, but nvidia.com/gpu CDI devices are registered (--gpus uses CDI)"
     else
         echo "  ${YLW}warn${RST}: nvidia runtime not listed (sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker)"
     fi
@@ -720,12 +725,34 @@ cmd_down() {
 
 # Run a one-shot pod requesting one device of the given resource and listing the
 # device nodes the plugin injected.
+# Run a one-shot pod to completion, print its logs, and succeed only if it did.
+# Not `kubectl run --rm -i`: a pod that exits before the attach lands (nvidia-smi
+# does) loses its output, so the test passed while showing nothing.
+run_pod() {
+    local name=$1 image=$2 overrides=$3 phase="" out deadline=$((SECONDS + 300))
+    kubectl delete pod "${name}" --ignore-not-found >/dev/null 2>&1 || true
+    kubectl run "${name}" --restart=Never --image="${image}" --overrides="${overrides}" >/dev/null || return 1
+    while [ "${SECONDS}" -lt "${deadline}" ]; do
+        phase=$(kubectl get pod "${name}" -o jsonpath='{.status.phase}' 2>/dev/null || true)
+        case "${phase}" in Succeeded|Failed) break ;; esac
+        sleep 2
+    done
+    # $( ) + printf: pod output without a final newline would glue onto the next line.
+    out=$(kubectl logs "${name}" 2>&1 || true)
+    [ -z "${out}" ] || printf '%s\n' "${out}"
+    case "${phase}" in
+        Succeeded|Failed) ;;
+        *) warn "pod ${name} still ${phase:-not found} after 300s: kubectl describe pod ${name}" ;;
+    esac
+    kubectl delete pod "${name}" --wait=false >/dev/null 2>&1 || true
+    [ "${phase}" = Succeeded ]
+}
+
 device_test() {
     local name=$1 resource=$2 path=$3
     info "Deploying ${name} test pod (${DEVICE_TEST_IMAGE}, ${resource})..."
-    kubectl run "${name}" --rm -i --restart=Never \
-        --image="${DEVICE_TEST_IMAGE}" \
-        --overrides="{\"spec\":{\"containers\":[{\"name\":\"${name}\",\"image\":\"${DEVICE_TEST_IMAGE}\",\"resources\":{\"limits\":{\"${resource}\":1}},\"command\":[\"ls\",\"-l\",\"${path}\"]}]}}" \
+    run_pod "${name}" "${DEVICE_TEST_IMAGE}" \
+        "{\"spec\":{\"containers\":[{\"name\":\"${name}\",\"image\":\"${DEVICE_TEST_IMAGE}\",\"resources\":{\"limits\":{\"${resource}\":1}},\"command\":[\"ls\",\"-l\",\"${path}\"]}]}}" \
         || err "${name} test pod failed — run 'k3d-gpu doctor'"
 }
 
@@ -736,11 +763,10 @@ cmd_test() {
     local res v path
     if is_active nvidia; then
         info "Deploying nvidia-smi test pod (${TEST_IMAGE})..."
-        # The container command + GPU resource limit live entirely in --overrides;
+        # The container command + GPU resource limit live entirely in the overrides;
         # --image is still required by `kubectl run` but the overrides spec wins.
-        kubectl run nvidia-smi-test --rm -i --restart=Never \
-            --image="${TEST_IMAGE}" \
-            --overrides="{\"spec\":{\"runtimeClassName\":\"nvidia\",\"containers\":[{\"name\":\"nvidia-smi-test\",\"image\":\"${TEST_IMAGE}\",\"resources\":{\"limits\":{\"nvidia.com/gpu\":1}},\"command\":[\"nvidia-smi\"]}]}}" \
+        run_pod nvidia-smi-test "${TEST_IMAGE}" \
+            "{\"spec\":{\"runtimeClassName\":\"nvidia\",\"containers\":[{\"name\":\"nvidia-smi-test\",\"image\":\"${TEST_IMAGE}\",\"resources\":{\"limits\":{\"nvidia.com/gpu\":1}},\"command\":[\"nvidia-smi\"]}]}}" \
             || err "Test pod failed — run 'k3d-gpu doctor'"
     fi
     if is_active intel; then
@@ -766,9 +792,8 @@ cmd_test() {
     if is_active amx; then
         res=$(amx_labels | sed -n 1p)  # not head: early exit SIGPIPEs amx_labels under pipefail
         info "Deploying AMX test pod (${DEVICE_TEST_IMAGE}, nodeSelector ${res})..."
-        kubectl run amx-test --rm -i --restart=Never \
-            --image="${DEVICE_TEST_IMAGE}" \
-            --overrides="{\"spec\":{\"nodeSelector\":{\"${res%=*}\":\"true\"},\"containers\":[{\"name\":\"amx-test\",\"image\":\"${DEVICE_TEST_IMAGE}\",\"command\":[\"grep\",\"-m1\",\"-o\",\"amx_tile\",\"/proc/cpuinfo\"]}]}}" \
+        run_pod amx-test "${DEVICE_TEST_IMAGE}" \
+            "{\"spec\":{\"nodeSelector\":{\"${res%=*}\":\"true\"},\"containers\":[{\"name\":\"amx-test\",\"image\":\"${DEVICE_TEST_IMAGE}\",\"command\":[\"grep\",\"-m1\",\"-o\",\"amx_tile\",\"/proc/cpuinfo\"]}]}}" \
             || err "AMX test pod failed — run 'k3d-gpu doctor'"
     fi
 }

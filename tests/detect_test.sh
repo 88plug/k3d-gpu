@@ -67,7 +67,22 @@ doctor_says() {
 # doctor shells out to docker/k3d/kubectl; stub them so output is host-independent.
 STUB_BIN="${WORK}/bin"
 mkdir -p "${STUB_BIN}"
-for tool in docker k3d kubectl; do printf '#!/bin/sh\nexit 0\n' > "${STUB_BIN}/${tool}"; chmod +x "${STUB_BIN}/${tool}"; done
+for tool in k3d kubectl; do printf '#!/bin/sh\nexit 0\n' > "${STUB_BIN}/${tool}"; chmod +x "${STUB_BIN}/${tool}"; done
+# The docker stub answers `docker info --format` from STUB_DOCKER_RUNTIMES (runtime
+# names) and STUB_DOCKER_CDI (CDI device IDs), so doctor's runtime checks are testable.
+cat > "${STUB_BIN}/docker" <<'EOF'
+#!/bin/sh
+[ "$1" = info ] || exit 0
+case "$*" in
+    *Runtimes*) for r in ${STUB_DOCKER_RUNTIMES:-}; do echo "${r}"; done ;;
+    *DiscoveredDevices*) for id in ${STUB_DOCKER_CDI:-}; do echo "${id}"; done ;;
+    *--format*) ;;
+    *)  # plain `docker info`, shaped like Docker 29's
+        echo " Runtimes: ${STUB_DOCKER_RUNTIMES:-}"
+        for id in ${STUB_DOCKER_CDI:-}; do echo "  cdi: ${id}"; done ;;
+esac
+EOF
+chmod +x "${STUB_BIN}/docker"
 
 # expect <name> <root> <expected stdout> [env assignments...]
 expect() {
@@ -328,6 +343,61 @@ r=$(newroot gaudi-doc)
 kernel "${r}" 6.18.1
 pci "${r}" 0000:00:0b.0 0x8086 0x643e intel_vpu; accel "${r}" 0000:00:0b.0 0
 doctor_says "an NPU accel node does not satisfy the Gaudi check" "${r}" 'Checking Intel Gaudi' negate
+
+# Docker 29 lists CDI devices (cdi: nvidia.com/gpu=all) in `docker info`; that is
+# not a registered nvidia runtime, and doctor must not say it is.
+r=$(newroot nvidia-rt)
+mkdir -p "${r}/sys/module/nvidia"; touch "${r}/dev/nvidiactl"
+doctor_says "nvidia runtime registered is reported" "${r}" 'ok: nvidia runtime registered' "" \
+    STUB_DOCKER_RUNTIMES="io.containerd.runc.v2 nvidia runc"
+doctor_says "CDI-only host is not reported as having the nvidia runtime" "${r}" 'nvidia runtime registered' negate \
+    STUB_DOCKER_RUNTIMES="io.containerd.runc.v2 runc" STUB_DOCKER_CDI="nvidia.com/gpu=0 nvidia.com/gpu=all"
+doctor_says "CDI-only host is ok via CDI" "${r}" 'ok: .*CDI' "" \
+    STUB_DOCKER_RUNTIMES="io.containerd.runc.v2 runc" STUB_DOCKER_CDI="nvidia.com/gpu=0 nvidia.com/gpu=all"
+doctor_says "no runtime and no CDI warns" "${r}" 'warn.*nvidia-ctk' "" \
+    STUB_DOCKER_RUNTIMES="io.containerd.runc.v2 runc"
+
+# `test` must show the pod's output even when it exits before anything could
+# attach, and must fail when the pod fails. kubectl is stubbed: STUB_POD_PHASE is
+# the phase every pod reaches, STUB_POD_LOGS what `kubectl logs` prints.
+KSTUB="${WORK}/kbin"
+mkdir -p "${KSTUB}"
+cat > "${KSTUB}/kubectl" <<'EOF'
+#!/bin/sh
+case "$1" in
+    get)  case "$*" in *phase*) echo "${STUB_POD_PHASE}" ;; esac ;;
+    logs) printf %s "${STUB_POD_LOGS}" ;;  # no final newline, like nvidia-smi stderr
+esac
+exit 0
+EOF
+chmod +x "${KSTUB}/kubectl"
+
+# test_says <name> <root> <want rc: 0|fail> <ERE> [env assignments...]
+test_says() {
+    local name=$1 root=$2 want=$3 re=$4 out rc
+    shift 4
+    out=$(env K3D_GPU_SYSROOT="${root}" PATH="${KSTUB}:${PATH}" "$@" bash "${K3D_GPU}" test 2>&1)
+    rc=$?
+    if grep -E -- "${re}" <<< "${out}" >/dev/null \
+       && { { [ "${want}" = 0 ] && [ "${rc}" -eq 0 ]; } || { [ "${want}" = fail ] && [ "${rc}" -ne 0 ]; }; }; then
+        PASS=$((PASS + 1)); echo "ok   ${name}"
+    else
+        FAILS=$((FAILS + 1))
+        echo "FAIL ${name} (rc=${rc}, want ${want}, /${re}/)"
+        sed 's/^/  | /' <<< "${out}"
+    fi
+}
+
+r=$(newroot nvidia-test)
+mkdir -p "${r}/sys/module/nvidia"
+test_says "test prints nvidia-smi output from a pod that already exited" "${r}" 0 'GPU 0: Fake RTX' \
+    STUB_POD_PHASE=Succeeded STUB_POD_LOGS="GPU 0: Fake RTX"
+test_says "test fails when the nvidia-smi pod fails, and still shows its output" "${r}" fail 'NVML init failed' \
+    STUB_POD_PHASE=Failed STUB_POD_LOGS="NVML init failed"
+
+test_says "pod output without a final newline does not glue onto the next line" "${r}" 0 \
+    '^(.\[[0-9;]*m)?==>.*Deploying gaudi-test' \
+    STUB_POD_PHASE=Succeeded STUB_POD_LOGS="ERROR: noise" K3D_GPU_VENDORS=nvidia,gaudi
 
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
