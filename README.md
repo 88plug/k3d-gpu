@@ -42,7 +42,6 @@ yay -S k3d-gpu          # or build from packaging/aur/PKGBUILD
 k3d-gpu detect          # list accelerators on this host and their k8s resources
 k3d-gpu doctor          # preflight: accelerators, kernel/firmware, docker, runtimes, k3d, kubectl
 k3d-gpu host-setup      # check host drivers/userspace, print pinned install commands (--apply runs them)
-
 k3d-gpu doctor --perf   # read-only host tuning advisor for inference (add --model-gb N)
 k3d-gpu up              # create the cluster (device plugins auto-deploy), verify each accelerator > 0
 k3d-gpu test            # per accelerator: nvidia-smi pod / device-node listing pod

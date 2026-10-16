@@ -510,6 +510,7 @@ then
     FAILS=$((FAILS + 1)); echo "FAIL devcontainer docker-in-docker sets moby=false on a trixie base"
 else
     PASS=$((PASS + 1)); echo "ok   devcontainer docker-in-docker sets moby=false on a trixie base"
+fi
 
 # ---- doctor --perf ---------------------------------------------------------------
 # A fake host tuned for inference (good) and one with every knob wrong (bad). The
