@@ -10,14 +10,20 @@ endpoint: OpenVINO Model Server (OVMS) serving `OpenVINO/Qwen3-4B-int4-ov` as
 | [`langgraph/`](langgraph/) | LangGraph `StateGraph` + `ToolNode` | `langgraph==1.2.15`, `langchain-openai==1.7.2`, `langchain-core==1.6.11` |
 | [`crewai/`](crewai/) | CrewAI agent + task | `crewai==1.15.28` |
 | [`llamaindex/`](llamaindex/) | LlamaIndex `FunctionAgent` | `llama-index-core==0.14.25`, `llama-index-llms-openai-like==0.8.1` |
-| [`litellm-gateway/`](litellm-gateway/) | Intel Enterprise Agent Toolkit GenAI gateway (LiteLLM) | `litellm==1.83.14` (the gateway image's version) |
+| [`litellm-gateway/`](litellm-gateway/) | Intel Enterprise Agent Toolkit GenAI gateway (LiteLLM) | `litellm==1.83.14` (see [the gateway section](#enterprise-agent-toolkit-gateway)) |
 
 Each example asks "What is 6 times 7?", the model calls a `multiply` tool, and the
-agent prints the answer. Each directory has its own `requirements.txt`; install
-them in separate virtualenvs (CrewAI and LiteLLM pin `openai` 2.x, the Agents SDK
-needs 3.x).
+agent prints the answer. Each directory has its own `requirements.txt` (the direct
+dependencies) and `constraints.txt` (every package, transitive ones included,
+as resolved on Python 3.13 / Linux). Install them in separate virtualenvs: the
+CrewAI, LlamaIndex and LiteLLM sets resolve `openai` 2.x, the Agents SDK and
+LangGraph sets 3.x.
 
 ## Run against the cluster
+
+`k3d-gpu agent` (OVMS in namespace `k3d-gpu-agent`, Service `ovms` port 8000)
+is on branch [`claude/agent-stack`](https://github.com/88plug/k3d-gpu/tree/claude/agent-stack),
+not yet merged into `main`. Run the `k3d-gpu` script from that branch.
 
 ```bash
 k3d-gpu agent up                                     # OVMS on the best Intel engine
@@ -25,7 +31,7 @@ kubectl -n k3d-gpu-agent port-forward svc/ovms 8000:8000 &
 
 cd examples/agents/langgraph
 python -m venv .venv && . .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt -c constraints.txt
 python agent.py
 ```
 
@@ -65,6 +71,30 @@ kubectl -n genai-gateway port-forward svc/genai-gateway-service 4000:4000 &
 LITELLM_MASTER_KEY=... ./register-model.sh
 ```
 
+`register-model.sh` needs `curl` and `python3`.
+
+**Version.** The toolkit's image is built from LiteLLM tag
+`v1.83.14-stable.patch.2`, three commits after `v1.83.14-stable`: two Docker
+base-image pins and one MCP server-creation auth fix (BerriAI/litellm#27190).
+Both tags carry package version 1.83.14 and PyPI has only that one, built from
+`v1.83.14-stable`, so the example pins `litellm==1.83.14`. The three commits
+touch Dockerfiles and the proxy's MCP management endpoint, none of the SDK
+`Router` code the example runs.
+
+**Advisories.** OSV lists four advisories against `litellm` 1.83.14, all in the
+proxy server (the gateway), not the SDK `Router` this example runs:
+
+| Advisory | Issue | Fixed in |
+|---|---|---|
+| [GHSA-3cv6-jpf6-8222](https://osv.dev/vulnerability/GHSA-3cv6-jpf6-8222) | Authenticated SSRF and provider-credential exfiltration via request-body routing parameters | 1.88.6 |
+| [GHSA-4jcj-7x88-m979](https://osv.dev/vulnerability/GHSA-4jcj-7x88-m979) | MCP proxy improper authentication | 1.84.0 |
+| [GHSA-4xpc-pv4p-pm3w](https://osv.dev/vulnerability/GHSA-4xpc-pv4p-pm3w) | Authentication bypass via Host header injection | 1.84.0 |
+| [GHSA-7488-6r32-c95q](https://osv.dev/vulnerability/GHSA-7488-6r32-c95q) | MCP authentication bypass via OAuth2 passthrough fallback | 1.84.0 |
+
+The image's extra MCP auth commit is not listed as a fix for any of them, so
+treat all four as open on the toolkit's gateway: keep it off untrusted networks
+and its master key private, or run a fixed LiteLLM image.
+
 Clients then call the gateway (`http://localhost:4000/v1`, bearer = a gateway
 key) with `model="Qwen3-4B-int4-ov"`. The toolkit's charts schedule on nodes
 labelled `ei-infra-eligible=true` (or control-plane nodes).
@@ -74,12 +104,15 @@ labelled `ei-infra-eligible=true` (or control-plane nodes).
 `stub_openai.py` is a stdlib stand-in for the endpoint: `/v3` only, the one
 model name, a `multiply` tool call, then an answer from the tool's result,
 streaming or not. `check.py <example>` runs an example against it and checks
-the requests it sent. `tests/agent_examples_test.sh` does that for every
+the requests it sent (for `litellm-gateway`, also that `model.json` targets the
+in-cluster agent Service, which `agent.py` swaps for the stub). `tests/agent_examples_test.sh` does that for every
 example in a pinned `python:3.13.16-slim-trixie` container, which is where the
-packages get installed. It takes example names, so a CI matrix can run one
+packages get installed from `requirements.txt` under `constraints.txt`; the
+installed set must equal `constraints.txt`. It takes example names, so a CI matrix can run one
 example per job.
 
 ```bash
 tests/agent_examples_test.sh            # all
 tests/agent_examples_test.sh crewai     # one
+tests/register_model_test.sh            # register-model.sh against a stub gateway
 ```

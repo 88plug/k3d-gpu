@@ -2,6 +2,8 @@
 # Runs each examples/agents quickstart against the stub OpenAI endpoint
 # (examples/agents/stub_openai.py) inside a pinned python container. The
 # framework packages are installed in the container only. No cluster, no model.
+# Each example installs requirements.txt under constraints.txt (the full pinned
+# set, transitive dependencies included); the installed set must equal it.
 #
 # Usage: tests/agent_examples_test.sh [example ...]   (default: all)
 
@@ -23,6 +25,7 @@ fi
 FAILS=()
 for ex in "${examples[@]}"; do
     [ -f "${EXAMPLES_DIR}/${ex}/requirements.txt" ] || { echo "no such example: ${ex}" >&2; FAILS+=("${ex}"); continue; }
+    [ -f "${EXAMPLES_DIR}/${ex}/constraints.txt" ] || { echo "FAIL ${ex}: no constraints.txt" >&2; FAILS+=("${ex}"); continue; }
     echo "=== ${ex}"
     if docker run --rm \
         -v "${EXAMPLES_DIR}:/examples:ro" \
@@ -30,8 +33,11 @@ for ex in "${examples[@]}"; do
         -e EXAMPLE="${ex}" \
         "${IMAGE}" \
         sh -ec 'python -m venv /tmp/venv
-                /tmp/venv/bin/pip install --quiet --disable-pip-version-check -r "/examples/${EXAMPLE}/requirements.txt"
+                /tmp/venv/bin/pip install --quiet --disable-pip-version-check \
+                    -r "/examples/${EXAMPLE}/requirements.txt" -c "/examples/${EXAMPLE}/constraints.txt"
                 /tmp/venv/bin/pip check
+                /tmp/venv/bin/pip freeze --all --exclude pip | sort -f > /tmp/installed.txt
+                grep -v "^#" "/examples/${EXAMPLE}/constraints.txt" | sort -f | diff -u - /tmp/installed.txt
                 cd /examples && /tmp/venv/bin/python check.py "${EXAMPLE}"'; then
         echo "PASS ${ex}"
     else

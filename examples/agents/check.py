@@ -16,6 +16,8 @@ import tempfile
 import stub_openai
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+# `k3d-gpu agent up`: Service ovms, namespace k3d-gpu-agent, OVMS --rest_port=8000.
+AGENT_SERVICE_URL = "http://ovms.k3d-gpu-agent.svc.cluster.local:8000"
 
 
 def main(example):
@@ -55,6 +57,15 @@ def main(example):
     expect(any(m.get("role") == "tool" and "42" in stub_openai._text(m.get("content"))
                for r in chats for m in r["body"].get("messages") or []),
            "the tool result 42 went back as a tool message")
+    if example == "litellm-gateway":
+        # agent.py swaps api_base for the stub's URL; the in-cluster entry the
+        # gateway gets is checked here against the agent Service and the stub.
+        with open(os.path.join(HERE, example, "model.json")) as f:
+            params = json.load(f)["litellm_params"]
+        expect(params["api_base"] == f"{AGENT_SERVICE_URL}{stub_openai.PREFIX}",
+               f"model.json api_base is {AGENT_SERVICE_URL}{stub_openai.PREFIX} (got {params['api_base']})")
+        expect(params["model"] == f"openai/{stub_openai.MODEL}",
+               f"model.json model is openai/{stub_openai.MODEL} (got {params['model']})")
     os.unlink(log)
     return 1 if failures else 0
 
