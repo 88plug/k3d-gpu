@@ -475,12 +475,13 @@ else
 fi
 
 # vendor_total counts AMX/hybrid as distinct labelled nodes, not one per label:
-# label L1 is on nodes a and b, L2 on b, L3 on none, so the answer is 2.
+# labels L1 and L2 are both on nodes a and b, L3 on none, so the answer is 2.
+# Two nodes under two labels also catches node lists joined without a newline.
 VT_FN=$(sed -n '/^vendor_total() {/,/^}/p' "${K3D_GPU}")
 vt() {
     bash -euo pipefail -c "${VT_FN}"'
         vendor_resources() { printf "L1\nL2\nL3\n"; }
-        kubectl() { [ "${STUB_NONE:-}" ] && return 1; case "$4" in L1) printf "node/a\nnode/b\n" ;; L2) echo node/b ;; esac; }
+        kubectl() { [ "${STUB_NONE:-}" ] && return 1; case "$4" in L1|L2) printf "node/a\nnode/b\n" ;; esac; }
         vendor_total "$1"' _ "$1"
 }
 for case in "amx 2" "hybrid 2" "amx 0 none"; do
