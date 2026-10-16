@@ -1,0 +1,10 @@
+{
+  "_note": "Approximate architecture figures recalled from each model's config.json and NOT re-fetched for this prototype. Verify them before live scoring. kv_bytes_per_token = 2 (K,V) * layers * kv_heads * head_dim * 2 bytes (bf16).",
+  "llama-3.2-1b": {"dense_params": 1.24e9, "expert_params": 0, "n_experts": 0, "top_k": 0,
+                   "n_layers": 16, "d_model": 2048, "kv_bytes_per_token": 32768, "bytes_per_param": 2},
+  "llama-3.1-8b": {"dense_params": 8.03e9, "expert_params": 0, "n_experts": 0, "top_k": 0,
+                   "n_layers": 32, "d_model": 4096, "kv_bytes_per_token": 131072, "bytes_per_param": 2},
+  "qwen3-30b-a3b": {"_split": "Dense/expert split derived from 30.5B total and 3.3B active params, top-8 of 128 experts. Approximate.",
+                    "dense_params": 1.5e9, "expert_params": 29.0e9, "n_experts": 128, "top_k": 8,
+                    "n_layers": 48, "d_model": 2048, "kv_bytes_per_token": 98304, "bytes_per_param": 2}
+}

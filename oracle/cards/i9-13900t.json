@@ -1,0 +1,5 @@
+{
+  "peak_flops": 1.28e12,
+  "mem_bw": 8.96e10,
+  "notes": "mem_bw = 89.6 GB/s, the Intel ARK max memory bandwidth (DDR5-5600, 2 channels), fetched 2026-10-16. peak_flops is an ESTIMATE: 8 P-cores x 32 FP32 FLOP/cycle x 3.0 GHz plus 16 E-cores x 16 x 2.0 GHz, AVX2, no AMX. Real sustained clocks under the 35 W cap are lower."
+}

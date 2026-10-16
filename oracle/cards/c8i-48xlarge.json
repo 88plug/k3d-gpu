@@ -1,0 +1,5 @@
+{
+  "peak_flops": 1.966e14,
+  "mem_bw": 3.0e11,
+  "notes": "UNVERIFIED PLACEHOLDER. Assumes 192 vCPU = 96 cores (the AWS page fetched 2026-10-16 lists C8i sizes up to 96xlarge and gives no per-size table in the extracted text). peak_flops = 96 cores x 2.0 GHz (assumed AMX all-core clock) x 1024 BF16 FLOP/cycle (assumed AMX rate). mem_bw is assumed; the AWS page says only '2.5x more memory bandwidth' than the previous generation. The oracle's fitted efficiencies absorb the absolute scale. Only peak_flops/mem_bw decides which phase is the bottleneck. Before scoring, replace mem_bw with a STREAM triad result and peak_flops with a oneDNN AMX GEMM result."
+}

@@ -1,0 +1,22 @@
+# An agent backend whose promotion to the Xeon pool is gated on a predicted
+# task p95. `slo_oracle.py gate --manifest` reads the annotation.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: support-agent
+  annotations:
+    k3d-gpu.io/xeon-slo-p95: "240s"
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: support-agent}
+  template:
+    metadata:
+      labels:
+        app: support-agent
+        k3d-gpu.io/cores: performance
+    spec:
+      containers:
+        - name: agent
+          image: python:3.13-slim
+          command: ["sleep", "infinity"]

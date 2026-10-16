@@ -1,0 +1,7 @@
+{
+  "_note": "SYNTHETIC: produced by the oracle's own model with eff_c=0.5, eff_b=0.6, step_s=0.004 on the placeholder c8i card for llama-3.1-8b. Not a measurement. Replace with numbers measured on the target using the shapes from `slo_oracle.py anchors`.",
+  "prefill": 0.72193,
+  "decode": 0.09346,
+  "decode_long": 0.09921,
+  "valid": 0.11164
+}
