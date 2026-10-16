@@ -19,7 +19,6 @@ import argparse
 import bisect
 import itertools
 import json
-import math
 import multiprocessing as mp
 import random
 import statistics
@@ -178,7 +177,7 @@ class Oracle:
         opts = {v: true_cost(tool, v, self.cfg, thr, con) for v in variants_of(tool)}
         pool = opts
         if self.slo:
-            best = min(l for l, _ in opts.values())
+            best = min(lat for lat, _ in opts.values())
             pool = {v: c for v, c in opts.items() if c[0] <= (1 + self.cfg.slack) * best}
         return min(pool, key=lambda v: pool[v][1] + self.cfg.idle_w * pool[v][0])
 
@@ -287,6 +286,8 @@ def task_level_fair(cfg, start, scale, seed, extra_starts=()):
 
 
 def run(cfg: Cfg) -> dict:
+    if not 0 <= cfg.amp < 2 / 3:  # P throttle factor 1 - 1.5 * amp must stay positive
+        raise ValueError(f"amp must be in [0, 2/3), got {cfg.amp}")
     rng = random.Random(cfg.seed)
     tasks = make_tasks(cfg, rng)
     reg_seed, noise_seed = cfg.seed * 1009 + 1, cfg.seed * 7919 + 3
@@ -358,8 +359,11 @@ def lat_ratio(r, pol):
     return r["policies"][pol]["p95_lat"] / r["policies"]["static_best_latency"]["p95_lat"]
 
 
+def q(xs, p):
+    return sorted(xs)[min(len(xs) - 1, int(p * len(xs)))]
+
+
 def verdicts(results):
-    q = lambda xs, p: sorted(xs)[min(len(xs) - 1, int(p * len(xs)))]
     v = {}
     # H1 arithmetic upper bound (oracle, no SLO) per LLM share
     v["H1"] = {}

@@ -207,9 +207,14 @@ class OverheadTest(unittest.TestCase):
             "baggage": "userId=a,k3dgpu.joule_budget=500,k3dgpu.joules_spent=12"}}
         raw, wrapped = [], []
         for _ in range(3000):
-            t = time.perf_counter_ns(); ok_handler("t", {}, "p"); raw.append(time.perf_counter_ns() - t)
-            t = time.perf_counter_ns(); mw.call(params); wrapped.append(time.perf_counter_ns() - t)
-        raw.sort(); wrapped.sort()
+            t = time.perf_counter_ns()
+            ok_handler("t", {}, "p")
+            raw.append(time.perf_counter_ns() - t)
+            t = time.perf_counter_ns()
+            mw.call(params)
+            wrapped.append(time.perf_counter_ns() - t)
+        raw.sort()
+        wrapped.sort()
         p99 = (wrapped[int(0.99 * len(wrapped))] - raw[int(0.99 * len(raw))]) / 1e6
         print(f"\nH5 wrapper p99 added = {p99:.4f} ms")
         self.assertLessEqual(p99, 2.0)
