@@ -276,6 +276,24 @@ clean `up` means GPUs are schedulable.
 > your driver supports — see the
 > [CUDA/driver compatibility matrix](https://docs.nvidia.com/deploy/cuda-compatibility/).
 
+### Proving where a pod actually ran (prototype)
+
+`scripts/k3d-gpu-sampler` reads a pod's own counters over a window and reports
+whether the claimed engine did the work (`PROVEN`, `FALLBACK`, `AMBIGUOUS`,
+`IDLE`, `UNVERIFIABLE`). GPU time comes from DRM fdinfo of the pod's processes,
+P-/E-core time from `perf` cgroup counters, and NPU time from `npu_busy_time_us`
+when the pod is the NPU's only user. Run it as root on the node (RAPL
+`energy_uj` is root-only):
+
+```bash
+sudo scripts/k3d-gpu-sampler sample --cgroup kubepods.slice/<pod-slice> --claim igpu --window 10
+```
+
+The `verdict` and `sentinel` subcommands take JSON on stdin. Tests:
+`python3 tests/sampler_test.py` (unit) and `python3 tests/sampler_sim.py`
+(falsification simulation against `tests/sampler_criteria.py`; synthetic devices,
+not host measurements).
+
 ---
 
 ## References

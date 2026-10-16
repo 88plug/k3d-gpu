@@ -1,0 +1,609 @@
+#!/usr/bin/env python3
+"""k3d-gpu-sampler: per-engine counter sampler for k3d-gpu pods.
+
+Reads pod-scoped counters around a workload window and turns them into three
+outputs:
+
+  verdict    PROVEN / FALLBACK / AMBIGUOUS / IDLE / UNVERIFIABLE for the engine a
+             stage claims to run on, from what the counters show it ran on.
+  attribute  joules per pod and engine: iGPU from RAPL PP1 ("uncore") split by
+             DRM fdinfo busy share; P-core/E-core from RAPL PP0 ("core") through a
+             fitted shared-rail model, with rail-coupling and unattributed lines.
+  sentinel   fits marginal energy per event versus event rate for each candidate
+             device and picks the cheapest one at a given rate, or keeps the
+             incumbent when the measured difference is inside the noise.
+
+Counter sources (all read-only):
+  GPU        /proc/<pid>/fdinfo/<fd> drm-engine-<class> (ns, i915) or
+             drm-cycles-<class>/drm-total-cycles-<class> (xe), for the pids in the
+             pod cgroup, de-duplicated by (drm-pdev, drm-client-id).
+  NPU        /sys/class/accel/accel*/device/npu_busy_time_us (intel_vpu). This is
+             device-wide, so it counts for a pod only when that pod is the sole
+             holder of the accel node.
+  CPU        perf stat in cgroup mode on cpu_core/cycles/ and cpu_atom/cycles/,
+             split into busy seconds with the cgroup's cpu.stat usage_usec.
+  Energy     /sys/class/powercap/intel-rapl:* energy_uj, with wraparound at
+             max_energy_range_uj.
+
+The i915 PMU (rcs0-busy etc.) is system-wide and is not used for pod verdicts.
+
+K3D_GPU_SYSROOT prefixes every /sys and /proc path, so the readers run against a
+fake tree in tests.
+"""
+
+import argparse
+import glob
+import json
+import math
+import os
+import subprocess
+import sys
+
+SYSROOT = os.environ.get("K3D_GPU_SYSROOT", "")
+
+CPU_ENGINES = ("pcore", "ecore")
+ACCEL_ENGINES = ("igpu", "npu")
+
+
+def _p(path, root=None):
+    return (SYSROOT if root is None else root) + path
+
+
+def _read(path, default=None):
+    try:
+        with open(path) as f:
+            return f.read()
+    except OSError:
+        return default
+
+
+# --------------------------------------------------------------------------- RAPL
+
+def rapl_domains(root=None):
+    """{name: (energy_uj path, max_energy_range_uj)} for every powercap zone."""
+    out = {}
+    for d in sorted(glob.glob(_p("/sys/class/powercap/intel-rapl:*", root))):
+        name = (_read(os.path.join(d, "name")) or "").strip()
+        rng = (_read(os.path.join(d, "max_energy_range_uj")) or "").strip()
+        if name and rng.isdigit():
+            out[name] = (os.path.join(d, "energy_uj"), int(rng))
+    return out
+
+
+def rapl_read(domains):
+    out = {}
+    for name, (path, _) in domains.items():
+        v = (_read(path) or "").strip()
+        if v.isdigit():
+            out[name] = int(v)
+    return out
+
+
+def rapl_delta_j(before, after, domains):
+    """Joules per domain between two reads; one wrap per window is handled."""
+    out = {}
+    for name, (_, rng) in domains.items():
+        if name in before and name in after:
+            d = after[name] - before[name]
+            if d < 0:
+                d += rng + 1
+            out[name] = d / 1e6
+    return out
+
+
+# --------------------------------------------------------------------------- DRM fdinfo
+
+def parse_fdinfo(text):
+    """DRM usage keys from one fdinfo file, or None if the fd is not a DRM client."""
+    rec = {"engines_ns": {}, "cycles": {}, "total_cycles": {}}
+    for line in text.splitlines():
+        key, sep, val = line.partition(":")
+        if not sep:
+            continue
+        val = val.strip()
+        num = val.split()[0] if val else ""
+        if key == "drm-driver":
+            rec["driver"] = val
+        elif key == "drm-pdev":
+            rec["pdev"] = val
+        elif key == "drm-client-id":
+            rec["client_id"] = val
+        elif key.startswith("drm-engine-capacity-"):
+            continue
+        elif key.startswith("drm-engine-") and num.isdigit():
+            rec["engines_ns"][key[len("drm-engine-"):]] = int(num)
+        elif key.startswith("drm-total-cycles-") and num.isdigit():
+            rec["total_cycles"][key[len("drm-total-cycles-"):]] = int(num)
+        elif key.startswith("drm-cycles-") and num.isdigit():
+            rec["cycles"][key[len("drm-cycles-"):]] = int(num)
+    return rec if "driver" in rec else None
+
+
+def cgroup_pids(cgroup_dir):
+    pids = set()
+    for dirpath, _, files in os.walk(cgroup_dir):
+        if "cgroup.procs" in files:
+            for line in (_read(os.path.join(dirpath, "cgroup.procs")) or "").split():
+                if line.isdigit():
+                    pids.add(int(line))
+    return pids
+
+
+def drm_clients(pids=None, root=None, drivers=("i915", "xe")):
+    """{(pdev, client_id): record} for DRM clients held by pids (all pids if None)."""
+    if pids is None:
+        fds = glob.glob(_p("/proc/[0-9]*/fdinfo/*", root))
+    else:
+        fds = [f for pid in sorted(pids) for f in glob.glob(_p("/proc/%d/fdinfo/*" % pid, root))]
+    out = {}
+    for f in fds:
+        text = _read(f)
+        if not text or "drm-driver" not in text:
+            continue
+        rec = parse_fdinfo(text)
+        if rec is None or rec["driver"] not in drivers or "client_id" not in rec:
+            continue
+        out[(rec.get("pdev", ""), rec["client_id"])] = rec
+    return out
+
+
+def gpu_busy_s(before, after, window_s):
+    """Busy engine-seconds summed over clients present in both snapshots.
+
+    i915 reports ns. xe reports busy cycles against a total-cycles clock; busy
+    seconds = window * d(cycles) / d(total_cycles). A counter that went backwards
+    counts as zero (the spec allows a temporary step back).
+    """
+    total = 0.0
+    for key, a in after.items():
+        b = before.get(key)
+        if b is None:
+            continue
+        for cls, ns in a["engines_ns"].items():
+            if cls in a["cycles"]:
+                continue
+            total += max(0, ns - b["engines_ns"].get(cls, ns)) / 1e9
+        for cls, cyc in a["cycles"].items():
+            dt = a["total_cycles"].get(cls, 0) - b["total_cycles"].get(cls, 0)
+            dc = cyc - b["cycles"].get(cls, cyc)
+            if dt > 0 and dc > 0:
+                total += window_s * dc / dt
+    return total
+
+
+# --------------------------------------------------------------------------- NPU
+
+def npu_nodes(root=None):
+    """{accel name: npu_busy_time_us path} for NPUs that expose busy time."""
+    out = {}
+    for d in sorted(glob.glob(_p("/sys/class/accel/accel*", root))):
+        f = os.path.join(d, "device", "npu_busy_time_us")
+        if os.path.exists(f):
+            out[os.path.basename(d)] = f
+    return out
+
+
+def accel_holders(node, root=None):
+    """Pids with /dev/accel/<node> open."""
+    want = "/dev/accel/" + node
+    holders = set()
+    for fd in glob.glob(_p("/proc/[0-9]*/fd/*", root)):
+        try:
+            target = os.readlink(fd)
+        except OSError:
+            continue
+        if target.endswith(want):
+            holders.add(int(fd.split("/proc/")[1].split("/")[0]))
+    return holders
+
+
+# --------------------------------------------------------------------------- CPU (perf cgroup mode)
+
+def perf_cmd(cgroup, window_s):
+    """perf stat counting P- and E-core cycles for one cgroup, system-wide, CSV."""
+    return ["perf", "stat", "-x", ";", "-a",
+            "-e", "cpu_core/cycles/,cpu_atom/cycles/",
+            "-G", "%s,%s" % (cgroup, cgroup),
+            "--", "sleep", str(window_s)]
+
+
+def parse_perf_csv(text):
+    """{'pcore': cycles, 'ecore': cycles} from perf stat -x ';' output."""
+    out = {"pcore": 0, "ecore": 0}
+    for line in text.splitlines():
+        fields = line.split(";")
+        if len(fields) < 3:
+            continue
+        name = next((f for f in fields if f.startswith(("cpu_core/", "cpu_atom/"))), None)
+        if name is None:
+            continue
+        val = fields[0].strip()
+        n = int(float(val)) if val.replace(".", "", 1).isdigit() else 0
+        out["pcore" if name.startswith("cpu_core/") else "ecore"] += n
+    return out
+
+
+def cpu_busy_s(cycles, usage_s, fmax_ghz):
+    """Split cgroup CPU seconds into P/E busy seconds by cycles / per-type clock."""
+    t = {k: cycles.get(k, 0) / (fmax_ghz[k] * 1e9) for k in CPU_ENGINES}
+    s = sum(t.values())
+    if s <= 0:
+        return {k: 0.0 for k in CPU_ENGINES}
+    return {k: usage_s * t[k] / s for k in CPU_ENGINES}
+
+
+def cgroup_usage_s(cgroup_dir):
+    for line in (_read(os.path.join(cgroup_dir, "cpu.stat")) or "").splitlines():
+        k, _, v = line.partition(" ")
+        if k == "usage_usec" and v.strip().isdigit():
+            return int(v) / 1e6
+    return 0.0
+
+
+def type_fmax_ghz(root=None):
+    """Max clock per core type from cpufreq, keyed pcore/ecore."""
+    out = {}
+    for eng, pmu in (("pcore", "cpu_core"), ("ecore", "cpu_atom")):
+        cpus = (_read(_p("/sys/bus/event_source/devices/%s/cpus" % pmu, root)) or "").strip()
+        first = cpus.split(",")[0].split("-")[0] if cpus else ""
+        khz = (_read(_p("/sys/devices/system/cpu/cpu%s/cpufreq/cpuinfo_max_freq" % first, root)) or "").strip()
+        if first.isdigit() and khz.isdigit():
+            out[eng] = int(khz) / 1e6
+    return out
+
+
+# --------------------------------------------------------------------------- verdict
+
+DEFAULT_THRESHOLDS = {
+    "min_busy_frac": 0.02,  # claimed engine busy must exceed this share of the window
+    "proven_share": 0.50,   # claimed engine's share of the pod's busy time for PROVEN
+    "fallback_share": 0.10, # below this share the stage ran elsewhere
+    "cores_proven": 0.90,   # core-type label: share of CPU time on the labelled type
+    "cores_fallback": 0.50,
+}
+
+
+def verdict(claim, busy, window_s, th=None, ceiling=True):
+    """Classify one stage window.
+
+    busy: {engine: busy seconds attributable to the pod} for pcore, ecore, igpu,
+    npu. A missing key means the counter is unavailable on this host.
+    ceiling=False drops the cross-engine test and only asks whether the claimed
+    engine moved (kept for the ablation in tests/sampler_sim.py).
+    """
+    th = dict(DEFAULT_THRESHOLDS, **(th or {}))
+    if claim not in busy:
+        return "UNVERIFIABLE"
+    floor = th["min_busy_frac"] * window_s
+    cpu = sum(busy.get(k, 0.0) for k in CPU_ENGINES)
+    if claim in CPU_ENGINES:
+        if cpu < floor:
+            return "IDLE"
+        if not ceiling:
+            return "PROVEN" if busy[claim] >= floor else "FALLBACK"
+        share = busy[claim] / cpu
+        if share >= th["cores_proven"]:
+            return "PROVEN"
+        return "FALLBACK" if share < th["cores_fallback"] else "AMBIGUOUS"
+    acc = busy[claim]
+    if acc < floor:
+        return "FALLBACK" if cpu >= floor else "IDLE"
+    if not ceiling:
+        return "PROVEN"
+    share = acc / (acc + cpu)
+    if share >= th["proven_share"]:
+        return "PROVEN"
+    return "FALLBACK" if share < th["fallback_share"] else "AMBIGUOUS"
+
+
+# --------------------------------------------------------------------------- linear algebra (stdlib)
+
+def lstsq(rows, y):
+    """Ordinary least squares via normal equations with partial pivoting."""
+    n = len(rows[0])
+    a = [[sum(r[i] * r[j] for r in rows) for j in range(n)] for i in range(n)]
+    b = [sum(r[i] * v for r, v in zip(rows, y)) for i in range(n)]
+    for c in range(n):
+        p = max(range(c, n), key=lambda i: abs(a[i][c]))
+        if abs(a[p][c]) < 1e-300:
+            raise ValueError("singular design matrix")
+        a[c], a[p], b[c], b[p] = a[p], a[c], b[p], b[c]
+        for i in range(c + 1, n):
+            f = a[i][c] / a[c][c]
+            for j in range(c, n):
+                a[i][j] -= f * a[c][j]
+            b[i] -= f * b[c]
+    x = [0.0] * n
+    for i in reversed(range(n)):
+        x[i] = (b[i] - sum(a[i][j] * x[j] for j in range(i + 1, n))) / a[i][i]
+    return x
+
+
+def vif_pair(u, v):
+    """Variance inflation factor of two regressors (with intercept): 1/(1-r^2)."""
+    n = len(u)
+    mu, mv = sum(u) / n, sum(v) / n
+    suv = sum((a - mu) * (b - mv) for a, b in zip(u, v))
+    suu = sum((a - mu) ** 2 for a in u)
+    svv = sum((b - mv) ** 2 for b in v)
+    if suu == 0 or svv == 0:
+        return math.inf
+    r2 = suv * suv / (suu * svv)
+    return math.inf if r2 >= 1 else 1 / (1 - r2)
+
+
+# --------------------------------------------------------------------------- joules
+
+def igpu_joules(pp1_j, pod_busy_s, all_busy_s, floor_w, window_s):
+    """Split PP1 energy by fdinfo busy share. Idle floor and any share not
+    owned by a client go to 'unattributed'."""
+    active = max(0.0, pp1_j - floor_w * window_s)
+    pod = active * pod_busy_s / all_busy_s if all_busy_s > 0 else 0.0
+    return {"pod_j": pod, "unattributed_j": pp1_j - pod}
+
+
+def rail_g(f_ghz, a):
+    """Energy-per-cycle shape for a shared rail: V ~ v0 + k f, so V^2 ~ (a + f)^2."""
+    return (a + f_ghz) ** 2
+
+
+A_GRID = [x / 4 for x in range(0, 41)]   # a = v0/k in GHz, 0..10
+
+
+def fit_core_model(calib):
+    """Fit PP0 = idle_w*window + beta_p*cyc_p*g(f_rail) + beta_e*cyc_e*g(f_rail).
+
+    calib: list of dicts with window_s, pp0_j, cyc (pcore/ecore, in Gcycles),
+    f (pcore/ecore GHz). f_rail is the higher clock of the active core types.
+    The rail-shape parameter a is chosen by grid search; the rest is linear.
+    Returns the model with a 'vif' of the P/E regressors.
+    """
+    best = None
+    for a in A_GRID:
+        rows, y = [], []
+        for c in calib:
+            fr = rail_freq(c)
+            g = rail_g(fr, a)
+            rows.append([c["window_s"], c["cyc"]["pcore"] * g, c["cyc"]["ecore"] * g])
+            y.append(c["pp0_j"])
+        try:
+            x = lstsq(rows, y)
+        except ValueError:
+            continue
+        sse = sum((sum(xi * ri for xi, ri in zip(x, r)) - v) ** 2 for r, v in zip(rows, y))
+        if best is None or sse < best[0]:
+            best = (sse, a, x, rows)
+    if best is None:
+        # P and E cycles move together in every calibration window: only the
+        # combined core model is identifiable.
+        rows = [[c["window_s"], c["cyc"]["pcore"] + c["cyc"]["ecore"]] for c in calib]
+        x = lstsq(rows, [c["pp0_j"] for c in calib])
+        return {"a": None, "idle_w": x[0], "beta": None, "vif": math.inf, "rmse_j": None}
+    sse, a, x, rows = best
+    vif = vif_pair([r[1] / r[0] for r in rows], [r[2] / r[0] for r in rows])
+    return {"a": a, "idle_w": x[0], "beta": {"pcore": x[1], "ecore": x[2]}, "vif": vif,
+            "rmse_j": math.sqrt(sse / len(rows))}
+
+
+def rail_freq(w):
+    act = [w["f"][k] for k in CPU_ENGINES if w["cyc"][k] > 0]
+    return max(act) if act else 0.0
+
+
+def attribute_cores(model, window, pods, vif_limit=10.0):
+    """Joules per pod and core type at the operating point.
+
+    window: {window_s, pp0_j, f: {pcore, ecore GHz}, cyc: totals}
+    pods: {pod: {pcore: Gcycles, ecore: Gcycles}}
+    Rail coupling for a type = the extra energy its cycles cost because the
+    rail ran at f_rail rather than at that type's own clock.
+    """
+    if model["vif"] > vif_limit:
+        total = window["pp0_j"] - model["idle_w"] * window["window_s"]
+        return {"refused": "P/E regressors not identifiable (VIF %.1f > %.1f); "
+                           "reporting combined core joules only" % (model["vif"], vif_limit),
+                "core_active_j": total}
+    fr = rail_freq(window)
+    g = rail_g(fr, model["a"])
+    out, attributed = {}, 0.0
+    for pod, cyc in pods.items():
+        row = {}
+        for k in CPU_ENGINES:
+            j = model["beta"][k] * cyc.get(k, 0.0) * g
+            alone = model["beta"][k] * cyc.get(k, 0.0) * rail_g(window["f"][k], model["a"])
+            row[k + "_j"] = j
+            row[k + "_rail_coupling_j"] = j - alone
+            attributed += j
+        out[pod] = row
+    out["_idle_j"] = model["idle_w"] * window["window_s"]
+    out["_unattributed_j"] = window["pp0_j"] - attributed - out["_idle_j"]
+    return out
+
+
+def cpu_time_split(pkg_j, cpu_s):
+    """Baseline: package joules in proportion to CPU time (Scaphandre-style)."""
+    s = sum(cpu_s.values())
+    return {k: pkg_j * v / s if s else 0.0 for k, v in cpu_s.items()}
+
+
+# --------------------------------------------------------------------------- sentinel
+
+TAU_GRID = [0.001 * 1.25 ** i for i in range(48)]  # 1 ms .. ~45 s
+
+
+def _tail_features(rate, tau):
+    """Per-event features under Poisson arrivals with a hold-off timer tau:
+    expected awake tail E[min(gap, tau)] and wake probability P(gap > tau)."""
+    q = math.exp(-rate * tau)
+    return [1.0, (1 - q) / rate, q]
+
+
+def fit_sentinel(points, tail=True):
+    """Fit E_event(rate) = E_active + P_tail*E[min(gap,tau)] + E_wake*P(gap>tau).
+
+    points: [(rate, joules_per_event)] or [(rate, joules_per_event, std_err)].
+    tail=False fits E_active only (the ablation). Coefficients are kept
+    non-negative by dropping a feature that fits negative. The returned
+    rmse_rel is the larger of the fit residual and the median measured relative
+    standard error, so the placement gate never trusts the curve more than the
+    repeats allow.
+    """
+    se_rel = sorted(p[2] / p[1] for p in points if len(p) > 2 and p[1] > 0)
+    floor = se_rel[len(se_rel) // 2] if se_rel else 0.0
+    points = [(p[0], p[1]) for p in points]
+    if not tail:
+        e = sum(j for _, j in points) / len(points)
+        return {"tail": False, "e_active": e, "p_tail": 0.0, "e_wake": 0.0, "tau": 0.0,
+                "rmse_rel": max(floor, _rmse_rel(points, lambda r: e))}
+    best = None
+    for tau in TAU_GRID:
+        for keep in ([0, 1, 2], [0, 1], [0, 2], [0]):
+            rows = [[_tail_features(r, tau)[i] for i in keep] for r, _ in points]
+            try:
+                x = lstsq(rows, [j for _, j in points])
+            except ValueError:
+                continue
+            if any(v < 0 for v in x):
+                continue
+            coef = [0.0, 0.0, 0.0]
+            for i, v in zip(keep, x):
+                coef[i] = v
+            def pred(r, c=coef, t=tau):
+                return sum(ci * fi for ci, fi in zip(c, _tail_features(r, t)))
+            sse = sum((pred(r) - j) ** 2 / j ** 2 for r, j in points)
+            if best is None or sse < best[0]:
+                best = (sse, tau, coef, pred)
+            break
+    _, tau, coef, pred = best
+    return {"tail": True, "e_active": coef[0], "p_tail": coef[1], "e_wake": coef[2],
+            "tau": tau, "rmse_rel": max(floor, _rmse_rel(points, pred))}
+
+
+def _rmse_rel(points, pred):
+    return math.sqrt(sum((pred(r) - j) ** 2 / j ** 2 for r, j in points) / len(points))
+
+
+def predict(fit, rate):
+    if not fit["tail"]:
+        return fit["e_active"]
+    f = _tail_features(rate, fit["tau"])
+    return fit["e_active"] + fit["p_tail"] * f[1] + fit["e_wake"] * f[2]
+
+
+def crossover(fa, fb, lo, hi, steps=200):
+    """Rates in [lo, hi] where the cheaper of two fitted devices changes."""
+    out = []
+    prev = None
+    for i in range(steps + 1):
+        r = lo * (hi / lo) ** (i / steps)
+        d = predict(fa, r) - predict(fb, r)
+        if prev is not None and (d > 0) != (prev[1] > 0):
+            a, b = prev[0], r
+            for _ in range(40):
+                m = math.sqrt(a * b)
+                if (predict(fa, m) - predict(fb, m) > 0) == (prev[1] > 0):
+                    a = m
+                else:
+                    b = m
+            out.append(math.sqrt(a * b))
+        prev = (r, d)
+    return out
+
+
+def place(fits, rate, incumbent, z=2.0):
+    """Cheapest device at this rate, or the incumbent when the gap to it is
+    inside z combined standard errors (relative fit RMSE)."""
+    pred = {d: predict(f, rate) for d, f in fits.items()}
+    best = min(pred, key=pred.get)
+    if best == incumbent or incumbent not in fits:
+        return best, "best"
+    se = math.hypot(fits[best]["rmse_rel"] * pred[best], fits[incumbent]["rmse_rel"] * pred[incumbent])
+    if pred[incumbent] - pred[best] > z * se:
+        return best, "moved"
+    return incumbent, "indistinguishable"
+
+
+# --------------------------------------------------------------------------- CLI
+
+def snapshot(cgroup_dir, root=None):
+    pids = cgroup_pids(cgroup_dir)
+    doms = rapl_domains(root)
+    snap = {"rapl": rapl_read(doms), "pod_drm": drm_clients(pids, root),
+            "all_drm": drm_clients(None, root), "usage_s": cgroup_usage_s(cgroup_dir),
+            "npu": {n: int((_read(f) or "0").strip() or 0) for n, f in npu_nodes(root).items()}}
+    return snap, doms, pids
+
+
+def cmd_sample(args):
+    root = SYSROOT
+    cg_dir = _p("/sys/fs/cgroup/" + args.cgroup.strip("/"), root)
+    before, doms, pids = snapshot(cg_dir, root)
+    perf = subprocess.run(perf_cmd(args.cgroup.strip("/"), args.window), capture_output=True, text=True)
+    after, _, _ = snapshot(cg_dir, root)
+    w = args.window
+    cyc = parse_perf_csv(perf.stderr + perf.stdout)
+    fmax = type_fmax_ghz(root)
+    busy = {}
+    if len(fmax) == 2:
+        busy.update(cpu_busy_s(cyc, after["usage_s"] - before["usage_s"], fmax))
+    busy["igpu"] = gpu_busy_s(before["pod_drm"], after["pod_drm"], w)
+    if not glob.glob(_p("/sys/class/accel/accel*", root)):
+        busy["npu"] = 0.0   # no NPU on this node: an NPU claim did no NPU work
+    for node in npu_nodes(root):
+        holders = accel_holders(node, root)
+        if holders and holders <= pids:
+            busy["npu"] = (after["npu"][node] - before["npu"][node]) / 1e6
+    energy = rapl_delta_j(before["rapl"], after["rapl"], doms)
+    if doms and not energy:
+        print("k3d-gpu-sampler: RAPL energy_uj is not readable (root only on most kernels); "
+              "joules omitted", file=sys.stderr)
+    report = {"claim": args.claim, "window_s": w, "busy_s": busy,
+              "verdict": verdict(args.claim, busy, w),
+              "rapl_j": energy, "cycles": cyc,
+              "all_gpu_busy_s": gpu_busy_s(before["all_drm"], after["all_drm"], w)}
+    if "uncore" in energy:
+        report["igpu_joules"] = igpu_joules(energy["uncore"], busy["igpu"],
+                                            report["all_gpu_busy_s"], args.pp1_floor_w, w)
+    json.dump(report, sys.stdout, indent=2)
+    print()
+    return 0 if report["verdict"] == "PROVEN" else 3
+
+
+def cmd_verdict(args):
+    d = json.load(sys.stdin)
+    v = verdict(d["claim"], d["busy_s"], d["window_s"], d.get("thresholds"))
+    print(v)
+    return 0 if v == "PROVEN" else 3
+
+
+def cmd_sentinel(args):
+    d = json.load(sys.stdin)  # {"devices": {name: [[rate, j_per_event], ...]}, "rate": r, "incumbent": name}
+    fits = {k: fit_sentinel([tuple(p) for p in v]) for k, v in d["devices"].items()}
+    dev, why = place(fits, d["rate"], d.get("incumbent"))
+    names = sorted(fits)
+    xs = {"%s/%s" % (a, b): crossover(fits[a], fits[b], 0.1, 10.0)
+          for i, a in enumerate(names) for b in names[i + 1:]}
+    json.dump({"place": dev, "reason": why, "fits": fits, "crossovers": xs}, sys.stdout, indent=2)
+    print()
+    return 0
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="k3d-gpu-sampler", description=__doc__.split("\n")[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    s = sub.add_parser("sample", help="measure one pod over a window (needs perf and read access)")
+    s.add_argument("--cgroup", required=True, help="pod cgroup path relative to /sys/fs/cgroup")
+    s.add_argument("--claim", required=True, choices=CPU_ENGINES + ACCEL_ENGINES)
+    s.add_argument("--window", type=float, default=10.0)
+    s.add_argument("--pp1-floor-w", type=float, default=0.0, help="PP1 idle watts from calibration")
+    s.set_defaults(fn=cmd_sample)
+    v = sub.add_parser("verdict", help="classify busy seconds read as JSON on stdin")
+    v.set_defaults(fn=cmd_verdict)
+    t = sub.add_parser("sentinel", help="fit energy-per-event sweeps (JSON on stdin) and place")
+    t.set_defaults(fn=cmd_sentinel)
+    args = ap.parse_args(argv)
+    return args.fn(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
