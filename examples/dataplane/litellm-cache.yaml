@@ -1,0 +1,105 @@
+# LiteLLM proxy v1.105.1 with its response cache in the DTO-preloaded Redis
+# (redis-dto.yaml). LiteLLM stores each cached response as one json.dumps() string
+# (litellm/caching/redis_cache.py), so a cached embedding (1536 floats as JSON,
+# tens of KB) is a single large SET/GET: the size range DTO offloads.
+# LiteLLM itself needs no accelerator and no change; the hypothesis under test is
+# only whether Redis-side copies of those values get faster or cheaper.
+#
+#   kubectl create secret generic litellm-upstream -n dataplane \
+#       --from-literal=api_base=http://<openai-compatible-server>/v1 --from-literal=api_key=<key>
+#   kubectl apply -f examples/dataplane/litellm-cache.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: litellm-config
+  namespace: dataplane
+data:
+  config.yaml: |
+    model_list:
+    - model_name: embed
+      litellm_params:
+        model: openai/embed
+        api_base: os.environ/UPSTREAM_API_BASE
+        api_key: os.environ/UPSTREAM_API_KEY
+    - model_name: chat
+      litellm_params:
+        model: openai/chat
+        api_base: os.environ/UPSTREAM_API_BASE
+        api_key: os.environ/UPSTREAM_API_KEY
+    litellm_settings:
+      cache: true
+      cache_params:
+        type: redis
+        host: redis-dto.dataplane.svc
+        port: 6379
+        password: os.environ/REDIS_PASSWORD
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: litellm
+  namespace: dataplane
+  labels:
+    app: litellm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: litellm
+  template:
+    metadata:
+      labels:
+        app: litellm
+    spec:
+      containers:
+      - name: litellm
+        image: ghcr.io/berriai/litellm:v1.105.1
+        args: ["--config", "/etc/litellm/config.yaml", "--port", "4000"]
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-auth
+              key: password
+        - name: UPSTREAM_API_BASE
+          valueFrom:
+            secretKeyRef:
+              name: litellm-upstream
+              key: api_base
+        - name: UPSTREAM_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: litellm-upstream
+              key: api_key
+        ports:
+        - name: http
+          containerPort: 4000
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            memory: 2Gi
+        volumeMounts:
+        - name: config
+          mountPath: /etc/litellm
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: litellm-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: litellm
+  namespace: dataplane
+  labels:
+    app: litellm
+spec:
+  selector:
+    app: litellm
+  ports:
+  - name: http
+    port: 4000
+    targetPort: http

@@ -121,6 +121,12 @@ exists, and a privileged container has none of its own. QAT userspace (qatlib)
 needs locked memory in the workload pod. The DLB plugin was removed upstream in
 intel-device-plugins v0.37.0, so DLB is not supported.
 
+For what these accelerators can do for an agent data plane today (Redis with DTO,
+pgvector backups through zlib-accel, zswap on IAA, Envoy and Istio TLS on QAT), the
+pod requirements and the probes still to run on Sapphire Rapids, see
+[docs/accelerated-dataplane.md](docs/accelerated-dataplane.md) and
+[examples/dataplane/](examples/dataplane/).
+
 ### Hybrid P-core / E-core placement
 
 On Intel hybrid CPUs (Alder Lake and newer client parts, e.g. Core i9-13900),

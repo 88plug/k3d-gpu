@@ -1,0 +1,7 @@
+# Namespace for the accelerated agent data-plane examples (docs/accelerated-dataplane.md).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dataplane
+  labels:
+    app.kubernetes.io/part-of: k3d-gpu-dataplane

@@ -1,0 +1,57 @@
+# Helm values for the istio/gateway chart 1.31.2: an ingress gateway whose Envoy
+# signs TLS handshakes on QAT through ProxyConfig.privateKeyProvider.qat.
+# UNTESTED on k3d; see docs/accelerated-dataplane.md, "Istio".
+#
+# Verified in source, not run: istio/proxy 1.31.2 links envoy.tls.key_providers.qat
+# into the default (BoringSSL) proxyv2 build (BUILD: OPENSSL_INCOMPATIBLE_CONTRIB_DEPS),
+# and istio/api mesh/v1alpha1/proxy.proto has PrivateKeyProvider.QAT {poll_delay,
+# fallback}. Provider handles RSA keys only.
+#
+#   helm install istio-ingress istio/gateway --version 1.31.2 -n istio-ingress \
+#       --create-namespace -f examples/dataplane/istio-gateway-qat.values.yaml
+podAnnotations:
+  prometheus.io/port: "15020"
+  prometheus.io/scrape: "true"
+  prometheus.io/path: "/stats/prometheus"
+  inject.istio.io/templates: "gateway"
+  sidecar.istio.io/inject: "true"
+  proxy.istio.io/config: |
+    privateKeyProvider:
+      qat:
+        pollDelay: 2ms
+        fallback: true
+
+# k3d-gpu clusters run without the k3d load balancer; reach the gateway through a
+# port-forward or a NodePort instead of a LoadBalancer IP.
+service:
+  type: ClusterIP
+
+autoscaling:
+  enabled: false
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: "1"
+    memory: 256Mi
+  limits:
+    cpu: "2"
+    memory: 1Gi
+    qat.intel.com/cy: 1
+
+# The injected istio-proxy runs as uid 1337 by default. The VFIO group node the QAT
+# plugin injects stays root-owned unless k3s runs with --nonroot-devices (containerd
+# device_ownership_from_security_context, off by default), and capabilities added
+# for a non-root user are not effective, so CAP_IPC_LOCK (which lets vfio pin
+# qatlib's DMA buffers past RLIMIT_MEMLOCK) only works for root. Run the proxy as root.
+containerSecurityContext:
+  runAsUser: 0
+  runAsGroup: 0
+  runAsNonRoot: false
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+    add:
+    - IPC_LOCK
+    - NET_BIND_SERVICE

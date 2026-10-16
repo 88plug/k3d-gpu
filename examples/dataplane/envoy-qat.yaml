@@ -1,0 +1,171 @@
+# Envoy contrib v1.40.0 as the TLS edge for LiteLLM, with two QAT offloads:
+#   - envoy.tls.key_providers.qat (contrib, alpha): RSA sign/decrypt of the TLS
+#     handshake on a QAT "cy"/"asym" VF. RSA keys only. fallback: true keeps
+#     BoringSSL in software when no QAT instance is found.
+#   - envoy.compression.qatzip.compressor (contrib, alpha): gzip of large JSON
+#     responses (/v1/embeddings arrays) on a QAT "dc" VF.
+# Both extensions statically link qatlib (and QATzip) into the contrib binary
+# (bazel/deps.yaml), so the stock envoyproxy/envoy:contrib image needs no extra
+# packages. UNTESTED on k3d; see docs/accelerated-dataplane.md, "Envoy".
+#
+# The two resources come from different PFs whose cfg_services differ (e.g. one PF
+# "sym;asym" -> qat.intel.com/cy, one PF "dc" -> qat.intel.com/dc). With a single
+# PF configured "asym;dc" request qat.intel.com/asym-dc: 1 instead (the plugin
+# names the resource after cfg_services in order, ";" -> "-").
+#
+#   kubectl create secret tls envoy-tls -n dataplane --cert=tls.crt --key=tls.key   # RSA key
+#   kubectl apply -f examples/dataplane/envoy-qat.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: envoy-qat
+  namespace: dataplane
+data:
+  envoy.yaml: |
+    static_resources:
+      listeners:
+      - name: https
+        address:
+          socket_address: {address: 0.0.0.0, port_value: 8443}
+        filter_chains:
+        - transport_socket:
+            name: envoy.transport_sockets.tls
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+              common_tls_context:
+                tls_certificates:
+                - certificate_chain: {filename: /etc/envoy/tls/tls.crt}
+                  # Used only when the QAT provider is unavailable (fallback: true);
+                  # without it the fallback has no key to load.
+                  private_key: {filename: /etc/envoy/tls/tls.key}
+                  private_key_provider:
+                    provider_name: qat
+                    fallback: true
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.private_key_providers.qat.v3alpha.QatPrivateKeyMethodConfig
+                      private_key: {filename: /etc/envoy/tls/tls.key}
+                      poll_delay: 0.002s
+          filters:
+          - name: envoy.filters.network.http_connection_manager
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+              stat_prefix: https
+              route_config:
+                virtual_hosts:
+                - name: litellm
+                  domains: ["*"]
+                  routes:
+                  - match: {prefix: "/"}
+                    route: {cluster: litellm, timeout: 600s}
+              http_filters:
+              - name: envoy.filters.http.compressor
+                typed_config:
+                  "@type": type.googleapis.com/envoy.extensions.filters.http.compressor.v3.Compressor
+                  response_direction_config:
+                    common_config:
+                      min_content_length: 4096
+                      content_type_matcher:
+                      - prefix: application/json
+                  compressor_library:
+                    name: qatzip
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.compression.qatzip.compressor.v3alpha.Qatzip
+                      compression_level: 1
+                      hardware_buffer_size: SZ_64K
+                      input_size_threshold: 4096
+              - name: envoy.filters.http.router
+                typed_config:
+                  "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+      clusters:
+      - name: litellm
+        type: STRICT_DNS
+        connect_timeout: 1s
+        load_assignment:
+          cluster_name: litellm
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address: {address: litellm.dataplane.svc, port_value: 4000}
+    admin:
+      address:
+        socket_address: {address: 127.0.0.1, port_value: 9901}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: envoy-qat
+  namespace: dataplane
+  labels:
+    app: envoy-qat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: envoy-qat
+  template:
+    metadata:
+      labels:
+        app: envoy-qat
+    spec:
+      containers:
+      - name: envoy
+        image: envoyproxy/envoy:contrib-v1.40.0
+        args: ["-c", "/etc/envoy/envoy.yaml", "--log-level", "info"]
+        env:
+        # The image entrypoint drops to uid 101 unless ENVOY_UID=0; the VFIO group
+        # nodes the QAT plugin injects are root-owned.
+        - name: ENVOY_UID
+          value: "0"
+        - name: QAT_POLICY
+          value: "1"
+        ports:
+        - name: https
+          containerPort: 8443
+        readinessProbe:
+          tcpSocket:
+            port: https
+          periodSeconds: 5
+        resources:
+          requests:
+            cpu: "2"
+            memory: 512Mi
+          limits:
+            memory: 1Gi
+            qat.intel.com/cy: 1
+            qat.intel.com/dc: 1
+        securityContext:
+          runAsUser: 0
+          capabilities:
+            add:
+            - IPC_LOCK
+        volumeMounts:
+        - name: config
+          mountPath: /etc/envoy/envoy.yaml
+          subPath: envoy.yaml
+          readOnly: true
+        - name: tls
+          mountPath: /etc/envoy/tls
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: envoy-qat
+      - name: tls
+        secret:
+          secretName: envoy-tls
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: envoy-qat
+  namespace: dataplane
+  labels:
+    app: envoy-qat
+spec:
+  selector:
+    app: envoy-qat
+  ports:
+  - name: https
+    port: 8443
+    targetPort: https

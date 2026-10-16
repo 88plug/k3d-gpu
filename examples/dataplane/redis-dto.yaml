@@ -1,0 +1,112 @@
+# Redis 8.10.2 with Intel DTO preloaded: glibc memcpy/memmove/memset/memcmp calls of
+# DTO_MIN_BYTES or more are split between the CPU and a DSA shared work queue.
+# UNTESTED HYPOTHESIS on any host (see docs/accelerated-dataplane.md, "Redis + DTO").
+#
+# Needs on the host (Sapphire Rapids or newer):
+#   - a DSA *shared* user work queue (DTO only submits with ENQCMD to SWQs), and
+#     /sys/bus/dsa/devices/dsa0/pasid_enabled = 1 (IOMMU scalable mode + SVA);
+#   - the cluster created after the queue exists (k3d-gpu up labels the node and
+#     deploys intel-dsa-plugin, which advertises dsa.intel.com/wq-user-shared).
+# Image: build examples/dataplane/images/redis-dto.Dockerfile on the target host and
+# `k3d image import` it (imagePullPolicy: Never).
+#
+#   kubectl create secret generic redis-auth -n dataplane --from-literal=password=<pw>
+#   kubectl apply -f examples/dataplane/namespace.yaml -f examples/dataplane/redis-dto.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-dto
+  namespace: dataplane
+  labels:
+    app: redis-dto
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-dto
+  template:
+    metadata:
+      labels:
+        app: redis-dto
+        # On an Intel hybrid client host, k3d-gpu's balloons policy can pin the
+        # cache to E-cores: k3d-gpu.io/cores: efficient (no DSA on those parts).
+    spec:
+      containers:
+      - name: redis
+        image: k3d-gpu/redis-dto:8.10.2-dto-fbf41a6
+        imagePullPolicy: Never
+        # dto-launch (the image ENTRYPOINT) sets DTO_WQ_LIST from /dev/dsa/wq* and
+        # preloads libdto. Running redis-server directly skips the official
+        # entrypoint's gosu drop to the redis user, which would lose CAP_SYS_RAWIO.
+        args:
+        - redis-server
+        - --requirepass
+        - $(REDIS_PASSWORD)
+        - --save
+        - ""
+        - --appendonly
+        - "no"
+        - --maxmemory
+        - 2gb
+        - --maxmemory-policy
+        - allkeys-lru
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-auth
+              key: password
+        # DTO knobs (intel/DTO README). Latency profile: auto-tune + busypoll.
+        - name: DTO_MIN_BYTES
+          value: "16384"
+        - name: DTO_AUTO_ADJUST_KNOBS
+          value: "1"
+        - name: DTO_WAIT_METHOD
+          value: busypoll
+        # 1 = CPU only (the A/B baseline with the same image and binary).
+        - name: DTO_USESTDC_CALLS
+          value: "0"
+        # 1 = per-size histogram of offloaded vs CPU calls (slows the workload).
+        - name: DTO_COLLECT_STATS
+          value: "0"
+        ports:
+        - name: redis
+          containerPort: 6379
+        readinessProbe:
+          tcpSocket:
+            port: redis
+          periodSeconds: 5
+        resources:
+          requests:
+            cpu: "2"
+            memory: 2560Mi
+          limits:
+            cpu: "2"
+            memory: 2560Mi
+            dsa.intel.com/wq-user-shared: 1
+        securityContext:
+          # idxd refuses to mmap a user work-queue portal without CAP_SYS_RAWIO on
+          # every DSA/IAA it supports (user_submission_safe=false, INTEL-SA-01084),
+          # and the device node is root-owned, so the process runs as root.
+          runAsUser: 0
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+            add:
+            - SYS_RAWIO
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-dto
+  namespace: dataplane
+  labels:
+    app: redis-dto
+spec:
+  selector:
+    app: redis-dto
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: redis
