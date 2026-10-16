@@ -15,15 +15,24 @@ Behaviour on kubeadm / kubespray clusters is unchanged; the toleration
 is untouched. apply_node_topology.yaml already tests this label for
 presence rather than value.
 
+Set nodeSelector to null as well. On a cluster that already ran the
+old task, kubernetes.core.k8s updates the EnvoyProxy (a custom
+resource) with a JSON merge patch, and a merge patch keeps every key it
+does not set to null, so the old nodeSelector would stay next to the
+new affinity and still match no k3s node. On a fresh install the API
+server prunes the null, because the CRD does not mark nodeSelector
+nullable.
+
 Checked statically: the EnvoyProxy object validates against the
 v1alpha1 CRD schema shipped in gateway-helm v1.7.1, which includes
-pod.affinity.
+pod.affinity. Modelling create (null pruned) and re-install over the
+old object (RFC 7386 merge) both leave affinity and no nodeSelector.
 ---
- roles/envoy_gateway/tasks/install.yaml | 20 +++++++++++++-------
- 1 file changed, 13 insertions(+), 7 deletions(-)
+ roles/envoy_gateway/tasks/install.yaml | 23 ++++++++++++++++-------
+ 1 file changed, 16 insertions(+), 7 deletions(-)
 
 diff --git a/roles/envoy_gateway/tasks/install.yaml b/roles/envoy_gateway/tasks/install.yaml
-index ba7966a..9c6e8b0 100644
+index ba7966a..e1cbca7 100644
 --- a/roles/envoy_gateway/tasks/install.yaml
 +++ b/roles/envoy_gateway/tasks/install.yaml
 @@ -191,11 +191,12 @@
@@ -44,12 +53,15 @@ index ba7966a..9c6e8b0 100644
  - name: "envoy_gateway | Create EnvoyProxy config (DaemonSet on control-plane nodes)"
    kubernetes.core.k8s:
      state: present
-@@ -211,8 +212,13 @@
+@@ -211,8 +212,16 @@
            kubernetes:
              envoyDaemonSet:
                pod:
 -                nodeSelector:
 -                  node-role.kubernetes.io/control-plane: ""
++                # null drops the nodeSelector an older install left behind:
++                # this update is a JSON merge patch, which keeps omitted keys.
++                nodeSelector: null
 +                affinity:
 +                  nodeAffinity:
 +                    requiredDuringSchedulingIgnoredDuringExecution:

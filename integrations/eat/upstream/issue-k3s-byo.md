@@ -60,6 +60,8 @@ The `EnvoyProxy` pins the envoy DaemonSet to control-plane nodes with an exact-v
 
 **Fix (patch 0006):** a required node affinity with `operator: Exists` on the same key. Nothing changes on kubeadm/Kubespray. The object validates against the `EnvoyProxy` v1alpha1 CRD shipped in gateway-helm v1.7.1.
 
+The patch also sets `nodeSelector: null`. `kubernetes.core.k8s` updates an existing custom resource with a JSON merge patch, which keeps any key the patch leaves out, so without the null a cluster that already ran the old task would keep the exact-value selector next to the new affinity and still schedule nothing. On create, the API server prunes the null because the CRD does not mark `nodeSelector` nullable.
+
 ### 3. BYO clusters never get node-topology labels, but teardown removes them
 
 - With `existing_kubernetes` set, the kubernetes role ends before `post_install` ([roles/kubernetes/tasks/install.yaml#L23-L25](https://github.com/intel/enterprise-ai-solutions/blob/7743bac7e3d334da6eda602db10f7eec6b0360c5/roles/kubernetes/tasks/install.yaml#L23-L25)).
@@ -69,14 +71,18 @@ The `EnvoyProxy` pins the envoy DaemonSet to control-plane nodes with an exact-v
 
 This is not k3s-specific, but it is the first thing a multi-node k3d user hits.
 
-**Fix (patch 0004):** run `apply_node_topology.yaml` from the BYO branch when `node_topology_enabled` is true, and decide multi-node from the cluster's node count. Single-node stays a no-op. The docs are updated to match. We ran the role on localhost against a stub `kubernetes.core`:
+**Fix (patch 0004):** run `apply_node_topology.yaml` from the BYO branch when `node_topology_enabled` is true, and decide multi-node from the cluster's node count. Single-node stays a no-op. The docs are updated to match.
 
-| Case | Labels applied |
+This changes behaviour for existing multi-node BYO users, who were told to label by hand. On BYO the patch therefore leaves nodes that already carry a `workload-class` label alone, and a kubeconfig that cannot list or patch nodes gets the error reported and ignored instead of a failed install. The managed path still fails on those errors. We ran the role on localhost against a stub `kubernetes.core`:
+
+| Case | Result |
 |---|---|
-| BYO, 1 node | none |
+| BYO, 1 node | no labels |
 | BYO, 3 nodes | server `platform`, agents `inference` |
-| Topology off | none |
-| Managed path | unchanged |
+| BYO, 3 nodes, one agent already `workload-class=gpu` | that agent untouched, the others labelled |
+| BYO, node list or node patch denied | install succeeds, no labels |
+| Topology off | no labels |
+| Managed path | unchanged, including failing when node patch is denied |
 
 ### 4. NRI balloons chart is unpinned
 
@@ -104,8 +110,8 @@ NRI note on that page: k3s turns containerd NRI off only when it runs in a user 
 
 These are for completeness. Since #19 deletes the files, we would only send a fix if #19 is not going to merge soon.
 
-- **Platform detection.** It accepts only `^vX.Y.Z$` ([core/lib/brownfield/brownfield_deployment.sh#L124](https://github.com/intel/enterprise-agent-toolkit/blob/0ecf67a8331e8b502ef41e08bf6d2881416178c5/core/lib/brownfield/brownfield_deployment.sh#L124), [core/playbooks/setup-bastion.yml#L283](https://github.com/intel/enterprise-agent-toolkit/blob/0ecf67a8331e8b502ef41e08bf6d2881416178c5/core/playbooks/setup-bastion.yml#L283)). A k3s cluster (`v1.34.12+k3s1`) therefore falls through to the interactive platform prompt. Patch 0001 accepts `+k3sN`.
-  - `brownfield_deployment()` is sourced ([deploy-agentic-stack.sh#L631](https://github.com/intel/enterprise-agent-toolkit/blob/0ecf67a8331e8b502ef41e08bf6d2881416178c5/deploy-agentic-stack.sh#L631)) but called only from inside itself ([brownfield_deployment.sh#L171-L203](https://github.com/intel/enterprise-agent-toolkit/blob/0ecf67a8331e8b502ef41e08bf6d2881416178c5/core/lib/brownfield/brownfield_deployment.sh#L171-L203)), and the `--menu` offers options 1-3 only ([deploy-agentic-stack.sh#L637-L670](https://github.com/intel/enterprise-agent-toolkit/blob/0ecf67a8331e8b502ef41e08bf6d2881416178c5/deploy-agentic-stack.sh#L637-L670)). The impact is limited to that path.
+- **Platform detection.** It accepts only `^vX.Y.Z$` ([core/lib/brownfield/brownfield_deployment.sh#L124](https://github.com/intel/enterprise-agent-toolkit/blob/0ecf67a8331e8b502ef41e08bf6d2881416178c5/core/lib/brownfield/brownfield_deployment.sh#L124), [core/playbooks/setup-bastion.yml#L283](https://github.com/intel/enterprise-agent-toolkit/blob/0ecf67a8331e8b502ef41e08bf6d2881416178c5/core/playbooks/setup-bastion.yml#L283)). A k3s cluster (`v1.34.12+k3s1`) would fall through to the interactive platform prompt. We have no patch for it, because nothing reaches that code:
+  - `brownfield_deployment()` is sourced ([deploy-agentic-stack.sh#L631](https://github.com/intel/enterprise-agent-toolkit/blob/0ecf67a8331e8b502ef41e08bf6d2881416178c5/deploy-agentic-stack.sh#L631)) but called only from inside itself ([brownfield_deployment.sh#L171-L203](https://github.com/intel/enterprise-agent-toolkit/blob/0ecf67a8331e8b502ef41e08bf6d2881416178c5/core/lib/brownfield/brownfield_deployment.sh#L171-L203)), and the `--menu` offers options 1-3 only ([deploy-agentic-stack.sh#L637-L670](https://github.com/intel/enterprise-agent-toolkit/blob/0ecf67a8331e8b502ef41e08bf6d2881416178c5/deploy-agentic-stack.sh#L637-L670)). So the gap has no user-visible effect today.
 - **Node label.** vLLM *requires* the label `ei-inference-eligible=true` ([core/helm-charts/vllm/values.yaml#L141-L148](https://github.com/intel/enterprise-agent-toolkit/blob/0ecf67a8331e8b502ef41e08bf6d2881416178c5/core/helm-charts/vllm/values.yaml#L141-L148)). It is applied only on the Kubespray path ([core/lib/components/kubernetes-setup.sh#L15](https://github.com/intel/enterprise-agent-toolkit/blob/0ecf67a8331e8b502ef41e08bf6d2881416178c5/core/lib/components/kubernetes-setup.sh#L15)), so on an existing cluster the vLLM pod stays Pending until someone labels the node.
 
 ## Questions for maintainers
@@ -117,19 +123,21 @@ These are for completeness. Since #19 deletes the files, we would only send a fi
 ## What we did and did not verify
 
 **Verified statically:**
-- Every patch applies with `git apply --check` to a fresh clone of its repo's `main`. The EAS patches also apply to the head of enterprise-ai-solutions#40 (bbb3a53).
+- Every patch applies with `git apply --check` to a fresh clone of `main`. The EAS patches also apply to the head of enterprise-ai-solutions#40 (bbb3a53).
 - The EAS series applies in order with `git am`.
 - `ansible-lint` 26.8.0 with this repo's CI flags reports 0 failures on the patched tree (production profile).
 - `helm template` and CRD-schema checks pass as described above.
 - Role logic was exercised with stub modules.
+- A re-install of the `EnvoyProxy` over the object the current task creates was modelled as kubernetes.core 6.3.0 sends it (JSON merge patch): with patch 0006 the old `nodeSelector` is removed.
 
 **Not yet run end-to-end:** a full `./es_auto_installer.sh install inference` on a k3d cluster. The probes we will run before opening PRs:
 
 ```bash
 # 1. CNI paths: does the rancher/k3s image's containerd use /bin for CNI binaries (the k3d profile)?
 docker exec k3d-eas-server-0 sh -c 'grep -n -A3 "cni" /var/lib/rancher/k3s/agent/etc/containerd/config.toml'
-# 2. Envoy data plane schedules on a k3s server node with patch 0006
+# 2. Envoy data plane schedules on a k3s server node with patch 0006, also after re-installing over an unpatched install
 kubectl -n envoy-gateway-system get ds -o wide
+kubectl -n envoy-gateway-system get envoyproxy eg-proxy-config -o yaml | grep -A2 nodeSelector   # expect no output
 # 3. istio-cni chained into flannel's conflist with istio_platform: k3d
 docker exec k3d-eas-server-0 ls /var/lib/rancher/k3s/agent/etc/cni/net.d
 # 4. The whole BYO install, then a chat completion through the gateway
