@@ -127,8 +127,10 @@ appears (or `acceleratable` reads `false`), the node has no plugin serving
 
 Open the UI and get the admin password. With chart defaults the server writes an
 auto-generated password to `initial_admin_password`. If you pin one with
-`server.bootstrapPasswordSecret.password`, that file is not created; use the
-pinned value instead:
+`--set server.bootstrapPasswordSecret.enabled=true` and
+`--set server.bootstrapPasswordSecret.password=...` (both are needed; the chart
+ignores `password` while `enabled` is `false`), that file is not created; use
+the pinned value instead:
 
 ```bash
 kubectl -n gpustack-system exec gpustack-server-0 -- \
