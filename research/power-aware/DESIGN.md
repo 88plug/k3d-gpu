@@ -54,8 +54,9 @@ ambient, or for a different work mix, ignores that cross term. The controller pr
 ## 3. Controller
 
 Inputs (every 1 s):
-- RAPL energy deltas for `package-0`, `core`, `uncore` (needs root or CAP_SYS_RAWIO-free
-  read of `energy_uj`; run as a privileged DaemonSet, same as the NRI plugin).
+- RAPL energy deltas for `package-0`, `core`, `uncore` (`energy_uj` is mode 0400 and the
+  RAPL perf events need CAP_PERFMON at paranoid 2, so the controller runs as a privileged
+  DaemonSet, like the NRI plugin).
 - Average busy frequency of the P balloon CPUs and of the E balloon CPUs
   (`scaling_cur_freq`, or APERF/MPERF via turbostat `Bzy_MHz`).
 - `gt_act_freq_mhz` and `throttle_reason_pl1`/`throttle_reason_thermal`.
@@ -89,7 +90,8 @@ Decision (every 20 s): exhaustively search the placement grid (P cores 0–8 spl
 inference/tool, E cores in steps of one 4-core cluster split the same way, iGPU on/off:
 1 350 configs) with the fitted model; switch only when the predicted gain over the
 remaining horizon beats the switching cost (CPU pod move 5 s dead time, iGPU model load
-30 s) and a 3 % hysteresis.
+30 s) and a 3 % hysteresis. (This is v1, as pre-registered. v2, added after v1 failed AC4,
+is described in section 6.)
 
 Actuation in k3d-gpu: five Deployments (`agent-infer-p`, `agent-infer-e`,
 `agent-tool-p`, `agent-tool-e`, `agent-infer-igpu`) whose replica counts the controller
@@ -125,6 +127,149 @@ steps); S4 both.
   the full controller by ≥ 2 % median in S2 or S4. If it is not, the cross-term is not what
   produces the gain and the mechanism claim is withdrawn.
 
-## 6. Results
+## 6. Results (simulation only)
 
-(filled in after the run; see section 6 below once committed)
+Reproduce: `python3 powersim.py 40 <seed> <v1|v2>` (stdlib, ~2.5 min on one core);
+`python3 -m unittest` (16 tests). Ratios are medians over 40 plant draws. Raw output:
+`results-v1-seed6.json`, `results-v1-seed7.json`, `results-v2-seed7.json`.
+
+| run | scenario | ctrl/tuned | p10 | ctrl/oracle | ctrl/naive | ctrl/ablated | tuned/oracle | switches after 300 s |
+|---|---|---|---|---|---|---|---|---|
+| v1, seed 6 (pre-registered) | S1 stationary | 0.979 | 0.970 | 0.979 | 1.46 | 1.017 | 1.000 | 13.5 |
+| | S2 mix shift | 1.152 | 1.021 | 0.945 | 1.30 | 1.001 | 0.816 | 9.5 |
+| | S3 thermal drift | 0.983 | 0.972 | 0.980 | 1.49 | 1.016 | 0.996 | 14.0 |
+| | S4 both | 1.157 | 1.015 | 0.943 | 1.29 | 1.005 | 0.813 | 9.5 |
+| v1, seed 7 (held out) | S1 | 0.982 | 0.972 | 0.982 | 1.40 | 1.016 | 1.000 | 12.5 |
+| | S2 | 1.176 | 0.969 | 0.932 | 1.29 | 1.002 | 0.793 | 10.5 |
+| | S3 | 0.985 | 0.975 | 0.980 | 1.42 | 1.022 | 0.999 | 12.5 |
+| | S4 | 1.169 | 0.965 | 0.934 | 1.29 | 1.004 | 0.788 | 11.0 |
+| v2, seed 7 (held out) | S1 | 0.980 | **0.927** | 0.980 | 1.39 | 1.002 | 1.000 | 0 |
+| | S2 | 1.157 | 0.949 | 0.912 | 1.28 | 1.004 | 0.793 | 5.5 |
+| | S3 | 0.975 | 0.926 | 0.965 | 1.39 | 1.021 | 0.999 | 0 |
+| | S4 | 1.151 | 0.967 | 0.916 | 1.27 | 1.007 | 0.788 | 6.0 |
+
+Verdicts against the pre-registered criteria:
+
+| | AC1 no harm | AC2 gain | AC3 vs naive | AC4 stable | AC5 mechanism |
+|---|---|---|---|---|---|
+| v1 seed 6 (pre-registered) | pass | pass | pass | **fail** (13.5) | **fail** |
+| v1 seed 7 | pass | pass | pass | **fail** | **fail** |
+| v2 seed 7 | **fail** (p10 0.927 < 0.93) | pass | pass | pass | **fail** |
+
+v2 was designed after v1 failed AC4, tuned on seed 6, then judged on fresh seed 7. It
+fixes the churn (a model-mismatch limit cycle: v1 jumped between near-equal placements its
+biased model ranked differently) by keeping measured throughput for visited placements and
+demanding that an unmeasured one beat its prediction by twice the model's observed error.
+The price is lock-in: in the worst decile it settles 7 % below tuned static. **No version
+passes all five criteria.** Not iterated further on seed 7, to keep it held out.
+
+What the simulation says, read plainly:
+
+1. **The gain is mix tracking, not power awareness.** Against tuned static the controller
+   wins +15–18 % median only when the inference/tool mix moves (S2, S4), because the best
+   split of cores between inference and tool work moves with it (tuned static reaches only
+   79–82 % of the phase oracle there). Under ambient drift alone (S3) the best placement
+   barely changes with the cap (tuned/oracle 0.996–0.999), so the controller can only lose
+   (−1.5 to −2.5 %).
+2. **AC5 fails: the iGPU cross term is not what produces the gain.** Ablating it costs
+   0.1–0.7 % in S2/S4. It costs 1.6–2.2 % in S1/S3, which AC5 did not cover. Exploratory
+   (not pre-registered): across 760 phase optima the iGPU is off in only 30 (4 %), and
+   those 30 are exactly where the ablated model decides differently. Under these priors the
+   iGPU's work per watt (`aLG/kG`) is high enough that "iGPU on" is nearly always right,
+   so pricing its draw rarely changes a decision. Probe 3 measures `aLG/kG` for real; if
+   the UHD 770 is weaker per watt than the prior, the cross term becomes decisive.
+3. **Naive "everything on, split evenly" is 27–49 % worse** than the controller and also
+   worse than tuned static. Most of that is the even split, not power.
+
+So: the controller is a mix-tracking placer with an online power model. The power-cap part
+is a ~2 % refinement under the priors used. Nothing here is reduced to practice.
+
+Candidate v3 (untested, not run): age out measured entries after N periods so a locked-in
+placement is re-challenged; targets v2's AC1 p10 failure. Must be judged on a third fresh
+seed, then on hardware.
+
+## 7. Provenance partition
+
+**Known (prior art found and read):**
+- Joint partitioning of work *and* power budget between CPU and iGPU on one chip under a
+  shared cap; +13 % over work-only partitioning. Wang, Sathish, Singh, Schulte, Kim, PACT
+  2012, doi:10.1145/2370816.2370873; extended by Jang et al., IEEE TPDS 2015,
+  doi:10.1109/TPDS.2015.2453965.
+- Co-run slowdown on integrated CPU-GPU from both power-cap and memory contention, and
+  co-scheduling to recover it (9–46 %). Zhu, Wu, Shen, Shen, Wang, IPDPS 2017,
+  doi:10.1109/IPDPS.2017.124. The plant's shared-DRAM clamp is this effect.
+- Utilisation-driven power shifting between devices under a node cap (APS). Ortega et al.,
+  IEEE TC 2022, doi:10.1109/TC.2022.3174545.
+- Frequency-sensitivity-driven CPU/GPU power coordination on an AMD APU (DynaCo). Paul et
+  al., 2014, doi:10.1155/2014/210762.
+- ML-predicted co-scheduling + partitioning + power capping, arXiv:2405.03831 (2024);
+  online CPU-GPU power-setting prediction (OPEN), doi:10.1145/3797905.3800526.
+- PCU budget split between IA cores and graphics: `MSR_PP0_POLICY` / `MSR_PP1_POLICY`,
+  "default values give priority to the non-IA power plane" (Intel SDM text as reproduced
+  in PRACE/IT4I 2020 RAPL slides; SDM PDF itself not re-read).
+- Linux thermal `power_allocator` governor (IPA): splits a sustainable power budget among
+  cooling devices (CPU, GPU) by weights with a PID on temperature
+  (docs.kernel.org/driver-api/thermal/power_allocator.html; headings read, body not). It
+  actuates frequency, not work placement.
+- Intel HFI: per-CPU performance/efficiency capability, updated on power/thermal limit
+  changes, relayed by thermal netlink (docs.kernel.org/arch/x86/intel-hfi.html).
+- EAS on Intel hybrid: intel_pstate registers an energy model in passive mode with
+  schedutil, hybrid platforms without SMT only, merged for 6.16 (linux-pm pull for
+  v6.16-rc1; LWN 1020291). **Not usable here**: kernel 6.6, SMT on.
+- intel-lpmd: moves work onto the most efficient CPUs via cgroup cpusets by utilisation,
+  HFI and, in newer releases, graphics-utilisation detection and a "graphics IA bias" knob
+  (github.com/intel/intel-lpmd). Closest host-level relative; it targets idle power, not
+  throughput under a cap, and does not place work on the iGPU.
+- thermald: DPTF-table-driven power-limit adjustment (github.com/intel/thermal_daemon);
+  inactive on this host.
+- kubernetes-power-manager: per-pool freq/EPP/C-state profiles; archived 2024-09-09; no
+  RAPL budget logic, no iGPU (github.com/intel/kubernetes-power-manager). The
+  cluster-power-manager fork adds uncore frequency.
+- Telemetry Aware Scheduling power guide: node-level placement away from nodes above 80 %
+  TDP using RAPL via collectd (github.com/intel/platform-aware-scheduling). Chooses nodes,
+  not engines inside a node.
+- Kepler: RAPL energy attribution to pods by CPU-time share; exporter only
+  (github.com/sustainable-computing-io/kepler).
+- v2's measured memory plus an uncertainty margin for unvisited placements is standard
+  bandit / model-based-control practice; no specific citation searched.
+
+**No prior art found (search log below):** a pod-level controller that moves agent
+replicas among NRI P/E balloons and the iGPU on one client package, prices the iGPU's
+PP1-priority draw as a frequency loss on every CPU replica, and estimates the effective cap
+online as min(PL1 EWMA, thermal). Given the list above this is a composition of known
+parts, and the simulation says its power-specific part is worth ~2 %.
+
+**Unsearched:** mobile big.LITTLE + GPU scheduling under thermal budgets (Android EAS + IPA
+studies) beyond the IPA doc; Intel DTT on Windows/ChromeOS; TjMax of the 13900T (believed
+100 °C, not verified; probe 0 reads it).
+
+Search log (2026-10-16): searxng multi-query, 7 queries (power-capped CPU-iGPU scheduling
+papers, HFI, kubernetes-power-manager, DTT/DPTF, Kepler, APU power capping, EAS hybrid),
+results generic and discarded. Exa: "power-capped CPU-GPU heterogeneous processor ...
+workload placement and power shifting"; "kubernetes-power-manager intel github archived";
+"Linux kernel intel_hfi ... thermal netlink"; "intel_pstate energy aware scheduling hybrid
+... 6.16"; "intel_lpmd ... thermald DPTF"; "MSR_PP0_POLICY MSR_PP1_POLICY priority";
+"Kubernetes controller power-cap-aware pod placement between P-cores E-cores and
+integrated GPU"; "Kepler ... RAPL". Fetched the kernel power_allocator doc.
+
+## 8. Live probes (not run: live benchmarks occupy the host). Idle host, root.
+
+Common sampler, 1 s, summary plus one P-core and one E-core (columns from `man turbostat`,
+turbostat 2026.04.21 installed):
+
+    sudo turbostat --quiet --interval 1 --cpu 0,16 \
+      --show CPU,Busy%,Bzy_MHz,PkgWatt,CorWatt,GFXWatt,GFXAMHz,PkgTmp,PKG_%,CoreThr \
+      --out "$OUT/turbostat.txt"
+    # alongside, every 1 s: /sys/class/drm/card0/gt/gt0/throttle_reason_{pl1,thermal}
+    # and /sys/devices/system/cpu/cpu0/thermal_throttle/package_throttle_total_time_ms
+
+| # | Probe | Fits | Method |
+|---|---|---|---|
+| 0 | Thermal target, PCU policy | `T_LIM`, PP0/PP1 priority | `sudo rdmsr -p0 -f 23:16 -d 0x1a2` (temperature target), `sudo rdmsr -p0 -f 29:24 -d 0x1a2` (TCC offset), `sudo rdmsr -p0 0x63a`, `sudo rdmsr -p0 0x642` (may fault if unimplemented; record that). Check the 0x1A2 bit fields in SDM vol. 4 first. |
+| 1 | **iGPU load vs CPU frequency under the cap** | sign and size of the cross term; GPU-priority claim | All 24 cores busy (one `taskset -c N` spinner per core), then iGPU load 0 → 1 → 2 → 4 concurrent OVMS GPU decode streams (claude/agent-stack, device GPU), 180 s per step (> 3× PL1 tau). Prediction: once `PKG_%` or a gt throttle reason is set, `Bzy_MHz` on CPUs 0 and 16 falls as `GFXWatt` rises while `GFXAMHz` stays at 1650. If `GFXAMHz` falls first, PP1 priority is not in effect and the plant's PCU rule is wrong. Fit `d f_P / d GFXWatt`. |
+| 2 | Per-core-type power | `kP`, `kE`, exponent, `rho` | Spinners on 1, 2, 4, 8 P-cores alone, then 1–4 E-clusters alone, 120 s each; regress `CorWatt` on `n·Bzy_MHz^k`. Gives `rho = kE/kP`, which the online estimator cannot identify. |
+| 3 | Work rates | `aL*`, `aT*`, `bL`, `bT`, `bG`, `bw`, `aLG/kG` | `bench/llm_load.py` (claude/report-bench) against inference pinned to P only, E only, iGPU only, then all three (plateau = `bw`); tool-work benchmark the same way; exponents from probe 1's frequency spread. `aLG/kG` decides whether AC5's mechanism can matter on this box. |
+| 4 | Effective cap, `R_th` | thermal cap vs PL1 | All-core load 10 min at known ambient; steady `PkgWatt` with `PkgTmp` at target and the throttle counter rising = effective cap; `R_th = (T_target − T_amb)/PkgWatt`. Repeat at a second fan/ambient setting. Expect cap < 117 W given 27.5 h throttled since boot. |
+| 5 | End-to-end A/B | AC1–AC5 on hardware | Replay the S2 mix with the real agent stack: tuned static vs controller, 30 min each, ABAB, agent steps/s from the stack's metrics, same thresholds. |
+
+Until probe 5 runs, the claim is: designed and simulated, not reduced to practice.

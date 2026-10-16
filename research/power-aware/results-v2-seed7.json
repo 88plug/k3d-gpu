@@ -1,0 +1,53 @@
+{
+  "version": "v2",
+  "seed": 7,
+  "results": {
+    "S1_stationary": {
+      "ctrl/tuned_median": 0.9802208167110317,
+      "ctrl/tuned_p10": 0.9268950687047552,
+      "ctrl/oracle_median": 0.9802208167110317,
+      "ctrl/naive_median": 1.387198090220359,
+      "ctrl/ablated_median": 1.0016793054268058,
+      "tuned/oracle_median": 1.0,
+      "switches_after_300_median": 0.0,
+      "n": 40
+    },
+    "S2_mix_shift": {
+      "ctrl/tuned_median": 1.1573413521036517,
+      "ctrl/tuned_p10": 0.9488193509172073,
+      "ctrl/oracle_median": 0.9118615770396754,
+      "ctrl/naive_median": 1.278443086134764,
+      "ctrl/ablated_median": 1.004239159873225,
+      "tuned/oracle_median": 0.7926927748514765,
+      "switches_after_300_median": 5.5,
+      "n": 40
+    },
+    "S3_thermal_drift": {
+      "ctrl/tuned_median": 0.9752242660114454,
+      "ctrl/tuned_p10": 0.9260673672178471,
+      "ctrl/oracle_median": 0.9645699932092366,
+      "ctrl/naive_median": 1.3885048398949023,
+      "ctrl/ablated_median": 1.0212501991538074,
+      "tuned/oracle_median": 0.9990728343810127,
+      "switches_after_300_median": 0.0,
+      "n": 40
+    },
+    "S4_both": {
+      "ctrl/tuned_median": 1.1507396765709046,
+      "ctrl/tuned_p10": 0.9672800828750936,
+      "ctrl/oracle_median": 0.9163039172568246,
+      "ctrl/naive_median": 1.2718352241162965,
+      "ctrl/ablated_median": 1.006876548727774,
+      "tuned/oracle_median": 0.7878089020043697,
+      "switches_after_300_median": 6.0,
+      "n": 40
+    }
+  },
+  "verdict": {
+    "AC1": false,
+    "AC2": true,
+    "AC3": true,
+    "AC4": true,
+    "AC5": false
+  }
+}
