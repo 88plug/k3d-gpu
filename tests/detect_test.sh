@@ -339,6 +339,35 @@ kernel "${r}" 5.15.0
 pci "${r}" 0000:00:02.0 0x8086 0x4680 i915; render "${r}" 0000:00:02.0 128
 doctor_says "Alder Lake-S needs kernel 5.16 (i915 force_probe dropped)" "${r}" 'Alder Lake-S \(0x4680\) needs kernel 5\.16\+'
 
+# Every i915 row's default-binding kernel: one release older warns with
+# i915.force_probe, the release itself does not. Kernels: the first release whose
+# i915_pciids.h lists the id and whose i915_pci.c does not require force_probe.
+while read -r id name older mink; do
+    name=${name//_/ }
+    r=$(newroot "i915-${id}-old")
+    kernel "${r}" "${older}.0"
+    pci "${r}" 0000:00:02.0 0x8086 "${id}" i915; render "${r}" 0000:00:02.0 128
+    doctor_says "${name} ${id} on ${older} needs kernel ${mink}" "${r}" "${name} \\(${id}\\) needs kernel ${mink//./\\.}\\+.*i915\\.force_probe=${id#0x}"
+    r=$(newroot "i915-${id}")
+    kernel "${r}" "${mink}.0"
+    pci "${r}" 0000:00:02.0 0x8086 "${id}" i915; render "${r}" 0000:00:02.0 128
+    doctor_says "${name} ${id} is bound by default on ${mink}" "${r}" 'needs kernel' negate
+done <<'ROWS'
+0x4680 Alder_Lake-S 5.15 5.16
+0x468b Alder_Lake-S 6.0 6.1
+0x46a6 Alder_Lake-P 5.16 5.17
+0x46d1 Alder_Lake-N 5.17 5.18
+0x46d3 Alder_Lake-N 6.8 6.9
+0xa780 Raptor_Lake-S 5.16 5.17
+0xa78a Raptor_Lake-S 5.18 5.19
+0xa7a0 Raptor_Lake-P/U 5.18 5.19
+0xa7ac Raptor_Lake-P/U 6.6 6.7
+0x7d55 Meteor_Lake 6.6 6.7
+0x7d51 Arrow_Lake-H 6.8 6.9
+0x7d41 Arrow_Lake-U 6.8 6.9
+0x7d67 Arrow_Lake-S 6.6 6.7
+ROWS
+
 # NPU 0x7d1d is Meteor Lake and Arrow Lake-H; the CPU model tells them apart.
 r=$(newroot npu-7d1d-arlh)
 kernel "${r}" 6.14.0
