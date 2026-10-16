@@ -1,0 +1,130 @@
+# EXAMPLE ONLY - not applied by k3d-gpu. Rendered by pcp.render_policy for the
+# i9-13900T (idle states POLL C1_ACPI C2_ACPI C3_ACPI), dGPU present, E cap 2000 MHz.
+# Validated strictly against the BalloonsPolicy CRD in share/nri-balloons.yml (v0.14.0).
+# Applying it changes host cpufreq/EPP/cpuidle: do not apply while benchmarks run (probe P0 first).
+apiVersion: config.nri/v1alpha1
+kind: BalloonsPolicy
+metadata:
+  name: default
+  namespace: kube-system
+  labels:
+    helm.sh/chart: nri-resource-policy-balloons-v0.14.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: nri-resource-policy-balloons
+    app.kubernetes.io/instance: nri-resource-policy-balloons
+spec:
+  agent:
+    nodeResourceTopology: true
+    podResourceAPI: false
+  allocatorTopologyBalancing: true
+  control:
+    rdt:
+      enable: false
+      options:
+        l2:
+          optional: true
+        l3:
+          optional: true
+        mb:
+          optional: true
+      partitions:
+        fullCache:
+          classes:
+            BestEffort:
+              l2Allocation:
+                all:
+                  unified: 33%
+              l3Allocation:
+                all:
+                  unified: 33%
+            Burstable:
+              l2Allocation:
+                all:
+                  unified: 66%
+              l3Allocation:
+                all:
+                  unified: 66%
+            Guaranteed:
+              l2Allocation:
+                all:
+                  unified: 100%
+              l3Allocation:
+                all:
+                  unified: 100%
+          l2Allocation:
+            all:
+              unified: 100%
+          l3Allocation:
+            all:
+              unified: 100%
+      usePodQoSAsDefaultClass: true
+  instrumentation:
+    httpEndpoint: :8891
+    prometheusExport: false
+    reportPeriod: 60s
+    samplingRatePerMillion: 0
+  log:
+    debug:
+    - none
+    klog:
+      skip_headers: true
+    source: true
+  reservedPoolNamespaces:
+  - kube-system
+  reservedResources:
+    cpu: 1000m
+  cpuClasses:
+  - name: planner
+    minFreq: base
+    maxFreq: turbo
+    turboPriority: 10
+    energyPerformancePreference: 0
+    disabledCstates:
+    - C2_ACPI
+    - C3_ACPI
+  - name: capped
+    minFreq: min
+    maxFreq: 2000MHz
+    energyPerformancePreference: 192
+  - name: idle
+    minFreq: min
+    maxFreq: min
+    energyPerformancePreference: 255
+  idleCPUClass: idle
+  balloonTypes:
+  - name: planner
+    preferCoreType: performance
+    cpuClass: planner
+    matchExpressions:
+    - key: pod/labels/k3d-gpu.io/role
+      operator: Equals
+      values:
+      - planner
+  - name: tools
+    preferCoreType: efficient
+    cpuClass: capped
+    matchExpressions:
+    - key: pod/labels/k3d-gpu.io/role
+      operator: Equals
+      values:
+      - tools
+  - matchExpressions:
+    - key: pod/labels/k3d-gpu.io/cores
+      operator: Equals
+      values:
+      - performance
+    name: performance
+    preferCoreType: performance
+  - matchExpressions:
+    - key: pod/labels/k3d-gpu.io/cores
+      operator: Equals
+      values:
+      - efficient
+    name: efficient
+    preferCoreType: efficient
+  - matchExpressions:
+    - key: name
+      operator: AlwaysTrue
+    maxBalloons: 1
+    name: shared
+    shareIdleCPUsInSame: system

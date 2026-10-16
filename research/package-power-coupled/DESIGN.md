@@ -137,6 +137,117 @@ Scenario D0 = no dGPU (Core-Ultra-laptop-like); D2 = dGPU available.
 objection is right for most of the prior); planner leg may pass because E-core caps
 free watts for P-cores; AC3 fails; AC4 holds (irrelevant with a dGPU); AC5 triggers.
 
-## 6. Results
+## 6. Results (simulation only, written after the runs)
 
-(filled in after the run; see section 7)
+Reproduce: `python3 ppcsim.py 300 <seed> <variant>` (stdlib, ~7 s each);
+`python3 -m unittest test_pcp` (24 tests, needs PyYAML). Raw output:
+`results-seed{11,12}-{variant}.json`.
+
+Process disclosure: a 30-draw seed-1 smoke run came first (to debug the plant). The
+five perturbation variants were added after it and before seeds 11/12 were run. They
+were not in the pre-registration; they push the prior *toward* the idea so the sim
+cannot hide a win in an unlucky prior. `favourable` stacks all four.
+
+D0 (no dGPU) medians, seed 11 pre-registered / seed 12 held out:
+
+| variant | drafter tok/s FULL vs B0 | planner p95 cut | energy/turn | turn FULL/B0 | turn FULL/B1 (static cap) | iGPU-drafter gain at best cap | of which power-only | of which DRAM-only | iGPU clock rise |
+|---|---|---|---|---|---|---|---|---|---|
+| base | -0.5 / -1.1 % | -4.8 / -5.2 % | +4.6 / +4.6 % | 0.959 / 0.957 | 0.958 / 0.957 | +14.7 / +15.2 % | -1.4 / -1.3 % | +15.3 / +16.0 % | +5.2 / +5.0 % |
+| io_tools | +10.0 / +10.4 % | +4.1 / +4.7 % | -3.7 / -4.9 % | 1.025 / 1.033 | 0.968 / 0.967 | +14.7 / +15.2 % | -1.4 / -1.3 % | +15.3 / +16.0 % | +5.2 / +5.0 % |
+| no_pp1 | 0.0 / 0.0 % | -6.3 / -7.0 % | +5.7 / +5.5 % | 0.948 / 0.950 | 0.947 / 0.949 | +16.8 / +17.1 % | -1.1 / -0.9 % | +15.6 / +16.5 % | +12.2 / +12.1 % |
+| clock_bound | 0.0 / 0.0 % | 0.0 / -1.2 % | 0.0 / +0.1 % | 1.000 / 0.999 | 1.000 / 0.999 | +8.0 / +8.6 % | +2.8 / +2.7 % | +1.8 / +2.0 % | +5.2 / +5.0 % |
+| low_alpha | -6.0 / -6.9 % | -7.7 / -8.3 % | +9.0 / +9.0 % | 0.919 / 0.919 | 0.919 / 0.919 | +12.0 / +12.4 % | -1.5 / -1.5 % | +11.4 / +12.8 % | +7.5 / +7.2 % |
+| favourable | +7.4 / +7.7 % | +5.1 / +5.8 % | -2.8 / -3.2 % | 1.028 / 1.031 | 0.988 / 0.985 | +18.1 / +17.8 % | +14.3 / +13.7 % | +0.6 / +0.8 % | +18.0 / +17.7 % |
+
+D2 (dGPU present), every variant, both seeds: tuned B0 puts the drafter on the dGPU in
+100 % of draws; FULL/B0 turn rate 1.000–1.005. FULL *without* the demotion loop is
+0.53–0.78 x B0, because the idea's own admission rule keeps the bursty drafter on the
+iGPU; only the demotion loop moves it to the dGPU.
+
+Ablations (D0 base, seed 11): turboPriority-only, as the idea literally wrote it
+(lower classes' symbolic `"turbo"` -> base = 0.8 GHz E-cores): 0.54 x B0. Controller
+assuming a compute-bound drafter: identical to FULL (it never chose a cap in base).
+No-demotion: 1.00 x B0 (FULL's base loss comes entirely from demoting the drafter to
+P-cores).
+
+### Verdict against the pre-registered criteria
+
+| AC | result | |
+|---|---|---|
+| AC1 claim as stated | **FAIL**, every variant, both seeds | best: favourable, drafter +7.7 %, p95 -5.8 %, energy -3.2 % |
+| AC2 beats a static cap | **FAIL**, every variant | an oracle static E cap beats the controller by 1–3 % where caps help at all |
+| AC3 power channel | **FAIL** in base, io_tools, no_pp1, low_alpha, clock_bound; pass only in favourable | power-only channel is *negative* in the base prior |
+| AC4 dGPU scope | **HOLDS** (predicted) | idea irrelevant with a dGPU; harmful without its demotion loop |
+| AC5 freq falsifier invalid | **NOT triggered** (prediction wrong) | the iGPU clock itself barely rises (median +5 %), so the idea's own falsifier ("act_freq does not rise") fires and refutes it in most draws |
+| Regime rule | n/a | AC1 fails even in the stacked favourable corner |
+
+Predictions vs outcome: AC1-drafter fail, AC3 fail, AC4 hold — as predicted. Planner
+p95 leg was predicted to possibly pass; it fails (worse in base, +4–6 % at best).
+AC5 was predicted to trigger and did not.
+
+### What the simulator says the mechanism actually is
+
+1. **Freed watts go to the P-cores, not the iGPU.** With proportional PCU sharing and
+   any PP1 priority, an E-core cap mostly raises P-core clocks; the P-cores then pull
+   more DRAM bandwidth, so the power-only channel is slightly *negative* for a
+   bandwidth-bound drafter. Frequency moves as power^(1/alpha), so even a large watt
+   transfer is a small clock change.
+2. **The real gain from an E-core cap is DRAM relief** (+15 % drafter tok/s in base,
+   almost all from cut E-core traffic). That is the objection's confound, confirmed in
+   the model. It is a bandwidth-partitioning effect, not package-power coupling, and a
+   static cap already captures it.
+3. **Tools on the critical path eat the gain.** Capping E-cores slows tool-exec; unless
+   tools are I/O-bound (`io_tools`), turn rate drops.
+4. **`turboPriority` is a trap on this SKU.** Lower classes' symbolic `"turbo"`
+   resolves to base, and E-core base is 0.8 GHz: -46 % turn rate.
+
+**Decision: do not build the placer.** Keep only the pieces that are correct and cheap:
+effective-cap math, strict CRD validation of rendered policies, the turbo-trap guard,
+host-derived C-state names. The redirected (untested) hypothesis is "E-core caps as a
+DRAM-bandwidth throttle for co-located bandwidth-bound decode"; that needs its own
+pre-registration and is not claimed here.
+
+## 7. Live probes (none run; benchmarks were live on 2026-10-16)
+
+- **P0 write-path spike.** Apply a one-class `cpuClasses` policy (E cap only) to a
+  throwaway k3d cluster; confirm `scaling_max_freq` and `energy_performance_preference`
+  on the E-CPUs change on the host, and revert. Unknown: the DaemonSet runs with
+  `capabilities: drop: [ALL]` writing the k3d node container's `/sys` via hostPath.
+- **P1 the cheap research step (objection's design).** On the 13900T, dGPU unused:
+  iGPU INT4 drafter alone vs with P/E load, each with and without an E-core maxFreq
+  cap. Record RAPL `package-0`/`core`/`uncore` energy, `gt_act_freq_mhz`,
+  `throttle_reason_*`, drafter tok/s. **Bandwidth-matched control:** an E-core load
+  that is power-heavy and DRAM-light (L1-resident AVX2 loop) vs power-light and
+  DRAM-heavy (STREAM triad on 4 E-cores). Build only if tok/s (not clock) rises
+  >= 20 % under the cap with the DRAM-light load.
+- **P2 PP1 priority.** Read `MSR_PP0_POLICY` 0x63A / `MSR_PP1_POLICY` 0x642 (root,
+  `rdmsr`) to replace the `pi` prior with the programmed value.
+- **P3 alpha.** Fit the per-class power exponent from P1's RAPL traces. It sets how
+  far a watt transfer moves a clock; `low_alpha` alone did not rescue the claim in sim.
+- **P4 Core Ultra.** NPU power sharing and a dGPU-less package: needs Core Ultra
+  hardware; not available.
+
+## 8. Provenance partition
+
+- **Shipped:** nri-plugins balloons `cpuClasses` (min/maxFreq, EPP, `turboPriority`,
+  `disabledCstates`, uncore freq), `idleCPUClass`, `balloonTypes[].cpuClass` — present
+  in the CRD of the pinned chart v0.14.0 (`share/nri-balloons.yml` on `main`) and in the
+  v0.14.0 stable docs (fetched 2026-10-16 by the provenance pass). Per-pod
+  freq/EPP/C-state control in k8s: intel/kubernetes-power-manager (archived, last push
+  2024-09-09), AMDEPYC/kubernetes-power-manager (pushed 2026-09-05). Firmware CPU/GPU
+  power balancing: Intel SDM `MSR_PP0_POLICY`/`MSR_PP1_POLICY`; Intel Deep Link
+  Dynamic Power Share (Intel support article 000090047).
+- **Announced / in flight (not merged):** `claude/invent-power-aware` (RAPL coupled
+  model + work-moving controller), `claude/invent-agent-topology` (role split), both
+  2026-10-16 in this repo.
+- **Paper-only:** throttling the CPU to give an integrated GPU power under a shared
+  TDP — Paul et al., "Cooperative Boosting: Needy versus Greedy Power Management",
+  ISCA 2013, doi:10.1145/2485922.2485947; Paul et al., "Coordinated energy management
+  in heterogeneous processors", SC13, doi:10.1145/2503210.2503227.
+- **This branch (sim + static code only):** per-agent-role cpuClasses rendering with a
+  turbo-trap guard and strict CRD validation; effective-cap admission; 1 Hz
+  hold-then-demote loop over DRA fallback chains; a falsifying simulator whose verdict
+  is *refuted* for the stated claim.
+- **Host facts used** (read-only, 2026-10-16): idle states `POLL C1_ACPI C2_ACPI
+  C3_ACPI`; `intel_pstate` with EPP; P base 1.1 GHz, E base 0.8 GHz, E max 3.9 GHz;
+  iGPU RP0 1650 MHz. PL1 = 117 W from `claude/invent-power-aware`, not re-read here.
