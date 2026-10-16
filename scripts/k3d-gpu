@@ -932,7 +932,7 @@ HS_CR=26.35.39758.10
 HS_NPU_REL=v1.38.0
 HS_NPU_BUILD=1.38.0.20260910-34487311128
 HS_NVCTK=1.20.1-1
-HS_DIR="${K3D_GPU_SETUP_DIR:-/tmp/k3d-gpu-host-setup}"
+HS_DIR="${K3D_GPU_SETUP_DIR:-${XDG_CACHE_HOME:-${HOME:-}/.cache}/k3d-gpu/host-setup}"
 HS_LIBDIRS="usr/lib/x86_64-linux-gnu usr/lib64 usr/lib"
 
 # "<file> <sha256> <download dir>" per Intel GPU compute .deb. The sha256s are
@@ -1054,7 +1054,7 @@ hs_check_va() {
         lmin=$((10#${lmin} / 100))
     fi
     case "${HS_DISTRO}" in
-        ubuntu-*) fix="sudo add-apt-repository -y ppa:kobuk-team/intel-graphics && sudo apt-get install -y libva2=2.24.1-1~${HS_DISTRO#ubuntu-}~ppa2 libva-drm2=2.24.1-1~${HS_DISTRO#ubuntu-}~ppa2" ;;
+        ubuntu-*) fix="sudo add-apt-repository -y ppa:kobuk-team/intel-graphics && sudo apt-get install -y $(hs_libva_pkgs "${HS_DISTRO#ubuntu-}")" ;;
         *) fix=$(hs_sync_fix) ;;
     esac
     if [ -z "${lib}" ]; then
@@ -1122,7 +1122,7 @@ hs_check_opencl() {
 }
 
 hs_checks() {
-    local lz e id drv name mink gen
+    local lz e id drv name mink fw gen
     if is_hs_target intel || is_hs_target npu; then
         info "Checking Intel userspace..."
         hs_check_cxx
@@ -1154,9 +1154,12 @@ hs_checks() {
     for e in ${HS_INTEL_GPUS[@]+"${HS_INTEL_GPUS[@]}"}; do
         is_hs_target intel || break
         read -r id drv <<< "${e}"
-        IFS='|' read -r name mink _ <<< "$(intel_gpu_platform "${id}")"
+        IFS='|' read -r name mink fw <<< "$(intel_gpu_platform "${id}")"
         [ -n "${name}" ] || continue
-        if [ -z "${mink}" ] || { [ -z "${drv}" ] && kernel_lt "${mink}"; }; then
+        if [ -n "${mink}" ] && [ -z "${drv}" ] && kernel_lt "${mink}" && [ "${fw#i915/}" != "${fw}" ]; then
+            # i915 is the default driver for this part; xe does not support it on these kernels.
+            notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs the boot option i915.force_probe=${id#0x} (or kernel ${mink}+)"$'\n'
+        elif [ -z "${mink}" ] || { [ -z "${drv}" ] && kernel_lt "${mink}"; }; then
             notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs the boot options xe.force_probe=${id#0x} i915.force_probe=!${id#0x}${mink:+ (or kernel ${mink}+)}"$'\n'
         elif kernel_lt "${mink}"; then
             notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) is supported by default from kernel ${mink} (running $(kernel_release))"$'\n'
@@ -1175,6 +1178,22 @@ hs_checks() {
 
 hs_add() { HS_PLAN+=("$1"); }
 
+# libva and every libva-* that vainfo depends on, pinned to the PPA build together:
+# the release's libva-x11-2/libva-wayland2 depend on libva2 << 2.20.0.1.
+hs_libva_pkgs() {
+    local p v="2.24.1-1~$1~ppa2" out=""
+    for p in libva2 libva-drm2 libva-x11-2 libva-wayland2; do out+=" ${p}=${v}"; done
+    echo "${out# }"
+}
+
+# The NPU .debs inside the release archive, each as " '<prefix><file>'".
+hs_npu_debs() {
+    local p
+    for p in intel-level-zero-npu intel-driver-compiler-npu intel-fw-npu; do
+        printf " '%s'" "$2${p}_${HS_NPU_BUILD}~ubuntu$1_amd64.deb"
+    done
+}
+
 # Download a pinned file into HS_DIR and check its sha256.
 hs_fetch() {
     local file=$1 sum=$2 url=$3
@@ -1187,14 +1206,17 @@ hs_plan_ubuntu() {
     hs_add "sudo apt-get update"
     hs_add "sudo apt-get install -y ca-certificates curl gnupg software-properties-common"
     if is_hs_target intel || is_hs_target npu; then
-        hs_add "mkdir -p '${HS_DIR}'"
+        # A private download dir: the .debs in it are installed as root.
+        hs_add "mkdir -p '${HS_DIR}' && [ ! -L '${HS_DIR}' ] && [ -O '${HS_DIR}' ] && chmod 0700 '${HS_DIR}' || { echo 'refusing ${HS_DIR}: not a directory owned by this user' >&2; exit 1; }"
         read -r file sum url <<< "${HS_ZE_DEB}"
         hs_fetch "${file}" "${sum}" "${url}"
         debs+=" '${HS_DIR}/${file}'"
     fi
     if is_hs_target intel; then
         hs_add "sudo add-apt-repository -y ppa:kobuk-team/intel-graphics"
-        hs_add "sudo apt-get install -y intel-media-va-driver-non-free=26.3.2-1~${rel}~ppa1 libva2=2.24.1-1~${rel}~ppa2 libva-drm2=2.24.1-1~${rel}~ppa2 libigdgmm12=22.10.1-1~${rel}~ppa1 vainfo clinfo ocl-icd-libopencl1"
+        # The PPA also builds intel-opencl-icd/libze*/libigc*; keep apt on the GitHub .debs.
+        hs_add "printf 'Package: intel-opencl-icd libze-intel-gpu1 libze1 libze-dev libze-intel-gpu-dev libigc2 libigc-dev libigc-tools\\nPin: release o=LP-PPA-kobuk-team-intel-graphics\\nPin-Priority: -1\\n' | sudo tee /etc/apt/preferences.d/k3d-gpu-intel-compute >/dev/null"
+        hs_add "sudo apt-get install -y intel-media-va-driver-non-free=26.3.2-1~${rel}~ppa1 $(hs_libva_pkgs "${rel}") libigdgmm12=22.10.1-1~${rel}~ppa1 vainfo clinfo ocl-icd-libopencl1"
         while read -r file sum url; do
             hs_fetch "${file}" "${sum}" "${url}"
             debs+=" '${HS_DIR}/${file}'"
@@ -1204,8 +1226,8 @@ hs_plan_ubuntu() {
         read -r file sum <<< "$(hs_npu_tarball "${rel}")"
         hs_fetch "${file}" "${sum}" "https://github.com/intel/linux-npu-driver/releases/download/${HS_NPU_REL}"
         npu="${HS_DIR}/npu-${HS_NPU_REL}"
-        hs_add "mkdir -p '${npu}' && tar -xzf '${HS_DIR}/${file}' -C '${npu}'"
-        debs+=" libtbb12 '${npu}'/*.deb"
+        hs_add "mkdir -p '${npu}' && tar -xzf '${HS_DIR}/${file}' -C '${npu}'$(hs_npu_debs "${rel}" ./)"
+        debs+=" libtbb12$(hs_npu_debs "${rel}" "${npu}/")"
     fi
     [ -z "${debs}" ] || hs_add "sudo apt-get install -y${debs}"
     if is_hs_target nvidia; then
@@ -1237,19 +1259,22 @@ hs_plan_arch() {
     is_hs_target npu && ! is_hs_target intel && pkgs+=" level-zero-loader linux-firmware-intel"
     is_hs_target nvidia && pkgs+=" nvidia-container-toolkit"
     [ -z "${pkgs}" ] || hs_add "sudo pacman -Syu --needed${pkgs}"
-    # Arch's package ships no nvidia-cdi-refresh units, so write the spec directly.
-    is_hs_target nvidia && hs_plan_nvidia_runtime generate
+    # Arch's package ships the nvidia-cdi-refresh units from 1.20.1-1; older builds
+    # (Manjaro lags) do not, so those get the spec written directly.
+    is_hs_target nvidia && hs_plan_nvidia_runtime "${SYSROOT}/usr/lib/systemd/system/nvidia-cdi-refresh.service"
     return 0
 }
 
 # CDI spec + Docker runtime registration. NVIDIA's own packages (1.18+) keep
-# /var/run/cdi/nvidia.yaml current through nvidia-cdi-refresh; elsewhere generate it.
+# /var/run/cdi/nvidia.yaml current through nvidia-cdi-refresh. Given a unit file
+# path instead of "refresh", the refresh runs when that file exists, else the
+# spec is generated.
 hs_plan_nvidia_runtime() {
+    local refresh="sudo systemctl enable --now nvidia-cdi-refresh.path && sudo systemctl restart nvidia-cdi-refresh.service"
     if [ "$1" = refresh ]; then
-        hs_add "sudo systemctl enable --now nvidia-cdi-refresh.path"
-        hs_add "sudo systemctl restart nvidia-cdi-refresh.service"
+        hs_add "${refresh}"
     else
-        hs_add "sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml"
+        hs_add "if [ -e '$1' ]; then ${refresh}; else sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml; fi"
     fi
     hs_add "sudo nvidia-ctk runtime configure --runtime=docker"
     hs_add "sudo systemctl restart docker"

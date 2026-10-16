@@ -184,7 +184,7 @@ changes nothing unless you pass `--apply` and answer `y`.
 | Level Zero loader | GitHub `libze1` 1.34.0 .deb, sha256-checked | `oneapi-level-zero` | `level-zero-loader` |
 | Media driver + libva | `ppa:kobuk-team/intel-graphics`, pinned 26.3.2 / 2.24.1 | `libva-intel-media-driver` | `intel-media-driver libva` |
 | NPU driver + firmware | GitHub linux-npu-driver v1.38.0 archive, sha256-checked (includes `intel-fw-npu`) | `intel-npu-driver intel-npu-firmware` | `intel-npu-driver linux-firmware-intel` |
-| NVIDIA container toolkit | NVIDIA apt repo, pinned 1.20.1-1; CDI via `nvidia-cdi-refresh` | NVIDIA dnf repo, pinned 1.20.1-1 | `nvidia-container-toolkit`; `nvidia-ctk cdi generate` |
+| NVIDIA container toolkit | NVIDIA apt repo, pinned 1.20.1-1; CDI via `nvidia-cdi-refresh` | NVIDIA dnf repo, pinned 1.20.1-1 | `nvidia-container-toolkit`; CDI via `nvidia-cdi-refresh` (1.20.1-1+), else `nvidia-ctk cdi generate` |
 
 Fedora, Arch and Manjaro repos serve only their current build, so those plans
 install the repo version; Arch and Manjaro always use `pacman -Syu`. Before the
@@ -193,7 +193,9 @@ the fix:
 
 - **Media driver ahead of libva** (`vainfo`: `iHD_drv_video.so has no function __vaDriverInit_1_0`): the driver exports `__vaDriverInit_1_<N>` for libva 2.N and libva is older. Checked from the files and by running `vainfo`.
 - **Compute runtime ahead of libstdc++** (`version 'GLIBCXX_3.4.35' not found`; `clinfo` silently loses the Intel platform): the runtime was built by a newer GCC than the installed `gcc-libs`. Checked by comparing symbol versions, running `clinfo -l` and `ldd` on the registered ICD.
-- Parts newer than the kernel's default `xe` support get the `xe.force_probe=<id> i915.force_probe=!<id>` boot options (printed, never applied).
+- Parts newer than the kernel's default support get boot options (printed, never applied): `i915.force_probe=<id>` for i915 parts (Meteor Lake, Arrow Lake), `xe.force_probe=<id> i915.force_probe=!<id>` for xe parts.
+
+Downloads go to `${XDG_CACHE_HOME:-~/.cache}/k3d-gpu/host-setup` (override: `K3D_GPU_SETUP_DIR`), which must be a directory you own; it is set to mode 0700. On Ubuntu an apt pin keeps the PPA's `intel-opencl-icd`/`libze*`/`libigc*` builds from replacing the GitHub .debs.
 
 ---
 

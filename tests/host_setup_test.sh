@@ -47,8 +47,9 @@ pci() {
     fi
 }
 
-# lib <root> <path under usr/lib> <content>: a fake library holding the given strings.
-lib() { mkdir -p "$(dirname "$1/usr/lib/$2")"; printf '%s' "$3" > "$1/usr/lib/$2"; }
+# lib <root> <path under the library dir> <content>: a fake library holding the
+# given strings, under LIBDIR (default usr/lib).
+lib() { local d="$1/${LIBDIR:-usr/lib}"; mkdir -p "$(dirname "${d}/$2")"; printf '%s' "$3" > "${d}/$2"; }
 
 kernel() { mkdir -p "$1/proc/sys/kernel"; echo "$2" > "$1/proc/sys/kernel/osrelease"; }
 
@@ -94,6 +95,10 @@ run "${r}" ""
 rc_is "dry run exits 0" 0
 says "ubuntu 24.04 pins the PPA media driver for 24.04" "intel-media-va-driver-non-free=26.3.2-1~24.04~ppa1"
 says "ubuntu pins libva from the PPA" "libva2=2.24.1-1~24.04~ppa2"
+says "ubuntu pins libva-x11-2/libva-wayland2 with libva (vainfo needs both)" "libva-x11-2=2.24.1-1~24.04~ppa2 libva-wayland2=2.24.1-1~24.04~ppa2"
+says "ubuntu keeps apt from swapping the GitHub compute .debs for PPA builds" "Pin: release o=LP-PPA-kobuk-team-intel-graphics"
+says "the apt pin covers the runtime packages" "Package: intel-opencl-icd libze-intel-gpu1 libze1"
+says "downloads go to a private dir that must be the user's own" "mkdir -p '${WORK}/dl' && [ ! -L '${WORK}/dl' ] && [ -O '${WORK}/dl' ] && chmod 0700 '${WORK}/dl'"
 says "ubuntu downloads compute-runtime 26.35 .debs" "releases/download/26.35.39758.10/libze-intel-gpu1_26.35.39758.10-0_amd64.deb"
 says "ubuntu verifies the opencl-icd sha256" "61712caaddeba3d38e4f79e2a0fb23fea25596ca2d72c3144c6eea2331ec4301  ${WORK}/dl/intel-opencl-icd_26.35.39758.10-0_amd64.deb' | sha256sum -c -"
 says "ubuntu installs IGC 2.41.5 with the runtime" "intel-igc-opencl-2_2.41.5+22716_amd64.deb"
@@ -109,7 +114,9 @@ pci "${r}" 0000:00:0b.0 0x8086 0xb03e 0x120000 intel_vpu
 run "${r}" ""
 says "ubuntu 26.04 NPU uses the 26.04 driver archive" "linux-npu-driver-v1.38.0.20260910-34487311128-ubuntu2604.tar.gz"
 says "NPU archive sha256 is checked" "83685e6d92f4db1ca65e442846d487c7feb1335634b33994292ceb38f933bcc7"
-says "NPU install pulls libtbb12 and the archive .debs" "libtbb12 '${WORK}/dl/npu-v1.38.0'/*.deb"
+says "NPU install pulls libtbb12 and the archive .debs by name" "libtbb12 '${WORK}/dl/npu-v1.38.0/intel-level-zero-npu_1.38.0.20260910-34487311128~ubuntu26.04_amd64.deb' '${WORK}/dl/npu-v1.38.0/intel-driver-compiler-npu_1.38.0.20260910-34487311128~ubuntu26.04_amd64.deb' '${WORK}/dl/npu-v1.38.0/intel-fw-npu_1.38.0.20260910-34487311128~ubuntu26.04_amd64.deb'"
+not_says "NPU install never globs the download dir" "*.deb"
+says "only the named .debs are unpacked from the checked archive" "-C '${WORK}/dl/npu-v1.38.0' './intel-level-zero-npu_1.38.0.20260910-34487311128~ubuntu26.04_amd64.deb'"
 says "NPU gets the level-zero loader too" "libze1_1.34.0+u24.04_amd64.deb"
 not_says "NPU-only host skips the media PPA" "add-apt-repository"
 says "missing NPU firmware is reported" "intel/vpu/vpu_50xx_* firmware missing"
@@ -156,7 +163,12 @@ rc_is "host with nothing to set up exits 0" 0
 says "host with nothing to set up says so" "nothing to set up"
 run "${r}" "" K3D_GPU_VENDORS=nvidia
 says "K3D_GPU_VENDORS forces a plan" "sudo pacman -Syu --needed nvidia-container-toolkit"
-says "arch writes the CDI spec itself" "sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml"
+says "arch uses nvidia-cdi-refresh when the package ships it (1.20.1+)" "if [ -e '${r}/usr/lib/systemd/system/nvidia-cdi-refresh.service' ]; then sudo systemctl enable --now nvidia-cdi-refresh.path && sudo systemctl restart nvidia-cdi-refresh.service; else sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml; fi"
+
+run "${r}" "" --distro=ubuntu-24.04 K3D_GPU_VENDORS=intel K3D_GPU_SETUP_DIR= HOME=/home/u XDG_CACHE_HOME=
+says "default download dir is the user's cache, not /tmp" "mkdir -p '/home/u/.cache/k3d-gpu/host-setup'"
+run "${r}" "" --distro=ubuntu-24.04 K3D_GPU_VENDORS=intel K3D_GPU_SETUP_DIR= XDG_CACHE_HOME=/xdg
+says "XDG_CACHE_HOME is honored" "mkdir -p '/xdg/k3d-gpu/host-setup'"
 
 # ---- Manjaro partial-upgrade failure modes ----------------------------------
 
@@ -223,6 +235,14 @@ run "${r}" ""
 says "unsupported part gets force_probe" "Intel Crescent Island (0x674c) needs the boot options xe.force_probe=674c i915.force_probe=!674c"
 says "unbound part on an old kernel gets force_probe or a kernel" "Intel Battlemage (0xe20b) needs the boot options xe.force_probe=e20b i915.force_probe=!e20b (or kernel 6.12+)"
 says "fedora boot options go through grubby" "sudo grubby --update-kernel=ALL"
+
+r=$(newroot kernel-i915)
+osrel "${r}" fedora 44
+kernel "${r}" 6.5.0
+pci "${r}" 0000:00:02.0 0x8086 0x7d55 0x030000
+run "${r}" ""
+says "i915-default part on an old kernel gets i915.force_probe" "Intel Meteor Lake (0x7d55) needs the boot option i915.force_probe=7d55 (or kernel 6.7+)"
+not_says "i915-default part is never pointed at xe" "xe.force_probe=7d55"
 not_says "boot options are never in the plan" "    sudo grubby"
 
 # ---- --apply ----------------------------------------------------------------
@@ -241,12 +261,12 @@ ran_nothing "--apply with no input runs nothing"
 run "${r}" "y" --apply
 rc_is "--apply y succeeds" 0
 logged "--apply runs pacman" "sudo pacman -Syu --needed nvidia-container-toolkit"
-logged "--apply generates the CDI spec" "sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml"
+logged "--apply generates the CDI spec when the package has no refresh units" "sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml"
 nth_call "--apply runs the plan in order" 4 "sudo systemctl restart docker"
 
 run "${r}" "y" --apply STUB_SUDO_FAIL="cdi generate"
 rc_is "--apply stops on a failed command" 1
-says "--apply names the failed command" "command failed: sudo nvidia-ctk cdi generate"
+says "--apply names the failed command" "command failed: if [ -e"
 not_says "--apply runs nothing after a failure" "+ sudo systemctl restart docker"
 
 r=$(newroot apply-ubuntu)
@@ -257,6 +277,39 @@ rc_is "ubuntu --apply succeeds" 0
 logged "ubuntu --apply downloads the NPU archive" "curl -fL --retry 3 -o ${WORK}/dl/linux-npu-driver-v1.38.0.20260910-34487311128-ubuntu2604.tar.gz"
 logged "ubuntu --apply checks the sha256" "sha256sum -c -"
 logged "ubuntu --apply unpacks the archive" "tar -xzf ${WORK}/dl/linux-npu-driver-v1.38.0.20260910-34487311128-ubuntu2604.tar.gz -C ${WORK}/dl/npu-v1.38.0"
+
+r=$(newroot apply-arch-units)
+osrel "${r}" manjaro
+pci "${r}" 0000:01:00.0 0x10de 0x27b0 0x030000
+mkdir -p "${r}/usr/lib/systemd/system"; touch "${r}/usr/lib/systemd/system/nvidia-cdi-refresh.service"
+run "${r}" "y" --apply
+logged "--apply with the refresh units restarts nvidia-cdi-refresh" "sudo systemctl restart nvidia-cdi-refresh.service"
+not_says "--apply with the refresh units writes no static /etc spec" "+ sudo nvidia-ctk cdi generate"
+
+mkdir -p "${WORK}/elsewhere"; ln -sfn "${WORK}/elsewhere" "${WORK}/dl-link"
+r=$(newroot apply-symlink)
+osrel "${r}" ubuntu 26.04
+pci "${r}" 0000:00:0b.0 0x8086 0x7d1d 0x120000 intel_vpu
+run "${r}" "y" --apply K3D_GPU_SETUP_DIR="${WORK}/dl-link"
+rc_is "--apply refuses a download dir that is a symlink" 1
+not_says "--apply downloads nothing into a refused dir" "+ curl"
+
+# ---- library search order -----------------------------------------------------
+
+for d in usr/lib/x86_64-linux-gnu usr/lib64; do
+    r=$(newroot "libdir-${d//\//-}")
+    osrel "${r}" fedora 44
+    pci "${r}" 0000:00:02.0 0x8086 0x4680 0x030000 i915
+    LIBDIR=$d lib "${r}" dri/iHD_drv_video.so "__vaDriverInit_1_24"
+    LIBDIR=$d lib "${r}" libva.so.2.2300.0 "x"
+    LIBDIR=$d lib "${r}" libstdc++.so.6 "GLIBCXX_3.4.34"
+    LIBDIR=$d lib "${r}" intel-opencl/libigdrcl.so "GLIBCXX_3.4.35"
+    LIBDIR=$d lib "${r}" libze_loader.so.1 "x"
+    run "${r}" "" STUB_CLINFO="Platform #0: Intel(R) OpenCL Graphics"
+    says "media driver vs libva found under ${d}" "exports __vaDriverInit_1_24 (built for libva 2.24) but libva is 2.23"
+    says "libstdc++ vs runtime found under ${d}" "/${d}/intel-opencl/libigdrcl.so needs GLIBCXX_3.4.35"
+    says "Level Zero loader found under ${d}" "Level Zero loader: libze_loader.so.1"
+done
 
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
