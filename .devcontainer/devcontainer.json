@@ -1,0 +1,22 @@
+{
+  "name": "k3d-gpu",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:4.1.3": {
+      "moby": false
+    }
+  },
+  "remoteUser": "vscode",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "timonwong.shellcheck",
+        "exiasr.hadolint",
+        "github.vscode-github-actions",
+        "redhat.vscode-yaml"
+      ]
+    }
+  }
+}

@@ -30,6 +30,18 @@ Include relevant details:
    - Test your changes locally
 
 3. **Test your changes**:
+
+   Run the static checks first. They need no cluster or GPU: detection tests,
+   shellcheck, hadolint, kubeconform over `share/` (and `examples/`), and
+   actionlint. The pinned toolchain is in `.devcontainer/` (open the repo in a
+   dev container or Codespace), or run everything in that container from any
+   host with Docker:
+   ```bash
+   make check             # tools on PATH (inside the dev container)
+   make check-container   # builds .devcontainer/Dockerfile (no features), runs make check
+   ```
+
+   Then test on real hardware:
    ```bash
    # Build the image
    ./build.sh

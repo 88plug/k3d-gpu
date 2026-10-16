@@ -494,6 +494,23 @@ for case in "amx 2" "hybrid 2" "amx 0 none"; do
     fi
 done
 
+
+# The docker-in-docker feature's install.sh exits 1 when moby=true (its default) on
+# Debian trixie, so a trixie dev container must set "moby": false.
+DEVC="$(dirname "${K3D_GPU}")/../.devcontainer"
+if grep -qE '^FROM .*-trixie[@: ]' "${DEVC}/Dockerfile" \
+   && ! python3 - "${DEVC}/devcontainer.json" <<'EOF'
+import json, sys
+features = json.load(open(sys.argv[1])).get("features", {})
+dind = [opts for ref, opts in features.items() if "/docker-in-docker:" in ref]
+sys.exit(1 if any(opts.get("moby", True) is not False for opts in dind) else 0)
+EOF
+then
+    FAILS=$((FAILS + 1)); echo "FAIL devcontainer docker-in-docker sets moby=false on a trixie base"
+else
+    PASS=$((PASS + 1)); echo "ok   devcontainer docker-in-docker sets moby=false on a trixie base"
+fi
+
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]
