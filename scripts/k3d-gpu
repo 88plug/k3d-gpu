@@ -439,7 +439,7 @@ doctor_accel_sockets() {
         fi
         lines+="  info: per socket: ${line}"$'\n'"${extra}"
     fi
-    sdsi=$({ compgen -G "${SYSROOT}/sys/bus/auxiliary/devices/intel_vsec.sdsi.*" || true; } | sed 's#.*/##' | paste -sd, | sed 's/,/, /g')
+    sdsi=$({ compgen -G "${SYSROOT}/sys/bus/auxiliary/devices/intel_vsec.sdsi.*" || true; } | sed 's#.*/##' | sort -V | paste -sd, | sed 's/,/, /g')
     [ -z "${sdsi}" ] || lines+="  info: Intel On Demand interface present (${sdsi}): on On Demand SKUs, instances above the ARK default are activated by a license (https://github.com/intel/intel-sdsi); ask the platform vendor whether activation is offered"$'\n'
 }
 
