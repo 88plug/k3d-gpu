@@ -164,3 +164,9 @@ parser, e.g. `--enable-auto-tool-choice --tool-call-parser ...`) and use
 * `decode_tps` assumes the final usage chunk is present; without it the count
   of content deltas stands in for completion tokens.
 * One process, threads: thousands of concurrent sessions need an async client.
+
+## Tool-result compression and the answer oracle
+
+`--tool-compress`, `--compress-ratio`, `--compress-url`, `--compress-tools`,
+`--only-graded` and the `needle` family are documented in
+[`TOOL_COMPRESS.md`](TOOL_COMPRESS.md) with their pre-registered live protocol.

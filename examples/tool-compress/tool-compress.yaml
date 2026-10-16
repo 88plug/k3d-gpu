@@ -1,0 +1,78 @@
+# Tool-result compressor pinned to the E-cores (k3d-gpu.io/cores=efficient).
+#
+# Runs bench/tool_compress.py `serve`: POST /compress {"text","method","ratio","query"}
+# returns the tool result cut to ceil(ratio * words) words (methods trunc, keeplines,
+# randdrop; stdlib only). An agent runtime calls it inside the tool step, so the work
+# lands on the E-core balloon while the LLM engine keeps the P-cores. The NRI balloons
+# policy (share/nri-balloons.yml) sizes the efficient balloon from this pod's CPU
+# request, so requests equal limits in whole CPUs.
+#
+#   kubectl apply -f examples/tool-compress/tool-compress.yaml
+#   kubectl -n tool-compress create configmap tool-compress-src \
+#       --from-file=tool_compress.py=bench/tool_compress.py
+#   kubectl -n tool-compress rollout status deploy/tool-compress
+#   kubectl -n tool-compress exec deploy/tool-compress -- grep Cpus_allowed_list /proc/1/status
+#   kubectl -n tool-compress port-forward svc/tool-compress 8090:8090 &
+#   python3 bench/agent_trace.py run needle.json --model MODEL --url URL \
+#       --tool-compress keeplines --compress-url http://127.0.0.1:8090/compress --out runs/x
+#
+# The llmlingua2 method needs torch + llmlingua 0.2.2 and is not in this image.
+# Image: python 3.13.16-slim-trixie, pinned by digest (Docker Hub, 2026-10-16).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tool-compress
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tool-compress
+  namespace: tool-compress
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tool-compress
+  template:
+    metadata:
+      labels:
+        app: tool-compress
+        k3d-gpu.io/cores: efficient
+    spec:
+      nodeSelector:
+        k3d-gpu.io/hybrid-cpu: "true"
+      containers:
+      - name: compress
+        image: python:3.13.16-slim-trixie@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f
+        command: ["python3", "-B", "/app/tool_compress.py", "serve", "--port", "8090"]
+        ports:
+        - {name: http, containerPort: 8090}
+        readinessProbe:
+          httpGet: {path: /healthz, port: http}
+          periodSeconds: 5
+        resources:
+          requests: {cpu: "2", memory: 256Mi}
+          limits: {cpu: "2", memory: 256Mi}
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65534
+          capabilities: {drop: [ALL]}
+        volumeMounts:
+        - {name: src, mountPath: /app, readOnly: true}
+      volumes:
+      - name: src
+        configMap:
+          name: tool-compress-src
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tool-compress
+  namespace: tool-compress
+spec:
+  selector:
+    app: tool-compress
+  ports:
+  - {name: http, port: 8090, targetPort: http}

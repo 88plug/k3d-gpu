@@ -39,6 +39,22 @@ Trace format (JSON):
                             "think_s": float, "expect_tool": str|null,
                             "recorded": assistant message}]}]}
 
+Tool-result compression (bench/tool_compress.py, bench/TOOL_COMPRESS.md):
+  --tool-compress {none,trunc,keeplines,randdrop,llmlingua2} rewrites every
+  role=tool message of a turn's `append` to ceil(ratio * words) words before the
+  request is sent, in-process or through --compress-url (the E-core service in
+  examples/tool-compress/). The compressed text is what enters the history, so
+  later turns keep a stable prefix. The compressor is the tool step's work: its
+  time is taken out of that turn's think_s wait, so the offered load per agent
+  does not change unless compress time exceeds think_s (logged as
+  compress_overrun_ms). --compress-tools limits it to named tools.
+  Per turn: compress_ms, tool_words_in, tool_words_out, compress_overrun_ms.
+
+Answer oracle: a turn with "expect_answer" (the `needle` family) scores
+answer_ok = the expected string appears in the reply (whitespace-normalised).
+--only-graded sends only those turns (history is still built turn by turn), for
+quality runs where latency is not measured.
+
 Subcommands:
   gen      write a synthetic trace (see agent_trace_gen.py for the families)
   run      replay a trace, write per-turn JSONL + a summary JSON
@@ -57,6 +73,9 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import tool_compress  # noqa: E402
 
 JSON_TYPES = {
     "string": str,
@@ -202,6 +221,55 @@ def build_system(session, bust, run_nonce):
     return f"[nonce {nonce}]\n{session['system']}"
 
 
+def _remote_compress(url, text, method, ratio, query, timeout=60.0):
+    body = json.dumps({"text": text, "method": method, "ratio": ratio, "query": query}).encode()
+    req = urllib.request.Request(url, body, {"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        out = json.loads(resp.read())
+    return out["text"], out
+
+
+def compress_append(append, history, args):
+    """Compress role=tool messages in `append`. Returns (messages, stats)."""
+    method = getattr(args, "tool_compress", "none")
+    only = getattr(args, "compress_tools", "") or ""
+    only = set(only.split(",")) if only else None
+    calls = {}
+    for m in history:
+        for tc in m.get("tool_calls") or []:
+            calls[tc.get("id")] = tc.get("function") or {}
+    st = {"compress_ms": 0.0, "tool_words_in": 0, "tool_words_out": 0}
+    out = []
+    for m in append:
+        if m.get("role") != "tool":
+            out.append(m)
+            continue
+        text = m.get("content") or ""
+        fn = calls.get(m.get("tool_call_id"), {})
+        st["tool_words_in"] += tool_compress.nwords(text)
+        if method == "none" or (only and fn.get("name") not in only):
+            st["tool_words_out"] += tool_compress.nwords(text)
+            out.append(m)
+            continue
+        query = fn.get("arguments")
+        t0 = time.perf_counter()
+        if getattr(args, "compress_url", None):
+            new, _ = _remote_compress(args.compress_url, text, method, args.compress_ratio, query)
+        else:
+            new, _ = tool_compress.compress(text, method, args.compress_ratio, query)
+        st["compress_ms"] += (time.perf_counter() - t0) * 1e3
+        st["tool_words_out"] += tool_compress.nwords(new)
+        out.append(dict(m, content=new))
+    return out, st
+
+
+def answer_ok(content, expected):
+    if expected is None:
+        return None
+    norm = lambda x: " ".join((x or "").split())  # noqa: E731
+    return norm(expected) in norm(content)
+
+
 def replay_session(trace, session, args, t_start, results, lock, run_nonce):
     delay = session.get("start_s", 0.0) * args.time_scale - (
         time.perf_counter() - t_start
@@ -210,9 +278,18 @@ def replay_session(trace, session, args, t_start, results, lock, run_nonce):
         time.sleep(delay)
     history = []
     for idx, turn in enumerate(session["turns"]):
-        if turn.get("think_s") and idx > 0:
-            time.sleep(turn["think_s"] * args.time_scale)
-        history.extend(turn.get("append", []))
+        # The tool step: compression runs inside the turn's think_s wait.
+        wait = (turn.get("think_s") or 0.0) * args.time_scale if idx > 0 else 0.0
+        append, cst = compress_append(turn.get("append", []), history, args)
+        spent = cst["compress_ms"] / 1e3
+        cst["compress_overrun_ms"] = max(0.0, spent - wait) * 1e3 if idx > 0 else 0.0
+        if wait > spent:
+            time.sleep(wait - spent)
+        history.extend(append)
+        if getattr(args, "only_graded", False) and turn.get("expect_answer") is None:
+            if turn.get("recorded"):
+                history.append(turn["recorded"])
+            continue
         messages = [
             {
                 "role": "system",
@@ -234,6 +311,7 @@ def replay_session(trace, session, args, t_start, results, lock, run_nonce):
         sent_at = time.perf_counter() - t_start
         r = stream_chat(args.url, payload, args.api_key, args.timeout)
         rec = summarize_turn(trace, session, idx, turn, r, sent_at)
+        rec.update({k: (round(v, 3) if isinstance(v, float) else v) for k, v in cst.items()})
         with lock:
             results.append(rec)
         if args.verbose:
@@ -279,6 +357,7 @@ def summarize_turn(trace, session, idx, turn, r, sent_at):
         "tool_valid": valid,
         "tool_reason": reason,
         "tool_names": [c.get("name") for c in calls],
+        "answer_ok": answer_ok(r["content"], turn.get("expect_answer")),
     }
 
 
@@ -331,6 +410,8 @@ def summarize(results, wall, meta):
         if r["cached_tokens"] is not None and r["prompt_tokens"]
     ]
     out_tokens = sum(r["completion_tokens"] or 0 for r in ok)
+    graded = [r for r in ok if r.get("answer_ok") is not None]
+    e2e = [r["e2e_s"] for r in ok]
     return {
         **meta,
         "requests": len(results),
@@ -362,6 +443,13 @@ def summarize(results, wall, meta):
         "cached_fraction": (sum(c for c, _ in cached) / sum(p for _, p in cached))
         if cached
         else None,
+        "e2e_s": {"p50": _pct(e2e, 0.5), "p95": _pct(e2e, 0.95)},
+        "answer_graded": len(graded),
+        "answer_ok_rate": (sum(r["answer_ok"] for r in graded) / len(graded)) if graded else None,
+        "tool_words_in": sum(r.get("tool_words_in") or 0 for r in ok),
+        "tool_words_out": sum(r.get("tool_words_out") or 0 for r in ok),
+        "compress_ms_p95": _pct([r.get("compress_ms") for r in ok if r.get("compress_ms")], 0.95),
+        "compress_overruns": sum(1 for r in ok if (r.get("compress_overrun_ms") or 0) > 0),
         "per_turn": {
             str(t): {
                 "n": len(rs),
@@ -405,7 +493,7 @@ def main(argv=None):
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     g = sub.add_parser("gen", help="write a synthetic trace")
-    g.add_argument("family", choices=["support", "coding", "fanout"])
+    g.add_argument("family", choices=["support", "coding", "fanout", "needle"])
     g.add_argument("-o", "--out", required=True)
     g.add_argument("--seed", type=int, default=0)
     g.add_argument(
@@ -438,6 +526,14 @@ def main(argv=None):
     r.add_argument("--tool-choice", default="auto")
     r.add_argument("--timeout", type=float, default=600.0)
     r.add_argument("-v", "--verbose", action="store_true")
+    r.add_argument("--tool-compress", choices=tool_compress.METHODS, default="none")
+    r.add_argument("--compress-ratio", type=float, default=0.5)
+    r.add_argument("--compress-url", default=None,
+                   help="POST target of tool_compress.py serve (default: in-process)")
+    r.add_argument("--compress-tools", default="",
+                   help="comma-separated tool names to compress (default: all)")
+    r.add_argument("--only-graded", action="store_true",
+                   help="send only turns with expect_answer (history still built); quality runs")
 
     c = sub.add_parser("compare", help="prefix-cache benefit: normal vs busted summary")
     c.add_argument("base")
@@ -445,7 +541,6 @@ def main(argv=None):
 
     a = ap.parse_args(argv)
     if a.cmd == "gen":
-        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         import agent_trace_gen
 
         trace = agent_trace_gen.FAMILIES[a.family](seed=a.seed, scale=a.scale)
@@ -470,6 +565,10 @@ def main(argv=None):
         "model": a.model,
         "cache_bust": a.cache_bust,
         "time_scale": a.time_scale,
+        "tool_compress": a.tool_compress,
+        "compress_ratio": a.compress_ratio,
+        "compress_tools": a.compress_tools,
+        "only_graded": a.only_graded,
     }
     summary = summarize(results, wall, meta)
     with open(a.out + ".jsonl", "w") as f:
@@ -489,6 +588,9 @@ def main(argv=None):
                     "decode_tps_p50",
                     "tool_valid_any",
                     "cached_fraction",
+                    "e2e_s",
+                    "answer_ok_rate",
+                    "tool_words_out",
                 )
             }
         )

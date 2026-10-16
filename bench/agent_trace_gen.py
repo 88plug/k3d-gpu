@@ -40,12 +40,30 @@ fanout  (orchestrator spawning parallel sub-agents)
   max_tokens        128; think_s 0.2
   stresses          bursty concurrent prefill, two-level shared prefix
                     (system + burst brief), queueing under arrival spikes
+
+needle  (coding-shaped, with an answer oracle; for tool-result compression)
+  sessions          4 * scale, arrivals every 5.0 s, turns uniform 6..10
+  system prompt     900 words, shared
+  tools             5 functions; each returns a realistic tool output from
+                    tool_compress.fixture(): run_tests -> pytest log, search ->
+                    grep -n hits, read_file -> Python source, git_diff -> unified
+                    diff, fetch -> prose page. 400..1600 words each, one planted
+                    fact at a seeded position, call arguments = the fixture query
+  last turn         the final tool result, then a user question about one
+                    planted fact drawn uniformly from the session's tool results;
+                    "expect_answer" holds the answer string, max_tokens 64
+  stresses          whether compression keeps the facts a later turn needs
 """
 
 from __future__ import annotations
 
 import json
+import os
 import random
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import tool_compress  # noqa: E402
 
 VOCAB = (
     "account address agent allow amount answer apply approve available balance "
@@ -347,7 +365,66 @@ def fanout(seed=0, scale=1.0):
     }
 
 
-FAMILIES = {"support": support, "coding": coding, "fanout": fanout}
+NEEDLE_TOOLS = {
+    "run_tests": ("pytest", "Run the test suite.", {"target": STR}),
+    "search": ("grep", "Grep the repository.", {"pattern": STR}),
+    "read_file": ("source", "Read a file.", {"path": STR}),
+    "git_diff": ("diff", "Show the working-tree diff.", {"path": STR}),
+    "fetch": ("prose", "Fetch a URL.", {"url": STR}),
+}
+
+
+def needle(seed=0, scale=1.0):
+    rng = random.Random(seed)
+    params = {
+        "sessions": max(1, round(4 * scale)),
+        "gap_s": 5.0,
+        "system_words": 900,
+        "turns": [6, 10],
+        "user_words": 120,
+        "result_words": [400, 1600],
+        "max_tokens": 192,
+        "answer_max_tokens": 64,
+        "think_s": 0.5,
+    }
+    tools = [tool(n, d, props, list(props)) for n, (_, d, props) in NEEDLE_TOOLS.items()]
+    system = "You are a software engineering agent working in a repository.\n" + words(
+        rng, params["system_words"]
+    )
+    sessions = []
+    for i in range(params["sessions"]):
+        sid = f"n{i}"
+        n_turns = rng.randint(*params["turns"])
+        turns, facts, prev_id, fx = [], [], None, None  # fx: last turn's tool output
+        for t in range(n_turns):
+            if t == 0:
+                append = [{"role": "user", "content": words(rng, params["user_words"])}]
+            else:
+                append = [result_msg(prev_id, fx["text"])]
+                facts += [dict(f, kind=fx["kind"], pos=fx["pos"], turn=t) for f in fx["facts"]]
+            turn = {"append": append, "max_tokens": params["max_tokens"], "think_s": params["think_s"]}
+            if t == n_turns - 1:
+                f = rng.choice(facts)
+                append.append({"role": "user", "content": f["q"] + " Answer with the exact text only."})
+                turn.update(max_tokens=params["answer_max_tokens"], expect_tool=None,
+                            expect_answer=f["answer"],
+                            answer_meta={k: f[k] for k in ("kind", "pos", "turn", "where")},
+                            recorded={"role": "assistant", "content": f["answer"]})
+            else:
+                name = rng.choice(list(NEEDLE_TOOLS))
+                kind = NEEDLE_TOOLS[name][0]
+                fx = tool_compress.fixture(kind, f"{seed}-{sid}-{t}", tuple(params["result_words"]))
+                args = {k: str(v) for k, v in fx["query"].items()}
+                prev_id = f"call_{sid}_{t}"
+                turn["expect_tool"] = name
+                turn["recorded"] = call_msg(prev_id, name, args)
+            turns.append(turn)
+        sessions.append({"id": sid, "start_s": i * params["gap_s"], "system": system, "turns": turns})
+    return {"name": f"needle-s{seed}", "family": "needle", "params": params, "tools": tools,
+            "sessions": sessions}
+
+
+FAMILIES = {"support": support, "coding": coding, "fanout": fanout, "needle": needle}
 
 
 def describe(trace):
