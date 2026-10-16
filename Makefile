@@ -12,7 +12,8 @@ SHELL := /bin/bash
 K8S_VERSION     ?= $(shell sed -nE 's/^ARG K3S_TAG="v([0-9.]+)-k3s.*/\1/p' Dockerfile)
 DEV_IMAGE       ?= k3d-gpu-dev:local
 MANIFEST_DIRS   := $(wildcard share examples)
-MANIFESTS       := $(shell find $(MANIFEST_DIRS) -type f \( -name '*.yml' -o -name '*.yaml' \) 2>/dev/null | sort)
+# Helm values files (*.values.yaml) are not Kubernetes objects, so they are not validated here.
+MANIFESTS       := $(shell find $(MANIFEST_DIRS) -type f \( -name '*.yml' -o -name '*.yaml' \) ! -name '*.values.yaml' 2>/dev/null | sort)
 DOCKERFILES     := Dockerfile .devcontainer/Dockerfile
 
 
@@ -41,7 +42,7 @@ kubeconform:
 	schemas=$$(mktemp -d); trap 'rm -rf "$$schemas"' EXIT; \
 	(cd "$$schemas" && openapi2jsonschema $(abspath $(MANIFESTS)) >/dev/null); \
 	kubeconform -strict -summary -kubernetes-version $(K8S_VERSION) \
-	  -skip apiextensions.k8s.io/v1/CustomResourceDefinition \
+	  -skip apiextensions.k8s.io/v1/CustomResourceDefinition,ray.io/v1/RayCluster \
 	  -schema-location default \
 	  -schema-location "$$schemas/{{ .ResourceKind }}_{{ .ResourceAPIVersion }}.json" \
 	  $(MANIFESTS)
