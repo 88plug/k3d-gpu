@@ -100,8 +100,9 @@ Usage: k3d-gpu <command>
             toolkit + CDI (Ubuntu 24.04/26.04, Fedora, Arch, Manjaro). --apply runs
             them after a y/N prompt
   agent up|down|status|manifest
-            OpenAI-compatible LLM server (OpenVINO Model Server) in the current
-            cluster: on its Intel GPU if that GPU has XMX, else on the CPU (P-cores)
+            OpenAI-compatible LLM server in the current cluster: OpenVINO Model
+            Server on its Intel GPU if that GPU has XMX, else on the CPU (P-cores);
+            or vLLM on an Arc GPU (K3D_GPU_AGENT_BACKEND)
   recipe npu-embeddings
             Print an OVMS embeddings-on-NPU manifest for this host (pipe to kubectl apply -f -)
   version   Show version
@@ -125,7 +126,12 @@ Environment:
   K3D_GPU_NPU_EMBEDDINGS NPU embeddings recipe (default: ${SHARE_DIR}/npu-embeddings.yml)
   K3D_GPU_MODEL_GB      model size checked by doctor --perf (same as --model-gb)
   K3D_GPU_AGENT_DEVICE  agent device: auto | CPU | GPU | NPU (default: auto)
-  K3D_GPU_AGENT_MODEL   agent Hugging Face model (default: OpenVINO/Qwen3-4B-int4-ov)
+  K3D_GPU_AGENT_BACKEND agent server: ovms | vllm | llm-scaler (default: ovms; vllm and
+                        llm-scaler need an Intel GPU, Arc B-series validated)
+  K3D_GPU_AGENT_MODEL   agent Hugging Face model (default: OpenVINO/Qwen3-4B-int4-ov,
+                        Qwen/Qwen3-4B on vllm/llm-scaler)
+  K3D_GPU_AGENT_GPUS    vllm/llm-scaler: GPUs to shard the model across (default: 1)
+  K3D_GPU_AGENT_MAX_LEN vllm/llm-scaler: max context tokens (default: 8192)
   K3D_GPU_EXPERIMENTAL  auto (default: safe, mature, detected features), off, or a comma
                         list to force exactly those; 'list' prints them with their status
                         on this host. See docs/experimental.md
@@ -4112,33 +4118,72 @@ cmd_host_setup() {
 }
 
 # ---- agent: OpenAI-compatible inference on the best Intel engine -------------
-# OpenVINO Model Server (OVMS) serves one LLM over the OpenAI API at /v3. The
-# device is read from what the running cluster actually advertises, never from
+# The default backend, OpenVINO Model Server (OVMS), serves one LLM over the
+# OpenAI API at /v3 on an Intel GPU, the CPU or the NPU. The vLLM backends serve
+# /v1 from Intel GPUs only and are meant for discrete Arc (Battlemage) cards:
+#   vllm        upstream vLLM for Intel GPUs (the runtime intel/enterprise-inference
+#               uses for Arc), validated on Arc Pro B-series
+#   llm-scaler  Intel's own vLLM build for Arc B60/B70 (older vLLM baseline)
+# The device is read from what the running cluster actually advertises, never from
 # the host alone: an Intel GPU the cluster cannot schedule is not a choice.
 
 AGENT_NS="k3d-gpu-agent"
-# openvino/model_server:2026.4.1-gpu (CPU, GPU and NPU plugins, compute-runtime inside).
-AGENT_IMAGE="${K3D_GPU_AGENT_IMAGE:-openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58}"
-AGENT_DEFAULT_MODEL="OpenVINO/Qwen3-4B-int4-ov"
+AGENT_BACKEND="${K3D_GPU_AGENT_BACKEND:-ovms}"
+AGENT_BACKEND="${AGENT_BACKEND,,}"
+AGENT_STORAGE="${K3D_GPU_AGENT_STORAGE:-20Gi}"
+AGENT_TIMEOUT="${K3D_GPU_AGENT_TIMEOUT:-1800}" # seconds: first run downloads the model
+AGENT_DEFAULT_REVISION=""
+case "${AGENT_BACKEND}" in
+    vllm|llm-scaler)
+        AGENT_APP=vllm AGENT_API=/v1
+        if [ "${AGENT_BACKEND}" = vllm ]; then
+            # vllm/vllm-openai-xpu:v0.31.0 (Level Zero 1.32 and compute-runtime 26.27 inside).
+            AGENT_DEFAULT_IMAGE="vllm/vllm-openai-xpu@sha256:95ac815038c4b3537b173798bfe3b89bdf525a52bd653cd14d4deb01f1062be7"
+        else
+            # intel/llm-scaler-vllm:1.5 = 0.26.0-b2 (vLLM 0.26 baseline, compute-runtime 26.14).
+            AGENT_DEFAULT_IMAGE="intel/llm-scaler-vllm@sha256:52218ad85513ab6686d4c090c83c2bd8c5b02423c63aa4dabd41837fe641fe3b"
+        fi
+        # Qwen3-4B in float16 is 8 GB: it fits a 12 GB Arc B580 with room for the KV cache.
+        AGENT_DEFAULT_MODEL="Qwen/Qwen3-4B"
+        AGENT_DEFAULT_REVISION="1cfa9a7208912126459214e8b04321603b3df60c"
+        AGENT_MEMORY="${K3D_GPU_AGENT_MEMORY:-8Gi}"
+        ;;
+    *)
+        AGENT_APP=ovms AGENT_API=/v3
+        # openvino/model_server:2026.4.1-gpu (CPU, GPU and NPU plugins, compute-runtime inside).
+        AGENT_DEFAULT_IMAGE="openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58"
+        AGENT_DEFAULT_MODEL="OpenVINO/Qwen3-4B-int4-ov"
+        AGENT_MEMORY="${K3D_GPU_AGENT_MEMORY:-6Gi}"
+        ;;
+esac
+AGENT_IMAGE="${K3D_GPU_AGENT_IMAGE:-${AGENT_DEFAULT_IMAGE}}"
 AGENT_MODEL="${K3D_GPU_AGENT_MODEL:-${AGENT_DEFAULT_MODEL}}"
 AGENT_MODEL_NAME="${K3D_GPU_AGENT_MODEL_NAME:-${AGENT_MODEL##*/}}"
-AGENT_STORAGE="${K3D_GPU_AGENT_STORAGE:-20Gi}"
-AGENT_MEMORY="${K3D_GPU_AGENT_MEMORY:-6Gi}"
-AGENT_TIMEOUT="${K3D_GPU_AGENT_TIMEOUT:-1800}" # seconds: first run downloads the model
-# DEBUG also prints the compiled model's EXECUTION_DEVICES (e.g. GPU.0: Intel(R)
-# UHD Graphics 770), and every HTTP request, readiness probes included.
+# OVMS only: DEBUG also prints the compiled model's EXECUTION_DEVICES (e.g. GPU.0:
+# Intel(R) UHD Graphics 770), and every HTTP request, readiness probes included.
 AGENT_LOG_LEVEL="${K3D_GPU_AGENT_LOG_LEVEL:-INFO}"
-# Qwen3 emits hermes-style tool calls and <think> reasoning. Any other model gets
-# OVMS's own parser detection from its chat template unless these are set (an
-# empty value turns a parser off).
+# Qwen3 emits hermes-style tool calls and <think> reasoning (hermes3 is OVMS's
+# name for the parser, hermes vLLM's). Any other model gets OVMS's own parser
+# detection from its chat template, or no parser on vLLM, unless these are set
+# (an empty value turns a parser off).
 if [ "${AGENT_MODEL}" = "${AGENT_DEFAULT_MODEL}" ]; then
-    AGENT_TOOL_PARSER="${K3D_GPU_AGENT_TOOL_PARSER-hermes3}"
+    if [ "${AGENT_APP}" = vllm ]; then
+        AGENT_TOOL_PARSER="${K3D_GPU_AGENT_TOOL_PARSER-hermes}"
+    else
+        AGENT_TOOL_PARSER="${K3D_GPU_AGENT_TOOL_PARSER-hermes3}"
+    fi
     AGENT_REASONING_PARSER="${K3D_GPU_AGENT_REASONING_PARSER-qwen3}"
+    AGENT_REVISION="${K3D_GPU_AGENT_REVISION:-${AGENT_DEFAULT_REVISION}}"
 else
     AGENT_TOOL_PARSER="${K3D_GPU_AGENT_TOOL_PARSER-}"
     AGENT_REASONING_PARSER="${K3D_GPU_AGENT_REASONING_PARSER-}"
+    AGENT_REVISION="${K3D_GPU_AGENT_REVISION:-}"
 fi
-AGENT_PROXY="/api/v1/namespaces/${AGENT_NS}/services/ovms:http/proxy"
+# vLLM only: GPUs the model is sharded across (--tensor-parallel-size), and the
+# longest context, sized so the default model's KV cache fits a 12 GB card.
+AGENT_GPUS="${K3D_GPU_AGENT_GPUS:-1}"
+AGENT_MAX_LEN="${K3D_GPU_AGENT_MAX_LEN:-8192}"
+AGENT_PROXY="/api/v1/namespaces/${AGENT_NS}/services/${AGENT_APP}:http/proxy"
 
 # Nodes carrying a label (names, one per line).
 labelled_nodes() { kubectl get nodes -l "$1" -o name 2>/dev/null || true; }
@@ -4167,9 +4212,11 @@ cpu_list_count() {
 # P-cores, 9.9 and 66 on the UHD 770 (EXPERIMENTS.md H6); the GPU only saves CPU
 # (~1 busy CPU instead of ~8). auto never picks the NPU, as OVMS's own detection
 # does not: LLMs on the NPU run the stateful pipeline only (no continuous batching).
+# The vLLM backends run on an Intel GPU only, so for them auto means GPU.
 AGENT_XMX_LABEL="gpu.intel.com/xmx=true"
 agent_device() {
     local want=${K3D_GPU_AGENT_DEVICE:-auto} res
+    [ "${AGENT_APP}" != vllm ] || [ "${want^^}" != AUTO ] || want=GPU
     case "${want^^}" in
         AUTO)
             if [ -n "$(labelled_nodes "${AGENT_XMX_LABEL}")" ]; then
@@ -4183,6 +4230,7 @@ agent_device() {
             for res in gpu.intel.com/xe gpu.intel.com/i915; do
                 if [ "$(resource_total "${res}")" -gt 0 ]; then echo "GPU ${res}"; return 0; fi
             done
+            [ "${AGENT_APP}" != vllm ] || err "K3D_GPU_AGENT_BACKEND=${AGENT_BACKEND} runs on an Intel GPU only, and the cluster advertises no gpu.intel.com/xe or i915 — check 'k3d-gpu detect' and recreate the cluster"
             err "K3D_GPU_AGENT_DEVICE=GPU but the cluster advertises no Intel GPU (gpu.intel.com/xe or i915) — check 'k3d-gpu detect' and recreate the cluster"
             ;;
         NPU)
@@ -4244,6 +4292,7 @@ agent_manifest() {
     fi
     cpus=$(agent_cpus "${device}" "${hybrid}")
     [ "${device}" = CPU ] || gid=$(agent_device_gid "${device}")
+    if [ "${AGENT_APP}" = vllm ]; then vllm_manifest; return 0; fi
     local via=""
     [ "${res}" = - ] || via=" (${res})"
     info "agent: ${AGENT_MODEL} as '${AGENT_MODEL_NAME}' on ${device}${via}${amx:+ (AMX node)}${hybrid:+, P-cores}, ${cpus} CPU(s)" >&2
@@ -4372,16 +4421,202 @@ spec:
 EOF
 }
 
-# One short chat completion from inside the pod (the image ships curl): runs the
-# first generation, which is slower than the rest, and proves generation end to
-# end. Not through the API server's service proxy: it hands OVMS a POST body the
-# server cannot route ("Mediapipe graph definition with requested name is not found").
+# ---- agent backend: vLLM on Intel GPUs (vllm, llm-scaler) ---------------------
+# Environment of Intel's own Arc runtime (intel/enterprise-inference PR #22,
+# runtimes vllm-xpu, models.yaml *-xpu), minus what it does not need here:
+#   - no host Level Zero/OpenCL hostPath mounts: both images ship their own
+#     compute-runtime, and on k3d hostPath is the node container, which has none;
+#   - no BASH_ENV setvars hook: vllm-openai-xpu has no /opt/intel/oneapi and an
+#     exec-form entrypoint; llm-scaler sources setvars in its own entrypoint;
+#   - no VLLM_USE_V1 / VLLM_ATTENTION_BACKEND (gone from vLLM's envs.py) nor
+#     TORCH_LLM_ALLREDUCE (IPEX; neither image uses IPEX).
+# Caches go to the models volume so restarts reuse downloads and compiled kernels.
+VLLM_XPU_ENV=(
+    VLLM_NO_USAGE_STATS=1
+    DO_NOT_TRACK=1
+    VLLM_WORKER_MULTIPROC_METHOD=spawn
+    VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
+    VLLM_TARGET_DEVICE=xpu
+    ZE_FLAT_DEVICE_HIERARCHY=FLAT
+    "ONEAPI_DEVICE_SELECTOR=level_zero:*"
+    ZE_ENABLE_PCI_ID_DEVICE_ORDER=1
+    SYCL_CACHE_PERSISTENT=1
+    ZES_ENABLE_SYSMAN=1
+    HF_HUB_DISABLE_XET=1
+    HF_HUB_ENABLE_HF_TRANSFER=0
+    CCL_PROCESS_LAUNCHER=none
+    CCL_WORKER_OFFLOAD=0
+    CCL_WORKER_AFFINITY=
+    CCL_ZE_IPC_EXCHANGE=pidfd
+    CCL_ALLREDUCE=ring
+    HF_HOME=/models/huggingface
+    XDG_CACHE_HOME=/models/.cache
+    TRITON_CACHE_DIR=/models/.triton
+    TRITON_HOME=/models/.triton
+)
+
+# vLLM on Intel GPUs is validated on Battlemage (Arc B-series). Any other Intel
+# GPU on the host still gets the pod, with a warning.
+vllm_gpu_check() {
+    local e name names=""
+    detect_intel
+    for e in ${INTEL_DRIVERS[@]+"${INTEL_DRIVERS[@]}"}; do
+        name=$(intel_gpu_platform "${e#* }")
+        name=${name%%|*}
+        [ "${name}" = Battlemage ] && return 0
+        names+="${names:+, }${name:-${e#* }}"
+    done
+    warn "vLLM on Intel GPUs is validated on Arc B-series (Battlemage); this host's Intel GPU is ${names:-not visible here} — K3D_GPU_AGENT_BACKEND=ovms runs on any Intel GPU"
+}
+
+# The vLLM Namespace, PVC, Deployment and Service. Called from agent_manifest,
+# whose locals (device res gid hybrid cpus) it reads.
+vllm_manifest() {
+    [ "${device}" = GPU ] \
+        || err "K3D_GPU_AGENT_BACKEND=${AGENT_BACKEND} runs on an Intel GPU only, but K3D_GPU_AGENT_DEVICE asks for ${device}"
+    [[ "${AGENT_GPUS}" =~ ^[1-9][0-9]*$ ]] || err "K3D_GPU_AGENT_GPUS must be a positive integer, not '${AGENT_GPUS}'"
+    [[ "${AGENT_MAX_LEN}" =~ ^[1-9][0-9]*$ ]] || err "K3D_GPU_AGENT_MAX_LEN must be a positive integer, not '${AGENT_MAX_LEN}'"
+    local have
+    have=$(resource_total "${res}")
+    [ "${have}" -ge "${AGENT_GPUS}" ] \
+        || err "K3D_GPU_AGENT_GPUS=${AGENT_GPUS} but the cluster advertises ${have} ${res}"
+    vllm_gpu_check
+    info "agent: ${AGENT_BACKEND} serving ${AGENT_MODEL} as '${AGENT_MODEL_NAME}' on ${AGENT_GPUS}x ${res}${hybrid:+, P-cores}, ${cpus} CPU(s)" >&2
+
+    # Flags from Intel's Arc runtime (models.yaml *-xpu): float16, 64-token
+    # blocks, eager mode (XPU graphs are experimental), no prefix caching, one
+    # GPU per tensor-parallel rank. --trust-remote-code is left out: Qwen3 is a
+    # built-in vLLM architecture and needs no code from the model repo.
+    local item="            - " args e podlabels="" podspec="" env=""
+    args="${item}${AGENT_MODEL}"
+    [ -z "${AGENT_REVISION}" ] || args+=$'\n'"${item}--revision=${AGENT_REVISION}"
+    args+=$'\n'"${item}--served-model-name=${AGENT_MODEL_NAME}"
+    args+=$'\n'"${item}--port=8000"
+    args+=$'\n'"${item}--dtype=float16"
+    args+=$'\n'"${item}--block-size=64"
+    args+=$'\n'"${item}--max-model-len=${AGENT_MAX_LEN}"
+    args+=$'\n'"${item}--max-num-batched-tokens=2048"
+    args+=$'\n'"${item}--gpu-memory-utilization=0.9"
+    args+=$'\n'"${item}--enforce-eager"
+    args+=$'\n'"${item}--no-enable-prefix-caching"
+    args+=$'\n'"${item}--tensor-parallel-size=${AGENT_GPUS}"
+    [ -z "${AGENT_TOOL_PARSER}" ] \
+        || args+=$'\n'"${item}--enable-auto-tool-choice"$'\n'"${item}--tool-call-parser=${AGENT_TOOL_PARSER}"
+    [ -z "${AGENT_REASONING_PARSER}" ] || args+=$'\n'"${item}--reasoning-parser=${AGENT_REASONING_PARSER}"
+    for e in "${VLLM_XPU_ENV[@]}"; do
+        env+=$'\n'"            - name: ${e%%=*}"$'\n'"              value: \"${e#*=}\""
+    done
+    [ -z "${hybrid}" ] || podlabels=$'\n        k3d-gpu.io/cores: performance'
+    [ -z "${gid}" ] || podspec=$'\n      securityContext:\n        supplementalGroups: ['"${gid}"']'
+
+    cat <<EOF
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${AGENT_NS}
+---
+# Hugging Face weights and the SYCL/Triton kernel caches, kept across restarts.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vllm-models
+  namespace: ${AGENT_NS}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: ${AGENT_STORAGE}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm
+  namespace: ${AGENT_NS}
+  labels:
+    app: vllm
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: vllm
+  template:
+    metadata:
+      labels:
+        app: vllm${podlabels}
+      annotations:
+        k3d-gpu.io/agent-device: GPU
+        k3d-gpu.io/agent-backend: ${AGENT_BACKEND}
+    spec:${podspec}
+      containers:
+        # Both images take 'vllm serve' arguments: their entrypoints run it.
+        - name: vllm
+          image: ${AGENT_IMAGE}
+          imagePullPolicy: IfNotPresent
+          args:
+${args}
+          env:${env}
+          ports:
+            - name: http
+              containerPort: 8000
+          # No liveness probe: the first start downloads the weights and
+          # compiles kernels for the GPU.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: "${cpus}"
+              memory: ${AGENT_MEMORY}
+            limits:
+              ${res}: ${AGENT_GPUS}
+          volumeMounts:
+            - name: models
+              mountPath: /models
+            - name: shm
+              mountPath: /dev/shm
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: vllm-models
+        # vLLM worker processes exchange tensors through shared memory.
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm
+  namespace: ${AGENT_NS}
+spec:
+  selector:
+    app: vllm
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+EOF
+}
+
+# One short chat completion: runs the first generation, which is slower than the
+# rest, and proves generation end to end. OVMS is asked from inside its pod (the
+# image ships curl), not through the API server's service proxy: the proxy hands
+# OVMS a POST body it cannot route ("Mediapipe graph definition with requested
+# name is not found"). vLLM is asked through the service proxy.
 agent_warmup() {
     local body reply start=${SECONDS}
     body="{\"model\":\"${AGENT_MODEL_NAME}\",\"max_tokens\":32,\"chat_template_kwargs\":{\"enable_thinking\":false},\"messages\":[{\"role\":\"user\",\"content\":\"Reply with one short sentence: what are you?\"}]}"
-    reply=$(kubectl -n "${AGENT_NS}" exec deployment/ovms -c ovms -- \
-        curl -sS --max-time 600 http://127.0.0.1:8000/v3/chat/completions -H 'Content-Type: application/json' -d "${body}" 2>&1) \
-        || err "warm-up request failed: ${reply}"
+    if [ "${AGENT_APP}" = vllm ]; then
+        reply=$(kubectl create --raw "${AGENT_PROXY}${AGENT_API}/chat/completions" -f - <<< "${body}" 2>&1)
+    else
+        reply=$(kubectl -n "${AGENT_NS}" exec deployment/ovms -c ovms -- \
+            curl -sS --max-time 600 http://127.0.0.1:8000/v3/chat/completions -H 'Content-Type: application/json' -d "${body}" 2>&1)
+    fi || err "warm-up request failed: ${reply}"
     case "${reply}" in *'"choices"'*) ;; *) err "warm-up request failed: ${reply}" ;; esac
     info "warm-up reply ($((SECONDS - start))s): $(sed -n 's/.*"content":"\([^"]*\)".*/\1/p' <<< "${reply}" | sed -n 1p)"
 }
@@ -4403,41 +4638,67 @@ agent_model_revision() {
     echo "${rev}"
 }
 
+# Both backends' Deployment/Service names: one GPU serves one of them at a time.
+AGENT_APPS=(ovms vllm)
+
 cmd_agent_up() {
     require kubectl
     kubectl get nodes >/dev/null 2>&1 || err "no cluster reachable — run 'k3d-gpu up' first"
-    local manifest
+    local manifest app logs="kubectl -n ${AGENT_NS} logs deploy/${AGENT_APP}"
     manifest=$(agent_manifest)
+    # Switching backends: stop the other one first so its GPU is free.
+    for app in "${AGENT_APPS[@]}"; do
+        [ "${app}" = "${AGENT_APP}" ] \
+            || kubectl -n "${AGENT_NS}" delete "deployment/${app}" "service/${app}" --ignore-not-found 2>/dev/null || true
+    done
     kubectl apply -f - <<< "${manifest}"
     info "Waiting for the model to download and load (first run fetches it into the PVC; up to ${AGENT_TIMEOUT}s)..."
-    kubectl -n "${AGENT_NS}" rollout status deployment/ovms --timeout="${AGENT_TIMEOUT}s" \
-        || err "server not ready — kubectl -n ${AGENT_NS} logs deploy/ovms -c pull; kubectl -n ${AGENT_NS} logs deploy/ovms"
+    [ "${AGENT_APP}" = vllm ] || logs="kubectl -n ${AGENT_NS} logs deploy/ovms -c pull; ${logs}"
+    kubectl -n "${AGENT_NS}" rollout status "deployment/${AGENT_APP}" --timeout="${AGENT_TIMEOUT}s" \
+        || err "server not ready — ${logs}"
     agent_warmup
-    info "model ${AGENT_MODEL} at commit $(agent_model_revision) (OVMS pulls the default branch; compare with 'k3d-gpu agent status' later)"
+    if [ "${AGENT_APP}" = vllm ]; then
+        info "model ${AGENT_MODEL} at revision ${AGENT_REVISION:-main (unpinned; set K3D_GPU_AGENT_REVISION)}"
+    else
+        info "model ${AGENT_MODEL} at commit $(agent_model_revision) (OVMS pulls the default branch; compare with 'k3d-gpu agent status' later)"
+    fi
     info "OpenAI API ready, model '${AGENT_MODEL_NAME}':
-       kubectl -n ${AGENT_NS} port-forward svc/ovms 8000:8000
-       curl http://localhost:8000/v3/chat/completions -H 'Content-Type: application/json' \\
+       kubectl -n ${AGENT_NS} port-forward svc/${AGENT_APP} 8000:8000
+       curl http://localhost:8000${AGENT_API}/chat/completions -H 'Content-Type: application/json' \\
          -d '{\"model\":\"${AGENT_MODEL_NAME}\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}'"
 }
 
 cmd_agent_status() {
     require kubectl
+    local app ann backend proxy path
     kubectl -n "${AGENT_NS}" get deployment,pod,pvc,service -o wide
-    info "device: $(kubectl -n "${AGENT_NS}" get deployment ovms -o jsonpath='{.spec.template.metadata.annotations.k3d-gpu\.io/agent-device}' 2>/dev/null || echo '?')"
-    info "model revision: $(agent_model_revision)"
-    info "models (/v1/config):"
-    kubectl get --raw "${AGENT_PROXY}/v1/config" 2>/dev/null || warn "server not answering yet"
-    echo ""
+    for app in "${AGENT_APPS[@]}"; do
+        ann=$(kubectl -n "${AGENT_NS}" get deployment "${app}" -o jsonpath='{.spec.template.metadata.annotations.k3d-gpu\.io/agent-device} {.spec.template.metadata.annotations.k3d-gpu\.io/agent-backend}' 2>/dev/null) || continue
+        read -r ann backend <<< "${ann}"
+        proxy="/api/v1/namespaces/${AGENT_NS}/services/${app}:http/proxy"
+        if [ "${app}" = vllm ]; then path=/v1/models; else path=/v1/config; fi
+        info "${backend:-${app}} on ${ann:-?}; models (${path}):"
+        [ "${app}" != ovms ] || info "model revision: $(agent_model_revision)"
+        kubectl get --raw "${proxy}${path}" 2>/dev/null || warn "server not answering yet"
+        echo ""
+    done
 }
 
-# Leaves the PVC so the next 'agent up' reuses the downloaded model.
+# Leaves the PVCs so the next 'agent up' reuses the downloaded model.
 cmd_agent_down() {
     require kubectl
-    kubectl -n "${AGENT_NS}" delete deployment/ovms service/ovms --ignore-not-found
-    info "Model cache kept in pvc/ovms-models. Remove everything: kubectl delete namespace ${AGENT_NS}"
+    local app
+    for app in "${AGENT_APPS[@]}"; do
+        kubectl -n "${AGENT_NS}" delete "deployment/${app}" "service/${app}" --ignore-not-found
+    done
+    info "Model caches kept in pvc/ovms-models and pvc/vllm-models. Remove everything: kubectl delete namespace ${AGENT_NS}"
 }
 
 cmd_agent() {
+    case "${AGENT_BACKEND}" in
+        ovms|vllm|llm-scaler) ;;
+        *) err "unknown K3D_GPU_AGENT_BACKEND '${K3D_GPU_AGENT_BACKEND}' (use ovms, vllm or llm-scaler)" ;;
+    esac
     case "${1:-}" in
         up)       cmd_agent_up ;;
         down)     cmd_agent_down ;;

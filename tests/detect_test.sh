@@ -1700,12 +1700,14 @@ ASTUB="${WORK}/abin"
 mkdir -p "${ASTUB}"
 cat > "${ASTUB}/kubectl" <<'EOF'
 #!/bin/sh
+[ -z "${STUB_LOG:-}" ] || echo "kubectl $*" >> "${STUB_LOG}"
 case "$*" in
     *allocatable*) printf '%s\n' "${STUB_ALLOC:-}" ;;
     "get nodes -l "*)
         for l in ${STUB_NODE_LABELS:-}; do [ "$l" = "$4" ] && echo node/k3d-agent-server-0; done ;;
     apply*) echo applied >> "${STUB_APPLY_LOG:-/dev/null}" ;;
     *" exec "*) [ -n "${STUB_EXEC:-}" ] || exit 1; printf '%s\n' "${STUB_EXEC}" ;;
+    "create --raw "*) cat >/dev/null; [ -n "${STUB_EXEC:-}" ] || exit 1; printf '%s\n' "${STUB_EXEC}" ;;
 esac
 exit 0
 EOF
@@ -2354,6 +2356,148 @@ else
     FAILS=$((FAILS + 1)); echo "FAIL up does not label a group-0 NPU node"
     sed 's/^/  | /' "${UP_LOG}" 2>/dev/null; awk '{print "  | " $0}' <<< "${out}"
 fi
+# ---- agent: vLLM backends for discrete Arc (vllm, llm-scaler) -----------------
+r=$(newroot agent-bmg)
+pci "${r}" 0000:03:00.0 0x8086 0xe20b xe; render "${r}" 0000:03:00.0 128
+gid=$(stat -c %g "${r}/dev/dri/renderD128")
+XE1=$'cpu 16\ngpu.intel.com/xe 1'
+agent_says "vllm backend serves from the upstream vLLM XPU image, pinned by digest" "${r}" 0 \
+    'image: vllm/vllm-openai-xpu@sha256:[0-9a-f]{64}$' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm
+agent_says "llm-scaler backend serves from Intel's llm-scaler image, pinned by digest" "${r}" 0 \
+    'image: intel/llm-scaler-vllm@sha256:[0-9a-f]{64}$' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=llm-scaler
+agent_says "the backend name is case-insensitive" "${r}" 0 \
+    'vllm/vllm-openai-xpu@' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vLLM
+agent_says "an unknown K3D_GPU_AGENT_BACKEND is rejected" "${r}" fail \
+    "unknown K3D_GPU_AGENT_BACKEND 'tgi'" "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=tgi
+agent_says "vllm pod requests one gpu.intel.com/xe" "${r}" 0 \
+    'gpu\.intel\.com/xe: "?1"?$' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm
+agent_says "vllm pod joins the host render group" "${r}" 0 \
+    "supplementalGroups: \[${gid}\]" "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm
+agent_says "vllm Deployment and Service are named vllm" "${r}" 0 \
+    '^  name: vllm$' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm
+agent_says "vllm keeps its weights on its own PVC" "${r}" 0 \
+    'claimName: vllm-models' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm
+agent_says "vllm readiness is vLLM's /health" "${r}" 0 \
+    'path: /health$' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm
+agent_says "vllm gets a memory-backed /dev/shm" "${r}" 0 \
+    'mountPath: /dev/shm' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm
+agent_says "vllm manifest carries no OVMS flags" "${r}" 0 \
+    'target_device|--pull|model_repository_path' negate STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm
+agent_says "vllm default model is Qwen/Qwen3-4B at a pinned revision" "${r}" 0 \
+    '--revision=[0-9a-f]{40}$' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm
+agent_says "vllm serves the default model under its short name" "${r}" 0 \
+    '--served-model-name=Qwen3-4B$' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm
+agent_says "vllm default model gets the hermes tool parser" "${r}" 0 \
+    '--tool-call-parser=hermes$' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm
+agent_says "vllm turns on automatic tool choice with the tool parser" "${r}" 0 \
+    '--enable-auto-tool-choice$' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm
+agent_says "vllm default model gets the qwen3 reasoning parser" "${r}" 0 \
+    '--reasoning-parser=qwen3$' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm
+agent_says "a custom vllm model gets no pinned revision" "${r}" 0 \
+    '--revision' negate STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_AGENT_MODEL=meta-llama/Llama-3.1-8B-Instruct
+agent_says "a custom vllm model gets no tool parser unless asked" "${r}" 0 \
+    'tool-call-parser|enable-auto-tool-choice' negate STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_AGENT_MODEL=meta-llama/Llama-3.1-8B-Instruct
+agent_says "K3D_GPU_AGENT_REVISION pins a custom vllm model" "${r}" 0 \
+    '--revision=abc123$' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_AGENT_MODEL=meta-llama/Llama-3.1-8B-Instruct K3D_GPU_AGENT_REVISION=abc123
+agent_says "an empty K3D_GPU_AGENT_TOOL_PARSER turns vllm tool calling off" "${r}" 0 \
+    'enable-auto-tool-choice' negate STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_AGENT_TOOL_PARSER=
+
+# Flags and environment of Intel's Arc runtime (enterprise-inference PR #22).
+for flag in '--dtype=float16' '--block-size=64' '--enforce-eager' '--no-enable-prefix-caching' \
+            '--gpu-memory-utilization=0.9' '--max-num-batched-tokens=2048' '--max-model-len=8192' \
+            '--tensor-parallel-size=1'; do
+    agent_says "vllm runs with Intel's Arc flag ${flag}" "${r}" 0 \
+        "^ *- ${flag}\$" "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm
+done
+for kv in 'ONEAPI_DEVICE_SELECTOR level_zero:\*' 'ZE_FLAT_DEVICE_HIERARCHY FLAT' 'SYCL_CACHE_PERSISTENT 1' \
+          'ZES_ENABLE_SYSMAN 1' 'VLLM_WORKER_MULTIPROC_METHOD spawn' 'CCL_ZE_IPC_EXCHANGE pidfd' \
+          'VLLM_NO_USAGE_STATS 1' 'HF_HOME /models/huggingface'; do
+    agent_says "vllm env sets ${kv%% *}" "${r}" 0 \
+        "name: ${kv%% *}\$" "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm
+    out=$(env K3D_GPU_SYSROOT="${r}" PATH="${ASTUB}:${PATH}" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm \
+        bash "${K3D_GPU}" agent manifest 2>/dev/null | grep -A1 -- "name: ${kv%% *}\$" | sed -n 2p)
+    if grep -E -- "value: \"${kv#* }\"\$" <<< "${out}" >/dev/null; then
+        PASS=$((PASS + 1)); echo "ok   vllm env ${kv%% *} has Intel's value"
+    else
+        FAILS=$((FAILS + 1)); echo "FAIL vllm env ${kv%% *} has Intel's value (got: ${out})"
+    fi
+done
+agent_says "vllm does not mount host GPU libraries (the image ships its own)" "${r}" 0 \
+    'hostPath|host-gpu-libs|BASH_ENV' negate STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm
+agent_says "vllm drops env vars vLLM no longer reads" "${r}" 0 \
+    'VLLM_USE_V1|VLLM_ATTENTION_BACKEND|TORCH_LLM_ALLREDUCE' negate STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm
+agent_says "vllm never runs model-repo code" "${r}" 0 \
+    'trust-remote-code' negate STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm
+agent_says "K3D_GPU_AGENT_MAX_LEN sets the context length" "${r}" 0 \
+    '--max-model-len=16384$' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_AGENT_MAX_LEN=16384
+agent_says "a non-numeric K3D_GPU_AGENT_MAX_LEN is rejected" "${r}" fail \
+    'K3D_GPU_AGENT_MAX_LEN must be a positive integer' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_AGENT_MAX_LEN=8k
+
+agent_says "K3D_GPU_AGENT_GPUS=2 shards the model across two GPUs" "${r}" 0 \
+    '--tensor-parallel-size=2$' "" STUB_ALLOC=$'cpu 16\ngpu.intel.com/xe 2' K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_AGENT_GPUS=2
+agent_says "K3D_GPU_AGENT_GPUS=2 requests two gpu.intel.com/xe" "${r}" 0 \
+    'gpu\.intel\.com/xe: "?2"?$' "" STUB_ALLOC=$'cpu 16\ngpu.intel.com/xe 2' K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_AGENT_GPUS=2
+agent_says "more GPUs than the cluster advertises fails" "${r}" fail \
+    'K3D_GPU_AGENT_GPUS=2 but the cluster advertises 1 gpu.intel.com/xe' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_AGENT_GPUS=2
+agent_says "a non-numeric K3D_GPU_AGENT_GPUS is rejected" "${r}" fail \
+    'K3D_GPU_AGENT_GPUS must be a positive integer' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_AGENT_GPUS=0
+
+agent_says "vllm with no allocatable Intel GPU fails instead of falling back to CPU" "${r}" fail \
+    'runs on an Intel GPU only' "" STUB_ALLOC='cpu 16' K3D_GPU_AGENT_BACKEND=vllm
+agent_says "vllm refuses K3D_GPU_AGENT_DEVICE=CPU" "${r}" fail \
+    'runs on an Intel GPU only.*asks for CPU' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_AGENT_DEVICE=CPU
+agent_says "vllm on a Battlemage host prints no hardware warning" "${r}" 0 \
+    'validated on Arc B-series' negate STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm
+agent_says "vllm on a hybrid node sits on P-cores" "${r}" 0 \
+    'k3d-gpu.io/cores: performance' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm STUB_NODE_LABELS=k3d-gpu.io/hybrid-cpu=true
+agent_says "the OVMS default still owns the agent when no backend is set" "${r}" 0 \
+    'image: openvino/model_server@' "" STUB_ALLOC="${XE1}"
+agent_says "the agent line names the GPU resource it requests" "${r}" 0 \
+    'on GPU \(gpu\.intel\.com/xe\)' "" STUB_ALLOC="${XE1}" STUB_NODE_LABELS=gpu.intel.com/xmx=true
+agent_says "vllm auto runs on the Intel GPU even where OVMS would pick the CPU (no XMX)" "${r}" 0 \
+    'gpu\.intel\.com/xe: "?1"?' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm STUB_NODE_LABELS=gpu.intel.com/xmx=false
+agent_says "vllm with no allocatable GPU names the backend, not K3D_GPU_AGENT_DEVICE" "${r}" fail \
+    'K3D_GPU_AGENT_DEVICE=GPU' negate STUB_ALLOC='cpu 16' K3D_GPU_AGENT_BACKEND=vllm
+
+r=$(newroot agent-lnl)
+pci "${r}" 0000:00:02.0 0x8086 0x64a0 xe; render "${r}" 0000:00:02.0 128
+agent_says "vllm on a non-Battlemage Intel GPU warns and names the GPU" "${r}" 0 \
+    'validated on Arc B-series \(Battlemage\); this host.s Intel GPU is Lunar Lake' "" \
+    STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm
+
+# `agent up|down` with vllm: the OVMS server is stopped first, the API is /v1.
+log="${WORK}/kubectl.log"
+r=$(newroot agent-bmg)
+: > "${log}"
+WARM='{"choices":[{"message":{"content":"I am a model."}}]}'
+out=$(env K3D_GPU_SYSROOT="${r}" PATH="${ASTUB}:${PATH}" STUB_ALLOC="${XE1}" STUB_LOG="${log}" STUB_EXEC="${WARM}" \
+    K3D_GPU_AGENT_BACKEND=vllm bash "${K3D_GPU}" agent up 2>&1)
+rc=$?
+agent_log_has() {
+    local name=$1 re=$2
+    if grep -E -- "${re}" "${log}" >/dev/null; then
+        PASS=$((PASS + 1)); echo "ok   ${name}"
+    else
+        FAILS=$((FAILS + 1)); echo "FAIL ${name} (no /${re}/ in kubectl calls)"
+        awk '{print "  | " $0}' "${log}"
+    fi
+}
+if [ "${rc}" -eq 0 ]; then PASS=$((PASS + 1)); echo "ok   agent up with vllm succeeds against a stub cluster"
+else FAILS=$((FAILS + 1)); echo "FAIL agent up with vllm (rc=${rc})"; awk '{print "  | " $0}' <<< "${out}"; fi
+agent_log_has "agent up with vllm stops the OVMS server first" 'delete deployment/ovms service/ovms'
+agent_log_has "agent up with vllm waits for deployment/vllm" 'rollout status deployment/vllm'
+agent_log_has "agent up with vllm warms up through /v1/chat/completions" \
+    'create --raw /api/v1/namespaces/k3d-gpu-agent/services/vllm:http/proxy/v1/chat/completions'
+: > "${log}"
+env K3D_GPU_SYSROOT="${r}" PATH="${ASTUB}:${PATH}" STUB_LOG="${log}" bash "${K3D_GPU}" agent down >/dev/null 2>&1
+agent_log_has "agent down removes the vllm server" 'delete deployment/vllm service/vllm'
+agent_log_has "agent down removes the OVMS server" 'delete deployment/ovms service/ovms'
+: > "${log}"
+env K3D_GPU_SYSROOT="${r}" PATH="${ASTUB}:${PATH}" STUB_ALLOC="${XE1}" STUB_LOG="${log}" STUB_EXEC="${WARM}" \
+    bash "${K3D_GPU}" agent up >/dev/null 2>&1
+agent_log_has "agent up with OVMS stops the vllm server first" 'delete deployment/vllm service/vllm'
+agent_log_has "agent up with OVMS warms up inside its pod at /v3/chat/completions" \
+    'exec deployment/ovms -c ovms -- curl .*http://127\.0\.0\.1:8000/v3/chat/completions'
 
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
