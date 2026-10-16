@@ -66,17 +66,18 @@ HYBRID_LABEL = "k3d-gpu.io/hybrid-cpu"
 CORES_LABEL = "k3d-gpu.io/cores"
 AMX_LABEL = "feature.node.kubernetes.io/cpu-cpuid.AMXTILE"
 
-# Device-plugin DaemonSets the launcher deploys, as (namespace, name).
-PLUGIN_DAEMONSETS = [
-    ("kube-system", "nvidia-device-plugin-daemonset"),
-    ("kube-system", "intel-gpu-plugin"),
-    ("kube-system", "intel-npu-plugin"),
-    ("habana-system", "habanalabs-device-plugin-daemonset"),
-    ("kube-system", "intel-dsa-plugin"),
-    ("kube-system", "intel-iaa-plugin"),
-    ("kube-system", "intel-qat-plugin"),
-    ("kube-system", "nri-resource-policy-balloons"),
-]
+# Device-plugin DaemonSet the launcher deploys per detected vendor, as (namespace,
+# name); mirrors vendor_daemonset in scripts/k3d-gpu. amx has none.
+PLUGIN_DAEMONSETS = {
+    "nvidia": ("kube-system", "nvidia-device-plugin-daemonset"),
+    "intel": ("kube-system", "intel-gpu-plugin"),
+    "npu": ("kube-system", "intel-npu-plugin"),
+    "gaudi": ("habana-system", "habanalabs-device-plugin-daemonset"),
+    "dsa": ("kube-system", "intel-dsa-plugin"),
+    "iaa": ("kube-system", "intel-iaa-plugin"),
+    "qat": ("kube-system", "intel-qat-plugin"),
+    "hybrid": ("kube-system", "nri-resource-policy-balloons"),
+}
 
 # Engines, best first, per workload and objective. "cpu" is always available.
 ENGINES = {
@@ -152,8 +153,9 @@ TOOLS = [
     {
         "name": "cluster_health",
         "title": "Cluster health",
-        "description": "Whether the k3d-gpu cluster is reachable, every node Ready and every "
-                       "deployed device plugin fully rolled out, with per-node accelerator counts.",
+        "description": "Whether the k3d-gpu cluster is reachable, every node Ready and the "
+                       "device plugin of every host-detected accelerator deployed and fully "
+                       "rolled out, with per-node accelerator counts.",
         "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
         "annotations": {"readOnlyHint": True, "openWorldHint": False},
     },
@@ -240,15 +242,21 @@ def cluster_nodes():
     return cluster
 
 
-def accelerators():
-    exe = launcher()
-    rc, out, errtext = run([exe, "report", "--json"])
+def launcher_report():
+    """Parsed `k3d-gpu report --json`, or None when the launcher has no valid report."""
+    rc, out, _ = run([launcher(), "report", "--json"])
     if rc == 0:
         try:
-            return json.loads(out)
+            data = json.loads(out)
         except ValueError:
-            pass
-    # Launcher without `report`: host view from `detect`, cluster view from kubectl.
+            return None
+        return data if isinstance(data, dict) else None
+    return None
+
+
+def launcher_detect():
+    """`k3d-gpu detect` as [{"vendor", "resources"}]."""
+    exe = launcher()
     rc, out, errtext = run([exe, "detect"])
     if rc != 0:
         raise ToolError(f"'{exe} detect' failed: {errtext or f'exit {rc}'}")
@@ -257,8 +265,26 @@ def accelerators():
         parts = line.split()
         if parts:
             detected.append({"vendor": parts[0], "resources": parts[1:]})
+    return detected
+
+
+def detected_vendors():
+    """Vendors the launcher detects on the host; empty when detection fails."""
+    report = launcher_report()
+    try:
+        detected = report.get("detected", []) if report else launcher_detect()
+    except ToolError:
+        return []
+    return [d.get("vendor") for d in detected]
+
+
+def accelerators():
+    report = launcher_report()
+    if report is not None:
+        return report
+    # Launcher without `report`: host view from `detect`, cluster view from kubectl.
     return {"schema": "k3d-gpu.mcp-fallback/v1", "source": "k3d-gpu detect + kubectl",
-            "cluster_name": CLUSTER, "detected": detected, "cluster": cluster_nodes()}
+            "cluster_name": CLUSTER, "detected": launcher_detect(), "cluster": cluster_nodes()}
 
 
 def quantity(value):
@@ -294,16 +320,8 @@ def inventory(report):
 # ---- recommend_placement --------------------------------------------------------
 
 def recommend(args, report):
-    workload = args.get("workload")
+    workload = args["workload"]
     objective = args.get("objective", "latency")
-    if workload not in PREFERENCES:
-        raise ToolError(f"workload must be one of {', '.join(WORKLOADS)}, got {workload!r}")
-    if objective not in OBJECTIVES:
-        raise ToolError(f"objective must be one of {', '.join(OBJECTIVES)}, got {objective!r}")
-    extra = sorted(set(args) - {"workload", "objective"})
-    if extra:
-        raise ToolError(f"unknown argument(s): {', '.join(extra)}")
-
     resources, labels, source = inventory(report)
     available = [e for e in PREFERENCES[workload][objective]
                  if ENGINES[e]["resource"] is None or ENGINES[e]["resource"] in resources]
@@ -427,7 +445,7 @@ def cluster_health():
     if dsets is None:
         health["problems"].append(f"cannot list DaemonSets: {reason}")
     else:
-        known = set(PLUGIN_DAEMONSETS)
+        known = set(PLUGIN_DAEMONSETS.values())
         for ds in dsets.get("items", []):
             meta = ds.get("metadata", {})
             key = (meta.get("namespace"), meta.get("name"))
@@ -441,6 +459,12 @@ def cluster_health():
                 health["problems"].append(f"{key[0]}/{key[1]} schedules on no node (missing node label?)")
             elif ready < desired:
                 health["problems"].append(f"{key[0]}/{key[1]}: {ready}/{desired} pods ready")
+        deployed = {(p["namespace"], p["name"]) for p in health["plugins"]}
+        for vendor in detected_vendors():
+            ns, name = PLUGIN_DAEMONSETS.get(vendor, (None, None))
+            if name and (ns, name) not in deployed:
+                health["problems"].append(f"{vendor} detected on the host but its device plugin "
+                                          f"{ns}/{name} is not deployed")
     health["healthy"] = not health["problems"]
     return health
 
@@ -457,8 +481,26 @@ def call_tool(name, args):
     return cluster_health()
 
 
+def check_args(name, args):
+    """Check args against the tool's inputSchema (flat properties: enum, required,
+    additionalProperties: false)."""
+    schema = next(t["inputSchema"] for t in TOOLS if t["name"] == name)
+    props = schema["properties"]
+    extra = sorted(set(args) - set(props))
+    if extra:
+        raise ToolError(f"unknown argument(s): {', '.join(extra)}")
+    for key in schema.get("required", []):
+        if key not in args:
+            raise ToolError(f"missing required argument {key!r}")
+    for key, val in args.items():
+        enum = props[key].get("enum")
+        if enum and val not in enum:
+            raise ToolError(f"{key} must be one of {', '.join(enum)}, got {val!r}")
+
+
 def tool_result(name, args):
     try:
+        check_args(name, args)
         data = call_tool(name, args)
     except ToolError as e:
         return {"content": [{"type": "text", "text": str(e)}], "isError": True}
@@ -488,6 +530,12 @@ class Server:
         version = meta[META_VERSION]
         if version not in SUPPORTED_VERSIONS:
             raise RpcError(UNSUPPORTED_PROTOCOL_VERSION, "Unsupported protocol version",
+                           {"supported": SUPPORTED_VERSIONS, "requested": version})
+        if version in LEGACY_VERSIONS and not self.legacy_version:
+            # Legacy versions run in a session that `initialize` opens; per-request
+            # _meta is the modern era's.
+            raise RpcError(UNSUPPORTED_PROTOCOL_VERSION,
+                           f"Unsupported protocol version: {version} needs initialize first",
                            {"supported": SUPPORTED_VERSIONS, "requested": version})
         if not isinstance(meta.get(META_CAPS), dict):
             raise RpcError(INVALID_PARAMS, f"missing _meta.{META_CAPS}")

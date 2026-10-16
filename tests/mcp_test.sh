@@ -38,9 +38,11 @@ exit 1
 EOF
 # Launcher stub: `report --json` prints ${STUB_KUBE}/report.json (exit 1 with the
 # usage text when absent, like a launcher without the subcommand); `detect`
-# prints ${STUB_KUBE}/detect; `version` reports 9.8.7.
+# prints ${STUB_KUBE}/detect; `version` reports 9.8.7. With STUB_SLEEP set, every
+# other subcommand sleeps that many seconds instead.
 cat > "${STUB_BIN}/k3d-gpu" <<'EOF'
 #!/usr/bin/env bash
+[ "$1" = version ] || [ -z "${STUB_SLEEP:-}" ] || exec sleep "${STUB_SLEEP}"
 case "$1" in
     report) [ -f "${STUB_KUBE}/report.json" ] && exec cat "${STUB_KUBE}/report.json"
             echo "Usage: k3d-gpu <command>"; exit 1 ;;
@@ -163,6 +165,13 @@ check "unknown tool: -32602" "${out}" 'r[5]["error"]["code"] == -32602 and "rm_r
 check "bad JSON, batch array and boolean id are rejected, client responses ignored" "${out}" \
     '[json.loads(l)["error"]["code"] for l in lines[5:]] == [-32700, -32600, -32600] and all(json.loads(l)["id"] is None for l in lines[5:]) and len(lines) == 8'
 
+out=$(session "${d}" '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2025-11-25","io.modelcontextprotocol/clientCapabilities":{}}}}')
+check "per-request _meta with a legacy version and no initialize: -32022" "${out}" \
+    'r[1]["error"]["code"] == -32022 and r[1]["error"]["data"]["requested"] == "2025-11-25" and "initialize" in r[1]["error"]["message"]'
+out=$(session "${d}" '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}
+{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2025-11-25","io.modelcontextprotocol/clientCapabilities":{}}}}')
+check "legacy session may still carry its version in _meta" "${out}" 'len(r[2]["result"]["tools"]) == 4'
+
 # ---- accelerators ------------------------------------------------------------------
 
 d=$(fixtures report)
@@ -188,6 +197,24 @@ check "fallback keeps only accelerator labels" "${out}" \
     'sc(1)["cluster"]["nodes"][0]["labels"] == {"k3d-gpu.io/hybrid-cpu": "true"}'
 check "kubectl always targets context k3d-<cluster>" "${out}" \
     'all("--context k3d-gpu" in c for c in open("'"${d}"'/calls").read().splitlines() if not c.startswith("config"))'
+
+d=$(fixtures report-bad-json)
+echo '{"schema": truncated' > "${d}/report.json"
+printf 'nvidia nvidia.com/gpu\n' > "${d}/detect"
+out=$(session "${d}" "$(call 1 accelerators)")
+check "report --json exiting 0 with invalid JSON falls back to detect" "${out}" \
+    'sc(1)["schema"] == "k3d-gpu.mcp-fallback/v1" and sc(1)["detected"] == [{"vendor": "nvidia", "resources": ["nvidia.com/gpu"]}]'
+
+d=$(fixtures timeout)
+out=$(session "${d}" "$(call 1 accelerators)" STUB_SLEEP=5 K3D_GPU_MCP_TIMEOUT=0.5)
+check "a launcher call past K3D_GPU_MCP_TIMEOUT is a tool error naming the timeout" "${out}" \
+    'r[1]["result"]["isError"] is True and "timed out after 0.5s" in r[1]["result"]["content"][0]["text"]'
+
+for tool in accelerators agent_endpoint cluster_health; do
+    out=$(session "${d}" "$(call 1 "${tool}" '{"bogus":1}')")
+    check "${tool}: unknown argument is a tool error" "${out}" \
+        'r[1]["result"]["isError"] is True and "bogus" in r[1]["result"]["content"][0]["text"]'
+done
 
 # ---- recommend_placement ----------------------------------------------------------
 
@@ -224,6 +251,12 @@ nodes "${d}" '{"cpu":"96","gpu.intel.com/xe":"0"}' '{"feature.node.kubernetes.io
 out=$(session "${d}" "$(call 1 recommend_placement '{"workload":"llm","objective":"throughput"}')")
 check "Xeon with AMX and a zero-count GPU: CPU on the AMX node, no cores label" "${out}" \
     'sc(1)["engine"] == "cpu" and sc(1)["podSpecFragment"] == {"spec": {"containers": [{"name": "main"}], "nodeSelector": {"feature.node.kubernetes.io/cpu-cpuid.AMXTILE": "true"}}}'
+
+d=$(fixtures place-multinode)
+printf '{"detected":[],"cluster":{"present":true,"nodes":[{"name":"n0","allocatable":{"cpu":"8"},"labels":{}},{"name":"n1","allocatable":{"cpu":"8","nvidia.com/gpu":"2"},"labels":{"k3d-gpu.io/hybrid-cpu":"true"}}]}}\n' > "${d}/report.json"
+out=$(session "${d}" "$(call 1 recommend_placement '{"workload":"llm"}')")
+check "multi-node: devices and labels on any node count (k3d labels every node alike)" "${out}" \
+    'sc(1)["engine"] == "nvidia" and sc(1)["podSpecFragment"]["metadata"]["labels"]["k3d-gpu.io/cores"] == "performance"'
 
 d=$(fixtures place-plugin-down)
 printf '{"detected":[{"vendor":"intel","resources":["gpu.intel.com/xe"]}],"cluster":{"present":true,"nodes":[{"name":"n0","allocatable":{"cpu":"8"},"labels":{}}]}}\n' > "${d}/report.json"
@@ -303,6 +336,23 @@ out=$(session "${d}" "$(call 1 cluster_health)")
 check "health: NotReady node, unscheduled and partial plugins are problems" "${out}" \
     'not sc(1)["healthy"] and len(sc(1)["problems"]) == 3 and any("1/2" in p for p in sc(1)["problems"])'
 
+printf 'intel gpu.intel.com/xe\nnpu npu.intel.com/accel\namx feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true\n' > "${d}/detect"
+fixture "${d}" get nodes -o json <<'EOF'
+{"items":[{"metadata":{"name":"k3d-gpu-server-0"},"status":{"conditions":[{"type":"Ready","status":"True"}],"allocatable":{"gpu.intel.com/xe":"1"}}}]}
+EOF
+fixture "${d}" get daemonsets --all-namespaces -o json <<'EOF'
+{"items":[{"metadata":{"namespace":"kube-system","name":"intel-gpu-plugin"},"status":{"desiredNumberScheduled":1,"numberReady":1}}]}
+EOF
+out=$(session "${d}" "$(call 1 cluster_health)")
+check "health: a detected device whose plugin DaemonSet is absent is a problem" "${out}" \
+    'not sc(1)["healthy"] and len(sc(1)["problems"]) == 1 and "kube-system/intel-npu-plugin" in sc(1)["problems"][0]'
+rm "${d}/detect"
+
+echo 'not json' | fixture "${d}" get nodes -o json
+out=$(session "${d}" "$(call 1 cluster_health)")
+check "health: kubectl printing invalid JSON is unreachable, not a crash" "${out}" \
+    'not sc(1)["reachable"] and any("invalid JSON" in p for p in sc(1)["problems"])'
+
 # ---- transport ------------------------------------------------------------------
 
 d=$(fixtures transport)
@@ -314,6 +364,19 @@ else
 fi
 out=$(session "${d}" "$(call 1 cluster_health)")
 check "every reply is one line of JSON" "${out}" 'len(lines) == 1 and "\n" not in lines[0]'
+
+# ---- README -----------------------------------------------------------------------
+
+# `claude mcp add --env K=V <name>` reads <name> as another K=V pair and fails
+# (code.claude.com/docs/en/mcp): every --env must be followed by another option.
+README="$(dirname "${MCP}")/../README.md"
+ENV_THEN_NAME='claude mcp add.*(-e|--env) +[A-Za-z_][A-Za-z0-9_]*=[^ ]+ +[^- ]'
+if grep -qE "${ENV_THEN_NAME}" "${README}"; then
+    FAILS=$((FAILS + 1)); echo "FAIL README: claude mcp add puts the server name right after --env"
+    grep -E "${ENV_THEN_NAME}" "${README}" | sed 's/^/  | /'
+else
+    PASS=$((PASS + 1)); echo "ok   README claude mcp add examples keep --env away from the server name"
+fi
 
 echo ""
 echo "${PASS} passed, ${FAILS} failed"

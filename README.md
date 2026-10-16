@@ -89,7 +89,7 @@ launcher and `kubectl`, and is read-only: it never creates or deletes anything.
 | `accelerators` | the `k3d-gpu report --json` document: host devices, detected vendors and their resources, per-node allocatable resources and accelerator labels (falls back to `detect` + node allocatable on launchers without `report`) |
 | `recommend_placement` | `workload`: `llm` \| `embeddings` \| `media` \| `batch`, `objective`: `latency` (default) \| `throughput` \| `efficiency`. The best engine the cluster advertises and the pod-spec fragment to merge: the extended-resource limit, `k3d-gpu.io/cores=performance\|efficient` on hybrid CPUs, the AMX `nodeSelector` on the CPU path |
 | `agent_endpoint` | the OpenVINO Model Server from `k3d-gpu agent up`: in-cluster `/v3` base URL, a `port-forward` command and `localhost` URL for the host, device, served models (`/v3/models`) |
-| `cluster_health` | node readiness, per-node accelerator counts, device-plugin DaemonSet rollout, and a list of problems |
+| `cluster_health` | node readiness, per-node accelerator counts, device-plugin DaemonSet rollout (and plugins missing for host-detected devices), and a list of problems |
 
 Protocol: MCP **2026-07-28** (per-request `_meta`, `server/discover`) and, for
 clients that still open with the `initialize` handshake, 2025-11-25, 2025-06-18,
@@ -100,7 +100,7 @@ Claude Code:
 ```bash
 claude mcp add --transport stdio k3d-gpu -- k3d-gpu-mcp
 # a non-default cluster name:
-claude mcp add --transport stdio --env K3D_GPU_CLUSTER=dev k3d-gpu -- k3d-gpu-mcp
+claude mcp add --env K3D_GPU_CLUSTER=dev --transport stdio k3d-gpu -- k3d-gpu-mcp
 ```
 
 Other MCP clients launch the same command; most read a JSON entry like this one (the
