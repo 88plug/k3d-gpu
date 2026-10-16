@@ -2908,6 +2908,9 @@ AGENT_MODEL_NAME="${K3D_GPU_AGENT_MODEL_NAME:-${AGENT_MODEL##*/}}"
 AGENT_STORAGE="${K3D_GPU_AGENT_STORAGE:-20Gi}"
 AGENT_MEMORY="${K3D_GPU_AGENT_MEMORY:-6Gi}"
 AGENT_TIMEOUT="${K3D_GPU_AGENT_TIMEOUT:-1800}" # seconds: first run downloads the model
+# DEBUG also prints the compiled model's EXECUTION_DEVICES (e.g. GPU.0: Intel(R)
+# UHD Graphics 770), and every HTTP request, readiness probes included.
+AGENT_LOG_LEVEL="${K3D_GPU_AGENT_LOG_LEVEL:-INFO}"
 # Qwen3 emits hermes-style tool calls and <think> reasoning. Any other model gets
 # OVMS's own parser detection from its chat template unless these are set (an
 # empty value turns a parser off).
@@ -2965,7 +2968,9 @@ agent_device() {
 
 # Group owning the device node the pod is handed: the Intel render node for GPU,
 # the NPU accel node for NPU. k3d nodes share the host /dev, so the host GID is
-# the one the pod sees. Empty when there is no such node to read.
+# the one that matters. The Intel plugins inject devices through CDI, which
+# already gives the node to the pod's own UID/GID; the group is for plugins that
+# pass plain device nodes. Empty when there is no such node to read.
 agent_device_gid() {
     local dev node
     case "$1" in
@@ -3008,7 +3013,8 @@ agent_cpus() {
 # Prints the namespace, model PVC, Deployment and Service. Choices go to stderr.
 agent_manifest() {
     local sel device res gid="" hybrid="" amx="" cpus
-    sel=$(agent_device)
+    # || exit: errexit is off inside the $(agent_manifest) of cmd_agent_up.
+    sel=$(agent_device) || exit 1
     read -r device res <<< "${sel}"
     [ -z "$(labelled_nodes "${HYBRID_LABEL}")" ] || hybrid=1
     if [ "${device}" = CPU ] && [ -n "$(labelled_nodes feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true)" ]; then
@@ -3016,7 +3022,9 @@ agent_manifest() {
     fi
     cpus=$(agent_cpus "${device}" "${hybrid}")
     [ "${device}" = CPU ] || gid=$(agent_device_gid "${device}")
-    info "agent: ${AGENT_MODEL} as '${AGENT_MODEL_NAME}' on ${device}${res#-}${amx:+ (AMX node)}${hybrid:+, P-cores}, ${cpus} CPU(s)" >&2
+    local via=""
+    [ "${res}" = - ] || via=" (${res})"
+    info "agent: ${AGENT_MODEL} as '${AGENT_MODEL_NAME}' on ${device}${via}${amx:+ (AMX node)}${hybrid:+, P-cores}, ${cpus} CPU(s)" >&2
 
     local item="            - " args
     args="${item}--target_device=${device}"
@@ -3097,7 +3105,7 @@ ${args}
             - --model_path=/models/${AGENT_MODEL}
             - --model_name=${AGENT_MODEL_NAME}
             - --cache_dir=/models/.ov_cache
-            - --log_level=INFO
+            - --log_level=${AGENT_LOG_LEVEL}
           ports:
             - name: http
               containerPort: 8000
@@ -3137,14 +3145,18 @@ spec:
 EOF
 }
 
-# One short chat completion through the API server's service proxy: loads
-# anything still lazy and proves generation end to end. Prints the reply.
+# One short chat completion from inside the pod (the image ships curl): runs the
+# first generation, which is slower than the rest, and proves generation end to
+# end. Not through the API server's service proxy: it hands OVMS a POST body the
+# server cannot route ("Mediapipe graph definition with requested name is not found").
 agent_warmup() {
-    local body reply
+    local body reply start=${SECONDS}
     body="{\"model\":\"${AGENT_MODEL_NAME}\",\"max_tokens\":32,\"chat_template_kwargs\":{\"enable_thinking\":false},\"messages\":[{\"role\":\"user\",\"content\":\"Reply with one short sentence: what are you?\"}]}"
-    reply=$(kubectl create --raw "${AGENT_PROXY}/v3/chat/completions" -f - <<< "${body}" 2>&1) \
+    reply=$(kubectl -n "${AGENT_NS}" exec deployment/ovms -c ovms -- \
+        curl -sS --max-time 600 http://127.0.0.1:8000/v3/chat/completions -H 'Content-Type: application/json' -d "${body}" 2>&1) \
         || err "warm-up request failed: ${reply}"
-    info "warm-up reply: $(sed -n 's/.*"content":"\([^"]*\)".*/\1/p' <<< "${reply}" | sed -n 1p)"
+    case "${reply}" in *'"choices"'*) ;; *) err "warm-up request failed: ${reply}" ;; esac
+    info "warm-up reply ($((SECONDS - start))s): $(sed -n 's/.*"content":"\([^"]*\)".*/\1/p' <<< "${reply}" | sed -n 1p)"
 }
 
 cmd_agent_up() {

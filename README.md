@@ -46,6 +46,7 @@ k3d-gpu doctor --perf   # read-only host tuning advisor for inference (add --mod
 k3d-gpu up              # create the cluster (device plugins auto-deploy), verify each accelerator > 0
 k3d-gpu test            # per accelerator: nvidia-smi pod / device-node listing pod
 k3d-gpu logs            # tail the k3s server container logs
+k3d-gpu agent up        # OpenAI-compatible LLM server on the Intel GPU (else CPU)
 k3d-gpu down            # delete the cluster
 ```
 
@@ -63,6 +64,7 @@ Behaviour is tunable via environment variables:
 | `K3D_GPU_NPU_PLUGIN` | `/usr/share/k3d-gpu/intel-npu-plugin.yml` | same, for the Intel NPU plugin |
 | `K3D_GPU_DSA_PLUGIN` / `_IAA_` / `_QAT_` | `/usr/share/k3d-gpu/intel-{dsa,iaa,qat}-plugin.yml` | same, for the Xeon accelerator plugins |
 | `K3D_GPU_HYBRID_PLUGIN` | `/usr/share/k3d-gpu/nri-balloons.yml` | same, for the NRI balloons policy (hybrid and NUMA hosts) |
+| `K3D_GPU_AGENT_*`    | see [Agent](#agent-an-openai-compatible-llm-on-the-best-intel-engine) | `k3d-gpu agent` settings |
 | `K3D_GPU_DEVICE_TEST_IMAGE` | `busybox:1.37`                     | image used by `k3d-gpu test` for Intel GPU/NPU and Gaudi |
 | `K3D_GPU_TEST_IMAGE` | `nvidia/cuda:13.4.2-base-ubuntu26.04`     | image used by `k3d-gpu test`         |
 
@@ -278,6 +280,86 @@ Service `ovms` gives the agent-stack address shape,
 `tests/kserve_test.sh` checks the install against stub `helm`/`kubectl` and,
 with `kubeconform` and `helm` on `PATH`, validates the manifests and rendered
 charts at Kubernetes 1.34 and 1.35.
+
+### Agent: an OpenAI-compatible LLM on the best Intel engine
+
+`k3d-gpu agent up` deploys [OpenVINO Model Server](https://github.com/openvinotoolkit/model_server)
+2026.4.1 (`openvino/model_server:2026.4.1-gpu`, pinned by digest) into the
+running cluster and serves `OpenVINO/Qwen3-4B-int4-ov` over the OpenAI API at
+`/v3` (`chat/completions`, `completions`), with tool calling (`hermes3` parser)
+and reasoning (`qwen3` parser).
+
+```bash
+k3d-gpu up                       # cluster first
+k3d-gpu agent up                 # download (once), load, warm up; prints a reply
+K3D_GPU_AGENT_DEVICE=CPU k3d-gpu agent up   # same model on the CPU instead
+kubectl -n k3d-gpu-agent port-forward svc/ovms 8000:8000 &
+curl http://localhost:8000/v3/chat/completions -H 'Content-Type: application/json' \
+  -d '{"model":"Qwen3-4B-int4-ov","messages":[{"role":"user","content":"hi"}]}'
+k3d-gpu agent status             # pod, PVC, device, model state (/v1/config)
+k3d-gpu agent down               # stop serving; the downloaded model stays
+k3d-gpu agent manifest           # print the YAML instead of applying it
+```
+
+The device comes from what the cluster advertises, not from the host alone:
+
+| Cluster has | Device | Pod gets |
+|-------------|--------|----------|
+| allocatable `gpu.intel.com/xe`, else `gpu.intel.com/i915` | `GPU` | one GPU; the host render group is added as a supplemental group |
+| neither | `CPU` | no device; on a node labelled `...cpu-cpuid.AMXTILE=true` it is pinned there |
+| `npu.intel.com/accel`, only with `K3D_GPU_AGENT_DEVICE=NPU` | `NPU` | the NPU and its accel node's group |
+
+`auto` never picks the NPU, same as OVMS's own device detection: LLMs on the NPU
+run the stateful pipeline only (no continuous batching, static prompt shapes).
+On a hybrid node the server pod carries `k3d-gpu.io/cores=performance`, so it
+runs on P-cores. Its CPU request sizes that balloon: 2 CPUs when a GPU or NPU
+does the math, every P-core CPU for CPU inference (half the node's CPUs on
+non-hybrid nodes).
+
+The model is fetched once into `pvc/ovms-models` (an init container runs
+`ovms --pull`; on later starts it finds the files and only rewrites the
+model's `graph.pbtxt`, so a device change downloads nothing). The compiled-model
+cache (`--cache_dir`) lives on the same PVC, so a restart skips most GPU
+compilation. `agent down` keeps the PVC; `kubectl delete namespace k3d-gpu-agent`
+removes everything. The Intel GPU plugin hands out each GPU exclusively, so
+`k3d-gpu test` cannot get the GPU while the agent runs on it.
+
+`agent up` finishes with one short generation run inside the pod (`kubectl exec`
++ `curl`). It reports the reply and how long it took. Use the port-forward, not
+the API server's service proxy, for POSTs: through that proxy OVMS answers
+`Mediapipe graph definition with requested name is not found`. To see which
+device the model compiled for, run with `K3D_GPU_AGENT_LOG_LEVEL=DEBUG`, then
+`kubectl -n k3d-gpu-agent logs deploy/ovms | grep -A1 EXECUTION_DEVICES`
+(for example `GPU.0: Intel(R) UHD Graphics 770 (iGPU)`).
+
+The Intel plugins inject devices through CDI, which already gives the device
+node to the pod's own user. The render group is a fallback for plugins that
+pass plain device nodes.
+
+Measured on an i9-13900T (UHD 770 iGPU, 8 P-cores). Qwen3-4B int4,
+256-token answers, three runs each:
+
+| Device | Decode | CPUs the pod holds |
+|--------|--------|--------------------|
+| `GPU` (UHD 770) | 9.7–10.0 tokens/s | 2 (P-cores) |
+| `CPU` | 12.7–14.8 tokens/s | 16 (every P-core) |
+
+On a small iGPU like this one the P-cores decode faster. `auto` still picks
+the GPU, because it leaves the P-cores free for everything else. Set
+`K3D_GPU_AGENT_DEVICE=CPU` when tokens per second matter more.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `K3D_GPU_AGENT_DEVICE` | `auto` | `CPU`, `GPU` or `NPU` (any case) to force one; forcing a device the cluster does not advertise fails |
+| `K3D_GPU_AGENT_MODEL` | `OpenVINO/Qwen3-4B-int4-ov` | Hugging Face model in OpenVINO IR format |
+| `K3D_GPU_AGENT_MODEL_NAME` | last part of the model id | name clients send as `model` |
+| `K3D_GPU_AGENT_TOOL_PARSER` / `_REASONING_PARSER` | `hermes3` / `qwen3` for the default model, unset otherwise | unset lets OVMS detect them from the chat template; empty turns one off |
+| `K3D_GPU_AGENT_CPUS` | see above | CPU request (balloon size on hybrid nodes) |
+| `K3D_GPU_AGENT_MEMORY` | `6Gi` | memory request |
+| `K3D_GPU_AGENT_STORAGE` | `20Gi` | PVC size |
+| `K3D_GPU_AGENT_TIMEOUT` | `1800` | seconds `agent up` waits for download + load |
+| `K3D_GPU_AGENT_LOG_LEVEL` | `INFO` | `DEBUG` also logs the compiled model's execution device (and every request) |
+| `K3D_GPU_AGENT_IMAGE` | `openvino/model_server@sha256:a928…fc58` (2026.4.1-gpu) | server image |
 
 ---
 

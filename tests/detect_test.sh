@@ -1470,6 +1470,7 @@ case "$*" in
     *allocatable*) printf '%s\n' "${STUB_ALLOC:-}" ;;
     "get nodes -l "*)
         for l in ${STUB_NODE_LABELS:-}; do [ "$l" = "$4" ] && echo node/k3d-agent-server-0; done ;;
+    apply*) echo applied >> "${STUB_APPLY_LOG:-/dev/null}" ;;
 esac
 exit 0
 EOF
@@ -1521,6 +1522,15 @@ agent_says "an unknown K3D_GPU_AGENT_DEVICE is rejected" "${r}" fail \
 agent_says "auto never picks the NPU" "${r}" 0 \
     '--target_device=NPU' negate STUB_ALLOC=$'cpu 32\nnpu.intel.com/accel 1'
 
+# A device that cannot be honoured must stop `agent up` before anything is applied.
+applylog="${WORK}/apply.log"
+if env K3D_GPU_SYSROOT="${r}" PATH="${ASTUB}:${PATH}" STUB_ALLOC='cpu 32' STUB_APPLY_LOG="${applylog}" \
+       K3D_GPU_AGENT_DEVICE=GPU bash "${K3D_GPU}" agent up >/dev/null 2>&1 || [ -s "${applylog}" ]; then
+    FAILS=$((FAILS + 1)); echo "FAIL agent up with an unavailable forced device applies nothing and fails"
+else
+    PASS=$((PASS + 1)); echo "ok   agent up with an unavailable forced device applies nothing and fails"
+fi
+
 r=$(newroot agent-npu)
 pci "${r}" 0000:00:0b.0 0x8086 0x643e intel_vpu; accel "${r}" 0000:00:0b.0 0
 gid=$(stat -c %g "${r}/dev/accel/accel0")
@@ -1564,6 +1574,9 @@ agent_says "an empty K3D_GPU_AGENT_TOOL_PARSER turns the parser off" "${r}" 0 't
     STUB_ALLOC='cpu 8' K3D_GPU_AGENT_TOOL_PARSER=
 agent_says "the model cache lives on the models volume" "${r}" 0 '--cache_dir=/models/\.ov_cache' "" STUB_ALLOC='cpu 8'
 agent_says "the server image is pinned by digest" "${r}" 0 'image: openvino/model_server@sha256:[0-9a-f]{64}' "" STUB_ALLOC='cpu 8'
+agent_says "server logs at INFO by default" "${r}" 0 '--log_level=INFO$' "" STUB_ALLOC='cpu 8'
+agent_says "K3D_GPU_AGENT_LOG_LEVEL=DEBUG reaches the server" "${r}" 0 '--log_level=DEBUG$' "" \
+    STUB_ALLOC='cpu 8' K3D_GPU_AGENT_LOG_LEVEL=DEBUG
 agent_says "a custom model leaves parser choice to OVMS" "${r}" 0 'tool_parser' negate \
     STUB_ALLOC='cpu 8' K3D_GPU_AGENT_MODEL=OpenVINO/Phi-4-mini-instruct-int4-ov
 
