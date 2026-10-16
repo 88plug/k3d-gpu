@@ -1327,6 +1327,18 @@ perf_says "perf: TME state needs root without the MSR" "${cool}" 'tme flag set: 
 perf_says "perf: xfs root gets no 4 KiB note" "${cool}" 'mapped with 4 KiB pages' negate
 perf_says "perf: missing /proc/cmdline prints no shell error" "${cool}" 'No such file|line [0-9]+:' negate
 
+# IA32_TME_ACTIVATE: active only when locked (bit 0) and enabled (bit 1), as the
+# kernel's detect_tme_early() reads it.
+r=$(newroot perf-tme-on)
+g10_common "${r}"
+msrset "${r}" 0x982 0000000000000003
+perf_says "perf: TME locked and enabled is active" "${r}" 'info: TME active \(IA32_TME_ACTIVATE 0x0000000000000003: locked, encryption enabled'
+r=$(newroot perf-tme-unlocked)
+g10_common "${r}"
+msrset "${r}" 0x982 0000000000000002
+perf_says "perf: TME enabled but unlocked is not active" "${r}" 'TME capable but off \(IA32_TME_ACTIVATE 0x0000000000000002: lock=0 enable=1;'
+perf_says "perf: TME enabled but unlocked is not reported active" "${r}" 'TME active' negate
+
 # Uncorrected errors warn; root-only SMBIOS records; a 13th Gen HX below POR; an
 # unknown platform falls back to data width.
 r=$(newroot perf-ue)
