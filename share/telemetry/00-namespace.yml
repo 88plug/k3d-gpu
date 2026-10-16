@@ -1,0 +1,12 @@
+# Namespace for the opt-in k3d-gpu telemetry stack (share/telemetry/*.yml).
+# Not baked into the node image: apply with `kubectl apply -f share/telemetry/`
+# (files apply in name order, so this one comes first) and remove with
+# `kubectl delete namespace k3d-gpu-telemetry`.
+# The GPU exporters and node-exporter read host devices and sysfs, so pods here
+# run privileged; the label states that for Pod Security Admission.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: k3d-gpu-telemetry
+  labels:
+    pod-security.kubernetes.io/enforce: privileged

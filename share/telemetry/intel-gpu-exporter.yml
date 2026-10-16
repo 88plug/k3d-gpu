@@ -1,0 +1,143 @@
+# Intel iGPU/dGPU exporter (drm-exporter): per-engine busy ratio, frequency, power, memory
+# Source: https://github.com/home-operations/drm-exporter (helm chart
+# oci://ghcr.io/home-operations/charts/drm-exporter 0.3.4, image pinned by digest),
+# rendered with `helm template drm-exporter --namespace k3d-gpu-telemetry --skip-tests`
+# and the values below, then metadata.namespace added. Re-render to bump.
+# Reads the i915/xe perf PMU and sysfs through qmlib (the qmassa library), so it covers
+# integrated Gen12 parts such as the UHD 770 that xpumd does not list as supported.
+# Privileged instead of a GPU resource request: no gpu.intel.com resource is consumed
+# and the pod needs PERFMON (engine PMU) and SYS_RAWIO + /dev/cpu (MSR package
+# temperature, RAPL fallback). On a node without an Intel or AMD GPU the pod exits.
+# Serves :8081/metrics.
+#
+# values:
+#   hostAccess: {devDri: /dev/dri, sys: /sys, devCpu: /dev/cpu}
+#   securityContext: {privileged: true, allowPrivilegeEscalation: null, capabilities: null}
+#   nodeSelector: {kubernetes.io/arch: amd64}
+---
+# Source: drm-exporter/templates/serviceaccount.tpl
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: drm-exporter
+  namespace: k3d-gpu-telemetry
+  labels:
+    helm.sh/chart: drm-exporter-0.3.4
+    app.kubernetes.io/name: drm-exporter
+    app.kubernetes.io/instance: drm-exporter
+    app.kubernetes.io/version: "0.3.4"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: exporter
+automountServiceAccountToken: false
+---
+# Source: drm-exporter/templates/service.tpl
+apiVersion: v1
+kind: Service
+metadata:
+  name: drm-exporter
+  namespace: k3d-gpu-telemetry
+  labels:
+    helm.sh/chart: drm-exporter-0.3.4
+    app.kubernetes.io/name: drm-exporter
+    app.kubernetes.io/instance: drm-exporter
+    app.kubernetes.io/version: "0.3.4"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: exporter
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: drm-exporter
+    app.kubernetes.io/instance: drm-exporter
+  ports:
+    - name: metrics
+      port: 8081
+      targetPort: metrics
+      protocol: TCP
+---
+# Source: drm-exporter/templates/daemonset.tpl
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: drm-exporter
+  namespace: k3d-gpu-telemetry
+  labels:
+    helm.sh/chart: drm-exporter-0.3.4
+    app.kubernetes.io/name: drm-exporter
+    app.kubernetes.io/instance: drm-exporter
+    app.kubernetes.io/version: "0.3.4"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: exporter
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: drm-exporter
+      app.kubernetes.io/instance: drm-exporter
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: drm-exporter
+        app.kubernetes.io/instance: drm-exporter
+    spec:
+      serviceAccountName: drm-exporter
+      automountServiceAccountToken: false
+      securityContext:
+        runAsGroup: 0
+        runAsNonRoot: false
+        runAsUser: 0
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: drm-exporter
+          image: "ghcr.io/home-operations/drm-exporter@sha256:9b5424634b74f0c6905109fc46f90a7f569ab7bde1211d3ac5f9c32a17895e60"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: true
+            readOnlyRootFilesystem: true
+          env:
+            - name: DRM_EXPORTER_PORT
+              value: "8081"
+            - name: DRM_EXPORTER_INTERVAL_SECONDS
+              value: "5"
+            - name: RUST_LOG
+              value: "info"
+          ports:
+            - name: metrics
+              containerPort: 8081
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: metrics
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          volumeMounts:
+            - name: dev-dri
+              mountPath: /dev/dri
+            - name: sys
+              mountPath: /sys
+              readOnly: true
+            - name: dev-cpu
+              mountPath: /dev/cpu
+              readOnly: true
+      volumes:
+        - name: dev-dri
+          hostPath:
+            path: /dev/dri
+        - name: sys
+          hostPath:
+            path: /sys
+            type: Directory
+        - name: dev-cpu
+          hostPath:
+            path: /dev/cpu
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      terminationGracePeriodSeconds: 30
