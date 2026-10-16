@@ -1,0 +1,5 @@
+# Docs site toolchain (direct dependencies). requirements.txt is the hashed lock:
+# regenerate it with docs-build/lock.sh, never by hand.
+mkdocs==1.6.1
+mkdocs-material==9.7.7
+pymdown-extensions==12.3

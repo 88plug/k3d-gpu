@@ -112,6 +112,12 @@ Include relevant details:
   "%", "first", "only", "fastest") on the same line with a primary-source URL,
   `[ledger:Hn]` (a SUPPORTED row of EXPERIMENTS.md) or `[provenance:Pn]` (a sourced
   row of docs/provenance.md). CI runs `tests/claims_check.sh` to enforce it
+- The docs site renders README.md as its home page and this file as a page, so
+  the quick start lives only in README.md. Longer pages go in `docs/*.md` and
+  need a `nav` entry in `mkdocs.yml`; `mkdocs build --strict` fails on a page
+  missing from `nav`. A `nav` entry whose page is not in `docs/` yet is skipped.
+- Check the site with `tests/docs_test.sh` after
+  `pip install --require-hashes -r docs-build/requirements.txt`
 
 ### Workflow Changes
 

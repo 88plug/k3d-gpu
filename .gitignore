@@ -16,3 +16,6 @@ Thumbs.db
 
 # Build artifacts
 *.log
+
+# Docs site build output (mkdocs)
+site/

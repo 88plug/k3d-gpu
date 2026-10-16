@@ -15,3 +15,16 @@ updates:
     labels: [dependencies, automerge]
     commit-message:
       prefix: "deps"
+
+  # Docs toolchain lock (docs-build/requirements.txt, from requirements.in).
+  - package-ecosystem: pip
+    directory: /docs-build
+    schedule:
+      interval: weekly
+    labels: [dependencies, automerge]
+    commit-message:
+      prefix: "deps"
+    ignore:
+      # MkDocs 2.0 drops the plugin and theme system mkdocs-material is built on.
+      - dependency-name: mkdocs
+        update-types: ["version-update:semver-major"]
