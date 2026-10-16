@@ -23,6 +23,9 @@
 #                                                         -> node labels k3d-gpu.io/numa-nodes=<n>,
 #           k3d-gpu.io/snc=<nodes per L3>; pods labelled k3d-gpu.io/cores=replica get a
 #           balloon inside one NUMA node, memory pinned to it, near their devices
+#   wsl     Intel GPU on Windows through WSL2 GPU-PV (/dev/dxg + /usr/lib/wsl)
+#                                                         -> gpu.intel.com/dxg
+#           NVIDIA on WSL2 is the nvidia vendor: --gpus hands the node /dev/dxg via the toolkit.
 #           DSA/IAA/QAT need host setup first (work queues / SR-IOV VFs); doctor says what is missing.
 #   up also labels nodes with CPU ISA extensions (NFD cpu-cpuid names), Intel GPU XMX and
 #   media engine counts, and the NPU generation; doctor prints the labels.
@@ -63,6 +66,7 @@ IAA_PLUGIN_MANIFEST="${K3D_GPU_IAA_PLUGIN:-${SHARE_DIR}/intel-iaa-plugin.yml}"
 QAT_PLUGIN_MANIFEST="${K3D_GPU_QAT_PLUGIN:-${SHARE_DIR}/intel-qat-plugin.yml}"
 HYBRID_PLUGIN_MANIFEST="${K3D_GPU_HYBRID_PLUGIN:-${SHARE_DIR}/nri-balloons.yml}"
 NPU_EMBEDDINGS_MANIFEST="${K3D_GPU_NPU_EMBEDDINGS:-${SHARE_DIR}/npu-embeddings.yml}"
+WSL_PLUGIN_MANIFEST="${K3D_GPU_WSL_PLUGIN:-${SHARE_DIR}/intel-gpu-wsl-plugin.yml}"
 SYSROOT="${K3D_GPU_SYSROOT:-}" # prefix for /sys and /dev reads (tests point it at a fake tree)
 TEST_IMAGE="${K3D_GPU_TEST_IMAGE:-nvidia/cuda:13.4.3-base-ubuntu26.04}"
 DEVICE_TEST_IMAGE="${K3D_GPU_DEVICE_TEST_IMAGE:-busybox:1.37}"
@@ -80,7 +84,7 @@ warn() { echo "${YLW}WARN:${RST} $*" >&2; }
 
 usage() {
     cat <<EOF
-k3d-gpu ${VERSION} — accelerator-ready k3d clusters (NVIDIA, Intel GPU/iGPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX/NUMA, hybrid P/E cores)
+k3d-gpu ${VERSION} — accelerator-ready k3d clusters (NVIDIA, Intel GPU/iGPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX/NUMA, hybrid P/E cores, WSL2)
 
 Usage: k3d-gpu <command>
 
@@ -116,7 +120,7 @@ Usage: k3d-gpu <command>
 Environment:
   K3D_GPU_CLUSTER       cluster name         (default: gpu)
   K3D_GPU_IMAGE         k3s node image       (default: ${IMAGE_REPO}:${VERSION}; ${IMAGE_REPO}:latest floats)
-  K3D_GPU_VENDORS       auto | comma list of nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa (default: auto)
+  K3D_GPU_VENDORS       auto | comma list of nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa,wsl (default: auto)
   K3D_GPU_NODE_LABELS   extra node labels, comma list of key=value (default: none)
   K3D_GPU_K3S_ARGS      extra k3s server flags, space-separated, e.g. --disable=servicelb (default: none)
   K3D_GPU_SHARE         dir holding the fallback plugin yamls (default: /usr/share/k3d-gpu)
@@ -128,6 +132,7 @@ Environment:
   K3D_GPU_IAA_PLUGIN    Intel IAA plugin yaml  (default: ${SHARE_DIR}/intel-iaa-plugin.yml)
   K3D_GPU_QAT_PLUGIN    Intel QAT plugin yaml  (default: ${SHARE_DIR}/intel-qat-plugin.yml)
   K3D_GPU_HYBRID_PLUGIN NRI balloons yaml for hybrid and numa (default: ${SHARE_DIR}/nri-balloons.yml)
+  K3D_GPU_WSL_PLUGIN    WSL2 Intel GPU plugin yaml (default: ${SHARE_DIR}/intel-gpu-wsl-plugin.yml)
   K3D_GPU_NPU_EMBEDDINGS NPU embeddings recipe (default: ${SHARE_DIR}/npu-embeddings.yml)
   K3D_GPU_MODEL_GB      model size checked by doctor --perf (same as --model-gb)
   K3D_GPU_AGENT_DEVICE  agent device: auto | CPU | GPU | NPU | HPU (default: auto; auto
@@ -163,8 +168,22 @@ require() {
 # NVIDIA: device nodes appear only after first use on some hosts, so also accept
 # the loaded kernel module.
 has_nvidia() {
-    [ -e "${SYSROOT}/dev/nvidiactl" ] || [ -e "${SYSROOT}/dev/nvidia0" ] || [ -d "${SYSROOT}/sys/module/nvidia" ]
+    [ -e "${SYSROOT}/dev/nvidiactl" ] || [ -e "${SYSROOT}/dev/nvidia0" ] || [ -d "${SYSROOT}/sys/module/nvidia" ] \
+        || has_wsl_nvidia
 }
+
+# WSL2: the Windows GPU driver reaches Linux through GPU paravirtualization. The
+# guest sees one /dev/dxg for every GPU and no PCI device or DRM render node; the
+# Windows driver store is mounted at /usr/lib/wsl/drivers and the user-mode
+# libraries (libdxcore, nvidia-smi, ...) at /usr/lib/wsl/lib.
+WSL_LIB=/usr/lib/wsl
+WSL_LABEL="k3d-gpu.io/wsl-gpu=true"
+is_wsl() { grep -qi microsoft "${SYSROOT}/proc/version" 2>/dev/null && [ -e "${SYSROOT}/dev/dxg" ]; }
+# Intel's Windows graphics driver package (iigd_dch*.inf) in the driver store.
+wsl_intel_drivers() { compgen -G "${SYSROOT}${WSL_LIB}/drivers/iigd_dch*" || true; }
+has_wsl_intel() { is_wsl && [ -n "$(wsl_intel_drivers)" ]; }
+# NVIDIA's Windows driver puts nvidia-smi in the WSL library dir.
+has_wsl_nvidia() { is_wsl && [ -e "${SYSROOT}${WSL_LIB}/lib/nvidia-smi" ]; }
 
 # Name of the kernel driver bound to a sysfs device dir, or empty.
 bound_driver() {
@@ -877,13 +896,14 @@ resolve_vendors() {
         if [ -n "$(amx_flags)" ]; then ACTIVE+=(amx); fi
         if has_hybrid; then ACTIVE+=(hybrid); fi
         if has_numa; then ACTIVE+=(numa); fi
+        if has_wsl_intel; then ACTIVE+=(wsl); fi
     else
         IFS=',' read -r -a req <<< "${VENDORS_REQUEST}"
         for v in "${req[@]}"; do
             case "${v}" in
                 "") ;;
-                nvidia|intel|npu|gaudi|dsa|iaa|qat|amx|hybrid|numa) is_active "${v}" || ACTIVE+=("${v}") ;;
-                *) err "unknown vendor '${v}' in K3D_GPU_VENDORS (use nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa)" ;;
+                nvidia|intel|npu|gaudi|dsa|iaa|qat|amx|hybrid|numa|wsl) is_active "${v}" || ACTIVE+=("${v}") ;;
+                *) err "unknown vendor '${v}' in K3D_GPU_VENDORS (use nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa,wsl)" ;;
             esac
         done
     fi
@@ -911,6 +931,7 @@ vendor_resources() {
         amx)    amx_labels ;;
         hybrid) echo "${HYBRID_LABEL}" ;;
         numa)   numa_labels ;;
+        wsl)    echo "gpu.intel.com/dxg" ;;
         intel)
             # One resource per bound driver; both when nothing is detected
             # (explicit K3D_GPU_VENDORS=intel on a host we cannot read).
@@ -936,6 +957,7 @@ vendor_daemonset() {  # prints: namespace name manifest
         hybrid) echo "kube-system nri-resource-policy-balloons ${HYBRID_PLUGIN_MANIFEST}" ;;
         # The same balloons policy; listed once when the host is hybrid too.
         numa)   is_active hybrid || echo "kube-system nri-resource-policy-balloons ${HYBRID_PLUGIN_MANIFEST}" ;;
+        wsl)    echo "kube-system intel-gpu-plugin-wsl ${WSL_PLUGIN_MANIFEST}" ;;
     esac
 }
 
@@ -969,6 +991,8 @@ doctor_nvidia() {
     info "Checking NVIDIA GPU..."
     if [ -e "${SYSROOT}/dev/nvidiactl" ] || [ -e "${SYSROOT}/dev/nvidia0" ]; then
         echo "  ok: /dev/nvidia* present"
+    elif has_wsl_nvidia; then
+        echo "  ok: WSL2: NVIDIA GPU-PV through /dev/dxg (${WSL_LIB}/lib/nvidia-smi present; there are no /dev/nvidia* on WSL)"
     elif has_nvidia; then
         echo "  ${YLW}warn${RST}: nvidia module loaded but no /dev/nvidia* yet (run: sudo nvidia-modprobe -u -c0)"
     else
@@ -980,6 +1004,8 @@ doctor_nvidia() {
     if command -v nvidia-container-runtime >/dev/null 2>&1 \
        || command -v nvidia-ctk >/dev/null 2>&1; then
         echo "  ok"
+    elif has_wsl_nvidia; then
+        echo "  ${YLW}warn${RST}: nvidia-container-toolkit not in this WSL distro — fine with Docker Desktop (it brings its own); a dockerd inside WSL needs it"
     else
         echo "  ${RED}fail${RST}: nvidia-container-toolkit not installed"
         echo "         install: https://github.com/NVIDIA/nvidia-container-toolkit"
@@ -1106,6 +1132,29 @@ doctor_gaudi() {
     else
         echo "  ${YLW}warn${RST}: no /dev/accel/accel_controlD* nodes"
     fi
+}
+
+doctor_wsl() {
+    info "Checking Intel GPU on WSL2 (GPU-PV, /dev/dxg)..."
+    if ! is_wsl; then
+        echo "  ${RED}fail${RST}: not a WSL2 host with /dev/dxg (needs WSL2 on Windows 11 or Windows 10 21H2+, a current Windows GPU driver, and wsl --update)"
+        FAIL=1
+        return
+    fi
+    echo "  ok: WSL2 kernel $(kernel_release), /dev/dxg present"
+    local d drivers
+    drivers=$(wsl_intel_drivers)
+    if [ -n "${drivers}" ]; then
+        while read -r d; do echo "  ok: Intel driver store ${WSL_LIB}/drivers/${d##*/}"; done <<< "${drivers}"
+    else
+        echo "  ${YLW}warn${RST}: no Intel graphics driver (iigd_dch*) under ${WSL_LIB}/drivers — install the current Intel Arc & Iris Xe graphics driver on Windows, then wsl --shutdown"
+    fi
+    if [ -e "${SYSROOT}${WSL_LIB}/lib/libdxcore.so" ]; then
+        echo "  ok: ${WSL_LIB}/lib/libdxcore.so present"
+    else
+        echo "  ${YLW}warn${RST}: ${WSL_LIB}/lib/libdxcore.so missing — GPU-PV user space is not mounted (wsl --update; check gpuSupport in .wslconfig)"
+    fi
+    echo "  note: up mounts ${WSL_LIB} into the node; workload images need Intel compute-runtime (Level Zero / OpenCL), which supports WSL"
 }
 
 # Intel GPUs and NPUs the kernel saw but no driver claimed. They have no device
@@ -1658,7 +1707,7 @@ doctor() {
 
     if [ "${#ACTIVE[@]}" -eq 0 ]; then
         echo ""
-        echo "  ${RED}fail${RST}: no supported accelerator detected (NVIDIA, Intel GPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX, hybrid P/E cores)"
+        echo "  ${RED}fail${RST}: no supported accelerator detected (NVIDIA, Intel GPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX, hybrid P/E cores, NUMA, WSL2 Intel GPU)"
         FAIL=1
     else
         info "Detected accelerators: ${ACTIVE[*]}"
@@ -1666,6 +1715,7 @@ doctor() {
         if is_active intel;  then doctor_intel;  fi
         if is_active npu;    then doctor_npu;    fi
         if is_active gaudi;  then doctor_gaudi;  fi
+        if is_active wsl;    then doctor_wsl;    fi
     fi
     doctor_intel_unbound
     doctor_cpu_accels
@@ -2853,7 +2903,7 @@ cmd_up() {
     require kubectl
 
     resolve_vendors
-    [ "${#ACTIVE[@]}" -gt 0 ] || err "no supported accelerator detected (NVIDIA, Intel GPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX, hybrid P/E cores) — run 'k3d-gpu doctor' or set K3D_GPU_VENDORS"
+    [ "${#ACTIVE[@]}" -gt 0 ] || err "no supported accelerator detected (NVIDIA, Intel GPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX, hybrid P/E cores, NUMA, WSL2 Intel GPU) — run 'k3d-gpu doctor' or set K3D_GPU_VENDORS"
     info "Accelerators: ${ACTIVE[*]}"
     exp_collect
 
@@ -2923,6 +2973,15 @@ cmd_up() {
         while read -r label; do
             [ -n "${label}" ] && create_args+=(--k3s-node-label="${label}@server:*;agent:*")
         done < <(numa_labels)
+    fi
+    # WSL2 Intel GPU: the privileged node already sees /dev/dxg, but not the
+    # Windows driver store and libdxcore under /usr/lib/wsl, which the WSL-mode
+    # plugin and its Level Zero sidecar load and then hand to pods. The label
+    # gates that plugin, whose /dev/dxg CharDevice mount fails anywhere else.
+    if is_active wsl; then
+        create_args+=(--k3s-node-label="${WSL_LABEL}@server:*;agent:*")
+        create_args+=(--volume="${WSL_LIB}:${WSL_LIB}:ro@server:*;agent:*")
+        [ -e /dev/dxg ] || warn "no /dev/dxg on host — the WSL2 GPU will not be visible in the node"
     fi
     # AMX is a CPU feature: no plugin, just NFD-style labels pods can select on.
     if is_active amx; then
@@ -3237,6 +3296,9 @@ cmd_test() {
     fi
     if is_active gaudi; then
         device_test "gaudi-test" "habana.ai/gaudi" /dev/accel
+    fi
+    if is_active wsl; then
+        device_test "wsl-gpu-test" "gpu.intel.com/dxg" /dev/dxg
     fi
     local kind
     for kind in "dsa /dev/dsa" "iaa /dev/iax" "qat /dev/vfio"; do

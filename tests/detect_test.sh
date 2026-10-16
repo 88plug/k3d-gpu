@@ -2902,6 +2902,138 @@ else
     PASS=$((PASS + 1)); echo "ok   agent down keeps the model PVCs"
 fi
 
+# ---- WSL2 (Windows) -----------------------------------------------------------
+
+# wsl <root> [driver store dir...]: a WSL2 distro. GPU-PV shows up as /dev/dxg, the
+# Windows driver store under usr/lib/wsl/drivers, and its libraries under
+# usr/lib/wsl/lib. WSLg's vgem render node has no PCI vendor behind it.
+wsl() {
+    local r=$1 d
+    shift
+    mkdir -p "${r}/proc" "${r}/usr/lib/wsl/lib" "${r}/sys/devices/platform/vgem/drm/renderD128" "${r}/sys/class/drm" "${r}/dev/dri"
+    echo "Linux version 6.6.87.2-microsoft-standard-WSL2 (root@439a258ad544) (gcc (GCC) 11.2.0) #1 SMP PREEMPT_DYNAMIC" > "${r}/proc/version"
+    touch "${r}/dev/dxg" "${r}/usr/lib/wsl/lib/libdxcore.so" "${r}/dev/dri/renderD128"
+    ln -sfn "${r}/sys/devices/platform/vgem" "${r}/sys/devices/platform/vgem/drm/renderD128/device"
+    ln -sfn "${r}/sys/devices/platform/vgem/drm/renderD128" "${r}/sys/class/drm/renderD128"
+    for d in "$@"; do mkdir -p "${r}/usr/lib/wsl/drivers/${d}"; done
+}
+
+r=$(newroot wsl-intel)
+wsl "${r}" iigd_dch.inf_amd64_8a3b1c6f2e0d4a17
+expect "WSL2 with the Intel graphics driver is wsl, not intel" "${r}" "wsl gpu.intel.com/dxg"
+
+r=$(newroot wsl-arc)
+wsl "${r}" iigd_dch_d.inf_amd64_0f1e2d3c4b5a6978
+expect "WSL2 with the Intel Arc driver package is wsl" "${r}" "wsl gpu.intel.com/dxg"
+
+r=$(newroot wsl-nvidia)
+wsl "${r}" nv_dispi.inf_amd64_5b9f0c6c1a7e2d34
+touch "${r}/usr/lib/wsl/lib/nvidia-smi"
+expect "WSL2 with only the NVIDIA driver is nvidia, not wsl" "${r}" "nvidia nvidia.com/gpu"
+
+r=$(newroot wsl-both)
+wsl "${r}" iigd_dch.inf_amd64_8a3b1c6f2e0d4a17 nv_dispi.inf_amd64_5b9f0c6c1a7e2d34
+touch "${r}/usr/lib/wsl/lib/nvidia-smi"
+expect "WSL2 laptop with Intel iGPU and NVIDIA dGPU is both" "${r}" \
+"nvidia nvidia.com/gpu
+wsl gpu.intel.com/dxg"
+
+r=$(newroot wsl-no-dxg)
+wsl "${r}" iigd_dch.inf_amd64_8a3b1c6f2e0d4a17
+rm "${r}/dev/dxg"
+expect "WSL2 without /dev/dxg (GPU-PV off) is not wsl" "${r}" ""
+
+r=$(newroot dxg-not-wsl)
+wsl "${r}" iigd_dch.inf_amd64_8a3b1c6f2e0d4a17
+echo "Linux version 6.18.1-arch1-1 (linux@archlinux) (gcc (GCC) 15.2.1)" > "${r}/proc/version"
+expect "/dev/dxg on a kernel that is not WSL is not wsl" "${r}" ""
+
+r=$(newroot wsl-mixed-case)
+wsl "${r}" iigd_dch.inf_amd64_8a3b1c6f2e0d4a17
+echo "Linux version 5.15.167.4-Microsoft-standard-WSL2 (root@1a2b3c) (gcc (GCC) 11.2.0)" > "${r}/proc/version"
+expect "WSL kernel string is matched case-insensitively" "${r}" "wsl gpu.intel.com/dxg"
+
+r=$(newroot wsl-forced)
+expect "forced wsl is accepted" "${r}" "wsl gpu.intel.com/dxg" K3D_GPU_VENDORS=wsl
+
+r=$(newroot wsl-doc)
+kernel "${r}" 6.6.87.2-microsoft-standard-WSL2
+wsl "${r}" iigd_dch.inf_amd64_8a3b1c6f2e0d4a17
+doctor_says "doctor reports /dev/dxg on WSL2" "${r}" 'ok: WSL2 .*/dev/dxg'
+doctor_says "doctor names the Intel driver store package" "${r}" 'ok: .*iigd_dch\.inf_amd64_8a3b1c6f2e0d4a17'
+doctor_says "doctor does not ask for xe.force_probe on WSL2" "${r}" 'force_probe' negate
+rm "${r}/usr/lib/wsl/lib/libdxcore.so"
+doctor_says "doctor warns when libdxcore.so is missing" "${r}" 'warn.*libdxcore'
+
+r=$(newroot wsl-doc-nointel)
+kernel "${r}" 6.6.87.2-microsoft-standard-WSL2
+wsl "${r}" nv_dispi.inf_amd64_5b9f0c6c1a7e2d34
+doctor_says "forced wsl without an Intel driver store warns about the Windows driver" "${r}" \
+    'warn.*Intel graphics driver' "" K3D_GPU_VENDORS=wsl
+
+r=$(newroot wsl-doc-native)
+kernel "${r}" 6.18.1
+doctor_says "forced wsl on a native Linux host fails doctor" "${r}" 'fail.*WSL2' "" K3D_GPU_VENDORS=wsl
+
+r=$(newroot wsl-doc-nvidia)
+kernel "${r}" 6.6.87.2-microsoft-standard-WSL2
+wsl "${r}" nv_dispi.inf_amd64_5b9f0c6c1a7e2d34
+touch "${r}/usr/lib/wsl/lib/nvidia-smi"
+doctor_says "NVIDIA on WSL2 is ok without /dev/nvidia*" "${r}" 'ok: WSL2: NVIDIA .*/dev/dxg'
+doctor_says "NVIDIA on WSL2 does not fail on missing /dev/nvidia*" "${r}" 'no /dev/nvidia\* devices' negate
+
+r=$(newroot wsl-test)
+wsl "${r}" iigd_dch.inf_amd64_8a3b1c6f2e0d4a17
+test_says "wsl test lists /dev/dxg in a pod holding gpu.intel.com/dxg" "${r}" 0 'crw-rw-rw-.*/dev/dxg' \
+    STUB_POD_PHASE=Succeeded STUB_POD_LOGS="crw-rw-rw-    1 root     root       10, 125 Oct 16 09:00 /dev/dxg"
+
+# `up` on WSL2: the node gets the Windows driver store and the plugin's gate label.
+# k3d records its arguments; kubectl reports STUB_ALLOC (default one
+# gpu.intel.com/dxg) as allocatable so verify passes.
+USTUB="${WORK}/ubin"
+mkdir -p "${USTUB}"
+cp "${STUB_BIN}/docker" "${USTUB}/docker"
+cat > "${USTUB}/k3d" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$@" > "${STUB_K3D_ARGS}"
+EOF
+cat > "${USTUB}/kubectl" <<'EOF'
+#!/bin/sh
+case "$*" in *allocatable*) echo "${STUB_ALLOC:-gpu.intel.com/dxg 1}" ;; esac
+exit 0
+EOF
+chmod +x "${USTUB}"/*
+
+# up_args <name> <root> <ERE> [negate] [env...]: `up` must succeed and its k3d
+# arguments must match <ERE> (or must not with a 4th argument).
+up_args() {
+    local name=$1 root=$2 re=$3 negate=${4:-} out rc hit=0 args="${WORK}/k3d-args"
+    shift 4 2>/dev/null || shift $#
+    rm -f "${args}"
+    out=$(env K3D_GPU_SYSROOT="${root}" STUB_K3D_ARGS="${args}" PATH="${USTUB}:${PATH}" "$@" bash "${K3D_GPU}" up 2>&1)
+    rc=$?
+    grep -E -- "${re}" "${args}" >/dev/null 2>&1 && hit=1
+    if [ "${rc}" -eq 0 ] && { { [ -z "${negate}" ] && [ "${hit}" -eq 1 ]; } || { [ -n "${negate}" ] && [ "${hit}" -eq 0 ]; }; }; then
+        PASS=$((PASS + 1)); echo "ok   ${name}"
+    else
+        FAILS=$((FAILS + 1))
+        echo "FAIL ${name} (rc=${rc}, ${negate:+not }matching /${re}/)"
+        sed 's/^/  | /' <<< "${out}"
+        [ -f "${args}" ] && sed 's/^/  k3d> /' "${args}"
+    fi
+}
+
+r=$(newroot wsl-up)
+wsl "${r}" iigd_dch.inf_amd64_8a3b1c6f2e0d4a17
+up_args "up on WSL2 mounts the Windows driver store into the node read-only" "${r}" \
+    '^--volume=/usr/lib/wsl:/usr/lib/wsl:ro@server:\*;agent:\*$'
+up_args "up on WSL2 labels the node for the WSL Intel GPU plugin" "${r}" \
+    '^--k3s-node-label=k3d-gpu\.io/wsl-gpu=true@server:\*;agent:\*$'
+up_args "up on WSL2 without NVIDIA does not pass --gpus" "${r}" '^--gpus' negate
+r=$(newroot native-up)
+pci "${r}" 0000:03:00.0 0x8086 0xe20b xe; render "${r}" 0000:03:00.0 128
+up_args "up on native Linux does not mount /usr/lib/wsl" "${r}" 'usr/lib/wsl' negate STUB_ALLOC="gpu.intel.com/xe 1"
+
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]
