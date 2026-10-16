@@ -1,0 +1,416 @@
+#!/usr/bin/env python3
+"""k3d-gpu-witness: kernel-accounted execution-path witness for a pod.
+
+Runs as a sidecar in a pod with shareProcessNamespace: true. Every period it
+records raw counter text:
+  - DRM fdinfo of every open DRM client (/proc/<pid>/fdinfo/<fd>): i915
+    drm-engine-<class> ns, xe drm-cycles-<class> / drm-total-cycles-<class>
+  - /proc/<pid>/stat CPU time of every process in the pod
+  - optionally nvidia-smi pmon per-process SM% rows (host PIDs; needs a pid map)
+The bundle carries the raw text, the rule and the rule's sha256. `verify`
+recomputes the verdict from the raw text alone.
+
+Spec for the fdinfo keys: docs.kernel.org/gpu/drm-usage-stats.html and
+docs.kernel.org/gpu/xe/xe-drm-usage-stats.html.
+
+Usage:
+  k3d-gpu-witness rule-hash RULE.json
+  k3d-gpu-witness sample --rule RULE.json --claim DEVICE --out BUNDLE.json
+                         [--expect-rule-sha256 H] [--proc /proc] [--duration-s N]
+                         [--nvidia-pmon] [--pidmap FILE]
+  k3d-gpu-witness verify BUNDLE.json [--expect-rule-sha256 H]
+
+DEVICE is a DRM PCI address (0000:00:02.0) or nvidia:<index>.
+Exit codes: 0 PASS, 1 FAIL, 2 INCONCLUSIVE, 3 bundle rejected (tampered/mismatch), 64 usage.
+"""
+import hashlib
+import json
+import os
+import re
+import signal
+import subprocess
+import sys
+import threading
+import time
+
+SCHEMA = 1
+CLK_TCK = os.sysconf("SC_CLK_TCK") if hasattr(os, "sysconf") else 100
+
+# Engine classes that do inference work, per driver. Copy/video engines are ignored.
+DEFAULT_CLASSES = {"i915": ["render", "compute"], "xe": ["rcs", "ccs"], "nvidia": ["sm"]}
+
+
+# ---------------------------------------------------------------- hashing --
+
+def canonical(obj):
+    return json.dumps(obj, sort_keys=True, separators=(",", ":")).encode()
+
+
+def rule_sha256(rule):
+    return hashlib.sha256(canonical(rule)).hexdigest()
+
+
+# ---------------------------------------------------------------- parsers --
+
+_UNIT = re.compile(r"^(\d+)\s*(ns)?$")
+
+
+def parse_fdinfo(text):
+    """Parse one fdinfo file. Returns None if it is not a DRM client with an id."""
+    kv = {}
+    for line in text.splitlines():
+        if ":" not in line:
+            continue
+        k, v = line.split(":", 1)
+        kv[k.strip()] = v.strip()
+    if "drm-driver" not in kv or "drm-client-id" not in kv:
+        return None
+    eng = {}
+    for k, v in kv.items():
+        m = _UNIT.match(v)
+        if not m:
+            continue
+        n = int(m.group(1))
+        if k.startswith("drm-engine-capacity-"):
+            eng.setdefault(k[len("drm-engine-capacity-"):], {})["cap"] = n
+        elif k.startswith("drm-engine-"):
+            eng.setdefault(k[len("drm-engine-"):], {})["ns"] = n
+        elif k.startswith("drm-total-cycles-"):
+            eng.setdefault(k[len("drm-total-cycles-"):], {})["total"] = n
+        elif k.startswith("drm-cycles-"):
+            eng.setdefault(k[len("drm-cycles-"):], {})["cycles"] = n
+    return {
+        "driver": kv["drm-driver"],
+        "pdev": kv.get("drm-pdev", ""),
+        "client": int(kv["drm-client-id"]),
+        "engines": eng,
+    }
+
+
+def parse_stat(text):
+    """CPU ticks (utime+stime, all threads) from a /proc/<pid>/stat line."""
+    rest = text[text.rindex(")") + 2:].split()
+    # rest[0] is field 3 (state); utime/stime are fields 14/15.
+    return int(rest[11]) + int(rest[12])
+
+
+def parse_pmon(text):
+    """nvidia-smi pmon -s u rows -> {(gpu_idx, host_pid): sm_percent or None}."""
+    out = {}
+    for line in text.splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        f = line.split()
+        if len(f) < 4 or not f[0].isdigit() or not f[1].isdigit():
+            continue
+        sm = None if f[3] == "-" else int(f[3])
+        out[(int(f[0]), int(f[1]))] = sm
+    return out
+
+
+# ---------------------------------------------------------------- collect --
+
+def collect(proc="/proc", pmon_text=None):
+    """One raw snapshot of every DRM client, NVIDIA fd holder and process CPU."""
+    snap = {"t_ns": time.monotonic_ns(), "fdinfo": {}, "stat": {}, "nvfd": {}, "pmon": pmon_text}
+    for pid in os.listdir(proc):
+        if not pid.isdigit():
+            continue
+        base = os.path.join(proc, pid)
+        try:
+            with open(os.path.join(base, "stat")) as f:
+                snap["stat"][pid] = f.read()
+        except OSError:
+            continue
+        try:
+            fds = os.listdir(os.path.join(base, "fd"))
+        except OSError:
+            continue
+        for fd in fds:
+            try:
+                target = os.readlink(os.path.join(base, "fd", fd))
+            except OSError:
+                continue
+            m = re.match(r"^/dev/nvidia(\d+)$", target)
+            if m:
+                snap["nvfd"].setdefault(pid, []).append(int(m.group(1)))
+            if not target.startswith("/dev/dri/"):
+                continue
+            try:
+                with open(os.path.join(base, "fdinfo", fd)) as f:
+                    snap["fdinfo"][pid + "/" + fd] = f.read()
+            except OSError:
+                pass
+    return snap
+
+
+class PmonStream:
+    """Background `nvidia-smi pmon -s u -d 1`; keeps the latest row per (gpu, pid)."""
+
+    def __init__(self):
+        self.rows = {}
+        self.lock = threading.Lock()
+        self.p = subprocess.Popen(["nvidia-smi", "pmon", "-s", "u", "-d", "1"],
+                                  stdout=subprocess.PIPE, text=True)
+        threading.Thread(target=self._read, daemon=True).start()
+
+    def _read(self):
+        for line in self.p.stdout:
+            f = line.split()
+            if len(f) >= 4 and f[0].isdigit() and f[1].isdigit():
+                with self.lock:
+                    self.rows[(f[0], f[1])] = line.rstrip("\n")
+
+    def text(self):
+        with self.lock:
+            return "\n".join(self.rows.values())
+
+    def stop(self):
+        self.p.terminate()
+
+
+# ---------------------------------------------------------------- reduce --
+
+def _client_busy(e, prev, dt_ns):
+    """Busy seconds of one engine class between two readings of one client."""
+    if "ns" in e:
+        # Spec: a value lower than the previous one keeps the previous one.
+        return max(0, e["ns"] - prev.get("ns", 0)) / 1e9
+    if "cycles" in e and "total" in e:
+        dtot = e["total"] - prev.get("total", e["total"])
+        if dtot <= 0:
+            return 0.0
+        frac = max(0, e["cycles"] - prev.get("cycles", 0)) / dtot
+        return min(1.0, frac) * dt_ns / 1e9
+    return 0.0
+
+
+def intervals(snaps, claim, rule, pidmap=None):
+    """Reduce raw snapshots to per-interval (dt, busy_claimed, busy_other, cpu_engine, cpu_pod)."""
+    classes = rule.get("classes", DEFAULT_CLASSES)
+    nv = claim.startswith("nvidia:")
+    nv_idx = int(claim.split(":", 1)[1]) if nv else None
+    pidmap = {int(k): str(v) for k, v in (pidmap or {}).items()}
+
+    engine_pids = set()
+    for s in snaps:
+        for key, text in s["fdinfo"].items():
+            c = parse_fdinfo(text)
+            if c and c["pdev"] == claim:
+                engine_pids.add(key.split("/")[0])
+        if nv:
+            engine_pids |= {p for p, idx in s["nvfd"].items() if nv_idx in idx}
+
+    out = []
+    last = {}       # (pdev, client) -> {class: reading}, monotonic-held
+    last_cpu = {}   # pid -> ticks
+    for i, s in enumerate(snaps):
+        clients = {}
+        for key, text in s["fdinfo"].items():
+            c = parse_fdinfo(text)
+            if not c:
+                continue
+            ident = (c["pdev"], c["client"])  # spec de-dup: dup'd fds share the id
+            if ident in clients:
+                continue
+            clients[ident] = c
+        cpu = {pid: parse_stat(t) for pid, t in s["stat"].items()}
+        if i == 0:
+            for ident, c in clients.items():
+                last[ident] = {k: dict(v) for k, v in c["engines"].items()}
+            last_cpu = cpu
+            t_prev = s["t_ns"]
+            continue
+        dt_ns = s["t_ns"] - t_prev
+        t_prev = s["t_ns"]
+        if dt_ns <= 0:
+            continue
+        busy = {}
+        for ident, c in clients.items():
+            prev = last.get(ident, {})
+            cls = classes.get(c["driver"], [])
+            b = sum(_client_busy(e, prev.get(name, {}), dt_ns)
+                    for name, e in c["engines"].items() if name in cls)
+            busy[ident[0]] = busy.get(ident[0], 0.0) + b
+            held = last.setdefault(ident, {})
+            for name, e in c["engines"].items():
+                h = held.setdefault(name, {})
+                for k, v in e.items():
+                    h[k] = max(h.get(k, 0), v) if k in ("ns", "cycles") else v
+        if s.get("pmon"):
+            for (gpu, hpid), sm in parse_pmon(s["pmon"]).items():
+                if sm is None:
+                    continue
+                if pidmap and hpid not in pidmap:
+                    continue
+                busy["nvidia:%d" % gpu] = busy.get("nvidia:%d" % gpu, 0.0) + sm / 100.0 * dt_ns / 1e9
+        dsec = dt_ns / 1e9
+        ce = cp = 0.0
+        for pid, ticks in cpu.items():
+            d = max(0, ticks - last_cpu.get(pid, 0)) / CLK_TCK
+            cp += d
+            if pid in engine_pids:
+                ce += d
+        last_cpu = cpu
+        claimed = min(busy.get(claim, 0.0), dsec)
+        other = sum(v for k, v in busy.items() if k != claim)
+        out.append({"dt": dsec, "busy": claimed, "other": other,
+                    "cpu_engine": ce / dsec, "cpu_pod": cp / dsec})
+    return out, sorted(engine_pids)
+
+
+# ---------------------------------------------------------------- rules --
+
+def evaluate(snaps, claim, rule, pidmap=None, reduced=None):
+    """Apply a rule to raw snapshots. Returns {verdict, reasons, stats}.
+
+    reduced: a precomputed intervals() result, to apply several rules to one run."""
+    kind = rule.get("kind", "witness")
+    nv = claim.startswith("nvidia:")
+    if nv and not any(s.get("pmon") for s in snaps):
+        return {"verdict": "INCONCLUSIVE", "reasons": ["nvidia claim but no pmon samples"], "stats": {}}
+    if nv and not pidmap:
+        return {"verdict": "INCONCLUSIVE",
+                "reasons": ["nvidia pmon reports host PIDs; a host-to-pod pid map is required"],
+                "stats": {}}
+    iv, engine_pids = reduced or intervals(snaps, claim, rule, pidmap)
+    wall = sum(x["dt"] for x in iv)
+    busy = sum(x["busy"] for x in iv)
+    other = sum(x["other"] for x in iv)
+    stats = {"wall_s": round(wall, 4), "busy_s": round(busy, 4), "other_busy_s": round(other, 4),
+             "engine_pids": engine_pids, "intervals": len(iv)}
+    reasons = []
+    if not iv:
+        return {"verdict": "INCONCLUSIVE", "reasons": ["fewer than two snapshots"], "stats": stats}
+
+    if kind == "any_busy":          # baseline B1
+        if busy <= 0:
+            reasons.append("no engine time on %s" % claim)
+    elif kind == "fixed_ratio":     # baseline B2
+        cores = sum(x["cpu_pod"] * x["dt"] for x in iv) / wall
+        stats["busy_over_wall"] = round(busy / wall, 4)
+        stats["pod_cores"] = round(cores, 3)
+        if busy < rule["min_busy_over_wall"] * wall:
+            reasons.append("busy/wall %.2f < %.2f" % (busy / wall, rule["min_busy_over_wall"]))
+        if cores >= rule["max_cpu_cores"]:
+            reasons.append("pod CPU %.2f cores >= %.2f" % (cores, rule["max_cpu_cores"]))
+    else:                           # witness
+        if not engine_pids:
+            reasons.append("no process holds a client on %s" % claim)
+        cpu_key = "cpu_pod" if rule.get("cpu_scope") == "pod" else "cpu_engine"
+        c0 = rule["c0_cores"]
+        if rule.get("interval_resolved", True):
+            excess = sum(max(0.0, x[cpu_key] - c0) * x["dt"] for x in iv)
+            active = sum(x["dt"] for x in iv if x["busy"] > 0.02 * x["dt"] or x[cpu_key] > c0)
+        else:
+            cpu = sum(x[cpu_key] * x["dt"] for x in iv)
+            excess = max(0.0, cpu - c0 * wall)
+            active = wall
+        share = excess / (excess + busy) if excess + busy > 0 else 0.0
+        stats["cpu_excess_core_s"] = round(excess, 4)
+        stats["cpu_share"] = round(share, 4)
+        stats["gpu_share_active"] = round(busy / active, 4) if active > 0 else 0.0
+        if other > busy and other > 0:
+            reasons.append("engine time on another device (%.3fs) exceeds %s (%.3fs)" % (other, claim, busy))
+        if active > 0 and busy / active < rule["min_gpu_share"]:
+            reasons.append("engine busy %.1f%% of active time on %s < %.0f%%"
+                           % (100 * busy / active, claim, 100 * rule["min_gpu_share"]))
+        if share > rule["s_max"]:
+            reasons.append("CPU compute share %.1f%% > %.0f%% (%.2f core-s above %.2f cores)"
+                           % (100 * share, 100 * rule["s_max"], excess, c0))
+    return {"verdict": "FAIL" if reasons else "PASS", "reasons": reasons, "stats": stats}
+
+
+# ---------------------------------------------------------------- bundle --
+
+def make_bundle(rule, claim, snaps, pidmap=None):
+    b = {"schema": SCHEMA, "claim": claim, "rule": rule, "rule_sha256": rule_sha256(rule),
+         "pidmap": pidmap, "snapshots": snaps}
+    b["verdict"] = evaluate(snaps, claim, rule, pidmap)
+    return b
+
+
+def verify(bundle, expect_sha=None):
+    """Recompute from raw. Returns (exit_code, report)."""
+    problems = []
+    if bundle.get("schema") != SCHEMA:
+        problems.append("unknown schema %r" % bundle.get("schema"))
+    got = rule_sha256(bundle["rule"])
+    if got != bundle.get("rule_sha256"):
+        problems.append("rule edited: sha256 %s != recorded %s" % (got, bundle.get("rule_sha256")))
+    if expect_sha and got != expect_sha:
+        problems.append("rule sha256 %s != pre-registered %s" % (got, expect_sha))
+    re_v = evaluate(bundle["snapshots"], bundle["claim"], bundle["rule"], bundle.get("pidmap"))
+    rec = bundle.get("verdict", {})
+    if rec.get("verdict") != re_v["verdict"] or rec.get("reasons") != re_v["reasons"]:
+        problems.append("recorded verdict %s does not match recomputed %s"
+                        % (rec.get("verdict"), re_v["verdict"]))
+    if problems:
+        return 3, {"verdict": "FAIL", "reasons": problems, "recomputed": re_v}
+    code = {"PASS": 0, "FAIL": 1}.get(re_v["verdict"], 2)
+    return code, re_v
+
+
+# ---------------------------------------------------------------- cli --
+
+def _load(path):
+    with open(path) as f:
+        return json.load(f)
+
+
+def _arg(argv, name, default=None):
+    if name in argv:
+        i = argv.index(name)
+        if i + 1 >= len(argv):
+            sys.exit("missing value for " + name)
+        return argv[i + 1]
+    return default
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help"):
+        print(__doc__)
+        return 0 if argv else 64
+    cmd = argv[0]
+    if cmd == "rule-hash" and len(argv) == 2:
+        print(rule_sha256(_load(argv[1])))
+        return 0
+    if cmd == "verify" and len(argv) >= 2:
+        code, rep = verify(_load(argv[1]), _arg(argv, "--expect-rule-sha256"))
+        print(json.dumps(rep, indent=2))
+        return code
+    if cmd == "sample":
+        rule = _load(_arg(argv, "--rule") or sys.exit("--rule required"))
+        claim = _arg(argv, "--claim") or sys.exit("--claim required")
+        out = _arg(argv, "--out") or sys.exit("--out required")
+        expect = _arg(argv, "--expect-rule-sha256")
+        if expect and rule_sha256(rule) != expect:
+            sys.exit("rule sha256 %s != pre-registered %s" % (rule_sha256(rule), expect))
+        proc = _arg(argv, "--proc", "/proc")
+        duration = float(_arg(argv, "--duration-s", "0"))
+        pidmap = _load(_arg(argv, "--pidmap")) if _arg(argv, "--pidmap") else None
+        pmon = PmonStream() if "--nvidia-pmon" in argv else None
+        period = rule["period_ms"] / 1000.0
+        stop = threading.Event()
+        signal.signal(signal.SIGTERM, lambda *_: stop.set())
+        signal.signal(signal.SIGINT, lambda *_: stop.set())
+        snaps, t0 = [], time.monotonic()
+        while not stop.is_set():
+            snaps.append(collect(proc, pmon.text() if pmon else None))
+            if duration and time.monotonic() - t0 >= duration:
+                break
+            stop.wait(period)
+        snaps.append(collect(proc, pmon.text() if pmon else None))
+        if pmon:
+            pmon.stop()
+        b = make_bundle(rule, claim, snaps, pidmap)
+        with open(out, "w") as f:
+            json.dump(b, f)
+        print(json.dumps(b["verdict"], indent=2))
+        return {"PASS": 0, "FAIL": 1}.get(b["verdict"]["verdict"], 2)
+    print(__doc__, file=sys.stderr)
+    return 64
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

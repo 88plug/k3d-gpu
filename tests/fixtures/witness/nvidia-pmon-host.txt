@@ -1,0 +1,5 @@
+# gpu         pid   type     sm    mem    enc    dec    jpg    ofa    command 
+# Idx           #    C/G      %      %      %      %      %      %    name 
+    0       2465     G      -      -      -      -      -      -    gnome-shell    
+    0    3812011     C      -      -      -      -      -      -    llama-server   
+    1       2465     G      -      -      -      -      -      -    gnome-shell    

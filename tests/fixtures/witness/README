@@ -1,0 +1,10 @@
+Raw counter fixtures for tests/witness_test.py.
+
+i915-host-*.txt            /proc/<pid>/fdinfo/<fd> captured on the dev host (i9-13900T,
+                           UHD 770, kernel 6.6.128, i915). fd42 and fd44 are dup'd fds
+                           of client 28; client53 is an idle client.
+nvidia-pmon-host.txt       `nvidia-smi pmon -s u -c 1`, driver 590.48.01, same host.
+proc-stat-host.txt         one /proc/<pid>/stat line from the same host.
+xe-kernel-doc-example.txt  the fdinfo example from
+                           docs.kernel.org/gpu/xe/xe-drm-usage-stats.html, with some
+                           memory keys left out (the host has no xe device).

@@ -1,0 +1,10 @@
+{
+  "kind": "witness",
+  "period_ms": 100,
+  "c0_cores": 1.25,
+  "s_max": 0.10,
+  "min_gpu_share": 0.05,
+  "interval_resolved": true,
+  "cpu_scope": "engine",
+  "classes": {"i915": ["render", "compute"], "xe": ["rcs", "ccs"], "nvidia": ["sm"]}
+}
