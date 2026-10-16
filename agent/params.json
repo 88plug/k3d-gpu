@@ -1,0 +1,64 @@
+{
+  "_doc": "Reference priors for agent/sim.py. Every service-time field is UNMEASURED: a derivation from public specs, to be replaced by H2/H3 measurements on this host. Fields marked VERIFIED were read from the host or from Intel ARK. compute = engine-seconds per unit at full frequency (phi=1); on P/E pools that is core-seconds; bytes = DRAM bytes moved per unit (GB).",
+
+  "package": {
+    "pl1_w": 117.0,
+    "_pl1_w": "VERIFIED host: /sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw = 117000000 (constraint_0_max_power_uw = 35000000; ARK: Processor Base Power 35 W, Maximum Turbo Power 106 W)",
+    "base_w": 10.0,
+    "_base_w": "UNMEASURED prior: uncore + idle cores + ring. Probe: RAPL package power at idle.",
+    "dvfs_exponent": 3.0,
+    "_dvfs_exponent": "prior: dynamic power ~ f * V^2 with V roughly linear in f over the turbo range",
+    "phi_min": 0.25,
+    "dram_gbps": 55.0,
+    "_dram_gbps": "UNMEASURED prior: ARK max 89.6 GB/s (2ch DDR5-5600); host has 128 GB (likely 2 DIMMs/channel, lower MT/s) and DIMM speed is root-only (dmidecode). Probe: STREAM triad."
+  },
+
+  "engines": {
+    "P":    {"capacity": 8,  "dvfs": true,  "watts_per_unit": 11.0, "_": "VERIFIED 8 P-cores (cpu_core/cpus 0-15 incl. SMT); watts UNMEASURED"},
+    "E":    {"capacity": 16, "dvfs": true,  "watts_per_unit": 3.0,  "_": "VERIFIED 16 E-cores (cpu_atom/cpus 16-31); watts UNMEASURED"},
+    "igpu": {"capacity": 1,  "dvfs": true,  "watts_per_unit": 12.0, "_": "VERIFIED UHD 770, 32 EU, rcs0 present; watts UNMEASURED"},
+    "vcs":  {"capacity": 2,  "dvfs": false, "watts_per_unit": 1.5,  "_": "VERIFIED vcs0+vcs1 under /sys/class/drm/card0/engine; ARK: 2 multi-format codec engines"},
+    "npu":  {"capacity": 0,  "dvfs": false, "watts_per_unit": 3.0,  "_": "VERIFIED absent on Raptor Lake (no /sys/class/accel)"}
+  },
+
+  "e_core_perf": 0.55,
+  "_e_core_perf": "UNMEASURED prior: E-core throughput per core relative to a P-core (Gracemont vs Golden Cove IPC x 3.9/5.1 GHz max turbo, ARK)",
+  "spin_penalty": 0.5,
+  "_spin_penalty": "UNMEASURED prior: a thread group oversubscribed to share s<1 of its threads' cores runs at s^(1+spin_penalty) (spin-waiting barrier threads burn their share)",
+
+  "workload": {
+    "rerank_docs": 20,
+    "ingest_chunks": 4,
+    "prefill_tokens": 800,
+    "decode_tokens": 120,
+    "media_probability": 0.3,
+    "lognormal_sigma": 0.35,
+    "_": "prefill_tokens = new tokens per turn with prefix caching (retrieved docs + last tool output); decode ends in one tool call"
+  },
+
+  "stages": {
+    "gateway":      {"units": 1, "bytes": 0.001, "par": 1,
+                     "compute": {"P": 0.005}},
+    "embed_query":  {"units": 1, "bytes": 0.22, "par": 4,
+                     "compute": {"P": 0.03, "igpu": 0.012, "npu": 0.015},
+                     "_": "bge-base-class 110M int8, 30-token query"},
+    "vdb_search":   {"units": 1, "bytes": 0.05, "par": 1,
+                     "compute": {"P": 0.03}},
+    "rerank":       {"units": "rerank_docs", "bytes": 0.28, "par": 8,
+                     "compute": {"P": 0.7, "igpu": 0.24, "npu": 0.2},
+                     "_": "278M cross-encoder x 300 tokens = 167 GFLOP/doc; P ~230 GOP/s/core effective, iGPU ~0.7 TOP/s effective (40% of 32 EU x 1.65 GHz FP16/DP4A peak)"},
+    "llm_prefill":  {"units": "prefill_tokens", "bytes": 0.004, "par": "llm_threads",
+                     "compute": {"P": 0.06, "igpu": 0.01},
+                     "_": "3B Q4 (~1.9 GB): 6 GFLOP/token; weights re-read once per 512-token ubatch"},
+    "llm_decode":   {"units": "decode_tokens", "bytes": 0.15, "shared_bytes": 1.9, "par": "llm_threads",
+                     "compute": {"P": 0.2, "igpu": 0.02},
+                     "_": "bytes = KV cache per step at ~4k context; shared_bytes = weights, read once per batched step"},
+    "tool":         {"units": 1, "bytes": 0.5, "par": 2,
+                     "compute": {"P": 1.0}},
+    "media":        {"units": 1, "bytes": 0.4, "par": 4, "probability": "media_probability",
+                     "compute": {"P": 3.0, "vcs": 0.3},
+                     "_": "10 s 1080p clip: software decode on 4 cores vs fixed-function vcs"},
+    "embed_ingest": {"units": "ingest_chunks", "bytes": 0.22, "par": 4,
+                     "compute": {"P": 0.3, "igpu": 0.1, "npu": 0.08}}
+  }
+}
