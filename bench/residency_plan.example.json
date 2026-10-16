@@ -1,0 +1,4 @@
+{
+  "pools": {"rtx4000sff": "dgpu", "rtx2000e": "dgpu", "uhd770": "igpu"},
+  "pins": {"router-1.5b": ["rtx2000e", "uhd770"], "embed": ["rtx2000e"]}
+}
