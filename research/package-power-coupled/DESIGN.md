@@ -151,7 +151,7 @@ free watts for P-cores; AC3 fails; AC4 holds (irrelevant with a dGPU); AC5 trigg
 ## 6. Results (simulation only, written after the runs)
 
 Reproduce: `python3 ppcsim.py 300 <seed> <variant>` (stdlib, ~10 s each);
-`python3 -m unittest test_pcp` (29 tests, needs PyYAML). Raw output:
+`python3 -m unittest test_pcp` (31 tests, needs PyYAML). Raw output:
 `results-seed{11,12}-{variant}.json`.
 
 Process disclosure, in order:
@@ -198,8 +198,10 @@ bounds AC1 regardless of how well the controller fits:
 "Max drafter tok/s" is the per-draw best drafter rate over every plan and cap that
 keeps energy/turn at or below B0, ignoring turn rate and p95. Its median never reaches
 the +20 % AC1 needs, in any variant. **AC1 is unreachable on this plant, however
-good the controller is.** The oracle optimises turn rate, so a single FULL leg can
-beat it (io_tools p95, favourable p95).
+good the controller is.** The bound holds even though AC1 tests energy on the median
+rather than per draw: dropping the energy filter entirely, the median per-draw best
+drafter rate is still +12.8 % to +18.3 % across variants and seeds. The oracle
+optimises turn rate, so a single FULL leg can beat it (io_tools p95, favourable p95).
 
 D2 (dGPU present), every variant, both seeds: tuned B0 puts the drafter on the dGPU in
 100 % of draws; FULL/B0 turn rate 1.000, with or without the demotion loop. The

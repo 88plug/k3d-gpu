@@ -2,6 +2,7 @@ import copy
 import os
 import random
 import unittest
+from unittest import mock
 
 import yaml
 
@@ -89,6 +90,19 @@ class AdmissionTest(unittest.TestCase):
         ok, rs = admit(roles(), w, 48.0, False)  # no off-package target: refuse, stay
         self.assertFalse(ok)
         self.assertEqual({r.name: r.placed for r in rs}["drafter"], "igpu")
+
+    def test_over_margin_moves_lowest_weight_first(self):
+        # Two movable on-package roles; one move is enough. The lower weight goes.
+        rs = [Role("planner", 99, ["pcore"]),
+              Role("drafter", 3, ["igpu", "dgpu"]),
+              Role("embed", 1, ["ecore", "dgpu"])]
+
+        def w(rs):
+            return 50.0 if all(r.placed != "dgpu" for r in rs) else 30.0
+        ok, rs = admit(rs, w, 48.0, True)
+        self.assertTrue(ok)
+        self.assertEqual({r.name: r.placed for r in rs},
+                         {"planner": "pcore", "drafter": "igpu", "embed": "dgpu"})
 
     def test_bursty_roles_stay_on_package(self):
         _, rs = admit(roles(), lambda rs: 0, 50, True)
@@ -264,18 +278,40 @@ class SimPolicyTest(unittest.TestCase):
         self.assertEqual(len(out), 4)
         self.assertFalse(out[3])
 
-    def test_oracle_bounds_every_policy(self):
-        rng = random.Random(7)
-        for _ in range(10):
-            p = S.draw(rng)
-            jit = [(rng.random(), 1.0) for _ in range(200)]
-            b0_plan, b0 = S.tuned_default(p, False, jit)
-            _, b1 = S.tuned_static_cap(p, b0_plan, b0, jit)
-            _, _, o, max_rate = S.oracle(p, False, b0, jit)
-            self.assertGreaterEqual(o["turn_rate"], b1["turn_rate"] - 1e-12)
-            self.assertLessEqual(o["energy"], b0["energy"] + 1e-9)
-            self.assertGreaterEqual(max_rate, max(o["rate"], b0["rate"]) - 1e-12)
+    def test_run_records_admission_outcome(self):
+        for verdict in (True, False):
+            with mock.patch.object(S, "admit", lambda rs, *a, v=verdict, **k: (v, rs)):
+                rows = S.run(2, 3)
+            for scen in ("D0", "D2"):
+                self.assertEqual([r["f_admitted"] for r in rows[scen]], [verdict] * 2)
+            self.assertEqual(S.summarize(rows)["D0"]["full_admitted_frac"], float(verdict))
 
+    def test_oracle_bounds_every_policy(self):
+        # Base and favourable priors, with and without a dGPU: the favourable draws are
+        # where an E cap beats B0 and where the turn-best plan can cost more energy.
+        rng = random.Random(7)
+        for variant in ("base", "favourable"):
+            with mock.patch.dict(S.PRIORS, S.VARIANTS[variant]):
+                for _ in range(10):
+                    p = S.draw(rng)
+                    jit = [(rng.random(), 1.0) for _ in range(200)]
+                    for dg in (False, True):
+                        b0_plan, b0 = S.tuned_default(p, dg, jit)
+                        _, b1 = S.tuned_static_cap(p, b0_plan, b0, jit)
+                        _, _, o, max_rate = S.oracle(p, dg, b0, jit)
+                        _, _, f, _ = S.full(p, random.Random(1), dg, jit)
+                        self.assertGreaterEqual(o["turn_rate"], b1["turn_rate"] - 1e-12)
+                        if f["energy"] <= b0["energy"] + 1e-9:
+                            self.assertGreaterEqual(o["turn_rate"], f["turn_rate"] - 1e-12)
+                            self.assertGreaterEqual(max_rate, f["rate"] - 1e-12)
+                        self.assertLessEqual(o["energy"], b0["energy"] + 1e-9)
+                        self.assertGreaterEqual(max_rate, max(o["rate"], b0["rate"]) - 1e-12)
+                        # max_rate is the bound only over pairs within B0's energy
+                        feasible = [r["rate"] for pl in S.plans(dg)
+                                    for c in [S.FMAX_E] + S.CAP_GRID
+                                    for r in [S.evaluate(p, pl, c, jit)]
+                                    if r["energy"] <= b0["energy"] + 1e-9]
+                        self.assertAlmostEqual(max_rate, max(feasible), places=12)
 
 if __name__ == "__main__":
     unittest.main()
