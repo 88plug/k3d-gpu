@@ -42,6 +42,8 @@ yay -S k3d-gpu          # or build from packaging/aur/PKGBUILD
 k3d-gpu detect          # list accelerators on this host and their k8s resources
 k3d-gpu doctor          # preflight: accelerators, kernel/firmware, docker, runtimes, k3d, kubectl
 k3d-gpu host-setup      # check host drivers/userspace, print pinned install commands (--apply runs them)
+
+k3d-gpu doctor --perf   # read-only host tuning advisor for inference (add --model-gb N)
 k3d-gpu up              # create the cluster (device plugins auto-deploy), verify each accelerator > 0
 k3d-gpu test            # per accelerator: nvidia-smi pod / device-node listing pod
 k3d-gpu logs            # tail the k3s server container logs
@@ -109,6 +111,19 @@ without the habana container runtime; full Gaudi workloads may still expect it.
 Force or limit vendors with `K3D_GPU_VENDORS=nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid`.
 A loaded `nvidia` or `habanalabs` kernel module counts as present even before
 its device nodes appear; `doctor` then flags the missing nodes.
+
+### Host tuning advisor (`doctor --perf`)
+
+`k3d-gpu doctor --perf [--model-gb N]` reads sysfs/procfs (plus `docker info` and
+`nvidia-smi`) and reports what matters for inference serving: CPU governor and EPP
+per core type, turbo and frequency caps, `hwp_dynamic_boost`, idle-state exit
+latencies, RAPL PL1/PL2 against the thermal spec power, THP and hugetlb pages,
+swap in use and `vm.swappiness`, irqbalance, Intel GPU frequency (i915 RPS / GuC
+SLPC, xe `freq0`), NVIDIA persistence, the Docker storage driver, and whether a
+model of N GiB fits in `MemAvailable`. Each finding names the file it came from
+and cites its source; each suggestion prints a one-line apply command and the
+command that restores the value it found. It never writes to the host, and it
+exits 0 — the suggestions are advice, not failures.
 
 ### Xeon built-in accelerators
 
