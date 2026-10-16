@@ -218,6 +218,11 @@ run "${r}" "" STUB_VAINFO="vainfo: Driver version: Intel iHD driver - 26.2.4 ()"
 says "healthy host: libstdc++ ok" "libstdc++ provides GLIBCXX_3.4.35, enough for the installed Intel runtimes"
 says "healthy host: clinfo ok" "ok: clinfo: Intel(R) OpenCL Graphics"
 not_says "healthy host has no failures" "fail"
+not_says "healthy host gets no install plan" "Install plan"
+not_says "healthy host is not told to upgrade the system" "pacman -Syu"
+says "healthy host says there is nothing to install" "nothing to install"
+run "${r}" "" --plan STUB_VAINFO="vainfo: Driver version: Intel iHD driver - 26.2.4 ()" STUB_CLINFO="Platform #0: Intel(R) OpenCL Graphics"
+says "--plan prints the full plan even on a healthy host" "Install plan"
 
 r=$(manjaro ubuntu-libva 2000 3.4.35 3.4.35)
 osrel "${r}" ubuntu 24.04

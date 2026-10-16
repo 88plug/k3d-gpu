@@ -1025,7 +1025,7 @@ is_hs_target() {
 }
 
 hs_ok()   { echo "  ok: $*"; }
-hs_warn() { echo "  ${YLW}warn${RST}: $*"; }
+hs_warn() { echo "  ${YLW}warn${RST}: $*"; HS_MISSING=$((HS_MISSING + 1)); }
 hs_fail() { echo "  ${RED}fail${RST}: $*"; HS_BROKEN=$((HS_BROKEN + 1)); }
 
 # The one command that brings every package back in step on this distro.
@@ -1281,14 +1281,15 @@ hs_plan_nvidia_runtime() {
 }
 
 cmd_host_setup() {
-    local apply=0 cmd ans
+    local apply=0 plan=0 cmd ans
     HS_DISTRO=""
     while [ $# -gt 0 ]; do
         case "$1" in
             --apply) apply=1 ;;
+            --plan) plan=1 ;;
             --distro) [ $# -ge 2 ] || err "--distro needs a value"; HS_DISTRO=$2; shift ;;
             --distro=*) HS_DISTRO=${1#--distro=} ;;
-            *) err "unknown host-setup option '$1' (use --apply, --distro ubuntu-24.04|ubuntu-26.04|fedora|arch|manjaro)" ;;
+            *) err "unknown host-setup option '$1' (use --apply, --plan, --distro ubuntu-24.04|ubuntu-26.04|fedora|arch|manjaro)" ;;
         esac
         shift
     done
@@ -1304,8 +1305,16 @@ cmd_host_setup() {
         return 0
     fi
     info "Host setup for ${HS_DISTRO}: ${HS_TARGETS[*]}"
-    HS_BROKEN=0
+    HS_BROKEN=0 HS_MISSING=0
     hs_checks
+
+    # A host whose every check passed needs nothing; proposing a full system
+    # upgrade and a docker restart there would only risk a working setup.
+    if [ "${HS_BROKEN}" -eq 0 ] && [ "${HS_MISSING}" -eq 0 ] && [ "${plan}" -eq 0 ]; then
+        echo ""
+        info "Every check passed: nothing to install. ('k3d-gpu host-setup --plan' prints the full install plan anyway.)"
+        return 0
+    fi
 
     HS_PLAN=()
     case "${HS_DISTRO}" in
