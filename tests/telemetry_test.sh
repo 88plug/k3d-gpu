@@ -92,7 +92,8 @@ check "non-hybrid: no file" "<none>" "$(core_type flat - -)"
 # under errexit as makepkg does (outside an `if`, where errexit would be ignored).
 mkdir -p "${WORK}/src" "${WORK}/pkg"
 ln -s "${ROOT}" "${WORK}/src/k3d-gpu"
-(srcdir="${WORK}/src" pkgdir="${WORK}/pkg"; . "${ROOT}/packaging/aur/PKGBUILD"; set -e; package) >/dev/null 2>&1
+# shellcheck source=/dev/null
+(export srcdir="${WORK}/src" pkgdir="${WORK}/pkg"; . "${ROOT}/packaging/aur/PKGBUILD"; set -e; package) >/dev/null 2>&1
 pkg_rc=$?
 if [ "${pkg_rc}" -eq 0 ]; then
     missing=""
