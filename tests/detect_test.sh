@@ -1357,7 +1357,17 @@ dimm "${r}" 0 16384 34 13 5600 4800 64 64 1
 dimm "${r}" 1 16384 34 13 5600 4800 64 64 1
 perf_says "perf: configured below POR warns" "${r}" 'warn: configured 4800 MT/s is below the 5600 MT/s POR for 1DPC 1R \(modules rated 5600\)'
 perf_says "perf: below-POR apply names the POR speed" "${r}" 'apply:  BIOS: set the memory frequency to 5600 MT/s'
+perf_says "perf: below-POR says the POR is the top SKU's (note 17)" "${r}" 'why: .*POR is the top SKU.s speed \(743844 table 25 note 17\); a lower SKU can be specified lower: check ark\.intel\.com for 13th Gen Intel\(R\) Core\(TM\) i9-13980HX'
 perf_says "perf: non-ECC modules reported" "${r}" 'info: non-ECC modules'
+# Model 0xBF is the 8+8 (C0) and 6+0 (H0) die: 743844 table 25 note 16 puts it at
+# 12th Gen DDR5 speeds, so the 13th/14th Gen POR rows do not apply.
+r=$(newroot perf-rpl-bf)
+kernel "${r}" 6.6.0
+printf 'cpu family\t: 6\nmodel\t\t: 191\nmodel name\t: 13th Gen Intel(R) Core(TM) i5-13400\n' > "${r}/proc/cpuinfo"
+dimm "${r}" 0 16384 34 9 5600 4800 64 64 1
+dimm "${r}" 1 16384 34 9 5600 4800 64 64 1
+perf_says "perf: model 0xBF gets no 13th Gen POR warning (note 16)" "${r}" 'below the|POR for' negate
+perf_says "perf: model 0xBF falls back to the data-width peak" "${r}" 'info: peak DRAM bandwidth 76\.8 GB/s = 4800 MT/s x 16 B of data width'
 r=$(newroot perf-dmi-nospeed)
 kernel "${r}" 6.6.0
 printf 'cpu family\t: 6\nmodel\t\t: 183\nmodel name\t: 13th Gen Intel(R) Core(TM) i9-13900T\n' > "${r}/proc/cpuinfo"

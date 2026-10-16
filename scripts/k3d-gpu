@@ -1527,7 +1527,9 @@ dram_form() {
 }
 
 # client_line: "13S", "13HX", "13HPU", "14S" or "14HX" for 13th/14th Gen Core (Raptor
-# Lake family 6 models 0xB7, 0xBA, 0xBF) from the model number and brand string.
+# Lake family 6 models 0xB7, 0xBA) from the model number and brand string. Model
+# 0xBF (the 8+8 C0 and 6+0 H0 dies) runs 12th Gen DDR5 speeds (743844 table 25
+# note 16), so it gets no line.
 client_line() {
     local model name gen sfx
     [ "$(cpuinfo_field "cpu family")" = 6 ] || return 0
@@ -1535,7 +1537,7 @@ client_line() {
     [[ "${name}" =~ i[3579]-(1[34])[0-9]{3}([A-Z]*) ]] || return 0
     gen=${BASH_REMATCH[1]}; sfx=${BASH_REMATCH[2]}
     case "${model}" in
-        183|191) if [ "${sfx}" = HX ]; then echo "${gen}HX"; else echo "${gen}S"; fi ;;
+        183) if [ "${sfx}" = HX ]; then echo "${gen}HX"; else echo "${gen}S"; fi ;;
         186) if [ "${gen}" = 13 ]; then echo 13HPU; fi ;;
     esac
     return 0
@@ -1624,7 +1626,7 @@ perf_dram() {
             if lt "${cmin}" "${por}" && lt "${cmin}" "${rated}"; then
                 perf_flag warn "configured ${cmin} MT/s is below the ${por} MT/s POR for ${row} (modules rated ${rated})" \
                     "/sys/firmware/dmi/entries/17-*/raw (root)" \
-                    "peak DRAM bandwidth scales with the transfer rate; the platform supports ${por} MT/s for this population (743844 table 25)" \
+                    "peak DRAM bandwidth scales with the transfer rate; the platform supports ${por} MT/s for this population (743844 table 25). That POR is the top SKU's speed (743844 table 25 note 17); a lower SKU can be specified lower: check ark.intel.com for $(cpuinfo_field "model name") before raising it" \
                     "BIOS: set the memory frequency to $(( por < rated ? por : rated )) MT/s (or Auto/JEDEC), then reboot" \
                     "BIOS: set it back to ${cmin} MT/s"
             else
