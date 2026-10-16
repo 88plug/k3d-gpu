@@ -108,6 +108,10 @@ Include relevant details:
 - Update README.md for user-facing changes
 - Keep examples up to date
 - Include clear explanations for complex configurations
+- Back every performance claim in README.md or docs/ (tok/s, J/token, "Nx faster",
+  "%", "first", "only", "fastest") on the same line with `[ledger:Hn]` (a SUPPORTED
+  row of EXPERIMENTS.md) or `[provenance:Pn]` (a sourced row of docs/provenance.md).
+  CI runs `tests/claims_check.sh` to enforce it
 
 ### Workflow Changes
 
