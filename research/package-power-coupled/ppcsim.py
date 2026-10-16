@@ -220,7 +220,23 @@ def controller_view(p, fit, rng, cbound):
     return q
 
 
-def full(p, rng, have_dgpu, jitter, cbound=False, demote=True, use_cap=True, tp_only=False):
+def oracle(p, have_dgpu, base, jitter):
+    """Upper bound on the true plant, energy/turn not above B0: the turn-rate-best
+    (plan, E cap) and, separately, the highest drafter tok/s any such pair reaches."""
+    best, max_rate = None, 0.0
+    for pl in plans(have_dgpu):
+        for cap in [FMAX_E] + CAP_GRID:
+            r = evaluate(p, pl, cap, jitter)
+            if r["energy"] > base["energy"] + 1e-9:
+                continue
+            max_rate = max(max_rate, r["rate"])
+            if best is None or r["turn_rate"] > best[2]["turn_rate"]:
+                best = (pl, cap, r)
+    return best + (max_rate,)
+
+
+def full(p, rng, have_dgpu, jitter, cbound=False, demote=True, use_cap=True, tp_only=False,
+         literal_demote=False):
     fit = PowerModel(FMAX_P, FMAX_E, FMAX_G).fit(synth_traces(p, rng))
     q = controller_view(p, fit, rng, cbound)
     roles = [Role("planner", 99, ["pcore"]),
@@ -233,7 +249,7 @@ def full(p, rng, have_dgpu, jitter, cbound=False, demote=True, use_cap=True, tp_
         return evaluate(q, {"drafter": pl["drafter"], "embed": pl["embed"]},
                         FMAX_E, jitter[:200])["burst_pkg"]
 
-    admit(roles, pred_w, q["cap"], have_dgpu)
+    admitted, _ = admit(roles, pred_w, q["cap"], have_dgpu)
     plan = {"drafter": roles[1].placed, "embed": roles[3].placed}
     if tp_only:
         cap = BASE_E  # nri-plugins: lower classes' symbolic "turbo" -> base
@@ -248,14 +264,14 @@ def full(p, rng, have_dgpu, jitter, cbound=False, demote=True, use_cap=True, tp_
         cap = FMAX_E
     res = evaluate(p, plan, cap, jitter)
     if demote and res["burst_throttled"] and BURST_S > Demoter.hold_s:
-        d = Demoter()
+        d = Demoter(off_package_only=not literal_demote)
         for _ in range(BURST_S):
             name = d.tick(roles, res["burst_pkg"], p["cap"], True, have_dgpu)
             if name:
                 break
         plan = {"drafter": roles[1].placed, "embed": roles[3].placed}
         res = evaluate(p, plan, cap, jitter)
-    return plan, cap, res
+    return plan, cap, res, admitted
 
 
 # ---------------------------------------------------------------- experiment
@@ -277,13 +293,16 @@ def run(n, seed):
             b0_plan, b0 = tuned_default(p, dg, jitter)
             b1_cap, b1 = tuned_static_cap(p, b0_plan, b0, jitter)
             st = sub.getstate()
-            f_plan, f_cap, f = full(p, sub, dg, jitter)
+            _, _, o, o_max_rate = oracle(p, dg, b0, jitter)
+            f_plan, f_cap, f, f_ok = full(p, sub, dg, jitter)
             sub.setstate(st)
-            _, _, a_cb = full(p, sub, dg, jitter, cbound=True)
+            _, _, a_cb, _ = full(p, sub, dg, jitter, cbound=True)
             sub.setstate(st)
-            _, _, a_nd = full(p, sub, dg, jitter, demote=False)
+            _, _, a_nd, _ = full(p, sub, dg, jitter, demote=False)
             sub.setstate(st)
-            _, _, a_tp = full(p, sub, dg, jitter, tp_only=True)
+            _, _, a_tp, _ = full(p, sub, dg, jitter, tp_only=True)
+            sub.setstate(st)
+            _, _, a_lit, _ = full(p, sub, dg, jitter, literal_demote=True)
             row = dict(pi=p["pi"], rho=p["rho"], b0_drafter=b0_plan["drafter"],
                        f_drafter=f_plan["drafter"], f_cap=f_cap, b1_cap=b1_cap,
                        drafter_gain=f["rate"] / b0["rate"] - 1,
@@ -293,7 +312,14 @@ def run(n, seed):
                        turn_vs_b1=f["turn_rate"] / b1["turn_rate"],
                        turn_cbound_vs_b0=a_cb["turn_rate"] / b0["turn_rate"],
                        turn_nodemote_vs_b0=a_nd["turn_rate"] / b0["turn_rate"],
-                       turn_tponly_vs_b0=a_tp["turn_rate"] / b0["turn_rate"])
+                       turn_tponly_vs_b0=a_tp["turn_rate"] / b0["turn_rate"],
+                       turn_literal_demote_vs_b0=a_lit["turn_rate"] / b0["turn_rate"],
+                       f_admitted=f_ok,
+                       oracle_drafter_gain=o["rate"] / b0["rate"] - 1,
+                       oracle_max_drafter_gain=o_max_rate / b0["rate"] - 1,
+                       oracle_p95_cut=1 - o["p95"] / b0["p95"],
+                       oracle_energy_chg=o["energy"] / b0["energy"] - 1,
+                       oracle_turn_vs_b0=o["turn_rate"] / b0["turn_rate"])
             # channel decomposition on a fixed iGPU-drafter plan, at the best static
             # cap for that plan on the true plant (so the channel test does not depend
             # on whether FULL happened to pick a cap)
@@ -319,10 +345,14 @@ def summarize(rows):
             return round(median([r[k] for r in rs]), 4)
         s = {k: m(k) for k in ("drafter_gain", "p95_cut", "energy_chg", "turn_vs_b0",
                                "turn_vs_b1", "turn_cbound_vs_b0", "turn_nodemote_vs_b0",
-                               "turn_tponly_vs_b0", "ig_gain", "ig_power_only",
-                               "ig_dram_only", "ig_fg_rise")}
+                               "turn_tponly_vs_b0", "turn_literal_demote_vs_b0",
+                               "oracle_drafter_gain", "oracle_max_drafter_gain",
+                               "oracle_p95_cut",
+                               "oracle_energy_chg", "oracle_turn_vs_b0", "ig_gain",
+                               "ig_power_only", "ig_dram_only", "ig_fg_rise")}
         s["b0_drafter_dgpu_frac"] = round(sum(r["b0_drafter"] == "dgpu" for r in rs) / len(rs), 3)
         s["b0_drafter_igpu_frac"] = round(sum(r["b0_drafter"] == "igpu" for r in rs) / len(rs), 3)
+        s["full_admitted_frac"] = round(sum(r["f_admitted"] for r in rs) / len(rs), 3)
         s["full_capped_frac"] = round(sum(r["f_cap"] < FMAX_E for r in rs) / len(rs), 3)
         s["clock_up_tok_flat_frac"] = round(sum(
             r["ig_fg_rise"] >= 0.10 and r["ig_gain"] < 0.05 for r in rs) / len(rs), 3)

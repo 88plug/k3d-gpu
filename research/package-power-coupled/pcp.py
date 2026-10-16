@@ -105,7 +105,10 @@ def admit(roles, predict_w, cap_w, have_dgpu, margin=0.9):
     """Place roles. Returns (admitted, roles). predict_w(roles) -> steady package W.
 
     Sustained-heavy roles take the first off-package device in their chain when a
-    dGPU exists; everyone else takes the first device in their chain.
+    dGPU exists; everyone else takes the first device in their chain. While the
+    prediction is above `margin * cap_w`, the lowest-weight non-planner role moves to
+    its next off-package fallback. If none is left, the plan is refused (False) and
+    the placement is returned unchanged for the caller to decide.
     """
     for r in roles:
         r.placed = r.chain[0]
@@ -115,7 +118,18 @@ def admit(roles, predict_w, cap_w, have_dgpu, margin=0.9):
                 r.placed = off[0]
         if r.placed == "dgpu" and not have_dgpu:
             r.placed = next(d for d in r.chain if d != "dgpu")
-    return predict_w(roles) <= margin * cap_w, roles
+    while predict_w(roles) > margin * cap_w:
+        moved = False
+        for r in sorted(roles, key=lambda r: r.weight):
+            if r.planner or r.placed not in ON_PACKAGE:
+                continue
+            nxt = _next_fallback(r, have_dgpu, off_package_only=True)
+            if nxt is not None:
+                r.placed, moved = nxt, True
+                break
+        if not moved:
+            return False, roles
+    return True, roles
 
 
 # ---------------------------------------------------------------- policy render
@@ -230,9 +244,15 @@ def crd_spec_schema(docs):
 
 @dataclass
 class Demoter:
-    """Call tick() at 1 Hz. Demotes after `hold_s` consecutive seconds at cap."""
+    """Call tick() at 1 Hz. Demotes after `hold_s` consecutive seconds at cap.
+
+    Only to an off-package fallback: a move between two on-package devices adds load
+    to the package it is meant to relieve. `off_package_only=False` is the idea's
+    literal rule, kept for the ablation.
+    """
     hold_s: int = 5
     at_cap_frac: float = 0.97
+    off_package_only: bool = True
     streak: int = 0
     log: list = field(default_factory=list)
 
@@ -244,7 +264,7 @@ class Demoter:
         for r in sorted(roles, key=lambda r: r.weight):
             if r.planner or r.placed not in ON_PACKAGE:
                 continue
-            nxt = _next_fallback(r, have_dgpu)
+            nxt = _next_fallback(r, have_dgpu, self.off_package_only)
             if nxt is None:
                 continue
             self.log.append((r.name, r.placed, nxt))
@@ -254,10 +274,12 @@ class Demoter:
         return None
 
 
-def _next_fallback(role, have_dgpu):
+def _next_fallback(role, have_dgpu, off_package_only=False):
     i = role.chain.index(role.placed) if role.placed in role.chain else -1
     for d in role.chain[i + 1:]:
         if d == "dgpu" and not have_dgpu:
+            continue
+        if off_package_only and d in ON_PACKAGE:
             continue
         if d != role.placed:
             return d

@@ -80,6 +80,16 @@ class AdmissionTest(unittest.TestCase):
         self.assertEqual(placed["embed"], "ecore")
         self.assertNotIn("dgpu", placed.values())
 
+    def test_over_margin_moves_lowest_weight_role_off_package(self):
+        def w(rs):
+            return 50.0 if {r.name: r.placed for r in rs}["drafter"] == "igpu" else 30.0
+        ok, rs = admit(roles(), w, 48.0, True)
+        self.assertTrue(ok)
+        self.assertEqual({r.name: r.placed for r in rs}["drafter"], "dgpu")
+        ok, rs = admit(roles(), w, 48.0, False)  # no off-package target: refuse, stay
+        self.assertFalse(ok)
+        self.assertEqual({r.name: r.placed for r in rs}["drafter"], "igpu")
+
     def test_bursty_roles_stay_on_package(self):
         _, rs = admit(roles(), lambda rs: 0, 50, True)
         placed = {r.name: r.placed for r in rs}
@@ -174,8 +184,17 @@ class DemoterTest(unittest.TestCase):
         self.assertEqual(rs[0].placed, "pcore")
         self.assertEqual(d.log, [])
 
-    def test_lowest_weight_with_fallback_first_and_no_dgpu_when_absent(self):
+    def test_no_on_package_to_on_package_demotion(self):
+        # iGPU -> P-core stays on the package: it adds P-core load, it cannot cut
+        # package watts. Without a dGPU nothing has an off-package fallback.
         rs, d = self.placed(False), Demoter()
+        for _ in range(30):
+            self.assertIsNone(d.tick(rs, 50, 50, True, False))
+        self.assertEqual({r.name: r.placed for r in rs}["drafter"], "igpu")
+        self.assertEqual(d.log, [])
+
+    def test_literal_rule_is_kept_as_ablation(self):
+        rs, d = self.placed(False), Demoter(off_package_only=False)
         for _ in range(6):
             name = d.tick(rs, 50, 50, True, False)
         self.assertEqual(name, "drafter")  # embed/tools have no fallback without a dGPU
@@ -225,6 +244,37 @@ class SimPlantTest(unittest.TestCase):
         r1 = S.drafter_rate(p, "igpu", 1.65, 10.0)
         r2 = S.drafter_rate(p, "igpu", 0.825, 10.0)
         self.assertAlmostEqual(r1 / r2, 2.0, delta=0.05)
+
+
+class SimPolicyTest(unittest.TestCase):
+    def test_d0_full_never_moves_drafter_between_on_package_devices(self):
+        rng = random.Random(5)
+        for _ in range(20):
+            p = S.draw(rng)
+            jit = [(rng.random(), 1.0) for _ in range(200)]
+            plan, _, _, _ = S.full(p, random.Random(rng.random()), False, jit)
+            self.assertEqual(plan["drafter"], "igpu")
+
+    def test_sim_full_reports_admission(self):
+        rng = random.Random(6)
+        p = S.draw(rng)
+        p["cap"] = 20.0  # far below any plan: admission must refuse without a dGPU
+        jit = [(rng.random(), 1.0) for _ in range(200)]
+        out = S.full(p, random.Random(1), False, jit)
+        self.assertEqual(len(out), 4)
+        self.assertFalse(out[3])
+
+    def test_oracle_bounds_every_policy(self):
+        rng = random.Random(7)
+        for _ in range(10):
+            p = S.draw(rng)
+            jit = [(rng.random(), 1.0) for _ in range(200)]
+            b0_plan, b0 = S.tuned_default(p, False, jit)
+            _, b1 = S.tuned_static_cap(p, b0_plan, b0, jit)
+            _, _, o, max_rate = S.oracle(p, False, b0, jit)
+            self.assertGreaterEqual(o["turn_rate"], b1["turn_rate"] - 1e-12)
+            self.assertLessEqual(o["energy"], b0["energy"] + 1e-9)
+            self.assertGreaterEqual(max_rate, max(o["rate"], b0["rate"]) - 1e-12)
 
 
 if __name__ == "__main__":

@@ -32,8 +32,14 @@ share one package budget, ring and LLC. Proposal:
 
 1. **The cap is not 35 W on this host.** `claude/invent-power-aware` read
    `intel-rapl:0/constraint_0_power_limit_uw = 117000000` (PL1 = PL2 = 117 W); 35 W
-   is the TDP field. The binding limit is thermal. Admission and demotion key on
-   `effective_cap = min(PL1, thermal_cap)`, never on TDP.
+   is the TDP field. Admission and demotion key on
+   `effective_cap = min(PL1, thermal_cap)`, never on TDP. **Assumption, not
+   measured:** that the binding limit is thermal, and that it sits at 35–65 W (the
+   `cap` prior in the simulator). No sustained package power at the Tj limit has been
+   read on this host. With the cap at the programmed 117 W instead, the plant rarely
+   throttles (one-off check: B0's burst phase throttles in 24/300 base draws, 87/300 favourable,
+   seed 11), so the idea has little to arbitrate. The low-cap prior therefore favours
+   the idea, and the refutation is conservative. Probe P-1 (§7) reads the real cap.
 2. **"Over PL1 for > 5 s" cannot happen in steady state** — the PCU enforces the
    limit. The trigger is "package power >= 0.97 x effective cap AND a throttle
    reason (`gt/gt0/throttle_reason_pl1|thermal`, or core busy freq below max) for
@@ -102,9 +108,14 @@ Policies:
   *true* plant (an oracle static knob, no controller).
 - **FULL**: admission + per-role cpuClasses chosen by the controller's *fitted,
   mis-specified* model (coefficients from noisy synthetic RAPL traces, exponent held
-  at the prior midpoint, roofline `rho` at the prior midpoint).
+  at the prior midpoint, roofline `rho` at the prior midpoint). Admission moves roles
+  off package while over the 0.9 x cap margin; the demotion loop only moves a role to
+  an off-package fallback (rule fixes in §6).
+- **Oracle**: best plan and E cap on the *true* plant, energy/turn not above B0. An
+  upper bound for any controller.
 - Ablations: **A-noTP** (caps, no turboPriority), **A-noCap** (turboPriority only),
-  **A-cbound** (controller assumes compute-bound drafter, the idea as stated).
+  **A-cbound** (controller assumes compute-bound drafter, the idea as stated),
+  **A-literal** (the literal "next DRA fallback" demotion, on-package targets allowed).
 - Channel counterfactuals for FULL's chosen cap: **power-only** (cap's power effect,
   E-core DRAM traffic held at uncapped level — the "bandwidth-matched control") and
   **DRAM-only** (traffic cut, power held).
@@ -139,51 +150,110 @@ free watts for P-cores; AC3 fails; AC4 holds (irrelevant with a dGPU); AC5 trigg
 
 ## 6. Results (simulation only, written after the runs)
 
-Reproduce: `python3 ppcsim.py 300 <seed> <variant>` (stdlib, ~7 s each);
-`python3 -m unittest test_pcp` (24 tests, needs PyYAML). Raw output:
+Reproduce: `python3 ppcsim.py 300 <seed> <variant>` (stdlib, ~10 s each);
+`python3 -m unittest test_pcp` (29 tests, needs PyYAML). Raw output:
 `results-seed{11,12}-{variant}.json`.
 
-Process disclosure: a 30-draw seed-1 smoke run came first (to debug the plant). The
-five perturbation variants were added after it and before seeds 11/12 were run. They
-were not in the pre-registration; they push the prior *toward* the idea so the sim
-cannot hide a win in an unlucky prior. `favourable` stacks all four.
+Process disclosure, in order:
+
+1. `b25cf09` (05:07:51 -0700) committed §1–§5 alone: no simulator code existed in the
+   tree, and its message records that the criteria were written before any simulator
+   run. §5 is byte-identical in every later commit.
+2. After `b25cf09`, a 30-draw seed-1 smoke run debugged the plant. Git cannot prove
+   this order by itself; the evidence is that `ppcsim.py` first appears in `56cc941`
+   (05:14:43, 7 minutes later) and that `b25cf09` says no run had happened.
+3. The five perturbation variants were added after the smoke run and before seeds
+   11/12. They are **not** pre-registered. Each pushes the prior *toward* the idea, so
+   they can only hide a refutation, not manufacture one. `favourable` stacks all four.
+4. Revision after review (this table): the demotion loop now only moves a role to an
+   off-package fallback, and admission now acts on its 0.9 x cap margin (see "Rule
+   fixes" below). The table is FULL with both fixes. The first-run numbers, with the
+   literal rule, are in the "literal-demotion" column of the second table and in git
+   history (`56cc941`).
 
 D0 (no dGPU) medians, seed 11 pre-registered / seed 12 held out:
 
 | variant | drafter tok/s FULL vs B0 | planner p95 cut | energy/turn | turn FULL/B0 | turn FULL/B1 (static cap) | iGPU-drafter gain at best cap | of which power-only | of which DRAM-only | iGPU clock rise |
 |---|---|---|---|---|---|---|---|---|---|
-| base | -0.5 / -1.1 % | -4.8 / -5.2 % | +4.6 / +4.6 % | 0.959 / 0.957 | 0.958 / 0.957 | +14.7 / +15.2 % | -1.4 / -1.3 % | +15.3 / +16.0 % | +5.2 / +5.0 % |
-| io_tools | +10.0 / +10.4 % | +4.1 / +4.7 % | -3.7 / -4.9 % | 1.025 / 1.033 | 0.968 / 0.967 | +14.7 / +15.2 % | -1.4 / -1.3 % | +15.3 / +16.0 % | +5.2 / +5.0 % |
-| no_pp1 | 0.0 / 0.0 % | -6.3 / -7.0 % | +5.7 / +5.5 % | 0.948 / 0.950 | 0.947 / 0.949 | +16.8 / +17.1 % | -1.1 / -0.9 % | +15.6 / +16.5 % | +12.2 / +12.1 % |
-| clock_bound | 0.0 / 0.0 % | 0.0 / -1.2 % | 0.0 / +0.1 % | 1.000 / 0.999 | 1.000 / 0.999 | +8.0 / +8.6 % | +2.8 / +2.7 % | +1.8 / +2.0 % | +5.2 / +5.0 % |
-| low_alpha | -6.0 / -6.9 % | -7.7 / -8.3 % | +9.0 / +9.0 % | 0.919 / 0.919 | 0.919 / 0.919 | +12.0 / +12.4 % | -1.5 / -1.5 % | +11.4 / +12.8 % | +7.5 / +7.2 % |
-| favourable | +7.4 / +7.7 % | +5.1 / +5.8 % | -2.8 / -3.2 % | 1.028 / 1.031 | 0.988 / 0.985 | +18.1 / +17.8 % | +14.3 / +13.7 % | +0.6 / +0.8 % | +18.0 / +17.7 % |
+| base | 0.0 / 0.0 % | 0.0 / 0.0 % | 0.0 / 0.0 % | 1.000 / 1.000 | 1.000 / 1.000 | +14.7 / +15.2 % | -1.4 / -1.3 % | +15.3 / +16.0 % | +5.2 / +5.0 % |
+| io_tools | +12.3 / +12.9 % | +9.7 / +9.8 % | -7.4 / -8.2 % | 1.065 / 1.069 | 0.997 / 0.996 | +14.7 / +15.2 % | -1.4 / -1.3 % | +15.3 / +16.0 % | +5.2 / +5.0 % |
+| no_pp1 | 0.0 / 0.0 % | 0.0 / 0.0 % | 0.0 / 0.0 % | 1.000 / 1.000 | 1.000 / 1.000 | +16.8 / +17.1 % | -1.1 / -0.9 % | +15.6 / +16.5 % | +12.2 / +12.1 % |
+| clock_bound | -22.4 / 0.0 % | +0.2 / 0.0 % | +0.7 / 0.0 % | 0.991 / 1.000 | 0.991 / 1.000 | +8.0 / +8.6 % | +2.8 / +2.7 % | +1.8 / +1.9 % | +5.2 / +5.0 % |
+| low_alpha | 0.0 / 0.0 % | 0.0 / 0.0 % | 0.0 / 0.0 % | 1.000 / 1.000 | 1.000 / 1.000 | +12.0 / +12.4 % | -1.5 / -1.5 % | +11.4 / +12.8 % | +7.5 / +7.2 % |
+| favourable | -30.2 / -27.5 % | +15.5 / +16.3 % | +4.0 / +1.2 % | 0.948 / 0.986 | 0.907 / 0.933 | +18.1 / +17.8 % | +14.3 / +13.7 % | +0.6 / +0.8 % | +17.9 / +17.7 % |
+
+**Oracle upper bound (D0).** The best plan and E-core cap, chosen on the *true* plant,
+with energy/turn not above B0. This is what a perfect controller could reach, so it
+bounds AC1 regardless of how well the controller fits:
+
+| variant | oracle drafter tok/s vs B0 | max drafter tok/s at any plan/cap | oracle p95 cut | oracle energy/turn | oracle turn/B0 | literal-demotion FULL/B0 | turboPriority-only FULL/B0 |
+|---|---|---|---|---|---|---|---|
+| base | 0.0 / 0.0 % | 0.0 / 0.0 % | 0.0 / 0.0 % | 0.0 / 0.0 % | 1.000 / 1.000 | 0.959 / 0.957 | 0.563 / 0.574 |
+| io_tools | +13.7 / +13.8 % | +15.5 / +15.5 % | +8.4 / +8.7 % | -7.5 / -8.5 % | 1.075 / 1.079 | 1.025 / 1.033 | 1.069 / 1.072 |
+| no_pp1 | 0.0 / 0.0 % | 0.0 / 0.0 % | 0.0 / 0.0 % | 0.0 / 0.0 % | 1.000 / 1.000 | 0.948 / 0.950 | 0.554 / 0.565 |
+| clock_bound | 0.0 / 0.0 % | 0.0 / 0.0 % | 0.0 / 0.0 % | 0.0 / 0.0 % | 1.000 / 1.000 | 1.000 / 0.999 | 0.481 / 0.487 |
+| low_alpha | 0.0 / 0.0 % | 0.0 / 0.0 % | 0.0 / 0.0 % | 0.0 / 0.0 % | 1.000 / 1.000 | 0.919 / 0.919 | 0.603 / 0.615 |
+| favourable | +10.8 / +11.1 % | +12.9 / +13.5 % | +9.0 / +9.6 % | -5.2 / -5.8 % | 1.053 / 1.057 | 1.028 / 1.031 | 0.955 / 0.983 |
+
+"Max drafter tok/s" is the per-draw best drafter rate over every plan and cap that
+keeps energy/turn at or below B0, ignoring turn rate and p95. Its median never reaches
+the +20 % AC1 needs, in any variant. **AC1 is unreachable on this plant, however
+good the controller is.** The oracle optimises turn rate, so a single FULL leg can
+beat it (io_tools p95, favourable p95).
 
 D2 (dGPU present), every variant, both seeds: tuned B0 puts the drafter on the dGPU in
-100 % of draws; FULL/B0 turn rate 1.000–1.005. FULL *without* the demotion loop is
-0.53–0.78 x B0, because the idea's own admission rule keeps the bursty drafter on the
-iGPU; only the demotion loop moves it to the dGPU.
+100 % of draws; FULL/B0 turn rate 1.000, with or without the demotion loop. The
+admission margin now moves the drafter to the dGPU before any throttling.
 
-Ablations (D0 base, seed 11): turboPriority-only, as the idea literally wrote it
-(lower classes' symbolic `"turbo"` -> base = 0.8 GHz E-cores): 0.54 x B0. Controller
-assuming a compute-bound drafter: identical to FULL (it never chose a cap in base).
-No-demotion: 1.00 x B0 (FULL's base loss comes entirely from demoting the drafter to
-P-cores).
+### Rule fixes made after review
+
+1. **Demotion only to an off-package target.** The literal rule (§1c, "next DRA
+   fallback") moved the drafter iGPU -> P-cores in D0. Both are on the package, so the
+   move adds P-core load and cannot lower package power. It was a strawman element:
+   in the first run, FULL's whole base-variant loss (0.957–0.959 x B0) came from it.
+   That loss was an artifact of the literal demotion rule, not of power coupling. With
+   the fix, FULL ties B0 in base, no_pp1 and low_alpha. In D0 nothing has an
+   off-package fallback, so the loop never fires there. The literal rule stays as the
+   `literal_demote` ablation.
+2. **Admission acts on its margin.** `admit()` used to return a boolean the simulator
+   discarded, so the 0.9 x cap margin never changed a placement. It now moves the
+   lowest-weight non-planner role to an off-package fallback while the prediction is
+   above the margin, and refuses (False) when none is left. Under the 35–65 W cap
+   prior the margin refuses **every** D0 plan (`full_admitted_frac = 0`): tool bursts
+   alone saturate the package. The plan still runs, because nothing else can.
+3. **Side effect in `favourable`.** The fixed FULL drops to 0.948 / 0.986 x B0 with
+   the drafter at -30 %. In this variant B0 puts the drafter on P-cores in 70–75 % of
+   draws (`b0_drafter_igpu_frac` 0.253 / 0.297). The literal iGPU -> P-core demotion
+   was doing B0's plan choice by accident. That is a plan-selection effect, not package
+   coupling. The verdict does not change.
 
 ### Verdict against the pre-registered criteria
 
 | AC | result | |
 |---|---|---|
-| AC1 claim as stated | **FAIL**, every variant, both seeds | best: favourable, drafter +7.7 %, p95 -5.8 %, energy -3.2 % |
-| AC2 beats a static cap | **FAIL**, every variant | an oracle static E cap beats the controller by 1–3 % where caps help at all |
+| AC1 claim as stated | **FAIL**, every variant, both seeds | the oracle bound caps the drafter leg at +15.5 % (io_tools); favourable passes only the p95 leg |
+| AC2 beats a static cap | **FAIL**, every variant | an oracle static E cap matches or beats the controller |
 | AC3 power channel | **FAIL** in base, io_tools, no_pp1, low_alpha, clock_bound; pass only in favourable | power-only channel is *negative* in the base prior |
-| AC4 dGPU scope | **HOLDS** (predicted) | idea irrelevant with a dGPU; harmful without its demotion loop |
-| AC5 freq falsifier invalid | **NOT triggered** (prediction wrong) | the iGPU clock itself barely rises (median +5 %), so the idea's own falsifier ("act_freq does not rise") fires and refutes it in most draws |
+| AC4 dGPU scope | **HOLDS** (predicted) | idea irrelevant with a dGPU |
+| AC5 freq falsifier invalid | **condition did not occur** (prediction wrong) | see below |
 | Regime rule | n/a | AC1 fails even in the stacked favourable corner |
 
+AC5, stated plainly. Its invalidity condition was "the iGPU clock rises >= 10 % while
+drafter tok/s rises < 5 %, in > 25 % of D0 draws". That happened in <= 3 % of draws in
+every variant, so the act_freq falsifier is **not** invalid. Separately, the idea's own
+prediction that "iGPU act_freq rises" under the E-core cap **failed**: the median iGPU
+clock rose only about +5 % in base (+12 % with no PP1 priority, +18 % in favourable).
+
+**AC3 attribution, a modelling choice.** The power-only counterfactual holds E-core DRAM
+traffic at its uncapped level, but lets the P-cores boost and pull more DRAM traffic at
+the higher clock. That P-core traffic is counted in the *power* channel, because the
+claim is that freed watts are re-spent by other on-package agents. The channel split is
+close to additive in base (-1.4 % power + 15.3 % DRAM vs +14.7 % total), which supports
+the split.
+
 Predictions vs outcome: AC1-drafter fail, AC3 fail, AC4 hold — as predicted. Planner
-p95 leg was predicted to possibly pass; it fails (worse in base, +4–6 % at best).
-AC5 was predicted to trigger and did not.
+p95 leg was predicted to possibly pass. It passes only in the non-pre-registered
+favourable variant. AC5 was predicted to trigger and did not.
 
 ### What the simulator says the mechanism actually is
 
@@ -199,7 +269,7 @@ AC5 was predicted to trigger and did not.
 3. **Tools on the critical path eat the gain.** Capping E-cores slows tool-exec; unless
    tools are I/O-bound (`io_tools`), turn rate drops.
 4. **`turboPriority` is a trap on this SKU.** Lower classes' symbolic `"turbo"`
-   resolves to base, and E-core base is 0.8 GHz: -46 % turn rate.
+   resolves to base, and E-core base is 0.8 GHz: -44 % turn rate in base.
 
 **Decision: do not build the placer.** Keep only the pieces that are correct and cheap:
 effective-cap math, strict CRD validation of rendered policies, the turbo-trap guard,
@@ -207,7 +277,19 @@ host-derived C-state names. The redirected (untested) hypothesis is "E-core caps
 DRAM-bandwidth throttle for co-located bandwidth-bound decode"; that needs its own
 pre-registration and is not claimed here.
 
+**Unmeasured priors that drive the redirect.** The DRAM-traffic priors `t_tool`,
+`t_emb` and `t_plan` (GB/s per busy core at fmax) set the size of the DRAM-relief
+channel, and none of them is measured. The follow-up pre-registration must take them
+from the P1 STREAM-vs-L1 control before it makes any claim.
+
 ## 7. Live probes (none run; benchmarks were live on 2026-10-16)
+
+- **P-1 thermal-cap read (before P1).** On the 13900T, run a sustained all-core load
+  until package temperature reaches the Tj limit, then record steady
+  `intel-rapl:0` package W over 60 s with `throttle_reason_*` and core temperatures.
+  That steady wattage is the real `thermal_cap`. It replaces the 35–65 W `cap` prior;
+  if it is near the programmed 117 W PL1, the plant rarely throttles and the idea has
+  nothing to arbitrate.
 
 - **P0 write-path spike.** Apply a one-class `cpuClasses` policy (E cap only) to a
   throwaway k3d cluster; confirm `scaling_max_freq` and `energy_performance_preference`
