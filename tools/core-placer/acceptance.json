@@ -1,0 +1,30 @@
+{
+  "_comment": "Pre-registered before any simulation ran. Thresholds, mixes and seeds are fixed here; tests read this file and must not edit it. Sim results never touch real hardware; live claims are listed under live_probes and stay unverified until run.",
+  "registered": "2026-10-16",
+  "unit": {
+    "U1_netlink": "Parser decodes a v6.6-format THERMAL_GENL_EVENT_CPU_CAPABILITY_CHANGE (event 14, nest attr 20 holding repeated u32 attrs 21/22/23) into {cpu: (perf, eff)}; rejects truncated attrs.",
+    "U2_hfi_hysteresis": {"hold_s": 2.0, "max_rewrites_per_min": 6, "static_stream_rewrites": 0, "flap_period_s": 0.5, "flap_duration_s": 60, "flap_rewrites_max": 0, "zero_cap_excluded_within_s": 3.0},
+    "U3_knapsack": {"random_instances": 500, "must_equal_bruteforce": true},
+    "U4_perf_encoding": {"attr_size": 112, "hybrid_instructions_config": "(pmu_type << 32) | 1", "amx_busy_raw_config": "0x02b7 (EXE.AMX_BUSY, perfmon SPR/GNR json EventCode 0xb7 UMask 0x02)"},
+    "U5_amx_fsm": {"promote_after_windows": 3, "demote_after_windows": 5, "dither_between_thresholds_transitions": 0}
+  },
+  "sim": {
+    "horizon_s": 1800,
+    "window_s": 3,
+    "seeds": [1, 2, 3, 4, 5],
+    "move_cost_s": 5,
+    "mixes": ["M1_agent_light", "M2_oversub_stationary", "M3_phased", "M4_churn", "M5_mixed_agent"],
+    "baselines": ["unpinned", "all_p", "exhaustive_static"],
+    "S1_win": "auto beats the best baseline by >= 10% mean weighted throughput in at least one mix",
+    "S1_kill": "exhaustive_static within 3% of auto (auto/best_static < 1.03) on all 5 mixes -> claim (1) killed in sim",
+    "S2_ablation": "in every mix where auto beats unpinned by >= 5%, both ablations (constant-S, counters shuffled across pods) must lose >= 50% of that margin; otherwise the sim result is void",
+    "S3_probe_error": "under M3, the concurrent passive probe has lower median |log(S_est/S_true)| than the sequential two-balloon probe",
+    "S4_robustness": {"perturbations": 20, "scale": 0.3, "verdict_stable_fraction_min": 0.8}
+  },
+  "live_claims_not_tested_here": [
+    "probe overhead < 2%",
+    "claim (1) on the 13900T with RAPL energy",
+    "claim (2) HFI-reactive p95 under PL1-saturating E load; gate: >= 1 HFI change/min",
+    "claim (3) AMX fencing on SPR or later"
+  ]
+}
