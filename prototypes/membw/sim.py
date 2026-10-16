@@ -145,7 +145,8 @@ def admission_pods(r_igpu, est_err, rng):
     llama3 = membw.bytes_per_token(3.21, 4.5, 28, 8, 128, 4096)    # Llama-3.2-3B Q4, 4k ctx
     qwen15 = membw.bytes_per_token(1.54, 4.5, 28, 2, 128, 4096)    # Qwen2.5-1.5B Q4, 4k ctx
     embed = 0.22e9                                                 # bge-base fp16 weights per batch step
-    e = lambda: rng.uniform(1 - est_err, 1 + est_err)
+    def e():
+        return rng.uniform(1 - est_err, 1 + est_err)
     return [
         (Client("igpu-ovms-8b", r_igpu, 6.0, llama8, lat_sens=1.0, watts=12, est_reach=r_igpu * e()), 300),
         (Client("cpu-llama-3b", 55.0, 30.0, llama3, lat_sens=0.3, watts=35, est_reach=55.0 * e()), 1500),
@@ -222,8 +223,15 @@ def run_guard(world, victim, sandboxes, trace, horizon, rng, sigma, mode, static
         s.q = static_q if mode == "static" and i == 0 else 1.0
     guard = None
     if mode.startswith("guard"):
-        guard = membw.Guard(solo_itl * rng.gauss(1.0, 0.03), len(sandboxes),
-                            rank="random" if mode == "guard-random" else "pressure", rng=rng)
+        # solo_itl = (p95, geometric mean, log-sd) from the victim's solo profile.
+        p95_solo, gm_solo, sd_solo = solo_itl
+        noise = rng.gauss(1.0, 0.03)          # solo profile measured on another run
+        if mode == "guard-v1":
+            guard = membw.Guard(p95_solo * noise, len(sandboxes), rng=rng)
+        else:
+            guard = membw.Guard(gm_solo * noise, len(sandboxes), rng=rng, sensor="geomean",
+                                memory=mode != "guard-nomem", solo_log_sd=sd_solo,
+                                rank="random" if mode == "guard-random" else "pressure")
     tok, act_time, carry = 0.0, 0.0, 0.0
     prog = [0.0] * len(sandboxes)
     itls, window = [], []
@@ -250,13 +258,18 @@ def run_guard(world, victim, sandboxes, trace, horizon, rng, sigma, mode, static
         since_tick += DT
         if guard and since_tick >= tick:
             since_tick = 0.0
-            window = [(ts, x) for ts, x in window if ts > t - 1.0]
-            samples = [] if mode == "guard-blind" else [x for _, x in window]
+            window = [(ts, x) for ts, x in window if ts > t - 3.0]
+            if mode == "guard-blind":
+                samples = []
+            elif mode == "guard-v1":   # v1: plain ITLs from the last 1 s
+                samples = [x for ts, x in window if ts > t - 1.0]
+            else:
+                samples = window
             if rank_signal == "llc":   # per-cgroup LLC misses ~ DRAM traffic
                 score = [a * rng.lognormvariate(0, score_noise) for a in alloc[1 if active else 0:]]
             else:                      # PSI memory / refaults: capacity stalls
                 score = [s.psi * rng.lognormvariate(0, score_noise) for s in sandboxes]
-            for s, q in zip(sandboxes, guard.step(samples, score)):
+            for s, q in zip(sandboxes, guard.step(samples, score, active=active, now=t)):
                 s.q = q
         t += DT
     return (tok / act_time if act_time else float("nan")), prog, itls
@@ -268,7 +281,10 @@ def s3(cap=65.0, r_igpu=25.0, w_igpu=1.0, alpha=0.5, knee=0.6, gamma=1.0, pl1=11
     world, victim, sbx = guard_world(cap, r_igpu, w_igpu, alpha, knee, gamma, pl1, stream_reach)
     solo_rate, _, solo_itls = run_guard(world, victim, [], tr, horizon, random.Random(seed), sigma, "none")
     _, sbx_solo, _ = run_guard(world, victim, sbx, [], horizon, random.Random(seed), sigma, "none")
-    solo_itl = p95(solo_itls)
+    logs = [math.log(x) for x in solo_itls]
+    mu = sum(logs) / len(logs)
+    sd = math.sqrt(sum((x - mu) ** 2 for x in logs) / len(logs))
+    solo_itl = (p95(solo_itls), math.exp(mu), sd)
 
     def measure(mode, q=1.0):
         rate, prog, _ = run_guard(world, victim, sbx, tr, horizon, random.Random(seed), sigma, mode,
@@ -292,7 +308,8 @@ def s3(cap=65.0, r_igpu=25.0, w_igpu=1.0, alpha=0.5, knee=0.6, gamma=1.0, pl1=11
                 hi = mid
     static = measure("static", lo) if lo > 0 else None
     return {"naive": naive, "static_q": lo, "static": static, "guard": measure("guard"),
-            "guard_random": measure("guard-random"), "guard_blind": measure("guard-blind")}
+            "guard_random": measure("guard-random"), "guard_blind": measure("guard-blind"),
+            "guard_nomem": measure("guard-nomem"), "guard_v1": measure("guard-v1")}
 
 
 def s3_verdict(r):
@@ -324,7 +341,7 @@ def main(quick=False):
     for sig in ("llc", "psi"):
         r = s3(rank_signal=sig)
         print(f"  rank={sig}: static_q={r['static_q']:.3f}")
-        for k in ("naive", "static", "guard", "guard_random", "guard_blind"):
+        for k in ("naive", "static", "guard", "guard_nomem", "guard_v1", "guard_random", "guard_blind"):
             if r[k]:
                 print(f"    {k:13s} " + fmt(r[k]))
         print(f"    S3 holds90,advantage = {s3_verdict(r)}")
@@ -342,27 +359,57 @@ def main(quick=False):
         (0.0, 0.5, 1.5), (0.5, 1.0, 2.0)
     if quick:
         caps, reaches, ws, alphas, gammas = (65.0,), (12.0, 25.0), (0.5, 1.0), (0.0, 1.5), (1.0,)
-    s1_pass = s1_n = s3_pass = s3_n = s3a_pass = 0
+    # Grid seeds differ from the seeds the guard constants were picked on (s1 seed 1, s3 seed 7).
+    tally = dict.fromkeys(("s1", "s1n", "s3", "s3n", "cont", "s3c_ok", "nomem", "v1", "rand_worse",
+                           "blind_fail", "s3a", "s3an"), 0)
     kill = {}
+    rows = ["cap\treach\tw\talpha\tgamma\tnaive\tstatic_q\tstatic_slow\tguard_v\tguard_slow"
+            "\tnomem_v\tnomem_slow\tv1_v\tv1_slow\trand_v\trand_sbx\tguard_sbx"]
     for cap, ri, w, a in itertools.product(caps, reaches, ws, alphas):
-        r = s1(cap=cap, r_igpu=ri, w_igpu=w, alpha=a, sigma=0.2)
-        s1_n += 1
-        s1_pass += r["bw-greedy"]["worst_deg"] <= 0.15 and r["default"]["worst_deg"] >= 0.40
+        r = s1(cap=cap, r_igpu=ri, w_igpu=w, alpha=a, sigma=0.2, seed=101)
+        tally["s1n"] += 1
+        tally["s1"] += r["bw-greedy"]["worst_deg"] <= 0.15 and r["default"]["worst_deg"] >= 0.40
         for g in gammas:
-            r3 = s3(cap=cap, r_igpu=ri, w_igpu=w, alpha=a, gamma=g, sigma=0.2, horizon=60.0)
-            s3_n += 1
+            r3 = s3(cap=cap, r_igpu=ri, w_igpu=w, alpha=a, gamma=g, sigma=0.2, horizon=60.0, seed=107)
+            tally["s3n"] += 1
             holds, adv = s3_verdict(r3)
-            s3_pass += holds and adv >= 0.25
+            ok = holds and adv >= 0.25
+            tally["s3"] += ok
+            contended = r3["naive"]["victim"] < 0.9
+            if contended:
+                tally["cont"] += 1
+                tally["s3c_ok"] += ok
+                for k in ("nomem", "v1"):
+                    h, ad = s3_verdict(dict(r3, guard=r3["guard_" + k]))
+                    tally[k] += h and ad >= 0.25
+                gr, gd = r3["guard_random"], r3["guard"]
+                tally["rand_worse"] += gr["victim"] < 0.9 or gr["sbx_slow"] > gd["sbx_slow"]
+                tally["blind_fail"] += r3["guard_blind"]["victim"] < 0.9
             kill.setdefault(ri, []).append(r3["naive"]["victim"] > 1 / 1.15)
+            st = r3["static"] or {"stream_slow": float("nan")}
+            rows.append("\t".join(f"{x:.3f}" for x in (
+                cap, ri, w, a, g, r3["naive"]["victim"], r3["static_q"], st["stream_slow"],
+                r3["guard"]["victim"], r3["guard"]["stream_slow"],
+                r3["guard_nomem"]["victim"], r3["guard_nomem"]["stream_slow"],
+                r3["guard_v1"]["victim"], r3["guard_v1"]["stream_slow"],
+                r3["guard_random"]["victim"], r3["guard_random"]["sbx_slow"], r3["guard"]["sbx_slow"])))
         if not quick:
-            r3a = s3(cap=cap, r_igpu=ri, w_igpu=w, alpha=a, duty=1.0, sigma=0.2, horizon=60.0)
-            h, adv = s3_verdict(r3a)
-            s3a_pass += not (h and adv >= 0.25)
-    print(f"  S1 pass {s1_pass}/{s1_n}   S3 pass {s3_pass}/{s3_n}"
-          + ("" if quick else f"   S3a (duty=1 advantage vanishes) {s3a_pass}/{s1_n}"))
+            r3a = s3(cap=cap, r_igpu=ri, w_igpu=w, alpha=a, duty=1.0, sigma=0.2, horizon=60.0, seed=107)
+            if r3a["naive"]["victim"] < 0.9:
+                tally["s3an"] += 1
+                h, adv = s3_verdict(r3a)
+                tally["s3a"] += not (h and adv >= 0.25)
+    t = tally
+    print(f"  S1 pass {t['s1']}/{t['s1n']}   S3 pass {t['s3']}/{t['s3n']} all points, "
+          f"{t['s3c_ok']}/{t['cont']} contended (naive victim < 0.9)")
+    print(f"  contended ablations: no-memory pass {t['nomem']}/{t['cont']}, v1 pass {t['v1']}/{t['cont']}, "
+          f"S3b random-rank worse {t['rand_worse']}/{t['cont']}, S3c blind misses 90% {t['blind_fail']}/{t['cont']}")
+    if not quick:
+        print(f"  S3a (duty=1, contended) advantage vanishes {t['s3a']}/{t['s3an']}")
     for ri, v in sorted(kill.items()):
         print(f"  kill region: iGPU reach {ri:>4.0f} GB/s -> naive degradation <15% in {sum(v)}/{len(v)} grid points")
-
+    with open("s5_grid.tsv" if not quick else "s5_grid_quick.tsv", "w") as f:
+        f.write("\n".join(rows) + "\n")
 
 if __name__ == "__main__":
     main(quick="--quick" in sys.argv)

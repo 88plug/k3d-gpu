@@ -128,19 +128,39 @@ def admit(demands, capacity):
 class Guard:
     """AIMD controller on sandbox cpu.max quotas (fractions of the sandbox's CPUs).
 
-    Input per tick: the victim decode's recent ITL samples (seconds; empty when
-    the victim is idle) and one ranking score per sandbox. The score is
-    pluggable: PSI memory / refaults (read_cgroup_signals) as the idea proposed,
-    or a per-cgroup LLC-miss rate (perf -G), which tracks DRAM traffic; PSI
-    memory and refaults measure capacity stalls, not bandwidth. It never sees
-    bandwidth, allocations or the true quota->bandwidth curve."""
+    Inputs per tick, all observable on a real node:
+      itl_samples  the victim decode's recent inter-token latencies (seconds),
+                   timed from its token stream (OVMS exports no per-token metric);
+      pressure     one ranking score per sandbox: PSI memory / refaults
+                   (read_cgroup_signals) as first proposed, or a per-cgroup
+                   LLC-miss rate (perf -G), which tracks DRAM traffic;
+      active       victim has requests in flight (OVMS ovms_current_requests /
+                   ovms_current_graphs > 0). None = unknown, inferred from samples.
+    It never sees bandwidth, allocations or the true quota->bandwidth curve.
+
+    sensor="geomean": trigger when the window's geometric-mean ITL exceeds the
+      solo geometric mean by > slack AND by > z standard errors of the solo
+      log-ITL spread (a few-sample window p95 is biased high and fires on noise).
+    sensor="p95": v1 trigger, window p95 vs solo p95.
+    memory=True: remember the quotas that last held the SLO while the victim was
+      active, and re-apply them the tick a new burst starts, instead of
+      re-discovering them by cutting from 1.0 at every burst onset."""
 
     def __init__(self, solo_itl, n_sandboxes, slack=0.08, cut=0.6, relax=1.25,
-                 floor=0.05, rank="pressure", rng=None):
+                 floor=0.05, rank="pressure", rng=None, sensor="p95", memory=False,
+                 solo_log_sd=0.0, z=2.0, min_samples=3, active_relax=1.02,
+                 window=3.0):
         self.solo_itl = solo_itl
         self.q = [1.0] * n_sandboxes
         self.slack, self.cut, self.relax, self.floor = slack, cut, relax, floor
         self.rank, self.rng = rank, rng
+        self.sensor, self.memory = sensor, memory
+        self.solo_log_sd, self.z, self.min_samples = solo_log_sd, z, min_samples
+        self.active_relax = active_relax
+        self.window = window
+        self.hold = None
+        self.was_active = False
+        self.last_cut = float("-inf")
 
     def _victim_order(self, pressure):
         idx = list(range(len(self.q)))
@@ -149,18 +169,43 @@ class Guard:
             return idx
         return sorted(idx, key=lambda i: -pressure[i])
 
-    def step(self, itl_samples, pressure):
-        if itl_samples:
-            s = sorted(itl_samples)
-            p95 = s[min(len(s) - 1, int(0.95 * len(s)))]
-            if p95 > self.solo_itl * (1 + self.slack):
-                for i in self._victim_order(pressure):
-                    if self.q[i] > self.floor:
-                        self.q[i] = max(self.floor, self.q[i] * self.cut)
-                        break
-                return self.q
-        # Victim idle or within slack: relax every throttled sandbox.
-        self.q = [min(1.0, x * self.relax) for x in self.q]
+    def _slow(self, s):
+        if self.sensor == "p95":
+            s = sorted(s)
+            return s[min(len(s) - 1, int(0.95 * len(s)))] > self.solo_itl * (1 + self.slack)
+        if len(s) < self.min_samples:
+            return None
+        mlog = sum(math.log(x) for x in s) / len(s)
+        excess = mlog - math.log(self.solo_itl)
+        return (excess > math.log1p(self.slack)
+                and excess > self.z * self.solo_log_sd / math.sqrt(len(s)))
+
+    def step(self, itl_samples, pressure, active=None, now=None):
+        """itl_samples: floats (sensor="p95") or (timestamp, itl) pairs (sensor="geomean")."""
+        if active is None:
+            active = bool(itl_samples)
+        if self.memory and active and not self.was_active and self.hold:
+            self.q = [min(a, b) for a, b in zip(self.q, self.hold)]
+        self.was_active = active
+        if self.sensor == "geomean":
+            # Only tokens produced after the last cut reflect the current quotas.
+            itl_samples = [x for t, x in itl_samples
+                           if t > self.last_cut and (now is None or t > now - self.window)]
+        slow = self._slow(itl_samples) if itl_samples else None
+        if slow:
+            for i in self._victim_order(pressure):
+                if self.q[i] > self.floor:
+                    self.q[i] = max(self.floor, self.q[i] * self.cut)
+                    break
+            self.last_cut = now if now is not None else self.last_cut
+        elif slow is None and active and self.sensor == "geomean":
+            pass                   # running but too few fresh tokens to judge: hold
+        else:
+            # Within SLO: probe upward slowly while the victim runs, quickly when idle.
+            r = self.active_relax if (self.memory and active) else self.relax
+            self.q = [min(1.0, x * r) for x in self.q]
+        if self.memory and active:
+            self.hold = list(self.q)   # the next burst resumes from here
         return self.q
 
 
@@ -190,3 +235,46 @@ def read_cgroup_signals(cgroup_dir):
 def write_cpu_max(cgroup_dir, value):
     with open(os.path.join(cgroup_dir, "cpu.max"), "w") as f:
         f.write(value)
+
+
+# --- webhook server ----------------------------------------------------------
+
+def handle_body(body):
+    """Raw AdmissionReview request bytes -> response bytes. Malformed input is
+    allowed through unchanged (the MutatingWebhookConfiguration also sets
+    failurePolicy: Ignore), so a webhook bug never blocks pod creation."""
+    try:
+        out = mutate(json.loads(body))
+    except (ValueError, KeyError, TypeError, IndexError):
+        uid = ""
+        try:
+            uid = json.loads(body)["request"]["uid"]
+        except (ValueError, KeyError, TypeError):
+            pass
+        out = {"apiVersion": "admission.k8s.io/v1", "kind": "AdmissionReview",
+               "response": {"uid": uid, "allowed": True}}
+    return json.dumps(out).encode()
+
+
+def serve(port=8443, cert="/tls/tls.crt", key="/tls/tls.key"):
+    import http.server
+    import ssl
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            out = handle_body(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(out)))
+            self.end_headers()
+            self.wfile.write(out)
+
+    srv = http.server.ThreadingHTTPServer(("", port), H)
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.load_cert_chain(cert, key)
+    srv.socket = ctx.wrap_socket(srv.socket, server_side=True)
+    srv.serve_forever()
+
+
+if __name__ == "__main__":
+    serve()

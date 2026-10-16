@@ -1,0 +1,35 @@
+== S1/S2 admission, default point (C=65 GB/s, iGPU reach 25, alpha=0.5) ==
+  default    worst_p95_deg=+1.53 agg_tok_s=55.6  igpu-ovms-8b=+0.49 cpu-llama-3b=+1.53 ecore-qwen-1.5b=+0.14 embedder=+0.23
+  bw-target  worst_p95_deg=+0.76 agg_tok_s=46.5  igpu-ovms-8b=+0.54 cpu-llama-3b=+0.76 ecore-qwen-1.5b=+0.12 embedder=+0.16
+  bw-greedy  worst_p95_deg=+0.11 agg_tok_s=33.5  igpu-ovms-8b=+0.11 cpu-llama-3b=+0.00 ecore-qwen-1.5b=+0.02 embedder=+0.00
+  S1  pass=True  S1a (target demand protects?)=False  S2 agg delta=-0.397
+== S3 guard, default point (duty 0.4, LLC-miss ranking) ==
+  rank=llc: static_q=0.367
+    naive         victim=+0.67 stream_slow=+0.06 decoy_slow=+0.00 sbx_slow=+0.06
+    static        victim=+0.90 stream_slow=+0.62 decoy_slow=-0.03 sbx_slow=+0.61
+    guard         victim=+0.95 stream_slow=+0.30 decoy_slow=-0.01 sbx_slow=+0.29
+    guard_nomem   victim=+0.81 stream_slow=+0.18 decoy_slow=-0.00 sbx_slow=+0.18
+    guard_v1      victim=+0.93 stream_slow=+0.38 decoy_slow=+0.18 sbx_slow=+0.37
+    guard_random  victim=+0.90 stream_slow=+0.25 decoy_slow=+0.27 sbx_slow=+0.25
+    guard_blind   victim=+0.67 stream_slow=+0.06 decoy_slow=+0.00 sbx_slow=+0.06
+    S3 holds90,advantage = (True, 0.5200328003096584)
+  rank=psi: static_q=0.367
+    naive         victim=+0.67 stream_slow=+0.06 decoy_slow=+0.00 sbx_slow=+0.06
+    static        victim=+0.90 stream_slow=+0.62 decoy_slow=-0.03 sbx_slow=+0.61
+    guard         victim=+0.88 stream_slow=+0.23 decoy_slow=+0.43 sbx_slow=+0.23
+    guard_nomem   victim=+0.67 stream_slow=+0.06 decoy_slow=+0.23 sbx_slow=+0.06
+    guard_v1      victim=+0.86 stream_slow=+0.32 decoy_slow=+0.41 sbx_slow=+0.32
+    guard_random  victim=+0.90 stream_slow=+0.25 decoy_slow=+0.27 sbx_slow=+0.25
+    guard_blind   victim=+0.67 stream_slow=+0.06 decoy_slow=+0.00 sbx_slow=+0.06
+    S3 holds90,advantage = (False, 0.628308676409558)
+  S3a duty=1.0: (True, -0.10846819343735925)  static_q=0.367
+== S4 attribution: infinite DRAM, power limit only ==
+  PL1=117 W naive victim=1.000
+  PL1=35 W naive victim=0.688
+== S5 robustness grid ==
+  S1 pass 66/81   S3 pass 50/243 all points, 50/180 contended (naive victim < 0.9)
+  contended ablations: no-memory pass 1/180, v1 pass 39/180, S3b random-rank worse 176/180, S3c blind misses 90% 180/180
+  S3a (duty=1, contended) advantage vanishes 60/60
+  kill region: iGPU reach   12 GB/s -> naive degradation <15% in 27/81 grid points
+  kill region: iGPU reach   25 GB/s -> naive degradation <15% in 21/81 grid points
+  kill region: iGPU reach   40 GB/s -> naive degradation <15% in 15/81 grid points

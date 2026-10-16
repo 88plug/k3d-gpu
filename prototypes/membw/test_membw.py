@@ -126,6 +126,67 @@ class GuardController(unittest.TestCase):
         self.assertEqual(g.step([1.0], [0.0, 9.0]), [0.6, 0.05])
 
 
+class GuardV2(unittest.TestCase):
+    def g(self, **k):
+        return membw.Guard(solo_itl=0.2, n_sandboxes=1, sensor="geomean", memory=True,
+                           solo_log_sd=0.2, **k)
+
+    def test_noise_does_not_trigger(self):
+        # Five samples at solo +5% (inside the 8% slack): no cut, slow probe up.
+        g = self.g()
+        g.q = [0.5]
+        q = g.step([(4 + t / 5, 0.21) for t in range(5)], [1.0], active=True, now=5)
+        self.assertAlmostEqual(q[0], 0.51)
+
+    def test_slow_cuts_once_then_ignores_stale_tokens(self):
+        g = self.g()
+        self.assertEqual(g.step([(4 + t / 5, 0.4) for t in range(5)], [1.0], active=True, now=5), [0.6])
+        # Same (pre-cut) tokens again: too few fresh ones, so hold rather than cut again.
+        self.assertEqual(g.step([(4 + t / 5, 0.4) for t in range(5)], [1.0], active=True, now=5.1), [0.6])
+
+    def test_burst_onset_resumes_last_quota(self):
+        g = self.g()
+        g.step([(4 + t / 5, 0.4) for t in range(5)], [1.0], active=True, now=5)    # cut to 0.6
+        for i in range(20):                                               # idle: relax to 1
+            g.step([], [1.0], active=False, now=6 + i)
+        self.assertEqual(g.q, [1.0])
+        self.assertEqual(g.step([], [1.0], active=True, now=30), [0.6])    # new burst
+
+    def test_no_memory_ablation_restarts_from_one(self):
+        g = membw.Guard(solo_itl=0.2, n_sandboxes=1, sensor="geomean", memory=False, solo_log_sd=0.2)
+        g.step([(4 + t / 5, 0.4) for t in range(5)], [1.0], active=True, now=5)
+        for i in range(20):
+            g.step([], [1.0], active=False, now=6 + i)
+        self.assertEqual(g.step([], [1.0], active=True, now=30), [1.0])
+
+
+class WebhookServer(unittest.TestCase):
+    def test_handle_body_round_trip(self):
+        out = json.loads(membw.handle_body(json.dumps(review(ANNS)).encode()))
+        self.assertEqual(out["response"]["patchType"], "JSONPatch")
+
+    def test_malformed_is_allowed(self):
+        out = json.loads(membw.handle_body(b'{"request": {"uid": "u9", "object": {}}}'))
+        self.assertEqual(out["response"], {"uid": "u9", "allowed": True})
+        out = json.loads(membw.handle_body(b"not json"))
+        self.assertTrue(out["response"]["allowed"])
+
+    def test_manifests_selector_and_example_pod(self):
+        try:
+            import yaml
+        except ImportError:
+            self.skipTest("PyYAML not installed")
+        here = os.path.dirname(os.path.abspath(__file__))
+        docs = {d["kind"]: d for d in yaml.safe_load_all(open(os.path.join(here, "manifests.yaml")))}
+        wh = docs["MutatingWebhookConfiguration"]["webhooks"][0]
+        self.assertEqual(wh["failurePolicy"], "Ignore")
+        pod = docs["Pod"]
+        for k, v in wh["objectSelector"]["matchLabels"].items():
+            self.assertEqual(pod["metadata"]["labels"][k], v)
+        out = membw.mutate({"request": {"uid": "x", "object": pod}})
+        self.assertIn("patch", out["response"])
+
+
 class Cgroup(unittest.TestCase):  # U4
     def test_reads_psi_and_refaults_writes_cpu_max(self):
         d = tempfile.mkdtemp()
@@ -160,7 +221,7 @@ class SimInvariants(unittest.TestCase):
         # Guard must not read World state: its step signature takes ITLs and scores only.
         import inspect
         self.assertEqual(list(inspect.signature(membw.Guard.step).parameters),
-                         ["self", "itl_samples", "pressure"])
+                         ["self", "itl_samples", "pressure", "active", "now"])
 
     def test_blind_guard_equals_naive(self):
         r = sim.s3(horizon=30.0)
