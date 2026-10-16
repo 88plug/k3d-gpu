@@ -1,0 +1,50 @@
+# Helm values for nri-resource-policy-balloons v0.14.0 that consume the placement twin's labels.
+# PROTOTYPE, NOT APPLIED by k3d-gpu. share/nri-balloons.yml stays the shipped policy. To try it,
+# re-render share/nri-balloons.yml with these values (same chart and version, see its header).
+#
+# Labels written by twin/placement_twin.py emit():
+#   k3d-gpu.io/cores=performance                       -> balloon type performance (P-cores)
+#   k3d-gpu.io/cores=efficient + k3d-gpu.io/e-group=mN -> balloon type efficient-module
+#
+# efficient-module: one balloon per e-group value (groupBy). The l2cache load class (doc:
+# "Balloons generating similar loads get CPUs from separate cores/caches"; with
+# overloadsLevelInBalloon false, CPUs inside one balloon stay close) asks the allocator to
+# put a group on one 4-core Gracemont module and different groups on different modules.
+# maxCPUs 4 = one module. Whether the allocator honours this on a 13900T is UNVERIFIED
+# (live probe L5 in docs/placement-twin.md).
+nodeSelector:
+  k3d-gpu.io/hybrid-cpu: "true"
+config:
+  reservedResources:
+    cpu: 1000m
+  agent:
+    nodeResourceTopology: true
+  allocatorTopologyBalancing: true
+  reservedPoolNamespaces: [kube-system]
+  loadClasses:
+  - name: e-module
+    level: l2cache
+    overloadsLevelInBalloon: false
+  balloonTypes:
+  - name: performance
+    preferCoreType: performance
+    matchExpressions:
+    - {key: pod/labels/k3d-gpu.io/cores, operator: Equals, values: [performance]}
+  - name: efficient-module
+    preferCoreType: efficient
+    groupBy: "${pod/labels/k3d-gpu.io/e-group}"
+    maxCPUs: 4
+    loads: [e-module]
+    matchExpressions:
+    - {key: pod/labels/k3d-gpu.io/e-group, operator: Exists}
+  - name: efficient
+    preferCoreType: efficient
+    matchExpressions:
+    - {key: pod/labels/k3d-gpu.io/cores, operator: Equals, values: [efficient]}
+  - name: shared
+    shareIdleCPUsInSame: system
+    maxBalloons: 1
+    matchExpressions:
+    - {key: name, operator: AlwaysTrue}
+  log:
+    debug: [none]

@@ -1,0 +1,63 @@
+# Placement-twin counter profiler. PROTOTYPE, NOT APPLIED by k3d-gpu.
+#
+# One pod per hybrid node. For every pod labelled k3d-gpu.io/twin-profile=true it samples the
+# pod's cgroup with `perf stat -x, -a -G <cgroup>` while the pod runs in the performance balloon,
+# and reads /proc/<pid>/schedstat for the off-CPU share. Samples are accumulated per image
+# digest (docs/placement-twin.md A3: a 2 s sample at pod start mispredicts the E/P factor by
+# ~4x more than a per-image profile, so the start sample is not used for placement).
+#
+# Needs: CAP_PERFMON (perf_event_open on other tasks' cgroups), hostPID (schedstat of the
+# pod's processes), the host cgroup tree read-only, and a perf binary in $PROFILER_IMAGE.
+# On k3d the "host" is the k3s node container, so the node container itself must be allowed
+# perf_event_open (docker's default seccomp profile denies it unless CAP_PERFMON or
+# CAP_SYS_ADMIN is granted, and kernel.perf_event_paranoid applies). UNVERIFIED: live probe L1.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: k3d-gpu-twin-profiler
+  namespace: kube-system
+  labels: {app: k3d-gpu-twin-profiler}
+spec:
+  selector:
+    matchLabels: {app: k3d-gpu-twin-profiler}
+  template:
+    metadata:
+      labels: {app: k3d-gpu-twin-profiler}
+    spec:
+      nodeSelector:
+        k3d-gpu.io/hybrid-cpu: "true"
+      hostPID: true
+      containers:
+      - name: profiler
+        image: ${PROFILER_IMAGE}
+        command: ["/bin/sh", "-c"]
+        # EVENTS is the output of `python3 twin/placement_twin.py events`.
+        args:
+        - |
+          set -eu
+          EVENTS="cpu_core/instructions/,cpu_core/cpu-cycles/,cpu_core/ref-cycles/,cpu_core/slots/,cpu_core/topdown-retiring/,cpu_core/topdown-bad-spec/,cpu_core/topdown-fe-bound/,cpu_core/topdown-be-bound/,cpu_core/topdown-mem-bound/,cpu_core/branch-misses/,cpu_core/l2_rqsts.miss/,cpu_core/longest_lat_cache.miss/,cpu_core/fp_arith_inst_retired.256b_packed_single/,cpu_core/fp_arith_inst_retired.256b_packed_double/"
+          # Prototype loop body: one 10 s window per labelled pod cgroup listed in /targets.
+          while true; do
+            for cg in $(cat /targets/cgroups 2>/dev/null); do
+              perf stat -x, -a -G "$cg" -e "$EVENTS" -o "/out/$(basename "$cg").csv" -- sleep 10 || true
+            done
+            sleep 30
+          done
+        securityContext:
+          capabilities:
+            add: ["PERFMON"]
+          readOnlyRootFilesystem: true
+        resources:
+          requests: {cpu: 50m, memory: 32Mi}
+          limits: {cpu: 200m, memory: 64Mi}
+        volumeMounts:
+        - {name: cgroup, mountPath: /sys/fs/cgroup, readOnly: true}
+        - {name: out, mountPath: /out}
+        - {name: targets, mountPath: /targets}
+      volumes:
+      - name: cgroup
+        hostPath: {path: /sys/fs/cgroup}
+      - name: out
+        emptyDir: {}
+      - name: targets
+        emptyDir: {}
