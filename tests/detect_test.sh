@@ -442,6 +442,92 @@ test_says "hybrid test fails when an efficient pod is not on E-cores" "${r}" fai
     STUB_POD_PHASE=Succeeded STUB_POD_LOGS_cores_performance_test="Cpus_allowed_list:	0" \
     STUB_POD_LOGS_cores_efficient_test="Cpus_allowed_list:	3" K3D_GPU_VENDORS=hybrid
 
+# `up` with docker, k3d and kubectl stubbed: k3d logs its arguments to K3D_ARGS_LOG,
+# every DaemonSet exists, and each node label selector matches one node.
+USTUB="${WORK}/ubin"
+mkdir -p "${USTUB}"
+printf '#!/bin/sh\nexit 0\n' > "${USTUB}/docker"
+printf '#!/bin/sh\nprintf "%%s\\n" "$@" >> "${K3D_ARGS_LOG}"\n' > "${USTUB}/k3d"
+cat > "${USTUB}/kubectl" <<'EOF'
+#!/bin/sh
+case "$*" in "get nodes -l "*) echo node/k3d-gpu-server-0 ;; esac
+exit 0
+EOF
+chmod +x "${USTUB}/docker" "${USTUB}/k3d" "${USTUB}/kubectl"
+
+# up_args <name> <root> <ERE> [negate] [env assignments...]: one `k3d cluster create`
+# argument must match <ERE>, or none may when a 4th argument is given.
+up_args() {
+    local name=$1 root=$2 re=$3 negate=${4:-} log out rc hit=0
+    shift 4 2>/dev/null || shift $#
+    log="${WORK}/k3d-args.$((PASS + FAILS))"
+    out=$(env K3D_GPU_SYSROOT="${root}" K3D_ARGS_LOG="${log}" PATH="${USTUB}:${PATH}" "$@" bash "${K3D_GPU}" up 2>&1)
+    rc=$?
+    grep -E -- "${re}" "${log}" >/dev/null 2>&1 && hit=1
+    if [ "${rc}" -eq 0 ] && { { [ -z "${negate}" ] && [ "${hit}" -eq 1 ]; } || { [ -n "${negate}" ] && [ "${hit}" -eq 0 ]; }; }; then
+        PASS=$((PASS + 1)); echo "ok   ${name}"
+    else
+        FAILS=$((FAILS + 1))
+        echo "FAIL ${name} (rc=${rc}, ${negate:+not }matching /${re}/)"
+        sed 's/^/  | k3d /' "${log}" 2>/dev/null
+        sed 's/^/  | /' <<< "${out}"
+    fi
+}
+
+# One NRI policy per node: the baked balloons addon stays only for a hybrid CPU with
+# k3s owning it; otherwise k3s is told to delete it so a Helm release can own the node.
+NO_BALLOONS='^--k3s-arg=--disable=nri-balloons@server:\*$'
+r=$(newroot up-hybrid)
+hybrid "${r}" 0-15 16-31
+up_args "up keeps the baked balloons policy on a hybrid CPU" "${r}" "${NO_BALLOONS}" negate
+up_args "up labels a hybrid node" "${r}" '^--k3s-node-label=k3d-gpu.io/hybrid-cpu=true@server:\*;agent:\*$'
+up_args "K3D_GPU_BALLOONS=external disables the baked balloons policy" "${r}" "${NO_BALLOONS}" "" \
+    K3D_GPU_BALLOONS=external
+up_args "K3D_GPU_BALLOONS=external still labels the hybrid node" "${r}" 'k3d-gpu.io/hybrid-cpu=true' "" \
+    K3D_GPU_BALLOONS=external
+
+r=$(newroot up-xeon)
+mkdir -p "${r}/proc"
+echo "flags		: fpu sse2 avx512f amx_bf16 amx_tile amx_int8" > "${r}/proc/cpuinfo"
+up_args "up disables the baked balloons policy on a non-hybrid CPU" "${r}" "${NO_BALLOONS}"
+up_args "K3D_GPU_VENDORS without hybrid disables the baked balloons policy" "${r}" "${NO_BALLOONS}" "" \
+    K3D_GPU_VENDORS=amx
+
+# Helm adopts an existing object only if it carries managed-by=Helm and the release
+# name/namespace annotations; every chart-templated object in the baked manifest must,
+# so Intel EAT's `helm upgrade --install nri-resource-policy-balloons -n kube-system` can
+# take it over instead of failing.
+BALLOONS_YML="$(dirname "${K3D_GPU}")/../share/nri-balloons.yml"
+unowned=$(awk '
+    function check() {
+        if (tmpl && !(mb && rn && rns)) print src
+        tmpl = mb = rn = rns = 0
+    }
+    /^---$/ { check(); next }
+    /^# Source: .*\/templates\// { tmpl = 1; src = $3 }
+    /^    app.kubernetes.io\/managed-by: Helm$/ { mb = 1 }
+    /^    meta.helm.sh\/release-name: nri-resource-policy-balloons$/ { rn = 1 }
+    /^    meta.helm.sh\/release-namespace: kube-system$/ { rns = 1 }
+    END { check() }' "${BALLOONS_YML}")
+owned=$(grep -c '^# Source: .*/templates/' "${BALLOONS_YML}")
+if [ -z "${unowned}" ] && [ "${owned}" -gt 0 ]; then
+    PASS=$((PASS + 1)); echo "ok   all ${owned} templated balloons objects carry Helm ownership metadata"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL templated balloons objects without Helm ownership metadata: ${unowned:-none found}"
+fi
+
+r=$(newroot balloons-bad)
+expect_fail "unknown K3D_GPU_BALLOONS is rejected" "${r}" K3D_GPU_BALLOONS=helm
+
+r=$(newroot hybrid-doc-external)
+kernel "${r}" 6.18.1
+hybrid "${r}" 0-15 16-31
+doctor_says "doctor says K3D_GPU_BALLOONS=external leaves the policy to another stack" "${r}" \
+    'ok: hybrid CPU: .*leaves the NRI balloons policy to another stack \(K3D_GPU_BALLOONS=external' "" \
+    K3D_GPU_BALLOONS=external
+doctor_says "doctor says a hybrid CPU left out of K3D_GPU_VENDORS gets no policy" "${r}" \
+    'leaves the NRI balloons policy to another stack .*K3D_GPU_VENDORS=amx' "" K3D_GPU_VENDORS=amx
+
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

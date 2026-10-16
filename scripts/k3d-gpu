@@ -16,7 +16,9 @@
 #   hybrid  Intel hybrid CPUs (P-cores + E-cores, Alder Lake and newer)
 #                                                         -> node label k3d-gpu.io/hybrid-cpu=true; pods
 #           labelled k3d-gpu.io/cores=performance|efficient are pinned to P- or E-cores by
-#           the NRI balloons policy (nri-plugins), everything else keeps every CPU
+#           the NRI balloons policy (nri-plugins), everything else keeps every CPU.
+#           K3D_GPU_BALLOONS=external leaves that policy to a Helm release (e.g. Intel's
+#           Enterprise Agent Toolkit); without hybrid the baked policy is disabled.
 #           DSA/IAA/QAT need host setup first (work queues / SR-IOV VFs); doctor says what is missing.
 #
 # Subcommands:
@@ -44,6 +46,7 @@ SYSROOT="${K3D_GPU_SYSROOT:-}" # prefix for /sys and /dev reads (tests point it 
 TEST_IMAGE="${K3D_GPU_TEST_IMAGE:-nvidia/cuda:13.4.2-base-ubuntu26.04}"
 DEVICE_TEST_IMAGE="${K3D_GPU_DEVICE_TEST_IMAGE:-busybox:1.37}"
 VENDORS_REQUEST="${K3D_GPU_VENDORS:-auto}"
+BALLOONS="${K3D_GPU_BALLOONS:-k3s}" # owner of the hybrid NRI balloons policy: k3s (baked addon) | external
 FAIL=0           # set by doctor_* checks
 INTEL_DRIVERS=() # "<driver> <pci-device-id>" per Intel render node (filled by detect_intel)
 NPU_IDS=()       # PCI device id per Intel NPU accel node (filled by detect_npu)
@@ -82,6 +85,7 @@ Environment:
   K3D_GPU_IAA_PLUGIN    Intel IAA plugin yaml  (default: ${SHARE_DIR}/intel-iaa-plugin.yml)
   K3D_GPU_QAT_PLUGIN    Intel QAT plugin yaml  (default: ${SHARE_DIR}/intel-qat-plugin.yml)
   K3D_GPU_HYBRID_PLUGIN NRI balloons yaml    (default: ${SHARE_DIR}/nri-balloons.yml)
+  K3D_GPU_BALLOONS      k3s | external: owner of the hybrid NRI balloons policy (default: k3s)
 
 Docs: https://github.com/88plug/k3d-gpu
 EOF
@@ -302,8 +306,18 @@ resolve_vendors() {
             esac
         done
     fi
+    case "${BALLOONS}" in
+        k3s|external) ;;
+        *) err "unknown K3D_GPU_BALLOONS '${BALLOONS}' (use k3s or external)" ;;
+    esac
     return 0
 }
+
+# The baked NRI balloons addon runs only on a hybrid CPU with k3s owning it. A node
+# runs one NRI resource policy; otherwise it is left to whatever stack installs one
+# (Intel's Enterprise Agent Toolkit installs the same chart as Helm release
+# nri-resource-policy-balloons in kube-system).
+balloons_baked() { is_active hybrid && [ "${BALLOONS}" = k3s ]; }
 
 is_active() {
     local v
@@ -347,7 +361,7 @@ vendor_daemonset() {  # prints: namespace name manifest
         dsa)    echo "kube-system intel-dsa-plugin ${DSA_PLUGIN_MANIFEST}" ;;
         iaa)    echo "kube-system intel-iaa-plugin ${IAA_PLUGIN_MANIFEST}" ;;
         qat)    echo "kube-system intel-qat-plugin ${QAT_PLUGIN_MANIFEST}" ;;
-        hybrid) echo "kube-system nri-resource-policy-balloons ${HYBRID_PLUGIN_MANIFEST}" ;;
+        hybrid) if balloons_baked; then echo "kube-system nri-resource-policy-balloons ${HYBRID_PLUGIN_MANIFEST}"; fi ;;
     esac
 }
 
@@ -545,7 +559,9 @@ doctor_cpu_accels() {
         lines+="  ${RED}fail${RST}: QAT requested but no QAT PF with VFs"$'\n'
         FAIL=1
     fi
-    if has_hybrid; then
+    if has_hybrid && ! balloons_baked; then
+        lines+="  ok: hybrid CPU: P-cores $(hybrid_cpus core), E-cores $(hybrid_cpus atom) — up leaves the NRI balloons policy to another stack (K3D_GPU_BALLOONS=${BALLOONS}, K3D_GPU_VENDORS=${VENDORS_REQUEST})"$'\n'
+    elif has_hybrid; then
         lines+="  ok: hybrid CPU: P-cores $(hybrid_cpus core), E-cores $(hybrid_cpus atom) — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient"$'\n'
     elif is_active hybrid; then
         lines+="  ${RED}fail${RST}: hybrid requested but the CPU has no online P-core and E-core PMUs (/sys/devices/cpu_core, cpu_atom)"$'\n'
@@ -644,6 +660,13 @@ cmd_up() {
     # node's own cgroup cpusets change; nothing host-wide (cpufreq, RDT) is touched.
     if is_active hybrid; then
         create_args+=(--k3s-node-label="${HYBRID_LABEL}@server:*;agent:*")
+    fi
+    # k3s re-applies every baked manifest at each start (pkg/deploy WatchFiles), which
+    # would undo a Helm upgrade of the policy. --disable=nri-balloons makes k3s delete
+    # the baked nri-balloons.yaml and every object it created instead, so a Helm
+    # release can own the node's NRI policy.
+    if ! balloons_baked; then
+        create_args+=(--k3s-arg="--disable=nri-balloons@server:*")
     fi
     # AMX is a CPU feature: no plugin, just NFD-style labels pods can select on.
     if is_active amx; then

@@ -54,6 +54,7 @@ Behaviour is tunable via environment variables:
 | `K3D_GPU_NPU_PLUGIN` | `/usr/share/k3d-gpu/intel-npu-plugin.yml` | same, for the Intel NPU plugin |
 | `K3D_GPU_DSA_PLUGIN` / `_IAA_` / `_QAT_` | `/usr/share/k3d-gpu/intel-{dsa,iaa,qat}-plugin.yml` | same, for the Xeon accelerator plugins |
 | `K3D_GPU_HYBRID_PLUGIN` | `/usr/share/k3d-gpu/nri-balloons.yml` | same, for the hybrid-CPU NRI balloons policy |
+| `K3D_GPU_BALLOONS`   | `k3s`                                     | `external` leaves the hybrid NRI balloons policy to a Helm release |
 | `K3D_GPU_DEVICE_TEST_IMAGE` | `busybox:1.37`                     | image used by `k3d-gpu test` for Intel GPU/NPU and Gaudi |
 | `K3D_GPU_TEST_IMAGE` | `nvidia/cuda:13.4.2-base-ubuntu26.04`     | image used by `k3d-gpu test`         |
 
@@ -145,9 +146,36 @@ Unlabelled pods land in a `shared` balloon that uses every idle CPU, so nothing
 else loses capacity. kube-system runs on a one-CPU reserve. k3s turns NRI on in
 containerd for a privileged node, and the node sees the host's core-type PMUs.
 The policy only changes cpusets inside the node's cgroup. It never touches
-cpufreq, C-states or RDT. Only one NRI resource policy can own a node, so drop
-`hybrid` from `K3D_GPU_VENDORS` if another stack installs its own (for example,
-Intel's Enterprise Agent Toolkit CPU balloons).
+cpufreq, C-states or RDT.
+
+Only one NRI resource policy can own a node. k3s re-applies its baked manifests
+every time it starts, which would undo another stack's changes to the policy. So
+`up` tells k3s to delete the baked policy (`--disable=nri-balloons`) when the CPU
+is not hybrid, when `hybrid` is left out of `K3D_GPU_VENDORS`, or when you set
+`K3D_GPU_BALLOONS=external`. Use `external` when a Helm release will own the
+policy, for example Intel's Enterprise Agent Toolkit (EAT). EAT installs the same
+chart as release `nri-resource-policy-balloons` in `kube-system`.
+
+The baked objects also carry Helm's ownership metadata for that release. If EAT
+runs on a cluster created without `external`, its `helm upgrade --install` adopts
+them instead of failing. To keep k3s from reverting the release on the next
+restart, run
+`docker exec k3d-gpu-server-0 touch /var/lib/rancher/k3s/server/manifests/nri-balloons.yaml.skip`
+(use your cluster name in place of `gpu`).
+
+#### Intel Enterprise Agent Toolkit on a hybrid CPU
+
+[`contrib/eat/`](contrib/eat) keeps EAT's vLLM on P-cores and its agent services
+(LiteLLM, Redis, pgvector, sandboxes) on E-cores:
+
+- `hybrid-values.yaml` holds chart values for `K3D_GPU_BALLOONS=external`. Install
+  them with the `helm` command at the top of the file, then set
+  `deploy_nri_balloon_policy=no` in EAT's `agentic-config.cfg`.
+- `enterprise-agent-toolkit.patch` is for EAT itself. It makes its CPU reservation
+  correct on hybrid CPUs, which upstream gets wrong, and adds the same P/E split
+  to EAT's own policy.
+- `compute_reserved_cpus.sh` is the patched script. `tests/reserved_cpus_test.sh`
+  tests it.
 
 ---
 
