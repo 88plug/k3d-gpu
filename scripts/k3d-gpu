@@ -26,6 +26,7 @@
 #   detect  print the accelerators found on this host and their k8s resources
 #   doctor  preflight: accelerators present, docker running, runtimes, k3d installed
 #   logs    tail server container logs
+#   host-setup  check the host userspace and print (--apply: run) the pinned install commands
 
 set -euo pipefail
 
@@ -66,6 +67,11 @@ Usage: k3d-gpu <command>
   detect    Print accelerators found on this host and their Kubernetes resources
   doctor    Diagnostic preflight checks
   logs      Tail k3s server container logs
+  host-setup [--apply] [--distro D]
+            Check the host drivers/userspace (vainfo, clinfo, libva, libstdc++) and print
+            the pinned install commands for Intel GPU/NPU and the NVIDIA container
+            toolkit + CDI (Ubuntu 24.04/26.04, Fedora, Arch, Manjaro). --apply runs
+            them after a y/N prompt
   version   Show version
   help      Show this message
 
@@ -285,8 +291,13 @@ kernel_lt() {
 }
 
 # firmware_present <path prefix under lib/firmware>: matches .bin, .zst, .xz, ...
+# Also looks in firmware/updates, where Intel's own packages (intel-fw-npu) install.
 firmware_present() {
-    compgen -G "${SYSROOT}/lib/firmware/$1*" >/dev/null || compgen -G "${SYSROOT}/usr/lib/firmware/$1*" >/dev/null
+    local d
+    for d in lib/firmware lib/firmware/updates usr/lib/firmware usr/lib/firmware/updates; do
+        compgen -G "${SYSROOT}/${d}/$1*" >/dev/null && return 0
+    done
+    return 1
 }
 
 # Resolve the active vendor list into ACTIVE (array). Honors K3D_GPU_VENDORS.
@@ -899,6 +910,451 @@ cmd_logs() {
     docker logs -f "k3d-${CLUSTER}-server-0"
 }
 
+# ---- host setup -----------------------------------------------------------------
+# `host-setup` checks the host userspace each detected accelerator needs, then
+# prints the commands that install it (Intel compute runtime, Level Zero, media
+# driver, NPU driver + firmware; NVIDIA container toolkit + CDI spec). --apply
+# runs them after a y/N prompt. Kernel boot options are printed, never applied.
+#
+# Pins, taken from each upstream release page:
+#   intel/compute-runtime 26.35.39758.10 with intel-graphics-compiler v2.41.5
+#   oneapi-src/level-zero v1.34.0 (libze1, the Ubuntu 24.04 build; also used on 26.04)
+#   intel/linux-npu-driver v1.38.0 (UMD, NPU compiler, intel-fw-npu firmware)
+#   ppa:kobuk-team/intel-graphics media driver 26.3.2, libva 2.24.1, gmmlib 22.10.1
+#     (Intel publishes no media-driver .debs; this is Intel's Ubuntu package source)
+#   nvidia-container-toolkit 1.20.1-1 (NVIDIA's apt and dnf repos)
+# Ubuntu archive tools (vainfo, clinfo, libtbb12) come from the release itself.
+# Arch, Manjaro and Fedora install their own repo builds: those repos serve only
+# the current build, so an exact version cannot be requested there. Arch and
+# Manjaro always install with -Syu, because a partial upgrade is what leaves the
+# media driver ahead of libva or the compute runtime ahead of libstdc++.
+HS_CR=26.35.39758.10
+HS_NPU_REL=v1.38.0
+HS_NPU_BUILD=1.38.0.20260910-34487311128
+HS_NVCTK=1.20.1-1
+HS_DIR="${K3D_GPU_SETUP_DIR:-${XDG_CACHE_HOME:-${HOME:-}/.cache}/k3d-gpu/host-setup}"
+HS_LIBDIRS="usr/lib/x86_64-linux-gnu usr/lib64 usr/lib"
+
+# "<file> <sha256> <download dir>" per Intel GPU compute .deb. The sha256s are
+# the ones the compute-runtime and IGC release notes publish.
+hs_intel_debs() {
+    local cr="https://github.com/intel/compute-runtime/releases/download/${HS_CR}"
+    local igc="https://github.com/intel/intel-graphics-compiler/releases/download/v2.41.5"
+    cat <<EOF
+intel-igc-core-2_2.41.5+22716_amd64.deb 0a6e64a663ae65a0fa02d6912ae3b6b37cf85b90c21cc423fd9fef70aaf4f628 ${igc}
+intel-igc-opencl-2_2.41.5+22716_amd64.deb 779e1b9e88098eb25711e9a8f67c2752665bad22f134aa40ed5649f6e1b87058 ${igc}
+intel-opencl-icd_${HS_CR}-0_amd64.deb 61712caaddeba3d38e4f79e2a0fb23fea25596ca2d72c3144c6eea2331ec4301 ${cr}
+libze-intel-gpu1_${HS_CR}-0_amd64.deb c19a641b953d55aebbf1d51bec364a84bf629f985e02fbbe6dc70224c0e88470 ${cr}
+EOF
+}
+HS_ZE_DEB="libze1_1.34.0+u24.04_amd64.deb 45210e4549cd965ad7b9f160eefe53cbcdba01af341bea7ac7ba0aedeeb613ba https://github.com/oneapi-src/level-zero/releases/download/v1.34.0"
+
+# NPU driver archive per Ubuntu release: "<file> <sha256>" (GitHub asset digests).
+hs_npu_tarball() {
+    case "$1" in
+        24.04) echo "linux-npu-driver-v${HS_NPU_BUILD}-ubuntu2404.tar.gz 1efcd4b60c22abee751d8f2705962cbcc2a569de45c7e0e670cf08afbfcdc1d2" ;;
+        26.04) echo "linux-npu-driver-v${HS_NPU_BUILD}-ubuntu2604.tar.gz 83685e6d92f4db1ca65e442846d487c7feb1335634b33994292ceb38f933bcc7" ;;
+    esac
+}
+
+# ubuntu-24.04 | ubuntu-26.04 | fedora | arch | manjaro, or the raw os-release ID.
+hs_distro() {
+    local f="${SYSROOT}/etc/os-release" id ver
+    [ -r "${f}" ] || f="${SYSROOT}/usr/lib/os-release"
+    id=$(sed -n 's/^ID=//p' "${f}" 2>/dev/null | tr -d '"')
+    ver=$(sed -n 's/^VERSION_ID=//p' "${f}" 2>/dev/null | tr -d '"')
+    case "${id}" in
+        ubuntu) echo "ubuntu-${ver}" ;;
+        *) echo "${id:-unknown}" ;;
+    esac
+}
+
+# First file matching <glob> under the library dirs (highest version wins).
+hs_find() {
+    local d hit
+    for d in ${HS_LIBDIRS}; do
+        hit=$({ compgen -G "${SYSROOT}/${d}/$1" || true; } | sort -V | tail -1)
+        [ -n "${hit}" ] && { echo "${hit}"; return 0; }
+    done
+    return 1
+}
+
+# Highest GLIBCXX_3.4.N symbol version named in a binary (empty when none).
+glibcxx_max() { { grep -ao 'GLIBCXX_3\.4\.[0-9]*' "$1" 2>/dev/null || true; } | sort -uV | tail -1; }
+
+# Fills HS_TARGETS (intel npu nvidia) from PCI devices, bound or not, so it works
+# before any driver is set up. K3D_GPU_VENDORS narrows or forces the list.
+hs_targets() {
+    HS_TARGETS=() HS_NPU_GENS=() HS_INTEL_GPUS=() HS_RENDER=""
+    local dev vendor class id gen v req
+    for dev in "${SYSROOT}"/sys/bus/pci/devices/*; do
+        vendor=$(cat "${dev}/vendor" 2>/dev/null) || continue
+        class=$(cat "${dev}/class" 2>/dev/null) || continue
+        id=$(cat "${dev}/device" 2>/dev/null) || continue
+        case "${vendor}:${class}" in
+            0x8086:0x03*) HS_INTEL_GPUS+=("${id} $(bound_driver "${dev}")") ;;
+            0x10de:0x03*) is_hs_target nvidia || HS_TARGETS+=(nvidia) ;;
+        esac
+        if [ "${vendor}" = 0x8086 ] && [ -n "$(npu_platform "${id}")" ]; then
+            IFS='|' read -r _ _ gen <<< "$(npu_platform "${id}")"
+            HS_NPU_GENS+=("${gen}")
+        fi
+    done
+    if [ "${#HS_INTEL_GPUS[@]}" -gt 0 ]; then HS_TARGETS+=(intel); fi
+    if [ "${#HS_NPU_GENS[@]}" -gt 0 ]; then HS_TARGETS+=(npu); fi
+    if has_nvidia && ! is_hs_target nvidia; then HS_TARGETS+=(nvidia); fi
+    for dev in "${SYSROOT}"/sys/class/drm/renderD*; do
+        [ "$(cat "${dev}/device/vendor" 2>/dev/null)" = 0x8086 ] || continue
+        HS_RENDER="/dev/dri/${dev##*/}"
+        break
+    done
+    if [ "${VENDORS_REQUEST}" != "auto" ]; then
+        HS_TARGETS=()
+        IFS=',' read -r -a req <<< "${VENDORS_REQUEST// /}"
+        for v in "${req[@]}"; do
+            case "${v}" in intel|npu|nvidia) is_hs_target "${v}" || HS_TARGETS+=("${v}") ;; esac
+        done
+    fi
+    return 0
+}
+
+is_hs_target() {
+    local v
+    for v in ${HS_TARGETS[@]+"${HS_TARGETS[@]}"}; do [ "${v}" = "$1" ] && return 0; done
+    return 1
+}
+
+hs_ok()   { echo "  ok: $*"; }
+hs_warn() { echo "  ${YLW}warn${RST}: $*"; HS_MISSING=$((HS_MISSING + 1)); }
+hs_fail() { echo "  ${RED}fail${RST}: $*"; HS_BROKEN=$((HS_BROKEN + 1)); }
+
+# The one command that brings every package back in step on this distro.
+hs_sync_fix() {
+    case "${HS_DISTRO}" in
+        arch|manjaro) echo "sudo pacman -Syu (a full upgrade; never pacman -Sy <pkg> alone)" ;;
+        fedora)       echo "sudo dnf upgrade --refresh" ;;
+        ubuntu-*)     echo "sudo apt-get update && sudo apt-get full-upgrade" ;;
+        *)            echo "upgrade the whole system with your package manager" ;;
+    esac
+}
+
+# libva only loads a driver exporting __vaDriverInit_1_<N> with N at most its own
+# minor version (libva 2.N implements VA-API 1.N). A driver built against a newer
+# libva fails with "has no function __vaDriverInit_1_0": the last name it tried.
+hs_check_va() {
+    local drv lib dmin="" lmin="" fix out line
+    if ! drv=$(hs_find dri/iHD_drv_video.so); then
+        hs_warn "intel-media-driver (iHD_drv_video.so) not installed — the plan below installs it"
+        return 0
+    fi
+    dmin=$({ grep -ao '__vaDriverInit_1_[0-9]*' "${drv}" 2>/dev/null || true; } | sed 's/.*_//' | sort -n | tail -1)
+    if lib=$(hs_find 'libva.so.2.*'); then
+        lmin=${lib##*/libva.so.2.}
+        lmin=${lmin%%.*}
+        lmin=$((10#${lmin} / 100))
+    fi
+    case "${HS_DISTRO}" in
+        ubuntu-*) fix="sudo add-apt-repository -y ppa:kobuk-team/intel-graphics && sudo apt-get install -y $(hs_libva_pkgs "${HS_DISTRO#ubuntu-}")" ;;
+        *) fix=$(hs_sync_fix) ;;
+    esac
+    if [ -z "${lib}" ]; then
+        hs_fail "libva.so.2 not found — install libva (the plan below does)"
+    elif [ -n "${dmin}" ] && [ "${dmin}" -gt "${lmin}" ]; then
+        hs_fail "${drv#"${SYSROOT}"} exports __vaDriverInit_1_${dmin} (built for libva 2.${dmin}) but libva is 2.${lmin} — vainfo fails with 'has no function __vaDriverInit_1_0'. Fix: ${fix}"
+    elif [ -n "${dmin}" ]; then
+        hs_ok "media driver exports __vaDriverInit_1_${dmin}, libva is 2.${lmin}"
+    fi
+    command -v vainfo >/dev/null 2>&1 || { hs_warn "vainfo not installed — cannot run the media driver (the plan below installs it)"; return 0; }
+    out=$(timeout 30 vainfo --display drm --device "${HS_RENDER:-/dev/dri/renderD128}" 2>&1 || true)
+    if line=$(grep -m1 'has no function __vaDriverInit' <<< "${out}"); then
+        hs_fail "vainfo: ${line#libva error: } — the media driver is newer than libva. Fix: ${fix}"
+    elif line=$(grep -m1 'dlopen of .* failed' <<< "${out}"); then
+        if grep -q "GLIBCXX_" <<< "${line}"; then
+            hs_fail "vainfo: ${line#libva error: } — libstdc++ is older than the media driver needs. Fix: $(hs_sync_fix)"
+        else
+            hs_fail "vainfo: ${line#libva error: }"
+        fi
+    elif line=$(grep -m1 'Driver version:' <<< "${out}"); then
+        hs_ok "vainfo: ${line#*Driver version: }"
+    else
+        hs_fail "vainfo did not initialise the driver: $(tail -n1 <<< "${out}")"
+    fi
+}
+
+# A runtime built by a newer GCC than the installed libstdc++ fails to load with
+# "version `GLIBCXX_3.4.N' not found"; the OpenCL ICD loader then hides the
+# platform silently, so compare the symbol versions directly.
+hs_check_cxx() {
+    local cxx have need lib name bad=0
+    cxx=$(hs_find libstdc++.so.6) || return 0
+    have=$(glibcxx_max "${cxx}")
+    [ -n "${have}" ] || return 0
+    for name in intel-opencl/libigdrcl.so libze_intel_gpu.so.1 libze_intel_npu.so.1 dri/iHD_drv_video.so; do
+        lib=$(hs_find "${name}") || continue
+        need=$(glibcxx_max "${lib}")
+        [ -n "${need}" ] || continue
+        if [ "${need##*.}" -gt "${have##*.}" ]; then
+            hs_fail "${lib#"${SYSROOT}"} needs ${need} but libstdc++ provides up to ${have} — it was built by a newer GCC than the installed gcc-libs/libstdc++. Fix: $(hs_sync_fix)"
+            bad=1
+        fi
+    done
+    [ "${bad}" -eq 1 ] || hs_ok "libstdc++ provides ${have}, enough for the installed Intel runtimes"
+}
+
+hs_check_opencl() {
+    local out icd line
+    command -v clinfo >/dev/null 2>&1 || { hs_warn "clinfo not installed — cannot list OpenCL platforms (the plan below installs it)"; return 0; }
+    out=$(timeout 60 clinfo -l 2>&1 || true)
+    if line=$(grep -m1 -E 'Intel\(R\) OpenCL.*Graphics' <<< "${out}"); then
+        hs_ok "clinfo: ${line#*: }"
+        return 0
+    fi
+    icd=$(head -n1 "${SYSROOT}/etc/OpenCL/vendors/intel.icd" 2>/dev/null || true)
+    if [ -z "${icd}" ]; then
+        hs_fail "clinfo lists no Intel OpenCL platform and /etc/OpenCL/vendors/intel.icd is missing — the compute runtime is not installed (the plan below installs it)"
+        return 0
+    fi
+    hs_fail "clinfo lists no Intel OpenCL platform although ${icd} is registered"
+    while read -r line; do
+        [ -n "${line}" ] && echo "         ldd ${icd}: ${line}"
+    done < <({ ldd "${icd}" 2>&1 || true; } | grep 'not found')
+    echo "         Fix: $(hs_sync_fix); then rerun k3d-gpu host-setup"
+}
+
+hs_checks() {
+    local lz e id drv name mink fw gen
+    if is_hs_target intel || is_hs_target npu; then
+        info "Checking Intel userspace..."
+        hs_check_cxx
+        if lz=$(hs_find libze_loader.so.1); then hs_ok "Level Zero loader: ${lz##*/}"; else hs_warn "Level Zero loader (libze_loader.so.1) not installed"; fi
+    fi
+    if is_hs_target intel; then
+        if hs_find libze_intel_gpu.so.1 >/dev/null; then hs_ok "Level Zero GPU driver (libze_intel_gpu.so.1) installed"; else hs_warn "Level Zero GPU driver (libze_intel_gpu.so.1) not installed"; fi
+        hs_check_opencl
+        hs_check_va
+    fi
+    if is_hs_target npu; then
+        info "Checking Intel NPU userspace..."
+        if hs_find libze_intel_npu.so.1 >/dev/null; then hs_ok "NPU Level Zero driver (libze_intel_npu.so.1) installed"; else hs_warn "NPU Level Zero driver (libze_intel_npu.so.1) not installed"; fi
+        for gen in $(printf '%s\n' ${HS_NPU_GENS[@]+"${HS_NPU_GENS[@]}"} | sort -u); do
+            if firmware_present "intel/vpu/vpu_${gen}_"; then hs_ok "intel/vpu/vpu_${gen}_* firmware present"; else hs_warn "intel/vpu/vpu_${gen}_* firmware missing"; fi
+        done
+    fi
+    if is_hs_target nvidia; then
+        info "Checking NVIDIA container toolkit..."
+        if command -v nvidia-ctk >/dev/null 2>&1; then hs_ok "nvidia-ctk installed"; else hs_warn "nvidia-ctk not installed"; fi
+        if [ -e "${SYSROOT}/etc/cdi/nvidia.yaml" ] || [ -e "${SYSROOT}/var/run/cdi/nvidia.yaml" ]; then
+            hs_ok "NVIDIA CDI spec present"
+        else
+            hs_warn "no NVIDIA CDI spec in /etc/cdi or /var/run/cdi"
+        fi
+    fi
+    # Kernel side: parts newer than the kernel's default xe support.
+    local notes=""
+    for e in ${HS_INTEL_GPUS[@]+"${HS_INTEL_GPUS[@]}"}; do
+        is_hs_target intel || break
+        read -r id drv <<< "${e}"
+        IFS='|' read -r name mink fw <<< "$(intel_gpu_platform "${id}")"
+        [ -n "${name}" ] || continue
+        if [ -n "${mink}" ] && [ -z "${drv}" ] && kernel_lt "${mink}" && [ "${fw#i915/}" != "${fw}" ]; then
+            # i915 is the default driver for this part; xe does not support it on these kernels.
+            notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs the boot option i915.force_probe=${id#0x} (or kernel ${mink}+)"$'\n'
+        elif [ -z "${mink}" ] || { [ -z "${drv}" ] && kernel_lt "${mink}"; }; then
+            notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs the boot options xe.force_probe=${id#0x} i915.force_probe=!${id#0x}${mink:+ (or kernel ${mink}+)}"$'\n'
+        elif kernel_lt "${mink}"; then
+            notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) is supported by default from kernel ${mink} (running $(kernel_release))"$'\n'
+        fi
+    done
+    if [ -n "${notes}" ]; then
+        info "Kernel (printed only; --apply never changes boot options)..."
+        printf '%s' "${notes}"
+        case "${HS_DISTRO}" in
+            fedora) echo "  add them: sudo grubby --update-kernel=ALL --args='<options>'" ;;
+            ubuntu-*) echo "  add them to GRUB_CMDLINE_LINUX_DEFAULT in /etc/default/grub, then: sudo update-grub" ;;
+            arch|manjaro) echo "  add them to GRUB_CMDLINE_LINUX_DEFAULT in /etc/default/grub, then: sudo grub-mkconfig -o /boot/grub/grub.cfg (systemd-boot: the options line in /boot/loader/entries/*.conf)" ;;
+        esac
+    fi
+}
+
+hs_add() { HS_PLAN+=("$1"); }
+
+# libva and every libva-* that vainfo depends on, pinned to the PPA build together:
+# the release's libva-x11-2/libva-wayland2 depend on libva2 << 2.20.0.1.
+hs_libva_pkgs() {
+    local p v="2.24.1-1~$1~ppa2" out=""
+    for p in libva2 libva-drm2 libva-x11-2 libva-wayland2; do out+=" ${p}=${v}"; done
+    echo "${out# }"
+}
+
+# The NPU .debs inside the release archive, each as " '<prefix><file>'".
+hs_npu_debs() {
+    local p
+    for p in intel-level-zero-npu intel-driver-compiler-npu intel-fw-npu; do
+        printf " '%s'" "$2${p}_${HS_NPU_BUILD}~ubuntu$1_amd64.deb"
+    done
+}
+
+# Download a pinned file into HS_DIR and check its sha256.
+hs_fetch() {
+    local file=$1 sum=$2 url=$3
+    hs_add "curl -fL --retry 3 -o '${HS_DIR}/${file}' '${url}/${file}'"
+    hs_add "echo '${sum}  ${HS_DIR}/${file}' | sha256sum -c -"
+}
+
+hs_plan_ubuntu() {
+    local rel=$1 debs="" file sum url npu
+    hs_add "sudo apt-get update"
+    hs_add "sudo apt-get install -y ca-certificates curl gnupg software-properties-common"
+    if is_hs_target intel || is_hs_target npu; then
+        # A private download dir: the .debs in it are installed as root.
+        hs_add "mkdir -p '${HS_DIR}' && [ ! -L '${HS_DIR}' ] && [ -O '${HS_DIR}' ] && chmod 0700 '${HS_DIR}' || { echo 'refusing ${HS_DIR}: not a directory owned by this user' >&2; exit 1; }"
+        read -r file sum url <<< "${HS_ZE_DEB}"
+        hs_fetch "${file}" "${sum}" "${url}"
+        debs+=" '${HS_DIR}/${file}'"
+    fi
+    if is_hs_target intel; then
+        hs_add "sudo add-apt-repository -y ppa:kobuk-team/intel-graphics"
+        # The PPA also builds intel-opencl-icd/libze*/libigc*; keep apt on the GitHub .debs.
+        hs_add "printf 'Package: intel-opencl-icd libze-intel-gpu1 libze1 libze-dev libze-intel-gpu-dev libigc2 libigc-dev libigc-tools\\nPin: release o=LP-PPA-kobuk-team-intel-graphics\\nPin-Priority: -1\\n' | sudo tee /etc/apt/preferences.d/k3d-gpu-intel-compute >/dev/null"
+        hs_add "sudo apt-get install -y intel-media-va-driver-non-free=26.3.2-1~${rel}~ppa1 $(hs_libva_pkgs "${rel}") libigdgmm12=22.10.1-1~${rel}~ppa1 vainfo clinfo ocl-icd-libopencl1"
+        while read -r file sum url; do
+            hs_fetch "${file}" "${sum}" "${url}"
+            debs+=" '${HS_DIR}/${file}'"
+        done < <(hs_intel_debs)
+    fi
+    if is_hs_target npu; then
+        read -r file sum <<< "$(hs_npu_tarball "${rel}")"
+        hs_fetch "${file}" "${sum}" "https://github.com/intel/linux-npu-driver/releases/download/${HS_NPU_REL}"
+        npu="${HS_DIR}/npu-${HS_NPU_REL}"
+        hs_add "mkdir -p '${npu}' && tar -xzf '${HS_DIR}/${file}' -C '${npu}'$(hs_npu_debs "${rel}" ./)"
+        debs+=" libtbb12$(hs_npu_debs "${rel}" "${npu}/")"
+    fi
+    [ -z "${debs}" ] || hs_add "sudo apt-get install -y${debs}"
+    if is_hs_target nvidia; then
+        hs_add "curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --batch --yes --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg"
+        hs_add "curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list >/dev/null"
+        hs_add "sudo apt-get update"
+        hs_add "sudo apt-get install -y nvidia-container-toolkit=${HS_NVCTK} nvidia-container-toolkit-base=${HS_NVCTK} libnvidia-container-tools=${HS_NVCTK} libnvidia-container1=${HS_NVCTK}"
+        hs_plan_nvidia_runtime refresh
+    fi
+}
+
+hs_plan_fedora() {
+    local pkgs=""
+    is_hs_target intel && pkgs+=" intel-opencl intel-level-zero oneapi-level-zero libva-intel-media-driver libva-utils clinfo intel-gpu-firmware"
+    is_hs_target npu && pkgs+=" intel-npu-driver intel-npu-firmware"
+    is_hs_target intel || { is_hs_target npu && pkgs+=" oneapi-level-zero"; }
+    [ -z "${pkgs}" ] || hs_add "sudo dnf install -y --refresh${pkgs}"
+    if is_hs_target nvidia; then
+        hs_add "curl -fsSL https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo | sudo tee /etc/yum.repos.d/nvidia-container-toolkit.repo >/dev/null"
+        hs_add "sudo dnf install -y nvidia-container-toolkit-${HS_NVCTK} nvidia-container-toolkit-base-${HS_NVCTK} libnvidia-container-tools-${HS_NVCTK} libnvidia-container1-${HS_NVCTK}"
+        hs_plan_nvidia_runtime refresh
+    fi
+}
+
+hs_plan_arch() {
+    local pkgs=""
+    is_hs_target intel && pkgs+=" intel-compute-runtime level-zero-loader intel-media-driver libva libva-utils clinfo linux-firmware-intel"
+    is_hs_target npu && pkgs+=" intel-npu-driver"
+    is_hs_target npu && ! is_hs_target intel && pkgs+=" level-zero-loader linux-firmware-intel"
+    is_hs_target nvidia && pkgs+=" nvidia-container-toolkit"
+    [ -z "${pkgs}" ] || hs_add "sudo pacman -Syu --needed${pkgs}"
+    # Arch's package ships the nvidia-cdi-refresh units from 1.20.1-1; older builds
+    # (Manjaro lags) do not, so those get the spec written directly.
+    is_hs_target nvidia && hs_plan_nvidia_runtime "${SYSROOT}/usr/lib/systemd/system/nvidia-cdi-refresh.service"
+    return 0
+}
+
+# CDI spec + Docker runtime registration. NVIDIA's own packages (1.18+) keep
+# /var/run/cdi/nvidia.yaml current through nvidia-cdi-refresh. Given a unit file
+# path instead of "refresh", the refresh runs when that file exists, else the
+# spec is generated.
+hs_plan_nvidia_runtime() {
+    local refresh="sudo systemctl enable --now nvidia-cdi-refresh.path && sudo systemctl restart nvidia-cdi-refresh.service"
+    if [ "$1" = refresh ]; then
+        hs_add "${refresh}"
+    else
+        hs_add "if [ -e '$1' ]; then ${refresh}; else sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml; fi"
+    fi
+    hs_add "sudo nvidia-ctk runtime configure --runtime=docker"
+    hs_add "sudo systemctl restart docker"
+}
+
+cmd_host_setup() {
+    local apply=0 plan=0 cmd ans
+    HS_DISTRO=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --apply) apply=1 ;;
+            --plan) plan=1 ;;
+            --distro) [ $# -ge 2 ] || err "--distro needs a value"; HS_DISTRO=$2; shift ;;
+            --distro=*) HS_DISTRO=${1#--distro=} ;;
+            *) err "unknown host-setup option '$1' (use --apply, --plan, --distro ubuntu-24.04|ubuntu-26.04|fedora|arch|manjaro)" ;;
+        esac
+        shift
+    done
+    [ -n "${HS_DISTRO}" ] || HS_DISTRO=$(hs_distro)
+    case "${HS_DISTRO}" in
+        ubuntu-24.04|ubuntu-26.04|fedora|arch|manjaro) ;;
+        *) err "host-setup supports Ubuntu 24.04/26.04, Fedora, Arch and Manjaro (this host: ${HS_DISTRO}); pass --distro to print another distro's plan" ;;
+    esac
+
+    hs_targets
+    if [ "${#HS_TARGETS[@]}" -eq 0 ]; then
+        info "No Intel GPU, Intel NPU or NVIDIA GPU found — nothing to set up (K3D_GPU_VENDORS=intel,npu,nvidia forces a plan)"
+        return 0
+    fi
+    info "Host setup for ${HS_DISTRO}: ${HS_TARGETS[*]}"
+    HS_BROKEN=0 HS_MISSING=0
+    hs_checks
+
+    # A host whose every check passed needs nothing; proposing a full system
+    # upgrade and a docker restart there would only risk a working setup.
+    if [ "${HS_BROKEN}" -eq 0 ] && [ "${HS_MISSING}" -eq 0 ] && [ "${plan}" -eq 0 ]; then
+        echo ""
+        info "Every check passed: nothing to install. ('k3d-gpu host-setup --plan' prints the full install plan anyway.)"
+        return 0
+    fi
+
+    HS_PLAN=()
+    case "${HS_DISTRO}" in
+        ubuntu-*) hs_plan_ubuntu "${HS_DISTRO#ubuntu-}" ;;
+        fedora) hs_plan_fedora ;;
+        arch|manjaro) hs_plan_arch ;;
+    esac
+    echo ""
+    info "Install plan (${#HS_PLAN[@]} commands):"
+    printf '    %s\n' "${HS_PLAN[@]}"
+    if is_hs_target nvidia; then
+        echo "  note: the NVIDIA kernel driver itself is not part of this plan; install it from your distro first"
+    fi
+    if is_hs_target npu; then
+        echo "  note: new NPU firmware loads on the next boot (or: sudo modprobe -r intel_vpu && sudo modprobe intel_vpu)"
+    fi
+    if [ "${HS_DISTRO}" = manjaro ]; then
+        echo "  note: Manjaro syncs Arch packages later; install only from Manjaro's own repos, never Arch [extra] or AUR binaries of these"
+    fi
+    [ "${HS_BROKEN}" -eq 0 ] || warn "${HS_BROKEN} check(s) failed — each line above names its fix"
+
+    if [ "${apply}" -eq 0 ]; then
+        echo ""
+        info "Dry run: nothing was changed. Run 'k3d-gpu host-setup --apply' to execute the plan."
+        return 0
+    fi
+    printf 'Run these %d commands now? [y/N] ' "${#HS_PLAN[@]}"
+    ans=""
+    read -r ans || true  # an answer without a trailing newline still counts
+    case "${ans}" in
+        y|Y|yes|YES) ;;
+        *) info "Aborted: nothing was run."; return 0 ;;
+    esac
+    for cmd in "${HS_PLAN[@]}"; do
+        info "+ ${cmd}"
+        bash -c "set -euo pipefail; ${cmd}" || err "command failed: ${cmd}"
+    done
+    info "Host setup done. Check again with: k3d-gpu host-setup && k3d-gpu doctor"
+}
+
 case "${1:-help}" in
     up)      cmd_up      ;;
     down)    cmd_down    ;;
@@ -906,6 +1362,7 @@ case "${1:-help}" in
     detect)  cmd_detect  ;;
     doctor)  doctor      ;;
     logs)    cmd_logs    ;;
+    host-setup) shift; cmd_host_setup "$@" ;;
     version|--version|-v) echo "k3d-gpu ${VERSION}" ;;
     help|--help|-h) usage ;;
     *) usage; exit 1 ;;

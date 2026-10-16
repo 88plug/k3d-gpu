@@ -41,6 +41,7 @@ yay -S k3d-gpu          # or build from packaging/aur/PKGBUILD
 
 k3d-gpu detect          # list accelerators on this host and their k8s resources
 k3d-gpu doctor          # preflight: accelerators, kernel/firmware, docker, runtimes, k3d, kubectl
+k3d-gpu host-setup      # check host drivers/userspace, print pinned install commands (--apply runs them)
 k3d-gpu up              # create the cluster (device plugins auto-deploy), verify each accelerator > 0
 k3d-gpu test            # per accelerator: nvidia-smi pod / device-node listing pod
 k3d-gpu logs            # tail the k3s server container logs
@@ -169,6 +170,32 @@ Intel's Enterprise Agent Toolkit CPU balloons).
 - **Docker** (20.10+), configured with NVIDIA GPU support (i.e., `nvidia-docker2` or Docker’s built‑in `--gpus`)  
 - **k3d** (v5.0.0 or later) to manage local K3s clusters  
 - A host NVIDIA GPU with an up‑to‑date driver (the node image needs no CUDA toolkit)  
+
+### Host setup (`k3d-gpu host-setup`)
+
+`k3d-gpu host-setup` checks the host userspace for each detected Intel GPU, Intel
+NPU and NVIDIA GPU, then prints the exact install commands for this distro
+(Ubuntu 24.04/26.04, Fedora, Arch, Manjaro; `--distro` prints another one's). It
+changes nothing unless you pass `--apply` and answer `y`.
+
+| Component | Ubuntu 24.04 / 26.04 | Fedora | Arch / Manjaro |
+|-----------|----------------------|--------|----------------|
+| Compute runtime (OpenCL + Level Zero GPU) | GitHub .debs, sha256-checked: compute-runtime 26.35.39758.10, IGC 2.41.5 | `intel-opencl intel-level-zero` | `intel-compute-runtime` |
+| Level Zero loader | GitHub `libze1` 1.34.0 .deb, sha256-checked | `oneapi-level-zero` | `level-zero-loader` |
+| Media driver + libva | `ppa:kobuk-team/intel-graphics`, pinned 26.3.2 / 2.24.1 | `libva-intel-media-driver` | `intel-media-driver libva` |
+| NPU driver + firmware | GitHub linux-npu-driver v1.38.0 archive, sha256-checked (includes `intel-fw-npu`) | `intel-npu-driver intel-npu-firmware` | `intel-npu-driver linux-firmware-intel` |
+| NVIDIA container toolkit | NVIDIA apt repo, pinned 1.20.1-1; CDI via `nvidia-cdi-refresh` | NVIDIA dnf repo, pinned 1.20.1-1 | `nvidia-container-toolkit`; CDI via `nvidia-cdi-refresh` (1.20.1-1+), else `nvidia-ctk cdi generate` |
+
+Fedora, Arch and Manjaro repos serve only their current build, so those plans
+install the repo version; Arch and Manjaro always use `pacman -Syu`. Before the
+plan, `host-setup` reads the failures a partial upgrade leaves behind and prints
+the fix:
+
+- **Media driver ahead of libva** (`vainfo`: `iHD_drv_video.so has no function __vaDriverInit_1_0`): the driver exports `__vaDriverInit_1_<N>` for libva 2.N and libva is older. Checked from the files and by running `vainfo`.
+- **Compute runtime ahead of libstdc++** (`version 'GLIBCXX_3.4.35' not found`; `clinfo` silently loses the Intel platform): the runtime was built by a newer GCC than the installed `gcc-libs`. Checked by comparing symbol versions, running `clinfo -l` and `ldd` on the registered ICD.
+- Parts newer than the kernel's default support get boot options (printed, never applied): `i915.force_probe=<id>` for i915 parts (Meteor Lake, Arrow Lake), `xe.force_probe=<id> i915.force_probe=!<id>` for xe parts.
+
+Downloads go to `${XDG_CACHE_HOME:-~/.cache}/k3d-gpu/host-setup` (override: `K3D_GPU_SETUP_DIR`), which must be a directory you own; it is set to mode 0700. On Ubuntu an apt pin keeps the PPA's `intel-opencl-icd`/`libze*`/`libigc*` builds from replacing the GitHub .debs.
 
 ---
 
