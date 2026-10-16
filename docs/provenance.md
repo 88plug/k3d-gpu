@@ -376,3 +376,16 @@ Re-run this search if any of these happen:
 - nri-plugins or k3s ships a "hybrid" quick start.
 - Intel EAS/EAT adds a k3s or laptop profile (watch EAT PR #19 and enterprise-inference PR #22).
 - OVMS starts requesting k8s resources itself, for example a KServe runtime that sets device limits from node allocatable.
+
+## Quoted-number register
+
+Numbers this project quotes from someone else: upstream benchmarks, vendor specs,
+papers. Docs cite a row as `[provenance:Pn]`. Our own measurements go in
+[`EXPERIMENTS.md`](../EXPERIMENTS.md) as `[ledger:Hn]` instead.
+
+A row needs a Source a reader can open: a URL pinned to a commit, tag, release or
+archived copy, or a document title with version and page. A row with an empty
+Source does not back a claim. `tests/claims_check.sh` enforces both rules.
+
+| # | Claim | Source | Retrieved |
+|---|-------|--------|-----------|

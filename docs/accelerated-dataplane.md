@@ -109,9 +109,9 @@ Evidence:
 - **Proven elsewhere:**
   - DTO speeds up CacheLib's CacheBench. The DSA characterization paper
     (arXiv 2305.02480) offloaded only copies ≥ 8 KB with DTO. Those were
-    4.8 % of `memcpy` calls but 96.4 % of the bytes.
-  - Redis with **custom** DSA code reached up to 23 % faster RDB saves
-    (LightDSA). The same paper notes DTO lacks DSA-specific tuning.
+    4.8 % of `memcpy` calls but 96.4 % of the bytes ([arXiv 2305.02480](https://arxiv.org/pdf/2305.02480)).
+  - Redis with **custom** DSA code reached up to 23 % faster RDB saves ([LightDSA](https://dl.acm.org/doi/pdf/10.1145/3767295.3769356)).
+    The same paper notes DTO lacks DSA-specific tuning.
 - **Untested hypothesis:** `LD_PRELOAD`ing DTO into Redis cuts the CPU cost
   of large GET/SET values. LiteLLM stores each cached response as a single
   `json.dumps()` string (`litellm/caching/redis_cache.py`). An embedding of
@@ -197,7 +197,7 @@ There is no pod spec. The pod only needs to be Burstable on a node with
   - zlib-accel's README lists **`pg_dump --format=directory
     --compress=gzip`** and RocksDB `db_bench` as tested uses. It was tested on
     an AWS m7i.metal-24xl with Ubuntu 22.04 and kernel 6.8.
-  - IAA gave the fastest compression and decompression in CMU's DuckDB study
+  - IAA gave the fastest compression and decompression in [CMU's DuckDB study](https://db.cs.cmu.edu/papers/2025/laspias-adms2025.pdf)
     (ADMS 2025).
 - **Limit that decides fit:** QAT and IAA only take a **single `Z_FINISH`
   call carrying the whole input**. Streaming `deflate(Z_NO_FLUSH)` stays on
@@ -440,7 +440,7 @@ Proposals (none implemented in this branch):
 **Proven elsewhere (cited):**
 
 - DTO offloads large `memcpy` for CacheLib/CacheBench (arXiv 2305.02480).
-- DSA speeds up Redis RDB saves with custom code (LightDSA, up to 23 %).
+- DSA speeds up Redis RDB saves with custom code ([LightDSA](https://dl.acm.org/doi/pdf/10.1145/3767295.3769356), up to 23 %).
 - zswap compresses on IAA via `deflate-iaa` (kernel docs, Linux 6.8+).
 - zlib-accel offloads `pg_dump --format=directory --compress=gzip` and
   RocksDB `zlib` to QAT/IAA (zlib-accel README).
