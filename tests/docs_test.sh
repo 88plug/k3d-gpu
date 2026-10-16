@@ -49,6 +49,18 @@ for page in "${ROOT}"/docs/*.md; do
     check "docs/${name}.md is published" "$d" test -f "$d/site/${name}/index.html"
 done
 
+# --- The docs interpreter pin is one Dependabot can bump ----------------------
+# Dependabot's docker ecosystem reads Dockerfiles, not a workflow's
+# `container: image:`. docs-build/Dockerfile holds the pin; the workflow and
+# docs-build/lock.sh must use the same image.
+from_image=$(sed -n 's/^FROM \(python:[^ ]*\).*$/\1/p' "${ROOT}/docs-build/Dockerfile" 2>/dev/null)
+wf_image=$(sed -n 's/^ *image: *\(python:[^ ]*\) *$/\1/p' "${ROOT}/.github/workflows/docs.yml")
+check "docs-build/Dockerfile pins python by digest" "" grep -qE '^FROM python:[^ ]+@sha256:[0-9a-f]{64}$' "${ROOT}/docs-build/Dockerfile"
+check "docs workflow container image matches docs-build/Dockerfile" "" test -n "${from_image}" -a "${from_image}" = "${wf_image}"
+check "Dependabot docker ecosystem watches docs-build/" "" \
+    python3 -c 'import sys,re; t=open(sys.argv[1]).read(); sys.exit(not re.search(r"package-ecosystem: docker\n\s+directory: /docs-build\n", t))' \
+    "${ROOT}/.github/dependabot.yml"
+
 # --- A nav entry whose page is not in docs/ yet is skipped, not an error ------
 d=$(tree unpublished)
 rm -f "$d/docs/provenance.md"
