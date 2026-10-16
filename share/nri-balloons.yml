@@ -13,8 +13,9 @@
 #                   v0.14.0 has two core kinds (cpu_core, cpu_atom), so it cannot
 #                   tell an LP E-core from an E-core; `k3d-gpu doctor` lists which
 #                   CPUs are LP E-cores
-#   ecluster        4 E-cores, at most one balloon per L2 (the ecluster-l2 load),
-#                   so one balloon is one 4-core E-core cluster
+#   ecluster        4 E-cores; the ecluster-l2 load makes the allocator avoid an
+#                   L2 another ecluster balloon holds, so each should get one
+#                   4-core E-core cluster (a preference, not a guarantee)
 #   pcore-physical  P-cores; containers see one thread per physical core
 #                   (hideHyperthreads), the sibling stays idle
 #   latency         like pcore-physical, at most 2 CPUs per balloon; `up` also

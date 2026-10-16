@@ -181,7 +181,7 @@ seven balloon types. Each but `shared` matches one value of the pod label
 | `performance` | `performance` | P-cores (`preferCoreType: performance`) |
 | `efficient` | `efficient` | E-cores (`preferCoreType: efficient`) |
 | `lowpower` | `lowpower` | E-core kind (`preferCoreType: efficient`), for idle supervisors and heartbeats |
-| `ecluster` | `ecluster` | 4 E-cores (`minCPUs` = `maxCPUs` = 4); the `ecluster-l2` load (`level: l2cache`) keeps two such balloons off one L2, so each is one 4-core E-core cluster |
+| `ecluster` | `ecluster` | 4 E-cores (`minCPUs` = `maxCPUs` = 4); the `ecluster-l2` load (`level: l2cache`) makes the allocator avoid an L2 another such balloon holds, so each should get one 4-core E-core cluster (a preference, not a guarantee) |
 | `pcore-physical` | `pcore-physical` | P-cores, one thread per physical core visible to the pod (`hideHyperthreads`); the sibling stays idle |
 | `latency` | `latency` | as `pcore-physical`, at most 2 CPUs (`maxCPUs: 2`), for a sampler, tokenizer, event loop or GPU feeder thread |
 | `shared` | everything else (`AlwaysTrue`, `maxBalloons: 1`) | every idle CPU (`shareIdleCPUsInSame: system`) |
