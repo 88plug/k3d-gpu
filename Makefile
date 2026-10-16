@@ -24,6 +24,7 @@ check: test shellcheck hadolint kubeconform actionlint
 
 test:
 	tests/detect_test.sh
+	tests/prefill_guard_test.sh
 
 # Shell scripts: *.sh plus any file whose shebang runs sh or bash.
 shellcheck:
