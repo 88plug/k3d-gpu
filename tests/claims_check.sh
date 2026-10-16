@@ -10,8 +10,10 @@
 #
 # A claim is backed when the same line (for a split claim, either of its two lines)
 # carries at least one of:
-#   [ledger:H2]      a row of the Hypotheses table in EXPERIMENTS.md whose verdict is exactly SUPPORTED
-#   [provenance:P1]  a row of docs/provenance.md with a non-empty Source column
+#   an http/https URL  a primary source, bare or as a markdown link (a cited table row)
+#   [ledger:H2]        a row of the Hypotheses table in EXPERIMENTS.md whose verdict is exactly SUPPORTED
+#   [provenance:P1]    a row of docs/provenance.md with a non-empty Source column
+# A URL inside inline code or an HTML comment does not count.
 #
 # Every [ledger:..] and [provenance:..] reference must resolve, claim or not.
 # Fenced code blocks (CommonMark rules: a fence closes only on the same character
@@ -135,13 +137,15 @@ for f in "${files[@]}"; do
                 s = substr(s, 1, p - 1) substr(s, p + q + 6)
             }
             gsub(/`[^`]*`/, "", s)
+            # A primary-source link (http/https URL, bare or in a markdown link) backs the line.
+            linked = (s ~ /https?:\/\/[^ )>]/)
             gsub(/\]\([^)]*\)/, "]", s)
             gsub(/https?:\/\/[^ )>]+/, "", s)
             low = tolower(s)
 
             claim = is_claim(low)
 
-            backed = 0; notes = ""; rest = s
+            backed = linked; notes = ""; rest = s
             while (match(rest, /\[(ledger|provenance):[A-Za-z0-9]+\]/)) {
                 ref = substr(rest, RSTART, RLENGTH)
                 rest = substr(rest, RSTART + RLENGTH)
@@ -182,5 +186,5 @@ echo "${report}"
 unbacked=$(grep -c ': unbacked claim' <<< "${report}")
 refs=$(( $(wc -l <<< "${report}") - unbacked ))
 echo "claims_check: ${unbacked} unbacked claim(s), ${refs} bad reference(s)"
-echo "Back each claim with a SUPPORTED [ledger:Hn] row in EXPERIMENTS.md or a sourced [provenance:Pn] row in docs/provenance.md."
+echo "Back each claim with a primary-source URL on the line, a SUPPORTED [ledger:Hn] row in EXPERIMENTS.md or a sourced [provenance:Pn] row in docs/provenance.md."
 exit 1

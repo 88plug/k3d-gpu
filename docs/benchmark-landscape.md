@@ -50,7 +50,7 @@ batch 1. "Server/Offline" = MLPerf LoadGen scenarios.
 
 C1-C5 data-quality note: each CSV holds 2-6 unlabeled rows per (model,
 precision, input). They carry no run or device label, so ranges are reported.
-qwen2.5-1.5b on 258V spans 51.5 to 75.2 tok/s.
+qwen2.5-1.5b INT4 at 1024 in on 258V spans 51.5 to 75.2 tok/s ([llm_models_7-258V.csv](https://docs.openvino.ai/2026/_static/benchmarks_files/llm_models_7-258V.csv)).
 
 ### 1b. Datacenter (Xeon / Arc / Gaudi): context only, not comparable to our host
 
@@ -58,9 +58,9 @@ qwen2.5-1.5b on 258V spans 51.5 to 75.2 tok/s.
 |---|----|--------|-------|-----------|----------|----------|--------|-------|--------|
 | D1 | V | 2x Xeon 6980P (128 cores), 24x96 GB MRDIMM-8800 | Llama 3.1 8B | not stated | MLPerf Inference v6.1 Closed; CNN-DailyMail, max_new_tokens 128; Server SLO p99 TTFT 2000 ms / TPOT 100 ms | Intel submission `mint-lark-1a28` | tokens/s | Server 1,139.51; Offline 1,916.74 (v6.0: 471.54 / 1,229.56) | [Intel newsroom, MLPerf v6.1](https://www.intel.com/content/www/us/en/newsroom/news/data-center/intel-software-optimizations-boost-ai-inference-in-mlperf-v6-1.html) |
 | D2 | V | Supermicro 2x Xeon 6980P | llama3_1-8b | not in summary | MLPerf v5.1 Closed | Intel MLPerf 5.1 container | tokens/s | Server 450.87; Offline 1195.93 (both "Result is: VALID") | [inference_results_v5.1 log summaries](https://github.com/mlcommons/inference_results_v5.1/tree/main/closed/Supermicro/results/1-node-2S-GNR_128C) |
-| D3 | V | Xeon 6972P CPU-only | llama-3-8b / llama-3.2-3b / qwen2.5-7b / phi-3-mini | INT4 | batch 1, 1024 / 128 | OV 2026.4 general graphs | tok/s; ms | 155.6 / 6.4; 286.2 / 3.5; 164.7 / 6.1; 225 / 4.4 | graph-data-ov.json |
-| D4 | V,flag | Xeon 6972P | deepseek-r1-distill-llama-8b | INT4 | batch 1 | OV 2026.4 | tok/s; ms | 155.4 with 38.6 ms: **self-inconsistent** (1/38.6 ms = 25.9 tok/s) | graph-data-ov.json |
-| D5 | V | Xeon Platinum 8580 CPU-only | llama-3.2-3b / llama-3-8b | INT4 | batch 1, 1024 / 128 | OV 2026.4 | tok/s | 57.07 / 30.04 | graph-data-ov.json |
+| D3 | V | Xeon 6972P CPU-only | llama-3-8b / llama-3.2-3b / qwen2.5-7b / phi-3-mini | INT4 | batch 1, 1024 / 128 | OV 2026.4 general graphs | tok/s; ms | 155.6 / 6.4; 286.2 / 3.5; 164.7 / 6.1; 225 / 4.4 | [graph-data-ov.json](https://docs.openvino.ai/2026/_static/benchmarks_files/data/graph-data-ov.json) |
+| D4 | V,flag | Xeon 6972P | deepseek-r1-distill-llama-8b | INT4 | batch 1 | OV 2026.4 | tok/s; ms | 155.4 with 38.6 ms: **self-inconsistent** (1/38.6 ms = 25.9 tok/s) | [graph-data-ov.json](https://docs.openvino.ai/2026/_static/benchmarks_files/data/graph-data-ov.json) |
+| D5 | V | Xeon Platinum 8580 CPU-only | llama-3.2-3b / llama-3-8b | INT4 | batch 1, 1024 / 128 | OV 2026.4 | tok/s | 57.07 / 30.04 | [graph-data-ov.json](https://docs.openvino.ai/2026/_static/benchmarks_files/data/graph-data-ov.json) |
 | D6 | V | Xeon 8580 / 8480+ / 6726P-B; Arc A770M | Meta-Llama-3-8B-Instruct | FP16 (Xeon), INT8 (Arc) | vLLM `benchmark_serving.py`, ShareGPT, request-rate sweep, prefix cache off | OVMS 2025.3 | tok/s; mean TPOT | 8580: 401.41 / 78.71 ms at 1 req/s; 1151.94 / 173.91 ms at inf. 8480+: 994.92 at inf. A770M: 2128.09 / 98.86 ms at inf | [graph-data-ovms-genai.json](https://docs.openvino.ai/2026/_static/benchmarks_files/data/graph-data-ovms-genai.json) (2025-09-03) |
 | D7 | V | Lenovo SR650 V4, 2x Xeon 6740P 48C, DDR5-6400 | Llama-3.1-8B-Instruct | not stated (AMX BF16 build) | 512 / 512, users 1-128 | vLLM CPU (version n.s.) | agg tok/s; tok/s/user; TTFT | c=1: 10.16, 197.02 ms. c=16: 138.25. c=128: 405.50, 6238.52 ms | [Lenovo Press LP2406](https://lenovopress.lenovo.com/lp2406-implementing-ai-agents-without-gpus-high-performance-inference-on-intel-xeon-6) (2026-03-24) |
 | D8 | S | Lenovo SR650 V4, 2x 6745P / 2x 6767P | Llama 3.1 8B | n.s. | TPOT <= 100 ms, lengths n.s. | vLLM | peak tok/s | 934 / 1,089 | [LP2363](https://lenovopress.lenovo.com/lp2363.pdf) |
@@ -72,7 +72,7 @@ qwen2.5-1.5b on 258V spans 51.5 to 75.2 tok/s.
 | D14 | S | Gaudi2 x8 + Xeon 8380 head | Llama-3.1-8B (ChatQnA) | bf16 | pubmed_10, out 1024, 1-256 users | OPEA v1.3 | TTFT / TPOT | 1 user 126.8 / 12.5 ms | [OPEA ChatQnA results](https://opea-project.github.io/latest/GenAIExamples/ChatQnA/benchmark_results.html) |
 
 Flag on D3: the 6972P INT4 batch-1 numbers are 5.2x the Xeon 8580 rows in the
-same file (155.6 vs 30.04 tok/s, llama-3-8b). The file gives no instance
+same [file](https://docs.openvino.ai/2026/_static/benchmarks_files/data/graph-data-ov.json) (155.6 vs 30.04 tok/s, llama-3-8b). The file gives no instance
 count, core count or SNC setting, so this gap cannot be checked from the data.
 
 ### 1c. Intel's own toolkit sizing table (targets, not measurements)
@@ -119,8 +119,8 @@ Evidence:
   no numbers. Dell and IBM write-ups describe Xeon/Gaudi3 deployments
   without measured results. (Sweep-reported, not re-fetched.)
 - The only Xeon tok/s figure inside the EI repo is the HybridSearch sample:
-  "Xeon" (SKU not stated) Qwen3-8B 4.5 tok/s with `max_tokens` 50. Its
-  conditions are too weak to compare against. (Sweep-reported.)
+  "Xeon" (SKU not stated) Qwen3-8B 4.5 tok/s with `max_tokens` 50 ([README table](https://github.com/opea-project/Enterprise-Inference/blob/322162523fb78a0c020da9efbce2ba1a9e7b1102/sample_solutions/HybridSearch/README.md#L381-L388)). Its
+  conditions are too weak to compare against. (Re-fetched 2026-10-16.)
 
 Queries that returned nothing relevant:
 - GitHub issue search for `benchmark` and `performance` in all four repos.
@@ -151,19 +151,19 @@ i7-1355U) for vision and BERT models only.
 | Target | Our run must use | Compare to | Caveat |
 |--------|------------------|------------|--------|
 | T1. OV llm_bench, iGPU, INT4, 1024 in | `llm_bench` (OV / GenAI 2026.4 to match), `-d GPU`, INT4-MIXED models converted the same way, 1024-token prompt, `-ic 128`, `-n` >= 3, batch 1. Models: llama-3.2-3b-instruct, llama-3.1-8b-instruct, qwen2.5-1.5b, qwen3-8b, phi-4-mini | C1-C7 (255H, 258V, 5-330, 155H iGPUs) | UHD 770 has 32 Xe-LP EUs; 155H has 8 Xe-LPG cores (128 EU) with a newer ISA. Expect a large shortfall: report it as a ratio, not a "beat". The 4 GB single-allocation cap on UHD 770 bounds model and KV size. |
-| T2. OV CPU INT4 Llama-2-7b-chat, 1024 / 128 | `llm_bench -d CPU`, Llama-2-7b-chat INT4, 1024 / 128, beam 1, P-cores only (`k3d-gpu.io/cores=performance`) | C9-C10 (i9-13900K, OV 2024.0: 8.9 tok/s) | Same die family. 13900K PL1 is 125 W vs our 35 W, and OV 2024.0 vs 2026.4. Run once with OV 2024.0 as well if the claim is "same software". |
+| T2. OV CPU INT4 Llama-2-7b-chat, 1024 / 128 | `llm_bench -d CPU`, Llama-2-7b-chat INT4, 1024 / 128, beam 1, P-cores only (`k3d-gpu.io/cores=performance`) | C9-C10 (i9-13900K, OV 2024.0: 8.9 tok/s, [white paper](https://www.intel.cn/content/dam/develop/public/us/en/documents/openvino-toolkit-llms-solution-white-paper.pdf)) | Same die family. 13900K PL1 is 125 W vs our 35 W, and OV 2024.0 vs 2026.4. Run once with OV 2024.0 as well if the claim is "same software". |
 | T3. OV CPU INT4 llama-3.2-3b / llama-3-8b, 1024 / 128 | `llm_bench -d CPU`, P-core balloon vs E-core balloon vs all cores | D5 (Xeon 8580: 57.07 / 30.04) as a ceiling reference | Different class (8580 has AMX). Valid only as "same workload" context. |
-| T4. OV iGPU INT4 Llama-2-7b, 1024 / 128 | `llm_bench -d GPU` on UHD 770 | C11 (i7-1360P Iris Xe 96 EU, 4.6 tok/s) | Same Gen12 Xe-LP ISA, 3x the EUs. The fairest iGPU proxy that exists. |
+| T4. OV iGPU INT4 Llama-2-7b, 1024 / 128 | `llm_bench -d GPU` on UHD 770 | C11 (i7-1360P Iris Xe 96 EU, 4.6 tok/s, [white paper](https://www.intel.cn/content/dam/develop/public/us/en/documents/openvino-toolkit-llms-solution-white-paper.pdf)) | Same Gen12 Xe-LP ISA, 3x the EUs. The fairest iGPU proxy that exists. |
 | T5. llama.cpp UHD 770 vs CPU | `llama-bench -m gemma-4-26B-A4B-it-IQ4_XS.gguf -p 512 -n 128 -r 3`, Vulkan `-dev Vulkan0 -ngl 99` and CPU P-cores | C12 (UHD 770 2.37 tg / 12900K 22.2 tg) | Identical iGPU. Set `GGML_VK_SERIALIZE_SUBMISSIONS=1` (C13) or results can be silently wrong. Engine differs from our OVMS stack. |
 | T6. pts/llama-cpp TG128 | `phoronix-test-suite benchmark llama-cpp`, granite-3.0-3b-a800m Q8_0 and Llama-3.1-Tulu-3-8B Q8_0, CPU BLAS | C20 (14900K 30), C21 (285K 10.0) | Profile version and llama.cpp build must match. 14900K is a 125 W upper bound. Sweep rows: re-fetch before quoting. |
-| T7. pts/openvino-genai | `phoronix-test-suite benchmark openvino-genai`, TinyLlama CPU | C18 (14900K 70 tok/s, 18.4 ms) | Same caveats as T6. |
-| T8. vLLM-style serving shape at c=1, 512 / 512 | `bench/llm_load.py` (or `vllm bench serve`) against our OVMS `/v3`, Llama-3.1-8B-Instruct, random 512 / 512, `ignore_eos`, c=1 | D7 c=1 (10.16 tok/s, TTFT 197 ms) | Shape match only: Xeon 6740P + AMX BF16 vLLM vs our INT4 OVMS. Report as context, not a win or loss. |
+| T7. pts/openvino-genai | `phoronix-test-suite benchmark openvino-genai`, TinyLlama CPU | C18 (14900K 70 tok/s, 18.4 ms, [OpenBenchmarking](https://openbenchmarking.org/test/pts/openvino-genai)) | Same caveats as T6. |
+| T8. vLLM-style serving shape at c=1, 512 / 512 | `bench/llm_load.py` (or `vllm bench serve`) against our OVMS `/v3`, Llama-3.1-8B-Instruct, random 512 / 512, `ignore_eos`, c=1 | D7 c=1 (10.16 tok/s, TTFT 197 ms, [LP2406](https://lenovopress.lenovo.com/lp2406-implementing-ai-agents-without-gpus-high-performance-inference-on-intel-xeon-6)) | Shape match only: Xeon 6740P + AMX BF16 vLLM vs our INT4 OVMS. Report as context, not a win or loss. |
 
 ### 3b. Not comparable, and why
 
 | Row(s) | Why not |
 |--------|---------|
-| D1, D2 (MLPerf Inference Xeon) | Fixed CNN-DailyMail dataset, LoadGen Server/Offline scenarios, accuracy gate (99% of FP32 ROUGE), 2-socket 256-thread AMX parts. Our host cannot submit, and a home-made "Server" number is not an MLPerf result. |
+| D1, D2 (MLPerf Inference Xeon) | Fixed CNN-DailyMail dataset, LoadGen Server/Offline scenarios, accuracy gate (99% of FP32 ROUGE, [MLPerf inference rules](https://github.com/mlcommons/inference_policies/blob/master/inference_rules.adoc)), 2-socket 256-thread AMX parts. Our host cannot submit, and a home-made "Server" number is not an MLPerf result. |
 | E1-E4 (EAS targets) | Targets, not measurements; no in/out lengths; BF16 on AMX Xeon; header and entries disagree on the platform. Use them as SLO gates only. |
 | D6, D9 (OVMS GenAI graphs, scaling demo) | FP16 on Xeon, ShareGPT at a request-rate sweep, OVMS 2025.3. Different precision and arrival process. |
 | D8, D10, D11 | Lengths or precision not stated, or only ratios published. |

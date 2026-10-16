@@ -63,7 +63,7 @@ check() {
         PASS=$((PASS + 1)); echo "ok   ${name}"
     else
         FAILS=$((FAILS + 1)); echo "FAIL ${name} (rc=${rc}, want ${want}, pattern '${pat}')"
-        sed 's/^/  | /' <<< "${out}"
+        printf '  | %s\n' "${out//$'\n'/$'\n'  | }"
     fi
 }
 
@@ -186,6 +186,20 @@ check "a paragraph break ends a split claim" "$(repo $'Step 3x\n\nfaster setup n
 check "an HTML comment inside a claim is ignored" "$(repo '3x <!-- note --> faster')" fail 'README.md:1'
 check "a claim inside a multi-line HTML comment is not rendered and passes" \
     "$(repo $'<!--\nIt is 3x faster.\n-->\nok')" 0
+
+# --- a primary-source link on the line backs it --------------------------------
+check "a cited table row with a markdown link passes" \
+    "$(repo '| C1 | i9 | 8.9 tok/s | [Vendor](https://example.com/bench) (2025-05-15) |')" 0
+check "the same table row without a link fails" \
+    "$(repo '| C1 | i9 | 8.9 tok/s | Vendor (2025-05-15) |')" fail 'README.md:1'
+check "a prose number with a bare https URL passes" "$(repo 'It hits 42 tok/s per https://example.com/run.')" 0
+check "a prose number with neither link nor reference fails" "$(repo 'It hits 42 tok/s on the iGPU.')" fail 'README.md:1'
+check "a relative link does not back a claim" "$(repo 'It hits 42 tok/s, see [notes](../notes.md).')" fail 'README.md:1'
+check "a URL in inline code does not back a claim" "$(repo 'It hits 42 tok/s, `https://example.com/x`.')" fail 'README.md:1'
+check "a URL in an HTML comment does not back a claim" \
+    "$(repo 'It hits 42 tok/s <!-- https://example.com/x -->.')" fail 'README.md:1'
+check "a split claim with a link on its first line passes" \
+    "$(repo $'Per https://example.com/a pinning is 3x\nfaster than before.')" 0
 
 # --- docs only claim CI enforcement when CI runs the guard ---------------------
 root="$(cd "$(dirname "$0")/.." && pwd)"
