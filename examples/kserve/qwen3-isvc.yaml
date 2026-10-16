@@ -1,0 +1,71 @@
+# Qwen3-4B (OpenVINO int4) on an Intel GPU through KServe's kserve-openvino runtime.
+# OpenAI-compatible API, tool calling on:
+#   http://qwen3-predictor.llm.svc/v3/chat/completions   (model: "qwen3")
+#   http://ovms.llm.svc:8000/v3/chat/completions         (alias Service below)
+#
+# The storage initializer downloads the pinned Hugging Face revision into
+# /mnt/models. OVMS then builds the text-generation graph in memory from
+# --model_path=/mnt/models (set by the runtime) and --task.
+#
+# install.sh fills in two values at apply time from the host's first Intel
+# render node: supplementalGroups gets its group id (OVMS runs as uid 5000 and
+# the render node keeps the host's group ownership inside the k3d node), and
+# the GPU resource becomes gpu.intel.com/<driver>, xe or i915.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llm
+---
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: qwen3
+  namespace: llm
+  annotations:
+    serving.kserve.io/deploymentMode: Standard
+  labels:
+    networking.kserve.io/visibility: cluster-local
+spec:
+  predictor:
+    minReplicas: 1
+    maxReplicas: 1
+    labels:
+      k3d-gpu.io/cores: performance   # NRI balloons: pin to P-cores on hybrid CPUs
+    securityContext:
+      supplementalGroups: []
+    model:
+      runtime: kserve-openvino
+      modelFormat:
+        name: huggingface
+      storageUri: hf://OpenVINO/Qwen3-4B-int4-ov:b467368d16b75df14055562fe927ae8e1f15f7ef
+      args:
+      - --task=text_generation
+      - --target_device=GPU
+      - --tool_parser=hermes3
+      - --reasoning_parser=qwen3
+      resources:
+        requests:
+          cpu: "4"
+          memory: 8Gi
+          gpu.intel.com/i915: "1"
+        limits:
+          cpu: "4"
+          memory: 8Gi
+          gpu.intel.com/i915: "1"
+---
+# Alias on the agent-stack address shape, http://ovms.<ns>.svc:8000/v3 with a
+# port named http, so its clients only change the namespace to llm. Selects
+# the pods KServe labels for this ISVC's predictor; OVMS serves REST on 8080.
+apiVersion: v1
+kind: Service
+metadata:
+  name: ovms
+  namespace: llm
+spec:
+  selector:
+    serving.kserve.io/inferenceservice: qwen3
+    component: predictor
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8080
