@@ -1,14 +1,16 @@
 # Qwen3-4B (OpenVINO int4) on an Intel GPU through KServe's kserve-openvino runtime.
 # OpenAI-compatible API, tool calling on:
 #   http://qwen3-predictor.llm.svc/v3/chat/completions   (model: "qwen3")
+#   http://ovms.llm.svc:8000/v3/chat/completions         (alias Service below)
 #
 # The storage initializer downloads the pinned Hugging Face revision into
 # /mnt/models. OVMS then builds the text-generation graph in memory from
 # --model_path=/mnt/models (set by the runtime) and --task.
 #
-# supplementalGroups gets the host's render group id at apply time
-# (install.sh fills it in): OVMS runs as uid 5000 and the render node keeps the
-# host's group ownership inside the k3d node.
+# install.sh fills in two values at apply time from the host's first Intel
+# render node: supplementalGroups gets its group id (OVMS runs as uid 5000 and
+# the render node keeps the host's group ownership inside the k3d node), and
+# the GPU resource becomes gpu.intel.com/<driver>, xe or i915.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -49,4 +51,21 @@ spec:
         limits:
           cpu: "4"
           memory: 8Gi
-          gpu.intel.com/i915: "1"   # gpu.intel.com/xe on xe-driver GPUs (Battlemage/Xe2)
+          gpu.intel.com/i915: "1"
+---
+# Alias on the agent-stack address shape, http://ovms.<ns>.svc:8000/v3 with a
+# port named http, so its clients only change the namespace to llm. Selects
+# the pods KServe labels for this ISVC's predictor; OVMS serves REST on 8080.
+apiVersion: v1
+kind: Service
+metadata:
+  name: ovms
+  namespace: llm
+spec:
+  selector:
+    serving.kserve.io/inferenceservice: qwen3
+    component: predictor
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8080

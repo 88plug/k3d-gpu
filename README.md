@@ -190,7 +190,7 @@ serves `OpenVINO/Qwen3-4B-int4-ov` on the Intel GPU through KServe's
 OpenVINO Model Server runtime (OVMS 2026.4.1), with tool calling:
 
 ```bash
-examples/kserve/install.sh          # needs kubectl, helm 3.8+, /dev/dri/renderD*
+examples/kserve/install.sh          # needs kubectl, helm 3.8+, an Intel GPU (xe or i915)
 curl http://qwen3-predictor.llm.svc/v3/chat/completions \
   -H 'Content-Type: application/json' \
   -d '{"model":"qwen3","messages":[{"role":"user","content":"hi"}]}'   # from a pod
@@ -200,10 +200,14 @@ curl http://qwen3-predictor.llm.svc/v3/chat/completions \
 |------|------------|
 | `kserve-values.yaml` | `kserve-resources` chart values: Standard mode, no Ingress objects |
 | `openvino-runtime.yaml` | `kserve-openvino` ClusterServingRuntime from KServe v0.21.0 `config/runtimes` (not in that release's charts), image pinned to `openvino/model_server:2026.4.1-gpu` by digest |
-| `qwen3-isvc.yaml` | namespace `llm` and InferenceService `qwen3`: `gpu.intel.com/i915: 1`, pod label `k3d-gpu.io/cores=performance`, model pinned to a Hugging Face revision |
+| `qwen3-isvc.yaml` | namespace `llm`, InferenceService `qwen3` (one Intel GPU, pod label `k3d-gpu.io/cores=performance`, model pinned to a Hugging Face revision) and Service `ovms` on port 8000 |
 
-The OVMS container runs as uid 5000, so `install.sh` adds the host's render
-group id to the pod. Use `gpu.intel.com/xe` for an xe-driver GPU.
+`install.sh` reads the host's first Intel render node from sysfs. The pod
+requests `gpu.intel.com/xe` or `gpu.intel.com/i915` to match that node's
+driver, and gets its group id, since the OVMS container runs as uid 5000.
+Service `ovms` gives the agent-stack address shape,
+`http://ovms.llm.svc:8000/v3`; the model id there is `qwen3`, not
+`Qwen3-4B-int4-ov`.
 `tests/kserve_test.sh` checks the install against stub `helm`/`kubectl` and,
 with `kubeconform` and `helm` on `PATH`, validates the manifests and rendered
 charts at Kubernetes 1.34 and 1.35.

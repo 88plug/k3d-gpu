@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Tests for the optional KServe example (examples/kserve).
-#  1. install.sh against stub helm/kubectl: pinned chart versions, Standard-mode
-#     values, render-group substitution, and the no-GPU error path. No cluster.
+#  1. install.sh against stub helm/kubectl and a fake sysfs: pinned chart
+#     versions, Standard-mode values, the Intel render node's driver and group
+#     filled into the ISVC, the ovms alias Service, and the no-GPU error path.
+#     No cluster.
 #  2. kubeconform at Kubernetes 1.34 and 1.35 over the example manifests and the
 #     rendered cert-manager/KServe charts, with KServe CRD schemas generated from
 #     the pinned kserve-crd chart. Runs when kubeconform and helm are on PATH
@@ -49,9 +51,27 @@ run_install() { # run_install <sysroot>: prints install.sh's exit code
     echo $?
 }
 
+# render_node <sysroot> <renderDN> <pci-vendor> <driver>: a DRM render node in
+# /dev/dri plus its sysfs entry, laid out like the kernel's.
+render_node() {
+    local root=$1 node=$2 vendor=$3 drv=$4
+    local pci="${root}/sys/devices/pci0000:00/0000:00:${node#renderD}.0"
+    mkdir -p "${root}/dev/dri" "${root}/sys/class/drm/${node}" "${pci}" "${root}/sys/bus/pci/drivers/${drv}"
+    touch "${root}/dev/dri/${node}"
+    echo "${vendor}" > "${pci}/vendor"
+    ln -sfn "${root}/sys/bus/pci/drivers/${drv}" "${pci}/driver"
+    ln -sfn "${pci}" "${root}/sys/class/drm/${node}/device"
+}
+# doc_of <kind> <name> <file>: prints the YAML document of that kind and name.
+doc_of() {
+    awk -v k="kind: $1" -v n="  name: $2" '
+        /^---$/ { if (hk && hn) printf "%s", d; d = ""; hk = hn = 0; next }
+        { d = d $0 "\n"; if ($0 == k) hk = 1; if ($0 == n) hn = 1 }
+        END { if (hk && hn) printf "%s", d }' "$3"
+}
+
 SYS="${WORK}/sys"
-mkdir -p "${SYS}/dev/dri"
-touch "${SYS}/dev/dri/renderD128"
+render_node "${SYS}" renderD128 0x8086 i915
 gid=$(stat -c %g "${SYS}/dev/dri/renderD128")
 
 check "install.sh exits 0 with a render node" is "$(run_install "${SYS}")" 0
@@ -66,13 +86,45 @@ check "cert-manager installs before KServe" \
 check "runtime applied" has "^kubectl apply --server-side -f ${EX}/openvino-runtime.yaml$" "${CALLS}"
 check "ISVC gets the host render gid" has "supplementalGroups: \[${gid}\]$" "${STDIN_OUT}"
 check "ISVC requests the Intel GPU" has 'gpu.intel.com/i915: "1"' "${STDIN_OUT}"
+# Agent-stack consumers call http://ovms.<ns>.svc:8000/v3 (port name "http").
+doc_of Service ovms "${STDIN_OUT}" > "${WORK}/ovms-svc.yaml"
+check "ovms alias Service in namespace llm" has '^  namespace: llm$' "${WORK}/ovms-svc.yaml"
+check "ovms alias Service: port http 8000 -> OVMS rest port 8080" \
+    grep -qzE -- $'- name: http\n +port: 8000\n +targetPort: 8080\n' "${WORK}/ovms-svc.yaml"
+check "ovms selector names the ISVC" has '^    serving.kserve.io/inferenceservice: qwen3$' "${WORK}/ovms-svc.yaml"
+check "ovms selector names the predictor" has '^    component: predictor$' "${WORK}/ovms-svc.yaml"
 check "ISVC carries the hybrid-core label" has 'k3d-gpu.io/cores: performance' "${STDIN_OUT}"
 check "waits for the ISVC" has \
     '^kubectl wait --namespace llm --for=condition=Ready inferenceservice/qwen3' "${CALLS}"
 
 check "install.sh fails without a render node" is "$(run_install "${WORK}/empty")" 1
-check "no-GPU error names the missing node" has 'no .*/dev/dri/renderD\*' "${WORK}/out"
+check "no-GPU error names the missing node" has 'no Intel render node (xe or i915)' "${WORK}/out"
 check "nothing installed without a render node" [ ! -s "${CALLS}" ]
+
+# xe-driver GPU (Lunar Lake, Battlemage, ...): the device plugin advertises
+# gpu.intel.com/xe, so the ISVC must request that, not i915.
+XE="${WORK}/xe"
+render_node "${XE}" renderD128 0x8086 xe
+check "install.sh exits 0 on an xe GPU" is "$(run_install "${XE}")" 0
+check "ISVC requests gpu.intel.com/xe on an xe GPU" has 'gpu.intel.com/xe: "1"' "${STDIN_OUT}"
+check "ISVC drops gpu.intel.com/i915 on an xe GPU" [ "$(grep -c 'gpu.intel.com/i915' "${STDIN_OUT}")" -eq 0 ]
+
+# NVIDIA render node first (renderD128), Intel second: the Intel node's driver
+# and group go into the ISVC.
+MIX="${WORK}/mix"
+render_node "${MIX}" renderD128 0x10de nvidia
+render_node "${MIX}" renderD129 0x8086 xe
+other=$(id -G | tr ' ' '\n' | grep -vx "$(id -g)" | head -n1)
+[ -n "${other}" ] && chgrp "${other}" "${MIX}/dev/dri/renderD128"
+mix_gid=$(stat -c %g "${MIX}/dev/dri/renderD129")
+check "install.sh exits 0 with NVIDIA + Intel render nodes" is "$(run_install "${MIX}")" 0
+check "ISVC gets the Intel node's gid, not NVIDIA's" has "supplementalGroups: \[${mix_gid}\]$" "${STDIN_OUT}"
+check "ISVC requests the Intel node's driver" has 'gpu.intel.com/xe: "1"' "${STDIN_OUT}"
+
+NV="${WORK}/nv"
+render_node "${NV}" renderD128 0x10de nvidia
+check "install.sh fails with only an NVIDIA render node" is "$(run_install "${NV}")" 1
+check "nothing installed with only an NVIDIA render node" [ ! -s "${CALLS}" ]
 
 check "values select Standard mode" has 'deploymentMode: Standard' "${EX}/kserve-values.yaml"
 check "values disable Ingress creation" has 'disableIngressCreation: true' "${EX}/kserve-values.yaml"
@@ -138,7 +190,13 @@ EOF
             -schema-location "${SC}/{{ .ResourceKind }}_{{ .ResourceAPIVersion }}.json" "$@" \
             > "${WORK}/kc.out" 2>&1 || { cat "${WORK}/kc.out"; return 1; }
     }
-    rejects() { ! validate "$@" > /dev/null; }
+    # rejects <k8s> <file>: kubeconform finds exactly one invalid resource, the
+    # misspelt predictor field, and no errors (a missing file or bad YAML is an error).
+    rejects() {
+        ! validate "$@" > /dev/null \
+            && has "at '/spec/predictor': additional properties 'lables' not allowed" "${WORK}/kc.out" \
+            && has 'Invalid: 1, Errors: 0' "${WORK}/kc.out"
+    }
     for k8s in 1.34.0 1.35.0; do
         check "kubeconform ${k8s}: example manifests" validate "${k8s}" \
             "${EX}/openvino-runtime.yaml" "${EX}/qwen3-isvc.yaml" "${WORK}/isvc-filled.yaml"
