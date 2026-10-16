@@ -1,0 +1,29 @@
+Platform: the same Gaudi 3 server before the out-of-tree habanalabs driver is
+installed: eight 0x1da3:0x1060 functions, no driver, no accel nodes. k3d-gpu must
+warn and skip Gaudi; the host's AMX is still detected.
+
+Sources (kernel paths are Linux v6.18 (torvalds/linux tag v6.18)):
+- 0x1da3 0x1060 "Gaudi3 AI Training Accelerator": pci.ids 2026.10.15
+  (pciutils/pciids). Mainline lists only up to Gaudi2 (0x1020,
+  drivers/accel/habanalabs/common/habanalabs_drv.c), so Gaudi 3 means Intel's
+  out-of-tree habanalabs driver; module name and accel layout match mainline.
+- /dev/accel/accel<n> and /sys/class/accel/accel<n>: Documentation/accel/introduction.rst.
+- accel_controlD<n> beside accel<n>, same index: drivers/accel/habanalabs/common/device.c
+  (snprintf "accel_controlD%d", cdev_idx = drm.accel->index).
+- DSA 0x8086:0x0b25 / IAA 0x8086:0x0cfe, class 0x088000, driver idxd, devices
+  dsa0/iax1 (one id space): include/linux/pci_ids.h, drivers/dma/idxd/init.c
+  ("%s%d" with name_prefix dsa/iax); class from intel-device-plugins v0.37.1
+  deployments/nfd/overlays/node-feature-rules (class 0880).
+- ASPEED 0x1a03:0x2000 "ASPEED Graphics Family", driver ast, card0 only: pci.ids.
+- amx_bf16 amx_tile amx_int8: arch/x86/include/asm/cpufeatures.h; NFD v0.19.0
+  docs/usage/features.md names the labels AMXBF16, AMXTILE, AMXINT8.
+
+Layout: sysfs paths and relative symlinks follow the driver core's naming
+(class devices under <pci dev>/<class>/<name>; /sys/class/<class>/<name> and
+/sys/bus/pci/devices/<bdf> as relative links; <dev>/driver -> bus/pci/drivers/<drv>),
+in exactly the form tests/fixtures/capture.sh writes (the matrix test re-captures
+each tree and requires an identical result).
+
+Not from hardware: BDFs, the Gaudi PCI class (0x120000; k3d-gpu does not read
+it), the kernel release string, and the cpuinfo flags line (a representative
+subset in cpufeatures.h order).

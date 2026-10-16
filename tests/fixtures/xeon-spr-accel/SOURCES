@@ -1,0 +1,30 @@
+Platform: Sapphire Rapids Xeon with its built-in accelerators set up: one DSA and
+one IAA work queue configured (accel-config), a second DSA/IAA pair without
+queues, a QAT 4xxx PF with 4 SR-IOV VFs, vfio-pci loaded, AMX.
+
+Sources (kernel paths are Linux v6.18 (torvalds/linux tag v6.18)):
+- DSA 0x0b25 / IAA 0x0cfe, driver idxd, dsa<n>/iax<n> on the dsa bus, work queues
+  <dev>/wq<dev>.<n> and /dev/dsa|iax/wq<dev>.<n>: include/linux/pci_ids.h,
+  drivers/dma/idxd/init.c, drivers/dma/idxd/cdev.c ("%s/wq%u.%u"),
+  Documentation/ABI/stable/sysfs-driver-dma-idxd.
+- /dev/char/<major>:<minor> -> ../dsa/wq0.0: udev's char-device links, which the
+  DSA/IAA plugins require; major 375 as in intel-device-plugins v0.37.1
+  pkg/idxd/plugin_test.go (dsaMajor).
+- QAT PF 0x4940 bound to "4xxx", VFs 0x4941: drivers/crypto/intel/qat/qat_common/
+  adf_accel_devices.h. Mainline has no 4xxx VF driver (drivers/crypto/intel/qat/
+  Makefile), so the VFs stay unbound until the plugin binds them to vfio-pci.
+  virtfn<n> links on the PF: intel-device-plugins v0.37.1
+  cmd/qat_plugin/dpdkdrv/dpdkdrv_test.go.
+- allocatable qat.intel.com/cy: v0.37.1 cmd/qat_plugin/dpdkdrv/dpdkdrv.go maps
+  cfg_services "sym;asym" (the value shown in Documentation/ABI/testing/
+  sysfs-driver-qat) to "cy". dsa.intel.com/wq-user-dedicated: cmd/dsa_plugin/README.md.
+- amx_*: arch/x86/include/asm/cpufeatures.h; ASPEED 0x1a03:0x2000: pci.ids 2026.10.15.
+
+Layout: sysfs paths and relative symlinks follow the driver core's naming
+(class devices under <pci dev>/<class>/<name>; /sys/class/<class>/<name> and
+/sys/bus/pci/devices/<bdf> as relative links; <dev>/driver -> bus/pci/drivers/<drv>),
+in exactly the form tests/fixtures/capture.sh writes (the matrix test re-captures
+each tree and requires an identical result).
+
+Not from hardware: BDFs, char-device minors, the kernel release string, and the
+cpuinfo flags line (a representative subset in cpufeatures.h order).

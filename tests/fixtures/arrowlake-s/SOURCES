@@ -1,0 +1,20 @@
+Platform: Core Ultra 200S desktop (Arrow Lake-S, 8 P + 16 E cores, no SMT): iGPU
+on i915, NPU on intel_vpu, firmware installed.
+
+Sources (kernel paths are Linux v6.18 (torvalds/linux tag v6.18)):
+- 0x8086 0x7d67 "Arrow Lake-S [Intel Graphics]": pci.ids 2026.10.15; INTEL_ARL_S_IDS
+  in include/drm/intel/pciids.h.
+- 0x8086 0xad1d NPU: drivers/accel/ivpu/ivpu_drv.h (PCI_DEVICE_ID_ARL), mapped to the
+  37xx IP and so intel/vpu/vpu_37xx firmware.
+- i915/mtl_guc_70.bin, intel/vpu/vpu_37xx_v1.bin: linux-firmware tag 20260916 WHENCE.
+- 8 P + 16 E cores: Intel ark, Core Ultra 9 285K (product 241060); cpu_core/cpu_atom
+  files per tools/perf/Documentation/intel-hybrid.txt.
+
+Layout: sysfs paths and relative symlinks follow the driver core's naming
+(class devices under <pci dev>/<class>/<name>; /sys/class/<class>/<name> and
+/sys/bus/pci/devices/<bdf> as relative links; <dev>/driver -> bus/pci/drivers/<drv>),
+in exactly the form tests/fixtures/capture.sh writes (the matrix test re-captures
+each tree and requires an identical result).
+
+Not from hardware: the P/E CPU numbering (0-7 P, 8-23 E), the kernel release
+string, and the cpuinfo flags line.

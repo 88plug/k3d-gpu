@@ -1,0 +1,27 @@
+==> Accelerators: intel npu hybrid
+==> Creating k3d cluster 'gpu' with image cryptoandcoffee/k3d-gpu:latest...
+==> Waiting for nodes Ready...
+==> intel device plugin auto-deployed by k3s.
+==> npu device plugin auto-deployed by k3s.
+==> hybrid device plugin auto-deployed by k3s.
+==> Verifying accelerators are schedulable...
+==> Accelerators schedulable: intel=1 npu=1 hybrid=1. Try: k3d-gpu test
+exit=0
+--- calls
+k3d cluster create gpu
+  --image=cryptoandcoffee/k3d-gpu:latest
+  --no-lb
+  --k3s-arg=--disable=traefik@server:0
+  --k3s-node-label=nvidia.com/gpu.present=false@server:*;agent:*
+  --k3s-node-label=intel.feature.node.kubernetes.io/npu=true@server:*;agent:*
+  --k3s-node-label=k3d-gpu.io/hybrid-cpu=true@server:*;agent:*
+kubectl wait --for=condition=Ready nodes --all --timeout=120s
+kubectl -n kube-system get daemonset intel-gpu-plugin
+kubectl -n kube-system get daemonset intel-npu-plugin
+kubectl -n kube-system get daemonset nri-resource-policy-balloons
+kubectl -n kube-system rollout status daemonset/intel-gpu-plugin --timeout=120s
+kubectl get nodes -o go-template={{range .items}}{{range $k, $v := .status.allocatable}}{{$k}} {{$v}}{{"\n"}}{{end}}{{end}}
+kubectl -n kube-system rollout status daemonset/intel-npu-plugin --timeout=120s
+kubectl get nodes -o go-template={{range .items}}{{range $k, $v := .status.allocatable}}{{$k}} {{$v}}{{"\n"}}{{end}}{{end}}
+kubectl -n kube-system rollout status daemonset/nri-resource-policy-balloons --timeout=120s
+kubectl get nodes -l k3d-gpu.io/hybrid-cpu=true -o name
