@@ -1,0 +1,16 @@
+# How a prod (Xeon) release becomes the dev (k3d-gpu laptop) release.
+ratio:                 # dev allocatable / prod allocatable, from the twins' twin.yaml
+  cpu: auto
+  memory: auto
+floors:                # never project below what the model needs to load
+  ovms-llm: {memory: 10Gi}
+  embedder: {memory: 2Gi}
+labelTable:            # prod balloon label -> k3d-gpu hybrid-core label (share/nri-balloons.yml)
+  fromKey: k3d-gpu.io/balloon
+  toKey: k3d-gpu.io/cores
+  map:
+    inference: performance
+    agent: efficient
+gate:                  # replay rules on the prod twin
+  strictNumaBalloonTypes: [inference]
+  balloonLabelKey: k3d-gpu.io/balloon

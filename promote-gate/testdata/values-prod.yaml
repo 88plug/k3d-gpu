@@ -1,0 +1,29 @@
+# Prod release on the Xeon: the LLM and embedder ask for NUMA-local inference balloons.
+namespace: agents
+components:
+- name: ovms-llm
+  image: openvino/model_server:2025.3
+  args: ["--config_path", "/models/config.json"]
+  env: {OVMS_DEVICE: CPU}
+  replicas: 2
+  cpu: "20"
+  memory: 12Gi
+  labels: {k3d-gpu.io/balloon: inference}
+- name: embedder
+  image: openvino/model_server:2025.3
+  replicas: 1
+  cpu: "8"
+  memory: 8Gi
+  labels: {k3d-gpu.io/balloon: inference}
+- name: agent
+  image: registry.example.com/agent:1.4.2
+  env: {LLM_URL: "http://ovms-llm:8080/v3"}
+  replicas: 3
+  cpu: "2"
+  memory: 4Gi
+  labels: {k3d-gpu.io/balloon: agent}
+- name: vectordb
+  image: qdrant/qdrant:v1.15.0
+  replicas: 1
+  cpu: "4"
+  memory: 8Gi

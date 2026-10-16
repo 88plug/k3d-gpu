@@ -1,0 +1,13 @@
+# sysfs files a twin records, relative to the host root. Shared by
+# promote_gate.py capture (local) and twin-capture.yml (ansible, prod Xeon).
+sys/devices/system/cpu/online
+sys/devices/system/cpu/cpu[0-9]*/topology/physical_package_id
+sys/devices/system/cpu/cpu[0-9]*/topology/die_id
+sys/devices/system/cpu/cpu[0-9]*/topology/core_id
+sys/devices/system/cpu/cpu[0-9]*/topology/thread_siblings_list
+sys/devices/system/node/online
+sys/devices/system/node/node[0-9]*/cpulist
+sys/devices/system/node/node[0-9]*/distance
+sys/devices/system/node/node[0-9]*/meminfo
+sys/devices/cpu_core/cpus
+sys/devices/cpu_atom/cpus

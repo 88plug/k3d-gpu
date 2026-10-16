@@ -1,0 +1,68 @@
+# Record a prod node's twin for promote-gate: the sysfs files in capture-globs.txt,
+# the node's allocatable, and the BalloonsPolicy CR. Read-only on the target.
+#
+#   ansible-playbook -i <inventory> promote-gate/twin-capture.yml \
+#     -e target=<host> -e node_name=<k8s node name> -e out=twins/<name>
+#
+# kubectl runs on the target host, so the host needs a kubeconfig that can read the
+# node and balloonspolicies. With -e use_kubectl=false, or without kubectl, twin.yaml
+# falls back to sizes from sysfs and the policy file must be added by hand.
+- name: Capture promote-gate twin
+  hosts: "{{ target }}"
+  gather_facts: false
+  vars:
+    globs: "{{ lookup('file', playbook_dir + '/capture-globs.txt').splitlines()
+               | reject('match', '^#') | reject('equalto', '') | list }}"
+    stage: /tmp/promote-gate-twin
+    use_kubectl: true
+  tasks:
+    - name: Copy the sysfs files into a staging tree
+      ansible.builtin.shell: |
+        set -eu
+        rm -rf {{ stage }}; mkdir -p {{ stage }}
+        cd /
+        for g in {{ globs | map('quote') | join(' ') }}; do
+          for f in $g; do
+            [ -e "$f" ] || continue
+            mkdir -p "{{ stage }}/$(dirname "$f")"
+            case "$f" in
+              */meminfo) grep MemTotal: "$f" > "{{ stage }}/$f" ;;
+              *) cat "$f" > "{{ stage }}/$f" ;;
+            esac
+          done
+        done
+        if {{ use_kubectl | bool | lower }} && command -v kubectl >/dev/null; then
+          kubectl get node {{ node_name | quote }} \
+            -o jsonpath='{"allocatable:\n  cpu: \""}{.status.allocatable.cpu}{"\"\n  memory: \""}{.status.allocatable.memory}{"\"\nallocatableSource: kubectl\n"}' \
+            > {{ stage }}/twin.yaml || true
+          kubectl get balloonspolicies.config.nri -A -o yaml > {{ stage }}/balloonspolicy.yaml || true
+        fi
+        tar -C {{ stage }} -czf {{ stage }}.tgz .
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Fetch the twin
+      ansible.builtin.fetch:
+        src: "{{ stage }}.tgz"
+        dest: "{{ out }}.tgz"
+        flat: true
+
+    - name: Remove the staging tree
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop: ["{{ stage }}", "{{ stage }}.tgz"]
+
+- name: Unpack the twin
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Unpack
+      ansible.builtin.shell: |
+        set -eu
+        mkdir -p {{ out | quote }}
+        tar -C {{ out | quote }} -xzf {{ out | quote }}.tgz
+        rm {{ out | quote }}.tgz
+        [ -s {{ out | quote }}/twin.yaml ] || python3 {{ playbook_dir | quote }}/promote_gate.py meta {{ out | quote }}
+      changed_when: true

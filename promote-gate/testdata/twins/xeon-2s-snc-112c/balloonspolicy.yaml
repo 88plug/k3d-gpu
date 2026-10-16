@@ -1,0 +1,21 @@
+# Prod BalloonsPolicy as twin capture records it (kubectl get balloonspolicies -o yaml).
+apiVersion: config.nri/v1alpha1
+kind: BalloonsPolicy
+metadata:
+  name: default
+  namespace: kube-system
+spec:
+  reservedResources:
+    cpu: 2000m
+  reservedPoolNamespaces: [kube-system]
+  allocatorTopologyBalancing: true
+  balloonTypes:
+  - name: inference
+    preferNewBalloons: true
+    matchExpressions:
+    - {key: pod/labels/k3d-gpu.io/balloon, operator: Equals, values: [inference]}
+  - name: agent
+    maxBalloons: 1
+    maxCPUs: 16
+    matchExpressions:
+    - {key: pod/labels/k3d-gpu.io/balloon, operator: Equals, values: [agent]}

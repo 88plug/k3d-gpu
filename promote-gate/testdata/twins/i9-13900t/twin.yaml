@@ -1,0 +1,5 @@
+allocatable:
+  cpu: '32'
+  memory: 128438Mi
+allocatableSource: derived-from-sysfs
+files: 135

@@ -1,0 +1,4 @@
+apiVersion: v2
+name: agent-stack
+description: Test fixture shaped like a local agent stack (LLM server, embedder, agents, vector DB).
+version: 0.1.0

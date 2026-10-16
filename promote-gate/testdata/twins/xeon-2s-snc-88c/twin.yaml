@@ -1,0 +1,5 @@
+allocatable:
+  cpu: '88'
+  memory: 385398Mi
+allocatableSource: derived-from-sysfs
+files: 366

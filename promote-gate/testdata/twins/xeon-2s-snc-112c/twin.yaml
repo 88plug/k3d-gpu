@@ -1,0 +1,5 @@
+allocatable:
+  cpu: '112'
+  memory: 636275Mi
+allocatableSource: derived-from-sysfs
+files: 474

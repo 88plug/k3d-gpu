@@ -1,0 +1,33 @@
+# Dev release as a developer would write it by hand for the i9-13900T twin, from
+# values-prod.yaml and projection-map.yaml: cpu x 2/7 (32/112 CPUs), memory x
+# 128438/636275 (MemTotal ratio), rounded up, memory floors applied, balloon labels
+# mapped to k3d-gpu.io/cores. Quantities are spelled differently from what
+# `promote_gate.py project` prints on purpose; certify compares them by value.
+namespace: agents
+components:
+- name: ovms-llm
+  image: openvino/model_server:2025.3
+  args: ["--config_path", "/models/config.json"]
+  env: {OVMS_DEVICE: CPU}
+  replicas: 2
+  cpu: "5.715"
+  memory: 10Gi
+  labels: {k3d-gpu.io/cores: performance}
+- name: embedder
+  image: openvino/model_server:2025.3
+  replicas: 1
+  cpu: "2286m"
+  memory: 2Gi
+  labels: {k3d-gpu.io/cores: performance}
+- name: agent
+  image: registry.example.com/agent:1.4.2
+  env: {LLM_URL: "http://ovms-llm:8080/v3"}
+  replicas: 3
+  cpu: "0.572"
+  memory: 827Mi
+  labels: {k3d-gpu.io/cores: efficient}
+- name: vectordb
+  image: qdrant/qdrant:v1.15.0
+  replicas: 1
+  cpu: "1143m"
+  memory: 1654Mi

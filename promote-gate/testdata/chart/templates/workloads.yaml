@@ -1,0 +1,44 @@
+{{- range .Values.components }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .name }}
+  namespace: {{ $.Values.namespace }}
+spec:
+  replicas: {{ .replicas | default 1 }}
+  selector:
+    matchLabels:
+      app: {{ .name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .name }}
+        {{- with .labels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      containers:
+      - name: {{ .name }}
+        image: {{ .image }}
+        {{- with .args }}
+        args: {{ toJson . }}
+        {{- end }}
+        {{- with .env }}
+        env:
+        {{- range $k, $v := . }}
+        - name: {{ $k }}
+          value: {{ $v | quote }}
+        {{- end }}
+        {{- end }}
+        ports:
+        - name: http
+          containerPort: {{ .port | default 8080 }}
+        resources:
+          requests:
+            cpu: {{ .cpu | quote }}
+            memory: {{ .memory | quote }}
+          limits:
+            cpu: {{ .cpu | quote }}
+            memory: {{ .memory | quote }}
+{{- end }}
