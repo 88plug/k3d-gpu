@@ -25,6 +25,14 @@ jobs:
       - run: tests/detect_test.sh
       - run: tests/host_setup_test.sh
 
+  claims-check:
+    name: Docs claims guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: tests/claims_check_test.sh
+      - run: tests/claims_check.sh
+
   kuberay-example:
     name: KubeRay example (static)
     runs-on: ubuntu-latest
