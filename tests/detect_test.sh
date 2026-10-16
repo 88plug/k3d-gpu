@@ -431,6 +431,21 @@ test_says "pod output without a final newline does not glue onto the next line" 
     '^(.\[[0-9;]*m)?==>.*Deploying gaudi-test' \
     STUB_POD_PHASE=Succeeded STUB_POD_LOGS="ERROR: noise" K3D_GPU_VENDORS=nvidia,gaudi
 
+# Image refs are pasted into the pod overrides JSON, so `test` must refuse a value
+# that is not a plain image reference instead of sending it on.
+r=$(newroot nvidia-test)
+mkdir -p "${r}/sys/module/nvidia"
+inject='busybox:1.37","securityContext":{"privileged":true},"imagePullPolicy":"IfNotPresent'
+test_says "test rejects a K3D_GPU_DEVICE_TEST_IMAGE that is not an image reference" "${r}" fail \
+    "K3D_GPU_DEVICE_TEST_IMAGE .* is not a valid image reference" \
+    STUB_POD_PHASE=Succeeded K3D_GPU_VENDORS=gaudi K3D_GPU_DEVICE_TEST_IMAGE="${inject}"
+test_says "test rejects a K3D_GPU_TEST_IMAGE that is not an image reference" "${r}" fail \
+    "K3D_GPU_TEST_IMAGE .* is not a valid image reference" \
+    STUB_POD_PHASE=Succeeded K3D_GPU_TEST_IMAGE="${inject}"
+test_says "test accepts a digest-pinned image reference" "${r}" 0 'Deploying gaudi-test' \
+    STUB_POD_PHASE=Succeeded K3D_GPU_VENDORS=gaudi \
+    K3D_GPU_DEVICE_TEST_IMAGE="docker.io/library/busybox:1.37@sha256:$(printf '%064d' 0)"
+
 r=$(newroot hybrid-test)
 hybrid "${r}" 0-15 16-31
 test_says "hybrid test passes when each pod lands on its core type" "${r}" 0 'Cpus_allowed_list' \

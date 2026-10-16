@@ -270,8 +270,8 @@ injection:
 
 ```bash
 valid_image() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._/:@+-]*$ ]]; }
-valid_image "${TEST_IMAGE}" || err "K3D_GPU_TEST_IMAGE '${TEST_IMAGE}' is not an image reference"
-valid_image "${DEVICE_TEST_IMAGE}" || err "K3D_GPU_DEVICE_TEST_IMAGE '${DEVICE_TEST_IMAGE}' is not an image reference"
+valid_image "${TEST_IMAGE}" || err "K3D_GPU_TEST_IMAGE '${TEST_IMAGE}' is not a valid image reference"
+valid_image "${DEVICE_TEST_IMAGE}" || err "K3D_GPU_DEVICE_TEST_IMAGE '${DEVICE_TEST_IMAGE}' is not a valid image reference"
 ```
 
 Add a case to `tests/detect_test.sh` that asserts `k3d-gpu test` errors on the

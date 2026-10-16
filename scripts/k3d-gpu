@@ -1395,7 +1395,12 @@ device_test() {
         || err "${name} test pod failed — run 'k3d-gpu doctor'"
 }
 
+# Image refs are pasted into the pod overrides JSON, so only accept reference characters.
+valid_image() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._/:@+-]*$ ]]; }
+
 cmd_test() {
+    valid_image "${TEST_IMAGE}" || err "K3D_GPU_TEST_IMAGE '${TEST_IMAGE}' is not a valid image reference"
+    valid_image "${DEVICE_TEST_IMAGE}" || err "K3D_GPU_DEVICE_TEST_IMAGE '${DEVICE_TEST_IMAGE}' is not a valid image reference"
     require kubectl
     resolve_vendors
     [ "${#ACTIVE[@]}" -gt 0 ] || err "no supported accelerator detected — run 'k3d-gpu doctor'"
