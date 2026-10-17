@@ -42,6 +42,9 @@ removes it all. See [docs/quickstart.md](docs/quickstart.md), the pinned,
 sha256-checked installer `packaging/install.sh`, and
 [docs/first-run.md](docs/first-run.md) for your kind of machine (WSL2 laptop,
 mini PC, Fedora laptop, Xeon server, Arch + Arc, NVIDIA workstation).
+No accelerator, or a team endpoint? `k3d-gpu quickstart --remote` uses any
+OpenAI-compatible endpoint (`OPENAI_BASE_URL`, `OPENAI_API_KEY`) instead of a
+local model: see [docs/remote-endpoints.md](docs/remote-endpoints.md).
 
 The `k3d-gpu` launcher wraps the whole workflow — no need to remember
 `k3d cluster create` flags. Install it with your package manager (see [Install](#install)), then:

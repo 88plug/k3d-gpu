@@ -1,0 +1,135 @@
+# Rendered by `k3d-gpu sandbox up --remote`: egress is gaudi.example.net:443 only (104.21.77.178, 172.67.210.235, 2606:4700:3030::6815:4db2), no DNS.
+# k3d-gpu sandbox profile for kubernetes-sigs/agent-sandbox v1.0.7 (share/agent-sandbox.yml).
+# Applied by `k3d-gpu sandbox up` once the controller and its CRDs are ready.
+#
+# Untrusted agent tool execution runs on E-cores: the pod label k3d-gpu.io/cores=efficient
+# puts every sandbox in the NRI balloons "efficient" balloon on hybrid hosts (k3d-gpu up
+# deploys it), so the P-cores stay free for inference. The CPU request sizes the balloon.
+# On a non-hybrid host the label does nothing and sandboxes use any CPU.
+#
+# Runtime: plain runc. agent-sandbox delegates isolation to a RuntimeClass (gVisor, Kata);
+# the k3d node image ships neither, so a sandbox is a hardened container (non-root, no
+# capabilities, no service account token) behind a NetworkPolicy, not a VM or user-space
+# kernel. k3s enforces NetworkPolicy with its embedded kube-router controller.
+#
+# NetworkPolicy (the controller renders spec.networkPolicy into one policy per template):
+#   ingress  port 8888 from pods labelled k3d-gpu.io/sandbox-client=true in any namespace,
+#            and from upstream's sandbox-router (app=sandbox-router in agent-sandbox-system)
+#   egress   cluster DNS (kube-dns, port 53), and public addresses only: RFC1918, CGNAT
+#            100.64.0.0/10 (tailscale), link-local and IPv6 ULA/link-local are blocked, so
+#            sandboxes cannot reach pods, services, the k3d docker network, tailnet peers or
+#            the host by those addresses. The host's own public IPs (and anything it serves
+#            on them) stay reachable: bind inference servers to a private address, or
+#            firewall them on the host.
+# This is upstream's default managed policy (extensions/controllers/sandboxtemplate_controller.go)
+# plus CGNAT, DNS (upstream blocks it, which breaks pip by name) and the sandbox-client peer.
+#
+# Image: user 1000 has no passwd entry, so HOME would be / and pip's user install would fail
+# on /.local; HOME=/tmp gives `pip install` a writable user site. The image has no git or curl.
+#
+# Claim a sandbox from the warm pool:
+#   kubectl create -f - <<EOF
+#   apiVersion: extensions.agents.x-k8s.io/v1beta1
+#   kind: SandboxClaim
+#   metadata: {generateName: task-, namespace: agent-sandbox}
+#   spec: {warmPoolRef: {name: python-ecores}}
+#   EOF
+# The runtime serves POST /execute {"command": "..."} -> {stdout, stderr, exit_code} on :8888.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agent-sandbox
+---
+apiVersion: extensions.agents.x-k8s.io/v1beta1
+kind: SandboxTemplate
+metadata:
+  name: python-ecores
+  namespace: agent-sandbox
+  annotations:
+    k3d-gpu.io/remote-host: "gaudi.example.net"
+    k3d-gpu.io/remote-addrs: "104.21.77.178,172.67.210.235,2606:4700:3030::6815:4db2"
+spec:
+  networkPolicy:
+    ingress:
+    - from:
+      - namespaceSelector: {}
+        podSelector:
+          matchLabels:
+            k3d-gpu.io/sandbox-client: "true"
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: agent-sandbox-system
+        podSelector:
+          matchLabels:
+            app: sandbox-router
+      ports:
+      - port: 8888
+        protocol: TCP
+    egress:
+    - to:
+      - ipBlock:
+          cidr: 104.21.77.178/32
+      - ipBlock:
+          cidr: 172.67.210.235/32
+      - ipBlock:
+          cidr: 2606:4700:3030::6815:4db2/128
+      ports:
+      - port: 443
+        protocol: TCP
+  podTemplate:
+    metadata:
+      labels:
+        k3d-gpu.io/cores: efficient
+    spec:
+      automountServiceAccountToken: false
+      hostAliases:
+      - ip: "104.21.77.178"
+        hostnames: [gaudi.example.net]
+      - ip: "172.67.210.235"
+        hostnames: [gaudi.example.net]
+      - ip: "2606:4700:3030::6815:4db2"
+        hostnames: [gaudi.example.net]
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: python
+        image: registry.k8s.io/agent-sandbox/python-runtime-sandbox:v1.0.7@sha256:fc92654c97fe5dff2a7935a845820981026c075d0c1014e5c2c569f5e58204f1
+        env:
+        - name: HOME
+          value: /tmp
+        envFrom:
+        - secretRef:
+            name: k3d-gpu-llm
+        ports:
+        - containerPort: 8888
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8888
+        resources:
+          requests:
+            cpu: "1"
+            memory: 256Mi
+          limits:
+            cpu: "1"
+            memory: 1Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+---
+apiVersion: extensions.agents.x-k8s.io/v1beta1
+kind: SandboxWarmPool
+metadata:
+  name: python-ecores
+  namespace: agent-sandbox
+spec:
+  replicas: 1
+  sandboxTemplateRef:
+    name: python-ecores
