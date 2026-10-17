@@ -34,6 +34,13 @@ jobs:
       - run: tests/claims_check_test.sh
       - run: tests/claims_check.sh
 
+  bench-tests:
+    name: Bench harness tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: tests/bench_test.sh
+
   kuberay-example:
     name: KubeRay example (static)
     runs-on: ubuntu-latest

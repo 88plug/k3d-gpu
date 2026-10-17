@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Measurement harness tests: bench/energy.sh against a fake RAPL tree,
-# bench/llm_load.py against tests/openai_stub.py, bench/noisy.sh manifests.
+# bench/llm_load.py against tests/openai_stub.py, bench/noisy.sh manifests,
+# bench/agent_trace.py through its own unit tests (in-process stub).
 # No root, no cluster, no hardware.
 #
 # Usage: tests/bench_test.sh
@@ -178,6 +179,11 @@ noisy_bad_cores() {
 check "noisy: efficient pod is labelled, sized and pinned to the image digest" noisy_efficient
 check "noisy: unlabelled pod has no cores label; --cpu overrides the request" noisy_unlabelled
 check "noisy: bad --cores is rejected" noisy_bad_cores
+
+# ---- agent_trace.py ---------------------------------------------------------------
+
+check "agent_trace: unit tests against the in-process stub" \
+    env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/test_agent_trace.py"
 
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
