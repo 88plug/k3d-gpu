@@ -341,7 +341,8 @@
         },
         "pci": "0000:00:02.0",
         "platform": "Arrow Lake-S",
-        "render_node": "renderD128"
+        "render_node": "renderD128",
+        "xmx": false
       }
     ],
     "kernel": "6.12.48-1-lts",

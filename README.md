@@ -452,6 +452,7 @@ turns them on; `k3d-gpu doctor` prints the labels this host gets.
 |-------|----------|--------|
 | `feature.node.kubernetes.io/cpu-cpuid.<NAME>=true` | always, for each of `avx_vnni`, `avx512f`, `avx512_vnni`, `avx512_bf16`, `vaes`, `gfni`, `sha_ni`, `ibt`, `user_shstk` in `/proc/cpuinfo` | NFD's names: `AVXVNNI`, `AVX512F`, `AVX512VNNI`, `AVX512BF16`, `VAES`, `GFNI`, `SHA`, `CETIBT`, `CETSS` |
 | `gpu.intel.com/xmx=true\|false` | `intel` is active; `true` if any Intel GPU has XMX matrix engines, `false` only when every one is known to lack them | per platform, from Mesa's `has_systolic` |
+| `k3d-gpu.io/xmx.i915=false`, `k3d-gpu.io/xmx.xe=false` | `gpu.intel.com/xmx=true`, and that driver also holds an Intel GPU without known XMX (its device plugin resource may hand that GPU out, so `agent up` auto and `recommend_placement` skip it) | per platform, from Mesa's `has_systolic` |
 | `gpu.intel.com/media-vcs=<n>`, `gpu.intel.com/media-vecs=<n>` | `intel` is active on `i915` | video decode/encode and video enhancement engines under `/sys/class/drm/card*/engine` |
 | `k3d-gpu.io/npu.gen=37xx\|40xx\|50xx\|60xx` | `npu` is active | the NPU's firmware generation |
 
@@ -751,7 +752,7 @@ The device comes from what the cluster advertises, not from the host alone:
 | Cluster has | Device | Pod gets |
 |-------------|--------|----------|
 | allocatable `habana.ai/gaudi` | `HPU` | one Gaudi, served by vLLM (see [vLLM on Gaudi](#vllm-on-gaudi)) |
-| allocatable `gpu.intel.com/xe`, else `gpu.intel.com/i915`, on a node labelled `gpu.intel.com/xmx=true` | `GPU` | one GPU, a `gpu.intel.com/xmx: "true"` node selector; the host render group is added as a supplemental group |
+| allocatable `gpu.intel.com/xe`, else `gpu.intel.com/i915`, on a node labelled `gpu.intel.com/xmx=true`, skipping a driver labelled `k3d-gpu.io/xmx.<driver>=false` | `GPU` | one GPU, a `gpu.intel.com/xmx: "true"` node selector; the host render group is added as a supplemental group |
 | anything else, including an Intel GPU without XMX (or with `xmx` unknown) | `CPU` | no device; the P-cores on a hybrid node; on a node labelled `...cpu-cpuid.AMXTILE=true` it is pinned there |
 | `npu.intel.com/accel`, only with `K3D_GPU_AGENT_DEVICE=NPU` | `NPU` | the NPU and its accel node's group |
 
@@ -1398,6 +1399,49 @@ address is blocked like any other.
 The image ships no `git` or `curl`; fetch with Python or pip. Edit
 `share/agent-sandbox-k3d.yml` (or point `K3D_GPU_SANDBOX_PROFILE` at a copy) to
 change the image, CPU request, warm pool size or policy.
+
+### Capacity oracle (`k3d-gpu share`, opt-in)
+
+`k3d-gpu share` turns a finished `capacity` run into a bundle for the public
+per-SKU leaderboard ([docs/oracle.md](docs/oracle.md),
+[docs/leaderboard.md](docs/leaderboard.md); design:
+[docs/moat-design.md](docs/moat-design.md)). It never sends anything on its own.
+
+```bash
+k3d-gpu share --dry-run        # build, validate and print the bundle; write and send nothing
+k3d-gpu share                  # same, then write ./k3d-gpu-share-<sha12>.json (mode 0600)
+k3d-gpu share --submit         # same, then ask y/N at the terminal before opening a public pull request
+```
+
+* **What it reads**: `k3d-gpu report --json --no-cluster` (the cluster is not
+  queried) and the newest finished run under
+  `$XDG_STATE_HOME/k3d-gpu/capacity/` (or `--capacity FILE`).
+* **What a bundle holds**: counts, device ids, ISA flags, the CPU model string,
+  kernel major.minor, memory rounded to a standard size, PL1/PL2, EPP, the
+  pinned tool/server/model versions, the ISO week, and each request's timings
+  and token counts. Not the hostname, machine-id, serial numbers, MAC or IP
+  addresses, user names, paths, PCI addresses, CPU lists, cluster or node names,
+  URLs or timestamps. `oracle/project.py` (the allowlist) and
+  `oracle/schema/bundle-v1.json` (every object closed, every string an enum or
+  pattern) are the authority when this list and the code differ.
+* **Checks before it is shown as submittable**: `oracle/validate.py`, the same
+  rules the oracle ingest runs (V1-V12 in the design doc), recomputes p95 and
+  agents per box from the samples and scans the bundle for this machine's own
+  hostname, machine-id, user name, home path, MAC addresses and DMI serials. A
+  rejected bundle is neither written nor sendable.
+* **Sending**: only with `--submit`, only at an interactive terminal, only after
+  a typed `y`/`yes`; there is no `--yes`. With `gh` installed and logged in it
+  forks `88plug/k3d-gpu` and opens a pull request adding
+  `data/oracle/<sha256>.json`; without `gh` it prints those steps. CI validates
+  the file (V1-V12); a maintainer merges it and regenerates the leaderboard. The
+  bundle has no identifiers, but a pull request is public under your account:
+  a submission is not anonymous.
+
+`python3 oracle/test_oracle.py` tests the schema, the projection over every sim
+fixture with planted identifiers, each validator rule, the matrix generator
+against `docs/oracle-matrix.md`, and that `share` never runs `gh` without the
+typed confirmation (stub `gh`, pseudo-terminal). `oracle/test_fuzz.py` fuzzes the
+identifier scrubber and the validator (`FUZZ_N`, `FUZZ_SEED`).
 
 ---
 

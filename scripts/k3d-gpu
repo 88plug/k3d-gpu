@@ -61,10 +61,14 @@
 #           kubernetes-sigs/agent-sandbox with a warm pool of sandboxes pinned to E-cores
 #   tune    run|show|space|env|fingerprint|reset: search the OVMS agent's serving config on
 #           this host; keep a winner only if it beats the default; agent up applies it
+#   capacity    agents per box: closed-loop agent ramp against the cluster's chat endpoint
+#           (bench/apb/capacity.py), prints the agent count at a p95 turn SLO and writes JSON
+#   share   opt-in capacity-oracle bundle with no identifiers (oracle/share.py): --dry-run
+#           prints the exact payload; --submit opens a PR adding it under data/ after a y/N prompt
 
 set -euo pipefail
 
-VERSION="0.1.48"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.52"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 # The node image defaults to the tag built from this launcher's own release
 # (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
@@ -150,7 +154,8 @@ Usage: k3d-gpu <command>
             Read-only host tuning advisor for inference (CPU/GPU clocks, power
             limits, THP, swap, IRQs, persistence): evidence, why, apply + revert
   report    Host + cluster inventory per engine; writes k3d-gpu-report.{json,html}
-            (report DIR writes there; report --json prints the JSON only)
+            (report DIR writes there; report --json prints the JSON only;
+            --no-cluster skips the cluster query)
   logs      Tail k3s server container logs
   host-setup [--apply] [--distro D]
             Check the host drivers/userspace (vainfo, clinfo, libva, libstdc++) and print
@@ -224,6 +229,12 @@ Usage: k3d-gpu <command>
             reps per step stop once the p95 CI clears the SLO. Prints agents per
             box (or the bracket when --budget runs out), stores the bracket per
             host+engine so a rerun only refines it. Full options: capacity --help
+  share [--capacity FILE]... [--dry-run] [--submit]
+            Capacity oracle (opt-in): builds a bundle from report + capacity results
+            with an allowlist (no hostname, serials, MACs, IPs, paths or timestamps).
+            --dry-run prints the exact payload and writes nothing; without it the
+            bundle is written 0600. Nothing is sent without --submit AND a y/N
+            answer at a terminal (then a PR adds it under data/). Full options: share --help
   autoquant [--json] [--facts FILE] [--store RESULTS]
             The CPU agent's weight precision: the measured winner cached for
             this host fingerprint (bench/amx-autoquant/probe.sh --store), else
@@ -240,6 +251,12 @@ Usage: k3d-gpu <command>
             J/token, and write the result JSON plus an EXPERIMENTS.md run section.
             The model cache volume is removed after unless --keep-cache;
             K3D_GPU_SIGNOFF="Name <email>" signs the run section
+  bench agent plan|run|apb|control|bfcl|report|proxy|manifest|tasks ...
+            Agent benchmark (EXPERIMENTS.md H40-H48): Intel's EAT blueprint flows
+            and BFCL S100, graded, timed at one recording proxy, under bench/load
+            background load, with RAPL J per successful task and resumable
+            results. Repo checkout only. Full options: bench agent --help;
+            guide: docs/agent-benchmarks.md
   phase-steer [--json] [--prefill CPUS --decode CPUS]
             Experimental, read-only (H20 PENDING): per-phase CPU split for one
             llama.cpp server per agent, prefill on the P-cores and decode on the
@@ -315,6 +332,7 @@ Environment:
   K3D_GPU_TUNE_DIR      tuned profiles       (default: ~/.config/k3d-gpu/tune)
   K3D_GPU_TUNE_PY       tune driver          (default: the repo's console/tune.py, then ${SHARE_DIR}/console/tune.py)
   K3D_GPU_BENCH         dir with llm_load.py, energy.sh and apb/capacity.py (default: the repo's bench/, then ${SHARE_DIR}/bench)
+  K3D_GPU_ORACLE        dir holding share.py (default: the repo's oracle/, then ${SHARE_DIR}/oracle)
   K3D_GPU_AGENT_CORES, K3D_GPU_AGENT_MAX_NUM_SEQS, K3D_GPU_AGENT_CACHE_SIZE,
   K3D_GPU_AGENT_PREFIX_CACHING, K3D_GPU_AGENT_PLUGIN_CONFIG
                         OVMS serving knobs 'tune' sets: balloon core type (performance |
@@ -1274,15 +1292,18 @@ intel_engine_cards() {
 engine_count() { local n; n=$({ compgen -G "$1/engine/$2[0-9]*" || true; } | wc -l); echo $((n)); }
 
 # Node labels for the detected Intel GPUs. gpu.intel.com/xmx is true when any GPU
-# has XMX and false when every GPU is known to lack it. gpu.intel.com/media-vcs and
-# media-vecs count the video decode/encode and video enhancement engines of the
-# i915 card with the most video engines.
+# has XMX and false when every GPU is known to lack it. When it is true,
+# k3d-gpu.io/xmx.<driver>=false marks a driver (i915, xe) that also holds a GPU
+# without known XMX: its device plugin resource may hand out that GPU.
+# gpu.intel.com/media-vcs and media-vecs count the video decode/encode and video
+# enhancement engines of the i915 card with the most video engines.
 intel_gpu_labels() {
-    local e name x xmx=false unknown=0 card vcs best=-1 vecs=0
+    local e name x xmx=false unknown=0 card vcs best=-1 vecs=0 partial=""
     for e in ${INTEL_DRIVERS[@]+"${INTEL_DRIVERS[@]}"}; do
         IFS='|' read -r name _ <<< "$(intel_gpu_platform "${e#* }")"
         x=$(gpu_xmx "${name}")
         case "${x}" in true) xmx=true ;; false) ;; *) unknown=1 ;; esac
+        [ "${x}" = true ] || [[ " ${partial} " == *" ${e%% *} "* ]] || partial+="${partial:+ }${e%% *}"
     done
     if [ "${#INTEL_DRIVERS[@]}" -gt 0 ] && { [ "${xmx}" = true ] || [ "${unknown}" -eq 0 ]; }; then
         echo "gpu.intel.com/xmx=${xmx}"
@@ -1296,6 +1317,10 @@ intel_gpu_labels() {
         echo "gpu.intel.com/media-vcs=${best}"
         echo "gpu.intel.com/media-vecs=${vecs}"
     fi
+    if [ "${xmx}" = true ]; then
+        for e in ${partial}; do echo "k3d-gpu.io/xmx.${e}=false"; done
+    fi
+    return 0
 }
 
 # Node label for the NPU firmware generation (37xx, 40xx, ...), when every
@@ -3210,12 +3235,25 @@ perf_memory() {
     perf_info "MemTotal $(kb_gib "${total}") GiB, MemAvailable $(kb_gib "${avail}") GiB, swap $(kb_gib "${stot:-0}") GiB, vm.swappiness=${sw:-?}" /proc/meminfo
     used=$(( ${stot:-0} - ${sfree:-0} ))
     if [ "${used}" -ge 1048576 ]; then
-        local apply=""
-        [ "${avail:-0}" -gt $((used + 1048576)) ] \
-            && apply="sudo swapoff -a && sudo swapon -a   # pulls swapped pages back into RAM; MemAvailable covers them"
+        local apply="" revert="" dev pri on why="; MemAvailable is too small to pull the swapped pages back in right now"
+        # Cycle each active swap device by name, at its own priority: swapon -a
+        # re-enables only /etc/fstab entries, so zram-generator swap (a systemd
+        # unit) would stay off. swapon -p takes 0..32767; a negative priority is
+        # the kernel's own and comes back by itself.
+        if [ "${avail:-0}" -gt $((used + 1048576)) ]; then
+            while read -r dev _ _ _ pri; do
+                [ -n "${dev}" ] && [ "${dev}" != Filename ] && [[ "${pri}" =~ ^-?[0-9]+$ ]] || continue
+                if [ "${pri:0:1}" = - ]; then on="sudo swapon"; else on="sudo swapon -p ${pri}"; fi
+                apply+="${apply:+ && }sudo swapoff ${dev} && ${on} ${dev}"
+                revert+="${revert:+; }${on} ${dev}"
+            done < <(cat "${SYSROOT}/proc/swaps" 2>/dev/null || true)
+            why=""
+            [ -n "${apply}" ] && apply+="   # pulls swapped pages back into RAM; MemAvailable covers them" \
+                || why="; /proc/swaps lists no device to cycle"
+        fi
         perf_flag warn "$(kb_gib "${used}") GiB of swap in use — the host is under memory pressure" /proc/meminfo \
-            "anything a server keeps in anonymous memory (KV cache, runtime buffers, weights it copied) is paged back from disk when touched. Free memory or serve a smaller model before benchmarking$([ -n "${apply}" ] || echo "; MemAvailable is too small to pull the swapped pages back in right now")" \
-            "${apply}" ""
+            "anything a server keeps in anonymous memory (KV cache, runtime buffers, weights it copied) is paged back from disk when touched. Free memory or serve a smaller model before benchmarking${why}" \
+            "${apply}" "${revert}"
     else
         perf_ok "swap in use: $(kb_gib "${used}") GiB" /proc/meminfo
     fi
@@ -4932,7 +4970,7 @@ pci_addr() { basename "$(readlink -f "$1")"; }
 
 # Intel DRM cards (card0, not connectors like card0-DP-1).
 report_intel_gpus() {
-    local card dev bdf id drv render r name engines guc huc out=""
+    local card dev bdf id drv render r name xmx engines guc huc out=""
     for card in "${SYSROOT}"/sys/class/drm/card*; do
         [[ "${card##*/}" =~ ^card[0-9]+$ ]] || continue
         dev="${card}/device"
@@ -4942,8 +4980,9 @@ report_intel_gpus() {
             [ -e "${r}/device" ] && [ "$(pci_addr "${r}/device")" = "${bdf}" ] && render=${r##*/}
         done
         IFS='|' read -r name _ <<< "$(intel_gpu_platform "${id}")"
+        xmx=$(gpu_xmx "${name}")
         engines=$(gpu_engines "${card}" "${dev}") guc=$(uc_info "${card##*card}" guc "${bdf}") huc=$(uc_info "${card##*card}" huc "${bdf}")
-        out+="${out:+,}{\"card\":$(json_str "${card##*/}"),\"render_node\":$(json_str_or_null "${render}"),\"pci\":$(json_str "${bdf}"),\"device_id\":$(json_str_or_null "${id}"),\"platform\":$(json_str_or_null "${name}"),\"driver\":$(json_str_or_null "${drv}"),\"engines\":${engines},\"guc\":${guc},\"huc\":${huc}}"
+        out+="${out:+,}{\"card\":$(json_str "${card##*/}"),\"render_node\":$(json_str_or_null "${render}"),\"pci\":$(json_str "${bdf}"),\"device_id\":$(json_str_or_null "${id}"),\"platform\":$(json_str_or_null "${name}"),\"xmx\":${xmx:-null},\"driver\":$(json_str_or_null "${drv}"),\"engines\":${engines},\"guc\":${guc},\"huc\":${huc}}"
         report_line "Intel GPU ${card##*/}: ${name:+${name} }${id} on ${drv:-no driver} (${bdf}${render:+, ${render}})"
         report_line "  engines: $(grep -o '"name":"[^"]*"' <<< "${engines}" | cut -d'"' -f4 | paste -sd' ')"
         report_line "  GuC $(uc_status "${guc}"), HuC $(uc_status "${huc}")"
@@ -5052,7 +5091,9 @@ node_json() { printf '{"name":%s,"allocatable":{%s},"labels":{%s}}' "$(json_str 
 # k3d-<cluster> context explicitly, never whatever context happens to be current.
 report_cluster() {
     local ctx="k3d-${CLUSTER}" reason="" lines kind node key val nodes="" cur="" alloc="" labels="" summary=""
-    if ! command -v kubectl >/dev/null 2>&1; then
+    if [ "${REPORT_NO_CLUSTER:-0}" = 1 ]; then
+        reason="not queried (--no-cluster)"
+    elif ! command -v kubectl >/dev/null 2>&1; then
         reason="kubectl not found"
     elif ! kubectl config get-contexts -o name 2>/dev/null | grep -x "${ctx}" >/dev/null; then
         reason="no kubeconfig context ${ctx} (cluster not created, or KUBECONFIG points elsewhere)"
@@ -5141,15 +5182,23 @@ for (const [k, x] of [...Object.entries(r.host), ["detected", r.detected], ["clu
 EOF
 }
 
-# report [--json] [dir]: text summary plus <dir>/k3d-gpu-report.{json,html}, or
-# only the JSON on stdout with --json.
+# report [--json] [--no-cluster] [dir]: text summary plus
+# <dir>/k3d-gpu-report.{json,html}, or only the JSON on stdout with --json.
+# --no-cluster leaves kubectl alone (the cluster section says it was not queried).
 cmd_report() {
-    local json dir=.
-    if [ "${1:-}" = "--json" ]; then
+    local json dir=. as_json=0 a
+    for a in "$@"; do
+        case "${a}" in
+            --json)       as_json=1 ;;
+            --no-cluster) REPORT_NO_CLUSTER=1 ;;
+            -*)           err "report: unknown option ${a} (usage: k3d-gpu report [--json] [--no-cluster] [DIR])" ;;
+            *)            dir=${a} ;;
+        esac
+    done
+    if [ "${as_json}" = 1 ]; then
         report_json 3>/dev/null
         return
     fi
-    [ -z "${1:-}" ] || dir=$1
     [ -d "${dir}" ] || err "report directory ${dir} does not exist"
     info "k3d-gpu report: host${SYSROOT:+ ${SYSROOT}}, cluster ${CLUSTER}"
     exec 3>&1
@@ -5941,7 +5990,9 @@ cpu_list_count() {
 # auto: an allocatable Gaudi (HPU, served by vLLM) first, unless the backend was
 # set to ovms or llm-scaler, which do not run on it. Then the Intel GPU (xe
 # first: Battlemage/Lunar Lake and newer) only when it is allocatable and a node
-# labels it gpu.intel.com/xmx=true; otherwise CPU, on the P-cores of a hybrid
+# labels it gpu.intel.com/xmx=true (skipping a driver labelled
+# k3d-gpu.io/xmx.<driver>=false: its plugin may hand out the GPU without XMX);
+# otherwise CPU, on the P-cores of a hybrid
 # node. A GPU without XMX loses to the P-cores: on an i9-13900T, Qwen3-4B int4
 # decodes 15.7 tok/s and prefills 172 tok/s on the P-cores, 9.9 and 66 on the UHD
 # 770 (EXPERIMENTS.md H6); the GPU only saves CPU (~1 busy CPU instead of ~8).
@@ -5971,6 +6022,11 @@ agent_device() {
             if [ -n "$(labelled_nodes "${AGENT_XMX_LABEL}")" ]; then
                 for res in gpu.intel.com/xe gpu.intel.com/i915; do
                     [ "$(resource_total "${res}")" -gt 0 ] || continue
+                    # Not every GPU on this driver has XMX: the plugin may hand out one without.
+                    if [ -n "$(labelled_nodes "k3d-gpu.io/xmx.${res##*/}=false")" ]; then
+                        info "agent: ${res} also holds a GPU without XMX, so auto does not request it (K3D_GPU_AGENT_DEVICE=GPU forces it)" >&2
+                        continue
+                    fi
                     if [ -n "${refused}" ]; then
                         IFS='|' read -r bdf why fix <<< "${refused}"
                         warn "agent: Intel GPU ${bdf} refused: ${why}; fix: ${fix}; using OVMS on the CPU"
@@ -6116,6 +6172,29 @@ agent_cpus() {
     echo "${n}"
 }
 
+# The agent values spliced into the manifest as plain YAML scalars. Each comes from
+# the environment or from a file (tune profile, autoquant cache, plan matrix), so
+# each is checked against its own character set: no newline, quote or space.
+agent_check_values() {
+    [[ "${AGENT_LOG_LEVEL}" =~ ^(TRACE|DEBUG|INFO|WARNING|ERROR)$ ]] \
+        || err "K3D_GPU_AGENT_LOG_LEVEL must be TRACE, DEBUG, INFO, WARNING or ERROR, got '${AGENT_LOG_LEVEL}'"
+    valid_image "${AGENT_IMAGE}" || err "K3D_GPU_AGENT_IMAGE '${AGENT_IMAGE}' is not a valid image reference"
+    [[ "${AGENT_IMAGE}" == *@sha256:* ]] \
+        || warn "K3D_GPU_AGENT_IMAGE '${AGENT_IMAGE}' is not pinned by digest: the tag can move upstream"
+    [[ "${AGENT_MODEL}" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] \
+        || err "K3D_GPU_AGENT_MODEL '${AGENT_MODEL}' is not a valid model id (letters, digits, . _ - /)"
+    [[ "${AGENT_MODEL_NAME}" =~ ^[A-Za-z0-9][A-Za-z0-9._:/-]*$ ]] \
+        || err "K3D_GPU_AGENT_MODEL_NAME '${AGENT_MODEL_NAME}' is not a valid served name (letters, digits, . _ - : /)"
+    [ -z "${AGENT_REVISION}" ] || [[ "${AGENT_REVISION}" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] \
+        || err "K3D_GPU_AGENT_REVISION '${AGENT_REVISION}' is not a valid revision (a commit, tag or branch)"
+    [ -z "${AGENT_TOOL_PARSER}" ] || [[ "${AGENT_TOOL_PARSER}" =~ ^[A-Za-z0-9_.-]+$ ]] \
+        || err "K3D_GPU_AGENT_TOOL_PARSER '${AGENT_TOOL_PARSER}' is not a valid parser name"
+    [ -z "${AGENT_REASONING_PARSER}" ] || [[ "${AGENT_REASONING_PARSER}" =~ ^[A-Za-z0-9_.-]+$ ]] \
+        || err "K3D_GPU_AGENT_REASONING_PARSER '${AGENT_REASONING_PARSER}' is not a valid parser name"
+    [[ "${AGENT_DRAFT_MODEL}" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] \
+        || err "K3D_GPU_AGENT_DRAFT_MODEL '${AGENT_DRAFT_MODEL}' is not a valid model id (letters, digits, . _ - /)"
+}
+
 # Prints the namespace, model PVC, Deployment and Service. Choices go to stderr.
 agent_manifest() {
     local device res gid="" hybrid="" amx="" cpus
@@ -6127,6 +6206,7 @@ agent_manifest() {
     cpus=$(agent_cpus "${device}" "${hybrid}")
     [ "${device}" = CPU ] || gid=$(agent_device_gid "${device}")
     [ "${device}" != CPU ] || agent_autoquant
+    agent_check_values
     if [ "${AGENT_APP}" = vllm ]; then vllm_manifest; return 0; fi
     local via=""
     [ "${res}" = - ] || via=" (${res})"
@@ -8196,6 +8276,35 @@ cmd_uninstall() {
 # (console/matrix.v1.json) to console/plan.py, a pure function that picks an
 # engine, model and placement only from green cells. Both need python3 (stdlib).
 
+# ---- share: capacity-oracle bundle ------------------------------------------
+# oracle/share.py (Python stdlib only), next to a repo checkout first, then the
+# packaged copy. It runs this script again for `report --json --no-cluster`,
+# and uses bench/apb/apb.py (found as for capacity) to recompute the scores.
+oracle_dir() {
+    local d self
+    self=$(readlink -f "${BASH_SOURCE[0]}")
+    for d in "${K3D_GPU_ORACLE:-}" "$(dirname "${self}")/../oracle" "${SHARE_DIR}/oracle"; do
+        if [ -n "${d}" ] && [ -f "${d}/share.py" ]; then
+            echo "${d}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+cmd_share() {
+    local d cap="" self pins
+    d=$(oracle_dir) || err "share: oracle/share.py not found in the repo's oracle/ or ${SHARE_DIR}/oracle (set K3D_GPU_ORACLE)"
+    require python3
+    cap=$(capacity_script) || cap=""
+    self=$(readlink -f "${BASH_SOURCE[0]}")
+    # Every server image this script pins by digest (one per agent backend).
+    pins=$(sed -n 's/^ *AGENT_\(OVMS\|DEFAULT\)_IMAGE="\([^"$]*@sha256:[0-9a-f]\{64\}\)"$/\2/p' "${self}" | paste -sd' ')
+    K3D_GPU_SELF="${self}" K3D_GPU_VERSION="${VERSION}" \
+        K3D_GPU_AGENT_IMAGE_PIN="${pins}" K3D_GPU_APB_DIR="${cap%/*}" \
+        exec python3 "${d}/share.py" "$@"
+}
+
 # Directory with facts.py and plan.py: K3D_GPU_CONSOLE, then next to a repo
 # checkout, then the packaged copy.
 console_dir() {
@@ -8709,6 +8818,13 @@ bench_vs_remote() {
 
 cmd_bench() {
     require python3
+    if [ "${1:-}" = agent ]; then
+        shift
+        local agent
+        agent="$(bench_dir)/eatflow/agentbench.py"
+        [ -f "${agent}" ] || err "bench agent: ${agent} missing; run from a k3d-gpu checkout or set K3D_GPU_BENCH to its bench/ directory"
+        exec python3 "${agent}" "$@"
+    fi
     local stack="" kurl="" kmodel="" budget=900 rounds=3 warmup=3 maxtok=128 id="" out="" cpuset="" dry="" keep=""
     remote_parse "$@"
     set -- ${REMOTE_REST[@]+"${REMOTE_REST[@]}"}
@@ -8960,7 +9076,7 @@ case "${1:-help}" in
     test)    cmd_test    ;;
     detect)  shift; cmd_detect "$@" ;;
     doctor)  shift; cmd_doctor "$@" ;;
-    report)  cmd_report "${2:-}" ;;
+    report)  shift; cmd_report "$@" ;;
     logs)    cmd_logs    ;;
     host-setup) shift; cmd_host_setup "$@" ;;
     agent)   shift; cmd_agent "$@" ;;
@@ -8974,6 +9090,7 @@ case "${1:-help}" in
     apply)   shift; cmd_apply "$@" ;;
     tune)    shift; cmd_tune "$@" ;;
     capacity) shift; cmd_capacity "$@" ;;
+    share)   shift; cmd_share "$@" ;;
     autoquant) shift; cmd_autoquant "$@" ;;
     bench)   shift; cmd_bench "$@" ;;
     phase-steer) shift; cmd_phase_steer "$@" ;;

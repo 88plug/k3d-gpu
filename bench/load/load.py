@@ -34,6 +34,7 @@ import argparse
 import glob
 import json
 import os
+import shlex
 import subprocess
 import sys
 import time
@@ -265,6 +266,16 @@ def rapl_zone(sysfs="/sys"):
     return None
 
 
+
+def rapl_elevation():
+    """Command prefix that reads a root-only energy_uj: K3D_GPU_RAPL_EXEC when set (e.g.
+    `docker exec <container with /sys/class/powercap> ` on a host without sudo), else
+    sudo -A (SUDO_ASKPASS set) or sudo -n."""
+    cmd = os.environ.get("K3D_GPU_RAPL_EXEC")
+    if cmd:
+        return shlex.split(cmd)
+    return ["sudo", "-A"] if os.environ.get("SUDO_ASKPASS") else ["sudo", "-n"]
+
 def read_energy_uj(zone):
     """Package energy counter. energy_uj is root-only on current kernels: read it
     directly when allowed, else via sudo -A (SUDO_ASKPASS set) or sudo -n."""
@@ -274,7 +285,7 @@ def read_energy_uj(zone):
     v = _read(path)
     if v.isdigit():
         return int(v)
-    elev = ["sudo", "-A"] if os.environ.get("SUDO_ASKPASS") else ["sudo", "-n"]
+    elev = rapl_elevation()
     p = subprocess.run(elev + ["cat", path], capture_output=True, text=True)
     v = p.stdout.strip()
     return int(v) if p.returncode == 0 and v.isdigit() else None

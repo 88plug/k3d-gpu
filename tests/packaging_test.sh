@@ -131,6 +131,32 @@ check "packages.yml dry_run skips the upload" \
     grep -Pzq -- '- name: Publish to the GitHub release\n +if: \$\{\{ !inputs\.dry_run \}\}\n' "${PKGS}"
 check "packages.yml dry_run skips the formula commit" \
     grep -Pzq -- '- name: Commit to main\n +if: \$\{\{ !inputs\.dry_run \}\}\n' "${PKGS}"
+# The NVIDIA device-plugin step takes only a vX.Y.Z tag: its output lands in later run
+# scripts and in share/nvidia-device-plugin.yml. Run the step with curl stubbed to a tag.
+nvstep=$(python3 -c 'import sys, yaml
+for s in yaml.safe_load(open(sys.argv[1]))["jobs"]["check"]["steps"]:
+    if s.get("id") == "nvidia_plugin": print(s["run"])' "${BAP}")
+check "build-and-push has the nvidia_plugin step" test -n "${nvstep}"
+# nvstep_out <tag>: the step's GITHUB_OUTPUT when the release API answers <tag>; fails when the step fails.
+nvstep_out() {
+    local d rc=0
+    d=$(mktemp -d)
+    jq -n --arg t "$1" '{tag_name: $t}' > "${d}/release.json"
+    printf '#!/bin/sh\ncat "%s/release.json"\n' "${d}" > "${d}/curl"
+    chmod +x "${d}/curl"
+    if PATH="${d}:${PATH}" GITHUB_OUTPUT="${d}/out" GH_TOKEN=x bash -euc "${nvstep}" >/dev/null 2>&1; then
+        cat "${d}/out"
+    else
+        rc=1
+    fi
+    rm -rf "${d}"
+    return "${rc}"
+}
+nvstep_refuses() { ! nvstep_out "$1" >/dev/null; }
+check "nvidia_plugin step takes a vX.Y.Z tag" test "$(nvstep_out v0.21.0)" = "latest=v0.21.0"
+check "nvidia_plugin step refuses a tag with shell characters" nvstep_refuses 'v0.21.0";id;"'
+check "nvidia_plugin step refuses a tag with a newline" nvstep_refuses $'v0.21.0\nx'
+check "nvidia_plugin step refuses a tag with \$( )" nvstep_refuses 'v1$(id)'
 check "packages.yml builds with packaging/check.sh nfpm" grep -q 'packaging/check.sh nfpm' "${PKGS}"
 check "packages.yml uploads to the aur-v release" grep -q 'gh release upload' "${PKGS}"
 # gh uploads create-time assets to a draft and publishes only once they are all up, so a

@@ -415,11 +415,18 @@ def recommend(args, report):
     # Intel GPU only on a node labelled gpu.intel.com/xmx=true; without XMX the
     # P-cores decode and prefill faster (EXPERIMENTS.md H6), so the GPU only wins
     # on efficiency (it saves CPU).
+    # k3d-gpu.io/xmx.<driver>=false: that driver also holds a GPU without XMX, and
+    # its resource may hand that one out, so the gate skips it too.
     xmx = labels.get(XMX_LABEL) == "true"
     xmx_gate = workload == "llm" and objective != "efficiency"
+
+    def no_xmx(e):
+        driver = ENGINES[e]["resource"].rsplit("/", 1)[1]
+        return not xmx or labels.get(f"k3d-gpu.io/xmx.{driver}") == "false"
+
     available = [e for e in PREFERENCES[workload][objective]
                  if (ENGINES[e]["resource"] is None or ENGINES[e]["resource"] in resources)
-                 and not (xmx_gate and e in INTEL_GPUS and not xmx)]
+                 and not (xmx_gate and e in INTEL_GPUS and no_xmx(e))]
     engine = available[0]
     res = ENGINES[engine]["resource"]
     hybrid = labels.get(HYBRID_LABEL) == "true"
@@ -434,6 +441,10 @@ def recommend(args, report):
                                     for e in prefs[:prefs.index(engine)] if e in INTEL_GPUS):
         notes.append(f"The Intel GPU is skipped: no node is labelled {XMX_LABEL}=true, and without "
                      "XMX the P-cores run LLMs faster (objective=efficiency still picks the GPU).")
+    elif xmx_gate and any(ENGINES[e]["resource"] in resources and no_xmx(e)
+                          for e in prefs[:prefs.index(engine)] if e in INTEL_GPUS):
+        notes.append("An Intel GPU resource is skipped: its driver also holds a GPU without XMX "
+                     "(k3d-gpu.io/xmx.<driver>=false), and the device plugin may hand that one out.")
     if xmx_gate and xmx and engine in INTEL_GPUS:
         node_selector[XMX_LABEL] = "true"
     if hybrid:

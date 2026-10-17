@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """analyze.py: the H26 verdict from run.sh output, by the pre-registered rules.
 
-  analyze.py requests.jsonl blocks.jsonl     prints one JSON object
+  analyze.py requests.jsonl blocks.jsonl [load.jsonl]     prints one JSON object
 
 requests.jsonl: client.py lines. blocks.jsonl: one line per block from run.sh
 with "block", "round", "arm", "void", "imc_gbs", "pkg_j", "pswpin". Rules
@@ -17,12 +17,18 @@ with "block", "round", "arm", "void", "imc_gbs", "pkg_j", "pswpin". Rules
   the MC4 hog keeps >= 85% of the ME4 hog's IMC bandwidth (else the gain is
   the hog being throttled, not isolation: REFUTED as stated).
   REFUTED if R >= 0.8, else REFUTED as stated.
-Confidence = P(R <= 0.5) from a bootstrap of requests stratified by block.
+Confidence = P(R <= 0.5) from a bootstrap of requests stratified by block;
+P(R >= 0.8) is reported beside it.
+Amendment A2: with load.jsonl (bench/load/load.py sample windows, tagged by arm,
+taken with no hog running), a level whose background load is unmatched under
+load.py's TOLERANCE is INCONCLUSIVE; "verdict_if_matched" keeps the A1 result.
 Python 3 standard library only.
 """
 
+import importlib.util
 import json
 import math
+import os
 import random
 import statistics
 import sys
@@ -83,15 +89,17 @@ def decide(reqs, blocks, n_boot=10000, seed=26, drop_swap=False):
     qblocks = [statistics.median(v) for (_, arm, _), v in by_block.items() if arm == "Q"]
     out["q_block_p50"] = qblocks
     rng = random.Random(seed)
-    hits = 0
+    hits = high = 0
     for _ in range(n_boot):
         bl = {a: [] for a in ARMS}
         for (_, arm, _), v in by_block.items():
             bl[arm].extend(rng.choice(v) for _ in v)
         rb, _ = ratio(bl)
         hits += rb is not None and rb <= 0.5
+        high += rb is not None and rb >= 0.8
     conf = hits / n_boot
     out["P_R_le_0.5"] = conf
+    out["P_R_ge_0.8"] = high / n_boot
     bw = per_arm(blocks, bad, "imc_gbs")
     hog = {a: statistics.mean(bw[a]) - statistics.mean(bw["Q"]) for a in ARMS if bw[a] and bw["Q"]}
     out["neighbour_imc_gbs"] = hog
@@ -121,17 +129,48 @@ def decide(reqs, blocks, n_boot=10000, seed=26, drop_swap=False):
     return out
 
 
-def verdict(reqs, blocks, n_boot=10000):
+def bgload():
+    """bench/load/load.py as a module (its matched() and TOLERANCE)."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "load", "load.py")
+    spec = importlib.util.spec_from_file_location("bench_load", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def load_summary(windows, metrics):
+    """Per-arm means of each matching metric over the background windows."""
+    out = {}
+    for a in ARMS:
+        ws = [w for w in windows if w.get("tag") == a]
+        out[a] = {"windows": len(ws)}
+        for m in metrics:
+            vals = [w[m] for w in ws if w.get(m) is not None]
+            out[a][m] = round(statistics.mean(vals), 3) if vals else None
+    return out
+
+
+def verdict(reqs, blocks, n_boot=10000, windows=None):
     main = decide(reqs, blocks, n_boot)
     alt = decide(reqs, blocks, n_boot, drop_swap=True)
     main["verdict_without_swap_blocks"] = alt["verdict"]
     if alt["verdict"] != main["verdict"]:
         main["reason"] = "swap-flag sensitivity flips the verdict (was %s)" % main["verdict"]
         main["verdict"] = "INCONCLUSIVE"
+    if windows is not None:
+        bl = bgload()
+        m = bl.matched(windows)
+        main.update(load_matched=m["matched"], load_checks=m["checks"],
+                    load_by_arm=load_summary(windows, bl.TOLERANCE),
+                    verdict_if_matched=main["verdict"])
+        if not m["matched"]:
+            main["verdict"] = "INCONCLUSIVE"
+            main["reason"] = m["verdict"].split(": ", 1)[1]
     return main
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
+    if len(sys.argv) not in (3, 4):
         sys.exit(__doc__)
-    print(json.dumps(verdict(load(sys.argv[1]), load(sys.argv[2])), indent=1, sort_keys=True))
+    w = load(sys.argv[3]) if len(sys.argv) == 4 else None
+    print(json.dumps(verdict(load(sys.argv[1]), load(sys.argv[2]), windows=w), indent=1, sort_keys=True))

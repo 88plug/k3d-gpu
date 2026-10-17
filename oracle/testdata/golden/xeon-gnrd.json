@@ -1,0 +1,119 @@
+{
+ "hardware": {
+  "cpu": {
+   "amx": [
+    "amx_bf16",
+    "amx_int8",
+    "amx_tile"
+   ],
+   "e_core_cpus": null,
+   "family": 6,
+   "hybrid": false,
+   "isa": [
+    "avx2",
+    "avx512_bf16",
+    "avx512_fp16",
+    "avx512_vnni",
+    "avx512bw",
+    "avx512cd",
+    "avx512dq",
+    "avx512f",
+    "avx512vbmi",
+    "avx512vl",
+    "avx_vnni"
+   ],
+   "logical_cpus": null,
+   "microcode": null,
+   "model": null,
+   "model_id": 174,
+   "numa_nodes": 1,
+   "p_core_cpus": null,
+   "snc": null,
+   "sockets": 1,
+   "stepping": null
+  },
+  "dsa": {
+   "devices": 1,
+   "work_queues": 1
+  },
+  "gaudi": {
+   "devices": 0
+  },
+  "iaa": {
+   "devices": 0,
+   "work_queues": 0
+  },
+  "intel_gpus": [],
+  "kernel": "6.18",
+  "memory": {
+   "channels": null,
+   "configured_mts": null,
+   "total_gib": null,
+   "type": null
+  },
+  "npus": [],
+  "nvidia": {
+   "driver": null,
+   "gpus": []
+  },
+  "qat": []
+ },
+ "levers": [
+  {
+   "detected": true,
+   "id": "amx",
+   "state": "unknown"
+  },
+  {
+   "detected": true,
+   "id": "dsa_dto",
+   "state": "unknown"
+  },
+  {
+   "detected": false,
+   "id": "iaa_zswap",
+   "state": "unknown"
+  },
+  {
+   "detected": false,
+   "id": "media_engines",
+   "state": "unknown"
+  },
+  {
+   "detected": false,
+   "id": "npu_offload",
+   "state": "unknown"
+  },
+  {
+   "detected": false,
+   "id": "numa_replica",
+   "state": "unknown"
+  },
+  {
+   "detected": false,
+   "id": "openvino_int4",
+   "state": "unknown"
+  },
+  {
+   "detected": false,
+   "id": "pe_pinning",
+   "state": "unknown"
+  },
+  {
+   "detected": false,
+   "id": "qat",
+   "state": "unknown"
+  },
+  {
+   "detected": false,
+   "id": "xmx_gate",
+   "state": "unknown"
+  }
+ ],
+ "power": {
+  "epp": null,
+  "pl1_w": null,
+  "pl2_w": null,
+  "platform_profile": null
+ }
+}

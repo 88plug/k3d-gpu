@@ -230,7 +230,8 @@
         },
         "pci": "0000:00:02.0",
         "platform": "Alder Lake-N",
-        "render_node": "renderD128"
+        "render_node": "renderD128",
+        "xmx": false
       }
     ],
     "kernel": "6.8.0-45-generic",

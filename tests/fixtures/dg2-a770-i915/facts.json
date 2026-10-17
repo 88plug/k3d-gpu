@@ -221,7 +221,8 @@
         },
         "pci": "0000:03:00.0",
         "platform": "Alchemist DG2-G10",
-        "render_node": "renderD128"
+        "render_node": "renderD128",
+        "xmx": true
       }
     ],
     "kernel": "6.8.0-85-generic",
