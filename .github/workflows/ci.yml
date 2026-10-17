@@ -50,6 +50,7 @@ jobs:
       - run: tests/reserved_cpus_test.sh
       - run: tests/experimental_test.sh
       - run: tests/phase_steer_test.sh
+      - run: tests/prefill_guard_test.sh
 
   telemetry-tests:
     name: Telemetry manifests
@@ -192,6 +193,7 @@ jobs:
       - run: python3 bench/apb/test_apb.py
       - run: python3 bench/apb/test_stage.py
       - run: python3 bench/test_agent_trace.py
+      - run: python3 bench/load/test_load.py
 
   tune-tests:
     name: k3d-gpu tune tests

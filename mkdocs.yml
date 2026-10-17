@@ -21,6 +21,7 @@ hooks:
 nav:
   - Home: index.md
   - Quickstart: quickstart.md
+  - First run by machine: first-run.md
   - Intel platforms: intel.md
   - Platform matrix: platforms.md
   - Operations:
@@ -29,6 +30,7 @@ nav:
       - Power envelope: power-envelope.md
       - Accelerated dataplane: accelerated-dataplane.md
       - Experimental features: experimental.md
+      - Prefill guard: prefill-guard.md
   - Integrations:
       - GPUStack: integrations/gpustack.md
   - Design:
@@ -45,6 +47,8 @@ nav:
       - Capacity oracle matrix: oracle-matrix.md
       - Capacity oracle design: moat-design.md
       - Security audit: security-audit.md
+      - Intel technical report: intel/technical-report.md
+      - Upstream draft (EAT/EAS): intel/upstream-eat.md
   - Development:
       - Branch consolidation: dev/consolidation.md
   - Contributing: contributing.md

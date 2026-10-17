@@ -4,7 +4,7 @@
 #
 #   curl -fsSLO https://raw.githubusercontent.com/88plug/k3d-gpu/main/packaging/install.sh
 #   less install.sh          # read it first
-#   bash install.sh          # then: k3d-gpu quickstart (0.1.29 and newer)
+#   bash install.sh          # then: k3d-gpu doctor, k3d-gpu quickstart
 #
 # What it does, on Linux and WSL2 (amd64, arm64):
 #   1. k3d-gpu ${K3D_GPU_VERSION} from its GitHub release: the .deb through apt-get, or
@@ -27,9 +27,9 @@
 
 set -euo pipefail
 
-K3D_GPU_VERSION=0.1.28
-K3D_GPU_DEB_SHA256=c637318d1658c9dcb888c01aac735e17cf55b883723adc8e503cb4970b10c1c7
-K3D_GPU_RPM_SHA256=987d6fbde2744f071e5cc5a86f9dce1e60ad58e381489d5c49d10280f743169e
+K3D_GPU_VERSION=0.1.44
+K3D_GPU_DEB_SHA256=726d0cc5d81b74f34d3757ac46df0ac6fc5f3aebb734c26d3677db0ca90c38b5
+K3D_GPU_RPM_SHA256=7625fb5ed039a9eebc2fc083d2eebd3cb8483328d75c17a44e3099df6bc8aaf1
 K3D_VERSION=v5.9.0
 K3D_SHA256_AMD64=06d8f25bc3a971c4eb29e0ff08429b180402db0f4dec838c9eac427e296800a0
 K3D_SHA256_ARM64=03cde5cf23e6e8e67de5a039ecf26e5b85aca82fba3e5d13dadf904cd218a250
@@ -37,7 +37,7 @@ KUBECTL_VERSION=v1.37.1
 KUBECTL_SHA256_AMD64=65691ff77eb6fa44c908b77a1082c9f092c3b9733b5cefabec0d1104890e21a8
 KUBECTL_SHA256_ARM64=ff749f4b78d9c4f1ec87307df9b50119ed819e2094aa9810cb9acffc3286c8c7
 # First k3d-gpu release with the quickstart command; the closing hint follows it.
-QUICKSTART_SINCE=0.1.29
+QUICKSTART_SINCE=0.1.33
 
 BASE="${K3D_GPU_INSTALL_BASE:-https://github.com/88plug/k3d-gpu/releases/download/aur-v${K3D_GPU_VERSION}}"
 BIN_DIR="${K3D_GPU_BIN_DIR:-${HOME}/.local/bin}"

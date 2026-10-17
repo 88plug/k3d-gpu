@@ -50,7 +50,7 @@
       "subject": "docker.io/rancher/mirrored-pause:3.10.2"
     },
     {
-      "detail": "sha256:a8c8297c7274 in images.lock (share/nri-balloons.yml); on k3d-gpu-server-0",
+      "detail": "sha256:a8c8297c7274 in images.lock (share/nri-balloons-guard.yml, share/nri-balloons.yml); on k3d-gpu-server-0",
       "fix": null,
       "rule": "image",
       "status": "pass",

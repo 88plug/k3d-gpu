@@ -34,13 +34,14 @@ A Docker-based [rancher/k3s](https://hub.docker.com/r/rancher/k3s) node image on
 
 ## Quick Start (k3d-gpu CLI)
 
-Just want a local chat? `k3d-gpu quickstart` (from 0.1.29; until that
-release, `scripts/k3d-gpu quickstart` in a checkout) goes from a machine with
+Just want a local chat? `k3d-gpu quickstart` (0.1.33 and newer) goes from a machine with
 Docker and a detected accelerator to a chat UI on `127.0.0.1:8080` in one
 command: cluster, LLM server (model picked
 from your RAM), Open WebUI with a generated admin account. `k3d-gpu uninstall`
-removes it all. See [docs/quickstart.md](docs/quickstart.md), and the pinned,
-sha256-checked installer `packaging/install.sh`.
+removes it all. See [docs/quickstart.md](docs/quickstart.md), the pinned,
+sha256-checked installer `packaging/install.sh`, and
+[docs/first-run.md](docs/first-run.md) for your kind of machine (WSL2 laptop,
+mini PC, Fedora laptop, Xeon server, Arch + Arc, NVIDIA workstation).
 
 The `k3d-gpu` launcher wraps the whole workflow — no need to remember
 `k3d cluster create` flags. Install it with your package manager (see [Install](#install)), then:
@@ -147,6 +148,8 @@ Behaviour is tunable via environment variables:
 | `K3D_GPU_SANDBOX`    | `/usr/share/k3d-gpu/agent-sandbox.yml`    | agent-sandbox controller + CRDs for `k3d-gpu sandbox up` |
 | `K3D_GPU_SANDBOX_PROFILE` | `/usr/share/k3d-gpu/agent-sandbox-k3d.yml` | E-core SandboxTemplate + warm pool for `k3d-gpu sandbox up` |
 | `K3D_GPU_SANDBOX_TIMEOUT` | `180`                                | seconds `sandbox up` waits for a ready sandbox |
+| `K3D_GPU_PREFILL_GUARD` | off | opt-in, hybrid CPUs: cap E-cores of the `efficient` balloon at a kHz value or a percent of the E-core max ([prefill guard](docs/prefill-guard.md)); writes host cpufreq, `down` restores it |
+| `K3D_GPU_STATE_DIR` | `${XDG_STATE_HOME:-~/.local/state}/k3d-gpu` | where the prefill guard keeps its rendered policy and the recorded `scaling_max_freq` per cluster |
 | `K3D_GPU_DEVICE_TEST_IMAGE` | `busybox:1.37`                     | image used by `k3d-gpu test` for Intel GPU/NPU and Gaudi |
 | `K3D_GPU_TEST_IMAGE` | `nvidia/cuda:13.4.2-base-ubuntu26.04`     | image used by `k3d-gpu test`         |
 
@@ -477,8 +480,12 @@ spec:
 Unlabelled pods land in a `shared` balloon that uses every idle CPU, so nothing
 else loses capacity. kube-system runs on a one-CPU reserve. k3s turns NRI on in
 containerd for a privileged node, and the node sees the host's core-type PMUs.
-The policy only changes cpusets inside the node's cgroup. It never touches
-cpufreq, C-states or RDT.
+By default the policy only changes cpusets inside the node's cgroup. It never
+touches cpufreq, C-states or RDT. The one exception is opt-in: the
+[prefill guard](docs/prefill-guard.md) (`K3D_GPU_PREFILL_GUARD=50% k3d-gpu up`)
+caps the max frequency of the E-cores running `efficient` pods, because P- and
+E-cores share one package power and thermal budget. With the guard set or
+recorded, `k3d-gpu doctor --perf` shows the package throttle counters behind it.
 
 Only one NRI resource policy can own a node. k3s re-applies its baked manifests
 every time it starts, which would undo another stack's changes to the policy. So
@@ -1037,7 +1044,10 @@ resource), port and auth mode. It picks only a **green** cell: one with a
 `k3d-gpu report` run, a passing tool-calling eval and the engine image this
 release pins. Community cells are amber, everything else grey, and neither is
 ever picked or interpolated. With no green cell for the box it prints
-``unmeasured, run `k3d-gpu prove` on this box``. Today no cell is green: the two
+``unmeasured: no green cell for this box; quickstart and agent up still pick by device``.
+There is no `prove` command yet (it is a design in docs/console-design.md);
+`k3d-gpu quickstart` and `k3d-gpu agent up` serve with their device rules
+regardless, and `k3d-gpu capacity` measures this box. Today no cell is green: the two
 cells from the [ledger:H6] run have no report run and no tool-calling eval yet,
 so every host plans unmeasured. `plan --explain` prints each target, each cell
 that applies with its status and reasons, and the decision; `plan --json` is
@@ -1433,9 +1443,16 @@ identifier scrubber and the validator (`FUZZ_N`, `FUZZ_SEED`).
 
 ## Prerequisites
 
-- **Docker** (20.10+), configured with NVIDIA GPU support (i.e., `nvidia-docker2` or Docker’s built‑in `--gpus`)  
-- **k3d** (v5.0.0 or later) to manage local K3s clusters  
-- A host NVIDIA GPU with an up‑to‑date driver (the node image needs no CUDA toolkit)  
+- **Docker** (20.10+). `packaging/install.sh` prints the install command; it never installs Docker.
+- **k3d** (v5.0.0 or later) and **kubectl**. `packaging/install.sh` installs pinned
+  copies into `~/.local/bin`; on Arch, `yay -S rancher-k3d-bin` and `pacman -S kubectl`.
+- At least one accelerator `k3d-gpu detect` reports: an Intel GPU, NPU or Gaudi,
+  Xeon AMX/DSA/IAA/QAT, hybrid P/E cores, NUMA, or an NVIDIA GPU.
+- **NVIDIA only**: an up-to-date driver and the NVIDIA Container Toolkit
+  (`nvidia-ctk`; the node image needs no CUDA toolkit). Intel hosts need neither.
+  The quickstart LLM never runs on an NVIDIA GPU; see [docs/first-run.md](docs/first-run.md).
+
+Per-machine install paths with time expectations: [docs/first-run.md](docs/first-run.md).
 
 ### Host setup (`k3d-gpu host-setup`)
 
