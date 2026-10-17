@@ -52,7 +52,7 @@ IAA_PLUGIN_MANIFEST="${K3D_GPU_IAA_PLUGIN:-${SHARE_DIR}/intel-iaa-plugin.yml}"
 QAT_PLUGIN_MANIFEST="${K3D_GPU_QAT_PLUGIN:-${SHARE_DIR}/intel-qat-plugin.yml}"
 HYBRID_PLUGIN_MANIFEST="${K3D_GPU_HYBRID_PLUGIN:-${SHARE_DIR}/nri-balloons.yml}"
 SYSROOT="${K3D_GPU_SYSROOT:-}" # prefix for /sys and /dev reads (tests point it at a fake tree)
-TEST_IMAGE="${K3D_GPU_TEST_IMAGE:-nvidia/cuda:13.4.2-base-ubuntu26.04}"
+TEST_IMAGE="${K3D_GPU_TEST_IMAGE:-nvidia/cuda:13.4.3-base-ubuntu26.04}"
 DEVICE_TEST_IMAGE="${K3D_GPU_DEVICE_TEST_IMAGE:-busybox:1.37}"
 VENDORS_REQUEST="${K3D_GPU_VENDORS:-auto}"
 NODE_LABELS="${K3D_GPU_NODE_LABELS:-}" # extra key=value node labels, comma-separated
