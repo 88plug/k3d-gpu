@@ -162,6 +162,20 @@ class Plan(unittest.TestCase):
         self.assertEqual(cmd[cmd.index("--cpuset-cpus") + 1], "16-23")
         self.assertIn('"INFERENCE_NUM_THREADS": "8"', cmd[-1])
 
+    def test_each_arm_mounts_its_own_repository(self):
+        # OVMS --source_model rewrites graph.pbtxt (which carries plugin_config) on
+        # every start; a shared mount lets concurrent starts load each other's config.
+        mounts = set()
+        for k in probe.ARMS:
+            cmd = probe.launch("img", "/m", k)
+            mounts.add(cmd[cmd.index("-v") + 1])
+        self.assertEqual(mounts, {f"/m/{k}:/models" for k in probe.ARMS})
+
+    def test_graph_plugin_config_parsed(self):
+        txt = "x\n  plugin_config: '{\"INFERENCE_NUM_THREADS\": \"4\"}',\n"
+        self.assertEqual(probe.graph_plugin_config(txt), {"INFERENCE_NUM_THREADS": "4"})
+        self.assertIsNone(probe.graph_plugin_config("no config"))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=1)

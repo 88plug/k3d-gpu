@@ -7,8 +7,8 @@ script measures; it never edits the predictions. It self-limits to DEADLINE_S
 (17 min) from start and keeps partial data.
 
   run:    sudo -E python3 bench/sku-model/probe.py --out DIR
-          (env IMAGE = the H6 OVMS image by digest, MODELS = dir with
-          OpenVINO/Qwen3-4B-int4-ov; run under the live-work flock)
+          (env IMAGE = the H6 OVMS image by digest, MODELS = dir with one repository
+          per arm, MODELS/{A,B,C,D}/OpenVINO/Qwen3-4B-int4-ov; run under the live-work flock)
   score:  python3 bench/sku-model/probe.py --score DIR/raw.jsonl
   plan:   python3 bench/sku-model/probe.py --dry-run   (prints the visit plan, no docker)
 
@@ -168,14 +168,25 @@ def topology_ok():
 
 # ------------------------------------------------------------- OVMS
 def launch(image, models, arm):
+    # One repository per arm: --source_model rewrites graph.pbtxt (it carries
+    # plugin_config) on every start, so a shared mount races between arms.
     a = ARMS[arm]
     plugin = json.dumps({"SCHEDULING_CORE_TYPE": a["core"], "INFERENCE_NUM_THREADS": str(a["threads"])})
     return ["docker", "run", "-d", "--name", name(arm), "--cpuset-cpus", a["cpus"],
-            "-p", f"127.0.0.1:{a['port']}:8000", "-v", f"{models}:/models", image,
+            "-p", f"127.0.0.1:{a['port']}:8000", "-v", f"{models}/{arm}:/models", image,
             "--source_model", SOURCE_MODEL, "--model_repository_path", "/models",
             "--model_name", MODEL, "--task", "text_generation", "--target_device", "CPU",
             "--rest_port", "8000", "--max_num_seqs", "8", "--cache_size", "2",
             "--enable_prefix_caching", "false", "--plugin_config", plugin]
+
+
+def graph_plugin_config(pbtxt):
+    """plugin_config dict from an OVMS graph.pbtxt, or None."""
+    for ln in pbtxt.splitlines():
+        ln = ln.strip()
+        if ln.startswith("plugin_config:"):
+            return json.loads(ln.split("'")[1])
+    return None
 
 
 def chat(port, prompt, max_tokens, ignore_eos=True):
@@ -510,8 +521,13 @@ def main():
             emit({"kind": "abort", "reason": f"not ready in {READY_S}s: {sorted(pending)}"})
             return 3
         for arm in ARMS:
+            cfg = graph_plugin_config(read(os.path.join(models, arm, SOURCE_MODEL, "graph.pbtxt"), ""))
             emit({"kind": "startup_log", "arm": arm,
-                  "log": sh("docker", "logs", name(arm), check=False).stderr[-4000:]})
+                  "log": sh("docker", "logs", name(arm), check=False).stderr[-4000:],
+                  "graph_plugin_config": cfg})
+            if cfg != json.loads(launch(image, models, arm)[-1]):
+                emit({"kind": "abort", "reason": f"arm {arm} graph plugin_config {cfg}"})
+                return 3
         if mem_available_gb() < 20:
             emit({"kind": "abort", "reason": f"MemAvailable {mem_available_gb():.1f} GB < 20"})
             return 3
