@@ -538,6 +538,49 @@ is deleted.
 | `K3D_GPU_AGENT_TIMEOUT` | `1800` | seconds `agent up` waits for download + load |
 | `K3D_GPU_AGENT_LOG_LEVEL` | `INFO` | `DEBUG` also logs the compiled model's execution device (and every request) |
 | `K3D_GPU_AGENT_IMAGE` | `openvino/model_server@sha256:a928…fc58` (2026.4.1-gpu) | server image |
+| `K3D_GPU_AGENT_BACKEND` | `ovms` | `ovms`, `vllm` or `llm-scaler` (see below) |
+
+#### vLLM backends for discrete Arc (Battlemage)
+
+`K3D_GPU_AGENT_BACKEND=vllm` or `llm-scaler` swaps OVMS for vLLM, serving the
+OpenAI API at `/v1` from `svc/vllm`:
+
+| Backend | Image (pinned by digest) | Notes |
+|---------|--------------------------|-------|
+| `vllm` | `vllm/vllm-openai-xpu:v0.31.0` | upstream vLLM for Intel GPUs; validated on Arc Pro B-series |
+| `llm-scaler` | `intel/llm-scaler-vllm:1.5` (vLLM 0.26.0-b2) | Intel's build for Arc B60/B70 |
+
+```bash
+K3D_GPU_AGENT_BACKEND=vllm k3d-gpu agent up
+kubectl -n k3d-gpu-agent port-forward svc/vllm 8000:8000 &
+curl http://localhost:8000/v1/chat/completions -H 'Content-Type: application/json' \
+  -d '{"model":"Qwen3-4B","messages":[{"role":"user","content":"hi"}]}'
+```
+
+Both run on an Intel GPU only: for them `auto` means the first allocatable
+`gpu.intel.com/xe`, else `i915`, with no XMX gate, and `K3D_GPU_AGENT_DEVICE=CPU`
+or `NPU` is refused. A host whose Intel GPU is not Battlemage gets a warning, not
+a refusal. The default model is `Qwen/Qwen3-4B` at a pinned revision (8 GB in
+float16, fits a 12 GB B580) with the `hermes` tool and `qwen3` reasoning parsers.
+Flags and environment follow Intel's Arc runtime in
+[intel/enterprise-inference](https://github.com/intel/enterprise-inference)
+(`--dtype float16`, `--block-size 64`, `--enforce-eager`, no prefix caching).
+Weights and SYCL/Triton caches live in `pvc/vllm-models`. `agent up` stops the
+other backend first so its GPU is free; `agent down` and `agent status` cover both.
+The chat UI below and other clients that use `svc/ovms` at `/v3` need
+`http://vllm.k3d-gpu-agent.svc:8000/v1` instead.
+
+Not yet run on Arc hardware here: serving end to end and tensor parallelism
+above 1 (`CCL_ZE_IPC_EXCHANGE=pidfd`; oneCCL calls `prctl(PR_SET_PTRACER, getppid())`,
+so sibling workers should need no `CAP_SYS_PTRACE` under yama `ptrace_scope=1`).
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `K3D_GPU_AGENT_MODEL` | `Qwen/Qwen3-4B` | Hugging Face model (safetensors) |
+| `K3D_GPU_AGENT_REVISION` | pinned commit for the default model, unset otherwise | `--revision` |
+| `K3D_GPU_AGENT_GPUS` | `1` | GPUs to shard across (`--tensor-parallel-size`) |
+| `K3D_GPU_AGENT_MAX_LEN` | `8192` | `--max-model-len` |
+| `K3D_GPU_AGENT_MEMORY` | `8Gi` | memory request |
 
 ### Chat UI for the agent (optional)
 
