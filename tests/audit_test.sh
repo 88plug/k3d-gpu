@@ -266,7 +266,7 @@ fi
 pkg="${WORK}/pkg"
 # Run the real PKGBUILD package() into ${pkg}, so the test checks what ships.
 mkdir -p "${WORK}/src"; ln -sfn "${REPO}" "${WORK}/src/k3d-gpu"
-( set -e; source "${REPO}/packaging/aur/PKGBUILD"; srcdir="${WORK}/src" pkgdir="${pkg}"; package ) > "${WORK}/pkgbuild.log" 2>&1
+( set -e; source "${REPO}/packaging/aur/PKGBUILD"; export srcdir="${WORK}/src" pkgdir="${pkg}"; package ) > "${WORK}/pkgbuild.log" 2>&1
 if K3D_GPU_SHARE="${pkg}/usr/share/k3d-gpu" "${pkg}/usr/bin/k3d-gpu" audit --observed "${DIR}/default.observed.json" > "${WORK}/pkg.out" 2>&1; then
     ok "packaged layout (PKGBUILD's console files and images.lock under \$K3D_GPU_SHARE) audits"
 else

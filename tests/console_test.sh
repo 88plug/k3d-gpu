@@ -173,7 +173,7 @@ fi
 pkg="${WORK}/pkg"
 # Run the real PKGBUILD package() into ${pkg}, so the test checks what ships.
 mkdir -p "${WORK}/src"; ln -sfn "${REPO}" "${WORK}/src/k3d-gpu"
-( set -e; source "${REPO}/packaging/aur/PKGBUILD"; srcdir="${WORK}/src" pkgdir="${pkg}"; package ) > "${WORK}/pkgbuild.log" 2>&1
+( set -e; source "${REPO}/packaging/aur/PKGBUILD"; export srcdir="${WORK}/src" pkgdir="${pkg}"; package ) > "${WORK}/pkgbuild.log" 2>&1
 if K3D_GPU_SHARE="${pkg}/usr/share/k3d-gpu" "${pkg}/usr/bin/k3d-gpu" plan --json \
        --facts "${REPO}/tests/fixtures/raptorlake-nvidia/facts.json" > "${WORK}/pkg.json" 2> "${WORK}/pkg.err" \
    && cmp -s "${WORK}/pkg.json" "${REPO}/tests/fixtures/raptorlake-nvidia/plan.json"; then
