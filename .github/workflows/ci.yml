@@ -167,6 +167,7 @@ jobs:
           echo "${KUBECONFORM_SHA256}  kubeconform.tar.gz" | sha256sum -c -
           sudo tar -xzf kubeconform.tar.gz -C /usr/local/bin kubeconform
       - run: tests/chat_ui_test.sh
+      - run: tests/model_share_test.sh
 
   # One job per tests/fixtures/<platform>, so a new fixture joins the matrix
   # without editing this file.
