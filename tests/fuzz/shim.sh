@@ -10,6 +10,7 @@
 #        shim.sh overrides <sysroot>  records: image reference
 #        shim.sh amx_labels <sysroot> no records
 #        shim.sh cpu_isa_labels <sysroot> no records
+#        shim.sh progress_bar         records: done, total, width (three per case)
 
 # The globals assigned below are read by the sourced launcher functions.
 # shellcheck disable=SC2034
@@ -59,5 +60,10 @@ case "${mode}" in
     cpu_isa_labels)
         out=$(cpu_isa_labels)
         emit "$?" "${out}" ;;
+    progress_bar)
+        while IFS= read -r -d '' a && IFS= read -r -d '' b && IFS= read -r -d '' c; do
+            out=$(progress_bar "${a}" "${b}" "${c}" 2>&1)
+            emit "$?" "${out}"
+        done ;;
     *) echo "unknown mode ${mode}" >&2; exit 2 ;;
 esac

@@ -1,0 +1,24 @@
+==> Checking docker...
+  ok: docker running
+==> Checking k3d...
+  ok: k3d version v0.0.0-stub
+==> Checking kubectl...
+  ok
+==> Detected accelerators: intel
+==> Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...
+  ok: Intel Alchemist DG2-G10 (0x56a0) bound to i915
+  ok: i915/dg2_guc_* firmware present
+  info: Intel Alchemist DG2-G10 (0x56a0) at 0000:03:00.0: GuC version not checked: debugfs needs root (sudo k3d-gpu doctor)
+  ok: up labels the node gpu.intel.com/xmx=true
+  ok: GPU sharing off: one pod per Intel GPU (K3D_GPU_INTEL_SHARED=auto)
+==> Intel CPU built-in accelerators...
+  ok: CPU ISA: AVX512BF16 AVX512F AVX512VNNI — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
+  info: noisy-neighbour isolation: cpu-cap — no rdt_a flag and no E-cores; give a neighbour a CPU limit. Cache and DRAM bandwidth stay shared
+==> Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...
+  ok: dra available (auto)
+  ok: image-volume available (auto)
+
+==> All checks passed.
+exit=0
+--- calls
+kubectl --context k3d-gpu --request-timeout=5s get nodes -o name

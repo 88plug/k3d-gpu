@@ -1,0 +1,17 @@
+Platform: Intel Arc A770 (Alchemist DG2-G10) bound to i915 on a 6.8 kernel.
+
+Sources:
+- 0x8086 0x56a0 "Arc A770": pci.ids 2026.10.17; INTEL_DG2_G10_D_IDS in
+  https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/include/drm/intel/pciids.h.
+- i915 default from 6.2: dg2_info has no require_force_probe in
+  drivers/gpu/drm/i915/i915_pci.c at v6.2 (set at v6.1).
+- i915/dg2_guc_70.bin: drivers/gpu/drm/i915/gt/uc/intel_uc_fw.c (DG2 GuC 70).
+- XMX: Mesa src/intel/dev/intel_device_info.c XEHP_FEATURES has_systolic.
+- /sys/module/i915/initstate "live" and bus/pci/drivers/i915: driver core naming.
+
+Layout: copied from battlemage-b580 (same BDF, PCIe path, cpuinfo), in the form
+tests/fixtures/capture.sh writes; only the files named above differ.
+
+Not from hardware: BDF and PCIe path, the kernel release string, the cpuinfo
+flags line. Doctor output for this part is predicted by the sources above, not
+measured.

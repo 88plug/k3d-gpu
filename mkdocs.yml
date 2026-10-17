@@ -20,8 +20,9 @@ hooks:
 # entry until its file exists in docs/ ("not yet published").
 nav:
   - Home: index.md
+  - Quickstart: quickstart.md
   - Intel platforms: intel.md
-  - Newest ISA and kernel features: platforms.md
+  - Platform matrix: platforms.md
   - Operations:
       - Telemetry: telemetry.md
       - Failure modes: failure-modes.md
@@ -32,9 +33,12 @@ nav:
       - GPUStack: integrations/gpustack.md
   - Design:
       - Speculative decoding: design/speculative-decoding.md
+      - Moat: moat-design.md
+      - Console: console-design.md
   - Evidence:
       - Intel capability map: intel-capability-map.md
       - Benchmark landscape: benchmark-landscape.md
+      - Head-to-head benchmarks: benchmarks.md
       - Provenance: provenance.md
       - Security audit: security-audit.md
   - Development:

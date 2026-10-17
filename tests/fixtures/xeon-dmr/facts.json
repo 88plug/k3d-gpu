@@ -23,6 +23,8 @@
     {
       "resources": [
         "feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true",
+        "feature.node.kubernetes.io/cpu-cpuid.AMXCOMPLEX=true",
+        "feature.node.kubernetes.io/cpu-cpuid.AMXFP16=true",
         "feature.node.kubernetes.io/cpu-cpuid.AMXINT8=true",
         "feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true"
       ],
@@ -127,6 +129,15 @@
         "revert": null,
         "section": "Intel CPU built-in accelerators...",
         "text": "RDT allocation (rdt_a: cat_l3 cdp_l3 mba) — resctrl classes are available but left off: the balloons policy ships control.rdt.enable: false because enabling it rewrites the host's /sys/fs/resctrl. To opt in, mount resctrl on the host (mount -t resctrl resctrl /sys/fs/resctrl) and set control.rdt.enable: true in nri-balloons.yml; usePodQoSAsDefaultClass then gives BestEffort/Burstable/Guaranteed pods 33%/66%/100% of the L3",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "info",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "noisy-neighbour isolation: rdt-mba — CAT + MBA can cap a neighbour's cache share and DRAM bandwidth through the RDT opt-in above (resctrl mounted: no); the shipped classes set cache shares only, so add mbAllocation: {all: [\"50%\"]} to the BestEffort class for bandwidth; the classes run inside the NRI balloons policy, which up deploys on hybrid or multi-NUMA hosts only",
         "why": null
       },
       {
@@ -260,6 +271,8 @@
   "hostname": "",
   "labels": {
     "feature.node.kubernetes.io/cpu-cpuid.AMXBF16": "true",
+    "feature.node.kubernetes.io/cpu-cpuid.AMXCOMPLEX": "true",
+    "feature.node.kubernetes.io/cpu-cpuid.AMXFP16": "true",
     "feature.node.kubernetes.io/cpu-cpuid.AMXINT8": "true",
     "feature.node.kubernetes.io/cpu-cpuid.AMXTILE": "true",
     "feature.node.kubernetes.io/cpu-cpuid.AVX512BF16": "true",
@@ -282,13 +295,13 @@
         "why": null
       },
       {
-        "apply": "cat /sys/devices/system/cpu/intel_uncore_frequency/uncore00/initial_max_freq_khz | sudo tee /sys/devices/system/cpu/intel_uncore_frequency/uncore00/max_freq_khz",
-        "from": "/sys/devices/system/cpu/intel_uncore_frequency/uncore00/max_freq_khz, initial_max_freq_khz",
+        "apply": "echo 2200000 | sudo tee /sys/devices/system/cpu/intel_uncore_frequency/uncore00/max_freq_khz",
+        "from": "/sys/devices/system/cpu/intel_uncore_frequency/uncore00/max_freq_khz",
         "level": "warn",
         "revert": "echo 1800000 | sudo tee /sys/devices/system/cpu/intel_uncore_frequency/uncore00/max_freq_khz",
-        "section": "Uncore frequency",
-        "text": "uncore00: uncore max capped at 1800000 kHz, below the firmware maximum 2200000 kHz",
-        "why": "a lower uncore clock slows L3 and memory traffic, which bounds token generation"
+        "section": "Uncore frequency (intel_uncore_frequency)",
+        "text": "uncore00: max_freq_khz 1800000 is below the hardware ceiling 2200000",
+        "why": "a lowered uncore ceiling caps ring/LLC (client) or mesh and memory-controller (Xeon) clock, and token generation reads every weight once per token through it"
       },
       {
         "apply": null,
@@ -325,8 +338,8 @@
         "src": "https://docs.kernel.org/admin-guide/pm/intel_pstate.html#energy-vs-performance-hints, https://docs.kernel.org/admin-guide/pm/cpufreq.html"
       },
       {
-        "good": "the uncore (ring/mesh, LLC, memory path) may reach its firmware maximum: max_freq_khz = initial_max_freq_khz",
-        "name": "Uncore frequency",
+        "good": "max_freq_khz at initial_max_freq_khz and min_freq_khz at initial_min_freq_khz: the hardware (UFS, or ELC on TPMI parts) picks the uncore clock inside the full range. A floor pinned high for decode is under test (EXPERIMENTS.md H29, PENDING), so it is not suggested",
+        "name": "Uncore frequency (intel_uncore_frequency)",
         "src": "https://docs.kernel.org/admin-guide/pm/intel_uncore_frequency_scaling.html"
       },
       {

@@ -21,6 +21,8 @@ k3d cluster create gpu
   --k3s-node-label=k3d-gpu.io/numa-nodes=6@server:*;agent:*
   --k3s-node-label=k3d-gpu.io/snc=3@server:*;agent:*
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true@server:*;agent:*
+  --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AMXCOMPLEX=true@server:*;agent:*
+  --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AMXFP16=true@server:*;agent:*
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AMXINT8=true@server:*;agent:*
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true@server:*;agent:*
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AVX512BF16=true@server:*;agent:*
@@ -38,6 +40,8 @@ kubectl get nodes -o go-template={{range .items}}{{range $k, $v := .status.alloc
 kubectl -n kube-system rollout status daemonset/intel-iaa-plugin --timeout=120s
 kubectl get nodes -o go-template={{range .items}}{{range $k, $v := .status.allocatable}}{{$k}} {{$v}}{{"\n"}}{{end}}{{end}}
 kubectl get nodes -l feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true -o name
+kubectl get nodes -l feature.node.kubernetes.io/cpu-cpuid.AMXCOMPLEX=true -o name
+kubectl get nodes -l feature.node.kubernetes.io/cpu-cpuid.AMXFP16=true -o name
 kubectl get nodes -l feature.node.kubernetes.io/cpu-cpuid.AMXINT8=true -o name
 kubectl get nodes -l feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true -o name
 kubectl -n kube-system rollout status daemonset/nri-resource-policy-balloons --timeout=120s

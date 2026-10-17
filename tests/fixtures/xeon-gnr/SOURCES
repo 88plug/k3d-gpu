@@ -1,6 +1,6 @@
 Platform: two-socket Xeon 6960P (Granite Rapids, Xeon 6 P-core) server in SNC3:
 six NUMA nodes, four DSA and four IAA per socket (one work queue each configured
-on the first pair of each socket), AMX with FP16, RDT allocation.
+on the first pair of each socket), AMX (FP16 from the model), RDT allocation.
 
 Sources (kernel paths are Linux v6.18 (torvalds/linux tag v6.18)):
 - Xeon 6960P: 72 cores / 144 threads, 2S, QAT/DLB/DSA/IAA "4 default devices",
@@ -15,7 +15,10 @@ Sources (kernel paths are Linux v6.18 (torvalds/linux tag v6.18)):
   idxd's id table has no Granite Rapids-SP entry of its own (only SPR0, GNRD, DMR,
   PTL, WCL), so these devices are given the SPR ids it binds; inferred from that
   table, not captured. dsa<n>/iax<n> and wq<dev>.<n> naming as in xeon-spr-accel.
-- amx_fp16 (12*32+21), rdt_a, cat_l3, cdp_l3, mba, avx_vnni: arch/x86/include/asm/cpufeatures.h.
+- AMX-FP16: no cpuinfo flag (cpufeatures.h gives X86_FEATURE_AMX_FP16 no quoted
+  name); it comes from cpu family/model 6/173 (intel-family.h GRANITERAPIDS_X,
+  LLVM X86.td GNRFeatures).
+- rdt_a, cat_l3, cdp_l3, mba, avx_vnni: arch/x86/include/asm/cpufeatures.h.
 
 Layout: sysfs paths and relative symlinks follow the driver core's naming, in
 exactly the form tests/fixtures/capture.sh writes (the matrix test re-captures each

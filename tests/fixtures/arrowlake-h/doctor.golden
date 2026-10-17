@@ -13,8 +13,8 @@
   ok: GPU sharing on: up to 8 pods per Intel GPU, balanced allocation (K3D_GPU_INTEL_SHARED=auto); pods share its memory and engines with no isolation
 ==> Checking Intel NPU (Core Ultra)...
   ok: Intel NPU Arrow Lake-H (0x7d1d) bound to intel_vpu
-  ok: intel/vpu/vpu_37xx_* firmware present (/lib/firmware/intel/vpu/vpu_37xx_v1.bin)
-  note: no build date readable in /lib/firmware/intel/vpu/vpu_37xx_v1.bin; cannot compare it with openvino/model_server:2026.4.1-gpu's NPU driver v1.35.0
+  ok: intel/vpu/vpu_37xx_* firmware present (/lib/firmware/intel/vpu/vpu_37xx_v0.0.bin)
+  note: no build date readable in /lib/firmware/intel/vpu/vpu_37xx_v0.0.bin; cannot compare it with openvino/model_server:2026.4.1-gpu's NPU driver v1.35.0
   ok: up labels the node k3d-gpu.io/npu.gen=37xx
   warn: /dev/accel/accel0 is group <gid>, mode 644: only root pods can open it. Add the udev rule
         SUBSYSTEM=="accel", GROUP="render", MODE="0660" (systemd 254+ ships it in 50-udev-default.rules)
@@ -24,6 +24,7 @@
   ok: hybrid CPU: P-cores 0-5, E-cores 6-13, LP E-cores 14-15 — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient|lowpower|ecluster|pcore-physical|latency
   ok: E-core clusters (shared L2): 6-9 10-13 — k3d-gpu.io/cores=ecluster gives a pod 4 E-cores of one cluster
   ok: physical P-cores (one thread per core): 0-5 — k3d-gpu.io/cores=pcore-physical and latency show pods one thread per core
+  info: noisy-neighbour isolation: cpu-cap — no rdt_a flag, so cache and DRAM bandwidth stay shared; give a bandwidth-heavy neighbour a CPU limit. Holding it to one E-core L2 cluster (k3d-gpu.io/cores=ecluster) is not recommended: H26 measures it against the same workers spread over the E-cores (EXPERIMENTS.md H26)
 ==> Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...
   ok: dra available (auto)
   ok: image-volume available (auto)

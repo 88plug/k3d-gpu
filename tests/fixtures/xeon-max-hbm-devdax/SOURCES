@@ -1,0 +1,24 @@
+Platform: one-socket Xeon CPU Max 9480 in HBM flat mode with SNC4, HBM not yet
+onlined: NUMA nodes 0-3 hold the CPUs and the DDR5; the four HBM ranges are EFI
+soft-reserved memory, exposed as dax0.0-dax3.0 bound to device_dax.
+
+Sources (kernel paths are Linux v6.18 (torvalds/linux tag v6.18)):
+- Flat mode boots HBM as soft-reserved dax devices (dax0.0-dax7.0 on 2S SNC4, so
+  dax0.0-dax3.0 on 1S), onlined with daxctl reconfigure-device -m system-ram, or at
+  boot with efi=nosoftreserve: Intel Xeon CPU Max Series Configuration and Tuning
+  Guide 354227-003 section 5.2,
+  https://cdrdv2-public.intel.com/787743/354227-intel-xeon-cpu-max-series-configuration-and-tuning-guide-rev3.pdf
+- /sys/bus/dax/devices/daxX.Y: Documentation/ABI/testing/sysfs-bus-dax.
+- Driver names device_dax (devdax mode) and kmem (system-ram mode): drivers/dax/Makefile
+  module names, used as the driver name by dax_driver_register() (drivers/dax/bus.h,
+  bus.c __dax_driver_register: drv->name = mod_name).
+- daxctl --mode=system-ram / --mode=devdax --force: pmem/ndctl
+  Documentation/daxctl/daxctl-reconfigure-device.txt (EXAMPLES).
+- cpu family 6, model 143 (0x8F): arch/x86/include/asm/intel-family.h.
+- SNC, cpulists, amx_*, rdt_a: as in xeon-max-hbm.
+
+Layout: exactly the form tests/fixtures/capture.sh writes.
+
+Not from hardware: everything xeon-max-hbm lists, plus the dax devices' parent
+(devices/platform/hmem.<N>, the hmem platform devices of drivers/dax/hmem) and their
+numbering, inferred from the guide, not captured.

@@ -34,6 +34,14 @@ A Docker-based [rancher/k3s](https://hub.docker.com/r/rancher/k3s) node image on
 
 ## Quick Start (k3d-gpu CLI)
 
+Just want a local chat? `k3d-gpu quickstart` (from 0.1.29; until that
+release, `scripts/k3d-gpu quickstart` in a checkout) goes from a machine with
+Docker and a detected accelerator to a chat UI on `127.0.0.1:8080` in one
+command: cluster, LLM server (model picked
+from your RAM), Open WebUI with a generated admin account. `k3d-gpu uninstall`
+removes it all. See [docs/quickstart.md](docs/quickstart.md), and the pinned,
+sha256-checked installer `packaging/install.sh`.
+
 The `k3d-gpu` launcher wraps the whole workflow — no need to remember
 `k3d cluster create` flags. Install it with your package manager (see [Install](#install)), then:
 
@@ -1117,6 +1125,71 @@ them then. `audit --json` prints `k3d-gpu.audit/v1`;
 the endpoint a `plan --json` document plans: off loopback it must be `oidc`.
 Exit 0 pass, 1 fail, 2 bad input. Needs `python3` (standard library only).
 
+### Capacity and tuning (`capacity`, `tune`)
+
+Both commands spend a wall-clock budget, keep what they learned on disk, and
+pick up from it on the next run, so a rerun only refines the last answer.
+
+`k3d-gpu capacity` finds agents per box: the largest number of closed-loop
+agents (`bench/apb/capacity.py`) whose p95 turn latency stays under `--slo`
+(default 10 s) against the cluster's OVMS/vLLM chat endpoint.
+
+```bash
+k3d-gpu capacity                    # budget 15 min; prints AGENTS PER BOX and the bracket
+k3d-gpu capacity --budget 5         # stops early: "APB in [a,b]" is what is proven so far
+k3d-gpu capacity                    # resumes from the stored bracket, refines it
+k3d-gpu capacity --fresh            # forget the stored bracket and start over
+```
+
+- N doubles (1, 2, 4, 8, ...) until a step does not pass, then bisects between
+  the largest pass and the smallest failure, up to `--max` (default 32).
+- A step repeats only while the bootstrap confidence interval of its p95
+  straddles the SLO: at most `--reps` (default 3) repetitions, fewer when
+  the answer is already clear. `--step-cap` (default 180 s) stops adding
+  repetitions to a step.
+- When `--budget` runs out the report gives the bracket found so far and
+  agents per box is its proven lower end.
+- A repetition is not started when it would end past `--budget`: its length
+  is estimated from the slowest session time seen so far (the warm-up
+  included) times the sessions per agent. The report then names the next
+  step and the time one repetition of it needs.
+- The bracket is stored per host, engine, model, endpoint, SLO and trace in
+  `$XDG_STATE_HOME/k3d-gpu/capacity/state/`. A closed bracket is answered from
+  there without sending any load.
+
+`k3d-gpu tune run` tunes the OVMS agent's serving config on this host from its
+current best (the stored profile's winner, else the default):
+
+```bash
+k3d-gpu tune run                    # budget 10 min
+k3d-gpu tune run --budget 20 --objective ttft
+k3d-gpu tune show                   # incumbent and the history of runs
+k3d-gpu tune run --full             # the full successive-halving search instead
+```
+
+- Each run screens the incumbent's untried one-knob neighbours with one
+  short trial each, then confirms only the best screener against the
+  incumbent: interleaved runs, five per side, with the same gates as the full
+  search (margin `--margin 0.05`, separation beyond the run-to-run spread,
+  Mann-Whitney, guardrail metric, quality probe).
+- The incumbent stays unless the challenger passes every gate. When the budget
+  ends mid-confirmation nothing changes.
+- A confirmation is ten long trials. When it would take more than three
+  quarters of `--budget`, the run spends the whole budget screening and keeps
+  the best screener as `pending`, printing the `--budget` that confirms it.
+  The next run with that budget confirms the pending challenger first, with no
+  screening; a shorter run keeps screening the remaining neighbours.
+- Trials stop at the budget: a fifth of `--budget` (at most 2 min) is kept for
+  redeploying the result, and a trial still running at that point (a first
+  download of a precision sibling, say) is stopped and tried again next run.
+- The profile (`~/.config/k3d-gpu/tune/<fingerprint>.json`) records which
+  neighbours were already screened against which incumbent, so the next run
+  tries only the rest; with none left it reports `converged`.
+- Every trial reuses the compiled-model cache on the PVC (`--cache_dir`). A
+  screening trial of the config already deployed runs on the live pod with no
+  restart; every other trial redeploys, because each tuned knob is an OVMS
+  load-time setting (graph options and `plugin_config`).
+
 ### Measurement harness (`bench/`)
 
 Small tools for measuring workloads on a k3d-gpu cluster. They are not
@@ -1187,7 +1260,9 @@ the in-process stub in `bench/test_agent_trace.py`.
 (LiteLLM gateway, Redis, pgvector, agent sandbox, CPU vLLM) on a single k3d-gpu
 node through EAT's own brownfield path, on a non-Xeon client CPU. Its vLLM pod
 joins the hybrid balloons policy's `performance` balloon through EAT's own chart
-annotation, so EAT's CPU balloons stay off and `hybrid` stays on.
+annotation, so EAT's CPU balloons stay off and `hybrid` stays on. It deploys EAT's
+latest tag, `release-1.0.3-hotfix`; OpenShell (`deploy_openshell`) is on EAT `main`
+only, so `eat-up.sh` refuses it (see [docs/platforms.md](docs/platforms.md)).
 
 ### Experimental features (auto-adapting)
 

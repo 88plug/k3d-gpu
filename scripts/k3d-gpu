@@ -57,11 +57,14 @@
 #   plan    engine, model and placement from the measured (green) matrix cells, --explain prints why
 #   audit   posture checks: unauthenticated listeners off loopback, images not in images.lock
 #   sandbox up|down|status
+#   model-share --image REF --agent-image REF [--replicas N] [--name NAME]
 #           kubernetes-sigs/agent-sandbox with a warm pool of sandboxes pinned to E-cores
+#   tune    run|show|space|env|fingerprint|reset: search the OVMS agent's serving config on
+#           this host; keep a winner only if it beats the default; agent up applies it
 
 set -euo pipefail
 
-VERSION="0.1.28"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.43"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 # The node image defaults to the tag built from this launcher's own release
 # (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
@@ -85,6 +88,7 @@ INTEL_DRA_DRIVER="gpu.intel.com" # DRA driver name, also the name of its DeviceC
 INTEL_DRA_LABEL="k3d-gpu.io/intel-gpu-dra=true" # node label the DRA kubelet plugin selects
 SANDBOX_MANIFEST="${K3D_GPU_SANDBOX:-${SHARE_DIR}/agent-sandbox.yml}"
 SANDBOX_PROFILE_MANIFEST="${K3D_GPU_SANDBOX_PROFILE:-${SHARE_DIR}/agent-sandbox-k3d.yml}"
+MODEL_SHARE_MANIFEST="${K3D_GPU_MODEL_SHARE:-${SHARE_DIR}/model-share.yml}"
 SANDBOX_TIMEOUT="${K3D_GPU_SANDBOX_TIMEOUT:-180}" # seconds `sandbox up` waits for a warm sandbox
 SYSROOT="${K3D_GPU_SYSROOT:-}" # prefix for /sys and /dev reads (tests point it at a fake tree)
 TEST_IMAGE="${K3D_GPU_TEST_IMAGE:-nvidia/cuda:13.4.3-base-ubuntu26.04}"
@@ -114,6 +118,13 @@ k3d-gpu ${VERSION} — accelerator-ready k3d clusters (NVIDIA, Intel GPU/iGPU/NP
 
 Usage: k3d-gpu <command>
 
+  quickstart [--no-ui]
+            One command to a local chat: cluster, LLM server (model picked by RAM
+            tier), Open WebUI with a generated admin account, port-forward on
+            127.0.0.1:8080 (next free port when taken). Re-run to resume
+  uninstall [--yes] [--images] [--cluster]
+            Remove what quickstart made: port-forward, the cluster it created (with
+            models and chats; --cluster also one it reused), state; --images node image
   up        Create cluster '${CLUSTER}' with passthrough for every detected accelerator
   down      Delete cluster '${CLUSTER}'
   test      Run a pod per detected accelerator and print its device view
@@ -138,6 +149,14 @@ Usage: k3d-gpu <command>
             has XMX, else on the CPU (P-cores); or vLLM on an Arc GPU (K3D_GPU_AGENT_BACKEND).
             --with adds a vision-language model, Whisper speech-to-text (NPU first)
             and DL Streamer video analytics (GPU media engines) on what the LLM leaves
+  agent prefix [--json] [--device CPU|GPU] [--min-tokens N] [--kv-kib K] [--tokenizer FILE] FILE|DIR...
+            Read agent manifests (JSON: name, system, tools) before deploy and report
+            which agents share a prompt head the KV prefix cache can reuse, in whole
+            KV blocks, and tool schemas whose key order breaks sharing. Device follows
+            K3D_GPU_AGENT_DEVICE (CPU or GPU), else CPU, labelled as assumed. Tokens are
+            chars/4 unless --tokenizer names the model's tokenizer.json. OVMS block
+            sizes only. Prefix caching is already on in OVMS (--pull default); this
+            only reports and plans one shared engine
   recipe npu-embeddings
             Print an OVMS embeddings-on-NPU manifest for this host (pipe to kubectl apply -f -)
   facts [--json | --html [--facts FILE] [--matrix FILE]]
@@ -150,6 +169,10 @@ Usage: k3d-gpu <command>
             Engine, model and placement for this box, picked only from measured
             (green) matrix cells; with none it says "unmeasured, run prove"
             --hash prints the plan hash: sha256 of the --json output
+  plan --predict SKU|auto|list [--json] [--mts N] [--channels N]
+            Roofline prediction (decode/prefill tok/s, derived agents per box) for
+            an Intel SKU from its spec fields, fitted on one measured host row;
+            labelled calibrated or extrapolated. A model output (H24 PENDING)
   audit [--json|--observe] [--observed FILE] [--plan FILE] [--lock FILE]
             Posture checks of the running cluster: fails on an unauthenticated
             listener off loopback, an image not pinned in images.lock, a runtime
@@ -157,10 +180,45 @@ Usage: k3d-gpu <command>
   sandbox up|down|status
             Install kubernetes-sigs/agent-sandbox with a warm pool of sandboxes on
             E-cores (k3d-gpu.io/cores=efficient), check where they run, or remove it
+  model-share --image REF --agent-image REF [--replicas N] [--name NAME]
+            Print a Deployment whose N agent replicas mount one model OCI image as a
+            read-only image volume (pipe to kubectl apply -f -). It warns when this
+            cluster's snapshotter, the device or an unpinned tag would give each
+            replica its own copy (EXPERIMENTS.md H28)
   apply --plan-hash H [--engine E] [--device D] [--model M] [--port N]
             Run the plan ('agent up' with its image, device, model and P-core
             count) only if the plan, recomputed now with the same options,
             still hashes to H; a plan on a port other than 8000 is refused
+  tune run|show|space|env|fingerprint|reset
+            Tune the OVMS agent's serving config (device, precision, OpenVINO
+            plugin_config, batching, P/E cores, CPUs) on this host. 'run' starts
+            from this host's current best, screens its one-knob neighbours and
+            confirms the best against it within --budget (default 10 min); the
+            incumbent stays unless the challenger wins beyond noise. 'run --full'
+            is the full successive-halving search. 'agent up' applies the result
+  capacity [--slo 10] [--trace support] [--max 32] [--budget 15] [--engine auto|cpu|igpu|npu|gaudi|nvidia]
+            Agents per box: doubles closed-loop agents against the cluster's OVMS/vLLM
+            chat endpoint until the p95 turn latency breaks the SLO, then bisects;
+            reps per step stop once the p95 CI clears the SLO. Prints agents per
+            box (or the bracket when --budget runs out), stores the bracket per
+            host+engine so a rerun only refines it. Full options: capacity --help
+  autoquant [--json] [--facts FILE] [--store RESULTS]
+            The CPU agent's weight precision: the measured winner cached for
+            this host fingerprint (bench/amx-autoquant/probe.sh --store), else
+            int4 (EXPERIMENTS.md H27); also lists the probe arms the CPU allows
+  bench --vs ollama|llamacpp|ovms [--id Hn] [--out DIR] [--budget S] [--rounds N]
+        [--warmup N] [--max-tokens N] [--cpuset LIST] [--k3d-url URL --k3d-model M]
+        [--keep-cache] [--dry-run]
+            Head-to-head: start the competitor's pinned image and weights
+            (competitors.lock) with its defaults next to this cluster's 'agent up'
+            server, drive both with one client, interleaved rounds and RAPL
+            J/token, and write the result JSON plus an EXPERIMENTS.md run section.
+            The model cache volume is removed after unless --keep-cache;
+            K3D_GPU_SIGNOFF="Name <email>" signs the run section
+  phase-steer [--json] [--prefill CPUS --decode CPUS]
+            Experimental, read-only (H20 PENDING): per-phase CPU split for one
+            llama.cpp server per agent, prefill on the P-cores and decode on the
+            E-cores (LP E-cores left out), as -Cb/-C masks; off on one core type
   version   Show version
   help      Show this message
 
@@ -194,6 +252,13 @@ Environment:
                         a Gaudi; llm-scaler needs an Intel GPU, Arc B-series validated)
   K3D_GPU_AGENT_MODEL   agent Hugging Face model (default: OpenVINO/Qwen3-4B-int4-ov,
                         Qwen/Qwen3-4B on vllm/llm-scaler)
+  K3D_GPU_AGENT_DRAFT   ovms Fast Draft speculative decoding: off | auto | CPU | GPU | NPU
+                        (default: off until a host measurement shows a speedup;
+                        auto = the target's device; GPU = an Intel GPU, the first advertised)
+  K3D_GPU_AGENT_DRAFT_MODEL  draft model (default: OpenVINO/Qwen3-0.6B-int4-ov)
+  K3D_GPU_AUTOQUANT     auto | off: on OVMS/CPU with no K3D_GPU_AGENT_MODEL, serve the
+                        precision measured for this host fingerprint (default: auto)
+  K3D_GPU_AUTOQUANT_CACHE  measured-pick cache (default: \$XDG_STATE_HOME/k3d-gpu/autoquant.json)
   K3D_GPU_AGENT_GPUS    vllm/llm-scaler: GPUs (or Gaudis) to shard the model across (default: 1)
   K3D_GPU_AGENT_MAX_LEN vllm/llm-scaler: max context tokens (default: 8192)
   K3D_GPU_AGENT_VLM_DEVICE, K3D_GPU_AGENT_STT_DEVICE, K3D_GPU_AGENT_VIDEO_DEVICE
@@ -212,6 +277,19 @@ Environment:
   K3D_GPU_SANDBOX       agent-sandbox yaml   (default: ${SHARE_DIR}/agent-sandbox.yml)
   K3D_GPU_SANDBOX_PROFILE  E-core sandbox template + warm pool (default: ${SHARE_DIR}/agent-sandbox-k3d.yml)
   K3D_GPU_SANDBOX_TIMEOUT  seconds 'sandbox up' waits for a ready sandbox (default: 180)
+  K3D_GPU_TUNE          auto | off: apply this host's tuned profile in 'agent up' (default: auto)
+  K3D_GPU_TUNE_DIR      tuned profiles       (default: ~/.config/k3d-gpu/tune)
+  K3D_GPU_TUNE_PY       tune driver          (default: the repo's console/tune.py, then ${SHARE_DIR}/console/tune.py)
+  K3D_GPU_BENCH         dir with llm_load.py, energy.sh and apb/capacity.py (default: the repo's bench/, then ${SHARE_DIR}/bench)
+  K3D_GPU_AGENT_CORES, K3D_GPU_AGENT_MAX_NUM_SEQS, K3D_GPU_AGENT_CACHE_SIZE,
+  K3D_GPU_AGENT_PREFIX_CACHING, K3D_GPU_AGENT_PLUGIN_CONFIG
+                        OVMS serving knobs 'tune' sets: balloon core type (performance |
+                        efficient), --max_num_seqs, --cache_size (GB), --enable_prefix_caching,
+                        --plugin_config (flat JSON) (default: unset = the OVMS default)
+  K3D_GPU_CHAT_PORT     quickstart chat UI port on 127.0.0.1 (default: first free of 8080-8099)
+  K3D_GPU_CHAT_UI       Open WebUI yaml (default: the repo's share/, then ${SHARE_DIR}/agent-chat-ui.yml)
+  K3D_GPU_QUICKSTART_DIR  quickstart state: admin password, port-forward pid and log
+                        (default: ~/.local/state/k3d-gpu/quickstart)
 
 Docs: https://github.com/88plug/k3d-gpu
 EOF
@@ -281,11 +359,12 @@ detect_intel() {
 # gpu.intel.com/monitoring, one per node, which hands a container every Intel GPU
 # (for exporters such as XPU Manager).
 
-# True for a discrete Intel GPU id: DG1 (0x4905-0x4909), Alchemist and Arc Pro A
-# (0x56xx), Ponte Vecchio (0x0bd0-0x0bdb), and the intel_gpu_platform families
-# Battlemage and Crescent Island.
+# True for a discrete Intel GPU id: DG1 (0x4905-0x4909), Alchemist, Arc Pro A and
+# Flex (0x56xx), Ponte Vecchio (the INTEL_PVC_IDS of include/drm/intel/pciids.h;
+# 0BD0-0BD3 are pre-production ids not in that list and are not matched),
+# and the intel_gpu_platform families Battlemage and Crescent Island.
 intel_gpu_discrete() {
-    case "$1" in 0x490[5-9]|0x56[0-9a-f][0-9a-f]|0x0bd[0-9ab]) return 0 ;; esac
+    case "$1" in 0x490[5-9]|0x56[0-9a-f][0-9a-f]|0x0b69|0x0b6e|0x0bd[4-9ab]|0x0be[015]) return 0 ;; esac
     case "$(intel_gpu_platform "$1")" in Battlemage\|*|"Crescent Island|"*) return 0 ;; esac
     return 1
 }
@@ -469,13 +548,28 @@ amx_flags() {
     cpu_flags | LC_ALL=C grep -E '^amx_[a-z0-9_]+$' | LC_ALL=C grep -vxE 'amx_(tf32|transpose)' | sort | paste -sd' ' || true
 }
 
-# NFD-style node labels for the host's AMX flags (amx_tile -> ...cpu-cpuid.AMXTILE=true).
+# NFD-style node labels for the host's AMX flags (amx_tile -> ...cpu-cpuid.AMXTILE=true),
+# sorted. AMX-FP16 (CPUID.(7,1):EAX[21]) and AMX-COMPLEX (CPUID.(7,1):EDX[8]) are
+# never printed in /proc/cpuinfo (cpufeatures.h gives X86_FEATURE_AMX_FP16 no quoted
+# name and has no AMX_COMPLEX at all), so they come from the CPU model: LLVM X86.td
+# gives Granite Rapids (6/0xAD) AMX-FP16, Granite Rapids-D (6/0xAE) AMX-FP16 and
+# AMX-COMPLEX, Diamond Rapids (19/0x01) both (intel-family.h ids). Only on bare
+# metal (no hypervisor flag, which may mask CPUID bits) and only with amx_tile
+# present, which the kernel clears when it cannot switch AMX state (cpuid-deps.c).
 amx_labels() {
-    local f
-    for f in $(amx_flags); do
+    local f flags names=""
+    flags=$(amx_flags)
+    for f in ${flags}; do
         f=${f//_/}
-        echo "feature.node.kubernetes.io/cpu-cpuid.${f^^}=true"
+        names+="${f^^}"$'\n'
     done
+    if [[ " ${flags} " == *" amx_tile "* ]] && ! cpu_flag hypervisor; then
+        case "$(cpu_family_model)" in
+            "6 173")        names+=$'AMXFP16\n' ;;
+            "6 174"|"19 1") names+=$'AMXFP16\nAMXCOMPLEX\n' ;;
+        esac
+    fi
+    printf '%s' "${names}" | LC_ALL=C sort -u | sed 's#.*#feature.node.kubernetes.io/cpu-cpuid.&=true#'
 }
 
 # NFD's cpuid label name for a /proc/cpuinfo flag, or nothing. NFD names its
@@ -849,10 +943,19 @@ doctor_accel_sockets() {
 # drivers/accel/ivpu.
 
 # Intel GPU id -> "<name>|<first kernel binding it by default>|<GuC firmware glob>".
-# An empty kernel field means the kernel still requires xe.force_probe. For an
+# An empty kernel field means the kernel still requires xe.force_probe (Flex:
+# ats_m_info/ats_m_desc keep require_force_probe; Max: pvc_info/pvc_desc are
+# __maybe_unused with no ids in either pciidlist, so no upstream driver binds it).
+# Battlemage ids joined the xe table in steps: E202/E20B/E20C/E20D/E212 in 6.12,
+# E210/E211/E216 in 6.15, E209/E220-E223 in 6.17 (pciids.h at each tag); E215
+# was dropped in 6.17 and is not listed. Alchemist binds i915 by default from
+# 6.2 (dg2_info lost require_force_probe), 56BA-56BD from 6.7, 56BE/56BF from
+# 6.10. For an
 # i915 part the kernel is the first release whose pciids header lists the id and
 # whose i915_pci.c no longer sets require_force_probe for its platform (ADL-S
 # from 5.16; ADL-P, and so ADL-N and RPL-P/U, from 5.17; MTL from 6.7).
+# Wildcat Lake 0xfd80/0xfd81 are in v6.17's INTEL_PTL_IDS, bound to ptl_desc
+# (no require_force_probe); v6.18 moved them to INTEL_WCL_IDS.
 intel_gpu_platform() {
     case "$1" in
         0x468[028a]|0x469[023])             echo "Alder Lake-S|5.16|i915/tgl_guc_" ;;
@@ -870,13 +973,47 @@ intel_gpu_platform() {
         0x7d67)                             echo "Arrow Lake-S|6.7|i915/mtl_guc_" ;;
         0xb640)                             echo "Arrow Lake-S|6.12|i915/mtl_guc_" ;;
         0x6420|0x64a0|0x64b0)               echo "Lunar Lake|6.12|xe/lnl_guc_" ;;
-        0xe20[29bcd]|0xe21[0126]|0xe22[0-3]) echo "Battlemage|6.12|xe/bmg_guc_" ;;
+        0xe20[2bcd]|0xe212)                 echo "Battlemage|6.12|xe/bmg_guc_" ;;
+        0xe21[016])                         echo "Battlemage|6.15|xe/bmg_guc_" ;;
+        0xe209|0xe22[0-3])                  echo "Battlemage|6.17|xe/bmg_guc_" ;;
         0xb08[0-7f]|0xb090|0xb0a0|0xb0b0)   echo "Panther Lake|6.17|xe/ptl_guc_" ;;
-        0xfd80|0xfd81)                      echo "Wildcat Lake|6.18|xe/ptl_guc_" ;;
+        0xfd80|0xfd81)                      echo "Wildcat Lake|6.17|xe/ptl_guc_" ;;
         0xd74[0-35ab])                      echo "Nova Lake-S|7.3|xe/nvl_guc_" ;;
         0xd75[0-7f])                        echo "Nova Lake-P||" ;;
         0x674[c-f]|0x6750)                  echo "Crescent Island||" ;;
+        0x56a[0-2]|0x569[0-2])              echo "Alchemist DG2-G10|6.2|i915/dg2_guc_" ;;
+        0x56b[ef])                          echo "Alchemist DG2-G10|6.10|i915/dg2_guc_" ;;
+        0x56a[56]|0x56b[01]|0x569[3-5])     echo "Alchemist DG2-G11|6.2|i915/dg2_guc_" ;;
+        0x56b[a-d])                         echo "Alchemist DG2-G11|6.7|i915/dg2_guc_" ;;
+        0x56a[34]|0x56b[23]|0x569[67])      echo "Alchemist DG2-G12|6.2|i915/dg2_guc_" ;;
+        0x56c[0-2])                         echo "Flex (ATS-M)||i915/dg2_guc_" ;;
+        0x0b69|0x0b6e|0x0bd[4-9ab]|0x0be[015]) echo "Max (Ponte Vecchio)||" ;;
     esac
+}
+
+# True for an id whose intel_gpu_platform kernel is the release that added the id
+# to the driver's id table, after its platform already bound by default: Battlemage
+# E210/E211/E216 (6.15) and E209/E220-E223 (6.17), Alchemist 56BA-56BD (6.7) and
+# 56BE/56BF (6.10). force_probe cannot bind an id missing from the table, so on an
+# older kernel an unbound one needs a newer kernel and a bound one is a backport.
+intel_gpu_id_late() {
+    case "$1" in 0xe21[016]|0xe209|0xe22[0-3]|0x56b[a-f]) return 0 ;; esac
+    return 1
+}
+
+# The upstream driver for an intel_gpu_platform GuC firmware glob: i915 or xe.
+intel_gpu_fw_driver() { if [ "${1#i915/}" != "$1" ]; then echo i915; else echo xe; fi; }
+
+# xe was merged in Linux 6.8 (drivers/gpu/drm/xe); on an older kernel there is no
+# xe module, so xe.force_probe does nothing.
+kernel_has_xe() { ! kernel_lt 6.8; }
+
+# Whether xe.force_probe cannot bring up this GPU on a kernel older than its
+# default-binding kernel. Panther Lake and Wildcat Lake (GuC firmware xe/ptl_guc_):
+# no xe_uc_fw.c before v6.17 has a PANTHERLAKE firmware entry, and no pciids.h
+# before v6.17 lists 0xfd80/0xfd81, so only the kernel upgrade helps.
+intel_gpu_no_force_probe() {
+    [ "$(intel_gpu_platform "$1" | cut -d'|' -f3)" = "xe/ptl_guc_" ]
 }
 
 # Whether a GPU platform (an intel_gpu_platform name) has XMX systolic matrix
@@ -885,6 +1022,7 @@ intel_gpu_platform() {
 gpu_xmx() {
     case "$1" in
         "Arrow Lake-H"|"Lunar Lake"|Battlemage|"Panther Lake"|"Wildcat Lake"|"Nova Lake-S"|"Nova Lake-P") echo true ;;
+        "Alchemist DG2-G10"|"Alchemist DG2-G11"|"Alchemist DG2-G12"|"Flex (ATS-M)") echo true ;;
         "Alder Lake-S"|"Alder Lake-P"|"Alder Lake-N"|"Raptor Lake-S"|"Raptor Lake-P/U"|"Meteor Lake"|"Arrow Lake-U"|"Arrow Lake-S") echo false ;;
     esac
 }
@@ -911,7 +1049,41 @@ npu_platform() {
     esac
 }
 
+# Device ids the pinned NPU plugin serves: npuIDs in cmd/npu_plugin/npu_plugin.go
+# at the intel/intel-npu-plugin tag share/intel-npu-plugin.yml pins. The plugin
+# matches an accel node by vendor and device id alone and logs "Unknown device ID"
+# for any other id, advertising no npu.intel.com/accel for it. Upstream also lists
+# 0x7e4c, which pci.ids names the Meteor Lake GNA; intel_vpu never binds it, so
+# detection never sees it. Bump NPU_PLUGIN_TAG and the list together.
+NPU_PLUGIN_TAG="0.37.1"
+NPU_PLUGIN_IDS="0x7e4c 0x643e 0xad1d 0x7d1d 0xb03e 0xfd3e 0xd71d"
+npu_plugin_serves() { [[ " ${NPU_PLUGIN_IDS} " == *" $1 "* ]]; }
+
+# True when the pinned plugin serves at least one detected NPU. An unreadable id
+# ("-") counts as served: coverage is unknown, so the plugin decides.
+npu_plugin_serves_any() {
+    local id
+    for id in ${NPU_IDS[@]+"${NPU_IDS[@]}"}; do
+        if [ "${id}" = - ] || npu_plugin_serves "${id}"; then return 0; fi
+    done
+    return 1
+}
+
+# The id list above describes only the bundled manifest; K3D_GPU_NPU_PLUGIN
+# replaces the plugin, so its coverage is the user's call.
+npu_plugin_default() { [ "${NPU_PLUGIN_MANIFEST}" = "${SHARE_DIR}/intel-npu-plugin.yml" ]; }
+
+# True when a detected NPU gets an advertised npu.intel.com/accel: the bundled
+# plugin serves one of the ids, or K3D_GPU_NPU_PLUGIN overrides the plugin.
+npu_usable() {
+    [ "${#NPU_IDS[@]}" -gt 0 ] && { ! npu_plugin_default || npu_plugin_serves_any; }
+}
+NPU_UNSERVED=0  # 1 when auto detection skipped NPUs the bundled plugin does not serve
+
 kernel_release() { cat "${SYSROOT}/proc/sys/kernel/osrelease" 2>/dev/null || uname -r; }
+
+# True when the kernel release starts with a numeric major.minor.
+kernel_known() { [[ "$(kernel_release)" =~ ^[0-9]+\.[0-9]+ ]]; }
 
 # kernel_lt <major.minor>: true when the running kernel is older.
 kernel_lt() {
@@ -1000,9 +1172,35 @@ NPU_UMD_IMAGE="openvino/model_server:2026.4.1-gpu"
 NPU_UMD_DRIVER="v1.35.0"
 NPU_UMD_FW_DATE="20260630"
 
+# npu_fw_names <generation>: the names intel_vpu requests on the running kernel, in
+# order (fw_names[] in drivers/accel/ivpu/ivpu_fw.c, read at tags v6.5, v6.6, v6.8, v6.9, v6.12,
+# v6.15, v6.16 and v6.19). 6.16+ asks for intel/vpu/vpu_<gen>_v1.bin first and 60xx
+# has no _v0.0 name; older kernels never ask for _v1 and try vpu_<gen>.bin in the
+# firmware root first; 6.8 and older also try mtl_vpu.bin for 37xx; before 6.6 only
+# Meteor Lake's mtl_vpu names exist.
+npu_fw_names() {
+    if ! kernel_known; then
+        # Unreadable kernel version: every name some kernel requests, newest first.
+        echo "intel/vpu/vpu_$1_v1.bin"
+        [ "$1" = 60xx ] || echo "intel/vpu/vpu_$1_v0.0.bin"
+        echo "vpu_$1.bin"
+        if [ "$1" = 37xx ]; then echo "mtl_vpu.bin"; echo "intel/vpu/mtl_vpu_v0.0.bin"; fi
+    elif ! kernel_lt 6.16; then
+        echo "intel/vpu/vpu_$1_v1.bin"
+        [ "$1" = 60xx ] || echo "intel/vpu/vpu_$1_v0.0.bin"
+    elif ! kernel_lt 6.6; then
+        echo "vpu_$1.bin"
+        if [ "$1" = 37xx ] && kernel_lt 6.9; then echo "mtl_vpu.bin"; fi
+        echo "intel/vpu/vpu_$1_v0.0.bin"
+    else
+        echo "mtl_vpu.bin"
+        echo "intel/vpu/mtl_vpu_v0.0.bin"
+    fi
+}
+
 # npu_fw_file <generation>: the firmware file intel_vpu loads, in the kernel's order.
 # Names: intel_vpu's firmware= parameter alone when set (it reads "(null)" when not),
-# else the list in drivers/accel/ivpu/ivpu_fw.c (v1 first). For each name the
+# else npu_fw_names. For each name the
 # firmware loader (drivers/base/firmware_loader/main.c) tries no suffix, then .zst,
 # then .xz, each across fw_path[]: firmware_class.path, /lib/firmware/updates/<release>,
 # /lib/firmware/updates, /lib/firmware/<release>, /lib/firmware. No /usr/lib.
@@ -1014,7 +1212,8 @@ npu_fw_file() {
     if [ -n "${param}" ] && [ "${param}" != "(null)" ]; then
         fw_names=("${param}")
     else
-        fw_names=("intel/vpu/vpu_$1_v1.bin" "intel/vpu/vpu_$1_v0.0.bin")
+        fw_names=()
+        while read -r name; do fw_names+=("${name}"); done < <(npu_fw_names "$1")
     fi
     for name in "${fw_names[@]}"; do
         for sfx in "" .zst .xz; do
@@ -1074,7 +1273,12 @@ resolve_vendors() {
     if [ "${VENDORS_REQUEST}" = "auto" ]; then
         if has_nvidia; then ACTIVE+=(nvidia); fi
         if [ "${#INTEL_DRIVERS[@]}" -gt 0 ]; then ACTIVE+=(intel); fi
-        if [ "${#NPU_IDS[@]}" -gt 0 ]; then ACTIVE+=(npu); fi
+        if npu_usable; then
+            ACTIVE+=(npu)
+        elif [ "${#NPU_IDS[@]}" -gt 0 ]; then
+            NPU_UNSERVED=1
+            warn "Intel NPU $(printf '%s ' "${NPU_IDS[@]}")is not served by intel-npu-plugin ${NPU_PLUGIN_TAG} — skipping the NPU (K3D_GPU_NPU_PLUGIN=<newer plugin yaml> overrides; see 'k3d-gpu doctor')"
+        fi
         if has_gaudi; then
             ACTIVE+=(gaudi)
         elif has_gaudi_pci; then
@@ -1256,10 +1460,17 @@ doctor_intel() {
         read -r drv id <<< "${e}"
         IFS='|' read -r name mink fw <<< "$(intel_gpu_platform "${id}")"
         echo "  ok: Intel ${name:-GPU} (${id:-?}) bound to ${drv}"
-        if [ -n "${mink}" ] && kernel_lt "${mink}"; then
-            opt=xe
-            [ "${fw#i915/}" = "${fw}" ] || opt=i915
-            echo "  ${YLW}warn${RST}: ${name} (${id}) needs kernel ${mink}+ (running $(kernel_release)); older kernels need ${opt}.force_probe=${id#0x}"
+        opt=$(intel_gpu_fw_driver "${fw}")
+        if [ -n "${mink}" ] && kernel_lt "${mink}" && intel_gpu_id_late "${id}"; then
+            # force_probe cannot bind an id missing from the driver's table, so a
+            # bound late id on an older kernel is a stable or distro backport.
+            echo "  ok: ${name} (${id}) is in this kernel's ${opt} id table (a stable backport; mainline lists it from ${mink})"
+        elif [ -n "${mink}" ] && kernel_lt "${mink}"; then
+            if intel_gpu_no_force_probe "${id}"; then
+                echo "  ${YLW}warn${RST}: ${name} (${id}) needs kernel ${mink}+ (running $(kernel_release)); no older kernel can drive it, force_probe included"
+            else
+                echo "  ${YLW}warn${RST}: ${name} (${id}) needs kernel ${mink}+ (running $(kernel_release)); older kernels need ${opt}.force_probe=${id#0x}"
+            fi
         fi
         if [ -n "${fw}" ]; then
             if firmware_present "${fw}"; then
@@ -1312,24 +1523,90 @@ doctor_intel_sharing() {
 doctor_npu() {
     info "Checking Intel NPU (Core Ultra)..."
     local id name mink gen fw date gid mode node
+    local param custom upd base sfx lsfx v1 link old
     if [ "${#NPU_IDS[@]}" -eq 0 ]; then
         echo "  ${RED}fail${RST}: no Intel NPU accel node bound to intel_vpu (driver not loaded? lsmod | grep intel_vpu)"
         FAIL=1
         return
     fi
     for id in ${NPU_IDS[@]+"${NPU_IDS[@]}"}; do
+        if [ "${id}" = - ] || [ -z "${id}" ]; then
+            echo "  ${YLW}warn${RST}: an Intel NPU is bound to intel_vpu but its PCI device id is unreadable (/sys/class/accel/accel*/device/device)"
+            continue
+        fi
         IFS='|' read -r name mink gen <<< "$(npu_platform "${id}")"
         echo "  ok: Intel NPU ${name:-(unknown generation)} (${id}) bound to intel_vpu"
-        if [ -n "${mink}" ] && kernel_lt "${mink}"; then
-            echo "  ${YLW}warn${RST}: ${name} NPU needs kernel ${mink}+ (running $(kernel_release))"
+        if ! npu_plugin_default; then
+            echo "  note: K3D_GPU_NPU_PLUGIN=${NPU_PLUGIN_MANIFEST} replaces the bundled plugin; its device-id coverage is not checked"
+        elif ! npu_plugin_serves "${id}"; then
+            echo "  ${YLW}warn${RST}: intel-npu-plugin ${NPU_PLUGIN_TAG} does not list ${id}: it logs 'Unknown device ID' and advertises"
+            echo "        no npu.intel.com/accel for it, so auto detection skips it. Fix: a newer intel/intel-npu-plugin via"
+            echo "        K3D_GPU_NPU_PLUGIN=<plugin yaml>, which up then uses with the NPU label"
         fi
         [ -n "${gen}" ] || continue
+        if ! kernel_known; then
+            echo "  ${YLW}warn${RST}: kernel version unreadable ('$(kernel_release)'); cannot tell which NPU firmware names it requests"
+        elif kernel_lt "${mink}"; then
+            # The firmware names below belong to kernels that support this NPU.
+            echo "  ${YLW}warn${RST}: ${name} NPU needs kernel ${mink}+ (running $(kernel_release))"
+            continue
+        fi
         fw=$(npu_fw_file "${gen}")
-        if [ -z "${fw}" ]; then
-            echo "  ${YLW}warn${RST}: intel/vpu/vpu_${gen}_* firmware not found (install linux-firmware or intel-fw-npu)"
+        if [ -z "${fw}" ] && [ "${gen}" = 60xx ]; then
+            # Neither linux-firmware (tag 20260916 WHENCE) nor linux-npu-driver v1.38.0
+            # (firmware/bin) ships vpu_60xx_v1.bin.
+            echo "  ${YLW}warn${RST}: no published NPU firmware for 60xx yet (intel/vpu/vpu_60xx_v1.bin is in neither"
+            echo "        linux-firmware nor linux-npu-driver); the NPU cannot load until Intel publishes it"
+            continue
+        elif [ -z "${fw}" ]; then
+            echo "  ${YLW}warn${RST}: intel/vpu/vpu_${gen}_* firmware not found; kernel $(kernel_release) loads $(npu_fw_names "${gen}" | paste -sd, -) (install linux-firmware or intel-fw-npu)"
             continue
         fi
         echo "  ok: intel/vpu/vpu_${gen}_* firmware present (${fw#"${SYSROOT}"})"
+        # intel-fw-npu installs updates/intel/vpu/vpu_<gen>_v1.bin, a name only 6.16+
+        # requests; 6.6-6.15 load another file (for 50xx the package has no _v0.0
+        # link at all, linux-npu-driver v1.38.0 firmware/bin). A link
+        # updates/intel/vpu/vpu_<gen>_v0.0.bin -> v1 (the link linux-firmware's WHENCE
+        # itself ships) wins only when that name is the one loaded, no firmware=
+        # parameter forces another, the loaded file is in a fw_path entry after
+        # /lib/firmware/updates (not firmware_class.path), and the link's suffix is
+        # tried no later than the loaded file's.
+        param=$(head -n1 "${SYSROOT}/sys/module/intel_vpu/parameters/firmware" 2>/dev/null || true)
+        custom=$(head -n1 "${SYSROOT}/sys/module/firmware_class/parameters/path" 2>/dev/null || true)
+        upd="/lib/firmware/updates/intel/vpu"
+        base=${fw##*/} lsfx=""
+        case "${base}" in *.zst) lsfx=.zst ;; *.xz) lsfx=.xz ;; esac
+        v1=""
+        if kernel_known && ! kernel_lt 6.6 && kernel_lt 6.16 \
+            && { [ -z "${param}" ] || [ "${param}" = "(null)" ]; } \
+            && [ "${base%"${lsfx}"}" = "vpu_${gen}_v0.0.bin" ] \
+            && [ "${fw#"${SYSROOT}"/lib/firmware/updates/}" = "${fw}" ] \
+            && { [ -z "${custom}" ] || [ "${fw#"${SYSROOT}${custom%/}"/}" = "${fw}" ]; }; then
+            for sfx in "" .zst .xz; do
+                if [ -f "${SYSROOT}${upd}/vpu_${gen}_v1.bin${sfx}" ]; then v1="vpu_${gen}_v1.bin${sfx}"; break; fi
+                [ "${sfx}" != "${lsfx}" ] || break
+            done
+        fi
+        if [ -n "${v1}" ]; then
+            link="${upd}/vpu_${gen}_v0.0.bin${sfx}"
+            echo "  ${YLW}warn${RST}: ${upd}/${v1} (intel-fw-npu) is not loaded: kernel $(kernel_release)"
+            echo "        never requests _v1 (6.16+ does). Boot a 6.16+ kernel, or point the name it loads at it."
+            echo "        Stop what uses the NPU first ('k3d-gpu down' for the cluster), or reboot instead of the modprobe steps:"
+            if [ -e "${SYSROOT}${link}" ] || [ -L "${SYSROOT}${link}" ]; then
+                # Present but not loaded: a dangling link or an unreadable file.
+                old=$(readlink "${SYSROOT}${link}" 2>/dev/null || true)
+                echo "        ${link} exists but is not loaded${old:+ (a link to ${old})}"
+                echo "        run:    sudo ln -sfn ${v1} ${link} && sudo modprobe -r intel_vpu && sudo modprobe intel_vpu"
+                if [ -n "${old}" ]; then
+                    echo "        revert: sudo ln -sfn ${old} ${link} && sudo modprobe -r intel_vpu && sudo modprobe intel_vpu"
+                else
+                    echo "        revert: back up ${link} before running; restore it, then: sudo modprobe -r intel_vpu && sudo modprobe intel_vpu"
+                fi
+            else
+                echo "        run:    sudo ln -s ${v1} ${link} && sudo modprobe -r intel_vpu && sudo modprobe intel_vpu"
+                echo "        revert: sudo rm ${link} && sudo modprobe -r intel_vpu && sudo modprobe intel_vpu"
+            fi
+        fi
         date=$(npu_fw_date "${fw}")
         if [ -z "${date}" ]; then
             echo "  note: no build date readable in ${fw#"${SYSROOT}"}; cannot compare it with ${NPU_UMD_IMAGE}'s NPU driver ${NPU_UMD_DRIVER}"
@@ -1426,10 +1703,34 @@ doctor_intel_unbound() {
         id=$(cat "${dev}/device" 2>/dev/null) || continue
         if [ -n "$(npu_platform "${id}")" ]; then
             IFS='|' read -r name mink gen <<< "$(npu_platform "${id}")"
-            lines+="  ${YLW}warn${RST}: Intel NPU ${name} (${id}) has no driver — load intel_vpu (kernel ${mink}+): sudo modprobe intel_vpu"$'\n'
-        elif IFS='|' read -r name mink fw <<< "$(intel_gpu_platform "${id}")" && [ "${fw#i915/}" != "${fw}" ]; then
+            # First cause that holds: kernel too old for the id, module not loaded,
+            # firmware missing (intel_vpu's probe fails without it).
+            if kernel_known && kernel_lt "${mink}"; then
+                lines+="  ${YLW}warn${RST}: Intel NPU ${name} (${id}) has no driver — kernel $(kernel_release) predates its intel_vpu support; it needs kernel ${mink}+"$'\n'
+            elif [ ! -d "${SYSROOT}/sys/module/intel_vpu" ]; then
+                lines+="  ${YLW}warn${RST}: Intel NPU ${name} (${id}) has no driver — load intel_vpu (kernel ${mink}+): sudo modprobe intel_vpu (revert: sudo modprobe -r intel_vpu)"$'\n'
+            elif [ -z "$(npu_fw_file "${gen}")" ] && [ "${gen}" = 60xx ]; then
+                lines+="  ${YLW}warn${RST}: Intel NPU ${name} (${id}) has no driver — intel_vpu is loaded but no published NPU firmware for 60xx exists yet (vpu_60xx_v1.bin is in neither linux-firmware nor linux-npu-driver)"$'\n'
+            elif [ -z "$(npu_fw_file "${gen}")" ]; then
+                lines+="  ${YLW}warn${RST}: Intel NPU ${name} (${id}) has no driver — intel_vpu is loaded but found no ${gen} firmware ($(npu_fw_names "${gen}" | paste -sd, -)), so its probe failed"$'\n'
+            else
+                lines+="  ${YLW}warn${RST}: Intel NPU ${name} (${id}) has no driver — intel_vpu is loaded and ${gen} firmware is present; see: sudo dmesg | grep intel_vpu"$'\n'
+            fi
+        elif IFS='|' read -r name mink fw <<< "$(intel_gpu_platform "${id}")" && [ "${name}" = "Max (Ponte Vecchio)" ]; then
+            lines+="  ${YLW}warn${RST}: Intel ${name} (${id}) has no driver — no upstream i915 or xe binds it (pvc_info/pvc_desc list no ids); Intel's supported driver is the out-of-tree intel-i915-dkms LTS (2523.x) on an OS from https://dgpu-docs.intel.com/overview/support-matrix/max-and-flex-support-matrix.html"$'\n'
+        elif [ "${name}" = "Flex (ATS-M)" ]; then
+            if kernel_has_xe; then
+                lines+="  ${YLW}warn${RST}: Intel ${name} (${id}) has no driver — upstream i915 and xe both still require force_probe for it; install Intel's intel-i915-dkms LTS (2523.x), or force-probe xe (not production upstream; exact apply and revert: k3d-gpu doctor --experimental, xe-force-probe)"$'\n'
+            else
+                lines+="  ${YLW}warn${RST}: Intel ${name} (${id}) has no driver — upstream i915 still requires force_probe for it and kernel $(kernel_release) has no xe (merged in 6.8); install Intel's intel-i915-dkms LTS (2523.x)"$'\n'
+            fi
+        elif [ -n "${mink}" ] && kernel_lt "${mink}" && intel_gpu_id_late "${id}"; then
+            lines+="  ${YLW}warn${RST}: Intel ${name} (${id}) has no driver — $(intel_gpu_fw_driver "${fw}") lists this id from kernel ${mink} (running $(kernel_release)); upgrade the kernel, force_probe cannot add an id missing from the driver's table"$'\n'
+        elif [ "${fw#i915/}" != "${fw}" ]; then
             # A GuC firmware under i915/ means i915 is the default driver for the part.
             lines+="  ${YLW}warn${RST}: Intel ${name} (${id}) has no driver — load i915 (kernel ${mink}+): sudo modprobe i915"$'\n'
+        elif intel_gpu_no_force_probe "${id}" && kernel_lt "${mink}"; then
+            lines+="  ${YLW}warn${RST}: Intel ${name} (${id}) has no driver — it needs kernel ${mink}+ (running $(kernel_release)); force_probe cannot bind it on older kernels"$'\n'
         else
             lines+="  ${YLW}warn${RST}: Intel ${name:-GPU/accelerator} (${id}) has no driver — if dmesg says xe does not support it yet, boot with xe.force_probe=${id#0x} i915.force_probe=!${id#0x}"$'\n'
         fi
@@ -1459,6 +1760,7 @@ doctor_numa() {
         lines+="  ${RED}fail${RST}: NUMA requested but the host has ${count} NUMA node(s) (/sys/devices/system/node)"$'\n'
         FAIL=1
     fi
+    doctor_hbm
     flags=$(grep -m1 '^flags[[:space:]]*:' "${SYSROOT}/proc/cpuinfo" 2>/dev/null || true)
     if [[ " ${flags#*:} " == *" rdt_a "* ]]; then
         for n in cat_l2 cat_l3 cdp_l2 cdp_l3 mba; do
@@ -1466,6 +1768,85 @@ doctor_numa() {
         done
         lines+="  info: RDT allocation (rdt_a:${rdt}) — resctrl classes are available but left off: the balloons policy ships control.rdt.enable: false because enabling it rewrites the host's /sys/fs/resctrl. To opt in, mount resctrl on the host (mount -t resctrl resctrl /sys/fs/resctrl) and set control.rdt.enable: true in nri-balloons.yml; usePodQoSAsDefaultClass then gives BestEffort/Burstable/Guaranteed pods 33%/66%/100% of the L3"$'\n'
     fi
+    doctor_isolation "${flags#*:}"
+}
+
+# Noisy-neighbour isolation for agent pods, picked from the CPU's own flags
+# (never from the SKU name): rdt-mba (CAT + MBA: cache share and DRAM bandwidth),
+# rdt-cat (CAT only: cache share), cpu-cap (CPU limit only). Holding a neighbour
+# to one E-core L2 cluster is not a mode: H26 tests it (EXPERIMENTS.md).
+isolation_mode() {
+    local flags=" $1 "
+    if [[ "${flags}" == *" rdt_a "* && "${flags}" == *" mba "* ]]; then echo rdt-mba
+    elif [[ "${flags}" == *" rdt_a "* ]] && [[ "${flags}" == *" cat_l3 "* || "${flags}" == *" cat_l2 "* ]]; then echo rdt-cat
+    else echo cpu-cap
+    fi
+}
+
+# One doctor line naming the isolation mode. Host changes are printed with their
+# exact apply and revert, never made; the RDT opt-in itself is the RDT line above.
+doctor_isolation() {
+    local mode mounted=no
+    mode=$(isolation_mode "$1")
+    [ ! -d "${SYSROOT}/sys/fs/resctrl/info" ] || mounted=yes
+    case "${mode}" in
+        rdt-mba)
+            lines+="  info: noisy-neighbour isolation: rdt-mba — CAT + MBA can cap a neighbour's cache share and DRAM bandwidth through the RDT opt-in above (resctrl mounted: ${mounted}); the shipped classes set cache shares only, so add mbAllocation: {all: [\"50%\"]} to the BestEffort class for bandwidth; the classes run inside the NRI balloons policy, which up deploys on hybrid or multi-NUMA hosts only"$'\n' ;;
+        rdt-cat)
+            lines+="  info: noisy-neighbour isolation: rdt-cat — CAT can cap a neighbour's cache share through the RDT opt-in above (resctrl mounted: ${mounted}); no MBA, so DRAM bandwidth stays shared; the classes run inside the NRI balloons policy, which up deploys on hybrid or multi-NUMA hosts only"$'\n' ;;
+        *)
+            if has_hybrid && [ -n "$(ecore_clusters)" ]; then
+                lines+="  info: noisy-neighbour isolation: cpu-cap — no rdt_a flag, so cache and DRAM bandwidth stay shared; give a bandwidth-heavy neighbour a CPU limit. Holding it to one E-core L2 cluster (k3d-gpu.io/cores=ecluster) is not recommended: H26 measures it against the same workers spread over the E-cores (EXPERIMENTS.md H26)"$'\n'
+            elif has_hybrid; then
+                lines+="  info: noisy-neighbour isolation: cpu-cap — no rdt_a flag; E-core L2 clusters are not readable (no cpu*/cache in sysfs); give a neighbour a CPU limit. Cache and DRAM bandwidth stay shared"$'\n'
+            else
+                lines+="  info: noisy-neighbour isolation: cpu-cap — no rdt_a flag and no E-cores; give a neighbour a CPU limit. Cache and DRAM bandwidth stay shared"$'\n'
+            fi ;;
+    esac
+}
+
+# Xeon CPU Max (6/0x8F with on-package HBM) memory modes, appended to ${lines}.
+# Cache mode: the kernel lists node<N>/memory_side_cache/index<M> (size in bytes,
+# indexing 0 = direct-mapped; Documentation/ABI/stable/sysfs-devices-node). Flat
+# mode boots HBM as EFI soft-reserved memory: drivers/dax/hmem/hmem.c registers it
+# as platform devices "hmem" whose dax devices bind device_dax until daxctl hands
+# them to kmem (drivers/dax/Makefile module names; Intel Xeon CPU Max tuning guide
+# 354227 section 5.2). PMem namespaces and CXL dax regions also bind device_dax but
+# hang off other parents, so the HBM advice needs an hmem parent and a "CPU Max"
+# model name. page_alloc.shuffle exists only with CONFIG_SHUFFLE_PAGE_ALLOCATOR=y
+# (Documentation/admin-guide/kernel-parameters.txt) and its sysfs file is mode
+# 0400 (mm/shuffle.c). Guidance only: the launcher never changes host memory.
+doctor_hbm() {
+    local d n idx size kind dax="" drv msc="" shuf
+    for n in $(numa_nodes); do
+        for d in "${SYSROOT}/sys/devices/system/node/node${n}"/memory_side_cache/index[0-9]*; do
+            [ -d "${d}" ] || continue
+            idx=${d##*/index}
+            size=$(head -n1 "${d}/size" 2>/dev/null || true)
+            [[ "${size}" =~ ^[0-9]{1,20}$ ]] || size="?"
+            kind="indexed"
+            [ "$(head -n1 "${d}/indexing" 2>/dev/null)" != 0 ] || kind="direct-mapped"
+            msc+="${msc:+; }node ${n} index ${idx} ${size} bytes ${kind}"
+        done
+    done
+    if [ -n "${msc}" ]; then
+        lines+="  info: memory-side cache (${msc}) — HBM cache mode on Xeon CPU Max, or another 2LM memory; pods need no change"$'\n'
+        shuf=$(head -c1 "${SYSROOT}/sys/module/page_alloc/parameters/shuffle" 2>/dev/null || true)
+        if [ "${shuf}" = Y ]; then
+            lines+="  ok: page_alloc.shuffle is on (evens out memory-side cache conflict misses)"$'\n'
+        else
+            lines+="  info: Intel suggests page_alloc.shuffle=y on the kernel cmdline to even out conflict misses; needs CONFIG_SHUFFLE_PAGE_ALLOCATOR=y. Check as root: sudo cat /sys/module/page_alloc/parameters/shuffle (Y = on). Apply: sudo grubby --update-kernel=ALL --args=page_alloc.shuffle=y (Fedora/RHEL), or add it to GRUB_CMDLINE_LINUX_DEFAULT in /etc/default/grub then sudo update-grub (Debian/Ubuntu) or sudo grub-mkconfig -o /boot/grub/grub.cfg; reboot. Revert: sudo grubby --update-kernel=ALL --remove-args=page_alloc.shuffle, or remove it from /etc/default/grub and rerun the same command; reboot"$'\n'
+        fi
+    fi
+    [ "$(cpu_family_model)" = "6 143" ] || return 0
+    [[ "$(cpuinfo_field "model name")" == *"CPU Max"* ]] || return 0
+    for d in "${SYSROOT}"/sys/bus/dax/devices/dax[0-9]*.[0-9]*; do
+        [ -L "${d}/driver" ] || continue
+        [[ "$(readlink -f "${d}")" == */devices/platform/hmem.[0-9]*/* ]] || continue
+        drv=$(readlink "${d}/driver")
+        [ "${drv##*/}" != device_dax ] || dax+=" ${d##*/}"
+    done
+    [ -z "${dax}" ] || lines+="  info: dax device(s)${dax} in devdax mode — HBM the kernel left soft-reserved (Xeon CPU Max flat mode), unused by pods. To use it: sudo daxctl reconfigure-device --mode=system-ram <dev> for each (lasts until reboot; rerun it from a boot-time unit), or boot with efi=nosoftreserve; revert: sudo daxctl reconfigure-device --mode=devdax --force <dev>, or drop the cmdline flag. HBM then shows as memory-only NUMA nodes"$'\n'
 }
 
 # Xeon built-in accelerators. `up` deploys DSA/IAA/QAT plugins once the host
@@ -1523,9 +1904,25 @@ doctor_cpu_accels() {
         lines+="  ok: hybrid CPU: P-cores $(hybrid_cpus core), E-cores $(efficient_cpus) — up leaves the NRI balloons policy to another stack (K3D_GPU_BALLOONS=${BALLOONS}, K3D_GPU_VENDORS=${VENDORS_REQUEST})"$'\n'
     elif has_hybrid; then
         lp=$(lowpower_cpus) e=$(efficient_cpus) cl=$(ecore_clusters) pp=$(pcore_physical_cpus)
-        lines+="  ok: hybrid CPU: P-cores $(hybrid_cpus core), E-cores ${e:-none}${lp:+, LP E-cores ${lp}} — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient|lowpower|ecluster|pcore-physical|latency"$'\n'
+        # With no non-LP E-cores (Lunar Lake) the efficient and ecluster balloons have no CPUs to offer.
+        lines+="  ok: hybrid CPU: P-cores $(hybrid_cpus core), E-cores ${e:-none}${lp:+, LP E-cores ${lp}} — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance${e:+|efficient}|lowpower${e:+|ecluster}|pcore-physical|latency"$'\n'
         [ -z "${cl}" ] || lines+="  ok: E-core clusters (shared L2): ${cl} — k3d-gpu.io/cores=ecluster gives a pod 4 E-cores of one cluster"$'\n'
         [ -z "${pp}" ] || lines+="  ok: physical P-cores (one thread per core): ${pp} — k3d-gpu.io/cores=pcore-physical and latency show pods one thread per core"$'\n'
+        # Lunar Lake (INTEL_LUNARLAKE_M, family 6 model 189) is hybrid_big_small in
+        # arch/x86/events/intel/core.c: every SKU on ARK has 4 P-cores without SMT
+        # and 4 LP E-cores, all in cpu_atom, and no cpu_lowpower PMU. The note
+        # compares PMU core counts only: whether the LP split above found them
+        # depends on cache sysfs, which a VM or container may not expose.
+        if [ "$(cpu_family_model)" = "6 189" ]; then
+            local lnl_p lnl_e
+            lnl_p=$(hybrid_cpus core) lnl_e=$(hybrid_cpus atom)
+            if ! lnl_p=$([ -z "${lnl_p}" ] || cpulist_expand "${lnl_p}") || ! lnl_e=$([ -z "${lnl_e}" ] || cpulist_expand "${lnl_e}"); then
+                lines+="  ${YLW}warn${RST}: cpu_core or cpu_atom lists a malformed CPU list ($(hybrid_cpus core) / $(hybrid_cpus atom)); the Lunar Lake core-count check is skipped"$'\n'
+            elif [ -n "$(hybrid_cpus lowpower)" ] || [ "$(grep -c . <<< "${lnl_p}")" -ne 4 ] \
+                || [ "$(grep -c . <<< "${lnl_e}")" -ne 4 ]; then
+                lines+="  note: Lunar Lake topology is 4 P-cores + 4 LP E-cores in cpu_atom; this host differs, so the balloons follow sysfs as read above"$'\n'
+            fi
+        fi
     elif is_active hybrid; then
         lines+="  ${RED}fail${RST}: hybrid requested but the CPU has no online P-core and E-core PMUs (/sys/devices/cpu_core, cpu_atom or cpu_lowpower)"$'\n'
         FAIL=1
@@ -1665,14 +2062,33 @@ exp_intel_gpu_pci() {
     done
 }
 
-# Unbound Intel GPUs: PCI device ids without the 0x, comma separated.
+# True when any Intel GPU (not an NPU) has no driver bound.
+exp_any_unbound_gpu() {
+    local dev
+    while read -r dev; do
+        [ -n "${dev}" ] && [ -z "$(bound_driver "${dev}")" ] || continue
+        [ -z "$(npu_platform "$(pci_id "${dev}/device")")" ] && return 0
+    done < <(exp_intel_gpu_pci)
+    return 1
+}
+
+# Unbound Intel GPUs xe.force_probe can bind: PCI device ids without the 0x,
+# comma separated. Skips Max (no xe id), a late id below its kernel, and every
+# GPU on a kernel with no xe (before 6.8).
 exp_unbound_gpu_ids() {
-    local dev ids=()
+    kernel_has_xe || return 0
+    local dev id name mink ids=()
     while read -r dev; do
         [ -n "${dev}" ] || continue
         [ -z "$(bound_driver "${dev}")" ] || continue
-        [ -z "$(npu_platform "$(cat "${dev}/device" 2>/dev/null)")" ] || continue
-        ids+=("$(pci_id "${dev}/device" | sed 's/^0x//')")
+        id=$(pci_id "${dev}/device")
+        [ -z "$(npu_platform "${id}")" ] || continue
+        IFS='|' read -r name mink _ <<< "$(intel_gpu_platform "${id}")"
+        # No xe id for Max; a late id below its kernel is missing from the table.
+        [ "${name}" != "Max (Ponte Vecchio)" ] || continue
+        if [ -n "${mink}" ] && kernel_lt "${mink}" && intel_gpu_id_late "${id}"; then continue; fi
+        ! intel_gpu_no_force_probe "${id}" || continue
+        ids+=("${id#0x}")
     done < <(exp_intel_gpu_pci)
     local IFS=,
     echo "${ids[*]}"
@@ -1733,7 +2149,7 @@ exp_npu_turbo() {
         status)   echo "OpenVINO 2026.4.0 NPU property NPU_TURBO; ivpu sched_mode param (HW scheduler auto-selected on new firmware)" ;;
         families) echo "Intel NPU: Meteor/Arrow Lake (37xx), Lunar Lake (40xx), Panther/Wildcat Lake (50xx), Nova Lake (60xx)" ;;
         value)    echo "sustained max NPU clocks for latency-bound agent inference; HW scheduler gives per-context priority and preemption" ;;
-        detect)   detect_npu; [ "${#NPU_IDS[@]}" -gt 0 ] ;;
+        detect)   detect_npu; npu_usable ;;
         prereq)   detect_npu
                   [ "${#NPU_IDS[@]}" -gt 0 ] && return 0
                   echo "no Intel NPU accel node bound to intel_vpu under /sys/class/accel (needs Meteor Lake or newer and the intel_vpu driver)"
@@ -1779,7 +2195,13 @@ exp_xe_force_probe() {
         value)    echo "brings a new GPU up before distro kernels support it, so agents can schedule on it" ;;
         detect)   [ -n "$(exp_unbound_gpu_ids)" ] ;;
         prereq)   [ -n "$(exp_unbound_gpu_ids)" ] && return 0
-                  echo "no unbound Intel GPU: every Intel GPU on this host already has a driver, or there is none (force_probe only helps a GPU the kernel did not bind)"
+                  if exp_any_unbound_gpu && ! kernel_has_xe; then
+                      echo "kernel $(kernel_release) has no xe (merged in Linux 6.8); see k3d-gpu doctor for the unbound GPU"
+                  elif exp_any_unbound_gpu; then
+                      echo "no unbound Intel GPU xe.force_probe can bind: Max has no upstream xe id, and an id newer than this kernel's xe table needs a newer kernel (see k3d-gpu doctor)"
+                  else
+                      echo "no unbound Intel GPU: every Intel GPU on this host already has a driver, or there is none (force_probe only helps a GPU the kernel did not bind)"
+                  fi
                   return 1 ;;
         apply)    ids=$(exp_unbound_gpu_ids)
                   EXP_HOST+=("xe-force-probe: Intel GPU ${ids} has no driver. Host change (taints the kernel; pre-production support can hang the GPU):"
@@ -1984,6 +2406,7 @@ doctor() {
         if is_active gaudi;  then doctor_gaudi;  fi
         if is_active wsl;    then doctor_wsl;    fi
     fi
+    if [ "${NPU_UNSERVED}" = 1 ]; then doctor_npu; fi
     if intel_dra; then doctor_dra; fi
     doctor_intel_unbound
     doctor_cpu_accels
@@ -2276,36 +2699,49 @@ perf_cpu() {
     fi
 }
 
-# Uncore (ring/mesh/LLC) clock limits. max_freq_khz and initial_max_freq_khz are
-# world-readable; current_freq_khz is 0400 and is not read
-# (drivers/platform/x86/intel/uncore-frequency/uncore-frequency-common.c).
+# Uncore (ring/LLC on client parts, mesh/LLC/memory controller on Xeon) frequency
+# range from intel_uncore_frequency: legacy package_NN_die_NN, or TPMI uncoreNN with
+# ELC. min/max/initial are world-readable; current_freq_khz is 0400 and is not read
+# (drivers/platform/x86/intel/uncore-frequency/uncore-frequency-common.c). Writes need
+# root, so a lowered ceiling is a suggestion with its exact revert. TPMI parts also
+# list package_XX_die_YY roots for the same clocks; only the clusters are reported so
+# one cap gives one finding. Pinning the floor high for LLM decode is pre-registered
+# as EXPERIMENTS.md H29 and stays unsuggested until it is measured.
 perf_uncore() {
-    local root=/sys/devices/system/cpu/intel_uncore_frequency d n mx im shown=0 tpmi=0
-    # TPMI parts list per-cluster uncoreNN plus package_XX_die_YY roots for the
-    # same clocks; report the clusters only so one cap gives one finding.
-    compgen -G "${SYSROOT}${root}/uncore[0-9]*" >/dev/null && tpmi=1
-    for d in "${SYSROOT}${root}"/*; do
+    local base=/sys/devices/system/cpu/intel_uncore_frequency d rel name imin imax mn mx elc n=0 tpmi=0
+    compgen -G "${SYSROOT}${base}/uncore[0-9]*" >/dev/null && tpmi=1
+    for d in "${SYSROOT}${base}"/package_*_die_* "${SYSROOT}${base}"/uncore[0-9]*; do
         [ -d "${d}" ] || continue
-        n=${d##*/}
-        [ "${tpmi}" = 0 ] || [[ "${n}" != package_* ]] || continue
-        mx=$(rd "${root}/${n}/max_freq_khz") im=$(rd "${root}/${n}/initial_max_freq_khz")
-        [[ "${mx}" =~ ^[0-9]+$ && "${im}" =~ ^[0-9]+$ ]] || continue
-        if [ "${shown}" = 0 ]; then
-            perf_section "Uncore frequency" \
-                "the uncore (ring/mesh, LLC, memory path) may reach its firmware maximum: max_freq_khz = initial_max_freq_khz" \
+        rel=${d#"${SYSROOT}"} name=${d##*/}
+        [ "${tpmi}" = 0 ] || [[ "${name}" != package_* ]] || continue
+        imin=$(rd "${rel}/initial_min_freq_khz") imax=$(rd "${rel}/initial_max_freq_khz")
+        mn=$(rd "${rel}/min_freq_khz") mx=$(rd "${rel}/max_freq_khz")
+        [[ "${imax}" =~ ^[0-9]+$ && "${mx}" =~ ^[0-9]+$ ]] || continue
+        # The floor is judged only when both min files read as numbers.
+        [[ "${imin}" =~ ^[0-9]+$ && "${mn}" =~ ^[0-9]+$ ]] || imin="" mn=""
+        if [ "${n}" -eq 0 ]; then
+            perf_section "Uncore frequency (intel_uncore_frequency)" \
+                "max_freq_khz at initial_max_freq_khz and min_freq_khz at initial_min_freq_khz: the hardware (UFS, or ELC on TPMI parts) picks the uncore clock inside the full range. A floor pinned high for decode is under test (EXPERIMENTS.md H29, PENDING), so it is not suggested" \
                 "https://docs.kernel.org/admin-guide/pm/intel_uncore_frequency_scaling.html"
-            shown=1
         fi
-        if lt "${mx}" "${im}"; then
-            perf_flag warn "${n}: uncore max capped at ${mx} kHz, below the firmware maximum ${im} kHz" "${root}/${n}/max_freq_khz, initial_max_freq_khz" \
-                "a lower uncore clock slows L3 and memory traffic, which bounds token generation" \
-                "cat ${root}/${n}/initial_max_freq_khz | sudo tee ${root}/${n}/max_freq_khz" \
-                "echo ${mx} | sudo tee ${root}/${n}/max_freq_khz"
-        elif [ "${mx}" -eq "${im}" ]; then
-            perf_ok "${n}: uncore max ${mx} kHz = firmware maximum" "${root}/${n}/max_freq_khz"
+        n=$((n + 1))
+        if lt "${mx}" "${imax}"; then
+            perf_flag warn "${name}: max_freq_khz ${mx} is below the hardware ceiling ${imax}" "${base}/${name}/max_freq_khz" \
+                "a lowered uncore ceiling caps ring/LLC (client) or mesh and memory-controller (Xeon) clock, and token generation reads every weight once per token through it" \
+                "echo ${imax} | sudo tee ${base}/${name}/max_freq_khz" "echo ${mx} | sudo tee ${base}/${name}/max_freq_khz"
+        elif lt "${imax}" "${mx}"; then
+            perf_info "${name}: max_freq_khz ${mx} is above initial_max_freq_khz ${imax} (raised after boot)" "${base}/${name}/max_freq_khz, initial_max_freq_khz"
+        elif [ -n "${mn}" ] && lt "${imin}" "${mn}"; then
+            perf_info "${name}: floor raised to ${mn} kHz (hardware floor ${imin}); costs idle package power, revert: echo ${imin} | sudo tee ${base}/${name}/min_freq_khz" \
+                "${base}/${name}/min_freq_khz"
+        elif [ -n "${mn}" ]; then
+            perf_ok "${name}: $((mn / 1000))-$((mx / 1000)) MHz, the full hardware range" "${base}/${name}/{min,max}_freq_khz"
         else
-            perf_info "${n}: uncore max ${mx} kHz is above initial_max_freq_khz ${im} kHz (raised after boot)" "${root}/${n}/max_freq_khz, initial_max_freq_khz"
+            perf_ok "${name}: max $((mx / 1000)) MHz, the hardware ceiling" "${base}/${name}/max_freq_khz"
         fi
+        elc=$(rd "${rel}/elc_floor_freq_khz")
+        [ -z "${elc}" ] || perf_info "${name}: ELC floor ${elc} kHz, thresholds low $(rd "${rel}/elc_low_threshold_percent")% high $(rd "${rel}/elc_high_threshold_percent")% (enable $(rd "${rel}/elc_high_threshold_enable"))" \
+            "${base}/${name}/elc_*"
     done
 }
 
@@ -3232,6 +3668,58 @@ cmd_doctor() {
     if [ "${perf}" -eq 1 ]; then doctor_perf; else doctor; fi
 }
 
+# ---- host proxy ----------------------------------------------------------------
+# k3s and its containerd read HTTP_PROXY, HTTPS_PROXY and NO_PROXY from their
+# environment (https://docs.k3s.io/advanced#configuring-an-http-proxy), and k3d
+# does not pass the host's on by itself, so `up` hands them to every node with
+# k3d --env (KEY=VALUE@NODEFILTER; a literal '@' is escaped as '\@'). NO_PROXY
+# gains loopback and the cluster's pod and service networks and DNS suffixes.
+
+# proxy_value <NAME>: $NAME, else its lower-case spelling.
+proxy_value() {
+    local lower="${1,,}"
+    printf '%s' "${!1:-${!lower:-}}"
+}
+
+# NO_PROXY for the cluster: the host's own entries plus the cluster's.
+proxy_no_proxy() {
+    local own
+    own=$(proxy_value NO_PROXY)
+    printf '%s' "${own:+${own},}127.0.0.1,localhost,10.42.0.0/16,10.43.0.0/16,.svc,.cluster.local"
+}
+
+# NAME=VALUE lines (HTTP_PROXY, HTTPS_PROXY, NO_PROXY); nothing without a proxy.
+proxy_env() {
+    local k v
+    [ -n "$(proxy_value HTTP_PROXY)$(proxy_value HTTPS_PROXY)" ] || return 0
+    for k in HTTP_PROXY HTTPS_PROXY; do
+        v=$(proxy_value "${k}")
+        [ -z "${v}" ] || printf '%s=%s\n' "${k}" "${v}"
+    done
+    printf 'NO_PROXY=%s\n' "$(proxy_no_proxy)"
+}
+
+# k3d create args carrying the proxy into every node.
+proxy_k3d_args() {
+    local kv
+    while IFS= read -r kv; do
+        [ -n "${kv}" ] && printf -- '--env=%s@server:*;agent:*\n' "${kv//@/\\@}"
+    done < <(proxy_env)
+}
+
+# YAML env entries (12-space indent) carrying the proxy into a container;
+# nothing without a proxy. Values are JSON-quoted.
+proxy_yaml_env() {
+    local kv v
+    while IFS= read -r kv; do
+        [ -n "${kv}" ] || continue
+        v=${kv#*=}
+        v=${v//\\/\\\\}
+        v=${v//\"/\\\"}
+        printf '            - name: %s\n              value: "%s"\n' "${kv%%=*}" "${v}"
+    done < <(proxy_env)
+}
+
 cmd_up() {
     require docker
     require k3d
@@ -3295,6 +3783,8 @@ cmd_up() {
     if is_active gaudi; then
         create_args+=(--k3s-node-label="habana.ai/gaudi.present=true@server:*;agent:*")
     fi
+    # Auto detection leaves out NPUs the bundled plugin does not serve
+    # (resolve_vendors); an explicit K3D_GPU_VENDORS=npu keeps the label.
     if is_active npu; then
         create_args+=(--k3s-node-label="intel.feature.node.kubernetes.io/npu=true@server:*;agent:*")
         # Pods get /dev/accel/accelN with the host's numeric group; publish it so
@@ -3395,6 +3885,10 @@ cmd_up() {
     while read -r arg; do
         [ -n "${arg}" ] && create_args+=("${arg}")
     done < <(exp_k3d_args)
+    while IFS= read -r arg; do
+        [ -n "${arg}" ] && create_args+=("${arg}")
+    done < <(proxy_k3d_args)
+    [ -z "$(proxy_env)" ] || info "Proxy: HTTP(S)_PROXY and NO_PROXY (plus the cluster networks) go to every node"
     exp_print_host
 
     # k3d cannot change an existing cluster's node image; name the image it runs.
@@ -4502,6 +4996,59 @@ cmd_sandbox() {
     esac
 }
 
+# ---- model-share ----------------------------------------------------------------
+# N agent replicas mount one model OCI image as a read-only image volume and mmap
+# it. Sharing one page-cache copy needs three things, each detected here:
+#   snapshotter  overlayfs keeps one lower dir per layer, so every pod's view
+#                resolves to the same inodes; native copies the layer per view.
+#                Read from the k3s-generated containerd config in the server node.
+#   scope        CPU-resident weights only. A GPU or NPU runtime copies the
+#                weights into per-process device buffers, so each replica pays for
+#                its own device copy; the template requests no device.
+#   pinning      a tag can resolve to a new digest on another node or a re-pull.
+# The measured effect is EXPERIMENTS.md H28 (PENDING until the probe runs).
+
+# Snapshotter of the running cluster's server node, or nothing when there is none.
+ms_snapshotter() {
+    local node="k3d-${CLUSTER}-server-0"
+    type -P docker >/dev/null || return 0
+    docker exec "${node}" sh -c 'cat /var/lib/rancher/k3s/agent/etc/containerd/config*.toml' 2>/dev/null \
+        | sed -n 's/^[[:space:]]*snapshotter[[:space:]]*=[[:space:]]*"\([a-z0-9_-]*\)".*/\1/p' | head -n 1
+}
+
+cmd_model_share() {
+    local image="" agent="" replicas=1 name=model-share snap
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --image)       image="${2:-}"; shift ;;
+            --agent-image) agent="${2:-}"; shift ;;
+            --replicas)    replicas="${2:-}"; shift ;;
+            --name)        name="${2:-}"; shift ;;
+            *) err "usage: k3d-gpu model-share --image REF --agent-image REF [--replicas N] [--name NAME]" ;;
+        esac
+        shift
+    done
+    # [host[:port]/]path[:tag][@sha256:digest]; a k3d registry always has a port.
+    local ref='^[a-z0-9][a-z0-9._-]*(:[0-9]{1,5}(/[a-z0-9][a-z0-9._-]*)+|(/[a-z0-9][a-z0-9._-]*)*)(:[A-Za-z0-9._-]+)?(@sha256:[0-9a-f]{64})?$'
+    [[ "${image}" =~ ${ref} ]] || err "model-share: --image '${image}' is not an image reference"
+    [[ "${agent}" =~ ${ref} ]] || err "model-share: --agent-image '${agent}' is not an image reference"
+    [[ "${replicas}" =~ ^[1-9][0-9]{0,3}$ ]] || err "model-share: --replicas must be 1-9999, got '${replicas}'"
+    [[ "${name}" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]] || err "model-share: --name '${name}' is not a DNS-1123 label"
+    [[ "${image}" == *@sha256:* ]] \
+        || warn "model-share: ${image} is not pinned by digest; replicas on a re-pull can mount different weights (append @sha256:...)"
+    [ -f "${MODEL_SHARE_MANIFEST}" ] || err "${MODEL_SHARE_MANIFEST} not found"
+    snap=$(ms_snapshotter || true)
+    case "${snap}" in
+        "") info "model-share: no running cluster '${CLUSTER}' to read the snapshotter from; sharing needs overlayfs (the k3s default)" >&2 ;;
+        overlayfs) ;;
+        *) warn "model-share: cluster '${CLUSTER}' uses the ${snap} snapshotter; it can give each pod its own copy of the layer, so budget ${replicas} x model size. Recreate it on a filesystem that supports overlayfs (k3d-gpu down && k3d-gpu up)" ;;
+    esac
+    echo "# k3d-gpu model-share: replicas=${replicas} snapshotter=${snap:-unknown}"
+    sed -e "/^[[:space:]]*#/d" \
+        -e "s|K3D_GPU_MS_AGENT_IMAGE|${agent}|g" -e "s|K3D_GPU_MS_IMAGE|${image}|g" \
+        -e "s|^  replicas: 1$|  replicas: ${replicas}|" -e "s|K3D_GPU_MS_NAME|${name}|g" "${MODEL_SHARE_MANIFEST}"
+}
+
 # ---- host setup -----------------------------------------------------------------
 # `host-setup` checks the host userspace each detected accelerator needs, then
 # prints the commands that install it (Intel compute runtime, Level Zero, media
@@ -4748,9 +5295,22 @@ hs_checks() {
         read -r id drv <<< "${e}"
         IFS='|' read -r name mink fw <<< "$(intel_gpu_platform "${id}")"
         [ -n "${name}" ] || continue
-        if [ -n "${mink}" ] && [ -z "${drv}" ] && kernel_lt "${mink}" && [ "${fw#i915/}" != "${fw}" ]; then
+        if [ "${name}" = "Max (Ponte Vecchio)" ]; then
+            [ -n "${drv}" ] || notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) has no upstream driver (no i915 or xe id); Intel's supported driver is the out-of-tree intel-i915-dkms LTS (2523.x)"$'\n'
+        elif [ "${name}" = "Flex (ATS-M)" ]; then
+            if [ -z "${drv}" ] && kernel_has_xe; then
+                notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs intel-i915-dkms LTS (2523.x), or xe force-probe (not production upstream; exact apply and revert: k3d-gpu doctor --experimental, xe-force-probe)"$'\n'
+            elif [ -z "${drv}" ]; then
+                notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs intel-i915-dkms LTS (2523.x); kernel $(kernel_release) has no xe (merged in 6.8)"$'\n'
+            fi
+        elif [ -n "${mink}" ] && [ -z "${drv}" ] && kernel_lt "${mink}" && intel_gpu_id_late "${id}"; then
+            # The id is missing from this kernel's driver table; force_probe cannot add it.
+            notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs kernel ${mink}+ (running $(kernel_release)); force_probe cannot add an id missing from the driver's table"$'\n'
+        elif [ -n "${mink}" ] && [ -z "${drv}" ] && kernel_lt "${mink}" && [ "${fw#i915/}" != "${fw}" ]; then
             # i915 is the default driver for this part; xe does not support it on these kernels.
             notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs the boot option i915.force_probe=${id#0x} (or kernel ${mink}+)"$'\n'
+        elif [ -z "${drv}" ] && intel_gpu_no_force_probe "${id}" && kernel_lt "${mink}"; then
+            notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs kernel ${mink}+ (running $(kernel_release)); force_probe cannot bind it on older kernels"$'\n'
         elif [ -z "${mink}" ] || { [ -z "${drv}" ] && kernel_lt "${mink}"; }; then
             notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs the boot options xe.force_probe=${id#0x} i915.force_probe=!${id#0x}${mink:+ (or kernel ${mink}+)}"$'\n'
         elif kernel_lt "${mink}"; then
@@ -5016,8 +5576,11 @@ agent_config() {
     # Qwen3 emits hermes-style tool calls and <think> reasoning (hermes3 is OVMS's
     # name for the parser, hermes vLLM's). Any other model gets OVMS's own parser
     # detection from its chat template, or no parser on vLLM, unless these are set
-    # (an empty value turns a parser off).
-    if [ "${AGENT_MODEL}" = "${AGENT_DEFAULT_MODEL}" ]; then
+    # (an empty value turns a parser off). The int8 and fp16 siblings of the OVMS
+    # default ('k3d-gpu tune' may pick one) are the same model and get its parsers.
+    local family=${AGENT_DEFAULT_MODEL%-int4-ov}
+    if [ "${AGENT_MODEL}" = "${AGENT_DEFAULT_MODEL}" ] || { [ "${AGENT_APP}" = ovms ] \
+        && { [ "${AGENT_MODEL}" = "${family}-int8-ov" ] || [ "${AGENT_MODEL}" = "${family}-fp16-ov" ]; }; }; then
         if [ "${AGENT_APP}" = vllm ]; then
             AGENT_TOOL_PARSER="${K3D_GPU_AGENT_TOOL_PARSER-hermes}"
         else
@@ -5128,8 +5691,21 @@ agent_device() {
                 || err "K3D_GPU_AGENT_DEVICE=NPU but the cluster advertises no Intel NPU (npu.intel.com/accel)"
             echo "NPU npu.intel.com/accel"
             ;;
+        # OVMS only: the GPU runs what it supports and hands the rest of the graph
+        # to the CPU (model_server docs/parameters.md: HETERO:<...> for text_generation).
+        HETERO:GPU,CPU)
+            [ "${AGENT_APP}" = ovms ] || err "K3D_GPU_AGENT_DEVICE=${want} is an OpenVINO device: use K3D_GPU_AGENT_BACKEND=ovms"
+            if [ -n "${refused}" ]; then
+                IFS='|' read -r bdf why fix <<< "${refused}"
+                err "K3D_GPU_AGENT_DEVICE=${want} but Intel GPU ${bdf} is refused: ${why}; fix: ${fix}"
+            fi
+            for res in gpu.intel.com/xe gpu.intel.com/i915; do
+                if [ "$(resource_total "${res}")" -gt 0 ]; then echo "HETERO:GPU,CPU ${res}"; return 0; fi
+            done
+            err "K3D_GPU_AGENT_DEVICE=${want} but the cluster advertises no Intel GPU (gpu.intel.com/xe or i915)"
+            ;;
         CPU) echo "CPU -" ;;
-        *) err "unknown K3D_GPU_AGENT_DEVICE '${want}' (use auto, CPU, GPU, NPU or HPU)" ;;
+        *) err "unknown K3D_GPU_AGENT_DEVICE '${want}' (use auto, CPU, GPU, NPU, HPU or HETERO:GPU,CPU)" ;;
     esac
 }
 
@@ -5143,6 +5719,42 @@ agent_select() {
     fi
 }
 
+# OVMS Fast Draft speculative decoding: "<draft device> <extra resource or ->", or
+# "- -" for none. K3D_GPU_AGENT_DRAFT: off (default) | auto | CPU | GPU | NPU.
+# off is the default until a measured speedup exists: a draft on another engine
+# lost on Lunar Lake (openvinotoolkit/openvino discussions/36484) and H22 is the
+# host measurement. auto drafts on the target's own device:
+# GenAI 2026.4.1 runs draft then verify serially (EXPERIMENTS.md H22), so a draft
+# on another engine pays only if it is faster there, and no measurement says so
+# yet. A named device overrides; one the target does not already hold adds its
+# resource to the pod.
+AGENT_DRAFT_MODEL="${K3D_GPU_AGENT_DRAFT_MODEL:-OpenVINO/Qwen3-0.6B-int4-ov}"
+agent_draft() {
+    local target=$1 want=${K3D_GPU_AGENT_DRAFT:-off} res
+    case "${want^^}" in
+        OFF|0|"") echo "- -"; return 0 ;;
+        AUTO) echo "${target} -"; return 0 ;;
+        CPU|GPU|NPU) ;;
+        *) err "unknown K3D_GPU_AGENT_DRAFT '${want}' (use off, auto, CPU, GPU or NPU)" ;;
+    esac
+    want=${want^^}
+    if [ "${want}" = "${target}" ] || [ "${want}" = CPU ]; then echo "${want} -"; return 0; fi
+    case "${want}" in
+        GPU)
+            [ -z "$(intel_gpu_refusal)" ] || err "K3D_GPU_AGENT_DRAFT=GPU but the Intel GPU is refused — see 'k3d-gpu doctor'"
+            for res in gpu.intel.com/xe gpu.intel.com/i915; do
+                if [ "$(resource_total "${res}")" -gt 0 ]; then echo "GPU ${res}"; return 0; fi
+            done
+            err "K3D_GPU_AGENT_DRAFT=GPU but the cluster advertises no Intel GPU (gpu.intel.com/xe or i915)"
+            ;;
+        NPU)
+            [ "$(resource_total npu.intel.com/accel)" -gt 0 ] \
+                || err "K3D_GPU_AGENT_DRAFT=NPU but the cluster advertises no Intel NPU (npu.intel.com/accel)"
+            echo "NPU npu.intel.com/accel"
+            ;;
+    esac
+}
+
 # Group owning the device node the pod is handed: the Intel render node for GPU,
 # the NPU accel node for NPU. k3d nodes share the host /dev, so the host GID is
 # the one that matters. The Intel plugins inject devices through CDI, which
@@ -5151,7 +5763,7 @@ agent_select() {
 agent_device_gid() {
     local dev node
     case "$1" in
-        GPU)
+        GPU|HETERO:*)
             for dev in "${SYSROOT}"/sys/class/drm/renderD*/device; do
                 [ "$(cat "${dev}/vendor" 2>/dev/null)" = "0x8086" ] || continue
                 case "$(bound_driver "${dev}")" in xe|i915) ;; *) continue ;; esac
@@ -5164,15 +5776,25 @@ agent_device_gid() {
     return 0
 }
 
+# Core type of the LLM's balloon on a hybrid node: P-cores unless
+# K3D_GPU_AGENT_CORES=efficient (which 'k3d-gpu tune' may pick).
+agent_cores() {
+    local cores=${K3D_GPU_AGENT_CORES:-performance}
+    [[ "${cores}" =~ ^(performance|efficient)$ ]] || err "K3D_GPU_AGENT_CORES must be performance or efficient, got '${cores}'"
+    echo "${cores}"
+}
+
 # CPU request, which is also the size of the balloon on a hybrid node. CPU
-# inference takes every P-core (hybrid) or half the node; GPU/NPU inference only
-# needs host threads for tokenizing and scheduling.
+# inference takes every core of the balloon's type (hybrid; P-cores by default)
+# or half the node; GPU/NPU inference only needs host threads for tokenizing
+# and scheduling.
 agent_cpus() {
-    local device=$1 hybrid=$2 n
+    local device=$1 hybrid=$2 n type=core
     if [ -n "${K3D_GPU_AGENT_CPUS:-}" ]; then echo "${K3D_GPU_AGENT_CPUS}"; return 0; fi
     if [ "${device}" != CPU ]; then echo 2; return 0; fi
     if [ -n "${hybrid}" ]; then
-        n=$(cpu_list_count "$(hybrid_cpus core)")
+        [ "$(agent_cores)" = performance ] || type=atom
+        n=$(cpu_list_count "$(hybrid_cpus "${type}")")
     else
         n=$(( $(max_node_cpus) / 2 ))
     fi
@@ -5190,18 +5812,60 @@ agent_manifest() {
     fi
     cpus=$(agent_cpus "${device}" "${hybrid}")
     [ "${device}" = CPU ] || gid=$(agent_device_gid "${device}")
+    [ "${device}" != CPU ] || agent_autoquant
     if [ "${AGENT_APP}" = vllm ]; then vllm_manifest; return 0; fi
     local via=""
     [ "${res}" = - ] || via=" (${res})"
-    info "agent: ${AGENT_MODEL} as '${AGENT_MODEL_NAME}' on ${device}${via}${amx:+ (AMX node)}${hybrid:+, P-cores}, ${cpus} CPU(s)" >&2
+    local cores cname=P-cores
+    cores=$(agent_cores)
+    [ "${cores}" = performance ] || cname=E-cores
+    info "agent: ${AGENT_MODEL} as '${AGENT_MODEL_NAME}' on ${device}${via}${amx:+ (AMX node)}${hybrid:+, ${cname}}, ${cpus} CPU(s)" >&2
 
-    local item="            - " args
+    local item="            - " args v draft draft_res draft_sel draft_gid
     args="${item}--target_device=${device}"
+    draft_sel=$(agent_draft "${device}") || exit 1
+    read -r draft draft_res <<< "${draft_sel}"
+    if [ "${draft}" != - ]; then
+        info "agent: Fast Draft ${AGENT_DRAFT_MODEL} on ${draft}" >&2
+        args+=$'\n'"${item}--draft_source_model=${AGENT_DRAFT_MODEL}"$'\n'"${item}--draft_device=${draft}"
+        # A draft on a second accelerator needs that device's group too (GPU + NPU).
+        if [ "${draft}" != CPU ] && [ "${draft}" != "${device}" ]; then
+            draft_gid=$(agent_device_gid "${draft}")
+            if [ -n "${draft_gid}" ] && [ "${draft_gid}" != "${gid}" ]; then
+                gid=${gid:+${gid}, }${draft_gid}
+            fi
+        fi
+    fi
     [ -z "${AGENT_TOOL_PARSER}" ] || args+=$'\n'"${item}--tool_parser=${AGENT_TOOL_PARSER}"
     [ -z "${AGENT_REASONING_PARSER}" ] || args+=$'\n'"${item}--reasoning_parser=${AGENT_REASONING_PARSER}"
+    # Serving knobs ('k3d-gpu tune' sets these; a user can too). --pull rewrites
+    # graph.pbtxt on every start, so a change applies without a re-download.
+    v=${K3D_GPU_AGENT_MAX_NUM_SEQS:-}
+    if [ -n "${v}" ]; then
+        [[ "${v}" =~ ^[0-9]{1,4}$ ]] || err "K3D_GPU_AGENT_MAX_NUM_SEQS must be a number, got '${v}'"
+        args+=$'\n'"${item}--max_num_seqs=${v}"
+    fi
+    v=${K3D_GPU_AGENT_CACHE_SIZE:-}
+    if [ -n "${v}" ]; then
+        [[ "${v}" =~ ^[0-9]{1,3}$ ]] || err "K3D_GPU_AGENT_CACHE_SIZE must be a number of GB, got '${v}'"
+        args+=$'\n'"${item}--cache_size=${v}"
+    fi
+    v=${K3D_GPU_AGENT_PREFIX_CACHING:-}
+    if [ -n "${v}" ]; then
+        [[ "${v}" =~ ^(true|false)$ ]] || err "K3D_GPU_AGENT_PREFIX_CACHING must be true or false, got '${v}'"
+        args+=$'\n'"${item}--enable_prefix_caching=${v}"
+    fi
+    v=${K3D_GPU_AGENT_PLUGIN_CONFIG:-}
+    if [ -n "${v}" ]; then
+        # A flat JSON object of plain keys and values: it sits in a single-quoted YAML scalar.
+        [[ "${v}" =~ ^\{[A-Za-z0-9_\":,.\ -]*\}$ ]] || err "K3D_GPU_AGENT_PLUGIN_CONFIG must be a flat JSON object, got '${v}'"
+        args+=$'\n'"${item}'--plugin_config=${v}'"
+    fi
     # Optional pod fields, built here: quotes inside ${x:+...} in a heredoc are removed.
-    local podlabels="" podspec=""
-    [ -z "${hybrid}" ] || podlabels=$'\n        k3d-gpu.io/cores: performance'
+    local podlabels="" podspec="" pullenv=""
+    pullenv=$(proxy_yaml_env)
+    [ -z "${pullenv}" ] || pullenv=$'\n          env:\n'"${pullenv}"
+    [ -z "${hybrid}" ] || podlabels=$'\n        k3d-gpu.io/cores: '"${cores}"
     [ -z "${gid}" ] || podspec+=$'\n        supplementalGroups: ['"${gid}"']'
     [ -z "${amx}" ] || podspec+=$'\n      nodeSelector:\n        feature.node.kubernetes.io/cpu-cpuid.AMXTILE: "true"'
     # auto chose the GPU because a node has XMX: keep the pod on such a node.
@@ -5247,7 +5911,7 @@ spec:
       labels:
         app: ovms${podlabels}
       annotations:
-        k3d-gpu.io/agent-device: ${device}
+        k3d-gpu.io/agent-device: ${device}${AGENT_AUTOQUANT_ANN:-}
     spec:
       securityContext:
         runAsUser: 5000
@@ -5259,7 +5923,7 @@ spec:
         # graph is rewritten, so a device change takes effect with no download.
         - name: pull
           image: ${AGENT_IMAGE}
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: IfNotPresent${pullenv}
           args:
             - --pull
             - --source_model=${AGENT_MODEL}
@@ -5294,7 +5958,11 @@ ${args}
               cpu: "${cpus}"
               memory: ${AGENT_MEMORY}
 EOF
-    [ "${res}" = - ] || printf '            limits:\n              %s: 1\n' "${res}"
+    if [ "${res}" != - ] || [ "${draft_res}" != - ]; then
+        printf '            limits:\n'
+        [ "${res}" = - ] || printf '              %s: 1\n' "${res}"
+        [ "${draft_res}" = - ] || printf '              %s: 1\n' "${draft_res}"
+    fi
     cat <<EOF
           volumeMounts:
             - name: models
@@ -6081,6 +6749,7 @@ cmd_agent_up() {
     local addons manifest app svc deploy
     addons=$(agent_addons "$@")
     kubectl get nodes >/dev/null 2>&1 || err "no cluster reachable — run 'k3d-gpu up' first"
+    tune_apply_profile
     agent_select
     local logs="kubectl -n ${AGENT_NS} logs deploy/${AGENT_APP}"
     if [ -z "${addons}" ]; then
@@ -6112,6 +6781,11 @@ cmd_agent_up() {
             video) agent_video_check ;;
         esac
     done
+    # agent_manifest ran in a subshell: read the weights it rendered (autoquant may
+    # have swapped them) so the commit below is the served model's.
+    local served
+    served=$(grep -m1 -o -- '--source_model=[^[:space:]]*' <<< "${manifest}" | cut -d= -f2- || true)
+    [ -z "${served}" ] || AGENT_MODEL=${served}
     if [ "${AGENT_APP}" = vllm ]; then
         info "model ${AGENT_MODEL} at revision ${AGENT_REVISION:-main (unpinned; set K3D_GPU_AGENT_REVISION)}"
     else
@@ -6156,6 +6830,22 @@ cmd_agent_down() {
     info "Model caches kept in the namespace's PVCs. Remove everything: kubectl delete namespace ${AGENT_NS}"
 }
 
+# Shared-prefix report of agent manifests (console/shared_prefix.py, H25). The
+# KV block size follows the device: --device, else K3D_GPU_AGENT_DEVICE when it
+# names CPU or GPU, else CPU, reported as assumed (auto resolves only at deploy).
+cmd_agent_prefix() {
+    require python3
+    local dir dev=CPU a
+    dir=$(console_dir) || err "agent prefix: console/shared_prefix.py not found next to the launcher or in ${SHARE_DIR}/console (set K3D_GPU_CONSOLE)"
+    [ -f "${dir}/shared_prefix.py" ] || err "agent prefix: ${dir}/shared_prefix.py missing"
+    local assumed=--device-assumed
+    case "${K3D_GPU_AGENT_DEVICE:-}" in [Cc][Pp][Uu]|[Gg][Pp][Uu]) dev=${K3D_GPU_AGENT_DEVICE^^} assumed="" ;; esac
+    for a in "$@"; do [ "${a}" != --device ] || { dev=""; assumed=""; }; done
+    [ $# -gt 0 ] || err "usage: k3d-gpu agent prefix [--json] [--device CPU|GPU] [--min-tokens N] [--kv-kib K] [--tokenizer FILE] FILE|DIR..."
+    [ "${AGENT_BACKEND}" = ovms ] || warn "agent prefix: KV block sizes and the plan are OVMS's; backend ${AGENT_BACKEND} is not modelled"
+    python3 "${dir}/shared_prefix.py" ${dev:+--device "${dev}"} ${assumed:+"${assumed}"} "$@"
+}
+
 cmd_agent() {
     case "${AGENT_BACKEND}" in
         ovms|vllm|llm-scaler) ;;
@@ -6169,13 +6859,749 @@ cmd_agent() {
         status)   cmd_agent_status ;;
         manifest)
             addons=$(agent_addons "$@")
+            tune_apply_profile >&2
             agent_select
             if [ -z "${addons}" ]; then agent_manifest; else
                 # shellcheck disable=SC2086 # word list of add-on names
                 agent_stack_manifest ${addons}
             fi ;;
-        *) err "usage: k3d-gpu agent up|down|status|manifest [--with vlm,stt,video]" ;;
+        prefix)   cmd_agent_prefix "$@" ;;
+        *) err "usage: k3d-gpu agent up|down|status|manifest [--with vlm,stt,video] | prefix FILE|DIR..." ;;
     esac
+}
+
+# ---- quickstart and uninstall: the retail path ---------------------------------
+# `quickstart` takes a machine with docker, k3d and kubectl to a chat UI on
+# 127.0.0.1 in one command: cluster, LLM server, Open WebUI with an admin
+# account, and a port-forward. Every step reads the live state first and skips
+# what is already done, so a second run changes nothing and an interrupted run
+# resumes (OVMS --pull resumes a half-downloaded model from its .lfs_part files).
+# Detection picks the config: the backend and device follow `agent up`'s auto
+# (a Gaudi gets vLLM), and on the OVMS path the model follows the host's RAM
+# tier. Every K3D_GPU_AGENT_* the user sets wins.
+# `uninstall` removes what quickstart made: the port-forward, the cluster when
+# quickstart created it (with the model and chat volumes inside), and
+# quickstart's state files.
+
+QS_DIR="${K3D_GPU_QUICKSTART_DIR:-${XDG_STATE_HOME:-${HOME:-}/.local/state}/k3d-gpu/quickstart}"
+QS_STEPS=5
+QS_MIN_MI=2048  # smallest memory request quickstart gives the LLM server
+
+# This launcher's path; quickstart runs its `up` and `agent up` through it.
+qs_self() { readlink -f "${BASH_SOURCE[0]}"; }
+
+# Chat UI manifest: K3D_GPU_CHAT_UI, then the repo checkout, then the packaged copy.
+chat_ui_manifest() {
+    local d self
+    self=$(readlink -f "${BASH_SOURCE[0]}")
+    for d in "${K3D_GPU_CHAT_UI:-}" "$(dirname "${self}")/../share/agent-chat-ui.yml" "${SHARE_DIR}/agent-chat-ui.yml"; do
+        if [ -n "${d}" ] && [ -f "${d}" ]; then echo "${d}"; return 0; fi
+    done
+    return 1
+}
+
+# qs_model_mi <model>: the memory request (MiB) a tier model wants; 0 when the
+# model is not one of the tiers.
+qs_model_mi() {
+    case "$1" in
+        *Qwen3-1.7B*) echo 4096 ;;
+        *Qwen3-4B*)   echo 6144 ;;
+        *Qwen3-8B*)   echo 10240 ;;
+        *)            echo 0 ;;
+    esac
+}
+
+# ---- tune: search the agent's serving config, keep only a proven winner -------
+# The search driver is console/tune.py (python3 stdlib); this side owns every
+# cluster action. A trial redeploys the OVMS agent with K3D_GPU_AGENT_* overrides
+# (the same variables a user can set by hand), so tuning only ever changes
+# k3d-gpu's own Deployment in the agent namespace, never host settings.
+
+TUNE_DIR="${K3D_GPU_TUNE_DIR:-${XDG_CONFIG_HOME:-${HOME}/.config}/k3d-gpu/tune}"
+TUNE_MODEL="${K3D_GPU_AGENT_MODEL:-OpenVINO/Qwen3-4B-int4-ov}"
+TUNE_PRECISIONS="int4,int8,fp16"
+TUNE_DEVICES=""                  # empty: every device the cluster schedules (--devices narrows it)
+TUNE_ENERGY="${TUNE_ENERGY:-}"   # set in a trial's environment by 'tune run --energy'
+TUNE_HETERO=1
+# The only variables a profile may set (tune.py validates every value too).
+TUNE_ENV_KEYS=" K3D_GPU_AGENT_DEVICE K3D_GPU_AGENT_MODEL K3D_GPU_AGENT_CPUS K3D_GPU_AGENT_CORES K3D_GPU_AGENT_PLUGIN_CONFIG K3D_GPU_AGENT_MAX_NUM_SEQS K3D_GPU_AGENT_CACHE_SIZE K3D_GPU_AGENT_PREFIX_CACHING "
+
+# tune.py: K3D_GPU_TUNE_PY, then next to a repo checkout, then the packaged copy.
+tune_py_path() {
+    local self d
+    self=$(readlink -f "${BASH_SOURCE[0]}")
+    for d in "${K3D_GPU_TUNE_PY:-}" "$(dirname "${self}")/../console/tune.py" "${SHARE_DIR}/console/tune.py"; do
+        if [ -n "${d}" ] && [ -f "${d}" ]; then echo "${d}"; return 0; fi
+    done
+    return 1
+}
+
+# Directory with llm_load.py and energy.sh: K3D_GPU_BENCH, the repo's bench/, the packaged copy.
+tune_bench_dir() {
+    local self d
+    self=$(readlink -f "${BASH_SOURCE[0]}")
+    for d in "${K3D_GPU_BENCH:-}" "$(dirname "${self}")/../bench" "${SHARE_DIR}/bench"; do
+        if [ -n "${d}" ] && [ -f "${d}/llm_load.py" ]; then echo "${d}"; return 0; fi
+    done
+    return 1
+}
+
+tune_py() {
+    local py
+    command -v python3 >/dev/null 2>&1 || err "'k3d-gpu tune' needs python3"
+    py=$(tune_py_path) || err "tune driver console/tune.py not found next to the launcher or in ${SHARE_DIR}/console (set K3D_GPU_TUNE_PY)"
+    python3 "${py}" "$@"
+}
+
+# CPU feature flags the search space depends on (CPU plugin precisions).
+tune_cpu_flags() {
+    local flags
+    flags=$(grep -m1 '^flags' "${SYSROOT}/proc/cpuinfo" 2>/dev/null || true)
+    tr ' ' '\n' <<< "${flags#*:}" | grep -xE 'avx512_bf16|avx512_fp16|amx_bf16|amx_fp16|amx_int8|avx_vnni' | sort | paste -sd, || true
+}
+
+# What decides how fast a config runs here: CPU, core split, accelerators,
+# kernel, server image and model. A profile only applies when all of it matches.
+tune_fingerprint_inputs() {
+    detect_intel
+    detect_npu
+    local model
+    model=$(sed -n 's/^model name[[:space:]]*:[[:space:]]*//p' "${SYSROOT}/proc/cpuinfo" 2>/dev/null | sed -n 1p)
+    echo "cpu=${model:-unknown}"
+    echo "cpus=$(cat "${SYSROOT}/sys/devices/system/cpu/online" 2>/dev/null || echo '?')"
+    echo "p_cores=$(hybrid_cpus core)"
+    echo "e_cores=$(hybrid_cpus atom)"
+    echo "intel_gpu=${INTEL_DRIVERS[*]+${INTEL_DRIVERS[*]}}"
+    echo "npu=${NPU_IDS[*]+${NPU_IDS[*]}}"
+    echo "kernel=$(kernel_release | cut -d. -f1-2)"
+    echo "agent_image=${K3D_GPU_AGENT_IMAGE:-${AGENT_OVMS_IMAGE}}"
+    echo "agent_model=${TUNE_MODEL}"
+}
+
+tune_fingerprint() { tune_fingerprint_inputs | sha256sum | cut -c1-16; }
+
+tune_profile_path() { echo "${TUNE_DIR}/$(tune_fingerprint).json"; }
+
+# Export this host's tuned overrides before 'agent up' builds its manifest, then
+# re-read the agent settings. A variable the user already set wins;
+# K3D_GPU_TUNE=off skips the profile, and so does a vLLM backend (tune only
+# searches OVMS).
+TUNE_APPLIED=()  # "KEY=VALUE" per override tune_apply_profile exported
+tune_apply_profile() {
+    TUNE_APPLIED=()
+    [ "${K3D_GPU_TUNE:-auto}" != off ] || return 0
+    [ "${AGENT_BACKEND}" = ovms ] || return 0
+    local path py key val applied=""
+    path=$(tune_profile_path)
+    [ -f "${path}" ] || return 0
+    command -v python3 >/dev/null 2>&1 || { warn "tuned profile ${path} ignored: python3 not found"; return 0; }
+    py=$(tune_py_path) || { warn "tuned profile ${path} ignored: console/tune.py not found"; return 0; }
+    while IFS='=' read -r key val; do
+        [[ "${TUNE_ENV_KEYS}" == *" ${key} "* ]] || continue
+        [ -z "${!key+x}" ] || continue
+        export "${key}=${val}"
+        TUNE_APPLIED+=("${key}=${val}")
+        applied+=" ${key#K3D_GPU_AGENT_}=${val}"
+    done < <(python3 "${py}" env --profile "${path}" --fingerprint "$(tune_fingerprint)" 2>/dev/null || true)
+    [ -n "${applied}" ] || return 0
+    info "agent: tuned profile ${path}:${applied} (K3D_GPU_TUNE=off ignores it)"
+    agent_config
+}
+
+# Facts JSON for tune.py: devices the cluster can schedule, the device 'agent up'
+# picks by itself, cores, CPU flags.
+tune_facts() {
+    local devices="CPU" default p=0 e=0 res d out=""
+    if [ -z "$(intel_gpu_refusal)" ]; then
+        for res in gpu.intel.com/xe gpu.intel.com/i915; do
+            if [ "$(resource_total "${res}")" -gt 0 ]; then devices+=",GPU"; break; fi
+        done
+    fi
+    [ "$(resource_total npu.intel.com/accel)" -eq 0 ] || devices+=",NPU"
+    default=$(unset K3D_GPU_AGENT_DEVICE; agent_device) || exit 1
+    default=${default%% *}
+    case "${default}" in
+        CPU|GPU|NPU) ;;
+        *) err "'agent up' picks ${default} here, which 'k3d-gpu tune' does not search (it tunes OVMS on CPU, GPU and NPU)" ;;
+    esac
+    if [ -n "${TUNE_DEVICES}" ]; then
+        for d in ${TUNE_DEVICES//,/ }; do
+            [[ ",${devices}," == *",${d^^},"* ]] || err "--devices ${d}: the cluster does not schedule it (it has ${devices})"
+            out+=",${d^^}"
+        done
+        devices=${out#,}
+    fi
+    if [ -n "$(labelled_nodes "${HYBRID_LABEL}")" ]; then
+        p=$(cpu_list_count "$(hybrid_cpus core)")
+        e=$(cpu_list_count "$(hybrid_cpus atom)")
+    fi
+    tune_py facts --devices "${devices}" --default-device "${default}" ${TUNE_HETERO:+--hetero} \
+        --p-cpus "${p}" --e-cpus "${e}" --node-cpus "$(max_node_cpus)" \
+        --cpu-flags "$(tune_cpu_flags)" --model "${TUNE_MODEL}" --precisions "${TUNE_PRECISIONS}"
+}
+
+tune_need_bench() {
+    local dir
+    dir=$(tune_bench_dir) || err "bench/llm_load.py not found next to the launcher or in ${SHARE_DIR}/bench (set K3D_GPU_BENCH)"
+    if [ -n "${TUNE_ENERGY}" ] && [ ! -f "${dir}/energy.sh" ]; then
+        err "--energy needs bench/energy.sh in ${dir}"
+    fi
+}
+
+# usage_usec of the agent container's cgroup (its own view under cgroup v2).
+tune_pod_cpu_usec() {
+    { kubectl -n "${AGENT_NS}" exec deployment/ovms -c ovms -- cat /sys/fs/cgroup/cpu.stat 2>/dev/null || true; } \
+        | awk '$1 == "usage_usec" { print $2 }'
+}
+
+# One trial: deploy the config, load it, record runs. Called by tune.py as
+#   k3d-gpu tune _trial <config.json> <budget.json> <out.json>
+# A failure is a result ({"ok": false}), not an error: the search drops the config.
+cmd_tune_trial() {
+    local cfg=$1 budget=$2 out=$3 dir requests max_tokens repeats conc key val bench
+    local name port rep runs before after rc line deadline gen cold
+    TRIAL_PF=""
+    dir=$(dirname "${out}")
+    runs="${dir}/runs.jsonl"
+    : > "${runs}"
+    trial_fail() {
+        [ -z "${TRIAL_PF}" ] || kill "${TRIAL_PF}" 2>/dev/null || true
+        tune_py trial-result --out "${out}" --runs "${runs}" --error "$1"
+        exit 0
+    }
+    bench=$(tune_bench_dir) || trial_fail "bench/llm_load.py not found"
+    read -r requests max_tokens repeats conc cold <<< "$(tune_py budget "${budget}")"
+    [ -n "${cold}" ] || trial_fail "bad budget ${budget}"
+    local -a env_lines=()
+    mapfile -t env_lines < <(tune_py env --config "${cfg}" || echo "INVALID=")
+    [[ "${env_lines[*]-}" != *INVALID=* ]] || trial_fail "config rejected by tune.py"
+
+    # Deploy in a subshell: the overrides and K3D_GPU_TUNE=off stay in it, and an
+    # err() inside 'agent up' ends the subshell, not the tune. Every tuned
+    # variable is cleared first, so the default trial and a config that leaves a
+    # knob unset get the 'agent up' default, not the user's own setting; only the
+    # model under tune is kept.
+    gen=$(kubectl -n "${AGENT_NS}" get deployment ovms -o 'jsonpath={.metadata.generation}' 2>/dev/null || true)
+    (
+        export K3D_GPU_TUNE=off
+        for key in ${TUNE_ENV_KEYS}; do unset "${key}"; done
+        export K3D_GPU_AGENT_MODEL="${TUNE_MODEL}"
+        for line in ${env_lines[@]+"${env_lines[@]}"}; do
+            key=${line%%=*} val=${line#*=}
+            [[ "${TUNE_ENV_KEYS}" == *" ${key} "* ]] || exit 3
+            export "${key}=${val}"
+        done
+        agent_config
+        cmd_agent_up
+    ) >"${dir}/deploy.log" 2>&1 || trial_fail "agent up failed (${dir}/deploy.log)"
+    # An unchanged manifest leaves the generation, and the warm pod with its
+    # prefix cache, as they were: restart it so every trial starts cold, unless
+    # the budget says warm is fine (incremental screening; the load runs
+    # --unique-prompts, so the prefix cache gives it nothing).
+    if [ "${cold}" = 1 ] && [ -n "${gen}" ] && [ "${gen}" = "$(kubectl -n "${AGENT_NS}" get deployment ovms -o 'jsonpath={.metadata.generation}' 2>/dev/null || true)" ]; then
+        { kubectl -n "${AGENT_NS}" rollout restart deployment/ovms \
+            && kubectl -n "${AGENT_NS}" rollout status deployment/ovms --timeout="${AGENT_TIMEOUT}s"; } \
+            >>"${dir}/deploy.log" 2>&1 || trial_fail "restart of the unchanged deployment failed (${dir}/deploy.log)"
+    fi
+
+    # The served name, as 'agent up' derives it: K3D_GPU_AGENT_MODEL_NAME, else
+    # the basename of the model this config deploys.
+    name=${TUNE_MODEL##*/}
+    for line in ${env_lines[@]+"${env_lines[@]}"}; do
+        [ "${line%%=*}" != K3D_GPU_AGENT_MODEL ] || name=${line##*/}
+    done
+    name=${K3D_GPU_AGENT_MODEL_NAME:-${name}}
+    port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
+    kubectl -n "${AGENT_NS}" port-forward svc/ovms "${port}:8000" >"${dir}/port-forward.log" 2>&1 &
+    TRIAL_PF=$!
+    deadline=$((SECONDS + 60))
+    until curl -fsS -o /dev/null "http://127.0.0.1:${port}/v2/health/ready" 2>/dev/null; do
+        if [ "${SECONDS}" -ge "${deadline}" ] || ! kill -0 "${TRIAL_PF}" 2>/dev/null; then
+            trial_fail "server not reachable through port-forward (${dir}/port-forward.log)"
+        fi
+        sleep 1
+    done
+
+    for rep in $(seq 1 "${repeats}"); do
+        # --unique-prompts: every request misses the prefix cache, so first-token
+        # latency includes the prompt's prefill.
+        local -a load_cmd=(python3 "${bench}/llm_load.py" --base-url "http://127.0.0.1:${port}/v3" --model "${name}"
+            --requests "${requests}" --concurrency "${conc}" --max-tokens "${max_tokens}" --ignore-eos
+            --unique-prompts --warmup 1 --label tune --out "${dir}/load-${rep}.json")
+        [ -z "${TUNE_ENERGY}" ] || load_cmd=("${bench}/energy.sh" --json "${dir}/energy-${rep}.json" -- "${load_cmd[@]}")
+        before=$(tune_pod_cpu_usec)
+        rc=0
+        "${load_cmd[@]}" 2>>"${dir}/load.log" || rc=$?
+        after=$(tune_pod_cpu_usec)
+        # llm_load.py exits 1 when a request failed but still writes its JSON;
+        # the driver counts those errors, so only a missing file fails the trial.
+        [ -f "${dir}/load-${rep}.json" ] || trial_fail "llm_load.py wrote no result (exit ${rc}, ${dir}/load.log)"
+        tune_py quality --base-url "http://127.0.0.1:${port}/v3" --model "${name}" > "${dir}/quality-${rep}.json" \
+            || rm -f "${dir}/quality-${rep}.json"
+        local -a cpu_args=()
+        [ -z "${before}" ] || [ -z "${after}" ] || cpu_args=(--cpu-before "${before}" --cpu-after "${after}")
+        tune_py assemble-run --llm-load "${dir}/load-${rep}.json" --energy "${dir}/energy-${rep}.json" \
+            --quality "${dir}/quality-${rep}.json" ${cpu_args[@]+"${cpu_args[@]}"} >> "${runs}" \
+            || trial_fail "could not assemble run ${rep}"
+    done
+    kill "${TRIAL_PF}" 2>/dev/null || true
+    tune_py trial-result --out "${out}" --runs "${runs}"
+}
+
+cmd_tune_run() {
+    local objective=throughput dry="" full="" budget=10 arg inputs facts_file fp workdir
+    local -a extra=()
+    while [ $# -gt 0 ]; do
+        arg=$1
+        case "${arg}" in
+            --objective)   objective=${2:?--objective needs a value}; shift 2 ;;
+            --energy)      TUNE_ENERGY=1; shift ;;
+            --precisions)  TUNE_PRECISIONS=${2:?--precisions needs a value}; shift 2 ;;
+            --devices)     TUNE_DEVICES=${2:?--devices needs a value}; shift 2 ;;
+            --no-hetero)   TUNE_HETERO=""; shift ;;
+            --dry-run)     dry=1; shift ;;
+            --full)        full=1; shift ;;
+            --budget)      budget=${2:?--budget needs minutes}; shift 2 ;;
+            --n|--n0|--eta|--seed|--margin|--k|--alpha|--guard-tol|--ttft-slo|--concurrency)
+                extra+=("${arg}" "${2:?${arg} needs a value}"); shift 2 ;;
+            *) err "unknown tune option '${arg}' (see 'k3d-gpu help')" ;;
+        esac
+    done
+    case "${objective}" in
+        throughput|ttft|cpu-offload) ;;
+        joules) TUNE_ENERGY=1 ;;
+        *) err "--objective must be throughput, ttft, joules or cpu-offload" ;;
+    esac
+    [ "${AGENT_BACKEND}" = ovms ] || err "'k3d-gpu tune' searches the OVMS agent; unset K3D_GPU_AGENT_BACKEND=${AGENT_BACKEND}"
+    require kubectl
+    kubectl get nodes >/dev/null 2>&1 || err "no cluster reachable — run 'k3d-gpu up' first"
+    workdir=$(mktemp -d "${TMPDIR:-/tmp}/k3d-gpu-tune.XXXXXX")
+    facts_file="${workdir}/facts.json"
+    tune_facts > "${facts_file}"
+    if [ -n "${dry}" ]; then
+        local n0=27 seed=1 i
+        for ((i = 0; i < ${#extra[@]}; i += 2)); do
+            case "${extra[i]}" in --n0) n0=${extra[i+1]} ;; --seed) seed=${extra[i+1]} ;; esac
+        done
+        tune_py space --facts "${facts_file}" --n0 "${n0}" --seed "${seed}"
+        return 0
+    fi
+    require curl
+    tune_need_bench
+    fp=$(tune_fingerprint)
+    inputs=$(tune_fingerprint_inputs | python3 -c 'import json, sys; print(json.dumps(dict(l.rstrip("\n").split("=", 1) for l in sys.stdin)))')
+    mkdir -p "${TUNE_DIR}"
+    export TUNE_ENERGY  # read by every 'tune _trial' the driver starts
+    info "tune: objective ${objective}, profile ${TUNE_DIR}/${fp}.json, trials in ${workdir}"
+    if [ -n "${full}" ]; then
+        tune_py run --facts "${facts_file}" --objective "${objective}" --out "${TUNE_DIR}/${fp}.json" \
+            --fingerprint "${fp}" --fingerprint-inputs "${inputs}" --workdir "${workdir}" \
+            --trial-cmd "$(printf '%q' "$0") tune _trial" ${extra[@]+"${extra[@]}"} \
+            || err "tune failed — trials and logs are in ${workdir}"
+    else
+        local i
+        for ((i = 0; i < ${#extra[@]}; i += 2)); do
+            case "${extra[i]}" in
+                --n0|--eta|--seed) err "${extra[i]} applies to 'tune run --full' only" ;;
+            esac
+        done
+        tune_py step --facts "${facts_file}" --objective "${objective}" --out "${TUNE_DIR}/${fp}.json" \
+            --fingerprint "${fp}" --fingerprint-inputs "${inputs}" --workdir "${workdir}" \
+            --budget "${budget}" --trial-cmd "$(printf '%q' "$0") tune _trial" ${extra[@]+"${extra[@]}"} \
+            || err "tune failed — trials and logs are in ${workdir}"
+    fi
+    info "Re-deploying the agent with the result (the tuned profile, or the default when nothing won)..."
+    cmd_agent_up
+}
+
+cmd_tune() {
+    local sub=${1:-}
+    shift || true
+    case "${sub}" in
+        run)         cmd_tune_run "$@" ;;
+        space)       cmd_tune_run --dry-run "$@" ;;
+        show)        [ -f "$(tune_profile_path)" ] || err "no tuned profile for this host ($(tune_profile_path)) — run 'k3d-gpu tune run'"
+                     tune_py show "$(tune_profile_path)" ;;
+        env)         tune_apply_profile >/dev/null  # what 'agent up' would export, user settings applied
+                     if [ "${#TUNE_APPLIED[@]}" -gt 0 ]; then printf '%s\n' "${TUNE_APPLIED[@]}"; fi ;;
+        fingerprint) echo "$(tune_fingerprint) $(tune_profile_path)"; tune_fingerprint_inputs | sed 's/^/  /' ;;
+        reset)       rm -f "$(tune_profile_path)"; info "removed $(tune_profile_path); 'agent up' deploys the default" ;;
+        _trial)      [ $# -eq 3 ] || err "usage: k3d-gpu tune _trial <config.json> <budget.json> <out.json>"
+                     cmd_tune_trial "$@" ;;
+        *) err "usage: k3d-gpu tune run [--budget MIN] [--full] [--objective throughput|ttft|joules|cpu-offload] [--energy] [--devices CPU,GPU,NPU] [--precisions int4,int8,fp16] [--no-hetero] [--dry-run] | show | space | env | fingerprint | reset" ;;
+    esac
+}
+
+# ---- capacity: agents per box at a p95 turn SLO -----------------------------
+# The search is bench/apb/capacity.py (Python stdlib only). Found next to a repo
+# checkout first, then in the packaged copy under ${SHARE_DIR}/bench.
+capacity_script() {
+    local d self
+    self=$(readlink -f "${BASH_SOURCE[0]}")
+    for d in "${K3D_GPU_BENCH:-}" "$(dirname "${self}")/../bench" "${SHARE_DIR}/bench"; do
+        if [ -n "${d}" ] && [ -f "${d}/apb/capacity.py" ]; then
+            echo "${d}/apb/capacity.py"
+            return 0
+        fi
+    done
+    return 1
+}
+
+cmd_capacity() {
+    local script
+    script=$(capacity_script) \
+        || err "capacity: apb/capacity.py not found in the repo's bench/ or ${SHARE_DIR}/bench (set K3D_GPU_BENCH)"
+    require python3
+    exec python3 "${script}" "$@"
+}
+
+# "<model> <memory request> <revision>" for the host's RAM tier (MemTotal). The
+# tiers keep the int4 weights near a quarter of RAM or less, leaving room for
+# k3s, the KV cache and the desktop: under 12 GiB (8 GB machines) Qwen3-1.7B,
+# under 24 GiB (16 GB machines) Qwen3-4B, the agent's default, else Qwen3-8B.
+# An unreadable MemTotal gets the default. The memory request is capped at
+# MemTotal minus 1 GiB for Open WebUI's request and 768 MiB for k3s, so the pod
+# can schedule on a small host (a WSL2 VM gets half of Windows' RAM); below
+# QS_MIN_MI the memory is "-" and quickstart stops. Revisions are the Hugging
+# Face commit of each repo (huggingface.co/api/models/<model>, "sha"). Only
+# the 4B model is measured on this project's test bed (EXPERIMENTS.md H6), and
+# the 8B cold path once (H9); the 1.7B tier is a prediction.
+qs_tier() {
+    local kb model rev want cap
+    kb=$(meminfo_kb MemTotal)
+    [[ "${kb}" =~ ^[0123456789]{1,12}$ ]] || kb=0
+    if [ "${kb}" -eq 0 ] || { [ "${kb}" -ge $((12 * 1048576)) ] && [ "${kb}" -lt $((24 * 1048576)) ]; }; then
+        model=OpenVINO/Qwen3-4B-int4-ov rev=b467368d16b75df14055562fe927ae8e1f15f7ef
+    elif [ "${kb}" -lt $((12 * 1048576)) ]; then
+        model=OpenVINO/Qwen3-1.7B-int4-ov rev=6f32d81e9deebeca30bb5490a7176cf4fa8c79e3
+    else
+        model=OpenVINO/Qwen3-8B-int4-ov rev=5c47abf4b8e12ebe8e99745bb0c1ec17e0c0abcc
+    fi
+    want=$(qs_model_mi "${model}")
+    cap=$((kb / 1024 - 1024 - 768))
+    if [ "${kb}" -eq 0 ] || [ "${cap}" -ge "${want}" ]; then
+        echo "${model} $((want / 1024))Gi ${rev}"
+    elif [ "${cap}" -ge "${QS_MIN_MI}" ]; then
+        echo "${model} ${cap}Mi ${rev}"
+    else
+        echo "${model} - ${rev}"
+    fi
+}
+
+# progress_bar <done> <total> [width]: "[#####-----]  50%". A total of 0 or less,
+# or a non-number, prints an empty bar and "  ?%". done above total shows 100%.
+progress_bar() {
+    local done=$1 total=$2 width=${3:-30} fill pct bar
+    [[ "${width}" =~ ^[0123456789]{1,3}$ ]] && [ "${width}" -ge 1 ] && [ "${width}" -le 200 ] || width=30
+    if ! [[ "${done}" =~ ^[0123456789]{1,15}$ && "${total}" =~ ^[0123456789]{1,15}$ ]] || [ "${total}" -le 0 ]; then
+        printf '[%s]   ?%%' "$(printf '%*s' "${width}" "" | tr ' ' '-')"
+        return 0
+    fi
+    [ "${done}" -le "${total}" ] || done=${total}
+    fill=$((done * width / total))
+    pct=$((done * 100 / total))
+    bar=$(printf '%*s' "${fill}" "" | tr ' ' '#')$(printf '%*s' "$((width - fill))" "" | tr ' ' '-')
+    printf '[%s] %3d%%' "${bar}" "${pct}"
+}
+
+# qs_step <n> <text>: the step line, "[2/5]" with the overall bar.
+qs_step() { echo "${GRN}==>${RST} [$1/${QS_STEPS}] $(progress_bar "$(($1 - 1))" "${QS_STEPS}" 10) $2"; }
+
+# Lines of WSL2 guidance; nothing off WSL. Docker Desktop documents GPU
+# paravirtualization for NVIDIA only (https://docs.docker.com/desktop/features/gpu/);
+# the Intel path is /dev/dxg plus /usr/lib/wsl, as in OpenVINO's container recipe
+# (https://github.com/openvinotoolkit/docker_ci/blob/master/docs/accelerators.md).
+# The Intel NPU has no WSL2 driver (https://github.com/intel/linux-npu-driver/issues/56).
+# agent_device requests gpu.intel.com/xe, i915, a Gaudi or the CPU, never
+# gpu.intel.com/dxg, so under WSL2 quickstart's LLM runs on the CPU.
+# Host changes are printed as suggestions, never run.
+qs_wsl_guidance() {
+    grep -qi microsoft "${SYSROOT}/proc/version" 2>/dev/null || return 0
+    echo "WSL2 detected. The LLM runs on the CPU here: the agent does not request the WSL2 GPU (gpu.intel.com/dxg) yet."
+    if [ ! -e "${SYSROOT}/dev/dxg" ]; then
+        echo "  /dev/dxg is missing: no GPU paravirtualization. quickstart still needs an accelerator 'k3d-gpu detect' reports."
+        echo "  Suggested, in Windows PowerShell: wsl --update; wsl --shutdown"
+    elif [ -e "${SYSROOT}${WSL_LIB}/lib/nvidia-smi" ]; then
+        echo "  /dev/dxg and the NVIDIA driver (${WSL_LIB}/lib/nvidia-smi) are present: the cluster gets the NVIDIA GPU."
+    elif [ -n "$(wsl_intel_drivers)" ]; then
+        echo "  /dev/dxg and the Intel driver (${WSL_LIB}/drivers/iigd_dch*) are present: the cluster advertises the Intel GPU as gpu.intel.com/dxg."
+        echo "  This path is unit-tested only; it has not been run on a Windows machine."
+    else
+        echo "  /dev/dxg is present but no Intel or NVIDIA driver is under ${WSL_LIB}."
+        echo "  Suggested: install the current GPU driver on Windows, then run wsl --shutdown."
+    fi
+    echo "  Docker: Docker Desktop with WSL integration enabled for this distro, or Docker Engine inside it."
+    echo "  Docker Desktop's --gpus flag is NVIDIA-only; the Intel GPU goes through /dev/dxg instead."
+    echo "  The Intel NPU is not reachable from WSL2 (intel/linux-npu-driver#56)."
+}
+
+# Pid of the port-forward quickstart started, while it runs. A pid whose
+# command line is not that port-forward (a pid recycled after a reboot or a
+# crash) does not count, and its stale file is removed.
+qs_pf_pid() {
+    local pid cmd
+    pid=$(cat "${QS_DIR}/port-forward.pid" 2>/dev/null) || return 1
+    [[ "${pid}" =~ ^[0-9]{1,10}$ ]] || return 1
+    cmd=$(tr '\0' ' ' < "/proc/${pid}/cmdline" 2>/dev/null) || cmd=""
+    if [[ "${cmd}" == *port-forward*svc/open-webui* ]]; then
+        echo "${pid}"
+        return 0
+    fi
+    rm -f -- "${QS_DIR}/port-forward.pid"
+    return 1
+}
+
+# qs_port_free <port>: nothing listens on 127.0.0.1:<port>.
+qs_port_free() { ! (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
+
+# The chat port: K3D_GPU_CHAT_PORT when set, else 8080 or the next free port
+# up to 8099.
+qs_port() {
+    local p
+    if [ -n "${K3D_GPU_CHAT_PORT:-}" ]; then echo "${K3D_GPU_CHAT_PORT}"; return 0; fi
+    for p in $(seq 8080 8099); do
+        if qs_port_free "${p}"; then echo "${p}"; return 0; fi
+    done
+    echo 8080
+}
+
+# The Open WebUI admin Secret, created once with a random password that is also
+# written to ${QS_DIR}/chat-admin (mode 0600), so sign-up is never open. The
+# Secret is read from that file, so the password is never on a command line.
+qs_admin_secret() {
+    local file="${QS_DIR}/chat-admin" pw email=admin@localhost
+    if kubectl -n "${AGENT_NS}" get secret open-webui-admin >/dev/null 2>&1; then
+        [ -f "${file}" ] || warn "chat: Secret open-webui-admin exists but ${file} does not; sign in with the password set before"
+        return 0
+    fi
+    pw=$(head -c 30 /dev/urandom | base64 | tr -d '/+=\n' | head -c 20)
+    [ "${#pw}" -ge 16 ] || err "chat: could not generate a password"
+    (umask 077; printf 'email=%s\npassword=%s\n' "${email}" "${pw}" > "${file}")
+    kubectl create namespace "${AGENT_NS}" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+    kubectl -n "${AGENT_NS}" create secret generic open-webui-admin --from-env-file="${file}" >/dev/null
+}
+
+# Total size of a model's files from the Hugging Face API, or 0 when offline or
+# python3 is missing.
+qs_model_bytes() {
+    local n
+    command -v python3 >/dev/null 2>&1 || { echo 0; return 0; }
+    n=$(curl -fsS --max-time 10 "https://huggingface.co/api/models/$1?blobs=true" 2>/dev/null \
+        | python3 -c 'import json, sys
+print(sum(s.get("size") or 0 for s in json.load(sys.stdin).get("siblings", [])))' 2>/dev/null) || n=0
+    [[ "${n}" =~ ^[0-9]+$ ]] || n=0
+    echo "${n}"
+}
+
+# Bytes of the model on the PVC so far (half-downloaded .lfs_part files count),
+# read from the pull init container while it runs; 0 otherwise.
+qs_pulled_bytes() {
+    local pod n
+    pod=$(kubectl -n "${AGENT_NS}" get pod -l app=ovms -o name 2>/dev/null | sed -n 1p)
+    [ -n "${pod}" ] || { echo 0; return 0; }
+    n=$(kubectl -n "${AGENT_NS}" exec "${pod}" -c pull -- du -sb "/models/$1" 2>/dev/null | awk 'NR == 1 {print $1}') || n=0
+    [[ "${n}" =~ ^[0-9]+$ ]] || n=0
+    echo "${n}"
+}
+
+# qs_agent_ready <model> <memory>: the OVMS Deployment is ready, serves <model>
+# and requests <memory>.
+qs_agent_ready() {
+    local got
+    got=$(kubectl -n "${AGENT_NS}" get deployment ovms \
+        -o jsonpath='{.status.readyReplicas} {.spec.template.spec.containers[0].resources.requests.memory} {.spec.template.spec.containers[0].args}' 2>/dev/null) || return 1
+    [ "${got%% *}" = 1 ] && [[ "${got}" == *"--model_path=/models/$1\""* ]] && [[ " ${got} " == *" $2 "* ]]
+}
+
+# The backend `agent up` will run: the user's, else vllm on a cluster that
+# advertises a Gaudi (agent_device's auto), else ovms.
+qs_backend() {
+    if [ -n "${K3D_GPU_AGENT_BACKEND:-}" ]; then echo "${K3D_GPU_AGENT_BACKEND,,}"
+    elif [ "${K3D_GPU_AGENT_DEVICE:-auto}" != CPU ] && [ "$(resource_total habana.ai/gaudi)" -gt 0 ]; then echo vllm
+    else echo ovms
+    fi
+}
+
+# quickstart [--no-ui]
+cmd_quickstart() {
+    local ui=1 model mem rev tmodel tmem pid exe manifest total done_b last=-1 pid_run t missing="" accel backend port line
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --no-ui) ui="" ;;
+            *) err "unknown quickstart option: $1 (use --no-ui)" ;;
+        esac
+        shift
+    done
+    exe=$(qs_self)
+    mkdir -p "${QS_DIR}"
+
+    qs_step 1 "Checking this machine"
+    qs_wsl_guidance
+    for t in docker k3d kubectl; do command -v "${t}" >/dev/null 2>&1 || missing+=" ${t}"; done
+    [ -z "${missing}" ] || err "missing:${missing} — 'k3d-gpu doctor' prints how to install them"
+    docker info >/dev/null 2>&1 || err "docker is installed but not reachable (is the daemon running, and is this user in the docker group?)"
+    if [ -n "$(proxy_value HTTPS_PROXY)$(proxy_value HTTP_PROXY)" ]; then
+        info "proxy detected: the cluster nodes and the model download get HTTP(S)_PROXY; NO_PROXY adds the cluster networks"
+    fi
+    if ! k3d cluster get "${CLUSTER}" >/dev/null 2>&1; then
+        accel=$( (resolve_vendors >/dev/null 2>&1 && echo "${ACTIVE[*]}") 2>/dev/null || true)
+        [ -n "${accel}" ] || err "no accelerator k3d-gpu supports was detected, and quickstart has no CPU-only path yet — 'k3d-gpu doctor' says what is missing (K3D_GPU_VENDORS overrides detection)"
+    fi
+    read -r tmodel tmem rev <<< "$(qs_tier)"
+    model=${K3D_GPU_AGENT_MODEL:-${tmodel}}
+    if [ -n "${K3D_GPU_AGENT_MEMORY:-}" ]; then
+        mem=${K3D_GPU_AGENT_MEMORY}
+    elif [ "${model}" != "${tmodel}" ] && [ "$(qs_model_mi "${model}")" -gt 0 ] && [ "${tmem}" != - ]; then
+        # An overridden tier model gets its own memory, within the host's cap.
+        t=$(qs_model_mi "${model}")
+        if [[ "${tmem}" == *Mi ]] && [ "${tmem%Mi}" -lt "${t}" ]; then mem=${tmem}; else mem="$((t / 1024))Gi"; fi
+    else
+        mem=${tmem}
+    fi
+    [ "${model}" = "${tmodel}" ] || rev=""
+    rev=${K3D_GPU_AGENT_REVISION:-${rev}}
+    [ "${mem}" != - ] || err "RAM $(kb_gib "$(meminfo_kb MemTotal)") GiB is too small: the LLM server needs a ${QS_MIN_MI}Mi memory request beside k3s and the chat UI. Suggested on WSL2: raise memory= in %UserProfile%\\.wslconfig, then wsl --shutdown"
+    info "RAM $(kb_gib "$(meminfo_kb MemTotal)") GiB: model ${model}${rev:+ @ ${rev:0:12}}, memory ${mem}"
+
+    qs_step 2 "Cluster '${CLUSTER}'"
+    if k3d cluster get "${CLUSTER}" >/dev/null 2>&1; then
+        info "cluster '${CLUSTER}' exists; reusing it"
+    else
+        "${exe}" up || err "'k3d-gpu up' failed; fix the error above and run quickstart again"
+        : > "${QS_DIR}/cluster-created"
+    fi
+    kubectl config use-context "k3d-${CLUSTER}" >/dev/null 2>&1 || true
+    kubectl get nodes >/dev/null 2>&1 || err "cluster '${CLUSTER}' is not reachable — run 'k3d-gpu doctor'"
+
+    backend=$(qs_backend)
+    if [ "${backend}" != ovms ]; then
+        # vLLM (a Gaudi, or the user's choice): agent up picks its own model and memory.
+        qs_step 3 "LLM server (${backend})"
+        "${exe}" agent up || err "'k3d-gpu agent up' failed; run quickstart again to resume"
+    elif qs_agent_ready "${model}" "${mem}"; then
+        qs_step 3 "LLM server (${model})"
+        info "agent already serving ${model}"
+    else
+        qs_step 3 "LLM server (${model})"
+        total=$(qs_model_bytes "${model}")
+        # A background job of a non-interactive shell starts with SIGINT ignored,
+        # so Ctrl-C (or a TERM) stops `agent up` here, before a resumed run
+        # starts another. Set before the job starts, so no signal falls between.
+        pid_run=""
+        trap 'if [ -n "${pid_run}" ]; then kill -TERM "${pid_run}" 2>/dev/null; pkill -TERM -P "${pid_run}" 2>/dev/null; fi; exit 130' INT TERM
+        # Only what the user left unset is passed. A tier model is a Qwen3, so it
+        # gets Qwen3's parsers (agent_config sets them for its own default only).
+        if [ "${model}" = "${tmodel}" ]; then
+            K3D_GPU_AGENT_TOOL_PARSER="${K3D_GPU_AGENT_TOOL_PARSER-hermes3}" \
+            K3D_GPU_AGENT_REASONING_PARSER="${K3D_GPU_AGENT_REASONING_PARSER-qwen3}" \
+            K3D_GPU_AGENT_MODEL="${model}" K3D_GPU_AGENT_MEMORY="${mem}" K3D_GPU_AGENT_REVISION="${rev}" \
+                "${exe}" agent up &
+        else
+            K3D_GPU_AGENT_MODEL="${model}" K3D_GPU_AGENT_MEMORY="${mem}" K3D_GPU_AGENT_REVISION="${rev}" \
+                "${exe}" agent up &
+        fi
+        pid_run=$!
+        # A download line each time the bytes on the PVC change; the server's own
+        # lines interleave.
+        while kill -0 "${pid_run}" 2>/dev/null; do
+            sleep "${K3D_GPU_QUICKSTART_POLL:-5}"
+            done_b=$(qs_pulled_bytes "${model}")
+            [ "${done_b}" -gt 0 ] && [ "${done_b}" != "${last}" ] || continue
+            last=${done_b}
+            if [ "${total}" -gt 0 ]; then
+                echo "    download $(progress_bar "${done_b}" "${total}") $((done_b / 1000000)) / $((total / 1000000)) MB"
+            else
+                echo "    download $((done_b / 1000000)) MB"
+            fi
+        done
+        if ! wait "${pid_run}"; then
+            trap - INT TERM
+            err "'k3d-gpu agent up' failed; run quickstart again to resume (the download continues where it stopped)"
+        fi
+        trap - INT TERM
+    fi
+
+    if [ -z "${ui}" ]; then
+        echo "${GRN}==>${RST} [${QS_STEPS}/${QS_STEPS}] $(progress_bar 1 1 10) Ready (no chat UI)"
+        info "OpenAI API: kubectl -n ${AGENT_NS} port-forward svc/${backend} 8000:8000"
+        return 0
+    fi
+    [ "${backend}" = ovms ] || err "the chat UI talks to OVMS (svc/ovms) only; with backend ${backend}, run quickstart --no-ui"
+
+    qs_step 4 "Chat UI (Open WebUI)"
+    manifest=$(chat_ui_manifest) || err "chat UI manifest agent-chat-ui.yml not found (set K3D_GPU_CHAT_UI)"
+    qs_admin_secret
+    # The UI's default model is the one served: the value line after DEFAULT_MODELS.
+    line=$(grep -n -A1 'name: DEFAULT_MODELS$' "${manifest}" | sed -n 's/^\([0-9]*\)-  *value: .*/\1/p')
+    [[ "${line}" =~ ^[0-9]+$ ]] || err "chat UI manifest ${manifest} has no DEFAULT_MODELS value"
+    awk -v n="${line}" -v m="${model##*/}" 'NR == n + 0 { sub(/value: .*/, "value: \"" m "\"") } { print }' "${manifest}" \
+        | kubectl apply -f - >/dev/null
+    kubectl -n "${AGENT_NS}" rollout status deployment/open-webui --timeout=600s \
+        || err "chat UI not ready — kubectl -n ${AGENT_NS} logs deploy/open-webui"
+
+    if pid=$(qs_pf_pid); then
+        port=$(cat "${QS_DIR}/port" 2>/dev/null || echo "${K3D_GPU_CHAT_PORT:-8080}")
+        qs_step 5 "Port-forward on 127.0.0.1:${port}"
+        info "port-forward already running (pid ${pid})"
+    else
+        port=$(qs_port)
+        [ -n "${K3D_GPU_CHAT_PORT:-}" ] || [ "${port}" = 8080 ] || info "port 8080 is taken; using ${port}"
+        qs_step 5 "Port-forward on 127.0.0.1:${port}"
+        nohup kubectl -n "${AGENT_NS}" port-forward --address 127.0.0.1 svc/open-webui "${port}:8080" \
+            > "${QS_DIR}/port-forward.log" 2>&1 < /dev/null &
+        echo "$!" > "${QS_DIR}/port-forward.pid"
+        echo "${port}" > "${QS_DIR}/port"
+        sleep 2
+        qs_pf_pid >/dev/null || err "port-forward did not start — ${QS_DIR}/port-forward.log"
+    fi
+    echo "${GRN}==>${RST} [${QS_STEPS}/${QS_STEPS}] $(progress_bar 1 1 10) Ready"
+    info "Chat: http://127.0.0.1:${port}  (sign in with the email and password in ${QS_DIR}/chat-admin)"
+    info "Remove everything: k3d-gpu uninstall"
+}
+
+# uninstall [--yes] [--images] [--cluster]: stops quickstart's port-forward,
+# deletes cluster '${CLUSTER}' when quickstart created it (the model and chat
+# volumes live inside it; --cluster also deletes one quickstart only reused),
+# and quickstart's state files; --images also removes the node image. Without
+# --yes it asks on a terminal and refuses when there is none.
+cmd_uninstall() {
+    local yes="" images="" force_cluster="" pid ans created=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --yes|-y) yes=1 ;;
+            --images) images=1 ;;
+            --cluster) force_cluster=1 ;;
+            *) err "unknown uninstall option: $1 (use --yes, --images, --cluster)" ;;
+        esac
+        shift
+    done
+    [ -f "${QS_DIR}/cluster-created" ] && created=1
+    if [ -n "${created}${force_cluster}" ]; then
+        echo "This removes cluster '${CLUSTER}' with its downloaded models and chats, and ${QS_DIR}${images:+, and image ${IMAGE}}."
+    else
+        echo "This removes quickstart's port-forward and ${QS_DIR}${images:+, and image ${IMAGE}}; cluster '${CLUSTER}' was not created by quickstart and is kept (--cluster deletes it)."
+    fi
+    if [ -z "${yes}" ]; then
+        [ -t 0 ] || err "uninstall: no terminal to ask on; pass --yes to confirm"
+        read -r -p "Continue? [y/N] " ans
+        [[ "${ans}" =~ ^[Yy]$ ]] || { info "uninstall: cancelled"; return 0; }
+    fi
+    if pid=$(qs_pf_pid); then kill "${pid}" 2>/dev/null || true; fi
+    if ! command -v k3d >/dev/null 2>&1 || ! k3d cluster get "${CLUSTER}" >/dev/null 2>&1; then
+        info "no cluster '${CLUSTER}'"
+    elif [ -n "${created}${force_cluster}" ]; then
+        k3d cluster delete "${CLUSTER}"
+    else
+        info "cluster '${CLUSTER}' kept (quickstart did not create it; --cluster deletes it)"
+    fi
+    if [ -n "${images}" ] && command -v docker >/dev/null 2>&1; then
+        if docker image rm "${IMAGE}" >/dev/null 2>&1; then info "removed image ${IMAGE}"; else info "image ${IMAGE} not present"; fi
+    fi
+    # Only quickstart's own files; the directory goes when nothing else is in it.
+    rm -f -- "${QS_DIR}/chat-admin" "${QS_DIR}/port-forward.pid" "${QS_DIR}/port-forward.log" \
+        "${QS_DIR}/port" "${QS_DIR}/cluster-created"
+    rmdir -- "${QS_DIR}" 2>/dev/null || true
+    info "uninstall: done"
 }
 
 # ---- facts and plan: the console spine ------------------------------------------
@@ -6291,15 +7717,49 @@ cmd_facts() {
     info "Wrote ${state}/facts.json"
 }
 
+# plan --predict SKU|auto|list [--json] [--mts N] [--channels N]: roofline
+# prediction from Intel spec fields (console/sku_model.py, H24 PENDING).
+plan_predict() {
+    local dir sku=$1 args=()
+    shift
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --json) args+=(--json) ;;
+            --mts|--channels)
+                [ $# -ge 2 ] || err "plan: $1 needs a value"
+                args+=("$1" "$2")
+                shift ;;
+            *) err "unknown plan --predict option: $1 (use --json, --mts, --channels)" ;;
+        esac
+        shift
+    done
+    dir=$(console_dir) || err "plan: console/ not found next to the launcher or in ${SHARE_DIR}/console (set K3D_GPU_CONSOLE)"
+    [ -f "${dir}/sku_model.py" ] || err "plan: ${dir}/sku_model.py not found"
+    require python3
+    if [ "${sku}" = "list" ]; then
+        python3 "${dir}/sku_model.py" list ${args[@]+"${args[@]}"}
+    else
+        python3 "${dir}/sku_model.py" predict "${sku}" ${args[@]+"${args[@]}"}
+    fi
+}
+
 # plan [--explain|--json|--hash] [--facts FILE] [--matrix FILE] [--engine E]
 #      [--device D] [--model M] [--bind ADDR] [--port N]
+# plan --predict SKU|auto|list [--json] [--mts N] [--channels N]
 cmd_plan() {
     local dir mode=text facts="" matrix="" args=() out
+    if [ "${1:-}" = "--predict" ]; then
+        [ $# -ge 2 ] || err "plan: --predict needs a SKU, auto or list"
+        shift
+        plan_predict "$@"
+        return
+    fi
     while [ $# -gt 0 ]; do
         case "$1" in
             --explain) mode=explain ;;
             --json) mode=json ;;
             --hash) mode="hash" ;;
+            --predict) err "plan: --predict must be the first option" ;;
             --facts|--matrix|--engine|--device|--model|--bind|--port)
                 [ $# -ge 2 ] || err "plan: $1 needs a value"
                 case "$1" in
@@ -6449,6 +7909,405 @@ print(d["decision"], e.get("name") or "-", e.get("device") or "-", e.get("image"
         K3D_GPU_AGENT_IMAGE="${image}" K3D_GPU_AGENT_CPUS="${cpus}" exec "$(readlink -f "${BASH_SOURCE[0]}")" agent up
 }
 
+# ---- autoquant -----------------------------------------------------------------
+# The CPU agent's weight precision (EXPERIMENTS.md H27). A probe
+# (bench/amx-autoquant/probe.sh) measures turn latency and an NLL quality delta per
+# precision and stores the gated winner under this host's fingerprint (CPU model,
+# ISA, P/E topology, microcode, memory, OVMS image). `agent up` on OVMS/CPU serves
+# the cached winner while the fingerprint matches, else the static int4 default.
+# Nothing is probed automatically: with no stored run every host serves int4. The
+# served model name stays the default's, so clients that name it keep working;
+# the pod's k3d-gpu.io/agent-model annotation names the weights actually served.
+# K3D_GPU_AGENT_MODEL overrides both; K3D_GPU_AUTOQUANT=off ignores the cache.
+autoquant_cache() { echo "${K3D_GPU_AUTOQUANT_CACHE:-${XDG_STATE_HOME:-${HOME}/.local/state}/k3d-gpu/autoquant.json}"; }
+
+# "--microcode X --mem-kib N" from this host's procfs, one word per line (each pair only when read).
+autoquant_host_args() {
+    local mc mem
+    mc=$(grep -m1 '^microcode[[:space:]]*:' "${SYSROOT}/proc/cpuinfo" 2>/dev/null || true)
+    mc=${mc#*: }
+    mem=$(awk '/^MemTotal:/ {print $2; exit}' "${SYSROOT}/proc/meminfo" 2>/dev/null || true)
+    if [[ "${mc}" =~ ^0x[0-9a-fA-F]+$ ]]; then printf -- '--microcode\n%s\n' "${mc}"; fi
+    if [[ "${mem}" =~ ^[0-9]+$ ]]; then printf -- '--mem-kib\n%s\n' "${mem}"; fi
+    return 0
+}
+
+# autoquant_run <facts file or ""> <autoquant.py args...>: console/autoquant.py
+# with --cache, on this host's facts/v1 plus its microcode and memory size, or on
+# the facts file alone (no host reads, so a fixture fingerprints the same anywhere).
+autoquant_run() {
+    local dir facts=$1 host_args=()
+    shift
+    dir=$(console_dir) || return 1
+    [ -f "${dir}/autoquant.py" ] || return 1
+    command -v python3 >/dev/null 2>&1 || return 1
+    if [ -n "${facts}" ]; then
+        python3 "${dir}/autoquant.py" "$@" --cache "$(autoquant_cache)" --runtime "${AGENT_OVMS_IMAGE}" < "${facts}"
+    else
+        mapfile -t host_args < <(autoquant_host_args)
+        facts_json "${dir}" | python3 "${dir}/autoquant.py" "$@" --cache "$(autoquant_cache)" \
+            --runtime "${AGENT_OVMS_IMAGE}" ${host_args[@]+"${host_args[@]}"}
+    fi
+}
+
+autoquant_select() { autoquant_run "${1:-}" select; }
+
+# Swap AGENT_MODEL (and AGENT_MEMORY) to the measured winner for an OVMS agent on
+# the CPU, when nothing pins the model. Only a measured cache entry for this
+# host's fingerprint changes anything.
+agent_autoquant() {
+    local doc fields precision model memory source
+    [ "${AGENT_APP}" = ovms ] && [ -z "${K3D_GPU_AGENT_MODEL:-}" ] || return 0
+    [ "${K3D_GPU_AUTOQUANT:-auto}" != off ] || return 0
+    [ -f "$(autoquant_cache)" ] || return 0
+    doc=$(autoquant_select) || { warn "autoquant: cache present but select failed, keeping ${AGENT_MODEL}"; return 0; }
+    fields=$(python3 -c 'import json, sys; d = json.load(sys.stdin); print(d["precision"], d["model"], d["memory"], d["source"])' <<< "${doc}") || return 0
+    read -r precision model memory source <<< "${fields}"
+    if [ "${source}" != measured ]; then
+        info "autoquant: no measured pick for this host fingerprint (${source}), serving ${AGENT_MODEL}" >&2
+        return 0
+    fi
+    AGENT_MODEL=${model}
+    AGENT_AUTOQUANT_ANN=$'\n        k3d-gpu.io/agent-model: '"${model}"$'\n        k3d-gpu.io/agent-precision-source: autoquant-measured'
+    if [ -z "${K3D_GPU_AGENT_MEMORY:-}" ]; then
+        AGENT_MEMORY=${memory}
+    elif [ "$(mem_gib "${K3D_GPU_AGENT_MEMORY}")" -lt "$(mem_gib "${memory}")" ]; then
+        warn "autoquant: K3D_GPU_AGENT_MEMORY=${K3D_GPU_AGENT_MEMORY} is below the ${memory} that ${precision} needs; the pod may be OOM-killed"
+    fi
+    info "autoquant: measured pick ${precision} for this host, serving ${AGENT_MODEL} (K3D_GPU_AGENT_MODEL or K3D_GPU_AUTOQUANT=off overrides)" >&2
+}
+
+# mem_gib <k8s quantity Ni|NGi|NMi>: whole GiB, 0 when unparsed.
+mem_gib() {
+    case "$1" in
+        *Gi) echo "${1%Gi}" | grep -Eo '^[0-9]+' || echo 0 ;;
+        *Mi) local m; m=$(echo "${1%Mi}" | grep -Eo '^[0-9]+' || echo 0); echo $((m / 1024)) ;;
+        *) echo 0 ;;
+    esac
+}
+
+# autoquant [--json] [--facts FILE] [--store RESULTS]: the precision `agent up`
+# would serve on the CPU, why, and the probe arms this CPU's ISA allows. --store
+# caches the gated winner of a probe's results file under this host's fingerprint.
+cmd_autoquant() {
+    local mode=text facts="" results="" out
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --json) mode=json ;;
+            --facts|--store)
+                [ $# -ge 2 ] || err "autoquant: $1 needs a value"
+                if [ "$1" = --facts ]; then facts=$2; else results=$2; fi
+                shift ;;
+            *) err "unknown autoquant option: $1 (use --json, --facts FILE, --store RESULTS)" ;;
+        esac
+        shift
+    done
+    [ -z "${facts}" ] || [ -f "${facts}" ] || err "autoquant: facts file ${facts} does not exist"
+    if [ -n "${results}" ]; then
+        [ -f "${results}" ] || err "autoquant: results file ${results} does not exist"
+        autoquant_run "${facts}" store --results "${results}" \
+            || err "autoquant: no precision passed the quality gate, nothing cached"
+        info "autoquant: cached in $(autoquant_cache)"
+        return
+    fi
+    out=$(autoquant_select "${facts}") || err "autoquant: could not compute (needs python3 and console/autoquant.py)"
+    if [ "${mode}" = json ]; then printf '%s\n' "${out}"; return; fi
+    python3 -c 'import json, sys
+d = json.load(sys.stdin)
+print("precision: %s (%s) from %s" % (d["precision"], d["model"], d["source"]))
+print("fingerprint: %s" % d["fingerprint"])
+for a in d["arms"]:
+    print("  arm %-5s %-18s %s" % (a["precision"], a["path"], a["model"]))
+if d["source"] != "measured":
+    print("measure: bench/amx-autoquant/probe.sh --store (EXPERIMENTS.md H27)")' <<< "${out}"
+}
+
+# Directory holding vs.py, llm_load.py and competitors.lock: K3D_GPU_BENCH, else
+# the repo's bench/ next to this script, else the installed share directory.
+bench_dir() {
+    local d
+    d="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../bench"
+    if [ -n "${K3D_GPU_BENCH:-}" ]; then echo "${K3D_GPU_BENCH}"
+    elif [ -f "${d}/vs.py" ]; then (cd "${d}" && pwd)
+    else echo "${SHARE_DIR}/bench"; fi
+}
+
+free_port() { python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])'; }
+
+# Short CPU name for the ledger heading (i9-13900T, Ultra 7 155H, Core 5 120U,
+# N100, Xeon w5-2455X); empty when none matches, and vs.py then uses the full name.
+cpu_short() {
+    grep -oE 'i[3579]-[0-9A-Z]+|Ultra [3579] [0-9A-Z]+|Core [3579] [0-9]+[A-Z]*|\bN[0-9]{2,3}\b|Xeon [A-Za-z0-9-]+( [A-Za-z0-9-]+)?' <<< "$1" | head -n1
+}
+
+# bench_alive NAME: returns 0 while the container runs; once it has exited, prints
+# its last log lines and stops with its exit code and OOMKilled flag.
+bench_alive() {
+    local st code oom
+    st=$(docker inspect -f '{{.State.Running}} {{.State.ExitCode}} {{.State.OOMKilled}}' "$1" 2>/dev/null) || st="false ? ?"
+    [ "${st%% *}" != true ] || return 0
+    docker logs --tail 30 "$1" >&2 2>&1 || true
+    read -r _ code oom <<< "${st}"
+    err "bench: container $1 exited (exit code ${code}, OOMKilled ${oom})"
+}
+
+cmd_bench() {
+    require python3
+    local stack="" kurl="" kmodel="" budget=900 rounds=3 warmup=3 maxtok=128 id="" out="" cpuset="" dry="" keep=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --dry-run) dry=1; shift; continue ;;
+            --keep-cache) keep=1; shift; continue ;;
+            --vs|--k3d-url|--k3d-model|--budget|--rounds|--warmup|--max-tokens|--id|--out|--cpuset)
+                [ $# -ge 2 ] || err "bench: $1 needs a value" ;;
+            *) err "unknown bench option: $1 (see 'k3d-gpu help')" ;;
+        esac
+        case "$1" in
+            --vs) stack=$2 ;; --k3d-url) kurl=$2 ;; --k3d-model) kmodel=$2 ;; --budget) budget=$2 ;;
+            --rounds) rounds=$2 ;; --warmup) warmup=$2 ;; --max-tokens) maxtok=$2 ;; --id) id=$2 ;;
+            --out) out=$2 ;; --cpuset) cpuset=$2 ;;
+        esac
+        shift 2
+    done
+    [ -n "${stack}" ] || err "bench: --vs <stack> is required (ollama, llamacpp or ovms)"
+    local n
+    for n in "${budget}" "${rounds}" "${warmup}" "${maxtok}"; do
+        [[ "${n}" =~ ^[0-9]+$ ]] || err "bench: --budget, --rounds, --warmup and --max-tokens take whole numbers, got '${n}'"
+    done
+    [ -z "${id}" ] || [[ "${id}" =~ ^H[0-9]+$ ]] || err "bench: --id must look like H10, got '${id}'"
+    [ -z "${cpuset}" ] || [[ "${cpuset}" =~ ^[0-9,-]+$ ]] || err "bench: --cpuset takes a CPU list like 0-15, got '${cpuset}'"
+    if [ -n "${kurl}" ] && [ -z "${kmodel}" ]; then err "bench: --k3d-url needs --k3d-model"; fi
+    id=${id:-H0}
+    out=${out:-bench-${id}-${stack}}
+    local dir lock fields image port api health served pull cache dri quant device user apath asha rev args=()
+    dir=$(bench_dir)
+    lock="${dir}/competitors.lock"
+    [ -f "${lock}" ] || err "bench: ${lock} missing (set K3D_GPU_BENCH to the bench/ directory)"
+    # Tab-separated, so an empty field is written as '-' (read would merge tabs).
+    fields=$(python3 -c 'import json, sys
+s = json.load(open(sys.argv[1]))["stacks"].get(sys.argv[2])
+if s is None:
+    sys.exit(3)
+print("\t".join(str(x) or "-" for x in (s["image"], s["port"], s["api"], s["health"], s["served_model"], s["pull"],
+                                        s["cache"], "1" if s.get("dri") else "0", s["quant_tier"], s["device"],
+                                        s.get("user", ""), s["artifact_path"], s["artifact_sha256"], s["model_revision"])))
+for a in s["args"]:
+    print(a)' "${lock}" "${stack}") \
+        || err "bench: unknown stack '${stack}' (use ollama, llamacpp or ovms)"
+    IFS=$'\t' read -r image port api health served pull cache dri quant device user apath asha rev <<< "$(head -n1 <<< "${fields}")"
+    mapfile -t args < <(tail -n +2 <<< "${fields}")
+
+    local name="k3dgpu-g-vs-${stack}" hport docker_args gid v np devs="none (CPU only)"
+    hport=$(free_port)
+    docker_args=(run -d --name "${name}" -p "127.0.0.1:${hport}:${port}" -v "${name}-cache:${cache}")
+    [ "${user}" = - ] || docker_args+=(--user "${user}")
+    [ -z "${cpuset}" ] || docker_args+=(--cpuset-cpus "${cpuset}")
+    # The container downloads the model itself, so the host's proxy settings go in,
+    # with the loopback added to NO_PROXY.
+    if [ -n "${HTTP_PROXY:-}${HTTPS_PROXY:-}${http_proxy:-}${https_proxy:-}" ]; then
+        for v in HTTP_PROXY HTTPS_PROXY http_proxy https_proxy; do
+            [ -z "${!v:-}" ] || docker_args+=(-e "${v}=${!v}")
+        done
+        np="${NO_PROXY:-${no_proxy:-}}"
+        np="${np:+${np},}127.0.0.1,localhost"
+        docker_args+=(-e "NO_PROXY=${np}" -e "no_proxy=${np}")
+    fi
+    if [ "${dri}" = 1 ]; then
+        if is_wsl; then
+            # WSL2: the GPU is /dev/dxg plus the host's user-mode driver in /usr/lib/wsl.
+            docker_args+=(--device /dev/dxg -v "${WSL_LIB}:${WSL_LIB}:ro")
+            devs="/dev/dxg + ${WSL_LIB}"
+        elif [ -e /dev/dri ]; then
+            docker_args+=(--device /dev/dri)
+            for gid in $(stat -c %g /dev/dri/render* 2>/dev/null | sort -u); do docker_args+=(--group-add "${gid}"); done
+            devs="/dev/dri"
+        fi
+    fi
+    docker_args+=("${image}" ${args[@]+"${args[@]}"})
+    local vs_args=(run --id "${id}" --out "${out}/result.json" --ledger "${out}/ledger.md"
+        --rounds "${rounds}" --warmup "${warmup}" --max-tokens "${maxtok}")
+    if [ -n "${dry}" ]; then
+        echo "docker ${docker_args[*]}"
+        echo "verify: sha256 ${apath} = ${asha}"
+        echo "python3 ${dir}/vs.py ${vs_args[*]} --arm k3d-gpu=${kurl:-<port-forward svc/ovms>},${kmodel:-<agent model>} --arm ${stack}=http://127.0.0.1:${hport}${api},${served}"
+        return 0
+    fi
+
+    require docker
+    require curl
+    local t0=${SECONDS} pf="" pfport kdevice="" kbackend="" ktransport="direct (--k3d-url)" app kctx="k3d-${CLUSTER}" got
+    if docker inspect "${name}" >/dev/null 2>&1; then err "bench: container ${name} already exists (docker rm -f ${name})"; fi
+    if [ -z "${kurl}" ]; then
+        # The k3d-gpu arm as deployed now: the live server, its device and its model.
+        require kubectl
+        for app in "${AGENT_APPS[@]}" ""; do
+            [ -n "${app}" ] || err "bench: no agent service in ${AGENT_NS} on ${kctx}; run 'k3d-gpu agent up' first (or pass --k3d-url and --k3d-model)"
+            kubectl --context "${kctx}" -n "${AGENT_NS}" get "service/${app}" >/dev/null 2>&1 && break
+        done
+        read -r kdevice kbackend <<< "$(kubectl --context "${kctx}" -n "${AGENT_NS}" get deployment "${app}" \
+            -o jsonpath='{.spec.template.metadata.annotations.k3d-gpu\.io/agent-device} {.spec.template.metadata.annotations.k3d-gpu\.io/agent-backend}' 2>/dev/null)"
+        pfport=$(free_port)
+        kubectl --context "${kctx}" -n "${AGENT_NS}" port-forward "service/${app}" "${pfport}:8000" >/dev/null 2>&1 &
+        pf=$!
+        ktransport="kubectl port-forward (API-server stream)"
+        local kapi=/v3 mpath=/v1/config
+        [ "${app}" != vllm ] || { kapi=/v1; mpath=/v1/models; }
+        kurl="http://127.0.0.1:${pfport}${kapi}"
+        local mj=""
+        for _ in $(seq 1 30); do
+            mj=$(curl --noproxy '*' -sf -m 5 "http://127.0.0.1:${pfport}${mpath}") && break
+            sleep 1
+        done
+        [ -n "${mj}" ] || err "bench: the ${app} server on ${kctx} did not answer ${mpath}"
+        kmodel=$(python3 -c 'import json, sys
+d = json.loads(sys.argv[1])
+ids = [m["id"] for m in d["data"]] if isinstance(d, dict) and "data" in d else list(d)
+print(ids[0] if ids else "")' "${mj}") || kmodel=""
+        [ -n "${kmodel}" ] || err "bench: the ${app} server on ${kctx} lists no model"
+        # Competitors run a 4-bit build; a k3d-gpu arm on another tier is a different test.
+        [[ "${kmodel,,}" =~ int4|q4|4bit|awq|gptq ]] \
+            || err "bench: the k3d-gpu arm serves '${kmodel}', not a 4-bit build; the competitors run 4-bit (pass --k3d-url and --k3d-model to compare anyway)"
+    fi
+    # shellcheck disable=SC2064 # expand now: the names are fixed for this run
+    trap "docker rm -f '${name}' >/dev/null 2>&1 || true; [ -n '${keep}' ] || docker volume rm '${name}-cache' >/dev/null 2>&1 || true; [ -z '${pf}' ] || kill '${pf}' 2>/dev/null || true" EXIT
+    mkdir -p "${out}"
+    info "bench: starting ${stack} (${image})"
+    docker "${docker_args[@]}" >/dev/null || err "bench: docker run failed"
+    until curl --noproxy '*' -sf -o /dev/null "http://127.0.0.1:${hport}${health}"; do
+        bench_alive "${name}"
+        [ $((SECONDS - t0)) -lt "${budget}" ] || { docker logs --tail 30 "${name}" >&2; err "bench: ${stack} not healthy within the ${budget}s budget"; }
+        sleep 3
+    done
+    if [ "${pull}" = ollama ]; then
+        info "bench: ollama pull ${served}"
+        curl --noproxy '*' -sf -m "$((budget - (SECONDS - t0) + 1))" "http://127.0.0.1:${hport}/api/pull" \
+            -d "{\"model\":\"${served}\",\"stream\":false}" >/dev/null || err "bench: ollama pull ${served} failed"
+    fi
+    # A model that loads lazily (OVMS pull, llama.cpp download) answers once loaded.
+    until curl --noproxy '*' -sf -o /dev/null -m 120 "http://127.0.0.1:${hport}${api}/chat/completions" -H 'Content-Type: application/json' \
+            -d "{\"model\":\"${served}\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":2}"; do
+        bench_alive "${name}"
+        [ $((SECONDS - t0)) -lt "${budget}" ] || { docker logs --tail 30 "${name}" >&2; err "bench: ${stack} not serving ${served} within the ${budget}s budget"; }
+        sleep 5
+    done
+    # The weights served must be the pinned ones: hash the file the server loaded.
+    got=$(docker exec "${name}" sha256sum "${apath}" 2>/dev/null | cut -d' ' -f1)
+    [ "${got}" = "${asha}" ] || err "bench: ${apath} in ${name} hashes to '${got:-missing}', competitors.lock pins ${asha} (${rev}); refusing to measure other weights"
+    local left=$((budget - (SECONDS - t0))) ctx signer cpu
+    [ "${left}" -gt 0 ] || err "bench: budget spent on startup"
+    cpu=$(sed -n 's/^model name[[:space:]]*: //p' /proc/cpuinfo | head -n1)
+    ctx=$(python3 -c 'import json, sys; print(json.dumps(dict(zip(sys.argv[1::2], sys.argv[2::2]))))' \
+        host_cpu "${cpu}" host_cpu_short "$(cpu_short "${cpu}")" \
+        host_kernel "$(uname -r)" commit "$(cd "${dir}" && git rev-parse HEAD 2>/dev/null || echo "k3d-gpu ${VERSION}")" \
+        image "${image}" quant_tier "${quant}" device "${device}${cpuset:+, cpuset ${cpuset}}" vs_devices "${devs}" \
+        model_revision "${rev}" artifact "${apath} sha256 ${got}" \
+        k3d_device "${kdevice:-unknown}" k3d_backend "${kbackend:-unknown}" \
+        k3d_transport "${ktransport}" vs_transport "docker-proxy on 127.0.0.1")
+    # Sign-off is opt-in: K3D_GPU_SIGNOFF="Name <email>" puts it in the ledger section.
+    signer=${K3D_GPU_SIGNOFF:-}
+    python3 "${dir}/vs.py" "${vs_args[@]}" --budget-s "${left}" --context "${ctx}" --signed-off-by "${signer}" \
+        --arm "k3d-gpu=${kurl},${kmodel}" --arm "${stack}=http://127.0.0.1:${hport}${api},${served}" \
+        || err "bench: vs.py failed"
+    info "bench: ${out}/result.json and ${out}/ledger.md (add the run section to EXPERIMENTS.md and set the row's verdict; render docs: bench/vs.py docs --out docs/benchmarks.md bench-*/result.json)"
+    [ -z "${keep}" ] || info "bench: model cache kept in docker volume ${name}-cache (docker volume rm ${name}-cache)"
+}
+
+# ---- phase-steer (H20, experimental) ----------------------------------------------
+# cpulist_hexmask <cpulist>: the CPUs as a hex affinity mask, "0x" with CPU 0 in
+# the lowest bit, the form llama.cpp's -C/--cpu-mask and -Cb/--cpu-mask-batch read
+# (tools/server/README.md: "CPU affinity mask: arbitrarily long hex"). Fails on an
+# invalid or empty list.
+cpulist_hexmask() {
+    local cpus c i top=0 out=""
+    local -a nib=()
+    cpus=$(cpulist_expand "$1") && [ -n "${cpus}" ] || return 1
+    for c in ${cpus}; do
+        i=$((c / 4))
+        nib[i]=$(( ${nib[i]:-0} | (1 << (c % 4)) ))
+        [ "${i}" -le "${top}" ] || top=${i}
+    done
+    for ((i = top; i >= 0; i--)); do out+=$(printf '%x' "${nib[i]:-0}"); done
+    echo "0x${out}"
+}
+
+# phase_steer_plan [prefill] [decode]: "<state> <prefill> <decode> <lp-e> <reason>".
+# Auto: prefill (compute-bound) on the P-cores (cpu_core), decode on the E-cores
+# that share the L3 (cpu_atom minus the LP E-cores, which have no L3 and sit off
+# the compute tile). Explicit lists override detection; both must be online CPUs.
+phase_steer_plan() {
+    local pcpus=${1:-} dcpus=${2:-} lp online l
+    lp=$(lowpower_cpus)
+    if [ -z "${pcpus}${dcpus}" ]; then
+        has_hybrid || { echo "off - - - no P-core and E-core PMUs (cpu_core, cpu_atom), one core type: nothing to steer"; return 0; }
+        pcpus=$(hybrid_cpus core) dcpus=$(efficient_cpus)
+        [ -n "${dcpus}" ] || { echo "off - - ${lp:--} the only E-cores are LP E-cores (no L3, off the compute tile)"; return 0; }
+        echo "auto ${pcpus} ${dcpus} ${lp:--} detected from cpu_core and cpu_atom"
+        return 0
+    fi
+    { [ -n "${pcpus}" ] && [ -n "${dcpus}" ]; } || err "phase-steer: --prefill and --decode go together"
+    online=$(rd /sys/devices/system/cpu/online)
+    for l in "${pcpus}" "${dcpus}"; do
+        cpulist_expand "${l}" >/dev/null || err "phase-steer: '${l}' is not a CPU list (e.g. 0-15 or 0,2,4)"
+        [ -z "${online}" ] || cpulist_within "${l}" "${online}" || err "phase-steer: CPUs ${l} are not all online (${online})"
+    done
+    echo "override ${pcpus} ${dcpus} ${lp:--} set by --prefill and --decode"
+}
+
+# phase-steer [--json] [--prefill CPUS --decode CPUS]
+# Read-only. Prints the per-phase CPU split for one llama.cpp server per agent:
+# prompt processing (-Cb, the batch pool) on the P-cores, token generation (-C)
+# on the E-cores, as llama-server flags. The masks are non-strict on purpose:
+# ggml strict mode pins thread j to the j-th set bit in every process, so N
+# agents given one strict mask would all stack on its first CPUs (H20 A1).
+# Nothing is applied: H20 in
+# EXPERIMENTS.md is PENDING, and the split becomes a default only if it holds.
+cmd_phase_steer() {
+    local json=0 pre="" dlist="" state p d lp reason pm="" dm=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --json) json=1 ;;
+            --prefill|--decode)
+                [ $# -ge 2 ] || err "phase-steer: $1 needs a CPU list"
+                if [ "$1" = --prefill ]; then pre=$2; else dlist=$2; fi
+                shift ;;
+            *) err "unknown phase-steer option: $1 (use --json, --prefill CPUS, --decode CPUS)" ;;
+        esac
+        shift
+    done
+    read -r state p d lp reason <<< "$(phase_steer_plan "${pre}" "${dlist}")"
+    [ -n "${state}" ] || exit 1
+    if [ "${state}" != off ]; then
+        { pm=$(cpulist_hexmask "${p}") && dm=$(cpulist_hexmask "${d}"); } \
+            || err "phase-steer: could not build masks from ${p} and ${d}"
+    fi
+    if [ "${json}" = 1 ]; then
+        python3 - "${state}" "${p}" "${d}" "${lp}" "${reason}" "${pm}" "${dm}" <<'PY'
+import json, sys
+state, p, d, lp, reason, pm, dm = sys.argv[1:]
+on = state != "off"
+def opt(v):
+    return None if v in ("-", "") else v
+print(json.dumps({
+    "schema": "phase-steer/v1", "state": state, "reason": reason, "ledger": "H20 PENDING",
+    "prefill_cpus": opt(p), "decode_cpus": opt(d), "lowpower_cpus": opt(lp),
+    "prefill_mask": opt(pm), "decode_mask": opt(dm),
+    "llama_server_args": ["--cpu-mask-batch", pm, "--cpu-mask", dm] if on else [],
+}, sort_keys=True))
+PY
+        return 0
+    fi
+    info "phase-steer (experimental, H20 PENDING: no command applies it)"
+    if [ "${state}" = off ]; then
+        echo "  off: ${reason}"
+        return 0
+    fi
+    echo "  prefill (P-cores): ${p}  mask ${pm}"
+    echo "  decode  (E-cores): ${d}  mask ${dm}"
+    [ "${lp}" = - ] || echo "  LP E-cores left out: ${lp}"
+    echo "  from: ${reason}"
+    echo "  llama-server: --cpu-mask-batch ${pm} --cpu-mask ${dm}"
+}
+
 # K3D_GPU_EXPERIMENTAL=list prints the feature table with any command; any
 # other value is checked up front, so an unknown name fails before anything runs.
 if exp_is_list; then
@@ -6472,7 +8331,15 @@ case "${1:-help}" in
     plan)    shift; cmd_plan "$@" ;;
     audit)   shift; cmd_audit "$@" ;;
     sandbox) cmd_sandbox "${2:-}" ;;
+    model-share) shift; cmd_model_share "$@" ;;
     apply)   shift; cmd_apply "$@" ;;
+    tune)    shift; cmd_tune "$@" ;;
+    capacity) shift; cmd_capacity "$@" ;;
+    autoquant) shift; cmd_autoquant "$@" ;;
+    bench)   shift; cmd_bench "$@" ;;
+    phase-steer) shift; cmd_phase_steer "$@" ;;
+    quickstart) shift; cmd_quickstart "$@" ;;
+    uninstall)  shift; cmd_uninstall "$@" ;;
     version|--version|-v) echo "k3d-gpu ${VERSION}" ;;
     help|--help|-h) usage ;;
     *) usage; exit 1 ;;

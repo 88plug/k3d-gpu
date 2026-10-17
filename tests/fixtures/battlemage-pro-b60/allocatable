@@ -1,0 +1,3 @@
+cpu 16
+pods 110
+gpu.intel.com/xe 1

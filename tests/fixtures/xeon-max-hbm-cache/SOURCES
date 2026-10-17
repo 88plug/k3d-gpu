@@ -1,0 +1,19 @@
+Platform: one-socket Xeon CPU Max 9480 (Sapphire Rapids with on-package HBM) in
+HBM cache mode (2LM) with SNC4: NUMA nodes 0-3 hold the CPUs and the DDR5; the HBM
+is a direct-mapped memory-side cache in front of each node and has no node of its own.
+
+Sources (kernel paths are Linux v6.18 (torvalds/linux tag v6.18)):
+- Cache mode shows only DDR nodes, and node0/memory_side_cache is present only in
+  cache mode: Intel Xeon CPU Max Series Configuration and Tuning Guide 354227-003,
+  https://cdrdv2-public.intel.com/787743/354227-intel-xeon-cpu-max-series-configuration-and-tuning-guide-rev3.pdf
+- node<N>/memory_side_cache/index<M>/{size,indexing} (size in bytes, indexing 0 =
+  direct-mapped): Documentation/ABI/stable/sysfs-devices-node.
+- cpu family 6, model 143 (0x8F): arch/x86/include/asm/intel-family.h
+  INTEL_SAPPHIRERAPIDS_X; Xeon CPU Max has the same model.
+- SNC, cpulists, amx_*, rdt_a: as in xeon-max-hbm.
+
+Layout: exactly the form tests/fixtures/capture.sh writes.
+
+Not from hardware: everything xeon-max-hbm lists, plus the cache index number (1)
+and size (64 GB HBM per socket, from the tuning guide, split evenly over the four
+SNC4 nodes: 16 GiB each).

@@ -1,0 +1,292 @@
+{
+  "capacity": [],
+  "cluster": {
+    "context": "k3d-gpu",
+    "name": "gpu",
+    "nodes": [],
+    "present": false,
+    "reason": "no kubeconfig context k3d-gpu (cluster not created, or KUBECONFIG points elsewhere)"
+  },
+  "detected": [
+    {
+      "resources": [
+        "k3d-gpu.io/hybrid-cpu=true"
+      ],
+      "vendor": "hybrid"
+    }
+  ],
+  "doctor": {
+    "exit": 0,
+    "findings": [
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking docker...",
+        "text": "docker running",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking k3d...",
+        "text": "k3d version v0.0.0-stub",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking kubectl...",
+        "text": "",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "warn",
+        "revert": null,
+        "section": "Intel devices with no driver bound...",
+        "text": "Intel NPU Nova Lake (0xd71d) has no driver — intel_vpu is loaded but no published NPU firmware for 60xx exists yet (vpu_60xx_v1.bin is in neither linux-firmware nor linux-npu-driver)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "CPU ISA: AVXVNNI — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "hybrid CPU: P-cores 0-3, E-cores 4-11, LP E-cores 12-15 — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient|lowpower|ecluster|pcore-physical|latency",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "E-core clusters (shared L2): 4-7 8-11 — k3d-gpu.io/cores=ecluster gives a pod 4 E-cores of one cluster",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "physical P-cores (one thread per core): 0-3 — k3d-gpu.io/cores=pcore-physical and latency show pods one thread per core",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "info",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "noisy-neighbour isolation: cpu-cap — no rdt_a flag, so cache and DRAM bandwidth stay shared; give a bandwidth-heavy neighbour a CPU limit. Holding it to one E-core L2 cluster (k3d-gpu.io/cores=ecluster) is not recommended: H26 measures it against the same workers spread over the E-cores (EXPERIMENTS.md H26)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...",
+        "text": "dra available (auto)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...",
+        "text": "image-volume available (auto)",
+        "why": null
+      }
+    ],
+    "sections": [
+      {
+        "good": null,
+        "name": "Checking docker...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Checking k3d...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Checking kubectl...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Detected accelerators: hybrid",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Intel devices with no driver bound...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Intel CPU built-in accelerators...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "All checks passed.",
+        "src": null
+      }
+    ]
+  },
+  "fingerprint": "sha256:41b9760644175d0c963e63d0ab17a28e70787c2d59ced2185f1168e468a74b17",
+  "host": {
+    "cpu": {
+      "amx": [],
+      "avx512": false,
+      "avx_vnni": true,
+      "e_core_cpus": 12,
+      "e_cores": "4-15",
+      "hybrid": true,
+      "isa": [
+        "avx2",
+        "avx_vnni"
+      ],
+      "logical_cpus": null,
+      "model": null,
+      "online": null,
+      "p_core_cpus": 4,
+      "p_cores": "0-3"
+    },
+    "dsa": {
+      "devices": 0,
+      "work_queues": 0
+    },
+    "gaudi": {
+      "accel_nodes": 0,
+      "driver_loaded": false,
+      "pci_devices": 0
+    },
+    "iaa": {
+      "devices": 0,
+      "work_queues": 0
+    },
+    "intel_gpus": [],
+    "kernel": "6.19.0-1-generic",
+    "memory": {
+      "available_kib": null,
+      "total_kib": null
+    },
+    "npus": [],
+    "nvidia": {
+      "driver": null,
+      "gpus": []
+    },
+    "qat": [],
+    "rapl": []
+  },
+  "hostname": "",
+  "labels": {
+    "feature.node.kubernetes.io/cpu-cpuid.AVXVNNI": "true",
+    "k3d-gpu.io/hybrid-cpu": "true"
+  },
+  "perf": {
+    "exit": 0,
+    "findings": [
+      {
+        "apply": null,
+        "from": "/sys/devices/system/cpu/cpu0/cpufreq/",
+        "level": "info",
+        "revert": null,
+        "section": "CPU frequency (driver none)",
+        "text": "no cpufreq policy exposed (VM or cpufreq disabled) — nothing to tune here",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/proc/cpuinfo",
+        "level": "info",
+        "revert": null,
+        "section": "Isolation for sandboxed agents",
+        "text": "no VT-x (vmx flag) exposed: no microVM sandboxes (VT-x off in BIOS, or a VM without nested virtualization)",
+        "why": null
+      }
+    ],
+    "sections": [
+      {
+        "good": "cores ramp to full turbo the moment a request arrives: EPP performance or balance_performance, turbo on, no frequency caps — token generation is a latency-bound loop and every ramp-up shows in time-to-first-token",
+        "name": "CPU frequency (driver none)",
+        "src": "https://docs.kernel.org/admin-guide/pm/intel_pstate.html#energy-vs-performance-hints, https://docs.kernel.org/admin-guide/pm/cpufreq.html"
+      },
+      {
+        "good": "/dev/kvm usable for microVM sandboxes, each GPU alone in its IOMMU group, split-lock detection on, CET known, GPU observation streams limited to CAP_PERFMON",
+        "name": "Isolation for sandboxed agents",
+        "src": "https://docs.kernel.org/driver-api/vfio.html (IOMMU groups), https://docs.kernel.org/admin-guide/kernel-parameters.html (split_lock_detect), https://docs.kernel.org/admin-guide/sysctl/kernel.html (split_lock_mitigate), kernel source drivers/gpu/drm/i915/i915_perf.c and drivers/gpu/drm/xe/xe_observation.c (paranoid sysctls), Intel SDM vol. 4 335592-093 (IA32_S_CET 6A2H, IA32_TME_ACTIVATE 982H)"
+      },
+      {
+        "good": null,
+        "name": "0 suggestion(s). Read-only: nothing on this host was changed.",
+        "src": null
+      }
+    ]
+  },
+  "release": {
+    "k3d_gpu_version": "<version>",
+    "pins": {
+      "llama.cpp": "ghcr.io/ggml-org/llama.cpp@sha256:be586c648cb79d2cd75d0c38a6541e1f16c47a7c6621d3e711470a467fc38744",
+      "ovms": "openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58"
+    }
+  },
+  "schema": "k3d-gpu.facts/v1",
+  "targets": [
+    {
+      "cpu": {
+        "amx": false,
+        "e_count": 12,
+        "e_cpus": "4-15",
+        "family_model": null,
+        "hybrid": true,
+        "logical_cpus": null,
+        "model_name": null,
+        "numa_nodes": 1,
+        "p_count": 4,
+        "p_cpus": "0-3"
+      },
+      "device_id": null,
+      "driver": null,
+      "fix": null,
+      "generation": null,
+      "id": "cpu",
+      "kind": "cpu",
+      "pci": null,
+      "platform": null,
+      "reason": null,
+      "resource": null,
+      "usable": true,
+      "vendor": null,
+      "xmx": null
+    }
+  ]
+}
