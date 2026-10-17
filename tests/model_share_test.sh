@@ -61,7 +61,7 @@ expect "render: pull only if absent"  "pullPolicy: IfNotPresent" "${out}"
 expect "render: name"                 "name: fleet" "${out}"
 expect "render: no placeholder left"  "K3D_GPU_MS_" "${out}" negate
 expect "render: no template comments" "# Zero-copy" "${out}" negate
-expect "render: header names inputs"  "# k3d-gpu model-share: replicas=8 device=cpu snapshotter=overlayfs" "${out}"
+expect "render: header names inputs"  "# k3d-gpu model-share: replicas=8 snapshotter=overlayfs" "${out}"
 expect "overlayfs: no warning"        "WARN" "${out}" negate
 
 # ---- auto-adapt -----------------------------------------------------------------
@@ -73,13 +73,15 @@ out=$(ms "" --image "${MODEL}" --agent-image "${AGENT}")
 expect "no cluster: says so"          "no running cluster 'ms-test'" "${out}"
 expect "no cluster: snapshotter unknown" "snapshotter=unknown" "${out}"
 expect "default replicas 1"           "  replicas: 1" "${out}"
-expect "default device is cpu"        "device=cpu" "${out}"
-out=$(ms overlayfs --image "${MODEL}" --agent-image "${AGENT}" --device gpu --replicas 3)
-expect "gpu: warns device buffers"    "own device buffers" "${out}"
-expect "gpu: header"                  "device=gpu" "${out}"
+out=$(ms overlayfs --image k3d-registry.localhost:5000/m:v1 --agent-image localhost:5000/agent)
+expect "registry with port: renders"  "rc=0" "${out}"
+expect "registry with port: ref kept" "reference: k3d-registry.localhost:5000/m:v1" "${out}"
+expect "registry with port: agent"    "image: localhost:5000/agent" "${out}"
+expect "port without path fails"      "rc=1" "$(ms overlayfs --image 'host:5000:v1' --agent-image "${AGENT}")"
+expect "empty path segment fails"     "rc=1" "$(ms overlayfs --image 'host//m' --agent-image "${AGENT}")"
 out=$(ms overlayfs --image registry.example/models/qwen3:0.6b --agent-image "${AGENT}")
 expect "tag: warns not pinned"        "is not pinned by digest" "${out}"
-out=$(ms overlayfs --image "${MODEL}" --agent-image "${AGENT}" --device auto)
+out=$(ms overlayfs --image "${MODEL}" --agent-image "${AGENT}")
 expect "digest: no pin warning"       "not pinned" "${out}" negate
 
 # ---- input validation -----------------------------------------------------------
@@ -90,7 +92,7 @@ expect "replicas text fails"          "rc=1" "$(ms overlayfs --image "${MODEL}" 
 expect "uppercase name fails"         "rc=1" "$(ms overlayfs --image "${MODEL}" --agent-image "${AGENT}" --name Fleet)"
 expect "sed delimiter in image fails" "rc=1" "$(ms overlayfs --image 'a|b' --agent-image "${AGENT}")"
 expect "newline in image fails"       "rc=1" "$(ms overlayfs --image "$(printf 'a\nb')" --agent-image "${AGENT}")"
-expect "unknown device fails"         "rc=1" "$(ms overlayfs --image "${MODEL}" --agent-image "${AGENT}" --device tpu)"
+expect "--device is not a flag"       "rc=1" "$(ms overlayfs --image "${MODEL}" --agent-image "${AGENT}" --device gpu)"
 expect "unknown flag fails"           "rc=1" "$(ms overlayfs --image "${MODEL}" --agent-image "${AGENT}" --bogus)"
 
 # ---- H28 probe ------------------------------------------------------------------
@@ -104,7 +106,11 @@ expect "probe C: init copy"           "initContainers" "${pc}"
 expect "probe C: mmaps the copy"      "/data/blob" "${pc}"
 expect "probe: image volume ref"      'reference: "h28-model:r1"' "${pt}"
 expect "probe: cluster name"          "k3dgpu-i-zero-copy-models" "$(cat "${PROBE}")"
-expect "probe: 20 min self-limit"     "timeout -k 30 1200" "$(cat "${PROBE}")"
+expect "probe: rounds killed at 17 min" "timeout -k 15 1020" "$(cat "${PROBE}")"
+expect "probe: delete under the lock"  "k3d cluster delete" "$(sed -n "/^locked()/,/^}/p" "${PROBE}")"
+expect "probe: re-check f-* in lock"  "f_cluster" "$(sed -n "/^locked()/,/^}/p" "${PROBE}")"
+expect "probe: cold != 0 is VOID"     "VOID-cold" "$(cat "${PROBE}")"
+expect "probe: warm-up round"         "round C 0 warmup" "$(cat "${PROBE}")"
 expect "probe: waits for f- clusters" "k3dgpu-f-" "$(cat "${PROBE}")"
 expect "probe run: needs LOCK"        "LOCK" "$("${PROBE}" run 2>&1)"
 expect "probe: unknown verb fails"    "usage" "$("${PROBE}" bogus 2>&1)"

@@ -193,11 +193,35 @@ rounds under the lock, 20 min hard kill; MemAvailable >= 1.5 x N x size or abort
 | C ΔCached < 0.8 x N x size or C PSS < 0.9x size | 0.05 | INCONCLUSIVE (probe blind) | Fix the probe (per-pod cgroup `memory.current`); no claim |
 | >= 2 rounds of an arm void, or round-median spread > 30% of median | 0.05 | INCONCLUSIVE | Rerun with MIB=512 or in a quieter window |
 
+**Amendment A1, registered 2026-10-17T12:39:21Z, before any H28 measurement** (it
+answers two refuter reviews; the original rows above stay as registered):
+- Primary memory metric is now `model_resident_kB`: mincore resident pages of the
+  round's shared file plus, in arm C, of every pod's copy. It counts only the model's
+  page cache, so the 59 other containers on the host do not move it. ΔCached stays,
+  as a secondary metric. Predictions: T <= 1.1x size; C >= 0.8 x (N+1) x size (the
+  source plus N copies). Null: T >= 0.5 x N x size.
+- Charge, recorded, not scored: pod-level memcg `memory.current` and `file`. Predicted
+  for T: the first pod to fault a page is charged for it, so the per-pod `file` charge
+  is uneven and sums to about 1x size. That pod needs headroom of about 1x size in
+  `memory.current`. The claim is therefore node-total: the node saves (N-1) x size,
+  and the per-agent cost is near zero only in PSS terms.
+- Cold check: a prime pod mounts the image volume without reading it, so the layer is
+  unpacked before eviction. The script prints VOID-cold for any `cold != 0`.
+- Order bias: an untimed warm-up round (r0, arm C) runs first and is never scored.
+- Lock: the rounds process is killed at 17 min. The cluster and model images are
+  deleted while the lock is still held, and k3dgpu-f-* is re-checked inside the lock.
+- A hostPath or RWX-PVC arm is not run. It would share one inode in the same way, so
+  any claim is scoped to "matches a shared-file mount, and adds OCI delivery and
+  pinning".
+- The priors are revised before measuring, because 8 GiB of `cp` writes stay in page
+  cache on a 128 GiB host: SUPPORTED 0.45, REFUTED (time part) 0.35, the other rows
+  unchanged at 0.05 each.
+
 Generalization (prediction, by family): page-cache sharing is a kernel and filesystem
 property, so the memory result should hold on every Intel family (Core, Core Ultra,
 Atom/N-series, Xeon) with the saving (N-1) x size, while weights stay CPU-resident.
-GPU or NPU offload copies into per-process device buffers, so `model-share --device
-gpu|npu` warns. The time ratio depends on copy cost: a larger win is predicted on
+GPU or NPU offload copies into per-process device buffers, so `model-share` renders
+CPU-resident weights only (A1 removed its decorative `--device` flag). The time ratio depends on copy cost: a larger win is predicted on
 low-RAM, single-channel or eMMC hosts (N100, 16 GB Core Ultra), a smaller one on
 8-channel DDR5 Xeons. On multi-socket Xeon the shared copy sits on one NUMA node; a
 per-socket follow-up is needed before claiming anything there. memcg charges the page

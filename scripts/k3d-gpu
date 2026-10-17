@@ -57,7 +57,7 @@
 #   plan    engine, model and placement from the measured (green) matrix cells, --explain prints why
 #   audit   posture checks: unauthenticated listeners off loopback, images not in images.lock
 #   sandbox up|down|status
-#   model-share --image REF --agent-image REF [--replicas N] [--name NAME] [--device D]
+#   model-share --image REF --agent-image REF [--replicas N] [--name NAME]
 #           kubernetes-sigs/agent-sandbox with a warm pool of sandboxes pinned to E-cores
 
 set -euo pipefail
@@ -159,7 +159,7 @@ Usage: k3d-gpu <command>
   sandbox up|down|status
             Install kubernetes-sigs/agent-sandbox with a warm pool of sandboxes on
             E-cores (k3d-gpu.io/cores=efficient), check where they run, or remove it
-  model-share --image REF --agent-image REF [--replicas N] [--name NAME] [--device auto|cpu|gpu|npu]
+  model-share --image REF --agent-image REF [--replicas N] [--name NAME]
             Print a Deployment whose N agent replicas mount one model OCI image as a
             read-only image volume (pipe to kubectl apply -f -). It warns when this
             cluster's snapshotter, the device or an unpinned tag would give each
@@ -4420,8 +4420,9 @@ cmd_sandbox() {
 #   snapshotter  overlayfs keeps one lower dir per layer, so every pod's view
 #                resolves to the same inodes; native copies the layer per view.
 #                Read from the k3s-generated containerd config in the server node.
-#   device       cpu (auto) mmaps the file; a GPU or NPU loads the weights into
-#                per-process device buffers, so each replica pays for its own copy.
+#   scope        CPU-resident weights only. A GPU or NPU runtime copies the
+#                weights into per-process device buffers, so each replica pays for
+#                its own device copy; the template requests no device.
 #   pinning      a tag can resolve to a new digest on another node or a re-pull.
 # The measured effect is EXPERIMENTS.md H28 (PENDING until the probe runs).
 
@@ -4434,28 +4435,23 @@ ms_snapshotter() {
 }
 
 cmd_model_share() {
-    local image="" agent="" replicas=1 name=model-share device=auto snap
+    local image="" agent="" replicas=1 name=model-share snap
     while [ $# -gt 0 ]; do
         case "$1" in
             --image)       image="${2:-}"; shift ;;
             --agent-image) agent="${2:-}"; shift ;;
             --replicas)    replicas="${2:-}"; shift ;;
             --name)        name="${2:-}"; shift ;;
-            --device)      device="${2:-}"; shift ;;
-            *) err "usage: k3d-gpu model-share --image REF --agent-image REF [--replicas N] [--name NAME] [--device auto|cpu|gpu|npu]" ;;
+            *) err "usage: k3d-gpu model-share --image REF --agent-image REF [--replicas N] [--name NAME]" ;;
         esac
         shift
     done
-    local ref='^[a-z0-9][a-z0-9._/-]*(:[A-Za-z0-9._-]+)?(@sha256:[0-9a-f]{64})?$'
+    # [host[:port]/]path[:tag][@sha256:digest]; a k3d registry always has a port.
+    local ref='^[a-z0-9][a-z0-9._-]*(:[0-9]{1,5}(/[a-z0-9][a-z0-9._-]*)+|(/[a-z0-9][a-z0-9._-]*)*)(:[A-Za-z0-9._-]+)?(@sha256:[0-9a-f]{64})?$'
     [[ "${image}" =~ ${ref} ]] || err "model-share: --image '${image}' is not an image reference"
     [[ "${agent}" =~ ${ref} ]] || err "model-share: --agent-image '${agent}' is not an image reference"
     [[ "${replicas}" =~ ^[1-9][0-9]{0,3}$ ]] || err "model-share: --replicas must be 1-9999, got '${replicas}'"
     [[ "${name}" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]] || err "model-share: --name '${name}' is not a DNS-1123 label"
-    case "${device}" in
-        auto|cpu) device=cpu ;;
-        gpu|npu) warn "model-share: on ${device} each replica copies the weights into its own device buffers; only the file read is shared, so budget ${replicas} x model size" ;;
-        *) err "model-share: --device must be auto, cpu, gpu or npu, got '${device}'" ;;
-    esac
     [[ "${image}" == *@sha256:* ]] \
         || warn "model-share: ${image} is not pinned by digest; replicas on a re-pull can mount different weights (append @sha256:...)"
     [ -f "${MODEL_SHARE_MANIFEST}" ] || err "${MODEL_SHARE_MANIFEST} not found"
@@ -4465,7 +4461,7 @@ cmd_model_share() {
         overlayfs) ;;
         *) warn "model-share: cluster '${CLUSTER}' uses the ${snap} snapshotter; it can give each pod its own copy of the layer, so budget ${replicas} x model size. Recreate it on a filesystem that supports overlayfs (k3d-gpu down && k3d-gpu up)" ;;
     esac
-    echo "# k3d-gpu model-share: replicas=${replicas} device=${device} snapshotter=${snap:-unknown}"
+    echo "# k3d-gpu model-share: replicas=${replicas} snapshotter=${snap:-unknown}"
     sed -e "/^[[:space:]]*#/d" \
         -e "s|K3D_GPU_MS_AGENT_IMAGE|${agent}|g" -e "s|K3D_GPU_MS_IMAGE|${image}|g" \
         -e "s|^  replicas: 1$|  replicas: ${replicas}|" -e "s|K3D_GPU_MS_NAME|${name}|g" "${MODEL_SHARE_MANIFEST}"
