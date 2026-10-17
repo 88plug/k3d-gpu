@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+# render-component [--latest] [name...]: render pinned upstream components into the
+# manifests baked into the node image (share/). No names renders every component.
+#
+#   (default)  render the pinned version; the downloaded chart must match its sha256
+#   --latest   first move the pins in component.conf to the newest stable upstream
+#              release (never backwards), then render it
+#   --list     print the component names, one per line
+#
+# Each hack/components/<name>/ holds:
+#   component.conf  KIND, OUTPUT (path under the repo root) and the kind's pins
+#   header.txt      comment block written on top of OUTPUT; @VERSION@ -> the version
+#   values.yaml     helm values, also echoed into the header so the manifest says
+#                   how it was made
+#
+# KIND=helm   CHART_REPO (https:// helm repo URL), CHART, CHART_VERSION, CHART_SHA256,
+#             RELEASE, NAMESPACE. Rendered with `helm template --include-crds`, using
+#             the helm pinned in hack/tools.env (hack/install-helm fetches it).
+# A new kind is one render_<kind> function plus its required keys in KIND_KEYS.
+#
+# Env: RENDER_ROOT  repo root holding hack/components and OUTPUT (default: this checkout)
+set -euo pipefail
+
+HACK_DIR=$(cd "$(dirname "$0")" && pwd)
+ROOT=${RENDER_ROOT:-$(dirname "${HACK_DIR}")}
+# shellcheck source=hack/tools.env
+. "${HACK_DIR}/tools.env"
+
+declare -A KIND_KEYS=(
+    [helm]="CHART_REPO CHART CHART_VERSION CHART_SHA256 RELEASE NAMESPACE"
+)
+
+die() { echo "render-component: $*" >&2; exit 1; }
+
+# set_pin <conf> <key> <value>: rewrite KEY=... in a component.conf.
+set_pin() { sed -i "s|^$2=.*|$2=$3|" "$1"; }
+
+# not_older <current> <candidate>: candidate sorts at or after current.
+not_older() { [ "$(printf '%s\n' "$1" "$2" | sort -V | tail -n1)" = "$2" ]; }
+
+render_helm() {
+    local dir=$1 latest=$2 tmp tgz sum v
+    command -v helm >/dev/null || die "helm not on PATH (hack/install-helm <dir>, then add <dir> to PATH)"
+    v=$(helm version --template '{{.Version}}')
+    [ "${v}" = "${HELM_VERSION}" ] || die "helm ${v} on PATH, need the pinned ${HELM_VERSION} (hack/install-helm)"
+    # https, or plain http on loopback (the tests' local chart repo).
+    [[ "${CHART_REPO}" == https://* || "${CHART_REPO}" == http://127.0.0.1:* ]] \
+        || die "${NAME}: CHART_REPO must be an https:// helm repo, got '${CHART_REPO}'"
+
+    tmp=$(mktemp -d)
+    # shellcheck disable=SC2064 # expand now: tmp is local, gone when the trap fires
+    trap "rm -rf -- '${tmp}'" EXIT
+    # Private helm state: no repos or cache from the user's ~/.config/helm leak in.
+    export HELM_CACHE_HOME="${tmp}/cache" HELM_CONFIG_HOME="${tmp}/config" HELM_DATA_HOME="${tmp}/data"
+
+    if [ "${latest}" = 1 ]; then
+        v=$(helm show chart "${CHART}" --repo "${CHART_REPO}" | sed -n 's/^version: *//p')
+        [ -n "${v}" ] || die "${NAME}: no ${CHART} release found in ${CHART_REPO}"
+        not_older "${CHART_VERSION}" "${v}" || die "${NAME}: upstream latest ${v} is older than pinned ${CHART_VERSION}"
+        CHART_VERSION=${v}
+    fi
+
+    helm pull "${CHART}" --repo "${CHART_REPO}" --version "${CHART_VERSION}" --destination "${tmp}" >/dev/null
+    tgz=$(find "${tmp}" -maxdepth 1 -name '*.tgz' -print -quit)
+    [ -n "${tgz}" ] || die "${NAME}: helm pull of ${CHART} ${CHART_VERSION} produced no chart"
+    sum=$(sha256sum "${tgz}" | cut -d' ' -f1)
+
+    if [ "${latest}" = 0 ] && [ "${sum}" != "${CHART_SHA256}" ]; then
+        die "${NAME}: ${CHART} ${CHART_VERSION} has sha256 ${sum}, pinned ${CHART_SHA256}"
+    fi
+
+    {
+        sed "s|@VERSION@|${CHART_VERSION}|g" "${dir}/header.txt"
+        echo "# values:"
+        sed 's/^/#   /; s/ *$//' "${dir}/values.yaml"
+        helm template "${RELEASE}" "${tgz}" --namespace "${NAMESPACE}" --include-crds -f "${dir}/values.yaml"
+    } > "${tmp}/out.yml"
+    mkdir -p "$(dirname "${ROOT}/${OUTPUT}")"
+    mv "${tmp}/out.yml" "${ROOT}/${OUTPUT}"
+    # Pins move only once the render succeeded, so they always match OUTPUT.
+    if [ "${latest}" = 1 ]; then
+        set_pin "${dir}/component.conf" CHART_VERSION "${CHART_VERSION}"
+        set_pin "${dir}/component.conf" CHART_SHA256 "${sum}"
+    fi
+    echo "rendered ${NAME} ${CHART_VERSION} -> ${OUTPUT}"
+}
+
+# render <name> <latest>: in a subshell, so one component's keys never leak into the next.
+render() (
+    NAME=$1
+    local dir="${ROOT}/hack/components/$1" k
+    [ -f "${dir}/component.conf" ] || die "unknown component '$1' (no ${dir}/component.conf)"
+    # shellcheck source=/dev/null
+    . "${dir}/component.conf"
+    [ -n "${KIND:-}" ] && [ -n "${KIND_KEYS[${KIND}]+x}" ] || die "$1: unknown KIND '${KIND:-}'"
+    for k in OUTPUT ${KIND_KEYS[${KIND}]}; do
+        [ -n "${!k:-}" ] || die "$1: component.conf is missing ${k}"
+    done
+    "render_${KIND}" "${dir}" "$2"
+)
+
+list() {
+    local c
+    for c in "${ROOT}"/hack/components/*/component.conf; do
+        [ -f "${c}" ] && basename "$(dirname "${c}")"
+    done
+    return 0
+}
+
+latest=0
+case "${1:-}" in
+    --list) list; exit 0 ;;
+    --latest) latest=1; shift ;;
+    -*) die "unknown option '$1'" ;;
+esac
+[ $# -gt 0 ] || mapfile -t names < <(list)
+[ $# -eq 0 ] || names=("$@")
+[ "${#names[@]}" -gt 0 ] || die "no components under ${ROOT}/hack/components"
+for n in "${names[@]}"; do
+    render "${n}" "${latest}"
+done

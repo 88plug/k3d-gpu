@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# install-helm <dir>: download the helm pinned in hack/tools.env into <dir>/helm,
+# checked against its pinned sha256.
+set -euo pipefail
+
+# shellcheck source=hack/tools.env
+. "$(dirname "$0")/tools.env"
+
+dest=${1:?usage: install-helm <dir>}
+tmp=$(mktemp -d)
+trap 'rm -rf "${tmp}"' EXIT
+
+curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 \
+    -o "${tmp}/helm.tgz" "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
+echo "${HELM_SHA256}  ${tmp}/helm.tgz" | sha256sum -c --quiet -
+tar -xzf "${tmp}/helm.tgz" -C "${tmp}" linux-amd64/helm
+mkdir -p "${dest}"
+install -m755 "${tmp}/linux-amd64/helm" "${dest}/helm"
+"${dest}/helm" version --short

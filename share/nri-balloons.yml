@@ -1,6 +1,6 @@
 # NRI balloons resource policy for Intel hybrid CPUs (P-cores + E-cores) and NUMA hosts
 # Source: https://github.com/containers/nri-plugins (helm chart nri-resource-policy-balloons v0.14.0),
-# rendered with `helm template --include-crds` and the values below. Re-render to bump.
+# rendered by `hack/render-component nri-balloons` (helm template --include-crds) with the values below.
 # Scheduled only onto nodes labelled k3d-gpu.io/hybrid-cpu=true, which the k3d-gpu
 # launcher sets when /sys/devices/cpu_core lists online CPUs and cpu_atom or
 # cpu_lowpower does too, or carrying k3d-gpu.io/numa-nodes, which it sets when the

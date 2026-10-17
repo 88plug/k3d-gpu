@@ -11,17 +11,29 @@ jobs:
     name: Shellcheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: ludeeus/action-shellcheck@master
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
         with:
           scandir: .
           severity: warning
+          version: v0.11.0
+
+  actionlint:
+    name: Workflow lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      # rhysd/actionlint 1.7.12 (bundles shellcheck for run: blocks), pinned by digest.
+      - name: actionlint
+        env:
+          IMAGE: rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+        run: docker run --rm -v "$PWD:/repo" -w /repo "$IMAGE" -color
 
   detect-tests:
     name: Detection tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - run: tests/detect_test.sh
       - run: tests/image_test.sh
       - run: tests/host_setup_test.sh
@@ -37,7 +49,7 @@ jobs:
       # ghcr.io/yannh/kubeconform:v0.8.0
       KUBECONFORM_IMAGE: ghcr.io/yannh/kubeconform@sha256:faffaf43f95aa6425306e1ab8d6fcad72acb9049158f38e574c085ea1ec0f64e
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - name: Install promtool
         run: |
           tgz="prometheus-${PROMETHEUS_VERSION}.linux-amd64.tar.gz"
@@ -56,14 +68,14 @@ jobs:
     name: Agent manifests (kubeconform)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - run: tests/agent_kubeconform.sh
 
   claims-check:
     name: Docs claims guard
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - run: tests/claims_check_test.sh
       - run: tests/claims_check.sh
 
@@ -71,21 +83,21 @@ jobs:
     name: Bench harness tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - run: tests/bench_test.sh
 
   mcp-tests:
     name: MCP server tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - run: tests/mcp_test.sh
 
   kuberay-example:
     name: KubeRay example (static)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - run: sudo apt-get update && sudo apt-get install -y python3-yaml
       - run: tests/kuberay_test.sh
 
@@ -96,7 +108,7 @@ jobs:
       KUBECONFORM_VERSION: v0.8.0
       KUBECONFORM_SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - name: Install kubeconform
         run: |
           curl -fsSL -o kubeconform.tar.gz \
@@ -113,7 +125,7 @@ jobs:
     outputs:
       platforms: ${{ steps.list.outputs.platforms }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - id: list
         run: echo "platforms=$(tests/sim_matrix_test.sh --list-json)" >> "$GITHUB_OUTPUT"
 
@@ -126,7 +138,7 @@ jobs:
       matrix:
         platform: ${{ fromJSON(needs.sim-fixtures.outputs.platforms) }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - env:
           PLATFORM: ${{ matrix.platform }}
         run: tests/sim_matrix_test.sh "$PLATFORM"
@@ -139,22 +151,40 @@ jobs:
       matrix:
         example: [openai-agents, langgraph, crewai, llamaindex, litellm-gateway]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - run: tests/agent_examples_test.sh "${{ matrix.example }}"
 
   register-model-test:
     name: LiteLLM register-model.sh
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - run: tests/register_model_test.sh
+
+  render:
+    name: Rendered components
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - name: Install pinned helm
+        run: |
+          hack/install-helm "$RUNNER_TEMP/bin"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Render tests
+        run: tests/render_test.sh
+      # Every baked manifest under share/ that a component renders must be exactly
+      # what its pinned chart renders to: no hand edits, no stale pins.
+      - name: Committed manifests match their pinned render
+        run: |
+          hack/render-component
+          git diff --exit-code -- share/ || { echo "::error::share/ differs from hack/render-component output; re-render and commit"; exit 1; }
 
   hadolint:
     name: Dockerfile lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: hadolint/hadolint-action@v3.3.0
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0
         with:
           dockerfile: Dockerfile
           failure-threshold: error
@@ -164,7 +194,7 @@ jobs:
     runs-on: ubuntu-latest
     container: archlinux:latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - name: Install tools
         run: pacman -Sy --noconfirm namcap base-devel
       - name: Create builder user
@@ -186,8 +216,8 @@ jobs:
       KUBECONFORM_VERSION: v0.8.0
       KUBECONFORM_SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
     steps:
-      - uses: actions/checkout@v6
-      - uses: azure/setup-helm@v5.0.1
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
           version: v4.3.1
       - name: Install kubeconform and PyYAML
