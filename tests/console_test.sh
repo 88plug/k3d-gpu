@@ -154,6 +154,18 @@ if cmp -s "${WORK}/a.json" "${WORK}/state/k3d-gpu/facts.json" && cmp -s "${WORK}
 else
     fail "facts --json, detect --json, doctor --json and the state file differ"
 fi
+# The OVMS pin is the OVMS image whatever agent backend is set; K3D_GPU_AGENT_IMAGE
+# overrides it only for the OVMS backend.
+pins() { python3 -c 'import json,sys; p=json.load(sys.stdin)["release"]["pins"]; print(p["ovms"], p["llama.cpp"])'; }
+ovms_pin=$(run facts --json 2>/dev/null | pins)
+vllm_pin=$(K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_AGENT_IMAGE=example/vllm@sha256:0 run facts --json 2>/dev/null | pins)
+over_pin=$(K3D_GPU_AGENT_IMAGE=example/ovms@sha256:1 run facts --json 2>/dev/null | pins)
+if [[ "${ovms_pin}" == "openvino/model_server@sha256:"*" ghcr.io/ggml-org/llama.cpp@sha256:"* ]] \
+   && [ "${vllm_pin}" = "${ovms_pin}" ] && [ "${over_pin}" = "example/ovms@sha256:1 ${ovms_pin#* }" ]; then
+    ok "facts pins: OVMS and llama.cpp digests; a vLLM backend leaves the OVMS pin alone"
+else
+    fail "facts pins (ovms: ${ovms_pin}; vllm: ${vllm_pin}; override: ${over_pin})"
+fi
 
 # The packaged layout (/usr/bin/k3d-gpu + /usr/share/k3d-gpu/console/<the files
 # PKGBUILD installs>) finds its console files and plans.

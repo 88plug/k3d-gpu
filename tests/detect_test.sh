@@ -1892,6 +1892,11 @@ doctor_says "gate: a running GuC refuses nothing" "${r}" 'refused' negate
 
 r=$(gate_root gate-numeric 0xe20b xe 0 'GuC firmware: xe/bmg_guc_70.bin\n\tstatus: RUNNING\n\twanted release version 70.9.0\n\tfound release version 70.10.0\n\tfound compatibility version 1.2.0\n')
 doctor_says "gate: versions compare numerically (70.10.0 is not older than 70.9.0)" "${r}" 'refused' negate
+r=$(gate_root gate-patch 0xe20b xe 0 'GuC firmware: xe/bmg_guc_70.bin\n\tstatus: RUNNING\n\twanted release version 70.54.1\n\tfound release version 70.54.0\n')
+doctor_says "gate: a GuC one patch release older than wanted refuses the GPU" "${r}" \
+    'GuC xe/bmg_guc_70\.bin 70\.54\.0 is older than the 70\.54\.1 xe wants; GPU engines refused'
+r=$(gate_root gate-newer-major 0xe20b xe 0 'GuC firmware: xe/bmg_guc_70.bin\n\tstatus: RUNNING\n\twanted release version 70.54.1\n\tfound release version 71.0.0\n')
+doctor_says "gate: a newer major GuC release is not refused" "${r}" 'refused' negate
 
 r=$(gate_root gate-adl-s 0x4680 i915 0 'GuC firmware: i915/tgl_guc_70.1.1.bin\nGuC firmware wanted: i915/tgl_guc_70.bin\n\tstatus: RUNNING\n\tversion: wanted 70.5.1, found 70.1.1\n')
 doctor_says "gate: a stale GuC on Alder Lake-S (execlists) warns with the fix" "${r}" \
@@ -1926,6 +1931,9 @@ agent_says "gate: the CPU fallback requests no GPU" "${r}" 0 \
 agent_says "gate: K3D_GPU_AGENT_DEVICE=GPU on a refused GPU fails with the fix" "${r}" fail \
     'K3D_GPU_AGENT_DEVICE=GPU but Intel GPU 0000:00:02\.0 is refused: .*fix: install linux-firmware' "" \
     STUB_ALLOC=$'cpu 32\ngpu.intel.com/xe 1' K3D_GPU_AGENT_DEVICE=GPU
+agent_says "gate: a vLLM backend on a refused GPU fails with the fix, not a CPU fallback" "${r}" fail \
+    'K3D_GPU_AGENT_BACKEND=vllm needs an Intel GPU but Intel GPU 0000:00:02\.0 is refused: .*fix: install linux-firmware' "" \
+    STUB_ALLOC=$'cpu 32\ngpu.intel.com/xe 1' STUB_NODE_LABELS=gpu.intel.com/xmx=true K3D_GPU_AGENT_BACKEND=vllm
 
 # OVMS --pull clones the model repo's default branch and has no revision option,
 # so `agent status` reports the commit that was downloaded.

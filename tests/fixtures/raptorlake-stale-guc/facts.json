@@ -134,6 +134,15 @@
         "from": null,
         "level": "ok",
         "revert": null,
+        "section": "Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...",
+        "text": "GPU sharing on: up to 8 pods per Intel GPU, balanced allocation (K3D_GPU_INTEL_SHARED=auto); pods share its memory and engines with no isolation",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
         "section": "Intel CPU built-in accelerators...",
         "text": "CPU ISA: AVXVNNI CETIBT CETSS GFNI SHA VAES — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)",
         "why": null
