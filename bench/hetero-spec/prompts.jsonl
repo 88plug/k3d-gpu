@@ -1,0 +1,8 @@
+{"id": "tool1", "text": "Call the get_weather tool for Paris as JSON: {\"name\": ..., \"arguments\": ...}. Then explain the call."}
+{"id": "tool2", "text": "Return a JSON tool call to search_files with pattern '*.py' and path 'src', then list what you expect to find."}
+{"id": "tool3", "text": "Emit a JSON object calling create_issue with title 'Fix login bug' and labels ['bug', 'auth'], then describe each field."}
+{"id": "code1", "text": "Rewrite this Python to use a list comprehension and explain: result = []\nfor x in range(10):\n    if x % 2 == 0:\n        result.append(x * x)"}
+{"id": "code2", "text": "Add type hints and a docstring to: def merge(a, b):\n    out = dict(a)\n    out.update(b)\n    return out"}
+{"id": "code3", "text": "Fix the bug and explain: def mean(xs):\n    return sum(xs) / len(xs) if xs else sum(xs) / 0"}
+{"id": "chat1", "text": "Explain in plain words how a CPU cache works."}
+{"id": "chat2", "text": "Give five tips for writing a clear changelog entry, with an example of each."}

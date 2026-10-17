@@ -64,7 +64,7 @@
 
 set -euo pipefail
 
-VERSION="0.1.38"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.39"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 # The node image defaults to the tag built from this launcher's own release
 # (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
@@ -252,6 +252,10 @@ Environment:
                         a Gaudi; llm-scaler needs an Intel GPU, Arc B-series validated)
   K3D_GPU_AGENT_MODEL   agent Hugging Face model (default: OpenVINO/Qwen3-4B-int4-ov,
                         Qwen/Qwen3-4B on vllm/llm-scaler)
+  K3D_GPU_AGENT_DRAFT   ovms Fast Draft speculative decoding: off | auto | CPU | GPU | NPU
+                        (default: off until a host measurement shows a speedup;
+                        auto = the target's device; GPU = an Intel GPU, the first advertised)
+  K3D_GPU_AGENT_DRAFT_MODEL  draft model (default: OpenVINO/Qwen3-0.6B-int4-ov)
   K3D_GPU_AUTOQUANT     auto | off: on OVMS/CPU with no K3D_GPU_AGENT_MODEL, serve the
                         precision measured for this host fingerprint (default: auto)
   K3D_GPU_AUTOQUANT_CACHE  measured-pick cache (default: \$XDG_STATE_HOME/k3d-gpu/autoquant.json)
@@ -5353,6 +5357,42 @@ agent_select() {
     fi
 }
 
+# OVMS Fast Draft speculative decoding: "<draft device> <extra resource or ->", or
+# "- -" for none. K3D_GPU_AGENT_DRAFT: off (default) | auto | CPU | GPU | NPU.
+# off is the default until a measured speedup exists: a draft on another engine
+# lost on Lunar Lake (openvinotoolkit/openvino discussions/36484) and H22 is the
+# host measurement. auto drafts on the target's own device:
+# GenAI 2026.4.1 runs draft then verify serially (EXPERIMENTS.md H22), so a draft
+# on another engine pays only if it is faster there, and no measurement says so
+# yet. A named device overrides; one the target does not already hold adds its
+# resource to the pod.
+AGENT_DRAFT_MODEL="${K3D_GPU_AGENT_DRAFT_MODEL:-OpenVINO/Qwen3-0.6B-int4-ov}"
+agent_draft() {
+    local target=$1 want=${K3D_GPU_AGENT_DRAFT:-off} res
+    case "${want^^}" in
+        OFF|0|"") echo "- -"; return 0 ;;
+        AUTO) echo "${target} -"; return 0 ;;
+        CPU|GPU|NPU) ;;
+        *) err "unknown K3D_GPU_AGENT_DRAFT '${want}' (use off, auto, CPU, GPU or NPU)" ;;
+    esac
+    want=${want^^}
+    if [ "${want}" = "${target}" ] || [ "${want}" = CPU ]; then echo "${want} -"; return 0; fi
+    case "${want}" in
+        GPU)
+            [ -z "$(intel_gpu_refusal)" ] || err "K3D_GPU_AGENT_DRAFT=GPU but the Intel GPU is refused — see 'k3d-gpu doctor'"
+            for res in gpu.intel.com/xe gpu.intel.com/i915; do
+                if [ "$(resource_total "${res}")" -gt 0 ]; then echo "GPU ${res}"; return 0; fi
+            done
+            err "K3D_GPU_AGENT_DRAFT=GPU but the cluster advertises no Intel GPU (gpu.intel.com/xe or i915)"
+            ;;
+        NPU)
+            [ "$(resource_total npu.intel.com/accel)" -gt 0 ] \
+                || err "K3D_GPU_AGENT_DRAFT=NPU but the cluster advertises no Intel NPU (npu.intel.com/accel)"
+            echo "NPU npu.intel.com/accel"
+            ;;
+    esac
+}
+
 # Group owning the device node the pod is handed: the Intel render node for GPU,
 # the NPU accel node for NPU. k3d nodes share the host /dev, so the host GID is
 # the one that matters. The Intel plugins inject devices through CDI, which
@@ -5419,8 +5459,21 @@ agent_manifest() {
     [ "${cores}" = performance ] || cname=E-cores
     info "agent: ${AGENT_MODEL} as '${AGENT_MODEL_NAME}' on ${device}${via}${amx:+ (AMX node)}${hybrid:+, ${cname}}, ${cpus} CPU(s)" >&2
 
-    local item="            - " args v
+    local item="            - " args v draft draft_res draft_sel draft_gid
     args="${item}--target_device=${device}"
+    draft_sel=$(agent_draft "${device}") || exit 1
+    read -r draft draft_res <<< "${draft_sel}"
+    if [ "${draft}" != - ]; then
+        info "agent: Fast Draft ${AGENT_DRAFT_MODEL} on ${draft}" >&2
+        args+=$'\n'"${item}--draft_source_model=${AGENT_DRAFT_MODEL}"$'\n'"${item}--draft_device=${draft}"
+        # A draft on a second accelerator needs that device's group too (GPU + NPU).
+        if [ "${draft}" != CPU ] && [ "${draft}" != "${device}" ]; then
+            draft_gid=$(agent_device_gid "${draft}")
+            if [ -n "${draft_gid}" ] && [ "${draft_gid}" != "${gid}" ]; then
+                gid=${gid:+${gid}, }${draft_gid}
+            fi
+        fi
+    fi
     [ -z "${AGENT_TOOL_PARSER}" ] || args+=$'\n'"${item}--tool_parser=${AGENT_TOOL_PARSER}"
     [ -z "${AGENT_REASONING_PARSER}" ] || args+=$'\n'"${item}--reasoning_parser=${AGENT_REASONING_PARSER}"
     # Serving knobs ('k3d-gpu tune' sets these; a user can too). --pull rewrites
@@ -5543,7 +5596,11 @@ ${args}
               cpu: "${cpus}"
               memory: ${AGENT_MEMORY}
 EOF
-    [ "${res}" = - ] || printf '            limits:\n              %s: 1\n' "${res}"
+    if [ "${res}" != - ] || [ "${draft_res}" != - ]; then
+        printf '            limits:\n'
+        [ "${res}" = - ] || printf '              %s: 1\n' "${res}"
+        [ "${draft_res}" = - ] || printf '              %s: 1\n' "${draft_res}"
+    fi
     cat <<EOF
           volumeMounts:
             - name: models
