@@ -39,7 +39,7 @@
     "  raptorlake-s.uhd770.ovms.qwen3-4b-int4 on gpu:0000:00:02.0: grey (ledger H6, decode 9.89 tok/s): no k3d-gpu report run recorded; tool-calling eval not run; excluded: target gpu:0000:00:02.0 not usable: GuC i915/tgl_guc_70.1.1.bin 70.1.1 is older than the 70.5.1 i915 wants",
     "decision:",
     "  gpu:0000:00:02.0 refused: GuC i915/tgl_guc_70.1.1.bin 70.1.1 is older than the 70.5.1 i915 wants; fix: install linux-firmware with i915/tgl_guc_70.bin 70.5.1 or newer, then reboot",
-    "  unmeasured, run `k3d-gpu prove` on this box",
+    "  unmeasured: no green cell for this box; quickstart and agent up still pick by device",
     "  bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)"
   ],
   "fingerprint": "sha256:d24cd9499c08d2e9502194f71775d7929d6c28871e7c2ad26b17b8ba9c1da0a1",
@@ -58,7 +58,7 @@
   "schema": "k3d-gpu.plan/v1",
   "summary": [
     "gpu:0000:00:02.0 refused: GuC i915/tgl_guc_70.1.1.bin 70.1.1 is older than the 70.5.1 i915 wants; fix: install linux-firmware with i915/tgl_guc_70.bin 70.5.1 or newer, then reboot",
-    "unmeasured, run `k3d-gpu prove` on this box",
+    "unmeasured: no green cell for this box; quickstart and agent up still pick by device",
     "bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)"
   ]
 }

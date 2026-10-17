@@ -10,8 +10,8 @@ the plan decisions against the goldens:
   (`up.golden`). NRI balloons run on hybrid P/E and multi-NUMA hosts only; elsewhere
   `up` passes `--disable=nri-balloons` to k3s. `K3D_GPU_*` flags only override these.
 - **Predicted behaviour**: the plan's targets and decision (`plan.json`). Nothing
-  here is a measurement. Every fixture plans `unmeasured` until `k3d-gpu prove` runs
-  on a real box, or `fix` where a target is refused (`raptorlake-stale-guc`,
+  here is a measurement. Every fixture plans `unmeasured` until a cell measured on a real box turns green in
+  `console/matrix.v1.json`, or `fix` where a target is refused (`raptorlake-stale-guc`,
   `gaudi3-no-driver`). Measured numbers live only in [EXPERIMENTS.md](../EXPERIMENTS.md).
 - **Source**: the fixture's `SOURCES` file, which names the capture or datasheet
   every sysfs value comes from.

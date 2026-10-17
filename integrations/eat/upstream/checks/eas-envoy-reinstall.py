@@ -21,13 +21,19 @@ import sys
 
 import yaml
 
-TASK = "roles/envoy_gateway/tasks/install.yaml"
+# EAS #42 (88fd2ae) moved the task from install.yaml to controller.yaml.
+TASKS = ("roles/envoy_gateway/tasks/controller.yaml", "roles/envoy_gateway/tasks/install.yaml")
 NAME = "envoy_gateway | Create EnvoyProxy config (DaemonSet on control-plane nodes)"
 
 
 def definition(checkout):
-    with open("%s/%s" % (checkout, TASK)) as f:
-        for task in yaml.safe_load(f):
+    for path in TASKS:
+        try:
+            with open("%s/%s" % (checkout, path)) as f:
+                tasks = yaml.safe_load(f)
+        except FileNotFoundError:
+            continue
+        for task in tasks:
             if task.get("name") == NAME:
                 return task["kubernetes.core.k8s"]["definition"]
     sys.exit("task %r not found in %s" % (NAME, checkout))

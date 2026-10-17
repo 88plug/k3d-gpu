@@ -7,7 +7,7 @@ targets:
 matrix: 2 cells, 0 on a target of this host
   no measured cell for these targets
 decision:
-  unmeasured, run `k3d-gpu prove` on this box
+  unmeasured: no green cell for this box; quickstart and agent up still pick by device
   bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)
 exit=0
 --- calls
