@@ -6,12 +6,14 @@ name: Release packages (deb, rpm, Homebrew)
 #             (created with --latest=false so the image release from build-and-push.yml keeps "Latest").
 #   homebrew  points Formula/k3d-gpu.rb at the tag's tarball, tests it in the Homebrew image
 #             and commits it to main (this repo is the tap).
+#   install-pin  after deb-rpm, points packaging/install.sh at the release: the version plus
+#             the .deb and .rpm sha256s from the release's published SHA256SUMS, committed to main.
 # The Nix flake needs no step: it reads its version from scripts/k3d-gpu at the tag.
 # build-and-push.yml's release job dispatches this next to aur-deploy.yml once the image for the
 # version is published (a GITHUB_TOKEN tag push does not trigger workflows); a tag pushed by hand
 # triggers it directly.
 # dry_run=true builds and tests both packages from the dispatched ref instead of the tag and
-# skips the release upload and the formula commit, so it publishes nothing.
+# skips the release upload and both commits to main (formula, install.sh), so it publishes nothing.
 
 on:
   push:
@@ -133,6 +135,74 @@ jobs:
           git config user.email "andrew@88plug.com"
           git add Formula/k3d-gpu.rb
           git commit -m "release: homebrew k3d-gpu ${VER} [skip release]"
+          for attempt in 1 2 3 4 5; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            echo "push attempt ${attempt} lost a race, retrying"
+            sleep $((attempt * 5))
+          done
+          exit 1
+
+  install-pin:
+    name: Pin packaging/install.sh to the release
+    needs: deb-rpm
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine version
+        id: ver
+        run: |
+          VER="${VERSION_INPUT:-${GITHUB_REF_NAME#aur-v}}"
+          [[ "${VER}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::bad version '${VER}'"; exit 1; }
+          echo "ver=${VER}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Point install.sh at the published packages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VER: ${{ steps.ver.outputs.ver }}
+          INSTALLER: packaging/install.sh
+        run: |
+          CUR=$(sed -n 's/^K3D_GPU_VERSION=//p' "${INSTALLER}")
+          if [ "$(printf '%s\n%s\n' "${CUR}" "${VER}" | sort -V | tail -1)" != "${VER}" ]; then
+            echo "install.sh is at ${CUR}, newer than ${VER}; leaving it"
+            exit 0
+          fi
+          # The sha256s come from the release's published SHA256SUMS. The two assets are
+          # downloaded too and checked against it, so the pin matches what users fetch.
+          SUMS_DIR=$(mktemp -d)
+          gh release download "aur-v${VER}" --dir "${SUMS_DIR}" \
+            -p SHA256SUMS -p "k3d-gpu_${VER}-1_all.deb" -p "k3d-gpu-${VER}-1.noarch.rpm"
+          (cd "${SUMS_DIR}" && sha256sum --check --strict --ignore-missing SHA256SUMS)
+          SUMS="${SUMS_DIR}/SHA256SUMS"
+          # install-pin-rewrite-begin (exercised by tests/packaging_test.sh)
+          DEB_SHA=$(awk -v f="k3d-gpu_${VER}-1_all.deb" '$2 == f || $2 == "*" f {print $1}' "${SUMS}")
+          RPM_SHA=$(awk -v f="k3d-gpu-${VER}-1.noarch.rpm" '$2 == f || $2 == "*" f {print $1}' "${SUMS}")
+          [[ "${DEB_SHA}" =~ ^[0-9a-f]{64}$ ]] || { echo "::error::no .deb sha256 for ${VER} in SHA256SUMS"; exit 1; }
+          [[ "${RPM_SHA}" =~ ^[0-9a-f]{64}$ ]] || { echo "::error::no .rpm sha256 for ${VER} in SHA256SUMS"; exit 1; }
+          sed -i \
+            -e "s|^K3D_GPU_VERSION=.*|K3D_GPU_VERSION=${VER}|" \
+            -e "s|^K3D_GPU_DEB_SHA256=.*|K3D_GPU_DEB_SHA256=${DEB_SHA}|" \
+            -e "s|^K3D_GPU_RPM_SHA256=.*|K3D_GPU_RPM_SHA256=${RPM_SHA}|" \
+            "${INSTALLER}"
+          # install-pin-rewrite-end
+          git diff -- "${INSTALLER}"
+
+      - name: Commit to main
+        env:
+          VER: ${{ steps.ver.outputs.ver }}
+        run: |
+          if git diff --quiet -- packaging/install.sh; then
+            echo "install.sh already at ${VER}"
+            exit 0
+          fi
+          git config user.name  "88plug-bot"
+          git config user.email "andrew@88plug.com"
+          git add packaging/install.sh
+          git commit -m "release: install.sh k3d-gpu ${VER} [skip release]"
           for attempt in 1 2 3 4 5; do
             git pull --rebase origin main && git push origin HEAD:main && exit 0
             echo "push attempt ${attempt} lost a race, retrying"
