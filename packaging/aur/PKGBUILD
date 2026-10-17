@@ -9,7 +9,7 @@ license=('custom:FSL-1.1-ALv2')
 depends=('bash')
 optdepends=(
     'docker: container runtime for the cluster'
-    'k3d-git: k3d CLI to manage clusters'
+    'rancher-k3d-bin: k3d CLI to manage clusters'
     'kubectl: query and apply manifests'
     'nvidia-container-toolkit: GPU container runtime for Docker'
     'python: k3d-gpu-mcp (the MCP server for AI agents), k3d-gpu facts, plan, audit, tune and capacity'

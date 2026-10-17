@@ -34,13 +34,14 @@ A Docker-based [rancher/k3s](https://hub.docker.com/r/rancher/k3s) node image on
 
 ## Quick Start (k3d-gpu CLI)
 
-Just want a local chat? `k3d-gpu quickstart` (from 0.1.29; until that
-release, `scripts/k3d-gpu quickstart` in a checkout) goes from a machine with
+Just want a local chat? `k3d-gpu quickstart` (0.1.33 and newer) goes from a machine with
 Docker and a detected accelerator to a chat UI on `127.0.0.1:8080` in one
 command: cluster, LLM server (model picked
 from your RAM), Open WebUI with a generated admin account. `k3d-gpu uninstall`
-removes it all. See [docs/quickstart.md](docs/quickstart.md), and the pinned,
-sha256-checked installer `packaging/install.sh`.
+removes it all. See [docs/quickstart.md](docs/quickstart.md), the pinned,
+sha256-checked installer `packaging/install.sh`, and
+[docs/first-run.md](docs/first-run.md) for your kind of machine (WSL2 laptop,
+mini PC, Fedora laptop, Xeon server, Arch + Arc, NVIDIA workstation).
 
 The `k3d-gpu` launcher wraps the whole workflow — no need to remember
 `k3d cluster create` flags. Install it with your package manager (see [Install](#install)), then:
@@ -1043,7 +1044,10 @@ resource), port and auth mode. It picks only a **green** cell: one with a
 `k3d-gpu report` run, a passing tool-calling eval and the engine image this
 release pins. Community cells are amber, everything else grey, and neither is
 ever picked or interpolated. With no green cell for the box it prints
-``unmeasured, run `k3d-gpu prove` on this box``. Today no cell is green: the two
+``unmeasured: no green cell for this box; quickstart and agent up still pick by device``.
+There is no `prove` command yet (it is a design in docs/console-design.md);
+`k3d-gpu quickstart` and `k3d-gpu agent up` serve with their device rules
+regardless, and `k3d-gpu capacity` measures this box. Today no cell is green: the two
 cells from the [ledger:H6] run have no report run and no tool-calling eval yet,
 so every host plans unmeasured. `plan --explain` prints each target, each cell
 that applies with its status and reasons, and the decision; `plan --json` is
@@ -1396,9 +1400,16 @@ change the image, CPU request, warm pool size or policy.
 
 ## Prerequisites
 
-- **Docker** (20.10+), configured with NVIDIA GPU support (i.e., `nvidia-docker2` or Docker’s built‑in `--gpus`)  
-- **k3d** (v5.0.0 or later) to manage local K3s clusters  
-- A host NVIDIA GPU with an up‑to‑date driver (the node image needs no CUDA toolkit)  
+- **Docker** (20.10+). `packaging/install.sh` prints the install command; it never installs Docker.
+- **k3d** (v5.0.0 or later) and **kubectl**. `packaging/install.sh` installs pinned
+  copies into `~/.local/bin`; on Arch, `yay -S rancher-k3d-bin` and `pacman -S kubectl`.
+- At least one accelerator `k3d-gpu detect` reports: an Intel GPU, NPU or Gaudi,
+  Xeon AMX/DSA/IAA/QAT, hybrid P/E cores, NUMA, or an NVIDIA GPU.
+- **NVIDIA only**: an up-to-date driver and the NVIDIA Container Toolkit
+  (`nvidia-ctk`; the node image needs no CUDA toolkit). Intel hosts need neither.
+  The quickstart LLM never runs on an NVIDIA GPU; see [docs/first-run.md](docs/first-run.md).
+
+Per-machine install paths with time expectations: [docs/first-run.md](docs/first-run.md).
 
 ### Host setup (`k3d-gpu host-setup`)
 

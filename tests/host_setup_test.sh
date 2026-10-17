@@ -243,6 +243,9 @@ run "${r}" ""
 says "unsupported part gets force_probe" "Intel Crescent Island (0x674c) needs the boot options xe.force_probe=674c i915.force_probe=!674c"
 says "unbound part on an old kernel gets force_probe or a kernel" "Intel Battlemage (0xe20b) needs the boot options xe.force_probe=e20b i915.force_probe=!e20b (or kernel 6.12+)"
 says "fedora boot options go through grubby" "sudo grubby --update-kernel=ALL"
+# Blind test: grubby printed a literal '<options>' placeholder.
+says "fedora grubby line carries the real options" "sudo grubby --update-kernel=ALL --args='xe.force_probe=674c i915.force_probe=!674c xe.force_probe=e20b i915.force_probe=!e20b'"
+not_says "no literal <options> placeholder" "<options>"
 
 # Late Battlemage ids, Flex and Max: force_probe cannot add an id missing from
 # xe's table (Pro B70 0xe223 joined in 6.17); Max has no upstream driver at all.
