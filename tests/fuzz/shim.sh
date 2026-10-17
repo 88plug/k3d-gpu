@@ -49,7 +49,7 @@ case "${mode}" in
         run_pod() { printf '%s\n' "$3" >&3; printf 'Cpus_allowed_list:\t0\n'; }
         while IFS= read -r -d '' img; do
             out=$( (TEST_IMAGE=${img} DEVICE_TEST_IMAGE=${img}
-                    VENDORS_REQUEST=nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa
+                    VENDORS_REQUEST=nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa,wsl
                     cmd_test >/dev/null 2>&1) 3>&1 )
             emit "$?" "${out}"
         done ;;

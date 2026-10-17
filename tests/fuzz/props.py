@@ -27,7 +27,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 SHIM = os.path.join(HERE, "shim.sh")
 LAUNCHER = os.path.join(REPO, "scripts", "k3d-gpu")
-VENDORS = ["nvidia", "intel", "npu", "gaudi", "dsa", "iaa", "qat", "amx", "hybrid", "numa"]
+VENDORS = ["nvidia", "intel", "npu", "gaudi", "dsa", "iaa", "qat", "amx", "hybrid", "numa", "wsl"]
 SEED = int(os.environ.get("FUZZ_SEED", random.SystemRandom().randrange(2**32)))
 N = int(os.environ.get("FUZZ_N", "300"))
 WORK = tempfile.mkdtemp(prefix="k3d-gpu-fuzz-")
@@ -420,8 +420,8 @@ def overrides_reference():
             docs = [json.loads(line) for line in text.split("\n")]
         except ValueError as e:
             return "overrides for image %s are not JSON (%s): %s" % (REFERENCE_IMAGE, e, text[:300])
-        if len(docs) != 11:
-            return "expected 11 test pods with every vendor active, got %d" % len(docs)
+        if len(docs) != 12:
+            return "expected 12 test pods with every vendor active, got %d" % len(docs)
         for d in docs:
             cs = d.get("spec", {}).get("containers", [])
             if len(cs) != 1 or cs[0].get("image") != REFERENCE_IMAGE or not cs[0].get("command"):
