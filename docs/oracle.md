@@ -4,7 +4,10 @@ The capacity oracle is a public, per-SKU record of what Intel boxes serve under
 k3d-gpu's auto-adapted defaults: agents per box at a p95 turn SLO, single-stream
 decode speed, and tokens per package joule. Its goal is to become the reference
 data set for agent serving on Intel hybrid CPUs, GPUs, NPUs and Gaudi. Today it
-holds this maintainer box's two H6 runs and nothing else.
+holds this maintainer box's ledger runs and nothing else: the two H6
+single-stream arms and the scored H8 agents-per-box arms (A1 OVMS on the
+P-cores, two runs, and A4 vLLM CUDA on the RTX 4000 SFF Ada). H8's A2 and A3
+scored no step and have no row.
 
 - **Leaderboard**: [leaderboard.md](leaderboard.md) (also [leaderboard.json](leaderboard.json)).
 - **Per-key matrix with IQR, tiers and A/B uplifts**: [oracle-matrix.md](oracle-matrix.md).
@@ -110,7 +113,13 @@ already created and reports the pull request if one is open.
   turn. It is `-` when the bundle carries no per-step energy. The two H6 seed
   bundles carry none because the per-request raw files they are built from have
   no per-step J per turn; the H6 run itself measured RAPL package energy
-  ([ledger:H2] reports its J per token).
+  ([ledger:H2] reports its J per token). Package energy does not cover a
+  discrete card, so tok/s/W is `-` for an `nvidia` or `gaudi` row.
+- `>= N` in agents per box means every step up to the run's `--max` passed
+  (H8 A4 stopped at 32), so N is a lower bound, not the box's limit.
+- A maintainer run made on a busy box carries the `not-quiet` tag and its
+  ledger row records the load (H8 ran beside 53 other containers); a community
+  bundle from a busy box stays in review (V10).
 - The SKU is the CPU plus the device the engine ran on (the iGPU for `igpu`, the
   NVIDIA card for `nvidia`); other devices in the box are not in the label.
 - Rows are sorted by SKU, not ranked. Each row links to its bundle and, for

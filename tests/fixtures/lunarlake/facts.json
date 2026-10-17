@@ -316,7 +316,8 @@
         },
         "pci": "0000:00:02.0",
         "platform": "Lunar Lake",
-        "render_node": "renderD128"
+        "render_node": "renderD128",
+        "xmx": true
       }
     ],
     "kernel": "6.12.52-1-default",
