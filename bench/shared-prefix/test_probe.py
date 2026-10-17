@@ -58,6 +58,36 @@ class Gen(unittest.TestCase):
         self.assertEqual(next(iter(counts))[0], next(iter(counts))[1])
 
 
+class Request(unittest.TestCase):
+    def test_tool_call_delta_counts_as_first_token(self):
+        import http.server
+        import threading
+        events = [{"choices": [{"delta": {"role": "assistant"}}]},
+                  {"choices": [{"delta": {"tool_calls": [{"index": 0, "function": {"name": "eat_tool_00"}}]}}]},
+                  {"choices": [], "usage": {"prompt_tokens": 1634}}]
+
+        class H(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                self.rfile.read(int(self.headers["Content-Length"]))
+                self.send_response(200)
+                self.end_headers()
+                for e in events:
+                    self.wfile.write(f"data: {json.dumps(e)}\n\n".encode())
+                self.wfile.write(b"data: [DONE]\n\n")
+
+            def log_message(self, *a):
+                pass
+
+        srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+        threading.Thread(target=srv.handle_request, daemon=True).start()
+        r = probe.request(f"http://127.0.0.1:{srv.server_port}/v3/chat/completions", "s", "u", [{}])
+        srv.server_close()
+        self.assertIsNone(r["error"])
+        self.assertIsNotNone(r["ttft"])
+        self.assertGreater(r["text_len"], 0)
+        self.assertEqual(r["prompt_tokens"], 1634)
+
+
 class Score(unittest.TestCase):
     def run_score(self, rounds):
         with tempfile.TemporaryDirectory() as d:

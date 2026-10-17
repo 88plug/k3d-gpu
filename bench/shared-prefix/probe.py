@@ -88,7 +88,10 @@ def request(url, system, user, tools, max_tokens=8):
                 usage = ev.get("usage") or usage
                 for ch in ev.get("choices") or []:
                     d = ch.get("delta") or {}
-                    piece = (d.get("content") or "") + (d.get("reasoning_content") or "")
+                    # With tools in the request the reply can stream as tool_calls
+                    # deltas only (H25 run 1: every request had empty content).
+                    piece = ((d.get("content") or "") + (d.get("reasoning_content") or "")
+                             + "".join(json.dumps(tc) for tc in d.get("tool_calls") or []))
                     if piece and ttft is None:
                         ttft = time.monotonic() - t0
                     text += piece
