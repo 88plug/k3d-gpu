@@ -616,6 +616,57 @@ so whether vLLM opens the HPU with only the plugin's device nodes and environmen
 is unverified. vllm-gaudi validates `Qwen3-0.6B`, not `Qwen3-4B`, and tensor
 parallelism above 1 is untested.
 
+#### Multimodal add-ons: vision, speech-to-text, video analytics
+
+`--with` adds services next to the LLM, each placed on the Intel engine that
+suits it:
+
+```bash
+k3d-gpu agent up --with vlm,stt,video
+k3d-gpu agent manifest --with vlm,stt,video   # print the YAML instead
+```
+
+| Add-on | What runs | Placement (auto) | Why |
+|--------|-----------|------------------|-----|
+| `vlm` | OVMS 2026.4.1, `OpenVINO/Qwen3-VL-4B-Instruct-int4-ov`; `/v3/chat/completions` with `image_url` parts (base64 data URLs; set `K3D_GPU_AGENT_VLM_MEDIA_DOMAINS` to allow http(s) image URLs) | GPU, else CPU. NPU only when asked: it then serves `OpenVINO/Phi-3.5-vision-instruct-fp16-ov`, as in OVMS's NPU demo | The GPU's XMX/EU arrays run both the image encoder and the int4 decoder |
+| `stt` | OVMS, `OpenVINO/whisper-large-v3-turbo-fp16-ov`; `/v3/audio/transcriptions` and `/v3/audio/translations` | NPU, else GPU, else CPU | Whisper has a fixed-shape NPU pipeline in OpenVINO GenAI, and on the NPU it leaves the GPU to vision and video |
+| `video` | Intel DL Streamer 2026.2.0, OMZ `person-vehicle-bike-detection-2004`; detections as JSON lines in `kubectl logs` | GPU, else CPU. Never NPU | Decode runs on the GPU's video engines (vcs0/vcs1 on a UHD 770), scaling and colour conversion on the video-enhancement engine (vecs0) and inference on render/compute, with frames kept as VA surfaces throughout. Only the GPU has media engines |
+
+The add-ons always run OVMS (or DL Streamer), whatever `K3D_GPU_AGENT_BACKEND`
+the LLM uses. The LLM's device is the one `agent up` picks without add-ons (a
+Gaudi, else an XMX GPU, else P-cores); add-ons never move it. The Intel device
+plugins give each GPU or NPU to one pod unless sharing is configured, so
+`agent up` counts the free units (allocatable minus what pods in other
+namespaces hold, minus the LLM's) and plans the add-ons into what is left.
+Explicit `K3D_GPU_AGENT_VLM_DEVICE` / `_STT_DEVICE` / `_VIDEO_DEVICE` requests
+are served first and fail if nothing is free. Then auto add-ons claim engines in
+order: video, vlm, stt. On an iGPU without XMX and an NPU, the LLM runs on the
+P-cores, video gets the iGPU, stt the NPU, and the VLM falls back to CPU with a
+warning. On one XMX GPU the LLM keeps it and video decodes on CPU.
+
+`agent up` deletes the add-ons left out of its `--with` list, and waits for
+their pods to go, before it applies the new plan. A device an earlier add-on
+held is then free for the new one. Their PVCs stay. `agent down` removes the
+add-ons too.
+
+On a hybrid node, add-ons using an accelerator sit on E-cores and CPU ones on
+P-cores. The LLM stays on P-cores on any device: its GPU figures above were
+measured that way, and E-cores for it are unmeasured.
+
+On the NPU the VLM is compiled for a fixed prompt length, which the image
+tokens count against. OVMS's default is 1024; `agent up` sets 4096
+(`K3D_GPU_AGENT_VLM_MAX_PROMPT_LEN` changes it).
+
+`K3D_GPU_AGENT_VIDEO_SOURCE` points the pipeline at a stream URI (`rtsp://…`,
+`https://…`). Host paths and `file://` are refused, because the pod cannot see
+the host's files. By default it loops DL Streamer's sample clip, pinned by
+commit and checksum.
+
+Not yet run on hardware here: the add-ons end to end (VA decode and
+`va-surface-sharing` in DL Streamer 2026.2.0, Whisper on the NPU, Qwen3-VL on the
+GPU, Phi-3.5-vision on the NPU). `tests/agent_kubeconform.sh` schema-checks every
+manifest they render.
+
 ### Chat UI for the agent (optional)
 
 `share/agent-chat-ui.yml` (installed as `/usr/share/k3d-gpu/agent-chat-ui.yml`)

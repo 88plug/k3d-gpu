@@ -39,7 +39,9 @@
 #   host-setup  check the host userspace and print (--apply: run) the pinned install commands
 #   agent   up|down|status|manifest: OpenAI-compatible LLM server on the cluster's
 #           best Intel engine: vLLM on a Gaudi, else OpenVINO Model Server on an XMX
-#           GPU, else CPU on P-cores (NPU on request)
+#           GPU, else CPU on P-cores (NPU on request); --with vlm,stt,video adds
+#           vision, Whisper speech-to-text and DL Streamer video analytics on the
+#           Intel GPU/NPU units the LLM leaves free
 #   recipe  print a ready-to-apply workload manifest (npu-embeddings)
 
 set -euo pipefail
@@ -100,10 +102,12 @@ Usage: k3d-gpu <command>
             the pinned install commands for Intel GPU/NPU and the NVIDIA container
             toolkit + CDI (Ubuntu 24.04/26.04, Fedora, Arch, Manjaro). --apply runs
             them after a y/N prompt
-  agent up|down|status|manifest
+  agent up|down|status|manifest [--with vlm,stt,video]
             OpenAI-compatible LLM server in the current cluster: vLLM on its Gaudi
             if it has one, else OpenVINO Model Server on its Intel GPU if that GPU
-            has XMX, else on the CPU (P-cores); or vLLM on an Arc GPU (K3D_GPU_AGENT_BACKEND)
+            has XMX, else on the CPU (P-cores); or vLLM on an Arc GPU (K3D_GPU_AGENT_BACKEND).
+            --with adds a vision-language model, Whisper speech-to-text (NPU first)
+            and DL Streamer video analytics (GPU media engines) on what the LLM leaves
   recipe npu-embeddings
             Print an OVMS embeddings-on-NPU manifest for this host (pipe to kubectl apply -f -)
   version   Show version
@@ -134,6 +138,13 @@ Environment:
                         Qwen/Qwen3-4B on vllm/llm-scaler)
   K3D_GPU_AGENT_GPUS    vllm/llm-scaler: GPUs (or Gaudis) to shard the model across (default: 1)
   K3D_GPU_AGENT_MAX_LEN vllm/llm-scaler: max context tokens (default: 8192)
+  K3D_GPU_AGENT_VLM_DEVICE, K3D_GPU_AGENT_STT_DEVICE, K3D_GPU_AGENT_VIDEO_DEVICE
+                        add-on device: auto | CPU | GPU | NPU (video: no NPU) (default: auto)
+  K3D_GPU_AGENT_VLM_MODEL  vision model (default: OpenVINO/Qwen3-VL-4B-Instruct-int4-ov;
+                        on NPU OpenVINO/Phi-3.5-vision-instruct-fp16-ov)
+  K3D_GPU_AGENT_STT_MODEL  Whisper model (default: OpenVINO/whisper-large-v3-turbo-fp16-ov)
+  K3D_GPU_AGENT_VLM_MAX_PROMPT_LEN  VLM prompt tokens on the NPU, images included (default: 4096)
+  K3D_GPU_AGENT_VIDEO_SOURCE  video stream URI (rtsp://, http(s)://; default: sample clip)
   K3D_GPU_EXPERIMENTAL  auto (default: safe, mature, detected features), off, or a comma
                         list to force exactly those; 'list' prints them with their status
                         on this host. See docs/experimental.md
@@ -4139,6 +4150,8 @@ AGENT_HPU=""    # set by agent_select when the device is a Gaudi
 AGENT_SEL=""    # "<device> <resource>", set by agent_select
 AGENT_STORAGE="${K3D_GPU_AGENT_STORAGE:-20Gi}"
 AGENT_TIMEOUT="${K3D_GPU_AGENT_TIMEOUT:-1800}" # seconds: first run downloads the model
+# openvino/model_server:2026.4.1-gpu (CPU, GPU and NPU plugins, compute-runtime inside).
+AGENT_OVMS_IMAGE="openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58"
 
 # Image, model, parsers and API of AGENT_BACKEND (on a Gaudi when AGENT_HPU is set).
 agent_config() {
@@ -4171,8 +4184,7 @@ agent_config() {
             ;;
         *)
             AGENT_APP=ovms AGENT_API=/v3
-            # openvino/model_server:2026.4.1-gpu (CPU, GPU and NPU plugins, compute-runtime inside).
-            AGENT_DEFAULT_IMAGE="openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58"
+            AGENT_DEFAULT_IMAGE="${AGENT_OVMS_IMAGE}"
             AGENT_DEFAULT_MODEL="OpenVINO/Qwen3-4B-int4-ov"
             AGENT_MEMORY="${K3D_GPU_AGENT_MEMORY:-6Gi}"
             ;;
@@ -4720,26 +4732,547 @@ agent_model_revision() {
     echo "${rev}"
 }
 
+# ---- agent add-ons: vision, speech-to-text, video analytics ------------------
+# `agent up --with vlm,stt,video` adds services next to the LLM, each on its own
+# Intel engine:
+#   vlm    vision-language model (OVMS, OpenAI chat with image_url parts): the GPU,
+#          whose XMX/EU arrays run the image encoder and the int4 decoder; else CPU.
+#          NPU only on request, with the fp16 model OVMS's NPU demo uses.
+#   stt    Whisper speech-to-text (OVMS /v3/audio/transcriptions): the NPU first —
+#          a fixed-shape encoder/decoder is what it runs best, and it leaves the GPU
+#          to the vision and video services — then the GPU, then CPU.
+#   video  Intel DL Streamer: H.264/H.265 decode on the GPU's video engines (vcs),
+#          scale/convert on the video-enhancement engine (vecs) and detection on its
+#          render/compute engines, frames kept as VA surfaces throughout. Media engines
+#          exist only on the GPU, so it is the first add-on in line for one; else
+#          software on CPU.
+# The LLM's device is agent_select's, the same choice as with no add-ons (auto: a
+# Gaudi, else an XMX GPU, else P-cores): add-ons never move it. GPUs and NPUs are
+# counted, not just detected: the Intel device plugins hand out each device to one
+# pod unless sharing is configured, so the add-ons claim what the LLM and pods in
+# other namespaces leave free (explicit requests first, then video, vlm, stt).
+
+AGENT_ADDONS="vlm stt video"
+AGENT_VLM_DEFAULT_MODEL="OpenVINO/Qwen3-VL-4B-Instruct-int4-ov"
+# The NPU runs a VLM from the fp16 IR (compressed for the NPU at load), as in
+# OVMS's demos/vlm_npu; the int4 IRs are not exported for the NPU.
+AGENT_VLM_NPU_MODEL="OpenVINO/Phi-3.5-vision-instruct-fp16-ov"
+AGENT_STT_MODEL="${K3D_GPU_AGENT_STT_MODEL:-OpenVINO/whisper-large-v3-turbo-fp16-ov}"
+# intel/dlstreamer:2026.2.0-ubuntu24 (GStreamer va plugin, OpenVINO GPU/NPU runtimes inside).
+AGENT_VIDEO_IMAGE="${K3D_GPU_AGENT_VIDEO_IMAGE:-intel/dlstreamer@sha256:3848efe52c047cf6b5961eb070deaf9eca53bd5328f0d819fbb68ad56c65fb19}"
+# Open Model Zoo person-vehicle-bike-detection-2004 FP16 IR and the DL Streamer
+# sample clip, pinned by URL and checksum.
+AGENT_VIDEO_MODEL_URL="https://storage.openvinotoolkit.org/repositories/open_model_zoo/2023.0/models_bin/1/person-vehicle-bike-detection-2004/FP16/person-vehicle-bike-detection-2004"
+AGENT_VIDEO_MODEL_XML_SHA256="5005ecf7ad3ef3a240af22cceec925c6ccf9a052ee735d726864543853066d64"
+AGENT_VIDEO_MODEL_BIN_SHA256="ce7c98916aba29d275bcec6e8c7bb1380fedca8da6d02b1d911f62104455173e"
+AGENT_VIDEO_SAMPLE_URL="https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/57978890822836f2b4743852f04f62fc511757e4/person-bicycle-car-detection.mp4"
+AGENT_VIDEO_SAMPLE_SHA256="452b11b7e0efbd019f1d9570d0c790e90416ad4ad29eec6003872d08443140ef"
+# A 64x64 PNG for the vision warm-up request.
+AGENT_VLM_PROBE_PNG="iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAT0lEQVR42u3PQQkAAAgEsItz/fMYxgi+hcEKLNO+FgEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQGBywLzk8EPlvGqjQAAAABJRU5ErkJggg=="
+
+# " (<extended resource>)" for log lines, nothing for "-".
+agent_res_note() { [ "$1" = - ] || printf ' (%s)' "$1"; }
+
+# Add-ons named by --with (a comma list, repeatable), in canonical order.
+agent_addons() {
+    local list="" a out="" parts
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --with) [ $# -ge 2 ] || err "--with needs a list, e.g. --with vlm,stt,video"; list+=",$2"; shift 2 ;;
+            --with=*) list+=",${1#--with=}"; shift ;;
+            *) err "unknown agent option '$1' (use --with vlm,stt,video)" ;;
+        esac
+    done
+    list=${list,,}
+    IFS=, read -r -a parts <<< "${list#,}"
+    for a in ${parts[@]+"${parts[@]}"}; do
+        case " ${AGENT_ADDONS} " in
+            *" ${a} "*) ;;
+            *) err "unknown agent add-on '${a}' (choose from: ${AGENT_ADDONS// /, })" ;;
+        esac
+    done
+    for a in ${AGENT_ADDONS}; do
+        case ",${list}," in *",${a},"*) out+="${out:+ }${a}" ;; esac
+    done
+    echo "${out}"
+}
+
+# Units of an extended resource held by live pods outside the agent namespace
+# (agent up deletes or replaces the agent's own pods: see agent_prune).
+resource_used_elsewhere() {
+    kubectl get pods -A -o go-template='{{range .items}}{{if and (ne .status.phase "Succeeded") (ne .status.phase "Failed")}}{{$ns := .metadata.namespace}}{{range .spec.containers}}{{with .resources}}{{with .limits}}{{range $k, $v := .}}{{$ns}} {{$k}} {{$v}}{{"\n"}}{{end}}{{end}}{{end}}{{end}}{{end}}{{end}}' 2>/dev/null \
+        | awk -v ns="${AGENT_NS}" -v r="$1" '$1 != ns && $2 == r { s += $3 } END { print s + 0 }'
+}
+
+# Requested device of an add-on: auto | CPU | GPU | NPU (upper-cased).
+agent_want() {
+    local var=K3D_GPU_AGENT_${1^^}_DEVICE
+    local want=${!var:-auto}
+    want=${want^^}
+    case "${want}" in
+        AUTO|CPU|GPU) ;;
+        NPU) [ "$1" != video ] || err "${var}=NPU: video analytics decodes on the GPU's media engines (use GPU or CPU)" ;;
+        *) err "unknown ${var} '${!var}' (use CPU, GPU or NPU)" ;;
+    esac
+    echo "${want}"
+}
+
+# Claims one free unit of a GPU or NPU for a service: agent_plan_take <service>
+# <GPU|NPU>. Works on agent_plan's free/got arrays, so it runs in its shell.
+agent_plan_take() {
+    local r rs=npu.intel.com/accel
+    [ "$2" != GPU ] || rs="gpu.intel.com/xe gpu.intel.com/i915"
+    for r in ${rs}; do
+        if [ "${free[${r}]}" -gt 0 ]; then
+            free[${r}]=$(( ${free[${r}]} - 1 ))
+            got[$1]="$2 ${r}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# "<service> <OVMS/OpenVINO device> <extended resource or ->" per add-on given,
+# in the order given. The LLM (AGENT_SEL, from agent_select) holds its units
+# first. Explicit add-on requests are served next and fail when the cluster has
+# no free unit; auto add-ons then claim what is left by priority.
+agent_plan() {
+    local -A free=() got=() want=()
+    local svc res kind gpus llm_res n=1
+    for res in gpu.intel.com/xe gpu.intel.com/i915 npu.intel.com/accel; do
+        free[${res}]=$(( $(resource_total "${res}") - $(resource_used_elsewhere "${res}") ))
+    done
+    gpus=$(( $(resource_total gpu.intel.com/xe) + $(resource_total gpu.intel.com/i915) ))
+    llm_res=${AGENT_SEL#* }
+    if [ -n "${free[${llm_res}]+x}" ]; then
+        [ "${AGENT_APP}" != vllm ] || n=${AGENT_GPUS}
+        free[${llm_res}]=$(( free[${llm_res}] - n ))
+    fi
+    for svc in "$@"; do want[${svc}]=$(agent_want "${svc}") || exit 1; done
+
+    for svc in "$@"; do
+        kind=${want[${svc}]}
+        case "${kind}" in
+            CPU) got[${svc}]="CPU -" ;;
+            GPU) agent_plan_take "${svc}" GPU \
+                    || err "${svc} was asked to run on GPU, but the cluster has no free Intel GPU (gpu.intel.com/xe or i915) — see 'k3d-gpu detect' and what holds it: kubectl get pods -A" ;;
+            NPU) agent_plan_take "${svc}" NPU \
+                    || err "${svc} was asked to run on NPU, but the cluster has no free Intel NPU (npu.intel.com/accel) — see 'k3d-gpu detect' and what holds it: kubectl get pods -A" ;;
+        esac
+    done
+    for svc in video vlm stt; do
+        [ "${want[${svc}]:-}" = AUTO ] || continue
+        if [ "${svc}" = stt ]; then
+            agent_plan_take "${svc}" NPU || agent_plan_take "${svc}" GPU || true
+        else
+            agent_plan_take "${svc}" GPU || true
+        fi
+        if [ -z "${got[${svc}]:-}" ]; then
+            got[${svc}]="CPU -"
+            [ "${gpus}" -eq 0 ] \
+                || warn "${svc}: no Intel GPU unit is left (the LLM, explicit requests and earlier add-ons claim first), so it runs on CPU (the GPU plugin gives each GPU to one pod unless sharing is enabled)"
+        fi
+    done
+    for svc in "$@"; do echo "${svc} ${got[${svc}]}"; done
+}
+
+# Pod label pinning an add-on to P- or E-cores on hybrid nodes: inference on CPU
+# wants the P-cores; with an accelerator doing the work the host side (HTTP,
+# tokenizing, audio resampling, pipeline control) fits on E-cores. The LLM is
+# not labelled here: agent_manifest keeps it on P-cores on every device, the
+# setup its GPU decode rates were measured with.
+agent_core_label() {
+    [ -n "$(labelled_nodes "${HYBRID_LABEL}")" ] || return 0
+    if [ "$1" = CPU ]; then printf '\n        k3d-gpu.io/cores: performance'; else printf '\n        k3d-gpu.io/cores: efficient'; fi
+}
+
+# OVMS add-on: <service> <device> <resource>. vlm and stt differ only in model,
+# task, sizing and endpoint; both pull into their own PVC like the LLM.
+agent_ovms_addon_manifest() {
+    local svc=$1 device=$2 res=$3 model task memory storage cpus gid="" podspec="" media="" pullextra=""
+    local up=${svc^^}
+    case "${svc}" in
+        vlm)
+            model=${AGENT_VLM_DEFAULT_MODEL}
+            [ "${device}" != NPU ] || model=${AGENT_VLM_NPU_MODEL}
+            local mvar=K3D_GPU_AGENT_VLM_MODEL
+            model=${!mvar:-${model}}
+            task=text_generation; memory=8Gi; storage=20Gi
+            if [ "${device}" = NPU ]; then
+                memory=12Gi
+                # The NPU compiles for a fixed prompt length, 1024 tokens unless set,
+                # and a VLM's image tokens count against it (OVMS demos/vlm_npu).
+                local lvar=K3D_GPU_AGENT_VLM_MAX_PROMPT_LEN
+                pullextra=$'\n            - --max_prompt_len='"${!lvar:-4096}"
+            fi
+            # Images arrive as base64 data URLs; fetching http(s) image URLs is opt-in.
+            local dvar=K3D_GPU_AGENT_VLM_MEDIA_DOMAINS
+            [ -z "${!dvar:-}" ] || media=$'\n            - --allowed_media_domains='"${!dvar}"
+            ;;
+        stt)
+            model=${AGENT_STT_MODEL}; task=speech2text; memory=4Gi; storage=10Gi ;;
+    esac
+    local cvar=K3D_GPU_AGENT_${up}_CPUS mvar2=K3D_GPU_AGENT_${up}_MEMORY
+    cpus=${!cvar:-1}
+    [ "${device}" != CPU ] || cpus=${!cvar:-4}
+    memory=${!mvar2:-${memory}}
+    local name=${model##*/}
+    [ "${device}" = CPU ] || gid=$(agent_device_gid "${device}")
+    [ -z "${gid}" ] || podspec=$'\n        supplementalGroups: ['"${gid}"']'
+    info "agent ${svc}: ${model} on ${device}$(agent_res_note "${res}")" >&2
+
+    cat <<EOF
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ovms-${svc}-models
+  namespace: ${AGENT_NS}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: ${storage}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ovms-${svc}
+  namespace: ${AGENT_NS}
+  labels:
+    app: ovms-${svc}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ovms-${svc}
+  template:
+    metadata:
+      labels:
+        app: ovms-${svc}$(agent_core_label "${device}")
+      annotations:
+        k3d-gpu.io/agent-device: ${device}
+    spec:
+      securityContext:
+        runAsUser: 5000
+        runAsGroup: 5000
+        fsGroup: 5000${podspec}
+      initContainers:
+        - name: pull
+          image: ${AGENT_OVMS_IMAGE}
+          imagePullPolicy: IfNotPresent
+          args:
+            - --pull
+            - --source_model=${model}
+            - --model_repository_path=/models
+            - --model_name=${name}
+            - --task=${task}
+            - --target_device=${device}${pullextra}
+          volumeMounts:
+            - name: models
+              mountPath: /models
+      containers:
+        - name: ovms
+          image: ${AGENT_OVMS_IMAGE}
+          imagePullPolicy: IfNotPresent
+          args:
+            - --rest_port=8000
+            - --model_path=/models/${model}
+            - --model_name=${name}
+            - --cache_dir=/models/.ov_cache
+            - --log_level=INFO${media}
+          ports:
+            - name: http
+              containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /v2/health/ready
+              port: http
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: "${cpus}"
+              memory: ${memory}
+EOF
+    [ "${res}" = - ] || printf '            limits:\n              %s: 1\n' "${res}"
+    cat <<EOF
+          volumeMounts:
+            - name: models
+              mountPath: /models
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: ovms-${svc}-models
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ovms-${svc}
+  namespace: ${AGENT_NS}
+spec:
+  selector:
+    app: ovms-${svc}
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+EOF
+}
+
+# DL Streamer pipeline, run in a loop so a finished file replays and a dropped
+# stream reconnects. Detections go to stdout as JSON lines (gvametapublish's
+# file-path=stdout), so `kubectl logs` is the result feed.
+agent_video_script() {
+    cat <<'EOF'
+#!/bin/bash
+set -u
+model=person-vehicle-bike-detection-2004
+case "${VIDEO_SOURCE:-}" in
+    "")    src="filesrc location=/data/input.mp4" ;;
+    *)     src="urisourcebin uri=${VIDEO_SOURCE}" ;;
+esac
+if [ "${DEVICE}" = GPU ]; then
+    # decodebin3 picks the va decoders (vah264dec, vah265dec, ...: the vcs engines,
+    # ranked first through GST_PLUGIN_FEATURE_RANK), vapostproc scales and converts
+    # on vecs, and gvadetect reads the VA surfaces in place on the GPU.
+    decode="decodebin3 ! vapostproc ! video/x-raw(memory:VAMemory)"
+    pre="pre-process-backend=va-surface-sharing"
+else
+    decode="decodebin3"
+    pre=""
+fi
+while :; do
+    # shellcheck disable=SC2086 # the pipeline is a list of gst-launch words
+    gst-launch-1.0 -e ${src} ! ${decode} ! queue ! \
+        gvadetect model=/data/${model}.xml model-proc=${MODEL_PROC_PATH}/intel/${model}.json \
+                  device=${DEVICE} ${pre} threshold=${THRESHOLD:-0.5} ! queue ! \
+        gvafpscounter ! gvametaconvert ! \
+        gvametapublish method=file file-format=json-lines file-path=stdout ! \
+        fakesink sync=true async=false
+    sleep 2
+done
+EOF
+}
+
+# Video analytics add-on: <device> <resource>.
+agent_video_manifest() {
+    local device=$1 res=$2 gid="" podspec="" src=${K3D_GPU_AGENT_VIDEO_SOURCE:-} cpus memory
+    cpus=${K3D_GPU_AGENT_VIDEO_CPUS:-1}
+    [ "${device}" != CPU ] || cpus=${K3D_GPU_AGENT_VIDEO_CPUS:-4}
+    memory=${K3D_GPU_AGENT_VIDEO_MEMORY:-1Gi}
+    # The source lands in a quoted YAML string and in gst-launch's word list,
+    # and host paths are not visible in the pod: only plain stream URIs pass.
+    if [ -n "${src}" ] && { [[ ! "${src}" =~ ^[a-zA-Z][a-zA-Z0-9+.-]*://[^[:space:]\"\\!]+$ ]] || [[ "${src,,}" == file:* ]]; }; then
+        err "K3D_GPU_AGENT_VIDEO_SOURCE must be a stream URI (rtsp://, http(s)://, ...) with no spaces, quotes, backslashes or '!': '${src}'. Host paths are not visible inside the pod"
+    fi
+    [ "${device}" = CPU ] || gid=$(agent_device_gid "${device}")
+    [ -z "${gid}" ] || podspec=$'\n      securityContext:\n        supplementalGroups: ['"${gid}"']'
+    info "agent video: DL Streamer person/vehicle/bike detection on ${device}$(agent_res_note "${res}")${src:+, source ${src}}" >&2
+
+    # The sample clip is fetched only when no source is given.
+    local fetch="curl -fsSL -o /data/${AGENT_VIDEO_MODEL_URL##*/}.xml ${AGENT_VIDEO_MODEL_URL}.xml
+              curl -fsSL -o /data/${AGENT_VIDEO_MODEL_URL##*/}.bin ${AGENT_VIDEO_MODEL_URL}.bin
+              echo '${AGENT_VIDEO_MODEL_XML_SHA256}  /data/${AGENT_VIDEO_MODEL_URL##*/}.xml' | sha256sum -c
+              echo '${AGENT_VIDEO_MODEL_BIN_SHA256}  /data/${AGENT_VIDEO_MODEL_URL##*/}.bin' | sha256sum -c"
+    [ -n "${src}" ] || fetch+="
+              curl -fsSL -o /data/input.mp4 ${AGENT_VIDEO_SAMPLE_URL}
+              echo '${AGENT_VIDEO_SAMPLE_SHA256}  /data/input.mp4' | sha256sum -c"
+    local env=""
+    [ "${device}" != GPU ] || env=$'\n            - name: GST_PLUGIN_FEATURE_RANK\n              value: vah264dec:MAX,vah265dec:MAX,vaav1dec:MAX,vavp9dec:MAX'
+
+    cat <<EOF
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: video-analytics
+  namespace: ${AGENT_NS}
+data:
+  run.sh: |
+$(agent_video_script | sed 's/^/    /')
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: video-analytics
+  namespace: ${AGENT_NS}
+  labels:
+    app: video-analytics
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: video-analytics
+  template:
+    metadata:
+      labels:
+        app: video-analytics$(agent_core_label "${device}")
+      annotations:
+        k3d-gpu.io/agent-device: ${device}
+    spec:${podspec}
+      initContainers:
+        - name: fetch
+          image: ${AGENT_VIDEO_IMAGE}
+          imagePullPolicy: IfNotPresent
+          command:
+            - bash
+            - -euc
+            - |
+              ${fetch}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      containers:
+        - name: dlstreamer
+          image: ${AGENT_VIDEO_IMAGE}
+          imagePullPolicy: IfNotPresent
+          command: [bash, /etc/video-analytics/run.sh]
+          env:
+            - name: DEVICE
+              value: ${device}
+            - name: VIDEO_SOURCE
+              value: "${src}"${env}
+          resources:
+            requests:
+              cpu: "${cpus}"
+              memory: ${memory}
+EOF
+    [ "${res}" = - ] || printf '            limits:\n              %s: 1\n' "${res}"
+    cat <<EOF
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: script
+              mountPath: /etc/video-analytics
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: script
+          configMap:
+            name: video-analytics
+EOF
+}
+
+# Manifest for the LLM (on AGENT_SEL) plus the add-ons planned around it.
+agent_stack_manifest() {
+    local plan svc device res
+    plan=$(agent_plan "$@") || exit 1
+    agent_manifest
+    while read -r svc device res; do
+        case "${svc}" in
+            video) agent_video_manifest "${device}" "${res}" ;;
+            *)     agent_ovms_addon_manifest "${svc}" "${device}" "${res}" ;;
+        esac
+    done <<< "${plan}"
+}
+
+# A chat completion with an image part, from inside the vlm pod as agent_warmup
+# does: the service proxy breaks OVMS POSTs here too.
+agent_vlm_warmup() {
+    local name body reply
+    name=$(kubectl -n "${AGENT_NS}" get deployment ovms-vlm -o jsonpath='{.spec.template.spec.containers[0].args}' 2>/dev/null \
+        | grep -o -- '--model_name=[^"]*' | cut -d= -f2)
+    body="{\"model\":\"${name}\",\"max_tokens\":32,\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What colour is this image? One word.\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,${AGENT_VLM_PROBE_PNG}\"}}]}]}"
+    reply=$(kubectl -n "${AGENT_NS}" exec deployment/ovms-vlm -c ovms -- \
+        curl -sS --max-time 600 http://127.0.0.1:8000/v3/chat/completions -H 'Content-Type: application/json' -d "${body}" 2>&1) \
+        || err "vlm warm-up request failed: ${reply}"
+    case "${reply}" in *'"choices"'*) ;; *) err "vlm warm-up request failed: ${reply}" ;; esac
+    info "vlm warm-up reply (a red square): $(sed -n 's/.*"content":"\([^"]*\)".*/\1/p' <<< "${reply}" | sed -n 1p)"
+}
+
+# Waits for the first detection record in the video pipeline's output.
+agent_video_check() {
+    local i=0 out
+    while [ "${i}" -lt 60 ]; do
+        i=$((i + 1))
+        out=$(kubectl -n "${AGENT_NS}" logs deployment/video-analytics -c dlstreamer --tail=200 2>/dev/null || true)
+        if grep -q '"objects"' <<< "${out}"; then
+            info "video: detections flowing — kubectl -n ${AGENT_NS} logs -f deploy/video-analytics"
+            return 0
+        fi
+        sleep 2
+    done
+    err "video pipeline produced no detections in 120s — kubectl -n ${AGENT_NS} logs deploy/video-analytics"
+}
+
+agent_addon_endpoints() {
+    local svc
+    for svc in "$@"; do
+        case "${svc}" in
+            vlm) info "vision: kubectl -n ${AGENT_NS} port-forward svc/ovms-vlm 8001:8000
+       POST http://localhost:8001/v3/chat/completions with content parts {\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/jpeg;base64,...\"}}" ;;
+            stt) info "speech-to-text: kubectl -n ${AGENT_NS} port-forward svc/ovms-stt 8002:8000
+       curl http://localhost:8002/v3/audio/transcriptions -F file=@speech.wav -F model=${AGENT_STT_MODEL##*/}" ;;
+            video) info "video: kubectl -n ${AGENT_NS} logs -f deploy/video-analytics (JSON lines per frame)" ;;
+        esac
+    done
+}
+
+# Objects of one add-on, for kubectl delete. PVCs are left alone.
+agent_addon_objects() {
+    case "$1" in
+        video) echo deployment/video-analytics configmap/video-analytics ;;
+        *)     echo "deployment/ovms-$1 service/ovms-$1" ;;
+    esac
+}
+
+# Deletes the add-ons not in the list given, and waits for their pods to go.
+# The plan counts every device the agent namespace holds as free, so add-ons
+# from an earlier 'agent up' must release theirs before the new pods schedule.
+agent_prune() {
+    local a objs=""
+    for a in ${AGENT_ADDONS}; do
+        case " $* " in *" ${a} "*) continue ;; esac
+        objs+=" $(agent_addon_objects "${a}")"
+    done
+    [ -n "${objs}" ] || return 0
+    # shellcheck disable=SC2086 # word list of object names
+    kubectl -n "${AGENT_NS}" delete ${objs} --ignore-not-found --cascade=foreground --wait=true
+}
+
 # Both backends' Deployment/Service names: one GPU serves one of them at a time.
 AGENT_APPS=(ovms vllm)
 
 cmd_agent_up() {
     require kubectl
+    local addons manifest app svc deploy
+    addons=$(agent_addons "$@")
     kubectl get nodes >/dev/null 2>&1 || err "no cluster reachable — run 'k3d-gpu up' first"
     agent_select
-    local manifest app logs="kubectl -n ${AGENT_NS} logs deploy/${AGENT_APP}"
-    manifest=$(agent_manifest)
+    local logs="kubectl -n ${AGENT_NS} logs deploy/${AGENT_APP}"
+    if [ -z "${addons}" ]; then
+        manifest=$(agent_manifest)
+    else
+        # shellcheck disable=SC2086 # word list of add-on names
+        manifest=$(agent_stack_manifest ${addons})
+    fi
     # Switching backends: stop the other one first so its GPU is free.
     for app in "${AGENT_APPS[@]}"; do
         [ "${app}" = "${AGENT_APP}" ] \
             || kubectl -n "${AGENT_NS}" delete "deployment/${app}" "service/${app}" --ignore-not-found 2>/dev/null || true
     done
+    # shellcheck disable=SC2086 # word list of add-on names
+    agent_prune ${addons}
     kubectl apply -f - <<< "${manifest}"
     info "Waiting for the model to download and load (first run fetches it into the PVC; up to ${AGENT_TIMEOUT}s)..."
     [ "${AGENT_APP}" = vllm ] || logs="kubectl -n ${AGENT_NS} logs deploy/ovms -c pull; ${logs}"
     kubectl -n "${AGENT_NS}" rollout status "deployment/${AGENT_APP}" --timeout="${AGENT_TIMEOUT}s" \
         || err "server not ready — ${logs}"
     agent_warmup
+    for svc in ${addons}; do
+        deploy=ovms-${svc}
+        [ "${svc}" != video ] || deploy=video-analytics
+        kubectl -n "${AGENT_NS}" rollout status "deployment/${deploy}" --timeout="${AGENT_TIMEOUT}s" \
+            || err "${svc} not ready — kubectl -n ${AGENT_NS} logs deploy/${deploy} --all-containers"
+        case "${svc}" in
+            vlm) agent_vlm_warmup ;;
+            video) agent_video_check ;;
+        esac
+    done
     if [ "${AGENT_APP}" = vllm ]; then
         info "model ${AGENT_MODEL} at revision ${AGENT_REVISION:-main (unpinned; set K3D_GPU_AGENT_REVISION)}"
     else
@@ -4749,6 +5282,8 @@ cmd_agent_up() {
        kubectl -n ${AGENT_NS} port-forward svc/${AGENT_APP} 8000:8000
        curl http://localhost:8000${AGENT_API}/chat/completions -H 'Content-Type: application/json' \\
          -d '{\"model\":\"${AGENT_MODEL_NAME}\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}'"
+    # shellcheck disable=SC2086 # word list of add-on names
+    agent_addon_endpoints ${addons}
 }
 
 cmd_agent_status() {
@@ -4765,6 +5300,10 @@ cmd_agent_status() {
         kubectl get --raw "${proxy}${path}" 2>/dev/null || warn "server not answering yet"
         echo ""
     done
+    for app in ovms-vlm ovms-stt video-analytics; do
+        ann=$(kubectl -n "${AGENT_NS}" get deployment "${app}" -o jsonpath='{.spec.template.metadata.annotations.k3d-gpu\.io/agent-device}' 2>/dev/null) || continue
+        info "add-on ${app} on ${ann:-?}"
+    done
 }
 
 # Leaves the PVCs so the next 'agent up' reuses the downloaded model.
@@ -4774,7 +5313,8 @@ cmd_agent_down() {
     for app in "${AGENT_APPS[@]}"; do
         kubectl -n "${AGENT_NS}" delete "deployment/${app}" "service/${app}" --ignore-not-found
     done
-    info "Model caches kept in pvc/ovms-models and pvc/vllm-models. Remove everything: kubectl delete namespace ${AGENT_NS}"
+    agent_prune
+    info "Model caches kept in the namespace's PVCs. Remove everything: kubectl delete namespace ${AGENT_NS}"
 }
 
 cmd_agent() {
@@ -4782,12 +5322,20 @@ cmd_agent() {
         ovms|vllm|llm-scaler) ;;
         *) err "unknown K3D_GPU_AGENT_BACKEND '${K3D_GPU_AGENT_BACKEND}' (use ovms, vllm or llm-scaler)" ;;
     esac
-    case "${1:-}" in
-        up)       cmd_agent_up ;;
+    local sub=${1:-} addons
+    [ $# -eq 0 ] || shift
+    case "${sub}" in
+        up)       cmd_agent_up "$@" ;;
         down)     cmd_agent_down ;;
         status)   cmd_agent_status ;;
-        manifest) agent_select; agent_manifest ;;
-        *) err "usage: k3d-gpu agent up|down|status|manifest" ;;
+        manifest)
+            addons=$(agent_addons "$@")
+            agent_select
+            if [ -z "${addons}" ]; then agent_manifest; else
+                # shellcheck disable=SC2086 # word list of add-on names
+                agent_stack_manifest ${addons}
+            fi ;;
+        *) err "usage: k3d-gpu agent up|down|status|manifest [--with vlm,stt,video]" ;;
     esac
 }
 
@@ -4808,7 +5356,7 @@ case "${1:-help}" in
     report)  cmd_report "${2:-}" ;;
     logs)    cmd_logs    ;;
     host-setup) shift; cmd_host_setup "$@" ;;
-    agent)   cmd_agent "${2:-}" ;;
+    agent)   shift; cmd_agent "$@" ;;
     recipe)  cmd_recipe "${2:-}" ;;
     version|--version|-v) echo "k3d-gpu ${VERSION}" ;;
     help|--help|-h) usage ;;
