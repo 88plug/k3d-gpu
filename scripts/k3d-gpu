@@ -39,6 +39,7 @@
 #   host-setup  check the host userspace and print (--apply: run) the pinned install commands
 #   agent   up|down|status|manifest: OpenAI-compatible LLM server (OpenVINO Model
 #           Server) on the cluster's best Intel engine (an XMX GPU, else CPU on P-cores; NPU on request)
+#   recipe  print a ready-to-apply workload manifest (npu-embeddings)
 
 set -euo pipefail
 
@@ -53,6 +54,7 @@ DSA_PLUGIN_MANIFEST="${K3D_GPU_DSA_PLUGIN:-${SHARE_DIR}/intel-dsa-plugin.yml}"
 IAA_PLUGIN_MANIFEST="${K3D_GPU_IAA_PLUGIN:-${SHARE_DIR}/intel-iaa-plugin.yml}"
 QAT_PLUGIN_MANIFEST="${K3D_GPU_QAT_PLUGIN:-${SHARE_DIR}/intel-qat-plugin.yml}"
 HYBRID_PLUGIN_MANIFEST="${K3D_GPU_HYBRID_PLUGIN:-${SHARE_DIR}/nri-balloons.yml}"
+NPU_EMBEDDINGS_MANIFEST="${K3D_GPU_NPU_EMBEDDINGS:-${SHARE_DIR}/npu-embeddings.yml}"
 SYSROOT="${K3D_GPU_SYSROOT:-}" # prefix for /sys and /dev reads (tests point it at a fake tree)
 TEST_IMAGE="${K3D_GPU_TEST_IMAGE:-nvidia/cuda:13.4.3-base-ubuntu26.04}"
 DEVICE_TEST_IMAGE="${K3D_GPU_DEVICE_TEST_IMAGE:-busybox:1.37}"
@@ -96,6 +98,8 @@ Usage: k3d-gpu <command>
   agent up|down|status|manifest
             OpenAI-compatible LLM server (OpenVINO Model Server) in the current
             cluster: on its Intel GPU if that GPU has XMX, else on the CPU (P-cores)
+  recipe npu-embeddings
+            Print an OVMS embeddings-on-NPU manifest for this host (pipe to kubectl apply -f -)
   version   Show version
   help      Show this message
 
@@ -114,6 +118,7 @@ Environment:
   K3D_GPU_IAA_PLUGIN    Intel IAA plugin yaml  (default: ${SHARE_DIR}/intel-iaa-plugin.yml)
   K3D_GPU_QAT_PLUGIN    Intel QAT plugin yaml  (default: ${SHARE_DIR}/intel-qat-plugin.yml)
   K3D_GPU_HYBRID_PLUGIN NRI balloons yaml for hybrid and numa (default: ${SHARE_DIR}/nri-balloons.yml)
+  K3D_GPU_NPU_EMBEDDINGS NPU embeddings recipe (default: ${SHARE_DIR}/npu-embeddings.yml)
   K3D_GPU_MODEL_GB      model size checked by doctor --perf (same as --model-gb)
   K3D_GPU_AGENT_DEVICE  agent device: auto | CPU | GPU | NPU (default: auto)
   K3D_GPU_AGENT_MODEL   agent Hugging Face model (default: OpenVINO/Qwen3-4B-int4-ov)
@@ -189,6 +194,25 @@ detect_npu() {
     done < <(accel_nodes)
     return 0
 }
+
+# Print "<gid> <octal mode> <path>" per Intel NPU device node (/dev/accel/accelN
+# owned by intel_vpu). Pods get the node with the host's owner and mode, so a
+# non-root pod opens it only through a supplemental group equal to <gid>, unless
+# the mode is world read-write (systemd's default render mode is 0666; distros
+# such as Ubuntu build it as 0660).
+npu_dev_access() {
+    local dev node
+    for dev in "${SYSROOT}"/sys/class/accel/accel[0-9]*/device; do
+        [ "$(cat "${dev}/vendor" 2>/dev/null)" = "0x8086" ] && [ "$(bound_driver "${dev}")" = "intel_vpu" ] || continue
+        node="${SYSROOT}/dev/accel/$(basename "$(dirname "${dev}")")"
+        [ -e "${node}" ] && stat -L -c '%g %a %n' "${node}"
+    done
+    return 0
+}
+
+# GID of the first NPU device node, or empty. `up` publishes it as this node label.
+npu_render_gid() { npu_dev_access | awk 'NR == 1 {print $1}'; }
+NPU_GID_LABEL="k3d-gpu.io/npu-render-gid"
 
 # Gaudi: an accel node owned by a Habana device, a loaded habanalabs driver, or
 # legacy /dev/hl* nodes from older out-of-tree drivers.
@@ -744,6 +768,69 @@ npu_labels() {
     return 0
 }
 
+# NPU firmware vs the NPU user space that serves models. The serving image
+# (openvino/model_server:2026.4.1-gpu, Ubuntu 24.04) installs linux-npu-driver
+# v1.35.0 (Level Zero NPU driver + compiler; model_server Dockerfile.ubuntu at
+# v2026.4.1), whose verified firmware is built 2026-06-30. linux-npu-driver
+# (docs/overview.md, "Firmware version mismatch") says the firmware must come from
+# the driver release that matches the NPU compiler; older firmware fails with
+# "MAPPED_INFERENCE_VERSION is NOT compatible with the ELF".
+NPU_UMD_IMAGE="openvino/model_server:2026.4.1-gpu"
+NPU_UMD_DRIVER="v1.35.0"
+NPU_UMD_FW_DATE="20260630"
+
+# npu_fw_file <generation>: the firmware file intel_vpu loads, in the kernel's order.
+# Names: intel_vpu's firmware= parameter alone when set (it reads "(null)" when not),
+# else the list in drivers/accel/ivpu/ivpu_fw.c (v1 first). For each name the
+# firmware loader (drivers/base/firmware_loader/main.c) tries no suffix, then .zst,
+# then .xz, each across fw_path[]: firmware_class.path, /lib/firmware/updates/<release>,
+# /lib/firmware/updates, /lib/firmware/<release>, /lib/firmware. No /usr/lib.
+npu_fw_file() {
+    local name sfx dir f rel custom param fw_names
+    rel=$(kernel_release)
+    custom=$(head -n1 "${SYSROOT}/sys/module/firmware_class/parameters/path" 2>/dev/null || true)
+    param=$(head -n1 "${SYSROOT}/sys/module/intel_vpu/parameters/firmware" 2>/dev/null || true)
+    if [ -n "${param}" ] && [ "${param}" != "(null)" ]; then
+        fw_names=("${param}")
+    else
+        fw_names=("intel/vpu/vpu_$1_v1.bin" "intel/vpu/vpu_$1_v0.0.bin")
+    fi
+    for name in "${fw_names[@]}"; do
+        for sfx in "" .zst .xz; do
+            for dir in ${custom:+"${custom}"} "/lib/firmware/updates/${rel}" /lib/firmware/updates \
+                       "/lib/firmware/${rel}" /lib/firmware; do
+                f="${SYSROOT}${dir}/${name}${sfx}"
+                if [ -f "${f}" ]; then echo "${f}"; return 0; fi
+            done
+        done
+    done
+    return 0
+}
+
+# npu_fw_date <file>: build date (YYYYMMDD) from the firmware's embedded version
+# string, "20260630*MTL_CLIENT_SILICON..." (37xx) or "Jun 30 2026*NPU40xx*..."
+# (40xx and newer). Empty when unreadable.
+npu_fw_date() {
+    local dec=(cat) ver m d y
+    case "$1" in
+        *.zst) dec=(zstd -dcq) ;;
+        *.xz)  dec=(xz -dc) ;;
+    esac
+    # No match (or no decompressor) is not an error under pipefail; only the output counts.
+    ver=$({ "${dec[@]}" "$1" 2>/dev/null || true; } \
+        | { LC_ALL=C grep -a -o -E '([0-9]{8}|[A-Z][a-z]{2} [ 0-9][0-9] [0-9]{4})\*(MTL|NPU)' || true; } \
+        | awk 'NR == 1')
+    ver=${ver%%\**}
+    if [[ "${ver}" =~ ^[0-9]{8}$ ]]; then echo "${ver}"; return 0; fi
+    read -r m d y <<< "${ver}"
+    m=$(( $(awk -v m="${m}" 'BEGIN {print index("JanFebMarAprMayJunJulAugSepOctNovDec", m)}') ))
+    [ -n "${y}" ] && [ "${m}" -gt 0 ] || return 0
+    printf '%04d%02d%02d\n' "${y}" $(( (m + 2) / 3 )) $((10#${d}))
+}
+
+# YYYYMMDD -> YYYY-MM-DD
+ymd() { echo "${1:0:4}-${1:4:2}-${1:6:2}"; }
+
 # Resolve the active vendor list into ACTIVE (array). Honors K3D_GPU_VENDORS.
 resolve_vendors() {
     ACTIVE=()
@@ -930,7 +1017,7 @@ doctor_intel() {
 
 doctor_npu() {
     info "Checking Intel NPU (Core Ultra)..."
-    local id name mink gen
+    local id name mink gen fw date gid mode node
     if [ "${#NPU_IDS[@]}" -eq 0 ]; then
         echo "  ${RED}fail${RST}: no Intel NPU accel node bound to intel_vpu (driver not loaded? lsmod | grep intel_vpu)"
         FAIL=1
@@ -943,14 +1030,39 @@ doctor_npu() {
             echo "  ${YLW}warn${RST}: ${name} NPU needs kernel ${mink}+ (running $(kernel_release))"
         fi
         [ -n "${gen}" ] || continue
-        if firmware_present "intel/vpu/vpu_${gen}_"; then
-            echo "  ok: intel/vpu/vpu_${gen}_* firmware present"
-        else
+        fw=$(npu_fw_file "${gen}")
+        if [ -z "${fw}" ]; then
             echo "  ${YLW}warn${RST}: intel/vpu/vpu_${gen}_* firmware not found (install linux-firmware or intel-fw-npu)"
+            continue
+        fi
+        echo "  ok: intel/vpu/vpu_${gen}_* firmware present (${fw#"${SYSROOT}"})"
+        date=$(npu_fw_date "${fw}")
+        if [ -z "${date}" ]; then
+            echo "  note: no build date readable in ${fw#"${SYSROOT}"}; cannot compare it with ${NPU_UMD_IMAGE}'s NPU driver ${NPU_UMD_DRIVER}"
+        elif [ "${date}" -lt "${NPU_UMD_FW_DATE}" ]; then
+            echo "  ${YLW}warn${RST}: NPU firmware built $(ymd "${date}") is older than the $(ymd "${NPU_UMD_FW_DATE}") firmware of linux-npu-driver ${NPU_UMD_DRIVER}, the NPU user space in ${NPU_UMD_IMAGE};"
+            echo "        NPU inference can fail with 'MAPPED_INFERENCE_VERSION is NOT compatible'. Install intel-fw-npu from"
+            echo "        https://github.com/intel/linux-npu-driver/releases/tag/${NPU_UMD_DRIVER} (it goes to /lib/firmware/updates/intel/vpu, which"
+            echo "        the kernel prefers), then reload: sudo modprobe -r intel_vpu && sudo modprobe intel_vpu"
+        else
+            echo "  ok: NPU firmware built $(ymd "${date}"), not older than linux-npu-driver ${NPU_UMD_DRIVER}'s ($(ymd "${NPU_UMD_FW_DATE}")) in ${NPU_UMD_IMAGE}"
         fi
     done
     gen=$(npu_labels)
     [ -z "${gen}" ] || echo "  ok: up labels the node ${gen}"
+    # Device node access for non-root pods (OVMS runs as uid 5000).
+    while read -r gid mode node; do
+        node=${node#"${SYSROOT}"}
+        if (( (8#${mode} & 8#006) == 8#006 )); then
+            echo "  ok: ${node} is mode ${mode}: pods of any user can open it"
+        elif (( (8#${mode} & 8#060) == 8#060 )) && [ "${gid}" -ne 0 ]; then
+            echo "  ok: ${node} is group ${gid}, mode ${mode}: non-root pods need securityContext.supplementalGroups: [${gid}]"
+            echo "        ('k3d-gpu up' labels the node ${NPU_GID_LABEL}=${gid}; 'k3d-gpu recipe npu-embeddings' sets it)"
+        else
+            echo "  ${YLW}warn${RST}: ${node} is group ${gid}, mode ${mode}: only root pods can open it. Add the udev rule"
+            echo "        SUBSYSTEM==\"accel\", GROUP=\"render\", MODE=\"0660\" (systemd 254+ ships it in 50-udev-default.rules)"
+        fi
+    done < <(npu_dev_access)
     echo "  note: workload images need the NPU user-space driver (github.com/intel/linux-npu-driver) and Level Zero"
 }
 
@@ -2749,6 +2861,13 @@ cmd_up() {
     fi
     if is_active npu; then
         create_args+=(--k3s-node-label="intel.feature.node.kubernetes.io/npu=true@server:*;agent:*")
+        # Pods get /dev/accel/accelN with the host's numeric group; publish it so
+        # non-root workloads can set supplementalGroups without reading the host.
+        local gid
+        gid=$(npu_render_gid)
+        if [ -n "${gid}" ] && [ "${gid}" -ne 0 ]; then
+            create_args+=(--k3s-node-label="${NPU_GID_LABEL}=${gid}@server:*;agent:*")
+        fi
     fi
     # DSA/IAA/QAT plugins are gated by upstream's NFD labels the same way.
     local v label
@@ -3459,6 +3578,27 @@ cmd_report() {
     info "Wrote ${dir}/k3d-gpu-report.json and ${dir}/k3d-gpu-report.html"
 }
 
+# Print a workload manifest with this host's values filled in.
+cmd_recipe() {
+    case "${1:-}" in
+        npu-embeddings) ;;
+        *) err "usage: k3d-gpu recipe npu-embeddings" ;;
+    esac
+    resolve_vendors
+    is_active npu || err "no Intel NPU detected — run 'k3d-gpu doctor'"
+    [ -f "${NPU_EMBEDDINGS_MANIFEST}" ] || err "${NPU_EMBEDDINGS_MANIFEST} not found"
+    local gid mode node
+    read -r gid mode node <<< "$(npu_dev_access | awk 'NR == 1')"
+    [ -n "${gid}" ] || err "no /dev/accel/accel* node for the NPU — is intel_vpu loaded?"
+    # Never hand a pod the root group: a root-group node must be world read-write.
+    if [ "${gid}" -eq 0 ]; then
+        (( (8#${mode} & 8#006) == 8#006 )) \
+            || err "${node#"${SYSROOT}"} is group 0, mode ${mode}; only root pods can open it — run 'k3d-gpu doctor' for the udev fix"
+        gid=""
+    fi
+    sed "/^[[:space:]]*#/!s/K3D_GPU_NPU_RENDER_GID/${gid}/g" "${NPU_EMBEDDINGS_MANIFEST}"
+}
+
 cmd_logs() {
     require docker
     docker logs -f "k3d-${CLUSTER}-server-0"
@@ -3691,7 +3831,7 @@ hs_checks() {
         info "Checking Intel NPU userspace..."
         if hs_find libze_intel_npu.so.1 >/dev/null; then hs_ok "NPU Level Zero driver (libze_intel_npu.so.1) installed"; else hs_warn "NPU Level Zero driver (libze_intel_npu.so.1) not installed"; fi
         for gen in $(printf '%s\n' ${HS_NPU_GENS[@]+"${HS_NPU_GENS[@]}"} | sort -u); do
-            if firmware_present "intel/vpu/vpu_${gen}_"; then hs_ok "intel/vpu/vpu_${gen}_* firmware present"; else hs_warn "intel/vpu/vpu_${gen}_* firmware missing"; fi
+            if [ -n "$(npu_fw_file "${gen}")" ]; then hs_ok "intel/vpu/vpu_${gen}_* firmware present"; else hs_warn "intel/vpu/vpu_${gen}_* firmware missing"; fi
         done
     fi
     if is_hs_target nvidia; then
@@ -4009,14 +4149,7 @@ agent_device_gid() {
                 stat -c %g "${SYSROOT}/dev/dri/${node##*/}" 2>/dev/null && return 0
             done
             ;;
-        NPU)
-            for dev in "${SYSROOT}"/sys/class/accel/accel[0-9]*/device; do
-                [ "$(cat "${dev}/vendor" 2>/dev/null)" = "0x8086" ] || continue
-                [ "$(bound_driver "${dev}")" = intel_vpu ] || continue
-                node=${dev%/device}
-                stat -c %g "${SYSROOT}/dev/accel/${node##*/}" 2>/dev/null && return 0
-            done
-            ;;
+        NPU) npu_render_gid ;;
     esac
     return 0
 }
@@ -4270,6 +4403,7 @@ case "${1:-help}" in
     logs)    cmd_logs    ;;
     host-setup) shift; cmd_host_setup "$@" ;;
     agent)   cmd_agent "${2:-}" ;;
+    recipe)  cmd_recipe "${2:-}" ;;
     version|--version|-v) echo "k3d-gpu ${VERSION}" ;;
     help|--help|-h) usage ;;
     *) usage; exit 1 ;;

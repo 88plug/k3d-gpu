@@ -48,7 +48,7 @@ PASS=0 FAILS=0
 # binaries (nvidia-ctk, a real kubectl) cannot change the result.
 BASE_BIN="${WORK}/bin"
 mkdir -p "${BASE_BIN}"
-for tool in bash cat readlink basename dirname grep tr sort paste seq uname sed awk wc head sleep dd od; do
+for tool in bash cat readlink basename dirname grep tr sort paste seq uname sed awk wc head sleep dd od stat; do
     ln -s "$(command -v "${tool}")" "${BASE_BIN}/${tool}"
 done
 
@@ -122,7 +122,8 @@ transcript() {
             echo "--- calls"
             cat "${run}/calls"
         fi
-    } | sed -e 's/\x1b\[[0-9;]*m//g' -e "s#${fx}/sysroot#<sysroot>#g" -e "s#${REPO}#<repo>#g"
+    } | sed -e 's/\x1b\[[0-9;]*m//g' -e "s#${fx}/sysroot#<sysroot>#g" -e "s#${REPO}#<repo>#g" \
+        -e 's/npu-render-gid=[0-9]*/npu-render-gid=<gid>/g' -e 's/ is group [0-9]*, mode / is group <gid>, mode /g'
 }
 
 check() {
