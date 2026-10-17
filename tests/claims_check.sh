@@ -47,7 +47,7 @@ fi
 ledger=$(awk -F'|' '
     { gsub(/\\\|/, "") }
     /^## / { inh = ($0 ~ /^## Hypotheses/) }
-    inh && /^\| *H[0-9]+ *\|/ {
+    inh && /^\| *H[0-9]+[a-z]? *\|/ {
         id = $2; gsub(/ /, "", id)
         v = ($NF ~ /^[ \t]*$/) ? $(NF - 1) : $NF
         gsub(/\*\*/, "", v); gsub(/^[ \t]+|[ \t]+$/, "", v); v = toupper(v)

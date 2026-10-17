@@ -133,8 +133,20 @@ def calls_from_content(content):
 
 
 # ---------------------------------------------------------------- one request
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """A 3xx becomes an HTTPError: with a key set, the Authorization header must not
+    be replayed to whatever host the Location names."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_KEYED_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
 def stream_chat(url, payload, api_key=None, timeout=600.0):
-    """POST a streaming chat request. Returns a dict of timings and parsed output."""
+    """POST a streaming chat request. Returns a dict of timings and parsed output.
+    With api_key, redirects are not followed (the key goes only to url's host)."""
     headers = {"Content-Type": "application/json", "Accept": "text/event-stream"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
@@ -144,7 +156,7 @@ def stream_chat(url, payload, api_key=None, timeout=600.0):
     t0 = time.perf_counter()
     t_first = t_last = None
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with (_KEYED_OPENER.open if api_key else urllib.request.urlopen)(req, timeout=timeout) as resp:
             for raw in resp:
                 line = raw.decode("utf-8", "replace").strip()
                 if not line.startswith("data:"):
