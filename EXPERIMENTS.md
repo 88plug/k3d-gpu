@@ -31,7 +31,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H15 | On an iGPU-only Intel host, the `K3D_GPU_INTEL_SHARED=auto` default (8 pods per iGPU) lets two `gpu.intel.com/i915` pods use the UHD 770 at once, at no loss of total throughput against running them one at a time. | (F) On a cluster from this branch's image with the default, node allocatable `gpu.intel.com/i915` = 8, the plugin DaemonSet args are `-shared-dev-num=8 -allocation-policy=balanced` and survive `docker restart` of the server node, and two pods requesting `gpu.intel.com/i915: 1` are both Running with overlapping run intervals and exit 0; a control cluster with `K3D_GPU_INTEL_SHARED=1` advertises 1 and keeps the second pod Pending while the first runs. (T) With a VA-API media workload (1080p H.264 decode, `scale_vaapi` to 720p, `h264_vaapi` encode, 6000 frames per pod, `linuxserver/ffmpeg:version-9.0.2-cli`), the aggregate fps of two concurrent pods is at least 0.9x the median solo fps, each concurrent pod gets at least 0.4x solo, no pod fails and dmesg logs no new i915 GPU hang. | Pre-registered 2026-10-16 PDT (2026-10-17T06:04Z, commit 1350533, pushed) before any H15 run. One shared cluster (default env) and one control cluster, both from `docker build -t $TAG .` on `claude/igpu-sharing-r2`. Timed arms on the shared cluster: S = one pod alone, C = two pods started together on a wall-clock barrier; n=3 per arm, order S C C S S C. Per run: package W (RAPL), load (1 min), swap used, package throttle count delta. Outcome -> conclusion: F holds and every C run meets T -> SUPPORTED, keep `auto` = 8 on iGPU-only hosts; F holds but aggregate < 0.9x solo in 2 or more C runs -> REFUTED, `auto` becomes 1 (sharing opt-in); any failed pod or GPU hang -> REFUTED, `auto` becomes 1; solo spread (max - min) above 20% of its median -> INCONCLUSIVE, rerun. | SUPPORTED |
 | H16 | On k3s 1.37, `K3D_GPU_DRA=1` hands the UHD 770 to a pod through the Intel GPU DRA driver (gpu-v0.12.1) and no device plugin. | On a cluster from this branch's image with `K3D_GPU_DRA=1` on an i9-13900T: no `intel-gpu-plugin` DaemonSet, a ResourceSlice of driver `gpu.intel.com` lists the iGPU, node allocatable has no `gpu.intel.com/i915`, `up` reports `intel=1`, and every pod that names a ResourceClaimTemplate for DeviceClass `gpu.intel.com` lists `renderD128` under `/dev/dri` and ends `Succeeded`. | Pre-registered 2026-10-17 (this commit, pushed before the first run) together with H17, same runs: 3 DRA clusters (arm D). Refuted by a plugin DaemonSet, no slice, an i915 extended resource, or any claim pod without `renderD128` or not `Succeeded`. | SUPPORTED |
 | H17 | DRA mode can become the default (auto) Intel GPU path when the driver is baked in, without losing what the device-plugin default gives on an iGPU host. | On the same host, all three: (a) two pods that each claim the iGPU through their own ResourceClaim from one template are both `Running` at once, as two `gpu.intel.com/i915: 1` pods are under the plugin's sharing default (H15); (b) median pod latency (create to `Succeeded`, busybox `ls /dev/dri`, image preloaded) in DRA mode is at most 1.2x the plugin's; (c) median `k3d-gpu up` wall time in DRA mode is at most 1.2x the plugin's. | Arms D (`K3D_GPU_DRA=1`) and P (default), one fresh cluster per run, n=3 runs per arm, order D P P D D P; per run 1 timed `up` and 3 timed pods (reported as the run's median), then the 2-pod check read 20 s after creation. Per run: package W over `up` (RAPL), load (1 min), swap used, package throttle count delta. Outcome -> conclusion: (a) fails in any D run -> REFUTED, DRA stays opt-in (`K3D_GPU_DRA=0` default), since auto would take away H15's sharing; (a) holds but (b) or (c) fails -> REFUTED, DRA stays opt-in; all hold -> SUPPORTED, DRA may become auto in a later change; F of H16 fails -> H17 not evaluated (DRA mode broken). A timing arm whose spread (max - min) exceeds 30% of its median -> that part INCONCLUSIVE. Prediction before measuring: REFUTED by (a), because gpu-v0.12.1 publishes no shared counters or multi-allocation (docs/experimental.md). | REFUTED |
-| H18 | `k3d-gpu sandbox up` keeps agent sandboxes on the E-cores and inside a default-deny egress policy on k3d (kube-router), while public egress (PyPI) still works. | On an i9-13900T with tailscale (host `100.65.179.24`, sshd on `0.0.0.0:22`) and a cluster from this branch's image: (a) `sandbox up` exits 0 with the warm pool `readyReplicas` >= 1 and every sandbox pod's `Cpus_allowed_list` inside the E-cores (cpu_atom); (b) from a sandbox pod, TCP to `100.65.179.24:22` (CGNAT, tailscale) and to `192.168.1.108:22` (RFC1918, host LAN) both fail to connect within 3 s, and the policy's kube-router drop-log rule counts the packets, while from a control pod (same image, namespace `sbx-control`, no policy) both connect; (c) from a sandbox pod, DNS resolves `pypi.org`, TCP to `pypi.org:443` connects, and `pip install --user tomli_w==1.2.0` (not in the image) with the profile's `HOME=/tmp` exits 0 and imports from `/tmp/.local`. | Pre-registered 2026-10-17 before any H18 run (this commit, pushed). Image `docker build -t $TAG .` from `claude/agent-sandbox-ecores` rebased on origin/main 2b45f87. Cluster `k3dgpu-r2-sbx`, scratch `KUBECONFIG`, one fresh cluster per run, n=3 runs. Per run: timed `sandbox up` (wall, s), then the probes interleaved sandbox/control, each probe once per pod. Confounds per run: package W (RAPL, 5 s before), 1-min load, swap used, package throttle count delta. Outcome -> conclusion: every run meets (a), (b) and (c) -> SUPPORTED; a sandbox pod off the E-cores, a sandbox reaching either private address, or a control pod failing to connect (probe cannot see a block) -> REFUTED (control failure -> INCONCLUSIVE); pip failing while `pypi.org:443` connects -> REFUTED for (c), README must drop the pip claim. Prediction: SUPPORTED. Amended before the counted runs, after pilot run 0 (log below): kube-router REJECTs (`icmp-port-unreachable`, so `Connection refused` in ~0.1 s) rather than dropping, so (b) asks for no connect plus the drop-log counter instead of a timeout; `six` ships in the image, so (c) installs `tomli_w`. Runner: `bench/sandbox_round.sh`. | PENDING |
+| H18 | `k3d-gpu sandbox up` keeps agent sandboxes on the E-cores and inside a default-deny egress policy on k3d (kube-router), while public egress (PyPI) still works. | On an i9-13900T with tailscale (host `100.65.179.24`, sshd on `0.0.0.0:22`) and a cluster from this branch's image: (a) `sandbox up` exits 0 with the warm pool `readyReplicas` >= 1 and every sandbox pod's `Cpus_allowed_list` inside the E-cores (cpu_atom); (b) from a sandbox pod, TCP to `100.65.179.24:22` (CGNAT, tailscale) and to `192.168.1.108:22` (RFC1918, host LAN) both fail to connect within 3 s, and the policy's kube-router drop-log rule counts the packets, while from a control pod (same image, namespace `sbx-control`, no policy) both connect; (c) from a sandbox pod, DNS resolves `pypi.org`, TCP to `pypi.org:443` connects, and `pip install --user tomli_w==1.2.0` (not in the image) with the profile's `HOME=/tmp` exits 0 and imports from `/tmp/.local`. | Pre-registered 2026-10-17 before any H18 run (this commit, pushed). Image `docker build -t $TAG .` from `claude/agent-sandbox-ecores` rebased on origin/main 2b45f87. Cluster `k3dgpu-r2-sbx`, scratch `KUBECONFIG`, one fresh cluster per run, n=3 runs. Per run: timed `sandbox up` (wall, s), then the probes interleaved sandbox/control, each probe once per pod. Confounds per run: package W (RAPL, 5 s before), 1-min load, swap used, package throttle count delta. Outcome -> conclusion: every run meets (a), (b) and (c) -> SUPPORTED; a sandbox pod off the E-cores, a sandbox reaching either private address, or a control pod failing to connect (probe cannot see a block) -> REFUTED (control failure -> INCONCLUSIVE); pip failing while `pypi.org:443` connects -> REFUTED for (c), README must drop the pip claim. Prediction: SUPPORTED. Amended before the counted runs, after pilot run 0 (log below): kube-router REJECTs (`icmp-port-unreachable`, so `Connection refused` in ~0.1 s) rather than dropping, so (b) asks for no connect plus the drop-log counter instead of a timeout; `six` ships in the image, so (c) installs `tomli_w`. Runner: `bench/sandbox_round.sh`. | SUPPORTED |
 
 ## Falsification log
 
@@ -82,6 +82,7 @@ new evidence (new hardware, new driver, new model, changed method).
 | 2026-10-16 | idea (no branch): freeze-consistent fork of agent sandboxes | Provenance search | Anticipated by E2B `fork({count:N})` and Modal snapshots | DO-NOT-RE-ATTACK |
 | 2026-10-17 | H15 | i9-13900T, UHD 770: shared cluster (default env) F checks, 6 timed runs S C C S S C; control cluster `K3D_GPU_INTEL_SHARED=1` (header and per-run table in [H15 run](#h15-run-i9-13900t-2026-10-17)) | Held. F: allocatable 8, args `["-shared-dev-num=8","-allocation-policy=balanced"]` before and after `docker restart`, `k3d-gpu test` rc 0; both pods of every C run Succeeded from the same start second. Solo median 548.4 fps (spread 20.1, 3.7%); two-pod aggregate median 649.6 fps = 1.18x solo (min 1.16x), each pod 0.58-0.59x solo; 0 failed pods, 0 GPU hangs. Control: allocatable 1, second pod Pending (`Insufficient gpu.intel.com/i915`) until the first finished | DO-NOT-RE-ATTACK on UHD 770 / i915 with this media workload; a compute workload (OpenVINO, oneAPI) or an Xe2/Xe3 iGPU is new evidence |
 | 2026-10-17 | H16, H17 | i9-13900T, UHD 770: 6 fresh clusters D P P D D P (one `up`, 3 timed claim or i915 pods and a 2-pod check each), plus a `k3d-gpu test` cluster in DRA mode and a manual `k3d cluster create` from the same image (header and table in [H16/H17 run](#h16h17-run-i9-13900t-2026-10-17)) | H16 held in all 3 DRA runs. H17 (a) failed in all 3: the second claim pod stayed Pending (`cannot allocate all claims`) while 2 i915 pods ran at once in all 3 plugin runs; (b) and (c) held (pod latency 1.00x, `up` 1.06x) | DO-NOT-RE-ATTACK for gpu-v0.12.1: DRA mode stays opt-in. Re-attack when an Intel GPU DRA driver release publishes shared or multi-allocatable devices (consumable capacity or `allowMultipleAllocations`) |
+| 2026-10-17 | H18 | i9-13900T with tailscale: pilot run 0, then 3 fresh clusters from this branch's image, `bench/sandbox_round.sh` (header and numbers in [H18 run](#h18-run-i9-13900t-2026-10-17)) | Held 3 of 3. Every sandbox pod on CPU 24 (cpu_atom 16-31); sandbox -> `100.65.179.24:22` and `192.168.1.108:22` refused in 0.13-0.16 s with 2 packets on the policy's drop log, while the control pod connected to both; `pypi.org:443` connected and `pip install --user tomli_w==1.2.0` installed to `/tmp/.local` and imported. Pilot: blocked egress is a REJECT, not a timeout, and `six` ships in the image (amendment in the H18 row) | Yes, for egress and placement with kube-router on k3s v1.37.1; re-attack on a new k3s, agent-sandbox or CNI |
 
 ## Research leads
 
@@ -496,6 +497,76 @@ TAG=k3d-gpu:dra-r2 && docker build -t "$TAG" . && docker pull busybox:1.37
 export IMAGE=$TAG OUT=$(mktemp -d)
 n=0; for m in D P P D D P; do sleep 10; n=$((n + 1)); bench/dra_round.sh "$m" "$n"; done
 cat "$OUT/results.txt"   # one RESULT line per run; per-run logs in $OUT
+```
+
+### H18 run (i9-13900T, 2026-10-17)
+
+```text
+# provenance
+date:            2026-10-17T08:17:43Z (pilot run 0), 08:21:20Z..08:25:10Z (runs 1-3); runner check 08:25:25Z
+                 pre-registered in 1811012 (pushed before the pilot), amended in a173b04 (pushed before run 1)
+hypothesis:      H18
+host cpu:        13th Gen Intel(R) Core(TM) i9-13900T (8 P-cores, 16 E-cores; cpu_core 0-15, cpu_atom 16-31)
+host kernel:     6.6.128-1-MANJARO
+accelerators:    nvidia=2 (RTX 4000 SFF Ada, RTX 2000E Ada), intel=8 (UHD 770, shared), hybrid=1
+network:         tailscale0 100.65.179.24/32, br0 192.168.1.108/24, sshd on 0.0.0.0:22
+k3d-gpu commit:  a173b04 (claude/agent-sandbox-ecores rebased on origin/main 2b45f87)
+node image:      sha256:8a8a093acd204807b72587208c942d0d441364686f70b27e7be442aaa7d5c29a, docker build -t k3d-gpu:r2-sandbox .
+                 (k3s v1.37.1+k3s1; same image ID as the H16/H17 build, this branch changes no image input)
+runtime:         agent-sandbox v1.0.7 controller and python-runtime-sandbox v1.0.7, both pinned by digest;
+                 NetworkPolicy enforced by k3s's embedded kube-router
+model:           none
+energy source:   /sys/class/powercap/intel-rapl:0 (package-0), confounds only, sampled every 5 s by a
+                 separate sudo loop (the runner's `sudo -n` had no cached credentials, so it printed -)
+runs per arm:    3 counted (one fresh cluster each, 10 s idle between), plus pilot run 0 and a runner check
+```
+
+| Run | `sandbox up` (s) | sandbox CPUs | sandbox -> 100.65.179.24:22 | control -> same | sandbox -> 192.168.1.108:22 | control -> same | drop-log pkts | pypi.org:443 | pip `tomli_w` | load (1 min) | throttle delta |
+|-----|------|----|------|------|------|------|---|------|------|------|------|
+| 1 | 12.3 | 24 | refused, 0.14 s | connect | refused, 0.16 s | connect | 2 | connect | ok, 0.7 s | 3.97 | 12016 |
+| 2 | 16.6 | 24 | refused, 0.14 s | connect | refused, 0.15 s | connect | 2 | connect | ok, 0.8 s | 3.34 | 13926 |
+| 3 | 21.5 | 24 | refused, 0.15 s | connect | refused, 0.15 s | connect | 2 | connect | ok, 0.7 s | 5.29 | 12874 |
+
+`sandbox up` wall time (controller install, CRDs, warm pool Ready, then the
+E-core status check; each fresh cluster pulls the controller and runtime images):
+median 16.6 s, p90 20.5 s, spread
+(max - min) 9.2 s, n=3. Confounds: package power 74.4-80.9 W (median 76.7 W, 29 samples)
+across runs 2 and 3, 77.7 W idle before the pilot; swap used 108078-108081 MiB;
+the throttle delta is the sum of every CPU's `package_throttle_count` over the
+run, so the host was throttling throughout, as in earlier runs. None of the
+checks is a timing threshold, so the throttling does not bear on the verdict.
+
+Pilot run 0 (not counted): the same checks with an earlier probe. Placement and
+both blocks held, but the blocked connects failed with `Connection refused` in
+0.13 s, not a 3 s timeout: kube-router ends its policy chain with an NFLOG rule
+("DROP by policy agent-sandbox/python-ecores-network-policy") and the pod
+firewall rejects with `icmp-port-unreachable`. The pip probe was void:
+`six==1.17.0` is already in the runtime image (`Requirement already satisfied`).
+The amendment in the H18 row replaced the timeout with "no connect plus drop-log
+packets" and `six` with `tomli_w`, before run 1. The pilot's spare cluster was
+also used to read the image's package list and the iptables rules.
+
+Runner check (after the counted runs, `bench/sandbox_round.sh check`, with the
+probe now printing the exception instead of kubectl's exit line): same results,
+`NOCONNECT ConnectionRefusedError [Errno 111] Connection refused` for both
+private addresses, `sandbox up` 8.8 s.
+
+What PyPI egress depends on: the profile allows `0.0.0.0/0` minus RFC1918, CGNAT
+and link-local, and kube-dns on port 53. PyPI (Fastly, 151.101.0.0/16) is public,
+so the policy allows it; a mirror on a private address would be blocked.
+
+Verdict: H18 SUPPORTED, confidence high for this host (every check held in 3 of
+3 runs, with a control pod that proves each blocked address is reachable without
+the policy). Scope: k3s v1.37.1 kube-router, IPv4 only (the cluster has no IPv6,
+so the IPv6 ipBlock was not exercised); the host's public addresses were not
+tested because this host has none.
+
+```bash
+# Reproduce on a hybrid host, from this branch (sudo -v first for RAPL).
+TAG=k3d-gpu:r2-sandbox && docker build -t "$TAG" .
+export IMAGE=$TAG OUT=$(mktemp -d)
+for n in 1 2 3; do bench/sandbox_round.sh "$n"; sleep 10; done
+# TARGETS="ip:port ..." overrides the default tailscale0:22, LAN:22, pypi.org:443
 ```
 
 ## Scope corrections

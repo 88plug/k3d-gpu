@@ -73,7 +73,7 @@ try:
     print("CONNECT")
 except Exception as e:
     print("NOCONNECT", type(e).__name__, e)
-    sys.exit(1)' "$3" 2>&1 | tail -1); rc=$?
+    sys.exit(1)' "$3" 2>/dev/null); rc=$?
     echo "probe ns=$1 dst=$3 rc=${rc} s=$(elapsed "${t0}" "$(date +%s.%N)") ${out}"
 }
 for t in ${TARGETS}; do

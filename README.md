@@ -1267,13 +1267,16 @@ What works on k3d, and what does not:
 | Piece | On k3d-gpu |
 |-------|------------|
 | Controller, Sandbox, SandboxTemplate, SandboxClaim, SandboxWarmPool | Yes. Plain manifests, no webhook or cert-manager. |
-| NetworkPolicy | Enforced by k3s's embedded kube-router controller. The template allows ingress on 8888 only from pods labelled `k3d-gpu.io/sandbox-client=true` (and upstream's `sandbox-router`). Egress is limited to cluster DNS and public addresses. RFC1918, CGNAT `100.64.0.0/10` (tailscale) and link-local are blocked, so a sandbox cannot reach pods, services, the k3d docker network, tailnet peers or the host by those addresses. The host's public IPs stay reachable, so bind inference servers to a private address or firewall them. Ingress is gated on a pod label that any namespace can set: fine for a single-user dev cluster, not for a shared one. |
+| NetworkPolicy | Enforced by k3s's embedded kube-router controller. The template allows ingress on 8888 only from pods labelled `k3d-gpu.io/sandbox-client=true` (and upstream's `sandbox-router`). Egress is limited to cluster DNS and public addresses. RFC1918, CGNAT `100.64.0.0/10` (tailscale) and link-local are blocked, so a sandbox cannot reach pods, services, the k3d docker network, tailnet peers or the host by those addresses. A blocked connect fails at once with `Connection refused` (kube-router rejects it), not a timeout [ledger:H18]. The host's public IPs stay reachable, so bind inference servers to a private address or firewall them. Ingress is gated on a pod label that any namespace can set: fine for a single-user dev cluster, not for a shared one. |
 | gVisor / Kata (`runtimeClassName`) | Not available. The node image ships neither, and Kata needs `/dev/kvm` in the node container. Sandboxes run under runc, hardened instead: non-root, all capabilities dropped, no privilege escalation, `RuntimeDefault` seccomp, no service-account token. That is container isolation, not a VM or user-space kernel boundary. |
 | sandbox-router, sandboxd | Not installed. Upstream publishes them only as staging `latest-main` images, which cannot be pinned to a release. Clients reach a sandbox by pod IP (from a `k3d-gpu.io/sandbox-client=true` pod) or `kubectl port-forward`, which containerd opens inside the pod's network namespace, so the policy does not block it. |
 
 Upstream's default policy blocks DNS as well. The profile allows `kube-dns` on
 port 53 so `pip install` resolves names, and sets `HOME=/tmp` so pip's user
 install has somewhere to write (the image's user 1000 has no home directory).
+PyPI's addresses are public, so the egress rule allows them and `pip install
+--user <pkg>` lands in `/tmp/.local` [ledger:H18]; a package index on a private
+address is blocked like any other.
 The image ships no `git` or `curl`; fetch with Python or pip. Edit
 `share/agent-sandbox-k3d.yml` (or point `K3D_GPU_SANDBOX_PROFILE` at a copy) to
 change the image, CPU request, warm pool size or policy.
