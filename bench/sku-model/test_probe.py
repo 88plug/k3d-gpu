@@ -127,17 +127,49 @@ class Stub(BaseHTTPRequestHandler):
         pass
 
 
+class ReasoningStub(Stub):
+    # OVMS 2026.4.1 streams Qwen3 thinking as delta.reasoning_content (H24 run 1:
+    # no delta.content in 128 tokens, so every TTFT was null).
+    def do_POST(self):  # noqa: N802
+        self.rfile.read(int(self.headers["Content-Length"]))
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.end_headers()
+        for _ in range(5):
+            self.wfile.write(b'data: {"choices":[{"delta":{"reasoning_content":"x"}}]}\n\n')
+        self.wfile.write(b'data: {"choices":[],"usage":{"completion_tokens":5,"prompt_tokens":9}}\n\n')
+        self.wfile.write(b"data: [DONE]\n\n")
+
+
 class Client(unittest.TestCase):
-    def test_chat_parses_stream(self):
-        srv = HTTPServer(("127.0.0.1", 0), Stub)
+    def _chat(self, stub):
+        srv = HTTPServer(("127.0.0.1", 0), stub)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         try:
-            r = probe.chat(srv.server_address[1], "hi", 5)
+            return probe.chat(srv.server_address[1], "hi", 5)
         finally:
             srv.shutdown()
+
+    def test_chat_parses_stream(self):
+        r = self._chat(Stub)
         self.assertEqual(r["completion_tokens"], 5)
         self.assertEqual(r["prompt_tokens"], 9)
         self.assertIsNotNone(r["ttft_s"])
+
+    def test_chat_counts_reasoning_tokens(self):
+        r = self._chat(ReasoningStub)
+        self.assertIsNotNone(r["ttft_s"])
+        self.assertIsNotNone(r["decode_tok_s"])
+
+    def test_prefill_prompt_near_512_tokens(self):
+        # "w123456" is ~7 Qwen3 tokens; 420 words gave ~2920 prompt tokens in run 1.
+        n = len(probe.prefill_prompt().split())
+        self.assertTrue(60 <= n <= 90, n)
+
+    def test_rapl_delta_handles_wrap(self):
+        top = 262143328850
+        self.assertEqual(probe.rapl_delta_uj(top - 10, 5, top), 15)
+        self.assertEqual(probe.rapl_delta_uj(100, 250, top), 150)
 
     def test_nonce_prompts_unique(self):
         self.assertNotEqual(probe.prefill_prompt(), probe.prefill_prompt())
@@ -161,6 +193,20 @@ class Plan(unittest.TestCase):
         self.assertIn("127.0.0.1:8243:8000", cmd)
         self.assertEqual(cmd[cmd.index("--cpuset-cpus") + 1], "16-23")
         self.assertIn('"INFERENCE_NUM_THREADS": "8"', cmd[-1])
+
+    def test_each_arm_mounts_its_own_repository(self):
+        # OVMS --source_model rewrites graph.pbtxt (which carries plugin_config) on
+        # every start; a shared mount lets concurrent starts load each other's config.
+        mounts = set()
+        for k in probe.ARMS:
+            cmd = probe.launch("img", "/m", k)
+            mounts.add(cmd[cmd.index("-v") + 1])
+        self.assertEqual(mounts, {f"/m/{k}:/models" for k in probe.ARMS})
+
+    def test_graph_plugin_config_parsed(self):
+        txt = "x\n  plugin_config: '{\"INFERENCE_NUM_THREADS\": \"4\"}',\n"
+        self.assertEqual(probe.graph_plugin_config(txt), {"INFERENCE_NUM_THREADS": "4"})
+        self.assertIsNone(probe.graph_plugin_config("no config"))
 
 
 if __name__ == "__main__":
