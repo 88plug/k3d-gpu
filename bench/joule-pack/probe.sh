@@ -8,7 +8,9 @@
 #   OUT=$(mktemp -d) flock -w 10800 <lockfile> bench/joule-pack/probe.sh
 #
 # Env: OUT (results dir, required); IMAGE (node image, default: the launcher's
-# pinned one); SUDO_ASKPASS or a prior `sudo -v` (RAPL energy_uj is root-only).
+# pinned one); SUDO_ASKPASS (sudo -A), else sudo must work non-interactively
+# (sudo -n) in this process: RAPL energy_uj is root-only, and a `sudo -v` taken
+# in another shell does not carry over when there is no tty.
 # Reads sysfs only; writes nothing to sysfs. Self-limits: no arm starts with
 # fewer than 127 s left of BUDGET (1140 s), and a watchdog ends the run at
 # HARD_STOP (1200 s); the cluster is deleted on every exit path.
@@ -41,6 +43,7 @@ mkdir -p "${OUT}"
 left() { echo $(( BUDGET - ($(date +%s) - T0) )); }
 cleanup() {
     [ -n "${WATCHDOG:-}" ] && kill "${WATCHDOG}" 2>/dev/null
+    # The root sampler exits by itself within 1 s of this shell going away.
     [ -n "${SAMPLER:-}" ] && "${ELEV[@]}" kill "${SAMPLER}" 2>/dev/null
     [ -n "${CONF:-}" ] && kill "${CONF}" 2>/dev/null
     k3d cluster delete "${NAME}" >/dev/null 2>&1
@@ -53,6 +56,11 @@ trap 'echo "stopped by signal at +$(( $(date +%s) - T0 ))s" >> "${OUT}/events.lo
 if k3d cluster list 2>/dev/null | awk 'NR>1 {print $1}' | grep -q '^k3dgpu-f-'; then
     echo "a k3dgpu-f-* cluster exists; refusing" >&2; exit 3
 fi
+if k3d cluster list 2>/dev/null | awk 'NR>1 {print $1}' | grep -qx "${NAME}"; then
+    echo "removing leftover ${NAME}" >> "${OUT}/events.log"; k3d cluster delete "${NAME}" >/dev/null 2>&1
+fi
+ELEV=(sudo -n); [ -n "${SUDO_ASKPASS:-}" ] && ELEV=(sudo -A)
+"${ELEV[@]}" true || { echo "sudo (${ELEV[*]}) does not work here; set SUDO_ASKPASS" >&2; exit 5; }
 ( sleep "${HARD_STOP}"; kill -TERM $$ ) &
 WATCHDOG=$!
 
@@ -69,16 +77,21 @@ d = json.load(sys.stdin)
 for k, v in d["pools"].items():
     print(k, ",".join(map(str, v)))' <<< "${DETECT}" > "${OUT}/pools.txt"
 
-ELEV=(sudo); [ -n "${SUDO_ASKPASS:-}" ] && ELEV+=(-A)
 Z=/sys/class/powercap
 for z in ${ZONES}; do
     printf '%s %s %s\n' "$z" "$(cat "$Z/$z/name")" "$("${ELEV[@]}" cat "$Z/$z/max_energy_range_uj")"
 done > "${OUT}/zones.txt"
+awk 'NF != 3 {exit 1}' "${OUT}/zones.txt" || { echo "zones.txt malformed (sudo read failed)" >&2; exit 5; }
 # Host sampler, 1 s: epoch then energy_uj of each zone, in zones.txt order.
+# Bounded twice: timeout HARD_STOP+30 s, and it ends when this shell ($$) exits.
 # shellcheck disable=SC2016 # expands in the root shell
-"${ELEV[@]}" bash -c 'Z=/sys/class/powercap; while :; do l="E ${EPOCHREALTIME/,/.}"
-  for z in "$@"; do l+=" $(<"$Z/$z/energy_uj")"; done; echo "$l"; sleep 1; done' _ ${ZONES} > "${OUT}/rapl.txt" &
+"${ELEV[@]}" timeout "$(( HARD_STOP + 30 ))" bash -c 'Z=/sys/class/powercap; P=$1; shift
+  while kill -0 "$P" 2>/dev/null; do l="E ${EPOCHREALTIME/,/.}"
+  for z in "$@"; do l+=" $(<"$Z/$z/energy_uj")"; done; echo "$l"; sleep 1; done' _ "$$" ${ZONES} > "${OUT}/rapl.txt" &
 SAMPLER=$!
+sleep 3
+[ "$(grep -c '^E ' "${OUT}/rapl.txt")" -ge 2 ] || { echo "RAPL sampler wrote no rows" >&2; exit 5; }
+[ "${PREFLIGHT_ONLY:-0}" = 1 ] && { echo "preflight ok: $(wc -l < "${OUT}/rapl.txt") rows" >&2; exit 0; }
 ( while :; do
     th=$(cat /sys/devices/system/cpu/cpu*/thermal_throttle/package_throttle_count 2>/dev/null | awk '{s+=$1} END {print s+0}')
     echo "C $(date +%s) load1=$(cut -d' ' -f1 /proc/loadavg) swap_mib=$(free -m | awk '/^Swap/ {print $3}') throttle=${th} temp_mC=$(cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null | sort -n | tail -1) containers=$(docker ps -q | wc -l)"
@@ -142,7 +155,7 @@ BYTES=$(awk '/^T /{print $4-$3}' "${OUT}/cal.log" | sort -g | awk -v cb="${CAL_B
 [ "${BYTES}" -gt 0 ] || { echo "calibration failed (see ${OUT}/cal.log)" >&2; exit 1; }
 echo "BYTES ${BYTES}" >> "${OUT}/events.log"
 
-window_idle() { local s; s=$(date +%s); sleep "${IDLE}"; echo "W idle ${s} $((s + IDLE))" >> "${OUT}/windows.txt"; }
+window_idle() { local s; s=$(date +%s); sleep "${IDLE}" & wait $!; echo "W idle ${s} $((s + IDLE))" >> "${OUT}/windows.txt"; }
 window_arm() { # <round> <arm>
     local at=$(( $(date +%s) + 6 )) i lab p
     for i in $(seq 1 "${N}"); do
@@ -151,13 +164,14 @@ window_arm() { # <round> <arm>
             M) if [ "$i" -le $((N / 2)) ]; then lab=performance; else lab=efficient; fi ;;
         esac
         pod "a-${2,,}-${i}" "$2" "${lab}" "${at}" "${BYTES}"
-    done | kubectl apply -f - >/dev/null
-    sleep $(( at + WARM + MEAS - $(date +%s) + 2 ))
+    done | kubectl apply -f - >/dev/null || echo "apply failed r$1 $2" >> "${OUT}/events.log"
+    sleep $(( at + WARM + MEAS - $(date +%s) + 2 )) & wait $!
     echo "W $2 $((at + WARM)) $((at + WARM + MEAS)) round=$1" >> "${OUT}/windows.txt"
     for p in $(kubectl -n "${NS}" get pods -l "h21-arm=$2" -o name); do
         kubectl -n "${NS}" logs "$p" > "${OUT}/r$1-$2-${p##*/}.log" 2>&1
     done
-    kubectl -n "${NS}" delete pods -l "h21-arm=$2" --wait=false >/dev/null
+    # Wait for teardown so it does not land in the next idle window.
+    kubectl -n "${NS}" delete pods -l "h21-arm=$2" --wait=true --timeout=30s >/dev/null
 }
 
 ORDER=("U P E X M" "M X E P U" "E U M P X")

@@ -54,6 +54,14 @@ def _read(path):
         return ""
 
 
+def _cache_shared(cpu_sys, cpu, level):
+    """shared_cpu_list of the CPU's cache at that level, '' when it has none."""
+    for d in sorted(glob.glob(os.path.join(cpu_sys, "cpu%d" % cpu, "cache", "index*"))):
+        if _read(os.path.join(d, "level")) == level:
+            return _read(os.path.join(d, "shared_cpu_list"))
+    return ""
+
+
 def discover(sysroot=""):
     """RAPL zones (by name) and CPU pools under sysroot. Never raises on a missing tree."""
     sysroot = sysroot or "/"
@@ -72,6 +80,16 @@ def discover(sysroot=""):
         cpus = cpulist(_read(os.path.join(sysroot, "sys/devices/cpu_%s/cpus" % pmu)))
         if cpus:
             pools[pool] = cpus
+    # LP E-cores without an L3 (Meteor/Lunar/Panther Lake) sit in cpu_atom; move
+    # them to lowpower, as scripts/k3d-gpu lowpower_cpus() does.
+    cpu_sys = os.path.join(sysroot, "sys/devices/system/cpu")
+    if any(_read(f) == "3" for f in glob.glob(os.path.join(cpu_sys, "cpu[0-9]*/cache/index*/level"))):
+        lp = [c for c in pools.get("efficient", []) if not _cache_shared(cpu_sys, c, "3")]
+        if lp:
+            pools["lowpower"] = sorted(set(pools.get("lowpower", [])) | set(lp))
+            pools["efficient"] = [c for c in pools["efficient"] if c not in lp]
+            if not pools["efficient"]:
+                del pools["efficient"]
     hybrid = "performance" in pools and ("efficient" in pools or "lowpower" in pools)
     if "core" in zones and "package" in zones:
         domain = "core"
@@ -161,7 +179,11 @@ def load_run(out):
     zones = {}  # kind -> (column index, max range)
     with open(os.path.join(out, "zones.txt")) as f:
         for col, line in enumerate(f):
-            zone, name, rng = line.split()
+            p = line.split()
+            if len(p) != 3:
+                raise ValueError("%s/zones.txt line %d: want 'zone name max_energy_range_uj', got %r "
+                                 "(RAPL range unreadable: sudo failed?)" % (out, col + 1, line.rstrip()))
+            zone, name, rng = p
             kind = "package" if name.startswith("package-") else name
             zones[kind] = (col, int(rng) if rng.isdigit() else 0)
     samples = []
@@ -170,6 +192,8 @@ def load_run(out):
             p = line.split()
             if len(p) == 2 + len(zones) and p[0] == "E":
                 samples.append((float(p[1]), [int(x) for x in p[2:]]))
+    if not samples:
+        raise ValueError("%s/rapl.txt has no samples (RAPL energy_uj unreadable: sudo failed?)" % out)
     pools = {}
     pf = os.path.join(out, "pools.txt")
     if os.path.exists(pf):
@@ -203,9 +227,9 @@ def window_watts(zones, samples, t0, t1):
 
 
 def p95(xs):
-    """Nearest-rank (lower) p95; nan on empty."""
+    """Nearest-rank p95 (rank ceil(0.95 n)); nan on empty."""
     xs = sorted(xs)
-    return xs[int(0.95 * (len(xs) - 1))] if xs else math.nan
+    return xs[max(math.ceil(0.95 * len(xs)), 1) - 1] if xs else math.nan
 
 
 def _conf_delta(conf, t0, t1, key):
@@ -259,6 +283,7 @@ def analyse(out, n=N_AGENTS, slo=SLO_S):
         rows.append({
             "round": rnd, "arm": arm, "marginal_w": marg, "turns": len(lat), "p95_s": p95(lat),
             "agents_per_w": n / marg["package"] if marg["package"] > 0 else math.inf,
+            "j_per_turn": marg["package"] * (t1 - t0) / len(lat) if lat and marg["package"] > 0 else math.nan,
             "cpu_s": cpu, "bad_cpuset": bad_cpuset,
             "flag_throttle": thr > 3 * max(idle_thr or [0.0]) and thr > 0,
             "flag_swap": swap > 512,
@@ -290,33 +315,54 @@ def verdict(out, n=N_AGENTS, slo=SLO_S, min_gain=MIN_GAIN):
     res["inconclusive_flags"] = inconc
     res["validity_flags"] = sorted({"throttle r%s %s" % (r["round"], r["arm"]) for r in rows if r["flag_throttle"]}
                                    | {"swap r%s %s" % (r["round"], r["arm"]) for r in rows if r["flag_swap"]})
-    # H21a: oracle best vs E and vs U, paired per round.
-    ge, ge_u, per = 0, 0, []
+    # H21a: oracle best vs E and vs U, paired per round, on two metrics:
+    # agents per marginal package W (pre-registered) and marginal package J per
+    # turn (work-normalized; added before the run). The best arm must meet the
+    # SLO; the ratio uses E's measured value even when E misses the SLO, which
+    # is reported as its own flag, not as an energy win.
+    def ratio(vals, best, ref, lower_better):
+        if best is None or not vals.get(ref) or not vals.get(best) or math.isnan(vals[ref]) or math.isnan(vals[best]):
+            return math.nan
+        return vals[ref] / vals[best] if lower_better else vals[best] / vals[ref]
+    ge, ge_j, ge_u, per = 0, 0, 0, []
     for rd in complete:
-        arms = {a: {"n": n, "pkg_w": by[rd][a]["marginal_w"]["package"], "p95": by[rd][a]["p95_s"]} for a in "UPEX"}
-        d = place(arms, slo, min_gain=1.0, incumbent="E")
-        apw = d.get("agents_per_w", {})
-        best = d["arm"]
-        re_ = apw[best] / apw["E"] if best and apw.get("E") else (math.inf if best else math.nan)
-        ru = apw[best] / apw["U"] if best and apw.get("U") else (math.inf if best else math.nan)
+        feas = [a for a in "UPEX" if by[rd][a]["p95_s"] <= slo and by[rd][a]["marginal_w"]["package"] > 0]
+        apw = {a: by[rd][a]["agents_per_w"] for a in "UPEX" if by[rd][a]["marginal_w"]["package"] > 0}
+        jpt = {a: by[rd][a]["j_per_turn"] for a in "UPEX" if not math.isnan(by[rd][a]["j_per_turn"])}
+        best = max(sorted(feas), key=lambda a: apw[a]) if feas else None
+        best_j = min(sorted(a for a in feas if a in jpt), key=lambda a: jpt[a]) if any(a in jpt for a in feas) else None
+        re_, ru, rj = ratio(apw, best, "E", False), ratio(apw, best, "U", False), ratio(jpt, best_j, "E", True)
         ge += re_ >= min_gain
+        ge_j += rj >= min_gain
         ge_u += ru >= 1.3
-        per.append({"round": rd, "best": best, "best_over_E": re_, "best_over_U": ru,
+        per.append({"round": rd, "best": best, "best_over_E": re_, "best_over_U": ru, "best_j": best_j,
+                    "E_over_best_j_per_turn": rj, "j_per_turn": jpt,
                     "E_meets_slo": by[rd]["E"]["p95_s"] <= slo, "P_meets_slo": by[rd]["P"]["p95_s"] <= slo})
     k = len(complete)
-    if res["invalid"]:
+
+    def rule(g):
+        if res["invalid"]:
+            return "VOID"
+        if inconc:
+            return "INCONCLUSIVE"
+        if k == 3 and g == 3:
+            return "SUPPORTED"
+        if k - g >= 2:
+            return "REFUTED"
+        return "INCONCLUSIVE"
+    va_w, va_j = rule(ge), rule(ge_j)
+    if "VOID" in (va_w, va_j):
         va = "VOID"
-    elif inconc:
-        va = "INCONCLUSIVE"
-    elif k == 3 and ge == 3:
+    elif va_w == va_j == "SUPPORTED":
         va = "SUPPORTED"
-    elif k - ge >= 2:
+    elif va_j == "REFUTED":
         va = "REFUTED"
     else:
         va = "INCONCLUSIVE"
-    agree = ge if va == "SUPPORTED" else k - ge
-    res["a"] = {"per_round": per, "rounds_ge_gain": ge, "rounds_best_over_U_ge_1.3": ge_u, "verdict": va,
-                "confidence": 1 - 0.5 ** agree if va in ("SUPPORTED", "REFUTED") else None}
+    agree = 3 if va == "SUPPORTED" else k - ge_j
+    res["a"] = {"per_round": per, "rounds_ge_gain": ge, "rounds_ge_gain_j_per_turn": ge_j,
+                "rounds_best_over_U_ge_1.3": ge_u, "verdict_agents_per_w": va_w, "verdict_j_per_turn": va_j,
+                "verdict": va, "confidence": 1 - 0.5 ** agree if va in ("SUPPORTED", "REFUTED") else None}
     # H21b: CPU-time share of P pods in M vs core-domain energy share from P and E arms.
     dom = "core" if rows and "core" in rows[0]["marginal_w"] else "package"
     perb, ok, low, gap = [], 0, 0, False
@@ -397,23 +443,25 @@ def main(argv=None):
         if args.json:
             _dump(r)
         else:
-            print("rnd arm   pkgW  coreW  uncW  turns  p95s  agents/W  flags")
+            print("rnd arm   pkgW  coreW  uncW  turns  p95s  agents/W  J/turn  flags")
             for x in r["rows"]:
                 m = x["marginal_w"]
                 fl = ",".join(f for f, on in (("throttle", x["flag_throttle"]), ("swap", x["flag_swap"]),
                                                ("cpuset", bool(x["bad_cpuset"]))) if on)
-                print("%3s %3s %6.2f %6.2f %5.2f %6d %5.2f %9.3f  %s" % (
+                print("%3s %3s %6.2f %6.2f %5.2f %6d %5.2f %9.3f %7.3f  %s" % (
                     x["round"], x["arm"], m["package"], m.get("core", math.nan), m.get("uncore", math.nan),
-                    x["turns"], x["p95_s"], x["agents_per_w"], fl))
+                    x["turns"], x["p95_s"], x["agents_per_w"], x["j_per_turn"], fl))
             print("idle pkg W: median %.2f spread %.2f n=%d" % (r["idle_pkg_w"]["median"], r["idle_pkg_w"]["spread"],
                                                                r["idle_pkg_w"]["n"]))
             for k in ("invalid", "inconclusive_flags", "validity_flags"):
                 if r[k]:
                     print("%s: %s" % (k, "; ".join(r[k])))
             for pr in r["a"]["per_round"]:
-                print("H21a round %s: best=%s best/E=%.3f best/U=%.3f" % (pr["round"], pr["best"], pr["best_over_E"],
-                                                                          pr["best_over_U"]))
-            print("H21a verdict: %s confidence=%s" % (r["a"]["verdict"], r["a"]["confidence"]))
+                print("H21a round %s: best=%s best/E=%.3f best/U=%.3f | J/turn best=%s E/best=%.3f | E meets SLO: %s" % (
+                    pr["round"], pr["best"], pr["best_over_E"], pr["best_over_U"], pr["best_j"],
+                    pr["E_over_best_j_per_turn"], pr["E_meets_slo"]))
+            print("H21a verdict: %s confidence=%s (agents/W %s, J/turn %s)" % (
+                r["a"]["verdict"], r["a"]["confidence"], r["a"]["verdict_agents_per_w"], r["a"]["verdict_j_per_turn"]))
             for pr in r["b"]["per_round"]:
                 print("H21b round %s: cpu-share P=%.3f energy-share P=%.3f err=%+.3f additivity gap=%.2f" % (
                     pr["round"], pr["cpu_share_P"], pr["energy_share_P"], pr["err"], pr["additivity_gap"]))

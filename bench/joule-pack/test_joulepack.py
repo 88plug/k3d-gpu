@@ -59,6 +59,21 @@ class Detect(unittest.TestCase):
             self.assertEqual(len(d["pools"]["performance"]), p_n, name)
         self.assertIn("lowpower", jp.discover(os.path.join(FIX, "arrowlake-h", "sysroot"))["pools"])
 
+    def test_lp_ecores_match_launcher(self):
+        # Pools equal scripts/k3d-gpu efficient_cpus/lowpower_cpus on every hybrid fixture.
+        launcher = os.path.join(ROOT, "scripts", "k3d-gpu")
+        prog = ('SYSROOT="$1"; CPULIST_MAX=65536; '
+                'eval "$(sed -n -e "/^cpulist_expand()/,/^}/p" -e "/^cpulist_compress()/,/^}/p" '
+                '-e "/^hybrid_cpus()/,/^efficient_cpus()/p" "$2")"; '
+                'echo "$(efficient_cpus)"; echo "$(lowpower_cpus)"')
+        for name in ("meteorlake", "pantherlake", "arrowlake-h", "arrowlake-s", "raptorlake-nvidia"):
+            sysroot = os.path.join(FIX, name, "sysroot")
+            out = subprocess.run(["bash", "-c", prog, "_", sysroot, launcher],
+                                 capture_output=True, text=True, check=True).stdout.split("\n")
+            d = jp.discover(sysroot)
+            self.assertEqual(d["pools"].get("efficient", []), jp.cpulist(out[0]), name)
+            self.assertEqual(d["pools"].get("lowpower", []), jp.cpulist(out[1]), name)
+
     def test_xeon_homogeneous(self):
         d = jp.discover(os.path.join(FIX, "xeon-gnr", "sysroot"))
         self.assertFalse(d["hybrid"])
@@ -136,9 +151,10 @@ class Place(unittest.TestCase):
 
 
 def fake_run(d, arm_w, rounds=3, lat=None, uncore=0.0, idle_jitter=0.0, cpu=None, bad_cpuset=False,
-             core_frac=0.8):
+             core_frac=0.8, turns=None):
     """Synthetic probe.sh output. arm_w: {arm: marginal package W}; idle floor 75 W."""
     lat = lat or {}
+    turns = turns or {}
     cpu = cpu or {"performance": 10.0, "efficient": 10.0}
     write(os.path.join(d, "zones.txt"), "intel-rapl:0 package-0 262143328850\nintel-rapl:0:0 core 262143328850\n"
                                         "intel-rapl:0:1 uncore 262143328850\nintel-rapl:1 psys 262143328850\n")
@@ -175,7 +191,7 @@ def fake_run(d, arm_w, rounds=3, lat=None, uncore=0.0, idle_jitter=0.0, cpu=None
                     cs = "0-31"
                 l95 = lat.get(a, 0.3)
                 lines = ["CPUS %s LAB %s" % (cs, lab), "U0 %d 0" % (s + 1)]
-                lines += ["T %d 0.0 %.3f" % (s + 2 + k, l95) for k in range(20)]
+                lines += ["T %d 0.0 %.3f" % (s + 2 + k % 36, l95) for k in range(turns.get(a, 20))]
                 lines.append("U1 %d %d" % (t, int(cpu.get(lab, 1.0) / 6 * 1e6)))
                 write(os.path.join(d, "r%d-%s-a-%s-%d.log" % (r, a, a.lower(), i)), "\n".join(lines) + "\n")
     s = t
@@ -239,9 +255,43 @@ class Verdict(unittest.TestCase):
         self.assertEqual(r["a"]["verdict"], "INCONCLUSIVE")
 
     def test_e_fails_slo(self):
+        # E misses the SLO: the ratio still uses E's measured agents/W (U 16 W vs E 8 W
+        # -> 0.5x), so an SLO miss is a flag, never an infinite energy win.
         r = self.v(lat={"E": 1.5, "X": 1.5})
         self.assertTrue(all(not p["E_meets_slo"] for p in r["a"]["per_round"]))
         self.assertEqual({p["best"] for p in r["a"]["per_round"]}, {"U"})
+        for p in r["a"]["per_round"]:
+            self.assertAlmostEqual(p["best_over_E"], 0.5, places=2)
+            self.assertTrue(math.isfinite(p["E_over_best_j_per_turn"]))
+        self.assertEqual(r["a"]["verdict"], "REFUTED")
+
+    def test_j_per_turn_normalizes_work(self):
+        # X draws 6 W (agents/W 1.33x E) but does half E's turns: per turn it costs more.
+        r = self.v(arm_w=dict(self.BASE, X=6.0), turns={"X": 10})
+        self.assertEqual(r["a"]["verdict_agents_per_w"], "SUPPORTED")
+        self.assertEqual(r["a"]["verdict_j_per_turn"], "REFUTED")
+        self.assertEqual(r["a"]["verdict"], "REFUTED")
+        row = next(x for x in r["rows"] if x["arm"] == "X")
+        self.assertAlmostEqual(row["j_per_turn"], 6.0 * 40 / (12 * 10), places=3)
+
+    def test_j_per_turn_supports_when_both_win(self):
+        r = self.v(arm_w=dict(self.BASE, X=6.0))
+        self.assertEqual(r["a"]["verdict_j_per_turn"], "SUPPORTED")
+        self.assertEqual(r["a"]["verdict"], "SUPPORTED")
+
+    def test_malformed_zones_raises_clear_error(self):
+        with tempfile.TemporaryDirectory() as t:
+            fake_run(t, self.BASE)
+            write(os.path.join(t, "zones.txt"), "intel-rapl:0 package-0\n")
+            with self.assertRaisesRegex(ValueError, "sudo failed"):
+                jp.verdict(t)
+
+    def test_empty_rapl_raises_clear_error(self):
+        with tempfile.TemporaryDirectory() as t:
+            fake_run(t, self.BASE)
+            write(os.path.join(t, "rapl.txt"), "")
+            with self.assertRaisesRegex(ValueError, "no samples"):
+                jp.verdict(t)
 
     def test_counter_wrap(self):
         zones = {"package": (0, 100)}
@@ -250,6 +300,8 @@ class Verdict(unittest.TestCase):
 
     def test_p95(self):
         self.assertEqual(jp.p95(list(range(1, 21))), 19)
+        self.assertEqual(jp.p95(list(range(1, 101))), 95)
+        self.assertEqual(jp.p95([3.0]), 3.0)
         self.assertTrue(math.isnan(jp.p95([])))
 
 
