@@ -69,8 +69,7 @@ keyargs=()
 for ((i = 0; i < ${#args[@]}; i += 2)); do [ "${args[i]}" != --api-key-file ] || keyargs=(--api-key-file "${args[i + 1]}"); done
 
 info "Secret ${GW_NS}/k3d-gpu-llm..."
-remote_py secret --namespace "${GW_NS}" --remote "${base}" --model "${model}" ${keyargs[@]+"${keyargs[@]}"} \
-    | kubectl apply --server-side --force-conflicts --field-manager=k3d-gpu -f - >/dev/null
+remote_py secret --namespace "${GW_NS}" --remote "${base}" --model "${model}" ${keyargs[@]+"${keyargs[@]}"}
 
 info "Gateway env ${KEY_ENV} from that Secret (secretKeyRef)..."
 kubectl -n "${GW_NS}" set env "deployment/${GW_DEPLOY}" --from=secret/k3d-gpu-llm --keys=OPENAI_API_KEY \

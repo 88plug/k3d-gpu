@@ -71,7 +71,7 @@ class Stub:
             def handle_any(self, body=None):
                 stub.seen.append({"path": self.path, "auth": self.headers.get("Authorization"), "body": body})
                 if stub.redirect_to:
-                    self.send(302, {}, [("Location", stub.redirect_to + self.path)])
+                    self.send(302, {}, [("Location", stub.redirect_to + "/v1/models")])
                     return
                 if stub.key and self.headers.get("Authorization") != f"Bearer {stub.key}":
                     self.send(401, {"error": {"message": "invalid api key"}})
@@ -326,29 +326,48 @@ class Live(unittest.TestCase):
         rc, out, err = cli("check", env=dict(self.env, HTTP_PROXY="http://127.0.0.1:9", http_proxy="http://127.0.0.1:9"))
         self.assertEqual(rc, 0, out + err)
 
-    def test_raw_key_only_into_a_pipe(self):
-        rc, out, _ = cli("_key", env=self.env)
-        self.assertEqual((rc, out), (0, KEY))
-
-        class Tty(io.StringIO):
-            def isatty(self):
-                return True
-        buf = Tty()
-        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
-            rc = remote.main(["_key"], env=self.env)
-        self.assertNotEqual(rc, 0)
-        self.assertEqual(buf.getvalue(), "")
-
-
 class Manifests(unittest.TestCase):
     def test_secret_golden(self):
-        rc, out, err = cli("secret", "--namespace", "k3d-gpu-agent", "--model", "zai-org/GLM-5.3",
-                           env={"OPENAI_BASE_URL": "https://gaudi.example.net/v1", "OPENAI_API_KEY": KEY})
-        self.assertEqual(rc, 0, err)
+        a = remote.parse(["secret", "--namespace", "k3d-gpu-agent", "--model", "zai-org/GLM-5.3"])
+        ep = remote.Endpoint(a, {"OPENAI_BASE_URL": "https://gaudi.example.net/v1", "OPENAI_API_KEY": KEY})
+        out = remote.secret_manifest(ep, "k3d-gpu-agent", "zai-org/GLM-5.3")
         self.assertEqual(out, golden("secret.golden", out))
         self.assertNotIn(KEY, out, "the raw key is only ever base64 data, never stringData")
         self.assertIn(KEY_B64, out)
         self.assertIn("app.kubernetes.io/managed-by: k3d-gpu", out)
+
+    def test_secret_goes_to_kubectl_stdin_never_stdout(self):
+        with tempfile.TemporaryDirectory() as d:
+            log = os.path.join(d, "kubectl.log")
+            with open(os.path.join(d, "kubectl"), "w") as f:
+                f.write(f"#!/bin/sh\necho \"argv $*\" >> {log}\ncat >> {log}\n")
+            os.chmod(os.path.join(d, "kubectl"), 0o755)
+            env = dict(CLEAN_ENV, PATH=d + os.pathsep + os.environ["PATH"],
+                       OPENAI_BASE_URL="https://gaudi.example.net/v1", OPENAI_API_KEY=KEY)
+            p = subprocess.run([sys.executable, os.path.join(ROOT, "console", "remote.py"), "secret",
+                                "--namespace", "ns1", "--model", "m"], env=env, capture_output=True, text=True)
+            self.assertEqual(p.returncode, 0, p.stderr)
+            self.assertNotIn(KEY_B64, p.stdout + p.stderr)
+            self.assertNotIn(KEY, p.stdout + p.stderr)
+            with open(log) as f:
+                got = f.read()
+            argv = got.splitlines()[0]
+            self.assertEqual(argv, "argv apply --server-side --force-conflicts --field-manager=k3d-gpu -f -")
+            self.assertNotIn(KEY_B64, argv)
+            self.assertIn(f"OPENAI_API_KEY: {KEY_B64}", got)
+
+    def test_exec_hands_the_key_in_the_environment(self):
+        with tempfile.TemporaryDirectory() as d:
+            kf = os.path.join(d, "k")
+            with open(kf, "w") as f:
+                f.write("OPENAI_API_KEY=sk-test-exec-000000\n")
+            os.chmod(kf, 0o600)
+            p = subprocess.run([sys.executable, os.path.join(ROOT, "console", "remote.py"), "exec", "--remote",
+                                "https://gaudi.example.net", "--api-key-file", kf, "--", sys.executable, "-c",
+                                "import os, sys; sys.exit(0 if os.environ['OPENAI_API_KEY'] == 'sk-test-exec-000000' else 1)"],
+                               env=CLEAN_ENV, capture_output=True, text=True)
+            self.assertEqual(p.returncode, 0, p.stderr)
+            self.assertEqual(p.stdout, "")
 
     def test_secret_needs_a_model_or_probe(self):
         rc, _, err = cli("secret", "--namespace", "x",

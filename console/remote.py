@@ -18,10 +18,11 @@ the Authorization header can never be replayed to a host a 3xx names.
   remote.py show                                what resolves, no network
   remote.py models                              GET /models, one id per line
   remote.py resolve [--probe]                   "base<TAB>model<TAB>origin" for the launcher ("-": no model)
-  remote.py secret --namespace NS               Secret k3d-gpu-llm manifest on stdout
+  remote.py secret --namespace NS               apply Secret k3d-gpu-llm (kubectl, manifest on its stdin)
   remote.py chat-ui MANIFEST                    Open WebUI manifest reading that Secret
   remote.py sandbox-profile MANIFEST [--addrs]  sandbox profile whose egress is only the endpoint
   remote.py addrs                               the endpoint host's addresses (sandbox drift check)
+  remote.py exec -- CMD...                      run CMD with OPENAI_API_KEY in its environment
 
 K3D_GPU_REMOTE_ADDRS=a,b pins the host's addresses for sandbox-profile and addrs
 instead of resolving it.
@@ -39,6 +40,7 @@ import os
 import re
 import socket
 import stat
+import subprocess
 import sys
 import time
 import urllib.error
@@ -49,7 +51,6 @@ SECRET = "k3d-gpu-llm"
 MAX_TOKENS_CAP = 64
 TEMPERATURE = 0.6  # never 0: shared fleets serve sampling, and greedy is a different code path
 LOCAL_SUFFIXES = (".svc", ".svc.cluster.local", ".cluster.local")
-HIDDEN = ("_key",)
 EXIT_CONFIG, EXIT_AUTH, EXIT_ENDPOINT = 2, 3, 4
 
 
@@ -278,7 +279,7 @@ def _sub1(pattern, repl, text, what):
     return new
 
 
-def render_chat_ui(text, ep, model):
+def render_chat_ui(text, base, model):
     """Open WebUI reading the endpoint and key from Secret k3d-gpu-llm. Its env names
     are OPENAI_API_BASE_URL and OPENAI_API_KEY (open-webui backend/open_webui/config.py,
     v0.12.2). ENABLE_PERSISTENT_CONFIG=False: otherwise a connection saved in the data
@@ -294,7 +295,7 @@ def render_chat_ui(text, ep, model):
     text = _sub1(r"^(\s*)- name: DEFAULT_MODELS\n\s*value: .*\n",
                  f"\\1- name: DEFAULT_MODELS\n\\1  value: {q(model)}\n"
                  "\\1- name: ENABLE_PERSISTENT_CONFIG\n\\1  value: \"False\"\n", text, "DEFAULT_MODELS")
-    return (f"# Rendered by `k3d-gpu quickstart --remote`: chat against {ep.base}\n"
+    return (f"# Rendered by `k3d-gpu quickstart --remote`: chat against {base}\n"
             f"# (model {model}); endpoint and key come from Secret {SECRET}.\n" + text)
 
 
@@ -323,23 +324,26 @@ def endpoint_addrs(ep, pinned=None):
     return [str(i) for i in sorted(out, key=lambda i: (i.version, i))]
 
 
-def render_sandbox(text, ep, addrs):
+def render_sandbox(text, host, port, addrs):
     """The sandbox profile with egress to the endpoint only: one rule, a /32 (/128)
     per address of its host, on its port, TCP. No DNS egress: hostAliases pin the
     name to the same addresses, so TLS SNI and Host stay the endpoint's."""
     cidrs = "".join(f"      - ipBlock:\n          cidr: {a}/{32 if ':' not in a else 128}\n" for a in addrs)
     egress = (f"    egress:\n    - to:\n{cidrs}"
-              f"      ports:\n      - port: {ep.port}\n        protocol: TCP\n")
-    text = _sub1(r"^    egress:\n(?:    .*\n|      .*\n)*?(?=  podTemplate:)", egress, text, "egress block")
-    aliases = "".join(f"      - ip: {q(a)}\n        hostnames: [{ep.host}]\n" for a in addrs)
+              f"      ports:\n      - port: {port}\n        protocol: TCP\n")
+    start, end = text.find("\n    egress:\n"), text.find("\n  podTemplate:")
+    if start < 0 or end < start:
+        raise RemoteError("manifest has no egress block before podTemplate to rewrite (is it k3d-gpu's?)")
+    text = text[: start + 1] + egress + text[end + 1:]
+    aliases = "".join(f"      - ip: {q(a)}\n        hostnames: [{host}]\n" for a in addrs)
     text = _sub1(r"^(      automountServiceAccountToken: false\n)", f"\\1      hostAliases:\n{aliases}", text,
                  "podTemplate spec")
     text = _sub1(r"^(        env:\n        - name: HOME\n          value: /tmp\n)",
                  f"\\1        envFrom:\n        - secretRef:\n            name: {SECRET}\n", text, "container env")
     text = _sub1(r"^(kind: SandboxTemplate\nmetadata:\n  name: .*\n  namespace: .*\n)",
-                 f"\\1  annotations:\n    k3d-gpu.io/remote-host: {q(ep.host)}\n"
+                 f"\\1  annotations:\n    k3d-gpu.io/remote-host: {q(host)}\n"
                  f"    k3d-gpu.io/remote-addrs: {q(','.join(addrs))}\n", text, "SandboxTemplate metadata")
-    return (f"# Rendered by `k3d-gpu sandbox up --remote`: egress is {ep.host}:{ep.port} only "
+    return (f"# Rendered by `k3d-gpu sandbox up --remote`: egress is {host}:{port} only "
             f"({', '.join(addrs)}), no DNS.\n" + text)
 
 
@@ -458,10 +462,22 @@ def need_model(ep, a):
     return ep.model
 
 
+KUBECTL_APPLY = ["kubectl", "apply", "--server-side", "--force-conflicts", "--field-manager=k3d-gpu", "-f", "-"]
+
+
 def cmd_secret(ep, a):
+    """Applies Secret k3d-gpu-llm: the manifest goes to kubectl on its stdin and
+    server-side, so no last-applied-configuration annotation (which `kubectl
+    describe` prints) copies the key into the object's metadata."""
     if not re.fullmatch(r"[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?", a.namespace or ""):
         raise RemoteError(f"--namespace {a.namespace!r} is not a namespace name")
-    sys.stdout.write(secret_manifest(ep, a.namespace, need_model(ep, a)))
+    manifest = secret_manifest(ep, a.namespace, need_model(ep, a))
+    try:
+        p = subprocess.run(KUBECTL_APPLY, input=manifest, text=True, stdout=subprocess.DEVNULL)
+    except OSError as e:
+        raise RemoteError(f"kubectl: {e.strerror}")
+    if p.returncode != 0:
+        raise RemoteError(f"kubectl apply of Secret {a.namespace}/{SECRET} failed (exit {p.returncode})")
     return 0
 
 
@@ -474,14 +490,15 @@ def read_manifest(path):
 
 
 def cmd_chat_ui(ep, a):
-    sys.stdout.write(render_chat_ui(read_manifest(a.manifest), ep, need_model(ep, a)))
+    sys.stdout.write(render_chat_ui(read_manifest(a.manifest), ep.base, need_model(ep, a)))
     return 0
 
 
 def cmd_sandbox_profile(ep, a):
     if ep.base.startswith("http://"):
         raise RemoteError("the sandbox egress pin is for https endpoints; an in-cluster endpoint needs no egress rule")
-    sys.stdout.write(render_sandbox(read_manifest(a.manifest), ep, endpoint_addrs(ep, a.addrs or ep.pinned_addrs)))
+    addrs = endpoint_addrs(ep, a.addrs or ep.pinned_addrs)
+    sys.stdout.write(render_sandbox(read_manifest(a.manifest), ep.host, ep.port, addrs))
     return 0
 
 
@@ -490,21 +507,25 @@ def cmd_addrs(ep, a):
     return 0
 
 
-def cmd_key(ep, a):
-    """The raw key, for the launcher to hand a child process through its environment.
-    Refuses a terminal so it is never printed on a screen."""
-    if sys.stdout.isatty():
-        raise RemoteError("_key writes the raw key and refuses a terminal")
+def cmd_exec(ep, a):
+    """Runs a command with the resolved key as OPENAI_API_KEY in its environment
+    (capacity, bench --vs remote): the key never passes through stdout or argv."""
+    argv = a.argv[1:] if a.argv[:1] == ["--"] else a.argv
+    if not argv:
+        raise RemoteError("exec needs a command after --")
     if not ep.key:
         raise RemoteError("no key configured")
-    sys.stdout.write(ep.key)
-    return 0
+    env = dict(os.environ, OPENAI_API_KEY=ep.key)
+    try:
+        os.execvpe(argv[0], argv, env)
+    except OSError as e:
+        raise RemoteError(f"{argv[0]}: {e.strerror}")
 
 
 COMMANDS = {
     "check": (cmd_check, True), "show": (cmd_show, False), "models": (cmd_models, True),
     "resolve": (cmd_resolve, True), "secret": (cmd_secret, True), "chat-ui": (cmd_chat_ui, False),
-    "sandbox-profile": (cmd_sandbox_profile, False), "addrs": (cmd_addrs, False), "_key": (cmd_key, True),
+    "sandbox-profile": (cmd_sandbox_profile, False), "addrs": (cmd_addrs, False), "exec": (cmd_exec, True),
 }
 
 
@@ -533,7 +554,8 @@ def parse(argv):
     p.add_argument("--addrs", help="comma-separated addresses instead of resolving the host")
     p = sub.add_parser("addrs", parents=[common])
     p.add_argument("--addrs", help=argparse.SUPPRESS)
-    sub.add_parser("_key", parents=[common])
+    p = sub.add_parser("exec", parents=[common], help="run a command with OPENAI_API_KEY set")
+    p.add_argument("argv", nargs=argparse.REMAINDER)
     return ap.parse_args(argv)
 
 

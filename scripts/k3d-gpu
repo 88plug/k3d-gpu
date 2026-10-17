@@ -7035,15 +7035,14 @@ remote_resolve() {
     remote_py resolve --probe ${REMOTE_ARGS[@]+"${REMOTE_ARGS[@]}"} || err "remote endpoint not usable (above); 'k3d-gpu remote check' says more"
 }
 
-# remote_secret_apply <namespace> <base> <model>: Secret k3d-gpu-llm, on stdin and
-# server-side, so no last-applied-configuration annotation copies the key into the
-# object's metadata (which `kubectl describe` prints).
+# remote_secret_apply <namespace> <base> <model>: Secret k3d-gpu-llm. remote.py hands
+# it to kubectl on stdin and server-side, so no last-applied-configuration annotation
+# copies the key into the object's metadata (which `kubectl describe` prints).
 remote_secret_apply() {
     local ns=$1 keyargs=()
     [ -z "${REMOTE_KEYFILE}" ] || keyargs=(--api-key-file "${REMOTE_KEYFILE}")
     kubectl create namespace "${ns}" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
     remote_py secret --namespace "${ns}" --remote "$2" --model "$3" ${keyargs[@]+"${keyargs[@]}"} \
-        | kubectl apply --server-side --force-conflicts --field-manager=k3d-gpu -f - >/dev/null \
         || err "could not write Secret ${ns}/${LLM_SECRET}"
 }
 
@@ -7533,10 +7532,9 @@ cmd_capacity() {
         [ -n "${budget}" ] || set -- "$@" --budget 5
         [ -n "${max}" ] || set -- "$@" --max 4
         info "capacity: ${url} is remote: budgeted ramp ($*)"
-        if [ -n "${REMOTE_KEYFILE}" ]; then
-            OPENAI_API_KEY=$(remote_py _key --remote "${url}" --api-key-file "${REMOTE_KEYFILE}") || err "capacity: no key"
-            export OPENAI_API_KEY
-        fi
+        # remote.py runs it with the key from --api-key-file in its environment.
+        [ -z "${REMOTE_KEYFILE}" ] \
+            || exec python3 "$(console_dir)/remote.py" exec --remote "${url}" --api-key-file "${REMOTE_KEYFILE}" -- python3 "${script}" "$@"
     fi
     exec python3 "${script}" "$@"
 }
@@ -8445,9 +8443,9 @@ bench_vs_remote() {
     fi
     fields=$(remote_resolve)
     IFS=$'\t' read -r base rmodel origin <<< "${fields}"
-    if [ -n "${REMOTE_KEYFILE}" ]; then
-        OPENAI_API_KEY=$(remote_py _key --remote "${base}" --api-key-file "${REMOTE_KEYFILE}") || err "bench: no key"
-    fi
+    # vs.py reads the key from OPENAI_API_KEY; remote.py exec puts --api-key-file's there.
+    local keyrun=()
+    [ -z "${REMOTE_KEYFILE}" ] || keyrun=(python3 "$(console_dir)/remote.py" exec --remote "${base}" --api-key-file "${REMOTE_KEYFILE}" --)
     [ -n "${kurl}" ] || bench_k3d_arm
     # shellcheck disable=SC2064 # expand now: the pid is fixed for this run
     trap "[ -z '${pf}' ] || kill '${pf}' 2>/dev/null || true" EXIT
@@ -8457,7 +8455,7 @@ bench_vs_remote() {
         k3d_device "${kdevice:-unknown}" k3d_backend "${kbackend:-unknown}" k3d_transport "${ktransport}" \
         vs_transport "https to ${base#*://} (from ${origin})")
     info "bench: k3d-gpu arm vs remote ${base} (${rmodel}): ${rounds} round, ${warmup} warmup, ${maxtok} tokens"
-    OPENAI_API_KEY="${OPENAI_API_KEY:-}" python3 "$(bench_dir)/vs.py" run --id "${id}" --out "${out}/result.json" \
+    ${keyrun[@]+"${keyrun[@]}"} python3 "$(bench_dir)/vs.py" run --id "${id}" --out "${out}/result.json" \
         --ledger "${out}/ledger.md" --rounds "${rounds}" --warmup "${warmup}" --max-tokens "${maxtok}" \
         --budget-s "${budget}" --context "${ctx}" --signed-off-by "${K3D_GPU_SIGNOFF:-}" --remote-arm remote \
         --arm "k3d-gpu=${kurl},${kmodel}" --arm "remote=${base},${rmodel}" || err "bench: vs.py failed"

@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import urllib.parse
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "bench"))
@@ -298,8 +299,9 @@ class RemoteArm(unittest.TestCase):
             else:
                 os.environ["OPENAI_API_KEY"] = env
             shutil.rmtree(tmp)
-        remote = [a for a in seen if a.base_url.startswith("https://llm.example")]
-        local = [a for a in seen if a.base_url.startswith("http://127.0.0.1")]
+        host = lambda a: urllib.parse.urlsplit(a.base_url).hostname  # noqa: E731
+        remote = [a for a in seen if host(a) == "llm.example"]
+        local = [a for a in seen if host(a) == "127.0.0.1"]
         self.assertTrue(remote and local)
         self.assertTrue(all(a.temperature > 0 and not a.ignore_eos and a.api_key == "sk-test-vs-0000" for a in remote))
         self.assertTrue(all(a.temperature == 0.0 and a.ignore_eos and a.api_key is None for a in local))
