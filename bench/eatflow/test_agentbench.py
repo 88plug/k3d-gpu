@@ -635,6 +635,16 @@ class EnergyTest(unittest.TestCase):
         m.start()
         self.assertIsNone(m.stop()["energy_j"])
 
+    def test_rapl_exec_prefix(self):
+        reader = os.path.join(self.tmp, "reader")
+        with open(reader, "w") as f:
+            f.write("#!/bin/sh\necho 777\n")
+        os.chmod(reader, 0o755)
+        zone = os.path.join(self.tmp, "class/powercap/intel-rapl:0")
+        os.environ["K3D_GPU_RAPL_EXEC"] = reader
+        self.addCleanup(os.environ.pop, "K3D_GPU_RAPL_EXEC")
+        self.assertEqual(energy.read_uj(zone), 777)
+
     def test_gpu_integration(self):
         g = energy.GpuPower(period=0.01, query=lambda: 50.0)
         g.start()
@@ -1173,7 +1183,10 @@ class BlockRefuterTest(unittest.TestCase):
         rows = AB.run_block(self.agent(sleep=0.02), T.B15_RO[:2], "A3", "typical", 1, self.out, 1.0, self.log,
                             cycle=True, settle_s=0.0)
         prompts = [m["content"] for b in LLM.seen for m in b["messages"] if m["role"] == "user"]
-        self.assertEqual(len(prompts), len(set(prompts)) * 2)   # each sent prompt unique (2 turns per task)
+        counts = {p: prompts.count(p) for p in prompts}
+        self.assertLessEqual(max(counts.values()), 2)            # a prompt is one task's 2 turns, never reused
+        self.assertTrue(all(p.startswith("[ref b-") for p in counts))
+        self.assertGreaterEqual(len(counts), len(rows) - 1)      # the cut last task may not reach the LLM
         self.assertGreater(len(rows), 2)
         self.assertTrue(all(r["llm_requests"] == 2 for r in rows if not r["censored"]))
 

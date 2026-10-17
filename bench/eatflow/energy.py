@@ -12,6 +12,7 @@ numerator.
 """
 import glob
 import os
+import shlex
 import subprocess
 import threading
 import time
@@ -39,12 +40,22 @@ def rapl_domains(sysfs="/sys"):
     return {"package": pkg, "psys": psys}
 
 
+
+def rapl_elevation():
+    """Command prefix that reads a root-only energy_uj: K3D_GPU_RAPL_EXEC when set (e.g.
+    `docker exec <container with /sys/class/powercap> ` on a host without sudo), else
+    sudo -A (SUDO_ASKPASS set) or sudo -n."""
+    cmd = os.environ.get("K3D_GPU_RAPL_EXEC")
+    if cmd:
+        return shlex.split(cmd)
+    return ["sudo", "-A"] if os.environ.get("SUDO_ASKPASS") else ["sudo", "-n"]
+
 def read_uj(zone):
     """energy_uj of one zone; root-only on current kernels, so fall back to sudo -n/-A."""
     v = _read(f"{zone}/energy_uj")
     if v.isdigit():
         return int(v)
-    elev = ["sudo", "-A"] if os.environ.get("SUDO_ASKPASS") else ["sudo", "-n"]
+    elev = rapl_elevation()
     try:
         p = subprocess.run(elev + ["cat", f"{zone}/energy_uj"], capture_output=True, text=True, timeout=5)
     except (OSError, subprocess.TimeoutExpired):
