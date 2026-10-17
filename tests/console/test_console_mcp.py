@@ -68,7 +68,7 @@ def hosts():
 class World:
     """A stub directory, a console directory and the environment for one host."""
 
-    def __init__(self, host, green=False):
+    def __init__(self, host, green=False, matrix=None):
         self.dir = tempfile.mkdtemp(prefix="console-mcp-")
         bindir = os.path.join(self.dir, "bin")
         os.makedirs(bindir)
@@ -79,8 +79,8 @@ class World:
         console = os.path.join(self.dir, "console")
         shutil.copytree(os.path.join(REPO, "console"), console,
                         ignore=shutil.ignore_patterns("__pycache__"))
-        if green:
-            shutil.copy(os.path.join(HERE, "matrix-green.json"), os.path.join(console, "matrix.v1.json"))
+        if green or matrix:
+            shutil.copy(os.path.join(HERE, matrix or "matrix-green.json"), os.path.join(console, "matrix.v1.json"))
         self.env = dict(os.environ, PATH=bindir + os.pathsep + os.environ["PATH"], STUB_DIR=self.dir,
                         K3D_GPU_SYSROOT=os.path.join(FIXTURES, host, "sysroot"),
                         K3D_GPU_CONSOLE=console, K3D_GPU_BIN=os.path.join(self.dir, "k3d-gpu"),
@@ -511,6 +511,26 @@ class CliApply(unittest.TestCase):
             self.assertEqual(writes(w), [])
         finally:
             w.close()
+
+    def refused_on(self, world, want):
+        self.addCleanup(world.close)
+        h = world.cli("plan", "--hash").decode().strip()
+        p = subprocess.run([LAUNCHER, "apply", "--plan-hash", h], env=world.env, capture_output=True,
+                           text=True, timeout=300)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn(want, p.stderr)
+        self.assertEqual(writes(world), [])
+
+    def test_fix_decision_refused(self):
+        # A GPU the firmware gatekeeper refuses and no green cell elsewhere: the
+        # plan's decision is "fix", which names no engine to deploy.
+        self.refused_on(World("raptorlake-stale-guc"),
+                        "the plan has no engine: gpu:0000:00:02.0 refused: GuC i915/tgl_guc_70.1.1.bin")
+
+    def test_engine_without_apply_path_refused(self):
+        # The fallback picks llama.cpp on Vulkan; agent up only runs OVMS.
+        self.refused_on(World("raptorlake-stale-guc", matrix="matrix-fallback.json"),
+                        "no apply path for engine llama.cpp yet")
 
     def test_apply_deploys_the_confirmed_plan(self):
         # The manifest carries the plan's image, model, device and P-core count,
