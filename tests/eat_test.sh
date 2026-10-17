@@ -131,19 +131,40 @@ check_says "eat-check fails when the sandbox does not print 385" fail 'expected 
 
 # 3. eat-up.sh refuses deploy_openshell=on before it touches the cluster: the pinned
 #    release-1.0.3-hotfix has no OpenShell role. No kubectl stub: it must stop first.
-sed 's/^deploy_agent_sandbox=on$/&\ndeploy_openshell=on/' "${EAT}/agentic-config.cfg" > "${WORK}/openshell.cfg"
-out=$(EAT_CONFIG="${WORK}/openshell.cfg" EAT_KUBECONFIG=/nonexistent "${EAT}/eat-up.sh" 2>&1) && rc=0 || rc=$?
-if [ "${rc}" -ne 0 ] && grep -q 'deploy_openshell=on needs an EAT release newer than release-1.0.3-hotfix' <<< "${out}"; then
-    ok "eat-up refuses deploy_openshell=on on the pinned tag"
-else
-    fail "eat-up refuses deploy_openshell=on on the pinned tag (rc=${rc}): ${out}"
-fi
-out=$(EAT_CONFIG="${EAT}/agentic-config.cfg" EAT_KUBECONFIG=/nonexistent "${EAT}/eat-up.sh" 2>&1) && rc=0 || rc=$?
-if [ "${rc}" -ne 0 ] && grep -q 'kubeconfig /nonexistent not found' <<< "${out}"; then
-    ok "eat-up passes the shipped config to the kubeconfig check"
-else
-    fail "eat-up passes the shipped config to the kubeconfig check (rc=${rc}): ${out}"
-fi
+#    The spellings follow EAT main's read_config_file: trimmed key and value, quotes
+#    dropped, on mapped to yes, last assignment wins.
+REFUSED='deploy_openshell=on needs an EAT release newer than release-1.0.3-hotfix'
+PASSED='kubeconfig /nonexistent not found'
+N=0
+# openshell_case <name> <expect: refuse|pass> <lines appended to the shipped config...>
+openshell_case() {
+    local name=$1 want=$2 out rc msg cfg
+    shift 2
+    N=$((N + 1))
+    cfg="${WORK}/openshell-${N}.cfg"
+    cp "${EAT}/agentic-config.cfg" "${cfg}"
+    [ "$#" -eq 0 ] || printf '%s\n' "$@" >> "${cfg}"
+    out=$(EAT_CONFIG="${cfg}" EAT_KUBECONFIG=/nonexistent "${EAT}/eat-up.sh" 2>&1) && rc=0 || rc=$?
+    if [ "${want}" = refuse ]; then msg=${REFUSED}; else msg=${PASSED}; fi
+    if [ "${rc}" -ne 0 ] && grep -qF "${msg}" <<< "${out}"; then
+        ok "eat-up ${want}: ${name}"
+    else
+        fail "eat-up ${want}: ${name} (rc=${rc}): ${out}"
+    fi
+}
+openshell_case "shipped config" pass
+openshell_case "deploy_openshell=on" refuse 'deploy_openshell=on'
+openshell_case "spaces around =" refuse 'deploy_openshell = on'
+openshell_case "leading indent" refuse '  deploy_openshell=on'
+openshell_case "double-quoted value" refuse 'deploy_openshell="on"'
+openshell_case "single-quoted value" refuse "deploy_openshell='on'"
+openshell_case "=yes" refuse 'deploy_openshell=yes'
+openshell_case "trailing spaces" refuse 'deploy_openshell=on   '
+openshell_case "on then off, last wins" pass 'deploy_openshell=on' 'deploy_openshell=off'
+openshell_case "off then on, last wins" refuse 'deploy_openshell=off' 'deploy_openshell=on'
+openshell_case "commented out" pass '# deploy_openshell=on'
+openshell_case "ON is not on to EAT" pass 'deploy_openshell=ON'
+openshell_case "other key mentioning it" pass 'note=deploy_openshell=on'
 
 echo ""
 echo "${PASS} passed, ${FAILS} failed"

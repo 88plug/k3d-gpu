@@ -31,11 +31,27 @@ BASTION_IMAGE="k3d-gpu-eat-bastion:$(sha256sum "${HERE}/bastion.Dockerfile" | cu
 err()  { echo "ERROR: $*" >&2; exit 1; }
 info() { echo "==> $*"; }
 
+# openshell_setting <cfg>: the deploy_openshell value EAT main would use. Parsed the
+# way its read_config_file does (core/lib/system/precheck/read-config-file.sh @0ecf67a):
+# split on the first '=', trim key and value with xargs (which also drops quotes),
+# skip comments, and the last assignment wins because the result is sourced.
+openshell_setting() {
+    local key value v=""
+    while IFS='=' read -r key value || [ -n "${key}" ]; do
+        key=$(echo "${key}" | xargs 2>/dev/null) || continue
+        [ "${key}" = deploy_openshell ] || continue
+        v=$(echo "${value}" | xargs 2>/dev/null) || v="${value}"
+    done < "$1"
+    echo "${v}"
+}
+
 [ -f "${EAT_CONFIG}" ] || err "config ${EAT_CONFIG} not found"
 # deploy_openshell arrived on EAT main after ${EAT_TAG} (PR #14); the pinned tag has no
-# OpenShell role and would skip the key without a word.
-! grep -Eq '^deploy_openshell=on([[:space:]]|$)' "${EAT_CONFIG}" \
-    || err "deploy_openshell=on needs an EAT release newer than ${EAT_TAG}; set deploy_openshell=off"
+# OpenShell role and would skip the key without a word. EAT maps on to yes and
+# installs OpenShell when the value is yes (fresh-install.sh).
+case "$(openshell_setting "${EAT_CONFIG}")" in
+    on|yes) err "deploy_openshell=on needs an EAT release newer than ${EAT_TAG}; set deploy_openshell=off" ;;
+esac
 [ -f "${EAT_KUBECONFIG}" ] || err "kubeconfig ${EAT_KUBECONFIG} not found"
 for l in ei-infra-eligible ei-inference-eligible; do
     [ -n "$(KUBECONFIG="${EAT_KUBECONFIG}" kubectl get nodes -l "${l}=true" -o name)" ] \
