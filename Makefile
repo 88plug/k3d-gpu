@@ -25,6 +25,7 @@ check: test shellcheck hadolint kubeconform actionlint
 test:
 	tests/detect_test.sh
 	tests/experimental_test.sh
+	tests/phase_steer_test.sh
 
 # Shell scripts: *.sh plus any file whose shebang runs sh or bash.
 shellcheck:
