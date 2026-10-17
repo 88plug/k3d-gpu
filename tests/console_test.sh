@@ -171,16 +171,15 @@ fi
 # The packaged layout (/usr/bin/k3d-gpu + /usr/share/k3d-gpu/console/<the files
 # PKGBUILD installs>) finds its console files and plans.
 pkg="${WORK}/pkg"
-mkdir -p "${pkg}/usr/bin" "${pkg}/usr/share/k3d-gpu/console"
-cp "${K3D_GPU}" "${pkg}/usr/bin/k3d-gpu"
-files=$(sed -n 's/^ *for f in \(.*\); do$/\1/p' "${REPO}/packaging/aur/PKGBUILD")
-for f in ${files}; do cp "${CONSOLE}/${f}" "${pkg}/usr/share/k3d-gpu/console/"; done
-if [ -n "${files}" ] && K3D_GPU_SHARE="${pkg}/usr/share/k3d-gpu" "${pkg}/usr/bin/k3d-gpu" plan --json \
+# Run the real PKGBUILD package() into ${pkg}, so the test checks what ships.
+mkdir -p "${WORK}/src"; ln -sfn "${REPO}" "${WORK}/src/k3d-gpu"
+( set -e; source "${REPO}/packaging/aur/PKGBUILD"; srcdir="${WORK}/src" pkgdir="${pkg}"; package ) > "${WORK}/pkgbuild.log" 2>&1
+if K3D_GPU_SHARE="${pkg}/usr/share/k3d-gpu" "${pkg}/usr/bin/k3d-gpu" plan --json \
        --facts "${REPO}/tests/fixtures/raptorlake-nvidia/facts.json" > "${WORK}/pkg.json" 2> "${WORK}/pkg.err" \
    && cmp -s "${WORK}/pkg.json" "${REPO}/tests/fixtures/raptorlake-nvidia/plan.json"; then
     ok "packaged layout (PKGBUILD's console files under \$K3D_GPU_SHARE/console) plans"
 else
-    fail "packaged layout plans"; sed 's/^/  | /' "${WORK}/pkg.err"
+    fail "packaged layout plans"; sed 's/^/  | /' "${WORK}/pkg.err" "${WORK}/pkgbuild.log"
 fi
 
 # Bad input fails with a message and a non-zero exit.

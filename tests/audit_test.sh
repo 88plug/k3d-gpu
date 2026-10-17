@@ -264,15 +264,13 @@ fi
 
 # ---- the packaged layout finds console/audit.py and images.lock ----
 pkg="${WORK}/pkg"
-mkdir -p "${pkg}/usr/bin" "${pkg}/usr/share/k3d-gpu/console"
-cp "${K3D_GPU}" "${pkg}/usr/bin/k3d-gpu"
-files=$(sed -n 's/^ *for f in \(.*\); do$/\1/p' "${REPO}/packaging/aur/PKGBUILD")
-for f in ${files}; do cp "${CONSOLE}/${f}" "${pkg}/usr/share/k3d-gpu/console/"; done
-grep -q 'images.lock.*usr/share/k3d-gpu/images.lock' "${REPO}/packaging/aur/PKGBUILD" && cp "${REPO}/images.lock" "${pkg}/usr/share/k3d-gpu/"
+# Run the real PKGBUILD package() into ${pkg}, so the test checks what ships.
+mkdir -p "${WORK}/src"; ln -sfn "${REPO}" "${WORK}/src/k3d-gpu"
+( set -e; source "${REPO}/packaging/aur/PKGBUILD"; srcdir="${WORK}/src" pkgdir="${pkg}"; package ) > "${WORK}/pkgbuild.log" 2>&1
 if K3D_GPU_SHARE="${pkg}/usr/share/k3d-gpu" "${pkg}/usr/bin/k3d-gpu" audit --observed "${DIR}/default.observed.json" > "${WORK}/pkg.out" 2>&1; then
     ok "packaged layout (PKGBUILD's console files and images.lock under \$K3D_GPU_SHARE) audits"
 else
-    fail "packaged layout audits"; sed 's/^/  | /' "${WORK}/pkg.out"
+    fail "packaged layout audits"; sed 's/^/  | /' "${WORK}/pkg.out" "${WORK}/pkgbuild.log"
 fi
 
 # ---- bad input ----
