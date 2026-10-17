@@ -1,14 +1,14 @@
 WARN: Gaudi PCI device found but the habanalabs driver is not loaded — skipping Gaudi (Gaudi 3 needs Intel's out-of-tree habanalabs driver; mainline only covers up to Gaudi 2)
 ==> Accelerators: amx
 ==> Experimental features (auto): dra image-volume
-==> Creating k3d cluster 'gpu' with image cryptoandcoffee/k3d-gpu:latest...
+==> Creating k3d cluster 'gpu' with image cryptoandcoffee/k3d-gpu:<version>...
 ==> Waiting for nodes Ready...
 ==> Verifying accelerators are schedulable...
 ==> Accelerators schedulable: amx=1. Try: k3d-gpu test
 exit=0
 --- calls
 k3d cluster create gpu
-  --image=cryptoandcoffee/k3d-gpu:latest
+  --image=cryptoandcoffee/k3d-gpu:<version>
   --no-lb
   --k3s-arg=--disable=traefik@server:0
   --k3s-node-label=nvidia.com/gpu.present=false@server:*;agent:*

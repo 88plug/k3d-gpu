@@ -23,6 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - run: tests/detect_test.sh
+      - run: tests/image_test.sh
       - run: tests/host_setup_test.sh
       - run: tests/eat_test.sh
       - run: tests/experimental_test.sh

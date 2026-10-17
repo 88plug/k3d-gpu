@@ -58,7 +58,7 @@ Behaviour is tunable via environment variables:
 | Variable             | Default                                   | Description                          |
 |----------------------|-------------------------------------------|--------------------------------------|
 | `K3D_GPU_CLUSTER`    | `gpu`                                     | cluster name                         |
-| `K3D_GPU_IMAGE`      | `cryptoandcoffee/k3d-gpu:latest`          | node image (`latest` = ubuntu26.04)  |
+| `K3D_GPU_IMAGE`      | `cryptoandcoffee/k3d-gpu:<launcher version>` | node image built from the same release (ubuntu26.04); see [Upgrading](#upgrading) |
 | `K3D_GPU_SHARE`      | `/usr/share/k3d-gpu`                      | dir of fallback plugin manifests     |
 | `K3D_GPU_VENDORS`    | `auto`                                    | `auto` detects; or a list of `nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa` |
 | `K3D_GPU_NODE_LABELS` | none                                    | extra node labels, comma list of `key=value` (e.g. `ei-infra-eligible=true,ei-inference-eligible=true`) |
@@ -73,6 +73,38 @@ Behaviour is tunable via environment variables:
 | `K3D_GPU_NPU_EMBEDDINGS` | `/usr/share/k3d-gpu/npu-embeddings.yml` | template printed by `k3d-gpu recipe npu-embeddings` |
 | `K3D_GPU_DEVICE_TEST_IMAGE` | `busybox:1.37`                     | image used by `k3d-gpu test` for Intel GPU/NPU and Gaudi |
 | `K3D_GPU_TEST_IMAGE` | `nvidia/cuda:13.4.2-base-ubuntu26.04`     | image used by `k3d-gpu test`         |
+
+### Upgrading
+
+Launcher `X.Y.Z` creates clusters from `cryptoandcoffee/k3d-gpu:X.Y.Z`, the image
+built from the same release, so the baked device plugins match the launcher.
+Every release publishes that tag once and never moves it.
+
+An existing cluster keeps the image it was created with: k3d cannot swap a node
+image in place (`k3d cluster edit` and `k3d node edit` only add or remove ports).
+After upgrading the launcher, recreate the cluster to get the new image — this
+deletes the cluster's state, so back up anything you need first:
+
+```bash
+k3d-gpu version                                   # launcher version = default image tag
+k3d-gpu doctor                                    # "node image ..." line: what the cluster runs
+k3d-gpu down && k3d-gpu up
+```
+
+`k3d-gpu doctor` names the image the cluster's server node was created from and
+its release (the `org.opencontainers.image.version` label that versioned release
+builds carry; "unversioned" means the image predates them). It warns when that
+is not the image this launcher uses, or when the same tag now names a different
+local image (a re-pulled `:latest`). `k3d-gpu up` on a cluster that already
+exists prints the same line and stops instead of failing inside k3d. Without the
+launcher: `docker inspect -f '{{.Config.Image}}' k3d-gpu-server-0`.
+
+Other tags:
+
+- `K3D_GPU_IMAGE=cryptoandcoffee/k3d-gpu:X.Y.Z-ubuntu24.04` — the Ubuntu 24.04 build of a release.
+- `K3D_GPU_IMAGE=cryptoandcoffee/k3d-gpu:latest` — opt in to the floating tag. k3d only
+  pulls an image that is missing locally, so `docker pull cryptoandcoffee/k3d-gpu:latest`
+  before `k3d-gpu up` to get the current build.
 
 The rest of this README documents the underlying image and the manual `k3d`
 commands the launcher runs for you.
