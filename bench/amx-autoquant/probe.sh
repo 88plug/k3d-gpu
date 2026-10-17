@@ -54,7 +54,7 @@ PRECS="int4 int8 fp16"
 LOAD_LEVEL="${LOAD_LEVEL:-none}"
 AUTOQUANT_NLL="${AUTOQUANT_NLL:-run}"
 LOAD="${ROOT}/bench/load/load.py"
-GAP=10 WINDOW=5 NLL_CAP=600 SWAPIN_MAX=2560
+GAP=10 WINDOW=5 NLL_CAP=600
 declare -A PORT=([int4]=18101 [int8]=18102 [fp16]=18103)
 
 log() { printf '[%4ds] %s\n' "$((SECONDS))" "$*" | tee -a "${RUN:-/dev/null}/probe.log" >&2; }
@@ -165,9 +165,9 @@ run() {
     avail=$(awk '/^MemAvailable:/ {print $2; exit}' /proc/meminfo)
     [ "${avail}" -ge $((16 * 1024 * 1024)) ] || die "MemAvailable ${avail} kB < 16 GiB"
     sw0=$(awk '/^pswpin/ {print $2}' /proc/vmstat); sleep 60; sw1=$(awk '/^pswpin/ {print $2}' /proc/vmstat)
-    # H27 A2: a busy host may swap in a few pages a minute; only >10 MiB aborts.
-    log "preflight swap-in over 60 s: $((sw1 - sw0)) pages (abort above ${SWAPIN_MAX})"
-    [ $((sw1 - sw0)) -le "${SWAPIN_MAX}" ] || die "swap-in over 60 s: $((sw1 - sw0)) pages > ${SWAPIN_MAX}"
+    # H27 A3: on a busy host swap-in is background, recorded here and per request
+    # (turn.py pswpin) and matched per arm (load.py swap used / growth); it never aborts.
+    log "preflight swap-in over 60 s: $((sw1 - sw0)) pages (recorded, not a gate)"
     { uptime; docker ps --format '{{.Names}}' | wc -l; cat "${DIR}/model-shas.txt"; } > "${RUN}/baseline.txt"
     local p t
     for p in ${PRECS}; do

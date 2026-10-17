@@ -2703,6 +2703,23 @@ exactly zero, so it is a quiet-host gate, and A1's rule is that load alone never
 - No request was sent and no outcome is known. Arms, order, n, gate, scoring, predictions and
   priors are unchanged from the row and A1.
 
+### H27 amendment A3: swap-in is recorded, not a gate (2026-10-17)
+
+Written 2026-10-17T22:25Z. Two more attempts under A2 (22:20Z typical, 22:21Z heavy) also
+aborted in the 60 s preflight, before any OVMS container or request. Swap-in was 10880 and
+7628 pages (42 and 30 MiB). Across four preflights this host's swap-in ranged from 3 to
+10880 pages a minute. It holds about 153 GiB in swap and has 48 GiB MemAvailable. The swap-in
+comes from the production containers, which this run must not touch. Any fixed threshold
+would either void every run or be tuned after the fact, so A3 drops the gate:
+- The preflight logs swap-in over 60 s and never aborts on it. The MemAvailable >= 16 GiB
+  abort is unchanged.
+- Swap stays a recorded and matched background variable. Per arm, `load.py matched` checks
+  swap used (256 MiB) and swap growth (64 MiB per window). Every request records its pswpin
+  and pgmajfault deltas, and those are reported per arm. The pre-registered fp16 flag
+  (>= 2 requests with > 1000 major faults) is unchanged.
+- No request was sent and no outcome is known. Arms, order, n, gate, scoring, predictions and
+  priors are unchanged from the row and A1.
+
 ### H23 pre-registration (2026-10-17)
 
 Written 2026-10-17T12:08Z, before any measurement. Ledger id H23; provenance ids
