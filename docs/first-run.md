@@ -32,7 +32,7 @@ image, the Open WebUI image (several GB) and the model (1.2 to 4.9 GB, by RAM).
     bash install.sh
     ```
 
-    It installs k3d-gpu 0.1.44, plus k3d and kubectl into `~/.local/bin` when
+    It installs the latest k3d-gpu release (its `K3D_GPU_VERSION` pin), plus k3d and kubectl into `~/.local/bin` when
     they are missing. On Arch use the AUR instead (see below).
 2. **Docker.** The installer never installs it; it prints the command. After
     adding yourself to the `docker` group, log out and back in.

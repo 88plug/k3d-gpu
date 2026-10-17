@@ -139,6 +139,15 @@ refuses "k3d-url without model" "--k3d-url needs --k3d-model" --vs ollama --k3d-
 refuses "missing value" "--budget needs a value" --vs ollama --budget
 refuses "unknown option" "unknown bench option: --fast" --vs ollama --fast
 check "bench/vs.py unit tests (stub servers)" python3 "${ROOT}/tests/bench_vs_test.py"
+agent_plan() { "${K}" bench agent plan H42 | grep -q '"hypothesis": "H42"'; }
+agent_missing() {
+    local o
+    if o=$(K3D_GPU_BENCH=/nonexistent "${K}" bench agent plan H42 2>&1); then return 1; fi
+    grep -q 'bench agent: /nonexistent/eatflow/agentbench.py missing' <<< "${o}"
+}
+check "bench agent dispatches to bench/eatflow/agentbench.py" agent_plan
+check "bench agent without bench/eatflow fails with a hint" agent_missing
+check "help lists bench agent" grep -q 'bench agent plan|run|apb' <("${K}" help)
 
 echo "bench_vs: ${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

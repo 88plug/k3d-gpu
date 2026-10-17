@@ -10,7 +10,7 @@ This report covers what was measured, and how. Every result comes from one host:
 
 - Six hypotheses are SUPPORTED. All six are scoped to that host.
 - Six are REFUTED. They changed shipped defaults.
-- Twelve are INCONCLUSIVE, mostly because the shared host throttles or its load was unmatched. Seven are PENDING.
+- Twelve are INCONCLUSIVE, mostly because the shared host throttles or its load was unmatched. Sixteen are PENDING, nine of them the agent benchmark (H40-H48), pre-registered on 2026-10-17.
 - Every other Intel family is detected and configured in fixture tests only. None has a measurement.
 
 No world-first, superlative or priority claim is made; [docs/provenance.md](../provenance.md) supports none.
@@ -80,7 +80,7 @@ The host is a shared, live machine: about 53 other containers, about 80 W idle p
 | H20, H21, H23, H24, H25, H29 | Energy and phase-steering mechanisms [ledger:H20] [ledger:H21] [ledger:H23] [ledger:H24] [ledger:H25] [ledger:H29] | Idle package power spread swamped the signal, or the run was partial |
 | H26 | E-core L2-cluster confinement of a DRAM-bandwidth neighbour: the measured R (p95 inflation, cluster over spread) was 0.83, CI 0.61-0.87, at `typical` background load, which is not a verdict [ledger:H26] | Background load unmatched across arms at both levels (hog carry-over into the load windows; the `heavy` load was removed mid-run) |
 
-PENDING with a pre-registration: H5 (prefill guard on/off with an E-core neighbour), H19 (noise guard tuning), H27 (on-box precision probe), H28 (image-volume model sharing), and the external bake-offs H30 (Ollama 0.40.5), H31 (llama.cpp b11706) and H32 (plain OVMS device choice). Until H30-H32 run, there is no "faster than X" comparison of any kind.
+PENDING with a pre-registration: H5 (prefill guard on/off with an E-core neighbour), H19 (noise guard tuning), H27 (on-box precision probe), H28 (image-volume model sharing), and the external bake-offs H30 (Ollama 0.40.5), H31 (llama.cpp b11706) and H32 (plain OVMS device choice), and the agent benchmark H40-H48 ([agent-benchmarks.md](../agent-benchmarks.md): real EAT blueprint flows and BFCL, graded, on a busy box). Until H30-H32 run, there is no "faster than X" comparison of any kind.
 
 ## Per-family support matrix
 

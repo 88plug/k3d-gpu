@@ -1,6 +1,15 @@
 # Moat design: capacity oracle and Intel Advantage profile
 
-Status: **design, not built.** Nothing here is a new measurement. Every number
+Status: **MVP built** (sections 2-4 and the H6 seed; "Build status" at the end
+lists what differs from this design). **The submission path that shipped is
+not the one designed in sections 1, 2 and 4.** `k3d-gpu share --submit` opens a
+pull request on `88plug/k3d-gpu` adding `data/oracle/<content_sha256>.json`,
+and the `oracle` CI job validates it; the user guide is
+[docs/oracle.md](oracle.md). The GitHub-issue submission, the
+`88plug/k3d-gpu-oracle` data repo, its ingest workflow and the build
+attestation below are superseded future design, kept for the reasoning; none
+of them exists.
+Nothing here is a new measurement. Every number
 that appears below is either backed on its own line (ledger row, provenance row
 or primary-source URL) or sits in a code block as a formula or an example shape.
 
@@ -225,12 +234,12 @@ Verdicts: `reject` (not committed), `quarantine` (committed under
 |---|---|---|
 | V1 | JSON Schema v1 with `additionalProperties: false`; size within 256 KiB | reject |
 | V2 | `content_sha256` equals the recomputed hash; content-hash dedup against `data/` | reject (dup = no-op) |
-| V3 | Canary scan: no string anywhere matches hostname/MAC/IPv4/IPv6/UUID/email/`/home/`/`/root/` patterns. This is a belt on top of the allowlist | reject |
+| V3 | Canary scan: no string anywhere matches hostname/MAC/IPv4/IPv6/UUID/email/`/home/`/`/root/` patterns, and `server_image` names Docker Hub or a public registry (a private mirror's host name identifies the network). This is a belt on top of the allowlist | reject |
 | V4 | `tool.version` is a tagged k3d-gpu release with a build-provenance attestation, and `server_image` is the digest pinned in `scripts/k3d-gpu` at that tag | quarantine |
-| V5 | **Recompute**: from `samples`, p95 per step, verdicts and `agents_per_box` via `apb.score_step` / `capacity.agents_per_box`. Any mismatch with the claimed value means the claim is discarded. Only the recomputed value is stored | reject |
+| V5 | **Recompute**: from `samples`, p95 per step, verdicts and `agents_per_box` via `apb.score_step` / `capacity.agents_per_box`. Any mismatch with the claimed value means the claim is discarded. Only the recomputed value is stored. No reply may carry more `out_tok` than the `max_tokens` it was sent with (the trace regenerated from its seed, or the single-stream shape) | reject |
 | V6 | **Little's law**: per step, `window_out_tok_s` agrees with `N * mean(out_tok) / mean(e2e + tool)` within a relative 0.25 | quarantine |
 | V7 | **Throughput ceiling**: `APB <= ceil(R_peak * (slo_s + mean(tool_s)) / mean(out_tok))`, where `R_peak` = the largest recomputed window tok/s of any step | reject |
-| V8 | **Bandwidth roofline** (CPU and iGPU engines): single-stream decode `<= 1.15 * BW / weights_bytes`, with `BW = channels * configured_mts * 8 bytes`. This rule is skipped when a speculative-decoding lever is on (the roofline does not hold there), and when DRAM fields are null | quarantine |
+| V8 | **Bandwidth roofline** (CPU and iGPU engines): single-stream decode `<= 1.15 * BW / weights_bytes`, with `BW = channels * configured_mts * 8 bytes`. This rule is skipped when a speculative-decoding lever is on (the roofline does not hold there). When DRAM fields or `weights_bytes` are null, or the engine is not CPU/iGPU, one stream above a fixed ceiling (`1000 tok/s` CPU/iGPU/NPU, `8000 tok/s` Gaudi/NVIDIA, constants in `oracle/validate.py`) goes to review instead | quarantine |
 | V9 | **Energy sanity**: `0 < pkg_w_mean <= max(pl2_w, 2 * pl1_w)` when known; `j_per_turn_pkg` agrees with `pkg_w_mean * window_s / turns` within a relative 0.1 | quarantine |
 | V10 | **Box state**: `quiet_check_ok == true`. With `throttle_events > 0` in the binding step, or `drift_ratio > 1.25`, the bundle is accepted but tagged `throttled` / `drifted`, and the matrix shows those tags | quarantine if not quiet |
 | V11 | **Monotone sanity**: recomputed p95 must not drop by more than half from step N to step 2N at the same reps. Such a drop is a sign of spliced runs | quarantine |
@@ -298,7 +307,7 @@ Rationale:
   oracle/seed/maintainer-i9-13900T-h6.json
   share/oracle-matrix.json            baked snapshot for --compare --offline
   tests/oracle_test.sh                golden + canary fixtures
-  docs/oracle.md                      generated snapshot of the matrix
+  docs/oracle-matrix.md                      generated snapshot of the matrix
 
 88plug/k3d-gpu-oracle/                (data repo)
   .github/workflows/ingest.yml        issue/PR -> validate -> commit -> actions/attest
@@ -341,7 +350,7 @@ Matrix generator (`oracle/matrix.py`), per comparison key:
 | n, tier | distinct submitters; provisional / community / verified |
 | Data | link to the data files |
 
-`docs/oracle.md` is in this repo and is scanned by `tests/claims_check.sh`. The
+`docs/oracle-matrix.md` is in this repo and is scanned by `tests/claims_check.sh`. The
 generator therefore writes each numeric row with the https URL of its data file
 on the same line, so every row is backed by a primary source and the guard
 passes without exceptions.
@@ -407,16 +416,18 @@ https://docs.brew.sh/Bottles).
 
 | Seed | Kind | Content | Status |
 |---|---|---|---|
-| `oracle/seed/maintainer-i9-13900T-h6.json` | `single_stream` | Two bundles, CPU (P-core balloon) and GPU (UHD 770): decode and TTFT per-request samples from the H6 run, OVMS 2026.4.1 digest `sha256:a928903f...`, Qwen3-4B int4 at revision `b467368d`, weights sha256 `074214fa...`. `provenance.source = maintainer-lab`. The medians are cross-checked against the H6 table [ledger:H6] | buildable now from the H6 raw per-request files, which must be committed with the seed |
-| H1 (EAT on a non-Xeon host) | none | functional, not a capacity number | INCONCLUSIVE [ledger:H1]: a completion returned, but the probe did not run as written; no bundle until a clean run |
+| `oracle/seed/maintainer-i9-13900T-h6-{cpu,gpu}.json` | `single_stream` | Two bundles, CPU (P-core balloon) and GPU (UHD 770): decode and TTFT per-request samples from the H6 run, OVMS 2026.4.1 digest `sha256:a928903f...`, Qwen3-4B int4 at revision `b467368d`, weights sha256 `074214fa...`. `provenance.source = maintainer-lab`. The medians are cross-checked against the H6 table [ledger:H6] | built by `oracle/seed/build.py` from the H6 raw per-request files under `oracle/raw/h6/` |
+| H1 (EAT on a non-Xeon host) | none | functional, not a capacity number | INCONCLUSIVE [ledger:H1]: run 2 passed every step in one pass, but the pre-registered `kubectl wait --all -A` cannot exit 0 on k3s v1.37 (Succeeded Job pods); no bundle until a clean run |
 | H2 (iGPU vs tuned CPU, J/token) | `single_stream` with energy | the UHD 770 lost decode, prefill, 4-in-flight and energy; H6 is the quotable row for decode and prefill | REFUTED [ledger:H2]; no seed bundle from it |
 | H3 (P/E isolation) | `capacity` A/B, lever `pe_pinning` | the first lever pair; prefill and a DRAM-bandwidth neighbour were not isolated | REFUTED [ledger:H3]; no seed bundle from it |
 | H4 (auto device = best device) | `single_stream` sweep | records the `auto` choice next to each forced device; the old rule (8385dc2) lost to the forced 16-P-CPU arm and was replaced by the XMX gate | REFUTED [ledger:H4]; a re-run against the XMX gate is owed before any bundle |
-| APB arms A1-A4 (`bench/apb/PROTOCOL.md`) | `capacity` | the first APB cells: OVMS CPU, OVMS iGPU, EAT vLLM-CPU, vLLM CUDA | pre-registered, not run |
+| `oracle/seed/maintainer-i9-13900T-h8-{a1-run1,a1-run2,a4}.json` | `capacity` | H8's scored APB arms (`bench/apb/PROTOCOL.md`): A1 OVMS int4 on the P-cores, two runs, APB 0 by the scoring rule with N=1 on the SLO edge; A4 vLLM CUDA AWQ on the RTX 4000 SFF Ada, APB >= 32 (every step to `--max` passed). Tagged `not-quiet`: the box ran beside 53 other containers | INCONCLUSIVE [ledger:H8]; built by `oracle/seed/build.py` from `oracle/raw/h8/`. A2 and A3 scored no step and have no bundle |
 
-The seed is generated by `share` itself (`--provenance maintainer-lab`, a flag
-that only the ingest workflow accepts from the maintainers' lab runner). The
-seed therefore passes the same projection and V1-V12, and dogfoods the path.
+As built, the seed is generated by `oracle/seed/build.py`, which calls
+`project.project_single_stream` (H6) and `project.project_capacity` (H8), the allowlist module `share` uses, with `provenance.source =
+maintainer-lab`; `share` has no provenance flag. CI validates `oracle/seed/`
+with `--trusted` and `data/oracle/` without it, so the seed passes the same
+V1-V12 and only the maintainer path may carry maintainer-lab provenance.
 Rules for seeds: a seed counts as one submitter, and it reaches `verified` only
 after an independent community reproduction, or after a second maintainer box
 of the same SKU.
@@ -433,7 +444,7 @@ of the same SKU.
 - `validate.py` unit tests cover each rule V1-V12 with one passing and one
   failing bundle. The tampered-sample case (a claimed APB above the recomputed
   value) must be rejected.
-- `tests/claims_check.sh` covers this file and the generated `docs/oracle.md`.
+- `tests/claims_check.sh` covers this file and the generated `docs/oracle-matrix.md`.
 
 ## 9. Build order (one coherent change per push)
 
@@ -443,14 +454,60 @@ of the same SKU.
    merges.
 3. `k3d-gpu share` steps 1-6 (local only), then step 7-8 (`gh` path).
 4. The H6 seed bundle and the data repo with `ingest.yml` and attestations.
-5. `matrix.py`, `docs/oracle.md`, the Pages SKU pages and `capacity --compare`
+5. `matrix.py`, `docs/oracle-matrix.md`, the Pages SKU pages and `capacity --compare`
    with the baked snapshot.
 6. Lever A/B runs, one lever at a time, each adding a ledger row before any
    uplift is quoted.
 
+## Build status (MVP)
+
+Built, with tests in `oracle/test_oracle.py` and the CI job `oracle`:
+
+- `oracle/schema/bundle-v1.json`, `oracle/bundle.py` (canonical JSON, content
+  hash, comparison key, a stdlib checker for the schema keywords used),
+  `oracle/project.py`, `oracle/validate.py` (V1-V12), `oracle/matrix.py`,
+  `oracle/share.py` behind `k3d-gpu share`, and `report --no-cluster`.
+- Seed: `oracle/seed/maintainer-i9-13900T-h6-{cpu,gpu}.json`, rebuilt by
+  `oracle/seed/build.py` from the H6 raw per-request files committed under
+  `oracle/raw/h6/`. The recomputed medians equal the H6 table [ledger:H6].
+- `docs/oracle-matrix.md` is generated from the seed and checked in CI.
+
+Differences from the design above:
+
+- Samples are integer **microseconds**, not milliseconds, so the recomputed
+  p95 and pass/fail verdicts match the run's own at any SLO. The V1 size cap is
+  therefore 1 MiB, not 256 KiB; the 48 KiB issue cap is unchanged.
+- `--dry-run` writes nothing (the design wrote the file first). Without
+  `--submit` the file is written; nothing is sent either way.
+- `--sign keyless` is not built. Bundles carry `client_signature: none` only.
+- No free text: levers have no `evidence` string and the workload has no
+  `extra_body` object; it carries `thinking: off|on|default` and `time_scale`.
+- V4: a release must pin the bundle's server image at its `aur-vX.Y.Z` tag
+  (read from the clone, or given with `--pin`). An unreleased build
+  (`git-<sha>`) is accepted only from a trusted maintainer path and is tagged
+  `unreleased-build`. Checking a release's build attestation is left to the
+  ingest repo, which does not exist yet.
+- V6 and V7 use the tool wait the trace generator gave the replayer (the trace
+  is regenerated from capacity's seed `1000 * N + rep`), not the gaps observed
+  in the samples, which would make Little's law hold by construction. V7 keeps
+  a slack factor of 1.25 because agents are not busy at every instant.
+- Submitter tokens come from the ingest (`matrix.py --submitters`). Without
+  them each community bundle is its own submitter and all maintainer-lab
+  bundles are one.
+- Submission is a pull request on `88plug/k3d-gpu` adding
+  `data/oracle/<content_sha256>.json` (not an issue on a data repo). CI runs
+  `validate.py --strict` on it; `leaderboard.py --check` reports it as pending
+  until a maintainer regenerates `docs/leaderboard.{md,json}` after merge.
+- Not built (superseded or deferred): the data repo `88plug/k3d-gpu-oracle` with its ingest and
+  attestation workflows, `capacity --compare` and the baked
+  `share/oracle-matrix.json`, the planner (section 6) and every lever A/B.
+- The seed's hardware block was read with `report --no-cluster` on the H6
+  host on the same day, not during the run, so microcode and power state are
+  left null.
+
 ## Open items (unverified)
 
-- GitHub issue body size limit (section 2). Confirm before step 8.
+- GitHub issue body size limit (section 2). Moot for the pull-request path that shipped.
 - Whether the OpenVINO CPU plugin honours `ONEDNN_MAX_CPU_ISA` for the AMX A/B.
 - The mainline merge status of the IAA zswap batching series.
 - `doctor --perf` reads DRAM channel count and configured speed only as root.

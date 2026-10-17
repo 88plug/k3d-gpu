@@ -21,15 +21,17 @@
 #                         GitHub release); the pinned sha256 is checked either way
 #   K3D_GPU_INSTALL_DRY_RUN=1  print the install commands instead of running them
 #
-# Bump: set the versions below, then copy each sha256 from the release's own
-# checksum file (k3d-gpu: SHA256SUMS of the aur-v<version> release; k3d:
-# checksums.txt; kubectl: https://dl.k8s.io/release/<version>/bin/linux/<arch>/kubectl.sha256).
+# Bump: the k3d-gpu pin moves with every release (packages.yml's install-pin job
+# reads its two sha256s from the aur-v<version> release's SHA256SUMS). k3d and
+# kubectl are bumped by hand: set the version, then copy each sha256 from the
+# release's own checksum file (k3d: checksums.txt; kubectl:
+# https://dl.k8s.io/release/<version>/bin/linux/<arch>/kubectl.sha256).
 
 set -euo pipefail
 
-K3D_GPU_VERSION=0.1.44
-K3D_GPU_DEB_SHA256=726d0cc5d81b74f34d3757ac46df0ac6fc5f3aebb734c26d3677db0ca90c38b5
-K3D_GPU_RPM_SHA256=7625fb5ed039a9eebc2fc083d2eebd3cb8483328d75c17a44e3099df6bc8aaf1
+K3D_GPU_VERSION=0.1.51
+K3D_GPU_DEB_SHA256=d35062269449c926124e5975ef07dc7b5969e035a66c57887343810468be1bfc
+K3D_GPU_RPM_SHA256=547919833a23656d64c60af5b0de0dbbb830f8adb119bfd9d230df92ff15ee23
 K3D_VERSION=v5.9.0
 K3D_SHA256_AMD64=06d8f25bc3a971c4eb29e0ff08429b180402db0f4dec838c9eac427e296800a0
 K3D_SHA256_ARM64=03cde5cf23e6e8e67de5a039ecf26e5b85aca82fba3e5d13dadf904cd218a250

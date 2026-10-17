@@ -263,6 +263,12 @@ check "llm on an XMX GPU: the GPU, pinned to an xmx=true node, no cores label of
 check "the XMX gate is for LLMs only: embeddings take the GPU with no xmx selector" "${out}" \
     'sc(2)["engine"] == "intel-gpu-xe" and "nodeSelector" not in sc(2)["podSpecFragment"]["spec"]'
 
+d=$(fixtures place-xmx-partial)
+nodes "${d}" '{"cpu":"16","gpu.intel.com/i915":"2"}' '{"gpu.intel.com/xmx":"true","k3d-gpu.io/xmx.i915":"false"}'
+out=$(session "${d}" "$(call 1 recommend_placement '{"workload":"llm","objective":"throughput"}')")
+check "llm: an i915 that also holds a GPU without XMX is skipped (the agent's auto rule)" "${out}" \
+    'sc(1)["engine"] == "cpu" and any("xmx.<driver>=false" in n for n in sc(1)["notes"])'
+
 d=$(fixtures place-xeon)
 nodes "${d}" '{"cpu":"96","gpu.intel.com/xe":"0"}' '{"feature.node.kubernetes.io/cpu-cpuid.AMXTILE":"true"}'
 out=$(session "${d}" "$(call 1 recommend_placement '{"workload":"llm","objective":"throughput"}')")

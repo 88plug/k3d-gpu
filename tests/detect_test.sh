@@ -612,6 +612,15 @@ kernel "${r}" 6.14.0
 pci "${r}" 0000:00:02.0 0x8086 0x7d55 i915; render "${r}" 0000:00:02.0 128
 pci "${r}" 0000:03:00.0 0x8086 0xe20b xe;   render "${r}" 0000:03:00.0 129
 doctor_says "Meteor Lake iGPU + Battlemage dGPU node has XMX" "${r}" 'gpu\.intel\.com/xmx=true'
+# Two GPUs on one driver, one with XMX and one without: the device plugin may
+# hand out either, so that driver is labelled as not all-XMX.
+r=$(newroot xmx-same-driver)
+kernel "${r}" 6.14.0
+pci "${r}" 0000:00:02.0 0x8086 0xa780 i915; render "${r}" 0000:00:02.0 128
+pci "${r}" 0000:03:00.0 0x8086 0x56a0 i915; render "${r}" 0000:03:00.0 129
+doctor_says "UHD 770 + Arc A770 on i915: i915 is not all-XMX" "${r}" 'gpu\.intel\.com/xmx=true .*k3d-gpu\.io/xmx\.i915=false'
+doctor_says "Meteor Lake i915 + Battlemage xe: xe is not flagged" "$(newroot xmx-mixed)" 'k3d-gpu\.io/xmx\.xe' negate
+doctor_says "Arrow Lake-H alone gets no per-driver label" "$(newroot xmx-arlh)" 'k3d-gpu\.io/xmx\.' negate
 r=$(newroot xmx-unknown)
 kernel "${r}" 7.3.0
 pci "${r}" 0000:17:00.0 0x8086 0x674c xe; render "${r}" 0000:17:00.0 128
@@ -1577,6 +1586,21 @@ perf_says "perf: THP defrag=always warns" "${bad}" 'warn: THP defrag=always' "" 
 perf_says "perf: reserved huge pages are counted" "${bad}" 'note: 1024 huge pages reserved, 1024 free = 2\.0 GiB' "" "${BAD_ENV[@]}"
 perf_says "perf: swap in use warns" "${bad}" 'warn: 4\.0 GiB of swap in use' "" "${BAD_ENV[@]}"
 perf_says "perf: swapoff not offered when RAM cannot hold the swap" "${bad}" 'swapoff' negate "${BAD_ENV[@]}"
+# Swap that RAM can hold: the cycle names each active device from /proc/swaps,
+# because swapon -a re-enables only fstab entries (zram-generator swap is a
+# systemd unit, not in fstab), and the revert turns each one back on.
+r=$(newroot perf-swap-zram)
+meminfo "${r}" 25165824 8388608 4194304 0 0
+printf 'Filename\t\t\t\tType\t\tSize\t\tUsed\t\tPriority\n/dev/zram0                              partition\t8388604\t\t4194304\t\t100\n/swapfile                               file\t\t1048572\t\t0\t\t-2\n' \
+    > "${r}/proc/swaps"
+perf_says "perf: swap cycle never uses swapon -a" "${r}" 'swapon -a' negate
+perf_says "perf: swap cycle names each device and keeps its priority" "${r}" \
+    'apply:  sudo swapoff /dev/zram0 && sudo swapon -p 100 /dev/zram0 && sudo swapoff /swapfile && sudo swapon /swapfile'
+perf_says "perf: swap cycle has a revert that re-enables each device" "${r}" \
+    'revert: sudo swapon -p 100 /dev/zram0; sudo swapon /swapfile'
+r=$(newroot perf-swap-noproc)
+meminfo "${r}" 25165824 8388608 4194304 0 0
+perf_says "perf: no swap cycle without /proc/swaps" "${r}" 'swapoff' negate
 perf_says "perf: high swappiness noted with exact revert" "${bad}" 'revert: sudo sysctl vm.swappiness=100' "" "${BAD_ENV[@]}"
 perf_says "perf: missing irqbalance noted" "${bad}" 'note: irqbalance is not running' "" "${BAD_ENV[@]}"
 perf_says "perf: i915 host RPS reported without SLPC" "${bad}" 'card0 i915 gt0: host RPS \(no GuC SLPC\)' "" "${BAD_ENV[@]}"
@@ -2082,6 +2106,12 @@ agent_says "auto GPU pod is placed on an XMX node" "${r}" 0 \
     'gpu\.intel\.com/xmx: "true"' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/xe 1' STUB_NODE_LABELS=gpu.intel.com/xmx=true
 # Measured on an i9-13900T (UHD 770, no XMX): P-cores decode 15.7 tok/s and
 # prefill 172 tok/s, the GPU 9.9 and 66. Without XMX auto stays on the CPU.
+# xmx=true from an Arc A770, but i915 also holds the UHD 770: auto must not
+# request a gpu.intel.com/i915 the plugin may fill with the iGPU.
+agent_says "auto skips a driver that is not all-XMX" "${r}" 0 \
+    '--target_device=CPU' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 2' STUB_NODE_LABELS='gpu.intel.com/xmx=true k3d-gpu.io/xmx.i915=false'
+agent_says "auto still takes an all-XMX xe beside a mixed i915" "${r}" 0 \
+    'gpu\.intel\.com/xe: "?1"?' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 2\ngpu.intel.com/xe 1' STUB_NODE_LABELS='gpu.intel.com/xmx=true k3d-gpu.io/xmx.i915=false'
 agent_says "auto picks CPU when the Intel GPU has no XMX" "${r}" 0 \
     '--target_device=CPU' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' STUB_NODE_LABELS=gpu.intel.com/xmx=false
 agent_says "auto picks CPU when no node says the GPU has XMX" "${r}" 0 \
@@ -2341,6 +2371,7 @@ RSTUB="${WORK}/rbin"
 mkdir -p "${RSTUB}"
 cat > "${RSTUB}/kubectl" <<'EOF'
 #!/bin/sh
+[ -z "${STUB_KUBECTL_LOG:-}" ] || echo "$*" >> "${STUB_KUBECTL_LOG}"
 case "$*" in
     *get-contexts*) for c in ${STUB_CONTEXTS:-}; do echo "${c}"; done ;;
     *"get nodes"*)  [ -n "${STUB_NODES:-}" ] || exit 1; printf '%b' "${STUB_NODES}" ;;
@@ -2353,7 +2384,7 @@ chmod +x "${RSTUB}/kubectl"
 report_says() {
     local name=$1 root=$2 expr=$3 out rc
     shift 3
-    out=$(env K3D_GPU_SYSROOT="${root}" PATH="${RSTUB}:${PATH}" "$@" bash "${K3D_GPU}" report --json 2>"${WORK}/report.err")
+    out=$(env K3D_GPU_SYSROOT="${root}" PATH="${RSTUB}:${PATH}" "$@" bash -c 'exec bash "$1" report --json ${REPORT_ARGS:-}' _ "${K3D_GPU}" 2>"${WORK}/report.err")
     rc=$?
     if [ "${rc}" -eq 0 ] && python3 -c '
 import json, sys
@@ -2410,6 +2441,8 @@ report_says "report: memory from meminfo" "${r}" \
     'r["host"]["memory"] == {"total_kib": 131072000, "available_kib": 73400320}'
 report_says "report: i915 iGPU with render node, engines and GuC/HuC" "${r}" \
     'len(r["host"]["intel_gpus"]) == 1 and (g := r["host"]["intel_gpus"][0]) and g["card"] == "card0" and g["render_node"] == "renderD128" and g["pci"] == "0000:00:02.0" and g["device_id"] == "0xa780" and g["driver"] == "i915" and [e["name"] for e in g["engines"]] == ["bcs0", "rcs0", "vcs0", "vecs0"] and g["engines"][2]["capabilities"] == ["hevc", "sfc"] and g["guc"] == {"status": "RUNNING", "firmware": "i915/tgl_guc_70.bin", "version": "70.49.4"} and g["huc"]["status"] == "RUNNING" and g["huc"]["version"] == "7.9.3"'
+report_says "report: UHD 770 (Raptor Lake-S) has no XMX" "${r}" \
+    'r["host"]["intel_gpus"][0]["platform"] == "Raptor Lake-S" and r["host"]["intel_gpus"][0]["xmx"] is False'
 report_says "report: NVIDIA GPU from procfs" "${r}" \
     '(n := r["host"]["nvidia"]) and n["driver"] == "590.48.01" and n["gpus"] == [{"pci": "0000:01:00.0", "model": "NVIDIA RTX 4000 SFF Ada Generation", "device_id": "0x27b0", "minor": 0}]'
 report_says "report: RAPL zones with names and wrap range" "${r}" \
@@ -2424,6 +2457,28 @@ report_says "report: no kubeconfig context means cluster absent with a reason" "
 report_says "report: unreachable API means cluster absent with a reason" "${r}" \
     '(c := r["cluster"]) and c["present"] is False and "unreachable" in c["reason"]' \
     K3D_GPU_CLUSTER=rpt STUB_CONTEXTS="k3d-rpt"
+# --no-cluster (used by `share`) must not run kubectl at all, even with a context.
+report_says "report: --no-cluster leaves kubectl alone" "${r}" \
+    '(c := r["cluster"]) and c["present"] is False and c["reason"] == "not queried (--no-cluster)"' \
+    K3D_GPU_CLUSTER=rpt STUB_CONTEXTS="k3d-rpt" STUB_NODES='N\tk3d-rpt-server-0\n' REPORT_ARGS=--no-cluster STUB_KUBECTL_LOG="${WORK}/report-kubectl.log"
+if [ -s "${WORK}/report-kubectl.log" ]; then
+    FAILS=$((FAILS + 1)); echo "FAIL report: --no-cluster ran kubectl"; sed 's/^/  | /' "${WORK}/report-kubectl.log"
+else
+    PASS=$((PASS + 1)); echo "ok   report: --no-cluster ran no kubectl command"
+fi
+says_rc() {
+    local name=$1 want=$2 re=$3 out rc
+    shift 3
+    out=$("$@" 2>&1)
+    rc=$?
+    if [ "${rc}" -eq "${want}" ] && grep -E -- "${re}" <<< "${out}" >/dev/null; then
+        PASS=$((PASS + 1)); echo "ok   ${name}"
+    else
+        FAILS=$((FAILS + 1)); echo "FAIL ${name} (rc=${rc}, want ${want}, /${re}/)"; sed 's/^/  | /' <<< "${out}"
+    fi
+}
+says_rc "report: an unknown option is refused" 1 'unknown option --bogus' \
+    env K3D_GPU_SYSROOT="${r}" PATH="${RSTUB}:${PATH}" bash "${K3D_GPU}" report --json --bogus
 report_says "report: cluster allocatable and k3d-gpu labels per node" "${r}" \
     '(c := r["cluster"]) and c["present"] is True and c["nodes"] == [{"name": "k3d-rpt-server-0", "allocatable": {"cpu": "32", "gpu.intel.com/i915": "1", "nvidia.com/gpu": "2"}, "labels": {"k3d-gpu.io/hybrid-cpu": "true", "nvidia.com/gpu.present": ""}}]' \
     K3D_GPU_CLUSTER=rpt STUB_CONTEXTS="k3d-rpt" \
@@ -2446,6 +2501,7 @@ report_says "report: JSON-escaped CPU model" "${r}" \
     'r["host"]["cpu"]["model"] == "Fake \"Quoted\" \\ CPU" and r["host"]["cpu"]["hybrid"] is False and r["host"]["cpu"]["p_cores"] is None'
 report_says "report: AVX-512 and AMX flags" "${r}" \
     '(c := r["host"]["cpu"]) and c["avx512"] is True and c["amx"] == ["amx_bf16", "amx_tile"] and "avx512_bf16" in c["isa"]'
+report_says "report: Lunar Lake iGPU has XMX" "${r}" 'r["host"]["intel_gpus"][0]["xmx"] is True'
 report_says "report: xe engines by class; GuC unknown without root" "${r}" \
     '(g := r["host"]["intel_gpus"][0]) and g["driver"] == "xe" and g["platform"] == "Lunar Lake" and [e["name"] for e in g["engines"]] == ["bcs", "ccs", "rcs"] and g["guc"]["status"] is None and "root" in g["guc"]["note"]'
 report_says "report: NPU, Gaudi without driver, DSA/IAA queues, QAT VFs" "${r}" \
@@ -4429,6 +4485,9 @@ says() {
 }
 REPO=$(cd "$(dirname "${K3D_GPU}")/.." && pwd)
 says "help lists capacity" 0 '^  capacity \[--slo 10\]' bash "${K3D_GPU}" help
+says "help lists share" 0 '^  share \[--capacity FILE\]' bash "${K3D_GPU}" help
+says "share --help comes from the repo's oracle/share.py" 0 'There is no --yes' \
+    bash "${K3D_GPU}" share --help
 says "capacity --help comes from the repo's bench/apb/capacity.py" 0 'Agents per box at a p95' \
     bash "${K3D_GPU}" capacity --help
 says "capacity passes its arguments through (--url needs --model)" 2 '--url needs --model' \
@@ -4442,6 +4501,15 @@ cp "${REPO}/bench/agent_trace.py" "${REPO}/bench/agent_trace_gen.py" "${SOLO}/sh
 cp "${REPO}/bench/apb/apb.py" "${REPO}/bench/apb/capacity.py" "${SOLO}/share/bench/apb/"
 says "capacity runs from the packaged copy under K3D_GPU_SHARE/bench" 0 'Agents per box at a p95' \
     env K3D_GPU_SHARE="${SOLO}/share" bash "${SOLO}/bin/k3d-gpu" capacity --help
+says "share outside a checkout with no packaged copy says what is missing" 1 'share.py not found' \
+    env K3D_GPU_SHARE="${SOLO}/none" bash "${SOLO}/bin/k3d-gpu" share --help
+# The files the packages install under /usr/share/k3d-gpu/oracle.
+mkdir -p "${SOLO}/share/oracle/schema"
+for f in bundle.py project.py validate.py share.py schema/bundle-v1.json; do cp "${REPO}/oracle/${f}" "${SOLO}/share/oracle/${f}"; done
+says "share runs from the packaged copy under K3D_GPU_SHARE/oracle" 0 'There is no --yes' \
+    env K3D_GPU_SHARE="${SOLO}/share" bash "${SOLO}/bin/k3d-gpu" share --help
+says "packaged share finds no capacity run and says so" 2 'no finished capacity run' \
+    env K3D_GPU_SHARE="${SOLO}/share" XDG_STATE_HOME="${SOLO}/state" K3D_GPU_SYSROOT="${SOLO}/root" bash "${SOLO}/bin/k3d-gpu" share --dry-run
 
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
