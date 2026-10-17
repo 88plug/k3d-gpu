@@ -75,7 +75,7 @@
         "level": "warn",
         "revert": "sudo rm /lib/firmware/updates/intel/vpu/vpu_50xx_v0.0.bin && sudo modprobe -r intel_vpu && sudo modprobe intel_vpu",
         "section": "Checking Intel NPU (Core Ultra)...",
-        "text": "/lib/firmware/updates/intel/vpu/vpu_50xx_v1.bin (intel-fw-npu) is not loaded: kernel 6.14.0-33-generic never requests _v1 (6.16+ does). Boot a 6.16+ kernel, or point the name it loads at it: run:    sudo ln -s vpu_50xx_v1.bin /lib/firmware/updates/intel/vpu/vpu_50xx_v0.0.bin && sudo modprobe -r intel_vpu && sudo modprobe intel_vpu",
+        "text": "/lib/firmware/updates/intel/vpu/vpu_50xx_v1.bin (intel-fw-npu) is not loaded: kernel 6.14.0-33-generic never requests _v1 (6.16+ does). Boot a 6.16+ kernel, or point the name it loads at it. Stop what uses the NPU first ('k3d-gpu down' for the cluster), or reboot instead of the modprobe steps: run:    sudo ln -s vpu_50xx_v1.bin /lib/firmware/updates/intel/vpu/vpu_50xx_v0.0.bin && sudo modprobe -r intel_vpu && sudo modprobe intel_vpu",
         "why": null
       },
       {

@@ -328,7 +328,12 @@ def oracle_sysfs(t):
     found = []
     if any(val(d["vendor"]) == "0x8086" and d["driver"] in ("xe", "i915") for d in t["render"]):
         found.append("intel")
-    if any(val(d["vendor"]) == "0x8086" and d["driver"] == "intel_vpu" for d in t["accel"]):
+    # An NPU counts when the bundled plugin (NPU_PLUGIN_IDS) serves its id; an
+    # unreadable id (not 0x + 4 hex digits) counts too, since coverage is unknown.
+    npu_ids = {"0x7e4c", "0x643e", "0xad1d", "0x7d1d", "0xb03e", "0xfd3e", "0xd71d"}
+    served = lambda v: v in npu_ids or not re.fullmatch(r"0x[0-9a-fA-F]{4}", v)
+    if any(val(d["vendor"]) == "0x8086" and d["driver"] == "intel_vpu" and served(val(d["device"]))
+           for d in t["accel"]):
         found.append("npu")
     if any(val(d["vendor"]) == "0x1da3" for d in t["accel"]):
         found.append("gaudi")

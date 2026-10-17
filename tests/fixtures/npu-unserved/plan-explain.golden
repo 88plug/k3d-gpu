@@ -1,0 +1,15 @@
+WARN: Intel NPU 0x1234 is not served by intel-npu-plugin 0.37.1 — skipping the NPU (K3D_GPU_NPU_PLUGIN=<newer plugin yaml> overrides; see 'k3d-gpu doctor')
+facts: sha256:da56acdef57e490cdb8eb1731d696387d66c07b918da72c62745e002d06a35c2
+targets:
+  cpu: unknown CPU, P-cores 0-3 (4), E-cores 4-15 (12); usable
+  gpu:0000:00:02.0: intel Panther Lake, 0xb080, on xe, XMX; usable
+  npu:0000:00:0b.0: intel, 0x1234, on intel_vpu; usable
+matrix: 2 cells, 0 on a target of this host
+  no measured cell for these targets
+decision:
+  unmeasured, run `k3d-gpu prove` on this box
+  bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)
+exit=0
+--- calls
+kubectl config get-contexts -o name
+kubectl --context k3d-gpu --request-timeout=5s get nodes -o name
