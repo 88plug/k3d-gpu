@@ -59,7 +59,8 @@ class Fixtures(unittest.TestCase):
                 self.assertEqual(facts, before)
                 self.assertEqual(offline_check.static(a), [])
                 self.assertIn(facts["fingerprint"], a)
-                self.assertIn("unmeasured, run <code>k3d-gpu prove</code> on this box", a)
+                if p["decision"] != "fix":
+                    self.assertIn("unmeasured, run <code>k3d-gpu prove</code> on this box", a)
                 for t in facts["targets"]:
                     self.assertIn(report_html.esc(t["id"]), a)
 
@@ -84,6 +85,18 @@ class Content(unittest.TestCase):
         for line in p["summary"]:
             self.assertIn(report_html.text(line), out)
         self.assertIn('class="badge green"', out)
+
+    def test_fix_decision_is_labelled_and_lists_the_fix(self):
+        facts = load(os.path.join(REPO, "tests", "fixtures", "raptorlake-stale-guc", "facts.json"))
+        p = planmod.plan(facts, MATRIX)
+        self.assertEqual(p["decision"], "fix")
+        out = report_html.render(facts, p)
+        self.assertIn('<div class="verdict fix"><span class="badge fail">fix first</span>', out)
+        self.assertNotIn('class="verdict unmeasured"', out)
+        for line in p["summary"]:
+            self.assertIn(report_html.text(line), out)
+        gpu = next(t for t in facts["targets"] if t["fix"])
+        self.assertIn("fix: " + report_html.text(gpu["fix"]), out)
 
     def test_considered_cells_are_listed(self):
         p = planmod.plan(self.facts, GREEN)

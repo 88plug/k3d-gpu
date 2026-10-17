@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'sha256-6s3ARK7lKBwvnBBXuveIF9AvsXunuRjywpLAbDjuDiY='; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'sha256-t5ihSqo8B3ZVyn3gbHcaiybtdj+O9/xjPoZXFuRhvtc='; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>k3d-gpu report: (hostname not set)</title>
@@ -20,6 +20,7 @@ h2{font-size:12px;margin:30px 0 10px;text-transform:uppercase;letter-spacing:.08
 h3{font-size:14px;margin:18px 0 6px}
 .verdict{border:1px solid var(--line);border-left:6px solid var(--grey);background:var(--panel);padding:14px 16px;border-radius:4px}
 .verdict.green{border-left-color:var(--green)}.verdict.unmeasured{border-left-color:var(--amber)}
+.verdict.fix{border-left-color:var(--red)}
 .verdict ul{margin:8px 0 0;padding-left:18px}
 code{font:12.5px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--code);padding:1px 4px;border-radius:3px;overflow-wrap:anywhere}
 a{color:var(--link);overflow-wrap:anywhere}
@@ -48,9 +49,9 @@ footer p{margin:4px 0}
 <header><h1>k3d-gpu report: (hostname not set)</h1>
 <p class="sub">facts/v1 <code>sha256:2e1a8fe354f8af37f1ca3dfe808b6d019f2d0f7ad866fa42c93c4444b3bdf59a</code> · k3d-gpu &lt;version&gt; · kernel 6.8.0-60-generic</p></header>
 <h2>What runs on this box</h2>
-<div class="verdict unmeasured"><span class="badge amber">unmeasured</span><strong>unmeasured, run <code>k3d-gpu prove</code> on this box</strong><ul><li>bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)</li></ul></div>
+<div class="verdict fix"><span class="badge fail">fix first</span><strong>hpu refused: habanalabs driver not loaded; fix: install the Intel Gaudi driver (habanalabs), then sudo modprobe habanalabs</strong><ul><li>unmeasured, run <code>k3d-gpu prove</code> on this box</li><li>bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)</li></ul></div>
 <h2>Hardware targets</h2>
-<div class="wrap"><table><thead><tr><th>target</th><th>what it is</th><th>resource</th><th>state</th></tr></thead><tbody><tr><td><code>cpu</code></td><td>unknown CPU, AMX</td><td><span class="mut">none</span></td><td><span class="badge ok">usable</span></td></tr><tr><td><code>hpu</code></td><td>habana</td><td><code>habana.ai/gaudi</code></td><td><span class="badge fail">not usable</span> habanalabs driver not loaded</td></tr></tbody></table></div>
+<div class="wrap"><table><thead><tr><th>target</th><th>what it is</th><th>resource</th><th>state</th></tr></thead><tbody><tr><td><code>cpu</code></td><td>unknown CPU, AMX</td><td><span class="mut">none</span></td><td><span class="badge ok">usable</span></td></tr><tr><td><code>hpu</code></td><td>habana</td><td><code>habana.ai/gaudi</code></td><td><span class="badge fail">not usable</span> habanalabs driver not loaded<br>fix: install the Intel Gaudi driver (habanalabs), then sudo modprobe habanalabs</td></tr></tbody></table></div>
 <h2>Matrix cells considered</h2>
 <div class="wrap"><table><thead><tr><th>cell</th><th>status</th><th>target</th><th>eligible</th><th>reasons</th></tr></thead><tbody><tr><td><code>raptorlake-s.cpu-pcores.ovms.qwen3-4b-int4</code></td><td><span class="badge grey">grey</span></td><td><span class="mut">no target here</span></td><td>no</td><td>no k3d-gpu report run recorded<br>tool-calling eval not run<br>excluded: no target on this host matches</td></tr><tr><td><code>raptorlake-s.uhd770.ovms.qwen3-4b-int4</code></td><td><span class="badge grey">grey</span></td><td><span class="mut">no target here</span></td><td>no</td><td>no k3d-gpu report run recorded<br>tool-calling eval not run<br>excluded: no target on this host matches</td></tr></tbody></table></div>
 <h2>Capacity</h2>
@@ -66,9 +67,9 @@ footer p{margin:4px 0}
 <h2>Node labels</h2>
 <div class="wrap"><table><tbody><tr><th>feature.node.kubernetes.io/cpu-cpuid.AMXBF16</th><td>true</td></tr><tr><th>feature.node.kubernetes.io/cpu-cpuid.AMXINT8</th><td>true</td></tr><tr><th>feature.node.kubernetes.io/cpu-cpuid.AMXTILE</th><td>true</td></tr><tr><th>feature.node.kubernetes.io/cpu-cpuid.AVX512BF16</th><td>true</td></tr><tr><th>feature.node.kubernetes.io/cpu-cpuid.AVX512F</th><td>true</td></tr><tr><th>feature.node.kubernetes.io/cpu-cpuid.AVX512VNNI</th><td>true</td></tr></tbody></table></div>
 <h2>Release pins</h2>
-<div class="wrap"><table><tbody><tr><th>ovms</th><td>openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58</td></tr></tbody></table></div>
+<div class="wrap"><table><tbody><tr><th>llama.cpp</th><td>ghcr.io/ggml-org/llama.cpp@sha256:be586c648cb79d2cd75d0c38a6541e1f16c47a7c6621d3e711470a467fc38744</td></tr><tr><th>ovms</th><td>openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58</td></tr></tbody></table></div>
 <footer>
-<p>Rendered from facts/v1, sha256 of its canonical bytes <code>215aba54eb5ff22251cce99cf8cf10a4fa6e8d67d13416076484175f39f8cbae</code>, and plan/v1.</p>
+<p>Rendered from facts/v1, sha256 of its canonical bytes <code>9b8c225c795461700d0b25e1f25f85ac3d77b0dd3d9e14aa23ac62cf073d189d</code>, and plan/v1.</p>
 <p>This page runs no script and loads nothing: its Content-Security-Policy is <code>default-src 'none'</code>. The links are references to follow, not resources it fetches.</p>
 <p><a href="https://github.com/88plug/k3d-gpu" rel="noreferrer">https://github.com/88plug/k3d-gpu</a></p>
 </footer></main></body></html>

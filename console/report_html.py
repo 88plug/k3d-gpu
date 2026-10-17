@@ -52,6 +52,7 @@ h2{font-size:12px;margin:30px 0 10px;text-transform:uppercase;letter-spacing:.08
 h3{font-size:14px;margin:18px 0 6px}
 .verdict{border:1px solid var(--line);border-left:6px solid var(--grey);background:var(--panel);padding:14px 16px;border-radius:4px}
 .verdict.green{border-left-color:var(--green)}.verdict.unmeasured{border-left-color:var(--amber)}
+.verdict.fix{border-left-color:var(--red)}
 .verdict ul{margin:8px 0 0;padding-left:18px}
 code{font:12.5px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--code);padding:1px 4px;border-radius:3px;overflow-wrap:anywhere}
 a{color:var(--link);overflow-wrap:anywhere}
@@ -140,18 +141,27 @@ def value(v):
     return '<div class="wrap"><table><tbody>%s</tbody></table></div>' % rows
 
 
+# plan decision -> (verdict class, badge class, badge label)
+VERDICTS = {
+    "green": ("green", "green", "green cell"),
+    "fix": ("fix", "fail", "fix first"),
+    "unmeasured": ("unmeasured", "amber", "unmeasured"),
+}
+
+
 def verdict(plan):
-    cls = "green" if plan["decision"] == "green" else "unmeasured"
-    label = "green cell" if plan["decision"] == "green" else "unmeasured"
+    cls, badge_cls, label = VERDICTS[plan["decision"]]
     lines = "".join("<li>%s</li>" % text(s) for s in plan["summary"][1:])
     return '<div class="verdict %s">%s<strong>%s</strong><ul>%s</ul></div>' % (
-        cls, badge("green" if cls == "green" else "amber", label), text(plan["summary"][0]), lines)
+        cls, badge(badge_cls, label), text(plan["summary"][0]), lines)
 
 
 def targets(facts):
     rows = []
     for t in facts["targets"]:
         state = badge("ok", "usable") if t["usable"] else badge("fail", "not usable") + " " + text(t["reason"])
+        if t.get("fix"):
+            state += "<br>fix: " + text(t["fix"])
         rows.append(["<code>%s</code>" % esc(t["id"]), text(factsmod.describe(t)),
                      "<code>%s</code>" % esc(t["resource"]) if t["resource"] else '<span class="mut">none</span>',
                      state])
