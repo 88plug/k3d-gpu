@@ -33,6 +33,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H17 | DRA mode can become the default (auto) Intel GPU path when the driver is baked in, without losing what the device-plugin default gives on an iGPU host. | On the same host, all three: (a) two pods that each claim the iGPU through their own ResourceClaim from one template are both `Running` at once, as two `gpu.intel.com/i915: 1` pods are under the plugin's sharing default (H15); (b) median pod latency (create to `Succeeded`, busybox `ls /dev/dri`, image preloaded) in DRA mode is at most 1.2x the plugin's; (c) median `k3d-gpu up` wall time in DRA mode is at most 1.2x the plugin's. | Arms D (`K3D_GPU_DRA=1`) and P (default), one fresh cluster per run, n=3 runs per arm, order D P P D D P; per run 1 timed `up` and 3 timed pods (reported as the run's median), then the 2-pod check read 20 s after creation. Per run: package W over `up` (RAPL), load (1 min), swap used, package throttle count delta. Outcome -> conclusion: (a) fails in any D run -> REFUTED, DRA stays opt-in (`K3D_GPU_DRA=0` default), since auto would take away H15's sharing; (a) holds but (b) or (c) fails -> REFUTED, DRA stays opt-in; all hold -> SUPPORTED, DRA may become auto in a later change; F of H16 fails -> H17 not evaluated (DRA mode broken). A timing arm whose spread (max - min) exceeds 30% of its median -> that part INCONCLUSIVE. Prediction before measuring: REFUTED by (a), because gpu-v0.12.1 publishes no shared counters or multi-allocation (docs/experimental.md). | REFUTED |
 | H18 | `k3d-gpu sandbox up` keeps agent sandboxes on the E-cores and inside a default-deny egress policy on k3d (kube-router), while public egress (PyPI) still works. | On an i9-13900T with tailscale (host `100.65.179.24`, sshd on `0.0.0.0:22`) and a cluster from this branch's image: (a) `sandbox up` exits 0 with the warm pool `readyReplicas` >= 1 and every sandbox pod's `Cpus_allowed_list` inside the E-cores (cpu_atom); (b) from a sandbox pod, TCP to `100.65.179.24:22` (CGNAT, tailscale) and to `192.168.1.108:22` (RFC1918, host LAN) both fail to connect within 3 s, and the policy's kube-router drop-log rule counts the packets, while from a control pod (same image, namespace `sbx-control`, no policy) both connect; (c) from a sandbox pod, DNS resolves `pypi.org`, TCP to `pypi.org:443` connects, and `pip install --user tomli_w==1.2.0` (not in the image) with the profile's `HOME=/tmp` exits 0 and imports from `/tmp/.local`. | Pre-registered 2026-10-17 before any H18 run (this commit, pushed). Image `docker build -t $TAG .` from `claude/agent-sandbox-ecores` rebased on origin/main 2b45f87. Cluster `k3dgpu-r2-sbx`, scratch `KUBECONFIG`, one fresh cluster per run, n=3 runs. Per run: timed `sandbox up` (wall, s), then the probes interleaved sandbox/control, each probe once per pod. Confounds per run: package W (RAPL, 5 s before), 1-min load, swap used, package throttle count delta. Outcome -> conclusion: every run meets (a), (b) and (c) -> SUPPORTED; a sandbox pod off the E-cores, a sandbox reaching either private address, or a control pod failing to connect (probe cannot see a block) -> REFUTED (control failure -> INCONCLUSIVE); pip failing while `pypi.org:443` connects -> REFUTED for (c), README must drop the pip claim. Prediction: SUPPORTED. Amended before the counted runs, after pilot run 0 (log below): kube-router REJECTs (`icmp-port-unreachable`, so `Connection refused` in ~0.1 s) rather than dropping, so (b) asks for no connect plus the drop-log counter instead of a timeout; `six` ships in the image, so (c) installs `tomli_w`. Runner: `bench/sandbox_round.sh`. | SUPPORTED |
 | H7 | OVMS's decode lead over EAT's vLLM CPU engine in the H2 run comes from weight precision, not from the engine. | On the i9-13900T 16-CPU P-core balloon, one checkpoint served by OVMS 2026.4.1 and by vLLM CPU v0.24.0 at matched weight precision decodes within 15% between the two engines, and the two land within 15% of each other in effective weight bandwidth (weight bytes x decode tok/s). | Pre-registered 2026-10-16, before any run. One checkpoint and revision (`Qwen/Qwen3-4B-Instruct-2507`, revision recorded) for both engines: OVMS loads an OpenVINO IR exported from it with 16-bit weights, vLLM loads it in bf16. A second arm at int4 in both engines runs only if vLLM v0.24.0 CPU is first shown to load an int4 build of the same checkpoint. vLLM runs with EAT's chart defaults and once with `--enforce-eager` dropped, to split engine from config. H2 workloads and energy method, arms interleaved ABBA, 5 rounds. Refuted if the decode gap at matched precision is 15% or more. | PENDING |
+| H28 | On k3s v1.37.1+k3s1 (containerd v2.3.4-k3s1), N agent pods that mount one model through an image volume and mmap it read-only share one page-cache copy, so the per-agent memory cost is near zero, and they become ready faster than pods that copy the model into their own emptyDir. | On an i9-13900T, 1 GiB unique blob, N=8: arm T (image volume + mmap) median PSS per pod <= 160 MiB, Shared_Clean >= 0.9x size, host ΔCached per round <= 1.25x size; arm C (init `cp` to emptyDir, then mmap) PSS >= 0.9x size, ΔCached >= 0.8xNxsize; T round-median time-to-ready (cold source, create to READY after faulting in the whole mapping) <= 0.5x C, and max(T) < min(C). Null: T PSS >= 0.5x size, or ΔCached >= 0.5xNxsize, or T time >= 0.8x C. | Pre-registered 2026-10-17T12:13:48Z before any H28 run. `bench/zero-copy-models/probe.sh` (prep outside the lock, run under live.lock, cluster `k3dgpu-i-zero-copy-models`, scratch KUBECONFIG, locked part killed at 20 min). n=3 rounds per arm, 8 pods per round, order C T T C C T, unique image per round, source file evicted per round (fsync + posix_fadvise DONTNEED in a helper container; mincore must read 0), no global drop_caches. Confounds per round: load1, swap used, swap-out, package throttle count, RAPL W. Outcome -> conclusion: see the [H28 pre-registration](#h28-pre-registration-i9-13900t-2026-10-17). Prior art: KEP-4639, KServe `oci+native://`, Tetris (ATC'22), overlayfs page-cache sharing [provenance:P280]; only the measured delta may be claimed. Prediction: SUPPORTED. | PENDING |
 
 ## Falsification log
 
@@ -153,6 +154,55 @@ docker image inspect --format '{{index .RepoDigests 0}}' "$IMAGE"
 # RAPL package energy counter in microjoules; read before and after a run.
 cat /sys/class/powercap/intel-rapl:0/energy_uj
 ```
+
+### H28 pre-registration (i9-13900T, 2026-10-17)
+
+Registered 2026-10-17T12:13:48Z, before any H28 measurement. Probe: `bench/zero-copy-models/probe.sh`;
+product path: `k3d-gpu model-share` (renders the fleet Deployment and warns when the
+snapshotter, the device or an unpinned tag would give each replica its own copy).
+
+Baseline first: arm C = the same image volume mounted in an init container that runs
+`cp` into an `emptyDir`, then the agent mmaps the copy. It is a lower bound on a
+per-pod download. Treatment: arm T = the agent mmaps the file in place from the image
+volume. The only difference between the arms is the copy.
+
+Confounds and how each is killed:
+- Hot cache from `k3d image import`: the round's unpacked snapshot file is evicted
+  (fsync + `posix_fadvise(DONTNEED)` as root in a helper container that mounts the
+  node volume read-only; no sysfs write) and checked with `mincore`.
+- Carryover between rounds: a unique blob and image per round.
+- Throttling, swap, other containers on the host: arms interleaved; throttle count,
+  RAPL W, load1, swap used and swap-out recorded; swap-out > 256 MiB voids the round.
+- Snapshotter: read from the k3s-generated containerd config, recorded in `meta`.
+- Probe blindness: arm C must show N-fold duplication.
+
+n=3 rounds per arm, 8 pods per round. The round is the unit. 3 v 3 with complete
+separation gives an exact one-sided Mann-Whitney p = 1/C(6,3) = 0.05, the smallest
+this design can produce. Confidence = (fraction of non-void rounds meeting the
+prediction) x (1 - p). Spread = min-max of the round medians.
+Guardrails: cold pages left = 0; swap-out <= 256 MiB; Ready within 240 s; <= 18 min of
+rounds under the lock, 20 min hard kill; MemAvailable >= 1.5 x N x size or abort
+(rerun at MIB=512).
+
+| Outcome | Prior | Conclusion | Action |
+|---|---|---|---|
+| T meets memory and time; C shows duplication | 0.70 | SUPPORTED | `model-share` docs may cite [ledger:H28] for PSS and ready-time ratios |
+| T memory holds, T time > 0.5x C but <= 0.8x C, or rounds overlap | 0.10 | REFUTED (time part) | Claim memory sharing only; time stays unclaimed |
+| T PSS >= 0.5x size, or ΔCached about N x size, snapshotter overlayfs | 0.05 | REFUTED | Image-volume views do not share page cache on this stack; drop the "zero-copy" wording; file the data upstream |
+| Same, snapshotter `native`/fuse | 0.05 | REFUTED for this snapshotter | `model-share` already warns; add a doctor detect-and-suggest step (overlayfs, exact apply/revert); rerun |
+| C ΔCached < 0.8 x N x size or C PSS < 0.9x size | 0.05 | INCONCLUSIVE (probe blind) | Fix the probe (per-pod cgroup `memory.current`); no claim |
+| >= 2 rounds of an arm void, or round-median spread > 30% of median | 0.05 | INCONCLUSIVE | Rerun with MIB=512 or in a quieter window |
+
+Generalization (prediction, by family): page-cache sharing is a kernel and filesystem
+property, so the memory result should hold on every Intel family (Core, Core Ultra,
+Atom/N-series, Xeon) with the saving (N-1) x size, while weights stay CPU-resident.
+GPU or NPU offload copies into per-process device buffers, so `model-share --device
+gpu|npu` warns. The time ratio depends on copy cost: a larger win is predicted on
+low-RAM, single-channel or eMMC hosts (N100, 16 GB Core Ultra), a smaller one on
+8-channel DDR5 Xeons. On multi-socket Xeon the shared copy sits on one NUMA node; a
+per-socket follow-up is needed before claiming anything there. memcg charges the page
+cache to the first pod that faults it, so `memory.current` stays lopsided even when
+PSS is not; the first-loading pod needs the limit headroom.
 
 ### H6 run (i9-13900T, 2026-10-16)
 
