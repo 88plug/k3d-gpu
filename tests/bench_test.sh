@@ -191,6 +191,9 @@ check "agent_trace: unit tests against the in-process stub" \
 check "uncore-phase: probe unit tests (order, sign test, verdict rules, knob restore)" \
     env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/uncore-phase/test_probe.py"
 
+check "phase-steer: H20 probe unit tests" \
+    env -u IMAGE PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/phase-steer/test_probe.py"
+
 # ---- research/ models -------------------------------------------------------------
 
 check "research: agents-per-box ceiling selftest" \
