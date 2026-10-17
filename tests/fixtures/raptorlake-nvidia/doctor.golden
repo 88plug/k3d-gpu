@@ -14,6 +14,7 @@
 ==> Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...
   ok: Intel Raptor Lake-S (0xa780) bound to i915
   ok: i915/tgl_guc_* firmware present
+  info: Intel Raptor Lake-S (0xa780) at 0000:00:02.0: GuC version not checked: debugfs needs root (sudo k3d-gpu doctor)
   ok: card0 media engines: vcs0 (hevc sfc), vcs1 (hevc sfc), vecs0 (sfc)
   ok: up labels the node gpu.intel.com/xmx=false gpu.intel.com/media-vcs=2 gpu.intel.com/media-vecs=1
   ok: GPU sharing on: up to 8 pods per Intel GPU, balanced allocation (K3D_GPU_INTEL_SHARED=auto); pods share its memory and engines with no isolation

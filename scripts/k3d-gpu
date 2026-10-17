@@ -1192,6 +1192,7 @@ doctor_intel() {
             fi
         fi
     done
+    doctor_intel_firmware
     while read -r card; do
         [ -n "${card}" ] || continue
         engines=""
@@ -3689,9 +3690,17 @@ report_memory() {
 # GT that has it wins over one that does not. The device's debugfs dir is
 # dri/<PCI address> on newer kernels (dri/<minor> is then a symlink to it), else
 # dri/<minor>.
+uc_dir() {  # uc_dir <card minor> <PCI address>: the device's debugfs directory
+    if [ -d "${SYSROOT}/sys/kernel/debug/dri/$2" ]; then
+        echo "${SYSROOT}/sys/kernel/debug/dri/$2"
+    else
+        echo "${SYSROOT}/sys/kernel/debug/dri/$1"
+    fi
+}
+
 uc_info() {  # uc_info <card minor> <guc|huc> <PCI address>
-    local f path status version uc_st="" fw="" ver="" note="" dir="${SYSROOT}/sys/kernel/debug/dri/$1"
-    [ -d "${SYSROOT}/sys/kernel/debug/dri/$3" ] && dir="${SYSROOT}/sys/kernel/debug/dri/$3"
+    local f path status version uc_st="" fw="" ver="" note="" dir
+    dir=$(uc_dir "$1" "$3")
     for f in "${dir}"/gt*/uc/"$2"_info; do
         [ -r "${f}" ] || continue
         status=$(sed -n 's/^[[:space:]]*status: //p' "${f}" | head -n1)
@@ -3712,6 +3721,150 @@ uc_info() {  # uc_info <card minor> <guc|huc> <PCI address>
         printf '{"status":null,"note":%s}' \
             "$(json_str "${note:-debugfs not readable (run as root) or no $2}")"
     fi
+}
+
+# ---- firmware gatekeeper ------------------------------------------------------
+# Whether an Intel GPU's firmware lets an engine run on it, read from the driver's
+# own debugfs record (root only). The floor is the version the running driver
+# asks for: i915 prints "version: wanted W, found X" when X is older than W, xe
+# always prints "wanted release version W" and "found release version X"
+# (intel_uc_fw_dump in drivers/gpu/drm/i915/gt/uc/intel_uc_fw.c, xe_uc_fw_print in
+# drivers/gpu/drm/xe/xe_uc_fw.c). Both drivers still run an older minor release
+# and only log a notice, so the gate is stricter than the driver on purpose: an
+# engine is refused on a GPU whose GuC is older than W or not RUNNING (MISSING,
+# ERROR, LOAD FAIL, ...). xe, and i915 from Alder Lake-P and Raptor Lake-S on,
+# submit all GPU work through the GuC (uc_expand_default_options in
+# intel_uc.c), so that refusal covers every GPU engine: OVMS on the GPU and
+# llama.cpp on Vulkan alike. DISABLED and N/A mean the driver uses no GuC there.
+# The HuC only runs media decode/encode, so a failed HuC warns and refuses nothing.
+
+# ver_lt <a> <b>: dotted numeric versions, a older than b.
+ver_lt() {
+    local -a a b
+    local i
+    [[ "$1" =~ ^[0-9]+(\.[0-9]+)*$ && "$2" =~ ^[0-9]+(\.[0-9]+)*$ ]] || return 1
+    IFS=. read -r -a a <<< "$1"
+    IFS=. read -r -a b <<< "$2"
+    for i in 0 1 2 3; do
+        [ "$((10#${a[i]:-0}))" -lt "$((10#${b[i]:-0}))" ] && return 0
+        [ "$((10#${a[i]:-0}))" -gt "$((10#${b[i]:-0}))" ] && return 1
+    done
+    return 1
+}
+
+# uc_fields <guc_info|huc_info file>: "<status>|<selected file>|<wanted file>|<wanted version>|<found version>".
+# The wanted file is the selected one unless i915 fell back to another.
+uc_fields() {
+    awk 'NR == 1 { sub(/^[^:]*: */, ""); sel = $0; next }
+         /^[A-Za-z]+ firmware wanted: / { sub(/^[^:]*: */, ""); wfile = $0; next }
+         $1 == "status:" { sub(/^[[:space:]]*status: */, ""); st = $0; next }
+         $1 == "version:" { for (i = 2; i < NF; i++) { if ($i == "wanted") w = $(i + 1); if ($i == "found") f = $(i + 1) }; next }
+         $1 == "wanted" && $2 == "release" { w = $NF; next }
+         $1 == "found" && $2 == "release" { f = $NF; next }
+         END { sub(/,$/, "", w); printf "%s|%s|%s|%s|%s\n", st, sel, (wfile == "" ? sel : wfile), w, f }' "$1"
+}
+
+# gpu_gate <DRM card dir>: "<state>|<detail>|<fix>". state refuse (detail is the
+# reason), advise (a GuC fault on a GPU that does not submit through the GuC),
+# ok (detail says what runs), unused (no GuC in use) or unread.
+gpu_gate() {
+    local card=$1 bdf drv name f st sel wfile want found state=unread detail="" why="" fix=""
+    bdf=$(pci_addr "${card}/device") drv=$(bound_driver "${card}/device")
+    IFS='|' read -r name _ <<< "$(intel_gpu_platform "$(read1 "${card}/device/device")")"
+    for f in "$(uc_dir "${card##*card}" "${bdf}")"/gt*/uc/guc_info; do
+        [ -r "${f}" ] || continue
+        IFS='|' read -r st sel wfile want found <<< "$(uc_fields "${f}")"
+        case "${st}" in
+            "") ;;
+            N/A|DISABLED) [ "${state}" = ok ] || { state=unused detail="GuC not in use (status ${st})"; } ;;
+            RUNNING|PRELOADED)
+                if ver_lt "${found}" "${want}"; then
+                    why="GuC ${sel} ${found} is older than the ${want} ${drv} wants"
+                    fix="install linux-firmware with ${wfile} ${want} or newer, then reboot"
+                    break
+                fi
+                state=ok detail="GuC ${sel} ${found:-?} running${want:+ (${drv} wants ${want})}" ;;
+            MISSING)
+                why="GuC ${sel} status MISSING" fix="install linux-firmware with ${wfile}, then reboot"
+                break ;;
+            *)
+                why="GuC ${sel} status ${st}"
+                fix="install the current linux-firmware (${wfile}), then reboot; dmesg | grep -i guc shows the driver's reason"
+                break ;;
+        esac
+    done
+    [ -n "${why}" ] || { echo "${state}|${detail}|"; return 0; }
+    # i915 loads the GuC on Alder Lake-S only to authenticate the HuC and submits
+    # through execlists (uc_expand_default_options, intel_uc.c), so engines still run.
+    if [ "${drv}" = i915 ] && [ "${name}" = "Alder Lake-S" ]; then
+        echo "advise|${why} (i915 submits through execlists on Alder Lake-S, so engines are not refused)|${fix}"
+    else
+        echo "refuse|${why}|${fix}"
+    fi
+}
+
+# huc_gate <DRM card dir>: "<detail>|<fix>" when a HuC failed, nothing otherwise.
+huc_gate() {
+    local card=$1 bdf f st sel wfile fix
+    bdf=$(pci_addr "${card}/device")
+    for f in "$(uc_dir "${card##*card}" "${bdf}")"/gt*/uc/huc_info; do
+        [ -r "${f}" ] || continue
+        IFS='|' read -r st sel wfile _ _ <<< "$(uc_fields "${f}")"
+        case "${st}" in
+            ""|N/A|DISABLED|RUNNING|PRELOADED) continue ;;
+            MISSING) fix="install linux-firmware with ${wfile}, then reboot" ;;
+            *) fix="install the current linux-firmware (${wfile}), then reboot" ;;
+        esac
+        echo "HuC ${sel} status ${st} (media decode/encode only; inference is not affected)|${fix}"
+        return 0
+    done
+}
+
+# Intel DRM cards bound to xe or i915, one dir per line.
+intel_bound_cards() {
+    local card
+    for card in "${SYSROOT}"/sys/class/drm/card[0-9]*; do
+        [[ "${card##*/}" =~ ^card[0-9]+$ ]] || continue
+        [ "$(read1 "${card}/device/vendor")" = 0x8086 ] || continue
+        case "$(bound_driver "${card}/device")" in xe|i915) echo "${card}" ;; esac
+    done
+    return 0
+}
+
+# "Intel <name> (<id>) at <PCI address>" for a DRM card dir.
+intel_card_name() {
+    local id name
+    id=$(read1 "$1/device/device")
+    IFS='|' read -r name _ <<< "$(intel_gpu_platform "${id}")"
+    echo "Intel ${name:-GPU} (${id:-?}) at $(pci_addr "$1/device")"
+}
+
+# First refused Intel GPU: "<PCI address>|<reason>|<fix>", nothing when none is.
+intel_gpu_refusal() {
+    local card st detail fix
+    while read -r card; do
+        [ -n "${card}" ] || continue
+        IFS='|' read -r st detail fix <<< "$(gpu_gate "${card}")"
+        if [ "${st}" = refuse ]; then echo "$(pci_addr "${card}/device")|${detail}|${fix}"; return 0; fi
+    done <<< "$(intel_bound_cards)"
+}
+
+doctor_intel_firmware() {
+    local card who st detail fix
+    while read -r card; do
+        [ -n "${card}" ] || continue
+        who=$(intel_card_name "${card}")
+        IFS='|' read -r st detail fix <<< "$(gpu_gate "${card}")"
+        case "${st}" in
+            refuse) echo "  ${RED}fail${RST}: ${who}: ${detail}; GPU engines refused; fix: ${fix}"; FAIL=1 ;;
+            advise) echo "  ${YLW}warn${RST}: ${who}: ${detail}; fix: ${fix}" ;;
+            ok)     echo "  ok: ${who}: ${detail}" ;;
+            unused) echo "  info: ${who}: ${detail}" ;;
+            *)      echo "  info: ${who}: GuC version not checked: debugfs needs root (sudo k3d-gpu doctor)" ;;
+        esac
+        IFS='|' read -r detail fix <<< "$(huc_gate "${card}")"
+        [ -z "${detail}" ] || echo "  ${YLW}warn${RST}: ${who}: ${detail}; fix: ${fix}"
+    done <<< "$(intel_bound_cards)"
 }
 
 # "RUNNING" from a uc_info object, or "unknown (needs root)".
@@ -4457,6 +4610,10 @@ AGENT_BACKEND="${K3D_GPU_AGENT_BACKEND:-ovms}"
 AGENT_BACKEND="${AGENT_BACKEND,,}"
 AGENT_HPU=""    # set by agent_select when the device is a Gaudi
 AGENT_SEL=""    # "<device> <resource>", set by agent_select
+# llama.cpp server on Vulkan, the engine plan() may pick for a GPU cell other
+# than OVMS: ghcr.io/ggml-org/llama.cpp:server-vulkan-v0.5.0, the multi-arch
+# index built from release v0.5.0 (commit 7fe450e19305b828c199d602c23a8337aaa1f03b).
+LLAMA_VULKAN_IMAGE="${K3D_GPU_LLAMA_VULKAN_IMAGE:-ghcr.io/ggml-org/llama.cpp@sha256:be586c648cb79d2cd75d0c38a6541e1f16c47a7c6621d3e711470a467fc38744}"
 AGENT_STORAGE="${K3D_GPU_AGENT_STORAGE:-20Gi}"
 AGENT_TIMEOUT="${K3D_GPU_AGENT_TIMEOUT:-1800}" # seconds: first run downloads the model
 # openvino/model_server:2026.4.1-gpu (CPU, GPU and NPU plugins, compute-runtime inside).
@@ -4559,9 +4716,12 @@ cpu_list_count() {
 # auto never picks the NPU, as OVMS's own detection does not: LLMs on the NPU run
 # the stateful pipeline only (no continuous batching). The vLLM backends run on an
 # Intel GPU or a Gaudi only, so for them auto means a Gaudi, else the GPU.
+# A GPU the firmware gatekeeper refuses (gpu_gate) is never picked: auto falls
+# back to OVMS on the CPU and says why; a forced GPU, or a vLLM backend that needs
+# the GPU, stops with the one-line fix.
 AGENT_XMX_LABEL="gpu.intel.com/xmx=true"
 agent_device() {
-    local want=${K3D_GPU_AGENT_DEVICE:-auto} res gaudi_ok=1
+    local want=${K3D_GPU_AGENT_DEVICE:-auto} res gaudi_ok=1 refused bdf why fix need="K3D_GPU_AGENT_DEVICE=GPU"
     if [ "${AGENT_BACKEND}" = llm-scaler ] || { [ "${AGENT_BACKEND}" = ovms ] && [ -n "${AGENT_BACKEND_SET}" ]; }; then
         gaudi_ok=""
     fi
@@ -4569,17 +4729,32 @@ agent_device() {
         echo "HPU habana.ai/gaudi"
         return 0
     fi
-    [ "${AGENT_APP}" != vllm ] || [ "${want^^}" != AUTO ] || want=GPU
+    if [ "${AGENT_APP}" = vllm ] && [ "${want^^}" = AUTO ]; then
+        want=GPU need="K3D_GPU_AGENT_BACKEND=${AGENT_BACKEND} needs an Intel GPU"
+    fi
+    # The device plugin may hand the pod any Intel GPU, so one refused GPU rules the GPU out.
+    refused=$(intel_gpu_refusal)
     case "${want^^}" in
         AUTO)
             if [ -n "$(labelled_nodes "${AGENT_XMX_LABEL}")" ]; then
                 for res in gpu.intel.com/xe gpu.intel.com/i915; do
-                    if [ "$(resource_total "${res}")" -gt 0 ]; then echo "GPU ${res}"; return 0; fi
+                    [ "$(resource_total "${res}")" -gt 0 ] || continue
+                    if [ -n "${refused}" ]; then
+                        IFS='|' read -r bdf why fix <<< "${refused}"
+                        warn "agent: Intel GPU ${bdf} refused: ${why}; fix: ${fix}; using OVMS on the CPU"
+                        break
+                    fi
+                    echo "GPU ${res}"
+                    return 0
                 done
             fi
             echo "CPU -"
             ;;
         GPU)
+            if [ -n "${refused}" ]; then
+                IFS='|' read -r bdf why fix <<< "${refused}"
+                err "${need} but Intel GPU ${bdf} is refused: ${why}; fix: ${fix}"
+            fi
             for res in gpu.intel.com/xe gpu.intel.com/i915; do
                 if [ "$(resource_total "${res}")" -gt 0 ]; then echo "GPU ${res}"; return 0; fi
             done
@@ -5671,10 +5846,17 @@ console_dir() {
 }
 
 # Lookups that live in this script's tables, keyed for console/facts.py: XMX and
-# platform per bound Intel GPU id, generation per NPU id, CPU family:model and the
-# NUMA node count. Needs resolve_vendors.
+# platform per bound Intel GPU id, generation per NPU id, CPU family:model, the
+# NUMA node count, and the firmware gatekeeper's refusals per Intel GPU PCI
+# address (reason and one-line fix). Needs resolve_vendors.
 facts_lookups() {
-    local e id name gens="" xmx="" x gen fm
+    local e id name gens="" xmx="" x gen fm card st why fix gate=""
+    while read -r card; do
+        [ -n "${card}" ] || continue
+        IFS='|' read -r st why fix <<< "$(gpu_gate "${card}")"
+        [ "${st}" = refuse ] || continue
+        gate+="${gate:+,}$(json_str "$(pci_addr "${card}/device")"):{\"reason\":$(json_str "${why}"),\"fix\":$(json_str "${fix}")}"
+    done <<< "$(intel_bound_cards)"
     for e in ${INTEL_DRIVERS[@]+"${INTEL_DRIVERS[@]}"}; do
         id=${e#* }
         IFS='|' read -r name _ <<< "$(intel_gpu_platform "${id}")"
@@ -5686,25 +5868,26 @@ facts_lookups() {
         gens+="${gens:+,}$(json_str "${id}"):$(json_str_or_null "${gen}")"
     done
     fm=$(cpu_family_model)
-    printf '{"intel_gpu":{%s},"npu_generation":{%s},"cpu_family_model":%s,"numa_nodes":%s,"cpu_vendor":%s}' \
+    printf '{"intel_gpu":{%s},"npu_generation":{%s},"cpu_family_model":%s,"numa_nodes":%s,"cpu_vendor":%s,"gpu_gate":{%s}}' \
         "${xmx}" "${gens}" "$(json_str_or_null "${fm/ /:}")" "$(json_num "$(numa_count)")" \
-        "$(json_str_or_null "$(cpuinfo_field vendor_id)")"
+        "$(json_str_or_null "$(cpuinfo_field vendor_id)")" "${gate}"
 }
 
 # The raw facts document console/facts.py normalizes. Doctor and doctor --perf
 # run as their own commands would, colours off, and their transcripts are kept
 # whole; facts.py turns them into findings.
 facts_raw() {
-    local body labels doctor_out perf_out doctor_rc=0 perf_rc=0 ovms_image
+    local body labels doctor_out perf_out doctor_rc=0 perf_rc=0 ovms_pin=${AGENT_OVMS_IMAGE}
+    # K3D_GPU_AGENT_IMAGE overrides the OVMS pin only when the agent backend is OVMS.
+    [ "${AGENT_APP}" != ovms ] || ovms_pin=${AGENT_IMAGE}
     body=$(report_body 3>/dev/null)
     labels=$({ if is_active hybrid; then echo "${HYBRID_LABEL}"; fi
                if is_active numa; then numa_labels; fi
                node_feature_labels; } | paste -sd' ')
     doctor_out=$(set -e; RED="" GRN="" YLW="" RST=""; doctor 2>&1) || doctor_rc=$?
     perf_out=$(set -e; RED="" GRN="" YLW="" RST=""; doctor_perf 2>&1) || perf_rc=$?
-    ovms_image=$(AGENT_BACKEND=ovms AGENT_HPU=""; agent_config; echo "${AGENT_IMAGE}")
-    printf '{"k3d_gpu_version":%s,"pins":{"ovms":%s},"report":{%s},"labels":%s,"lookups":%s,"doctor":{"exit":%s,"text":%s},"perf":{"exit":%s,"text":%s}}\n' \
-        "$(json_str "${VERSION}")" "$(json_str "${ovms_image}")" "${body}" "$(json_words "${labels}")" \
+    printf '{"k3d_gpu_version":%s,"pins":{"ovms":%s,"llama.cpp":%s},"report":{%s},"labels":%s,"lookups":%s,"doctor":{"exit":%s,"text":%s},"perf":{"exit":%s,"text":%s}}\n' \
+        "$(json_str "${VERSION}")" "$(json_str "${ovms_pin}")" "$(json_str "${LLAMA_VULKAN_IMAGE}")" "${body}" "$(json_words "${labels}")" \
         "$(facts_lookups)" "${doctor_rc}" "$(json_str "${doctor_out}")" "${perf_rc}" "$(json_str "${perf_out}")"
 }
 

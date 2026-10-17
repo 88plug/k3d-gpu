@@ -8,6 +8,7 @@
 ==> Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...
   ok: Intel Alder Lake-N (0x46d1) bound to i915
   ok: i915/adlp_guc_* firmware present
+  info: Intel Alder Lake-N (0x46d1) at 0000:00:02.0: GuC version not checked: debugfs needs root (sudo k3d-gpu doctor)
   ok: up labels the node gpu.intel.com/xmx=false
   ok: GPU sharing on: up to 8 pods per Intel GPU, balanced allocation (K3D_GPU_INTEL_SHARED=auto); pods share its memory and engines with no isolation
 ==> Intel CPU built-in accelerators...

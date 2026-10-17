@@ -1,0 +1,4 @@
+nvidia nvidia.com/gpu
+intel gpu.intel.com/i915
+hybrid k3d-gpu.io/hybrid-cpu=true
+exit=0

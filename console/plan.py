@@ -14,6 +14,13 @@ cell is eligible when it matches a usable target of this host and no override
 excludes it. Among eligible cells the highest median decode tok/s wins; ties go
 to the smaller cell id.
 
+A target the facts mark not usable carries a one-line fix (the launcher's
+firmware gatekeeper refuses a GPU with a stale or failed GuC; a Gaudi without its
+driver has no engine). Its cells are never eligible, so the pick falls back to
+the next green cell on a usable target: OVMS on the CPU, or llama.cpp on Vulkan
+on another GPU. Every such fix is listed. With no pick and a fix to apply, the
+decision is "fix", not an engine.
+
   plan.py --mode text|explain|json --matrix FILE [--engine E] [--device D]
           [--model M] [--bind ADDR] [--port N] < facts.json
 
@@ -34,6 +41,7 @@ import schema_check  # noqa: E402
 
 PLAN_SCHEMA = "k3d-gpu.plan/v1"
 UNMEASURED = "unmeasured, run `k3d-gpu prove` on this box"
+NO_GREEN_LEFT = "no green cell left on a usable target: apply a fix above, then plan again"
 DEFAULT_BIND = "127.0.0.1"
 ENGINE_PORTS = {"ovms": 8000, "vllm": 8000, "llama.cpp": 8080}  # each server's own default port
 DEVICES = ("cpu", "gpu", "npu", "hpu")
@@ -142,7 +150,7 @@ def metric_text(row):
 
 def evidence_text(row):
     ev = row["evidence"]
-    parts = [row["source"]]
+    parts = [] if row["source"] == "report" and ev["report_id"] else [row["source"]]
     if ev["ledger"]:
         parts.append(ev["ledger"])
     if ev["report_id"]:
@@ -159,12 +167,18 @@ def plan(facts, matrix, overrides=None):
     for t in targets:
         state = "usable" if t["usable"] else "not usable: " + t["reason"]
         explain.append("  %s: %s; %s" % (t["id"], factsmod.describe(t), state))
+    fixes = [{"target": t["id"], "reason": t["reason"], "fix": t["fix"]}
+             for t in targets if not t["usable"] and t["fix"]]
+    fix_lines = ["%s refused: %s; fix: %s" % (f["target"], f["reason"], f["fix"]) for f in fixes]
 
+    refused = {f["target"] for f in fixes}
     considered, eligible, shown = [], [], []
+    green_refused = False  # a green cell fits a refused target: its fix would unlock it
     for row in sorted(matrix["rows"], key=lambda r: r["id"]):
         status, reasons = cell_status(row, pins)
         fits = [t for t in targets if matches(row["match"], t) and placement_fits(row["placement"], t)]
         usable = [t for t in fits if t["usable"]]
+        green_refused = green_refused or (status == "green" and any(t["id"] in refused for t in fits))
         tgt = (usable or fits or [None])[0]
         excluded = None
         if tgt is None:
@@ -198,10 +212,16 @@ def plan(facts, matrix, overrides=None):
     bind = ov.get("bind", DEFAULT_BIND)
     auth = "loopback-key" if is_loopback(bind) else "oidc"
     doc = {"schema": PLAN_SCHEMA, "fingerprint": facts["fingerprint"], "overrides": ov,
-           "considered": considered, "bind": bind, "auth": auth}
+           "considered": considered, "bind": bind, "auth": auth, "fixes": fixes}
     if not eligible:
-        summary = [UNMEASURED, "bind %s, auth %s (%s)" % (bind, auth, AUTH_TEXT[auth])]
-        doc.update(decision="unmeasured", message=UNMEASURED, cell=None, engine=None, model=None,
+        if fixes:
+            summary = fix_lines + [NO_GREEN_LEFT if green_refused else UNMEASURED]
+            decision, message = "fix", fix_lines[0]
+        else:
+            summary = [UNMEASURED]
+            decision, message = "unmeasured", UNMEASURED
+        summary.append("bind %s, auth %s (%s)" % (bind, auth, AUTH_TEXT[auth]))
+        doc.update(decision=decision, message=message, cell=None, engine=None, model=None,
                    placement=None, port=ov.get("port"))
     else:
         eligible.sort(key=lambda rt: (-rt[0]["metrics"]["decode_tok_s"]["median"], rt[0]["id"]))
@@ -215,7 +235,7 @@ def plan(facts, matrix, overrides=None):
             "model: %s%s, %s" % (model["name"], "@" + model["revision"] if model["revision"] else "", model["precision"]),
             "placement: " + placement_text(placement),
             "endpoint: %s:%d, auth %s (%s)" % (bind, port, auth, AUTH_TEXT[auth]),
-        ]
+        ] + fix_lines
         doc.update(decision="green", message=None, cell=row["id"], engine=dict(row["engine"]),
                    model=dict(model), placement=placement, port=port)
     doc["summary"] = summary

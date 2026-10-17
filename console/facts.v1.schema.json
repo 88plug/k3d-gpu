@@ -216,7 +216,7 @@
       "type": "object",
       "description": "Something plan() can place an engine on. Every target has every key; the ones that do not apply are null.",
       "additionalProperties": false,
-      "required": ["id", "kind", "vendor", "device_id", "pci", "platform", "driver", "resource", "xmx", "generation", "usable", "reason", "cpu"],
+      "required": ["id", "kind", "vendor", "device_id", "pci", "platform", "driver", "resource", "xmx", "generation", "usable", "reason", "fix", "cpu"],
       "properties": {
         "id": {"type": "string", "pattern": "^(cpu|hpu|gpu:nvidia|(gpu|npu):[0-9a-fA-F:.]+)$"},
         "kind": {"enum": ["cpu", "gpu", "npu", "hpu"]},
@@ -230,6 +230,7 @@
         "generation": {"$ref": "#/$defs/str_or_null", "description": "Intel NPU firmware generation (37xx, 40xx, ...)"},
         "usable": {"type": "boolean"},
         "reason": {"$ref": "#/$defs/str_or_null", "description": "why the target is not usable; null when it is"},
+        "fix": {"$ref": "#/$defs/str_or_null", "description": "one-line fix that makes the target usable; null when it is usable"},
         "cpu": {
           "anyOf": [
             {"type": "null"},
@@ -426,11 +427,11 @@
       "type": "object",
       "description": "k3d-gpu.plan/v1: what plan(facts, matrix, overrides) picked and every step of why. Renderers print summary or explain; they compute nothing.",
       "additionalProperties": false,
-      "required": ["schema", "fingerprint", "decision", "message", "cell", "engine", "model", "placement", "bind", "port", "auth", "overrides", "considered", "summary", "explain"],
+      "required": ["schema", "fingerprint", "decision", "message", "cell", "engine", "model", "placement", "bind", "port", "auth", "overrides", "considered", "fixes", "summary", "explain"],
       "properties": {
         "schema": {"const": "k3d-gpu.plan/v1"},
         "fingerprint": {"$ref": "#/$defs/fingerprint"},
-        "decision": {"enum": ["green", "unmeasured"]},
+        "decision": {"enum": ["green", "fix", "unmeasured"], "description": "green: an engine was picked; fix: nothing picked and a target needs the fix in fixes; unmeasured: no green cell"},
         "message": {"$ref": "#/$defs/str_or_null"},
         "cell": {"$ref": "#/$defs/str_or_null"},
         "engine": {
@@ -501,6 +502,16 @@
               "eligible": {"type": "boolean"},
               "excluded": {"$ref": "#/$defs/str_or_null"}
             }
+          }
+        },
+        "fixes": {
+          "type": "array",
+          "description": "every target the facts mark not usable, with its one-line fix",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["target", "reason", "fix"],
+            "properties": {"target": {"type": "string"}, "reason": {"type": "string"}, "fix": {"type": "string"}}
           }
         },
         "summary": {"$ref": "#/$defs/strings"},

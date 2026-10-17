@@ -9,6 +9,10 @@
 #     ${CONSOLE_JSONSCHEMA_PYTHON:-python3})
 #   - `plan` against a matrix whose cells are green (synthetic report ids) picks,
 #     places and renders as the goldens in tests/console/*.golden say
+#   - S3, the firmware gatekeeper: on raptorlake-stale-guc (GuC older than i915
+#     wants) the iGPU is refused with a one-line fix and plan falls back to
+#     llama.cpp on Vulkan or OVMS on the CPU (tests/console/matrix-fallback.json,
+#     synthetic cells); gaudi3-no-driver plans a fix, not an engine
 #   - `facts` writes the state file; detect --json and doctor --json print facts/v1
 #   - bad options and bad input fail with a message
 #
@@ -52,23 +56,42 @@ plan_files=("${REPO}"/tests/fixtures/*/plan.json)
     || fail "expected facts.json and plan.json for every fixture (found ${#facts_files[@]} and ${#plan_files[@]})"
 validate "" "${facts_files[@]}" && ok "facts goldens validate as facts/v1" || fail "facts goldens validate as facts/v1"
 validate "#/\$defs/plan" "${plan_files[@]}" && ok "plan goldens validate as plan/v1" || fail "plan goldens validate as plan/v1"
-validate "#/\$defs/matrix" "${CONSOLE}/matrix.v1.json" "${DIR}/matrix-green.json" \
+validate "#/\$defs/matrix" "${CONSOLE}/matrix.v1.json" "${DIR}/matrix-green.json" "${DIR}/matrix-fallback.json" \
     && ok "matrices validate as matrix/v1" || fail "matrices validate as matrix/v1"
 
-# S2: the baked matrix has no green cell on any fixture.
-if grep -L '"decision": "unmeasured"' "${plan_files[@]}" | grep -q .; then
-    fail "a fixture plan.json is not unmeasured with the baked matrix"
+# S2: the baked matrix has no green cell on any fixture. S3: the fixtures with a
+# refused target (and only they) plan a fix instead.
+FIX_FIXTURES="gaudi3-no-driver raptorlake-stale-guc"
+bad=""
+for f in "${plan_files[@]}"; do
+    name=$(basename "$(dirname "${f}")") want=unmeasured
+    [[ " ${FIX_FIXTURES} " == *" ${name} "* ]] && want=fix
+    grep -q "\"decision\": \"${want}\"" "${f}" || bad+=" ${name}"
+done
+if [ -z "${bad}" ]; then
+    ok "baked matrix: ${FIX_FIXTURES// / and } plan a fix, every other fixture plans unmeasured"
 else
-    ok "every fixture plans unmeasured with the baked matrix"
+    fail "baked matrix: wrong decision for${bad}"
 fi
 if grep -L 'unmeasured, run `k3d-gpu prove` on this box' "${REPO}"/tests/fixtures/*/plan-explain.golden | grep -q .; then
     fail "a fixture plan-explain.golden lacks the unmeasured line"
 else
     ok "every fixture's --explain says unmeasured, run prove"
 fi
+for name in ${FIX_FIXTURES}; do
+    if python3 - "${REPO}/tests/fixtures/${name}/plan.json" <<'EOF'
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+assert d["engine"] is None and d["cell"] is None and d["placement"] is None, d
+assert d["fixes"] and all(f["fix"] for f in d["fixes"]), d["fixes"]
+assert d["message"] == d["summary"][0] and "; fix: " in d["message"] and "\n" not in d["message"], d["message"]
+EOF
+    then ok "${name}: plan returns a one-line fix, not an engine"
+    else fail "${name}: plan returns a one-line fix, not an engine"; fi
+done
 
 py=${CONSOLE_JSONSCHEMA_PYTHON:-python3}
-"${py}" "${DIR}/crosscheck.py" "${facts_files[@]}" "${plan_files[@]}" "${CONSOLE}/matrix.v1.json" "${DIR}/matrix-green.json"
+"${py}" "${DIR}/crosscheck.py" "${facts_files[@]}" "${plan_files[@]}" "${CONSOLE}/matrix.v1.json" "${DIR}/matrix-green.json" "${DIR}/matrix-fallback.json"
 case $? in
     0) ok "schema_check agrees with jsonschema" ;;
     77) echo "skip schema_check vs jsonschema (jsonschema not importable by ${py})" ;;
@@ -76,10 +99,10 @@ case $? in
 esac
 
 # Green-path goldens: plan reads a facts file, so nothing on this host is read.
-golden() {  # golden <name> <plan args...>
+golden() {  # golden <name> <plan args...>; GOLDEN_FIXTURE and GOLDEN_MATRIX pick the inputs
     local name=$1 out rc; shift
-    out=$("${K3D_GPU}" plan --facts "${REPO}/tests/fixtures/raptorlake-nvidia/facts.json" \
-        --matrix "${DIR}/matrix-green.json" "$@" 2>&1)
+    out=$("${K3D_GPU}" plan --facts "${REPO}/tests/fixtures/${GOLDEN_FIXTURE:-raptorlake-nvidia}/facts.json" \
+        --matrix "${GOLDEN_MATRIX:-${DIR}/matrix-green.json}" "$@" 2>&1)
     rc=$?
     out+=$'\n'"exit=${rc}"
     if [ "${UPDATE}" -eq 1 ]; then
@@ -95,6 +118,14 @@ golden green-explain --explain
 golden green-gpu-shared --device gpu --bind 0.0.0.0 --port 9000
 golden green-json --json
 golden green-engine-excluded --explain --engine llama.cpp
+# S3 fallback: the healthy host picks the iGPU; the stale-GuC host refuses it,
+# names the fix and falls back to llama.cpp-Vulkan on the NVIDIA GPU, or to OVMS
+# on the P-cores when the engine is OVMS. A forced refused device gets the fix.
+GOLDEN_MATRIX="${DIR}/matrix-fallback.json" golden fallback-healthy
+GOLDEN_MATRIX="${DIR}/matrix-fallback.json" GOLDEN_FIXTURE=raptorlake-stale-guc golden fallback-vulkan --explain
+GOLDEN_MATRIX="${DIR}/matrix-fallback.json" GOLDEN_FIXTURE=raptorlake-stale-guc golden fallback-cpu --engine ovms
+GOLDEN_MATRIX="${DIR}/matrix-fallback.json" GOLDEN_FIXTURE=raptorlake-stale-guc golden fallback-forced-gpu --engine ovms --device gpu
+GOLDEN_MATRIX="${DIR}/matrix-fallback.json" GOLDEN_FIXTURE=raptorlake-stale-guc golden fallback-json --json
 [ "${UPDATE}" -eq 1 ] && exit 0
 
 # --json output of the green plan is plan/v1.
@@ -122,6 +153,18 @@ if cmp -s "${WORK}/a.json" "${WORK}/state/k3d-gpu/facts.json" && cmp -s "${WORK}
     ok "facts --json, detect --json, doctor --json and the state file are the same bytes"
 else
     fail "facts --json, detect --json, doctor --json and the state file differ"
+fi
+# The OVMS pin is the OVMS image whatever agent backend is set; K3D_GPU_AGENT_IMAGE
+# overrides it only for the OVMS backend.
+pins() { python3 -c 'import json,sys; p=json.load(sys.stdin)["release"]["pins"]; print(p["ovms"], p["llama.cpp"])'; }
+ovms_pin=$(run facts --json 2>/dev/null | pins)
+vllm_pin=$(K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_AGENT_IMAGE=example/vllm@sha256:0 run facts --json 2>/dev/null | pins)
+over_pin=$(K3D_GPU_AGENT_IMAGE=example/ovms@sha256:1 run facts --json 2>/dev/null | pins)
+if [[ "${ovms_pin}" == "openvino/model_server@sha256:"*" ghcr.io/ggml-org/llama.cpp@sha256:"* ]] \
+   && [ "${vllm_pin}" = "${ovms_pin}" ] && [ "${over_pin}" = "example/ovms@sha256:1 ${ovms_pin#* }" ]; then
+    ok "facts pins: OVMS and llama.cpp digests; a vLLM backend leaves the OVMS pin alone"
+else
+    fail "facts pins (ovms: ${ovms_pin}; vllm: ${vllm_pin}; override: ${over_pin})"
 fi
 
 # The packaged layout (/usr/bin/k3d-gpu + /usr/share/k3d-gpu/console/<the files

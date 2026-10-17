@@ -100,9 +100,12 @@ Include relevant details:
 - `tests/console_test.sh` covers `console/` (facts/v1, the matrix and `plan()`):
   unit and property tests, schema validation of every golden, a cross-check of the
   stdlib schema validator against `jsonschema`, and `plan` goldens for green cells
-  in `tests/console/` (`tests/console_test.sh --update` rewrites those).
+  and for the firmware gatekeeper's fallback (`raptorlake-stale-guc` against the
+  synthetic `tests/console/matrix-fallback.json`) in `tests/console/`
+  (`tests/console_test.sh --update` rewrites those).
 - Have hardware the matrix lacks? Capture it (reads ids, driver bindings, device
-  node names, CPU flags, kernel release and firmware file names only):
+  node names, CPU flags, kernel release and firmware file names; as root also the
+  GuC/HuC firmware records from debugfs):
   ```bash
   tests/fixtures/capture.sh tests/fixtures/<platform>/sysroot
   ```

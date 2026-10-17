@@ -1,0 +1,5 @@
+HuC firmware: i915/tgl_huc.bin
+	status: RUNNING
+	version: found 7.9.3
+	uCode: 589504 bytes
+	RSA: 256 bytes

@@ -766,7 +766,7 @@ is deleted.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `K3D_GPU_AGENT_DEVICE` | `auto` | `auto`: a Gaudi, else the GPU only on an XMX node, else CPU. `CPU`, `GPU`, `NPU` or `HPU` (any case) to force one; forcing a device the cluster does not advertise fails |
+| `K3D_GPU_AGENT_DEVICE` | `auto` | `auto`: a Gaudi, else the GPU only on an XMX node, else CPU. `CPU`, `GPU`, `NPU` or `HPU` (any case) to force one; forcing a device the cluster does not advertise, or an Intel GPU the firmware gatekeeper refuses, fails |
 | `K3D_GPU_AGENT_MODEL` | `OpenVINO/Qwen3-4B-int4-ov` | Hugging Face model in OpenVINO IR format |
 | `K3D_GPU_AGENT_MODEL_NAME` | last part of the model id | name clients send as `model` |
 | `K3D_GPU_AGENT_TOOL_PARSER` / `_REASONING_PARSER` | `hermes3` / `qwen3` for the default model, unset otherwise | unset lets OVMS detect them from the chat template; empty turns one off |
@@ -1013,6 +1013,29 @@ the same as `k3d-gpu.plan/v1`. `--engine`, `--device`, `--model`, `--bind` and
 `--port` override; a non-loopback `--bind` turns auth to `oidc`. `--facts FILE`
 plans from a saved document instead of this host. Both need `python3` (standard
 library only).
+
+**Firmware gatekeeper.** Run as root, `doctor` reads each Intel GPU's GuC record
+from the i915/xe debugfs and compares it with the version the running driver
+asks for. A GuC older than that, or one that is not `RUNNING` (`MISSING`,
+`ERROR`, `LOAD FAIL`, ...), refuses every engine on that GPU with one line:
+
+```
+fail: Intel Raptor Lake-S (0xa780) at 0000:00:02.0: GuC i915/tgl_guc_70.1.1.bin 70.1.1 is older than the 70.5.1 i915 wants; GPU engines refused; fix: install linux-firmware with i915/tgl_guc_70.bin 70.5.1 or newer, then reboot
+```
+
+Both drivers would still run an older minor release; the gate is stricter on
+purpose. xe, and i915 from Alder Lake-P and Raptor Lake-S on, submit all GPU
+work through the GuC, so the refusal covers OVMS on the GPU and llama.cpp on
+Vulkan alike. On Alder Lake-S, i915 loads the GuC only to authenticate the HuC
+and submits through execlists, so a GuC fault there warns instead. A failed HuC
+only warns: it runs media decode and encode, not inference. Without root the GuC is reported as not checked. The refused GPU's
+facts/v1 target reads `usable: false` with the `reason` and `fix`; `plan` then
+falls back to the next green cell on a usable target (OVMS on the CPU, or
+llama.cpp on Vulkan, pinned as `ghcr.io/ggml-org/llama.cpp:server-vulkan-v0.5.0`
+by digest) and lists the fix. With nothing left to pick the decision is `fix`,
+not an engine; a Gaudi without its driver plans the same way. `agent up` follows
+the same verdict: `auto` uses OVMS on the CPU and says why, and
+`K3D_GPU_AGENT_DEVICE=GPU` stops with the fix.
 
 ### Measurement harness (`bench/`)
 

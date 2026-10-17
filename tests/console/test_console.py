@@ -7,8 +7,10 @@ in docs/console-design.md (L2, L3), not from plan.py:
   - it picks a cell iff some green cell fits a usable target and no override
     excludes it, and then the one with the highest median decode tok/s (ties:
     smallest id);
-  - with no such cell it says "unmeasured, run `k3d-gpu prove` on this box"
-    and names no engine, model or placement;
+  - with no such cell it names no engine, model or placement, and says "fix"
+    with the one-line fix of every refused target when there is one, else
+    "unmeasured, run `k3d-gpu prove` on this box";
+  - every target the facts mark not usable is listed with its fix, picked or not;
   - it never picks an amber or grey cell;
   - it is pure: same output twice, inputs unchanged, row order irrelevant;
   - its output validates against the plan/v1 schema.
@@ -56,7 +58,8 @@ def gen_targets(rng):
             id="gpu:0000:0%d:00.0" % i, kind="gpu", vendor="intel", pci="0000:0%d:00.0" % i,
             device_id=rng.choice(["0xa780", "0xe20b", "0x7d51"]), platform="p", driver=drv,
             resource="gpu.intel.com/xe" if usable else None, xmx=rng.choice([True, False, None]),
-            usable=usable, reason=None if usable else "no xe or i915 driver bound (driver: none)"))
+            usable=usable, reason=None if usable else "GuC x/y_guc_70.bin 70.1.1 is older than the 70.5.1 xe wants",
+            fix=None if usable else "install linux-firmware with x/y_guc_70.bin 70.5.1 or newer, then reboot"))
     if rng.random() < 0.3:
         ts.append(factsmod.target(id="npu:0000:00:0b.0", kind="npu", vendor="intel", pci="0000:00:0b.0",
                                   device_id="0x7d1d", driver="intel_vpu", resource="npu.intel.com/accel"))
@@ -64,7 +67,8 @@ def gen_targets(rng):
         ok = rng.random() < 0.5
         ts.append(factsmod.target(id="hpu", kind="hpu", vendor="habana", resource="habana.ai/gaudi",
                                   driver="habanalabs" if ok else None, usable=ok,
-                                  reason=None if ok else "habanalabs driver not loaded"))
+                                  reason=None if ok else "habanalabs driver not loaded",
+                                  fix=None if ok else "sudo modprobe habanalabs"))
     return ts
 
 
@@ -187,12 +191,26 @@ class PlanProperties(unittest.TestCase):
             bind = ov.get("bind", "127.0.0.1")
             loop = bind in ("127.0.0.1", "::1", "localhost", "127.0.0.2")
             self.assertEqual(got["auth"], "loopback-key" if loop else "oidc", ctx)
+            refused = [t for t in facts["targets"] if not t["usable"]]
+            self.assertEqual([f["target"] for f in got["fixes"]], [t["id"] for t in refused], ctx)
+            self.assertEqual([f["fix"] for f in got["fixes"]], [t["fix"] for t in refused], ctx)
+            for t in refused:
+                line = "%s refused: %s; fix: %s" % (t["id"], t["reason"], t["fix"])
+                self.assertIn(line, got["summary"], ctx)
             if want is None:
-                self.assertEqual(got["decision"], "unmeasured", ctx)
-                self.assertEqual(got["message"], UNMEASURED, ctx)
-                self.assertEqual(got["summary"][0], UNMEASURED, ctx)
                 for k in ("cell", "engine", "model", "placement"):
                     self.assertIsNone(got[k], ctx)
+                if refused:
+                    self.assertEqual(got["decision"], "fix", ctx)
+                    self.assertEqual(got["message"], got["summary"][0], ctx)
+                    self.assertTrue(got["message"].startswith(refused[0]["id"] + " refused: "), ctx)
+                    blocked = any(oracle_green(r, facts["release"]["pins"]) and oracle_fits(r, t)
+                                  for r in matrix["rows"] for t in refused)
+                    self.assertEqual(got["summary"][-2], planmod.NO_GREEN_LEFT if blocked else UNMEASURED, ctx)
+                else:
+                    self.assertEqual(got["decision"], "unmeasured", ctx)
+                    self.assertEqual(got["message"], UNMEASURED, ctx)
+                    self.assertEqual(got["summary"][0], UNMEASURED, ctx)
             else:
                 _, row, tgt = want
                 self.assertEqual(got["decision"], "green", ctx)
@@ -257,6 +275,35 @@ class PlanCases(unittest.TestCase):
         self.assertEqual(got["decision"], "unmeasured")
         self.assertEqual({c["status"] for c in got["considered"]}, {"amber"})
 
+    def test_refused_gpu_falls_back(self):
+        # S3: the facts mark the iGPU refused (the gatekeeper's verdict); with every
+        # cell green, the pick that was the iGPU under --device gpu becomes a fix.
+        facts = copy.deepcopy(self.facts)
+        gpu = next(t for t in facts["targets"] if t["id"] == "gpu:0000:00:02.0")
+        gpu.update(usable=False, reason="GuC old", fix="install linux-firmware, then reboot")
+        got = planmod.plan(facts, self.green())
+        self.assertEqual(got["cell"], "raptorlake-s.cpu-pcores.ovms.qwen3-4b-int4")
+        self.assertEqual(got["fixes"], [{"target": "gpu:0000:00:02.0", "reason": "GuC old",
+                                         "fix": "install linux-firmware, then reboot"}])
+        self.assertIn("gpu:0000:00:02.0 refused: GuC old; fix: install linux-firmware, then reboot", got["summary"])
+        got = planmod.plan(facts, self.green(), {"device": "gpu"})
+        self.assertEqual(got["decision"], "fix")
+        self.assertIsNone(got["engine"])
+        self.assertEqual(got["summary"][1], planmod.NO_GREEN_LEFT)
+
+    def test_stale_guc_fixture_falls_back_to_vulkan_then_cpu(self):
+        with open(os.path.join(REPO, "tests", "fixtures", "raptorlake-stale-guc", "facts.json")) as f:
+            facts = json.load(f)
+        with open(os.path.join(HERE, "matrix-fallback.json")) as f:
+            matrix = json.load(f)
+        self.assertEqual(planmod.plan(self.facts, matrix)["cell"], "synthetic.uhd770.ovms")
+        got = planmod.plan(facts, matrix)
+        self.assertEqual((got["cell"], got["engine"]["name"], got["placement"]["target"]),
+                         ("synthetic.nvidia.llama-cpp-vulkan", "llama.cpp", "gpu:nvidia"))
+        got = planmod.plan(facts, matrix, {"engine": "ovms"})
+        self.assertEqual((got["cell"], got["placement"]["kind"]), ("synthetic.cpu-pcores.ovms", "p-cores"))
+        self.assertEqual([f["target"] for f in got["fixes"]], ["gpu:0000:00:02.0"])
+
     def test_bad_overrides(self):
         for ov in ({"device": "tpu"}, {"port": 0}, {"port": 70000}, {"port": True}, {"bind": ""}, {"color": "x"}):
             with self.assertRaises(ValueError, msg=ov):
@@ -264,6 +311,30 @@ class PlanCases(unittest.TestCase):
 
 
 class FactsUnits(unittest.TestCase):
+    def test_gate_marks_the_gpu_refused(self):
+        with open(os.path.join(REPO, "tests", "fixtures", "raptorlake-nvidia", "facts.json")) as f:
+            facts = json.load(f)
+        lookups = {"intel_gpu": {"0xa780": {"platform": "Raptor Lake-S", "xmx": False}},
+                   "gpu_gate": {"0000:00:02.0": {"reason": "GuC old", "fix": "update it"}}}
+        ts = factsmod.build_targets(facts["host"], lookups, facts["detected"])
+        gpu = next(t for t in ts if t["id"] == "gpu:0000:00:02.0")
+        self.assertEqual((gpu["usable"], gpu["reason"], gpu["fix"], gpu["resource"]),
+                         (False, "GuC old", "update it", "gpu.intel.com/i915"))
+        self.assertTrue(all(t["usable"] and t["fix"] is None for t in ts if t is not gpu))
+        lookups["gpu_gate"] = {}
+        ts = factsmod.build_targets(facts["host"], lookups, facts["detected"])
+        self.assertTrue(all(t["usable"] for t in ts))
+
+    def test_every_unusable_fixture_target_has_a_fix(self):
+        for name in sorted(os.listdir(os.path.join(REPO, "tests", "fixtures"))):
+            path = os.path.join(REPO, "tests", "fixtures", name, "facts.json")
+            if not os.path.exists(path):
+                continue
+            with open(path) as f:
+                for t in json.load(f)["targets"]:
+                    self.assertEqual(t["usable"], t["reason"] is None, name)
+                    self.assertEqual(t["usable"], t["fix"] is None, name)
+
     def test_transcript_parse(self):
         text = "\n".join([
             "==> Checking docker...", "  ok: docker running", "==> CPU frequency (x)",

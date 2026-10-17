@@ -1,0 +1,6 @@
+GuC firmware: i915/tgl_guc_70.1.1.bin
+GuC firmware wanted: i915/tgl_guc_70.bin
+	status: RUNNING
+	version: wanted 70.5.1, found 70.1.1
+	uCode: 277056 bytes
+	RSA: 256 bytes

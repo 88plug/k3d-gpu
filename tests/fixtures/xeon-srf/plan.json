@@ -39,6 +39,7 @@
     "  bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)"
   ],
   "fingerprint": "sha256:14bb456496ba3661edb47f47a9859c9479855bc5b48081c46a60e3eafa45b4b8",
+  "fixes": [],
   "message": "unmeasured, run `k3d-gpu prove` on this box",
   "model": null,
   "overrides": {},

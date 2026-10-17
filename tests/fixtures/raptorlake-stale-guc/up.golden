@@ -1,0 +1,46 @@
+==> Accelerators: nvidia intel hybrid
+==> Experimental features (auto): dra image-volume
+==> Creating k3d cluster 'gpu' with image cryptoandcoffee/k3d-gpu:<version>...
+==> Waiting for nodes Ready...
+==> nvidia device plugin auto-deployed by k3s.
+==> intel device plugin auto-deployed by k3s.
+==> hybrid device plugin auto-deployed by k3s.
+==> Configuring intel GPU device plugin: -shared-dev-num=8 -allocation-policy=balanced
+==> Verifying accelerators are schedulable...
+==> Accelerators schedulable: nvidia=2 intel=8 hybrid=1. Try: k3d-gpu test
+exit=0
+--- calls
+k3d cluster create gpu
+  --image=cryptoandcoffee/k3d-gpu:<version>
+  --no-lb
+  --k3s-arg=--disable=traefik@server:0
+  --gpus=all
+  --k3s-arg=--default-runtime=nvidia@server:0
+  --k3s-node-label=k3d-gpu.io/hybrid-cpu=true@server:*;agent:*
+  --k3s-node-label=gpu.intel.com/xmx=false@server:*;agent:*
+  --k3s-node-label=gpu.intel.com/media-vcs=2@server:*;agent:*
+  --k3s-node-label=gpu.intel.com/media-vecs=1@server:*;agent:*
+  --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AVXVNNI=true@server:*;agent:*
+  --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.CETIBT=true@server:*;agent:*
+  --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.CETSS=true@server:*;agent:*
+  --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.GFNI=true@server:*;agent:*
+  --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.SHA=true@server:*;agent:*
+  --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.VAES=true@server:*;agent:*
+  --k3s-node-label=experimental.k3d-gpu.io/dra=true@server:*;agent:*
+  --k3s-node-label=experimental.k3d-gpu.io/image-volume=true@server:*;agent:*
+kubectl wait --for=condition=Ready nodes --all --timeout=120s
+kubectl annotate nodes --all --overwrite k3d-gpu.io/favored-cpus=8-11
+kubectl -n kube-system get daemonset nvidia-device-plugin-daemonset
+kubectl -n kube-system get daemonset intel-gpu-plugin
+kubectl -n kube-system get daemonset nri-resource-policy-balloons
+kubectl -n kube-system get daemonset intel-gpu-plugin -o jsonpath={.spec.template.spec.containers[0].args}
+kubectl -n kube-system rollout status daemonset/intel-gpu-plugin --timeout=60s
+kubectl get nodes -o go-template={{range .items}}{{range $k, $v := .status.allocatable}}{{$k}} {{$v}}{{"\n"}}{{end}}{{end}}
+kubectl -n kube-system get balloonspolicy default -o jsonpath={.spec.balloonTypes[*].name}
+kubectl -n kube-system patch balloonspolicy default --type=json -p [{"op":"add","path":"/spec/balloonTypes/6/preferCloseToDevices","value":["/sys/devices/system/cpu/cpu8/cache/index2","/sys/devices/system/cpu/cpu10/cache/index2"]}]
+kubectl -n kube-system rollout status daemonset/nvidia-device-plugin-daemonset --timeout=120s
+kubectl get nodes -o go-template={{range .items}}{{range $k, $v := .status.allocatable}}{{$k}} {{$v}}{{"\n"}}{{end}}{{end}}
+kubectl -n kube-system rollout status daemonset/intel-gpu-plugin --timeout=120s
+kubectl get nodes -o go-template={{range .items}}{{range $k, $v := .status.allocatable}}{{$k}} {{$v}}{{"\n"}}{{end}}{{end}}
+kubectl -n kube-system rollout status daemonset/nri-resource-policy-balloons --timeout=120s
+kubectl get nodes -l k3d-gpu.io/hybrid-cpu=true -o name

@@ -1,0 +1,1002 @@
+{
+  "capacity": [],
+  "cluster": {
+    "context": "k3d-gpu",
+    "name": "gpu",
+    "nodes": [],
+    "present": false,
+    "reason": "no kubeconfig context k3d-gpu (cluster not created, or KUBECONFIG points elsewhere)"
+  },
+  "detected": [
+    {
+      "resources": [
+        "nvidia.com/gpu"
+      ],
+      "vendor": "nvidia"
+    },
+    {
+      "resources": [
+        "gpu.intel.com/i915"
+      ],
+      "vendor": "intel"
+    },
+    {
+      "resources": [
+        "k3d-gpu.io/hybrid-cpu=true"
+      ],
+      "vendor": "hybrid"
+    }
+  ],
+  "doctor": {
+    "exit": 1,
+    "findings": [
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking docker...",
+        "text": "docker running",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking k3d...",
+        "text": "k3d version v0.0.0-stub",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking kubectl...",
+        "text": "",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking NVIDIA GPU...",
+        "text": "/dev/nvidia* present",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking nvidia-container-toolkit...",
+        "text": "",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking docker NVIDIA runtime...",
+        "text": "no nvidia runtime, but nvidia.com/gpu CDI devices are registered (--gpus uses CDI)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...",
+        "text": "Intel Raptor Lake-S (0xa780) bound to i915",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...",
+        "text": "i915/tgl_guc_* firmware present",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "fail",
+        "revert": null,
+        "section": "Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...",
+        "text": "Intel Raptor Lake-S (0xa780) at 0000:00:02.0: GuC i915/tgl_guc_70.1.1.bin 70.1.1 is older than the 70.5.1 i915 wants; GPU engines refused; fix: install linux-firmware with i915/tgl_guc_70.bin 70.5.1 or newer, then reboot",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...",
+        "text": "card0 media engines: vcs0 (hevc sfc), vcs1 (hevc sfc), vecs0 (sfc)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...",
+        "text": "up labels the node gpu.intel.com/xmx=false gpu.intel.com/media-vcs=2 gpu.intel.com/media-vecs=1",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...",
+        "text": "GPU sharing on: up to 8 pods per Intel GPU, balanced allocation (K3D_GPU_INTEL_SHARED=auto); pods share its memory and engines with no isolation",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "CPU ISA: AVXVNNI CETIBT CETSS GFNI SHA VAES — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "hybrid CPU: P-cores 0-15, E-cores 16-31 — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient|lowpower|ecluster|pcore-physical|latency",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "E-core clusters (shared L2): 16-19 20-23 24-27 28-31 — k3d-gpu.io/cores=ecluster gives a pod 4 E-cores of one cluster",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "physical P-cores (one thread per core): 0,2,4,6,8,10,12,14 — k3d-gpu.io/cores=pcore-physical and latency show pods one thread per core",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "favored CPUs 8-11 (highest_perf 68, next 65) — up annotates nodes k3d-gpu.io/favored-cpus=8-11 and points the latency balloon at them",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...",
+        "text": "dra available (auto)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...",
+        "text": "image-volume available (auto)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "fail",
+        "revert": null,
+        "section": "Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...",
+        "text": "One or more checks failed.",
+        "why": null
+      }
+    ],
+    "sections": [
+      {
+        "good": null,
+        "name": "Checking docker...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Checking k3d...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Checking kubectl...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Detected accelerators: nvidia intel hybrid",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Checking NVIDIA GPU...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Checking nvidia-container-toolkit...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Checking docker NVIDIA runtime...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Intel CPU built-in accelerators...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...",
+        "src": null
+      }
+    ]
+  },
+  "fingerprint": "sha256:d24cd9499c08d2e9502194f71775d7929d6c28871e7c2ad26b17b8ba9c1da0a1",
+  "host": {
+    "cpu": {
+      "amx": [],
+      "avx512": false,
+      "avx_vnni": true,
+      "e_core_cpus": 16,
+      "e_cores": "16-31",
+      "hybrid": true,
+      "isa": [
+        "avx",
+        "avx2",
+        "avx_vnni",
+        "f16c",
+        "fma"
+      ],
+      "logical_cpus": 32,
+      "model": "13th Gen Intel(R) Core(TM) i9-13900T",
+      "online": "0-31",
+      "p_core_cpus": 16,
+      "p_cores": "0-15"
+    },
+    "dsa": {
+      "devices": 0,
+      "work_queues": 0
+    },
+    "gaudi": {
+      "accel_nodes": 0,
+      "driver_loaded": false,
+      "pci_devices": 0
+    },
+    "iaa": {
+      "devices": 0,
+      "work_queues": 0
+    },
+    "intel_gpus": [
+      {
+        "card": "card0",
+        "device_id": "0xa780",
+        "driver": "i915",
+        "engines": [
+          {
+            "capabilities": [],
+            "name": "bcs0"
+          },
+          {
+            "capabilities": [],
+            "name": "rcs0"
+          },
+          {
+            "capabilities": [
+              "hevc",
+              "sfc"
+            ],
+            "name": "vcs0"
+          },
+          {
+            "capabilities": [
+              "hevc",
+              "sfc"
+            ],
+            "name": "vcs1"
+          },
+          {
+            "capabilities": [
+              "sfc"
+            ],
+            "name": "vecs0"
+          }
+        ],
+        "guc": {
+          "firmware": "i915/tgl_guc_70.1.1.bin",
+          "status": "RUNNING",
+          "version": "70.1.1"
+        },
+        "huc": {
+          "firmware": "i915/tgl_huc.bin",
+          "status": "RUNNING",
+          "version": "7.9.3"
+        },
+        "pci": "0000:00:02.0",
+        "platform": "Raptor Lake-S",
+        "render_node": "renderD128"
+      }
+    ],
+    "kernel": "6.6.128-1-MANJARO",
+    "memory": {
+      "available_kib": 64165200,
+      "total_kib": 131521428
+    },
+    "npus": [],
+    "nvidia": {
+      "driver": null,
+      "gpus": []
+    },
+    "qat": [],
+    "rapl": [
+      {
+        "energy_readable": false,
+        "max_energy_range_uj": null,
+        "name": "package-0",
+        "zone": "intel-rapl-mmio:0"
+      },
+      {
+        "energy_readable": false,
+        "max_energy_range_uj": null,
+        "name": "package-0",
+        "zone": "intel-rapl:0"
+      },
+      {
+        "energy_readable": false,
+        "max_energy_range_uj": null,
+        "name": "psys",
+        "zone": "intel-rapl:1"
+      }
+    ]
+  },
+  "hostname": "",
+  "labels": {
+    "feature.node.kubernetes.io/cpu-cpuid.AVXVNNI": "true",
+    "feature.node.kubernetes.io/cpu-cpuid.CETIBT": "true",
+    "feature.node.kubernetes.io/cpu-cpuid.CETSS": "true",
+    "feature.node.kubernetes.io/cpu-cpuid.GFNI": "true",
+    "feature.node.kubernetes.io/cpu-cpuid.SHA": "true",
+    "feature.node.kubernetes.io/cpu-cpuid.VAES": "true",
+    "gpu.intel.com/media-vcs": "2",
+    "gpu.intel.com/media-vecs": "1",
+    "gpu.intel.com/xmx": "false",
+    "k3d-gpu.io/hybrid-cpu": "true"
+  },
+  "perf": {
+    "exit": 0,
+    "findings": [
+      {
+        "apply": null,
+        "from": "/sys/devices/system/cpu/cpu{0..15}/cpufreq/energy_performance_preference",
+        "level": "ok",
+        "revert": null,
+        "section": "CPU frequency (driver intel_pstate, mode active)",
+        "text": "P-cores 0-15: governor powersave, EPP performance",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/sys/devices/system/cpu/cpu{0..15}/cpufreq/{scaling,cpuinfo}_max_freq",
+        "level": "ok",
+        "revert": null,
+        "section": "CPU frequency (driver intel_pstate, mode active)",
+        "text": "P-cores 0-15: no frequency cap (hardware max 5100 5300 MHz), min 800 MHz",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/sys/devices/system/cpu/cpu{16..31}/cpufreq/energy_performance_preference",
+        "level": "ok",
+        "revert": null,
+        "section": "CPU frequency (driver intel_pstate, mode active)",
+        "text": "E-cores 16-31: governor powersave, EPP performance",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/sys/devices/system/cpu/cpu{16..31}/cpufreq/{scaling,cpuinfo}_max_freq",
+        "level": "ok",
+        "revert": null,
+        "section": "CPU frequency (driver intel_pstate, mode active)",
+        "text": "E-cores 16-31: no frequency cap (hardware max 3900 MHz), min 800 MHz",
+        "why": null
+      },
+      {
+        "apply": "sudo systemctl stop power-profiles-daemon",
+        "from": "/proc/*/comm",
+        "level": "note",
+        "revert": "sudo systemctl start power-profiles-daemon",
+        "section": "CPU frequency (driver intel_pstate, mode active)",
+        "text": "power-profiles-daemon is running: it sets the governor and EPP itself, so an EPP or governor write here lasts only until its next profile change",
+        "why": "power-profiles-daemon's README (https://gitlab.freedesktop.org/upower/power-profiles-daemon, 'Operations on Intel-based machines'): on intel_pstate in active mode it applies the selected profile through the governor and the energy-performance hints. Either keep it and pick its performance profile (powerprofilesctl set performance), or stop it for a benchmark run so EPP writes stick"
+      },
+      {
+        "apply": null,
+        "from": "/sys/devices/system/cpu/intel_pstate/no_turbo",
+        "level": "ok",
+        "revert": null,
+        "section": "CPU frequency (driver intel_pstate, mode active)",
+        "text": "turbo enabled (no_turbo=0)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/sys/devices/system/cpu/intel_pstate/max_perf_pct",
+        "level": "ok",
+        "revert": null,
+        "section": "CPU frequency (driver intel_pstate, mode active)",
+        "text": "max_perf_pct=100, min_perf_pct=16",
+        "why": null
+      },
+      {
+        "apply": "echo 1 | sudo tee /sys/devices/system/cpu/intel_pstate/hwp_dynamic_boost",
+        "from": "/sys/devices/system/cpu/intel_pstate/hwp_dynamic_boost",
+        "level": "note",
+        "revert": "echo 0 | sudo tee /sys/devices/system/cpu/intel_pstate/hwp_dynamic_boost",
+        "section": "CPU frequency (driver intel_pstate, mode active)",
+        "text": "hwp_dynamic_boost=0",
+        "why": "when 1, a task waking from I/O wait gets a short min-P-state boost; it can help request handlers that block on the network or disk. Unmeasured for inference here — benchmark before keeping it"
+      },
+      {
+        "apply": "echo 1 | sudo tee /sys/devices/system/cpu/cpu*/cpuidle/state{2,3}/disable",
+        "from": "/sys/devices/system/cpu/cpu0/cpuidle/state*/{name,latency,disable}",
+        "level": "note",
+        "revert": "echo 0 | sudo tee /sys/devices/system/cpu/cpu*/cpuidle/state{2,3}/disable",
+        "section": "CPU idle states (intel_idle, intel_idle.max_cstate=9)",
+        "text": "enabled idle states with >=100 us exit latency: C2_ACPI/127us C3_ACPI/1048us",
+        "why": "a core woken from these pays that latency before it runs; disabling them trims tail latency at the cost of idle power. The 100 us cut-off is this tool's heuristic, not a kernel rule. Runtime disable needs no reboot (intel_idle.max_cstate does)"
+      },
+      {
+        "apply": null,
+        "from": "/sys/class/hwmon/hwmon4/temp1_{crit,input}, /sys/bus/pci/devices/0000:00:04.0/tcc_offset_degree_celsius",
+        "level": "info",
+        "revert": null,
+        "section": "CPU thermal throttling",
+        "text": "TCC activation 95 C (TjMax 100 C - TCC offset 5 C); package now 95 C",
+        "why": null
+      },
+      {
+        "apply": "none on the host: improve cooling (airflow, heatsink, BIOS fan or thermal profile); the host-side lever is a lower PL1, see CPU package power limits",
+        "from": "/sys/devices/system/cpu/cpu0/thermal_throttle/package_throttle_{count,total_time_ms,max_time_ms}, /proc/uptime",
+        "level": "warn",
+        "revert": "none",
+        "section": "CPU thermal throttling",
+        "text": "package thermally throttled 4% of uptime: 22190052 events, 101915027 ms in total, longest 417 ms; core events peak at 8502475 on cpu8",
+        "why": "therm_throt counts each time the package raised its thermal or PROCHOT status; while it is set the cores run below the frequency they request, so sustained inference speed follows the cooler, not the clock settings. The 1%-of-uptime cut-off is this tool's heuristic"
+      },
+      {
+        "apply": null,
+        "from": "/dev/cpu/0/msr (root)",
+        "level": "info",
+        "revert": null,
+        "section": "CPU thermal throttling",
+        "text": "MSR 0x1B1 IA32_PACKAGE_THERM_STATUS 0x000000008805080b: now thermal; logged thermal, PROCHOT, power limit; 5 C below TjMax",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/dev/cpu/0/msr (root)",
+        "level": "info",
+        "revert": null,
+        "section": "CPU thermal throttling",
+        "text": "MSR 0x19C IA32_THERM_STATUS (CPU 0) 0x00000000880b2a88: now none; logged PROCHOT, threshold #1, threshold #2, power limit, current limit; 11 C below TjMax",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/dev/cpu/0/msr (root)",
+        "level": "info",
+        "revert": null,
+        "section": "CPU thermal throttling",
+        "text": "MSR 0x64F MSR_CORE_PERF_LIMIT_REASONS 0x0000000019030002: now thermal; logged PROCHOT, thermal, other (electrical), PL2, max turbo limit",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "Intel SDM vol. 4 335592-093 (R/WC0 log bits)",
+        "level": "info",
+        "revert": null,
+        "section": "CPU thermal throttling",
+        "text": "the log bits are sticky: the SDM says they stay set until software writes 0, so they cover the time since boot or the last clear. doctor --perf only reads them",
+        "why": null
+      },
+      {
+        "apply": "echo 70000000 | sudo tee /sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw",
+        "from": "/sys/class/powercap/intel-rapl:0/constraint_0_{power_limit_uw,max_power_uw}, /sys/devices/system/cpu/cpu0/thermal_throttle/package_throttle_total_time_ms",
+        "level": "warn",
+        "revert": "echo 117000000 | sudo tee /sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw",
+        "section": "CPU package power limits (RAPL)",
+        "text": "intel-rapl:0 package-0: PL1 117 W is 3.3x the 35 W thermal spec power while the package is thermally throttled 4% of uptime (long_term 117 W, short_term 117 W, peak_power 230 W)",
+        "why": "PL1 is the sustained package power. Set above what the cooler removes, it never binds: the package runs into its TCC point and throttles on temperature instead (see CPU thermal throttling). A PL1 the cooler can hold trades peak clocks for steady ones. 2x the thermal spec power is this tool's first step for a sweep, not an Intel figure: measure tokens/s at each step before keeping one. Firmware may re-apply its own value on reboot"
+      },
+      {
+        "apply": null,
+        "from": "/sys/class/powercap/intel-rapl-mmio:0/enabled",
+        "level": "info",
+        "revert": null,
+        "section": "CPU package power limits (RAPL)",
+        "text": "intel-rapl-mmio:0 package-0: PL1 not enabled on this interface (enabled=0)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/sys/kernel/mm/transparent_hugepage/enabled",
+        "level": "ok",
+        "revert": null,
+        "section": "Transparent huge pages",
+        "text": "THP enabled=always",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/sys/kernel/mm/transparent_hugepage/defrag",
+        "level": "ok",
+        "revert": null,
+        "section": "Transparent huge pages",
+        "text": "THP defrag=madvise",
+        "why": null
+      },
+      {
+        "apply": "sudo mkdir -p /mnt/k3d-gpu-models && sudo mount -t tmpfs -o huge=within_size,size=<model GiB + 1>G tmpfs /mnt/k3d-gpu-models",
+        "from": "/proc/mounts, /proc/sys/kernel/osrelease",
+        "level": "note",
+        "revert": "sudo umount /mnt/k3d-gpu-models",
+        "section": "Transparent huge pages",
+        "text": "root filesystem is ext4 on Linux 6.6.128-1-MANJARO: model files mmapped from it are mapped with 4 KiB pages, whatever THP enabled says",
+        "why": "on this kernel ext4 page cache holds no large folios (fs/ext4/inode.c calls mapping_set_large_folios from 6.16), and khugepaged collapses file pages only in executable mappings (include/linux/huge_mm.h file_thp_enabled needs VM_EXEC). OpenVINO and llama.cpp mmap weights by default, so THP covers only anonymous copies. A tmpfs with huge=within_size serves the weights from huge pages (docs.kernel.org/admin-guide/mm/transhuge.html, hugepages in tmpfs/shmem); copy the model in and point the server at it"
+      },
+      {
+        "apply": null,
+        "from": "/proc/meminfo",
+        "level": "ok",
+        "revert": null,
+        "section": "Reserved huge pages (hugetlbfs)",
+        "text": "HugePages_Total=0, free 0",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/proc/meminfo",
+        "level": "info",
+        "revert": null,
+        "section": "Memory and swap",
+        "text": "MemTotal 125.4 GiB, MemAvailable 61.2 GiB, swap 187.5 GiB, vm.swappiness=60",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/proc/meminfo",
+        "level": "warn",
+        "revert": null,
+        "section": "Memory and swap",
+        "text": "107.6 GiB of swap in use — the host is under memory pressure",
+        "why": "anything a server keeps in anonymous memory (KV cache, runtime buffers, weights it copied) is paged back from disk when touched. Free memory or serve a smaller model before benchmarking; MemAvailable is too small to pull the swapped pages back in right now"
+      },
+      {
+        "apply": null,
+        "from": "/proc/meminfo",
+        "level": "info",
+        "revert": null,
+        "section": "Memory and swap",
+        "text": "pass --model-gb <size> (or K3D_GPU_MODEL_GB) to check a model against MemAvailable",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/sys/firmware/dmi/entries/17-*/raw (root)",
+        "level": "info",
+        "revert": null,
+        "section": "DRAM speed, bandwidth and ECC",
+        "text": "4x DDR5 SODIMM 32 GiB 2R, ECC (80/64-bit): rated 4800 MT/s, configured 3600 MT/s; 4 of 4 slots populated",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/proc/cpuinfo (model 13S), /sys/firmware/dmi/entries/17-*/raw",
+        "level": "info",
+        "revert": null,
+        "section": "DRAM speed, bandwidth and ECC",
+        "text": "SODIMMs at 2 slots per channel are not a supported configuration on the 13th Gen Core S line (743844 table 25 note 9); the nearest POR row, UDIMM 2DPC, 2 DIMMs 2R, is 3600 MT/s",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/sys/firmware/dmi/entries/17-*/raw (root)",
+        "level": "ok",
+        "revert": null,
+        "section": "DRAM speed, bandwidth and ECC",
+        "text": "configured 3600 MT/s is at the 3600 MT/s POR for 2DPC, 2 DIMMs 2R",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "743844 table 25",
+        "level": "info",
+        "revert": null,
+        "section": "DRAM speed, bandwidth and ECC",
+        "text": "at one module per channel these modules would run at 4800 MT/s (the lower of rated 4800 and the 1DPC 2R POR): 76.8 GB/s peak, with 2 of the 4 modules (less capacity)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/sys/firmware/dmi/entries/17-*/raw (root)",
+        "level": "info",
+        "revert": null,
+        "section": "DRAM speed, bandwidth and ECC",
+        "text": "peak DRAM bandwidth 57.6 GB/s = 2 channels x 3600 MT/s x 8 B (computed; CPU and iGPU decode share it)",
+        "why": null
+      },
+      {
+        "apply": "boot Linux 6.16 or newer (ie31200_edac binds host bridge 8086:a700 from 6.16), then: sudo modprobe ie31200_edac",
+        "from": "/sys/devices/system/edac/mc/ (no mc*), /sys/firmware/dmi/entries/17-*/raw",
+        "level": "note",
+        "revert": "sudo modprobe -r ie31200_edac",
+        "section": "DRAM speed, bandwidth and ECC",
+        "text": "ECC modules, but no EDAC memory controller is registered: corrected and uncorrected errors are not counted (dram.ecc=unmonitored)",
+        "why": "without an EDAC driver a failing module shows up only as crashes or silent corruption; with one, ce_count/ue_count give early warning"
+      },
+      {
+        "apply": null,
+        "from": "/sys/kernel/mm/ksm/run",
+        "level": "ok",
+        "revert": null,
+        "section": "Kernel samepage merging (KSM)",
+        "text": "KSM off (run=0, pages_sharing=0)",
+        "why": null
+      },
+      {
+        "apply": "sudo systemctl enable --now irqbalance   # install the irqbalance package first if the unit is missing",
+        "from": "/proc/*/comm, /etc/systemd/system/*.wants/irqbalance.service",
+        "level": "note",
+        "revert": "sudo systemctl disable --now irqbalance",
+        "section": "IRQ balancing",
+        "text": "irqbalance is not running",
+        "why": "irqbalance spreads the highest-volume interrupt sources across CPUs. It matters most on a busy NIC or many NVMe queues; a single-user desktop sees little difference"
+      },
+      {
+        "apply": null,
+        "from": "/sys/bus/pci/devices/0000:01:00.0/max_link_{speed,width}, /sys/bus/pci/devices/0000:00:01.0/max_link_{speed,width}",
+        "level": "ok",
+        "revert": null,
+        "section": "GPU PCIe links and BAR sizes",
+        "text": "0000:01:00.0 [10de:27b0]: Gen4 x16 behind port 0000:00:01.0 (Gen5 x16): the link can reach the device maximum",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/sys/bus/pci/devices/0000:01:00.0/resource, /sys/bus/pci/devices/0000:01:00.0/resource1_resize",
+        "level": "ok",
+        "revert": null,
+        "section": "GPU PCIe links and BAR sizes",
+        "text": "0000:01:00.0 [10de:27b0]: BAR1 32 GiB, the largest size it supports",
+        "why": null
+      },
+      {
+        "apply": "hardware: move the card to a slot whose port is at least x8 (no host command changes the link width)",
+        "from": "/sys/bus/pci/devices/0000:02:00.0/max_link_{speed,width}, /sys/bus/pci/devices/0000:00:06.0/max_link_{speed,width}",
+        "level": "warn",
+        "revert": "hardware: move it back",
+        "section": "GPU PCIe links and BAR sizes",
+        "text": "0000:02:00.0 [10de:28b0]: device Gen4 x8, upstream port 0000:00:06.0 Gen4 x4: the link trains at most Gen4 x4",
+        "why": "a link trains to the lower speed and width of its two ends. current_link_* reads lower at idle (link power management), so only max_* is compared. Keep this GPU's weights and KV cache resident (nothing streamed over the link) and give the widest link to the GPU that moves the most data"
+      },
+      {
+        "apply": null,
+        "from": "/sys/bus/pci/devices/0000:02:00.0/resource, /sys/bus/pci/devices/0000:02:00.0/resource1_resize",
+        "level": "ok",
+        "revert": null,
+        "section": "GPU PCIe links and BAR sizes",
+        "text": "0000:02:00.0 [10de:28b0]: BAR1 16 GiB, the largest size it supports",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "nvidia-smi topo -p2p r",
+        "level": "info",
+        "revert": null,
+        "section": "GPU PCIe links and BAR sizes",
+        "text": "GPU peer-to-peer not checked: nvidia-smi not found",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/sys/class/drm/card0/gt/gt0/rps_*_freq_mhz",
+        "level": "info",
+        "revert": null,
+        "section": "Intel GPU frequency",
+        "text": "card0 i915 gt0: GuC SLPC; cur 1650 / act 0 MHz, min 300, max 1650, boost 1650, RPn 300, RP1 700, RP0 1650",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/sys/class/drm/card0/gt/gt0/slpc_ignore_eff_freq, /sys/class/drm/card0/gt/gt0/rps_RP1_freq_mhz",
+        "level": "info",
+        "revert": null,
+        "section": "Intel GPU frequency",
+        "text": "card0 gt0: slpc_ignore_eff_freq=0, so GuC SLPC keeps the efficient frequency RP1 700 MHz as its floor while busy, above min 300 MHz (i915 drops the floor to min only when the flag is 1)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/sys/kernel/debug/dri/0/gt0/uc/guc_slpc_info",
+        "level": "info",
+        "revert": null,
+        "section": "Intel GPU frequency",
+        "text": "card0 gt0: waitboost count not readable (debugfs needs root: sudo cat /sys/kernel/debug/dri/0/gt0/uc/guc_slpc_info)",
+        "why": null
+      },
+      {
+        "apply": "echo 1650 | sudo tee /sys/class/drm/card0/gt/gt0/rps_min_freq_mhz",
+        "from": "/sys/class/drm/card0/gt/gt0/rps_min_freq_mhz",
+        "level": "note",
+        "revert": "echo 300 | sudo tee /sys/class/drm/card0/gt/gt0/rps_min_freq_mhz",
+        "section": "Intel GPU frequency",
+        "text": "card0 gt0: min 300 MHz — the GPU ramps from there on each burst",
+        "why": "pinning min to RP0 removes the ramp for bursty single-user inference but holds full clock (and power) while idle; on a shared-TDP part it also takes power budget from the CPU cores. Benchmark both"
+      },
+      {
+        "apply": null,
+        "from": "/sys/kernel/debug/dri/*/gt0/uc/huc_info (see https://docs.kernel.org/gpu/i915.html#huc)",
+        "level": "info",
+        "revert": null,
+        "section": "Intel GPU frequency",
+        "text": "HuC: \tstatus: RUNNING — HuC is the HEVC/AVC media microcontroller, not used by inference",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/dev/kvm, /sys/module/kvm_intel/parameters/*",
+        "level": "info",
+        "revert": null,
+        "section": "Isolation for sandboxed agents",
+        "text": "/dev/kvm present; kvm_intel nested=Y enable_apicv=Y ept=Y: microVM sandboxes (Kata, Firecracker) can run here",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/sys/bus/pci/devices/0000:00:02.0/iommu_group/devices/",
+        "level": "ok",
+        "revert": null,
+        "section": "Isolation for sandboxed agents",
+        "text": "0000:00:02.0: alone in IOMMU group 0 (with its own functions and upstream ports): can be passed to a microVM by itself",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/sys/bus/pci/devices/0000:01:00.0/iommu_group/devices/",
+        "level": "ok",
+        "revert": null,
+        "section": "Isolation for sandboxed agents",
+        "text": "0000:01:00.0: alone in IOMMU group 2 (with its own functions and upstream ports): can be passed to a microVM by itself",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/sys/bus/pci/devices/0000:02:00.0/iommu_group/devices/",
+        "level": "ok",
+        "revert": null,
+        "section": "Isolation for sandboxed agents",
+        "text": "0000:02:00.0: alone in IOMMU group 4 (with its own functions and upstream ports): can be passed to a microVM by itself",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/sys/class/iommu/, /sys/kernel/iommu_groups/*/type",
+        "level": "info",
+        "revert": null,
+        "section": "Isolation for sandboxed agents",
+        "text": "2 IOMMU unit(s); default domain type: identity",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/proc/cpuinfo, /dev/cpu/0/msr (root)",
+        "level": "info",
+        "revert": null,
+        "section": "Isolation for sandboxed agents",
+        "text": "CET flags: user_shstk, ibt; IA32_S_CET 0x0000000000000004: kernel IBT on; user shadow stacks are opt-in per process (glibc.cpu.x86_shstk tunable)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/proc/cpuinfo, /proc/cmdline, /proc/sys/kernel/split_lock_mitigate",
+        "level": "ok",
+        "revert": null,
+        "section": "Isolation for sandboxed agents",
+        "text": "split-lock detection warn (default), split_lock_mitigate=1",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/dev/cpu/0/msr (root)",
+        "level": "info",
+        "revert": null,
+        "section": "Isolation for sandboxed agents",
+        "text": "TME capable but off (IA32_TME_ACTIVATE 0x0000000000000001: lock=1 enable=0; mem-encryption=tme-capable-off). Enabling is a BIOS setting",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/proc/sys/dev/i915/perf_stream_paranoid",
+        "level": "ok",
+        "revert": null,
+        "section": "Isolation for sandboxed agents",
+        "text": "dev.i915.perf_stream_paranoid=1",
+        "why": null
+      }
+    ],
+    "sections": [
+      {
+        "good": "cores ramp to full turbo the moment a request arrives: EPP performance or balance_performance, turbo on, no frequency caps — token generation is a latency-bound loop and every ramp-up shows in time-to-first-token",
+        "name": "CPU frequency (driver intel_pstate, mode active)",
+        "src": "https://docs.kernel.org/admin-guide/pm/intel_pstate.html#energy-vs-performance-hints, https://docs.kernel.org/admin-guide/pm/cpufreq.html"
+      },
+      {
+        "good": "for latency-critical serving, no idle state whose exit latency is large next to a token step; for throughput or power budgets, leave them all on",
+        "name": "CPU idle states (intel_idle, intel_idle.max_cstate=9)",
+        "src": "https://docs.kernel.org/admin-guide/pm/cpuidle.html#representation-of-idle-states, https://docs.kernel.org/admin-guide/pm/intel_idle.html"
+      },
+      {
+        "good": "no throttle time under load: the package stays below its TCC activation point (TjMax minus the TCC offset), so cores keep the frequency they request",
+        "name": "CPU thermal throttling",
+        "src": "kernel source drivers/thermal/intel/therm_throt.c (thermal_throttle/*), drivers/thermal/intel/int340x_thermal/processor_thermal_device.c (tcc_offset_degree_celsius), drivers/hwmon/coretemp.c (tempN_crit = TjMax), Intel SDM vol. 4 335592-093 (IA32_THERM_STATUS 19CH, IA32_PACKAGE_THERM_STATUS 1B1H, MSR_CORE_PERF_LIMIT_REASONS 64FH in table 2-39)"
+      },
+      {
+        "good": "PL1 (long_term) at or above the thermal spec power (TDP, reported as constraint_0_max_power_uw) so sustained inference is not clamped below spec; PL1 decides the clock under a long run, PL2 only covers short bursts. On a package that thermally throttles, a PL1 far above TDP only moves the limit from power to temperature",
+        "name": "CPU package power limits (RAPL)",
+        "src": "https://docs.kernel.org/power/powercap/powercap.html, kernel source drivers/powercap/intel_rapl_common.c (PL1 max_power = PKG_POWER_INFO thermal spec power)"
+      },
+      {
+        "good": "enabled = always or madvise (fewer TLB misses over multi-GB weight and KV buffers), defrag != always (no allocation stalls mid-request)",
+        "name": "Transparent huge pages",
+        "src": "https://docs.kernel.org/admin-guide/mm/transhuge.html#global-thp-controls"
+      },
+      {
+        "good": "0 unless a server is configured to use hugetlbfs — reserved pages cannot be used for anything else, and OpenVINO, PyTorch and llama.cpp do not use them by default",
+        "name": "Reserved huge pages (hugetlbfs)",
+        "src": "https://docs.kernel.org/admin-guide/mm/hugetlbpage.html"
+      },
+      {
+        "good": "the model plus KV cache fits in MemAvailable with headroom and nothing is swapped; swapped-out buffers fault back in at random-I/O speed",
+        "name": "Memory and swap",
+        "src": "https://docs.kernel.org/admin-guide/sysctl/vm.html#swappiness, https://docs.openvino.ai/2026/openvino-workflow/running-inference/optimize-inference/optimizing-latency.html"
+      },
+      {
+        "good": "modules at the platform's plan-of-record (POR) speed for how the slots are populated; single-stream CPU and iGPU decode is bound by DRAM bandwidth. Memory errors counted by an EDAC driver",
+        "name": "DRAM speed, bandwidth and ECC",
+        "src": "SMBIOS DSP0134 7.18 (type 17, as dmidecode.c decodes it), Intel datasheet 743844 rev. 015 table 25 (13th/14th Gen Core DDR support matrix, https://cdrdv2.intel.com/v1/dl/getContent/743844), https://docs.kernel.org/driver-api/edac.html"
+      },
+      {
+        "good": "off (run=0, the kernel default) on a node that runs other tenants' pods: merged pages are shared copy-on-write, and the write fault on a merged page is a timing signal another tenant can observe",
+        "name": "Kernel samepage merging (KSM)",
+        "src": "https://docs.kernel.org/admin-guide/mm/ksm.html, Suzaki et al., Memory Deduplication as a Threat to the Guest OS, EuroSec 2011"
+      },
+      {
+        "good": "irqbalance running, so interrupt load (NIC, NVMe, GPU) is spread over CPUs instead of piling onto the cores that serve tokens",
+        "name": "IRQ balancing",
+        "src": "https://github.com/Irqbalance/irqbalance"
+      },
+      {
+        "good": "each GPU's link trains at the device's own maximum (its upstream port is not slower or narrower), and the large BAR maps all of VRAM (Resizable BAR)",
+        "name": "GPU PCIe links and BAR sizes",
+        "src": "https://docs.kernel.org/PCI/sysfs-pci.html, kernel source drivers/pci/pci-sysfs.c (max_link_*, resourceN_resize) and drivers/pci/pci.c pci_rebar_get_possible_sizes (bit 0 = 1 MB)"
+      },
+      {
+        "good": "max request at RP0 (no cap); boost at RP0 so a waiting client gets full clock; under GuC SLPC the firmware picks the frequency between min and max",
+        "name": "Intel GPU frequency",
+        "src": "kernel source drivers/gpu/drm/i915/gt/intel_gt_sysfs_pm.c + uc/intel_guc_slpc.c + intel_gt_pm_debugfs.c (i915: RP1 floor, waitboost counters), https://docs.kernel.org/gpu/xe/xe_gt_freq.html (xe)"
+      },
+      {
+        "good": "/dev/kvm usable for microVM sandboxes, each GPU alone in its IOMMU group, split-lock detection on, CET known, GPU observation streams limited to CAP_PERFMON",
+        "name": "Isolation for sandboxed agents",
+        "src": "https://docs.kernel.org/driver-api/vfio.html (IOMMU groups), https://docs.kernel.org/admin-guide/kernel-parameters.html (split_lock_detect), https://docs.kernel.org/admin-guide/sysctl/kernel.html (split_lock_mitigate), kernel source drivers/gpu/drm/i915/i915_perf.c and drivers/gpu/drm/xe/xe_observation.c (paranoid sysctls), Intel SDM vol. 4 335592-093 (IA32_S_CET 6A2H, IA32_TME_ACTIVATE 982H)"
+      },
+      {
+        "good": null,
+        "name": "11 suggestion(s). Read-only: nothing on this host was changed.",
+        "src": null
+      }
+    ]
+  },
+  "release": {
+    "k3d_gpu_version": "<version>",
+    "pins": {
+      "llama.cpp": "ghcr.io/ggml-org/llama.cpp@sha256:be586c648cb79d2cd75d0c38a6541e1f16c47a7c6621d3e711470a467fc38744",
+      "ovms": "openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58"
+    }
+  },
+  "schema": "k3d-gpu.facts/v1",
+  "targets": [
+    {
+      "cpu": {
+        "amx": false,
+        "e_count": 16,
+        "e_cpus": "16-31",
+        "family_model": "6:183",
+        "hybrid": true,
+        "logical_cpus": 32,
+        "model_name": "13th Gen Intel(R) Core(TM) i9-13900T",
+        "numa_nodes": 0,
+        "p_count": 16,
+        "p_cpus": "0-15"
+      },
+      "device_id": null,
+      "driver": null,
+      "fix": null,
+      "generation": null,
+      "id": "cpu",
+      "kind": "cpu",
+      "pci": null,
+      "platform": null,
+      "reason": null,
+      "resource": null,
+      "usable": true,
+      "vendor": null,
+      "xmx": null
+    },
+    {
+      "cpu": null,
+      "device_id": "0xa780",
+      "driver": "i915",
+      "fix": "install linux-firmware with i915/tgl_guc_70.bin 70.5.1 or newer, then reboot",
+      "generation": null,
+      "id": "gpu:0000:00:02.0",
+      "kind": "gpu",
+      "pci": "0000:00:02.0",
+      "platform": "Raptor Lake-S",
+      "reason": "GuC i915/tgl_guc_70.1.1.bin 70.1.1 is older than the 70.5.1 i915 wants",
+      "resource": "gpu.intel.com/i915",
+      "usable": false,
+      "vendor": "intel",
+      "xmx": false
+    },
+    {
+      "cpu": null,
+      "device_id": null,
+      "driver": "nvidia",
+      "fix": null,
+      "generation": null,
+      "id": "gpu:nvidia",
+      "kind": "gpu",
+      "pci": null,
+      "platform": null,
+      "reason": null,
+      "resource": "nvidia.com/gpu",
+      "usable": true,
+      "vendor": "nvidia",
+      "xmx": null
+    }
+  ]
+}
