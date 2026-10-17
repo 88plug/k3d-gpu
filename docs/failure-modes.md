@@ -32,9 +32,9 @@ Link prefixes used below:
   registration timeout 5 s, request timeout 2 s
   (`CTRD internal/nri/config.go:43-53`; values from `NRI pkg/api/timeouts.go:25,27`
   and `NRI pkg/api/plugin.go:26`).
-- The only way to change them is a user template
-  `config-v3.toml.tmpl` next to the generated config (`K3S pkg/agent/containerd/config.go:51-63`),
-  which k3d-gpu does not ship.
+- k3s replaces its built-in template with a user template
+  `config-v3.toml.tmpl` next to the generated config when one exists
+  (`K3S pkg/agent/containerd/config.go:51-63`); k3d-gpu does not ship one.
 
 ## 1. The balloons plugin pod crashes, is evicted, or is slow
 
