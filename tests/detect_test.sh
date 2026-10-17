@@ -2516,6 +2516,93 @@ agent_log_before "agent up with OVMS stops the vllm server before applying" \
 agent_log_has "agent up with OVMS warms up inside its pod at /v3/chat/completions" \
     'exec deployment/ovms -c ovms -- curl .*http://127\.0\.0\.1:8000/v3/chat/completions'
 
+# ---- agent on Gaudi: the device selector picks the HPU, served by vLLM --------
+r=$(newroot agent-gaudi)
+HPU_ALLOC=$'cpu 160\nhabana.ai/gaudi 8'
+agent_says "auto serves with vLLM when the cluster advertises habana.ai/gaudi" "${r}" 0 \
+    'command: \[vllm, serve\]' "" STUB_ALLOC="${HPU_ALLOC}"
+agent_says "agent Gaudi pod requests one habana.ai/gaudi" "${r}" 0 \
+    '^ +habana\.ai/gaudi: 1$' "" STUB_ALLOC="${HPU_ALLOC}"
+agent_says "the Gaudi pod is annotated with device HPU" "${r}" 0 \
+    'k3d-gpu\.io/agent-device: HPU$' "" STUB_ALLOC="${HPU_ALLOC}"
+agent_says "Gaudi beats an allocatable XMX Intel GPU" "${r}" 0 \
+    '^ +habana\.ai/gaudi: 1$' "" STUB_ALLOC=$'cpu 160\ngpu.intel.com/xe 1\nhabana.ai/gaudi 8' \
+    STUB_NODE_LABELS=gpu.intel.com/xmx=true
+agent_says "the Gaudi path renders no OVMS and no Arc flags" "${r}" 0 \
+    'target_device|model_server|--block-size|--enforce-eager|ZE_|CCL_|SYCL_' negate STUB_ALLOC="${HPU_ALLOC}"
+agent_says "zero allocatable Gaudi falls back to OVMS on CPU" "${r}" 0 \
+    '--target_device=CPU' "" STUB_ALLOC=$'cpu 160\nhabana.ai/gaudi 0'
+agent_says "K3D_GPU_AGENT_DEVICE=CPU overrides an available Gaudi" "${r}" 0 \
+    '--target_device=CPU' "" STUB_ALLOC="${HPU_ALLOC}" K3D_GPU_AGENT_DEVICE=CPU
+agent_says "K3D_GPU_AGENT_DEVICE=GPU overrides an available Gaudi" "${r}" 0 \
+    '--target_device=GPU' "" STUB_ALLOC=$'cpu 160\ngpu.intel.com/xe 1\nhabana.ai/gaudi 8' K3D_GPU_AGENT_DEVICE=GPU
+agent_says "K3D_GPU_AGENT_DEVICE=gaudi is accepted as HPU" "${r}" 0 \
+    'command: \[vllm, serve\]' "" STUB_ALLOC="${HPU_ALLOC}" K3D_GPU_AGENT_DEVICE=gaudi
+agent_says "K3D_GPU_AGENT_DEVICE=HPU with no allocatable Gaudi fails" "${r}" fail \
+    'no Gaudi' "" STUB_ALLOC='cpu 160' K3D_GPU_AGENT_DEVICE=HPU
+agent_says "an explicit ovms backend never picks the Gaudi" "${r}" 0 \
+    '--target_device=CPU' "" STUB_ALLOC="${HPU_ALLOC}" K3D_GPU_AGENT_BACKEND=ovms
+agent_says "an explicit ovms backend refuses K3D_GPU_AGENT_DEVICE=HPU" "${r}" fail \
+    'does not run on a Gaudi' "" STUB_ALLOC="${HPU_ALLOC}" K3D_GPU_AGENT_BACKEND=ovms K3D_GPU_AGENT_DEVICE=HPU
+agent_says "llm-scaler refuses K3D_GPU_AGENT_DEVICE=HPU" "${r}" fail \
+    'does not run on a Gaudi' "" STUB_ALLOC="${HPU_ALLOC}" K3D_GPU_AGENT_BACKEND=llm-scaler K3D_GPU_AGENT_DEVICE=HPU
+agent_says "llm-scaler auto skips the Gaudi for the Intel GPU" "${r}" 0 \
+    'gpu\.intel\.com/xe: "?1"?$' "" STUB_ALLOC=$'cpu 160\ngpu.intel.com/xe 1\nhabana.ai/gaudi 8' K3D_GPU_AGENT_BACKEND=llm-scaler
+agent_says "an explicit vllm backend runs on the Gaudi" "${r}" 0 \
+    '^ +habana\.ai/gaudi: 1$' "" STUB_ALLOC="${HPU_ALLOC}" K3D_GPU_AGENT_BACKEND=vllm
+agent_says "the vLLM image is Intel's vllm-gaudi 0.30.0 build pinned by digest" "${r}" 0 \
+    'image: vault\.habana\.ai/gaudi-docker/1\.24\.2/ubuntu24\.04/habanalabs/vllm-0\.30\.0-ptupstream-2\.13\.0@sha256:[0-9a-f]{64}$' "" \
+    STUB_ALLOC="${HPU_ALLOC}"
+agent_says "K3D_GPU_AGENT_IMAGE overrides the Gaudi image" "${r}" 0 \
+    'image: example/vllm-gaudi:dev$' "" STUB_ALLOC="${HPU_ALLOC}" K3D_GPU_AGENT_IMAGE=example/vllm-gaudi:dev
+agent_says "HPU runs in bfloat16" "${r}" 0 '--dtype=bfloat16$' "" STUB_ALLOC="${HPU_ALLOC}"
+agent_says "HPU default model is Qwen3-4B at a pinned revision" "${r}" 0 \
+    '--revision=1cfa9a7208912126459214e8b04321603b3df60c$' "" STUB_ALLOC="${HPU_ALLOC}"
+agent_says "HPU default model is served as Qwen3-4B" "${r}" 0 \
+    '--served-model-name=Qwen3-4B$' "" STUB_ALLOC="${HPU_ALLOC}"
+agent_says "HPU default model gets vLLM's hermes tool parser" "${r}" 0 \
+    '--tool-call-parser=hermes$' "" STUB_ALLOC="${HPU_ALLOC}"
+agent_says "HPU tool calling is switched on" "${r}" 0 \
+    '--enable-auto-tool-choice$' "" STUB_ALLOC="${HPU_ALLOC}"
+agent_says "HPU default model gets the qwen3 reasoning parser" "${r}" 0 \
+    '--reasoning-parser=qwen3$' "" STUB_ALLOC="${HPU_ALLOC}"
+agent_says "a custom HPU model gets no parsers and no pinned revision" "${r}" 0 \
+    'parser|revision|auto-tool' negate STUB_ALLOC="${HPU_ALLOC}" K3D_GPU_AGENT_MODEL=meta-llama/Llama-3.1-8B-Instruct
+agent_says "K3D_GPU_AGENT_REVISION pins a custom HPU model" "${r}" 0 \
+    '--revision=abc123$' "" STUB_ALLOC="${HPU_ALLOC}" K3D_GPU_AGENT_MODEL=meta-llama/Llama-3.1-8B-Instruct K3D_GPU_AGENT_REVISION=abc123
+agent_says "vLLM on HPU runs eager + torch.compile (PT_HPU_LAZY_MODE=0)" "${r}" 0 \
+    'name: PT_HPU_LAZY_MODE' "" STUB_ALLOC="${HPU_ALLOC}"
+agent_says "HABANA_VISIBLE_DEVICES is left to the device plugin" "${r}" 0 \
+    'name: HABANA_VISIBLE_DEVICES' negate STUB_ALLOC="${HPU_ALLOC}"
+agent_says "vLLM on HPU gets SYS_NICE" "${r}" 0 'add: \[SYS_NICE\]$' "" STUB_ALLOC="${HPU_ALLOC}"
+agent_says "vLLM on HPU gets an 8Gi memory-backed /dev/shm" "${r}" 0 \
+    'sizeLimit: 8Gi$' "" STUB_ALLOC="${HPU_ALLOC}"
+agent_says "vLLM on HPU requests 16Gi of memory" "${r}" 0 'memory: 16Gi$' "" STUB_ALLOC="${HPU_ALLOC}"
+agent_says "K3D_GPU_AGENT_MAX_LEN reaches vLLM on HPU" "${r}" 0 \
+    '--max-model-len=32768$' "" STUB_ALLOC="${HPU_ALLOC}" K3D_GPU_AGENT_MAX_LEN=32768
+agent_says "K3D_GPU_AGENT_GPUS shards across Gaudis" "${r}" 0 \
+    '^ +habana\.ai/gaudi: 2$' "" STUB_ALLOC="${HPU_ALLOC}" K3D_GPU_AGENT_GPUS=2
+agent_says "K3D_GPU_AGENT_GPUS above the allocatable Gaudis fails" "${r}" fail \
+    'K3D_GPU_AGENT_GPUS=9 but the cluster advertises 8 habana\.ai/gaudi' "" STUB_ALLOC="${HPU_ALLOC}" K3D_GPU_AGENT_GPUS=9
+agent_says "the Arc manifest keeps its own image, env and 2Gi /dev/shm" "${r}" 0 \
+    'sizeLimit: 2Gi$' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm
+agent_says "the Arc manifest gets no Gaudi settings" "${r}" 0 \
+    'PT_HPU|SYS_NICE|command: \[vllm' negate STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm
+
+# `agent up` on a Gaudi: the OVMS server is stopped first, the API is vLLM's /v1.
+: > "${log}"
+out=$(env K3D_GPU_SYSROOT="${r}" PATH="${ASTUB}:${PATH}" STUB_ALLOC="${HPU_ALLOC}" STUB_LOG="${log}" STUB_EXEC="${WARM}" \
+    bash "${K3D_GPU}" agent up 2>&1)
+rc=$?
+if [ "${rc}" -eq 0 ]; then PASS=$((PASS + 1)); echo "ok   agent up on a Gaudi succeeds against a stub cluster"
+else FAILS=$((FAILS + 1)); echo "FAIL agent up on a Gaudi (rc=${rc})"; awk '{print "  | " $0}' <<< "${out}"; fi
+agent_log_has "agent up on a Gaudi applies the vllm Deployment on HPU" 'k3d-gpu\.io/agent-device: HPU$'
+agent_log_before "agent up on a Gaudi stops the OVMS server before applying" \
+    'delete deployment/ovms service/ovms' '^kubectl apply -f -$'
+agent_log_has "agent up on a Gaudi waits for deployment/vllm" 'rollout status deployment/vllm'
+agent_log_has "agent up on a Gaudi warms up through /v1/chat/completions" \
+    'create --raw /api/v1/namespaces/k3d-gpu-agent/services/vllm:http/proxy/v1/chat/completions'
+
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]
