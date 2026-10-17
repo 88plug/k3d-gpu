@@ -9,6 +9,7 @@
   ok: Intel Arrow Lake-H (0x7d51) bound to i915
   ok: i915/mtl_guc_* firmware present
   ok: up labels the node gpu.intel.com/xmx=true
+  ok: GPU sharing on: up to 8 pods per Intel GPU, balanced allocation (K3D_GPU_INTEL_SHARED=auto); pods share its memory and engines with no isolation
 ==> Checking Intel NPU (Core Ultra)...
   ok: Intel NPU Arrow Lake-H (0x7d1d) bound to intel_vpu
   ok: intel/vpu/vpu_37xx_* firmware present (/lib/firmware/intel/vpu/vpu_37xx_v1.bin)

@@ -9,6 +9,7 @@
   ok: Intel Battlemage (0xe20b) bound to xe
   ok: xe/bmg_guc_* firmware present
   ok: up labels the node gpu.intel.com/xmx=true
+  ok: GPU sharing off: one pod per Intel GPU (K3D_GPU_INTEL_SHARED=auto)
 ==> Intel CPU built-in accelerators...
   ok: CPU ISA: AVX512BF16 AVX512F AVX512VNNI — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
 ==> Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...

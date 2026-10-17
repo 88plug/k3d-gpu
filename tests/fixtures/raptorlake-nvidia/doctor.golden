@@ -16,6 +16,7 @@
   ok: i915/tgl_guc_* firmware present
   ok: card0 media engines: vcs0 (hevc sfc), vcs1 (hevc sfc), vecs0 (sfc)
   ok: up labels the node gpu.intel.com/xmx=false gpu.intel.com/media-vcs=2 gpu.intel.com/media-vecs=1
+  ok: GPU sharing on: up to 8 pods per Intel GPU, balanced allocation (K3D_GPU_INTEL_SHARED=auto); pods share its memory and engines with no isolation
 ==> Intel CPU built-in accelerators...
   ok: CPU ISA: AVXVNNI CETIBT CETSS GFNI SHA VAES — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
   ok: hybrid CPU: P-cores 0-15, E-cores 16-31 — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient|lowpower|ecluster|pcore-physical|latency

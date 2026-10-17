@@ -6,9 +6,10 @@
 ==> npu device plugin auto-deployed by k3s.
 ==> iaa device plugin auto-deployed by k3s.
 ==> hybrid device plugin auto-deployed by k3s.
+==> Configuring intel GPU device plugin: -shared-dev-num=8 -allocation-policy=balanced
 ==> Applying experimental OpenVINO plugin config (ConfigMap default/k3d-gpu-openvino-experimental)...
 ==> Verifying accelerators are schedulable...
-==> Accelerators schedulable: intel=1 npu=1 iaa=1 hybrid=1. Try: k3d-gpu test
+==> Accelerators schedulable: intel=8 npu=1 iaa=1 hybrid=1. Try: k3d-gpu test
 exit=0
 --- calls
 k3d cluster create gpu
@@ -32,6 +33,9 @@ kubectl -n kube-system get daemonset intel-gpu-plugin
 kubectl -n kube-system get daemonset intel-npu-plugin
 kubectl -n kube-system get daemonset intel-iaa-plugin
 kubectl -n kube-system get daemonset nri-resource-policy-balloons
+kubectl -n kube-system get daemonset intel-gpu-plugin -o jsonpath={.spec.template.spec.containers[0].args}
+kubectl -n kube-system rollout status daemonset/intel-gpu-plugin --timeout=60s
+kubectl get nodes -o go-template={{range .items}}{{range $k, $v := .status.allocatable}}{{$k}} {{$v}}{{"\n"}}{{end}}{{end}}
 kubectl apply -f -
 kubectl -n kube-system rollout status daemonset/intel-gpu-plugin --timeout=120s
 kubectl get nodes -o go-template={{range .items}}{{range $k, $v := .status.allocatable}}{{$k}} {{$v}}{{"\n"}}{{end}}{{end}}

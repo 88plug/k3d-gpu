@@ -5,8 +5,9 @@
 ==> nvidia device plugin auto-deployed by k3s.
 ==> intel device plugin auto-deployed by k3s.
 ==> hybrid device plugin auto-deployed by k3s.
+==> Configuring intel GPU device plugin: -shared-dev-num=8 -allocation-policy=balanced
 ==> Verifying accelerators are schedulable...
-==> Accelerators schedulable: nvidia=2 intel=1 hybrid=1. Try: k3d-gpu test
+==> Accelerators schedulable: nvidia=2 intel=8 hybrid=1. Try: k3d-gpu test
 exit=0
 --- calls
 k3d cluster create gpu
@@ -32,6 +33,9 @@ kubectl annotate nodes --all --overwrite k3d-gpu.io/favored-cpus=8-11
 kubectl -n kube-system get daemonset nvidia-device-plugin-daemonset
 kubectl -n kube-system get daemonset intel-gpu-plugin
 kubectl -n kube-system get daemonset nri-resource-policy-balloons
+kubectl -n kube-system get daemonset intel-gpu-plugin -o jsonpath={.spec.template.spec.containers[0].args}
+kubectl -n kube-system rollout status daemonset/intel-gpu-plugin --timeout=60s
+kubectl get nodes -o go-template={{range .items}}{{range $k, $v := .status.allocatable}}{{$k}} {{$v}}{{"\n"}}{{end}}{{end}}
 kubectl -n kube-system get balloonspolicy default -o jsonpath={.spec.balloonTypes[*].name}
 kubectl -n kube-system patch balloonspolicy default --type=json -p [{"op":"add","path":"/spec/balloonTypes/6/preferCloseToDevices","value":["/sys/devices/system/cpu/cpu8/cache/index2","/sys/devices/system/cpu/cpu10/cache/index2"]}]
 kubectl -n kube-system rollout status daemonset/nvidia-device-plugin-daemonset --timeout=120s

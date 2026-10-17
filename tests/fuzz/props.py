@@ -420,8 +420,8 @@ def overrides_reference():
             docs = [json.loads(line) for line in text.split("\n")]
         except ValueError as e:
             return "overrides for image %s are not JSON (%s): %s" % (REFERENCE_IMAGE, e, text[:300])
-        if len(docs) != 12:
-            return "expected 12 test pods with every vendor active, got %d" % len(docs)
+        if len(docs) != 13:
+            return "expected 13 test pods with every vendor active (12 vendor pods + gpu.intel.com/monitoring), got %d" % len(docs)
         for d in docs:
             cs = d.get("spec", {}).get("containers", [])
             if len(cs) != 1 or cs[0].get("image") != REFERENCE_IMAGE or not cs[0].get("command"):
