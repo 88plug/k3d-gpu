@@ -230,6 +230,17 @@ check "uncore-phase: probe unit tests (order, sign test, verdict rules, knob res
 check "phase-steer: H20 probe unit tests" \
     env -u IMAGE PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/phase-steer/test_probe.py"
 
+# ---- hetero-spec (H22) ---------------------------------------------------------------
+
+check "hetero-spec: analyze.py applies the H22 outcome table" \
+    env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/hetero-spec/test_analyze.py"
+check "hetero-spec: probe.sh parses" bash -n "${ROOT}/bench/hetero-spec/probe.sh"
+check "hetero-spec: host sample is one JSON object and gpu_busy is a number" \
+    env -u SUDO_PASS H22_SELFTEST=1 bash "${ROOT}/bench/hetero-spec/probe.sh"
+check "hetero-spec: prompts.jsonl has 8 prompts with id and text" \
+    python3 -c 'import json, sys; p = [json.loads(l) for l in open(sys.argv[1])]; assert len(p) == 8 and all(x["id"] and x["text"] for x in p)' \
+    "${ROOT}/bench/hetero-spec/prompts.jsonl"
+
 # ---- research/ models -------------------------------------------------------------
 
 check "research: agents-per-box ceiling selftest" \
