@@ -93,6 +93,16 @@ lock_drift "a lock entry with no digest" "schema violations" \
     "python3 -c \"import json; d=json.load(open('images.lock')); d['images'][0]['digest']='latest'; open('images.lock','w').write(json.dumps(d))\""
 lock_drift "a wrong source list" "images.lock sources" \
     "python3 -c \"import json; d=json.load(open('images.lock')); d['images'][0]['sources']=['share/other.yml']; open('images.lock','w').write(json.dumps(d))\""
+# A CRD schema has `image:` keys whose value is on the next line (`type: string`);
+# they name no image, so the next line's word must not be read as one.
+lock_drift "an image added next to a CRD schema image: key" \
+    "not in images.lock: docker.io/library/redis:7.4 (from share/crd.yml)" \
+    "printf 'properties:\n  image:\n    type: string\n  - image: redis:7.4\n' > share/crd.yml"
+if out=$(cd "${WORK}/lockcopy" && "${WORK}/lockcopy/scripts/images-lock" check --root "${WORK}/lockcopy" 2>&1 | grep -E 'library/(type|properties)'); then
+    fail "images-lock reads a CRD schema's image: key as an image"; sed 's/^/  | /' <<< "${out}"
+else
+    ok "images-lock skips a CRD schema's image: key"
+fi
 
 # ---- the live path, with docker and kubectl stubbed ----
 mkdir -p "${WORK}/bin"

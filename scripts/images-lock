@@ -41,7 +41,7 @@ LOCK_SCHEMA = "k3d-gpu.images-lock/v1"
 DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 SCRIPT_IMAGE_RE = re.compile(r'^[A-Z_]+="\$\{(K3D_GPU_[A-Z_]*IMAGE):-([^}]+)\}"', re.M)
 PLAIN_IMAGE_RE = re.compile(r'^\s*([A-Z_]*IMAGE)="([^"$]+)"', re.M)
-SHARE_IMAGE_RE = re.compile(r"^\s*(?:-\s+)?image:\s*[\"']?([^\"'\s#]+)", re.M)
+SHARE_IMAGE_RE = re.compile(r"^[ \t]*(?:-[ \t]+)?image:[ \t]*[\"']?([^\"'\s#]+)", re.M)
 NODE_IMAGE_VAR = "K3D_GPU_IMAGE"  # the node image this repo builds from the Dockerfile
 K3S_IMAGES_URL = "https://github.com/k3s-io/k3s/releases/download/%s/k3s-images.txt"
 ACCEPT = ", ".join([

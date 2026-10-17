@@ -51,6 +51,7 @@ k3d-gpu test            # per accelerator: nvidia-smi pod / device-node listing 
 k3d-gpu logs            # tail the k3s server container logs
 k3d-gpu agent up        # OpenAI-compatible LLM server on the Intel GPU (else CPU)
 k3d-gpu recipe npu-embeddings | kubectl apply -f -   # OVMS embeddings on the NPU
+k3d-gpu sandbox up      # opt-in: agent-sandbox with a warm pool of sandboxes on E-cores
 k3d-gpu down            # delete the cluster
 ```
 
@@ -135,6 +136,9 @@ Behaviour is tunable via environment variables:
 | `K3D_GPU_NPU_EMBEDDINGS` | `/usr/share/k3d-gpu/npu-embeddings.yml` | template printed by `k3d-gpu recipe npu-embeddings` |
 | `K3D_GPU_DRA`        | `0`                                       | `1` = Intel GPUs through the DRA driver instead of the device plugin (experimental, Kubernetes 1.36+) |
 | `K3D_GPU_INTEL_DRA`  | `/usr/share/k3d-gpu/intel-gpu-dra.yml`    | same, for the Intel GPU DRA driver |
+| `K3D_GPU_SANDBOX`    | `/usr/share/k3d-gpu/agent-sandbox.yml`    | agent-sandbox controller + CRDs for `k3d-gpu sandbox up` |
+| `K3D_GPU_SANDBOX_PROFILE` | `/usr/share/k3d-gpu/agent-sandbox-k3d.yml` | E-core SandboxTemplate + warm pool for `k3d-gpu sandbox up` |
+| `K3D_GPU_SANDBOX_TIMEOUT` | `180`                                | seconds `sandbox up` waits for a ready sandbox |
 | `K3D_GPU_DEVICE_TEST_IMAGE` | `busybox:1.37`                     | image used by `k3d-gpu test` for Intel GPU/NPU and Gaudi |
 | `K3D_GPU_TEST_IMAGE` | `nvidia/cuda:13.4.2-base-ubuntu26.04`     | image used by `k3d-gpu test`         |
 
@@ -1233,6 +1237,49 @@ and `k3d-gpu agent` and the recipes request `gpu.intel.com/xe|i915`, which DRA m
 does not advertise. A claim pod gets the iGPU through the driver on k3s 1.37
 [ledger:H16]. The `dra` experimental feature only sets Kubernetes gates and does
 not switch the Intel GPU path.
+
+### Agent sandboxes on E-cores
+
+`k3d-gpu sandbox up` installs [kubernetes-sigs/agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox)
+v1.0.7 (controller image pinned by digest) and a `python-ecores` SandboxTemplate
+plus a one-replica warm pool in namespace `agent-sandbox`. Sandbox pods carry
+`k3d-gpu.io/cores: efficient` and request one CPU, so on a hybrid host untrusted
+agent tool execution runs on E-cores and the P-cores stay free for inference.
+`up` waits for a warm sandbox, then runs `status`, which reads each sandbox's
+`Cpus_allowed_list` and fails if it is not inside the host's E-cores.
+`k3d-gpu sandbox down` removes it all.
+
+```bash
+k3d-gpu sandbox up
+kubectl create -f - <<EOF
+apiVersion: extensions.agents.x-k8s.io/v1beta1
+kind: SandboxClaim
+metadata: {generateName: task-, namespace: agent-sandbox}
+spec: {warmPoolRef: {name: python-ecores}}
+EOF
+```
+
+The sandbox serves `POST /execute {"command": "..."}` on port 8888
+(`registry.k8s.io/agent-sandbox/python-runtime-sandbox:v1.0.7`, pinned by digest).
+
+What works on k3d, and what does not:
+
+| Piece | On k3d-gpu |
+|-------|------------|
+| Controller, Sandbox, SandboxTemplate, SandboxClaim, SandboxWarmPool | Yes. Plain manifests, no webhook or cert-manager. |
+| NetworkPolicy | Enforced by k3s's embedded kube-router controller. The template allows ingress on 8888 only from pods labelled `k3d-gpu.io/sandbox-client=true` (and upstream's `sandbox-router`). Egress is limited to cluster DNS and public addresses. RFC1918, CGNAT `100.64.0.0/10` (tailscale) and link-local are blocked, so a sandbox cannot reach pods, services, the k3d docker network, tailnet peers or the host by those addresses. A blocked connect fails at once with `Connection refused` (kube-router rejects it), not a timeout [ledger:H18]. The host's public IPs stay reachable, so bind inference servers to a private address or firewall them. Ingress is gated on a pod label that any namespace can set: fine for a single-user dev cluster, not for a shared one. |
+| gVisor / Kata (`runtimeClassName`) | Not available. The node image ships neither, and Kata needs `/dev/kvm` in the node container. Sandboxes run under runc, hardened instead: non-root, all capabilities dropped, no privilege escalation, `RuntimeDefault` seccomp, no service-account token. That is container isolation, not a VM or user-space kernel boundary. |
+| sandbox-router, sandboxd | Not installed. Upstream publishes them only as staging `latest-main` images, which cannot be pinned to a release. Clients reach a sandbox by pod IP (from a `k3d-gpu.io/sandbox-client=true` pod) or `kubectl port-forward`, which containerd opens inside the pod's network namespace, so the policy does not block it. |
+
+Upstream's default policy blocks DNS as well. The profile allows `kube-dns` on
+port 53 so `pip install` resolves names, and sets `HOME=/tmp` so pip's user
+install has somewhere to write (the image's user 1000 has no home directory).
+PyPI's addresses are public, so the egress rule allows them and `pip install
+--user <pkg>` lands in `/tmp/.local` [ledger:H18]; a package index on a private
+address is blocked like any other.
+The image ships no `git` or `curl`; fetch with Python or pip. Edit
+`share/agent-sandbox-k3d.yml` (or point `K3D_GPU_SANDBOX_PROFILE` at a copy) to
+change the image, CPU request, warm pool size or policy.
 
 ---
 
