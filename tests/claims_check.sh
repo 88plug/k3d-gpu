@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Claims guard for the docs. Fails when a line of README.md or docs/*.md makes a
-# performance claim without a reference that backs it.
+# Claims guard for the docs. Fails when a line of README.md, docs/*.md or
+# docs/intel/*.md makes a performance claim without a reference that backs it.
 #
 # A claim is a number with a performance unit (tok/s, tok/sec, t/s, TPS, tokens
 # per second, J/token, "3x faster", "10 times faster", "30%"), a "doubles
@@ -79,7 +79,7 @@ fi
 
 files=()
 [ -f "${ROOT}/README.md" ] && files+=("${ROOT}/README.md")
-for f in "${ROOT}"/docs/*.md; do
+for f in "${ROOT}"/docs/*.md "${ROOT}"/docs/intel/*.md; do
     [ -f "${f}" ] && [ "${f}" != "${PROVENANCE}" ] && files+=("${f}")
 done
 
