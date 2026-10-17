@@ -1,9 +1,11 @@
-ARG K3S_TAG="v1.34.1-k3s1-amd64"
-#https://hub.docker.com/r/rancher/k3s/tags
+ARG K3S_TAG="v1.37.1-k3s1"
+ARG K3S_DIGEST="sha256:ca7f37d993d82ef0dcdcfecb2e0e2618ea541dbaffc620c8cedebe01a82acd0d"
+#https://hub.docker.com/r/rancher/k3s/tags  (multi-arch index digest of K3S_TAG;
+# rancher stopped publishing per-arch "-amd64" tags after v1.34.1-k3s1)
 ARG UBUNTU_TAG="26.04"
 #https://hub.docker.com/_/ubuntu/tags  (26.04 = default/latest; 24.04 also built)
 
-FROM rancher/k3s:$K3S_TAG AS k3s
+FROM rancher/k3s:$K3S_TAG@$K3S_DIGEST AS k3s
 
 # A k3s NODE image does not need the CUDA toolkit. The node only runs containerd
 # + the NVIDIA container runtime; GPU pods get the driver libraries injected from
@@ -61,8 +63,13 @@ COPY share/intel-qat-plugin.yml /var/lib/rancher/k3s/server/manifests/intel-qat-
 # k3d-gpu.io/cores=performance|efficient onto P- or E-cores, and =replica into
 # one NUMA node.
 COPY share/nri-balloons.yml /var/lib/rancher/k3s/server/manifests/nri-balloons.yaml
+# Node Feature Discovery plus Intel's NodeFeatureRules, on every node: labels CPU
+# features (cpu-cpuid.*), kernel, PCI devices and intel.feature.node.kubernetes.io/gpu
+# from the host. Labels the launcher sets at node registration (npu/dsa/iaa/qat and
+# its cpu-cpuid names) are left to the launcher, so each label has one owner.
+COPY share/node-feature-discovery.yml /var/lib/rancher/k3s/server/manifests/node-feature-discovery.yaml
 
-# CDI spec directories. containerd 2.x (k3s 1.34) enables CDI by default and scans
+# CDI spec directories. containerd 2.x (k3s 1.34 and newer) enables CDI by default and scans
 # these paths, so vendor plugins/tools that emit CDI specs work without any
 # containerd config change. /var/run/cdi is tmpfs at runtime, so device plugins
 # create it via a DirectoryOrCreate hostPath; only the persistent /etc/cdi is made here.

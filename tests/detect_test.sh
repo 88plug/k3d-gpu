@@ -1862,6 +1862,63 @@ up_says "K3D_GPU_K3S_ARGS keeps a flag's own commas" 0 \
 up_says "K3D_GPU_K3S_ARGS rejects a word that is not a flag" fail 'servicelb' negate \
     K3D_GPU_K3S_ARGS="--disable servicelb"
 
+# Node Feature Discovery reads the host's kernel config, builtin modules and
+# os-release; the node image has its own /boot, /lib and /etc, so `up` mounts
+# the host's copies read-only under /k3d-gpu/host.
+r=$(newroot up-nfd)
+mkdir -p "${r}/lib/modules/6.18.1" "${r}/boot" "${r}/etc"
+echo "ID=manjaro" > "${r}/etc/os-release"
+up_says "up mounts the host's /lib/modules for NFD" 0 \
+    "^--volume=${r}/lib/modules:/k3d-gpu/host/lib/modules:ro@server:\*;agent:\*$" "" K3D_GPU_SYSROOT="${r}"
+up_says "up mounts no /boot without a config for the running kernel" 0 '/k3d-gpu/host/boot' negate \
+    K3D_GPU_SYSROOT="${r}"
+mkdir -p "${r}/proc/sys/kernel"
+echo "6.18.1" > "${r}/proc/sys/kernel/osrelease"
+echo "CONFIG_X86=y" > "${r}/boot/config-6.18.1"
+echo "kernel" > "${r}/boot/vmlinuz-6.18.1"
+up_says "up mounts the running kernel's /boot config for NFD" 0 \
+    "^--volume=${r}/boot/config-6.18.1:/k3d-gpu/host/boot/config-6.18.1:ro@server:\*;agent:\*$" "" K3D_GPU_SYSROOT="${r}"
+up_says "up mounts nothing else from /boot" 0 "^--volume=${r}/boot(/vmlinuz[^:]*)?:" negate K3D_GPU_SYSROOT="${r}"
+up_says "up mounts the host's /etc/os-release for NFD" 0 \
+    "^--volume=${r}/etc/os-release:/k3d-gpu/host/etc/os-release:ro@server:\*;agent:\*$" "" K3D_GPU_SYSROOT="${r}"
+up_says "up still sets the hybrid label itself" 0 \
+    '^--k3s-node-label=k3d-gpu.io/hybrid-cpu=true@server:\*;agent:\*$' "" K3D_GPU_SYSROOT="${r}"
+up_says "up skips host paths that do not exist" 0 '/k3d-gpu/host/' negate
+
+# AMX labels are launcher-set (NFD's worker blacklists them): they exist from
+# node registration on, before (or without) NFD.
+r=$(newroot up-amx)
+mkdir -p "${r}/proc"
+echo "flags : fpu amx_bf16 amx_tile amx_int8" > "${r}/proc/cpuinfo"
+up_says "up sets the AMX labels itself" 0 \
+    '^--k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true@server:\*;agent:\*$' "" \
+    K3D_GPU_SYSROOT="${r}" K3D_GPU_VENDORS=hybrid,amx
+
+# One owner per node label: NFD must not publish a label the launcher sets. The
+# launcher's cpu-cpuid names (nfd_cpuid_name, and AMX*) are in nfd-worker's
+# cpuid attributeBlacklist next to NFD's own defaults, and the baked Intel
+# NodeFeatureRules carry no npu/dsa/iaa/qat label.
+NFD_YML="$(dirname "${K3D_GPU}")/../share/node-feature-discovery.yml"
+blacklist=$(sed -n 's/^ *attributeBlacklist: \[\(.*\)\]$/\1/p' "${NFD_YML}" | tr -d ' ' | tr ',' '\n')
+launcher_cpuid=$(sed -n '/^nfd_cpuid_name() {/,/^}/p' "${K3D_GPU}" | grep -oE 'echo [A-Z0-9_]+' | cut -d' ' -f2)
+nfd_defaults="AVX10 BMI1 BMI2 CLMUL CMOV CX16 ERMS F16C HTT LZCNT MMX MMXEXT NX POPCNT RDRAND RDSEED RDTSCP SGX SGXLC SSE SSE2 SSE3 SSE4 SSE42 SSSE3 TDX_GUEST"
+amx_ids="AMXBF16 AMXCOMPLEX AMXFP16 AMXFP8 AMXINT8 AMXTF32 AMXTILE AMXTRANSPOSE"
+missing=""
+for id in ${launcher_cpuid} ${nfd_defaults} ${amx_ids}; do
+    grep -qxF "${id}" <<< "${blacklist}" || missing+=" ${id}"
+done
+if [ -n "${launcher_cpuid}" ] && [ -z "${missing}" ]; then
+    PASS=$((PASS + 1)); echo "ok   nfd-worker blacklists the launcher's cpu-cpuid labels and keeps NFD's defaults"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL nfd-worker cpuid attributeBlacklist misses:${missing:- (no launcher names found)}"
+fi
+dup=$(grep -oE 'intel\.feature\.node\.kubernetes\.io/(npu|dsa|iaa|qat):' "${NFD_YML}" | sort -u | paste -sd' ')
+if [ -z "${dup}" ]; then
+    PASS=$((PASS + 1)); echo "ok   baked NodeFeatureRules leave npu/dsa/iaa/qat labels to the launcher"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL baked NodeFeatureRules also set: ${dup}"
+fi
+
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

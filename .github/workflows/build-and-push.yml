@@ -35,23 +35,34 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
-      # ─── 1. Latest k3s tag (*-amd64) ────────────────────────────────────
+      # ─── 1. Latest k3s release (multi-arch tag + index digest) ───────────
       - name: Get latest k3s tag
         id: k3s
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # name= filter scopes the scan, then paginate via .next so a high
-          # version can't be hidden past page 1 (push-order != version-order).
-          latest=$(
-            url="https://registry.hub.docker.com/v2/repositories/rancher/k3s/tags?page_size=100&name=amd64"
-            for _ in $(seq 1 20); do
-              [ -z "$url" ] && break; [ "$url" = "null" ] && break
-              resp=$(curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 "$url") || break
-              printf '%s\n' "$resp" | jq -r '.results[].name'
-              url=$(printf '%s' "$resp" | jq -r '.next')
-            done | grep -E 'amd64$' | grep -v 'rc' | sort -V | tail -n1
-          )
-          [ -n "$latest" ] || { echo "::error::no k3s tag resolved from registry"; exit 1; }
+          # rancher/k3s stopped publishing per-arch "-amd64" tags after
+          # v1.34.1-k3s1-amd64; every release since is a multi-arch tag
+          # (v1.37.1-k3s1). Take the highest non-prerelease k3s release by version
+          # (not GitHub's "latest" flag: all minors release within seconds of each
+          # other), map "+k3s" to the "-k3s" image tag, and require Docker Hub to
+          # serve it with an amd64 image before pinning its index digest.
+          rel=$(curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            "https://api.github.com/repos/k3s-io/k3s/releases?per_page=100" \
+            | jq -r '.[] | select(.prerelease == false and .draft == false) | .tag_name' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+\+k3s[0-9]+$' | sort -V | tail -n1)
+          [ -n "$rel" ] || { echo "::error::no k3s release resolved from GitHub"; exit 1; }
+          latest=${rel/+/-}
+          hub=$(curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 \
+            "https://registry.hub.docker.com/v2/repositories/rancher/k3s/tags/${latest}") \
+            || { echo "::error::rancher/k3s:${latest} not on Docker Hub yet"; exit 1; }
+          printf '%s' "$hub" | jq -e '.images[] | select(.architecture == "amd64")' >/dev/null \
+            || { echo "::error::rancher/k3s:${latest} has no amd64 image"; exit 1; }
+          digest=$(printf '%s' "$hub" | jq -r '.digest')
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::no digest for rancher/k3s:${latest}"; exit 1; }
           echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       # ─── 2. Latest NVIDIA device plugin release (baked into the image) ───
       - name: Get latest NVIDIA device plugin version
@@ -122,11 +133,14 @@ jobs:
           kt=$(grep '^ARG K3S_TAG' Dockerfile | cut -d= -f2 | tr -d '"')
           pp=$(grep -oE 'k8s-device-plugin:v[0-9]+\.[0-9]+\.[0-9]+' share/nvidia-device-plugin.yml | cut -d: -f2)
           ti=$(grep -oE 'K3D_GPU_TEST_IMAGE:-nvidia/cuda:[^}]*' scripts/k3d-gpu | sed 's#.*nvidia/cuda:##')
-          echo "k3s=$kt" >> "$GITHUB_OUTPUT"
-          echo "plugin=$pp" >> "$GITHUB_OUTPUT"
-          echo "intel=$(grep -oE 'intel-gpu-plugin:[0-9]+\.[0-9]+\.[0-9]+' share/intel-gpu-plugin.yml | cut -d: -f2)" >> "$GITHUB_OUTPUT"
-          echo "gaudi=$(grep -oE 'gaudi-device-plugin:[0-9]+\.[0-9]+\.[0-9]+-[0-9]+' share/gaudi-device-plugin.yml | cut -d: -f2)" >> "$GITHUB_OUTPUT"
-          echo "testcuda=$ti" >> "$GITHUB_OUTPUT"
+          {
+            echo "k3s=$kt"
+            echo "k3sdigest=$(grep '^ARG K3S_DIGEST' Dockerfile | cut -d= -f2 | tr -d '"')"
+            echo "plugin=$pp"
+            echo "intel=$(grep -oE 'intel-gpu-plugin:[0-9]+\.[0-9]+\.[0-9]+' share/intel-gpu-plugin.yml | cut -d: -f2)"
+            echo "gaudi=$(grep -oE 'gaudi-device-plugin:[0-9]+\.[0-9]+\.[0-9]+-[0-9]+' share/gaudi-device-plugin.yml | cut -d: -f2)"
+            echo "testcuda=$ti"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Determine if update is needed
         id: need
@@ -136,6 +150,7 @@ jobs:
           #          main that touched the image contents.
           changed=false
           if [ "${{ steps.k3s.outputs.latest }}" != "${{ steps.current.outputs.k3s }}" ] || \
+             [ "${{ steps.k3s.outputs.digest }}" != "${{ steps.current.outputs.k3sdigest }}" ] || \
              [ "${{ steps.nvidia_plugin.outputs.latest }}" != "${{ steps.current.outputs.plugin }}" ] || \
              [ "${{ steps.intel_plugin.outputs.latest }}" != "${{ steps.current.outputs.intel }}" ] || \
              [ "${{ steps.gaudi_plugin.outputs.latest }}" != "${{ steps.current.outputs.gaudi }}" ] || \
@@ -157,6 +172,7 @@ jobs:
         if: steps.need.outputs.update == 'true'
         run: |
           sed -i "s|^ARG K3S_TAG=.*|ARG K3S_TAG=\"${{ steps.k3s.outputs.latest }}\"|" Dockerfile
+          sed -i "s|^ARG K3S_DIGEST=.*|ARG K3S_DIGEST=\"${{ steps.k3s.outputs.digest }}\"|" Dockerfile
           sed -i "s|k8s-device-plugin:v[0-9]*\.[0-9]*\.[0-9]*|k8s-device-plugin:${{ steps.nvidia_plugin.outputs.latest }}|" share/nvidia-device-plugin.yml
           sed -i "s|intel-gpu-plugin:[0-9]*\.[0-9]*\.[0-9]*|intel-gpu-plugin:${{ steps.intel_plugin.outputs.latest }}|" share/intel-gpu-plugin.yml
           # NPU/DSA/IAA/QAT plugins ship in the same intel-device-plugins release as the GPU plugin.
@@ -173,10 +189,12 @@ jobs:
           entry="| $today | ${{ steps.k3s.outputs.latest }} | ${{ steps.nvidia_plugin.outputs.latest }} | v${{ steps.intel_plugin.outputs.latest }} | ${{ steps.gaudi_plugin.outputs.latest }} |"
           awk -v e="$entry" \
               -v k3s="${{ steps.k3s.outputs.latest }}" \
+              -v k3sdigest="${{ steps.k3s.outputs.digest }}" \
               -v plugin="${{ steps.nvidia_plugin.outputs.latest }}" '
             /^## Release History/ { in_rh = 1 }
             in_rh && /^\|----------/ { print; print e; in_rh = 0; next }
-            /^\| `K3S_TAG`/ { sub(/`v[0-9][^`]*-amd64`/, "`" k3s "`"); print; next }
+            /^\| `K3S_TAG`/ { sub(/`v[0-9][^`]*-k3s[0-9]+(-amd64)?`/, "`" k3s "`"); print; next }
+            /^\| `K3S_DIGEST`/ { sub(/`sha256:[0-9a-f]+…`/, "`" substr(k3sdigest, 1, 15) "…`"); print; next }
             /k8s-device-plugin\/v[0-9]/ { sub(/v[0-9]+\.[0-9]+\.[0-9]+/, plugin); print; next }
             { print }
           ' README.md > README.md.new && mv README.md.new README.md
