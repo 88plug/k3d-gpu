@@ -48,6 +48,8 @@
 #           vision, Whisper speech-to-text and DL Streamer video analytics on the
 #           Intel GPU/NPU units the LLM leaves free
 #   recipe  print a ready-to-apply workload manifest (npu-embeddings)
+#   facts   detect + doctor + doctor --perf + report as one facts/v1 JSON document
+#   plan    engine, model and placement from the measured (green) matrix cells, --explain prints why
 
 set -euo pipefail
 
@@ -117,6 +119,14 @@ Usage: k3d-gpu <command>
             and DL Streamer video analytics (GPU media engines) on what the LLM leaves
   recipe npu-embeddings
             Print an OVMS embeddings-on-NPU manifest for this host (pipe to kubectl apply -f -)
+  facts [--json]
+            Host facts (detect + doctor + doctor --perf + report) as one JSON
+            document, schema facts/v1; writes ~/.local/state/k3d-gpu/facts.json
+            (--json prints it only). detect --json and doctor --json print the same
+  plan [--explain|--json] [--engine E] [--device cpu|gpu|npu|hpu] [--model M]
+       [--bind ADDR] [--port N] [--facts FILE] [--matrix FILE]
+            Engine, model and placement for this box, picked only from measured
+            (green) matrix cells; with none it says "unmeasured, run prove"
   version   Show version
   help      Show this message
 
@@ -157,6 +167,8 @@ Environment:
   K3D_GPU_EXPERIMENTAL  auto (default: safe, mature, detected features), off, or a comma
                         list to force exactly those; 'list' prints them with their status
                         on this host. See docs/experimental.md
+  K3D_GPU_CONSOLE       dir holding facts.py, plan.py, the schema and matrix
+                        (default: the repo's console/, then ${SHARE_DIR}/console)
 
 Docs: https://github.com/88plug/k3d-gpu
 EOF
@@ -876,6 +888,16 @@ npu_fw_date() {
 
 # YYYYMMDD -> YYYY-MM-DD
 ymd() { echo "${1:0:4}-${1:4:2}-${1:6:2}"; }
+
+# Labels for facts pods can select on, one key=value per line: AMX (a CPU
+# feature: no plugin), Intel GPU XMX and media engines, the NPU generation, and
+# the CPU's other ISA extensions under NFD's names. Needs resolve_vendors.
+node_feature_labels() {
+    if is_active amx; then amx_labels; fi
+    if is_active intel; then intel_gpu_labels; fi
+    if is_active npu; then npu_labels; fi
+    cpu_isa_labels
+}
 
 # Resolve the active vendor list into ACTIVE (array). Honors K3D_GPU_VENDORS.
 resolve_vendors() {
@@ -2899,20 +2921,23 @@ doctor_perf() {
 }
 
 cmd_doctor() {
-    local perf=0
+    local perf=0 json=0
     while [ $# -gt 0 ]; do
         case "$1" in
             --perf) perf=1 ;;
             --experimental) DOCTOR_EXP_ALL=1 ;;
+            --json) json=1 ;;
             --model-gb) [ $# -ge 2 ] || err "--model-gb needs a size in GiB"; PERF_MODEL_GB=$2; shift ;;
             --model-gb=*) PERF_MODEL_GB=${1#*=} ;;
-            *) err "unknown doctor option: $1 (use --perf [--model-gb N] or --experimental)" ;;
+            *) err "unknown doctor option: $1 (use --perf [--model-gb N], --experimental or --json)" ;;
         esac
         shift
     done
     if [ -n "${PERF_MODEL_GB}" ] && ! [[ "${PERF_MODEL_GB}" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
         err "--model-gb must be a number of GiB, got '${PERF_MODEL_GB}'"
     fi
+    # --json: facts/v1, which holds both the doctor and the doctor --perf findings.
+    if [ "${json}" -eq 1 ]; then cmd_facts --json; return; fi
     if [ "${perf}" -eq 1 ]; then doctor_perf; else doctor; fi
 }
 
@@ -3009,19 +3034,11 @@ cmd_up() {
     if ! balloons_baked; then
         create_args+=(--k3s-arg="--disable=nri-balloons@server:*")
     fi
-    # AMX is a CPU feature: no plugin, just NFD-style labels pods can select on.
-    if is_active amx; then
-        while read -r label; do
-            [ -n "${label}" ] && create_args+=(--k3s-node-label="${label}@server:*;agent:*")
-        done < <(amx_labels)
-    fi
-    # Facts pods can select on: Intel GPU XMX and media engines, the NPU
-    # generation, and the CPU's other ISA extensions under NFD's names.
+    # AMX, Intel GPU XMX and media engines, the NPU generation and the CPU's
+    # other ISA extensions: labels pods can select on (node_feature_labels).
     while read -r label; do
         [ -n "${label}" ] && create_args+=(--k3s-node-label="${label}@server:*;agent:*")
-    done < <(if is_active intel; then intel_gpu_labels; fi
-             if is_active npu; then npu_labels; fi
-             cpu_isa_labels)
+    done < <(node_feature_labels)
     # Extra labels for stacks that place pods by their own node labels, e.g. Intel's
     # Enterprise Agent Toolkit: ei-infra-eligible=true,ei-inference-eligible=true.
     local extra
@@ -3359,7 +3376,13 @@ cmd_test() {
 }
 
 # One line per active accelerator: "<vendor> <resource> [<resource>...]".
+# --json: facts/v1 (its detected, labels and targets members are detect's view).
 cmd_detect() {
+    case "${1:-}" in
+        --json) cmd_facts --json; return ;;
+        "") ;;
+        *) err "unknown detect option: $1 (use --json)" ;;
+    esac
     resolve_vendors
     local v
     for v in ${ACTIVE[@]+"${ACTIVE[@]}"}; do
@@ -3674,15 +3697,21 @@ report_cluster() {
         "$(json_str "${CLUSTER}")" "$(json_str "${ctx}")" "${nodes}"
 }
 
-report_json() {
+# The report members after generated_at: hostname, host, detected, cluster.
+# `facts` embeds the same members, so both describe the host the same way.
+report_body() {
     local host
     report_cpu_text
     host="$(report_cpu),$(report_memory),$(report_intel_gpus),$(report_npus),$(report_gaudi)"
     host+=",$(report_idxd dsa dsa dsa),$(report_idxd iaa iax iax),$(report_qat),$(report_nvidia),$(report_rapl)"
-    printf '{"schema":"%s","k3d_gpu_version":"%s","generated_at":%s,"hostname":%s,"host":{"kernel":%s,%s},%s,%s}\n' \
-        "${REPORT_SCHEMA}" "${VERSION}" "$(json_str "$(date -u +%Y-%m-%dT%H:%M:%SZ)")" \
+    printf '"hostname":%s,"host":{"kernel":%s,%s},%s,%s' \
         "$(json_str "$(read1 "${SYSROOT}/proc/sys/kernel/hostname")")" "$(json_str "$(kernel_release)")" \
         "${host}" "$(report_detected)" "$(report_cluster)"
+}
+
+report_json() {
+    printf '{"schema":"%s","k3d_gpu_version":"%s","generated_at":%s,%s}\n' \
+        "${REPORT_SCHEMA}" "${VERSION}" "$(json_str "$(date -u +%Y-%m-%dT%H:%M:%SZ)")" "$(report_body)"
 }
 
 # Self-contained HTML: the JSON is embedded verbatim ("</" escaped so it cannot
@@ -5427,6 +5456,128 @@ cmd_agent() {
     esac
 }
 
+# ---- facts and plan: the console spine ------------------------------------------
+# `facts` puts what detect, doctor, doctor --perf and report read into one JSON
+# document, facts/v1 (console/facts.v1.schema.json). console/facts.py normalizes
+# and validates it; nothing in it depends on the clock, so the same host gives
+# the same bytes. `plan` feeds facts/v1 and the baked matrix of measured cells
+# (console/matrix.v1.json) to console/plan.py, a pure function that picks an
+# engine, model and placement only from green cells. Both need python3 (stdlib).
+
+# Directory with facts.py and plan.py: K3D_GPU_CONSOLE, then next to a repo
+# checkout, then the packaged copy.
+console_dir() {
+    local d self
+    self=$(readlink -f "${BASH_SOURCE[0]}")
+    for d in "${K3D_GPU_CONSOLE:-}" "$(dirname "${self}")/../console" "${SHARE_DIR}/console"; do
+        if [ -n "${d}" ] && [ -f "${d}/facts.py" ] && [ -f "${d}/plan.py" ]; then
+            echo "${d}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Lookups that live in this script's tables, keyed for console/facts.py: XMX and
+# platform per bound Intel GPU id, generation per NPU id, CPU family:model and the
+# NUMA node count. Needs resolve_vendors.
+facts_lookups() {
+    local e id name gens="" xmx="" x gen fm
+    for e in ${INTEL_DRIVERS[@]+"${INTEL_DRIVERS[@]}"}; do
+        id=${e#* }
+        IFS='|' read -r name _ <<< "$(intel_gpu_platform "${id}")"
+        x=$(gpu_xmx "${name}")
+        xmx+="${xmx:+,}$(json_str "${id}"):{\"platform\":$(json_str_or_null "${name}"),\"xmx\":${x:-null}}"
+    done
+    for id in ${NPU_IDS[@]+"${NPU_IDS[@]}"}; do
+        IFS='|' read -r _ _ gen <<< "$(npu_platform "${id}")"
+        gens+="${gens:+,}$(json_str "${id}"):$(json_str_or_null "${gen}")"
+    done
+    fm=$(cpu_family_model)
+    printf '{"intel_gpu":{%s},"npu_generation":{%s},"cpu_family_model":%s,"numa_nodes":%s,"cpu_vendor":%s}' \
+        "${xmx}" "${gens}" "$(json_str_or_null "${fm/ /:}")" "$(json_num "$(numa_count)")" \
+        "$(json_str_or_null "$(cpuinfo_field vendor_id)")"
+}
+
+# The raw facts document console/facts.py normalizes. Doctor and doctor --perf
+# run as their own commands would, colours off, and their transcripts are kept
+# whole; facts.py turns them into findings.
+facts_raw() {
+    local body labels doctor_out perf_out doctor_rc=0 perf_rc=0 ovms_image
+    body=$(report_body 3>/dev/null)
+    labels=$({ if is_active hybrid; then echo "${HYBRID_LABEL}"; fi
+               if is_active numa; then numa_labels; fi
+               node_feature_labels; } | paste -sd' ')
+    doctor_out=$(set -e; RED="" GRN="" YLW="" RST=""; doctor 2>&1) || doctor_rc=$?
+    perf_out=$(set -e; RED="" GRN="" YLW="" RST=""; doctor_perf 2>&1) || perf_rc=$?
+    ovms_image=$(AGENT_BACKEND=ovms AGENT_HPU=""; agent_config; echo "${AGENT_IMAGE}")
+    printf '{"k3d_gpu_version":%s,"pins":{"ovms":%s},"report":{%s},"labels":%s,"lookups":%s,"doctor":{"exit":%s,"text":%s},"perf":{"exit":%s,"text":%s}}\n' \
+        "$(json_str "${VERSION}")" "$(json_str "${ovms_image}")" "${body}" "$(json_words "${labels}")" \
+        "$(facts_lookups)" "${doctor_rc}" "$(json_str "${doctor_out}")" "${perf_rc}" "$(json_str "${perf_out}")"
+}
+
+# facts/v1 on stdout. $1: the console directory.
+facts_json() {
+    resolve_vendors 2>/dev/null
+    facts_raw | python3 "$1/facts.py" normalize
+}
+
+# facts [--json]: --json prints facts/v1; otherwise writes it to the state dir
+# and prints a summary.
+cmd_facts() {
+    local dir json=0 state out
+    case "${1:-}" in
+        --json) json=1 ;;
+        "") ;;
+        *) err "unknown facts option: $1 (use --json)" ;;
+    esac
+    dir=$(console_dir) || err "facts: console/facts.py not found next to the launcher or in ${SHARE_DIR}/console (set K3D_GPU_CONSOLE)"
+    require python3
+    out=$(facts_json "${dir}") || err "facts: could not build facts/v1"
+    if [ "${json}" -eq 1 ]; then
+        printf '%s\n' "${out}"
+        return
+    fi
+    state="${XDG_STATE_HOME:-${HOME}/.local/state}/k3d-gpu"
+    mkdir -p "${state}"
+    printf '%s\n' "${out}" > "${state}/facts.json.tmp"
+    mv -f "${state}/facts.json.tmp" "${state}/facts.json"
+    python3 "${dir}/facts.py" summary < "${state}/facts.json"
+    info "Wrote ${state}/facts.json"
+}
+
+# plan [--explain|--json] [--facts FILE] [--matrix FILE] [--engine E] [--device D]
+#      [--model M] [--bind ADDR] [--port N]
+cmd_plan() {
+    local dir mode=text facts="" matrix="" args=() out
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --explain) mode=explain ;;
+            --json) mode=json ;;
+            --facts|--matrix|--engine|--device|--model|--bind|--port)
+                [ $# -ge 2 ] || err "plan: $1 needs a value"
+                case "$1" in
+                    --facts) facts=$2 ;;
+                    --matrix) matrix=$2 ;;
+                    *) args+=("$1" "$2") ;;
+                esac
+                shift ;;
+            *) err "unknown plan option: $1 (use --explain, --json, --facts, --matrix, --engine, --device, --model, --bind, --port)" ;;
+        esac
+        shift
+    done
+    dir=$(console_dir) || err "plan: console/plan.py not found next to the launcher or in ${SHARE_DIR}/console (set K3D_GPU_CONSOLE)"
+    require python3
+    [ -n "${matrix}" ] || matrix="${dir}/matrix.v1.json"
+    if [ -n "${facts}" ]; then
+        [ -f "${facts}" ] || err "plan: facts file ${facts} does not exist"
+        out=$(<"${facts}")
+    else
+        out=$(facts_json "${dir}") || err "plan: could not build facts/v1"
+    fi
+    python3 "${dir}/plan.py" --mode "${mode}" --matrix "${matrix}" ${args[@]+"${args[@]}"} <<< "${out}"
+}
+
 # K3D_GPU_EXPERIMENTAL=list prints the feature table with any command; any
 # other value is checked up front, so an unknown name fails before anything runs.
 if exp_is_list; then
@@ -5439,13 +5590,15 @@ case "${1:-help}" in
     up)      cmd_up      ;;
     down)    cmd_down    ;;
     test)    cmd_test    ;;
-    detect)  cmd_detect  ;;
+    detect)  shift; cmd_detect "$@" ;;
     doctor)  shift; cmd_doctor "$@" ;;
     report)  cmd_report "${2:-}" ;;
     logs)    cmd_logs    ;;
     host-setup) shift; cmd_host_setup "$@" ;;
     agent)   shift; cmd_agent "$@" ;;
     recipe)  cmd_recipe "${2:-}" ;;
+    facts)   shift; cmd_facts "$@" ;;
+    plan)    shift; cmd_plan "$@" ;;
     version|--version|-v) echo "k3d-gpu ${VERSION}" ;;
     help|--help|-h) usage ;;
     *) usage; exit 1 ;;

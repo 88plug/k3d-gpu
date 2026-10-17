@@ -1,0 +1,13 @@
+facts: sha256:50096139fb1e424adfc64c8c05beb7b9ed3d6f5bbd3a35f1723e6493b23632aa
+targets:
+  cpu: Intel(R) N100, family:model 6:190; usable
+  gpu:0000:00:02.0: intel Alder Lake-N, 0x46d1, on i915, no XMX; usable
+matrix: 2 cells, 0 on a target of this host
+  no measured cell for these targets
+decision:
+  unmeasured, run `k3d-gpu prove` on this box
+  bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)
+exit=0
+--- calls
+kubectl config get-contexts -o name
+kubectl --context k3d-gpu --request-timeout=5s get nodes -o name

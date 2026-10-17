@@ -1,0 +1,93 @@
+{
+  "rows": [
+    {
+      "device": "CPU, P-core balloon",
+      "engine": {
+        "device": "CPU",
+        "image": "openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58",
+        "name": "ovms"
+      },
+      "evidence": {
+        "ledger": "H6",
+        "report_id": "synthetic-test-1"
+      },
+      "family": "Raptor Lake-S (i9-13900T)",
+      "host_fingerprint": null,
+      "id": "raptorlake-s.cpu-pcores.ovms.qwen3-4b-int4",
+      "match": {
+        "family_model": "6:183",
+        "hybrid": true,
+        "kind": "cpu"
+      },
+      "measured_on": "2026-10-16",
+      "metrics": {
+        "decode_tok_s": {
+          "ci95": null,
+          "median": 15.66
+        },
+        "prefill_tok_s": {
+          "ci95": null,
+          "median": 172
+        }
+      },
+      "model": {
+        "name": "OpenVINO/Qwen3-4B-int4-ov",
+        "precision": "int4",
+        "revision": "b467368d16b75df14055562fe927ae8e1f15f7ef"
+      },
+      "placement": "p-cores",
+      "release": "94f71e11d8a5a760010a028aaadcdb44df8df73e",
+      "reps": 5,
+      "source": "ledger",
+      "tool_eval": {
+        "result": "pass",
+        "suite": "synthetic-test"
+      }
+    },
+    {
+      "device": "UHD Graphics 770 iGPU (i915, no XMX)",
+      "engine": {
+        "device": "GPU",
+        "image": "openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58",
+        "name": "ovms"
+      },
+      "evidence": {
+        "ledger": "H6",
+        "report_id": "synthetic-test-2"
+      },
+      "family": "Raptor Lake-S (i9-13900T)",
+      "host_fingerprint": null,
+      "id": "raptorlake-s.uhd770.ovms.qwen3-4b-int4",
+      "match": {
+        "device_id": "0xa780",
+        "kind": "gpu",
+        "vendor": "intel"
+      },
+      "measured_on": "2026-10-16",
+      "metrics": {
+        "decode_tok_s": {
+          "ci95": null,
+          "median": 9.89
+        },
+        "prefill_tok_s": {
+          "ci95": null,
+          "median": 66
+        }
+      },
+      "model": {
+        "name": "OpenVINO/Qwen3-4B-int4-ov",
+        "precision": "int4",
+        "revision": "b467368d16b75df14055562fe927ae8e1f15f7ef"
+      },
+      "placement": "device",
+      "release": "94f71e11d8a5a760010a028aaadcdb44df8df73e",
+      "reps": 5,
+      "source": "ledger",
+      "tool_eval": {
+        "result": "pass",
+        "suite": "synthetic-test"
+      }
+    }
+  ],
+  "schema": "k3d-gpu.matrix/v1"
+}

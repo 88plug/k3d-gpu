@@ -1,0 +1,71 @@
+{
+  "auth": "loopback-key",
+  "bind": "127.0.0.1",
+  "cell": "raptorlake-s.cpu-pcores.ovms.qwen3-4b-int4",
+  "considered": [
+    {
+      "cell": "raptorlake-s.cpu-pcores.ovms.qwen3-4b-int4",
+      "eligible": true,
+      "excluded": null,
+      "reasons": [],
+      "status": "green",
+      "target": "cpu"
+    },
+    {
+      "cell": "raptorlake-s.uhd770.ovms.qwen3-4b-int4",
+      "eligible": true,
+      "excluded": null,
+      "reasons": [],
+      "status": "green",
+      "target": "gpu:0000:00:02.0"
+    }
+  ],
+  "decision": "green",
+  "engine": {
+    "device": "CPU",
+    "image": "openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58",
+    "name": "ovms"
+  },
+  "explain": [
+    "facts: sha256:d24cd9499c08d2e9502194f71775d7929d6c28871e7c2ad26b17b8ba9c1da0a1",
+    "targets:",
+    "  cpu: 13th Gen Intel(R) Core(TM) i9-13900T, family:model 6:183, P-cores 0-15 (16), E-cores 16-31 (16); usable",
+    "  gpu:0000:00:02.0: intel Raptor Lake-S, 0xa780, on i915, no XMX; usable",
+    "  gpu:nvidia: nvidia, on nvidia; usable",
+    "matrix: 2 cells, 2 on a target of this host",
+    "  raptorlake-s.cpu-pcores.ovms.qwen3-4b-int4 on cpu: green (ledger H6 report synthetic-test-1, decode 15.66 tok/s)",
+    "  raptorlake-s.uhd770.ovms.qwen3-4b-int4 on gpu:0000:00:02.0: green (ledger H6 report synthetic-test-2, decode 9.89 tok/s)",
+    "decision:",
+    "  pick: raptorlake-s.cpu-pcores.ovms.qwen3-4b-int4 (decode 15.66 tok/s, highest of 2 green cell(s) on this host)",
+    "  engine: ovms on CPU (openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58)",
+    "  model: OpenVINO/Qwen3-4B-int4-ov@b467368d16b75df14055562fe927ae8e1f15f7ef, int4",
+    "  placement: P-cores 0-15 (16 CPUs), pod label k3d-gpu.io/cores=performance",
+    "  endpoint: 127.0.0.1:8000, auth loopback-key (no login, gateway key in a 0600 file)"
+  ],
+  "fingerprint": "sha256:d24cd9499c08d2e9502194f71775d7929d6c28871e7c2ad26b17b8ba9c1da0a1",
+  "message": null,
+  "model": {
+    "name": "OpenVINO/Qwen3-4B-int4-ov",
+    "precision": "int4",
+    "revision": "b467368d16b75df14055562fe927ae8e1f15f7ef"
+  },
+  "overrides": {},
+  "placement": {
+    "cpu_count": 16,
+    "cpus": "0-15",
+    "kind": "p-cores",
+    "pod_label": "k3d-gpu.io/cores=performance",
+    "resource": null,
+    "target": "cpu"
+  },
+  "port": 8000,
+  "schema": "k3d-gpu.plan/v1",
+  "summary": [
+    "pick: raptorlake-s.cpu-pcores.ovms.qwen3-4b-int4 (decode 15.66 tok/s, highest of 2 green cell(s) on this host)",
+    "engine: ovms on CPU (openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58)",
+    "model: OpenVINO/Qwen3-4B-int4-ov@b467368d16b75df14055562fe927ae8e1f15f7ef, int4",
+    "placement: P-cores 0-15 (16 CPUs), pod label k3d-gpu.io/cores=performance",
+    "endpoint: 127.0.0.1:8000, auth loopback-key (no login, gateway key in a 0600 file)"
+  ]
+}
+exit=0

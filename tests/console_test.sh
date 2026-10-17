@@ -1,0 +1,170 @@
+#!/usr/bin/env bash
+# Console spine tests: facts/v1 and plan(). No cluster, no network.
+#
+#   - unit and property tests of console/ (tests/console/test_console.py)
+#   - every tests/fixtures/*/facts.json and plan.json and both matrices validate
+#     (tests/sim_matrix_test.sh writes and byte-checks those goldens)
+#   - the schema subset validator agrees with the jsonschema package
+#     (tests/console/crosscheck.py; skipped when jsonschema is not importable by
+#     ${CONSOLE_JSONSCHEMA_PYTHON:-python3})
+#   - `plan` against a matrix whose cells are green (synthetic report ids) picks,
+#     places and renders as the goldens in tests/console/*.golden say
+#   - `facts` writes the state file; detect --json and doctor --json print facts/v1
+#   - bad options and bad input fail with a message
+#
+# Usage: tests/console_test.sh [--update]   (--update rewrites tests/console/*.golden)
+
+set -uo pipefail
+
+TESTS=$(cd "$(dirname "$0")" && pwd)
+REPO=$(dirname "${TESTS}")
+K3D_GPU="${REPO}/scripts/k3d-gpu"
+CONSOLE="${REPO}/console"
+DIR="${TESTS}/console"
+UPDATE=0
+[ "${1:-}" = "--update" ] && UPDATE=1
+WORK=$(mktemp -d)
+trap 'rm -rf "${WORK}"' EXIT
+PASS=0 FAILS=0
+
+ok()   { PASS=$((PASS + 1)); echo "ok   $*"; }
+fail() { FAILS=$((FAILS + 1)); echo "FAIL $*"; }
+
+if python3 "${DIR}/test_console.py"; then ok "console unit and property tests"; else fail "console unit and property tests"; fi
+
+# Every golden document validates against its schema.
+validate() {  # validate <ref or ""> <file>...
+    local ref=$1; shift
+    python3 - "${CONSOLE}" "${ref}" "$@" <<'EOF'
+import json, sys
+sys.path.insert(0, sys.argv[1])
+import facts, schema_check
+root, ref = facts.load_schema(), sys.argv[2] or None
+for f in sys.argv[3:]:
+    schema_check.check(json.load(open(f, encoding="utf-8")), root, ref)
+EOF
+}
+shopt -s nullglob
+facts_files=("${REPO}"/tests/fixtures/*/facts.json)
+plan_files=("${REPO}"/tests/fixtures/*/plan.json)
+[ "${#facts_files[@]}" -ge 14 ] && [ "${#facts_files[@]}" -eq "${#plan_files[@]}" ] \
+    && ok "facts.json and plan.json goldens for all ${#facts_files[@]} fixtures" \
+    || fail "expected facts.json and plan.json for every fixture (found ${#facts_files[@]} and ${#plan_files[@]})"
+validate "" "${facts_files[@]}" && ok "facts goldens validate as facts/v1" || fail "facts goldens validate as facts/v1"
+validate "#/\$defs/plan" "${plan_files[@]}" && ok "plan goldens validate as plan/v1" || fail "plan goldens validate as plan/v1"
+validate "#/\$defs/matrix" "${CONSOLE}/matrix.v1.json" "${DIR}/matrix-green.json" \
+    && ok "matrices validate as matrix/v1" || fail "matrices validate as matrix/v1"
+
+# S2: the baked matrix has no green cell on any fixture.
+if grep -L '"decision": "unmeasured"' "${plan_files[@]}" | grep -q .; then
+    fail "a fixture plan.json is not unmeasured with the baked matrix"
+else
+    ok "every fixture plans unmeasured with the baked matrix"
+fi
+if grep -L 'unmeasured, run `k3d-gpu prove` on this box' "${REPO}"/tests/fixtures/*/plan-explain.golden | grep -q .; then
+    fail "a fixture plan-explain.golden lacks the unmeasured line"
+else
+    ok "every fixture's --explain says unmeasured, run prove"
+fi
+
+py=${CONSOLE_JSONSCHEMA_PYTHON:-python3}
+"${py}" "${DIR}/crosscheck.py" "${facts_files[@]}" "${plan_files[@]}" "${CONSOLE}/matrix.v1.json" "${DIR}/matrix-green.json"
+case $? in
+    0) ok "schema_check agrees with jsonschema" ;;
+    77) echo "skip schema_check vs jsonschema (jsonschema not importable by ${py})" ;;
+    *) fail "schema_check disagrees with jsonschema" ;;
+esac
+
+# Green-path goldens: plan reads a facts file, so nothing on this host is read.
+golden() {  # golden <name> <plan args...>
+    local name=$1 out rc; shift
+    out=$("${K3D_GPU}" plan --facts "${REPO}/tests/fixtures/raptorlake-nvidia/facts.json" \
+        --matrix "${DIR}/matrix-green.json" "$@" 2>&1)
+    rc=$?
+    out+=$'\n'"exit=${rc}"
+    if [ "${UPDATE}" -eq 1 ]; then
+        printf '%s\n' "${out}" > "${DIR}/${name}.golden"; echo "wrote tests/console/${name}.golden"; return
+    fi
+    if diff -u "${DIR}/${name}.golden" <(printf '%s\n' "${out}") > "${WORK}/diff"; then
+        ok "plan $* (${name}.golden)"
+    else
+        fail "plan $* (${name}.golden)"; sed 's/^/  | /' "${WORK}/diff"
+    fi
+}
+golden green-explain --explain
+golden green-gpu-shared --device gpu --bind 0.0.0.0 --port 9000
+golden green-json --json
+golden green-engine-excluded --explain --engine llama.cpp
+[ "${UPDATE}" -eq 1 ] && exit 0
+
+# --json output of the green plan is plan/v1.
+"${K3D_GPU}" plan --json --facts "${REPO}/tests/fixtures/raptorlake-nvidia/facts.json" --matrix "${DIR}/matrix-green.json" > "${WORK}/p.json"
+validate "#/\$defs/plan" "${WORK}/p.json" && ok "green plan --json validates as plan/v1" || fail "green plan --json validates as plan/v1"
+
+# `facts` on a fixture, with docker, k3d and kubectl stubbed: state file written
+# and valid; detect --json and doctor --json print the same document.
+mkdir -p "${WORK}/bin" "${WORK}/state"
+for t in docker k3d kubectl; do printf '#!/bin/sh\nexit 0\n' > "${WORK}/bin/${t}"; chmod +x "${WORK}/bin/${t}"; done
+run() { PATH="${WORK}/bin:${PATH}" XDG_STATE_HOME="${WORK}/state" \
+    K3D_GPU_SYSROOT="${REPO}/tests/fixtures/arrowlake-h/sysroot" "${K3D_GPU}" "$@"; }
+if run facts > "${WORK}/summary" 2>&1 && [ -s "${WORK}/state/k3d-gpu/facts.json" ] \
+   && validate "" "${WORK}/state/k3d-gpu/facts.json" \
+   && grep -q "^facts/v1 for sha256:" "${WORK}/summary" && grep -q "npu:0000:00:0b.0" "${WORK}/summary"; then
+    ok "facts writes \$XDG_STATE_HOME/k3d-gpu/facts.json and prints a summary"
+else
+    fail "facts writes the state file"; sed 's/^/  | /' "${WORK}/summary"
+fi
+run facts --json > "${WORK}/a.json" 2>/dev/null
+run detect --json > "${WORK}/b.json" 2>/dev/null
+run doctor --json > "${WORK}/c.json" 2>/dev/null
+if cmp -s "${WORK}/a.json" "${WORK}/state/k3d-gpu/facts.json" && cmp -s "${WORK}/a.json" "${WORK}/b.json" \
+   && cmp -s "${WORK}/a.json" "${WORK}/c.json"; then
+    ok "facts --json, detect --json, doctor --json and the state file are the same bytes"
+else
+    fail "facts --json, detect --json, doctor --json and the state file differ"
+fi
+
+# The packaged layout (/usr/bin/k3d-gpu + /usr/share/k3d-gpu/console/<the files
+# PKGBUILD installs>) finds its console files and plans.
+pkg="${WORK}/pkg"
+mkdir -p "${pkg}/usr/bin" "${pkg}/usr/share/k3d-gpu/console"
+cp "${K3D_GPU}" "${pkg}/usr/bin/k3d-gpu"
+files=$(sed -n 's/^ *for f in \(.*\); do$/\1/p' "${REPO}/packaging/aur/PKGBUILD")
+for f in ${files}; do cp "${CONSOLE}/${f}" "${pkg}/usr/share/k3d-gpu/console/"; done
+if [ -n "${files}" ] && K3D_GPU_SHARE="${pkg}/usr/share/k3d-gpu" "${pkg}/usr/bin/k3d-gpu" plan --json \
+       --facts "${REPO}/tests/fixtures/raptorlake-nvidia/facts.json" > "${WORK}/pkg.json" 2> "${WORK}/pkg.err" \
+   && cmp -s "${WORK}/pkg.json" "${REPO}/tests/fixtures/raptorlake-nvidia/plan.json"; then
+    ok "packaged layout (PKGBUILD's console files under \$K3D_GPU_SHARE/console) plans"
+else
+    fail "packaged layout plans"; sed 's/^/  | /' "${WORK}/pkg.err"
+fi
+
+# Bad input fails with a message and a non-zero exit.
+expect_fail() {  # expect_fail <message substring> <args...>
+    local want=$1 out; shift
+    if out=$(run "$@" 2>&1 < /dev/null); then
+        fail "$* succeeded"
+    elif grep -qF -- "${want}" <<< "${out}"; then
+        ok "$* fails: ${want}"
+    else
+        fail "$* failed without '${want}'"; sed 's/^/  | /' <<< "${out}"
+    fi
+}
+F="${REPO}/tests/fixtures/raptorlake-nvidia/facts.json"
+expect_fail "unknown facts option" facts --yaml
+expect_fail "unknown detect option" detect --yaml
+expect_fail "unknown plan option" plan --frobnicate
+expect_fail "plan: --port needs a value" plan --port
+expect_fail "port must be an integer" plan --facts "${F}" --port abc
+expect_fail "port must be an integer" plan --facts "${F}" --port 70000
+expect_fail "device must be one of" plan --facts "${F}" --device tpu
+expect_fail "does not exist" plan --facts "${WORK}/missing.json"
+echo '{"schema": "k3d-gpu.facts/v1"}' > "${WORK}/bad.json"
+expect_fail "schema violations" plan --facts "${WORK}/bad.json"
+echo 'not json' > "${WORK}/junk.json"
+expect_fail "plan:" plan --facts "${WORK}/junk.json"
+expect_fail "schema violations" plan --facts "${F}" --matrix "${WORK}/bad.json"
+
+echo ""
+echo "${PASS} passed, ${FAILS} failed"
+[ "${FAILS}" -eq 0 ]

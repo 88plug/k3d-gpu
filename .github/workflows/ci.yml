@@ -72,6 +72,17 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - run: tests/agent_kubeconform.sh
 
+  console-tests:
+    name: Console spine (facts/v1, plan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install jsonschema for the schema cross-check (pinned)
+        run: python3 -m venv /tmp/jsonschema && /tmp/jsonschema/bin/pip install --disable-pip-version-check jsonschema==4.26.0
+      - env:
+          CONSOLE_JSONSCHEMA_PYTHON: /tmp/jsonschema/bin/python
+        run: tests/console_test.sh
+
   claims-check:
     name: Docs claims guard
     runs-on: ubuntu-latest

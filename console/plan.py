@@ -1,0 +1,263 @@
+#!/usr/bin/env python3
+"""plan(facts, matrix, overrides): engine, model, placement, port and auth mode.
+
+A pure function: no I/O, no clock, inputs left unchanged. It picks only from
+green matrix cells and never interpolates: a box with no green cell gets
+"unmeasured, run `k3d-gpu prove` on this box" and no engine.
+
+A cell is green when all three hold (docs/console-design.md, L2):
+  - a k3d-gpu report run exists for it (evidence.report_id),
+  - it passed the tool-calling eval (tool_eval.result == "pass"),
+  - its engine image is the one this release pins (facts.release.pins).
+A community cell is amber; anything else is grey, with the reasons. A green
+cell is eligible when it matches a usable target of this host and no override
+excludes it. Among eligible cells the highest median decode tok/s wins; ties go
+to the smaller cell id.
+
+  plan.py --mode text|explain|json --matrix FILE [--engine E] [--device D]
+          [--model M] [--bind ADDR] [--port N] < facts.json
+
+Python standard library only.
+"""
+
+import argparse
+import ipaddress
+import json
+import os
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+
+import facts as factsmod  # noqa: E402  (stdlib-only sibling modules)
+import schema_check  # noqa: E402
+
+PLAN_SCHEMA = "k3d-gpu.plan/v1"
+UNMEASURED = "unmeasured, run `k3d-gpu prove` on this box"
+DEFAULT_BIND = "127.0.0.1"
+ENGINE_PORTS = {"ovms": 8000, "vllm": 8000, "llama.cpp": 8080}  # each server's own default port
+DEVICES = ("cpu", "gpu", "npu", "hpu")
+CPU_MATCH_KEYS = ("family_model", "hybrid", "amx")
+AUTH_TEXT = {
+    "loopback-key": "no login, gateway key in a 0600 file",
+    "oidc": "OIDC login required: the listener is off loopback",
+}
+
+
+def same(a, b):
+    """JSON equality that keeps true apart from 1."""
+    if isinstance(a, bool) or isinstance(b, bool):
+        return type(a) is type(b) and a == b
+    return a == b
+
+
+def is_loopback(bind):
+    if bind == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(bind).is_loopback
+    except ValueError:
+        return False
+
+
+def check_overrides(overrides):
+    """A copy of overrides with only known keys and valid values; ValueError otherwise."""
+    out = {}
+    for key, value in (overrides or {}).items():
+        if value is None:
+            continue
+        if key == "device":
+            if value not in DEVICES:
+                raise ValueError("device must be one of %s, got %r" % (", ".join(DEVICES), value))
+        elif key == "port":
+            if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 65535:
+                raise ValueError("port must be an integer 1-65535, got %r" % (value,))
+        elif key in ("engine", "model", "bind"):
+            if not isinstance(value, str) or not value:
+                raise ValueError("%s must be a non-empty string" % key)
+        else:
+            raise ValueError("unknown override %r" % key)
+        out[key] = value
+    return out
+
+
+def cell_status(row, pins):
+    """("green" | "amber" | "grey", reasons)."""
+    if row["source"] == "community":
+        return "amber", ["community pack, not reviewed"]
+    reasons = []
+    if not row["evidence"]["report_id"]:
+        reasons.append("no k3d-gpu report run recorded")
+    te = row["tool_eval"]
+    if te is None:
+        reasons.append("tool-calling eval not run")
+    elif te["result"] != "pass":
+        reasons.append("tool-calling eval failed (%s)" % te["suite"])
+    pin = pins.get(row["engine"]["name"])
+    if pin is None:
+        reasons.append("this release pins no %s image" % row["engine"]["name"])
+    elif pin != row["engine"]["image"]:
+        reasons.append("engine pin moved since the measurement (cell %s, release %s)" % (row["engine"]["image"], pin))
+    return ("grey" if reasons else "green"), reasons
+
+
+def matches(match, t):
+    for key, want in match.items():
+        if key in CPU_MATCH_KEYS:
+            if t["cpu"] is None or not same(t["cpu"][key], want):
+                return False
+        elif not same(t.get(key), want):
+            return False
+    return True
+
+
+def placement_fits(placement, t):
+    if placement == "p-cores":
+        return t["kind"] == "cpu" and t["cpu"]["hybrid"]
+    if placement == "cpu":
+        return t["kind"] == "cpu"
+    return t["kind"] != "cpu"
+
+
+def resolve_placement(kind, t):
+    p = {"kind": kind, "target": t["id"], "resource": None, "pod_label": None, "cpus": None, "cpu_count": None}
+    if kind == "p-cores":
+        p.update(pod_label="k3d-gpu.io/cores=performance", cpus=t["cpu"]["p_cpus"], cpu_count=t["cpu"]["p_count"])
+    elif kind == "device":
+        p["resource"] = t["resource"]
+    return p
+
+
+def placement_text(p):
+    if p["kind"] == "p-cores":
+        return "P-cores %s (%s CPUs), pod label %s" % (p["cpus"], p["cpu_count"], p["pod_label"])
+    if p["kind"] == "cpu":
+        return "CPU (%s)" % p["target"]
+    return "%s via %s" % (p["target"], p["resource"])
+
+
+def metric_text(row):
+    return "decode %s tok/s" % row["metrics"]["decode_tok_s"]["median"]
+
+
+def evidence_text(row):
+    ev = row["evidence"]
+    parts = [row["source"]]
+    if ev["ledger"]:
+        parts.append(ev["ledger"])
+    if ev["report_id"]:
+        parts.append("report " + ev["report_id"])
+    return " ".join(parts)
+
+
+def plan(facts, matrix, overrides=None):
+    """The plan/v1 document for this host. Pure: reads its arguments only."""
+    ov = check_overrides(overrides)
+    targets = facts["targets"]
+    pins = facts["release"]["pins"]
+    explain = ["facts: " + facts["fingerprint"], "targets:"]
+    for t in targets:
+        state = "usable" if t["usable"] else "not usable: " + t["reason"]
+        explain.append("  %s: %s; %s" % (t["id"], factsmod.describe(t), state))
+
+    considered, eligible, shown = [], [], []
+    for row in sorted(matrix["rows"], key=lambda r: r["id"]):
+        status, reasons = cell_status(row, pins)
+        fits = [t for t in targets if matches(row["match"], t) and placement_fits(row["placement"], t)]
+        usable = [t for t in fits if t["usable"]]
+        tgt = (usable or fits or [None])[0]
+        excluded = None
+        if tgt is None:
+            excluded = "no target on this host matches"
+        elif not usable:
+            excluded = "target %s not usable: %s" % (tgt["id"], tgt["reason"])
+        elif "engine" in ov and row["engine"]["name"] != ov["engine"]:
+            excluded = "--engine %s" % ov["engine"]
+        elif "device" in ov and tgt["kind"] != ov["device"]:
+            excluded = "--device %s" % ov["device"]
+        elif "model" in ov and row["model"]["name"] != ov["model"]:
+            excluded = "--model %s" % ov["model"]
+        ok = status == "green" and excluded is None
+        considered.append({"cell": row["id"], "status": status, "reasons": reasons,
+                           "target": tgt["id"] if tgt else None, "eligible": ok, "excluded": excluded})
+        if ok:
+            eligible.append((row, tgt))
+        if tgt is not None:
+            line = "  %s on %s: %s (%s, %s)" % (row["id"], tgt["id"], status, evidence_text(row), metric_text(row))
+            if reasons:
+                line += ": " + "; ".join(reasons)
+            if excluded:
+                line += "; excluded: " + excluded
+            shown.append(line)
+
+    explain.append("matrix: %d cells, %d on a target of this host" % (len(matrix["rows"]), len(shown)))
+    explain += shown or ["  no measured cell for these targets"]
+    if ov:
+        explain.append("overrides: " + ", ".join("%s=%s" % (k, ov[k]) for k in sorted(ov)))
+
+    bind = ov.get("bind", DEFAULT_BIND)
+    auth = "loopback-key" if is_loopback(bind) else "oidc"
+    doc = {"schema": PLAN_SCHEMA, "fingerprint": facts["fingerprint"], "overrides": ov,
+           "considered": considered, "bind": bind, "auth": auth}
+    if not eligible:
+        summary = [UNMEASURED, "bind %s, auth %s (%s)" % (bind, auth, AUTH_TEXT[auth])]
+        doc.update(decision="unmeasured", message=UNMEASURED, cell=None, engine=None, model=None,
+                   placement=None, port=ov.get("port"))
+    else:
+        eligible.sort(key=lambda rt: (-rt[0]["metrics"]["decode_tok_s"]["median"], rt[0]["id"]))
+        row, tgt = eligible[0]
+        port = ov.get("port", ENGINE_PORTS.get(row["engine"]["name"], 8000))
+        placement = resolve_placement(row["placement"], tgt)
+        model = row["model"]
+        summary = [
+            "pick: %s (%s, highest of %d green cell(s) on this host)" % (row["id"], metric_text(row), len(eligible)),
+            "engine: %s on %s (%s)" % (row["engine"]["name"], row["engine"]["device"], row["engine"]["image"]),
+            "model: %s%s, %s" % (model["name"], "@" + model["revision"] if model["revision"] else "", model["precision"]),
+            "placement: " + placement_text(placement),
+            "endpoint: %s:%d, auth %s (%s)" % (bind, port, auth, AUTH_TEXT[auth]),
+        ]
+        doc.update(decision="green", message=None, cell=row["id"], engine=dict(row["engine"]),
+                   model=dict(model), placement=placement, port=port)
+    doc["summary"] = summary
+    doc["explain"] = explain + ["decision:"] + ["  " + s for s in summary]
+    return doc
+
+
+def main(argv):
+    ap = argparse.ArgumentParser(prog="k3d-gpu plan", description="engine, model and placement from green matrix cells")
+    ap.add_argument("--mode", choices=("text", "explain", "json"), default="text")
+    ap.add_argument("--matrix", required=True)
+    ap.add_argument("--engine")
+    ap.add_argument("--device")
+    ap.add_argument("--model")
+    ap.add_argument("--bind")
+    ap.add_argument("--port")
+    args = ap.parse_args(argv[1:])
+    schema = factsmod.load_schema()
+    try:
+        port = None
+        if args.port is not None:
+            if not args.port.isdigit():
+                raise ValueError("port must be an integer 1-65535, got %r" % args.port)
+            port = int(args.port)
+        facts = json.load(sys.stdin)
+        schema_check.check(facts, schema)
+        with open(args.matrix, encoding="utf-8") as f:
+            matrix = json.load(f)
+        schema_check.check(matrix, schema, "#/$defs/matrix")
+        doc = plan(facts, matrix, {"engine": args.engine, "device": args.device, "model": args.model,
+                                   "bind": args.bind, "port": port})
+        schema_check.check(doc, schema, "#/$defs/plan")
+    except (ValueError, OSError) as e:
+        sys.stderr.write("plan: %s\n" % e)
+        return 2
+    if args.mode == "json":
+        sys.stdout.buffer.write(factsmod.dumps(doc))
+    else:
+        lines = doc["explain"] if args.mode == "explain" else doc["summary"]
+        sys.stdout.buffer.write(("\n".join(lines) + "\n").encode("utf-8"))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

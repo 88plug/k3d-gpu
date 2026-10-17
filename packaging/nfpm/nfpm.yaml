@@ -19,6 +19,8 @@ description: |-
   Xeon DSA/IAA/QAT/AMX and hybrid P/E-core pinning. Needs docker, k3d and kubectl.
 depends:
   - bash
+suggests:
+  - python3  # k3d-gpu facts and plan (console/)
 contents:
   - src: scripts/k3d-gpu
     dst: /usr/bin/k3d-gpu
@@ -34,6 +36,14 @@ contents:
       mode: 0644
   - src: share/telemetry/optional/*.yml
     dst: /usr/share/k3d-gpu/telemetry/optional/
+    file_info:
+      mode: 0644
+  - src: console/*.py
+    dst: /usr/share/k3d-gpu/console/
+    file_info:
+      mode: 0644
+  - src: console/*.json
+    dst: /usr/share/k3d-gpu/console/
     file_info:
       mode: 0644
   - src: README.md
@@ -62,6 +72,11 @@ contents:
     file_info:
       mode: 0755
   - dst: /usr/share/k3d-gpu/telemetry/optional
+    type: dir
+    packager: rpm
+    file_info:
+      mode: 0755
+  - dst: /usr/share/k3d-gpu/console
     type: dir
     packager: rpm
     file_info:

@@ -1,0 +1,55 @@
+{
+  "auth": "loopback-key",
+  "bind": "127.0.0.1",
+  "cell": null,
+  "considered": [
+    {
+      "cell": "raptorlake-s.cpu-pcores.ovms.qwen3-4b-int4",
+      "eligible": false,
+      "excluded": null,
+      "reasons": [
+        "no k3d-gpu report run recorded",
+        "tool-calling eval not run"
+      ],
+      "status": "grey",
+      "target": "cpu"
+    },
+    {
+      "cell": "raptorlake-s.uhd770.ovms.qwen3-4b-int4",
+      "eligible": false,
+      "excluded": null,
+      "reasons": [
+        "no k3d-gpu report run recorded",
+        "tool-calling eval not run"
+      ],
+      "status": "grey",
+      "target": "gpu:0000:00:02.0"
+    }
+  ],
+  "decision": "unmeasured",
+  "engine": null,
+  "explain": [
+    "facts: sha256:d24cd9499c08d2e9502194f71775d7929d6c28871e7c2ad26b17b8ba9c1da0a1",
+    "targets:",
+    "  cpu: 13th Gen Intel(R) Core(TM) i9-13900T, family:model 6:183, P-cores 0-15 (16), E-cores 16-31 (16); usable",
+    "  gpu:0000:00:02.0: intel Raptor Lake-S, 0xa780, on i915, no XMX; usable",
+    "  gpu:nvidia: nvidia, on nvidia; usable",
+    "matrix: 2 cells, 2 on a target of this host",
+    "  raptorlake-s.cpu-pcores.ovms.qwen3-4b-int4 on cpu: grey (ledger H6, decode 15.66 tok/s): no k3d-gpu report run recorded; tool-calling eval not run",
+    "  raptorlake-s.uhd770.ovms.qwen3-4b-int4 on gpu:0000:00:02.0: grey (ledger H6, decode 9.89 tok/s): no k3d-gpu report run recorded; tool-calling eval not run",
+    "decision:",
+    "  unmeasured, run `k3d-gpu prove` on this box",
+    "  bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)"
+  ],
+  "fingerprint": "sha256:d24cd9499c08d2e9502194f71775d7929d6c28871e7c2ad26b17b8ba9c1da0a1",
+  "message": "unmeasured, run `k3d-gpu prove` on this box",
+  "model": null,
+  "overrides": {},
+  "placement": null,
+  "port": null,
+  "schema": "k3d-gpu.plan/v1",
+  "summary": [
+    "unmeasured, run `k3d-gpu prove` on this box",
+    "bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)"
+  ]
+}
