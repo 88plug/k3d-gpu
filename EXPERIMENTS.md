@@ -2213,8 +2213,9 @@ every arm. The hog stays the treatment: its design, arms, block order and A1 rul
   `stress-ng-stream` workers cannot satisfy it.
 - Each level gets its own A1 verdict. The ledger verdict is the `typical` one; `heavy` is reported as
   robustness. Confidence stays the bootstrap P(R <= 0.5); P(R >= 0.8) is reported beside it.
-- Budget: each level aborts at 18 min of its own wall time (the first one includes cluster setup);
-  unrun blocks are void. The cluster and the load containers are removed before the lock is released.
+- Budget: each level aborts 18 min after its background load starts, the whole run at 39 min of
+  lock time (cluster setup included); a level with under 10 min left is not started; unrun blocks
+  are void. The cluster and the load containers are removed before the lock is released.
 - sudo -A reads RAPL `energy_uj` and the uncore IMC counters (`perf stat`), as pre-registered; no writes.
 - Predictions unchanged from A1: REFUTED (R ~1). Priors: SUPPORTED 0.10, REFUTED as stated 0.20,
   REFUTED 0.45, INCONCLUSIVE 0.25.
