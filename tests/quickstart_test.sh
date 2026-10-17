@@ -313,5 +313,24 @@ launcher_ver=$(sed -n 's/^VERSION="\([^"]*\)".*/\1/p' "${LAUNCHER}")
     && ok "installer pin ${inst_ver} is not newer than the launcher ${launcher_ver}" || fail "installer pin ${inst_ver} newer than launcher ${launcher_ver}"
 grep -q "cmd_quickstart" "${LAUNCHER}" && ok "launcher has quickstart" || fail "launcher lacks quickstart"
 
+# ---- qs_backend agrees with agent_device ----------------------------------------
+# On a Gaudi host only an AUTO device (any case) sends the agent to vLLM; any other
+# device makes `agent up` deploy OVMS, so quickstart must take the OVMS path.
+qsb() { (source <(lib); resource_total() { [ "$1" = habana.ai/gaudi ] && echo 1 || echo 0; }; qs_backend); }
+for d in auto AUTO Auto; do eq "gaudi + device ${d} -> vllm" "$(K3D_GPU_AGENT_DEVICE=${d} qsb)" vllm; done
+eq "gaudi + device unset -> vllm" "$(unset K3D_GPU_AGENT_DEVICE; qsb)" vllm
+for d in CPU cpu GPU gpu NPU HETERO:GPU,CPU; do eq "gaudi + device ${d} -> ovms" "$(K3D_GPU_AGENT_DEVICE=${d} qsb)" ovms; done
+eq "explicit backend wins" "$(K3D_GPU_AGENT_DEVICE=cpu K3D_GPU_AGENT_BACKEND=VLLM qsb)" vllm
+
+# ---- argument-less commands refuse extra arguments ----------------------------
+# `k3d-gpu down mycluster` must not delete the default cluster instead.
+for c in up down test logs; do
+    rm -f "${TMP}/argstate/log"; mkdir -p "${TMP}/argstate"
+    out=$(PATH="${B}:${PATH}" STUB_STATE="${TMP}/argstate" timeout 20 bash "${LAUNCHER}" "${c}" mycluster 2>&1); rc=$?
+    [ "${rc}" -ne 0 ] && ok "${c} with an extra argument exits non-zero" || fail "${c} with an extra argument: rc=0"
+    has "${c} names the stray argument" "${out}" "mycluster"
+    lacks "${c} with an extra argument runs nothing" "$(cat "${TMP}/argstate/log" 2>/dev/null)" "k3d cluster"
+done
+
 echo "quickstart_test: ${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]
