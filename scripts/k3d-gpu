@@ -39,6 +39,8 @@
 #           Server) on the cluster's best Intel engine (an XMX GPU, else CPU on P-cores; NPU on request)
 #   capacity    agents per box: closed-loop agent ramp against the cluster's chat endpoint
 #           (bench/apb/capacity.py), prints the agent count at a p95 turn SLO and writes JSON
+#   share   build an identifier-free capacity-oracle bundle (oracle/share.py), print it,
+#           write it; --submit sends it as a public GitHub issue only after a y/N prompt
 
 set -euo pipefail
 
@@ -84,7 +86,8 @@ Usage: k3d-gpu <command>
             Read-only host tuning advisor for inference (CPU/GPU clocks, power
             limits, THP, swap, IRQs, persistence): evidence, why, apply + revert
   report    Host + cluster inventory per engine; writes k3d-gpu-report.{json,html}
-            (report DIR writes there; report --json prints the JSON only)
+            (report DIR writes there; report --json prints the JSON only;
+            --no-cluster skips the cluster query)
   logs      Tail k3s server container logs
   host-setup [--apply] [--distro D]
             Check the host drivers/userspace (vainfo, clinfo, libva, libstdc++) and print
@@ -99,6 +102,11 @@ Usage: k3d-gpu <command>
             chat endpoint until the p95 turn latency breaks the SLO; prints agents
             per box, p50/p95/p99, J per turn and the binding limit, writes JSON.
             Refuses a box that is not quiet (--force). Full options: capacity --help
+  share [--capacity FILE]... [--dry-run] [--submit]
+            Capacity oracle (opt-in): builds a bundle from report + capacity results
+            with an allowlist (no hostname, serials, MACs, IPs, paths or timestamps),
+            prints every byte and writes it. Nothing is sent without --submit AND a
+            y/N answer at a terminal. Full options: share --help
   version   Show version
   help      Show this message
 
@@ -121,6 +129,7 @@ Environment:
   K3D_GPU_AGENT_DEVICE  agent device: auto | CPU | GPU | NPU (default: auto)
   K3D_GPU_AGENT_MODEL   agent Hugging Face model (default: OpenVINO/Qwen3-4B-int4-ov)
   K3D_GPU_BENCH         dir holding apb/capacity.py (default: the repo's bench/, then ${SHARE_DIR}/bench)
+  K3D_GPU_ORACLE        dir holding share.py (default: the repo's oracle/, then ${SHARE_DIR}/oracle)
 
 Docs: https://github.com/88plug/k3d-gpu
 EOF
@@ -2647,7 +2656,7 @@ pci_addr() { basename "$(readlink -f "$1")"; }
 
 # Intel DRM cards (card0, not connectors like card0-DP-1).
 report_intel_gpus() {
-    local card dev bdf id drv render r name engines guc huc out=""
+    local card dev bdf id drv render r name xmx engines guc huc out=""
     for card in "${SYSROOT}"/sys/class/drm/card*; do
         [[ "${card##*/}" =~ ^card[0-9]+$ ]] || continue
         dev="${card}/device"
@@ -2657,8 +2666,9 @@ report_intel_gpus() {
             [ -e "${r}/device" ] && [ "$(pci_addr "${r}/device")" = "${bdf}" ] && render=${r##*/}
         done
         IFS='|' read -r name _ <<< "$(intel_gpu_platform "${id}")"
+        xmx=$(gpu_xmx "${name}")
         engines=$(gpu_engines "${card}" "${dev}") guc=$(uc_info "${card##*card}" guc "${bdf}") huc=$(uc_info "${card##*card}" huc "${bdf}")
-        out+="${out:+,}{\"card\":$(json_str "${card##*/}"),\"render_node\":$(json_str_or_null "${render}"),\"pci\":$(json_str "${bdf}"),\"device_id\":$(json_str_or_null "${id}"),\"platform\":$(json_str_or_null "${name}"),\"driver\":$(json_str_or_null "${drv}"),\"engines\":${engines},\"guc\":${guc},\"huc\":${huc}}"
+        out+="${out:+,}{\"card\":$(json_str "${card##*/}"),\"render_node\":$(json_str_or_null "${render}"),\"pci\":$(json_str "${bdf}"),\"device_id\":$(json_str_or_null "${id}"),\"platform\":$(json_str_or_null "${name}"),\"xmx\":${xmx:-null},\"driver\":$(json_str_or_null "${drv}"),\"engines\":${engines},\"guc\":${guc},\"huc\":${huc}}"
         report_line "Intel GPU ${card##*/}: ${name:+${name} }${id} on ${drv:-no driver} (${bdf}${render:+, ${render}})"
         report_line "  engines: $(grep -o '"name":"[^"]*"' <<< "${engines}" | cut -d'"' -f4 | paste -sd' ')"
         report_line "  GuC $(uc_status "${guc}"), HuC $(uc_status "${huc}")"
@@ -2767,7 +2777,9 @@ node_json() { printf '{"name":%s,"allocatable":{%s},"labels":{%s}}' "$(json_str 
 # k3d-<cluster> context explicitly, never whatever context happens to be current.
 report_cluster() {
     local ctx="k3d-${CLUSTER}" reason="" lines kind node key val nodes="" cur="" alloc="" labels="" summary=""
-    if ! command -v kubectl >/dev/null 2>&1; then
+    if [ "${REPORT_NO_CLUSTER:-0}" = 1 ]; then
+        reason="not queried (--no-cluster)"
+    elif ! command -v kubectl >/dev/null 2>&1; then
         reason="kubectl not found"
     elif ! kubectl config get-contexts -o name 2>/dev/null | grep -x "${ctx}" >/dev/null; then
         reason="no kubeconfig context ${ctx} (cluster not created, or KUBECONFIG points elsewhere)"
@@ -2850,15 +2862,23 @@ for (const [k, x] of [...Object.entries(r.host), ["detected", r.detected], ["clu
 EOF
 }
 
-# report [--json] [dir]: text summary plus <dir>/k3d-gpu-report.{json,html}, or
-# only the JSON on stdout with --json.
+# report [--json] [--no-cluster] [dir]: text summary plus
+# <dir>/k3d-gpu-report.{json,html}, or only the JSON on stdout with --json.
+# --no-cluster leaves kubectl alone (the cluster section says it was not queried).
 cmd_report() {
-    local json dir=.
-    if [ "${1:-}" = "--json" ]; then
+    local json dir=. as_json=0 a
+    for a in "$@"; do
+        case "${a}" in
+            --json)       as_json=1 ;;
+            --no-cluster) REPORT_NO_CLUSTER=1 ;;
+            -*)           err "report: unknown option ${a} (usage: k3d-gpu report [--json] [--no-cluster] [DIR])" ;;
+            *)            dir=${a} ;;
+        esac
+    done
+    if [ "${as_json}" = 1 ]; then
         report_json 3>/dev/null
         return
     fi
-    [ -z "${1:-}" ] || dir=$1
     [ -d "${dir}" ] || err "report directory ${dir} does not exist"
     info "k3d-gpu report: host${SYSROOT:+ ${SYSROOT}}, cluster ${CLUSTER}"
     exec 3>&1
@@ -3685,17 +3705,44 @@ cmd_capacity() {
     exec python3 "${script}" "$@"
 }
 
+# ---- share: capacity-oracle bundle ------------------------------------------
+# oracle/share.py (Python stdlib only), next to a repo checkout first, then the
+# packaged copy. It runs this script again for `report --json --no-cluster`,
+# and uses bench/apb/apb.py (found as for capacity) to recompute the scores.
+oracle_dir() {
+    local d self
+    self=$(readlink -f "${BASH_SOURCE[0]}")
+    for d in "${K3D_GPU_ORACLE:-}" "$(dirname "${self}")/../oracle" "${SHARE_DIR}/oracle"; do
+        if [ -n "${d}" ] && [ -f "${d}/share.py" ]; then
+            echo "${d}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+cmd_share() {
+    local d cap=""
+    d=$(oracle_dir) || err "share: oracle/share.py not found in the repo's oracle/ or ${SHARE_DIR}/oracle (set K3D_GPU_ORACLE)"
+    require python3
+    cap=$(capacity_script) || cap=""
+    K3D_GPU_SELF=$(readlink -f "${BASH_SOURCE[0]}") K3D_GPU_VERSION="${VERSION}" \
+        K3D_GPU_AGENT_IMAGE_PIN="${AGENT_IMAGE}" K3D_GPU_APB_DIR="${cap%/*}" \
+        exec python3 "${d}/share.py" "$@"
+}
+
 case "${1:-help}" in
     up)      cmd_up      ;;
     down)    cmd_down    ;;
     test)    cmd_test    ;;
     detect)  cmd_detect  ;;
     doctor)  shift; cmd_doctor "$@" ;;
-    report)  cmd_report "${2:-}" ;;
+    report)  shift; cmd_report "$@" ;;
     logs)    cmd_logs    ;;
     host-setup) shift; cmd_host_setup "$@" ;;
     agent)   cmd_agent "${2:-}" ;;
     capacity) shift; cmd_capacity "$@" ;;
+    share)   shift; cmd_share "$@" ;;
     version|--version|-v) echo "k3d-gpu ${VERSION}" ;;
     help|--help|-h) usage ;;
     *) usage; exit 1 ;;

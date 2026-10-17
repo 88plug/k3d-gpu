@@ -35,6 +35,21 @@ jobs:
       - run: python3 bench/apb/test_apb.py
       - run: python3 bench/test_agent_trace.py
 
+  oracle:
+    name: Capacity oracle (schema, privacy, validator, matrix, share)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: python3 oracle/test_oracle.py
+      - name: Validate every committed bundle
+        run: |
+          mapfile -t bundles < <(find oracle/seed -name '*.json' | sort)
+          python3 oracle/validate.py --trusted "${bundles[@]}"
+      - name: docs/oracle.md is the matrix of the committed bundles
+        run: |
+          python3 oracle/matrix.py --trusted oracle/seed --md "${RUNNER_TEMP}/oracle.md" oracle/seed
+          diff -u docs/oracle.md "${RUNNER_TEMP}/oracle.md"
+
   claims-check:
     name: Docs claims guard
     runs-on: ubuntu-latest

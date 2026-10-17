@@ -32,6 +32,9 @@ package() {
     install -Dm644 bench/agent_trace_gen.py "$pkgdir/usr/share/k3d-gpu/bench/agent_trace_gen.py"
     install -Dm644 bench/apb/apb.py         "$pkgdir/usr/share/k3d-gpu/bench/apb/apb.py"
     install -Dm644 bench/apb/capacity.py    "$pkgdir/usr/share/k3d-gpu/bench/apb/capacity.py"
+    for f in bundle.py project.py validate.py share.py schema/bundle-v1.json; do
+        install -Dm644 "oracle/$f" "$pkgdir/usr/share/k3d-gpu/oracle/$f"
+    done
     install -Dm644 README.md  "$pkgdir/usr/share/doc/$pkgname/README.md"
     install -Dm644 LICENSE.md    "$pkgdir/usr/share/licenses/$pkgname/LICENSE.md"
 }
