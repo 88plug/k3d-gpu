@@ -57,7 +57,7 @@ def prompt_for(args):
     """The prompt of the next request. --unique-prompts puts a tag no other request
     has first (a random run id and a sequence number across every phase and
     warm-up), so no two requests share a prefix and none is a prefix-cache hit."""
-    if not args.unique_prompts:
+    if not getattr(args, "unique_prompts", False):
         return args.prompt
     return f"[request {args.run_id}-{next(PROMPT_SEQ)}] {args.prompt}"
 
