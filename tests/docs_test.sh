@@ -61,10 +61,46 @@ check "Dependabot docker ecosystem watches docs-build/" "" \
     python3 -c 'import sys,re; t=open(sys.argv[1]).read(); sys.exit(not re.search(r"package-ecosystem: docker\n\s+directory: /docs-build\n", t))' \
     "${ROOT}/.github/dependabot.yml"
 
+# --- Every root file the site renders triggers the Docs workflow -------------
+for src in README.md CONTRIBUTING.md; do
+    check "docs workflow runs on ${src} changes (push and pull_request)" "" \
+        test "$(grep -cE "^ +- ${src}\$" "${ROOT}/.github/workflows/docs.yml")" -eq 2
+done
+
+# --- main deploys only when Pages publishes from Actions ----------------------
+# pages_enabled(): 404 (Pages off) and a legacy branch source mean skip; only
+# build_type=workflow deploys; any other HTTP error fails the job.
+check "Pages gate: off (404), legacy source, workflow source, 500" "" \
+    python3 - "${ROOT}/docs-build" <<'PY'
+import io, json, sys, urllib.error
+sys.path.insert(0, sys.argv[1])
+from pages_enabled import enabled
+
+def reply(code, body=None):
+    def opener(req, timeout):
+        assert req.full_url == "https://api.github.com/repos/o/r/pages", req.full_url
+        if code != 200:
+            raise urllib.error.HTTPError(req.full_url, code, "x", {}, None)
+        return io.BytesIO(json.dumps(body).encode())
+    return opener
+
+assert enabled("o/r", opener=reply(404)) is False
+assert enabled("o/r", opener=reply(200, {"build_type": "legacy"})) is False
+assert enabled("o/r", opener=reply(200, {"build_type": "workflow"})) is True
+try:
+    enabled("o/r", opener=reply(500))
+except urllib.error.HTTPError:
+    pass
+else:
+    sys.exit("500 must fail the job")
+PY
+check "deploy job and Pages upload wait on the Pages gate" "" \
+    test "$(grep -cE "^ +if: (steps\.pages\.outputs\.enabled|needs\.build\.outputs\.pages) == 'true'\$" "${ROOT}/.github/workflows/docs.yml")" -eq 2
+
 # --- A nav entry whose page is not in docs/ yet is skipped, not an error ------
 d=$(tree unpublished)
 rm -f "$d/docs/provenance.md"
-printf '# Intel\n\nSee [the log](provenance.md#sources).\n' > "$d/docs/intel.md"
+printf '\nSee [the log](provenance.md#sources).\n' >> "$d/docs/intel.md"
 printf '\nSee [provenance](docs/provenance.md).\n' >> "$d/README.md"
 check "missing nav page does not fail --strict" "$d" build "$d"
 check "missing nav page logged as not yet published" "$d" grep -q 'provenance.md not yet published' "$d/build.log"

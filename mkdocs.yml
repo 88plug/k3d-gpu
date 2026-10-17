@@ -26,14 +26,18 @@ nav:
       - Failure modes: failure-modes.md
       - Power envelope: power-envelope.md
       - Accelerated dataplane: accelerated-dataplane.md
+      - Experimental features: experimental.md
   - Integrations:
       - GPUStack: integrations/gpustack.md
   - Design:
       - Speculative decoding: design/speculative-decoding.md
   - Evidence:
+      - Intel capability map: intel-capability-map.md
       - Benchmark landscape: benchmark-landscape.md
       - Provenance: provenance.md
       - Security audit: security-audit.md
+  - Development:
+      - Branch consolidation: dev/consolidation.md
   - Contributing: contributing.md
 
 validation:
