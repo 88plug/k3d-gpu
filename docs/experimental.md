@@ -156,6 +156,11 @@ by how many families the feature covers.
   driver gpu-v0.12.1 publishes no shared counters or multi-allocation, so on
   Intel today the gain is health status and extended-resource mapping.
   https://github.com/intel/intel-resource-drivers-for-kubernetes/blob/gpu-v0.12.1/doc/gpu/README.md
+- **Intel GPU DRA driver**: `dra` never switches the Intel GPU path. The driver
+  ships in the image and runs only with `K3D_GPU_DRA=1` (README, "Intel GPU DRA
+  mode"). It stays opt-in when the driver is present: measured on a UHD 770 it
+  hands a claim pod the iGPU, but a second claim pod stays Pending where the
+  plugin's sharing default runs both (EXPERIMENTS.md H16, H17).
 - **Detect / prereq**: none. It applies on every host.
 
 ### 2. `image-volume`: OCI images as read-only model volumes

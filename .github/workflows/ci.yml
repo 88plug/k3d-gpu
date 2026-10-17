@@ -72,6 +72,13 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - run: tests/agent_kubeconform.sh
 
+  intel-gpu-dra-manifests:
+    name: Intel GPU DRA manifests (kubeconform)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - run: tests/kubeconform.sh
+
   console-tests:
     name: Console spine (facts/v1, plan)
     runs-on: ubuntu-latest

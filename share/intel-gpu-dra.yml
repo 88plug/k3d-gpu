@@ -1,0 +1,251 @@
+# Intel GPU DRA driver (intel-resource-drivers-for-kubernetes gpu-v0.12.1), opt-in with K3D_GPU_DRA=1
+# Source: https://github.com/intel/intel-resource-drivers-for-kubernetes (deployments/gpu at tag
+# gpu-v0.12.1 = f5bbf17c75fa7b05c08bff7ed53884e163420646), rendered with `kubectl kustomize`
+# from this kustomization. Re-render to bump:
+#
+#   resources:
+#     - <checkout at the tag>/deployments/gpu/overlays/manage-binding-disabled
+#   images:
+#     - name: ghcr.io/intel/intel-gpu-resource-driver
+#       newTag: v0.12.1
+#       digest: sha256:1479956240397c7207c3d38c0d296bd591cd66f26d432452f9a2d75336843776
+#
+# Publishes the node's Intel GPUs as ResourceSlices (driver gpu.intel.com) and
+# serves ResourceClaims for DeviceClass gpu.intel.com through CDI. Needs
+# resource.k8s.io/v1 (Kubernetes 1.34+); upstream supports gpu-v0.12 on 1.36+.
+# The manage-binding-disabled overlay keeps the driver from rebinding host GPUs
+# between xe/i915 and vfio-pci, and limits each DeviceClass to GPUs on its driver.
+#
+# Baked into the image next to intel-gpu-plugin.yml; the launcher passes k3s
+# --disable=intel-gpu-plugin when K3D_GPU_DRA=1 and --disable=intel-gpu-dra
+# otherwise, so a cluster runs exactly one of the two.
+#
+# Local changes on top of the render (keep them when re-rendering):
+# - DaemonSet nodeSelector k3d-gpu.io/intel-gpu-dra=true, a label only DRA mode
+#   sets, so clusters created without --disable=intel-gpu-dra (older launchers,
+#   a manual `k3d cluster create`) never run this plugin next to intel-gpu-plugin.
+# - hostPath type DirectoryOrCreate on /var/run/cdi and /run/xpumd, as in the
+#   other baked plugins.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: intel-gpu-resource-driver
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: intel-gpu-resource-driver-service-account
+  namespace: intel-gpu-resource-driver
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: intel-gpu-resource-driver-role
+  namespace: intel-gpu-resource-driver
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+- apiGroups:
+  - resource.k8s.io
+  resources:
+  - resourceslices
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - resource.k8s.io
+  resources:
+  - resourceclaims
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: intel-gpu-resource-driver-role-binding
+  namespace: intel-gpu-resource-driver
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: intel-gpu-resource-driver-role
+subjects:
+- kind: ServiceAccount
+  name: intel-gpu-resource-driver-service-account
+  namespace: intel-gpu-resource-driver
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: resourceslices-policy-dra-kubelet-plugin-gpu
+spec:
+  failurePolicy: Fail
+  matchConditions:
+  - expression: request.userInfo.username == "system:serviceaccount:intel-gpu-resource-driver:intel-gpu-resource-driver-service-account"
+    name: isRestrictedUser
+  matchConstraints:
+    resourceRules:
+    - apiGroups:
+      - resource.k8s.io
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      - DELETE
+      resources:
+      - resourceslices
+  validations:
+  - expression: variables.userNodeName != ""
+    message: no node association found for user, this user must run in a pod on a
+      node and ServiceAccountTokenPodNodeInfo must be enabled
+  - expression: variables.userNodeName == variables.objectNodeName
+    messageExpression: '"this user running on node ''"+variables.userNodeName+"''
+      may not modify " + (variables.objectNodeName == "" ?"cluster resourceslices"
+      : "resourceslices on node ''"+variables.objectNodeName+"''")'
+  variables:
+  - expression: request.userInfo.extra[?'authentication.kubernetes.io/node-name'][0].orValue('')
+    name: userNodeName
+  - expression: '(request.operation == "DELETE" ? oldObject : object).spec.?nodeName.orValue("")'
+    name: objectNodeName
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: resourceslices-policy-dra-kubelet-plugin-gpu
+spec:
+  policyName: resourceslices-policy-dra-kubelet-plugin-gpu
+  validationActions:
+  - Deny
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  labels:
+    app: intel-gpu-resource-driver-kubelet-plugin
+  name: intel-gpu-resource-driver-kubelet-plugin
+  namespace: intel-gpu-resource-driver
+spec:
+  selector:
+    matchLabels:
+      app: intel-gpu-resource-driver-kubelet-plugin
+  template:
+    metadata:
+      labels:
+        app: intel-gpu-resource-driver-kubelet-plugin
+    spec:
+      containers:
+      - command:
+        - /kubelet-gpu-plugin
+        env:
+        - name: MANAGE_BINDING
+          value: "false"
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: SYSFS_ROOT
+          value: /sysfs
+        image: ghcr.io/intel/intel-gpu-resource-driver:v0.12.1@sha256:1479956240397c7207c3d38c0d296bd591cd66f26d432452f9a2d75336843776
+        livenessProbe:
+          failureThreshold: 3
+          grpc:
+            port: 51516
+            service: liveness
+          periodSeconds: 30
+          timeoutSeconds: 10
+        name: kubelet-plugin
+        ports:
+        - containerPort: 51516
+          name: healthcheck
+        securityContext:
+          capabilities:
+            drop:
+            - ALL
+          privileged: true
+          readOnlyRootFilesystem: true
+          runAsUser: 0
+          seccompProfile:
+            type: RuntimeDefault
+        startupProbe:
+          failureThreshold: 60
+          grpc:
+            port: 51516
+            service: liveness
+          periodSeconds: 10
+          timeoutSeconds: 10
+        volumeMounts:
+        - mountPath: /var/lib/kubelet/plugins_registry
+          name: plugins-registry
+        - mountPath: /var/lib/kubelet/plugins
+          name: plugins
+        - mountPath: /etc/cdi
+          name: cdi
+        - mountPath: /var/run/cdi
+          name: varruncdi
+        - mountPath: /sysfs
+          name: sysfs
+        - mountPath: /run/xpumd
+          name: xpumd-socket
+      nodeSelector:
+        k3d-gpu.io/intel-gpu-dra: "true"
+      serviceAccount: intel-gpu-resource-driver-service-account
+      serviceAccountName: intel-gpu-resource-driver-service-account
+      volumes:
+      - hostPath:
+          path: /var/lib/kubelet/plugins_registry
+        name: plugins-registry
+      - hostPath:
+          path: /var/lib/kubelet/plugins
+        name: plugins
+      - hostPath:
+          path: /etc/cdi
+        name: cdi
+      - hostPath:
+          path: /var/run/cdi
+          type: DirectoryOrCreate
+        name: varruncdi
+      - hostPath:
+          path: /sys
+        name: sysfs
+      - hostPath:
+          path: /run/xpumd
+          type: DirectoryOrCreate
+        name: xpumd-socket
+---
+apiVersion: resource.k8s.io/v1
+kind: DeviceClass
+metadata:
+  name: gpu-vfio.intel.com
+spec:
+  selectors:
+  - cel:
+      expression: device.driver == "gpu.intel.com"
+  - cel:
+      expression: device.attributes["gpu.intel.com"].driver == 'vfio-pci' || device.attributes["gpu.intel.com"].driver
+        == 'xe-vfio-pci'
+---
+apiVersion: resource.k8s.io/v1
+kind: DeviceClass
+metadata:
+  name: gpu.intel.com
+spec:
+  selectors:
+  - cel:
+      expression: device.driver == "gpu.intel.com"
+  - cel:
+      expression: device.attributes["gpu.intel.com"].driver == 'i915' || device.attributes["gpu.intel.com"].driver
+        == 'xe'

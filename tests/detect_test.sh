@@ -3472,6 +3472,218 @@ up_check "custom image without the baked manifest gets the args via kubectl appl
             - "-allocation-policy=packed"' K3D_GPU_INTEL_SHARED=4 K3D_GPU_INTEL_ALLOCATION=packed \
     K3D_GPU_INTEL_PLUGIN="$(dirname "${K3D_GPU}")/../share/intel-gpu-plugin.yml"
 
+# ---- Intel GPU DRA mode (K3D_GPU_DRA=1) ---------------------------------------
+# DSTUB's kubectl answers what `up` and `test` ask in DRA mode: STUB_K8S_VERSION
+# (/version), STUB_API_VERSIONS, STUB_SLICES (rendered `get resourceslices`
+# lines: driver pool generation kmd taint-effects), STUB_ALLOCATABLE, the pod
+# phase and logs. It appends every call to STUB_LOG and saves `apply -f -` input
+# to STUB_APPLIED. Its k3d appends its arguments, one per line, to STUB_LOG.
+DSTUB="${WORK}/dbin"
+mkdir -p "${DSTUB}"
+cat > "${DSTUB}/kubectl" <<'EOF'
+#!/bin/sh
+printf 'kubectl %s\n' "$*" >> "${STUB_LOG}"
+case "$*" in
+    "get --raw /version") printf '{\n  "major": "1",\n  "gitVersion": "%s"\n}\n' "${STUB_K8S_VERSION}" ;;
+    api-versions) for a in ${STUB_API_VERSIONS}; do echo "${a}"; done ;;
+    "get resourceslices"*) printf '%s' "${STUB_SLICES:-}" ;;
+    "get nodes"*) printf '%s' "${STUB_ALLOCATABLE:-}" ;;
+    "apply -f -") cat > "${STUB_APPLIED}" ;;
+    "get pod"*) echo "${STUB_POD_PHASE:-Succeeded}" ;;
+    logs*) printf %s "${STUB_POD_LOGS:-}" ;;
+esac
+exit 0
+EOF
+printf '#!/bin/sh\nfor a in "$@"; do echo "k3d-arg $a"; done >> "${STUB_LOG}"\n' > "${DSTUB}/k3d"
+cp "${STUB_BIN}/docker" "${DSTUB}/docker"
+chmod +x "${DSTUB}"/*
+
+DRA_APIS="apps/v1 v1 resource.k8s.io/v1 resource.k8s.io/v1beta2"
+# One untainted xe GPU in pool generation 3, next to devices a gpu.intel.com
+# claim cannot get: an older generation, a tainted GPU, a vfio-pci GPU, another driver.
+DRA_SLICES="gpu.intel.com node0 2 xe
+gpu.intel.com node0 3 xe
+gpu.intel.com node0 3 i915 NoSchedule,
+gpu.intel.com node0 3 vfio-pci
+gpu.example.com node0 9 xe
+"
+DRA_NONE="gpu.intel.com node0 3 xe NoExecute,
+gpu.intel.com node0 3 vfio-pci
+"
+CASE=0
+
+# run_says <cmd> <name> <root> <want rc: 0|fail> <ERE> [env assignments...]: run a
+# subcommand against DSTUB. Leaves the call log in ${LOG} and applied YAML in ${APPLIED}.
+run_says() {
+    local cmd=$1 name=$2 root=$3 want=$4 re=$5 out rc
+    shift 5
+    CASE=$((CASE + 1)); LOG="${WORK}/dra-${CASE}.log"; APPLIED="${WORK}/dra-${CASE}.yaml"
+    : > "${LOG}"
+    out=$(env K3D_GPU_SYSROOT="${root}" PATH="${DSTUB}:${PATH}" STUB_LOG="${LOG}" STUB_APPLIED="${APPLIED}" \
+        STUB_K8S_VERSION=v1.34.1+k3s1 STUB_API_VERSIONS="${DRA_APIS}" "$@" bash "${K3D_GPU}" "${cmd}" 2>&1)
+    rc=$?
+    if grep -E -- "${re}" <<< "${out}" >/dev/null \
+       && { { [ "${want}" = 0 ] && [ "${rc}" -eq 0 ]; } || { [ "${want}" = fail ] && [ "${rc}" -ne 0 ]; }; }; then
+        PASS=$((PASS + 1)); echo "ok   ${name}"
+    else
+        FAILS=$((FAILS + 1))
+        echo "FAIL ${name} (rc=${rc}, want ${want}, /${re}/)"
+        sed 's/^/  | /' <<< "${out}"
+    fi
+}
+
+# file_has <name> <file> <ERE> [negate]: <file> must contain a line matching <ERE>
+# (must not when a 4th argument is given).
+file_has() {
+    local name=$1 file=$2 re=$3 negate=${4:-} hit=0
+    grep -E -- "${re}" "${file}" >/dev/null 2>&1 && hit=1
+    if { [ -z "${negate}" ] && [ "${hit}" -eq 1 ]; } || { [ -n "${negate}" ] && [ "${hit}" -eq 0 ]; }; then
+        PASS=$((PASS + 1)); echo "ok   ${name}"
+    else
+        FAILS=$((FAILS + 1))
+        echo "FAIL ${name} (${negate:+not }matching /${re}/ in ${file})"
+        sed 's/^/  | /' "${file}" 2>/dev/null
+    fi
+}
+
+r=$(newroot dra-intel)
+kernel "${r}" 6.18.1
+pci "${r}" 0000:03:00.0 0x8086 0xe20b xe; render "${r}" 0000:03:00.0 128
+
+expect "DRA mode lists the Intel DeviceClass instead of extended resources" "${r}" \
+    "intel deviceclass/gpu.intel.com" K3D_GPU_DRA=1
+expect "K3D_GPU_DRA=0 keeps the device plugin resources" "${r}" "intel gpu.intel.com/xe" K3D_GPU_DRA=0
+expect_fail "K3D_GPU_DRA other than 0 or 1 is rejected" "${r}" K3D_GPU_DRA=yes
+
+doctor_says "doctor reports DRA mode with an Intel GPU" "${r}" 'ok: up deploys the Intel GPU DRA driver' "" K3D_GPU_DRA=1
+r2=$(newroot dra-no-intel)
+kernel "${r2}" 6.18.1
+mkdir -p "${r2}/sys/module/nvidia"; touch "${r2}/dev/nvidiactl"
+doctor_says "doctor fails DRA mode without an Intel GPU" "${r2}" 'fail.*K3D_GPU_DRA=1 but no Intel GPU' "" K3D_GPU_DRA=1
+
+run_says up "up in DRA mode verifies by counting ResourceSlice devices" "${r}" 0 'schedulable: intel=1\.' \
+    K3D_GPU_DRA=1 STUB_K8S_VERSION=v1.36.5+k3s1 STUB_SLICES="${DRA_SLICES}"
+file_has "DRA up labels nodes for the DRA kubelet plugin" "${LOG}" \
+    '^k3d-arg --k3s-node-label=k3d-gpu\.io/intel-gpu-dra=true@server:\*;agent:\*$'
+file_has "DRA up disables the intel-gpu-plugin addon" "${LOG}" '^k3d-arg --k3s-arg=--disable=intel-gpu-plugin@server:0$'
+file_has "DRA up keeps the DRA driver addon" "${LOG}" 'disable=intel-gpu-dra' negate
+file_has "DRA up waits for the kubelet plugin rollout" "${LOG}" \
+    '^kubectl -n intel-gpu-resource-driver rollout status daemonset/intel-gpu-resource-driver-kubelet-plugin'
+file_has "DRA up checks for resource.k8s.io/v1" "${LOG}" '^kubectl api-versions$'
+
+run_says up "up without DRA disables the DRA addon and verifies allocatable" "${r}" 0 'schedulable: intel=2\.' \
+    STUB_ALLOCATABLE="gpu.intel.com/xe 2
+"
+file_has "non-DRA up disables the intel-gpu-dra addon" "${LOG}" '^k3d-arg --k3s-arg=--disable=intel-gpu-dra@server:0$'
+file_has "non-DRA up keeps intel-gpu-plugin" "${LOG}" 'disable=intel-gpu-plugin' negate
+file_has "non-DRA up never reads ResourceSlices" "${LOG}" 'resourceslices' negate
+file_has "non-DRA up never sets the DRA node label" "${LOG}" 'intel-gpu-dra=true' negate
+
+run_says up "DRA on Kubernetes 1.34 fails: the driver is supported on 1.36+" "${r}" fail \
+    'v1\.34\.1\+k3s1.*gpu-v0\.12\.1 needs Kubernetes 1\.36\+' K3D_GPU_DRA=1 STUB_SLICES="${DRA_SLICES}"
+file_has "DRA on 1.34 never waits for the kubelet plugin" "${LOG}" 'rollout status' negate
+run_says up "DRA on Kubernetes 1.37 passes the version gate" "${r}" 0 'schedulable: intel=1\.' \
+    K3D_GPU_DRA=1 STUB_K8S_VERSION=v1.37.0+k3s1 STUB_SLICES="${DRA_SLICES}"
+run_says up "DRA without resource.k8s.io/v1 fails with the cluster version" "${r}" fail \
+    'needs resource\.k8s\.io/v1 \(Kubernetes 1\.34\+\), cluster runs v1\.33\.5\+k3s1' \
+    K3D_GPU_DRA=1 STUB_K8S_VERSION=v1.33.5+k3s1 STUB_API_VERSIONS="apps/v1 v1 resource.k8s.io/v1beta2"
+run_says up "DRA without an Intel GPU fails before creating a cluster" "${r2}" fail 'K3D_GPU_DRA=1 needs an Intel GPU' \
+    K3D_GPU_DRA=1
+file_has "no cluster is created when DRA has no Intel GPU" "${LOG}" '^k3d-arg' negate
+
+run_says test "DRA test pod gets a GPU through a ResourceClaimTemplate" "${r}" 0 'renderD128' \
+    K3D_GPU_DRA=1 STUB_SLICES="${DRA_SLICES}" STUB_POD_LOGS="crw-rw---- 1 root render 226, 128 Oct 16 12:00 renderD128"
+file_has "test creates a v1 ResourceClaimTemplate" "${APPLIED}" '^kind: ResourceClaimTemplate$'
+file_has "the template requests the gpu.intel.com DeviceClass" "${APPLIED}" 'deviceClassName: gpu\.intel\.com$'
+file_has "the test pod claims through the template" "${LOG}" \
+    '^kubectl run intel-gpu-dra-test .*"resourceClaimTemplateName":"intel-gpu-dra-test".*"claims":\[\{"name":"gpu"\}\]'
+file_has "the template is deleted after the test" "${LOG}" '^kubectl delete resourceclaimtemplate intel-gpu-dra-test'
+file_has "DRA test never requests an extended resource" "${LOG}" 'gpu\.intel\.com/(xe|i915)' negate
+
+run_says test "DRA test fails when the claim pod fails, and cleans up" "${r}" fail 'intel-gpu-dra-test pod failed' \
+    K3D_GPU_DRA=1 STUB_SLICES="${DRA_SLICES}" STUB_POD_PHASE=Failed STUB_POD_LOGS="ls: /dev/dri: No such file or directory"
+file_has "a failed DRA test still deletes the template" "${LOG}" '^kubectl delete resourceclaimtemplate intel-gpu-dra-test'
+run_says test "DRA test fails when only tainted or vfio GPUs are published" "${r}" fail 'no allocatable gpu\.intel\.com device' \
+    K3D_GPU_DRA=1 STUB_SLICES="${DRA_NONE}"
+file_has "no DRA pod runs without an allocatable device" "${LOG}" '^kubectl run' negate
+
+# DRA mode on an iGPU: the sharing default (#57) configures intel-gpu-plugin, which
+# DRA mode disables, so up must not touch the plugin and says so when the user set it.
+r3=$(newroot dra-igpu)
+kernel "${r3}" 6.18.1
+pci "${r3}" 0000:00:02.0 0x8086 0xa780 i915; render "${r3}" 0000:00:02.0 128
+run_says up "DRA up on an iGPU verifies through ResourceSlices" "${r3}" 0 'schedulable: intel=1\.' \
+    K3D_GPU_DRA=1 STUB_K8S_VERSION=v1.37.1+k3s1 STUB_SLICES="gpu.intel.com node0 1 i915"
+file_has "DRA up on an iGPU never patches intel-gpu-plugin args" "${LOG}" 'intel-gpu-plugin\.yaml|daemonset intel-gpu-plugin' negate
+run_says up "DRA up warns that plugin sharing settings are ignored" "${r3}" 0 \
+    'K3D_GPU_DRA=1 ignores K3D_GPU_INTEL_SHARED=4 K3D_GPU_INTEL_MONITORING=1' \
+    K3D_GPU_DRA=1 STUB_K8S_VERSION=v1.37.1+k3s1 STUB_SLICES="gpu.intel.com node0 1 i915" \
+    K3D_GPU_INTEL_SHARED=4 K3D_GPU_INTEL_MONITORING=1
+run_says up "DRA up still rejects a bad K3D_GPU_INTEL_SHARED" "${r3}" fail "K3D_GPU_INTEL_SHARED='0'" \
+    K3D_GPU_DRA=1 K3D_GPU_INTEL_SHARED=0
+doctor_says "doctor in DRA mode reports claim-based exclusivity, not plugin sharing" "${r3}" \
+    'ok: DRA mode: one pod per Intel GPU per ResourceClaim' "" K3D_GPU_DRA=1
+doctor_says "doctor in DRA mode never claims plugin sharing" "${r3}" 'GPU sharing on' negate K3D_GPU_DRA=1
+doctor_says "doctor in DRA mode warns about ignored plugin settings" "${r3}" \
+    'warn.*K3D_GPU_DRA=1 ignores K3D_GPU_INTEL_ALLOCATION=packed' "" K3D_GPU_DRA=1 K3D_GPU_INTEL_ALLOCATION=packed
+
+# The DRA manifest is baked into every image, so launchers that never pass
+# --disable=intel-gpu-dra (AUR <= 0.1.7, the README's manual k3d command) still
+# apply it. The kubelet plugin must then stay off nodes without the DRA label.
+DRA_YML="$(dirname "${K3D_GPU}")/../share/intel-gpu-dra.yml"
+dra_ds=$(awk '/^---/ { ds = 0 } /^kind: DaemonSet$/ { ds = 1 } ds' "${DRA_YML}")
+file_has "DRA kubelet plugin only runs on nodes labelled k3d-gpu.io/intel-gpu-dra" \
+    <(grep -A1 '^      nodeSelector:$' <<< "${dra_ds}") '^        k3d-gpu\.io/intel-gpu-dra: "true"$'
+for hp in /var/run/cdi /run/xpumd; do
+    file_has "DRA hostPath ${hp} is DirectoryOrCreate" \
+        <(grep -A1 "^          path: ${hp}\$" <<< "${dra_ds}") '^          type: DirectoryOrCreate$'
+done
+
+# intel_dra_devices' go-template, rendered by kubectl's own printer: kubectl
+# label --local applies -o go-template to each item of a List offline, which is
+# what `get resourceslices` does inside the template's range over .items. The
+# fixture holds 3 devices a gpu.intel.com claim can get (pool-a gen 2 xe,
+# pool-a gen 2 i915 with a None taint, pool-b xe) and 8 it cannot.
+if type -P kubectl >/dev/null; then
+    cat > "${WORK}/slices.json" <<'EOF'
+{"apiVersion": "v1", "kind": "List", "items": [
+ {"apiVersion": "resource.k8s.io/v1", "kind": "ResourceSlice", "metadata": {"name": "a-old"},
+  "spec": {"driver": "gpu.intel.com", "nodeName": "n0", "pool": {"name": "pool-a", "generation": 1, "resourceSliceCount": 1},
+   "devices": [{"name": "g0", "attributes": {"driver": {"string": "xe"}}}]}},
+ {"apiVersion": "resource.k8s.io/v1", "kind": "ResourceSlice", "metadata": {"name": "a-new"},
+  "spec": {"driver": "gpu.intel.com", "nodeName": "n0", "pool": {"name": "pool-a", "generation": 2, "resourceSliceCount": 1},
+   "devices": [
+    {"name": "g0", "attributes": {"driver": {"string": "xe"}, "model": {"string": "Arc B580"}}},
+    {"name": "g1", "attributes": {"driver": {"string": "i915"}}, "taints": [{"key": "info", "effect": "None"}]},
+    {"name": "g2", "attributes": {"driver": {"string": "xe"}}, "taints": [{"key": "unhealthy", "effect": "NoExecute"}]},
+    {"name": "g3", "attributes": {"driver": {"string": "xe"}}, "taints": [{"key": "a", "effect": "None"}, {"key": "b", "effect": "NoSchedule"}]},
+    {"name": "g4", "attributes": {"driver": {"string": "vfio-pci"}}},
+    {"name": "g5", "attributes": {"model": {"string": "no driver attribute"}}},
+    {"name": "g6"}]}},
+ {"apiVersion": "resource.k8s.io/v1", "kind": "ResourceSlice", "metadata": {"name": "b"},
+  "spec": {"driver": "gpu.intel.com", "nodeName": "n1", "pool": {"name": "pool-b", "generation": 7, "resourceSliceCount": 1},
+   "devices": [{"name": "g0", "attributes": {"driver": {"string": "xe"}}}]}},
+ {"apiVersion": "resource.k8s.io/v1", "kind": "ResourceSlice", "metadata": {"name": "other"},
+  "spec": {"driver": "gpu.example.com", "nodeName": "n0", "pool": {"name": "pool-a", "generation": 9, "resourceSliceCount": 1},
+   "devices": [{"name": "g0", "attributes": {"driver": {"string": "xe"}}}]}}
+]}
+EOF
+    slice_got=$( # shellcheck source=scripts/k3d-gpu
+        source "${K3D_GPU}" help >/dev/null
+        KUBECONFIG=/dev/null kubectl label --local -f "${WORK}/slices.json" k3d-gpu.io/t=1 \
+            -o go-template="$(dra_slice_template)" 2>&1 | dra_count_devices
+        # and `up` hands kubectl the same template inside the range over .items
+        grep -F -x "kubectl get resourceslices -o go-template={{range .items}}$(dra_slice_template){{end}}" \
+            "${WORK}/dra-1.log" >/dev/null || echo "up-template-mismatch")
+    if [ "${slice_got}" = 3 ]; then
+        PASS=$((PASS + 1)); echo "ok   DRA slice template counts allocatable devices through kubectl's printer"
+    else
+        FAILS=$((FAILS + 1)); echo "FAIL DRA slice template counts allocatable devices through kubectl's printer (want 3, got '${slice_got}')"
+    fi
+else
+    echo "skip DRA slice template through kubectl's printer (no kubectl on PATH)"
+fi
+
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

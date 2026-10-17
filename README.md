@@ -132,6 +132,8 @@ Behaviour is tunable via environment variables:
 | `K3D_GPU_BALLOONS`   | `k3s`                                     | `external` leaves the NRI balloons policy to a Helm release |
 | `K3D_GPU_AGENT_*`    | see [Agent](#agent-an-openai-compatible-llm-on-the-best-intel-engine) | `k3d-gpu agent` settings |
 | `K3D_GPU_NPU_EMBEDDINGS` | `/usr/share/k3d-gpu/npu-embeddings.yml` | template printed by `k3d-gpu recipe npu-embeddings` |
+| `K3D_GPU_DRA`        | `0`                                       | `1` = Intel GPUs through the DRA driver instead of the device plugin (experimental, Kubernetes 1.36+) |
+| `K3D_GPU_INTEL_DRA`  | `/usr/share/k3d-gpu/intel-gpu-dra.yml`    | same, for the Intel GPU DRA driver |
 | `K3D_GPU_DEVICE_TEST_IMAGE` | `busybox:1.37`                     | image used by `k3d-gpu test` for Intel GPU/NPU and Gaudi |
 | `K3D_GPU_TEST_IMAGE` | `nvidia/cuda:13.4.2-base-ubuntu26.04`     | image used by `k3d-gpu test`         |
 
@@ -1133,6 +1135,65 @@ k3d-gpu only sets cluster-side options: feature gates, node labels and an
 OpenVINO plugin-config ConfigMap. A feature that needs a host kernel or module
 change prints the command and its revert, and k3d-gpu never runs it. See
 **[docs/experimental.md](docs/experimental.md)** for the ranking and sources.
+
+### Intel GPU DRA mode
+
+`K3D_GPU_DRA=1 k3d-gpu up` hands Intel GPUs to pods through the
+[Intel GPU DRA driver](https://github.com/intel/intel-resource-drivers-for-kubernetes)
+(`gpu-v0.12.1`, `ghcr.io/intel/intel-gpu-resource-driver`) instead of
+intel-gpu-plugin. The two never run together: k3s skips `intel-gpu-plugin` in
+DRA mode and `intel-gpu-dra` otherwise. The driver publishes each GPU in a
+ResourceSlice, and a pod gets one through a ResourceClaim:
+
+```yaml
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata:
+  name: intel-gpu
+spec:
+  spec:
+    devices:
+      requests:
+      - name: gpu
+        exactly:
+          deviceClassName: gpu.intel.com
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: app
+spec:
+  resourceClaims:
+  - name: gpu
+    resourceClaimTemplateName: intel-gpu
+  containers:
+  - name: app
+    image: busybox:1.37
+    command: ["ls", "-l", "/dev/dri"]
+    resources:
+      claims:
+      - name: gpu
+```
+
+`up` counts the GPUs in ResourceSlices (bound to xe or i915, untainted) instead of
+node allocatable, and `test` runs a pod like the one above. DRA mode is
+experimental and needs Kubernetes 1.36+, the driver's supported floor upstream
+(where DRADeviceTaints is on by default, so unhealthy GPUs stay tainted); `up`
+fails on an older cluster (the image ships k3s v1.37). The driver's DaemonSet only runs on nodes
+labelled `k3d-gpu.io/intel-gpu-dra=true`, which `up` sets in DRA mode, so a
+cluster created any other way never runs it. The driver runs with
+binding management off, so it never moves a host GPU between xe/i915 and vfio-pci.
+Pods ask for `gpu.intel.com` claims, not `gpu.intel.com/xe` or `/i915` resources.
+
+DRA mode stays opt-in, also on k3s 1.37 where DRA is GA, because with gpu-v0.12.1
+it loses what the default gives: the driver publishes each GPU as one exclusive
+device, so a second pod's claim stays Pending where the plugin's iGPU sharing
+default runs both [ledger:H17]; `K3D_GPU_INTEL_SHARED`, `_ALLOCATION` and
+`_MONITORING` configure the plugin and are ignored (with a warning) in DRA mode;
+and `k3d-gpu agent` and the recipes request `gpu.intel.com/xe|i915`, which DRA mode
+does not advertise. A claim pod gets the iGPU through the driver on k3s 1.37
+[ledger:H16]. The `dra` experimental feature only sets Kubernetes gates and does
+not switch the Intel GPU path.
 
 ---
 
