@@ -53,6 +53,11 @@ check "nfpm ships console/*.json to /usr/share/k3d-gpu/console/" \
 for f in "${ROOT}"/console/*.py "${ROOT}"/console/*.json; do
     check "PKGBUILD installs console/${f##*/}" grep -Eq "for f in (.* )?${f##*/}( |;)" "${PKGBUILD}"
 done
+check "nfpm ships images.lock to /usr/share/k3d-gpu/" \
+    grep -Pzq 'src: images\.lock\n +dst: /usr/share/k3d-gpu/images\.lock\n' "${NFPM}"
+check "PKGBUILD installs images.lock" \
+    grep -qF 'install -Dm644 images.lock "$pkgdir/usr/share/k3d-gpu/images.lock"' "${PKGBUILD}"
+check "nix installs images.lock" grep -qF 'install -Dm644 images.lock "$out/share/k3d-gpu/images.lock"' "${NIXPKG}"
 check "nix installs console/*.py and console/*.json" \
     grep -qF 'install -Dm644 -t "$out/share/k3d-gpu/console" console/*.py console/*.json' "${NIXPKG}"
 check "formula points K3D_GPU_SHARE at pkgshare" grep -qF 'K3D_GPU_SHARE: "${K3D_GPU_SHARE:-#{pkgshare}}"' "${FORMULA}"

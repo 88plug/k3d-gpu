@@ -108,6 +108,14 @@ Include relevant details:
   them can fetch, and a headless Chromium load inside a network namespace whose
   net log must show no request from the page (`--update` rewrites the goldens;
   set `K3D_GPU_CHROME` to pick the browser).
+- `tests/audit_test.sh` covers `k3d-gpu audit` and `images.lock`: property tests
+  of `audit()` against an oracle, `scripts/images-lock check` on the repo and on
+  drifted copies, and the live read with docker and kubectl stubbed
+  (`tests/console/audit/default`), diffed against `tests/console/audit/*.golden`
+  (`tests/audit_test.sh --update` rewrites those).
+- Changed an image in `share/`, the Dockerfile or an image pin in `scripts/k3d-gpu`?
+  Run `scripts/images-lock update` (it reads the registries) and commit
+  `images.lock`; CI's `scripts/images-lock check` fails until you do.
 - Have hardware the matrix lacks? Capture it (reads ids, driver bindings, device
   node names, CPU flags, kernel release and firmware file names; as root also the
   GuC/HuC firmware records from debugfs):

@@ -193,6 +193,9 @@ jobs:
           done
           sed -i "s|gaudi-device-plugin:[0-9]*\.[0-9]*\.[0-9]*-[0-9]*|gaudi-device-plugin:${{ steps.gaudi_plugin.outputs.latest }}|" share/gaudi-device-plugin.yml
           sed -i "s|K3D_GPU_TEST_IMAGE:-nvidia/cuda:[^}]*|K3D_GPU_TEST_IMAGE:-nvidia/cuda:${{ steps.cuda.outputs.latest }}|" scripts/k3d-gpu
+          # Re-pin every image by digest (and k3s's own image list) for the new tags.
+          scripts/images-lock update
+          scripts/images-lock check
 
       - name: Update README
         if: steps.need.outputs.changed == 'true'
@@ -216,7 +219,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Dockerfile README.md share/nvidia-device-plugin.yml share/intel-*-plugin.yml share/gaudi-device-plugin.yml scripts/k3d-gpu
+          git add Dockerfile README.md images.lock share/nvidia-device-plugin.yml share/intel-*-plugin.yml share/gaudi-device-plugin.yml scripts/k3d-gpu
           if git diff --cached --quiet; then
             echo "no version changes to commit (forced release)"
           else
@@ -433,6 +436,11 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           git diff --stat
 
+      - name: Re-pin images.lock for the new manifest
+        run: |
+          scripts/images-lock update
+          scripts/images-lock check
+
       - name: Detection tests
         run: tests/detect_test.sh
 
@@ -447,6 +455,7 @@ jobs:
           add-paths: |
             share/
             hack/components/${{ matrix.component }}/
+            images.lock
           commit-message: "chore(${{ matrix.component }}): bump to ${{ steps.render.outputs.version }}"
           title: "chore(${{ matrix.component }}): bump to ${{ steps.render.outputs.version }}"
           labels: dependencies

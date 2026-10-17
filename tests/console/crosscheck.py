@@ -2,9 +2,10 @@
 """Cross-check console/schema_check.py against the `jsonschema` package.
 
 Every document given on the command line is validated by both, against the
-facts/v1 schema (or its matrix / plan $defs, picked by the document's "schema"
-member), and then mutated at random (a key dropped, a value retyped, a key
-added, a string replaced) to see that both still give the same verdict. Exits
+facts/v1 schema (or its matrix, plan, images_lock, observed or audit $defs,
+picked by the document's "schema" member), and then mutated at random (a key
+dropped, a value retyped, a key added, a string replaced) to see that both
+still give the same verdict. Exits
 1 on any disagreement, 0 when they agree, 77 when jsonschema is not installed.
 
 Usage: crosscheck.py doc.json...   (FUZZ_SEED=<int> to replay, FUZZ_N=<int> mutations per doc)
@@ -32,7 +33,9 @@ except ImportError:
 SEED = int(os.environ.get("FUZZ_SEED", random.SystemRandom().randrange(2**32)))
 N = int(os.environ.get("FUZZ_N", "40"))
 ROOT = factsmod.load_schema()
-REFS = {"k3d-gpu.facts/v1": None, "k3d-gpu.matrix/v1": "#/$defs/matrix", "k3d-gpu.plan/v1": "#/$defs/plan"}
+REFS = {"k3d-gpu.facts/v1": None, "k3d-gpu.matrix/v1": "#/$defs/matrix", "k3d-gpu.plan/v1": "#/$defs/plan",
+        "k3d-gpu.images-lock/v1": "#/$defs/images_lock", "k3d-gpu.observed/v1": "#/$defs/observed",
+        "k3d-gpu.audit/v1": "#/$defs/audit"}
 
 
 def theirs(doc, ref):

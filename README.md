@@ -45,6 +45,7 @@ k3d-gpu doctor --perf   # read-only host tuning advisor for inference (add --mod
 k3d-gpu report          # what the host and the cluster have, per engine (text + JSON + HTML)
 k3d-gpu facts           # detect + doctor + doctor --perf + report as one facts/v1 JSON document
 k3d-gpu plan --explain  # engine, model and placement from measured cells, and why
+k3d-gpu audit           # posture: open listeners off loopback, images not pinned in images.lock
 k3d-gpu up              # create the cluster (device plugins auto-deploy), verify each accelerator > 0
 k3d-gpu test            # per accelerator: nvidia-smi pod / device-node listing pod
 k3d-gpu logs            # tail the k3s server container logs
@@ -1048,6 +1049,44 @@ offline and fetches nothing. The only URLs in it are links a reader can follow
 (the finding sources and the project page). `--facts FILE` renders a saved
 facts/v1 document and `--matrix FILE` a different matrix. The page takes nothing
 from the clock, so the same facts give the same bytes.
+
+### Audit and images.lock (`audit`)
+
+`images.lock` lists every container image k3d-gpu ships, each pinned by its
+registry digest: the images in `share/**/*.yml` (the opt-in telemetry too), the Dockerfile's `FROM` images,
+the launcher's agent backend, add-on and test-pod images, and the system images k3s itself
+starts (from the `k3s-images.txt` of the Dockerfile's `K3S_TAG`). The node
+image the Dockerfile builds is not in it. CI runs `scripts/images-lock check`,
+which fails when the lock misses an image the repo references, holds one it no
+longer does, or disagrees with a digest the repo pins; `scripts/images-lock
+update` re-reads the digests from the registries, and the scheduled bump jobs
+(plugins and k3s, and each re-rendered upstream chart) run it after each bump.
+
+`k3d-gpu audit` reads the running cluster (`docker inspect` and `crictl images`
+on each node of cluster `K3D_GPU_CLUSTER`, its workloads through kubectl, and
+the kubeconfig files' modes) and fails, with a fix per finding, on:
+
+- a listener off loopback with no authentication it can establish: a node port
+  published on `0.0.0.0` or `::` other than the API server, which k3s runs with
+  anonymous auth off;
+- an image in containerd whose digest images.lock does not pin for its name, or
+  that has no registry digest;
+- an image pulled at runtime: the live read takes kubelet's `Pulled` events
+  ("Successfully pulled image", not "already present"), which the API server
+  keeps for one hour by default, so an older pull is not seen;
+- a kubeconfig readable by group or others (it holds the cluster admin key);
+- Open WebUI with `WEBUI_AUTH` off.
+
+The default layout (`up` then `agent up`, endpoint through `kubectl
+port-forward` on 127.0.0.1) passes the listener, image, kubeconfig and Open
+WebUI rules (`tests/console/audit/default`). Within an hour of its first start
+it still fails the runtime-pull rule: the node image does not bake the k3s
+system images, the device plugins or the agent images yet, so containerd pulls
+them then. `audit --json` prints `k3d-gpu.audit/v1`;
+`audit --observe` prints what it read (`k3d-gpu.observed/v1`), and `audit
+--observed FILE` checks a saved one instead of the cluster. `--plan FILE` adds
+the endpoint a `plan --json` document plans: off loopback it must be `oidc`.
+Exit 0 pass, 1 fail, 2 bad input. Needs `python3` (standard library only).
 
 ### Measurement harness (`bench/`)
 

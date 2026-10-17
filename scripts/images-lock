@@ -1,0 +1,255 @@
+#!/usr/bin/env python3
+"""images.lock: every container image k3d-gpu ships, pinned by registry digest.
+
+  scripts/images-lock check    offline: images.lock lists exactly the images the
+                               repo references, with the digests the repo pins
+  scripts/images-lock update   network: resolve each digest from its registry,
+                               read k3s's own image list, rewrite images.lock
+
+Sources of image references (the lock holds all of them and nothing else):
+  - share/**/*.yml             every `image:` line (the baked manifests and the
+                               opt-in ones under share/telemetry/)
+  - Dockerfile                 every FROM, with its ARG defaults substituted
+  - scripts/k3d-gpu            the K3D_GPU_*_IMAGE defaults (agent and test pods),
+                               except K3D_GPU_IMAGE, the node image this repo builds,
+                               and every literal *_IMAGE="ref" pin (the agent backends)
+  - k3s's system images        k3s-images.txt of the Dockerfile's K3S_TAG release
+                               (coredns, local-path-provisioner, metrics-server,
+                               pause, ...): k3s itself starts them in the cluster
+
+`check` cannot read k3s-images.txt offline, so for those entries it checks that
+the lock was made for the Dockerfile's K3S_TAG; `update` refreshes them.
+
+Format: JSON, keys sorted, entries sorted by name then tag. A digest is the
+registry's manifest digest for the reference (the multi-arch index when there is
+one), which is what containerd records as the image's repo digest.
+
+Python standard library only. Options: --root DIR (default: this repo).
+"""
+
+import argparse
+import json
+import os
+import re
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+LOCK_SCHEMA = "k3d-gpu.images-lock/v1"
+DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+SCRIPT_IMAGE_RE = re.compile(r'^[A-Z_]+="\$\{(K3D_GPU_[A-Z_]*IMAGE):-([^}]+)\}"', re.M)
+PLAIN_IMAGE_RE = re.compile(r'^\s*([A-Z_]*IMAGE)="([^"$]+)"', re.M)
+SHARE_IMAGE_RE = re.compile(r"^\s*(?:-\s+)?image:\s*[\"']?([^\"'\s#]+)", re.M)
+NODE_IMAGE_VAR = "K3D_GPU_IMAGE"  # the node image this repo builds from the Dockerfile
+K3S_IMAGES_URL = "https://github.com/k3s-io/k3s/releases/download/%s/k3s-images.txt"
+ACCEPT = ", ".join([
+    "application/vnd.oci.image.index.v1+json",
+    "application/vnd.docker.distribution.manifest.list.v2+json",
+    "application/vnd.oci.image.manifest.v1+json",
+    "application/vnd.docker.distribution.manifest.v2+json",
+])
+REGISTRY_HOSTS = {"docker.io": "registry-1.docker.io"}
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "console"))
+from audit import parse_ref  # noqa: E402  (one image-reference parser for the lock and the audit)
+import facts  # noqa: E402
+import schema_check  # noqa: E402
+
+
+def dockerfile_froms(text):
+    """The images the Dockerfile's FROM lines name, ARG defaults substituted."""
+    args, out, stages = {}, [], set()
+    for line in text.splitlines():
+        m = re.match(r'^ARG\s+([A-Za-z_][A-Za-z0-9_]*)(?:=(.*))?$', line.strip())
+        if m:
+            args[m.group(1)] = (m.group(2) or "").strip().strip('"')
+            continue
+        m = re.match(r"^FROM\s+(?:--\S+\s+)*(\S+)(?:\s+AS\s+(\S+))?", line.strip(), re.I)
+        if m:
+            ref = re.sub(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?", lambda v: args.get(v.group(1), ""), m.group(1))
+            if ref not in stages:  # FROM <earlier stage> is not an image
+                out.append(ref)
+            if m.group(2):
+                stages.add(m.group(2))
+    return out, args
+
+
+def collect(root):
+    """{(name, tag): {"digest": pinned digest or None, "sources": set}} plus the K3S_TAG."""
+    found = {}
+
+    def add(ref, source):
+        name, tag, digest = parse_ref(ref)
+        e = found.setdefault((name, tag), {"digest": digest, "sources": set()})
+        if digest and e["digest"] and digest != e["digest"]:
+            raise ValueError("%s:%s is pinned to two digests (%s, %s)" % (name, tag, e["digest"], digest))
+        e["digest"] = e["digest"] or digest
+        e["sources"].add(source)
+
+    for dirpath, dirnames, filenames in os.walk(os.path.join(root, "share")):
+        dirnames.sort()
+        for f in sorted(filenames):
+            if f.endswith((".yml", ".yaml")):
+                path = os.path.join(dirpath, f)
+                with open(path, encoding="utf-8") as fh:
+                    for ref in SHARE_IMAGE_RE.findall(fh.read()):
+                        add(ref, os.path.relpath(path, root).replace(os.sep, "/"))
+    with open(os.path.join(root, "Dockerfile"), encoding="utf-8") as fh:
+        froms, args = dockerfile_froms(fh.read())
+    for ref in froms:
+        add(ref, "Dockerfile")
+    with open(os.path.join(root, "scripts", "k3d-gpu"), encoding="utf-8") as fh:
+        text = fh.read()
+    for var, ref in SCRIPT_IMAGE_RE.findall(text):
+        if var != NODE_IMAGE_VAR:
+            add(ref, "scripts/k3d-gpu " + var)
+    for var, ref in PLAIN_IMAGE_RE.findall(text):
+        add(ref, "scripts/k3d-gpu " + var)
+    k3s_tag = args.get("K3S_TAG")
+    if not k3s_tag:
+        raise ValueError("Dockerfile has no ARG K3S_TAG default")
+    return found, k3s_tag
+
+
+def label(name, tag):
+    return name + (":" + tag if tag else "")
+
+
+def k3s_source(k3s_tag):
+    return "k3s-images.txt " + k3s_tag
+
+
+def read_lock(path):
+    with open(path, encoding="utf-8") as f:
+        lock = json.load(f)
+    schema_check.check(lock, facts.load_schema(), "#/$defs/images_lock")
+    return lock
+
+
+def dumps(lock):
+    return json.dumps(lock, sort_keys=True, indent=2) + "\n"
+
+
+def check(root, lock_path):
+    """Problems, one string each; empty when images.lock matches the repo."""
+    found, k3s_tag = collect(root)
+    lock = read_lock(lock_path)
+    k3s = k3s_source(k3s_tag)
+    problems = []
+    if lock["k3s_tag"] != k3s_tag:
+        problems.append("images.lock is for k3s %s, the Dockerfile pins %s: run scripts/images-lock update"
+                        % (lock["k3s_tag"], k3s_tag))
+    entries = {}
+    for e in lock["images"]:
+        key = (e["name"], e["tag"])
+        if key in entries:
+            problems.append("images.lock lists %s twice" % label(*key))
+        entries[key] = e
+    if not any(k3s in e["sources"] for e in lock["images"]):
+        problems.append("images.lock holds no k3s system images: run scripts/images-lock update")
+    for key in sorted(found, key=lambda k: (k[0], k[1] or "")):
+        want, e = found[key], entries.get(key)
+        if e is None:
+            problems.append("not in images.lock: %s (from %s)" % (label(*key), ", ".join(sorted(want["sources"]))))
+            continue
+        if want["digest"] and e["digest"] != want["digest"]:
+            problems.append("%s: the repo pins %s, images.lock has %s" % (label(*key), want["digest"], e["digest"]))
+        if set(e["sources"]) - {k3s} != want["sources"]:
+            problems.append("%s: images.lock sources %s, the repo has %s"
+                            % (label(*key), e["sources"], sorted(want["sources"])))
+    for key, e in sorted(entries.items(), key=lambda kv: (kv[0][0], kv[0][1] or "")):
+        if key not in found and e["sources"] != [k3s]:
+            problems.append("stale in images.lock: %s (nothing in the repo references it)" % label(*key))
+    return problems
+
+
+def http(req):
+    """urlopen with three tries on network errors (an HTTP status is not retried)."""
+    for attempt in range(3):
+        try:
+            return urllib.request.urlopen(req, timeout=60)
+        except urllib.error.HTTPError:
+            raise
+        except (urllib.error.URLError, TimeoutError):
+            if attempt == 2:
+                raise
+            time.sleep(3 * (attempt + 1))
+
+
+def registry_digest(name, tag):
+    """The registry's manifest digest for name:tag, anonymous pull token if asked for."""
+    host, repo = name.split("/", 1)
+    url = "https://%s/v2/%s/manifests/%s" % (REGISTRY_HOSTS.get(host, host), repo, tag)
+    headers = {"Accept": ACCEPT}
+    for _ in range(2):
+        req = urllib.request.Request(url, method="HEAD", headers=headers)
+        try:
+            with http(req) as r:
+                digest = r.headers.get("Docker-Content-Digest", "")
+                if not DIGEST_RE.match(digest):
+                    raise ValueError("%s:%s: registry returned no digest" % (name, tag))
+                return digest
+        except urllib.error.HTTPError as e:
+            challenge = e.headers.get("WWW-Authenticate", "")
+            if e.code != 401 or not challenge.lower().startswith("bearer ") or "Authorization" in headers:
+                raise ValueError("%s:%s: HTTP %d from %s" % (name, tag, e.code, url)) from None
+            params = dict(re.findall(r'(\w+)="([^"]*)"', challenge))
+            query = {k: params[k] for k in ("service", "scope") if k in params}
+            query.setdefault("scope", "repository:%s:pull" % repo)
+            with http(params["realm"] + "?" + urllib.parse.urlencode(query)) as r:
+                body = json.load(r)
+            headers["Authorization"] = "Bearer " + (body.get("token") or body.get("access_token"))
+    raise ValueError("%s:%s: registry refused the pull token" % (name, tag))
+
+
+def update(root, lock_path):
+    found, k3s_tag = collect(root)
+    with http(K3S_IMAGES_URL % urllib.parse.quote(k3s_tag.replace("-k3s", "+k3s"))) as r:
+        k3s_refs = [line.strip() for line in r.read().decode().splitlines() if line.strip()]
+    for ref in k3s_refs:
+        name, tag, digest = parse_ref(ref)
+        e = found.setdefault((name, tag), {"digest": digest, "sources": set()})
+        e["sources"].add(k3s_source(k3s_tag))
+    images = []
+    for (name, tag), e in sorted(found.items(), key=lambda kv: (kv[0][0], kv[0][1] or "")):
+        digest = e["digest"]
+        if digest is None:
+            digest = registry_digest(name, tag)
+        elif tag is not None and registry_digest(name, tag) != digest:
+            raise ValueError("%s:%s: the repo pins %s but the registry serves %s"
+                             % (name, tag, digest, registry_digest(name, tag)))
+        images.append({"name": name, "tag": tag, "digest": digest, "sources": sorted(e["sources"])})
+        sys.stderr.write("%s %s\n" % (label(name, tag), digest))
+    lock = {"schema": LOCK_SCHEMA, "k3s_tag": k3s_tag, "images": images}
+    with open(lock_path + ".tmp", "w", encoding="utf-8") as f:
+        f.write(dumps(lock))
+    os.replace(lock_path + ".tmp", lock_path)
+
+
+def main(argv):
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    ap = argparse.ArgumentParser(prog="images-lock", description=__doc__.split("\n")[0])
+    ap.add_argument("command", choices=("check", "update"))
+    ap.add_argument("--root", default=here)
+    args = ap.parse_args(argv[1:])
+    lock_path = os.path.join(args.root, "images.lock")
+    try:
+        if args.command == "update":
+            update(args.root, lock_path)
+            return 0
+        problems = check(args.root, lock_path)
+    except (ValueError, OSError, KeyError) as e:
+        sys.stderr.write("images-lock: %s\n" % e)
+        return 2
+    for p in problems:
+        print("FAIL " + p)
+    if problems:
+        return 1
+    print("ok   images.lock matches share/, the Dockerfile, scripts/k3d-gpu and k3s %s" % collect(args.root)[1])
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

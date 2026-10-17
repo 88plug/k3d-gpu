@@ -1,0 +1,2 @@
+k3d-gpu-server-0 server
+k3d-gpu-tools noRole

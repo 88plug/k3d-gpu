@@ -55,6 +55,7 @@
 #   recipe  print a ready-to-apply workload manifest (npu-embeddings)
 #   facts   detect + doctor + doctor --perf + report as one facts/v1 JSON document (--html: report.html)
 #   plan    engine, model and placement from the measured (green) matrix cells, --explain prints why
+#   audit   posture checks: unauthenticated listeners off loopback, images not in images.lock
 
 set -euo pipefail
 
@@ -143,6 +144,10 @@ Usage: k3d-gpu <command>
        [--bind ADDR] [--port N] [--facts FILE] [--matrix FILE]
             Engine, model and placement for this box, picked only from measured
             (green) matrix cells; with none it says "unmeasured, run prove"
+  audit [--json|--observe] [--observed FILE] [--plan FILE] [--lock FILE]
+            Posture checks of the running cluster: fails on an unauthenticated
+            listener off loopback, an image not pinned in images.lock, a runtime
+            pull, a key file readable by others, or Open WebUI without sign-in
   version   Show version
   help      Show this message
 
@@ -6121,6 +6126,85 @@ cmd_plan() {
     python3 "${dir}/plan.py" --mode "${mode}" --matrix "${matrix}" ${args[@]+"${args[@]}"} <<< "${out}"
 }
 
+# images.lock: next to the console directory (the repo root, or ${SHARE_DIR}).
+images_lock() {
+    local dir
+    if [ -n "${K3D_GPU_IMAGES_LOCK:-}" ]; then echo "${K3D_GPU_IMAGES_LOCK}"; return; fi
+    dir=$(console_dir) || return 1
+    echo "$(dirname "${dir}")/images.lock"
+}
+
+# The raw read console/audit.py turns into observed/v1: per node container of
+# cluster ${CLUSTER} its published ports (docker inspect) and containerd images
+# (crictl), the cluster's workloads, its kubelet Pulled events (a registry pull at
+# pod start), and the kubeconfig files' modes.
+audit_raw() {
+    local name role nodes="" ports imgs workloads events secrets="" f
+    local -a kubeconfigs
+    while read -r name role; do
+        case "${role}" in server|agent) ;; *) continue ;; esac
+        ports=$(docker inspect --format '{{json .NetworkSettings.Ports}}' "${name}") \
+            || err "audit: docker inspect ${name} failed"
+        imgs=$(docker exec "${name}" crictl images -o json) \
+            || err "audit: crictl images on ${name} failed"
+        nodes+="${nodes:+,}{\"name\":$(json_str "${name}"),\"ports\":${ports:-null},\"images\":${imgs:-null}}"
+    done < <(docker ps --filter "label=k3d.cluster=${CLUSTER}" --format '{{.Names}} {{.Label "k3d.role"}}' | sort)
+    [ -n "${nodes}" ] || err "audit: no running node of k3d cluster '${CLUSTER}' (run 'k3d-gpu up', or pass --observed FILE)"
+    workloads=$(kc get deployments,statefulsets,daemonsets -A -o json) \
+        || err "audit: kubectl cannot list the workloads of k3d-${CLUSTER}"
+    events=$(kc get events -A --field-selector reason=Pulled -o json) \
+        || err "audit: kubectl cannot list the events of k3d-${CLUSTER}"
+    IFS=: read -r -a kubeconfigs <<< "${KUBECONFIG:-${HOME}/.kube/config}"
+    for f in ${kubeconfigs[@]+"${kubeconfigs[@]}"}; do
+        [ -f "${f}" ] || continue
+        secrets+="${secrets:+,}{\"path\":$(json_str "${f}"),\"mode\":$(json_str "$(stat -c '%a' "${f}")")}"
+    done
+    printf '{"cluster":%s,"nodes":[%s],"workloads":%s,"events":%s,"secrets":[%s]}\n' \
+        "$(json_str "${CLUSTER}")" "${nodes}" "${workloads}" "${events}" "${secrets}"
+}
+
+# audit [--json|--observe] [--observed FILE] [--plan FILE] [--lock FILE]: posture checks
+# (console/audit.py). Exit 0 pass, 1 fail, 2 bad input. --observe prints the
+# observed/v1 document it would check, and checks nothing.
+cmd_audit() {
+    local dir mode=text observed="" plan="" lock="" args=() out
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --json) mode=json ;;
+            --observe) mode=observe ;;
+            --observed|--plan|--lock)
+                [ $# -ge 2 ] || err "audit: $1 needs a value"
+                case "$1" in
+                    --observed) observed=$2 ;;
+                    --plan) plan=$2 ;;
+                    --lock) lock=$2 ;;
+                esac
+                shift ;;
+            *) err "unknown audit option: $1 (use --json, --observe, --observed, --plan, --lock)" ;;
+        esac
+        shift
+    done
+    dir=$(console_dir) || err "audit: console/audit.py not found next to the launcher or in ${SHARE_DIR}/console (set K3D_GPU_CONSOLE)"
+    [ -f "${dir}/audit.py" ] || err "audit: ${dir}/audit.py not found"
+    require python3
+    if [ -n "${observed}" ]; then
+        [ -f "${observed}" ] || err "audit: observed file ${observed} does not exist"
+        out=$(<"${observed}")
+    else
+        require docker
+        require kubectl
+        out=$(audit_raw | python3 "${dir}/audit.py" observe) || err "audit: could not read the cluster"
+    fi
+    if [ "${mode}" = observe ]; then printf '%s\n' "${out}"; return; fi
+    [ -n "${lock}" ] || lock=$(images_lock)
+    [ -f "${lock}" ] || err "audit: images.lock not found at ${lock} (set K3D_GPU_IMAGES_LOCK or pass --lock)"
+    if [ -n "${plan}" ]; then
+        [ -f "${plan}" ] || err "audit: plan file ${plan} does not exist"
+        args+=(--plan "${plan}")
+    fi
+    python3 "${dir}/audit.py" check --mode "${mode}" --lock "${lock}" ${args[@]+"${args[@]}"} <<< "${out}"
+}
+
 # K3D_GPU_EXPERIMENTAL=list prints the feature table with any command; any
 # other value is checked up front, so an unknown name fails before anything runs.
 if exp_is_list; then
@@ -6142,6 +6226,7 @@ case "${1:-help}" in
     recipe)  cmd_recipe "${2:-}" ;;
     facts)   shift; cmd_facts "$@" ;;
     plan)    shift; cmd_plan "$@" ;;
+    audit)   shift; cmd_audit "$@" ;;
     version|--version|-v) echo "k3d-gpu ${VERSION}" ;;
     help|--help|-h) usage ;;
     *) usage; exit 1 ;;

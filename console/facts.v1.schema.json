@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/88plug/k3d-gpu/console/facts.v1.schema.json",
   "title": "k3d-gpu facts/v1",
-  "description": "One host's facts: what detect, doctor, doctor --perf and report read, the targets plan() can place work on, and capacity rows. $defs also holds the matrix (k3d-gpu.matrix/v1) and plan (k3d-gpu.plan/v1) documents, so every console surface reads one schema file.",
+  "description": "One host's facts: what detect, doctor, doctor --perf and report read, the targets plan() can place work on, and capacity rows. $defs also holds the matrix (k3d-gpu.matrix/v1), plan (k3d-gpu.plan/v1), images.lock (k3d-gpu.images-lock/v1), observed (k3d-gpu.observed/v1) and audit (k3d-gpu.audit/v1) documents, so every console surface reads one schema file.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "fingerprint", "release", "hostname", "host", "detected", "labels", "targets", "doctor", "perf", "cluster", "capacity"],
@@ -516,6 +516,133 @@
         },
         "summary": {"$ref": "#/$defs/strings"},
         "explain": {"$ref": "#/$defs/strings"}
+      }
+    },
+    "images_lock": {
+      "type": "object",
+      "description": "k3d-gpu.images-lock/v1 (images.lock): every image k3d-gpu ships, pinned by registry digest. Written by scripts/images-lock update; CI runs scripts/images-lock check.",
+      "additionalProperties": false,
+      "required": ["schema", "k3s_tag", "images"],
+      "properties": {
+        "schema": {"const": "k3d-gpu.images-lock/v1"},
+        "k3s_tag": {"type": "string"},
+        "images": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "tag", "digest", "sources"],
+            "properties": {
+              "name": {"type": "string", "pattern": "^[a-z0-9.:-]+(/[a-z0-9._-]+)+$"},
+              "tag": {"$ref": "#/$defs/str_or_null"},
+              "digest": {"$ref": "#/$defs/fingerprint"},
+              "sources": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+            }
+          }
+        }
+      }
+    },
+    "observed": {
+      "type": "object",
+      "description": "k3d-gpu.observed/v1: what `k3d-gpu audit` read from a running cluster and host (listeners, containerd images, pulls, secret file modes, apps), or a fixture of it. audit() reads only this and images.lock.",
+      "additionalProperties": false,
+      "required": ["schema", "cluster", "listeners", "images", "pulls", "secrets", "apps"],
+      "properties": {
+        "schema": {"const": "k3d-gpu.observed/v1"},
+        "cluster": {"$ref": "#/$defs/str_or_null"},
+        "listeners": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "address", "port", "auth", "source"],
+            "properties": {
+              "name": {"type": "string"},
+              "address": {"type": "string"},
+              "port": {"anyOf": [{"type": "null"}, {"type": "integer", "minimum": 1, "maximum": 65535}]},
+              "auth": {"enum": ["none", "unknown", "key", "client-cert", "oidc"]},
+              "source": {"type": "string"}
+            }
+          }
+        },
+        "images": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["node", "tags", "digests"],
+            "properties": {
+              "node": {"type": "string"},
+              "tags": {"$ref": "#/$defs/strings"},
+              "digests": {"$ref": "#/$defs/strings"}
+            }
+          }
+        },
+        "pulls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["node", "ref"],
+            "properties": {"node": {"type": "string"}, "ref": {"type": "string"}}
+          }
+        },
+        "secrets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "mode"],
+            "properties": {"path": {"type": "string"}, "mode": {"type": "string", "pattern": "^[0-7]{3,4}$"}}
+          }
+        },
+        "apps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "name", "auth"],
+            "properties": {
+              "kind": {"enum": ["open-webui"]},
+              "name": {"type": "string"},
+              "auth": {"type": ["boolean", "null"]}
+            }
+          }
+        }
+      }
+    },
+    "audit": {
+      "type": "object",
+      "description": "k3d-gpu.audit/v1: audit(observed, lock, plan) checks, each pass or fail with a fix. verdict is fail when any check fails. Renderers print summary or checks; they compute nothing.",
+      "additionalProperties": false,
+      "required": ["schema", "verdict", "cluster", "lock", "checks", "summary"],
+      "properties": {
+        "schema": {"const": "k3d-gpu.audit/v1"},
+        "verdict": {"enum": ["pass", "fail"]},
+        "cluster": {"$ref": "#/$defs/str_or_null"},
+        "lock": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["k3s_tag", "images"],
+          "properties": {"k3s_tag": {"type": "string"}, "images": {"type": "integer", "minimum": 1}}
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["rule", "subject", "status", "detail", "fix"],
+            "properties": {
+              "rule": {"enum": ["listener", "image", "fetch", "secret", "app"]},
+              "subject": {"type": "string"},
+              "status": {"enum": ["pass", "fail"]},
+              "detail": {"type": "string"},
+              "fix": {"$ref": "#/$defs/str_or_null"}
+            }
+          }
+        },
+        "summary": {"$ref": "#/$defs/strings"}
       }
     }
   }
