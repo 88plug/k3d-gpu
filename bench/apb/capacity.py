@@ -253,6 +253,15 @@ def _server(image):
     return None
 
 
+# Extended-resource domain -> engine, checked in this order.
+RESOURCE_DOMAINS = (
+    ("nvidia.com", "nvidia"),
+    ("gpu.intel.com", "igpu"),
+    ("npu.intel.com", "npu"),
+    ("habana.ai", "gaudi"),
+)
+
+
 def _engine(pod, containers):
     res = {}
     for c in containers:
@@ -260,15 +269,10 @@ def _engine(pod, containers):
         res.update(r.get("requests") or {})
         res.update(r.get("limits") or {})
     # Extended resource names are <domain>/<name>; match on the domain part.
-    domains = {k.split("/", 1)[0] for k in res if "/" in k}
-    if "nvidia.com" in domains:
-        return "nvidia"
-    if "gpu.intel.com" in domains:
-        return "igpu"
-    if "npu.intel.com" in domains:
-        return "npu"
-    if "habana.ai" in domains:
-        return "gaudi"
+    domains = [k.split("/", 1)[0] for k in res if "/" in k]
+    for domain, engine in RESOURCE_DOMAINS:
+        if any(d == domain for d in domains):
+            return engine
     dev = ((pod.get("metadata") or {}).get("annotations") or {}).get("k3d-gpu.io/agent-device")
     spec = pod.get("spec") or {}
     if not dev:
