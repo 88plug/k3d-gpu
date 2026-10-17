@@ -65,6 +65,8 @@ AGENT_DEVICE_ANNOTATION = "k3d-gpu.io/agent-device"
 HYBRID_LABEL = "k3d-gpu.io/hybrid-cpu"
 CORES_LABEL = "k3d-gpu.io/cores"
 AMX_LABEL = "feature.node.kubernetes.io/cpu-cpuid.AMXTILE"
+XMX_LABEL = "gpu.intel.com/xmx"
+INTEL_GPUS = ("intel-gpu-xe", "intel-gpu-i915")
 
 # Device-plugin DaemonSet the launcher deploys per detected vendor, as (namespace,
 # name); mirrors vendor_daemonset in scripts/k3d-gpu. amx has none.
@@ -323,25 +325,43 @@ def recommend(args, report):
     workload = args["workload"]
     objective = args.get("objective", "latency")
     resources, labels, source = inventory(report)
+    # The launcher's agent rule (agent_device in scripts/k3d-gpu): an LLM goes to the
+    # Intel GPU only on a node labelled gpu.intel.com/xmx=true; without XMX the
+    # P-cores decode and prefill faster (EXPERIMENTS.md H6), so the GPU only wins
+    # on efficiency (it saves CPU).
+    xmx = labels.get(XMX_LABEL) == "true"
+    xmx_gate = workload == "llm" and objective != "efficiency"
     available = [e for e in PREFERENCES[workload][objective]
-                 if ENGINES[e]["resource"] is None or ENGINES[e]["resource"] in resources]
+                 if (ENGINES[e]["resource"] is None or ENGINES[e]["resource"] in resources)
+                 and not (xmx_gate and e in INTEL_GPUS and not xmx)]
     engine = available[0]
     res = ENGINES[engine]["resource"]
     hybrid = labels.get(HYBRID_LABEL) == "true"
     amx = labels.get(AMX_LABEL) == "true"
 
     notes = []
-    pod_labels, node_selector, limits = {}, {}, {}
+    pod_labels, node_selector, limits, requests = {}, {}, {}, {}
     if res:
         limits[res] = "1"
+    prefs = PREFERENCES[workload][objective]
+    if xmx_gate and not xmx and any(ENGINES[e]["resource"] in resources
+                                    for e in prefs[:prefs.index(engine)] if e in INTEL_GPUS):
+        notes.append(f"The Intel GPU is skipped: no node is labelled {XMX_LABEL}=true, and without "
+                     "XMX the P-cores run LLMs faster (objective=efficiency still picks the GPU).")
+    if xmx_gate and xmx and engine in INTEL_GPUS:
+        node_selector[XMX_LABEL] = "true"
     if hybrid:
         # P-cores for latency and for feeding model inference at throughput; E-cores for
         # power, for media (the GPU does the work) and for wide batch jobs.
         fast = objective == "latency" or (objective == "throughput" and workload in ("llm", "embeddings"))
         cores = "performance" if fast else "efficient"
         pod_labels[CORES_LABEL] = cores
+        # A balloon is sized by its pods' CPU requests: a pod requesting no CPU gets
+        # an empty balloon and runs unpinned.
+        requests["cpu"] = "1"
         where = "P-cores" if cores == "performance" else "E-cores"
-        notes.append(f"{CORES_LABEL}={cores} pins the pod to {where} via the NRI balloons policy.")
+        notes.append(f"{CORES_LABEL}={cores} pins the pod to {where} via the NRI balloons policy; "
+                     "the balloon is sized by the pod's CPU request (1 here; raise it to the cores the pod needs).")
     if engine == "cpu" and amx and workload in ("llm", "embeddings", "batch"):
         node_selector[AMX_LABEL] = "true"
         notes.append("CPU path on an AMX node: use an AMX-enabled runtime (OpenVINO, oneDNN, PyTorch).")
@@ -353,7 +373,6 @@ def recommend(args, report):
     if source == "host":
         notes.append(f"Cluster {CLUSTER} is not running: engines come from host detection; run 'k3d-gpu up'.")
     else:
-        prefs = PREFERENCES[workload][objective]
         host = inventory({"detected": report.get("detected", [])})[0]
         for better in prefs[:prefs.index(engine)]:
             if ENGINES[better]["resource"] in host:
@@ -361,8 +380,10 @@ def recommend(args, report):
                              f"{ENGINES[better]['resource']}: its device plugin is not ready (see cluster_health).")
 
     container = {"name": "main"}
+    if requests:
+        container.setdefault("resources", {})["requests"] = requests
     if limits:
-        container["resources"] = {"limits": limits}
+        container.setdefault("resources", {})["limits"] = limits
     fragment = {"spec": {"containers": [container]}}
     if pod_labels:
         fragment["metadata"] = {"labels": pod_labels}

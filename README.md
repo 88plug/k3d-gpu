@@ -87,7 +87,7 @@ launcher and `kubectl`, and is read-only: it never creates or deletes anything.
 | Tool | Returns |
 |------|---------|
 | `accelerators` | the `k3d-gpu report --json` document: host devices, detected vendors and their resources, per-node allocatable resources and accelerator labels (falls back to `detect` + node allocatable on launchers without `report`) |
-| `recommend_placement` | `workload`: `llm` \| `embeddings` \| `media` \| `batch`, `objective`: `latency` (default) \| `throughput` \| `efficiency`. The best engine the cluster advertises and the pod-spec fragment to merge: the extended-resource limit, `k3d-gpu.io/cores=performance\|efficient` on hybrid CPUs, the AMX `nodeSelector` on the CPU path |
+| `recommend_placement` | `workload`: `llm` \| `embeddings` \| `media` \| `batch`, `objective`: `latency` (default) \| `throughput` \| `efficiency`. The best engine the cluster advertises and the pod-spec fragment to merge: the extended-resource limit, `k3d-gpu.io/cores=performance\|efficient` with a CPU request (the balloon is sized by it) on hybrid CPUs, the AMX `nodeSelector` on the CPU path. An `llm` at `latency` or `throughput` takes the Intel GPU only on a `gpu.intel.com/xmx=true` node, the same rule as `k3d-gpu agent up` |
 | `agent_endpoint` | the OpenVINO Model Server from `k3d-gpu agent up`: in-cluster `/v3` base URL, a `port-forward` command and `localhost` URL for the host, device, served models (`/v3/models`) |
 | `cluster_health` | node readiness, per-node accelerator counts, device-plugin DaemonSet rollout (and plugins missing for host-detected devices), and a list of problems |
 

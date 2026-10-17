@@ -234,7 +234,7 @@ out=$(session "${d}" "$(call 1 recommend_placement '{"workload":"llm"}')
 $(call 2 recommend_placement '{"workload":"llm","objective":"efficiency"}')
 $(call 3 recommend_placement '{"workload":"media","objective":"throughput"}')")
 check "llm/latency picks Gaudi with a habana.ai/gaudi limit on P-cores" "${out}" \
-    'sc(1)["engine"] == "gaudi" and sc(1)["podSpecFragment"] == {"metadata": {"labels": {"k3d-gpu.io/cores": "performance"}}, "spec": {"containers": [{"name": "main", "resources": {"limits": {"habana.ai/gaudi": "1"}}}]}}'
+    'sc(1)["engine"] == "gaudi" and sc(1)["podSpecFragment"] == {"metadata": {"labels": {"k3d-gpu.io/cores": "performance"}}, "spec": {"containers": [{"name": "main", "resources": {"requests": {"cpu": "1"}, "limits": {"habana.ai/gaudi": "1"}}}]}} and not any("xmx" in n for n in sc(1)["notes"])'
 check "objective defaults to latency" "${out}" 'sc(1)["objective"] == "latency"'
 check "llm/efficiency prefers the Intel GPU on E-cores" "${out}" \
     'sc(2)["engine"] == "intel-gpu-xe" and sc(2)["podSpecFragment"]["metadata"]["labels"]["k3d-gpu.io/cores"] == "efficient" and sc(2)["alternatives"] == ["gaudi", "cpu"]'
@@ -247,9 +247,19 @@ $(call 2 recommend_placement '{"workload":"llm","objective":"latency"}')
 $(call 3 recommend_placement '{"workload":"batch","objective":"throughput"}')")
 check "embeddings/efficiency picks the NPU" "${out}" \
     'sc(1)["engine"] == "npu" and sc(1)["podSpecFragment"]["spec"]["containers"][0]["resources"]["limits"] == {"npu.intel.com/accel": "1"}'
-check "llm/latency never auto-picks the NPU" "${out}" 'sc(2)["engine"] == "intel-gpu-i915" and "npu" not in sc(2)["alternatives"]'
-check "batch/throughput: CPU only, E-cores, no device limit" "${out}" \
-    'sc(3)["engine"] == "cpu" and "resources" not in sc(3)["podSpecFragment"]["spec"]["containers"][0] and sc(3)["podSpecFragment"]["metadata"]["labels"]["k3d-gpu.io/cores"] == "efficient"'
+check "llm/latency: no NPU, and a GPU without XMX loses to the P-cores (the agent's auto rule)" "${out}" \
+    'sc(2)["engine"] == "cpu" and sc(2)["alternatives"] == [] and sc(2)["podSpecFragment"]["metadata"]["labels"]["k3d-gpu.io/cores"] == "performance" and any("gpu.intel.com/xmx=true" in n for n in sc(2)["notes"])'
+check "batch/throughput: CPU only, E-cores, a CPU request and no device limit" "${out}" \
+    'sc(3)["engine"] == "cpu" and sc(3)["podSpecFragment"]["spec"]["containers"][0]["resources"] == {"requests": {"cpu": "1"}} and sc(3)["podSpecFragment"]["metadata"]["labels"]["k3d-gpu.io/cores"] == "efficient"'
+
+d=$(fixtures place-xmx)
+nodes "${d}" '{"cpu":"16","gpu.intel.com/xe":"1"}' '{"gpu.intel.com/xmx":"true"}'
+out=$(session "${d}" "$(call 1 recommend_placement '{"workload":"llm","objective":"throughput"}')
+$(call 2 recommend_placement '{"workload":"embeddings"}')")
+check "llm on an XMX GPU: the GPU, pinned to an xmx=true node, no cores label off hybrid" "${out}" \
+    'sc(1)["engine"] == "intel-gpu-xe" and sc(1)["podSpecFragment"] == {"spec": {"containers": [{"name": "main", "resources": {"limits": {"gpu.intel.com/xe": "1"}}}], "nodeSelector": {"gpu.intel.com/xmx": "true"}}}'
+check "the XMX gate is for LLMs only: embeddings take the GPU with no xmx selector" "${out}" \
+    'sc(2)["engine"] == "intel-gpu-xe" and "nodeSelector" not in sc(2)["podSpecFragment"]["spec"]'
 
 d=$(fixtures place-xeon)
 nodes "${d}" '{"cpu":"96","gpu.intel.com/xe":"0"}' '{"feature.node.kubernetes.io/cpu-cpuid.AMXTILE":"true"}'
