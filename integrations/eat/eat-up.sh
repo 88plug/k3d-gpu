@@ -31,6 +31,11 @@ BASTION_IMAGE="k3d-gpu-eat-bastion:$(sha256sum "${HERE}/bastion.Dockerfile" | cu
 err()  { echo "ERROR: $*" >&2; exit 1; }
 info() { echo "==> $*"; }
 
+[ -f "${EAT_CONFIG}" ] || err "config ${EAT_CONFIG} not found"
+# deploy_openshell arrived on EAT main after ${EAT_TAG} (PR #14); the pinned tag has no
+# OpenShell role and would skip the key without a word.
+! grep -Eq '^deploy_openshell=on([[:space:]]|$)' "${EAT_CONFIG}" \
+    || err "deploy_openshell=on needs an EAT release newer than ${EAT_TAG}; set deploy_openshell=off"
 [ -f "${EAT_KUBECONFIG}" ] || err "kubeconfig ${EAT_KUBECONFIG} not found"
 for l in ei-infra-eligible ei-inference-eligible; do
     [ -n "$(KUBECONFIG="${EAT_KUBECONFIG}" kubectl get nodes -l "${l}=true" -o name)" ] \

@@ -9,6 +9,7 @@
 #        both for a router that shlex.splits the command (agent-sandbox v0.5.0
 #        python-runtime-sandbox) and for one that runs it under /bin/sh -c
 #      - the check fails when the sandbox prints anything but 385
+#   3. eat-up.sh refuses deploy_openshell=on, which the pinned EAT tag cannot deploy.
 # Needs bash, jq, python3.
 
 set -euo pipefail
@@ -127,6 +128,22 @@ check_says "multi-line code with quotes survives a /bin/sh -c router" 0 '"stdout
     STUB_CODE="${MULTI}" STUB_ROUTER=sh
 check_says "eat-check fails when the sandbox does not print 385" fail 'expected 385' \
     STUB_CODE='print(sum(range(1, 11)))'
+
+# 3. eat-up.sh refuses deploy_openshell=on before it touches the cluster: the pinned
+#    release-1.0.3-hotfix has no OpenShell role. No kubectl stub: it must stop first.
+sed 's/^deploy_agent_sandbox=on$/&\ndeploy_openshell=on/' "${EAT}/agentic-config.cfg" > "${WORK}/openshell.cfg"
+out=$(EAT_CONFIG="${WORK}/openshell.cfg" EAT_KUBECONFIG=/nonexistent "${EAT}/eat-up.sh" 2>&1) && rc=0 || rc=$?
+if [ "${rc}" -ne 0 ] && grep -q 'deploy_openshell=on needs an EAT release newer than release-1.0.3-hotfix' <<< "${out}"; then
+    ok "eat-up refuses deploy_openshell=on on the pinned tag"
+else
+    fail "eat-up refuses deploy_openshell=on on the pinned tag (rc=${rc}): ${out}"
+fi
+out=$(EAT_CONFIG="${EAT}/agentic-config.cfg" EAT_KUBECONFIG=/nonexistent "${EAT}/eat-up.sh" 2>&1) && rc=0 || rc=$?
+if [ "${rc}" -ne 0 ] && grep -q 'kubeconfig /nonexistent not found' <<< "${out}"; then
+    ok "eat-up passes the shipped config to the kubeconfig check"
+else
+    fail "eat-up passes the shipped config to the kubeconfig check (rc=${rc}): ${out}"
+fi
 
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
