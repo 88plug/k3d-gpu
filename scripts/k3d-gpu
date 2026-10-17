@@ -61,7 +61,7 @@
 
 set -euo pipefail
 
-VERSION="0.1.30"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.31"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 # The node image defaults to the tag built from this launcher's own release
 # (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
@@ -138,6 +138,14 @@ Usage: k3d-gpu <command>
             has XMX, else on the CPU (P-cores); or vLLM on an Arc GPU (K3D_GPU_AGENT_BACKEND).
             --with adds a vision-language model, Whisper speech-to-text (NPU first)
             and DL Streamer video analytics (GPU media engines) on what the LLM leaves
+  agent prefix [--json] [--device CPU|GPU] [--min-tokens N] [--kv-kib K] [--tokenizer FILE] FILE|DIR...
+            Read agent manifests (JSON: name, system, tools) before deploy and report
+            which agents share a prompt head the KV prefix cache can reuse, in whole
+            KV blocks, and tool schemas whose key order breaks sharing. Device follows
+            K3D_GPU_AGENT_DEVICE (CPU or GPU), else CPU, labelled as assumed. Tokens are
+            chars/4 unless --tokenizer names the model's tokenizer.json. OVMS block
+            sizes only. Prefix caching is already on in OVMS (--pull default); this
+            only reports and plans one shared engine
   recipe npu-embeddings
             Print an OVMS embeddings-on-NPU manifest for this host (pipe to kubectl apply -f -)
   facts [--json | --html [--facts FILE] [--matrix FILE]]
@@ -165,6 +173,10 @@ Usage: k3d-gpu <command>
             Run the plan ('agent up' with its image, device, model and P-core
             count) only if the plan, recomputed now with the same options,
             still hashes to H; a plan on a port other than 8000 is refused
+  phase-steer [--json] [--prefill CPUS --decode CPUS]
+            Experimental, read-only (H20 PENDING): per-phase CPU split for one
+            llama.cpp server per agent, prefill on the P-cores and decode on the
+            E-cores (LP E-cores left out), as -Cb/-C masks; off on one core type
   version   Show version
   help      Show this message
 
@@ -6136,6 +6148,22 @@ cmd_agent_down() {
     info "Model caches kept in the namespace's PVCs. Remove everything: kubectl delete namespace ${AGENT_NS}"
 }
 
+# Shared-prefix report of agent manifests (console/shared_prefix.py, H25). The
+# KV block size follows the device: --device, else K3D_GPU_AGENT_DEVICE when it
+# names CPU or GPU, else CPU, reported as assumed (auto resolves only at deploy).
+cmd_agent_prefix() {
+    require python3
+    local dir dev=CPU a
+    dir=$(console_dir) || err "agent prefix: console/shared_prefix.py not found next to the launcher or in ${SHARE_DIR}/console (set K3D_GPU_CONSOLE)"
+    [ -f "${dir}/shared_prefix.py" ] || err "agent prefix: ${dir}/shared_prefix.py missing"
+    local assumed=--device-assumed
+    case "${K3D_GPU_AGENT_DEVICE:-}" in [Cc][Pp][Uu]|[Gg][Pp][Uu]) dev=${K3D_GPU_AGENT_DEVICE^^} assumed="" ;; esac
+    for a in "$@"; do [ "${a}" != --device ] || { dev=""; assumed=""; }; done
+    [ $# -gt 0 ] || err "usage: k3d-gpu agent prefix [--json] [--device CPU|GPU] [--min-tokens N] [--kv-kib K] [--tokenizer FILE] FILE|DIR..."
+    [ "${AGENT_BACKEND}" = ovms ] || warn "agent prefix: KV block sizes and the plan are OVMS's; backend ${AGENT_BACKEND} is not modelled"
+    python3 "${dir}/shared_prefix.py" ${dev:+--device "${dev}"} ${assumed:+"${assumed}"} "$@"
+}
+
 cmd_agent() {
     case "${AGENT_BACKEND}" in
         ovms|vllm|llm-scaler) ;;
@@ -6154,7 +6182,8 @@ cmd_agent() {
                 # shellcheck disable=SC2086 # word list of add-on names
                 agent_stack_manifest ${addons}
             fi ;;
-        *) err "usage: k3d-gpu agent up|down|status|manifest [--with vlm,stt,video]" ;;
+        prefix)   cmd_agent_prefix "$@" ;;
+        *) err "usage: k3d-gpu agent up|down|status|manifest [--with vlm,stt,video] | prefix FILE|DIR..." ;;
     esac
 }
 
@@ -6463,6 +6492,102 @@ print(d["decision"], e.get("name") or "-", e.get("device") or "-", e.get("image"
         K3D_GPU_AGENT_IMAGE="${image}" K3D_GPU_AGENT_CPUS="${cpus}" exec "$(readlink -f "${BASH_SOURCE[0]}")" agent up
 }
 
+# ---- phase-steer (H20, experimental) ----------------------------------------------
+# cpulist_hexmask <cpulist>: the CPUs as a hex affinity mask, "0x" with CPU 0 in
+# the lowest bit, the form llama.cpp's -C/--cpu-mask and -Cb/--cpu-mask-batch read
+# (tools/server/README.md: "CPU affinity mask: arbitrarily long hex"). Fails on an
+# invalid or empty list.
+cpulist_hexmask() {
+    local cpus c i top=0 out=""
+    local -a nib=()
+    cpus=$(cpulist_expand "$1") && [ -n "${cpus}" ] || return 1
+    for c in ${cpus}; do
+        i=$((c / 4))
+        nib[i]=$(( ${nib[i]:-0} | (1 << (c % 4)) ))
+        [ "${i}" -le "${top}" ] || top=${i}
+    done
+    for ((i = top; i >= 0; i--)); do out+=$(printf '%x' "${nib[i]:-0}"); done
+    echo "0x${out}"
+}
+
+# phase_steer_plan [prefill] [decode]: "<state> <prefill> <decode> <lp-e> <reason>".
+# Auto: prefill (compute-bound) on the P-cores (cpu_core), decode on the E-cores
+# that share the L3 (cpu_atom minus the LP E-cores, which have no L3 and sit off
+# the compute tile). Explicit lists override detection; both must be online CPUs.
+phase_steer_plan() {
+    local pcpus=${1:-} dcpus=${2:-} lp online l
+    lp=$(lowpower_cpus)
+    if [ -z "${pcpus}${dcpus}" ]; then
+        has_hybrid || { echo "off - - - no P-core and E-core PMUs (cpu_core, cpu_atom), one core type: nothing to steer"; return 0; }
+        pcpus=$(hybrid_cpus core) dcpus=$(efficient_cpus)
+        [ -n "${dcpus}" ] || { echo "off - - ${lp:--} the only E-cores are LP E-cores (no L3, off the compute tile)"; return 0; }
+        echo "auto ${pcpus} ${dcpus} ${lp:--} detected from cpu_core and cpu_atom"
+        return 0
+    fi
+    { [ -n "${pcpus}" ] && [ -n "${dcpus}" ]; } || err "phase-steer: --prefill and --decode go together"
+    online=$(rd /sys/devices/system/cpu/online)
+    for l in "${pcpus}" "${dcpus}"; do
+        cpulist_expand "${l}" >/dev/null || err "phase-steer: '${l}' is not a CPU list (e.g. 0-15 or 0,2,4)"
+        [ -z "${online}" ] || cpulist_within "${l}" "${online}" || err "phase-steer: CPUs ${l} are not all online (${online})"
+    done
+    echo "override ${pcpus} ${dcpus} ${lp:--} set by --prefill and --decode"
+}
+
+# phase-steer [--json] [--prefill CPUS --decode CPUS]
+# Read-only. Prints the per-phase CPU split for one llama.cpp server per agent:
+# prompt processing (-Cb, the batch pool) on the P-cores, token generation (-C)
+# on the E-cores, as llama-server flags. The masks are non-strict on purpose:
+# ggml strict mode pins thread j to the j-th set bit in every process, so N
+# agents given one strict mask would all stack on its first CPUs (H20 A1).
+# Nothing is applied: H20 in
+# EXPERIMENTS.md is PENDING, and the split becomes a default only if it holds.
+cmd_phase_steer() {
+    local json=0 pre="" dlist="" state p d lp reason pm="" dm=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --json) json=1 ;;
+            --prefill|--decode)
+                [ $# -ge 2 ] || err "phase-steer: $1 needs a CPU list"
+                if [ "$1" = --prefill ]; then pre=$2; else dlist=$2; fi
+                shift ;;
+            *) err "unknown phase-steer option: $1 (use --json, --prefill CPUS, --decode CPUS)" ;;
+        esac
+        shift
+    done
+    read -r state p d lp reason <<< "$(phase_steer_plan "${pre}" "${dlist}")"
+    [ -n "${state}" ] || exit 1
+    if [ "${state}" != off ]; then
+        { pm=$(cpulist_hexmask "${p}") && dm=$(cpulist_hexmask "${d}"); } \
+            || err "phase-steer: could not build masks from ${p} and ${d}"
+    fi
+    if [ "${json}" = 1 ]; then
+        python3 - "${state}" "${p}" "${d}" "${lp}" "${reason}" "${pm}" "${dm}" <<'PY'
+import json, sys
+state, p, d, lp, reason, pm, dm = sys.argv[1:]
+on = state != "off"
+def opt(v):
+    return None if v in ("-", "") else v
+print(json.dumps({
+    "schema": "phase-steer/v1", "state": state, "reason": reason, "ledger": "H20 PENDING",
+    "prefill_cpus": opt(p), "decode_cpus": opt(d), "lowpower_cpus": opt(lp),
+    "prefill_mask": opt(pm), "decode_mask": opt(dm),
+    "llama_server_args": ["--cpu-mask-batch", pm, "--cpu-mask", dm] if on else [],
+}, sort_keys=True))
+PY
+        return 0
+    fi
+    info "phase-steer (experimental, H20 PENDING: no command applies it)"
+    if [ "${state}" = off ]; then
+        echo "  off: ${reason}"
+        return 0
+    fi
+    echo "  prefill (P-cores): ${p}  mask ${pm}"
+    echo "  decode  (E-cores): ${d}  mask ${dm}"
+    [ "${lp}" = - ] || echo "  LP E-cores left out: ${lp}"
+    echo "  from: ${reason}"
+    echo "  llama-server: --cpu-mask-batch ${pm} --cpu-mask ${dm}"
+}
+
 # K3D_GPU_EXPERIMENTAL=list prints the feature table with any command; any
 # other value is checked up front, so an unknown name fails before anything runs.
 if exp_is_list; then
@@ -6487,6 +6612,7 @@ case "${1:-help}" in
     audit)   shift; cmd_audit "$@" ;;
     sandbox) cmd_sandbox "${2:-}" ;;
     apply)   shift; cmd_apply "$@" ;;
+    phase-steer) shift; cmd_phase_steer "$@" ;;
     version|--version|-v) echo "k3d-gpu ${VERSION}" ;;
     help|--help|-h) usage ;;
     *) usage; exit 1 ;;

@@ -217,10 +217,16 @@ check "rdt-isolate: run.sh parses" bash -n "${ROOT}/bench/rdt-isolate/run.sh"
 check "agent_trace: unit tests against the in-process stub" \
     env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/test_agent_trace.py"
 
+check "shared-prefix (H25): prompt generator and scorer" \
+    env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/shared-prefix/test_probe.py"
+
 # ---- uncore-phase (H29) -----------------------------------------------------------
 
 check "uncore-phase: probe unit tests (order, sign test, verdict rules, knob restore)" \
     env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/uncore-phase/test_probe.py"
+
+check "phase-steer: H20 probe unit tests" \
+    env -u IMAGE PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/phase-steer/test_probe.py"
 
 # ---- research/ models -------------------------------------------------------------
 
