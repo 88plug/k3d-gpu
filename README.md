@@ -18,16 +18,17 @@ A Docker-based [rancher/k3s](https://hub.docker.com/r/rancher/k3s) node image on
 ## Table of Contents
 
 1. [Quick Start (k3d-gpu CLI)](#quick-start-k3d-gpu-cli)  
-2. [Features](#features)  
-3. [Prerequisites](#prerequisites)  
-4. [Environment Variables](#environment-variables)  
-5. [Building & Pushing the Image](#building--pushing-the-image)  
-6. [k3d Cluster Setup](#k3d-cluster-setup)  
-7. [Testing GPU Access](#testing-gpu-access)  
-8. [References](#references)  
-9. [Contributing](#contributing)  
-10. [Release History](#release-history)  
-11. [License](#license)  
+2. [MCP server for AI agents](#mcp-server-for-ai-agents)  
+3. [Features](#features)  
+4. [Prerequisites](#prerequisites)  
+5. [Environment Variables](#environment-variables)  
+6. [Building & Pushing the Image](#building--pushing-the-image)  
+7. [k3d Cluster Setup](#k3d-cluster-setup)  
+8. [Testing GPU Access](#testing-gpu-access)  
+9. [References](#references)  
+10. [Contributing](#contributing)  
+11. [Release History](#release-history)  
+12. [License](#license)  
 
 ---
 
@@ -73,6 +74,60 @@ Behaviour is tunable via environment variables:
 
 The rest of this README documents the underlying image and the manual `k3d`
 commands the launcher runs for you.
+
+---
+
+## MCP server for AI agents
+
+`k3d-gpu-mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server
+that lets an AI agent see which engines the cluster has and place work on them. It
+speaks stdio, needs only `python3` (3.8+, standard library) next to the `k3d-gpu`
+launcher and `kubectl`, and is read-only: it never creates or deletes anything.
+
+| Tool | Returns |
+|------|---------|
+| `accelerators` | the `k3d-gpu report --json` document: host devices, detected vendors and their resources, per-node allocatable resources and accelerator labels (falls back to `detect` + node allocatable on launchers without `report`) |
+| `recommend_placement` | `workload`: `llm` \| `embeddings` \| `media` \| `batch`, `objective`: `latency` (default) \| `throughput` \| `efficiency`. The best engine the cluster advertises and the pod-spec fragment to merge: the extended-resource limit, `k3d-gpu.io/cores=performance\|efficient` with a CPU request (the balloon is sized by it) on hybrid CPUs, the AMX `nodeSelector` on the CPU path. An `llm` at `latency` or `throughput` takes the Intel GPU only on a `gpu.intel.com/xmx=true` node, the same rule as `k3d-gpu agent up` |
+| `agent_endpoint` | the OpenVINO Model Server from `k3d-gpu agent up`: in-cluster `/v3` base URL, a `port-forward` command and `localhost` URL for the host, device, served models (`/v3/models`) |
+| `cluster_health` | node readiness, per-node accelerator counts, device-plugin DaemonSet rollout (and plugins missing for host-detected devices), and a list of problems |
+
+Protocol: MCP **2026-07-28** (per-request `_meta`, `server/discover`) and, for
+clients that still open with the `initialize` handshake, 2025-11-25, 2025-06-18,
+2025-03-26 and 2024-11-05.
+
+Claude Code:
+
+```bash
+claude mcp add --transport stdio k3d-gpu -- k3d-gpu-mcp
+# a non-default cluster name:
+claude mcp add --env K3D_GPU_CLUSTER=dev --transport stdio k3d-gpu -- k3d-gpu-mcp
+```
+
+Other MCP clients launch the same command; most read a JSON entry like this one (the
+top-level key differs between clients — check yours):
+
+```json
+{
+  "mcpServers": {
+    "k3d-gpu": {
+      "command": "k3d-gpu-mcp",
+      "env": { "K3D_GPU_CLUSTER": "gpu" }
+    }
+  }
+}
+```
+
+From a git checkout use the absolute path to `scripts/k3d-gpu-mcp`; it finds the
+`scripts/k3d-gpu` launcher next to it.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `K3D_GPU_CLUSTER` | `gpu` | cluster; kubectl always uses context `k3d-<name>` |
+| `K3D_GPU_BIN` | `k3d-gpu` next to the server, else `PATH` | launcher to run |
+| `K3D_GPU_MCP_TIMEOUT` | `60` | seconds per launcher or kubectl call |
+
+`tests/mcp_test.sh` drives the server through scripted JSON-RPC sessions against a
+stubbed launcher and kubectl.
 
 ---
 
