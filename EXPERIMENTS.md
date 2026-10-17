@@ -33,6 +33,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H17 | DRA mode can become the default (auto) Intel GPU path when the driver is baked in, without losing what the device-plugin default gives on an iGPU host. | On the same host, all three: (a) two pods that each claim the iGPU through their own ResourceClaim from one template are both `Running` at once, as two `gpu.intel.com/i915: 1` pods are under the plugin's sharing default (H15); (b) median pod latency (create to `Succeeded`, busybox `ls /dev/dri`, image preloaded) in DRA mode is at most 1.2x the plugin's; (c) median `k3d-gpu up` wall time in DRA mode is at most 1.2x the plugin's. | Arms D (`K3D_GPU_DRA=1`) and P (default), one fresh cluster per run, n=3 runs per arm, order D P P D D P; per run 1 timed `up` and 3 timed pods (reported as the run's median), then the 2-pod check read 20 s after creation. Per run: package W over `up` (RAPL), load (1 min), swap used, package throttle count delta. Outcome -> conclusion: (a) fails in any D run -> REFUTED, DRA stays opt-in (`K3D_GPU_DRA=0` default), since auto would take away H15's sharing; (a) holds but (b) or (c) fails -> REFUTED, DRA stays opt-in; all hold -> SUPPORTED, DRA may become auto in a later change; F of H16 fails -> H17 not evaluated (DRA mode broken). A timing arm whose spread (max - min) exceeds 30% of its median -> that part INCONCLUSIVE. Prediction before measuring: REFUTED by (a), because gpu-v0.12.1 publishes no shared counters or multi-allocation (docs/experimental.md). | REFUTED |
 | H18 | `k3d-gpu sandbox up` keeps agent sandboxes on the E-cores and inside a default-deny egress policy on k3d (kube-router), while public egress (PyPI) still works. | On an i9-13900T with tailscale (host `100.65.179.24`, sshd on `0.0.0.0:22`) and a cluster from this branch's image: (a) `sandbox up` exits 0 with the warm pool `readyReplicas` >= 1 and every sandbox pod's `Cpus_allowed_list` inside the E-cores (cpu_atom); (b) from a sandbox pod, TCP to `100.65.179.24:22` (CGNAT, tailscale) and to `192.168.1.108:22` (RFC1918, host LAN) both fail to connect within 3 s, and the policy's kube-router drop-log rule counts the packets, while from a control pod (same image, namespace `sbx-control`, no policy) both connect; (c) from a sandbox pod, DNS resolves `pypi.org`, TCP to `pypi.org:443` connects, and `pip install --user tomli_w==1.2.0` (not in the image) with the profile's `HOME=/tmp` exits 0 and imports from `/tmp/.local`. | Pre-registered 2026-10-17 before any H18 run (this commit, pushed). Image `docker build -t $TAG .` from `claude/agent-sandbox-ecores` rebased on origin/main 2b45f87. Cluster `k3dgpu-r2-sbx`, scratch `KUBECONFIG`, one fresh cluster per run, n=3 runs. Per run: timed `sandbox up` (wall, s), then the probes interleaved sandbox/control, each probe once per pod. Confounds per run: package W (RAPL, 5 s before), 1-min load, swap used, package throttle count delta. Outcome -> conclusion: every run meets (a), (b) and (c) -> SUPPORTED; a sandbox pod off the E-cores, a sandbox reaching either private address, or a control pod failing to connect (probe cannot see a block) -> REFUTED (control failure -> INCONCLUSIVE); pip failing while `pypi.org:443` connects -> REFUTED for (c), README must drop the pip claim. Prediction: SUPPORTED. Amended before the counted runs, after pilot run 0 (log below): kube-router REJECTs (`icmp-port-unreachable`, so `Connection refused` in ~0.1 s) rather than dropping, so (b) asks for no connect plus the drop-log counter instead of a timeout; `six` ships in the image, so (c) installs `tomli_w`. Runner: `bench/sandbox_round.sh`. | SUPPORTED |
 | H7 | OVMS's decode lead over EAT's vLLM CPU engine in the H2 run comes from weight precision, not from the engine. | On the i9-13900T 16-CPU P-core balloon, one checkpoint served by OVMS 2026.4.1 and by vLLM CPU v0.24.0 at matched weight precision decodes within 15% between the two engines, and the two land within 15% of each other in effective weight bandwidth (weight bytes x decode tok/s). | Pre-registered 2026-10-16, before any run. One checkpoint and revision (`Qwen/Qwen3-4B-Instruct-2507`, revision recorded) for both engines: OVMS loads an OpenVINO IR exported from it with 16-bit weights, vLLM loads it in bf16. A second arm at int4 in both engines runs only if vLLM v0.24.0 CPU is first shown to load an int4 build of the same checkpoint. vLLM runs with EAT's chart defaults and once with `--enforce-eager` dropped, to split engine from config. H2 workloads and energy method, arms interleaved ABBA, 5 rounds. Refuted if the decode gap at matched precision is 15% or more. | PENDING |
+| H25 | Agents that send a byte-identical system prompt and tool schemas to one OVMS CPU server reuse one prefix KV, so an added agent's first request skips the shared prefill. Whether the shared blocks also cut resident memory per live agent is measured too, not assumed. Pre-registered 2026-10-17T05:08-07:00, before any H25 run. | On an i9-13900T, OVMS 2026.4.1 (digest a928903f…), `OpenVINO/Qwen3-4B-int4-ov` b467368d on the 16-CPU P-core balloon, shared prefix Ps ≈ 1536 tokens, private Pp = 96, max_tokens 8, thinking off. (T) The median TTFT of an added agent (agents 2..6, sequential) is ≥ 4x lower with the shipping default (prefix caching on, cache_size 0) than with `--enable_prefix_caching=false`; the lower bound of the 95% bootstrap CI of the ratio is ≥ 4x. Point prediction: OFF 9.6 s ± 15% (Ps+Pp at the 172 tok/s of H6), ON 0.9 s (0.6-1.4). (C) An ON agent with one token changed at system position 16 measures ≥ 0.8x the OFF median. (M) Memory per added live agent in a 6-agent burst: OFF ≈ 117 MiB (52 blocks x 32 tok x 72 KiB u8). Expectation (prior 0.5): ON ΔRSS per agent is ≥ 0.8x OFF, because dynamic-pool growth counts full prompts; physical sharing alone would give ≈ 9-12 MiB. Null H0: added-agent TTFT ON/OFF < 2x with c equal to the ON agents (no cross-agent reuse); for M, ON ΔRSS per agent ≥ 0.8x OFF. | `bench/shared-prefix/run.sh` under the live lock, 20 min cap. Fresh OVMS pod every round, arm order ON OFF OFF ON ON OFF (n = 3 rounds per arm, 15 added-agent samples per arm), new prefix seed every round. Per round: warm-up, sequential agents a1..a6 plus the perturbed control c, then a 6-agent barrier burst with 1 Hz sampling of pod `memory.current`. Confounds per round: RAPL package energy, 1-min load, swap used, pod `memory.swap.current`, package throttle-count delta, running container count. Outcome table and guardrails in [H25 pre-registration](#h25-pre-registration). The deploy-time detector (`k3d-gpu agent prefix`) is scored by unit tests, not by this probe. Prior art exists (vLLM APC, SGLang RadixAttention on Xeon, OVMS prefix caching, KVFlow, KVComm): a claim states only the measured delta [provenance:P250] [provenance:P252] [provenance:P253] [provenance:P259]. | PENDING |
 
 ## Falsification log
 
@@ -1012,6 +1013,70 @@ sed -e 's/cores: performance/cores: efficient/' -e 's/cpu: "16"/cpu: "15"/' c16.
 # H4b: G C16 C8 in 5 rotated orders; H4c: Ce G alternating, 5 rounds.
 scripts/k3d-gpu down
 ```
+
+### H25 pre-registration
+
+Written 2026-10-17T05:08-07:00, before any H25 measurement. Nothing below may
+change after the first live round; a change voids the run.
+
+**Premise check.** OVMS 2026.4.1 `--pull` already writes
+`enable_prefix_caching: true` and `cache_size: 0` (the pinned image's `--help`
+prints `--enable_prefix_caching ... (default: true)` and `--cache_size ...
+(default: 0)`, checked 2026-10-17 [provenance:P253]). The k3d-gpu agent
+manifest uses `--pull`, so prefix caching is on today. "Auto-enable" adds
+nothing; the baseline is the shipping default and caching OFF is the negative
+control. What H25 can add is a measured cost per added agent, and the
+deploy-time detector `k3d-gpu agent prefix`, which reads agent manifests
+before any request and reports the shared, block-aligned prefix.
+
+Outside the lock (no cluster, no load):
+1. Stage `OpenVINO/Qwen3-4B-int4-ov` at revision b467368d16b75df14055562fe927ae8e1f15f7ef into a scratch dir and check `openvino_model.bin` against the H6 header.
+2. `docker run --rm $IMAGE --help` on the pinned OVMS digest; grep `enable_prefix_caching` and `cache_size` (done above).
+3. Prompts come from `bench/shared-prefix/probe.py gen` with fixed seeds, one prefix seed per round: system text plus 12 EAT-style tool schemas with frozen key order, Ps calibrated to 1536 ± 32 rendered tokens, a 96-token private message per agent, and the perturbed copy c with one word changed at system position 16.
+
+Inside `flock -w 10800 .../live.lock` (wait first until no `k3dgpu-f-*`
+cluster exists), wall-time cap 20 min, hard abort at 18:30 elapsed. On abort
+the cluster is deleted and rounds not run count as missing.
+- Cluster `k3dgpu-i-shared-prefix`, scratch KUBECONFIG, model dir mounted with `-v`, OVMS image imported.
+- The agent CPU manifest with one change: models come from a hostPath instead of the PVC. Image, args, P-core balloon, 16 CPUs and `--log_level=INFO` are the same in both arms.
+- Arm ON: no extra pull args. Arm OFF: `--enable_prefix_caching=false` on the pull container. graph.pbtxt is read back after every init; a mismatch voids the round.
+
+Every round runs on a fresh pod, in the order ON OFF OFF ON ON OFF:
+0. Confounds: RAPL energy_uj start, 1-min load, swap used, package_throttle_count summed over CPUs, running container count.
+1. Warm-up: one unique 16-token request, max_tokens 4, not scored.
+2. Phase S, concurrency 1: agents a1..a6, then c. Stream with include_usage, max_tokens 8, `chat_template_kwargs.enable_thinking=false`. TTFT = time to the first content or reasoning delta. a1 is the cold reference; a2..a6 are the added-agent samples (5 per round, 15 per arm).
+3. Phase B: 6 new agents b1..b6, same prefix seed, new private messages, released on a barrier. Pod `memory.current` and `memory.swap.current` sampled at 1 Hz from 5 s before release to the last response. ΔRSS per agent = (peak − pre-burst) / 6.
+4. RAPL energy_uj end and throttle delta. The cluster is deleted before the lock is released.
+
+Statistics: T ratio = median OFF added-agent TTFT / median ON added-agent TTFT;
+95% CI from 10,000 bootstrap resamples over the 15 + 15 samples; spread =
+max − min of the per-round medians; confidence = share of the 9 cross-round
+ON/OFF pairs whose ratio is ≥ 4x, reported next to the CI.
+
+Guardrails (a breach voids that round, not the hypothesis): > 2% request
+errors or a null TTFT; `usage.prompt_tokens` not identical across agents and
+arms; empty output within max_tokens 8; graph.pbtxt mismatch;
+`memory.swap.current` > 0 during phase B (voids M for that round). More than 1
+of 3 rounds voided in an arm makes the arm INCONCLUSIVE. Per-arm spread > 30%
+of the median makes that part INCONCLUSIVE.
+
+| Outcome | Prior | Conclusion | Action |
+|---------|-------|------------|--------|
+| T: CI lower bound ≥ 4x, c ≥ 0.8x OFF, a1 ON within ±15% of OFF | 0.85 | Cross-agent prefix reuse works on the shipping default; T SUPPORTED | Docs may cite the added-agent TTFT as [ledger:H25]; no auto-enable code (already on); ship canonical-prefix guidance |
+| T: 2x ≤ ratio < 4x, or CI straddles 4x | 0.07 | Reuse happens, but fixed cost T0 (template, tokenizer, parser) is large | INCONCLUSIVE for 4x; next probe: T0 by tool-schema size |
+| T: ratio < 2x, c ≈ ON agents | 0.04 | REFUTED: no reuse across agents | Dump and diff rendered prompts; no claim; do not re-attack until the cause is named |
+| c measures warm (< 0.5x OFF) | 0.01 | Probe defect | Run void; fix the generator |
+| Guardrail or spread breach in ≥ 2 rounds of an arm | 0.03 | INCONCLUSIVE (host noise) | Re-run at lower load; report confounds |
+| M: ON ΔRSS per agent ≤ 0.5x OFF | 0.35 | Shared blocks also save resident memory per live agent | Claim MiB per added agent [ledger:H25] |
+| M: ON ΔRSS per agent ≥ 0.8x OFF | 0.50 | Sharing does not show in RSS; dynamic-pool growth reserves full prompts | No memory claim; follow-up tests static `cache_size` |
+| M: 0.5x < ratio < 0.8x | 0.15 | Partial; 256-token growth steps blur it | INCONCLUSIVE for M; report the raw ΔRSS curve |
+
+Generalization (model prediction, not measured): the T ratio ≈ (Ps+Pp)/(Pp +
+T0·rate) is first-order SKU-invariant on the CPU path, and the absolute saving
+per added agent is Ps / prefill rate, so it is largest on low-core parts
+(Alder Lake-N) and smallest on AMX Xeons. The Core Ultra iGPU path uses
+16-token blocks and u4 KV, so its memory per token differs and is untested.
+
 
 ## Scope corrections
 
