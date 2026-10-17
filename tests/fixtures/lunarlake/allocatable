@@ -1,3 +1,4 @@
-cpu 16
+cpu 8
 pods 110
+gpu.intel.com/xe 1
 npu.intel.com/accel 1

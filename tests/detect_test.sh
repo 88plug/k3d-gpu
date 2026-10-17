@@ -8,6 +8,8 @@ set -uo pipefail
 
 K3D_GPU="$(cd "$(dirname "$0")/.." && pwd)/scripts/k3d-gpu"
 WORK=$(mktemp -d)
+# A measured autoquant pick on this dev box (EXPERIMENTS.md H27) must not leak into goldens.
+export K3D_GPU_AUTOQUANT_CACHE="${WORK}/no-autoquant.json"
 trap 'rm -rf "${WORK}"' EXIT
 PASS=0 FAILS=0
 
@@ -245,6 +247,79 @@ mkdir -p "${r}/proc"
 printf 'processor\t: 0\nflags\t\t: fpu avx512f avx512_bf16\n' > "${r}/proc/cpuinfo"
 expect "CPU without AMX flags is not amx" "${r}" ""
 
+# ---- AMX model-derived labels and Xeon CPU Max memory modes ------------------
+
+AMXL="feature.node.kubernetes.io/cpu-cpuid"
+# xcpu <root> <family> <model> <flags> [model name]: one-CPU cpuinfo.
+xcpu() {
+    mkdir -p "$1/proc"
+    printf 'processor\t: 0\ncpu family\t: %s\nmodel\t\t: %s\nmodel name\t: %s\nflags\t\t: fpu %s\n' \
+        "$2" "$3" "${5:-Intel(R) Xeon(R)}" "$4" > "$1/proc/cpuinfo"
+}
+AMX3="amx_bf16 amx_tile amx_int8"
+
+r=$(newroot gnr-bare); xcpu "${r}" 6 173 "${AMX3}"
+expect "Granite Rapids 6/173 bare metal gets AMXFP16" "${r}" \
+"amx ${AMXL}.AMXBF16=true ${AMXL}.AMXFP16=true ${AMXL}.AMXINT8=true ${AMXL}.AMXTILE=true"
+r=$(newroot gnrd-bare); xcpu "${r}" 6 174 "${AMX3}"
+expect "Granite Rapids-D 6/174 gets AMXFP16 and AMXCOMPLEX" "${r}" \
+"amx ${AMXL}.AMXBF16=true ${AMXL}.AMXCOMPLEX=true ${AMXL}.AMXFP16=true ${AMXL}.AMXINT8=true ${AMXL}.AMXTILE=true"
+r=$(newroot dmr-bare); xcpu "${r}" 19 1 "${AMX3}"
+expect "Diamond Rapids 19/1 gets AMXFP16 and AMXCOMPLEX" "${r}" \
+"amx ${AMXL}.AMXBF16=true ${AMXL}.AMXCOMPLEX=true ${AMXL}.AMXFP16=true ${AMXL}.AMXINT8=true ${AMXL}.AMXTILE=true"
+r=$(newroot gnr-vm); xcpu "${r}" 6 173 "${AMX3} hypervisor"
+expect "Granite Rapids under a hypervisor gets no inferred labels" "${r}" \
+"amx ${AMXL}.AMXBF16=true ${AMXL}.AMXINT8=true ${AMXL}.AMXTILE=true"
+r=$(newroot gnr-notile); xcpu "${r}" 6 173 "amx_bf16 amx_int8"
+expect "Granite Rapids without amx_tile gets no inferred labels" "${r}" \
+"amx ${AMXL}.AMXBF16=true ${AMXL}.AMXINT8=true"
+r=$(newroot spr-bare); xcpu "${r}" 6 143 "${AMX3}"
+expect "Sapphire Rapids 6/143 gets no AMXFP16" "${r}" \
+"amx ${AMXL}.AMXBF16=true ${AMXL}.AMXINT8=true ${AMXL}.AMXTILE=true"
+r=$(newroot gnr-dup); xcpu "${r}" 6 173 "${AMX3} amx_fp16"
+expect "a kernel printing amx_fp16 gives one AMXFP16 label" "${r}" \
+"amx ${AMXL}.AMXBF16=true ${AMXL}.AMXFP16=true ${AMXL}.AMXINT8=true ${AMXL}.AMXTILE=true"
+
+# dax <root> <dev> <parent dir under sys/devices> <driver>: a /sys/bus/dax device.
+dax() {
+    local dir="$1/sys/devices/$3/$2"
+    mkdir -p "${dir}" "$1/sys/bus/dax/devices" "$1/sys/bus/dax/drivers/$4"
+    ln -sfn "$1/sys/bus/dax/drivers/$4" "${dir}/driver"
+    ln -sfn "${dir}" "$1/sys/bus/dax/devices/$2"
+}
+MAX="Intel(R) Xeon(R) CPU Max 9480"
+r=$(newroot max-devdax); kernel "${r}" 6.18.1; xcpu "${r}" 6 143 "${AMX3}" "${MAX}"
+dax "${r}" dax0.0 platform/hmem.0 device_dax
+doctor_says "Xeon Max hmem dax on device_dax gets the system-ram advice" "${r}" 'dax0\.0 in devdax mode.*daxctl reconfigure-device --mode=system-ram'
+r=$(newroot max-kmem); kernel "${r}" 6.18.1; xcpu "${r}" 6 143 "${AMX3}" "${MAX}"
+dax "${r}" dax0.0 platform/hmem.0 kmem
+doctor_says "Xeon Max hmem dax already on kmem is silent" "${r}" 'devdax mode' negate
+r=$(newroot spr-pmem); kernel "${r}" 6.18.1; xcpu "${r}" 6 143 "${AMX3}" "Intel(R) Xeon(R) Platinum 8480+"
+dax "${r}" dax0.0 platform/e820_pmem/ndbus0/region0/dax0.1 device_dax
+doctor_says "SPR PMem devdax namespace gets no system-ram advice" "${r}" 'system-ram|HBM the kernel' negate
+r=$(newroot max-pmem); kernel "${r}" 6.18.1; xcpu "${r}" 6 143 "${AMX3}" "${MAX}"
+dax "${r}" dax0.0 platform/e820_pmem/ndbus0/region0/dax0.1 device_dax
+doctor_says "PMem devdax on a Xeon Max host is not called HBM" "${r}" 'system-ram|HBM the kernel' negate
+r=$(newroot spr-cxl); kernel "${r}" 6.18.1; xcpu "${r}" 6 143 "${AMX3}" "Intel(R) Xeon(R) Platinum 8480+"
+dax "${r}" dax0.0 platform/ACPI0017:00/root0/decoder0.0/region0/dax_region0 device_dax
+doctor_says "SPR CXL devdax is not called HBM" "${r}" 'system-ram|HBM the kernel' negate
+r=$(newroot spr-hmem); kernel "${r}" 6.18.1; xcpu "${r}" 6 143 "${AMX3}" "Intel(R) Xeon(R) Platinum 8480+"
+dax "${r}" dax0.0 platform/hmem.0 device_dax
+doctor_says "non-Max 6/143 hmem dax gets no HBM advice" "${r}" 'system-ram|HBM the kernel' negate
+
+# msc <root> <node>: node<N> with a 16 GiB direct-mapped memory-side cache.
+msc() {
+    local d="$1/sys/devices/system/node/node$2/memory_side_cache/index1"
+    mkdir -p "${d}"; echo 17179869184 > "${d}/size"; echo 0 > "${d}/indexing"
+}
+r=$(newroot max-cache); kernel "${r}" 6.18.1; xcpu "${r}" 6 143 "${AMX3}" "${MAX}"
+for n in 0 1 2 10; do msc "${r}" "${n}"; done
+doctor_says "memory-side cache nodes are listed in numeric order" "${r}" 'node 0 index 1 .*; node 1 .*; node 2 .*; node 10 index 1'
+doctor_says "memory-side cache without shuffle on suggests page_alloc.shuffle=y" "${r}" 'CONFIG_SHUFFLE_PAGE_ALLOCATOR=y.*sudo cat /sys/module/page_alloc/parameters/shuffle.*grubby --update-kernel=ALL --args=page_alloc\.shuffle=y.*--remove-args=page_alloc\.shuffle'
+mkdir -p "${r}/sys/module/page_alloc/parameters"; echo Y > "${r}/sys/module/page_alloc/parameters/shuffle"
+doctor_says "memory-side cache with shuffle on reports ok" "${r}" 'ok: page_alloc\.shuffle is on'
+doctor_says "memory-side cache with shuffle on does not suggest it" "${r}" 'Intel suggests page_alloc' negate
+
 # ---- doctor diagnostics -------------------------------------------------------
 
 r=$(newroot cri-unbound)
@@ -267,6 +342,24 @@ r=$(newroot ptl-old-kernel)
 kernel "${r}" 6.16.3
 pci "${r}" 0000:00:02.0 0x8086 0xb080 xe; render "${r}" 0000:00:02.0 128
 doctor_says "Panther Lake iGPU on 6.16 warns about kernel 6.17" "${r}" 'Panther Lake.*6\.17'
+doctor_says "Panther Lake iGPU on 6.16 gets no force_probe advice" "${r}" 'force_probe=b0' negate
+
+# Wildcat Lake iGPU: v6.17 INTEL_PTL_IDS binds 0xfd80/0xfd81 to ptl_desc.
+r=$(newroot wcl-old-kernel)
+kernel "${r}" 6.16.3
+pci "${r}" 0000:00:02.0 0x8086 0xfd80 xe; render "${r}" 0000:00:02.0 128
+doctor_says "Wildcat Lake iGPU on 6.16 warns about kernel 6.17" "${r}" 'Wildcat Lake.*6\.17'
+doctor_says "Wildcat Lake iGPU on 6.16 gets no force_probe advice" "${r}" 'force_probe=fd8' negate
+r=$(newroot wcl-unbound-old)
+kernel "${r}" 6.16.3
+pci "${r}" 0000:00:02.0 0x8086 0xfd80 "" 0x030000
+doctor_says "unbound Wildcat Lake on 6.16 asks for kernel 6.17" "${r}" 'Wildcat Lake \(0xfd80\) has no driver.*kernel 6\.17\+'
+doctor_says "unbound Wildcat Lake on 6.16 gets no force_probe advice" "${r}" 'force_probe=fd8' negate
+r=$(newroot wcl-617)
+kernel "${r}" 6.17.2
+pci "${r}" 0000:00:02.0 0x8086 0xfd80 xe; render "${r}" 0000:00:02.0 128
+firmware "${r}" xe/ptl_guc_70.bin
+doctor_says "Wildcat Lake iGPU on 6.17 has no kernel warning" "${r}" 'needs [0-9]' negate
 
 r=$(newroot lnl-ok)
 kernel "${r}" 6.18.1
@@ -308,6 +401,64 @@ r=$(newroot not-bmg)
 kernel "${r}" 6.11.2
 pci "${r}" 0000:03:00.0 0x8086 0xe214 xe; render "${r}" 0000:03:00.0 128
 doctor_says "0xe214 is not a Battlemage id in the kernel" "${r}" 'Intel Battlemage \(' negate
+
+r=$(newroot bmg-b60-backport)
+kernel "${r}" 6.14.3
+pci "${r}" 0000:03:00.0 0x8086 0xe211 xe; render "${r}" 0000:03:00.0 128
+doctor_says "Pro B60 bound on 6.14 is a stable backport, not force_probe" "${r}" 'is in this kernel.s xe id table.*6\.15'
+doctor_says "Pro B60 bound on 6.14 gets no force_probe" "${r}" 'force_probe=e211' negate
+
+r=$(newroot bmg-b580-616)
+kernel "${r}" 6.16.1
+pci "${r}" 0000:03:00.0 0x8086 0xe20b xe; render "${r}" 0000:03:00.0 128
+doctor_says "B580 on 6.16 has no kernel warning" "${r}" 'Battlemage.*(needs kernel|stable backport)' negate
+
+r=$(newroot dg2-a770)
+kernel "${r}" 6.8.0
+pci "${r}" 0000:03:00.0 0x8086 0x56a0 i915; render "${r}" 0000:03:00.0 128
+doctor_says "Arc A770 is Alchemist DG2-G10" "${r}" 'Intel Alchemist DG2-G10 \(0x56a0\) bound to i915'
+doctor_says "Arc A770 gets the xmx label" "${r}" 'gpu.intel.com/xmx=true'
+
+r=$(newroot dg2-a770-old)
+kernel "${r}" 6.1.0
+pci "${r}" 0000:03:00.0 0x8086 0x56a0 i915; render "${r}" 0000:03:00.0 128
+doctor_says "Arc A770 on 6.1 needs 6.2 or i915.force_probe" "${r}" 'Alchemist DG2-G10.*6\.2\+.*i915.force_probe=56a0'
+
+# Late Alchemist ids joined i915's table after DG2 bound by default (6.2):
+# 56BA-56BD in 6.7, 56BE/56BF in 6.10. force_probe cannot add a missing id.
+r=$(newroot dg2-56ba-66)
+kernel "${r}" 6.6.0
+pci "${r}" 0000:03:00.0 0x8086 0x56ba i915; render "${r}" 0000:03:00.0 128
+doctor_says "bound 0x56ba on 6.6 is a backport" "${r}" 'Alchemist DG2-G11 \(0x56ba\) is in this kernel.s i915 id table.*6\.7'
+doctor_says "bound 0x56ba on 6.6 gets no force_probe" "${r}" 'force_probe=56ba' negate
+
+r=$(newroot dg2-56ba-65-unbound)
+kernel "${r}" 6.5.0
+pci "${r}" 0000:03:00.0 0x8086 0x56ba "" 0x030000
+doctor_says "unbound 0x56ba on 6.5 needs a kernel" "${r}" 'DG2-G11 \(0x56ba\) has no driver .*i915 lists this id from kernel 6\.7 .*upgrade the kernel'
+doctor_says "unbound 0x56ba on 6.5 gets no modprobe or force_probe" "${r}" '0x56ba.*(modprobe i915|force_probe=56ba)' negate
+
+r=$(newroot dg2-56be-69-unbound)
+kernel "${r}" 6.9.0
+pci "${r}" 0000:03:00.0 0x8086 0x56be "" 0x030000
+doctor_says "unbound 0x56be on 6.9 needs 6.10" "${r}" 'DG2-G10 \(0x56be\) has no driver .*from kernel 6\.10 '
+doctor_says "unbound 0x56be on 6.9 gets no modprobe" "${r}" '0x56be.*modprobe i915' negate
+
+r=$(newroot dg2-56be-68)
+kernel "${r}" 6.8.0
+pci "${r}" 0000:03:00.0 0x8086 0x56be i915; render "${r}" 0000:03:00.0 128
+doctor_says "bound 0x56be on 6.8 is a backport" "${r}" 'DG2-G10 \(0x56be\) is in this kernel.s i915 id table.*6\.10'
+
+r=$(newroot flex-515-unbound)
+kernel "${r}" 5.15.0
+pci "${r}" 0000:03:00.0 0x8086 0x56c1 "" 0x038000
+doctor_says "unbound Flex on 5.15 gets dkms" "${r}" 'Flex \(ATS-M\) \(0x56c1\) has no driver .*has no xe .*intel-i915-dkms'
+doctor_says "unbound Flex on 5.15 gets no xe.force_probe" "${r}" 'xe.force_probe|force-probe xe' negate
+
+r=$(newroot flex-68-unbound)
+kernel "${r}" 6.8.0
+pci "${r}" 0000:03:00.0 0x8086 0x56c1 "" 0x038000
+doctor_says "unbound Flex on 6.8 points at the exact experimental apply" "${r}" 'Flex \(ATS-M\) \(0x56c1\) has no driver .*doctor --experimental, xe-force-probe'
 
 r=$(newroot arl-s)
 kernel "${r}" 6.10.4
@@ -593,6 +744,9 @@ for c in 20 21; do cpucache "${r}" "${c}" 2 20-21; corecpus "${r}" "${c}" "${c}"
 doctor_says "atom CPUs without an L3 are LP E-cores" "${r}" 'ok: hybrid CPU: P-cores 0-11, E-cores 12-19, LP E-cores 20-21 '
 doctor_says "doctor offers the new core labels" "${r}" 'k3d-gpu.io/cores=performance\|efficient\|lowpower\|ecluster\|pcore-physical\|latency'
 doctor_says "E-core clusters come from the shared L2" "${r}" 'ok: E-core clusters \(shared L2\): 12-15 16-19 '
+doctor_says "hybrid, no rdt_a, E-core clusters: cpu-cap, ecluster not recommended" "${r}" \
+    'info: noisy-neighbour isolation: cpu-cap — no rdt_a flag, .*k3d-gpu.io/cores=ecluster) is not recommended'
+doctor_says "isolation never claims a measured effect" "${r}" 'isolation: .*(SUPPORTED|faster|% )' negate
 doctor_says "physical P-cores are the first thread of each core" "${r}" 'ok: physical P-cores \(one thread per core\): 0,2,4,6,8,10 '
 doctor_says "no CPPC data, no favored CPUs" "${r}" 'favored' negate
 for c in $(seq 0 21); do
@@ -613,6 +767,57 @@ kernel "${r}" 6.18.1
 hybrid "${r}" 0-11 12-21
 doctor_says "without cache sysfs no atom CPU is called LP" "${r}" 'ok: hybrid CPU: P-cores 0-11, E-cores 12-21 '
 doctor_says "without cache sysfs no LP line" "${r}" 'LP E-cores' negate
+
+# Lunar Lake (6/189): 4 P without SMT + 4 Skymont in cpu_atom, none with an L3.
+r=$(newroot lnl-cpu)
+kernel "${r}" 6.18.1
+cpuinfo "${r}" 6 189 "fpu avx2 avx_vnni"
+hybrid "${r}" 0-3 4-7
+for c in 0 1 2 3; do cpucache "${r}" "${c}" 3 0-3; cpucache "${r}" "${c}" 2 "${c}"; corecpus "${r}" "${c}" "${c}"; done
+for c in 4 5 6 7; do cpucache "${r}" "${c}" 2 4-7; corecpus "${r}" "${c}" "${c}"; done
+doctor_says "Lunar Lake: every cpu_atom CPU is an LP E-core" "${r}" 'ok: hybrid CPU: P-cores 0-3, E-cores none, LP E-cores 4-7 '
+doctor_says "Lunar Lake: no E-core cluster line" "${r}" 'E-core clusters' negate
+doctor_says "Lunar Lake: the expected topology gives no note" "${r}" 'Lunar Lake topology' negate
+cpucache "${r}" 4 3 0-7
+doctor_says "Lunar Lake: an E-core with an L3 still has 4+4 cores, no note" "${r}" 'Lunar Lake topology' negate
+# No cache sysfs (VM, container): no LP split, but the core counts still match.
+r=$(newroot lnl-no-cache)
+kernel "${r}" 6.18.1
+cpuinfo "${r}" 6 189 "fpu avx2 avx_vnni"
+hybrid "${r}" 0-3 4-7
+doctor_says "Lunar Lake without cache sysfs reads E-cores 4-7" "${r}" 'ok: hybrid CPU: P-cores 0-3, E-cores 4-7 '
+doctor_says "Lunar Lake without cache sysfs gives no note" "${r}" 'Lunar Lake topology' negate
+r=$(newroot lnl-5atom)
+kernel "${r}" 6.18.1
+cpuinfo "${r}" 6 189 "fpu avx2 avx_vnni"
+hybrid "${r}" 0-3 4-8
+doctor_says "Lunar Lake model with 5 atom CPUs gives a topology note" "${r}" 'note: Lunar Lake topology is 4 P-cores \+ 4 LP E-cores'
+r=$(newroot lnl-lowpower)
+kernel "${r}" 6.18.1
+cpuinfo "${r}" 6 189 "fpu avx2 avx_vnni"
+hybrid "${r}" 0-3 4-7
+mkdir -p "${r}/sys/devices/cpu_lowpower"; echo 8-9 > "${r}/sys/devices/cpu_lowpower/cpus"
+doctor_says "Lunar Lake model with a cpu_lowpower PMU gives a topology note" "${r}" 'note: Lunar Lake topology is 4 P-cores \+ 4 LP E-cores'
+r=$(newroot lnl-garbled)
+kernel "${r}" 6.18.1
+cpuinfo "${r}" 6 189 "fpu avx2 avx_vnni"
+hybrid "${r}" 0-3x 4-7
+doctor_says "Lunar Lake model with a garbled cpu_core list warns" "${r}" 'warn.*malformed CPU list'
+doctor_says "Lunar Lake model with a garbled cpu_core list gives no note" "${r}" 'Lunar Lake topology' negate
+
+# Arrow Lake-U (6/181): SMT P-cores, LP E-cores in cpu_atom without an L3.
+r=$(newroot arlu-cpu)
+kernel "${r}" 6.18.1
+cpuinfo "${r}" 6 181 "fpu avx2 avx_vnni"
+hybrid "${r}" 0-3 4-13
+for c in $(seq 0 11); do cpucache "${r}" "${c}" 3 0-11; done
+for c in 0 1; do cpucache "${r}" "${c}" 2 0-1; corecpus "${r}" "${c}" 0-1; done
+for c in 2 3; do cpucache "${r}" "${c}" 2 2-3; corecpus "${r}" "${c}" 2-3; done
+for c in $(seq 4 11); do cpucache "${r}" "${c}" 2 "$(( c < 8 ? 4 : 8 ))-$(( c < 8 ? 7 : 11 ))"; corecpus "${r}" "${c}" "${c}"; done
+for c in 12 13; do cpucache "${r}" "${c}" 2 12-13; corecpus "${r}" "${c}" "${c}"; done
+doctor_says "Arrow Lake-U: LP E-cores split out of cpu_atom" "${r}" 'ok: hybrid CPU: P-cores 0-3, E-cores 4-11, LP E-cores 12-13 '
+doctor_says "Arrow Lake-U: one thread per SMT P-core" "${r}" 'ok: physical P-cores \(one thread per core\): 0,2 '
+doctor_says "Arrow Lake-U: no Lunar Lake note" "${r}" 'Lunar Lake topology' negate
 
 # Favored cores (ITMT): CPPC highest_perf, 68 on 8-11 vs 65 on the other P-cores
 # and 39 on E-cores, as read on the i9-13900T development host.
@@ -781,6 +986,16 @@ mkdir -p "${r}/proc"
 printf 'processor\t: 0\nflags\t\t: fpu cat_l3 cdp_l3 rdt_a mba\n' > "${r}/proc/cpuinfo"
 doctor_says "rdt_a gives resctrl class guidance" "${r}" \
     'info: RDT allocation \(rdt_a: cat_l3 cdp_l3 mba\) — .*control\.rdt\.enable'
+doctor_says "rdt_a + mba: rdt-mba isolation, resctrl unmounted" "${r}" \
+    'isolation: rdt-mba — CAT \+ MBA .*resctrl mounted: no\).*add mbAllocation: \{all: \["50%"\]\} to the BestEffort class'
+doctor_says "rdt isolation adds no second apply line" "${r}" '^        apply:  sudo mount -t resctrl' negate
+mkdir -p "${r}/sys/fs/resctrl/info"
+doctor_says "a mounted resctrl is reported" "${r}" 'isolation: rdt-mba .*resctrl mounted: yes'
+printf 'processor\t: 0\nflags\t\t: fpu cat_l2 cdp_l2 rdt_a\n' > "${r}/proc/cpuinfo"
+doctor_says "rdt_a + cat_l2 without mba: rdt-cat, bandwidth stays shared" "${r}" \
+    'isolation: rdt-cat — CAT can cap .*no MBA, so DRAM bandwidth stays shared'
+printf 'processor\t: 0\nflags\t\t: fpu mba cat_l3\n' > "${r}/proc/cpuinfo"
+doctor_says "mba and cat_l3 without rdt_a: no RDT mode" "${r}" 'isolation: cpu-cap — no rdt_a flag'
 
 r=$(newroot numa-doc-forced)
 kernel "${r}" 6.18.1
@@ -1229,6 +1444,10 @@ put "${good}" /proc/sys/vm/swappiness 60
 put "${good}" /proc/4242/comm irqbalance
 pci "${good}" 0000:00:02.0 0x8086 0xa780 i915
 i915gt "${good}" 0000:00:02.0 card0 1650 1650 1650 1650 300 1650 slpc
+put "${good}" /sys/devices/system/cpu/intel_uncore_frequency/package_00_die_00/initial_min_freq_khz 800000
+put "${good}" /sys/devices/system/cpu/intel_uncore_frequency/package_00_die_00/initial_max_freq_khz 4700000
+put "${good}" /sys/devices/system/cpu/intel_uncore_frequency/package_00_die_00/min_freq_khz 800000
+put "${good}" /sys/devices/system/cpu/intel_uncore_frequency/package_00_die_00/max_freq_khz 4700000
 
 perf_says "perf: tuned host has no suggestions" "${good}" '^==> 0 suggestion\(s\)\. Read-only' "" STUB_DOCKER_DRIVER=overlay2
 perf_says "perf: reports EPP per core type" "${good}" 'ok: +E-cores 2-3: governor powersave, EPP balance_performance'
@@ -1656,6 +1875,45 @@ printf 'cpu family\t: 6\nmodel\t\t: 143\nmodel name\t: Intel(R) Xeon(R) Platinum
 for c in 0 1 2 3 4 5 6 7; do dimm "${r}" "${c}" 65536 34 9 4800 4800 80 64 2; done
 perf_says "perf: unknown platform peak assumes 1 DIMM per channel" "${r}" 'info: peak DRAM bandwidth 307\.2 GB/s = 4800 MT/s x 64 B of data width \(computed, assuming one module per channel'
 
+# Uncore frequency (intel_uncore_frequency): legacy die dirs on client parts, TPMI
+# uncoreNN with ELC on Xeon 6. A lowered ceiling is a warn with apply and exact revert;
+# a raised floor is information only (H29 is PENDING, so no pin is ever suggested).
+uncore() {  # uncore <root> <dir> <initial_min> <initial_max> <min> <max>
+    local d=/sys/devices/system/cpu/intel_uncore_frequency/$2
+    put "$1" "${d}/initial_min_freq_khz" "$3"; put "$1" "${d}/initial_max_freq_khz" "$4"
+    put "$1" "${d}/min_freq_khz" "$5"; put "$1" "${d}/max_freq_khz" "$6"
+}
+r=$(newroot perf-uncore-capped)
+uncore "${r}" package_00_die_00 800000 4700000 800000 3000000
+perf_says "perf: uncore ceiling below the hardware max is flagged" "${r}" 'warn: package_00_die_00: max_freq_khz 3000000 is below the hardware ceiling 4700000'
+perf_says "perf: uncore apply restores the hardware ceiling" "${r}" 'apply:  echo 4700000 \| sudo tee /sys/devices/system/cpu/intel_uncore_frequency/package_00_die_00/max_freq_khz$'
+perf_says "perf: uncore revert writes the observed ceiling back" "${r}" 'revert: echo 3000000 \| sudo tee /sys/devices/system/cpu/intel_uncore_frequency/package_00_die_00/max_freq_khz$'
+before=$(cd "${r}" && find . -type f -exec md5sum {} + | sort)
+rm -f "${WORK}/sudo-called"
+env K3D_GPU_SYSROOT="${r}" PATH="${STUB_BIN}:${PATH}" bash "${K3D_GPU}" doctor --perf >/dev/null 2>&1
+after=$(cd "${r}" && find . -type f -exec md5sum {} + | sort)
+if [ "${before}" = "${after}" ] && [ ! -e "${WORK}/sudo-called" ]; then
+    PASS=$((PASS + 1)); echo "ok   perf: uncore checks are read-only (tree unchanged, sudo never run)"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL perf: uncore checks are read-only (tree changed or sudo ran)"
+fi
+r=$(newroot perf-uncore-floor)
+uncore "${r}" package_00_die_00 800000 4700000 4700000 4700000
+perf_says "perf: a raised uncore floor is information with its revert" "${r}" 'info: package_00_die_00: floor raised to 4700000 kHz \(hardware floor 800000\).*echo 800000 \| sudo tee'
+perf_says "perf: a raised uncore floor is not a suggestion" "${r}" 'warn: package_00_die_00' negate
+perf_says "perf: the uncore section never suggests a pin while H29 is pending" "${r}" 'under test \(EXPERIMENTS\.md H29, PENDING\)'
+r=$(newroot perf-uncore-tpmi)
+uncore "${r}" uncore00 800000 2200000 800000 2200000
+uncore "${r}" uncore01 800000 2500000 800000 2500000
+put "${r}" /sys/devices/system/cpu/intel_uncore_frequency/uncore00/elc_floor_freq_khz 1200000
+put "${r}" /sys/devices/system/cpu/intel_uncore_frequency/uncore00/elc_low_threshold_percent 10
+put "${r}" /sys/devices/system/cpu/intel_uncore_frequency/uncore00/elc_high_threshold_percent 95
+put "${r}" /sys/devices/system/cpu/intel_uncore_frequency/uncore00/elc_high_threshold_enable 1
+perf_says "perf: TPMI uncore clusters are each reported" "${r}" 'ok: +uncore01: 800-2500 MHz, the full hardware range'
+perf_says "perf: TPMI ELC settings are shown" "${r}" 'info: uncore00: ELC floor 1200000 kHz, thresholds low 10% high 95% \(enable 1\)'
+r=$(newroot perf-uncore-none)
+perf_says "perf: no intel_uncore_frequency means no uncore section" "${r}" 'Uncore frequency' negate
+
 # Real procfs files report size 0: the isolation checks still run on them.
 r=$(newroot perf-procfs)
 mkdir -p "${r}/proc"; ln -s /proc/cpuinfo "${r}/proc/cpuinfo"
@@ -1779,6 +2037,55 @@ agent_says "an unknown K3D_GPU_AGENT_DEVICE is rejected" "${r}" fail \
     'TPU' "" STUB_ALLOC='cpu 32' K3D_GPU_AGENT_DEVICE=TPU
 agent_says "auto never picks the NPU" "${r}" 0 \
     '--target_device=NPU' negate STUB_ALLOC=$'cpu 32\nnpu.intel.com/accel 1'
+
+# H22 hetero-spec: Fast Draft is off by default (until a host measurement shows a gain); auto
+# drafts on the target's own device; a named device adds its resource to the pod.
+agent_says "no draft model by default" "${r}" 0 \
+    'draft' negate STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1'
+agent_says "K3D_GPU_AGENT_DRAFT=auto drafts on the target device (CPU)" "${r}" 0 \
+    '--draft_device=CPU' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' K3D_GPU_AGENT_DRAFT=auto
+agent_says "auto draft on a CPU target requests no GPU" "${r}" 0 \
+    'gpu\.intel\.com' negate STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' K3D_GPU_AGENT_DRAFT=auto
+agent_says "auto draft names the default draft model" "${r}" 0 \
+    '--draft_source_model=OpenVINO/Qwen3-0\.6B-int4-ov' "" STUB_ALLOC='cpu 32' K3D_GPU_AGENT_DRAFT=auto
+agent_says "auto draft follows a GPU target" "${r}" 0 \
+    '--draft_device=GPU' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/xe 1' STUB_NODE_LABELS=gpu.intel.com/xmx=true K3D_GPU_AGENT_DRAFT=auto
+agent_says "K3D_GPU_AGENT_DRAFT=GPU puts the draft on the iGPU, target stays CPU" "${r}" 0 \
+    '--target_device=CPU' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' K3D_GPU_AGENT_DRAFT=GPU
+agent_says "a GPU draft on a CPU target requests one gpu.intel.com/i915" "${r}" 0 \
+    'gpu\.intel\.com/i915: "?1"?' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' K3D_GPU_AGENT_DRAFT=GPU
+agent_says "a GPU draft pod joins the host render group" "${r}" 0 \
+    "supplementalGroups: \[${gid}\]" "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' K3D_GPU_AGENT_DRAFT=GPU
+agent_says "a GPU draft with no allocatable Intel GPU fails" "${r}" fail \
+    'no Intel GPU' "" STUB_ALLOC='cpu 32' K3D_GPU_AGENT_DRAFT=GPU
+agent_says "a NPU draft with no allocatable NPU fails" "${r}" fail \
+    'no Intel NPU' "" STUB_ALLOC='cpu 32' K3D_GPU_AGENT_DRAFT=NPU
+agent_says "a NPU draft requests npu.intel.com/accel" "${r}" 0 \
+    'npu\.intel\.com/accel: "?1"?' "" STUB_ALLOC=$'cpu 32\nnpu.intel.com/accel 1' K3D_GPU_AGENT_DRAFT=NPU
+agent_says "an unknown K3D_GPU_AGENT_DRAFT is rejected" "${r}" fail \
+    'unknown K3D_GPU_AGENT_DRAFT' "" STUB_ALLOC='cpu 32' K3D_GPU_AGENT_DRAFT=TPU
+agent_says "the draft override is case-insensitive" "${r}" 0 \
+    '--draft_device=GPU' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' K3D_GPU_AGENT_DRAFT=gpu
+
+# GPU target + NPU draft (Core Ultra): the pod holds both devices and joins both groups.
+r2=$(newroot agent-gpu-npu)
+pci "${r2}" 0000:00:02.0 0x8086 0x7d55 i915; render "${r2}" 0000:00:02.0 128
+pci "${r2}" 0000:00:0b.0 0x8086 0x7d1d intel_vpu; accel "${r2}" 0000:00:0b.0 0
+rgid=$(stat -c %g "${r2}/dev/dri/renderD128")
+ngid=$(id -G | tr ' ' '\n' | grep -vx "${rgid}" | head -1)
+if [ -n "${ngid}" ] && chgrp "${ngid}" "${r2}/dev/accel/accel0" 2>/dev/null; then
+    agent_says "a GPU target with an NPU draft joins both device groups" "${r2}" 0 \
+        "supplementalGroups: \[${rgid}, ${ngid}\]" "" \
+        STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1\nnpu.intel.com/accel 1' STUB_NODE_LABELS=gpu.intel.com/xmx=true K3D_GPU_AGENT_DRAFT=NPU
+else
+    echo "skip a GPU target with an NPU draft joins both device groups (no second group to chgrp to)"
+fi
+agent_says "a GPU target with an NPU draft limits both devices" "${r2}" 0 \
+    'npu\.intel\.com/accel: "?1"?' "" \
+    STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1\nnpu.intel.com/accel 1' STUB_NODE_LABELS=gpu.intel.com/xmx=true K3D_GPU_AGENT_DRAFT=NPU
+agent_says "a GPU target with an NPU draft keeps its own GPU limit" "${r2}" 0 \
+    'gpu\.intel\.com/i915: "?1"?' "" \
+    STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1\nnpu.intel.com/accel 1' STUB_NODE_LABELS=gpu.intel.com/xmx=true K3D_GPU_AGENT_DRAFT=NPU
 
 # A device that cannot be honoured must stop `agent up` before anything is applied.
 applylog="${WORK}/apply.log"
@@ -4021,6 +4328,36 @@ doctor_says "a .zst link loses to an uncompressed v0.0: no advice" "${r}" 'sudo 
 r=$(fwnpu_ptl npu-fwnpu-stop 6.14.0)
 firmware "${r}" intel/vpu/vpu_50xx_v0.0.bin
 doctor_says "v0.0 link advice says to stop NPU users first" "${r}" "Stop what uses the NPU first \('k3d-gpu down'"
+# capacity: dispatch and locating bench/apb/capacity.py (the ramp itself is
+# tested by bench/apb/test_capacity.py).
+# says <name> <want rc: 0|N> <ERE> <cmd...>: output must match and rc must equal want.
+says() {
+    local name=$1 want_rc=$2 re=$3 out rc
+    shift 3
+    out=$("$@" 2>&1)
+    rc=$?
+    if [ "${rc}" -eq "${want_rc}" ] && grep -E -- "${re}" <<< "${out}" >/dev/null; then
+        PASS=$((PASS + 1)); echo "ok   ${name}"
+    else
+        FAILS=$((FAILS + 1)); echo "FAIL ${name} (rc=${rc}, want ${want_rc}, /${re}/)"
+        sed 's/^/  | /' <<< "${out}"
+    fi
+}
+REPO=$(cd "$(dirname "${K3D_GPU}")/.." && pwd)
+says "help lists capacity" 0 '^  capacity \[--slo 10\]' bash "${K3D_GPU}" help
+says "capacity --help comes from the repo's bench/apb/capacity.py" 0 'Agents per box at a p95' \
+    bash "${K3D_GPU}" capacity --help
+says "capacity passes its arguments through (--url needs --model)" 2 '--url needs --model' \
+    bash "${K3D_GPU}" capacity --url http://127.0.0.1:1/v1/chat/completions
+SOLO="${WORK}/solo"
+mkdir -p "${SOLO}/bin" "${SOLO}/share/bench/apb"
+cp "${K3D_GPU}" "${SOLO}/bin/k3d-gpu"
+says "capacity outside a checkout with no packaged copy says what is missing" 1 'capacity.py not found' \
+    env K3D_GPU_SHARE="${SOLO}/none" bash "${SOLO}/bin/k3d-gpu" capacity --help
+cp "${REPO}/bench/agent_trace.py" "${REPO}/bench/agent_trace_gen.py" "${SOLO}/share/bench/"
+cp "${REPO}/bench/apb/apb.py" "${REPO}/bench/apb/capacity.py" "${SOLO}/share/bench/apb/"
+says "capacity runs from the packaged copy under K3D_GPU_SHARE/bench" 0 'Agents per box at a p95' \
+    env K3D_GPU_SHARE="${SOLO}/share" bash "${SOLO}/bin/k3d-gpu" capacity --help
 
 echo ""
 echo "${PASS} passed, ${FAILS} failed"

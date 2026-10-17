@@ -1,0 +1,258 @@
+{
+ "name": "coder",
+ "system": "You are an agent of the Intel Enterprise Agent Toolkit. Answer with tool calls when a tool fits. You are an agent of the Intel Enterprise Agent Toolkit. Answer with tool calls when a tool fits. You are an agent of the Intel Enterprise Agent Toolkit. Answer with tool calls when a tool fits. You are an agent of the Intel Enterprise Agent Toolkit. Answer with tool calls when a tool fits. You are an agent of the Intel Enterprise Agent Toolkit. Answer with tool calls when a tool fits. You are an agent of the Intel Enterprise Agent Toolkit. Answer with tool calls when a tool fits. You are an agent of the Intel Enterprise Agent Toolkit. Answer with tool calls when a tool fits. You are an agent of the Intel Enterprise Agent Toolkit. Answer with tool calls when a tool fits. You are an agent of the Intel Enterprise Agent Toolkit. Answer with tool calls when a tool fits. You are an agent of the Intel Enterprise Agent Toolkit. Answer with tool calls when a tool fits. You are an agent of the Intel Enterprise Agent Toolkit. Answer with tool calls when a tool fits. You are an agent of the Intel Enterprise Agent Toolkit. Answer with tool calls when a tool fits. You are an agent of the Intel Enterprise Agent Toolkit. Answer with tool calls when a tool fits. You are an agent of the Intel Enterprise Agent Toolkit. Answer with tool calls when a tool fits. You are an agent of the Intel Enterprise Agent Toolkit. Answer with tool calls when a tool fits. You are an agent of the Intel Enterprise Agent Toolkit. Answer with tool calls when a tool fits. You are an agent of the Intel Enterprise Agent Toolkit. Answer with tool calls when a tool fits. You are an agent of the Intel Enterprise Agent Toolkit. Answer with tool calls when a tool fits. You are an agent of the Intel Enterprise Agent Toolkit. Answer with tool calls when a tool fits. You are an agent of the Intel Enterprise Agent Toolkit. Answer with tool calls when a tool fits. You are an agent of the Intel Enterprise Agent Toolkit. Answer with tool calls when a tool fits. You are an agent of the Intel Enterprise Agent Toolkit. Answer with tool calls when a tool fits. You are an agent of the Intel Enterprise Agent Toolkit. Answer with tool calls when a tool fits. You are an agent of the Intel Enterprise Agent Toolkit. Answer with tool calls when a tool fits. You are an agent of the Intel Enterprise Agent Toolkit. Answer with tool calls when a tool fits. You are an agent of the Intel Enterprise Agent Toolkit. Answer with tool calls when a tool fits. You are an agent of the Intel Enterprise Agent Toolkit. Answer with tool calls when a tool fits. You are an agent of the Intel Enterprise Agent Toolkit. Answer with tool calls when a tool fits. You are an agent of the Intel Enterprise Agent Toolkit. Answer with tool calls when a tool fits. You are an agent of the Intel Enterprise Agent Toolkit. Answer with tool calls when a tool fits.",
+ "tools": [
+  {
+   "function": {
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      },
+      "limit": {
+       "type": "integer"
+      }
+     },
+     "required": [
+      "id"
+     ]
+    },
+    "name": "tool_0",
+    "description": "Tool number 0 reads records of kind 0 from the enterprise store."
+   },
+   "type": "function"
+  },
+  {
+   "function": {
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      },
+      "limit": {
+       "type": "integer"
+      }
+     },
+     "required": [
+      "id"
+     ]
+    },
+    "name": "tool_1",
+    "description": "Tool number 1 reads records of kind 1 from the enterprise store."
+   },
+   "type": "function"
+  },
+  {
+   "function": {
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      },
+      "limit": {
+       "type": "integer"
+      }
+     },
+     "required": [
+      "id"
+     ]
+    },
+    "name": "tool_2",
+    "description": "Tool number 2 reads records of kind 2 from the enterprise store."
+   },
+   "type": "function"
+  },
+  {
+   "function": {
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      },
+      "limit": {
+       "type": "integer"
+      }
+     },
+     "required": [
+      "id"
+     ]
+    },
+    "name": "tool_3",
+    "description": "Tool number 3 reads records of kind 3 from the enterprise store."
+   },
+   "type": "function"
+  },
+  {
+   "function": {
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      },
+      "limit": {
+       "type": "integer"
+      }
+     },
+     "required": [
+      "id"
+     ]
+    },
+    "name": "tool_4",
+    "description": "Tool number 4 reads records of kind 4 from the enterprise store."
+   },
+   "type": "function"
+  },
+  {
+   "function": {
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      },
+      "limit": {
+       "type": "integer"
+      }
+     },
+     "required": [
+      "id"
+     ]
+    },
+    "name": "tool_5",
+    "description": "Tool number 5 reads records of kind 5 from the enterprise store."
+   },
+   "type": "function"
+  },
+  {
+   "function": {
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      },
+      "limit": {
+       "type": "integer"
+      }
+     },
+     "required": [
+      "id"
+     ]
+    },
+    "name": "tool_6",
+    "description": "Tool number 6 reads records of kind 6 from the enterprise store."
+   },
+   "type": "function"
+  },
+  {
+   "function": {
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      },
+      "limit": {
+       "type": "integer"
+      }
+     },
+     "required": [
+      "id"
+     ]
+    },
+    "name": "tool_7",
+    "description": "Tool number 7 reads records of kind 7 from the enterprise store."
+   },
+   "type": "function"
+  },
+  {
+   "function": {
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      },
+      "limit": {
+       "type": "integer"
+      }
+     },
+     "required": [
+      "id"
+     ]
+    },
+    "name": "tool_8",
+    "description": "Tool number 8 reads records of kind 8 from the enterprise store."
+   },
+   "type": "function"
+  },
+  {
+   "function": {
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      },
+      "limit": {
+       "type": "integer"
+      }
+     },
+     "required": [
+      "id"
+     ]
+    },
+    "name": "tool_9",
+    "description": "Tool number 9 reads records of kind 9 from the enterprise store."
+   },
+   "type": "function"
+  },
+  {
+   "function": {
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      },
+      "limit": {
+       "type": "integer"
+      }
+     },
+     "required": [
+      "id"
+     ]
+    },
+    "name": "tool_10",
+    "description": "Tool number 10 reads records of kind 10 from the enterprise store."
+   },
+   "type": "function"
+  },
+  {
+   "function": {
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      },
+      "limit": {
+       "type": "integer"
+      }
+     },
+     "required": [
+      "id"
+     ]
+    },
+    "name": "tool_11",
+    "description": "Tool number 11 reads records of kind 11 from the enterprise store."
+   },
+   "type": "function"
+  }
+ ]
+}

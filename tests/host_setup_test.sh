@@ -241,6 +241,46 @@ says "unsupported part gets force_probe" "Intel Crescent Island (0x674c) needs t
 says "unbound part on an old kernel gets force_probe or a kernel" "Intel Battlemage (0xe20b) needs the boot options xe.force_probe=e20b i915.force_probe=!e20b (or kernel 6.12+)"
 says "fedora boot options go through grubby" "sudo grubby --update-kernel=ALL"
 
+# Late Battlemage ids, Flex and Max: force_probe cannot add an id missing from
+# xe's table (Pro B70 0xe223 joined in 6.17); Max has no upstream driver at all.
+r=$(newroot kernel-dgpu)
+osrel "${r}" fedora 44
+kernel "${r}" 6.16.0
+pci "${r}" 0000:03:00.0 0x8086 0xe223 0x030000
+pci "${r}" 0000:04:00.0 0x8086 0x56c1 0x038000
+pci "${r}" 0000:05:00.0 0x8086 0x0bd5 0x038000
+run "${r}" ""
+says "late Battlemage id gets a kernel, not force_probe" "Intel Battlemage (0xe223) needs kernel 6.17+ (running 6.16.0); force_probe cannot add an id missing from the driver's table"
+not_says "late Battlemage id gets no force_probe" "xe.force_probe=e223"
+says "Flex gets dkms or xe force-probe" "Intel Flex (ATS-M) (0x56c1) needs intel-i915-dkms LTS (2523.x), or xe force-probe (not production upstream; exact apply and revert: k3d-gpu doctor --experimental, xe-force-probe)"
+says "Max has no upstream driver" "Intel Max (Ponte Vecchio) (0x0bd5) has no upstream driver"
+not_says "Max gets no force_probe" "xe.force_probe=0bd5"
+
+# Late Alchemist ids and Flex below 6.8 (no xe): no force_probe advice.
+r=$(newroot kernel-dg2-late)
+osrel "${r}" fedora 44
+kernel "${r}" 6.5.0
+pci "${r}" 0000:03:00.0 0x8086 0x56ba 0x030000
+run "${r}" ""
+says "late DG2 id on 6.5 gets a kernel" "Intel Alchemist DG2-G11 (0x56ba) needs kernel 6.7+ (running 6.5.0); force_probe cannot add an id missing from the driver's table"
+not_says "late DG2 id on 6.5 gets no force_probe" "force_probe=56ba"
+
+r=$(newroot kernel-dg2-late2)
+osrel "${r}" fedora 44
+kernel "${r}" 6.8.0
+pci "${r}" 0000:03:00.0 0x8086 0x56be 0x030000
+run "${r}" ""
+says "late DG2 id on 6.8 gets 6.10" "Intel Alchemist DG2-G10 (0x56be) needs kernel 6.10+ (running 6.8.0)"
+not_says "late DG2 id on 6.8 gets no force_probe" "force_probe=56be"
+
+r=$(newroot kernel-flex-515)
+osrel "${r}" fedora 44
+kernel "${r}" 5.15.0
+pci "${r}" 0000:03:00.0 0x8086 0x56c1 0x038000
+run "${r}" ""
+says "Flex on 5.15 gets dkms only" "Intel Flex (ATS-M) (0x56c1) needs intel-i915-dkms LTS (2523.x); kernel 5.15.0 has no xe (merged in 6.8)"
+not_says "Flex on 5.15 gets no xe.force_probe" "xe.force_probe=56c1"
+
 r=$(newroot kernel-i915)
 osrel "${r}" fedora 44
 kernel "${r}" 6.5.0

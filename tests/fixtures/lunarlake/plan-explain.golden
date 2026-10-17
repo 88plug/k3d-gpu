@@ -1,6 +1,7 @@
-facts: sha256:b2da2ad1cd0023490a193707e856513b06cfaafe2dab7704b98cca261a409b99
+facts: sha256:f1aa4b9fcced267b07cb006c3001fa913d1cf88678c35697639d9fde8ee089b0
 targets:
-  cpu: unknown CPU, P-cores 0-3 (4), E-cores 4-15 (12); usable
+  cpu: Intel(R) Core(TM) Ultra 7 258V, family:model 6:189, P-cores 0-3 (4), E-cores 4-7 (4); usable
+  gpu:0000:00:02.0: intel Lunar Lake, 0x64a0, on xe, XMX; usable
   npu:0000:00:0b.0: intel Lunar Lake, 0x643e, on intel_vpu, NPU 40xx; usable
 matrix: 2 cells, 0 on a target of this host
   no measured cell for these targets

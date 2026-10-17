@@ -1,3 +1,4 @@
+intel gpu.intel.com/xe
 npu npu.intel.com/accel
 hybrid k3d-gpu.io/hybrid-cpu=true
 exit=0

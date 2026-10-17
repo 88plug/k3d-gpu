@@ -10,6 +10,12 @@
   "detected": [
     {
       "resources": [
+        "gpu.intel.com/xe"
+      ],
+      "vendor": "intel"
+    },
+    {
+      "resources": [
         "npu.intel.com/accel"
       ],
       "vendor": "npu"
@@ -49,6 +55,51 @@
         "revert": null,
         "section": "Checking kubectl...",
         "text": "",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...",
+        "text": "Intel Lunar Lake (0x64a0) bound to xe",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...",
+        "text": "xe/lnl_guc_* firmware present",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "info",
+        "revert": null,
+        "section": "Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...",
+        "text": "Intel Lunar Lake (0x64a0) at 0000:00:02.0: GuC version not checked: debugfs needs root (sudo k3d-gpu doctor)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...",
+        "text": "up labels the node gpu.intel.com/xmx=true",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...",
+        "text": "GPU sharing on: up to 8 pods per Intel GPU, balanced allocation (K3D_GPU_INTEL_SHARED=auto); pods share its memory and engines with no isolation",
         "why": null
       },
       {
@@ -120,16 +171,7 @@
         "level": "ok",
         "revert": null,
         "section": "Intel CPU built-in accelerators...",
-        "text": "hybrid CPU: P-cores 0-3, E-cores 4-11, LP E-cores 12-15 — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient|lowpower|ecluster|pcore-physical|latency",
-        "why": null
-      },
-      {
-        "apply": null,
-        "from": null,
-        "level": "ok",
-        "revert": null,
-        "section": "Intel CPU built-in accelerators...",
-        "text": "E-core clusters (shared L2): 4-7 8-11 — k3d-gpu.io/cores=ecluster gives a pod 4 E-cores of one cluster",
+        "text": "hybrid CPU: P-cores 0-3, E-cores none, LP E-cores 4-7 — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|lowpower|pcore-physical|latency",
         "why": null
       },
       {
@@ -139,6 +181,15 @@
         "revert": null,
         "section": "Intel CPU built-in accelerators...",
         "text": "physical P-cores (one thread per core): 0-3 — k3d-gpu.io/cores=pcore-physical and latency show pods one thread per core",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "info",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "noisy-neighbour isolation: cpu-cap — no rdt_a flag; E-core L2 clusters are not readable (no cpu*/cache in sysfs); give a neighbour a CPU limit. Cache and DRAM bandwidth stay shared",
         "why": null
       },
       {
@@ -187,7 +238,12 @@
       },
       {
         "good": null,
-        "name": "Detected accelerators: npu hybrid",
+        "name": "Detected accelerators: intel npu hybrid",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...",
         "src": null
       },
       {
@@ -212,21 +268,21 @@
       }
     ]
   },
-  "fingerprint": "sha256:b2da2ad1cd0023490a193707e856513b06cfaafe2dab7704b98cca261a409b99",
+  "fingerprint": "sha256:f1aa4b9fcced267b07cb006c3001fa913d1cf88678c35697639d9fde8ee089b0",
   "host": {
     "cpu": {
       "amx": [],
       "avx512": false,
       "avx_vnni": true,
-      "e_core_cpus": 12,
-      "e_cores": "4-15",
+      "e_core_cpus": 4,
+      "e_cores": "4-7",
       "hybrid": true,
       "isa": [
         "avx2",
         "avx_vnni"
       ],
       "logical_cpus": null,
-      "model": null,
+      "model": "Intel(R) Core(TM) Ultra 7 258V",
       "online": null,
       "p_core_cpus": 4,
       "p_cores": "0-3"
@@ -244,8 +300,26 @@
       "devices": 0,
       "work_queues": 0
     },
-    "intel_gpus": [],
-    "kernel": "6.8.0-45-generic",
+    "intel_gpus": [
+      {
+        "card": "card0",
+        "device_id": "0x64a0",
+        "driver": "xe",
+        "engines": [],
+        "guc": {
+          "note": "debugfs not readable (run as root) or no guc",
+          "status": null
+        },
+        "huc": {
+          "note": "debugfs not readable (run as root) or no huc",
+          "status": null
+        },
+        "pci": "0000:00:02.0",
+        "platform": "Lunar Lake",
+        "render_node": "renderD128"
+      }
+    ],
+    "kernel": "6.12.52-1-default",
     "memory": {
       "available_kib": null,
       "total_kib": null
@@ -269,6 +343,7 @@
   "hostname": "",
   "labels": {
     "feature.node.kubernetes.io/cpu-cpuid.AVXVNNI": "true",
+    "gpu.intel.com/xmx": "true",
     "k3d-gpu.io/hybrid-cpu": "true",
     "k3d-gpu.io/npu.gen": "40xx"
   },
@@ -324,12 +399,12 @@
     {
       "cpu": {
         "amx": false,
-        "e_count": 12,
-        "e_cpus": "4-15",
-        "family_model": null,
+        "e_count": 4,
+        "e_cpus": "4-7",
+        "family_model": "6:189",
         "hybrid": true,
         "logical_cpus": null,
-        "model_name": null,
+        "model_name": "Intel(R) Core(TM) Ultra 7 258V",
         "numa_nodes": 1,
         "p_count": 4,
         "p_cpus": "0-3"
@@ -347,6 +422,22 @@
       "usable": true,
       "vendor": null,
       "xmx": null
+    },
+    {
+      "cpu": null,
+      "device_id": "0x64a0",
+      "driver": "xe",
+      "fix": null,
+      "generation": null,
+      "id": "gpu:0000:00:02.0",
+      "kind": "gpu",
+      "pci": "0000:00:02.0",
+      "platform": "Lunar Lake",
+      "reason": null,
+      "resource": "gpu.intel.com/xe",
+      "usable": true,
+      "vendor": "intel",
+      "xmx": true
     },
     {
       "cpu": null,

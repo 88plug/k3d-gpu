@@ -10,7 +10,7 @@ npu-turbo: available
   status:   OpenVINO 2026.4.0 NPU property NPU_TURBO; ivpu sched_mode param (HW scheduler auto-selected on new firmware)
   families: Intel NPU: Meteor/Arrow Lake (37xx), Lunar Lake (40xx), Panther/Wildcat Lake (50xx), Nova Lake (60xx)
   value:    sustained max NPU clocks for latency-bound agent inference; HW scheduler gives per-context priority and preemption
-scx: absent — kernel 6.8.0-45-generic has no /sys/kernel/sched_ext/state (needs Linux 6.12+ built with CONFIG_SCHED_CLASS_EXT)
+scx: absent — kernel 6.12.52-1-default has no /sys/kernel/sched_ext/state (needs Linux 6.12+ built with CONFIG_SCHED_CLASS_EXT)
   status:   sched_ext merged in Linux 6.12; schedulers (scx_lavd, scx_layered) out of tree, sched-ext/scx v1.1.4
   families: any x86 host on Linux 6.12+ with CONFIG_SCHED_CLASS_EXT; most useful on hybrid P/E parts
   value:    latency-aware or layered CPU scheduling for agent processes, swapped at runtime with no reboot

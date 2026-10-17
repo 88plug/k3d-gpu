@@ -1,12 +1,14 @@
-==> Accelerators: npu hybrid
+==> Accelerators: intel npu hybrid
 ==> Experimental features (auto): dra image-volume npu-turbo
 ==> Creating k3d cluster 'gpu' with image cryptoandcoffee/k3d-gpu:<version>...
 ==> Waiting for nodes Ready...
+==> intel device plugin auto-deployed by k3s.
 ==> npu device plugin auto-deployed by k3s.
 ==> hybrid device plugin auto-deployed by k3s.
+==> Configuring intel GPU device plugin: -shared-dev-num=8 -allocation-policy=balanced
 ==> Applying experimental OpenVINO plugin config (ConfigMap default/k3d-gpu-openvino-experimental)...
 ==> Verifying accelerators are schedulable...
-==> Accelerators schedulable: npu=1 hybrid=1. Try: k3d-gpu test
+==> Accelerators schedulable: intel=8 npu=1 hybrid=1. Try: k3d-gpu test
 exit=0
 --- calls
 k3d cluster create gpu
@@ -18,15 +20,22 @@ k3d cluster create gpu
   --k3s-node-label=intel.feature.node.kubernetes.io/npu=true@server:*;agent:*
   --k3s-node-label=k3d-gpu.io/npu-render-gid=<gid>@server:*;agent:*
   --k3s-node-label=k3d-gpu.io/hybrid-cpu=true@server:*;agent:*
+  --k3s-node-label=gpu.intel.com/xmx=true@server:*;agent:*
   --k3s-node-label=k3d-gpu.io/npu.gen=40xx@server:*;agent:*
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AVXVNNI=true@server:*;agent:*
   --k3s-node-label=experimental.k3d-gpu.io/dra=true@server:*;agent:*
   --k3s-node-label=experimental.k3d-gpu.io/image-volume=true@server:*;agent:*
   --k3s-node-label=experimental.k3d-gpu.io/npu-turbo=true@server:*;agent:*
 kubectl wait --for=condition=Ready nodes --all --timeout=120s
+kubectl -n kube-system get daemonset intel-gpu-plugin
 kubectl -n kube-system get daemonset intel-npu-plugin
 kubectl -n kube-system get daemonset nri-resource-policy-balloons
+kubectl -n kube-system get daemonset intel-gpu-plugin -o jsonpath={.spec.template.spec.containers[0].args}
+kubectl -n kube-system rollout status daemonset/intel-gpu-plugin --timeout=60s
+kubectl get nodes -o go-template={{range .items}}{{range $k, $v := .status.allocatable}}{{$k}} {{$v}}{{"\n"}}{{end}}{{end}}
 kubectl apply -f -
+kubectl -n kube-system rollout status daemonset/intel-gpu-plugin --timeout=120s
+kubectl get nodes -o go-template={{range .items}}{{range $k, $v := .status.allocatable}}{{$k}} {{$v}}{{"\n"}}{{end}}{{end}}
 kubectl -n kube-system rollout status daemonset/intel-npu-plugin --timeout=120s
 kubectl get nodes -o go-template={{range .items}}{{range $k, $v := .status.allocatable}}{{$k}} {{$v}}{{"\n"}}{{end}}{{end}}
 kubectl -n kube-system rollout status daemonset/nri-resource-policy-balloons --timeout=120s
