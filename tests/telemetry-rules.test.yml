@@ -38,6 +38,8 @@ tests:
       - series: 'node_cpu_scaling_frequency_hertz{instance="n",job="node-exporter",cpu="2"}'
         values: '1000000000x20'
       # 450 J per 15 s = 30 W on the package; the MMIO zone is the same package.
+      # Labels match node-exporter v1.12.1 on an i9-13900T: with the zone label on,
+      # both package series report index="0".
       - series: 'node_rapl_joules_total{instance="n",job="node-exporter",index="0",path="/host/sys/class/powercap/intel-rapl:0",rapl_zone="package"}'
         values: '0+450x20'
       - series: 'node_rapl_joules_total{instance="n",job="node-exporter",index="0",path="/host/sys/class/powercap/intel-rapl-mmio:0",rapl_zone="package"}'

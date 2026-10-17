@@ -178,7 +178,7 @@ Findings from the v2.3.0 release, the `xpumd/` tree at tag `v2.3.0`, and the cha
 - **Benchmark caveat.** xpumd reads engine utilisation through Sysman `GetActivity`
   (`receiver/intelxpu/sysman/engine.go`). The xpu-smi v2.3.0 notes moved xpu-smi off
   those counters because they "keep the media GT awake and slowed running workloads (by
-  up to ~25%)". Disable `hw.gpu.utilization` under `config.receivers.intel_xpu.metrics`
+  up to ~25%)" ([release notes](https://github.com/intel/xpumanager/releases/tag/v2.3.0)). Disable `hw.gpu.utilization` under `config.receivers.intel_xpu.metrics`
   in the chart values when benchmarking, or use drm-exporter.
 
 Unverified on this host. Probe: apply `optional/intel-xpumd.yml`, then check
@@ -247,9 +247,9 @@ Run without a cluster:
   E-cores offline, non-hybrid), and the AUR `package()` function, which must install
   every manifest under `/usr/share/k3d-gpu/telemetry/`. When `promtool` is on PATH, it also runs
   `promtool check metrics` on the script output and `promtool test rules` on the
-  recording rules with `tests/telemetry-rules.test.yml`. CI does not run it yet; the job that installs promtool 3.15.0 needs a push with the GitHub `workflow` scope.
-- `kubeconform -kubernetes-version 1.34.1 -strict share/telemetry share/telemetry/optional`
-  (the k3s version in the `Dockerfile`): 29 resources valid.
+  recording rules with `tests/telemetry-rules.test.yml`. CI's `telemetry-tests` job installs promtool 3.15.0 (sha256-checked) and runs it with the rules test.
+- `kubeconform -kubernetes-version <k3s version in the Dockerfile> -strict share/telemetry share/telemetry/optional`
+  (CI runs this in the same job): 29 resources valid.
 - `promtool check config` on the extracted `prometheus.yml`: valid, 3 rules.
 
 Not validated without a cluster: API-server admission (`kubectl apply --dry-run=server`),

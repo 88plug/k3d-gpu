@@ -28,6 +28,30 @@ jobs:
       - run: tests/eat_test.sh
       - run: tests/experimental_test.sh
 
+  telemetry-tests:
+    name: Telemetry manifests
+    runs-on: ubuntu-latest
+    env:
+      PROMETHEUS_VERSION: 3.15.0
+      PROMETHEUS_SHA256: 2a542df32eac02ee17b9d844fb2aa1de00dafa5476579ba8a3ba862e9d572ea0
+      # ghcr.io/yannh/kubeconform:v0.8.0
+      KUBECONFORM_IMAGE: ghcr.io/yannh/kubeconform@sha256:faffaf43f95aa6425306e1ab8d6fcad72acb9049158f38e574c085ea1ec0f64e
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install promtool
+        run: |
+          tgz="prometheus-${PROMETHEUS_VERSION}.linux-amd64.tar.gz"
+          curl -fsSLo "/tmp/${tgz}" "https://github.com/prometheus/prometheus/releases/download/v${PROMETHEUS_VERSION}/${tgz}"
+          echo "${PROMETHEUS_SHA256}  /tmp/${tgz}" | sha256sum -c -
+          tar xzf "/tmp/${tgz}" -C /tmp
+          echo "/tmp/prometheus-${PROMETHEUS_VERSION}.linux-amd64" >> "${GITHUB_PATH}"
+      - run: tests/telemetry_test.sh
+      - name: kubeconform
+        run: |
+          k8s=$(sed -n 's/^ARG K3S_TAG="v\([0-9.]*\)-k3s.*/\1/p' Dockerfile)
+          docker run --rm -v "${PWD}/share/telemetry:/m:ro" "${KUBECONFORM_IMAGE}" \
+            -kubernetes-version "${k8s}" -strict -summary /m /m/optional
+
   agent-manifests:
     name: Agent manifests (kubeconform)
     runs-on: ubuntu-latest
