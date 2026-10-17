@@ -28,7 +28,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H12 | A Helm release named like Intel EAT's can take over the NRI balloons policy of a k3d-gpu cluster, and P/E placement stays correct. | On a hybrid host, with a node image built from this branch: (a) on a default cluster (`K3D_GPU_BALLOONS=k3s`), `helm upgrade --install nri-resource-policy-balloons` (chart v0.14.0, `-n kube-system`, `-f contrib/eat/hybrid-values.yaml`) exits 0 and adopts the baked objects: release revision 1 `deployed`, the BalloonsPolicy gains `vllm-balloon`, the DaemonSet is Ready, and `k3d-gpu test` passes; a pod with a container named `vllm` gets only P-cores and a pod in namespace `redis` only E-cores. After `.skip` and `docker restart` of the server node the policy still has `vllm-balloon`. (b) with `K3D_GPU_BALLOONS=external`, the server's manifests dir has no `nri-balloons.yaml`, neither CRD `balloonspolicies.config.nri` nor DaemonSet `nri-resource-policy-balloons` exists before Helm, and the same `helm` command then gives the same placement and a passing `k3d-gpu test`. (c) control: on a cluster from an image built from `origin/main` (objects without Helm ownership annotations), the same command fails with "cannot be imported". | Pre-registered 2026-10-17 before the live runs. Image `docker build -t k3d-gpu:r2-beat .` from this branch; control image from `origin/main` fcfdd38. Cluster `k3dgpu-r2-beat`, scratch `KUBECONFIG`. Arms (a) and (b) n=3 each, order a b b a a b, fresh cluster per run; (c) n=1 (it only shows the probe can fail). Placement read from each pod's `Cpus_allowed_list` against `/sys/devices/cpu_core/cpus` and `cpu_atom/cpus`. Outcome -> conclusion: every (a) and (b) run meets every listed check -> SUPPORTED; any helm failure, missing `vllm-balloon`, wrong cpuset, failing `k3d-gpu test`, baked object present under (b), or revert after the `.skip` restart -> REFUTED; (c) succeeding -> the probe cannot tell adoption apart, INCONCLUSIVE. Confounds recorded per run: package W (RAPL, 5 s before), 1-min load, swap used, package throttle count delta. | REFUTED |
 | H13 | H12's adoption works when Helm applies client-side, as Helm 3 (EAT pins v3.14.0) always does; with Helm 4, `K3D_GPU_BALLOONS=external` installs with its default server-side apply, and adoption needs `--server-side=false`. | Same checks as H12 (a)/(b) (exit 0, revision 1 `deployed`, `vllm-balloon` present, DaemonSet Ready, `k3d-gpu test` passes, `vllm` container on P-cores, `redis` namespace on E-cores, `vllm-balloon` kept across a `.skip` restart for adoption arms). Arms: A3 = default cluster + Helm v3.14.0; A4 = default cluster + Helm v4.1.1 `--server-side=false`; B4 = external cluster + Helm v4.1.1 defaults; B3 = external cluster + Helm v3.14.0. | Pre-registered 2026-10-17 04:23Z, after H12 run a1 failed, before any H13 run. Same image, cluster name, values and probe script as H12; the Helm binary and the `--server-side` flag are the only changes. Helm v3.14.0 from get.helm.sh, sha256 f43e1c33…6651 checked against its .sha256sum. n=3 per arm, order A3 A4 B4 B3, B3 B4 A4 A3, A3 A4 B4 B3, fresh cluster per run. Outcome -> conclusion: every run of an arm meets every check -> that arm SUPPORTED; H13 SUPPORTED only if all four arms are; any failure in an arm -> REFUTED for that arm, and the README states only the arms that held. Confounds as H12. | REFUTED |
 | H14 | Helm installs EAT's chart values over a k3d-gpu cluster in two ways: on a `K3D_GPU_BALLOONS=external` cluster with no extra flag (Helm 3 and 4), and on a default cluster with Helm 3 `--force` or Helm 4 `--force-conflicts`, which replace the adopted BalloonsPolicy spec. | Every run meets H12's checks: helm exit 0, revision 1 `deployed`, BalloonsPolicy has `vllm-balloon` and `agent-control-plane`, DaemonSet Ready, `k3d-gpu test` passes, a `vllm` container gets only P-cores and a pod in namespace `redis` only E-cores; on default clusters `vllm-balloon` survives a `docker restart` of the server after `.skip`. | Pre-registered 2026-10-17 before any H14 run, after H13 runs A3-1 and A4-2 and a 2-cluster spike (log below). Arms: A3f = default cluster, Helm v3.14.0 `--force`; A4f = default cluster, Helm v4.1.1 `--force-conflicts`; B4 = external cluster, Helm v4.1.1 defaults; B3 = external cluster, Helm v3.14.0 defaults. n=3 per arm, order A3f A4f B4 B3 B3 B4 A4f A3f A3f A4f B4 B3, fresh cluster per run, same image, values and probe script as H12. Outcome -> conclusion: all runs of an arm pass every check -> that arm SUPPORTED, and only SUPPORTED arms are documented as working; any failed check -> that arm REFUTED. Confounds as H12. | SUPPORTED |
-| H15 | On an iGPU-only Intel host, the `K3D_GPU_INTEL_SHARED=auto` default (8 pods per iGPU) lets two `gpu.intel.com/i915` pods use the UHD 770 at once, at no loss of total throughput against running them one at a time. | (F) On a cluster from this branch's image with the default, node allocatable `gpu.intel.com/i915` = 8, the plugin DaemonSet args are `-shared-dev-num=8 -allocation-policy=balanced` and survive `docker restart` of the server node, and two pods requesting `gpu.intel.com/i915: 1` are both Running with overlapping run intervals and exit 0; a control cluster with `K3D_GPU_INTEL_SHARED=1` advertises 1 and keeps the second pod Pending while the first runs. (T) With a VA-API media workload (1080p H.264 decode, `scale_vaapi` to 720p, `h264_vaapi` encode, 6000 frames per pod, `linuxserver/ffmpeg:version-9.0.2-cli`), the aggregate fps of two concurrent pods is at least 0.9x the median solo fps, each concurrent pod gets at least 0.4x solo, no pod fails and dmesg logs no new i915 GPU hang. | Pre-registered 2026-10-16 before any H15 run. One shared cluster (default env) and one control cluster, both from `docker build -t $TAG .` on `claude/igpu-sharing-r2`. Timed arms on the shared cluster: S = one pod alone, C = two pods started together on a wall-clock barrier; n=3 per arm, order S C C S S C. Per run: package W (RAPL), load (1 min), swap used, package throttle count delta. Outcome -> conclusion: F holds and every C run meets T -> SUPPORTED, keep `auto` = 8 on iGPU-only hosts; F holds but aggregate < 0.9x solo in 2 or more C runs -> REFUTED, `auto` becomes 1 (sharing opt-in); any failed pod or GPU hang -> REFUTED, `auto` becomes 1; solo spread (max - min) above 20% of its median -> INCONCLUSIVE, rerun. | PENDING |
+| H15 | On an iGPU-only Intel host, the `K3D_GPU_INTEL_SHARED=auto` default (8 pods per iGPU) lets two `gpu.intel.com/i915` pods use the UHD 770 at once, at no loss of total throughput against running them one at a time. | (F) On a cluster from this branch's image with the default, node allocatable `gpu.intel.com/i915` = 8, the plugin DaemonSet args are `-shared-dev-num=8 -allocation-policy=balanced` and survive `docker restart` of the server node, and two pods requesting `gpu.intel.com/i915: 1` are both Running with overlapping run intervals and exit 0; a control cluster with `K3D_GPU_INTEL_SHARED=1` advertises 1 and keeps the second pod Pending while the first runs. (T) With a VA-API media workload (1080p H.264 decode, `scale_vaapi` to 720p, `h264_vaapi` encode, 6000 frames per pod, `linuxserver/ffmpeg:version-9.0.2-cli`), the aggregate fps of two concurrent pods is at least 0.9x the median solo fps, each concurrent pod gets at least 0.4x solo, no pod fails and dmesg logs no new i915 GPU hang. | Pre-registered 2026-10-16 PDT (2026-10-17T06:04Z, commit 1350533, pushed) before any H15 run. One shared cluster (default env) and one control cluster, both from `docker build -t $TAG .` on `claude/igpu-sharing-r2`. Timed arms on the shared cluster: S = one pod alone, C = two pods started together on a wall-clock barrier; n=3 per arm, order S C C S S C. Per run: package W (RAPL), load (1 min), swap used, package throttle count delta. Outcome -> conclusion: F holds and every C run meets T -> SUPPORTED, keep `auto` = 8 on iGPU-only hosts; F holds but aggregate < 0.9x solo in 2 or more C runs -> REFUTED, `auto` becomes 1 (sharing opt-in); any failed pod or GPU hang -> REFUTED, `auto` becomes 1; solo spread (max - min) above 20% of its median -> INCONCLUSIVE, rerun. | SUPPORTED |
 
 ## Falsification log
 
@@ -77,6 +77,7 @@ new evidence (new hardware, new driver, new model, changed method).
 | 2026-10-16 | idea (no branch): clock-locked efficiency lanes (DVFS as placement) | Provenance search | Anticipated by DynamoLLM, GreenLLM, VoltanaLLM, DualScale | DO-NOT-RE-ATTACK |
 | 2026-10-16 | idea (no branch): tool-idle IAA compaction into zswap | Provenance search | Anticipated by AgentZip (arXiv:2609.11294) phase-aligned compression with restore prefetch | DO-NOT-RE-ATTACK |
 | 2026-10-16 | idea (no branch): freeze-consistent fork of agent sandboxes | Provenance search | Anticipated by E2B `fork({count:N})` and Modal snapshots | DO-NOT-RE-ATTACK |
+| 2026-10-17 | H15 | i9-13900T, UHD 770: shared cluster (default env) F checks, 6 timed runs S C C S S C; control cluster `K3D_GPU_INTEL_SHARED=1` (header and per-run table in [H15 run](#h15-run-i9-13900t-2026-10-17)) | Held. F: allocatable 8, args `["-shared-dev-num=8","-allocation-policy=balanced"]` before and after `docker restart`, `k3d-gpu test` rc 0; both pods of every C run Succeeded from the same start second. Solo median 548.4 fps (spread 20.1, 3.7%); two-pod aggregate median 649.6 fps = 1.18x solo (min 1.16x), each pod 0.58-0.59x solo; 0 failed pods, 0 GPU hangs. Control: allocatable 1, second pod Pending (`Insufficient gpu.intel.com/i915`) until the first finished | DO-NOT-RE-ATTACK on UHD 770 / i915 with this media workload; a compute workload (OpenVINO, oneAPI) or an Xe2/Xe3 iGPU is new evidence |
 
 ## Research leads
 
@@ -304,6 +305,108 @@ scripts/k3d-gpu down
 docker image rm "$K3D_GPU_IMAGE"
 ```
 
+### H15 run (i9-13900T, 2026-10-17)
+
+```text
+# provenance
+date:            2026-10-17T06:05Z..06:17Z (pre-registered 06:04:45Z, commit 1350533, pushed before the first run)
+hypothesis:      H15
+host cpu:        13th Gen Intel(R) Core(TM) i9-13900T (8 P-cores, 16 E-cores)
+host kernel:     6.6.128-1-MANJARO
+accelerators:    nvidia=2 (RTX 4000 SFF Ada, RTX 2000E Ada), intel=1 (UHD 770, 0xa780, i915, PCI 0000:00:02.0), hybrid
+k3d-gpu commit:  1350533 (claude/igpu-sharing-r2 on origin/main 765ad5f)
+node image:      sha256:038ab24ee423, docker build -t k3d-gpu-int:igpu-share-r2 . from this branch
+                 (k3s v1.37.1+k3s1, intel/intel-gpu-plugin:0.37.1)
+model:           none; workload = work.sh below
+runtime:         linuxserver/ffmpeg@sha256:742e17516dd4d7b76b939d774bd08f0f6b7cab8bce1c014b95ab2fb992fd0a1f
+                 (version-9.0.2-cli), VA-API iHD on /dev/dri/renderD128 from the plugin
+energy source:   /sys/class/powercap/intel-rapl:0 (package-0), confounds only
+runs per arm:    3 (order S C C S S C), one cluster, 10 s idle between runs
+```
+
+Workload per pod: encode a 300-frame 1080p `testsrc2` clip with libx264 (untimed),
+wait for a shared wall-clock start second, then time
+`ffmpeg -hwaccel vaapi -hwaccel_output_format vaapi -stream_loop 19 -i in.mp4 -vf scale_vaapi=w=1280:h=720 -c:v h264_vaapi -f null -`
+(6000 frames: GPU decode, scale and encode). Pods request `gpu.intel.com/i915: 1`
+and nothing else.
+
+```sh
+# work.sh, mounted from a ConfigMap; env START_AT (epoch s), LOOPS=19
+# GPU media workload for H15: VA-API decode + scale + H.264 encode of a 1080p clip.
+# START_AT (epoch seconds) lines up concurrent pods; prints one RESULT line.
+set -e
+DEV=${DEV:-/dev/dri/renderD128}
+[ -e "${DEV}" ] || DEV=$(ls /dev/dri/renderD* | head -1)
+ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=1920x1080:rate=30 \
+    -frames:v 300 -c:v libx264 -preset ultrafast -y /tmp/in.mp4
+if [ -n "${START_AT:-}" ]; then
+    while [ "$(date +%s)" -lt "${START_AT}" ]; do sleep 0.1; done
+fi
+t0=$(date +%s.%N)
+ffmpeg -hide_banner -nostats -loglevel error -init_hw_device "vaapi=va:${DEV}" \
+    -hwaccel vaapi -hwaccel_device va -hwaccel_output_format vaapi \
+    -stream_loop "${LOOPS:-5}" -i /tmp/in.mp4 -vf scale_vaapi=w=1280:h=720 \
+    -c:v h264_vaapi -f null -
+t1=$(date +%s.%N)
+frames=$((300 * (${LOOPS:-5} + 1)))
+awk -v a="${t0}" -v b="${t1}" -v f="${frames}" -v d="${DEV}" \
+    'BEGIN { printf "RESULT dev=%s frames=%d start=%.3f end=%.3f secs=%.3f fps=%.1f\n", d, f, a, b, b - a, f / (b - a) }'
+```
+
+| Run | Arm | Pod fps | Aggregate fps (frames / first start to last end) | package W | load (1 min) | swap used MiB | throttle delta | new GPU hangs |
+|-----|-----|---------|------------------------------------------------|-----------|--------------|---------------|----------------|---------------|
+| 1 | S | 548.4 | 548.4 | 70.4 | 3.92 | 108131 | 23816 | 0 |
+| 2 | C | 325.0 / 325.9 | 649.9 | 72.4 | 3.16 | 108131 | 4832 | 0 |
+| 3 | C | 324.8 / 324.8 | 649.6 | 72.8 | 3.45 | 108107 | 7784 | 0 |
+| 4 | S | 551.0 | 551.0 | 78.2 | 3.31 | 108106 | 13870 | 0 |
+| 5 | S | 530.9 | 530.9 | 77.8 | 2.91 | 108106 | 46976 | 0 |
+| 6 | C | 317.5 / 317.5 | 634.9 | 76.4 | 2.98 | 108106 | 25666 | 0 |
+
+| Arm | median | p90 (n=3: max) | spread (max - min) |
+|-----|--------|----------------|--------------------|
+| S fps | 548.4 | 551.0 | 20.1 (3.7%) |
+| C aggregate fps | 649.6 | 649.9 | 15.0 (2.3%) |
+| C aggregate / S median | 1.18x | 1.19x | min 1.16x |
+| C per pod / S median | 0.59x | 0.59x | min 0.58x |
+
+Package W is RAPL package-0 over the timed window (CPU cores and iGPU, the 52
+other containers on the host included), throttle delta sums
+`package_throttle_count` over all CPUs. Both stayed within the host's idle band
+(about 71-80 W) and showed no pattern by arm, and swap use did not change.
+
+Control (`K3D_GPU_INTEL_SHARED=1`, cluster made from the same image): allocatable
+`gpu.intel.com/i915` 1, no plugin args; 15 s after both pods were created the first
+was Running and the second Pending with `0/1 nodes are available: 1 Insufficient
+gpu.intel.com/i915`; it started once the first finished. The two jobs took 24.9 s
+end to end (482 fps for 12000 frames, pod start gap included) against 18.5 s when
+shared.
+
+Extra live checks on the same image: a shared cluster made with
+`K3D_GPU_INTEL_MONITORING=1` set the args `-shared-dev-num=8
+-allocation-policy=balanced -enable-monitoring`, advertised `gpu.intel.com/i915` 8
+and `gpu.intel.com/monitoring` 1, and `k3d-gpu test` ran both the i915 and the
+monitoring test pod (each listed `card0` and `renderD128`) with rc 0. Two
+long-running pods on the shared cluster were both `Running` at once with node
+allocated `gpu.intel.com/i915` 2 of 8.
+
+Verdict: SUPPORTED, confidence high for this host and workload (every run met
+every prediction; the smallest aggregate margin, 1.16x against the 0.9x
+threshold, is about 7 times the solo spread). `K3D_GPU_INTEL_SHARED=auto` stays 8 on
+iGPU-only hosts.
+
+```bash
+# Reproduce on an iGPU-only (or iGPU + NVIDIA) host, from this branch.
+TAG=k3d-gpu-int:igpu-share-r2 FF=linuxserver/ffmpeg:version-9.0.2-cli
+docker build -t "$TAG" . && docker pull "$FF"
+export KUBECONFIG=$(mktemp) K3D_GPU_IMAGE=$TAG K3D_GPU_CLUSTER=h15
+scripts/k3d-gpu up && k3d image import "$FF" -c h15
+kubectl get node -o jsonpath='{.items[0].status.allocatable.gpu\.intel\.com/i915}'   # 8
+docker restart k3d-h15-server-0   # args and the count survive
+# Run work.sh (above) from a ConfigMap in 1 or 2 pods with limits gpu.intel.com/i915: 1 and a
+# shared START_AT, order S C C S S C; compare the RESULT fps lines.
+scripts/k3d-gpu down
+```
+
 ## Scope corrections
 
 Limits on what a SUPPORTED verdict may be quoted as saying.
@@ -331,3 +434,8 @@ Limits on what a SUPPORTED verdict may be quoted as saying.
   Helm v3.14.0 and v4.1.1, and `contrib/eat/hybrid-values.yaml`. EAT itself was
   not deployed: a `vllm`-named busybox container and a pod in namespace `redis`
   stand in for its vLLM and agent services.
+- **H15** covers one UHD 770 (i915, no XMX) and a VA-API media workload, which
+  spreads over the video engines and the EUs. A compute workload that saturates the
+  EUs alone (OpenVINO, oneAPI) may gain nothing from sharing, and nothing here
+  measures memory pressure between pods. It shows that concurrent pods work and
+  lose no total throughput; it does not show isolation.

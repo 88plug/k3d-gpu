@@ -285,9 +285,16 @@ Why the default is like this:
 
 - **An iGPU is already shared.** The host desktop, browser and video player
   all use it. Exclusive allocation inside the cluster isolates nothing.
+- **Sharing costs no total throughput here.** On a UHD 770, two media pods
+  (VA-API 1080p decode, scale, H.264 encode) ran together.
+  Each got 0.59x the speed of one pod alone, so together they did 1.18x the work per second [ledger:H15].
+  Exclusive allocation would have left the second pod Pending until the first
+  finished. A compute job that keeps every EU busy may gain nothing; see the
+  ledger's scope note.
 - **A discrete GPU stays exclusive.** The count applies to every Intel GPU on
   the node. So a host with an Arc card (with or without an iGPU) keeps
-  one-pod-per-GPU unless you set a number.
+  one-pod-per-GPU unless you set a number. A discrete id at the iGPU's PCI slot
+  (a card passed through to a VM) also stays exclusive.
 - **Why 8.** The count is only a scheduling ceiling and reserves nothing.
   8 covers an inference server, embeddings, media and a few jobs. It still
   stops dozens of pods from silently piling onto a 32-EU iGPU. Upstream's
