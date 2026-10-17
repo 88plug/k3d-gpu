@@ -37,6 +37,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H7 | OVMS's decode lead over EAT's vLLM CPU engine in the H2 run comes from weight precision, not from the engine. | On the i9-13900T 16-CPU P-core balloon, one checkpoint served by OVMS 2026.4.1 and by vLLM CPU v0.24.0 at matched weight precision decodes within 15% between the two engines, and the two land within 15% of each other in effective weight bandwidth (weight bytes x decode tok/s). | Pre-registered 2026-10-16, before any run. One checkpoint and revision (`Qwen/Qwen3-4B-Instruct-2507`, revision recorded) for both engines: OVMS loads an OpenVINO IR exported from it with 16-bit weights, vLLM loads it in bf16. A second arm at int4 in both engines runs only if vLLM v0.24.0 CPU is first shown to load an int4 build of the same checkpoint. vLLM runs with EAT's chart defaults and once with `--enforce-eager` dropped, to split engine from config. H2 workloads and energy method, arms interleaved ABBA, 5 rounds. Refuted if the decode gap at matched precision is 15% or more. | PENDING |
 | H24 | A spec-only roofline (DRAM channels x MT/s x 8 B; cores x int8 MAC/clk x GHz), calibrated on one 8-P-core point of this host, predicts decode, prefill and 4-in-flight throughput of core configurations it was not fitted on, within 25% MAPE. This is the transfer law `k3d-gpu plan --predict <sku>` relies on. | Held-out arms B (4 P-cores), C (8 E-cores), D (16 E-cores) on the i9-13900T, Qwen3-4B int4, OVMS 2026.4.1 (H6 digest). M0 (`console/sku_model.py arms`) predicts decode 15.7 / 15.7 / 15.7, prefill 86 / 32.3 / 64.5, c4 62.6 / 32.3 / 62.6 tok/s for B / C / D (C compute-bound at c4). Competing M1 (min(spec BW, measured per-cpuset triad BW)) predicts decode = 15.7 x triad(arm) / triad(A). Author prior: M0 decode REFUTED (B ~12.5, C ~8, D ~12), M0 prefill holds, M1 decode holds within 20%. | Pre-registered 2026-10-17T12:15Z, before any H24 run; `tests/console/test_sku_model.py` checks the model's numbers equal these within 1%. Probe `bench/sku-model/probe.py` (self-limits to 19 min). 4 OVMS containers `sci-h24-{A,B,C,D}`, same image digest and weights sha256 as H6, all loaded at once, one served at a time; no k3d cluster. stream_probe triad per arm x2. Visit order A B C D D C B A; per visit: 5 s idle sample, 3 decode (30-token prompt with nonce, 128 out, `ignore_eos`), 2 prefill (unique ~512-token prompt, 16 out), 1 c=4 (4 x 128 out). n per arm: decode 6, prefill 4, c4 2. Calibration = this run's arm A (H6's 15.66 is a sanity check: A within 15%). Outcome -> conclusion: see [H24 pre-registration](#h24-pre-registration). Live run not yet taken (2026-10-17: lock held by another live experiment for the whole work budget); review fixes in ed20aa4. | PENDING |
 | H25 | Agents that send a byte-identical system prompt and tool schemas to one OVMS CPU server reuse one prefix KV, so an added agent's first request skips the shared prefill. Whether the shared blocks also cut resident memory per live agent is measured too, not assumed. Pre-registered 2026-10-17T05:08-07:00, before any H25 run. | On an i9-13900T, OVMS 2026.4.1 (digest a928903f…), `OpenVINO/Qwen3-4B-int4-ov` b467368d on the 16-CPU P-core balloon, shared prefix Ps ≈ 1536 tokens, private Pp = 96, max_tokens 8, thinking off. (T) The median TTFT of an added agent (agents 2..6, sequential) is ≥ 4x lower with the shipping default (prefix caching on, cache_size 0) than with `--enable_prefix_caching=false`; the lower bound of the 95% bootstrap CI of the ratio is ≥ 4x. Point prediction: OFF 9.6 s ± 15% (Ps+Pp at the 172 tok/s of H6), ON 0.9 s (0.6-1.4). (C) An ON agent with one token changed at system position 16 measures ≥ 0.8x the OFF median. (M) Memory per added live agent in a 6-agent burst: OFF ≈ 117 MiB (52 blocks x 32 tok x 72 KiB u8). Expectation (prior 0.5): ON ΔRSS per agent is ≥ 0.8x OFF, because dynamic-pool growth counts full prompts; physical sharing alone would give ≈ 9-12 MiB. Null H0: added-agent TTFT ON/OFF < 2x with c equal to the ON agents (no cross-agent reuse); for M, ON ΔRSS per agent ≥ 0.8x OFF. | `bench/shared-prefix/run.sh` under the live lock, 20 min cap. Fresh OVMS pod every round, arm order ON OFF OFF ON ON OFF (n = 3 rounds per arm, 15 added-agent samples per arm), new prefix seed every round. Per round: warm-up, sequential agents a1..a6 plus the perturbed control c, then a 6-agent barrier burst with 1 Hz sampling of pod `memory.current`. Confounds per round: RAPL package energy, 1-min load, swap used, pod `memory.swap.current`, package throttle-count delta, running container count. Outcome table and guardrails in [H25 pre-registration](#h25-pre-registration). The deploy-time detector (`k3d-gpu agent prefix`) is scored by unit tests, not by this probe. Prior art exists (vLLM APC, SGLang RadixAttention on Xeon, OVMS prefix caching, KVFlow, KVComm): a claim states only the measured delta [provenance:P250] [provenance:P252] [provenance:P253] [provenance:P259]. Run 2026-10-17: TTFT null in every request (probe read only content deltas), so both parts void; exploratory end-to-end latency 4.96x (CI 4.68-5.33), see [H25 run](#h25-run-i9-13900t-2026-10-17). | INCONCLUSIVE |
+| H26 | On a hybrid Intel client with no RDT (i9-13900T: no `rdt_a`/`cat_l3`/`mba`/`cqm` flags, no `/sys/fs/resctrl`), confining a memory-bandwidth neighbour to one E-core L2 cluster (`k3d-gpu.io/cores: ecluster`, 4 E-cores) cuts the agent's p95 latency inflation by at least half against the same neighbour in the `efficient` balloon. On hosts with `rdt_a`+`mba`, nri-plugins RDT classes are the predicted remedy instead (not testable on this host; H26-X). | R = I(MC4)/I(ME15) <= 0.5, where I(arm) = p95(arm)/p95(Q) - 1 on agent request latency. Point prediction: p95(Q) ~2.3 s, I(ME15) >= +100% (replicates H3 PM), I(MC4) +20..+50%, R ~0.3; I(ME4) within spread of I(MC4) (core count, not L2 topology, does the work). Competing prior (prior-art note): L2 confinement helps little against a DRAM hog (LLC and memory controller stay shared, no MBA), improvement < 10%. | Pre-registered 2026-10-17T12:18Z before any H26 run; see [H26 pre-registration](#h26-pre-registration-i9-13900t-2026-10-17). Probe `bench/rdt-isolate/run.sh` (analysis `bench/rdt-isolate/analyze.py`). Agent = OVMS 2026.4.1 `OpenVINO/Qwen3-4B-int4-ov`, `k3d-gpu agent up` on CPU with 15 CPU; unique ~30-token prompt x 32 out, greedy, `ignore_eos`, streamed. Arms: Q none; ME15 `stress-ng --stream 15` on `efficient`; ME4 `--stream 4` on `efficient`; MC4 `--stream 4` on `ecluster`; every neighbour `--stream-l3-size 128m` (same total DRAM footprint). 3 blocks x 10 requests per arm (n=30), order Q ME15 ME4 MC4 / MC4 ME4 ME15 Q / Q ME15 ME4 MC4, one cluster `k3dgpu-i-rdt-isolate`. Outcome -> conclusion in the section. | PENDING |
 | H29 | On a client Intel hybrid CPU, B=1 agent decode on the P-cores spends less energy per token at the same speed when the P-cores are capped and the uncore (ring/LLC) floor is pinned high, and the uncore pin is what keeps the speed. Static config held for the whole request (prefill included); not phase-aware. On client parts `intel_uncore_frequency` sets the ring/LLC clock, not the IMC/DRAM clock. | On an i9-13900T (`intel_uncore_frequency` legacy, ring 0.8-4.7 GHz, EPP performance), OVMS 2026.4.1 + `OpenVINO/Qwen3-4B-int4-ov` from `k3d-gpu agent up` (CPU): arm UC (pod CPUs `scaling_max_freq` 2.8 GHz + uncore min = max = 4.7 GHz) vs stock A gives median decode tok/s >= 0.97x and median package J/token <= 0.90x, lower in every paired round, on BOTH gross J/token and marginal J/token against the same round's stock-arm idle; and UC beats C (cap only) by >= 3% tok/s, or by >= 5% J/token on both metrics, in every paired round. Prior: SUPPORTED 0.10, REFUTED-split 0.20, REFUTED 0.50, INCONCLUSIVE 0.20. | Pre-registered 2026-10-17 05:13 PDT before any run (no measurement taken yet). AMENDED 2026-10-17 before any run, after two refuters: (1) the per-arm marginal metric subtracted each arm's own idle, which removes a pinned ring's standing idle cost from exactly the U/UC arms; the decision now uses gross J/token AND marginal J/token against the stock arm's idle of the same round (per-arm marginal recorded, not decided on); (2) "phase-aware" dropped: the knobs are static per request; (3) up to 8 rounds, deadline-bound (Williams square balanced at 4 and 8), L on even rounds; (4) added manipulation checks: U ring >= target - 100 MHz, A pod-CPU MHz >= cap + 200 MHz (else INCONCLUSIVE); (5) decode tok/s uses completion_tokens, the J/token denominator; (6) temperature abort 95 C; (7) the locked runner refreshes sudo itself (`sudo -A -v`), since a no-tty sudo timestamp is per parent process. Physics note (refuters, not fetched): on Alder/Raptor Lake client parts the ring may share the P-core VccIA rail, which favours REFUTED. `bench/uncore-phase/run.sh` (cluster `k3dgpu-i-uncore-phase`, scratch KUBECONFIG, under the live lock, <= 20 min wall) runs `bench/uncore-phase/probe.py`. Arms A (stock), U (uncore floor pinned to `initial_max_freq_khz`), C (P-core cap), UC (C + U), L (uncore pinned 2.0 GHz, regime control); n = 5 rounds per primary arm, n = 3 for L (rounds 0/2/4); arm order a 4x4 Williams square by round (amended before any run: rotate-then-reverse-odd-rounds put only A or C first, caught by the unit test); one 192-token streamed greedy `ignore_eos` request per cell after 6 s settle and a 5 s idle window under the same arm; one unrecorded stock warm-up. Marginal J/token = (package J - idle W x t) / tokens; gross J/token also reported. Per cell: ring MHz (`current_freq_khz`), pod-CPU MHz, package temp, throttle count delta, pswpin/pswpout, load1, busy fraction inside and outside the pod. Cells with a throttle increment or > 100 MiB swap-in are excluded. Outcome -> conclusion: < 4 valid cells in a primary arm, or A tok/s spread > 10% of median -> INCONCLUSIVE; L ring > 2.1 GHz or C cores > 2.9 GHz -> INCONCLUSIVE (knob not honoured); both parts hold -> SUPPORTED; only the first part holds -> REFUTED-split (doctor suggests the cap only); first part fails -> REFUTED. Confidence = 1 - one-sided sign-test p over paired rounds (n/n rounds: 4 = 0.938, 5 = 0.969, 8 = 0.996). Every sysfs write logged and restored (probe `finally`, signal handler, runner EXIT trap from a pre-run snapshot). Prior art exists (uncore DVFS for memory-bound HPC phases, phase-aware DVFS for mobile and GPU LLM inference, the Intel KPM Uncore CRD, hardware ELC; [provenance:P291]-[provenance:P299]); a static joint core + uncore setting is the setting of [provenance:P295], so no novelty is claimed for the mechanism, only the measured delta on this test bed (search log [provenance:P290], incomplete). | PENDING |
 
 ## Falsification log
@@ -1448,6 +1449,77 @@ detector stays report-only; no default changes. Next probe: re-run T with the
 tool-call TTFT fix at low host load, then the arms the refuters asked for
 (one shared engine vs N per-agent engines; static vs dynamic `cache_size`).
 
+### H26 pre-registration (i9-13900T, 2026-10-17)
+
+Written 2026-10-17T12:18Z, before any timed block. No sysfs writes are planned. Reads only
+(sudo -n): RAPL `energy_uj`, `thermal_throttle/package_throttle_count`, `perf stat`
+on the uncore IMC free-running counters.
+
+**Host facts (read 2026-10-17, before the run):**
+- `/proc/cpuinfo` has none of `rdt_a cat_l3 cat_l2 cdp_l3 mba cqm cqm_mbm_total`; `/sys/fs/resctrl` does not exist
+  (`CONFIG_X86_CPU_RESCTRL=y`). [provenance:P260]
+- E-core L2 groups (`cpu*/cache/index2/shared_cpu_list`): 16-19, 20-23, 24-27, 28-31.
+- `uncore_imc_free_running_0` and `_1` expose `data_read` and `data_write` (scale 6.103515625e-5 MiB).
+- The RDT/MBA arm is N/A on this host: H26-X stays PENDING until a Xeon host runs it.
+
+**Prior:** H3 arm PM (stream 15 on E, inference on P): decode +165.8%, prefill +99.1%. CPU balloons
+alone do not isolate a bandwidth neighbour; H26 tests whether L2-cluster confinement does. Prior art
+(nri-plugins RDT classes and balloons `loadClasses`, Koordinator resctrl, Heracles) is in
+`docs/provenance.md` P260-P267; only the measured delta is claimable.
+
+**Arms** (neighbour = `bench/noisy.sh --stressor stream`, stress-ng 0.22.01 by digest,
+request = limit, `--stream-l3-size 128m`: stress-ng splits that size across workers, so every arm's
+neighbour holds 3 x 128 MiB of buffers in total and only the worker count and placement differ):
+
+| Arm | Label | CPU | Workers | Purpose |
+|-----|-------|-----|---------|---------|
+| Q | none | 0 | 0 | baseline |
+| ME15 | efficient | 15 | 15 | today's behaviour (H3 PM replication); positive control |
+| ME4 | efficient | 4 | 4 | core-count control: 4 hog cores, placement left to balloons |
+| MC4 | ecluster | 4 | 4 | treatment: 4 hog cores inside one L2 cluster |
+
+**Agent:** one OVMS pod for the whole run (`K3D_GPU_AGENT_DEVICE=CPU K3D_GPU_AGENT_CPUS=15 k3d-gpu agent up`),
+`Cpus_allowed_list` logged. Per block: neighbour up (Running plus its `Cpus_allowed_list` line), 5 s
+settle, 1 discarded request, 10 timed requests (`bench/rdt-isolate/client.py`, nonce per prompt),
+neighbour deleted. n = 30 per arm; p95 is nearest-rank (29th of 30), so the decision threshold is a
+2x effect, not a fine margin.
+
+**Recorded per block:** neighbour CPUs, IMC GB/s over a 15 s window, package joules, throttle delta,
+`pswpin` delta, CPU 0-15 busy %, 1-min load; agent pod restarts over the run.
+
+**Analysis and outcome -> conclusion** (`bench/rdt-isolate/analyze.py`, unit-tested; priors in brackets):
+
+| Observed | Verdict | Action |
+|----------|---------|--------|
+| I(ME15) < +20% | INCONCLUSIVE [0.05] | Probe blind; check IMC GB/s, rerun with a larger stream size |
+| Q block-p95 spread > 25% of its median, or dropping swap-flagged blocks (pswpin > 2560) flips the verdict | INCONCLUSIVE [0.10] | Rerun at a quieter hour |
+| MC4 neighbour IMC GB/s (above Q) < 15% of ME15's | INCONCLUSIVE [0.05] | Confinement starves the hog: a throughput trade, not isolation |
+| R <= 0.5, bootstrap P(R <= 0.5) >= 0.8 (10 000 resamples stratified by block), 3/3 rounds R <= 0.5 | SUPPORTED [0.40] | doctor may recommend `ecluster` for bandwidth-heavy neighbours on hybrid clients |
+| 0.5 < R < 0.8, or R <= 0.5 with lower confidence | REFUTED as stated [0.25] | Document I(MC4), I(ME15) with spread; no auto default |
+| R >= 0.8 | REFUTED [0.15] | doctor keeps saying ecluster caps cores, not bandwidth, and points to Xeon RDT/MBA |
+| H26b: I(ME4) - I(MC4) within the ME4/MC4 block spread | core count, not L2 topology | Capping the neighbour's CPU count is the simpler fallback |
+
+A MC4 block whose neighbour CPUs are not inside one L2 group is VOID. Guardrails: every request
+returns 32 tokens; the agent pod never restarts. The probe aborts at 18 min of its own wall time
+and marks unrun blocks INCONCLUSIVE.
+
+**Amendment A1 (2026-10-17, after two refuter reviews, before any timed block).** The primary
+metric above compared 4 hog workers (MC4) with 15 (ME15), so it could pass on core count alone.
+A1 replaces it; the table above is kept for the record but no longer decides.
+- Primary: R = I(MC4) / I(ME4). ME4 is now `--stream 4 --cpu 15` on `efficient`, so the same 4
+  workers float over all 15 E-cores; MC4 holds them in one L2 cluster. Only placement differs.
+- Placement is checked per block: the stream workers' CPUs (host `ps -eLo psr`, sampled 8 s into
+  the window) must touch >= 2 L2 groups for ME4, and the neighbour's `Cpus_allowed_list` must sit
+  inside one group for MC4, else the block is VOID. L2 groups come from sysfs, not the 13900T map.
+- The agent must sit off the E-cores (`/sys/devices/cpu_atom/cpus`) or the run aborts.
+- INCONCLUSIVE also when I(ME4) < +10% (nothing to isolate) or any arm lacks an IMC reading.
+  The Q-noise guard uses block medians, not block p95 (the max of 10).
+- SUPPORTED additionally needs the MC4 hog's IMC GB/s (above Q) >= 85% of the ME4 hog's;
+  below that any gain is the hog being throttled, recorded as REFUTED as stated.
+- Prediction (A1): REFUTED (R ~1). P-cores have private L2; L2 placement of the hog
+  partitions none of the shared LLC, ring or IMC. Priors: SUPPORTED 0.10, REFUTED as stated 0.20,
+  REFUTED 0.45, INCONCLUSIVE 0.25.
+- Run status (2026-10-17T12:58Z): the A1 probe queued for the live lock at 12:33Z and did not get it inside the 40 min work budget (another live experiment held it); no timed block ran, no cluster was made. H26 stays PENDING; the next run is `SUDO_ASKPASS=<askpass> flock -w 10800 $LOCK bench/rdt-isolate/run.sh` on b7d2f16 or later.
 
 ## Scope corrections
 
