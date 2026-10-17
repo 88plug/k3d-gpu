@@ -69,8 +69,12 @@ k3d-gpu down            # delete the cluster
 
 ### Install
 
-Every package installs the same payload: the launcher at `bin/k3d-gpu` and the plugin
-manifests in `share/k3d-gpu/`. All need Docker, [k3d](https://k3d.io) and `kubectl` on the
+Every package installs the same payload: the launcher at `bin/k3d-gpu`, the MCP server at `bin/k3d-gpu-mcp`,
+and in `share/k3d-gpu/` the plugin manifests, `console/`, `bench/`, `oracle/` and `images.lock`
+(`facts`, `plan`, `audit`, `tune`, `capacity` and `k3d-gpu-mcp` also need `python3`).
+The node image `cryptoandcoffee/k3d-gpu` is published for linux/amd64 only, so on arm64 the
+packages install but `k3d-gpu up` stops unless `K3D_GPU_IMAGE` names a k3s node image built for
+arm64. All need Docker, [k3d](https://k3d.io) and `kubectl` on the
 host (the Nix package brings its own k3d and kubectl). Releases are tagged `aur-vX.Y.Z`; the
 .deb, .rpm and `SHA256SUMS` are attached to each `aur-v*` [GitHub release](https://github.com/88plug/k3d-gpu/releases)
 (the flake and the .deb/.rpm start with the first release after 0.1.20).

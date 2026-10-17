@@ -4571,6 +4571,21 @@ says "share runs from the packaged copy under K3D_GPU_SHARE/oracle" 0 'There is 
 says "packaged share finds no capacity run and says so" 2 'no finished capacity run' \
     env K3D_GPU_SHARE="${SOLO}/share" XDG_STATE_HOME="${SOLO}/state" K3D_GPU_SYSROOT="${SOLO}/root" bash "${SOLO}/bin/k3d-gpu" share --dry-run
 
+# The node image is published for linux/amd64 only (build-and-push.yml platforms), so
+# `up` on another CPU stops before docker runs unless K3D_GPU_IMAGE names an image for it.
+ARCH_BIN="${WORK}/arch-bin"
+mkdir -p "${ARCH_BIN}"
+printf '#!/bin/sh\n[ "$1" = -m ] && { echo aarch64; exit 0; }\nexec /usr/bin/env -i uname "$@"\n' > "${ARCH_BIN}/uname"
+for t in docker k3d kubectl; do
+    printf '#!/bin/sh\necho "%s $*" >> "%s/arch-calls"\nexit 1\n' "${t}" "${WORK}" > "${ARCH_BIN}/${t}"
+done
+chmod +x "${ARCH_BIN}"/*
+ARCH_ROOT=$(newroot arch-empty)
+says "up on aarch64 with the default node image names the amd64-only image" 1 'published for linux/amd64 only.*K3D_GPU_IMAGE' \
+    env -u K3D_GPU_IMAGE PATH="${ARCH_BIN}:${PATH}" K3D_GPU_SYSROOT="${ARCH_ROOT}" bash "${K3D_GPU}" up
+says "up on aarch64 stops before docker runs" 0 '^$' bash -c "cat '${WORK}/arch-calls' 2>/dev/null; true"
+says "up on aarch64 with K3D_GPU_IMAGE set passes the arch check" 1 'no supported accelerator' \
+    env K3D_GPU_IMAGE=example/k3s-arm64:1 PATH="${ARCH_BIN}:${PATH}" K3D_GPU_SYSROOT="${ARCH_ROOT}" bash "${K3D_GPU}" up
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

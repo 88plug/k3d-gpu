@@ -106,6 +106,36 @@ check "brew wrapper keeps a user K3D_GPU_SHARE" \
     grep -qF /x/nvidia-device-plugin.yml <(K3D_GPU_SHARE=/x "${wrap_dir}/k3d-gpu" help)
 rm -rf "${wrap_dir}"
 
+# Every recipe ships the same payload (README "Install"): the formula too, so a brew install
+# runs plan, audit, autoquant, tune, capacity and share like the other packages.
+check "formula installs console/*.py and console/*.json" \
+    grep -qF '(pkgshare/"console").install Dir["console/*.py", "console/*.json"]' "${FORMULA}"
+check "formula installs images.lock" grep -qF 'pkgshare.install "images.lock"' "${FORMULA}"
+for f in energy.sh agent_trace.py agent_trace_gen.py; do
+    check "formula installs bench/${f}" grep -qF "\"bench/${f}\"" "${FORMULA}"
+done
+check "formula installs bench/apb/{apb,capacity}.py" \
+    grep -qF '(pkgshare/"bench/apb").install "bench/apb/apb.py", "bench/apb/capacity.py"' "${FORMULA}"
+check "formula installs oracle/{bundle,project,validate,share}.py" \
+    grep -qF '(pkgshare/"oracle").install "oracle/bundle.py", "oracle/project.py", "oracle/validate.py", "oracle/share.py"' "${FORMULA}"
+check "formula installs oracle/schema/bundle-v1.json" \
+    grep -qF '(pkgshare/"oracle/schema").install "oracle/schema/bundle-v1.json"' "${FORMULA}"
+# README documents `k3d-gpu-mcp` as the MCP server command; every recipe puts it on PATH.
+check "PKGBUILD installs k3d-gpu-mcp" grep -qF 'install -Dm755 scripts/k3d-gpu-mcp' "${PKGBUILD}"
+check "nfpm ships k3d-gpu-mcp to /usr/bin" \
+    grep -Pzq 'src: scripts/k3d-gpu-mcp\n +dst: /usr/bin/k3d-gpu-mcp\n +file_info:\n +mode: 0755' "${NFPM}"
+check "formula installs k3d-gpu-mcp next to the launcher" grep -qF 'libexec.install "scripts/k3d-gpu", "scripts/k3d-gpu-mcp"' "${FORMULA}"
+check "formula puts k3d-gpu-mcp on PATH with K3D_GPU_SHARE" \
+    grep -qF '(bin/"k3d-gpu-mcp").write_env_script libexec/"k3d-gpu-mcp", K3D_GPU_SHARE: "${K3D_GPU_SHARE:-#{pkgshare}}"' "${FORMULA}"
+check "nix source includes k3d-gpu-mcp" grep -qF '(root + "/scripts/k3d-gpu-mcp")' "${NIXPKG}"
+check "nix installs k3d-gpu-mcp" grep -qF 'install -Dm755 scripts/k3d-gpu-mcp "$out/bin/k3d-gpu-mcp"' "${NIXPKG}"
+check "packaging/check.sh asserts k3d-gpu-mcp is installed" grep -qF 'test -x /usr/bin/k3d-gpu-mcp' "${ROOT}/packaging/check.sh"
+
+check "README Install names k3d-gpu-mcp in the shared payload" \
+    grep -qF 'the launcher at `bin/k3d-gpu`, the MCP server at `bin/k3d-gpu-mcp`' "${ROOT}/README.md"
+check "README Install says the node image is amd64 only" \
+    grep -qF 'The node image `cryptoandcoffee/k3d-gpu` is published for linux/amd64 only' "${ROOT}/README.md"
+
 check "formula url is an aur-v release tarball" \
     grep -Eq '^  url "https://github.com/88plug/k3d-gpu/archive/refs/tags/aur-v[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz"$' "${FORMULA}"
 check "formula sha256 is 64 hex" grep -Eq '^  sha256 "[0-9a-f]{64}"$' "${FORMULA}"
