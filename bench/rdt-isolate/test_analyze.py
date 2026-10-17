@@ -39,18 +39,41 @@ class Verdicts(unittest.TestCase):
         return analyze.verdict(*synth(*a, **k), n_boot=300)
 
     def test_supported(self):
-        out = self.v(2.3, {"Q": 1.0, "ME15": 2.0, "ME4": 1.3, "MC4": 1.3})
+        out = self.v(2.3, {"Q": 1.0, "ME15": 2.0, "ME4": 1.6, "MC4": 1.15})
         self.assertEqual(out["verdict"], "SUPPORTED", out)
-        self.assertAlmostEqual(out["R"], 0.3, places=2)
+        self.assertAlmostEqual(out["R"], 0.25, places=2)
         self.assertEqual(out["n"]["MC4"], 30)
-        self.assertEqual(out["H26b"], "core count, not L2 topology")
+
+    def test_core_count_only_is_refuted(self):
+        # MC4 beats ME15 only by having 4 workers; at equal workers there is no gain.
+        out = self.v(2.3, {"Q": 1.0, "ME15": 2.0, "ME4": 1.3, "MC4": 1.3})
+        self.assertEqual(out["verdict"], "REFUTED", out)
+        self.assertAlmostEqual(out["R"], 1.0, places=2)
+
+    def test_throttled_hog_is_not_isolation(self):
+        out = self.v(2.3, {"Q": 1.0, "ME15": 2.0, "ME4": 1.6, "MC4": 1.15},
+                     imc={"Q": 2, "ME15": 40, "ME4": 30, "MC4": 20})
+        self.assertEqual(out["verdict"], "REFUTED as stated", out)
+        self.assertIn("throttling", out["reason"])
+
+    def test_missing_imc_is_inconclusive(self):
+        reqs, blocks = synth(2.3, {"Q": 1.0, "ME15": 2.0, "ME4": 1.6, "MC4": 1.15})
+        for b in blocks:
+            b["imc_gbs"] = None
+        out = analyze.verdict(reqs, blocks, n_boot=100)
+        self.assertEqual(out["verdict"], "INCONCLUSIVE", out)
+        self.assertIn("IMC", out["reason"])
+
+    def test_nothing_to_isolate(self):
+        out = self.v(2.3, {"Q": 1.0, "ME15": 2.0, "ME4": 1.05, "MC4": 1.05})
+        self.assertIn("nothing to isolate", out["reason"])
 
     def test_refuted(self):
-        out = self.v(2.3, {"Q": 1.0, "ME15": 2.0, "ME4": 1.9, "MC4": 1.9})
+        out = self.v(2.3, {"Q": 1.0, "ME15": 2.0, "ME4": 1.6, "MC4": 1.55})
         self.assertEqual(out["verdict"], "REFUTED", out)
 
     def test_refuted_as_stated(self):
-        out = self.v(2.3, {"Q": 1.0, "ME15": 2.0, "ME4": 1.65, "MC4": 1.65})
+        out = self.v(2.3, {"Q": 1.0, "ME15": 2.0, "ME4": 1.6, "MC4": 1.39})
         self.assertEqual(out["verdict"], "REFUTED as stated", out)
 
     def test_blind_probe(self):
@@ -58,14 +81,9 @@ class Verdicts(unittest.TestCase):
         self.assertEqual(out["verdict"], "INCONCLUSIVE")
         self.assertIn("positive control", out["reason"])
 
-    def test_starved_hog(self):
-        out = self.v(2.3, {"Q": 1.0, "ME15": 2.0, "ME4": 1.3, "MC4": 1.3},
-                     imc={"Q": 2, "ME15": 40, "ME4": 30, "MC4": 5})
-        self.assertIn("starved", out["reason"])
-
     def test_swap_flip_is_inconclusive(self):
         # Round 2's MC4 block is slow and swap-flagged: with it R > 0.5, without it R ~0.3.
-        reqs, blocks = synth(2.3, {"Q": 1.0, "ME15": 2.0, "ME4": 1.3, "MC4": 1.3}, swap={(2, "MC4"): 9999})
+        reqs, blocks = synth(2.3, {"Q": 1.0, "ME15": 2.0, "ME4": 1.6, "MC4": 1.15}, swap={(2, "MC4"): 9999})
         for r in reqs:
             if r["round"] == 2 and r["arm"] == "MC4":
                 r["latency_s"] *= 2

@@ -1068,6 +1068,23 @@ A MC4 block whose neighbour CPUs are not inside one L2 group is VOID. Guardrails
 returns 32 tokens; the agent pod never restarts. The probe aborts at 18 min of its own wall time
 and marks unrun blocks INCONCLUSIVE.
 
+**Amendment A1 (2026-10-17, after two refuter reviews, before any timed block).** The primary
+metric above compared 4 hog workers (MC4) with 15 (ME15), so it could pass on core count alone.
+A1 replaces it; the table above is kept for the record but no longer decides.
+- Primary: R = I(MC4) / I(ME4). ME4 is now `--stream 4 --cpu 15` on `efficient`, so the same 4
+  workers float over all 15 E-cores; MC4 holds them in one L2 cluster. Only placement differs.
+- Placement is checked per block: the stream workers' CPUs (host `ps -eLo psr`, sampled 8 s into
+  the window) must touch >= 2 L2 groups for ME4, and the neighbour's `Cpus_allowed_list` must sit
+  inside one group for MC4, else the block is VOID. L2 groups come from sysfs, not the 13900T map.
+- The agent must sit off the E-cores (`/sys/devices/cpu_atom/cpus`) or the run aborts.
+- INCONCLUSIVE also when I(ME4) < +10% (nothing to isolate) or any arm lacks an IMC reading.
+  The Q-noise guard uses block medians, not block p95 (the max of 10).
+- SUPPORTED additionally needs the MC4 hog's IMC GB/s (above Q) >= 85% of the ME4 hog's;
+  below that any gain is the hog being throttled, recorded as REFUTED as stated.
+- Prediction (A1): REFUTED (R ~1). P-cores have private L2; L2 placement of the hog
+  partitions none of the shared LLC, ring or IMC. Priors: SUPPORTED 0.10, REFUTED as stated 0.20,
+  REFUTED 0.45, INCONCLUSIVE 0.25.
+
 ## Scope corrections
 
 Limits on what a SUPPORTED verdict may be quoted as saying.

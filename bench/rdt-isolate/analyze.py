@@ -4,13 +4,18 @@
   analyze.py requests.jsonl blocks.jsonl     prints one JSON object
 
 requests.jsonl: client.py lines. blocks.jsonl: one line per block from run.sh
-with "block", "round", "arm", "void", "imc_gbs", "pswpin". Rules (EXPERIMENTS.md,
-H26 pre-registration):
-  I(arm) = p95(arm) / p95(Q) - 1, p95 nearest-rank; R = I(MC4) / I(ME15).
-  INCONCLUSIVE if I(ME15) < 0.20, the Q block-p95 spread is > 25% of its median,
-  the MC4 neighbour's IMC bandwidth (above Q) is < 15% of ME15's, or the verdict
-  flips when swap-flagged blocks (pswpin > 2560 pages) are dropped.
-  SUPPORTED if R <= 0.5, bootstrap P(R <= 0.5) >= 0.8 and 3/3 rounds have R <= 0.5.
+with "block", "round", "arm", "void", "imc_gbs", "pkg_j", "pswpin". Rules
+(EXPERIMENTS.md, H26 pre-registration, amendment A1):
+  I(arm) = p95(arm) / p95(Q) - 1, p95 nearest-rank.
+  Primary R = I(MC4) / I(ME4): the same 4 stream workers, inside one E-core L2
+  cluster (MC4) or spread over all E-cores (ME4), so only placement differs.
+  INCONCLUSIVE if I(ME15) < 0.20 (positive control), I(ME4) < 0.10 (nothing to
+  isolate), an arm has no IMC reading, the Q block-median spread is > 25% of
+  its median, or the verdict flips when swap-flagged blocks (pswpin > 2560
+  pages) are dropped.
+  SUPPORTED if R <= 0.5, bootstrap P(R <= 0.5) >= 0.8, 3/3 rounds R <= 0.5 and
+  the MC4 hog keeps >= 85% of the ME4 hog's IMC bandwidth (else the gain is
+  the hog being throttled, not isolation: REFUTED as stated).
   REFUTED if R >= 0.8, else REFUTED as stated.
 Confidence = P(R <= 0.5) from a bootstrap of requests stratified by block.
 Python 3 standard library only.
@@ -32,18 +37,24 @@ def p95(xs):
     return s[max(0, math.ceil(0.95 * len(s)) - 1)]
 
 
-def ratio(lat):
-    """R and the I per arm from {arm: [latency]}; None where undefined."""
-    q = p95(lat["Q"])
-    inf = {a: p95(lat[a]) / q - 1 for a in ARMS if lat.get(a)}
-    me15 = inf.get("ME15")
-    r = None if not me15 or me15 <= 0 or "MC4" not in inf else inf["MC4"] / me15
+def ratio(lat, stat=p95):
+    """R = I(MC4)/I(ME4) and the I per arm from {arm: [latency]}; None where undefined."""
+    q = stat(lat["Q"])
+    inf = {a: stat(lat[a]) / q - 1 for a in ARMS if lat.get(a)}
+    me4 = inf.get("ME4")
+    r = None if not me4 or me4 <= 0 or "MC4" not in inf else inf["MC4"] / me4
     return r, inf
 
 
 def load(path):
     with open(path) as f:
         return [json.loads(line) for line in f if line.strip()]
+
+
+def per_arm(blocks, bad, key):
+    """{arm: [block value]} over valid blocks that recorded key."""
+    return {a: [b[key] for b in blocks if b["arm"] == a and b["block"] not in bad
+                and b.get(key) is not None] for a in ARMS}
 
 
 def decide(reqs, blocks, n_boot=10000, seed=26, drop_swap=False):
@@ -56,20 +67,21 @@ def decide(reqs, blocks, n_boot=10000, seed=26, drop_swap=False):
         by_block.setdefault((r["round"], r["arm"], r["block"]), []).append(r["latency_s"])
     lat = {a: [x for (_, arm, _), v in by_block.items() if arm == a for x in v] for a in ARMS}
     out = {"n": {a: len(lat[a]) for a in ARMS}, "void_blocks": sorted(bad)}
-    if not lat["Q"] or not lat["ME15"] or not lat["MC4"]:
+    if not all(lat[a] for a in ARMS):
         out["verdict"] = "INCONCLUSIVE"
         out["reason"] = "an arm has no valid requests"
         return out
     r, inf = ratio(lat)
-    out.update(R=r, I=inf, p95={a: p95(lat[a]) for a in ARMS if lat[a]},
-               p50={a: statistics.median(lat[a]) for a in ARMS if lat[a]})
+    out.update(R=r, I=inf, p95={a: p95(lat[a]) for a in ARMS},
+               p50={a: statistics.median(lat[a]) for a in ARMS},
+               I_p50=ratio(lat, statistics.median)[1])
     rounds = {}
     for rd in sorted({k[0] for k in by_block}):
         rl = {a: [x for (rr, arm, _), v in by_block.items() if rr == rd and arm == a for x in v] for a in ARMS}
-        rounds[rd] = ratio(rl)[0] if rl["Q"] and rl["ME15"] and rl["MC4"] else None
+        rounds[rd] = ratio(rl)[0] if all(rl[a] for a in ARMS) else None
     out["R_by_round"] = rounds
-    qblocks = [p95(v) for (_, arm, _), v in by_block.items() if arm == "Q"]
-    out["q_block_p95"] = qblocks
+    qblocks = [statistics.median(v) for (_, arm, _), v in by_block.items() if arm == "Q"]
+    out["q_block_p50"] = qblocks
     rng = random.Random(seed)
     hits = 0
     for _ in range(n_boot):
@@ -80,29 +92,32 @@ def decide(reqs, blocks, n_boot=10000, seed=26, drop_swap=False):
         hits += rb is not None and rb <= 0.5
     conf = hits / n_boot
     out["P_R_le_0.5"] = conf
-    bw = {a: [b["imc_gbs"] for b in blocks if b["arm"] == a and b["block"] not in bad
-              and b.get("imc_gbs") is not None] for a in ARMS}
+    bw = per_arm(blocks, bad, "imc_gbs")
     hog = {a: statistics.mean(bw[a]) - statistics.mean(bw["Q"]) for a in ARMS if bw[a] and bw["Q"]}
     out["neighbour_imc_gbs"] = hog
-    spread = (max(qblocks) - min(qblocks)) / statistics.median(qblocks) if qblocks else 0
+    pj = per_arm(blocks, bad, "pkg_j")
+    out["pkg_j_mean"] = {a: statistics.mean(pj[a]) for a in ARMS if pj[a]}
+    spread = (max(qblocks) - min(qblocks)) / statistics.median(qblocks)
+    throttled = hog.get("ME4", 0) > 0 and hog.get("MC4", 0) < 0.85 * hog["ME4"]
     if inf["ME15"] < 0.20:
         out["verdict"], out["reason"] = "INCONCLUSIVE", "positive control failed: I(ME15) < +20%"
+    elif inf["ME4"] < 0.10:
+        out["verdict"], out["reason"] = "INCONCLUSIVE", "I(ME4) < +10%: nothing to isolate"
+    elif any(not bw[a] for a in ARMS):
+        out["verdict"], out["reason"] = "INCONCLUSIVE", "an arm has no IMC reading: hog bandwidth unproven"
     elif spread > 0.25:
-        out["verdict"], out["reason"] = "INCONCLUSIVE", "Q block-p95 spread > 25% of median"
-    elif "MC4" in hog and "ME15" in hog and hog["ME15"] > 0 and hog["MC4"] < 0.15 * hog["ME15"]:
-        out["verdict"], out["reason"] = "INCONCLUSIVE", "MC4 neighbour starved: < 15% of ME15 IMC bandwidth"
-    elif r is not None and r <= 0.5 and conf >= 0.8 and all(x is not None and x <= 0.5 for x in rounds.values()) \
-            and len(rounds) >= 3:
-        out["verdict"], out["reason"] = "SUPPORTED", "R <= 0.5, P >= 0.8, all rounds agree"
+        out["verdict"], out["reason"] = "INCONCLUSIVE", "Q block-median spread > 25% of median"
+    elif r is not None and r <= 0.5 and conf >= 0.8 and len(rounds) >= 3 \
+            and all(x is not None and x <= 0.5 for x in rounds.values()):
+        if throttled:
+            out["verdict"], out["reason"] = ("REFUTED as stated",
+                                             "MC4 hog < 85% of ME4 IMC bandwidth: throttling, not isolation")
+        else:
+            out["verdict"], out["reason"] = "SUPPORTED", "R <= 0.5, P >= 0.8, all rounds agree, hog not throttled"
     elif r is not None and r >= 0.8:
         out["verdict"], out["reason"] = "REFUTED", "R >= 0.8"
     else:
         out["verdict"], out["reason"] = "REFUTED as stated", "partial effect or low confidence"
-    if "ME4" in inf:
-        me4_mc4 = [p95(v) for (_, arm, _), v in by_block.items() if arm in ("ME4", "MC4")]
-        bspread = (max(me4_mc4) - min(me4_mc4)) / p95(lat["Q"]) if me4_mc4 else 0
-        out["H26b"] = ("L2 topology adds isolation" if inf["ME4"] - inf["MC4"] > bspread
-                       else "core count, not L2 topology")
     return out
 
 
