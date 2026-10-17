@@ -15,6 +15,7 @@ Subcommands (k3d-gpu bench agent <subcommand> ...):
   control   load-only control window (energy baseline for J per success)
   apb       agents-per-box ramp N = 1, 2, 4, 8 on B15-RO, graded
   bfcl      BFCL S100 through the proxy (board or server-fc mode)
+  regrade   apply the current graders to recorded blocks (originals kept)
   report    report.json + report.md from run directories
   tasks     list a task set
 
@@ -25,6 +26,7 @@ import json
 import os
 import platform
 import shlex
+import shutil
 import subprocess
 import sys
 import threading
@@ -405,7 +407,7 @@ def run_block(agent, task_list, arm, level, n, out, budget_s, proxy_log, mcp_url
                "reason": reason, "t_start": t0, "t_end": t1, "duration_s": round(dur, 3),
                "censored": kind == "censored", "response_status": status, "answer": (answer or "")[:2000],
                "error": err, "llm_requests": len(recs), "user_msgs_max": users,
-               "truncated": any(r.get("finish_reason") == "length" for r in recs),
+               "truncated": any(r.get("finish_reason") == "length" for r in recs), "end_state": end,
                "calls": [{k: c.get(k) for k in ("name", "valid", "reason")} for c in calls],
                "first_turn_valid": (any(c.get("valid") for c in recs[0].get("tool_calls") or [])
                                     if recs and t.get("tools") else None)}
@@ -478,6 +480,45 @@ def reset_sidecar(cmd, mcp_url, task, opener=urllib.request.urlopen, tries=60, t
         if i + 1 < tries:
             time.sleep(2)
     raise ResetFailed("MCP server did not return to the seed state after --reset")
+
+
+# ---- regrade -------------------------------------------------------------------------
+
+def regrade(run_dir):
+    """Apply the current graders to a finished block's recorded answers and tool calls.
+
+    The first run keeps its rows in results.raw.jsonl; results.jsonl is rewritten, and a
+    row whose verdict changes carries "regraded": {"from": old reason}. Rows that failed
+    before grading (error, timeout, censored) and mutating rows without a recorded end
+    state keep their verdict. Returns the number of changed rows."""
+    path = os.path.join(run_dir, "results.jsonl")
+    raw = os.path.join(run_dir, "results.raw.jsonl")
+    if not os.path.exists(raw):
+        shutil.copyfile(path, raw)
+    rows = read_jsonl(raw)
+    turns = read_jsonl(os.path.join(run_dir, "turns.jsonl"))
+    by_id = {t["id"]: t for ts in T.TASKSETS.values() for t in ts}
+    changed = 0
+    for r in rows:
+        t = by_id.get(r["task"])
+        if t is None or r["status"] not in ("pass", "fail") or r.get("error"):
+            continue
+        state = r.get("end_state")
+        if t.get("mutating") and state is None:
+            continue
+        recs = [x for x in turns if (x.get("task"), x.get("arm"), x.get("level"), x.get("n"), x.get("step"))
+                == (r["task"], r["arm"], r["level"], r["n"], r.get("step"))
+                and r["t_start"] <= (x.get("ts_send") or 0) <= r["t_end"]]
+        calls = flat_calls(recs)
+        ok, reason = T.grader_for(t)(t, r["answer"], calls, state, evidence=evidence_text(recs))
+        if ok != r["passed"]:
+            changed += 1
+            r["regraded"] = {"from": r["reason"]}
+            r.update(passed=ok, status="pass" if ok else "fail", reason=reason,
+                     strict=ok and bool(calls) and all(c.get("valid") for c in calls))
+    with open(path, "w") as f:
+        f.writelines(json.dumps(r) + "\n" for r in rows)
+    return changed
 
 
 # ---- apb gate ----------------------------------------------------------------------
@@ -1022,6 +1063,12 @@ def cmd_bfcl(a):
     return 0
 
 
+def cmd_regrade(a):
+    for d in a.runs:
+        print(f"{d}: {regrade(d)} row(s) changed (originals in results.raw.jsonl)")
+    return 0
+
+
 def cmd_report(a):
     rep = build_report(a.runs, a.ref)
     os.makedirs(a.out, exist_ok=True)
@@ -1128,6 +1175,10 @@ def parse(argv):
     p.add_argument("--limit", type=int, help="first N ids of S100's run order (H48: 8)")
     p.add_argument("--proxy-url", help="a running proxy (e.g. one shared request cap) instead of --upstream")
     p.set_defaults(func=cmd_bfcl)
+
+    p = sub.add_parser("regrade", help="apply the current graders to recorded blocks")
+    p.add_argument("runs", nargs="+")
+    p.set_defaults(func=cmd_regrade)
 
     p = sub.add_parser("report", help="report.json + report.md")
     p.add_argument("runs", nargs="+")

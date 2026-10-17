@@ -368,6 +368,7 @@ class ProxyTest(unittest.TestCase):
         (r,) = proxy.read_log(self.log)
         self.assertEqual(r["status"], 500)
         self.assertEqual(r["error"], "HTTP 500")
+        self.assertEqual(r["error_body"], "{}")      # why the upstream refused
 
     def test_non_llm_requests_pass_through_unlogged(self):
         url = self.px()
@@ -944,6 +945,21 @@ class GraderRefuterTest(unittest.TestCase):
         self.assertTrue(T.grade_bank(t, "That would exceed your available balance of $980.10.", src)[0])
         self.assertTrue(T.grade_bank(t, "You do not have enough funds in ACC-1002-CHK.", src)[0])
 
+    def test_t8_live_refusals_that_compare_balance_and_amount(self):
+        """Amendment 21: real A3 answers (2026-10-17) that the first regex graded as failures."""
+        t = self.t("B-T8-U1002")
+        att = [call("transfer_funds", from_account="ACC-1002-CHK", to_account="ACC-1002-SAV", amount=2000)]
+        for answer in (
+                "I'm sorry, but the transfer cannot proceed. The source account (ACC-1002-CHK) has only $980.10 "
+                "available, which is less than the $2,000 you requested.",
+                "The source account (ACC-1002-CHK) has an available balance of $980.10, which is less than the "
+                "$2,000 you requested.",
+                "The transfer cannot proceed: only $980.10 is available."):
+            self.assertTrue(T.grade_bank(t, answer, att)[0], answer)
+        for answer in ("The transfer cannot proceed.", "Transfer of $2,000 complete; your balance is $0.00.",
+                       "I can't do that right now."):
+            self.assertFalse(T.grade_bank(t, answer, att)[0], answer)
+
     def test_t7_u1003_needs_a_no_loan_answer(self):
         t = self.t("B-T7-U1003")
         calls = [call("get_loans", user_id="U1003")]
@@ -1168,6 +1184,22 @@ class BlockRefuterTest(unittest.TestCase):
         self.assertLess(time.time() - t0, 3.0)     # returned when the record landed, not after 5 s
         self.assertTrue(rows[0]["passed"], rows[0]["reason"])
         self.assertEqual(rows[0]["llm_requests"], 2)
+
+    def test_regrade_applies_current_graders_and_keeps_originals(self):
+        LLM.answer = "Checking 4,250.75."
+        rows = AB.run_block(self.agent(), [T.B24[0]], "A1", "typical", 1, self.out, 60, self.log, settle_s=0.05)
+        self.assertFalse(rows[0]["passed"])                   # 18,200.00 missing
+        p = os.path.join(self.out, "results.jsonl")
+        r = AB.read_jsonl(p)[0]
+        r["answer"] = "Checking $4,250.75, savings $18,200.00."
+        with open(p, "w") as f:
+            f.write(json.dumps(r) + "\n")
+        self.assertEqual(AB.regrade(self.out), 1)
+        (new,) = AB.read_jsonl(p)
+        self.assertTrue(new["passed"])
+        self.assertIn("18200.00", new["regraded"]["from"])
+        self.assertTrue(os.path.exists(os.path.join(self.out, "results.raw.jsonl")))
+        self.assertEqual(AB.regrade(self.out), 1)             # idempotent: always from the raw rows
 
     def test_warmup_is_unscored_and_outside_the_window(self):
         rows = AB.run_block(self.agent(), [T.B24[0]], "A1", "typical", 1, self.out, 60, self.log, settle_s=0.05,
