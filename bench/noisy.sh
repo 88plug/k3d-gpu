@@ -2,15 +2,20 @@
 # noisy.sh — a CPU-burning noisy-neighbour pod (stress-ng) for interference tests.
 #
 # Usage:
-#   bench/noisy.sh start [--cores performance|efficient|none] [--workers N] [--cpu Q]
+#   bench/noisy.sh start [--cores performance|efficient|ecluster|none] [--workers N] [--cpu Q]
+#                        [--stressor cpu|stream] [--stream-bytes SIZE]
 #                        [--name NAME] [--namespace NS] [--dry-run]
 #   bench/noisy.sh stop  [--name NAME] [--namespace NS]
 #   bench/noisy.sh status [--name NAME] [--namespace NS]
 #
-#   --cores    performance / efficient label the pod k3d-gpu.io/cores=<value>, so
-#              on a hybrid node the NRI balloons policy pins it to P- or E-cores;
-#              none (default) leaves it unlabelled, in the shared balloon
-#   --workers  stress-ng --cpu workers (default 4)
+#   --cores    performance / efficient / ecluster label the pod k3d-gpu.io/cores=<value>,
+#              so on a hybrid node the NRI balloons policy pins it to P-cores, E-cores
+#              or the E-cores of one L2 cluster; none (default) leaves it unlabelled
+#   --stressor cpu (default, stress-ng --cpu) or stream (stress-ng --stream, DRAM bandwidth)
+#   --stream-bytes  stream: --stream-l3-size, the total buffer size stress-ng splits
+#              across the workers (default 128m, so every worker count has the same
+#              DRAM footprint: 3 buffers of 128m in total)
+#   --workers  stress-ng workers (default 4)
 #   --cpu      CPU request = limit (default: the worker count); it sizes the
 #              balloon, so --workers above --cpu oversubscribe that balloon
 #   --dry-run  print the pod manifest instead of applying it
@@ -30,27 +35,33 @@ kc() { kubectl ${KARGS[@]+"${KARGS[@]}"} "$@"; }
 
 ACTION=${1:-}
 [ $# -eq 0 ] || shift
-CORES=none WORKERS=4 CPU="" NAME=noisy-neighbour NS=default DRY=0
+CORES=none WORKERS=4 CPU="" NAME=noisy-neighbour NS=default DRY=0 STRESSOR=cpu STREAM_BYTES=128m
 while [ $# -gt 0 ]; do
     case "$1" in
         --cores)     CORES=${2:?}; shift 2 ;;
         --workers)   WORKERS=${2:?}; shift 2 ;;
         --cpu)       CPU=${2:?}; shift 2 ;;
+        --stressor)  STRESSOR=${2:?}; shift 2 ;;
+        --stream-bytes) STREAM_BYTES=${2:?}; shift 2 ;;
         --name)      NAME=${2:?}; shift 2 ;;
         --namespace) NS=${2:?}; shift 2 ;;
         --dry-run)   DRY=1; shift ;;
         *) die "unknown option $1" ;;
     esac
 done
-case "${CORES}" in performance|efficient|none) ;; *) die "--cores must be performance, efficient or none" ;; esac
+case "${CORES}" in performance|efficient|ecluster|none) ;; *) die "--cores must be performance, efficient, ecluster or none" ;; esac
+case "${STRESSOR}" in cpu|stream) ;; *) die "--stressor must be cpu or stream" ;; esac
+[[ "${STREAM_BYTES}" =~ ^[1-9][0-9]*[kmg]?$ ]] || die "--stream-bytes must be a size (128m, 1g)"
 [[ "${WORKERS}" =~ ^[1-9][0-9]*$ ]] || die "--workers must be a positive integer"
 CPU=${CPU:-${WORKERS}}
 [[ "${CPU}" =~ ^[0-9]+(\.[0-9]+|m)?$ ]] || die "--cpu must be a CPU quantity (4, 2.5, 500m)"
 [[ "${NAME}" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] || die "--name must be a DNS label"
 
 manifest() {
-    local labels="\"app.kubernetes.io/name\": \"k3d-gpu-noisy\""
+    local args="--cpu ${WORKERS}" mem=64Mi labels="\"app.kubernetes.io/name\": \"k3d-gpu-noisy\""
     [ "${CORES}" = none ] || labels+=", \"k3d-gpu.io/cores\": \"${CORES}\""
+    # stream: 3 buffers of --stream-l3-size in total plus index arrays; 1Gi covers 128m.
+    [ "${STRESSOR}" = cpu ] || { args="--stream ${WORKERS} --stream-l3-size ${STREAM_BYTES}"; mem=1Gi; }
     # Logs the CPUs the pod may use first, then burns them until deleted.
     cat <<EOF
 {
@@ -64,10 +75,10 @@ manifest() {
       "name": "stress-ng",
       "image": "${NOISY_IMAGE}",
       "command": ["/bin/sh", "-c",
-        "grep Cpus_allowed_list /proc/self/status; exec stress-ng --cpu ${WORKERS} --timeout 0 --metrics-brief"],
+        "grep Cpus_allowed_list /proc/self/status; exec stress-ng ${args} --timeout 0 --metrics-brief"],
       "resources": {
-        "requests": {"cpu": "${CPU}", "memory": "64Mi"},
-        "limits":   {"cpu": "${CPU}", "memory": "64Mi"}
+        "requests": {"cpu": "${CPU}", "memory": "${mem}"},
+        "limits":   {"cpu": "${CPU}", "memory": "${mem}"}
       }
     }]
   }
@@ -87,7 +98,7 @@ start() {
         sleep 2
     done
     [ "${phase}" = Running ] || die "pod ${NAME} is ${phase:-not created} (kubectl -n ${NS} describe pod ${NAME})"
-    echo "noisy: ${NAME} running, cores=${CORES} workers=${WORKERS} cpu=${CPU}; ${line:-Cpus_allowed_list not logged yet}"
+    echo "noisy: ${NAME} running, cores=${CORES} stressor=${STRESSOR} workers=${WORKERS} cpu=${CPU}; ${line:-Cpus_allowed_list not logged yet}"
 }
 
 stop() {
@@ -103,5 +114,5 @@ case "${ACTION}" in
     start)  start ;;
     stop)   stop ;;
     status) status ;;
-    *) sed -n '2,19p' "$0"; exit 2 ;;
+    *) sed -n '2,24p' "$0"; exit 2 ;;
 esac

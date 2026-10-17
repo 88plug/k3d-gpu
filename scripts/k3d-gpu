@@ -62,7 +62,7 @@
 
 set -euo pipefail
 
-VERSION="0.1.33"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.34"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 # The node image defaults to the tag built from this launcher's own release
 # (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
@@ -1476,6 +1476,41 @@ doctor_numa() {
         done
         lines+="  info: RDT allocation (rdt_a:${rdt}) — resctrl classes are available but left off: the balloons policy ships control.rdt.enable: false because enabling it rewrites the host's /sys/fs/resctrl. To opt in, mount resctrl on the host (mount -t resctrl resctrl /sys/fs/resctrl) and set control.rdt.enable: true in nri-balloons.yml; usePodQoSAsDefaultClass then gives BestEffort/Burstable/Guaranteed pods 33%/66%/100% of the L3"$'\n'
     fi
+    doctor_isolation "${flags#*:}"
+}
+
+# Noisy-neighbour isolation for agent pods, picked from the CPU's own flags
+# (never from the SKU name): rdt-mba (CAT + MBA: cache share and DRAM bandwidth),
+# rdt-cat (CAT only: cache share), cpu-cap (CPU limit only). Holding a neighbour
+# to one E-core L2 cluster is not a mode: H26 tests it (EXPERIMENTS.md).
+isolation_mode() {
+    local flags=" $1 "
+    if [[ "${flags}" == *" rdt_a "* && "${flags}" == *" mba "* ]]; then echo rdt-mba
+    elif [[ "${flags}" == *" rdt_a "* ]] && [[ "${flags}" == *" cat_l3 "* || "${flags}" == *" cat_l2 "* ]]; then echo rdt-cat
+    else echo cpu-cap
+    fi
+}
+
+# One doctor line naming the isolation mode. Host changes are printed with their
+# exact apply and revert, never made; the RDT opt-in itself is the RDT line above.
+doctor_isolation() {
+    local mode mounted=no
+    mode=$(isolation_mode "$1")
+    [ ! -d "${SYSROOT}/sys/fs/resctrl/info" ] || mounted=yes
+    case "${mode}" in
+        rdt-mba)
+            lines+="  info: noisy-neighbour isolation: rdt-mba — CAT + MBA can cap a neighbour's cache share and DRAM bandwidth through the RDT opt-in above (resctrl mounted: ${mounted}); the shipped classes set cache shares only, so add mbAllocation: {all: [\"50%\"]} to the BestEffort class for bandwidth; the classes run inside the NRI balloons policy, which up deploys on hybrid or multi-NUMA hosts only"$'\n' ;;
+        rdt-cat)
+            lines+="  info: noisy-neighbour isolation: rdt-cat — CAT can cap a neighbour's cache share through the RDT opt-in above (resctrl mounted: ${mounted}); no MBA, so DRAM bandwidth stays shared; the classes run inside the NRI balloons policy, which up deploys on hybrid or multi-NUMA hosts only"$'\n' ;;
+        *)
+            if has_hybrid && [ -n "$(ecore_clusters)" ]; then
+                lines+="  info: noisy-neighbour isolation: cpu-cap — no rdt_a flag, so cache and DRAM bandwidth stay shared; give a bandwidth-heavy neighbour a CPU limit. Holding it to one E-core L2 cluster (k3d-gpu.io/cores=ecluster) is not recommended: H26 measures it against the same workers spread over the E-cores (EXPERIMENTS.md H26)"$'\n'
+            elif has_hybrid; then
+                lines+="  info: noisy-neighbour isolation: cpu-cap — no rdt_a flag; E-core L2 clusters are not readable (no cpu*/cache in sysfs); give a neighbour a CPU limit. Cache and DRAM bandwidth stay shared"$'\n'
+            else
+                lines+="  info: noisy-neighbour isolation: cpu-cap — no rdt_a flag and no E-cores; give a neighbour a CPU limit. Cache and DRAM bandwidth stay shared"$'\n'
+            fi ;;
+    esac
 }
 
 # Xeon built-in accelerators. `up` deploys DSA/IAA/QAT plugins once the host
