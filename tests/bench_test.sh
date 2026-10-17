@@ -142,7 +142,22 @@ assert s["ok"] and s["output_tokens"] is None and s["tokens_per_s"] is None and 
 EOF
 }
 
+load_unique_prompts() {
+    python3 -B - "${ROOT}/bench" <<'EOF'
+import sys, types
+sys.path.insert(0, sys.argv[1])
+import llm_load as L
+plain = types.SimpleNamespace(unique_prompts=False, prompt="p", run_id="r")
+assert {L.prompt_for(plain) for _ in range(3)} == {"p"}
+uniq = types.SimpleNamespace(unique_prompts=True, prompt="p", run_id="ab12")
+got = [L.prompt_for(uniq) for _ in range(50)]
+assert len(set(got)) == 50, got
+assert all(g.startswith("[request ab12-") and g.endswith("] p") for g in got), got
+EOF
+}
+
 stub --tokens 16 --ttft 0.05 --itl 0.01
+check "llm_load: --unique-prompts gives every request its own prefix" load_unique_prompts
 check "llm_load: OVMS /v3 stream, usage tokens, TTFT after the delay" load_ovms_v3
 check "llm_load: concurrent phase overlaps requests" load_concurrent
 check "llm_load: max_tokens is sent" load_max_tokens

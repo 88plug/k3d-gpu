@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 # A new push to a PR supersedes its older run; main runs always finish.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.sha }}
@@ -145,6 +148,26 @@ jobs:
       - run: tests/bench_test.sh
       - run: tests/autoquant_test.sh
       - run: tests/bench_vs_test.sh
+
+  tune-tests:
+    name: k3d-gpu tune tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      # TUNE_E2E_FULL: two whole tunes against tests/fake_ovms.py, one where no
+      # config changes the speed (must keep the default) and one with a real winner.
+      - run: tests/tune_test.sh
+        env:
+          TUNE_E2E_FULL: "1"
+
+  capacity-tests:
+    name: k3d-gpu capacity tests (stub server)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - run: python3 bench/apb/test_capacity.py
+      - run: python3 bench/apb/test_apb.py
+      - run: python3 bench/test_agent_trace.py
 
   mcp-tests:
     name: MCP server tests

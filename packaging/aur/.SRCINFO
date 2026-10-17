@@ -10,7 +10,7 @@ pkgbase = k3d-gpu
 	optdepends = k3d-git: k3d CLI to manage clusters
 	optdepends = kubectl: query and apply manifests
 	optdepends = nvidia-container-toolkit: GPU container runtime for Docker
-	optdepends = python: k3d-gpu-mcp (the MCP server for AI agents), k3d-gpu facts, plan and audit
+	optdepends = python: k3d-gpu-mcp (the MCP server for AI agents), k3d-gpu facts, plan, audit, tune and capacity
 	source = git+https://github.com/88plug/k3d-gpu.git#tag=aur-v0.1.40
 	sha256sums = SKIP
 

@@ -56,6 +56,20 @@ check "PKGBUILD installs console/*.py and console/*.json" \
     grep -Eq 'for f in console/\*\.py console/\*\.json; do' "${PKGBUILD}"
 check "PKGBUILD installs console files to /usr/share/k3d-gpu/console/" \
     grep -Fq 'install -Dm644 "$f" "$pkgdir/usr/share/k3d-gpu/$f"' "${PKGBUILD}"
+for f in llm_load.py energy.sh; do
+    check "nfpm ships bench/${f} (k3d-gpu tune)" \
+        grep -Pzq "src: bench/${f//./\\.}\n +dst: /usr/share/k3d-gpu/bench/${f//./\\.}\n" "${NFPM}"
+    check "PKGBUILD installs bench/${f}" grep -qE "install -Dm755 .*bench/${f//./\\.}( |$)" "${PKGBUILD}"
+    check "nix installs bench/${f}" grep -qE "install -Dm755 .*bench/${f//./\\.}( |$)" "${NIXPKG}"
+done
+for f in agent_trace.py agent_trace_gen.py apb/apb.py apb/capacity.py; do
+    check "nfpm ships bench/${f} (k3d-gpu capacity)" \
+        grep -Pzq "src: bench/${f//./\\.}\n +dst: /usr/share/k3d-gpu/bench/${f//./\\.}\n" "${NFPM}"
+done
+check "PKGBUILD installs bench/agent_trace*.py and apb/{apb,capacity}.py" \
+    grep -qF 'for f in agent_trace.py agent_trace_gen.py apb/apb.py apb/capacity.py; do' "${PKGBUILD}"
+check "nix installs bench/apb/apb.py and capacity.py" \
+    grep -qF 'install -Dm644 -t "$out/share/k3d-gpu/bench/apb" bench/apb/apb.py bench/apb/capacity.py' "${NIXPKG}"
 check "nfpm ships images.lock to /usr/share/k3d-gpu/" \
     grep -Pzq 'src: images\.lock\n +dst: /usr/share/k3d-gpu/images\.lock\n' "${NFPM}"
 check "PKGBUILD installs images.lock" \

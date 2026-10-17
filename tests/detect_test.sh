@@ -4090,6 +4090,37 @@ else
     PASS=$((PASS + 1)); echo "ok   every agent-sandbox image is pinned by digest"
 fi
 
+# capacity: dispatch and locating bench/apb/capacity.py (the ramp itself is
+# tested by bench/apb/test_capacity.py).
+# says <name> <want rc: 0|N> <ERE> <cmd...>: output must match and rc must equal want.
+says() {
+    local name=$1 want_rc=$2 re=$3 out rc
+    shift 3
+    out=$("$@" 2>&1)
+    rc=$?
+    if [ "${rc}" -eq "${want_rc}" ] && grep -E -- "${re}" <<< "${out}" >/dev/null; then
+        PASS=$((PASS + 1)); echo "ok   ${name}"
+    else
+        FAILS=$((FAILS + 1)); echo "FAIL ${name} (rc=${rc}, want ${want_rc}, /${re}/)"
+        sed 's/^/  | /' <<< "${out}"
+    fi
+}
+REPO=$(cd "$(dirname "${K3D_GPU}")/.." && pwd)
+says "help lists capacity" 0 '^  capacity \[--slo 10\]' bash "${K3D_GPU}" help
+says "capacity --help comes from the repo's bench/apb/capacity.py" 0 'Agents per box at a p95' \
+    bash "${K3D_GPU}" capacity --help
+says "capacity passes its arguments through (--url needs --model)" 2 '--url needs --model' \
+    bash "${K3D_GPU}" capacity --url http://127.0.0.1:1/v1/chat/completions
+SOLO="${WORK}/solo"
+mkdir -p "${SOLO}/bin" "${SOLO}/share/bench/apb"
+cp "${K3D_GPU}" "${SOLO}/bin/k3d-gpu"
+says "capacity outside a checkout with no packaged copy says what is missing" 1 'capacity.py not found' \
+    env K3D_GPU_SHARE="${SOLO}/none" bash "${SOLO}/bin/k3d-gpu" capacity --help
+cp "${REPO}/bench/agent_trace.py" "${REPO}/bench/agent_trace_gen.py" "${SOLO}/share/bench/"
+cp "${REPO}/bench/apb/apb.py" "${REPO}/bench/apb/capacity.py" "${SOLO}/share/bench/apb/"
+says "capacity runs from the packaged copy under K3D_GPU_SHARE/bench" 0 'Agents per box at a p95' \
+    env K3D_GPU_SHARE="${SOLO}/share" bash "${SOLO}/bin/k3d-gpu" capacity --help
+
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]
