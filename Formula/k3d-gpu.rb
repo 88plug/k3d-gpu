@@ -14,6 +14,8 @@ class K3dGpu < Formula
   def install
     libexec.install "scripts/k3d-gpu"
     pkgshare.install Dir["share/*.yml", "share/telemetry"]
+    # Dir[] so a release tarball cut before bench/ shipped still installs.
+    (pkgshare/"bench").install Dir["bench/vs.py", "bench/llm_load.py", "bench/competitors.lock"]
     # The launcher reads its manifests from K3D_GPU_SHARE (default /usr/share/k3d-gpu).
     (bin/"k3d-gpu").write_env_script libexec/"k3d-gpu", K3D_GPU_SHARE: "${K3D_GPU_SHARE:-#{pkgshare}}"
   end

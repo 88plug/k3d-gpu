@@ -50,6 +50,18 @@ contents:
     dst: /usr/share/k3d-gpu/images.lock
     file_info:
       mode: 0644
+  - src: bench/vs.py
+    dst: /usr/share/k3d-gpu/bench/vs.py
+    file_info:
+      mode: 0755
+  - src: bench/llm_load.py
+    dst: /usr/share/k3d-gpu/bench/llm_load.py
+    file_info:
+      mode: 0755
+  - src: bench/competitors.lock
+    dst: /usr/share/k3d-gpu/bench/competitors.lock
+    file_info:
+      mode: 0644
   - src: README.md
     dst: /usr/share/doc/k3d-gpu/README.md
     file_info:
@@ -81,6 +93,11 @@ contents:
     file_info:
       mode: 0755
   - dst: /usr/share/k3d-gpu/console
+    type: dir
+    packager: rpm
+    file_info:
+      mode: 0755
+  - dst: /usr/share/k3d-gpu/bench
     type: dir
     packager: rpm
     file_info:

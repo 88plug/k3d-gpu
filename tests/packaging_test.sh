@@ -58,6 +58,15 @@ check "nfpm ships images.lock to /usr/share/k3d-gpu/" \
 check "PKGBUILD installs images.lock" \
     grep -qF 'install -Dm644 images.lock "$pkgdir/usr/share/k3d-gpu/images.lock"' "${PKGBUILD}"
 check "nix installs images.lock" grep -qF 'install -Dm644 images.lock "$out/share/k3d-gpu/images.lock"' "${NIXPKG}"
+# 'k3d-gpu bench' reads vs.py, llm_load.py and competitors.lock from ${SHARE_DIR}/bench.
+for f in vs.py llm_load.py competitors.lock; do
+    check "nfpm ships bench/${f}" grep -Pzq "src: bench/${f//./\\.}\n +dst: /usr/share/k3d-gpu/bench/${f//./\\.}\n" "${NFPM}"
+    check "PKGBUILD installs bench/${f}" grep -qE "install .*bench/${f//./\\.}( |$)" "${PKGBUILD}"
+    check "nix installs bench/${f}" grep -qE "install .*bench/${f//./\\.}( |$)" "${NIXPKG}"
+    check "nix source includes bench/${f}" grep -qF "(root + \"/bench/${f}\")" "${NIXPKG}"
+    check "formula installs bench/${f}" grep -qF "\"bench/${f}\"" "${FORMULA}"
+    check "packaging/check.sh hashes bench/${f}" grep -qE "for f in vs.py llm_load.py competitors.lock" "${ROOT}/packaging/check.sh"
+done
 check "nix installs console/*.py and console/*.json" \
     grep -qF 'install -Dm644 -t "$out/share/k3d-gpu/console" console/*.py console/*.json' "${NIXPKG}"
 check "formula points K3D_GPU_SHARE at pkgshare" grep -qF 'K3D_GPU_SHARE: "${K3D_GPU_SHARE:-#{pkgshare}}"' "${FORMULA}"

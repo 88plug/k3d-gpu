@@ -43,6 +43,8 @@ def make_handler(opts):
                 self.send_error(400, "stub only streams")
                 return
             n = min(opts.tokens, req.get("max_tokens") or opts.tokens)
+            if opts.eos_at:
+                n = min(n, opts.eos_at)
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             if not opts.close:
@@ -55,7 +57,8 @@ def make_handler(opts):
                 if i:
                     time.sleep(opts.itl)
                 fin = "length" if i == n - 1 else None
-                self.send_chunk(json.dumps({**base, "choices": [{"index": 0, "delta": {"content": f"tok{i} "}, "finish_reason": fin}]}))
+                key = "reasoning" if i < opts.reasoning else "content"
+                self.send_chunk(json.dumps({**base, "choices": [{"index": 0, "delta": {key: f"tok{i} "}, "finish_reason": fin}]}))
             if (req.get("stream_options") or {}).get("include_usage") and not opts.no_usage:
                 self.send_chunk(json.dumps({**base, "choices": [], "usage": {"prompt_tokens": 7, "completion_tokens": n, "total_tokens": 7 + n}}))
             self.send_chunk("[DONE]")
@@ -73,6 +76,8 @@ def main():
     p.add_argument("--itl", type=float, default=0.01)
     p.add_argument("--no-usage", action="store_true")
     p.add_argument("--close", action="store_true")
+    p.add_argument("--reasoning", type=int, default=0, help="first N tokens in delta.reasoning (Ollama v0.40.5 thinking)")
+    p.add_argument("--eos-at", type=int, default=0, help="stop after N tokens whatever max_tokens/ignore_eos ask")
     p.add_argument("--prefix", default="/v1,/v3", help="API roots served, comma list")
     opts = p.parse_args()
     srv = http.server.ThreadingHTTPServer(("127.0.0.1", opts.port), make_handler(opts))
