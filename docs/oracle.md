@@ -17,7 +17,7 @@ upload and no default-on prompt. A bundle leaves the box only when you run all
 three of these:
 
 ```bash
-k3d-gpu capacity                 # a finished agents-per-box run (or the H6-style single-stream files)
+k3d-gpu capacity                 # a finished agents-per-box run
 k3d-gpu share --dry-run          # build, validate and print the exact payload; write and send nothing
 k3d-gpu share --submit           # same, then a typed y/yes at a terminal opens a pull request
 ```
@@ -75,30 +75,44 @@ recomputed from the raw samples.
 | Rule | Check |
 |---|---|
 | V1 | schema (closed objects, enums, patterns) and size |
-| V2 | content hash and comparison key; no duplicates |
-| V3 | no identifier-shaped string, no private-registry image |
+| V2 | content hash and comparison key; a hash already in `--known DIR` is a duplicate (in `data/oracle/` the file name is the hash, so a second copy is the same path) |
+| V3 | no identifier-shaped string, no private-registry image; locally, none of this machine's identifiers as a whole token (a plain word found only in the CPU brand string, such as the login `core` in `Core(TM)`, quarantines for review instead) |
 | V4 | the server image is the one that release tag pins |
 | V5 | p95, verdict and agents per box recomputed from the samples |
 | V6 | Little's law between offered and observed concurrency |
 | V7 | throughput below the ceiling the trace's tool waits allow |
-| V8 | single-stream decode below the memory-bandwidth roofline |
+| V8 | single-stream decode below the memory-bandwidth roofline when the bundle carries memory channels, MT/s and weight bytes (`k3d-gpu share` does not record them yet, so for its bundles V8 falls back to a flat decode ceiling) |
 | V9 | energy: J per turn equals power x time / turns |
 | V10 | quiet box at start; throttling and drift are tagged |
-| V11 | p95 is monotone in the agent count |
+| V11 | p95 at 2N is not under half of p95 at N (a spliced-run sanity check) |
 | V12 | an A/B arm counts toward an uplift only with its pair |
 
-A maintainer merge is the final gate. After a merge, the maintainer runs
-`python3 oracle/leaderboard.py` and commits `docs/leaderboard.{md,json}`; CI
-(`leaderboard.py --check`) fails until they match the committed bundles.
+A maintainer merge is the final gate. A data pull request does not touch the
+leaderboard: `leaderboard.py --check` rebuilds the board from the bundles
+`docs/leaderboard.json` lists as its `inputs`, and reports a new
+`data/oracle/` file as pending without failing. After a merge, the maintainer
+runs `python3 oracle/leaderboard.py` and commits `docs/leaderboard.{md,json}`,
+which adds the bundle to the inputs.
+
+If `--submit` is interrupted, run the same command again. The branch name and
+file path come from the bundle's hash, so it reuses the branch and file it
+already created and reports the pull request if one is open.
 
 ## Leaderboard rules
 
 - **Measured** columns (agents per box, decode tok/s, tok/s/W) come only from
   bundles that pass V1-V12. **Predicted** columns (the V8 bandwidth roofline)
-  are labelled as such and never mixed into a measured column.
-- tok/s/W is output tokens per package joule at the binding agent count, from
-  the step's samples and its J per turn. It is `-` when the run recorded no
-  energy; the two H6 seed runs recorded none.
+  are labelled as such and never mixed into a measured column. The roofline
+  column is not computed yet for bundles `k3d-gpu share` builds (it does not
+  record memory channels, MT/s or weight bytes), so it shows `-` there.
+- tok/s/W is output tokens per package joule at the agents-per-box step (the
+  largest agent count that met the SLO), from that step's samples and its J per
+  turn. It is `-` when the bundle carries no per-step energy. The two H6 seed
+  bundles carry none because the per-request raw files they are built from have
+  no per-step J per turn; the H6 run itself measured RAPL package energy
+  ([ledger:H2] reports its J per token).
+- The SKU is the CPU plus the device the engine ran on (the iGPU for `igpu`, the
+  NVIDIA card for `nvidia`); other devices in the box are not in the label.
 - Rows are sorted by SKU, not ranked. Each row links to its bundle and, for
   maintainer runs, to its ledger row.
 - A tier says how many independent submitters agree: provisional (one),
@@ -110,5 +124,6 @@ A maintainer merge is the final gate. After a merge, the maintainer runs
 ```bash
 python3 oracle/test_oracle.py          # schema, projection goldens per fixture, each rule, matrix, share
 FUZZ_N=100 python3 oracle/test_fuzz.py # scrubber and validator property fuzz (FUZZ_SEED replays)
+python3 oracle/test_adversarial.py     # first-time users: N100, no GPU, WSL2, generic names, interrupted submit
 python3 oracle/leaderboard.py --check  # the committed leaderboard is the generated one
 ```

@@ -1,7 +1,14 @@
 # Moat design: capacity oracle and Intel Advantage profile
 
-Status: **MVP built** on branch `claude/capacity-oracle` (sections 2-4 and the
-H6 seed; "Build status" at the end lists what differs from this design).
+Status: **MVP built** (sections 2-4 and the H6 seed; "Build status" at the end
+lists what differs from this design). **The submission path that shipped is
+not the one designed in sections 1, 2 and 4.** `k3d-gpu share --submit` opens a
+pull request on `88plug/k3d-gpu` adding `data/oracle/<content_sha256>.json`,
+and the `oracle` CI job validates it; the user guide is
+[docs/oracle.md](oracle.md). The GitHub-issue submission, the
+`88plug/k3d-gpu-oracle` data repo, its ingest workflow and the build
+attestation below are superseded future design, kept for the reasoning; none
+of them exists.
 Nothing here is a new measurement. Every number
 that appears below is either backed on its own line (ledger row, provenance row
 or primary-source URL) or sits in a code block as a formula or an example shape.
@@ -361,7 +368,7 @@ J/turn.
 
 | id | Families | Detection (code on `origin/main`) | Applied | Uplift evidence today | A/B the oracle runs |
 |---|---|---|---|---|---|
-| `pe_pinning` | ADL, RPL, MTL, ARL, LNL, PTL (hybrid) | `has_hybrid`/`hybrid_cpus` read the `cpu_core`/`cpu_atom` PMUs; label `k3d-gpu.io/hybrid-cpu=true` | auto: `share/nri-balloons.yml`; `agent_manifest` labels the agent `k3d-gpu.io/cores: performance` | none quotable; H3 is PENDING [ledger:H3]. A preliminary run on `claude/prefill-guard` saw decode mostly isolated and a prefill power-coupling residual, and it backs no claim | H3 arms: pinned quiet, pinned plus E-core neighbour, unpinned. Record TTFT/TPOT p95, `Cpus_allowed_list` and the throttle-count delta |
+| `pe_pinning` | ADL, RPL, MTL, ARL, LNL, PTL (hybrid) | `has_hybrid`/`hybrid_cpus` read the `cpu_core`/`cpu_atom` PMUs; label `k3d-gpu.io/hybrid-cpu=true` | auto: `share/nri-balloons.yml`; `agent_manifest` labels the agent `k3d-gpu.io/cores: performance` | none quotable; H3 is REFUTED [ledger:H3] (decode held, prefill did not). A preliminary run on `claude/prefill-guard` saw decode mostly isolated and a prefill power-coupling residual, and it backs no claim | H3 arms: pinned quiet, pinned plus E-core neighbour, unpinned. Record TTFT/TPOT p95, `Cpus_allowed_list` and the throttle-count delta |
 | `prefill_guard` | hybrid | as above | auto, once merged (branch `claude/prefill-guard`) | none | guard on/off with an E-core neighbour; TTFT p95 and APB |
 | `xmx_gate` | XMX: ARL-H, LNL, BMG, PTL, WCL, NVL. No XMX: ADL, RPL, MTL, ARL-S/U | `gpu_xmx` (Mesa `has_systolic`) -> `intel_gpu_labels` emits `gpu.intel.com/xmx` | auto: `agent_device` takes the GPU only on an XMX node | non-XMX side measured: on the UHD 770 the P-cores win decode and prefill [ledger:H6] | H6 protocol on an XMX box: GPU/CPU decode and TTFT ratios, CPU-s/s freed, J/turn; plus an `offload` arm (model on a non-XMX iGPU, tools on the freed CPU) |
 | `amx` | Xeon SPR, EMR, GNR, Xeon W (not SRF, not client) | `amx_flags` -> `amx_labels` -> `feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true` | auto: `agent_manifest` adds an AMXTILE nodeSelector | cited for prefill only, not decode (https://lenovopress.lenovo.com/lp2167); none measured | `ONEDNN_MAX_CPU_ISA=AVX512_CORE_BF16` vs default. **Unverified** whether the OpenVINO CPU plugin honours it; confirm via oneDNN verbose ISA, or use host `clearcpuid` |
@@ -409,16 +416,18 @@ https://docs.brew.sh/Bottles).
 
 | Seed | Kind | Content | Status |
 |---|---|---|---|
-| `oracle/seed/maintainer-i9-13900T-h6.json` | `single_stream` | Two bundles, CPU (P-core balloon) and GPU (UHD 770): decode and TTFT per-request samples from the H6 run, OVMS 2026.4.1 digest `sha256:a928903f...`, Qwen3-4B int4 at revision `b467368d`, weights sha256 `074214fa...`. `provenance.source = maintainer-lab`. The medians are cross-checked against the H6 table [ledger:H6] | buildable now from the H6 raw per-request files, which must be committed with the seed |
-| H1 (EAT on a non-Xeon host) | none | functional, not a capacity number | PENDING [ledger:H1]; no bundle until it runs |
-| H2 (iGPU vs tuned CPU, J/token) | `single_stream` with energy | on the measured host this is superseded by H6 for decode and prefill; the energy arm is still unmeasured | PENDING [ledger:H2] |
-| H3 (P/E isolation) | `capacity` A/B, lever `pe_pinning` | the first lever pair | PENDING [ledger:H3] |
-| H4 (auto device = best device) | `single_stream` sweep | records the `auto` choice next to each forced device | PENDING [ledger:H4] |
+| `oracle/seed/maintainer-i9-13900T-h6-{cpu,gpu}.json` | `single_stream` | Two bundles, CPU (P-core balloon) and GPU (UHD 770): decode and TTFT per-request samples from the H6 run, OVMS 2026.4.1 digest `sha256:a928903f...`, Qwen3-4B int4 at revision `b467368d`, weights sha256 `074214fa...`. `provenance.source = maintainer-lab`. The medians are cross-checked against the H6 table [ledger:H6] | built by `oracle/seed/build.py` from the H6 raw per-request files under `oracle/raw/h6/` |
+| H1 (EAT on a non-Xeon host) | none | functional, not a capacity number | INCONCLUSIVE [ledger:H1]; no bundle (not a capacity number) |
+| H2 (iGPU vs tuned CPU, J/token) | `single_stream` with energy | same campaign as H6; the ledger row reports decode, prefill and package J/token for both arms. The seed bundles carry no energy because the per-request raw files have no per-step J | REFUTED [ledger:H2]; no energy bundle yet |
+| H3 (P/E isolation) | `capacity` A/B, lever `pe_pinning` | the first lever pair | REFUTED [ledger:H3]; no bundle (its runs were not capacity runs) |
+| H4 (auto device = best device) | `single_stream` sweep | records the `auto` choice next to each forced device | REFUTED [ledger:H4]; no bundle |
 | APB arms A1-A4 (`bench/apb/PROTOCOL.md`) | `capacity` | the first APB cells: OVMS CPU, OVMS iGPU, EAT vLLM-CPU, vLLM CUDA | pre-registered, not run |
 
-The seed is generated by `share` itself (`--provenance maintainer-lab`, a flag
-that only the ingest workflow accepts from the maintainers' lab runner). The
-seed therefore passes the same projection and V1-V12, and dogfoods the path.
+As built, the seed is generated by `oracle/seed/build.py`, which calls
+`project.project_single_stream` (the allowlist module `share` uses) with `provenance.source =
+maintainer-lab`; `share` has no provenance flag. CI validates `oracle/seed/`
+with `--trusted` and `data/oracle/` without it, so the seed passes the same
+V1-V12 and only the maintainer path may carry maintainer-lab provenance.
 Rules for seeds: a seed counts as one submitter, and it reaches `verified` only
 after an independent community reproduction, or after a second maintainer box
 of the same SKU.
@@ -485,7 +494,11 @@ Differences from the design above:
 - Submitter tokens come from the ingest (`matrix.py --submitters`). Without
   them each community bundle is its own submitter and all maintainer-lab
   bundles are one.
-- Not built yet: the data repo `88plug/k3d-gpu-oracle` with its ingest and
+- Submission is a pull request on `88plug/k3d-gpu` adding
+  `data/oracle/<content_sha256>.json` (not an issue on a data repo). CI runs
+  `validate.py --strict` on it; `leaderboard.py --check` reports it as pending
+  until a maintainer regenerates `docs/leaderboard.{md,json}` after merge.
+- Not built (superseded or deferred): the data repo `88plug/k3d-gpu-oracle` with its ingest and
   attestation workflows, `capacity --compare` and the baked
   `share/oracle-matrix.json`, the planner (section 6) and every lever A/B.
 - The seed's hardware block was read with `report --no-cluster` on the H6
@@ -494,7 +507,7 @@ Differences from the design above:
 
 ## Open items (unverified)
 
-- GitHub issue body size limit (section 2). Confirm before step 8.
+- GitHub issue body size limit (section 2). Moot for the pull-request path that shipped.
 - Whether the OpenVINO CPU plugin honours `ONEDNN_MAX_CPU_ISA` for the AMX A/B.
 - The mainline merge status of the IAA zswap batching series.
 - `doctor --perf` reads DRAM channel count and configured speed only as root.

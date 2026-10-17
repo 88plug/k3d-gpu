@@ -1392,7 +1392,7 @@ k3d-gpu share --submit         # same, then ask y/N at the terminal before openi
   a typed `y`/`yes`; there is no `--yes`. With `gh` installed and logged in it
   forks `88plug/k3d-gpu` and opens a pull request adding
   `data/oracle/<sha256>.json`; without `gh` it prints those steps. CI validates
-  the file (V1-V12) and a maintainer merge puts it on the leaderboard. The
+  the file (V1-V12); a maintainer merges it and regenerates the leaderboard. The
   bundle has no identifiers, but a pull request is public under your account:
   a submission is not anonymous.
 
