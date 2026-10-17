@@ -3,41 +3,57 @@
 # arms Q (none), ME15 (stream 15 on efficient), ME4 (stream 4 on efficient with a
 # 15-CPU balloon, so the 4 workers spread over every E-core L2 cluster), MC4
 # (stream 4 on ecluster: one L2 cluster), order Q ME15 ME4 MC4 | MC4 ME4 ME15 Q | Q ME15 ME4 MC4,
-# 10 timed requests per block (n=30 per arm). Run it under the live lock:
+# 10 timed requests per block (n=30 per arm). Amendment A2: every level in LEVELS
+# runs all 12 blocks under the same controlled background load (bench/load/load.py
+# on the E-cores); before each hog starts, 3 x 5 s load windows are sampled with
+# no hog running, and analyze.py makes the level INCONCLUSIVE if they are
+# unmatched across arms. Run it under the live lock:
 #
-#   flock -w 10800 "$LOCK" bench/rdt-isolate/run.sh
+#   flock -w 14400 "$LOCK" bench/rdt-isolate/run.sh
 #
-# It aborts at 18 min of its own wall time (ABORT_S), marks unrun blocks
-# INCONCLUSIVE, and always deletes its cluster. Reads only (sudo): RAPL
+# Each level aborts at 18 min after its background load starts (ABORT_S), and the
+# whole script at TOTAL_S (cluster setup included); a level that would start with
+# under 10 min left is skipped. Unrun blocks are marked INCONCLUSIVE, and the script
+# always deletes its cluster and load containers. Reads only (sudo): RAPL
 # energy_uj and perf stat on the uncore IMC free-running counters. No sysfs writes.
 # sudo is non-interactive: sudo -A when SUDO_ASKPASS is set, else sudo -n; a read
 # that fails records null and the analysis then says INCONCLUSIVE.
 # Env: OUT results dir (default ./h26-out), K3D_GPU_IMAGE node image (optional),
-#      K3D_GPU_CLUSTER (default k3dgpu-i-rdt-isolate), ABORT_S (default 1080).
+#      K3D_GPU_CLUSTER (default k3dgpu-i-rdt-isolate), ABORT_S (default 1080, per level),
+#      TOTAL_S (default 2340, the whole run),
+#      MODELS (optional) host dir holding OpenVINO/Qwen3-4B-int4-ov as a git+LFS clone;
+#      it is copied into the agent's ovms-models PVC before `agent up`, so the
+#      locked run does not wait on a Hugging Face download (the pull init then
+#      finds the files and only rewrites graph.pbtxt).
+#      LEVELS (default "typical heavy"; per-level results in OUT/LEVEL/).
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "${HERE}/../.." && pwd)
 OUT=${OUT:-${PWD}/h26-out}
 ABORT_S=${ABORT_S:-1080}
+TOTAL_S=${TOTAL_S:-2340}
 NAME=${K3D_GPU_CLUSTER:-k3dgpu-i-rdt-isolate}
+LEVELS=${LEVELS:-typical heavy}
 mkdir -p "${OUT}"
 KUBECONFIG="${OUT}/kubeconfig-$$"
 export KUBECONFIG K3D_GPU_CLUSTER="${NAME}" K3D_GPU_SHARE="${K3D_GPU_SHARE:-${ROOT}/share}"
 L=("${ROOT}/scripts/k3d-gpu")
 NOISY=("${ROOT}/bench/noisy.sh")
+LOAD=(python3 "${ROOT}/bench/load/load.py")
 PORT=18080 PF=""
-REQ="${OUT}/requests.jsonl" BLK="${OUT}/blocks.jsonl" LOG="${OUT}/run.log"
-: > "${REQ}"; : > "${BLK}"
+LOG="${OUT}/run.log"
 log() { echo "$(date -u +%FT%TZ) $*" | tee -a "${LOG}"; }
 cleanup() {
     [ -z "${PF}" ] || kill "${PF}" 2>/dev/null
     "${NOISY[@]}" stop >/dev/null 2>&1
+    log "load stop: $("${LOAD[@]}" stop 2>&1)"
     log "deleting cluster ${NAME}"
     k3d cluster delete "${NAME}" >> "${LOG}" 2>&1
     rm -f "${KUBECONFIG}"
 }
 trap cleanup EXIT
-left() { [ "${SECONDS}" -lt "${ABORT_S}" ]; }
+LT0=0
+left() { [ $((SECONDS - LT0)) -lt "${ABORT_S}" ] && [ "${SECONDS}" -lt "${TOTAL_S}" ]; }
 
 if k3d cluster list -o json | python3 -c 'import json,sys; sys.exit(any(c["name"].startswith("k3dgpu-f-") for c in json.load(sys.stdin)))'; then :; else
     log "a k3dgpu-f-* cluster exists; refusing to run"; exit 3
@@ -67,6 +83,55 @@ imc() {
 
 log "H26 start: cluster ${NAME}, out ${OUT}, abort at ${ABORT_S}s"
 "${L[@]}" up >> "${LOG}" 2>&1 || { log "up failed"; exit 1; }
+if [ -n "${MODELS:-}" ]; then
+    [ -d "${MODELS}/OpenVINO/Qwen3-4B-int4-ov" ] || { log "MODELS has no OpenVINO/Qwen3-4B-int4-ov"; exit 1; }
+    kubectl apply -f - >> "${LOG}" 2>&1 <<'EOF' || { log "model staging: apply failed"; exit 1; }
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: k3d-gpu-agent
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ovms-models
+  namespace: k3d-gpu-agent
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: stage-models
+  namespace: k3d-gpu-agent
+spec:
+  restartPolicy: Never
+  containers:
+    - name: hold
+      image: busybox:1.37
+      command: [sleep, "600"]
+      volumeMounts:
+        - name: models
+          mountPath: /models
+  volumes:
+    - name: models
+      persistentVolumeClaim:
+        claimName: ovms-models
+EOF
+    kubectl -n k3d-gpu-agent wait --for=condition=Ready pod/stage-models --timeout=180s >> "${LOG}" 2>&1 || { log "model staging: pod not Ready"; exit 1; }
+    pv=$(kubectl -n k3d-gpu-agent get pvc ovms-models -o jsonpath='{.spec.volumeName}')
+    pvpath=$(kubectl get pv "${pv}" -o jsonpath='{.spec.hostPath.path}{.spec.local.path}')
+    node="k3d-${NAME}-server-0"
+    docker exec "${node}" mkdir -p "${pvpath}/OpenVINO" \
+        && docker cp "${MODELS}/OpenVINO/Qwen3-4B-int4-ov" "${node}:${pvpath}/OpenVINO/" >> "${LOG}" 2>&1 \
+        && docker exec "${node}" chown -R 5000:5000 "${pvpath}" \
+        || { log "model staging: copy into ${node}:${pvpath} failed"; exit 1; }
+    kubectl -n k3d-gpu-agent delete pod stage-models --wait=true --timeout=60s >> "${LOG}" 2>&1
+    log "model staged into PVC ${pv} at ${pvpath} ($(docker exec "${node}" du -sh "${pvpath}" | cut -f1))"
+fi
 K3D_GPU_AGENT_DEVICE=CPU K3D_GPU_AGENT_CPUS=15 "${L[@]}" agent up >> "${LOG}" 2>&1 || { log "agent up failed"; exit 1; }
 kubectl -n k3d-gpu-agent wait --for=condition=Ready pod -l app=ovms --timeout=300s >> "${LOG}" 2>&1 \
     || kubectl -n k3d-gpu-agent wait --for=condition=Ready pod --all --timeout=300s >> "${LOG}" 2>&1 \
@@ -99,6 +164,17 @@ for c in ecluster efficient; do
 done
 
 restarts() { kubectl -n k3d-gpu-agent get "${agent_pod}" -o jsonpath='{.status.containerStatuses[0].restartCount}'; }
+for level in ${LEVELS}; do
+if [ $((TOTAL_S - SECONDS)) -lt 600 ]; then
+    log "level ${level}: not run (under 10 min of TOTAL_S left)"; continue
+fi
+D="${OUT}/${level}"
+mkdir -p "${D}"
+REQ="${D}/requests.jsonl" BLK="${D}/blocks.jsonl" LJ="${D}/load.jsonl"
+: > "${REQ}"; : > "${BLK}"; : > "${LJ}"
+LT0=${SECONDS}
+log "level ${level}: load $("${LOAD[@]}" start --level "${level}" --ttl 1500)"
+sleep 20  # let the background reach its steady state before the first window
 r0=$(restarts)
 block=0
 for spec in "1 Q" "1 ME15" "1 ME4" "1 MC4" "2 MC4" "2 ME4" "2 ME15" "2 Q" "3 Q" "3 ME15" "3 ME4" "3 MC4"; do
@@ -109,6 +185,8 @@ for spec in "1 Q" "1 ME15" "1 ME4" "1 MC4" "2 MC4" "2 ME4" "2 ME15" "2 Q" "3 Q" 
         echo "{\"block\": ${block}, \"round\": ${rd}, \"arm\": \"${arm}\", \"void\": true, \"reason\": \"abort budget\"}" >> "${BLK}"
         continue
     fi
+    # A2: background load with no hog and the agent idle, tagged with the coming arm.
+    "${LOAD[@]}" sample --seconds 5 --windows 3 --tag "${arm}" --level "${level}" --out "${LJ}"
     ncpus=-
     case "${arm}" in
         ME15) "${NOISY[@]}" start --cores efficient --stressor stream --workers 15 > "${OUT}/n.txt" 2>&1 ;;
@@ -122,7 +200,7 @@ for spec in "1 Q" "1 ME15" "1 ME4" "1 MC4" "2 MC4" "2 ME4" "2 ME15" "2 Q" "3 Q" 
     imc "${block}" > "${OUT}/imc-${block}.gbs" &
     ip=$!
     # CPUs the stream workers run on (host view), sampled once inside the window.
-    ( sleep 8; ps -eLo psr,comm | awk '$2 ~ /^stress-ng-strea/ {print $1}' | sort -n | paste -sd, - ) > "${OUT}/psr-${block}.txt" &
+    ( sleep 8; ps -eLo psr,comm,cgroup | awk '$2 ~ /^stress-ng-strea/ && $3 ~ /kubepods/ {print $1}' | sort -n | paste -sd, - ) > "${OUT}/psr-${block}.txt" &
     pp=$!
     python3 "${HERE}/client.py" --base-url "${BASE}" --model "${MODEL}" --arm "${arm}" --block "${block}" --round "${rd}" >> "${REQ}"
     wait "${ip}" "${pp}"
@@ -151,8 +229,11 @@ print(json.dumps({"block": int(b), "round": int(rd), "arm": arm, "neighbour_cpus
     "pkg_j": None if "-" in (e0, e1) else (int(e1) - int(e0)) / 1e6,
     "throttle_delta": int(thr), "pswpin": int(sw), "cpu0_15_busy_pct": int(busy), "load1": float(load)}))
 EOF
-    log "block ${block} round ${rd} ${arm} neighbour=${ncpus} $(tail -1 "${BLK}")"
+    log "level ${level} block ${block} round ${rd} ${arm} neighbour=${ncpus} $(tail -1 "${BLK}")"
 done
-log "agent restarts during run: $(( $(restarts) - r0 ))"
-python3 "${HERE}/analyze.py" "${REQ}" "${BLK}" | tee "${OUT}/verdict.json"
+log "level ${level}: agent restarts $(( $(restarts) - r0 )), load $("${LOAD[@]}" stop)"
+python3 "${HERE}/analyze.py" "${REQ}" "${BLK}" "${LJ}" > "${D}/verdict.json"
+python3 -c 'import json, sys; v = json.load(open(sys.argv[1])); print(sys.argv[2], v["verdict"], v.get("reason"), "R=%s" % v.get("R"), "load_matched=%s" % v.get("load_matched"))' "${D}/verdict.json" "${level}" | tee -a "${LOG}"
+log "level ${level} done at ${SECONDS}s"
+done
 log "H26 done in ${SECONDS}s"

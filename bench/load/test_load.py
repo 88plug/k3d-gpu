@@ -224,6 +224,23 @@ def win(tag, busy=60.0, load1=8.0, w=40.0, thr=0.0, swap=100.0, dswap=0.0, level
             "throttle_per_min": thr, "swap_used_mib": swap, "swap_delta_mib": dswap}
 
 
+class RaplExecTest(unittest.TestCase):
+    def test_exec_prefix_reads_a_root_only_counter(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        zone = os.path.join(tmp, "intel-rapl:0")
+        os.makedirs(zone)
+        reader = os.path.join(tmp, "reader")
+        with open(reader, "w") as f:
+            f.write("#!/bin/sh\necho 4242\n")
+        os.chmod(reader, 0o755)
+        with mock.patch.dict(os.environ, {"K3D_GPU_RAPL_EXEC": reader}):
+            self.assertEqual(load.rapl_elevation(), [reader])
+            self.assertEqual(load.read_energy_uj(zone), 4242)
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(load.rapl_elevation(), ["sudo", "-n"])
+
+
 class MatchedTest(unittest.TestCase):
     def test_high_but_matched_load_is_matched(self):
         ws = [win("A", busy=97, load1=40, w=95), win("B", busy=96, load1=38, w=92),

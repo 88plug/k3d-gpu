@@ -108,6 +108,45 @@ class Verdicts(unittest.TestCase):
         self.assertEqual(analyze.verdict(reqs, blocks, n_boot=10)["verdict"], "INCONCLUSIVE")
 
 
+def windows(pkg=None, level="typical"):
+    """Background windows, 3 per block, the same load in every arm unless pkg overrides."""
+    out = []
+    for arm in ("Q", "ME15", "ME4", "MC4"):
+        for _ in range(9):
+            out.append({"tag": arm, "level": level, "busy_pct": 37.0, "load1": 20.0,
+                        "pkg_w": (pkg or {}).get(arm, 60.0), "throttle_per_min": 5.0,
+                        "swap_used_mib": 1000.0, "swap_delta_mib": 0.0})
+    return out
+
+
+class MatchedLoad(unittest.TestCase):
+    """Amendment A2: unmatched background load makes the level INCONCLUSIVE."""
+
+    def test_matched_keeps_the_a1_verdict(self):
+        reqs, blocks = synth(2.3, {"Q": 1.0, "ME15": 2.0, "ME4": 1.6, "MC4": 1.55})
+        out = analyze.verdict(reqs, blocks, n_boot=200, windows=windows())
+        self.assertTrue(out["load_matched"])
+        self.assertEqual(out["verdict"], "REFUTED", out)
+        self.assertEqual(out["verdict_if_matched"], "REFUTED")
+        self.assertEqual(out["load_by_arm"]["MC4"]["windows"], 9)
+        self.assertGreater(out["P_R_ge_0.8"], 0.5)
+
+    def test_unmatched_is_inconclusive_naming_the_metric(self):
+        reqs, blocks = synth(2.3, {"Q": 1.0, "ME15": 2.0, "ME4": 1.6, "MC4": 1.55})
+        out = analyze.verdict(reqs, blocks, n_boot=200, windows=windows(pkg={"MC4": 80.0}))
+        self.assertFalse(out["load_matched"])
+        self.assertEqual(out["verdict"], "INCONCLUSIVE")
+        self.assertEqual(out["verdict_if_matched"], "REFUTED")
+        self.assertIn("pkg_w", out["reason"])
+
+    def test_high_but_matched_load_does_not_void(self):
+        reqs, blocks = synth(2.3, {"Q": 1.0, "ME15": 2.0, "ME4": 1.6, "MC4": 1.55})
+        w = windows(level="heavy")
+        for x in w:
+            x.update(busy_pct=100.0, load1=40.0, pkg_w=110.0)
+        self.assertEqual(analyze.verdict(reqs, blocks, n_boot=100, windows=w)["verdict"], "REFUTED")
+
+
 class Client(unittest.TestCase):
     def test_prompts_are_unique(self):
         self.assertEqual(len({client.prompt(n) for n in range(1000)}), 1000)

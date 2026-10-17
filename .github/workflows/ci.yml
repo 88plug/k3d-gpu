@@ -133,6 +133,29 @@ jobs:
           K3D_GPU_REQUIRE_HEADLESS: "1"
         run: tests/report_html_test.sh
 
+  oracle:
+    name: Capacity oracle (schema, privacy, validator, fuzz, matrix, leaderboard, share)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0 # V4 reads the server image each release tag pins
+      - run: python3 oracle/test_oracle.py
+      - run: python3 oracle/test_fuzz.py
+      - run: python3 oracle/test_adversarial.py
+      - name: Validate every committed bundle (maintainer seed trusted, data/oracle not)
+        run: |
+          mapfile -t seed < <(find oracle/seed -name '*.json' | sort)
+          python3 oracle/validate.py --trusted "${seed[@]}"
+          mapfile -t data < <(find data/oracle -name '*.json' | sort)
+          if [ "${#data[@]}" -gt 0 ]; then python3 oracle/validate.py --strict "${data[@]}"; fi
+      - name: docs/oracle-matrix.md is the matrix of the seed bundles
+        run: |
+          python3 oracle/matrix.py --trusted oracle/seed --md "${RUNNER_TEMP}/oracle-matrix.md" oracle/seed
+          diff -u docs/oracle-matrix.md "${RUNNER_TEMP}/oracle-matrix.md"
+      - name: docs/leaderboard.{md,json} match the bundles they list (new data/oracle files are pending)
+        run: python3 oracle/leaderboard.py --check
+
   claims-check:
     name: Docs claims guard
     runs-on: ubuntu-latest
@@ -173,6 +196,7 @@ jobs:
       - run: python3 bench/apb/test_stage.py
       - run: python3 bench/test_agent_trace.py
       - run: python3 bench/load/test_load.py
+      - run: python3 bench/eatflow/test_agentbench.py
 
   mcp-tests:
     name: MCP server tests
