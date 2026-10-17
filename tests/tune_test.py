@@ -598,6 +598,58 @@ class IncrementalTest(unittest.TestCase):
         self.assertEqual(res["decision"], "budget")
         self.assertIsNone(res["winner"])
 
+    def test_short_budget_screens_and_defers_confirmation(self):
+        # 30 s trials: a confirmation needs ~600 s, more than 75% of a 300 s
+        # budget. The run screens with the whole budget instead of nothing and
+        # leaves the best screener pending for a later run.
+        clock = Clock()
+        ev = Timed(tune.SimEvaluator(cost_from(lambda c: 10.0 if c.get("baseline") else 20.0)), clock, 30.0)
+        res = tune.incremental(ev, FACTS, {"baseline": True}, "throughput", budget_s=300.0, clock=clock)
+        self.assertGreater(len(res["screened"]), 0)
+        self.assertLessEqual(clock.t, 300.0 + 30.0)
+        self.assertEqual(res["decision"], "pending")
+        self.assertIsNone(res["confirm"])
+        self.assertIsNotNone(res["pending"])
+        self.assertEqual(res["pending"]["config"], res["challenger"])
+        self.assertAlmostEqual(res["pending"]["screen_s"], 30.0)
+        prof = tune.step_profile(None, res, "t1")
+        self.assertEqual(prof["pending"]["config"], res["challenger"])
+        self.assertEqual(prof["pending"]["incumbent"], tune.config_key({"baseline": True}))
+
+    def test_pending_is_confirmed_without_screening(self):
+        ev = tune.SimEvaluator(cost_from(lambda c: 20.0 if is_hint(c) else 10.0))
+        hint = next(c for c in tune.neighbours(FACTS, {"baseline": True}) if is_hint(c))
+        pending = {"config": hint, "gain": 1.0, "screen_s": 1.0}
+        res = tune.incremental(ev, FACTS, {"baseline": True}, "throughput", budget_s=1e9, pending=pending)
+        self.assertEqual(res["screened"], [])
+        self.assertEqual(res["decision"], "challenger")
+        self.assertTrue(is_hint(res["winner"]))
+        self.assertIsNone(res["pending"])
+        prof = tune.step_profile({"pending": dict(pending, incumbent="x")}, res, "t2")
+        self.assertNotIn("pending", prof)
+
+    def test_pending_too_big_for_budget_keeps_screening(self):
+        clock = Clock()
+        ev = Timed(tune.SimEvaluator(cost_from(lambda c: 10.0)), clock, 30.0)
+        first = tune.neighbours(FACTS, {"baseline": True})[0]
+        pending = {"config": first, "gain": 0.5, "screen_s": 30.0}
+        res = tune.incremental(ev, FACTS, {"baseline": True}, "throughput", budget_s=300.0, clock=clock,
+                               tried=[tune.config_key(first)], pending=pending)
+        self.assertGreater(len(res["screened"]), 0)
+        self.assertEqual(res["decision"], "pending")
+        self.assertEqual(res["pending"]["config"], first)  # nothing screened beats it
+
+    def test_all_screened_with_pending_names_the_budget(self):
+        inc = {"baseline": True}
+        tried = [tune.config_key(c) for c in tune.neighbours(FACTS, inc)]
+        first = tune.neighbours(FACTS, inc)[0]
+        msgs = []
+        res = tune.incremental(tune.SimEvaluator(cost_from(lambda c: 10.0)), FACTS, inc, "throughput",
+                               budget_s=300.0, tried=tried, log=msgs.append,
+                               pending={"config": first, "gain": 0.5, "screen_s": 30.0})
+        self.assertEqual(res["decision"], "pending")
+        self.assertTrue(any("--budget 10" in m for m in msgs), msgs)
+
     def test_resume_skips_screened_and_converges(self):
         ev = tune.SimEvaluator(cost_from(lambda c: 10.0))
         inc = {"baseline": True}

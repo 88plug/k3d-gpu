@@ -1162,6 +1162,11 @@ k3d-gpu tune run --full             # the full successive-halving search instead
   Mann-Whitney, guardrail metric, quality probe).
 - The incumbent stays unless the challenger passes every gate. When the budget
   ends mid-confirmation nothing changes.
+- A confirmation is ten long trials. When it would take more than three
+  quarters of `--budget`, the run spends the whole budget screening and keeps
+  the best screener as `pending`, printing the `--budget` that confirms it.
+  The next run with that budget confirms the pending challenger first, with no
+  screening; a shorter run keeps screening the remaining neighbours.
 - The profile (`~/.config/k3d-gpu/tune/<fingerprint>.json`) records which
   neighbours were already screened against which incumbent, so the next run
   tries only the rest; with none left it reports `converged`.
