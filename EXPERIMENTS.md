@@ -217,6 +217,13 @@ answers two refuter reviews; the original rows above stay as registered):
   cache on a 128 GiB host: SUPPORTED 0.45, REFUTED (time part) 0.35, the other rows
   unchanged at 0.05 each.
 
+**Run status, 2026-10-17T12:41Z: not run, still PENDING.** The A1 probe is committed
+and passes `tests/model_share_test.sh` and shellcheck. The live lock had one holder
+and six waiters (at most 20 min each), more than this attempt's budget, so no round
+ran and no number exists. The prep images were removed. Next step: `probe.sh prep`,
+then `probe.sh run` under live.lock. The verdict is scored only against the rows
+above and A1.
+
 Generalization (prediction, by family): page-cache sharing is a kernel and filesystem
 property, so the memory result should hold on every Intel family (Core, Core Ultra,
 Atom/N-series, Xeon) with the saving (N-1) x size, while weights stay CPU-resident.
