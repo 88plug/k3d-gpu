@@ -624,6 +624,9 @@ placement as SP, and the placement proof could not see it. Changes, all made bef
 - **Design consequence, stated up front:** PS uses 6 physical cores per agent, SP 2. That
   is the treatment (decode moves onto otherwise idle E-cores), and J/token charges for it.
   Outcome table, guardrails and priors are unchanged. Prior P(SUPPORTED) stays 0.15.
+- **Pinned image has no `--mlock`:** b11707 replaced it with `--load-mode mmap+mlock`
+  (read from the image `--help`, which made the first A1 start refuse at 05:43:58 PDT before
+  any measurement). The probe now passes `--load-mode mmap+mlock` and requires that flag.
 - **Product:** `k3d-gpu phase-steer` now prints non-strict masks (`--cpu-mask-batch P
   --cpu-mask E`), since one strict mask shared by N agents stacks them.
 

@@ -39,7 +39,7 @@ PHASES = {  # arm: (decode slice, prefill slice); None = no mask, non-strict
     "SP": ("P", "P"), "PS": ("E", "P"), "ALL": (None, None), "NEG": ("P", "E"),
 }
 ORDER = ["SP", "PS", "ALL", "PS", "ALL", "SP", "ALL", "SP", "PS", "NEG"]
-REQUIRED_FLAGS = ["--cpu-mask", "--cpu-mask-batch", "--cpu-strict", "--cpu-strict-batch", "--parallel", "--mlock",
+REQUIRED_FLAGS = ["--cpu-mask", "--cpu-mask-batch", "--cpu-strict", "--cpu-strict-batch", "--parallel", "--load-mode",
                   "--poll", "--poll-batch"]
 RAPL = "/sys/class/powercap/intel-rapl:0"
 PREFIX_TOK, TURN_TOK, OUT_TOK = 1024, 396, 96
@@ -185,7 +185,7 @@ def start_servers(args, arm, cell, n):
            "-v", f"{os.path.abspath(args.model)}:/m/model.gguf:ro", args.image,
            "-m", "/m/model.gguf", "--host", "0.0.0.0", "--port", "8080", "-c", "2048",
            "--parallel", "1", "--poll", str(args.poll), "--poll-batch", str(int(args.poll > 0)),
-           *server_args(arm, i), "--mlock")
+           *server_args(arm, i), "--load-mode", "mmap+mlock")
         names.append(name)
     return names
 
