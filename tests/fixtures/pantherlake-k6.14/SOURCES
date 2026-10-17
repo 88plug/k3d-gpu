@@ -1,0 +1,17 @@
+Platform: Core Ultra Series 3 (Panther Lake) NPU 5 on intel_vpu under kernel
+6.14, with both linux-firmware and Intel's intel-fw-npu package installed.
+NPU-only fixture: it exercises the 6.13-6.15 firmware names, where the kernel
+never requests the _v1 file intel-fw-npu installs.
+
+Sources:
+- 0x8086 0xb03e NPU: drivers/accel/ivpu/ivpu_drv.h (PCI_DEVICE_ID_PTL_P, 50xx IP).
+- Firmware names on 6.13-6.15: fw_names[] in drivers/accel/ivpu/ivpu_fw.c at tag
+  v6.15 (vpu_50xx.bin, then intel/vpu/vpu_50xx_v0.0.bin); _v1 first only from v6.16.
+- intel/vpu/vpu_50xx_v1.bin and its vpu_50xx_v0.0.bin link: linux-firmware tag
+  20260916 WHENCE.
+- updates/intel/vpu/vpu_50xx_v1.bin alone: intel/linux-npu-driver v1.38.0
+  firmware/bin (no vpu_50xx_v0.0.bin) and firmware/CMakeLists.txt (component
+  fw-npu installs to /lib/firmware/updates/intel/vpu).
+
+Derived from tests/fixtures/pantherlake with the iGPU and IAA removed. Not from
+hardware: the kernel release string and everything pantherlake's SOURCES lists.

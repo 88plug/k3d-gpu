@@ -14,7 +14,8 @@ Sources (kernel paths are Linux master as of 2026-10-17 unless a tag is named):
   in the PCI table from v6.6); listed in intel-device-plugins v0.37.1
   cmd/npu_plugin/npu_plugin.go. Class 0x1200 per its NFD rule.
 - xe/lnl_guc_70.bin: xe_uc_fw.c (MAKE_FW_PATH); intel/vpu/vpu_40xx_v1.bin:
-  drivers/accel/ivpu/ivpu_fw.c.
+  drivers/accel/ivpu/ivpu_fw.c. Its vpu_40xx_v0.0.bin link, the name kernel 6.12
+  loads (fw_names[] at tag v6.12): linux-firmware tag 20260916 WHENCE.
 - Hybrid PMUs: case INTEL_LUNARLAKE_M in arch/x86/events/intel/core.c calls
   intel_pmu_init_hybrid(hybrid_big_small) ("lunarlake_hybrid"), so cpu_core and
   cpu_atom only, no cpu_lowpower. Files: tools/perf/Documentation/intel-hybrid.txt.

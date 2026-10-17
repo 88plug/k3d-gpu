@@ -110,6 +110,9 @@ ran_nothing "dry run calls no installer"
 
 r=$(newroot ubuntu2604-npu)
 osrel "${r}" ubuntu 26.04
+# host-setup dates NPU firmware by the names the running kernel requests; pin a
+# 6.16+ release so the result does not follow the test host's uname -r.
+kernel "${r}" 6.17.0-5-generic
 pci "${r}" 0000:00:0b.0 0x8086 0xb03e 0x120000 intel_vpu
 run "${r}" ""
 says "ubuntu 26.04 NPU uses the 26.04 driver archive" "linux-npu-driver-v1.38.0.20260910-34487311128-ubuntu2604.tar.gz"

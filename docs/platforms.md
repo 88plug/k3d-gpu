@@ -43,6 +43,11 @@ the plan decisions against the goldens:
 | Arc A770 (Alchemist DG2-G10) on i915 | `dg2-a770-i915` | `gpu.intel.com/i915` | Intel GPU plugin (dGPU, not shared); no NRI balloons | plan targets: cpu, gpu usable; doctor never suggests xe for it; no catalog cell on this host; `unmeasured` | [SOURCES](../tests/fixtures/dg2-a770-i915/SOURCES) |
 | Data Center GPU Flex 140 (ATS-M), unbound | `flex140-unbound` | nothing (no driver bound) | none: `up` exits 1 with no supported accelerator | plan targets: cpu usable; doctor offers intel-i915-dkms LTS or the `xe-force-probe` experimental feature; `unmeasured` | [SOURCES](../tests/fixtures/flex140-unbound/SOURCES) |
 | Data Center GPU Max 1550 (Ponte Vecchio), unbound | `pvc-max1550-unbound` | nothing (no driver bound) | none: `up` exits 1 with no supported accelerator | plan targets: cpu usable; doctor names intel-i915-dkms LTS only, no force_probe; `unmeasured` | [SOURCES](../tests/fixtures/pvc-max1550-unbound/SOURCES) |
+| Lunar Lake NPU, kernel 6.8 (NPU only) | `lunarlake-k6.8` | `npu.intel.com/accel`, hybrid | NPU plugin, NRI balloons (hybrid P/E) | plan targets: cpu, npu usable; doctor dates the `vpu_40xx_v0.0.bin` that kernel 6.8 loads, not `_v1`; no catalog cell on this host; `unmeasured` | [SOURCES](../tests/fixtures/lunarlake-k6.8/SOURCES) |
+| Panther Lake NPU, kernel 6.14 + intel-fw-npu (NPU only) | `pantherlake-k6.14` | `npu.intel.com/accel`, hybrid | NPU plugin, NRI balloons (hybrid P/E) | plan targets: cpu, npu usable; doctor suggests (never applies) a `vpu_50xx_v0.0.bin` link to intel-fw-npu's `_v1`, with its revert; no catalog cell on this host; `unmeasured` | [SOURCES](../tests/fixtures/pantherlake-k6.14/SOURCES) |
+| Wildcat Lake NPU (NPU only) | `wildcatlake` | `npu.intel.com/accel`, hybrid | NPU plugin, NRI balloons (hybrid P/E) | plan targets: cpu, npu usable; no catalog cell on this host; `unmeasured` | [SOURCES](../tests/fixtures/wildcatlake/SOURCES) |
+| Nova Lake NPU, no firmware, unbound (NPU only) | `novalake` | hybrid; the unbound NPU is not detected | NRI balloons (hybrid P/E); no NPU plugin | plan targets: cpu usable; doctor says no 60xx NPU firmware is published; no catalog cell on this host; `unmeasured` | [SOURCES](../tests/fixtures/novalake/SOURCES) |
+| NPU id the pinned plugin does not serve (Panther Lake, id 0x1234) | `npu-unserved` | `gpu.intel.com/xe`, `iaa.intel.com/*`, hybrid; the NPU is skipped with a warning | Intel GPU plugin (shared iGPU), IAA plugin, NRI balloons (hybrid P/E); no NPU plugin | plan targets: cpu, gpu (xe), npu usable; doctor warns that intel-npu-plugin 0.37.1 does not list the id; no catalog cell on this host; `unmeasured` | [SOURCES](../tests/fixtures/npu-unserved/SOURCES) |
 
 ## Client: Core Ultra
 
@@ -60,7 +65,7 @@ atom CPU with no L3 is an LP E-core. The CPU family and model in
 | Arrow Lake-U (Core Ultra 200U, model 181) | iGPU 0x7d41 on i915; P-cores with SMT; LP E-cores = `cpu_atom` CPUs without an L3 | `gpu.intel.com/i915`, `xmx=false`; `pcore-physical` = one thread per P-core; `lowpower` set | P-core balloons pin whole sibling pairs, predicted by ARK 255U (12 cores, 14 threads); no XMX, predicted by Mesa arl_u and compute-runtime `MTL_U` | [ARK 255U](https://www.intel.com/content/www/us/en/products/sku/241860/intel-core-ultra-7-processor-255u-12m-cache-up-to-5-20-ghz/specifications.html), [iris_pci_ids.h](https://gitlab.freedesktop.org/mesa/mesa/-/blob/main/include/pci_ids/iris_pci_ids.h), fixture `arrowlake-u` |
 | Lunar Lake (Core Ultra 200V, model 189) | iGPU 0x6420/0x64a0/0x64b0 on xe only (6.12+); NPU 0x643e (40xx); all 4 `cpu_atom` CPUs are LP E-cores | `gpu.intel.com/xe`, `xmx=true`, `npu.gen=40xx`; `lowpower` = all E-cores, no `efficient` E-cores; doctor notes any topology other than 4 P + 4 LP E | Memory is on-package and shared by CPU, iGPU and NPU, so `MemTotal` is the whole budget, predicted by the ARK and Wikipedia SKU tables (not yet acted on: no code budgets by it); the LP E-core split depends on the E-cores showing no L3 in sysfs, which no capture has confirmed yet | [xe_pci.c](https://github.com/torvalds/linux/blob/master/drivers/gpu/drm/xe/xe_pci.c), [ivpu_drv.h](https://github.com/torvalds/linux/blob/master/drivers/accel/ivpu/ivpu_drv.h), [core.c](https://github.com/torvalds/linux/blob/master/arch/x86/events/intel/core.c), [Lunar Lake](https://en.wikipedia.org/wiki/Lunar_Lake), fixture `lunarlake` |
 | Panther Lake (Core Ultra Series 3, model 204) | iGPU 0xb080-0xb087/0xb08f/0xb090/0xb0a0/0xb0b0 on xe (6.17+); NPU 0xb03e (50xx, 6.13+); LP E-cores = `cpu_atom` CPUs without an L3 | `gpu.intel.com/xe`, `xmx=true`, `npu.gen=50xx`; doctor asks for kernel 6.17 below it, with no `force_probe` advice (no earlier `xe_uc_fw.c` has a PANTHERLAKE GuC entry) | XMX on every PTL id, the 4-Xe parts too, predicted by Mesa `XE3_CONFIG` | [xe_pci.c v6.17](https://github.com/torvalds/linux/blob/v6.17/drivers/gpu/drm/xe/xe_pci.c), [xe_uc_fw.c v6.17](https://github.com/torvalds/linux/blob/v6.17/drivers/gpu/drm/xe/xe_uc_fw.c), fixture `pantherlake` |
-| Wildcat Lake (model 213) | iGPU 0xfd80/0xfd81 on xe (6.17+, `ptl_desc`); NPU 0xfd3e (50xx, 6.17+) | `gpu.intel.com/xe`, `xmx=true`, `npu.gen=50xx`; doctor asks for kernel 6.17 below it, with no `force_probe` advice (no earlier `pciids.h` lists either id); detect_test only, no fixture | Same xe path as Panther Lake, predicted by v6.17 `INTEL_PTL_IDS` listing both ids | [pciids.h v6.17](https://github.com/torvalds/linux/blob/v6.17/include/drm/intel/pciids.h) |
+| Wildcat Lake (model 213) | iGPU 0xfd80/0xfd81 on xe (6.17+, `ptl_desc`); NPU 0xfd3e (50xx, 6.17+) | `gpu.intel.com/xe`, `xmx=true`, `npu.gen=50xx`; doctor asks for kernel 6.17 below it, with no `force_probe` advice (no earlier `pciids.h` lists either id); the iGPU is covered by detect_test only, the NPU by fixture `wildcatlake` | Same xe path as Panther Lake, predicted by v6.17 `INTEL_PTL_IDS` listing both ids | [pciids.h v6.17](https://github.com/torvalds/linux/blob/v6.17/include/drm/intel/pciids.h) |
 
 Host, kernel and BIOS changes are never applied. `k3d-gpu doctor` prints them as
 suggestions with the exact command and its revert.
@@ -114,6 +119,38 @@ SR-IOV stays suggest-only. The `xe-sriov` experimental feature (`k3d-gpu doctor 
 when its `sriov_totalvfs` is above zero. xe sets it to zero on Battlemage before
 6.17, because `bmg_desc` gains `has_sriov` there
 ([xe_sriov.c](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/drivers/gpu/drm/xe/xe_sriov.c)).
+
+## NPU
+
+Detection: an accel node `/sys/class/accel/accelN` whose PCI vendor is `0x8086`,
+whose bound driver is `intel_vpu`, and whose `/dev/accel/accelN` exists. The
+device id maps to a name, the first kernel that knows it and a firmware
+generation ([ivpu_fw.c v6.17](https://github.com/torvalds/linux/blob/v6.17/drivers/accel/ivpu/ivpu_fw.c), [ivpu_drv.h v6.17](https://github.com/torvalds/linux/blob/v6.17/drivers/accel/ivpu/ivpu_drv.h)).
+
+Auto config on every NPU row: the intel-npu-plugin DaemonSet with upstream's
+`-shared-dev-num` default of 1, i.e. one pod per NPU
+([npu_plugin README](https://github.com/intel/intel-device-plugins-for-kubernetes/blob/v0.37.1/cmd/npu_plugin/README.md)),
+resource `npu.intel.com/accel`; node labels
+`intel.feature.node.kubernetes.io/npu=true`, `k3d-gpu.io/npu.gen=<gen>` and,
+when the device node's group is not root, `k3d-gpu.io/npu-render-gid=<gid>`.
+A node gets no NPU label when the pinned plugin
+([npuIDs at v0.37.1](https://github.com/intel/intel-device-plugins-for-kubernetes/blob/v0.37.1/cmd/npu_plugin/npu_plugin.go))
+does not list its id, because the plugin would advertise nothing there.
+
+| Family | Detected as | Auto config | Predicted behaviour | Source |
+|---|---|---|---|---|
+| Meteor Lake / Arrow Lake-H | `0x7d1d`, 37xx, kernel 6.3+ (CPU model tells MTL from ARL-H) | plugin + labels, `npu.gen=37xx` | kernel 6.14 loads `intel/vpu/vpu_37xx_v0.0.bin`, predicted by `fw_names[]` in ivpu_fw.c | [ivpu_fw.c v6.15](https://github.com/torvalds/linux/blob/v6.15/drivers/accel/ivpu/ivpu_fw.c), fixture `arrowlake-h` |
+| Arrow Lake | `0xad1d`, 37xx, kernel 6.6+ | plugin + labels, `npu.gen=37xx` | kernel 6.12 loads `intel/vpu/vpu_37xx_v0.0.bin` (a linux-firmware link to `_v1`), predicted by ivpu_fw.c | [ivpu_fw.c v6.12](https://github.com/torvalds/linux/blob/v6.12/drivers/accel/ivpu/ivpu_fw.c), fixture `arrowlake-s` |
+| Lunar Lake | `0x643e`, 40xx, kernel 6.6+ | plugin + labels, `npu.gen=40xx` | kernel 6.8 tries, in order, `vpu_40xx.bin` then `intel/vpu/vpu_40xx_v0.0.bin` and loads the first found, never `_v1`, predicted by ivpu_fw.c | [ivpu_fw.c v6.8](https://github.com/torvalds/linux/blob/v6.8/drivers/accel/ivpu/ivpu_fw.c), fixture `lunarlake-k6.8` |
+| Panther Lake | `0xb03e`, 50xx, kernel 6.13+ | plugin + labels, `npu.gen=50xx` | kernel 6.18 loads `intel/vpu/vpu_50xx_v1.bin`, predicted by ivpu_fw.c | [ivpu_fw.c v6.16](https://github.com/torvalds/linux/blob/v6.16/drivers/accel/ivpu/ivpu_fw.c), fixture `pantherlake` |
+| Panther Lake on 6.13-6.15 | `0xb03e`, 50xx | plugin + labels; doctor suggests (never applies) a `vpu_50xx_v0.0.bin` link to intel-fw-npu's `_v1`, with its revert | the kernel loads linux-firmware's `vpu_50xx_v0.0.bin`, not intel-fw-npu's `_v1`, predicted by ivpu_fw.c and intel-fw-npu's file list | [ivpu_fw.c v6.15](https://github.com/torvalds/linux/blob/v6.15/drivers/accel/ivpu/ivpu_fw.c), [linux-npu-driver firmware/bin](https://github.com/intel/linux-npu-driver/tree/v1.38.0/firmware/bin), fixture `pantherlake-k6.14` |
+| Wildcat Lake | `0xfd3e`, 50xx, kernel 6.17+ | plugin + labels, `npu.gen=50xx` | loads `intel/vpu/vpu_50xx_v1.bin`, predicted by ivpu_fw.c | [ivpu_fw.c v6.17](https://github.com/torvalds/linux/blob/v6.17/drivers/accel/ivpu/ivpu_fw.c), [ivpu_drv.h v6.17](https://github.com/torvalds/linux/blob/v6.17/drivers/accel/ivpu/ivpu_drv.h), fixture `wildcatlake` |
+| Nova Lake | `0xd71d`, 60xx, kernel 6.19+; not detected while firmware is missing | none (no accel node); doctor says no 60xx firmware is published | intel_vpu's probe fails for want of `vpu_60xx_v1.bin`, which linux-firmware 20260916 and linux-npu-driver v1.38.0 do not ship, predicted by their file lists | [WHENCE](https://gitlab.com/kernel-firmware/linux-firmware/-/blob/20260916/WHENCE), [ivpu_fw.c v6.19](https://github.com/torvalds/linux/blob/v6.19/drivers/accel/ivpu/ivpu_fw.c), fixture `novalake` |
+
+Doctor explains an NPU PCI function (class `0x1200`) with no driver by the first
+cause that holds: a kernel older than the id's first tag; `intel_vpu` not loaded
+(it suggests `sudo modprobe intel_vpu`, revert `sudo modprobe -r intel_vpu`); no
+firmware under the names that kernel requests. Host changes are suggested only.
 
 ## Intel Enterprise Agent Toolkit (EAT)
 
