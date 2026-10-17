@@ -40,6 +40,7 @@ nav:
       - Intel capability map: intel-capability-map.md
       - Benchmark landscape: benchmark-landscape.md
       - Head-to-head benchmarks: benchmarks.md
+      - Agent benchmarks: agent-benchmarks.md
       - Provenance: provenance.md
       - Security audit: security-audit.md
       - Intel technical report: intel/technical-report.md

@@ -171,6 +171,7 @@ jobs:
       - run: python3 bench/apb/test_stage.py
       - run: python3 bench/test_agent_trace.py
       - run: python3 bench/load/test_load.py
+      - run: python3 bench/eatflow/test_agentbench.py
 
   mcp-tests:
     name: MCP server tests
