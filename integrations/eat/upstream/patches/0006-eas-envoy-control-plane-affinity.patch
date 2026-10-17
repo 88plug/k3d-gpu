@@ -28,14 +28,14 @@ v1alpha1 CRD schema shipped in gateway-helm v1.7.1, which includes
 pod.affinity. Modelling create (null pruned) and re-install over the
 old object (RFC 7386 merge) both leave affinity and no nodeSelector.
 ---
- roles/envoy_gateway/tasks/install.yaml | 23 ++++++++++++++++-------
+ roles/envoy_gateway/tasks/controller.yaml | 23 ++++++++++++++++-------
  1 file changed, 16 insertions(+), 7 deletions(-)
 
-diff --git a/roles/envoy_gateway/tasks/install.yaml b/roles/envoy_gateway/tasks/install.yaml
-index ba7966a..e1cbca7 100644
---- a/roles/envoy_gateway/tasks/install.yaml
-+++ b/roles/envoy_gateway/tasks/install.yaml
-@@ -191,11 +191,12 @@
+diff --git a/roles/envoy_gateway/tasks/controller.yaml b/roles/envoy_gateway/tasks/controller.yaml
+index cf1824b..991f505 100644
+--- a/roles/envoy_gateway/tasks/controller.yaml
++++ b/roles/envoy_gateway/tasks/controller.yaml
+@@ -151,11 +151,12 @@
  # MetalLB elects at any given moment: every CP node always has a local
  # envoy. Survives CP failover, no hostname pinning, no cp[0] dance.
  #
@@ -53,7 +53,7 @@ index ba7966a..e1cbca7 100644
  - name: "envoy_gateway | Create EnvoyProxy config (DaemonSet on control-plane nodes)"
    kubernetes.core.k8s:
      state: present
-@@ -211,8 +212,16 @@
+@@ -171,8 +172,16 @@
            kubernetes:
              envoyDaemonSet:
                pod:

@@ -64,7 +64,7 @@
 
 set -euo pipefail
 
-VERSION="0.1.46"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.47"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 # The node image defaults to the tag built from this launcher's own release
 # (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
@@ -7636,8 +7636,9 @@ qs_agent_ready() {
 # The backend `agent up` will run: the user's, else vllm on a cluster that
 # advertises a Gaudi (agent_device's auto), else ovms.
 qs_backend() {
+    local dev=${K3D_GPU_AGENT_DEVICE:-auto}
     if [ -n "${K3D_GPU_AGENT_BACKEND:-}" ]; then echo "${K3D_GPU_AGENT_BACKEND,,}"
-    elif [ "${K3D_GPU_AGENT_DEVICE:-auto}" != CPU ] && [ "$(resource_total habana.ai/gaudi)" -gt 0 ]; then echo vllm
+    elif [ "${dev^^}" = AUTO ] && [ "$(resource_total habana.ai/gaudi)" -gt 0 ]; then echo vllm
     else echo ovms
     fi
 }
@@ -8536,6 +8537,11 @@ if exp_is_list; then
 fi
 exp_resolve
 
+# up, down, test and logs take no arguments; a stray one (a cluster name) is refused
+# so `down mycluster` cannot act on the default cluster instead.
+case "${1:-help}" in
+    up|down|test|logs) [ $# -le 1 ] || err "'$1' takes no arguments (got: ${*:2}); set K3D_GPU_CLUSTER to pick the cluster" ;;
+esac
 case "${1:-help}" in
     up)      cmd_up      ;;
     down)    cmd_down    ;;

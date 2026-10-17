@@ -65,9 +65,9 @@ Repo truths (evidence from this repo):
   prediction, "not re-measured here". It measures precision plus engine, not
   engine. This document does not use that ratio as a claim; section 6 requires
   a matched-precision re-run first.
-- H1 (EAT on one non-Xeon box) reads PENDING on `main`'s ledger. The
-  `claude/eat-on-k3d` branch reports a live run. The ledger verdict must be
-  updated before any doc claims it.
+- H1 (EAT on one non-Xeon box) is INCONCLUSIVE on `main`'s ledger [ledger:H1].
+  One i9-13900T run returned a completion, but the probe did not run as
+  written. No doc claims it until a clean run turns the row SUPPORTED.
 - The fixture set has **14 hosts** under `tests/fixtures/`: alderlake-n,
   arrowlake-h, arrowlake-s, battlemage-b580, gaudi3-hls, gaudi3-no-driver,
   pantherlake, qat-420xx, raptorlake-nvidia, xeon-gnr, xeon-gnrd, xeon-max-hbm,
