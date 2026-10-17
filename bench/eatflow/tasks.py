@@ -11,6 +11,7 @@ A grader sees only the final answer text, the tool calls the recording proxy saw
 for the task, and (mutating banking tasks) the MCP server's end state. No judge
 model. Each grader returns (passed: bool, reason: str).
 """
+import json
 import re
 
 BLUEPRINTS = "intel/enterprise-ai-blueprints@758d4845520ca5456bf732264ef02d92a26d25a6"
@@ -30,6 +31,7 @@ AVAILABLE = {
     "ACC-1001-CHK": 4250.75, "ACC-1001-SAV": 18200.00, "ACC-1002-CHK": 980.10,
     "ACC-1002-SAV": 5600.00, "ACC-1002-CRD": 3200.00, "ACC-1003-CHK": 12750.42,
 }
+OWED = {"ACC-1002-CRD": 1800.00}  # credit current_balance (amount owed), data.py _SEED_BALANCES
 TRANSACTIONS = [  # (account_id, date, amount)
     ("ACC-1001-CHK", "2026-07-15", -52.30), ("ACC-1001-CHK", "2026-07-14", -12.99),
     ("ACC-1001-CHK", "2026-07-12", 3200.00), ("ACC-1001-CHK", "2026-07-10", -88.40),
@@ -75,9 +77,16 @@ def numbers(text):
 
 
 def has_amount(text, value):
-    """True when |value| appears in the text as a number (to the cent)."""
-    v = round(abs(value), 2)
-    return any(abs(abs(x) - v) < 0.005 for x in numbers(text))
+    """True when |value| appears in the text as a number (to the cent). A tuple of values
+    means any one of them (a credit account: available credit or amount owed)."""
+    vals = value if isinstance(value, tuple) else (value,)
+    nums = numbers(text)
+    return any(abs(abs(x) - round(abs(v), 2)) < 0.005 for v in vals for x in nums)
+
+
+def balance_answer(account):
+    """Accepted amounts for one account's balance."""
+    return (AVAILABLE[account], OWED[account]) if account in OWED else AVAILABLE[account]
 
 
 def has_token(text, token):
@@ -103,8 +112,11 @@ def calls_named(calls, wanted):
     return [c for c in calls if tool_matches(c.get("name") or "", wanted)]
 
 
-REFUSAL_RE = re.compile(r"insufficient|not enough|exceed|cannot|can't|unable|declin|not possible|overdra", re.I)
-NO_LOAN_RE = re.compile(r"\b(no|not have any|doesn't have any|does not have any|don't have any)\b[^.]*\bloans?\b", re.I)
+# A refusal must cite the reason (funds), not just decline: "I cannot access accounts" fails.
+INSUFFICIENT_RE = re.compile(r"insufficient|(?:not|n't) (?:have )?(?:enough|sufficient)|exceed|overdra|"
+                             r"more than (?:the |your )?(?:available|balance)", re.I)
+NO_LOAN_RE = re.compile(r"\b(no|not have (?:any|an?)|doesn't have (?:any|an?)|does not have (?:any|an?)|"
+                        r"don't have (?:any|an?)|do not have (?:any|an?))\b[^.]*\bloans?\b", re.I)
 
 
 # ---- B24 ----------------------------------------------------------------------------
@@ -116,7 +128,7 @@ def _bank_tasks():
         # T1 all balances (README prompt 1 for U1001)
         tasks.append({"id": f"B-T1-{u}", "template": "T1", "user": u, "mutating": False,
                       "prompt": f"My user id is {u}. What are the balances across all my accounts?",
-                      "tools": ["get_balances"], "amounts": [AVAILABLE[a] for a in accts]})
+                      "tools": ["get_balances"], "amounts": [balance_answer(a) for a in accts]})
         # T2 one account balance
         tasks.append({"id": f"B-T2-{u}", "template": "T2", "user": u, "mutating": False,
                       "prompt": f"What is the available balance on account {chk[u]}?",
@@ -158,7 +170,7 @@ def _bank_tasks():
         if u == "U1003":
             tasks.append({"id": f"B-T7-{u}", "template": "T7", "user": u, "mutating": True,
                           "prompt": "I'm user U1003. Pay $100 toward my auto loan from ACC-1003-CHK. I confirm.",
-                          "tools": ["get_loans|get_loan_summary"],
+                          "tools": ["get_loans|get_loan_summary"], "no_loan": True,
                           "end_state": {"balances": {"ACC-1003-CHK": AVAILABLE["ACC-1003-CHK"]},
                                         "loans": {lid: lo[2] for lid, lo in LOANS.items()}}})
         else:
@@ -175,7 +187,7 @@ def _bank_tasks():
                          "U1003": ("ACC-1003-CHK", "ACC-1002-SAV", 20000.0)}[u]
         tasks.append({"id": f"B-T8-{u}", "template": "T8", "user": u, "mutating": False, "refuse": True,
                       "prompt": f"I'm user {u}. Transfer ${amt:.0f} from {src} to {dst}. I confirm.",
-                      "tools": [],
+                      "tools": [], "source": src,
                       "end_state": {"balances": {src: AVAILABLE[src], dst: AVAILABLE[dst]}}})
     return tasks
 
@@ -190,7 +202,7 @@ C12 = [
     {"id": "C02", "prompt": "Write a Python function for the nth Fibonacci number, run it, and print the 15th.",
      "expect": ["610"]},  # README example prompt, verbatim (F1 = F2 = 1)
     {"id": "C03", "prompt": "Install the 'sympy' package in the sandbox and list the first 10 primes with it.",
-     "sequence": [2, 3, 5, 7, 11, 13, 17, 19, 23, 29], "install": True},  # README, verbatim
+     "sequence": [2, 3, 5, 7, 11, 13, 17, 19, 23, 29], "absent": ["31"], "install": True},  # README, verbatim
     {"id": "C04", "prompt": "Run Python in the sandbox to count the prime numbers below 1000 and print the count.",
      "expect": ["168"]},
     {"id": "C05", "prompt": "Run Python in the sandbox to compute the sum of the decimal digits of 2**100 and print it.",
@@ -234,20 +246,24 @@ def _need_tools(task, calls):
     return None
 
 
-def grade_bank(task, answer, calls, state=None):
+def grade_bank(task, answer, calls, state=None, evidence=None):
     """state: {"balances": {acct: available}, "loans": {loan: remaining}} read back from
     the MCP server after the task, or None when no MCP URL was given."""
+    del evidence
     miss = _need_tools(task, calls)
     if miss:
         return False, miss
     if task.get("refuse"):
-        if not REFUSAL_RE.search(answer or ""):
-            return False, "answer does not say the transfer was refused"
+        if not checked_source(calls, task["source"]):
+            return False, f"no valid balance read of {task['source']} and no transfer_funds attempt"
+        if not INSUFFICIENT_RE.search(answer or ""):
+            return False, "answer does not refuse for insufficient funds"
     if task.get("no_loan") and not NO_LOAN_RE.search(answer or ""):
         return False, "answer does not say the user holds no loan"
     for v in task.get("amounts", []):
         if not has_amount(answer, v):
-            return False, f"amount {v:.2f} missing from the answer"
+            shown = " or ".join(f"{x:.2f}" for x in (v if isinstance(v, tuple) else (v,)))
+            return False, f"amount {shown} missing from the answer"
     for d in task.get("dates", []):
         y, m, day = d.split("-")
         months = ["January", "February", "March", "April", "May", "June", "July", "August",
@@ -271,7 +287,25 @@ def grade_bank(task, answer, calls, state=None):
     return True, "ok"
 
 
-def grade_code(task, answer, calls, state=None):
+def checked_source(calls, src):
+    """T8 evidence: a transfer attempt (the server rejects it), get_balances, or a balance
+    read of the source account."""
+    if [c for c in calls_named(calls, "transfer_funds") + calls_named(calls, "get_balances") if c.get("valid")]:
+        return True
+    for c in calls_named(calls, "get_account_balance"):
+        try:
+            args = json.loads(c.get("arguments") or "{}")
+        except ValueError:
+            continue
+        if c.get("valid") and isinstance(args, dict) and args.get("account_id") == src:
+            return True
+    return False
+
+
+def grade_code(task, answer, calls, state=None, evidence=None):
+    """evidence: text of the tool results the agent received (role=tool messages the proxy
+    saw). When given, each expected token must also appear there, so an answer from
+    memory after a failed run does not pass."""
     del state
     if not [c for c in calls_named(calls, "execute_python_code") if c.get("valid")]:
         return False, "no valid execute_python_code call"
@@ -280,8 +314,15 @@ def grade_code(task, answer, calls, state=None):
     for tok in task.get("expect", []):
         if not has_token(answer, tok):
             return False, f"{tok} missing from the answer"
+        if evidence is not None and not has_token(evidence, tok):
+            return False, f"{tok} not in the sandbox tool output"
     if task.get("sequence") and not in_order(answer, task["sequence"]):
         return False, "expected sequence missing from the answer"
+    if task.get("sequence") and evidence is not None and not in_order(evidence, task["sequence"]):
+        return False, "expected sequence not in the sandbox tool output"
+    for tok in task.get("absent", []):
+        if has_token(answer, tok):
+            return False, f"{tok} in the answer: more than was asked for"
     return True, "ok"
 
 

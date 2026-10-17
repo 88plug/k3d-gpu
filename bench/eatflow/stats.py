@@ -86,3 +86,21 @@ def ratio_ci(xs, ys, stat=median, boot=BOOT, seed=SEED):
         return point, (None, None)
     vals.sort()
     return point, (vals[int(0.025 * len(vals))], vals[min(len(vals) - 1, int(0.975 * len(vals)))])
+
+
+def paired_ratio(a, b, boot=BOOT, seed=SEED):
+    """Paired time ratio of two {task_id: seconds} maps on their shared ids.
+
+    ratio = exp(median of per-id log(a / b)); the 95% CI resamples ids (paired bootstrap).
+    Tasks only one arm completed never enter it. Returns {"n", "ratio", "ci95": [lo, hi]}."""
+    ids = sorted(i for i in set(a) & set(b) if a[i] > 0 and b[i] > 0)
+    out = {"n": len(ids), "ratio": None, "ci95": [None, None]}
+    if not ids:
+        return out
+    d = [math.log(a[i] / b[i]) for i in ids]
+    out["ratio"] = math.exp(median(d))
+    rng = random.Random(seed)
+    n = len(d)
+    meds = sorted(median([d[rng.randrange(n)] for _ in range(n)]) for _ in range(boot))
+    out["ci95"] = [math.exp(meds[int(0.025 * boot)]), math.exp(meds[min(boot - 1, int(0.975 * boot))])]
+    return out

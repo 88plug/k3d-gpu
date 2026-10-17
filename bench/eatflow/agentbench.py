@@ -156,13 +156,46 @@ def seed_state(task):
 # ---- proxy-record attribution ------------------------------------------------------
 
 def attribute(records, prompt, t0, t1, slack=0.0):
-    """Proxy records of one task: same last user message, sent inside the task window."""
-    return [r for r in records if r.get("last_user") == prompt
+    """Proxy records of one task: its prompt is the last (or first) user message, and the
+    proxy received the request inside the task window."""
+    return [r for r in records if prompt in (r.get("last_user"), r.get("first_user"))
             and t0 - slack <= (r.get("ts_send") or 0) <= t1 + slack]
+
+
+def is_final(rec):
+    """The turn that produced the agent's answer: no tool call, no error."""
+    return not rec.get("tool_calls") and not rec.get("error") and (rec.get("status") or 0) < 400
+
+
+def wait_records(proxy_log, prompt, t0, t1, need_final, max_wait, poll=0.1, clock=time.time):
+    """Poll the proxy log until the task's final turn is in it (a `kubectl logs -f` copy
+    lags behind the proxy), or max_wait seconds pass. Returns the attributed records."""
+    end = clock() + max_wait
+    while True:
+        recs = attribute(proxy.read_log(proxy_log), prompt, t0, t1)
+        if not need_final or any(is_final(r) for r in recs) or clock() >= end:
+            return recs
+        time.sleep(poll)
 
 
 def flat_calls(recs):
     return [c for r in recs for c in (r.get("tool_calls") or [])]
+
+
+def evidence_text(recs):
+    """Every distinct tool result the agent was sent during the task."""
+    seen = []
+    for r in recs:
+        for t in r.get("tool_results") or []:
+            if t not in seen:
+                seen.append(t)
+    return "\n".join(seen)
+
+
+def memory_users(recs):
+    """Largest user-message count among the task's requests (None: proxy predates it)."""
+    n = [r["user_msgs"] for r in recs if r.get("user_msgs") is not None]
+    return max(n) if n else None
 
 
 # ---- results file (resumable) ------------------------------------------------------
@@ -242,12 +275,41 @@ def write_facts(out, args, extra=None):
 
 # ---- one block ---------------------------------------------------------------------
 
+WARMUP = {"bank": "My user id is U1001. Which account ids do I have? Answer with the ids only.",
+          "code": "Run Python in the sandbox to print the value of 7 * 6."}
+
+
+class BlockAborted(Exception):
+    """A block stopped before its end: the run is not valid and the CLI exits non-zero."""
+
+    def __init__(self, reason, rows):
+        super().__init__(reason)
+        self.reason, self.rows = reason, rows
+
+
+class ResetFailed(Exception):
+    pass
+
+
+def warmup_prompt(task_list):
+    return WARMUP["code"] if task_list and task_list[0]["id"].startswith("C") else WARMUP["bank"]
+
+
 def run_block(agent, task_list, arm, level, n, out, budget_s, proxy_log, mcp_url=None, reset=None,
-              cycle=False, task_timeout=TASK_TIMEOUT_S, clock=time.time, settle_s=2.0,
-              opener=urllib.request.urlopen, sampler=None, meter=None, step=None):
+              cycle=False, task_timeout=TASK_TIMEOUT_S, clock=time.time, settle_s=30.0,
+              opener=urllib.request.urlopen, sampler=None, meter=None, step=None, warmup=None,
+              reset_tries=60):
     """Closed-loop block: n workers take tasks until the set is done (or, with cycle,
     until the budget ends). Each finished task is graded and appended to
-    results.jsonl. Returns the rows of this block."""
+    results.jsonl. Returns the rows of this block.
+
+    warmup: one unscored prompt sent before the window opens (cold start: compile, cache
+    fill); its answer must come back. settle_s: the longest wait for a task's final LLM
+    turn to reach the proxy log. In cycle mode every sent prompt carries a nonce prefix
+    so no two requests repeat. After a mutating task, or any task whose end state reads
+    back off the seed, --reset runs, the seed is read back, and the warm-up prompt must
+    answer again before the next task. Any failure there, or a request that carries more
+    than one user message (agent memory on), aborts the block: BlockAborted."""
     os.makedirs(out, exist_ok=True)
     res = Results(os.path.join(out, "results.jsonl"))
     skip = set() if cycle else res.done(arm, level, n) & {t["id"] for t in task_list}
@@ -257,7 +319,32 @@ def run_block(agent, task_list, arm, level, n, out, budget_s, proxy_log, mcp_url
     qlock = threading.Lock()
     inflight = set()
     rows = []
-    rep = {"i": 0}
+    rep = {"i": 0, "seq": 0}
+    abort = {"reason": None}
+    abort_ev = threading.Event()
+    blk = {"arm": arm, "level": level, "n": n, "step": step, "warmup": None}
+
+    def finish(block_s, e):
+        blk.update(seconds=round(block_s, 3), tasks=len(rows), energy=e, aborted=abort["reason"])
+        with open(os.path.join(out, "blocks.jsonl"), "a") as f:
+            f.write(json.dumps(blk) + "\n")
+        if abort["reason"]:
+            raise BlockAborted(abort["reason"], rows)
+
+    def stop(reason):
+        with qlock:
+            if abort["reason"] is None:
+                abort["reason"] = reason
+        abort_ev.set()
+
+    if warmup:
+        w0 = clock()
+        ans, _, err = agent.ask(warmup, timeout=task_timeout)
+        blk["warmup"] = {"prompt": warmup, "seconds": round(clock() - w0, 3), "error": err,
+                         "answer": (ans or "")[:300], "t_end": clock()}
+        if err:
+            stop(f"warm-up failed: {err}")
+            finish(0.0, None)
     deadline = clock() + budget_s
 
     def next_task():
@@ -268,64 +355,86 @@ def run_block(agent, task_list, arm, level, n, out, budget_s, proxy_log, mcp_url
                     rep["i"] += 1
                     if t["id"] not in inflight:
                         inflight.add(t["id"])
-                        return t, rep["i"] // len(task_list)
-                return None, 0
+                        rep["seq"] += 1
+                        return t, rep["i"] // len(task_list), f"[ref {step or 'b'}-{rep['seq']}] "
+                return None, 0, ""
             while queue:
                 t = queue.pop(0)
                 inflight.add(t["id"])
-                return t, 0
-            return None, 0
+                return t, 0, ""
+            return None, 0, ""
+
+    def one(t, cyc, nonce):
+        prompt = nonce + t["prompt"]
+        left = deadline - clock()
+        t0 = clock()
+        limit = min(task_timeout, left)
+        answer, status, err = agent.ask(prompt, timeout=limit)
+        t1 = clock()
+        dur = t1 - t0
+        if err and "timed out" in err.lower() and limit < task_timeout:
+            state, kind = "censored", "censored"
+        elif err and "timed out" in err.lower():
+            state, kind = "timeout", "fail"
+        elif err:
+            state, kind = "error", "fail"
+        else:
+            state, kind = "done", None
+        recs = (wait_records(proxy_log, prompt, t0, t1, kind is None, settle_s, clock=clock)
+                if proxy_log else [])
+        users = memory_users(recs)
+        if users is not None and users > 1:
+            stop(f"agent memory is on: an LLM request of {t['id']} carried {users} user messages "
+                 "(deploy the blueprint with ENABLE_MEMORY=false)")
+        calls = flat_calls(recs)
+        end = None
+        if mcp_url and t.get("end_state"):
+            try:
+                end = mcp_state(mcp_url, t, opener)
+            except (OSError, ValueError, urllib.error.URLError) as e:
+                end, err = None, f"end-state read failed: {e}"
+        if kind is None:
+            ok, reason = T.grader_for(t)(t, answer, calls, end,
+                                         evidence=evidence_text(recs) if proxy_log else None)
+            kind = "pass" if ok else "fail"
+        else:
+            ok, reason = False, err or state
+        strict = ok and bool(calls) and all(c.get("valid") for c in calls)
+        row = {"task": t["id"], "arm": arm, "level": level, "n": n, "cycle": cyc, "step": step,
+               "nonce": nonce or None, "status": kind, "passed": kind == "pass", "strict": strict,
+               "reason": reason, "t_start": t0, "t_end": t1, "duration_s": round(dur, 3),
+               "censored": kind == "censored", "response_status": status, "answer": (answer or "")[:2000],
+               "error": err, "llm_requests": len(recs), "user_msgs_max": users,
+               "truncated": any(r.get("finish_reason") == "length" for r in recs),
+               "calls": [{k: c.get(k) for k in ("name", "valid", "reason")} for c in calls],
+               "first_turn_valid": (any(c.get("valid") for c in recs[0].get("tool_calls") or [])
+                                    if recs and t.get("tools") else None)}
+        res.add(row, recs)
+        rows.append(row)
+        moved = end is not None and end != seed_state(t)
+        if reset and (t.get("mutating") or moved) and not abort_ev.is_set():
+            reset_sidecar(reset, mcp_url, t, opener, tries=reset_tries)
+            probe = warmup or warmup_prompt([t])
+            _, _, perr = agent.ask(probe, timeout=task_timeout)
+            if perr:
+                raise ResetFailed(f"agent did not answer after --reset: {perr}")
 
     def worker():
-        while True:
-            left = deadline - clock()
-            if left <= 0:
+        while not abort_ev.is_set():
+            if deadline - clock() <= 0:
                 return
-            t, cyc = next_task()
+            t, cyc, nonce = next_task()
             if t is None:
                 return
-            mutating = t.get("mutating")
-            t0 = clock()
-            limit = min(task_timeout, left)
-            answer, status, err = agent.ask(t["prompt"], timeout=limit)
-            t1 = clock()
-            dur = t1 - t0
-            if err and "timed out" in err.lower() and limit < task_timeout:
-                state, kind = "censored", "censored"
-            elif err and "timed out" in err.lower():
-                state, kind = "timeout", "fail"
-            elif err:
-                state, kind = "error", "fail"
-            else:
-                state, kind = "done", None
-            time.sleep(settle_s)
-            recs = attribute(proxy.read_log(proxy_log), t["prompt"], t0, t1) if proxy_log else []
-            calls = flat_calls(recs)
-            end = None
-            if mcp_url and t.get("end_state"):
-                try:
-                    end = mcp_state(mcp_url, t, opener)
-                except (OSError, ValueError, urllib.error.URLError) as e:
-                    end, err = None, f"end-state read failed: {e}"
-            if kind is None:
-                ok, reason = T.grader_for(t)(t, answer, calls, end)
-                kind = "pass" if ok else "fail"
-            else:
-                ok, reason = False, err or state
-            strict = ok and bool(calls) and all(c.get("valid") for c in calls)
-            row = {"task": t["id"], "arm": arm, "level": level, "n": n, "cycle": cyc, "step": step,
-                   "status": kind, "passed": kind == "pass", "strict": strict, "reason": reason,
-                   "t_start": t0, "t_end": t1, "duration_s": round(dur, 3), "censored": kind == "censored",
-                   "response_status": status, "answer": (answer or "")[:2000], "error": err,
-                   "llm_requests": len(recs), "calls": [{k: c.get(k) for k in ("name", "valid", "reason")} for c in calls],
-                   "first_turn_valid": (any(c.get("valid") for c in recs[0].get("tool_calls") or [])
-                                        if recs and t.get("tools") else None)}
-            res.add(row, recs)
-            rows.append(row)
-            with qlock:
-                inflight.discard(t["id"])
-            if mutating and reset:
-                reset_sidecar(reset, mcp_url, t, opener)
+            try:
+                one(t, cyc, nonce)
+            except ResetFailed as e:
+                stop(f"reset after {t['id']} failed: {e}")
+            except Exception as e:  # noqa: BLE001 - any worker crash invalidates the block
+                stop(f"worker crashed on {t['id']}: {type(e).__name__}: {e}")
+            finally:
+                with qlock:
+                    inflight.discard(t["id"])
 
     if sampler:
         sampler.start()
@@ -341,27 +450,34 @@ def run_block(agent, task_list, arm, level, n, out, budget_s, proxy_log, mcp_url
     e = meter.stop() if meter else None
     if sampler:
         sampler.stop()
-    blk = {"arm": arm, "level": level, "n": n, "step": step, "seconds": round(block_s, 3),
-           "tasks": len(rows), "energy": e}
-    with open(os.path.join(out, "blocks.jsonl"), "a") as f:
-        f.write(json.dumps(blk) + "\n")
+    finish(block_s, e)
     return rows
 
 
-def reset_sidecar(cmd, mcp_url, task, opener=urllib.request.urlopen, tries=60):
-    """Run the reset command, then wait until the MCP server reads back the seed."""
-    subprocess.run(shlex.split(cmd), check=False, capture_output=True, timeout=300)
+def reset_sidecar(cmd, mcp_url, task, opener=urllib.request.urlopen, tries=60, timeout=300):
+    """Run the reset command (it must exit 0 within timeout), then wait until the MCP
+    server reads back the seed. Raises ResetFailed."""
+    try:
+        p = subprocess.run(shlex.split(cmd), check=False, capture_output=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise ResetFailed(f"--reset did not finish in {timeout} s")
+    except OSError as e:
+        raise ResetFailed(f"--reset could not run: {e}")
+    if p.returncode != 0:
+        tail = (p.stderr or b"").decode(errors="replace").strip()[-300:]
+        raise ResetFailed(f"--reset exit {p.returncode}: {tail}")
     if not mcp_url:
         return
     want = seed_state(task)
-    for _ in range(tries):
+    for i in range(tries):
         try:
             if mcp_state(mcp_url, task, opener) == want:
                 return
         except (OSError, ValueError, urllib.error.URLError):
             pass
-        time.sleep(2)
-    raise SystemExit("agentbench: MCP server did not return to the seed state after --reset")
+        if i + 1 < tries:
+            time.sleep(2)
+    raise ResetFailed("MCP server did not return to the seed state after --reset")
 
 
 # ---- apb gate ----------------------------------------------------------------------
@@ -442,7 +558,16 @@ def summarize_rows(rows, recs):
         "tool_turn_completion_tokens_median": stats.median(tool_tok),
         "cached_fraction": sum(cached) / len(cached) if cached else None,
         "error_rate": (sum(1 for x in lat if x == INF) / len(lat)) if lat else None,
+        "sampling": unique([r.get("sampling") for r in recs]),
     }
+
+
+def unique(xs):
+    out = []
+    for x in xs:
+        if x not in out:
+            out.append(x)
+    return out
 
 
 def collect(run_dirs):
@@ -491,15 +616,21 @@ def build_report(run_dirs, ref=None):
                 continue
             a = {r["task"]: int(r["passed"]) for r in rs if not r["censored"]}
             b = {r["task"]: int(r["passed"]) for r in groups[(ref, level, n)] if not r["censored"]}
+            shared = sorted(set(a) & set(b))
             pd = stats.paired_diff(a, b)
-            ta = [r["duration_s"] for r in rs if not r["censored"]]
-            tb = [r["duration_s"] for r in groups[(ref, level, n)] if not r["censored"]]
-            point, ci = stats.ratio_ci(ta, tb)
-            out["pairs"].append({"arm": arm, "ref": ref, "level": level, "n": n, "success_diff": pd,
-                                 "time_ratio_median": point, "time_ratio_ci95": list(ci)})
+            ta = {r["task"]: r["duration_s"] for r in rs if not r["censored"]}
+            tb = {r["task"]: r["duration_s"] for r in groups[(ref, level, n)] if not r["censored"]}
+            pr = stats.paired_ratio(ta, tb)
+            out["pairs"].append({
+                "arm": arm, "ref": ref, "level": level, "n": n, "shared_ids": len(shared),
+                "arm_completed": len(a), "ref_completed": len(b),
+                "arm_success_shared": sum(a[i] for i in shared) / len(shared) if shared else None,
+                "ref_success_shared": sum(b[i] for i in shared) / len(shared) if shared else None,
+                "success_diff": pd, "time_ratio_median": pr["ratio"], "time_ratio_ci95": pr["ci95"],
+                "time_ratio_n": pr["n"]})
     lm = _load_mod()
-    for level in sorted({w.get("level") for w in loads}, key=str):
-        ws = [w for w in loads if w.get("level") == level]
+    for level in sorted({w.get("level") for w in loads if not str(w.get("tag") or "").endswith("-control")}, key=str):
+        ws = [w for w in loads if w.get("level") == level and not str(w.get("tag") or "").endswith("-control")]
         out["load"][str(level)] = lm.matched(ws) if lm else {"verdict": "load.py unavailable"}
     by_mode = {}
     for b in bfcls:
@@ -526,18 +657,21 @@ def render_md(rep):
         for g in rep["groups"]:
             lo, hi = g["success_wilson95"]
             L.append(f"| {g['arm']} | {g['level']} | {g['n']} | {g['tasks']} | {g['censored']} | "
-                     f"{_f(g['success'])} ({_f(lo)}-{_f(hi)}) | {_f(g['strict_success'])} | "
+                     f"{_f(g['success'])} ({g['successes']}/{g['tasks']}), {_f(lo)}-{_f(hi)} | "
+                     f"{_f(g['strict_success'])} | "
                      f"{_f(g['tool_call_validity'])} | {_f(g['tool_valid_any'])} | {_f(g['turn_p50_s'])} | "
                      f"{_f(g['turn_p95_s'])} | {_f(g['ttft_p95_s'])} | {_f(g['task_median_s'])} | "
                      f"{_f(g['task_p95_s'])} | {_f(g.get('j_per_success'), 1)} |")
         L.append("")
     if rep["pairs"]:
-        L += ["## Paired vs reference", "", "| Arm | Ref | Load | N | Shared ids | Success diff (95% CI) | "
-              "Time ratio median (95% CI) |", "|---|---|---|---|---|---|---|"]
+        L += ["## Paired vs reference (shared completed task ids only)", "",
+              "| Arm | Ref | Load | N | Completed (arm/ref) | Shared ids | Success on shared (arm/ref) | "
+              "Success diff (95% CI) | Paired time ratio (95% CI) |", "|---|---|---|---|---|---|---|---|---|"]
         for p in rep["pairs"]:
             d = p["success_diff"]
-            L.append(f"| {p['arm']} | {p['ref']} | {p['level']} | {p['n']} | {d['n']} | {_f(d['diff'])} "
-                     f"({_f(d['ci95'][0])}..{_f(d['ci95'][1])}) | {_f(p['time_ratio_median'])} "
+            L.append(f"| {p['arm']} | {p['ref']} | {p['level']} | {p['n']} | {p['arm_completed']}/{p['ref_completed']} | "
+                     f"{p['shared_ids']} | {_f(p['arm_success_shared'])}/{_f(p['ref_success_shared'])} | "
+                     f"{_f(d['diff'])} ({_f(d['ci95'][0])}..{_f(d['ci95'][1])}) | {_f(p['time_ratio_median'])} "
                      f"({_f(p['time_ratio_ci95'][0])}..{_f(p['time_ratio_ci95'][1])}) |")
         L.append("")
     if rep["bfcl"]:
@@ -618,13 +752,35 @@ def cmd_plan(a):
     return 0
 
 
+def sampling_set(spec):
+    """A sampling profile name from agent.lock ("agent_local", "agent_remote") or a JSON object."""
+    if not spec:
+        return None
+    profiles = lock().get("sampling", {})
+    if spec in profiles:
+        return {k: v for k, v in profiles[spec].items() if not k.startswith("_")}
+    try:
+        d = json.loads(spec)
+    except ValueError:
+        d = None
+    if not isinstance(d, dict):
+        raise SystemExit(f"agentbench: --sampling {spec!r} is neither a profile ({', '.join(profiles)}) "
+                         "nor a JSON object")
+    return d
+
+
 def cmd_proxy(a):
+    key = proxy.read_key_file(a.key_file, a.key_var) if a.key_file else None
     if a.log != "-":
         os.makedirs(os.path.dirname(os.path.abspath(a.log)), exist_ok=True)
-    px = proxy.Proxy(a.upstream, "/dev/stdout" if a.log == "-" else a.log, max_requests=a.max_requests,
-                     include_usage=not a.no_usage, api_key=os.environ.get("AGENTBENCH_UPSTREAM_KEY"))
+    try:
+        px = proxy.Proxy(a.upstream, "/dev/stdout" if a.log == "-" else a.log, max_requests=a.max_requests,
+                         include_usage=not a.no_usage, api_key=key, sampling=sampling_set(a.sampling))
+    except ValueError as e:
+        raise SystemExit(f"agentbench: {e} (--max-requests)")
     srv = proxy.serve(px, a.host, a.port)
-    log(f"proxy on {srv.server_address[0]}:{srv.server_address[1]} -> {a.upstream} (log {a.log})")
+    log(f"proxy on {srv.server_address[0]}:{srv.server_address[1]} -> {a.upstream} (log {a.log}, "
+        f"cap {a.max_requests}, sampling {px.sampling}, key {'from ' + a.key_file if key else 'none'})")
     try:
         while True:
             time.sleep(3600)
@@ -652,7 +808,7 @@ spec:
         - name: proxy
           image: {image}
           command: ["python3", "-u", "/app/eatflow/agentbench.py", "proxy", "--host", "0.0.0.0",
-                    "--port", "8080", "--upstream", "{upstream}", "--log", "-"{cap}]
+                    "--port", "8080", "--upstream", "{upstream}", "--log", "-"{cap}{sampling}]
           ports: [{{containerPort: 8080}}]
           volumeMounts:
             - {{name: src, mountPath: /app/eatflow/agentbench.py, subPath: agentbench.py}}
@@ -674,7 +830,8 @@ spec:
 """
 
 
-def manifest(upstream, ns, max_requests=None):
+def manifest(upstream, ns, max_requests=None, sampling=None):
+    """sampling: a profile name from agent.lock, or a dict (passed to the proxy as JSON)."""
     names = ["agentbench.py", "proxy.py", "tasks.py", "stats.py", "energy.py", "bfcl.py", "agent.lock"]
     paths = {n: os.path.join(HERE, n) for n in names}
     paths["agent_trace.py"] = os.path.join(HERE, "..", "agent_trace.py")
@@ -683,19 +840,22 @@ def manifest(upstream, ns, max_requests=None):
         with open(p) as f:
             body = f.read()
         files.append(f"  {n}: |\n" + "".join(f"    {ln}\n" if ln else "\n" for ln in body.split("\n")))
-    cap = f', "--max-requests", "{max_requests}"' if max_requests else ""
+    cap = f', "--max-requests", "{max_requests}"' if max_requests is not None else ""
+    spec = json.dumps(sampling) if isinstance(sampling, dict) else sampling
+    samp = f', "--sampling", {json.dumps(spec)}' if spec else ""
     return MANIFEST.format(ns=ns, files="".join(files), image=lock()["images"]["proxy_python"]["ref"],
-                           upstream=upstream, cap=cap)
+                           upstream=upstream, cap=cap, sampling=samp)
 
 
 def cmd_manifest(a):
-    sys.stdout.write(manifest(a.upstream, a.namespace, a.max_requests))
+    sampling_set(a.sampling)
+    sys.stdout.write(manifest(a.upstream, a.namespace, a.max_requests, a.sampling))
     return 0
 
 
-def _block_tools(a, tag):
+def _block_tools(a, tag, load_file="load.jsonl"):
     os.makedirs(a.out, exist_ok=True)
-    sampler = None if a.no_load_sample else LoadSampler(os.path.join(a.out, "load.jsonl"), tag, a.level, a.sample_s)
+    sampler = None if a.no_load_sample else LoadSampler(os.path.join(a.out, load_file), tag, a.level, a.sample_s)
     meter = None if a.no_energy else energy.Meter(gpu=a.gpu_power)
     return sampler, meter
 
@@ -704,7 +864,7 @@ def _proxy_log(a):
     """The proxy log for this block: --proxy-log, or an in-process proxy with --upstream."""
     if a.upstream:
         path = os.path.join(a.out, "proxy.jsonl")
-        px = proxy.Proxy(a.upstream, path, max_requests=a.max_requests)
+        px = proxy.Proxy(a.upstream, path, max_requests=a.max_requests, sampling=sampling_set(a.sampling))
         srv = proxy.serve(px, "127.0.0.1", a.proxy_port)
         log(f"in-process proxy on 127.0.0.1:{srv.server_address[1]} -> {a.upstream}")
         return path, srv
@@ -728,18 +888,46 @@ def cmd_run(a):
         ts = [t for t in ts if t["id"] in want]
     if a.limit:
         ts = ts[:a.limit]
-    rows = run_block(agent, ts, a.arm, a.level, a.concurrency, a.out, a.budget_s, plog, a.mcp_url, a.reset,
-                     cycle=a.cycle, task_timeout=a.task_timeout_s, sampler=sampler, meter=meter)
+    rc = 0
+    try:
+        rows = run_block(agent, ts, a.arm, a.level, a.concurrency, a.out, a.budget_s, plog, a.mcp_url, a.reset,
+                         cycle=a.cycle, task_timeout=a.task_timeout_s, sampler=sampler, meter=meter,
+                         warmup=None if a.no_warmup else warmup_prompt(ts), settle_s=a.settle_s)
+    except BlockAborted as e:
+        rows, rc = e.rows, 1
+        log(f"block ABORTED: {e.reason}")
     if srv:
         srv.shutdown()
+    record_turn_facts(a.out, a.arm, a.level, a.concurrency)
     k = sum(r["passed"] for r in rows)
     log(f"{a.arm} {a.level} N={a.concurrency}: {k}/{len(rows)} passed; results in {a.out}/results.jsonl")
-    return 0
+    return rc
+
+
+def record_turn_facts(out, arm, level, n):
+    """Add what the proxy saw to facts.json: the sampling sets and the agent-memory check."""
+    turns = [t for t in read_jsonl(os.path.join(out, "turns.jsonl"))
+             if (t.get("arm"), t.get("level"), t.get("n")) == (arm, level, n)]
+    users = [t.get("user_msgs") for t in turns]
+    if users and all(u == 1 for u in users):
+        mem = "off: every attributed LLM request carried one user message"
+    elif any(u is not None and u > 1 for u in users):
+        mem = "ON: a request carried more than one user message"
+    else:
+        mem = "unverified: no attributed request recorded a user-message count"
+    p = os.path.join(out, "facts.json")
+    with open(p) as f:
+        facts = json.load(f)
+    facts.update(sampling_seen=unique([t.get("sampling") for t in turns]), memory=mem, turns=len(turns))
+    with open(p, "w") as f:
+        json.dump(facts, f, indent=1, default=str)
 
 
 def cmd_control(a):
+    if a.no_energy:
+        raise SystemExit("agentbench: control measures the energy baseline; --no-energy makes it meaningless")
     os.makedirs(a.out, exist_ok=True)
-    sampler, meter = _block_tools(a, f"{a.arm}-control")
+    sampler, meter = _block_tools(a, f"{a.arm}-control", "control-load.jsonl")
     if sampler:
         sampler.start()
     meter.start()
@@ -754,12 +942,13 @@ def cmd_control(a):
 
 
 def run_apb(agent, arm, level, out, step_s, proxy_log, ramp=RAMP, warmup_s=30.0,
-            clock=time.time, settle_s=2.0, block=run_block, meter_factory=None, sampler_factory=None):
+            clock=time.time, settle_s=30.0, block=run_block, meter_factory=None, sampler_factory=None,
+            warmup=None):
     steps, base = [], None
     for n in ramp:
         t0 = clock()
         rows = block(agent, T.B15_RO, arm, level, n, out, step_s, proxy_log, cycle=True, clock=clock,
-                     settle_s=settle_s, step=f"apb-{n}",
+                     settle_s=settle_s, step=f"apb-{n}", warmup=warmup if n == ramp[0] else None,
                      meter=meter_factory() if meter_factory else None,
                      sampler=sampler_factory() if sampler_factory else None)
         recs = window_requests(proxy.read_log(proxy_log), t0 + warmup_s)
@@ -786,12 +975,18 @@ def cmd_apb(a):
     if not plog:
         raise SystemExit("agentbench: --proxy-log FILE or --upstream URL is required")
     agent = Agent(a.agent_url, os.environ.get("DEVUI_AUTH_TOKEN"), a.entity)
-    res = run_apb(agent, a.arm, a.level, a.out, a.step_s, plog,
-                  meter_factory=None if a.no_energy else (lambda: energy.Meter(gpu=a.gpu_power)),
-                  sampler_factory=None if a.no_load_sample else
-                  (lambda: LoadSampler(os.path.join(a.out, "load.jsonl"), a.arm, a.level, a.sample_s)))
-    if srv:
-        srv.shutdown()
+    try:
+        res = run_apb(agent, a.arm, a.level, a.out, a.step_s, plog, settle_s=a.settle_s,
+                      meter_factory=None if a.no_energy else (lambda: energy.Meter(gpu=a.gpu_power)),
+                      sampler_factory=None if a.no_load_sample else
+                      (lambda: LoadSampler(os.path.join(a.out, "load.jsonl"), a.arm, a.level, a.sample_s)),
+                      warmup=None if a.no_warmup else WARMUP["bank"])
+    except BlockAborted as e:
+        log(f"apb ABORTED: {e.reason}")
+        return 1
+    finally:
+        if srv:
+            srv.shutdown()
     print(f"agents per box ({a.arm}, {a.level}): {res['apb']}")
     return 0
 
@@ -856,14 +1051,18 @@ def parse(argv):
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8080)
     p.add_argument("--log", required=True, help="JSONL file, or - for stdout (kubectl logs)")
-    p.add_argument("--max-requests", type=int)
+    p.add_argument("--max-requests", type=int, help="hard cap on forwarded POSTs (required with --key-file)")
     p.add_argument("--no-usage", action="store_true", help="do not add stream_options.include_usage")
+    p.add_argument("--key-file", help="0600 KEY=VALUE file holding the upstream key (remote arm)")
+    p.add_argument("--key-var", default="OPENAI_API_KEY", help="variable in --key-file holding the key")
+    p.add_argument("--sampling", help="pinned sampling: a profile in agent.lock or a JSON object")
     p.set_defaults(func=cmd_proxy)
 
     p = sub.add_parser("manifest", help="in-cluster proxy manifest")
     p.add_argument("--upstream", required=True)
     p.add_argument("--namespace", default="agentbench")
     p.add_argument("--max-requests", type=int)
+    p.add_argument("--sampling", default="agent_local", help="pinned sampling profile or JSON (default agent_local)")
     p.set_defaults(func=cmd_manifest)
 
     def block_args(p, budget=True):
@@ -877,11 +1076,19 @@ def parse(argv):
         if budget:
             p.add_argument("--budget-s", type=float, default=ARM_BUDGET_S)
 
-    def llm_args(p):
+    def llm_args(p, agent=True):
         p.add_argument("--proxy-log", help="JSONL of the in-cluster proxy (kubectl logs -f ... > FILE)")
         p.add_argument("--upstream", help="run the proxy in-process against this LLM server root")
         p.add_argument("--proxy-port", type=int, default=0)
         p.add_argument("--max-requests", type=int, help="hard LLM request cap (paid/remote arm)")
+        if not agent:   # BFCL keeps its own sampling (temperature 0.001, as on the board)
+            p.set_defaults(sampling=None)
+            return
+        p.add_argument("--sampling", default="agent_local",
+                       help="sampling the in-process proxy pins (agent.lock profile or JSON)")
+        p.add_argument("--no-warmup", action="store_true", help="skip the unscored warm-up prompt")
+        p.add_argument("--settle-s", type=float, default=30.0,
+                       help="longest wait for a task's final turn to reach the proxy log")
 
     p = sub.add_parser("run", help="one block")
     block_args(p)
@@ -913,7 +1120,7 @@ def parse(argv):
 
     p = sub.add_parser("bfcl", help="BFCL S100 through the proxy")
     block_args(p)
-    llm_args(p)
+    llm_args(p, agent=False)
     p.add_argument("--mode", required=True, choices=sorted(bfcl.REGISTRY))
     p.add_argument("--served-model", help="model name the server-fc mode sends")
     p.add_argument("--python", default="python3", help="interpreter of the venv holding bfcl-eval==2025.12.17")

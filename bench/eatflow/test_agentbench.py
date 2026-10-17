@@ -105,6 +105,7 @@ class LLM(http.server.BaseHTTPRequestHandler):
             ev({"choices": [{"delta": {"tool_calls": [{"index": 0, "function": {"arguments": a[5:]}}]}}]})
         else:
             ev({"choices": [{"delta": {"content": LLM.answer}}]})
+        ev({"choices": [{"delta": {}, "finish_reason": "tool_calls" if last == "user" else "stop"}]})
         if (body.get("stream_options") or {}).get("include_usage"):
             ev({"choices": [], "usage": {"prompt_tokens": 100, "completion_tokens": 7}})
         ev(b"[DONE]")
@@ -521,7 +522,7 @@ class BlockTest(unittest.TestCase):
         self.assertNotEqual(AB.mcp_state(murl, t6), AB.seed_state(t6))
         AB.reset_sidecar(f"cp {seed} {state}", murl, t6, tries=3)
         self.assertEqual(AB.mcp_state(murl, t6), AB.seed_state(t6))
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(AB.ResetFailed):
             with open(state, "w") as f:
                 json.dump(moved, f)
             AB.reset_sidecar("true", murl, t6, tries=1)
@@ -538,7 +539,7 @@ class BlockTest(unittest.TestCase):
         self.assertEqual(sorted(r["task"] for r in rows), ["B-T1-U1001", "B-T2-U1001"])
         with open(os.path.join(self.out, "facts.json")) as f:
             facts = json.load(f)
-        self.assertNotIn("tok", json.dumps(facts))
+        self.assertNotIn('"tok"', json.dumps(facts))     # the DevUI token value
         self.assertEqual(facts["lock"]["schema"], "k3d-gpu.agent-bench-lock/v1")
         with self.assertRaises(SystemExit):
             AB.main(["run", "--arm", "A1", "--level", "none", "--out", self.out, "--agent-url", url,
@@ -994,6 +995,14 @@ class ProxyRefuterTest(unittest.TestCase):
         self.assertNotIn("top_k", sent)      # a pinned set replaces the agent's sampling keys
         (r,) = proxy.read_log(self.log)
         self.assertEqual(r["sampling"], pin)
+        self.assertEqual(r["finish_reason"], None)
+
+    def test_finish_reason_is_recorded(self):
+        url = self.px()
+        post(url + "/v1/chat/completions", {"model": "m", "stream": True, "tools": [BAL_TOOL],
+                                            "messages": [{"role": "user", "content": "q"}]})
+        (r,) = proxy.read_log(self.log)
+        self.assertEqual(r["finish_reason"], "tool_calls")
 
     def test_records_user_count_first_user_and_tool_results(self):
         url = self.px()
@@ -1008,7 +1017,7 @@ class ProxyRefuterTest(unittest.TestCase):
 
     def test_cap_counts_every_post_when_set(self):
         url = self.px(max_requests=2)
-        post(url + "/v1/embeddings", {"model": "m", "input": "x"})
+        post(url + "/v1/embeddings", {"model": "m", "messages": [{"role": "user", "content": "x"}]})
         req = urllib.request.Request(url + "/v1/chat/completions", data=b"not json",
                                      headers={"Content-Type": "application/json"})
         try:
@@ -1166,7 +1175,7 @@ class BlockRefuterTest(unittest.TestCase):
         prompts = [m["content"] for b in LLM.seen for m in b["messages"] if m["role"] == "user"]
         self.assertEqual(len(prompts), len(set(prompts)) * 2)   # each sent prompt unique (2 turns per task)
         self.assertGreater(len(rows), 2)
-        self.assertTrue(all(r["llm_requests"] == 2 for r in rows), rows)
+        self.assertTrue(all(r["llm_requests"] == 2 for r in rows if not r["censored"]))
 
     def test_run_records_sampling_and_memory_in_facts(self):
         srv, url = serve(make_devui(self.purl))

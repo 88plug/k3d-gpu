@@ -53,13 +53,13 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H5 | On a hybrid CPU whose package throttles, the opt-in prefill guard (`K3D_GPU_PREFILL_GUARD`, an E-core `scaling_max_freq` cap) protects P-core prefill from an E-core-pinned CPU neighbour. | At one or more cap levels the neighbour's median P-core prefill penalty (median `ttft_s` over the quiet median, minus 1) is at most half the guard-off penalty, and the p90 penalty is below the guard-off p90 penalty. | Pre-registered in [docs/prefill-guard.md](docs/prefill-guard.md#pre-registered-ab-test-h5): stage 1 host-level, arms quiet / guard off / caps at 75%, 50% and the E-core minimum, five Latin-square rounds per neighbour method (`matrixprod`, `loop`), n = 5 per arm; neighbour bogo-ops/s, a tool-latency proxy, decode tok/s and package power always reported. Stage 2 repeats the chosen level through `k3d-gpu up` and checks the NRI write path and the `down` restore. Refuted if no cap level reaches half; inconclusive if the guard-off penalty is inside the quiet spread or the quiet arm drifts. | PENDING |
 | H40 | The agent harness reproduces the BFCL board: BFCL v4 (`bfcl-eval==2025.12.17`, gorilla `f7cf7359`) in the board's own mode (registry `Qwen/Qwen3-4B-Instruct-2507-FC`, BFCL applies the chat template and calls `/v1/completions`) on the fixed 100-id subset S100, sent through LiteLLM and the recording proxy, scores bf16 `Qwen/Qwen3-4B-Instruct-2507` @ `cdbee75f` on vLLM CUDA (arm A3ref) like the leaderboard row. | S100 accuracy in [77.9, 91.9]: the board-weighted 84.9 (row "Qwen3-4B-Instruct-2507 (FC)" of https://gorilla.cs.berkeley.edu/data_overall.csv, read 2026-10-17) +/- 7, the binomial 95% half-width at n=100. Every category within its own binomial 95% CI of the board value. Confidence 0.75. | `k3d-gpu bench agent bfcl --mode board --arm A3ref --level none`, n=100, one block, measurement budget 20 min ([pre-registration](#h40-h48-pre-registration-agent-benchmark-2026-10-17)). SUPPORTED: both hold, and H41 may be read. REFUTED: overall outside the band; the harness differs from the board (template, parser, handler) and H41 is not scored until fixed. INCONCLUSIVE: fewer than 100 ids completed, or failed requests. | PENDING |
 | H41 | Serving a 4-bit build keeps tool-calling quality: on BFCL-S100 in server-fc mode (the engine's own tool parser parses the calls), each of A1 (k3d-gpu CPU, OVMS int4), A3 (k3d-gpu RTX 4000, AWQ 4-bit), B1 (EAT stock vLLM CPU, bf16), C1 (Ollama Q4_K_M) and C2 (llama.cpp Q4_K_M) scores within 8 points of A3ref (bf16, vLLM CUDA) run in the same mode. | Per arm, the one-sided paired-bootstrap 95% lower bound of (arm - A3ref) on the shared completed ids is >= -8 points. A1, A3, C2 hold (0.7 each); B1 holds but completes only 60-100 ids (0.6); C1 holds (0.55, the highest risk: Ollama's template and tool path). | `k3d-gpu bench agent bfcl --mode server-fc`, typical load, A B ... B A order in 10-min halves, 20 min per arm, `load.py matched` across arms. Read only after H40 is SUPPORTED. Per arm: SUPPORTED when the lower bound >= -8; REFUTED when the upper bound < -8; INCONCLUSIVE when the CI straddles -8, fewer than 60 shared ids, or load unmatched (exit 3). | PENDING |
-| H42 | On Intel's real EAT banking flow (`intel/enterprise-ai-blueprints` v1.0.0 banking-assistant, task set B24 at N=1, typical load), the k3d-gpu CPU arm A1 succeeds as often as the GPU arm and finishes a task in a third of the time of EAT stock (B1) or less. | (1) Success, every arm that finishes: A1 >= 0.75, A3 >= 0.75, C2 >= 0.70; C1 <= A1 - 10 points (4k-context truncation, 0.5). (2) Median time per task A1/B1 <= 0.35 (point 0.15, range 0.08-0.35, confidence 0.75). (3) A3 median time per task < A1 (0.85). (4) A2 > A1 (0.8). (5) B1 completes <= 12 of 24 tasks in 20 min (0.7). | `k3d-gpu bench agent run --tasks B24` per arm (A1 A2 A3 B1 C1 C2), A B ... B A in 10-min halves, `--mcp-url` end-state grading with `--reset` after each mutating task. SUPPORTED: (1)-(4) hold with load matched. REFUTED: A1/B1 time-ratio CI lower bound > 0.5, or A1 success < 0.6. Otherwise, or load unmatched, INCONCLUSIVE. Censored tasks are lower bounds, never failures. | PENDING |
+| H42 | On Intel's real EAT banking flow (`intel/enterprise-ai-blueprints` v1.0.0 banking-assistant, task set B24 at N=1, typical load), the k3d-gpu CPU stack A1 (OVMS, OpenVINO int4 self-export, P-cores) succeeds as often as the GPU stack and finishes a task in a third of the time of the EAT stock stack B1 (vLLM CPU, bf16) or less. A stack-vs-stack claim: A1 and B1 differ in runtime, placement and weight precision (int4 vs bf16) together, so the ratio does not isolate any one of them (amendment 16). | (1) Success on completed task ids, stated with the count, every arm that finishes: A1 >= 0.75, A3 >= 0.75, C2 >= 0.70; C1 <= A1 - 10 points (4k-context truncation, 0.5). (2) Paired median time ratio A1/B1 on the task ids both completed <= 0.35 (point 0.15, range 0.08-0.35, confidence 0.75). (3) A3 median time per task < A1 (0.85). (4) A2 > A1 (0.8). (5) B1 completes <= 12 of 24 tasks in 20 min (0.7). | `k3d-gpu bench agent run --tasks B24` per arm (A1 A2 A3 B1 C1 C2), A B ... B A in 10-min halves, `--mcp-url` end-state grading with `--reset` after each mutating task; sampling `agent_local`, agent memory off (amendments 7-20). SUPPORTED: (1)-(4) hold with load matched. REFUTED: A1/B1 time-ratio CI lower bound > 0.5, or A1 success < 0.6. Otherwise, or load unmatched, INCONCLUSIVE. Censored tasks are lower bounds, never failures. | PENDING |
 | H43 | With the agent sandbox on the E-cores (coding-agent-maf, C12, `k3d-gpu sandbox up`), heavy E-core load stretches A1's median time per task by at most 1.5x over typical load while success stays within 10 points. | A1 holds on success but fails on time: ratio 1.6-2.5x, because the sandbox pods share the E-cores with the load and lack the P/E isolation the model server gets. Confidence 0.6. | `k3d-gpu bench agent run --tasks C12` for A1, A3, B1 at typical and at heavy, A B ... B A halves per level. SUPPORTED: ratio <= 1.5 and delta success >= -10 points. REFUTED: ratio CI lower bound > 1.5. Otherwise INCONCLUSIVE. | PENDING |
 | H44 | Busy-box robustness: on B24's first 12 tasks, the p95 turn-latency inflation heavy/none is <= 1.25x for A1 (inference on the P-cores, load on the E-cores) and >= 1.5x for B1 (EAT stock floats onto the loaded E-cores). | A1 <= 1.25 (0.65). B1 >= 1.5 (0.6). | `k3d-gpu bench agent run --tasks B24 --limit 12` for A1 and B1, blocks none/heavy/none/heavy at 5 min each (20 min per arm). SUPPORTED: both hold. REFUTED: A1 inflation CI lower bound > 1.25, or B1 <= 1.25 as well (no difference). Otherwise INCONCLUSIVE. | PENDING |
 | H45 | Graded agents per box (largest N on the ramp 1, 2, 4, 8 at which pooled p95 turn latency <= 10 s, success >= the arm's N=1 success - 10 points, error rate <= 1% and >= 60 window requests) on the read-only banking set B15-RO at typical load. | A3 >= 8 (0.8). A1 in [1, 4] (0.55). C1 <= 1 (0.7, `OLLAMA_NUM_PARALLEL=1` serializes). C2 <= A1 (0.6). B1 not run, predicted 0. An arm's prediction is refuted by a scored APB outside its range; a bracket that still contains the prediction decides nothing. | `k3d-gpu bench agent apb` per arm (A1 A3 C1 C2), 5 min per step. The synthetic `k3d-gpu capacity --slo 10` APB is reported beside it, not scored. | PENDING |
 | H46 | Joules per successful banking task (differential: block energy minus the mean power of a load-only control window at the same load, times the block time, over the successful tasks): A1 needs at most 0.4x of B1's. | A1/B1 <= 0.4 (0.7). A3 < A1 including dGPU power (0.7). A2 > A1 (0.6). | H42's blocks plus one 120 s `k3d-gpu bench agent control` window per arm with its server up and idle. SUPPORTED: ratio CI upper bound <= 0.4. REFUTED: ratio CI lower bound > 0.7. INCONCLUSIVE: B1 with zero successes (J per success undefined), load unmatched, or RAPL unreadable. | PENDING |
 | H47 | CPU draft speculative decoding helps agent tasks: A4 (A1 plus a CPU draft, `OpenVINO/Qwen3-0.6B-int4-ov` @ `f864c610`) cuts B24's median time per task by >= 10% vs A1 with delta success >= -5 points. Runs only if H34 is SUPPORTED when the campaign starts; otherwise not run, recorded. | A 0-15% gain; INCONCLUSIVE likely (tool-call turns are 40-96 tokens, little to amortize, and the draft competes for the P-cores). Confidence it is SUPPORTED: 0.35. | `k3d-gpu bench agent run --tasks B24`, A4 vs A1 paired and interleaved at typical load. SUPPORTED: gain CI lower bound >= 10% with success held. REFUTED: gain CI upper bound < 0. Otherwise INCONCLUSIVE. | PENDING |
-| H48 | The graders are sound: remote GLM-5.3 through harvest (arm R, gaudi.farmgpu.net, never a node's :8299) passes >= 11 of the measured items among 4 B24 tasks and 8 S100 ids, under a hard cap of 20 LLM requests. | >= 11 pass (0.8). | One `k3d-gpu bench agent proxy --max-requests 20` in front of harvest carries every request: first `bfcl --mode server-fc --limit 8 --proxy-url` (8 single-turn ids, 8 requests), then `run --tasks B24 --ids B-T1-U1001,B-T3-U1002,B-T5-U1003,B-T8-U1001` through the same proxy; a task cut by the cap is unmeasured. Latency and energy are not reported. SUPPORTED: >= 11 pass. REFUTED: <= 9 pass, and every failed item's task and grader are audited before H41-H46 are read. INCONCLUSIVE: 10 pass. | PENDING |
+| H48 | The graders are sound: remote GLM-5.3 through harvest (arm R, gaudi.farmgpu.net, never a node's :8299) passes >= 11 of the measured items among 4 B24 tasks and 8 S100 ids, under a hard cap of 20 LLM requests. | >= 11 pass (0.8). | One `k3d-gpu bench agent proxy --max-requests 20 --key-file FILE --sampling agent_remote` in front of harvest carries every request: first `bfcl --mode server-fc --limit 8 --proxy-url` (8 single-turn ids, 8 requests), then `run --tasks B24 --ids B-T1-U1001,B-T3-U1002,B-T5-U1003,B-T8-U1001` through the same proxy; a task cut by the request cap or by the 256-token cap (`finish_reason=length`) is unmeasured. Latency and energy are not reported. SUPPORTED: >= 10 measured and <= 1 measured item fails. REFUTED: >= 3 measured items fail, and every failed item's task and grader are audited before H41-H46 are read. Otherwise INCONCLUSIVE (amendment 17; originally >= 11 / 10 / <= 9 of 12). | PENDING |
 
 ## Falsification log
 
@@ -269,6 +269,78 @@ Changes from the design draft, fixed here before measuring:
    the task prompt and the proxy received it inside the task's time window.
 6. The vLLM CUDA digest `a4a4c043...` is the linux/amd64 manifest of tag v0.31.0 (the
    tag's index digest is `c1c9f6fd...`).
+
+Amendments after two refuters, fixed 2026-10-17 before any measurement (harness changes
+in `bench/eatflow/`, each with a regression test in `test_agentbench.py`):
+
+7. Sampling is pinned. The blueprint agent sends no sampling keys, so each engine fell
+   back to its own default (vLLM: the model's `generation_config.json`, temperature 0.7,
+   top_k 20, top_p 0.8, https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/raw/cdbee75f17c01a7cc42f958dc650907174af0554/generation_config.json;
+   llama.cpp server: temperature 0.8, https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md).
+   The proxy now replaces every sampling key of every agent request with one set from
+   `agent.lock` `sampling`: local arms `agent_local` = temperature 0, top_p 1, max_tokens
+   1024 (greedy); arm R `agent_remote` = top_k 1, max_tokens 256, reasoning_effort low
+   (harvest forbids temperature 0 and logprobs). Each proxy record and `facts.json`
+   (`sampling_seen`) carry the set. BFCL keeps 0.001 (item 2), except on arm R, whose one
+   shared proxy pins `agent_remote` for every request.
+8. Agent memory is off. The blueprint defaults to `ENABLE_MEMORY=true` (one Redis index,
+   user `default_user`), which re-injects earlier prompts as extra user messages. Every
+   arm runs the agent with `ENABLE_MEMORY=false`; the proxy records each request's
+   user-message count, a task request with more than one aborts the block, and
+   `facts.json` records `memory`. Attribution (item 5) also matches the first user message.
+9. Arm vs arm compares only shared completed task ids. The H42 (2), H46 and H47 time
+   ratios are the paired ratio exp(median of per-id log(arm/ref)) over task ids both
+   arms completed, with a paired bootstrap CI (2000 resamples, seed 40). Success is read on
+   the same shared ids for comparisons; every absolute success rate is stated with its
+   completed-id count (`k/n`), and H42 (1) thresholds are read on completed ids only.
+10. Grader fixes. T8 needs a valid balance read of the source account (or `get_balances`,
+    or a `transfer_funds` attempt) and an answer that cites insufficient funds ("cannot"
+    or "unable" alone no longer passes). B-T7-U1003 needs a no-loan answer. A credit
+    account's balance accepts the available credit or the amount owed (B-T1-U1002: 3200.00
+    or 1800.00). Code tasks need each expected value in the sandbox tool output too, and C03
+    fails when the 11th prime (31) is listed.
+11. Load-only control windows (H46) go to `control-load.jsonl` and never enter load matching.
+12. One unscored warm-up prompt (not in any task set) runs before each block's window.
+13. In cycle mode (`apb`, H45) each sent prompt starts with a unique nonce, so prefix and
+    prompt caches see unique user turns.
+14. A task's turns are read once its final turn is in the proxy log (polled, up to 30 s),
+    not after a fixed 2 s.
+15. `--reset` must exit 0 within 300 s and the MCP server must read back the seed; then the
+    warm-up prompt must answer again (a stale MCP session shows here). A failure aborts the
+    block (`blocks.jsonl` `aborted`, exit 1). A refused task whose end state moved off the
+    seed is reset too. The MCP URL must survive a reset (a NodePort, an in-cluster URL, or a
+    host process), never a `kubectl port-forward`.
+16. H42 is a stack-vs-stack claim. A1 (OVMS, OpenVINO int4 self-export, P-cores) and B1
+    (EAT stock vLLM CPU, bf16) differ in runtime, placement and weight precision at once,
+    so the A1/B1 ratio does not isolate any one of them; the row now says so.
+17. Remote key and cap: `proxy --key-file` reads the key from a 0600 file owned by the
+    caller (no environment-variable path), refuses to start without `--max-requests`, and
+    counts every forwarded POST against the cap. The proxy records `finish_reason`; on arm R
+    an item whose turns hit `finish_reason=length` (the 256-token cap) is unmeasured, like
+    an item cut by the request cap. H48 then reads: SUPPORTED when at least 10 items are
+    measured and at most 1 measured item fails; REFUTED when 3 or more measured items fail;
+    otherwise INCONCLUSIVE.
+18. `bench/eatflow/bfcl-constraints.txt` carries a sha256 for every package
+    (`uv pip compile --generate-hashes`, the same 128 versions) and installs with
+    `--require-hashes`.
+
+Live-run setup, fixed 2026-10-17 before the first measured block (i9-13900T, one shared
+lock, each hold at most 20 min wall time):
+
+19. Topology per local arm: the model server runs in a fresh k3d-gpu cluster
+    `k3dgpu-a-<arm>` (A1, A3, B1 staged as in `bench/apb/arm.sh`) or, for the vendor stacks
+    C1 and C2, as a host container with its vendor defaults, as in `k3d-gpu bench --vs`.
+    The rest of the path runs on the host, the same for every arm: the banking agent
+    (DevUI) and its FastMCP sidecar from the pinned blueprint commit `758d484`
+    (`ENABLE_MEMORY=false`, sidecar reset = restart the process), the recording proxy, and
+    EAT's LiteLLM at the version EAT `0d3438d` pins (`v1.83.14-stable.patch.2`, by digest
+    in the run's `facts.json`) holding the one alias `Qwen/Qwen3-4B-Instruct-2507`. This
+    replaces EAT's in-cluster deployment of the agent and gateway, which the hold cannot fit;
+    the agent code, prompts, tools, gateway and model path are unchanged.
+20. ABBA halves need two holds per arm. Where time allows only one hold per arm, each arm
+    runs one block (B24 in order, budget what the hold leaves after bring-up, at most 12
+    min), in the order R, A3, A1, B1, C2, C1, A2; time ratios then come from single blocks
+    and the verdict says so.
 
 Static proof of the harness (no cluster, 2026-10-17): the unit suite against stub servers;
 BFCL S100 in both modes through the proxy against a stub endpoint with the pinned wheel
