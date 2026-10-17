@@ -102,7 +102,11 @@ EOF
 cat > "${WORK}/bin/kubectl" <<'EOF'
 #!/bin/sh
 echo "kubectl $*" >> "${AUDIT_STUB}/calls"
-case "$*" in *"--context k3d-gpu "*"get deployments,statefulsets,daemonsets -A -o json"*) cat "${AUDIT_STUB}/workloads.json" ;; *) exit 1 ;; esac
+case "$*" in
+    *"--context k3d-gpu "*"get deployments,statefulsets,daemonsets -A -o json"*) cat "${AUDIT_STUB}/workloads.json" ;;
+    *"--context k3d-gpu "*"get events -A --field-selector reason=Pulled -o json"*) cat "${AUDIT_STUB}/events.json" ;;
+    *) exit 1 ;;
+esac
 EOF
 chmod +x "${WORK}/bin/docker" "${WORK}/bin/kubectl"
 
@@ -182,8 +186,19 @@ d=$(stub kubeconfig-0644); chmod 644 "${d}/kubeconfig"
 golden kubeconfig-0644 live "${d}"
 golden chat-ui live "$(stub chat-ui "$(chat_ui_edit '"True"')")"
 golden chat-ui-noauth live "$(stub chat-ui-noauth "$(chat_ui_edit '"False"')")"
+# A kubelet "Successfully pulled image" event: the image came from a registry at
+# pod start, not from the node image (an "already present" event passes).
+golden runtime-pull live "$(stub runtime-pull 'import json
+e = json.load(open("events.json"))
+for ns, pod, ref, node in (("default", "gpu-test", "nvidia/cuda:13.4.3-base-ubuntu26.04", "k3d-gpu-server-0"),
+                           ("kube-system", "coredns-5f7c9", "rancher/mirrored-coredns-coredns:1.14.7", "k3d-gpu-server-0"),
+                           ("kube-system", "coredns-5f7c9", "rancher/mirrored-coredns-coredns:1.14.7", "k3d-gpu-server-0")):
+    e["items"].append({"kind": "Event", "reason": "Pulled", "source": {"component": "kubelet", "host": node},
+                       "involvedObject": {"kind": "Pod", "namespace": ns, "name": pod},
+                       "message": "Successfully pulled image \"%s\" in 4.1s (4.1s including waiting). Image size: 1 bytes." % ref})
+json.dump(e, open("events.json", "w"))')"
 
-# observed/v1 fixtures: what the live read cannot produce yet.
+# observed/v1 fixtures: what the live read cannot produce yet (an in-cluster listener's own auth).
 golden runtime-fetch "${K3D_GPU}" audit --observed "${DIR}/runtime-fetch.observed.json"
 golden ipv6-unauth "${K3D_GPU}" audit --observed "${DIR}/ipv6-unauth.observed.json"
 [ "${UPDATE}" -eq 1 ] && exit 0

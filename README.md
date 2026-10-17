@@ -1071,8 +1071,9 @@ the kubeconfig files' modes) and fails, with a fix per finding, on:
   anonymous auth off;
 - an image in containerd whose digest images.lock does not pin for its name, or
   that has no registry digest;
-- an image pulled at runtime (the `pulls` of an observed document; the live
-  read does not record pulls yet);
+- an image pulled at runtime: the live read takes kubelet's `Pulled` events
+  ("Successfully pulled image", not "already present"), which the API server
+  keeps for one hour by default, so an older pull is not seen;
 - a kubeconfig readable by group or others (it holds the cluster admin key);
 - Open WebUI with `WEBUI_AUTH` off.
 

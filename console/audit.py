@@ -31,6 +31,7 @@ import argparse
 import ipaddress
 import json
 import os
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -48,6 +49,9 @@ RULES = ("listener", "image", "fetch", "secret", "app")
 KNOWN_PORTS = {"6443/tcp": ("kube-apiserver", "client-cert")}
 OPEN_WEBUI = "ghcr.io/open-webui/open-webui"
 PLAN_AUTH = {"loopback-key": "key", "oidc": "oidc"}
+# kubelet's Pulled event when the image came from a registry; a baked image reads
+# 'Container image "<ref>" already present on machine'.
+PULLED_RE = re.compile(r'^Successfully pulled image "([^"]+)"')
 
 
 def parse_ref(ref):
@@ -195,7 +199,8 @@ def render_checks(doc):
 
 def observe(raw):
     """observed/v1 from the launcher's raw read: per node `docker inspect` ports and
-    `crictl images -o json`, the cluster's workloads, and kubeconfig file modes."""
+    `crictl images -o json`, the cluster's workloads, its kubelet Pulled events
+    (kept for the API server's event TTL, 1 h by default), and kubeconfig file modes."""
     listeners, images, apps = [], [], []
     for node in raw["nodes"]:
         for cport, binds in sorted((node.get("ports") or {}).items()):
@@ -220,12 +225,18 @@ def observe(raw):
                     auth = None if v is None else v.strip().lower() == "true"
             apps.append({"kind": "open-webui", "auth": auth,
                          "name": "%s/%s/%s" % (meta.get("namespace", ""), item.get("kind", "").lower(), meta.get("name", ""))})
+    pulls = set()
+    for ev in (raw.get("events") or {}).get("items") or []:
+        m = PULLED_RE.match(ev.get("message") or "") if ev.get("reason") == "Pulled" else None
+        if m:
+            node = (ev.get("source") or {}).get("host") or ev.get("reportingInstance") or "(unknown node)"
+            pulls.add((node, m.group(1)))
     listeners.sort(key=lambda x: (x["source"], x["address"], x["port"]))
     images.sort(key=lambda x: (x["node"], x["tags"], x["digests"]))
     apps.sort(key=lambda x: x["name"])
     secrets = sorted(({"path": s["path"], "mode": s["mode"]} for s in raw.get("secrets") or []), key=lambda x: x["path"])
     return {"schema": OBSERVED_SCHEMA, "cluster": raw.get("cluster"), "listeners": listeners, "images": images,
-            "pulls": [], "secrets": secrets, "apps": apps}
+            "pulls": [{"node": n, "ref": r} for n, r in sorted(pulls)], "secrets": secrets, "apps": apps}
 
 
 def load(path, schema, ref):

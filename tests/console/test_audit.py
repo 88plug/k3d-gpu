@@ -271,6 +271,31 @@ class Observe(unittest.TestCase):
         self.assertEqual(obs["images"][0]["tags"], [])
         self.assertEqual(obs["pulls"], [])
 
+    def test_pulled_events_to_pulls(self):
+        def ev(msg, host=None, instance=None):
+            e = {"reason": "Pulled", "message": msg}
+            if host:
+                e["source"] = {"component": "kubelet", "host": host}
+            if instance:
+                e["reportingInstance"] = instance
+            return e
+        raw = {"cluster": "gpu", "nodes": [], "workloads": {"items": []}, "events": {"items": [
+            ev('Successfully pulled image "busybox:1.37" in 1.5s (1.5s including waiting). Image size: 2 bytes.', "n1"),
+            ev('Successfully pulled image "busybox:1.37" in 1.1s', "n1"),
+            ev('Successfully pulled image "nvidia/cuda:13" in 5s', instance="n2"),
+            ev('Container image "busybox:1.37" already present on machine and can be accessed by the pod', "n1"),
+            {"reason": "Pulling", "message": 'Pulling image "x:1"', "source": {"host": "n1"}},
+            ev('Successfully pulled image "orphan:1" in 1s')]}}
+        obs = auditmod.observe(raw)
+        schema_check.check(obs, SCHEMA, "#/$defs/observed")
+        self.assertEqual(obs["pulls"], [{"node": "(unknown node)", "ref": "orphan:1"},
+                                        {"node": "n1", "ref": "busybox:1.37"},
+                                        {"node": "n2", "ref": "nvidia/cuda:13"}])
+        self.assertEqual(auditmod.observe(dict(raw, events=None))["pulls"], [])
+        doc = auditmod.audit(dict(obs, images=default_images()), LOCK)
+        self.assertEqual(doc["verdict"], "fail")
+        self.assertEqual(sum(c["rule"] == "fetch" and c["status"] == "fail" for c in doc["checks"]), 3)
+
 
 if __name__ == "__main__":
     print("FUZZ_SEED=%d FUZZ_N=%d" % (SEED, N))

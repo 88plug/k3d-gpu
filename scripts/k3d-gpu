@@ -6136,9 +6136,10 @@ images_lock() {
 
 # The raw read console/audit.py turns into observed/v1: per node container of
 # cluster ${CLUSTER} its published ports (docker inspect) and containerd images
-# (crictl), the cluster's workloads, and the kubeconfig files' modes.
+# (crictl), the cluster's workloads, its kubelet Pulled events (a registry pull at
+# pod start), and the kubeconfig files' modes.
 audit_raw() {
-    local name role nodes="" ports imgs workloads secrets="" f
+    local name role nodes="" ports imgs workloads events secrets="" f
     local -a kubeconfigs
     while read -r name role; do
         case "${role}" in server|agent) ;; *) continue ;; esac
@@ -6151,13 +6152,15 @@ audit_raw() {
     [ -n "${nodes}" ] || err "audit: no running node of k3d cluster '${CLUSTER}' (run 'k3d-gpu up', or pass --observed FILE)"
     workloads=$(kc get deployments,statefulsets,daemonsets -A -o json) \
         || err "audit: kubectl cannot list the workloads of k3d-${CLUSTER}"
+    events=$(kc get events -A --field-selector reason=Pulled -o json) \
+        || err "audit: kubectl cannot list the events of k3d-${CLUSTER}"
     IFS=: read -r -a kubeconfigs <<< "${KUBECONFIG:-${HOME}/.kube/config}"
     for f in ${kubeconfigs[@]+"${kubeconfigs[@]}"}; do
         [ -f "${f}" ] || continue
         secrets+="${secrets:+,}{\"path\":$(json_str "${f}"),\"mode\":$(json_str "$(stat -c '%a' "${f}")")}"
     done
-    printf '{"cluster":%s,"nodes":[%s],"workloads":%s,"secrets":[%s]}\n' \
-        "$(json_str "${CLUSTER}")" "${nodes}" "${workloads}" "${secrets}"
+    printf '{"cluster":%s,"nodes":[%s],"workloads":%s,"events":%s,"secrets":[%s]}\n' \
+        "$(json_str "${CLUSTER}")" "${nodes}" "${workloads}" "${events}" "${secrets}"
 }
 
 # audit [--json|--observe] [--observed FILE] [--plan FILE] [--lock FILE]: posture checks
