@@ -189,6 +189,11 @@ check "agent_trace: unit tests against the in-process stub" \
 check "bench: joule-pack (H21) unit tests" \
     env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/joule-pack/test_joulepack.py"
 
+# ---- uncore-phase (H29) -----------------------------------------------------------
+
+check "uncore-phase: probe unit tests (order, sign test, verdict rules, knob restore)" \
+    env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/uncore-phase/test_probe.py"
+
 # ---- research/ models -------------------------------------------------------------
 
 check "research: agents-per-box ceiling selftest" \
