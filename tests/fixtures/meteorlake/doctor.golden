@@ -10,7 +10,7 @@
   ok: hybrid CPU: P-cores 0-11, E-cores 12-19, LP E-cores 20-21 — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient|lowpower|ecluster|pcore-physical|latency
   ok: E-core clusters (shared L2): 12-15 16-19 — k3d-gpu.io/cores=ecluster gives a pod 4 E-cores of one cluster
   ok: physical P-cores (one thread per core): 0,2,4,6,8,10 — k3d-gpu.io/cores=pcore-physical and latency show pods one thread per core
-  info: noisy-neighbour isolation: ecluster — no rdt_a flag, so no cache or bandwidth partitioning; label a bandwidth-heavy neighbour k3d-gpu.io/cores=ecluster to hold it to the E-cores of one L2 cluster. This caps its cores, not its DRAM bandwidth; the effect on agent latency is unmeasured (EXPERIMENTS.md H26, PENDING)
+  info: noisy-neighbour isolation: cpu-cap — no rdt_a flag, so cache and DRAM bandwidth stay shared; give a bandwidth-heavy neighbour a CPU limit. Holding it to one E-core L2 cluster (k3d-gpu.io/cores=ecluster) is not recommended: H26 measures it against the same workers spread over the E-cores (EXPERIMENTS.md H26)
 ==> Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...
   ok: dra available (auto)
   ok: image-volume available (auto)

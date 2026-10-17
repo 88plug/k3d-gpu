@@ -189,7 +189,7 @@
         "level": "info",
         "revert": null,
         "section": "Intel CPU built-in accelerators...",
-        "text": "noisy-neighbour isolation: ecluster — no rdt_a flag, so no cache or bandwidth partitioning; label a bandwidth-heavy neighbour k3d-gpu.io/cores=ecluster to hold it to the E-cores of one L2 cluster. This caps its cores, not its DRAM bandwidth; the effect on agent latency is unmeasured (EXPERIMENTS.md H26, PENDING)",
+        "text": "noisy-neighbour isolation: cpu-cap — no rdt_a flag, so cache and DRAM bandwidth stay shared; give a bandwidth-heavy neighbour a CPU limit. Holding it to one E-core L2 cluster (k3d-gpu.io/cores=ecluster) is not recommended: H26 measures it against the same workers spread over the E-cores (EXPERIMENTS.md H26)",
         "why": null
       },
       {

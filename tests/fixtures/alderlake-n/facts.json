@@ -109,12 +109,12 @@
         "why": null
       },
       {
-        "apply": "sudo mount -t resctrl resctrl /sys/fs/resctrl, then set control.rdt.enable: true in nri-balloons.yml",
-        "from": "/proc/cpuinfo flags (rdt_a, cat_l2/cat_l3, mba), /sys/fs/resctrl",
+        "apply": null,
+        "from": null,
         "level": "info",
-        "revert": "set control.rdt.enable: false in nri-balloons.yml, then sudo umount /sys/fs/resctrl",
+        "revert": null,
         "section": "Intel CPU built-in accelerators...",
-        "text": "noisy-neighbour isolation: rdt-cat — resctrl can cap a neighbour's cache share only (CAT, no MBA: DRAM bandwidth stays shared); resctrl mounted: no; opt-in, then annotate the neighbour pod rdtclass.resource-policy.nri.io/pod: BestEffort",
+        "text": "noisy-neighbour isolation: rdt-cat — CAT can cap a neighbour's cache share through the RDT opt-in above (resctrl mounted: no); no MBA, so DRAM bandwidth stays shared; the classes run inside the NRI balloons policy, which up deploys on hybrid or multi-NUMA hosts only",
         "why": null
       },
       {

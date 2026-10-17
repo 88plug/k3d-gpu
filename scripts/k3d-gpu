@@ -1447,35 +1447,35 @@ doctor_numa() {
 
 # Noisy-neighbour isolation for agent pods, picked from the CPU's own flags
 # (never from the SKU name): rdt-mba (CAT + MBA: cache share and DRAM bandwidth),
-# rdt-cat (CAT only: cache share), ecluster (hybrid client with E-core L2
-# clusters: confine the neighbour to one cluster), cpu-cap (CPU limit only).
+# rdt-cat (CAT only: cache share), cpu-cap (CPU limit only). Holding a neighbour
+# to one E-core L2 cluster is not a mode: H26 tests it (EXPERIMENTS.md).
 isolation_mode() {
     local flags=" $1 "
     if [[ "${flags}" == *" rdt_a "* && "${flags}" == *" mba "* ]]; then echo rdt-mba
     elif [[ "${flags}" == *" rdt_a "* ]] && [[ "${flags}" == *" cat_l3 "* || "${flags}" == *" cat_l2 "* ]]; then echo rdt-cat
-    elif has_hybrid && [ -n "$(ecore_clusters)" ]; then echo ecluster
     else echo cpu-cap
     fi
 }
 
 # One doctor line naming the isolation mode. Host changes are printed with their
-# exact apply and revert, never made.
+# exact apply and revert, never made; the RDT opt-in itself is the RDT line above.
 doctor_isolation() {
-    local mode what mounted=no
+    local mode mounted=no
     mode=$(isolation_mode "$1")
     [ ! -d "${SYSROOT}/sys/fs/resctrl/info" ] || mounted=yes
     case "${mode}" in
-        rdt-mba|rdt-cat)
-            what="cache share and DRAM bandwidth (CAT + MBA)"
-            [ "${mode}" = rdt-mba ] || what="cache share only (CAT, no MBA: DRAM bandwidth stays shared)"
-            lines+="  info: noisy-neighbour isolation: ${mode} — resctrl can cap a neighbour's ${what}; resctrl mounted: ${mounted}; opt-in, then annotate the neighbour pod rdtclass.resource-policy.nri.io/pod: BestEffort"$'\n'
-            lines+="        from:   /proc/cpuinfo flags (rdt_a, cat_l2/cat_l3, mba), /sys/fs/resctrl"$'\n'
-            lines+="        apply:  sudo mount -t resctrl resctrl /sys/fs/resctrl, then set control.rdt.enable: true in nri-balloons.yml"$'\n'
-            lines+="        revert: set control.rdt.enable: false in nri-balloons.yml, then sudo umount /sys/fs/resctrl"$'\n' ;;
-        ecluster)
-            lines+="  info: noisy-neighbour isolation: ecluster — no rdt_a flag, so no cache or bandwidth partitioning; label a bandwidth-heavy neighbour k3d-gpu.io/cores=ecluster to hold it to the E-cores of one L2 cluster. This caps its cores, not its DRAM bandwidth; the effect on agent latency is unmeasured (EXPERIMENTS.md H26, PENDING)"$'\n' ;;
+        rdt-mba)
+            lines+="  info: noisy-neighbour isolation: rdt-mba — CAT + MBA can cap a neighbour's cache share and DRAM bandwidth through the RDT opt-in above (resctrl mounted: ${mounted}); the shipped classes set cache shares only, so add mbAllocation: {all: [\"50%\"]} to the BestEffort class for bandwidth; the classes run inside the NRI balloons policy, which up deploys on hybrid or multi-NUMA hosts only"$'\n' ;;
+        rdt-cat)
+            lines+="  info: noisy-neighbour isolation: rdt-cat — CAT can cap a neighbour's cache share through the RDT opt-in above (resctrl mounted: ${mounted}); no MBA, so DRAM bandwidth stays shared; the classes run inside the NRI balloons policy, which up deploys on hybrid or multi-NUMA hosts only"$'\n' ;;
         *)
-            lines+="  info: noisy-neighbour isolation: cpu-cap — no rdt_a flag and no E-core L2 clusters; give a neighbour a CPU limit. Cache and DRAM bandwidth stay shared"$'\n' ;;
+            if has_hybrid && [ -n "$(ecore_clusters)" ]; then
+                lines+="  info: noisy-neighbour isolation: cpu-cap — no rdt_a flag, so cache and DRAM bandwidth stay shared; give a bandwidth-heavy neighbour a CPU limit. Holding it to one E-core L2 cluster (k3d-gpu.io/cores=ecluster) is not recommended: H26 measures it against the same workers spread over the E-cores (EXPERIMENTS.md H26)"$'\n'
+            elif has_hybrid; then
+                lines+="  info: noisy-neighbour isolation: cpu-cap — no rdt_a flag; E-core L2 clusters are not readable (no cpu*/cache in sysfs); give a neighbour a CPU limit. Cache and DRAM bandwidth stay shared"$'\n'
+            else
+                lines+="  info: noisy-neighbour isolation: cpu-cap — no rdt_a flag and no E-cores; give a neighbour a CPU limit. Cache and DRAM bandwidth stay shared"$'\n'
+            fi ;;
     esac
 }
 

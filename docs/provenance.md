@@ -395,5 +395,5 @@ Source does not back a claim. `tests/claims_check.sh` enforces both rules.
 | P263 | Agent-sandbox interference papers characterize memory as the bottleneck; none applies RDT or L2 placement to agent pods | https://www.arxiv.org/pdf/2602.09345 | 2026-10-17 |
 | P264 | Exa queries for Koordinator and Intel 12th/13th gen client RDT were rate-limited, not run (coverage gap) | | 2026-10-17 |
 | P265 | intel/goresctrl provides the rdt, sst and blockio packages under nri-plugins and containerd/CRI-O class-based RDT | https://github.com/intel/goresctrl | 2026-10-17 |
-| P266 | Koordinator koordlet ships per-pod resctrl LLC/MB isolation (`ResctrlConfig{LLC, MB}`); KEP-3008 QoS-class resources issue is closed | https://github.com/koordinator-sh/koordinator/blob/main/apis/extension/resctrl.go | 2026-10-17 |
+| P266 | Koordinator koordlet ships per-pod resctrl LLC/MB isolation (`ResctrlConfig{LLC, MB}`); KEP-3008 QoS-class resources issue is closed | https://github.com/koordinator-sh/koordinator/blob/c5afca711320cb6bbc8fe74a0c90af8d0e44dbcb/apis/extension/resctrl.go | 2026-10-17 |
 | P267 | WebSearch not run (call budget exhausted): kernel lists, OSDI/EuroSys/MLSys full text and Intel TCC CAT on embedded Core are uncovered, so H26 novelty is "partial search" | | 2026-10-17 |

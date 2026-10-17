@@ -98,7 +98,7 @@
         "level": "info",
         "revert": null,
         "section": "Intel CPU built-in accelerators...",
-        "text": "noisy-neighbour isolation: cpu-cap — no rdt_a flag and no E-core L2 clusters; give a neighbour a CPU limit. Cache and DRAM bandwidth stay shared",
+        "text": "noisy-neighbour isolation: cpu-cap — no rdt_a flag and no E-cores; give a neighbour a CPU limit. Cache and DRAM bandwidth stay shared",
         "why": null
       },
       {

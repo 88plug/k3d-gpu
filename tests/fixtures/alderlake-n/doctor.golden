@@ -14,10 +14,7 @@
 ==> Intel CPU built-in accelerators...
   ok: CPU ISA: AVXVNNI CETIBT GFNI SHA VAES — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
   info: RDT allocation (rdt_a: cat_l2 cdp_l2) — resctrl classes are available but left off: the balloons policy ships control.rdt.enable: false because enabling it rewrites the host's /sys/fs/resctrl. To opt in, mount resctrl on the host (mount -t resctrl resctrl /sys/fs/resctrl) and set control.rdt.enable: true in nri-balloons.yml; usePodQoSAsDefaultClass then gives BestEffort/Burstable/Guaranteed pods 33%/66%/100% of the L3
-  info: noisy-neighbour isolation: rdt-cat — resctrl can cap a neighbour's cache share only (CAT, no MBA: DRAM bandwidth stays shared); resctrl mounted: no; opt-in, then annotate the neighbour pod rdtclass.resource-policy.nri.io/pod: BestEffort
-        from:   /proc/cpuinfo flags (rdt_a, cat_l2/cat_l3, mba), /sys/fs/resctrl
-        apply:  sudo mount -t resctrl resctrl /sys/fs/resctrl, then set control.rdt.enable: true in nri-balloons.yml
-        revert: set control.rdt.enable: false in nri-balloons.yml, then sudo umount /sys/fs/resctrl
+  info: noisy-neighbour isolation: rdt-cat — CAT can cap a neighbour's cache share through the RDT opt-in above (resctrl mounted: no); no MBA, so DRAM bandwidth stays shared; the classes run inside the NRI balloons policy, which up deploys on hybrid or multi-NUMA hosts only
 ==> Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...
   ok: dra available (auto)
   ok: image-volume available (auto)

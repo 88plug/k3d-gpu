@@ -13,7 +13,7 @@
   ok: CPU ISA: AVX512BF16 AVX512F AVX512VNNI — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
   warn: DSA: 1 device(s) but no user work queues — configure them on the host with accel-config
   warn: IAA: 1 device(s) but no user work queues — configure them on the host with accel-config
-  info: noisy-neighbour isolation: cpu-cap — no rdt_a flag and no E-core L2 clusters; give a neighbour a CPU limit. Cache and DRAM bandwidth stay shared
+  info: noisy-neighbour isolation: cpu-cap — no rdt_a flag and no E-cores; give a neighbour a CPU limit. Cache and DRAM bandwidth stay shared
   info: per socket: socket 0: DSA 1, IAA 1, QAT 0 (no ARK default on file for this CPU)
 ==> Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...
   ok: dra available (auto)
