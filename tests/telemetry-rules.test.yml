@@ -1,0 +1,70 @@
+# promtool unit tests for the recording rules in share/telemetry/prometheus.yml.
+# tests/telemetry_test.sh extracts k3d-gpu.rules.yml next to this file and runs
+# `promtool test rules` when promtool is on PATH.
+rule_files:
+  - k3d-gpu.rules.yml
+evaluation_interval: 15s
+# rate() extrapolation leaves float rounding (0.7499999999999999 for 0.75).
+fuzzy_compare: true
+tests:
+  - interval: 15s
+    input_series:
+      # CPUs 0 and 1 are P-cores, CPU 2 is an E-core. CPU 0 is half busy, CPU 1 fully
+      # busy, CPU 2 idle (iowait counts as idle).
+      - series: 'node_cpu_seconds_total{instance="n",job="node-exporter",cpu="0",mode="user"}'
+        values: '0+7.5x20'
+      - series: 'node_cpu_seconds_total{instance="n",job="node-exporter",cpu="0",mode="idle"}'
+        values: '0+7.5x20'
+      - series: 'node_cpu_seconds_total{instance="n",job="node-exporter",cpu="1",mode="system"}'
+        values: '0+15x20'
+      - series: 'node_cpu_seconds_total{instance="n",job="node-exporter",cpu="1",mode="idle"}'
+        values: '0+0x20'
+      - series: 'node_cpu_seconds_total{instance="n",job="node-exporter",cpu="2",mode="user"}'
+        values: '0+0x20'
+      - series: 'node_cpu_seconds_total{instance="n",job="node-exporter",cpu="2",mode="idle"}'
+        values: '0+10x20'
+      - series: 'node_cpu_seconds_total{instance="n",job="node-exporter",cpu="2",mode="iowait"}'
+        values: '0+5x20'
+      - series: 'k3d_gpu_cpu_core_type{instance="n",job="node-exporter",cpu="0",type="performance"}'
+        values: '1x20'
+      - series: 'k3d_gpu_cpu_core_type{instance="n",job="node-exporter",cpu="1",type="performance"}'
+        values: '1x20'
+      - series: 'k3d_gpu_cpu_core_type{instance="n",job="node-exporter",cpu="2",type="efficient"}'
+        values: '1x20'
+      - series: 'node_cpu_scaling_frequency_hertz{instance="n",job="node-exporter",cpu="0"}'
+        values: '4000000000x20'
+      - series: 'node_cpu_scaling_frequency_hertz{instance="n",job="node-exporter",cpu="1"}'
+        values: '2000000000x20'
+      - series: 'node_cpu_scaling_frequency_hertz{instance="n",job="node-exporter",cpu="2"}'
+        values: '1000000000x20'
+      # 450 J per 15 s = 30 W on the package; the MMIO zone is the same package.
+      # Labels match node-exporter v1.12.1 on an i9-13900T: with the zone label on,
+      # both package series report index="0".
+      - series: 'node_rapl_joules_total{instance="n",job="node-exporter",index="0",path="/host/sys/class/powercap/intel-rapl:0",rapl_zone="package"}'
+        values: '0+450x20'
+      - series: 'node_rapl_joules_total{instance="n",job="node-exporter",index="0",path="/host/sys/class/powercap/intel-rapl-mmio:0",rapl_zone="package"}'
+        values: '0+450x20'
+      - series: 'node_rapl_joules_total{instance="n",job="node-exporter",index="0",path="/host/sys/class/powercap/intel-rapl:0:1",rapl_zone="uncore"}'
+        values: '0+75x20'
+    promql_expr_test:
+      - expr: k3d_gpu:cpu_utilisation:ratio
+        eval_time: 3m
+        exp_samples:
+          - labels: 'k3d_gpu:cpu_utilisation:ratio{instance="n",type="performance"}'
+            value: 0.75
+          - labels: 'k3d_gpu:cpu_utilisation:ratio{instance="n",type="efficient"}'
+            value: 0
+      - expr: k3d_gpu:cpu_frequency_hertz:avg
+        eval_time: 3m
+        exp_samples:
+          - labels: 'k3d_gpu:cpu_frequency_hertz:avg{instance="n",type="performance"}'
+            value: 3000000000
+          - labels: 'k3d_gpu:cpu_frequency_hertz:avg{instance="n",type="efficient"}'
+            value: 1000000000
+      - expr: k3d_gpu:rapl_power:watts
+        eval_time: 3m
+        exp_samples:
+          - labels: 'k3d_gpu:rapl_power:watts{instance="n",job="node-exporter",index="0",path="/host/sys/class/powercap/intel-rapl:0",rapl_zone="package"}'
+            value: 30
+          - labels: 'k3d_gpu:rapl_power:watts{instance="n",job="node-exporter",index="0",path="/host/sys/class/powercap/intel-rapl:0:1",rapl_zone="uncore"}'
+            value: 5

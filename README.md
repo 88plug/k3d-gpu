@@ -1065,6 +1065,7 @@ clean `up` means GPUs are schedulable.
 - [k3d: Running CUDA workloads](https://k3d.io/v5.7.2/usage/advanced/cuda/)  
 - [NVIDIA Container Toolkit](https://github.com/NVIDIA/libnvidia-container)  
 - [GPUStack on k3d-gpu](docs/integrations/gpustack.md): NVIDIA recipe; why Intel GPU/NPU/Gaudi are not supported  
+- [Telemetry](docs/telemetry.md): opt-in Prometheus, node-exporter (RAPL, P/E-core labels), Intel GPU and DCGM exporter manifests in `share/telemetry/`  
 
 ---
 

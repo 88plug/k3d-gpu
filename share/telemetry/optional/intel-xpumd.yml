@@ -1,0 +1,336 @@
+# Intel XPU Manager daemon (xpumd): Level Zero Sysman GPU metrics as a Prometheus endpoint
+# Source: https://github.com/intel/xpumanager (helm chart
+# oci://ghcr.io/intel/xpumanager/charts/xpumd 2.3.0, image ghcr.io/intel/xpumanager/xpumd:v2.3.0),
+# rendered with `helm template xpumd --namespace k3d-gpu-telemetry` and the values below,
+# then metadata.namespace added. Re-render to bump.
+# Optional: xpumanager v2.3.0 lists only Arc Pro B50/B60/B65/B70 as supported devices.
+# Its Level Zero stack (compute-runtime 26.35) does run on Alder/Raptor Lake iGPUs, and
+# the receiver labels them hw_gpu_type="integrated", but iGPU metric coverage is not
+# validated upstream; drm-exporter (../intel-gpu-exporter.yml) is the iGPU default.
+# Engine utilisation comes from Sysman engine counters, which xpu-smi v2.3.0 stopped
+# using because they kept the media GT awake and slowed workloads; disable
+# hw.gpu.utilization in config.receivers.intel_xpu.metrics when benchmarking.
+# Privileged (gpuAccess=privileged) so no gpu.intel.com/monitoring resource is needed;
+# the baked intel-gpu-plugin runs without -enable-monitoring. Serves :8080/metrics.
+#
+# values:
+#   image: {pullPolicy: IfNotPresent}
+#   gpuAccess: privileged
+#   service: {create: true}
+#   config.service.pipelines.metrics.exporters: [intel_xpu_info, prometheus]
+---
+# Source: xpumd/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: xpumd
+  namespace: k3d-gpu-telemetry
+  labels:
+    helm.sh/chart: xpumd-2.3.0
+    app.kubernetes.io/name: xpumd
+    app.kubernetes.io/instance: xpumd
+    app.kubernetes.io/version: "v2.3.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: xpumd/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: xpumd-config
+  namespace: k3d-gpu-telemetry
+  labels:
+    helm.sh/chart: xpumd-2.3.0
+    app.kubernetes.io/name: xpumd
+    app.kubernetes.io/instance: xpumd
+    app.kubernetes.io/version: "v2.3.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  # Default configuration for the Intel Crashlog receiver. Can be overridden
+  # in config.yaml (via .Values.config).
+  config-receiver-crashlog.yaml: |-
+    receivers:
+      intel_crashlog:
+        directory: /var/log/crashlog
+        glob: "*.crashlog"
+        ignore_older_than: 0s
+  # Default configuration for the GPU info log collection of the Intel XPU
+  # receiver. Can be overridden in config.yaml (via .Values.config).
+  config-receiver-infolog.yaml: |-
+    receivers:
+      intel_xpu:
+        info_logs:
+          enabled: false
+          instance_name: xpumd
+  # Default configuration for the Intel XPU status processor. Can be overridden
+  # in config.yaml (via .Values.config).
+  config-processor-xpustatus.yaml: |-
+    processors:
+      intel_xpu_status:
+        rules:
+          - name: "Intel GPU core temperature health"
+            source_metric: "hw.temperature"
+            parent_metric: "hw.gpu.info"
+            parent_ref_attribute: "hw.id"
+            parent_filters:
+              - key: "pci.vendor_id"
+                values: ["8086"]
+            component_filters:
+              - key: "hw.sensor_location"
+                values: ["gpu"]
+            copy_attributes: ["hw.id", "hw.name", "pci.bdf", "hw.sensor_location", "com.intel.subdevice_id"]
+            add_attributes:
+              hw.type: "temperature"
+            states:
+              # Default state
+              - state_name: "ok"
+              - state_name: "warning"
+                conditions:
+                  - value: 95.0
+                    parent_filters:
+                      - key: "pci.device_id"
+                        values: ["56c1"]
+                  - value: 100.0
+                    parent_filters:
+                      - key: "pci.device_id"
+                        values: ["56c0", "56c2"]
+                  # Default threshold for other device IDs
+                  - value: 105.0
+          - name: "Intel GPU memory temperature health"
+            source_metric: "hw.temperature"
+            parent_metric: "hw.gpu.info"
+            parent_ref_attribute: "hw.id"
+            parent_filters:
+              - key: "pci.vendor_id"
+                values: ["8086"]
+            component_filters:
+              - key: "hw.sensor_location"
+                values: ["memory"]
+            copy_attributes: ["hw.id", "hw.name", "pci.bdf", "hw.sensor_location", "com.intel.subdevice_id"]
+            add_attributes:
+              hw.type: "temperature"
+            states:
+              # Default state
+              - state_name: "ok"
+              - state_name: "warning"
+                conditions:
+                  - value: 85.0
+  # Default configuration for the Intel XPU info exporter. Can be overridden
+  # in config.yaml (via .Values.config).
+  config-exporter-xpuinfo.yaml: |-
+    exporters:
+      intel_xpu_info:
+        endpoint: "/run/xpumd/intel_xpu_info.sock"
+        hw_status_mappings:
+          - health_domain: "memory"
+            filters:
+              - key: hw.type
+                values: [memory]
+            state_mapping:
+              unknown:
+                severity: unknown
+              ok:
+                severity: ok
+              degraded:
+                severity: warning
+              critical:
+                severity: critical
+              replace:
+                severity: critical
+              "*":
+                severity: warning
+                message: "Unexpected memory health state, mapped to warning"
+          # GPU device states.
+          - health_domain: "gpu"
+            filters:
+              - key: hw.type
+                values: [gpu]
+            state_mapping:
+              ok:
+                severity: ok
+              wedged:
+                severity: critical
+              survivability:
+                severity: critical
+              "*":
+                severity: warning
+          # Default mapping (empty filters matches any data point not matched above):
+          - health_domain: "{{ .hw_type }}"
+            state_mapping:
+              unknown:
+                severity: unknown
+              ok:
+                severity: ok
+              warning:
+                severity: warning
+              critical:
+                severity: critical
+              failed:
+                severity: failed
+              "*":
+                severity: warning
+  config.yaml: |-
+    exporters:
+      intel_xpu_info: {}
+      prometheus:
+        endpoint: 0.0.0.0:8080
+    extensions:
+      intel_device_watch:
+        change_action: log
+        dev_root: /dev
+        max_restarts: 3
+        report_interval: 10m
+        restart_window: 10m
+        scan_interval: 30s
+        settle_scans: 2
+        state_file: /var/lib/xpumd/device-watch/restarts.json
+        subsystems:
+        - drm
+        - mei
+        sysfs_root: /sys
+        vendor_ids:
+        - "8086"
+    processors:
+      intel_xpu_status: {}
+    receivers:
+      intel_crashlog: {}
+      intel_xpu:
+        collection_interval: 5s
+        fail_on_sysman_init_error: false
+        info_logs: {}
+        initial_delay: 1s
+        metrics: {}
+        sampling_interval: 1s
+        timeout: 0
+    service:
+      extensions:
+      - intel_device_watch
+      pipelines:
+        logs:
+          exporters:
+          - intel_xpu_info
+          receivers:
+          - intel_xpu
+          - intel_crashlog
+        metrics:
+          exporters:
+          - intel_xpu_info
+          - prometheus
+          processors:
+          - intel_xpu_status
+          receivers:
+          - intel_xpu
+      telemetry:
+        logs:
+          disable_stacktrace: true
+          level: info
+---
+# Source: xpumd/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: xpumd
+  namespace: k3d-gpu-telemetry
+  labels:
+    helm.sh/chart: xpumd-2.3.0
+    app.kubernetes.io/name: xpumd
+    app.kubernetes.io/instance: xpumd
+    app.kubernetes.io/version: "v2.3.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: xpumd
+    app.kubernetes.io/instance: xpumd
+---
+# Source: xpumd/templates/daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: xpumd
+  namespace: k3d-gpu-telemetry
+  labels:
+    helm.sh/chart: xpumd-2.3.0
+    app.kubernetes.io/name: xpumd
+    app.kubernetes.io/instance: xpumd
+    app.kubernetes.io/version: "v2.3.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: xpumd
+      app.kubernetes.io/instance: xpumd
+  template:
+    metadata:
+      annotations:
+        checksum/config: 09223afaeb29dffd51230cd930608f7c0116f8f68fe0d51eedf890276971a483
+      labels:
+        app.kubernetes.io/name: xpumd
+        app.kubernetes.io/instance: xpumd
+    spec:
+      serviceAccountName: xpumd
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: xpumd
+        image: "ghcr.io/intel/xpumanager/xpumd:v2.3.0"
+        imagePullPolicy: IfNotPresent
+        args:
+        - "--config=/etc/xpumd/config-receiver-crashlog.yaml"
+        - "--config=/etc/xpumd/config-receiver-infolog.yaml"
+        - "--config=/etc/xpumd/config-processor-xpustatus.yaml"
+        - "--config=/etc/xpumd/config-exporter-xpuinfo.yaml"
+        - "--config=/etc/xpumd/config.yaml"
+        securityContext:
+          readOnlyRootFilesystem: true
+          # Required for GPU device access, unless container runtime allows device file owner override:
+          # - https://kubernetes.io/blog/2021/11/09/non-root-containers-and-devices/
+          # Required also for all other metrics than frequency, memory usage, power
+          runAsUser: 0
+          # Privileged mode grants the device access that a GPU resource request would.
+          # It is also the only way to access devices that appeared on the node after the
+          # pod was started as the devices cgroup (controlling access to device
+          # files in non-privileged mode) is fixed at that point.
+          privileged: true
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        resources:
+          requests:
+            cpu: 10m
+            memory: 128Mi
+          # map all GPUs to container
+          limits:
+            memory: 2Gi
+        volumeMounts:
+        - name: config
+          mountPath: /etc/xpumd
+          readOnly: true
+        - name: rundir
+          mountPath: /run/xpumd
+        # Backs intel_device_watch's restart-limiter state_file.
+        - name: device-watch-state
+          mountPath: /var/lib/xpumd/device-watch
+        - name: crashlog
+          mountPath: /var/log/crashlog
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: xpumd-config
+      - name: rundir
+        hostPath:
+          path: /run/xpumd
+          type: DirectoryOrCreate
+      - name: device-watch-state
+        emptyDir: {}
+      - name: crashlog
+        hostPath:
+          path: /var/log/crashlog
+          type: DirectoryOrCreate

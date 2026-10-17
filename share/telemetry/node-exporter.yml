@@ -1,0 +1,176 @@
+# Prometheus node_exporter: host CPU (per core), cpufreq, RAPL energy, hwmon, memory
+# Source: https://github.com/prometheus/node_exporter (image quay.io/prometheus/node-exporter:v1.12.1).
+# Collectors used beyond the per-CPU basics, all enabled by default in v1.12.1:
+#   cpu       node_cpu_seconds_total{cpu,mode} for every logical CPU
+#   cpufreq   node_cpu_scaling_frequency_hertz{cpu}
+#   rapl      node_rapl_joules_total{rapl_zone,index,path} from /sys/class/powercap
+#             (--collector.rapl.enable-zone-label puts the zone name in a label)
+#   hwmon     node_hwmon_* (CPU package temperature via coretemp)
+#   textfile  k3d_gpu_cpu_core_type{cpu,type} written by the core-type init container
+# RAPL energy_uj is root-only (0400) since CVE-2020-8694, so the exporter runs as
+# root; without it the rapl collector logs at debug level and exports nothing.
+# Hybrid CPUs: the init container maps each CPU to its core type from the PMU cpu
+# lists (/sys/devices/cpu_core/cpus -> performance, cpu_atom/cpus -> efficient), the
+# same lists the k3d-gpu launcher reads, so PromQL can split utilisation by core type
+# (see the k3d_gpu:cpu_utilisation:ratio rule in prometheus.yml). Non-hybrid CPUs get
+# no core-type series.
+# Every k3d node of one cluster is a container on the same host, so a multi-node
+# cluster reports the host CPUs once per node.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: node-exporter-scripts
+  namespace: k3d-gpu-telemetry
+data:
+  core-type.sh: |
+    #!/bin/sh
+    # Writes k3d_gpu_cpu_core_type{cpu,type} 1 for each CPU in the hybrid PMU cpu lists,
+    # in node_exporter textfile format. Writes nothing on a non-hybrid CPU.
+    set -eu
+    sys=${SYSFS:-/host/sys}
+    out=${OUT:-/textfile/k3d_gpu_core_type.prom}
+    tmp="${out}.tmp"
+    : > "${tmp}"
+    emit() {
+        [ -r "${sys}/devices/$1/cpus" ] || return 0
+        for range in $(tr ',' ' ' < "${sys}/devices/$1/cpus"); do
+            i=${range%-*}
+            last=${range#*-}
+            while [ "${i}" -le "${last}" ]; do
+                echo "k3d_gpu_cpu_core_type{cpu=\"${i}\",type=\"$2\"} 1" >> "${tmp}"
+                i=$((i + 1))
+            done
+        done
+    }
+    emit cpu_core performance
+    emit cpu_atom efficient
+    if [ -s "${tmp}" ]; then
+        {
+            echo "# HELP k3d_gpu_cpu_core_type Core type of each logical CPU on a hybrid Intel CPU."
+            echo "# TYPE k3d_gpu_cpu_core_type gauge"
+            cat "${tmp}"
+        } > "${out}"
+    fi
+    rm -f "${tmp}"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: node-exporter
+  namespace: k3d-gpu-telemetry
+  labels:
+    app: node-exporter
+spec:
+  selector:
+    app: node-exporter
+  ports:
+    - name: metrics
+      port: 9100
+      targetPort: metrics
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-exporter
+  namespace: k3d-gpu-telemetry
+  labels:
+    app: node-exporter
+spec:
+  selector:
+    matchLabels:
+      app: node-exporter
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: node-exporter
+    spec:
+      automountServiceAccountToken: false
+      hostNetwork: true
+      hostPID: true
+      securityContext:
+        runAsUser: 0
+        runAsGroup: 0
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: core-type
+          image: quay.io/prometheus/node-exporter:v1.12.1
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/scripts/core-type.sh"]
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+            - name: textfile
+              mountPath: /textfile
+            - name: sys
+              mountPath: /host/sys
+              readOnly: true
+      containers:
+        - name: node-exporter
+          image: quay.io/prometheus/node-exporter:v1.12.1
+          imagePullPolicy: IfNotPresent
+          args:
+            - --web.listen-address=:9100
+            - --path.procfs=/host/proc
+            - --path.sysfs=/host/sys
+            - --path.rootfs=/host/root
+            - --collector.rapl.enable-zone-label
+            - --collector.textfile.directory=/textfile
+          ports:
+            - name: metrics
+              containerPort: 9100
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          volumeMounts:
+            - name: textfile
+              mountPath: /textfile
+              readOnly: true
+            - name: proc
+              mountPath: /host/proc
+              readOnly: true
+            - name: sys
+              mountPath: /host/sys
+              readOnly: true
+            - name: root
+              mountPath: /host/root
+              mountPropagation: HostToContainer
+              readOnly: true
+      volumes:
+        - name: scripts
+          configMap:
+            name: node-exporter-scripts
+        - name: textfile
+          emptyDir: {}
+        - name: proc
+          hostPath:
+            path: /proc
+        - name: sys
+          hostPath:
+            path: /sys
+        - name: root
+          hostPath:
+            path: /
+      tolerations:
+        - operator: Exists
+      nodeSelector:
+        kubernetes.io/os: linux
