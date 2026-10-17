@@ -195,7 +195,7 @@ a plan whose hash the user confirmed in the client.
 | `cluster_health` | node readiness, per-node accelerator counts, device-plugin DaemonSet rollout (and plugins missing for host-detected devices), and a list of problems |
 | `hardware` | the host's `facts/v1` document: the exact bytes `k3d-gpu facts --json` prints |
 | `plan_launch` | `engine`, `device`, `model`, `port` (all optional). The exact bytes `k3d-gpu plan --json` prints with those options, plus the plan hash (`sha256` of those bytes, what `k3d-gpu plan --hash` prints) in a second text item and in `_meta["k3d-gpu.io/planHash"]`. There is no `bind`: an off-loopback listener is never set up over MCP |
-| `apply` | `plan_hash` and the options given to `plan_launch`. The only write: `k3d-gpu apply --plan-hash`, which runs `k3d-gpu agent up` with the plan's device and model. See below |
+| `apply` | `plan_hash` and the options given to `plan_launch`. The only write: `k3d-gpu apply --plan-hash`, which runs `k3d-gpu agent up` with the plan's image, device, model and P-core count. See below |
 
 `apply` writes only after a human confirms the plan hash in the client. On the
 first call it recomputes the plan; if the plan names no engine or no longer
@@ -1073,9 +1073,11 @@ from the clock, so the same facts give the same bytes.
 
 `plan --hash` prints the plan hash, `sha256:` plus the SHA-256 of the
 `plan --json` bytes. `k3d-gpu apply --plan-hash HASH` with the same options
-recomputes the plan and runs it (`agent up` with the plan's OVMS device and
-model) only if it still hashes to `HASH`; a changed host, matrix or option set
-gives another hash and apply refuses, as it does for a plan with no engine.
+recomputes the plan and runs it (`agent up` with the plan's OVMS image, device,
+model and P-core count) only if it still hashes to `HASH`; a changed host,
+matrix or option set gives another hash and apply refuses, as it does for a plan
+with no engine and for a plan whose endpoint port is not 8000, the one port
+`agent up` serves.
 
 ### Audit and images.lock (`audit`)
 

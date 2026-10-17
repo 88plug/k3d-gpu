@@ -487,6 +487,35 @@ class CliApply(unittest.TestCase):
         finally:
             w.close()
 
+    def test_apply_deploys_the_confirmed_plan(self):
+        # The manifest carries the plan's image, model, device and P-core count,
+        # not whatever agent up would pick on its own.
+        w = World(GREEN_HOST, green=True)
+        self.addCleanup(w.close)
+        doc = json.loads(w.cli("plan", "--json"))
+        h = w.cli("plan", "--hash").decode().strip()
+        # A backend from the user's shell does not replace the plan's engine.
+        env = dict(w.env, K3D_GPU_AGENT_BACKEND="vllm")
+        p = subprocess.run([LAUNCHER, "apply", "--plan-hash", h], env=env, capture_output=True,
+                           text=True, timeout=300)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        with open(os.path.join(w.dir, "manifest"), encoding="utf-8") as f:
+            manifest = f.read()
+        self.assertIn("image: " + doc["engine"]["image"], manifest)
+        self.assertIn("--source_model=" + doc["model"]["name"], manifest)
+        self.assertIn("--target_device=" + doc["engine"]["device"], manifest)
+        self.assertIn('cpu: "%d"' % doc["placement"]["cpu_count"], manifest)
+        self.assertIn("--rest_port=%d" % doc["port"], manifest)
+
+    def test_port_agent_up_cannot_serve_refused(self):
+        # agent up serves on 8000 only; a confirmed endpoint on another port
+        # would not be what runs, so apply refuses before any write.
+        h = self.w.cli("plan", "--hash", "--port", "9000").decode().strip()
+        p = self.apply("--plan-hash", h, "--port", "9000")
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("refused, the plan's endpoint port 9000", p.stderr)
+        self.assertEqual(writes(self.w), [])
+
     def test_gpu_plan_applies_on_gpu(self):
         h = self.w.cli("plan", "--hash", "--device", "gpu").decode().strip()
         p = self.apply("--plan-hash", h, "--device", "gpu")
