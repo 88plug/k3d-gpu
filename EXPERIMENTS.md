@@ -2164,10 +2164,16 @@ and N=2 was never reached. The N=1 p95 is 34-37% above PROTOCOL.md's predicted
 (median 33 tokens, 34 on A4), so the host load is the first suspect. Tool-call
 validity 0.73 (check 2 wants >= 0.9).
 
-capacity reports these runs as "search closed: APB = 0" and stores N=1 as the
-upper end, so a rerun with a larger `--budget` returns the stored 0 without
-measuring; `--fresh` is needed. That treats a step ended by the budget like a
-measured failure; it is a reporting gap in capacity, not a property of the box.
+capacity reported these runs as "search closed: APB = 0" and stored N=1 as the
+upper end, so a rerun with a larger `--budget` returned the stored 0 without
+measuring; `--fresh` was needed. That treated a step ended by the budget like a
+measured failure; it was a reporting gap in capacity, not a property of the box.
+Fixed since: a step the budget cuts short (run 2 here) is unmeasured, the
+bracket stays open ("APB unknown (budget)", status `partial`), a rerun measures
+that N, and stores holding such a step are rebuilt on load. Run 1 ended on
+`--step-cap`, not the budget, so its `insufficient` N=1 still bounds the
+bracket. The table's "0 by the scoring rule" is unchanged: both runs scored one
+N=1 rep with the CI crossing 10 s.
 
 A2: the warm-up's first turn took 119.6 s (kernel compile on a fresh cluster),
 the next six 15.3-27.9 s with TTFT 5.7-14.5 s; every turn after the first is over

@@ -23,10 +23,13 @@ for the full streamed reply, wait the trace's tool time, send the next turn.
      bootstrap CI straddles the SLO; a rep whose own p95 exceeds 2 x
      --stop-slo ends its step. --step-cap bounds a step, --budget (default
      15 min) the search: when it runs out the bracket so far is reported
-     ("APB in [a,b]"). The bracket is stored per host + engine + model + SLO
-     ($XDG_STATE_HOME/k3d-gpu/capacity/state); a rerun resumes from it and
-     only refines it, and a closed bracket is answered without sending load
-     (--fresh starts over).
+     ("APB >= a (budget)", "APB unknown (budget)" when no step passed) and
+     the report status is "partial". A step the budget cut short is
+     unmeasured, not a fail: it does not bound the bracket and is not stored.
+     The bracket is stored per host + engine + model + SLO
+     ($XDG_STATE_HOME/k3d-gpu/capacity/state); a rerun resumes from it, measures
+     the cut step's N and only refines it, and a closed bracket is answered
+     without sending load (--fresh starts over).
   6. One more N=1 rep (drift check), then capacity.json.
 
 Scoring is bench/apb/apb.py's (PROTOCOL.md section 6): steady window per rep,
@@ -188,7 +191,9 @@ def search_apb(measure, max_agents, bracket=None, budget_s=None, clock=time.mono
     """Exponential-then-binary search for the largest passing N.
 
     measure(n, deadline) -> scored step, or None when the step does not fit
-    the budget (the search then ends with "budget"). bracket {"lo", "hi"} resumes a
+    the budget. A step the budget cut short (stop "budget") is unmeasured, not
+    a fail: it stays out of the bracket and the steps, so a resumed search
+    measures that N. Either way the search ends with "budget". bracket {"lo", "hi"} resumes a
     previous search (lo: largest N seen passing, hi: smallest N seen not
     passing). A step that is not a pass (fail or insufficient) bounds the
     bracket from above. Returns (bracket, steps, status) with status "closed",
@@ -206,7 +211,7 @@ def search_apb(measure, max_agents, bracket=None, budget_s=None, clock=time.mono
         if deadline is not None and clock() >= deadline:
             return b, steps, "budget"
         s = measure(n, deadline)
-        if s is None:
+        if s is None or s.get("stop") == "budget":
             return b, steps, "budget"
         steps.append(s)
         if on_step:
@@ -237,6 +242,14 @@ def load_state(path):
         return None
     if st.get("schema") != STATE_SCHEMA:
         return None
+    steps = st.get("steps") or []
+    measured = [x for x in steps if x.get("stop") != "budget"]
+    if len(measured) != len(steps):
+        # Stores written before budget-cut steps were left out: rebuild the
+        # bracket from the measured steps only.
+        st["steps"] = measured
+        st["lo"] = max((x["agents"] for x in measured if x.get("verdict") == "pass"), default=0)
+        st["hi"] = min((x["agents"] for x in measured if x.get("verdict") != "pass"), default=None)
     return st
 
 
@@ -254,6 +267,16 @@ def bracket_text(lo, hi):
     if hi - lo <= 1:
         return f"APB = {lo}"
     return f"APB in [{lo},{hi - 1}]"
+
+
+def result_text(lo, hi, status):
+    """bracket_text, marked "(budget)" when the budget ended the search; with
+    no step passed by then, APB is unknown (not 0)."""
+    if status != "budget":
+        return bracket_text(lo, hi)
+    if not lo:
+        return "APB unknown (budget)"
+    return bracket_text(lo, hi) + " (budget)"
 
 
 def agents_per_box(steps):
@@ -858,8 +881,9 @@ def confounds(rep, forwarded, sampler, engine_known):
     if d and d.get("ratio") is not None and abs(d["ratio"] - 1) > DRIFT_BAND:
         out.append(f"drift: N=1 p95 end/start = {d['ratio']:.2f}, outside 1 +/- {DRIFT_BAND}: the box changed during the run")
     if rep["binding_limit"]["kind"] == "budget":
-        out.append("--budget ran out before the bracket closed: agents per box is the proven lower end; "
-                   "rerun to refine (the bracket is stored)")
+        out.append("--budget ran out before the bracket closed: agents per box is the proven lower end "
+                   "(unknown when no step passed); a step the budget cut short is unmeasured, not a fail, "
+                   "and a rerun measures it (the bracket is stored)")
     if rep.get("bracket_start", {}).get("lo") or rep.get("bracket_start", {}).get("hi"):
         out.append("bracket resumed from an earlier run: steps outside this run were measured then, not now")
     if rep["binding_limit"]["kind"] == "max_reached":
@@ -882,7 +906,8 @@ def fmt(v, nd=2):
 def print_report(rep):
     ep = rep["endpoint"]
     b = rep.get("bracket") or {"lo": rep["agents_per_box"], "hi": None}
-    print(f"AGENTS PER BOX: {rep['agents_per_box']}  ({bracket_text(b['lo'], b['hi'])}, "
+    apb_n = "unknown" if rep["agents_per_box"] is None else rep["agents_per_box"]
+    print(f"AGENTS PER BOX: {apb_n}  ({result_text(b['lo'], b['hi'], rep.get('search_status'))}, "
           f"search {rep.get('search_status')}; "
           f"(p95 turn latency <= {fmt(rep['slo_s'], 3)} s, trace {rep['trace']}, "
           f"engine {ep['engine']}, model {ep['model']})")
@@ -1099,8 +1124,12 @@ def run(a, ep, forwarded):
             log(f"N={s['agents']}: {s['verdict']} (p95 {fmt(s['p95_s'])} s, n {s['n']})")
 
         def measure(n, deadline):
-            return measure_step(run_rep, n, a.stop_slo, st["base_tool"], max_reps=a.reps,
-                                step_cap_s=a.step_cap, deadline=deadline, est_rep_s=est_rep)
+            s = measure_step(run_rep, n, a.stop_slo, st["base_tool"], max_reps=a.reps,
+                             step_cap_s=a.step_cap, deadline=deadline, est_rep_s=est_rep)
+            if s is not None and s["stop"] == "budget":
+                rep["unmeasured"] = {"agents": n, "reps": s["reps"], "seconds": round(s["seconds"], 1)}
+                log(f"N={n}: unmeasured, --budget ran out after {s['reps']} rep(s)")
+            return s
 
         def on_search_step(s):
             # Saved after every step, so an interrupted run still resumes.
@@ -1122,7 +1151,7 @@ def run(a, ep, forwarded):
         st.update(lo=bracket["lo"], hi=bracket["hi"], runs=st["runs"] + 1, updated_at=time.time())
         save_state(state_path, st)
         rep["bracket"], rep["search_status"] = bracket, status
-        log(f"search {status}: {bracket_text(bracket['lo'], bracket['hi'])} "
+        log(f"search {status}: {result_text(bracket['lo'], bracket['hi'], status)} "
             f"({len(scored)} steps, {time.monotonic() - t_start:.0f} s)")
         left = a.budget * 60 - (time.monotonic() - t_start)
         if status == "budget":
@@ -1156,12 +1185,14 @@ def run(a, ep, forwarded):
         known = {x["agents"]: x for x in st["steps"]}  # latest record per N, this run's included
         _best, interp = agents_per_box([{**x, "_slo": a.stop_slo} for x in sorted(known.values(), key=lambda x: x["agents"])])
         rep["steps"] = steps
-        # The bracket's lower end is the agent count proven to pass (stop SLO).
-        rep["agents_per_box"], rep["agents_per_box_interpolated"] = bracket["lo"], interp
+        # The bracket's lower end is the agent count proven to pass (stop SLO);
+        # unknown when the budget ran out before any step passed.
+        rep["agents_per_box"] = None if status == "budget" and not bracket["lo"] else bracket["lo"]
+        rep["agents_per_box_interpolated"] = interp
         rep["binding_limit"] = binding_limit(steps, a.max)
         if status == "budget":
             rep["binding_limit"] = dict(rep["binding_limit"], kind="budget",
-                                        detail=f"--budget {a.budget:g} min ran out: {bracket_text(bracket['lo'], bracket['hi'])}")
+                                        detail=f"--budget {a.budget:g} min ran out: {result_text(bracket['lo'], bracket['hi'], status)}")
         rep["apb_at_secondary_slo_p95_only"] = secondary_apb(steps, a.stop_slo)
         drift = apb.load_run(os.path.join(run_dir, "drift")).get(1)
         if drift and steps:
@@ -1170,7 +1201,7 @@ def run(a, ep, forwarded):
             rep["drift_check"] = {"p95_start_s": p0, "p95_end_s": d["p95_s"],
                                   "ratio": None if not p0 or d["p95_s"] in (None, apb.INF) or p0 == apb.INF
                                   else d["p95_s"] / p0}
-        rep["status"] = "ok"
+        rep["status"] = "partial" if status == "budget" else "ok"
         rep["finished_at"] = time.time()
         rep["confounds"] = confounds(rep, forwarded, sampler, ep.get("server") is not None)
         write()

@@ -1136,7 +1136,7 @@ agents (`bench/apb/capacity.py`) whose p95 turn latency stays under `--slo`
 
 ```bash
 k3d-gpu capacity                    # budget 15 min; prints AGENTS PER BOX and the bracket
-k3d-gpu capacity --budget 5         # stops early: "APB in [a,b]" is what is proven so far
+k3d-gpu capacity --budget 5         # stops early: "APB >= a (budget)" is what is proven so far
 k3d-gpu capacity                    # resumes from the stored bracket, refines it
 k3d-gpu capacity --fresh            # forget the stored bracket and start over
 ```
@@ -1147,15 +1147,20 @@ k3d-gpu capacity --fresh            # forget the stored bracket and start over
   straddles the SLO: at most `--reps` (default 3) repetitions, fewer when
   the answer is already clear. `--step-cap` (default 180 s) stops adding
   repetitions to a step.
-- When `--budget` runs out the report gives the bracket found so far and
-  agents per box is its proven lower end.
+- When `--budget` runs out the report gives the bracket found so far, marked
+  `(budget)`, with status `partial`; agents per box is its proven lower end,
+  or `APB unknown (budget)` when no step passed yet (never 0). A step the
+  budget cut short is unmeasured, not a fail: it does not bound the bracket,
+  and the next run measures that N.
 - A repetition is not started when it would end past `--budget`: its length
   is estimated from the slowest session time seen so far (the warm-up
   included) times the sessions per agent. The report then names the next
   step and the time one repetition of it needs.
 - The bracket is stored per host, engine, model, endpoint, SLO and trace in
   `$XDG_STATE_HOME/k3d-gpu/capacity/state/`. A closed bracket is answered from
-  there without sending any load.
+  there without sending any load; a bracket left open by the budget is not.
+  Stores written by older versions, where a budget-cut step closed the
+  bracket, are rebuilt from their measured steps on load.
 
 `k3d-gpu tune run` tunes the OVMS agent's serving config on this host from its
 current best (the stored profile's winner, else the default):
