@@ -6,14 +6,24 @@
   ok
 ==> Detected accelerators: intel npu hybrid
 ==> Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...
-  ok: Intel Arrow Lake (0x7d67) bound to i915
+  ok: Intel Arrow Lake-S (0x7d67) bound to i915
   ok: i915/mtl_guc_* firmware present
+  ok: card0 media engines: vcs0 (hevc sfc), vcs1 (hevc sfc), vecs0 (sfc)
+  ok: up labels the node gpu.intel.com/xmx=false gpu.intel.com/media-vcs=2 gpu.intel.com/media-vecs=1
 ==> Checking Intel NPU (Core Ultra)...
   ok: Intel NPU Arrow Lake (0xad1d) bound to intel_vpu
   ok: intel/vpu/vpu_37xx_* firmware present
+  ok: up labels the node k3d-gpu.io/npu.gen=37xx
   note: workload images need the NPU user-space driver (github.com/intel/linux-npu-driver) and Level Zero
 ==> Intel CPU built-in accelerators...
+  ok: CPU ISA: AVXVNNI — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
   ok: hybrid CPU: P-cores 0-7, E-cores 8-23 — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient|lowpower|ecluster|pcore-physical|latency
+==> Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...
+  ok: dra available (auto)
+  ok: image-volume available (auto)
+  ok: npu-turbo available (auto)
 
 ==> All checks passed.
 exit=0
+--- calls
+kubectl --context k3d-gpu --request-timeout=5s get nodes -o name

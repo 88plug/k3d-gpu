@@ -4,11 +4,27 @@
   ok: k3d version v0.0.0-stub
 ==> Checking kubectl...
   ok
-==> Detected accelerators: hybrid
+==> Detected accelerators: intel npu hybrid
+==> Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...
+  ok: Intel Arrow Lake-H (0x7d51) bound to i915
+  ok: i915/mtl_guc_* firmware present
+  ok: up labels the node gpu.intel.com/xmx=true
+==> Checking Intel NPU (Core Ultra)...
+  ok: Intel NPU Arrow Lake-H (0x7d1d) bound to intel_vpu
+  ok: intel/vpu/vpu_37xx_* firmware present
+  ok: up labels the node k3d-gpu.io/npu.gen=37xx
+  note: workload images need the NPU user-space driver (github.com/intel/linux-npu-driver) and Level Zero
 ==> Intel CPU built-in accelerators...
+  ok: CPU ISA: AVXVNNI GFNI SHA VAES — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
   ok: hybrid CPU: P-cores 0-5, E-cores 6-13, LP E-cores 14-15 — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient|lowpower|ecluster|pcore-physical|latency
   ok: E-core clusters (shared L2): 6-9 10-13 — k3d-gpu.io/cores=ecluster gives a pod 4 E-cores of one cluster
   ok: physical P-cores (one thread per core): 0-5 — k3d-gpu.io/cores=pcore-physical and latency show pods one thread per core
+==> Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...
+  ok: dra available (auto)
+  ok: image-volume available (auto)
+  ok: npu-turbo available (auto)
 
 ==> All checks passed.
 exit=0
+--- calls
+kubectl --context k3d-gpu --request-timeout=5s get nodes -o name
