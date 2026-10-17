@@ -2689,6 +2689,20 @@ unmatched across arms, never because the load is high.
   predictions, not decision rules, and A1 does not move them. Priors unchanged: O1 0.55,
   O2 0.25, O3 0.08, O4 0.04, O5 0.08.
 
+### H27 amendment A2: swap preflight on a busy host (2026-10-17)
+
+Written 2026-10-17T22:24Z. Two A1 attempts (22:17Z typical, 22:18Z heavy) aborted in the
+60 s swap preflight, before any OVMS container or request: swap-in was 5 and 3 pages
+(20 and 12 KiB). This host holds about 145 GiB of swapped-out pages from its production
+containers and swaps in a few pages a minute in steady state. The pre-registered gate demanded
+exactly zero, so it is a quiet-host gate, and A1's rule is that load alone never voids a run.
+- New preflight: abort only if swap-in over the 60 s exceeds 2560 pages (10 MiB). That is
+  the same per-block swap flag H26 used. The count is logged every time.
+- Swap drift during a level is still caught per arm by `load.py matched` (swap used 256 MiB,
+  swap growth 64 MiB per window). The fp16 major-fault flag in `summarize.py` is unchanged.
+- No request was sent and no outcome is known. Arms, order, n, gate, scoring, predictions and
+  priors are unchanged from the row and A1.
+
 ### H23 pre-registration (2026-10-17)
 
 Written 2026-10-17T12:08Z, before any measurement. Ledger id H23; provenance ids
