@@ -37,8 +37,9 @@
 #   report  what the host and the cluster have, per engine (text + JSON + HTML)
 #   logs    tail server container logs
 #   host-setup  check the host userspace and print (--apply: run) the pinned install commands
-#   agent   up|down|status|manifest: OpenAI-compatible LLM server (OpenVINO Model
-#           Server) on the cluster's best Intel engine (an XMX GPU, else CPU on P-cores; NPU on request)
+#   agent   up|down|status|manifest: OpenAI-compatible LLM server on the cluster's
+#           best Intel engine: vLLM on a Gaudi, else OpenVINO Model Server on an XMX
+#           GPU, else CPU on P-cores (NPU on request)
 #   recipe  print a ready-to-apply workload manifest (npu-embeddings)
 
 set -euo pipefail
@@ -100,9 +101,9 @@ Usage: k3d-gpu <command>
             toolkit + CDI (Ubuntu 24.04/26.04, Fedora, Arch, Manjaro). --apply runs
             them after a y/N prompt
   agent up|down|status|manifest
-            OpenAI-compatible LLM server in the current cluster: OpenVINO Model
-            Server on its Intel GPU if that GPU has XMX, else on the CPU (P-cores);
-            or vLLM on an Arc GPU (K3D_GPU_AGENT_BACKEND)
+            OpenAI-compatible LLM server in the current cluster: vLLM on its Gaudi
+            if it has one, else OpenVINO Model Server on its Intel GPU if that GPU
+            has XMX, else on the CPU (P-cores); or vLLM on an Arc GPU (K3D_GPU_AGENT_BACKEND)
   recipe npu-embeddings
             Print an OVMS embeddings-on-NPU manifest for this host (pipe to kubectl apply -f -)
   version   Show version
@@ -125,12 +126,13 @@ Environment:
   K3D_GPU_HYBRID_PLUGIN NRI balloons yaml for hybrid and numa (default: ${SHARE_DIR}/nri-balloons.yml)
   K3D_GPU_NPU_EMBEDDINGS NPU embeddings recipe (default: ${SHARE_DIR}/npu-embeddings.yml)
   K3D_GPU_MODEL_GB      model size checked by doctor --perf (same as --model-gb)
-  K3D_GPU_AGENT_DEVICE  agent device: auto | CPU | GPU | NPU (default: auto)
-  K3D_GPU_AGENT_BACKEND agent server: ovms | vllm | llm-scaler (default: ovms; vllm and
-                        llm-scaler need an Intel GPU, Arc B-series validated)
+  K3D_GPU_AGENT_DEVICE  agent device: auto | CPU | GPU | NPU | HPU (default: auto; auto
+                        takes a Gaudi first, served by vLLM)
+  K3D_GPU_AGENT_BACKEND agent server: ovms | vllm | llm-scaler (default: ovms, or vllm on
+                        a Gaudi; llm-scaler needs an Intel GPU, Arc B-series validated)
   K3D_GPU_AGENT_MODEL   agent Hugging Face model (default: OpenVINO/Qwen3-4B-int4-ov,
                         Qwen/Qwen3-4B on vllm/llm-scaler)
-  K3D_GPU_AGENT_GPUS    vllm/llm-scaler: GPUs to shard the model across (default: 1)
+  K3D_GPU_AGENT_GPUS    vllm/llm-scaler: GPUs (or Gaudis) to shard the model across (default: 1)
   K3D_GPU_AGENT_MAX_LEN vllm/llm-scaler: max context tokens (default: 8192)
   K3D_GPU_EXPERIMENTAL  auto (default: safe, mature, detected features), off, or a comma
                         list to force exactly those; 'list' prints them with their status
@@ -4120,70 +4122,91 @@ cmd_host_setup() {
 # ---- agent: OpenAI-compatible inference on the best Intel engine -------------
 # The default backend, OpenVINO Model Server (OVMS), serves one LLM over the
 # OpenAI API at /v3 on an Intel GPU, the CPU or the NPU. The vLLM backends serve
-# /v1 from Intel GPUs only and are meant for discrete Arc (Battlemage) cards:
+# /v1, from Intel GPUs or a Gaudi:
 #   vllm        upstream vLLM for Intel GPUs (the runtime intel/enterprise-inference
-#               uses for Arc), validated on Arc Pro B-series
+#               uses for Arc), validated on Arc Pro B-series; on a Gaudi (HPU),
+#               Intel's vllm-gaudi build instead
 #   llm-scaler  Intel's own vLLM build for Arc B60/B70 (older vLLM baseline)
 # The device is read from what the running cluster actually advertises, never from
-# the host alone: an Intel GPU the cluster cannot schedule is not a choice.
+# the host alone: an Intel GPU the cluster cannot schedule is not a choice. A Gaudi
+# runs vLLM only, so picking one (auto prefers it) switches an unset backend to vllm.
 
 AGENT_NS="k3d-gpu-agent"
+AGENT_BACKEND_SET="${K3D_GPU_AGENT_BACKEND:+1}" # empty: the backend may follow the device
 AGENT_BACKEND="${K3D_GPU_AGENT_BACKEND:-ovms}"
 AGENT_BACKEND="${AGENT_BACKEND,,}"
+AGENT_HPU=""    # set by agent_select when the device is a Gaudi
+AGENT_SEL=""    # "<device> <resource>", set by agent_select
 AGENT_STORAGE="${K3D_GPU_AGENT_STORAGE:-20Gi}"
 AGENT_TIMEOUT="${K3D_GPU_AGENT_TIMEOUT:-1800}" # seconds: first run downloads the model
-AGENT_DEFAULT_REVISION=""
-case "${AGENT_BACKEND}" in
-    vllm|llm-scaler)
-        AGENT_APP=vllm AGENT_API=/v1
-        if [ "${AGENT_BACKEND}" = vllm ]; then
-            # vllm/vllm-openai-xpu:v0.31.0 (Level Zero 1.32 and compute-runtime 26.27 inside).
-            AGENT_DEFAULT_IMAGE="vllm/vllm-openai-xpu@sha256:95ac815038c4b3537b173798bfe3b89bdf525a52bd653cd14d4deb01f1062be7"
+
+# Image, model, parsers and API of AGENT_BACKEND (on a Gaudi when AGENT_HPU is set).
+agent_config() {
+    AGENT_DEFAULT_REVISION=""
+    case "${AGENT_BACKEND}" in
+        vllm|llm-scaler)
+            AGENT_APP=vllm AGENT_API=/v1
+            if [ -n "${AGENT_HPU}" ]; then
+                # Intel's vllm-gaudi v0.30.0 + vLLM v0.30.0 on Gaudi software 1.24.2-481
+                # (PyTorch 2.13.0), the release of the baked gaudi-device-plugin. Tag
+                # 1.24.2-481 of vault.habana.ai/gaudi-docker/1.24.2/ubuntu24.04/habanalabs/
+                # vllm-0.30.0-ptupstream-2.13.0, pulled anonymously.
+                AGENT_DEFAULT_IMAGE="vault.habana.ai/gaudi-docker/1.24.2/ubuntu24.04/habanalabs/vllm-0.30.0-ptupstream-2.13.0@sha256:5d064465d751a73a729e7ecdc32c0ba5de0df1d305debb60a3d9a85b4fd3a967"
+            elif [ "${AGENT_BACKEND}" = vllm ]; then
+                # vllm/vllm-openai-xpu:v0.31.0 (Level Zero 1.32 and compute-runtime 26.27 inside).
+                AGENT_DEFAULT_IMAGE="vllm/vllm-openai-xpu@sha256:95ac815038c4b3537b173798bfe3b89bdf525a52bd653cd14d4deb01f1062be7"
+            else
+                # intel/llm-scaler-vllm:1.5 = 0.26.0-b2 (vLLM 0.26 baseline, compute-runtime 26.14).
+                AGENT_DEFAULT_IMAGE="intel/llm-scaler-vllm@sha256:52218ad85513ab6686d4c090c83c2bd8c5b02423c63aa4dabd41837fe641fe3b"
+            fi
+            # Qwen3-4B is 8 GB in float16/bfloat16: it fits a 12 GB Arc B580 with room
+            # for the KV cache.
+            AGENT_DEFAULT_MODEL="Qwen/Qwen3-4B"
+            AGENT_DEFAULT_REVISION="1cfa9a7208912126459214e8b04321603b3df60c"
+            if [ -n "${AGENT_HPU}" ]; then
+                AGENT_MEMORY="${K3D_GPU_AGENT_MEMORY:-16Gi}"
+            else
+                AGENT_MEMORY="${K3D_GPU_AGENT_MEMORY:-8Gi}"
+            fi
+            ;;
+        *)
+            AGENT_APP=ovms AGENT_API=/v3
+            # openvino/model_server:2026.4.1-gpu (CPU, GPU and NPU plugins, compute-runtime inside).
+            AGENT_DEFAULT_IMAGE="openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58"
+            AGENT_DEFAULT_MODEL="OpenVINO/Qwen3-4B-int4-ov"
+            AGENT_MEMORY="${K3D_GPU_AGENT_MEMORY:-6Gi}"
+            ;;
+    esac
+    AGENT_IMAGE="${K3D_GPU_AGENT_IMAGE:-${AGENT_DEFAULT_IMAGE}}"
+    AGENT_MODEL="${K3D_GPU_AGENT_MODEL:-${AGENT_DEFAULT_MODEL}}"
+    AGENT_MODEL_NAME="${K3D_GPU_AGENT_MODEL_NAME:-${AGENT_MODEL##*/}}"
+    # Qwen3 emits hermes-style tool calls and <think> reasoning (hermes3 is OVMS's
+    # name for the parser, hermes vLLM's). Any other model gets OVMS's own parser
+    # detection from its chat template, or no parser on vLLM, unless these are set
+    # (an empty value turns a parser off).
+    if [ "${AGENT_MODEL}" = "${AGENT_DEFAULT_MODEL}" ]; then
+        if [ "${AGENT_APP}" = vllm ]; then
+            AGENT_TOOL_PARSER="${K3D_GPU_AGENT_TOOL_PARSER-hermes}"
         else
-            # intel/llm-scaler-vllm:1.5 = 0.26.0-b2 (vLLM 0.26 baseline, compute-runtime 26.14).
-            AGENT_DEFAULT_IMAGE="intel/llm-scaler-vllm@sha256:52218ad85513ab6686d4c090c83c2bd8c5b02423c63aa4dabd41837fe641fe3b"
+            AGENT_TOOL_PARSER="${K3D_GPU_AGENT_TOOL_PARSER-hermes3}"
         fi
-        # Qwen3-4B in float16 is 8 GB: it fits a 12 GB Arc B580 with room for the KV cache.
-        AGENT_DEFAULT_MODEL="Qwen/Qwen3-4B"
-        AGENT_DEFAULT_REVISION="1cfa9a7208912126459214e8b04321603b3df60c"
-        AGENT_MEMORY="${K3D_GPU_AGENT_MEMORY:-8Gi}"
-        ;;
-    *)
-        AGENT_APP=ovms AGENT_API=/v3
-        # openvino/model_server:2026.4.1-gpu (CPU, GPU and NPU plugins, compute-runtime inside).
-        AGENT_DEFAULT_IMAGE="openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58"
-        AGENT_DEFAULT_MODEL="OpenVINO/Qwen3-4B-int4-ov"
-        AGENT_MEMORY="${K3D_GPU_AGENT_MEMORY:-6Gi}"
-        ;;
-esac
-AGENT_IMAGE="${K3D_GPU_AGENT_IMAGE:-${AGENT_DEFAULT_IMAGE}}"
-AGENT_MODEL="${K3D_GPU_AGENT_MODEL:-${AGENT_DEFAULT_MODEL}}"
-AGENT_MODEL_NAME="${K3D_GPU_AGENT_MODEL_NAME:-${AGENT_MODEL##*/}}"
+        AGENT_REASONING_PARSER="${K3D_GPU_AGENT_REASONING_PARSER-qwen3}"
+        AGENT_REVISION="${K3D_GPU_AGENT_REVISION:-${AGENT_DEFAULT_REVISION}}"
+    else
+        AGENT_TOOL_PARSER="${K3D_GPU_AGENT_TOOL_PARSER-}"
+        AGENT_REASONING_PARSER="${K3D_GPU_AGENT_REASONING_PARSER-}"
+        AGENT_REVISION="${K3D_GPU_AGENT_REVISION:-}"
+    fi
+    AGENT_PROXY="/api/v1/namespaces/${AGENT_NS}/services/${AGENT_APP}:http/proxy"
+}
+agent_config
 # OVMS only: DEBUG also prints the compiled model's EXECUTION_DEVICES (e.g. GPU.0:
 # Intel(R) UHD Graphics 770), and every HTTP request, readiness probes included.
 AGENT_LOG_LEVEL="${K3D_GPU_AGENT_LOG_LEVEL:-INFO}"
-# Qwen3 emits hermes-style tool calls and <think> reasoning (hermes3 is OVMS's
-# name for the parser, hermes vLLM's). Any other model gets OVMS's own parser
-# detection from its chat template, or no parser on vLLM, unless these are set
-# (an empty value turns a parser off).
-if [ "${AGENT_MODEL}" = "${AGENT_DEFAULT_MODEL}" ]; then
-    if [ "${AGENT_APP}" = vllm ]; then
-        AGENT_TOOL_PARSER="${K3D_GPU_AGENT_TOOL_PARSER-hermes}"
-    else
-        AGENT_TOOL_PARSER="${K3D_GPU_AGENT_TOOL_PARSER-hermes3}"
-    fi
-    AGENT_REASONING_PARSER="${K3D_GPU_AGENT_REASONING_PARSER-qwen3}"
-    AGENT_REVISION="${K3D_GPU_AGENT_REVISION:-${AGENT_DEFAULT_REVISION}}"
-else
-    AGENT_TOOL_PARSER="${K3D_GPU_AGENT_TOOL_PARSER-}"
-    AGENT_REASONING_PARSER="${K3D_GPU_AGENT_REASONING_PARSER-}"
-    AGENT_REVISION="${K3D_GPU_AGENT_REVISION:-}"
-fi
-# vLLM only: GPUs the model is sharded across (--tensor-parallel-size), and the
-# longest context, sized so the default model's KV cache fits a 12 GB card.
+# vLLM only: GPUs (or Gaudis) the model is sharded across (--tensor-parallel-size),
+# and the longest context, sized so the default model's KV cache fits a 12 GB card.
 AGENT_GPUS="${K3D_GPU_AGENT_GPUS:-1}"
 AGENT_MAX_LEN="${K3D_GPU_AGENT_MAX_LEN:-8192}"
-AGENT_PROXY="/api/v1/namespaces/${AGENT_NS}/services/${AGENT_APP}:http/proxy"
 
 # Nodes carrying a label (names, one per line).
 labelled_nodes() { kubectl get nodes -l "$1" -o name 2>/dev/null || true; }
@@ -4204,18 +4227,27 @@ cpu_list_count() {
     echo "${n}"
 }
 
-# "<OVMS device> <extended resource or ->". K3D_GPU_AGENT_DEVICE forces one.
-# auto: the Intel GPU (xe first: Battlemage/Lunar Lake and newer) only when it is
-# allocatable and a node labels it gpu.intel.com/xmx=true; otherwise CPU, on the
-# P-cores of a hybrid node. A GPU without XMX loses to the P-cores: on an
-# i9-13900T, Qwen3-4B int4 decodes 15.7 tok/s and prefills 172 tok/s on the
-# P-cores, 9.9 and 66 on the UHD 770 (EXPERIMENTS.md H6); the GPU only saves CPU
-# (~1 busy CPU instead of ~8). auto never picks the NPU, as OVMS's own detection
-# does not: LLMs on the NPU run the stateful pipeline only (no continuous batching).
-# The vLLM backends run on an Intel GPU only, so for them auto means GPU.
+# "<device> <extended resource or ->". K3D_GPU_AGENT_DEVICE forces one.
+# auto: an allocatable Gaudi (HPU, served by vLLM) first, unless the backend was
+# set to ovms or llm-scaler, which do not run on it. Then the Intel GPU (xe
+# first: Battlemage/Lunar Lake and newer) only when it is allocatable and a node
+# labels it gpu.intel.com/xmx=true; otherwise CPU, on the P-cores of a hybrid
+# node. A GPU without XMX loses to the P-cores: on an i9-13900T, Qwen3-4B int4
+# decodes 15.7 tok/s and prefills 172 tok/s on the P-cores, 9.9 and 66 on the UHD
+# 770 (EXPERIMENTS.md H6); the GPU only saves CPU (~1 busy CPU instead of ~8).
+# auto never picks the NPU, as OVMS's own detection does not: LLMs on the NPU run
+# the stateful pipeline only (no continuous batching). The vLLM backends run on an
+# Intel GPU or a Gaudi only, so for them auto means a Gaudi, else the GPU.
 AGENT_XMX_LABEL="gpu.intel.com/xmx=true"
 agent_device() {
-    local want=${K3D_GPU_AGENT_DEVICE:-auto} res
+    local want=${K3D_GPU_AGENT_DEVICE:-auto} res gaudi_ok=1
+    if [ "${AGENT_BACKEND}" = llm-scaler ] || { [ "${AGENT_BACKEND}" = ovms ] && [ -n "${AGENT_BACKEND_SET}" ]; }; then
+        gaudi_ok=""
+    fi
+    if [ "${want^^}" = AUTO ] && [ -n "${gaudi_ok}" ] && [ "$(resource_total habana.ai/gaudi)" -gt 0 ]; then
+        echo "HPU habana.ai/gaudi"
+        return 0
+    fi
     [ "${AGENT_APP}" != vllm ] || [ "${want^^}" != AUTO ] || want=GPU
     case "${want^^}" in
         AUTO)
@@ -4230,8 +4262,15 @@ agent_device() {
             for res in gpu.intel.com/xe gpu.intel.com/i915; do
                 if [ "$(resource_total "${res}")" -gt 0 ]; then echo "GPU ${res}"; return 0; fi
             done
-            [ "${AGENT_APP}" != vllm ] || err "K3D_GPU_AGENT_BACKEND=${AGENT_BACKEND} runs on an Intel GPU only, and the cluster advertises no gpu.intel.com/xe or i915 — check 'k3d-gpu detect' and recreate the cluster"
+            [ "${AGENT_APP}" != vllm ] || err "K3D_GPU_AGENT_BACKEND=${AGENT_BACKEND} runs on an Intel GPU only (vllm also on a Gaudi), and the cluster advertises no gpu.intel.com/xe or i915 — check 'k3d-gpu detect' and recreate the cluster"
             err "K3D_GPU_AGENT_DEVICE=GPU but the cluster advertises no Intel GPU (gpu.intel.com/xe or i915) — check 'k3d-gpu detect' and recreate the cluster"
+            ;;
+        HPU|GAUDI)
+            [ -n "${gaudi_ok}" ] \
+                || err "K3D_GPU_AGENT_DEVICE=${want} needs vLLM: K3D_GPU_AGENT_BACKEND=${AGENT_BACKEND} does not run on a Gaudi (unset it or use vllm)"
+            [ "$(resource_total habana.ai/gaudi)" -gt 0 ] \
+                || err "K3D_GPU_AGENT_DEVICE=${want} but the cluster advertises no Gaudi (habana.ai/gaudi) — check 'k3d-gpu detect' and recreate the cluster"
+            echo "HPU habana.ai/gaudi"
             ;;
         NPU)
             [ "$(resource_total npu.intel.com/accel)" -gt 0 ] \
@@ -4239,8 +4278,18 @@ agent_device() {
             echo "NPU npu.intel.com/accel"
             ;;
         CPU) echo "CPU -" ;;
-        *) err "unknown K3D_GPU_AGENT_DEVICE '${want}' (use auto, CPU, GPU or NPU)" ;;
+        *) err "unknown K3D_GPU_AGENT_DEVICE '${want}' (use auto, CPU, GPU, NPU or HPU)" ;;
     esac
+}
+
+# Resolves the device once, into AGENT_SEL. A Gaudi is served by vLLM, so it
+# switches the backend (and with it image, model, parsers and API) to vllm.
+agent_select() {
+    AGENT_SEL=$(agent_device) || exit 1
+    if [ "${AGENT_SEL%% *}" = HPU ]; then
+        AGENT_BACKEND=vllm AGENT_HPU=1
+        agent_config
+    fi
 }
 
 # Group owning the device node the pod is handed: the Intel render node for GPU,
@@ -4282,10 +4331,8 @@ agent_cpus() {
 
 # Prints the namespace, model PVC, Deployment and Service. Choices go to stderr.
 agent_manifest() {
-    local sel device res gid="" hybrid="" amx="" cpus
-    # || exit: errexit is off inside the $(agent_manifest) of cmd_agent_up.
-    sel=$(agent_device) || exit 1
-    read -r device res <<< "${sel}"
+    local device res gid="" hybrid="" amx="" cpus
+    read -r device res <<< "${AGENT_SEL}"
     [ -z "$(labelled_nodes "${HYBRID_LABEL}")" ] || hybrid=1
     if [ "${device}" = CPU ] && [ -n "$(labelled_nodes feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true)" ]; then
         amx=1
@@ -4421,7 +4468,7 @@ spec:
 EOF
 }
 
-# ---- agent backend: vLLM on Intel GPUs (vllm, llm-scaler) ---------------------
+# ---- agent backend: vLLM on Intel GPUs (vllm, llm-scaler) and Gaudi ----------
 # Environment of Intel's own Arc runtime (intel/enterprise-inference PR #22,
 # runtimes vllm-xpu, models.yaml *-xpu), minus what it does not need here:
 #   - no host Level Zero/OpenCL hostPath mounts: both images ship their own
@@ -4458,6 +4505,21 @@ VLLM_XPU_ENV=(
     TRITON_HOME=/models/.triton
 )
 
+# Environment of vLLM on a Gaudi (vllm-gaudi docs). HABANA_VISIBLE_DEVICES and
+# HABANA_VISIBLE_MODULES come from the device plugin's Allocate response and
+# override the image's "all", so they are not set here.
+#   PT_HPU_LAZY_MODE=0                    eager + torch.compile, the vllm-gaudi default
+#   PT_HPU_ENABLE_LAZY_COLLECTIVES=true   required for tensor parallelism with HPU graphs
+#   PT_HPUGRAPH_DISABLE_TENSOR_CACHE=false  required for Qwen, LLaVA and RoBERTa models
+VLLM_HPU_ENV=(
+    PT_HPU_LAZY_MODE=0
+    PT_HPU_ENABLE_LAZY_COLLECTIVES=true
+    PT_HPUGRAPH_DISABLE_TENSOR_CACHE=false
+    HF_HOME=/models/huggingface
+    VLLM_CACHE_ROOT=/models/vllm
+    PYTHONUNBUFFERED=1
+)
+
 # vLLM on Intel GPUs is validated on Battlemage (Arc B-series). Any other Intel
 # GPU on the host still gets the pod, with a warning.
 vllm_gpu_check() {
@@ -4472,41 +4534,55 @@ vllm_gpu_check() {
     warn "vLLM on Intel GPUs is validated on Arc B-series (Battlemage); this host's Intel GPU is ${names:-not visible here} — K3D_GPU_AGENT_BACKEND=ovms runs on any Intel GPU"
 }
 
-# The vLLM Namespace, PVC, Deployment and Service. Called from agent_manifest,
-# whose locals (device res gid hybrid cpus) it reads.
+# The vLLM Namespace, PVC, Deployment and Service, on an Intel GPU or a Gaudi
+# (HPU). Called from agent_manifest, whose locals (device res gid hybrid cpus) it reads.
 vllm_manifest() {
-    [ "${device}" = GPU ] \
-        || err "K3D_GPU_AGENT_BACKEND=${AGENT_BACKEND} runs on an Intel GPU only, but K3D_GPU_AGENT_DEVICE asks for ${device}"
+    [ "${device}" = GPU ] || [ "${device}" = HPU ] \
+        || err "K3D_GPU_AGENT_BACKEND=${AGENT_BACKEND} runs on an Intel GPU only (vllm also on a Gaudi), but K3D_GPU_AGENT_DEVICE asks for ${device}"
     [[ "${AGENT_GPUS}" =~ ^[1-9][0-9]*$ ]] || err "K3D_GPU_AGENT_GPUS must be a positive integer, not '${AGENT_GPUS}'"
     [[ "${AGENT_MAX_LEN}" =~ ^[1-9][0-9]*$ ]] || err "K3D_GPU_AGENT_MAX_LEN must be a positive integer, not '${AGENT_MAX_LEN}'"
     local have
     have=$(resource_total "${res}")
     [ "${have}" -ge "${AGENT_GPUS}" ] \
         || err "K3D_GPU_AGENT_GPUS=${AGENT_GPUS} but the cluster advertises ${have} ${res}"
-    vllm_gpu_check
+    [ "${device}" = HPU ] || vllm_gpu_check
     info "agent: ${AGENT_BACKEND} serving ${AGENT_MODEL} as '${AGENT_MODEL_NAME}' on ${AGENT_GPUS}x ${res}${hybrid:+, P-cores}, ${cpus} CPU(s)" >&2
 
-    # Flags from Intel's Arc runtime (models.yaml *-xpu): float16, 64-token
-    # blocks, eager mode (XPU graphs are experimental), no prefix caching, one
-    # GPU per tensor-parallel rank. --trust-remote-code is left out: Qwen3 is a
-    # built-in vLLM architecture and needs no code from the model repo.
-    local item="            - " args e podlabels="" podspec="" env=""
+    # On an Intel GPU, flags from Intel's Arc runtime (models.yaml *-xpu): float16,
+    # 64-token blocks, eager mode (XPU graphs are experimental), no prefix caching.
+    # On a Gaudi, bfloat16 and vllm-gaudi's own defaults (--max-model-len also
+    # bounds its warm-up buckets). One device per tensor-parallel rank.
+    # --trust-remote-code is left out: Qwen3 is a built-in vLLM architecture and
+    # needs no code from the model repo.
+    local item="            - " args e podlabels="" podspec="" env="" command="" cap="" shm=2Gi
+    local -a envs=("${VLLM_XPU_ENV[@]}")
     args="${item}${AGENT_MODEL}"
     [ -z "${AGENT_REVISION}" ] || args+=$'\n'"${item}--revision=${AGENT_REVISION}"
     args+=$'\n'"${item}--served-model-name=${AGENT_MODEL_NAME}"
     args+=$'\n'"${item}--port=8000"
-    args+=$'\n'"${item}--dtype=float16"
-    args+=$'\n'"${item}--block-size=64"
-    args+=$'\n'"${item}--max-model-len=${AGENT_MAX_LEN}"
-    args+=$'\n'"${item}--max-num-batched-tokens=2048"
-    args+=$'\n'"${item}--gpu-memory-utilization=0.9"
-    args+=$'\n'"${item}--enforce-eager"
-    args+=$'\n'"${item}--no-enable-prefix-caching"
+    if [ "${device}" = HPU ]; then
+        envs=("${VLLM_HPU_ENV[@]}")
+        args+=$'\n'"${item}--dtype=bfloat16"
+        args+=$'\n'"${item}--max-model-len=${AGENT_MAX_LEN}"
+        command=$'\n          command: [vllm, serve]'
+        # Intel runs these containers with --cap-add=sys_nice.
+        cap=$'\n          securityContext:\n            capabilities:\n              add: [SYS_NICE]'
+        # Intel runs vLLM on Gaudi with --ipc=host; the pod gets a larger /dev/shm instead.
+        shm=8Gi
+    else
+        args+=$'\n'"${item}--dtype=float16"
+        args+=$'\n'"${item}--block-size=64"
+        args+=$'\n'"${item}--max-model-len=${AGENT_MAX_LEN}"
+        args+=$'\n'"${item}--max-num-batched-tokens=2048"
+        args+=$'\n'"${item}--gpu-memory-utilization=0.9"
+        args+=$'\n'"${item}--enforce-eager"
+        args+=$'\n'"${item}--no-enable-prefix-caching"
+    fi
     args+=$'\n'"${item}--tensor-parallel-size=${AGENT_GPUS}"
     [ -z "${AGENT_TOOL_PARSER}" ] \
         || args+=$'\n'"${item}--enable-auto-tool-choice"$'\n'"${item}--tool-call-parser=${AGENT_TOOL_PARSER}"
     [ -z "${AGENT_REASONING_PARSER}" ] || args+=$'\n'"${item}--reasoning-parser=${AGENT_REASONING_PARSER}"
-    for e in "${VLLM_XPU_ENV[@]}"; do
+    for e in "${envs[@]}"; do
         env+=$'\n'"            - name: ${e%%=*}"$'\n'"              value: \"${e#*=}\""
     done
     [ -z "${hybrid}" ] || podlabels=$'\n        k3d-gpu.io/cores: performance'
@@ -4518,7 +4594,8 @@ kind: Namespace
 metadata:
   name: ${AGENT_NS}
 ---
-# Hugging Face weights and the SYCL/Triton kernel caches, kept across restarts.
+# Hugging Face weights and the kernel caches (SYCL/Triton, or vLLM's on a Gaudi),
+# kept across restarts.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -4549,22 +4626,24 @@ spec:
       labels:
         app: vllm${podlabels}
       annotations:
-        k3d-gpu.io/agent-device: GPU
+        k3d-gpu.io/agent-device: ${device}
         k3d-gpu.io/agent-backend: ${AGENT_BACKEND}
     spec:${podspec}
       containers:
-        # Both images take 'vllm serve' arguments: their entrypoints run it.
+        # The Intel GPU images take 'vllm serve' arguments (their entrypoints run
+        # it); the Gaudi image's entrypoint is Intel's compose launcher, so the pod
+        # runs vllm serve itself.
         - name: vllm
           image: ${AGENT_IMAGE}
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: IfNotPresent${command}
           args:
 ${args}
-          env:${env}
+          env:${env}${cap}
           ports:
             - name: http
               containerPort: 8000
           # No liveness probe: the first start downloads the weights and
-          # compiles kernels for the GPU.
+          # compiles kernels (on a Gaudi: warms up HPU graphs) for the device.
           readinessProbe:
             httpGet:
               path: /health
@@ -4589,7 +4668,7 @@ ${args}
         - name: shm
           emptyDir:
             medium: Memory
-            sizeLimit: 2Gi
+            sizeLimit: ${shm}
 ---
 apiVersion: v1
 kind: Service
@@ -4647,6 +4726,7 @@ AGENT_APPS=(ovms vllm)
 cmd_agent_up() {
     require kubectl
     kubectl get nodes >/dev/null 2>&1 || err "no cluster reachable — run 'k3d-gpu up' first"
+    agent_select
     local manifest app logs="kubectl -n ${AGENT_NS} logs deploy/${AGENT_APP}"
     manifest=$(agent_manifest)
     # Switching backends: stop the other one first so its GPU is free.
@@ -4706,7 +4786,7 @@ cmd_agent() {
         up)       cmd_agent_up ;;
         down)     cmd_agent_down ;;
         status)   cmd_agent_status ;;
-        manifest) agent_manifest ;;
+        manifest) agent_select; agent_manifest ;;
         *) err "usage: k3d-gpu agent up|down|status|manifest" ;;
     esac
 }

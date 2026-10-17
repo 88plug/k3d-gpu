@@ -471,6 +471,7 @@ The device comes from what the cluster advertises, not from the host alone:
 
 | Cluster has | Device | Pod gets |
 |-------------|--------|----------|
+| allocatable `habana.ai/gaudi` | `HPU` | one Gaudi, served by vLLM (see [vLLM on Gaudi](#vllm-on-gaudi)) |
 | allocatable `gpu.intel.com/xe`, else `gpu.intel.com/i915`, on a node labelled `gpu.intel.com/xmx=true` | `GPU` | one GPU, a `gpu.intel.com/xmx: "true"` node selector; the host render group is added as a supplemental group |
 | anything else, including an Intel GPU without XMX (or with `xmx` unknown) | `CPU` | no device; the P-cores on a hybrid node; on a node labelled `...cpu-cpuid.AMXTILE=true` it is pinned there |
 | `npu.intel.com/accel`, only with `K3D_GPU_AGENT_DEVICE=NPU` | `NPU` | the NPU and its accel node's group |
@@ -528,7 +529,7 @@ is deleted.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `K3D_GPU_AGENT_DEVICE` | `auto` | `auto`: GPU only on an XMX node, else CPU. `CPU`, `GPU` or `NPU` (any case) to force one; forcing a device the cluster does not advertise fails |
+| `K3D_GPU_AGENT_DEVICE` | `auto` | `auto`: a Gaudi, else the GPU only on an XMX node, else CPU. `CPU`, `GPU`, `NPU` or `HPU` (any case) to force one; forcing a device the cluster does not advertise fails |
 | `K3D_GPU_AGENT_MODEL` | `OpenVINO/Qwen3-4B-int4-ov` | Hugging Face model in OpenVINO IR format |
 | `K3D_GPU_AGENT_MODEL_NAME` | last part of the model id | name clients send as `model` |
 | `K3D_GPU_AGENT_TOOL_PARSER` / `_REASONING_PARSER` | `hermes3` / `qwen3` for the default model, unset otherwise | unset lets OVMS detect them from the chat template; empty turns one off |
@@ -538,7 +539,7 @@ is deleted.
 | `K3D_GPU_AGENT_TIMEOUT` | `1800` | seconds `agent up` waits for download + load |
 | `K3D_GPU_AGENT_LOG_LEVEL` | `INFO` | `DEBUG` also logs the compiled model's execution device (and every request) |
 | `K3D_GPU_AGENT_IMAGE` | `openvino/model_server@sha256:a928…fc58` (2026.4.1-gpu) | server image |
-| `K3D_GPU_AGENT_BACKEND` | `ovms` | `ovms`, `vllm` or `llm-scaler` (see below) |
+| `K3D_GPU_AGENT_BACKEND` | `ovms` (`vllm` on a Gaudi) | `ovms`, `vllm` or `llm-scaler` (see below) |
 
 #### vLLM backends for discrete Arc (Battlemage)
 
@@ -557,8 +558,8 @@ curl http://localhost:8000/v1/chat/completions -H 'Content-Type: application/jso
   -d '{"model":"Qwen3-4B","messages":[{"role":"user","content":"hi"}]}'
 ```
 
-Both run on an Intel GPU only: for them `auto` means the first allocatable
-`gpu.intel.com/xe`, else `i915`, with no XMX gate, and `K3D_GPU_AGENT_DEVICE=CPU`
+Both run on an Intel GPU only (`vllm` also on a Gaudi, below): for them `auto`
+means the first allocatable `gpu.intel.com/xe`, else `i915`, with no XMX gate, and `K3D_GPU_AGENT_DEVICE=CPU`
 or `NPU` is refused. A host whose Intel GPU is not Battlemage gets a warning, not
 a refusal. The default model is `Qwen/Qwen3-4B` at a pinned revision (8 GB in
 float16, fits a 12 GB B580) with the `hermes` tool and `qwen3` reasoning parsers.
@@ -581,6 +582,39 @@ so sibling workers should need no `CAP_SYS_PTRACE` under yama `ptrace_scope=1`).
 | `K3D_GPU_AGENT_GPUS` | `1` | GPUs to shard across (`--tensor-parallel-size`) |
 | `K3D_GPU_AGENT_MAX_LEN` | `8192` | `--max-model-len` |
 | `K3D_GPU_AGENT_MEMORY` | `8Gi` | memory request |
+
+#### vLLM on Gaudi
+
+When the cluster advertises `habana.ai/gaudi`, `auto` picks the Gaudi (`HPU`)
+and serves it with the `vllm` backend: Intel's prebuilt
+`vault.habana.ai/gaudi-docker/1.24.2/ubuntu24.04/habanalabs/vllm-0.30.0-ptupstream-2.13.0:1.24.2-481`
+image (vllm-gaudi v0.30.0 on Gaudi software 1.24.2, the release of the baked
+device plugin; public, pinned by digest). Same `svc/vllm`, `/v1` API, default
+model (`Qwen/Qwen3-4B` at the pinned revision, here in bfloat16) and parsers as
+on Arc; the variables above apply.
+
+```bash
+k3d-gpu agent up                              # a Gaudi in the cluster: vLLM on it
+kubectl -n k3d-gpu-agent port-forward svc/vllm 8000:8000 &
+curl http://localhost:8000/v1/chat/completions -H 'Content-Type: application/json' \
+  -d '{"model":"Qwen3-4B","messages":[{"role":"user","content":"hi"}]}'
+```
+
+`K3D_GPU_AGENT_DEVICE=HPU` (or `gaudi`) requires a Gaudi; `CPU` or `GPU` skips
+it. An explicit `K3D_GPU_AGENT_BACKEND=ovms` or `llm-scaler` never picks a Gaudi,
+and refuses `HPU`: neither runs on it. The pod gets `PT_HPU_LAZY_MODE=0` (eager +
+torch.compile, the vllm-gaudi default), the PT_HPU settings vllm-gaudi documents
+for tensor parallelism and Qwen models, `SYS_NICE`, an 8 GiB memory-backed
+`/dev/shm` (Intel runs it with `--ipc=host`) and a 16Gi memory request.
+`HABANA_VISIBLE_DEVICES` comes from the device plugin. `--max-model-len` also
+bounds the HPU warm-up, which runs on every start and takes minutes;
+`K3D_GPU_AGENT_TIMEOUT` (1800 s) bounds it.
+
+Not yet run on Gaudi hardware here: serving end to end. The device plugin runs
+without Intel's `habana-container-runtime` hook (see `share/gaudi-device-plugin.yml`),
+so whether vLLM opens the HPU with only the plugin's device nodes and environment
+is unverified. vllm-gaudi validates `Qwen3-0.6B`, not `Qwen3-4B`, and tensor
+parallelism above 1 is untested.
 
 ### Chat UI for the agent (optional)
 
