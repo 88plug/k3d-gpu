@@ -1,16 +1,16 @@
 # k3d-gpu on Intel hardware: technical report
 
-Status: working report, 2026-10-17. Ledger: [EXPERIMENTS.md](../../EXPERIMENTS.md) at origin/main `d17a622`.
+Status: working report, 2026-10-17. Ledger: [EXPERIMENTS.md](../../EXPERIMENTS.md), verdicts as of origin/main `ad69fc0`.
 
 ## Abstract
 
 k3d-gpu turns one Linux host into a single-node k3s cluster (k3d) that detects the host's Intel hardware and configures it. It sets NRI balloons for hybrid P/E and NUMA CPUs, device plugins for iGPU, dGPU, NPU, DSA, IAA, QAT and Gaudi, and placement labels for agent and inference pods.
 
-This report covers what was measured, and how. Every result comes from one host: an i9-13900T (Raptor Lake-S, 8 P-cores and 16 E-cores, UHD 770 iGPU with no XMX, AVX-VNNI, no AMX, no NPU).
+This report covers what was measured, and how. Every result comes from one host: an i9-13900T (Raptor Lake-S, 8 P-cores and 16 E-cores, UHD 770 iGPU with no XMX, AVX-VNNI, no AMX, no NPU). It is a T-SKU rated at 35 W base power, but its firmware runs PL1 = PL2 = 117 W, so it does not run the T-series 35 W envelope.
 
 - Six hypotheses are SUPPORTED. All six are scoped to that host.
 - Six are REFUTED. They changed shipped defaults.
-- Eleven are INCONCLUSIVE, mostly because the shared host throttles. Seven are PENDING.
+- Eleven are INCONCLUSIVE, mostly because the shared host throttles. Eight are PENDING.
 - Every other Intel family is detected and configured in fixture tests only. None has a measurement.
 
 No world-first, superlative or priority claim is made; [docs/provenance.md](../provenance.md) supports none.
@@ -27,13 +27,13 @@ Each hypothesis is a row of the Hypotheses table in `EXPERIMENTS.md`, written an
 
 A verdict is one of `PENDING`, `SUPPORTED`, `REFUTED` or `INCONCLUSIVE`. Most rows are scored by an analysis script (`analyze.py`, `joulepack.py verdict` and similar), not by hand. A run that misses its pre-registered protocol is INCONCLUSIVE even when the result looks good; [ledger:H1] is the example.
 
-`tests/claims_check.sh` runs in CI. A performance number in `README.md` or `docs/*.md` must cite one of:
+`tests/claims_check.sh` runs in CI. A performance number in `README.md`, `docs/*.md` or `docs/intel/*.md` must cite one of:
 
 - a SUPPORTED ledger row;
 - a sourced provenance row;
 - a primary-source URL.
 
-This report sits in `docs/intel/`, which the CI glob does not scan. It was checked by running the guard on a copy (see Reproduce), and every number below follows the same rule.
+`tests/ledger_drift_check.py` also runs in CI. It fails when a doc states a verdict for a row (`H2 is REFUTED`, `PENDING [ledger:H1]`, a verdict table cell or a verdict section heading) that differs from the ledger, and when a verdict count in this report's summary is off.
 
 ### Matched-load design
 
@@ -79,7 +79,7 @@ The host is a shared, live machine: about 53 other containers, about 80 W idle p
 | H22 | The iGPU draft lost to the P-core draft in 16/16 paired rounds. Separately, a same-engine P-core draft beat the target alone in 8/8 rounds in both runs; that matches Intel's published Lunar Lake CPU-draft ratio [provenance:P222] [ledger:H22] | The noise guardrail fired in both runs: the probe's own 16-CPU load throttles the package. The same-engine draft needs its own pre-registered row |
 | H20, H21, H23, H24, H25, H29 | Energy and phase-steering mechanisms [ledger:H20] [ledger:H21] [ledger:H23] [ledger:H24] [ledger:H25] [ledger:H29] | Idle package power spread swamped the signal, or the run was partial |
 
-PENDING with a pre-registration: H19 (noise guard tuning), H26 (E-core L2-cluster confinement), H27 (on-box precision probe), H28 (image-volume model sharing), and the external bake-offs H30 (Ollama 0.40.5), H31 (llama.cpp b11706) and H32 (plain OVMS device choice). Until H30-H32 run, there is no "faster than X" comparison of any kind.
+PENDING with a pre-registration: H5 (prefill guard on/off with an E-core neighbour), H19 (noise guard tuning), H26 (E-core L2-cluster confinement), H27 (on-box precision probe), H28 (image-volume model sharing), and the external bake-offs H30 (Ollama 0.40.5), H31 (llama.cpp b11706) and H32 (plain OVMS device choice). Until H30-H32 run, there is no "faster than X" comparison of any kind.
 
 ## Per-family support matrix
 
@@ -105,10 +105,7 @@ PENDING with a pre-registration: H19 (noise guard tuning), H26 (E-core L2-cluste
 3. **The XMX half of the device rule is untested.** H6 supports "stay on the P-cores when the iGPU has no XMX". Whether the iGPU wins when it has XMX is an open prediction.
 4. **Small n.** Most SUPPORTED rows are n=3 per arm, so they show direction and correctness, not effect-size precision.
 5. **EAT is not proven end to end.** H14 proves the balloons install paths only. The full-stack run (H1) is INCONCLUSIVE.
-6. **Known doc drift, to fix before publishing.**
-   - `docs/moat-design.md` §5/§7 still lists H2-H4 as PENDING; they are REFUTED.
-   - `docs/provenance.md` C3 says "not yet demonstrated by us"; H1 has since run (INCONCLUSIVE).
-   - The H22 row calls the host a "35 W T-SKU". A separate reading on the same host measured PL1 = PL2 = 117 W. The power envelope must be reconciled before any thermal claim.
+6. **Power envelope.** The host is a 35 W T-SKU by rating only. Firmware sets PL1 = PL2 = 117 W, so every result here, H22's throttle included, is at that envelope. No result transfers to a T-SKU held at Intel's 35 W / 106 W limits.
 
 ## Reproduce
 
@@ -117,10 +114,8 @@ Each ledger row's run section ends with its own reproduce block, giving the imag
 ```bash
 git clone https://github.com/88plug/k3d-gpu && cd k3d-gpu
 scripts/k3d-gpu doctor && scripts/k3d-gpu plan     # what the host is detected as
-tests/claims_check.sh                              # README.md + docs/*.md
-# This report sits outside the CI glob; check it the same way:
-R=$(mktemp -d); mkdir -p "$R/docs"; cp EXPERIMENTS.md "$R/"; cp docs/provenance.md "$R/docs/"
-cp docs/intel/*.md "$R/docs/" && tests/claims_check.sh "$R"
+tests/claims_check.sh                              # README.md + docs/*.md + docs/intel/*.md
+python3 tests/ledger_drift_check.py                # doc verdicts agree with EXPERIMENTS.md
 # One SUPPORTED row end to end (H18, the sandbox):
 IMAGE=k3d-gpu:local; docker build -t "$IMAGE" . && IMAGE=$IMAGE OUT=$(mktemp -d) bench/sandbox_round.sh 1
 ```

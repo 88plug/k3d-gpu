@@ -14,7 +14,7 @@ These are drafts for Intel's repos. **None of them has been filed, opened or pus
 | Repo | Base it was cut from |
 |---|---|
 | intel/enterprise-agent-toolkit (EAT) | `main` @ `0ecf67a8331e8b502ef41e08bf6d2881416178c5` |
-| intel/enterprise-ai-solutions (EAS) | `main` @ `7743bac7e3d334da6eda602db10f7eec6b0360c5` |
+| intel/enterprise-ai-solutions (EAS) | `main` @ `7743bac7e3d334da6eda602db10f7eec6b0360c5`; 0006 regenerated on `main` @ `7c02ca206cccea6119f380312708eb8b97d146f5` |
 
 ## Contents
 
@@ -32,7 +32,7 @@ These are drafts for Intel's repos. **None of them has been filed, opened or pus
 | [0003](patches/0003-eas-pin-nri-balloons-chart.patch) | EAS | Pins the nri-plugins balloons chart to `v0.14.0` via `nri_cpu_balloons_chart_version` | Matches how the repo pins its other charts (`seaweedfs_chart_version`, `istio_csr_helm_chart_version`, ...). v0.14.0 is today's newest release, so no fresh install changes now. |
 | [0004](patches/0004-eas-byo-node-topology-labels.patch) | EAS | Applies the `workload-class` node labels on multi-node BYO clusters, as on managed ones; updates the two docs that said "label by hand" | Fixes an install/teardown asymmetry: teardown already removes these labels from BYO nodes. Not k3s-specific. Single-node and the managed path are unchanged. **Behaviour change for existing multi-node BYO users**, kept small: nodes that already carry a `workload-class` label (set by hand, as the old docs said) keep it, and on BYO a kubeconfig without node list/patch RBAC skips labelling instead of failing the install. |
 | [0005](patches/0005-eas-docs-single-node-k3d.patch) | EAS | New `docs/deploy/k3d.md` "Single-Node Dev on k3d", linked from `docs/README.md` | Docs only. It builds on the documented BYO path and states the patches it relies on. |
-| [0006](patches/0006-eas-envoy-control-plane-affinity.patch) | EAS | Selects envoy's control-plane nodes by label presence (`operator: Exists`) instead of the exact value `""`, and sets `nodeSelector: null` so a re-install over an older EnvoyProxy drops the old selector | **Extra, found during review.** k3s sets `node-role.kubernetes.io/control-plane=true`, so today the envoy DaemonSet schedules zero pods on k3s and the gateway has no data plane. No change on kubeadm/Kubespray. |
+| [0006](patches/0006-eas-envoy-control-plane-affinity.patch) | EAS | In `roles/envoy_gateway/tasks/controller.yaml`, selects envoy's control-plane nodes by label presence (`operator: Exists`) instead of the exact value `""`, and sets `nodeSelector: null` so a re-install over an older EnvoyProxy drops the old selector | **Extra, found during review.** k3s sets `node-role.kubernetes.io/control-plane=true`, so today the envoy DaemonSet schedules zero pods on k3s and the gateway has no data plane. No change on kubeadm/Kubespray. |
 
 Suggested order to send them, after the issue gets a response:
 
@@ -53,9 +53,9 @@ git am --signoff integrations/eat/upstream/patches/0002-eas-istio-global-platfor
 
 | Check | Result |
 |---|---|
-| `git apply --check`, each patch on a fresh EAS copy; `git am` of the whole series | all pass ([checks/apply-check.sh](checks/apply-check.sh)) |
-| Same, against the head of intel/enterprise-ai-solutions#40 (`bbb3a53`) | all EAS patches apply |
-| `ansible-lint` 26.8.0 (the version EAS CI pins in `.github/workflows/ansible-lint.yml`) with EAS CI's exact flags (`--skip-list name,var-naming,fqcn,yaml,jinja,key-order roles/ playbooks/`) on the patched tree | `Passed: 0 failure(s), 0 warning(s)`, profile `production`, same as unpatched `main` |
+| `git apply --check`, each patch on a fresh EAS copy, then the whole series in order | all pass on EAS `main` `7c02ca2` (2026-10-17; [checks/apply-check.sh](checks/apply-check.sh) does the same on a clone) |
+| Same, against the head of intel/enterprise-ai-solutions#40 (`bbb3a53`) | 0002-0005 apply; 0006 does not, because #40 predates EAS #42, which moved the EnvoyProxy task from `install.yaml` to `controller.yaml` |
+| `ansible-lint` 26.8.0 (the version EAS CI pins in `.github/workflows/ansible-lint.yml`) with EAS CI's exact flags (`--skip-list name,var-naming,fqcn,yaml,jinja,key-order roles/ playbooks/`) on the patched tree | `Passed: 0 failure(s), 0 warning(s)`, profile `production`, same as unpatched `main` (on `7743bac`; not re-run on `7c02ca2`) |
 | `yamllint -d relaxed` on every YAML file the patches touch | no findings apart from line length; EAS CI skips the `yaml` rule |
 | 0002 behaviour, `helm template` of EAS `charts/istio` (base/istiod/cni/ztunnel 1.27.3) | `global.platform=k3d` mounts `/bin` + `/var/lib/rancher/k3s/agent/etc/cni/net.d`; unset keeps `/opt/cni/bin` + `/etc/cni/net.d`; unknown value fails `unknown platform`. The Jinja `values:` expression evaluates to `{}` when empty |
 | 0003 behaviour | `advanced-balloon-values.yaml.j2`, rendered with sample inputs, goes through `helm template` for chart v0.14.0; the `BalloonsPolicy` validates against the v0.14.0 CRD schema; the image resolves to `ghcr.io/containers/nri-plugins/nri-resource-policy-balloons:v0.14.0` |

@@ -219,6 +219,12 @@ else
     echo "  | docs that say CI enforces the guard: ${ci_claim//$'\n'/ }"
 fi
 
+# --- docs/intel/ is scanned too -----------------------------------------------
+intel=$(repo 'ok')
+mkdir -p "${intel}/docs/intel"
+printf '%s\n' 'The iGPU serves 42 tok/s.' > "${intel}/docs/intel/report.md"
+check "an unbacked claim in docs/intel/ fails" "${intel}" fail 'docs/intel/report.md:1'
+
 # --- the real repo -----------------------------------------------------------
 check "this repo's own docs pass" "$(cd "$(dirname "$0")/.." && pwd)" 0
 

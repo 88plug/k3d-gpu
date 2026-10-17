@@ -3,7 +3,7 @@
 > **DRAFT: not submitted; awaiting owner approval.**
 > Nothing here has been filed, opened, forked or pushed to any `intel/*` repository. A maintainer of this repo sends each piece by hand, in the order below, after approving it.
 
-Drafted 2026-10-17 against:
+Drafted 2026-10-17 against these heads, re-read with `gh api` on 2026-10-17 (unchanged):
 
 | Repo | Ref | SHA |
 |---|---|---|
@@ -49,7 +49,6 @@ EAT (after #19 merges; one PR, docs only)
 
 EAS (main 7c02ca2; one concern per PR, in this order)
 ├── roles/envoy_gateway/tasks/controller.yaml       0006  control-plane affinity, operator Exists
-│                                                         (patch today targets install.yaml; REGENERATE first)
 ├── configs/defaults/global_config.yaml             0002  istio_platform documented
 ├── roles/istio/defaults/main.yaml                  0002  istio_platform: ""
 ├── roles/istio/tasks/install.yaml                  0002  global.platform on install
@@ -64,17 +63,21 @@ EAS (main 7c02ca2; one concern per PR, in this order)
 └── docs/README.md                                  0005  +1 row under Deploy
 ```
 
-The EAS patch files, in full, are in this repo:
+The EAS patch files, in full, are in this repo. Each was checked with `git apply --check` on a copy of the tree read from the GitHub tarball API (no clone, no fork), one patch at a time, then the five applied in order:
 
-| Patch | File | State on EAS `main` 7c02ca2 |
-|---|---|---|
-| 0006 | [0006-eas-envoy-control-plane-affinity.patch](../../integrations/eat/upstream/patches/0006-eas-envoy-control-plane-affinity.patch) | **Does not apply.** EAS #42 (88fd2ae) moved the EnvoyProxy task. The gap is still there, at `roles/envoy_gateway/tasks/controller.yaml` L174-175 (`nodeSelector: {node-role.kubernetes.io/control-plane: ""}`). Must be regenerated against `controller.yaml` before sending |
-| 0002 | [0002-eas-istio-global-platform.patch](../../integrations/eat/upstream/patches/0002-eas-istio-global-platform.patch) | applies |
-| 0004 | [0004-eas-byo-node-topology-labels.patch](../../integrations/eat/upstream/patches/0004-eas-byo-node-topology-labels.patch) | applies |
-| 0003 | [0003-eas-pin-nri-balloons-chart.patch](../../integrations/eat/upstream/patches/0003-eas-pin-nri-balloons-chart.patch) | applies |
-| 0005 | [0005-eas-docs-single-node-k3d.patch](../../integrations/eat/upstream/patches/0005-eas-docs-single-node-k3d.patch) | applies; rewrite to reviewer norms first (see below) |
+| Patch | File | EAS `main` 7c02ca2 | EAS #40 head bbb3a53 |
+|---|---|---|---|
+| 0006 | [0006-eas-envoy-control-plane-affinity.patch](../../integrations/eat/upstream/patches/0006-eas-envoy-control-plane-affinity.patch) | applies. Regenerated 2026-10-17 against `roles/envoy_gateway/tasks/controller.yaml` (blob `cf1824b`), where EAS #42 (88fd2ae) moved the EnvoyProxy task; the previous `install.yaml` patch fails there | does not apply: #40 predates #42 and still has the task in `install.yaml`; it has to rebase onto `main` |
+| 0002 | [0002-eas-istio-global-platform.patch](../../integrations/eat/upstream/patches/0002-eas-istio-global-platform.patch) | applies | applies |
+| 0004 | [0004-eas-byo-node-topology-labels.patch](../../integrations/eat/upstream/patches/0004-eas-byo-node-topology-labels.patch) | applies | applies |
+| 0003 | [0003-eas-pin-nri-balloons-chart.patch](../../integrations/eat/upstream/patches/0003-eas-pin-nri-balloons-chart.patch) | applies | applies |
+| 0005 | [0005-eas-docs-single-node-k3d.patch](../../integrations/eat/upstream/patches/0005-eas-docs-single-node-k3d.patch) | applies; rewrite to reviewer norms first (see below) | applies |
+| series 0002-0006 | all five in order | applies | n/a |
+| EAT docs patch | the diff below | n/a (EAS only) | n/a |
 
-The "applies on main" line in `integrations/eat/upstream/README.md` pins EAS base 7743bac, which is now stale. Fix it when 0006 is regenerated.
+The EAT docs patch below applies on EAT PR #19 head `9d842f5` and does not apply on EAT `main` `0ecf67a`, as intended: it edits the docs tables #19 adds.
+
+On the regenerated 0006, `checks/eas-envoy-reinstall.py` (now reading `controller.yaml`) passes: fresh install and re-install over the unpatched object both leave the affinity and no `nodeSelector`. Unpatched `main` fails both, as expected. `yamllint -d relaxed` on the patched `controller.yaml` reports nothing. `ansible-lint` was not re-run on this tree.
 
 ## EAT patch (full content)
 
@@ -141,7 +144,7 @@ EAT_WORK=$PWD/eat-work integrations/eat/eat-check.sh   # expect: ==> EAT check p
 scripts/k3d-gpu down
 ```
 
-**Gate 1. Static checks.** These have passed before; re-run them on EAS `main` once 0006 is regenerated.
+**Gate 1. Static checks.** `git apply --check` (each patch, then the series) and the envoy re-install check pass on EAS `main` 7c02ca2 with the regenerated 0006 (table above). Re-run `ansible-lint` and the topology check before sending.
 
 ```bash
 integrations/eat/upstream/checks/apply-check.sh <EAS clone at main>        # every patch alone, then the series
@@ -183,7 +186,7 @@ This repo's git policy (no assistant attribution lines) does not conflict with a
 The source is [issue-k3s-byo.md](../../integrations/eat/upstream/issue-k3s-byo.md). Before filing:
 
 - repoint every permalink from `7743bac` to the current EAS `main` SHA;
-- move gap 2 to `roles/envoy_gateway/tasks/controller.yaml#L174-L178`.
+- move gap 2 to `roles/envoy_gateway/tasks/controller.yaml#L174-L178` (7c02ca2).
 
 ### EAS PR (one per patch; example for 0006)
 

@@ -138,6 +138,8 @@ Include relevant details:
   "%", "first", "only", "fastest") on the same line with a primary-source URL,
   `[ledger:Hn]` (a SUPPORTED row of EXPERIMENTS.md) or `[provenance:Pn]` (a sourced
   row of docs/provenance.md). CI runs `tests/claims_check.sh` to enforce it
+- A verdict a doc states for a ledger row (`H2 is REFUTED`, `PENDING [ledger:H1]`)
+  must match EXPERIMENTS.md. CI runs `tests/ledger_drift_check.py` to enforce it
 - The docs site renders README.md as its home page and this file as a page, so
   the quick start lives only in README.md. Longer pages go in `docs/*.md` and
   need a `nav` entry in `mkdocs.yml`; `mkdocs build --strict` fails on a page
