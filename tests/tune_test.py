@@ -616,6 +616,18 @@ class IncrementalTest(unittest.TestCase):
         self.assertEqual(prof["pending"]["config"], res["challenger"])
         self.assertEqual(prof["pending"]["incumbent"], tune.config_key({"baseline": True}))
 
+    def test_screening_stays_inside_the_budget_when_redeploys_are_slow(self):
+        # The incumbent is measured warm (20 s); every neighbour redeploys (100 s).
+        clock = Clock()
+        sim = tune.SimEvaluator(cost_from(lambda c: 10.0))
+
+        def call(cfg, budget):
+            clock.t += 20.0 if cfg.get("baseline") else 100.0
+            return sim(cfg, budget)
+        res = tune.incremental(call, FACTS, {"baseline": True}, "throughput", budget_s=300.0, clock=clock)
+        self.assertGreater(len(res["screened"]), 0)
+        self.assertLessEqual(clock.t, 300.0)
+
     def test_pending_is_confirmed_without_screening(self):
         ev = tune.SimEvaluator(cost_from(lambda c: 20.0 if is_hint(c) else 10.0))
         hint = next(c for c in tune.neighbours(FACTS, {"baseline": True}) if is_hint(c))

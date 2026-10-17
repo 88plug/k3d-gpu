@@ -877,7 +877,11 @@ def incremental(evaluator, facts, incumbent, objective, *, budget_s=600.0, tried
             say(f"screening stopped at {len(out['screened'])}/{len(cands)} neighbours"
                 + (" to keep time to confirm" if confirm_now else ": budget spent"))
             break
+        t1 = clock()
         ok, err, ms = evaluate(evaluator, c, budget, ttft_slo)
+        # A neighbour redeploys, so it can take longer than the warm incumbent
+        # trial: plan the next one with the slowest seen.
+        trial_s = max(trial_s, clock() - t1)
         sc = score(ms, metric, sign) if ok else None
         out["screened"].append({"config": c, "ok": sc is not None, "error": err,
                                 "score": None if sc is None else sign * sc})
