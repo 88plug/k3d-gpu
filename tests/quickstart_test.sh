@@ -333,6 +333,21 @@ lacks "README has no stale pre-release note" "$(cat "${ROOT}/README.md")" "from 
 bad_tables=$(awk 'FNR==1{n=0} /^\|/{ if ($0 ~ /^\|[ :|]*-[ :|-]*\|[ ]*$/) n++; if (n>1) {print FILENAME": "FNR; n=0}; next} {n=0}' \
     "${ROOT}/README.md" "${ROOT}"/docs/*.md)
 eq "no Markdown table has two header rows" "${bad_tables}" ""
+# docs/first-run.md: one path per blind-test persona, in the docs nav; times are
+# predictions except the one ledger row (H9) it cites.
+fr="${ROOT}/docs/first-run.md"
+if [ -f "${fr}" ]; then
+    frt=$(cat "${fr}")
+    for sec in "WSL2" "N100" "Lunar Lake" "Xeon 6" "Arc B580" "NVIDIA GPU"; do has "first-run covers ${sec}" "${frt}" "${sec}"; done
+    has "first-run cites H9 as the only measured run" "${frt}" "Ledger row H9"
+    has "first-run labels other times as predictions" "${frt}" "is a **prediction**"
+    has "first-run tells NVIDIA users the LLM is on the CPU" "${frt}" "the LLM runs on the CPU, not the NVIDIA GPU"
+    has "first-run Arch path uses rancher-k3d-bin" "${frt}" "yay -S rancher-k3d-bin"
+    grep -q "first-run.md" "${ROOT}/mkdocs.yml" && ok "first-run.md is in the mkdocs nav" || fail "first-run.md not in the mkdocs nav"
+else
+    fail "docs/first-run.md missing"
+fi
+lacks "README prerequisites drop nvidia-docker2" "$(sed -n '/^## Prerequisites/,/^### /p' "${ROOT}/README.md")" "nvidia-docker2"
 launcher_ver=$(sed -n 's/^VERSION="\([^"]*\)".*/\1/p' "${LAUNCHER}")
 [ "$(printf '%s\n%s\n' "${inst_ver}" "${launcher_ver}" | sort -V | tail -n1)" = "${launcher_ver}" ] \
     && ok "installer pin ${inst_ver} is not newer than the launcher ${launcher_ver}" || fail "installer pin ${inst_ver} newer than launcher ${launcher_ver}"

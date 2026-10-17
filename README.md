@@ -38,8 +38,10 @@ Just want a local chat? `k3d-gpu quickstart` (0.1.33 and newer) goes from a mach
 Docker and a detected accelerator to a chat UI on `127.0.0.1:8080` in one
 command: cluster, LLM server (model picked
 from your RAM), Open WebUI with a generated admin account. `k3d-gpu uninstall`
-removes it all. See [docs/quickstart.md](docs/quickstart.md), and the pinned,
-sha256-checked installer `packaging/install.sh`.
+removes it all. See [docs/quickstart.md](docs/quickstart.md), the pinned,
+sha256-checked installer `packaging/install.sh`, and
+[docs/first-run.md](docs/first-run.md) for your kind of machine (WSL2 laptop,
+mini PC, Fedora laptop, Xeon server, Arch + Arc, NVIDIA workstation).
 
 The `k3d-gpu` launcher wraps the whole workflow — no need to remember
 `k3d cluster create` flags. Install it with your package manager (see [Install](#install)), then:
@@ -1387,9 +1389,16 @@ change the image, CPU request, warm pool size or policy.
 
 ## Prerequisites
 
-- **Docker** (20.10+), configured with NVIDIA GPU support (i.e., `nvidia-docker2` or Docker’s built‑in `--gpus`)  
-- **k3d** (v5.0.0 or later) to manage local K3s clusters  
-- A host NVIDIA GPU with an up‑to‑date driver (the node image needs no CUDA toolkit)  
+- **Docker** (20.10+). `packaging/install.sh` prints the install command; it never installs Docker.
+- **k3d** (v5.0.0 or later) and **kubectl**. `packaging/install.sh` installs pinned
+  copies into `~/.local/bin`; on Arch, `yay -S rancher-k3d-bin` and `pacman -S kubectl`.
+- At least one accelerator `k3d-gpu detect` reports: an Intel GPU, NPU or Gaudi,
+  Xeon AMX/DSA/IAA/QAT, hybrid P/E cores, NUMA, or an NVIDIA GPU.
+- **NVIDIA only**: an up-to-date driver and the NVIDIA Container Toolkit
+  (`nvidia-ctk`; the node image needs no CUDA toolkit). Intel hosts need neither.
+  The quickstart LLM never runs on an NVIDIA GPU; see [docs/first-run.md](docs/first-run.md).
+
+Per-machine install paths with time expectations: [docs/first-run.md](docs/first-run.md).
 
 ### Host setup (`k3d-gpu host-setup`)
 
