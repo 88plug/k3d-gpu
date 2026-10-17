@@ -70,6 +70,7 @@ Behaviour is tunable via environment variables:
 | `K3D_GPU_DSA_PLUGIN` / `_IAA_` / `_QAT_` | `/usr/share/k3d-gpu/intel-{dsa,iaa,qat}-plugin.yml` | same, for the Xeon accelerator plugins |
 | `K3D_GPU_HYBRID_PLUGIN` | `/usr/share/k3d-gpu/nri-balloons.yml` | same, for the NRI balloons policy (hybrid and NUMA hosts) |
 | `K3D_GPU_WSL_PLUGIN` | `/usr/share/k3d-gpu/intel-gpu-wsl-plugin.yml` | same, for the Intel GPU plugin in WSL mode |
+| `K3D_GPU_BALLOONS`   | `k3s`                                     | `external` leaves the NRI balloons policy to a Helm release |
 | `K3D_GPU_AGENT_*`    | see [Agent](#agent-an-openai-compatible-llm-on-the-best-intel-engine) | `k3d-gpu agent` settings |
 | `K3D_GPU_NPU_EMBEDDINGS` | `/usr/share/k3d-gpu/npu-embeddings.yml` | template printed by `k3d-gpu recipe npu-embeddings` |
 | `K3D_GPU_DEVICE_TEST_IMAGE` | `busybox:1.37`                     | image used by `k3d-gpu test` for Intel GPU/NPU and Gaudi |
@@ -331,9 +332,62 @@ Unlabelled pods land in a `shared` balloon that uses every idle CPU, so nothing
 else loses capacity. kube-system runs on a one-CPU reserve. k3s turns NRI on in
 containerd for a privileged node, and the node sees the host's core-type PMUs.
 The policy only changes cpusets inside the node's cgroup. It never touches
-cpufreq, C-states or RDT. Only one NRI resource policy can own a node, so drop
-`hybrid` (and `numa`) from `K3D_GPU_VENDORS` if another stack installs its own (for example,
-Intel's Enterprise Agent Toolkit CPU balloons).
+cpufreq, C-states or RDT.
+
+Only one NRI resource policy can own a node. k3s re-applies its baked manifests
+every time it starts, which would undo another stack's changes to the policy. So
+`up` tells k3s to delete the baked policy (`--disable=nri-balloons`) when neither
+`hybrid` nor `numa` is active (not detected, or left out of `K3D_GPU_VENDORS`), or
+when you set `K3D_GPU_BALLOONS=external`. Use `external` when a Helm release will
+own the policy, for example Intel's Enterprise Agent Toolkit (EAT). EAT installs
+the same chart as release `nri-resource-policy-balloons` in `kube-system`. With
+`external`, `up` also skips its own edits to the policy: the favored-CPU hint on
+the `latency` balloon and, on Arrow Lake-H, `OVERRIDE_SYS_ATOM_CPUS` on the
+DaemonSet. A Helm release that needs them sets them in its own values.
+
+The baked objects also carry Helm's ownership metadata for that release, so on a
+cluster created without `external`, `helm upgrade --install` of that release
+adopts them instead of failing with "cannot be imported". Adopting does not
+replace the policy by itself. Helm 3 sends an adopted BalloonsPolicy an empty
+patch, so the baked balloon types stay. Helm 4 applies server-side and stops on
+conflicts with k3s's deploy controller. To replace the baked policy on such a
+cluster, keep k3s from re-applying it, then pass a force flag (use your cluster
+name in place of `gpu`):
+
+```bash
+docker exec k3d-gpu-server-0 touch /var/lib/rancher/k3s/server/manifests/nri-balloons.yaml.skip
+helm upgrade --install nri-resource-policy-balloons nri-resource-policy-balloons \
+  --repo https://containers.github.io/nri-plugins --version v0.14.0 \
+  --namespace kube-system -f values.yaml --force   # Helm 4: --force-conflicts
+```
+
+Without the `.skip` file, the next start of the node puts the baked policy back.
+EAT's own playbook runs Helm with no force flag, so on such a cluster it leaves a
+mix of baked and EAT settings (see [docs/intel.md](docs/intel.md)). For EAT,
+create the cluster with `external` ([ledger:H14]).
+
+#### Intel Enterprise Agent Toolkit on a hybrid CPU
+
+[`contrib/eat/`](contrib/eat) keeps EAT's vLLM on P-cores and its agent services
+(LiteLLM, Redis, pgvector, sandboxes) on E-cores:
+
+- `hybrid-values.yaml` holds chart values for `K3D_GPU_BALLOONS=external`. Install
+  them with the `helm` command at the top of the file, then set
+  `deploy_nri_balloon_policy=no` in EAT's `agentic-config.cfg`. That setting also
+  turns EAT's `balloon_policy_cpu` off, which has a cost: EAT skips its CPU
+  topology detection and deploys vLLM without its balloon `--set` flags
+  (`cpu_balloon_annotation`, `cpu`, `memory`, `tensor_parallel_size`,
+  `pipeline_parallel_size`). vLLM still lands in `vllm-balloon`, because that
+  type matches the container name `vllm`, but its CPU and memory requests and
+  its parallelism come from the defaults in EAT's `xeon_values_file`. Set them
+  there.
+- `enterprise-agent-toolkit.patch` is for EAT itself. It makes its CPU reservation
+  correct on hybrid CPUs, which upstream gets wrong, and adds the same P/E split
+  to EAT's own policy. EAT detects a hybrid CPU only when it computes
+  `nri_reserved_cpu_list` itself. If you set `nri_reserved_cpu_list`, also set
+  `nri_hybrid_cpu=true`, or the P/E split is skipped.
+- `compute_reserved_cpus.sh` is the patched script. `tests/reserved_cpus_test.sh`
+  tests it.
 
 ### NUMA placement (multi-socket and SNC Xeon)
 

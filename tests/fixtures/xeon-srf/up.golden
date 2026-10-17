@@ -16,6 +16,7 @@ k3d cluster create gpu
   --k3s-node-label=intel.feature.node.kubernetes.io/dsa=true@server:*;agent:*
   --k3s-node-label=intel.feature.node.kubernetes.io/iaa=true@server:*;agent:*
   --volume=/dev/char:/dev/char:ro@server:*;agent:*
+  --k3s-arg=--disable=nri-balloons@server:*
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AVXVNNI=true@server:*;agent:*
   --k3s-node-label=experimental.k3d-gpu.io/dra=true@server:*;agent:*
   --k3s-node-label=experimental.k3d-gpu.io/image-volume=true@server:*;agent:*

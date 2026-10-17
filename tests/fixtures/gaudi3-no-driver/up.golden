@@ -12,6 +12,7 @@ k3d cluster create gpu
   --no-lb
   --k3s-arg=--disable=traefik@server:0
   --k3s-node-label=nvidia.com/gpu.present=false@server:*;agent:*
+  --k3s-arg=--disable=nri-balloons@server:*
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true@server:*;agent:*
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AMXINT8=true@server:*;agent:*
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true@server:*;agent:*

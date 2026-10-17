@@ -5,6 +5,11 @@
 # launcher sets when /sys/devices/cpu_core lists online CPUs and cpu_atom or
 # cpu_lowpower does too, or carrying k3d-gpu.io/numa-nodes, which it sets when the
 # host has more than one NUMA node (multi-socket or SNC Xeon, HBM/CXL memory nodes).
+# On other hosts, or with K3D_GPU_BALLOONS=external, the launcher disables this addon.
+# Every templated object carries the meta.helm.sh/release-name and release-namespace
+# annotations of release nri-resource-policy-balloons in kube-system (HELM_ADOPTABLE in
+# component.conf), the release Intel's Enterprise Agent Toolkit installs, so its
+# `helm upgrade --install` adopts these objects instead of refusing them.
 #
 # Balloon types (first match wins; the pod label is k3d-gpu.io/cores=<type>):
 #   performance     P-cores (preferCoreType)

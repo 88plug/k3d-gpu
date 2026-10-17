@@ -5,6 +5,11 @@
 # launcher sets when /sys/devices/cpu_core lists online CPUs and cpu_atom or
 # cpu_lowpower does too, or carrying k3d-gpu.io/numa-nodes, which it sets when the
 # host has more than one NUMA node (multi-socket or SNC Xeon, HBM/CXL memory nodes).
+# On other hosts, or with K3D_GPU_BALLOONS=external, the launcher disables this addon.
+# Every templated object carries the meta.helm.sh/release-name and release-namespace
+# annotations of release nri-resource-policy-balloons in kube-system (HELM_ADOPTABLE in
+# component.conf), the release Intel's Enterprise Agent Toolkit installs, so its
+# `helm upgrade --install` adopts these objects instead of refusing them.
 #
 # Balloon types (first match wins; the pod label is k3d-gpu.io/cores=<type>):
 #   performance     P-cores (preferCoreType)
@@ -1688,6 +1693,9 @@ spec:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
+  annotations:
+    meta.helm.sh/release-name: nri-resource-policy-balloons
+    meta.helm.sh/release-namespace: kube-system
   name: nri-resource-policy-balloons
   namespace: kube-system
   labels:
@@ -1700,6 +1708,9 @@ metadata:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
+  annotations:
+    meta.helm.sh/release-name: nri-resource-policy-balloons
+    meta.helm.sh/release-namespace: kube-system
   name: nri-resource-policy-balloons
   labels:
     helm.sh/chart: nri-resource-policy-balloons-v0.14.0
@@ -1737,6 +1748,9 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
+  annotations:
+    meta.helm.sh/release-name: nri-resource-policy-balloons
+    meta.helm.sh/release-namespace: kube-system
   name: nri-resource-policy-balloons
   labels:
     helm.sh/chart: nri-resource-policy-balloons-v0.14.0
@@ -1756,6 +1770,9 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
+  annotations:
+    meta.helm.sh/release-name: nri-resource-policy-balloons
+    meta.helm.sh/release-namespace: kube-system
   name: nri-resource-policy-balloons
   namespace: kube-system
   labels:
@@ -1785,6 +1802,9 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
+  annotations:
+    meta.helm.sh/release-name: nri-resource-policy-balloons
+    meta.helm.sh/release-namespace: kube-system
   name: nri-resource-policy-balloons
   namespace: kube-system
   labels:
@@ -1805,6 +1825,9 @@ subjects:
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
+  annotations:
+    meta.helm.sh/release-name: nri-resource-policy-balloons
+    meta.helm.sh/release-namespace: kube-system
   labels:
     helm.sh/chart: nri-resource-policy-balloons-v0.14.0
     app.kubernetes.io/managed-by: Helm
@@ -1917,6 +1940,9 @@ spec:
 apiVersion: config.nri/v1alpha1
 kind: BalloonsPolicy
 metadata:
+  annotations:
+    meta.helm.sh/release-name: nri-resource-policy-balloons
+    meta.helm.sh/release-namespace: kube-system
   name: default
   namespace: kube-system
   labels:

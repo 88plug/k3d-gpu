@@ -16,6 +16,12 @@
 # KIND=helm   CHART_REPO (https:// helm repo URL), CHART, CHART_VERSION, CHART_SHA256,
 #             RELEASE, NAMESPACE. Rendered with `helm template --include-crds`, using
 #             the helm pinned in hack/tools.env (hack/install-helm fetches it).
+#             Optional HELM_ADOPTABLE=yes: every object from the chart's templates/
+#             gets the meta.helm.sh/release-name and release-namespace annotations
+#             `helm install` would set, so a later `helm upgrade --install` of
+#             RELEASE in NAMESPACE adopts the baked objects instead of refusing them
+#             (helm pkg/action/validate.go checkOwnership). CRDs need none: helm
+#             skips CRDs that already exist.
 # A new kind is one render_<kind> function plus its required keys in KIND_KEYS.
 #
 # Env: RENDER_ROOT  repo root holding hack/components and OUTPUT (default: this checkout)
@@ -37,6 +43,20 @@ set_pin() { sed -i "s|^$2=.*|$2=$3|" "$1"; }
 
 # not_older <current> <candidate>: candidate sorts at or after current.
 not_older() { [ "$(printf '%s\n' "$1" "$2" | sort -V | tail -n1)" = "$2" ]; }
+
+# helm_owned <release> <namespace>: on stdin a `helm template` stream; add Helm's
+# release annotations under metadata: of every object from the chart's templates/.
+helm_owned() {
+    awk -v rel="$1" -v ns="$2" '
+        /^# Source: .*\/templates\// { t = 1 }
+        /^# Source: .*\/crds\// { t = 0 }
+        { print }
+        t && /^metadata:$/ {
+            print "  annotations:"
+            print "    meta.helm.sh/release-name: " rel
+            print "    meta.helm.sh/release-namespace: " ns
+        }'
+}
 
 render_helm() {
     local dir=$1 latest=$2 tmp tgz sum v
@@ -73,8 +93,12 @@ render_helm() {
         sed "s|@VERSION@|${CHART_VERSION}|g" "${dir}/header.txt"
         echo "# values:"
         sed 's/^/#   /; s/ *$//' "${dir}/values.yaml"
-        helm template "${RELEASE}" "${tgz}" --namespace "${NAMESPACE}" --include-crds -f "${dir}/values.yaml"
+        helm template "${RELEASE}" "${tgz}" --namespace "${NAMESPACE}" --include-crds -f "${dir}/values.yaml" \
+            | if [ "${HELM_ADOPTABLE:-no}" = yes ]; then helm_owned "${RELEASE}" "${NAMESPACE}"; else cat; fi
     } > "${tmp}/out.yml"
+    if [ "${HELM_ADOPTABLE:-no}" = yes ] && awk '/^---$/ {n = 0} /^  annotations:$/ && ++n > 1 {bad = 1} END {exit !bad}' "${tmp}/out.yml"; then
+        die "${NAME}: a templated object already has metadata.annotations; HELM_ADOPTABLE cannot add a second block"
+    fi
     mkdir -p "$(dirname "${ROOT}/${OUTPUT}")"
     mv "${tmp}/out.yml" "${ROOT}/${OUTPUT}"
     # Pins move only once the render succeeded, so they always match OUTPUT.

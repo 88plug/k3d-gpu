@@ -139,8 +139,17 @@ Facts from that snapshot that shape a k3d run:
 - No code path requests `gpu.intel.com`, `habana.ai` or `/dev/dri`. The OVMS
   chart defaults to `targetDevice: CPU` (`core/helm-charts/ovms/values.yaml:77`).
 - The toolkit installs its own `nri-resource-policy-balloons` release in
-  `kube-system`. Only one NRI resource policy can own a node, so drop `hybrid` and `numa`
-  from `K3D_GPU_VENDORS` before installing it.
+  `kube-system`. Only one NRI resource policy can own a node. Create the cluster
+  with `K3D_GPU_BALLOONS=external` so k3s does not bake its own policy; the
+  launcher still labels the node for P/E and NUMA placement. On a cluster created
+  without it, EAT's `helm upgrade --install` adopts the baked objects (they carry
+  that release's Helm ownership metadata), but the policy ends up mixed: EAT
+  installs the chart with its defaults, then upgrades it with its values, and on
+  an adopted object Helm changes only what differs between those two revisions.
+  EAT's balloon types land; baked settings such as `agent.podResourceAPI: true`
+  stay. [`contrib/eat/`](../contrib/eat) has
+  chart values that keep EAT's vLLM on P-cores and its agent services on E-cores,
+  and a patch for EAT's CPU reservation on hybrid CPUs (see the README).
 
 Measured on the i9-13900T host above. Values come from the run ledger; a
 placeholder still present means the measurement has not landed.

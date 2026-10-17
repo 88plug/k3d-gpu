@@ -38,6 +38,7 @@ jobs:
       - run: tests/image_test.sh
       - run: tests/host_setup_test.sh
       - run: tests/eat_test.sh
+      - run: tests/reserved_cpus_test.sh
       - run: tests/experimental_test.sh
 
   telemetry-tests:
