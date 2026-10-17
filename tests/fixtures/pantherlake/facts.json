@@ -340,7 +340,8 @@
         },
         "pci": "0000:00:02.0",
         "platform": "Panther Lake",
-        "render_node": "renderD128"
+        "render_node": "renderD128",
+        "xmx": true
       }
     ],
     "kernel": "6.18.2-1-default",

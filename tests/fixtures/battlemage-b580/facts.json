@@ -212,7 +212,8 @@
         },
         "pci": "0000:03:00.0",
         "platform": "Battlemage",
-        "render_node": "renderD128"
+        "render_node": "renderD128",
+        "xmx": true
       }
     ],
     "kernel": "6.17.0-5-generic",
