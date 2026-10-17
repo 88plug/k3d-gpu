@@ -2192,6 +2192,32 @@ A1 replaces it; the table above is kept for the record but no longer decides.
   partitions none of the shared LLC, ring or IMC. Priors: SUPPORTED 0.10, REFUTED as stated 0.20,
   REFUTED 0.45, INCONCLUSIVE 0.25.
 - Run status (2026-10-17T12:58Z): the A1 probe queued for the live lock at 12:33Z and did not get it inside the 40 min work budget (another live experiment held it); no timed block ran, no cluster was made. H26 stays PENDING; the next run is `SUDO_ASKPASS=<askpass> flock -w 10800 $LOCK bench/rdt-isolate/run.sh` on b7d2f16 or later.
+
+**Amendment A2: matched background load (2026-10-17, written before any timed block).**
+Real Intel hosts are busy, so H26 now runs under the same controlled background load in
+every arm. The hog stays the treatment: its design, arms, block order and A1 rules do not change.
+- Background: `bench/load/load.py start --level L` on the load CPUs (E-cores 16-31 here) for the whole
+  level, `typical` first (the headline), then `heavy` (robustness) if the lock budget allows. The
+  hog and the background share the E-cores; the agent stays on P-cores (A1 abort rule).
+- Order per level as before: Q ME15 ME4 MC4 / MC4 ME4 ME15 Q / Q ME15 ME4 MC4, 10 timed requests
+  per block, n = 30 per arm. One cluster for both levels; the background is restarted per level.
+- Per block, after the previous hog is deleted and before the next one starts (agent idle, no hog):
+  `load.py sample --seconds 5 --windows 3 --tag ARM --level L`. These windows decide matching:
+  `load.py matched` over the level's windows with TOLERANCE as committed in 402518e (unchanged since)
+  (busy_pct 5 pp; load1 max(1, 15%); pkg_w max(3 W, 10%); throttle_per_min max(10, 25%);
+  swap used 256 MiB; swap growth 64 MiB per window). Unmatched means INCONCLUSIVE at that level,
+  naming the metric. High load alone never voids a level.
+- The in-block readings (IMC GB/s, package J, throttle delta, pswpin, CPU 0-15 busy, load1) include
+  the hog, so they are reported per arm but do not decide matching.
+- ME4's placement check counts only stream workers in a `kubepods` cgroup, so the background's own
+  `stress-ng-stream` workers cannot satisfy it.
+- Each level gets its own A1 verdict. The ledger verdict is the `typical` one; `heavy` is reported as
+  robustness. Confidence stays the bootstrap P(R <= 0.5); P(R >= 0.8) is reported beside it.
+- Budget: each level aborts at 18 min of its own wall time (the first one includes cluster setup);
+  unrun blocks are void. The cluster and the load containers are removed before the lock is released.
+- sudo -A reads RAPL `energy_uj` and the uncore IMC counters (`perf stat`), as pre-registered; no writes.
+- Predictions unchanged from A1: REFUTED (R ~1). Priors: SUPPORTED 0.10, REFUTED as stated 0.20,
+  REFUTED 0.45, INCONCLUSIVE 0.25.
 ### H23 pre-registration (2026-10-17)
 
 Written 2026-10-17T12:08Z, before any measurement. Ledger id H23; provenance ids
