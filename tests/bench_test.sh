@@ -188,6 +188,8 @@ check "agent_trace: unit tests against the in-process stub" \
 
 check "bench: joule-pack (H21) unit tests" \
     env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/joule-pack/test_joulepack.py"
+check "shared-prefix (H25): prompt generator and scorer" \
+    env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/shared-prefix/test_probe.py"
 
 # ---- uncore-phase (H29) -----------------------------------------------------------
 
