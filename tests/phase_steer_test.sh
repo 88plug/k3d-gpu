@@ -59,10 +59,11 @@ for p in sys.argv[1].split(","):
 for p in sys.argv[1].split(","):
     a, _, b = p.partition("-"); print("\n".join(str(i) for i in range(int(a), int(b or a) + 1)))' "${lp}" | sort))"
 
-# llama-server args carry exactly the two masks, strict on both pools.
+# llama-server args carry exactly the two masks, non-strict (strict stacks agents, H20 A1).
 json=$(run raptorlake-nvidia --json)
-check "llama args" "--cpu-mask-batch 0xffff --cpu-strict-batch 1 --cpu-mask 0xffff0000 --cpu-strict 1" \
+check "llama args" "--cpu-mask-batch 0xffff --cpu-mask 0xffff0000" \
     "$(field llama_server_args <<< "${json}")"
+check "no strict placement (agents would stack)" "" "$(field llama_server_args <<< "${json}" | grep -o strict)"
 check "off has no args" "" "$(run xeon-gnr --json | field llama_server_args)"
 check "schema" "phase-steer/v1" "$(field schema <<< "${json}")"
 check "ledger status" "H20 PENDING" "$(field ledger <<< "${json}")"

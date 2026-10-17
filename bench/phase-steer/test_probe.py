@@ -35,9 +35,39 @@ class Masks(unittest.TestCase):
         self.assertEqual(probe.hexmask("16-31"), "0xffff0000")
         self.assertEqual(probe.hexmask("0,2,4,6"), "0x55")
 
-    def test_arms_only_masks_differ(self):
-        self.assertEqual(probe.ARMS["PS"], ("16-31", "0-15"))
-        self.assertEqual(probe.ARMS["NEG"], ("0-15", "16-31"))
+    def test_arms(self):
+        self.assertEqual(probe.PHASES["PS"], ("E", "P"))
+        self.assertEqual(probe.PHASES["NEG"], ("P", "E"))
+        self.assertEqual(probe.PHASES["ALL"], (None, None))
+
+    def test_slices_disjoint_every_arm(self):
+        for arm in probe.PHASES:
+            sets = [probe.expected_cpus(arm, i) for i in range(4)]
+            for a in range(4):
+                for b in range(a + 1, 4):
+                    self.assertFalse(sets[a] & sets[b], (arm, a, b))
+
+    def test_one_thread_per_physical_core(self):
+        for i in range(4):
+            p = probe.slice_cpus("P", i)
+            self.assertEqual(len({c // 2 for c in p}), len(p))  # no SMT pair
+            self.assertEqual(len({(c - 16) // 4 for c in probe.slice_cpus("E", i)}), 1)  # one L2 cluster
+
+    def test_server_args(self):
+        self.assertEqual(probe.server_args("PS", 1),
+                         ["-t", "4", "-tb", "2", "--cpu-mask", "0xf00000", "--cpu-mask-batch", "0x50",
+                          "--cpu-strict", "1", "--cpu-strict-batch", "1"])
+        self.assertNotIn("--cpu-mask", probe.server_args("ALL", 0))
+        self.assertIn("0", probe.server_args("ALL", 0)[probe.server_args("ALL", 0).index("--cpu-strict") + 1])
+
+    def test_overlap_detected(self):
+        stacked = {"a0": ["0", "1", "0-31"], "a1": ["0", "1", "0-31"]}
+        self.assertEqual(probe.overlap(stacked), [0, 1])
+        self.assertFalse(probe.placement_ok("SP", stacked))
+        good = {"a0": ["0", "2", "0-31"], "a1": ["4", "6", "0-31"]}
+        self.assertTrue(probe.placement_ok("SP", good))
+        self.assertFalse(probe.placement_ok("ALL", good))
+        self.assertTrue(probe.placement_ok("ALL", {"a0": ["0-31"], "a1": ["0-31"]}))
 
     def test_order_latin_square(self):
         rows = [probe.ORDER[i:i + 3] for i in (0, 3, 6)]
@@ -86,6 +116,14 @@ class Outcomes(unittest.TestCase):
 
     def test_inconclusive_contaminated(self):
         self.assertEqual(table(e_busy=0.02), "INCONCLUSIVE")
+
+    def test_inconclusive_overlap(self):
+        cells = []
+        for _ in range(3):
+            cells += [cell("SP", 1.0), cell("PS", 0.8), cell("ALL", 0.9)]
+        cells[1]["overlap"] = [16]
+        cells.append(cell("NEG", 1.0, ttft=5))
+        self.assertEqual(probe.verdict(probe.summarize(cells))[0], "INCONCLUSIVE")
 
     def test_inconclusive_short(self):
         cells = [cell("SP", 1.0), cell("PS", 0.8), cell("ALL", 0.9), cell("NEG", 1.0, ttft=5)]

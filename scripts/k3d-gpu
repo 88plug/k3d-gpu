@@ -6402,7 +6402,10 @@ phase_steer_plan() {
 # phase-steer [--json] [--prefill CPUS --decode CPUS]
 # Read-only. Prints the per-phase CPU split for one llama.cpp server per agent:
 # prompt processing (-Cb, the batch pool) on the P-cores, token generation (-C)
-# on the E-cores, as llama-server flags. Nothing is applied: H20 in
+# on the E-cores, as llama-server flags. The masks are non-strict on purpose:
+# ggml strict mode pins thread j to the j-th set bit in every process, so N
+# agents given one strict mask would all stack on its first CPUs (H20 A1).
+# Nothing is applied: H20 in
 # EXPERIMENTS.md is PENDING, and the split becomes a default only if it holds.
 cmd_phase_steer() {
     local json=0 pre="" dlist="" state p d lp reason pm="" dm=""
@@ -6434,8 +6437,7 @@ print(json.dumps({
     "schema": "phase-steer/v1", "state": state, "reason": reason, "ledger": "H20 PENDING",
     "prefill_cpus": opt(p), "decode_cpus": opt(d), "lowpower_cpus": opt(lp),
     "prefill_mask": opt(pm), "decode_mask": opt(dm),
-    "llama_server_args": ["--cpu-mask-batch", pm, "--cpu-strict-batch", "1",
-                          "--cpu-mask", dm, "--cpu-strict", "1"] if on else [],
+    "llama_server_args": ["--cpu-mask-batch", pm, "--cpu-mask", dm] if on else [],
 }, sort_keys=True))
 PY
         return 0
@@ -6449,7 +6451,7 @@ PY
     echo "  decode  (E-cores): ${d}  mask ${dm}"
     [ "${lp}" = - ] || echo "  LP E-cores left out: ${lp}"
     echo "  from: ${reason}"
-    echo "  llama-server: --cpu-mask-batch ${pm} --cpu-strict-batch 1 --cpu-mask ${dm} --cpu-strict 1"
+    echo "  llama-server: --cpu-mask-batch ${pm} --cpu-mask ${dm}"
 }
 
 # K3D_GPU_EXPERIMENTAL=list prints the feature table with any command; any

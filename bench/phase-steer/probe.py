@@ -28,11 +28,19 @@ import time
 import urllib.request
 
 P, E, ALLC = "0-15", "16-31", "0-31"
-ARMS = {  # arm: (decode --cpu-mask, prefill --cpu-mask-batch)
-    "SP": (P, P), "PS": (E, P), "ALL": (ALLC, ALLC), "NEG": (P, E),
+# Amendment A1 (2026-10-17, before any run): ggml strict mode pins thread j of
+# every pool to the j-th set bit of its mask, counting from bit 0 in each
+# process (ggml-cpu.c ggml_thread_cpumask_next). Shared masks therefore stack
+# every agent on the same first CPUs. Each agent now gets a disjoint slice, one
+# thread per physical core: P = cores {4i, 4i+2} (no SMT sibling), E = the
+# 4-core Gracemont L2 cluster 16+4i..16+4i+3. ALL is non-strict with no mask,
+# so the kernel (ITMT/HFI) places the threads.
+PHASES = {  # arm: (decode slice, prefill slice); None = no mask, non-strict
+    "SP": ("P", "P"), "PS": ("E", "P"), "ALL": (None, None), "NEG": ("P", "E"),
 }
 ORDER = ["SP", "PS", "ALL", "PS", "ALL", "SP", "ALL", "SP", "PS", "NEG"]
-REQUIRED_FLAGS = ["--cpu-mask", "--cpu-mask-batch", "--cpu-strict", "--cpu-strict-batch", "--parallel", "--mlock"]
+REQUIRED_FLAGS = ["--cpu-mask", "--cpu-mask-batch", "--cpu-strict", "--cpu-strict-batch", "--parallel", "--mlock",
+                  "--poll", "--poll-batch"]
 RAPL = "/sys/class/powercap/intel-rapl:0"
 PREFIX_TOK, TURN_TOK, OUT_TOK = 1024, 396, 96
 PRIMARY = ("SP", "PS", "ALL")
@@ -119,9 +127,56 @@ def watts_over(seconds):
     return energy_delta_j(a, energy_uj()) / (time.monotonic() - t0)
 
 
+def slice_cpus(kind, i):
+    """Agent i's disjoint CPUs: kind 'P' or 'E' (i9-13900T layout, asserted in prechecks)."""
+    return [4 * i, 4 * i + 2] if kind == "P" else [16 + 4 * i + k for k in range(4)]
+
+
+def server_args(arm, i):
+    """llama-server placement flags for agent i in arm: one thread per physical core."""
+    dec, pre = PHASES[arm]
+    if dec is None:
+        return ["-t", "2", "-tb", "2", "--cpu-strict", "0", "--cpu-strict-batch", "0"]
+    d, p = slice_cpus(dec, i), slice_cpus(pre, i)
+    tolist = lambda v: ",".join(map(str, v))
+    return ["-t", str(len(d)), "-tb", str(len(p)),
+            "--cpu-mask", hexmask(tolist(d)), "--cpu-mask-batch", hexmask(tolist(p)),
+            "--cpu-strict", "1", "--cpu-strict-batch", "1"]
+
+
+def expected_cpus(arm, i):
+    dec, pre = PHASES[arm]
+    return set() if dec is None else set(slice_cpus(dec, i)) | set(slice_cpus(pre, i))
+
+
+def pinned(lists):
+    """CPUs that some thread is pinned to alone (Cpus_allowed_list of one CPU)."""
+    return {int(x) for x in lists if x.isdigit()}
+
+
+def overlap(affinity):
+    """CPUs pinned by threads of more than one server."""
+    seen, shared = {}, set()
+    for name, lists in affinity.items():
+        for c in pinned(lists):
+            if c in seen and seen[c] != name:
+                shared.add(c)
+            seen[c] = name
+    return sorted(shared)
+
+
+def placement_ok(arm, affinity):
+    """Strict arms: each server pins threads only inside its own slice; no CPU
+    shared. A subset is allowed: the compute main thread moves between pools."""
+    if PHASES[arm][0] is None:
+        return all(not pinned(v) for v in affinity.values())
+    if overlap(affinity):
+        return False
+    return all(pinned(v) and pinned(v) <= expected_cpus(arm, i) for i, v in enumerate(affinity.values()))
+
+
 # ---- servers and agents --------------------------------------------------------
 def start_servers(args, arm, cell, n):
-    dec, pre = ARMS[arm]
     names = []
     for i in range(n):
         name = f"sci-h20-c{cell}-a{i}"
@@ -129,9 +184,8 @@ def start_servers(args, arm, cell, n):
            "--ulimit", "memlock=-1:-1", "-p", f"127.0.0.1:{args.port0 + i}:8080",
            "-v", f"{os.path.abspath(args.model)}:/m/model.gguf:ro", args.image,
            "-m", "/m/model.gguf", "--host", "0.0.0.0", "--port", "8080", "-c", "2048",
-           "--parallel", "1", "-t", str(args.threads), "-tb", str(args.threads),
-           "--cpu-mask", hexmask(dec), "--cpu-mask-batch", hexmask(pre),
-           "--cpu-strict", "1", "--cpu-strict-batch", "1", "--mlock")
+           "--parallel", "1", "--poll", str(args.poll), "--poll-batch", str(int(args.poll > 0)),
+           *server_args(arm, i), "--mlock")
         names.append(name)
     return names
 
@@ -233,7 +287,8 @@ def run_cell(args, arm, rep, cell, idle_w, deadline):
         "j_per_tok": round(joules / toks, 4) if toks else None,
         "j_per_tok_net": round((joules - idle_w * secs) / toks, 4) if toks else None,
         "errors": errors, "busy": {"P": busy_frac(b0, b1, pcpus), "E": busy_frac(b0, b1, ecpus)},
-        "pre_busy": pre_busy, "affinity": affinity, "mhz": mhz,
+        "pre_busy": pre_busy, "affinity": affinity, "overlap": overlap(affinity),
+        "placement_ok": placement_ok(arm, affinity), "mhz": mhz,
         "throttle_delta": thr1 - thr0, "pswpin_delta": sw1 - sw0, "load1": rd("/proc/loadavg").split()[0],
         "pre_t": pre_t,
     }
@@ -255,11 +310,14 @@ def prechecks(args):
     missing = [f for f in REQUIRED_FLAGS if f not in helptext]
     if missing:
         raise SystemExit(f"refusing: {args.image} --help lacks {missing}")
+    layout = (rd("/sys/devices/cpu_core/cpus"), rd("/sys/devices/cpu_atom/cpus"))
+    if layout != (P, E) or args.agents > 4:
+        raise SystemExit(f"refusing: slices assume P={P} E={E} and <= 4 agents, host has {layout}")
     if not os.access(f"{RAPL}/energy_uj", os.R_OK):
         raise SystemExit(f"refusing: {RAPL}/energy_uj not readable (run with sudo)")
     steer = sh(os.path.join(os.path.dirname(__file__), "..", "..", "scripts", "k3d-gpu"), "phase-steer", "--json", check=False)
     return {"kind": "header", "image": args.image, "model": args.model, "agents": args.agents,
-            "threads": args.threads, "order": ORDER[: args.cells], "cpu_core": rd("/sys/devices/cpu_core/cpus"),
+            "poll": args.poll, "slices": {a: [server_args(a, i) for i in range(args.agents)] for a in PHASES}, "order": ORDER[: args.cells], "cpu_core": rd("/sys/devices/cpu_core/cpus"),
             "cpu_atom": rd("/sys/devices/cpu_atom/cpus"),
             "hfi": " hfi " in f" {rd('/proc/cpuinfo')} ", "itd": " itd " in f" {rd('/proc/cpuinfo')} ",
             "phase_steer": steer.strip(), "kernel": rd("/proc/sys/kernel/osrelease")}
@@ -319,7 +377,10 @@ def summarize(cells):
 
 
 def contaminated(c):
-    """Placement proof: PS must load the E-cores above background, SP must not."""
+    """Placement proof: every server on its own pinned slice (A1); PS must load
+    the E-cores above background, SP must not."""
+    if c.get("placement_ok") is False or c.get("overlap"):
+        return True
     e, pe = c["busy"]["E"] or 0, c["pre_busy"]["E"] or 0
     if c["arm"] == "PS":
         return e <= pe + 0.05
@@ -367,8 +428,8 @@ def main(argv=None):
     ap.add_argument("--image", default=os.environ.get("IMAGE"))
     ap.add_argument("--model")
     ap.add_argument("--out", default="h20.jsonl")
-    ap.add_argument("--agents", type=int, default=6)
-    ap.add_argument("--threads", type=int, default=4)
+    ap.add_argument("--agents", type=int, default=4)
+    ap.add_argument("--poll", type=int, default=0, help="ggml --poll/--poll-batch for every arm (0 = no spin)")
     ap.add_argument("--warm", type=float, default=15)
     ap.add_argument("--window", type=float, default=60)
     ap.add_argument("--cells", type=int, default=len(ORDER))

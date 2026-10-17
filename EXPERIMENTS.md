@@ -602,6 +602,31 @@ containers. It can be claimed only as a measured delta against SP and ALL.
 - "Decode is memory-bound per H3" has no support. H3 is a P/E isolation result, and the DRAM roof of this host is unmeasured.
 - The E-cores add no DRAM bandwidth. If decode is bandwidth-bound, E decode per agent is slower, and p95 grows.
 
+**Amendment A1 (2026-10-17, written after two refuter reviews and before any H20 run).**
+Both refuters found the probe could not test H20. ggml strict mode pins thread j of each
+pool to the j-th set bit of its mask, counting from bit 0 in every process
+(`ggml_thread_cpumask_next`, ggml-cpu.c [provenance:P202]). Six servers with one shared
+strict mask therefore stacked on CPUs 0-3 (two SMT P-cores) or 16-19, ALL was the same
+placement as SP, and the placement proof could not see it. Changes, all made before measuring:
+- **N = 4 agents, disjoint slices, one thread per physical core.** Agent i: P slice CPUs
+  {4i, 4i+2} (two physical P-cores, no SMT sibling); E slice CPUs 16+4i..16+4i+3 (one
+  Gracemont L2 cluster). Thread count = slice size in each pool.
+- **SP:** `-t 2 -tb 2`, both masks = P slice, strict. **PS:** `-t 4` on the E slice,
+  `-tb 2` on the P slice, strict. **NEG:** `-t 2` on P, `-tb 4` on E, strict.
+  **ALL:** `-t 2 -tb 2`, no mask, `--cpu-strict 0`: the kernel (ITMT/HFI) places SP's
+  thread budget anywhere on 0-31. This is the real competent baseline.
+- **Spin pinned:** `--poll 0 --poll-batch 0` in every arm, so energy is work, not busy-wait.
+- **Placement proof extended:** each cell records every server thread's
+  `Cpus_allowed_list`. A strict-arm cell is CONTAMINATED if two servers pin the same CPU or
+  a server pins outside its slice; an ALL cell is CONTAMINATED if any thread is pinned.
+  Unit-tested (`test_slices_disjoint_every_arm`, `test_overlap_detected`).
+- **Host layout asserted:** the probe refuses unless `cpu_core` = 0-15 and `cpu_atom` = 16-31.
+- **Design consequence, stated up front:** PS uses 6 physical cores per agent, SP 2. That
+  is the treatment (decode moves onto otherwise idle E-cores), and J/token charges for it.
+  Outcome table, guardrails and priors are unchanged. Prior P(SUPPORTED) stays 0.15.
+- **Product:** `k3d-gpu phase-steer` now prints non-strict masks (`--cpu-mask-batch P
+  --cpu-mask E`), since one strict mask shared by N agents stacks them.
+
 **Host pre-checks** (read-only, logged in the jsonl header):
 - `/sys/devices/cpu_core/cpus` and `cpu_atom/cpus`, plus the `k3d-gpu phase-steer --json` output.
 - `hfi`/`itd` in `/proc/cpuinfo`.
@@ -671,7 +696,7 @@ each Latin-square position. That cancels order and thermal drift.
 - Alder Lake and Raptor Lake: same sign as this host.
 - Arrow Lake S/H, with Skymont E-cores and no P-core SMT: PS is most likely to pass.
 - Meteor Lake and Arrow Lake H: `phase-steer` already leaves out the LP E-cores, which have no L3.
-- Lunar Lake and Panther Lake: largest J/token upside predicted, highest p95 risk.
+- Lunar Lake and Panther Lake U: their E-cores have no L3, so `phase-steer` classes them as LP and reports off. Not testable with this mechanism.
 - Non-hybrid parts: `phase-steer` reports off. Nothing to test.
 
 **Auto-adapt if SUPPORTED:** enable only when `cpu_atom` exists, serving is one engine per
