@@ -34,6 +34,47 @@ DRAFT=OpenVINO/Qwen3-0.6B-int4-ov
 ARMS=(A B C DP DG)
 declare -A GRAPH=([A]=a-4b-cpu [B]=b-spec-cpu [C]=c-spec-igpu [DP]=dp-06b-cpu [DG]=dg-06b-gpu)
 
+sread() { if [ -n "${SUDO_PASS:-}" ]; then sudo -S -p '' cat "$1" <<< "${SUDO_PASS}" 2>/dev/null; else cat "$1" 2>/dev/null; fi; }
+# Host context for one request: throttle counts, package temp, iGPU freq, swap, load, RAPL.
+# Every field is one number: under pipefail `a | b || echo 0` prints two lines, so
+# each value is read whole and defaulted with ${x:-0} instead.
+host_sample() {
+    local thr=0 f v temp=0 mhz=0 rapl card
+    for f in /sys/devices/system/cpu/cpu*/thermal_throttle/package_throttle_count; do
+        v=$(cat "${f}" 2>/dev/null); thr=$(( thr + ${v:-0} ))
+    done
+    for f in /sys/class/hwmon/hwmon*/temp1_input; do
+        v=$(cat "${f}" 2>/dev/null); [ "${v:-0}" -le "${temp}" ] || temp=${v}
+    done
+    for card in /sys/class/drm/card[0-9]*; do  # the iGPU sits at PCI 00:02.0
+        [ "$(basename "$(readlink -f "${card}/device")")" = 0000:00:02.0 ] || continue
+        v=$(cat "${card}/gt/gt0/rps_act_freq_mhz" 2>/dev/null); mhz=${v:-0}; break
+    done
+    rapl=$(sread /sys/class/powercap/intel-rapl:0/energy_uj)
+    printf '{"throttle":%s,"temp_mc":%s,"igpu_mhz":%s,"swap":"%s","load1":%s,"rapl_uj":%s}\n' \
+        "${thr}" "${temp}" "${mhz}" \
+        "$(awk '/^pswpin|^pswpout/ {s += $2} END {print s + 0}' /proc/vmstat)" \
+        "$(cut -d' ' -f1 /proc/loadavg)" "${rapl:-0}"
+}
+# i915 render-engine busy ns summed over the OVMS process's DRM fds (sudo read).
+# The OVMS pid runs as another user, so its fd list is read with sudo too (a glob
+# over /proc/<pid>/fdinfo as this user expands to nothing). DRM fds only.
+sls() { if [ -n "${SUDO_PASS:-}" ]; then sudo -S -p '' ls -l "$1" <<< "${SUDO_PASS}" 2>/dev/null; else ls -l "$1" 2>/dev/null; fi; }
+gpu_busy() {
+    local pid=$1 fd s=0 v
+    for fd in $(sls "/proc/${pid}/fd" | awk '/\/dev\/dri\// {print $(NF - 2)}'); do
+        v=$(sread "/proc/${pid}/fdinfo/${fd}" | awk '/^drm-engine-render:/ {print $2}')
+        [ -z "${v}" ] || s=$(( s + v ))
+    done
+    echo "${s}"
+}
+# H22_SELFTEST=1: one host sample and one gpu_busy read must parse (bench_test runs this).
+if [ "${H22_SELFTEST:-0}" = 1 ]; then
+    host_sample | python3 -c 'import json, sys; json.loads(sys.stdin.read())' || exit 1
+    [[ "$(gpu_busy $$)" =~ ^[0-9]+$ ]] || exit 1
+    echo "selftest ok"; exit 0
+fi
+
 mkdir -p "${OUT}"
 export KUBECONFIG="${OUT}/kubeconfig"
 JSONL="${OUT}/run.jsonl"
@@ -61,28 +102,6 @@ if k3d cluster list -o json 2>/dev/null | grep -q '"name": *"k3dgpu-f-'; then
     log "ABORT: a k3dgpu-f-* cluster exists; one live experiment at a time"; exit 3
 fi
 
-sread() { if [ -n "${SUDO_PASS:-}" ]; then sudo -S -p '' cat "$1" <<< "${SUDO_PASS}" 2>/dev/null; else cat "$1" 2>/dev/null; fi; }
-# Host context for one request: throttle counts, package temp, iGPU freq, swap, load, RAPL.
-host_sample() {
-    local thr=0 f
-    for f in /sys/devices/system/cpu/cpu*/thermal_throttle/package_throttle_count; do
-        thr=$(( thr + $(cat "${f}" 2>/dev/null || echo 0) ))
-    done
-    printf '{"throttle":%s,"temp_mc":%s,"igpu_mhz":%s,"swap":"%s","load1":%s,"rapl_uj":%s}' \
-        "${thr}" "$(cat /sys/class/hwmon/hwmon*/temp1_input 2>/dev/null | sort -n | tail -1 || echo 0)" \
-        "$(cat /sys/class/drm/card*/gt/gt0/rps_act_freq_mhz 2>/dev/null | head -1 || echo 0)" \
-        "$(awk '/^pswpin|^pswpout/ {s += $2} END {print s + 0}' /proc/vmstat)" \
-        "$(cut -d' ' -f1 /proc/loadavg)" "$(sread /sys/class/powercap/intel-rapl:0/energy_uj || echo 0)"
-}
-# i915 render-engine busy ns summed over the OVMS process's DRM fds (sudo read).
-gpu_busy() {
-    local pid=$1 f s=0 v
-    for f in /proc/"${pid}"/fdinfo/*; do
-        v=$(sread "${f}" | awk '/^drm-engine-render:/ {print $2}')
-        [ -z "${v}" ] || s=$(( s + v ))
-    done
-    echo "${s}"
-}
 
 # graph <name> <device> [draft_device]: one LLM graph.pbtxt (OVMS docs/llm/reference.md template).
 graph() {
@@ -205,7 +224,12 @@ req() {  # req <round> <arm> <prompt index>
     python3 - "$1" "$2" "${rec}" "${before}" "${after}" "$(( b1 - b0 ))" <<'PY' >> "${JSONL}"
 import json, sys
 r, arm, rec, b, a, busy = sys.argv[1:]
-rec, b, a = json.loads(rec), json.loads(b), json.loads(a)
+try:
+    rec, b, a = json.loads(rec), json.loads(b), json.loads(a)
+except ValueError as exc:  # keep the raw strings: a parse slip must not lose the record
+    print(json.dumps(dict(kind="req", round=int(r), arm=arm, decode_tps=None, error=repr(exc),
+                          raw=[rec[:300], b, a])))
+    sys.exit(0)
 flag = a["throttle"] > b["throttle"] or int(a["swap"]) > int(b["swap"])
 print(json.dumps(dict(rec, kind="req", round=int(r), arm=arm, gpu_busy_ns=int(busy), flagged=flag,
                       rapl_uj=a["rapl_uj"] - b["rapl_uj"], temp_mc=a["temp_mc"], igpu_mhz=a["igpu_mhz"],
