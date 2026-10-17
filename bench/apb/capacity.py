@@ -259,14 +259,15 @@ def _engine(pod, containers):
         r = c.get("resources") or {}
         res.update(r.get("requests") or {})
         res.update(r.get("limits") or {})
-    keys = list(res)
-    if any(k == "nvidia.com/gpu" or k.startswith("nvidia.com/") for k in keys):
+    # Extended resource names are <domain>/<name>; match on the domain part.
+    domains = {k.split("/", 1)[0] for k in res if "/" in k}
+    if "nvidia.com" in domains:
         return "nvidia"
-    if any(k.startswith("gpu.intel.com/") for k in keys):
+    if "gpu.intel.com" in domains:
         return "igpu"
-    if any(k.startswith("npu.intel.com/") for k in keys):
+    if "npu.intel.com" in domains:
         return "npu"
-    if any(k.startswith("habana.ai/") for k in keys):
+    if "habana.ai" in domains:
         return "gaudi"
     dev = ((pod.get("metadata") or {}).get("annotations") or {}).get("k3d-gpu.io/agent-device")
     spec = pod.get("spec") or {}
