@@ -1943,6 +1943,29 @@ host; it puts every arm under the SAME controlled background load and records it
   expected to stretch under load; the ratio prediction is unchanged.
   Confidence = (pairs ≥ 4x + 1) / (pairs + 2) over cross-round ON/OFF pairs.
 
+**Amendment A3: first-token signal, phase S only** (written 2026-10-17T19:55Z,
+after run 2 was stopped in its second round and before any further round;
+predictions unchanged). Run 2 (`typical` load, lock 19:39:12Z-19:45:11Z,
+cluster and load removed) showed that the run-1 fix did not work: with tools in
+the request no content, reasoning or tool_calls delta ever arrives, so TTFT
+stayed null in all 13 scored requests of round 1. One extra request captured
+the raw OVMS stream (OFF pod, max_tokens 8): a chunk with
+`delta: {"role": "assistant", "content": null}` at 21.06 s, then only the
+`finish_reason: length` chunk at 21.84 s and usage `completion_tokens: 8`. The
+tool parser holds the 8-token reply; the role chunk is sent once the first
+token is generated. Run 2 also showed the burst's own load in the next round's
+windows: 1-min load 14.4 (ON, round 1) vs 24.0 (OFF, after the ON burst), with
+busy, package W and swap close. Changes:
+- TTFT = arrival of the first SSE chunk that carries a choice (the role
+  chunk). The "empty output" guardrail reads `usage.completion_tokens` (0 =
+  empty) because the parser holds the text.
+- Phase B is not run, so M is not measured again: it keeps the run-1
+  exploratory reading and stays INCONCLUSIVE. This keeps the burst out of the
+  next round's load windows and fits 6 rounds in a level's 20 min.
+- 30 s idle after the pod is Ready, then the two 10 s load windows.
+- Everything else in A2 stands: levels, ABAB order, seeds, n, matching rule,
+  and every T prediction and threshold.
+
 ### H25 run (i9-13900T, 2026-10-17)
 
 ```text

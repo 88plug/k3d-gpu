@@ -89,18 +89,21 @@ def request(url, system, user, tools, max_tokens=8):
                 ev = json.loads(line[5:])
                 usage = ev.get("usage") or usage
                 for ch in ev.get("choices") or []:
-                    d = ch.get("delta") or {}
-                    # With tools in the request the reply can stream as tool_calls
-                    # deltas only (H25 run 1: every request had empty content).
-                    piece = ((d.get("content") or "") + (d.get("reasoning_content") or "")
-                             + "".join(json.dumps(tc) for tc in d.get("tool_calls") or []))
-                    if piece and ttft is None:
+                    # TTFT = the first chunk that carries a choice (amendment A3).
+                    # OVMS sends it, a role delta with content null, once the first
+                    # token is generated; with tools in the request its tool parser
+                    # holds the 8-token reply, so no content or tool_calls delta
+                    # ever arrives (H25 runs 1 and 2).
+                    if ttft is None:
                         ttft = time.monotonic() - t0
-                    text += piece
+                    d = ch.get("delta") or {}
+                    text += ((d.get("content") or "") + (d.get("reasoning_content") or "")
+                             + "".join(json.dumps(tc) for tc in d.get("tool_calls") or []))
     except Exception as e:  # recorded, scored as a guardrail breach
         err = repr(e)
     return {"ttft": ttft, "total": time.monotonic() - t0, "text_len": len(text),
-            "prompt_tokens": (usage or {}).get("prompt_tokens"), "error": err}
+            "prompt_tokens": (usage or {}).get("prompt_tokens"),
+            "completion_tokens": (usage or {}).get("completion_tokens"), "error": err}
 
 
 def mem_sampler(cmd, stop, out):
@@ -119,6 +122,10 @@ def do_round(a):
     rec = {"seed": a.seed, "arm": a.arm, "warmup": request(a.url, None, p["warmup"], None, 4)}
     rec["S"] = [dict(request(a.url, p["system"], u, p["tools"]), agent=f"a{n + 1}") for n, u in enumerate(p["a"])]
     rec["S"].append(dict(request(a.url, p["control_system"], p["c"], p["tools"]), agent="c"))
+    if not a.burst:  # amendment A3: phase B (M) not run
+        rec["B"], rec["mem"], rec["drss_per_agent_mib"], rec["swap_in_burst"] = [], [], None, False
+        _finish(a, rec)
+        return
     samples, stop = [], threading.Event()
     th = threading.Thread(target=mem_sampler, args=(a.mem_cmd, stop, samples), daemon=True)
     th.start()
@@ -144,6 +151,10 @@ def do_round(a):
     rec["mem"] = samples
     rec["drss_per_agent_mib"] = ((max(peak) - max(pre)) / 6 / 2**20) if pre and peak else None
     rec["swap_in_burst"] = any(s.get("swap", 0) > 0 for s in samples)
+    _finish(a, rec)
+
+
+def _finish(a, rec):
     with open(a.out, "w") as f:
         json.dump(rec, f)
     print(json.dumps({"arm": a.arm, "seed": a.seed,
@@ -156,7 +167,9 @@ def void_reasons(rec, tokens):
     reqs = rec["S"] + rec["B"]
     if sum(1 for r in reqs if r["error"] or r["ttft"] is None) > 0.02 * len(reqs):
         why.append("errors or null TTFT")
-    if any(r["text_len"] == 0 for r in reqs if not r["error"]):
+    # Generated tokens: usage.completion_tokens when recorded (A3; the tool parser
+    # holds the text), else the streamed text.
+    if any((r.get("completion_tokens") or r["text_len"]) == 0 for r in reqs if not r["error"]):
         why.append("empty output")
     pts = {r["prompt_tokens"] for r in rec["S"][:6] + rec["B"]}
     if len(pts) != 1:
@@ -245,6 +258,8 @@ def _score(files):
         out["M"] = {"drss_per_agent_mib": {k: statistics.median(v) for k, v in m.items()}, "on_over_off": mr,
                     "verdict": "SUPPORTED (<= 0.5x)" if mr <= 0.5 else "no memory benefit (>= 0.8x)" if mr >= 0.8
                     else "INCONCLUSIVE (0.5x-0.8x)"}
+    elif not any(r["B"] for r in rounds):
+        out["M"] = "INCONCLUSIVE (not measured: phase B not run, amendment A3)"
     else:
         out["M"] = "INCONCLUSIVE (no swap-free burst in an arm)"
     return out
@@ -259,7 +274,8 @@ def main():
     r.add_argument("--seed", type=int, required=True)
     r.add_argument("--url", required=True)
     r.add_argument("--arm", choices=["ON", "OFF"], required=True)
-    r.add_argument("--mem-cmd", required=True)
+    r.add_argument("--mem-cmd", default="")
+    r.add_argument("--no-burst", dest="burst", action="store_false", help="skip phase B (amendment A3)")
     r.add_argument("--out", required=True)
     s = sub.add_parser("score")
     s.add_argument("--load", help="load.jsonl from bench/load/load.py sample, tagged by arm")

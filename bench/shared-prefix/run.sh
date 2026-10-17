@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# H25 live run (EXPERIMENTS.md, "H25 pre-registration", amendment A2):
+# H25 live run (EXPERIMENTS.md, "H25 pre-registration", amendments A2, A3):
 # cross-agent shared prefix KV on one OVMS CPU server, arm ON (shipping default)
 # vs arm OFF (--enable_prefix_caching=false on the pull container), interleaved
 # ON OFF ON OFF ON OFF under the same controlled background load
 # (bench/load/load.py on the E-cores), a fresh pod and a new prefix seed every
-# round. Per level: 20 min cap (no new round after 18:30 of the level; the first
-# level includes cluster setup). The cluster and the load containers are
-# removed on any exit. Run it under the shared live lock:
+# round, phase S only (A3). Per level: 20 min cap (no new round after 18:30 of
+# the level; the first level includes cluster setup). The cluster and the load
+# containers are removed on any exit. Run it under the shared live lock:
 #
 #   flock -w 14400 "$LOCK" bench/shared-prefix/run.sh
 #
@@ -101,6 +101,7 @@ for i in "${!ARMS[@]}"; do
         || { echo "${level} round ${r} (${arm}) void: pod not ready"; continue; }
     want=true; [ "${arm}" = ON ] || want=false
     got=$(kubectl -n "${NS}" exec deploy/ovms -c ovms -- grep -o 'enable_prefix_caching: *[a-z]*' "${GRAPH}" | awk '{print $2}')
+    sleep 30  # A3: let the previous round's prefill decay out of the 1-min load
     "${LOAD[@]}" sample --seconds 10 --windows 2 --tag "${arm}" --level "${level}" --out "${D}/load.jsonl"
     echo "level=${level} round=${r} arm=${arm} seed=${seed} graph_prefix_caching=${got:-missing} load1=$(cut -d' ' -f1 /proc/loadavg) swap_used_mib=$(free -m | awk '/^Swap/ {print $3}') containers=$(docker ps -q | wc -l)"
     e0=$(rapl); th0=$(throttles)
@@ -109,7 +110,7 @@ for i in "${!ARMS[@]}"; do
     sleep 2
     timeout "$(left)" python3 "${P}" round --seed "${seed}" --arm "${arm}" \
         --url http://127.0.0.1:18025/v3/chat/completions \
-        --mem-cmd "kubectl -n ${NS} exec deploy/ovms -c ovms -- sh -c 'cat /sys/fs/cgroup/memory.current /sys/fs/cgroup/memory.swap.current'" \
+        --no-burst \
         --out "${D}/round-${r}.json"
     e1=$(rapl); th1=$(throttles)
     python3 - "${D}/round-${r}.json" "${got}" "${want}" "${e0}" "${e1}" "${th0}" "${th1}" <<'EOF'
