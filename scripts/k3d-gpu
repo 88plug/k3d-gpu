@@ -5304,7 +5304,7 @@ hs_checks() {
         fi
     fi
     # Kernel side: parts newer than the kernel's default xe support.
-    local notes=""
+    local notes="" opts=""
     for e in ${HS_INTEL_GPUS[@]+"${HS_INTEL_GPUS[@]}"}; do
         is_hs_target intel || break
         read -r id drv <<< "${e}"
@@ -5324,10 +5324,12 @@ hs_checks() {
         elif [ -n "${mink}" ] && [ -z "${drv}" ] && kernel_lt "${mink}" && [ "${fw#i915/}" != "${fw}" ]; then
             # i915 is the default driver for this part; xe does not support it on these kernels.
             notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs the boot option i915.force_probe=${id#0x} (or kernel ${mink}+)"$'\n'
+            opts+=" i915.force_probe=${id#0x}"
         elif [ -z "${drv}" ] && intel_gpu_no_force_probe "${id}" && kernel_lt "${mink}"; then
             notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs kernel ${mink}+ (running $(kernel_release)); force_probe cannot bind it on older kernels"$'\n'
         elif [ -z "${mink}" ] || { [ -z "${drv}" ] && kernel_lt "${mink}"; }; then
             notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs the boot options xe.force_probe=${id#0x} i915.force_probe=!${id#0x}${mink:+ (or kernel ${mink}+)}"$'\n'
+            opts+=" xe.force_probe=${id#0x} i915.force_probe=!${id#0x}"
         elif kernel_lt "${mink}"; then
             notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) is supported by default from kernel ${mink} (running $(kernel_release))"$'\n'
         fi
@@ -5336,7 +5338,8 @@ hs_checks() {
         info "Kernel (printed only; --apply never changes boot options)..."
         printf '%s' "${notes}"
         case "${HS_DISTRO}" in
-            fedora) echo "  add them: sudo grubby --update-kernel=ALL --args='<options>'" ;;
+            fedora) if [ -n "${opts}" ]; then echo "  add them: sudo grubby --update-kernel=ALL --args='${opts# }'"
+                    else echo "  or move to a newer kernel: sudo dnf upgrade --refresh, then reboot"; fi ;;
             ubuntu-*) echo "  add them to GRUB_CMDLINE_LINUX_DEFAULT in /etc/default/grub, then: sudo update-grub" ;;
             arch|manjaro) echo "  add them to GRUB_CMDLINE_LINUX_DEFAULT in /etc/default/grub, then: sudo grub-mkconfig -o /boot/grub/grub.cfg (systemd-boot: the options line in /boot/loader/entries/*.conf)" ;;
         esac
