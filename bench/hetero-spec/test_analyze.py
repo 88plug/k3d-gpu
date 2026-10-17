@@ -8,7 +8,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import analyze  # noqa: E402
 
-P0_OK = {"kind": "p0", "draft_loaded": True, "gpu_busy_A": 0, "gpu_busy_C": 1000}
+P0_OK = {"kind": "p0", "ready": True, "gpu_busy_A": 0, "gpu_busy_C": 1000}
 
 
 def run(a, b, c, n=8, p0=P0_OK, flag=()):
@@ -53,8 +53,34 @@ class Verdicts(unittest.TestCase):
         self.assertEqual(v["verdict"], "REFUTED")
         self.assertIn("P0", v["outcome"])
 
-    def test_p0_missing_is_fail(self):
-        self.assertIn("P0", run(15.7, 19.0, 25.0, p0={})["outcome"])
+    def test_p0_missing_is_blocked(self):
+        v = run(15.7, 19.0, 25.0, p0={})
+        self.assertEqual(v["verdict"], "INCONCLUSIVE")
+        self.assertIn("BLOCKED", v["outcome"])
+
+    def test_not_ready_is_inconclusive_not_refuted(self):
+        v = run(15.7, 19.0, 12.8, p0={"kind": "p0", "ready": False, "gpu_busy_A": 0, "gpu_busy_C": 0})
+        self.assertEqual(v["verdict"], "INCONCLUSIVE")
+
+    def test_gpu_busy_in_a_is_uncontrolled(self):
+        v = run(15.7, 19.0, 12.8, p0=dict(P0_OK, gpu_busy_A=5_000_000))
+        self.assertEqual(v["verdict"], "INCONCLUSIVE")
+        self.assertIn("uncontrolled", v["outcome"])
+
+    def test_bad_token_count_dropped(self):
+        recs = [P0_OK]
+        for i in range(8):
+            for arm, v in (("A", 15.7), ("B", 19.0), ("C", 12.8)):
+                recs.append({"kind": "req", "round": i + 1, "arm": arm, "decode_tps": v,
+                             "tokens_ok": not (arm == "C" and i == 0)})
+        out = analyze.verdict(recs)
+        self.assertEqual(out["dropped_requests"], 1)
+        self.assertEqual(out["n_rounds"], 8)
+        self.assertEqual(out["c_wins"] + out["c_losses"], 7)
+
+    def test_arm_spread(self):
+        v = run(15.7, 19.0, [12.0, 13.0] * 4)
+        self.assertEqual(v["tps_C"], {"median": 12.5, "min": 12.0, "max": 13.0})
 
     def test_calibration_out(self):
         self.assertEqual(run(11.0, 19.0, 12.8)["verdict"], "INCONCLUSIVE")

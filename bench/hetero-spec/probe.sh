@@ -2,8 +2,10 @@
 # H22 hetero-spec live probe (EXPERIMENTS.md, "H22 pre-registration").
 # One OVMS 2026.4.1 pod, five graphs: A target alone (CPU), B Fast Draft on CPU,
 # C Fast Draft on the iGPU (draft_device GPU), DP and DG the draft alone on CPU
-# and GPU. n=8 rounds, arm order rotated per round (Latin square), greedy,
-# 256 tokens, ignore_eos, streamed, concurrency 1. Writes JSONL and runs analyze.py.
+# and GPU. n=8 rounds, arm order cyclically rotated per round, greedy, 256 tokens,
+# ignore_eos, streamed, concurrency 1. Writes JSONL and runs analyze.py.
+# Models are pre-staged outside the lock (H22_MODELS, OVMS --pull layout) and copied
+# into the k3d node containers, so a slow download cannot eat the lock window.
 #
 # Run it under the box-wide live lock, with no k3dgpu-f-* cluster present:
 #   flock -w 10800 <scratchpad>/live.lock bench/hetero-spec/probe.sh [outdir]
@@ -21,7 +23,8 @@ NS=hetero-spec
 ROUNDS=${H22_ROUNDS:-8}
 HARD_S=${H22_HARD_S:-1200}     # 20 min wall budget under the lock
 SCORE_S=${H22_SCORE_S:-1080}   # stop scoring at 18:00
-READY_S=${H22_READY_S:-360}
+READY_S=${H22_READY_S:-240}
+MODELS=${H22_MODELS:-${HOME}/h22-models}
 PORT=${H22_PORT:-18022}
 START=$(date +%s)
 # Pinned in scripts/k3d-gpu (AGENT_OVMS_IMAGE): OVMS 2026.4.1.
@@ -46,8 +49,13 @@ cleanup() {
 }
 trap cleanup EXIT
 # Hard wall: the whole probe ends at HARD_S even if a step hangs.
-( sleep "${HARD_S}"; log "HARD STOP at ${HARD_S}s"; kill -TERM $$ ) & WATCHDOG=$!
+# Every slow child also runs under `timeout`, so the deferred TERM lands within ~2.5 min.
+( sleep "${HARD_S}"; log "HARD STOP at ${HARD_S}s"; kill -TERM $$; pkill -TERM -P $$ ) & WATCHDOG=$!
 trap 'kill ${WATCHDOG} 2>/dev/null; cleanup' EXIT
+trap 'exit 124' TERM
+for m in "${TARGET}" "${DRAFT}"; do
+    [ -f "${MODELS}/${m}/openvino_model.xml" ] || { log "ABORT: ${MODELS}/${m} not pre-staged"; exit 2; }
+done
 
 if k3d cluster list -o json 2>/dev/null | grep -q '"name": *"k3dgpu-f-'; then
     log "ABORT: a k3dgpu-f-* cluster exists; one live experiment at a time"; exit 3
@@ -143,28 +151,20 @@ metadata:
   labels: {k3d-gpu.io/cores: performance}
 spec:
   restartPolicy: Never
-  initContainers:
 EOF
-    for g in "${TARGET}" "${DRAFT}"; do
-        cat <<EOF
-    - name: pull-$(tr 'A-Z./' 'a-z--' <<< "${g##*/}")
-      image: ${OVMS_IMAGE}
-      args: [--pull, --source_model=${g}, --model_repository_path=/models, --task=text_generation]
-      volumeMounts: [{name: models, mountPath: /models}]
-EOF
-    done
     cat <<EOF
   containers:
     - name: ovms
       image: ${OVMS_IMAGE}
-      args: [--rest_port=8000, --config_path=/graphs/config.json, --cache_dir=/models/.ov_cache, --log_level=DEBUG]
+      args: [--rest_port=8000, --config_path=/graphs/config.json, --cache_dir=/cache, --log_level=INFO]
       readinessProbe: {httpGet: {path: /v2/health/ready, port: 8000}, periodSeconds: 5}
       resources:
         requests: {cpu: "16", memory: 10Gi}
         limits: {gpu.intel.com/i915: 1}
-      volumeMounts: [{name: models, mountPath: /models}, {name: graphs, mountPath: /graphs}]
+      volumeMounts: [{name: models, mountPath: /models, readOnly: true}, {name: cache, mountPath: /cache}, {name: graphs, mountPath: /graphs}]
   volumes:
-    - {name: models, emptyDir: {}}
+    - {name: models, hostPath: {path: /var/lib/h22-models, type: Directory}}
+    - {name: cache, emptyDir: {}}
     - {name: graphs, configMap: {name: graphs}}
 EOF
 }
@@ -172,24 +172,35 @@ graph_entry() { printf '  %s.pbtxt: |\n' "$1"; graph "$@" | sed 's/^/    /'; }
 
 log "H22 probe -> ${OUT} (rounds=${ROUNDS}, hard=${HARD_S}s)"
 sha256sum "${HERE}/prompts.jsonl" | tee -a "${LOG}"
-K3D_GPU_CLUSTER=${CLUSTER} K3D_GPU_VENDORS=intel,hybrid "${ROOT}/scripts/k3d-gpu" up >>"${LOG}" 2>&1 \
+K3D_GPU_CLUSTER=${CLUSTER} K3D_GPU_VENDORS=intel,hybrid timeout 300 "${ROOT}/scripts/k3d-gpu" up >>"${LOG}" 2>&1 \
     || { log "ABORT: k3d-gpu up failed"; exit 4; }
+# hostPath on k3d is the node container's filesystem: copy the pre-staged models in.
+for node in $(docker ps --filter "label=k3d.cluster=${CLUSTER}" --format '{{.Names}}'); do
+    case "${node}" in *-serverlb|*-tools) continue ;; esac
+    timeout 180 docker cp "${MODELS}/." "${node}:/var/lib/h22-models" >>"${LOG}" 2>&1 \
+        || { log "ABORT: model copy into ${node} failed"; exit 4; }
+done
+log "models staged"
 manifest > "${OUT}/manifest.yaml"
-kubectl apply -f "${OUT}/manifest.yaml" >>"${LOG}" 2>&1 || { log "ABORT: apply failed"; exit 4; }
+timeout 60 kubectl apply -f "${OUT}/manifest.yaml" >>"${LOG}" 2>&1 || { log "ABORT: apply failed"; exit 4; }
 if ! kubectl -n "${NS}" wait --for=condition=Ready pod/ovms --timeout="${READY_S}s" >>"${LOG}" 2>&1; then
     kubectl -n "${NS}" logs ovms --tail=80 >>"${LOG}" 2>&1
-    echo '{"kind":"p0","draft_loaded":false,"gpu_busy_A":0,"gpu_busy_C":0,"why":"not ready"}' >> "${JSONL}"
-    log "ABORT: server not Ready in ${READY_S}s (P0 fail)"; python3 "${HERE}/analyze.py" "${JSONL}" | tee "${OUT}/verdict.json"; exit 5
+    echo '{"kind":"p0","ready":false,"gpu_busy_A":0,"gpu_busy_C":0,"why":"not ready"}' >> "${JSONL}"
+    log "ABORT: server not Ready in ${READY_S}s (BLOCKED)"; python3 "${HERE}/analyze.py" "${JSONL}" | tee "${OUT}/verdict.json"; exit 5
 fi
 kubectl -n "${NS}" port-forward pod/ovms "${PORT}:8000" >>"${LOG}" 2>&1 & PF_PID=$!
 sleep 3
 PID=$(pgrep -n -f -- '--config_path=/graphs/config.json' || true)
+if [ -z "${PID}" ]; then  # no pid means no GPU-busy evidence: BLOCKED, not a refutation
+    echo '{"kind":"p0","ready":false,"gpu_busy_A":0,"gpu_busy_C":0,"why":"ovms pid not found"}' >> "${JSONL}"
+    log "ABORT: OVMS pid not found (BLOCKED)"; python3 "${HERE}/analyze.py" "${JSONL}" | tee "${OUT}/verdict.json"; exit 5
+fi
 kubectl -n "${NS}" logs ovms > "${OUT}/ovms.log" 2>&1
 
 req() {  # req <round> <arm> <prompt index>
     local before after b0 b1 rec
     before=$(host_sample); b0=$( [ -n "${PID}" ] && gpu_busy "${PID}" || echo 0 )
-    rec=$(python3 "${HERE}/req.py" "http://127.0.0.1:${PORT}" "${GRAPH[$2]}" "${HERE}/prompts.jsonl" "$3")
+    rec=$(timeout 150 python3 "${HERE}/req.py" "http://127.0.0.1:${PORT}" "${GRAPH[$2]}" "${HERE}/prompts.jsonl" "$3")
     b1=$( [ -n "${PID}" ] && gpu_busy "${PID}" || echo 0 ); after=$(host_sample)
     python3 - "$1" "$2" "${rec}" "${before}" "${after}" "$(( b1 - b0 ))" <<'PY' >> "${JSONL}"
 import json, sys
@@ -203,16 +214,15 @@ PY
 }
 
 # P0 gate: GPU busy during A must be ~0, during C > 0 (else silent CPU fallback).
-python3 "${HERE}/req.py" "http://127.0.0.1:${PORT}" a-4b-cpu "${HERE}/prompts.jsonl" 0 >/dev/null  # warm A
-ba0=$(gpu_busy "${PID}"); python3 "${HERE}/req.py" "http://127.0.0.1:${PORT}" a-4b-cpu "${HERE}/prompts.jsonl" 0 >/dev/null; ba1=$(gpu_busy "${PID}")
+timeout 150 python3 "${HERE}/req.py" "http://127.0.0.1:${PORT}" a-4b-cpu "${HERE}/prompts.jsonl" 0 >/dev/null  # warm A
+ba0=$(gpu_busy "${PID}"); timeout 150 python3 "${HERE}/req.py" "http://127.0.0.1:${PORT}" a-4b-cpu "${HERE}/prompts.jsonl" 0 >/dev/null; ba1=$(gpu_busy "${PID}")
 for g in b-spec-cpu c-spec-igpu dp-06b-cpu dg-06b-gpu; do
-    python3 "${HERE}/req.py" "http://127.0.0.1:${PORT}" "${g}" "${HERE}/prompts.jsonl" 0 >/dev/null  # warm-up, not scored
+    timeout 150 python3 "${HERE}/req.py" "http://127.0.0.1:${PORT}" "${g}" "${HERE}/prompts.jsonl" 0 >/dev/null  # warm-up, not scored
 done
-bc0=$(gpu_busy "${PID}"); python3 "${HERE}/req.py" "http://127.0.0.1:${PORT}" c-spec-igpu "${HERE}/prompts.jsonl" 0 >/dev/null; bc1=$(gpu_busy "${PID}")
-loaded=false; grep -qi 'draft' "${OUT}/ovms.log" && loaded=true
-printf '{"kind":"p0","draft_loaded":%s,"gpu_busy_A":%s,"gpu_busy_C":%s,"pid":"%s"}\n' \
-    "${loaded}" "$(( ba1 - ba0 ))" "$(( bc1 - bc0 ))" "${PID}" >> "${JSONL}"
-log "P0: draft_loaded=${loaded} gpu_busy A=$(( ba1 - ba0 )) C=$(( bc1 - bc0 ))"
+bc0=$(gpu_busy "${PID}"); timeout 150 python3 "${HERE}/req.py" "http://127.0.0.1:${PORT}" c-spec-igpu "${HERE}/prompts.jsonl" 0 >/dev/null; bc1=$(gpu_busy "${PID}")
+printf '{"kind":"p0","ready":true,"gpu_busy_A":%s,"gpu_busy_C":%s,"pid":"%s"}\n' \
+    "$(( ba1 - ba0 ))" "$(( bc1 - bc0 ))" "${PID}" >> "${JSONL}"
+log "P0: gpu_busy A=$(( ba1 - ba0 )) C=$(( bc1 - bc0 ))"
 
 for (( r = 0; r < ROUNDS; r++ )); do
     [ "$(elapsed)" -lt "${SCORE_S}" ] || { log "18:00 reached: partial, ${r}/${ROUNDS} rounds"; break; }

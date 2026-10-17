@@ -3,7 +3,10 @@
 
 Input: one JSON object per line from bench/hetero-spec/probe.sh, e.g.
   {"kind": "req", "round": 1, "arm": "C", "decode_tps": 12.8, "flagged": false}
-  {"kind": "p0", "draft_loaded": true, "gpu_busy_A": 0, "gpu_busy_C": 51234}
+  {"kind": "p0", "ready": true, "gpu_busy_A": 0, "gpu_busy_C": 51234}
+P0 rests only on the i915 render-busy delta of the OVMS pid: ~0 in A, > 0 in C.
+A server that never got Ready is BLOCKED (mechanism untested): INCONCLUSIVE.
+Requests whose usage.completion_tokens != 256 are dropped (count unknown).
 Arms: A (target alone), B (P-core draft), C (iGPU draft), DP, DG (draft alone).
 Output: one JSON verdict on stdout. Stdlib only. Usage: analyze.py run.jsonl
 """
@@ -19,6 +22,7 @@ CALIB_TOL = 0.15
 SUPPORT_R = 1.05
 REFUTE_R = 0.95
 SUPPORT_CA = 1.10
+GPU_BUSY_A_MAX_NS = 1_000_000   # "A ~ 0": under 1 ms of render-engine time per request
 
 
 def sign_test_p(wins, n):
@@ -44,7 +48,9 @@ def paired(rounds, num, den):
 
 def verdict(records):
     p0 = next((r for r in records if r.get("kind") == "p0"), {})
-    reqs = [r for r in records if r.get("kind") == "req" and r.get("decode_tps")]
+    reqs = [r for r in records if r.get("kind") == "req" and r.get("decode_tps")
+            and r.get("tokens_ok", True)]
+    dropped = sum(1 for r in records if r.get("kind") == "req") - len(reqs)
     by_round = {}
     flagged = set()
     for r in reqs:
@@ -52,10 +58,22 @@ def verdict(records):
         if r.get("flagged"):
             flagged.add(r["round"])
     rounds = [by_round[k] for k in sorted(by_round)]
-    out = {"n_rounds": len(rounds), "flagged_rounds": sorted(flagged)}
+    out = {"n_rounds": len(rounds), "flagged_rounds": sorted(flagged), "dropped_requests": dropped}
+    for arm in ("A", "B", "C", "DP", "DG"):
+        xs = sorted(r[arm] for r in rounds if arm in r)
+        if xs:
+            out["tps_" + arm] = {"median": statistics.median(xs), "min": xs[0], "max": xs[-1]}
 
-    if not p0.get("draft_loaded", False) or p0.get("gpu_busy_C", 0) <= 0:
-        out.update(verdict="REFUTED", outcome="P0 fail: GPU draft did not load or no GPU busy in C",
+    if not p0.get("ready", False):
+        out.update(verdict="INCONCLUSIVE", outcome="BLOCKED: server not Ready (infra); mechanism untested",
+                   confidence=None)
+        return out
+    if p0.get("gpu_busy_A", 0) >= GPU_BUSY_A_MAX_NS:
+        out.update(verdict="INCONCLUSIVE", outcome="P0 uncontrolled: GPU busy during A request",
+                   confidence=None)
+        return out
+    if p0.get("gpu_busy_C", 0) <= 0:
+        out.update(verdict="REFUTED", outcome="P0 fail: no GPU busy in C (draft not on the iGPU)",
                    confidence=None)
         return out
     a = [r["A"] for r in rounds if "A" in r]
