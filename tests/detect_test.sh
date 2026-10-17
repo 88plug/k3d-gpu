@@ -4245,7 +4245,20 @@ doctor_says "K3D_GPU_NPU_PLUGIN skips the bundled id check" "${r}" 'does not lis
 doctor_says "K3D_GPU_NPU_PLUGIN gets a note instead" "${r}" 'note: K3D_GPU_NPU_PLUGIN=/opt/newer-npu-plugin\.yml replaces the bundled plugin' "" \
     K3D_GPU_NPU_PLUGIN=/opt/newer-npu-plugin.yml
 # The stub cluster advertises no npu.intel.com/accel, so up exits non-zero after
-# k3d create; the recorded create arguments are what these check.
+# k3d create; the recorded create arguments are what these check. Later sections
+# replace the up_says stubs, so put back the k3d one that records its arguments
+# and a kubectl that accepts everything.
+cat > "${USTUB}/k3d" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$@" > "${STUB_K3D_ARGS}"
+EOF
+cat > "${USTUB}/kubectl" <<'EOF'
+#!/bin/sh
+case "$*" in *"get nodes -l"*) echo node/k3d-stub-server-0 ;; esac
+exit 0
+EOF
+cp "${STUB_BIN}/docker" "${USTUB}/docker"
+chmod +x "${USTUB}"/*
 up_says "up labels an unlisted NPU when K3D_GPU_VENDORS=npu forces it" fail \
     '^--k3s-node-label=intel\.feature\.node\.kubernetes\.io/npu=true' "" K3D_GPU_SYSROOT="${r}" K3D_GPU_VENDORS=npu
 up_says "up labels an unlisted NPU under K3D_GPU_NPU_PLUGIN" fail \
