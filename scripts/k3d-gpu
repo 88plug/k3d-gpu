@@ -4980,7 +4980,6 @@ sandbox_up() {
     for f in "${SANDBOX_MANIFEST}" "${SANDBOX_PROFILE_MANIFEST}"; do
         [ -f "${f}" ] || err "${f} not found — set K3D_GPU_SHARE, K3D_GPU_SANDBOX or K3D_GPU_SANDBOX_PROFILE"
     done
-    profile=$(cat "${SANDBOX_PROFILE_MANIFEST}")
     if [ -n "${REMOTE}" ]; then
         # Remote: egress is the endpoint's host:port only (no DNS; hostAliases pin
         # the name), and the sandbox reads the endpoint from its own Secret copy.
@@ -4998,7 +4997,11 @@ sandbox_up() {
     # The Secret exists before the warm pool's pods, which read it at start.
     [ -z "${REMOTE}" ] || remote_secret_apply "${SANDBOX_NS}" "${base}" "${model}"
     info "Applying the E-core sandbox profile (${SANDBOX_PROFILE_MANIFEST})..."
-    kubectl apply -f - <<< "${profile}"
+    if [ -n "${REMOTE}" ]; then
+        kubectl apply -f - <<< "${profile}"
+    else
+        kubectl apply -f "${SANDBOX_PROFILE_MANIFEST}"
+    fi
     if [ -z "$(kubectl get nodes -l "${HYBRID_LABEL}" -o name 2>/dev/null || true)" ]; then
         warn "no node labelled ${HYBRID_LABEL}: k3d-gpu.io/cores=efficient does nothing here and sandboxes use every CPU"
     fi
@@ -5074,7 +5077,7 @@ cmd_sandbox() {
         up)     sandbox_up     ;;
         down)   sandbox_down   ;;
         status) sandbox_status ;;
-        *) err "usage: k3d-gpu sandbox up [--remote [URL] [--api-key-file F]] | down | status" ;;
+        *) err "usage: k3d-gpu sandbox up|down|status (up --remote [URL] [--api-key-file F]: egress only to that endpoint)" ;;
     esac
 }
 
