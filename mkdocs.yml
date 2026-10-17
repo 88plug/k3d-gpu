@@ -21,6 +21,7 @@ hooks:
 nav:
   - Home: index.md
   - Intel platforms: intel.md
+  - Platform matrix: platforms.md
   - Operations:
       - Telemetry: telemetry.md
       - Failure modes: failure-modes.md
@@ -31,6 +32,8 @@ nav:
       - GPUStack: integrations/gpustack.md
   - Design:
       - Speculative decoding: design/speculative-decoding.md
+      - Moat: moat-design.md
+      - Console: console-design.md
   - Evidence:
       - Intel capability map: intel-capability-map.md
       - Benchmark landscape: benchmark-landscape.md
