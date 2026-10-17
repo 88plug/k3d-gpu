@@ -414,6 +414,23 @@ r=$(newroot npu-7d1d-unknown)
 kernel "${r}" 6.14.0
 pci "${r}" 0000:00:0b.0 0x8086 0x7d1d intel_vpu; accel "${r}" 0000:00:0b.0 0
 doctor_says "NPU 0x7d1d with no CPU model names both platforms" "${r}" 'ok: Intel NPU Meteor Lake / Arrow Lake-H \(0x7d1d\)'
+
+# Newest-ISA CPU models: families 18 (Nova Lake) and 19 (Diamond Rapids) are Intel;
+# their ISA is reported as a gcc -march prediction, never as a cpuinfo read.
+for c in "19 1|Diamond Rapids-X|AMX-FP8" "18 1|Nova Lake|no AMX" "18 3|Nova Lake-L|APX_F" "6 173|Granite Rapids-X|AVX10\.1" "6 174|Granite Rapids-D|AMX-COMPLEX"; do
+    IFS='|' read -r fm want isa <<< "${c}"
+    r=$(newroot "isa-${fm// /-}")
+    cpuinfo "${r}" "${fm% *}" "${fm#* }" "fpu avx512f"
+    doctor_says "family/model ${fm} is ${want}, ISA predicted not measured" "${r}" "info: ${want} \\(family ${fm% *}, model ${fm#* }\\): ISA predicted by gcc PTA_[A-Z_]+, not read from CPUID: .*${isa}"
+done
+r=$(newroot isa-unknown)
+cpuinfo "${r}" 6 183 "fpu"
+doctor_says "Raptor Lake (6/183) gets no ISA prediction" "${r}" 'ISA predicted by gcc' negate
+# Cancelled AMX extensions never become labels even if a kernel prints them.
+r=$(newroot amx-cancelled)
+cpuinfo "${r}" 19 1 "fpu amx_tile amx_tf32 amx_transpose amx_int8"
+doctor_says "amx_tf32 and amx_transpose are never reported" "${r}" 'ok: AMX \(amx_int8 amx_tile\)'
+doctor_says "amx_tf32 never named as an AMX flag" "${r}" 'ok: AMX \([^)]*tf32' negate
 r=$(newroot npu-7d1d-other-family)
 kernel "${r}" 6.14.0
 cpuinfo "${r}" 18 197 "fpu"

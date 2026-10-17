@@ -1,0 +1,5 @@
+dsa dsa.intel.com/*
+iaa iaa.intel.com/*
+amx feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true feature.node.kubernetes.io/cpu-cpuid.AMXFP16=true feature.node.kubernetes.io/cpu-cpuid.AMXINT8=true feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true
+numa k3d-gpu.io/numa-nodes=6 k3d-gpu.io/snc=3
+exit=0
