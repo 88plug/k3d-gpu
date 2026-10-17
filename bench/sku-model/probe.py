@@ -118,6 +118,15 @@ def rapl_uj():
     return int(read("/sys/class/powercap/intel-rapl:0/energy_uj", "0") or 0)
 
 
+def rapl_max_uj():
+    return int(read("/sys/class/powercap/intel-rapl:0/max_energy_range_uj", "0") or 0)
+
+
+def rapl_delta_uj(e0, e1, top):
+    """Counter delta; energy_uj wraps at max_energy_range_uj."""
+    return e1 - e0 if e1 >= e0 or not top else e1 + top - e0
+
+
 def throttle_count():
     # One package counter, exposed identically under every cpu; read it once.
     return int(read("/sys/devices/system/cpu/cpu0/thermal_throttle/package_throttle_count", "0") or 0)
@@ -210,7 +219,9 @@ def chat(port, prompt, max_tokens, ignore_eos=True):
             if ev.get("usage"):
                 usage = ev["usage"]
             for ch in ev.get("choices", []):
-                if (ch.get("delta") or {}).get("content"):
+                d = ch.get("delta") or {}
+                # OVMS streams Qwen3 thinking as reasoning_content, not content.
+                if d.get("content") or d.get("reasoning_content"):
                     now = time.perf_counter()
                     ttft = ttft if ttft is not None else now - t0
                     t_last = now
@@ -232,7 +243,7 @@ def decode_prompt():
 
 
 def prefill_prompt():
-    words = " ".join(f"w{secrets.randbelow(10**6)}" for _ in range(420))
+    words = " ".join(f"w{secrets.randbelow(10**6)}" for _ in range(72))  # ~7 tokens per word -> ~512
     return f"{nonce()} Summarise these tokens in one word: {words}"
 
 
@@ -313,7 +324,7 @@ def visit(arm, idx):
     rec["rest_busy"] = busy(s2, s3, [c for c in s3 if c not in cpus])
     rec["throttle_delta"] = throttle_count() - th0
     secs = time.monotonic() - w0
-    rec["package_w"] = (rapl_uj() - e0) / 1e6 / secs if secs > 0 else None
+    rec["package_w"] = rapl_delta_uj(e0, rapl_uj(), rapl_max_uj()) / 1e6 / secs if secs > 0 else None
     rec["freq_mhz_mean"] = statistics.mean([f for f in freqs if f]) if any(freqs) else None
     rec["coretemp_max_c"] = max([t for t in temps if t], default=None)
     rec["pswpin_delta"] = v1.get("pswpin", 0) - v0.get("pswpin", 0)

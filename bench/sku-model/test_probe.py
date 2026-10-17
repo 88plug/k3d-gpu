@@ -127,17 +127,49 @@ class Stub(BaseHTTPRequestHandler):
         pass
 
 
+class ReasoningStub(Stub):
+    # OVMS 2026.4.1 streams Qwen3 thinking as delta.reasoning_content (H24 run 1:
+    # no delta.content in 128 tokens, so every TTFT was null).
+    def do_POST(self):  # noqa: N802
+        self.rfile.read(int(self.headers["Content-Length"]))
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.end_headers()
+        for _ in range(5):
+            self.wfile.write(b'data: {"choices":[{"delta":{"reasoning_content":"x"}}]}\n\n')
+        self.wfile.write(b'data: {"choices":[],"usage":{"completion_tokens":5,"prompt_tokens":9}}\n\n')
+        self.wfile.write(b"data: [DONE]\n\n")
+
+
 class Client(unittest.TestCase):
-    def test_chat_parses_stream(self):
-        srv = HTTPServer(("127.0.0.1", 0), Stub)
+    def _chat(self, stub):
+        srv = HTTPServer(("127.0.0.1", 0), stub)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         try:
-            r = probe.chat(srv.server_address[1], "hi", 5)
+            return probe.chat(srv.server_address[1], "hi", 5)
         finally:
             srv.shutdown()
+
+    def test_chat_parses_stream(self):
+        r = self._chat(Stub)
         self.assertEqual(r["completion_tokens"], 5)
         self.assertEqual(r["prompt_tokens"], 9)
         self.assertIsNotNone(r["ttft_s"])
+
+    def test_chat_counts_reasoning_tokens(self):
+        r = self._chat(ReasoningStub)
+        self.assertIsNotNone(r["ttft_s"])
+        self.assertIsNotNone(r["decode_tok_s"])
+
+    def test_prefill_prompt_near_512_tokens(self):
+        # "w123456" is ~7 Qwen3 tokens; 420 words gave ~2920 prompt tokens in run 1.
+        n = len(probe.prefill_prompt().split())
+        self.assertTrue(60 <= n <= 90, n)
+
+    def test_rapl_delta_handles_wrap(self):
+        top = 262143328850
+        self.assertEqual(probe.rapl_delta_uj(top - 10, 5, top), 15)
+        self.assertEqual(probe.rapl_delta_uj(100, 250, top), 150)
 
     def test_nonce_prompts_unique(self):
         self.assertNotEqual(probe.prefill_prompt(), probe.prefill_prompt())
