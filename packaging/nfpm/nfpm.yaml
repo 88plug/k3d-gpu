@@ -111,6 +111,11 @@ contents:
     packager: rpm
     file_info:
       mode: 0755
+  - dst: /usr/share/k3d-gpu/bench/apb
+    type: dir
+    packager: rpm
+    file_info:
+      mode: 0755
   - dst: /usr/share/k3d-gpu/console
     type: dir
     packager: rpm
