@@ -23,3 +23,6 @@ site/
 # Package builds (packaging/check.sh, nix build)
 /dist/
 /result
+
+# Python bytecode
+__pycache__/
