@@ -55,6 +55,15 @@ ledger=$(awk -F'|' '
         printf "%s=%s;", id, v
     }' "${LEDGER}") || read_error "${LEDGER}"
 
+# One row per id: a merge that keeps both sides of an edited row leaves two,
+# and the lookup below would silently read only one of them.
+dups=$(tr ';' '\n' <<< "${ledger}" | cut -d= -f1 | grep . | sort | uniq -d | tr '\n' ' ')
+if [ -n "${dups}" ]; then
+    for id in ${dups}; do echo "EXPERIMENTS.md: duplicate hypothesis id ${id}"; done
+    echo "claims_check: keep one row per hypothesis id in EXPERIMENTS.md"
+    exit 1
+fi
+
 # "P1=OK;P2=NOSOURCE;" from the rows of docs/provenance.md (columns: # | Claim | Source | Retrieved).
 provenance=""
 if [ -f "${PROVENANCE}" ]; then
