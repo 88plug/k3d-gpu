@@ -139,13 +139,17 @@ mkdir -p "${WORK}/aqdir/text" "${WORK}/kbin"
 echo '{}' > "${WORK}/aqdir/text/prompts.json"
 printf '#!/bin/sh\necho "NAME SERVERS"\necho "k3dgpu-f-other 1/1"\n' > "${WORK}/kbin/k3d"
 chmod +x "${WORK}/kbin/k3d"
+# A docker stub logs every call: the abort path must not touch any container.
+printf '#!/bin/sh\necho "$*" >> "%s/docker.calls"\n' "${WORK}" > "${WORK}/kbin/docker"
+chmod +x "${WORK}/kbin/docker"
 if command -v flock >/dev/null 2>&1; then
     env PATH="${WORK}/kbin:${PATH}" AUTOQUANT_DIR="${WORK}/aqdir" \
         flock -w 5 "${WORK}/live.lock" "${ROOT}/bench/amx-autoquant/probe.sh" > "${WORK}/abort.out" 2>&1
     rc=$?
     if [ "${rc}" -ne 0 ] && grep -q 'k3dgpu-f-\* cluster exists' "${WORK}/abort.out" \
-        && flock -w 7 "${WORK}/live.lock" true; then
-        ok "probe.sh preflight abort releases live.lock (watchdog stopped by the EXIT trap)"
+        && grep -q 'removed 0 container(s) this run started' "${WORK}/abort.out" \
+        && [ ! -s "${WORK}/docker.calls" ] && flock -w 7 "${WORK}/live.lock" true; then
+        ok "probe.sh preflight abort releases live.lock and touches no container it did not start"
     else
         fail "probe.sh abort path (rc ${rc})"; sed 's/^/  | /' "${WORK}/abort.out"
     fi
