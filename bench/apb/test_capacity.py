@@ -35,8 +35,9 @@ class LoadStub:
     """OpenAI-compatible SSE stub. Each request sleeps base + per * (in-flight - 1)
     seconds, then streams one tool call for the first declared tool."""
 
-    def __init__(self, base=0.0, per=0.0, fail=False):
-        self.base, self.per, self.fail = base, per, fail
+    def __init__(self, base=0.0, per=0.0, fail=False, slow_after=None):
+        # slow_after=(k, s): from request k+1 on, each request sleeps s more.
+        self.base, self.per, self.fail, self.slow_after = base, per, fail, slow_after
         self.inflight, self.peak, self.count = 0, 0, 0
         self.bodies = []
         self.lock = threading.Lock()
@@ -54,6 +55,8 @@ class LoadStub:
                     stub.peak = max(stub.peak, stub.inflight)
                     stub.bodies.append(body)
                     delay = stub.base + stub.per * (stub.inflight - 1)
+                    if stub.slow_after and stub.count > stub.slow_after[0]:
+                        delay += stub.slow_after[1]
                 done = False
 
                 def finish():
@@ -406,6 +409,71 @@ class SearchBudgetTest(unittest.TestCase):
     def test_unmeasured_step_ends_the_search_on_budget(self):
         b, steps, status = cap.search_apb(lambda n, d: None, 32, {"lo": 2, "hi": None}, budget_s=300.0)
         self.assertEqual((b["lo"], b["hi"], status, steps), (2, None, "budget", []))
+
+    def cut_at(self, cut_n, verdict):
+        """measure(): passes below cut_n; at cut_n the budget ends mid-step."""
+        calls = []
+
+        def m(n, _deadline):
+            calls.append(n)
+            if n == cut_n:
+                return {"agents": n, "verdict": verdict, "p95_s": 1.0, "stop": "budget"}
+            return {"agents": n, "verdict": "pass", "p95_s": 1.0, "stop": "ci_below_slo"}
+        return m, calls
+
+    def test_budget_cut_step_is_unmeasured_not_a_fail(self):
+        for verdict in ("insufficient", "fail", "pass"):
+            m, calls = self.cut_at(16, verdict)
+            b, steps, status = cap.search_apb(m, 32, budget_s=300.0)
+            self.assertEqual(calls, [1, 2, 4, 8, 16])
+            self.assertEqual((b["lo"], b["hi"], status), (8, None, "budget"), verdict)
+            self.assertEqual([s["agents"] for s in steps], [1, 2, 4, 8])
+            self.assertEqual(cap.result_text(b["lo"], b["hi"], status), "APB >= 8 (budget)")
+
+    def test_budget_cut_first_step_is_unknown_not_zero(self):
+        m, calls = self.cut_at(1, "insufficient")
+        b, steps, status = cap.search_apb(m, 32, budget_s=300.0)
+        self.assertEqual((calls, steps), ([1], []))
+        self.assertEqual((b["lo"], b["hi"], status), (0, None, "budget"))
+        self.assertEqual(cap.result_text(b["lo"], b["hi"], status), "APB unknown (budget)")
+
+    def test_budget_cut_step_resumes_at_the_same_n(self):
+        m, _ = self.cut_at(16, "insufficient")
+        b, _, _ = cap.search_apb(m, 32, budget_s=300.0)
+        calls = []
+        b, _, status = cap.search_apb(threshold_measure(13, calls), 32, b)
+        self.assertEqual(calls[0], 16)
+        self.assertEqual((b["lo"], b["hi"], status), (13, 14, "closed"))
+
+    def test_result_text_outside_budget_is_the_bracket(self):
+        self.assertEqual(cap.result_text(13, 14, "closed"), "APB = 13")
+        self.assertEqual(cap.result_text(0, 1, "closed"), "APB = 0")
+        self.assertEqual(cap.result_text(32, None, "max_reached"), "APB >= 32")
+        self.assertEqual(cap.result_text(8, 16, "budget"), "APB in [8,15] (budget)")
+
+    def test_stored_budget_cut_step_is_dropped_on_load(self):
+        # A state file written before this fix: the budget-cut N=1 rep closed
+        # the bracket at "APB = 0".
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        path = os.path.join(d, "s.json")
+        cap.save_state(path, {"schema": cap.STATE_SCHEMA, "lo": 0, "hi": 1, "base_tool": None, "runs": 1,
+                              "steps": [{"agents": 1, "verdict": "insufficient", "stop": "budget"}]})
+        st = cap.load_state(path)
+        self.assertEqual((st["lo"], st["hi"], st["steps"]), (0, None, []))
+        self.assertEqual(cap.next_n(st["lo"], st["hi"], 32), 1)
+
+    def test_stored_measured_steps_are_kept_on_load(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        path = os.path.join(d, "s.json")
+        steps = [{"agents": 1, "verdict": "pass", "stop": "ci_below_slo"},
+                 {"agents": 2, "verdict": "fail", "stop": "ci_above_slo"},
+                 {"agents": 4, "verdict": "insufficient", "stop": "budget"}]
+        cap.save_state(path, {"schema": cap.STATE_SCHEMA, "lo": 1, "hi": 2, "base_tool": None, "runs": 1,
+                              "steps": steps})
+        st = cap.load_state(path)
+        self.assertEqual((st["lo"], st["hi"], [x["agents"] for x in st["steps"]]), (1, 2, [1, 2]))
 
 
 # ------------------------------------------------------------------ APB
@@ -897,9 +965,11 @@ class EndToEndTest(unittest.TestCase):
         self.assertEqual(rc, 0, err)
         rep = self.report()
         self.assertEqual(rep["search_status"], "budget")
+        self.assertEqual(rep["status"], "partial")
         self.assertEqual(rep["binding_limit"]["kind"], "budget")
-        self.assertEqual(rep["agents_per_box"], 0)
-        self.assertIn("APB >= 0", out)
+        self.assertIsNone(rep["agents_per_box"])
+        self.assertIn("APB unknown (budget)", out)
+        self.assertNotIn("APB >= 0", out)
 
     def test_budget_bounds_the_run_when_a_rep_is_long(self):
         fake_host(self.root, rapl=False)
@@ -913,11 +983,47 @@ class EndToEndTest(unittest.TestCase):
         self.assertEqual(rc, 0, err)
         rep = self.report()
         self.assertEqual(rep["search_status"], "budget")
+        self.assertEqual(rep["status"], "partial")
+        self.assertIsNone(rep["agents_per_box"])
+        self.assertIn("APB unknown (budget)", out)
         self.assertEqual(rep["steps"], [])
         self.assertEqual(rep["next_rep_estimate"]["agents"], 1)
         self.assertGreater(rep["next_rep_estimate"]["seconds"], 3.0)
         self.assertLess(wall, 3.0 + 1.5)
         self.assertIn("rerun with a larger --budget", err)
+
+    def test_budget_out_mid_rep_is_unmeasured_and_the_rerun_measures_it(self):
+        fake_host(self.root, rapl=False)
+        # The warm-up (7 turns) is fast, so the estimate lets the first N=1 rep
+        # start; its 45 turns then take 0.1 s each and run past the 3 s budget.
+        # One N=1 rep is too few rows to score: the step is cut, not failed.
+        stub = LoadStub(base=0.001, slow_after=(7, 0.1))
+        self.stubs.append(stub)
+        rc, out, err = self.run_main(self.common(stub.url, ["--slo", "5", "--budget", str(3.0 / 60)]))
+        self.assertEqual(rc, 0, err)
+        self.assertGreater(stub.count, 7)  # the N=1 rep was sent
+        rep = self.report()
+        self.assertEqual(rep["search_status"], "budget")
+        self.assertEqual(rep["status"], "partial")
+        self.assertEqual(rep["bracket"], {"lo": 0, "hi": None})
+        self.assertIsNone(rep["agents_per_box"])
+        self.assertEqual(rep["steps"], [])
+        self.assertEqual(rep["unmeasured"]["agents"], 1)
+        self.assertIn("APB unknown (budget)", out)
+        self.assertNotIn("APB = 0", out + err)
+        with open(rep["state_path"]) as f:
+            st = json.load(f)
+        self.assertEqual((st["lo"], st["hi"], st["steps"]), (0, None, []))
+        # The rerun is not answered from the store: it measures N=1.
+        stub.slow_after = None
+        sent = stub.count
+        rc, out, err = self.run_main(self.common(stub.url, ["--slo", "5", "--max", "1", "--budget", "1"]))
+        self.assertEqual(rc, 0, err)
+        self.assertGreater(stub.count, sent)
+        rep = self.report()
+        self.assertEqual(rep["status"], "ok")
+        self.assertEqual([s["agents"] for s in rep["steps"]], [1])
+        self.assertEqual(rep["agents_per_box"], 1)
 
     def test_dry_run_sends_nothing(self):
         fake_host(self.root)
