@@ -1353,7 +1353,8 @@ device, so a second pod's claim stays Pending where the plugin's iGPU sharing
 default runs both [ledger:H17]; `K3D_GPU_INTEL_SHARED`, `_ALLOCATION` and
 `_MONITORING` configure the plugin and are ignored (with a warning) in DRA mode;
 and `k3d-gpu agent` and the recipes request `gpu.intel.com/xe|i915`, which DRA mode
-does not advertise. A claim pod gets the iGPU through the driver on k3s 1.37
+does not advertise (on a DRA GPU, `agent` in auto mode serves on the CPU and says
+why; a forced GPU, a GPU draft or a vLLM backend stops and names `K3D_GPU_DRA=0`). A claim pod gets the iGPU through the driver on k3s 1.37
 [ledger:H16]. The `dra` experimental feature only sets Kubernetes gates and does
 not switch the Intel GPU path.
 
