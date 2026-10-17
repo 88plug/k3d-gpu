@@ -33,6 +33,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H17 | DRA mode can become the default (auto) Intel GPU path when the driver is baked in, without losing what the device-plugin default gives on an iGPU host. | On the same host, all three: (a) two pods that each claim the iGPU through their own ResourceClaim from one template are both `Running` at once, as two `gpu.intel.com/i915: 1` pods are under the plugin's sharing default (H15); (b) median pod latency (create to `Succeeded`, busybox `ls /dev/dri`, image preloaded) in DRA mode is at most 1.2x the plugin's; (c) median `k3d-gpu up` wall time in DRA mode is at most 1.2x the plugin's. | Arms D (`K3D_GPU_DRA=1`) and P (default), one fresh cluster per run, n=3 runs per arm, order D P P D D P; per run 1 timed `up` and 3 timed pods (reported as the run's median), then the 2-pod check read 20 s after creation. Per run: package W over `up` (RAPL), load (1 min), swap used, package throttle count delta. Outcome -> conclusion: (a) fails in any D run -> REFUTED, DRA stays opt-in (`K3D_GPU_DRA=0` default), since auto would take away H15's sharing; (a) holds but (b) or (c) fails -> REFUTED, DRA stays opt-in; all hold -> SUPPORTED, DRA may become auto in a later change; F of H16 fails -> H17 not evaluated (DRA mode broken). A timing arm whose spread (max - min) exceeds 30% of its median -> that part INCONCLUSIVE. Prediction before measuring: REFUTED by (a), because gpu-v0.12.1 publishes no shared counters or multi-allocation (docs/experimental.md). | REFUTED |
 | H18 | `k3d-gpu sandbox up` keeps agent sandboxes on the E-cores and inside a default-deny egress policy on k3d (kube-router), while public egress (PyPI) still works. | On an i9-13900T with tailscale (host `100.65.179.24`, sshd on `0.0.0.0:22`) and a cluster from this branch's image: (a) `sandbox up` exits 0 with the warm pool `readyReplicas` >= 1 and every sandbox pod's `Cpus_allowed_list` inside the E-cores (cpu_atom); (b) from a sandbox pod, TCP to `100.65.179.24:22` (CGNAT, tailscale) and to `192.168.1.108:22` (RFC1918, host LAN) both fail to connect within 3 s, and the policy's kube-router drop-log rule counts the packets, while from a control pod (same image, namespace `sbx-control`, no policy) both connect; (c) from a sandbox pod, DNS resolves `pypi.org`, TCP to `pypi.org:443` connects, and `pip install --user tomli_w==1.2.0` (not in the image) with the profile's `HOME=/tmp` exits 0 and imports from `/tmp/.local`. | Pre-registered 2026-10-17 before any H18 run (this commit, pushed). Image `docker build -t $TAG .` from `claude/agent-sandbox-ecores` rebased on origin/main 2b45f87. Cluster `k3dgpu-r2-sbx`, scratch `KUBECONFIG`, one fresh cluster per run, n=3 runs. Per run: timed `sandbox up` (wall, s), then the probes interleaved sandbox/control, each probe once per pod. Confounds per run: package W (RAPL, 5 s before), 1-min load, swap used, package throttle count delta. Outcome -> conclusion: every run meets (a), (b) and (c) -> SUPPORTED; a sandbox pod off the E-cores, a sandbox reaching either private address, or a control pod failing to connect (probe cannot see a block) -> REFUTED (control failure -> INCONCLUSIVE); pip failing while `pypi.org:443` connects -> REFUTED for (c), README must drop the pip claim. Prediction: SUPPORTED. Amended before the counted runs, after pilot run 0 (log below): kube-router REJECTs (`icmp-port-unreachable`, so `Connection refused` in ~0.1 s) rather than dropping, so (b) asks for no connect plus the drop-log counter instead of a timeout; `six` ships in the image, so (c) installs `tomli_w`. Runner: `bench/sandbox_round.sh`. | SUPPORTED |
 | H7 | OVMS's decode lead over EAT's vLLM CPU engine in the H2 run comes from weight precision, not from the engine. | On the i9-13900T 16-CPU P-core balloon, one checkpoint served by OVMS 2026.4.1 and by vLLM CPU v0.24.0 at matched weight precision decodes within 15% between the two engines, and the two land within 15% of each other in effective weight bandwidth (weight bytes x decode tok/s). | Pre-registered 2026-10-16, before any run. One checkpoint and revision (`Qwen/Qwen3-4B-Instruct-2507`, revision recorded) for both engines: OVMS loads an OpenVINO IR exported from it with 16-bit weights, vLLM loads it in bf16. A second arm at int4 in both engines runs only if vLLM v0.24.0 CPU is first shown to load an int4 build of the same checkpoint. vLLM runs with EAT's chart defaults and once with `--enforce-eager` dropped, to split engine from config. H2 workloads and energy method, arms interleaved ABBA, 5 rounds. Refuted if the decode gap at matched precision is 15% or more. | PENDING |
+| H26 | On a hybrid Intel client with no RDT (i9-13900T: no `rdt_a`/`cat_l3`/`mba`/`cqm` flags, no `/sys/fs/resctrl`), confining a memory-bandwidth neighbour to one E-core L2 cluster (`k3d-gpu.io/cores: ecluster`, 4 E-cores) cuts the agent's p95 latency inflation by at least half against the same neighbour in the `efficient` balloon. On hosts with `rdt_a`+`mba`, nri-plugins RDT classes are the predicted remedy instead (not testable on this host; H26-X). | R = I(MC4)/I(ME15) <= 0.5, where I(arm) = p95(arm)/p95(Q) - 1 on agent request latency. Point prediction: p95(Q) ~2.3 s, I(ME15) >= +100% (replicates H3 PM), I(MC4) +20..+50%, R ~0.3; I(ME4) within spread of I(MC4) (core count, not L2 topology, does the work). Competing prior (prior-art note): L2 confinement helps little against a DRAM hog (LLC and memory controller stay shared, no MBA), improvement < 10%. | Pre-registered 2026-10-17T12:18Z before any H26 run; see [H26 pre-registration](#h26-pre-registration-i9-13900t-2026-10-17). Probe `bench/rdt-isolate/run.sh` (analysis `bench/rdt-isolate/analyze.py`). Agent = OVMS 2026.4.1 `OpenVINO/Qwen3-4B-int4-ov`, `k3d-gpu agent up` on CPU with 15 CPU; unique ~30-token prompt x 32 out, greedy, `ignore_eos`, streamed. Arms: Q none; ME15 `stress-ng --stream 15` on `efficient`; ME4 `--stream 4` on `efficient`; MC4 `--stream 4` on `ecluster`; every neighbour `--stream-l3-size 128m` (same total DRAM footprint). 3 blocks x 10 requests per arm (n=30), order Q ME15 ME4 MC4 / MC4 ME4 ME15 Q / Q ME15 ME4 MC4, one cluster `k3dgpu-i-rdt-isolate`. Outcome -> conclusion in the section. | PENDING |
 
 ## Falsification log
 
@@ -1012,6 +1013,60 @@ sed -e 's/cores: performance/cores: efficient/' -e 's/cpu: "16"/cpu: "15"/' c16.
 # H4b: G C16 C8 in 5 rotated orders; H4c: Ce G alternating, 5 rounds.
 scripts/k3d-gpu down
 ```
+
+### H26 pre-registration (i9-13900T, 2026-10-17)
+
+Written 2026-10-17T12:18Z, before any timed block. No sysfs writes are planned. Reads only
+(sudo -n): RAPL `energy_uj`, `thermal_throttle/package_throttle_count`, `perf stat`
+on the uncore IMC free-running counters.
+
+**Host facts (read 2026-10-17, before the run):**
+- `/proc/cpuinfo` has none of `rdt_a cat_l3 cat_l2 cdp_l3 mba cqm cqm_mbm_total`; `/sys/fs/resctrl` does not exist
+  (`CONFIG_X86_CPU_RESCTRL=y`). [provenance:P260]
+- E-core L2 groups (`cpu*/cache/index2/shared_cpu_list`): 16-19, 20-23, 24-27, 28-31.
+- `uncore_imc_free_running_0` and `_1` expose `data_read` and `data_write` (scale 6.103515625e-5 MiB).
+- The RDT/MBA arm is N/A on this host: H26-X stays PENDING until a Xeon host runs it.
+
+**Prior:** H3 arm PM (stream 15 on E, inference on P): decode +165.8%, prefill +99.1%. CPU balloons
+alone do not isolate a bandwidth neighbour; H26 tests whether L2-cluster confinement does. Prior art
+(nri-plugins RDT classes and balloons `loadClasses`, Koordinator resctrl, Heracles) is in
+`docs/provenance.md` P260-P267; only the measured delta is claimable.
+
+**Arms** (neighbour = `bench/noisy.sh --stressor stream`, stress-ng 0.22.01 by digest,
+request = limit, `--stream-l3-size 128m`: stress-ng splits that size across workers, so every arm's
+neighbour holds 3 x 128 MiB of buffers in total and only the worker count and placement differ):
+
+| Arm | Label | CPU | Workers | Purpose |
+|-----|-------|-----|---------|---------|
+| Q | none | 0 | 0 | baseline |
+| ME15 | efficient | 15 | 15 | today's behaviour (H3 PM replication); positive control |
+| ME4 | efficient | 4 | 4 | core-count control: 4 hog cores, placement left to balloons |
+| MC4 | ecluster | 4 | 4 | treatment: 4 hog cores inside one L2 cluster |
+
+**Agent:** one OVMS pod for the whole run (`K3D_GPU_AGENT_DEVICE=CPU K3D_GPU_AGENT_CPUS=15 k3d-gpu agent up`),
+`Cpus_allowed_list` logged. Per block: neighbour up (Running plus its `Cpus_allowed_list` line), 5 s
+settle, 1 discarded request, 10 timed requests (`bench/rdt-isolate/client.py`, nonce per prompt),
+neighbour deleted. n = 30 per arm; p95 is nearest-rank (29th of 30), so the decision threshold is a
+2x effect, not a fine margin.
+
+**Recorded per block:** neighbour CPUs, IMC GB/s over a 15 s window, package joules, throttle delta,
+`pswpin` delta, CPU 0-15 busy %, 1-min load; agent pod restarts over the run.
+
+**Analysis and outcome -> conclusion** (`bench/rdt-isolate/analyze.py`, unit-tested; priors in brackets):
+
+| Observed | Verdict | Action |
+|----------|---------|--------|
+| I(ME15) < +20% | INCONCLUSIVE [0.05] | Probe blind; check IMC GB/s, rerun with a larger stream size |
+| Q block-p95 spread > 25% of its median, or dropping swap-flagged blocks (pswpin > 2560) flips the verdict | INCONCLUSIVE [0.10] | Rerun at a quieter hour |
+| MC4 neighbour IMC GB/s (above Q) < 15% of ME15's | INCONCLUSIVE [0.05] | Confinement starves the hog: a throughput trade, not isolation |
+| R <= 0.5, bootstrap P(R <= 0.5) >= 0.8 (10 000 resamples stratified by block), 3/3 rounds R <= 0.5 | SUPPORTED [0.40] | doctor may recommend `ecluster` for bandwidth-heavy neighbours on hybrid clients |
+| 0.5 < R < 0.8, or R <= 0.5 with lower confidence | REFUTED as stated [0.25] | Document I(MC4), I(ME15) with spread; no auto default |
+| R >= 0.8 | REFUTED [0.15] | doctor keeps saying ecluster caps cores, not bandwidth, and points to Xeon RDT/MBA |
+| H26b: I(ME4) - I(MC4) within the ME4/MC4 block spread | core count, not L2 topology | Capping the neighbour's CPU count is the simpler fallback |
+
+A MC4 block whose neighbour CPUs are not inside one L2 group is VOID. Guardrails: every request
+returns 32 tokens; the agent pod never restarts. The probe aborts at 18 min of its own wall time
+and marks unrun blocks INCONCLUSIVE.
 
 ## Scope corrections
 

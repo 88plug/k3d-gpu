@@ -389,3 +389,11 @@ Source does not back a claim. `tests/claims_check.sh` enforces both rules.
 
 | # | Claim | Source | Retrieved |
 |---|-------|--------|-----------|
+| P260 | H26 local probe (i9-13900T): `/proc/cpuinfo` has none of `rdt_a`, `cat_l2`, `cat_l3`, `cdp_l3`, `mba`, `cqm*`; `CONFIG_X86_CPU_RESCTRL=y`; `/sys/fs/resctrl` missing. H26 prior-art search was partial (P261-P267): no prior art found for auto-selecting RDT classes or L2-cluster placement for agent sandboxes; each mechanism is prior art | Local read on the test bed, 2026-10-17; kernel ABI https://docs.kernel.org/6.6/arch/x86/resctrl.html | 2026-10-17 |
+| P261 | SearXNG (bing backend), 6 queries on nri-plugins RDT, Koordinator resctrl, KEP-3008, Raptor Lake CAT, Heracles, agent noisy neighbour: null (engine noise) | | 2026-10-17 |
+| P262 | nri-plugins documents class-based RDT (`control.rdt`, `rdtclass.resource-policy.nri.io` annotation) and balloons `loadClasses` with `level: l2cache` | https://github.com/containers/nri-plugins/blob/v0.13.1/pkg/apis/config/v1alpha1/resmgr/policy/balloons/config.go | 2026-10-17 |
+| P263 | Agent-sandbox interference papers characterize memory as the bottleneck; none applies RDT or L2 placement to agent pods | https://www.arxiv.org/pdf/2602.09345 | 2026-10-17 |
+| P264 | Exa queries for Koordinator and Intel 12th/13th gen client RDT were rate-limited, not run (coverage gap) | | 2026-10-17 |
+| P265 | intel/goresctrl provides the rdt, sst and blockio packages under nri-plugins and containerd/CRI-O class-based RDT | https://github.com/intel/goresctrl | 2026-10-17 |
+| P266 | Koordinator koordlet ships per-pod resctrl LLC/MB isolation (`ResctrlConfig{LLC, MB}`); KEP-3008 QoS-class resources issue is closed | https://github.com/koordinator-sh/koordinator/blob/main/apis/extension/resctrl.go | 2026-10-17 |
+| P267 | WebSearch not run (call budget exhausted): kernel lists, OSDI/EuroSys/MLSys full text and Intel TCC CAT on embedded Core are uncovered, so H26 novelty is "partial search" | | 2026-10-17 |
