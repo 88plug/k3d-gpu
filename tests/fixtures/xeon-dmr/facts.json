@@ -23,7 +23,6 @@
     {
       "resources": [
         "feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true",
-        "feature.node.kubernetes.io/cpu-cpuid.AMXFP16=true",
         "feature.node.kubernetes.io/cpu-cpuid.AMXINT8=true",
         "feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true"
       ],
@@ -73,7 +72,7 @@
         "level": "info",
         "revert": null,
         "section": "Intel CPU built-in accelerators...",
-        "text": "Diamond Rapids-X (family 19, model 1): ISA predicted by gcc PTA_DIAMONDRAPIDS, not read from CPUID: AVX10.2, APX_F, AMX-FP8, AMX-FP16, AMX-COMPLEX, AMX-AVX512, AMX-MOVRS, MOVRS — /proc/cpuinfo cannot show these; NFD labels what CPUID reports (cpu-cpuid.AVX10_VERSION, APX_F, AMXFP8) and oneDNN/OpenVINO pick them with no flag",
+        "text": "Diamond Rapids-X (family 19, model 1): ISA predicted by gcc PTA_DIAMONDRAPIDS, not read from CPUID: AVX10.2, APX_F, AMX-FP8, AMX-FP16, AMX-COMPLEX, AMX-AVX512, AMX-MOVRS, MOVRS — /proc/cpuinfo may not show these (kernel-dependent); NFD labels what CPUID reports (cpu-cpuid.AVX10_VERSION, APX_F, AMXFP8) and oneDNN/OpenVINO pick them with no flag",
         "why": null
       },
       {
@@ -82,7 +81,7 @@
         "level": "ok",
         "revert": null,
         "section": "Intel CPU built-in accelerators...",
-        "text": "AMX (amx_bf16 amx_fp16 amx_int8 amx_tile) — CPU instructions, usable in any pod; up labels nodes feature.node.kubernetes.io/cpu-cpuid.AMX*",
+        "text": "AMX (amx_bf16 amx_int8 amx_tile) — CPU instructions, usable in any pod; up labels nodes feature.node.kubernetes.io/cpu-cpuid.AMX*",
         "why": null
       },
       {
@@ -196,12 +195,11 @@
       }
     ]
   },
-  "fingerprint": "sha256:35d17231c6768ba1fc3b83829166eb9fd11222aaa68e49e53e640d79ef7aa652",
+  "fingerprint": "sha256:941bc39dd22a87e3c2e768811e92a62dba010530be807800366d2d5004cbdcce",
   "host": {
     "cpu": {
       "amx": [
         "amx_bf16",
-        "amx_fp16",
         "amx_int8",
         "amx_tile"
       ],
@@ -212,7 +210,6 @@
       "hybrid": false,
       "isa": [
         "amx_bf16",
-        "amx_fp16",
         "amx_int8",
         "amx_tile",
         "avx2",
@@ -263,7 +260,6 @@
   "hostname": "",
   "labels": {
     "feature.node.kubernetes.io/cpu-cpuid.AMXBF16": "true",
-    "feature.node.kubernetes.io/cpu-cpuid.AMXFP16": "true",
     "feature.node.kubernetes.io/cpu-cpuid.AMXINT8": "true",
     "feature.node.kubernetes.io/cpu-cpuid.AMXTILE": "true",
     "feature.node.kubernetes.io/cpu-cpuid.AVX512BF16": "true",
@@ -296,21 +292,30 @@
       },
       {
         "apply": null,
-        "from": "/proc/cpuinfo",
+        "from": "/dev/kvm, /sys/module/kvm_intel/parameters/*",
         "level": "info",
         "revert": null,
         "section": "Isolation for sandboxed agents",
-        "text": "no VT-x (vmx flag) exposed: no microVM sandboxes (VT-x off in BIOS, or a VM without nested virtualization)",
+        "text": "/dev/kvm present: microVM sandboxes (Kata, Firecracker) can run here",
         "why": null
       },
       {
-        "apply": "BIOS: enable TDX, then: sudo modprobe -r kvm_intel && sudo modprobe kvm_intel tdx=1",
+        "apply": "sudo modprobe -r kvm_intel && sudo modprobe kvm_intel tdx=1",
         "from": "/proc/cpuinfo (tdx_host_platform), /sys/module/kvm_intel/parameters/tdx",
         "level": "note",
         "revert": "sudo modprobe -r kvm_intel && sudo modprobe kvm_intel tdx=0",
         "section": "Isolation for sandboxed agents",
         "text": "the CPU reports tdx_host_platform but kvm_intel runs without TDX (tdx=N): no confidential microVM sandboxes",
-        "why": "kvm_intel creates TDX guests only when loaded with tdx=1 and TDX is enabled in the BIOS"
+        "why": "kvm_intel creates TDX guests only when loaded with tdx=1; stop running VMs and microVM sandboxes first, since modprobe -r kvm_intel fails while one holds /dev/kvm"
+      },
+      {
+        "apply": "BIOS: enable VT-d, then add intel_iommu=on to the kernel command line and reboot",
+        "from": "/sys/class/iommu/",
+        "level": "note",
+        "revert": "remove intel_iommu=on from the kernel command line and reboot",
+        "section": "Isolation for sandboxed agents",
+        "text": "no IOMMU unit registered: no DMA isolation between devices, no GPU passthrough into a microVM",
+        "why": "VFIO hands a device to a VM only with its IOMMU group; without VT-d enabled there are no groups"
       }
     ],
     "sections": [
@@ -331,7 +336,7 @@
       },
       {
         "good": null,
-        "name": "2 suggestion(s). Read-only: nothing on this host was changed.",
+        "name": "3 suggestion(s). Read-only: nothing on this host was changed.",
         "src": null
       }
     ]
@@ -369,7 +374,7 @@
       "reason": null,
       "resource": null,
       "usable": true,
-      "vendor": null,
+      "vendor": "intel",
       "xmx": null
     }
   ]

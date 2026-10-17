@@ -314,10 +314,11 @@ kernel "${r}" 6.10.4
 pci "${r}" 0000:00:02.0 0x8086 0xb640 i915; render "${r}" 0000:00:02.0 128
 doctor_says "Arrow Lake-S 0xb640 needs kernel 6.12" "${r}" 'Arrow Lake.*6\.12'
 
-# cpuinfo <root> <family> <model> <flags>: the first CPU's family, model and flags.
+# cpuinfo <root> <family> <model> <flags> [vendor]: the first CPU's vendor_id
+# (default GenuineIntel), family, model and flags.
 cpuinfo() {
     mkdir -p "$1/proc"
-    printf 'processor\t: 0\ncpu family\t: %s\nmodel\t\t: %s\nmodel name\t: Fake CPU\nflags\t\t: %s\n' "$2" "$3" "$4" > "$1/proc/cpuinfo"
+    printf 'processor\t: 0\nvendor_id\t: %s\ncpu family\t: %s\nmodel\t\t: %s\nmodel name\t: Fake CPU\nflags\t\t: %s\n' "${5:-GenuineIntel}" "$2" "$3" "$4" > "$1/proc/cpuinfo"
 }
 
 # engine <root> <bdf> <card> <engine> [capabilities]: an i915 engine dir under
@@ -426,6 +427,13 @@ done
 r=$(newroot isa-unknown)
 cpuinfo "${r}" 6 183 "fpu"
 doctor_says "Raptor Lake (6/183) gets no ISA prediction" "${r}" 'ISA predicted by gcc' negate
+# Family/model ids are Intel's only with vendor_id GenuineIntel: AMD Llano prints 18/1.
+r=$(newroot isa-amd-18-1)
+cpuinfo "${r}" 18 1 "fpu" AuthenticAMD
+doctor_says "AuthenticAMD family 18 model 1 (Llano) is not Nova Lake" "${r}" 'ISA predicted by gcc' negate
+r=$(newroot isa-other-19-1)
+cpuinfo "${r}" 19 1 "fpu" HygonGenuine
+doctor_says "non-Intel family 19 model 1 is not Diamond Rapids-X" "${r}" 'ISA predicted by gcc' negate
 # Cancelled AMX extensions never become labels even if a kernel prints them.
 r=$(newroot amx-cancelled)
 cpuinfo "${r}" 19 1 "fpu amx_tile amx_tf32 amx_transpose amx_int8"
@@ -1257,6 +1265,51 @@ perf_says "perf: PL1 above thermal spec power is ok" "${good}" 'ok: +intel-rapl:
 perf_says "perf: irqbalance found in /proc/*/comm" "${good}" 'ok: +irqbalance is running'
 perf_says "perf: overlay2 is ok" "${good}" 'ok: +storage driver overlay2' "" STUB_DOCKER_DRIVER=overlay2
 perf_says "perf: model that fits is ok" "${good}" 'ok: +a 30 GiB model \(\+20% headroom = 36\.0 GiB\) fits in MemAvailable 48\.0 GiB' "" K3D_GPU_MODEL_GB=30
+
+# Uncore: only numeric max/initial pairs are judged; ok only on equality.
+UNC=/sys/devices/system/cpu/intel_uncore_frequency
+unc() { put "$1" "${UNC}/$2/max_freq_khz" "$3"; put "$1" "${UNC}/$2/initial_max_freq_khz" "$4"; }
+r=$(newroot perf-uncore-bad); cpuinfo "${r}" 6 183 "fpu"
+unc "${r}" uncore00 abc 2200000; unc "${r}" uncore01 "" 2200000
+perf_says "perf: malformed uncore max is not ok" "${r}" 'uncore0[01]: uncore max' negate
+r=$(newroot perf-uncore-above); cpuinfo "${r}" 6 183 "fpu"
+unc "${r}" uncore00 2500000 2200000
+perf_says "perf: uncore max above initial is not called the firmware maximum" "${r}" 'firmware maximum' negate
+perf_says "perf: uncore max above initial is info with both numbers" "${r}" 'info: uncore00: uncore max 2500000 kHz is above initial_max_freq_khz 2200000 kHz'
+r=$(newroot perf-uncore-legacy); cpuinfo "${r}" 6 183 "fpu"
+unc "${r}" package_00_die_00 4700000 4700000
+perf_says "perf: client package_00_die_00 at its maximum is ok" "${r}" 'ok: +package_00_die_00: uncore max 4700000 kHz = firmware maximum'
+r=$(newroot perf-uncore-tpmi); cpuinfo "${r}" 6 173 "fpu"
+unc "${r}" uncore00 1800000 2200000; unc "${r}" package_00_die_00 1800000 2200000
+perf_says "perf: TPMI cap warns on the cluster" "${r}" 'warn: uncore00: uncore max capped at 1800000 kHz'
+perf_says "perf: TPMI package root is not reported twice" "${r}" 'package_00_die_00' negate
+
+# TDX host: the note only when VT-x is exposed and kvm_intel can take tdx=1.
+KM=/sys/module/kvm_intel/parameters
+r=$(newroot perf-tdx-n); cpuinfo "${r}" 19 1 "fpu vmx tdx_host_platform"; kernel "${r}" 6.18.1
+put "${r}" "${KM}/tdx" N
+perf_says "perf: tdx=N on a TDX CPU gives a pasteable modprobe apply" "${r}" 'apply: +sudo modprobe -r kvm_intel && sudo modprobe kvm_intel tdx=1$'
+perf_says "perf: tdx=N note says to stop VMs first" "${r}" 'why: .*stop running VMs and microVM sandboxes first'
+perf_says "perf: tdx note has no BIOS step" "${r}" 'BIOS: enable TDX' negate
+r=$(newroot perf-tdx-y); cpuinfo "${r}" 19 1 "fpu vmx tdx_host_platform"; kernel "${r}" 6.18.1
+put "${r}" "${KM}/tdx" Y
+perf_says "perf: tdx=Y is info" "${r}" 'info: kvm_intel tdx=Y'
+r=$(newroot perf-tdx-guest); cpuinfo "${r}" 19 1 "fpu tdx_guest"
+perf_says "perf: tdx_guest is a TDX guest" "${r}" 'info: this node is a TDX guest'
+r=$(newroot perf-tdx-oldkernel); cpuinfo "${r}" 6 143 "fpu vmx tdx_host_platform"; kernel "${r}" 6.12.0
+mkdir -p "${r}${KM}"
+perf_says "perf: kernel 6.12 gets no modprobe tdx=1" "${r}" 'tdx=1' negate
+perf_says "perf: kernel 6.12 is told KVM TDX needs 6.16" "${r}" 'info: .*kernel 6\.12\.0 has no KVM TDX host support \(needs Linux 6\.16\+\)'
+r=$(newroot perf-tdx-noparam); cpuinfo "${r}" 19 1 "fpu vmx tdx_host_platform"; kernel "${r}" 6.18.1
+mkdir -p "${r}${KM}"
+perf_says "perf: 6.16+ without the tdx parameter lacks CONFIG_KVM_INTEL_TDX" "${r}" 'info: .*built without CONFIG_KVM_INTEL_TDX'
+perf_says "perf: missing tdx parameter gets no apply" "${r}" 'tdx=1' negate
+r=$(newroot perf-tdx-unloaded); cpuinfo "${r}" 19 1 "fpu vmx tdx_host_platform"; kernel "${r}" 6.18.1
+perf_says "perf: unloaded kvm_intel is not 'runs without TDX'" "${r}" 'runs without TDX' negate
+perf_says "perf: unloaded kvm_intel apply has no modprobe -r" "${r}" 'apply: +sudo modprobe kvm_intel tdx=1$'
+r=$(newroot perf-tdx-novmx); cpuinfo "${r}" 19 1 "fpu tdx_host_platform"; kernel "${r}" 6.18.1
+put "${r}" "${KM}/tdx" N
+perf_says "perf: no vmx means no TDX modprobe advice" "${r}" 'tdx=1' negate
 perf_says "perf: model that does not fit warns" "${good}" 'warn: a 45 GiB model needs ~54\.0 GiB' "" K3D_GPU_MODEL_GB=45
 
 # Bad host: every knob wrong.

@@ -461,8 +461,11 @@ cpu_flags() {
 # AMX feature flags from /proc/cpuinfo, sorted, one line (empty when absent).
 amx_flags() {
     # Kernel flag names are [a-z0-9_]; anything else is not a flag and must not
-    # become a node label. amx_tf32 and amx_transpose were cut from the ISA
-    # (Intel ISE 319433-061: rev 059 and rev 062) and are never labeled.
+    # become a node label. AMX-TRANSPOSE was removed in Intel ISE rev 059
+    # (319433-061 revision history) and AMX-TF32 in ISE rev 062
+    # (https://cdrdv2.intel.com/v1/dl/getContent/671368; gcc-patches 2026-June
+    # 722128). cpufeatures.h has never defined either flag, so stock kernels
+    # never print them; the filter covers custom kernels that might.
     cpu_flags | LC_ALL=C grep -E '^amx_[a-z0-9_]+$' | LC_ALL=C grep -vxE 'amx_(tf32|transpose)' | sort | paste -sd' ' || true
 }
 
@@ -515,12 +518,13 @@ cpu_family_model() {
 # cpu_isa_predicted "<family> <model>": "<name>|<ISA list>|<source>" for CPU
 # models whose newest ISA /proc/cpuinfo cannot show. The kernel prints a flag
 # only when its cpufeatures.h comment starts with a quoted name
-# (arch/x86/kernel/cpu/mkcapflags.sh): AMX_FP16 and APX are unquoted, and AVX10,
-# AMX_FP8 and AMX_COMPLEX have no X86_FEATURE at all (only KVM's
-# arch/x86/kvm/reverse_cpuid.h). The lists are gcc's -march masks
+# (arch/x86/kernel/cpu/mkcapflags.sh): AMX_FP16 (on newer kernels) and APX are
+# unquoted, and AVX10, AMX_FP8 and AMX_COMPLEX have no cpufeatures.h entry; only
+# KVM's arch/x86/kvm/reverse_cpuid.h defines their X86_FEATURE_* macros. The lists are gcc's -march masks
 # (gcc/config/i386/i386.h PTA_*), not a CPUID read; NFD reads CPUID itself and
 # labels cpu-cpuid.AVX10_VERSION, APX_F, AMXFP8. Family/model ids:
-# arch/x86/include/asm/intel-family.h; families 18 and 19 are Intel too.
+# arch/x86/include/asm/intel-family.h; they are Intel ids, so the caller checks
+# vendor_id GenuineIntel first (AMD Llano also prints family 18 model 1).
 cpu_isa_predicted() {
     case "$1" in
         "6 173") echo "Granite Rapids-X|AVX10.1, AMX-FP16|PTA_GRANITERAPIDS" ;;                 # INTEL_GRANITERAPIDS_X 0xAD
@@ -1470,10 +1474,11 @@ doctor_cpu_accels() {
     local amx isa pred fm dev bdf vfs n wqs kind name prefix devdir lines="" lp e cl pp fav fv fn
     amx=$(amx_flags)
     fm=$(cpu_family_model)
-    pred=$(cpu_isa_predicted "${fm}")
+    pred=""
+    [ "$(cpuinfo_field vendor_id)" != GenuineIntel ] || pred=$(cpu_isa_predicted "${fm}")
     if [ -n "${pred}" ]; then
         IFS='|' read -r name isa prefix <<< "${pred}"
-        lines+="  info: ${name} (family ${fm% *}, model ${fm#* }): ISA predicted by gcc ${prefix}, not read from CPUID: ${isa} — /proc/cpuinfo cannot show these; NFD labels what CPUID reports (cpu-cpuid.AVX10_VERSION, APX_F, AMXFP8) and oneDNN/OpenVINO pick them with no flag"$'\n'
+        lines+="  info: ${name} (family ${fm% *}, model ${fm#* }): ISA predicted by gcc ${prefix}, not read from CPUID: ${isa} — /proc/cpuinfo may not show these (kernel-dependent); NFD labels what CPUID reports (cpu-cpuid.AVX10_VERSION, APX_F, AMXFP8) and oneDNN/OpenVINO pick them with no flag"$'\n'
     fi
     [ -z "${amx}" ] || lines+="  ok: AMX (${amx}) — CPU instructions, usable in any pod; up labels nodes feature.node.kubernetes.io/cpu-cpuid.AMX*"$'\n'
     isa=$(cpu_isa_labels | sed 's#^feature\.node\.kubernetes\.io/cpu-cpuid\.##; s#=true$##' | paste -sd' ')
@@ -2275,12 +2280,16 @@ perf_cpu() {
 # world-readable; current_freq_khz is 0400 and is not read
 # (drivers/platform/x86/intel/uncore-frequency/uncore-frequency-common.c).
 perf_uncore() {
-    local root=/sys/devices/system/cpu/intel_uncore_frequency d n mx im shown=0
+    local root=/sys/devices/system/cpu/intel_uncore_frequency d n mx im shown=0 tpmi=0
+    # TPMI parts list per-cluster uncoreNN plus package_XX_die_YY roots for the
+    # same clocks; report the clusters only so one cap gives one finding.
+    compgen -G "${SYSROOT}${root}/uncore[0-9]*" >/dev/null && tpmi=1
     for d in "${SYSROOT}${root}"/*; do
         [ -d "${d}" ] || continue
         n=${d##*/}
+        [ "${tpmi}" = 0 ] || [[ "${n}" != package_* ]] || continue
         mx=$(rd "${root}/${n}/max_freq_khz") im=$(rd "${root}/${n}/initial_max_freq_khz")
-        [ -n "${mx}" ] && [ -n "${im}" ] || continue
+        [[ "${mx}" =~ ^[0-9]+$ && "${im}" =~ ^[0-9]+$ ]] || continue
         if [ "${shown}" = 0 ]; then
             perf_section "Uncore frequency" \
                 "the uncore (ring/mesh, LLC, memory path) may reach its firmware maximum: max_freq_khz = initial_max_freq_khz" \
@@ -2292,8 +2301,10 @@ perf_uncore() {
                 "a lower uncore clock slows L3 and memory traffic, which bounds token generation" \
                 "cat ${root}/${n}/initial_max_freq_khz | sudo tee ${root}/${n}/max_freq_khz" \
                 "echo ${mx} | sudo tee ${root}/${n}/max_freq_khz"
-        else
+        elif [ "${mx}" -eq "${im}" ]; then
             perf_ok "${n}: uncore max ${mx} kHz = firmware maximum" "${root}/${n}/max_freq_khz"
+        else
+            perf_info "${n}: uncore max ${mx} kHz is above initial_max_freq_khz ${im} kHz (raised after boot)" "${root}/${n}/max_freq_khz, initial_max_freq_khz"
         fi
     done
 }
@@ -3026,7 +3037,7 @@ perf_nvidia() {
 }
 
 perf_isolation() {
-    local km p v kv="" units=0 u d bdf g gn m mb others cls types="" sld mit flags tme cet sc pf f
+    local km p v kv="" units=0 u d bdf g gn m mb others cls types="" sld mit flags tme cet sc pf f kr
     [ -n "$(cpuinfo_field flags)" ] || return 0   # procfs files report size 0, so no -s test
     perf_section "Isolation for sandboxed agents" \
         "/dev/kvm usable for microVM sandboxes, each GPU alone in its IOMMU group, split-lock detection on, CET known, GPU observation streams limited to CAP_PERFMON" \
@@ -3047,19 +3058,34 @@ perf_isolation() {
         perf_info "no VT-x (vmx flag) exposed: no microVM sandboxes (VT-x off in BIOS, or a VM without nested virtualization)" "/proc/cpuinfo"
     fi
 
-    # TDX: kvm_intel's tdx parameter (0444, arch/x86/kvm/vmx/tdx.c) says the host
-    # runs TDX guests; tdx_guest (cpuinfo) or /dev/tdx_guest says this node is one.
-    # Loading kvm_intel with TDX is a host change, so it is only suggested.
+    # TDX: kvm_intel's tdx parameter (0444, arch/x86/kvm/vmx/tdx.c, new in Linux
+    # 6.16: the file is absent at v6.15) says the host runs TDX guests; tdx_guest
+    # (cpuinfo) or /dev/tdx_guest says this node is one. The kernel sets
+    # tdx_host_platform only after tdx_init() finds the BIOS-enabled KeyID range
+    # (arch/x86/virt/vmx/tdx/tdx.c), so no BIOS step is suggested. Loading
+    # kvm_intel with TDX is a host change, so it is only suggested.
     v=$(rd "${km}/tdx")
     if cpu_flag tdx_guest || [ -e "${SYSROOT}/dev/tdx_guest" ]; then
         perf_info "this node is a TDX guest (confidential VM): attestation reports via configfs-tsm /sys/kernel/config/tsm/report" "/proc/cpuinfo (tdx_guest), /dev/tdx_guest"
     elif [ "${v}" = Y ]; then
         perf_info "kvm_intel tdx=Y: the host runs TDX guests, so untrusted agent sandboxes can run as confidential microVMs (Kata kata-qemu-tdx RuntimeClass)" "${km}/tdx"
-    elif cpu_flag tdx_host_platform; then
-        perf_flag note "the CPU reports tdx_host_platform but kvm_intel runs without TDX (tdx=${v:-absent}): no confidential microVM sandboxes" "/proc/cpuinfo (tdx_host_platform), ${km}/tdx" \
-            "kvm_intel creates TDX guests only when loaded with tdx=1 and TDX is enabled in the BIOS" \
-            "BIOS: enable TDX, then: sudo modprobe -r kvm_intel && sudo modprobe kvm_intel tdx=1" \
-            "sudo modprobe -r kvm_intel && sudo modprobe kvm_intel tdx=0"
+    elif cpu_flag tdx_host_platform && cpu_flag vmx; then
+        kr=$(kernel_release); kr=${kr%%[!0-9.]*}
+        if [ -n "${v}" ]; then
+            perf_flag note "the CPU reports tdx_host_platform but kvm_intel runs without TDX (tdx=${v}): no confidential microVM sandboxes" "/proc/cpuinfo (tdx_host_platform), ${km}/tdx" \
+                "kvm_intel creates TDX guests only when loaded with tdx=1; stop running VMs and microVM sandboxes first, since modprobe -r kvm_intel fails while one holds /dev/kvm" \
+                "sudo modprobe -r kvm_intel && sudo modprobe kvm_intel tdx=1" \
+                "sudo modprobe -r kvm_intel && sudo modprobe kvm_intel tdx=0"
+        elif ver_lt "${kr}" 6.16; then
+            perf_info "the CPU reports tdx_host_platform, but kernel $(kernel_release) has no KVM TDX host support (needs Linux 6.16+): no confidential microVM sandboxes" "/proc/cpuinfo (tdx_host_platform), /proc/sys/kernel/osrelease"
+        elif [ -d "${SYSROOT}/sys/module/kvm_intel" ]; then
+            perf_info "the CPU reports tdx_host_platform, but kvm_intel has no tdx parameter: this kernel is built without CONFIG_KVM_INTEL_TDX" "/proc/cpuinfo (tdx_host_platform), ${km}/tdx"
+        else
+            perf_flag note "the CPU reports tdx_host_platform but kvm_intel is not loaded: no microVM or confidential microVM sandboxes" "/proc/cpuinfo (tdx_host_platform), /sys/module/kvm_intel" \
+                "kvm_intel creates TDX guests only when loaded with tdx=1 (kernels built with CONFIG_KVM_INTEL_TDX)" \
+                "sudo modprobe kvm_intel tdx=1" \
+                "sudo modprobe -r kvm_intel"
+        fi
     fi
 
     # IOMMU and per-GPU groups

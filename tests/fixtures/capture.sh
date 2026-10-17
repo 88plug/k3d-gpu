@@ -136,11 +136,12 @@ for cpu in "${SRC}"/sys/devices/system/cpu/cpu[0-9]*; do
     done
 done
 
-# First CPU's family, model, model name and flags, and the kernel release.
+# First CPU's vendor, family, model, model name and flags, and the kernel release.
 if [ -r "${SRC}/proc/cpuinfo" ]; then
     mkdir -p "${OUT}/proc"
     {
         printf 'processor\t: 0\n'
+        grep -m1 '^vendor_id[[:space:]]*:' "${SRC}/proc/cpuinfo" || true
         grep -m1 '^cpu family[[:space:]]*:' "${SRC}/proc/cpuinfo" || true
         grep -m1 '^model[[:space:]]*:' "${SRC}/proc/cpuinfo" || true
         grep -m1 '^model name' "${SRC}/proc/cpuinfo" || true
