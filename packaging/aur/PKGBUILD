@@ -44,6 +44,7 @@ package() {
     install -Dm644 images.lock "$pkgdir/usr/share/k3d-gpu/images.lock"
     install -Dm644 share/agent-sandbox.yml      "$pkgdir/usr/share/k3d-gpu/agent-sandbox.yml"
     install -Dm644 share/agent-sandbox-k3d.yml  "$pkgdir/usr/share/k3d-gpu/agent-sandbox-k3d.yml"
+    install -Dm644 share/model-share.yml        "$pkgdir/usr/share/k3d-gpu/model-share.yml"
     install -Dm644 README.md  "$pkgdir/usr/share/doc/$pkgname/README.md"
     install -Dm644 LICENSE.md    "$pkgdir/usr/share/licenses/$pkgname/LICENSE.md"
 }
