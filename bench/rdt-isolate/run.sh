@@ -21,6 +21,10 @@
 # Env: OUT results dir (default ./h26-out), K3D_GPU_IMAGE node image (optional),
 #      K3D_GPU_CLUSTER (default k3dgpu-i-rdt-isolate), ABORT_S (default 1080, per level),
 #      TOTAL_S (default 2340, the whole run),
+#      MODELS (optional) host dir holding OpenVINO/Qwen3-4B-int4-ov as a git+LFS clone;
+#      it is copied into the agent's ovms-models PVC before `agent up`, so the
+#      locked run does not wait on a Hugging Face download (the pull init then
+#      finds the files and only rewrites graph.pbtxt).
 #      LEVELS (default "typical heavy"; per-level results in OUT/LEVEL/).
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -79,6 +83,55 @@ imc() {
 
 log "H26 start: cluster ${NAME}, out ${OUT}, abort at ${ABORT_S}s"
 "${L[@]}" up >> "${LOG}" 2>&1 || { log "up failed"; exit 1; }
+if [ -n "${MODELS:-}" ]; then
+    [ -d "${MODELS}/OpenVINO/Qwen3-4B-int4-ov" ] || { log "MODELS has no OpenVINO/Qwen3-4B-int4-ov"; exit 1; }
+    kubectl apply -f - >> "${LOG}" 2>&1 <<'EOF' || { log "model staging: apply failed"; exit 1; }
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: k3d-gpu-agent
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ovms-models
+  namespace: k3d-gpu-agent
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: stage-models
+  namespace: k3d-gpu-agent
+spec:
+  restartPolicy: Never
+  containers:
+    - name: hold
+      image: busybox:1.37
+      command: [sleep, "600"]
+      volumeMounts:
+        - name: models
+          mountPath: /models
+  volumes:
+    - name: models
+      persistentVolumeClaim:
+        claimName: ovms-models
+EOF
+    kubectl -n k3d-gpu-agent wait --for=condition=Ready pod/stage-models --timeout=180s >> "${LOG}" 2>&1 || { log "model staging: pod not Ready"; exit 1; }
+    pv=$(kubectl -n k3d-gpu-agent get pvc ovms-models -o jsonpath='{.spec.volumeName}')
+    pvpath=$(kubectl get pv "${pv}" -o jsonpath='{.spec.hostPath.path}{.spec.local.path}')
+    node="k3d-${NAME}-server-0"
+    docker exec "${node}" mkdir -p "${pvpath}/OpenVINO" \
+        && docker cp "${MODELS}/OpenVINO/Qwen3-4B-int4-ov" "${node}:${pvpath}/OpenVINO/" >> "${LOG}" 2>&1 \
+        && docker exec "${node}" chown -R 5000:5000 "${pvpath}" \
+        || { log "model staging: copy into ${node}:${pvpath} failed"; exit 1; }
+    kubectl -n k3d-gpu-agent delete pod stage-models --wait=true --timeout=60s >> "${LOG}" 2>&1
+    log "model staged into PVC ${pv} at ${pvpath} ($(docker exec "${node}" du -sh "${pvpath}" | cut -f1))"
+fi
 K3D_GPU_AGENT_DEVICE=CPU K3D_GPU_AGENT_CPUS=15 "${L[@]}" agent up >> "${LOG}" 2>&1 || { log "agent up failed"; exit 1; }
 kubectl -n k3d-gpu-agent wait --for=condition=Ready pod -l app=ovms --timeout=300s >> "${LOG}" 2>&1 \
     || kubectl -n k3d-gpu-agent wait --for=condition=Ready pod --all --timeout=300s >> "${LOG}" 2>&1 \
