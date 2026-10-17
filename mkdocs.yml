@@ -42,6 +42,8 @@ nav:
       - Head-to-head benchmarks: benchmarks.md
       - Provenance: provenance.md
       - Security audit: security-audit.md
+      - Intel technical report: intel/technical-report.md
+      - Upstream draft (EAT/EAS): intel/upstream-eat.md
   - Development:
       - Branch consolidation: dev/consolidation.md
   - Contributing: contributing.md
