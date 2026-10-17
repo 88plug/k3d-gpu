@@ -59,6 +59,8 @@ Behaviour is tunable via environment variables:
 | `K3D_GPU_IMAGE`      | `cryptoandcoffee/k3d-gpu:latest`          | node image (`latest` = ubuntu26.04)  |
 | `K3D_GPU_SHARE`      | `/usr/share/k3d-gpu`                      | dir of fallback plugin manifests     |
 | `K3D_GPU_VENDORS`    | `auto`                                    | `auto` detects; or a list of `nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa` |
+| `K3D_GPU_NODE_LABELS` | none                                    | extra node labels, comma list of `key=value` (e.g. `ei-infra-eligible=true,ei-inference-eligible=true`) |
+| `K3D_GPU_K3S_ARGS`   | none                                      | extra k3s server flags, space-separated (e.g. `--disable=servicelb`) |
 | `K3D_GPU_PLUGIN`     | `/usr/share/k3d-gpu/nvidia-device-plugin.yml` | fallback manifest (only used if a custom image lacks the baked one) |
 | `K3D_GPU_INTEL_PLUGIN` | `/usr/share/k3d-gpu/intel-gpu-plugin.yml` | same, for the Intel GPU plugin |
 | `K3D_GPU_GAUDI_PLUGIN` | `/usr/share/k3d-gpu/gaudi-device-plugin.yml` | same, for the Gaudi plugin |
@@ -454,6 +456,15 @@ pins it. CPU request = limit = `--workers` unless `--cpu` says otherwise.
 
 `tests/bench_test.sh` tests all three without root, a cluster or a model,
 using a fake RAPL tree and `tests/openai_stub.py`, a streaming stub server.
+
+### Intel Enterprise Agent Toolkit
+
+[integrations/eat](integrations/eat/README.md) runs Intel's
+[Enterprise Agent Toolkit](https://github.com/intel/enterprise-agent-toolkit)
+(LiteLLM gateway, Redis, pgvector, agent sandbox, CPU vLLM) on a single k3d-gpu
+node through EAT's own brownfield path, on a non-Xeon client CPU. Its vLLM pod
+joins the hybrid balloons policy's `performance` balloon through EAT's own chart
+annotation, so EAT's CPU balloons stay off and `hybrid` stays on.
 
 ---
 
