@@ -20,7 +20,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 
 | # | Hypothesis | Prediction | Probe | Verdict |
 |---|------------|------------|-------|---------|
-| H1 | EAT (Intel Enterprise Agent Toolkit) runs on a single non-Xeon machine. | On one host whose CPU is not a Xeon (Core or Core Ultra), `k3d-gpu up` followed by the EAT deploy from `claude/eat-on-k3d` reaches all EAT pods `Ready` and one inference request returns a completion. | Fresh host, Reproduce header filled in. `k3d-gpu up`, deploy EAT, `kubectl wait --for=condition=Ready pod --all -A --timeout=30m`, then one completion request against the EAT endpoint. Refuted by any pod not Ready at the timeout, a Xeon-only instruction or node-label requirement, or no completion. Wave 1 (2026-10-16, i9-13900T): a completion returned, but the probe was not run as written (see [H1 run](#h1-run-i9-13900t-2026-10-16)). | INCONCLUSIVE |
+| H1 | EAT (Intel Enterprise Agent Toolkit) runs on a single non-Xeon machine. | On one host whose CPU is not a Xeon (Core or Core Ultra), `k3d-gpu up` followed by the EAT deploy from `claude/eat-on-k3d` reaches all EAT pods `Ready` and one inference request returns a completion. | Fresh host, Reproduce header filled in. `k3d-gpu up`, deploy EAT, `kubectl wait --for=condition=Ready pod --all -A --timeout=30m`, then one completion request against the EAT endpoint. Refuted by any pod not Ready at the timeout, a Xeon-only instruction or node-label requirement, or no completion. Wave 1 (2026-10-16, i9-13900T): a completion returned, but the probe was not run as written (see [H1 run](#h1-run-i9-13900t-2026-10-16)). Amended 2026-10-17T20:35Z, before run 2: matched load instead of a fresh host, one fresh cluster, every step timed and logged, grading of Job pods fixed in advance (see [H1 run 2](#h1-run-2-i9-13900t-2026-10-17)). | INCONCLUSIVE |
 | H2 | On an Intel hybrid host whose only Intel GPU is an iGPU (wave 1: i9-13900T, UHD 770), the iGPU serves a fixed model faster and with less energy per token than the CPU running the same model with a tuned thread count. | iGPU decode tok/s is higher than the best CPU tok/s, and iGPU J/token is lower than the CPU J/token at that best thread count. | Row restated 2026-10-16 to the pre-registration that ran (written ~10:20 PDT, before the 10:29-11:32 PDT campaign); the row first committed at 04:48 PDT named a Core Ultra host, which was not tested. OVMS 2026.4.1 with `OpenVINO/Qwen3-4B-int4-ov`, same digest and graph except the device. CPU baseline swept over 4 thread and core configs first, best kept. Energy from RAPL `package-0`, with a 20 s model-loaded idle before each block. Decode 30 x 256, prefill ~1936 x 16, 4-in-flight 30 x 128; 5 rounds, ABBA order. Refuted if the iGPU loses on either tok/s or J/token. | REFUTED |
 | H3 | P/E pinning isolates inference from noisy neighbours on a hybrid CPU. | With the inference pod labelled `k3d-gpu.io/cores: performance` and a CPU-saturating neighbour labelled `k3d-gpu.io/cores: efficient`, inference latency stays within 10% of the no-neighbour baseline on both decode and prefill. Without pinning, the same neighbour raises latency by more than 10% on at least one workload. | Pre-registered 2026-10-16 ~13:20 PDT, before any timed block (13:24-14:53 PDT). OVMS on CPU, Qwen3-4B int4, 15-CPU request; neighbour `bench/noisy.sh` (stress-ng `--cpu 15`, Guaranteed 15 CPU). Arms: Q pinned and quiet, P pinned with the neighbour on the E-cores, U both unlabelled, plus Qu, Qe, X (roles swapped) and PM (stream neighbour). `Cpus_allowed_list` read in every block. 5 rounds x 7 arms, 5 requests per workload per block. Refuted if P is more than 10% above Q on either workload. | REFUTED |
 | H4 | The automatic device choice equals the measured best device. | For a fixed model on a host with more than one usable device (CPU, iGPU, NPU, dGPU), the device the agent stack selects automatically (`claude/agent-stack`) is the one with the highest measured tok/s in a sweep over every usable device. | Record the auto-selected device. Then force each usable device in turn and measure tok/s with the H2 method. Refuted if any forced device beats the auto choice by more than the run-to-run spread. Wave 1 pre-registered 2026-10-16 15:30 PDT (H4b) and 16:22 PDT (H4c), each before its runs, against the `auto` rule of `claude/agent-stack` 8385dc2. | REFUTED |
@@ -1478,6 +1478,43 @@ kubectl wait --for=condition=Ready pod --all -A --timeout=30m
 EAT_WORK=$PWD/eat-work integrations/eat/eat-check.sh   # expect: ==> EAT check passed.
 scripts/k3d-gpu down
 ```
+
+### H1 run 2 (i9-13900T, 2026-10-17)
+
+Amendment, written 2026-10-17T20:35Z and pushed before any step of this run.
+It fixes the three deviations of run 1 and adds nothing to the H1 prediction.
+
+- **Host.** No fresh host exists for this probe; it runs on the same shared
+  i9-13900T. "Fresh host" is replaced by a matched-load design: for the whole run,
+  `bench/load/load.py start --level typical` holds the E-cores (16-31) at its
+  fixed background load, and `bench/load/load.py sample` records busy %, load1 and
+  swap in 60 s windows (package W is null: no root for RAPL). Other tenants of
+  the host keep running and are recorded, not removed.
+- **One fresh cluster.** Cluster `k3dgpu-h1-eat`, created by this run and deleted
+  after it, scratch `KUBECONFIG`, an empty `EAT_WORK`. Every step runs once; no
+  step is retried and no `helm uninstall` happens between steps.
+- **Steps, each timed (wall s) and logged in order.** The reproduce block of run 1
+  with `K3D_GPU_CLUSTER=k3dgpu-h1-eat`, from `main` 992df8d: (0) `docker build`
+  of the node image, the EAT clone at the pinned commit and the bastion build,
+  before the host lock (they touch no cluster; `eat-up.sh` then finds both and
+  skips them); (1) `k3d-gpu up`; (2) `eat-up.sh`; (3) `eat-up.sh model
+  cpu-qwen3-1-7b`; (4) `kubectl wait --for=condition=Ready pod --all -A
+  --timeout=30m`, output recorded verbatim; (5) one chat completion through EAT's
+  LiteLLM gateway (ingress-nginx, `Host: api.example.com`), request and response
+  recorded; (6) `eat-check.sh` (the README's step 4, not graded); (7) `k3d-gpu
+  down`. Host lock: at most 25 min from step 1 to step 7.
+- **Grading, fixed now.** SUPPORTED only if steps 1-3 exit 0, step 4 exits 0
+  (every pod Ready), step 5 returns HTTP 200 with a non-empty completion, and no
+  Xeon-only instruction or node label is needed. Step 4 exiting non-zero is
+  REFUTED when any pod owned by a Deployment, StatefulSet, DaemonSet or ReplicaSet
+  is not Ready at the end of the wait. It is INCONCLUSIVE when the only pods not
+  Ready are finished Job pods (phase Succeeded, or Failed with a later Succeeded
+  pod of the same Job): such a pod can never become Ready, so the probe as
+  written cannot pass on a stack that runs Jobs. Once every pod that is not Ready
+  is a finished Job pod, the outcome of the wait is fixed and it is stopped there
+  (to stay inside the lock), with the pod list recorded. Any step 1-3 failing,
+  or no completion, is REFUTED; the lock running out before step 5 is
+  INCONCLUSIVE.
 
 ### H2 run (i9-13900T, 2026-10-16)
 
