@@ -33,13 +33,20 @@ meminfo() { mkdir -p "$1/proc"; printf 'MemTotal:       %s kB\nMemAvailable:   1
 
 # ---- qs_tier: model and memory by RAM tier ------------------------------------
 tier() { local d="${TMP}/tier-$1"; meminfo "${d}" "$1"; (source <(lib); SYSROOT=${d}; qs_tier); }
-eq "8 GB host -> 1.7B"   "$(tier 8000000)"   "OpenVINO/Qwen3-1.7B-int4-ov 4Gi"
-eq "11.9 GiB -> 1.7B"    "$(tier 12582911)"  "OpenVINO/Qwen3-1.7B-int4-ov 4Gi"
-eq "12 GiB -> 4B"        "$(tier 12582912)"  "OpenVINO/Qwen3-4B-int4-ov 6Gi"
-eq "16 GB host -> 4B"    "$(tier 16000000)"  "OpenVINO/Qwen3-4B-int4-ov 6Gi"
-eq "24 GiB -> 8B"        "$(tier 25165824)"  "OpenVINO/Qwen3-8B-int4-ov 10Gi"
-eq "128 GB host -> 8B"   "$(tier 131521428)" "OpenVINO/Qwen3-8B-int4-ov 10Gi"
-eq "no meminfo -> default 4B" "$( (source <(lib); SYSROOT=${TMP}/none; qs_tier) )" "OpenVINO/Qwen3-4B-int4-ov 6Gi"
+eq "8 GB host -> 1.7B"   "$(tier 8000000)"   "OpenVINO/Qwen3-1.7B-int4-ov 4Gi 6f32d81e9deebeca30bb5490a7176cf4fa8c79e3"
+eq "11.9 GiB -> 1.7B"    "$(tier 12582911)"  "OpenVINO/Qwen3-1.7B-int4-ov 4Gi 6f32d81e9deebeca30bb5490a7176cf4fa8c79e3"
+eq "12 GiB -> 4B"        "$(tier 12582912)"  "OpenVINO/Qwen3-4B-int4-ov 6Gi b467368d16b75df14055562fe927ae8e1f15f7ef"
+eq "16 GB host -> 4B"    "$(tier 16000000)"  "OpenVINO/Qwen3-4B-int4-ov 6Gi b467368d16b75df14055562fe927ae8e1f15f7ef"
+eq "24 GiB -> 8B"        "$(tier 25165824)"  "OpenVINO/Qwen3-8B-int4-ov 10Gi 5c47abf4b8e12ebe8e99745bb0c1ec17e0c0abcc"
+eq "128 GB host -> 8B"   "$(tier 131521428)" "OpenVINO/Qwen3-8B-int4-ov 10Gi 5c47abf4b8e12ebe8e99745bb0c1ec17e0c0abcc"
+eq "no meminfo -> default 4B" "$( (source <(lib); SYSROOT=${TMP}/none; qs_tier) )" "OpenVINO/Qwen3-4B-int4-ov 6Gi b467368d16b75df14055562fe927ae8e1f15f7ef"
+# A small host (WSL2 gets half of Windows' RAM): the request shrinks to fit, then stops.
+eq "3.8 GiB WSL2 VM -> request fits" "$(tier 3984588)" "OpenVINO/Qwen3-1.7B-int4-ov 2099Mi 6f32d81e9deebeca30bb5490a7176cf4fa8c79e3"
+eq "2 GiB host -> too small" "$(tier 2097152)" "OpenVINO/Qwen3-1.7B-int4-ov - 6f32d81e9deebeca30bb5490a7176cf4fa8c79e3"
+for kb in 2000000 3984588 8000000 12582912 25165824 131521428; do
+    r=$(tier "${kb}" | cut -d' ' -f3)
+    [[ "${r}" =~ ^[0-9a-f]{40}$ ]] && ok "tier at ${kb} kB pins a revision" || fail "tier at ${kb} kB: revision '${r}'"
+done
 
 # ---- progress_bar -------------------------------------------------------------
 pb() { (source <(lib); progress_bar "$@"); }
@@ -49,6 +56,8 @@ eq "bar 100%"    "$(pb 100 100 10)" "[##########] 100%"
 eq "bar clamps"  "$(pb 300 100 10)" "[##########] 100%"
 eq "bar no total" "$(pb 5 0 10)"    "[----------]   ?%"
 eq "bar junk"    "$(pb abc 10 10)"  "[----------]   ?%"
+eq "bar non-ASCII digit" "$(pb ٣ 1 10)" "[----------]   ?%"
+eq "bar non-ASCII width -> 30" "$(pb 0 0 ٣ | wc -c)" "37"
 eq "bar default width" "$(pb 1 2 | wc -c)" "37"
 eq "bar bad width -> 30" "$(pb 1 2 x | wc -c)" "37"
 
@@ -64,10 +73,17 @@ has "WSL: NPU unreachable"      "${out}" "intel/linux-npu-driver#56"
 has "WSL: Docker Desktop NVIDIA-only" "${out}" "NVIDIA-only"
 mkdir -p "${TMP}/wsl-intel/proc" "${TMP}/wsl-intel/dev" "${TMP}/wsl-intel/usr/lib/wsl/drivers/iigd_dch.inf_amd64_x"
 cp "${TMP}/wsl-nodxg/proc/version" "${TMP}/wsl-intel/proc/version" && touch "${TMP}/wsl-intel/dev/dxg"
-has "WSL with Intel driver" "$(wsl "${TMP}/wsl-intel")" "advertised as gpu.intel.com/dxg"
+has "WSL with Intel driver" "$(wsl "${TMP}/wsl-intel")" "advertises the Intel GPU as gpu.intel.com/dxg"
+has "WSL: LLM runs on the CPU (agent does not request dxg)" "$(wsl "${TMP}/wsl-intel")" "The LLM runs on the CPU here"
+lacks "WSL without dxg: no CPU promise" "$(wsl "${TMP}/wsl-nodxg")" "so the agent runs on the CPU"
+mkdir -p "${TMP}/wsl-nv/proc" "${TMP}/wsl-nv/dev" "${TMP}/wsl-nv/usr/lib/wsl/lib"
+cp "${TMP}/wsl-nodxg/proc/version" "${TMP}/wsl-nv/proc/version" && touch "${TMP}/wsl-nv/dev/dxg" "${TMP}/wsl-nv/usr/lib/wsl/lib/nvidia-smi"
+out=$(wsl "${TMP}/wsl-nv")
+has "WSL with NVIDIA driver" "${out}" "the cluster gets the NVIDIA GPU"
+lacks "WSL NVIDIA: no Intel driver advice" "${out}" "install the current"
 mkdir -p "${TMP}/wsl-nodrv/proc" "${TMP}/wsl-nodrv/dev"
 cp "${TMP}/wsl-nodxg/proc/version" "${TMP}/wsl-nodrv/proc/version" && touch "${TMP}/wsl-nodrv/dev/dxg"
-has "WSL dxg without Intel driver" "$(wsl "${TMP}/wsl-nodrv")" "no Intel driver is under"
+has "WSL dxg without Intel driver" "$(wsl "${TMP}/wsl-nodrv")" "no Intel or NVIDIA driver is under"
 
 # ---- quickstart end to end against stubs -----------------------------------------
 S="${TMP}/state" B="${TMP}/bin"
@@ -95,43 +111,45 @@ echo "kubectl $*" >> "${STUB_STATE}/log"
 case "$*" in
     *"get deployment ovms"*)
         [ -f "${STUB_STATE}/agent" ] || exit 1
-        printf '1 ["--model_path=/models/%s","--port=8000"]' "$(cat "${STUB_STATE}/agent")" ;;
+        printf '1 %s ["--model_path=/models/%s","--port=8000"]' "$(cat "${STUB_STATE}/mem")" "$(cat "${STUB_STATE}/agent")" ;;
     *"get secret open-webui-admin"*) [ -f "${STUB_STATE}/secret" ] || exit 1 ;;
     *"create secret generic open-webui-admin"*) touch "${STUB_STATE}/secret" ;;
     *"create namespace"*) echo "kind: Namespace" ;;
     *"apply -f -"*) cat >> "${STUB_STATE}/applied" ;;
-    *port-forward*) echo $$ >> "${STUB_STATE}/pf.pids"; exec sleep 60 ;;
+    *port-forward*) echo $$ >> "${STUB_STATE}/pf.pids"; exec -a "kubectl $*" sleep 60 ;;
 esac
 exit 0
 EOF
 cat > "${B}/self" <<'EOF'
 #!/usr/bin/env bash
-echo "self $* model=${K3D_GPU_AGENT_MODEL:-} mem=${K3D_GPU_AGENT_MEMORY:-} tool=${K3D_GPU_AGENT_TOOL_PARSER:-} reason=${K3D_GPU_AGENT_REASONING_PARSER:-} backend=${K3D_GPU_AGENT_BACKEND:-}" >> "${STUB_STATE}/log"
+echo "self $* model=${K3D_GPU_AGENT_MODEL:-} mem=${K3D_GPU_AGENT_MEMORY:-} tool=${K3D_GPU_AGENT_TOOL_PARSER:-} reason=${K3D_GPU_AGENT_REASONING_PARSER:-} backend=${K3D_GPU_AGENT_BACKEND:-} rev=${K3D_GPU_AGENT_REVISION:-}" >> "${STUB_STATE}/log"
 case "$1" in
     up) touch "${STUB_STATE}/cluster" ;;
-    agent) echo "${K3D_GPU_AGENT_MODEL}" > "${STUB_STATE}/agent" ;;
+    agent) echo "${K3D_GPU_AGENT_MODEL}" > "${STUB_STATE}/agent"; echo "${K3D_GPU_AGENT_MEMORY}" > "${STUB_STATE}/mem" ;;
 esac
 EOF
 chmod +x "${B}"/*
 
 qs() {
     (export PATH="${B}:${PATH}" STUB_STATE="${S}" K3D_GPU_QUICKSTART_DIR="${S}/qs" K3D_GPU_QUICKSTART_POLL=0 \
-        K3D_GPU_CHAT_UI="${ROOT}/share/agent-chat-ui.yml"
-     source <(lib); SYSROOT="${TMP}/host"; qs_self() { echo "${B}/self"; }; "$@") 2>&1
+        K3D_GPU_CHAT_UI="${ROOT}/share/agent-chat-ui.yml" K3D_GPU_VENDORS="${QS_VENDORS-hybrid}"
+     source <(lib); SYSROOT="${TMP}/host"; qs_self() { echo "${B}/self"; }; resource_total() { echo 0; }; "$@") 2>&1
 }
 
 out=$(qs cmd_quickstart); rc=$?
 eq "first run exits 0" "${rc}" 0
 log=$(cat "${S}/log")
 has "first run creates the cluster" "${log}" "self up"
-has "first run starts the agent with the tier model" "${log}" "self agent up model=OpenVINO/Qwen3-8B-int4-ov mem=10Gi tool=hermes3 reason=qwen3 backend=ovms"
+has "first run starts the agent with the tier model" "${log}" "self agent up model=OpenVINO/Qwen3-8B-int4-ov mem=10Gi tool=hermes3 reason=qwen3 backend= rev=5c47abf4b8e12ebe8e99745bb0c1ec17e0c0abcc"
+has "admin secret read from the 0600 file" "${log}" "--from-env-file="
+lacks "admin password never on argv" "${log}" "password="
 has "progress steps shown" "${out}" "[1/5]"
 has "ready line" "${out}" "[5/5] [##########] 100% Ready"
 has "chat URL on loopback" "${out}" "http://127.0.0.1:8080"
 has "admin secret created" "${log}" "create secret generic open-webui-admin"
 eq  "admin file is 0600" "$(stat -c %a "${S}/qs/chat-admin")" 600
 has "admin file holds a password" "$(cat "${S}/qs/chat-admin")" "password="
-has "UI default model follows the tier" "$(cat "${S}/applied")" "value: Qwen3-8B-int4-ov"
+has "UI default model follows the tier" "$(cat "${S}/applied")" 'value: "Qwen3-8B-int4-ov"'
 lacks "UI default model replaced" "$(cat "${S}/applied")" "value: Qwen3-4B-int4-ov"
 has "port-forward bound to loopback" "${log}" "port-forward --address 127.0.0.1 svc/open-webui 8080:8080"
 pf1=$(cat "${S}/qs/port-forward.pid")
@@ -152,13 +170,37 @@ has "second run says agent serving" "${out}" "agent already serving OpenVINO/Qwe
 out=$(K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3-1.7B-int4-ov qs cmd_quickstart)
 log=$(cat "${S}/log")
 lacks "override: cluster kept" "${log}" "self up"
-has "override: agent restarted with it" "${log}" "self agent up model=OpenVINO/Qwen3-1.7B-int4-ov"
+has "override: agent restarted with it" "${log}" "self agent up model=OpenVINO/Qwen3-1.7B-int4-ov mem=4Gi tool= reason= backend= rev="
+
+# A changed memory reservation alone restarts the agent too.
+: > "${S}/log"
+K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3-1.7B-int4-ov K3D_GPU_AGENT_MEMORY=3Gi qs cmd_quickstart >/dev/null
+has "memory change restarts the agent" "$(cat "${S}/log")" "self agent up model=OpenVINO/Qwen3-1.7B-int4-ov mem=3Gi"
+
+# What the user exports reaches agent up unchanged.
+: > "${S}/log"
+K3D_GPU_AGENT_TOOL_PARSER=mine K3D_GPU_AGENT_REVISION=abc qs cmd_quickstart >/dev/null
+has "user parser and revision win" "$(cat "${S}/log")" "tool=mine reason=qwen3 backend= rev=abc"
+: > "${S}/log"
+out=$(K3D_GPU_AGENT_BACKEND=vllm qs cmd_quickstart --no-ui); rc=$?
+eq "user backend vllm: exits 0" "${rc}" 0
+has "user backend reaches agent up unchanged" "$(cat "${S}/log")" "self agent up model= mem= tool= reason= backend=vllm"
+out=$(K3D_GPU_AGENT_BACKEND=vllm qs cmd_quickstart); rc=$?
+[ "${rc}" -ne 0 ] && grep -q -- "--no-ui" <<< "${out}" && ok "vllm + chat UI names --no-ui" || fail "vllm + chat UI: rc=${rc} ${out}"
 
 # --no-ui stops after the agent.
 out=$(qs cmd_quickstart --no-ui)
 has "--no-ui prints the API" "${out}" "Ready (no chat UI)"
 out=$(qs cmd_quickstart --bogus); rc=$?
 eq "unknown option fails" "${rc}" 1
+
+# No accelerator detected: stops at step 1, before any cluster.
+mv "${S}/cluster" "${S}/cluster.keep"
+: > "${S}/log"
+out=$(QS_VENDORS="" qs cmd_quickstart); rc=$?
+[ "${rc}" -ne 0 ] && grep -q "no CPU-only path" <<< "${out}" && ok "no accelerator: stops with a message" || fail "no accelerator: rc=${rc}"
+lacks "no accelerator: nothing created" "$(cat "${S}/log")" "self up"
+mv "${S}/cluster.keep" "${S}/cluster"
 
 # Missing tools are named, nothing runs.
 out=$(PATH="${TMP}/empty" qs cmd_quickstart 2>&1); rc=$?
@@ -176,6 +218,41 @@ kill -0 "${pf1}" 2>/dev/null && fail "port-forward still running" || ok "port-fo
 out=$(qs cmd_uninstall --yes); rc=$?
 eq "uninstall twice is fine" "${rc}" 0
 has "second uninstall: no cluster" "${out}" "no cluster 'gpu'"
+
+# A cluster quickstart only reused is kept unless --cluster.
+touch "${S}/cluster"; : > "${S}/log"
+qs cmd_quickstart --no-ui >/dev/null
+out=$(qs cmd_uninstall --yes)
+lacks "reused cluster kept" "$(cat "${S}/log")" "k3d cluster delete"
+has "reused cluster: says why" "${out}" "quickstart did not create it"
+qs cmd_uninstall --yes --cluster >/dev/null
+has "--cluster deletes a reused cluster" "$(cat "${S}/log")" "k3d cluster delete gpu"
+
+# Port: 8080 taken -> the next free port; the env var wins.
+if command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import socket, time
+s = socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); s.bind(("127.0.0.1", 0)); s.listen(1)
+print(s.getsockname()[1], flush=True); time.sleep(20)' > "${TMP}/port" &
+    lpid=$!
+    for _ in $(seq 1 50); do [ -s "${TMP}/port" ] && break; sleep 0.1; done
+    lp=$(cat "${TMP}/port")
+    (source <(lib); qs_port_free "${lp}") && fail "busy port ${lp} read as free" || ok "busy port read as busy"
+    kill "${lpid}" 2>/dev/null; wait "${lpid}" 2>/dev/null
+fi
+eq "K3D_GPU_CHAT_PORT wins" "$(K3D_GPU_CHAT_PORT=9191 bash -c 'source <(sed "/^case \"\${1:-help}\" in$/,\$d" "$0"); qs_port' "${LAUNCHER}")" 9191
+
+# A recycled pid in port-forward.pid is not quickstart's port-forward.
+mkdir -p "${S}/qs"; sleep 30 & v=$!; echo "${v}" > "${S}/qs/port-forward.pid"
+(source <(lib); QS_DIR="${S}/qs"; qs_pf_pid) && fail "foreign pid taken as the port-forward" || ok "foreign pid rejected"
+[ -e "${S}/qs/port-forward.pid" ] && fail "stale pid file kept" || ok "stale pid file removed"
+kill "${v}" 2>/dev/null; wait "${v}" 2>/dev/null; rmdir "${S}/qs" 2>/dev/null
+
+# Proxy: carried into the nodes (k3d --env) and the model download.
+px=$(HTTPS_PROXY='http://u:p@proxy:3128' NO_PROXY=corp bash -c 'source <(sed "/^case \"\${1:-help}\" in$/,\$d" "$0"); proxy_k3d_args; proxy_yaml_env' "${LAUNCHER}")
+has "proxy: node env with escaped @" "${px}" 'HTTPS_PROXY=http://u:p\@proxy:3128@server:*;agent:*'
+has "proxy: NO_PROXY keeps the host's and adds the cluster's" "${px}" "NO_PROXY=corp,127.0.0.1,localhost,10.42.0.0/16,10.43.0.0/16,.svc,.cluster.local@server:*;agent:*"
+has "proxy: pod env" "${px}" 'value: "http://u:p@proxy:3128"'
+eq "no proxy: nothing" "$(env -u HTTPS_PROXY -u https_proxy -u HTTP_PROXY -u http_proxy bash -c 'source <(sed "/^case \"\${1:-help}\" in$/,\$d" "$0"); proxy_k3d_args; proxy_yaml_env' "${LAUNCHER}")" ""
 
 # Uninstall leaves other files in the state dir alone.
 mkdir -p "${S}/qs" && echo keep > "${S}/qs/mine"
@@ -214,6 +291,27 @@ printf '#!/bin/sh\nexit 0\n' > "${TMP}/ibin/apt-get" && chmod +x "${TMP}/ibin/ap
 out=$(PATH="${TMP}/ibin:${PATH}" K3D_GPU_INSTALL_BASE="file://${TMP}/mirror" K3D_GPU_INSTALL_DRY_RUN=1 bash "${INSTALLER}" 2>&1); rc=$?
 [ "${rc}" -ne 0 ] && ok "tampered .deb refused" || fail "tampered .deb accepted"
 lacks "nothing installed after mismatch" "${out}" "+ sudo apt-get"
+# Full successful dry run: the .deb matches (its pin set to the test file's sha),
+# k3d and kubectl on PATH. Exits 0 and leaves no temp dir.
+printf '#!/bin/sh\nexit 0\n' > "${TMP}/ibin/k3d"; cp "${TMP}/ibin/k3d" "${TMP}/ibin/kubectl"; chmod +x "${TMP}/ibin/k3d" "${TMP}/ibin/kubectl"
+cp "${TMP}/f" "${TMP}/mirror/k3d-gpu_$(sed -n 's/^K3D_GPU_VERSION=//p' "${INSTALLER}")-1_all.deb"
+mkdir -p "${TMP}/itmp"
+out=$(PATH="${TMP}/ibin:${PATH}" TMPDIR="${TMP}/itmp" K3D_GPU_INSTALL_BASE="file://${TMP}/mirror" K3D_GPU_INSTALL_DRY_RUN=1 \
+      K3D_GPU_INSTALL_SOURCE_ONLY=1 bash -c 'source "$0"; K3D_GPU_DEB_SHA256=$1; main' "${INSTALLER}" "${H}" 2>&1); rc=$?
+eq "successful install exits 0" "${rc}" 0
+has "successful install runs apt-get" "${out}" "apt-get install -y"
+eq "successful install leaves no temp dir" "$(ls -A "${TMP}/itmp")" ""
+inst_ver=$(sed -n 's/^K3D_GPU_VERSION=//p' "${INSTALLER}")
+since=$(sed -n 's/^QUICKSTART_SINCE=//p' "${INSTALLER}")
+if [ "$(printf '%s\n%s\n' "${inst_ver}" "${since}" | sort -V | head -n1)" = "${since}" ]; then
+    has "installer hint: quickstart (pin has it)" "${out}" "then k3d-gpu quickstart"
+else
+    has "installer hint: names the first quickstart release" "${out}" "ships in ${since}"
+fi
+launcher_ver=$(sed -n 's/^VERSION="\([^"]*\)".*/\1/p' "${LAUNCHER}")
+[ "$(printf '%s\n%s\n' "${inst_ver}" "${launcher_ver}" | sort -V | tail -n1)" = "${launcher_ver}" ] \
+    && ok "installer pin ${inst_ver} is not newer than the launcher ${launcher_ver}" || fail "installer pin ${inst_ver} newer than launcher ${launcher_ver}"
+grep -q "cmd_quickstart" "${LAUNCHER}" && ok "launcher has quickstart" || fail "launcher lacks quickstart"
 
 echo "quickstart_test: ${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

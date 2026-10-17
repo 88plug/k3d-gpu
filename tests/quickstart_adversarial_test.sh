@@ -43,7 +43,7 @@ cat > "${B}/k3d" <<'EOF'
 #!/usr/bin/env bash
 echo "k3d $*" >> "${STUB_STATE}/log"
 case "$1 $2" in
-    "cluster get") [ -f "${STUB_STATE}/cluster" ] ;;
+    "cluster get") [ -f "${STUB_STATE}/cluster" ]; exit ;;
     "cluster delete") rm -f "${STUB_STATE}/cluster" ;;
     "cluster create") touch "${STUB_STATE}/cluster" ;;
 esac
@@ -64,7 +64,7 @@ case "$*" in
     *"create secret generic open-webui-admin"*) touch "${STUB_STATE}/secret" ;;
     *"create namespace"*) echo "kind: Namespace" ;;
     *"apply -f -"*) cat > /dev/null ;;
-    *port-forward*) echo $$ >> "${STUB_STATE}/pf.pids"; exec sleep 60 ;;
+    *port-forward*) echo $$ >> "${STUB_STATE}/pf.pids"; exec -a "kubectl $*" sleep 60 ;;
 esac
 exit 0
 EOF
@@ -83,8 +83,8 @@ chmod +x "${B}"/*
 
 qs() {
     (export PATH="${B}:${PATH}" STUB_STATE="${S}" K3D_GPU_QUICKSTART_DIR="${S}/qs" K3D_GPU_QUICKSTART_POLL=0 \
-        K3D_GPU_CHAT_UI="${ROOT}/share/agent-chat-ui.yml"
-     source <(lib); SYSROOT="${QS_SYSROOT:-${TMP}/host}"; qs_self() { echo "${B}/self"; }; "$@") 2>&1
+        K3D_GPU_CHAT_UI="${ROOT}/share/agent-chat-ui.yml" K3D_GPU_VENDORS="${QS_VENDORS-hybrid}"
+     source <(lib); SYSROOT="${QS_SYSROOT:-${TMP}/host}"; qs_self() { echo "${B}/self"; }; resource_total() { echo 0; }; "$@") 2>&1
 }
 
 # ---- 1. recycled pid in port-forward.pid --------------------------------------
@@ -115,8 +115,12 @@ qs cmd_uninstall --yes >/dev/null; rm -f "${S}/log" "${S}/agent" "${S}/secret"
 # and the agent pod stays Pending. quickstart must pick a request that fits, or
 # stop at step 1 with a message.
 wslroot "${TMP}/wsl-small"; meminfo "${TMP}/wsl-small" 3984588
-read -r m mem <<< "$( (source <(lib); SYSROOT="${TMP}/wsl-small"; qs_tier) )"
-req_kb=$(( ${mem%Gi} * 1048576 ))
+read -r m mem _ <<< "$( (source <(lib); SYSROOT="${TMP}/wsl-small"; qs_tier) )"
+case "${mem}" in
+    *Gi) req_kb=$(( ${mem%Gi} * 1048576 )) ;;
+    *Mi) req_kb=$(( ${mem%Mi} * 1024 )) ;;
+    *) req_kb=999999999 ;;
+esac
 if [ "${req_kb}" -lt 3984588 ]; then ok "3.8 GiB host: memory request ${mem} fits"
 else
     out=$(QS_SYSROOT="${TMP}/wsl-small" qs cmd_quickstart); rc=$?
@@ -129,13 +133,24 @@ qs cmd_uninstall --yes >/dev/null; rm -f "${S}/log" "${S}/agent" "${S}/secret"
 # ---- 3. WSL2 without /dev/dxg, no accelerator ----------------------------------
 # quickstart tells this user "the agent runs on the CPU", then `k3d-gpu up` must
 # not refuse with "no supported accelerator".
-wslroot "${TMP}/wsl-cpu"; meminfo "${TMP}/wsl-cpu" 16000000
+wslroot "${TMP}/wsl-cpu"; meminfo "${TMP}/wsl-cpu" 16000000; rm -f "${S}/cluster"
 printf 'processor\t: 0\nmodel name\t: Intel(R) Core(TM) i5-1235U\nflags\t\t: fpu sse sse2 avx avx2\n' > "${TMP}/wsl-cpu/proc/cpuinfo"
 guide=$( (source <(lib); SYSROOT="${TMP}/wsl-cpu"; qs_wsl_guidance) )
 up=$(PATH="${B}:${PATH}" STUB_STATE="${S}" K3D_GPU_SYSROOT="${TMP}/wsl-cpu" KUBECONFIG="${TMP}/kc" \
      timeout 60 bash "${LAUNCHER}" up 2>&1)
-if grep -q "runs on the CPU" <<< "${guide}"; then
+if grep -q "so the agent runs on the CPU" <<< "${guide}"; then
     lacks "WSL2 without dxg: 'up' honors the CPU promise" "${up}" "no supported accelerator"
+else
+    ok "WSL2 without dxg: guidance makes no CPU-fallback promise"
+    rm -f "${S}/cluster" "${S}/log"
+    out=$(QS_VENDORS="" QS_SYSROOT="${TMP}/wsl-cpu" qs cmd_quickstart --no-ui); rc=$?
+    if grep -q "no supported accelerator" <<< "${up}"; then
+        if [ "${rc}" -ne 0 ] && grep -q "no CPU-only path" <<< "${out}" && ! grep -q "self up" "${S}/log" 2>/dev/null; then
+            ok "WSL2 without dxg or accelerator: quickstart stops at step 1 and says why"
+        else fail "WSL2, 'up' refuses: quickstart went on: rc=${rc} $(tail -c 600 <<< "${out}")"; fi
+    elif [ "${rc}" -eq 0 ]; then
+        ok "WSL2 without dxg: 'up' detects an accelerator and quickstart goes on"
+    else fail "WSL2 without dxg or accelerator: rc=${rc} $(tail -c 600 <<< "${out}")"; fi
 fi
 rm -f "${S}/log" "${S}/cluster"
 
@@ -160,7 +175,10 @@ qs cmd_uninstall --yes >/dev/null; rm -f "${S}/log" "${S}/agent" "${S}/secret"
 # to the foreground process group) ends quickstart; `agent up` must end too, or
 # the resumed run starts a second one beside it.
 rm -f "${TMP}/agent.pid"
-(export STUB_AGENT_SLEEP=30; setsid bash -c "$(declare -f qs lib); B='${B}' S='${S}' TMP='${TMP}' ROOT='${ROOT}' LAUNCHER='${LAUNCHER}'; qs cmd_quickstart" >/dev/null 2>&1) &
+# A test script's background job inherits SIGINT ignored, which a shell cannot
+# trap; a terminal's foreground job has it at its default, so restore that.
+(export STUB_AGENT_SLEEP=30; python3 -c 'import os, signal, sys
+signal.signal(signal.SIGINT, signal.SIG_DFL); os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' bash -c "$(declare -f qs lib); B='${B}' S='${S}' TMP='${TMP}' ROOT='${ROOT}' LAUNCHER='${LAUNCHER}'; qs cmd_quickstart" >/dev/null 2>&1) &
 for _ in $(seq 1 50); do [ -s "${TMP}/agent.pid" ] && break; sleep 0.1; done
 apid=$(cat "${TMP}/agent.pid" 2>/dev/null)
 if [ -n "${apid}" ]; then

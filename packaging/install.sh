@@ -4,7 +4,7 @@
 #
 #   curl -fsSLO https://raw.githubusercontent.com/88plug/k3d-gpu/main/packaging/install.sh
 #   less install.sh          # read it first
-#   bash install.sh          # then: k3d-gpu quickstart
+#   bash install.sh          # then: k3d-gpu quickstart (0.1.29 and newer)
 #
 # What it does, on Linux and WSL2 (amd64, arm64):
 #   1. k3d-gpu ${K3D_GPU_VERSION} from its GitHub release: the .deb through apt-get, or
@@ -36,6 +36,8 @@ K3D_SHA256_ARM64=03cde5cf23e6e8e67de5a039ecf26e5b85aca82fba3e5d13dadf904cd218a25
 KUBECTL_VERSION=v1.37.1
 KUBECTL_SHA256_AMD64=65691ff77eb6fa44c908b77a1082c9f092c3b9733b5cefabec0d1104890e21a8
 KUBECTL_SHA256_ARM64=ff749f4b78d9c4f1ec87307df9b50119ed819e2094aa9810cb9acffc3286c8c7
+# First k3d-gpu release with the quickstart command; the closing hint follows it.
+QUICKSTART_SINCE=0.1.29
 
 BASE="${K3D_GPU_INSTALL_BASE:-https://github.com/88plug/k3d-gpu/releases/download/aur-v${K3D_GPU_VERSION}}"
 BIN_DIR="${K3D_GPU_BIN_DIR:-${HOME}/.local/bin}"
@@ -136,8 +138,15 @@ install_bin() {
     run install -m 0755 "$4/$1" "${BIN_DIR}/$1"
 }
 
+# version_ge <a> <b>: dotted version a is b or newer.
+version_ge() { [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1)" = "$2" ]; }
+
+# The download directory; global, so the EXIT trap still sees it after main returns.
+DL_DIR=""
+cleanup() { if [ -n "${DL_DIR}" ]; then rm -rf -- "${DL_DIR}"; fi; }
+
 main() {
-    local arch kind dir
+    local arch kind
     [ "$(uname -s)" = Linux ] || die "k3d-gpu runs on Linux and WSL2 only (on Windows: wsl --install, then run this inside the distro)"
     arch=$(go_arch) || true
     [ -n "${arch}" ] || die "unsupported CPU architecture $(uname -m) (amd64 and arm64 only)"
@@ -147,19 +156,23 @@ main() {
     fi
     kind=$(pkg_kind)
     [ -n "${kind}" ] || die "no apt-get, dnf or zypper here. $(other_distro_hint)"
-    dir=$(mktemp -d)
-    trap 'rm -rf -- "${dir}"' EXIT
-    install_k3d_gpu "${kind}" "${dir}"
+    DL_DIR=$(mktemp -d)
+    trap cleanup EXIT
+    install_k3d_gpu "${kind}" "${DL_DIR}"
     if [ "${arch}" = amd64 ]; then
-        install_bin k3d "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/k3d-linux-amd64" "${K3D_SHA256_AMD64}" "${dir}"
-        install_bin kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" "${KUBECTL_SHA256_AMD64}" "${dir}"
+        install_bin k3d "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/k3d-linux-amd64" "${K3D_SHA256_AMD64}" "${DL_DIR}"
+        install_bin kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" "${KUBECTL_SHA256_AMD64}" "${DL_DIR}"
     else
-        install_bin k3d "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/k3d-linux-arm64" "${K3D_SHA256_ARM64}" "${dir}"
-        install_bin kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/arm64/kubectl" "${KUBECTL_SHA256_ARM64}" "${dir}"
+        install_bin k3d "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/k3d-linux-arm64" "${K3D_SHA256_ARM64}" "${DL_DIR}"
+        install_bin kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/arm64/kubectl" "${KUBECTL_SHA256_ARM64}" "${DL_DIR}"
     fi
     case ":${PATH}:" in *":${BIN_DIR}:"*) ;; *) say "add ${BIN_DIR} to PATH: export PATH=\"${BIN_DIR}:\$PATH\"" ;; esac
     command -v docker >/dev/null 2>&1 || say "Docker is not installed. Suggested: $(docker_hint)"
-    say "next: k3d-gpu doctor, then k3d-gpu quickstart"
+    if version_ge "${K3D_GPU_VERSION}" "${QUICKSTART_SINCE}"; then
+        say "next: k3d-gpu doctor, then k3d-gpu quickstart"
+    else
+        say "next: k3d-gpu doctor. 'k3d-gpu quickstart' ships in ${QUICKSTART_SINCE}; until then run it from a checkout: git clone https://github.com/88plug/k3d-gpu && k3d-gpu/scripts/k3d-gpu quickstart"
+    fi
 }
 
 [ -n "${K3D_GPU_INSTALL_SOURCE_ONLY:-}" ] || main "$@"

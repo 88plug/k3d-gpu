@@ -601,6 +601,51 @@ def shrink(prop, value, failure, still_valid, keep=None, budget=1500):
     return value, failure
 
 
+# ---- progress_bar: numbers from the Hugging Face API and du ---------------------------
+
+def gen_bar_field(r):
+    k = r.random()
+    if k < 0.35:
+        return str(r.randint(0, 10 ** r.randint(1, 16)))
+    if k < 0.5:
+        return str(r.randint(0, 250))
+    if k < 0.6:
+        return "-" + str(r.randint(0, 10 ** 6))
+    pool = ["", " ", "0", "00", "1e3", "0x10", "1.5", "+5", "9" * 20, "$(id)", "`id`", "*", "?",
+            "\\", "%s", "%d", "\n", "1 2", "\u00e9", "\u0663", "--", "${x}"]
+    return r.choice(pool)
+
+
+def gen_bar(r):
+    return (gen_bar_field(r), gen_bar_field(r), gen_bar_field(r))
+
+
+def bar_int(v):
+    return int(v) if re.fullmatch(r"[0-9]{1,15}", v) else None
+
+
+def check_bar(vals):
+    res = shim("progress_bar", [x for v in vals for x in v])
+    out = []
+    for (d, t, w), (rc, text) in zip(vals, res):
+        width = int(w) if re.fullmatch(r"[0-9]{1,3}", w) and 1 <= int(w) <= 200 else 30
+        m = re.fullmatch(r"\[([#-]{%d})\] +(\?|[0-9]{1,3})%%" % width, text)
+        if rc != 0 or not m:
+            out.append("rc=%d output %r does not match the bar format (width %d)" % (rc, text[:80], width))
+            continue
+        di, ti = bar_int(d), bar_int(t)
+        if di is None or ti is None or ti <= 0:
+            out.append(None if m.group(2) == "?" else "non-number or empty total gave %r, want ?" % m.group(2))
+            continue
+        want = min(di, ti) * 100 // ti
+        fill = min(di, ti) * width // ti
+        if m.group(2) != str(want) or m.group(1).count("#") != fill:
+            out.append("got %r, want %d%% and %d '#'" % (text, want, fill))
+        else:
+            out.append(None)
+    return out
+
+
 # ---- driver ----------------------------------------------------------------------------
 
 def repro(name, v):
@@ -614,6 +659,9 @@ def repro(name, v):
     if name == "overrides":
         return ("K3D_GPU_DEVICE_TEST_IMAGE=%s scripts/k3d-gpu test   "
                 "(inspect the --overrides argument run_pod passes to kubectl run)" % q(v))
+    if name == "progress_bar":
+        return "bash -c '%sprogress_bar \"$1\" \"$2\" \"$3\"' _ %s %s %s" % (
+            FUNCS.replace("'", "'\\''"), q(v[0]), q(v[1]), q(v[2]))
     return tree_script(v)
 
 
@@ -630,6 +678,7 @@ PROPS = [
     ("vendors", check_vendors, gen_vendor_request, lambda v: True, N, 1500),
     ("overrides", check_overrides, gen_image, lambda v: v != "", max(20, N // 5), 1500),
     ("sysfs", check_sysfs, gen_sysfs, lambda v: True, max(40, N // 2), 1500),
+    ("progress_bar", check_bar, gen_bar, lambda v: True, N, 1500),
 ]
 
 
