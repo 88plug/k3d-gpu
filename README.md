@@ -1179,8 +1179,7 @@ spec:
 node allocatable, and `test` runs a pod like the one above. DRA mode is
 experimental and needs Kubernetes 1.36+, the driver's supported floor upstream
 (where DRADeviceTaints is on by default, so unhealthy GPUs stay tainted); `up`
-fails on an older cluster. The default image still ships k3s v1.34, so set
-`K3D_GPU_IMAGE` to a k3s v1.36+ build. The driver's DaemonSet only runs on nodes
+fails on an older cluster (the image ships k3s v1.37). The driver's DaemonSet only runs on nodes
 labelled `k3d-gpu.io/intel-gpu-dra=true`, which `up` sets in DRA mode, so a
 cluster created any other way never runs it. The driver runs with
 binding management off, so it never moves a host GPU between xe/i915 and vfio-pci.

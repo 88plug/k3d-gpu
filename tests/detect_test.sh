@@ -3607,6 +3607,26 @@ run_says test "DRA test fails when only tainted or vfio GPUs are published" "${r
     K3D_GPU_DRA=1 STUB_SLICES="${DRA_NONE}"
 file_has "no DRA pod runs without an allocatable device" "${LOG}" '^kubectl run' negate
 
+# DRA mode on an iGPU: the sharing default (#57) configures intel-gpu-plugin, which
+# DRA mode disables, so up must not touch the plugin and says so when the user set it.
+r3=$(newroot dra-igpu)
+kernel "${r3}" 6.18.1
+pci "${r3}" 0000:00:02.0 0x8086 0xa780 i915; render "${r3}" 0000:00:02.0 128
+run_says up "DRA up on an iGPU verifies through ResourceSlices" "${r3}" 0 'schedulable: intel=1\.' \
+    K3D_GPU_DRA=1 STUB_K8S_VERSION=v1.37.1+k3s1 STUB_SLICES="gpu.intel.com node0 1 i915"
+file_has "DRA up on an iGPU never patches intel-gpu-plugin args" "${LOG}" 'intel-gpu-plugin\.yaml|daemonset intel-gpu-plugin' negate
+run_says up "DRA up warns that plugin sharing settings are ignored" "${r3}" 0 \
+    'K3D_GPU_DRA=1 ignores K3D_GPU_INTEL_SHARED=4 K3D_GPU_INTEL_MONITORING=1' \
+    K3D_GPU_DRA=1 STUB_K8S_VERSION=v1.37.1+k3s1 STUB_SLICES="gpu.intel.com node0 1 i915" \
+    K3D_GPU_INTEL_SHARED=4 K3D_GPU_INTEL_MONITORING=1
+run_says up "DRA up still rejects a bad K3D_GPU_INTEL_SHARED" "${r3}" fail "K3D_GPU_INTEL_SHARED='0'" \
+    K3D_GPU_DRA=1 K3D_GPU_INTEL_SHARED=0
+doctor_says "doctor in DRA mode reports claim-based exclusivity, not plugin sharing" "${r3}" \
+    'ok: DRA mode: one pod per Intel GPU per ResourceClaim' "" K3D_GPU_DRA=1
+doctor_says "doctor in DRA mode never claims plugin sharing" "${r3}" 'GPU sharing on' negate K3D_GPU_DRA=1
+doctor_says "doctor in DRA mode warns about ignored plugin settings" "${r3}" \
+    'warn.*K3D_GPU_DRA=1 ignores K3D_GPU_INTEL_ALLOCATION=packed' "" K3D_GPU_DRA=1 K3D_GPU_INTEL_ALLOCATION=packed
+
 # The DRA manifest is baked into every image, so launchers that never pass
 # --disable=intel-gpu-dra (AUR <= 0.1.7, the README's manual k3d command) still
 # apply it. The kubelet plugin must then stay off nodes without the DRA label.
@@ -3648,17 +3668,17 @@ if type -P kubectl >/dev/null; then
    "devices": [{"name": "g0", "attributes": {"driver": {"string": "xe"}}}]}}
 ]}
 EOF
-    got=$( # shellcheck source=scripts/k3d-gpu
+    slice_got=$( # shellcheck source=scripts/k3d-gpu
         source "${K3D_GPU}" help >/dev/null
         KUBECONFIG=/dev/null kubectl label --local -f "${WORK}/slices.json" k3d-gpu.io/t=1 \
             -o go-template="$(dra_slice_template)" 2>&1 | dra_count_devices
         # and `up` hands kubectl the same template inside the range over .items
         grep -F -x "kubectl get resourceslices -o go-template={{range .items}}$(dra_slice_template){{end}}" \
             "${WORK}/dra-1.log" >/dev/null || echo "up-template-mismatch")
-    if [ "${got}" = 3 ]; then
+    if [ "${slice_got}" = 3 ]; then
         PASS=$((PASS + 1)); echo "ok   DRA slice template counts allocatable devices through kubectl's printer"
     else
-        FAILS=$((FAILS + 1)); echo "FAIL DRA slice template counts allocatable devices through kubectl's printer (want 3, got '${got}')"
+        FAILS=$((FAILS + 1)); echo "FAIL DRA slice template counts allocatable devices through kubectl's printer (want 3, got '${slice_got}')"
     fi
 else
     echo "skip DRA slice template through kubectl's printer (no kubectl on PATH)"
