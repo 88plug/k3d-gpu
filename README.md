@@ -450,7 +450,7 @@ The document carries `"schema": "k3d-gpu.report/v1"`.
 
 ### Measurement harness (`bench/`)
 
-Three small tools for measuring workloads on a k3d-gpu cluster. They are not
+Small tools for measuring workloads on a k3d-gpu cluster. They are not
 installed by the package; run them from a checkout.
 
 **`bench/energy.sh`** — energy one command used, from a RAPL counter (default
@@ -500,8 +500,16 @@ pins it. CPU request = limit = `--workers` unless `--cpu` says otherwise.
 `start` waits until the pod runs and prints its `Cpus_allowed_list`.
 `KUBECTL_ARGS="--context k3d-NAME"` picks the cluster.
 
-`tests/bench_test.sh` tests all three without root, a cluster or a model,
-using a fake RAPL tree and `tests/openai_stub.py`, a streaming stub server.
+**`bench/agent_trace.py`** — replays a multi-turn agent trace (shared system
+prompt and tool schema, growing context, bursty sessions) against an
+OpenAI-compatible endpoint and records per-turn TTFT, decode tokens/s, cached
+prompt tokens and tool-call validity; `--cache-bust` A/Bs the prefix cache.
+`bench/agent_trace_gen.py` writes the synthetic trace families. Usage and
+method: [bench/AGENT_TRACE.md](bench/AGENT_TRACE.md).
+
+`tests/bench_test.sh` tests all four without root, a cluster or a model,
+using a fake RAPL tree, `tests/openai_stub.py` (a streaming stub server) and
+the in-process stub in `bench/test_agent_trace.py`.
 
 ### Intel Enterprise Agent Toolkit
 
