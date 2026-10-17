@@ -296,6 +296,43 @@ class FactsUnits(unittest.TestCase):
             ("warn", '/dev/accel/accel0 is mode 644. Add the udev rule SUBSYSTEM=="accel", MODE="0660"'),
             ("ok", "done")])
 
+    def test_intel_gpu_without_xe_or_i915_is_not_usable(self):
+        # A GPU bound to vfio-pci (passed through) or to no driver is no place for an engine.
+        host = {
+            "cpu": {"model": "x", "logical_cpus": 4, "hybrid": False, "p_cores": None, "e_cores": None,
+                    "p_core_cpus": 0, "e_core_cpus": 0, "amx": False},
+            "intel_gpus": [
+                {"pci": "0000:00:02.0", "device_id": "0xa780", "platform": "Raptor Lake-S", "driver": "vfio-pci"},
+                {"pci": "0000:03:00.0", "device_id": "0xe20b", "platform": "Battlemage", "driver": None},
+                {"pci": "0000:04:00.0", "device_id": "0xe20b", "platform": "Battlemage", "driver": "xe"},
+            ],
+            "npus": [], "nvidia": {"gpus": []},
+            "gaudi": {"pci_devices": [], "accel_nodes": [], "driver_loaded": False},
+        }
+        gpus = [t for t in factsmod.build_targets(host, {}, []) if t["kind"] == "gpu"]
+        self.assertEqual([(t["pci"], t["usable"], t["resource"], t["reason"]) for t in gpus], [
+            ("0000:00:02.0", False, None, "no xe or i915 driver bound (driver: vfio-pci)"),
+            ("0000:03:00.0", False, None, "no xe or i915 driver bound (driver: none)"),
+            ("0000:04:00.0", True, "gpu.intel.com/xe", None)])
+
+    def test_plan_excludes_a_gpu_with_no_intel_driver(self):
+        with open(os.path.join(REPO, "tests", "fixtures", "raptorlake-nvidia", "facts.json")) as f:
+            facts = json.load(f)
+        with open(os.path.join(REPO, "console", "matrix.v1.json")) as f:
+            matrix = json.load(f)
+        for i, r in enumerate(matrix["rows"]):
+            r["evidence"]["report_id"] = "synthetic-%d" % i
+            r["tool_eval"] = {"result": "pass", "suite": "synthetic"}
+        uhd = next(t for t in facts["targets"] if t["vendor"] == "intel" and t["kind"] == "gpu")
+        uhd.update(driver="vfio-pci", usable=False, resource=None,
+                   reason="no xe or i915 driver bound (driver: vfio-pci)")
+        got = planmod.plan(facts, matrix, {"device": "gpu"})
+        self.assertEqual(got["decision"], "unmeasured")
+        cell = next(c for c in got["considered"] if c["cell"] == "raptorlake-s.uhd770.ovms.qwen3-4b-int4")
+        self.assertFalse(cell["eligible"])
+        self.assertEqual(cell["excluded"], "target gpu:0000:00:02.0 not usable: "
+                         "no xe or i915 driver bound (driver: vfio-pci)")
+
     def test_fingerprint_ignores_software_state(self):
         with open(os.path.join(REPO, "tests", "fixtures", "raptorlake-nvidia", "facts.json")) as f:
             facts = json.load(f)
