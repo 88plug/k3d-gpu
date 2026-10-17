@@ -114,6 +114,13 @@ k3d-gpu ${VERSION} — accelerator-ready k3d clusters (NVIDIA, Intel GPU/iGPU/NP
 
 Usage: k3d-gpu <command>
 
+  quickstart [--no-ui]
+            One command to a local chat: cluster, LLM server (model picked by RAM
+            tier), Open WebUI with a generated admin account, port-forward on
+            127.0.0.1:8080. Re-run to resume; finished steps are skipped
+  uninstall [--yes] [--images]
+            Remove what quickstart made: port-forward, cluster with its models
+            and chats, quickstart state; --images also the node image
   up        Create cluster '${CLUSTER}' with passthrough for every detected accelerator
   down      Delete cluster '${CLUSTER}'
   test      Run a pod per detected accelerator and print its device view
@@ -212,6 +219,10 @@ Environment:
   K3D_GPU_SANDBOX       agent-sandbox yaml   (default: ${SHARE_DIR}/agent-sandbox.yml)
   K3D_GPU_SANDBOX_PROFILE  E-core sandbox template + warm pool (default: ${SHARE_DIR}/agent-sandbox-k3d.yml)
   K3D_GPU_SANDBOX_TIMEOUT  seconds 'sandbox up' waits for a ready sandbox (default: 180)
+  K3D_GPU_CHAT_PORT     quickstart chat UI port on 127.0.0.1 (default: 8080)
+  K3D_GPU_CHAT_UI       Open WebUI yaml (default: the repo's share/, then ${SHARE_DIR}/agent-chat-ui.yml)
+  K3D_GPU_QUICKSTART_DIR  quickstart state: admin password, port-forward pid and log
+                        (default: ~/.local/state/k3d-gpu/quickstart)
 
 Docs: https://github.com/88plug/k3d-gpu
 EOF
@@ -6083,6 +6094,265 @@ cmd_agent() {
     esac
 }
 
+# ---- quickstart and uninstall: the retail path ---------------------------------
+# `quickstart` takes a machine with docker, k3d and kubectl to a chat UI on
+# 127.0.0.1 in one command: cluster, LLM server, Open WebUI with an admin
+# account, and a port-forward. Every step reads the live state first and skips
+# what is already done, so a second run changes nothing and an interrupted run
+# resumes (OVMS --pull resumes a half-downloaded model from its .lfs_part files).
+# The model is picked by the host's RAM tier; K3D_GPU_AGENT_MODEL overrides it.
+# `uninstall` removes what quickstart made: the port-forward, the cluster (with
+# the model and chat volumes inside it) and quickstart's state directory.
+
+QS_DIR="${K3D_GPU_QUICKSTART_DIR:-${XDG_STATE_HOME:-${HOME:-}/.local/state}/k3d-gpu/quickstart}"
+QS_PORT="${K3D_GPU_CHAT_PORT:-8080}"
+QS_STEPS=5
+
+# This launcher's path; quickstart runs its `up` and `agent up` through it.
+qs_self() { readlink -f "${BASH_SOURCE[0]}"; }
+
+# Chat UI manifest: K3D_GPU_CHAT_UI, then the repo checkout, then the packaged copy.
+chat_ui_manifest() {
+    local d self
+    self=$(readlink -f "${BASH_SOURCE[0]}")
+    for d in "${K3D_GPU_CHAT_UI:-}" "$(dirname "${self}")/../share/agent-chat-ui.yml" "${SHARE_DIR}/agent-chat-ui.yml"; do
+        if [ -n "${d}" ] && [ -f "${d}" ]; then echo "${d}"; return 0; fi
+    done
+    return 1
+}
+
+# "<model> <memory request>" for the host's RAM tier (MemTotal). The tiers keep
+# the int4 weights near a quarter of RAM or less, leaving room for k3s, the KV
+# cache and the desktop: under 12 GiB (8 GB machines) Qwen3-1.7B, under 24 GiB
+# (16 GB machines) Qwen3-4B, the agent's default, else Qwen3-8B. An unreadable
+# MemTotal gets the default. Only the 4B model is measured on this project's
+# test bed (EXPERIMENTS.md H6); the other tiers are predictions.
+qs_tier() {
+    local kb
+    kb=$(meminfo_kb MemTotal)
+    [[ "${kb}" =~ ^[0-9]+$ ]] || kb=0
+    if [ "${kb}" -eq 0 ]; then
+        echo "OpenVINO/Qwen3-4B-int4-ov 6Gi"
+    elif [ "${kb}" -lt $((12 * 1048576)) ]; then
+        echo "OpenVINO/Qwen3-1.7B-int4-ov 4Gi"
+    elif [ "${kb}" -lt $((24 * 1048576)) ]; then
+        echo "OpenVINO/Qwen3-4B-int4-ov 6Gi"
+    else
+        echo "OpenVINO/Qwen3-8B-int4-ov 10Gi"
+    fi
+}
+
+# progress_bar <done> <total> [width]: "[#####-----]  50%". A total of 0 or less,
+# or a non-number, prints an empty bar and "  ?%". done above total shows 100%.
+progress_bar() {
+    local done=$1 total=$2 width=${3:-30} fill pct bar
+    [[ "${width}" =~ ^[0-9]+$ ]] && [ "${width}" -ge 1 ] && [ "${width}" -le 200 ] || width=30
+    if ! [[ "${done}" =~ ^[0-9]{1,15}$ && "${total}" =~ ^[0-9]{1,15}$ ]] || [ "${total}" -le 0 ]; then
+        printf '[%s]   ?%%' "$(printf '%*s' "${width}" "" | tr ' ' '-')"
+        return 0
+    fi
+    [ "${done}" -le "${total}" ] || done=${total}
+    fill=$((done * width / total))
+    pct=$((done * 100 / total))
+    bar=$(printf '%*s' "${fill}" "" | tr ' ' '#')$(printf '%*s' "$((width - fill))" "" | tr ' ' '-')
+    printf '[%s] %3d%%' "${bar}" "${pct}"
+}
+
+# qs_step <n> <text>: the step line, "[2/5]" with the overall bar.
+qs_step() { echo "${GRN}==>${RST} [$1/${QS_STEPS}] $(progress_bar "$(($1 - 1))" "${QS_STEPS}" 10) $2"; }
+
+# Lines of WSL2 guidance; nothing off WSL. Docker Desktop documents GPU
+# paravirtualization for NVIDIA only (https://docs.docker.com/desktop/features/gpu/);
+# the Intel path is /dev/dxg plus /usr/lib/wsl, as in OpenVINO's container recipe
+# (https://github.com/openvinotoolkit/docker_ci/blob/master/docs/accelerators.md).
+# The Intel NPU has no WSL2 driver (https://github.com/intel/linux-npu-driver/issues/56).
+# Host changes are printed as suggestions, never run.
+qs_wsl_guidance() {
+    grep -qi microsoft "${SYSROOT}/proc/version" 2>/dev/null || return 0
+    echo "WSL2 detected."
+    if [ ! -e "${SYSROOT}/dev/dxg" ]; then
+        echo "  /dev/dxg is missing: no GPU paravirtualization, so the agent runs on the CPU."
+        echo "  Suggested, in Windows PowerShell: wsl --update; wsl --shutdown"
+    elif [ -n "$(wsl_intel_drivers)" ]; then
+        echo "  /dev/dxg and the Intel driver (${WSL_LIB}/drivers/iigd_dch*) are present: the Intel GPU is advertised as gpu.intel.com/dxg."
+        echo "  This path is unit-tested only; it has not been run on a Windows machine."
+    else
+        echo "  /dev/dxg is present but no Intel driver is under ${WSL_LIB}/drivers."
+        echo "  Suggested: install the current Intel graphics driver on Windows, then run wsl --shutdown."
+    fi
+    echo "  Docker: Docker Desktop with WSL integration enabled for this distro, or Docker Engine inside it."
+    echo "  Docker Desktop's --gpus flag is NVIDIA-only; the Intel GPU goes through /dev/dxg instead."
+    echo "  The Intel NPU is not reachable from WSL2 (intel/linux-npu-driver#56)."
+}
+
+# Pid of the port-forward quickstart started, while it runs.
+qs_pf_pid() {
+    local pid
+    pid=$(cat "${QS_DIR}/port-forward.pid" 2>/dev/null) || return 1
+    [[ "${pid}" =~ ^[0-9]+$ ]] && kill -0 "${pid}" 2>/dev/null && echo "${pid}"
+}
+
+# The Open WebUI admin Secret, created once with a random password that is also
+# written to ${QS_DIR}/chat-admin (mode 0600), so sign-up is never open.
+qs_admin_secret() {
+    local file="${QS_DIR}/chat-admin" pw email=admin@localhost
+    if kubectl -n "${AGENT_NS}" get secret open-webui-admin >/dev/null 2>&1; then
+        [ -f "${file}" ] || warn "chat: Secret open-webui-admin exists but ${file} does not; sign in with the password set before"
+        return 0
+    fi
+    pw=$(head -c 30 /dev/urandom | base64 | tr -d '/+=\n' | head -c 20)
+    [ "${#pw}" -ge 16 ] || err "chat: could not generate a password"
+    (umask 077; printf 'email=%s\npassword=%s\n' "${email}" "${pw}" > "${file}")
+    kubectl create namespace "${AGENT_NS}" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+    kubectl -n "${AGENT_NS}" create secret generic open-webui-admin \
+        --from-literal=email="${email}" --from-literal=password="${pw}" >/dev/null
+}
+
+# Total size of a model's files from the Hugging Face API, or 0 when offline.
+qs_model_bytes() {
+    local n
+    n=$(curl -fsS --max-time 10 "https://huggingface.co/api/models/$1?blobs=true" 2>/dev/null \
+        | python3 -c 'import json, sys
+print(sum(s.get("size") or 0 for s in json.load(sys.stdin).get("siblings", [])))' 2>/dev/null) || n=0
+    [[ "${n}" =~ ^[0-9]+$ ]] || n=0
+    echo "${n}"
+}
+
+# Bytes of the model on the PVC so far (half-downloaded .lfs_part files count),
+# read from the pull init container while it runs; 0 otherwise.
+qs_pulled_bytes() {
+    local pod n
+    pod=$(kubectl -n "${AGENT_NS}" get pod -l app=ovms -o name 2>/dev/null | sed -n 1p)
+    [ -n "${pod}" ] || { echo 0; return 0; }
+    n=$(kubectl -n "${AGENT_NS}" exec "${pod}" -c pull -- du -sb "/models/$1" 2>/dev/null | awk 'NR == 1 {print $1}') || n=0
+    [[ "${n}" =~ ^[0-9]+$ ]] || n=0
+    echo "${n}"
+}
+
+# Whether the OVMS Deployment is ready and serves the given model.
+qs_agent_ready() {
+    local got
+    got=$(kubectl -n "${AGENT_NS}" get deployment ovms \
+        -o jsonpath='{.status.readyReplicas} {.spec.template.spec.containers[0].args}' 2>/dev/null) || return 1
+    [ "${got%% *}" = 1 ] && [[ "${got}" == *"--model_path=/models/$1\""* ]]
+}
+
+# quickstart [--no-ui]
+cmd_quickstart() {
+    local ui=1 model mem pid exe manifest total done_b last=-1 pid_run t missing=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --no-ui) ui="" ;;
+            *) err "unknown quickstart option: $1 (use --no-ui)" ;;
+        esac
+        shift
+    done
+    exe=$(qs_self)
+    mkdir -p "${QS_DIR}"
+
+    qs_step 1 "Checking this machine"
+    qs_wsl_guidance
+    for t in docker k3d kubectl python3; do command -v "${t}" >/dev/null 2>&1 || missing+=" ${t}"; done
+    [ -z "${missing}" ] || err "missing:${missing} — 'k3d-gpu doctor' prints how to install them"
+    docker info >/dev/null 2>&1 || err "docker is installed but not reachable (is the daemon running, and is this user in the docker group?)"
+    read -r model mem <<< "$(qs_tier)"
+    model=${K3D_GPU_AGENT_MODEL:-${model}}
+    mem=${K3D_GPU_AGENT_MEMORY:-${mem}}
+    info "RAM $(kb_gib "$(meminfo_kb MemTotal)") GiB: model ${model}, memory ${mem}"
+
+    qs_step 2 "Cluster '${CLUSTER}'"
+    if k3d cluster get "${CLUSTER}" >/dev/null 2>&1; then
+        info "cluster '${CLUSTER}' exists; reusing it"
+    else
+        "${exe}" up || err "'k3d-gpu up' failed; fix the error above and run quickstart again"
+    fi
+    kubectl config use-context "k3d-${CLUSTER}" >/dev/null 2>&1 || true
+    kubectl get nodes >/dev/null 2>&1 || err "cluster '${CLUSTER}' is not reachable — run 'k3d-gpu doctor'"
+
+    qs_step 3 "LLM server (${model})"
+    if qs_agent_ready "${model}"; then
+        info "agent already serving ${model}"
+    else
+        total=$(qs_model_bytes "${model}")
+        K3D_GPU_AGENT_BACKEND=ovms K3D_GPU_AGENT_MODEL="${model}" K3D_GPU_AGENT_MEMORY="${mem}" \
+            K3D_GPU_AGENT_TOOL_PARSER=hermes3 K3D_GPU_AGENT_REASONING_PARSER=qwen3 "${exe}" agent up &
+        pid_run=$!
+        # A download line each time the bytes on the PVC change; the server's own
+        # lines interleave.
+        while kill -0 "${pid_run}" 2>/dev/null; do
+            sleep "${K3D_GPU_QUICKSTART_POLL:-5}"
+            done_b=$(qs_pulled_bytes "${model}")
+            [ "${done_b}" -gt 0 ] && [ "${done_b}" != "${last}" ] || continue
+            last=${done_b}
+            echo "    download $(progress_bar "${done_b}" "${total}") $((done_b / 1000000)) / $((total / 1000000)) MB"
+        done
+        wait "${pid_run}" || err "'k3d-gpu agent up' failed; run quickstart again to resume (the download continues where it stopped)"
+    fi
+
+    if [ -z "${ui}" ]; then
+        echo "${GRN}==>${RST} [${QS_STEPS}/${QS_STEPS}] $(progress_bar 1 1 10) Ready (no chat UI)"
+        info "OpenAI API: kubectl -n ${AGENT_NS} port-forward svc/ovms 8000:8000, then http://127.0.0.1:8000/v3"
+        return 0
+    fi
+
+    qs_step 4 "Chat UI (Open WebUI)"
+    manifest=$(chat_ui_manifest) || err "chat UI manifest agent-chat-ui.yml not found (set K3D_GPU_CHAT_UI)"
+    qs_admin_secret
+    # The UI's default model is the one served.
+    sed "s|^\(              value: \)Qwen3-4B-int4-ov\$|\1${model##*/}|" "${manifest}" | kubectl apply -f - >/dev/null
+    kubectl -n "${AGENT_NS}" rollout status deployment/open-webui --timeout=600s \
+        || err "chat UI not ready — kubectl -n ${AGENT_NS} logs deploy/open-webui"
+
+    qs_step 5 "Port-forward on 127.0.0.1:${QS_PORT}"
+    if pid=$(qs_pf_pid); then
+        info "port-forward already running (pid ${pid})"
+    else
+        nohup kubectl -n "${AGENT_NS}" port-forward --address 127.0.0.1 svc/open-webui "${QS_PORT}:8080" \
+            > "${QS_DIR}/port-forward.log" 2>&1 < /dev/null &
+        echo "$!" > "${QS_DIR}/port-forward.pid"
+        sleep 2
+        qs_pf_pid >/dev/null || err "port-forward did not start — ${QS_DIR}/port-forward.log"
+    fi
+    echo "${GRN}==>${RST} [${QS_STEPS}/${QS_STEPS}] $(progress_bar 1 1 10) Ready"
+    info "Chat: http://127.0.0.1:${QS_PORT}  (sign in with the email and password in ${QS_DIR}/chat-admin)"
+    info "Remove everything: k3d-gpu uninstall"
+}
+
+# uninstall [--yes] [--images]: stops quickstart's port-forward, deletes cluster
+# '${CLUSTER}' (the model and chat volumes live inside it) and quickstart's
+# state directory; --images also removes the node image. Without --yes it asks
+# on a terminal and refuses when there is none.
+cmd_uninstall() {
+    local yes="" images="" pid ans
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --yes|-y) yes=1 ;;
+            --images) images=1 ;;
+            *) err "unknown uninstall option: $1 (use --yes, --images)" ;;
+        esac
+        shift
+    done
+    echo "This removes cluster '${CLUSTER}' with its downloaded models and chats, and ${QS_DIR}${images:+, and image ${IMAGE}}."
+    if [ -z "${yes}" ]; then
+        [ -t 0 ] || err "uninstall: no terminal to ask on; pass --yes to confirm"
+        read -r -p "Continue? [y/N] " ans
+        [[ "${ans}" =~ ^[Yy]$ ]] || { info "uninstall: cancelled"; return 0; }
+    fi
+    if pid=$(qs_pf_pid); then kill "${pid}" 2>/dev/null || true; fi
+    if command -v k3d >/dev/null 2>&1 && k3d cluster get "${CLUSTER}" >/dev/null 2>&1; then
+        k3d cluster delete "${CLUSTER}"
+    else
+        info "no cluster '${CLUSTER}'"
+    fi
+    if [ -n "${images}" ] && command -v docker >/dev/null 2>&1; then
+        if docker image rm "${IMAGE}" >/dev/null 2>&1; then info "removed image ${IMAGE}"; else info "image ${IMAGE} not present"; fi
+    fi
+    # Only quickstart's own files; the directory goes when nothing else is in it.
+    rm -f -- "${QS_DIR}/chat-admin" "${QS_DIR}/port-forward.pid" "${QS_DIR}/port-forward.log"
+    rmdir -- "${QS_DIR}" 2>/dev/null || true
+    info "uninstall: done"
+}
+
 # ---- facts and plan: the console spine ------------------------------------------
 # `facts` puts what detect, doctor, doctor --perf and report read into one JSON
 # document, facts/v1 (console/facts.v1.schema.json). console/facts.py normalizes
@@ -6378,6 +6648,8 @@ case "${1:-help}" in
     audit)   shift; cmd_audit "$@" ;;
     sandbox) cmd_sandbox "${2:-}" ;;
     apply)   shift; cmd_apply "$@" ;;
+    quickstart) shift; cmd_quickstart "$@" ;;
+    uninstall)  shift; cmd_uninstall "$@" ;;
     version|--version|-v) echo "k3d-gpu ${VERSION}" ;;
     help|--help|-h) usage ;;
     *) usage; exit 1 ;;

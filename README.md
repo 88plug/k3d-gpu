@@ -34,6 +34,12 @@ A Docker-based [rancher/k3s](https://hub.docker.com/r/rancher/k3s) node image on
 
 ## Quick Start (k3d-gpu CLI)
 
+Just want a local chat? `k3d-gpu quickstart` goes from a clean machine to a
+chat UI on `127.0.0.1:8080` in one command: cluster, LLM server (model picked
+from your RAM), Open WebUI with a generated admin account. `k3d-gpu uninstall`
+removes it all. See [docs/quickstart.md](docs/quickstart.md), and the pinned,
+sha256-checked installer `packaging/install.sh`.
+
 The `k3d-gpu` launcher wraps the whole workflow — no need to remember
 `k3d cluster create` flags. Install it with your package manager (see [Install](#install)), then:
 

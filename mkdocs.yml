@@ -20,6 +20,7 @@ hooks:
 # entry until its file exists in docs/ ("not yet published").
 nav:
   - Home: index.md
+  - Quickstart: quickstart.md
   - Intel platforms: intel.md
   - Operations:
       - Telemetry: telemetry.md
