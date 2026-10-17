@@ -21,7 +21,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | # | Hypothesis | Prediction | Probe | Verdict |
 |---|------------|------------|-------|---------|
 | H1 | EAT (Intel Enterprise Agent Toolkit) runs on a single non-Xeon machine. | On one host whose CPU is not a Xeon (Core or Core Ultra), `k3d-gpu up` followed by the EAT deploy from `claude/eat-on-k3d` reaches all EAT pods `Ready` and one inference request returns a completion. | Fresh host, Reproduce header filled in. `k3d-gpu up`, deploy EAT, `kubectl wait --for=condition=Ready pod --all -A --timeout=30m`, then one completion request against the EAT endpoint. Refuted by any pod not Ready at the timeout, a Xeon-only instruction or node-label requirement, or no completion. Wave 1 (2026-10-16, i9-13900T): a completion returned, but the probe was not run as written (see [H1 run](#h1-run-i9-13900t-2026-10-16)). Amended 2026-10-17T20:27Z, before run 2: matched load instead of a fresh host, one fresh cluster, every step timed and logged, grading of Job pods fixed in advance. Run 2 (2026-10-17): every step held in one pass except the `--all -A` wait, which no k3s v1.37 cluster can pass (k3s's Gateway API CRD Job leaves a Succeeded pod); see [H1 run 2](#h1-run-2-i9-13900t-2026-10-17). | INCONCLUSIVE |
-| H1b | EAT (Intel Enterprise Agent Toolkit) runs on a single non-Xeon machine (H1's hypothesis, re-run with a readiness probe that can pass on k3s v1.37). | On one host whose CPU is not a Xeon (Core or Core Ultra), `k3d-gpu up` followed by the EAT deploy reaches every pod that is not in phase Succeeded `Ready` within 30 min, and one inference request returns a completion. | Pre-registered 2026-10-17T21:13Z (093ba98), before any H1b step; H1 keeps its INCONCLUSIVE verdict. One fresh cluster `k3dgpu-h1b-eat`, scratch `KUBECONFIG`, empty `EAT_WORK`, under `bench/load/load.py` `typical` on the E-cores (16-31) with 60 s load samples; the documented user path run once, each step timed: `k3d-gpu up`, `eat-up.sh`, `eat-up.sh model cpu-qwen3-1-7b`, `kubectl wait --for=condition=Ready pod -A --field-selector=status.phase!=Succeeded --timeout=30m`, one completion through EAT's LiteLLM gateway, `eat-check.sh`, `k3d-gpu down`. Every Job's completion is recorded on its own line and not graded. Refuted by any step 1-3 failing, a wait that ends non-zero with a Deployment, StatefulSet, DaemonSet, ReplicaSet or Sandbox pod not Ready, a Xeon-only instruction or node-label requirement, or no completion. Grading, lock budget and outcome table in [H1b pre-registration](#h1b-pre-registration-i9-13900t-2026-10-17). | PENDING |
+| H1b | EAT (Intel Enterprise Agent Toolkit) runs on a single non-Xeon machine (H1's hypothesis, re-run with a readiness probe that can pass on k3s v1.37). | On one host whose CPU is not a Xeon (Core or Core Ultra), `k3d-gpu up` followed by the EAT deploy reaches every pod that is not in phase Succeeded `Ready` within 30 min, and one inference request returns a completion. | Pre-registered 2026-10-17T21:13Z (093ba98), before any H1b step; H1 keeps its INCONCLUSIVE verdict. One fresh cluster `k3dgpu-h1b-eat`, scratch `KUBECONFIG`, empty `EAT_WORK`, under `bench/load/load.py` `typical` on the E-cores (16-31) with 60 s load samples; the documented user path run once, each step timed: `k3d-gpu up`, `eat-up.sh`, `eat-up.sh model cpu-qwen3-1-7b`, `kubectl wait --for=condition=Ready pod -A --field-selector=status.phase!=Succeeded --timeout=30m`, one completion through EAT's LiteLLM gateway, `eat-check.sh`, `k3d-gpu down`. Every Job's completion is recorded on its own line and not graded. Refuted by any step 1-3 failing, a wait that ends non-zero with a Deployment, StatefulSet, DaemonSet, ReplicaSet or Sandbox pod not Ready, a Xeon-only instruction or node-label requirement, or no completion. Grading, lock budget and outcome table in [H1b pre-registration](#h1b-pre-registration-i9-13900t-2026-10-17). Run (2026-10-17, i9-13900T, k3s v1.37.1): steps 1-3 rc 0, the wait exited 0 after 280.1 s with all 33 selected pods Ready, both Jobs `Complete`, completion HTTP 200; see [H1b run](#h1b-run-i9-13900t-2026-10-17). | SUPPORTED |
 | H2 | On an Intel hybrid host whose only Intel GPU is an iGPU (wave 1: i9-13900T, UHD 770), the iGPU serves a fixed model faster and with less energy per token than the CPU running the same model with a tuned thread count. | iGPU decode tok/s is higher than the best CPU tok/s, and iGPU J/token is lower than the CPU J/token at that best thread count. | Row restated 2026-10-16 to the pre-registration that ran (written ~10:20 PDT, before the 10:29-11:32 PDT campaign); the row first committed at 04:48 PDT named a Core Ultra host, which was not tested. OVMS 2026.4.1 with `OpenVINO/Qwen3-4B-int4-ov`, same digest and graph except the device. CPU baseline swept over 4 thread and core configs first, best kept. Energy from RAPL `package-0`, with a 20 s model-loaded idle before each block. Decode 30 x 256, prefill ~1936 x 16, 4-in-flight 30 x 128; 5 rounds, ABBA order. Refuted if the iGPU loses on either tok/s or J/token. | REFUTED |
 | H3 | P/E pinning isolates inference from noisy neighbours on a hybrid CPU. | With the inference pod labelled `k3d-gpu.io/cores: performance` and a CPU-saturating neighbour labelled `k3d-gpu.io/cores: efficient`, inference latency stays within 10% of the no-neighbour baseline on both decode and prefill. Without pinning, the same neighbour raises latency by more than 10% on at least one workload. | Pre-registered 2026-10-16 ~13:20 PDT, before any timed block (13:24-14:53 PDT). OVMS on CPU, Qwen3-4B int4, 15-CPU request; neighbour `bench/noisy.sh` (stress-ng `--cpu 15`, Guaranteed 15 CPU). Arms: Q pinned and quiet, P pinned with the neighbour on the E-cores, U both unlabelled, plus Qu, Qe, X (roles swapped) and PM (stream neighbour). `Cpus_allowed_list` read in every block. 5 rounds x 7 arms, 5 requests per workload per block. Refuted if P is more than 10% above Q on either workload. | REFUTED |
 | H4 | The automatic device choice equals the measured best device. | For a fixed model on a host with more than one usable device (CPU, iGPU, NPU, dGPU), the device the agent stack selects automatically (`claude/agent-stack`) is the one with the highest measured tok/s in a sweep over every usable device. | Record the auto-selected device. Then force each usable device in turn and measure tok/s with the H2 method. Refuted if any forced device beats the auto choice by more than the run-to-run spread. Wave 1 pre-registered 2026-10-16 15:30 PDT (H4b) and 16:22 PDT (H4c), each before its runs, against the `auto` rule of `claude/agent-stack` 8385dc2. | REFUTED |
@@ -148,6 +148,7 @@ in the falsification log above as DO-NOT-RE-ATTACK rows.
 Superseded, not a lead: `archive/experimental-features` (the `K3D_GPU_EXPERIMENTAL` framework) landed in substance as #37.
 
 | 2026-10-17 | H1 | i9-13900T (AVX2 and VNNI, no AVX-512, no AMX): run 2, the pre-registered probe on one fresh cluster `k3dgpu-h1-eat` (k3s v1.37.1, main 992df8d, EAT release-1.0.3-hotfix) under the `typical` background load, each step once ([H1 run 2](#h1-run-2-i9-13900t-2026-10-17)); run 1 (2026-10-16, [H1 run](#h1-run-i9-13900t-2026-10-16)) ran the model step twice and skipped the wait | INCONCLUSIVE by the amendment's Job-pod rule. `up` 48.8 s, EAT stack 516.7 s (5 PLAY RECAPs `failed=0`), model step 157.7 s, then 383.0 s until 33 of 34 pods were Ready, vLLM included. The one pod not Ready was k3s's own `helm-install-gateway-api-crd` Job pod (Succeeded), so `kubectl wait ... --all -A` cannot exit 0 on k3s v1.37. The completion returned HTTP 200, `finish_reason` stop, 20 prompt / 27 completion tokens, vllm-0.24.0; `eat-check.sh` passed. No Xeon-only instruction or label was needed | No: re-run once with a pre-registered wait that skips Succeeded pods and requires every Job `Complete` |
+| 2026-10-17 | H1b | i9-13900T (AVX2 and VNNI, no AVX-512, no AMX): the pre-registered H1b probe on one fresh cluster `k3dgpu-h1b-eat` (k3s v1.37.1, claude/h1b-eat 1ac2a39, EAT release-1.0.3-hotfix) under the `typical` background load, each step once ([H1b run](#h1b-run-i9-13900t-2026-10-17)) | SUPPORTED. `up` 48.9 s, EAT stack 494.6 s (5 PLAY RECAPs `failed=0`), model step 154.9 s, `kubectl wait ... --field-selector=status.phase!=Succeeded` exit 0 after 280.1 s (33 pods, vLLM included). Jobs `helm-install-gateway-api-crd` and `register-qwen-qwen3-1-7b` both `Complete`. Completion HTTP 200, `finish_reason` stop, 20 prompt / 27 completion tokens; `eat-check.sh` passed. No Xeon-only instruction or label needed | No for this host; another CPU family needs its own row |
 | 2026-10-16 | H2 | i9-13900T: OVMS 2026.4.1 + Qwen3-4B int4 on UHD 770 vs the tuned 16-CPU P-core arm, 5 ABBA rounds ([H2 run](#h2-run-i9-13900t-2026-10-16)) | REFUTED, confidence 0.9. The iGPU lost decode (9.88 vs 15.67 tok/s), prefill (29.5 s vs 11.2 s TTFT), 4-in-flight (30.4 vs 56.0 tok/s) and decode energy (8.86 vs 5.32 total package J/token). Prefill incremental energy tied. It won only CPU offload (1.0 vs 7.9 CPU-s/s). Same campaign as H6 | DO-NOT-RE-ATTACK on UHD 770 / Raptor Lake with this model and server: re-run on an XMX iGPU, new driver, model or OVMS release |
 | 2026-10-16 | H2 | Secondary arm in the same run: EAT's vLLM CPU v0.24.0, bf16, `Qwen3-4B-Instruct-2507`, on the same 16-CPU P-core balloon, 2 blocks after the A/B | 4.63 decode tok/s against OVMS int4's 15.67. Not an engine comparison: precision (bf16 vs int4), checkpoint and config all differ, and both engines ran at about the same effective weight bandwidth. No engine ratio is claimed; H7 is the matched-precision re-run | No: superseded by H7 |
 | 2026-10-16 | H3 | i9-13900T: OVMS CPU 15-CPU request, stress-ng neighbour, 7 arms x 5 rounds ([H3 run](#h3-run-i9-13900t-2026-10-16)) | REFUTED, confidence 0.85. Decode held (P +6.0% vs Q), prefill did not (P +32.6%, block ranges disjoint). Pinning still beat no labels on prefill (P -13.6% vs U). A stream (DRAM bandwidth) neighbour on the E-cores was not isolated at all (decode +168%) | No: re-run Q vs P on a host whose own processes are confined off the P-cores, to split host spill from package coupling |
@@ -1689,6 +1690,136 @@ other pod, and `kubectl wait --for=condition=Ready pod -A
   pod's image pull and model load (run 2: 33 of 34 pods Ready 383 s after step
   3). Prior P(SUPPORTED) = 0.75; the main risks are a lock stop under a slower
   image pull and a pod replaced during the wait.
+
+### H1b run (i9-13900T, 2026-10-17)
+
+```text
+# provenance
+date:            2026-10-17T21:47:30Z..22:04:41Z (host lock held 1031 s of 1500); pre-registration pushed 21:13:47Z (093ba98, time fixed in 1ac2a39)
+hypothesis:      H1b
+host cpu:        13th Gen Intel(R) Core(TM) i9-13900T (8 P-cores, 16 E-cores; AVX2 and VNNI, no AVX-512, no AMX)
+host kernel:     6.6.128-1-MANJARO
+accelerators:    "Accelerators schedulable: nvidia=2 intel=8 hybrid=1"
+k3d-gpu commit:  claude/h1b-eat 1ac2a390ea35b5de0351521d636ab0b515c40bf9 (main 968cf95 plus docs and ledger-check changes only)
+node image:      k3d-gpu:eat-1ac2a39, image ID sha256:8a8a093acd204807b72587208c942d0d441364686f70b27e7be442aaa7d5c29a (k3s v1.37.1+k3s1);
+                 the same image ID as H1 run 2
+model:           Qwen/Qwen3-1.7B, bf16 (EAT catalog id cpu-qwen3-1-7b; revision not pinned by EAT)
+runtime:         EAT release-1.0.3-hotfix 0d3438d7119de44cafc5903f66665c0b623e3333 (fresh clone); bastion image ID
+                 sha256:ca1bed9cd2e387e0afcfc3fd569b0b34443ab687e2eff06bb751a4b708c1b90e;
+                 vllm/vllm-openai-cpu:v0.24.0 (EAT chart values), KV cache 6 GiB
+background load: bench/load/load.py typical on CPUs 16-31 for the whole run; 17 windows of 60 s:
+                 load-CPU busy 54.8-65.0 % (median 58.4), load1 12.2-16.6 (median 14.3), swap used 143.4-144.4 GiB,
+                 core throttle 26-10182 events/min (median 778); package W not measured (no root for RAPL);
+                 53 other containers running at the start, host load1 19.3
+runs per arm:    1 (one cluster, k3dgpu-h1b-eat, deleted at the end; scratch KUBECONFIG; empty EAT_WORK)
+```
+
+| Step | Command | Start (UTC) | rc | Wall (s) |
+|---|---|---|---|---|
+| 0 | node image build, EAT clone, bastion build (before the lock) | 21:14:50 | 0 | 2.9 |
+| 1 | `k3d-gpu up` (README env, `K3D_GPU_CLUSTER=k3dgpu-h1b-eat`) | 21:47:31 | 0 | 48.9 |
+| 2 | `eat-up.sh` (5 PLAY RECAPs, all `failed=0`) | 21:48:20 | 0 | 494.6 |
+| 3 | `eat-up.sh model cpu-qwen3-1-7b` | 21:56:34 | 0 | 154.9 |
+| 4 | `kubectl wait --for=condition=Ready pod -A --field-selector=status.phase!=Succeeded --timeout=30m` | 21:59:09 | 0 | 280.1 |
+| 4j | every Job recorded | 22:03:50 | 0 | 0.1 |
+| 5 | one chat completion through LiteLLM | 22:03:50 | 0 | 12.6 |
+| 6 | `eat-check.sh` (not graded) | 22:04:03 | 0 | 28.4 |
+| 7 | `k3d-gpu down` | 22:04:31 | 0 | 10.2 |
+
+Step 4 output, verbatim:
+
+```text
+pod/agent-sandbox-controller-786cd8f99f-8hvgh condition met
+pod/python-pool-2pch5 condition met
+pod/python-pool-cwtnk condition met
+pod/python-pool-nw67x condition met
+pod/python-pool-sbrn5 condition met
+pod/python-pool-zc6f9 condition met
+pod/sandbox-router-deployment-d4bf6ff8d-l7zs2 condition met
+pod/sandbox-router-deployment-d4bf6ff8d-xkqdn condition met
+pod/vllm-qwen-3-1-7b-cpu-6ccd6d895f-ndjwl condition met
+pod/genai-gateway-deployment-68cd6b65d6-kwtpx condition met
+pod/genai-gateway-postgresql-0 condition met
+pod/genai-gateway-redis-master-0 condition met
+pod/genai-gateway-trace-clickhouse-shard0-0 condition met
+pod/genai-gateway-trace-postgresql-0 condition met
+pod/genai-gateway-trace-redis-primary-0 condition met
+pod/genai-gateway-trace-s3-5c79c56bf4-np6np condition met
+pod/genai-gateway-trace-web-6f564cd7cf-xk2hw condition met
+pod/genai-gateway-trace-worker-5bcfd5c94d-8gxcw condition met
+pod/genai-gateway-trace-zookeeper-0 condition met
+pod/genai-gateway-trace-zookeeper-1 condition met
+pod/genai-gateway-trace-zookeeper-2 condition met
+pod/ingress-nginx-controller-6fdb88bff4-tb8dk condition met
+pod/coredns-577d995dff-wjhf9 condition met
+pod/intel-gpu-plugin-zb2j6 condition met
+pod/local-path-provisioner-6858d854cf-rpzgx condition met
+pod/metrics-server-778c4649b4-p9bx8 condition met
+pod/nri-resource-policy-balloons-5grz4 condition met
+pod/nvidia-device-plugin-daemonset-wcspx condition met
+pod/nfd-gc-7d6955597d-mx7w7 condition met
+pod/nfd-master-74b6cfb7df-84ncx condition met
+pod/nfd-worker-55c2g condition met
+pod/pgvector-0 condition met
+pod/redis-stack-server-0 condition met
+```
+
+The two pods the selector left out were the Succeeded pods of the two Jobs.
+Step 4j, one line per Job:
+
+```text
+default/register-qwen-qwen3-1-7b          SuccessCriteriaMet,Complete  succeeded=1  failed=0  start=2026-10-17T21:58:53Z  completion=2026-10-17T21:59:00Z
+kube-system/helm-install-gateway-api-crd  SuccessCriteriaMet,Complete  succeeded=1  failed=0  start=2026-10-17T21:47:43Z  completion=2026-10-17T21:48:09Z
+```
+
+Step 5, the completion (trimmed):
+
+```text
+POST https://api.example.com/v1/chat/completions (resolve api.example.com:443 -> 172.24.0.2)
+request:  {"model":"Qwen/Qwen3-1.7B","max_tokens":64,"temperature":0,
+           "messages":[{"role":"user","content":"In one sentence, what is Kubernetes? /no_think"}]}
+http_code=200 time_total=12.512036s
+response: {"model":"Qwen/Qwen3-1.7B","system_fingerprint":"vllm-0.24.0-5616035f","choices":[{"finish_reason":"stop",
+           "message":{"content":"<think>\n\n</think>\n\nKubernetes is an open-source platform for automating the
+           deployment, scaling, and management of containerized applications."}}],
+           "usage":{"completion_tokens":27,"prompt_tokens":20,"total_tokens":47}}
+```
+
+Step 6 printed `get_weather({"city": "Portland"})` for the tool call, the
+sandbox ran the model's code (`{"stdout":"385\n","stderr":"","exit_code":0}`)
+and it ended `==> EAT check passed.`
+
+Verdict: **SUPPORTED**, confidence 0.85 for this host and this EAT release.
+Every criterion held as written: steps 1-3 exited 0 in one pass with no retry,
+the wait exited 0 on its own (no stop), the completion returned HTTP 200 with
+content, and the only node labels EAT needed were `ei-infra-eligible` and
+`ei-inference-eligible`, which are not Xeon labels. EAT's vLLM values file is
+named `xeon-values.yaml`, but it ran on a CPU with no AVX-512 and no AMX, so no
+Xeon-only instruction was needed. H1 keeps its INCONCLUSIVE verdict.
+
+Scope: one i9-13900T, n=1, a shared host under the `typical` load instead of a
+fresh host (53 other containers, ~144 GiB of swap in use, a throttling
+package). It shows that EAT deploys and serves on this client CPU. It says
+nothing about speed or about other Core or Core Ultra parts.
+
+```bash
+# Reproduce on one fresh cluster under the typical load. Host needs docker, k3d, kubectl, curl, jq.
+lscpu | grep 'Model name'; uname -r; git rev-parse HEAD
+export KUBECONFIG=$PWD/h1b.kubeconfig K3D_GPU_CLUSTER=k3dgpu-h1b-eat EAT_WORK=$PWD/eat-work
+IMAGE=k3d-gpu:eat-$(git rev-parse --short HEAD)
+docker build -q -t "$IMAGE" . && docker image inspect --format '{{.Id}}' "$IMAGE"
+bench/load/load.py start --level typical --ttl 1800
+bench/load/load.py sample --seconds 60 --windows 26 --tag h1b --level typical --out load.jsonl &
+K3D_GPU_IMAGE="$IMAGE" \
+K3D_GPU_NODE_LABELS=ei-infra-eligible=true,ei-inference-eligible=true \
+K3D_GPU_K3S_ARGS=--disable=servicelb scripts/k3d-gpu up
+integrations/eat/eat-up.sh
+integrations/eat/eat-up.sh model cpu-qwen3-1-7b
+kubectl wait --for=condition=Ready pod -A --field-selector=status.phase!=Succeeded --timeout=30m
+kubectl get jobs -A                                              # every Job: COMPLETIONS 1/1
+integrations/eat/eat-check.sh                                    # expect: ==> EAT check passed.
+scripts/k3d-gpu down; bench/load/load.py stop
+```
 
 ### H2 run (i9-13900T, 2026-10-16)
 
