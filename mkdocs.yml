@@ -29,6 +29,7 @@ nav:
       - Power envelope: power-envelope.md
       - Accelerated dataplane: accelerated-dataplane.md
       - Experimental features: experimental.md
+      - Prefill guard: prefill-guard.md
   - Integrations:
       - GPUStack: integrations/gpustack.md
   - Design:

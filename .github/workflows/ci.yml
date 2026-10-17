@@ -50,6 +50,7 @@ jobs:
       - run: tests/reserved_cpus_test.sh
       - run: tests/experimental_test.sh
       - run: tests/phase_steer_test.sh
+      - run: tests/prefill_guard_test.sh
 
   telemetry-tests:
     name: Telemetry manifests
