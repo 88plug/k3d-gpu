@@ -83,6 +83,24 @@ jobs:
           PLATFORM: ${{ matrix.platform }}
         run: tests/sim_matrix_test.sh "$PLATFORM"
 
+  agent-examples:
+    name: Agent framework examples (${{ matrix.example }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [openai-agents, langgraph, crewai, llamaindex, litellm-gateway]
+    steps:
+      - uses: actions/checkout@v6
+      - run: tests/agent_examples_test.sh "${{ matrix.example }}"
+
+  register-model-test:
+    name: LiteLLM register-model.sh
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: tests/register_model_test.sh
+
   hadolint:
     name: Dockerfile lint
     runs-on: ubuntu-latest

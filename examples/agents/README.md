@@ -21,9 +21,8 @@ LangGraph sets 3.x.
 
 ## Run against the cluster
 
-`k3d-gpu agent` (OVMS in namespace `k3d-gpu-agent`, Service `ovms` port 8000)
-is on branch [`claude/agent-stack`](https://github.com/88plug/k3d-gpu/tree/claude/agent-stack),
-not yet merged into `main`. Run the `k3d-gpu` script from that branch.
+`k3d-gpu agent up` runs OVMS in namespace `k3d-gpu-agent`, Service `ovms`
+port 8000 (see `cmd_agent` in [`scripts/k3d-gpu`](../../scripts/k3d-gpu)).
 
 ```bash
 k3d-gpu agent up                                     # OVMS on the best Intel engine
@@ -61,6 +60,7 @@ The toolkit's GenAI gateway is LiteLLM (`docker.litellm.ai/berriai/litellm:v1.83
 in `core/helm-charts/genai-gateway` at toolkit tag `release-1.0.3-hotfix`),
 Service `genai-gateway-service` port 4000 in namespace `genai-gateway`, with
 models stored in its database and added through `/model/new`.
+[`integrations/eat/`](../../integrations/eat/) brings the toolkit up on a k3d-gpu node.
 [`litellm-gateway/model.json`](litellm-gateway/model.json) is that request body:
 model `openai/Qwen3-4B-int4-ov`, `api_base` the in-cluster OVMS Service at `/v3`.
 
@@ -105,8 +105,8 @@ labelled `ei-infra-eligible=true` (or control-plane nodes).
 model name, a `multiply` tool call, then an answer from the tool's result,
 streaming or not. `check.py <example>` runs an example against it and checks
 the requests it sent (for `litellm-gateway`, also that `model.json` targets the
-in-cluster agent Service, which `agent.py` swaps for the stub). `tests/agent_examples_test.sh` does that for every
-example in a pinned `python:3.13.16-slim-trixie` container, which is where the
+in-cluster agent Service, which `agent.py` swaps for the stub).
+`tests/agent_examples_test.sh` does that for every example in a pinned `python:3.13.16-slim-trixie` container, which is where the
 packages get installed from `requirements.txt` under `constraints.txt`; the
 installed set must equal `constraints.txt`. It takes example names, so a CI matrix can run one
 example per job.
