@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
 
+# A new push to a PR supersedes its older run; main runs always finish.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   shellcheck:
     name: Shellcheck
@@ -38,8 +43,10 @@ jobs:
       - run: tests/image_test.sh
       - run: tests/host_setup_test.sh
       - run: tests/eat_test.sh
+      - run: tests/platforms_doc_test.sh
       - run: tests/reserved_cpus_test.sh
       - run: tests/experimental_test.sh
+      - run: tests/phase_steer_test.sh
 
   telemetry-tests:
     name: Telemetry manifests
@@ -167,6 +174,7 @@ jobs:
           echo "${KUBECONFORM_SHA256}  kubeconform.tar.gz" | sha256sum -c -
           sudo tar -xzf kubeconform.tar.gz -C /usr/local/bin kubeconform
       - run: tests/chat_ui_test.sh
+      - run: tests/model_share_test.sh
 
   # One job per tests/fixtures/<platform>, so a new fixture joins the matrix
   # without editing this file.

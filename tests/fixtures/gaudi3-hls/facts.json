@@ -113,6 +113,15 @@
         "level": "info",
         "revert": null,
         "section": "Intel CPU built-in accelerators...",
+        "text": "noisy-neighbour isolation: cpu-cap — no rdt_a flag and no E-cores; give a neighbour a CPU limit. Cache and DRAM bandwidth stay shared",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "info",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
         "text": "per socket: socket 0: DSA 1, IAA 1, QAT 0 (no ARK default on file for this CPU)",
         "why": null
       },

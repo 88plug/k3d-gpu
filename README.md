@@ -34,6 +34,14 @@ A Docker-based [rancher/k3s](https://hub.docker.com/r/rancher/k3s) node image on
 
 ## Quick Start (k3d-gpu CLI)
 
+Just want a local chat? `k3d-gpu quickstart` (from 0.1.29; until that
+release, `scripts/k3d-gpu quickstart` in a checkout) goes from a machine with
+Docker and a detected accelerator to a chat UI on `127.0.0.1:8080` in one
+command: cluster, LLM server (model picked
+from your RAM), Open WebUI with a generated admin account. `k3d-gpu uninstall`
+removes it all. See [docs/quickstart.md](docs/quickstart.md), and the pinned,
+sha256-checked installer `packaging/install.sh`.
+
 The `k3d-gpu` launcher wraps the whole workflow — no need to remember
 `k3d cluster create` flags. Install it with your package manager (see [Install](#install)), then:
 
@@ -1187,7 +1195,9 @@ the in-process stub in `bench/test_agent_trace.py`.
 (LiteLLM gateway, Redis, pgvector, agent sandbox, CPU vLLM) on a single k3d-gpu
 node through EAT's own brownfield path, on a non-Xeon client CPU. Its vLLM pod
 joins the hybrid balloons policy's `performance` balloon through EAT's own chart
-annotation, so EAT's CPU balloons stay off and `hybrid` stays on.
+annotation, so EAT's CPU balloons stay off and `hybrid` stays on. It deploys EAT's
+latest tag, `release-1.0.3-hotfix`; OpenShell (`deploy_openshell`) is on EAT `main`
+only, so `eat-up.sh` refuses it (see [docs/platforms.md](docs/platforms.md)).
 
 ### Experimental features (auto-adapting)
 
