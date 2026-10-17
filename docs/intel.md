@@ -129,7 +129,15 @@ moves a row to verified. Please send its output.
 balloons policy) onto Kubernetes. It targets Xeon servers. We read it at
 [`0ecf67a`](https://github.com/intel/enterprise-agent-toolkit/tree/0ecf67a); a
 k3d-gpu cluster is a candidate bring-your-own target for a single developer
-machine.
+machine. [`integrations/eat/eat-up.sh`](../integrations/eat/eat-up.sh) deploys the
+latest tag, `release-1.0.3-hotfix`
+([`0d3438d`](https://github.com/intel/enterprise-agent-toolkit/tree/0d3438d7119de44cafc5903f66665c0b623e3333),
+[tags](https://api.github.com/repos/intel/enterprise-agent-toolkit/tags), checked
+2026-10-17). `main` adds only opt-in NVIDIA OpenShell
+([PR #14](https://github.com/intel/enterprise-agent-toolkit/pull/14),
+`deploy_openshell=off`), CI and docs after that tag; `eat-up.sh` stops on
+`deploy_openshell=on` because the tag cannot deploy it. Pins and open upstream
+changes: [platforms.md](platforms.md#intel-enterprise-agent-toolkit-eat).
 
 Facts from that snapshot that shape a k3d run:
 

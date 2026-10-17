@@ -1229,6 +1229,10 @@ put "${good}" /proc/sys/vm/swappiness 60
 put "${good}" /proc/4242/comm irqbalance
 pci "${good}" 0000:00:02.0 0x8086 0xa780 i915
 i915gt "${good}" 0000:00:02.0 card0 1650 1650 1650 1650 300 1650 slpc
+put "${good}" /sys/devices/system/cpu/intel_uncore_frequency/package_00_die_00/initial_min_freq_khz 800000
+put "${good}" /sys/devices/system/cpu/intel_uncore_frequency/package_00_die_00/initial_max_freq_khz 4700000
+put "${good}" /sys/devices/system/cpu/intel_uncore_frequency/package_00_die_00/min_freq_khz 800000
+put "${good}" /sys/devices/system/cpu/intel_uncore_frequency/package_00_die_00/max_freq_khz 4700000
 
 perf_says "perf: tuned host has no suggestions" "${good}" '^==> 0 suggestion\(s\)\. Read-only' "" STUB_DOCKER_DRIVER=overlay2
 perf_says "perf: reports EPP per core type" "${good}" 'ok: +E-cores 2-3: governor powersave, EPP balance_performance'
@@ -1655,6 +1659,45 @@ kernel "${r}" 6.6.0
 printf 'cpu family\t: 6\nmodel\t\t: 143\nmodel name\t: Intel(R) Xeon(R) Platinum 8480+\n' > "${r}/proc/cpuinfo"
 for c in 0 1 2 3 4 5 6 7; do dimm "${r}" "${c}" 65536 34 9 4800 4800 80 64 2; done
 perf_says "perf: unknown platform peak assumes 1 DIMM per channel" "${r}" 'info: peak DRAM bandwidth 307\.2 GB/s = 4800 MT/s x 64 B of data width \(computed, assuming one module per channel'
+
+# Uncore frequency (intel_uncore_frequency): legacy die dirs on client parts, TPMI
+# uncoreNN with ELC on Xeon 6. A lowered ceiling is a warn with apply and exact revert;
+# a raised floor is information only (H29 is PENDING, so no pin is ever suggested).
+uncore() {  # uncore <root> <dir> <initial_min> <initial_max> <min> <max>
+    local d=/sys/devices/system/cpu/intel_uncore_frequency/$2
+    put "$1" "${d}/initial_min_freq_khz" "$3"; put "$1" "${d}/initial_max_freq_khz" "$4"
+    put "$1" "${d}/min_freq_khz" "$5"; put "$1" "${d}/max_freq_khz" "$6"
+}
+r=$(newroot perf-uncore-capped)
+uncore "${r}" package_00_die_00 800000 4700000 800000 3000000
+perf_says "perf: uncore ceiling below the hardware max is flagged" "${r}" 'warn: package_00_die_00: max_freq_khz 3000000 is below the hardware ceiling 4700000'
+perf_says "perf: uncore apply restores the hardware ceiling" "${r}" 'apply:  echo 4700000 \| sudo tee /sys/devices/system/cpu/intel_uncore_frequency/package_00_die_00/max_freq_khz$'
+perf_says "perf: uncore revert writes the observed ceiling back" "${r}" 'revert: echo 3000000 \| sudo tee /sys/devices/system/cpu/intel_uncore_frequency/package_00_die_00/max_freq_khz$'
+before=$(cd "${r}" && find . -type f -exec md5sum {} + | sort)
+rm -f "${WORK}/sudo-called"
+env K3D_GPU_SYSROOT="${r}" PATH="${STUB_BIN}:${PATH}" bash "${K3D_GPU}" doctor --perf >/dev/null 2>&1
+after=$(cd "${r}" && find . -type f -exec md5sum {} + | sort)
+if [ "${before}" = "${after}" ] && [ ! -e "${WORK}/sudo-called" ]; then
+    PASS=$((PASS + 1)); echo "ok   perf: uncore checks are read-only (tree unchanged, sudo never run)"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL perf: uncore checks are read-only (tree changed or sudo ran)"
+fi
+r=$(newroot perf-uncore-floor)
+uncore "${r}" package_00_die_00 800000 4700000 4700000 4700000
+perf_says "perf: a raised uncore floor is information with its revert" "${r}" 'info: package_00_die_00: floor raised to 4700000 kHz \(hardware floor 800000\).*echo 800000 \| sudo tee'
+perf_says "perf: a raised uncore floor is not a suggestion" "${r}" 'warn: package_00_die_00' negate
+perf_says "perf: the uncore section never suggests a pin while H29 is pending" "${r}" 'under test \(EXPERIMENTS\.md H29, PENDING\)'
+r=$(newroot perf-uncore-tpmi)
+uncore "${r}" uncore00 800000 2200000 800000 2200000
+uncore "${r}" uncore01 800000 2500000 800000 2500000
+put "${r}" /sys/devices/system/cpu/intel_uncore_frequency/uncore00/elc_floor_freq_khz 1200000
+put "${r}" /sys/devices/system/cpu/intel_uncore_frequency/uncore00/elc_low_threshold_percent 10
+put "${r}" /sys/devices/system/cpu/intel_uncore_frequency/uncore00/elc_high_threshold_percent 95
+put "${r}" /sys/devices/system/cpu/intel_uncore_frequency/uncore00/elc_high_threshold_enable 1
+perf_says "perf: TPMI uncore clusters are each reported" "${r}" 'ok: +uncore01: 800-2500 MHz, the full hardware range'
+perf_says "perf: TPMI ELC settings are shown" "${r}" 'info: uncore00: ELC floor 1200000 kHz, thresholds low 10% high 95% \(enable 1\)'
+r=$(newroot perf-uncore-none)
+perf_says "perf: no intel_uncore_frequency means no uncore section" "${r}" 'Uncore frequency' negate
 
 # Real procfs files report size 0: the isolation checks still run on them.
 r=$(newroot perf-procfs)
