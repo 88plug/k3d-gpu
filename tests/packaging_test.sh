@@ -40,7 +40,12 @@ check "nfpm ships the launcher to /usr/bin" grep -Pzq 'src: scripts/k3d-gpu\n +d
 check "nfpm ships share/*.yml to /usr/share/k3d-gpu/" grep -Pzq 'src: share/\*\.yml\n +dst: /usr/share/k3d-gpu/' "${NFPM}"
 check "nfpm version comes from \$VERSION" grep -qx 'version: ${VERSION}' "${NFPM}"
 check "nfpm is arch-independent" grep -qx 'arch: all' "${NFPM}"
-check "formula installs share/*.yml" grep -qF 'pkgshare.install Dir["share/*.yml"]' "${FORMULA}"
+check "formula installs share/*.yml and share/telemetry" \
+    grep -qF 'pkgshare.install Dir["share/*.yml", "share/telemetry"]' "${FORMULA}"
+check "nfpm ships share/telemetry/" \
+    grep -Pzq 'src: share/telemetry/\*\.yml\n +dst: /usr/share/k3d-gpu/telemetry/\n' "${NFPM}"
+check "nfpm ships share/telemetry/optional/" \
+    grep -Pzq 'src: share/telemetry/optional/\*\.yml\n +dst: /usr/share/k3d-gpu/telemetry/optional/\n' "${NFPM}"
 check "formula points K3D_GPU_SHARE at pkgshare" grep -qF 'K3D_GPU_SHARE: "${K3D_GPU_SHARE:-#{pkgshare}}"' "${FORMULA}"
 check "formula test asserts a user K3D_GPU_SHARE wins" \
     grep -qF 'assert_match "/x/nvidia-device-plugin.yml", shell_output("K3D_GPU_SHARE=/x #{bin}/k3d-gpu help")' "${FORMULA}"
@@ -68,18 +73,30 @@ formula_version=$(sed -n 's|.*/aur-v\([0-9.]*\)\.tar\.gz".*|\1|p' "${FORMULA}")
 check "formula version is not ahead of the launcher" \
     test "$(printf '%s\n%s\n' "${formula_version}" "${launcher_version}" | sort -V | tail -1)" = "${launcher_version}"
 check "nix installs share/*.yml" grep -qF 'install -Dm644 -t "$out/share/k3d-gpu" share/*.yml' "${NIXPKG}"
+check "nix installs share/telemetry/*.yml" \
+    grep -qF 'install -Dm644 -t "$out/share/k3d-gpu/telemetry" share/telemetry/*.yml' "${NIXPKG}"
+check "nix installs share/telemetry/optional/*.yml" \
+    grep -qF 'install -Dm644 -t "$out/share/k3d-gpu/telemetry/optional" share/telemetry/optional/*.yml' "${NIXPKG}"
 check "nix points K3D_GPU_SHARE at the store" grep -qF -- '--set-default K3D_GPU_SHARE "$out/share/k3d-gpu"' "${NIXPKG}"
 check "flake.lock pins nixpkgs to a rev" \
     grep -Eq '"rev": "[0-9a-f]{40}"' "${ROOT}/flake.lock"
 
-# Release wiring: auto-release dispatches packages.yml next to aur-deploy.yml, and the
-# formula rewrite there produces lines the checks above accept.
-AUTO="${ROOT}/.github/workflows/auto-release.yml"
+# Release wiring: the image release job dispatches packages.yml next to aur-deploy.yml, and
+# the formula rewrite there produces lines the checks above accept.
+BAP="${ROOT}/.github/workflows/build-and-push.yml"
 PKGS="${ROOT}/.github/workflows/packages.yml"
-check "auto-release dispatches aur-deploy.yml" grep -q 'gh workflow run aur-deploy.yml' "${AUTO}"
-check "auto-release dispatches packages.yml" grep -q 'gh workflow run packages.yml' "${AUTO}"
+check "image release dispatches aur-deploy.yml" grep -q 'gh workflow run aur-deploy.yml' "${BAP}"
+check "image release dispatches packages.yml" grep -q 'gh workflow run packages.yml --ref main -f version=' "${BAP}"
+check "packages.yml dry_run skips the upload" \
+    grep -Pzq -- '- name: Publish to the GitHub release\n +if: \$\{\{ !inputs\.dry_run \}\}\n' "${PKGS}"
+check "packages.yml dry_run skips the formula commit" \
+    grep -Pzq -- '- name: Commit to main\n +if: \$\{\{ !inputs\.dry_run \}\}\n' "${PKGS}"
 check "packages.yml builds with packaging/check.sh nfpm" grep -q 'packaging/check.sh nfpm' "${PKGS}"
 check "packages.yml uploads to the aur-v release" grep -q 'gh release upload' "${PKGS}"
+# gh uploads create-time assets to a draft and publishes only once they are all up, so a
+# failed upload never leaves a published aur-v release without its .deb/.rpm.
+check "packages.yml creates the release with its assets" \
+    grep -Eq 'gh release create "\$\{TAG\}" k3d-gpu\* SHA256SUMS ' "${PKGS}"
 
 # Run the formula rewrite from packages.yml on a copy and check the result.
 work=$(mktemp -d)

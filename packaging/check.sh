@@ -25,7 +25,9 @@ VERSION="${VERSION:-$(sed -n 's/^VERSION="\([^"]*\)".*/\1/p' "${ROOT}/scripts/k3
 installed_checks='
 set -euo pipefail
 test "$(k3d-gpu version)" = "k3d-gpu ${VERSION}"
-for f in /src/share/*.yml; do test "$(sha256sum < "$f")" = "$(sha256sum < "/usr/share/k3d-gpu/${f##*/}")"; done
+for f in /src/share/*.yml /src/share/telemetry/*.yml /src/share/telemetry/optional/*.yml; do
+    test "$(sha256sum < "$f")" = "$(sha256sum < "/usr/share/k3d-gpu/${f#/src/share/}")"
+done
 k3d-gpu help | grep -F "/usr/share/k3d-gpu/nvidia-device-plugin.yml" >/dev/null
 test -x /usr/bin/k3d-gpu
 '

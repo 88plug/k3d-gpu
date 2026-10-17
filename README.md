@@ -57,7 +57,7 @@ Every package installs the same payload: the launcher at `bin/k3d-gpu` and the p
 manifests in `share/k3d-gpu/`. All need Docker, [k3d](https://k3d.io) and `kubectl` on the
 host (the Nix package brings its own k3d and kubectl). Releases are tagged `aur-vX.Y.Z`; the
 .deb, .rpm and `SHA256SUMS` are attached to each `aur-v*` [GitHub release](https://github.com/88plug/k3d-gpu/releases)
-(the flake and the .deb/.rpm start with the first release after 0.1.7).
+(the flake and the .deb/.rpm start with the first release after 0.1.20).
 
 **Arch Linux / Manjaro (AUR)**
 

@@ -5,15 +5,15 @@
 class K3dGpu < Formula
   desc "Bootstrap GPU-ready k3d clusters on Docker"
   homepage "https://github.com/88plug/k3d-gpu"
-  url "https://github.com/88plug/k3d-gpu/archive/refs/tags/aur-v0.1.7.tar.gz"
-  sha256 "8e376a436b80dc77df8c640d5a712796cdc898deb2686df13ce9a3ae7b18b293"
+  url "https://github.com/88plug/k3d-gpu/archive/refs/tags/aur-v0.1.20.tar.gz"
+  sha256 "e9b5410b4b33549e33932d2aa1a097a1f542b18a6c577796d80cfe72574a4d3b"
   license "FSL-1.1-ALv2"
 
   depends_on :linux
 
   def install
     libexec.install "scripts/k3d-gpu"
-    pkgshare.install Dir["share/*.yml"]
+    pkgshare.install Dir["share/*.yml", "share/telemetry"]
     # The launcher reads its manifests from K3D_GPU_SHARE (default /usr/share/k3d-gpu).
     (bin/"k3d-gpu").write_env_script libexec/"k3d-gpu", K3D_GPU_SHARE: "${K3D_GPU_SHARE:-#{pkgshare}}"
   end

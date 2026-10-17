@@ -42,6 +42,8 @@ stdenvNoCC.mkDerivation {
     runHook preInstall
     install -Dm755 scripts/k3d-gpu "$out/bin/k3d-gpu"
     install -Dm644 -t "$out/share/k3d-gpu" share/*.yml
+    install -Dm644 -t "$out/share/k3d-gpu/telemetry" share/telemetry/*.yml
+    install -Dm644 -t "$out/share/k3d-gpu/telemetry/optional" share/telemetry/optional/*.yml
     install -Dm644 README.md "$out/share/doc/k3d-gpu/README.md"
     install -Dm644 LICENSE.md "$out/share/licenses/k3d-gpu/LICENSE.md"
     runHook postInstall

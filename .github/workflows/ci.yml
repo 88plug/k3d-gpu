@@ -184,28 +184,28 @@ jobs:
     name: Packaging consistency tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - run: tests/packaging_test.sh
 
   deb-rpm:
     name: Build and test .deb + .rpm (nfpm)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - run: packaging/check.sh nfpm
 
   homebrew:
     name: Homebrew formula style, audit, install, test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - run: packaging/check.sh brew
 
   nix-flake:
     name: Nix flake check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - run: packaging/check.sh nix
 
   hadolint:

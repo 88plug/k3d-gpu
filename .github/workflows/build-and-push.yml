@@ -7,8 +7,9 @@ name: Auto-update, Build & Release
 #           auto-release.yml, which cuts a launcher release for them.
 #   release (dispatched by auto-release.yml with `release=X.Y.Z`): build the image
 #           from tag aur-vX.Y.Z, publish <repo>:X.Y.Z (the launcher's default
-#           image) next to the floating tags, then dispatch aur-deploy.yml so the
-#           launcher reaches AUR only once its image exists.
+#           image) next to the floating tags, then dispatch aur-deploy.yml and
+#           packages.yml (deb, rpm, Homebrew) so the launcher reaches every package
+#           channel only once its image exists.
 #
 # Every image is built from a release tag, so every published image has a
 # launcher version. Pushes made with GITHUB_TOKEN start no workflow runs, but
@@ -366,6 +367,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh workflow run aur-deploy.yml --ref main -f version=${{ inputs.release }}
+
+      - name: Dispatch deb, rpm and Homebrew release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run packages.yml --ref main -f version=${{ inputs.release }}
 
   # ─── Rendered components (hack/components/*) ─────────────────────────────
   # Each component is a pinned upstream chart rendered into a manifest under
