@@ -1067,17 +1067,23 @@ def run(a, ep, forwarded):
                                 step_cap_s=a.step_cap, deadline=deadline)
 
         def on_search_step(s):
+            # Saved after every step, so an interrupted run still resumes.
             if s["agents"] == 1 and st["base_tool"] is None:
                 st["base_tool"] = s["tool_valid_any"]
+            if s["verdict"] == "pass":
+                st["lo"] = max(st["lo"], s["agents"])
+            else:
+                st["hi"] = s["agents"] if st["hi"] is None else min(st["hi"], s["agents"])
+            st["steps"].append({"agents": s["agents"], "verdict": s["verdict"], "p95_s": s["p95_s"],
+                                "p95_ci95_s": s["p95_ci95_s"], "n": s["n"], "reps": s["reps"],
+                                "stop": s["stop"], "at": time.time()})
+            save_state(state_path, st)
             on_step(s)
 
         budget_s = a.budget * 60 - (time.monotonic() - t_start)
         bracket, scored, status = search_apb(measure, a.max, {"lo": st["lo"], "hi": st["hi"]},
                                              budget_s=max(0.0, budget_s), on_step=on_search_step)
         st.update(lo=bracket["lo"], hi=bracket["hi"], runs=st["runs"] + 1, updated_at=time.time())
-        st["steps"] += [{"agents": s["agents"], "verdict": s["verdict"], "p95_s": s["p95_s"],
-                         "p95_ci95_s": s["p95_ci95_s"], "n": s["n"], "reps": s["reps"],
-                         "stop": s["stop"], "at": time.time()} for s in scored]
         save_state(state_path, st)
         rep["bracket"], rep["search_status"] = bracket, status
         log(f"search {status}: {bracket_text(bracket['lo'], bracket['hi'])} "
