@@ -19,3 +19,7 @@ Thumbs.db
 
 # Docs site build output (mkdocs)
 site/
+
+# Package builds (packaging/check.sh, nix build)
+/dist/
+/result

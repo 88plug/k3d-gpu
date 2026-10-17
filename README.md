@@ -34,12 +34,10 @@ A Docker-based [rancher/k3s](https://hub.docker.com/r/rancher/k3s) node image on
 
 ## Quick Start (k3d-gpu CLI)
 
-The Arch package installs a `k3d-gpu` launcher that wraps the whole workflow — no
-need to remember `k3d cluster create` flags:
+The `k3d-gpu` launcher wraps the whole workflow — no need to remember
+`k3d cluster create` flags. Install it with your package manager (see [Install](#install)), then:
 
 ```bash
-yay -S k3d-gpu          # or build from packaging/aur/PKGBUILD
-
 k3d-gpu detect          # list accelerators on this host and their k8s resources
 k3d-gpu doctor          # preflight: accelerators, kernel/firmware, docker, runtimes, k3d, kubectl
 k3d-gpu host-setup      # check host drivers/userspace, print pinned install commands (--apply runs them)
@@ -52,6 +50,62 @@ k3d-gpu agent up        # OpenAI-compatible LLM server on the Intel GPU (else CP
 k3d-gpu recipe npu-embeddings | kubectl apply -f -   # OVMS embeddings on the NPU
 k3d-gpu down            # delete the cluster
 ```
+
+### Install
+
+Every package installs the same payload: the launcher at `bin/k3d-gpu` and the plugin
+manifests in `share/k3d-gpu/`. All need Docker, [k3d](https://k3d.io) and `kubectl` on the
+host (the Nix package brings its own k3d and kubectl). Releases are tagged `aur-vX.Y.Z`; the
+.deb, .rpm and `SHA256SUMS` are attached to each `aur-v*` [GitHub release](https://github.com/88plug/k3d-gpu/releases)
+(the flake and the .deb/.rpm start with the first release after 0.1.20).
+
+**Arch Linux / Manjaro (AUR)**
+
+```bash
+yay -S k3d-gpu          # or build from packaging/aur/PKGBUILD
+```
+
+**Debian / Ubuntu (.deb)**
+
+```bash
+VER=$(curl -fsSL 'https://api.github.com/repos/88plug/k3d-gpu/releases?per_page=100' |
+      sed -n 's/.*"tag_name": *"aur-v\([0-9.]*\)".*/\1/p' | head -1)   # newest package release
+curl -fLO "https://github.com/88plug/k3d-gpu/releases/download/aur-v${VER}/k3d-gpu_${VER}-1_all.deb"
+sudo apt install "./k3d-gpu_${VER}-1_all.deb"
+```
+
+**Fedora / RHEL / openSUSE (.rpm)**
+
+```bash
+VER=$(curl -fsSL 'https://api.github.com/repos/88plug/k3d-gpu/releases?per_page=100' |
+      sed -n 's/.*"tag_name": *"aur-v\([0-9.]*\)".*/\1/p' | head -1)   # newest package release
+sudo dnf install "https://github.com/88plug/k3d-gpu/releases/download/aur-v${VER}/k3d-gpu-${VER}-1.noarch.rpm"
+# openSUSE: sudo zypper install <same URL>
+```
+
+**Homebrew on Linux** — this repository is the tap:
+
+```bash
+brew tap 88plug/k3d-gpu https://github.com/88plug/k3d-gpu
+brew install 88plug/k3d-gpu/k3d-gpu
+```
+
+**Nix** (flake, needs the `nix-command` and `flakes` features; x86_64-linux and aarch64-linux):
+
+```bash
+nix run github:88plug/k3d-gpu -- detect               # try without installing
+nix profile add github:88plug/k3d-gpu                 # pin a release: github:88plug/k3d-gpu/aur-vX.Y.Z
+```
+
+In a NixOS or home-manager config, add the flake as an input and use
+`inputs.k3d-gpu.packages.${system}.default`, or apply `inputs.k3d-gpu.overlays.default`
+to get `pkgs.k3d-gpu`. The license (FSL-1.1-ALv2) is unfree to nixpkgs: the flake's own
+packages allow it, but through the overlay your nixpkgs needs
+`config.allowUnfreePredicate = p: lib.getName p == "k3d-gpu";`.
+
+Homebrew and Nix install outside `/usr/share`, so their `k3d-gpu` wrapper sets
+`K3D_GPU_SHARE` to the bundled manifests (an exported `K3D_GPU_SHARE` still wins).
+`packaging/check.sh nfpm|brew|nix` builds and tests each package in pinned containers.
 
 Behaviour is tunable via environment variables:
 

@@ -1,0 +1,141 @@
+name: Release packages (deb, rpm, Homebrew)
+
+# Publishes k3d-gpu beyond the AUR for each aur-vX.Y.Z tag:
+#   deb-rpm   builds the .deb and .rpm with nfpm (packaging/check.sh pins every image), tests
+#             them in Debian and Fedora, and attaches them to the aur-vX.Y.Z GitHub release
+#             (created with --latest=false so the image release from build-and-push.yml keeps "Latest").
+#   homebrew  points Formula/k3d-gpu.rb at the tag's tarball, tests it in the Homebrew image
+#             and commits it to main (this repo is the tap).
+# The Nix flake needs no step: it reads its version from scripts/k3d-gpu at the tag.
+# build-and-push.yml's release job dispatches this next to aur-deploy.yml once the image for the
+# version is published (a GITHUB_TOKEN tag push does not trigger workflows); a tag pushed by hand
+# triggers it directly.
+# dry_run=true builds and tests both packages from the dispatched ref instead of the tag and
+# skips the release upload and the formula commit, so it publishes nothing.
+
+on:
+  push:
+    tags:
+      - 'aur-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version without leading v (e.g. 0.1.7); the aur-v<version> tag must exist'
+        required: true
+        type: string
+      dry_run:
+        description: 'Build and test only, from the dispatched ref: no release upload, no formula commit'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: packages-${{ inputs.version || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  VERSION_INPUT: ${{ inputs.version }}
+
+jobs:
+  deb-rpm:
+    name: Build and attach .deb + .rpm
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine version
+        id: ver
+        run: |
+          VER="${VERSION_INPUT:-${GITHUB_REF_NAME#aur-v}}"
+          [[ "${VER}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::bad version '${VER}'"; exit 1; }
+          echo "ver=${VER}" >> "$GITHUB_OUTPUT"
+          echo "tag=aur-v${VER}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ inputs.dry_run && github.sha || steps.ver.outputs.tag }}
+
+      - name: Build and test packages
+        env:
+          VERSION: ${{ steps.ver.outputs.ver }}
+        run: packaging/check.sh nfpm
+
+      - name: Publish to the GitHub release
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.ver.outputs.tag }}
+          VER: ${{ steps.ver.outputs.ver }}
+        run: |
+          cd dist
+          sha256sum k3d-gpu* > SHA256SUMS
+          cat SHA256SUMS
+          # A new release gets its assets in the create call: gh uploads them to a draft and
+          # publishes only after every upload succeeds (it deletes the draft otherwise).
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release upload "${TAG}" k3d-gpu* SHA256SUMS --clobber
+          else
+            gh release create "${TAG}" k3d-gpu* SHA256SUMS --verify-tag --latest=false --title "k3d-gpu ${VER}" \
+              --notes "k3d-gpu ${VER}: .deb (Debian/Ubuntu) and .rpm (Fedora/RHEL/openSUSE). Install docs: https://github.com/88plug/k3d-gpu#install"
+          fi
+
+  homebrew:
+    name: Update Homebrew formula
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine version
+        id: ver
+        run: |
+          VER="${VERSION_INPUT:-${GITHUB_REF_NAME#aur-v}}"
+          [[ "${VER}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::bad version '${VER}'"; exit 1; }
+          echo "ver=${VER}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ inputs.dry_run && github.sha || 'main' }}
+          fetch-depth: 0
+
+      - name: Point the formula at the release tarball
+        if: ${{ !inputs.dry_run }}
+        env:
+          VER: ${{ steps.ver.outputs.ver }}
+          FORMULA: Formula/k3d-gpu.rb
+        run: |
+          CUR=$(sed -n 's|.*/aur-v\([0-9.]*\)\.tar\.gz".*|\1|p' "${FORMULA}")
+          if [ "$(printf '%s\n%s\n' "${CUR}" "${VER}" | sort -V | tail -1)" != "${VER}" ]; then
+            echo "formula is at ${CUR}, newer than ${VER}; leaving it"
+            exit 0
+          fi
+          SHA=$(curl -fsSL --retry 5 "https://github.com/88plug/k3d-gpu/archive/refs/tags/aur-v${VER}.tar.gz" | sha256sum | cut -d' ' -f1)
+          export SHA
+          # formula-rewrite-begin (exercised by tests/packaging_test.sh)
+          sed -i \
+            -e "s|^  url \"https://github.com/88plug/k3d-gpu/archive/refs/tags/aur-v.*\.tar\.gz\"$|  url \"https://github.com/88plug/k3d-gpu/archive/refs/tags/aur-v${VER}.tar.gz\"|" \
+            -e "s|^  sha256 \"[0-9a-f]*\"$|  sha256 \"${SHA}\"|" \
+            "${FORMULA}"
+          # formula-rewrite-end
+          git diff -- "${FORMULA}"
+
+      - name: Style, audit, install and test the formula
+        run: packaging/check.sh brew
+
+      - name: Commit to main
+        if: ${{ !inputs.dry_run }}
+        env:
+          VER: ${{ steps.ver.outputs.ver }}
+        run: |
+          if git diff --quiet -- Formula/k3d-gpu.rb; then
+            echo "formula already at ${VER}"
+            exit 0
+          fi
+          git config user.name  "88plug-bot"
+          git config user.email "andrew@88plug.com"
+          git add Formula/k3d-gpu.rb
+          git commit -m "release: homebrew k3d-gpu ${VER} [skip release]"
+          for attempt in 1 2 3 4 5; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            echo "push attempt ${attempt} lost a race, retrying"
+            sleep $((attempt * 5))
+          done
+          exit 1

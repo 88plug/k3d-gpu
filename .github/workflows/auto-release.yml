@@ -68,8 +68,14 @@ jobs:
           git config user.name  "88plug-bot"
           git config user.email "andrew@88plug.com"
           git add scripts/k3d-gpu packaging/aur/PKGBUILD packaging/aur/.SRCINFO
-          git commit -m "release: aur-v${VER} [skip release]"
-          git push origin HEAD:main
+          # Tracked files already at VER means an earlier run pushed the release commit but not
+          # the tag; tag the current HEAD (same VERSION) instead of failing on an empty commit.
+          if git diff --cached --quiet; then
+            echo "tracked files already at ${VER}; tagging HEAD"
+          else
+            git commit -m "release: aur-v${VER} [skip release]"
+            git push origin HEAD:main
+          fi
           git tag ${{ steps.ver.outputs.tag }}
           git push origin ${{ steps.ver.outputs.tag }}
 

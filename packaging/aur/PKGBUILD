@@ -32,6 +32,7 @@ package() {
     install -Dm644 share/gaudi-device-plugin.yml "$pkgdir/usr/share/k3d-gpu/gaudi-device-plugin.yml"
     install -Dm644 share/agent-chat-ui.yml      "$pkgdir/usr/share/k3d-gpu/agent-chat-ui.yml"
     install -Dm644 share/npu-embeddings.yml     "$pkgdir/usr/share/k3d-gpu/npu-embeddings.yml"
+    install -Dm644 share/node-feature-discovery.yml "$pkgdir/usr/share/k3d-gpu/node-feature-discovery.yml"
     local f
     for f in share/telemetry/*.yml share/telemetry/optional/*.yml; do
         install -Dm644 "$f" "$pkgdir/usr/share/k3d-gpu/${f#share/}"
