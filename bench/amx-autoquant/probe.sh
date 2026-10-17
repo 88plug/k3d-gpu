@@ -12,7 +12,8 @@
 #   probe.sh --dry-run   print the plan, touch nothing
 #
 # Run the live part only as:
-#   flock -w 10800 <scratchpad>/live.lock bench/amx-autoquant/probe.sh
+#   flock -o -w 10800 <scratchpad>/live.lock bench/amx-autoquant/probe.sh
+# (-o: the lock fd is not inherited, so only flock itself holds the lock).
 # after `k3d cluster list` shows no k3dgpu-f-* cluster. No k3d cluster is made.
 # Only containers named k3dgpu-i-amx-autoquant-* are created and removed. No
 # sysfs writes; RAPL is read with `sudo -n cat`.
@@ -32,10 +33,15 @@ PREFIX=k3dgpu-i-amx-autoquant
 OVMS_IMAGE="openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58"
 # python:3.12-slim (PYTHON_VERSION=3.12.15) by digest.
 PY_IMAGE="python@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1"
-# Latest on PyPI 2026-10-17; openvino 2026.4.1 matches the OVMS release. pip
-# resolves torch/transformers/huggingface_hub from optimum-intel's own bounds, and
-# --prepare records the full resolved set in pip-freeze.txt.
-PIP_PINS="openvino==2026.4.1 optimum-intel==2.2.0 pyarrow==26.0.0"
+# Checked on PyPI / download.pytorch.org 2026-10-17. openvino 2026.4.1 matches the
+# OVMS release. transformers and huggingface_hub are the newest inside optimum-intel
+# 2.2.0's bounds (transformers<5.6, huggingface-hub<1.22). torch/torchvision come
+# from the CPU wheel index so no CUDA wheels are pulled. --prepare still records
+# the full resolved set in pip-freeze.txt.
+PIP_PINS="openvino==2026.4.1 openvino-tokenizers==2026.4.1 optimum-intel==2.2.0 optimum==2.3.0 transformers==5.5.4 huggingface-hub==1.21.0 torch==2.14.1+cpu torchvision==0.29.1+cpu pyarrow==26.0.0"
+PIP_INDEX="--extra-index-url https://download.pytorch.org/whl/cpu"
+# Containers run as the invoking user so the cache stays user-owned.
+UIDGID="$(id -u):$(id -g)"
 PRECS="int4 int8 fp16"
 declare -A PORT=([int4]=18101 [int8]=18102 [fp16]=18103)
 
@@ -46,13 +52,13 @@ plan() {
     echo "H27 plan: budget ${BUDGET} s (abort at ${ABORT_AT} s), cpus ${CPUS}, dir ${DIR}"
     for p in ${PRECS}; do echo "  container ${PREFIX}-${p} ${OVMS_IMAGE} port ${PORT[${p}]} model OpenVINO/Qwen3-4B-${p}-ov"; done
     echo "  container ${PREFIX}-nll ${PY_IMAGE} (${PIP_PINS})"
-    echo "  schedule: warmup, P1, R1 ABCD, R2 DCBA, P2, R3 ABCD, R4 DCBA, R5 ABCD, P3, stop OVMS, NLL"
+    echo "  schedule: warmup, P1, R1 ABCD, R2 DCBA, P2, R3 ABCD, R4 DCBA, R5 ABCD, P3; probe order P1 int4,int8,fp16, P2 reversed, P3 forward; stop OVMS, NLL"
 }
 
 prepare() {
     mkdir -p "${DIR}/models" "${DIR}/venv" "${DIR}/text"
-    docker run --rm --name "${PREFIX}-prep" -v "${DIR}:/w" -e HOME=/w "${PY_IMAGE}" sh -ec "
-        python -m venv /w/venv && /w/venv/bin/pip install -q ${PIP_PINS}
+    docker run --rm --name "${PREFIX}-prep" --user "${UIDGID}" -v "${DIR}:/w" -e HOME=/w "${PY_IMAGE}" sh -ec "
+        python -m venv /w/venv && /w/venv/bin/pip install -q ${PIP_INDEX} ${PIP_PINS}
         /w/venv/bin/pip freeze > /w/pip-freeze.txt
         for p in ${PRECS}; do
             /w/venv/bin/python -c 'import sys; from huggingface_hub import snapshot_download, HfApi
@@ -62,7 +68,7 @@ print(r, HfApi().model_info(r).sha)' OpenVINO/Qwen3-4B-\$p-ov
     # Held-out text: this repo's docs written in 2026 (after Qwen3's training data), frozen by commit.
     git -C "${ROOT}" rev-parse HEAD > "${DIR}/text/heldout.commit"
     cat "${ROOT}/EXPERIMENTS.md" "${ROOT}"/docs/*.md > "${DIR}/text/heldout.txt"
-    docker run --rm --name "${PREFIX}-prep" -v "${DIR}:/w" -e HOME=/w "${PY_IMAGE}" /w/venv/bin/python -c '
+    docker run --rm --name "${PREFIX}-prep" --user "${UIDGID}" -v "${DIR}:/w" -e HOME=/w "${PY_IMAGE}" /w/venv/bin/python -c '
 import json
 from huggingface_hub import hf_hub_download
 from transformers import AutoTokenizer
@@ -96,9 +102,10 @@ watchdog() {
 turn() { python3 "${HERE}/turn.py" --ports "int4=${PORT[int4]},int8=${PORT[int8]},fp16=${PORT[fp16]}" \
     --prompts "${DIR}/text/prompts.json" --out "${RUN}/results.jsonl" --cpus "${CPUS}" "$@" | tee -a "${RUN}/probe.log"; }
 
+# probe_repeat <label> <order>: one probe request per arm; P1/P3 forward, P2 reversed.
 probe_repeat() {
     local t0=${SECONDS}
-    turn --phase probe --label "$1" --order int4,int8,fp16
+    turn --phase probe --label "$1" --order "$2"
     log "probe $1 wall $((SECONDS - t0)) s (budget 60 s)"
 }
 
@@ -106,7 +113,10 @@ run() {
     [ -f "${DIR}/text/prompts.json" ] || die "run --prepare first"
     RUN="${DIR}/run-$(date -u +%Y%m%dT%H%M%SZ)"
     mkdir -p "${RUN}"
-    trap cleanup EXIT
+    WD=""
+    # The EXIT trap stops the watchdog on every path (abort, set -e, success), so
+    # no background child outlives the run.
+    trap '[ -z "${WD}" ] || kill "${WD}" 2>/dev/null || true; cleanup' EXIT
     trap 'exit 1' TERM INT
     SECONDS=0
     watchdog & WD=$!
@@ -133,23 +143,24 @@ run() {
             > "${RUN}/precision-${p}.txt" || echo "not exposed" > "${RUN}/precision-${p}.txt"
     done
     turn --phase warmup --label W --order int4,int8,fp16
-    probe_repeat P1
+    probe_repeat P1 int4,int8,fp16
     turn --phase reference --label R1 --order "int4,int8,fp16,int4'"
     turn --phase reference --label R2 --order "int4',fp16,int8,int4"
-    probe_repeat P2
+    probe_repeat P2 fp16,int8,int4
     turn --phase reference --label R3 --order "int4,int8,fp16,int4'"
     turn --phase reference --label R4 --order "int4',fp16,int8,int4"
     turn --phase reference --label R5 --order "int4,int8,fp16,int4'"
-    probe_repeat P3
+    probe_repeat P3 int4,int8,fp16
     for p in ${PRECS}; do docker stats --no-stream --format "${p} {{.MemUsage}}" "${PREFIX}-${p}" >> "${RUN}/rss.txt" || true; done
     for p in ${PRECS}; do docker rm -f "${PREFIX}-${p}" >/dev/null; done
     log "NLL pass"
-    docker run --rm --name "${PREFIX}-nll" --cpuset-cpus "${CPUS}" -v "${DIR}:/w" -v "${HERE}:/b:ro" -e HOME=/w \
+    local tn=${SECONDS}
+    docker run --rm --name "${PREFIX}-nll" --user "${UIDGID}" --cpuset-cpus "${CPUS}" -v "${DIR}:/w" -v "${HERE}:/b:ro" -e HOME=/w \
         "${PY_IMAGE}" /w/venv/bin/python /b/nll.py --models /w/models --heldout /w/text/heldout.txt \
         --wikitext /w/text/wikitext2.txt --out "/w/${RUN##*/}/nll.json" || log "NLL pass failed: dNLL will be null"
+    log "NLL pass wall $((SECONDS - tn)) s (quality cost, outside the 60 s probe budget)"
     python3 "${HERE}/summarize.py" --requests "${RUN}/results.jsonl" --nll "${RUN}/nll.json" --out "${RUN}/results.json" \
         | tee -a "${RUN}/probe.log"
-    kill "${WD}" 2>/dev/null || true
     log "done in ${SECONDS} s: ${RUN}/results.json"
 }
 

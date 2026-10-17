@@ -25,6 +25,11 @@ def res(**arms):
     return {"measured_at": "2026-10-17T00:00:00Z", "arms": arms}
 
 
+def strong(**arms):
+    """Results whose pick won 5 of 5 reference rounds with no INCONCLUSIVE note."""
+    return dict(res(**arms), rounds=5, wins=5, notes=[])
+
+
 class Arms(unittest.TestCase):
     def paths(self, name):
         return {a["precision"]: a["path"] for a in autoquant.arms(facts(name))}
@@ -99,6 +104,17 @@ class Pick(unittest.TestCase):
         self.assertIsNone(w)
         self.assertEqual(len(why), 4)
 
+    def test_win_within_default_spread_keeps_default(self):
+        w, why = autoquant.pick(res(int4={"turn_s": [2.0, 2.4, 2.6], "dnll": 0.01},
+                                    int8={"turn_s": [2.0, 2.1, 2.2], "dnll": 0.0}))
+        self.assertEqual(w, "int4")
+        self.assertTrue(any("within its spread" in r for r in why))
+
+    def test_win_beyond_default_spread_switches(self):
+        w, _ = autoquant.pick(res(int4={"turn_s": [3.0, 3.1, 3.2], "dnll": 0.01},
+                                  int8={"turn_s": [2.0, 2.1, 2.2], "dnll": 0.0}))
+        self.assertEqual(w, "int8")
+
     def test_median_not_mean(self):
         w, _ = autoquant.pick(res(int4={"turn_s": [2, 2, 50], "dnll": 0.0}, int8={"turn_s": [3, 3, 3], "dnll": 0.0}))
         self.assertEqual(w, "int4")
@@ -134,7 +150,7 @@ class Cache(unittest.TestCase):
 
     def test_store_then_select_same_host(self):
         f = facts("raptorlake-nvidia")
-        w, fp, _ = autoquant.store(f, self.cache, res(int8={"turn_s": [1], "dnll": 0.0}), microcode="0x12f")
+        w, fp, _ = autoquant.store(f, self.cache, strong(int8={"turn_s": [1], "dnll": 0.0}), microcode="0x12f")
         self.assertEqual(w, "int8")
         d = autoquant.select(f, autoquant.load_cache(self.cache), microcode="0x12f")
         self.assertEqual((d["precision"], d["model"], d["memory"], d["source"], d["fingerprint"]),
@@ -142,9 +158,43 @@ class Cache(unittest.TestCase):
 
     def test_microcode_change_invalidates(self):
         f = facts("raptorlake-nvidia")
-        autoquant.store(f, self.cache, res(fp16={"turn_s": [1], "dnll": 0.0}), microcode="0x12f")
+        autoquant.store(f, self.cache, strong(fp16={"turn_s": [1], "dnll": 0.0}), microcode="0x12f")
         d = autoquant.select(f, autoquant.load_cache(self.cache), microcode="0x130")
         self.assertEqual((d["precision"], d["source"]), ("int4", "rule-stale-cache"))
+
+    def test_weak_evidence_caches_nothing(self):
+        f = facts("raptorlake-nvidia")
+        arms = {"int8": {"turn_s": [1], "dnll": 0.0}}
+        for extra in ({}, {"rounds": 5, "wins": 4}, {"rounds": 3, "wins": 3},
+                      {"rounds": 5, "wins": 5, "notes": ["INCONCLUSIVE: control"]},
+                      {"rounds": "5", "wins": 5}):
+            w, _, why = autoquant.store(f, self.cache, dict(res(**arms), **extra))
+            self.assertIsNone(w, extra)
+            self.assertTrue(any(r.startswith("evidence:") for r in why))
+        self.assertFalse(os.path.exists(self.cache))
+
+    def test_default_pick_needs_no_rounds(self):
+        w, _, _ = autoquant.store(facts("raptorlake-nvidia"), self.cache, res(int4={"turn_s": [1], "dnll": 0.0}))
+        self.assertEqual(w, "int4")
+
+    def test_runtime_change_invalidates(self):
+        f = facts("raptorlake-nvidia")
+        autoquant.store(f, self.cache, strong(int8={"turn_s": [1], "dnll": 0.0}), runtime="ovms@sha256:a")
+        c = autoquant.load_cache(self.cache)
+        self.assertEqual(autoquant.select(f, c, runtime="ovms@sha256:a")["source"], "measured")
+        self.assertEqual(autoquant.select(f, c, runtime="ovms@sha256:b")["source"], "rule-stale-cache")
+
+    def test_malformed_hosts_is_safe(self):
+        f = facts("raptorlake-nvidia")
+        for hosts in ([], "x", 3, {autoquant.fingerprint(f): "int8"}):
+            d = autoquant.select(f, {"schema": autoquant.SCHEMA, "hosts": hosts})
+            self.assertEqual(d["precision"], "int4")
+            os.makedirs(os.path.dirname(self.cache), exist_ok=True)
+            with open(self.cache, "w", encoding="utf-8") as fh:
+                json.dump({"schema": autoquant.SCHEMA, "hosts": hosts}, fh)
+            w, fp, _ = autoquant.store(f, self.cache, strong(int8={"turn_s": [1], "dnll": 0.0}))
+            self.assertEqual(w, "int8")
+            self.assertEqual(autoquant.select(f, autoquant.load_cache(self.cache))["source"], "measured")
 
     def test_nothing_passes_writes_nothing(self):
         w, _, _ = autoquant.store(facts("raptorlake-nvidia"), self.cache, res(int4={"turn_s": [1], "dnll": 0.9}))

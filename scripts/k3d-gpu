@@ -5196,7 +5196,7 @@ spec:
       labels:
         app: ovms${podlabels}
       annotations:
-        k3d-gpu.io/agent-device: ${device}
+        k3d-gpu.io/agent-device: ${device}${AGENT_AUTOQUANT_ANN:-}
     spec:
       securityContext:
         runAsUser: 5000
@@ -6061,6 +6061,11 @@ cmd_agent_up() {
             video) agent_video_check ;;
         esac
     done
+    # agent_manifest ran in a subshell: read the weights it rendered (autoquant may
+    # have swapped them) so the commit below is the served model's.
+    local served
+    served=$(grep -m1 -o -- '--source_model=[^[:space:]]*' <<< "${manifest}" | cut -d= -f2- || true)
+    [ -z "${served}" ] || AGENT_MODEL=${served}
     if [ "${AGENT_APP}" = vllm ]; then
         info "model ${AGENT_MODEL} at revision ${AGENT_REVISION:-main (unpinned; set K3D_GPU_AGENT_REVISION)}"
     else
@@ -6402,9 +6407,11 @@ print(d["decision"], e.get("name") or "-", e.get("device") or "-", e.get("image"
 # The CPU agent's weight precision (EXPERIMENTS.md H27). A probe
 # (bench/amx-autoquant/probe.sh) measures turn latency and an NLL quality delta per
 # precision and stores the gated winner under this host's fingerprint (CPU model,
-# ISA, P/E topology, microcode, memory). `agent up` on OVMS/CPU serves the cached
-# winner while the fingerprint matches, else the static int4 default. The served
-# model name stays the default's, so clients that name it keep working.
+# ISA, P/E topology, microcode, memory, OVMS image). `agent up` on OVMS/CPU serves
+# the cached winner while the fingerprint matches, else the static int4 default.
+# Nothing is probed automatically: with no stored run every host serves int4. The
+# served model name stays the default's, so clients that name it keep working;
+# the pod's k3d-gpu.io/agent-model annotation names the weights actually served.
 # K3D_GPU_AGENT_MODEL overrides both; K3D_GPU_AUTOQUANT=off ignores the cache.
 autoquant_cache() { echo "${K3D_GPU_AUTOQUANT_CACHE:-${XDG_STATE_HOME:-${HOME}/.local/state}/k3d-gpu/autoquant.json}"; }
 
@@ -6429,10 +6436,11 @@ autoquant_run() {
     [ -f "${dir}/autoquant.py" ] || return 1
     command -v python3 >/dev/null 2>&1 || return 1
     if [ -n "${facts}" ]; then
-        python3 "${dir}/autoquant.py" "$@" --cache "$(autoquant_cache)" < "${facts}"
+        python3 "${dir}/autoquant.py" "$@" --cache "$(autoquant_cache)" --runtime "${AGENT_OVMS_IMAGE}" < "${facts}"
     else
         mapfile -t host_args < <(autoquant_host_args)
-        facts_json "${dir}" | python3 "${dir}/autoquant.py" "$@" --cache "$(autoquant_cache)" ${host_args[@]+"${host_args[@]}"}
+        facts_json "${dir}" | python3 "${dir}/autoquant.py" "$@" --cache "$(autoquant_cache)" \
+            --runtime "${AGENT_OVMS_IMAGE}" ${host_args[@]+"${host_args[@]}"}
     fi
 }
 
@@ -6454,8 +6462,22 @@ agent_autoquant() {
         return 0
     fi
     AGENT_MODEL=${model}
-    [ -n "${K3D_GPU_AGENT_MEMORY:-}" ] || AGENT_MEMORY=${memory}
+    AGENT_AUTOQUANT_ANN=$'\n        k3d-gpu.io/agent-model: '"${model}"$'\n        k3d-gpu.io/agent-precision-source: autoquant-measured'
+    if [ -z "${K3D_GPU_AGENT_MEMORY:-}" ]; then
+        AGENT_MEMORY=${memory}
+    elif [ "$(mem_gib "${K3D_GPU_AGENT_MEMORY}")" -lt "$(mem_gib "${memory}")" ]; then
+        warn "autoquant: K3D_GPU_AGENT_MEMORY=${K3D_GPU_AGENT_MEMORY} is below the ${memory} that ${precision} needs; the pod may be OOM-killed"
+    fi
     info "autoquant: measured pick ${precision} for this host, serving ${AGENT_MODEL} (K3D_GPU_AGENT_MODEL or K3D_GPU_AUTOQUANT=off overrides)" >&2
+}
+
+# mem_gib <k8s quantity Ni|NGi|NMi>: whole GiB, 0 when unparsed.
+mem_gib() {
+    case "$1" in
+        *Gi) echo "${1%Gi}" | grep -Eo '^[0-9]+' || echo 0 ;;
+        *Mi) local m; m=$(echo "${1%Mi}" | grep -Eo '^[0-9]+' || echo 0); echo $((m / 1024)) ;;
+        *) echo 0 ;;
+    esac
 }
 
 # autoquant [--json] [--facts FILE] [--store RESULTS]: the precision `agent up`
