@@ -449,6 +449,7 @@ turns them on; `k3d-gpu doctor` prints the labels this host gets.
 |-------|----------|--------|
 | `feature.node.kubernetes.io/cpu-cpuid.<NAME>=true` | always, for each of `avx_vnni`, `avx512f`, `avx512_vnni`, `avx512_bf16`, `vaes`, `gfni`, `sha_ni`, `ibt`, `user_shstk` in `/proc/cpuinfo` | NFD's names: `AVXVNNI`, `AVX512F`, `AVX512VNNI`, `AVX512BF16`, `VAES`, `GFNI`, `SHA`, `CETIBT`, `CETSS` |
 | `gpu.intel.com/xmx=true\|false` | `intel` is active; `true` if any Intel GPU has XMX matrix engines, `false` only when every one is known to lack them | per platform, from Mesa's `has_systolic` |
+| `k3d-gpu.io/xmx.i915=false`, `k3d-gpu.io/xmx.xe=false` | `gpu.intel.com/xmx=true`, and that driver also holds an Intel GPU without known XMX (its device plugin resource may hand that GPU out, so `agent up` auto and `recommend_placement` skip it) | per platform, from Mesa's `has_systolic` |
 | `gpu.intel.com/media-vcs=<n>`, `gpu.intel.com/media-vecs=<n>` | `intel` is active on `i915` | video decode/encode and video enhancement engines under `/sys/class/drm/card*/engine` |
 | `k3d-gpu.io/npu.gen=37xx\|40xx\|50xx\|60xx` | `npu` is active | the NPU's firmware generation |
 
@@ -748,7 +749,7 @@ The device comes from what the cluster advertises, not from the host alone:
 | Cluster has | Device | Pod gets |
 |-------------|--------|----------|
 | allocatable `habana.ai/gaudi` | `HPU` | one Gaudi, served by vLLM (see [vLLM on Gaudi](#vllm-on-gaudi)) |
-| allocatable `gpu.intel.com/xe`, else `gpu.intel.com/i915`, on a node labelled `gpu.intel.com/xmx=true` | `GPU` | one GPU, a `gpu.intel.com/xmx: "true"` node selector; the host render group is added as a supplemental group |
+| allocatable `gpu.intel.com/xe`, else `gpu.intel.com/i915`, on a node labelled `gpu.intel.com/xmx=true`, skipping a driver labelled `k3d-gpu.io/xmx.<driver>=false` | `GPU` | one GPU, a `gpu.intel.com/xmx: "true"` node selector; the host render group is added as a supplemental group |
 | anything else, including an Intel GPU without XMX (or with `xmx` unknown) | `CPU` | no device; the P-cores on a hybrid node; on a node labelled `...cpu-cpuid.AMXTILE=true` it is pinned there |
 | `npu.intel.com/accel`, only with `K3D_GPU_AGENT_DEVICE=NPU` | `NPU` | the NPU and its accel node's group |
 

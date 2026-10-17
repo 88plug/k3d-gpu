@@ -1252,15 +1252,18 @@ intel_engine_cards() {
 engine_count() { local n; n=$({ compgen -G "$1/engine/$2[0-9]*" || true; } | wc -l); echo $((n)); }
 
 # Node labels for the detected Intel GPUs. gpu.intel.com/xmx is true when any GPU
-# has XMX and false when every GPU is known to lack it. gpu.intel.com/media-vcs and
-# media-vecs count the video decode/encode and video enhancement engines of the
-# i915 card with the most video engines.
+# has XMX and false when every GPU is known to lack it. When it is true,
+# k3d-gpu.io/xmx.<driver>=false marks a driver (i915, xe) that also holds a GPU
+# without known XMX: its device plugin resource may hand out that GPU.
+# gpu.intel.com/media-vcs and media-vecs count the video decode/encode and video
+# enhancement engines of the i915 card with the most video engines.
 intel_gpu_labels() {
-    local e name x xmx=false unknown=0 card vcs best=-1 vecs=0
+    local e name x xmx=false unknown=0 card vcs best=-1 vecs=0 partial=""
     for e in ${INTEL_DRIVERS[@]+"${INTEL_DRIVERS[@]}"}; do
         IFS='|' read -r name _ <<< "$(intel_gpu_platform "${e#* }")"
         x=$(gpu_xmx "${name}")
         case "${x}" in true) xmx=true ;; false) ;; *) unknown=1 ;; esac
+        [ "${x}" = true ] || [[ " ${partial} " == *" ${e%% *} "* ]] || partial+="${partial:+ }${e%% *}"
     done
     if [ "${#INTEL_DRIVERS[@]}" -gt 0 ] && { [ "${xmx}" = true ] || [ "${unknown}" -eq 0 ]; }; then
         echo "gpu.intel.com/xmx=${xmx}"
@@ -1274,6 +1277,10 @@ intel_gpu_labels() {
         echo "gpu.intel.com/media-vcs=${best}"
         echo "gpu.intel.com/media-vecs=${vecs}"
     fi
+    if [ "${xmx}" = true ]; then
+        for e in ${partial}; do echo "k3d-gpu.io/xmx.${e}=false"; done
+    fi
+    return 0
 }
 
 # Node label for the NPU firmware generation (37xx, 40xx, ...), when every
@@ -3155,12 +3162,25 @@ perf_memory() {
     perf_info "MemTotal $(kb_gib "${total}") GiB, MemAvailable $(kb_gib "${avail}") GiB, swap $(kb_gib "${stot:-0}") GiB, vm.swappiness=${sw:-?}" /proc/meminfo
     used=$(( ${stot:-0} - ${sfree:-0} ))
     if [ "${used}" -ge 1048576 ]; then
-        local apply=""
-        [ "${avail:-0}" -gt $((used + 1048576)) ] \
-            && apply="sudo swapoff -a && sudo swapon -a   # pulls swapped pages back into RAM; MemAvailable covers them"
+        local apply="" revert="" dev pri on why="; MemAvailable is too small to pull the swapped pages back in right now"
+        # Cycle each active swap device by name, at its own priority: swapon -a
+        # re-enables only /etc/fstab entries, so zram-generator swap (a systemd
+        # unit) would stay off. swapon -p takes 0..32767; a negative priority is
+        # the kernel's own and comes back by itself.
+        if [ "${avail:-0}" -gt $((used + 1048576)) ]; then
+            while read -r dev _ _ _ pri; do
+                [ -n "${dev}" ] && [ "${dev}" != Filename ] && [[ "${pri}" =~ ^-?[0-9]+$ ]] || continue
+                if [ "${pri:0:1}" = - ]; then on="sudo swapon"; else on="sudo swapon -p ${pri}"; fi
+                apply+="${apply:+ && }sudo swapoff ${dev} && ${on} ${dev}"
+                revert+="${revert:+; }${on} ${dev}"
+            done < <(cat "${SYSROOT}/proc/swaps" 2>/dev/null || true)
+            why=""
+            [ -n "${apply}" ] && apply+="   # pulls swapped pages back into RAM; MemAvailable covers them" \
+                || why="; /proc/swaps lists no device to cycle"
+        fi
         perf_flag warn "$(kb_gib "${used}") GiB of swap in use — the host is under memory pressure" /proc/meminfo \
-            "anything a server keeps in anonymous memory (KV cache, runtime buffers, weights it copied) is paged back from disk when touched. Free memory or serve a smaller model before benchmarking$([ -n "${apply}" ] || echo "; MemAvailable is too small to pull the swapped pages back in right now")" \
-            "${apply}" ""
+            "anything a server keeps in anonymous memory (KV cache, runtime buffers, weights it copied) is paged back from disk when touched. Free memory or serve a smaller model before benchmarking${why}" \
+            "${apply}" "${revert}"
     else
         perf_ok "swap in use: $(kb_gib "${used}") GiB" /proc/meminfo
     fi
@@ -5847,7 +5867,9 @@ cpu_list_count() {
 # auto: an allocatable Gaudi (HPU, served by vLLM) first, unless the backend was
 # set to ovms or llm-scaler, which do not run on it. Then the Intel GPU (xe
 # first: Battlemage/Lunar Lake and newer) only when it is allocatable and a node
-# labels it gpu.intel.com/xmx=true; otherwise CPU, on the P-cores of a hybrid
+# labels it gpu.intel.com/xmx=true (skipping a driver labelled
+# k3d-gpu.io/xmx.<driver>=false: its plugin may hand out the GPU without XMX);
+# otherwise CPU, on the P-cores of a hybrid
 # node. A GPU without XMX loses to the P-cores: on an i9-13900T, Qwen3-4B int4
 # decodes 15.7 tok/s and prefills 172 tok/s on the P-cores, 9.9 and 66 on the UHD
 # 770 (EXPERIMENTS.md H6); the GPU only saves CPU (~1 busy CPU instead of ~8).
@@ -5877,6 +5899,11 @@ agent_device() {
             if [ -n "$(labelled_nodes "${AGENT_XMX_LABEL}")" ]; then
                 for res in gpu.intel.com/xe gpu.intel.com/i915; do
                     [ "$(resource_total "${res}")" -gt 0 ] || continue
+                    # Not every GPU on this driver has XMX: the plugin may hand out one without.
+                    if [ -n "$(labelled_nodes "k3d-gpu.io/xmx.${res##*/}=false")" ]; then
+                        info "agent: ${res} also holds a GPU without XMX, so auto does not request it (K3D_GPU_AGENT_DEVICE=GPU forces it)" >&2
+                        continue
+                    fi
                     if [ -n "${refused}" ]; then
                         IFS='|' read -r bdf why fix <<< "${refused}"
                         warn "agent: Intel GPU ${bdf} refused: ${why}; fix: ${fix}; using OVMS on the CPU"
