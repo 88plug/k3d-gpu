@@ -1,0 +1,90 @@
+# Docs site: README.md (home) + CONTRIBUTING.md + docs/*.md, published to GitHub
+# Pages by .github/workflows/docs.yml. Toolchain pinned in docs-build/.
+# Preview: tests/docs_test.sh builds it; `mkdocs serve` with the same toolchain.
+site_name: k3d-gpu
+site_description: k3d node image and launcher that schedules NVIDIA, Intel and Gaudi accelerators on a local k3s cluster.
+site_url: https://88plug.github.io/k3d-gpu/
+repo_url: https://github.com/88plug/k3d-gpu
+repo_name: 88plug/k3d-gpu
+edit_uri: edit/main/docs/
+copyright: FSL-1.1-ALv2 © 2025 Crypto & Coffee Development Team
+
+docs_dir: docs
+site_dir: site
+strict: true
+
+hooks:
+  - docs-build/hooks.py
+
+# Pages that other branches add are listed already. docs-build/hooks.py drops an
+# entry until its file exists in docs/ ("not yet published").
+nav:
+  - Home: index.md
+  - Intel platforms: intel.md
+  - Operations:
+      - Telemetry: telemetry.md
+      - Failure modes: failure-modes.md
+      - Power envelope: power-envelope.md
+      - Accelerated dataplane: accelerated-dataplane.md
+      - Experimental features: experimental.md
+  - Integrations:
+      - GPUStack: integrations/gpustack.md
+  - Design:
+      - Speculative decoding: design/speculative-decoding.md
+  - Evidence:
+      - Intel capability map: intel-capability-map.md
+      - Benchmark landscape: benchmark-landscape.md
+      - Provenance: provenance.md
+      - Security audit: security-audit.md
+  - Development:
+      - Branch consolidation: dev/consolidation.md
+  - Contributing: contributing.md
+
+validation:
+  nav:
+    omitted_files: warn
+    not_found: warn
+  links:
+    not_found: warn
+    anchors: warn
+    absolute_links: warn
+    unrecognized_links: warn
+
+theme:
+  name: material
+  features:
+    - content.code.copy
+    - content.action.edit
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Light mode
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      # GitHub-style anchors, so README's in-page links work on both.
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
