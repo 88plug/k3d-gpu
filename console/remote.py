@@ -47,7 +47,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-SECRET = "k3d-gpu-llm"
+ENV_OBJECT = "k3d-gpu-llm"  # the Secret pods read the endpoint from
 MAX_TOKENS_CAP = 64
 TEMPERATURE = 0.6  # never 0: shared fleets serve sampling, and greedy is a different code path
 LOCAL_SUFFIXES = (".svc", ".svc.cluster.local", ".cluster.local")
@@ -262,7 +262,7 @@ def secret_manifest(ep, namespace, model):
     """Secret k3d-gpu-llm. Keys are env-var names, so `envFrom: secretRef` works.
     The key is base64 data only; base URL and model are annotations too, so tools
     can report them without reading data."""
-    return (f"apiVersion: v1\nkind: Secret\nmetadata:\n  name: {SECRET}\n  namespace: {namespace}\n"
+    return (f"apiVersion: v1\nkind: Secret\nmetadata:\n  name: {ENV_OBJECT}\n  namespace: {namespace}\n"
             f"  labels:\n    app.kubernetes.io/managed-by: k3d-gpu\n"
             f"  annotations:\n    k3d-gpu.io/base-url: {q(ep.base)}\n    k3d-gpu.io/model: {q(model)}\n"
             f"type: Opaque\ndata:\n"
@@ -283,9 +283,9 @@ def render_chat_ui(text, base, model):
     are OPENAI_API_BASE_URL and OPENAI_API_KEY (open-webui backend/open_webui/config.py,
     v0.12.2). ENABLE_PERSISTENT_CONFIG=False: otherwise a connection saved in the data
     volume wins over the env on the next start."""
-    def ref(name, key):
+    def ref(name, field):
         return (f"\\1- name: {name}\n\\1  valueFrom:\n"
-                f"\\1    secretKeyRef: {{name: {SECRET}, key: {key}}}\n")
+                f"\\1    secretKeyRef: {{name: {ENV_OBJECT}, key: {field}}}\n")
     text = _sub1(r"^(\s*)- name: OPENAI_API_BASE_URL\n\s*value: .*\n", ref("OPENAI_API_BASE_URL", "OPENAI_BASE_URL"),
                  text, "OPENAI_API_BASE_URL")
     text = re.sub(r"^\s*# OVMS runs without an API key.*\n", "", text, flags=re.M)
@@ -295,7 +295,7 @@ def render_chat_ui(text, base, model):
                  f"\\1- name: DEFAULT_MODELS\n\\1  value: {q(model)}\n"
                  "\\1- name: ENABLE_PERSISTENT_CONFIG\n\\1  value: \"False\"\n", text, "DEFAULT_MODELS")
     return (f"# Rendered by `k3d-gpu quickstart --remote`: chat against {base}\n"
-            f"# (model {model}); endpoint and key come from Secret {SECRET}.\n" + text)
+            f"# (model {model}); endpoint and key come from Secret {ENV_OBJECT}.\n" + text)
 
 
 def endpoint_addrs(host, port, pinned=None):
@@ -338,7 +338,7 @@ def render_sandbox(text, host, port, addrs):
     text = _sub1(r"^(      automountServiceAccountToken: false\n)", f"\\1      hostAliases:\n{aliases}", text,
                  "podTemplate spec")
     text = _sub1(r"^(        env:\n        - name: HOME\n          value: /tmp\n)",
-                 f"\\1        envFrom:\n        - secretRef:\n            name: {SECRET}\n", text, "container env")
+                 f"\\1        envFrom:\n        - secretRef:\n            name: {ENV_OBJECT}\n", text, "container env")
     text = _sub1(r"^(kind: SandboxTemplate\nmetadata:\n  name: .*\n  namespace: .*\n)",
                  f"\\1  annotations:\n    k3d-gpu.io/remote-host: {q(host)}\n"
                  f"    k3d-gpu.io/remote-addrs: {q(','.join(addrs))}\n", text, "SandboxTemplate metadata")
@@ -476,7 +476,7 @@ def cmd_secret(ep, a):
     except OSError as e:
         raise RemoteError(f"kubectl: {e.strerror}")
     if p.returncode != 0:
-        raise RemoteError(f"kubectl apply of Secret {a.namespace}/{SECRET} failed (exit {p.returncode})")
+        raise RemoteError(f"kubectl apply of Secret {a.namespace}/{ENV_OBJECT} failed (exit {p.returncode})")
     return 0
 
 
