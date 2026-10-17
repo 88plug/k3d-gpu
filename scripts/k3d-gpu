@@ -68,7 +68,7 @@
 
 set -euo pipefail
 
-VERSION="0.1.51"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.53"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 # The node image defaults to the tag built from this launcher's own release
 # (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
@@ -5908,6 +5908,17 @@ cpu_list_count() {
 # A GPU the firmware gatekeeper refuses (gpu_gate) is never picked: auto falls
 # back to OVMS on the CPU and says why; a forced GPU, or a vLLM backend that needs
 # the GPU, stops with the one-line fix.
+# The cluster has an Intel GPU only as a DRA device (K3D_GPU_DRA=1): no
+# gpu.intel.com/xe or i915 extended resource, but a ResourceSlice device a
+# gpu.intel.com claim can get. The agent stack requests extended resources only.
+agent_dra_gpu() {
+    [ $(( $(resource_total gpu.intel.com/xe) + $(resource_total gpu.intel.com/i915) )) -eq 0 ] \
+        && [ "$(intel_dra_devices)" -gt 0 ]
+}
+agent_dra_note() {
+    echo "the cluster exposes its Intel GPU through DRA (K3D_GPU_DRA=1), and the agent stack requests gpu.intel.com/xe or i915 only — recreate the cluster with K3D_GPU_DRA=0 to serve on the GPU"
+}
+
 AGENT_XMX_LABEL="gpu.intel.com/xmx=true"
 agent_device() {
     local want=${K3D_GPU_AGENT_DEVICE:-auto} res gaudi_ok=1 refused bdf why fix need="K3D_GPU_AGENT_DEVICE=GPU"
@@ -5942,6 +5953,7 @@ agent_device() {
                     return 0
                 done
             fi
+            ! agent_dra_gpu || warn "agent: $(agent_dra_note); using OVMS on the CPU"
             echo "CPU -"
             ;;
         GPU)
@@ -5952,6 +5964,7 @@ agent_device() {
             for res in gpu.intel.com/xe gpu.intel.com/i915; do
                 if [ "$(resource_total "${res}")" -gt 0 ]; then echo "GPU ${res}"; return 0; fi
             done
+            ! agent_dra_gpu || err "${need}: $(agent_dra_note)"
             [ "${AGENT_APP}" != vllm ] || err "K3D_GPU_AGENT_BACKEND=${AGENT_BACKEND} runs on an Intel GPU only (vllm also on a Gaudi), and the cluster advertises no gpu.intel.com/xe or i915 — check 'k3d-gpu detect' and recreate the cluster"
             err "K3D_GPU_AGENT_DEVICE=GPU but the cluster advertises no Intel GPU (gpu.intel.com/xe or i915) — check 'k3d-gpu detect' and recreate the cluster"
             ;;
@@ -5978,6 +5991,7 @@ agent_device() {
             for res in gpu.intel.com/xe gpu.intel.com/i915; do
                 if [ "$(resource_total "${res}")" -gt 0 ]; then echo "HETERO:GPU,CPU ${res}"; return 0; fi
             done
+            ! agent_dra_gpu || err "K3D_GPU_AGENT_DEVICE=${want}: $(agent_dra_note)"
             err "K3D_GPU_AGENT_DEVICE=${want} but the cluster advertises no Intel GPU (gpu.intel.com/xe or i915)"
             ;;
         CPU) echo "CPU -" ;;
@@ -6015,18 +6029,26 @@ agent_draft() {
     esac
     want=${want^^}
     if [ "${want}" = "${target}" ] || [ "${want}" = CPU ]; then echo "${want} -"; return 0; fi
+    # A HETERO target already holds the GPU the draft runs on.
+    if [ "${want}" = GPU ] && [[ "${target}" == HETERO:* ]]; then echo "GPU -"; return 0; fi
     case "${want}" in
         GPU)
             [ -z "$(intel_gpu_refusal)" ] || err "K3D_GPU_AGENT_DRAFT=GPU but the Intel GPU is refused — see 'k3d-gpu doctor'"
             for res in gpu.intel.com/xe gpu.intel.com/i915; do
-                if [ "$(resource_total "${res}")" -gt 0 ]; then echo "GPU ${res}"; return 0; fi
+                [ "$(resource_total "${res}")" -gt 0 ] || continue
+                if [ $(( $(resource_total "${res}") - $(resource_used_elsewhere "${res}") )) -gt 0 ]; then echo "GPU ${res}"; return 0; fi
+                err "K3D_GPU_AGENT_DRAFT=GPU but the cluster has no free Intel GPU (${res}) — see what holds it: kubectl get pods -A"
             done
+            agent_dra_gpu && err "K3D_GPU_AGENT_DRAFT=GPU: $(agent_dra_note)"
             err "K3D_GPU_AGENT_DRAFT=GPU but the cluster advertises no Intel GPU (gpu.intel.com/xe or i915)"
             ;;
         NPU)
-            [ "$(resource_total npu.intel.com/accel)" -gt 0 ] \
-                || err "K3D_GPU_AGENT_DRAFT=NPU but the cluster advertises no Intel NPU (npu.intel.com/accel)"
-            echo "NPU npu.intel.com/accel"
+            res=npu.intel.com/accel
+            [ "$(resource_total "${res}")" -gt 0 ] \
+                || err "K3D_GPU_AGENT_DRAFT=NPU but the cluster advertises no Intel NPU (${res})"
+            [ $(( $(resource_total "${res}") - $(resource_used_elsewhere "${res}") )) -gt 0 ] \
+                || err "K3D_GPU_AGENT_DRAFT=NPU but the cluster has no free Intel NPU (${res}) — see what holds it: kubectl get pods -A"
+            echo "NPU ${res}"
             ;;
     esac
 }
@@ -6078,6 +6100,29 @@ agent_cpus() {
     echo "${n}"
 }
 
+# The agent values spliced into the manifest as plain YAML scalars. Each comes from
+# the environment or from a file (tune profile, autoquant cache, plan matrix), so
+# each is checked against its own character set: no newline, quote or space.
+agent_check_values() {
+    [[ "${AGENT_LOG_LEVEL}" =~ ^(TRACE|DEBUG|INFO|WARNING|ERROR)$ ]] \
+        || err "K3D_GPU_AGENT_LOG_LEVEL must be TRACE, DEBUG, INFO, WARNING or ERROR, got '${AGENT_LOG_LEVEL}'"
+    valid_image "${AGENT_IMAGE}" || err "K3D_GPU_AGENT_IMAGE '${AGENT_IMAGE}' is not a valid image reference"
+    [[ "${AGENT_IMAGE}" == *@sha256:* ]] \
+        || warn "K3D_GPU_AGENT_IMAGE '${AGENT_IMAGE}' is not pinned by digest: the tag can move upstream"
+    [[ "${AGENT_MODEL}" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] \
+        || err "K3D_GPU_AGENT_MODEL '${AGENT_MODEL}' is not a valid model id (letters, digits, . _ - /)"
+    [[ "${AGENT_MODEL_NAME}" =~ ^[A-Za-z0-9][A-Za-z0-9._:/-]*$ ]] \
+        || err "K3D_GPU_AGENT_MODEL_NAME '${AGENT_MODEL_NAME}' is not a valid served name (letters, digits, . _ - : /)"
+    [ -z "${AGENT_REVISION}" ] || [[ "${AGENT_REVISION}" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] \
+        || err "K3D_GPU_AGENT_REVISION '${AGENT_REVISION}' is not a valid revision (a commit, tag or branch)"
+    [ -z "${AGENT_TOOL_PARSER}" ] || [[ "${AGENT_TOOL_PARSER}" =~ ^[A-Za-z0-9_.-]+$ ]] \
+        || err "K3D_GPU_AGENT_TOOL_PARSER '${AGENT_TOOL_PARSER}' is not a valid parser name"
+    [ -z "${AGENT_REASONING_PARSER}" ] || [[ "${AGENT_REASONING_PARSER}" =~ ^[A-Za-z0-9_.-]+$ ]] \
+        || err "K3D_GPU_AGENT_REASONING_PARSER '${AGENT_REASONING_PARSER}' is not a valid parser name"
+    [[ "${AGENT_DRAFT_MODEL}" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] \
+        || err "K3D_GPU_AGENT_DRAFT_MODEL '${AGENT_DRAFT_MODEL}' is not a valid model id (letters, digits, . _ - /)"
+}
+
 # Prints the namespace, model PVC, Deployment and Service. Choices go to stderr.
 agent_manifest() {
     local device res gid="" hybrid="" amx="" cpus
@@ -6089,6 +6134,7 @@ agent_manifest() {
     cpus=$(agent_cpus "${device}" "${hybrid}")
     [ "${device}" = CPU ] || gid=$(agent_device_gid "${device}")
     [ "${device}" != CPU ] || agent_autoquant
+    agent_check_values
     if [ "${AGENT_APP}" = vllm ]; then vllm_manifest; return 0; fi
     local via=""
     [ "${res}" = - ] || via=" (${res})"
@@ -6616,12 +6662,12 @@ agent_plan_take() {
 }
 
 # "<service> <OVMS/OpenVINO device> <extended resource or ->" per add-on given,
-# in the order given. The LLM (AGENT_SEL, from agent_select) holds its units
-# first. Explicit add-on requests are served next and fail when the cluster has
+# in the order given. The LLM (AGENT_SEL, from agent_select) and its Fast Draft
+# hold their units first. Explicit add-on requests are served next and fail when the cluster has
 # no free unit; auto add-ons then claim what is left by priority.
 agent_plan() {
     local -A free=() got=() want=()
-    local svc res kind gpus llm_res n=1
+    local svc res kind gpus llm_res draft_res n=1
     for res in gpu.intel.com/xe gpu.intel.com/i915 npu.intel.com/accel; do
         free[${res}]=$(( $(resource_total "${res}") - $(resource_used_elsewhere "${res}") ))
     done
@@ -6630,6 +6676,12 @@ agent_plan() {
     if [ -n "${free[${llm_res}]+x}" ]; then
         [ "${AGENT_APP}" != vllm ] || n=${AGENT_GPUS}
         free[${llm_res}]=$(( free[${llm_res}] - n ))
+    fi
+    # OVMS Fast Draft on a second device holds one unit of it as well.
+    if [ "${AGENT_APP}" = ovms ]; then
+        draft_res=$(agent_draft "${AGENT_SEL%% *}") || exit 1
+        draft_res=${draft_res#* }
+        [ -z "${free[${draft_res}]+x}" ] || free[${draft_res}]=$(( free[${draft_res}] - 1 ))
     fi
     for svc in "$@"; do want[${svc}]=$(agent_want "${svc}") || exit 1; done
 
@@ -7680,13 +7732,28 @@ qs_pulled_bytes() {
     echo "${n}"
 }
 
-# qs_agent_ready <model> <memory>: the OVMS Deployment is ready, serves <model>
-# and requests <memory>.
+# The ovms Deployment of a rendered agent manifest (stdin) as sorted lines: each
+# container's image and args, its resource requests and limits. The same lines
+# qs_agent_ready reads from the live Deployment.
+qs_ovms_sig() {
+    awk '
+        /^---/ { dep = 0; on = 0; next }
+        /^kind: Deployment$/ { dep = 1 }
+        dep && /^  name: ovms$/ { on = 1 }
+        !on { next }
+        /^ *- '\''?--/ { sub(/^ *- /, ""); gsub(/^'\''|'\''$/, ""); print; next }
+        /^ +(image|cpu|memory): / { sub(/^ +/, ""); gsub(/"/, ""); print; next }
+        /^ +[A-Za-z0-9.-]+\/[A-Za-z0-9.-]+: [0-9]+$/ { sub(/^ +/, ""); print }' | sort
+}
+
+# qs_agent_ready <rendered manifest>: the OVMS Deployment is ready and runs what
+# `agent manifest` renders now (model, memory, device, draft, parsers, tune knobs).
 qs_agent_ready() {
-    local got
-    got=$(kubectl -n "${AGENT_NS}" get deployment ovms \
-        -o jsonpath='{.status.readyReplicas} {.spec.template.spec.containers[0].resources.requests.memory} {.spec.template.spec.containers[0].args}' 2>/dev/null) || return 1
-    [ "${got%% *}" = 1 ] && [[ "${got}" == *"--model_path=/models/$1\""* ]] && [[ " ${got} " == *" $2 "* ]]
+    local want got
+    want=$(qs_ovms_sig <<< "$1")
+    [ -n "${want}" ] || return 1
+    got=$(kubectl -n "${AGENT_NS}" get deployment ovms -o go-template='ready: {{with .status.readyReplicas}}{{.}}{{end}}{{"\n"}}{{range .spec.template.spec.initContainers}}image: {{.image}}{{"\n"}}{{range .args}}{{.}}{{"\n"}}{{end}}{{end}}{{range .spec.template.spec.containers}}image: {{.image}}{{"\n"}}{{range .args}}{{.}}{{"\n"}}{{end}}{{with .resources}}{{with .requests}}{{range $k, $v := .}}{{$k}}: {{$v}}{{"\n"}}{{end}}{{end}}{{with .limits}}{{range $k, $v := .}}{{$k}}: {{$v}}{{"\n"}}{{end}}{{end}}{{end}}{{end}}' 2>/dev/null) || return 1
+    [ "$(sed -n 1p <<< "${got}")" = "ready: 1" ] && [ "$(sed 1d <<< "${got}" | sort)" = "${want}" ]
 }
 
 # The backend `agent up` will run: the user's, else vllm on a cluster that
@@ -7702,6 +7769,7 @@ qs_backend() {
 # quickstart [--no-ui]
 cmd_quickstart() {
     local ui=1 model mem rev tmodel tmem pid exe manifest total done_b last=-1 pid_run t missing="" accel backend port line
+    local rendered="" served name="" qenv=()
     while [ $# -gt 0 ]; do
         case "$1" in
             --no-ui) ui="" ;;
@@ -7750,12 +7818,32 @@ cmd_quickstart() {
     kubectl config use-context "k3d-${CLUSTER}" >/dev/null 2>&1 || true
     kubectl get nodes >/dev/null 2>&1 || err "cluster '${CLUSTER}' is not reachable — run 'k3d-gpu doctor'"
 
+    # The environment of `agent up`: only what the user left unset is passed. A
+    # tier model is a Qwen3, so it gets Qwen3's parsers (agent_config sets them for
+    # its own default only). The *_TIER marks say the model and memory are tier
+    # picks, which a measured autoquant pick may replace.
+    qenv=(K3D_GPU_AGENT_MODEL="${model}" K3D_GPU_AGENT_MEMORY="${mem}" K3D_GPU_AGENT_REVISION="${rev}")
+    if [ "${model}" = "${tmodel}" ]; then
+        qenv+=(K3D_GPU_AGENT_TOOL_PARSER="${K3D_GPU_AGENT_TOOL_PARSER-hermes3}"
+               K3D_GPU_AGENT_REASONING_PARSER="${K3D_GPU_AGENT_REASONING_PARSER-qwen3}")
+    fi
+    [ -n "${K3D_GPU_AGENT_MODEL:-}" ] || qenv+=(K3D_GPU_AGENT_MODEL_TIER=1)
+    [ -n "${K3D_GPU_AGENT_MEMORY:-}" ] || qenv+=(K3D_GPU_AGENT_MEMORY_TIER=1)
+
     backend=$(qs_backend)
+    if [ "${backend}" = ovms ]; then
+        # What agent up would deploy now: the model it serves (autoquant may pick
+        # one), its served name, and every setting qs_agent_ready compares.
+        rendered=$(env "${qenv[@]}" "${exe}" agent manifest 2>/dev/null) || rendered=""
+        served=$(qs_ovms_sig <<< "${rendered}" | sed -n 's/^--source_model=//p' | sed -n 1p)
+        name=$(qs_ovms_sig <<< "${rendered}" | sed -n 's/^--model_name=//p' | sed -n 1p)
+        model=${served:-${model}}
+    fi
     if [ "${backend}" != ovms ]; then
         # vLLM (a Gaudi, or the user's choice): agent up picks its own model and memory.
         qs_step 3 "LLM server (${backend})"
         "${exe}" agent up || err "'k3d-gpu agent up' failed; run quickstart again to resume"
-    elif qs_agent_ready "${model}" "${mem}"; then
+    elif qs_agent_ready "${rendered}"; then
         qs_step 3 "LLM server (${model})"
         info "agent already serving ${model}"
     else
@@ -7766,17 +7854,7 @@ cmd_quickstart() {
         # starts another. Set before the job starts, so no signal falls between.
         pid_run=""
         trap 'if [ -n "${pid_run}" ]; then kill -TERM "${pid_run}" 2>/dev/null; pkill -TERM -P "${pid_run}" 2>/dev/null; fi; exit 130' INT TERM
-        # Only what the user left unset is passed. A tier model is a Qwen3, so it
-        # gets Qwen3's parsers (agent_config sets them for its own default only).
-        if [ "${model}" = "${tmodel}" ]; then
-            K3D_GPU_AGENT_TOOL_PARSER="${K3D_GPU_AGENT_TOOL_PARSER-hermes3}" \
-            K3D_GPU_AGENT_REASONING_PARSER="${K3D_GPU_AGENT_REASONING_PARSER-qwen3}" \
-            K3D_GPU_AGENT_MODEL="${model}" K3D_GPU_AGENT_MEMORY="${mem}" K3D_GPU_AGENT_REVISION="${rev}" \
-                "${exe}" agent up &
-        else
-            K3D_GPU_AGENT_MODEL="${model}" K3D_GPU_AGENT_MEMORY="${mem}" K3D_GPU_AGENT_REVISION="${rev}" \
-                "${exe}" agent up &
-        fi
+        env "${qenv[@]}" "${exe}" agent up &
         pid_run=$!
         # A download line each time the bytes on the PVC change; the server's own
         # lines interleave.
@@ -7811,7 +7889,7 @@ cmd_quickstart() {
     # The UI's default model is the one served: the value line after DEFAULT_MODELS.
     line=$(grep -n -A1 'name: DEFAULT_MODELS$' "${manifest}" | sed -n 's/^\([0-9]*\)-  *value: .*/\1/p')
     [[ "${line}" =~ ^[0-9]+$ ]] || err "chat UI manifest ${manifest} has no DEFAULT_MODELS value"
-    awk -v n="${line}" -v m="${model##*/}" 'NR == n + 0 { sub(/value: .*/, "value: \"" m "\"") } { print }' "${manifest}" \
+    awk -v n="${line}" -v m="${name:-${model##*/}}" 'NR == n + 0 { sub(/value: .*/, "value: \"" m "\"") } { print }' "${manifest}" \
         | kubectl apply -f - >/dev/null
     kubectl -n "${AGENT_NS}" rollout status deployment/open-webui --timeout=600s \
         || err "chat UI not ready — kubectl -n ${AGENT_NS} logs deploy/open-webui"
@@ -8261,9 +8339,14 @@ autoquant_select() { autoquant_run "${1:-}" select; }
 # Swap AGENT_MODEL (and AGENT_MEMORY) to the measured winner for an OVMS agent on
 # the CPU, when nothing pins the model. Only a measured cache entry for this
 # host's fingerprint changes anything.
+# quickstart passes its RAM-tier picks with K3D_GPU_AGENT_MODEL_TIER=1 and
+# K3D_GPU_AGENT_MEMORY_TIER=1: a tier model is no pin when it is the default the
+# probe arms measure, and a tier memory gives way to the winner's.
 agent_autoquant() {
-    local doc fields precision model memory source
-    [ "${AGENT_APP}" = ovms ] && [ -z "${K3D_GPU_AGENT_MODEL:-}" ] || return 0
+    local doc fields precision model memory source pin=${K3D_GPU_AGENT_MODEL:-} mem=${K3D_GPU_AGENT_MEMORY:-}
+    [ -z "${K3D_GPU_AGENT_MODEL_TIER:-}" ] || [ "${pin}" != "${AGENT_DEFAULT_MODEL}" ] || pin=""
+    [ -z "${K3D_GPU_AGENT_MEMORY_TIER:-}" ] || mem=""
+    [ "${AGENT_APP}" = ovms ] && [ -z "${pin}" ] || return 0
     [ "${K3D_GPU_AUTOQUANT:-auto}" != off ] || return 0
     [ -f "$(autoquant_cache)" ] || return 0
     doc=$(autoquant_select) || { warn "autoquant: cache present but select failed, keeping ${AGENT_MODEL}"; return 0; }
@@ -8275,10 +8358,10 @@ agent_autoquant() {
     fi
     AGENT_MODEL=${model}
     AGENT_AUTOQUANT_ANN=$'\n        k3d-gpu.io/agent-model: '"${model}"$'\n        k3d-gpu.io/agent-precision-source: autoquant-measured'
-    if [ -z "${K3D_GPU_AGENT_MEMORY:-}" ]; then
+    if [ -z "${mem}" ]; then
         AGENT_MEMORY=${memory}
-    elif [ "$(mem_gib "${K3D_GPU_AGENT_MEMORY}")" -lt "$(mem_gib "${memory}")" ]; then
-        warn "autoquant: K3D_GPU_AGENT_MEMORY=${K3D_GPU_AGENT_MEMORY} is below the ${memory} that ${precision} needs; the pod may be OOM-killed"
+    elif [ "$(mem_gib "${mem}")" -lt "$(mem_gib "${memory}")" ]; then
+        warn "autoquant: K3D_GPU_AGENT_MEMORY=${mem} is below the ${memory} that ${precision} needs; the pod may be OOM-killed"
     fi
     info "autoquant: measured pick ${precision} for this host, serving ${AGENT_MODEL} (K3D_GPU_AGENT_MODEL or K3D_GPU_AUTOQUANT=off overrides)" >&2
 }
