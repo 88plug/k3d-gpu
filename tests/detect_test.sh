@@ -3216,6 +3216,23 @@ pci "${r}" 0000:00:02.0 0x8086 0xa780 i915; render "${r}" 0000:00:02.0 128
 pci "${r}" 0000:03:00.0 0x8086 0xe20b xe;   render "${r}" 0000:03:00.0 129
 doctor_says "iGPU plus dGPU stays exclusive by default (one count covers both)" "${r}" 'ok: GPU sharing off'
 
+# A discrete card at the iGPU's slot (passed through to a VM guest) is not an iGPU.
+r=$(newroot vm-dgpu-share)
+kernel "${r}" 6.18.1
+pci "${r}" 0000:00:02.0 0x8086 0xe20b xe; render "${r}" 0000:00:02.0 128
+doctor_says "Battlemage at 00:02.0 stays exclusive by default" "${r}" 'ok: GPU sharing off'
+r=$(newroot vm-alchemist-share)
+kernel "${r}" 6.18.1
+pci "${r}" 0000:00:02.0 0x8086 0x56a0 i915; render "${r}" 0000:00:02.0 128
+doctor_says "Alchemist at 00:02.0 stays exclusive by default" "${r}" 'ok: GPU sharing off'
+
+# iGPU SR-IOV: the PF at 00:02.0 and a VF at 00:02.1 are both the integrated GPU.
+r=$(newroot igpu-vf-share)
+kernel "${r}" 6.18.1
+pci "${r}" 0000:00:02.0 0x8086 0xa780 i915; render "${r}" 0000:00:02.0 128
+pci "${r}" 0000:00:02.1 0x8086 0xa780 i915; render "${r}" 0000:00:02.1 129
+doctor_says "iGPU with an SR-IOV VF is still shared by default" "${r}" 'ok: GPU sharing on: up to 8 pods'
+
 # `up` against stubbed k3d/docker/kubectl. STUB_NODE is the server node's
 # filesystem: docker exec reads and writes under it. kubectl reports the plugin
 # DaemonSet's args from the node's manifest (as k3s would apply it), records
@@ -3268,6 +3285,7 @@ up_check() {
     rc=$?
     { [ "${want}" = 0 ] && [ "${rc}" -eq 0 ]; } || { [ "${want}" = fail ] && [ "${rc}" -ne 0 ]; } || ok=0
     if [ "${want}" = 0 ] && [[ "${out}" == *"has not applied the new intel-gpu-plugin args"* ]]; then ok=0; fi
+    if [ "${want}" = 0 ] && [[ "${out}" == *"Intel GPU slots, expected"* ]]; then ok=0; fi
     if [ "${text}" = unchanged ]; then
         cmp -s "${node}/${file}" "$(dirname "${K3D_GPU}")/../share/intel-gpu-plugin.yml" || ok=0
     elif [ -n "${text}" ]; then
@@ -3334,6 +3352,19 @@ if [[ "${out}" == *"has not applied the new intel-gpu-plugin args after 1s"* ]];
     PASS=$((PASS + 1)); echo "ok   up warns when the DaemonSet never picks up the new args"
 else
     FAILS=$((FAILS + 1)); echo "FAIL up warns when the DaemonSet never picks up the new args"
+    while IFS= read -r l; do echo "  | ${l}"; done <<< "${out}"
+fi
+
+# The args land but kubelet keeps the pre-share count: up warns with the numbers.
+n=$(node_with_manifest igpu-oldcount)
+out=$(env K3D_GPU_SYSROOT="${r}" PATH="${USTUB}:${PATH}" STUB_NODE="${n}" \
+    STUB_ALLOCATABLE="gpu.intel.com/i915 1" K3D_GPU_VENDORS=intel K3D_GPU_INTEL_APPLY_TIMEOUT=1 \
+    bash "${K3D_GPU}" up 2>&1)
+if [[ "${out}" == *"cluster advertises 1 Intel GPU slots, expected 8 (8 per GPU, 1 GPU(s))"* ]] \
+    && [[ "${out}" != *"has not applied"* ]]; then
+    PASS=$((PASS + 1)); echo "ok   up warns when allocatable never reaches the shared count"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL up warns when allocatable never reaches the shared count"
     while IFS= read -r l; do echo "  | ${l}"; done <<< "${out}"
 fi
 

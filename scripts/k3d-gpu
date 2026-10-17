@@ -248,14 +248,25 @@ detect_intel() {
 # gpu.intel.com/monitoring, one per node, which hands a container every Intel GPU
 # (for exporters such as XPU Manager).
 
-# True when the host has Intel GPUs and all of them are the integrated one. Intel
-# puts its integrated graphics at PCI 0000:00:02.0; discrete cards sit behind a
-# root port on another bus.
+# True for a discrete Intel GPU id: DG1 (0x4905-0x4909), Alchemist and Arc Pro A
+# (0x56xx), Ponte Vecchio (0x0bd0-0x0bdb), and the intel_gpu_platform families
+# Battlemage and Crescent Island.
+intel_gpu_discrete() {
+    case "$1" in 0x490[5-9]|0x56[0-9a-f][0-9a-f]|0x0bd[0-9ab]) return 0 ;; esac
+    case "$(intel_gpu_platform "$1")" in Battlemage\|*|"Crescent Island|"*) return 0 ;; esac
+    return 1
+}
+
+# True when the host has Intel GPUs and all of them are integrated. Intel puts its
+# integrated graphics at PCI 0000:00:02.0 (its SR-IOV VFs at 00:02.1-7); discrete
+# cards sit behind a root port on another bus. A discrete id at that slot (a card
+# passed through to a VM guest) does not count as integrated.
 intel_all_integrated() {
     [ "${#INTEL_BDFS[@]}" -gt 0 ] || return 1
-    local bdf
-    for bdf in "${INTEL_BDFS[@]}"; do
-        [ "${bdf}" = "0000:00:02.0" ] || return 1
+    local i
+    for i in "${!INTEL_BDFS[@]}"; do
+        [[ "${INTEL_BDFS[i]}" == 0000:00:02.[0-7] ]] || return 1
+        ! intel_gpu_discrete "${INTEL_DRIVERS[i]#* }" || return 1
     done
 }
 
@@ -3317,16 +3328,40 @@ configure_intel_plugin() {
         while [ "${SECONDS}" -lt "${dl}" ]; do
             got=$(kubectl -n kube-system get daemonset intel-gpu-plugin \
                 -o jsonpath='{.spec.template.spec.containers[0].args}' 2>/dev/null || true)
-            [[ "${got}" == *"\"${first}\""* ]] && return 0
+            [[ "${got}" == *"\"${first}\""* ]] && break
             sleep 3
         done
-        warn "k3s has not applied the new intel-gpu-plugin args after ${INTEL_APPLY_TIMEOUT}s — inspect: kubectl -n kube-system get addon intel-gpu-plugin -o yaml"
+        if [[ "${got}" != *"\"${first}\""* ]]; then
+            warn "k3s has not applied the new intel-gpu-plugin args after ${INTEL_APPLY_TIMEOUT}s — inspect: kubectl -n kube-system get addon intel-gpu-plugin -o yaml"
+            return 0
+        fi
     else
         # A custom image without the baked manifest: ensure_plugin applied ours.
         out=$(intel_manifest_with_args "${args}" < "${INTEL_PLUGIN_MANIFEST}") \
             || err "cannot add args to ${INTEL_PLUGIN_MANIFEST}"
         kubectl apply -f - <<< "${out}"
     fi
+    intel_wait_shared
+}
+
+# New args roll the plugin pod (maxUnavailable 1, no surge), and until the new pod
+# registers, kubelet still advertises the old count. Wait for the rollout, then for
+# allocatable to reach the shared count on every detected GPU, so verify_gpus and
+# its summary report the configured sharing.
+intel_wait_shared() {
+    local n want got=0 dl
+    n=$(intel_shared)
+    [ "${n}" != 1 ] && [ "${#INTEL_DRIVERS[@]}" -gt 0 ] || return 0
+    want=$((n * ${#INTEL_DRIVERS[@]}))
+    kubectl -n kube-system rollout status daemonset/intel-gpu-plugin --timeout="${INTEL_APPLY_TIMEOUT}s" >/dev/null 2>&1 || true
+    dl=$((SECONDS + INTEL_APPLY_TIMEOUT))
+    while :; do
+        got=$(vendor_total intel)
+        [ "${got}" -ge "${want}" ] && return 0
+        [ "${SECONDS}" -lt "${dl}" ] || break
+        sleep 3
+    done
+    warn "cluster advertises ${got} Intel GPU slots, expected ${want} (${n} per GPU, ${#INTEL_DRIVERS[@]} GPU(s)) — inspect: kubectl -n kube-system logs ds/intel-gpu-plugin"
 }
 
 ensure_plugin() {
