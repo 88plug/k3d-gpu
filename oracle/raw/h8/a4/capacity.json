@@ -1,0 +1,601 @@
+{
+ "agents_per_box": 32,
+ "agents_per_box_interpolated": null,
+ "apb_at_secondary_slo_p95_only": {
+  "5.0": {
+   "agents_per_box": 16,
+   "lower_bound": false
+  }
+ },
+ "binding_limit": {
+  "at_agents": 32,
+  "detail": "every step up to N=32 passed",
+  "hardware": [
+   "cpu_thermal_throttle",
+   "gpu0_power_cap"
+  ],
+  "kind": "max_reached"
+ },
+ "bracket": {
+  "hi": null,
+  "lo": 32
+ },
+ "bracket_start": {
+  "hi": null,
+  "lo": 0
+ },
+ "budget_s": 583.2,
+ "confounds": [
+  "synthetic, teacher-forced agent trace: measures the serving path, not task quality",
+  "access path is kubectl port-forward: every stream crosses it and its CPU use is on the box",
+  "CPU package energy (RAPL) includes the iGPU and excludes DRAM and discrete GPUs",
+  "GPU energy integrates nvidia-smi power.draw of every NVIDIA GPU in the box",
+  "net J subtracts the quiet-window power and assumes the background stays constant",
+  "box not quiet at start (forced past: pkg_power): other work shares the box",
+  "CPU package thermal throttling during the ramp (+1503 events): clocks, and so latency, depend on the box's cooling and on co-running work",
+  "ramp reached --max 32 without breaking the SLO: agents per box is a lower bound",
+  "p95 pools requests as independent; turns of one session are correlated (per-rep p95 listed)"
+ ],
+ "drift_check": null,
+ "endpoint": {
+  "engine": "nvidia",
+  "image": "vllm/vllm-openai@sha256:a4a4c0437bf7240089da5f08aa370c4aee17ae5290f7a3b468825ee26c4c3a6b",
+  "model": "Qwen/Qwen3-4B-AWQ",
+  "namespace": "apb-vllm",
+  "server": "vllm",
+  "service": "apb-vllm/vllm",
+  "workload": "deployment/vllm"
+ },
+ "extra_body": {
+  "chat_template_kwargs": {
+   "enable_thinking": false
+  }
+ },
+ "finished_at": 1792257392.461412,
+ "host": {
+  "cpu_model": "13th Gen Intel(R) Core(TM) i9-13900T",
+  "kernel": "6.6.128-1-MANJARO",
+  "loadavg": "5.82 5.91 6.21 4/14057 2991256",
+  "logical_cpus": 32,
+  "pl1_w": 117.0
+ },
+ "idle": {
+  "pkg_watts": 81.9391935506789,
+  "seconds": 10.09563398361206,
+  "watts": 115.2862206130661
+ },
+ "max_agents": 32,
+ "quiet_check": {
+  "checks": [
+   {
+    "check": "cpu_busy",
+    "limit": 0.1,
+    "ok": true,
+    "value": 0.07413034042289328
+   },
+   {
+    "check": "pkg_power",
+    "limit": 40.949999999999996,
+    "ok": false,
+    "value": 81.9391935506789
+   },
+   {
+    "check": "gpu0_util",
+    "limit": 10.0,
+    "ok": true,
+    "value": 1.0
+   },
+   {
+    "check": "gpu0_power",
+    "limit": 35.0,
+    "ok": true,
+    "value": 26.563636363636363
+   },
+   {
+    "check": "gpu1_util",
+    "limit": 10.0,
+    "ok": true,
+    "value": 0.0
+   },
+   {
+    "check": "gpu1_power",
+    "limit": 25.0,
+    "ok": true,
+    "value": 6.791818181818181
+   }
+  ],
+  "forced": true,
+  "ok": false,
+  "sample": {
+   "cpu_busy": 0.07413034042289328,
+   "gpus": [
+    {
+     "index": 0,
+     "limit_w": 70.0,
+     "power_w": 26.563636363636363,
+     "util": 1.0
+    },
+    {
+     "index": 1,
+     "limit_w": 50.0,
+     "power_w": 6.791818181818181,
+     "util": 0.0
+    }
+   ],
+   "pkg_w": 81.9391935506789,
+   "pl1_w": 117.0
+  }
+ },
+ "reps": 3,
+ "schema": "k3d-gpu.capacity/1",
+ "search": "exponential-then-binary",
+ "search_status": "max_reached",
+ "slo_s": 10.0,
+ "started_at": 1792256903.8026989,
+ "status": "ok",
+ "step_cap_s": 583.0,
+ "steps": [
+  {
+   "agents": 1,
+   "cached_fraction": 0.9632917676605438,
+   "energy": {
+    "gpu_j": {
+     "0": 7808.426951088453,
+     "1": 984.9013250780463
+    },
+    "gross_j": 20348.0140891665,
+    "gross_j_per_out_token": 4.3759170084229035,
+    "gross_j_per_turn": 223.6045504304011,
+    "net_j": 3651.347726627104,
+    "net_j_per_out_token": 0.785236070242388,
+    "net_j_per_turn": 40.12470029260554,
+    "out_tokens": 4650,
+    "pkg_j": 11554.685813,
+    "psys_j": 26474.656528,
+    "seconds": 144.82794451713562,
+    "turns": 91
+   },
+   "error_rate": 0.0,
+   "errors": 0,
+   "hardware": {
+    "cpu_busy_mean": 0.09255110617635673,
+    "gpu": {
+     "0": {
+      "limit_w": 70.0,
+      "power_cap_frac": 0.5563380281690141,
+      "power_w_mean": 53.8062676056338,
+      "thermal_frac": 0.0,
+      "util_max": 100.0,
+      "util_mean": 53.605633802816904
+     },
+     "1": {
+      "limit_w": 50.0,
+      "power_cap_frac": 0.0,
+      "power_w_mean": 6.7991549295774645,
+      "thermal_frac": 0.0,
+      "util_max": 0.0,
+      "util_mean": 0.0
+     }
+    },
+    "package_throttle_events": 823,
+    "pkg_w_mean": 79.78215703829784,
+    "pl1_w": 117.0
+   },
+   "j_per_output_token": {
+    "gross": 4.3759170084229035,
+    "net": 0.785236070242388
+   },
+   "j_per_turn": {
+    "cpu_package": 126.97456937362638,
+    "gpu": 96.62998105677472,
+    "gross": 223.6045504304011,
+    "net": 40.12470029260554
+   },
+   "n": 82,
+   "p50_s": 0.5478962417691946,
+   "p95_ci95_s": [
+    1.461844364181161,
+    1.4898901330307126
+   ],
+   "p95_s": 1.4778922130353749,
+   "p99_s": 1.495125480927527,
+   "per_rep_p95_s": [
+    1.4778922130353749,
+    1.4883780861273408
+   ],
+   "reasons": [],
+   "reps": 2,
+   "seconds": 145.56679487181827,
+   "stop": "ci_below_slo",
+   "tool_valid_any": 0.859375,
+   "ttft_p95_s": 0.18145484616979957,
+   "verdict": "pass",
+   "window_output_tok_per_s": 32.69037511704366
+  },
+  {
+   "agents": 2,
+   "cached_fraction": 0.9639613755886725,
+   "energy": {
+    "gpu_j": {
+     "0": 4693.822255494782,
+     "1": 531.2228388130691
+    },
+    "gross_j": 11293.668475307852,
+    "gross_j_per_out_token": 2.639324252233665,
+    "gross_j_per_turn": 121.43729543341776,
+    "net_j": 2288.5114998063273,
+    "net_j_per_out_token": 0.5348239074097516,
+    "net_j_per_turn": 24.607650535551905,
+    "out_tokens": 4279,
+    "pkg_j": 6068.623380999999,
+    "psys_j": 14654.406943,
+    "seconds": 78.11130356788635,
+    "turns": 93
+   },
+   "error_rate": 0.0,
+   "errors": 0,
+   "hardware": {
+    "cpu_busy_mean": 0.09100756434592575,
+    "gpu": {
+     "0": {
+      "limit_w": 70.0,
+      "power_cap_frac": 0.6867469879518072,
+      "power_w_mean": 58.8733734939759,
+      "thermal_frac": 0.0,
+      "util_max": 100.0,
+      "util_mean": 67.63855421686748
+     },
+     "1": {
+      "limit_w": 50.0,
+      "power_cap_frac": 0.0,
+      "power_w_mean": 6.809277108433735,
+      "thermal_frac": 0.0,
+      "util_max": 0.0,
+      "util_mean": 0.0
+     }
+    },
+    "package_throttle_events": 277,
+    "pkg_w_mean": 77.69199979777284,
+    "pl1_w": 117.0
+   },
+   "j_per_output_token": {
+    "gross": 2.639324252233665,
+    "net": 0.5348239074097516
+   },
+   "j_per_turn": {
+    "cpu_package": 65.25401484946237,
+    "gpu": 56.18328058395539,
+    "gross": 121.43729543341776,
+    "net": 24.607650535551905
+   },
+   "n": 72,
+   "p50_s": 0.5666558020748198,
+   "p95_ci95_s": [
+    1.3253541071899235,
+    1.5506919780746102
+   ],
+   "p95_s": 1.5252506430260837,
+   "p99_s": 1.5539443460293114,
+   "per_rep_p95_s": [
+    1.5252506430260837,
+    1.5190790798515081
+   ],
+   "reasons": [],
+   "reps": 2,
+   "seconds": 78.55845257313922,
+   "stop": "ci_below_slo",
+   "tool_valid_any": 0.8947368421052632,
+   "ttft_p95_s": 0.21851459192112088,
+   "verdict": "pass",
+   "window_output_tok_per_s": 60.815116595127876
+  },
+  {
+   "agents": 4,
+   "cached_fraction": 0.9627401707398583,
+   "energy": {
+    "gpu_j": {
+     "0": 2464.4035149141087,
+     "1": 254.0633013901855
+    },
+    "gross_j": 5503.296418304294,
+    "gross_j_per_out_token": 1.385871674214126,
+    "gross_j_per_turn": 62.53745929891243,
+    "net_j": 1183.034697521899,
+    "net_j_per_out_token": 0.29791858411531075,
+    "net_j_per_turn": 13.443576108203398,
+    "out_tokens": 3971,
+    "pkg_j": 2784.829602,
+    "psys_j": 7218.760939,
+    "seconds": 37.47422456741333,
+    "turns": 88
+   },
+   "error_rate": 0.0,
+   "errors": 0,
+   "hardware": {
+    "cpu_busy_mean": 0.1369356507511289,
+    "gpu": {
+     "0": {
+      "limit_w": 70.0,
+      "power_cap_frac": 0.875,
+      "power_w_mean": 63.277499999999996,
+      "thermal_frac": 0.0,
+      "util_max": 100.0,
+      "util_mean": 86.275
+     },
+     "1": {
+      "limit_w": 50.0,
+      "power_cap_frac": 0.0,
+      "power_w_mean": 6.796250000000001,
+      "thermal_frac": 0.0,
+      "util_max": 0.0,
+      "util_mean": 0.0
+     }
+    },
+    "package_throttle_events": 33,
+    "pkg_w_mean": 74.31320151776055,
+    "pl1_w": 117.0
+   },
+   "j_per_output_token": {
+    "gross": 1.385871674214126,
+    "net": 0.29791858411531075
+   },
+   "j_per_turn": {
+    "cpu_package": 31.64579093181818,
+    "gpu": 30.891668367094255,
+    "gross": 62.53745929891243,
+    "net": 13.443576108203398
+   },
+   "n": 69,
+   "p50_s": 0.6225544512271881,
+   "p95_ci95_s": [
+    1.456522508058697,
+    1.6884318552911282
+   ],
+   "p95_s": 1.652342040091753,
+   "p99_s": 1.75925198988989,
+   "per_rep_p95_s": [
+    1.652342040091753
+   ],
+   "reasons": [],
+   "reps": 1,
+   "seconds": 37.71139499405399,
+   "stop": "ci_below_slo",
+   "tool_valid_any": 0.8867924528301887,
+   "ttft_p95_s": 0.2667696140706539,
+   "verdict": "pass",
+   "window_output_tok_per_s": 114.80076227685701
+  },
+  {
+   "agents": 8,
+   "cached_fraction": 0.9627835437138851,
+   "energy": {
+    "gpu_j": {
+     "0": 3233.46591684186,
+     "1": 325.15808452052477
+    },
+    "gross_j": 7268.578554362384,
+    "gross_j_per_out_token": 0.8322164591667488,
+    "gross_j_per_turn": 38.45808758921896,
+    "net_j": 1721.7353399892727,
+    "net_j_per_out_token": 0.19713021982931905,
+    "net_j_per_turn": 9.109710793594035,
+    "out_tokens": 8734,
+    "pkg_j": 3709.954553,
+    "psys_j": 9443.609369,
+    "seconds": 48.113670349121094,
+    "turns": 189
+   },
+   "error_rate": 0.0,
+   "errors": 0,
+   "hardware": {
+    "cpu_busy_mean": 0.10856722715938878,
+    "gpu": {
+     "0": {
+      "limit_w": 70.0,
+      "power_cap_frac": 0.9387755102040817,
+      "power_w_mean": 66.04510204081633,
+      "thermal_frac": 0.0,
+      "util_max": 100.0,
+      "util_mean": 93.87755102040816
+     },
+     "1": {
+      "limit_w": 50.0,
+      "power_cap_frac": 0.0,
+      "power_w_mean": 6.76795918367347,
+      "thermal_frac": 0.0,
+      "util_max": 0.0,
+      "util_mean": 0.0
+     }
+    },
+    "package_throttle_events": 146,
+    "pkg_w_mean": 77.10811763226397,
+    "pl1_w": 117.0
+   },
+   "j_per_output_token": {
+    "gross": 0.8322164591667488,
+    "net": 0.19713021982931905
+   },
+   "j_per_turn": {
+    "cpu_package": 19.62938916931217,
+    "gpu": 18.828698419906797,
+    "gross": 38.45808758921896,
+    "net": 9.109710793594035
+   },
+   "n": 149,
+   "p50_s": 0.7866099919192493,
+   "p95_ci95_s": [
+    1.745033573359251,
+    2.0365708847530186
+   ],
+   "p95_s": 1.9251267407089472,
+   "p99_s": 2.0639760089106858,
+   "per_rep_p95_s": [
+    1.9251267407089472
+   ],
+   "reasons": [],
+   "reps": 1,
+   "seconds": 48.39910020492971,
+   "stop": "ci_below_slo",
+   "tool_valid_any": 0.9316239316239316,
+   "ttft_p95_s": 0.3647044198587537,
+   "verdict": "pass",
+   "window_output_tok_per_s": 201.7785527277773
+  },
+  {
+   "agents": 16,
+   "cached_fraction": 0.9631720280439074,
+   "energy": {
+    "gpu_j": {
+     "0": 4076.063260567899,
+     "1": 402.84391637940155
+    },
+    "gross_j": 9141.4691549473,
+    "gross_j_per_out_token": 0.5285613850793466,
+    "gross_j_per_turn": 26.420431083662713,
+    "net_j": 2264.95269491777,
+    "net_j_per_out_token": 0.13095997079605493,
+    "net_j_per_turn": 6.5461060546756356,
+    "out_tokens": 17295,
+    "pkg_j": 4662.561978,
+    "psys_j": 11959.692955,
+    "seconds": 59.647340536117554,
+    "turns": 346
+   },
+   "error_rate": 0.0,
+   "errors": 0,
+   "hardware": {
+    "cpu_busy_mean": 0.15923911066772664,
+    "gpu": {
+     "0": {
+      "limit_w": 70.0,
+      "power_cap_frac": 0.9661016949152542,
+      "power_w_mean": 67.68254237288136,
+      "thermal_frac": 0.0,
+      "util_max": 100.0,
+      "util_mean": 96.62711864406779
+     },
+     "1": {
+      "limit_w": 50.0,
+      "power_cap_frac": 0.0,
+      "power_w_mean": 6.761525423728814,
+      "thermal_frac": 0.0,
+      "util_max": 0.0,
+      "util_mean": 0.0
+     }
+    },
+    "package_throttle_events": 44,
+    "pkg_w_mean": 78.16881584480255,
+    "pl1_w": 117.0
+   },
+   "j_per_output_token": {
+    "gross": 0.5285613850793466,
+    "net": 0.13095997079605493
+   },
+   "j_per_turn": {
+    "cpu_package": 13.47561265317919,
+    "gpu": 12.944818430483528,
+    "gross": 26.420431083662713,
+    "net": 6.5461060546756356
+   },
+   "n": 280,
+   "p50_s": 1.244792927056551,
+   "p95_ci95_s": [
+    3.091698602773249,
+    3.295522458385676
+   ],
+   "p95_s": 3.1759487041272223,
+   "p99_s": 3.4660880039446056,
+   "per_rep_p95_s": [
+    3.1759487041272223
+   ],
+   "reasons": [],
+   "reps": 1,
+   "seconds": 60.132236460223794,
+   "stop": "ci_below_slo",
+   "tool_valid_any": 0.7990654205607477,
+   "ttft_p95_s": 0.6346033830195665,
+   "verdict": "pass",
+   "window_output_tok_per_s": 320.8184173657775
+  },
+  {
+   "agents": 32,
+   "cached_fraction": 0.9633027027637205,
+   "energy": {
+    "gpu_j": {
+     "0": 6487.302842276492,
+     "1": 632.1608293302368
+    },
+    "gross_j": 14562.099159606729,
+    "gross_j_per_out_token": 0.42654069008807055,
+    "gross_j_per_turn": 19.520240160330737,
+    "net_j": 3658.550540230375,
+    "net_j_per_out_token": 0.10716316755214925,
+    "net_j_per_turn": 4.9042232442766425,
+    "out_tokens": 34140,
+    "pkg_j": 7442.635488,
+    "psys_j": 18967.35043,
+    "seconds": 94.57807326316833,
+    "turns": 746
+   },
+   "error_rate": 0.0,
+   "errors": 0,
+   "hardware": {
+    "cpu_busy_mean": 0.1563097138968144,
+    "gpu": {
+     "0": {
+      "limit_w": 70.0,
+      "power_cap_frac": 0.967032967032967,
+      "power_w_mean": 67.83483516483517,
+      "thermal_frac": 0.0,
+      "util_max": 100.0,
+      "util_mean": 96.71428571428571
+     },
+     "1": {
+      "limit_w": 50.0,
+      "power_cap_frac": 0.0,
+      "power_w_mean": 6.690659340659341,
+      "thermal_frac": 0.0,
+      "util_max": 0.0,
+      "util_mean": 0.0
+     }
+    },
+    "package_throttle_events": 180,
+    "pkg_w_mean": 78.69303350355304,
+    "pl1_w": 117.0
+   },
+   "j_per_output_token": {
+    "gross": 0.42654069008807055,
+    "net": 0.10716316755214925
+   },
+   "j_per_turn": {
+    "cpu_package": 9.976723174262734,
+    "gpu": 9.543516986068001,
+    "gross": 19.520240160330737,
+    "net": 4.9042232442766425
+   },
+   "n": 609,
+   "p50_s": 2.2996392999775708,
+   "p95_ci95_s": [
+    5.826808331999928,
+    6.15304961707443
+   ],
+   "p95_s": 5.958541829138994,
+   "p99_s": 6.574179902207106,
+   "per_rep_p95_s": [
+    5.958541829138994
+   ],
+   "reasons": [],
+   "reps": 1,
+   "seconds": 95.47816168097779,
+   "stop": "ci_below_slo",
+   "tool_valid_any": 0.9331941544885177,
+   "ttft_p95_s": 1.2678366303443909,
+   "verdict": "pass",
+   "window_output_tok_per_s": 377.38313801323727
+  }
+ ],
+ "stop_slo_s": 10.0,
+ "time_scale": 1.0,
+ "timeout_s": 120.0,
+ "trace": "support"
+}

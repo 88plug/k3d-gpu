@@ -94,6 +94,7 @@
               "pci": {"type": "string"},
               "device_id": {"$ref": "#/$defs/str_or_null"},
               "platform": {"$ref": "#/$defs/str_or_null"},
+              "xmx": {"type": ["boolean", "null"]},
               "driver": {"$ref": "#/$defs/str_or_null"},
               "engines": {
                 "type": "array",

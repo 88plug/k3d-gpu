@@ -355,7 +355,8 @@
         },
         "pci": "0000:00:02.0",
         "platform": "Raptor Lake-S",
-        "render_node": "renderD128"
+        "render_node": "renderD128",
+        "xmx": false
       }
     ],
     "kernel": "6.6.128-1-MANJARO",

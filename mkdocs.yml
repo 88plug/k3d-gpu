@@ -42,6 +42,10 @@ nav:
       - Benchmark landscape: benchmark-landscape.md
       - Head-to-head benchmarks: benchmarks.md
       - Provenance: provenance.md
+      - Capacity oracle: oracle.md
+      - Capacity leaderboard: leaderboard.md
+      - Capacity oracle matrix: oracle-matrix.md
+      - Capacity oracle design: moat-design.md
       - Security audit: security-audit.md
       - Intel technical report: intel/technical-report.md
       - Upstream draft (EAT/EAS): intel/upstream-eat.md

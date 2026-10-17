@@ -80,6 +80,26 @@ contents:
     dst: /usr/share/k3d-gpu/bench/apb/capacity.py
     file_info:
       mode: 0644
+  - src: oracle/bundle.py
+    dst: /usr/share/k3d-gpu/oracle/bundle.py
+    file_info:
+      mode: 0644
+  - src: oracle/project.py
+    dst: /usr/share/k3d-gpu/oracle/project.py
+    file_info:
+      mode: 0644
+  - src: oracle/validate.py
+    dst: /usr/share/k3d-gpu/oracle/validate.py
+    file_info:
+      mode: 0644
+  - src: oracle/share.py
+    dst: /usr/share/k3d-gpu/oracle/share.py
+    file_info:
+      mode: 0644
+  - src: oracle/schema/bundle-v1.json
+    dst: /usr/share/k3d-gpu/oracle/schema/bundle-v1.json
+    file_info:
+      mode: 0644
   - src: bench/competitors.lock
     dst: /usr/share/k3d-gpu/bench/competitors.lock
     file_info:
@@ -120,6 +140,16 @@ contents:
     file_info:
       mode: 0755
   - dst: /usr/share/k3d-gpu/bench/apb
+    type: dir
+    packager: rpm
+    file_info:
+      mode: 0755
+  - dst: /usr/share/k3d-gpu/oracle
+    type: dir
+    packager: rpm
+    file_info:
+      mode: 0755
+  - dst: /usr/share/k3d-gpu/oracle/schema
     type: dir
     packager: rpm
     file_info:
