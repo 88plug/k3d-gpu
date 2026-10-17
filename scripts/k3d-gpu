@@ -384,6 +384,51 @@ favored_cpus() {
         | while read -r l v n; do echo "$(cpulist_compress "${l}") ${v} ${n}"; done
 }
 
+# favored_hint_devs <cpulist>: the L2 cache dir (cpu<N>/cache/index<i>, level 2)
+# of each favored core, one per distinct L2 (P-cores have a private L2, so one
+# per physical core). nri-plugins reads a sysfs dir's shared_cpu_list as a
+# topology hint (pkg/topology getTopologyHint), so a balloon type with these in
+# preferCloseToDevices takes its CPUs from the favored cores while they are free.
+favored_hint_devs() {
+    local c d seen=" " l
+    for c in $(cpulist_expand "$1" || true); do
+        for d in "${SYSROOT}${CPU_SYS}/cpu${c}"/cache/index*; do
+            [ "$(cat "${d}/level" 2>/dev/null)" = 2 ] || continue
+            l=$(cat "${d}/shared_cpu_list" 2>/dev/null) || break
+            [[ "${l}" =~ ^[0-9,-]+$ ]] && [[ "${seen}" != *" ${l} "* ]] || break
+            seen+="${l} "
+            echo "${d#"${SYSROOT}"}"
+            break
+        done
+    done
+}
+
+# latency_prefer_favored <cpulist>: add the favored cores' L2 dirs to the latency
+# balloon type's preferCloseToDevices in the baked BalloonsPolicy. nri-plugins
+# v0.14.0 ranks CPUs by base frequency and EPP only, not by CPPC highest_perf.
+latency_prefer_favored() {
+    local devs names n i=0 dl=$((SECONDS + 30)) json=""
+    devs=$(favored_hint_devs "$1")
+    [ -n "${devs}" ] || return 0
+    while :; do
+        names=$(kubectl -n kube-system get balloonspolicy default -o 'jsonpath={.spec.balloonTypes[*].name}' 2>/dev/null) || names=""
+        [ -n "${names}" ] || [ "${SECONDS}" -ge "${dl}" ] || { sleep 2; continue; }
+        break
+    done
+    for n in ${names}; do
+        [ "${n}" = latency ] && break
+        i=$((i + 1))
+    done
+    if [ "${n:-}" != latency ]; then
+        warn "no latency balloon type in BalloonsPolicy kube-system/default — latency pods are not steered to the favored CPUs $1"
+        return 0
+    fi
+    for n in ${devs}; do json+="\"${n}\","; done
+    kubectl -n kube-system patch balloonspolicy default --type=json \
+        -p "[{\"op\":\"add\",\"path\":\"/spec/balloonTypes/${i}/preferCloseToDevices\",\"value\":[${json%,}]}]" \
+        || warn "could not point the latency balloon at the favored CPUs $1"
+}
+
 # Kernel CPU list ("0-3,8,10-11") -> one CPU number per line. Only what the
 # kernel prints is accepted (decimal, no leading zeros, a <= b, CPU ids below
 # CPULIST_MAX); anything else prints nothing and fails, so a garbled list can
@@ -1037,7 +1082,7 @@ doctor_cpu_accels() {
     fav=$(favored_cpus)
     if [ -n "${fav}" ]; then
         read -r fav fv fn <<< "${fav}"
-        lines+="  ok: favored CPUs ${fav} (highest_perf ${fv}, next ${fn}) — up annotates nodes k3d-gpu.io/favored-cpus=${fav}"$'\n'
+        lines+="  ok: favored CPUs ${fav} (highest_perf ${fv}, next ${fn}) — up annotates nodes k3d-gpu.io/favored-cpus=${fav} and points the latency balloon at them"$'\n'
     fi
     doctor_numa
     doctor_accel_sockets
@@ -2795,9 +2840,8 @@ cmd_up() {
     info "Waiting for nodes Ready..."
     kubectl wait --for=condition=Ready nodes --all --timeout=120s
 
-    # Favored cores (top CPPC highest_perf) as a node annotation: nri-plugins
-    # v0.14.0 ranks CPUs by base frequency and EPP only, so the latency balloon
-    # asks for P-cores and the annotation names the fastest of them.
+    # Favored cores (top CPPC highest_perf) as a node annotation; once the balloons
+    # policy exists, its latency balloon type is pointed at them too.
     local fav
     fav=$(favored_cpus)
     if [ -n "${fav}" ]; then
@@ -2820,6 +2864,9 @@ cmd_up() {
     # through the plugin's OVERRIDE_SYS_ATOM_CPUS.
     if is_active hybrid && [ -n "$(hybrid_cpus lowpower)" ]; then
         kubectl -n kube-system set env daemonset/nri-resource-policy-balloons "OVERRIDE_SYS_ATOM_CPUS=$(ecore_kind_cpus)"
+    fi
+    if is_active hybrid && [ -n "${fav}" ]; then
+        latency_prefer_favored "${fav%% *}"
     fi
     exp_post_up
 

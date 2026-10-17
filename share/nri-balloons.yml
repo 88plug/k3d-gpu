@@ -18,8 +18,9 @@
 #                   4-core E-core cluster (a preference, not a guarantee)
 #   pcore-physical  P-cores; containers see one thread per physical core
 #                   (hideHyperthreads), the sibling stays idle
-#   latency         like pcore-physical, at most 2 CPUs per balloon; `up` also
+#   latency         like pcore-physical, at most 2 CPUs per balloon; `up`
 #                   annotates nodes k3d-gpu.io/favored-cpus with the top-CPPC CPUs
+#                   and adds their L2 cache dirs to this type's preferCloseToDevices
 #   shared          everything else, one balloon that shares every idle CPU, so
 #                   unlabelled pods keep the whole machine
 # A balloon is sized by its pods' CPU requests; kube-system runs on the 1-CPU reserve.

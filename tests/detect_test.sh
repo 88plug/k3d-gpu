@@ -638,6 +638,55 @@ for c in 0 1 2 3; do
 done
 doctor_says "MSR 0x771 highest perf is the fallback" "${r}" 'ok: favored CPUs 1 \(highest_perf 70, next 50\)'
 
+# `up` points the latency balloon type at the favored cores: one L2 cache dir per
+# favored physical core, added to its preferCloseToDevices by type index.
+FAV_BIN="${WORK}/favbin"
+mkdir -p "${FAV_BIN}"
+cat > "${FAV_BIN}/kubectl" <<'EOF'
+#!/bin/sh
+echo "kubectl $*" >> "${STUB_LOG}"
+case "$*" in
+    "get nodes -l "*" -o name") echo "node/k3d-gpu-server-0" ;;
+    *"get balloonspolicy default -o jsonpath="*) echo "${STUB_BLN_TYPES}" ;;
+esac
+exit 0
+EOF
+chmod +x "${FAV_BIN}/kubectl"
+# fav_up <name> <root> <ERE on the recorded calls and output> [negate] [env assignments...]
+fav_up() {
+    local name=$1 r=$2 want=$3 negate=${4:-} ok=0
+    shift 3
+    [ $# -eq 0 ] || shift
+    rm -f "${r}/calls"
+    env K3D_GPU_SYSROOT="${r}" STUB_LOG="${r}/calls" PATH="${FAV_BIN}:${STUB_BIN}:${PATH}" \
+        STUB_BLN_TYPES="performance efficient latency shared" "$@" bash "${K3D_GPU}" up > "${r}/up.out" 2>&1
+    grep -qE -- "${want}" "${r}/calls" "${r}/up.out" 2>/dev/null && ok=1
+    [ -z "${negate}" ] || ok=$((1 - ok))
+    if [ "${ok}" = 1 ]; then
+        PASS=$((PASS + 1)); echo "ok   ${name}"
+    else
+        FAILS=$((FAILS + 1)); echo "FAIL ${name}"; sed 's/^/  | /' "${r}/calls" "${r}/up.out" 2>/dev/null
+    fi
+}
+r=$(newroot favored-up)
+hybrid "${r}" 0-15 16-31
+for c in $(seq 0 31); do cppc "${r}" "${c}" 65; done
+for c in 8 9 10 11; do cppc "${r}" "${c}" 68; done
+for c in $(seq 0 2 14); do for t in "${c}" $((c + 1)); do cpucache "${r}" "${t}" 2 "${c}-$((c + 1))"; done; done
+fav_up "up points the latency type (index 2) at one L2 dir per favored core" "${r}" \
+    'patch balloonspolicy default --type=json -p \[\{"op":"add","path":"/spec/balloonTypes/2/preferCloseToDevices","value":\["/sys/devices/system/cpu/cpu8/cache/index2","/sys/devices/system/cpu/cpu10/cache/index2"\]\}\]$'
+fav_up "favored hint dirs are host paths, not sysroot paths" "${r}" "value\":\[\"${r}" negate
+fav_up "no latency type in the policy: no patch" "${r}" 'patch balloonspolicy' negate \
+    STUB_BLN_TYPES="performance efficient shared"
+fav_up "no latency type in the policy: up warns" "${r}" 'no latency balloon type' "" \
+    STUB_BLN_TYPES="performance efficient shared"
+r=$(newroot favored-up-nocache)
+hybrid "${r}" 0-15 16-31
+for c in $(seq 0 31); do cppc "${r}" "${c}" 65; done
+for c in 8 9; do cppc "${r}" "${c}" 68; done
+fav_up "favored CPUs without L2 sysfs: annotation only, no policy query" "${r}" 'balloonspolicy' negate
+fav_up "favored CPUs without L2 sysfs: still annotated" "${r}" 'annotate nodes --all --overwrite k3d-gpu.io/favored-cpus=8-9$'
+
 # ---- NUMA / SNC (Xeon) ----------------------------------------------------------
 
 # node <root> <n> <cpulist> [package]: NUMA node n; "" is a memory-only node (HBM,

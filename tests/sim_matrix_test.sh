@@ -59,7 +59,8 @@ cat > "${BASE_BIN}/k3d" <<'EOF'
 { echo "k3d $1 $2 $3"; shift 3; printf '  %s\n' "$@"; } >> "${STUB_LOG}"
 EOF
 # kubectl: logs every call. Node allocatable comes from STUB_ALLOCATABLE; a
-# label query finds the single server node; every other call succeeds silently
+# label query finds the single server node; the balloons policy lists the type
+# names baked in share/nri-balloons.yml; every other call succeeds silently
 # (so baked plugin daemonsets "exist" and rollouts "finish").
 cat > "${BASE_BIN}/kubectl" <<'EOF'
 #!/bin/bash
@@ -67,6 +68,7 @@ echo "kubectl $*" >> "${STUB_LOG}"
 case "$*" in
     "get nodes -o go-template="*) cat "${STUB_ALLOCATABLE}" ;;
     "get nodes -l "*" -o name") echo "node/k3d-gpu-server-0" ;;
+    *"get balloonspolicy default -o jsonpath={.spec.balloonTypes[*].name}") echo "replica performance efficient lowpower ecluster pcore-physical latency shared" ;;
 esac
 exit 0
 EOF

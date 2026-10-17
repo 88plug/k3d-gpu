@@ -32,6 +32,8 @@ kubectl annotate nodes --all --overwrite k3d-gpu.io/favored-cpus=8-11
 kubectl -n kube-system get daemonset nvidia-device-plugin-daemonset
 kubectl -n kube-system get daemonset intel-gpu-plugin
 kubectl -n kube-system get daemonset nri-resource-policy-balloons
+kubectl -n kube-system get balloonspolicy default -o jsonpath={.spec.balloonTypes[*].name}
+kubectl -n kube-system patch balloonspolicy default --type=json -p [{"op":"add","path":"/spec/balloonTypes/6/preferCloseToDevices","value":["/sys/devices/system/cpu/cpu8/cache/index2","/sys/devices/system/cpu/cpu10/cache/index2"]}]
 kubectl -n kube-system rollout status daemonset/nvidia-device-plugin-daemonset --timeout=120s
 kubectl get nodes -o go-template={{range .items}}{{range $k, $v := .status.allocatable}}{{$k}} {{$v}}{{"\n"}}{{end}}{{end}}
 kubectl -n kube-system rollout status daemonset/intel-gpu-plugin --timeout=120s
