@@ -195,7 +195,8 @@ Environment:
   K3D_GPU_AGENT_MODEL   agent Hugging Face model (default: OpenVINO/Qwen3-4B-int4-ov,
                         Qwen/Qwen3-4B on vllm/llm-scaler)
   K3D_GPU_AGENT_DRAFT   ovms Fast Draft speculative decoding: off | auto | CPU | GPU | NPU
-                        (default: off; forces greedy decoding; auto = the target's device)
+                        (default: off until a host measurement shows a speedup;
+                        auto = the target's device; GPU = an Intel GPU, the first advertised)
   K3D_GPU_AGENT_DRAFT_MODEL  draft model (default: OpenVINO/Qwen3-0.6B-int4-ov)
   K3D_GPU_AGENT_GPUS    vllm/llm-scaler: GPUs (or Gaudis) to shard the model across (default: 1)
   K3D_GPU_AGENT_MAX_LEN vllm/llm-scaler: max context tokens (default: 8192)
@@ -5053,8 +5054,9 @@ agent_select() {
 
 # OVMS Fast Draft speculative decoding: "<draft device> <extra resource or ->", or
 # "- -" for none. K3D_GPU_AGENT_DRAFT: off (default) | auto | CPU | GPU | NPU.
-# off is the default because Fast Draft makes OVMS 2026.4.1 decode greedily, which
-# changes a sampling model's output. auto drafts on the target's own device:
+# off is the default until a measured speedup exists: a draft on another engine
+# lost on Lunar Lake (openvinotoolkit/openvino discussions/36484) and H22 is the
+# host measurement. auto drafts on the target's own device:
 # GenAI 2026.4.1 runs draft then verify serially (EXPERIMENTS.md H22), so a draft
 # on another engine pays only if it is faster there, and no measurement says so
 # yet. A named device overrides; one the target does not already hold adds its
@@ -5138,15 +5140,20 @@ agent_manifest() {
     [ "${res}" = - ] || via=" (${res})"
     info "agent: ${AGENT_MODEL} as '${AGENT_MODEL_NAME}' on ${device}${via}${amx:+ (AMX node)}${hybrid:+, P-cores}, ${cpus} CPU(s)" >&2
 
-    local item="            - " args draft draft_res draft_sel
+    local item="            - " args draft draft_res draft_sel draft_gid
     args="${item}--target_device=${device}"
     draft_sel=$(agent_draft "${device}") || exit 1
     read -r draft draft_res <<< "${draft_sel}"
     if [ "${draft}" != - ]; then
-        info "agent: Fast Draft ${AGENT_DRAFT_MODEL} on ${draft} (greedy decoding)" >&2
+        info "agent: Fast Draft ${AGENT_DRAFT_MODEL} on ${draft}" >&2
         args+=$'\n'"${item}--draft_source_model=${AGENT_DRAFT_MODEL}"$'\n'"${item}--draft_device=${draft}"
-        [ "${draft}" != GPU ] || [ -n "${gid}" ] || gid=$(agent_device_gid GPU)
-        [ "${draft}" != NPU ] || [ -n "${gid}" ] || gid=$(agent_device_gid NPU)
+        # A draft on a second accelerator needs that device's group too (GPU + NPU).
+        if [ "${draft}" != CPU ] && [ "${draft}" != "${device}" ]; then
+            draft_gid=$(agent_device_gid "${draft}")
+            if [ -n "${draft_gid}" ] && [ "${draft_gid}" != "${gid}" ]; then
+                gid=${gid:+${gid}, }${draft_gid}
+            fi
+        fi
     fi
     [ -z "${AGENT_TOOL_PARSER}" ] || args+=$'\n'"${item}--tool_parser=${AGENT_TOOL_PARSER}"
     [ -z "${AGENT_REASONING_PARSER}" ] || args+=$'\n'"${item}--reasoning_parser=${AGENT_REASONING_PARSER}"

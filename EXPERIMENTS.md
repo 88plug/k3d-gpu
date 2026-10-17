@@ -596,7 +596,7 @@ auto-adapting k8s placement of the draft (no prior art found, search log
 | Arm | Graph | device | draft | draft_device | Role |
 |---|---|---|---|---|---|
 | A | `a-4b-cpu` | CPU | - | - | baseline (target alone) |
-| B | `b-spec-cpu` | CPU | 0.6B | CPU | tuned rival (same-engine draft) |
+| B | `b-spec-cpu` | CPU | 0.6B | CPU | same-engine rival (default `num_assistant_tokens` 5, not swept) |
 | C | `c-spec-igpu` | CPU | 0.6B | GPU | treatment (H22) |
 | DP | `dp-06b-cpu` | CPU | - | - | measures t_d(P) |
 | DG | `dg-06b-gpu` | GPU | - | - | measures t_d(iGPU) |
@@ -604,7 +604,7 @@ auto-adapting k8s placement of the draft (no prior art found, search log
 Every graph: `enable_prefix_caching: false`, `cache_size: 2`, no `plugin_config`.
 
 **Load:** 8 fixed prompts (3 tool-call JSON, 3 code edit, 2 chat; sha256 recorded),
-greedy (`temperature 0`; Fast Draft forces greedy anyway), `max_tokens 256`,
+greedy (`temperature 0`), `max_tokens 256`,
 `ignore_eos`, streamed, concurrency 1. Decode tok/s = (tokens - 1) / (t_last - t_first).
 
 **Schedule (self-limits to 20 min under the lock):** cluster `k3dgpu-i-hetero-spec`
@@ -646,8 +646,23 @@ confidence = 1 - exact two-sided sign-test p of the paired C/B vs 1.0.
 
 `bench/hetero-spec/analyze.py` applies this table mechanically to the probe's JSONL.
 
-**Shipped default while PENDING:** `K3D_GPU_AGENT_DRAFT` is `off` (Fast Draft forces
-greedy decoding, so it changes model behaviour). `auto` puts the draft on the target's
+**Amended 2026-10-17, after review and before any H22 run** (two refuters, both
+"prototype, not kill"): (1) tokens are `usage.completion_tokens` from
+`stream_options.include_usage`, not SSE chunks, since OVMS writes all of a step's
+accepted tokens in one chunk; a request whose count is not 256 is dropped and
+counted; (2) a server that never gets Ready, or an OVMS pid the probe cannot find,
+is INCONCLUSIVE (BLOCKED, mechanism untested), not REFUTED; (3) P0 rests only on the
+i915 render-busy delta, and A must stay under 1 ms of render time per request
+(else INCONCLUSIVE, uncontrolled); the `grep draft` log check is gone; (4) OVMS logs
+at INFO, not DEBUG; (5) models are pre-staged outside the lock and copied into the
+node, every slow child runs under `timeout`; (6) the schedule is a cyclic rotation,
+not a Latin square, and B is not tuned (no gamma sweep), so a REFUTED says nothing
+about a better gamma. Scope of any verdict: OVMS 2026.4.1 serial Fast Draft, UHD 770
+draft, 35 W T-SKU, AVX-VNNI target (no AMX on this host), no NPU (`/dev/accel`
+absent). It does not test a parallel draft/verify design (Dovetail, DuoDecoding).
+
+**Shipped default while PENDING:** `K3D_GPU_AGENT_DRAFT` is `off` until a host
+measurement shows a speedup (a cross-engine draft lost on Lunar Lake [provenance:P222]). `auto` puts the draft on the target's
 own device: in the serial engine a cross-engine draft wins only if it is faster there,
 and no host measurement says so yet.
 

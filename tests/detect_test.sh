@@ -1780,7 +1780,7 @@ agent_says "an unknown K3D_GPU_AGENT_DEVICE is rejected" "${r}" fail \
 agent_says "auto never picks the NPU" "${r}" 0 \
     '--target_device=NPU' negate STUB_ALLOC=$'cpu 32\nnpu.intel.com/accel 1'
 
-# H22 hetero-spec: Fast Draft is off by default (it forces greedy decoding); auto
+# H22 hetero-spec: Fast Draft is off by default (until a host measurement shows a gain); auto
 # drafts on the target's own device; a named device adds its resource to the pod.
 agent_says "no draft model by default" "${r}" 0 \
     'draft' negate STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1'
@@ -1808,6 +1808,26 @@ agent_says "an unknown K3D_GPU_AGENT_DRAFT is rejected" "${r}" fail \
     'unknown K3D_GPU_AGENT_DRAFT' "" STUB_ALLOC='cpu 32' K3D_GPU_AGENT_DRAFT=TPU
 agent_says "the draft override is case-insensitive" "${r}" 0 \
     '--draft_device=GPU' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' K3D_GPU_AGENT_DRAFT=gpu
+
+# GPU target + NPU draft (Core Ultra): the pod holds both devices and joins both groups.
+r2=$(newroot agent-gpu-npu)
+pci "${r2}" 0000:00:02.0 0x8086 0x7d55 i915; render "${r2}" 0000:00:02.0 128
+pci "${r2}" 0000:00:0b.0 0x8086 0x7d1d intel_vpu; accel "${r2}" 0000:00:0b.0 0
+rgid=$(stat -c %g "${r2}/dev/dri/renderD128")
+ngid=$(id -G | tr ' ' '\n' | grep -vx "${rgid}" | head -1)
+if [ -n "${ngid}" ] && chgrp "${ngid}" "${r2}/dev/accel/accel0" 2>/dev/null; then
+    agent_says "a GPU target with an NPU draft joins both device groups" "${r2}" 0 \
+        "supplementalGroups: \[${rgid}, ${ngid}\]" "" \
+        STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1\nnpu.intel.com/accel 1' STUB_NODE_LABELS=gpu.intel.com/xmx=true K3D_GPU_AGENT_DRAFT=NPU
+else
+    echo "skip a GPU target with an NPU draft joins both device groups (no second group to chgrp to)"
+fi
+agent_says "a GPU target with an NPU draft limits both devices" "${r2}" 0 \
+    'npu\.intel\.com/accel: "?1"?' "" \
+    STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1\nnpu.intel.com/accel 1' STUB_NODE_LABELS=gpu.intel.com/xmx=true K3D_GPU_AGENT_DRAFT=NPU
+agent_says "a GPU target with an NPU draft keeps its own GPU limit" "${r2}" 0 \
+    'gpu\.intel\.com/i915: "?1"?' "" \
+    STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1\nnpu.intel.com/accel 1' STUB_NODE_LABELS=gpu.intel.com/xmx=true K3D_GPU_AGENT_DRAFT=NPU
 
 # A device that cannot be honoured must stop `agent up` before anything is applied.
 applylog="${WORK}/apply.log"
