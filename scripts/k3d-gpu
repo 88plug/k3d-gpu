@@ -229,6 +229,12 @@ Usage: k3d-gpu <command>
             J/token, and write the result JSON plus an EXPERIMENTS.md run section.
             The model cache volume is removed after unless --keep-cache;
             K3D_GPU_SIGNOFF="Name <email>" signs the run section
+  bench agent plan|run|apb|control|bfcl|report|proxy|manifest|tasks ...
+            Agent benchmark (EXPERIMENTS.md H40-H48): Intel's EAT blueprint flows
+            and BFCL S100, graded, timed at one recording proxy, under bench/load
+            background load, with RAPL J per successful task and resumable
+            results. Repo checkout only. Full options: bench agent --help;
+            guide: docs/agent-benchmarks.md
   phase-steer [--json] [--prefill CPUS --decode CPUS]
             Experimental, read-only (H20 PENDING): per-phase CPU split for one
             llama.cpp server per agent, prefill on the P-cores and decode on the
@@ -8353,6 +8359,13 @@ bench_alive() {
 
 cmd_bench() {
     require python3
+    if [ "${1:-}" = agent ]; then
+        shift
+        local agent
+        agent="$(bench_dir)/eatflow/agentbench.py"
+        [ -f "${agent}" ] || err "bench agent: ${agent} missing; run from a k3d-gpu checkout or set K3D_GPU_BENCH to its bench/ directory"
+        exec python3 "${agent}" "$@"
+    fi
     local stack="" kurl="" kmodel="" budget=900 rounds=3 warmup=3 maxtok=128 id="" out="" cpuset="" dry="" keep=""
     while [ $# -gt 0 ]; do
         case "$1" in
