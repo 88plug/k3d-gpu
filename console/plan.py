@@ -3,7 +3,7 @@
 
 A pure function: no I/O, no clock, inputs left unchanged. It picks only from
 green matrix cells and never interpolates: a box with no green cell gets
-"unmeasured, run `k3d-gpu prove` on this box" and no engine.
+"unmeasured: no green cell for this box; quickstart and agent up still pick by device" and no engine.
 
 A cell is green when all three hold (docs/console-design.md, L2):
   - a k3d-gpu report run exists for it (evidence.report_id),
@@ -45,7 +45,7 @@ import facts as factsmod  # noqa: E402  (stdlib-only sibling modules)
 import schema_check  # noqa: E402
 
 PLAN_SCHEMA = "k3d-gpu.plan/v1"
-UNMEASURED = "unmeasured, run `k3d-gpu prove` on this box"
+UNMEASURED = "unmeasured: no green cell for this box; quickstart and agent up still pick by device"
 NO_GREEN_LEFT = "no green cell left on a usable target: apply a fix above, then plan again"
 DEFAULT_BIND = "127.0.0.1"
 ENGINE_PORTS = {"ovms": 8000, "vllm": 8000, "llama.cpp": 8080}  # each server's own default port

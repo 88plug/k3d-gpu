@@ -9,7 +9,7 @@ in docs/console-design.md (L2, L3), not from plan.py:
     smallest id);
   - with no such cell it names no engine, model or placement, and says "fix"
     with the one-line fix of every refused target when there is one, else
-    "unmeasured, run `k3d-gpu prove` on this box";
+    "unmeasured: no green cell for this box; quickstart and agent up still pick by device";
   - every target the facts mark not usable is listed with its fix, picked or not;
   - it never picks an amber or grey cell;
   - it is pure: same output twice, inputs unchanged, row order irrelevant;
@@ -39,7 +39,7 @@ N = int(os.environ.get("FUZZ_N", "300"))
 SCHEMA = factsmod.load_schema()
 PIN = "openvino/model_server@sha256:" + "a" * 64
 OTHER_IMAGE = "openvino/model_server@sha256:" + "b" * 64
-UNMEASURED = "unmeasured, run `k3d-gpu prove` on this box"
+UNMEASURED = "unmeasured: no green cell for this box; quickstart and agent up still pick by device"
 
 
 # ---- generators -------------------------------------------------------------

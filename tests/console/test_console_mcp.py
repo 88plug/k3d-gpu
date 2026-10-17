@@ -507,7 +507,7 @@ class CliApply(unittest.TestCase):
             h = w.cli("plan", "--hash").decode().strip()
             p = subprocess.run([LAUNCHER, "apply", "--plan-hash", h], env=w.env, capture_output=True, text=True)
             self.assertNotEqual(p.returncode, 0)
-            self.assertIn("the plan has no engine: unmeasured, run `k3d-gpu prove` on this box", p.stderr)
+            self.assertIn("the plan has no engine: unmeasured: no green cell for this box; quickstart and agent up still pick by device", p.stderr)
             self.assertEqual(writes(w), [])
         finally:
             w.close()

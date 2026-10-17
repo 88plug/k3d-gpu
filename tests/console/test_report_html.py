@@ -60,7 +60,7 @@ class Fixtures(unittest.TestCase):
                 self.assertEqual(offline_check.static(a), [])
                 self.assertIn(facts["fingerprint"], a)
                 if p["decision"] != "fix":
-                    self.assertIn("unmeasured, run <code>k3d-gpu prove</code> on this box", a)
+                    self.assertIn("unmeasured: no green cell for this box; quickstart and agent up still pick by device", a)
                 for t in facts["targets"]:
                     self.assertIn(report_html.esc(t["id"]), a)
 

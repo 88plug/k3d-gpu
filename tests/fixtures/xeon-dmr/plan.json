@@ -35,19 +35,19 @@
     "matrix: 2 cells, 0 on a target of this host",
     "  no measured cell for these targets",
     "decision:",
-    "  unmeasured, run `k3d-gpu prove` on this box",
+    "  unmeasured: no green cell for this box; quickstart and agent up still pick by device",
     "  bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)"
   ],
   "fingerprint": "sha256:941bc39dd22a87e3c2e768811e92a62dba010530be807800366d2d5004cbdcce",
   "fixes": [],
-  "message": "unmeasured, run `k3d-gpu prove` on this box",
+  "message": "unmeasured: no green cell for this box; quickstart and agent up still pick by device",
   "model": null,
   "overrides": {},
   "placement": null,
   "port": null,
   "schema": "k3d-gpu.plan/v1",
   "summary": [
-    "unmeasured, run `k3d-gpu prove` on this box",
+    "unmeasured: no green cell for this box; quickstart and agent up still pick by device",
     "bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)"
   ]
 }
