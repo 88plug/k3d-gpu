@@ -158,12 +158,14 @@ def mask(key):
 
 
 class Endpoint:
-    def __init__(self, a, env, need_key=True):
+    def __init__(self, a, env, key="need"):
+        """key: "need" (a remote host must have one), "load" (read it if set), or
+        "none" (never read: commands that only render manifests or resolve names)."""
         self.base, self.origin = resolve_base(a.remote, env)
         self.host = urllib.parse.urlsplit(self.base).hostname
         self.port = urllib.parse.urlsplit(self.base).port or (443 if self.base.startswith("https") else 80)
-        self.key, self.key_source = load_key(a.api_key_file, env)
-        if need_key and not self.key and not is_local_host(self.host):
+        self.key, self.key_source = load_key(a.api_key_file, env) if key != "none" else (None, None)
+        if key == "need" and not self.key and not is_local_host(self.host):
             raise RemoteError(f"remote endpoint {self.base} needs a key: set OPENAI_API_KEY or pass --api-key-file FILE")
         self.model = a.model or (env.get("OPENAI_MODEL") or "").strip() or None
         self.model_source = "--model" if a.model else ("OPENAI_MODEL" if self.model else None)
@@ -454,7 +456,7 @@ def cmd_resolve(ep, a):
 
 
 def need_model(ep, a):
-    if a.probe:
+    if getattr(a, "probe", False):
         ids, _ = ep.models()
         return ep.pick_model(ids, warn)[0]
     if not ep.model:
@@ -523,9 +525,9 @@ def cmd_exec(ep, a):
 
 
 COMMANDS = {
-    "check": (cmd_check, True), "show": (cmd_show, False), "models": (cmd_models, True),
-    "resolve": (cmd_resolve, True), "secret": (cmd_secret, True), "chat-ui": (cmd_chat_ui, False),
-    "sandbox-profile": (cmd_sandbox_profile, False), "addrs": (cmd_addrs, False), "exec": (cmd_exec, True),
+    "check": (cmd_check, "need"), "show": (cmd_show, "load"), "models": (cmd_models, "need"),
+    "resolve": (cmd_resolve, "need"), "secret": (cmd_secret, "need"), "chat-ui": (cmd_chat_ui, "none"),
+    "sandbox-profile": (cmd_sandbox_profile, "none"), "addrs": (cmd_addrs, "none"), "exec": (cmd_exec, "need"),
 }
 
 
@@ -548,7 +550,6 @@ def parse(argv):
     p.add_argument("--probe", action="store_true")
     p = sub.add_parser("chat-ui", parents=[common])
     p.add_argument("manifest")
-    p.add_argument("--probe", action="store_true")
     p = sub.add_parser("sandbox-profile", parents=[common])
     p.add_argument("manifest")
     p.add_argument("--addrs", help="comma-separated addresses instead of resolving the host")
@@ -565,9 +566,9 @@ def main(argv=None, env=None):
         a = parse(sys.argv[1:] if argv is None else argv)
     except SystemExit as e:
         return e.code if isinstance(e.code, int) else EXIT_CONFIG
-    fn, need_key = COMMANDS[a.cmd]
+    fn, key = COMMANDS[a.cmd]
     try:
-        return fn(Endpoint(a, env, need_key), a)
+        return fn(Endpoint(a, env, key), a)
     except RemoteError as e:
         print(f"remote: {e}", file=sys.stderr, flush=True)
         return e.code

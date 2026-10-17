@@ -3775,7 +3775,7 @@ cmd_up() {
     require kubectl
 
     resolve_vendors
-    [ "${#ACTIVE[@]}" -gt 0 ] || [ "${VENDORS_REQUEST}" = none ] || err "no supported accelerator detected (NVIDIA, Intel GPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX, hybrid P/E cores, NUMA, WSL2 Intel GPU) — run 'k3d-gpu doctor' or set K3D_GPU_VENDORS (none: a plain cluster, e.g. for a remote endpoint)"
+    [ "${#ACTIVE[@]}" -gt 0 ] || [ "${VENDORS_REQUEST}" = none ] || err "no supported accelerator detected (NVIDIA, Intel GPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX, hybrid P/E cores, NUMA, WSL2 Intel GPU) — run 'k3d-gpu doctor' or set K3D_GPU_VENDORS"
     info "Accelerators: ${ACTIVE[*]:-none (K3D_GPU_VENDORS=none)}"
     local intel_args="" problems
     if intel_dra && ! is_active intel; then
