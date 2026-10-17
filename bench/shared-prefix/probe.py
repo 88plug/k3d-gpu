@@ -4,7 +4,9 @@
   probe.py gen   --seed S                       prints the round's prompts (JSON)
   probe.py round --seed S --url URL --arm ARM --mem-cmd CMD --out FILE
                                                 warm-up, phase S (a1..a6, c), phase B (b1..b6)
-  probe.py score FILE...                        T ratio, bootstrap CI, spread, M, verdict
+  probe.py score [--load LOAD.jsonl] FILE...    T ratio, bootstrap CI, spread, M, verdict;
+                                                with --load, unmatched background load
+                                                (bench/load/load.py) makes T and M INCONCLUSIVE
 
 Prompts follow the H25 pre-registration in EXPERIMENTS.md (amendment A1):
 system text plus 12 EAT-style tool schemas with frozen key order, a shared
@@ -172,7 +174,28 @@ def bootstrap_ratio(off, on, n=10000, seed=25):
     return rs[int(0.025 * n)], rs[int(0.975 * n) - 1]
 
 
-def score(files):
+def load_check(path):
+    """bench/load/load.py matched() over one level's per-arm sample windows."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "bench_load", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "load", "load.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    with open(path) as f:
+        return mod.matched([json.loads(line) for line in f if line.strip()])
+
+
+def score(files, load=None):
+    out = _score(files)
+    if load:
+        lc = load_check(load)
+        out["load"] = lc
+        if not lc["matched"]:
+            out["T"] = out["M"] = lc["verdict"]
+    return out
+
+
+def _score(files):
     rounds = [json.load(open(f)) for f in files]
     tokens, arms = set(), {"ON": [], "OFF": []}
     for r in rounds:
@@ -239,6 +262,7 @@ def main():
     r.add_argument("--mem-cmd", required=True)
     r.add_argument("--out", required=True)
     s = sub.add_parser("score")
+    s.add_argument("--load", help="load.jsonl from bench/load/load.py sample, tagged by arm")
     s.add_argument("files", nargs="+")
     a = ap.parse_args()
     if a.cmd == "gen":
@@ -246,7 +270,7 @@ def main():
     elif a.cmd == "round":
         do_round(a)
     else:
-        print(json.dumps(score(a.files), indent=2))
+        print(json.dumps(score(a.files, a.load), indent=2))
     return 0
 
 

@@ -129,6 +129,39 @@ class Score(unittest.TestCase):
         off = [rnd("OFF", s, [9.6] * 5) for s in (2, 3, 6)]
         self.assertTrue(self.run_score(on + off)["T"].startswith("INCONCLUSIVE"))
 
+    def load_file(self, d, on_load1, off_load1):
+        f = os.path.join(d, "load.jsonl")
+        with open(f, "w") as fh:
+            for arm, l1 in (("ON", on_load1), ("OFF", off_load1)):
+                for _ in range(2):
+                    fh.write(json.dumps({"tag": arm, "level": "typical", "busy_pct": 37.0, "load1": l1,
+                                         "pkg_w": 40.0, "throttle_per_min": 0.0, "swap_used_mib": 100.0,
+                                         "swap_delta_mib": 0.0}) + "\n")
+        return f
+
+    def score_with_load(self, rounds, on_load1, off_load1):
+        with tempfile.TemporaryDirectory() as d:
+            files = []
+            for i, r in enumerate(rounds):
+                files.append(os.path.join(d, f"round-{i}.json"))
+                json.dump(r, open(files[-1], "w"))
+            return probe.score(files, self.load_file(d, on_load1, off_load1))
+
+    def test_matched_high_load_keeps_verdict(self):
+        on = [rnd("ON", s, [0.9, 0.85, 0.95, 0.9, 0.88]) for s in (1, 3, 5)]
+        off = [rnd("OFF", s, [9.6, 9.4, 9.7, 9.5, 9.8]) for s in (2, 4, 6)]
+        out = self.score_with_load(on + off, 24.0, 25.0)  # high but matched
+        self.assertTrue(out["load"]["matched"])
+        self.assertEqual(out["T"], "SUPPORTED")
+
+    def test_unmatched_load_is_inconclusive(self):
+        on = [rnd("ON", s, [0.9, 0.85, 0.95, 0.9, 0.88]) for s in (1, 3, 5)]
+        off = [rnd("OFF", s, [9.6, 9.4, 9.7, 9.5, 9.8]) for s in (2, 4, 6)]
+        out = self.score_with_load(on + off, 5.0, 20.0)
+        self.assertFalse(out["load"]["matched"])
+        self.assertTrue(out["T"].startswith("INCONCLUSIVE: load unmatched (load1"), out["T"])
+        self.assertEqual(out["M"], out["T"])
+
     def test_missing_arm(self):
         on = [rnd("ON", s, [0.9] * 5) for s in (1, 4, 5)]
         self.assertTrue(self.run_score(on)["T"].startswith("INCONCLUSIVE"))
