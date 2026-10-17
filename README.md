@@ -483,8 +483,8 @@ By default the policy only changes cpusets inside the node's cgroup. It never
 touches cpufreq, C-states or RDT. The one exception is opt-in: the
 [prefill guard](docs/prefill-guard.md) (`K3D_GPU_PREFILL_GUARD=50% k3d-gpu up`)
 caps the max frequency of the E-cores running `efficient` pods, because P- and
-E-cores share one package power and thermal budget. `k3d-gpu doctor --perf`
-suggests it when the package throttles.
+E-cores share one package power and thermal budget. With the guard set or
+recorded, `k3d-gpu doctor --perf` shows the package throttle counters behind it.
 
 Only one NRI resource policy can own a node. k3s re-applies its baked manifests
 every time it starts, which would undo another stack's changes to the policy. So

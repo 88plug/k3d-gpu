@@ -20,7 +20,7 @@ hypothesis H5.
 ## Use
 
 ```bash
-k3d-gpu doctor --perf                         # suggests it, with the evidence, when the package throttles
+K3D_GPU_PREFILL_GUARD=50% k3d-gpu doctor --perf   # the throttle evidence behind it, before any change
 k3d-gpu down && K3D_GPU_PREFILL_GUARD=50% k3d-gpu up        # apply: cap at half the E-core max
 k3d-gpu down && K3D_GPU_PREFILL_GUARD=2000000 k3d-gpu up    # or an absolute cap in kHz
 k3d-gpu down && k3d-gpu up                    # revert: down writes the recorded values back
@@ -32,8 +32,11 @@ E-core `cpuinfo_min_freq`, a cap that is not below the E-core maximum (it would
 cap nothing), any other form, and any host without both `cpu_core` and
 `cpu_atom` CPUs. It refuses before it creates anything.
 
-`doctor --perf` suggests the guard only on hybrid hosts whose
-`package_throttle_count` is above zero, and prints the counters it read:
+`doctor --perf` prints this section only on hybrid hosts, and only when
+`K3D_GPU_PREFILL_GUARD` is set or a guard record exists for the cluster: while H5
+is PENDING it never suggests the guard unprompted. With the guard set, it
+suggests it when `package_throttle_count` is above zero, and prints the counters
+it read:
 
 ```text
 ==> Package power/thermal coupling on a hybrid CPU (prefill guard, opt-in)
@@ -238,7 +241,8 @@ with p90s.
   (1 - bogo-ops/s / N0 bogo-ops/s), tool proxy latency ratio to N0, decode
   tok/s ratio to N0, package power and throttle-count delta.
 - If SUPPORTED, the level with the smallest neighbour throughput loss among the
-  passing levels replaces `50%` as the doctor suggestion, in its own commit.
+  passing levels replaces `50%` as the doctor suggestion, and doctor shows the
+  suggestion without `K3D_GPU_PREFILL_GUARD` set, in its own commit.
 
 **Stage 2: the delivery, through k3d-gpu.** Only after wave-1 is finished (it
 creates clusters). It checks that the NRI path writes what stage 1 measured.

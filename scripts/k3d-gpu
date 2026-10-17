@@ -253,8 +253,8 @@ Environment:
                         as kHz (2000000) or a percent of the E-core max (50%), so P-core
                         inference keeps more of the package power/thermal budget. Writes
                         host cpufreq through the NRI balloons policy; 'down' writes the
-                        values recorded at 'up' back. doctor --perf suggests it when the
-                        package throttles
+                        values recorded at 'up' back. With it set, doctor --perf shows the
+                        package throttle counters
   K3D_GPU_HYBRID_GUARD_PLUGIN  guard manifest template (default: ${SHARE_DIR}/nri-balloons-guard.yml)
   K3D_GPU_STATE_DIR     guard state per cluster (default: ${STATE_DIR})
   K3D_GPU_MODEL_GB      model size checked by doctor --perf (same as --model-gb)
@@ -3037,10 +3037,13 @@ perf_rapl() {
 # Hybrid hosts only: P-cores and E-cores share one package power and thermal
 # budget, so pinning them apart does not stop an E-core neighbour from clocking
 # P-core inference down. The kernel counts package thermal throttle events since
-# boot; when there are any, suggest the opt-in prefill guard.
+# boot; when there are any, suggest the opt-in prefill guard. Until H5 is
+# measured the section is printed only for a guard that is requested
+# (K3D_GPU_PREFILL_GUARD) or recorded for this cluster, never unprompted.
 perf_prefill_guard() {
     local p first tt cnt tot core=0 cpu v pl khz rec="${STATE_DIR}/${CLUSTER}/scaling_max_freq"
     has_hybrid || return 0
+    case "${PREFILL_GUARD}" in ""|off) [ -e "${rec}" ] || return 0 ;; esac
     p=$(hybrid_cpus core)
     first=$(cpulist_expand "${p}" | head -n1)
     tt=/sys/devices/system/cpu/cpu${first}/thermal_throttle

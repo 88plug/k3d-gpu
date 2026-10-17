@@ -314,6 +314,9 @@ throttle "${r}" 0 22236660 102128310 651794
 throttle "${r}" 16 22173096 102257307 14262
 ENVS=()
 run "${r}" "${WORK}/state-doc" doctor --perf
+hasnt "no guard requested or recorded, no guard section" 'prefill guard' "${OUT}"
+ENVS=(K3D_GPU_PREFILL_GUARD=50%)
+run "${r}" "${WORK}/state-doc" doctor --perf
 has "doctor flags package throttling on a hybrid host" 'note: package throttled 22236660 times since boot' "${OUT}"
 has "doctor cites the counter file" 'from: +/sys/devices/system/cpu/cpu0/thermal_throttle/package_throttle_\{count,total_time_ms\}' "${OUT}"
 has "doctor gives the exact apply" 'apply: +k3d-gpu down && K3D_GPU_PREFILL_GUARD=50% k3d-gpu up' "${OUT}"
@@ -338,6 +341,7 @@ hasnt "non-hybrid host gets no guard suggestion" 'PREFILL_GUARD' "${OUT}"
 
 r=$(raptor doc-active)
 throttle "${r}" 0 5 5 0
+ENVS=()
 mkdir -p "${WORK}/state-active/gpu"
 printf '16 3900000\n' > "${WORK}/state-active/gpu/scaling_max_freq"
 run "${r}" "${WORK}/state-active" doctor --perf
