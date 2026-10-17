@@ -1,0 +1,464 @@
+{
+ "ab": null,
+ "client_signature": {
+  "kind": "none"
+ },
+ "comparison_key": "cbea631920979c1153ad2d44299b08a9fd108b924bf64ce3a7b5caf7e7b0de1b",
+ "content_sha256": "ed5d6ed3002182a1d77715f0c81410136b2cde0dcf8a7a9d94f42be158a5b5dd",
+ "hardware": {
+  "cpu": {
+   "amx": [],
+   "e_core_cpus": 16,
+   "family": 6,
+   "hybrid": true,
+   "isa": [
+    "avx",
+    "avx2",
+    "avx_vnni",
+    "f16c",
+    "fma"
+   ],
+   "logical_cpus": 32,
+   "microcode": null,
+   "model": "13th Gen Intel(R) Core(TM) i9-13900T",
+   "model_id": 183,
+   "numa_nodes": 1,
+   "p_core_cpus": 16,
+   "snc": null,
+   "sockets": 1,
+   "stepping": 1
+  },
+  "dsa": {
+   "devices": 0,
+   "work_queues": 0
+  },
+  "gaudi": {
+   "devices": 0
+  },
+  "iaa": {
+   "devices": 0,
+   "work_queues": 0
+  },
+  "intel_gpus": [
+   {
+    "device_id": "0xa780",
+    "driver": "i915",
+    "engines": {
+     "compute": 0,
+     "copy": 1,
+     "render": 1,
+     "video": 2,
+     "video_enhance": 1
+    },
+    "guc": null,
+    "huc": null,
+    "platform": "Raptor Lake-S",
+    "xmx": false
+   }
+  ],
+  "kernel": "6.6",
+  "memory": {
+   "channels": null,
+   "configured_mts": null,
+   "total_gib": 128,
+   "type": null
+  },
+  "npus": [],
+  "nvidia": {
+   "driver": "590.48",
+   "gpus": [
+    {
+     "device_id": "0x27b0",
+     "model": "NVIDIA RTX 4000 SFF Ada Generation"
+    },
+    {
+     "device_id": "0x28b0",
+     "model": "NVIDIA RTX 2000E Ada Generation"
+    }
+   ]
+  },
+  "qat": []
+ },
+ "kind": "single_stream",
+ "levers": [
+  {
+   "detected": false,
+   "id": "amx",
+   "state": "unknown"
+  },
+  {
+   "detected": false,
+   "id": "dsa_dto",
+   "state": "unknown"
+  },
+  {
+   "detected": false,
+   "id": "iaa_zswap",
+   "state": "unknown"
+  },
+  {
+   "detected": true,
+   "id": "media_engines",
+   "state": "unknown"
+  },
+  {
+   "detected": false,
+   "id": "npu_offload",
+   "state": "unknown"
+  },
+  {
+   "detected": false,
+   "id": "numa_replica",
+   "state": "unknown"
+  },
+  {
+   "detected": true,
+   "id": "openvino_int4",
+   "state": "on"
+  },
+  {
+   "detected": true,
+   "id": "pe_pinning",
+   "state": "on"
+  },
+  {
+   "detected": false,
+   "id": "qat",
+   "state": "unknown"
+  },
+  {
+   "detected": true,
+   "id": "xmx_gate",
+   "state": "on"
+  }
+ ],
+ "power": {
+  "epp": null,
+  "pl1_w": null,
+  "pl2_w": null,
+  "platform_profile": null
+ },
+ "provenance": {
+  "note": "ledger-H6",
+  "source": "maintainer-lab"
+ },
+ "results": {
+  "capacity": null,
+  "engine": "cpu",
+  "server": "ovms",
+  "single_stream": {
+   "decode": {
+    "e2e_us": [
+     16404536,
+     16405805,
+     16523886,
+     16455810,
+     16415920,
+     16534854,
+     16528896,
+     16402358,
+     16486883,
+     16795124,
+     16521528,
+     16464089,
+     16412814,
+     16393152,
+     16493831,
+     16543759,
+     16360986,
+     16527288,
+     16596673,
+     16490728,
+     16645835,
+     16730166,
+     16625565,
+     16575417,
+     16639733
+    ],
+    "out_tok": [
+     256,
+     256,
+     256,
+     256,
+     256,
+     256,
+     256,
+     256,
+     256,
+     256,
+     256,
+     256,
+     256,
+     256,
+     256,
+     256,
+     256,
+     256,
+     256,
+     256,
+     256,
+     256,
+     256,
+     256,
+     256
+    ],
+    "prompt_tok": [
+     30,
+     30,
+     30,
+     30,
+     30,
+     30,
+     30,
+     30,
+     30,
+     30,
+     30,
+     30,
+     30,
+     30,
+     30,
+     30,
+     30,
+     30,
+     30,
+     30,
+     30,
+     30,
+     30,
+     30,
+     30
+    ],
+    "round": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     2,
+     2,
+     2,
+     2,
+     2,
+     3,
+     3,
+     3,
+     3,
+     3,
+     4,
+     4,
+     4,
+     4,
+     4,
+     5,
+     5,
+     5,
+     5,
+     5
+    ],
+    "ttft_us": [
+     276994,
+     241605,
+     246373,
+     247151,
+     241072,
+     255503,
+     244220,
+     235879,
+     232978,
+     246583,
+     231561,
+     246734,
+     240544,
+     243282,
+     246822,
+     244771,
+     238537,
+     245927,
+     265643,
+     245152,
+     258587,
+     246011,
+     247258,
+     238943,
+     241500
+    ]
+   },
+   "prefill": {
+    "e2e_us": [
+     12456323,
+     12278988,
+     12146883,
+     12142552,
+     12162626,
+     12575398,
+     12145335,
+     12130576,
+     12133497,
+     12259208,
+     12169443,
+     12270112,
+     12835448,
+     13127640,
+     12742573,
+     12204669,
+     12217600,
+     12188351,
+     12419004,
+     12245306,
+     12189371,
+     12295966,
+     12412363,
+     12197658,
+     12236402
+    ],
+    "out_tok": [
+     16,
+     16,
+     16,
+     16,
+     16,
+     16,
+     16,
+     16,
+     16,
+     16,
+     16,
+     16,
+     16,
+     16,
+     16,
+     16,
+     16,
+     16,
+     16,
+     16,
+     16,
+     16,
+     16,
+     16,
+     16
+    ],
+    "prompt_tok": [
+     1937,
+     1935,
+     1938,
+     1937,
+     1935,
+     1937,
+     1935,
+     1936,
+     1935,
+     1937,
+     1936,
+     1933,
+     1934,
+     1932,
+     1932,
+     1933,
+     1931,
+     1933,
+     1936,
+     1934,
+     1935,
+     1934,
+     1935,
+     1936,
+     1931
+    ],
+    "round": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     2,
+     2,
+     2,
+     2,
+     2,
+     3,
+     3,
+     3,
+     3,
+     3,
+     4,
+     4,
+     4,
+     4,
+     4,
+     5,
+     5,
+     5,
+     5,
+     5
+    ],
+    "ttft_us": [
+     11433023,
+     11255126,
+     11130014,
+     11120954,
+     11152186,
+     11555107,
+     11140929,
+     11122529,
+     11127458,
+     11265929,
+     11159544,
+     11261909,
+     11818304,
+     12106370,
+     11736221,
+     11198946,
+     11212097,
+     11167239,
+     11417867,
+     11218385,
+     11162253,
+     11273738,
+     11359708,
+     11179964,
+     11228691
+    ]
+   }
+  }
+ },
+ "schema": "k3d-gpu.oracle.bundle/1",
+ "tool": {
+  "k3s": "v1.34.1+k3s1",
+  "node_image_digest": null,
+  "server_image": "openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58",
+  "version": "git-94f71e11d8a5a760010a028aaadcdb44df8df73e"
+ },
+ "week": "2026-W42",
+ "workload": {
+  "max_agents": null,
+  "model": {
+   "id": "OpenVINO/Qwen3-4B-int4-ov",
+   "quant": "int4",
+   "revision": "b467368d16b75df14055562fe927ae8e1f15f7ef",
+   "weights_bytes": null,
+   "weights_sha256": "074214fa29ab1b479536fc7184ef3036e7b355a5835e8590b61b70a8de1df2f9"
+  },
+  "protocol": "single-stream-v1",
+  "reps": null,
+  "single_stream": {
+   "decode": {
+    "max_tokens": 256,
+    "prompt_tokens": 30
+   },
+   "ignore_eos": true,
+   "per_round": 5,
+   "prefill": {
+    "max_tokens": 16,
+    "prompt_tokens": 1936
+   },
+   "rounds": 5
+  },
+  "slo_s": null,
+  "stop_slo_s": null,
+  "thinking": "default",
+  "time_scale": null,
+  "trace": null
+ }
+}

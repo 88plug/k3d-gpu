@@ -1,0 +1,219 @@
+{
+ "agents_per_box": 0,
+ "agents_per_box_interpolated": null,
+ "apb_at_secondary_slo_p95_only": {
+  "5.0": {
+   "agents_per_box": 0,
+   "lower_bound": true
+  }
+ },
+ "binding_limit": {
+  "at_agents": 1,
+  "detail": "pooled n 39 < 60",
+  "hardware": [
+   "cpu_thermal_throttle"
+  ],
+  "kind": "insufficient_data"
+ },
+ "bracket": {
+  "hi": 1,
+  "lo": 0
+ },
+ "bracket_start": {
+  "hi": null,
+  "lo": 0
+ },
+ "budget_s": 718.2,
+ "confounds": [
+  "synthetic, teacher-forced agent trace: measures the serving path, not task quality",
+  "access path is kubectl port-forward: every stream crosses it and its CPU use is on the box",
+  "CPU package energy (RAPL) includes the iGPU and excludes DRAM and discrete GPUs",
+  "GPU energy integrates nvidia-smi power.draw of every NVIDIA GPU in the box",
+  "net J subtracts the quiet-window power and assumes the background stays constant",
+  "box not quiet at start (forced past: cpu_busy, pkg_power): other work shares the box",
+  "CPU package thermal throttling during the ramp (+1185 events): clocks, and so latency, depend on the box's cooling and on co-running work",
+  "p95 pools requests as independent; turns of one session are correlated (per-rep p95 listed)"
+ ],
+ "drift_check": null,
+ "endpoint": {
+  "engine": "cpu",
+  "image": "openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58",
+  "model": "Qwen3-4B-int4-ov",
+  "namespace": "k3d-gpu-agent",
+  "server": "ovms",
+  "service": "k3d-gpu-agent/ovms",
+  "workload": "deployment/ovms"
+ },
+ "extra_body": {
+  "chat_template_kwargs": {
+   "enable_thinking": false
+  }
+ },
+ "finished_at": 1792260732.138335,
+ "host": {
+  "cpu_model": "13th Gen Intel(R) Core(TM) i9-13900T",
+  "kernel": "6.6.128-1-MANJARO",
+  "loadavg": "5.90 10.38 11.19 6/14135 1502360",
+  "logical_cpus": 32,
+  "pl1_w": 117.0
+ },
+ "idle": {
+  "pkg_watts": 79.32846302500414,
+  "seconds": 10.09658408164978,
+  "watts": 112.06594101913956
+ },
+ "max_agents": 32,
+ "quiet_check": {
+  "checks": [
+   {
+    "check": "cpu_busy",
+    "limit": 0.1,
+    "ok": false,
+    "value": 0.15891881827209534
+   },
+   {
+    "check": "pkg_power",
+    "limit": 40.949999999999996,
+    "ok": false,
+    "value": 79.32846302500414
+   },
+   {
+    "check": "gpu0_util",
+    "limit": 10.0,
+    "ok": true,
+    "value": 1.0
+   },
+   {
+    "check": "gpu0_power",
+    "limit": 35.0,
+    "ok": true,
+    "value": 25.91090909090909
+   },
+   {
+    "check": "gpu1_util",
+    "limit": 10.0,
+    "ok": true,
+    "value": 0.0
+   },
+   {
+    "check": "gpu1_power",
+    "limit": 25.0,
+    "ok": true,
+    "value": 6.845454545454545
+   }
+  ],
+  "forced": true,
+  "ok": false,
+  "sample": {
+   "cpu_busy": 0.15891881827209534,
+   "gpus": [
+    {
+     "index": 0,
+     "limit_w": 70.0,
+     "power_w": 25.91090909090909,
+     "util": 1.0
+    },
+    {
+     "index": 1,
+     "limit_w": 50.0,
+     "power_w": 6.845454545454545,
+     "util": 0.0
+    }
+   ],
+   "pkg_w": 79.32846302500414,
+   "pl1_w": 117.0
+  }
+ },
+ "reps": 3,
+ "schema": "k3d-gpu.capacity/1",
+ "search": "exponential-then-binary",
+ "search_status": "closed",
+ "slo_s": 10.0,
+ "started_at": 1792260340.7229674,
+ "status": "ok",
+ "step_cap_s": 718.0,
+ "steps": [
+  {
+   "agents": 1,
+   "cached_fraction": null,
+   "energy": {
+    "gpu_j": {
+     "0": 7899.6960892251,
+     "1": 2076.8665889014214
+    },
+    "gross_j": 38909.15761612652,
+    "gross_j_per_out_token": 18.69733667281428,
+    "gross_j_per_turn": 864.6479470250338,
+    "net_j": 4805.056128267752,
+    "net_j_per_out_token": 2.30901303616903,
+    "net_j_per_turn": 106.7790250726167,
+    "out_tokens": 2081,
+    "pkg_j": 28932.594938,
+    "psys_j": 54578.237354,
+    "seconds": 304.3217339515686,
+    "turns": 45
+   },
+   "error_rate": 0.0,
+   "errors": 0,
+   "hardware": {
+    "cpu_busy_mean": 0.41170333343913407,
+    "gpu": {
+     "0": {
+      "limit_w": 70.0,
+      "power_cap_frac": 0.0,
+      "power_w_mean": 25.957555555555555,
+      "thermal_frac": 0.0,
+      "util_max": 1.0,
+      "util_mean": 0.24074074074074073
+     },
+     "1": {
+      "limit_w": 50.0,
+      "power_cap_frac": 0.0,
+      "power_w_mean": 6.824962962962963,
+      "thermal_frac": 0.0,
+      "util_max": 0.0,
+      "util_mean": 0.0
+     }
+    },
+    "package_throttle_events": 1185,
+    "pkg_w_mean": 95.07239119045137,
+    "pl1_w": 117.0
+   },
+   "j_per_output_token": {
+    "gross": 18.69733667281428,
+    "net": 2.30901303616903
+   },
+   "j_per_turn": {
+    "cpu_package": 642.9465541777778,
+    "gpu": 221.70139284725605,
+    "gross": 864.6479470250338,
+    "net": 106.7790250726167
+   },
+   "n": 39,
+   "p50_s": 4.617801025975496,
+   "p95_ci95_s": [
+    9.564618596807122,
+    10.564569612033665
+   ],
+   "p95_s": 9.864913631230593,
+   "p99_s": 10.564569612033665,
+   "per_rep_p95_s": [
+    9.864913631230593
+   ],
+   "reasons": [
+    "pooled n 39 < 60"
+   ],
+   "reps": 1,
+   "seconds": 304.5320206359029,
+   "stop": "budget",
+   "tool_valid_any": 0.7333333333333333,
+   "ttft_p95_s": 2.9391273949295282,
+   "verdict": "insufficient",
+   "window_output_tok_per_s": 7.382261913202114
+  }
+ ],
+ "stop_slo_s": 10.0,
+ "time_scale": 1.0,
+ "timeout_s": 120.0,
+ "trace": "support"
+}

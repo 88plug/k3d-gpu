@@ -1,0 +1,122 @@
+{
+ "hardware": {
+  "cpu": {
+   "amx": [],
+   "e_core_cpus": 10,
+   "family": 6,
+   "hybrid": true,
+   "isa": [
+    "avx2",
+    "avx_vnni"
+   ],
+   "logical_cpus": null,
+   "microcode": null,
+   "model": "Intel(R) Core(TM) Ultra 7 255U",
+   "model_id": 181,
+   "numa_nodes": 1,
+   "p_core_cpus": 4,
+   "snc": null,
+   "sockets": 1,
+   "stepping": null
+  },
+  "dsa": {
+   "devices": 0,
+   "work_queues": 0
+  },
+  "gaudi": {
+   "devices": 0
+  },
+  "iaa": {
+   "devices": 0,
+   "work_queues": 0
+  },
+  "intel_gpus": [
+   {
+    "device_id": "0x7d41",
+    "driver": "i915",
+    "engines": {
+     "compute": 0,
+     "copy": 0,
+     "render": 0,
+     "video": 0,
+     "video_enhance": 0
+    },
+    "guc": null,
+    "huc": null,
+    "platform": "Arrow Lake-U",
+    "xmx": false
+   }
+  ],
+  "kernel": "6.12",
+  "memory": {
+   "channels": null,
+   "configured_mts": null,
+   "total_gib": null,
+   "type": null
+  },
+  "npus": [],
+  "nvidia": {
+   "driver": null,
+   "gpus": []
+  },
+  "qat": []
+ },
+ "levers": [
+  {
+   "detected": false,
+   "id": "amx",
+   "state": "unknown"
+  },
+  {
+   "detected": false,
+   "id": "dsa_dto",
+   "state": "unknown"
+  },
+  {
+   "detected": false,
+   "id": "iaa_zswap",
+   "state": "unknown"
+  },
+  {
+   "detected": false,
+   "id": "media_engines",
+   "state": "unknown"
+  },
+  {
+   "detected": false,
+   "id": "npu_offload",
+   "state": "unknown"
+  },
+  {
+   "detected": false,
+   "id": "numa_replica",
+   "state": "unknown"
+  },
+  {
+   "detected": false,
+   "id": "openvino_int4",
+   "state": "unknown"
+  },
+  {
+   "detected": true,
+   "id": "pe_pinning",
+   "state": "unknown"
+  },
+  {
+   "detected": false,
+   "id": "qat",
+   "state": "unknown"
+  },
+  {
+   "detected": true,
+   "id": "xmx_gate",
+   "state": "unknown"
+  }
+ ],
+ "power": {
+  "epp": null,
+  "pl1_w": null,
+  "pl2_w": null,
+  "platform_profile": null
+ }
+}
