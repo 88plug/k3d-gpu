@@ -11,9 +11,17 @@
 # from the host. In a k3d node those paths hold the node image's own files, and a
 # failed builtin-module read drops the whole kernel.enabledmodule feature, which
 # Intel's intel.gpu rule matches on. So the worker reads them from /k3d-gpu/host,
-# where `k3d-gpu up` bind-mounts the host's /lib/modules, /boot and /etc/os-release
-# read-only. Without those mounts the paths are empty dirs and NFD still labels
-# everything it reads from /sys, /proc and CPUID.
+# where `k3d-gpu up` bind-mounts the host's /lib/modules, /boot/config-<release>
+# and /etc/os-release read-only. Without those mounts the paths are empty dirs and
+# NFD still labels everything it reads from /sys, /proc and CPUID.
+#
+# One owner per label. The launcher sets some labels at node registration
+# (intel.feature.node.kubernetes.io/{npu,dsa,iaa,qat} once the host side is set up,
+# and cpu-cpuid.* for the CPU flags the kernel lists in /proc/cpuinfo). NFD does
+# not publish those: the intel.npu/dsa/iaa/qat rules are dropped, and nfd-worker's
+# cpuid attributeBlacklist is NFD's default list plus the launcher's names
+# (scripts/k3d-gpu nfd_cpuid_name, and every AMX* id in klauspost/cpuid v2.4.0).
+# NodeFeatureRules still match on those cpuid features; only the labels are off.
 #
 # kustomization.yaml:
 #   resources:
@@ -35,6 +43,26 @@
 #       - {op: replace, path: /spec/template/spec/volumes/5/hostPath, value: {path: /k3d-gpu/host/lib, type: DirectoryOrCreate}}
 #       - {op: test, path: /spec/template/spec/containers/0/volumeMounts/1/name, value: host-os-release}
 #       - {op: replace, path: /spec/template/spec/containers/0/volumeMounts/1/mountPath, value: /host-etc}
+#   - target: {kind: NodeFeatureRule, name: intel-dp-devices}
+#     patch: |-
+#       - {op: test, path: /spec/rules/5/name, value: intel.npu}
+#       - {op: remove, path: /spec/rules/5}
+#       - {op: test, path: /spec/rules/3/name, value: intel.qat}
+#       - {op: remove, path: /spec/rules/3}
+#       - {op: test, path: /spec/rules/2/name, value: intel.iaa}
+#       - {op: remove, path: /spec/rules/2}
+#       - {op: test, path: /spec/rules/0/name, value: intel.dsa}
+#       - {op: remove, path: /spec/rules/0}
+#   configMapGenerator:
+#   - name: nfd-worker-conf
+#     namespace: node-feature-discovery
+#     behavior: replace
+#     literals:
+#     - |-
+#       nfd-worker.conf=sources:
+#         cpu:
+#           cpuid:
+#             attributeBlacklist: [AVX10, BMI1, BMI2, CLMUL, CMOV, CX16, ERMS, F16C, HTT, LZCNT, MMX, MMXEXT, NX, POPCNT, RDRAND, RDSEED, RDTSCP, SGX, SGXLC, SSE, SSE2, SSE3, SSE4, SSE42, SSSE3, TDX_GUEST, AMXBF16, AMXCOMPLEX, AMXFP16, AMXFP8, AMXINT8, AMXTF32, AMXTILE, AMXTRANSPOSE, AVX512BF16, AVX512F, AVX512VNNI, AVXVNNI, CETIBT, CETSS, GFNI, SHA, VAES]
 ---
 apiVersion: v1
 kind: Namespace
@@ -1045,259 +1073,14 @@ metadata:
 ---
 apiVersion: v1
 data:
-  nfd-worker.conf: |
-    #core:
-    #  labelWhiteList:
-    #  noPublish: false
-    #  noOwnerRefs: false
-    #  # Select from node, pod and ds. Use [] to disable owner references.
-    #  ownerRefs: [pod, ds]
-    #  sleepInterval: 60s
-    #  featureSources: [all]
-    #  labelSources: [all]
-    #  # Discover these features but omit them from the published NodeFeature object
-    #  # to reduce its size. Exact key or '*' prefix (e.g. pci.device, pci.*).
-    #  # Only for features no NodeFeatureRule/NodeFeatureGroup consumes.
-    #  noPublishFeatures: []
-    #  klog:
-    #    addDirHeader: false
-    #    alsologtostderr: false
-    #    logBacktraceAt:
-    #    logtostderr: true
-    #    skipHeaders: false
-    #    stderrthreshold: 2
-    #    v: 0
-    #    vmodule:
-    ##   NOTE: the following options are not dynamically run-time configurable
-    ##         and require a nfd-worker restart to take effect after being changed
-    #    logDir:
-    #    logFile:
-    #    logFileMaxSize: 1800
-    #    skipLogHeaders: false
-    #sources:
-    #  cpu:
-    #    cpuid:
-    ##     NOTE: whitelist has priority over blacklist
-    #      attributeBlacklist:
-    #        - "AVX10"
-    #        - "BMI1"
-    #        - "BMI2"
-    #        - "CLMUL"
-    #        - "CMOV"
-    #        - "CX16"
-    #        - "ERMS"
-    #        - "F16C"
-    #        - "HTT"
-    #        - "LZCNT"
-    #        - "MMX"
-    #        - "MMXEXT"
-    #        - "NX"
-    #        - "POPCNT"
-    #        - "RDRAND"
-    #        - "RDSEED"
-    #        - "RDTSCP"
-    #        - "SGX"
-    #        - "SSE"
-    #        - "SSE2"
-    #        - "SSE3"
-    #        - "SSE4"
-    #        - "SSE42"
-    #        - "SSSE3"
-    #        - "TDX_GUEST"
-    #      attributeWhitelist:
-    #  kernel:
-    #    kconfigFile: "/path/to/kconfig"
-    #    configOpts:
-    #      - "NO_HZ"
-    #      - "X86"
-    #      - "DMI"
-    #  pci:
-    #    deviceClassWhitelist:
-    #      - "0200"
-    #      - "03"
-    #      - "12"
-    #    deviceLabelFields:
-    #      - "class"
-    #      - "vendor"
-    #      - "device"
-    #      - "subsystem_vendor"
-    #      - "subsystem_device"
-    #  usb:
-    #    deviceClassWhitelist:
-    #      - "0e"
-    #      - "ef"
-    #      - "fe"
-    #      - "ff"
-    #    deviceLabelFields:
-    #      - "class"
-    #      - "vendor"
-    #      - "device"
-    #  custom:
-    #    # The following feature demonstrates the capabilities of the matchFeatures
-    #    - name: "my custom rule"
-    #      labels:
-    #        "vendor.io/my-ng-feature": "true"
-    #      # matchFeatures implements a logical AND over all matcher terms in the
-    #      # list (i.e. all of the terms, or per-feature matchers, must match)
-    #      matchFeatures:
-    #        - feature: cpu.cpuid
-    #          matchExpressions:
-    #            AVX512F: {op: Exists}
-    #        - feature: cpu.cstate
-    #          matchExpressions:
-    #            enabled: {op: IsTrue}
-    #        - feature: cpu.pstate
-    #          matchExpressions:
-    #            no_turbo: {op: IsFalse}
-    #            scaling_governor: {op: In, value: ["performance"]}
-    #        - feature: cpu.rdt
-    #          matchExpressions:
-    #            RDTL3CA: {op: Exists}
-    #        - feature: cpu.sst
-    #          matchExpressions:
-    #            bf.enabled: {op: IsTrue}
-    #        - feature: cpu.topology
-    #          matchExpressions:
-    #            hardware_multithreading: {op: IsFalse}
-    #
-    #        - feature: kernel.config
-    #          matchExpressions:
-    #            X86: {op: Exists}
-    #            LSM: {op: InRegexp, value: ["apparmor"]}
-    #        - feature: kernel.loadedmodule
-    #          matchExpressions:
-    #            e1000e: {op: Exists}
-    #        - feature: kernel.selinux
-    #          matchExpressions:
-    #            enabled: {op: IsFalse}
-    #        - feature: kernel.kvm
-    #          matchExpressions:
-    #            enabled: {op: IsFalse}
-    #        - feature: kernel.version
-    #          matchExpressions:
-    #            major: {op: In, value: ["5"]}
-    #            minor: {op: Gt, value: ["10"]}
-    #
-    #        - feature: storage.block
-    #          matchExpressions:
-    #            rotational: {op: In, value: ["0"]}
-    #            dax: {op: In, value: ["0"]}
-    #
-    #        - feature: network.device
-    #          matchExpressions:
-    #            operstate: {op: In, value: ["up"]}
-    #            speed: {op: Gt, value: ["100"]}
-    #
-    #        - feature: memory.numa
-    #          matchExpressions:
-    #            node_count: {op: Gt, value: ["2"]}
-    #        - feature: memory.nv
-    #          matchExpressions:
-    #            devtype: {op: In, value: ["nd_dax"]}
-    #            mode: {op: In, value: ["memory"]}
-    #
-    #        - feature: system.osrelease
-    #          matchExpressions:
-    #            ID: {op: In, value: ["fedora", "centos"]}
-    #        - feature: system.name
-    #          matchExpressions:
-    #            nodename: {op: InRegexp, value: ["^worker-X"]}
-    #
-    #        - feature: local.label
-    #          matchExpressions:
-    #            custom-feature-knob: {op: Gt, value: ["100"]}
-    #
-    #    # The following feature demonstrates the capabilities of the matchAny
-    #    - name: "my matchAny rule"
-    #      labels:
-    #        "vendor.io/my-ng-feature-2": "my-value"
-    #      # matchAny implements a logical IF over all elements (sub-matchers) in
-    #      # the list (i.e. at least one feature matcher must match)
-    #      matchAny:
-    #        - matchFeatures:
-    #            - feature: kernel.loadedmodule
-    #              matchExpressions:
-    #                driver-module-X: {op: Exists}
-    #            - feature: pci.device
-    #              matchExpressions:
-    #                vendor: {op: In, value: ["8086"]}
-    #                class: {op: In, value: ["0200"]}
-    #        - matchFeatures:
-    #            - feature: kernel.loadedmodule
-    #              matchExpressions:
-    #                driver-module-Y: {op: Exists}
-    #            - feature: usb.device
-    #              matchExpressions:
-    #                vendor: {op: In, value: ["8086"]}
-    #                class: {op: In, value: ["02"]}
-    #
-    #    - name: "avx wildcard rule"
-    #      labels:
-    #        "my-avx-feature": "true"
-    #      matchFeatures:
-    #        - feature: cpu.cpuid
-    #          matchName: {op: InRegexp, value: ["^AVX512"]}
-    #
-    #    # The following features demonstreate label templating capabilities
-    #    - name: "my template rule"
-    #      labelsTemplate: |
-    #        {{ range .system.osrelease }}vendor.io/my-system-feature.{{ .Name }}={{ .Value }}
-    #        {{ end }}
-    #      matchFeatures:
-    #        - feature: system.osrelease
-    #          matchExpressions:
-    #            ID: {op: InRegexp, value: ["^open.*"]}
-    #            VERSION_ID.major: {op: In, value: ["13", "15"]}
-    #
-    #    - name: "my template rule 2"
-    #      labelsTemplate: |
-    #        {{ range .pci.device }}vendor.io/my-pci-device.{{ .class }}-{{ .device }}=with-cpuid
-    #        {{ end }}
-    #      matchFeatures:
-    #        - feature: pci.device
-    #          matchExpressions:
-    #            class: {op: InRegexp, value: ["^06"]}
-    #            vendor: ["8086"]
-    #        - feature: cpu.cpuid
-    #          matchExpressions:
-    #            AVX: {op: Exists}
-    #
-    #    # The following examples demonstrate vars field and back-referencing
-    #    # previous labels and vars
-    #    - name: "my dummy kernel rule"
-    #      labels:
-    #        "vendor.io/my.kernel.feature": "true"
-    #      matchFeatures:
-    #        - feature: kernel.version
-    #          matchExpressions:
-    #            major: {op: Gt, value: ["2"]}
-    #
-    #    - name: "my dummy rule with no labels"
-    #      vars:
-    #        "my.dummy.var": "1"
-    #      matchFeatures:
-    #        - feature: cpu.cpuid
-    #          matchExpressions: {}
-    #
-    #    - name: "my rule using backrefs"
-    #      labels:
-    #        "vendor.io/my.backref.feature": "true"
-    #      matchFeatures:
-    #        - feature: rule.matched
-    #          matchExpressions:
-    #            vendor.io/my.kernel.feature: {op: IsTrue}
-    #            my.dummy.var: {op: Gt, value: ["0"]}
-    #
-    #    - name: "kconfig template rule"
-    #      labelsTemplate: |
-    #        {{ range .kernel.config }}kconfig-{{ .Name }}={{ .Value }}
-    #        {{ end }}
-    #      matchFeatures:
-    #        - feature: kernel.config
-    #          matchName: {op: In, value: ["SWAP", "X86", "ARM"]}
+  nfd-worker.conf: |-
+    sources:
+      cpu:
+        cpuid:
+          attributeBlacklist: [AVX10, BMI1, BMI2, CLMUL, CMOV, CX16, ERMS, F16C, HTT, LZCNT, MMX, MMXEXT, NX, POPCNT, RDRAND, RDSEED, RDTSCP, SGX, SGXLC, SSE, SSE2, SSE3, SSE4, SSE42, SSSE3, TDX_GUEST, AMXBF16, AMXCOMPLEX, AMXFP16, AMXFP8, AMXINT8, AMXTF32, AMXTILE, AMXTRANSPOSE, AVX512BF16, AVX512F, AVX512VNNI, AVXVNNI, CETIBT, CETSS, GFNI, SHA, VAES]
 kind: ConfigMap
 metadata:
-  name: nfd-worker-conf-m45f8m9fm8
+  name: nfd-worker-conf-mkft9897h6
   namespace: node-feature-discovery
 ---
 apiVersion: apps/v1
@@ -1569,7 +1352,7 @@ spec:
           path: /etc/kubernetes/node-feature-discovery/features.d/
         name: features-d
       - configMap:
-          name: nfd-worker-conf-m45f8m9fm8
+          name: nfd-worker-conf-mkft9897h6
         name: nfd-worker-conf
 ---
 apiVersion: nfd.k8s-sigs.io/v1alpha1
@@ -1578,30 +1361,6 @@ metadata:
   name: intel-dp-devices
 spec:
   rules:
-  - labels:
-      intel.feature.node.kubernetes.io/dsa: "true"
-    matchFeatures:
-    - feature: pci.device
-      matchExpressions:
-        class:
-          op: In
-          value:
-          - "0880"
-        device:
-          op: In
-          value:
-          - 0b25
-          - 11fb
-          - "1212"
-        vendor:
-          op: In
-          value:
-          - "8086"
-    - feature: kernel.loadedmodule
-      matchExpressions:
-        idxd:
-          op: Exists
-    name: intel.dsa
   - labels:
       intel.feature.node.kubernetes.io/gpu: "true"
     matchAny:
@@ -1648,67 +1407,6 @@ spec:
           xe:
             op: Exists
     name: intel.gpu
-  - labels:
-      intel.feature.node.kubernetes.io/iaa: "true"
-    matchFeatures:
-    - feature: pci.device
-      matchExpressions:
-        class:
-          op: In
-          value:
-          - "0880"
-        device:
-          op: In
-          value:
-          - 0cfe
-          - "1216"
-        vendor:
-          op: In
-          value:
-          - "8086"
-    - feature: kernel.loadedmodule
-      matchExpressions:
-        idxd:
-          op: Exists
-    name: intel.iaa
-  - labels:
-      intel.feature.node.kubernetes.io/qat: "true"
-    matchAny:
-    - matchFeatures:
-      - feature: kernel.loadedmodule
-        matchExpressions:
-          vfio_pci:
-            op: Exists
-    - matchFeatures:
-      - feature: kernel.enabledmodule
-        matchExpressions:
-          vfio-pci:
-            op: Exists
-    matchFeatures:
-    - feature: pci.device
-      matchExpressions:
-        class:
-          op: In
-          value:
-          - 0b40
-        device:
-          op: In
-          value:
-          - 37c8
-          - "4940"
-          - "4942"
-          - "4944"
-          - "4946"
-          - "4948"
-        vendor:
-          op: In
-          value:
-          - "8086"
-    - feature: kernel.loadedmodule
-      matchExpressions:
-        intel_qat:
-          op: Exists
-    name: intel.qat
   - extendedResources:
       sgx.intel.com/epc: '@cpu.security.sgx.epc'
     labels:
@@ -1729,41 +1427,6 @@ spec:
         X86_SGX:
           op: Exists
     name: intel.sgx
-  - labels:
-      intel.feature.node.kubernetes.io/npu: "true"
-    matchAny:
-    - matchFeatures:
-      - feature: kernel.loadedmodule
-        matchExpressions:
-          intel_vpu:
-            op: Exists
-    - matchFeatures:
-      - feature: kernel.enabledmodule
-        matchExpressions:
-          intel_vpu:
-            op: Exists
-    matchFeatures:
-    - feature: pci.device
-      matchExpressions:
-        class:
-          op: In
-          value:
-          - "1200"
-        device:
-          op: In
-          value:
-          - 7e4c
-          - 643e
-          - ad1d
-          - 7d1d
-          - b03e
-          - fd3e
-          - d71d
-        vendor:
-          op: In
-          value:
-          - "8086"
-    name: intel.npu
 ---
 apiVersion: nfd.k8s-sigs.io/v1alpha1
 kind: NodeFeatureRule

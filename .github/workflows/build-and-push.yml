@@ -133,12 +133,14 @@ jobs:
           kt=$(grep '^ARG K3S_TAG' Dockerfile | cut -d= -f2 | tr -d '"')
           pp=$(grep -oE 'k8s-device-plugin:v[0-9]+\.[0-9]+\.[0-9]+' share/nvidia-device-plugin.yml | cut -d: -f2)
           ti=$(grep -oE 'K3D_GPU_TEST_IMAGE:-nvidia/cuda:[^}]*' scripts/k3d-gpu | sed 's#.*nvidia/cuda:##')
-          echo "k3s=$kt" >> "$GITHUB_OUTPUT"
-          echo "k3sdigest=$(grep '^ARG K3S_DIGEST' Dockerfile | cut -d= -f2 | tr -d '"')" >> "$GITHUB_OUTPUT"
-          echo "plugin=$pp" >> "$GITHUB_OUTPUT"
-          echo "intel=$(grep -oE 'intel-gpu-plugin:[0-9]+\.[0-9]+\.[0-9]+' share/intel-gpu-plugin.yml | cut -d: -f2)" >> "$GITHUB_OUTPUT"
-          echo "gaudi=$(grep -oE 'gaudi-device-plugin:[0-9]+\.[0-9]+\.[0-9]+-[0-9]+' share/gaudi-device-plugin.yml | cut -d: -f2)" >> "$GITHUB_OUTPUT"
-          echo "testcuda=$ti" >> "$GITHUB_OUTPUT"
+          {
+            echo "k3s=$kt"
+            echo "k3sdigest=$(grep '^ARG K3S_DIGEST' Dockerfile | cut -d= -f2 | tr -d '"')"
+            echo "plugin=$pp"
+            echo "intel=$(grep -oE 'intel-gpu-plugin:[0-9]+\.[0-9]+\.[0-9]+' share/intel-gpu-plugin.yml | cut -d: -f2)"
+            echo "gaudi=$(grep -oE 'gaudi-device-plugin:[0-9]+\.[0-9]+\.[0-9]+-[0-9]+' share/gaudi-device-plugin.yml | cut -d: -f2)"
+            echo "testcuda=$ti"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Determine if update is needed
         id: need
@@ -187,10 +189,12 @@ jobs:
           entry="| $today | ${{ steps.k3s.outputs.latest }} | ${{ steps.nvidia_plugin.outputs.latest }} | v${{ steps.intel_plugin.outputs.latest }} | ${{ steps.gaudi_plugin.outputs.latest }} |"
           awk -v e="$entry" \
               -v k3s="${{ steps.k3s.outputs.latest }}" \
+              -v k3sdigest="${{ steps.k3s.outputs.digest }}" \
               -v plugin="${{ steps.nvidia_plugin.outputs.latest }}" '
             /^## Release History/ { in_rh = 1 }
             in_rh && /^\|----------/ { print; print e; in_rh = 0; next }
             /^\| `K3S_TAG`/ { sub(/`v[0-9][^`]*-k3s[0-9]+(-amd64)?`/, "`" k3s "`"); print; next }
+            /^\| `K3S_DIGEST`/ { sub(/`sha256:[0-9a-f]+…`/, "`" substr(k3sdigest, 1, 15) "…`"); print; next }
             /k8s-device-plugin\/v[0-9]/ { sub(/v[0-9]+\.[0-9]+\.[0-9]+/, plugin); print; next }
             { print }
           ' README.md > README.md.new && mv README.md.new README.md

@@ -64,9 +64,9 @@ COPY share/intel-qat-plugin.yml /var/lib/rancher/k3s/server/manifests/intel-qat-
 # one NUMA node.
 COPY share/nri-balloons.yml /var/lib/rancher/k3s/server/manifests/nri-balloons.yaml
 # Node Feature Discovery plus Intel's NodeFeatureRules, on every node: labels CPU
-# features (cpu-cpuid.*), PCI devices and intel.feature.node.kubernetes.io/* from
-# the host. The launcher's own labels stay as a fallback that exists from node
-# registration on.
+# features (cpu-cpuid.*), kernel, PCI devices and intel.feature.node.kubernetes.io/gpu
+# from the host. Labels the launcher sets at node registration (npu/dsa/iaa/qat and
+# its cpu-cpuid names) are left to the launcher, so each label has one owner.
 COPY share/node-feature-discovery.yml /var/lib/rancher/k3s/server/manifests/node-feature-discovery.yaml
 
 # CDI spec directories. containerd 2.x (k3s 1.34 and newer) enables CDI by default and scans

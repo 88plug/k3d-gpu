@@ -2241,9 +2241,10 @@ cmd_up() {
     # image has its own /boot, /lib and /etc, so share the host's kernel config,
     # builtin-module list and os-release read-only under /k3d-gpu/host, where the
     # baked nfd-worker looks. A separate path keeps the host's modules out of the
-    # node's own /lib/modules, so nothing in the node can modprobe them.
+    # node's own /lib/modules, so nothing in the node can modprobe them. From /boot
+    # only the running kernel's config is shared, not kernel images or initramfs.
     local src
-    for src in lib/modules boot etc/os-release; do
+    for src in lib/modules "boot/config-$(kernel_release)" etc/os-release; do
         if [ -e "${SYSROOT}/${src}" ]; then
             create_args+=(--volume="${SYSROOT}/${src}:${NFD_HOST_DIR}/${src}:ro@server:*;agent:*")
         fi
