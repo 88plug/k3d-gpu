@@ -478,6 +478,60 @@ is deleted.
 | `K3D_GPU_AGENT_LOG_LEVEL` | `INFO` | `DEBUG` also logs the compiled model's execution device (and every request) |
 | `K3D_GPU_AGENT_IMAGE` | `openvino/model_server@sha256:a928…fc58` (2026.4.1-gpu) | server image |
 
+### Chat UI for the agent (optional)
+
+`share/agent-chat-ui.yml` (installed as `/usr/share/k3d-gpu/agent-chat-ui.yml`)
+runs [Open WebUI](https://github.com/open-webui/open-webui) v0.12.2, pinned by
+digest, in front of the agent's OpenVINO Model Server. It is not deployed by
+`up`; apply it when you want it. Its only backend is the `svc/ovms` that
+`k3d-gpu agent up` creates, so start the agent first:
+
+```bash
+# Optional, before the first apply: create the admin account up front.
+kubectl create namespace k3d-gpu-agent
+kubectl -n k3d-gpu-agent create secret generic open-webui-admin \
+  --from-literal=email=you@example.com --from-literal=password='<long random password>'
+
+kubectl apply -f /usr/share/k3d-gpu/agent-chat-ui.yml
+kubectl -n k3d-gpu-agent rollout status deploy/open-webui --timeout=300s
+kubectl -n k3d-gpu-agent port-forward svc/open-webui 8080:8080   # open http://localhost:8080
+```
+
+| Setting | Value |
+|---------|-------|
+| Connection | `OPENAI_API_BASE_URL=http://ovms.k3d-gpu-agent.svc:8000/v3` — OVMS serves the OpenAI API under `/v3`, not `/v1`. Open WebUI lists the models from `/v3/models`; `DEFAULT_MODELS=Qwen3-4B-int4-ov`. Ollama is off. |
+| Placement | pod label `k3d-gpu.io/cores=efficient`, 1 CPU request: on a hybrid CPU the UI runs on E-cores and leaves the P-cores to inference. No effect on other hosts. |
+| Storage | PVC `open-webui-data` (2Gi, `local-path`) at `/data` (`DATA_DIR`): users, chats, settings, uploads and the session key. |
+
+Security:
+
+- **Sign-in is on** (`WEBUI_AUTH=True`). With the `open-webui-admin` Secret the
+  admin account is created on first start and self sign-up is switched off.
+  Without it, **the first account to sign up becomes admin** — do that right
+  after the first apply. Later sign-ups wait for admin approval
+  (`DEFAULT_USER_ROLE=pending`).
+- The session-signing key (`WEBUI_SECRET_KEY`) is generated on first start into
+  `/data/.webui_secret_key`. No secret sits in the manifest; deleting the PVC
+  logs everyone out.
+- The Service is `ClusterIP`. `kubectl port-forward` listens on 127.0.0.1 only.
+  Do not expose it with a NodePort, LoadBalancer or `--address 0.0.0.0` without
+  TLS in front. Traffic to OVMS stays in the cluster, and OVMS itself has no
+  API key, so anything that can reach `svc/ovms` can use the model.
+- `OFFLINE_MODE=True`: no Hugging Face downloads and no version checks; the
+  embedding models baked into the image are used. `ENABLE_COMMUNITY_SHARING=False`.
+  The image already disables its analytics (`SCARF_NO_ANALYTICS`, `DO_NOT_TRACK`,
+  `ANONYMIZED_TELEMETRY=false`).
+- The image runs as root (it writes under `/app/backend` at runtime); the pod
+  sets `allowPrivilegeEscalation: false` and the `RuntimeDefault` seccomp profile.
+- Open WebUI keeps its settings in the database after the first start
+  (`ENABLE_PERSISTENT_CONFIG`), so later edits to these env values do not apply
+  to an existing PVC; change them in Admin Panel > Settings > Connections.
+
+Remove it and its data, leaving the agent alone:
+`kubectl -n k3d-gpu-agent delete deploy/open-webui svc/open-webui pvc/open-webui-data`.
+(`kubectl delete -f` on the manifest would also delete the `k3d-gpu-agent`
+namespace, and with it the agent.)
+
 ### Inventory report
 
 `k3d-gpu report` says what this host and cluster actually have, engine by
