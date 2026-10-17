@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'sha256-6s3ARK7lKBwvnBBXuveIF9AvsXunuRjywpLAbDjuDiY='; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>k3d-gpu report: (hostname not set)</title>
+<style>:root{--bg:#fbfbf9;--fg:#1d1d1b;--mut:#6a6a64;--line:#deded7;--panel:#f2f2ed;--code:#ecece6;
+--green:#1d7a3e;--green-bg:#e3f3e8;--amber:#8a5a00;--amber-bg:#fbefd6;--red:#a52a2a;--red-bg:#f8e3e1;
+--blue:#2a5a9a;--blue-bg:#e4ecf7;--grey:#5f5f59;--grey-bg:#ecece6;--link:#2a5a9a}
+@media (prefers-color-scheme:dark){:root{--bg:#151514;--fg:#e9e9e3;--mut:#9d9d95;--line:#34342f;
+--panel:#1d1d1b;--code:#272724;--green:#6cd08e;--green-bg:#17301f;--amber:#e8b45a;--amber-bg:#33280f;
+--red:#ef8a80;--red-bg:#3a1c19;--blue:#8db4ea;--blue-bg:#1a2638;--grey:#b0b0a8;--grey-bg:#2a2a27;--link:#8db4ea}}
+*{box-sizing:border-box}
+body{margin:0;padding:28px 16px 40px;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:1040px;margin:0 auto}
+header{border-bottom:2px solid var(--fg);padding-bottom:12px;margin-bottom:20px}
+h1{font-size:22px;margin:0;letter-spacing:-.01em}
+.sub{color:var(--mut);margin:4px 0 0;overflow-wrap:anywhere}
+h2{font-size:12px;margin:30px 0 10px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut)}
+h3{font-size:14px;margin:18px 0 6px}
+.verdict{border:1px solid var(--line);border-left:6px solid var(--grey);background:var(--panel);padding:14px 16px;border-radius:4px}
+.verdict.green{border-left-color:var(--green)}.verdict.unmeasured{border-left-color:var(--amber)}
+.verdict ul{margin:8px 0 0;padding-left:18px}
+code{font:12.5px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--code);padding:1px 4px;border-radius:3px;overflow-wrap:anywhere}
+a{color:var(--link);overflow-wrap:anywhere}
+.wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;margin:4px 0}
+th,td{border:1px solid var(--line);padding:5px 8px;vertical-align:top;text-align:left}
+thead th{background:var(--panel);font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut)}
+tbody th{background:var(--panel);font-weight:600;white-space:nowrap;width:1%}
+table.findings{table-layout:fixed}table.findings th:first-child{width:84px}
+td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.badge{display:inline-block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:1px 7px;border-radius:10px;white-space:nowrap}
+.green,.ok{color:var(--green);background:var(--green-bg)}
+.amber,.warn{color:var(--amber);background:var(--amber-bg)}
+.fail{color:var(--red);background:var(--red-bg)}
+.info{color:var(--blue);background:var(--blue-bg)}
+.grey,.note,.other{color:var(--grey);background:var(--grey-bg)}
+.verdict .badge{margin-right:6px}
+.mut{color:var(--mut)}
+dl{margin:4px 0 0;display:grid;grid-template-columns:max-content 1fr;gap:2px 10px;font-size:13px}
+dt{color:var(--mut)}dd{margin:0;overflow-wrap:anywhere}
+.counts{margin:4px 0 8px}.counts .badge{margin-right:4px}
+.good{color:var(--mut);margin:2px 0 6px;font-size:13px}
+footer{margin-top:36px;padding-top:12px;border-top:1px solid var(--line);color:var(--mut);font-size:12.5px}
+footer p{margin:4px 0}
+@media print{body{padding:0}.wrap{overflow:visible}a{color:inherit}}</style></head><body><main>
+<header><h1>k3d-gpu report: (hostname not set)</h1>
+<p class="sub">facts/v1 <code>sha256:14bb456496ba3661edb47f47a9859c9479855bc5b48081c46a60e3eafa45b4b8</code> · k3d-gpu &lt;version&gt; · kernel 6.18.1-061801-generic</p></header>
+<h2>What runs on this box</h2>
+<div class="verdict unmeasured"><span class="badge amber">unmeasured</span><strong>unmeasured, run <code>k3d-gpu prove</code> on this box</strong><ul><li>bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)</li></ul></div>
+<h2>Hardware targets</h2>
+<div class="wrap"><table><thead><tr><th>target</th><th>what it is</th><th>resource</th><th>state</th></tr></thead><tbody><tr><td><code>cpu</code></td><td>Intel(R) Xeon(R) 6780E</td><td><span class="mut">none</span></td><td><span class="badge ok">usable</span></td></tr></tbody></table></div>
+<h2>Matrix cells considered</h2>
+<div class="wrap"><table><thead><tr><th>cell</th><th>status</th><th>target</th><th>eligible</th><th>reasons</th></tr></thead><tbody><tr><td><code>raptorlake-s.cpu-pcores.ovms.qwen3-4b-int4</code></td><td><span class="badge grey">grey</span></td><td><span class="mut">no target here</span></td><td>no</td><td>no k3d-gpu report run recorded<br>tool-calling eval not run<br>excluded: no target on this host matches</td></tr><tr><td><code>raptorlake-s.uhd770.ovms.qwen3-4b-int4</code></td><td><span class="badge grey">grey</span></td><td><span class="mut">no target here</span></td><td>no</td><td>no k3d-gpu report run recorded<br>tool-calling eval not run<br>excluded: no target on this host matches</td></tr></tbody></table></div>
+<h2>Capacity</h2>
+<p class="mut">No capacity run recorded on this host; run <code>k3d-gpu prove</code>.</p>
+<h2>doctor</h2><p class="counts"><span class="badge ok">8 ok</span> <span class="badge info">2 info</span> <span class="badge warn">1 warn</span> <span class="mut">exit 0</span></p><h3>Checking docker...</h3><div class="wrap"><table class="findings"><thead><tr><th>level</th><th>finding</th></tr></thead><tbody><tr><td><span class="badge ok">ok</span></td><td>docker running</td></tr></tbody></table></div><h3>Checking k3d...</h3><div class="wrap"><table class="findings"><thead><tr><th>level</th><th>finding</th></tr></thead><tbody><tr><td><span class="badge ok">ok</span></td><td>k3d version v0.0.0-stub</td></tr></tbody></table></div><h3>Checking kubectl...</h3><div class="wrap"><table class="findings"><thead><tr><th>level</th><th>finding</th></tr></thead><tbody><tr><td><span class="badge ok">ok</span></td><td><span class="mut">(no text)</span></td></tr></tbody></table></div><h3>Intel CPU built-in accelerators...</h3><div class="wrap"><table class="findings"><thead><tr><th>level</th><th>finding</th></tr></thead><tbody><tr><td><span class="badge ok">ok</span></td><td>CPU ISA: AVXVNNI — up labels nodes feature.node.kubernetes.io/cpu-cpuid.&lt;name&gt;=true (NFD names)</td></tr><tr><td><span class="badge ok">ok</span></td><td>DSA: 2 device(s), 1 user work queue(s) — deployed by &#x27;k3d-gpu up&#x27; (intel-dsa-plugin)</td></tr><tr><td><span class="badge ok">ok</span></td><td>IAA: 2 device(s), 1 user work queue(s) — deployed by &#x27;k3d-gpu up&#x27; (intel-iaa-plugin)</td></tr><tr><td><span class="badge info">info</span></td><td>RDT allocation (rdt_a: cat_l3 cdp_l3 mba) — resctrl classes are available but left off: the balloons policy ships control.rdt.enable: false because enabling it rewrites the host&#x27;s /sys/fs/resctrl. To opt in, mount resctrl on the host (mount -t resctrl resctrl /sys/fs/resctrl) and set control.rdt.enable: true in nri-balloons.yml; usePodQoSAsDefaultClass then gives BestEffort/Burstable/Guaranteed pods 33%/66%/100% of the L3</td></tr><tr><td><span class="badge info">info</span></td><td>per socket: socket 0: DSA 2, IAA 2, QAT 0 (ARK default for 6780E: DSA 2, IAA 2, QAT 2 per socket)</td></tr><tr><td><span class="badge warn">warn</span></td><td>socket 0: QAT 0 below the ARK default for 6780E — the BIOS may have the device disabled; check its accelerator settings</td></tr></tbody></table></div><h3>Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or &lt;name,...&gt;)...</h3><div class="wrap"><table class="findings"><thead><tr><th>level</th><th>finding</th></tr></thead><tbody><tr><td><span class="badge ok">ok</span></td><td>dra available (auto)</td></tr><tr><td><span class="badge ok">ok</span></td><td>image-volume available (auto)</td></tr></tbody></table></div>
+<h2>doctor --perf</h2><p class="counts"><span class="badge info">2 info</span> <span class="mut">exit 0</span></p><h3>CPU frequency (driver none)</h3><p class="good">good: cores ramp to full turbo the moment a request arrives: EPP performance or balance_performance, turbo on, no frequency caps — token generation is a latency-bound loop and every ramp-up shows in time-to-first-token</p><p class="good">sources: <a href="https://docs.kernel.org/admin-guide/pm/intel_pstate.html#energy-vs-performance-hints" rel="noreferrer">https://docs.kernel.org/admin-guide/pm/intel_pstate.html#energy-vs-performance-hints</a>, <a href="https://docs.kernel.org/admin-guide/pm/cpufreq.html" rel="noreferrer">https://docs.kernel.org/admin-guide/pm/cpufreq.html</a></p><div class="wrap"><table class="findings"><thead><tr><th>level</th><th>finding</th></tr></thead><tbody><tr><td><span class="badge info">info</span></td><td>no cpufreq policy exposed (VM or cpufreq disabled) — nothing to tune here<dl><dt>from</dt><dd>/sys/devices/system/cpu/cpu0/cpufreq/</dd></dl></td></tr></tbody></table></div><h3>Isolation for sandboxed agents</h3><p class="good">good: /dev/kvm usable for microVM sandboxes, each GPU alone in its IOMMU group, split-lock detection on, CET known, GPU observation streams limited to CAP_PERFMON</p><p class="good">sources: <a href="https://docs.kernel.org/driver-api/vfio.html" rel="noreferrer">https://docs.kernel.org/driver-api/vfio.html</a> (IOMMU groups), <a href="https://docs.kernel.org/admin-guide/kernel-parameters.html" rel="noreferrer">https://docs.kernel.org/admin-guide/kernel-parameters.html</a> (split_lock_detect), <a href="https://docs.kernel.org/admin-guide/sysctl/kernel.html" rel="noreferrer">https://docs.kernel.org/admin-guide/sysctl/kernel.html</a> (split_lock_mitigate), kernel source drivers/gpu/drm/i915/i915_perf.c and drivers/gpu/drm/xe/xe_observation.c (paranoid sysctls), Intel SDM vol. 4 335592-093 (IA32_S_CET 6A2H, IA32_TME_ACTIVATE 982H)</p><div class="wrap"><table class="findings"><thead><tr><th>level</th><th>finding</th></tr></thead><tbody><tr><td><span class="badge info">info</span></td><td>no VT-x (vmx flag) exposed: no microVM sandboxes (VT-x off in BIOS, or a VM without nested virtualization)<dl><dt>from</dt><dd>/proc/cpuinfo</dd></dl></td></tr></tbody></table></div>
+<h2>Cluster</h2>
+<p>not present: no kubeconfig context k3d-gpu (cluster not created, or KUBECONFIG points elsewhere)</p>
+<h2>Host inventory</h2>
+<div class="wrap"><table><tbody><tr><th>cpu</th><td><div class="wrap"><table><tbody><tr><th>amx</th><td><span class="mut">none</span></td></tr><tr><th>avx512</th><td>no</td></tr><tr><th>avx_vnni</th><td>yes</td></tr><tr><th>e_core_cpus</th><td><span class="mut">null</span></td></tr><tr><th>e_cores</th><td><span class="mut">null</span></td></tr><tr><th>hybrid</th><td>no</td></tr><tr><th>isa</th><td><code>avx2</code>, <code>avx_vnni</code></td></tr><tr><th>logical_cpus</th><td><span class="mut">null</span></td></tr><tr><th>model</th><td>Intel(R) Xeon(R) 6780E</td></tr><tr><th>online</th><td><span class="mut">null</span></td></tr><tr><th>p_core_cpus</th><td><span class="mut">null</span></td></tr><tr><th>p_cores</th><td><span class="mut">null</span></td></tr></tbody></table></div></td></tr><tr><th>dsa</th><td><div class="wrap"><table><tbody><tr><th>devices</th><td>2</td></tr><tr><th>work_queues</th><td>1</td></tr></tbody></table></div></td></tr><tr><th>gaudi</th><td><div class="wrap"><table><tbody><tr><th>accel_nodes</th><td>0</td></tr><tr><th>driver_loaded</th><td>no</td></tr><tr><th>pci_devices</th><td>0</td></tr></tbody></table></div></td></tr><tr><th>iaa</th><td><div class="wrap"><table><tbody><tr><th>devices</th><td>2</td></tr><tr><th>work_queues</th><td>1</td></tr></tbody></table></div></td></tr><tr><th>intel_gpus</th><td><span class="mut">none</span></td></tr><tr><th>kernel</th><td>6.18.1-061801-generic</td></tr><tr><th>memory</th><td><div class="wrap"><table><tbody><tr><th>available_kib</th><td><span class="mut">null</span></td></tr><tr><th>total_kib</th><td><span class="mut">null</span></td></tr></tbody></table></div></td></tr><tr><th>npus</th><td><span class="mut">none</span></td></tr><tr><th>nvidia</th><td><div class="wrap"><table><tbody><tr><th>driver</th><td><span class="mut">null</span></td></tr><tr><th>gpus</th><td><span class="mut">none</span></td></tr></tbody></table></div></td></tr><tr><th>qat</th><td><span class="mut">none</span></td></tr><tr><th>rapl</th><td><span class="mut">none</span></td></tr></tbody></table></div>
+<h2>Detected</h2>
+<div class="wrap"><table><tbody><tr><th>dsa</th><td><code>dsa.intel.com/*</code></td></tr><tr><th>iaa</th><td><code>iaa.intel.com/*</code></td></tr></tbody></table></div>
+<h2>Node labels</h2>
+<div class="wrap"><table><tbody><tr><th>feature.node.kubernetes.io/cpu-cpuid.AVXVNNI</th><td>true</td></tr></tbody></table></div>
+<h2>Release pins</h2>
+<div class="wrap"><table><tbody><tr><th>ovms</th><td>openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58</td></tr></tbody></table></div>
+<footer>
+<p>Rendered from facts/v1, sha256 of its canonical bytes <code>b7dd7a99952d1ef6200ae626716533eaa51096bb056ea62f3ff4893729d7c4a3</code>, and plan/v1.</p>
+<p>This page runs no script and loads nothing: its Content-Security-Policy is <code>default-src 'none'</code>. The links are references to follow, not resources it fetches.</p>
+<p><a href="https://github.com/88plug/k3d-gpu" rel="noreferrer">https://github.com/88plug/k3d-gpu</a></p>
+</footer></main></body></html>

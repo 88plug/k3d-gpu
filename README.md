@@ -1037,6 +1037,16 @@ not an engine; a Gaudi without its driver plans the same way. `agent up` follows
 the same verdict: `auto` uses OVMS on the CPU and says why, and
 `K3D_GPU_AGENT_DEVICE=GPU` stops with the fix.
 
+`k3d-gpu facts --html` prints `report.html`, the page of a Proof Pack: the
+plan's decision, every target, the matrix cells considered, capacity rows, every
+doctor and doctor --perf finding, and the host inventory, rendered from facts/v1
+by `console/report_html.py`. It is one self-contained file: inline styles only,
+no script, and a Content-Security-Policy of `default-src 'none'`, so it opens
+offline and fetches nothing. The only URLs in it are links a reader can follow
+(the finding sources and the project page). `--facts FILE` renders a saved
+facts/v1 document and `--matrix FILE` a different matrix. The page takes nothing
+from the clock, so the same facts give the same bytes.
+
 ### Measurement harness (`bench/`)
 
 Small tools for measuring workloads on a k3d-gpu cluster. They are not

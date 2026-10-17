@@ -103,6 +103,11 @@ Include relevant details:
   and for the firmware gatekeeper's fallback (`raptorlake-stale-guc` against the
   synthetic `tests/console/matrix-fallback.json`) in `tests/console/`
   (`tests/console_test.sh --update` rewrites those).
+- `tests/report_html_test.sh` covers `facts --html`: a `report.html` golden per
+  fixture plus `tests/console/green-report.html`, a static check that nothing in
+  them can fetch, and a headless Chromium load inside a network namespace whose
+  net log must show no request from the page (`--update` rewrites the goldens;
+  set `K3D_GPU_CHROME` to pick the browser).
 - Have hardware the matrix lacks? Capture it (reads ids, driver bindings, device
   node names, CPU flags, kernel release and firmware file names; as root also the
   GuC/HuC firmware records from debugfs):
