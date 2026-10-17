@@ -125,9 +125,9 @@ check "legacy initialize echoes a supported version" "${out}" \
 check "serverInfo carries the launcher's version" "${out}" 'r[1]["result"]["serverInfo"]["version"] == "9.8.7"'
 check "notifications get no reply" "${out}" 'len(lines) == 3'
 check "legacy tools/list after initialize needs no _meta" "${out}" \
-    '[t["name"] for t in r[2]["result"]["tools"]] == ["accelerators", "recommend_placement", "agent_endpoint", "cluster_health"]'
-check "every tool has an object inputSchema and is read-only" "${out}" \
-    'all(t["inputSchema"]["type"] == "object" and t["annotations"]["readOnlyHint"] for t in r[2]["result"]["tools"])'
+    '[t["name"] for t in r[2]["result"]["tools"]] == ["accelerators", "recommend_placement", "agent_endpoint", "cluster_health", "hardware", "plan_launch", "apply"]'
+check "every tool has an object inputSchema and every tool but apply is read-only" "${out}" \
+    'all(t["inputSchema"]["type"] == "object" and t["annotations"]["readOnlyHint"] == (t["name"] != "apply") for t in r[2]["result"]["tools"])'
 check "legacy ping answers an empty result" "${out}" 'r[3]["result"]["resultType"] == "complete"'
 
 out=$(session "${d}" '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}
@@ -144,7 +144,7 @@ check "server/discover advertises 2026-07-28 and the legacy versions" "${out}" \
 check "server/discover result is complete, cacheable, self-identified" "${out}" \
     'r["d"]["result"]["resultType"] == "complete" and r["d"]["result"]["ttlMs"] >= 0 and r["d"]["result"]["cacheScope"] == "public" and r["d"]["result"]["_meta"]["io.modelcontextprotocol/serverInfo"]["version"]'
 check "modern tools/list carries resultType, ttlMs and cacheScope" "${out}" \
-    'r[2]["result"]["resultType"] == "complete" and "ttlMs" in r[2]["result"] and r[2]["result"]["cacheScope"] in ("public", "private") and len(r[2]["result"]["tools"]) == 4'
+    'r[2]["result"]["resultType"] == "complete" and "ttlMs" in r[2]["result"] and r[2]["result"]["cacheScope"] in ("public", "private") and len(r[2]["result"]["tools"]) == 7'
 
 out=$(session "${d}" '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"1900-01-01","io.modelcontextprotocol/clientCapabilities":{}}}}
 {"jsonrpc":"2.0","id":2,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}
@@ -170,7 +170,7 @@ check "per-request _meta with a legacy version and no initialize: -32022" "${out
     'r[1]["error"]["code"] == -32022 and r[1]["error"]["data"]["requested"] == "2025-11-25" and "initialize" in r[1]["error"]["message"]'
 out=$(session "${d}" '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}
 {"jsonrpc":"2.0","id":2,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2025-11-25","io.modelcontextprotocol/clientCapabilities":{}}}}')
-check "legacy session may still carry its version in _meta" "${out}" 'len(r[2]["result"]["tools"]) == 4'
+check "legacy session may still carry its version in _meta" "${out}" 'len(r[2]["result"]["tools"]) == 7'
 
 # ---- accelerators ------------------------------------------------------------------
 

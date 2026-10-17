@@ -145,10 +145,11 @@ Usage: k3d-gpu <command>
             document, schema facts/v1; writes ~/.local/state/k3d-gpu/facts.json
             (--json prints it only). detect --json and doctor --json print the same.
             --html prints a self-contained report.html (no script, no fetches)
-  plan [--explain|--json] [--engine E] [--device cpu|gpu|npu|hpu] [--model M]
+  plan [--explain|--json|--hash] [--engine E] [--device cpu|gpu|npu|hpu] [--model M]
        [--bind ADDR] [--port N] [--facts FILE] [--matrix FILE]
             Engine, model and placement for this box, picked only from measured
             (green) matrix cells; with none it says "unmeasured, run prove"
+            --hash prints the plan hash: sha256 of the --json output
   audit [--json|--observe] [--observed FILE] [--plan FILE] [--lock FILE]
             Posture checks of the running cluster: fails on an unauthenticated
             listener off loopback, an image not pinned in images.lock, a runtime
@@ -156,6 +157,10 @@ Usage: k3d-gpu <command>
   sandbox up|down|status
             Install kubernetes-sigs/agent-sandbox with a warm pool of sandboxes on
             E-cores (k3d-gpu.io/cores=efficient), check where they run, or remove it
+  apply --plan-hash H [--engine E] [--device D] [--model M] [--port N]
+            Run the plan ('agent up' with its image, device, model and P-core
+            count) only if the plan, recomputed now with the same options,
+            still hashes to H; a plan on a port other than 8000 is refused
   version   Show version
   help      Show this message
 
@@ -6191,14 +6196,15 @@ cmd_facts() {
     info "Wrote ${state}/facts.json"
 }
 
-# plan [--explain|--json] [--facts FILE] [--matrix FILE] [--engine E] [--device D]
-#      [--model M] [--bind ADDR] [--port N]
+# plan [--explain|--json|--hash] [--facts FILE] [--matrix FILE] [--engine E]
+#      [--device D] [--model M] [--bind ADDR] [--port N]
 cmd_plan() {
     local dir mode=text facts="" matrix="" args=() out
     while [ $# -gt 0 ]; do
         case "$1" in
             --explain) mode=explain ;;
             --json) mode=json ;;
+            --hash) mode="hash" ;;
             --facts|--matrix|--engine|--device|--model|--bind|--port)
                 [ $# -ge 2 ] || err "plan: $1 needs a value"
                 case "$1" in
@@ -6207,7 +6213,7 @@ cmd_plan() {
                     *) args+=("$1" "$2") ;;
                 esac
                 shift ;;
-            *) err "unknown plan option: $1 (use --explain, --json, --facts, --matrix, --engine, --device, --model, --bind, --port)" ;;
+            *) err "unknown plan option: $1 (use --explain, --json, --hash, --facts, --matrix, --engine, --device, --model, --bind, --port)" ;;
         esac
         shift
     done
@@ -6302,6 +6308,52 @@ cmd_audit() {
     python3 "${dir}/audit.py" check --mode "${mode}" --lock "${lock}" ${args[@]+"${args[@]}"} <<< "${out}"
 }
 
+# apply --plan-hash sha256:<hex> [--facts FILE] [--matrix FILE] [--engine E]
+#       [--device D] [--model M] [--port N]
+# The one write a plan leads to: `agent up` with the plan's OVMS image, device,
+# model and P-core count. It recomputes the plan with the same options and runs only when that
+# plan's hash equals --plan-hash, the hash a human read from `plan --hash` (or
+# confirmed in their MCP client). A changed host, matrix or option set gives a
+# different hash, and apply refuses. There is no --bind: an off-loopback
+# listener needs the OIDC front of `share`, which is not built. A plan whose
+# endpoint port is not 8000, the only port agent up serves, is refused.
+cmd_apply() {
+    local confirmed="" plan_args=() doc got fields decision engine device image model port cpus message
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --plan-hash|--facts|--matrix|--engine|--device|--model|--port)
+                [ $# -ge 2 ] || err "apply: $1 needs a value"
+                if [ "$1" = --plan-hash ]; then confirmed=$2; else plan_args+=("$1" "$2"); fi
+                shift ;;
+            *) err "unknown apply option: $1 (use --plan-hash, --facts, --matrix, --engine, --device, --model, --port)" ;;
+        esac
+        shift
+    done
+    [[ "${confirmed}" =~ ^sha256:[0-9a-f]{64}$ ]] \
+        || err "apply: --plan-hash sha256:<64 hex> is required; read it from 'k3d-gpu plan --hash' with the same options"
+    doc=$(cmd_plan --json ${plan_args[@]+"${plan_args[@]}"}) || err "apply: could not compute the plan"
+    got="sha256:$(printf '%s\n' "${doc}" | sha256sum | cut -d' ' -f1)"
+    [ "${got}" = "${confirmed}" ] \
+        || err "apply: refused, the plan now hashes to ${got}, not the confirmed ${confirmed} (the host, matrix or options changed); review 'k3d-gpu plan --explain' and confirm the new hash"
+    fields=$(python3 -c 'import json, sys
+d = json.load(sys.stdin)
+e, m, p = d["engine"] or {}, d["model"] or {}, d["placement"] or {}
+print(d["decision"], e.get("name") or "-", e.get("device") or "-", e.get("image") or "-", m.get("name") or "-",
+      d["port"] or "-", p.get("cpu_count") or "-", d["message"] or "")' <<< "${doc}") \
+        || err "apply: could not read the plan"
+    read -r decision engine device image model port cpus message <<< "${fields}"
+    [ "${decision}" = green ] || err "apply: refused, the plan has no engine: ${message}"
+    [ "${engine}" = ovms ] || err "apply: refused, no apply path for engine ${engine} yet (only ovms, through 'k3d-gpu agent up')"
+    # agent up serves OVMS on port 8000 only; the confirmed endpoint must be the one that runs.
+    [ "${port}" = 8000 ] || err "apply: refused, the plan's endpoint port ${port} is not the port 'k3d-gpu agent up' serves (8000); plan without --port"
+    # The plan's P-core count sizes the request (and the balloon); "-" leaves it to agent up.
+    [ "${cpus}" != - ] || cpus=""
+    info "apply: plan ${confirmed}"
+    info "apply: K3D_GPU_AGENT_BACKEND=ovms K3D_GPU_AGENT_DEVICE=${device} K3D_GPU_AGENT_MODEL=${model} K3D_GPU_AGENT_IMAGE=${image}${cpus:+ K3D_GPU_AGENT_CPUS=${cpus}} k3d-gpu agent up"
+    K3D_GPU_AGENT_BACKEND=ovms K3D_GPU_AGENT_DEVICE="${device}" K3D_GPU_AGENT_MODEL="${model}" \
+        K3D_GPU_AGENT_IMAGE="${image}" K3D_GPU_AGENT_CPUS="${cpus}" exec "$(readlink -f "${BASH_SOURCE[0]}")" agent up
+}
+
 # K3D_GPU_EXPERIMENTAL=list prints the feature table with any command; any
 # other value is checked up front, so an unknown name fails before anything runs.
 if exp_is_list; then
@@ -6325,6 +6377,7 @@ case "${1:-help}" in
     plan)    shift; cmd_plan "$@" ;;
     audit)   shift; cmd_audit "$@" ;;
     sandbox) cmd_sandbox "${2:-}" ;;
+    apply)   shift; cmd_apply "$@" ;;
     version|--version|-v) echo "k3d-gpu ${VERSION}" ;;
     help|--help|-h) usage ;;
     *) usage; exit 1 ;;
