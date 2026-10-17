@@ -595,6 +595,9 @@ for c in 20 21; do cpucache "${r}" "${c}" 2 20-21; corecpus "${r}" "${c}" "${c}"
 doctor_says "atom CPUs without an L3 are LP E-cores" "${r}" 'ok: hybrid CPU: P-cores 0-11, E-cores 12-19, LP E-cores 20-21 '
 doctor_says "doctor offers the new core labels" "${r}" 'k3d-gpu.io/cores=performance\|efficient\|lowpower\|ecluster\|pcore-physical\|latency'
 doctor_says "E-core clusters come from the shared L2" "${r}" 'ok: E-core clusters \(shared L2\): 12-15 16-19 '
+doctor_says "hybrid, no rdt_a, E-core clusters: cpu-cap, ecluster not recommended" "${r}" \
+    'info: noisy-neighbour isolation: cpu-cap — no rdt_a flag, .*k3d-gpu.io/cores=ecluster) is not recommended'
+doctor_says "isolation never claims a measured effect" "${r}" 'isolation: .*(SUPPORTED|faster|% )' negate
 doctor_says "physical P-cores are the first thread of each core" "${r}" 'ok: physical P-cores \(one thread per core\): 0,2,4,6,8,10 '
 doctor_says "no CPPC data, no favored CPUs" "${r}" 'favored' negate
 for c in $(seq 0 21); do
@@ -783,6 +786,16 @@ mkdir -p "${r}/proc"
 printf 'processor\t: 0\nflags\t\t: fpu cat_l3 cdp_l3 rdt_a mba\n' > "${r}/proc/cpuinfo"
 doctor_says "rdt_a gives resctrl class guidance" "${r}" \
     'info: RDT allocation \(rdt_a: cat_l3 cdp_l3 mba\) — .*control\.rdt\.enable'
+doctor_says "rdt_a + mba: rdt-mba isolation, resctrl unmounted" "${r}" \
+    'isolation: rdt-mba — CAT \+ MBA .*resctrl mounted: no\).*add mbAllocation: \{all: \["50%"\]\} to the BestEffort class'
+doctor_says "rdt isolation adds no second apply line" "${r}" '^        apply:  sudo mount -t resctrl' negate
+mkdir -p "${r}/sys/fs/resctrl/info"
+doctor_says "a mounted resctrl is reported" "${r}" 'isolation: rdt-mba .*resctrl mounted: yes'
+printf 'processor\t: 0\nflags\t\t: fpu cat_l2 cdp_l2 rdt_a\n' > "${r}/proc/cpuinfo"
+doctor_says "rdt_a + cat_l2 without mba: rdt-cat, bandwidth stays shared" "${r}" \
+    'isolation: rdt-cat — CAT can cap .*no MBA, so DRAM bandwidth stays shared'
+printf 'processor\t: 0\nflags\t\t: fpu mba cat_l3\n' > "${r}/proc/cpuinfo"
+doctor_says "mba and cat_l3 without rdt_a: no RDT mode" "${r}" 'isolation: cpu-cap — no rdt_a flag'
 
 r=$(newroot numa-doc-forced)
 kernel "${r}" 6.18.1
