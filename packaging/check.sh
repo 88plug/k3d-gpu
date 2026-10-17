@@ -32,6 +32,9 @@ test "$(sha256sum < /src/images.lock)" = "$(sha256sum < /usr/share/k3d-gpu/image
 for f in /src/console/*.py /src/console/*.json; do
     test "$(sha256sum < "$f")" = "$(sha256sum < "/usr/share/k3d-gpu/console/${f##*/}")"
 done
+for f in vs.py llm_load.py competitors.lock; do
+    test "$(sha256sum < "/src/bench/$f")" = "$(sha256sum < "/usr/share/k3d-gpu/bench/$f")"
+done
 k3d-gpu help | grep -F "/usr/share/k3d-gpu/nvidia-device-plugin.yml" >/dev/null
 test -x /usr/bin/k3d-gpu
 '

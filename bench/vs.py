@@ -34,6 +34,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import statistics
 import subprocess
 import sys
@@ -100,10 +101,12 @@ def parse_arm(spec):
     return {"name": name, "base_url": url, "model": model}
 
 
-def request(arm, prompt, opts):
+def request(arm, prompt, opts, deadline=None):
+    # The per-request timeout never reaches past the budget's deadline.
+    timeout = opts.timeout if deadline is None else max(1.0, min(opts.timeout, deadline - time.monotonic()))
     args = SimpleNamespace(base_url=arm["base_url"], model=arm["model"], prompt=prompt,
                            max_tokens=opts.max_tokens, temperature=0.0, ignore_eos=True,
-                           api_key=None, timeout=opts.timeout)
+                           api_key=None, timeout=timeout)
     s = llm_load.one_request(args, 0)
     # A server that sends no usage: fall back to content chunks (one token each
     # on llama.cpp, Ollama and OVMS streaming) and say so.
@@ -123,10 +126,10 @@ def median(xs):
     return statistics.median(xs) if xs else None
 
 
-def segment(arm, prompts, opts, rapl):
+def segment(arm, prompts, opts, rapl, deadline=None):
     e0 = rapl.read()
     t0 = time.perf_counter()
-    samples = [request(arm, p, opts) for p in prompts]
+    samples = [request(arm, p, opts, deadline) for p in prompts]
     wall = time.perf_counter() - t0
     e1 = rapl.read()
     ok = [s for s in samples if s["ok"]]
@@ -138,26 +141,42 @@ def segment(arm, prompts, opts, rapl):
         "failed": len(samples) - len(ok),
         "decode_tokens_per_s": median(s["decode_tokens_per_s"] for s in ok),
         "ttft_s": median(s["ttft_s"] for s in ok),
+        "median_output_tokens": median(s["output_tokens"] for s in ok),
+        "tokens_sources": sorted({s.get("tokens_source", "usage") for s in ok}),
         "samples": samples,
     }
 
 
-def verdict(rounds, margin, budget_hit, nrounds):
+def verdict(rounds, margin, budget_hit, nrounds, max_tokens=None):
+    """Ratios are k3d-gpu / competitor decode tok/s, per round. SUPPORTED needs
+    k3d/vs >= 1+margin and REFUTED needs vs/k3d >= 1+margin in every round, so
+    the margin means the same thing both ways. The `why` text carries no percent
+    sign (docs/benchmarks.md renders it, and claims_check reads every percent)."""
     if budget_hit:
         return "INCONCLUSIVE", "budget ran out before every round finished"
     if len(rounds) < nrounds:
         return "INCONCLUSIVE", "not every round ran"
-    ratios = []
+    ratios, sources = [], set()
     for r in rounds:
         a, b = r["k3d"], r["vs"]
         if a["failed"] or b["failed"] or not a["decode_tokens_per_s"] or not b["decode_tokens_per_s"]:
             return "INCONCLUSIVE", f"round {r['round']} had failed requests or no token counts"
+        if max_tokens:
+            for side, seg in (("k3d-gpu", a), (b.get("arm", "competitor"), b)):
+                if (seg.get("median_output_tokens") or max_tokens) < max_tokens:
+                    return "INCONCLUSIVE", (f"round {r['round']}: {side} stopped early (median "
+                                            f"{seg['median_output_tokens']:.0f} of {max_tokens} tokens), so the arms did unequal work")
+        for seg in (a, b):
+            sources.update(seg.get("tokens_sources") or ["usage"])
         ratios.append(a["decode_tokens_per_s"] / b["decode_tokens_per_s"])
+    if len(sources) > 1:
+        return "INCONCLUSIVE", "the arms counted tokens differently (usage and stream chunks), so the rates use different rulers"
+    shown = ", ".join(f"{x:.2f}" for x in ratios)
     if all(x >= 1 + margin for x in ratios):
-        return "SUPPORTED", f"k3d-gpu ahead in every round (ratios {', '.join(f'{x:.2f}' for x in ratios)})"
-    if all(x <= 1 - margin for x in ratios):
-        return "REFUTED", f"competitor ahead in every round (ratios {', '.join(f'{x:.2f}' for x in ratios)})"
-    return "INCONCLUSIVE", f"rounds disagree or sit inside the {margin:.0%} margin (ratios {', '.join(f'{x:.2f}' for x in ratios)})"
+        return "SUPPORTED", f"k3d-gpu ahead by the margin in every round (k3d-gpu/competitor ratios {shown})"
+    if all(1 / x >= 1 + margin for x in ratios):
+        return "REFUTED", f"competitor ahead by the margin in every round (k3d-gpu/competitor ratios {shown})"
+    return "INCONCLUSIVE", f"rounds disagree or sit inside the pre-registered margin (k3d-gpu/competitor ratios {shown})"
 
 
 def summary(rounds):
@@ -182,20 +201,25 @@ def cmd_run(opts):
     budget_hit = False
     warm = {}
     for arm in (k3d, vs):
-        warm[arm["name"]] = [request(arm, prompts[i % len(prompts)], opts)["ok"] for i in range(opts.warmup)]
+        warm[arm["name"]] = []
+        for i in range(opts.warmup):
+            if time.monotonic() >= deadline:
+                budget_hit = True
+                break
+            warm[arm["name"]].append(request(arm, prompts[i % len(prompts)], opts, deadline)["ok"])
     rounds = []
-    for r in range(opts.rounds):
+    for r in range(0 if budget_hit else opts.rounds):
         order = [("k3d", k3d), ("vs", vs)] if r % 2 == 0 else [("vs", vs), ("k3d", k3d)]
         rec = {"round": r, "order": [a["name"] for _, a in order]}
         for side, arm in order:
             if time.monotonic() >= deadline:
                 budget_hit = True
                 break
-            rec[side] = segment(arm, prompts, opts, rapl)
+            rec[side] = segment(arm, prompts, opts, rapl, deadline)
         if budget_hit:
             break
         rounds.append(rec)
-    v, why = verdict(rounds, opts.margin, budget_hit, opts.rounds)
+    v, why = verdict(rounds, opts.margin, budget_hit, opts.rounds, opts.max_tokens)
     result = {
         "schema": SCHEMA, "id": opts.id, "stack": vs["name"], "arms": arms,
         "params": {"rounds": opts.rounds, "warmup": opts.warmup, "max_tokens": opts.max_tokens,
@@ -225,26 +249,25 @@ def fmt(x, nd=2):
 
 
 def ledger_md(res, sha, signer):
+    """The run section for EXPERIMENTS.md plus the verdict for the existing,
+    pre-registered row. The row's wording is never regenerated."""
     hid, stack, c, p = res["id"], res["stack"], res.get("context", {}), res["params"]
     s = res["summary"] or {"k3d": {}, "vs": {}}
-    probe = (f"`k3d-gpu bench --vs {stack} --id {hid}`: same prompt set ({len(p['prompts'])} prompts), "
-             f"max_tokens {p['max_tokens']}, temperature 0, ignore_eos, {p['warmup']} warmup requests per arm, "
-             f"{p['rounds']} interleaved rounds, one request in flight, RAPL package J/token. "
-             f"Refuted when {stack} has the higher median decode tok/s in every round by more than {p['margin']:.0%}.")
-    row = (f"| {hid} | The k3d-gpu auto-config (`k3d-gpu up` + `k3d-gpu agent up`) decodes faster than {stack} "
-           f"with its vendor defaults, at the same model family and 4-bit tier. | "
-           f"k3d-gpu median decode tok/s is at least {p['margin']:.0%} above {stack} in every round. | {probe} | {res['verdict']} |")
+    host = c.get("host_cpu_short") or c.get("host_cpu") or "host"
     lines = [
-        "<!-- hypothesis row: paste into the ## Hypotheses table -->", row, "",
-        f"### {hid} run ({c.get('host_cpu_short', 'host')}, {res['started'][:10]})", "", "```text", "# provenance",
+        f"<!-- set the Verdict column of the {hid} row in ## Hypotheses to: {res['verdict']} -->",
+        f"### {hid} run ({host}, {res['started'][:10]})", "", "```text", "# provenance",
         f"date:            {res['started']} (elapsed {res['elapsed_s']:.0f} s of a {p['budget_s']:.0f} s budget)",
         f"hypothesis:      {hid}",
         f"host cpu:        {c.get('host_cpu', 'unknown')}",
         f"host kernel:     {c.get('host_kernel', 'unknown')}",
         f"k3d-gpu commit:  {c.get('commit', 'unknown')}",
-        f"k3d-gpu arm:     {res['arms'][0]['base_url']} model {res['arms'][0]['model']} ({c.get('k3d_device', 'device from k3d-gpu agent status')})",
+        f"k3d-gpu arm:     {res['arms'][0]['base_url']} model {res['arms'][0]['model']} "
+        f"(backend {c.get('k3d_backend', 'unknown')}, device {c.get('k3d_device', 'unknown')}, via {c.get('k3d_transport', 'unknown')})",
         f"competitor:      {stack} {c.get('image', '')}",
-        f"competitor arm:  {res['arms'][1]['base_url']} model {res['arms'][1]['model']} ({c.get('quant_tier', '')}, device {c.get('device', 'default')})",
+        f"competitor arm:  {res['arms'][1]['base_url']} model {res['arms'][1]['model']} ({c.get('quant_tier', '')}, "
+        f"device {c.get('device', 'default')}, devices passed {c.get('vs_devices', 'unknown')}, via {c.get('vs_transport', 'unknown')})",
+        f"weights:         {c.get('model_revision', 'unknown')}; served {c.get('artifact', 'unknown')}",
         f"energy source:   {p['energy_zone']}",
         f"runs per arm:    {p['warmup']} warmup + {p['rounds']} rounds x {len(p['prompts'])} prompts, max_tokens {p['max_tokens']}",
         f"sign-off:        {signer or 'unsigned'}; raw results sha256 {sha}",
@@ -263,37 +286,81 @@ def ledger_md(res, sha, signer):
     return "\n".join(lines)
 
 
+def pending_rows(ledger_path):
+    """{id: stack} for every `k3d-gpu bench --vs` row in EXPERIMENTS.md."""
+    rows = {}
+    try:
+        with open(ledger_path) as f:
+            for line in f:
+                m = re.match(r"\| (H\d+) \|.*`k3d-gpu bench --vs (\w+)", line)
+                if m:
+                    rows[m.group(1)] = m.group(2)
+    except OSError:
+        pass
+    return rows
+
+
+def hnum(hid):
+    return int(hid.lstrip("H")) if hid.lstrip("H").isdigit() else 0
+
+
 def cmd_docs(opts):
-    results = []
+    results = {}
     for path in opts.results:
         with open(path) as f:
             r = json.load(f)
         if r.get("schema") != SCHEMA:
             raise SystemExit(f"vs: {path} is not a {SCHEMA} result")
-        results.append(r)
-    results.sort(key=lambda r: int(r["id"].lstrip("H")) if r["id"].lstrip("H").isdigit() else 0)
+        results[r["id"]] = r
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "competitors.lock")) as f:
+            tiers = {k: v["quant_tier"] for k, v in json.load(f)["stacks"].items()}
+    except (OSError, ValueError, KeyError):
+        tiers = {}
+    # Ledger rows with no result file stay on the page as PENDING.
+    pending = {h: st for h, st in pending_rows(opts.ledger).items() if h not in results}
     out = [
         "# Benchmarks: k3d-gpu against other stacks", "",
         "Head-to-head runs made with `k3d-gpu bench --vs <stack>`. Each row is one ledger",
-        "hypothesis in [`EXPERIMENTS.md`](../EXPERIMENTS.md); its run section there has the",
+        "hypothesis in [`EXPERIMENTS.md`](../EXPERIMENTS.md); its run section there holds the",
         "Reproduce header, the raw-results sha256 and the exact command. A row backs a claim",
         "only when its verdict is SUPPORTED.", "",
         "Protocol: one client (`bench/llm_load.py`), one prompt set, temperature 0,",
-        "`ignore_eos`, warmup requests discarded, interleaved rounds (A,B then B,A), one",
-        "request in flight, energy from the RAPL package counter. Competitors run their",
-        "pinned image (`bench/competitors.lock`) with vendor defaults, same model family",
-        "and 4-bit tier.", "",
+        "`ignore_eos` sent to every arm, warmup requests discarded, interleaved rounds",
+        "(A,B then B,A), one request in flight, energy from the RAPL package counter.",
+        "Competitors run their pinned image and pinned weights (`bench/competitors.lock`;",
+        "the served file's sha256 is checked before measuring) with vendor defaults, same",
+        "model family and 4-bit tier.", "",
+        "Known asymmetries, recorded in every run section: Ollama's OpenAI layer has no",
+        "`ignore_eos`, so a round where either arm stops early is INCONCLUSIVE; the k3d-gpu",
+        "arm is reached through `kubectl port-forward` (an API-server stream) while the",
+        "competitor is reached through docker-proxy, so tunnel latency and buffering land",
+        "on the k3d-gpu arm only.", "",
         "| Ledger | Competitor | Tier | Decode tok/s (k3d-gpu / competitor) | J/token (k3d-gpu / competitor) | Verdict |",
         "|---|---|---|---|---|---|",
     ]
-    for r in results:
-        s = r["summary"] or {"k3d": {}, "vs": {}}
-        out.append(
-            f"| [ledger:{r['id']}] | {r['stack']} | {r.get('context', {}).get('quant_tier', '4-bit')} | "
-            f"{fmt(s['k3d'].get('decode_tokens_per_s'))} / {fmt(s['vs'].get('decode_tokens_per_s'))} | "
-            f"{fmt(s['k3d'].get('j_per_token'))} / {fmt(s['vs'].get('j_per_token'))} | {r['verdict']} |")
-    out += ["", "Why each verdict:", ""]
-    out += [f"- [ledger:{r['id']}] ({r['stack']}): {r['why']}." for r in results]
+    for hid in sorted(set(results) | set(pending), key=hnum):
+        if hid in results:
+            r = results[hid]
+            s = r["summary"] or {"k3d": {}, "vs": {}}
+            out.append(
+                f"| [ledger:{hid}] | {r['stack']} | {r.get('context', {}).get('quant_tier') or tiers.get(r['stack'], '4-bit')} | "
+                f"{fmt(s['k3d'].get('decode_tokens_per_s'))} / {fmt(s['vs'].get('decode_tokens_per_s'))} | "
+                f"{fmt(s['k3d'].get('j_per_token'))} / {fmt(s['vs'].get('j_per_token'))} | {r['verdict']} |")
+        else:
+            st = pending[hid]
+            out.append(f"| [ledger:{hid}] | {st} | {tiers.get(st, '4-bit')} | not run | not run | PENDING |")
+    out.append("")
+    if results:
+        out += ["Why each verdict:", ""]
+        out += [f"- [ledger:{h}] ({results[h]['stack']}): {results[h]['why']}." for h in sorted(results, key=hnum)]
+    else:
+        out += ["No head-to-head has run yet, so this page makes no speed or energy claim. The goal",
+                "of each row is a measured answer, whichever way it falls."]
+    out += ["", "Run one and regenerate this page (rows without a result file stay PENDING):", "",
+            "```bash", "k3d-gpu up && k3d-gpu agent up",
+            "k3d-gpu bench --vs ollama --id H19 --budget 900 --out bench-H19",
+            "bench/vs.py docs --out docs/benchmarks.md bench-H*/result.json", "```"]
     with open(opts.out, "w") as f:
         f.write("\n".join(out) + "\n")
     return 0
@@ -319,7 +386,9 @@ def main(argv=None):
     r.add_argument("--context", help="JSON object recorded in the result (host, image, commit)")
     r.add_argument("--signed-off-by", default="")
     d = sub.add_parser("docs")
-    d.add_argument("results", nargs="+")
+    d.add_argument("results", nargs="*")
+    d.add_argument("--ledger", default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "EXPERIMENTS.md"),
+                   help="EXPERIMENTS.md; its bench rows with no result file render as PENDING")
     d.add_argument("--out", required=True)
     opts = ap.parse_args(argv)
     if opts.cmd == "run":

@@ -1,18 +1,19 @@
 {
   "schema": "k3d-gpu.competitors-lock/v1",
-  "note": "Competitor stacks for 'k3d-gpu bench --vs'. Every image is pinned by registry digest (verified with docker buildx imagetools inspect on 2026-10-17). Each stack serves the same model family and 4-bit tier as the k3d-gpu arm (Qwen3-4B, int4 / Q4_K_M), with its own vendor defaults.",
+  "note": "Competitor stacks for 'k3d-gpu bench --vs'. Every image is pinned by registry digest (verified with docker buildx imagetools inspect on 2026-10-17). Each stack serves the same model family and 4-bit tier as the k3d-gpu arm (Qwen3-4B, int4 / Q4_K_M), with its own vendor defaults. Weights are pinned too: after the model loads, 'bench' hashes artifact_path inside the container and refuses to measure unless it equals artifact_sha256 (the Hugging Face LFS sha256 at model_revision, or the Ollama registry manifest digest).",
   "stacks": {
     "llamacpp": {
       "api": "/v1",
-      "args": ["-hf", "Qwen/Qwen3-4B-GGUF:Q4_K_M", "--host", "0.0.0.0", "--port", "8080"],
+      "args": ["-mu", "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/bc640142c66e1fdd12af0bd68f40445458f3869b/Qwen3-4B-Q4_K_M.gguf", "-m", "/root/.cache/llama.cpp/Qwen3-4B-Q4_K_M.gguf", "--alias", "Qwen3-4B", "--host", "0.0.0.0", "--port", "8080"],
+      "artifact_path": "/root/.cache/llama.cpp/Qwen3-4B-Q4_K_M.gguf",
+      "artifact_sha256": "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5",
       "cache": "/root/.cache/llama.cpp",
       "device": "cpu",
-      "docs": "https://github.com/ggml-org/llama.cpp/blob/b11706/tools/server/README.md",
+      "docs": "https://github.com/ggml-org/llama.cpp/blob/b11706/common/arg.cpp",
       "health": "/health",
       "image": "ghcr.io/ggml-org/llama.cpp:server-b11706@sha256:f41d47eee678c02656eefc9ed8cce76cab584aa7032805eeef0e6639fcfda485",
       "model": "Qwen/Qwen3-4B-GGUF",
-      "model_artifact": "Qwen3-4B-Q4_K_M.gguf",
-      "model_revision": "bc640142c66e1fdd12af0bd68f40445458f3869b",
+      "model_revision": "Qwen/Qwen3-4B-GGUF@bc640142c66e1fdd12af0bd68f40445458f3869b",
       "port": 8080,
       "pull": "",
       "quant_tier": "4-bit (GGUF Q4_K_M)",
@@ -21,22 +22,26 @@
     "ollama": {
       "api": "/v1",
       "args": [],
+      "artifact_path": "/root/.ollama/models/manifests/registry.ollama.ai/library/qwen3/4b-q4_K_M",
+      "artifact_sha256": "2bfd38a7daaf4b1037efe517ccb73d1a3bbd4822cf89f1a82be1569050a114e0",
       "cache": "/root/.ollama",
       "device": "cpu",
-      "docs": "https://github.com/ollama/ollama/blob/v0.40.5/docs/api/openai-compatibility.mdx",
+      "docs": "https://github.com/ollama/ollama/blob/v0.40.5/openai/openai.go",
       "health": "/api/version",
+      "ignore_eos": false,
       "image": "ollama/ollama:0.40.5@sha256:5d3a2f25f9825628daba94dc0b1d421c7d57d6c03ae5faa9ba050e058bab8241",
-      "model": "qwen3:4b",
-      "model_artifact": "ollama library qwen3:4b",
-      "model_revision": "",
+      "model": "qwen3:4b-q4_K_M",
+      "model_revision": "registry.ollama.ai/library/qwen3:4b-q4_K_M manifest sha256:2bfd38a7daaf4b1037efe517ccb73d1a3bbd4822cf89f1a82be1569050a114e0",
       "port": 11434,
       "pull": "ollama",
       "quant_tier": "4-bit (GGUF Q4_K_M)",
-      "served_model": "qwen3:4b"
+      "served_model": "qwen3:4b-q4_K_M"
     },
     "ovms": {
       "api": "/v3",
       "args": ["--source_model", "OpenVINO/Qwen3-4B-int4-ov", "--model_repository_path", "/models", "--task", "text_generation", "--rest_port", "8000"],
+      "artifact_path": "/models/OpenVINO/Qwen3-4B-int4-ov/openvino_model.bin",
+      "artifact_sha256": "074214fa29ab1b479536fc7184ef3036e7b355a5835e8590b61b70a8de1df2f9",
       "cache": "/models",
       "device": "auto (OVMS default: dGPU, then iGPU, then CPU)",
       "docs": "https://github.com/openvinotoolkit/model_server/blob/v2026.4.1/docs/parameters.md",
@@ -44,12 +49,13 @@
       "health": "/v1/config",
       "image": "openvino/model_server:2026.4.1-gpu@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58",
       "model": "OpenVINO/Qwen3-4B-int4-ov",
-      "model_artifact": "openvino_model.bin (int4)",
-      "model_revision": "b467368d16b75df14055562fe927ae8e1f15f7ef",
+      "model_revision": "OpenVINO/Qwen3-4B-int4-ov@b467368d16b75df14055562fe927ae8e1f15f7ef",
       "port": 8000,
       "pull": "",
       "quant_tier": "4-bit (OpenVINO int4)",
-      "served_model": "OpenVINO/Qwen3-4B-int4-ov"
+      "served_model": "OpenVINO/Qwen3-4B-int4-ov",
+      "user": "0",
+      "user_note": "The image runs as uid 5000 and has no /models; docker creates the named-volume mountpoint root-owned, so the pull needs uid 0 to write there."
     }
   }
 }
