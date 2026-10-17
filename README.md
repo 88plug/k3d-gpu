@@ -1141,6 +1141,10 @@ k3d-gpu capacity --fresh            # forget the stored bracket and start over
   repetitions to a step.
 - When `--budget` runs out the report gives the bracket found so far and
   agents per box is its proven lower end.
+- A repetition is not started when it would end past `--budget`: its length
+  is estimated from the slowest session time seen so far (the warm-up
+  included) times the sessions per agent. The report then names the next
+  step and the time one repetition of it needs.
 - The bracket is stored per host, engine, model, endpoint, SLO and trace in
   `$XDG_STATE_HOME/k3d-gpu/capacity/state/`. A closed bracket is answered from
   there without sending any load.
@@ -1167,6 +1171,9 @@ k3d-gpu tune run --full             # the full successive-halving search instead
   the best screener as `pending`, printing the `--budget` that confirms it.
   The next run with that budget confirms the pending challenger first, with no
   screening; a shorter run keeps screening the remaining neighbours.
+- Trials stop at the budget: a fifth of `--budget` (at most 2 min) is kept for
+  redeploying the result, and a trial still running at that point (a first
+  download of a precision sibling, say) is stopped and tried again next run.
 - The profile (`~/.config/k3d-gpu/tune/<fingerprint>.json`) records which
   neighbours were already screened against which incumbent, so the next run
   tries only the rest; with none left it reports `converged`.

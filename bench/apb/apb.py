@@ -64,12 +64,17 @@ SECONDARY_SLOS = (5.0, 15.0, 20.0, 30.0)
 
 
 # ---------------------------------------------------------------- trace
+def session_count(agents, per_agent=5, min_sessions=10):
+    """Sessions in a step's trace at `agents` agents."""
+    return max(min_sessions, per_agent * agents)
+
+
 def build_trace(family, agents, seed, per_agent=5, min_sessions=10):
     if family not in BASE_SESSIONS:
         raise ValueError(f"family must be one of {sorted(BASE_SESSIONS)}")
     if agents < 1:
         raise ValueError("agents must be >= 1")
-    n = max(min_sessions, per_agent * agents)
+    n = session_count(agents, per_agent, min_sessions)
     trace = gen.FAMILIES[family](seed=seed, scale=n / BASE_SESSIONS[family])
     trace["sessions"] = trace["sessions"][:n]
     if len(trace["sessions"]) != n:

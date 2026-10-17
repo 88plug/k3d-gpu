@@ -35,6 +35,7 @@ import os
 import random
 import re
 import shlex
+import signal
 import statistics
 import subprocess
 import sys
@@ -458,14 +459,21 @@ def pareto_front(points):
 
 # ---- evaluators -------------------------------------------------------------------------
 
+TRIAL_DEADLINE = "trial stopped at the budget deadline"
+
+
 class CommandEvaluator:
-    """Runs --trial-cmd once per evaluation (see the module docstring)."""
+    """Runs --trial-cmd once per evaluation (see the module docstring).
+
+    deadline (time.monotonic) ends a trial still running then: its process
+    group is stopped and the trial reports TRIAL_DEADLINE."""
 
     def __init__(self, cmd, workdir, log=sys.stderr):
         self.cmd = shlex.split(cmd)
         self.workdir = workdir
         self.log = log
         self.calls = 0
+        self.deadline = None
 
     def __call__(self, cfg, budget):
         self.calls += 1
@@ -476,7 +484,22 @@ class CommandEvaluator:
             json.dump(cfg, f, indent=2)
         with open(paths[1], "w") as f:
             json.dump(budget, f, indent=2)
-        rc = subprocess.call(self.cmd + paths)
+        proc = subprocess.Popen(self.cmd + paths, start_new_session=True)
+        timeout = None if self.deadline is None else max(1.0, self.deadline - time.monotonic())
+        try:
+            rc = proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            for sig, wait in ((signal.SIGTERM, 15), (signal.SIGKILL, None)):
+                try:
+                    os.killpg(proc.pid, sig)
+                except ProcessLookupError:
+                    break
+                try:
+                    proc.wait(timeout=wait)
+                    break
+                except subprocess.TimeoutExpired:
+                    continue
+            return {"ok": False, "error": TRIAL_DEADLINE, "runs": []}
         try:
             with open(paths[2]) as f:
                 res = json.load(f)
@@ -798,6 +821,12 @@ def confirm_s(screen_s, n_confirm):
     return 2 * n_confirm * 2 * screen_s
 
 
+def restore_s(budget_s):
+    """Share of --budget kept for redeploying the result after the step: a
+    fifth of it, at most 2 min."""
+    return min(0.2 * budget_s, 120.0)
+
+
 def confirm_min(screen_s, n_confirm):
     """Smallest --budget (min) with which a run confirms a pending challenger."""
     return math.ceil(confirm_s(screen_s, n_confirm) / 60)
@@ -819,7 +848,11 @@ def incremental(evaluator, facts, incumbent, objective, *, budget_s=600.0, tried
     after this run (None once a confirmation decided it)."""
     metric, sign = OBJECTIVES[objective]
     say = log or (lambda *_: None)
-    deadline = clock() + budget_s
+    # Trials end restore_s before the budget does: the caller redeploys the result.
+    work_s = budget_s - restore_s(budget_s)
+    deadline = clock() + work_s
+    if hasattr(evaluator, "deadline"):
+        evaluator.deadline = deadline
     conc = concurrency_for(objective, levels)
     tried = set(tried)
     cands = [c for c in neighbours(facts, incumbent) if config_key(c) not in tried]
@@ -841,7 +874,7 @@ def incremental(evaluator, facts, incumbent, objective, *, budget_s=600.0, tried
             out["decision"], out["winner"] = "challenger", res["winner"]
         return out
 
-    if pending and confirm_s(pending["screen_s"], n_confirm) <= budget_s:
+    if pending and confirm_s(pending["screen_s"], n_confirm) <= work_s:
         return confirm(pending["config"])
     if not cands:
         if pending:
@@ -866,7 +899,7 @@ def incremental(evaluator, facts, incumbent, objective, *, budget_s=600.0, tried
     # Confirm in this run only when the confirmation leaves a quarter of the
     # budget for screening; otherwise screen with all of it and defer.
     reserve = confirm_s(trial_s, n_confirm)
-    confirm_now = pending is None and reserve <= 0.75 * budget_s
+    confirm_now = pending is None and reserve <= 0.75 * work_s
     if not confirm_now:
         reserve = 0.0
         say(f"budget {budget_s / 60:g} min is too short to also confirm (about "
@@ -882,6 +915,10 @@ def incremental(evaluator, facts, incumbent, objective, *, budget_s=600.0, tried
         # A neighbour redeploys, so it can take longer than the warm incumbent
         # trial: plan the next one with the slowest seen.
         trial_s = max(trial_s, clock() - t1)
+        if err == TRIAL_DEADLINE:  # cut short, not screened: a later run tries it again
+            say(f"screening stopped at {len(out['screened'])}/{len(cands)} neighbours: "
+                f"{_cfg_name(c)} ran past the budget")
+            break
         sc = score(ms, metric, sign) if ok else None
         out["screened"].append({"config": c, "ok": sc is not None, "error": err,
                                 "score": None if sc is None else sign * sc})

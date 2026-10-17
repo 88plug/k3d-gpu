@@ -19,6 +19,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 
 sys.dont_write_bytecode = True  # keep console/ and tests/ free of __pycache__
@@ -574,8 +575,9 @@ class IncrementalTest(unittest.TestCase):
     def test_budget_stops_screening_to_keep_time_to_confirm(self):
         clock = Clock()
         ev = Timed(tune.SimEvaluator(cost_from(true_tps)), clock, 30.0)
-        # 30 s a trial; confirm reserve = 2 x 5 x 2 x 30 s = 600 s; budget 900 s.
-        res = tune.incremental(ev, FACTS, {"baseline": True}, "throughput", budget_s=900.0, clock=clock)
+        # 30 s a trial; confirm reserve = 2 x 5 x 2 x 30 s = 600 s; 900 s for
+        # trials (1020 s less the 120 s kept to redeploy the result).
+        res = tune.incremental(ev, FACTS, {"baseline": True}, "throughput", budget_s=1020.0, clock=clock)
         self.assertLess(len(res["screened"]), len(tune.neighbours(FACTS, {"baseline": True})))
         self.assertLessEqual(clock.t, 900.0 + 30.0)  # overshoot at most one trial
 
@@ -592,7 +594,7 @@ class IncrementalTest(unittest.TestCase):
             ev.seconds = ev.seconds_for(budget)
             return orig(cfg, budget)
         res = tune.incremental(call, FACTS, {"baseline": True}, "throughput",
-                               budget_s=30.0 * (n + 1) + 600.0, clock=clock)
+                               budget_s=30.0 * (n + 1) + 600.0 + 120.0, clock=clock)
         self.assertEqual(len(res["screened"]), n)
         self.assertTrue(is_hint(res["challenger"]))
         self.assertEqual(res["decision"], "budget")
@@ -627,6 +629,38 @@ class IncrementalTest(unittest.TestCase):
         res = tune.incremental(call, FACTS, {"baseline": True}, "throughput", budget_s=300.0, clock=clock)
         self.assertGreater(len(res["screened"]), 0)
         self.assertLessEqual(clock.t, 300.0)
+
+    def test_trials_get_a_deadline_that_leaves_time_to_restore(self):
+        # A trial cut at the deadline (a model download, say) is not counted as
+        # screened, and the deadline keeps the restore share of the budget free.
+        clock = Clock()
+        sim = tune.SimEvaluator(cost_from(lambda c: 10.0))
+
+        class Capped:
+            deadline = None
+
+            def __call__(self, cfg, budget):
+                if cfg.get("baseline"):
+                    clock.t += 20.0
+                    return sim(cfg, budget)
+                clock.t = self.deadline
+                return {"ok": False, "error": tune.TRIAL_DEADLINE, "runs": []}
+        ev = Capped()
+        res = tune.incremental(ev, FACTS, {"baseline": True}, "throughput", budget_s=300.0, clock=clock)
+        self.assertEqual(ev.deadline, 300.0 - tune.restore_s(300.0))
+        self.assertEqual(res["screened"], [])
+        self.assertLessEqual(clock.t, 300.0 - tune.restore_s(300.0))
+
+    def test_command_evaluator_stops_a_trial_at_its_deadline(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        ev = tune.CommandEvaluator(f"{sys.executable} -c 'import time; time.sleep(30)'", tmp)
+        ev.deadline = time.monotonic() + 1.0
+        t0 = time.monotonic()
+        res = ev({"baseline": True}, {})
+        self.assertLess(time.monotonic() - t0, 10.0)
+        self.assertFalse(res["ok"])
+        self.assertEqual(res["error"], tune.TRIAL_DEADLINE)
 
     def test_pending_is_confirmed_without_screening(self):
         ev = tune.SimEvaluator(cost_from(lambda c: 20.0 if is_hint(c) else 10.0))

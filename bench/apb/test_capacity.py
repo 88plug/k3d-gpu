@@ -371,6 +371,42 @@ class AdaptiveRepsTest(unittest.TestCase):
                              2, 10.0, max_reps=3, deadline=60.0, clock=clock)
         self.assertEqual((s["reps"], s["stop"]), (1, "budget"))
 
+    def test_first_rep_that_cannot_fit_is_not_started(self):
+        clock, calls = FakeClock(), []
+        s = cap.measure_step(fake_rep({1: 1.0}, record=calls, clock=clock, rep_s=400.0),
+                             1, 10.0, max_reps=3, deadline=300.0, clock=clock,
+                             est_rep_s=lambda n: 400.0)
+        self.assertIsNone(s)
+        self.assertEqual(calls, [])
+        self.assertEqual(clock.t, 0.0)
+
+    def test_estimate_stops_reps_before_the_deadline(self):
+        clock, calls = FakeClock(), []
+        s = cap.measure_step(fake_rep({2: 5.0}, tail=12.0, record=calls, clock=clock, rep_s=50.0),
+                             2, 10.0, max_reps=3, deadline=120.0, clock=clock,
+                             est_rep_s=lambda n: 80.0)
+        # rep 1 ends at 50 s; the next is estimated at 80 s and would end at 130 s.
+        self.assertEqual(calls, [(2, 1)])
+        self.assertEqual(s["stop"], "budget")
+        self.assertLessEqual(clock.t, 120.0)
+
+
+class RepEstimateTest(unittest.TestCase):
+    def test_scales_by_sessions_per_agent_and_keeps_the_slowest_rate(self):
+        est = cap.RepEstimate(sessions=lambda n: max(10, 5 * n))
+        self.assertIsNone(est(1))
+        est.observe(agents=1, sessions=2, wall_s=87.0)  # warm-up: 43.5 s a session
+        self.assertAlmostEqual(est(1), 435.0)
+        self.assertAlmostEqual(est(4), 20 / 4 * 43.5)
+        est.observe(agents=4, sessions=20, wall_s=100.0)  # faster: 20 s a session-agent
+        self.assertAlmostEqual(est(1), 435.0)
+
+
+class SearchBudgetTest(unittest.TestCase):
+    def test_unmeasured_step_ends_the_search_on_budget(self):
+        b, steps, status = cap.search_apb(lambda n, d: None, 32, {"lo": 2, "hi": None}, budget_s=300.0)
+        self.assertEqual((b["lo"], b["hi"], status, steps), (2, None, "budget", []))
+
 
 # ------------------------------------------------------------------ APB
 def step(n, verdict, p95):
@@ -864,6 +900,24 @@ class EndToEndTest(unittest.TestCase):
         self.assertEqual(rep["binding_limit"]["kind"], "budget")
         self.assertEqual(rep["agents_per_box"], 0)
         self.assertIn("APB >= 0", out)
+
+    def test_budget_bounds_the_run_when_a_rep_is_long(self):
+        fake_host(self.root, rapl=False)
+        stub = LoadStub(base=0.15)
+        self.stubs.append(stub)
+        # Each turn takes 0.15 s: the warm-up (2 sessions) fits a 3 s budget, a
+        # 10-session rep at N=1 does not, so it is not started.
+        t0 = time.monotonic()
+        rc, out, err = self.run_main(self.common(stub.url, ["--slo", "5", "--budget", str(3.0 / 60)]))
+        wall = time.monotonic() - t0
+        self.assertEqual(rc, 0, err)
+        rep = self.report()
+        self.assertEqual(rep["search_status"], "budget")
+        self.assertEqual(rep["steps"], [])
+        self.assertEqual(rep["next_rep_estimate"]["agents"], 1)
+        self.assertGreater(rep["next_rep_estimate"]["seconds"], 3.0)
+        self.assertLess(wall, 3.0 + 1.5)
+        self.assertIn("rerun with a larger --budget", err)
 
     def test_dry_run_sends_nothing(self):
         fake_host(self.root)

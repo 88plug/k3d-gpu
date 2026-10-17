@@ -96,8 +96,26 @@ def sysroot():
 
 
 # ---------------------------------------------------------------- search
+class RepEstimate:
+    """Wall time of a rep before it runs. A rep is a closed loop of `agents`
+    over sessions(agents) sessions, so it takes about sessions / agents x the
+    agent-seconds one session needs. That rate is the slowest seen so far
+    (warm-up included): per-session time grows with N, never shrinks."""
+
+    def __init__(self, sessions):
+        self.sessions, self.rate = sessions, None
+
+    def observe(self, agents, sessions, wall_s):
+        if sessions and wall_s and wall_s > 0:
+            r = wall_s * agents / sessions
+            self.rate = r if self.rate is None else max(self.rate, r)
+
+    def __call__(self, n):
+        return None if self.rate is None else self.sessions(n) / n * self.rate
+
+
 def measure_step(run_rep, n, stop_slo, base_tool=None, max_reps=3, step_cap_s=None,
-                 deadline=None, clock=time.monotonic):
+                 deadline=None, clock=time.monotonic, est_rep_s=None):
     """Scored step at N agents with adaptive reps.
 
     After each rep the pooled step is scored; the step stops as soon as its
@@ -106,10 +124,15 @@ def measure_step(run_rep, n, stop_slo, base_tool=None, max_reps=3, step_cap_s=No
       - p95 bootstrap 95% CI entirely above the SLO (fail) or entirely at or
         below it with the pooled n met (pass).
     Otherwise it adds a rep, up to max_reps, while the next rep (at the mean rep
-    time so far) still fits step_cap_s and the deadline. The record carries
+    time so far, or est_rep_s(n) when longer) still fits step_cap_s and the
+    deadline. A first rep that est_rep_s says cannot end by the deadline is not
+    started: the step is unmeasured and None is returned. The record carries
     "stop" (why it ended) and "_reps" (the raw reps)."""
     t0 = clock()
     reps_data, early, stop = [], False, "max_reps"
+    first = est_rep_s(n) if est_rep_s else None
+    if deadline is not None and first is not None and t0 + first > deadline:
+        return None
     while True:
         results, meta = run_rep(n, len(reps_data) + 1)
         reps_data.append((results, meta))
@@ -128,6 +151,9 @@ def measure_step(run_rep, n, stop_slo, base_tool=None, max_reps=3, step_cap_s=No
         if len(reps_data) >= max_reps:
             break
         now, per_rep = clock(), (clock() - t0) / len(reps_data)
+        est = est_rep_s(n) if est_rep_s else None
+        if est is not None:
+            per_rep = max(per_rep, est)
         if step_cap_s is not None and now - t0 + per_rep > step_cap_s:
             stop = "step_cap"
             break
@@ -161,7 +187,8 @@ def next_n(lo, hi, max_agents):
 def search_apb(measure, max_agents, bracket=None, budget_s=None, clock=time.monotonic, on_step=None):
     """Exponential-then-binary search for the largest passing N.
 
-    measure(n, deadline) -> scored step. bracket {"lo", "hi"} resumes a
+    measure(n, deadline) -> scored step, or None when the step does not fit
+    the budget (the search then ends with "budget"). bracket {"lo", "hi"} resumes a
     previous search (lo: largest N seen passing, hi: smallest N seen not
     passing). A step that is not a pass (fail or insufficient) bounds the
     bracket from above. Returns (bracket, steps, status) with status "closed",
@@ -179,6 +206,8 @@ def search_apb(measure, max_agents, bracket=None, budget_s=None, clock=time.mono
         if deadline is not None and clock() >= deadline:
             return b, steps, "budget"
         s = measure(n, deadline)
+        if s is None:
+            return b, steps, "budget"
         steps.append(s)
         if on_step:
             on_step(s)
@@ -1029,6 +1058,7 @@ def run(a, ep, forwarded):
             return EXIT_NOT_QUIET
 
         api_key = os.environ.get("OPENAI_API_KEY")
+        est_rep = RepEstimate(apb.session_count)
 
         def run_rep(n, r, sub=""):
             d = os.path.join(run_dir, sub) if sub else run_dir
@@ -1042,6 +1072,7 @@ def run(a, ep, forwarded):
             results, meta = apb.run_step(tr, ep["url"], ep["model"], n, a.extra, a.timeout,
                                          a.time_scale, api_key)
             sampler.tick()
+            est_rep.observe(n, len(tr["sessions"]), meta.get("wall_s"))
             meta["early_fail"] = apb.early_fail(results, meta, a.stop_slo)
             prefix = os.path.join(d, "steps", f"n{n:03d}-r{r}")
             with open(prefix + ".jsonl", "w") as f:
@@ -1069,7 +1100,7 @@ def run(a, ep, forwarded):
 
         def measure(n, deadline):
             return measure_step(run_rep, n, a.stop_slo, st["base_tool"], max_reps=a.reps,
-                                step_cap_s=a.step_cap, deadline=deadline)
+                                step_cap_s=a.step_cap, deadline=deadline, est_rep_s=est_rep)
 
         def on_search_step(s):
             # Saved after every step, so an interrupted run still resumes.
@@ -1093,7 +1124,15 @@ def run(a, ep, forwarded):
         rep["bracket"], rep["search_status"] = bracket, status
         log(f"search {status}: {bracket_text(bracket['lo'], bracket['hi'])} "
             f"({len(scored)} steps, {time.monotonic() - t_start:.0f} s)")
-        if status != "budget" and time.monotonic() - t_start < a.budget * 60:
+        left = a.budget * 60 - (time.monotonic() - t_start)
+        if status == "budget":
+            n_next = next_n(bracket["lo"], bracket["hi"], a.max)
+            need = est_rep(n_next) if n_next else None
+            if need is not None:
+                rep["next_rep_estimate"] = {"agents": n_next, "seconds": round(need, 1)}
+                log(f"next step N={n_next} needs about {need / 60:.1f} min a rep "
+                    f"({left / 60:.1f} min left): rerun with a larger --budget to refine the bracket")
+        elif est_rep(1) is None or est_rep(1) <= left:
             log("drift check: N=1 once more")
             run_rep(1, 9, "drift")
         sampler.stop()
