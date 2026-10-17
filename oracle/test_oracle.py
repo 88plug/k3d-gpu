@@ -18,6 +18,7 @@ golden files)
 
 from __future__ import annotations
 
+import base64
 import copy
 import io
 import json
@@ -526,7 +527,10 @@ class ValidatorTest(unittest.TestCase):
         b["results"]["capacity"]["quiet_check_ok"] = False
         self.assertEqual(check(reseal(b)).verdict, "quarantine")
         b = copy.deepcopy(self.b)
-        b["results"]["capacity"]["steps"][-1]["throttle_events"] = 12
+        steps = b["results"]["capacity"]["steps"]
+        failed = [s for s in steps if s["claimed_verdict"] != "pass"]
+        bind = min(failed, key=lambda s: s["agents"]) if failed else max(steps, key=lambda s: s["agents"])
+        bind["throttle_events"] = 12
         b["results"]["capacity"]["drift_ratio"] = 1.6
         res = check(reseal(b))
         self.assertEqual(res.verdict, "accept")
@@ -577,9 +581,9 @@ def write_bundles(d, bundles):
 
 
 class MatrixTest(unittest.TestCase):
-    def test_docs_oracle_md_is_the_generated_seed_matrix(self):
+    def test_docs_oracle_matrix_md_is_the_generated_seed_matrix(self):
         m = M.build([SEED], [SEED])
-        with open(os.path.join(REPO, "docs", "oracle.md")) as f:
+        with open(os.path.join(REPO, "docs", "oracle-matrix.md")) as f:
             self.assertEqual(M.markdown(m), f.read())
         self.assertEqual(len(m["cells"]), 2)
         self.assertEqual({c["tier"] for c in m["cells"]}, {"provisional"})
@@ -643,11 +647,15 @@ class MatrixTest(unittest.TestCase):
 # ------------------------------------------------------------------ share
 GH_STUB = """#!/bin/sh
 printf '%s\\n' "$*" >> "$GH_LOG"
-case "$1 $2" in
+case "$*" in
   "auth status") exit 0 ;;
-  "issue create") for a; do case "$prev" in --body-file) cp "$a" "$GH_LOG.body" ;; esac; prev=$a; done ;;
+  "api user --jq .login") echo "${GH_LOGIN:-octo-cat}" ;;
+  "api repos/"*"/k3d-gpu --jq .default_branch") echo main ;;
+  "api repos/"*"/git/ref/heads/main --jq .object.sha") echo 0123456789abcdef0123456789abcdef01234567 ;;
+  "api -X PUT "*) cat > "$GH_LOG.put" ;;
+  "pr create "*) echo https://github.com/88plug/k3d-gpu/pull/999 ;;
 esac
-exit 0
+exit "${GH_FAIL_RC:-0}"
 """
 
 
@@ -740,25 +748,44 @@ class ShareTest(unittest.TestCase):
                 self.assertIn("not sent", out)
                 self.assertEqual(self.gh_calls(), [])
 
-    def test_submit_confirmed_opens_one_issue_with_the_bundle(self):
+    def test_submit_confirmed_opens_one_pull_request_adding_the_bundle(self):
         rc, out = self.run_tty("y", "--submit")
         self.assertEqual(rc, 0, out)
         calls = self.gh_calls()
         self.assertEqual(calls[0], "auth status")
-        (create,) = [c for c in calls if c.startswith("issue create")]
-        self.assertIn("--repo 88plug/k3d-gpu-oracle", create)
-        self.assertIn("--label submission", create)
+        self.assertIn("repo fork 88plug/k3d-gpu --clone=false --default-branch-only", calls)
+        (create,) = [c for c in calls if c.startswith("pr create")]
+        self.assertIn("--repo 88plug/k3d-gpu --base main --head octo-cat:oracle-", create)
+        self.assertIn("pull/999", out)
         (name,) = self.files()
         with open(os.path.join(self.tmp, name)) as f:
             text = f.read()
-        with open(self.log + ".body") as f:
-            body = f.read()
-        self.assertIn(text, body)
+        with open(self.log + ".put") as f:
+            put = json.load(f)
+        self.assertEqual(base64.b64decode(put["content"]).decode(), text)
+        sha = json.loads(text)["content_sha256"]
+        self.assertEqual(put["branch"], f"oracle-{sha[:12]}")
+        (call,) = [c for c in calls if c.startswith("api -X PUT")]
+        self.assertIn(f"repos/octo-cat/k3d-gpu/contents/data/oracle/{sha}.json", call)
 
-    def test_submit_without_gh_prints_the_form(self):
+    def test_submit_with_a_hostile_login_stops_before_any_write(self):
+        self.env["GH_LOGIN"] = "x;rm -rf /"
+        rc, out = self.run_tty("y", "--submit")
+        self.assertEqual(rc, S.EXIT_NOT_SENT, out)
+        self.assertIn("unexpected GitHub login", out)
+        self.assertFalse([c for c in self.gh_calls() if c.startswith(("api -X", "pr create"))])
+
+    def test_submit_gh_failure_prints_the_manual_steps(self):
+        self.env["GH_FAIL_RC"] = "4"
+        rc, out = self.run_tty("y", "--submit")
+        self.assertEqual(rc, S.EXIT_NOT_SENT, out)
+        self.assertIn("gh pr create --repo 88plug/k3d-gpu", out)
+
+    def test_submit_without_gh_prints_the_pull_request_steps(self):
         rc, out = self.run_tty("yes", "--submit", "--no-gh")
         self.assertEqual(rc, 0, out)
-        self.assertIn(S.ISSUE_FORM, out)
+        self.assertIn("data/oracle/", out)
+        self.assertIn("gh pr create --repo 88plug/k3d-gpu", out)
         self.assertEqual(self.gh_calls(), [])
 
     def test_printed_bytes_are_the_bundle(self):
@@ -766,20 +793,6 @@ class ShareTest(unittest.TestCase):
             text = S.pretty(b)
             self.assertEqual(json.loads(text), b)
             self.assertLess(len(text), 2 * len(B.canonical(b)))
-
-    def test_oversized_bundle_gets_pull_request_steps_not_an_issue(self):
-        old = S.ISSUE_MAX_BYTES
-        S.ISSUE_MAX_BYTES = 100
-        try:
-            b = cap_bundle()
-            out = io.StringIO()
-            with redirect_stdout(out):
-                rc = S.send(b, "x.json", S.pretty(b), True)
-        finally:
-            S.ISSUE_MAX_BYTES = old
-        self.assertEqual(rc, 0)
-        self.assertIn("gh pr create", out.getvalue())
-        self.assertEqual(self.gh_calls(), [])
 
     def test_identifier_in_the_cpu_model_blocks_the_bundle(self):
         root = os.path.join(self.tmp, "root")

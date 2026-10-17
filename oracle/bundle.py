@@ -37,6 +37,24 @@ PUBLIC_REGISTRIES = ("docker.io", "registry-1.docker.io", "quay.io", "ghcr.io", 
                      "nvcr.io", "public.ecr.aws", "mcr.microsoft.com", "vault.habana.ai")
 
 
+# Strings shaped like a host identifier. validate.py (V3) rejects a bundle that
+# carries one; project.py drops a matching value before it enters a bundle.
+CANARIES = [
+    ("a MAC address", re.compile(r"(?i)(?<![0-9a-f])([0-9a-f]{2}[:-]){5}[0-9a-f]{2}(?![0-9a-f])")),
+    ("an IPv4 address", re.compile(r"(?<![0-9.])((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}"
+                                r"(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(?![0-9.])")),
+    ("an IPv6 address", re.compile(r"(?i)(?<![0-9a-z:])(([0-9a-f]{1,4}:){2,7}[0-9a-f]{1,4}|[0-9a-f]{0,4}::[0-9a-f:]{0,39})(?![0-9a-z:])")),
+    ("a UUID", re.compile(r"(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")),
+    ("an e-mail address", re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\.[A-Za-z0-9.-]+")),
+    ("a home or root path", re.compile(r"/(home|root|Users)(/|$)")),
+    ("a machine-id", re.compile(r"(?i)(?<![0-9a-f])[0-9a-f]{32}(?![0-9a-f])")),
+]
+
+
+def looks_identifying(s) -> bool:
+    return isinstance(s, str) and any(rx.search(s) for _name, rx in CANARIES)
+
+
 def image_registry(ref: str) -> str | None:
     """Registry host of an image reference, None for a Docker Hub short name."""
     first, sep, _ = ref.partition("/")

@@ -2,7 +2,7 @@
  "hardware": {
   "cpu": {
    "amx": [],
-   "e_core_cpus": 8,
+   "e_core_cpus": 10,
    "family": 6,
    "hybrid": true,
    "isa": [

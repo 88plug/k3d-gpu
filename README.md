@@ -1362,13 +1362,14 @@ change the image, CPU request, warm pool size or policy.
 ### Capacity oracle (`k3d-gpu share`, opt-in)
 
 `k3d-gpu share` turns a finished `capacity` run into a bundle for the public
-per-SKU matrix ([docs/oracle.md](docs/oracle.md); design:
+per-SKU leaderboard ([docs/oracle.md](docs/oracle.md),
+[docs/leaderboard.md](docs/leaderboard.md); design:
 [docs/moat-design.md](docs/moat-design.md)). It never sends anything on its own.
 
 ```bash
 k3d-gpu share --dry-run        # build, validate and print the bundle; write and send nothing
 k3d-gpu share                  # same, then write ./k3d-gpu-share-<sha12>.json (mode 0600)
-k3d-gpu share --submit         # same, then ask y/N at the terminal before opening a public issue
+k3d-gpu share --submit         # same, then ask y/N at the terminal before opening a public pull request
 ```
 
 * **What it reads**: `k3d-gpu report --json --no-cluster` (the cluster is not
@@ -1388,15 +1389,18 @@ k3d-gpu share --submit         # same, then ask y/N at the terminal before openi
   hostname, machine-id, user name, home path, MAC addresses and DMI serials. A
   rejected bundle is neither written nor sendable.
 * **Sending**: only with `--submit`, only at an interactive terminal, only after
-  a typed `y`/`yes`; there is no `--yes`. It then runs `gh issue create` on
-  `88plug/k3d-gpu-oracle` if `gh` is installed and logged in, or prints the
-  issue-form URL. The bundle has no identifiers, but a GitHub issue is public
-  under your account: a submission is not anonymous.
+  a typed `y`/`yes`; there is no `--yes`. With `gh` installed and logged in it
+  forks `88plug/k3d-gpu` and opens a pull request adding
+  `data/oracle/<sha256>.json`; without `gh` it prints those steps. CI validates
+  the file (V1-V12) and a maintainer merge puts it on the leaderboard. The
+  bundle has no identifiers, but a pull request is public under your account:
+  a submission is not anonymous.
 
 `python3 oracle/test_oracle.py` tests the schema, the projection over every sim
 fixture with planted identifiers, each validator rule, the matrix generator
-against `docs/oracle.md`, and that `share` never runs `gh` without the typed
-confirmation (stub `gh`, pseudo-terminal).
+against `docs/oracle-matrix.md`, and that `share` never runs `gh` without the
+typed confirmation (stub `gh`, pseudo-terminal). `oracle/test_fuzz.py` fuzzes the
+identifier scrubber and the validator (`FUZZ_N`, `FUZZ_SEED`).
 
 ---
 

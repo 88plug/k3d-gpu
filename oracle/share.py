@@ -13,10 +13,10 @@
   5. write     ./k3d-gpu-share-<sha256[:12]>.json, mode 0600 (--out).
   6. stop      unless --submit; --dry-run always stops here.
   7. confirm   --submit needs a terminal and a typed y/yes. There is no --yes.
-  8. send      `gh issue create` on github.com/88plug/k3d-gpu-oracle when gh is
-               installed and logged in (and --no-gh is not given); otherwise the
-               issue-form URL and the file path are printed. Over 48 KiB the
-               bundle does not fit an issue: the pull-request steps are printed.
+  8. send      a pull request on github.com/88plug/k3d-gpu adding
+               data/oracle/<sha256>.json through your fork, when gh is installed
+               and logged in (and --no-gh is not given); otherwise the manual
+               pull-request steps are printed. CI validates the file (V1-V12).
 
 Nothing touches the network before step 8, and step 8 runs only after the
 answer at step 7.
@@ -25,6 +25,7 @@ answer at step 7.
 from __future__ import annotations
 
 import argparse
+import base64
 import glob
 import json
 import os
@@ -33,7 +34,6 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
@@ -41,13 +41,12 @@ sys.path.insert(0, HERE)
 import project as P  # noqa: E402
 import validate as V  # noqa: E402
 
-ORACLE_REPO = "88plug/k3d-gpu-oracle"
-ISSUE_FORM = f"https://github.com/{ORACLE_REPO}/issues/new?template=submission.yml"
-ISSUE_MAX_BYTES = 48 * 1024
+ORACLE_REPO = "88plug/k3d-gpu"
+DATA_DIR = "data/oracle"
 NOTICE = ("This bundle carries no identifiers: no hostname, serial numbers, MAC or IP addresses, "
-          "user names, paths or timestamps (the week only). A GitHub issue or pull request is public "
+          "user names, paths or timestamps (the week only). A GitHub pull request is public "
           "and shows your GitHub account, so a submission is not anonymous.")
-QUESTION = (f"Submit this bundle to github.com/{ORACLE_REPO} as a public issue under your "
+QUESTION = (f"Submit this bundle to github.com/{ORACLE_REPO} as a public pull request under your "
             "GitHub account? [y/N] ")
 EXIT_USAGE, EXIT_REJECTED, EXIT_NOT_SENT = 2, 3, 1
 
@@ -175,34 +174,63 @@ def gh_ready():
     return gh if ok else None
 
 
+def submission_steps(sha, path):
+    """The manual pull-request steps, for when gh cannot do them."""
+    return [f"  gh repo fork {ORACLE_REPO} --clone && cd k3d-gpu",
+            f"  git switch -c oracle-{sha[:12]} && cp {path} {DATA_DIR}/{sha}.json",
+            f"  git add {DATA_DIR}/{sha}.json && git commit -m 'oracle: bundle {sha[:12]}'",
+            f"  git push -u origin oracle-{sha[:12]} && gh pr create --repo {ORACLE_REPO} --fill"]
+
+
+def gh_out(gh, *args, stdin=None):
+    r = subprocess.run([gh, *args], input=stdin, capture_output=True, text=True, check=False)
+    if r.returncode != 0:
+        raise RuntimeError(f"gh {' '.join(args[:2])} failed (exit {r.returncode}): {r.stderr.strip()[:300]}")
+    return r.stdout.strip()
+
+
+LOGIN_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})")
+BRANCH_RE = re.compile(r"[A-Za-z0-9._/-]{1,100}")
+
+
 def send(b, path, text, use_gh):
+    """Open a pull request on ORACLE_REPO adding DATA_DIR/<sha256>.json through
+    the user's fork: fork (no clone), branch from the fork's default branch,
+    put the file with the contents API, then gh pr create. CI validates it."""
     sha = b["content_sha256"]
-    size = len(text.encode())
-    if size > ISSUE_MAX_BYTES:
-        say(f"The bundle is {size} bytes, over the {ISSUE_MAX_BYTES}-byte issue limit this tool uses.")
-        say("Send it as a pull request instead (gh repo fork, then add the file and open a PR):")
-        say(f"  gh repo fork {ORACLE_REPO} --clone && cd k3d-gpu-oracle")
-        say(f"  cp {path} inbox/{sha}.json && git add inbox/{sha}.json && git commit -m 'bundle {sha[:12]}'")
-        say(f"  git push && gh pr create --repo {ORACLE_REPO} --title 'bundle {sha[:12]}' --body 'k3d-gpu share'")
-        return 0
     gh = gh_ready() if use_gh else None
     if not gh:
-        say(f"gh is not available{' (or not logged in)' if use_gh else ''}: open {ISSUE_FORM}")
-        say(f"and paste the contents of {path}.")
+        say(f"gh is not available{' (or not logged in)' if use_gh else ''}. Open the pull request by hand:")
+        for line in submission_steps(sha, path):
+            say(line)
         return 0
-    body = f"k3d-gpu share bundle `{sha}`\n\n```json\n{text}```\n"
-    fd, tmp = tempfile.mkstemp(prefix="k3d-gpu-share-", suffix=".md")
+    branch, dest = f"oracle-{sha[:12]}", f"{DATA_DIR}/{sha}.json"
     try:
-        with os.fdopen(fd, "w") as f:
-            f.write(body)
-        title = f"bundle {sha[:12]} {slug(b['hardware']['cpu']['model'])}"
-        rc = subprocess.run([gh, "issue", "create", "--repo", ORACLE_REPO, "--title", title,
-                             "--label", "submission", "--body-file", tmp], check=False).returncode
-    finally:
-        os.unlink(tmp)
-    if rc != 0:
-        say(f"share: gh issue create failed (exit {rc}); the bundle is still in {path}.")
+        gh_out(gh, "repo", "fork", ORACLE_REPO, "--clone=false", "--default-branch-only")
+        login = gh_out(gh, "api", "user", "--jq", ".login")
+        if not LOGIN_RE.fullmatch(login):
+            raise RuntimeError(f"unexpected GitHub login {login!r}")
+        fork = f"{login}/{ORACLE_REPO.split('/')[1]}"
+        base = gh_out(gh, "api", f"repos/{fork}", "--jq", ".default_branch")
+        if not BRANCH_RE.fullmatch(base):
+            raise RuntimeError(f"unexpected default branch {base!r}")
+        head = gh_out(gh, "api", f"repos/{fork}/git/ref/heads/{base}", "--jq", ".object.sha")
+        gh_out(gh, "api", "-X", "POST", f"repos/{fork}/git/refs",
+               "-f", f"ref=refs/heads/{branch}", "-f", f"sha={head}")
+        payload = json.dumps({"message": f"oracle: bundle {sha[:12]}", "branch": branch,
+                              "content": base64.b64encode(text.encode()).decode()})
+        gh_out(gh, "api", "-X", "PUT", f"repos/{fork}/contents/{dest}", "--input", "-", stdin=payload)
+        title = f"oracle: bundle {sha[:12]} {slug(b['hardware']['cpu']['model'])}"
+        body = (f"k3d-gpu share bundle `{sha}` as `{dest}`.\n\n"
+                "CI runs oracle/validate.py (V1-V12) on it; a maintainer merges it into the leaderboard.\n")
+        url = gh_out(gh, "pr", "create", "--repo", ORACLE_REPO, "--base", "main",
+                     "--head", f"{login}:{branch}", "--title", title, "--body", body)
+    except RuntimeError as e:
+        say(f"share: {e}; the bundle is still in {path}. The manual steps:")
+        for line in submission_steps(sha, path):
+            say(line)
         return EXIT_NOT_SENT
+    say(f"share: opened {url}")
     return 0
 
 
@@ -215,8 +243,8 @@ def parse(argv):
     ap.add_argument("--capacity", help="capacity.json of a finished `k3d-gpu capacity` run (default: newest)")
     ap.add_argument("--out", help="bundle file (default ./k3d-gpu-share-<sha12>.json, mode 0600)")
     ap.add_argument("--dry-run", action="store_true", help="print the bundle and stop; write and send nothing")
-    ap.add_argument("--submit", action="store_true", help="after a y/N prompt, open a public GitHub issue with it")
-    ap.add_argument("--no-gh", action="store_true", help="never run gh; print the issue-form URL instead")
+    ap.add_argument("--submit", action="store_true", help="after a y/N prompt, open a public pull request adding it under data/oracle/")
+    ap.add_argument("--no-gh", action="store_true", help="never run gh; print the manual pull-request steps instead")
     ap.add_argument("--server-image", help="NAME@sha256:... when the run did not record the server digest")
     ap.add_argument("--model-id", help="Hugging Face org/name when the served name is not one")
     ap.add_argument("--model-revision", help="40-hex commit of the model weights (k3d-gpu agent status)")

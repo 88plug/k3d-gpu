@@ -61,16 +61,7 @@ MONO_DROP = 0.5          # V11
 # ~8000 tokens/s, and real single-stream decode stays well under both.
 STREAM_TOK_S_MAX = {"cpu": 1000.0, "igpu": 1000.0, "npu": 1000.0, "gaudi": 8000.0, "nvidia": 8000.0}
 
-CANARIES = [
-    ("a MAC address", re.compile(r"(?i)(?<![0-9a-f])([0-9a-f]{2}[:-]){5}[0-9a-f]{2}(?![0-9a-f])")),
-    ("an IPv4 address", re.compile(r"(?<![0-9.])((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}"
-                                r"(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(?![0-9.])")),
-    ("an IPv6 address", re.compile(r"(?i)(?<![0-9a-z:])(([0-9a-f]{1,4}:){2,7}[0-9a-f]{1,4}|[0-9a-f]{0,4}::[0-9a-f:]{0,39})(?![0-9a-z:])")),
-    ("a UUID", re.compile(r"(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")),
-    ("an e-mail address", re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\.[A-Za-z0-9.-]+")),
-    ("a home or root path", re.compile(r"/(home|root|Users)(/|$)")),
-    ("a machine-id", re.compile(r"(?i)(?<![0-9a-f])[0-9a-f]{32}(?![0-9a-f])")),
-]
+CANARIES = B.CANARIES  # shared with project.py, which drops matching values
 
 
 class Result:
@@ -309,7 +300,11 @@ def recompute_capacity(b, res):
     # V10 box state.
     if not c["quiet_check_ok"]:
         res.flag("quarantine", "V10", "box was not quiet when the run started")
-    bind = next((s for s in steps if s["verdict"] != "pass"), steps[-1] if steps else None)
+    # The binding step is the smallest N that broke the SLO (the search may
+    # visit N out of order), else the largest N run.
+    failed = [s for s in steps if s["verdict"] != "pass"]
+    bind = (min(failed, key=lambda s: s["agents"]) if failed
+            else max(steps, key=lambda s: s["agents"]) if steps else None)
     if bind is not None and (bind["_claim"]["throttle_events"] or 0) > 0:
         res.tag("throttled")
     if c["drift_ratio"] is not None and c["drift_ratio"] > DRIFT_MAX:
@@ -356,7 +351,7 @@ def single_stream_metrics(b, res):
 def _rounds_median(values, rounds):
     by = {}
     for v, r in zip(values, rounds):
-        if v is not None:
+        if v is not None and isinstance(r, int) and not isinstance(r, bool):
             by.setdefault(r, []).append(v)
     return statistics.median(statistics.median(v) for _r, v in sorted(by.items())) if by else None
 
@@ -428,6 +423,8 @@ def main(argv=None):
     ap.add_argument("--trusted", action="store_true", help="accept maintainer-lab provenance (seed, lab runner)")
     ap.add_argument("--pin", action="append", default=[], help="VERSION=IMAGE known release pin")
     ap.add_argument("--known", help="dir of accepted bundles: their content hashes count as duplicates")
+    ap.add_argument("--strict", action="store_true",
+                    help="data/oracle check: fail on quarantine too, and the file must be named <content_sha256>.json")
     a = ap.parse_args(argv)
     pins = dict(p.split("=", 1) for p in a.pin if "=" in p)
     known = set()
@@ -450,7 +447,10 @@ def main(argv=None):
             known_others = known - {b.get("content_sha256")} if a.known and os.path.abspath(path).startswith(
                 os.path.abspath(a.known)) else known
             out = validate(b, raw_size=len(raw), trusted=a.trusted, known_hashes=known_others, pins=pins).as_dict()
-        bad += out["verdict"] == "reject"
+            if a.strict and isinstance(b, dict) and os.path.basename(path) != f"{b.get('content_sha256')}.json":
+                out["verdict"] = "reject"
+                out["reasons"].append("V2 reject: file name is not <content_sha256>.json")
+        bad += out["verdict"] == "reject" or (a.strict and out["verdict"] != "accept")
         print(json.dumps({"path": path, **out}, sort_keys=True))
     return 1 if bad else 0
 

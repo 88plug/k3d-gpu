@@ -71,8 +71,8 @@ def _first_line(path):
 
 
 def _pick(value, rx):
-    """value if it is a str matching rx, else None."""
-    return value if isinstance(value, str) and rx.match(value) else None
+    """value if it is a str matching rx and shaped like no host identifier, else None."""
+    return value if isinstance(value, str) and rx.match(value) and not B.looks_identifying(value) else None
 
 
 def _int(v):

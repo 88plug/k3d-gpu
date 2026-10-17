@@ -1,0 +1,56 @@
+{
+ "review": 0,
+ "rows": [
+  {
+   "agents_per_box": null,
+   "basis": "measured",
+   "comparison_key": "cbea63192097",
+   "cpu": "13th Gen Intel(R) Core(TM) i9-13900T",
+   "data": [
+    "https://github.com/88plug/k3d-gpu/blob/main/oracle/seed/maintainer-i9-13900T-h6-cpu.json"
+   ],
+   "decode_tok_s": 15.664,
+   "engine": "cpu",
+   "kind": "single_stream",
+   "ledger": [
+    "H6"
+   ],
+   "model": "OpenVINO/Qwen3-4B-int4-ov",
+   "n": 1,
+   "predicted_decode_roofline_tok_s": null,
+   "sku": "13th Gen Intel(R) Core(TM) i9-13900T + Raptor Lake-S + NVIDIA RTX 2000E Ada Generation + NVIDIA RTX 4000 SFF Ada Generation",
+   "slo_s": null,
+   "tags": [
+    "unreleased-build"
+   ],
+   "tier": "provisional",
+   "tok_s_per_w": null
+  },
+  {
+   "agents_per_box": null,
+   "basis": "measured",
+   "comparison_key": "ac70f80ca76a",
+   "cpu": "13th Gen Intel(R) Core(TM) i9-13900T",
+   "data": [
+    "https://github.com/88plug/k3d-gpu/blob/main/oracle/seed/maintainer-i9-13900T-h6-gpu.json"
+   ],
+   "decode_tok_s": 9.894,
+   "engine": "igpu",
+   "kind": "single_stream",
+   "ledger": [
+    "H6"
+   ],
+   "model": "OpenVINO/Qwen3-4B-int4-ov",
+   "n": 1,
+   "predicted_decode_roofline_tok_s": null,
+   "sku": "13th Gen Intel(R) Core(TM) i9-13900T + Raptor Lake-S + NVIDIA RTX 2000E Ada Generation + NVIDIA RTX 4000 SFF Ada Generation",
+   "slo_s": null,
+   "tags": [
+    "unreleased-build"
+   ],
+   "tier": "provisional",
+   "tok_s_per_w": null
+  }
+ ],
+ "schema": "k3d-gpu.oracle.leaderboard/1"
+}

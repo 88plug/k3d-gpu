@@ -232,7 +232,7 @@ Verdicts: `reject` (not committed), `quarantine` (committed under
 | V5 | **Recompute**: from `samples`, p95 per step, verdicts and `agents_per_box` via `apb.score_step` / `capacity.agents_per_box`. Any mismatch with the claimed value means the claim is discarded. Only the recomputed value is stored. No reply may carry more `out_tok` than the `max_tokens` it was sent with (the trace regenerated from its seed, or the single-stream shape) | reject |
 | V6 | **Little's law**: per step, `window_out_tok_s` agrees with `N * mean(out_tok) / mean(e2e + tool)` within a relative 0.25 | quarantine |
 | V7 | **Throughput ceiling**: `APB <= ceil(R_peak * (slo_s + mean(tool_s)) / mean(out_tok))`, where `R_peak` = the largest recomputed window tok/s of any step | reject |
-| V8 | **Bandwidth roofline** (CPU and iGPU engines): single-stream decode `<= 1.15 * BW / weights_bytes`, with `BW = channels * configured_mts * 8 bytes`. This rule is skipped when a speculative-decoding lever is on (the roofline does not hold there). When DRAM fields or `weights_bytes` are null, or the engine is not CPU/iGPU, one stream above a fixed ceiling (1000 tok/s CPU/iGPU/NPU, 8000 tok/s Gaudi/NVIDIA) goes to review instead | quarantine |
+| V8 | **Bandwidth roofline** (CPU and iGPU engines): single-stream decode `<= 1.15 * BW / weights_bytes`, with `BW = channels * configured_mts * 8 bytes`. This rule is skipped when a speculative-decoding lever is on (the roofline does not hold there). When DRAM fields or `weights_bytes` are null, or the engine is not CPU/iGPU, one stream above a fixed ceiling (`1000 tok/s` CPU/iGPU/NPU, `8000 tok/s` Gaudi/NVIDIA, constants in `oracle/validate.py`) goes to review instead | quarantine |
 | V9 | **Energy sanity**: `0 < pkg_w_mean <= max(pl2_w, 2 * pl1_w)` when known; `j_per_turn_pkg` agrees with `pkg_w_mean * window_s / turns` within a relative 0.1 | quarantine |
 | V10 | **Box state**: `quiet_check_ok == true`. With `throttle_events > 0` in the binding step, or `drift_ratio > 1.25`, the bundle is accepted but tagged `throttled` / `drifted`, and the matrix shows those tags | quarantine if not quiet |
 | V11 | **Monotone sanity**: recomputed p95 must not drop by more than half from step N to step 2N at the same reps. Such a drop is a sign of spliced runs | quarantine |
@@ -300,7 +300,7 @@ Rationale:
   oracle/seed/maintainer-i9-13900T-h6.json
   share/oracle-matrix.json            baked snapshot for --compare --offline
   tests/oracle_test.sh                golden + canary fixtures
-  docs/oracle.md                      generated snapshot of the matrix
+  docs/oracle-matrix.md                      generated snapshot of the matrix
 
 88plug/k3d-gpu-oracle/                (data repo)
   .github/workflows/ingest.yml        issue/PR -> validate -> commit -> actions/attest
@@ -343,7 +343,7 @@ Matrix generator (`oracle/matrix.py`), per comparison key:
 | n, tier | distinct submitters; provisional / community / verified |
 | Data | link to the data files |
 
-`docs/oracle.md` is in this repo and is scanned by `tests/claims_check.sh`. The
+`docs/oracle-matrix.md` is in this repo and is scanned by `tests/claims_check.sh`. The
 generator therefore writes each numeric row with the https URL of its data file
 on the same line, so every row is backed by a primary source and the guard
 passes without exceptions.
@@ -435,7 +435,7 @@ of the same SKU.
 - `validate.py` unit tests cover each rule V1-V12 with one passing and one
   failing bundle. The tampered-sample case (a claimed APB above the recomputed
   value) must be rejected.
-- `tests/claims_check.sh` covers this file and the generated `docs/oracle.md`.
+- `tests/claims_check.sh` covers this file and the generated `docs/oracle-matrix.md`.
 
 ## 9. Build order (one coherent change per push)
 
@@ -445,7 +445,7 @@ of the same SKU.
    merges.
 3. `k3d-gpu share` steps 1-6 (local only), then step 7-8 (`gh` path).
 4. The H6 seed bundle and the data repo with `ingest.yml` and attestations.
-5. `matrix.py`, `docs/oracle.md`, the Pages SKU pages and `capacity --compare`
+5. `matrix.py`, `docs/oracle-matrix.md`, the Pages SKU pages and `capacity --compare`
    with the baked snapshot.
 6. Lever A/B runs, one lever at a time, each adding a ledger row before any
    uplift is quoted.
@@ -461,7 +461,7 @@ Built, with tests in `oracle/test_oracle.py` and the CI job `oracle`:
 - Seed: `oracle/seed/maintainer-i9-13900T-h6-{cpu,gpu}.json`, rebuilt by
   `oracle/seed/build.py` from the H6 raw per-request files committed under
   `oracle/raw/h6/`. The recomputed medians equal the H6 table [ledger:H6].
-- `docs/oracle.md` is generated from the seed and checked in CI.
+- `docs/oracle-matrix.md` is generated from the seed and checked in CI.
 
 Differences from the design above:
 
