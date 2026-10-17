@@ -38,7 +38,6 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
-import bundle as B  # noqa: E402
 import project as P  # noqa: E402
 import validate as V  # noqa: E402
 

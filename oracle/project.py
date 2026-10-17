@@ -284,7 +284,8 @@ def tool_block(version, server_image, k3s=None):
     if not re.match(r"^([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|git-[0-9a-f]{40})$", version or ""):
         raise ProjectionError(f"tool version {version!r} is neither a release (x.y.z) nor git-<sha>")
     return {"version": version, "k3s": k3s,
-            "server_image": server_image if DIGEST_IMAGE_RE.match(server_image or "") else None,
+            "server_image": server_image if DIGEST_IMAGE_RE.match(server_image or "")
+        and B.public_image(server_image) else None,
             "node_image_digest": None}
 
 
@@ -360,9 +361,9 @@ def capacity_results(cap, run_dir):
 
 
 def served_model_id(served):
-    if served and "/" in served:
-        return served
-    if served == DEFAULT_MODEL.split("/")[-1]:
+    """Only the default model is named without --model-id: any other served
+    name can be a private org, user or path, so the submitter types it."""
+    if served in (DEFAULT_MODEL, DEFAULT_MODEL.split("/")[-1]):
         return DEFAULT_MODEL
     return None
 
@@ -373,7 +374,8 @@ def project_capacity(report, cap, run_dir, root, *, version=None, server_image=N
     ep = cap.get("endpoint") or {}
     mid = model_id or served_model_id(ep.get("model"))
     if mid is None:
-        raise ProjectionError(f"served model {ep.get('model')!r} is not an org/name id: pass --model-id")
+        raise ProjectionError(f"served model {ep.get('model')!r} is not the default model: pass --model-id "
+                              "with its public Hugging Face org/name")
     model = model_block(mid, revision, weights_sha256, weights_bytes, quant)
     engine = ep.get("engine") if ep.get("engine") in ("cpu", "igpu", "npu", "gaudi", "nvidia") else "unspecified"
     server = ep.get("server") if ep.get("server") in ("ovms", "vllm") else "unknown"
