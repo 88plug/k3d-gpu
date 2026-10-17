@@ -46,6 +46,15 @@ check "nfpm ships share/telemetry/" \
     grep -Pzq 'src: share/telemetry/\*\.yml\n +dst: /usr/share/k3d-gpu/telemetry/\n' "${NFPM}"
 check "nfpm ships share/telemetry/optional/" \
     grep -Pzq 'src: share/telemetry/optional/\*\.yml\n +dst: /usr/share/k3d-gpu/telemetry/optional/\n' "${NFPM}"
+check "nfpm ships console/*.py to /usr/share/k3d-gpu/console/" \
+    grep -Pzq 'src: console/\*\.py\n +dst: /usr/share/k3d-gpu/console/\n' "${NFPM}"
+check "nfpm ships console/*.json to /usr/share/k3d-gpu/console/" \
+    grep -Pzq 'src: console/\*\.json\n +dst: /usr/share/k3d-gpu/console/\n' "${NFPM}"
+for f in "${ROOT}"/console/*.py "${ROOT}"/console/*.json; do
+    check "PKGBUILD installs console/${f##*/}" grep -Eq "for f in (.* )?${f##*/}( |;)" "${PKGBUILD}"
+done
+check "nix installs console/*.py and console/*.json" \
+    grep -qF 'install -Dm644 -t "$out/share/k3d-gpu/console" console/*.py console/*.json' "${NIXPKG}"
 check "formula points K3D_GPU_SHARE at pkgshare" grep -qF 'K3D_GPU_SHARE: "${K3D_GPU_SHARE:-#{pkgshare}}"' "${FORMULA}"
 check "formula test asserts a user K3D_GPU_SHARE wins" \
     grep -qF 'assert_match "/x/nvidia-device-plugin.yml", shell_output("K3D_GPU_SHARE=/x #{bin}/k3d-gpu help")' "${FORMULA}"
