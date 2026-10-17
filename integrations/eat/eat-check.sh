@@ -12,18 +12,26 @@
 #   EAT_WORK        eat-up.sh work dir; its vault.yml holds the LiteLLM master key (default: ./eat-work)
 #   EAT_KUBECONFIG  kubeconfig of the cluster (default: $KUBECONFIG, else ~/.kube/config)
 #   EAT_MODEL       model name registered in LiteLLM (default: Qwen/Qwen3-1.7B)
+#   EAT_TEMPERATURE sampling temperature (default: 0). A remote endpoint from eat-remote.sh
+#                   on a shared fleet: 0.6, never 0
+#   EAT_MAX_TOKENS  max_tokens per request (default: 200; 64 for a shared remote endpoint)
 
 set -euo pipefail
 
 EAT_WORK="${EAT_WORK:-${PWD}/eat-work}"
 export KUBECONFIG="${EAT_KUBECONFIG:-${KUBECONFIG:-${HOME}/.kube/config}}"
 EAT_MODEL="${EAT_MODEL:-Qwen/Qwen3-1.7B}"
+EAT_TEMPERATURE="${EAT_TEMPERATURE:-0}"
+EAT_MAX_TOKENS="${EAT_MAX_TOKENS:-200}"
 CORE="${EAT_WORK}/eat/core"
 SANDBOX_NS=agent-sandbox-system
 ROUTER_PORT=18080
 
 err()  { echo "ERROR: $*" >&2; exit 1; }
 info() { echo "==> $*"; }
+
+[[ "${EAT_TEMPERATURE}" =~ ^[0-9]+([.][0-9]+)?$ ]] || err "EAT_TEMPERATURE must be a number, got '${EAT_TEMPERATURE}'"
+[[ "${EAT_MAX_TOKENS}" =~ ^[0-9]+$ ]] || err "EAT_MAX_TOKENS must be a whole number, got '${EAT_MAX_TOKENS}'"
 
 host=$(grep -E '^cluster_url=' "${CORE}/inventory/agentic-config.cfg" | cut -d= -f2-)
 key=$(grep -E '^litellm_master_key:' "${CORE}/inventory/metadata/vault.yml" | cut -d'"' -f2)
@@ -42,8 +50,8 @@ chat() {
 
 # ask <prompt>: the model's reply text, without Qwen3's empty <think></think> block.
 ask() {
-    chat "$(jq -n --arg m "${EAT_MODEL}" --arg p "$1" \
-        '{model: $m, max_tokens: 200, temperature: 0, messages: [{role: "user", content: $p}]}')" \
+    chat "$(jq -n --arg m "${EAT_MODEL}" --arg p "$1" --argjson n "${EAT_MAX_TOKENS}" --argjson t "${EAT_TEMPERATURE}" \
+        '{model: $m, max_tokens: $n, temperature: $t, messages: [{role: "user", content: $p}]}')" \
         | jq -r '.choices[0].message.content' | sed -e 's#</\{0,1\}think>##g' -e '/^```/d' -e '/^[[:space:]]*$/d'
 }
 
@@ -53,7 +61,7 @@ answer=$(ask "In one sentence, what is Kubernetes? /no_think")
 echo "    ${answer}"
 
 info "Tool call through LiteLLM..."
-tool=$(chat "$(jq -n --arg m "${EAT_MODEL}" '{model: $m, max_tokens: 200, temperature: 0,
+tool=$(chat "$(jq -n --arg m "${EAT_MODEL}" --argjson n "${EAT_MAX_TOKENS}" --argjson t "${EAT_TEMPERATURE}" '{model: $m, max_tokens: $n, temperature: $t,
     messages: [{role: "user", content: "What is the weather in Portland? Use the tool. /no_think"}],
     tools: [{type: "function", function: {name: "get_weather", description: "Current weather for a city",
         parameters: {type: "object", properties: {city: {type: "string"}}, required: ["city"]}}}]}')")

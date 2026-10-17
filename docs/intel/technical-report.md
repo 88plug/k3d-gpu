@@ -8,7 +8,7 @@ k3d-gpu turns one Linux host into a single-node k3s cluster (k3d) that detects t
 
 This report covers what was measured, and how. Every result comes from one host: an i9-13900T (Raptor Lake-S, 8 P-cores and 16 E-cores, UHD 770 iGPU with no XMX, AVX-VNNI, no AMX, no NPU). It is a T-SKU rated at 35 W base power, but its firmware runs PL1 = PL2 = 117 W, so it does not run the T-series 35 W envelope.
 
-- Six hypotheses are SUPPORTED. All six are scoped to that host.
+- Seven hypotheses are SUPPORTED. All seven are scoped to that host.
 - Seven are REFUTED. Six of them changed shipped defaults.
 - Twelve are INCONCLUSIVE, mostly because the shared host throttles or its load was unmatched. Fifteen are PENDING, nine of them the agent benchmark (H40-H48), pre-registered on 2026-10-17.
 - Every other Intel family is detected and configured in fixture tests only. None has a measurement.
@@ -56,6 +56,7 @@ The host is a shared, live machine: about 53 other containers, about 80 W idle p
 | H14 | Intel EAT's NRI balloons chart (v0.14.0) installs over a k3d-gpu cluster two ways: on a `K3D_GPU_BALLOONS=external` cluster with no flag, or on a default cluster with Helm 3 `--force` or Helm 4 `--force-conflicts`. 12/12 runs; `vllm` landed on P-cores 10-11, `redis` on E-cores 24-25 [ledger:H14] | Stand-in containers, not a full EAT deploy |
 | H15 | Two pods share the UHD 770 by default (`K3D_GPU_INTEL_SHARED=auto`, 8 per iGPU). The two-pod aggregate was 649.6 fps, 1.18x solo [ledger:H15]. With exclusive allocation the second pod stayed Pending | VA-API media workload. Shows concurrency, not isolation |
 | H16 | `K3D_GPU_DRA=1` hands the iGPU to a pod through the Intel GPU DRA driver gpu-v0.12.1 with no device plugin, 3/3 runs [ledger:H16] | One UHD 770, k3s 1.37 |
+| H1b | Intel EAT `release-1.0.3-hotfix` deployed and served on this 24-core client CPU in one pass: every pod not in phase Succeeded was Ready, both Jobs completed, a chat completion returned HTTP 200, and no Xeon-only instruction or label was needed [ledger:H1b] | n=1, shared host under background load, k3s v1.37.1. Reachability only, no speed |
 | H18 | `k3d-gpu sandbox up` kept sandbox pods on an E-core (CPU 24) behind default-deny egress. RFC1918 and tailscale targets were refused, PyPI was reachable, 3/3 runs [ledger:H18] | kube-router on k3s v1.37.1 |
 
 ### REFUTED (all but H27 changed a default)
@@ -106,7 +107,7 @@ PENDING with a pre-registration: H5 (prefill guard on/off with an E-core neighbo
 2. **Shared, throttling host.** The host is live and shared, and the package throttles under the probes' own load. Most INCONCLUSIVE verdicts come from this. H22 throttles itself, so it is barred from this host.
 3. **The XMX half of the device rule is untested.** H6 supports "stay on the P-cores when the iGPU has no XMX". Whether the iGPU wins when it has XMX is an open prediction.
 4. **Small n.** Most SUPPORTED rows are n=3 per arm, so they show direction and correctness, not effect-size precision.
-5. **EAT is not proven end to end.** H14 proves the balloons install paths only. The full-stack run (H1) is INCONCLUSIVE.
+5. **EAT end to end is one run.** H1b deployed and served the full EAT stack once on this host. H1 stays INCONCLUSIVE: its wait could not pass on k3s v1.37. Nothing is known for other client CPUs.
 6. **Power envelope.** The host is a 35 W T-SKU by rating only. Firmware sets PL1 = PL2 = 117 W, so every result here, H22's throttle included, is at that envelope. No result transfers to a T-SKU held at Intel's 35 W / 106 W limits.
 
 ## Reproduce

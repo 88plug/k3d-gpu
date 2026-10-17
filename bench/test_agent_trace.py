@@ -424,6 +424,65 @@ class PrefixCache(unittest.TestCase):
         self.assertGreater(s["per_turn"]["0"]["cached_p50"], 1200 + 600)
 
 
+class Redirects(unittest.TestCase):
+    """A 3xx never replays the bearer key: with a key, stream_chat does not follow it."""
+
+    def setUp(self):
+        self.seen = []
+        seen = self.seen
+
+        class Target(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_POST(self):
+                seen.append(self.headers.get("Authorization"))
+                self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                body = b'data: {"choices": [{"delta": {"content": "hi"}}]}\n\ndata: [DONE]\n\n'
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            do_GET = do_POST  # urllib turns a POST's 302 into a GET
+
+        self.target = ThreadingHTTPServer(("127.0.0.1", 0), Target)
+        port = self.target.server_address[1]
+
+        class Redirector(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                self.send_response(302)
+                self.send_header("Location", f"http://localhost:{port}/v1/chat/completions")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
+        self.redirector = ThreadingHTTPServer(("127.0.0.1", 0), Redirector)
+        for srv in (self.target, self.redirector):
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.url = f"http://127.0.0.1:{self.redirector.server_address[1]}/v1/chat/completions"
+
+    def tearDown(self):
+        for srv in (self.target, self.redirector):
+            srv.shutdown()
+            srv.server_close()
+
+    def test_key_is_not_replayed_to_the_redirect_target(self):
+        out = at.stream_chat(self.url, {"model": "m", "messages": []}, api_key="sk-test-redirect-0000", timeout=10)
+        self.assertEqual(self.seen, [], "the redirect target was contacted with the key")
+        self.assertIn("302", out["error"] or "")
+
+    def test_without_a_key_a_redirect_is_followed(self):
+        out = at.stream_chat(self.url, {"model": "m", "messages": []}, timeout=10)
+        self.assertIsNone(out["error"])
+        self.assertEqual(self.seen, [None])
+        self.assertEqual(out["content"], "hi")
+
+
 class Generator(unittest.TestCase):
     def test_families(self):
         for name, fn in gen.FAMILIES.items():

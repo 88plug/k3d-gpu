@@ -78,6 +78,8 @@ if url.endswith("/v1/chat/completions"):
     with open(os.environ["STUB_LOG"], "a") as f:
         f.write(f"resolve {resolve}\n")
     req = json.loads(body)
+    with open(os.environ["STUB_LOG"], "a") as f:
+        f.write(f"request max_tokens={req.get('max_tokens')} temperature={req.get('temperature')}\n")
     prompt = req["messages"][-1]["content"]
     if req.get("tools"):
         if os.environ.get("STUB_NO_TOOL"):
@@ -128,6 +130,68 @@ check_says "multi-line code with quotes survives a /bin/sh -c router" 0 '"stdout
     STUB_CODE="${MULTI}" STUB_ROUTER=sh
 check_says "eat-check fails when the sandbox does not print 385" fail 'expected 385' \
     STUB_CODE='print(sum(range(1, 11)))'
+check_says "eat-check defaults: 200 tokens, temperature 0" 0 'request max_tokens=200 temperature=0$'
+check_says "eat-check for a shared remote endpoint: sampled and short" 0 'request max_tokens=64 temperature=0.6$' \
+    EAT_TEMPERATURE=0.6 EAT_MAX_TOKENS=64
+check_says "eat-check refuses a non-numeric temperature" fail 'EAT_TEMPERATURE must be a number' EAT_TEMPERATURE=hot
+
+# 4. eat-remote.sh: a remote endpoint as a LiteLLM model. The key reaches the
+#    cluster only as the Secret on kubectl's stdin, the gateway gets it as a
+#    secretKeyRef (set env --from=secret), and /model/new names the env var, never
+#    the key. The master key header goes to curl on stdin, not argv.
+RKEY="sk-test-eat-remote-0123456789"
+RKEY_B64=$(printf '%s' "${RKEY}" | base64 -w0)
+RBIN="${WORK}/rbin"
+mkdir -p "${RBIN}"
+coproc ESTUB { exec python3 "${ROOT}/tests/openai_auth_stub.py" --key "${RKEY}" --models "zai-org/GLM-5.3"; }
+read -r _ EPORT <&"${ESTUB[0]}"
+cat > "${RBIN}/kubectl" <<'EOF'
+#!/usr/bin/env bash
+echo "kubectl $*" >> "${STUB_LOG}"
+case "$*" in
+    *"apply --server-side"*) grep -q "OPENAI_API_KEY: ${STUB_KEY_B64}" && echo "secret-on-stdin" >> "${STUB_LOG}" ;;
+    *port-forward*) exec sleep 30 ;;
+esac
+exit 0
+EOF
+cat > "${RBIN}/curl" <<'EOF'
+#!/usr/bin/env bash
+echo "curl $*" >> "${STUB_LOG}"
+grep -q 'Authorization: Bearer sk-stub' && echo "master-key-on-stdin" >> "${STUB_LOG}"
+case "$*" in
+    *"/models?"*) [ -f "${STUB_LOG}.listed" ] && echo '{"data":[{"id":"zai-org/GLM-5.3"}]}' || echo '{"data":[]}' ;;
+    *"/model/new"*) echo '{}' ;;
+esac
+EOF
+chmod +x "${RBIN}/kubectl" "${RBIN}/curl"
+rlog="${WORK}/rlog"
+: > "${rlog}"
+out=$(env PATH="${RBIN}:${PATH}" EAT_WORK="${WORK}/eat-work" EAT_KUBECONFIG="${WORK}/kubeconfig" STUB_LOG="${rlog}" \
+    STUB_KEY_B64="${RKEY_B64}" OPENAI_BASE_URL="http://127.0.0.1:${EPORT}" OPENAI_API_KEY="${RKEY}" \
+    "${EAT}/eat-remote.sh" 2>&1) && rc=0 || rc=$?
+log=$(cat "${rlog}")
+if [ "${rc}" -eq 0 ]; then ok "eat-remote registers the endpoint"; else fail "eat-remote rc=${rc}: ${out}"; fi
+grep -q '^secret-on-stdin$' <<< "${log}" && ok "eat-remote: Secret on stdin, server-side" || fail "eat-remote: Secret not on stdin"
+grep -q 'set env deployment/genai-gateway-deployment --from=secret/k3d-gpu-llm --keys=OPENAI_API_KEY --prefix=K3D_GPU_REMOTE_' <<< "${log}" \
+    && ok "eat-remote: gateway env is a secretKeyRef" || fail "eat-remote: gateway env"
+grep -q 'master-key-on-stdin' <<< "${log}" && ok "eat-remote: master key header on stdin" || fail "eat-remote: master key header"
+grep -q 'os.environ/K3D_GPU_REMOTE_OPENAI_API_KEY' <<< "${log}" && grep -q '"api_base":"http://127.0.0.1:'"${EPORT}"'/v1"' <<< "${log}" \
+    && ok "eat-remote: /model/new names the env var and the /v1 base" || fail "eat-remote: /model/new body: ${log}"
+if grep -Fq -- "${RKEY}" <<< "${log}${out}" || grep -Fq -- "${RKEY_B64}" <<< "${log}${out}" || grep -Fq 'sk-stub' <<< "${log}"; then
+    fail "eat-remote: a key reached argv or output"
+else
+    ok "eat-remote: no key on any argv or in the output"
+fi
+touch "${rlog}.listed"; : > "${rlog}"
+out=$(env PATH="${RBIN}:${PATH}" EAT_WORK="${WORK}/eat-work" EAT_KUBECONFIG="${WORK}/kubeconfig" STUB_LOG="${rlog}" \
+    STUB_KEY_B64="${RKEY_B64}" OPENAI_BASE_URL="http://127.0.0.1:${EPORT}" OPENAI_API_KEY="${RKEY}" \
+    "${EAT}/eat-remote.sh" 2>&1) && rc=0 || rc=$?
+if [ "${rc}" -eq 0 ] && grep -q 'already serves' <<< "${out}" && ! grep -q '/model/new' "${rlog}"; then
+    ok "eat-remote: a registered model is not registered again"
+else
+    fail "eat-remote idempotence: ${out}"
+fi
+kill "${ESTUB_PID}" 2>/dev/null || true
 
 # 3. eat-up.sh refuses deploy_openshell=on before it touches the cluster: the pinned
 #    release-1.0.3-hotfix has no OpenShell role. No kubectl stub: it must stop first.

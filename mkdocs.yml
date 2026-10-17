@@ -22,6 +22,7 @@ nav:
   - Home: index.md
   - Quickstart: quickstart.md
   - First run by machine: first-run.md
+  - Remote endpoints: remote-endpoints.md
   - Intel platforms: intel.md
   - Platform matrix: platforms.md
   - Operations:

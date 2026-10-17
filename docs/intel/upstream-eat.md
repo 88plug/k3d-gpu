@@ -126,9 +126,9 @@ Two content changes:
 
 ## Test plan
 
-**Gate 0. Re-run the H1 probe exactly as pre-registered before sending anything.**
+**Gate 0. A pre-registered end-to-end run passes before anything is sent.**
 
-Until this passes, the issue and PRs say "statically verified" only. **Status: not passed.** H1 is still INCONCLUSIVE [ledger:H1].
+**Status: passed on one host by H1b, SUPPORTED [ledger:H1b].** H1 stays INCONCLUSIVE [ledger:H1]; its wait cannot pass on k3s v1.37. The doc stays a DRAFT; nothing is sent until the owner approves it. The issue and PRs cite one i9-13900T run, n=1, not a support statement for client CPUs.
 
 Run 2 (2026-10-17, [EXPERIMENTS.md, H1 run 2](../../EXPERIMENTS.md#h1-run-2-i9-13900t-2026-10-17)) fixed run 1's deviations. It ran on one fresh cluster under a matched background load, each step once and timed:
 
@@ -143,10 +143,20 @@ Run 2 (2026-10-17, [EXPERIMENTS.md, H1 run 2](../../EXPERIMENTS.md#h1-run-2-i9-1
 
 Every pod that can be Ready was Ready, vLLM included. The wait still cannot exit 0. k3s v1.37 runs its own `helm-install-gateway-api-crd` Job, and a Succeeded pod never turns Ready. So the probe as written cannot pass on any k3s v1.37 cluster. The fault is in the probe, not in EAT.
 
-Next step before Gate 0 can pass: pre-register an amended wait (`--field-selector=status.phase!=Succeeded`, plus every Job `Complete`), then run it once.
+H1b ([EXPERIMENTS.md, H1b run](../../EXPERIMENTS.md#h1b-run-i9-13900t-2026-10-17)) is a new row with H1's hypothesis and criteria and one change: the wait skips Succeeded pods. It was pushed before the run, then run once on one fresh cluster under the same matched load:
+
+| Step | Wall (s) | Result |
+|---|---|---|
+| `k3d-gpu up` | 48.9 | rc 0 |
+| `eat-up.sh` | 494.6 | rc 0, 5 PLAY RECAPs `failed=0` |
+| `eat-up.sh model cpu-qwen3-1-7b` | 154.9 | rc 0 |
+| `kubectl wait --for=condition=Ready pod -A --field-selector=status.phase!=Succeeded --timeout=30m` | 280.1 | rc 0, 33 pods Ready |
+| every Job | 0.1 | `helm-install-gateway-api-crd` and `register-qwen-qwen3-1-7b` `Complete` |
+| one chat completion through LiteLLM | 12.6 | HTTP 200, `finish_reason` stop |
+| `eat-check.sh` | 28.4 | passed |
 
 ```bash
-# Fresh cluster, one uninterrupted pass (EXPERIMENTS.md, H1 run 2 has the matched-load version)
+# Fresh cluster, one uninterrupted pass (EXPERIMENTS.md, H1b run has the matched-load version)
 IMAGE=k3d-gpu:eat-$(git rev-parse --short HEAD)
 docker build -q -t "$IMAGE" .
 K3D_GPU_IMAGE="$IMAGE" \
@@ -154,7 +164,8 @@ K3D_GPU_NODE_LABELS=ei-infra-eligible=true,ei-inference-eligible=true \
 K3D_GPU_K3S_ARGS=--disable=servicelb scripts/k3d-gpu up
 EAT_WORK=$PWD/eat-work integrations/eat/eat-up.sh
 EAT_WORK=$PWD/eat-work integrations/eat/eat-up.sh model cpu-qwen3-1-7b
-kubectl wait --for=condition=Ready pod --all -A --timeout=30m
+kubectl wait --for=condition=Ready pod -A --field-selector=status.phase!=Succeeded --timeout=30m
+kubectl get jobs -A   # every Job: COMPLETIONS 1/1
 EAT_WORK=$PWD/eat-work integrations/eat/eat-check.sh   # expect: ==> EAT check passed.
 scripts/k3d-gpu down
 ```
@@ -256,7 +267,7 @@ Refs intel/enterprise-ai-solutions#<issue>.
 
 ## What this draft does not claim
 
-- That the toolkit is supported on any Intel client CPU. The only data points are two runs on one i9-13900T, INCONCLUSIVE [ledger:H1].
+- That the toolkit is supported on any Intel client CPU. The data points are three runs on one i9-13900T: H1 INCONCLUSIVE [ledger:H1] and one SUPPORTED run, n=1 [ledger:H1b].
 - Any performance number. None appears in the upstream text.
 - Any world-first. [docs/provenance.md](../provenance.md) supports none.
 

@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import urllib.parse
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "bench"))
@@ -278,6 +279,51 @@ class Units(unittest.TestCase):
             self.assertRegex(s["image"], r"^[a-z0-9./_-]+:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}$", name)
             self.assertTrue(s["api"] in ("/v1", "/v3") and s["served_model"] and s["docs"].startswith("https://"), name)
             self.assertIn("4-bit", s["quant_tier"], name)
+
+
+class RemoteArm(unittest.TestCase):
+    """--remote-arm: a third-party endpoint is sampled (never greedy), carries the
+    key from OPENAI_API_KEY, and the run is held to one round."""
+
+    def test_remote_arm_requests_and_budget(self):
+        seen = []
+
+        def fake(args, idx):
+            seen.append(args)
+            return {"ok": True, "output_tokens": 8, "content_chunks": 8, "latency_s": 1.0, "ttft_s": 0.1,
+                    "decode_tokens_per_s": 8.0, "tokens_source": "usage"}
+
+        tmp = tempfile.mkdtemp()
+        orig, env = vs.llm_load.one_request, os.environ.get("OPENAI_API_KEY")
+        vs.llm_load.one_request, os.environ["OPENAI_API_KEY"] = fake, "sk-test-vs-0000"
+        try:
+            base = ["run", "--arm", "k3d-gpu=http://127.0.0.1:1/v3,m", "--arm", "remote=https://llm.example/v1,r",
+                    "--remote-arm", "remote", "--id", "H0", "--out", os.path.join(tmp, "r.json"),
+                    "--powercap", tmp]
+            with self.assertRaises(SystemExit):
+                vs.main(base + ["--rounds", "3", "--warmup", "0", "--max-tokens", "16"])
+            with self.assertRaises(SystemExit):
+                vs.main(base + ["--rounds", "1", "--warmup", "0", "--max-tokens", "128"])
+            self.assertEqual(seen, [], "a refused run sends nothing")
+            self.assertEqual(vs.main(base + ["--rounds", "1", "--warmup", "0", "--max-tokens", "16"]), 0)
+        finally:
+            vs.llm_load.one_request = orig
+            if env is None:
+                os.environ.pop("OPENAI_API_KEY", None)
+            else:
+                os.environ["OPENAI_API_KEY"] = env
+            shutil.rmtree(tmp)
+        host = lambda a: urllib.parse.urlsplit(a.base_url).hostname  # noqa: E731
+        remote = [a for a in seen if host(a) == "llm.example"]
+        local = [a for a in seen if host(a) == "127.0.0.1"]
+        self.assertTrue(remote and local)
+        self.assertTrue(all(a.temperature > 0 and not a.ignore_eos and a.api_key == "sk-test-vs-0000" for a in remote))
+        self.assertTrue(all(a.temperature == 0.0 and a.ignore_eos and a.api_key is None for a in local))
+
+    def test_remote_arm_must_name_an_arm(self):
+        with self.assertRaises(SystemExit):
+            vs.main(["run", "--arm", "k3d-gpu=http://h:1/v3,m", "--arm", "x=https://h/v1,m", "--remote-arm", "y",
+                     "--id", "H0", "--out", "/dev/null", "--rounds", "1", "--warmup", "0", "--max-tokens", "8"])
 
 
 if __name__ == "__main__":

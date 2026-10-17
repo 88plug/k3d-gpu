@@ -106,6 +106,36 @@ check "brew wrapper keeps a user K3D_GPU_SHARE" \
     grep -qF /x/nvidia-device-plugin.yml <(K3D_GPU_SHARE=/x "${wrap_dir}/k3d-gpu" help)
 rm -rf "${wrap_dir}"
 
+# Every recipe ships the same payload (README "Install"): the formula too, so a brew install
+# runs plan, audit, autoquant, tune, capacity and share like the other packages.
+check "formula installs console/*.py and console/*.json" \
+    grep -qF '(pkgshare/"console").install Dir["console/*.py", "console/*.json"]' "${FORMULA}"
+check "formula installs images.lock" grep -qF 'pkgshare.install "images.lock"' "${FORMULA}"
+for f in energy.sh agent_trace.py agent_trace_gen.py; do
+    check "formula installs bench/${f}" grep -qF "\"bench/${f}\"" "${FORMULA}"
+done
+check "formula installs bench/apb/{apb,capacity}.py" \
+    grep -qF '(pkgshare/"bench/apb").install "bench/apb/apb.py", "bench/apb/capacity.py"' "${FORMULA}"
+check "formula installs oracle/{bundle,project,validate,share}.py" \
+    grep -qF '(pkgshare/"oracle").install "oracle/bundle.py", "oracle/project.py", "oracle/validate.py", "oracle/share.py"' "${FORMULA}"
+check "formula installs oracle/schema/bundle-v1.json" \
+    grep -qF '(pkgshare/"oracle/schema").install "oracle/schema/bundle-v1.json"' "${FORMULA}"
+# README documents `k3d-gpu-mcp` as the MCP server command; every recipe puts it on PATH.
+check "PKGBUILD installs k3d-gpu-mcp" grep -qF 'install -Dm755 scripts/k3d-gpu-mcp' "${PKGBUILD}"
+check "nfpm ships k3d-gpu-mcp to /usr/bin" \
+    grep -Pzq 'src: scripts/k3d-gpu-mcp\n +dst: /usr/bin/k3d-gpu-mcp\n +file_info:\n +mode: 0755' "${NFPM}"
+check "formula installs k3d-gpu-mcp next to the launcher" grep -qF 'libexec.install "scripts/k3d-gpu", "scripts/k3d-gpu-mcp"' "${FORMULA}"
+check "formula puts k3d-gpu-mcp on PATH with K3D_GPU_SHARE" \
+    grep -qF '(bin/"k3d-gpu-mcp").write_env_script libexec/"k3d-gpu-mcp", K3D_GPU_SHARE: "${K3D_GPU_SHARE:-#{pkgshare}}"' "${FORMULA}"
+check "nix source includes k3d-gpu-mcp" grep -qF '(root + "/scripts/k3d-gpu-mcp")' "${NIXPKG}"
+check "nix installs k3d-gpu-mcp" grep -qF 'install -Dm755 scripts/k3d-gpu-mcp "$out/bin/k3d-gpu-mcp"' "${NIXPKG}"
+check "packaging/check.sh asserts k3d-gpu-mcp is installed" grep -qF 'test -x /usr/bin/k3d-gpu-mcp' "${ROOT}/packaging/check.sh"
+
+check "README Install names k3d-gpu-mcp in the shared payload" \
+    grep -qF 'the launcher at `bin/k3d-gpu`, the MCP server at `bin/k3d-gpu-mcp`' "${ROOT}/README.md"
+check "README Install says the node image is amd64 only" \
+    grep -qF 'The node image `cryptoandcoffee/k3d-gpu` is published for linux/amd64 only' "${ROOT}/README.md"
+
 check "formula url is an aur-v release tarball" \
     grep -Eq '^  url "https://github.com/88plug/k3d-gpu/archive/refs/tags/aur-v[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz"$' "${FORMULA}"
 check "formula sha256 is 64 hex" grep -Eq '^  sha256 "[0-9a-f]{64}"$' "${FORMULA}"
@@ -131,6 +161,32 @@ check "packages.yml dry_run skips the upload" \
     grep -Pzq -- '- name: Publish to the GitHub release\n +if: \$\{\{ !inputs\.dry_run \}\}\n' "${PKGS}"
 check "packages.yml dry_run skips the formula commit" \
     grep -Pzq -- '- name: Commit to main\n +if: \$\{\{ !inputs\.dry_run \}\}\n' "${PKGS}"
+# The NVIDIA device-plugin step takes only a vX.Y.Z tag: its output lands in later run
+# scripts and in share/nvidia-device-plugin.yml. Run the step with curl stubbed to a tag.
+nvstep=$(python3 -c 'import sys, yaml
+for s in yaml.safe_load(open(sys.argv[1]))["jobs"]["check"]["steps"]:
+    if s.get("id") == "nvidia_plugin": print(s["run"])' "${BAP}")
+check "build-and-push has the nvidia_plugin step" test -n "${nvstep}"
+# nvstep_out <tag>: the step's GITHUB_OUTPUT when the release API answers <tag>; fails when the step fails.
+nvstep_out() {
+    local d rc=0
+    d=$(mktemp -d)
+    jq -n --arg t "$1" '{tag_name: $t}' > "${d}/release.json"
+    printf '#!/bin/sh\ncat "%s/release.json"\n' "${d}" > "${d}/curl"
+    chmod +x "${d}/curl"
+    if PATH="${d}:${PATH}" GITHUB_OUTPUT="${d}/out" GH_TOKEN=x bash -euc "${nvstep}" >/dev/null 2>&1; then
+        cat "${d}/out"
+    else
+        rc=1
+    fi
+    rm -rf "${d}"
+    return "${rc}"
+}
+nvstep_refuses() { ! nvstep_out "$1" >/dev/null; }
+check "nvidia_plugin step takes a vX.Y.Z tag" test "$(nvstep_out v0.21.0)" = "latest=v0.21.0"
+check "nvidia_plugin step refuses a tag with shell characters" nvstep_refuses 'v0.21.0";id;"'
+check "nvidia_plugin step refuses a tag with a newline" nvstep_refuses $'v0.21.0\nx'
+check "nvidia_plugin step refuses a tag with \$( )" nvstep_refuses 'v1$(id)'
 check "packages.yml builds with packaging/check.sh nfpm" grep -q 'packaging/check.sh nfpm' "${PKGS}"
 check "packages.yml uploads to the aur-v release" grep -q 'gh release upload' "${PKGS}"
 # gh uploads create-time assets to a draft and publishes only once they are all up, so a

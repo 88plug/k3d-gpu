@@ -125,8 +125,8 @@ cat > "${B}/kubectl" <<'EOF'
 echo "kubectl $*" >> "${STUB_STATE}/log"
 case "$*" in
     *"get deployment ovms"*)
-        [ -f "${STUB_STATE}/agent" ] || exit 1
-        printf '1 %s ["--model_path=/models/%s","--port=8000"]' "$(cat "${STUB_STATE}/mem")" "$(cat "${STUB_STATE}/agent")" ;;
+        [ -f "${STUB_STATE}/live" ] || exit 1
+        cat "${STUB_STATE}/live" ;;
     *"get secret open-webui-admin"*) [ -f "${STUB_STATE}/secret" ] || exit 1 ;;
     *"create secret generic open-webui-admin"*) touch "${STUB_STATE}/secret" ;;
     *"create namespace"*) echo "kind: Namespace" ;;
@@ -135,12 +135,31 @@ case "$*" in
 esac
 exit 0
 EOF
+# `agent manifest` renders a minimal ovms Deployment from the environment it is
+# given (STUB_AUTOQUANT stands in for a measured autoquant pick, which only an
+# unpinned model takes); `agent up` writes what the live Deployment then reports,
+# in the go-template layout qs_agent_ready reads.
 cat > "${B}/self" <<'EOF'
 #!/usr/bin/env bash
-echo "self $* model=${K3D_GPU_AGENT_MODEL:-} mem=${K3D_GPU_AGENT_MEMORY:-} tool=${K3D_GPU_AGENT_TOOL_PARSER:-} reason=${K3D_GPU_AGENT_REASONING_PARSER:-} backend=${K3D_GPU_AGENT_BACKEND:-} rev=${K3D_GPU_AGENT_REVISION:-}" >> "${STUB_STATE}/log"
-case "$1" in
-    up) touch "${STUB_STATE}/cluster" ;;
-    agent) echo "${K3D_GPU_AGENT_MODEL}" > "${STUB_STATE}/agent"; echo "${K3D_GPU_AGENT_MEMORY}" > "${STUB_STATE}/mem" ;;
+echo "self $* model=${K3D_GPU_AGENT_MODEL:-} mem=${K3D_GPU_AGENT_MEMORY:-} tool=${K3D_GPU_AGENT_TOOL_PARSER:-} reason=${K3D_GPU_AGENT_REASONING_PARSER:-} backend=${K3D_GPU_AGENT_BACKEND:-} rev=${K3D_GPU_AGENT_REVISION:-} tier=${K3D_GPU_AGENT_MODEL_TIER:-}${K3D_GPU_AGENT_MEMORY_TIER:-}" >> "${STUB_STATE}/log"
+served=${K3D_GPU_AGENT_MODEL}
+[ -z "${STUB_AUTOQUANT:-}" ] || [ -z "${K3D_GPU_AGENT_MODEL_TIER:-}" ] || served=${STUB_AUTOQUANT}
+dev=${K3D_GPU_AGENT_DEVICE:-CPU}
+case "$1 ${2:-}" in
+    "up "*) touch "${STUB_STATE}/cluster" ;;
+    "agent manifest")
+        printf 'kind: Namespace\nmetadata:\n  name: k3d-gpu-agent\n---\nkind: Deployment\nmetadata:\n  name: ovms\nspec:\n  template:\n    spec:\n'
+        printf '      initContainers:\n        - name: pull\n          image: ovms:1\n          args:\n            - --pull\n'
+        printf '            - --source_model=%s\n            - --target_device=%s\n' "${served}" "${dev}"
+        [ -z "${K3D_GPU_AGENT_DRAFT:-}" ] || printf '            - --draft_device=%s\n' "${K3D_GPU_AGENT_DRAFT}"
+        printf '      containers:\n        - name: ovms\n          image: ovms:1\n          args:\n'
+        printf '            - --model_path=/models/%s\n            - --model_name=%s\n' "${served}" "${K3D_GPU_AGENT_MODEL##*/}"
+        printf '          resources:\n            requests:\n              cpu: "2"\n              memory: %s\n---\nkind: Service\n' "${K3D_GPU_AGENT_MEMORY}" ;;
+    "agent up")
+        { printf 'ready: 1\nimage: ovms:1\n--pull\n--source_model=%s\n--target_device=%s\n' "${served}" "${dev}"
+          [ -z "${K3D_GPU_AGENT_DRAFT:-}" ] || printf -- '--draft_device=%s\n' "${K3D_GPU_AGENT_DRAFT}"
+          printf 'image: ovms:1\n--model_path=/models/%s\n--model_name=%s\ncpu: 2\nmemory: %s\n' "${served}" "${K3D_GPU_AGENT_MODEL##*/}" "${K3D_GPU_AGENT_MEMORY}"
+        } > "${STUB_STATE}/live" ;;
 esac
 EOF
 chmod +x "${B}"/*
@@ -155,7 +174,7 @@ out=$(qs cmd_quickstart); rc=$?
 eq "first run exits 0" "${rc}" 0
 log=$(cat "${S}/log")
 has "first run creates the cluster" "${log}" "self up"
-has "first run starts the agent with the tier model" "${log}" "self agent up model=OpenVINO/Qwen3-8B-int4-ov mem=10Gi tool=hermes3 reason=qwen3 backend= rev=5c47abf4b8e12ebe8e99745bb0c1ec17e0c0abcc"
+has "first run starts the agent with the tier model" "${log}" "self agent up model=OpenVINO/Qwen3-8B-int4-ov mem=10Gi tool=hermes3 reason=qwen3 backend= rev=5c47abf4b8e12ebe8e99745bb0c1ec17e0c0abcc tier=11"
 has "admin secret read from the 0600 file" "${log}" "--from-env-file="
 lacks "admin password never on argv" "${log}" "password="
 has "progress steps shown" "${out}" "[1/5]"
@@ -175,7 +194,7 @@ out=$(qs cmd_quickstart); rc=$?
 eq "second run exits 0" "${rc}" 0
 log=$(cat "${S}/log")
 lacks "second run: no cluster create" "${log}" "self up"
-lacks "second run: no agent up" "${log}" "self agent"
+lacks "second run: no agent up" "${log}" "self agent up"
 lacks "second run: secret kept" "${log}" "create secret"
 has "second run reuses port-forward" "${out}" "port-forward already running (pid ${pf1})"
 has "second run says agent serving" "${out}" "agent already serving OpenVINO/Qwen3-8B-int4-ov"
@@ -185,12 +204,36 @@ has "second run says agent serving" "${out}" "agent already serving OpenVINO/Qwe
 out=$(K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3-1.7B-int4-ov qs cmd_quickstart)
 log=$(cat "${S}/log")
 lacks "override: cluster kept" "${log}" "self up"
-has "override: agent restarted with it" "${log}" "self agent up model=OpenVINO/Qwen3-1.7B-int4-ov mem=4Gi tool= reason= backend= rev="
+has "override: agent restarted with it" "${log}" "self agent up model=OpenVINO/Qwen3-1.7B-int4-ov mem=4Gi tool= reason= backend= rev= tier=1"
 
 # A changed memory reservation alone restarts the agent too.
 : > "${S}/log"
 K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3-1.7B-int4-ov K3D_GPU_AGENT_MEMORY=3Gi qs cmd_quickstart >/dev/null
-has "memory change restarts the agent" "$(cat "${S}/log")" "self agent up model=OpenVINO/Qwen3-1.7B-int4-ov mem=3Gi"
+has "memory change restarts the agent" "$(cat "${S}/log")" "self agent up model=OpenVINO/Qwen3-1.7B-int4-ov mem=3Gi tool= reason= backend= rev= tier="
+
+# A change the model and memory do not show (device, Fast Draft) still reaches the
+# cluster: the live Deployment is compared with what `agent manifest` renders.
+: > "${S}/log"
+K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3-1.7B-int4-ov K3D_GPU_AGENT_MEMORY=3Gi qs cmd_quickstart >/dev/null
+lacks "unchanged rerun: no agent up" "$(cat "${S}/log")" "self agent up"
+: > "${S}/log"
+out=$(K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3-1.7B-int4-ov K3D_GPU_AGENT_MEMORY=3Gi K3D_GPU_AGENT_DRAFT=auto qs cmd_quickstart)
+has "draft change restarts the agent" "$(cat "${S}/log")" "self agent up model=OpenVINO/Qwen3-1.7B-int4-ov mem=3Gi"
+lacks "draft change: not 'already serving'" "${out}" "agent already serving"
+: > "${S}/log"
+K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3-1.7B-int4-ov K3D_GPU_AGENT_MEMORY=3Gi K3D_GPU_AGENT_DEVICE=GPU qs cmd_quickstart >/dev/null
+has "device change restarts the agent" "$(cat "${S}/log")" "self agent up model=OpenVINO/Qwen3-1.7B-int4-ov mem=3Gi"
+
+# The tier model is not a user pin: agent up may serve a measured autoquant pick,
+# and quickstart reports, polls and names in the chat UI what it serves.
+: > "${S}/log"; : > "${S}/applied"
+out=$(STUB_AUTOQUANT=OpenVINO/Qwen3-8B-int8-ov qs cmd_quickstart)
+has "tier run marks model and memory as tier picks" "$(cat "${S}/log")" "self agent up model=OpenVINO/Qwen3-8B-int4-ov mem=10Gi tool=hermes3 reason=qwen3 backend= rev=5c47abf4b8e12ebe8e99745bb0c1ec17e0c0abcc tier=11"
+: > "${S}/log"
+out=$(STUB_AUTOQUANT=OpenVINO/Qwen3-8B-int8-ov qs cmd_quickstart)
+lacks "autoquant pick, rerun: no agent up" "$(cat "${S}/log")" "self agent up"
+has "autoquant pick, rerun: names the served model" "${out}" "agent already serving OpenVINO/Qwen3-8B-int8-ov"
+has "UI default model is the served name" "$(cat "${S}/applied")" 'value: "Qwen3-8B-int4-ov"'
 
 # What the user exports reaches agent up unchanged.
 : > "${S}/log"

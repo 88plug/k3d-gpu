@@ -6,7 +6,8 @@
 #   less install.sh          # read it first
 #   bash install.sh          # then: k3d-gpu doctor, k3d-gpu quickstart
 #
-# What it does, on Linux and WSL2 (amd64, arm64):
+# What it does, on Linux and WSL2 (amd64, arm64; the node image `k3d-gpu up` pulls is
+# amd64 only, so arm64 needs K3D_GPU_IMAGE set to a k3s node image built for arm64):
 #   1. k3d-gpu ${K3D_GPU_VERSION} from its GitHub release: the .deb through apt-get, or
 #      the .rpm through dnf or zypper (sudo asks for your password).
 #   2. k3d ${K3D_VERSION} and kubectl ${KUBECTL_VERSION} into ~/.local/bin, when they are
@@ -29,9 +30,9 @@
 
 set -euo pipefail
 
-K3D_GPU_VERSION=0.1.51
-K3D_GPU_DEB_SHA256=d35062269449c926124e5975ef07dc7b5969e035a66c57887343810468be1bfc
-K3D_GPU_RPM_SHA256=547919833a23656d64c60af5b0de0dbbb830f8adb119bfd9d230df92ff15ee23
+K3D_GPU_VERSION=0.1.55
+K3D_GPU_DEB_SHA256=b0ea73124768d62960c3a4c6b2e676eec82ce8b0856408fecaf9799b416915e9
+K3D_GPU_RPM_SHA256=ae51655312f7621a63b68fed38aae34e5816d2af8fd07e658823e05878a5189f
 K3D_VERSION=v5.9.0
 K3D_SHA256_AMD64=06d8f25bc3a971c4eb29e0ff08429b180402db0f4dec838c9eac427e296800a0
 K3D_SHA256_ARM64=03cde5cf23e6e8e67de5a039ecf26e5b85aca82fba3e5d13dadf904cd218a250

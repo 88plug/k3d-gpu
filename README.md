@@ -42,6 +42,9 @@ removes it all. See [docs/quickstart.md](docs/quickstart.md), the pinned,
 sha256-checked installer `packaging/install.sh`, and
 [docs/first-run.md](docs/first-run.md) for your kind of machine (WSL2 laptop,
 mini PC, Fedora laptop, Xeon server, Arch + Arc, NVIDIA workstation).
+No accelerator, or a team endpoint? `k3d-gpu quickstart --remote` uses any
+OpenAI-compatible endpoint (`OPENAI_BASE_URL`, `OPENAI_API_KEY`) instead of a
+local model: see [docs/remote-endpoints.md](docs/remote-endpoints.md).
 
 The `k3d-gpu` launcher wraps the whole workflow — no need to remember
 `k3d cluster create` flags. Install it with your package manager (see [Install](#install)), then:
@@ -66,8 +69,12 @@ k3d-gpu down            # delete the cluster
 
 ### Install
 
-Every package installs the same payload: the launcher at `bin/k3d-gpu` and the plugin
-manifests in `share/k3d-gpu/`. All need Docker, [k3d](https://k3d.io) and `kubectl` on the
+Every package installs the same payload: the launcher at `bin/k3d-gpu`, the MCP server at `bin/k3d-gpu-mcp`,
+and in `share/k3d-gpu/` the plugin manifests, `console/`, `bench/`, `oracle/` and `images.lock`
+(`facts`, `plan`, `audit`, `tune`, `capacity` and `k3d-gpu-mcp` also need `python3`).
+The node image `cryptoandcoffee/k3d-gpu` is published for linux/amd64 only, so on arm64 the
+packages install but `k3d-gpu up` stops unless `K3D_GPU_IMAGE` names a k3s node image built for
+arm64. All need Docker, [k3d](https://k3d.io) and `kubectl` on the
 host (the Nix package brings its own k3d and kubectl). Releases are tagged `aur-vX.Y.Z`; the
 .deb, .rpm and `SHA256SUMS` are attached to each `aur-v*` [GitHub release](https://github.com/88plug/k3d-gpu/releases)
 (the flake and the .deb/.rpm start with the first release after 0.1.20).
@@ -1350,7 +1357,8 @@ device, so a second pod's claim stays Pending where the plugin's iGPU sharing
 default runs both [ledger:H17]; `K3D_GPU_INTEL_SHARED`, `_ALLOCATION` and
 `_MONITORING` configure the plugin and are ignored (with a warning) in DRA mode;
 and `k3d-gpu agent` and the recipes request `gpu.intel.com/xe|i915`, which DRA mode
-does not advertise. A claim pod gets the iGPU through the driver on k3s 1.37
+does not advertise (on a DRA GPU, `agent` in auto mode serves on the CPU and says
+why; a forced GPU, a GPU draft or a vLLM backend stops and names `K3D_GPU_DRA=0`). A claim pod gets the iGPU through the driver on k3s 1.37
 [ledger:H16]. The `dra` experimental feature only sets Kubernetes gates and does
 not switch the Intel GPU path.
 

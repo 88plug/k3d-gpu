@@ -42,6 +42,8 @@
           pkgs.runCommand "k3d-gpu-smoke" { } ''
             ${pkg}/bin/k3d-gpu version | grep -Fx "k3d-gpu ${pkg.version}"
             ${pkg}/bin/k3d-gpu help | grep -F "${pkg}/share/k3d-gpu/nvidia-device-plugin.yml"
+            test -x ${pkg}/bin/k3d-gpu-mcp
+            test -f ${pkg}/share/k3d-gpu/console/plan.py
             for f in ${./share}/*.yml; do
               cmp "$f" "${pkg}/share/k3d-gpu/$(basename "$f")"
             done
