@@ -50,13 +50,17 @@ check "nfpm ships console/*.py to /usr/share/k3d-gpu/console/" \
     grep -Pzq 'src: console/\*\.py\n +dst: /usr/share/k3d-gpu/console/\n' "${NFPM}"
 check "nfpm ships console/*.json to /usr/share/k3d-gpu/console/" \
     grep -Pzq 'src: console/\*\.json\n +dst: /usr/share/k3d-gpu/console/\n' "${NFPM}"
-for f in "${ROOT}"/console/*.py "${ROOT}"/console/*.json; do
-    check "PKGBUILD installs console/${f##*/}" grep -Eq "for f in (.* )?${f##*/}( |;)" "${PKGBUILD}"
-done
+# The AUR recipe globs console/ like nfpm and nix, so a new console module
+# needs no packaging edit (and no merge conflict between parallel PRs).
+check "PKGBUILD installs console/*.py and console/*.json" \
+    grep -Eq 'for f in console/\*\.py console/\*\.json; do' "${PKGBUILD}"
+check "PKGBUILD installs console files to /usr/share/k3d-gpu/console/" \
+    grep -Fq 'install -Dm644 "$f" "$pkgdir/usr/share/k3d-gpu/$f"' "${PKGBUILD}"
 for f in llm_load.py energy.sh; do
     check "nfpm ships bench/${f} (k3d-gpu tune)" \
         grep -Pzq "src: bench/${f//./\\.}\n +dst: /usr/share/k3d-gpu/bench/${f//./\\.}\n" "${NFPM}"
-    check "PKGBUILD installs bench/${f}" grep -qE "install -Dm755 bench/${f} +\"\\\$pkgdir/usr/share/k3d-gpu/bench/${f}\"" "${PKGBUILD}"
+    check "PKGBUILD installs bench/${f}" grep -qE "install -Dm755 .*bench/${f//./\\.}( |$)" "${PKGBUILD}"
+    check "nix installs bench/${f}" grep -qE "install -Dm755 .*bench/${f//./\\.}( |$)" "${NIXPKG}"
 done
 for f in agent_trace.py agent_trace_gen.py apb/apb.py apb/capacity.py; do
     check "nfpm ships bench/${f} (k3d-gpu capacity)" \
@@ -66,13 +70,20 @@ check "PKGBUILD installs bench/agent_trace*.py and apb/{apb,capacity}.py" \
     grep -qF 'for f in agent_trace.py agent_trace_gen.py apb/apb.py apb/capacity.py; do' "${PKGBUILD}"
 check "nix installs bench/apb/apb.py and capacity.py" \
     grep -qF 'install -Dm644 -t "$out/share/k3d-gpu/bench/apb" bench/apb/apb.py bench/apb/capacity.py' "${NIXPKG}"
-check "nix installs bench/llm_load.py and energy.sh" \
-    grep -qF 'install -Dm755 -t "$out/share/k3d-gpu/bench" bench/llm_load.py bench/energy.sh' "${NIXPKG}"
 check "nfpm ships images.lock to /usr/share/k3d-gpu/" \
     grep -Pzq 'src: images\.lock\n +dst: /usr/share/k3d-gpu/images\.lock\n' "${NFPM}"
 check "PKGBUILD installs images.lock" \
     grep -qF 'install -Dm644 images.lock "$pkgdir/usr/share/k3d-gpu/images.lock"' "${PKGBUILD}"
 check "nix installs images.lock" grep -qF 'install -Dm644 images.lock "$out/share/k3d-gpu/images.lock"' "${NIXPKG}"
+# 'k3d-gpu bench' reads vs.py, llm_load.py and competitors.lock from ${SHARE_DIR}/bench.
+for f in vs.py llm_load.py competitors.lock; do
+    check "nfpm ships bench/${f}" grep -Pzq "src: bench/${f//./\\.}\n +dst: /usr/share/k3d-gpu/bench/${f//./\\.}\n" "${NFPM}"
+    check "PKGBUILD installs bench/${f}" grep -qE "install .*bench/${f//./\\.}( |$)" "${PKGBUILD}"
+    check "nix installs bench/${f}" grep -qE "install .*bench/${f//./\\.}( |$)" "${NIXPKG}"
+    check "nix source includes bench/${f}" grep -qF "(root + \"/bench/${f}\")" "${NIXPKG}"
+    check "formula installs bench/${f}" grep -qF "\"bench/${f}\"" "${FORMULA}"
+    check "packaging/check.sh hashes bench/${f}" grep -qE "for f in vs.py llm_load.py competitors.lock" "${ROOT}/packaging/check.sh"
+done
 check "nix installs console/*.py and console/*.json" \
     grep -qF 'install -Dm644 -t "$out/share/k3d-gpu/console" console/*.py console/*.json' "${NIXPKG}"
 check "formula points K3D_GPU_SHARE at pkgshare" grep -qF 'K3D_GPU_SHARE: "${K3D_GPU_SHARE:-#{pkgshare}}"' "${FORMULA}"

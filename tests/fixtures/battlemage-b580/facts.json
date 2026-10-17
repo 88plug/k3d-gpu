@@ -102,6 +102,15 @@
       {
         "apply": null,
         "from": null,
+        "level": "info",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "noisy-neighbour isolation: cpu-cap — no rdt_a flag and no E-cores; give a neighbour a CPU limit. Cache and DRAM bandwidth stay shared",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
         "level": "ok",
         "revert": null,
         "section": "Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...",

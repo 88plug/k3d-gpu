@@ -3,12 +3,11 @@
   "cpu": {
    "amx": [
     "amx_bf16",
-    "amx_fp16",
     "amx_int8",
     "amx_tile"
    ],
    "e_core_cpus": null,
-   "family": null,
+   "family": 6,
    "hybrid": false,
    "isa": [
     "avx2",
@@ -26,7 +25,7 @@
    "logical_cpus": null,
    "microcode": null,
    "model": "Intel(R) Xeon(R) 6960P",
-   "model_id": null,
+   "model_id": 173,
    "numa_nodes": 6,
    "p_core_cpus": null,
    "snc": 3,

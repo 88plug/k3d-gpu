@@ -6,7 +6,8 @@ Sources (kernel paths are Linux v6.18 (torvalds/linux tag v6.18)):
   in include/drm/intel/pciids.h.
 - 0x8086 0xad1d NPU: drivers/accel/ivpu/ivpu_drv.h (PCI_DEVICE_ID_ARL), mapped to the
   37xx IP and so intel/vpu/vpu_37xx firmware.
-- i915/mtl_guc_70.bin, intel/vpu/vpu_37xx_v1.bin: linux-firmware tag 20260916 WHENCE.
+- i915/mtl_guc_70.bin, intel/vpu/vpu_37xx_v1.bin and its vpu_37xx_v0.0.bin link
+  (the name kernels before 6.16 load, ivpu_fw.c): linux-firmware tag 20260916 WHENCE.
 - 8 P + 16 E cores: Intel ark, Core Ultra 9 285K (product 241060); cpu_core/cpu_atom
   files per tools/perf/Documentation/intel-hybrid.txt.
 - cpu family 6, model 198: INTEL_ARROWLAKE IFM(6, 0xC6) in

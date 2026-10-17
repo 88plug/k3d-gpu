@@ -22,6 +22,10 @@ spec:
     metadata:
       labels: {app: vllm}
     spec:
+      # The Service is named vllm, so service links would set VLLM_PORT=tcp://IP:8000
+      # in the pod, which vLLM v0.31.0 reads as its own setting and refuses at
+      # engine start ("VLLM_PORT ... appears to be a URI", vllm/envs.py get_vllm_port).
+      enableServiceLinks: false
       runtimeClassName: nvidia
       containers:
         - name: vllm

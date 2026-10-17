@@ -35,6 +35,7 @@ import os
 import random
 import re
 import shlex
+import signal
 import statistics
 import subprocess
 import sys
@@ -458,14 +459,21 @@ def pareto_front(points):
 
 # ---- evaluators -------------------------------------------------------------------------
 
+TRIAL_DEADLINE = "trial stopped at the budget deadline"
+
+
 class CommandEvaluator:
-    """Runs --trial-cmd once per evaluation (see the module docstring)."""
+    """Runs --trial-cmd once per evaluation (see the module docstring).
+
+    deadline (time.monotonic) ends a trial still running then: its process
+    group is stopped and the trial reports TRIAL_DEADLINE."""
 
     def __init__(self, cmd, workdir, log=sys.stderr):
         self.cmd = shlex.split(cmd)
         self.workdir = workdir
         self.log = log
         self.calls = 0
+        self.deadline = None
 
     def __call__(self, cfg, budget):
         self.calls += 1
@@ -476,7 +484,22 @@ class CommandEvaluator:
             json.dump(cfg, f, indent=2)
         with open(paths[1], "w") as f:
             json.dump(budget, f, indent=2)
-        rc = subprocess.call(self.cmd + paths)
+        proc = subprocess.Popen(self.cmd + paths, start_new_session=True)
+        timeout = None if self.deadline is None else max(1.0, self.deadline - time.monotonic())
+        try:
+            rc = proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            for sig, wait in ((signal.SIGTERM, 15), (signal.SIGKILL, None)):
+                try:
+                    os.killpg(proc.pid, sig)
+                except ProcessLookupError:
+                    break
+                try:
+                    proc.wait(timeout=wait)
+                    break
+                except subprocess.TimeoutExpired:
+                    continue
+            return {"ok": False, "error": TRIAL_DEADLINE, "runs": []}
         try:
             with open(paths[2]) as f:
                 res = json.load(f)
@@ -788,21 +811,78 @@ def neighbours(facts, incumbent):
     return out
 
 
+def _cfg_name(cfg):
+    return " ".join(f"{k_}={v}" for k_, v in config_env(cfg)) or "default"
+
+
+def confirm_s(screen_s, n_confirm):
+    """Estimated wall time of one confirmation: 2 x n_confirm FINAL-sized trials
+    (8x the tokens of a screen, plus a deploy), each taken as twice a screen."""
+    return 2 * n_confirm * 2 * screen_s
+
+
+def restore_s(budget_s):
+    """Share of --budget kept for redeploying the result after the step: a
+    fifth of it, at most 2 min."""
+    return min(0.2 * budget_s, 120.0)
+
+
+def confirm_min(screen_s, n_confirm):
+    """Smallest --budget (min) with which a run confirms a pending challenger."""
+    return math.ceil(confirm_s(screen_s, n_confirm) / 60)
+
+
 def incremental(evaluator, facts, incumbent, objective, *, budget_s=600.0, tried=(), n_confirm=5,
                 margin=0.05, k=1.0, alpha=0.05, guard_tol=0.25, ttft_slo=10.0, levels=(1, 4, 8),
-                clock=time.monotonic, log=None):
+                pending=None, clock=time.monotonic, log=None):
     """One incremental step. Returns a result dict; "decision" is
     "challenger" (a neighbour passed every gate: it is the new incumbent),
-    "incumbent" (kept) or "converged" (every neighbour already screened)."""
+    "incumbent" (kept), "pending" (a screener beat the incumbent but its
+    confirmation did not fit this budget), "budget" (the confirmation was cut
+    short) or "converged" (every neighbour already screened, nothing pending).
+
+    pending is an earlier run's unconfirmed challenger ({"config", "gain",
+    "screen_s"}). A budget that fits its confirmation confirms it first, with no
+    screening; a smaller one screens the remaining neighbours instead, so every
+    run makes progress. result["pending"] is the challenger still unconfirmed
+    after this run (None once a confirmation decided it)."""
     metric, sign = OBJECTIVES[objective]
     say = log or (lambda *_: None)
-    deadline = clock() + budget_s
+    # Trials end restore_s before the budget does: the caller redeploys the result.
+    work_s = budget_s - restore_s(budget_s)
+    deadline = clock() + work_s
+    if hasattr(evaluator, "deadline"):
+        evaluator.deadline = deadline
     conc = concurrency_for(objective, levels)
     tried = set(tried)
     cands = [c for c in neighbours(facts, incumbent) if config_key(c) not in tried]
     out = {"objective": objective, "metric": metric, "incumbent": incumbent, "decision": "incumbent",
-           "winner": None, "screened": [], "challenger": None, "confirm": None, "budget_s": budget_s}
+           "winner": None, "screened": [], "challenger": None, "confirm": None, "budget_s": budget_s,
+           "pending": pending, "n_confirm": n_confirm}
+
+    def confirm(cfg):
+        out["challenger"] = cfg
+        say(f"confirming {_cfg_name(cfg)} against the incumbent")
+        res = _confirm(evaluator, incumbent, [cfg], objective, n_confirm=n_confirm, margin=margin, k=k,
+                       alpha=alpha, guard_tol=guard_tol, ttft_slo=ttft_slo, conc=conc, say=say,
+                       deadline=deadline, clock=clock)
+        if res is None:
+            out["decision"] = "budget"  # the challenger stays pending for a larger budget
+            return out
+        out["confirm"], out["pending"] = res, None
+        if res["winner"] is not None:
+            out["decision"], out["winner"] = "challenger", res["winner"]
+        return out
+
+    if pending and confirm_s(pending["screen_s"], n_confirm) <= work_s:
+        return confirm(pending["config"])
     if not cands:
+        if pending:
+            m = confirm_min(pending["screen_s"], n_confirm)
+            out["decision"], out["challenger"] = "pending", pending["config"]
+            say(f"every neighbour screened; {_cfg_name(pending['config'])} is pending: "
+                f"confirming it needs about {m} min, rerun with --budget {m}")
+            return out
         say("every neighbour of the incumbent was already screened: converged")
         out["decision"] = "converged"
         return out
@@ -815,39 +895,49 @@ def incremental(evaluator, facts, incumbent, objective, *, budget_s=600.0, tried
     if inc_score is None:
         raise RuntimeError(f"the incumbent failed its screening trial: {err or 'no ' + metric}")
     trial_s = max(clock() - t0, 1e-9)
-    # A confirmation trial is FINAL-sized (8x the tokens of a screen) plus a
-    # deploy; reserve 2 x n_confirm of them at twice a screen's wall time.
-    reserve = 2 * n_confirm * 2 * trial_s
-    best = None
+    out["incumbent_screen"] = sign * inc_score
+    # Confirm in this run only when the confirmation leaves a quarter of the
+    # budget for screening; otherwise screen with all of it and defer.
+    reserve = confirm_s(trial_s, n_confirm)
+    confirm_now = pending is None and reserve <= 0.75 * work_s
+    if not confirm_now:
+        reserve = 0.0
+        say(f"budget {budget_s / 60:g} min is too short to also confirm (about "
+            f"{confirm_min(trial_s, n_confirm)} min): screening only, the best screener stays pending")
+    best = (pending["gain"], pending["config"], pending["screen_s"]) if pending else None
     for c in cands:
         if clock() + trial_s > deadline - reserve:
-            say(f"screening stopped at {len(out['screened'])}/{len(cands)} neighbours to keep time to confirm")
+            say(f"screening stopped at {len(out['screened'])}/{len(cands)} neighbours"
+                + (" to keep time to confirm" if confirm_now else ": budget spent"))
             break
+        t1 = clock()
         ok, err, ms = evaluate(evaluator, c, budget, ttft_slo)
+        # A neighbour redeploys, so it can take longer than the warm incumbent
+        # trial: plan the next one with the slowest seen.
+        trial_s = max(trial_s, clock() - t1)
+        if err == TRIAL_DEADLINE:  # cut short, not screened: a later run tries it again
+            say(f"screening stopped at {len(out['screened'])}/{len(cands)} neighbours: "
+                f"{_cfg_name(c)} ran past the budget")
+            break
         sc = score(ms, metric, sign) if ok else None
         out["screened"].append({"config": c, "ok": sc is not None, "error": err,
                                 "score": None if sc is None else sign * sc})
         # score() is sign * median, so higher is better for every objective.
         if sc is not None and sc > inc_score + margin * abs(inc_score):
-            if best is None or sc > best[0]:
-                best = (sc, c)
-    out["incumbent_screen"] = sign * inc_score
+            gain = (sc - inc_score) / abs(inc_score)
+            if best is None or gain > best[0]:
+                best = (gain, c, trial_s)
     if best is None:
         say(f"no neighbour beat the incumbent by {margin:.0%} in screening: incumbent kept")
         return out
-    out["challenger"] = best[1]
-    say("confirming the best screener against the incumbent: "
-        + " ".join(f"{k_}={v}" for k_, v in config_env(best[1])))
-    res = _confirm(evaluator, incumbent, [best[1]], objective, n_confirm=n_confirm, margin=margin, k=k,
-                   alpha=alpha, guard_tol=guard_tol, ttft_slo=ttft_slo, conc=conc, say=say,
-                   deadline=deadline, clock=clock)
-    if res is None:
-        out["decision"] = "budget"
+    out["pending"] = {"config": best[1], "gain": best[0], "screen_s": best[2]}
+    if not confirm_now:
+        m = confirm_min(best[2], n_confirm)
+        out["decision"], out["challenger"] = "pending", best[1]
+        say(f"{_cfg_name(best[1])} beat the incumbent by {best[0]:+.0%} in screening; "
+            f"confirming it needs about {m} min: rerun with --budget {m}")
         return out
-    out["confirm"] = res
-    if res["winner"] is not None:
-        out["decision"], out["winner"] = "challenger", res["winner"]
-    return out
+    return confirm(best[1])
 
 
 # ---- profiles -------------------------------------------------------------------------
@@ -984,6 +1074,10 @@ def step_profile(prev, res, now):
     history.append({"at": now, "incumbent": inc, "decision": res["decision"],
                     "challenger": res["challenger"], "screened": len(res["screened"]),
                     "incumbent_screen": res.get("incumbent_screen")})
+    if res.get("pending"):
+        prof["pending"] = dict(res["pending"], incumbent=config_key(inc))
+    else:
+        prof.pop("pending", None)
     if res["decision"] == "challenger":
         prof["winner"], prof["decision"] = res["winner"], "tuned"
         screened.setdefault(config_key(res["winner"]), [])
@@ -1004,13 +1098,21 @@ def cmd_step(a):
     inc = prev["winner"] if prev and prev.get("decision") == "tuned" and prev.get("winner") else {"baseline": True}
     inc = validate_config(inc)
     tried = ((prev or {}).get("screened") or {}).get(config_key(inc), [])
+    pending = (prev or {}).get("pending")
+    if pending and pending.get("incumbent") == config_key(inc):
+        pending = {"config": validate_config(pending["config"]), "gain": float(pending["gain"]),
+                   "screen_s": float(pending["screen_s"])}
+        say(f"pending challenger from an earlier run: {_cfg_name(pending['config'])} "
+            f"({pending['gain']:+.0%} in screening)")
+    else:
+        pending = None
     say("incumbent: " + (" ".join(f"{k}={v}" for k, v in config_env(inc)) or "the default")
         + f"; {len(tried)} neighbour(s) already screened; budget {a.budget:g} min")
     workdir = a.workdir or tempfile.mkdtemp(prefix="k3d-gpu-tune-")
     ev = CommandEvaluator(a.trial_cmd, workdir)
     res = incremental(ev, facts, inc, a.objective, budget_s=a.budget * 60, tried=tried, n_confirm=a.n,
                       margin=a.margin, k=a.k, alpha=a.alpha, guard_tol=a.guard_tol, ttft_slo=a.ttft_slo,
-                      levels=[int(x) for x in a.concurrency.split(",")], log=say)
+                      levels=[int(x) for x in a.concurrency.split(",")], pending=pending, log=say)
     res["trials"], res["workdir"] = ev.calls, workdir
     prof = step_profile(prev, res, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
     write_profile(a.out, prof, a.fingerprint, json.loads(a.fingerprint_inputs), facts)
@@ -1027,6 +1129,10 @@ def print_step(res):
         print(f"  screen {fmt(e['score']) if e['ok'] else 'failed'}  {name}")
     if res.get("confirm"):
         print_summary(res["confirm"], ref="incumbent", final=False)
+    if res.get("pending"):
+        p = res["pending"]
+        print(f"pending: {_cfg_name(p['config'])} ({p['gain']:+.1%} in screening); "
+              f"confirm with --budget {confirm_min(p['screen_s'], res['n_confirm'])}")
     print(f"decision: {res['decision']} ({res['trials']} trials)")
 
 

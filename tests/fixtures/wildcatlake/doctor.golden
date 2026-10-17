@@ -1,0 +1,30 @@
+==> Checking docker...
+  ok: docker running
+==> Checking k3d...
+  ok: k3d version v0.0.0-stub
+==> Checking kubectl...
+  ok
+==> Detected accelerators: npu hybrid
+==> Checking Intel NPU (Core Ultra)...
+  ok: Intel NPU Wildcat Lake (0xfd3e) bound to intel_vpu
+  ok: intel/vpu/vpu_50xx_* firmware present (/lib/firmware/intel/vpu/vpu_50xx_v1.bin)
+  note: no build date readable in /lib/firmware/intel/vpu/vpu_50xx_v1.bin; cannot compare it with openvino/model_server:2026.4.1-gpu's NPU driver v1.35.0
+  ok: up labels the node k3d-gpu.io/npu.gen=50xx
+  warn: /dev/accel/accel0 is group <gid>, mode 644: only root pods can open it. Add the udev rule
+        SUBSYSTEM=="accel", GROUP="render", MODE="0660" (systemd 254+ ships it in 50-udev-default.rules)
+  note: workload images need the NPU user-space driver (github.com/intel/linux-npu-driver) and Level Zero
+==> Intel CPU built-in accelerators...
+  ok: CPU ISA: AVXVNNI — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
+  ok: hybrid CPU: P-cores 0-3, E-cores 4-11, LP E-cores 12-15 — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient|lowpower|ecluster|pcore-physical|latency
+  ok: E-core clusters (shared L2): 4-7 8-11 — k3d-gpu.io/cores=ecluster gives a pod 4 E-cores of one cluster
+  ok: physical P-cores (one thread per core): 0-3 — k3d-gpu.io/cores=pcore-physical and latency show pods one thread per core
+  info: noisy-neighbour isolation: cpu-cap — no rdt_a flag, so cache and DRAM bandwidth stay shared; give a bandwidth-heavy neighbour a CPU limit. Holding it to one E-core L2 cluster (k3d-gpu.io/cores=ecluster) is not recommended: H26 measures it against the same workers spread over the E-cores (EXPERIMENTS.md H26)
+==> Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...
+  ok: dra available (auto)
+  ok: image-volume available (auto)
+  ok: npu-turbo available (auto)
+
+==> All checks passed.
+exit=0
+--- calls
+kubectl --context k3d-gpu --request-timeout=5s get nodes -o name

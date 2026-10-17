@@ -243,6 +243,20 @@ expect "scx: reason names kernel" "kernel 6.18.0 has no /sys/kernel/sched_ext/st
 expect "xe-force-probe: reason" "no unbound Intel GPU" "$(run "${BARE}" xe-force-probe up)"
 expect "xe-sriov: reason" "no Intel GPU bound to xe reports SR-IOV" "$(run "${BARE}" xe-sriov up)"
 
+# xe.force_probe cannot bind Max (no xe id), a late id below its kernel, or any GPU
+# on a kernel with no xe (merged in 6.8).
+PVC=$(newroot fp-pvc)
+pci "${PVC}" 0000:03:00.0 0x8086 0x0bd5 0x038000
+expect "xe-force-probe: Max is not a candidate" "no unbound Intel GPU xe.force_probe can bind" "$(run "${PVC}" xe-force-probe up)"
+BMG=$(newroot fp-bmg-late)
+echo "6.16.0" > "${BMG}/proc/sys/kernel/osrelease"
+pci "${BMG}" 0000:03:00.0 0x8086 0xe223 0x030000
+expect "xe-force-probe: late BMG id on 6.16 is not a candidate" "no unbound Intel GPU xe.force_probe can bind" "$(run "${BMG}" xe-force-probe up)"
+FLEXOLD=$(newroot fp-flex-515)
+echo "5.15.0" > "${FLEXOLD}/proc/sys/kernel/osrelease"
+pci "${FLEXOLD}" 0000:03:00.0 0x8086 0x56c1 0x038000
+expect "xe-force-probe: no xe before 6.8" "kernel 5.15.0 has no xe" "$(run "${FLEXOLD}" xe-force-probe up)"
+
 # ---- framework rules ---------------------------------------------------------------
 
 # Auto-adapt: unset (or "auto") turns on every feature that is detected, mature

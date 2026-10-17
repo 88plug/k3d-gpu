@@ -1,0 +1,54 @@
+{
+  "auth": "loopback-key",
+  "bind": "127.0.0.1",
+  "cell": null,
+  "considered": [
+    {
+      "cell": "raptorlake-s.cpu-pcores.ovms.qwen3-4b-int4",
+      "eligible": false,
+      "excluded": "no target on this host matches",
+      "reasons": [
+        "no k3d-gpu report run recorded",
+        "tool-calling eval not run"
+      ],
+      "status": "grey",
+      "target": null
+    },
+    {
+      "cell": "raptorlake-s.uhd770.ovms.qwen3-4b-int4",
+      "eligible": false,
+      "excluded": "no target on this host matches",
+      "reasons": [
+        "no k3d-gpu report run recorded",
+        "tool-calling eval not run"
+      ],
+      "status": "grey",
+      "target": null
+    }
+  ],
+  "decision": "unmeasured",
+  "engine": null,
+  "explain": [
+    "facts: sha256:b7fbbdae1072f611958a204995daf17d494866a2115277acbbf1f8c4f9a8fd08",
+    "targets:",
+    "  cpu: Intel(R) Core(TM) Ultra 7 255U, family:model 6:181, P-cores 0-3 (4), E-cores 4-13 (10); usable",
+    "  gpu:0000:00:02.0: intel Arrow Lake-U, 0x7d41, on i915, no XMX; usable",
+    "matrix: 2 cells, 0 on a target of this host",
+    "  no measured cell for these targets",
+    "decision:",
+    "  unmeasured, run `k3d-gpu prove` on this box",
+    "  bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)"
+  ],
+  "fingerprint": "sha256:b7fbbdae1072f611958a204995daf17d494866a2115277acbbf1f8c4f9a8fd08",
+  "fixes": [],
+  "message": "unmeasured, run `k3d-gpu prove` on this box",
+  "model": null,
+  "overrides": {},
+  "placement": null,
+  "port": null,
+  "schema": "k3d-gpu.plan/v1",
+  "summary": [
+    "unmeasured, run `k3d-gpu prove` on this box",
+    "bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)"
+  ]
+}

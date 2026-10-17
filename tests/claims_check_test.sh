@@ -67,6 +67,13 @@ check() {
     fi
 }
 
+# --- duplicate hypothesis ids -------------------------------------------------
+# A merge that keeps both sides of an edited row leaves two rows with one id;
+# the guard must refuse the ledger instead of reading whichever row comes last.
+dup=$(repo 'Run `k3d-gpu up` to start a cluster.')
+sed -i 's/^| H2 | two | p | probe | \*\*SUPPORTED\*\* |$/&\n| H2 | two, older copy | p | probe | PENDING |/' "${dup}/EXPERIMENTS.md"
+check "a hypothesis id that appears twice fails" "${dup}" fail 'duplicate hypothesis id H2'
+
 # --- clean docs pass ---------------------------------------------------------
 check "plain docs with no claims pass" "$(repo 'Run `k3d-gpu up` to start a cluster.')" 0
 check "everyday 'only' and 'first' are not superlatives" \

@@ -1,0 +1,32 @@
+Platform: Core Ultra 7 258V laptop (Lunar Lake): Xe2 iGPU on xe, NPU 4 on
+intel_vpu, firmware installed, one NUMA node, a hybrid CPU of 4 P-cores without
+SMT and 4 LP E-cores.
+
+Sources (kernel paths are Linux master as of 2026-10-17 unless a tag is named):
+- cpu family 6, model 189: INTEL_LUNARLAKE_M IFM(6, 0xBD) in
+  arch/x86/include/asm/intel-family.h.
+- 0x8086 0x64a0 "Core Ultra 200V Series Processors Arc Graphics 130V/140V GPU":
+  pci.ids; INTEL_LNL_IDS in include/drm/intel/pciids.h, bound by xe's lnl_desc in
+  drivers/gpu/drm/xe/xe_pci.c (no i915 entry in i915_pci.c). force_probe was
+  dropped in v6.12 (commit 9c57bc08652a).
+- XMX: Mesa main src/intel/dev/intel_device_info.c (Xe2 has_systolic).
+- 0x8086 0x643e NPU: PCI_DEVICE_ID_LNL in drivers/accel/ivpu/ivpu_drv.h (40xx IP,
+  in the PCI table from v6.6); listed in intel-device-plugins v0.37.1
+  cmd/npu_plugin/npu_plugin.go. Class 0x1200 per its NFD rule.
+- xe/lnl_guc_70.bin: xe_uc_fw.c (MAKE_FW_PATH); intel/vpu/vpu_40xx_v1.bin:
+  drivers/accel/ivpu/ivpu_fw.c. Its vpu_40xx_v0.0.bin link, the name kernel 6.12
+  loads (fw_names[] at tag v6.12): linux-firmware tag 20260916 WHENCE.
+- Hybrid PMUs: case INTEL_LUNARLAKE_M in arch/x86/events/intel/core.c calls
+  intel_pmu_init_hybrid(hybrid_big_small) ("lunarlake_hybrid"), so cpu_core and
+  cpu_atom only, no cpu_lowpower. Files: tools/perf/Documentation/intel-hybrid.txt.
+- Core counts: 4 Lion Cove P-cores (no SMT) + 4 Skymont LP E-cores on every
+  SKU (ARK, e.g. sku 240957 Core Ultra 7 258V: 8 cores, 8 threads).
+- L3 reachable from the P-cores only: Chips and Cheese, "Lion Cove: Intel's P-core
+  roars" (2024-09-27). The E-cores share one 4 MB L2.
+
+Not from hardware: the CPU numbering (P 0-3, E 4-7), the cache index numbering,
+the BDFs (iGPU 00:02.0, NPU 00:0b.0, as in pantherlake), the kernel release
+string and the cpuinfo flags line (copied from the pantherlake fixture). That
+Linux shows no cache/index3 for the Lunar Lake E-cores is UNVERIFIED (no Lunar
+Lake capture yet); if the 8 MB memory-side cache shows as level 3 there, the
+E-cores read as regular E-cores and doctor prints a topology note.

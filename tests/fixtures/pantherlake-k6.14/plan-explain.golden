@@ -1,0 +1,13 @@
+facts: sha256:d02ba1184685da5dc8bd5e86309245b9027e56839b5d6c3ecd5f4ee348cd8131
+targets:
+  cpu: unknown CPU, P-cores 0-3 (4), E-cores 4-15 (12); usable
+  npu:0000:00:0b.0: intel Panther Lake, 0xb03e, on intel_vpu, NPU 50xx; usable
+matrix: 2 cells, 0 on a target of this host
+  no measured cell for these targets
+decision:
+  unmeasured, run `k3d-gpu prove` on this box
+  bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)
+exit=0
+--- calls
+kubectl config get-contexts -o name
+kubectl --context k3d-gpu --request-timeout=5s get nodes -o name

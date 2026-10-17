@@ -9,6 +9,16 @@ Cells compare only inside one comparison key (pinned tool build, server image, m
 revision, workload and engine). Each value is the median with its IQR in brackets when
 n > 1; n counts submitters, one vote each. Tier: provisional (n = 1), community, verified.
 
+## Key `136652294458`: apb-v1, nvidia
+
+- tool: `git-1a54ffbc7647`, k3s `None`, server `vllm/vllm-openai` `sha256:a4a4c0437bf7`
+- model: `Qwen/Qwen3-4B-AWQ` at `74d4bd2bd4bf`
+- workload: trace `support`, p95 turn SLO 10.0 s, 3 reps, up to 32 agents
+
+| SKU | Engine | Agents per box | J/turn (package) | PL1 | DRAM | Levers set | n | Tier | Tags | Data |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 13th Gen Intel(R) Core(TM) i9-13900T + NVIDIA RTX 2000E Ada Generation + NVIDIA RTX 4000 SFF Ada Generation | nvidia | 32 | 10.0 | <=125 W | unknown | - | 1 | provisional | not-quiet, throttled, unreleased-build | [bundle](https://github.com/88plug/k3d-gpu/blob/main/oracle/seed/maintainer-i9-13900T-h8-a4.json) |
+
 ## Key `ac70f80ca76a`: single-stream-v1, igpu
 
 - tool: `git-94f71e11d8a5`, k3s `v1.34.1+k3s1`, server `openvino/model_server` `sha256:a928903fe429`
@@ -28,6 +38,16 @@ n > 1; n counts submitters, one vote each. Tier: provisional (n = 1), community,
 | SKU | Engine | Decode tok/s | Prefill TTFT s | PL1 | DRAM | Levers set | n | Tier | Tags | Data |
 |---|---|---|---|---|---|---|---|---|---|---|
 | 13th Gen Intel(R) Core(TM) i9-13900T | cpu | 15.66 | 11.21 | unknown | unknown | openvino_int4=on,pe_pinning=on,xmx_gate=on | 1 | provisional | unreleased-build | [bundle](https://github.com/88plug/k3d-gpu/blob/main/oracle/seed/maintainer-i9-13900T-h6-cpu.json) [ledger:H6] |
+
+## Key `f5a6ebb95110`: apb-v1, cpu
+
+- tool: `git-1a54ffbc7647`, k3s `None`, server `openvino/model_server` `sha256:a928903fe429`
+- model: `OpenVINO/Qwen3-4B-int4-ov` at `b467368d16b7`
+- workload: trace `support`, p95 turn SLO 10.0 s, 3 reps, up to 32 agents
+
+| SKU | Engine | Agents per box | J/turn (package) | PL1 | DRAM | Levers set | n | Tier | Tags | Data |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 13th Gen Intel(R) Core(TM) i9-13900T | cpu | 0 | - | <=125 W | unknown | openvino_int4=on,pe_pinning=on,xmx_gate=on | 1 | provisional | not-quiet, throttled, unreleased-build | [bundle](https://github.com/88plug/k3d-gpu/blob/main/oracle/seed/maintainer-i9-13900T-h8-a1-run1.json) [bundle](https://github.com/88plug/k3d-gpu/blob/main/oracle/seed/maintainer-i9-13900T-h8-a1-run2.json) |
 
 ## Intel Advantage uplifts (paired A/B only)
 

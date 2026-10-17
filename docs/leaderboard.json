@@ -4,6 +4,7 @@
  "rows": [
   {
    "agents_per_box": null,
+   "agents_per_box_bound": null,
    "basis": "measured",
    "comparison_key": "cbea63192097",
    "cpu": "13th Gen Intel(R) Core(TM) i9-13900T",
@@ -28,7 +29,65 @@
    "tok_s_per_w": null
   },
   {
+   "agents_per_box": 0.0,
+   "agents_per_box_bound": "exact",
+   "basis": "measured",
+   "comparison_key": "f5a6ebb95110",
+   "cpu": "13th Gen Intel(R) Core(TM) i9-13900T",
+   "data": [
+    "https://github.com/88plug/k3d-gpu/blob/main/oracle/seed/maintainer-i9-13900T-h8-a1-run1.json",
+    "https://github.com/88plug/k3d-gpu/blob/main/oracle/seed/maintainer-i9-13900T-h8-a1-run2.json"
+   ],
+   "decode_tok_s": null,
+   "engine": "cpu",
+   "kind": "capacity",
+   "ledger": [
+    "H8"
+   ],
+   "model": "OpenVINO/Qwen3-4B-int4-ov",
+   "n": 1,
+   "predicted_decode_roofline_tok_s": null,
+   "sku": "13th Gen Intel(R) Core(TM) i9-13900T",
+   "slo_s": 10.0,
+   "tags": [
+    "not-quiet",
+    "throttled",
+    "unreleased-build"
+   ],
+   "tier": "provisional",
+   "tok_s_per_w": null
+  },
+  {
+   "agents_per_box": 32,
+   "agents_per_box_bound": "lower",
+   "basis": "measured",
+   "comparison_key": "136652294458",
+   "cpu": "13th Gen Intel(R) Core(TM) i9-13900T",
+   "data": [
+    "https://github.com/88plug/k3d-gpu/blob/main/oracle/seed/maintainer-i9-13900T-h8-a4.json"
+   ],
+   "decode_tok_s": null,
+   "engine": "nvidia",
+   "kind": "capacity",
+   "ledger": [
+    "H8"
+   ],
+   "model": "Qwen/Qwen3-4B-AWQ",
+   "n": 1,
+   "predicted_decode_roofline_tok_s": null,
+   "sku": "13th Gen Intel(R) Core(TM) i9-13900T + NVIDIA RTX 2000E Ada Generation + NVIDIA RTX 4000 SFF Ada Generation",
+   "slo_s": 10.0,
+   "tags": [
+    "not-quiet",
+    "throttled",
+    "unreleased-build"
+   ],
+   "tier": "provisional",
+   "tok_s_per_w": null
+  },
+  {
    "agents_per_box": null,
+   "agents_per_box_bound": null,
    "basis": "measured",
    "comparison_key": "ac70f80ca76a",
    "cpu": "13th Gen Intel(R) Core(TM) i9-13900T",

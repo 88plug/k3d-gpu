@@ -10,11 +10,16 @@ linked bundle. Machine-readable: [leaderboard.json](leaderboard.json). How to ad
 roofline (memory bandwidth / weight bytes) and are never a measurement; `-` means the bundle
 does not carry the inputs. `k3d-gpu share` does not record memory channels, MT/s or weight
 bytes yet, so that column is not computed for any row it builds. The SKU is the CPU plus the
-device the engine ran on. Rows are sorted by SKU, not ranked.
+device the engine ran on. `>= N` means every step up to the run's `--max` passed, so N is a
+lower bound. The `not-quiet` tag marks a maintainer run on a busy box (its ledger row gives
+the load); a community bundle from a busy box stays in review. Rows are sorted by SKU, not
+ranked.
 
 | SKU | Engine | Agents per box (measured) | Decode tok/s (measured) | tok/s/W (measured) | Decode roofline tok/s (predicted) | n | Tier | Tags | Data |
 |---|---|---|---|---|---|---|---|---|---|
 | 13th Gen Intel(R) Core(TM) i9-13900T | cpu | - | 15.66 | - | - | 1 | provisional | unreleased-build | [bundle](https://github.com/88plug/k3d-gpu/blob/main/oracle/seed/maintainer-i9-13900T-h6-cpu.json) [ledger:H6] |
+| 13th Gen Intel(R) Core(TM) i9-13900T | cpu | 0 at p95 10.0 s | - | - | - | 1 | provisional | not-quiet, throttled, unreleased-build | [bundle](https://github.com/88plug/k3d-gpu/blob/main/oracle/seed/maintainer-i9-13900T-h8-a1-run1.json) [bundle](https://github.com/88plug/k3d-gpu/blob/main/oracle/seed/maintainer-i9-13900T-h8-a1-run2.json) [ledger:H8] |
+| 13th Gen Intel(R) Core(TM) i9-13900T + NVIDIA RTX 2000E Ada Generation + NVIDIA RTX 4000 SFF Ada Generation | nvidia | >= 32 at p95 10.0 s | - | - | - | 1 | provisional | not-quiet, throttled, unreleased-build | [bundle](https://github.com/88plug/k3d-gpu/blob/main/oracle/seed/maintainer-i9-13900T-h8-a4.json) [ledger:H8] |
 | 13th Gen Intel(R) Core(TM) i9-13900T + Raptor Lake-S | igpu | - | 9.89 | - | - | 1 | provisional | unreleased-build | [bundle](https://github.com/88plug/k3d-gpu/blob/main/oracle/seed/maintainer-i9-13900T-h6-gpu.json) [ledger:H6] |
 
 Bundles in review (quarantined or outliers, not shown): 0.

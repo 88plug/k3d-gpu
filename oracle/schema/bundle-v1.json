@@ -21,7 +21,7 @@
       "type": "object", "additionalProperties": false, "required": ["source", "note"],
       "properties": {
         "source": {"enum": ["community", "maintainer-lab"]},
-        "note": {"enum": ["none", "ledger-H6"]}
+        "note": {"enum": ["none", "ledger-H6", "ledger-H8"]}
       }
     },
     "tool": {

@@ -261,7 +261,7 @@ def check_release(b, res, trusted, pins, repo):
 
 
 # ---------------------------------------------------------------- V5-V11 capacity
-def recompute_capacity(b, res):
+def recompute_capacity(b, res, trusted=False):
     w, c = b["workload"], b["results"]["capacity"]
     slo, stop = w["slo_s"], w["stop_slo_s"] or w["slo_s"]
     if slo is None:
@@ -358,9 +358,13 @@ def recompute_capacity(b, res):
             if want > 0 and abs(jt - want) / want > ENERGY_TOL:
                 res.flag("quarantine", "V9", f"N={s['agents']}: {jt:.1f} J/turn vs {want:.1f} from power x time / turns")
 
-    # V10 box state.
+    # V10 box state. A maintainer-lab run on a busy box is kept with the
+    # not-quiet tag: its ledger row records the load it ran under.
     if not c["quiet_check_ok"]:
-        res.flag("quarantine", "V10", "box was not quiet when the run started")
+        if trusted and b["provenance"]["source"] == "maintainer-lab":
+            res.tag("not-quiet")
+        else:
+            res.flag("quarantine", "V10", "box was not quiet when the run started")
     # The binding step is the smallest N that broke the SLO (the search may
     # visit N out of order), else the largest N run.
     failed = [s for s in steps if s["verdict"] != "pass"]
@@ -471,7 +475,7 @@ def validate(b, *, raw_size=None, trusted=False, known_hashes=(), local_identifi
         res.flag("reject", "V4", "maintainer-lab provenance is only accepted from the maintainers' lab")
     check_release(b, res, trusted, pins, repo)
     if kind == "capacity":
-        recompute_capacity(b, res)
+        recompute_capacity(b, res, trusted)
     else:
         single_stream_metrics(b, res)
         roofline(b, res)

@@ -7,7 +7,7 @@
     "amx_tile"
    ],
    "e_core_cpus": null,
-   "family": null,
+   "family": 6,
    "hybrid": false,
    "isa": [
     "avx2",
@@ -24,7 +24,7 @@
    "logical_cpus": null,
    "microcode": null,
    "model": "Intel(R) Xeon(R) CPU Max 9480",
-   "model_id": null,
+   "model_id": 143,
    "numa_nodes": 4,
    "p_core_cpus": null,
    "snc": 4,

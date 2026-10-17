@@ -537,6 +537,15 @@ class ValidatorTest(unittest.TestCase):
         self.assertEqual(res.verdict, "accept")
         self.assertEqual(sorted(res.tags), ["drifted", "throttled"])
 
+    def test_V10_trusted_maintainer_run_on_a_busy_box_is_tagged(self):
+        b = copy.deepcopy(self.b)
+        b["results"]["capacity"]["quiet_check_ok"] = False
+        b["provenance"]["source"] = "maintainer-lab"
+        res = check(reseal(b), trusted=True)
+        self.assertNotIn("V10", rules(res))
+        self.assertIn("not-quiet", res.tags)
+        self.assertIn("V10", rules(check(reseal(b))))
+
     def test_V11_monotone(self):
         b = copy.deepcopy(self.b)
         s2 = b["results"]["capacity"]["steps"][1]
@@ -586,7 +595,8 @@ class MatrixTest(unittest.TestCase):
         m = M.build([SEED], [SEED])
         with open(os.path.join(REPO, "docs", "oracle-matrix.md")) as f:
             self.assertEqual(M.markdown(m), f.read())
-        self.assertEqual(len(m["cells"]), 2)
+        # H6 CPU and iGPU (single stream), H8 A1 (two runs, one cell) and A4.
+        self.assertEqual(len(m["cells"]), 4)
         self.assertEqual({c["tier"] for c in m["cells"]}, {"provisional"})
         self.assertEqual(m["review"], [])
 

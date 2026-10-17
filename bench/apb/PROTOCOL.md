@@ -1,7 +1,8 @@
 # APB baseline: agents per box at a p95 turn-latency SLO
 
-Status: **pre-registered, not run.** Nothing in this file is a measurement of
-agents per box. Run it serially on the i9-13900T host after the live benchmark
+Status: **pre-registered.** Nothing in this file is a measurement of agents per
+box. The first run, with `k3d-gpu capacity` as the per-arm driver and a 15-min
+cap per arm, is EXPERIMENTS.md "H8 run". Run it serially on the i9-13900T host after the live benchmark
 window closes (after ~17:00) and after H3/H4 finish, one arm at a time.
 
 ## 1. Question and headline metric
@@ -348,6 +349,11 @@ quiet check is expected to refuse this host; `--force` then records it.
   errors scored as 0 s, first cohort kept in the window, RAPL wrap ignored, no
   concurrency cap, floor instead of ceil in the percentile) each fail the suite.
 * `bench/apb/vllm-cuda.yaml`: arm A4 Deployment + Service.
+* `bench/apb/arm.sh`: one arm on a fresh cluster under a wall-clock cap, model
+  staged into the node, then `k3d-gpu capacity` (the H8 run, EXPERIMENTS.md).
+* `bench/apb/stage.py`, `bench/apb/test_stage.py`: rewrite a rendered manifest to
+  serve that staged copy (hostPath) instead of downloading the model.
+* `bench/apb/h7.sh`: H7, OVMS fp16 vs EAT's vLLM CPU bf16 on one checkpoint.
 * `bench/apb/capacity.py`, `bench/apb/test_capacity.py`: `k3d-gpu capacity` (section 11) and its tests (stub server with load-dependent latency, fake powercap/proc tree, stub kubectl and nvidia-smi).
 * `bench/agent_trace*.py`, `bench/AGENT_TRACE.md`: unchanged copy of `5a1e541`.
 

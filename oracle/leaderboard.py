@@ -51,8 +51,11 @@ JSON_OUT = os.path.join(REPO, "docs", "leaderboard.json")
 
 def tokens_per_joule(bundle, agents):
     """Output tokens per package joule at step `agents`, or None."""
-    cap = (bundle.get("results") or {}).get("capacity")
-    if not cap:
+    res = bundle.get("results") or {}
+    cap = res.get("capacity")
+    # j_per_turn_pkg is the CPU package only: it covers a cpu/igpu/npu engine,
+    # not a discrete card's own power.
+    if not cap or res.get("engine") not in ("cpu", "igpu", "npu"):
         return None
     step = next((s for s in cap["steps"] if s["agents"] == agents), None)
     if not step or not step["j_per_turn_pkg"]:
@@ -89,12 +92,16 @@ def build(seed=SEED, data=DATA, repo=REPO, inputs=None):
         meta = m["keys"][c["comparison_key"]]
         met = c["metrics"]
         apb = (met.get("agents_per_box") or {}).get("median")
-        tpj, roof = [], []
+        tpj, roof, lower = [], [], False
         for u in c["data"]:
             rel = u[len(M.DEFAULT_URL_BASE):] if u.startswith(M.DEFAULT_URL_BASE) else None
             if not rel:
                 continue
             b = load(rel)
+            cap = (b.get("results") or {}).get("capacity") or {}
+            # Every step up to --max passed: the run proves a lower bound only.
+            if apb is not None and cap.get("binding_limit") == "max_reached" and cap.get("agents_per_box") == apb:
+                lower = True
             if apb is not None:
                 v = tokens_per_joule(b, int(apb))
                 if v is not None:
@@ -106,6 +113,7 @@ def build(seed=SEED, data=DATA, repo=REPO, inputs=None):
             "sku": c["sku"], "cpu": c["cpu"], "engine": c["engine"], "kind": meta["kind"],
             "model": meta["model"], "comparison_key": c["comparison_key"][:12],
             "agents_per_box": apb,
+            "agents_per_box_bound": None if apb is None else ("lower" if lower else "exact"),
             "slo_s": meta["workload"].get("slo_s") if meta["kind"] == "capacity" else None,
             "decode_tok_s": (met.get("decode_tok_s") or {}).get("median"),
             "tok_s_per_w": M.rnd(median(tpj)),
@@ -133,14 +141,18 @@ def markdown(board):
          "roofline (memory bandwidth / weight bytes) and are never a measurement; `-` means the bundle",
          "does not carry the inputs. `k3d-gpu share` does not record memory channels, MT/s or weight",
          "bytes yet, so that column is not computed for any row it builds. The SKU is the CPU plus the",
-         "device the engine ran on. Rows are sorted by SKU, not ranked.", "",
+         "device the engine ran on. `>= N` means every step up to the run's `--max` passed, so N is a",
+         "lower bound. The `not-quiet` tag marks a maintainer run on a busy box (its ledger row gives",
+         "the load); a community bundle from a busy box stays in review. Rows are sorted by SKU, not",
+         "ranked.", "",
          "| SKU | Engine | Agents per box (measured) | Decode tok/s (measured) | tok/s/W (measured) "
          "| Decode roofline tok/s (predicted) | n | Tier | Tags | Data |",
          "|---|---|---|---|---|---|---|---|---|---|"]
     if not board["rows"]:
         L.append("| - | - | - | - | - | - | 0 | - | - | - |")
     for r in board["rows"]:
-        apb = "-" if r["agents_per_box"] is None else f"{r['agents_per_box']:.0f} at p95 {r['slo_s']} s"
+        ge = ">= " if r["agents_per_box_bound"] == "lower" else ""
+        apb = "-" if r["agents_per_box"] is None else f"{ge}{r['agents_per_box']:.0f} at p95 {r['slo_s']} s"
         ref = "".join(f" [ledger:{h}]" for h in r["ledger"])
         L.append(f"| {r['sku']} | {r['engine']} | {apb} | {fmt(r['decode_tok_s'])} | {fmt(r['tok_s_per_w'], 3)} | "
                  f"{fmt(r['predicted_decode_roofline_tok_s'])} | {r['n']} | {r['tier']} | "

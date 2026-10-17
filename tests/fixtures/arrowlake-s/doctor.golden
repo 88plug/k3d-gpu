@@ -14,8 +14,8 @@
   ok: GPU sharing on: up to 8 pods per Intel GPU, balanced allocation (K3D_GPU_INTEL_SHARED=auto); pods share its memory and engines with no isolation
 ==> Checking Intel NPU (Core Ultra)...
   ok: Intel NPU Arrow Lake (0xad1d) bound to intel_vpu
-  ok: intel/vpu/vpu_37xx_* firmware present (/lib/firmware/intel/vpu/vpu_37xx_v1.bin)
-  note: no build date readable in /lib/firmware/intel/vpu/vpu_37xx_v1.bin; cannot compare it with openvino/model_server:2026.4.1-gpu's NPU driver v1.35.0
+  ok: intel/vpu/vpu_37xx_* firmware present (/lib/firmware/intel/vpu/vpu_37xx_v0.0.bin)
+  note: no build date readable in /lib/firmware/intel/vpu/vpu_37xx_v0.0.bin; cannot compare it with openvino/model_server:2026.4.1-gpu's NPU driver v1.35.0
   ok: up labels the node k3d-gpu.io/npu.gen=37xx
   warn: /dev/accel/accel0 is group <gid>, mode 644: only root pods can open it. Add the udev rule
         SUBSYSTEM=="accel", GROUP="render", MODE="0660" (systemd 254+ ships it in 50-udev-default.rules)
@@ -23,6 +23,7 @@
 ==> Intel CPU built-in accelerators...
   ok: CPU ISA: AVXVNNI — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
   ok: hybrid CPU: P-cores 0-7, E-cores 8-23 — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient|lowpower|ecluster|pcore-physical|latency
+  info: noisy-neighbour isolation: cpu-cap — no rdt_a flag; E-core L2 clusters are not readable (no cpu*/cache in sysfs); give a neighbour a CPU limit. Cache and DRAM bandwidth stay shared
 ==> Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...
   ok: dra available (auto)
   ok: image-volume available (auto)

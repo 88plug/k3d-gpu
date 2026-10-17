@@ -50,6 +50,10 @@ contents:
     dst: /usr/share/k3d-gpu/images.lock
     file_info:
       mode: 0644
+  - src: bench/vs.py
+    dst: /usr/share/k3d-gpu/bench/vs.py
+    file_info:
+      mode: 0755
   # k3d-gpu tune loads the agent with these.
   - src: bench/llm_load.py
     dst: /usr/share/k3d-gpu/bench/llm_load.py
@@ -94,6 +98,10 @@ contents:
       mode: 0644
   - src: oracle/schema/bundle-v1.json
     dst: /usr/share/k3d-gpu/oracle/schema/bundle-v1.json
+    file_info:
+      mode: 0644
+  - src: bench/competitors.lock
+    dst: /usr/share/k3d-gpu/bench/competitors.lock
     file_info:
       mode: 0644
   - src: README.md

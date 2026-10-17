@@ -498,7 +498,7 @@ def main(argv=None):
         p.add_argument("--quant")
         p.add_argument("--lever", action="append", help="id=on|off|unknown")
         p.add_argument("--provenance", default="community", choices=("community", "maintainer-lab"))
-        p.add_argument("--note", default="none", choices=("none", "ledger-H6"))
+        p.add_argument("--note", default="none", choices=("none", "ledger-H6", "ledger-H8"))
     sub.choices["capacity"].add_argument("--capacity", required=True)
     s = sub.choices["single-stream"]
     s.add_argument("--raw", required=True)
