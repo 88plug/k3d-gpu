@@ -10,6 +10,7 @@
   warn: Intel Max (Ponte Vecchio) (0x0bd5) has no driver — no upstream i915 or xe binds it (pvc_info/pvc_desc list no ids); Intel's supported driver is the out-of-tree intel-i915-dkms LTS (2523.x) on an OS from https://dgpu-docs.intel.com/overview/support-matrix/max-and-flex-support-matrix.html
 ==> Intel CPU built-in accelerators...
   ok: CPU ISA: AVX512BF16 AVX512F AVX512VNNI — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
+  info: noisy-neighbour isolation: cpu-cap — no rdt_a flag and no E-cores; give a neighbour a CPU limit. Cache and DRAM bandwidth stay shared
 ==> Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...
   ok: dra available (auto)
   ok: image-volume available (auto)

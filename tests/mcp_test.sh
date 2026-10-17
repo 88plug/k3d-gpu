@@ -9,6 +9,8 @@ set -uo pipefail
 
 MCP="$(cd "$(dirname "$0")/.." && pwd)/scripts/k3d-gpu-mcp"
 WORK=$(mktemp -d)
+# A measured autoquant pick on this dev box (EXPERIMENTS.md H27) must not leak into goldens.
+export K3D_GPU_AUTOQUANT_CACHE="${WORK}/no-autoquant.json"
 trap 'rm -rf "${WORK}"' EXIT
 PASS=0 FAILS=0
 

@@ -1,6 +1,6 @@
-facts: sha256:bee3e99e2c9e71ec025ee4a9cd5e5cd4663fc7b0262408ac2283dd3b88a28704
+facts: sha256:f49915b3e05a592efb34e0a0d4ebb5ba069172515dea6e3bd4d621b68b30f7d3
 targets:
-  cpu: Intel(R) Xeon(R) CPU Max 9480, AMX, 8 NUMA nodes; usable
+  cpu: Intel(R) Xeon(R) CPU Max 9480, family:model 6:143, AMX, 8 NUMA nodes; usable
 matrix: 2 cells, 0 on a target of this host
   no measured cell for these targets
 decision:

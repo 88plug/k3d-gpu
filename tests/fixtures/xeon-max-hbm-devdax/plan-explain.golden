@@ -1,0 +1,12 @@
+facts: sha256:f49915b3e05a592efb34e0a0d4ebb5ba069172515dea6e3bd4d621b68b30f7d3
+targets:
+  cpu: Intel(R) Xeon(R) CPU Max 9480, family:model 6:143, AMX, 4 NUMA nodes; usable
+matrix: 2 cells, 0 on a target of this host
+  no measured cell for these targets
+decision:
+  unmeasured, run `k3d-gpu prove` on this box
+  bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)
+exit=0
+--- calls
+kubectl config get-contexts -o name
+kubectl --context k3d-gpu --request-timeout=5s get nodes -o name

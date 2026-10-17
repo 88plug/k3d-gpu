@@ -1,0 +1,35 @@
+==> Checking docker...
+  ok: docker running
+==> Checking k3d...
+  ok: k3d version v0.0.0-stub
+==> Checking kubectl...
+  ok
+==> Detected accelerators: intel npu hybrid
+==> Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...
+  ok: Intel Lunar Lake (0x64a0) bound to xe
+  ok: xe/lnl_guc_* firmware present
+  info: Intel Lunar Lake (0x64a0) at 0000:00:02.0: GuC version not checked: debugfs needs root (sudo k3d-gpu doctor)
+  ok: up labels the node gpu.intel.com/xmx=true
+  ok: GPU sharing on: up to 8 pods per Intel GPU, balanced allocation (K3D_GPU_INTEL_SHARED=auto); pods share its memory and engines with no isolation
+==> Checking Intel NPU (Core Ultra)...
+  ok: Intel NPU Lunar Lake (0x643e) bound to intel_vpu
+  ok: intel/vpu/vpu_40xx_* firmware present (/lib/firmware/intel/vpu/vpu_40xx_v1.bin)
+  note: no build date readable in /lib/firmware/intel/vpu/vpu_40xx_v1.bin; cannot compare it with openvino/model_server:2026.4.1-gpu's NPU driver v1.35.0
+  ok: up labels the node k3d-gpu.io/npu.gen=40xx
+  warn: /dev/accel/accel0 is group <gid>, mode 644: only root pods can open it. Add the udev rule
+        SUBSYSTEM=="accel", GROUP="render", MODE="0660" (systemd 254+ ships it in 50-udev-default.rules)
+  note: workload images need the NPU user-space driver (github.com/intel/linux-npu-driver) and Level Zero
+==> Intel CPU built-in accelerators...
+  ok: CPU ISA: AVXVNNI — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
+  ok: hybrid CPU: P-cores 0-3, E-cores none, LP E-cores 4-7 — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|lowpower|pcore-physical|latency
+  ok: physical P-cores (one thread per core): 0-3 — k3d-gpu.io/cores=pcore-physical and latency show pods one thread per core
+  info: noisy-neighbour isolation: cpu-cap — no rdt_a flag; E-core L2 clusters are not readable (no cpu*/cache in sysfs); give a neighbour a CPU limit. Cache and DRAM bandwidth stay shared
+==> Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...
+  ok: dra available (auto)
+  ok: image-volume available (auto)
+  ok: npu-turbo available (auto)
+
+==> All checks passed.
+exit=0
+--- calls
+kubectl --context k3d-gpu --request-timeout=5s get nodes -o name

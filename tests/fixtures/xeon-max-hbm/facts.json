@@ -102,6 +102,15 @@
       {
         "apply": null,
         "from": null,
+        "level": "info",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "noisy-neighbour isolation: rdt-mba — CAT + MBA can cap a neighbour's cache share and DRAM bandwidth through the RDT opt-in above (resctrl mounted: no); the shipped classes set cache shares only, so add mbAllocation: {all: [\"50%\"]} to the BestEffort class for bandwidth; the classes run inside the NRI balloons policy, which up deploys on hybrid or multi-NUMA hosts only",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
         "level": "ok",
         "revert": null,
         "section": "Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...",
@@ -156,7 +165,7 @@
       }
     ]
   },
-  "fingerprint": "sha256:bee3e99e2c9e71ec025ee4a9cd5e5cd4663fc7b0262408ac2283dd3b88a28704",
+  "fingerprint": "sha256:f49915b3e05a592efb34e0a0d4ebb5ba069172515dea6e3bd4d621b68b30f7d3",
   "host": {
     "cpu": {
       "amx": [
@@ -282,7 +291,7 @@
         "amx": true,
         "e_count": null,
         "e_cpus": null,
-        "family_model": null,
+        "family_model": "6:143",
         "hybrid": false,
         "logical_cpus": null,
         "model_name": "Intel(R) Xeon(R) CPU Max 9480",

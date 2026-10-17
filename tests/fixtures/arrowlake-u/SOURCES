@@ -1,0 +1,26 @@
+Platform: Core Ultra 7 255U laptop (Arrow Lake-U): Xe-LPG iGPU without XMX on
+i915, firmware installed, one NUMA node, a hybrid CPU of 2 P-cores with SMT,
+8 E-cores in two 4-core clusters and 2 LP E-cores. No NPU: no kernel header,
+pci.ids entry or Intel document names the Arrow Lake-U NPU PCI id, so the
+fixture leaves it out rather than guess.
+
+Sources (kernel paths are Linux master as of 2026-10-17 unless a tag is named):
+- cpu family 6, model 181: INTEL_ARROWLAKE_U IFM(6, 0xB5) in
+  arch/x86/include/asm/intel-family.h.
+- 0x8086 0x7d41: INTEL_ARL_U_IDS in include/drm/intel/pciids.h; bound by i915
+  (INTEL_ARL_IDS with mtl_info in drivers/gpu/drm/i915/i915_pci.c).
+- XMX false: Mesa main include/pci_ids/iris_pci_ids.h maps 0x7d41 to arl_u
+  (MTL_CONFIG, has_systolic = false); intel/compute-runtime
+  enable_compiler_product_helper_arl.cpp compiles 0x7D41 as MTL_U.
+- i915/mtl_guc_70.bin: linux-firmware WHENCE.
+- Hybrid PMUs: case INTEL_ARROWLAKE_U sits with INTEL_METEORLAKE(_L) in
+  arch/x86/events/intel/core.c (hybrid_big_small), so the LP E-cores are in
+  cpu_atom, told apart by having no L3 as on Meteor Lake.
+- Core counts and SMT: ARK sku 241860 (Core Ultra 7 255U): 12 cores (2 P, 8 E,
+  2 LP E), 14 threads, so the 2 P-cores have SMT.
+
+Not from hardware: the CPU numbering (P threads 0-3 as sibling pairs, E 4-11,
+LP E 12-13), the cache index numbering, the iGPU BDF, the kernel release string
+and the cpuinfo flags line (copied from the pantherlake fixture). The 4-core E
+clusters and the LP E-cores reporting no L3 follow the Meteor Lake layout this
+die derives from; on Arrow Lake-U that is UNVERIFIED (no capture yet).
