@@ -1,0 +1,27 @@
+==> Checking docker...
+  ok: docker running
+==> Checking k3d...
+  ok: k3d version v0.0.0-stub
+==> Checking kubectl...
+  ok
+==> Detected accelerators: intel hybrid
+==> Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...
+  ok: Intel Arrow Lake-U (0x7d41) bound to i915
+  ok: i915/mtl_guc_* firmware present
+  info: Intel Arrow Lake-U (0x7d41) at 0000:00:02.0: GuC version not checked: debugfs needs root (sudo k3d-gpu doctor)
+  ok: up labels the node gpu.intel.com/xmx=false
+  ok: GPU sharing on: up to 8 pods per Intel GPU, balanced allocation (K3D_GPU_INTEL_SHARED=auto); pods share its memory and engines with no isolation
+==> Intel CPU built-in accelerators...
+  ok: CPU ISA: AVXVNNI — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
+  ok: hybrid CPU: P-cores 0-3, E-cores 4-11, LP E-cores 12-13 — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient|lowpower|ecluster|pcore-physical|latency
+  ok: E-core clusters (shared L2): 4-7 8-11 — k3d-gpu.io/cores=ecluster gives a pod 4 E-cores of one cluster
+  ok: physical P-cores (one thread per core): 0,2 — k3d-gpu.io/cores=pcore-physical and latency show pods one thread per core
+  info: noisy-neighbour isolation: cpu-cap — no rdt_a flag, so cache and DRAM bandwidth stay shared; give a bandwidth-heavy neighbour a CPU limit. Holding it to one E-core L2 cluster (k3d-gpu.io/cores=ecluster) is not recommended: H26 measures it against the same workers spread over the E-cores (EXPERIMENTS.md H26)
+==> Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...
+  ok: dra available (auto)
+  ok: image-volume available (auto)
+
+==> All checks passed.
+exit=0
+--- calls
+kubectl --context k3d-gpu --request-timeout=5s get nodes -o name

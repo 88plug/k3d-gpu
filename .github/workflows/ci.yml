@@ -143,6 +143,7 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - run: tests/bench_test.sh
+      - run: tests/bench_vs_test.sh
 
   mcp-tests:
     name: MCP server tests
@@ -174,6 +175,7 @@ jobs:
           echo "${KUBECONFORM_SHA256}  kubeconform.tar.gz" | sha256sum -c -
           sudo tar -xzf kubeconform.tar.gz -C /usr/local/bin kubeconform
       - run: tests/chat_ui_test.sh
+      - run: tests/model_share_test.sh
 
   # One job per tests/fixtures/<platform>, so a new fixture joins the matrix
   # without editing this file.
