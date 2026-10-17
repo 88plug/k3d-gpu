@@ -30,6 +30,7 @@ kubectl wait --for=condition=Ready nodes --all --timeout=120s
 kubectl -n kube-system get daemonset intel-gpu-plugin
 kubectl -n kube-system get daemonset intel-npu-plugin
 kubectl -n kube-system get daemonset nri-resource-policy-balloons
+kubectl -n kube-system set env daemonset/nri-resource-policy-balloons OVERRIDE_SYS_ATOM_CPUS=6-15
 kubectl apply -f -
 kubectl -n kube-system rollout status daemonset/intel-gpu-plugin --timeout=120s
 kubectl get nodes -o go-template={{range .items}}{{range $k, $v := .status.allocatable}}{{$k}} {{$v}}{{"\n"}}{{end}}{{end}}

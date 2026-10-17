@@ -16,7 +16,9 @@
 #   hybrid  Intel hybrid CPUs (P-cores + E-cores, Alder Lake and newer)
 #                                                         -> node label k3d-gpu.io/hybrid-cpu=true; pods
 #           labelled k3d-gpu.io/cores=performance|efficient are pinned to P- or E-cores by
-#           the NRI balloons policy (nri-plugins), everything else keeps every CPU
+#           the NRI balloons policy (nri-plugins), everything else keeps every CPU;
+#           lowpower|ecluster|pcore-physical|latency are further balloon types, and
+#           nodes get k3d-gpu.io/favored-cpus when CPPC ranks some CPUs highest
 #   numa    more than one NUMA node (multi-socket or SNC Xeon, HBM/CXL memory nodes)
 #                                                         -> node labels k3d-gpu.io/numa-nodes=<n>,
 #           k3d-gpu.io/snc=<nodes per L3>; pods labelled k3d-gpu.io/cores=replica get a
@@ -288,11 +290,144 @@ cpu_family_model() {
              END { if (f != "" && m != "") print f, m }' "${SYSROOT}/proc/cpuinfo" 2>/dev/null || true
 }
 
-# Hybrid CPUs register one PMU per core type; each lists its online CPUs.
+# Hybrid CPUs register one PMU per core type; each lists its online CPUs. Arrow
+# Lake-H adds a third, cpu_lowpower, for its LP E-cores (kernel 6.13+,
+# arch/x86/events/intel/core.c).
 hybrid_cpus() { cat "${SYSROOT}/sys/devices/cpu_$1/cpus" 2>/dev/null || true; }
-has_hybrid() { [ -n "$(hybrid_cpus core)" ] && [ -n "$(hybrid_cpus atom)" ]; }
+has_hybrid() { [ -n "$(hybrid_cpus core)" ] && [ -n "$(hybrid_cpus atom)$(hybrid_cpus lowpower)" ]; }
 HYBRID_LABEL="k3d-gpu.io/hybrid-cpu=true"
 NFD_HOST_DIR="/k3d-gpu/host" # in the node: host /lib/modules, /boot, /etc/os-release for nfd-worker
+CPU_SYS=/sys/devices/system/cpu
+
+# cache_shared <cpu> <level>: shared_cpu_list of the CPU's cache at that level
+# (cache/index*/level), empty when the CPU has none.
+cache_shared() {
+    local d
+    for d in "${SYSROOT}${CPU_SYS}/cpu$1"/cache/index*; do
+        [ "$(cat "${d}/level" 2>/dev/null)" = "$2" ] || continue
+        cat "${d}/shared_cpu_list" 2>/dev/null || true
+        return 0
+    done
+}
+
+# LP E-cores: Arrow Lake-H lists them in cpu_lowpower; Meteor Lake lists them in
+# cpu_atom, where they are the CPUs with no L3 (same PMU, Crestmont, no ring
+# access). The L3 test only runs when the host exposes an L3 at all.
+lowpower_cpus() {
+    local c out
+    out=$(cpulist_expand "$(hybrid_cpus lowpower)" || true)
+    if grep -qsx 3 "${SYSROOT}${CPU_SYS}"/cpu[0-9]*/cache/index*/level; then
+        for c in $(cpulist_expand "$(hybrid_cpus atom)" || true); do
+            [ -n "$(cache_shared "${c}" 3)" ] || out+=$'\n'"${c}"
+        done
+    fi
+    cpulist_compress "${out}"
+}
+
+# cpulist_minus <a> <b>: CPUs of list a that are not in list b, as a kernel list.
+cpulist_minus() {
+    cpulist_compress "$(cpulist_expand "$1" | grep -vxF -f <(cpulist_expand "$2" || true) || true)"
+}
+
+# E-cores without the LP E-cores, and every CPU the balloons policy treats as
+# an E-core (cpu_atom plus cpu_lowpower).
+efficient_cpus() { cpulist_minus "$(hybrid_cpus atom)" "$(lowpower_cpus)"; }
+ecore_kind_cpus() {
+    cpulist_compress "$(cpulist_expand "$(hybrid_cpus atom)" || true; cpulist_expand "$(hybrid_cpus lowpower)" || true)"
+}
+
+# E-core clusters: the distinct L2 shared_cpu_lists of the E-cores, space separated.
+ecore_clusters() {
+    local c l out=" "
+    for c in $(cpulist_expand "$(efficient_cpus)" || true); do
+        l=$(cache_shared "${c}" 2)
+        [[ "${l}" =~ ^[0-9,-]+$ ]] && [[ "${out}" != *" ${l} "* ]] && out+="${l} "
+    done
+    out=${out# }
+    echo "${out% }"
+}
+
+# Physical P-cores: the first CPU of each P-core's topology/core_cpus_list.
+pcore_physical_cpus() {
+    local c l out=""
+    for c in $(cpulist_expand "$(hybrid_cpus core)" || true); do
+        l=$(cat "${SYSROOT}${CPU_SYS}/cpu${c}/topology/core_cpus_list" 2>/dev/null) || continue
+        l=${l%%[-,]*}
+        [[ "${l}" =~ ^[0-9]+$ ]] && out+="${l}"$'\n'
+    done
+    cpulist_compress "${out}"
+}
+
+# "<cpu> <highest perf>" per CPU: acpi_cppc/highest_perf, or where no CPU has
+# CPPC, bits 7:0 of IA32_HWP_CAPABILITIES (MSR 0x771) from each readable
+# /dev/cpu/<n>/msr (root only; nothing is loaded or written).
+cpu_highest_perf() {
+    local m c v
+    { grep -s '' "${SYSROOT}${CPU_SYS}"/cpu[0-9]*/acpi_cppc/highest_perf || true; } \
+        | sed -n 's#.*/cpu\([0-9][0-9]*\)/acpi_cppc/highest_perf:\([0-9]\{1,4\}\)$#\1 \2#p' | grep . && return 0
+    for m in "${SYSROOT}"/dev/cpu/[0-9]*/msr; do
+        [ -r "${m}" ] || continue
+        c=${m%/msr}; c=${c##*/}
+        v=$(dd if="${m}" bs=8 count=1 skip=$((0x771)) iflag=skip_bytes status=none 2>/dev/null | od -An -tu1 -N1 | tr -d ' ') || continue
+        [[ "${v}" =~ ^[0-9]+$ ]] && echo "${c} ${v}"
+    done
+    return 0
+}
+
+# Favored cores (ITMT): "<cpulist> <highest perf> <next value>" for the CPUs at
+# the top highest perf, empty when every CPU reports the same value.
+favored_cpus() {
+    local l v n
+    cpu_highest_perf | sort -k2,2nr -k1,1n | awk '
+        NR == 1 {top = $2} $2 == top {l = l (l == "" ? "" : ",") $1; next}
+        nv == "" {nv = $2} END {if (nv != "") print l, top, nv}' \
+        | while read -r l v n; do echo "$(cpulist_compress "${l}") ${v} ${n}"; done
+}
+
+# favored_hint_devs <cpulist>: the L2 cache dir (cpu<N>/cache/index<i>, level 2)
+# of each favored core, one per distinct L2 (P-cores have a private L2, so one
+# per physical core). nri-plugins reads a sysfs dir's shared_cpu_list as a
+# topology hint (pkg/topology getTopologyHint), so a balloon type with these in
+# preferCloseToDevices takes its CPUs from the favored cores while they are free.
+favored_hint_devs() {
+    local c d seen=" " l
+    for c in $(cpulist_expand "$1" || true); do
+        for d in "${SYSROOT}${CPU_SYS}/cpu${c}"/cache/index*; do
+            [ "$(cat "${d}/level" 2>/dev/null)" = 2 ] || continue
+            l=$(cat "${d}/shared_cpu_list" 2>/dev/null) || break
+            [[ "${l}" =~ ^[0-9,-]+$ ]] && [[ "${seen}" != *" ${l} "* ]] || break
+            seen+="${l} "
+            echo "${d#"${SYSROOT}"}"
+            break
+        done
+    done
+}
+
+# latency_prefer_favored <cpulist>: add the favored cores' L2 dirs to the latency
+# balloon type's preferCloseToDevices in the baked BalloonsPolicy. nri-plugins
+# v0.14.0 ranks CPUs by base frequency and EPP only, not by CPPC highest_perf.
+latency_prefer_favored() {
+    local devs names n i=0 dl=$((SECONDS + 30)) json=""
+    devs=$(favored_hint_devs "$1")
+    [ -n "${devs}" ] || return 0
+    while :; do
+        names=$(kubectl -n kube-system get balloonspolicy default -o 'jsonpath={.spec.balloonTypes[*].name}' 2>/dev/null) || names=""
+        [ -n "${names}" ] || [ "${SECONDS}" -ge "${dl}" ] || { sleep 2; continue; }
+        break
+    done
+    for n in ${names}; do
+        [ "${n}" = latency ] && break
+        i=$((i + 1))
+    done
+    if [ "${n:-}" != latency ]; then
+        warn "no latency balloon type in BalloonsPolicy kube-system/default — latency pods are not steered to the favored CPUs $1"
+        return 0
+    fi
+    for n in ${devs}; do json+="\"${n}\","; done
+    kubectl -n kube-system patch balloonspolicy default --type=json \
+        -p "[{\"op\":\"add\",\"path\":\"/spec/balloonTypes/${i}/preferCloseToDevices\",\"value\":[${json%,}]}]" \
+        || warn "could not point the latency balloon at the favored CPUs $1"
+}
 
 # Kernel CPU list ("0-3,8,10-11") -> one CPU number per line. Only what the
 # kernel prints is accepted (decimal, no leading zeros, a <= b, CPU ids below
@@ -894,7 +1029,7 @@ doctor_numa() {
 # Xeon built-in accelerators. `up` deploys DSA/IAA/QAT plugins once the host
 # side is set up (work queues, SR-IOV VFs); this says what is still missing.
 doctor_cpu_accels() {
-    local amx isa dev bdf vfs n wqs kind name prefix devdir lines=""
+    local amx isa dev bdf vfs n wqs kind name prefix devdir lines="" lp e cl pp fav fv fn
     amx=$(amx_flags)
     [ -z "${amx}" ] || lines+="  ok: AMX (${amx}) — CPU instructions, usable in any pod; up labels nodes feature.node.kubernetes.io/cpu-cpuid.AMX*"$'\n'
     isa=$(cpu_isa_labels | sed 's#^feature\.node\.kubernetes\.io/cpu-cpuid\.##; s#=true$##' | paste -sd' ')
@@ -936,10 +1071,18 @@ doctor_cpu_accels() {
         FAIL=1
     fi
     if has_hybrid; then
-        lines+="  ok: hybrid CPU: P-cores $(hybrid_cpus core), E-cores $(hybrid_cpus atom) — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient"$'\n'
+        lp=$(lowpower_cpus) e=$(efficient_cpus) cl=$(ecore_clusters) pp=$(pcore_physical_cpus)
+        lines+="  ok: hybrid CPU: P-cores $(hybrid_cpus core), E-cores ${e:-none}${lp:+, LP E-cores ${lp}} — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient|lowpower|ecluster|pcore-physical|latency"$'\n'
+        [ -z "${cl}" ] || lines+="  ok: E-core clusters (shared L2): ${cl} — k3d-gpu.io/cores=ecluster gives a pod 4 E-cores of one cluster"$'\n'
+        [ -z "${pp}" ] || lines+="  ok: physical P-cores (one thread per core): ${pp} — k3d-gpu.io/cores=pcore-physical and latency show pods one thread per core"$'\n'
     elif is_active hybrid; then
-        lines+="  ${RED}fail${RST}: hybrid requested but the CPU has no online P-core and E-core PMUs (/sys/devices/cpu_core, cpu_atom)"$'\n'
+        lines+="  ${RED}fail${RST}: hybrid requested but the CPU has no online P-core and E-core PMUs (/sys/devices/cpu_core, cpu_atom or cpu_lowpower)"$'\n'
         FAIL=1
+    fi
+    fav=$(favored_cpus)
+    if [ -n "${fav}" ]; then
+        read -r fav fv fn <<< "${fav}"
+        lines+="  ok: favored CPUs ${fav} (highest_perf ${fv}, next ${fn}) — up annotates nodes k3d-gpu.io/favored-cpus=${fav} and points the latency balloon at them"$'\n'
     fi
     doctor_numa
     doctor_accel_sockets
@@ -1432,8 +1575,11 @@ cpu_word() {
 # The CPU groups the advisor reports on: P-cores and E-cores on hybrid parts.
 perf_groups() {
     if has_hybrid; then
+        local e lp
+        e=$(efficient_cpus) lp=$(lowpower_cpus)
         echo "P-cores|$(hybrid_cpus core)"
-        echo "E-cores|$(hybrid_cpus atom)"
+        [ -z "${e}" ] || echo "E-cores|${e}"
+        [ -z "${lp}" ] || echo "LP E-cores|${lp}"
     else
         echo "CPUs|$(rd /sys/devices/system/cpu/online)"
     fi
@@ -1450,7 +1596,7 @@ group_values() {
 
 # cpulist_compress <"0,1,3">: CPU numbers (comma/space separated) -> kernel list "0-1,3".
 cpulist_compress() {
-    tr -cs '0-9' '\n' <<< "$1" | awk 'NF' | sort -n | awk '
+    tr -cs '0-9' '\n' <<< "$1" | awk 'NF' | sort -nu | awk '
         {if (NR > 1 && $1 == e + 1) {e = $1; next}
          if (NR > 1) o = o (o == "" ? "" : ",") (s == e ? s : s "-" e); s = e = $1}
         END {if (NR) print o (o == "" ? "" : ",") (s == e ? s : s "-" e)}'
@@ -2620,7 +2766,7 @@ cmd_up() {
     fi
     # Hybrid P/E cores: the baked NRI balloons policy is gated by this label. NRI is
     # on in k3s's containerd for a privileged (non-userns) node, and the node sees
-    # the host's cpu_core/cpu_atom PMUs, so balloons can pin by core type. Only the
+    # the host's cpu_core/cpu_atom/cpu_lowpower PMUs, so balloons can pin by core type. Only the
     # node's own cgroup cpusets change; nothing host-wide (cpufreq, RDT) is touched.
     if is_active hybrid; then
         create_args+=(--k3s-node-label="${HYBRID_LABEL}@server:*;agent:*")
@@ -2694,6 +2840,14 @@ cmd_up() {
     info "Waiting for nodes Ready..."
     kubectl wait --for=condition=Ready nodes --all --timeout=120s
 
+    # Favored cores (top CPPC highest_perf) as a node annotation; once the balloons
+    # policy exists, its latency balloon type is pointed at them too.
+    local fav
+    fav=$(favored_cpus)
+    if [ -n "${fav}" ]; then
+        kubectl annotate nodes --all --overwrite "k3d-gpu.io/favored-cpus=${fav%% *}"
+    fi
+
     # The cryptoandcoffee/k3d-gpu image bakes every device plugin into k3s's
     # auto-deploy dir, so k3s applies them on startup — no action needed here. Give
     # each addon a moment to appear; only apply it ourselves if a custom image
@@ -2704,6 +2858,16 @@ cmd_up() {
         [ -n "${ds}" ] || continue
         ensure_plugin "${v}" "${ns}" "${ds}" "${manifest}"
     done
+    # nri-plugins v0.14.0 reads two core kinds, cpu_core and cpu_atom, and will not
+    # start while an online CPU is in neither (pkg/sysfs checkCoreKinds). Arrow
+    # Lake-H lists its LP E-cores in cpu_lowpower, so hand them to the E-core kind
+    # through the plugin's OVERRIDE_SYS_ATOM_CPUS.
+    if is_active hybrid && [ -n "$(hybrid_cpus lowpower)" ]; then
+        kubectl -n kube-system set env daemonset/nri-resource-policy-balloons "OVERRIDE_SYS_ATOM_CPUS=$(ecore_kind_cpus)"
+    fi
+    if is_active hybrid && [ -n "${fav}" ]; then
+        latency_prefer_favored "${fav%% *}"
+    fi
     exp_post_up
 
     verify_gpus
@@ -2890,17 +3054,18 @@ cmd_test() {
             || err "AMX test pod failed — run 'k3d-gpu doctor'"
     fi
     if is_active hybrid; then
-        for kind in "performance core" "efficient atom"; do
+        # nri-plugins pins by two core kinds: cpu_core, and cpu_atom plus cpu_lowpower.
+        for kind in "performance $(hybrid_cpus core)" "efficient $(ecore_kind_cpus)"; do
             read -r v path <<< "${kind}"
-            info "Deploying ${v}-core test pod (${DEVICE_TEST_IMAGE}; host ${v} CPUs: $(hybrid_cpus "${path}"))..."
+            info "Deploying ${v}-core test pod (${DEVICE_TEST_IMAGE}; host ${v} CPUs: ${path})..."
             out=$(run_pod "cores-${v}-test" "${DEVICE_TEST_IMAGE}" \
                 "{\"metadata\":{\"labels\":{\"k3d-gpu.io/cores\":\"${v}\"}},\"spec\":{\"containers\":[{\"name\":\"cores-${v}-test\",\"image\":\"${DEVICE_TEST_IMAGE}\",\"resources\":{\"requests\":{\"cpu\":\"1\"},\"limits\":{\"cpu\":\"1\"}},\"command\":[\"grep\",\"Cpus_allowed_list\",\"/proc/self/status\"]}]}}") \
                 || { printf '%s\n' "${out}"; err "${v}-core test pod failed — run 'k3d-gpu doctor'"; }
             printf '%s\n' "${out}"
             # The grep alone passes with NRI off; the CPU list must sit inside the core type.
             got=$(sed -n 's/^Cpus_allowed_list:[[:space:]]*//p' <<< "${out}")
-            cpulist_within "${got}" "$(hybrid_cpus "${path}")" \
-                || err "${v}-core test pod ran on CPUs '${got}', not on the ${v} CPUs $(hybrid_cpus "${path}") — check: kubectl -n kube-system logs ds/nri-resource-policy-balloons"
+            cpulist_within "${got}" "${path}" \
+                || err "${v}-core test pod ran on CPUs '${got}', not on the ${v} CPUs ${path} — check: kubectl -n kube-system logs ds/nri-resource-policy-balloons"
         done
     fi
 }
@@ -2983,7 +3148,7 @@ report_cpu() {
     online=$(read1 "${SYSROOT}/sys/devices/system/cpu/online")
     isa=$(cpu_ai_flags)
     amx=$(amx_flags)
-    p=$(hybrid_cpus core) e=$(hybrid_cpus atom)
+    p=$(hybrid_cpus core) e=$(ecore_kind_cpus)
     if has_hybrid; then hybrid=true; else p="" e=""; fi
     printf '"cpu":{"model":%s,"online":%s,"logical_cpus":%s,"hybrid":%s,"p_cores":%s,"e_cores":%s,"p_core_cpus":%s,"e_core_cpus":%s,"isa":%s,"avx_vnni":%s,"avx512":%s,"amx":%s}' \
         "$(json_str_or_null "${model}")" "$(json_str_or_null "${online}")" \
@@ -2999,7 +3164,7 @@ report_cpu_text() {
     model=$(grep -m1 '^model name' "${SYSROOT}/proc/cpuinfo" 2>/dev/null || true)
     isa=$(cpu_ai_flags)
     report_line "CPU: ${model#*: }"
-    if has_hybrid; then report_line "  P-cores $(hybrid_cpus core), E-cores $(hybrid_cpus atom)"; fi
+    if has_hybrid; then report_line "  P-cores $(hybrid_cpus core), E-cores $(ecore_kind_cpus)"; fi
     report_line "  AI ISA: ${isa:-none}"
     report_line "Memory: $(awk '$1 == "MemTotal:" {t = $2} $1 == "MemAvailable:" {a = $2} END {printf "%.1f GiB total, %.1f GiB available", t / 1048576, a / 1048576}' "${SYSROOT}/proc/meminfo" 2>/dev/null || true)"
 }

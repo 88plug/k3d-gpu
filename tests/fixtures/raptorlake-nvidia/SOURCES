@@ -27,3 +27,7 @@ nvidia-ctk and nvidia-container-runtime are installed. Device names: pci.ids 202
 
 allocatable is what the device plugins advertise for two GPUs and one iGPU; it is
 not read from a running cluster.
+
+sys/devices/system/cpu/ (topology/core_cpus_list, acpi_cppc/highest_perf,
+cache/index2 and index3) was added later from the same host with the extended
+capture.sh (read-only, 2026-10-16), and copied in unedited.

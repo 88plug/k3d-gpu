@@ -271,6 +271,7 @@ def gen_sysfs(r):
         "render": [dev([None, "xe", "i915", "amdgpu"]) for _ in range(r.randint(0, 2))],
         "accel": [dev([None, "intel_vpu", "habanalabs"]) for _ in range(r.randint(0, 2))],
         "core": cpus(), "atom": cpus(), "cpuinfo": cpuinfo,
+        "lowpower": None if r.random() < 0.6 else cpus(),
     }
 
 
@@ -290,8 +291,8 @@ def sysfs_files(t):
             if d["driver"]:
                 files["sys/bus/pci/drivers/%s/.keep" % d["driver"]] = ""
                 links.append((pci + "/driver", "sys/bus/pci/drivers/" + d["driver"]))
-    for kind in ("core", "atom"):
-        if t[kind] is not None:
+    for kind in ("core", "atom", "lowpower"):
+        if t.get(kind) is not None:
             files["sys/devices/cpu_%s/cpus" % kind] = t[kind]
     if t["cpuinfo"] is not None:
         files["proc/cpuinfo"] = t["cpuinfo"]
@@ -336,7 +337,9 @@ def oracle_sysfs(t):
         # kernel flag names use [a-z0-9_] only (x86_cap_flags); other tokens are not flags
         if any(re.fullmatch(r"amx_[a-z0-9_]+", tok) for tok in line.partition(":")[2].split(" ")):
             found.append("amx")
-    if t["core"] is not None and t["atom"] is not None and val(t["core"]) and val(t["atom"]):
+    # Arrow Lake-H lists its LP E-cores in a third PMU, cpu_lowpower.
+    if t["core"] is not None and val(t["core"]) and any(
+            t.get(k) is not None and val(t[k]) for k in ("atom", "lowpower")):
         found.append("hybrid")
     return found
 
@@ -516,7 +519,7 @@ def oracle_isa(t):
 
 def hostile_ws(t):
     vals = [d[k] for kind in ("render", "accel") for d in t[kind] for k in ("vendor",)]
-    vals += [t[k] for k in ("core", "atom") if t[k] is not None]
+    vals += [t[k] for k in ("core", "atom", "lowpower") if t.get(k) is not None]
     return any(re.search(r"[ \t]|\n(?!\n*$)", s) for s in vals)
 
 
@@ -562,7 +565,7 @@ def candidates(v):
                 yield v[:i] + [c] + v[i + 1:]
     elif isinstance(v, dict):
         for k, x in v.items():  # drop optional parts first
-            if x is not None and k in ("core", "atom", "cpuinfo", "driver"):
+            if x is not None and k in ("core", "atom", "lowpower", "cpuinfo", "driver"):
                 yield dict(v, **{k: None})
         for k, x in v.items():  # then drop list entries
             if isinstance(x, list):

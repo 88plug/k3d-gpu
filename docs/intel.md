@@ -114,7 +114,7 @@ the plugins, and asserts the result, with no manual step.
 | QAT (C62x, 4xxx, 420xx, 6xxx) | `qat.intel.com/*` | yes | yes | no | 4xxx and C62x PF with VFs, no VFs, unbound PF, `vfio-pci` check |
 | AMX | `feature.node.kubernetes.io/cpu-cpuid.AMX*=true` (labels, no plugin) | yes | yes (labels) | no | AMX flags detected and reported; CPU without AMX |
 | CPU ISA (AVX-VNNI, AVX-512, VAES, GFNI, SHA, CET) | `feature.node.kubernetes.io/cpu-cpuid.<NAME>=true` (NFD names, labels only) | yes | yes (labels) | labels read on the UHD 770 host by `doctor`; not applied to a live cluster | NFD name mapping, `pku` unlabelled, no-flag CPU |
-| Hybrid P/E cores | `k3d-gpu.io/hybrid-cpu=true`; pod label `k3d-gpu.io/cores` | yes | yes | **yes** at `109154d`: performance pod on CPU 0, efficient pod on CPU 20. The strict placement check in `test` is sim-only so far. | detection, no online E-cores, non-hybrid, forced, `doctor` lists, `test` placement pass and both failure modes |
+| Hybrid P/E cores | `k3d-gpu.io/hybrid-cpu=true`; pod label `k3d-gpu.io/cores` | yes | yes | **yes** at `109154d`: performance pod on CPU 0, efficient pod on CPU 20. The strict P/E placement check in `test` passed live on the merged tree (performance `0`, efficient `24`). The `ecluster`, `pcore-physical`, `latency` (on favored CPUs 8 and 10) and `lowpower` balloons verified live on the i9-13900T ([results](#how-hybrid-pe-pinning-works)); the Arrow Lake-H `cpu_lowpower` override is sim-only (UNVERIFIED live). | detection, no online E-cores, non-hybrid, forced, `doctor` lists, `test` placement pass and both failure modes; `cpu_lowpower` and no-L3 LP E-cores, E-core clusters, physical P-cores, favored CPUs from CPPC and MSR `0x771`, `latency` patched to the favored L2 dirs |
 
 The `xe`, NPU, Gaudi and Xeon rows have not run on hardware. If you have one of
 these platforms, `k3d-gpu doctor && k3d-gpu up && k3d-gpu test` is the probe that
@@ -164,20 +164,92 @@ are copied from the ledger and nowhere else.
 
 Intel hybrid CPUs (Alder Lake and newer) expose two perf PMUs:
 `/sys/devices/cpu_core/cpus` lists the P-cores and `/sys/devices/cpu_atom/cpus`
-the E-cores. When both list online CPUs, the launcher labels the node
+the E-cores. Arrow Lake-H adds a third, `/sys/devices/cpu_lowpower/cpus`, for its
+LP E-cores (kernel 6.13 and newer, `arch/x86/events/intel/core.c`). When
+`cpu_core` and one of the E-core PMUs list online CPUs, the launcher labels the node
 `k3d-gpu.io/hybrid-cpu=true`. That label lets the baked
 `nri-resource-policy-balloons` DaemonSet schedule. k3s already enables NRI in
 its containerd for a privileged node, and the node container sees the host's
 PMUs, so neither the host nor containerd needs changes.
 
 The `BalloonsPolicy` `default` in `kube-system` (`share/nri-balloons.yml`) has
-three balloon types. The first match wins:
+seven balloon types. Each but `shared` matches one value of the pod label
+`k3d-gpu.io/cores`. The first match wins:
 
-| Balloon | Matches | CPUs |
-|---------|---------|------|
-| `performance` | pod label `k3d-gpu.io/cores=performance` | P-cores (`preferCoreType: performance`) |
-| `efficient` | pod label `k3d-gpu.io/cores=efficient` | E-cores (`preferCoreType: efficient`) |
+| Balloon | Pod label value | CPUs |
+|---------|-----------------|------|
+| `performance` | `performance` | P-cores (`preferCoreType: performance`) |
+| `efficient` | `efficient` | E-cores (`preferCoreType: efficient`) |
+| `lowpower` | `lowpower` | E-core kind (`preferCoreType: efficient`), for idle supervisors and heartbeats |
+| `ecluster` | `ecluster` | 4 E-cores (`minCPUs` = `maxCPUs` = 4); the `ecluster-l2` load (`level: l2cache`) makes the allocator avoid an L2 another such balloon holds, so each should get one 4-core E-core cluster (a preference, not a guarantee) |
+| `pcore-physical` | `pcore-physical` | P-cores, one thread per physical core visible to the pod (`hideHyperthreads`); the sibling stays idle |
+| `latency` | `latency` | as `pcore-physical`, at most 2 CPUs (`maxCPUs: 2`), for a sampler, tokenizer, event loop or GPU feeder thread |
 | `shared` | everything else (`AlwaysTrue`, `maxBalloons: 1`) | every idle CPU (`shareIdleCPUsInSame: system`) |
+
+On a part with SMT, a `pcore-physical` or `latency` pod requests 2 CPUs per
+physical core it wants, since the balloon holds both threads and shows one.
+Every option above is in the balloons CRD of nri-plugins v0.14.0;
+`tests/nri_balloons_check.py` checks the shipped policy against the CRD in
+the same file, because the API server drops unknown fields without an error.
+
+What nri-plugins v0.14.0 cannot do, and what the launcher does instead:
+
+- **Two core kinds only.** `pkg/sysfs/system.go` reads `cpu_core` and `cpu_atom`
+  and refuses to start while an online CPU is in neither (`checkCoreKinds`). On
+  Arrow Lake-H, `up` therefore sets `OVERRIDE_SYS_ATOM_CPUS` (cpu_atom plus
+  cpu_lowpower) on the DaemonSet with `kubectl set env`. The same two kinds mean
+  the `lowpower` balloon is an E-core balloon: nri-plugins cannot tell an LP
+  E-core from an E-core. `k3d-gpu doctor` lists the LP E-cores (the
+  `cpu_lowpower` CPUs, and the `cpu_atom` CPUs with no L3 in
+  `cache/index*/level`, the Meteor Lake LP E-core layout).
+- **No CPPC ranking.** The allocator ranks CPUs by base frequency and EPP, not by
+  `acpi_cppc/highest_perf`. `up` annotates every node
+  `k3d-gpu.io/favored-cpus=<list>` with the CPUs at the top `highest_perf`
+  (bits 7:0 of MSR `0x771` when no CPU has CPPC and `/dev/cpu/N/msr` is
+  readable). On the i9-13900T that is `8-11` (68, against 65 on the other
+  P-cores and 39 on the E-cores). `up` then patches the `latency` type of
+  BalloonsPolicy `kube-system/default` with `preferCloseToDevices`: the
+  `cache/index*` dir of each favored core's L2 (`cpu8/cache/index2`,
+  `cpu10/cache/index2`). nri-plugins reads a sysfs dir's `shared_cpu_list` as a
+  topology hint, so a new `latency` balloon takes a favored core while one is
+  free and any P-core after that. Without the patch the first `latency` pod
+  landed on CPU `0`.
+
+`k3d-gpu doctor` prints what it found: LP E-cores, E-core clusters (distinct
+`cache/index2/shared_cpu_list`), physical P-cores (first CPU of each
+`topology/core_cpus_list`) and favored CPUs.
+
+Live on the i9-13900T (k3s v1.37.1, nri-plugins v0.14.0, image built from this
+tree), `Cpus_allowed_list` from each pod after `k3d-gpu up` and a passing
+`k3d-gpu test` (performance pod on `0`, efficient pod on `24`):
+
+| Pod label `k3d-gpu.io/cores` | CPU request | Balloon cpuset | Container sees |
+|---|---|---|---|
+| `ecluster` (first) | 4 | `24-27` | `24-27`, one whole E-cluster |
+| `ecluster` (second) | 4 | `28-31` | `28-31`, the next E-cluster |
+| `pcore-physical` | 4 | `0-3` | `0,2`, one thread per physical P-core |
+| `latency` | 1, then a second pod with 1 | `8`, then `8-9` | `8` (favored) |
+| `latency` (new balloon) | 2 | `10-11` | `10` (favored) |
+| `lowpower` | 1 | `17` | `17` (E-core kind; this host has no LP E-cores) |
+| none (shared) | 1 | every idle CPU | `4-7,12-15,18-23` (`16` is the kube-system reserve) |
+
+The `ecluster` L2 load is a preference. In a run where a `lowpower` balloon held
+`24` and the reserve held `16`, the second `ecluster` balloon got `17-19,22`,
+across two clusters. The probe:
+
+```bash
+for t in lowpower ecluster pcore-physical latency; do
+  kubectl run "cores-${t}" --image=busybox:1.37 --restart=Never --labels="k3d-gpu.io/cores=${t}" \
+    --overrides='{"spec":{"containers":[{"name":"c","image":"busybox:1.37","command":["grep","Cpus_allowed_list","/proc/self/status"],"resources":{"requests":{"cpu":"2"},"limits":{"cpu":"2"}}}]}}'
+done
+sleep 20; for t in lowpower ecluster pcore-physical latency; do echo "${t}: $(kubectl logs "cores-${t}")"; done
+kubectl get nodes -o jsonpath='{.items[*].metadata.annotations.k3d-gpu\.io/favored-cpus}'; echo
+kubectl delete pod cores-lowpower cores-ecluster cores-pcore-physical cores-latency
+```
+
+The Arrow Lake-H `OVERRIDE_SYS_ATOM_CPUS` path is UNVERIFIED live (no Arrow
+Lake-H host): there, `kubectl -n kube-system logs ds/nri-resource-policy-balloons`
+must not contain `neither marked to be of any core type`.
 
 A balloon is sized by its pods' CPU requests. `kube-system` runs on a 1-CPU
 reserve (`reservedResources.cpu: 1000m`). The policy only sets cpusets inside
@@ -196,6 +268,7 @@ flowchart LR
         ds["DaemonSet<br/>nri-resource-policy-balloons v0.14.0"] -->|NRI| ctrd["k3s containerd"]
         ctrd --> perf["balloon: performance<br/>cpuset on P-cores"]
         ctrd --> eff["balloon: efficient<br/>cpuset on E-cores"]
+        ctrd --> more["balloons: lowpower, ecluster,<br/>pcore-physical, latency"]
         ctrd --> shared["balloon: shared<br/>all idle CPUs"]
     end
     p1["pod<br/>k3d-gpu.io/cores=performance"] --> perf
@@ -223,7 +296,8 @@ spec:
 ```
 
 `k3d-gpu test` runs one such pod per core type. It fails unless the pod's
-`Cpus_allowed_list` sits inside the host's P-core or E-core list. A plain grep
+`Cpus_allowed_list` sits inside the host's P-core or E-core list (on Arrow
+Lake-H the E-core list includes `cpu_lowpower`). A plain grep
 would also pass with NRI off. On the i9-13900T, under the earlier grep-only
 `test` (`109154d`), the performance pod ran on CPU 0, the efficient pod on
 CPU 20, and an unlabelled pod could use `0-15,17-31`, every CPU except the
