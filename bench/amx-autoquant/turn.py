@@ -10,7 +10,8 @@ CPU busy on the pinned CPUs, pgmajfault and pswpin deltas).
   turn.py --ports int4=18101,int8=18102,fp16=18103 --prompts prompts.json \
           --phase probe|reference --label P1 --out results.jsonl [--cpus 0-15]
 
-Stdlib only. No sysfs writes; RAPL is read through `sudo -n cat` when not readable.
+Stdlib only. No sysfs writes; RAPL is read through `sudo -A cat` (SUDO_ASKPASS set)
+or `sudo -n cat` when not readable.
 """
 
 import argparse
@@ -31,7 +32,8 @@ def read(path):
             return f.read().strip()
     except OSError:
         try:
-            return subprocess.run(["sudo", "-n", "cat", path], capture_output=True, text=True,
+            sudo = ["sudo", "-A"] if os.environ.get("SUDO_ASKPASS") else ["sudo", "-n"]
+            return subprocess.run(sudo + ["cat", path], capture_output=True, text=True,
                                   timeout=5, check=True).stdout.strip()
         except (OSError, subprocess.SubprocessError):
             return None

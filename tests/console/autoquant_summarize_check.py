@@ -21,3 +21,20 @@ assert r["reference_pick"] == "int4" and r["wins"] == 5 and r["probe_agree"] == 
 assert all(0.9 <= v <= 1.1 for v in r["control_ratio"].values())
 assert abs(r["arms"]["int4"]["dnll"] - 0.04) < 1e-9
 print("summarize smoke ok")
+# H27 A1: --load embeds the background-load match; an unmatched arm adds an INCONCLUSIVE note.
+def windows(path, fp16_busy):
+    with open(path, "w") as f:
+        for arm in base:
+            for _ in range(5):
+                f.write(json.dumps({"tag": arm, "level": "typical", "busy_pct": fp16_busy if arm == "fp16" else 40.0,
+                                    "load1": 25.0, "pkg_w": 60.0, "throttle_per_min": 100.0,
+                                    "swap_used_mib": 1000.0, "swap_delta_mib": 0.0}) + "\n")
+for busy, ok in ((42.0, True), (60.0, False)):
+    windows(d + "/load.jsonl", busy)
+    subprocess.run([sys.executable, here + "/bench/amx-autoquant/summarize.py", "--requests", d + "/req.jsonl",
+                    "--nll", d + "/nll.json", "--out", d + "/res.json", "--load", d + "/load.jsonl"],
+                   capture_output=True, text=True, check=True)
+    r = json.load(open(d + "/res.json"))
+    assert r["load"]["matched"] is ok, r["load"]
+    assert any("load unmatched (busy_pct" in n for n in r["notes"]) is (not ok), r["notes"]
+print("summarize load-match ok")
