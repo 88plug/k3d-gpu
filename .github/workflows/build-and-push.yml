@@ -436,6 +436,11 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           git diff --stat
 
+      - name: Re-pin images.lock for the new manifest
+        run: |
+          scripts/images-lock update
+          scripts/images-lock check
+
       - name: Detection tests
         run: tests/detect_test.sh
 
@@ -450,6 +455,7 @@ jobs:
           add-paths: |
             share/
             hack/components/${{ matrix.component }}/
+            images.lock
           commit-message: "chore(${{ matrix.component }}): bump to ${{ steps.render.outputs.version }}"
           title: "chore(${{ matrix.component }}): bump to ${{ steps.render.outputs.version }}"
           labels: dependencies

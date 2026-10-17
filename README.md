@@ -1053,14 +1053,14 @@ from the clock, so the same facts give the same bytes.
 ### Audit and images.lock (`audit`)
 
 `images.lock` lists every container image k3d-gpu ships, each pinned by its
-registry digest: the images in `share/*.yml`, the Dockerfile's `FROM` images,
-the launcher's agent and test-pod images, and the system images k3s itself
+registry digest: the images in `share/**/*.yml` (the opt-in telemetry too), the Dockerfile's `FROM` images,
+the launcher's agent backend, add-on and test-pod images, and the system images k3s itself
 starts (from the `k3s-images.txt` of the Dockerfile's `K3S_TAG`). The node
 image the Dockerfile builds is not in it. CI runs `scripts/images-lock check`,
 which fails when the lock misses an image the repo references, holds one it no
 longer does, or disagrees with a digest the repo pins; `scripts/images-lock
-update` re-reads the digests from the registries, and the scheduled bump job
-runs it after each version bump.
+update` re-reads the digests from the registries, and the scheduled bump jobs
+(plugins and k3s, and each re-rendered upstream chart) run it after each bump.
 
 `k3d-gpu audit` reads the running cluster (`docker inspect` and `crictl images`
 on each node of cluster `K3D_GPU_CLUSTER`, its workloads through kubectl, and

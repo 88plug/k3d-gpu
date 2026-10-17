@@ -113,7 +113,7 @@ Include relevant details:
   drifted copies, and the live read with docker and kubectl stubbed
   (`tests/console/audit/default`), diffed against `tests/console/audit/*.golden`
   (`tests/audit_test.sh --update` rewrites those).
-- Changed an image in `share/`, the Dockerfile or a `K3D_GPU_*_IMAGE` default?
+- Changed an image in `share/`, the Dockerfile or an image pin in `scripts/k3d-gpu`?
   Run `scripts/images-lock update` (it reads the registries) and commit
   `images.lock`; CI's `scripts/images-lock check` fails until you do.
 - Have hardware the matrix lacks? Capture it (reads ids, driver bindings, device
