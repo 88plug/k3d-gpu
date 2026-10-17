@@ -184,6 +184,8 @@ jobs:
           sed -i "s|^ARG K3S_DIGEST=.*|ARG K3S_DIGEST=\"${{ steps.k3s.outputs.digest }}\"|" Dockerfile
           sed -i "s|k8s-device-plugin:v[0-9]*\.[0-9]*\.[0-9]*|k8s-device-plugin:${{ steps.nvidia_plugin.outputs.latest }}|" share/nvidia-device-plugin.yml
           sed -i "s|intel-gpu-plugin:[0-9]*\.[0-9]*\.[0-9]*|intel-gpu-plugin:${{ steps.intel_plugin.outputs.latest }}|" share/intel-gpu-plugin.yml
+          # The WSL variant runs the same plugin plus its Level Zero sidecar from that release.
+          sed -i -E "s#intel-gpu-(plugin|levelzero):[0-9]+\.[0-9]+\.[0-9]+#intel-gpu-\1:${{ steps.intel_plugin.outputs.latest }}#" share/intel-gpu-wsl-plugin.yml
           # NPU/DSA/IAA/QAT plugins ship in the same intel-device-plugins release as the GPU plugin.
           for p in npu dsa iaa qat; do
             sed -i "s|intel-$p-plugin:[0-9]*\.[0-9]*\.[0-9]*|intel-$p-plugin:${{ steps.intel_plugin.outputs.latest }}|" "share/intel-$p-plugin.yml"

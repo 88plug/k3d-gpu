@@ -60,7 +60,7 @@ Behaviour is tunable via environment variables:
 | `K3D_GPU_CLUSTER`    | `gpu`                                     | cluster name                         |
 | `K3D_GPU_IMAGE`      | `cryptoandcoffee/k3d-gpu:<launcher version>` | node image built from the same release (ubuntu26.04); see [Upgrading](#upgrading) |
 | `K3D_GPU_SHARE`      | `/usr/share/k3d-gpu`                      | dir of fallback plugin manifests     |
-| `K3D_GPU_VENDORS`    | `auto`                                    | `auto` detects; or a list of `nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa` |
+| `K3D_GPU_VENDORS`    | `auto`                                    | `auto` detects; or a list of `nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa,wsl` |
 | `K3D_GPU_NODE_LABELS` | none                                    | extra node labels, comma list of `key=value` (e.g. `ei-infra-eligible=true,ei-inference-eligible=true`) |
 | `K3D_GPU_K3S_ARGS`   | none                                      | extra k3s server flags, space-separated (e.g. `--disable=servicelb`) |
 | `K3D_GPU_PLUGIN`     | `/usr/share/k3d-gpu/nvidia-device-plugin.yml` | fallback manifest (only used if a custom image lacks the baked one) |
@@ -69,6 +69,7 @@ Behaviour is tunable via environment variables:
 | `K3D_GPU_NPU_PLUGIN` | `/usr/share/k3d-gpu/intel-npu-plugin.yml` | same, for the Intel NPU plugin |
 | `K3D_GPU_DSA_PLUGIN` / `_IAA_` / `_QAT_` | `/usr/share/k3d-gpu/intel-{dsa,iaa,qat}-plugin.yml` | same, for the Xeon accelerator plugins |
 | `K3D_GPU_HYBRID_PLUGIN` | `/usr/share/k3d-gpu/nri-balloons.yml` | same, for the NRI balloons policy (hybrid and NUMA hosts) |
+| `K3D_GPU_WSL_PLUGIN` | `/usr/share/k3d-gpu/intel-gpu-wsl-plugin.yml` | same, for the Intel GPU plugin in WSL mode |
 | `K3D_GPU_AGENT_*`    | see [Agent](#agent-an-openai-compatible-llm-on-the-best-intel-engine) | `k3d-gpu agent` settings |
 | `K3D_GPU_NPU_EMBEDDINGS` | `/usr/share/k3d-gpu/npu-embeddings.yml` | template printed by `k3d-gpu recipe npu-embeddings` |
 | `K3D_GPU_DEVICE_TEST_IMAGE` | `busybox:1.37`                     | image used by `k3d-gpu test` for Intel GPU/NPU and Gaudi |
@@ -192,6 +193,7 @@ stubbed launcher and kubectl.
 | Intel  | **Crescent Island** (Xe3P data-center GPU), Nova Lake | `gpu.intel.com/xe` | `xe` driver; still needs `xe.force_probe=<id>` (see `doctor`) |
 | Intel  | **NPU** in Core Ultra: Meteor / Arrow / Lunar / Panther / Wildcat Lake | `npu.intel.com/accel` | `intel_vpu` driver (kernel 6.3+ MTL … 6.13+ PTL), `intel/vpu/vpu_*` firmware |
 | Intel  | **Gaudi 3** (HPU, PCI `1da3`) | `habana.ai/gaudi` | Intel's out-of-tree `habanalabs` driver (mainline stops at Gaudi 2), `/dev/accel/accel*` |
+| Intel  | Core Ultra iGPU / Arc **on Windows (WSL2)** | `gpu.intel.com/dxg` | WSL2 GPU-PV: `/dev/dxg`, Intel graphics driver on Windows — see [Windows (WSL2)](#windows-wsl2) |
 
 k3d node containers are privileged, so host `/dev/dri` and `/dev/accel` are
 visible with no extra flag; the vendor plugins hand the device nodes to pods.
@@ -230,7 +232,7 @@ without the habana container runtime; full Gaudi workloads may still expect it.
   1024 and above uses the NPUW LLM text-embedding pipeline. The manifest
   (`share/npu-embeddings.yml`) documents the rules.
 
-Force or limit vendors with `K3D_GPU_VENDORS=nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa`.
+Force or limit vendors with `K3D_GPU_VENDORS=nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa,wsl`.
 A loaded `nvidia` or `habanalabs` kernel module counts as present even before
 its device nodes appear; `doctor` then flags the missing nodes.
 
@@ -370,6 +372,73 @@ cache allocation, which the launcher never does.
 [`examples/kuberay`](examples/kuberay/README.md) lays a KubeRay `RayCluster` across
 the core types: head on E-cores, a P-core and an E-core CPU worker group, and an
 iGPU worker group.
+
+### Windows (WSL2)
+
+Run `k3d-gpu` inside a WSL2 distro on a Windows AI PC. WSL2 has no PCI GPU and no
+`/dev/dri` render node for the GPU. The Windows driver is reached through GPU
+paravirtualization instead: one `/dev/dxg` device for every GPU, the Windows driver
+store mounted at `/usr/lib/wsl/drivers`, and `libdxcore.so` plus vendor libraries
+at `/usr/lib/wsl/lib`.
+
+| Vendor key | Active when the host has | Kubernetes exposes |
+|------------|--------------------------|--------------------|
+| `wsl` | `/proc/version` names a `microsoft` kernel, `/dev/dxg` exists, and the Intel graphics driver package (`iigd_dch*`) is in `/usr/lib/wsl/drivers` | `gpu.intel.com/dxg`, one per Intel GPU |
+| `nvidia` | the same WSL2 kernel and `/dev/dxg`, plus `/usr/lib/wsl/lib/nvidia-smi` from the NVIDIA Windows driver | `nvidia.com/gpu` (one `all` device) |
+
+**Intel (`wsl`).** The upstream Intel GPU plugin has a WSL mode (`-wsl`, plus its
+Level Zero sidecar). It advertises `gpu.intel.com/dxg` and gives each pod
+`/dev/dxg`, a read-only `/usr/lib/wsl` and `ZE_AFFINITY_MASK=<index>`. `up` mounts
+`/usr/lib/wsl` read-only into the node and labels it `k3d-gpu.io/wsl-gpu=true`;
+that label gates the baked `intel-gpu-plugin-wsl` DaemonSet. The node is
+privileged, so it already sees `/dev/dxg`. Workload images bring Intel
+compute-runtime (Level Zero / OpenCL). Its README lists WSL support from Tiger
+Lake through Meteor, Arrow, Lunar and Panther Lake, plus Alchemist and Battlemage.
+
+```yaml
+resources:
+  limits: {gpu.intel.com/dxg: 1}
+```
+
+**NVIDIA.** This uses the normal `nvidia` path, which works in two layers.
+First, `--gpus=all` gives the node container the GPU. Docker does that with
+either the legacy `nvidia-container-runtime-hook` (libnvidia-container) or, when
+the daemon resolves `--gpus` through CDI, a spec from `nvidia-ctk cdi generate`.
+Both find `libdxcore.so` and switch to WSL mode: they mount `/dev/dxg`, the
+libraries from `/usr/lib/wsl/lib` and the NVIDIA driver-store files. Second,
+inside the node, k3s containerd runs pods with the image's `nvidia` runtime, which
+has to detect WSL mode again from the `/dev/dxg` and `libdxcore.so` the first
+layer gave the node. The NVIDIA device plugin (v0.19.1+) reports one `all` device
+on WSL. Docker Desktop ships the toolkit itself. A `dockerd` inside the WSL
+distro needs `nvidia-container-toolkit` installed there.
+
+With both vendors, the node gets the read-only `/usr/lib/wsl` bind and the
+toolkit's mounts of files inside that same tree. The toolkit only mounts over
+paths that already exist in the bind (same source tree), which a read-only
+parent allows; it would fail only on a path missing from the bind.
+
+**Docker Desktop or `dockerd` in the distro.** Both run on the same WSL2 kernel,
+so `/dev/dxg` exists for either one. With Docker Desktop, the `/usr/lib/wsl` bind
+mount comes from Docker Desktop's own distro, not yours. Docker Desktop
+documents GPU support for NVIDIA only.
+
+> **Unverified on real hardware.** The detection, manifests and `up` arguments
+> are unit-tested. They have not been run on a Windows machine. To check a
+> machine, run these in the WSL distro, in order:
+>
+> ```bash
+> grep -i microsoft /proc/version && ls -l /dev/dxg && ls /usr/lib/wsl/lib /usr/lib/wsl/drivers
+> docker run --rm --privileged busybox:1.37 ls -l /dev/dxg                    # node sees /dev/dxg
+> docker run --rm -v /usr/lib/wsl:/usr/lib/wsl:ro busybox:1.37 ls /usr/lib/wsl/lib   # bind source resolves (Docker Desktop too)
+> k3d-gpu detect && k3d-gpu up && k3d-gpu test                               # expect wsl=1, /dev/dxg listed
+> kubectl -n kube-system logs ds/intel-gpu-plugin-wsl -c intel-gpu-levelzero  # Level Zero found the Intel GPU
+> kubectl describe node | grep nvidia.com/gpu                                # NVIDIA on WSL: node runtime resolved WSL mode
+> docker exec k3d-gpu-server-0 nvidia-smi                                    # Intel + NVIDIA: node started, toolkit mounts landed
+> ```
+>
+> The last proof is a pod with `gpu.intel.com/dxg: 1` running `clinfo` from
+> `intel/intel-opencl-icd` (upstream's `demo/intelgpu-job-wsl.yaml`). It should
+> report one device.
 
 ### Node Feature Discovery
 

@@ -1,0 +1,132 @@
+# Intel GPU device plugin in WSL mode (Windows: Core Ultra iGPU, Arc, through WSL2 GPU-PV)
+# Source: https://github.com/intel/intel-device-plugins-for-kubernetes
+#   (deployments/gpu_plugin/overlays/wsl = base + levelzero sidecar + -wsl).
+# In WSL2 the GPU is the paravirtual /dev/dxg and its user-mode driver lives in the
+# Windows driver store under /usr/lib/wsl; there is no /dev/dri render node for the
+# regular plugin to find. With -wsl the plugin asks the Level Zero sidecar for the
+# Intel GPU indices and advertises gpu.intel.com/dxg, one per Intel GPU, handing
+# each pod /dev/dxg, /usr/lib/wsl (read-only) and ZE_AFFINITY_MASK=<index>.
+# Scheduled only onto nodes labelled k3d-gpu.io/wsl-gpu=true, which the launcher
+# sets on a WSL2 host with an Intel driver store (the /dev/dxg CharDevice mount
+# fails anywhere else). The launcher also mounts /usr/lib/wsl into the node.
+# Auto-bumped by the build-and-push workflow (same release train as the GPU plugin).
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: intel-gpu-plugin-wsl
+  namespace: kube-system
+  labels:
+    app: intel-gpu-plugin-wsl
+spec:
+  selector:
+    matchLabels:
+      app: intel-gpu-plugin-wsl
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: intel-gpu-plugin-wsl
+    spec:
+      automountServiceAccountToken: false
+      priorityClassName: "system-node-critical"
+      containers:
+        - name: intel-gpu-plugin
+          image: intel/intel-gpu-plugin:0.37.1
+          imagePullPolicy: IfNotPresent
+          args:
+            - "-wsl"
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              memory: "45Mi"
+              cpu: 40m
+            limits:
+              memory: "115Mi"
+              cpu: 100m
+          volumeMounts:
+            - name: devfs
+              mountPath: /dev/dri
+              readOnly: true
+            - name: sysfsdrm
+              mountPath: /sys/class/drm
+              readOnly: true
+            - name: kubeletsockets
+              mountPath: /var/lib/kubelet/device-plugins
+            - name: cdipath
+              mountPath: /var/run/cdi
+            - name: levelzerosocket
+              mountPath: /var/lib/levelzero
+            - name: devdxg
+              mountPath: /dev/dxg
+        # Level Zero sidecar: loads Intel compute-runtime against /dev/dxg and the
+        # driver store, and tells the plugin which Level Zero devices are Intel GPUs.
+        - name: intel-gpu-levelzero
+          image: intel/intel-gpu-levelzero:0.37.1
+          imagePullPolicy: IfNotPresent
+          args:
+            - "-v=2"
+            - "-wsl"
+          securityContext:
+            readOnlyRootFilesystem: true
+            privileged: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              memory: "50Mi"
+              cpu: 25m
+            limits:
+              memory: "100Mi"
+              cpu: 50m
+          volumeMounts:
+            - name: levelzerosocket
+              mountPath: /var/lib/levelzero
+            - name: wsllib
+              mountPath: /usr/lib/wsl
+      volumes:
+        - name: devfs
+          hostPath:
+            path: /dev/dri
+            type: DirectoryOrCreate
+        - name: sysfsdrm
+          hostPath:
+            path: /sys/class/drm
+        - name: kubeletsockets
+          hostPath:
+            path: /var/lib/kubelet/device-plugins
+        - name: cdipath
+          hostPath:
+            path: /var/run/cdi
+            type: DirectoryOrCreate
+        - name: levelzerosocket
+          emptyDir: {}
+        - name: wsllib
+          hostPath:
+            path: /usr/lib/wsl
+            type: DirectoryOrCreate
+        - name: devdxg
+          hostPath:
+            path: /dev/dxg
+            type: CharDevice
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        k3d-gpu.io/wsl-gpu: "true"

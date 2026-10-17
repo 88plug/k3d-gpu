@@ -68,6 +68,9 @@ COPY share/nri-balloons.yml /var/lib/rancher/k3s/server/manifests/nri-balloons.y
 # from the host. Labels the launcher sets at node registration (npu/dsa/iaa/qat and
 # its cpu-cpuid names) are left to the launcher, so each label has one owner.
 COPY share/node-feature-discovery.yml /var/lib/rancher/k3s/server/manifests/node-feature-discovery.yaml
+# Intel GPU plugin in WSL mode (Windows WSL2 GPU-PV, /dev/dxg), gated by
+# k3d-gpu.io/wsl-gpu=true, which the launcher sets on a WSL2 host with an Intel GPU.
+COPY share/intel-gpu-wsl-plugin.yml /var/lib/rancher/k3s/server/manifests/intel-gpu-wsl-plugin.yaml
 
 # CDI spec directories. containerd 2.x (k3s 1.34 and newer) enables CDI by default and scans
 # these paths, so vendor plugins/tools that emit CDI specs work without any
