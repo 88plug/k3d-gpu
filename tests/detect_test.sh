@@ -3684,6 +3684,163 @@ else
     echo "skip DRA slice template through kubectl's printer (no kubectl on PATH)"
 fi
 
+# `sandbox` drives kubectl only. This stub logs every call to STUB_LOG and answers
+# from STUB_HYBRID_NODES (nodes with the hybrid label), STUB_POOL_READY (warm pool
+# readyReplicas), STUB_SANDBOX_PODS (running sandbox pods) and STUB_SANDBOX_CPUS
+# (the Cpus_allowed_list a sandbox pod reports). A call whose arguments match the
+# ERE in STUB_FAIL prints nothing and exits 1.
+SSTUB="${WORK}/sbin"
+mkdir -p "${SSTUB}"
+cat > "${SSTUB}/kubectl" <<'EOF'
+#!/bin/sh
+echo "$*" >> "${STUB_LOG}"
+if [ -n "${STUB_FAIL:-}" ] && echo "$*" | grep -Eq -- "${STUB_FAIL}"; then
+    echo "error: stub failure" >&2
+    exit 1
+fi
+case "$*" in
+    *"get nodes -l"*) for n in ${STUB_HYBRID_NODES:-}; do echo "node/${n}"; done ;;
+    *"get sandboxwarmpool "*) printf %s "${STUB_POOL_READY-1}" ;;
+    *"get pods -l k3d-gpu.io/cores=efficient"*) for p in ${STUB_SANDBOX_PODS:-}; do echo "${p}"; done ;;
+    *" exec "*) echo "Cpus_allowed_list:	${STUB_SANDBOX_CPUS:-}" ;;
+esac
+exit 0
+EOF
+chmod +x "${SSTUB}/kubectl"
+SHARE="$(cd "$(dirname "$0")/.." && pwd)/share"
+
+# sandbox_says <name> <root> <want rc: 0|fail> <ERE> <action> [negate] [env assignments...]:
+# output of `k3d-gpu sandbox <action>` must match <ERE>, or must not after "negate".
+# The kubectl call log is in ${WORK}/kubectl.log.
+sandbox_says() {
+    local name=$1 root=$2 want=$3 re=$4 action=$5 negate="" out rc hit=0
+    shift 5
+    if [ "${1:-}" = negate ]; then negate=1; shift; fi
+    : > "${WORK}/kubectl.log"
+    out=$(env K3D_GPU_SYSROOT="${root}" K3D_GPU_SHARE="${SHARE}" STUB_LOG="${WORK}/kubectl.log" \
+        PATH="${SSTUB}:${PATH}" "$@" bash "${K3D_GPU}" sandbox "${action}" 2>&1)
+    rc=$?
+    grep -E -- "${re}" <<< "${out}" >/dev/null && hit=1
+    [ -z "${negate}" ] || hit=$((1 - hit))
+    if [ "${hit}" -eq 1 ] \
+       && { { [ "${want}" = 0 ] && [ "${rc}" -eq 0 ]; } || { [ "${want}" = fail ] && [ "${rc}" -ne 0 ]; }; }; then
+        PASS=$((PASS + 1)); echo "ok   ${name}"
+    else
+        FAILS=$((FAILS + 1))
+        echo "FAIL ${name} (rc=${rc}, want ${want}, ${negate:+not }/${re}/)"
+        sed 's/^/  | /' <<< "${out}"
+    fi
+}
+
+# log_order <name> <ERE> <ERE>...: each pattern matches a kubectl call, in this order.
+log_order() {
+    local name=$1 re line=0 n
+    shift
+    for re in "$@"; do
+        n=$(grep -n -E -- "${re}" "${WORK}/kubectl.log" | awk -F: -v after="${line}" '$1 > after {print $1; exit}')
+        if [ -z "${n}" ]; then
+            FAILS=$((FAILS + 1)); echo "FAIL ${name} (no call /${re}/ after line ${line})"
+            sed 's/^/  | /' "${WORK}/kubectl.log"
+            return
+        fi
+        line=${n}
+    done
+    PASS=$((PASS + 1)); echo "ok   ${name}"
+}
+
+r=$(newroot sandbox-hybrid)
+hybrid "${r}" 0-15 16-31
+sandbox_says "sandbox up installs agent-sandbox and the E-core profile" "${r}" 0 'ok: python-ecores-abc12: CPUs 16-17' up \
+    STUB_HYBRID_NODES=k3d-gpu-server-0 STUB_SANDBOX_PODS=python-ecores-abc12 STUB_SANDBOX_CPUS=16-17
+log_order "sandbox up waits for the CRDs and controller before applying the profile" \
+    'apply -f .*/agent-sandbox\.yml$' \
+    'wait --for=condition=Established .*crd/sandboxtemplates\.extensions\.agents\.x-k8s\.io.*crd/sandboxwarmpools' \
+    'rollout status deployment/agent-sandbox-controller' \
+    'apply -f .*/agent-sandbox-k3d\.yml$' \
+    'get sandboxwarmpool python-ecores'
+sandbox_says "sandbox up on a hybrid node does not warn about the label" "${r}" 0 'does nothing here' up negate \
+    STUB_HYBRID_NODES=k3d-gpu-server-0 STUB_SANDBOX_PODS=p1 STUB_SANDBOX_CPUS=16
+sandbox_says "sandbox up warns when no node carries the hybrid label" "${r}" 0 'WARN.*hybrid-cpu=true.*does nothing here' up \
+    STUB_SANDBOX_PODS=p1 STUB_SANDBOX_CPUS=16
+sandbox_says "sandbox status passes when every sandbox runs on E-cores" "${r}" 0 'ok: a: CPUs 20,24-25' status \
+    STUB_SANDBOX_PODS="a b" STUB_SANDBOX_CPUS=20,24-25
+sandbox_says "sandbox status fails when a sandbox runs on P-cores" "${r}" fail "CPUs '3' are not within the E-cores 16-31" status \
+    STUB_SANDBOX_PODS=a STUB_SANDBOX_CPUS=3
+sandbox_says "sandbox status fails when a sandbox spans P- and E-cores (no pinning)" "${r}" fail 'not pinned to E-cores' status \
+    STUB_SANDBOX_PODS=a STUB_SANDBOX_CPUS=0-31
+sandbox_says "sandbox status fails with no running sandbox pods" "${r}" fail 'no running sandbox pods' status
+sandbox_says "sandbox up fails when the warm pool never gets ready" "${r}" fail 'no ready sandbox after 1s' up \
+    STUB_POOL_READY=0 K3D_GPU_SANDBOX_TIMEOUT=1
+sandbox_says "sandbox status fails on a hybrid host when a sandbox reports no CPU list" "${r}" fail "CPUs '' are not within the E-cores 16-31" status \
+    STUB_SANDBOX_PODS=a STUB_FAIL=' exec '
+
+# A failing kubectl step stops `sandbox up` before the next one runs.
+# no_call <name> <ERE>: no kubectl call in the log matches <ERE>.
+no_call() {
+    if grep -E -- "$2" "${WORK}/kubectl.log" >/dev/null; then
+        FAILS=$((FAILS + 1)); echo "FAIL $1 (unexpected call /$2/)"
+        sed 's/^/  | /' "${WORK}/kubectl.log"
+    else
+        PASS=$((PASS + 1)); echo "ok   $1"
+    fi
+}
+sandbox_says "sandbox up fails when the controller manifest does not apply" "${r}" fail 'stub failure' up \
+    STUB_FAIL='apply -f .*/agent-sandbox\.yml$'
+no_call "sandbox up stops after a failed controller apply" 'wait --for|rollout|agent-sandbox-k3d'
+sandbox_says "sandbox up fails when the CRDs never become Established" "${r}" fail 'stub failure' up \
+    STUB_FAIL='wait --for=condition=Established'
+no_call "sandbox up does not apply the profile without its CRDs" 'rollout|agent-sandbox-k3d'
+sandbox_says "sandbox up fails when the controller rollout fails" "${r}" fail 'stub failure' up \
+    STUB_FAIL='rollout status'
+no_call "sandbox up does not apply the profile without a controller" 'agent-sandbox-k3d'
+sandbox_says "sandbox up fails when the profile does not apply" "${r}" fail 'stub failure' up \
+    STUB_FAIL='apply -f .*/agent-sandbox-k3d\.yml$'
+no_call "sandbox up does not wait on a warm pool it failed to create" 'get sandboxwarmpool'
+
+r=$(newroot sandbox-flat)
+sandbox_says "sandbox status on a non-hybrid host reports CPUs without judging them" "${r}" 0 'a: CPUs 0-7 \(not a hybrid host' status \
+    STUB_SANDBOX_PODS=a STUB_SANDBOX_CPUS=0-7
+sandbox_says "sandbox up fails early when the manifest is missing" "${r}" fail 'not found' up \
+    K3D_GPU_SANDBOX=/nonexistent/agent-sandbox.yml
+if grep -q apply "${WORK}/kubectl.log"; then
+    FAILS=$((FAILS + 1)); echo "FAIL sandbox up with a missing manifest applies nothing"
+else
+    PASS=$((PASS + 1)); echo "ok   sandbox up with a missing manifest applies nothing"
+fi
+sandbox_says "sandbox down removes the profile, then agent-sandbox" "${r}" 0 'Removing' down
+log_order "sandbox down deletes the profile before the CRDs" \
+    'delete -f .*/agent-sandbox-k3d\.yml --ignore-not-found' 'delete -f .*/agent-sandbox\.yml --ignore-not-found'
+sandbox_says "sandbox with no action prints usage and fails" "${r}" fail 'usage: k3d-gpu sandbox up\|down\|status' ""
+
+# The shipped profile: sandboxes are labelled for E-cores, request CPU (requests size
+# the balloon) and every image is pinned by digest.
+manifest_has() {
+    if grep -E -- "$2" "${SHARE}/$3" >/dev/null; then
+        PASS=$((PASS + 1)); echo "ok   $1"
+    else
+        FAILS=$((FAILS + 1)); echo "FAIL $1 (/$2/ not in share/$3)"
+    fi
+}
+manifest_has "sandbox profile labels pods k3d-gpu.io/cores=efficient" '^        k3d-gpu.io/cores: efficient$' agent-sandbox-k3d.yml
+manifest_has "sandbox profile requests a whole CPU" '^            cpu: "1"$' agent-sandbox-k3d.yml
+# Egress must skip CGNAT 100.64.0.0/10 too: tailscale gives the host and every tailnet
+# peer an address there, which the 0.0.0.0/0 rule would otherwise allow.
+manifest_has "sandbox egress blocks CGNAT 100.64.0.0/10 (tailscale)" '^          - 100\.64\.0\.0/10$' agent-sandbox-k3d.yml
+# The image's user 1000 has no passwd entry, so HOME=/ and pip's user install fails
+# on /.local; HOME=/tmp gives pip a writable user site.
+if grep -A1 -- '^        - name: HOME$' "${SHARE}/agent-sandbox-k3d.yml" | grep -qx -- '          value: /tmp'; then
+    PASS=$((PASS + 1)); echo "ok   sandbox profile sets a writable HOME for pip"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL sandbox profile sets a writable HOME for pip (no 'name: HOME' followed by 'value: /tmp')"
+fi
+manifest_has "sandbox runtime image pinned by digest" 'image: registry.k8s.io/agent-sandbox/python-runtime-sandbox:v1.0.7@sha256:[0-9a-f]{64}$' agent-sandbox-k3d.yml
+manifest_has "agent-sandbox controller image pinned by digest" 'image: registry.k8s.io/agent-sandbox/agent-sandbox-controller:v1.0.7@sha256:[0-9a-f]{64}$' agent-sandbox.yml
+if grep -E 'image: ' "${SHARE}/agent-sandbox.yml" "${SHARE}/agent-sandbox-k3d.yml" | grep -v '@sha256:' | grep -v ':[[:space:]]*$' >/dev/null; then
+    FAILS=$((FAILS + 1)); echo "FAIL every agent-sandbox image is pinned by digest"
+else
+    PASS=$((PASS + 1)); echo "ok   every agent-sandbox image is pinned by digest"
+fi
+
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

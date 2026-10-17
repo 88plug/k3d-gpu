@@ -56,6 +56,8 @@
 #   facts   detect + doctor + doctor --perf + report as one facts/v1 JSON document (--html: report.html)
 #   plan    engine, model and placement from the measured (green) matrix cells, --explain prints why
 #   audit   posture checks: unauthenticated listeners off loopback, images not in images.lock
+#   sandbox up|down|status
+#           kubernetes-sigs/agent-sandbox with a warm pool of sandboxes pinned to E-cores
 
 set -euo pipefail
 
@@ -81,6 +83,9 @@ INTEL_DRA_MANIFEST="${K3D_GPU_INTEL_DRA:-${SHARE_DIR}/intel-gpu-dra.yml}"
 DRA="${K3D_GPU_DRA:-0}"        # 1: Intel GPUs through the DRA driver instead of intel-gpu-plugin
 INTEL_DRA_DRIVER="gpu.intel.com" # DRA driver name, also the name of its DeviceClass
 INTEL_DRA_LABEL="k3d-gpu.io/intel-gpu-dra=true" # node label the DRA kubelet plugin selects
+SANDBOX_MANIFEST="${K3D_GPU_SANDBOX:-${SHARE_DIR}/agent-sandbox.yml}"
+SANDBOX_PROFILE_MANIFEST="${K3D_GPU_SANDBOX_PROFILE:-${SHARE_DIR}/agent-sandbox-k3d.yml}"
+SANDBOX_TIMEOUT="${K3D_GPU_SANDBOX_TIMEOUT:-180}" # seconds `sandbox up` waits for a warm sandbox
 SYSROOT="${K3D_GPU_SYSROOT:-}" # prefix for /sys and /dev reads (tests point it at a fake tree)
 TEST_IMAGE="${K3D_GPU_TEST_IMAGE:-nvidia/cuda:13.4.3-base-ubuntu26.04}"
 DEVICE_TEST_IMAGE="${K3D_GPU_DEVICE_TEST_IMAGE:-busybox:1.37}"
@@ -148,6 +153,9 @@ Usage: k3d-gpu <command>
             Posture checks of the running cluster: fails on an unauthenticated
             listener off loopback, an image not pinned in images.lock, a runtime
             pull, a key file readable by others, or Open WebUI without sign-in
+  sandbox up|down|status
+            Install kubernetes-sigs/agent-sandbox with a warm pool of sandboxes on
+            E-cores (k3d-gpu.io/cores=efficient), check where they run, or remove it
   version   Show version
   help      Show this message
 
@@ -196,6 +204,9 @@ Environment:
   K3D_GPU_CONSOLE       dir holding facts.py, plan.py, the schema and matrix
                         (default: the repo's console/, then ${SHARE_DIR}/console)
   K3D_GPU_INTEL_DRA     Intel GPU DRA driver yaml (default: ${SHARE_DIR}/intel-gpu-dra.yml)
+  K3D_GPU_SANDBOX       agent-sandbox yaml   (default: ${SHARE_DIR}/agent-sandbox.yml)
+  K3D_GPU_SANDBOX_PROFILE  E-core sandbox template + warm pool (default: ${SHARE_DIR}/agent-sandbox-k3d.yml)
+  K3D_GPU_SANDBOX_TIMEOUT  seconds 'sandbox up' waits for a ready sandbox (default: 180)
 
 Docs: https://github.com/88plug/k3d-gpu
 EOF
@@ -4305,6 +4316,92 @@ cmd_logs() {
     docker logs -f "k3d-${CLUSTER}-server-0"
 }
 
+# ---- agent-sandbox (opt-in) -------------------------------------------------------
+# kubernetes-sigs/agent-sandbox runs untrusted agent tool execution in sandbox pods.
+# The profile labels them k3d-gpu.io/cores=efficient, so on a hybrid CPU the balloons
+# policy keeps them on E-cores and the P-cores stay free for inference.
+SANDBOX_VERSION="v1.0.7"
+SANDBOX_NS="agent-sandbox"
+SANDBOX_POOL="python-ecores"
+SANDBOX_CRDS=(
+    crd/sandboxes.agents.x-k8s.io
+    crd/sandboxtemplates.extensions.agents.x-k8s.io
+    crd/sandboxclaims.extensions.agents.x-k8s.io
+    crd/sandboxwarmpools.extensions.agents.x-k8s.io
+)
+
+sandbox_up() {
+    require kubectl
+    local f ready="" deadline
+    for f in "${SANDBOX_MANIFEST}" "${SANDBOX_PROFILE_MANIFEST}"; do
+        [ -f "${f}" ] || err "${f} not found — set K3D_GPU_SHARE, K3D_GPU_SANDBOX or K3D_GPU_SANDBOX_PROFILE"
+    done
+    info "Installing agent-sandbox ${SANDBOX_VERSION} (${SANDBOX_MANIFEST})..."
+    kubectl apply -f "${SANDBOX_MANIFEST}"
+    # The profile's SandboxTemplate and SandboxWarmPool need their CRDs served first.
+    kubectl wait --for=condition=Established "${SANDBOX_CRDS[@]}" --timeout=60s
+    kubectl -n agent-sandbox-system rollout status deployment/agent-sandbox-controller --timeout=180s
+    info "Applying the E-core sandbox profile (${SANDBOX_PROFILE_MANIFEST})..."
+    kubectl apply -f "${SANDBOX_PROFILE_MANIFEST}"
+    if [ -z "$(kubectl get nodes -l "${HYBRID_LABEL}" -o name 2>/dev/null || true)" ]; then
+        warn "no node labelled ${HYBRID_LABEL}: k3d-gpu.io/cores=efficient does nothing here and sandboxes use every CPU"
+    fi
+    info "Waiting for the ${SANDBOX_POOL} warm pool (first start pulls the runtime image)..."
+    deadline=$((SECONDS + SANDBOX_TIMEOUT))
+    while [ "${SECONDS}" -lt "${deadline}" ]; do
+        ready=$(kubectl -n "${SANDBOX_NS}" get sandboxwarmpool "${SANDBOX_POOL}" -o jsonpath='{.status.readyReplicas}' 2>/dev/null || true)
+        [ "${ready:-0}" -gt 0 ] && break
+        sleep 3
+    done
+    [ "${ready:-0}" -gt 0 ] || err "warm pool ${SANDBOX_POOL} has no ready sandbox after ${SANDBOX_TIMEOUT}s: kubectl -n ${SANDBOX_NS} describe sandboxwarmpool ${SANDBOX_POOL}"
+    sandbox_status
+}
+
+# Print each running sandbox pod's CPU list. On a hybrid host every list must sit
+# inside the E-cores, or the pinning is not in effect.
+sandbox_status() {
+    require kubectl
+    local pod got pods ecores="" fail=0
+    kubectl -n "${SANDBOX_NS}" get sandboxwarmpools,sandboxes 2>/dev/null || true
+    pods=$(kubectl -n "${SANDBOX_NS}" get pods -l k3d-gpu.io/cores=efficient \
+        -o jsonpath='{range .items[?(@.status.phase=="Running")]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
+    [ -n "${pods}" ] || err "no running sandbox pods in namespace ${SANDBOX_NS} — run 'k3d-gpu sandbox up'"
+    if has_hybrid; then ecores=$(ecore_kind_cpus); fi
+    while read -r pod; do
+        [ -n "${pod}" ] || continue
+        # PID 1 is the sandbox runtime; its affinity is the container's cpuset.
+        got=$(kubectl -n "${SANDBOX_NS}" exec "${pod}" -- grep Cpus_allowed_list /proc/1/status 2>/dev/null \
+            | sed -n 's/^Cpus_allowed_list:[[:space:]]*//p' || true)
+        if [ -z "${ecores}" ]; then
+            echo "  ${pod}: CPUs ${got:-?} (not a hybrid host, no E-core pinning)"
+        elif cpulist_within "${got}" "${ecores}"; then
+            echo "  ok: ${pod}: CPUs ${got} (E-cores ${ecores})"
+        else
+            echo "  ${RED}fail${RST}: ${pod}: CPUs '${got}' are not within the E-cores ${ecores} — check: kubectl -n kube-system logs ds/nri-resource-policy-balloons"
+            fail=1
+        fi
+    done <<< "${pods}"
+    [ "${fail}" -eq 0 ] || err "sandbox pods are not pinned to E-cores"
+}
+
+sandbox_down() {
+    require kubectl
+    info "Removing the sandbox profile and agent-sandbox ${SANDBOX_VERSION}..."
+    # Profile first, while its CRDs still exist; deleting the CRDs removes every sandbox.
+    kubectl delete -f "${SANDBOX_PROFILE_MANIFEST}" --ignore-not-found \
+        || warn "profile objects not removed (CRDs already gone?)"
+    kubectl delete -f "${SANDBOX_MANIFEST}" --ignore-not-found
+}
+
+cmd_sandbox() {
+    case "${1:-}" in
+        up)     sandbox_up     ;;
+        down)   sandbox_down   ;;
+        status) sandbox_status ;;
+        *) err "usage: k3d-gpu sandbox up|down|status" ;;
+    esac
+}
+
 # ---- host setup -----------------------------------------------------------------
 # `host-setup` checks the host userspace each detected accelerator needs, then
 # prints the commands that install it (Intel compute runtime, Level Zero, media
@@ -6227,6 +6324,7 @@ case "${1:-help}" in
     facts)   shift; cmd_facts "$@" ;;
     plan)    shift; cmd_plan "$@" ;;
     audit)   shift; cmd_audit "$@" ;;
+    sandbox) cmd_sandbox "${2:-}" ;;
     version|--version|-v) echo "k3d-gpu ${VERSION}" ;;
     help|--help|-h) usage ;;
     *) usage; exit 1 ;;
