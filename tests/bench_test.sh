@@ -240,6 +240,46 @@ check "research: power-envelope model unit tests" \
     env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/research/tseries-envelope/test_envelope_model.py"
 check "bench: sku-model probe scorer, client and plan (H24)" \
     python3 "${ROOT}/bench/sku-model/test_probe.py"
+check "research: thermal-resource headroom model unit tests" \
+    env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/research/thermal-resource/test_headroom_model.py"
+check "research: thermal-resource headroom model selftest" \
+    env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/research/thermal-resource/headroom_model.py" selftest
+
+# ---- thermal-resource probe (H23) ---------------------------------------------------
+
+check "thermal-resource probe: DRY_RUN prints the three arms" \
+    env DRY_RUN=1 OUT="${WORK}/h23" bash -c '"$1/bench/thermal-resource/probe.sh" > "$2"' _ "${ROOT}" "${WORK}/h23.yaml"
+# h23_arms: B, T, C lists of 24 pods each; 12 hot without --cpu-load, 12 cool with it;
+# T requests per-type watts, C one slot, B neither; requests equal limits.
+h23_arms() {
+    python3 - "${WORK}/h23.yaml" <<'PY'
+import sys, yaml
+docs = [d for d in yaml.safe_load_all(open(sys.argv[1])) if d]
+assert len(docs) == 3, len(docs)
+for arm, d in zip("BTC", docs):
+    pods = d["items"]
+    assert len(pods) == 24, (arm, len(pods))
+    hot = [p for p in pods if p["metadata"]["labels"]["h23-kind"] == "hot"]
+    cool = [p for p in pods if p["metadata"]["labels"]["h23-kind"] == "cool"]
+    assert len(hot) == 12 and len(cool) == 12
+    for p in pods:
+        c = p["spec"]["containers"][0]
+        req, lim = c["resources"]["requests"], c["resources"]["limits"]
+        assert req == lim and req["cpu"] == "1", req
+        assert ("--cpu-load" in c["command"]) == (p in cool)
+        assert c["imagePullPolicy"] == "Never" and p["spec"]["restartPolicy"] == "Never"
+        if arm == "B":
+            assert set(req) == {"cpu"}
+        elif arm == "T":
+            assert set(req) == {"cpu", "power.k3d-gpu.io/watts"}
+            assert req["power.k3d-gpu.io/watts"] == ("6" if p in hot else "3")
+        else:
+            assert set(req) == {"cpu", "k3d-gpu.io/slots"} and req["k3d-gpu.io/slots"] == "1"
+PY
+}
+if python3 -c 'import yaml' 2>/dev/null; then
+    check "thermal-resource probe: arms B/T/C request what H23 pre-registered" h23_arms
+fi
 if command -v cc >/dev/null; then
     check "research: stream_probe.c compiles" \
         cc -fsyntax-only -fopenmp "${ROOT}/research/agents-per-box-ceiling/stream_probe.c"
