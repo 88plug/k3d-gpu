@@ -6306,6 +6306,7 @@ cmd_audit() {
         args+=(--plan "${plan}")
     fi
     python3 "${dir}/audit.py" check --mode "${mode}" --lock "${lock}" ${args[@]+"${args[@]}"} <<< "${out}"
+}
 
 # apply --plan-hash sha256:<hex> [--facts FILE] [--matrix FILE] [--engine E]
 #       [--device D] [--model M] [--port N]
