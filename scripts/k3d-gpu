@@ -6078,6 +6078,29 @@ agent_cpus() {
     echo "${n}"
 }
 
+# The agent values spliced into the manifest as plain YAML scalars. Each comes from
+# the environment or from a file (tune profile, autoquant cache, plan matrix), so
+# each is checked against its own character set: no newline, quote or space.
+agent_check_values() {
+    [[ "${AGENT_LOG_LEVEL}" =~ ^(TRACE|DEBUG|INFO|WARNING|ERROR)$ ]] \
+        || err "K3D_GPU_AGENT_LOG_LEVEL must be TRACE, DEBUG, INFO, WARNING or ERROR, got '${AGENT_LOG_LEVEL}'"
+    valid_image "${AGENT_IMAGE}" || err "K3D_GPU_AGENT_IMAGE '${AGENT_IMAGE}' is not a valid image reference"
+    [[ "${AGENT_IMAGE}" == *@sha256:* ]] \
+        || warn "K3D_GPU_AGENT_IMAGE '${AGENT_IMAGE}' is not pinned by digest: the tag can move upstream"
+    [[ "${AGENT_MODEL}" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] \
+        || err "K3D_GPU_AGENT_MODEL '${AGENT_MODEL}' is not a valid model id (letters, digits, . _ - /)"
+    [[ "${AGENT_MODEL_NAME}" =~ ^[A-Za-z0-9][A-Za-z0-9._:/-]*$ ]] \
+        || err "K3D_GPU_AGENT_MODEL_NAME '${AGENT_MODEL_NAME}' is not a valid served name (letters, digits, . _ - : /)"
+    [ -z "${AGENT_REVISION}" ] || [[ "${AGENT_REVISION}" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] \
+        || err "K3D_GPU_AGENT_REVISION '${AGENT_REVISION}' is not a valid revision (a commit, tag or branch)"
+    [ -z "${AGENT_TOOL_PARSER}" ] || [[ "${AGENT_TOOL_PARSER}" =~ ^[A-Za-z0-9_.-]+$ ]] \
+        || err "K3D_GPU_AGENT_TOOL_PARSER '${AGENT_TOOL_PARSER}' is not a valid parser name"
+    [ -z "${AGENT_REASONING_PARSER}" ] || [[ "${AGENT_REASONING_PARSER}" =~ ^[A-Za-z0-9_.-]+$ ]] \
+        || err "K3D_GPU_AGENT_REASONING_PARSER '${AGENT_REASONING_PARSER}' is not a valid parser name"
+    [[ "${AGENT_DRAFT_MODEL}" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] \
+        || err "K3D_GPU_AGENT_DRAFT_MODEL '${AGENT_DRAFT_MODEL}' is not a valid model id (letters, digits, . _ - /)"
+}
+
 # Prints the namespace, model PVC, Deployment and Service. Choices go to stderr.
 agent_manifest() {
     local device res gid="" hybrid="" amx="" cpus
@@ -6089,6 +6112,7 @@ agent_manifest() {
     cpus=$(agent_cpus "${device}" "${hybrid}")
     [ "${device}" = CPU ] || gid=$(agent_device_gid "${device}")
     [ "${device}" != CPU ] || agent_autoquant
+    agent_check_values
     if [ "${AGENT_APP}" = vllm ]; then vllm_manifest; return 0; fi
     local via=""
     [ "${res}" = - ] || via=" (${res})"

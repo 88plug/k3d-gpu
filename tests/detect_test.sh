@@ -2251,6 +2251,24 @@ agent_says "the server image is pinned by digest" "${r}" 0 'image: openvino/mode
 agent_says "server logs at INFO by default" "${r}" 0 '--log_level=INFO$' "" STUB_ALLOC='cpu 8'
 agent_says "K3D_GPU_AGENT_LOG_LEVEL=DEBUG reaches the server" "${r}" 0 '--log_level=DEBUG$' "" \
     STUB_ALLOC='cpu 8' K3D_GPU_AGENT_LOG_LEVEL=DEBUG
+# Values spliced into the manifest stay one YAML scalar: a newline or a quote is refused.
+nl=$'\n'
+agent_says "K3D_GPU_AGENT_LOG_LEVEL with a newline is refused" "${r}" fail 'K3D_GPU_AGENT_LOG_LEVEL must be' "" \
+    STUB_ALLOC='cpu 8' "K3D_GPU_AGENT_LOG_LEVEL=INFO${nl}          securityContext:${nl}            privileged: true"
+agent_says "K3D_GPU_AGENT_LOG_LEVEL must be a known level" "${r}" fail 'K3D_GPU_AGENT_LOG_LEVEL must be' "" \
+    STUB_ALLOC='cpu 8' K3D_GPU_AGENT_LOG_LEVEL=LOUD
+agent_says "K3D_GPU_AGENT_MODEL with a newline is refused" "${r}" fail "' is not a valid model id" "" \
+    STUB_ALLOC='cpu 8' "K3D_GPU_AGENT_MODEL=OpenVINO/x${nl}          securityContext: {privileged: true}"
+agent_says "K3D_GPU_AGENT_MODEL_NAME with a quote is refused" "${r}" fail 'K3D_GPU_AGENT_MODEL_NAME .* is not a valid served name' "" \
+    STUB_ALLOC='cpu 8' 'K3D_GPU_AGENT_MODEL_NAME=x"y'
+agent_says "K3D_GPU_AGENT_IMAGE with a newline is refused" "${r}" fail "' is not a valid image reference" "" \
+    STUB_ALLOC='cpu 8' "K3D_GPU_AGENT_IMAGE=example/ovms:1${nl}          securityContext: {privileged: true}"
+agent_says "K3D_GPU_AGENT_REVISION with a space is refused" "${r}" fail 'K3D_GPU_AGENT_REVISION .* is not a valid revision' "" \
+    STUB_ALLOC='cpu 8' K3D_GPU_AGENT_MODEL=OpenVINO/Phi-4-mini-instruct-int4-ov 'K3D_GPU_AGENT_REVISION=main x'
+agent_says "an image pinned by tag only gets a warning" "${r}" 0 'K3D_GPU_AGENT_IMAGE .* is not pinned by digest' "" \
+    STUB_ALLOC='cpu 8' K3D_GPU_AGENT_IMAGE=example/ovms:latest
+agent_says "an image pinned by digest gets no warning" "${r}" 0 'not pinned by digest' negate \
+    STUB_ALLOC='cpu 8' K3D_GPU_AGENT_IMAGE=example/ovms@sha256:1
 agent_says "a custom model leaves parser choice to OVMS" "${r}" 0 'tool_parser' negate \
     STUB_ALLOC='cpu 8' K3D_GPU_AGENT_MODEL=OpenVINO/Phi-4-mini-instruct-int4-ov
 

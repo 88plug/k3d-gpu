@@ -91,7 +91,9 @@ jobs:
             -H "Authorization: Bearer ${GH_TOKEN}" \
             "https://api.github.com/repos/NVIDIA/k8s-device-plugin/releases/latest" \
             | jq -r '.tag_name')
-          [ -n "$latest" ] && [ "$latest" != "null" ] || { echo "::error::no device-plugin release resolved"; exit 1; }
+          # Only vX.Y.Z: the tag is expanded inside later run scripts and written into
+          # share/nvidia-device-plugin.yml.
+          [[ "$latest" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::no device-plugin release resolved (got '$latest')"; exit 1; }
           echo "latest=$latest" >> "$GITHUB_OUTPUT"
 
       # ─── 2b. Latest Intel GPU device plugin (Arc / Xe2 Battlemage) ───────
