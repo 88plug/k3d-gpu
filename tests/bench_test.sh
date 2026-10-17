@@ -177,19 +177,58 @@ noisy_bad_cores() {
     [ $? -eq 2 ]
 }
 
+noisy_stream_ecluster() {
+    "${NOISY[@]}" start --cores ecluster --stressor stream --workers 4 --dry-run > "${NJ}" || return 1
+    pyassert "${NJ}" <<'EOF'
+c = j["spec"]["containers"][0]
+assert j["metadata"]["labels"]["k3d-gpu.io/cores"] == "ecluster", j
+assert "--stream 4 --stream-l3-size 128m " in c["command"][2] and "--cpu " not in c["command"][2]
+assert c["resources"]["limits"] == {"cpu": "4", "memory": "1Gi"} == c["resources"]["requests"]
+EOF
+}
+noisy_cpu_default_mem() {
+    "${NOISY[@]}" start --workers 2 --dry-run > "${NJ}" || return 1
+    pyassert "${NJ}" <<'EOF'
+c = j["spec"]["containers"][0]
+assert c["resources"]["limits"]["memory"] == "64Mi" and "--stream" not in c["command"][2]
+EOF
+}
+noisy_bad_stream() {
+    local rc
+    "${NOISY[@]}" start --stressor bogus --dry-run; rc=$?
+    [ "${rc}" -eq 2 ] || return 1
+    "${NOISY[@]}" start --stressor stream --stream-bytes '1;x' --dry-run; rc=$?
+    [ "${rc}" -eq 2 ]
+}
+
+check "noisy: stream neighbour on ecluster has a fixed footprint and 1Gi" noisy_stream_ecluster
+check "noisy: cpu stressor keeps 64Mi and no stream args" noisy_cpu_default_mem
+check "noisy: bad --stressor and --stream-bytes are rejected" noisy_bad_stream
 check "noisy: efficient pod is labelled, sized and pinned to the image digest" noisy_efficient
 check "noisy: unlabelled pod has no cores label; --cpu overrides the request" noisy_unlabelled
 check "noisy: bad --cores is rejected" noisy_bad_cores
 
 # ---- agent_trace.py ---------------------------------------------------------------
 
+check "rdt-isolate: H26 analysis and client unit tests" \
+    env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/rdt-isolate/test_analyze.py"
+check "rdt-isolate: run.sh parses" bash -n "${ROOT}/bench/rdt-isolate/run.sh"
+
 check "agent_trace: unit tests against the in-process stub" \
     env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/test_agent_trace.py"
+
+check "bench: joule-pack (H21) unit tests" \
+    env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/joule-pack/test_joulepack.py"
+check "shared-prefix (H25): prompt generator and scorer" \
+    env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/shared-prefix/test_probe.py"
 
 # ---- uncore-phase (H29) -----------------------------------------------------------
 
 check "uncore-phase: probe unit tests (order, sign test, verdict rules, knob restore)" \
     env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/uncore-phase/test_probe.py"
+
+check "phase-steer: H20 probe unit tests" \
+    env -u IMAGE PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/phase-steer/test_probe.py"
 
 # ---- research/ models -------------------------------------------------------------
 
@@ -203,6 +242,46 @@ check "research: power-envelope model unit tests" \
     env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/research/tseries-envelope/test_envelope_model.py"
 check "bench: sku-model probe scorer, client and plan (H24)" \
     python3 "${ROOT}/bench/sku-model/test_probe.py"
+check "research: thermal-resource headroom model unit tests" \
+    env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/research/thermal-resource/test_headroom_model.py"
+check "research: thermal-resource headroom model selftest" \
+    env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/research/thermal-resource/headroom_model.py" selftest
+
+# ---- thermal-resource probe (H23) ---------------------------------------------------
+
+check "thermal-resource probe: DRY_RUN prints the three arms" \
+    env DRY_RUN=1 OUT="${WORK}/h23" bash -c '"$1/bench/thermal-resource/probe.sh" > "$2"' _ "${ROOT}" "${WORK}/h23.yaml"
+# h23_arms: B, T, C lists of 24 pods each; 12 hot without --cpu-load, 12 cool with it;
+# T requests per-type watts, C one slot, B neither; requests equal limits.
+h23_arms() {
+    python3 - "${WORK}/h23.yaml" <<'PY'
+import sys, yaml
+docs = [d for d in yaml.safe_load_all(open(sys.argv[1])) if d]
+assert len(docs) == 3, len(docs)
+for arm, d in zip("BTC", docs):
+    pods = d["items"]
+    assert len(pods) == 24, (arm, len(pods))
+    hot = [p for p in pods if p["metadata"]["labels"]["h23-kind"] == "hot"]
+    cool = [p for p in pods if p["metadata"]["labels"]["h23-kind"] == "cool"]
+    assert len(hot) == 12 and len(cool) == 12
+    for p in pods:
+        c = p["spec"]["containers"][0]
+        req, lim = c["resources"]["requests"], c["resources"]["limits"]
+        assert req == lim and req["cpu"] == "1", req
+        assert ("--cpu-load" in c["command"]) == (p in cool)
+        assert c["imagePullPolicy"] == "Never" and p["spec"]["restartPolicy"] == "Never"
+        if arm == "B":
+            assert set(req) == {"cpu"}
+        elif arm == "T":
+            assert set(req) == {"cpu", "power.k3d-gpu.io/watts"}
+            assert req["power.k3d-gpu.io/watts"] == ("6" if p in hot else "3")
+        else:
+            assert set(req) == {"cpu", "k3d-gpu.io/slots"} and req["k3d-gpu.io/slots"] == "1"
+PY
+}
+if python3 -c 'import yaml' 2>/dev/null; then
+    check "thermal-resource probe: arms B/T/C request what H23 pre-registered" h23_arms
+fi
 if command -v cc >/dev/null; then
     check "research: stream_probe.c compiles" \
         cc -fsyntax-only -fopenmp "${ROOT}/research/agents-per-box-ceiling/stream_probe.c"

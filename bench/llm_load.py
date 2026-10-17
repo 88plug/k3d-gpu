@@ -13,7 +13,7 @@ Model Server, .../v1 for vLLM, llama.cpp, Ollama and most others.
 Per request it records:
   first_chunk_s    first SSE data chunk (OVMS continuous batching sends a role-only
                    chunk the moment the first token exists)
-  ttft_s           first chunk carrying content or reasoning_content
+  ttft_s           first chunk carrying content, reasoning_content or reasoning
   latency_s        until [DONE] / end of stream
   output_tokens    usage.completion_tokens (stream_options.include_usage); null
                    when the server sends no usage
@@ -65,7 +65,7 @@ def one_request(args, idx):
     if args.api_key:
         headers["Authorization"] = f"Bearer {args.api_key}"
     conn_cls = http.client.HTTPSConnection if scheme == "https" else http.client.HTTPConnection
-    sample = {"index": idx, "ok": False, "error": None, "chunks": 0, "text_chars": 0}
+    sample = {"index": idx, "ok": False, "error": None, "chunks": 0, "content_chunks": 0, "text_chars": 0}
     for m in METRICS:
         sample[m] = None
     t0 = time.perf_counter()
@@ -98,8 +98,12 @@ def one_request(args, idx):
                 usage = chunk["usage"]
             for choice in chunk.get("choices") or []:
                 delta = choice.get("delta") or {}
-                text = (delta.get("content") or "") + (delta.get("reasoning_content") or "")
+                # reasoning_content: vLLM/OVMS; reasoning: Ollama's OpenAI layer
+                # (openai/openai.go, v0.40.5), which streams Qwen3 thinking there.
+                text = ((delta.get("content") or "") + (delta.get("reasoning_content") or "")
+                        + (delta.get("reasoning") or ""))
                 if text:
+                    sample["content_chunks"] += 1
                     sample["text_chars"] += len(text)
                     if sample["ttft_s"] is None:
                         sample["ttft_s"] = now

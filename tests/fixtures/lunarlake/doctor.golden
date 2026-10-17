@@ -23,6 +23,7 @@
   ok: CPU ISA: AVXVNNI — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
   ok: hybrid CPU: P-cores 0-3, E-cores none, LP E-cores 4-7 — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|lowpower|pcore-physical|latency
   ok: physical P-cores (one thread per core): 0-3 — k3d-gpu.io/cores=pcore-physical and latency show pods one thread per core
+  info: noisy-neighbour isolation: cpu-cap — no rdt_a flag; E-core L2 clusters are not readable (no cpu*/cache in sysfs); give a neighbour a CPU limit. Cache and DRAM bandwidth stay shared
 ==> Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...
   ok: dra available (auto)
   ok: image-volume available (auto)

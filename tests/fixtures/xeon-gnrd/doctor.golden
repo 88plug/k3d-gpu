@@ -10,6 +10,7 @@
   ok: CPU ISA: AVX512BF16 AVX512F AVX512VNNI AVXVNNI — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
   ok: DSA: 1 device(s), 1 user work queue(s) — deployed by 'k3d-gpu up' (intel-dsa-plugin)
   info: RDT allocation (rdt_a: cat_l3 cdp_l3 mba) — resctrl classes are available but left off: the balloons policy ships control.rdt.enable: false because enabling it rewrites the host's /sys/fs/resctrl. To opt in, mount resctrl on the host (mount -t resctrl resctrl /sys/fs/resctrl) and set control.rdt.enable: true in nri-balloons.yml; usePodQoSAsDefaultClass then gives BestEffort/Burstable/Guaranteed pods 33%/66%/100% of the L3
+  info: noisy-neighbour isolation: rdt-mba — CAT + MBA can cap a neighbour's cache share and DRAM bandwidth through the RDT opt-in above (resctrl mounted: no); the shipped classes set cache shares only, so add mbAllocation: {all: ["50%"]} to the BestEffort class for bandwidth; the classes run inside the NRI balloons policy, which up deploys on hybrid or multi-NUMA hosts only
   info: per socket: socket 0: DSA 1, IAA 0, QAT 0 (no ARK default on file for this CPU)
 ==> Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...
   ok: dra available (auto)
