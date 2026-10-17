@@ -1274,7 +1274,7 @@ unc "${r}" uncore00 abc 2200000; unc "${r}" uncore01 "" 2200000
 perf_says "perf: malformed uncore max is not ok" "${r}" 'uncore0[01]: uncore max' negate
 r=$(newroot perf-uncore-above); cpuinfo "${r}" 6 183 "fpu"
 unc "${r}" uncore00 2500000 2200000
-perf_says "perf: uncore max above initial is not called the firmware maximum" "${r}" 'firmware maximum' negate
+perf_says "perf: uncore max above initial is not called the firmware maximum" "${r}" 'ok: .*= firmware maximum' negate
 perf_says "perf: uncore max above initial is info with both numbers" "${r}" 'info: uncore00: uncore max 2500000 kHz is above initial_max_freq_khz 2200000 kHz'
 r=$(newroot perf-uncore-legacy); cpuinfo "${r}" 6 183 "fpu"
 unc "${r}" package_00_die_00 4700000 4700000
