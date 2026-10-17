@@ -1,9 +1,11 @@
 ==> Accelerators: intel npu hybrid
+==> Experimental features (auto): image-volume npu-turbo
 ==> Creating k3d cluster 'gpu' with image cryptoandcoffee/k3d-gpu:latest...
 ==> Waiting for nodes Ready...
 ==> intel device plugin auto-deployed by k3s.
 ==> npu device plugin auto-deployed by k3s.
 ==> hybrid device plugin auto-deployed by k3s.
+==> Applying experimental OpenVINO plugin config (ConfigMap default/k3d-gpu-openvino-experimental)...
 ==> Verifying accelerators are schedulable...
 ==> Accelerators schedulable: intel=1 npu=1 hybrid=1. Try: k3d-gpu test
 exit=0
@@ -20,10 +22,17 @@ k3d cluster create gpu
   --k3s-node-label=gpu.intel.com/media-vecs=1@server:*;agent:*
   --k3s-node-label=k3d-gpu.io/npu.gen=37xx@server:*;agent:*
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AVXVNNI=true@server:*;agent:*
+  --k3s-arg=--kube-apiserver-arg=feature-gates=ImageVolume=true@server:*
+  --k3s-arg=--kube-scheduler-arg=feature-gates=ImageVolume=true@server:*
+  --k3s-arg=--kube-controller-manager-arg=feature-gates=ImageVolume=true@server:*
+  --k3s-arg=--kubelet-arg=feature-gates=ImageVolume=true@server:*;agent:*
+  --k3s-node-label=experimental.k3d-gpu.io/image-volume=true@server:*;agent:*
+  --k3s-node-label=experimental.k3d-gpu.io/npu-turbo=true@server:*;agent:*
 kubectl wait --for=condition=Ready nodes --all --timeout=120s
 kubectl -n kube-system get daemonset intel-gpu-plugin
 kubectl -n kube-system get daemonset intel-npu-plugin
 kubectl -n kube-system get daemonset nri-resource-policy-balloons
+kubectl apply -f -
 kubectl -n kube-system rollout status daemonset/intel-gpu-plugin --timeout=120s
 kubectl get nodes -o go-template={{range .items}}{{range $k, $v := .status.allocatable}}{{$k}} {{$v}}{{"\n"}}{{end}}{{end}}
 kubectl -n kube-system rollout status daemonset/intel-npu-plugin --timeout=120s

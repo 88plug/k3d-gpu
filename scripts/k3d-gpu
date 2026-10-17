@@ -78,6 +78,8 @@ Usage: k3d-gpu <command>
   test      Run a pod per detected accelerator and print its device view
   detect    Print accelerators found on this host and their Kubernetes resources
   doctor    Diagnostic preflight checks
+  doctor --experimental
+            Also list every experimental feature and why it is (un)available here
   doctor --perf [--model-gb N]
             Read-only host tuning advisor for inference (CPU/GPU clocks, power
             limits, THP, swap, IRQs, persistence): evidence, why, apply + revert
@@ -113,6 +115,9 @@ Environment:
   K3D_GPU_MODEL_GB      model size checked by doctor --perf (same as --model-gb)
   K3D_GPU_AGENT_DEVICE  agent device: auto | CPU | GPU | NPU (default: auto)
   K3D_GPU_AGENT_MODEL   agent Hugging Face model (default: OpenVINO/Qwen3-4B-int4-ov)
+  K3D_GPU_EXPERIMENTAL  auto (default: safe, mature, detected features), off, or a comma
+                        list to force exactly those; 'list' prints them with their status
+                        on this host. See docs/experimental.md
 
 Docs: https://github.com/88plug/k3d-gpu
 EOF
@@ -1020,6 +1025,340 @@ doctor_cluster() {
         | awk '$2 ~ /\// && $3 ~ /^[0-9]+$/ && ($4 + 0) < ($3 + 0) { print $1, $2, $3, $4 + 0 }')
 }
 
+# ---- experimental features (K3D_GPU_EXPERIMENTAL) -----------------------------
+# Auto-adapt by default: unset (or "auto") enables every feature whose detect and
+# prereq pass and whose auto check says it is safe to turn on unasked (beta or GA
+# in the shipped k3s, no host change). "off" enables none; a comma list enables
+# exactly those. Each feature is one exp_<name> function answering:
+#   status    upstream maturity, with the release it shipped in
+#   families  hardware it applies to
+#   value     what it gives an agent workload
+#   detect    exit 0 when this host has what the feature acts on (quiet)
+#   prereq    exit 0 when it can be enabled; otherwise print the exact reason
+#   apply     add to EXP_GATES / EXP_LABELS / EXP_OVCFG / EXP_HOST (no side effects)
+#   revert    how to undo it
+#   auto      exit 0 when auto mode may enable it
+# apply only shapes the k3d/k3s cluster: feature gates, node labels, an OpenVINO
+# plugin-config ConfigMap. Host kernel, module and BIOS changes are never run;
+# they go into EXP_HOST as the exact command plus its revert, and up prints them.
+# docs/experimental.md has the sources for every gate, property and sysfs path.
+
+EXP_REQUEST="${K3D_GPU_EXPERIMENTAL:-auto}"
+EXP_FEATURES=(dra image-volume npu-turbo scx xe-force-probe xe-sriov)
+EXP_LABEL_PREFIX="experimental.k3d-gpu.io"
+EXP_OV_CONFIGMAP="k3d-gpu-openvino-experimental"
+
+exp_fn() { echo "exp_${1//-/_}"; }
+
+# Intel GPU PCI functions (vendor 0x8086, display class), one sysfs dir per line.
+exp_intel_gpu_pci() {
+    local dev class
+    for dev in "${SYSROOT}"/sys/bus/pci/devices/*; do
+        [ "$(cat "${dev}/vendor" 2>/dev/null)" = "0x8086" ] || continue
+        class=$(cat "${dev}/class" 2>/dev/null) || continue
+        case "${class}" in 0x03*) echo "${dev}" ;; esac
+    done
+}
+
+# Unbound Intel GPUs: PCI device ids without the 0x, comma separated.
+exp_unbound_gpu_ids() {
+    local dev ids=()
+    while read -r dev; do
+        [ -n "${dev}" ] || continue
+        [ -z "$(bound_driver "${dev}")" ] || continue
+        [ -z "$(npu_platform "$(cat "${dev}/device" 2>/dev/null)")" ] || continue
+        ids+=("$(pci_id "${dev}/device" | sed 's/^0x//')")
+    done < <(exp_intel_gpu_pci)
+    local IFS=,
+    echo "${ids[*]}"
+}
+
+# "<bdf> <totalvfs> <numvfs>" per Intel GPU bound to xe that reports SR-IOV.
+exp_xe_sriov_pfs() {
+    local dev total num
+    while read -r dev; do
+        [ -n "${dev}" ] && [ "$(bound_driver "${dev}")" = "xe" ] || continue
+        total=$(cat "${dev}/sriov_totalvfs" 2>/dev/null) || continue
+        [[ "${total}" =~ ^[1-9][0-9]*$ ]] || continue
+        num=$(cat "${dev}/sriov_numvfs" 2>/dev/null) || num=0
+        [[ "${num}" =~ ^[0-9]+$ ]] || num=0
+        echo "$(basename "${dev}") ${total} ${num}"
+    done < <(exp_intel_gpu_pci)
+}
+
+# NPU scheduler mode from the first intel_vpu accel device ("HW", "OS" or empty).
+exp_npu_sched_mode() {
+    local dev m
+    for dev in "${SYSROOT}"/sys/class/accel/accel[0-9]*/device; do
+        [ "$(bound_driver "${dev}")" = "intel_vpu" ] || continue
+        m=$(cat "${dev}/sched_mode" 2>/dev/null) || continue
+        case "${m}" in HW|OS) echo "${m}"; return 0 ;; esac
+    done
+}
+
+exp_dra() {
+    case "$1" in
+        status)   echo "Kubernetes gates: alpha in 1.34-1.35, beta default-on in 1.36 (DRAExtendedResource GA in 1.37)" ;;
+        families) echo "all: NVIDIA, Intel GPU and Gaudi DRA drivers, CPU (dra-driver-cpu)" ;;
+        value)    echo "partitionable devices, consumable capacity, binding conditions, extended-resource requests served by DRA, device health in pod status" ;;
+        detect|prereq) return 0 ;;
+        apply)    EXP_GATES+=(DRAPartitionableDevices DRAConsumableCapacity DRADeviceBindingConditions DRAExtendedResource ResourceHealthStatus) ;;
+        auto)     return 1 ;;  # alpha in the shipped k3s 1.34
+        revert)   echo "recreate the cluster without it: k3d-gpu down && k3d-gpu up" ;;
+    esac
+}
+
+exp_image_volume() {
+    case "$1" in
+        status)   echo "Kubernetes ImageVolume: beta default-off in 1.33-1.34, beta default-on in 1.35, GA (locked on) from 1.36" ;;
+        families) echo "all: models shipped as OCI images, mounted read-only into any accelerator pod" ;;
+        value)    echo "model weights pulled, cached and deduplicated by containerd; no init-container copy or PVC" ;;
+        detect|prereq) return 0 ;;
+        apply)    EXP_GATES+=(ImageVolume) ;;
+        auto)     return 0 ;;  # beta in 1.34, GA from 1.36
+        revert)   echo "recreate the cluster without it: k3d-gpu down && k3d-gpu up" ;;
+    esac
+}
+
+exp_npu_turbo() {
+    local mode
+    case "$1" in
+        status)   echo "OpenVINO 2026.4.0 NPU property NPU_TURBO; ivpu sched_mode param (HW scheduler auto-selected on new firmware)" ;;
+        families) echo "Intel NPU: Meteor/Arrow Lake (37xx), Lunar Lake (40xx), Panther/Wildcat Lake (50xx), Nova Lake (60xx)" ;;
+        value)    echo "sustained max NPU clocks for latency-bound agent inference; HW scheduler gives per-context priority and preemption" ;;
+        detect)   detect_npu; [ "${#NPU_IDS[@]}" -gt 0 ] ;;
+        prereq)   detect_npu
+                  [ "${#NPU_IDS[@]}" -gt 0 ] && return 0
+                  echo "no Intel NPU accel node bound to intel_vpu under /sys/class/accel (needs Meteor Lake or newer and the intel_vpu driver)"
+                  return 1 ;;
+        apply)    EXP_OVCFG+=("NPU NPU_TURBO true")
+                  mode=$(exp_npu_sched_mode)
+                  if [ -n "${mode}" ]; then EXP_LABELS+=("k3d-gpu.io/npu-sched=${mode}"); fi
+                  if [ "${mode}" = "OS" ]; then
+                      EXP_HOST+=("npu-turbo: the NPU runs the OS scheduler; for HW scheduling (kernel refuses OS mode on 60xx anyway):"
+                                 "  run:    echo 'options intel_vpu sched_mode=1' | sudo tee /etc/modprobe.d/k3d-gpu-npu-hws.conf && sudo modprobe -r intel_vpu && sudo modprobe intel_vpu"
+                                 "  revert: sudo rm /etc/modprobe.d/k3d-gpu-npu-hws.conf && sudo modprobe -r intel_vpu && sudo modprobe intel_vpu")
+                  fi ;;
+        revert)   echo "recreate without it; NPU_TURBO lives only in the ConfigMap workloads read" ;;
+        auto)     return 0 ;;  # a ConfigMap only; any host step is printed, never run
+    esac
+}
+
+exp_scx() {
+    local state
+    case "$1" in
+        status)   echo "sched_ext merged in Linux 6.12; schedulers (scx_lavd, scx_layered) out of tree, sched-ext/scx v1.1.4" ;;
+        families) echo "any x86 host on Linux 6.12+ with CONFIG_SCHED_CLASS_EXT; most useful on hybrid P/E parts" ;;
+        value)    echo "latency-aware or layered CPU scheduling for agent processes, swapped at runtime with no reboot" ;;
+        detect)   [ -e "${SYSROOT}/sys/kernel/sched_ext/state" ] ;;
+        prereq)   [ -e "${SYSROOT}/sys/kernel/sched_ext/state" ] && return 0
+                  echo "kernel $(kernel_release) has no /sys/kernel/sched_ext/state (needs Linux 6.12+ built with CONFIG_SCHED_CLASS_EXT)"
+                  return 1 ;;
+        apply)    state=$(cat "${SYSROOT}/sys/kernel/sched_ext/state" 2>/dev/null) || state=""
+                  [[ "${state}" =~ ^[a-z]+$ ]] && EXP_LABELS+=("k3d-gpu.io/sched-ext=${state}")
+                  EXP_HOST+=("scx: k3d-gpu never loads a host scheduler. Install sched-ext/scx v1.1.4 (https://github.com/sched-ext/scx/releases/tag/v1.1.4), then:"
+                             "  run:    sudo scx_lavd"
+                             "  revert: stop scx_lavd (Ctrl-C), or: echo S | sudo tee /proc/sysrq-trigger (the kernel falls back to its default scheduler)") ;;
+        revert)   echo "stop the host scheduler process; recreate the cluster to drop the label" ;;
+        auto)     return 1 ;;  # needs a host change
+    esac
+}
+
+exp_xe_force_probe() {
+    local ids
+    case "$1" in
+        status)   echo "xe.force_probe (unsafe param, taints the kernel); Nova Lake-P and Crescent Island still need it in Linux 7.3-rc" ;;
+        families) echo "Intel GPUs the running kernel will not bind: Nova Lake-P, Crescent Island, MTL/ARL/ADL/TGL/DG2 on xe" ;;
+        value)    echo "brings a new GPU up before distro kernels support it, so agents can schedule on it" ;;
+        detect)   [ -n "$(exp_unbound_gpu_ids)" ] ;;
+        prereq)   [ -n "$(exp_unbound_gpu_ids)" ] && return 0
+                  echo "no unbound Intel GPU: every Intel GPU on this host already has a driver, or there is none (force_probe only helps a GPU the kernel did not bind)"
+                  return 1 ;;
+        apply)    ids=$(exp_unbound_gpu_ids)
+                  EXP_HOST+=("xe-force-probe: Intel GPU ${ids} has no driver. Host change (taints the kernel; pre-production support can hang the GPU):"
+                             "  run:    printf 'options xe force_probe=%s\noptions i915 force_probe=!%s\n' '${ids}' '${ids//,/,!}' | sudo tee /etc/modprobe.d/k3d-gpu-xe-force-probe.conf && sudo reboot"
+                             "  revert: sudo rm /etc/modprobe.d/k3d-gpu-xe-force-probe.conf && sudo reboot"
+                             "  then:   k3d-gpu down && k3d-gpu up (the new render node joins as gpu.intel.com/xe)") ;;
+        revert)   echo "delete the modprobe.d file and reboot" ;;
+        auto)     return 1 ;;  # needs a host change
+    esac
+}
+
+exp_xe_sriov() {
+    local bdf total num first=""
+    case "$1" in
+        status)   echo "xe SR-IOV PF: xe.max_vfs param, configfs sriov/max_vfs since Linux 6.19; PF on BMG and PTL without force_probe" ;;
+        families) echo "Panther/Wildcat Lake iGPU, Battlemage / Arc Pro B, Nova Lake, Crescent Island (bound to xe)" ;;
+        value)    echo "hardware-isolated GPU slices: each VF is its own render node and gpu.intel.com/xe resource" ;;
+        detect)   [ -n "$(exp_xe_sriov_pfs)" ] ;;
+        prereq)   [ -n "$(exp_xe_sriov_pfs)" ] && return 0
+                  echo "no Intel GPU bound to xe reports SR-IOV (sriov_totalvfs missing or 0; needs a PF-capable part, CONFIG_PCI_IOV, xe.max_vfs not 0 and VT-d on)"
+                  return 1 ;;
+        apply)    while read -r bdf total num; do
+                      [ -n "${first}" ] || { first=${total}; EXP_LABELS+=("k3d-gpu.io/xe-sriov-totalvfs=${total}"); }
+                      if [ "${num}" -gt 0 ]; then
+                          EXP_HOST+=("xe-sriov: ${bdf} already has ${num} of ${total} VFs; nothing to do"
+                                     "  revert: echo 0 | sudo tee /sys/bus/pci/devices/${bdf}/sriov_numvfs")
+                      else
+                          EXP_HOST+=("xe-sriov: ${bdf} supports ${total} VFs, none enabled. Host change (N = 1..${total}):"
+                                     "  run:    echo N | sudo tee /sys/bus/pci/devices/${bdf}/sriov_numvfs"
+                                     "  revert: echo 0 | sudo tee /sys/bus/pci/devices/${bdf}/sriov_numvfs"
+                                     "  then:   k3d-gpu down && k3d-gpu up (each VF render node becomes a gpu.intel.com/xe)")
+                      fi
+                  done < <(exp_xe_sriov_pfs) ;;
+        revert)   echo "echo 0 > sriov_numvfs on the PF, then recreate the cluster" ;;
+        auto)     return 1 ;;  # needs a host change
+    esac
+}
+
+is_exp_feature() {
+    local f
+    for f in "${EXP_FEATURES[@]}"; do [ "${f}" = "$1" ] && return 0; done
+    return 1
+}
+
+# Parse K3D_GPU_EXPERIMENTAL into EXP_ACTIVE. Unknown names are an error.
+exp_resolve() {
+    EXP_ACTIVE=()
+    local req f v seen fn
+    req="${EXP_REQUEST//[[:space:]]/}"
+    case "${req}" in
+        off|none) return 0 ;;
+        ""|auto)
+            for f in "${EXP_FEATURES[@]}"; do
+                fn=$(exp_fn "${f}")
+                "${fn}" auto && "${fn}" detect && "${fn}" prereq >/dev/null && EXP_ACTIVE+=("${f}")
+            done
+            return 0 ;;
+    esac
+    IFS=',' read -r -a req <<< "${req}"
+    for f in "${req[@]}"; do
+        [ -n "${f}" ] || continue
+        case "${f}" in list|auto|off|none) err "K3D_GPU_EXPERIMENTAL=${f} cannot be combined with feature names" ;; esac
+        is_exp_feature "${f}" || err "unknown experimental feature '${f}' in K3D_GPU_EXPERIMENTAL (available: $(IFS=,; echo "${EXP_FEATURES[*]}"); K3D_GPU_EXPERIMENTAL=list shows them)"
+        seen=0
+        for v in ${EXP_ACTIVE[@]+"${EXP_ACTIVE[@]}"}; do [ "${v}" = "${f}" ] && seen=1; done
+        [ "${seen}" -eq 1 ] || EXP_ACTIVE+=("${f}")
+    done
+    return 0
+}
+
+exp_is_list() { [ "${EXP_REQUEST//[[:space:]]/}" = list ]; }
+exp_is_auto() { case "${EXP_REQUEST//[[:space:]]/}" in ""|auto) return 0 ;; esac; return 1; }
+
+# Run apply for every requested feature, after checking each prerequisite.
+exp_collect() {
+    EXP_GATES=() EXP_LABELS=() EXP_OVCFG=() EXP_HOST=()
+    local f reason
+    for f in ${EXP_ACTIVE[@]+"${EXP_ACTIVE[@]}"}; do
+        reason=$("$(exp_fn "${f}")" prereq) || err "experimental feature '${f}' cannot be enabled: ${reason}"
+        "$(exp_fn "${f}")" apply
+        EXP_LABELS+=("${EXP_LABEL_PREFIX}/${f}=true")
+    done
+    return 0
+}
+
+# k3d create arguments for the collected gates and labels, one per line.
+exp_k3d_args() {
+    local gates="" g label comp
+    for g in ${EXP_GATES[@]+"${EXP_GATES[@]}"}; do
+        gates+="${gates:+,}${g}=true"
+    done
+    if [ -n "${gates}" ]; then
+        # One merged feature-gates value per component: k3s keeps only the last
+        # plain --<component>-arg of a given key.
+        for comp in kube-apiserver kube-scheduler kube-controller-manager; do
+            echo "--k3s-arg=--${comp}-arg=feature-gates=${gates}@server:*"
+        done
+        echo "--k3s-arg=--kubelet-arg=feature-gates=${gates}@server:*;agent:*"
+    fi
+    for label in ${EXP_LABELS[@]+"${EXP_LABELS[@]}"}; do
+        echo "--k3s-node-label=${label}@server:*;agent:*"
+    done
+}
+
+# ConfigMap with the OpenVINO plugin config per device (CPU.json, GPU.json,
+# NPU.json). Workloads opt in by reading it.
+exp_ov_configmap() {
+    local dev entry d k v json first
+    echo "apiVersion: v1"
+    echo "kind: ConfigMap"
+    echo "metadata:"
+    echo "  name: ${EXP_OV_CONFIGMAP}"
+    echo "  namespace: default"
+    echo "  labels:"
+    echo "    app.kubernetes.io/managed-by: k3d-gpu"
+    echo "data:"
+    for dev in CPU GPU NPU; do
+        json="" first=1
+        for entry in "${EXP_OVCFG[@]}"; do
+            read -r d k v <<< "${entry}"
+            [ "${d}" = "${dev}" ] || continue
+            json+="$([ "${first}" -eq 1 ] || echo ', ')\"${k}\": \"${v}\""
+            first=0
+        done
+        [ -z "${json}" ] || echo "  ${dev}.json: '{${json}}'"
+    done
+}
+
+# Steps after the cluster is up: the OpenVINO ConfigMap. Host steps are printed
+# before create (exp_print_host), so they show even if a later step fails.
+exp_post_up() {
+    [ "${#EXP_OVCFG[@]}" -gt 0 ] || return 0
+    info "Applying experimental OpenVINO plugin config (ConfigMap default/${EXP_OV_CONFIGMAP})..."
+    exp_ov_configmap | kubectl apply -f -
+}
+
+exp_print_host() {
+    [ "${#EXP_ACTIVE[@]}" -gt 0 ] || return 0
+    info "Experimental features ($(exp_is_auto && echo auto || echo requested)): ${EXP_ACTIVE[*]}"
+    [ "${#EXP_HOST[@]}" -gt 0 ] || return 0
+    warn "host steps below are NOT run by k3d-gpu; each has its revert"
+    printf '  %s\n' "${EXP_HOST[@]}"
+}
+
+# Why a feature cannot be enabled: "absent" when detect finds nothing it acts
+# on here, "unavailable" when the hardware is there but a prerequisite is not.
+exp_word() { if "$1" detect; then echo unavailable; else echo absent; fi; }
+
+# K3D_GPU_EXPERIMENTAL=list: every feature, whether this host can use it, why not.
+exp_list() {
+    local f fn reason
+    for f in "${EXP_FEATURES[@]}"; do
+        fn=$(exp_fn "${f}")
+        if reason=$("${fn}" prereq); then
+            echo "${f}: available"
+        else
+            echo "${f}: $(exp_word "${fn}") — ${reason}"
+        fi
+        echo "  status:   $("${fn}" status)"
+        echo "  families: $("${fn}" families)"
+        echo "  value:    $("${fn}" value)"
+    done
+}
+
+# doctor section: per-feature availability. A requested feature that cannot be
+# enabled fails doctor; the rest are information.
+doctor_experimental() {
+    local all=$1 f v reason requested
+    exp_resolve
+    [ "${all}" -eq 1 ] || [ "${#EXP_ACTIVE[@]}" -gt 0 ] || return 0
+    info "Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)..."
+    for f in "${EXP_FEATURES[@]}"; do
+        requested=0
+        for v in ${EXP_ACTIVE[@]+"${EXP_ACTIVE[@]}"}; do [ "${v}" = "${f}" ] && requested=1; done
+        [ "${all}" -eq 1 ] || [ "${requested}" -eq 1 ] || continue
+        if reason=$("$(exp_fn "${f}")" prereq); then
+            echo "  ok: ${f} available$([ "${requested}" -eq 1 ] && { exp_is_auto && echo ' (auto)' || echo ' (requested)'; })"
+        elif [ "${requested}" -eq 1 ]; then
+            echo "  ${RED}fail${RST}: ${f} requested but ${reason}"
+            FAIL=1
+        else
+            echo "  info: ${f} $(exp_word "$(exp_fn "${f}")"): ${reason}"
+        fi
+    done
+}
+
 doctor() {
     FAIL=0
     resolve_vendors
@@ -1039,6 +1378,7 @@ doctor() {
     doctor_intel_unbound
     doctor_cpu_accels
     doctor_cluster
+    doctor_experimental "${DOCTOR_EXP_ALL:-0}"
 
     echo ""
     [ "${FAIL}" -eq 0 ] && info "All checks passed." || { err "One or more checks failed."; }
@@ -2199,9 +2539,10 @@ cmd_doctor() {
     while [ $# -gt 0 ]; do
         case "$1" in
             --perf) perf=1 ;;
+            --experimental) DOCTOR_EXP_ALL=1 ;;
             --model-gb) [ $# -ge 2 ] || err "--model-gb needs a size in GiB"; PERF_MODEL_GB=$2; shift ;;
             --model-gb=*) PERF_MODEL_GB=${1#*=} ;;
-            *) err "unknown doctor option: $1 (use --perf [--model-gb N])" ;;
+            *) err "unknown doctor option: $1 (use --perf [--model-gb N] or --experimental)" ;;
         esac
         shift
     done
@@ -2219,6 +2560,7 @@ cmd_up() {
     resolve_vendors
     [ "${#ACTIVE[@]}" -gt 0 ] || err "no supported accelerator detected (NVIDIA, Intel GPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX, hybrid P/E cores) — run 'k3d-gpu doctor' or set K3D_GPU_VENDORS"
     info "Accelerators: ${ACTIVE[*]}"
+    exp_collect
 
     local create_args=(
         --image="${IMAGE}"
@@ -2329,6 +2671,12 @@ cmd_up() {
         warn "no /dev/accel/accel* on host — Gaudi/NPU will not be visible in the node"
     fi
 
+    local arg
+    while read -r arg; do
+        [ -n "${arg}" ] && create_args+=("${arg}")
+    done < <(exp_k3d_args)
+    exp_print_host
+
     info "Creating k3d cluster '${CLUSTER}' with image ${IMAGE}..."
     k3d cluster create "${CLUSTER}" "${create_args[@]}"
 
@@ -2345,6 +2693,7 @@ cmd_up() {
         [ -n "${ds}" ] || continue
         ensure_plugin "${v}" "${ns}" "${ds}" "${manifest}"
     done
+    exp_post_up
 
     verify_gpus
 }
@@ -3726,6 +4075,14 @@ cmd_agent() {
         *) err "usage: k3d-gpu agent up|down|status|manifest" ;;
     esac
 }
+
+# K3D_GPU_EXPERIMENTAL=list prints the feature table with any command; any
+# other value is checked up front, so an unknown name fails before anything runs.
+if exp_is_list; then
+    exp_list
+    exit 0
+fi
+exp_resolve
 
 case "${1:-help}" in
     up)      cmd_up      ;;

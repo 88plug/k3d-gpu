@@ -12,6 +12,8 @@ WARN: Gaudi PCI device found but the habanalabs driver is not loaded — skippin
   warn: DSA: 1 device(s) but no user work queues — configure them on the host with accel-config
   warn: IAA: 1 device(s) but no user work queues — configure them on the host with accel-config
   info: per socket: socket 0: DSA 1, IAA 1, QAT 0 (no ARK default on file for this CPU)
+==> Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...
+  ok: image-volume available (auto)
 
 ==> All checks passed.
 exit=0

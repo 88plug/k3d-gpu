@@ -520,6 +520,20 @@ node through EAT's own brownfield path, on a non-Xeon client CPU. Its vLLM pod
 joins the hybrid balloons policy's `performance` balloon through EAT's own chart
 annotation, so EAT's CPU balloons stay off and `hybrid` stays on.
 
+### Experimental features (auto-adapting)
+
+Some upstream features are still alpha, beta or preview: Kubernetes DRA and
+ImageVolume gates, the OpenVINO NPU turbo property, sched_ext, xe SR-IOV and
+`force_probe`. By default `up` auto-enables the ones this host supports that are
+beta or GA in the shipped k3s and need no host change (`image-volume`, and
+`npu-turbo` on NPU hosts). `K3D_GPU_EXPERIMENTAL=<name,...>` forces exactly that
+list, `off` disables all, and an unknown name is an error. `K3D_GPU_EXPERIMENTAL=list k3d-gpu detect`
+or `k3d-gpu doctor --experimental` shows what this host can use and why.
+k3d-gpu only sets cluster-side options: feature gates, node labels and an
+OpenVINO plugin-config ConfigMap. A feature that needs a host kernel or module
+change prints the command and its revert, and k3d-gpu never runs it. See
+**[docs/experimental.md](docs/experimental.md)** for the ranking and sources.
+
 ---
 
 ## Prerequisites

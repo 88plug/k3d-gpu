@@ -1,5 +1,6 @@
 WARN: Gaudi PCI device found but the habanalabs driver is not loaded — skipping Gaudi (Gaudi 3 needs Intel's out-of-tree habanalabs driver; mainline only covers up to Gaudi 2)
 ==> Accelerators: amx
+==> Experimental features (auto): image-volume
 ==> Creating k3d cluster 'gpu' with image cryptoandcoffee/k3d-gpu:latest...
 ==> Waiting for nodes Ready...
 ==> Verifying accelerators are schedulable...
@@ -17,6 +18,11 @@ k3d cluster create gpu
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AVX512BF16=true@server:*;agent:*
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AVX512F=true@server:*;agent:*
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AVX512VNNI=true@server:*;agent:*
+  --k3s-arg=--kube-apiserver-arg=feature-gates=ImageVolume=true@server:*
+  --k3s-arg=--kube-scheduler-arg=feature-gates=ImageVolume=true@server:*
+  --k3s-arg=--kube-controller-manager-arg=feature-gates=ImageVolume=true@server:*
+  --k3s-arg=--kubelet-arg=feature-gates=ImageVolume=true@server:*;agent:*
+  --k3s-node-label=experimental.k3d-gpu.io/image-volume=true@server:*;agent:*
 kubectl wait --for=condition=Ready nodes --all --timeout=120s
 kubectl get nodes -l feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true -o name
 kubectl get nodes -l feature.node.kubernetes.io/cpu-cpuid.AMXINT8=true -o name

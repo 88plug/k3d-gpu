@@ -1,4 +1,5 @@
 ==> Accelerators: dsa iaa amx numa
+==> Experimental features (auto): image-volume
 ==> Creating k3d cluster 'gpu' with image cryptoandcoffee/k3d-gpu:latest...
 ==> Waiting for nodes Ready...
 ==> dsa device plugin auto-deployed by k3s.
@@ -26,6 +27,11 @@ k3d cluster create gpu
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AVX512F=true@server:*;agent:*
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AVX512VNNI=true@server:*;agent:*
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AVXVNNI=true@server:*;agent:*
+  --k3s-arg=--kube-apiserver-arg=feature-gates=ImageVolume=true@server:*
+  --k3s-arg=--kube-scheduler-arg=feature-gates=ImageVolume=true@server:*
+  --k3s-arg=--kube-controller-manager-arg=feature-gates=ImageVolume=true@server:*
+  --k3s-arg=--kubelet-arg=feature-gates=ImageVolume=true@server:*;agent:*
+  --k3s-node-label=experimental.k3d-gpu.io/image-volume=true@server:*;agent:*
 kubectl wait --for=condition=Ready nodes --all --timeout=120s
 kubectl -n kube-system get daemonset intel-dsa-plugin
 kubectl -n kube-system get daemonset intel-iaa-plugin
