@@ -8,6 +8,8 @@ the prompt. Uses fixtures and stubs only (no cluster, no network).
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import shutil
@@ -194,9 +196,67 @@ class InterruptedSubmit(T.ShareTest):
         self.assertEqual([c for c in self.gh_calls() if c != "auth status"], [])
 
 
+GH_AUTH_FAIL = T.GH_STUB.replace(
+    '  "auth status") exit 0 ;;',
+    '  "auth status") echo "error connecting to api.github.com: x509: certificate signed by unknown '
+    'authority" >&2; exit 1 ;;')
+
+GH_PR_OPEN = T.GH_STUB.replace(
+    '  "pr create "*)',
+    '  "pr list "*) echo https://github.com/88plug/k3d-gpu/pull/998 ;;\n  "pr create "*)')
+
+# The fork is still being created: its default-branch ref 404s twice.
+GH_FORK_LATE = T.GH_STUB.replace(
+    '  "api repos/"*"/git/ref/heads/main --jq .object.sha")',
+    '  "api repos/"*"/git/ref/heads/main --jq .object.sha") n=$(cat "$GH_LOG.n" 2>/dev/null || echo 0); '
+    'echo $((n + 1)) > "$GH_LOG.n"; [ "$n" -ge 2 ] || { echo "HTTP 404" >&2; exit 1; }; '
+    'echo 0123456789abcdef0123456789abcdef01234567 ;;\n  "api repos/"*"/git/ref/heads/main --jq .xx")')
+
+
+class GhStates(T.ShareTest):
+    """gh is installed but cannot reach GitHub; a pull request is already open;
+    the fork is not ready yet."""
+
+    def test_auth_failure_shows_gh_and_is_not_sent(self):
+        T.TC.stub_bin(self.bin, "gh", GH_AUTH_FAIL.replace("#!/bin/sh\n", ""))
+        rc, out = self.run_tty("y", "--submit")
+        self.assertEqual(rc, S.EXIT_NOT_SENT, out)
+        self.assertIn("x509: certificate signed by unknown authority", out)
+        self.assertIn("Nothing was sent", out)
+        self.assertEqual([c for c in self.gh_calls() if c != "auth status"], [])
+
+    def test_open_pull_request_is_reported_not_duplicated(self):
+        T.TC.stub_bin(self.bin, "gh", GH_PR_OPEN.replace("#!/bin/sh\n", ""))
+        rc, out = self.run_tty("y", "--submit")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("already open: https://github.com/88plug/k3d-gpu/pull/998", out)
+        self.assertFalse([c for c in self.gh_calls() if c.startswith("pr create")])
+
+    def test_waits_for_a_new_fork(self):
+        T.TC.stub_bin(self.bin, "gh", GH_FORK_LATE.replace("#!/bin/sh\n", ""))
+        b = T.cap_bundle()
+        old = (os.environ.get("PATH"), os.environ.get("GH_LOG"), S.POLL_WAIT_S)
+        os.environ["PATH"], os.environ["GH_LOG"], S.POLL_WAIT_S = self.env["PATH"], self.log, 0.0
+        try:
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = S.send(b, "bundle.json", S.pretty(b), True)
+        finally:
+            os.environ["PATH"], S.POLL_WAIT_S = old[0], old[2]
+            if old[1] is None:
+                os.environ.pop("GH_LOG", None)
+            else:
+                os.environ["GH_LOG"] = old[1]
+        self.assertEqual(rc, 0, buf.getvalue())
+        self.assertIn("pull/999", buf.getvalue())
+        with open(self.log + ".n") as f:
+            self.assertEqual(f.read().strip(), "3")  # two 404s, then the ref
+
+
 # The inherited ShareTest cases run in test_oracle.py already.
 for _n in [n for n in dir(T.ShareTest) if n.startswith("test_")]:
     setattr(InterruptedSubmit, _n, None)
+    setattr(GhStates, _n, None)
 
 
 if __name__ == "__main__":

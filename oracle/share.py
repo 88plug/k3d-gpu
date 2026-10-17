@@ -34,6 +34,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
@@ -162,16 +163,30 @@ def confirm(stdin=None, stdout=None):
         return False
     stdout.write(QUESTION)
     stdout.flush()
-    answer = stdin.readline().strip().lower()
+    try:
+        answer = stdin.readline().strip().lower()
+    except (KeyboardInterrupt, EOFError):
+        stdout.write("\n")
+        stdout.flush()
+        return False
     return answer in ("y", "yes")
 
 
+class GhUnavailable(RuntimeError):
+    """gh is installed but `gh auth status` failed."""
+
+
 def gh_ready():
+    """Path of a logged-in gh; None when gh is not installed. Raises
+    GhUnavailable with gh's own message when it is installed but the auth
+    check fails (not logged in, or a proxy/TLS problem)."""
     gh = shutil.which("gh")
     if not gh:
         return None
-    ok = subprocess.run([gh, "auth", "status"], capture_output=True, check=False).returncode == 0
-    return gh if ok else None
+    r = subprocess.run([gh, "auth", "status"], capture_output=True, text=True, check=False)
+    if r.returncode != 0:
+        raise GhUnavailable((r.stderr or r.stdout).strip()[:400] or f"exit {r.returncode}")
+    return gh
 
 
 def submission_steps(sha, path):
@@ -182,11 +197,31 @@ def submission_steps(sha, path):
             f"  git push -u origin oracle-{sha[:12]} && gh pr create --repo {ORACLE_REPO} --fill"]
 
 
+def gh_run(gh, *args, stdin=None):
+    return subprocess.run([gh, *args], input=stdin, capture_output=True, text=True, check=False)
+
+
 def gh_out(gh, *args, stdin=None):
-    r = subprocess.run([gh, *args], input=stdin, capture_output=True, text=True, check=False)
+    r = gh_run(gh, *args, stdin=stdin)
     if r.returncode != 0:
         raise RuntimeError(f"gh {' '.join(args[:2])} failed (exit {r.returncode}): {r.stderr.strip()[:300]}")
     return r.stdout.strip()
+
+
+POLL_TRIES, POLL_WAIT_S = 10, 3.0
+
+
+def gh_poll(gh, *args):
+    """gh_out, retried: GitHub creates a fork asynchronously, so its refs can
+    404 for a few seconds after `gh repo fork` returns."""
+    for i in range(POLL_TRIES):
+        try:
+            return gh_out(gh, *args)
+        except RuntimeError:
+            if i == POLL_TRIES - 1:
+                raise
+            time.sleep(POLL_WAIT_S)
+    return None
 
 
 LOGIN_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})")
@@ -196,11 +231,24 @@ BRANCH_RE = re.compile(r"[A-Za-z0-9._/-]{1,100}")
 def send(b, path, text, use_gh):
     """Open a pull request on ORACLE_REPO adding DATA_DIR/<sha256>.json through
     the user's fork: fork (no clone), branch from the fork's default branch,
-    put the file with the contents API, then gh pr create. CI validates it."""
+    put the file with the contents API, then gh pr create. CI validates it.
+
+    Every step can be rerun, so the same command after an interrupted submit
+    finishes the job: the branch name and file path come from the content
+    hash, an existing branch or identical file is reused, and an open pull
+    request from that branch is reported instead of opening a second one."""
     sha = b["content_sha256"]
-    gh = gh_ready() if use_gh else None
+    try:
+        gh = gh_ready() if use_gh else None
+    except GhUnavailable as e:
+        say(f"share: gh is installed but `gh auth status` failed: {e}")
+        say(f"Nothing was sent; the bundle is in {path}. Fix gh (gh auth login) and rerun, or open the "
+            "pull request by hand:")
+        for line in submission_steps(sha, path):
+            say(line)
+        return EXIT_NOT_SENT
     if not gh:
-        say(f"gh is not available{' (or not logged in)' if use_gh else ''}. Open the pull request by hand:")
+        say("gh is not available. Open the pull request by hand:" if use_gh else "Open the pull request by hand:")
         for line in submission_steps(sha, path):
             say(line)
         return 0
@@ -211,22 +259,43 @@ def send(b, path, text, use_gh):
         if not LOGIN_RE.fullmatch(login):
             raise RuntimeError(f"unexpected GitHub login {login!r}")
         fork = f"{login}/{ORACLE_REPO.split('/')[1]}"
-        base = gh_out(gh, "api", f"repos/{fork}", "--jq", ".default_branch")
+        base = gh_poll(gh, "api", f"repos/{fork}", "--jq", ".default_branch")
         if not BRANCH_RE.fullmatch(base):
             raise RuntimeError(f"unexpected default branch {base!r}")
-        head = gh_out(gh, "api", f"repos/{fork}/git/ref/heads/{base}", "--jq", ".object.sha")
-        gh_out(gh, "api", "-X", "POST", f"repos/{fork}/git/refs",
-               "-f", f"ref=refs/heads/{branch}", "-f", f"sha={head}")
-        payload = json.dumps({"message": f"oracle: bundle {sha[:12]}", "branch": branch,
-                              "content": base64.b64encode(text.encode()).decode()})
-        gh_out(gh, "api", "-X", "PUT", f"repos/{fork}/contents/{dest}", "--input", "-", stdin=payload)
+        have = gh_run(gh, "api", f"repos/{fork}/git/ref/heads/{branch}", "--jq", ".object.sha")
+        if not (have.returncode == 0 and have.stdout.strip()):
+            head = gh_poll(gh, "api", f"repos/{fork}/git/ref/heads/{base}", "--jq", ".object.sha")
+            made = gh_run(gh, "api", "-X", "POST", f"repos/{fork}/git/refs",
+                          "-f", f"ref=refs/heads/{branch}", "-f", f"sha={head}")
+            if made.returncode != 0 and "Reference already exists" not in made.stderr + made.stdout:
+                raise RuntimeError(f"gh api -X POST failed (exit {made.returncode}): {made.stderr.strip()[:300]}")
+        cur = gh_run(gh, "api", f"repos/{fork}/contents/{dest}?ref={branch}", "--jq", ".content")
+        on_branch = None
+        if cur.returncode == 0 and cur.stdout.strip():
+            try:
+                on_branch = base64.b64decode("".join(cur.stdout.split())).decode()
+            except ValueError:
+                on_branch = None
+        if on_branch != text:
+            payload = {"message": f"oracle: bundle {sha[:12]}", "branch": branch,
+                       "content": base64.b64encode(text.encode()).decode()}
+            if on_branch is not None:
+                payload["sha"] = gh_out(gh, "api", f"repos/{fork}/contents/{dest}?ref={branch}", "--jq", ".sha")
+            gh_out(gh, "api", "-X", "PUT", f"repos/{fork}/contents/{dest}", "--input", "-",
+                   stdin=json.dumps(payload))
+        url = gh_out(gh, "pr", "list", "--repo", ORACLE_REPO, "--head", branch, "--author", login,
+                     "--state", "open", "--json", "url", "--jq", ".[0].url // empty")
+        if url:
+            say(f"share: the pull request is already open: {url}")
+            return 0
         title = f"oracle: bundle {sha[:12]} {slug(b['hardware']['cpu']['model'])}"
         body = (f"k3d-gpu share bundle `{sha}` as `{dest}`.\n\n"
-                "CI runs oracle/validate.py (V1-V12) on it; a maintainer merges it into the leaderboard.\n")
+                "CI runs oracle/validate.py (V1-V12) on it; a maintainer merges it and regenerates "
+                "the leaderboard.\n")
         url = gh_out(gh, "pr", "create", "--repo", ORACLE_REPO, "--base", "main",
                      "--head", f"{login}:{branch}", "--title", title, "--body", body)
     except RuntimeError as e:
-        say(f"share: {e}; the bundle is still in {path}. The manual steps:")
+        say(f"share: {e}; the bundle is still in {path}. Rerun the same command to resume, or the manual steps:")
         for line in submission_steps(sha, path):
             say(line)
         return EXIT_NOT_SENT
@@ -270,8 +339,13 @@ def main(argv=None, stdin=None, stdout=None):
     except (P.ProjectionError, OSError, ValueError, KeyError) as e:
         say(f"share: {e}")
         return EXIT_USAGE
+    # CI reads the pins from the release tag (validate.release_pin). Use the
+    # same source when this checkout has the tag, so a checkout between
+    # releases sees the verdict CI will give; otherwise the running script's pins.
+    ver = b["tool"]["version"]
     pin = os.environ.get("K3D_GPU_AGENT_IMAGE_PIN")
-    pins = {b["tool"]["version"]: set(pin.split())} if pin and pin.split() else None
+    tagged = V.release_pin(ver, REPO) if not ver.startswith("git-") else None
+    pins = {ver: tagged} if tagged else ({ver: set(pin.split())} if pin and pin.split() else None)
     res = V.validate(b, local_identifiers=local_identifiers(), pins=pins)
     text = pretty(b)
     say(f"# k3d-gpu share: bundle built from {cap_path} and this host's report")

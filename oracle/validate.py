@@ -94,20 +94,81 @@ def strings(x, path="$"):
             yield from strings(v, f"{path}[{i}]")
 
 
+_VOCAB = None
+
+
+def schema_vocabulary():
+    """Every property name, enum value and const string of the bundle schema:
+    words the projection itself writes, so they identify no machine."""
+    global _VOCAB
+    if _VOCAB is None:
+        words = set()
+
+        def walk(x):
+            if isinstance(x, dict):
+                for k, v in x.items():
+                    if k == "properties" and isinstance(v, dict):
+                        words.update(str(n).lower() for n in v)
+                    elif k == "enum" and isinstance(v, list):
+                        words.update(str(e).lower() for e in v if isinstance(e, str))
+                    elif k == "const" and isinstance(v, str):
+                        words.add(v.lower())
+                    walk(v)
+            elif isinstance(x, list):
+                for v in x:
+                    walk(v)
+        walk(B.load_schema())
+        _VOCAB = frozenset(words)
+    return _VOCAB
+
+
+BRAND_PATH = "$.hardware.cpu.model"
+
+
+def _token_rx(ident):
+    # Bounded by anything that is not a letter, digit or underscore.
+    return re.compile(r"(?<![a-z0-9_])" + re.escape(ident) + r"(?![a-z0-9_])")
+
+
+def identifier_hits(b, local_identifiers=()):
+    """(reject, review) messages for this machine's identifiers in the bundle.
+
+    Keys are skipped (the schema owns them), an identifier that is a word of
+    the schema vocabulary is skipped, and an identifier matches on token
+    boundaries only. A plain word found only in the vendor CPU brand string
+    (`Core` for the login `core`) quarantines for review; anything else rejects."""
+    vocab = schema_vocabulary()
+    idents = sorted({s.strip().lower() for s in local_identifiers
+                     if isinstance(s, str) and len(s.strip()) >= 4} - vocab)
+    rxs = [(i, _token_rx(i)) for i in idents]
+    reject, review = [], []
+    for path, s in strings(b):
+        if path.endswith(".<key>") or path.endswith(SKIP_SUFFIXES):
+            continue
+        low = s.lower()
+        for ident, rx in rxs:
+            if not rx.search(low):
+                continue
+            if path == BRAND_PATH and re.fullmatch(r"[a-z]+", ident):
+                review.append(f"{path} (the CPU brand string) contains the word {ident!r}, "
+                              "which is also an identifier of this machine")
+            else:
+                reject.append(f"{path} contains an identifier of this machine")
+    return reject, review
+
+
+SKIP_SUFFIXES = ("content_sha256", "comparison_key", "weights_sha256", "revision")
+
+
 def canary_hits(b, local_identifiers=()):
     hits = []
-    locals_ = [s.lower() for s in local_identifiers if isinstance(s, str) and len(s) >= 4]
     for path, s in strings(b):
-        if path.endswith(("content_sha256", "comparison_key", "weights_sha256", "revision")):
+        if path.endswith(SKIP_SUFFIXES):
             continue
         for name, rx in CANARIES:
             if rx.search(s):
                 hits.append(f"{path} looks like {name}")
-        low = s.lower()
-        for ident in locals_:
-            if ident in low:
-                hits.append(f"{path} contains an identifier of this machine")
-    return hits
+    return hits + identifier_hits(b, local_identifiers)[0]
 
 
 def columns_ok(cols):
@@ -404,6 +465,8 @@ def validate(b, *, raw_size=None, trusted=False, known_hashes=(), local_identifi
     hits = canary_hits(b, local_identifiers)
     for h in hits[:20]:
         res.flag("reject", "V3", h)
+    for h in identifier_hits(b, local_identifiers)[1][:5]:
+        res.flag("quarantine", "V3", h)
     if b["provenance"]["source"] == "maintainer-lab" and not trusted:
         res.flag("reject", "V4", "maintainer-lab provenance is only accepted from the maintainers' lab")
     check_release(b, res, trusted, pins, repo)
