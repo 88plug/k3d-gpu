@@ -371,6 +371,31 @@ class S7WriteGate(unittest.TestCase):
                 r = self.session_flow([(h, None, None), (h, accept, forge)])
                 self.refused(r[1], "not issued by this server")
 
+    def test_expired_confirmation(self):
+        # A state this server signed is refused once its exp has passed. The
+        # server module runs in this process so the test can sign such a state.
+        import importlib.machinery
+        import importlib.util
+        import time
+        loader = importlib.machinery.SourceFileLoader("k3d_gpu_mcp", MCP)
+        mod = importlib.util.module_from_spec(importlib.util.spec_from_loader("k3d_gpu_mcp", loader))
+        saved = dict(os.environ)
+        os.environ.update(self.w.env)
+        before = writes(self.w)
+        try:
+            loader.exec_module(mod)
+            args = {"plan_hash": self.hash}
+            state = mod.sign_state({"tool": "apply", "args": mod.args_digest(args),
+                                    "exp": int(time.time()) - 1, "nonce": "expired"})
+            ctx = {"legacy": False, "caps": ELICIT, "requestState": state,
+                   "inputResponses": {"confirm_plan": {"action": "accept", "content": {"confirm": True}}}}
+            with self.assertRaisesRegex(mod.ToolError, "confirmation expired"):
+                mod.Apply()(args, ctx)
+        finally:
+            os.environ.clear()
+            os.environ.update(saved)
+        self.assertEqual(writes(self.w), before)
+
     def test_state_from_another_session(self):
         # A confirmation is bound to the server process that asked; each
         # session() call spawns a new one.
