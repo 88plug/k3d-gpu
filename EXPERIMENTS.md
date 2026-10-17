@@ -33,6 +33,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H17 | DRA mode can become the default (auto) Intel GPU path when the driver is baked in, without losing what the device-plugin default gives on an iGPU host. | On the same host, all three: (a) two pods that each claim the iGPU through their own ResourceClaim from one template are both `Running` at once, as two `gpu.intel.com/i915: 1` pods are under the plugin's sharing default (H15); (b) median pod latency (create to `Succeeded`, busybox `ls /dev/dri`, image preloaded) in DRA mode is at most 1.2x the plugin's; (c) median `k3d-gpu up` wall time in DRA mode is at most 1.2x the plugin's. | Arms D (`K3D_GPU_DRA=1`) and P (default), one fresh cluster per run, n=3 runs per arm, order D P P D D P; per run 1 timed `up` and 3 timed pods (reported as the run's median), then the 2-pod check read 20 s after creation. Per run: package W over `up` (RAPL), load (1 min), swap used, package throttle count delta. Outcome -> conclusion: (a) fails in any D run -> REFUTED, DRA stays opt-in (`K3D_GPU_DRA=0` default), since auto would take away H15's sharing; (a) holds but (b) or (c) fails -> REFUTED, DRA stays opt-in; all hold -> SUPPORTED, DRA may become auto in a later change; F of H16 fails -> H17 not evaluated (DRA mode broken). A timing arm whose spread (max - min) exceeds 30% of its median -> that part INCONCLUSIVE. Prediction before measuring: REFUTED by (a), because gpu-v0.12.1 publishes no shared counters or multi-allocation (docs/experimental.md). | REFUTED |
 | H18 | `k3d-gpu sandbox up` keeps agent sandboxes on the E-cores and inside a default-deny egress policy on k3d (kube-router), while public egress (PyPI) still works. | On an i9-13900T with tailscale (host `100.65.179.24`, sshd on `0.0.0.0:22`) and a cluster from this branch's image: (a) `sandbox up` exits 0 with the warm pool `readyReplicas` >= 1 and every sandbox pod's `Cpus_allowed_list` inside the E-cores (cpu_atom); (b) from a sandbox pod, TCP to `100.65.179.24:22` (CGNAT, tailscale) and to `192.168.1.108:22` (RFC1918, host LAN) both fail to connect within 3 s, and the policy's kube-router drop-log rule counts the packets, while from a control pod (same image, namespace `sbx-control`, no policy) both connect; (c) from a sandbox pod, DNS resolves `pypi.org`, TCP to `pypi.org:443` connects, and `pip install --user tomli_w==1.2.0` (not in the image) with the profile's `HOME=/tmp` exits 0 and imports from `/tmp/.local`. | Pre-registered 2026-10-17 before any H18 run (this commit, pushed). Image `docker build -t $TAG .` from `claude/agent-sandbox-ecores` rebased on origin/main 2b45f87. Cluster `k3dgpu-r2-sbx`, scratch `KUBECONFIG`, one fresh cluster per run, n=3 runs. Per run: timed `sandbox up` (wall, s), then the probes interleaved sandbox/control, each probe once per pod. Confounds per run: package W (RAPL, 5 s before), 1-min load, swap used, package throttle count delta. Outcome -> conclusion: every run meets (a), (b) and (c) -> SUPPORTED; a sandbox pod off the E-cores, a sandbox reaching either private address, or a control pod failing to connect (probe cannot see a block) -> REFUTED (control failure -> INCONCLUSIVE); pip failing while `pypi.org:443` connects -> REFUTED for (c), README must drop the pip claim. Prediction: SUPPORTED. Amended before the counted runs, after pilot run 0 (log below): kube-router REJECTs (`icmp-port-unreachable`, so `Connection refused` in ~0.1 s) rather than dropping, so (b) asks for no connect plus the drop-log counter instead of a timeout; `six` ships in the image, so (c) installs `tomli_w`. Runner: `bench/sandbox_round.sh`. | SUPPORTED |
 | H7 | OVMS's decode lead over EAT's vLLM CPU engine in the H2 run comes from weight precision, not from the engine. | On the i9-13900T 16-CPU P-core balloon, one checkpoint served by OVMS 2026.4.1 and by vLLM CPU v0.24.0 at matched weight precision decodes within 15% between the two engines, and the two land within 15% of each other in effective weight bandwidth (weight bytes x decode tok/s). | Pre-registered 2026-10-16, before any run. One checkpoint and revision (`Qwen/Qwen3-4B-Instruct-2507`, revision recorded) for both engines: OVMS loads an OpenVINO IR exported from it with 16-bit weights, vLLM loads it in bf16. A second arm at int4 in both engines runs only if vLLM v0.24.0 CPU is first shown to load an int4 build of the same checkpoint. vLLM runs with EAT's chart defaults and once with `--enforce-eager` dropped, to split engine from config. H2 workloads and energy method, arms interleaved ABBA, 5 rounds. Refuted if the decode gap at matched precision is 15% or more. | PENDING |
+| H22 | Cross-engine speculative decoding (draft on the iGPU, target on the P-cores) raises single-stream decode tok/s over both the target alone and same-engine (P-core) drafting. | On an i9-13900T, OVMS 2026.4.1, `OpenVINO/Qwen3-4B-int4-ov` target on the 16-CPU P-core balloon, `OpenVINO/Qwen3-0.6B-int4-ov` Fast Draft with `draft_device: "GPU"` (UHD 770), `num_assistant_tokens` 5: median paired decode tok/s C/B >= 1.05 and C/A >= 1.10. Written before measuring (2026-10-17T05:08-07:00): REFUTED expected, C/B ~ 0.68 (0.55-0.85), C/A ~ 0.82 (0.65-1.0), because GenAI 2026.4.1 runs draft then verify serially (no overlap) and the UHD 770 runs a 0.6B draft slower than the P-cores. | Pre-registered 2026-10-17 before any H22 run ([H22 pre-registration](#h22-pre-registration-i9-13900t)). `bench/hetero-spec/probe.sh`: one OVMS pod, 5 graphs, per-request Latin-square interleave, n=8 rounds, `bench/hetero-spec/analyze.py` verdict. Refuted if C/B <= 0.95 in >= 7/8 rounds or C/A < 1.0. | PENDING |
 
 ## Falsification log
 
@@ -577,6 +578,79 @@ TAG=k3d-gpu:r2-sandbox && docker build -t "$TAG" .
 export IMAGE=$TAG OUT=$(mktemp -d)
 for n in 1 2 3; do bench/sandbox_round.sh "$n"; sleep 10; done
 # TARGETS="ip:port ..." overrides the default tailscale0:22, LAN:22, pypi.org:443
+### H22 pre-registration (i9-13900T)
+
+Written 2026-10-17T05:08-07:00, before any H22 measurement. Nothing below is a result.
+
+Prior art exists, so no world-first claim: OVMS `draft_device` and OpenVINO GenAI
+draft-on-another-device [provenance:P222] [provenance:P229], Dovetail (draft on GPU,
+target on CPU) and DuoDecoding [provenance:P221], Lunar Lake NPU-draft slowdown
+[provenance:P222], llama.cpp `--device-draft` [provenance:P224]. Only a measured
+delta may be claimed. The narrow part searched without a hit is the measurement-gated,
+auto-adapting k8s placement of the draft (no prior art found, search log
+[provenance:P220]); it backs no performance number.
+
+**Arms** (all in one OVMS 2026.4.1 process, one pod, P-core balloon 16 CPUs plus
+`gpu.intel.com/i915: 1`):
+
+| Arm | Graph | device | draft | draft_device | Role |
+|---|---|---|---|---|---|
+| A | `a-4b-cpu` | CPU | - | - | baseline (target alone) |
+| B | `b-spec-cpu` | CPU | 0.6B | CPU | tuned rival (same-engine draft) |
+| C | `c-spec-igpu` | CPU | 0.6B | GPU | treatment (H22) |
+| DP | `dp-06b-cpu` | CPU | - | - | measures t_d(P) |
+| DG | `dg-06b-gpu` | GPU | - | - | measures t_d(iGPU) |
+
+Every graph: `enable_prefix_caching: false`, `cache_size: 2`, no `plugin_config`.
+
+**Load:** 8 fixed prompts (3 tool-call JSON, 3 code edit, 2 chat; sha256 recorded),
+greedy (`temperature 0`; Fast Draft forces greedy anyway), `max_tokens 256`,
+`ignore_eos`, streamed, concurrency 1. Decode tok/s = (tokens - 1) / (t_last - t_first).
+
+**Schedule (self-limits to 20 min under the lock):** cluster `k3dgpu-i-hetero-spec`
+(scratch KUBECONFIG) -> server Ready with 5 graphs (<= 6 min, else ABORT) -> P0 gate ->
+one warm-up per graph -> 8 rounds; round r uses prompt r for every arm, arm order
+rotated by r over (A,B,C,DP,DG) (Latin square) -> cluster deleted. Hard stop at 18:00;
+partial rounds are reported as partial.
+
+**n = 8:** the smallest n where a unanimous paired sign test gives two-sided
+p = 0.0078 < 0.01; 8 rounds x ~62 s fit the budget. Pairing by round cancels drift.
+
+**P0 gate (before timing):** (1) OVMS log loads both graphs with a draft; (2) the i915
+render-engine busy ns of the OVMS pid (`/proc/<pid>/fdinfo/*` `drm-engine-render`,
+sudo read) is ~0 during an A request and > 0 during DG and C requests; C with ~0 GPU
+busy is a silent CPU fallback and makes arm C invalid; (3) a GPU draft compile failure
+stops the run (verdict row "P0 fail").
+
+**Confounds:** per request the probe records throttle-count deltas, package temp,
+iGPU `rps_act_freq_mhz`, swap si/so, 1-min load, RAPL package energy (reads only, no
+sysfs writes). Calibration: A's median must sit within 15.7 tok/s +-15% (H6), else
+INCONCLUSIVE. The verdict must hold with flagged rounds (throttle or swap) dropped.
+
+**Guardrails (reported, not the verdict):** greedy output identity of B and C vs A;
+TTFT on the long prompt C/A <= 1.20; J/token per arm.
+
+**Derived numbers:** t_t = 1000/A, t_d(P) = 1000/DP, t_d(G) = 1000/DG. Primary
+statistic R = median paired C/B; 95% CI by bootstrap over rounds (10k, seed 22);
+confidence = 1 - exact two-sided sign-test p of the paired C/B vs 1.0.
+
+**Outcome -> conclusion (priors written before measuring):**
+
+| Outcome | Prior | Conclusion | Action |
+|---|---|---|---|
+| R >= 1.05, >= 7/8 rounds C > B, median C/A >= 1.10, P0 + calibration pass | 0.05 | SUPPORTED (measured delta only) | `K3D_GPU_AGENT_DRAFT=auto` may pick the iGPU when a DG-vs-DP probe finds t_d(G) < t_d(P) |
+| 0.95 < R < 1.05, or rounds split (< 7/8 one way) | 0.13 | INCONCLUSIVE (no gain) | draft stays on the target device |
+| R <= 0.95 with >= 7/8 rounds C < B, or median C/A < 1.0 | 0.62 | REFUTED | auto rule stays: draft device = target device |
+| P0 fail: GPU draft does not load, or no GPU busy in C | 0.15 | REFUTED as shipped (mechanism untested) | file upstream issue with the log |
+| A outside 15.7 +-15%, or > 3/8 rounds flagged | 0.05 | INCONCLUSIVE (setup too noisy) | re-run once in a quieter window |
+
+`bench/hetero-spec/analyze.py` applies this table mechanically to the probe's JSONL.
+
+**Shipped default while PENDING:** `K3D_GPU_AGENT_DRAFT` is `off` (Fast Draft forces
+greedy decoding, so it changes model behaviour). `auto` puts the draft on the target's
+own device: in the serial engine a cross-engine draft wins only if it is faster there,
+and no host measurement says so yet.
+
 ### Wave 1 host (H1-H4, i9-13900T, 2026-10-16)
 
 H1-H4 ran on one shared, live host. These confounds apply to every wave-1 entry
