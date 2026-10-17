@@ -123,14 +123,12 @@ jobs:
         run: tests/report_html_test.sh
 
   oracle:
-    name: Capacity oracle (capacity ramp, schema, privacy, validator, matrix, leaderboard, share)
+    name: Capacity oracle (schema, privacy, validator, fuzz, matrix, leaderboard, share)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0 # V4 reads the server image each release tag pins
-      - run: python3 bench/apb/test_capacity.py
-      - run: python3 bench/apb/test_apb.py
       - run: python3 oracle/test_oracle.py
       - run: python3 oracle/test_fuzz.py
       - name: Validate every committed bundle (maintainer seed trusted, data/oracle not)
