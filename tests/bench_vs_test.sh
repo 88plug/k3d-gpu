@@ -118,7 +118,7 @@ keep_cache_keeps_volume() {
 dry_k3d_url() {
     dry --vs ollama --k3d-url http://127.0.0.1:9/v3 --k3d-model m | grep -q -- '--arm k3d-gpu=http://127.0.0.1:9/v3,m '
 }
-help_lists_bench() { "${K}" help | grep -q 'bench --vs ollama|llamacpp|ovms'; }
+help_lists_bench() { "${K}" help | grep 'bench --vs ollama|llamacpp|ovms' >/dev/null; }
 
 check "dry-run ollama: pinned image, cpuset, /v1 arm" dry_ollama
 check "dry-run llamacpp: Q4_K_M GGUF, default id and out dir" dry_llamacpp
