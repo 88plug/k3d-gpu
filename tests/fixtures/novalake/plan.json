@@ -1,0 +1,53 @@
+{
+  "auth": "loopback-key",
+  "bind": "127.0.0.1",
+  "cell": null,
+  "considered": [
+    {
+      "cell": "raptorlake-s.cpu-pcores.ovms.qwen3-4b-int4",
+      "eligible": false,
+      "excluded": "no target on this host matches",
+      "reasons": [
+        "no k3d-gpu report run recorded",
+        "tool-calling eval not run"
+      ],
+      "status": "grey",
+      "target": null
+    },
+    {
+      "cell": "raptorlake-s.uhd770.ovms.qwen3-4b-int4",
+      "eligible": false,
+      "excluded": "no target on this host matches",
+      "reasons": [
+        "no k3d-gpu report run recorded",
+        "tool-calling eval not run"
+      ],
+      "status": "grey",
+      "target": null
+    }
+  ],
+  "decision": "unmeasured",
+  "engine": null,
+  "explain": [
+    "facts: sha256:41b9760644175d0c963e63d0ab17a28e70787c2d59ced2185f1168e468a74b17",
+    "targets:",
+    "  cpu: unknown CPU, P-cores 0-3 (4), E-cores 4-15 (12); usable",
+    "matrix: 2 cells, 0 on a target of this host",
+    "  no measured cell for these targets",
+    "decision:",
+    "  unmeasured, run `k3d-gpu prove` on this box",
+    "  bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)"
+  ],
+  "fingerprint": "sha256:41b9760644175d0c963e63d0ab17a28e70787c2d59ced2185f1168e468a74b17",
+  "fixes": [],
+  "message": "unmeasured, run `k3d-gpu prove` on this box",
+  "model": null,
+  "overrides": {},
+  "placement": null,
+  "port": null,
+  "schema": "k3d-gpu.plan/v1",
+  "summary": [
+    "unmeasured, run `k3d-gpu prove` on this box",
+    "bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)"
+  ]
+}

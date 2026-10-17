@@ -1,0 +1,33 @@
+==> Checking docker...
+  ok: docker running
+==> Checking k3d...
+  ok: k3d version v0.0.0-stub
+==> Checking kubectl...
+  ok
+==> Detected accelerators: npu hybrid
+==> Checking Intel NPU (Core Ultra)...
+  ok: Intel NPU Panther Lake (0xb03e) bound to intel_vpu
+  ok: intel/vpu/vpu_50xx_* firmware present (/lib/firmware/intel/vpu/vpu_50xx_v0.0.bin)
+  warn: /lib/firmware/updates/intel/vpu/vpu_50xx_v1.bin (intel-fw-npu) is not loaded: kernel 6.14.0-33-generic
+        never requests _v1 (6.16+ does). Boot a 6.16+ kernel, or point the name it loads at it:
+        run:    sudo ln -s vpu_50xx_v1.bin /lib/firmware/updates/intel/vpu/vpu_50xx_v0.0.bin && sudo modprobe -r intel_vpu && sudo modprobe intel_vpu
+        revert: sudo rm /lib/firmware/updates/intel/vpu/vpu_50xx_v0.0.bin && sudo modprobe -r intel_vpu && sudo modprobe intel_vpu
+  note: no build date readable in /lib/firmware/intel/vpu/vpu_50xx_v0.0.bin; cannot compare it with openvino/model_server:2026.4.1-gpu's NPU driver v1.35.0
+  ok: up labels the node k3d-gpu.io/npu.gen=50xx
+  warn: /dev/accel/accel0 is group <gid>, mode 644: only root pods can open it. Add the udev rule
+        SUBSYSTEM=="accel", GROUP="render", MODE="0660" (systemd 254+ ships it in 50-udev-default.rules)
+  note: workload images need the NPU user-space driver (github.com/intel/linux-npu-driver) and Level Zero
+==> Intel CPU built-in accelerators...
+  ok: CPU ISA: AVXVNNI — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
+  ok: hybrid CPU: P-cores 0-3, E-cores 4-11, LP E-cores 12-15 — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient|lowpower|ecluster|pcore-physical|latency
+  ok: E-core clusters (shared L2): 4-7 8-11 — k3d-gpu.io/cores=ecluster gives a pod 4 E-cores of one cluster
+  ok: physical P-cores (one thread per core): 0-3 — k3d-gpu.io/cores=pcore-physical and latency show pods one thread per core
+==> Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...
+  ok: dra available (auto)
+  ok: image-volume available (auto)
+  ok: npu-turbo available (auto)
+
+==> All checks passed.
+exit=0
+--- calls
+kubectl --context k3d-gpu --request-timeout=5s get nodes -o name

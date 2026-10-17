@@ -206,7 +206,7 @@ for base in lib usr/lib; do
         continue
     fi
     for fw in "${SRC}/${base}"/firmware/i915/*_guc_* "${SRC}/${base}"/firmware/xe/*_guc_* \
-              "${SRC}/${base}"/firmware/intel/vpu/vpu_*; do
+              "${SRC}/${base}"/firmware/intel/vpu/vpu_* "${SRC}/${base}"/firmware/updates/intel/vpu/vpu_*; do
         [ -e "${fw}" ] || continue
         mkdir -p "$(dirname "${OUT}/${fw#"${SRC}"/}")"
         : > "${OUT}/${fw#"${SRC}"/}"

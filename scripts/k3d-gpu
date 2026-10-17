@@ -887,6 +887,23 @@ npu_platform() {
     esac
 }
 
+# Device ids the pinned NPU plugin serves: npuIDs in cmd/npu_plugin/npu_plugin.go
+# at the intel/intel-npu-plugin tag share/intel-npu-plugin.yml pins. The plugin
+# matches an accel node by vendor and device id alone and logs "Unknown device ID"
+# for any other id, advertising no npu.intel.com/accel for it. Upstream also lists
+# 0x7e4c, which pci.ids names the Meteor Lake GNA; intel_vpu never binds it, so
+# detection never sees it. Bump NPU_PLUGIN_TAG and the list together.
+NPU_PLUGIN_TAG="0.37.1"
+NPU_PLUGIN_IDS="0x7e4c 0x643e 0xad1d 0x7d1d 0xb03e 0xfd3e 0xd71d"
+npu_plugin_serves() { [[ " ${NPU_PLUGIN_IDS} " == *" $1 "* ]]; }
+
+# True when the pinned plugin serves at least one detected NPU.
+npu_plugin_serves_any() {
+    local id
+    for id in ${NPU_IDS[@]+"${NPU_IDS[@]}"}; do npu_plugin_serves "${id}" && return 0; done
+    return 1
+}
+
 kernel_release() { cat "${SYSROOT}/proc/sys/kernel/osrelease" 2>/dev/null || uname -r; }
 
 # kernel_lt <major.minor>: true when the running kernel is older.
@@ -976,9 +993,29 @@ NPU_UMD_IMAGE="openvino/model_server:2026.4.1-gpu"
 NPU_UMD_DRIVER="v1.35.0"
 NPU_UMD_FW_DATE="20260630"
 
+# npu_fw_names <generation>: the names intel_vpu requests on the running kernel, in
+# order (fw_names[] in drivers/accel/ivpu/ivpu_fw.c, read at tags v6.5, v6.8, v6.12,
+# v6.15, v6.16 and v6.19). 6.16+ asks for intel/vpu/vpu_<gen>_v1.bin first and 60xx
+# has no _v0.0 name; older kernels never ask for _v1 and try vpu_<gen>.bin in the
+# firmware root first; 6.8 and older also try mtl_vpu.bin for 37xx; before 6.6 only
+# Meteor Lake's mtl_vpu names exist.
+npu_fw_names() {
+    if ! kernel_lt 6.16; then
+        echo "intel/vpu/vpu_$1_v1.bin"
+        [ "$1" = 60xx ] || echo "intel/vpu/vpu_$1_v0.0.bin"
+    elif ! kernel_lt 6.6; then
+        echo "vpu_$1.bin"
+        if [ "$1" = 37xx ] && kernel_lt 6.9; then echo "mtl_vpu.bin"; fi
+        echo "intel/vpu/vpu_$1_v0.0.bin"
+    else
+        echo "mtl_vpu.bin"
+        echo "intel/vpu/mtl_vpu_v0.0.bin"
+    fi
+}
+
 # npu_fw_file <generation>: the firmware file intel_vpu loads, in the kernel's order.
 # Names: intel_vpu's firmware= parameter alone when set (it reads "(null)" when not),
-# else the list in drivers/accel/ivpu/ivpu_fw.c (v1 first). For each name the
+# else npu_fw_names. For each name the
 # firmware loader (drivers/base/firmware_loader/main.c) tries no suffix, then .zst,
 # then .xz, each across fw_path[]: firmware_class.path, /lib/firmware/updates/<release>,
 # /lib/firmware/updates, /lib/firmware/<release>, /lib/firmware. No /usr/lib.
@@ -990,7 +1027,8 @@ npu_fw_file() {
     if [ -n "${param}" ] && [ "${param}" != "(null)" ]; then
         fw_names=("${param}")
     else
-        fw_names=("intel/vpu/vpu_$1_v1.bin" "intel/vpu/vpu_$1_v0.0.bin")
+        fw_names=()
+        while read -r name; do fw_names+=("${name}"); done < <(npu_fw_names "$1")
     fi
     for name in "${fw_names[@]}"; do
         for sfx in "" .zst .xz; do
@@ -1299,13 +1337,33 @@ doctor_npu() {
         if [ -n "${mink}" ] && kernel_lt "${mink}"; then
             echo "  ${YLW}warn${RST}: ${name} NPU needs kernel ${mink}+ (running $(kernel_release))"
         fi
+        if ! npu_plugin_serves "${id}"; then
+            echo "  ${YLW}warn${RST}: intel-npu-plugin ${NPU_PLUGIN_TAG} does not list ${id}: it logs 'Unknown device ID' and advertises"
+            echo "        no npu.intel.com/accel for it, so up does not label the node for it. Fix: a newer intel/intel-npu-plugin"
+        fi
         [ -n "${gen}" ] || continue
         fw=$(npu_fw_file "${gen}")
-        if [ -z "${fw}" ]; then
-            echo "  ${YLW}warn${RST}: intel/vpu/vpu_${gen}_* firmware not found (install linux-firmware or intel-fw-npu)"
+        if [ -z "${fw}" ] && [ "${gen}" = 60xx ]; then
+            # Neither linux-firmware (tag 20260916 WHENCE) nor linux-npu-driver v1.38.0
+            # (firmware/bin) ships vpu_60xx_v1.bin.
+            echo "  ${YLW}warn${RST}: no published NPU firmware for 60xx yet (intel/vpu/vpu_60xx_v1.bin is in neither"
+            echo "        linux-firmware nor linux-npu-driver); the NPU cannot load until Intel publishes it"
+            continue
+        elif [ -z "${fw}" ]; then
+            echo "  ${YLW}warn${RST}: intel/vpu/vpu_${gen}_* firmware not found; kernel $(kernel_release) loads $(npu_fw_names "${gen}" | paste -sd, -) (install linux-firmware or intel-fw-npu)"
             continue
         fi
         echo "  ok: intel/vpu/vpu_${gen}_* firmware present (${fw#"${SYSROOT}"})"
+        # intel-fw-npu installs updates/intel/vpu/vpu_<gen>_v1.bin, a name only 6.16+
+        # requests; older kernels load another file (for 50xx the package has no
+        # _v0.0 link at all, linux-npu-driver v1.38.0 firmware/bin).
+        if kernel_lt 6.16 && [ "${fw#"${SYSROOT}"/lib/firmware/updates/}" = "${fw}" ] \
+            && [ -f "${SYSROOT}/lib/firmware/updates/intel/vpu/vpu_${gen}_v1.bin" ]; then
+            echo "  ${YLW}warn${RST}: /lib/firmware/updates/intel/vpu/vpu_${gen}_v1.bin (intel-fw-npu) is not loaded: kernel $(kernel_release)"
+            echo "        never requests _v1 (6.16+ does). Boot a 6.16+ kernel, or point the name it loads at it:"
+            echo "        run:    sudo ln -s vpu_${gen}_v1.bin /lib/firmware/updates/intel/vpu/vpu_${gen}_v0.0.bin && sudo modprobe -r intel_vpu && sudo modprobe intel_vpu"
+            echo "        revert: sudo rm /lib/firmware/updates/intel/vpu/vpu_${gen}_v0.0.bin && sudo modprobe -r intel_vpu && sudo modprobe intel_vpu"
+        fi
         date=$(npu_fw_date "${fw}")
         if [ -z "${date}" ]; then
             echo "  note: no build date readable in ${fw#"${SYSROOT}"}; cannot compare it with ${NPU_UMD_IMAGE}'s NPU driver ${NPU_UMD_DRIVER}"
@@ -1402,7 +1460,19 @@ doctor_intel_unbound() {
         id=$(cat "${dev}/device" 2>/dev/null) || continue
         if [ -n "$(npu_platform "${id}")" ]; then
             IFS='|' read -r name mink gen <<< "$(npu_platform "${id}")"
-            lines+="  ${YLW}warn${RST}: Intel NPU ${name} (${id}) has no driver — load intel_vpu (kernel ${mink}+): sudo modprobe intel_vpu"$'\n'
+            # First cause that holds: kernel too old for the id, module not loaded,
+            # firmware missing (intel_vpu's probe fails without it).
+            if kernel_lt "${mink}"; then
+                lines+="  ${YLW}warn${RST}: Intel NPU ${name} (${id}) has no driver — kernel $(kernel_release) predates its intel_vpu support; it needs kernel ${mink}+"$'\n'
+            elif [ ! -d "${SYSROOT}/sys/module/intel_vpu" ]; then
+                lines+="  ${YLW}warn${RST}: Intel NPU ${name} (${id}) has no driver — load intel_vpu (kernel ${mink}+): sudo modprobe intel_vpu (revert: sudo modprobe -r intel_vpu)"$'\n'
+            elif [ -z "$(npu_fw_file "${gen}")" ] && [ "${gen}" = 60xx ]; then
+                lines+="  ${YLW}warn${RST}: Intel NPU ${name} (${id}) has no driver — intel_vpu is loaded but no published NPU firmware for 60xx exists yet (vpu_60xx_v1.bin is in neither linux-firmware nor linux-npu-driver)"$'\n'
+            elif [ -z "$(npu_fw_file "${gen}")" ]; then
+                lines+="  ${YLW}warn${RST}: Intel NPU ${name} (${id}) has no driver — intel_vpu is loaded but found no ${gen} firmware ($(npu_fw_names "${gen}" | paste -sd, -)), so its probe failed"$'\n'
+            else
+                lines+="  ${YLW}warn${RST}: Intel NPU ${name} (${id}) has no driver — intel_vpu is loaded and ${gen} firmware is present; see: sudo dmesg | grep intel_vpu"$'\n'
+            fi
         elif IFS='|' read -r name mink fw <<< "$(intel_gpu_platform "${id}")" && [ "${fw#i915/}" != "${fw}" ]; then
             # A GuC firmware under i915/ means i915 is the default driver for the part.
             lines+="  ${YLW}warn${RST}: Intel ${name} (${id}) has no driver — load i915 (kernel ${mink}+): sudo modprobe i915"$'\n'
@@ -3200,7 +3270,11 @@ cmd_up() {
     if is_active gaudi; then
         create_args+=(--k3s-node-label="habana.ai/gaudi.present=true@server:*;agent:*")
     fi
-    if is_active npu; then
+    # A node whose NPUs the pinned plugin does not serve gets no NPU label, so the
+    # plugin DaemonSet does not run where it would advertise nothing.
+    if is_active npu && [ "${#NPU_IDS[@]}" -gt 0 ] && ! npu_plugin_serves_any; then
+        warn "Intel NPU $(printf '%s ' "${NPU_IDS[@]}")is not served by intel-npu-plugin ${NPU_PLUGIN_TAG} — the node gets no NPU label (see 'k3d-gpu doctor')"
+    elif is_active npu; then
         create_args+=(--k3s-node-label="intel.feature.node.kubernetes.io/npu=true@server:*;agent:*")
         # Pods get /dev/accel/accelN with the host's numeric group; publish it so
         # non-root workloads can set supplementalGroups without reading the host.

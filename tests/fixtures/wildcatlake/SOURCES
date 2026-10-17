@@ -1,0 +1,14 @@
+Platform: Wildcat Lake NPU (50xx IP) on intel_vpu under kernel 6.17,
+linux-firmware installed. NPU-only fixture.
+
+Sources:
+- 0x8086 0xfd3e NPU: drivers/accel/ivpu/ivpu_drv.h (PCI_DEVICE_ID_WCL, 50xx IP,
+  first in v6.17); listed in intel-device-plugins v0.37.1 cmd/npu_plugin/npu_plugin.go.
+- Firmware names on 6.16+: fw_names[] in drivers/accel/ivpu/ivpu_fw.c at tag v6.16
+  (intel/vpu/vpu_50xx_v1.bin, then _v0.0.bin).
+- intel/vpu/vpu_50xx_v1.bin and its vpu_50xx_v0.0.bin link: linux-firmware tag
+  20260916 WHENCE.
+
+Derived from tests/fixtures/pantherlake with the iGPU and IAA removed. Not from
+hardware: the CPU tree (pantherlake's, not Wildcat Lake's), the kernel release
+string, the BDF.
