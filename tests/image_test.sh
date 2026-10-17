@@ -133,6 +133,9 @@ up_says "up on an existing cluster from an unversioned :latest names it and stop
     "warn.*node image $(ere "${REPO}:latest") \(unversioned.*uses $(ere "${PINNED}").*k3d-gpu down && k3d-gpu up.*already exists" \
     "!k3d cluster create|docker pull" \
     STUB_NODE="${REPO}:latest ${OLD_ID} " STUB_LOCAL_IMAGES="${PINNED}=${NEW_ID}"
+up_says "the Ubuntu base's version label is not taken for a release" \
+    "warn.*node image $(ere "${REPO}:latest") \\(unversioned" "!k3d cluster create" \
+    STUB_NODE="${REPO}:latest ${OLD_ID} 26.04"
 up_says "up on an existing cluster from an older release names that release" \
     "warn.*node image $(ere "${REPO}:0.0.9") \(release 0\.0\.9\).*uses $(ere "${PINNED}")" "!k3d cluster create" \
     STUB_NODE="${REPO}:0.0.9 ${OLD_ID} 0.0.9"

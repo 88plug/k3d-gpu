@@ -3022,7 +3022,7 @@ ensure_image() {
 
 # node_image: "<ref> <image id> [<release>]" of cluster ${CLUSTER}'s server node
 # container; fails when there is none. <release> is the image's
-# org.opencontainers.image.version label, set by versioned release builds only.
+# org.opencontainers.image.version label: X.Y.Z from a versioned release build.
 node_image() {
     local out
     out=$(docker container inspect -f '{{.Config.Image}} {{.Image}} {{with .Config.Labels}}{{index . "org.opencontainers.image.version"}}{{end}}' \
@@ -3039,8 +3039,9 @@ node_image_check() {
     local ref="" id="" rel="" cur what
     read -r ref id rel <<< "$(node_image || true)"
     [ -n "${ref}" ] || return 0
+    # Unversioned images inherit the Ubuntu base's label (26.04, 24.04).
     what="node image ${ref} (release ${rel})"
-    [ -n "${rel}" ] || what="node image ${ref} (unversioned: built before versioned releases)"
+    [[ "${rel}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || what="node image ${ref} (unversioned: built before versioned releases)"
     cur=$(docker image inspect -f '{{.Id}}' "${IMAGE}" 2>/dev/null || true)
     if [ "${ref}" != "${IMAGE}" ]; then
         echo "  ${YLW}warn${RST}: ${what}; this launcher (${VERSION}) uses ${IMAGE} — recreate to switch: k3d-gpu down && k3d-gpu up"

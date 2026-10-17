@@ -1,6 +1,6 @@
 ==> Accelerators: nvidia intel hybrid
 ==> Experimental features (auto): dra image-volume
-==> Creating k3d cluster 'gpu' with image cryptoandcoffee/k3d-gpu:latest...
+==> Creating k3d cluster 'gpu' with image cryptoandcoffee/k3d-gpu:<version>...
 ==> Waiting for nodes Ready...
 ==> nvidia device plugin auto-deployed by k3s.
 ==> intel device plugin auto-deployed by k3s.
@@ -10,7 +10,7 @@
 exit=0
 --- calls
 k3d cluster create gpu
-  --image=cryptoandcoffee/k3d-gpu:latest
+  --image=cryptoandcoffee/k3d-gpu:<version>
   --no-lb
   --k3s-arg=--disable=traefik@server:0
   --gpus=all

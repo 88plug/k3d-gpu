@@ -24,6 +24,9 @@ TESTS=$(cd "$(dirname "$0")" && pwd)
 REPO=$(dirname "${TESTS}")
 FIXTURES="${TESTS}/fixtures"
 K3D_GPU="${REPO}/scripts/k3d-gpu"
+# The default node image is tagged with the launcher version, which every
+# release bumps; transcripts record it as <version>.
+VERSION=$(sed -n 's/^VERSION="\(.*\)".*/\1/p' "${K3D_GPU}")
 UPDATE=0
 
 platforms() {
@@ -123,7 +126,8 @@ transcript() {
             cat "${run}/calls"
         fi
     } | sed -e 's/\x1b\[[0-9;]*m//g' -e "s#${fx}/sysroot#<sysroot>#g" -e "s#${REPO}#<repo>#g" \
-        -e 's/npu-render-gid=[0-9]*/npu-render-gid=<gid>/g' -e 's/ is group [0-9]*, mode / is group <gid>, mode /g'
+        -e 's/npu-render-gid=[0-9]*/npu-render-gid=<gid>/g' -e 's/ is group [0-9]*, mode / is group <gid>, mode /g' \
+        -e "s#k3d-gpu:${VERSION//./\\.}\([^0-9.]\|\.[^0-9]\|\.\?$\)#k3d-gpu:<version>\1#g"
 }
 
 check() {
