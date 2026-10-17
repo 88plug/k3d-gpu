@@ -153,6 +153,55 @@ check "rewrite sets the sha256" grep -qx "  sha256 \"$(printf '%064d' 0 | tr 0 a
 check "rewrite changes only url and sha256" \
     test "$(diff "${FORMULA}" "${work}/k3d-gpu.rb" | grep -c '^[<>]')" = 4
 
+# packaging/install.sh pins one release. packages.yml's install-pin job moves it to each new
+# release once its packages are published, so the pin is the launcher's VERSION or, while that
+# release is still building, the release before it (auto-release.yml bumps the patch by one).
+INSTALLER="${ROOT}/packaging/install.sh"
+pin=$(sed -n 's/^K3D_GPU_VERSION=//p' "${INSTALLER}")
+check "install.sh K3D_GPU_VERSION is x.y.z" grep -Eqx '[0-9]+\.[0-9]+\.[0-9]+' <<<"${pin}"
+for v in K3D_GPU_DEB_SHA256 K3D_GPU_RPM_SHA256; do
+    check "install.sh ${v} is a sha256" grep -Eqx '[0-9a-f]{64}' <<<"$(sed -n "s/^${v}=//p" "${INSTALLER}")"
+done
+patch=${launcher_version##*.}
+if [ "${patch}" -gt 0 ]; then
+    prev_release="${launcher_version%.*}.$((patch - 1))"
+else
+    prev_release=$(git -C "${ROOT}" tag -l 'aur-v*' --sort=-v:refname 2>/dev/null \
+        | sed 's/^aur-v//' | grep -vx "${launcher_version}" | head -n1)
+    prev_release=${prev_release:-${launcher_version}}
+fi
+check "install.sh pin ${pin} is not older than ${prev_release} (launcher ${launcher_version})" \
+    test "$(printf '%s\n%s\n' "${pin}" "${prev_release}" | sort -V | head -n1)" = "${prev_release}"
+check "packages.yml pins install.sh after the packages are published" \
+    grep -Pzq -- '  install-pin:\n.*\n    needs: deb-rpm\n    if: \$\{\{ !inputs\.dry_run \}\}\n' "${PKGS}"
+check "packages.yml reads install.sh sha256s from the release's SHA256SUMS" \
+    grep -q 'gh release download "aur-v${VER}" --dir "${SUMS_DIR}"' "${PKGS}"
+check "install.sh commit skips the release trigger" \
+    grep -q 'git commit -m "release: install.sh k3d-gpu ${VER} \[skip release\]"' "${PKGS}"
+
+# Run the install.sh rewrite from packages.yml on a copy, fed a SHA256SUMS like deb-rpm writes.
+cp "${INSTALLER}" "${work}/install.sh"
+deb_sha=$(printf '%064d' 0 | tr 0 d) rpm_sha=$(printf '%064d' 0 | tr 0 e)
+printf '%s  k3d-gpu-9.8.7-1.noarch.rpm\n%s  k3d-gpu_9.8.7-1_all.deb\n%s  k3d-gpu_9.8.6-1_all.deb\n' \
+    "${rpm_sha}" "${deb_sha}" "$(printf '%064d' 0 | tr 0 f)" > "${work}/SHA256SUMS"
+pin_rewrite=$(sed -n '/# install-pin-rewrite-begin/,/# install-pin-rewrite-end/p' "${PKGS}" | sed '1d;$d')
+check "packages.yml has an install.sh rewrite block" test -n "${pin_rewrite}"
+(
+    cd "${work}" && VER=9.8.7 SUMS=SHA256SUMS INSTALLER=install.sh bash -euc "${pin_rewrite}"
+) >/dev/null 2>&1
+check "install rewrite sets the version" grep -qx 'K3D_GPU_VERSION=9.8.7' "${work}/install.sh"
+check "install rewrite sets the .deb sha256" grep -qx "K3D_GPU_DEB_SHA256=${deb_sha}" "${work}/install.sh"
+check "install rewrite sets the .rpm sha256" grep -qx "K3D_GPU_RPM_SHA256=${rpm_sha}" "${work}/install.sh"
+check "install rewrite changes only those three lines" \
+    test "$(diff "${INSTALLER}" "${work}/install.sh" | grep -c '^[<>]')" = 6
+# A SHA256SUMS without the version's packages leaves install.sh alone and fails the step.
+cp "${INSTALLER}" "${work}/install.sh"
+(
+    cd "${work}" && VER=9.8.8 SUMS=SHA256SUMS INSTALLER=install.sh bash -euc "${pin_rewrite}"
+) >/dev/null 2>&1
+check "install rewrite fails when SHA256SUMS lacks the version" test $? -ne 0
+check "install rewrite leaves install.sh alone on failure" cmp -s "${INSTALLER}" "${work}/install.sh"
+
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]
