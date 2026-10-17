@@ -1384,17 +1384,32 @@ vendor_daemonset() {  # prints: namespace name manifest
     esac
 }
 
+# tool_hint docker|k3d|kubectl: how to install it on this distro (doctor's fail line).
+# k3d on the AUR is rancher-k3d-bin; k3d-git there is the K-3D 3D modeller.
+INSTALLER_URL="https://raw.githubusercontent.com/88plug/k3d-gpu/main/packaging/install.sh"
+tool_hint() {
+    local d; d=$(hs_distro)
+    case "$1:${d}" in
+        docker:arch|docker:manjaro) echo "sudo pacman -S docker && sudo systemctl enable --now docker" ;;
+        docker:*)    echo "https://docs.docker.com/engine/install/ (WSL2: Docker Desktop with WSL integration)" ;;
+        k3d:arch|k3d:manjaro) echo "yay -S rancher-k3d-bin" ;;
+        k3d:*)       echo "packaging/install.sh puts a pinned k3d in ~/.local/bin: ${INSTALLER_URL}" ;;
+        kubectl:arch|kubectl:manjaro) echo "sudo pacman -S kubectl" ;;
+        kubectl:*)   echo "packaging/install.sh puts a pinned kubectl in ~/.local/bin: ${INSTALLER_URL}" ;;
+    esac
+}
+
 doctor_common() {
     info "Checking docker..."
     if command -v docker >/dev/null 2>&1; then
         if docker info >/dev/null 2>&1; then
             echo "  ok: docker running"
         else
-            echo "  ${RED}fail${RST}: docker installed but daemon unreachable (sudo systemctl start docker)"
+            echo "  ${RED}fail${RST}: docker installed but daemon unreachable (sudo systemctl enable --now docker; as non-root also: sudo usermod -aG docker \$USER, then log in again)"
             FAIL=1
         fi
     else
-        echo "  ${RED}fail${RST}: docker not installed (sudo pacman -S docker)"
+        echo "  ${RED}fail${RST}: docker not installed ($(tool_hint docker))"
         FAIL=1
     fi
 
@@ -1402,12 +1417,12 @@ doctor_common() {
     if command -v k3d >/dev/null 2>&1; then
         echo "  ok: $(k3d version | head -1)"
     else
-        echo "  ${RED}fail${RST}: k3d not installed (yay -S k3d-git)"
+        echo "  ${RED}fail${RST}: k3d not installed ($(tool_hint k3d))"
         FAIL=1
     fi
 
     info "Checking kubectl..."
-    command -v kubectl >/dev/null 2>&1 && echo "  ok" || { echo "  ${RED}fail${RST}: kubectl not installed (sudo pacman -S kubectl)"; FAIL=1; }
+    command -v kubectl >/dev/null 2>&1 && echo "  ok" || { echo "  ${RED}fail${RST}: kubectl not installed ($(tool_hint kubectl))"; FAIL=1; }
 }
 
 doctor_nvidia() {
