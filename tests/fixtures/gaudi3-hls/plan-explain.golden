@@ -1,0 +1,13 @@
+facts: sha256:2e1a8fe354f8af37f1ca3dfe808b6d019f2d0f7ad866fa42c93c4444b3bdf59a
+targets:
+  cpu: unknown CPU, AMX; usable
+  hpu: habana, on habanalabs; usable
+matrix: 2 cells, 0 on a target of this host
+  no measured cell for these targets
+decision:
+  unmeasured, run `k3d-gpu prove` on this box
+  bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)
+exit=0
+--- calls
+kubectl config get-contexts -o name
+kubectl --context k3d-gpu --request-timeout=5s get nodes -o name

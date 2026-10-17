@@ -1,0 +1,53 @@
+{
+  "auth": "loopback-key",
+  "bind": "127.0.0.1",
+  "cell": null,
+  "considered": [
+    {
+      "cell": "raptorlake-s.cpu-pcores.ovms.qwen3-4b-int4",
+      "eligible": false,
+      "excluded": "no target on this host matches",
+      "reasons": [
+        "no k3d-gpu report run recorded",
+        "tool-calling eval not run"
+      ],
+      "status": "grey",
+      "target": null
+    },
+    {
+      "cell": "raptorlake-s.uhd770.ovms.qwen3-4b-int4",
+      "eligible": false,
+      "excluded": "no target on this host matches",
+      "reasons": [
+        "no k3d-gpu report run recorded",
+        "tool-calling eval not run"
+      ],
+      "status": "grey",
+      "target": null
+    }
+  ],
+  "decision": "unmeasured",
+  "engine": null,
+  "explain": [
+    "facts: sha256:2e1a8fe354f8af37f1ca3dfe808b6d019f2d0f7ad866fa42c93c4444b3bdf59a",
+    "targets:",
+    "  cpu: unknown CPU, AMX; usable",
+    "  hpu: habana; not usable: habanalabs driver not loaded",
+    "matrix: 2 cells, 0 on a target of this host",
+    "  no measured cell for these targets",
+    "decision:",
+    "  unmeasured, run `k3d-gpu prove` on this box",
+    "  bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)"
+  ],
+  "fingerprint": "sha256:2e1a8fe354f8af37f1ca3dfe808b6d019f2d0f7ad866fa42c93c4444b3bdf59a",
+  "message": "unmeasured, run `k3d-gpu prove` on this box",
+  "model": null,
+  "overrides": {},
+  "placement": null,
+  "port": null,
+  "schema": "k3d-gpu.plan/v1",
+  "summary": [
+    "unmeasured, run `k3d-gpu prove` on this box",
+    "bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)"
+  ]
+}

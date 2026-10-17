@@ -43,6 +43,8 @@ k3d-gpu doctor          # preflight: accelerators, kernel/firmware, docker, runt
 k3d-gpu host-setup      # check host drivers/userspace, print pinned install commands (--apply runs them)
 k3d-gpu doctor --perf   # read-only host tuning advisor for inference (add --model-gb N)
 k3d-gpu report          # what the host and the cluster have, per engine (text + JSON + HTML)
+k3d-gpu facts           # detect + doctor + doctor --perf + report as one facts/v1 JSON document
+k3d-gpu plan --explain  # engine, model and placement from measured cells, and why
 k3d-gpu up              # create the cluster (device plugins auto-deploy), verify each accelerator > 0
 k3d-gpu test            # per accelerator: nvidia-smi pod / device-node listing pod
 k3d-gpu logs            # tail the k3s server container logs
@@ -923,6 +925,36 @@ context is current, so the report cannot describe the wrong cluster. GuC/HuC
 state lives in debugfs, which only root can read: without root the report says
 `status: null` with a note rather than guessing. `energy_uj` is root-only too.
 The document carries `"schema": "k3d-gpu.report/v1"`.
+
+### Facts and plan (`facts`, `plan`)
+
+`k3d-gpu facts` puts what `detect`, `doctor`, `doctor --perf` and `report` read
+into one JSON document, `facts/v1` (schema: `console/facts.v1.schema.json`), and
+writes it to `${XDG_STATE_HOME:-~/.local/state}/k3d-gpu/facts.json`.
+`facts --json`, `detect --json` and `doctor --json` print the same document. It
+holds the report's `host`, `detected` and `cluster` members unchanged, the node
+labels `up` sets, one `targets[]` entry per place an engine can run (CPU, each
+Intel/NVIDIA GPU, NPU, Gaudi) with whether it is usable and why not, every
+doctor and doctor --perf finding (level, text, evidence, apply and revert), and
+a `fingerprint` of the hardware alone. Nothing in it comes from the clock, so
+the same host gives the same bytes; `tests/sim_matrix_test.sh` checks that for
+every fixture (`tests/fixtures/*/facts.json`).
+
+`k3d-gpu plan` feeds facts/v1 and the matrix of measured cells
+(`console/matrix.v1.json`) to `plan()` (`console/plan.py`), a pure function
+that returns the engine, model, placement (P-core balloon, CPU or device
+resource), port and auth mode. It picks only a **green** cell: one with a
+`k3d-gpu report` run, a passing tool-calling eval and the engine image this
+release pins. Community cells are amber, everything else grey, and neither is
+ever picked or interpolated. With no green cell for the box it prints
+``unmeasured, run `k3d-gpu prove` on this box``. Today no cell is green: the two
+cells from the [ledger:H6] run have no report run and no tool-calling eval yet,
+so every host plans unmeasured. `plan --explain` prints each target, each cell
+that applies with its status and reasons, and the decision; `plan --json` is
+the same as `k3d-gpu.plan/v1`. `--engine`, `--device`, `--model`, `--bind` and
+`--port` override; a non-loopback `--bind` turns auth to `oidc`. `--facts FILE`
+plans from a saved document instead of this host. Both need `python3` (standard
+library only).
 
 ### Measurement harness (`bench/`)
 

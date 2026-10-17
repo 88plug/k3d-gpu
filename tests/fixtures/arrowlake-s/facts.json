@@ -1,0 +1,455 @@
+{
+  "capacity": [],
+  "cluster": {
+    "context": "k3d-gpu",
+    "name": "gpu",
+    "nodes": [],
+    "present": false,
+    "reason": "no kubeconfig context k3d-gpu (cluster not created, or KUBECONFIG points elsewhere)"
+  },
+  "detected": [
+    {
+      "resources": [
+        "gpu.intel.com/i915"
+      ],
+      "vendor": "intel"
+    },
+    {
+      "resources": [
+        "npu.intel.com/accel"
+      ],
+      "vendor": "npu"
+    },
+    {
+      "resources": [
+        "k3d-gpu.io/hybrid-cpu=true"
+      ],
+      "vendor": "hybrid"
+    }
+  ],
+  "doctor": {
+    "exit": 0,
+    "findings": [
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking docker...",
+        "text": "docker running",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking k3d...",
+        "text": "k3d version v0.0.0-stub",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking kubectl...",
+        "text": "",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...",
+        "text": "Intel Arrow Lake-S (0x7d67) bound to i915",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...",
+        "text": "i915/mtl_guc_* firmware present",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...",
+        "text": "card0 media engines: vcs0 (hevc sfc), vcs1 (hevc sfc), vecs0 (sfc)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...",
+        "text": "up labels the node gpu.intel.com/xmx=false gpu.intel.com/media-vcs=2 gpu.intel.com/media-vecs=1",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking Intel NPU (Core Ultra)...",
+        "text": "Intel NPU Arrow Lake (0xad1d) bound to intel_vpu",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking Intel NPU (Core Ultra)...",
+        "text": "intel/vpu/vpu_37xx_* firmware present (/lib/firmware/intel/vpu/vpu_37xx_v1.bin)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "note",
+        "revert": null,
+        "section": "Checking Intel NPU (Core Ultra)...",
+        "text": "no build date readable in /lib/firmware/intel/vpu/vpu_37xx_v1.bin; cannot compare it with openvino/model_server:2026.4.1-gpu's NPU driver v1.35.0",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking Intel NPU (Core Ultra)...",
+        "text": "up labels the node k3d-gpu.io/npu.gen=37xx",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "warn",
+        "revert": null,
+        "section": "Checking Intel NPU (Core Ultra)...",
+        "text": "/dev/accel/accel0 is group <gid>, mode 644: only root pods can open it. Add the udev rule SUBSYSTEM==\"accel\", GROUP=\"render\", MODE=\"0660\" (systemd 254+ ships it in 50-udev-default.rules)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "note",
+        "revert": null,
+        "section": "Checking Intel NPU (Core Ultra)...",
+        "text": "workload images need the NPU user-space driver (github.com/intel/linux-npu-driver) and Level Zero",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "CPU ISA: AVXVNNI — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "hybrid CPU: P-cores 0-7, E-cores 8-23 — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient|lowpower|ecluster|pcore-physical|latency",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...",
+        "text": "dra available (auto)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...",
+        "text": "image-volume available (auto)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...",
+        "text": "npu-turbo available (auto)",
+        "why": null
+      }
+    ],
+    "sections": [
+      {
+        "good": null,
+        "name": "Checking docker...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Checking k3d...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Checking kubectl...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Detected accelerators: intel npu hybrid",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Checking Intel NPU (Core Ultra)...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Intel CPU built-in accelerators...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "All checks passed.",
+        "src": null
+      }
+    ]
+  },
+  "fingerprint": "sha256:7669f5120935dab945747a53cac2023bca6f2000c4d65a7269642a91a15d04e8",
+  "host": {
+    "cpu": {
+      "amx": [],
+      "avx512": false,
+      "avx_vnni": true,
+      "e_core_cpus": 16,
+      "e_cores": "8-23",
+      "hybrid": true,
+      "isa": [
+        "avx2",
+        "avx_vnni"
+      ],
+      "logical_cpus": null,
+      "model": null,
+      "online": null,
+      "p_core_cpus": 8,
+      "p_cores": "0-7"
+    },
+    "dsa": {
+      "devices": 0,
+      "work_queues": 0
+    },
+    "gaudi": {
+      "accel_nodes": 0,
+      "driver_loaded": false,
+      "pci_devices": 0
+    },
+    "iaa": {
+      "devices": 0,
+      "work_queues": 0
+    },
+    "intel_gpus": [
+      {
+        "card": "card0",
+        "device_id": "0x7d67",
+        "driver": "i915",
+        "engines": [
+          {
+            "capabilities": [],
+            "name": "rcs0"
+          },
+          {
+            "capabilities": [
+              "hevc",
+              "sfc"
+            ],
+            "name": "vcs0"
+          },
+          {
+            "capabilities": [
+              "hevc",
+              "sfc"
+            ],
+            "name": "vcs1"
+          },
+          {
+            "capabilities": [
+              "sfc"
+            ],
+            "name": "vecs0"
+          }
+        ],
+        "guc": {
+          "note": "debugfs not readable (run as root) or no guc",
+          "status": null
+        },
+        "huc": {
+          "note": "debugfs not readable (run as root) or no huc",
+          "status": null
+        },
+        "pci": "0000:00:02.0",
+        "platform": "Arrow Lake-S",
+        "render_node": "renderD128"
+      }
+    ],
+    "kernel": "6.12.48-1-lts",
+    "memory": {
+      "available_kib": null,
+      "total_kib": null
+    },
+    "npus": [
+      {
+        "accel": "accel0",
+        "device_id": "0xad1d",
+        "driver": "intel_vpu",
+        "pci": "0000:00:0b.0",
+        "platform": "Arrow Lake"
+      }
+    ],
+    "nvidia": {
+      "driver": null,
+      "gpus": []
+    },
+    "qat": [],
+    "rapl": []
+  },
+  "hostname": "",
+  "labels": {
+    "feature.node.kubernetes.io/cpu-cpuid.AVXVNNI": "true",
+    "gpu.intel.com/media-vcs": "2",
+    "gpu.intel.com/media-vecs": "1",
+    "gpu.intel.com/xmx": "false",
+    "k3d-gpu.io/hybrid-cpu": "true",
+    "k3d-gpu.io/npu.gen": "37xx"
+  },
+  "perf": {
+    "exit": 0,
+    "findings": [
+      {
+        "apply": null,
+        "from": "/sys/devices/system/cpu/cpu0/cpufreq/",
+        "level": "info",
+        "revert": null,
+        "section": "CPU frequency (driver none)",
+        "text": "no cpufreq policy exposed (VM or cpufreq disabled) — nothing to tune here",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/proc/cpuinfo",
+        "level": "info",
+        "revert": null,
+        "section": "Isolation for sandboxed agents",
+        "text": "no VT-x (vmx flag) exposed: no microVM sandboxes (VT-x off in BIOS, or a VM without nested virtualization)",
+        "why": null
+      }
+    ],
+    "sections": [
+      {
+        "good": "cores ramp to full turbo the moment a request arrives: EPP performance or balance_performance, turbo on, no frequency caps — token generation is a latency-bound loop and every ramp-up shows in time-to-first-token",
+        "name": "CPU frequency (driver none)",
+        "src": "https://docs.kernel.org/admin-guide/pm/intel_pstate.html#energy-vs-performance-hints, https://docs.kernel.org/admin-guide/pm/cpufreq.html"
+      },
+      {
+        "good": "/dev/kvm usable for microVM sandboxes, each GPU alone in its IOMMU group, split-lock detection on, CET known, GPU observation streams limited to CAP_PERFMON",
+        "name": "Isolation for sandboxed agents",
+        "src": "https://docs.kernel.org/driver-api/vfio.html (IOMMU groups), https://docs.kernel.org/admin-guide/kernel-parameters.html (split_lock_detect), https://docs.kernel.org/admin-guide/sysctl/kernel.html (split_lock_mitigate), kernel source drivers/gpu/drm/i915/i915_perf.c and drivers/gpu/drm/xe/xe_observation.c (paranoid sysctls), Intel SDM vol. 4 335592-093 (IA32_S_CET 6A2H, IA32_TME_ACTIVATE 982H)"
+      },
+      {
+        "good": null,
+        "name": "0 suggestion(s). Read-only: nothing on this host was changed.",
+        "src": null
+      }
+    ]
+  },
+  "release": {
+    "k3d_gpu_version": "<version>",
+    "pins": {
+      "ovms": "openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58"
+    }
+  },
+  "schema": "k3d-gpu.facts/v1",
+  "targets": [
+    {
+      "cpu": {
+        "amx": false,
+        "e_count": 16,
+        "e_cpus": "8-23",
+        "family_model": "6:198",
+        "hybrid": true,
+        "logical_cpus": null,
+        "model_name": null,
+        "numa_nodes": 0,
+        "p_count": 8,
+        "p_cpus": "0-7"
+      },
+      "device_id": null,
+      "driver": null,
+      "generation": null,
+      "id": "cpu",
+      "kind": "cpu",
+      "pci": null,
+      "platform": null,
+      "reason": null,
+      "resource": null,
+      "usable": true,
+      "vendor": null,
+      "xmx": null
+    },
+    {
+      "cpu": null,
+      "device_id": "0x7d67",
+      "driver": "i915",
+      "generation": null,
+      "id": "gpu:0000:00:02.0",
+      "kind": "gpu",
+      "pci": "0000:00:02.0",
+      "platform": "Arrow Lake-S",
+      "reason": null,
+      "resource": "gpu.intel.com/i915",
+      "usable": true,
+      "vendor": "intel",
+      "xmx": false
+    },
+    {
+      "cpu": null,
+      "device_id": "0xad1d",
+      "driver": "intel_vpu",
+      "generation": "37xx",
+      "id": "npu:0000:00:0b.0",
+      "kind": "npu",
+      "pci": "0000:00:0b.0",
+      "platform": "Arrow Lake",
+      "reason": null,
+      "resource": "npu.intel.com/accel",
+      "usable": true,
+      "vendor": "intel",
+      "xmx": null
+    }
+  ]
+}

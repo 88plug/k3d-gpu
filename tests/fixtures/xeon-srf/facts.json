@@ -1,0 +1,290 @@
+{
+  "capacity": [],
+  "cluster": {
+    "context": "k3d-gpu",
+    "name": "gpu",
+    "nodes": [],
+    "present": false,
+    "reason": "no kubeconfig context k3d-gpu (cluster not created, or KUBECONFIG points elsewhere)"
+  },
+  "detected": [
+    {
+      "resources": [
+        "dsa.intel.com/*"
+      ],
+      "vendor": "dsa"
+    },
+    {
+      "resources": [
+        "iaa.intel.com/*"
+      ],
+      "vendor": "iaa"
+    }
+  ],
+  "doctor": {
+    "exit": 0,
+    "findings": [
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking docker...",
+        "text": "docker running",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking k3d...",
+        "text": "k3d version v0.0.0-stub",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking kubectl...",
+        "text": "",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "CPU ISA: AVXVNNI — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "DSA: 2 device(s), 1 user work queue(s) — deployed by 'k3d-gpu up' (intel-dsa-plugin)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "IAA: 2 device(s), 1 user work queue(s) — deployed by 'k3d-gpu up' (intel-iaa-plugin)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "info",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "RDT allocation (rdt_a: cat_l3 cdp_l3 mba) — resctrl classes are available but left off: the balloons policy ships control.rdt.enable: false because enabling it rewrites the host's /sys/fs/resctrl. To opt in, mount resctrl on the host (mount -t resctrl resctrl /sys/fs/resctrl) and set control.rdt.enable: true in nri-balloons.yml; usePodQoSAsDefaultClass then gives BestEffort/Burstable/Guaranteed pods 33%/66%/100% of the L3",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "info",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "per socket: socket 0: DSA 2, IAA 2, QAT 0 (ARK default for 6780E: DSA 2, IAA 2, QAT 2 per socket)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "warn",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "socket 0: QAT 0 below the ARK default for 6780E — the BIOS may have the device disabled; check its accelerator settings",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...",
+        "text": "dra available (auto)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...",
+        "text": "image-volume available (auto)",
+        "why": null
+      }
+    ],
+    "sections": [
+      {
+        "good": null,
+        "name": "Checking docker...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Checking k3d...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Checking kubectl...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Detected accelerators: dsa iaa",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Intel CPU built-in accelerators...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "All checks passed.",
+        "src": null
+      }
+    ]
+  },
+  "fingerprint": "sha256:14bb456496ba3661edb47f47a9859c9479855bc5b48081c46a60e3eafa45b4b8",
+  "host": {
+    "cpu": {
+      "amx": [],
+      "avx512": false,
+      "avx_vnni": true,
+      "e_core_cpus": null,
+      "e_cores": null,
+      "hybrid": false,
+      "isa": [
+        "avx2",
+        "avx_vnni"
+      ],
+      "logical_cpus": null,
+      "model": "Intel(R) Xeon(R) 6780E",
+      "online": null,
+      "p_core_cpus": null,
+      "p_cores": null
+    },
+    "dsa": {
+      "devices": 2,
+      "work_queues": 1
+    },
+    "gaudi": {
+      "accel_nodes": 0,
+      "driver_loaded": false,
+      "pci_devices": 0
+    },
+    "iaa": {
+      "devices": 2,
+      "work_queues": 1
+    },
+    "intel_gpus": [],
+    "kernel": "6.18.1-061801-generic",
+    "memory": {
+      "available_kib": null,
+      "total_kib": null
+    },
+    "npus": [],
+    "nvidia": {
+      "driver": null,
+      "gpus": []
+    },
+    "qat": [],
+    "rapl": []
+  },
+  "hostname": "",
+  "labels": {
+    "feature.node.kubernetes.io/cpu-cpuid.AVXVNNI": "true"
+  },
+  "perf": {
+    "exit": 0,
+    "findings": [
+      {
+        "apply": null,
+        "from": "/sys/devices/system/cpu/cpu0/cpufreq/",
+        "level": "info",
+        "revert": null,
+        "section": "CPU frequency (driver none)",
+        "text": "no cpufreq policy exposed (VM or cpufreq disabled) — nothing to tune here",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/proc/cpuinfo",
+        "level": "info",
+        "revert": null,
+        "section": "Isolation for sandboxed agents",
+        "text": "no VT-x (vmx flag) exposed: no microVM sandboxes (VT-x off in BIOS, or a VM without nested virtualization)",
+        "why": null
+      }
+    ],
+    "sections": [
+      {
+        "good": "cores ramp to full turbo the moment a request arrives: EPP performance or balance_performance, turbo on, no frequency caps — token generation is a latency-bound loop and every ramp-up shows in time-to-first-token",
+        "name": "CPU frequency (driver none)",
+        "src": "https://docs.kernel.org/admin-guide/pm/intel_pstate.html#energy-vs-performance-hints, https://docs.kernel.org/admin-guide/pm/cpufreq.html"
+      },
+      {
+        "good": "/dev/kvm usable for microVM sandboxes, each GPU alone in its IOMMU group, split-lock detection on, CET known, GPU observation streams limited to CAP_PERFMON",
+        "name": "Isolation for sandboxed agents",
+        "src": "https://docs.kernel.org/driver-api/vfio.html (IOMMU groups), https://docs.kernel.org/admin-guide/kernel-parameters.html (split_lock_detect), https://docs.kernel.org/admin-guide/sysctl/kernel.html (split_lock_mitigate), kernel source drivers/gpu/drm/i915/i915_perf.c and drivers/gpu/drm/xe/xe_observation.c (paranoid sysctls), Intel SDM vol. 4 335592-093 (IA32_S_CET 6A2H, IA32_TME_ACTIVATE 982H)"
+      },
+      {
+        "good": null,
+        "name": "0 suggestion(s). Read-only: nothing on this host was changed.",
+        "src": null
+      }
+    ]
+  },
+  "release": {
+    "k3d_gpu_version": "<version>",
+    "pins": {
+      "ovms": "openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58"
+    }
+  },
+  "schema": "k3d-gpu.facts/v1",
+  "targets": [
+    {
+      "cpu": {
+        "amx": false,
+        "e_count": null,
+        "e_cpus": null,
+        "family_model": null,
+        "hybrid": false,
+        "logical_cpus": null,
+        "model_name": "Intel(R) Xeon(R) 6780E",
+        "numa_nodes": 1,
+        "p_count": null,
+        "p_cpus": null
+      },
+      "device_id": null,
+      "driver": null,
+      "generation": null,
+      "id": "cpu",
+      "kind": "cpu",
+      "pci": null,
+      "platform": null,
+      "reason": null,
+      "resource": null,
+      "usable": true,
+      "vendor": null,
+      "xmx": null
+    }
+  ]
+}

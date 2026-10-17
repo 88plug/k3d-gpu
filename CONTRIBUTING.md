@@ -93,8 +93,14 @@ Include relevant details:
   Lake, Arrow Lake, Battlemage, Sapphire Rapids DSA/IAA/QAT/AMX, Raptor Lake +
   NVIDIA — and diffs the output, exit code, `k3d cluster create` arguments and
   kubectl calls against each platform's `*.golden` files. CI runs one job per platform.
+  It also runs `plan --explain`, and checks `facts --json` and `plan --json`
+  byte for byte (twice) against each platform's `facts.json` and `plan.json`.
 - When a change is meant to alter that output, regenerate and review the goldens:
   `tests/sim_matrix_test.sh --update && git diff tests/fixtures`.
+- `tests/console_test.sh` covers `console/` (facts/v1, the matrix and `plan()`):
+  unit and property tests, schema validation of every golden, a cross-check of the
+  stdlib schema validator against `jsonschema`, and `plan` goldens for green cells
+  in `tests/console/` (`tests/console_test.sh --update` rewrites those).
 - Have hardware the matrix lacks? Capture it (reads ids, driver bindings, device
   node names, CPU flags, kernel release and firmware file names only):
   ```bash

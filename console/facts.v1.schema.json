@@ -1,0 +1,511 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/88plug/k3d-gpu/console/facts.v1.schema.json",
+  "title": "k3d-gpu facts/v1",
+  "description": "One host's facts: what detect, doctor, doctor --perf and report read, the targets plan() can place work on, and capacity rows. $defs also holds the matrix (k3d-gpu.matrix/v1) and plan (k3d-gpu.plan/v1) documents, so every console surface reads one schema file.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "fingerprint", "release", "hostname", "host", "detected", "labels", "targets", "doctor", "perf", "cluster", "capacity"],
+  "properties": {
+    "schema": {"const": "k3d-gpu.facts/v1"},
+    "fingerprint": {"$ref": "#/$defs/fingerprint", "description": "sha256 of the hardware identity: CPU vendor, model, family:model and CPU count, and every accelerator's kind, vendor, PCI id and address. Kernel, driver and firmware state are left out, so it names the box, not its software."},
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["k3d_gpu_version", "pins"],
+      "properties": {
+        "k3d_gpu_version": {"type": "string"},
+        "pins": {"type": "object", "description": "engine name -> the image this release runs it from (digest pinned unless overridden)", "additionalProperties": {"type": "string"}}
+      }
+    },
+    "hostname": {"type": "string"},
+    "host": {"$ref": "#/$defs/host"},
+    "detected": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["vendor", "resources"],
+        "properties": {
+          "vendor": {"enum": ["nvidia", "intel", "npu", "gaudi", "dsa", "iaa", "qat", "amx", "hybrid", "numa"]},
+          "resources": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "labels": {"type": "object", "description": "node labels `up` sets from what it detects (key -> value)", "additionalProperties": {"type": "string"}},
+    "targets": {"type": "array", "items": {"$ref": "#/$defs/target"}},
+    "doctor": {"$ref": "#/$defs/transcript"},
+    "perf": {"$ref": "#/$defs/transcript"},
+    "cluster": {"$ref": "#/$defs/cluster"},
+    "capacity": {"type": "array", "items": {"$ref": "#/$defs/capacity_row"}}
+  },
+  "$defs": {
+    "fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "str_or_null": {"type": ["string", "null"]},
+    "int_or_null": {"type": ["integer", "null"], "minimum": 0},
+    "date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "strings": {"type": "array", "items": {"type": "string"}},
+    "string_map": {"type": "object", "additionalProperties": {"type": "string"}},
+
+    "host": {
+      "type": "object",
+      "description": "The host member of `k3d-gpu report --json` (report/v1), unchanged.",
+      "additionalProperties": false,
+      "required": ["kernel", "cpu", "memory", "intel_gpus", "npus", "gaudi", "dsa", "iaa", "qat", "nvidia", "rapl"],
+      "properties": {
+        "kernel": {"type": "string"},
+        "cpu": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["model", "online", "logical_cpus", "hybrid", "p_cores", "e_cores", "p_core_cpus", "e_core_cpus", "isa", "avx_vnni", "avx512", "amx"],
+          "properties": {
+            "model": {"$ref": "#/$defs/str_or_null"},
+            "online": {"$ref": "#/$defs/str_or_null"},
+            "logical_cpus": {"$ref": "#/$defs/int_or_null"},
+            "hybrid": {"type": "boolean"},
+            "p_cores": {"$ref": "#/$defs/str_or_null"},
+            "e_cores": {"$ref": "#/$defs/str_or_null"},
+            "p_core_cpus": {"$ref": "#/$defs/int_or_null"},
+            "e_core_cpus": {"$ref": "#/$defs/int_or_null"},
+            "isa": {"$ref": "#/$defs/strings"},
+            "avx_vnni": {"type": "boolean"},
+            "avx512": {"type": "boolean"},
+            "amx": {"$ref": "#/$defs/strings"}
+          }
+        },
+        "memory": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["total_kib", "available_kib"],
+          "properties": {
+            "total_kib": {"$ref": "#/$defs/int_or_null"},
+            "available_kib": {"$ref": "#/$defs/int_or_null"}
+          }
+        },
+        "intel_gpus": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["card", "render_node", "pci", "device_id", "platform", "driver", "engines", "guc", "huc"],
+            "properties": {
+              "card": {"type": "string"},
+              "render_node": {"$ref": "#/$defs/str_or_null"},
+              "pci": {"type": "string"},
+              "device_id": {"$ref": "#/$defs/str_or_null"},
+              "platform": {"$ref": "#/$defs/str_or_null"},
+              "driver": {"$ref": "#/$defs/str_or_null"},
+              "engines": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["name", "capabilities"],
+                  "properties": {"name": {"type": "string"}, "capabilities": {"$ref": "#/$defs/strings"}}
+                }
+              },
+              "guc": {"$ref": "#/$defs/uc"},
+              "huc": {"$ref": "#/$defs/uc"}
+            }
+          }
+        },
+        "npus": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["accel", "pci", "device_id", "driver", "platform"],
+            "properties": {
+              "accel": {"type": "string"},
+              "pci": {"type": "string"},
+              "device_id": {"$ref": "#/$defs/str_or_null"},
+              "driver": {"const": "intel_vpu"},
+              "platform": {"$ref": "#/$defs/str_or_null"}
+            }
+          }
+        },
+        "gaudi": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["accel_nodes", "pci_devices", "driver_loaded"],
+          "properties": {
+            "accel_nodes": {"type": "integer", "minimum": 0},
+            "pci_devices": {"type": "integer", "minimum": 0},
+            "driver_loaded": {"type": "boolean"}
+          }
+        },
+        "dsa": {"$ref": "#/$defs/idxd"},
+        "iaa": {"$ref": "#/$defs/idxd"},
+        "qat": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["pci", "device_id", "driver", "vfs"],
+            "properties": {
+              "pci": {"type": "string"},
+              "device_id": {"type": "string"},
+              "driver": {"$ref": "#/$defs/str_or_null"},
+              "vfs": {"type": "integer", "minimum": 0}
+            }
+          }
+        },
+        "nvidia": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["driver", "gpus"],
+          "properties": {
+            "driver": {"$ref": "#/$defs/str_or_null"},
+            "gpus": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["pci", "model", "device_id", "minor"],
+                "properties": {
+                  "pci": {"type": "string"},
+                  "model": {"$ref": "#/$defs/str_or_null"},
+                  "device_id": {"$ref": "#/$defs/str_or_null"},
+                  "minor": {"$ref": "#/$defs/int_or_null"}
+                }
+              }
+            }
+          }
+        },
+        "rapl": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["zone", "name", "max_energy_range_uj", "energy_readable"],
+            "properties": {
+              "zone": {"type": "string"},
+              "name": {"type": "string"},
+              "max_energy_range_uj": {"$ref": "#/$defs/int_or_null"},
+              "energy_readable": {"type": "boolean"}
+            }
+          }
+        }
+      }
+    },
+    "uc": {
+      "description": "GuC or HuC state from debugfs; status null when debugfs was not readable.",
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "firmware", "version"],
+          "properties": {"status": {"type": "string"}, "firmware": {"$ref": "#/$defs/str_or_null"}, "version": {"$ref": "#/$defs/str_or_null"}}
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "note"],
+          "properties": {"status": {"type": "null"}, "note": {"type": "string"}}
+        }
+      ]
+    },
+    "idxd": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["devices", "work_queues"],
+      "properties": {"devices": {"type": "integer", "minimum": 0}, "work_queues": {"type": "integer", "minimum": 0}}
+    },
+
+    "target": {
+      "type": "object",
+      "description": "Something plan() can place an engine on. Every target has every key; the ones that do not apply are null.",
+      "additionalProperties": false,
+      "required": ["id", "kind", "vendor", "device_id", "pci", "platform", "driver", "resource", "xmx", "generation", "usable", "reason", "cpu"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^(cpu|hpu|gpu:nvidia|(gpu|npu):[0-9a-fA-F:.]+)$"},
+        "kind": {"enum": ["cpu", "gpu", "npu", "hpu"]},
+        "vendor": {"$ref": "#/$defs/str_or_null"},
+        "device_id": {"$ref": "#/$defs/str_or_null"},
+        "pci": {"$ref": "#/$defs/str_or_null"},
+        "platform": {"$ref": "#/$defs/str_or_null"},
+        "driver": {"$ref": "#/$defs/str_or_null"},
+        "resource": {"$ref": "#/$defs/str_or_null", "description": "Kubernetes extended resource the device plugin advertises; null for the CPU"},
+        "xmx": {"type": ["boolean", "null"], "description": "Intel GPU has XMX matrix engines; null when unknown or not an Intel GPU"},
+        "generation": {"$ref": "#/$defs/str_or_null", "description": "Intel NPU firmware generation (37xx, 40xx, ...)"},
+        "usable": {"type": "boolean"},
+        "reason": {"$ref": "#/$defs/str_or_null", "description": "why the target is not usable; null when it is"},
+        "cpu": {
+          "anyOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["model_name", "family_model", "logical_cpus", "hybrid", "p_cpus", "e_cpus", "p_count", "e_count", "amx", "numa_nodes"],
+              "properties": {
+                "model_name": {"$ref": "#/$defs/str_or_null"},
+                "family_model": {"type": ["string", "null"], "pattern": "^[0-9]+:[0-9]+$"},
+                "logical_cpus": {"$ref": "#/$defs/int_or_null"},
+                "hybrid": {"type": "boolean"},
+                "p_cpus": {"$ref": "#/$defs/str_or_null"},
+                "e_cpus": {"$ref": "#/$defs/str_or_null"},
+                "p_count": {"$ref": "#/$defs/int_or_null"},
+                "e_count": {"$ref": "#/$defs/int_or_null"},
+                "amx": {"type": "boolean"},
+                "numa_nodes": {"type": "integer", "minimum": 0}
+              }
+            }
+          ]
+        }
+      }
+    },
+
+    "transcript": {
+      "type": "object",
+      "description": "A doctor or doctor --perf run: its exit code, its sections and one finding per ok/info/note/warn/fail line (WARN: and ERROR: lines from stderr read as warn and fail). Lines in no known form are kept as level other.",
+      "additionalProperties": false,
+      "required": ["exit", "sections", "findings"],
+      "properties": {
+        "exit": {"type": "integer", "minimum": 0},
+        "sections": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "good", "src"],
+            "properties": {"name": {"type": "string"}, "good": {"$ref": "#/$defs/str_or_null"}, "src": {"$ref": "#/$defs/str_or_null"}}
+          }
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["section", "level", "text", "from", "why", "apply", "revert"],
+            "properties": {
+              "section": {"$ref": "#/$defs/str_or_null"},
+              "level": {"enum": ["ok", "info", "note", "warn", "fail", "other"]},
+              "text": {"type": "string"},
+              "from": {"$ref": "#/$defs/str_or_null"},
+              "why": {"$ref": "#/$defs/str_or_null"},
+              "apply": {"$ref": "#/$defs/str_or_null"},
+              "revert": {"$ref": "#/$defs/str_or_null"}
+            }
+          }
+        }
+      }
+    },
+
+    "cluster": {
+      "type": "object",
+      "description": "The cluster member of report/v1: the k3d-<name> context's nodes, or why it was not read.",
+      "additionalProperties": false,
+      "required": ["name", "context", "present", "reason", "nodes"],
+      "properties": {
+        "name": {"type": "string"},
+        "context": {"type": "string"},
+        "present": {"type": "boolean"},
+        "reason": {"$ref": "#/$defs/str_or_null"},
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "allocatable", "labels"],
+            "properties": {"name": {"type": "string"}, "allocatable": {"$ref": "#/$defs/string_map"}, "labels": {"$ref": "#/$defs/string_map"}}
+          }
+        }
+      }
+    },
+
+    "metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["median", "ci95"],
+      "properties": {
+        "median": {"type": "number", "minimum": 0},
+        "ci95": {"anyOf": [{"type": "null"}, {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2}]}
+      }
+    },
+
+    "capacity_row": {
+      "type": "object",
+      "description": "One `capacity` result on this host: agents served within the p95 turn SLO.",
+      "additionalProperties": false,
+      "required": ["engine", "model", "precision", "agents_at_p95", "slo_p95_s", "p95_s", "measured_on", "report_id", "release", "host_fingerprint", "reps", "ci95"],
+      "properties": {
+        "engine": {"type": "string"},
+        "model": {"type": "string"},
+        "precision": {"type": "string"},
+        "agents_at_p95": {"type": "integer", "minimum": 0},
+        "slo_p95_s": {"type": "number", "minimum": 0},
+        "p95_s": {"type": "number", "minimum": 0},
+        "measured_on": {"$ref": "#/$defs/date"},
+        "report_id": {"type": "string"},
+        "release": {"type": "string"},
+        "host_fingerprint": {"$ref": "#/$defs/fingerprint"},
+        "reps": {"type": "integer", "minimum": 1},
+        "ci95": {"anyOf": [{"type": "null"}, {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2}]}
+      }
+    },
+
+    "matrix": {
+      "type": "object",
+      "description": "k3d-gpu.matrix/v1: measured cells. A cell is green only when a report run, a passing tool-calling eval and the current engine pin all hold; plan() derives that, the file never states it.",
+      "additionalProperties": false,
+      "required": ["schema", "rows"],
+      "properties": {
+        "schema": {"const": "k3d-gpu.matrix/v1"},
+        "rows": {"type": "array", "items": {"$ref": "#/$defs/matrix_row"}}
+      }
+    },
+    "matrix_row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "family", "device", "match", "engine", "model", "placement", "source", "evidence", "measured_on", "release", "host_fingerprint", "reps", "metrics", "tool_eval"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$"},
+        "family": {"type": "string"},
+        "device": {"type": "string"},
+        "match": {
+          "type": "object",
+          "description": "A target matches when every key here equals the target's own (family_model, hybrid and amx are compared with the target's cpu member).",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": {"enum": ["cpu", "gpu", "npu", "hpu"]},
+            "vendor": {"type": "string"},
+            "device_id": {"type": "string"},
+            "platform": {"type": "string"},
+            "xmx": {"type": "boolean"},
+            "family_model": {"type": "string", "pattern": "^[0-9]+:[0-9]+$"},
+            "hybrid": {"type": "boolean"},
+            "amx": {"type": "boolean"}
+          }
+        },
+        "engine": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "image", "device"],
+          "properties": {"name": {"type": "string"}, "image": {"type": "string"}, "device": {"type": "string"}}
+        },
+        "model": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "revision", "precision"],
+          "properties": {"name": {"type": "string"}, "revision": {"$ref": "#/$defs/str_or_null"}, "precision": {"type": "string"}}
+        },
+        "placement": {"enum": ["p-cores", "cpu", "device"]},
+        "source": {"enum": ["report", "ledger", "community"]},
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ledger", "report_id"],
+          "properties": {"ledger": {"type": ["string", "null"], "pattern": "^H[0-9]+$"}, "report_id": {"$ref": "#/$defs/str_or_null"}}
+        },
+        "measured_on": {"$ref": "#/$defs/date"},
+        "release": {"type": "string"},
+        "host_fingerprint": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/fingerprint"}]},
+        "reps": {"type": "integer", "minimum": 1},
+        "metrics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["decode_tok_s"],
+          "properties": {"decode_tok_s": {"$ref": "#/$defs/metric"}, "prefill_tok_s": {"$ref": "#/$defs/metric"}}
+        },
+        "tool_eval": {
+          "anyOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["result", "suite"],
+              "properties": {"result": {"enum": ["pass", "fail"]}, "suite": {"type": "string"}}
+            }
+          ]
+        }
+      }
+    },
+
+    "plan": {
+      "type": "object",
+      "description": "k3d-gpu.plan/v1: what plan(facts, matrix, overrides) picked and every step of why. Renderers print summary or explain; they compute nothing.",
+      "additionalProperties": false,
+      "required": ["schema", "fingerprint", "decision", "message", "cell", "engine", "model", "placement", "bind", "port", "auth", "overrides", "considered", "summary", "explain"],
+      "properties": {
+        "schema": {"const": "k3d-gpu.plan/v1"},
+        "fingerprint": {"$ref": "#/$defs/fingerprint"},
+        "decision": {"enum": ["green", "unmeasured"]},
+        "message": {"$ref": "#/$defs/str_or_null"},
+        "cell": {"$ref": "#/$defs/str_or_null"},
+        "engine": {
+          "anyOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "image", "device"],
+              "properties": {"name": {"type": "string"}, "image": {"type": "string"}, "device": {"type": "string"}}
+            }
+          ]
+        },
+        "model": {
+          "anyOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "revision", "precision"],
+              "properties": {"name": {"type": "string"}, "revision": {"$ref": "#/$defs/str_or_null"}, "precision": {"type": "string"}}
+            }
+          ]
+        },
+        "placement": {
+          "anyOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "target", "resource", "pod_label", "cpus", "cpu_count"],
+              "properties": {
+                "kind": {"enum": ["p-cores", "cpu", "device"]},
+                "target": {"type": "string"},
+                "resource": {"$ref": "#/$defs/str_or_null"},
+                "pod_label": {"$ref": "#/$defs/str_or_null"},
+                "cpus": {"$ref": "#/$defs/str_or_null"},
+                "cpu_count": {"$ref": "#/$defs/int_or_null"}
+              }
+            }
+          ]
+        },
+        "bind": {"type": "string"},
+        "port": {"type": ["integer", "null"], "minimum": 1, "maximum": 65535},
+        "auth": {"enum": ["loopback-key", "oidc"]},
+        "overrides": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "engine": {"type": "string"},
+            "device": {"enum": ["cpu", "gpu", "npu", "hpu"]},
+            "model": {"type": "string"},
+            "bind": {"type": "string"},
+            "port": {"type": "integer", "minimum": 1, "maximum": 65535}
+          }
+        },
+        "considered": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["cell", "status", "reasons", "target", "eligible", "excluded"],
+            "properties": {
+              "cell": {"type": "string"},
+              "status": {"enum": ["green", "amber", "grey"]},
+              "reasons": {"$ref": "#/$defs/strings"},
+              "target": {"$ref": "#/$defs/str_or_null"},
+              "eligible": {"type": "boolean"},
+              "excluded": {"$ref": "#/$defs/str_or_null"}
+            }
+          }
+        },
+        "summary": {"$ref": "#/$defs/strings"},
+        "explain": {"$ref": "#/$defs/strings"}
+      }
+    }
+  }
+}
