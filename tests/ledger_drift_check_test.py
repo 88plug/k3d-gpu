@@ -56,6 +56,14 @@ class Ledger(unittest.TestCase):
         self.assertEqual(rows, {"H1": "INCONCLUSIVE", "H2": "REFUTED", "H3": "SUPPORTED",
                                 "H4": "PENDING", "H5": "INCONCLUSIVE"})
 
+    def test_a_lettered_id_is_a_row_of_its_own(self):
+        with tempfile.TemporaryDirectory() as d:
+            (pathlib.Path(d) / "EXPERIMENTS.md").write_text(LEDGER.replace(
+                "| H2 | two", "| H1b | one, re-run | p | probe | PENDING |\n| H2 | two"))
+            rows = guard.ledger(pathlib.Path(d))
+        self.assertEqual(rows["H1b"], "PENDING")
+        self.assertEqual(rows["H1"], "INCONCLUSIVE")
+
     def test_a_row_without_a_verdict_fails(self):
         rc, out = run("ok\n", LEDGER.replace("| PENDING |", "| maybe |"))
         self.assertEqual(rc, 1)
@@ -135,6 +143,12 @@ class Drift(unittest.TestCase):
 
     def test_count(self):
         self.assertDrift("- Six are PENDING.\n", r"says 6 PENDING but EXPERIMENTS.md has 1")
+
+    def test_lettered_id_reference(self):
+        rc, out = run("Status: PENDING [ledger:H1b].\n", LEDGER.replace(
+            "| H2 | two", "| H1b | one, re-run | p | probe | SUPPORTED |\n| H2 | two"))
+        self.assertEqual(rc, 1, out)
+        self.assertRegex(out, r"H1b reads PENDING \(verdict before reference\).*SUPPORTED")
 
     def test_unknown_id(self):
         self.assertDrift("Still PENDING [ledger:H9].\n", r"H9 .*not in the EXPERIMENTS.md hypothesis table")

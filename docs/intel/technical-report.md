@@ -10,7 +10,7 @@ This report covers what was measured, and how. Every result comes from one host:
 
 - Six hypotheses are SUPPORTED. All six are scoped to that host.
 - Six are REFUTED. They changed shipped defaults.
-- Eleven are INCONCLUSIVE, mostly because the shared host throttles. Eight are PENDING.
+- Eleven are INCONCLUSIVE, mostly because the shared host throttles. Nine are PENDING.
 - Every other Intel family is detected and configured in fixture tests only. None has a measurement.
 
 No world-first, superlative or priority claim is made; [docs/provenance.md](../provenance.md) supports none.

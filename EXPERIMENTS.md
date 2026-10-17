@@ -21,6 +21,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | # | Hypothesis | Prediction | Probe | Verdict |
 |---|------------|------------|-------|---------|
 | H1 | EAT (Intel Enterprise Agent Toolkit) runs on a single non-Xeon machine. | On one host whose CPU is not a Xeon (Core or Core Ultra), `k3d-gpu up` followed by the EAT deploy from `claude/eat-on-k3d` reaches all EAT pods `Ready` and one inference request returns a completion. | Fresh host, Reproduce header filled in. `k3d-gpu up`, deploy EAT, `kubectl wait --for=condition=Ready pod --all -A --timeout=30m`, then one completion request against the EAT endpoint. Refuted by any pod not Ready at the timeout, a Xeon-only instruction or node-label requirement, or no completion. Wave 1 (2026-10-16, i9-13900T): a completion returned, but the probe was not run as written (see [H1 run](#h1-run-i9-13900t-2026-10-16)). Amended 2026-10-17T20:27Z, before run 2: matched load instead of a fresh host, one fresh cluster, every step timed and logged, grading of Job pods fixed in advance. Run 2 (2026-10-17): every step held in one pass except the `--all -A` wait, which no k3s v1.37 cluster can pass (k3s's Gateway API CRD Job leaves a Succeeded pod); see [H1 run 2](#h1-run-2-i9-13900t-2026-10-17). | INCONCLUSIVE |
+| H1b | EAT (Intel Enterprise Agent Toolkit) runs on a single non-Xeon machine (H1's hypothesis, re-run with a readiness probe that can pass on k3s v1.37). | On one host whose CPU is not a Xeon (Core or Core Ultra), `k3d-gpu up` followed by the EAT deploy reaches every pod that is not in phase Succeeded `Ready` within 30 min, and one inference request returns a completion. | Pre-registered 2026-10-17T21:15Z, before any H1b step; H1 keeps its INCONCLUSIVE verdict. One fresh cluster `k3dgpu-h1b-eat`, scratch `KUBECONFIG`, empty `EAT_WORK`, under `bench/load/load.py` `typical` on the E-cores (16-31) with 60 s load samples; the documented user path run once, each step timed: `k3d-gpu up`, `eat-up.sh`, `eat-up.sh model cpu-qwen3-1-7b`, `kubectl wait --for=condition=Ready pod -A --field-selector=status.phase!=Succeeded --timeout=30m`, one completion through EAT's LiteLLM gateway, `eat-check.sh`, `k3d-gpu down`. Every Job's completion is recorded on its own line and not graded. Refuted by any step 1-3 failing, a wait that ends non-zero with a Deployment, StatefulSet, DaemonSet, ReplicaSet or Sandbox pod not Ready, a Xeon-only instruction or node-label requirement, or no completion. Grading, lock budget and outcome table in [H1b pre-registration](#h1b-pre-registration-i9-13900t-2026-10-17). | PENDING |
 | H2 | On an Intel hybrid host whose only Intel GPU is an iGPU (wave 1: i9-13900T, UHD 770), the iGPU serves a fixed model faster and with less energy per token than the CPU running the same model with a tuned thread count. | iGPU decode tok/s is higher than the best CPU tok/s, and iGPU J/token is lower than the CPU J/token at that best thread count. | Row restated 2026-10-16 to the pre-registration that ran (written ~10:20 PDT, before the 10:29-11:32 PDT campaign); the row first committed at 04:48 PDT named a Core Ultra host, which was not tested. OVMS 2026.4.1 with `OpenVINO/Qwen3-4B-int4-ov`, same digest and graph except the device. CPU baseline swept over 4 thread and core configs first, best kept. Energy from RAPL `package-0`, with a 20 s model-loaded idle before each block. Decode 30 x 256, prefill ~1936 x 16, 4-in-flight 30 x 128; 5 rounds, ABBA order. Refuted if the iGPU loses on either tok/s or J/token. | REFUTED |
 | H3 | P/E pinning isolates inference from noisy neighbours on a hybrid CPU. | With the inference pod labelled `k3d-gpu.io/cores: performance` and a CPU-saturating neighbour labelled `k3d-gpu.io/cores: efficient`, inference latency stays within 10% of the no-neighbour baseline on both decode and prefill. Without pinning, the same neighbour raises latency by more than 10% on at least one workload. | Pre-registered 2026-10-16 ~13:20 PDT, before any timed block (13:24-14:53 PDT). OVMS on CPU, Qwen3-4B int4, 15-CPU request; neighbour `bench/noisy.sh` (stress-ng `--cpu 15`, Guaranteed 15 CPU). Arms: Q pinned and quiet, P pinned with the neighbour on the E-cores, U both unlabelled, plus Qu, Qe, X (roles swapped) and PM (stream neighbour). `Cpus_allowed_list` read in every block. 5 rounds x 7 arms, 5 requests per workload per block. Refuted if P is more than 10% above Q on either workload. | REFUTED |
 | H4 | The automatic device choice equals the measured best device. | For a fixed model on a host with more than one usable device (CPU, iGPU, NPU, dGPU), the device the agent stack selects automatically (`claude/agent-stack`) is the one with the highest measured tok/s in a sweep over every usable device. | Record the auto-selected device. Then force each usable device in turn and measure tok/s with the H2 method. Refuted if any forced device beats the auto choice by more than the run-to-run spread. Wave 1 pre-registered 2026-10-16 15:30 PDT (H4b) and 16:22 PDT (H4c), each before its runs, against the `auto` rule of `claude/agent-stack` 8385dc2. | REFUTED |
@@ -1628,6 +1629,66 @@ kubectl wait --for=condition=Ready pod --all -A --timeout=30m   # cannot exit 0:
 integrations/eat/eat-check.sh                                    # expect: ==> EAT check passed.
 scripts/k3d-gpu down; bench/load/load.py stop
 ```
+
+### H1b pre-registration (i9-13900T, 2026-10-17)
+
+Written 2026-10-17T21:15Z and pushed before any H1b step. H1 stays INCONCLUSIVE;
+H1b is a new row, run once, and graded only by what is written here.
+
+Why a new row: run 2 of H1 held every criterion but its readiness wait,
+`kubectl wait --for=condition=Ready pod --all -A`, which cannot exit 0 on k3s v1.37
+because a Succeeded Job pod never turns Ready ([H1 run 2](#h1-run-2-i9-13900t-2026-10-17)).
+H1b keeps H1's hypothesis and every other criterion and fixes only the wait.
+
+Field selector checked before this was written (2026-10-17T21:06-21:11Z, under
+the host lock, a throwaway k3d cluster `k3dgpu-h1b-fsel` on the k3s v1.37.1 node
+image `k3d-gpu:eat-992df8d`, deleted after). The Kubernetes docs list
+`status.phase` as a pod field selector with `=`, `==` and `!=`
+(https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/),
+and `kubectl wait --help` (client v1.35.2) lists `--field-selector`. On the
+cluster, `kubectl get pods -A --field-selector=status.phase!=Succeeded` dropped
+all four Succeeded Job pods (`helm-install-gateway-api-crd`,
+`helm-install-traefik-crd`, `helm-install-traefik` and a test Job) and kept every
+other pod, and `kubectl wait --for=condition=Ready pod -A
+--field-selector=status.phase!=Succeeded` waited on those pods only.
+
+- **Host.** The same shared i9-13900T and the same matched-load design as H1
+  run 2: `bench/load/load.py start --level typical` holds the E-cores (16-31)
+  for the whole run, and `bench/load/load.py sample` records busy %, load1, swap
+  and throttle events in 60 s windows. Other tenants keep running and are
+  recorded.
+- **One fresh cluster.** `k3dgpu-h1b-eat`, created by this run and deleted after
+  it, scratch `KUBECONFIG` (never `~/.kube/config`), an empty `EAT_WORK`. Every
+  step runs once; nothing is retried and nothing is uninstalled between steps.
+- **Steps, each timed (wall s) and logged in order.** (0) before the host lock:
+  `docker build` of the node image at this commit, the EAT clone at
+  `release-1.0.3-hotfix` and the bastion build (no cluster touched); (1)
+  `k3d-gpu up` with `K3D_GPU_CLUSTER=k3dgpu-h1b-eat` and the README's EAT env;
+  (2) `eat-up.sh`; (3) `eat-up.sh model cpu-qwen3-1-7b`; (4) `kubectl wait
+  --for=condition=Ready pod -A --field-selector=status.phase!=Succeeded
+  --timeout=30m`, output and exit code recorded verbatim; (4j) every Job in the
+  cluster recorded on its own line (namespace/name, `Complete` or `Failed`
+  condition, succeeded and failed counts, completion time), and the pod list;
+  (5) one chat completion through EAT's LiteLLM gateway (ingress-nginx,
+  `Host: api.example.com`), request and response recorded; (6) `eat-check.sh`
+  (not graded); (7) `k3d-gpu down`. Host lock: `flock` on the shared live lock,
+  at most 25 min from taking it to releasing it; the cluster is deleted and the
+  load stopped before release.
+- **Grading, fixed now.** SUPPORTED only if steps 1-3 exit 0, step 4 exits 0,
+  step 5 returns HTTP 200 with a non-empty completion, and no Xeon-only
+  instruction or node label is needed. The Job lines of step 4j are recorded,
+  not graded. Any step 1-3 failing, or no completion, is REFUTED. Step 4 ending
+  non-zero is REFUTED when any pod owned by a Deployment, StatefulSet,
+  DaemonSet, ReplicaSet or Sandbox is not Ready at its end; it is INCONCLUSIVE
+  when every pod not Ready is a Job pod (for example a Failed pod of a Job that
+  later succeeded, which the selector keeps), or when the wait ends on a pod
+  deleted during it. To stay inside the lock, step 4 is stopped 21 min after
+  the lock is taken; a stop there, or the lock running out before step 5, is
+  INCONCLUSIVE, with the pod list recorded.
+- **Prediction.** SUPPORTED, from run 2: the wait should take about the vLLM
+  pod's image pull and model load (run 2: 33 of 34 pods Ready 383 s after step
+  3). Prior P(SUPPORTED) = 0.75; the main risks are a lock stop under a slower
+  image pull and a pod replaced during the wait.
 
 ### H2 run (i9-13900T, 2026-10-16)
 
