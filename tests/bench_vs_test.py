@@ -133,7 +133,7 @@ class StubPair(unittest.TestCase):
         a = self.stub("--tokens", "16", "--ttft", "0.3", "--itl", "0.001")
         out = os.path.join(self.tmp, "w.json")
         vs.main(["run", "--arm", f"k3d-gpu=http://127.0.0.1:{a}/v3,m", "--arm", f"ollama=http://127.0.0.1:{a}/v1,m",
-                 "--id", "H19", "--out", out, "--warmup", "50", "--rounds", "3", "--max-tokens", "16",
+                 "--id", "H30", "--out", out, "--warmup", "50", "--rounds", "3", "--max-tokens", "16",
                  "--powercap", self.pc, "--budget-s", "1"])
         with open(out) as f:
             res = json.load(f)
@@ -147,7 +147,7 @@ class StubPair(unittest.TestCase):
         shutil.copytree(os.path.join(ROOT, "docs"), os.path.join(root, "docs"))
         shutil.copy(os.path.join(ROOT, "README.md"), root)
         with open(os.path.join(ROOT, "EXPERIMENTS.md")) as f:
-            led = re.sub(r"^(\| H19 \|.*\| )PENDING \|$", rf"\g<1>{verdict} |", f.read(), flags=re.M)
+            led = re.sub(r"^(\| H30 \|.*\| )PENDING \|$", rf"\g<1>{verdict} |", f.read(), flags=re.M)
         with open(os.path.join(root, "EXPERIMENTS.md"), "w") as f:
             f.write(led)
         vs.main(["docs", res_path, "--ledger", os.path.join(root, "EXPERIMENTS.md"),
@@ -156,7 +156,7 @@ class StubPair(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         with open(os.path.join(root, "docs", "benchmarks.md")) as f:
             page = f.read()
-        self.assertIn("[ledger:H20] | llamacpp", page)  # rows without a result stay PENDING
+        self.assertIn("[ledger:H31] | llamacpp", page)  # rows without a result stay PENDING
         self.assertIn(f"| {verdict} |", page)
 
     def test_docs_pass_claims_check_for_every_verdict(self):
@@ -165,7 +165,7 @@ class StubPair(unittest.TestCase):
             res, _, out = self.run_vs(fast, slow, *extra)
             self.assertEqual(res["verdict"], want)
             renamed = os.path.join(self.tmp, f"{want}.json")
-            res["id"] = "H19"
+            res["id"] = "H30"
             with open(renamed, "w") as f:
                 json.dump(res, f)
             self.render_and_check(renamed, want)
@@ -236,14 +236,14 @@ class Units(unittest.TestCase):
         self.assertNotIn("%", vs.verdict([rnd(10, 10)] * 3, 0.05, False, 3)[1])
 
     def test_ledger_heading_falls_back_to_full_cpu_name(self):
-        res = {"id": "H19", "stack": "ollama", "summary": None, "verdict": "INCONCLUSIVE", "why": "x",
+        res = {"id": "H30", "stack": "ollama", "summary": None, "verdict": "INCONCLUSIVE", "why": "x",
                "started": "2026-10-17T00:00:00Z", "elapsed_s": 1, "arms": [{"base_url": "u", "model": "m"}] * 2,
                "context": {"host_cpu_short": "", "host_cpu": "Intel(R) N100"},
                "params": {"budget_s": 9, "prompts": ["p"], "warmup": 0, "rounds": 1, "max_tokens": 2, "energy_zone": "z"}}
-        self.assertIn("### H19 run (Intel(R) N100, 2026-10-17)", vs.ledger_md(res, "0" * 64, ""))
+        self.assertIn("### H30 run (Intel(R) N100, 2026-10-17)", vs.ledger_md(res, "0" * 64, ""))
         self.assertIn("sign-off:        unsigned;", vs.ledger_md(res, "0" * 64, ""))
         res["context"] = {}
-        self.assertIn("### H19 run (host, ", vs.ledger_md(res, "0" * 64, ""))
+        self.assertIn("### H30 run (host, ", vs.ledger_md(res, "0" * 64, ""))
 
     def test_competitors_lock_pins_every_model_by_sha256(self):
         with open(os.path.join(ROOT, "bench", "competitors.lock")) as f:

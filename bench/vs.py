@@ -359,7 +359,7 @@ def cmd_docs(opts):
                 "of each row is a measured answer, whichever way it falls."]
     out += ["", "Run one and regenerate this page (rows without a result file stay PENDING):", "",
             "```bash", "k3d-gpu up && k3d-gpu agent up",
-            "k3d-gpu bench --vs ollama --id H19 --budget 900 --out bench-H19",
+            "k3d-gpu bench --vs ollama --id H30 --budget 900 --out bench-H30",
             "bench/vs.py docs --out docs/benchmarks.md bench-H*/result.json", "```"]
     with open(opts.out, "w") as f:
         f.write("\n".join(out) + "\n")

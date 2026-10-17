@@ -20,9 +20,9 @@ on the k3d-gpu arm only.
 
 | Ledger | Competitor | Tier | Decode tok/s (k3d-gpu / competitor) | J/token (k3d-gpu / competitor) | Verdict |
 |---|---|---|---|---|---|
-| [ledger:H19] | ollama | 4-bit (GGUF Q4_K_M) | not run | not run | PENDING |
-| [ledger:H20] | llamacpp | 4-bit (GGUF Q4_K_M) | not run | not run | PENDING |
-| [ledger:H21] | ovms | 4-bit (OpenVINO int4) | not run | not run | PENDING |
+| [ledger:H30] | ollama | 4-bit (GGUF Q4_K_M) | not run | not run | PENDING |
+| [ledger:H31] | llamacpp | 4-bit (GGUF Q4_K_M) | not run | not run | PENDING |
+| [ledger:H32] | ovms | 4-bit (OpenVINO int4) | not run | not run | PENDING |
 
 No head-to-head has run yet, so this page makes no speed or energy claim. The goal
 of each row is a measured answer, whichever way it falls.
@@ -31,6 +31,6 @@ Run one and regenerate this page (rows without a result file stay PENDING):
 
 ```bash
 k3d-gpu up && k3d-gpu agent up
-k3d-gpu bench --vs ollama --id H19 --budget 900 --out bench-H19
+k3d-gpu bench --vs ollama --id H30 --budget 900 --out bench-H30
 bench/vs.py docs --out docs/benchmarks.md bench-H*/result.json
 ```
