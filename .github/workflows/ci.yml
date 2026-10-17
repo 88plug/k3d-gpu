@@ -83,6 +83,23 @@ jobs:
           CONSOLE_JSONSCHEMA_PYTHON: /tmp/jsonschema/bin/python
         run: tests/console_test.sh
 
+  report-html:
+    name: report.html (goldens, offline load in headless Chrome)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - id: chrome
+        uses: browser-actions/setup-chrome@v2.2.0
+        with:
+          chrome-version: 155.0.8059.84
+      # The headless load runs Chrome in a network namespace (unshare -rn);
+      # Ubuntu's AppArmor blocks unprivileged user namespaces by default.
+      - run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - env:
+          K3D_GPU_CHROME: ${{ steps.chrome.outputs.chrome-path }}
+          K3D_GPU_REQUIRE_HEADLESS: "1"
+        run: tests/report_html_test.sh
+
   claims-check:
     name: Docs claims guard
     runs-on: ubuntu-latest

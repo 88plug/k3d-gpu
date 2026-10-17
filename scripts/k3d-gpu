@@ -48,7 +48,7 @@
 #           vision, Whisper speech-to-text and DL Streamer video analytics on the
 #           Intel GPU/NPU units the LLM leaves free
 #   recipe  print a ready-to-apply workload manifest (npu-embeddings)
-#   facts   detect + doctor + doctor --perf + report as one facts/v1 JSON document
+#   facts   detect + doctor + doctor --perf + report as one facts/v1 JSON document (--html: report.html)
 #   plan    engine, model and placement from the measured (green) matrix cells, --explain prints why
 
 set -euo pipefail
@@ -125,10 +125,11 @@ Usage: k3d-gpu <command>
             and DL Streamer video analytics (GPU media engines) on what the LLM leaves
   recipe npu-embeddings
             Print an OVMS embeddings-on-NPU manifest for this host (pipe to kubectl apply -f -)
-  facts [--json]
+  facts [--json | --html [--facts FILE] [--matrix FILE]]
             Host facts (detect + doctor + doctor --perf + report) as one JSON
             document, schema facts/v1; writes ~/.local/state/k3d-gpu/facts.json
-            (--json prints it only). detect --json and doctor --json print the same
+            (--json prints it only). detect --json and doctor --json print the same.
+            --html prints a self-contained report.html (no script, no fetches)
   plan [--explain|--json] [--engine E] [--device cpu|gpu|npu|hpu] [--model M]
        [--bind ADDR] [--port N] [--facts FILE] [--matrix FILE]
             Engine, model and placement for this box, picked only from measured
@@ -5897,22 +5898,37 @@ facts_json() {
     facts_raw | python3 "$1/facts.py" normalize
 }
 
-# facts [--json]: --json prints facts/v1; otherwise writes it to the state dir
-# and prints a summary.
+# facts [--json | --html [--facts FILE] [--matrix FILE]]: --json prints
+# facts/v1; --html prints report.html (console/report_html.py: inline styles, no
+# script, no fetches), from FILE instead of this host with --facts; otherwise
+# writes facts/v1 to the state dir and prints a summary.
 cmd_facts() {
-    local dir json=0 state out
-    case "${1:-}" in
-        --json) json=1 ;;
-        "") ;;
-        *) err "unknown facts option: $1 (use --json)" ;;
-    esac
+    local dir mode=state facts="" matrix="" state out
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --json) mode=json ;;
+            --html) mode=html ;;
+            --facts|--matrix)
+                [ $# -ge 2 ] || err "facts: $1 needs a value"
+                if [ "$1" = --facts ]; then facts=$2; else matrix=$2; fi
+                shift ;;
+            *) err "unknown facts option: $1 (use --json, or --html [--facts FILE] [--matrix FILE])" ;;
+        esac
+        shift
+    done
+    [ "${mode}" = html ] || [ -z "${facts}${matrix}" ] || err "facts: --facts and --matrix go with --html"
     dir=$(console_dir) || err "facts: console/facts.py not found next to the launcher or in ${SHARE_DIR}/console (set K3D_GPU_CONSOLE)"
     require python3
-    out=$(facts_json "${dir}") || err "facts: could not build facts/v1"
-    if [ "${json}" -eq 1 ]; then
-        printf '%s\n' "${out}"
-        return
+    if [ -n "${facts}" ]; then
+        [ -f "${facts}" ] || err "facts: facts file ${facts} does not exist"
+        out=$(<"${facts}")
+    else
+        out=$(facts_json "${dir}") || err "facts: could not build facts/v1"
     fi
+    case "${mode}" in
+        json) printf '%s\n' "${out}"; return ;;
+        html) python3 "${dir}/report_html.py" --matrix "${matrix:-${dir}/matrix.v1.json}" <<< "${out}"; return ;;
+    esac
     state="${XDG_STATE_HOME:-${HOME}/.local/state}/k3d-gpu"
     mkdir -p "${state}"
     printf '%s\n' "${out}" > "${state}/facts.json.tmp"
