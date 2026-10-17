@@ -167,7 +167,7 @@ Usage: k3d-gpu <command>
   plan [--explain|--json|--hash] [--engine E] [--device cpu|gpu|npu|hpu] [--model M]
        [--bind ADDR] [--port N] [--facts FILE] [--matrix FILE]
             Engine, model and placement for this box, picked only from measured
-            (green) matrix cells; with none it says "unmeasured, run prove"
+            (green) matrix cells; with none it says "unmeasured" (quickstart/agent up still serve)
             --hash prints the plan hash: sha256 of the --json output
   plan --predict SKU|auto|list [--json] [--mts N] [--channels N]
             Roofline prediction (decode/prefill tok/s, derived agents per box) for

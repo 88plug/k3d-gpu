@@ -1036,7 +1036,10 @@ resource), port and auth mode. It picks only a **green** cell: one with a
 `k3d-gpu report` run, a passing tool-calling eval and the engine image this
 release pins. Community cells are amber, everything else grey, and neither is
 ever picked or interpolated. With no green cell for the box it prints
-``unmeasured, run `k3d-gpu prove` on this box``. Today no cell is green: the two
+``unmeasured: no green cell for this box; quickstart and agent up still pick by device``.
+There is no `prove` command yet (it is a design in docs/console-design.md);
+`k3d-gpu quickstart` and `k3d-gpu agent up` serve with their device rules
+regardless, and `k3d-gpu capacity` measures this box. Today no cell is green: the two
 cells from the [ledger:H6] run have no report run and no tool-calling eval yet,
 so every host plans unmeasured. `plan --explain` prints each target, each cell
 that applies with its status and reasons, and the decision; `plan --json` is
