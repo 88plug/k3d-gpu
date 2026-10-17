@@ -65,7 +65,7 @@ def one_request(args, idx):
     if args.api_key:
         headers["Authorization"] = f"Bearer {args.api_key}"
     conn_cls = http.client.HTTPSConnection if scheme == "https" else http.client.HTTPConnection
-    sample = {"index": idx, "ok": False, "error": None, "chunks": 0, "text_chars": 0}
+    sample = {"index": idx, "ok": False, "error": None, "chunks": 0, "content_chunks": 0, "text_chars": 0}
     for m in METRICS:
         sample[m] = None
     t0 = time.perf_counter()
@@ -100,6 +100,7 @@ def one_request(args, idx):
                 delta = choice.get("delta") or {}
                 text = (delta.get("content") or "") + (delta.get("reasoning_content") or "")
                 if text:
+                    sample["content_chunks"] += 1
                     sample["text_chars"] += len(text)
                     if sample["ttft_s"] is None:
                         sample["ttft_s"] = now

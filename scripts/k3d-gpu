@@ -161,6 +161,12 @@ Usage: k3d-gpu <command>
             Run the plan ('agent up' with its image, device, model and P-core
             count) only if the plan, recomputed now with the same options,
             still hashes to H; a plan on a port other than 8000 is refused
+  bench --vs ollama|llamacpp|ovms [--id Hn] [--out DIR] [--budget S] [--rounds N]
+        [--warmup N] [--max-tokens N] [--cpuset LIST] [--k3d-url URL --k3d-model M] [--dry-run]
+            Head-to-head: start the competitor's pinned image (bench/competitors.lock)
+            with its defaults next to this cluster's 'agent up' server, drive both
+            with one client, interleaved rounds and RAPL J/token, and write the
+            result JSON plus an EXPERIMENTS.md row with its Reproduce header
   version   Show version
   help      Show this message
 
@@ -6354,6 +6360,127 @@ print(d["decision"], e.get("name") or "-", e.get("device") or "-", e.get("image"
         K3D_GPU_AGENT_IMAGE="${image}" K3D_GPU_AGENT_CPUS="${cpus}" exec "$(readlink -f "${BASH_SOURCE[0]}")" agent up
 }
 
+# Directory holding vs.py, llm_load.py and competitors.lock: the repo's bench/
+# next to this script, else the installed share directory.
+bench_dir() {
+    local d
+    d="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../bench"
+    if [ -n "${K3D_GPU_BENCH:-}" ]; then echo "${K3D_GPU_BENCH}"
+    elif [ -f "${d}/vs.py" ]; then (cd "${d}" && pwd)
+    else echo "${SHARE_DIR}/bench"; fi
+}
+
+free_port() { python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])'; }
+
+cmd_bench() {
+    local stack="" kurl="" kmodel="" budget=900 rounds=3 warmup=3 maxtok=128 id="" out="" cpuset="" dry=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --dry-run) dry=1; shift; continue ;;
+            --vs|--k3d-url|--k3d-model|--budget|--rounds|--warmup|--max-tokens|--id|--out|--cpuset)
+                [ $# -ge 2 ] || err "bench: $1 needs a value" ;;
+            *) err "unknown bench option: $1 (see 'k3d-gpu help')" ;;
+        esac
+        case "$1" in
+            --vs) stack=$2 ;; --k3d-url) kurl=$2 ;; --k3d-model) kmodel=$2 ;; --budget) budget=$2 ;;
+            --rounds) rounds=$2 ;; --warmup) warmup=$2 ;; --max-tokens) maxtok=$2 ;; --id) id=$2 ;;
+            --out) out=$2 ;; --cpuset) cpuset=$2 ;;
+        esac
+        shift 2
+    done
+    [ -n "${stack}" ] || err "bench: --vs <stack> is required (ollama, llamacpp or ovms)"
+    local n
+    for n in "${budget}" "${rounds}" "${warmup}" "${maxtok}"; do
+        [[ "${n}" =~ ^[0-9]+$ ]] || err "bench: --budget, --rounds, --warmup and --max-tokens take whole numbers, got '${n}'"
+    done
+    [ -z "${id}" ] || [[ "${id}" =~ ^H[0-9]+$ ]] || err "bench: --id must look like H10, got '${id}'"
+    [ -z "${cpuset}" ] || [[ "${cpuset}" =~ ^[0-9,-]+$ ]] || err "bench: --cpuset takes a CPU list like 0-15, got '${cpuset}'"
+    if [ -n "${kurl}" ] && [ -z "${kmodel}" ]; then err "bench: --k3d-url needs --k3d-model"; fi
+    id=${id:-H0}
+    out=${out:-bench-${id}-${stack}}
+    local dir lock fields image port api health served pull cache dri quant device args=()
+    dir=$(bench_dir)
+    lock="${dir}/competitors.lock"
+    [ -f "${lock}" ] || err "bench: ${lock} missing (set K3D_GPU_BENCH to the bench/ directory)"
+    fields=$(python3 -c 'import json, sys
+s = json.load(open(sys.argv[1]))["stacks"].get(sys.argv[2])
+if s is None:
+    sys.exit(3)
+print("\t".join([s["image"], str(s["port"]), s["api"], s["health"], s["served_model"], s["pull"] or "-",
+                 s["cache"], "1" if s.get("dri") else "0", s["quant_tier"], s["device"]]))
+for a in s["args"]:
+    print(a)' "${lock}" "${stack}") \
+        || err "bench: unknown stack '${stack}' (use ollama, llamacpp or ovms)"
+    IFS=$'\t' read -r image port api health served pull cache dri quant device <<< "$(head -n1 <<< "${fields}")"
+    mapfile -t args < <(tail -n +2 <<< "${fields}")
+
+    local name="k3dgpu-g-vs-${stack}" hport docker_args gid
+    hport=$(free_port)
+    docker_args=(run -d --name "${name}" -p "127.0.0.1:${hport}:${port}" -v "${name}-cache:${cache}")
+    [ -z "${cpuset}" ] || docker_args+=(--cpuset-cpus "${cpuset}")
+    if [ "${dri}" = 1 ] && [ -e /dev/dri ]; then
+        docker_args+=(--device /dev/dri)
+        for gid in $(stat -c %g /dev/dri/render* 2>/dev/null | sort -u); do docker_args+=(--group-add "${gid}"); done
+    fi
+    docker_args+=("${image}" ${args[@]+"${args[@]}"})
+    local vs_args=(run --id "${id}" --out "${out}/result.json" --ledger "${out}/ledger.md"
+        --rounds "${rounds}" --warmup "${warmup}" --max-tokens "${maxtok}")
+    if [ -n "${dry}" ]; then
+        echo "docker ${docker_args[*]}"
+        echo "python3 ${dir}/vs.py ${vs_args[*]} --arm k3d-gpu=${kurl:-<port-forward svc/ovms>},${kmodel:-<agent model>} --arm ${stack}=http://127.0.0.1:${hport}${api},${served}"
+        return 0
+    fi
+
+    require docker
+    require curl
+    local t0=${SECONDS} pf="" pfport
+    if docker inspect "${name}" >/dev/null 2>&1; then err "bench: container ${name} already exists (docker rm -f ${name})"; fi
+    if [ -z "${kurl}" ]; then
+        require kubectl
+        agent_select
+        kubectl -n "${AGENT_NS}" get "service/${AGENT_APP}" >/dev/null 2>&1 \
+            || err "bench: no '${AGENT_APP}' service in ${AGENT_NS}; run 'k3d-gpu agent up' first (or pass --k3d-url and --k3d-model)"
+        pfport=$(free_port)
+        kubectl -n "${AGENT_NS}" port-forward "service/${AGENT_APP}" "${pfport}:8000" >/dev/null 2>&1 &
+        pf=$!
+        kurl="http://127.0.0.1:${pfport}${AGENT_API}"
+        kmodel=${AGENT_MODEL_NAME}
+    fi
+    # shellcheck disable=SC2064 # expand now: the names are fixed for this run
+    trap "docker rm -f '${name}' >/dev/null 2>&1 || true; [ -z '${pf}' ] || kill '${pf}' 2>/dev/null || true" EXIT
+    mkdir -p "${out}"
+    info "bench: starting ${stack} (${image})"
+    docker "${docker_args[@]}" >/dev/null || err "bench: docker run failed"
+    until curl -sf -o /dev/null "http://127.0.0.1:${hport}${health}"; do
+        [ $((SECONDS - t0)) -lt "${budget}" ] || { docker logs --tail 30 "${name}" >&2; err "bench: ${stack} not healthy within the ${budget}s budget"; }
+        sleep 3
+    done
+    if [ "${pull}" = ollama ]; then
+        info "bench: ollama pull ${served}"
+        curl -sf -m "$((budget - (SECONDS - t0) + 1))" "http://127.0.0.1:${hport}/api/pull" \
+            -d "{\"model\":\"${served}\",\"stream\":false}" >/dev/null || err "bench: ollama pull ${served} failed"
+    fi
+    # A model that loads lazily (OVMS pull, llama.cpp download) answers once loaded.
+    until curl -sf -o /dev/null -m 120 "http://127.0.0.1:${hport}${api}/chat/completions" -H 'Content-Type: application/json' \
+            -d "{\"model\":\"${served}\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":2}"; do
+        [ $((SECONDS - t0)) -lt "${budget}" ] || { docker logs --tail 30 "${name}" >&2; err "bench: ${stack} not serving ${served} within the ${budget}s budget"; }
+        sleep 5
+    done
+    local left=$((budget - (SECONDS - t0))) ctx signer cpu
+    [ "${left}" -gt 0 ] || err "bench: budget spent on startup"
+    cpu=$(sed -n 's/^model name[[:space:]]*: //p' /proc/cpuinfo | head -n1)
+    ctx=$(python3 -c 'import json, sys; print(json.dumps(dict(zip(sys.argv[1::2], sys.argv[2::2]))))' \
+        host_cpu "${cpu}" host_cpu_short "$(grep -o 'i[3579]-[0-9A-Z]*\|Ultra [0-9] [0-9A-Z]*' <<< "${cpu}" | head -n1)" \
+        host_kernel "$(uname -r)" commit "$(cd "${dir}" && git rev-parse HEAD 2>/dev/null || echo "k3d-gpu ${VERSION}")" \
+        image "${image}" quant_tier "${quant}" device "${device}${cpuset:+, cpuset ${cpuset}}" \
+        k3d_device "$(kubectl -n "${AGENT_NS}" get deploy "${AGENT_APP:-ovms}" -o jsonpath='{.spec.template.metadata.annotations.k3d-gpu\.io/agent-device}' 2>/dev/null || echo unknown)")
+    signer=${K3D_GPU_SIGNOFF:-"$(git config user.name 2>/dev/null) <$(git config user.email 2>/dev/null)>"}
+    python3 "${dir}/vs.py" "${vs_args[@]}" --budget-s "${left}" --context "${ctx}" --signed-off-by "${signer}" \
+        --arm "k3d-gpu=${kurl},${kmodel}" --arm "${stack}=http://127.0.0.1:${hport}${api},${served}" \
+        || err "bench: vs.py failed"
+    info "bench: ${out}/result.json and ${out}/ledger.md (paste the row into EXPERIMENTS.md; render docs: bench/vs.py docs ${out}/result.json --out docs/benchmarks.md)"
+}
+
 # K3D_GPU_EXPERIMENTAL=list prints the feature table with any command; any
 # other value is checked up front, so an unknown name fails before anything runs.
 if exp_is_list; then
@@ -6378,6 +6505,7 @@ case "${1:-help}" in
     audit)   shift; cmd_audit "$@" ;;
     sandbox) cmd_sandbox "${2:-}" ;;
     apply)   shift; cmd_apply "$@" ;;
+    bench)   shift; cmd_bench "$@" ;;
     version|--version|-v) echo "k3d-gpu ${VERSION}" ;;
     help|--help|-h) usage ;;
     *) usage; exit 1 ;;

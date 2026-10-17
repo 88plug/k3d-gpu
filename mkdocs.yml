@@ -34,6 +34,7 @@ nav:
   - Evidence:
       - Intel capability map: intel-capability-map.md
       - Benchmark landscape: benchmark-landscape.md
+      - Head-to-head benchmarks: benchmarks.md
       - Provenance: provenance.md
       - Security audit: security-audit.md
   - Development:
