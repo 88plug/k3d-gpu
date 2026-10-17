@@ -126,7 +126,7 @@
         "level": "ok",
         "revert": null,
         "section": "Checking Intel NPU (Core Ultra)...",
-        "text": "intel/vpu/vpu_37xx_* firmware present (/lib/firmware/intel/vpu/vpu_37xx_v1.bin)",
+        "text": "intel/vpu/vpu_37xx_* firmware present (/lib/firmware/intel/vpu/vpu_37xx_v0.0.bin)",
         "why": null
       },
       {
@@ -135,7 +135,7 @@
         "level": "note",
         "revert": null,
         "section": "Checking Intel NPU (Core Ultra)...",
-        "text": "no build date readable in /lib/firmware/intel/vpu/vpu_37xx_v1.bin; cannot compare it with openvino/model_server:2026.4.1-gpu's NPU driver v1.35.0",
+        "text": "no build date readable in /lib/firmware/intel/vpu/vpu_37xx_v0.0.bin; cannot compare it with openvino/model_server:2026.4.1-gpu's NPU driver v1.35.0",
         "why": null
       },
       {

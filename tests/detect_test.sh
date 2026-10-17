@@ -402,15 +402,74 @@ kernel "${r}" 6.11.2
 pci "${r}" 0000:03:00.0 0x8086 0xe214 xe; render "${r}" 0000:03:00.0 128
 doctor_says "0xe214 is not a Battlemage id in the kernel" "${r}" 'Intel Battlemage \(' negate
 
+r=$(newroot bmg-b60-backport)
+kernel "${r}" 6.14.3
+pci "${r}" 0000:03:00.0 0x8086 0xe211 xe; render "${r}" 0000:03:00.0 128
+doctor_says "Pro B60 bound on 6.14 is a stable backport, not force_probe" "${r}" 'is in this kernel.s xe id table.*6\.15'
+doctor_says "Pro B60 bound on 6.14 gets no force_probe" "${r}" 'force_probe=e211' negate
+
+r=$(newroot bmg-b580-616)
+kernel "${r}" 6.16.1
+pci "${r}" 0000:03:00.0 0x8086 0xe20b xe; render "${r}" 0000:03:00.0 128
+doctor_says "B580 on 6.16 has no kernel warning" "${r}" 'Battlemage.*(needs kernel|stable backport)' negate
+
+r=$(newroot dg2-a770)
+kernel "${r}" 6.8.0
+pci "${r}" 0000:03:00.0 0x8086 0x56a0 i915; render "${r}" 0000:03:00.0 128
+doctor_says "Arc A770 is Alchemist DG2-G10" "${r}" 'Intel Alchemist DG2-G10 \(0x56a0\) bound to i915'
+doctor_says "Arc A770 gets the xmx label" "${r}" 'gpu.intel.com/xmx=true'
+
+r=$(newroot dg2-a770-old)
+kernel "${r}" 6.1.0
+pci "${r}" 0000:03:00.0 0x8086 0x56a0 i915; render "${r}" 0000:03:00.0 128
+doctor_says "Arc A770 on 6.1 needs 6.2 or i915.force_probe" "${r}" 'Alchemist DG2-G10.*6\.2\+.*i915.force_probe=56a0'
+
+# Late Alchemist ids joined i915's table after DG2 bound by default (6.2):
+# 56BA-56BD in 6.7, 56BE/56BF in 6.10. force_probe cannot add a missing id.
+r=$(newroot dg2-56ba-66)
+kernel "${r}" 6.6.0
+pci "${r}" 0000:03:00.0 0x8086 0x56ba i915; render "${r}" 0000:03:00.0 128
+doctor_says "bound 0x56ba on 6.6 is a backport" "${r}" 'Alchemist DG2-G11 \(0x56ba\) is in this kernel.s i915 id table.*6\.7'
+doctor_says "bound 0x56ba on 6.6 gets no force_probe" "${r}" 'force_probe=56ba' negate
+
+r=$(newroot dg2-56ba-65-unbound)
+kernel "${r}" 6.5.0
+pci "${r}" 0000:03:00.0 0x8086 0x56ba "" 0x030000
+doctor_says "unbound 0x56ba on 6.5 needs a kernel" "${r}" 'DG2-G11 \(0x56ba\) has no driver .*i915 lists this id from kernel 6\.7 .*upgrade the kernel'
+doctor_says "unbound 0x56ba on 6.5 gets no modprobe or force_probe" "${r}" '0x56ba.*(modprobe i915|force_probe=56ba)' negate
+
+r=$(newroot dg2-56be-69-unbound)
+kernel "${r}" 6.9.0
+pci "${r}" 0000:03:00.0 0x8086 0x56be "" 0x030000
+doctor_says "unbound 0x56be on 6.9 needs 6.10" "${r}" 'DG2-G10 \(0x56be\) has no driver .*from kernel 6\.10 '
+doctor_says "unbound 0x56be on 6.9 gets no modprobe" "${r}" '0x56be.*modprobe i915' negate
+
+r=$(newroot dg2-56be-68)
+kernel "${r}" 6.8.0
+pci "${r}" 0000:03:00.0 0x8086 0x56be i915; render "${r}" 0000:03:00.0 128
+doctor_says "bound 0x56be on 6.8 is a backport" "${r}" 'DG2-G10 \(0x56be\) is in this kernel.s i915 id table.*6\.10'
+
+r=$(newroot flex-515-unbound)
+kernel "${r}" 5.15.0
+pci "${r}" 0000:03:00.0 0x8086 0x56c1 "" 0x038000
+doctor_says "unbound Flex on 5.15 gets dkms" "${r}" 'Flex \(ATS-M\) \(0x56c1\) has no driver .*has no xe .*intel-i915-dkms'
+doctor_says "unbound Flex on 5.15 gets no xe.force_probe" "${r}" 'xe.force_probe|force-probe xe' negate
+
+r=$(newroot flex-68-unbound)
+kernel "${r}" 6.8.0
+pci "${r}" 0000:03:00.0 0x8086 0x56c1 "" 0x038000
+doctor_says "unbound Flex on 6.8 points at the exact experimental apply" "${r}" 'Flex \(ATS-M\) \(0x56c1\) has no driver .*doctor --experimental, xe-force-probe'
+
 r=$(newroot arl-s)
 kernel "${r}" 6.10.4
 pci "${r}" 0000:00:02.0 0x8086 0xb640 i915; render "${r}" 0000:00:02.0 128
 doctor_says "Arrow Lake-S 0xb640 needs kernel 6.12" "${r}" 'Arrow Lake.*6\.12'
 
-# cpuinfo <root> <family> <model> <flags>: the first CPU's family, model and flags.
+# cpuinfo <root> <family> <model> <flags> [vendor]: the first CPU's vendor_id
+# (default GenuineIntel), family, model and flags.
 cpuinfo() {
     mkdir -p "$1/proc"
-    printf 'processor\t: 0\ncpu family\t: %s\nmodel\t\t: %s\nmodel name\t: Fake CPU\nflags\t\t: %s\n' "$2" "$3" "$4" > "$1/proc/cpuinfo"
+    printf 'processor\t: 0\nvendor_id\t: %s\ncpu family\t: %s\nmodel\t\t: %s\nmodel name\t: Fake CPU\nflags\t\t: %s\n' "${5:-GenuineIntel}" "$2" "$3" "$4" > "$1/proc/cpuinfo"
 }
 
 # engine <root> <bdf> <card> <engine> [capabilities]: an i915 engine dir under
@@ -507,6 +566,30 @@ r=$(newroot npu-7d1d-unknown)
 kernel "${r}" 6.14.0
 pci "${r}" 0000:00:0b.0 0x8086 0x7d1d intel_vpu; accel "${r}" 0000:00:0b.0 0
 doctor_says "NPU 0x7d1d with no CPU model names both platforms" "${r}" 'ok: Intel NPU Meteor Lake / Arrow Lake-H \(0x7d1d\)'
+
+# Newest-ISA CPU models: families 18 (Nova Lake) and 19 (Diamond Rapids) are Intel;
+# their ISA is reported as a gcc -march prediction, never as a cpuinfo read.
+for c in "19 1|Diamond Rapids-X|AMX-FP8" "18 1|Nova Lake|no AMX" "18 3|Nova Lake-L|APX_F" "6 173|Granite Rapids-X|AVX10\.1" "6 174|Granite Rapids-D|AMX-COMPLEX"; do
+    IFS='|' read -r fm want isa <<< "${c}"
+    r=$(newroot "isa-${fm// /-}")
+    cpuinfo "${r}" "${fm% *}" "${fm#* }" "fpu avx512f"
+    doctor_says "family/model ${fm} is ${want}, ISA predicted not measured" "${r}" "info: ${want} \\(family ${fm% *}, model ${fm#* }\\): ISA predicted by gcc PTA_[A-Z_]+, not read from CPUID: .*${isa}"
+done
+r=$(newroot isa-unknown)
+cpuinfo "${r}" 6 183 "fpu"
+doctor_says "Raptor Lake (6/183) gets no ISA prediction" "${r}" 'ISA predicted by gcc' negate
+# Family/model ids are Intel's only with vendor_id GenuineIntel: AMD Llano prints 18/1.
+r=$(newroot isa-amd-18-1)
+cpuinfo "${r}" 18 1 "fpu" AuthenticAMD
+doctor_says "AuthenticAMD family 18 model 1 (Llano) is not Nova Lake" "${r}" 'ISA predicted by gcc' negate
+r=$(newroot isa-other-19-1)
+cpuinfo "${r}" 19 1 "fpu" HygonGenuine
+doctor_says "non-Intel family 19 model 1 is not Diamond Rapids-X" "${r}" 'ISA predicted by gcc' negate
+# Cancelled AMX extensions never become labels even if a kernel prints them.
+r=$(newroot amx-cancelled)
+cpuinfo "${r}" 19 1 "fpu amx_tile amx_tf32 amx_transpose amx_int8"
+doctor_says "amx_tf32 and amx_transpose are never reported" "${r}" 'ok: AMX \(amx_int8 amx_tile\)'
+doctor_says "amx_tf32 never named as an AMX flag" "${r}" 'ok: AMX \([^)]*tf32' negate
 r=$(newroot npu-7d1d-other-family)
 kernel "${r}" 6.14.0
 cpuinfo "${r}" 18 197 "fpu"
@@ -1401,6 +1484,52 @@ perf_says "perf: PL1 above thermal spec power is ok" "${good}" 'ok: +intel-rapl:
 perf_says "perf: irqbalance found in /proc/*/comm" "${good}" 'ok: +irqbalance is running'
 perf_says "perf: overlay2 is ok" "${good}" 'ok: +storage driver overlay2' "" STUB_DOCKER_DRIVER=overlay2
 perf_says "perf: model that fits is ok" "${good}" 'ok: +a 30 GiB model \(\+20% headroom = 36\.0 GiB\) fits in MemAvailable 48\.0 GiB' "" K3D_GPU_MODEL_GB=30
+
+# Uncore: only numeric max/initial pairs are judged; ok only on equality; min files
+# are optional; TPMI package roots are not reported twice.
+UNC=/sys/devices/system/cpu/intel_uncore_frequency
+unc() { put "$1" "${UNC}/$2/max_freq_khz" "$3"; put "$1" "${UNC}/$2/initial_max_freq_khz" "$4"; }
+r=$(newroot perf-uncmax-bad); cpuinfo "${r}" 6 183 "fpu"
+unc "${r}" uncore00 abc 2200000; unc "${r}" uncore01 "" 2200000
+perf_says "perf: malformed uncore max is not judged" "${r}" 'uncore0[01]:' negate
+r=$(newroot perf-uncmax-above); cpuinfo "${r}" 6 183 "fpu"
+unc "${r}" uncore00 2500000 2200000
+perf_says "perf: uncore max above initial is not called the hardware ceiling" "${r}" 'ok: +uncore00' negate
+perf_says "perf: uncore max above initial is info with both numbers" "${r}" 'info: uncore00: max_freq_khz 2500000 is above initial_max_freq_khz 2200000 \(raised after boot\)'
+r=$(newroot perf-uncmax-legacy); cpuinfo "${r}" 6 183 "fpu"
+unc "${r}" package_00_die_00 4700000 4700000
+perf_says "perf: client package_00_die_00 at its ceiling without min files is ok" "${r}" 'ok: +package_00_die_00: max 4700 MHz, the hardware ceiling'
+r=$(newroot perf-uncmax-tpmi); cpuinfo "${r}" 6 173 "fpu"
+unc "${r}" uncore00 1800000 2200000; unc "${r}" package_00_die_00 1800000 2200000
+perf_says "perf: TPMI cap warns on the cluster" "${r}" 'warn: uncore00: max_freq_khz 1800000 is below the hardware ceiling 2200000'
+perf_says "perf: TPMI package root is not reported twice" "${r}" 'package_00_die_00' negate
+
+# TDX host: the note only when VT-x is exposed and kvm_intel can take tdx=1.
+KM=/sys/module/kvm_intel/parameters
+r=$(newroot perf-tdx-n); cpuinfo "${r}" 19 1 "fpu vmx tdx_host_platform"; kernel "${r}" 6.18.1
+put "${r}" "${KM}/tdx" N
+perf_says "perf: tdx=N on a TDX CPU gives a pasteable modprobe apply" "${r}" 'apply: +sudo modprobe -r kvm_intel && sudo modprobe kvm_intel tdx=1$'
+perf_says "perf: tdx=N note says to stop VMs first" "${r}" 'why: .*stop running VMs and microVM sandboxes first'
+perf_says "perf: tdx note has no BIOS step" "${r}" 'BIOS: enable TDX' negate
+r=$(newroot perf-tdx-y); cpuinfo "${r}" 19 1 "fpu vmx tdx_host_platform"; kernel "${r}" 6.18.1
+put "${r}" "${KM}/tdx" Y
+perf_says "perf: tdx=Y is info" "${r}" 'info: kvm_intel tdx=Y'
+r=$(newroot perf-tdx-guest); cpuinfo "${r}" 19 1 "fpu tdx_guest"
+perf_says "perf: tdx_guest is a TDX guest" "${r}" 'info: this node is a TDX guest'
+r=$(newroot perf-tdx-oldkernel); cpuinfo "${r}" 6 143 "fpu vmx tdx_host_platform"; kernel "${r}" 6.12.0
+mkdir -p "${r}${KM}"
+perf_says "perf: kernel 6.12 gets no modprobe tdx=1" "${r}" 'tdx=1' negate
+perf_says "perf: kernel 6.12 is told KVM TDX needs 6.16" "${r}" 'info: .*kernel 6\.12\.0 has no KVM TDX host support \(needs Linux 6\.16\+\)'
+r=$(newroot perf-tdx-noparam); cpuinfo "${r}" 19 1 "fpu vmx tdx_host_platform"; kernel "${r}" 6.18.1
+mkdir -p "${r}${KM}"
+perf_says "perf: 6.16+ without the tdx parameter lacks CONFIG_KVM_INTEL_TDX" "${r}" 'info: .*built without CONFIG_KVM_INTEL_TDX'
+perf_says "perf: missing tdx parameter gets no apply" "${r}" 'tdx=1' negate
+r=$(newroot perf-tdx-unloaded); cpuinfo "${r}" 19 1 "fpu vmx tdx_host_platform"; kernel "${r}" 6.18.1
+perf_says "perf: unloaded kvm_intel is not 'runs without TDX'" "${r}" 'runs without TDX' negate
+perf_says "perf: unloaded kvm_intel apply has no modprobe -r" "${r}" 'apply: +sudo modprobe kvm_intel tdx=1$'
+r=$(newroot perf-tdx-novmx); cpuinfo "${r}" 19 1 "fpu tdx_host_platform"; kernel "${r}" 6.18.1
+put "${r}" "${KM}/tdx" N
+perf_says "perf: no vmx means no TDX modprobe advice" "${r}" 'tdx=1' negate
 perf_says "perf: model that does not fit warns" "${good}" 'warn: a 45 GiB model needs ~54\.0 GiB' "" K3D_GPU_MODEL_GB=45
 
 # Bad host: every knob wrong.
@@ -4090,6 +4219,199 @@ else
     PASS=$((PASS + 1)); echo "ok   every agent-sandbox image is pinned by digest"
 fi
 
+# NPU firmware names follow the running kernel (ivpu_fw.c fw_names[] per tag).
+r=$(newroot npu-k68-v1-only)
+kernel "${r}" 6.8.0-45-generic
+pci "${r}" 0000:00:0b.0 0x8086 0x643e intel_vpu; accel "${r}" 0000:00:0b.0 0
+firmware "${r}" intel/vpu/vpu_40xx_v1.bin
+doctor_says "kernel 6.8 never loads vpu_40xx_v1.bin" "${r}" \
+    'warn.*vpu_40xx_\* firmware not found; kernel 6\.8\.0-45-generic loads vpu_40xx\.bin,intel/vpu/vpu_40xx_v0\.0\.bin'
+r=$(newroot npu-k68-root-name)
+kernel "${r}" 6.8.0-45-generic
+pci "${r}" 0000:00:0b.0 0x8086 0x7d1d intel_vpu; accel "${r}" 0000:00:0b.0 0
+firmware "${r}" mtl_vpu.bin
+doctor_says "kernel 6.8 loads mtl_vpu.bin for 37xx" "${r}" 'present \(/lib/firmware/mtl_vpu\.bin\)'
+r=$(newroot npu-k612-no-mtl-name)
+kernel "${r}" 6.12.48
+pci "${r}" 0000:00:0b.0 0x8086 0x7d1d intel_vpu; accel "${r}" 0000:00:0b.0 0
+firmware "${r}" mtl_vpu.bin
+doctor_says "kernel 6.12 no longer loads mtl_vpu.bin" "${r}" 'warn.*vpu_37xx_\* firmware not found'
+r=$(newroot npu-k65)
+kernel "${r}" 6.5.0
+pci "${r}" 0000:00:0b.0 0x8086 0x7d1d intel_vpu; accel "${r}" 0000:00:0b.0 0
+firmware "${r}" intel/vpu/mtl_vpu_v0.0.bin
+doctor_says "kernel 6.5 loads intel/vpu/mtl_vpu_v0.0.bin" "${r}" 'present \(/lib/firmware/intel/vpu/mtl_vpu_v0\.0\.bin\)'
+
+# intel-fw-npu's updates/.../vpu_50xx_v1.bin is not what 6.13-6.15 loads.
+r=$(newroot npu-ptl-k614-fwnpu)
+kernel "${r}" 6.14.0-33-generic
+pci "${r}" 0000:00:0b.0 0x8086 0xb03e intel_vpu; accel "${r}" 0000:00:0b.0 0
+firmware "${r}" intel/vpu/vpu_50xx_v0.0.bin
+firmware "${r}" updates/intel/vpu/vpu_50xx_v1.bin
+doctor_says "PTL on 6.14 dates linux-firmware's vpu_50xx_v0.0.bin" "${r}" 'present \(/lib/firmware/intel/vpu/vpu_50xx_v0\.0\.bin\)'
+doctor_says "PTL on 6.14 with intel-fw-npu suggests the v0.0 link" "${r}" \
+    'run: +sudo ln -s vpu_50xx_v1\.bin /lib/firmware/updates/intel/vpu/vpu_50xx_v0\.0\.bin'
+doctor_says "PTL on 6.14 with intel-fw-npu gives the revert" "${r}" \
+    'revert: sudo rm /lib/firmware/updates/intel/vpu/vpu_50xx_v0\.0\.bin'
+r=$(newroot npu-ptl-k616-fwnpu)
+kernel "${r}" 6.16.3
+pci "${r}" 0000:00:0b.0 0x8086 0xb03e intel_vpu; accel "${r}" 0000:00:0b.0 0
+firmware "${r}" updates/intel/vpu/vpu_50xx_v1.bin
+doctor_says "PTL on 6.16 loads intel-fw-npu's v1 with no link hint" "${r}" 'sudo ln -s' negate
+
+# 60xx: no firmware is published; say so rather than "install intel-fw-npu".
+r=$(newroot npu-nvl-param)
+kernel "${r}" 6.19.0
+pci "${r}" 0000:00:0b.0 0x8086 0xd71d intel_vpu; accel "${r}" 0000:00:0b.0 0
+doctor_says "bound Nova Lake NPU without firmware says none is published" "${r}" 'no published NPU firmware for 60xx'
+doctor_says "Nova Lake NPU is not told to install intel-fw-npu" "${r}" 'install linux-firmware or intel-fw-npu' negate
+r=$(newroot npu-nvl-unbound)
+kernel "${r}" 6.19.0
+pci "${r}" 0000:00:0b.0 0x8086 0xd71d "" 0x120000
+mkdir -p "${r}/sys/module/intel_vpu"
+doctor_says "unbound Nova Lake NPU with intel_vpu loaded: no published 60xx firmware" "${r}" \
+    'Nova Lake \(0xd71d\) has no driver.*no published NPU firmware for 60xx'
+
+# Unbound NPU: first cause wins (kernel, module, firmware).
+r=$(newroot npu-lnl-nomod)
+kernel "${r}" 6.18.1
+pci "${r}" 0000:00:0b.0 0x8086 0x643e "" 0x120000
+doctor_says "unbound NPU with intel_vpu not loaded gives modprobe and its revert" "${r}" \
+    'sudo modprobe intel_vpu \(revert: sudo modprobe -r intel_vpu\)'
+r=$(newroot npu-lnl-nofw)
+kernel "${r}" 6.18.1
+pci "${r}" 0000:00:0b.0 0x8086 0x643e "" 0x120000
+mkdir -p "${r}/sys/module/intel_vpu"
+doctor_says "unbound NPU with intel_vpu loaded and no firmware names the firmware" "${r}" \
+    'found no 40xx firmware \(intel/vpu/vpu_40xx_v1\.bin,intel/vpu/vpu_40xx_v0\.0\.bin\)'
+
+# Plugin coverage: an intel_vpu id the pinned plugin does not list.
+r=$(newroot npu-unknown-id)
+kernel "${r}" 7.3.0
+pci "${r}" 0000:00:0b.0 0x8086 0x1234 intel_vpu; accel "${r}" 0000:00:0b.0 0
+doctor_says "NPU id outside the plugin's npuIDs is flagged" "${r}" 'warn.*intel-npu-plugin [0-9.]+ does not list 0x1234'
+r=$(newroot npu-known-id)
+kernel "${r}" 6.18.1
+pci "${r}" 0000:00:0b.0 0x8086 0xb03e intel_vpu; accel "${r}" 0000:00:0b.0 0
+doctor_says "PTL NPU is served by the pinned plugin" "${r}" 'does not list' negate
+# The id list is keyed to the plugin tag share/intel-npu-plugin.yml pins.
+tag=$(sed -n 's/^NPU_PLUGIN_TAG="\(.*\)"$/\1/p' "${K3D_GPU}")
+if [ -n "${tag}" ] && grep -q "image: intel/intel-npu-plugin:${tag}\$" "$(dirname "${K3D_GPU}")/../share/intel-npu-plugin.yml"; then
+    PASS=$((PASS + 1)); echo "ok   NPU_PLUGIN_TAG matches the pinned intel-npu-plugin image"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL NPU_PLUGIN_TAG (${tag}) matches the pinned intel-npu-plugin image"
+fi
+
+# Auto detection skips an NPU the bundled plugin does not serve; flags override.
+r=$(newroot npu-unserved-detect)
+kernel "${r}" 7.3.0
+pci "${r}" 0000:00:0b.0 0x8086 0x1234 intel_vpu; accel "${r}" 0000:00:0b.0 0
+expect "auto detection skips an NPU the bundled plugin does not serve" "${r}" ""
+expect "K3D_GPU_NPU_PLUGIN makes an unlisted NPU id active" "${r}" "npu npu.intel.com/accel" \
+    K3D_GPU_NPU_PLUGIN=/opt/newer-npu-plugin.yml
+expect "K3D_GPU_VENDORS=npu forces an unlisted NPU id active" "${r}" "npu npu.intel.com/accel" K3D_GPU_VENDORS=npu
+doctor_says "doctor explains an NPU auto detection skipped" "${r}" 'warn.*intel-npu-plugin [0-9.]+ does not list 0x1234'
+doctor_says "K3D_GPU_NPU_PLUGIN skips the bundled id check" "${r}" 'does not list' negate \
+    K3D_GPU_NPU_PLUGIN=/opt/newer-npu-plugin.yml
+doctor_says "K3D_GPU_NPU_PLUGIN gets a note instead" "${r}" 'note: K3D_GPU_NPU_PLUGIN=/opt/newer-npu-plugin\.yml replaces the bundled plugin' "" \
+    K3D_GPU_NPU_PLUGIN=/opt/newer-npu-plugin.yml
+# The stub cluster advertises no npu.intel.com/accel, so up exits non-zero after
+# k3d create; the recorded create arguments are what these check. Later sections
+# replace the up_says stubs, so put back the k3d one that records its arguments
+# and a kubectl that accepts everything.
+cat > "${USTUB}/k3d" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$@" > "${STUB_K3D_ARGS}"
+EOF
+cat > "${USTUB}/kubectl" <<'EOF'
+#!/bin/sh
+case "$*" in *"get nodes -l"*) echo node/k3d-stub-server-0 ;; esac
+exit 0
+EOF
+cp "${STUB_BIN}/docker" "${USTUB}/docker"
+chmod +x "${USTUB}"/*
+up_says "up labels an unlisted NPU when K3D_GPU_VENDORS=npu forces it" fail \
+    '^--k3s-node-label=intel\.feature\.node\.kubernetes\.io/npu=true' "" K3D_GPU_SYSROOT="${r}" K3D_GPU_VENDORS=npu
+up_says "up labels an unlisted NPU under K3D_GPU_NPU_PLUGIN" fail \
+    '^--k3s-node-label=intel\.feature\.node\.kubernetes\.io/npu=true' "" K3D_GPU_SYSROOT="${r}" K3D_GPU_VENDORS=auto \
+    K3D_GPU_NPU_PLUGIN=/opt/newer-npu-plugin.yml
+r=$(newroot npu-unreadable-id)
+kernel "${r}" 6.18.1
+pci "${r}" 0000:00:0b.0 0x8086 0x643e intel_vpu; accel "${r}" 0000:00:0b.0 0
+: > "${r}/sys/devices/pci0000:00/0000:00:0b.0/device"
+doctor_says "unreadable NPU device id is named as such" "${r}" 'its PCI device id is unreadable'
+doctor_says "unreadable NPU device id is not called unserved" "${r}" 'does not list' negate
+
+# A kernel older than the NPU's support gets no firmware-name advice.
+r=$(newroot npu-nvl-k614)
+kernel "${r}" 6.14.0
+pci "${r}" 0000:00:0b.0 0x8086 0xd71d intel_vpu; accel "${r}" 0000:00:0b.0 0
+doctor_says "Nova Lake on 6.14 says the kernel is too old" "${r}" 'warn.*Nova Lake NPU needs kernel 6\.19\+'
+doctor_says "Nova Lake on 6.14 skips the 60xx firmware message" "${r}" 'no published NPU firmware' negate
+
+# Unreadable kernel version: no kernel cause, no version-specific name list.
+r=$(newroot npu-ptl-nokernel)
+kernel "${r}" ""
+pci "${r}" 0000:00:0b.0 0x8086 0xb03e intel_vpu; accel "${r}" 0000:00:0b.0 0
+doctor_says "empty osrelease is reported as unreadable" "${r}" 'kernel version unreadable'
+doctor_says "empty osrelease does not list pre-6.6 mtl names for PTL" "${r}" 'mtl_vpu' negate
+r=$(newroot npu-ptl-nokernel-unbound)
+kernel "${r}" ""
+pci "${r}" 0000:00:0b.0 0x8086 0xb03e "" 0x120000
+doctor_says "empty osrelease: unbound NPU is not blamed on the kernel" "${r}" 'predates its intel_vpu support' negate
+doctor_says "empty osrelease: unbound NPU gets the modprobe hint" "${r}" 'sudo modprobe intel_vpu'
+
+# The intel-fw-npu v0.0 link is suggested only when it changes the loaded file.
+# fwnpu_ptl <name> <kernel>: PTL NPU with intel-fw-npu's updates/.../vpu_50xx_v1.bin.
+fwnpu_ptl() {
+    local r
+    r=$(newroot "$1"); kernel "${r}" "$2"
+    pci "${r}" 0000:00:0b.0 0x8086 0xb03e intel_vpu; accel "${r}" 0000:00:0b.0 0
+    firmware "${r}" updates/intel/vpu/vpu_50xx_v1.bin
+    echo "${r}"
+}
+r=$(fwnpu_ptl npu-fwnpu-root-name 6.14.0)
+firmware "${r}" vpu_50xx.bin
+doctor_says "root-level vpu_50xx.bin wins: no v0.0 link advice" "${r}" 'sudo ln -s' negate
+r=$(fwnpu_ptl npu-fwnpu-param 6.14.0)
+firmware "${r}" intel/vpu/vpu_50xx_v0.0.bin
+put "${r}" /sys/module/intel_vpu/parameters/firmware my_vpu.bin
+firmware "${r}" my_vpu.bin
+doctor_says "firmware= parameter set: no v0.0 link advice" "${r}" 'sudo ln -s' negate
+r=$(newroot npu-fwnpu-k65)
+kernel "${r}" 6.5.0
+pci "${r}" 0000:00:0b.0 0x8086 0x7d1d intel_vpu; accel "${r}" 0000:00:0b.0 0
+firmware "${r}" intel/vpu/mtl_vpu_v0.0.bin
+firmware "${r}" updates/intel/vpu/vpu_37xx_v1.bin
+doctor_says "kernel 6.5 requests mtl names: no v0.0 link advice" "${r}" 'sudo ln -s' negate
+r=$(fwnpu_ptl npu-fwnpu-custom 6.14.0)
+mkdir -p "${r}/opt/fw/intel/vpu"; touch "${r}/opt/fw/intel/vpu/vpu_50xx_v0.0.bin"
+put "${r}" /sys/module/firmware_class/parameters/path /opt/fw
+doctor_says "firmware_class.path copy wins: no v0.0 link advice" "${r}" 'sudo ln -s' negate
+r=$(fwnpu_ptl npu-fwnpu-dangling 6.14.0)
+firmware "${r}" intel/vpu/vpu_50xx_v0.0.bin
+ln -s vpu_50xx_v9.bin "${r}/lib/firmware/updates/intel/vpu/vpu_50xx_v0.0.bin"
+doctor_says "dangling v0.0 link: advice uses ln -sfn" "${r}" \
+    'run: +sudo ln -sfn vpu_50xx_v1\.bin /lib/firmware/updates/intel/vpu/vpu_50xx_v0\.0\.bin'
+doctor_says "dangling v0.0 link: revert restores the old target" "${r}" \
+    'revert: sudo ln -sfn vpu_50xx_v9\.bin /lib/firmware/updates/intel/vpu/vpu_50xx_v0\.0\.bin'
+doctor_says "dangling v0.0 link: no plain ln -s" "${r}" 'sudo ln -s vpu' negate
+r=$(newroot npu-fwnpu-zst)
+kernel "${r}" 6.14.0
+pci "${r}" 0000:00:0b.0 0x8086 0xb03e intel_vpu; accel "${r}" 0000:00:0b.0 0
+firmware "${r}" intel/vpu/vpu_50xx_v0.0.bin.zst
+firmware "${r}" updates/intel/vpu/vpu_50xx_v1.bin.zst
+doctor_says "compressed intel-fw-npu v1 gets a .zst link" "${r}" \
+    'run: +sudo ln -s vpu_50xx_v1\.bin\.zst /lib/firmware/updates/intel/vpu/vpu_50xx_v0\.0\.bin\.zst'
+r=$(newroot npu-fwnpu-zst-late)
+kernel "${r}" 6.14.0
+pci "${r}" 0000:00:0b.0 0x8086 0xb03e intel_vpu; accel "${r}" 0000:00:0b.0 0
+firmware "${r}" intel/vpu/vpu_50xx_v0.0.bin
+firmware "${r}" updates/intel/vpu/vpu_50xx_v1.bin.zst
+doctor_says "a .zst link loses to an uncompressed v0.0: no advice" "${r}" 'sudo ln -s' negate
+r=$(fwnpu_ptl npu-fwnpu-stop 6.14.0)
+firmware "${r}" intel/vpu/vpu_50xx_v0.0.bin
+doctor_says "v0.0 link advice says to stop NPU users first" "${r}" "Stop what uses the NPU first \('k3d-gpu down'"
 # capacity: dispatch and locating bench/apb/capacity.py (the ramp itself is
 # tested by bench/apb/test_capacity.py).
 # says <name> <want rc: 0|N> <ERE> <cmd...>: output must match and rc must equal want.

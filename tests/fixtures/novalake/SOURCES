@@ -1,0 +1,16 @@
+Platform: Nova Lake NPU (60xx IP) under kernel 6.19 with intel_vpu loaded but
+no NPU firmware, so the probe fails: the PCI function has no driver and no
+accel node. NPU-only fixture.
+
+Sources:
+- 0x8086 0xd71d NPU: drivers/accel/ivpu/ivpu_drv.h (PCI_DEVICE_ID_NVL, 60xx IP);
+  class 0x1200 per intel-device-plugins' NFD rule (deployments/nfd/overlays/
+  node-feature-rules).
+- Firmware: fw_names[] in drivers/accel/ivpu/ivpu_fw.c at tag v6.19 asks only for
+  intel/vpu/vpu_60xx_v1.bin (no _v0.0). Neither linux-firmware tag 20260916
+  (WHENCE) nor intel/linux-npu-driver v1.38.0 (firmware/bin) ships it.
+- A failed probe leaves no driver link and no accel node: ivpu_fw.c returns the
+  request_firmware error from probe.
+
+Derived from tests/fixtures/pantherlake with the iGPU and IAA removed. Not from
+hardware: the CPU tree (pantherlake's), the kernel release string, the BDF.

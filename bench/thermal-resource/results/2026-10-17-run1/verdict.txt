@@ -1,0 +1,1 @@
+INCONCLUSIVE degenerate budget: slots 2 < 4

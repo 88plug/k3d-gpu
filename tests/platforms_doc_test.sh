@@ -3,7 +3,8 @@
 #   1. every fixture with an up.golden has a row, and every row names a fixture
 #   2. the Auto config cell says "NRI balloons (" exactly when up.golden rolls out
 #      daemonset/nri-resource-policy-balloons, and "no NRI balloons" exactly when
-#      up.golden passes --disable=nri-balloons
+#      up.golden passes --disable=nri-balloons; when up.golden refuses (no supported
+#      accelerator, exit=1) the cell says "`up` exits 1" instead
 #   3. the Predicted behaviour cell ends with the plan.json decision in backticks
 # "as above" in a cell repeats the previous row's cell.
 # Needs bash, python3.
@@ -54,7 +55,14 @@ for f in fixtures:
     auto, pred = rows[f][3], rows[f][4]
     rolled = "rollout status daemonset/nri-resource-policy-balloons" in up
     disabled = "--disable=nri-balloons" in up
-    check(rolled != disabled, f"{f}: up.golden either runs or disables NRI balloons")
+    # A fixture with no supported accelerator (an unbound dGPU) makes up exit 1
+    # before k3s starts; its Auto config cell must say so.
+    refused = "no supported accelerator detected" in up and up.rstrip().endswith("exit=1")
+    if refused:
+        check(not rolled and not disabled, f"{f}: refused up.golden neither runs nor disables NRI balloons")
+        check("`up` exits 1" in auto, f"{f}: Auto config says `up` exits 1 (up.golden refuses)")
+    else:
+        check(rolled != disabled, f"{f}: up.golden either runs or disables NRI balloons")
     check(("NRI balloons (" in auto) == rolled, f"{f}: Auto config balloons cell matches up.golden (rolled={rolled})")
     check(("no NRI balloons" in auto) == disabled, f"{f}: Auto config 'no NRI balloons' matches up.golden (disabled={disabled})")
     decision = json.load(open(os.path.join(fix, f, "plan.json"), encoding="utf-8"))["decision"]

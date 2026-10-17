@@ -1,0 +1,13 @@
+facts: sha256:6a1a0f981880a76e4abb745f0a84bb1801d44c12c1f30579708660f210feecae
+targets:
+  cpu: unknown CPU, P-cores 0-3 (4), E-cores 4-15 (12); usable
+  npu:0000:00:0b.0: intel Wildcat Lake, 0xfd3e, on intel_vpu, NPU 50xx; usable
+matrix: 2 cells, 0 on a target of this host
+  no measured cell for these targets
+decision:
+  unmeasured, run `k3d-gpu prove` on this box
+  bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)
+exit=0
+--- calls
+kubectl config get-contexts -o name
+kubectl --context k3d-gpu --request-timeout=5s get nodes -o name

@@ -1,0 +1,5 @@
+WARN: Intel NPU 0x1234 is not served by intel-npu-plugin 0.37.1 — skipping the NPU (K3D_GPU_NPU_PLUGIN=<newer plugin yaml> overrides; see 'k3d-gpu doctor')
+intel gpu.intel.com/xe
+iaa iaa.intel.com/*
+hybrid k3d-gpu.io/hybrid-cpu=true
+exit=0

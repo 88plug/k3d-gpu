@@ -38,6 +38,17 @@ the plan decisions against the goldens:
 | Lunar Lake (Core Ultra 200V) | `lunarlake` | `gpu.intel.com/xe`, `npu.intel.com/accel`, hybrid | Intel GPU plugin (shared iGPU), NPU plugin, NRI balloons (hybrid P/E) | plan targets: cpu, gpu (xe), npu usable; no catalog cell on this host; `unmeasured` | [SOURCES](../tests/fixtures/lunarlake/SOURCES) |
 | Xeon CPU Max (HBM cache mode, SNC4) | `xeon-max-hbm-cache` | AMX, NUMA | AMX and NUMA labels, NRI balloons (NUMA replica) | plan targets: cpu usable; no catalog cell on this host; `unmeasured` | [SOURCES](../tests/fixtures/xeon-max-hbm-cache/SOURCES) |
 | Xeon CPU Max (HBM as devdax, SNC4) | `xeon-max-hbm-devdax` | AMX, NUMA | AMX and NUMA labels, NRI balloons (NUMA replica) | plan targets: cpu usable; no catalog cell on this host; `unmeasured` | [SOURCES](../tests/fixtures/xeon-max-hbm-devdax/SOURCES) |
+| Arc Pro B60 (Battlemage E211, kernel 6.14 backport) | `battlemage-pro-b60` | `gpu.intel.com/xe` | Intel GPU plugin (dGPU, not shared); no NRI balloons | plan targets: cpu, gpu usable; doctor reports the 6.14 bind as a stable backport, not force_probe; no catalog cell on this host; `unmeasured` | [SOURCES](../tests/fixtures/battlemage-pro-b60/SOURCES) |
+| Arc Pro B70 (Battlemage E223), kernel 6.16, unbound | `battlemage-pro-b70-k616` | nothing (no driver bound) | none: `up` exits 1 with no supported accelerator | plan targets: cpu usable; doctor asks for kernel 6.17+, as force_probe cannot add an id missing from xe's table; `unmeasured` | [SOURCES](../tests/fixtures/battlemage-pro-b70-k616/SOURCES) |
+| Arc A770 (Alchemist DG2-G10) on i915 | `dg2-a770-i915` | `gpu.intel.com/i915` | Intel GPU plugin (dGPU, not shared); no NRI balloons | plan targets: cpu, gpu usable; doctor never suggests xe for it; no catalog cell on this host; `unmeasured` | [SOURCES](../tests/fixtures/dg2-a770-i915/SOURCES) |
+| Data Center GPU Flex 140 (ATS-M), unbound | `flex140-unbound` | nothing (no driver bound) | none: `up` exits 1 with no supported accelerator | plan targets: cpu usable; doctor offers intel-i915-dkms LTS or the `xe-force-probe` experimental feature; `unmeasured` | [SOURCES](../tests/fixtures/flex140-unbound/SOURCES) |
+| Data Center GPU Max 1550 (Ponte Vecchio), unbound | `pvc-max1550-unbound` | nothing (no driver bound) | none: `up` exits 1 with no supported accelerator | plan targets: cpu usable; doctor names intel-i915-dkms LTS only, no force_probe; `unmeasured` | [SOURCES](../tests/fixtures/pvc-max1550-unbound/SOURCES) |
+| Lunar Lake NPU, kernel 6.8 (NPU only) | `lunarlake-k6.8` | `npu.intel.com/accel`, hybrid | NPU plugin, NRI balloons (hybrid P/E) | plan targets: cpu, npu usable; doctor dates the `vpu_40xx_v0.0.bin` that kernel 6.8 loads, not `_v1`; no catalog cell on this host; `unmeasured` | [SOURCES](../tests/fixtures/lunarlake-k6.8/SOURCES) |
+| Panther Lake NPU, kernel 6.14 + intel-fw-npu (NPU only) | `pantherlake-k6.14` | `npu.intel.com/accel`, hybrid | NPU plugin, NRI balloons (hybrid P/E) | plan targets: cpu, npu usable; doctor suggests (never applies) a `vpu_50xx_v0.0.bin` link to intel-fw-npu's `_v1`, with its revert; no catalog cell on this host; `unmeasured` | [SOURCES](../tests/fixtures/pantherlake-k6.14/SOURCES) |
+| Wildcat Lake NPU (NPU only) | `wildcatlake` | `npu.intel.com/accel`, hybrid | NPU plugin, NRI balloons (hybrid P/E) | plan targets: cpu, npu usable; no catalog cell on this host; `unmeasured` | [SOURCES](../tests/fixtures/wildcatlake/SOURCES) |
+| Nova Lake NPU, no firmware, unbound (NPU only) | `novalake` | hybrid; the unbound NPU is not detected | NRI balloons (hybrid P/E); no NPU plugin | plan targets: cpu usable; doctor says no 60xx NPU firmware is published; no catalog cell on this host; `unmeasured` | [SOURCES](../tests/fixtures/novalake/SOURCES) |
+| NPU id the pinned plugin does not serve (Panther Lake, id 0x1234) | `npu-unserved` | `gpu.intel.com/xe`, `iaa.intel.com/*`, hybrid; the NPU is skipped with a warning | Intel GPU plugin (shared iGPU), IAA plugin, NRI balloons (hybrid P/E); no NPU plugin | plan targets: cpu, gpu (xe), npu usable; doctor warns that intel-npu-plugin 0.37.1 does not list the id; no catalog cell on this host; `unmeasured` | [SOURCES](../tests/fixtures/npu-unserved/SOURCES) |
+| Xeon 6+ P-core (Diamond Rapids, SNC3, simulated) | `xeon-dmr` | DSA, IAA, AMX, NUMA | DSA and IAA plugins, AMX and NUMA labels, NRI balloons (NUMA replica) | plan targets: cpu usable; doctor names the family-19 CPU and its predicted ISA; no catalog cell on this host; `unmeasured` | [SOURCES](../tests/fixtures/xeon-dmr/SOURCES) |
 
 ## Client: Core Ultra
 
@@ -55,7 +66,7 @@ atom CPU with no L3 is an LP E-core. The CPU family and model in
 | Arrow Lake-U (Core Ultra 200U, model 181) | iGPU 0x7d41 on i915; P-cores with SMT; LP E-cores = `cpu_atom` CPUs without an L3 | `gpu.intel.com/i915`, `xmx=false`; `pcore-physical` = one thread per P-core; `lowpower` set | P-core balloons pin whole sibling pairs, predicted by ARK 255U (12 cores, 14 threads); no XMX, predicted by Mesa arl_u and compute-runtime `MTL_U` | [ARK 255U](https://www.intel.com/content/www/us/en/products/sku/241860/intel-core-ultra-7-processor-255u-12m-cache-up-to-5-20-ghz/specifications.html), [iris_pci_ids.h](https://gitlab.freedesktop.org/mesa/mesa/-/blob/main/include/pci_ids/iris_pci_ids.h), fixture `arrowlake-u` |
 | Lunar Lake (Core Ultra 200V, model 189) | iGPU 0x6420/0x64a0/0x64b0 on xe only (6.12+); NPU 0x643e (40xx); all 4 `cpu_atom` CPUs are LP E-cores | `gpu.intel.com/xe`, `xmx=true`, `npu.gen=40xx`; `lowpower` = all E-cores, no `efficient` E-cores; doctor notes any topology other than 4 P + 4 LP E | Memory is on-package and shared by CPU, iGPU and NPU, so `MemTotal` is the whole budget, predicted by the ARK and Wikipedia SKU tables (not yet acted on: no code budgets by it); the LP E-core split depends on the E-cores showing no L3 in sysfs, which no capture has confirmed yet | [xe_pci.c](https://github.com/torvalds/linux/blob/master/drivers/gpu/drm/xe/xe_pci.c), [ivpu_drv.h](https://github.com/torvalds/linux/blob/master/drivers/accel/ivpu/ivpu_drv.h), [core.c](https://github.com/torvalds/linux/blob/master/arch/x86/events/intel/core.c), [Lunar Lake](https://en.wikipedia.org/wiki/Lunar_Lake), fixture `lunarlake` |
 | Panther Lake (Core Ultra Series 3, model 204) | iGPU 0xb080-0xb087/0xb08f/0xb090/0xb0a0/0xb0b0 on xe (6.17+); NPU 0xb03e (50xx, 6.13+); LP E-cores = `cpu_atom` CPUs without an L3 | `gpu.intel.com/xe`, `xmx=true`, `npu.gen=50xx`; doctor asks for kernel 6.17 below it, with no `force_probe` advice (no earlier `xe_uc_fw.c` has a PANTHERLAKE GuC entry) | XMX on every PTL id, the 4-Xe parts too, predicted by Mesa `XE3_CONFIG` | [xe_pci.c v6.17](https://github.com/torvalds/linux/blob/v6.17/drivers/gpu/drm/xe/xe_pci.c), [xe_uc_fw.c v6.17](https://github.com/torvalds/linux/blob/v6.17/drivers/gpu/drm/xe/xe_uc_fw.c), fixture `pantherlake` |
-| Wildcat Lake (model 213) | iGPU 0xfd80/0xfd81 on xe (6.17+, `ptl_desc`); NPU 0xfd3e (50xx, 6.17+) | `gpu.intel.com/xe`, `xmx=true`, `npu.gen=50xx`; doctor asks for kernel 6.17 below it, with no `force_probe` advice (no earlier `pciids.h` lists either id); detect_test only, no fixture | Same xe path as Panther Lake, predicted by v6.17 `INTEL_PTL_IDS` listing both ids | [pciids.h v6.17](https://github.com/torvalds/linux/blob/v6.17/include/drm/intel/pciids.h) |
+| Wildcat Lake (model 213) | iGPU 0xfd80/0xfd81 on xe (6.17+, `ptl_desc`); NPU 0xfd3e (50xx, 6.17+) | `gpu.intel.com/xe`, `xmx=true`, `npu.gen=50xx`; doctor asks for kernel 6.17 below it, with no `force_probe` advice (no earlier `pciids.h` lists either id); the iGPU is covered by detect_test only, the NPU by fixture `wildcatlake` | Same xe path as Panther Lake, predicted by v6.17 `INTEL_PTL_IDS` listing both ids | [pciids.h v6.17](https://github.com/torvalds/linux/blob/v6.17/include/drm/intel/pciids.h) |
 
 Host, kernel and BIOS changes are never applied. `k3d-gpu doctor` prints them as
 suggestions with the exact command and its revert.
@@ -79,6 +90,130 @@ Notes:
   only when `amx_tile` is present and the `hypervisor` flag is not (a VM may mask
   CPUID bits). Real NFD reads CPUID and agrees on bare metal.
 - Host, kernel and BIOS changes are suggestions in `doctor`, never applied.
+
+## Discrete Intel GPUs
+
+How `k3d-gpu` detects each discrete Intel GPU family and what it does with no
+flags. Detection reads the PCI vendor and device id from sysfs and the driver the
+kernel bound. The device plugin resource is always `gpu.intel.com/<bound driver>`,
+the name the plugin itself derives (`device_props.go` in
+[intel-device-plugins v0.37.1](https://github.com/intel/intel-device-plugins-for-kubernetes/blob/v0.37.1/cmd/gpu_plugin/device_props.go)).
+Kernel, boot option and driver package changes are never applied: `doctor` and
+`host-setup` print them.
+
+Nothing in this table was measured on the hardware. The "predicted behaviour"
+column is predicted by the named kernel source or vendor doc. Each family has a
+sim fixture under `tests/fixtures/` whose transcripts are the goldens.
+
+| Family (ids) | Detected as | Auto config chosen | Predicted behaviour | Source |
+|---|---|---|---|---|
+| Arc B580/B570, Pro B50 (E20B E20C E212, plus E202 E20D) | `Battlemage`, kernel 6.12 | `gpu.intel.com/xe`, exclusive (shared-dev-num 1), `gpu.intel.com/xmx=true` | Predicted by xe_pci.c: binds xe without force_probe from 6.12. Fixture `battlemage-b580` | [pciids.h](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/include/drm/intel/pciids.h), [xe_pciids.h v6.12](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/include/drm/intel/xe_pciids.h?h=v6.12) |
+| Arc Pro B60 (E211, plus E210 E216) | `Battlemage`, kernel 6.15 | as above | Predicted by pciids.h: the id joins xe's table in 6.15 (6.14.y has a backport). Bound on an older kernel, doctor reports a backport, not force_probe. Fixture `battlemage-pro-b60` (6.14) | [pciids.h 6.14.y](https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/plain/include/drm/intel/pciids.h?h=linux-6.14.y) |
+| Arc Pro B65/B70 (E222 E223, plus E209 E220 E221) | `Battlemage`, kernel 6.17 | as above | Predicted by pciids.h: the id joins xe's table in 6.17. Unbound on an older kernel, doctor asks for a newer kernel; `xe.force_probe` cannot add a missing id. Fixture `battlemage-pro-b70-k616` | [pciids.h](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/include/drm/intel/pciids.h) |
+| Arc A-series, Arc Pro A (56A0-56A6, 5690-5697, 56B0-56B3, 56BA-56BF) | `Alchemist DG2-G10/G11/G12`, kernel 6.2 (56BA-56BD 6.7, 56BE/56BF 6.10) | `gpu.intel.com/i915` (or `xe` if force-probed), exclusive, `gpu.intel.com/xmx=true` | Predicted by i915_pci.c: dg2_info drops require_force_probe in 6.2. xe still requires force_probe, so doctor never suggests xe for it. 56BA-56BF joined i915's id table late, so on an older kernel doctor treats them like late Battlemage ids: unbound asks for a newer kernel, bound is a backport, never force_probe. XMX predicted by Mesa has_systolic (XEHP_FEATURES). Fixture `dg2-a770-i915` | [i915_pci.c v6.2](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/drivers/gpu/drm/i915/i915_pci.c?h=v6.2), [intel_device_info.c](https://gitlab.freedesktop.org/mesa/mesa/-/raw/main/src/intel/dev/intel_device_info.c) |
+| Data Center GPU Flex 170/140 (56C0 56C1, 56C2) | `Flex (ATS-M)`, no default kernel | resource follows the bound driver (i915 from intel-i915-dkms, xe if force-probed); `gpu.intel.com/xmx=true` | Predicted by i915_pci.c and xe_pci.c: ats_m keeps require_force_probe in both. Unbound, doctor offers intel-i915-dkms LTS, or on kernel 6.8+ (xe merged in 6.8) xe force-probe with the exact apply and revert of `doctor --experimental` `xe-force-probe`. Below 6.8 there is no xe, so it offers dkms only. Fixture `flex140-unbound` | [xe_pci.c](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/drivers/gpu/drm/xe/xe_pci.c), [xe_pci.c v6.8](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/drivers/gpu/drm/xe/xe_pci.c?h=v6.8), [Intel hardware table](https://dgpu-docs.intel.com/overview/hardware-table.html) |
+| Data Center GPU Max (0B69 0B6E 0BD4-0BDB 0BE0 0BE1 0BE5) | `Max (Ponte Vecchio)`, no upstream driver | resource follows the bound driver; no xmx label (not in Mesa) | Predicted by i915_pci.c and xe_pci.c: pvc_info/pvc_desc are unused and no PVC id is in either table. Unbound, doctor names intel-i915-dkms LTS only, no force_probe, and `xe-force-probe` is not offered. 0BD0-0BD3 are pre-production ids missing from `INTEL_PVC_IDS`, so they are not treated as discrete. Fixture `pvc-max1550-unbound` | [support matrix](https://dgpu-docs.intel.com/overview/support-matrix/max-and-flex-support-matrix.html) |
+
+E215 was in xe's table in 6.15 and 6.16 and was dropped in 6.17; it is left unnamed on purpose, so a bound E215 shows as `Intel GPU (0xe215)`.
+
+SR-IOV stays suggest-only. The `xe-sriov` experimental feature (`k3d-gpu doctor --experimental`) lists an xe PF only
+when its `sriov_totalvfs` is above zero. xe sets it to zero on Battlemage before
+6.17, because `bmg_desc` gains `has_sriov` there
+([xe_sriov.c](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/drivers/gpu/drm/xe/xe_sriov.c)).
+
+## NPU
+
+Detection: an accel node `/sys/class/accel/accelN` whose PCI vendor is `0x8086`,
+whose bound driver is `intel_vpu`, and whose `/dev/accel/accelN` exists. The
+device id maps to a name, the first kernel that knows it and a firmware
+generation ([ivpu_fw.c v6.17](https://github.com/torvalds/linux/blob/v6.17/drivers/accel/ivpu/ivpu_fw.c), [ivpu_drv.h v6.17](https://github.com/torvalds/linux/blob/v6.17/drivers/accel/ivpu/ivpu_drv.h)).
+
+Auto config on every NPU row: the intel-npu-plugin DaemonSet with upstream's
+`-shared-dev-num` default of 1, i.e. one pod per NPU
+([npu_plugin README](https://github.com/intel/intel-device-plugins-for-kubernetes/blob/v0.37.1/cmd/npu_plugin/README.md)),
+resource `npu.intel.com/accel`; node labels
+`intel.feature.node.kubernetes.io/npu=true`, `k3d-gpu.io/npu.gen=<gen>` and,
+when the device node's group is not root, `k3d-gpu.io/npu-render-gid=<gid>`.
+A node gets no NPU label when the pinned plugin
+([npuIDs at v0.37.1](https://github.com/intel/intel-device-plugins-for-kubernetes/blob/v0.37.1/cmd/npu_plugin/npu_plugin.go))
+does not list its id, because the plugin would advertise nothing there.
+
+| Family | Detected as | Auto config | Predicted behaviour | Source |
+|---|---|---|---|---|
+| Meteor Lake / Arrow Lake-H | `0x7d1d`, 37xx, kernel 6.3+ (CPU model tells MTL from ARL-H) | plugin + labels, `npu.gen=37xx` | kernel 6.14 loads `intel/vpu/vpu_37xx_v0.0.bin`, predicted by `fw_names[]` in ivpu_fw.c | [ivpu_fw.c v6.15](https://github.com/torvalds/linux/blob/v6.15/drivers/accel/ivpu/ivpu_fw.c), fixture `arrowlake-h` |
+| Arrow Lake | `0xad1d`, 37xx, kernel 6.6+ | plugin + labels, `npu.gen=37xx` | kernel 6.12 loads `intel/vpu/vpu_37xx_v0.0.bin` (a linux-firmware link to `_v1`), predicted by ivpu_fw.c | [ivpu_fw.c v6.12](https://github.com/torvalds/linux/blob/v6.12/drivers/accel/ivpu/ivpu_fw.c), fixture `arrowlake-s` |
+| Lunar Lake | `0x643e`, 40xx, kernel 6.6+ | plugin + labels, `npu.gen=40xx` | kernel 6.8 tries, in order, `vpu_40xx.bin` then `intel/vpu/vpu_40xx_v0.0.bin` and loads the first found, never `_v1`, predicted by ivpu_fw.c | [ivpu_fw.c v6.8](https://github.com/torvalds/linux/blob/v6.8/drivers/accel/ivpu/ivpu_fw.c), fixture `lunarlake-k6.8` |
+| Panther Lake | `0xb03e`, 50xx, kernel 6.13+ | plugin + labels, `npu.gen=50xx` | kernel 6.18 loads `intel/vpu/vpu_50xx_v1.bin`, predicted by ivpu_fw.c | [ivpu_fw.c v6.16](https://github.com/torvalds/linux/blob/v6.16/drivers/accel/ivpu/ivpu_fw.c), fixture `pantherlake` |
+| Panther Lake on 6.13-6.15 | `0xb03e`, 50xx | plugin + labels; doctor suggests (never applies) a `vpu_50xx_v0.0.bin` link to intel-fw-npu's `_v1`, with its revert | the kernel loads linux-firmware's `vpu_50xx_v0.0.bin`, not intel-fw-npu's `_v1`, predicted by ivpu_fw.c and intel-fw-npu's file list | [ivpu_fw.c v6.15](https://github.com/torvalds/linux/blob/v6.15/drivers/accel/ivpu/ivpu_fw.c), [linux-npu-driver firmware/bin](https://github.com/intel/linux-npu-driver/tree/v1.38.0/firmware/bin), fixture `pantherlake-k6.14` |
+| Wildcat Lake | `0xfd3e`, 50xx, kernel 6.17+ | plugin + labels, `npu.gen=50xx` | loads `intel/vpu/vpu_50xx_v1.bin`, predicted by ivpu_fw.c | [ivpu_fw.c v6.17](https://github.com/torvalds/linux/blob/v6.17/drivers/accel/ivpu/ivpu_fw.c), [ivpu_drv.h v6.17](https://github.com/torvalds/linux/blob/v6.17/drivers/accel/ivpu/ivpu_drv.h), fixture `wildcatlake` |
+| Nova Lake | `0xd71d`, 60xx, kernel 6.19+; not detected while firmware is missing | none (no accel node); doctor says no 60xx firmware is published | intel_vpu's probe fails for want of `vpu_60xx_v1.bin`, which linux-firmware 20260916 and linux-npu-driver v1.38.0 do not ship, predicted by their file lists | [WHENCE](https://gitlab.com/kernel-firmware/linux-firmware/-/blob/20260916/WHENCE), [ivpu_fw.c v6.19](https://github.com/torvalds/linux/blob/v6.19/drivers/accel/ivpu/ivpu_fw.c), fixture `novalake` |
+
+Doctor explains an NPU PCI function (class `0x1200`) with no driver by the first
+cause that holds: a kernel older than the id's first tag; `intel_vpu` not loaded
+(it suggests `sudo modprobe intel_vpu`, revert `sudo modprobe -r intel_vpu`); no
+firmware under the names that kernel requests. Host changes are suggested only.
+
+## Newest ISA and kernel features
+
+What `k3d-gpu doctor` and `doctor --perf` report for CPU families whose newest
+features `/proc/cpuinfo` may not show, and for kernel knobs that matter to agent
+inference. Everything here is read-only detection. k3d-gpu changes no host,
+kernel or BIOS setting; where a host change helps, doctor prints the exact
+`apply` and `revert` commands.
+
+### Why cpuinfo is not enough
+
+The kernel prints a CPU flag only when its `cpufeatures.h` comment starts with a
+quoted name ([mkcapflags.sh](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/cpu/mkcapflags.sh),
+[cpufeatures.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/cpufeatures.h)).
+On current kernels AMX-FP16 and APX are unquoted (older kernels did print
+`amx_fp16`, as the `xeon-gnr` fixture shows). AVX10, AMX-FP8 and AMX-COMPLEX
+have no `cpufeatures.h` entry; only KVM's
+[reverse_cpuid.h](https://github.com/torvalds/linux/blob/master/arch/x86/kvm/reverse_cpuid.h)
+defines their `X86_FEATURE_*` macros, so cpuinfo never prints them.
+So doctor names the CPU by family and model and reports the ISA that gcc's
+`-march` mask predicts. NFD reads CPUID itself and labels what the CPU really
+reports (`cpu-cpuid.AVX10_VERSION`, `APX_F`, `AMXFP8`;
+[NFD features](https://github.com/kubernetes-sigs/node-feature-discovery/blob/master/docs/usage/features.md)).
+
+### Families
+
+| Family | Detected as (cpuinfo `cpu family` / `model`) | Auto config chosen | Predicted behaviour | Source |
+|---|---|---|---|---|
+| Granite Rapids-X | 6 / 173 (0xAD) | doctor `info` line; AMX vendor from `amx_*` flags as before | AVX10.1 and AMX-FP16, predicted by gcc `PTA_GRANITERAPIDS` | [intel-family.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/intel-family.h), [gcc i386.h](https://gcc.gnu.org/git/?p=gcc.git;a=blob_plain;f=gcc/config/i386/i386.h;hb=HEAD) |
+| Granite Rapids-D | 6 / 174 (0xAE) | same | AVX10.1, AMX-FP16, AMX-COMPLEX, predicted by gcc `PTA_GRANITERAPIDS_D` | same |
+| Diamond Rapids-X | 19 / 1 | same; DSA 0x1212 and IAA 0x1216 detected on the dsa bus | AVX10.2, APX_F, AMX-FP8, AMX-FP16, AMX-COMPLEX, AMX-AVX512, AMX-MOVRS, MOVRS, predicted by gcc `PTA_DIAMONDRAPIDS`; oneDNN's `avx10_2_512_amx_2` path, predicted by [dnnl_types.h](https://github.com/uxlfoundation/oneDNN/blob/main/include/oneapi/dnnl/dnnl_types.h) | intel-family.h, gcc i386.h, [idxd init.c](https://github.com/torvalds/linux/blob/master/drivers/dma/idxd/init.c) |
+| Nova Lake | 18 / 1 | same; hybrid P/E pools from `cpu_core`/`cpu_atom` as on every hybrid part | AVX10.1, AVX10.2, APX_F, MOVRS, no AMX, predicted by gcc `PTA_NOVALAKE` | intel-family.h, gcc i386.h |
+| Nova Lake-L | 18 / 3 | same | as Nova Lake, predicted by gcc `PTA_NOVALAKE` | same |
+
+Families 18 and 19 are matched only when `vendor_id` is `GenuineIntel` (AMD
+Llano also prints family 18 model 1). The family-6-only tables (Raptor Lake
+DRAM POR, the MSR 0x64F decode) are skipped on families 18 and 19.
+Simulation fixture: `tests/fixtures/xeon-dmr` (topology borrowed from
+`xeon-gnr`; see its `SOURCES`).
+
+### Never reported
+
+- **AMX-TF32 and AMX-TRANSPOSE**: removed from the ISA. AMX-TRANSPOSE went in
+  ISE rev 059 (revision history of
+  [ISE 319433-061](https://cdrdv2-public.intel.com/915637/319433-061-architecture-instruction-set-extensions-programming-reference.pdf)).
+  AMX-TF32 went in ISE rev 062
+  ([current ISE](https://cdrdv2.intel.com/v1/dl/getContent/671368),
+  [gcc patch citing ISE062](https://gcc.gnu.org/pipermail/gcc-patches/2026-June/722128.html)).
+  cpufeatures.h has never defined either flag, so stock kernels never print
+  them; an `amx_tf32` or `amx_transpose` flag from a custom kernel is dropped
+  before labeling.
+- **UINTR**: Linux has no `X86_FEATURE_UINTR`, so no workload can use it.
+- **ITD task classes**: not in mainline (no `X86_FEATURE_ITD`); doctor never
+  claims Thread Director scheduling.
+
+### doctor --perf additions
+
+| Check | Reads (unprivileged) | Finding | Apply / revert |
+|---|---|---|---|
+| Uncore frequency | `/sys/devices/system/cpu/intel_uncore_frequency/*/{max,initial_max,min,initial_min}_freq_khz`, `elc_*` | `warn` when max is below `initial_max_freq_khz`, `info` when above it (raised after boot) or when the floor is raised, `ok` at the full range; ELC settings as `info`; non-numeric max values are skipped and the floor is judged only when both min files read. On TPMI parts only the `uncoreNN` clusters are reported, not the `package_XX_die_YY` roots. `current_freq_khz` is root-only and is not read. A high floor for decode is pending as EXPERIMENTS.md H29 and is never suggested | `echo <initial_max> \| sudo tee max_freq_khz` / `echo <old> \| sudo tee max_freq_khz` ([uncore-frequency-common.c](https://github.com/torvalds/linux/blob/master/drivers/platform/x86/intel/uncore-frequency/uncore-frequency-common.c), [doc](https://docs.kernel.org/admin-guide/pm/intel_uncore_frequency_scaling.html)) |
+| TDX host | `/sys/module/kvm_intel/parameters/tdx`, cpuinfo `tdx_host_platform` and `vmx`, osrelease | `info` when `tdx=Y`. With `tdx_host_platform` and `vmx`: `note` when `tdx=N` (stop VMs and sandboxes first) or kvm_intel is not loaded; `info` with no apply when the kernel is older than 6.16 or lacks `CONFIG_KVM_INTEL_TDX`. No BIOS step: the kernel sets `tdx_host_platform` only after TDX init finds the BIOS-enabled KeyID range ([virt/vmx/tdx/tdx.c](https://github.com/torvalds/linux/blob/master/arch/x86/virt/vmx/tdx/tdx.c)) | `sudo modprobe -r kvm_intel && sudo modprobe kvm_intel tdx=1` / same with `tdx=0`; not loaded: `sudo modprobe kvm_intel tdx=1` / `sudo modprobe -r kvm_intel` ([kvm/vmx/tdx.c](https://github.com/torvalds/linux/blob/v6.16/arch/x86/kvm/vmx/tdx.c), absent at v6.15) |
+| TDX guest | cpuinfo `tdx_guest`, `/dev/tdx_guest` | `info`: the node is a confidential VM; attestation via configfs-tsm | none ([tdx-guest.c](https://github.com/torvalds/linux/blob/master/drivers/virt/coco/tdx-guest/tdx-guest.c)) |
 
 ## Intel Enterprise Agent Toolkit (EAT)
 

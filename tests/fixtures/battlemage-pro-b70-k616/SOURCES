@@ -1,0 +1,15 @@
+Platform: Intel Arc Pro B70 (Battlemage G31) on a 6.16 kernel, no driver bound:
+the id is missing from xe's table before 6.17, and xe.force_probe cannot add it.
+
+Sources:
+- 0x8086 0xe223 "Arc Pro B70": pci.ids 2026.10.17; Mesa iris_pci_ids.h.
+- INTEL_BMG_G31_IDS (E220-E223) first in https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/include/drm/intel/pciids.h at v6.17;
+  absent at v6.16 and in linux-6.16.y.
+- No driver link, no drm class devices, no /dev/dri: the PCI device is unbound.
+
+Layout: copied from battlemage-b580 (same BDF, PCIe path, cpuinfo), in the form
+tests/fixtures/capture.sh writes; only the files named above differ.
+
+Not from hardware: BDF and PCIe path, the kernel release string, the cpuinfo
+flags line. Doctor output for this part is predicted by the sources above, not
+measured.

@@ -64,7 +64,7 @@
 
 set -euo pipefail
 
-VERSION="0.1.41"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.44"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 # The node image defaults to the tag built from this launcher's own release
 # (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
@@ -359,11 +359,12 @@ detect_intel() {
 # gpu.intel.com/monitoring, one per node, which hands a container every Intel GPU
 # (for exporters such as XPU Manager).
 
-# True for a discrete Intel GPU id: DG1 (0x4905-0x4909), Alchemist and Arc Pro A
-# (0x56xx), Ponte Vecchio (0x0bd0-0x0bdb), and the intel_gpu_platform families
-# Battlemage and Crescent Island.
+# True for a discrete Intel GPU id: DG1 (0x4905-0x4909), Alchemist, Arc Pro A and
+# Flex (0x56xx), Ponte Vecchio (the INTEL_PVC_IDS of include/drm/intel/pciids.h;
+# 0BD0-0BD3 are pre-production ids not in that list and are not matched),
+# and the intel_gpu_platform families Battlemage and Crescent Island.
 intel_gpu_discrete() {
-    case "$1" in 0x490[5-9]|0x56[0-9a-f][0-9a-f]|0x0bd[0-9ab]) return 0 ;; esac
+    case "$1" in 0x490[5-9]|0x56[0-9a-f][0-9a-f]|0x0b69|0x0b6e|0x0bd[4-9ab]|0x0be[015]) return 0 ;; esac
     case "$(intel_gpu_platform "$1")" in Battlemage\|*|"Crescent Island|"*) return 0 ;; esac
     return 1
 }
@@ -539,8 +540,12 @@ cpu_flags() {
 # AMX feature flags from /proc/cpuinfo, sorted, one line (empty when absent).
 amx_flags() {
     # Kernel flag names are [a-z0-9_]; anything else is not a flag and must not
-    # become a node label.
-    cpu_flags | LC_ALL=C grep -E '^amx_[a-z0-9_]+$' | sort | paste -sd' ' || true
+    # become a node label. AMX-TRANSPOSE was removed in Intel ISE rev 059
+    # (319433-061 revision history) and AMX-TF32 in ISE rev 062
+    # (https://cdrdv2.intel.com/v1/dl/getContent/671368; gcc-patches 2026-June
+    # 722128). cpufeatures.h has never defined either flag, so stock kernels
+    # never print them; the filter covers custom kernels that might.
+    cpu_flags | LC_ALL=C grep -E '^amx_[a-z0-9_]+$' | LC_ALL=C grep -vxE 'amx_(tf32|transpose)' | sort | paste -sd' ' || true
 }
 
 # NFD-style node labels for the host's AMX flags (amx_tile -> ...cpu-cpuid.AMXTILE=true),
@@ -602,6 +607,26 @@ cpu_family_model() {
     awk -F: '/^cpu family[[:space:]]*:/ && f == "" { f = $2 + 0 }
              /^model[[:space:]]*:/ && m == "" { m = $2 + 0 }
              END { if (f != "" && m != "") print f, m }' "${SYSROOT}/proc/cpuinfo" 2>/dev/null || true
+}
+
+# cpu_isa_predicted "<family> <model>": "<name>|<ISA list>|<source>" for CPU
+# models whose newest ISA /proc/cpuinfo cannot show. The kernel prints a flag
+# only when its cpufeatures.h comment starts with a quoted name
+# (arch/x86/kernel/cpu/mkcapflags.sh): AMX_FP16 (on newer kernels) and APX are
+# unquoted, and AVX10, AMX_FP8 and AMX_COMPLEX have no cpufeatures.h entry; only
+# KVM's arch/x86/kvm/reverse_cpuid.h defines their X86_FEATURE_* macros. The lists are gcc's -march masks
+# (gcc/config/i386/i386.h PTA_*), not a CPUID read; NFD reads CPUID itself and
+# labels cpu-cpuid.AVX10_VERSION, APX_F, AMXFP8. Family/model ids:
+# arch/x86/include/asm/intel-family.h; they are Intel ids, so the caller checks
+# vendor_id GenuineIntel first (AMD Llano also prints family 18 model 1).
+cpu_isa_predicted() {
+    case "$1" in
+        "6 173") echo "Granite Rapids-X|AVX10.1, AMX-FP16|PTA_GRANITERAPIDS" ;;                 # INTEL_GRANITERAPIDS_X 0xAD
+        "6 174") echo "Granite Rapids-D|AVX10.1, AMX-FP16, AMX-COMPLEX|PTA_GRANITERAPIDS_D" ;;  # INTEL_GRANITERAPIDS_D 0xAE
+        "19 1")  echo "Diamond Rapids-X|AVX10.2, APX_F, AMX-FP8, AMX-FP16, AMX-COMPLEX, AMX-AVX512, AMX-MOVRS, MOVRS|PTA_DIAMONDRAPIDS" ;;  # INTEL_DIAMONDRAPIDS_X 19/0x01
+        "18 1")  echo "Nova Lake|AVX10.1, AVX10.2, APX_F, MOVRS, no AMX|PTA_NOVALAKE" ;;         # INTEL_NOVALAKE 18/0x01
+        "18 3")  echo "Nova Lake-L|AVX10.1, AVX10.2, APX_F, MOVRS, no AMX|PTA_NOVALAKE" ;;       # INTEL_NOVALAKE_L 18/0x03
+    esac
 }
 
 # Hybrid CPUs register one PMU per core type; each lists its online CPUs. Arrow
@@ -918,7 +943,14 @@ doctor_accel_sockets() {
 # drivers/accel/ivpu.
 
 # Intel GPU id -> "<name>|<first kernel binding it by default>|<GuC firmware glob>".
-# An empty kernel field means the kernel still requires xe.force_probe. For an
+# An empty kernel field means the kernel still requires xe.force_probe (Flex:
+# ats_m_info/ats_m_desc keep require_force_probe; Max: pvc_info/pvc_desc are
+# __maybe_unused with no ids in either pciidlist, so no upstream driver binds it).
+# Battlemage ids joined the xe table in steps: E202/E20B/E20C/E20D/E212 in 6.12,
+# E210/E211/E216 in 6.15, E209/E220-E223 in 6.17 (pciids.h at each tag); E215
+# was dropped in 6.17 and is not listed. Alchemist binds i915 by default from
+# 6.2 (dg2_info lost require_force_probe), 56BA-56BD from 6.7, 56BE/56BF from
+# 6.10. For an
 # i915 part the kernel is the first release whose pciids header lists the id and
 # whose i915_pci.c no longer sets require_force_probe for its platform (ADL-S
 # from 5.16; ADL-P, and so ADL-N and RPL-P/U, from 5.17; MTL from 6.7).
@@ -941,14 +973,40 @@ intel_gpu_platform() {
         0x7d67)                             echo "Arrow Lake-S|6.7|i915/mtl_guc_" ;;
         0xb640)                             echo "Arrow Lake-S|6.12|i915/mtl_guc_" ;;
         0x6420|0x64a0|0x64b0)               echo "Lunar Lake|6.12|xe/lnl_guc_" ;;
-        0xe20[29bcd]|0xe21[0126]|0xe22[0-3]) echo "Battlemage|6.12|xe/bmg_guc_" ;;
+        0xe20[2bcd]|0xe212)                 echo "Battlemage|6.12|xe/bmg_guc_" ;;
+        0xe21[016])                         echo "Battlemage|6.15|xe/bmg_guc_" ;;
+        0xe209|0xe22[0-3])                  echo "Battlemage|6.17|xe/bmg_guc_" ;;
         0xb08[0-7f]|0xb090|0xb0a0|0xb0b0)   echo "Panther Lake|6.17|xe/ptl_guc_" ;;
         0xfd80|0xfd81)                      echo "Wildcat Lake|6.17|xe/ptl_guc_" ;;
         0xd74[0-35ab])                      echo "Nova Lake-S|7.3|xe/nvl_guc_" ;;
         0xd75[0-7f])                        echo "Nova Lake-P||" ;;
         0x674[c-f]|0x6750)                  echo "Crescent Island||" ;;
+        0x56a[0-2]|0x569[0-2])              echo "Alchemist DG2-G10|6.2|i915/dg2_guc_" ;;
+        0x56b[ef])                          echo "Alchemist DG2-G10|6.10|i915/dg2_guc_" ;;
+        0x56a[56]|0x56b[01]|0x569[3-5])     echo "Alchemist DG2-G11|6.2|i915/dg2_guc_" ;;
+        0x56b[a-d])                         echo "Alchemist DG2-G11|6.7|i915/dg2_guc_" ;;
+        0x56a[34]|0x56b[23]|0x569[67])      echo "Alchemist DG2-G12|6.2|i915/dg2_guc_" ;;
+        0x56c[0-2])                         echo "Flex (ATS-M)||i915/dg2_guc_" ;;
+        0x0b69|0x0b6e|0x0bd[4-9ab]|0x0be[015]) echo "Max (Ponte Vecchio)||" ;;
     esac
 }
+
+# True for an id whose intel_gpu_platform kernel is the release that added the id
+# to the driver's id table, after its platform already bound by default: Battlemage
+# E210/E211/E216 (6.15) and E209/E220-E223 (6.17), Alchemist 56BA-56BD (6.7) and
+# 56BE/56BF (6.10). force_probe cannot bind an id missing from the table, so on an
+# older kernel an unbound one needs a newer kernel and a bound one is a backport.
+intel_gpu_id_late() {
+    case "$1" in 0xe21[016]|0xe209|0xe22[0-3]|0x56b[a-f]) return 0 ;; esac
+    return 1
+}
+
+# The upstream driver for an intel_gpu_platform GuC firmware glob: i915 or xe.
+intel_gpu_fw_driver() { if [ "${1#i915/}" != "$1" ]; then echo i915; else echo xe; fi; }
+
+# xe was merged in Linux 6.8 (drivers/gpu/drm/xe); on an older kernel there is no
+# xe module, so xe.force_probe does nothing.
+kernel_has_xe() { ! kernel_lt 6.8; }
 
 # Whether xe.force_probe cannot bring up this GPU on a kernel older than its
 # default-binding kernel. Panther Lake and Wildcat Lake (GuC firmware xe/ptl_guc_):
@@ -964,6 +1022,7 @@ intel_gpu_no_force_probe() {
 gpu_xmx() {
     case "$1" in
         "Arrow Lake-H"|"Lunar Lake"|Battlemage|"Panther Lake"|"Wildcat Lake"|"Nova Lake-S"|"Nova Lake-P") echo true ;;
+        "Alchemist DG2-G10"|"Alchemist DG2-G11"|"Alchemist DG2-G12"|"Flex (ATS-M)") echo true ;;
         "Alder Lake-S"|"Alder Lake-P"|"Alder Lake-N"|"Raptor Lake-S"|"Raptor Lake-P/U"|"Meteor Lake"|"Arrow Lake-U"|"Arrow Lake-S") echo false ;;
     esac
 }
@@ -990,7 +1049,41 @@ npu_platform() {
     esac
 }
 
+# Device ids the pinned NPU plugin serves: npuIDs in cmd/npu_plugin/npu_plugin.go
+# at the intel/intel-npu-plugin tag share/intel-npu-plugin.yml pins. The plugin
+# matches an accel node by vendor and device id alone and logs "Unknown device ID"
+# for any other id, advertising no npu.intel.com/accel for it. Upstream also lists
+# 0x7e4c, which pci.ids names the Meteor Lake GNA; intel_vpu never binds it, so
+# detection never sees it. Bump NPU_PLUGIN_TAG and the list together.
+NPU_PLUGIN_TAG="0.37.1"
+NPU_PLUGIN_IDS="0x7e4c 0x643e 0xad1d 0x7d1d 0xb03e 0xfd3e 0xd71d"
+npu_plugin_serves() { [[ " ${NPU_PLUGIN_IDS} " == *" $1 "* ]]; }
+
+# True when the pinned plugin serves at least one detected NPU. An unreadable id
+# ("-") counts as served: coverage is unknown, so the plugin decides.
+npu_plugin_serves_any() {
+    local id
+    for id in ${NPU_IDS[@]+"${NPU_IDS[@]}"}; do
+        if [ "${id}" = - ] || npu_plugin_serves "${id}"; then return 0; fi
+    done
+    return 1
+}
+
+# The id list above describes only the bundled manifest; K3D_GPU_NPU_PLUGIN
+# replaces the plugin, so its coverage is the user's call.
+npu_plugin_default() { [ "${NPU_PLUGIN_MANIFEST}" = "${SHARE_DIR}/intel-npu-plugin.yml" ]; }
+
+# True when a detected NPU gets an advertised npu.intel.com/accel: the bundled
+# plugin serves one of the ids, or K3D_GPU_NPU_PLUGIN overrides the plugin.
+npu_usable() {
+    [ "${#NPU_IDS[@]}" -gt 0 ] && { ! npu_plugin_default || npu_plugin_serves_any; }
+}
+NPU_UNSERVED=0  # 1 when auto detection skipped NPUs the bundled plugin does not serve
+
 kernel_release() { cat "${SYSROOT}/proc/sys/kernel/osrelease" 2>/dev/null || uname -r; }
+
+# True when the kernel release starts with a numeric major.minor.
+kernel_known() { [[ "$(kernel_release)" =~ ^[0-9]+\.[0-9]+ ]]; }
 
 # kernel_lt <major.minor>: true when the running kernel is older.
 kernel_lt() {
@@ -1079,9 +1172,35 @@ NPU_UMD_IMAGE="openvino/model_server:2026.4.1-gpu"
 NPU_UMD_DRIVER="v1.35.0"
 NPU_UMD_FW_DATE="20260630"
 
+# npu_fw_names <generation>: the names intel_vpu requests on the running kernel, in
+# order (fw_names[] in drivers/accel/ivpu/ivpu_fw.c, read at tags v6.5, v6.6, v6.8, v6.9, v6.12,
+# v6.15, v6.16 and v6.19). 6.16+ asks for intel/vpu/vpu_<gen>_v1.bin first and 60xx
+# has no _v0.0 name; older kernels never ask for _v1 and try vpu_<gen>.bin in the
+# firmware root first; 6.8 and older also try mtl_vpu.bin for 37xx; before 6.6 only
+# Meteor Lake's mtl_vpu names exist.
+npu_fw_names() {
+    if ! kernel_known; then
+        # Unreadable kernel version: every name some kernel requests, newest first.
+        echo "intel/vpu/vpu_$1_v1.bin"
+        [ "$1" = 60xx ] || echo "intel/vpu/vpu_$1_v0.0.bin"
+        echo "vpu_$1.bin"
+        if [ "$1" = 37xx ]; then echo "mtl_vpu.bin"; echo "intel/vpu/mtl_vpu_v0.0.bin"; fi
+    elif ! kernel_lt 6.16; then
+        echo "intel/vpu/vpu_$1_v1.bin"
+        [ "$1" = 60xx ] || echo "intel/vpu/vpu_$1_v0.0.bin"
+    elif ! kernel_lt 6.6; then
+        echo "vpu_$1.bin"
+        if [ "$1" = 37xx ] && kernel_lt 6.9; then echo "mtl_vpu.bin"; fi
+        echo "intel/vpu/vpu_$1_v0.0.bin"
+    else
+        echo "mtl_vpu.bin"
+        echo "intel/vpu/mtl_vpu_v0.0.bin"
+    fi
+}
+
 # npu_fw_file <generation>: the firmware file intel_vpu loads, in the kernel's order.
 # Names: intel_vpu's firmware= parameter alone when set (it reads "(null)" when not),
-# else the list in drivers/accel/ivpu/ivpu_fw.c (v1 first). For each name the
+# else npu_fw_names. For each name the
 # firmware loader (drivers/base/firmware_loader/main.c) tries no suffix, then .zst,
 # then .xz, each across fw_path[]: firmware_class.path, /lib/firmware/updates/<release>,
 # /lib/firmware/updates, /lib/firmware/<release>, /lib/firmware. No /usr/lib.
@@ -1093,7 +1212,8 @@ npu_fw_file() {
     if [ -n "${param}" ] && [ "${param}" != "(null)" ]; then
         fw_names=("${param}")
     else
-        fw_names=("intel/vpu/vpu_$1_v1.bin" "intel/vpu/vpu_$1_v0.0.bin")
+        fw_names=()
+        while read -r name; do fw_names+=("${name}"); done < <(npu_fw_names "$1")
     fi
     for name in "${fw_names[@]}"; do
         for sfx in "" .zst .xz; do
@@ -1153,7 +1273,12 @@ resolve_vendors() {
     if [ "${VENDORS_REQUEST}" = "auto" ]; then
         if has_nvidia; then ACTIVE+=(nvidia); fi
         if [ "${#INTEL_DRIVERS[@]}" -gt 0 ]; then ACTIVE+=(intel); fi
-        if [ "${#NPU_IDS[@]}" -gt 0 ]; then ACTIVE+=(npu); fi
+        if npu_usable; then
+            ACTIVE+=(npu)
+        elif [ "${#NPU_IDS[@]}" -gt 0 ]; then
+            NPU_UNSERVED=1
+            warn "Intel NPU $(printf '%s ' "${NPU_IDS[@]}")is not served by intel-npu-plugin ${NPU_PLUGIN_TAG} — skipping the NPU (K3D_GPU_NPU_PLUGIN=<newer plugin yaml> overrides; see 'k3d-gpu doctor')"
+        fi
         if has_gaudi; then
             ACTIVE+=(gaudi)
         elif has_gaudi_pci; then
@@ -1335,9 +1460,12 @@ doctor_intel() {
         read -r drv id <<< "${e}"
         IFS='|' read -r name mink fw <<< "$(intel_gpu_platform "${id}")"
         echo "  ok: Intel ${name:-GPU} (${id:-?}) bound to ${drv}"
-        if [ -n "${mink}" ] && kernel_lt "${mink}"; then
-            opt=xe
-            [ "${fw#i915/}" = "${fw}" ] || opt=i915
+        opt=$(intel_gpu_fw_driver "${fw}")
+        if [ -n "${mink}" ] && kernel_lt "${mink}" && intel_gpu_id_late "${id}"; then
+            # force_probe cannot bind an id missing from the driver's table, so a
+            # bound late id on an older kernel is a stable or distro backport.
+            echo "  ok: ${name} (${id}) is in this kernel's ${opt} id table (a stable backport; mainline lists it from ${mink})"
+        elif [ -n "${mink}" ] && kernel_lt "${mink}"; then
             if intel_gpu_no_force_probe "${id}"; then
                 echo "  ${YLW}warn${RST}: ${name} (${id}) needs kernel ${mink}+ (running $(kernel_release)); no older kernel can drive it, force_probe included"
             else
@@ -1395,24 +1523,90 @@ doctor_intel_sharing() {
 doctor_npu() {
     info "Checking Intel NPU (Core Ultra)..."
     local id name mink gen fw date gid mode node
+    local param custom upd base sfx lsfx v1 link old
     if [ "${#NPU_IDS[@]}" -eq 0 ]; then
         echo "  ${RED}fail${RST}: no Intel NPU accel node bound to intel_vpu (driver not loaded? lsmod | grep intel_vpu)"
         FAIL=1
         return
     fi
     for id in ${NPU_IDS[@]+"${NPU_IDS[@]}"}; do
+        if [ "${id}" = - ] || [ -z "${id}" ]; then
+            echo "  ${YLW}warn${RST}: an Intel NPU is bound to intel_vpu but its PCI device id is unreadable (/sys/class/accel/accel*/device/device)"
+            continue
+        fi
         IFS='|' read -r name mink gen <<< "$(npu_platform "${id}")"
         echo "  ok: Intel NPU ${name:-(unknown generation)} (${id}) bound to intel_vpu"
-        if [ -n "${mink}" ] && kernel_lt "${mink}"; then
-            echo "  ${YLW}warn${RST}: ${name} NPU needs kernel ${mink}+ (running $(kernel_release))"
+        if ! npu_plugin_default; then
+            echo "  note: K3D_GPU_NPU_PLUGIN=${NPU_PLUGIN_MANIFEST} replaces the bundled plugin; its device-id coverage is not checked"
+        elif ! npu_plugin_serves "${id}"; then
+            echo "  ${YLW}warn${RST}: intel-npu-plugin ${NPU_PLUGIN_TAG} does not list ${id}: it logs 'Unknown device ID' and advertises"
+            echo "        no npu.intel.com/accel for it, so auto detection skips it. Fix: a newer intel/intel-npu-plugin via"
+            echo "        K3D_GPU_NPU_PLUGIN=<plugin yaml>, which up then uses with the NPU label"
         fi
         [ -n "${gen}" ] || continue
+        if ! kernel_known; then
+            echo "  ${YLW}warn${RST}: kernel version unreadable ('$(kernel_release)'); cannot tell which NPU firmware names it requests"
+        elif kernel_lt "${mink}"; then
+            # The firmware names below belong to kernels that support this NPU.
+            echo "  ${YLW}warn${RST}: ${name} NPU needs kernel ${mink}+ (running $(kernel_release))"
+            continue
+        fi
         fw=$(npu_fw_file "${gen}")
-        if [ -z "${fw}" ]; then
-            echo "  ${YLW}warn${RST}: intel/vpu/vpu_${gen}_* firmware not found (install linux-firmware or intel-fw-npu)"
+        if [ -z "${fw}" ] && [ "${gen}" = 60xx ]; then
+            # Neither linux-firmware (tag 20260916 WHENCE) nor linux-npu-driver v1.38.0
+            # (firmware/bin) ships vpu_60xx_v1.bin.
+            echo "  ${YLW}warn${RST}: no published NPU firmware for 60xx yet (intel/vpu/vpu_60xx_v1.bin is in neither"
+            echo "        linux-firmware nor linux-npu-driver); the NPU cannot load until Intel publishes it"
+            continue
+        elif [ -z "${fw}" ]; then
+            echo "  ${YLW}warn${RST}: intel/vpu/vpu_${gen}_* firmware not found; kernel $(kernel_release) loads $(npu_fw_names "${gen}" | paste -sd, -) (install linux-firmware or intel-fw-npu)"
             continue
         fi
         echo "  ok: intel/vpu/vpu_${gen}_* firmware present (${fw#"${SYSROOT}"})"
+        # intel-fw-npu installs updates/intel/vpu/vpu_<gen>_v1.bin, a name only 6.16+
+        # requests; 6.6-6.15 load another file (for 50xx the package has no _v0.0
+        # link at all, linux-npu-driver v1.38.0 firmware/bin). A link
+        # updates/intel/vpu/vpu_<gen>_v0.0.bin -> v1 (the link linux-firmware's WHENCE
+        # itself ships) wins only when that name is the one loaded, no firmware=
+        # parameter forces another, the loaded file is in a fw_path entry after
+        # /lib/firmware/updates (not firmware_class.path), and the link's suffix is
+        # tried no later than the loaded file's.
+        param=$(head -n1 "${SYSROOT}/sys/module/intel_vpu/parameters/firmware" 2>/dev/null || true)
+        custom=$(head -n1 "${SYSROOT}/sys/module/firmware_class/parameters/path" 2>/dev/null || true)
+        upd="/lib/firmware/updates/intel/vpu"
+        base=${fw##*/} lsfx=""
+        case "${base}" in *.zst) lsfx=.zst ;; *.xz) lsfx=.xz ;; esac
+        v1=""
+        if kernel_known && ! kernel_lt 6.6 && kernel_lt 6.16 \
+            && { [ -z "${param}" ] || [ "${param}" = "(null)" ]; } \
+            && [ "${base%"${lsfx}"}" = "vpu_${gen}_v0.0.bin" ] \
+            && [ "${fw#"${SYSROOT}"/lib/firmware/updates/}" = "${fw}" ] \
+            && { [ -z "${custom}" ] || [ "${fw#"${SYSROOT}${custom%/}"/}" = "${fw}" ]; }; then
+            for sfx in "" .zst .xz; do
+                if [ -f "${SYSROOT}${upd}/vpu_${gen}_v1.bin${sfx}" ]; then v1="vpu_${gen}_v1.bin${sfx}"; break; fi
+                [ "${sfx}" != "${lsfx}" ] || break
+            done
+        fi
+        if [ -n "${v1}" ]; then
+            link="${upd}/vpu_${gen}_v0.0.bin${sfx}"
+            echo "  ${YLW}warn${RST}: ${upd}/${v1} (intel-fw-npu) is not loaded: kernel $(kernel_release)"
+            echo "        never requests _v1 (6.16+ does). Boot a 6.16+ kernel, or point the name it loads at it."
+            echo "        Stop what uses the NPU first ('k3d-gpu down' for the cluster), or reboot instead of the modprobe steps:"
+            if [ -e "${SYSROOT}${link}" ] || [ -L "${SYSROOT}${link}" ]; then
+                # Present but not loaded: a dangling link or an unreadable file.
+                old=$(readlink "${SYSROOT}${link}" 2>/dev/null || true)
+                echo "        ${link} exists but is not loaded${old:+ (a link to ${old})}"
+                echo "        run:    sudo ln -sfn ${v1} ${link} && sudo modprobe -r intel_vpu && sudo modprobe intel_vpu"
+                if [ -n "${old}" ]; then
+                    echo "        revert: sudo ln -sfn ${old} ${link} && sudo modprobe -r intel_vpu && sudo modprobe intel_vpu"
+                else
+                    echo "        revert: back up ${link} before running; restore it, then: sudo modprobe -r intel_vpu && sudo modprobe intel_vpu"
+                fi
+            else
+                echo "        run:    sudo ln -s ${v1} ${link} && sudo modprobe -r intel_vpu && sudo modprobe intel_vpu"
+                echo "        revert: sudo rm ${link} && sudo modprobe -r intel_vpu && sudo modprobe intel_vpu"
+            fi
+        fi
         date=$(npu_fw_date "${fw}")
         if [ -z "${date}" ]; then
             echo "  note: no build date readable in ${fw#"${SYSROOT}"}; cannot compare it with ${NPU_UMD_IMAGE}'s NPU driver ${NPU_UMD_DRIVER}"
@@ -1509,8 +1703,30 @@ doctor_intel_unbound() {
         id=$(cat "${dev}/device" 2>/dev/null) || continue
         if [ -n "$(npu_platform "${id}")" ]; then
             IFS='|' read -r name mink gen <<< "$(npu_platform "${id}")"
-            lines+="  ${YLW}warn${RST}: Intel NPU ${name} (${id}) has no driver — load intel_vpu (kernel ${mink}+): sudo modprobe intel_vpu"$'\n'
-        elif IFS='|' read -r name mink fw <<< "$(intel_gpu_platform "${id}")" && [ "${fw#i915/}" != "${fw}" ]; then
+            # First cause that holds: kernel too old for the id, module not loaded,
+            # firmware missing (intel_vpu's probe fails without it).
+            if kernel_known && kernel_lt "${mink}"; then
+                lines+="  ${YLW}warn${RST}: Intel NPU ${name} (${id}) has no driver — kernel $(kernel_release) predates its intel_vpu support; it needs kernel ${mink}+"$'\n'
+            elif [ ! -d "${SYSROOT}/sys/module/intel_vpu" ]; then
+                lines+="  ${YLW}warn${RST}: Intel NPU ${name} (${id}) has no driver — load intel_vpu (kernel ${mink}+): sudo modprobe intel_vpu (revert: sudo modprobe -r intel_vpu)"$'\n'
+            elif [ -z "$(npu_fw_file "${gen}")" ] && [ "${gen}" = 60xx ]; then
+                lines+="  ${YLW}warn${RST}: Intel NPU ${name} (${id}) has no driver — intel_vpu is loaded but no published NPU firmware for 60xx exists yet (vpu_60xx_v1.bin is in neither linux-firmware nor linux-npu-driver)"$'\n'
+            elif [ -z "$(npu_fw_file "${gen}")" ]; then
+                lines+="  ${YLW}warn${RST}: Intel NPU ${name} (${id}) has no driver — intel_vpu is loaded but found no ${gen} firmware ($(npu_fw_names "${gen}" | paste -sd, -)), so its probe failed"$'\n'
+            else
+                lines+="  ${YLW}warn${RST}: Intel NPU ${name} (${id}) has no driver — intel_vpu is loaded and ${gen} firmware is present; see: sudo dmesg | grep intel_vpu"$'\n'
+            fi
+        elif IFS='|' read -r name mink fw <<< "$(intel_gpu_platform "${id}")" && [ "${name}" = "Max (Ponte Vecchio)" ]; then
+            lines+="  ${YLW}warn${RST}: Intel ${name} (${id}) has no driver — no upstream i915 or xe binds it (pvc_info/pvc_desc list no ids); Intel's supported driver is the out-of-tree intel-i915-dkms LTS (2523.x) on an OS from https://dgpu-docs.intel.com/overview/support-matrix/max-and-flex-support-matrix.html"$'\n'
+        elif [ "${name}" = "Flex (ATS-M)" ]; then
+            if kernel_has_xe; then
+                lines+="  ${YLW}warn${RST}: Intel ${name} (${id}) has no driver — upstream i915 and xe both still require force_probe for it; install Intel's intel-i915-dkms LTS (2523.x), or force-probe xe (not production upstream; exact apply and revert: k3d-gpu doctor --experimental, xe-force-probe)"$'\n'
+            else
+                lines+="  ${YLW}warn${RST}: Intel ${name} (${id}) has no driver — upstream i915 still requires force_probe for it and kernel $(kernel_release) has no xe (merged in 6.8); install Intel's intel-i915-dkms LTS (2523.x)"$'\n'
+            fi
+        elif [ -n "${mink}" ] && kernel_lt "${mink}" && intel_gpu_id_late "${id}"; then
+            lines+="  ${YLW}warn${RST}: Intel ${name} (${id}) has no driver — $(intel_gpu_fw_driver "${fw}") lists this id from kernel ${mink} (running $(kernel_release)); upgrade the kernel, force_probe cannot add an id missing from the driver's table"$'\n'
+        elif [ "${fw#i915/}" != "${fw}" ]; then
             # A GuC firmware under i915/ means i915 is the default driver for the part.
             lines+="  ${YLW}warn${RST}: Intel ${name} (${id}) has no driver — load i915 (kernel ${mink}+): sudo modprobe i915"$'\n'
         elif intel_gpu_no_force_probe "${id}" && kernel_lt "${mink}"; then
@@ -1636,8 +1852,15 @@ doctor_hbm() {
 # Xeon built-in accelerators. `up` deploys DSA/IAA/QAT plugins once the host
 # side is set up (work queues, SR-IOV VFs); this says what is still missing.
 doctor_cpu_accels() {
-    local amx isa dev bdf vfs n wqs kind name prefix devdir lines="" lp e cl pp fav fv fn
+    local amx isa pred fm dev bdf vfs n wqs kind name prefix devdir lines="" lp e cl pp fav fv fn
     amx=$(amx_flags)
+    fm=$(cpu_family_model)
+    pred=""
+    [ "$(cpuinfo_field vendor_id)" != GenuineIntel ] || pred=$(cpu_isa_predicted "${fm}")
+    if [ -n "${pred}" ]; then
+        IFS='|' read -r name isa prefix <<< "${pred}"
+        lines+="  info: ${name} (family ${fm% *}, model ${fm#* }): ISA predicted by gcc ${prefix}, not read from CPUID: ${isa} — /proc/cpuinfo may not show these (kernel-dependent); NFD labels what CPUID reports (cpu-cpuid.AVX10_VERSION, APX_F, AMXFP8) and oneDNN/OpenVINO pick them with no flag"$'\n'
+    fi
     [ -z "${amx}" ] || lines+="  ok: AMX (${amx}) — CPU instructions, usable in any pod; up labels nodes feature.node.kubernetes.io/cpu-cpuid.AMX*"$'\n'
     isa=$(cpu_isa_labels | sed 's#^feature\.node\.kubernetes\.io/cpu-cpuid\.##; s#=true$##' | paste -sd' ')
     [ -z "${isa}" ] || lines+="  ok: CPU ISA: ${isa} — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)"$'\n'
@@ -1839,15 +2062,33 @@ exp_intel_gpu_pci() {
     done
 }
 
-# Unbound Intel GPUs: PCI device ids without the 0x, comma separated.
+# True when any Intel GPU (not an NPU) has no driver bound.
+exp_any_unbound_gpu() {
+    local dev
+    while read -r dev; do
+        [ -n "${dev}" ] && [ -z "$(bound_driver "${dev}")" ] || continue
+        [ -z "$(npu_platform "$(pci_id "${dev}/device")")" ] && return 0
+    done < <(exp_intel_gpu_pci)
+    return 1
+}
+
+# Unbound Intel GPUs xe.force_probe can bind: PCI device ids without the 0x,
+# comma separated. Skips Max (no xe id), a late id below its kernel, and every
+# GPU on a kernel with no xe (before 6.8).
 exp_unbound_gpu_ids() {
-    local dev ids=()
+    kernel_has_xe || return 0
+    local dev id name mink ids=()
     while read -r dev; do
         [ -n "${dev}" ] || continue
         [ -z "$(bound_driver "${dev}")" ] || continue
-        [ -z "$(npu_platform "$(cat "${dev}/device" 2>/dev/null)")" ] || continue
-        ! intel_gpu_no_force_probe "$(pci_id "${dev}/device")" || continue
-        ids+=("$(pci_id "${dev}/device" | sed 's/^0x//')")
+        id=$(pci_id "${dev}/device")
+        [ -z "$(npu_platform "${id}")" ] || continue
+        IFS='|' read -r name mink _ <<< "$(intel_gpu_platform "${id}")"
+        # No xe id for Max; a late id below its kernel is missing from the table.
+        [ "${name}" != "Max (Ponte Vecchio)" ] || continue
+        if [ -n "${mink}" ] && kernel_lt "${mink}" && intel_gpu_id_late "${id}"; then continue; fi
+        ! intel_gpu_no_force_probe "${id}" || continue
+        ids+=("${id#0x}")
     done < <(exp_intel_gpu_pci)
     local IFS=,
     echo "${ids[*]}"
@@ -1908,7 +2149,7 @@ exp_npu_turbo() {
         status)   echo "OpenVINO 2026.4.0 NPU property NPU_TURBO; ivpu sched_mode param (HW scheduler auto-selected on new firmware)" ;;
         families) echo "Intel NPU: Meteor/Arrow Lake (37xx), Lunar Lake (40xx), Panther/Wildcat Lake (50xx), Nova Lake (60xx)" ;;
         value)    echo "sustained max NPU clocks for latency-bound agent inference; HW scheduler gives per-context priority and preemption" ;;
-        detect)   detect_npu; [ "${#NPU_IDS[@]}" -gt 0 ] ;;
+        detect)   detect_npu; npu_usable ;;
         prereq)   detect_npu
                   [ "${#NPU_IDS[@]}" -gt 0 ] && return 0
                   echo "no Intel NPU accel node bound to intel_vpu under /sys/class/accel (needs Meteor Lake or newer and the intel_vpu driver)"
@@ -1954,7 +2195,13 @@ exp_xe_force_probe() {
         value)    echo "brings a new GPU up before distro kernels support it, so agents can schedule on it" ;;
         detect)   [ -n "$(exp_unbound_gpu_ids)" ] ;;
         prereq)   [ -n "$(exp_unbound_gpu_ids)" ] && return 0
-                  echo "no unbound Intel GPU: every Intel GPU on this host already has a driver, or there is none (force_probe only helps a GPU the kernel did not bind)"
+                  if exp_any_unbound_gpu && ! kernel_has_xe; then
+                      echo "kernel $(kernel_release) has no xe (merged in Linux 6.8); see k3d-gpu doctor for the unbound GPU"
+                  elif exp_any_unbound_gpu; then
+                      echo "no unbound Intel GPU xe.force_probe can bind: Max has no upstream xe id, and an id newer than this kernel's xe table needs a newer kernel (see k3d-gpu doctor)"
+                  else
+                      echo "no unbound Intel GPU: every Intel GPU on this host already has a driver, or there is none (force_probe only helps a GPU the kernel did not bind)"
+                  fi
                   return 1 ;;
         apply)    ids=$(exp_unbound_gpu_ids)
                   EXP_HOST+=("xe-force-probe: Intel GPU ${ids} has no driver. Host change (taints the kernel; pre-production support can hang the GPU):"
@@ -2159,6 +2406,7 @@ doctor() {
         if is_active gaudi;  then doctor_gaudi;  fi
         if is_active wsl;    then doctor_wsl;    fi
     fi
+    if [ "${NPU_UNSERVED}" = 1 ]; then doctor_npu; fi
     if intel_dra; then doctor_dra; fi
     doctor_intel_unbound
     doctor_cpu_accels
@@ -2453,17 +2701,24 @@ perf_cpu() {
 
 # Uncore (ring/LLC on client parts, mesh/LLC/memory controller on Xeon) frequency
 # range from intel_uncore_frequency: legacy package_NN_die_NN, or TPMI uncoreNN with
-# ELC. min/max/initial are world-readable; writes need root, so a lowered ceiling is
-# a suggestion with its exact revert. Pinning the floor high for LLM decode is
-# pre-registered as EXPERIMENTS.md H29 and stays unsuggested until it is measured.
+# ELC. min/max/initial are world-readable; current_freq_khz is 0400 and is not read
+# (drivers/platform/x86/intel/uncore-frequency/uncore-frequency-common.c). Writes need
+# root, so a lowered ceiling is a suggestion with its exact revert. TPMI parts also
+# list package_XX_die_YY roots for the same clocks; only the clusters are reported so
+# one cap gives one finding. Pinning the floor high for LLM decode is pre-registered
+# as EXPERIMENTS.md H29 and stays unsuggested until it is measured.
 perf_uncore() {
-    local base=/sys/devices/system/cpu/intel_uncore_frequency d rel name imin imax mn mx elc n=0
+    local base=/sys/devices/system/cpu/intel_uncore_frequency d rel name imin imax mn mx elc n=0 tpmi=0
+    compgen -G "${SYSROOT}${base}/uncore[0-9]*" >/dev/null && tpmi=1
     for d in "${SYSROOT}${base}"/package_*_die_* "${SYSROOT}${base}"/uncore[0-9]*; do
         [ -d "${d}" ] || continue
         rel=${d#"${SYSROOT}"} name=${d##*/}
+        [ "${tpmi}" = 0 ] || [[ "${name}" != package_* ]] || continue
         imin=$(rd "${rel}/initial_min_freq_khz") imax=$(rd "${rel}/initial_max_freq_khz")
         mn=$(rd "${rel}/min_freq_khz") mx=$(rd "${rel}/max_freq_khz")
-        [[ "${imin}${imax}${mn}${mx}" =~ ^[0-9]+$ ]] || continue
+        [[ "${imax}" =~ ^[0-9]+$ && "${mx}" =~ ^[0-9]+$ ]] || continue
+        # The floor is judged only when both min files read as numbers.
+        [[ "${imin}" =~ ^[0-9]+$ && "${mn}" =~ ^[0-9]+$ ]] || imin="" mn=""
         if [ "${n}" -eq 0 ]; then
             perf_section "Uncore frequency (intel_uncore_frequency)" \
                 "max_freq_khz at initial_max_freq_khz and min_freq_khz at initial_min_freq_khz: the hardware (UFS, or ELC on TPMI parts) picks the uncore clock inside the full range. A floor pinned high for decode is under test (EXPERIMENTS.md H29, PENDING), so it is not suggested" \
@@ -2474,11 +2729,15 @@ perf_uncore() {
             perf_flag warn "${name}: max_freq_khz ${mx} is below the hardware ceiling ${imax}" "${base}/${name}/max_freq_khz" \
                 "a lowered uncore ceiling caps ring/LLC (client) or mesh and memory-controller (Xeon) clock, and token generation reads every weight once per token through it" \
                 "echo ${imax} | sudo tee ${base}/${name}/max_freq_khz" "echo ${mx} | sudo tee ${base}/${name}/max_freq_khz"
-        elif lt "${imin}" "${mn}"; then
+        elif lt "${imax}" "${mx}"; then
+            perf_info "${name}: max_freq_khz ${mx} is above initial_max_freq_khz ${imax} (raised after boot)" "${base}/${name}/max_freq_khz, initial_max_freq_khz"
+        elif [ -n "${mn}" ] && lt "${imin}" "${mn}"; then
             perf_info "${name}: floor raised to ${mn} kHz (hardware floor ${imin}); costs idle package power, revert: echo ${imin} | sudo tee ${base}/${name}/min_freq_khz" \
                 "${base}/${name}/min_freq_khz"
-        else
+        elif [ -n "${mn}" ]; then
             perf_ok "${name}: $((mn / 1000))-$((mx / 1000)) MHz, the full hardware range" "${base}/${name}/{min,max}_freq_khz"
+        else
+            perf_ok "${name}: max $((mx / 1000)) MHz, the hardware ceiling" "${base}/${name}/max_freq_khz"
         fi
         elc=$(rd "${rel}/elc_floor_freq_khz")
         [ -z "${elc}" ] || perf_info "${name}: ELC floor ${elc} kHz, thresholds low $(rd "${rel}/elc_low_threshold_percent")% high $(rd "${rel}/elc_high_threshold_percent")% (enable $(rd "${rel}/elc_high_threshold_enable"))" \
@@ -3214,7 +3473,7 @@ perf_nvidia() {
 }
 
 perf_isolation() {
-    local km p v kv="" units=0 u d bdf g gn m mb others cls types="" sld mit flags tme cet sc pf f
+    local km p v kv="" units=0 u d bdf g gn m mb others cls types="" sld mit flags tme cet sc pf f kr
     [ -n "$(cpuinfo_field flags)" ] || return 0   # procfs files report size 0, so no -s test
     perf_section "Isolation for sandboxed agents" \
         "/dev/kvm usable for microVM sandboxes, each GPU alone in its IOMMU group, split-lock detection on, CET known, GPU observation streams limited to CAP_PERFMON" \
@@ -3233,6 +3492,36 @@ perf_isolation() {
             "sudo modprobe kvm_intel" "sudo modprobe -r kvm_intel"
     else
         perf_info "no VT-x (vmx flag) exposed: no microVM sandboxes (VT-x off in BIOS, or a VM without nested virtualization)" "/proc/cpuinfo"
+    fi
+
+    # TDX: kvm_intel's tdx parameter (0444, arch/x86/kvm/vmx/tdx.c, new in Linux
+    # 6.16: the file is absent at v6.15) says the host runs TDX guests; tdx_guest
+    # (cpuinfo) or /dev/tdx_guest says this node is one. The kernel sets
+    # tdx_host_platform only after tdx_init() finds the BIOS-enabled KeyID range
+    # (arch/x86/virt/vmx/tdx/tdx.c), so no BIOS step is suggested. Loading
+    # kvm_intel with TDX is a host change, so it is only suggested.
+    v=$(rd "${km}/tdx")
+    if cpu_flag tdx_guest || [ -e "${SYSROOT}/dev/tdx_guest" ]; then
+        perf_info "this node is a TDX guest (confidential VM): attestation reports via configfs-tsm /sys/kernel/config/tsm/report" "/proc/cpuinfo (tdx_guest), /dev/tdx_guest"
+    elif [ "${v}" = Y ]; then
+        perf_info "kvm_intel tdx=Y: the host runs TDX guests, so untrusted agent sandboxes can run as confidential microVMs (Kata kata-qemu-tdx RuntimeClass)" "${km}/tdx"
+    elif cpu_flag tdx_host_platform && cpu_flag vmx; then
+        kr=$(kernel_release); kr=${kr%%[!0-9.]*}
+        if [ -n "${v}" ]; then
+            perf_flag note "the CPU reports tdx_host_platform but kvm_intel runs without TDX (tdx=${v}): no confidential microVM sandboxes" "/proc/cpuinfo (tdx_host_platform), ${km}/tdx" \
+                "kvm_intel creates TDX guests only when loaded with tdx=1; stop running VMs and microVM sandboxes first, since modprobe -r kvm_intel fails while one holds /dev/kvm" \
+                "sudo modprobe -r kvm_intel && sudo modprobe kvm_intel tdx=1" \
+                "sudo modprobe -r kvm_intel && sudo modprobe kvm_intel tdx=0"
+        elif ver_lt "${kr}" 6.16; then
+            perf_info "the CPU reports tdx_host_platform, but kernel $(kernel_release) has no KVM TDX host support (needs Linux 6.16+): no confidential microVM sandboxes" "/proc/cpuinfo (tdx_host_platform), /proc/sys/kernel/osrelease"
+        elif [ -d "${SYSROOT}/sys/module/kvm_intel" ]; then
+            perf_info "the CPU reports tdx_host_platform, but kvm_intel has no tdx parameter: this kernel is built without CONFIG_KVM_INTEL_TDX" "/proc/cpuinfo (tdx_host_platform), ${km}/tdx"
+        else
+            perf_flag note "the CPU reports tdx_host_platform but kvm_intel is not loaded: no microVM or confidential microVM sandboxes" "/proc/cpuinfo (tdx_host_platform), /sys/module/kvm_intel" \
+                "kvm_intel creates TDX guests only when loaded with tdx=1 (kernels built with CONFIG_KVM_INTEL_TDX)" \
+                "sudo modprobe kvm_intel tdx=1" \
+                "sudo modprobe -r kvm_intel"
+        fi
     fi
 
     # IOMMU and per-GPU groups
@@ -3494,6 +3783,8 @@ cmd_up() {
     if is_active gaudi; then
         create_args+=(--k3s-node-label="habana.ai/gaudi.present=true@server:*;agent:*")
     fi
+    # Auto detection leaves out NPUs the bundled plugin does not serve
+    # (resolve_vendors); an explicit K3D_GPU_VENDORS=npu keeps the label.
     if is_active npu; then
         create_args+=(--k3s-node-label="intel.feature.node.kubernetes.io/npu=true@server:*;agent:*")
         # Pods get /dev/accel/accelN with the host's numeric group; publish it so
@@ -5004,7 +5295,18 @@ hs_checks() {
         read -r id drv <<< "${e}"
         IFS='|' read -r name mink fw <<< "$(intel_gpu_platform "${id}")"
         [ -n "${name}" ] || continue
-        if [ -n "${mink}" ] && [ -z "${drv}" ] && kernel_lt "${mink}" && [ "${fw#i915/}" != "${fw}" ]; then
+        if [ "${name}" = "Max (Ponte Vecchio)" ]; then
+            [ -n "${drv}" ] || notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) has no upstream driver (no i915 or xe id); Intel's supported driver is the out-of-tree intel-i915-dkms LTS (2523.x)"$'\n'
+        elif [ "${name}" = "Flex (ATS-M)" ]; then
+            if [ -z "${drv}" ] && kernel_has_xe; then
+                notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs intel-i915-dkms LTS (2523.x), or xe force-probe (not production upstream; exact apply and revert: k3d-gpu doctor --experimental, xe-force-probe)"$'\n'
+            elif [ -z "${drv}" ]; then
+                notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs intel-i915-dkms LTS (2523.x); kernel $(kernel_release) has no xe (merged in 6.8)"$'\n'
+            fi
+        elif [ -n "${mink}" ] && [ -z "${drv}" ] && kernel_lt "${mink}" && intel_gpu_id_late "${id}"; then
+            # The id is missing from this kernel's driver table; force_probe cannot add it.
+            notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs kernel ${mink}+ (running $(kernel_release)); force_probe cannot add an id missing from the driver's table"$'\n'
+        elif [ -n "${mink}" ] && [ -z "${drv}" ] && kernel_lt "${mink}" && [ "${fw#i915/}" != "${fw}" ]; then
             # i915 is the default driver for this part; xe does not support it on these kernels.
             notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs the boot option i915.force_probe=${id#0x} (or kernel ${mink}+)"$'\n'
         elif [ -z "${drv}" ] && intel_gpu_no_force_probe "${id}" && kernel_lt "${mink}"; then
