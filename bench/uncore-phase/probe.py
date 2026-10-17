@@ -2,9 +2,11 @@
 """bench/uncore-phase/probe.py -- H29 probe (pre-registered; see EXPERIMENTS.md H29 row).
 
 H29: for B=1 decode on the P-cores (OVMS, Qwen3-4B int4, the `agent up` CPU path),
-capping P-core frequency AND pinning the uncore (ring/LLC on client parts) high cuts
-marginal package J/token by >= 10% at tok/s within 3% of stock, and the uncore pin is
-what keeps tok/s (UC beats core-cap-only C).
+a STATIC config (knobs held for the whole request, prefill included; not phase-aware)
+that caps P-core frequency AND pins the uncore (ring/LLC on client parts; not the
+IMC/DRAM clock) high cuts package J/token by >= 10% at tok/s within 3% of stock, on
+BOTH gross J/token and marginal J/token against the round's stock-arm idle, and the
+uncore pin is what keeps tok/s (UC beats core-cap-only C).
 
 Arms (all on the same warm server, interleaved per round, one cell = one request):
   A   stock: uncore min/max and P-core scaling_max_freq as read at start
@@ -16,11 +18,13 @@ Arms (all on the same warm server, interleaved per round, one cell = one request
       tok/s does not drop here, the ring is not on decode's critical path and the
       uncore half of H29 cannot work.
 
-Controls: per-cell idle window under the same arm (marginal energy subtracts the
-container background at that frequency config); Williams-square arm order per round;
+Controls: per-cell idle window under the same arm (recorded; the verdict subtracts
+the STOCK arm's idle of the same round from every arm, so a pin's standing idle cost
+is charged to the arm that pays it, and also checks gross J/token); Williams-square arm order per round;
 settle after every write; per-cell confounds (pkg temp, package throttle count
 delta, pswpin/pswpout delta, load1, busy fraction of CPUs outside the pod);
-manipulation checks (ring MHz from current_freq_khz, median pod-CPU MHz); hard
+manipulation checks (ring MHz from current_freq_khz for L and U, median pod-CPU MHz
+for C, and A's pod-CPU MHz above the cap so the cap binds); hard
 deadline; every sysfs write logged and restored in `finally` and on SIGTERM/SIGINT.
 
 Run (root: RAPL energy_uj, current_freq_khz and all writes need it), server reachable:
@@ -201,7 +205,9 @@ def stream(url, model, max_tokens):
             now = time.monotonic(); chunks += 1
             first = first or now; last = now
     conn.close()
-    dec = (chunks - 1) / (last - first) if chunks > 1 and last > first else None
+    # Same denominator as J/token: usage.completion_tokens when the server reports it.
+    toks = (usage or {}).get("completion_tokens") or chunks
+    dec = (toks - 1) / (last - first) if toks > 1 and first and last > first else None
     return (first - t0 if first else None), dec, chunks, time.monotonic() - t0, usage
 
 
@@ -262,6 +268,8 @@ def measure(a):
                        "core_j": energy_delta(c0, c1), "idle_w": idle_w,
                        "gross_j_tok": ej / toks, "marg_j_tok": (ej - idle_w * dt) / toks,
                        "ring_mhz": statistics.median(s.ring) if s.ring else None,
+                       "ring_target_mhz": (a.uncore_low_khz if arm == "L" else
+                                           k.u_max0 if arm in ("U", "UC") else k.u_max_saved) / 1000,
                        "ring_idle_mhz": ring_idle,
                        "pod_cpu_mhz": statistics.median(s.mhz) if s.mhz else None,
                        "temp_max_c": max(s.temp) if s.temp else None,
@@ -308,6 +316,19 @@ def analyze(path, a):
                   f"gross J/tok {med(arm, 'gross_j_tok'):.3f} ring {med(arm, 'ring_mhz')} "
                   f"core {med(arm, 'pod_cpu_mhz')} load1 {med(arm, 'load1')} T {med(arm, 'temp_max_c')}")
 
+    # Common baseline: every arm's marginal energy subtracts the stock arm's idle W of
+    # the same round (fallback: median stock idle), never its own arm's idle.
+    a_idle = {x["round"]: x["idle_w"] for x in by["A"] if x["idle_w"] is not None}
+    a_idle_med = statistics.median(a_idle.values()) if a_idle else None
+    for x in ok:
+        base = a_idle.get(x["round"], a_idle_med)
+        x["margc_j_tok"] = (x["pkg_j"] - base * x["wall_s"]) / x["tokens"] if base is not None else None
+    for arm in PRIMARY + ["L"]:
+        if by[arm]:
+            print(f"{arm:2} margc J/tok {med(arm, 'margc_j_tok'):.3f} (spread {spr(arm, 'margc_j_tok'):.3f}) "
+                  f"gross spread {spr(arm, 'gross_j_tok'):.3f} idle W {med(arm, 'idle_w'):.2f} "
+                  f"ring idle {med(arm, 'ring_idle_mhz')}")
+
     def paired(x, y, k):
         rx = {r["round"]: r[k] for r in by[x]}
         ry = {r["round"]: r[k] for r in by[y]}
@@ -322,27 +343,43 @@ def analyze(path, a):
         print("VERDICT INCONCLUSIVE: uncore writes not honoured (L ring above target)"); return
     if (med("C", "pod_cpu_mhz") or 1e9) > a.core_cap_khz / 1000 + 100:
         print("VERDICT INCONCLUSIVE: core cap not honoured"); return
+    if (med("A", "pod_cpu_mhz") or 0) < a.core_cap_khz / 1000 + 200:
+        print("VERDICT INCONCLUSIVE: stock cores not above the cap (cap does not bind)"); return
+    u_t = med("U", "ring_target_mhz")
+    if u_t is not None and (med("U", "ring_mhz") or 0) < u_t - 100:
+        print("VERDICT INCONCLUSIVE: uncore pin not honoured (U ring below target)"); return
     m = statistics.median
-    uc_a_tok, uc_a_j = paired("UC", "A", "decode_tok_s"), paired("UC", "A", "marg_j_tok")
-    uc_c_tok, uc_c_j = paired("UC", "C", "decode_tok_s"), paired("UC", "C", "marg_j_tok")
-    c_a_tok, c_a_j = paired("C", "A", "decode_tok_s"), paired("C", "A", "marg_j_tok")
+    uc_a_tok, uc_a_j = paired("UC", "A", "decode_tok_s"), paired("UC", "A", "margc_j_tok")
+    uc_a_g = paired("UC", "A", "gross_j_tok")
+    uc_c_tok, uc_c_j = paired("UC", "C", "decode_tok_s"), paired("UC", "C", "margc_j_tok")
+    uc_c_g = paired("UC", "C", "gross_j_tok")
+    c_a_tok, c_a_j = paired("C", "A", "decode_tok_s"), paired("C", "A", "margc_j_tok")
+    c_a_g = paired("C", "A", "gross_j_tok")
+    u_a_g = paired("U", "A", "gross_j_tok")
     u_a_tok = paired("U", "A", "decode_tok_s")
     l_a_tok = paired("L", "A", "decode_tok_s") if by["L"] else []
-    print(f"UC/A tok/s {m(uc_a_tok):.3f}  marg J/tok {m(uc_a_j):.3f}  conf(J lower) {sign_conf([r - 1 for r in uc_a_j])}")
-    print(f"C/A  tok/s {m(c_a_tok):.3f}  marg J/tok {m(c_a_j):.3f}  conf(J lower) {sign_conf([r - 1 for r in c_a_j])}")
-    print(f"UC/C tok/s {m(uc_c_tok):.3f}  marg J/tok {m(uc_c_j):.3f}  conf(UC faster) {sign_conf([1 - r for r in uc_c_tok])}")
-    print(f"U/A  tok/s {m(u_a_tok):.3f}")
+    print(f"UC/A tok/s {m(uc_a_tok):.3f}  margc J/tok {m(uc_a_j):.3f}  gross J/tok {m(uc_a_g):.3f}  "
+          f"conf(gross lower) {sign_conf([r - 1 for r in uc_a_g])}  conf(margc lower) {sign_conf([r - 1 for r in uc_a_j])}")
+    print(f"C/A  tok/s {m(c_a_tok):.3f}  margc J/tok {m(c_a_j):.3f}  gross J/tok {m(c_a_g):.3f}  "
+          f"conf(gross lower) {sign_conf([r - 1 for r in c_a_g])}")
+    print(f"UC/C tok/s {m(uc_c_tok):.3f}  margc J/tok {m(uc_c_j):.3f}  gross J/tok {m(uc_c_g):.3f}  "
+          f"conf(UC faster) {sign_conf([1 - r for r in uc_c_tok])}  conf(UC gross lower) {sign_conf([r - 1 for r in uc_c_g])}")
+    print(f"U/A  tok/s {m(u_a_tok):.3f}  gross J/tok {m(u_a_g):.3f}")
     if l_a_tok:
         print(f"L/A  tok/s {m(l_a_tok):.3f}  (ring on decode's critical path if <= 0.95)")
-    part1 = m(uc_a_tok) >= 0.97 and m(uc_a_j) <= 0.90 and all(r < 1 for r in uc_a_j)
+    def lower(ratios, cut):
+        return m(ratios) <= cut and all(r < 1 for r in ratios)
+    part1 = m(uc_a_tok) >= 0.97 and lower(uc_a_j, 0.90) and lower(uc_a_g, 0.90)
     part2 = (m(uc_c_tok) >= 1.03 and all(r > 1 for r in uc_c_tok)) \
-        or (m(uc_c_j) <= 0.95 and all(r < 1 for r in uc_c_j))
+        or (lower(uc_c_j, 0.95) and lower(uc_c_g, 0.95))
+    c_alone = m(c_a_tok) >= 0.97 and lower(c_a_j, 0.90) and lower(c_a_g, 0.90)
     if part1 and part2:
         print("VERDICT SUPPORTED (H29 as stated: core cap + uncore pin)")
     elif part1:
         print("VERDICT REFUTED (split): core cap alone carries the saving; the uncore pin adds nothing")
     else:
-        print("VERDICT REFUTED: UC does not hold tok/s within 3% at >= 10% lower marginal J/token")
+        print("VERDICT REFUTED: UC does not hold tok/s within 3% at >= 10% lower J/token (gross and common-idle marginal)"
+              + ("; core cap alone (C) does" if c_alone else ""))
 
 
 def main():
@@ -350,12 +387,12 @@ def main():
     ap.add_argument("--cpus", default="0-15")
     ap.add_argument("--url", default="http://127.0.0.1:18029/v3")
     ap.add_argument("--model", default="Qwen3-4B-int4-ov")
-    ap.add_argument("--rounds", type=int, default=5)
+    ap.add_argument("--rounds", type=int, default=8)
     ap.add_argument("--max-tokens", type=int, default=192)
     ap.add_argument("--core-cap-khz", type=int, default=2800000)
     ap.add_argument("--uncore-low-khz", type=int, default=2000000)
     ap.add_argument("--deadline-s", type=float, default=600)
-    ap.add_argument("--temp-abort-c", type=float, default=100)
+    ap.add_argument("--temp-abort-c", type=float, default=95)
     ap.add_argument("--swap-flag-pages", type=int, default=25600)  # 100 MiB of 4 KiB pages
     ap.add_argument("--out")
     ap.add_argument("--write-log")

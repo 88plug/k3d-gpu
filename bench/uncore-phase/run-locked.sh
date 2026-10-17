@@ -15,7 +15,12 @@ PF=""
 left() { echo $(( BUDGET - ( $(date +%s) - T0 ) - TEARDOWN )); }
 
 [ -d "${UNC}" ] || { echo "no ${UNC}: this host has no legacy intel_uncore_frequency die 0" >&2; exit 2; }
-sudo -n true || { echo "run 'sudo -v' first: RAPL and the uncore writes need root" >&2; exit 2; }
+# sudo keeps its timestamp per parent process when there is no tty, so a `sudo -v`
+# in the caller does not reach this script (a grandchild through flock). Refresh it
+# here, from SUDO_ASKPASS when set; every later sudo is a direct child of this shell
+# (no `| while` subshells), so the timestamp applies to all of them.
+if [ -n "${SUDO_ASKPASS:-}" ]; then sudo -A -v; fi
+sudo -n true || { echo "set SUDO_ASKPASS or run as root: RAPL and the uncore writes need root" >&2; exit 2; }
 
 # Snapshot "<path> <value>" of every file the probe can write (every CPU, so the
 # restore does not depend on knowing the pod's cpuset).
@@ -26,16 +31,25 @@ SNAP="${OUT}/knobs.before"
     for f in /sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_max_freq; do echo "${f} $(cat "${f}")"; done
 } > "${SNAP}"
 
+# Returns 1 if any write failed; each write's status is checked explicitly because
+# `set -e` does not apply inside a function called from a `||` list.
 restore_knobs() {
-    local p v
+    local p v rc=0
     # Uncore min to the hardware floor first, so every max/min write order is valid.
-    sudo -n tee "${UNC}/min_freq_khz" < "${UNC}/initial_min_freq_khz" >/dev/null
+    sudo -n tee "${UNC}/min_freq_khz" < "${UNC}/initial_min_freq_khz" >/dev/null || rc=1
     while read -r p v; do
         case "${p}" in */min_freq_khz) continue ;; esac
-        echo "${v}" | sudo -n tee "${p}" >/dev/null
+        sudo -n tee "${p}" <<< "${v}" >/dev/null || rc=1
     done < "${SNAP}"
-    grep "/min_freq_khz " "${SNAP}" | while read -r p v; do echo "${v}" | sudo -n tee "${p}" >/dev/null; done
-    echo "$(date +%s.%N) runner restore from ${SNAP}" >> "${OUT}/writes.log"
+    while read -r p v; do
+        case "${p}" in */min_freq_khz) sudo -n tee "${p}" <<< "${v}" >/dev/null || rc=1 ;; esac
+    done < "${SNAP}"
+    # Verify against the snapshot, not just the write status.
+    while read -r p v; do
+        [ "$(cat "${p}")" = "${v}" ] || { echo "restore mismatch ${p}: $(cat "${p}") != ${v}" >&2; rc=1; }
+    done < "${SNAP}"
+    echo "$(date +%s.%N) runner restore from ${SNAP} rc=${rc}" >> "${OUT}/writes.log"
+    return "${rc}"
 }
 cleanup() {
     restore_knobs || echo "RESTORE FAILED: re-apply ${SNAP} by hand" | tee -a "${OUT}/facts.txt"

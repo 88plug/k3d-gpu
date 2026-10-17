@@ -2,8 +2,8 @@
 # H29 runner (EXPERIMENTS.md): one lock-held live window, at most 20 min of wall time,
 # for bench/uncore-phase/probe.py.
 #
-# Usage: sudo -v && bench/uncore-phase/run.sh [OUT_DIR]
-#   sudo -v refreshes the sudo timestamp; this script itself uses sudo -n only.
+# Usage: SUDO_ASKPASS=<helper> bench/uncore-phase/run.sh [OUT_DIR]   (or run as root)
+#   run-locked.sh refreshes the sudo timestamp itself (sudo -A -v), then uses sudo -n.
 # Env:   LOCK        flock file shared by every live experiment on the box
 #        BUDGET_S    wall-time budget while the lock is held (default 1200)
 #        K3D_GPU_CLUSTER (default k3dgpu-i-uncore-phase)

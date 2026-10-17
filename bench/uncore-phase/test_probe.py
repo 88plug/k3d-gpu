@@ -34,10 +34,17 @@ def args(**kw):
     return SimpleNamespace(**d)
 
 
-def cell(r, arm, tok, j, ring=4700, core=5000):
-    return {"round": r, "arm": arm, "decode_tok_s": tok, "marg_j_tok": j, "gross_j_tok": j * 2,
-            "ring_mhz": ring, "pod_cpu_mhz": core, "load1": 1.0, "temp_max_c": 70,
-            "throttle_delta": 0, "pswpin": 0}
+TOKS = 192
+
+
+def cell(r, arm, tok, gross, idle=10.0, ring=4700, core=5000, target=4700):
+    """One 192-token cell: tok/s, gross J/token and the idle W measured under the arm."""
+    wall = TOKS / tok
+    return {"round": r, "arm": arm, "decode_tok_s": tok, "gross_j_tok": gross, "tokens": TOKS,
+            "wall_s": wall, "pkg_j": gross * TOKS, "idle_w": idle,
+            "marg_j_tok": (gross * TOKS - idle * wall) / TOKS,
+            "ring_mhz": ring, "ring_idle_mhz": ring, "ring_target_mhz": target,
+            "pod_cpu_mhz": core, "load1": 1.0, "temp_max_c": 70, "throttle_delta": 0, "pswpin": 0}
 
 
 def run_analyze(rows):
@@ -51,13 +58,16 @@ def run_analyze(rows):
     return buf.getvalue()
 
 
-def table(uc, c, u=(15.6, 1.0), a=(15.6, 1.0), l_tok=13.0, rounds=5, ring_l=2000, core_c=2800):
-    """uc, c, u, a: (tok/s, marginal J/token) per arm, identical in every round."""
+def table(uc, c, u=(15.6, 2.0, 13.0), a=(15.6, 2.0, 10.0), l_tok=13.0, rounds=5, ring_l=2000,
+          core_c=2800, core_a=5000, ring_u=4700):
+    """uc, c, u, a: (tok/s, gross J/token[, idle W]) per arm, identical in every round.
+    A stock idle is 10 W, a pinned uncore idles at 13 W unless stated."""
     rows = []
     for r in range(rounds):
-        rows += [cell(r, "A", *a), cell(r, "U", *u), cell(r, "C", *c, core=core_c), cell(r, "UC", *uc, core=core_c)]
+        rows += [cell(r, "A", *a, core=core_a, target=4700), cell(r, "U", *u, ring=ring_u),
+                 cell(r, "C", *c, core=core_c), cell(r, "UC", *uc, core=core_c)]
         if r % 2 == 0:
-            rows.append(cell(r, "L", l_tok, 1.0, ring=ring_l))
+            rows.append(cell(r, "L", l_tok, 2.0, ring=ring_l, target=2000))
     return rows
 
 
@@ -65,6 +75,7 @@ class Order(unittest.TestCase):
     def test_counts(self):
         cells = probe.order(5)
         self.assertEqual(len(cells), 23)
+        self.assertEqual(len(probe.order(8)), 36)
         for arm in probe.PRIMARY:
             self.assertEqual(sum(1 for _, x in cells if x == arm), 5)
         self.assertEqual([r for r, x in cells if x == "L"], [0, 2, 4])
@@ -97,44 +108,65 @@ class Sign(unittest.TestCase):
 
 class Verdict(unittest.TestCase):
     def test_supported(self):
-        out = run_analyze(table(uc=(15.4, 0.85), c=(14.0, 0.86)))
+        out = run_analyze(table(uc=(15.4, 1.6, 13.0), c=(14.0, 1.7, 10.0)))
         self.assertIn("VERDICT SUPPORTED", out)
 
     def test_refuted_split(self):
-        out = run_analyze(table(uc=(15.4, 0.85), c=(15.4, 0.85)))
+        out = run_analyze(table(uc=(15.4, 1.6, 13.0), c=(15.4, 1.6, 10.0)))
         self.assertIn("VERDICT REFUTED (split)", out)
 
     def test_refuted_speed(self):
-        out = run_analyze(table(uc=(14.0, 0.80), c=(14.0, 0.80)))
+        out = run_analyze(table(uc=(14.0, 1.5, 13.0), c=(14.0, 1.5, 10.0)))
         self.assertIn("VERDICT REFUTED:", out)
 
     def test_refuted_energy(self):
-        out = run_analyze(table(uc=(15.6, 0.95), c=(14.0, 0.96)))
+        out = run_analyze(table(uc=(15.6, 1.9, 13.0), c=(14.0, 1.92, 10.0)))
         self.assertIn("VERDICT REFUTED:", out)
 
+    def test_pin_idle_cost_is_not_subtracted_away(self):
+        # Per-arm marginal would favour UC (0.82x of A) only because UC's own idle is 3 W
+        # higher; gross is 0.975x and common-idle marginal 0.96x, so H29 must fail.
+        rows = table(uc=(15.6, 1.95, 13.0), c=(14.0, 2.0, 10.0))
+        uc = next(x for x in rows if x["arm"] == "UC")
+        a = next(x for x in rows if x["arm"] == "A")
+        self.assertLess(uc["marg_j_tok"] / a["marg_j_tok"], 0.90)
+        self.assertIn("VERDICT REFUTED:", run_analyze(rows))
+
+    def test_core_cap_alone_is_named(self):
+        out = run_analyze(table(uc=(14.0, 1.5, 13.0), c=(15.4, 1.6, 10.0)))
+        self.assertIn("core cap alone (C) does", out)
+
     def test_inconclusive_too_few_cells(self):
-        out = run_analyze(table(uc=(15.4, 0.85), c=(14.0, 0.86), rounds=3))
+        out = run_analyze(table(uc=(15.4, 1.6, 13.0), c=(14.0, 1.7), rounds=3))
         self.assertIn("VERDICT INCONCLUSIVE: < 4 valid", out)
 
     def test_throttled_cells_are_excluded(self):
-        rows = table(uc=(15.4, 0.85), c=(14.0, 0.86))
+        rows = table(uc=(15.4, 1.6, 13.0), c=(14.0, 1.7))
         for x in rows:
             if x["arm"] == "UC" and x["round"] < 2:
                 x["throttle_delta"] = 3
         self.assertIn("VERDICT INCONCLUSIVE: < 4 valid", run_analyze(rows))
 
     def test_inconclusive_noisy_baseline(self):
-        rows = table(uc=(15.4, 0.85), c=(14.0, 0.86))
+        rows = table(uc=(15.4, 1.6, 13.0), c=(14.0, 1.7))
         next(x for x in rows if x["arm"] == "A")["decode_tok_s"] = 12.0
         self.assertIn("baseline tok/s spread", run_analyze(rows))
 
     def test_inconclusive_uncore_not_honoured(self):
-        out = run_analyze(table(uc=(15.4, 0.85), c=(14.0, 0.86), ring_l=4700))
+        out = run_analyze(table(uc=(15.4, 1.6, 13.0), c=(14.0, 1.7), ring_l=4700))
         self.assertIn("uncore writes not honoured", out)
 
     def test_inconclusive_core_cap_not_honoured(self):
-        out = run_analyze(table(uc=(15.4, 0.85), c=(14.0, 0.86), core_c=4900))
+        out = run_analyze(table(uc=(15.4, 1.6, 13.0), c=(14.0, 1.7), core_c=4900))
         self.assertIn("core cap not honoured", out)
+
+    def test_inconclusive_cap_does_not_bind(self):
+        out = run_analyze(table(uc=(15.4, 1.6, 13.0), c=(14.0, 1.7), core_a=2900))
+        self.assertIn("cap does not bind", out)
+
+    def test_inconclusive_uncore_pin_not_honoured(self):
+        out = run_analyze(table(uc=(15.4, 1.6, 13.0), c=(14.0, 1.7), ring_u=3000))
+        self.assertIn("uncore pin not honoured", out)
 
 
 class KnobWrites(unittest.TestCase):
