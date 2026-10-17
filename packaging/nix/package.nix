@@ -28,6 +28,8 @@ stdenvNoCC.mkDerivation {
       launcher
       (lib.fileset.fileFilter (f: f.hasExt "yml") (root + "/share"))
       (lib.fileset.fileFilter (f: f.hasExt "py" || f.hasExt "json") (root + "/console"))
+      (root + "/bench/llm_load.py")
+      (root + "/bench/energy.sh")
       (root + "/images.lock")
       (root + "/README.md")
       (root + "/LICENSE.md")
@@ -48,6 +50,7 @@ stdenvNoCC.mkDerivation {
     install -Dm644 -t "$out/share/k3d-gpu/telemetry/optional" share/telemetry/optional/*.yml
     install -Dm644 -t "$out/share/k3d-gpu/console" console/*.py console/*.json
     install -Dm644 images.lock "$out/share/k3d-gpu/images.lock"
+    install -Dm755 -t "$out/share/k3d-gpu/bench" bench/llm_load.py bench/energy.sh
     install -Dm644 README.md "$out/share/doc/k3d-gpu/README.md"
     install -Dm644 LICENSE.md "$out/share/licenses/k3d-gpu/LICENSE.md"
     runHook postInstall

@@ -58,6 +58,8 @@
 #   audit   posture checks: unauthenticated listeners off loopback, images not in images.lock
 #   sandbox up|down|status
 #           kubernetes-sigs/agent-sandbox with a warm pool of sandboxes pinned to E-cores
+#   tune    run|show|space|env|fingerprint|reset: search the OVMS agent's serving config on
+#           this host; keep a winner only if it beats the default; agent up applies it
 
 set -euo pipefail
 
@@ -161,6 +163,10 @@ Usage: k3d-gpu <command>
             Run the plan ('agent up' with its image, device, model and P-core
             count) only if the plan, recomputed now with the same options,
             still hashes to H; a plan on a port other than 8000 is refused
+  tune run|show|space|env|fingerprint|reset
+            Search the OVMS agent's serving config (device, precision, OpenVINO
+            plugin_config, batching, P/E cores, CPUs) on this host; keep the
+            winner only if it beats the default; 'agent up' then applies it
   version   Show version
   help      Show this message
 
@@ -212,6 +218,15 @@ Environment:
   K3D_GPU_SANDBOX       agent-sandbox yaml   (default: ${SHARE_DIR}/agent-sandbox.yml)
   K3D_GPU_SANDBOX_PROFILE  E-core sandbox template + warm pool (default: ${SHARE_DIR}/agent-sandbox-k3d.yml)
   K3D_GPU_SANDBOX_TIMEOUT  seconds 'sandbox up' waits for a ready sandbox (default: 180)
+  K3D_GPU_TUNE          auto | off: apply this host's tuned profile in 'agent up' (default: auto)
+  K3D_GPU_TUNE_DIR      tuned profiles       (default: ~/.config/k3d-gpu/tune)
+  K3D_GPU_TUNE_PY       tune driver          (default: the repo's console/tune.py, then ${SHARE_DIR}/console/tune.py)
+  K3D_GPU_BENCH         dir with llm_load.py and energy.sh (default: the repo's bench/, then ${SHARE_DIR}/bench)
+  K3D_GPU_AGENT_CORES, K3D_GPU_AGENT_MAX_NUM_SEQS, K3D_GPU_AGENT_CACHE_SIZE,
+  K3D_GPU_AGENT_PREFIX_CACHING, K3D_GPU_AGENT_PLUGIN_CONFIG
+                        OVMS serving knobs 'tune' sets: balloon core type (performance |
+                        efficient), --max_num_seqs, --cache_size (GB), --enable_prefix_caching,
+                        --plugin_config (flat JSON) (default: unset = the OVMS default)
 
 Docs: https://github.com/88plug/k3d-gpu
 EOF
@@ -4921,8 +4936,11 @@ agent_config() {
     # Qwen3 emits hermes-style tool calls and <think> reasoning (hermes3 is OVMS's
     # name for the parser, hermes vLLM's). Any other model gets OVMS's own parser
     # detection from its chat template, or no parser on vLLM, unless these are set
-    # (an empty value turns a parser off).
-    if [ "${AGENT_MODEL}" = "${AGENT_DEFAULT_MODEL}" ]; then
+    # (an empty value turns a parser off). The int8 and fp16 siblings of the OVMS
+    # default ('k3d-gpu tune' may pick one) are the same model and get its parsers.
+    local family=${AGENT_DEFAULT_MODEL%-int4-ov}
+    if [ "${AGENT_MODEL}" = "${AGENT_DEFAULT_MODEL}" ] || { [ "${AGENT_APP}" = ovms ] \
+        && { [ "${AGENT_MODEL}" = "${family}-int8-ov" ] || [ "${AGENT_MODEL}" = "${family}-fp16-ov" ]; }; }; then
         if [ "${AGENT_APP}" = vllm ]; then
             AGENT_TOOL_PARSER="${K3D_GPU_AGENT_TOOL_PARSER-hermes}"
         else
@@ -5033,8 +5051,21 @@ agent_device() {
                 || err "K3D_GPU_AGENT_DEVICE=NPU but the cluster advertises no Intel NPU (npu.intel.com/accel)"
             echo "NPU npu.intel.com/accel"
             ;;
+        # OVMS only: the GPU runs what it supports and hands the rest of the graph
+        # to the CPU (model_server docs/parameters.md: HETERO:<...> for text_generation).
+        HETERO:GPU,CPU)
+            [ "${AGENT_APP}" = ovms ] || err "K3D_GPU_AGENT_DEVICE=${want} is an OpenVINO device: use K3D_GPU_AGENT_BACKEND=ovms"
+            if [ -n "${refused}" ]; then
+                IFS='|' read -r bdf why fix <<< "${refused}"
+                err "K3D_GPU_AGENT_DEVICE=${want} but Intel GPU ${bdf} is refused: ${why}; fix: ${fix}"
+            fi
+            for res in gpu.intel.com/xe gpu.intel.com/i915; do
+                if [ "$(resource_total "${res}")" -gt 0 ]; then echo "HETERO:GPU,CPU ${res}"; return 0; fi
+            done
+            err "K3D_GPU_AGENT_DEVICE=${want} but the cluster advertises no Intel GPU (gpu.intel.com/xe or i915)"
+            ;;
         CPU) echo "CPU -" ;;
-        *) err "unknown K3D_GPU_AGENT_DEVICE '${want}' (use auto, CPU, GPU, NPU or HPU)" ;;
+        *) err "unknown K3D_GPU_AGENT_DEVICE '${want}' (use auto, CPU, GPU, NPU, HPU or HETERO:GPU,CPU)" ;;
     esac
 }
 
@@ -5056,7 +5087,7 @@ agent_select() {
 agent_device_gid() {
     local dev node
     case "$1" in
-        GPU)
+        GPU|HETERO:*)
             for dev in "${SYSROOT}"/sys/class/drm/renderD*/device; do
                 [ "$(cat "${dev}/vendor" 2>/dev/null)" = "0x8086" ] || continue
                 case "$(bound_driver "${dev}")" in xe|i915) ;; *) continue ;; esac
@@ -5069,15 +5100,25 @@ agent_device_gid() {
     return 0
 }
 
+# Core type of the LLM's balloon on a hybrid node: P-cores unless
+# K3D_GPU_AGENT_CORES=efficient (which 'k3d-gpu tune' may pick).
+agent_cores() {
+    local cores=${K3D_GPU_AGENT_CORES:-performance}
+    [[ "${cores}" =~ ^(performance|efficient)$ ]] || err "K3D_GPU_AGENT_CORES must be performance or efficient, got '${cores}'"
+    echo "${cores}"
+}
+
 # CPU request, which is also the size of the balloon on a hybrid node. CPU
-# inference takes every P-core (hybrid) or half the node; GPU/NPU inference only
-# needs host threads for tokenizing and scheduling.
+# inference takes every core of the balloon's type (hybrid; P-cores by default)
+# or half the node; GPU/NPU inference only needs host threads for tokenizing
+# and scheduling.
 agent_cpus() {
-    local device=$1 hybrid=$2 n
+    local device=$1 hybrid=$2 n type=core
     if [ -n "${K3D_GPU_AGENT_CPUS:-}" ]; then echo "${K3D_GPU_AGENT_CPUS}"; return 0; fi
     if [ "${device}" != CPU ]; then echo 2; return 0; fi
     if [ -n "${hybrid}" ]; then
-        n=$(cpu_list_count "$(hybrid_cpus core)")
+        [ "$(agent_cores)" = performance ] || type=atom
+        n=$(cpu_list_count "$(hybrid_cpus "${type}")")
     else
         n=$(( $(max_node_cpus) / 2 ))
     fi
@@ -5098,15 +5139,41 @@ agent_manifest() {
     if [ "${AGENT_APP}" = vllm ]; then vllm_manifest; return 0; fi
     local via=""
     [ "${res}" = - ] || via=" (${res})"
-    info "agent: ${AGENT_MODEL} as '${AGENT_MODEL_NAME}' on ${device}${via}${amx:+ (AMX node)}${hybrid:+, P-cores}, ${cpus} CPU(s)" >&2
+    local cores cname=P-cores
+    cores=$(agent_cores)
+    [ "${cores}" = performance ] || cname=E-cores
+    info "agent: ${AGENT_MODEL} as '${AGENT_MODEL_NAME}' on ${device}${via}${amx:+ (AMX node)}${hybrid:+, ${cname}}, ${cpus} CPU(s)" >&2
 
-    local item="            - " args
+    local item="            - " args v
     args="${item}--target_device=${device}"
     [ -z "${AGENT_TOOL_PARSER}" ] || args+=$'\n'"${item}--tool_parser=${AGENT_TOOL_PARSER}"
     [ -z "${AGENT_REASONING_PARSER}" ] || args+=$'\n'"${item}--reasoning_parser=${AGENT_REASONING_PARSER}"
+    # Serving knobs ('k3d-gpu tune' sets these; a user can too). --pull rewrites
+    # graph.pbtxt on every start, so a change applies without a re-download.
+    v=${K3D_GPU_AGENT_MAX_NUM_SEQS:-}
+    if [ -n "${v}" ]; then
+        [[ "${v}" =~ ^[0-9]{1,4}$ ]] || err "K3D_GPU_AGENT_MAX_NUM_SEQS must be a number, got '${v}'"
+        args+=$'\n'"${item}--max_num_seqs=${v}"
+    fi
+    v=${K3D_GPU_AGENT_CACHE_SIZE:-}
+    if [ -n "${v}" ]; then
+        [[ "${v}" =~ ^[0-9]{1,3}$ ]] || err "K3D_GPU_AGENT_CACHE_SIZE must be a number of GB, got '${v}'"
+        args+=$'\n'"${item}--cache_size=${v}"
+    fi
+    v=${K3D_GPU_AGENT_PREFIX_CACHING:-}
+    if [ -n "${v}" ]; then
+        [[ "${v}" =~ ^(true|false)$ ]] || err "K3D_GPU_AGENT_PREFIX_CACHING must be true or false, got '${v}'"
+        args+=$'\n'"${item}--enable_prefix_caching=${v}"
+    fi
+    v=${K3D_GPU_AGENT_PLUGIN_CONFIG:-}
+    if [ -n "${v}" ]; then
+        # A flat JSON object of plain keys and values: it sits in a single-quoted YAML scalar.
+        [[ "${v}" =~ ^\{[A-Za-z0-9_\":,.\ -]*\}$ ]] || err "K3D_GPU_AGENT_PLUGIN_CONFIG must be a flat JSON object, got '${v}'"
+        args+=$'\n'"${item}'--plugin_config=${v}'"
+    fi
     # Optional pod fields, built here: quotes inside ${x:+...} in a heredoc are removed.
     local podlabels="" podspec=""
-    [ -z "${hybrid}" ] || podlabels=$'\n        k3d-gpu.io/cores: performance'
+    [ -z "${hybrid}" ] || podlabels=$'\n        k3d-gpu.io/cores: '"${cores}"
     [ -z "${gid}" ] || podspec+=$'\n        supplementalGroups: ['"${gid}"']'
     [ -z "${amx}" ] || podspec+=$'\n      nodeSelector:\n        feature.node.kubernetes.io/cpu-cpuid.AMXTILE: "true"'
     # auto chose the GPU because a node has XMX: keep the pod on such a node.
@@ -5986,6 +6053,7 @@ cmd_agent_up() {
     local addons manifest app svc deploy
     addons=$(agent_addons "$@")
     kubectl get nodes >/dev/null 2>&1 || err "no cluster reachable — run 'k3d-gpu up' first"
+    tune_apply_profile
     agent_select
     local logs="kubectl -n ${AGENT_NS} logs deploy/${AGENT_APP}"
     if [ -z "${addons}" ]; then
@@ -6074,12 +6142,317 @@ cmd_agent() {
         status)   cmd_agent_status ;;
         manifest)
             addons=$(agent_addons "$@")
+            tune_apply_profile >&2
             agent_select
             if [ -z "${addons}" ]; then agent_manifest; else
                 # shellcheck disable=SC2086 # word list of add-on names
                 agent_stack_manifest ${addons}
             fi ;;
         *) err "usage: k3d-gpu agent up|down|status|manifest [--with vlm,stt,video]" ;;
+    esac
+}
+
+# ---- tune: search the agent's serving config, keep only a proven winner -------
+# The search driver is console/tune.py (python3 stdlib); this side owns every
+# cluster action. A trial redeploys the OVMS agent with K3D_GPU_AGENT_* overrides
+# (the same variables a user can set by hand), so tuning only ever changes
+# k3d-gpu's own Deployment in the agent namespace, never host settings.
+
+TUNE_DIR="${K3D_GPU_TUNE_DIR:-${XDG_CONFIG_HOME:-${HOME}/.config}/k3d-gpu/tune}"
+TUNE_MODEL="${K3D_GPU_AGENT_MODEL:-OpenVINO/Qwen3-4B-int4-ov}"
+TUNE_PRECISIONS="int4,int8,fp16"
+TUNE_DEVICES=""                  # empty: every device the cluster schedules (--devices narrows it)
+TUNE_ENERGY="${TUNE_ENERGY:-}"   # set in a trial's environment by 'tune run --energy'
+TUNE_HETERO=1
+# The only variables a profile may set (tune.py validates every value too).
+TUNE_ENV_KEYS=" K3D_GPU_AGENT_DEVICE K3D_GPU_AGENT_MODEL K3D_GPU_AGENT_CPUS K3D_GPU_AGENT_CORES K3D_GPU_AGENT_PLUGIN_CONFIG K3D_GPU_AGENT_MAX_NUM_SEQS K3D_GPU_AGENT_CACHE_SIZE K3D_GPU_AGENT_PREFIX_CACHING "
+
+# tune.py: K3D_GPU_TUNE_PY, then next to a repo checkout, then the packaged copy.
+tune_py_path() {
+    local self d
+    self=$(readlink -f "${BASH_SOURCE[0]}")
+    for d in "${K3D_GPU_TUNE_PY:-}" "$(dirname "${self}")/../console/tune.py" "${SHARE_DIR}/console/tune.py"; do
+        if [ -n "${d}" ] && [ -f "${d}" ]; then echo "${d}"; return 0; fi
+    done
+    return 1
+}
+
+# Directory with llm_load.py and energy.sh: K3D_GPU_BENCH, the repo's bench/, the packaged copy.
+tune_bench_dir() {
+    local self d
+    self=$(readlink -f "${BASH_SOURCE[0]}")
+    for d in "${K3D_GPU_BENCH:-}" "$(dirname "${self}")/../bench" "${SHARE_DIR}/bench"; do
+        if [ -n "${d}" ] && [ -f "${d}/llm_load.py" ]; then echo "${d}"; return 0; fi
+    done
+    return 1
+}
+
+tune_py() {
+    local py
+    command -v python3 >/dev/null 2>&1 || err "'k3d-gpu tune' needs python3"
+    py=$(tune_py_path) || err "tune driver console/tune.py not found next to the launcher or in ${SHARE_DIR}/console (set K3D_GPU_TUNE_PY)"
+    python3 "${py}" "$@"
+}
+
+# CPU feature flags the search space depends on (CPU plugin precisions).
+tune_cpu_flags() {
+    local flags
+    flags=$(grep -m1 '^flags' "${SYSROOT}/proc/cpuinfo" 2>/dev/null || true)
+    tr ' ' '\n' <<< "${flags#*:}" | grep -xE 'avx512_bf16|avx512_fp16|amx_bf16|amx_fp16|amx_int8|avx_vnni' | sort | paste -sd, || true
+}
+
+# What decides how fast a config runs here: CPU, core split, accelerators,
+# kernel, server image and model. A profile only applies when all of it matches.
+tune_fingerprint_inputs() {
+    detect_intel
+    detect_npu
+    local model
+    model=$(sed -n 's/^model name[[:space:]]*:[[:space:]]*//p' "${SYSROOT}/proc/cpuinfo" 2>/dev/null | sed -n 1p)
+    echo "cpu=${model:-unknown}"
+    echo "cpus=$(cat "${SYSROOT}/sys/devices/system/cpu/online" 2>/dev/null || echo '?')"
+    echo "p_cores=$(hybrid_cpus core)"
+    echo "e_cores=$(hybrid_cpus atom)"
+    echo "intel_gpu=${INTEL_DRIVERS[*]+${INTEL_DRIVERS[*]}}"
+    echo "npu=${NPU_IDS[*]+${NPU_IDS[*]}}"
+    echo "kernel=$(kernel_release | cut -d. -f1-2)"
+    echo "agent_image=${K3D_GPU_AGENT_IMAGE:-${AGENT_OVMS_IMAGE}}"
+    echo "agent_model=${TUNE_MODEL}"
+}
+
+tune_fingerprint() { tune_fingerprint_inputs | sha256sum | cut -c1-16; }
+
+tune_profile_path() { echo "${TUNE_DIR}/$(tune_fingerprint).json"; }
+
+# Export this host's tuned overrides before 'agent up' builds its manifest, then
+# re-read the agent settings. A variable the user already set wins;
+# K3D_GPU_TUNE=off skips the profile, and so does a vLLM backend (tune only
+# searches OVMS).
+TUNE_APPLIED=()  # "KEY=VALUE" per override tune_apply_profile exported
+tune_apply_profile() {
+    TUNE_APPLIED=()
+    [ "${K3D_GPU_TUNE:-auto}" != off ] || return 0
+    [ "${AGENT_BACKEND}" = ovms ] || return 0
+    local path py key val applied=""
+    path=$(tune_profile_path)
+    [ -f "${path}" ] || return 0
+    command -v python3 >/dev/null 2>&1 || { warn "tuned profile ${path} ignored: python3 not found"; return 0; }
+    py=$(tune_py_path) || { warn "tuned profile ${path} ignored: console/tune.py not found"; return 0; }
+    while IFS='=' read -r key val; do
+        [[ "${TUNE_ENV_KEYS}" == *" ${key} "* ]] || continue
+        [ -z "${!key+x}" ] || continue
+        export "${key}=${val}"
+        TUNE_APPLIED+=("${key}=${val}")
+        applied+=" ${key#K3D_GPU_AGENT_}=${val}"
+    done < <(python3 "${py}" env --profile "${path}" --fingerprint "$(tune_fingerprint)" 2>/dev/null || true)
+    [ -n "${applied}" ] || return 0
+    info "agent: tuned profile ${path}:${applied} (K3D_GPU_TUNE=off ignores it)"
+    agent_config
+}
+
+# Facts JSON for tune.py: devices the cluster can schedule, the device 'agent up'
+# picks by itself, cores, CPU flags.
+tune_facts() {
+    local devices="CPU" default p=0 e=0 res d out=""
+    if [ -z "$(intel_gpu_refusal)" ]; then
+        for res in gpu.intel.com/xe gpu.intel.com/i915; do
+            if [ "$(resource_total "${res}")" -gt 0 ]; then devices+=",GPU"; break; fi
+        done
+    fi
+    [ "$(resource_total npu.intel.com/accel)" -eq 0 ] || devices+=",NPU"
+    default=$(unset K3D_GPU_AGENT_DEVICE; agent_device) || exit 1
+    default=${default%% *}
+    case "${default}" in
+        CPU|GPU|NPU) ;;
+        *) err "'agent up' picks ${default} here, which 'k3d-gpu tune' does not search (it tunes OVMS on CPU, GPU and NPU)" ;;
+    esac
+    if [ -n "${TUNE_DEVICES}" ]; then
+        for d in ${TUNE_DEVICES//,/ }; do
+            [[ ",${devices}," == *",${d^^},"* ]] || err "--devices ${d}: the cluster does not schedule it (it has ${devices})"
+            out+=",${d^^}"
+        done
+        devices=${out#,}
+    fi
+    if [ -n "$(labelled_nodes "${HYBRID_LABEL}")" ]; then
+        p=$(cpu_list_count "$(hybrid_cpus core)")
+        e=$(cpu_list_count "$(hybrid_cpus atom)")
+    fi
+    tune_py facts --devices "${devices}" --default-device "${default}" ${TUNE_HETERO:+--hetero} \
+        --p-cpus "${p}" --e-cpus "${e}" --node-cpus "$(max_node_cpus)" \
+        --cpu-flags "$(tune_cpu_flags)" --model "${TUNE_MODEL}" --precisions "${TUNE_PRECISIONS}"
+}
+
+tune_need_bench() {
+    local dir
+    dir=$(tune_bench_dir) || err "bench/llm_load.py not found next to the launcher or in ${SHARE_DIR}/bench (set K3D_GPU_BENCH)"
+    if [ -n "${TUNE_ENERGY}" ] && [ ! -f "${dir}/energy.sh" ]; then
+        err "--energy needs bench/energy.sh in ${dir}"
+    fi
+}
+
+# usage_usec of the agent container's cgroup (its own view under cgroup v2).
+tune_pod_cpu_usec() {
+    { kubectl -n "${AGENT_NS}" exec deployment/ovms -c ovms -- cat /sys/fs/cgroup/cpu.stat 2>/dev/null || true; } \
+        | awk '$1 == "usage_usec" { print $2 }'
+}
+
+# One trial: deploy the config, load it, record runs. Called by tune.py as
+#   k3d-gpu tune _trial <config.json> <budget.json> <out.json>
+# A failure is a result ({"ok": false}), not an error: the search drops the config.
+cmd_tune_trial() {
+    local cfg=$1 budget=$2 out=$3 dir requests max_tokens repeats conc key val bench
+    local name port rep runs before after rc line deadline gen
+    TRIAL_PF=""
+    dir=$(dirname "${out}")
+    runs="${dir}/runs.jsonl"
+    : > "${runs}"
+    trial_fail() {
+        [ -z "${TRIAL_PF}" ] || kill "${TRIAL_PF}" 2>/dev/null || true
+        tune_py trial-result --out "${out}" --runs "${runs}" --error "$1"
+        exit 0
+    }
+    bench=$(tune_bench_dir) || trial_fail "bench/llm_load.py not found"
+    read -r requests max_tokens repeats conc <<< "$(tune_py budget "${budget}")"
+    [ -n "${conc}" ] || trial_fail "bad budget ${budget}"
+    local -a env_lines=()
+    mapfile -t env_lines < <(tune_py env --config "${cfg}" || echo "INVALID=")
+    [[ "${env_lines[*]-}" != *INVALID=* ]] || trial_fail "config rejected by tune.py"
+
+    # Deploy in a subshell: the overrides and K3D_GPU_TUNE=off stay in it, and an
+    # err() inside 'agent up' ends the subshell, not the tune. Every tuned
+    # variable is cleared first, so the default trial and a config that leaves a
+    # knob unset get the 'agent up' default, not the user's own setting; only the
+    # model under tune is kept.
+    gen=$(kubectl -n "${AGENT_NS}" get deployment ovms -o 'jsonpath={.metadata.generation}' 2>/dev/null || true)
+    (
+        export K3D_GPU_TUNE=off
+        for key in ${TUNE_ENV_KEYS}; do unset "${key}"; done
+        export K3D_GPU_AGENT_MODEL="${TUNE_MODEL}"
+        for line in ${env_lines[@]+"${env_lines[@]}"}; do
+            key=${line%%=*} val=${line#*=}
+            [[ "${TUNE_ENV_KEYS}" == *" ${key} "* ]] || exit 3
+            export "${key}=${val}"
+        done
+        agent_config
+        cmd_agent_up
+    ) >"${dir}/deploy.log" 2>&1 || trial_fail "agent up failed (${dir}/deploy.log)"
+    # An unchanged manifest leaves the generation, and the warm pod with its
+    # prefix cache, as they were: restart it so every trial starts cold.
+    if [ -n "${gen}" ] && [ "${gen}" = "$(kubectl -n "${AGENT_NS}" get deployment ovms -o 'jsonpath={.metadata.generation}' 2>/dev/null || true)" ]; then
+        { kubectl -n "${AGENT_NS}" rollout restart deployment/ovms \
+            && kubectl -n "${AGENT_NS}" rollout status deployment/ovms --timeout="${AGENT_TIMEOUT}s"; } \
+            >>"${dir}/deploy.log" 2>&1 || trial_fail "restart of the unchanged deployment failed (${dir}/deploy.log)"
+    fi
+
+    # The served name, as 'agent up' derives it: K3D_GPU_AGENT_MODEL_NAME, else
+    # the basename of the model this config deploys.
+    name=${TUNE_MODEL##*/}
+    for line in ${env_lines[@]+"${env_lines[@]}"}; do
+        [ "${line%%=*}" != K3D_GPU_AGENT_MODEL ] || name=${line##*/}
+    done
+    name=${K3D_GPU_AGENT_MODEL_NAME:-${name}}
+    port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
+    kubectl -n "${AGENT_NS}" port-forward svc/ovms "${port}:8000" >"${dir}/port-forward.log" 2>&1 &
+    TRIAL_PF=$!
+    deadline=$((SECONDS + 60))
+    until curl -fsS -o /dev/null "http://127.0.0.1:${port}/v2/health/ready" 2>/dev/null; do
+        if [ "${SECONDS}" -ge "${deadline}" ] || ! kill -0 "${TRIAL_PF}" 2>/dev/null; then
+            trial_fail "server not reachable through port-forward (${dir}/port-forward.log)"
+        fi
+        sleep 1
+    done
+
+    for rep in $(seq 1 "${repeats}"); do
+        # --unique-prompts: every request misses the prefix cache, so first-token
+        # latency includes the prompt's prefill.
+        local -a load_cmd=(python3 "${bench}/llm_load.py" --base-url "http://127.0.0.1:${port}/v3" --model "${name}"
+            --requests "${requests}" --concurrency "${conc}" --max-tokens "${max_tokens}" --ignore-eos
+            --unique-prompts --warmup 1 --label tune --out "${dir}/load-${rep}.json")
+        [ -z "${TUNE_ENERGY}" ] || load_cmd=("${bench}/energy.sh" --json "${dir}/energy-${rep}.json" -- "${load_cmd[@]}")
+        before=$(tune_pod_cpu_usec)
+        rc=0
+        "${load_cmd[@]}" 2>>"${dir}/load.log" || rc=$?
+        after=$(tune_pod_cpu_usec)
+        # llm_load.py exits 1 when a request failed but still writes its JSON;
+        # the driver counts those errors, so only a missing file fails the trial.
+        [ -f "${dir}/load-${rep}.json" ] || trial_fail "llm_load.py wrote no result (exit ${rc}, ${dir}/load.log)"
+        tune_py quality --base-url "http://127.0.0.1:${port}/v3" --model "${name}" > "${dir}/quality-${rep}.json" \
+            || rm -f "${dir}/quality-${rep}.json"
+        local -a cpu_args=()
+        [ -z "${before}" ] || [ -z "${after}" ] || cpu_args=(--cpu-before "${before}" --cpu-after "${after}")
+        tune_py assemble-run --llm-load "${dir}/load-${rep}.json" --energy "${dir}/energy-${rep}.json" \
+            --quality "${dir}/quality-${rep}.json" ${cpu_args[@]+"${cpu_args[@]}"} >> "${runs}" \
+            || trial_fail "could not assemble run ${rep}"
+    done
+    kill "${TRIAL_PF}" 2>/dev/null || true
+    tune_py trial-result --out "${out}" --runs "${runs}"
+}
+
+cmd_tune_run() {
+    local objective=throughput dry="" arg inputs facts_file fp workdir
+    local -a extra=()
+    while [ $# -gt 0 ]; do
+        arg=$1
+        case "${arg}" in
+            --objective)   objective=${2:?--objective needs a value}; shift 2 ;;
+            --energy)      TUNE_ENERGY=1; shift ;;
+            --precisions)  TUNE_PRECISIONS=${2:?--precisions needs a value}; shift 2 ;;
+            --devices)     TUNE_DEVICES=${2:?--devices needs a value}; shift 2 ;;
+            --no-hetero)   TUNE_HETERO=""; shift ;;
+            --dry-run)     dry=1; shift ;;
+            --n|--n0|--eta|--seed|--margin|--k|--alpha|--guard-tol|--ttft-slo|--concurrency)
+                extra+=("${arg}" "${2:?${arg} needs a value}"); shift 2 ;;
+            *) err "unknown tune option '${arg}' (see 'k3d-gpu help')" ;;
+        esac
+    done
+    case "${objective}" in
+        throughput|ttft|cpu-offload) ;;
+        joules) TUNE_ENERGY=1 ;;
+        *) err "--objective must be throughput, ttft, joules or cpu-offload" ;;
+    esac
+    [ "${AGENT_BACKEND}" = ovms ] || err "'k3d-gpu tune' searches the OVMS agent; unset K3D_GPU_AGENT_BACKEND=${AGENT_BACKEND}"
+    require kubectl
+    kubectl get nodes >/dev/null 2>&1 || err "no cluster reachable — run 'k3d-gpu up' first"
+    workdir=$(mktemp -d "${TMPDIR:-/tmp}/k3d-gpu-tune.XXXXXX")
+    facts_file="${workdir}/facts.json"
+    tune_facts > "${facts_file}"
+    if [ -n "${dry}" ]; then
+        local n0=27 seed=1 i
+        for ((i = 0; i < ${#extra[@]}; i += 2)); do
+            case "${extra[i]}" in --n0) n0=${extra[i+1]} ;; --seed) seed=${extra[i+1]} ;; esac
+        done
+        tune_py space --facts "${facts_file}" --n0 "${n0}" --seed "${seed}"
+        return 0
+    fi
+    require curl
+    tune_need_bench
+    fp=$(tune_fingerprint)
+    inputs=$(tune_fingerprint_inputs | python3 -c 'import json, sys; print(json.dumps(dict(l.rstrip("\n").split("=", 1) for l in sys.stdin)))')
+    mkdir -p "${TUNE_DIR}"
+    export TUNE_ENERGY  # read by every 'tune _trial' the driver starts
+    info "tune: objective ${objective}, profile ${TUNE_DIR}/${fp}.json, trials in ${workdir}"
+    tune_py run --facts "${facts_file}" --objective "${objective}" --out "${TUNE_DIR}/${fp}.json" \
+        --fingerprint "${fp}" --fingerprint-inputs "${inputs}" --workdir "${workdir}" \
+        --trial-cmd "$(printf '%q' "$0") tune _trial" ${extra[@]+"${extra[@]}"} \
+        || err "tune failed — trials and logs are in ${workdir}"
+    info "Re-deploying the agent with the result (the tuned profile, or the default when nothing won)..."
+    cmd_agent_up
+}
+
+cmd_tune() {
+    local sub=${1:-}
+    shift || true
+    case "${sub}" in
+        run)         cmd_tune_run "$@" ;;
+        space)       cmd_tune_run --dry-run "$@" ;;
+        show)        [ -f "$(tune_profile_path)" ] || err "no tuned profile for this host ($(tune_profile_path)) — run 'k3d-gpu tune run'"
+                     tune_py show "$(tune_profile_path)" ;;
+        env)         tune_apply_profile >/dev/null  # what 'agent up' would export, user settings applied
+                     if [ "${#TUNE_APPLIED[@]}" -gt 0 ]; then printf '%s\n' "${TUNE_APPLIED[@]}"; fi ;;
+        fingerprint) echo "$(tune_fingerprint) $(tune_profile_path)"; tune_fingerprint_inputs | sed 's/^/  /' ;;
+        reset)       rm -f "$(tune_profile_path)"; info "removed $(tune_profile_path); 'agent up' deploys the default" ;;
+        _trial)      [ $# -eq 3 ] || err "usage: k3d-gpu tune _trial <config.json> <budget.json> <out.json>"
+                     cmd_tune_trial "$@" ;;
+        *) err "usage: k3d-gpu tune run [--objective throughput|ttft|joules|cpu-offload] [--energy] [--devices CPU,GPU,NPU] [--precisions int4,int8,fp16] [--no-hetero] [--dry-run] | show | space | env | fingerprint | reset" ;;
     esac
 }
 
@@ -6378,6 +6751,7 @@ case "${1:-help}" in
     audit)   shift; cmd_audit "$@" ;;
     sandbox) cmd_sandbox "${2:-}" ;;
     apply)   shift; cmd_apply "$@" ;;
+    tune)    shift; cmd_tune "$@" ;;
     version|--version|-v) echo "k3d-gpu ${VERSION}" ;;
     help|--help|-h) usage ;;
     *) usage; exit 1 ;;
