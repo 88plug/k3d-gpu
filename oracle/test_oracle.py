@@ -387,6 +387,15 @@ class ValidatorTest(unittest.TestCase):
         self.assertEqual(res.verdict, "reject")
         self.assertIn("V1", rules(res))
 
+    def test_V1_null_send_time_is_rejected(self):
+        # FUZZ_SEED=1570571994: a null sent_us crashed the recompute instead of rejecting.
+        b = copy.deepcopy(self.b)
+        b["results"]["capacity"]["steps"][0]["reps"][0]["sent_us"][0] = None
+        for trusted in (False, True):
+            res = check(reseal(b), trusted=trusted)
+            self.assertEqual(res.verdict, "reject")
+            self.assertIn("V1", rules(res))
+
     def test_V2_hashes_and_duplicates(self):
         b = copy.deepcopy(self.b)
         b["week"] = "2020-W01"

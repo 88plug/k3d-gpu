@@ -276,6 +276,9 @@ def recompute_capacity(b, res, trusted=False):
         if not all(columns_ok(r) for r in s["reps"]):
             res.flag("reject", "V1", f"N={s['agents']}: sample columns differ in length")
             return
+        if any(t is None for r in s["reps"] for t in r["sent_us"]):
+            res.flag("reject", "V1", f"N={s['agents']}: a request has no send time")
+            return
         if w["trace"]:
             for i, r in enumerate(s["reps"], 1):
                 cap_tok = max_tokens_of(w["trace"], s["agents"], i)
