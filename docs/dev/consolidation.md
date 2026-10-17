@@ -1,5 +1,12 @@
 # Branch consolidation: duplicated logic, conflict map, merge order
 
+> **Status: historical snapshot.** This review was measured against `ba81920`
+> (aur-v0.1.7). Since then many of the branches it covers have merged
+> (PRs #10 through #36), including the agent base as
+> #31, so its conflict counts no longer describe `origin/main`. Its value now
+> is the duplicated-logic inventory and the method section, which re-runs the
+> measurement against current tips.
+
 Measured 2026-10-16 09:00–09:40 PDT against `origin/main` = `ba81920`
 (release aur-v0.1.7), over all 50 `claude/*` branches on `origin` at that time.
 The 51st local ref, `claude/doctor-nvidia-runtime-check`, is gone from
