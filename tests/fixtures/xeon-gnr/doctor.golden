@@ -18,3 +18,5 @@
 
 ==> All checks passed.
 exit=0
+--- calls
+kubectl --context k3d-gpu --request-timeout=5s get nodes -o name

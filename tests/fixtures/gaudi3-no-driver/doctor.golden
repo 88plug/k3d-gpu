@@ -15,3 +15,5 @@ WARN: Gaudi PCI device found but the habanalabs driver is not loaded — skippin
 
 ==> All checks passed.
 exit=0
+--- calls
+kubectl --context k3d-gpu --request-timeout=5s get nodes -o name

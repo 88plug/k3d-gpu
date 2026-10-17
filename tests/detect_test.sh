@@ -67,13 +67,43 @@ doctor_says() {
 # doctor shells out to docker/k3d/kubectl; stub them so output is host-independent.
 STUB_BIN="${WORK}/bin"
 mkdir -p "${STUB_BIN}"
-for tool in k3d kubectl; do printf '#!/bin/sh\nexit 0\n' > "${STUB_BIN}/${tool}"; chmod +x "${STUB_BIN}/${tool}"; done
+printf '#!/bin/sh\nexit 0\n' > "${STUB_BIN}/k3d"; chmod +x "${STUB_BIN}/k3d"
+# The kubectl stub stands in for a live cluster, driven by env. With everything
+# unset there is no reachable cluster and doctor runs only its host checks.
+#   STUB_NODES         node names                      get nodes -o name
+#   STUB_HYBRID_NODES  nodes carrying the hybrid label get nodes -l ...
+#   STUB_DS_<name>     "<desired> <ready>" of DaemonSet <name> (- as _); unset = NotFound
+#   STUB_DS_LIST       namespace/name per DaemonSet    get daemonsets -A
+#   STUB_NODE_RES      "<node> <resource> <capacity> <allocatable>" lines, \n separated
+cat > "${STUB_BIN}/kubectl" <<'EOF'
+#!/bin/bash
+args=()
+for a in "$@"; do case "${a}" in --context=*|--request-timeout=*) ;; *) args+=("${a}") ;; esac; done
+set -- "${args[@]}"
+[ "$1" = --context ] && shift 2
+[ "$1" = -n ] && shift 2
+[ "$1" = get ] || exit 0
+case "$2 $*" in
+    "nodes "*" -l "*) for n in ${STUB_HYBRID_NODES:-}; do echo "node/${n}"; done ;;
+    "nodes "*go-template*) printf '%b' "${STUB_NODE_RES:-}" ;;
+    "nodes "*) for n in ${STUB_NODES:-}; do echo "node/${n}"; done ;;
+    "daemonsets "*) printf '%b' "${STUB_DS_LIST:-}" ;;
+    "daemonset "*) v="STUB_DS_$(echo "$3" | tr -- - _)"
+        [ -n "${!v+x}" ] || { echo "Error from server (NotFound): daemonsets.apps \"$3\" not found" >&2; exit 1; }
+        echo "${!v}" ;;
+esac
+exit 0
+EOF
+chmod +x "${STUB_BIN}/kubectl"
 # The docker stub answers `docker info --format` from STUB_DOCKER_RUNTIMES (runtime
 # names) and STUB_DOCKER_CDI (CDI device IDs), so doctor's runtime checks are testable.
+# `docker exec <node> test -S /var/run/nri/nri.sock` fails when STUB_NRI_SOCK_MISSING is set.
 cat > "${STUB_BIN}/docker" <<'EOF'
 #!/bin/sh
-[ "$1" = info ] || exit 0
+[ "$1" = info ] || [ "$1" = exec ] || exit 0
 case "$*" in
+    exec*nri.sock*) [ -z "${STUB_NRI_SOCK_MISSING:-}" ] ;;
+    exec*) ;;
     *Runtimes*) for r in ${STUB_DOCKER_RUNTIMES:-}; do echo "${r}"; done ;;
     *DiscoveredDevices*) for id in ${STUB_DOCKER_CDI:-}; do echo "${id}"; done ;;
     *Driver*) echo "${STUB_DOCKER_DRIVER:-}" ;;
@@ -751,6 +781,54 @@ doctor_says "CDI-only host is ok via CDI" "${r}" 'ok: .*CDI' "" \
     STUB_DOCKER_RUNTIMES="io.containerd.runc.v2 runc" STUB_DOCKER_CDI="nvidia.com/gpu=0 nvidia.com/gpu=all"
 doctor_says "no runtime and no CDI warns" "${r}" 'warn.*nvidia-ctk' "" \
     STUB_DOCKER_RUNTIMES="io.containerd.runc.v2 runc"
+
+# ---- doctor: live-cluster failure modes (docs/failure-modes.md) ---------------
+
+r=$(newroot cluster-hybrid)
+kernel "${r}" 6.18.1
+hybrid "${r}" 0-15 16-31
+doctor_says "no reachable cluster skips the cluster checks" "${r}" 'Checking cluster' negate
+CL=(STUB_NODES=k3d-gpu-server-0 STUB_HYBRID_NODES=k3d-gpu-server-0
+    "STUB_DS_LIST=kube-system/nri-resource-policy-balloons\n")
+doctor_says "Ready balloons DaemonSet on a hybrid node is ok" "${r}" 'ok: NRI balloons policy: 1/1 Ready' "" \
+    "${CL[@]}" "STUB_DS_nri_resource_policy_balloons=1 1"
+doctor_says "balloons DaemonSet not Ready while hybrid label set fails" "${r}" 'fail.*NRI balloons policy: 0/1 Ready' "" \
+    "${CL[@]}" "STUB_DS_nri_resource_policy_balloons=1 0"
+doctor_says "balloons not Ready says labelled pods start unpinned" "${r}" 'start unpinned' "" \
+    "${CL[@]}" "STUB_DS_nri_resource_policy_balloons=1 0"
+doctor_says "balloons DaemonSet missing while hybrid label set fails" "${r}" 'fail.*NRI balloons policy: DaemonSet .* not found' "" \
+    "${CL[@]}"
+doctor_says "missing NRI socket in the node is reported" "${r}" 'fail.*nri\.sock' "" \
+    "${CL[@]}" "STUB_DS_nri_resource_policy_balloons=1 0" STUB_NRI_SOCK_MISSING=1
+doctor_says "present NRI socket is not reported missing" "${r}" 'nri\.sock' negate \
+    "${CL[@]}" "STUB_DS_nri_resource_policy_balloons=1 0"
+doctor_says "no hybrid-labelled node means no balloons check" "${r}" 'NRI balloons policy:' negate \
+    STUB_NODES=k3d-gpu-server-0
+doctor_says "two NRI resource policies fail" "${r}" 'fail.*2 NRI resource policies.*topology-aware' "" \
+    "${CL[@]}" "STUB_DS_nri_resource_policy_balloons=1 1" \
+    "STUB_DS_LIST=kube-system/nri-resource-policy-balloons\nkube-system/nri-resource-policy-topology-aware\n"
+doctor_says "one NRI resource policy is not a conflict" "${r}" 'NRI resource policies' negate \
+    "${CL[@]}" "STUB_DS_nri_resource_policy_balloons=1 1"
+
+r=$(newroot cluster-nvidia)
+kernel "${r}" 6.18.1
+mkdir -p "${r}/sys/module/nvidia"; touch "${r}/dev/nvidiactl"
+doctor_says "Ready device plugin DaemonSet is ok" "${r}" 'ok: nvidia device plugin: 1/1 Ready' "" \
+    STUB_NODES=k3d-gpu-server-0 "STUB_DS_nvidia_device_plugin_daemonset=1 1"
+doctor_says "device plugin DaemonSet not Ready fails" "${r}" 'fail.*nvidia device plugin: 0/1 Ready' "" \
+    STUB_NODES=k3d-gpu-server-0 "STUB_DS_nvidia_device_plugin_daemonset=1 0"
+doctor_says "device plugin scheduled on no node fails" "${r}" 'fail.*nvidia device plugin: scheduled on no node' "" \
+    STUB_NODES=k3d-gpu-server-0 "STUB_DS_nvidia_device_plugin_daemonset=0 0"
+doctor_says "disconnected device plugin (allocatable 0, capacity kept) fails" "${r}" \
+    'fail.*k3d-gpu-server-0: nvidia.com/gpu allocatable 0 of capacity 2' "" \
+    STUB_NODES=k3d-gpu-server-0 "STUB_DS_nvidia_device_plugin_daemonset=1 1" \
+    "STUB_NODE_RES=k3d-gpu-server-0 cpu 32 31\nk3d-gpu-server-0 nvidia.com/gpu 2 0\n"
+doctor_says "partly unhealthy devices warn" "${r}" 'warn.*nvidia.com/gpu allocatable 1 of capacity 2' "" \
+    STUB_NODES=k3d-gpu-server-0 "STUB_DS_nvidia_device_plugin_daemonset=1 1" \
+    "STUB_NODE_RES=k3d-gpu-server-0 nvidia.com/gpu 2 1\n"
+doctor_says "core resources with capacity above allocatable are ignored" "${r}" 'allocatable .* of capacity' negate \
+    STUB_NODES=k3d-gpu-server-0 "STUB_DS_nvidia_device_plugin_daemonset=1 1" \
+    "STUB_NODE_RES=k3d-gpu-server-0 cpu 32 31\nk3d-gpu-server-0 memory 64Gi 63Gi\nk3d-gpu-server-0 nvidia.com/gpu 2 2\n"
 
 # `test` must show the pod's output even when it exits before anything could
 # attach, and must fail when the pod fails. kubectl is stubbed: STUB_POD_PHASE is
