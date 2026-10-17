@@ -510,7 +510,11 @@ host cpu:        13th Gen Intel(R) Core(TM) i9-13900T (8 P-cores, 16 E-cores; cp
 host kernel:     6.6.128-1-MANJARO
 accelerators:    nvidia=2 (RTX 4000 SFF Ada, RTX 2000E Ada), intel=8 (UHD 770, shared), hybrid=1
 network:         tailscale0 100.65.179.24/32, br0 192.168.1.108/24, sshd on 0.0.0.0:22
-k3d-gpu commit:  a173b04 (claude/agent-sandbox-ecores rebased on origin/main 2b45f87)
+k3d-gpu commit:  a173b04 (claude/agent-sandbox-ecores rebased on origin/main 2b45f87); the branch was
+                 later rebased onto origin/main b244662 (#61, k3d-gpu audit), which does not touch
+                 the sandbox or up paths: 1811012 -> 789f978, a173b04 -> 67a6f17. On that base a
+                 fresh cluster ran `sandbox up` (CPU 24) and `k3d-gpu audit` listed both sandbox
+                 images as ok in images.lock; `sandbox down` removed both namespaces
 node image:      sha256:8a8a093acd204807b72587208c942d0d441364686f70b27e7be442aaa7d5c29a, docker build -t k3d-gpu:r2-sandbox .
                  (k3s v1.37.1+k3s1; same image ID as the H16/H17 build, this branch changes no image input)
 runtime:         agent-sandbox v1.0.7 controller and python-runtime-sandbox v1.0.7, both pinned by digest;
