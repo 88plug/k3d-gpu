@@ -12,12 +12,19 @@ class K3dGpu < Formula
   depends_on :linux
 
   def install
-    libexec.install "scripts/k3d-gpu"
+    libexec.install "scripts/k3d-gpu", "scripts/k3d-gpu-mcp"
     pkgshare.install Dir["share/*.yml", "share/telemetry"]
-    # Dir[] so a release tarball cut before bench/ shipped still installs.
-    (pkgshare/"bench").install Dir["bench/vs.py", "bench/llm_load.py", "bench/competitors.lock"]
-    # The launcher reads its manifests from K3D_GPU_SHARE (default /usr/share/k3d-gpu).
+    pkgshare.install "images.lock"
+    (pkgshare/"console").install Dir["console/*.py", "console/*.json"]
+    (pkgshare/"bench").install "bench/vs.py", "bench/llm_load.py", "bench/competitors.lock", "bench/energy.sh",
+                               "bench/agent_trace.py", "bench/agent_trace_gen.py"
+    (pkgshare/"bench/apb").install "bench/apb/apb.py", "bench/apb/capacity.py"
+    (pkgshare/"oracle").install "oracle/bundle.py", "oracle/project.py", "oracle/validate.py", "oracle/share.py"
+    (pkgshare/"oracle/schema").install "oracle/schema/bundle-v1.json"
+    # The launcher reads its manifests from K3D_GPU_SHARE (default /usr/share/k3d-gpu);
+    # k3d-gpu-mcp runs the launcher next to it in libexec and passes its environment on.
     (bin/"k3d-gpu").write_env_script libexec/"k3d-gpu", K3D_GPU_SHARE: "${K3D_GPU_SHARE:-#{pkgshare}}"
+    (bin/"k3d-gpu-mcp").write_env_script libexec/"k3d-gpu-mcp", K3D_GPU_SHARE: "${K3D_GPU_SHARE:-#{pkgshare}}"
   end
 
   test do
@@ -25,5 +32,7 @@ class K3dGpu < Formula
     assert_match "#{pkgshare}/nvidia-device-plugin.yml", shell_output("#{bin}/k3d-gpu help")
     assert_match "/x/nvidia-device-plugin.yml", shell_output("K3D_GPU_SHARE=/x #{bin}/k3d-gpu help")
     assert_path_exists pkgshare/"nvidia-device-plugin.yml"
+    assert_path_exists pkgshare/"console/plan.py"
+    assert_path_exists bin/"k3d-gpu-mcp"
   end
 end

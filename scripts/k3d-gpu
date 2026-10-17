@@ -3943,7 +3943,19 @@ proxy_yaml_env() {
     done < <(proxy_env)
 }
 
+# The default node image (${IMAGE_REPO}) is built for linux/amd64 only
+# (build-and-push.yml platforms), so on another CPU `up` needs a K3D_GPU_IMAGE
+# built for that CPU.
+require_node_image_arch() {
+    [ -z "${K3D_GPU_IMAGE:-}" ] || return 0
+    case "$(uname -m)" in
+        x86_64|amd64) return 0 ;;
+    esac
+    err "node image ${IMAGE} is published for linux/amd64 only and this host is $(uname -m) — build a k3s node image for this CPU and set K3D_GPU_IMAGE to it"
+}
+
 cmd_up() {
+    require_node_image_arch
     require docker
     require k3d
     require kubectl

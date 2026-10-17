@@ -20,10 +20,14 @@ description: |-
 depends:
   - bash
 suggests:
-  - python3  # k3d-gpu facts, plan, tune and capacity (console/, bench/)
+  - python3  # k3d-gpu-mcp, k3d-gpu facts, plan, tune and capacity (console/, bench/)
 contents:
   - src: scripts/k3d-gpu
     dst: /usr/bin/k3d-gpu
+    file_info:
+      mode: 0755
+  - src: scripts/k3d-gpu-mcp
+    dst: /usr/bin/k3d-gpu-mcp
     file_info:
       mode: 0755
   - src: share/*.yml

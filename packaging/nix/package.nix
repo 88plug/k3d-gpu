@@ -26,6 +26,7 @@ stdenvNoCC.mkDerivation {
     inherit root;
     fileset = lib.fileset.unions [
       launcher
+      (root + "/scripts/k3d-gpu-mcp")
       (lib.fileset.fileFilter (f: f.hasExt "yml") (root + "/share"))
       (lib.fileset.fileFilter (f: f.hasExt "py" || f.hasExt "json") (root + "/console"))
       (root + "/bench/llm_load.py")
@@ -56,6 +57,7 @@ stdenvNoCC.mkDerivation {
   installPhase = ''
     runHook preInstall
     install -Dm755 scripts/k3d-gpu "$out/bin/k3d-gpu"
+    install -Dm755 scripts/k3d-gpu-mcp "$out/bin/k3d-gpu-mcp"
     install -Dm644 -t "$out/share/k3d-gpu" share/*.yml
     install -Dm644 -t "$out/share/k3d-gpu/telemetry" share/telemetry/*.yml
     install -Dm644 -t "$out/share/k3d-gpu/telemetry/optional" share/telemetry/optional/*.yml
