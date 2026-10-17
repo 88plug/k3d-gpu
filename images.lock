@@ -1,0 +1,190 @@
+{
+  "images": [
+    {
+      "digest": "sha256:386e6bec28b3f25a0e4e1c0fb726f026e8ed199bd74e4aa0fb226631359f7daf",
+      "name": "docker.io/intel/gaudi-device-plugin",
+      "sources": [
+        "share/gaudi-device-plugin.yml"
+      ],
+      "tag": "1.24.2-481"
+    },
+    {
+      "digest": "sha256:e7673d0b4fa60d846b7be037953c81bb0c9805ab75a6f790cb68c486b99d3c93",
+      "name": "docker.io/intel/intel-dsa-plugin",
+      "sources": [
+        "share/intel-dsa-plugin.yml"
+      ],
+      "tag": "0.37.1"
+    },
+    {
+      "digest": "sha256:004641b2547d58f1eadce58473fa160ad71377de1eb588cf1f82832387bf3e33",
+      "name": "docker.io/intel/intel-gpu-plugin",
+      "sources": [
+        "share/intel-gpu-plugin.yml"
+      ],
+      "tag": "0.37.1"
+    },
+    {
+      "digest": "sha256:6391dcd3b2f3ca487675503e850db5ec77ec3dd2054867e1de196d4986bc60bc",
+      "name": "docker.io/intel/intel-iaa-plugin",
+      "sources": [
+        "share/intel-iaa-plugin.yml"
+      ],
+      "tag": "0.37.1"
+    },
+    {
+      "digest": "sha256:cdcf6f4c662c0d1ee4e3fc841a56e1a097706c880f8f98fd3ff51d7a8f02b547",
+      "name": "docker.io/intel/intel-npu-plugin",
+      "sources": [
+        "share/intel-npu-plugin.yml"
+      ],
+      "tag": "0.37.1"
+    },
+    {
+      "digest": "sha256:4751706168d6d0e100e6391e3bb288fc9386920c5c2f733f2073d04f830c7418",
+      "name": "docker.io/intel/intel-qat-plugin",
+      "sources": [
+        "share/intel-qat-plugin.yml"
+      ],
+      "tag": "0.37.1"
+    },
+    {
+      "digest": "sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e",
+      "name": "docker.io/library/busybox",
+      "sources": [
+        "scripts/k3d-gpu K3D_GPU_DEVICE_TEST_IMAGE"
+      ],
+      "tag": "1.37"
+    },
+    {
+      "digest": "sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944",
+      "name": "docker.io/library/ubuntu",
+      "sources": [
+        "Dockerfile"
+      ],
+      "tag": "26.04"
+    },
+    {
+      "digest": "sha256:e2eb43e25d404e2c48716f80afdb8989a84c4da588f5509330322842084d97b0",
+      "name": "docker.io/nvidia/cuda",
+      "sources": [
+        "scripts/k3d-gpu K3D_GPU_TEST_IMAGE"
+      ],
+      "tag": "13.4.3-base-ubuntu26.04"
+    },
+    {
+      "digest": "sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58",
+      "name": "docker.io/openvino/model_server",
+      "sources": [
+        "scripts/k3d-gpu K3D_GPU_AGENT_IMAGE"
+      ],
+      "tag": null
+    },
+    {
+      "digest": "sha256:ca7f37d993d82ef0dcdcfecb2e0e2618ea541dbaffc620c8cedebe01a82acd0d",
+      "name": "docker.io/rancher/k3s",
+      "sources": [
+        "Dockerfile"
+      ],
+      "tag": "v1.37.1-k3s1"
+    },
+    {
+      "digest": "sha256:5425a2b4613d2458dbdff99218e8d487ebb59c20e7a941f061c0777070f0aac1",
+      "name": "docker.io/rancher/klipper-helm",
+      "sources": [
+        "k3s-images.txt v1.37.1-k3s1"
+      ],
+      "tag": "v0.13.3-build20260727"
+    },
+    {
+      "digest": "sha256:910944bb0bd94f060a82a56ca1ea1c577d3e49b3473a093a47a985f32e92d94a",
+      "name": "docker.io/rancher/klipper-lb",
+      "sources": [
+        "k3s-images.txt v1.37.1-k3s1"
+      ],
+      "tag": "v0.4.17"
+    },
+    {
+      "digest": "sha256:e757967a5ec338f6a9b371c5a9688bedaa8c3578ea3dd4db329ea0084be0a86f",
+      "name": "docker.io/rancher/local-path-provisioner",
+      "sources": [
+        "k3s-images.txt v1.37.1-k3s1"
+      ],
+      "tag": "v0.0.37"
+    },
+    {
+      "digest": "sha256:7efd3c635b03efd68c4e8398fc45f0d993d0e9ab016f72c1cefb0fd6d01aa286",
+      "name": "docker.io/rancher/mirrored-coredns-coredns",
+      "sources": [
+        "k3s-images.txt v1.37.1-k3s1"
+      ],
+      "tag": "1.14.7"
+    },
+    {
+      "digest": "sha256:101b4afd76732482eff9b95cae5f94bcf295e521fbec4e01b69c5421f3f3f3e5",
+      "name": "docker.io/rancher/mirrored-library-busybox",
+      "sources": [
+        "k3s-images.txt v1.37.1-k3s1"
+      ],
+      "tag": "1.37.0"
+    },
+    {
+      "digest": "sha256:f86a2cab1b5c649070c49f883c743dd32d8485a56e3368c5f93b9e91f1e91259",
+      "name": "docker.io/rancher/mirrored-library-traefik",
+      "sources": [
+        "k3s-images.txt v1.37.1-k3s1"
+      ],
+      "tag": "3.7.13"
+    },
+    {
+      "digest": "sha256:d9862115e7c7881280d3d75ca26bda8ffc0fc213315979575bf23ce9826205c0",
+      "name": "docker.io/rancher/mirrored-metrics-server",
+      "sources": [
+        "k3s-images.txt v1.37.1-k3s1"
+      ],
+      "tag": "v0.9.0"
+    },
+    {
+      "digest": "sha256:f548e0e8e3dc1896ca956272154dde3314e8cc4fde0a57577ee9fa1c63f5baf4",
+      "name": "docker.io/rancher/mirrored-pause",
+      "sources": [
+        "k3s-images.txt v1.37.1-k3s1"
+      ],
+      "tag": "3.10.2"
+    },
+    {
+      "digest": "sha256:a8c8297c72744f25dbcf70fdb4a64bb787f428a3f9ab4dfabb0eb1377da0070f",
+      "name": "ghcr.io/containers/nri-plugins/nri-resource-policy-balloons",
+      "sources": [
+        "share/nri-balloons.yml"
+      ],
+      "tag": "v0.14.0"
+    },
+    {
+      "digest": "sha256:10e6a78ba2d172493460a9e8a92c496aaa7a64dc4d26d622a2e95e0c736081c9",
+      "name": "ghcr.io/open-webui/open-webui",
+      "sources": [
+        "share/agent-chat-ui.yml"
+      ],
+      "tag": null
+    },
+    {
+      "digest": "sha256:27c1b2553a690ca3d29889dcd61df97525d46f58272c0be8dc63c2b18f120075",
+      "name": "nvcr.io/nvidia/k8s-device-plugin",
+      "sources": [
+        "share/nvidia-device-plugin.yml"
+      ],
+      "tag": "v0.20.1"
+    },
+    {
+      "digest": "sha256:2fa1c99ad09bdf2c8ad97706a4ad2fd548c84d5ecd70ba32a6152c667b96c4d2",
+      "name": "registry.k8s.io/nfd/node-feature-discovery",
+      "sources": [
+        "share/node-feature-discovery.yml"
+      ],
+      "tag": "v0.19.0"
+    }
+  ],
+  "k3s_tag": "v1.37.1-k3s1",
+  "schema": "k3d-gpu.images-lock/v1"
+}

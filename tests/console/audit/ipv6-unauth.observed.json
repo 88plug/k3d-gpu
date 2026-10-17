@@ -1,0 +1,100 @@
+{
+  "apps": [],
+  "cluster": "gpu",
+  "images": [
+    {
+      "digests": [
+        "docker.io/openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58"
+      ],
+      "node": "k3d-gpu-server-0",
+      "tags": []
+    },
+    {
+      "digests": [
+        "docker.io/intel/intel-gpu-plugin@sha256:004641b2547d58f1eadce58473fa160ad71377de1eb588cf1f82832387bf3e33"
+      ],
+      "node": "k3d-gpu-server-0",
+      "tags": [
+        "docker.io/intel/intel-gpu-plugin:0.37.1"
+      ]
+    },
+    {
+      "digests": [
+        "docker.io/rancher/local-path-provisioner@sha256:e757967a5ec338f6a9b371c5a9688bedaa8c3578ea3dd4db329ea0084be0a86f"
+      ],
+      "node": "k3d-gpu-server-0",
+      "tags": [
+        "docker.io/rancher/local-path-provisioner:v0.0.37"
+      ]
+    },
+    {
+      "digests": [
+        "docker.io/rancher/mirrored-coredns-coredns@sha256:7efd3c635b03efd68c4e8398fc45f0d993d0e9ab016f72c1cefb0fd6d01aa286"
+      ],
+      "node": "k3d-gpu-server-0",
+      "tags": [
+        "docker.io/rancher/mirrored-coredns-coredns:1.14.7"
+      ]
+    },
+    {
+      "digests": [
+        "docker.io/rancher/mirrored-metrics-server@sha256:d9862115e7c7881280d3d75ca26bda8ffc0fc213315979575bf23ce9826205c0"
+      ],
+      "node": "k3d-gpu-server-0",
+      "tags": [
+        "docker.io/rancher/mirrored-metrics-server:v0.9.0"
+      ]
+    },
+    {
+      "digests": [
+        "docker.io/rancher/mirrored-pause@sha256:f548e0e8e3dc1896ca956272154dde3314e8cc4fde0a57577ee9fa1c63f5baf4"
+      ],
+      "node": "k3d-gpu-server-0",
+      "tags": [
+        "docker.io/rancher/mirrored-pause:3.10.2"
+      ]
+    },
+    {
+      "digests": [
+        "ghcr.io/containers/nri-plugins/nri-resource-policy-balloons@sha256:a8c8297c72744f25dbcf70fdb4a64bb787f428a3f9ab4dfabb0eb1377da0070f"
+      ],
+      "node": "k3d-gpu-server-0",
+      "tags": [
+        "ghcr.io/containers/nri-plugins/nri-resource-policy-balloons:v0.14.0"
+      ]
+    },
+    {
+      "digests": [
+        "registry.k8s.io/nfd/node-feature-discovery@sha256:2fa1c99ad09bdf2c8ad97706a4ad2fd548c84d5ecd70ba32a6152c667b96c4d2"
+      ],
+      "node": "k3d-gpu-server-0",
+      "tags": [
+        "registry.k8s.io/nfd/node-feature-discovery:v0.19.0"
+      ]
+    }
+  ],
+  "listeners": [
+    {
+      "address": "0.0.0.0",
+      "auth": "client-cert",
+      "name": "kube-apiserver",
+      "port": 39651,
+      "source": "docker port 6443/tcp on k3d-gpu-server-0"
+    },
+    {
+      "address": "::",
+      "auth": "none",
+      "name": "vllm (EAT chart, no auth)",
+      "port": 8000,
+      "source": "fixture: EAT#9 layout"
+    }
+  ],
+  "pulls": [],
+  "schema": "k3d-gpu.observed/v1",
+  "secrets": [
+    {
+      "mode": "600",
+      "path": "/home/user/.kube/config"
+    }
+  ]
+}

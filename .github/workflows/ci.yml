@@ -80,7 +80,7 @@ jobs:
       - run: tests/kubeconform.sh
 
   console-tests:
-    name: Console spine (facts/v1, plan)
+    name: Console spine (facts/v1, plan, audit)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -89,6 +89,19 @@ jobs:
       - env:
           CONSOLE_JSONSCHEMA_PYTHON: /tmp/jsonschema/bin/python
         run: tests/console_test.sh
+      - env:
+          CONSOLE_JSONSCHEMA_PYTHON: /tmp/jsonschema/bin/python
+        run: tests/audit_test.sh
+
+  # images.lock must list every image share/, the Dockerfile and the launcher
+  # reference, at the digests they pin (offline; `scripts/images-lock update`
+  # refreshes it from the registries).
+  images-lock:
+    name: images.lock complete
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: scripts/images-lock check
 
   report-html:
     name: report.html (goldens, offline load in headless Chrome)

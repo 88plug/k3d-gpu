@@ -1,0 +1,14 @@
+audit FAIL: 1 of 11 checks failed (images.lock: 23 images, k3s v1.37.1-k3s1)
+FAIL listener 0.0.0.0:8000 published node port 30080/tcp: unauthenticated listener off loopback: no authentication this audit can establish; off loopback, auth unknown (docker port 30080/tcp on k3d-gpu-server-0)
+     fix: bind it to 127.0.0.1, or put OIDC in front of it (k3d-gpu plan --bind picks oidc off loopback)
+ok   listener 0.0.0.0:39651 kube-apiserver: off loopback, auth client-cert (docker port 6443/tcp on k3d-gpu-server-0)
+ok   image docker.io/intel/intel-gpu-plugin:0.37.1: sha256:004641b2547d in images.lock (share/intel-gpu-plugin.yml); on k3d-gpu-server-0
+ok   image docker.io/openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58: sha256:a928903fe429 in images.lock (scripts/k3d-gpu K3D_GPU_AGENT_IMAGE); on k3d-gpu-server-0
+ok   image docker.io/rancher/local-path-provisioner:v0.0.37: sha256:e757967a5ec3 in images.lock (k3s-images.txt v1.37.1-k3s1); on k3d-gpu-server-0
+ok   image docker.io/rancher/mirrored-coredns-coredns:1.14.7: sha256:7efd3c635b03 in images.lock (k3s-images.txt v1.37.1-k3s1); on k3d-gpu-server-0
+ok   image docker.io/rancher/mirrored-metrics-server:v0.9.0: sha256:d9862115e7c7 in images.lock (k3s-images.txt v1.37.1-k3s1); on k3d-gpu-server-0
+ok   image docker.io/rancher/mirrored-pause:3.10.2: sha256:f548e0e8e3dc in images.lock (k3s-images.txt v1.37.1-k3s1); on k3d-gpu-server-0
+ok   image ghcr.io/containers/nri-plugins/nri-resource-policy-balloons:v0.14.0: sha256:a8c8297c7274 in images.lock (share/nri-balloons.yml); on k3d-gpu-server-0
+ok   image registry.k8s.io/nfd/node-feature-discovery:v0.19.0: sha256:2fa1c99ad09b in images.lock (share/node-feature-discovery.yml); on k3d-gpu-server-0
+ok   secret <work>/stub/unauth-published/kubeconfig: mode 0600
+exit=1
