@@ -3713,7 +3713,7 @@ SHARE="$(cd "$(dirname "$0")/.." && pwd)/share"
 # output of `k3d-gpu sandbox <action>` must match <ERE>, or must not after "negate".
 # The kubectl call log is in ${WORK}/kubectl.log.
 sandbox_says() {
-    local name=$1 root=$2 want=$3 re=$4 action=$5 negate="" out rc hit=0
+    local name=$1 root=$2 want_rc=$3 re=$4 action=$5 negate="" out rc hit=0
     shift 5
     if [ "${1:-}" = negate ]; then negate=1; shift; fi
     : > "${WORK}/kubectl.log"
@@ -3723,11 +3723,11 @@ sandbox_says() {
     grep -E -- "${re}" <<< "${out}" >/dev/null && hit=1
     [ -z "${negate}" ] || hit=$((1 - hit))
     if [ "${hit}" -eq 1 ] \
-       && { { [ "${want}" = 0 ] && [ "${rc}" -eq 0 ]; } || { [ "${want}" = fail ] && [ "${rc}" -ne 0 ]; }; }; then
+       && { { [ "${want_rc}" = 0 ] && [ "${rc}" -eq 0 ]; } || { [ "${want_rc}" = fail ] && [ "${rc}" -ne 0 ]; }; }; then
         PASS=$((PASS + 1)); echo "ok   ${name}"
     else
         FAILS=$((FAILS + 1))
-        echo "FAIL ${name} (rc=${rc}, want ${want}, ${negate:+not }/${re}/)"
+        echo "FAIL ${name} (rc=${rc}, want ${want_rc}, ${negate:+not }/${re}/)"
         sed 's/^/  | /' <<< "${out}"
     fi
 }
