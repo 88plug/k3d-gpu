@@ -4,7 +4,7 @@ from the 8-P-core calibration arm to core sets it was not fitted on?
 
 Pre-registered in EXPERIMENTS.md ("H24 pre-registration") before any run. This
 script measures; it never edits the predictions. It self-limits to DEADLINE_S
-(19 min) from start and keeps partial data.
+(17 min) from start and keeps partial data.
 
   run:    sudo -E python3 bench/sku-model/probe.py --out DIR
           (env IMAGE = the H6 OVMS image by digest, MODELS = dir with
@@ -28,6 +28,7 @@ import glob
 import json
 import os
 import secrets
+import signal
 import shutil
 import statistics
 import subprocess
@@ -41,7 +42,10 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(REPO, "console"))
 import sku_model  # noqa: E402
 
-DEADLINE_S = 19 * 60
+# Internal deadline sits 120 s under the outer `timeout 1140` so cleanup and
+# scoring finish before the outer SIGTERM.
+DEADLINE_S = 17 * 60
+IDLE_WAIT_S = 60
 READY_S = 5 * 60
 MODEL = "qwen3-4b"
 SOURCE_MODEL = "OpenVINO/Qwen3-4B-int4-ov"
@@ -115,8 +119,8 @@ def rapl_uj():
 
 
 def throttle_count():
-    return sum(int(read(p, "0") or 0) for p in
-               glob.glob("/sys/devices/system/cpu/cpu*/thermal_throttle/package_throttle_count"))
+    # One package counter, exposed identically under every cpu; read it once.
+    return int(read("/sys/devices/system/cpu/cpu0/thermal_throttle/package_throttle_count", "0") or 0)
 
 
 def coretemp_max_c():
@@ -240,10 +244,16 @@ def visit(arm, idx):
     a = ARMS[arm]
     port, cpus = a["port"], list(a["cpu_list"])
     rec = {"arm": arm, "visit": idx, "t": time.time()}
-    s0 = cpu_times()
-    time.sleep(5)
-    s1 = cpu_times()
-    rec["idle_busy"] = busy(s0, s1, cpus)
+    # Wait (up to IDLE_WAIT_S) for the arm cpuset to go quiet; flag if it never does.
+    waited = time.monotonic()
+    while True:
+        s0 = cpu_times()
+        time.sleep(5)
+        s1 = cpu_times()
+        rec["idle_busy"] = busy(s0, s1, cpus)
+        if rec["idle_busy"] <= 0.10 or time.monotonic() - waited >= IDLE_WAIT_S or left() < 200:
+            break
+    rec["idle_wait_s"] = round(time.monotonic() - waited, 1)
     rec["flag_busy"] = rec["idle_busy"] > 0.10
     others = {o: container_usage_usec(o) for o in ARMS if o != arm}
     v0, th0, e0, w0 = vmstat(), throttle_count(), rapl_uj(), time.monotonic()
@@ -366,6 +376,22 @@ def score(path):
                 m1[arm] = {"measured": round(med, 2), "m1": round(want, 2),
                            "err": round((med - want) / want, 3)}
     out["m1_decode"] = m1
+    # Baseline (pre-registered): the uncalibrated efficiency-1 roofline, scored on
+    # absolute decode with no rescale, next to M0 absolute (H6 calibration, no rescale).
+    bw = sku_model.bw_spec(sku_model.CALIB["host_mts"], sku_model.CALIB["host_channels"])
+    base = sku_model.uncalibrated_roofline(bw)
+    out["absolute_decode"] = {}
+    for arm in "ABCD":
+        med = meas[arm]["decode_c1"][0]
+        if med:
+            m0a = pred[arm]["decode_c1"]
+            out["absolute_decode"][arm] = {
+                "measured": round(med, 2), "m0_abs": m0a, "m0_abs_err": round((med - m0a) / m0a, 3),
+                "baseline": round(base, 2), "baseline_err": round((med - base) / base, 3)}
+    ab = [v for k_, v in out["absolute_decode"].items() if k_ != "A"]
+    out["absolute_decode_mape"] = (
+        {"m0": round(statistics.mean(abs(v["m0_abs_err"]) for v in ab), 3),
+         "baseline": round(statistics.mean(abs(v["baseline_err"]) for v in ab), 3)} if ab else None)
     a_drift = None
     av = [v for v in visits if v["arm"] == "A"]
     if len(av) >= 2:
@@ -382,29 +408,36 @@ def score(path):
 
 
 def verdict(out, meas):
-    """Pre-registered outcome table; returns (row, label)."""
+    """Pre-registered outcome table (EXPERIMENTS.md, H24) -> label."""
     cells = [c for c in out["cells"] if c.get("measured") is not None]
     if len(cells) < 9:
         return "INCONCLUSIVE (missing cells: partial run)"
-    spreads = [meas[a][m][1] for a in ARMS for m in ("decode_c1",) if meas[a][m][1] is not None]
+    spreads = [meas[a][m][1] for a in ARMS for m in ("decode_c1", "prefill", "c4_agg")
+               if meas[a][m][1] is not None]
     if (out["a_drift"] or 0) > 0.10 or any(s > 0.20 for s in spreads) or any(
             meas[a]["flagged_visits"] >= 2 for a in ARMS):
         return "INCONCLUSIVE (row 6: noise floor)"
+    if not any(abs(c["err"]) > 0.25 for c in cells) and out["mape"] <= 0.25:
+        return "SUPPORTED (row 1)"
     dec = [c for c in cells if c["metric"] == "decode_c1"]
     pre = [c for c in cells if c["metric"] == "prefill"]
-    if all(abs(c["err"]) <= 0.25 for c in cells) and out["mape"] <= 0.25 and not any(
-            abs(c["err"]) > 0.40 for c in cells):
-        return "SUPPORTED (row 1)"
-    dec_fail = any(abs(c["err"]) > 0.25 for c in dec)
+    c4 = [c for c in cells if c["metric"] == "c4_agg"]
+    # Row 2 requires a failing decode gap to exceed 2x that arm's spread.
+    dec_any = any(abs(c["err"]) > 0.25 for c in dec)
+    dec_fail = any(abs(c["err"]) > 0.25 and abs(c["err"]) > 2 * (c["spread"] or 0) for c in dec)
     pre_fail = any(abs(c["err"]) > 0.25 for c in pre)
-    m1_ok = out["m1_decode"] and all(abs(v["err"]) <= 0.20 for v in out["m1_decode"].values())
+    c4_fail = {c["arm"] for c in c4 if abs(c["err"]) > 0.25}
+    m1 = out["m1_decode"]
+    m1_ok = len(m1) == 3 and all(abs(v["err"]) <= 0.20 for v in m1.values())
     if dec_fail and m1_ok and not pre_fail:
         return "REFUTED (row 2: M1 holds)"
-    if dec_fail and not m1_ok:
+    if dec_any and not m1_ok:
         return "REFUTED (row 3: M0 and M1 decode fail)"
-    if pre_fail and not dec_fail:
+    if pre_fail and not dec_any:
         return "REFUTED (row 4: prefill does not transfer)"
-    return "REFUTED (c4 only, row 5)"
+    if not dec_any and not pre_fail and c4_fail == {"C"}:
+        return "REFUTED (row 5: c4 fails only on C)"
+    return "REFUTED (mixed: no pre-registered row)"
 
 
 # ------------------------------------------------------------- main
@@ -435,6 +468,8 @@ def main():
     ap.add_argument("--score")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
+    # SIGTERM (outer timeout) -> SystemExit, so the `finally` below removes sci-h24-*.
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
     if a.score:
         score(a.score)
         return 0

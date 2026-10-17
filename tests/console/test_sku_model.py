@@ -46,6 +46,23 @@ def cpuinfo(name):
     return path
 
 
+I9 = None
+
+
+def dmi(mts, channels, dpc=1):
+    """Synthetic `dmidecode -t 17` text: dpc DIMMs per listed channel, plus one empty slot."""
+    devs = []
+    for ch in channels:
+        for d in range(dpc):
+            devs.append(f"Memory Device\n\tSize: 16 GB\n\tLocator: Controller0-Channel{ch}-DIMM{d}\n"
+                        f"\tSpeed: 5600 MT/s\n\tConfigured Memory Speed: {mts} MT/s\n")
+    devs.append("Memory Device\n\tSize: No Module Installed\n\tLocator: Controller1-ChannelZ-DIMM0\n")
+    path = os.path.join(TMP, f"dmi-{mts}-{channels}-{dpc}")
+    with open(path, "w") as f:
+        f.write("# dmidecode 3.6\n" + "\n".join(devs))
+    return path
+
+
 class Arms(unittest.TestCase):
     def test_prereg_within_1pct(self):
         arms = sm.h24_arms()
@@ -78,19 +95,55 @@ class Detect(unittest.TestCase):
         self.assertIsNone(sm.detect_sku("/nonexistent/cpuinfo"))
 
     def test_auto_host_is_calibrated(self):
-        rc, out, _ = run(["predict", "auto", "--json", "--cpuinfo",
-                          cpuinfo("13th Gen Intel(R) Core(TM) i9-13900T")])
+        # Only a box whose detected memory equals the calibration config is calibrated.
+        rc, out, _ = run(["predict", "auto", "--json", "--cpuinfo", I9,
+                          "--dmidecode-file", dmi(3600, "AB", dpc=2)])
         self.assertEqual(rc, 0)
         p = json.loads(out)
         self.assertEqual(p["status"], "calibrated")
         self.assertEqual(p["inputs"]["mts"], 3600)
+        self.assertEqual(p["inputs"]["channels"], 2)
         self.assertEqual(p["cpu"]["decode_tok_s"], 15.7)
+        self.assertEqual(p["fields_status"]["c4_agg_tok_s"], "derived")
+
+    def test_auto_other_13900t_box_uses_its_own_memory(self):
+        # A 1 DPC DDR5-5600 13900T box must not inherit this host's 3600 MT/s.
+        rc, out, _ = run(["predict", "auto", "--json", "--cpuinfo", I9,
+                          "--dmidecode-file", dmi(5600, "AB", dpc=1)])
+        self.assertEqual(rc, 0)
+        p = json.loads(out)
+        self.assertEqual(p["status"], "extrapolated")
+        self.assertEqual(p["inputs"]["mts"], 5600)
+
+    def test_auto_unread_memory_falls_back_to_spec(self):
+        rc, out, _ = run(["predict", "auto", "--json", "--cpuinfo", I9,
+                          "--dmidecode-file", "/nonexistent/dmi"])
+        self.assertEqual(rc, 0)
+        p = json.loads(out)
+        self.assertEqual(p["status"], "extrapolated")
+        self.assertEqual(p["inputs"]["mts"], sm.SKUS["i9-13900t"]["mts"])
 
     def test_auto_other_config_is_extrapolated(self):
-        rc, out, _ = run(["predict", "auto", "--json", "--mts", "5600", "--cpuinfo",
-                          cpuinfo("13th Gen Intel(R) Core(TM) i9-13900T")])
+        rc, out, _ = run(["predict", "auto", "--json", "--mts", "5600", "--cpuinfo", I9,
+                          "--dmidecode-file", dmi(3600, "AB", dpc=2)])
         self.assertEqual(rc, 0)
         self.assertEqual(json.loads(out)["status"], "extrapolated")
+
+    def test_parse_dmidecode(self):
+        with open(dmi(4800, "A", dpc=1)) as f:
+            self.assertEqual(sm.parse_dmidecode(f.read()), (4800, 1))
+        self.assertEqual(sm.parse_dmidecode(""), (None, None))
+
+
+class NonHybrid(unittest.TestCase):
+    def test_inference_gets_only_the_cores_sandboxes_leave(self):
+        # i5-12400: 6 P-cores, 3 to sandboxes, 3 to inference.
+        p = sm.predict("i5-12400")
+        self.assertEqual(p["inputs"]["sandbox_cores"], 3)
+        self.assertTrue(p["inputs"]["inference_cores"][0].startswith("3x"))
+        c, _ = sm.compute_spec([("P", 3, "golden-cove", None)])
+        want = sm.etas()[1] * c / sm.MODELS["qwen3-4b"]["mac_per_token"]
+        self.assertAlmostEqual(p["cpu"]["prefill_tok_s"], round(want, 1))
 
     def test_named_sku_is_extrapolated(self):
         for key in sm.SKUS:
@@ -148,6 +201,8 @@ class Properties(unittest.TestCase):
             self.assertEqual(p, sm.predict(key, mts, ch, model), msg)
             json.dumps(p)
 
+
+I9 = cpuinfo("13th Gen Intel(R) Core(TM) i9-13900T")
 
 if __name__ == "__main__":
     unittest.main(verbosity=1)

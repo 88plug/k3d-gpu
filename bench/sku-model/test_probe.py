@@ -82,6 +82,28 @@ class Score(unittest.TestCase):
     def test_partial_inconclusive(self):
         self.assertIn("partial", scored(raw_file(drop="D"))["verdict"])
 
+    def test_decode_and_prefill_fail_m1_holds_is_mixed(self):
+        # Formerly fell through to "c4 only, row 5"; no pre-registered row covers it.
+        fac = {"C": {"decode_c1": 0.5, "prefill": 0.5}}
+        tri = {"A": 50.0, "B": 50.0, "C": 25.0, "D": 50.0}
+        v = scored(raw_file(fac, tri))
+        self.assertEqual(v["verdict"], "REFUTED (mixed: no pre-registered row)")
+
+    def test_c4_only_on_c_is_row5(self):
+        v = scored(raw_file({"C": {"c4_agg": 0.5}}))
+        self.assertEqual(v["verdict"], "REFUTED (row 5: c4 fails only on C)")
+
+    def test_c4_on_b_is_mixed(self):
+        v = scored(raw_file({"B": {"c4_agg": 0.5}}))
+        self.assertEqual(v["verdict"], "REFUTED (mixed: no pre-registered row)")
+
+    def test_baseline_scored(self):
+        # Exact-M0 data: M0 absolute error 0, the efficiency-1 baseline overpredicts.
+        v = scored(raw_file())
+        self.assertIsNotNone(v["absolute_decode_mape"])
+        self.assertLess(v["absolute_decode_mape"]["m0"], 0.02)
+        self.assertGreater(v["absolute_decode_mape"]["baseline"], 0.3)
+
     def test_calibrates_on_run_a(self):
         # A whole-run offset (every arm 10% slow) is absorbed by arm A's calibration.
         fac = {a: {"decode_c1": 0.9, "prefill": 0.9, "c4_agg": 0.9} for a in "ABCD"}
@@ -128,7 +150,8 @@ class Plan(unittest.TestCase):
                              capture_output=True, text=True, check=True).stdout
         d = json.loads(out)
         self.assertEqual(d["order"], "ABCDDCBA")
-        self.assertLessEqual(d["deadline_s"], 20 * 60)
+        # >= 90 s under the outer `timeout 1140`, so cleanup runs before SIGTERM.
+        self.assertLessEqual(d["deadline_s"], 1140 - 90)
         for cmd in d["launch"]:
             self.assertIn("--enable_prefix_caching", cmd)
             self.assertTrue(cmd[cmd.index("--name") + 1].startswith("sci-h24-"))

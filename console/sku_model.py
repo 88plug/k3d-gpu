@@ -204,13 +204,13 @@ def predict(key, mts=None, channels=None, model="qwen3-4b", host_measured=False)
     else:
         inf = [("E", s["e"], s["e_uarch"], None)]
         sandbox_cores = 0
+    if not sandbox_cores:
+        # Non-hybrid part: half the cores for sandboxes, the rest for inference.
+        kind, n, uarch, override = inf[0]
+        sandbox_cores = n // 2
+        inf = [(kind, n - sandbox_cores, uarch, override)]
     c, notes = compute_spec(inf)
     r = m0(bw, c, model)
-    if not sandbox_cores:
-        # Non-hybrid part: half the cores for sandboxes, half for inference
-        # (inference compute halves; decode is memory-bound on paper anyway).
-        n = s.get("x") or s.get("p") or s.get("e")
-        sandbox_cores = n // 2
     calibrated = host_measured and key == CALIB["host_sku"].lower()
     label = "calibrated" if calibrated else "extrapolated"
     out = {
@@ -225,6 +225,9 @@ def predict(key, mts=None, channels=None, model="qwen3-4b", host_measured=False)
                    "npu_tops": s["npu_tops"]},
         "cpu": {"decode_tok_s": round(r["decode_c1"], 1), "prefill_tok_s": round(r["prefill"], 1),
                 "c4_agg_tok_s": round(r["c4_agg"], 1), "bound": r["bound_c1"]},
+        # Only decode c=1 and prefill were fitted; c4 is a model derivation everywhere.
+        "fields_status": {"decode_tok_s": label, "prefill_tok_s": label,
+                          "c4_agg_tok_s": "derived"},
         "baseline_uncalibrated_decode_tok_s": round(uncalibrated_roofline(bw, model), 1),
         "agents_per_box": dict(agents(r["c4_agg"], r["prefill"], sandbox_cores),
                                status="derived"),
@@ -280,12 +283,50 @@ def detect_sku(cpuinfo="/proc/cpuinfo"):
     m = re.search(r"^model name\s*:\s*(.+)$", txt, re.M)
     if not m:
         return None
-    name = m.group(1).lower()
+    return match_sku(m.group(1))
+
+
+def match_sku(model_name):
+    """Exact table row for a /proc/cpuinfo model name, or None."""
+    name = model_name.lower()
     for key, s in SKUS.items():
         tail = s["name"].lower().split()[-1]  # "i9-13900t", "n100", "155h", "8480+"
         if re.search(r"(?<![0-9a-z])" + re.escape(tail) + r"(?![0-9a-z])", name):
             return key
     return None
+
+
+def parse_dmidecode(txt):
+    """(configured MT/s, populated channels) from `dmidecode -t 17` text, or (None, None).
+
+    Channels = distinct channel tokens in populated DIMM locators
+    ("Controller0-ChannelA-DIMM0", "ChannelB-DIMM1"); None when unparseable."""
+    speeds, chans = [], set()
+    for dev in txt.split("Memory Device")[1:]:
+        if re.search(r"^\s*Size:\s*No Module", dev, re.M):
+            continue
+        sp = re.search(r"Configured (?:Memory|Clock) Speed:\s*(\d+)\s*MT/s", dev)
+        if sp:
+            speeds.append(int(sp.group(1)))
+        loc = re.search(r"^\s*(?:Bank )?Locator:.*?Channel\s*([A-Z0-9])", dev, re.M | re.I)
+        if loc:
+            ctl = re.search(r"Controller\s*(\d+)", dev)
+            chans.add((ctl.group(1) if ctl else "0", loc.group(1).upper()))
+    return (min(speeds) if speeds else None), (len(chans) or None)
+
+
+def detect_memory():
+    """Configured memory of this host via dmidecode (needs root); (None, None) if unread."""
+    import shutil
+    import subprocess
+    exe = shutil.which("dmidecode")
+    if not exe:
+        return None, None
+    try:
+        r = subprocess.run([exe, "-t", "17"], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None, None
+    return parse_dmidecode(r.stdout) if r.returncode == 0 else (None, None)
 
 
 def render(p):
@@ -321,6 +362,7 @@ def main(argv=None):
     pp.add_argument("--channels", type=int)
     pp.add_argument("--model", default="qwen3-4b", choices=sorted(MODELS))
     pp.add_argument("--cpuinfo", default="/proc/cpuinfo")
+    pp.add_argument("--dmidecode-file", help="`dmidecode -t 17` output to read instead of running it")
     pa = sub.add_parser("arms")
     pa.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
@@ -345,8 +387,18 @@ def main(argv=None):
                   file=sys.stderr)
             return 2
         host = True
-        if key == CALIB["host_sku"].lower() and a.mts is None and a.channels is None:
-            a.mts, a.channels = CALIB["host_mts"], CALIB["host_channels"]
+        # Memory comes from this box (dmidecode or --dmidecode-file), never from the
+        # calibration host; unread fields fall back to the spec value (extrapolated).
+        if a.dmidecode_file:
+            try:
+                with open(a.dmidecode_file) as f:
+                    mts, ch = parse_dmidecode(f.read())
+            except OSError:
+                mts, ch = None, None
+        else:
+            mts, ch = detect_memory()
+        a.mts = a.mts or mts
+        a.channels = a.channels or ch
     if key not in SKUS:
         print(f"sku_model: unknown SKU {a.sku!r}; known: {', '.join(SKUS)}", file=sys.stderr)
         return 2
