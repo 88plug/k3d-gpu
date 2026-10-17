@@ -415,13 +415,14 @@ scripts/k3d-gpu down
 
 ```text
 # provenance
-date:            2026-10-17T07:20:31Z..07:28:56Z (pre-registered in 205dfb6, pushed 07:15:01Z)
+date:            2026-10-17T07:20:31Z..07:28:56Z (pre-registered in 205dfb6, pushed 07:15:01Z; rebased onto aa968f0 as 8524df2)
 hypothesis:      H16, H17
 host cpu:        13th Gen Intel(R) Core(TM) i9-13900T (8 P-cores, 16 E-cores)
 host kernel:     6.6.128-1-MANJARO
 accelerators:    nvidia=2 (RTX 4000 SFF Ada, RTX 2000E Ada), intel=1 (UHD 770, 0xa780, i915, PCI 0000:00:02.0), hybrid
 k3d-gpu commit:  8477aed (claude/intel-gpu-dra-r2 on origin/main 6de91c0; launcher identical to 205dfb6,
-                 8477aed only regenerated test goldens)
+                 8477aed only regenerated test goldens; the branch was later rebased onto
+                 origin/main aa968f0, which did not touch the up path, as 375faa0)
 node image:      sha256:8a8a093acd20, docker build -t k3d-gpu:dra-r2-f859afb . from this branch
                  (k3s v1.37.1+k3s1, intel/intel-gpu-plugin:0.37.1,
                  ghcr.io/intel/intel-gpu-resource-driver:v0.12.1@sha256:1479956240397c7207c3d38c0d296bd591cd66f26d432452f9a2d75336843776)
