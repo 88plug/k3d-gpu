@@ -17,10 +17,16 @@ for the full streamed reply, wait the trace's tool time, send the next turn.
      is not quiet is refused (exit 5) unless --force; forced, the failed
      checks are written to the report as confounds.
   4. One discarded warm-up (2 sessions, N=1). All of it failing = exit 6.
-  5. Ramp N over 1, 2, 4, 8, 12, 16, 24, 32, 48, 64, ... up to --max, --reps
-     reps per step (more reps, up to 2 x --reps, while the pooled sample is
-     too small). The ramp stops at the first step that fails at --stop-slo
-     (default --slo). A rep whose own p95 exceeds 2 x --stop-slo ends its step.
+  5. Search N: 1, 2, 4, 8, ... doubling until a step does not pass (or
+     --max), then bisect between the largest pass and the smallest failure.
+     Each step adds reps (up to --reps, default 3) only while the p95
+     bootstrap CI straddles the SLO; a rep whose own p95 exceeds 2 x
+     --stop-slo ends its step. --step-cap bounds a step, --budget (default
+     15 min) the search: when it runs out the bracket so far is reported
+     ("APB in [a,b]"). The bracket is stored per host + engine + model + SLO
+     ($XDG_STATE_HOME/k3d-gpu/capacity/state); a rerun resumes from it and
+     only refines it, and a closed bracket is answered without sending load
+     (--fresh starts over).
   6. One more N=1 rep (drift check), then capacity.json.
 
 Scoring is bench/apb/apb.py's (PROTOCOL.md section 6): steady window per rep,
@@ -36,6 +42,7 @@ from __future__ import annotations
 
 import argparse
 import glob
+import hashlib
 import json
 import os
 import platform
@@ -51,6 +58,7 @@ sys.path.insert(0, HERE)
 import apb  # noqa: E402
 
 SCHEMA = "k3d-gpu.capacity/1"
+STATE_SCHEMA = "k3d-gpu.capacity-state/1"
 EXIT_USAGE, EXIT_NOT_QUIET, EXIT_ENDPOINT = 2, 5, 6
 AGENT_NAMESPACE = "k3d-gpu-agent"  # `k3d-gpu agent up`
 ENGINES = ("auto", "cpu", "igpu", "npu", "gaudi", "nvidia")
@@ -87,55 +95,136 @@ def sysroot():
     return os.environ.get("K3D_GPU_SYSROOT", "")
 
 
-# ---------------------------------------------------------------- ramp grid
-def ramp_steps(max_agents):
-    """1, 2, 4, 8, then +4 to 16, +8 to 32, +16 after; always ends at max_agents."""
-    if max_agents < 1:
-        raise ValueError("--max must be >= 1")
-    out, n = [], 1
-    while n < max_agents:
-        out.append(n)
-        n = n * 2 if n < 8 else n + (4 if n < 16 else 8 if n < 32 else 16)
-    out.append(max_agents)
-    return out
+# ---------------------------------------------------------------- search
+def measure_step(run_rep, n, stop_slo, base_tool=None, max_reps=3, step_cap_s=None,
+                 deadline=None, clock=time.monotonic):
+    """Scored step at N agents with adaptive reps.
 
-
-# ---------------------------------------------------------------- ramp loop
-def run_ramp(run_rep, steps, reps, stop_slo, max_reps=None, on_step=None):
-    """Run the ramp. run_rep(n, rep) -> (results, meta). Returns the scored
-    steps (apb.score_step records) in order; stops after the first failing or
-    still-insufficient step."""
-    max_reps = max(reps, max_reps if max_reps is not None else 2 * reps)
-    scored, base_tool = [], None
-    for n in steps:
-        reps_data, early = [], False
-        rep = 0
-        while True:
-            rep += 1
-            results, meta = run_rep(n, rep)
-            reps_data.append((results, meta))
-            if apb.early_fail(results, meta, stop_slo):
-                early = True
-                break
-            if rep < reps:
-                continue
-            s = apb.score_step(reps_data, stop_slo, base_tool)
-            if s["verdict"] != "insufficient" or rep >= max_reps:
-                break
+    After each rep the pooled step is scored; the step stops as soon as its
+    verdict cannot change with more data:
+      - fail on errors or tool validity, or a rep over EARLY_FAIL_FACTOR x SLO;
+      - p95 bootstrap 95% CI entirely above the SLO (fail) or entirely at or
+        below it with the pooled n met (pass).
+    Otherwise it adds a rep, up to max_reps, while the next rep (at the mean rep
+    time so far) still fits step_cap_s and the deadline. The record carries
+    "stop" (why it ended) and "_reps" (the raw reps)."""
+    t0 = clock()
+    reps_data, early, stop = [], False, "max_reps"
+    while True:
+        results, meta = run_rep(n, len(reps_data) + 1)
+        reps_data.append((results, meta))
+        if apb.early_fail(results, meta, stop_slo):
+            early, stop = True, "early_fail"
+            break
         s = apb.score_step(reps_data, stop_slo, base_tool)
-        if early and s["verdict"] != "pass":
-            s["verdict"] = "fail"
-            if not any(r.startswith("p95") for r in s["reasons"]):
-                s["reasons"].insert(0, f"p95 > {apb.EARLY_FAIL_FACTOR:g} x SLO {stop_slo:g} in one rep")
-        if n == steps[0] and base_tool is None:
-            base_tool = s["tool_valid_any"]
-        s["_reps"] = reps_data
-        scored.append(s)
+        lo, hi = (s["p95_ci95_s"] or [None, None])[:2]
+        p95_only = all(r.startswith("p95") for r in s["reasons"])
+        if s["verdict"] == "fail" and (not p95_only or (lo is not None and lo > stop_slo)):
+            stop = "ci_above_slo" if p95_only else "errors_or_tools"
+            break
+        if s["verdict"] == "pass" and hi is not None and hi <= stop_slo:
+            stop = "ci_below_slo"
+            break
+        if len(reps_data) >= max_reps:
+            break
+        now, per_rep = clock(), (clock() - t0) / len(reps_data)
+        if step_cap_s is not None and now - t0 + per_rep > step_cap_s:
+            stop = "step_cap"
+            break
+        if deadline is not None and now + per_rep > deadline:
+            stop = "budget"
+            break
+    s = apb.score_step(reps_data, stop_slo, base_tool)
+    if early and s["verdict"] != "pass":
+        s["verdict"] = "fail"
+        if not any(r.startswith("p95") for r in s["reasons"]):
+            s["reasons"].insert(0, f"p95 > {apb.EARLY_FAIL_FACTOR:g} x SLO {stop_slo:g} in one rep")
+    s["stop"] = stop
+    s["seconds"] = clock() - t0
+    s["_reps"] = reps_data
+    return s
+
+
+def next_n(lo, hi, max_agents):
+    """Next agent count to try for a bracket: lo passed (0 = nothing yet), hi
+    failed (None = nothing yet). Doubling until the first failure, then
+    bisection. None when the bracket is closed."""
+    if hi is None:
+        if lo >= max_agents:
+            return None
+        return min(max_agents, max(1, 2 * lo))
+    if hi - lo <= 1:
+        return None
+    return (lo + hi) // 2
+
+
+def search_apb(measure, max_agents, bracket=None, budget_s=None, clock=time.monotonic, on_step=None):
+    """Exponential-then-binary search for the largest passing N.
+
+    measure(n, deadline) -> scored step. bracket {"lo", "hi"} resumes a
+    previous search (lo: largest N seen passing, hi: smallest N seen not
+    passing). A step that is not a pass (fail or insufficient) bounds the
+    bracket from above. Returns (bracket, steps, status) with status "closed",
+    "max_reached" or "budget". Assumes p95 grows with N (closed loop)."""
+    b = {"lo": 0, "hi": None}
+    if bracket:
+        b.update({k: bracket.get(k) for k in ("lo", "hi")})
+        b["lo"] = b["lo"] or 0
+    deadline = None if budget_s is None else clock() + budget_s
+    steps = []
+    while True:
+        n = next_n(b["lo"], b["hi"], max_agents)
+        if n is None:
+            return b, steps, "max_reached" if b["hi"] is None else "closed"
+        if deadline is not None and clock() >= deadline:
+            return b, steps, "budget"
+        s = measure(n, deadline)
+        steps.append(s)
         if on_step:
             on_step(s)
-        if s["verdict"] != "pass":
-            break
-    return scored
+        if s["verdict"] == "pass":
+            b["lo"] = max(b["lo"], n)
+        else:
+            b["hi"] = n if b["hi"] is None else min(b["hi"], n)
+
+
+# ---------------------------------------------------------------- resume state
+def state_key(ep, a, host):
+    """Inputs that make two capacity runs comparable; their hash names the file."""
+    inputs = {"node": platform.node(), "cpu_model": host.get("cpu_model"),
+              "engine": ep.get("engine"), "model": ep.get("model"),
+              "endpoint": ep.get("service") or ep.get("url"), "image": ep.get("image"),
+              "slo_s": a.stop_slo, "trace": a.trace, "time_scale": a.time_scale, "extra": a.extra}
+    h = hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest()[:12]
+    safe = re.sub(r"[^A-Za-z0-9._-]", "_", f"{ep.get('engine')}-{ep.get('model')}")
+    return f"{safe}-{h}", inputs
+
+
+def load_state(path):
+    try:
+        with open(path) as f:
+            st = json.load(f)
+    except (OSError, ValueError):
+        return None
+    if st.get("schema") != STATE_SCHEMA:
+        return None
+    return st
+
+
+def save_state(path, st):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(apb.finite(st), f, indent=2)
+    os.replace(tmp, path)
+
+
+def bracket_text(lo, hi):
+    if hi is None:
+        return f"APB >= {lo}"
+    if hi - lo <= 1:
+        return f"APB = {lo}"
+    return f"APB in [{lo},{hi - 1}]"
 
 
 def agents_per_box(steps):
@@ -734,6 +823,11 @@ def confounds(rep, forwarded, sampler, engine_known):
     d = rep.get("drift_check")
     if d and d.get("ratio") is not None and abs(d["ratio"] - 1) > DRIFT_BAND:
         out.append(f"drift: N=1 p95 end/start = {d['ratio']:.2f}, outside 1 +/- {DRIFT_BAND}: the box changed during the run")
+    if rep["binding_limit"]["kind"] == "budget":
+        out.append("--budget ran out before the bracket closed: agents per box is the proven lower end; "
+                   "rerun to refine (the bracket is stored)")
+    if rep.get("bracket_start", {}).get("lo") or rep.get("bracket_start", {}).get("hi"):
+        out.append("bracket resumed from an earlier run: steps outside this run were measured then, not now")
     if rep["binding_limit"]["kind"] == "max_reached":
         out.append(f"ramp reached --max {rep['max_agents']} without breaking the SLO: "
                    "agents per box is a lower bound")
@@ -753,7 +847,9 @@ def fmt(v, nd=2):
 
 def print_report(rep):
     ep = rep["endpoint"]
-    print(f"AGENTS PER BOX: {rep['agents_per_box']}  "
+    b = rep.get("bracket") or {"lo": rep["agents_per_box"], "hi": None}
+    print(f"AGENTS PER BOX: {rep['agents_per_box']}  ({bracket_text(b['lo'], b['hi'])}, "
+          f"search {rep.get('search_status')}; "
           f"(p95 turn latency <= {fmt(rep['slo_s'], 3)} s, trace {rep['trace']}, "
           f"engine {ep['engine']}, model {ep['model']})")
     if rep["agents_per_box_interpolated"] is not None:
@@ -779,9 +875,13 @@ def print_report(rep):
 
 
 # ---------------------------------------------------------------- main
-def default_out(engine):
+def state_base():
     base = os.environ.get("XDG_STATE_HOME") or os.path.join(os.path.expanduser("~"), ".local", "state")
-    return os.path.join(base, "k3d-gpu", "capacity", f"{engine}-{time.strftime('%Y%m%d-%H%M%S')}")
+    return os.path.join(base, "k3d-gpu", "capacity")
+
+
+def default_out(engine):
+    return os.path.join(state_base(), f"{engine}-{time.strftime('%Y%m%d-%H%M%S')}")
 
 
 def parse(argv):
@@ -795,7 +895,14 @@ def parse(argv):
     ap.add_argument("--endpoint", help="NAMESPACE/SERVICE when several endpoints match")
     ap.add_argument("--url", help="chat completions URL; skips cluster discovery")
     ap.add_argument("--model", help="model name (required with --url)")
-    ap.add_argument("--reps", type=int, default=3, help="reps per step (default 3)")
+    ap.add_argument("--reps", type=int, default=3,
+                    help="most reps per step; a step stops early once its p95 CI clears the SLO (default 3)")
+    ap.add_argument("--budget", type=float, default=15.0,
+                    help="wall-clock budget, minutes; when it runs out the bracket found so far is reported (default 15)")
+    ap.add_argument("--step-cap", type=float, default=180.0,
+                    help="no further rep starts in a step past this many seconds (default 180)")
+    ap.add_argument("--state-dir", help="bracket store (default $XDG_STATE_HOME/k3d-gpu/capacity/state)")
+    ap.add_argument("--fresh", action="store_true", help="ignore the stored bracket for this host+engine and start over")
     ap.add_argument("--stop-slo", type=float, help="the ramp stops at a step failing this p95 (default --slo)")
     ap.add_argument("--timeout", type=float, default=120.0, help="per-request timeout, s (default 120)")
     ap.add_argument("--time-scale", type=float, default=1.0, help="multiplies the trace's tool waits")
@@ -810,8 +917,8 @@ def parse(argv):
     a = ap.parse_args(argv)
     if a.url and not a.model:
         ap.error("--url needs --model")
-    if a.slo <= 0 or a.reps < 1 or a.max < 1:
-        ap.error("--slo, --reps and --max must be positive")
+    if a.slo <= 0 or a.reps < 1 or a.max < 1 or a.budget <= 0 or a.step_cap <= 0:
+        ap.error("--slo, --reps, --max, --budget and --step-cap must be positive")
     a.stop_slo = a.stop_slo or a.slo
     if a.stop_slo < a.slo:
         ap.error("--stop-slo must be >= --slo")
@@ -852,14 +959,22 @@ def run(a, ep, forwarded):
     run_dir = a.out or default_out(ep["engine"])
     os.makedirs(run_dir, exist_ok=True)
     json_path = a.json or os.path.join(run_dir, "capacity.json")
-    steps_plan = ramp_steps(a.max)
-    sampler = Sampler(run_dir, a.interval)
-    sampler.start()
+    host = host_facts()
+    key, key_inputs = state_key(ep, a, host)
+    state_path = os.path.join(a.state_dir or os.path.join(state_base(), "state"), key + ".json")
+    st = None if a.fresh else load_state(state_path)
+    if st is None:
+        st = {"schema": STATE_SCHEMA, "inputs": key_inputs, "lo": 0, "hi": None,
+              "base_tool": None, "steps": [], "runs": 0}
+    t_start = time.monotonic()
     started = time.time()
     rep = {"schema": SCHEMA, "status": "running", "started_at": started, "finished_at": None,
            "slo_s": a.slo, "stop_slo_s": a.stop_slo, "trace": a.trace, "max_agents": a.max,
-           "reps": a.reps, "steps_planned": steps_plan, "timeout_s": a.timeout,
-           "time_scale": a.time_scale, "extra_body": a.extra, "endpoint": ep, "host": host_facts(),
+           "reps": a.reps, "search": "exponential-then-binary", "budget_s": a.budget * 60,
+           "step_cap_s": a.step_cap, "state_path": state_path,
+           "bracket_start": {"lo": st["lo"], "hi": st["hi"]}, "bracket": None, "search_status": None,
+           "timeout_s": a.timeout,
+           "time_scale": a.time_scale, "extra_body": a.extra, "endpoint": ep, "host": host,
            "run_dir": run_dir, "json_path": json_path, "agents_per_box": None,
            "agents_per_box_interpolated": None, "binding_limit": None, "steps": [],
            "idle": None, "drift_check": None, "confounds": []}
@@ -868,6 +983,17 @@ def run(a, ep, forwarded):
         with open(json_path, "w") as f:
             json.dump(apb.finite(rep), f, indent=2)
 
+    if next_n(st["lo"], st["hi"], a.max) is None and not a.dry_run:
+        # Nothing left to refine: the stored bracket is the answer, no load sent.
+        rep.update(status="cached", finished_at=time.time(), agents_per_box=st["lo"],
+                   bracket={"lo": st["lo"], "hi": st["hi"]},
+                   search_status="max_reached" if st["hi"] is None else "closed")
+        write()
+        print(f"AGENTS PER BOX: {st['lo']}  ({bracket_text(st['lo'], st['hi'])}, stored in {state_path}; "
+              f"--fresh to measure again)")
+        return 0
+    sampler = Sampler(run_dir, a.interval)
+    sampler.start()
     try:
         log(f"quiet check {a.quiet_s:g} s")
         q0 = sampler.tick()
@@ -883,7 +1009,9 @@ def run(a, ep, forwarded):
             log(f"not quiet: {c['check']} = {fmt(c['value'], 3)} > {fmt(c['limit'], 3)}")
         if a.dry_run:
             rep["status"] = "dry_run"
-            print(f"plan: N = {' '.join(map(str, steps_plan))}, {a.reps} reps/step, SLO p95 <= {a.slo:g} s, "
+            print(f"plan: N from {next_n(st['lo'], st['hi'], a.max)} (stored {bracket_text(st['lo'], st['hi'])}), "
+                  f"doubling to the first failure then bisecting up to --max {a.max}, <= {a.reps} reps/step, "
+                  f"budget {a.budget:g} min, SLO p95 <= {a.slo:g} s, "
                   f"trace {a.trace}, endpoint {ep.get('service') or ep['url']} "
                   f"({ep['engine']}, model {ep['model']}); quiet: {'yes' if ok else 'NO'}")
             write()
@@ -934,14 +1062,35 @@ def run(a, ep, forwarded):
         def on_step(s):
             log(f"N={s['agents']}: {s['verdict']} (p95 {fmt(s['p95_s'])} s, n {s['n']})")
 
-        scored = run_ramp(run_rep, steps_plan, a.reps, a.stop_slo, on_step=on_step)
-        log("drift check: N=1 once more")
-        run_rep(1, 9, "drift")
+        def measure(n, deadline):
+            return measure_step(run_rep, n, a.stop_slo, st["base_tool"], max_reps=a.reps,
+                                step_cap_s=a.step_cap, deadline=deadline)
+
+        def on_search_step(s):
+            if s["agents"] == 1 and st["base_tool"] is None:
+                st["base_tool"] = s["tool_valid_any"]
+            on_step(s)
+
+        budget_s = a.budget * 60 - (time.monotonic() - t_start)
+        bracket, scored, status = search_apb(measure, a.max, {"lo": st["lo"], "hi": st["hi"]},
+                                             budget_s=max(0.0, budget_s), on_step=on_search_step)
+        st.update(lo=bracket["lo"], hi=bracket["hi"], runs=st["runs"] + 1, updated_at=time.time())
+        st["steps"] += [{"agents": s["agents"], "verdict": s["verdict"], "p95_s": s["p95_s"],
+                         "p95_ci95_s": s["p95_ci95_s"], "n": s["n"], "reps": s["reps"],
+                         "stop": s["stop"], "at": time.time()} for s in scored]
+        save_state(state_path, st)
+        rep["bracket"], rep["search_status"] = bracket, status
+        log(f"search {status}: {bracket_text(bracket['lo'], bracket['hi'])} "
+            f"({len(scored)} steps, {time.monotonic() - t_start:.0f} s)")
+        if status != "budget" and time.monotonic() - t_start < a.budget * 60:
+            log("drift check: N=1 once more")
+            run_rep(1, 9, "drift")
         sampler.stop()
 
         idle = apb.idle_power(run_dir)
         rep["idle"] = idle
         base_tool, steps = None, []
+        scored.sort(key=lambda s: s["agents"])
         for s in scored:
             reps = s.pop("_reps")
             final = apb.score_step(reps, a.slo, base_tool)
@@ -951,11 +1100,18 @@ def run(a, ep, forwarded):
                 base_tool = final["tool_valid_any"]
             energy = apb.energy_for(run_dir, reps, idle)
             hw = step_hardware(sampler, reps, sampler.zones["pl1_w"], energy)
-            steps.append(step_record(final, energy, hw))
-        best, interp = agents_per_box([{**s, "_slo": a.slo} for s in steps])
+            rec = step_record(final, energy, hw)
+            rec["stop"], rec["seconds"] = s["stop"], s["seconds"]
+            steps.append(rec)
+        known = {x["agents"]: x for x in st["steps"]}  # latest record per N, this run's included
+        _best, interp = agents_per_box([{**x, "_slo": a.stop_slo} for x in sorted(known.values(), key=lambda x: x["agents"])])
         rep["steps"] = steps
-        rep["agents_per_box"], rep["agents_per_box_interpolated"] = best, interp
+        # The bracket's lower end is the agent count proven to pass (stop SLO).
+        rep["agents_per_box"], rep["agents_per_box_interpolated"] = bracket["lo"], interp
         rep["binding_limit"] = binding_limit(steps, a.max)
+        if status == "budget":
+            rep["binding_limit"] = dict(rep["binding_limit"], kind="budget",
+                                        detail=f"--budget {a.budget:g} min ran out: {bracket_text(bracket['lo'], bracket['hi'])}")
         rep["apb_at_secondary_slo_p95_only"] = secondary_apb(steps, a.stop_slo)
         drift = apb.load_run(os.path.join(run_dir, "drift")).get(1)
         if drift and steps:

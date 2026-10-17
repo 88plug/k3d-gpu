@@ -197,89 +197,179 @@ def vllm_items(ns="apb-vllm", gpu=True, args=None, command=None):
 
 
 # ------------------------------------------------------------------ ramp grid
-class StepsTest(unittest.TestCase):
-    def test_default_grid_matches_protocol(self):
-        self.assertEqual(cap.ramp_steps(32), [1, 2, 4, 8, 12, 16, 24, 32])
+class NextNTest(unittest.TestCase):
+    def test_doubles_until_a_failure(self):
+        self.assertEqual(cap.next_n(0, None, 32), 1)
+        self.assertEqual(cap.next_n(1, None, 32), 2)
+        self.assertEqual(cap.next_n(8, None, 32), 16)
+        self.assertEqual(cap.next_n(16, None, 20), 20)  # capped at --max
 
-    def test_grid_ends_at_max(self):
-        self.assertEqual(cap.ramp_steps(1), [1])
-        self.assertEqual(cap.ramp_steps(10), [1, 2, 4, 8, 10])
-        self.assertEqual(cap.ramp_steps(64), [1, 2, 4, 8, 12, 16, 24, 32, 48, 64])
-        self.assertEqual(cap.ramp_steps(40), [1, 2, 4, 8, 12, 16, 24, 32, 40])
+    def test_bisects_once_bounded(self):
+        self.assertEqual(cap.next_n(8, 16, 32), 12)
+        self.assertEqual(cap.next_n(12, 14, 32), 13)
 
-    def test_grid_rejects_nonpositive(self):
-        with self.assertRaises(ValueError):
-            cap.ramp_steps(0)
+    def test_closed(self):
+        self.assertIsNone(cap.next_n(13, 14, 32))
+        self.assertIsNone(cap.next_n(32, None, 32))
+        self.assertIsNone(cap.next_n(0, 1, 32))
 
 
-# ------------------------------------------------------------------ ramp loop
-def fake_rep(p95_by_n, n_rows=60, error_at=None, record=None):
-    """run_rep stand-in: a rep whose window requests all take p95_by_n[n] s."""
+class FakeClock:
+    def __init__(self):
+        self.t = 0.0
+
+    def __call__(self):
+        return self.t
+
+
+def threshold_measure(limit, calls, clock=None, cost=0.0):
+    """measure(n, deadline) for a box that passes up to `limit` agents."""
+    def m(n, _deadline):
+        calls.append(n)
+        if clock is not None:
+            clock.t += cost
+        return {"agents": n, "verdict": "pass" if n <= limit else "fail", "p95_s": float(n)}
+    return m
+
+
+class SearchTest(unittest.TestCase):
+    def test_exponential_then_binary(self):
+        calls = []
+        b, steps, status = cap.search_apb(threshold_measure(13, calls), 32)
+        self.assertEqual(calls, [1, 2, 4, 8, 16, 12, 14, 13])
+        self.assertEqual((b["lo"], b["hi"], status), (13, 14, "closed"))
+        self.assertEqual(len(steps), 8)
+
+    def test_fewer_steps_than_the_linear_grid(self):
+        # The old grid 1,2,4,8,12,16,24,32 needs 8 steps to reach 32 and could only
+        # say "between 24 and 32"; the search pins the exact count in <= 2*log2(max).
+        calls = []
+        b, _, _ = cap.search_apb(threshold_measure(27, calls), 32)
+        self.assertEqual(b["lo"], 27)
+        self.assertLessEqual(len(calls), 10)
+
+    def test_max_reached_is_reported(self):
+        calls = []
+        b, _, status = cap.search_apb(threshold_measure(100, calls), 32)
+        self.assertEqual(calls, [1, 2, 4, 8, 16, 32])
+        self.assertEqual((b["lo"], b["hi"], status), (32, None, "max_reached"))
+
+    def test_nothing_passes(self):
+        calls = []
+        b, _, status = cap.search_apb(threshold_measure(0, calls), 32)
+        self.assertEqual(calls, [1])
+        self.assertEqual((b["lo"], b["hi"], status), (0, 1, "closed"))
+
+    def test_budget_expiry_returns_the_bracket(self):
+        clock, calls = FakeClock(), []
+        b, steps, status = cap.search_apb(threshold_measure(13, calls, clock, cost=60.0), 32,
+                                          budget_s=290.0, clock=clock)
+        # 60 s a step, 290 s budget: steps start at t=0,60,120,180,240, none at 300.
+        self.assertEqual(calls, [1, 2, 4, 8, 16])
+        self.assertEqual((b["lo"], b["hi"], status), (8, 16, "budget"))
+        self.assertEqual(cap.bracket_text(b["lo"], b["hi"]), "APB in [8,15]")
+
+    def test_resume_only_refines(self):
+        calls = []
+        b, _, status = cap.search_apb(threshold_measure(13, calls), 32, {"lo": 8, "hi": 16})
+        self.assertEqual(calls, [12, 14, 13])
+        self.assertEqual((b["lo"], b["hi"], status), (13, 14, "closed"))
+
+    def test_resume_of_a_closed_bracket_measures_nothing(self):
+        calls = []
+        b, steps, status = cap.search_apb(threshold_measure(13, calls), 32, {"lo": 13, "hi": 14})
+        self.assertEqual((calls, steps, status), ([], [], "closed"))
+
+    def test_bracket_text(self):
+        self.assertEqual(cap.bracket_text(13, 14), "APB = 13")
+        self.assertEqual(cap.bracket_text(32, None), "APB >= 32")
+        self.assertEqual(cap.bracket_text(8, 16), "APB in [8,15]")
+
+
+# ------------------------------------------------------------------ adaptive reps
+def fake_rep(p95_by_n, n_rows=60, error_at=None, record=None, tail=None, clock=None, rep_s=0.0):
+    """run_rep stand-in: window requests take p95_by_n[n] s; with tail=T every
+    20th request takes T s instead, so the p95 sits on the edge and its
+    bootstrap CI spans both values."""
     def run(n, rep):
         if record is not None:
             record.append((n, rep))
+        if clock is not None:
+            clock.t += rep_s
         out, free, lat = [], [0.0] * n, p95_by_n[n]
         sessions = max(10, 5 * n)
         per = max(1, n_rows * 2 // sessions + 1)
+        i = 0
         for s in range(sessions):
-            a = min(range(n), key=lambda i: free[i])
+            a = min(range(n), key=lambda j: free[j])
             t = free[a]
             for k in range(per):
                 err = "boom" if error_at == n else None
-                out.append({"session": f"s{s}", "turn": k, "sent_at_s": t, "e2e_s": lat,
+                x = tail if tail is not None and i % 20 == 19 else lat
+                i += 1
+                out.append({"session": f"s{s}", "turn": k, "sent_at_s": t, "e2e_s": x,
                             "error": err, "ttft_s": 0.1, "completion_tokens": 5,
                             "expect_tool": "f", "tool_valid": True})
-                t += lat
+                t += x
             free[a] = t
         return out, {"agents": n, "epoch_start": 0.0, "epoch_end": 1.0}
     return run
 
 
-class RampTest(unittest.TestCase):
-    def test_stops_at_first_break(self):
+class AdaptiveRepsTest(unittest.TestCase):
+    def test_clear_pass_stops_after_one_rep(self):
         calls = []
-        lat = {1: 1.0, 2: 2.0, 4: 5.0, 8: 12.0, 12: 30.0}
-        steps = cap.run_ramp(fake_rep(lat, record=calls), [1, 2, 4, 8, 12], reps=2, stop_slo=10.0)
-        self.assertEqual([s["agents"] for s in steps], [1, 2, 4, 8])
-        self.assertEqual([s["verdict"] for s in steps], ["pass", "pass", "pass", "fail"])
-        self.assertNotIn(12, [n for n, _ in calls])
+        s = cap.measure_step(fake_rep({1: 1.0}, record=calls), 1, 10.0, max_reps=3)
+        self.assertEqual((s["verdict"], s["reps"], s["stop"]), ("pass", 1, "ci_below_slo"))
 
-    def test_runs_to_max_without_break(self):
-        lat = {1: 1.0, 2: 1.0, 4: 1.0}
-        steps = cap.run_ramp(fake_rep(lat), [1, 2, 4], reps=1, stop_slo=10.0)
-        self.assertEqual([s["verdict"] for s in steps], ["pass"] * 3)
+    def test_clear_fail_stops_after_one_rep(self):
+        s = cap.measure_step(fake_rep({4: 15.0}), 4, 10.0, max_reps=3)
+        self.assertEqual((s["verdict"], s["reps"], s["stop"]), ("fail", 1, "ci_above_slo"))
 
-    def test_errors_break_the_ramp(self):
-        lat = {1: 1.0, 2: 1.0, 4: 1.0}
-        steps = cap.run_ramp(fake_rep(lat, error_at=2), [1, 2, 4], reps=1, stop_slo=10.0)
-        self.assertEqual([s["agents"] for s in steps], [1, 2])
-        self.assertEqual(steps[-1]["verdict"], "fail")
-        self.assertTrue(any("error rate" in r for r in steps[-1]["reasons"]))
-
-    def test_early_fail_skips_remaining_reps(self):
+    def test_straddling_ci_runs_to_max_reps(self):
         calls = []
-        lat = {1: 1.0, 2: 100.0}
-        steps = cap.run_ramp(fake_rep(lat, record=calls), [1, 2, 4], reps=3, stop_slo=10.0)
-        self.assertEqual(calls.count((2, 1)), 1)
-        self.assertNotIn((2, 2), calls)
-        self.assertEqual(steps[-1]["verdict"], "fail")
+        s = cap.measure_step(fake_rep({2: 5.0}, tail=12.0, record=calls), 2, 10.0, max_reps=3)
+        self.assertEqual(calls, [(2, 1), (2, 2), (2, 3)])
+        self.assertEqual(s["stop"], "max_reps")
+        lo, hi = s["p95_ci95_s"]
+        self.assertLessEqual(lo, 10.0)
+        self.assertGreater(hi, 10.0)
 
-    def test_insufficient_adds_reps_then_stops(self):
+    def test_errors_stop_at_once(self):
+        s = cap.measure_step(fake_rep({2: 1.0}, error_at=2), 2, 10.0, max_reps=3)
+        self.assertEqual((s["verdict"], s["reps"]), ("fail", 1))
+        self.assertTrue(any("error rate" in r for r in s["reasons"]))
+
+    def test_early_fail(self):
         calls = []
-        lat = {1: 1.0, 2: 1.0}
-        # 10 rows per rep: never reaches pooled n >= 60 within max_reps.
-        steps = cap.run_ramp(fake_rep(lat, n_rows=4, record=calls), [1, 2], reps=1,
-                             stop_slo=10.0, max_reps=3)
+        s = cap.measure_step(fake_rep({2: 100.0}, record=calls), 2, 10.0, max_reps=3)
+        self.assertEqual(calls, [(2, 1)])
+        self.assertEqual((s["verdict"], s["stop"]), ("fail", "early_fail"))
+
+    def test_insufficient_adds_reps_up_to_max(self):
+        calls = []
+        s = cap.measure_step(fake_rep({1: 1.0}, n_rows=4, record=calls), 1, 10.0, max_reps=3)
         self.assertEqual(calls, [(1, 1), (1, 2), (1, 3)])
-        self.assertEqual([s["verdict"] for s in steps], ["insufficient"])
+        self.assertEqual(s["verdict"], "insufficient")
 
     def test_insufficient_recovers_with_extra_reps(self):
-        calls = []
-        lat = {1: 1.0, 2: 1.0}
-        steps = cap.run_ramp(fake_rep(lat, n_rows=30, record=calls), [1, 2], reps=1,
-                             stop_slo=10.0, max_reps=6)
-        self.assertEqual([s["verdict"] for s in steps], ["pass", "pass"])
-        self.assertGreater(len(calls), 2)
+        s = cap.measure_step(fake_rep({1: 1.0}, n_rows=20), 1, 10.0, max_reps=3)
+        self.assertEqual(s["verdict"], "pass")
+        self.assertGreater(s["reps"], 1)
+
+    def test_step_cap_stops_adding_reps(self):
+        clock, calls = FakeClock(), []
+        s = cap.measure_step(fake_rep({2: 5.0}, tail=12.0, record=calls, clock=clock, rep_s=50.0),
+                             2, 10.0, max_reps=3, step_cap_s=120.0, clock=clock)
+        # rep 1 ends at 50 s (+50 fits 120), rep 2 at 100 s (+50 does not).
+        self.assertEqual(calls, [(2, 1), (2, 2)])
+        self.assertEqual(s["stop"], "step_cap")
+
+    def test_deadline_stops_adding_reps(self):
+        clock = FakeClock()
+        s = cap.measure_step(fake_rep({2: 5.0}, tail=12.0, clock=clock, rep_s=50.0),
+                             2, 10.0, max_reps=3, deadline=60.0, clock=clock)
+        self.assertEqual((s["reps"], s["stop"]), (1, "budget"))
 
 
 # ------------------------------------------------------------------ APB
@@ -584,8 +674,9 @@ class EndToEndTest(unittest.TestCase):
         self.root = os.path.join(self.tmp, "root")
         self.bin = os.path.join(self.tmp, "bin")
         os.makedirs(self.bin)
-        self.env = {k: os.environ.get(k) for k in ("K3D_GPU_SYSROOT", "PATH")}
+        self.env = {k: os.environ.get(k) for k in ("K3D_GPU_SYSROOT", "PATH", "XDG_STATE_HOME")}
         os.environ["K3D_GPU_SYSROOT"] = self.root
+        os.environ["XDG_STATE_HOME"] = os.path.join(self.tmp, "state")  # bracket store
         os.environ["PATH"] = self.bin + os.pathsep + os.environ.get("PATH", "")
         self.stubs = []
         stub_bin(self.bin, "nvidia-smi", "exit 9\n")  # no NVIDIA GPU unless a test says so
@@ -624,11 +715,19 @@ class EndToEndTest(unittest.TestCase):
         self.assertEqual(rc, 0, err)
         rep = self.report()
         self.assertEqual(rep["schema"], "k3d-gpu.capacity/1")
-        self.assertEqual([s["agents"] for s in rep["steps"]], [1, 2, 4])
-        self.assertEqual(rep["agents_per_box"], 2)
+        # Doubling from 1 until a step fails (the stub slows ~30 ms per extra
+        # stream against a 60 ms SLO), then bisection: closed at hi = lo + 1.
+        ns = [s["agents"] for s in rep["steps"]]
+        self.assertEqual(ns[0], 1)
+        self.assertTrue(set(ns) <= {1, 2, 3, 4}, ns)
+        apb_n = rep["agents_per_box"]
+        self.assertIn(apb_n, (1, 2, 3))
+        self.assertEqual(rep["search_status"], "closed")
+        self.assertEqual(rep["bracket"], {"lo": apb_n, "hi": apb_n + 1})
         self.assertEqual(rep["binding_limit"]["kind"], "slo")
-        self.assertEqual(rep["binding_limit"]["at_agents"], 4)
-        self.assertIn("AGENTS PER BOX: 2", out)
+        self.assertEqual(rep["binding_limit"]["at_agents"], apb_n + 1)
+        self.assertIn(f"AGENTS PER BOX: {apb_n}", out)
+        self.assertIn(f"APB = {apb_n}", out)
         s1 = rep["steps"][0]
         for k in ("p50_s", "p95_s", "p99_s", "n", "error_rate"):
             self.assertIsNotNone(s1[k], k)
@@ -718,6 +817,53 @@ class EndToEndTest(unittest.TestCase):
         self.assertIn("-n k3d-gpu-agent port-forward svc/ovms :8000", log)
         self.assertIsNotNone(rep["steps"][0]["j_per_turn"]["gpu"])
         self.assertTrue(any("port-forward" in c for c in rep["confounds"]))
+
+    def test_rerun_answers_a_closed_bracket_without_load(self):
+        fake_host(self.root, rapl=False)
+        stub = LoadStub(base=0.001)
+        self.stubs.append(stub)
+        rc, _out, err = self.run_main(self.common(stub.url, ["--max", "2", "--slo", "5"]))
+        self.assertEqual(rc, 0, err)
+        sent = stub.count
+        rc, out, err = self.run_main(self.common(stub.url, ["--max", "2", "--slo", "5"]))
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(stub.count, sent)  # nothing sent the second time
+        self.assertEqual(self.report()["status"], "cached")
+        self.assertIn("AGENTS PER BOX: 2", out)
+        # --fresh measures again
+        rc, _out, err = self.run_main(self.common(stub.url, ["--max", "2", "--slo", "5", "--fresh"]))
+        self.assertEqual(rc, 0, err)
+        self.assertGreater(stub.count, sent)
+        self.assertEqual(self.report()["status"], "ok")
+
+    def test_rerun_resumes_and_refines(self):
+        fake_host(self.root, rapl=False)
+        stub = LoadStub(base=0.001)
+        self.stubs.append(stub)
+        state = os.path.join(self.tmp, "st")
+        rc, _out, err = self.run_main(self.common(stub.url, ["--max", "2", "--slo", "5", "--state-dir", state]))
+        self.assertEqual(rc, 0, err)
+        # Raise --max: the stored lo=2 is kept, the search goes on from 4.
+        rc, _out, err = self.run_main(self.common(stub.url, ["--max", "4", "--slo", "5", "--state-dir", state]))
+        self.assertEqual(rc, 0, err)
+        rep = self.report()
+        self.assertEqual(rep["bracket_start"], {"lo": 2, "hi": None})
+        self.assertEqual([s["agents"] for s in rep["steps"]], [4])
+        self.assertEqual(rep["agents_per_box"], 4)
+        self.assertTrue(any("resumed" in c for c in rep["confounds"]))
+
+    def test_budget_expiry_reports_the_bracket(self):
+        fake_host(self.root, rapl=False)
+        stub = LoadStub(base=0.001)
+        self.stubs.append(stub)
+        # The quiet check and warm-up alone use up a 0.3 s budget: no step runs.
+        rc, out, err = self.run_main(self.common(stub.url, ["--budget", str(0.3 / 60)]))
+        self.assertEqual(rc, 0, err)
+        rep = self.report()
+        self.assertEqual(rep["search_status"], "budget")
+        self.assertEqual(rep["binding_limit"]["kind"], "budget")
+        self.assertEqual(rep["agents_per_box"], 0)
+        self.assertIn("APB >= 0", out)
 
     def test_dry_run_sends_nothing(self):
         fake_host(self.root)
