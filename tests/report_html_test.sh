@@ -28,6 +28,10 @@ UPDATE=0
 [ "${1:-}" = "--update" ] && UPDATE=1
 WORK=$(mktemp -d)
 trap 'rm -rf "${WORK}"' EXIT
+# A home of its own: `facts --html` and `--json` must write nothing under it
+# (checked below), and Chromium keeps its crash database out of the real one.
+export HOME="${WORK}/home" XDG_STATE_HOME="${WORK}/home/.local/state"
+mkdir -p "${HOME}"
 PASS=0 FAILS=0
 
 ok()   { PASS=$((PASS + 1)); echo "ok   $*"; }
@@ -90,6 +94,12 @@ expect_fail() {  # expect_fail <message substring> <args...>
     fi
 }
 F="${REPO}/tests/fixtures/raptorlake-nvidia/facts.json"
+if [ -e "${XDG_STATE_HOME}/k3d-gpu" ]; then
+    fail "facts --html or --json wrote ${XDG_STATE_HOME#"${WORK}"/}/k3d-gpu (it must print only)"
+else
+    ok "facts --html and --json write no state on the host"
+fi
+
 expect_fail "unknown facts option" facts --pdf
 expect_fail "--facts and --matrix go with --html" facts --facts "${F}"
 expect_fail "--facts and --matrix go with --html" facts --json --matrix "${DIR}/matrix-green.json"
