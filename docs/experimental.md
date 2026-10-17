@@ -5,10 +5,10 @@ They sit behind a Kubernetes feature gate, an OpenVINO property that is off by
 default, a kernel module parameter, or a sysfs knob. k3d-gpu can switch some of
 them on for you, and it **auto-adapts**: with `K3D_GPU_EXPERIMENTAL` unset (or
 `auto`), `up` enables every feature that this host supports, that is beta or GA
-in the shipped k3s, and that needs no host change. Today that is `image-volume`
-everywhere and `npu-turbo` on hosts with an Intel NPU. Alpha features (`dra` on
-k3s 1.34) and features that need a host change (`scx`, `xe-force-probe`,
-`xe-sriov`) never turn on by themselves.
+in the shipped k3s, and that needs no host change. On the shipped k3s 1.37 that
+is `dra` and `image-volume` everywhere and `npu-turbo` on hosts with an Intel
+NPU. Alpha features (`dra` before 1.36) and features that need a host change
+(`scx`, `xe-force-probe`, `xe-sriov`) never turn on by themselves.
 
 ```bash
 k3d-gpu up                                              # auto: safe, mature, detected features
@@ -61,11 +61,21 @@ actions:
 
 - **Feature gates** become one `feature-gates=` value per component: the
   apiserver, scheduler and controller-manager on servers, and the kubelet on
-  every node. One merged value is needed because of how k3s builds component
-  arguments. A plain repeated `--<component>-arg` key replaces the earlier value
-  rather than appending to it (k3s `pkg/util/args.go` `GetArgs`,
-  https://github.com/k3s-io/k3s/blob/v1.34.1%2Bk3s1/pkg/util/args.go). k3s sets no
+  every node. k3s passes a repeated `--<component>-arg` key as repeated flags
+  (k3s `pkg/util/args.go` `GetArgs`,
+  https://github.com/k3s-io/k3s/blob/v1.37.1%2Bk3s1/pkg/util/args.go), and each
+  `--feature-gates` flag adds to the earlier ones (component-base
+  `featuregate.Set`), so a `feature-gates` value in `K3D_GPU_K3S_ARGS` is kept.
+  One merged value keeps one flag per component in the process args. k3s sets no
   `feature-gates` of its own on a normal (non-rootless) node.
+- **A gate that is already on by default in the shipped k3s is not passed.**
+  `EXP_K3S_MINOR` in `scripts/k3d-gpu` is the k3s minor of the Dockerfile's
+  `K3S_TAG` (the test suite fails when they differ). Setting a default-on gate
+  changes nothing, and Kubernetes removes a GA gate a few releases later
+  (`ImageVolume` in 1.39, `DRAExtendedResource` in 1.40); an unknown gate name
+  stops k3s from starting. On 1.37 neither `dra` nor `image-volume` passes a
+  gate: both features add only their node label, and the capability is already
+  on.
 - **Labels** become `--k3s-node-label` arguments.
 - **OpenVINO keys** go into ConfigMap `default/k3d-gpu-openvino-experimental`.
   It has one key per device, `CPU.json`, `GPU.json` and `NPU.json`, each holding
@@ -111,7 +121,7 @@ by how many families the feature covers.
 | 10 | OVMS idle servable unload (Preview) | 2 | 1 | 2 | 4 | all | next: needs an OVMS arg in the runtime, not plugin config |
 | 11 | GenAI KV eviction / sparse-attention prefill | 2 | 2 | 1 | 4 | CPU, Intel GPU | no: lives in graph.pbtxt, accuracy loss |
 | 12 | kubelet CPU-manager uncore/strict-reservation options | 2 | 2 | 1 | 4 | Xeon, hybrid client | no: static policy conflicts with the NRI balloons policy |
-| 13 | GenericWorkload / gang scheduling | 2 | 1 | 2 | 4 | multi-pod agents | no: gate unknown to 1.34, so a 1.34 node would not start |
+| 13 | GenericWorkload / gang scheduling | 2 | 1 | 2 | 4 | multi-pod agents | no: ranked on k3s 1.34, which does not know the gate; alpha in 1.35, beta default off in 1.37 |
 | 14 | NPU busy-time / memory telemetry | 2 | 3 | 3 | 18 | Intel NPU | no: needs an exporter image |
 | 15 | Level Zero experimental metrics / fabric / VF sysman | 2 | 1 | 2 | 4 | Intel GPU | no: needs an exporter image; counters need `perf_stream_paranoid` (host) |
 | 16 | IAA zswap compressor, TPMI uncore ELC, resctrl, IFS | 2 | 2 | 1 | 4 | Xeon | no: host-wide changes; doc only |
@@ -134,6 +144,9 @@ by how many families the feature covers.
     accepted as `=true`, and is due for removal in 1.40.
   - All five names exist in 1.34.1, 1.35.0 and 1.37.1. A gate name the binary
     does not know stops the k3s process, so this check matters.
+  - On the shipped k3s 1.37 all five are on by default, so `dra` passes no gate
+    and auto mode enables it (label only). Below 1.36 it passes all five and
+    auto leaves it off.
   - Sources: https://github.com/kubernetes/kubernetes/blob/v1.34.1/pkg/features/kube_features.go
     and https://github.com/kubernetes/kubernetes/blob/v1.37.1/pkg/features/kube_features.go
 - **Value**: a DRA driver can publish partitions of one device, shared devices
@@ -150,12 +163,12 @@ by how many families the feature covers.
 - **Gate**: `ImageVolume` on every component.
 - **Status**: beta and default off in 1.33 to 1.34, beta and default on in
   1.35, GA and locked to default from 1.36 (`LockToDefault: true`, "remove in
-  1.39" in v1.37.1 `kube_features.go`). On a 1.36+ node image `=true` is accepted
-  and changes nothing; the gate matters on the pinned 1.34 image.
+  1.39" in v1.37.1 `kube_features.go`). The gate is passed only below 1.35; on
+  the shipped 1.37 image `image-volume` adds its label and nothing else.
   https://github.com/kubernetes/kubernetes/blob/v1.37.1/pkg/features/kube_features.go
-- **Runtime**: the pinned k3s v1.34.1+k3s1 (2025-09-22) bundles containerd
-  v2.1.4-k3s2. containerd added image volume support in v2.1.0.
-  https://github.com/k3s-io/k3s/blob/v1.34.1%2Bk3s1/go.mod and
+- **Runtime**: the pinned k3s v1.37.1+k3s1 bundles containerd v2.3.4-k3s1.
+  containerd added image volume support in v2.1.0.
+  https://github.com/k3s-io/k3s/blob/v1.37.1%2Bk3s1/go.mod and
   https://github.com/containerd/containerd/releases/tag/v2.1.0
 - **Value**: a pod can mount a model (OpenVINO IR, GGUF, safetensors) shipped as
   an OCI artifact. containerd pulls and deduplicates it, with no init-container
@@ -265,7 +278,9 @@ it reports:
     create` never runs.
   - It also checks the framework rules: auto mode (mature, detected, no host
     change), `off`, explicit lists overriding auto, unknown names, `list`,
-    whitespace, duplicates, and the doctor section.
+    whitespace, duplicates, and the doctor section. A copy of the script with
+    `EXP_K3S_MINOR=34` checks the gates passed on an older k3s, and a check
+    fails when `EXP_K3S_MINOR` and the Dockerfile's k3s minor differ.
   - It runs `list` against every `tests/fixtures/<platform>` sysroot and
     compares the result with `experimental.golden`.
 - `tests/fixtures/capture.sh` now also records `sriov_totalvfs`, the NPU

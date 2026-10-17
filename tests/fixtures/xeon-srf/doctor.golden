@@ -13,6 +13,7 @@
   info: per socket: socket 0: DSA 2, IAA 2, QAT 0 (ARK default for 6780E: DSA 2, IAA 2, QAT 2 per socket)
   warn: socket 0: QAT 0 below the ARK default for 6780E — the BIOS may have the device disabled; check its accelerator settings
 ==> Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...
+  ok: dra available (auto)
   ok: image-volume available (auto)
 
 ==> All checks passed.

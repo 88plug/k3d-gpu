@@ -525,8 +525,9 @@ annotation, so EAT's CPU balloons stay off and `hybrid` stays on.
 Some upstream features are still alpha, beta or preview: Kubernetes DRA and
 ImageVolume gates, the OpenVINO NPU turbo property, sched_ext, xe SR-IOV and
 `force_probe`. By default `up` auto-enables the ones this host supports that are
-beta or GA in the shipped k3s and need no host change (`image-volume`, and
-`npu-turbo` on NPU hosts). `K3D_GPU_EXPERIMENTAL=<name,...>` forces exactly that
+beta or GA in the shipped k3s and need no host change (`dra` and
+`image-volume`, and `npu-turbo` on NPU hosts). A gate already on by default in
+the shipped k3s is not passed again. `K3D_GPU_EXPERIMENTAL=<name,...>` forces exactly that
 list, `off` disables all, and an unknown name is an error. `K3D_GPU_EXPERIMENTAL=list k3d-gpu detect`
 or `k3d-gpu doctor --experimental` shows what this host can use and why.
 k3d-gpu only sets cluster-side options: feature gates, node labels and an

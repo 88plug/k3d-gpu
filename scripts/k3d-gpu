@@ -1046,9 +1046,17 @@ doctor_cluster() {
 EXP_REQUEST="${K3D_GPU_EXPERIMENTAL:-auto}"
 EXP_FEATURES=(dra image-volume npu-turbo scx xe-force-probe xe-sriov)
 EXP_LABEL_PREFIX="experimental.k3d-gpu.io"
+# Minor of the k3s the node image ships (Dockerfile K3S_TAG; tests check they
+# match). A feature gate already on by default there is not passed: setting it
+# changes nothing, and Kubernetes removes a GA gate a few releases later, after
+# which an unknown gate name stops k3s from starting.
+EXP_K3S_MINOR=37
 EXP_OV_CONFIGMAP="k3d-gpu-openvino-experimental"
 
 exp_fn() { echo "exp_${1//-/_}"; }
+
+# exp_gate <name> <minor it is on by default from>: add it unless already on.
+exp_gate() { [ "${EXP_K3S_MINOR}" -ge "$2" ] || EXP_GATES+=("$1"); }
 
 # Intel GPU PCI functions (vendor 0x8086, display class), one sysfs dir per line.
 exp_intel_gpu_pci() {
@@ -1102,8 +1110,10 @@ exp_dra() {
         families) echo "all: NVIDIA, Intel GPU and Gaudi DRA drivers, CPU (dra-driver-cpu)" ;;
         value)    echo "partitionable devices, consumable capacity, binding conditions, extended-resource requests served by DRA, device health in pod status" ;;
         detect|prereq) return 0 ;;
-        apply)    EXP_GATES+=(DRAPartitionableDevices DRAConsumableCapacity DRADeviceBindingConditions DRAExtendedResource ResourceHealthStatus) ;;
-        auto)     return 1 ;;  # alpha in the shipped k3s 1.34
+        apply)    exp_gate DRAPartitionableDevices 36; exp_gate DRAConsumableCapacity 36
+                  exp_gate DRADeviceBindingConditions 36; exp_gate DRAExtendedResource 36
+                  exp_gate ResourceHealthStatus 36 ;;
+        auto)     [ "${EXP_K3S_MINOR}" -ge 36 ] ;;  # alpha before 1.36
         revert)   echo "recreate the cluster without it: k3d-gpu down && k3d-gpu up" ;;
     esac
 }
@@ -1114,8 +1124,8 @@ exp_image_volume() {
         families) echo "all: models shipped as OCI images, mounted read-only into any accelerator pod" ;;
         value)    echo "model weights pulled, cached and deduplicated by containerd; no init-container copy or PVC" ;;
         detect|prereq) return 0 ;;
-        apply)    EXP_GATES+=(ImageVolume) ;;
-        auto)     return 0 ;;  # beta in 1.34, GA from 1.36
+        apply)    exp_gate ImageVolume 35 ;;
+        auto)     [ "${EXP_K3S_MINOR}" -ge 33 ] ;;  # beta from 1.33, GA from 1.36
         revert)   echo "recreate the cluster without it: k3d-gpu down && k3d-gpu up" ;;
     esac
 }
@@ -1306,7 +1316,8 @@ exp_ov_configmap() {
 exp_post_up() {
     [ "${#EXP_OVCFG[@]}" -gt 0 ] || return 0
     info "Applying experimental OpenVINO plugin config (ConfigMap default/${EXP_OV_CONFIGMAP})..."
-    exp_ov_configmap | kubectl apply -f -
+    # A here-string, not a pipe: a reader that exits early cannot SIGPIPE the writer.
+    kubectl apply -f - <<< "$(exp_ov_configmap)"
 }
 
 exp_print_host() {

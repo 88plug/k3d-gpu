@@ -17,6 +17,7 @@
   warn: socket 1: QAT 0 below the ARK default for 8480+ — the BIOS may have the device disabled; check its accelerator settings
   info: Intel On Demand interface present (intel_vsec.sdsi.0, intel_vsec.sdsi.1): on On Demand SKUs, instances above the ARK default are activated by a license (https://github.com/intel/intel-sdsi); ask the platform vendor whether activation is offered
 ==> Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...
+  ok: dra available (auto)
   ok: image-volume available (auto)
 
 ==> All checks passed.

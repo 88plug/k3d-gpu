@@ -12,6 +12,7 @@
 ==> Intel CPU built-in accelerators...
   ok: CPU ISA: AVX512BF16 AVX512F AVX512VNNI — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
 ==> Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...
+  ok: dra available (auto)
   ok: image-volume available (auto)
 
 ==> All checks passed.

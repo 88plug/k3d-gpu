@@ -106,7 +106,7 @@ run() {
     : > "${log}"
     out=$(env -i HOME="${WORK}" PATH="${STUB_BIN}:/usr/bin:/bin" K3D_GPU_SYSROOT="${root}" \
         K3D_GPU_SHARE="${REPO}/share" STUB_LOG="${log}" STUB_ALLOCATABLE="${WORK}/allocatable" \
-        K3D_GPU_EXPERIMENTAL="${exp}" K3D_GPU_VENDORS="${VENDORS:-hybrid}" bash "${K3D_GPU}" "$@" 2>&1)
+        K3D_GPU_EXPERIMENTAL="${exp}" K3D_GPU_VENDORS="${VENDORS:-hybrid}" bash "${SCRIPT:-${K3D_GPU}}" "$@" 2>&1)
     rc=$?
     { printf '%s\nexit=%s\n' "${out}" "${rc}"; cat "${log}"; } | sed 's/\x1b\[[0-9;]*m//g'
 }
@@ -133,11 +133,31 @@ expect() {
     fi
 }
 
+# The script on an older k3s minor: a gate is passed only while it is off by
+# default in the k3s the node image ships (EXP_K3S_MINOR).
+K3D_GPU_134="${WORK}/k3d-gpu-1.34"
+sed 's/^EXP_K3S_MINOR=.*/EXP_K3S_MINOR=34/' "${K3D_GPU}" > "${K3D_GPU_134}"
+
+# EXP_K3S_MINOR must be the minor of the k3s the Dockerfile ships, so a k3s
+# bump re-checks every gate's maturity (kube_features.go at the new tag).
+want=$(sed -n 's/^ARG K3S_TAG="v1\.\([0-9]*\)\..*/\1/p' "${REPO}/Dockerfile")
+have=$(sed -n 's/^EXP_K3S_MINOR=\([0-9]*\)$/\1/p' "${K3D_GPU}")
+expect "EXP_K3S_MINOR matches the Dockerfile k3s minor (${want})" "^${want}$" "${have:-unset}"
+
 GATES='DRAPartitionableDevices=true,DRAConsumableCapacity=true,DRADeviceBindingConditions=true,DRAExtendedResource=true,ResourceHealthStatus=true'
 
 # ---- per feature: available -> up ------------------------------------------------
 
-out=$(run "${BARE}" dra up)
+# Shipped k3s (1.37): every DRA gate is beta default-on or GA, ImageVolume is GA.
+# Passing them changes nothing, and a GA gate is removed a few releases later
+# (ImageVolume in 1.39), which would stop k3s from starting.
+out=$(run "${BARE}" dra,image-volume up)
+expect "1.37: dra label"                 "--k3s-node-label=experimental.k3d-gpu.io/dra=true@server:\*;agent:\*" "${out}"
+expect "1.37: image-volume label"        "--k3s-node-label=experimental.k3d-gpu.io/image-volume=true@server:\*;agent:\*" "${out}"
+expect "1.37: no default-on gate passed" "feature-gates" "${out}" negate
+expect "1.37: exit 0"                    "^exit=0$" "${out}"
+
+out=$(SCRIPT="${K3D_GPU_134}" run "${BARE}" dra up)
 expect "dra: apiserver gates"  "--k3s-arg=--kube-apiserver-arg=feature-gates=${GATES}@server:\*$" "${out}"
 expect "dra: scheduler gates"  "--k3s-arg=--kube-scheduler-arg=feature-gates=${GATES}@server:\*$" "${out}"
 expect "dra: controller gates" "--k3s-arg=--kube-controller-manager-arg=feature-gates=${GATES}@server:\*$" "${out}"
@@ -146,7 +166,7 @@ expect "dra: label"            "--k3s-node-label=experimental.k3d-gpu.io/dra=tru
 expect "dra: no ConfigMap"     "apply -f -" "${out}" negate
 expect "dra: exit 0"           "^exit=0$" "${out}"
 
-out=$(run "${BARE}" image-volume,dra up)
+out=$(SCRIPT="${K3D_GPU_134}" run "${BARE}" image-volume,dra up)
 expect "image-volume: merged into one gate list" "--kube-apiserver-arg=feature-gates=ImageVolume=true,${GATES}@" "${out}"
 expect_count "image-volume: one apiserver arg" "kube-apiserver-arg=" 1 "${out}"
 expect "image-volume: label" "experimental.k3d-gpu.io/image-volume=true" "${out}"
@@ -228,9 +248,13 @@ expect "xe-sriov: reason" "no Intel GPU bound to xe reports SR-IOV" "$(run "${BA
 # Auto-adapt: unset (or "auto") turns on every feature that is detected, mature
 # (beta or GA in the shipped k3s) and needs no host change. "off" turns all off.
 out=$(run "${BARE}" "" up)
-expect "auto: beta ImageVolume gate on" "kube-apiserver-arg=feature-gates=ImageVolume=true@" "${out}"
 expect "auto: image-volume label" "experimental.k3d-gpu.io/image-volume=true@" "${out}"
-expect "auto: alpha DRA gates stay off" "DRAPartitionableDevices" "${out}" negate
+expect "auto: dra on (beta default-on in 1.37)" "experimental.k3d-gpu.io/dra=true@" "${out}"
+expect "auto: no gate passed on 1.37" "feature-gates" "${out}" negate
+out=$(SCRIPT="${K3D_GPU_134}" run "${BARE}" "" up)
+expect "auto 1.34: beta ImageVolume gate on" "kube-apiserver-arg=feature-gates=ImageVolume=true@" "${out}"
+expect "auto 1.34: alpha DRA stays off" "DRAPartitionableDevices|experimental.k3d-gpu.io/dra" "${out}" negate
+out=$(run "${BARE}" "" up)
 expect "auto: no NPU, no ConfigMap" "apply -f -" "${out}" negate
 expect "auto: host-change features never auto" "experimental.k3d-gpu.io/(scx|xe-force-probe|xe-sriov)" "${out}" negate
 expect "auto: no host steps on a bare host" "NOT run by k3d-gpu" "${out}" negate
@@ -241,7 +265,7 @@ out=$(run "${BARE}" off up)
 expect "off: no gates"  "feature-gates" "${out}" negate
 expect "off: no labels" "experimental.k3d-gpu.io" "${out}" negate
 expect "off: no ConfigMap" "apply -f -" "${out}" negate
-out=$(run "${BARE}" dra up)
+out=$(SCRIPT="${K3D_GPU_134}" run "${BARE}" dra up)
 expect "explicit list overrides auto: dra on" "DRAPartitionableDevices=true" "${out}"
 expect "explicit list overrides auto: image-volume not added" "experimental.k3d-gpu.io/image-volume" "${out}" negate
 expect "off cannot mix" "cannot be combined" "$(run "${BARE}" off,dra detect)"
@@ -252,7 +276,7 @@ expect "unknown name exit 1" "^exit=1$" "${out}"
 out=$(run "${BARE}" dra,nope up)
 expect "unknown name fails before create" "^k3d cluster create" "${out}" negate
 expect "list cannot mix" "cannot be combined with feature names" "$(run "${BARE}" list,dra detect)"
-expect "whitespace ignored" "kube-apiserver-arg=feature-gates=ImageVolume=true@" "$(run "${BARE}" ' image-volume , ' up)"
+expect "whitespace ignored" "kube-apiserver-arg=feature-gates=ImageVolume=true@" "$(SCRIPT="${K3D_GPU_134}" run "${BARE}" ' image-volume , ' up)"
 expect_count "duplicates collapse" "experimental.k3d-gpu.io/dra=true@" 1 "$(run "${BARE}" dra,dra up)"
 
 out=$(run "${BARE}" list up)

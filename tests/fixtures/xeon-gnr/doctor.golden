@@ -16,6 +16,7 @@
   warn: socket 0: QAT 0 below the ARK default for 6960P — the BIOS may have the device disabled; check its accelerator settings
   warn: socket 1: QAT 0 below the ARK default for 6960P — the BIOS may have the device disabled; check its accelerator settings
 ==> Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...
+  ok: dra available (auto)
   ok: image-volume available (auto)
 
 ==> All checks passed.
