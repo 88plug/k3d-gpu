@@ -12,6 +12,9 @@
 #        BUDGET_S wall-clock budget in seconds (default 1110 = 18:30)
 #        K3D_GPU_IMAGE  node image for `k3d-gpu up` (default: the launcher's pin)
 #        DRY_RUN=1      print the pod manifests for each arm and exit (no cluster)
+#        CAL_ONLY=1     stop after calibration and the budget gate (no cluster)
+# Exit 4 = INCONCLUSIVE before any run: the fitted budget admits < 4 or all 24
+# pods (headroom_model.py degenerate()), so arms T/C cannot differ from B.
 # Root is only used to read RAPL energy_uj (sudo -n); nothing in sysfs is written.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
@@ -40,7 +43,13 @@ for h in /sys/class/hwmon/hwmon*; do
     done
 done
 temp_c() { awk '{printf "%.1f", $1 / 1000}' "${TEMP_FILE}"; }
-energy_uj() { sudo -n cat /sys/class/powercap/intel-rapl:0/energy_uj; }
+# first package RAPL zone, by name
+RAPL=""
+for z in /sys/class/powercap/intel-rapl:[0-9]; do
+    case "$(cat "${z}/name" 2>/dev/null)" in package*) RAPL=${z}; break ;; esac
+done
+energy_uj() { sudo -n cat "${RAPL}/energy_uj"; }
+E_RANGE=$(cat "${RAPL:-/nonexistent}/max_energy_range_uj" 2>/dev/null || echo 0)
 throttle_ms() { cat /sys/devices/system/cpu/cpu0/thermal_throttle/package_throttle_total_time_ms; }
 swap_mib() { awk '/^SwapTotal/ {t = $2} /^SwapFree/ {f = $2} END {printf "%d", (t - f) / 1024}' /proc/meminfo; }
 load1() { cut -d' ' -f1 /proc/loadavg; }
@@ -48,7 +57,7 @@ load1() { cut -d' ' -f1 /proc/loadavg; }
 watts() {
     local e0 e1
     e0=$(energy_uj); sleep "$1"; e1=$(energy_uj)
-    awk -v a="${e0}" -v b="${e1}" -v s="$1" 'BEGIN {d = b - a; if (d < 0) d += 2^32 * 1000; printf "%.1f", d / 1e6 / s}'
+    awk -v a="${e0}" -v b="${e1}" -v s="$1" -v r="${E_RANGE}" 'BEGIN {d = b - a; if (d < 0) d += r; printf "%.1f", d / 1e6 / s}'
 }
 # sample <seconds> <csv>: one "watts,celsius" line per second
 sample() {
@@ -95,21 +104,28 @@ fi
 
 cleanup() {
     local c
-    [ -z "${WATCHDOG:-}" ] || kill "${WATCHDOG}" 2>/dev/null || true
+    [ -z "${WATCHDOG:-}" ] || { kill "${WATCHDOG}" 2>/dev/null; wait "${WATCHDOG}" 2>/dev/null; } || true
     for c in $(docker ps -aq --filter name='^h23-cal-'); do docker rm -f "${c}" >/dev/null 2>&1 || true; done
     if k3d cluster list -o json 2>/dev/null | grep -q "\"name\":\"${NAME}\""; then
         log "deleting cluster ${NAME}"
         k3d cluster delete "${NAME}" >/dev/null 2>&1 || true
     fi
+    docker image rm "${TAG}" >/dev/null 2>&1 || true
     log "done, $(( $(date +%s) - T_START )) s in the lock; results in ${OUT}"
 }
 trap cleanup EXIT
 trap 'exit 143' TERM INT
 # Watchdog: the whole probe stays inside BUDGET_S + 60 s; TERM runs cleanup.
-( sleep $(( BUDGET_S + 60 )); kill -TERM $$ 2>/dev/null ) &
+# Its sleep is killed with it, so no child keeps the caller's flock fd open.
+(
+    trap 'kill "${sp}" 2>/dev/null; exit 0' TERM
+    sleep $(( BUDGET_S + 60 )) & sp=$!
+    wait "${sp}" && kill -TERM $$ 2>/dev/null
+) &
 WATCHDOG=$!
 
 [ -n "${TEMP_FILE}" ] || { log "no coretemp Package id 0 sensor"; exit 2; }
+[ -n "${RAPL}" ] && [ "${E_RANGE}" -gt 0 ] || { log "no package RAPL zone"; exit 2; }
 energy_uj >/dev/null || { log "sudo -n cannot read RAPL energy_uj"; exit 2; }
 docker pull -q "${STRESS}" >/dev/null && docker tag "${STRESS}" "${TAG}"
 help=$(docker run --rm --entrypoint stress-ng "${TAG}" --help 2>&1 || true)
@@ -135,15 +151,16 @@ p_idle_med=$(sort -t, -k1 -n "${OUT}/fit.csv" | awk -F, '{a[NR] = $1} END {print
 r_hot=$(solo_rate); r_cool=$(solo_rate --cpu-load 40)
 [ -n "${r_hot}" ] && [ -n "${r_cool}" ] || { log "could not read stress-ng metrics"; exit 2; }
 ops_hot=$(( r_hot * SOLO_S )) ops_cool=$(( r_cool * SOLO_S ))
-# window <kind> <extra args>: 8 containers for 20 s; prints the mean watts of the last 15 s
+# window <kind> <extra args>: 8 containers for 52 s; prints the mean watts of the last 30 s
+# (the first 20 s let the package and heatsink settle before the fit samples)
 window() {
     local k=$1 i
     shift
     for i in 1 2 3 4 5 6 7 8; do
-        docker run -d --rm --name "h23-cal-$k-$i" --entrypoint stress-ng "${TAG}" --cpu 1 --cpu-method matrixprod "$@" --timeout 22 >/dev/null
+        docker run -d --rm --name "h23-cal-$k-$i" --entrypoint stress-ng "${TAG}" --cpu 1 --cpu-method matrixprod "$@" --timeout 52 >/dev/null
     done
-    sleep 5
-    : > "${OUT}/win-$k.csv"; sample 15 "${OUT}/win-$k.csv"; cat "${OUT}/win-$k.csv" >> "${OUT}/fit.csv"
+    sleep 20
+    : > "${OUT}/win-$k.csv"; sample 30 "${OUT}/win-$k.csv"; cat "${OUT}/win-$k.csv" >> "${OUT}/fit.csv"
     sleep 3
     awk -F, '{s += $1} END {printf "%.1f", s / NR}' "${OUT}/win-$k.csv"
 }
@@ -157,7 +174,22 @@ w_cool=$(awk -v a="${p_cool}" -v b="${p_idle_med}" 'BEGIN {w = (a - b) / 8; prin
 read -r p_i t_i r_th < <(python3 -c 'import json, sys; f = json.load(open(sys.argv[1])); print(f["p_idle_w"], f["t_idle_c"], f["r_th_c_per_w"])' "${OUT}/fit.json")
 t_tcc=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["t_tcc_c"])' "${OUT}/host.json")
 read -r pl1 pl2 < <(python3 -c 'import json, sys; h = json.load(open(sys.argv[1])); print(h["pl1_w"], h["pl2_w"])' "${OUT}/host.json")
+# gate <p_now> <file>: budget at p_now into <file>; exit 4 (INCONCLUSIVE) when degenerate
+gate() {
+    python3 "${MODEL}" budget --p-idle "${p_i}" --t-idle "${t_i}" --r-th "${r_th}" --t-tcc "${t_tcc}" \
+        --p-now "$1" --pl1 "${pl1}" --pl2 "${pl2}" --ewma "$1" --w-hot "${w_hot}" --w-cool "${w_cool}" \
+        --npods "${NPODS}" > "$2"
+    log "budget $(cat "$2")"
+    reason=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("degenerate") or "")' "$2")
+    if [ -n "${reason}" ]; then
+        echo "INCONCLUSIVE degenerate budget: ${reason}" | tee "${OUT}/verdict.txt"
+        exit 4
+    fi
+}
 log "fit $(cat "${OUT}/fit.json") p_hot ${p_hot} p_cool ${p_cool} w_hot ${w_hot} w_cool ${w_cool} ops ${ops_hot}/${ops_cool} bg_throttle_ms ${th_bg}/30s"
+
+gate "${p_idle_med}" "${OUT}/budget-pre.json"
+[ "${CAL_ONLY:-0}" != 1 ] || { log "CAL_ONLY: stop before the cluster"; exit 0; }
 
 # ---- cluster ----------------------------------------------------------------------
 log "k3d-gpu up"
@@ -172,20 +204,24 @@ if [ "${alloc_m}" -lt $(( NPODS * 1000 )) ]; then
     log "DEVIATION allocatable cpu ${alloc_cpu} < ${NPODS}; every arm requests cpu 500m"
 fi
 p_now=$(watts 5)
-python3 "${MODEL}" budget --p-idle "${p_i}" --t-idle "${t_i}" --r-th "${r_th}" --t-tcc "${t_tcc}" \
-    --p-now "${p_now}" --pl1 "${pl1}" --pl2 "${pl2}" --ewma "${p_now}" --w-hot "${w_hot}" --w-cool "${w_cool}" > "${OUT}/budget.json"
+gate "${p_now}" "${OUT}/budget.json"
 read -r budget nslots < <(python3 -c 'import json, sys; b = json.load(open(sys.argv[1])); print(b["watts"], b["slots"])' "${OUT}/budget.json")
 log "budget $(cat "${OUT}/budget.json") (T admits ~$(( budget * 2 / (w_hot + w_cool) )) of ${NPODS})"
 kubectl patch node "${node}" --subresource=status --type=json -p \
     "[{\"op\":\"add\",\"path\":\"/status/capacity/power.k3d-gpu.io~1watts\",\"value\":\"${budget}\"},{\"op\":\"add\",\"path\":\"/status/capacity/k3d-gpu.io~1slots\",\"value\":\"${nslots}\"}]" >/dev/null
+ok=0
 for _ in $(seq 30); do
-    [ "$(kubectl get node "${node}" -o jsonpath='{.status.allocatable.k3d-gpu\.io/slots}')" = "${nslots}" ] && break
+    if [ "$(kubectl get node "${node}" -o jsonpath='{.status.allocatable.k3d-gpu\.io/slots}')" = "${nslots}" ] &&
+        [ "$(kubectl get node "${node}" -o jsonpath='{.status.allocatable.power\.k3d-gpu\.io/watts}')" = "${budget}" ]; then
+        ok=1; break
+    fi
     sleep 1
 done
 log "node allocatable $(kubectl get node "${node}" -o jsonpath='{.status.allocatable}')"
+[ "${ok}" = 1 ] || { log "allocatable never showed watts=${budget} slots=${nslots}"; exit 2; }
 
 # ---- runs -------------------------------------------------------------------------
-echo "# arm run start_C pre_W load1 swap0 swap1 makespan_s censored throttle_ms throttle_net_ms energy_J pkg_W max_C failed gap_med_s gap_max_s void" > "${OUT}/results.txt"
+echo "# arm run start_C pre_W load1 swap0 swap1 makespan_s censored throttle_ms throttle_net_ms energy_J pkg_W max_C failed gap_med_s gap_max_s void done throttle_ms_per_pod" > "${OUT}/results.txt"
 start_ref=""
 run=0
 for arm in "${ORDER[@]}"; do
@@ -234,14 +270,17 @@ print(failed, med, gaps[-1] if gaps else -1)
 PY
 )
     mk=$(awk -v a="${ts}" -v b="${te}" 'BEGIN {printf "%.2f", b - a}')
-    ej=$(awk -v a="${e0}" -v b="${e1}" 'BEGIN {d = b - a; if (d < 0) d += 2^32 * 1000; printf "%.1f", d / 1e6}')
+    ej=$(awk -v a="${e0}" -v b="${e1}" -v r="${E_RANGE}" 'BEGIN {d = b - a; if (d < 0) d += r; printf "%.1f", d / 1e6}')
     pw=$(awk -v j="${ej}" -v m="${mk}" 'BEGIN {printf "%.1f", j / m}')
     thd=$(( th1 - th0 ))
     thn=$(awk -v d="${thd}" -v b="${th_bg}" -v m="${mk}" 'BEGIN {printf "%d", d - b * m / 30}')
     void=0
     awk -v w="${pre_w}" -v i="${p_idle_med}" 'BEGIN {exit !(w > i + 15)}' && void=1
     [ $(( s1 - s0 )) -gt 512 ] && void=1
-    echo "${arm} ${run} ${t0c} ${pre_w} ${l1} ${s0} ${s1} ${mk} ${censored} ${thd} ${thn} ${ej} ${pw} ${maxc} ${failed} ${gap_med} ${gap_max} ${void}" | tee -a "${OUT}/results.txt"
+    # a censored run did less work, so its throttle time is not comparable
+    [ "${censored}" = 1 ] && void=1
+    tpp=$(awk -v t="${thn}" -v n="${done_n}" 'BEGIN {printf "%.1f", (n > 0) ? t / n : -1}')
+    echo "${arm} ${run} ${t0c} ${pre_w} ${l1} ${s0} ${s1} ${mk} ${censored} ${thd} ${thn} ${ej} ${pw} ${maxc} ${failed} ${gap_med} ${gap_max} ${void} ${done_n} ${tpp}" | tee -a "${OUT}/results.txt"
     kubectl delete pods -l app=h23 --grace-period=0 --wait=true >/dev/null 2>&1 || true
 done
 
@@ -251,7 +290,7 @@ import sys
 rows = [l.split() for l in open(sys.argv[1]) if l.strip() and not l.startswith("#")]
 for arm in "BTC":
     r = [x for x in rows if x[0] == arm and x[17] == "0"]
-    for col, name in ((7, "makespan_s"), (9, "throttle_ms"), (10, "throttle_net_ms"), (12, "pkg_W")):
+    for col, name in ((7, "makespan_s"), (9, "throttle_ms"), (10, "throttle_net_ms"), (19, "throttle_ms_per_pod"), (12, "pkg_W")):
         v = sorted(float(x[col]) for x in r)
         if v:
             print("%s %-16s n=%d median=%.2f min=%.2f max=%.2f spread=%.2f" % (arm, name, len(v), v[len(v) // 2], v[0], v[-1], v[-1] - v[0]))

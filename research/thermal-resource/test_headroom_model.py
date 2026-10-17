@@ -111,6 +111,22 @@ class Limits(unittest.TestCase):
             self.assertEqual(budget // 5, hm.slots(budget, 5, 5))
 
 
+class Degenerate(unittest.TestCase):
+    def test_hot_idle_host_admits_nothing(self):
+        # this host read-only: idle 86-92 C, T_tcc 95, margin 10 -> limit below idle power
+        pth = hm.p_thermal(20, 86, 0.3, 95)
+        h = hm.headroom(21, pth, 117, 117, 21)
+        self.assertEqual(h["watts"], 0)
+        self.assertEqual(hm.slots(h["watts"], 6, 3), 0)
+        self.assertIn("watts 0", hm.degenerate(h["watts"], 0, 6, 3, 24))
+
+    def test_bounds(self):
+        self.assertIn("slots 3", hm.degenerate(60, 3, 6, 3, 24))
+        self.assertIn("no cap", hm.degenerate(300, 24, 6, 3, 24))
+        self.assertIsNone(hm.degenerate(60, 13, 6, 3, 24))
+        self.assertIsNotNone(hm.degenerate(11, 13, 6, 3, 24))
+
+
 class Host(unittest.TestCase):
     def test_raptorlake_fixture(self):
         h = hm.host(RPL)
@@ -121,6 +137,8 @@ class Host(unittest.TestCase):
         self.assertEqual(h["pl1_w"], 117)
         self.assertEqual(h["pl2_w"], 117)
         self.assertEqual(h["tdp_w"], 35)
+        self.assertEqual(h["tcc_offset_source"], "int340x")
+        self.assertEqual(h["packages"], 1)
 
     def test_empty_sysroot(self):
         with tempfile.TemporaryDirectory() as d:
@@ -128,6 +146,8 @@ class Host(unittest.TestCase):
         self.assertIsNone(h["t_tcc_c"])
         self.assertIsNone(h["pl1_w"])
         self.assertEqual(h["tcc_offset_c"], 0)
+        self.assertEqual(h["tcc_offset_source"], "none")
+        self.assertEqual(h["packages"], 0)
 
     def test_every_fixture_reads(self):
         fx = os.path.join(ROOT, "tests/fixtures")
@@ -180,6 +200,16 @@ class Cli(unittest.TestCase):
         self.assertEqual(j["watts"], 75)
         self.assertEqual(j["binding"], "thermal")
         self.assertEqual(j["slots"], 16)
+        self.assertNotIn("degenerate", j)
+
+    def test_budget_degenerate_flag(self):
+        r = run("budget", "--p-idle", "20", "--t-idle", "86", "--r-th", "0.3", "--t-tcc", "95",
+                "--p-now", "21", "--pl1", "117", "--pl2", "117", "--w-hot", "6", "--w-cool", "3",
+                "--npods", "24")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        j = json.loads(r.stdout)
+        self.assertEqual((j["watts"], j["slots"]), (0, 0))
+        self.assertTrue(j["degenerate"])
 
 
 if __name__ == "__main__":

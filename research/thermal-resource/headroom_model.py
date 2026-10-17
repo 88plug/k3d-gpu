@@ -18,7 +18,7 @@ Usage:
   headroom_model.py fit SAMPLES.csv            fit R_th from "watts,celsius" lines (JSON)
   headroom_model.py budget --p-idle W --t-idle C --r-th C_PER_W --t-tcc C
                            [--p-now W] [--pl1 W] [--pl2 W] [--ewma W] [--margin C]
-                           [--w-hot W --w-cool W]
+                           [--w-hot W --w-cool W [--npods N]]
   headroom_model.py selftest
 """
 import argparse
@@ -76,18 +76,33 @@ def rapl_package(sysroot):
 
 
 def tcc_offset(sysroot):
+    """(offset C, source): int340x proc_thermal sysfs, else (0, "none").
+
+    "none" means the offset is unknown, not zero: a BIOS can still program
+    MSR 0x1A2 (bits 29:24) on hosts without the int340x device, and then
+    t_tcc_c is too high by that offset.
+    """
     for p in sorted(glob.glob(os.path.join(sysroot, "sys/devices/pci*/*/tcc_offset_degree_celsius"))):
         v = num(read(p))
         if v is not None:
-            return v
-    return 0
+            return v, "int340x"
+    return 0, "none"
+
+
+def packages(sysroot):
+    """Number of top-level package RAPL zones (sockets)."""
+    n = 0
+    for zone in glob.glob(os.path.join(sysroot, "sys/class/powercap/intel-rapl:[0-9]")):
+        if (read(os.path.join(zone, "name")) or "").startswith("package"):
+            n += 1
+    return n
 
 
 def host(sysroot="/"):
     temp, tjmax = coretemp_package(sysroot)
-    off = tcc_offset(sysroot)
-    out = {"t_pkg_c": temp, "tjmax_c": tjmax, "tcc_offset_c": off,
-           "t_tcc_c": None if tjmax is None else tjmax - off}
+    off, src = tcc_offset(sysroot)
+    out = {"t_pkg_c": temp, "tjmax_c": tjmax, "tcc_offset_c": off, "tcc_offset_source": src,
+           "t_tcc_c": None if tjmax is None else tjmax - off, "packages": packages(sysroot)}
     out.update(rapl_package(sysroot))
     return out
 
@@ -165,6 +180,22 @@ def slots(budget, w_hot, w_cool):
     return max(0, math.floor(budget / mean))
 
 
+def degenerate(watts, n_slots, w_hot, w_cool, npods, min_pods=4):
+    """Why a budget cannot separate arms T/C from B, or None.
+
+    A budget that admits fewer than min_pods pods (or less than two of the
+    largest pod) only measures an empty node; one that admits all npods makes
+    T and C equal to B.
+    """
+    if watts < 2 * max(w_hot, w_cool):
+        return "watts %d < 2 x max pod watts %g" % (watts, max(w_hot, w_cool))
+    if n_slots < min_pods:
+        return "slots %d < %d" % (n_slots, min_pods)
+    if n_slots >= npods:
+        return "slots %d >= %d pods (no cap)" % (n_slots, npods)
+    return None
+
+
 def load_samples(path):
     out = []
     with open(path) as f:
@@ -186,6 +217,7 @@ def selftest():
     assert headroom(30, 200, 65, 120, 70) == {"limit_w": 65, "binding": "rapl", "watts": 35}
     assert slots(80, 6, 4) == 16
     assert abs(turbo_seconds(65, 120, 0, 28) - 28 * math.log(120 / 55)) < 1e-9
+    assert degenerate(0, 0, 6, 3, 24) is not None and degenerate(60, 13, 6, 3, 24) is None
     print("selftest ok")
 
 
@@ -201,6 +233,7 @@ def main(argv):
         b.add_argument("--" + name, type=float, required=True)
     for name in ("p-now", "pl1", "pl2", "ewma", "w-hot", "w-cool"):
         b.add_argument("--" + name, type=float)
+    b.add_argument("--npods", type=int)
     b.add_argument("--margin", type=float, default=10.0)
     sub.add_parser("selftest")
     a = ap.parse_args(argv)
@@ -218,6 +251,8 @@ def main(argv):
         out.update(headroom(p_now, pth, a.pl1, a.pl2, a.ewma))
         if a.w_hot is not None and a.w_cool is not None:
             out["slots"] = slots(out["watts"], a.w_hot, a.w_cool)
+            if a.npods is not None:
+                out["degenerate"] = degenerate(out["watts"], out["slots"], a.w_hot, a.w_cool, a.npods)
     json.dump(out, sys.stdout, sort_keys=True)
     print()
     return 0

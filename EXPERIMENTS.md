@@ -1626,6 +1626,37 @@ arms B and C. No-prior-art wording is limited to "per-pod watts as DRA
 consumable capacity set from a turbo-budget model", and only after the search
 in [provenance:P230] is re-run with a fresh budget.
 
+**Amendment 1 (2026-10-17, after two refuter reviews, before any H23 run).**
+Written and pushed before the lock is taken. Changes to the method:
+- Budget gate (new outcome O0). After calibration, and again after `k3d-gpu up`,
+  `headroom_model.py budget --npods 24` reports `degenerate` when the budget is
+  under 2x the largest pod watts, admits fewer than 4 slots, or admits all 24.
+  The probe then writes `INCONCLUSIVE degenerate budget: <reason>` and exits 4
+  before any arm runs (before the cluster, for the first gate).
+- The margin stays 10 C below T_tcc. It is not tuned to the host: a margin
+  picked to make the budget non-zero would be fitted to the data.
+- Fit windows: 8 containers for 52 s, fit samples from the last 30 s (was
+  20 s / last 15 s), so the heatsink has 20 s to settle.
+- Throttle is also reported per completed pod (`throttle_ms_per_pod`), and a
+  censored run is void. Criterion (a) uses `throttle_ms_per_pod`.
+- The probe fails (exit 2) unless node allocatable shows both
+  `power.k3d-gpu.io/watts` and `k3d-gpu.io/slots` at the patched values.
+- The watchdog's `sleep` is killed with the watchdog, so an early exit frees
+  the shared lock at once (scratchpad repro: lock free 1.0 s after a 1 s probe,
+  was 19 s). RAPL energy is read from the zone named `package*`, wrapped at its
+  `max_energy_range_uj`. `host` reports `tcc_offset_source` (`none` = offset
+  unknown, MSR 0x1A2 not read) and the number of package zones.
+
+**Prediction for the gate.** Read-only, before the lock: package 86-92 C at
+host load 20-26, T_tcc 95 C. T_tcc - margin = 85 C is at or below the idle
+temperature, so P_th <= P_idle and the budget is 0 W. Predicted outcome: O0,
+the probe stops after calibration (n = 1 calibration, 0 arm runs).
+
+| # | Outcome | Conclusion | Prior | Action |
+|---|---|---|---|---|
+| O0 | Gate reports degenerate (first or second gate) | INCONCLUSIVE: the model has no headroom to sell on this host; arms B/T/C not run | 0.85 | DO-NOT-RE-ATTACK on this host while idle is within 10 C of T_tcc; re-run on a host that idles >= 20 C below T_tcc |
+| O1-O6 | As above, if the gate passes | As above | 0.15 (scaled) | As above |
+
 ## Scope corrections
 
 Limits on what a SUPPORTED verdict may be quoted as saying.
