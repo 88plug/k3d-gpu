@@ -36,6 +36,8 @@ the plan decisions against the goldens:
 | Gaudi 3, no driver | `gaudi3-no-driver` | AMX; Gaudi skipped with a warning | no Gaudi plugin; no NRI balloons | plan refuses the hpu until `habanalabs` loads and prints the fix (install the Gaudi driver, then `modprobe habanalabs`); doctor only warns and skips Gaudi; `fix` | [SOURCES](../tests/fixtures/gaudi3-no-driver/SOURCES) |
 | Arrow Lake-U (Core Ultra 200U) | `arrowlake-u` | `gpu.intel.com/i915`, hybrid | Intel GPU plugin (shared iGPU), NRI balloons (hybrid P/E) | plan targets: cpu, gpu (i915, no XMX) usable; no catalog cell on this host; `unmeasured` | [SOURCES](../tests/fixtures/arrowlake-u/SOURCES) |
 | Lunar Lake (Core Ultra 200V) | `lunarlake` | `gpu.intel.com/xe`, `npu.intel.com/accel`, hybrid | Intel GPU plugin (shared iGPU), NPU plugin, NRI balloons (hybrid P/E) | plan targets: cpu, gpu (xe), npu usable; no catalog cell on this host; `unmeasured` | [SOURCES](../tests/fixtures/lunarlake/SOURCES) |
+| Xeon CPU Max (HBM cache mode, SNC4) | `xeon-max-hbm-cache` | AMX, NUMA | AMX and NUMA labels, NRI balloons (NUMA replica) | plan targets: cpu usable; no catalog cell on this host; `unmeasured` | [SOURCES](../tests/fixtures/xeon-max-hbm-cache/SOURCES) |
+| Xeon CPU Max (HBM as devdax, SNC4) | `xeon-max-hbm-devdax` | AMX, NUMA | AMX and NUMA labels, NRI balloons (NUMA replica) | plan targets: cpu usable; no catalog cell on this host; `unmeasured` | [SOURCES](../tests/fixtures/xeon-max-hbm-devdax/SOURCES) |
 
 ## Client: Core Ultra
 
@@ -57,6 +59,26 @@ atom CPU with no L3 is an LP E-core. The CPU family and model in
 
 Host, kernel and BIOS changes are never applied. `k3d-gpu doctor` prints them as
 suggestions with the exact command and its revert.
+
+## Xeon (P-core server)
+
+| Family (cpu family/model) | Detected as | Auto config chosen | Predicted behaviour | Source |
+|---|---|---|---|---|
+| Sapphire Rapids (6/143, 0x8F) | `amx` from `amx_tile amx_bf16 amx_int8` in /proc/cpuinfo; `numa` + `k3d-gpu.io/snc` when SNC is on | AMX labels; NRI balloons `replica` type when more than one NUMA node | bf16 on AMX predicted by the OpenVINO CPU device doc (default execution mode picks bf16 on AMX parts) | [intel-family.h](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/arch/x86/include/asm/intel-family.h), [cpufeatures.h](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/arch/x86/include/asm/cpufeatures.h), [OpenVINO CPU device](https://docs.openvino.ai/2026/openvino-workflow/running-inference/inference-devices-and-modes/cpu-device.html) |
+| Xeon CPU Max, HBM flat (6/143 + memory-only nodes) | as Sapphire Rapids; doctor lists the CPU-less nodes | replica pods keep memory on their CPU node; HBM is opt-in via a balloon with `memoryTypes: [HBM]` | none beyond Sapphire Rapids | [sysfs-devices-node](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/Documentation/ABI/stable/sysfs-devices-node), [Intel Max tuning guide 354227](https://cdrdv2-public.intel.com/787743/354227-intel-xeon-cpu-max-series-configuration-and-tuning-guide-rev3.pdf) |
+| Xeon CPU Max, HBM flat not onlined (6/143 + `dax*` on `device_dax`) | doctor `info`: HBM left soft-reserved | nothing changes; only when the dax device's parent is an `hmem` platform device and the model name says CPU Max (PMem and CXL dax stay untouched), doctor suggests `sudo daxctl reconfigure-device --mode=system-ram <dev>` (revert `--mode=devdax --force`) or `efi=nosoftreserve` | HBM unused by pods until onlined, predicted by Intel Max tuning guide section 5.2 | [daxctl-reconfigure-device](https://github.com/pmem/ndctl/blob/main/Documentation/daxctl/daxctl-reconfigure-device.txt), [drivers/dax/Makefile](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/drivers/dax/Makefile), [sysfs-bus-dax](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/Documentation/ABI/testing/sysfs-bus-dax) |
+| Xeon CPU Max, HBM cache (6/143 + `memory_side_cache`) | doctor `info`: memory-side cache size and indexing per node | no pod change; doctor suggests `page_alloc.shuffle=y` with grubby / update-grub apply and revert commands, or prints ok when `/sys/module/page_alloc/parameters/shuffle` reads `Y` (root-only file; needs `CONFIG_SHUFFLE_PAGE_ALLOCATOR=y`) | lower conflict-miss variance with shuffle, predicted by Intel Max tuning guide | [numaperf](https://www.kernel.org/doc/html/latest/admin-guide/mm/numaperf.html), [kernel-parameters.txt](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/Documentation/admin-guide/kernel-parameters.txt), [mm/shuffle.c](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/mm/shuffle.c), [Intel Max tuning guide 354227](https://cdrdv2-public.intel.com/787743/354227-intel-xeon-cpu-max-series-configuration-and-tuning-guide-rev3.pdf) |
+| Granite Rapids 6900P/6700P (6/173, 0xAD) | as Sapphire Rapids, plus `AMXFP16` from the model on bare metal | AMX labels incl. `AMXFP16`; balloons per SNC3 node | no engine change from AMX-FP16: vLLM CPU builds only amx-bf16/amx-tile kernels, predicted by its cpu_extension.cmake | [X86.td](https://github.com/llvm/llvm-project/blob/main/llvm/lib/Target/X86/X86.td), [cpu_extension.cmake](https://github.com/vllm-project/vllm/blob/main/cmake/cpu_extension.cmake) |
+| Granite Rapids-D (6/174, 0xAE) | as Granite Rapids, plus `AMXCOMPLEX` | AMX labels incl. `AMXFP16`, `AMXCOMPLEX` | as Granite Rapids | [X86.td](https://github.com/llvm/llvm-project/blob/main/llvm/lib/Target/X86/X86.td) |
+| Diamond Rapids (19/1, 0x01) | as Granite Rapids-D | AMX labels incl. `AMXFP16`, `AMXCOMPLEX` (X86.td DMR includes the GNRD features) | as Granite Rapids | [intel-family.h](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/arch/x86/include/asm/intel-family.h), [X86.td](https://github.com/llvm/llvm-project/blob/main/llvm/lib/Target/X86/X86.td) |
+
+Notes:
+
+- The kernel never prints `amx_fp16` (no quoted name in cpufeatures.h) and has no
+  `amx_complex` flag, so k3d-gpu adds those two labels from the CPU model, and
+  only when `amx_tile` is present and the `hypervisor` flag is not (a VM may mask
+  CPUID bits). Real NFD reads CPUID and agrees on bare metal.
+- Host, kernel and BIOS changes are suggestions in `doctor`, never applied.
 
 ## Intel Enterprise Agent Toolkit (EAT)
 

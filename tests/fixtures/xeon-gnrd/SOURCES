@@ -10,7 +10,9 @@ Sources (kernel paths are Linux v6.18 (torvalds/linux tag v6.18)):
   Documentation/ABI/stable/sysfs-devices-system-cpu, Documentation/ABI/testing/sysfs-bus-pci.
 - dsa<n> and wq<dev>.<n>, /dev/dsa/wq<dev>.<n>: drivers/dma/idxd/cdev.c,
   Documentation/ABI/stable/sysfs-driver-dma-idxd; /dev/char link as in xeon-spr-accel.
-- amx_* flags: arch/x86/include/asm/cpufeatures.h.
+- amx_* flags: arch/x86/include/asm/cpufeatures.h. AMX-FP16 and AMX-COMPLEX have no
+  cpuinfo flag; they come from cpu family/model 6/174 (intel-family.h
+  GRANITERAPIDS_D, LLVM X86.td GNRDFeatures).
 
 Layout: sysfs paths and relative symlinks follow the driver core's naming, in
 exactly the form tests/fixtures/capture.sh writes (the matrix test re-captures each

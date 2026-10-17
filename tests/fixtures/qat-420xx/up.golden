@@ -16,7 +16,6 @@ k3d cluster create gpu
   --k3s-node-label=intel.feature.node.kubernetes.io/qat=true@server:*;agent:*
   --k3s-arg=--disable=nri-balloons@server:*
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true@server:*;agent:*
-  --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AMXFP16=true@server:*;agent:*
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AMXINT8=true@server:*;agent:*
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true@server:*;agent:*
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AVX512BF16=true@server:*;agent:*
@@ -30,6 +29,5 @@ kubectl -n kube-system get daemonset intel-qat-plugin
 kubectl -n kube-system rollout status daemonset/intel-qat-plugin --timeout=120s
 kubectl get nodes -o go-template={{range .items}}{{range $k, $v := .status.allocatable}}{{$k}} {{$v}}{{"\n"}}{{end}}{{end}}
 kubectl get nodes -l feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true -o name
-kubectl get nodes -l feature.node.kubernetes.io/cpu-cpuid.AMXFP16=true -o name
 kubectl get nodes -l feature.node.kubernetes.io/cpu-cpuid.AMXINT8=true -o name
 kubectl get nodes -l feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true -o name
