@@ -1,0 +1,39 @@
+# Zero-copy model sharing for an agent fleet, rendered by `k3d-gpu model-share`.
+# Every replica mounts one model OCI image as a read-only Kubernetes image volume
+# (KEP-4639, GA from 1.36; k3s v1.37.1 bundles containerd v2.3.4) and mmaps the
+# weights in place. With the overlayfs snapshotter all replicas read the same
+# lower-layer inodes, so the kernel can keep one page-cache copy for the node.
+# The memory and ready-time effect is EXPERIMENTS.md H28 (PENDING, unmeasured).
+# The image must carry the model as a filesystem tar layer (FROM scratch + COPY);
+# containerd does not mount raw ModelPack weight blobs as image volumes.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: K3D_GPU_MS_NAME
+  labels:
+    app.kubernetes.io/name: K3D_GPU_MS_NAME
+    app.kubernetes.io/part-of: k3d-gpu
+    k3d-gpu.io/model-share: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: K3D_GPU_MS_NAME
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: K3D_GPU_MS_NAME
+        app.kubernetes.io/part-of: k3d-gpu
+        k3d-gpu.io/model-share: "true"
+    spec:
+      # The agent image is the caller's (--agent-image), not a repo pin, so it is
+      # written in flow style and stays out of images.lock; audit checks it live.
+      containers:
+        - {name: agent, image: K3D_GPU_MS_AGENT_IMAGE, imagePullPolicy: IfNotPresent,
+           env: [{name: MODEL_DIR, value: /models}],
+           volumeMounts: [{name: model, mountPath: /models, readOnly: true}]}
+      volumes:
+        - name: model
+          image:
+            reference: K3D_GPU_MS_IMAGE
+            pullPolicy: IfNotPresent
