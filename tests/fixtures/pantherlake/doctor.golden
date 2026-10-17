@@ -25,6 +25,7 @@
   ok: hybrid CPU: P-cores 0-3, E-cores 4-11, LP E-cores 12-15 — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient|lowpower|ecluster|pcore-physical|latency
   ok: E-core clusters (shared L2): 4-7 8-11 — k3d-gpu.io/cores=ecluster gives a pod 4 E-cores of one cluster
   ok: physical P-cores (one thread per core): 0-3 — k3d-gpu.io/cores=pcore-physical and latency show pods one thread per core
+  info: noisy-neighbour isolation: ecluster — no rdt_a flag, so no cache or bandwidth partitioning; label a bandwidth-heavy neighbour k3d-gpu.io/cores=ecluster to hold it to the E-cores of one L2 cluster. This caps its cores, not its DRAM bandwidth; the effect on agent latency is unmeasured (EXPERIMENTS.md H26, PENDING)
   info: per socket: socket 0: DSA 0, IAA 1, QAT 0 (no ARK default on file for this CPU)
 ==> Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...
   ok: dra available (auto)

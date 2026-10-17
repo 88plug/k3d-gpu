@@ -1442,6 +1442,41 @@ doctor_numa() {
         done
         lines+="  info: RDT allocation (rdt_a:${rdt}) — resctrl classes are available but left off: the balloons policy ships control.rdt.enable: false because enabling it rewrites the host's /sys/fs/resctrl. To opt in, mount resctrl on the host (mount -t resctrl resctrl /sys/fs/resctrl) and set control.rdt.enable: true in nri-balloons.yml; usePodQoSAsDefaultClass then gives BestEffort/Burstable/Guaranteed pods 33%/66%/100% of the L3"$'\n'
     fi
+    doctor_isolation "${flags#*:}"
+}
+
+# Noisy-neighbour isolation for agent pods, picked from the CPU's own flags
+# (never from the SKU name): rdt-mba (CAT + MBA: cache share and DRAM bandwidth),
+# rdt-cat (CAT only: cache share), ecluster (hybrid client with E-core L2
+# clusters: confine the neighbour to one cluster), cpu-cap (CPU limit only).
+isolation_mode() {
+    local flags=" $1 "
+    if [[ "${flags}" == *" rdt_a "* && "${flags}" == *" mba "* ]]; then echo rdt-mba
+    elif [[ "${flags}" == *" rdt_a "* ]] && [[ "${flags}" == *" cat_l3 "* || "${flags}" == *" cat_l2 "* ]]; then echo rdt-cat
+    elif has_hybrid && [ -n "$(ecore_clusters)" ]; then echo ecluster
+    else echo cpu-cap
+    fi
+}
+
+# One doctor line naming the isolation mode. Host changes are printed with their
+# exact apply and revert, never made.
+doctor_isolation() {
+    local mode what mounted=no
+    mode=$(isolation_mode "$1")
+    [ ! -d "${SYSROOT}/sys/fs/resctrl/info" ] || mounted=yes
+    case "${mode}" in
+        rdt-mba|rdt-cat)
+            what="cache share and DRAM bandwidth (CAT + MBA)"
+            [ "${mode}" = rdt-mba ] || what="cache share only (CAT, no MBA: DRAM bandwidth stays shared)"
+            lines+="  info: noisy-neighbour isolation: ${mode} — resctrl can cap a neighbour's ${what}; resctrl mounted: ${mounted}; opt-in, then annotate the neighbour pod rdtclass.resource-policy.nri.io/pod: BestEffort"$'\n'
+            lines+="        from:   /proc/cpuinfo flags (rdt_a, cat_l2/cat_l3, mba), /sys/fs/resctrl"$'\n'
+            lines+="        apply:  sudo mount -t resctrl resctrl /sys/fs/resctrl, then set control.rdt.enable: true in nri-balloons.yml"$'\n'
+            lines+="        revert: set control.rdt.enable: false in nri-balloons.yml, then sudo umount /sys/fs/resctrl"$'\n' ;;
+        ecluster)
+            lines+="  info: noisy-neighbour isolation: ecluster — no rdt_a flag, so no cache or bandwidth partitioning; label a bandwidth-heavy neighbour k3d-gpu.io/cores=ecluster to hold it to the E-cores of one L2 cluster. This caps its cores, not its DRAM bandwidth; the effect on agent latency is unmeasured (EXPERIMENTS.md H26, PENDING)"$'\n' ;;
+        *)
+            lines+="  info: noisy-neighbour isolation: cpu-cap — no rdt_a flag and no E-core L2 clusters; give a neighbour a CPU limit. Cache and DRAM bandwidth stay shared"$'\n' ;;
+    esac
 }
 
 # Xeon built-in accelerators. `up` deploys DSA/IAA/QAT plugins once the host

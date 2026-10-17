@@ -23,6 +23,7 @@
 ==> Intel CPU built-in accelerators...
   ok: CPU ISA: AVXVNNI — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
   ok: hybrid CPU: P-cores 0-7, E-cores 8-23 — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient|lowpower|ecluster|pcore-physical|latency
+  info: noisy-neighbour isolation: cpu-cap — no rdt_a flag and no E-core L2 clusters; give a neighbour a CPU limit. Cache and DRAM bandwidth stay shared
 ==> Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...
   ok: dra available (auto)
   ok: image-volume available (auto)

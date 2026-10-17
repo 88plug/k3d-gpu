@@ -100,6 +100,15 @@
         "why": null
       },
       {
+        "apply": "sudo mount -t resctrl resctrl /sys/fs/resctrl, then set control.rdt.enable: true in nri-balloons.yml",
+        "from": "/proc/cpuinfo flags (rdt_a, cat_l2/cat_l3, mba), /sys/fs/resctrl",
+        "level": "info",
+        "revert": "set control.rdt.enable: false in nri-balloons.yml, then sudo umount /sys/fs/resctrl",
+        "section": "Intel CPU built-in accelerators...",
+        "text": "noisy-neighbour isolation: rdt-mba — resctrl can cap a neighbour's cache share and DRAM bandwidth (CAT + MBA); resctrl mounted: no; opt-in, then annotate the neighbour pod rdtclass.resource-policy.nri.io/pod: BestEffort",
+        "why": null
+      },
+      {
         "apply": null,
         "from": null,
         "level": "info",
