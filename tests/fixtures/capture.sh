@@ -172,6 +172,11 @@ for node in "${SRC}"/sys/devices/system/node/node[0-9]*; do
     [ -d "${node}" ] || continue
     dir "${node}"
     attr "${node}" cpulist
+    for msc in "${node}"/memory_side_cache/index[0-9]*; do
+        [ -d "${msc}" ] || continue
+        dir "${msc}"
+        attr "${msc}" size indexing
+    done
     first=$(head -n1 "${node}/cpulist" 2>/dev/null || true)
     first=${first%%[-,]*}
     if [ -n "${first}" ] && [ -d "${SRC}/sys/devices/system/cpu/cpu${first}/topology" ]; then
@@ -185,6 +190,14 @@ if [ -d "${SRC}/sys/devices/system/cpu/cpu0/cache/index3" ]; then
 fi
 for dev in "${SRC}"/sys/bus/pci/devices/*; do
     if [ -e "${dev}/numa_node" ]; then attr "${dev}" numa_node; fi
+done
+# dax devices and the driver each is bound to (device_dax or kmem): Xeon CPU Max
+# flat-mode HBM left in devdax mode.
+for dax in "${SRC}"/sys/bus/dax/devices/dax*; do
+    [ -L "${dax}" ] || continue
+    link "${dax}"
+    dir "${dax}"
+    if [ -L "${dax}/driver" ]; then link "${dax}/driver"; fi
 done
 for aux in "${SRC}"/sys/bus/auxiliary/devices/intel_vsec.sdsi.*; do
     [ -L "${aux}" ] || continue

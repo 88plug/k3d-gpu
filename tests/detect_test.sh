@@ -247,6 +247,79 @@ mkdir -p "${r}/proc"
 printf 'processor\t: 0\nflags\t\t: fpu avx512f avx512_bf16\n' > "${r}/proc/cpuinfo"
 expect "CPU without AMX flags is not amx" "${r}" ""
 
+# ---- AMX model-derived labels and Xeon CPU Max memory modes ------------------
+
+AMXL="feature.node.kubernetes.io/cpu-cpuid"
+# xcpu <root> <family> <model> <flags> [model name]: one-CPU cpuinfo.
+xcpu() {
+    mkdir -p "$1/proc"
+    printf 'processor\t: 0\ncpu family\t: %s\nmodel\t\t: %s\nmodel name\t: %s\nflags\t\t: fpu %s\n' \
+        "$2" "$3" "${5:-Intel(R) Xeon(R)}" "$4" > "$1/proc/cpuinfo"
+}
+AMX3="amx_bf16 amx_tile amx_int8"
+
+r=$(newroot gnr-bare); xcpu "${r}" 6 173 "${AMX3}"
+expect "Granite Rapids 6/173 bare metal gets AMXFP16" "${r}" \
+"amx ${AMXL}.AMXBF16=true ${AMXL}.AMXFP16=true ${AMXL}.AMXINT8=true ${AMXL}.AMXTILE=true"
+r=$(newroot gnrd-bare); xcpu "${r}" 6 174 "${AMX3}"
+expect "Granite Rapids-D 6/174 gets AMXFP16 and AMXCOMPLEX" "${r}" \
+"amx ${AMXL}.AMXBF16=true ${AMXL}.AMXCOMPLEX=true ${AMXL}.AMXFP16=true ${AMXL}.AMXINT8=true ${AMXL}.AMXTILE=true"
+r=$(newroot dmr-bare); xcpu "${r}" 19 1 "${AMX3}"
+expect "Diamond Rapids 19/1 gets AMXFP16 and AMXCOMPLEX" "${r}" \
+"amx ${AMXL}.AMXBF16=true ${AMXL}.AMXCOMPLEX=true ${AMXL}.AMXFP16=true ${AMXL}.AMXINT8=true ${AMXL}.AMXTILE=true"
+r=$(newroot gnr-vm); xcpu "${r}" 6 173 "${AMX3} hypervisor"
+expect "Granite Rapids under a hypervisor gets no inferred labels" "${r}" \
+"amx ${AMXL}.AMXBF16=true ${AMXL}.AMXINT8=true ${AMXL}.AMXTILE=true"
+r=$(newroot gnr-notile); xcpu "${r}" 6 173 "amx_bf16 amx_int8"
+expect "Granite Rapids without amx_tile gets no inferred labels" "${r}" \
+"amx ${AMXL}.AMXBF16=true ${AMXL}.AMXINT8=true"
+r=$(newroot spr-bare); xcpu "${r}" 6 143 "${AMX3}"
+expect "Sapphire Rapids 6/143 gets no AMXFP16" "${r}" \
+"amx ${AMXL}.AMXBF16=true ${AMXL}.AMXINT8=true ${AMXL}.AMXTILE=true"
+r=$(newroot gnr-dup); xcpu "${r}" 6 173 "${AMX3} amx_fp16"
+expect "a kernel printing amx_fp16 gives one AMXFP16 label" "${r}" \
+"amx ${AMXL}.AMXBF16=true ${AMXL}.AMXFP16=true ${AMXL}.AMXINT8=true ${AMXL}.AMXTILE=true"
+
+# dax <root> <dev> <parent dir under sys/devices> <driver>: a /sys/bus/dax device.
+dax() {
+    local dir="$1/sys/devices/$3/$2"
+    mkdir -p "${dir}" "$1/sys/bus/dax/devices" "$1/sys/bus/dax/drivers/$4"
+    ln -sfn "$1/sys/bus/dax/drivers/$4" "${dir}/driver"
+    ln -sfn "${dir}" "$1/sys/bus/dax/devices/$2"
+}
+MAX="Intel(R) Xeon(R) CPU Max 9480"
+r=$(newroot max-devdax); kernel "${r}" 6.18.1; xcpu "${r}" 6 143 "${AMX3}" "${MAX}"
+dax "${r}" dax0.0 platform/hmem.0 device_dax
+doctor_says "Xeon Max hmem dax on device_dax gets the system-ram advice" "${r}" 'dax0\.0 in devdax mode.*daxctl reconfigure-device --mode=system-ram'
+r=$(newroot max-kmem); kernel "${r}" 6.18.1; xcpu "${r}" 6 143 "${AMX3}" "${MAX}"
+dax "${r}" dax0.0 platform/hmem.0 kmem
+doctor_says "Xeon Max hmem dax already on kmem is silent" "${r}" 'devdax mode' negate
+r=$(newroot spr-pmem); kernel "${r}" 6.18.1; xcpu "${r}" 6 143 "${AMX3}" "Intel(R) Xeon(R) Platinum 8480+"
+dax "${r}" dax0.0 platform/e820_pmem/ndbus0/region0/dax0.1 device_dax
+doctor_says "SPR PMem devdax namespace gets no system-ram advice" "${r}" 'system-ram|HBM the kernel' negate
+r=$(newroot max-pmem); kernel "${r}" 6.18.1; xcpu "${r}" 6 143 "${AMX3}" "${MAX}"
+dax "${r}" dax0.0 platform/e820_pmem/ndbus0/region0/dax0.1 device_dax
+doctor_says "PMem devdax on a Xeon Max host is not called HBM" "${r}" 'system-ram|HBM the kernel' negate
+r=$(newroot spr-cxl); kernel "${r}" 6.18.1; xcpu "${r}" 6 143 "${AMX3}" "Intel(R) Xeon(R) Platinum 8480+"
+dax "${r}" dax0.0 platform/ACPI0017:00/root0/decoder0.0/region0/dax_region0 device_dax
+doctor_says "SPR CXL devdax is not called HBM" "${r}" 'system-ram|HBM the kernel' negate
+r=$(newroot spr-hmem); kernel "${r}" 6.18.1; xcpu "${r}" 6 143 "${AMX3}" "Intel(R) Xeon(R) Platinum 8480+"
+dax "${r}" dax0.0 platform/hmem.0 device_dax
+doctor_says "non-Max 6/143 hmem dax gets no HBM advice" "${r}" 'system-ram|HBM the kernel' negate
+
+# msc <root> <node>: node<N> with a 16 GiB direct-mapped memory-side cache.
+msc() {
+    local d="$1/sys/devices/system/node/node$2/memory_side_cache/index1"
+    mkdir -p "${d}"; echo 17179869184 > "${d}/size"; echo 0 > "${d}/indexing"
+}
+r=$(newroot max-cache); kernel "${r}" 6.18.1; xcpu "${r}" 6 143 "${AMX3}" "${MAX}"
+for n in 0 1 2 10; do msc "${r}" "${n}"; done
+doctor_says "memory-side cache nodes are listed in numeric order" "${r}" 'node 0 index 1 .*; node 1 .*; node 2 .*; node 10 index 1'
+doctor_says "memory-side cache without shuffle on suggests page_alloc.shuffle=y" "${r}" 'CONFIG_SHUFFLE_PAGE_ALLOCATOR=y.*sudo cat /sys/module/page_alloc/parameters/shuffle.*grubby --update-kernel=ALL --args=page_alloc\.shuffle=y.*--remove-args=page_alloc\.shuffle'
+mkdir -p "${r}/sys/module/page_alloc/parameters"; echo Y > "${r}/sys/module/page_alloc/parameters/shuffle"
+doctor_says "memory-side cache with shuffle on reports ok" "${r}" 'ok: page_alloc\.shuffle is on'
+doctor_says "memory-side cache with shuffle on does not suggest it" "${r}" 'Intel suggests page_alloc' negate
+
 # ---- doctor diagnostics -------------------------------------------------------
 
 r=$(newroot cri-unbound)

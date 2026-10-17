@@ -519,13 +519,28 @@ amx_flags() {
     cpu_flags | LC_ALL=C grep -E '^amx_[a-z0-9_]+$' | sort | paste -sd' ' || true
 }
 
-# NFD-style node labels for the host's AMX flags (amx_tile -> ...cpu-cpuid.AMXTILE=true).
+# NFD-style node labels for the host's AMX flags (amx_tile -> ...cpu-cpuid.AMXTILE=true),
+# sorted. AMX-FP16 (CPUID.(7,1):EAX[21]) and AMX-COMPLEX (CPUID.(7,1):EDX[8]) are
+# never printed in /proc/cpuinfo (cpufeatures.h gives X86_FEATURE_AMX_FP16 no quoted
+# name and has no AMX_COMPLEX at all), so they come from the CPU model: LLVM X86.td
+# gives Granite Rapids (6/0xAD) AMX-FP16, Granite Rapids-D (6/0xAE) AMX-FP16 and
+# AMX-COMPLEX, Diamond Rapids (19/0x01) both (intel-family.h ids). Only on bare
+# metal (no hypervisor flag, which may mask CPUID bits) and only with amx_tile
+# present, which the kernel clears when it cannot switch AMX state (cpuid-deps.c).
 amx_labels() {
-    local f
-    for f in $(amx_flags); do
+    local f flags names=""
+    flags=$(amx_flags)
+    for f in ${flags}; do
         f=${f//_/}
-        echo "feature.node.kubernetes.io/cpu-cpuid.${f^^}=true"
+        names+="${f^^}"$'\n'
     done
+    if [[ " ${flags} " == *" amx_tile "* ]] && ! cpu_flag hypervisor; then
+        case "$(cpu_family_model)" in
+            "6 173")        names+=$'AMXFP16\n' ;;
+            "6 174"|"19 1") names+=$'AMXFP16\nAMXCOMPLEX\n' ;;
+        esac
+    fi
+    printf '%s' "${names}" | LC_ALL=C sort -u | sed 's#.*#feature.node.kubernetes.io/cpu-cpuid.&=true#'
 }
 
 # NFD's cpuid label name for a /proc/cpuinfo flag, or nothing. NFD names its
@@ -1505,6 +1520,7 @@ doctor_numa() {
         lines+="  ${RED}fail${RST}: NUMA requested but the host has ${count} NUMA node(s) (/sys/devices/system/node)"$'\n'
         FAIL=1
     fi
+    doctor_hbm
     flags=$(grep -m1 '^flags[[:space:]]*:' "${SYSROOT}/proc/cpuinfo" 2>/dev/null || true)
     if [[ " ${flags#*:} " == *" rdt_a "* ]]; then
         for n in cat_l2 cat_l3 cdp_l2 cdp_l3 mba; do
@@ -1547,6 +1563,50 @@ doctor_isolation() {
                 lines+="  info: noisy-neighbour isolation: cpu-cap — no rdt_a flag and no E-cores; give a neighbour a CPU limit. Cache and DRAM bandwidth stay shared"$'\n'
             fi ;;
     esac
+}
+
+# Xeon CPU Max (6/0x8F with on-package HBM) memory modes, appended to ${lines}.
+# Cache mode: the kernel lists node<N>/memory_side_cache/index<M> (size in bytes,
+# indexing 0 = direct-mapped; Documentation/ABI/stable/sysfs-devices-node). Flat
+# mode boots HBM as EFI soft-reserved memory: drivers/dax/hmem/hmem.c registers it
+# as platform devices "hmem" whose dax devices bind device_dax until daxctl hands
+# them to kmem (drivers/dax/Makefile module names; Intel Xeon CPU Max tuning guide
+# 354227 section 5.2). PMem namespaces and CXL dax regions also bind device_dax but
+# hang off other parents, so the HBM advice needs an hmem parent and a "CPU Max"
+# model name. page_alloc.shuffle exists only with CONFIG_SHUFFLE_PAGE_ALLOCATOR=y
+# (Documentation/admin-guide/kernel-parameters.txt) and its sysfs file is mode
+# 0400 (mm/shuffle.c). Guidance only: the launcher never changes host memory.
+doctor_hbm() {
+    local d n idx size kind dax="" drv msc="" shuf
+    for n in $(numa_nodes); do
+        for d in "${SYSROOT}/sys/devices/system/node/node${n}"/memory_side_cache/index[0-9]*; do
+            [ -d "${d}" ] || continue
+            idx=${d##*/index}
+            size=$(head -n1 "${d}/size" 2>/dev/null || true)
+            [[ "${size}" =~ ^[0-9]{1,20}$ ]] || size="?"
+            kind="indexed"
+            [ "$(head -n1 "${d}/indexing" 2>/dev/null)" != 0 ] || kind="direct-mapped"
+            msc+="${msc:+; }node ${n} index ${idx} ${size} bytes ${kind}"
+        done
+    done
+    if [ -n "${msc}" ]; then
+        lines+="  info: memory-side cache (${msc}) — HBM cache mode on Xeon CPU Max, or another 2LM memory; pods need no change"$'\n'
+        shuf=$(head -c1 "${SYSROOT}/sys/module/page_alloc/parameters/shuffle" 2>/dev/null || true)
+        if [ "${shuf}" = Y ]; then
+            lines+="  ok: page_alloc.shuffle is on (evens out memory-side cache conflict misses)"$'\n'
+        else
+            lines+="  info: Intel suggests page_alloc.shuffle=y on the kernel cmdline to even out conflict misses; needs CONFIG_SHUFFLE_PAGE_ALLOCATOR=y. Check as root: sudo cat /sys/module/page_alloc/parameters/shuffle (Y = on). Apply: sudo grubby --update-kernel=ALL --args=page_alloc.shuffle=y (Fedora/RHEL), or add it to GRUB_CMDLINE_LINUX_DEFAULT in /etc/default/grub then sudo update-grub (Debian/Ubuntu) or sudo grub-mkconfig -o /boot/grub/grub.cfg; reboot. Revert: sudo grubby --update-kernel=ALL --remove-args=page_alloc.shuffle, or remove it from /etc/default/grub and rerun the same command; reboot"$'\n'
+        fi
+    fi
+    [ "$(cpu_family_model)" = "6 143" ] || return 0
+    [[ "$(cpuinfo_field "model name")" == *"CPU Max"* ]] || return 0
+    for d in "${SYSROOT}"/sys/bus/dax/devices/dax[0-9]*.[0-9]*; do
+        [ -L "${d}/driver" ] || continue
+        [[ "$(readlink -f "${d}")" == */devices/platform/hmem.[0-9]*/* ]] || continue
+        drv=$(readlink "${d}/driver")
+        [ "${drv##*/}" != device_dax ] || dax+=" ${d##*/}"
+    done
+    [ -z "${dax}" ] || lines+="  info: dax device(s)${dax} in devdax mode — HBM the kernel left soft-reserved (Xeon CPU Max flat mode), unused by pods. To use it: sudo daxctl reconfigure-device --mode=system-ram <dev> for each (lasts until reboot; rerun it from a boot-time unit), or boot with efi=nosoftreserve; revert: sudo daxctl reconfigure-device --mode=devdax --force <dev>, or drop the cmdline flag. HBM then shows as memory-only NUMA nodes"$'\n'
 }
 
 # Xeon built-in accelerators. `up` deploys DSA/IAA/QAT plugins once the host
