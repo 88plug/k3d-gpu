@@ -1359,6 +1359,45 @@ The image ships no `git` or `curl`; fetch with Python or pip. Edit
 `share/agent-sandbox-k3d.yml` (or point `K3D_GPU_SANDBOX_PROFILE` at a copy) to
 change the image, CPU request, warm pool size or policy.
 
+### Capacity oracle (`k3d-gpu share`, opt-in)
+
+`k3d-gpu share` turns a finished `capacity` run into a bundle for the public
+per-SKU matrix ([docs/oracle.md](docs/oracle.md); design:
+[docs/moat-design.md](docs/moat-design.md)). It never sends anything on its own.
+
+```bash
+k3d-gpu share --dry-run        # build, validate and print the bundle; write and send nothing
+k3d-gpu share                  # same, then write ./k3d-gpu-share-<sha12>.json (mode 0600)
+k3d-gpu share --submit         # same, then ask y/N at the terminal before opening a public issue
+```
+
+* **What it reads**: `k3d-gpu report --json --no-cluster` (the cluster is not
+  queried) and the newest finished run under
+  `$XDG_STATE_HOME/k3d-gpu/capacity/` (or `--capacity FILE`).
+* **What a bundle holds**: counts, device ids, ISA flags, the CPU model string,
+  kernel major.minor, memory rounded to a standard size, PL1/PL2, EPP, the
+  pinned tool/server/model versions, the ISO week, and each request's timings
+  and token counts. Not the hostname, machine-id, serial numbers, MAC or IP
+  addresses, user names, paths, PCI addresses, CPU lists, cluster or node names,
+  URLs or timestamps. `oracle/project.py` (the allowlist) and
+  `oracle/schema/bundle-v1.json` (every object closed, every string an enum or
+  pattern) are the authority when this list and the code differ.
+* **Checks before it is shown as submittable**: `oracle/validate.py`, the same
+  rules the oracle ingest runs (V1-V12 in the design doc), recomputes p95 and
+  agents per box from the samples and scans the bundle for this machine's own
+  hostname, machine-id, user name, home path, MAC addresses and DMI serials. A
+  rejected bundle is neither written nor sendable.
+* **Sending**: only with `--submit`, only at an interactive terminal, only after
+  a typed `y`/`yes`; there is no `--yes`. It then runs `gh issue create` on
+  `88plug/k3d-gpu-oracle` if `gh` is installed and logged in, or prints the
+  issue-form URL. The bundle has no identifiers, but a GitHub issue is public
+  under your account: a submission is not anonymous.
+
+`python3 oracle/test_oracle.py` tests the schema, the projection over every sim
+fixture with planted identifiers, each validator rule, the matrix generator
+against `docs/oracle.md`, and that `share` never runs `gh` without the typed
+confirmation (stub `gh`, pseudo-terminal).
+
 ---
 
 ## Prerequisites

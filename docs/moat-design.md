@@ -1,6 +1,8 @@
 # Moat design: capacity oracle and Intel Advantage profile
 
-Status: **design, not built.** Nothing here is a new measurement. Every number
+Status: **MVP built** on branch `claude/capacity-oracle` (sections 2-4 and the
+H6 seed; "Build status" at the end lists what differs from this design).
+Nothing here is a new measurement. Every number
 that appears below is either backed on its own line (ledger row, provenance row
 or primary-source URL) or sits in a code block as a formula or an example shape.
 
@@ -447,6 +449,48 @@ of the same SKU.
    with the baked snapshot.
 6. Lever A/B runs, one lever at a time, each adding a ledger row before any
    uplift is quoted.
+
+## Build status (MVP)
+
+Built, with tests in `oracle/test_oracle.py` and the CI job `oracle`:
+
+- `oracle/schema/bundle-v1.json`, `oracle/bundle.py` (canonical JSON, content
+  hash, comparison key, a stdlib checker for the schema keywords used),
+  `oracle/project.py`, `oracle/validate.py` (V1-V12), `oracle/matrix.py`,
+  `oracle/share.py` behind `k3d-gpu share`, and `report --no-cluster`.
+- Seed: `oracle/seed/maintainer-i9-13900T-h6-{cpu,gpu}.json`, rebuilt by
+  `oracle/seed/build.py` from the H6 raw per-request files committed under
+  `oracle/raw/h6/`. The recomputed medians equal the H6 table [ledger:H6].
+- `docs/oracle.md` is generated from the seed and checked in CI.
+
+Differences from the design above:
+
+- Samples are integer **microseconds**, not milliseconds, so the recomputed
+  p95 and pass/fail verdicts match the run's own at any SLO. The V1 size cap is
+  therefore 1 MiB, not 256 KiB; the 48 KiB issue cap is unchanged.
+- `--dry-run` writes nothing (the design wrote the file first). Without
+  `--submit` the file is written; nothing is sent either way.
+- `--sign keyless` is not built. Bundles carry `client_signature: none` only.
+- No free text: levers have no `evidence` string and the workload has no
+  `extra_body` object; it carries `thinking: off|on|default` and `time_scale`.
+- V4: a release must pin the bundle's server image at its `aur-vX.Y.Z` tag
+  (read from the clone, or given with `--pin`). An unreleased build
+  (`git-<sha>`) is accepted only from a trusted maintainer path and is tagged
+  `unreleased-build`. Checking a release's build attestation is left to the
+  ingest repo, which does not exist yet.
+- V6 and V7 use the tool wait the trace generator gave the replayer (the trace
+  is regenerated from capacity's seed `1000 * N + rep`), not the gaps observed
+  in the samples, which would make Little's law hold by construction. V7 keeps
+  a slack factor of 1.25 because agents are not busy at every instant.
+- Submitter tokens come from the ingest (`matrix.py --submitters`). Without
+  them each community bundle is its own submitter and all maintainer-lab
+  bundles are one.
+- Not built yet: the data repo `88plug/k3d-gpu-oracle` with its ingest and
+  attestation workflows, `capacity --compare` and the baked
+  `share/oracle-matrix.json`, the planner (section 6) and every lever A/B.
+- The seed's hardware block was read with `report --no-cluster` on the H6
+  host on the same day, not during the run, so microcode and power state are
+  left null.
 
 ## Open items (unverified)
 
