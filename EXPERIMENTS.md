@@ -314,7 +314,8 @@ hypothesis:      H15
 host cpu:        13th Gen Intel(R) Core(TM) i9-13900T (8 P-cores, 16 E-cores)
 host kernel:     6.6.128-1-MANJARO
 accelerators:    nvidia=2 (RTX 4000 SFF Ada, RTX 2000E Ada), intel=1 (UHD 770, 0xa780, i915, PCI 0000:00:02.0), hybrid
-k3d-gpu commit:  1350533 (claude/igpu-sharing-r2 on origin/main 765ad5f)
+k3d-gpu commit:  1350533 (claude/igpu-sharing-r2 on origin/main 765ad5f; after the run the branch was
+                 rebased onto 76bb003, which changed only packaging, as e3ab698)
 node image:      sha256:038ab24ee423, docker build -t k3d-gpu-int:igpu-share-r2 . from this branch
                  (k3s v1.37.1+k3s1, intel/intel-gpu-plugin:0.37.1)
 model:           none; workload = work.sh below
