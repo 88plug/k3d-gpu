@@ -186,6 +186,9 @@ check "noisy: bad --cores is rejected" noisy_bad_cores
 check "agent_trace: unit tests against the in-process stub" \
     env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/test_agent_trace.py"
 
+check "phase-steer: H20 probe unit tests" \
+    env -u IMAGE PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/phase-steer/test_probe.py"
+
 # ---- research/ models -------------------------------------------------------------
 
 check "research: agents-per-box ceiling selftest" \
