@@ -53,7 +53,7 @@
         "level": "warn",
         "revert": null,
         "section": "Intel devices with no driver bound...",
-        "text": "Intel Battlemage (0xe223) has no driver — xe lists this id from kernel 6.17 (running 6.16.0-1-generic); upgrade the kernel, xe.force_probe cannot add an id missing from xe's table",
+        "text": "Intel Battlemage (0xe223) has no driver — xe lists this id from kernel 6.17 (running 6.16.0-1-generic); upgrade the kernel, force_probe cannot add an id missing from the driver's table",
         "why": null
       },
       {

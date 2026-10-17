@@ -53,7 +53,7 @@
         "level": "warn",
         "revert": null,
         "section": "Intel devices with no driver bound...",
-        "text": "Intel Flex (ATS-M) (0x56c1) has no driver — upstream i915 and xe both still require force_probe for it; install Intel's intel-i915-dkms LTS (2523.x), or boot with xe.force_probe=56c1 i915.force_probe=!56c1 (not production upstream; revert: remove both parameters)",
+        "text": "Intel Flex (ATS-M) (0x56c1) has no driver — upstream i915 and xe both still require force_probe for it; install Intel's intel-i915-dkms LTS (2523.x), or force-probe xe (not production upstream; exact apply and revert: k3d-gpu doctor --experimental, xe-force-probe)",
         "why": null
       },
       {

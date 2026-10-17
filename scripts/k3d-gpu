@@ -282,7 +282,8 @@ detect_intel() {
 # (for exporters such as XPU Manager).
 
 # True for a discrete Intel GPU id: DG1 (0x4905-0x4909), Alchemist, Arc Pro A and
-# Flex (0x56xx), Ponte Vecchio (the INTEL_PVC_IDS of include/drm/intel/pciids.h),
+# Flex (0x56xx), Ponte Vecchio (the INTEL_PVC_IDS of include/drm/intel/pciids.h;
+# 0BD0-0BD3 are pre-production ids not in that list and are not matched),
 # and the intel_gpu_platform families Battlemage and Crescent Island.
 intel_gpu_discrete() {
     case "$1" in 0x490[5-9]|0x56[0-9a-f][0-9a-f]|0x0b69|0x0b6e|0x0bd[4-9ab]|0x0be[015]) return 0 ;; esac
@@ -871,6 +872,23 @@ intel_gpu_platform() {
     esac
 }
 
+# True for an id whose intel_gpu_platform kernel is the release that added the id
+# to the driver's id table, after its platform already bound by default: Battlemage
+# E210/E211/E216 (6.15) and E209/E220-E223 (6.17), Alchemist 56BA-56BD (6.7) and
+# 56BE/56BF (6.10). force_probe cannot bind an id missing from the table, so on an
+# older kernel an unbound one needs a newer kernel and a bound one is a backport.
+intel_gpu_id_late() {
+    case "$1" in 0xe21[016]|0xe209|0xe22[0-3]|0x56b[a-f]) return 0 ;; esac
+    return 1
+}
+
+# The upstream driver for an intel_gpu_platform GuC firmware glob: i915 or xe.
+intel_gpu_fw_driver() { if [ "${1#i915/}" != "$1" ]; then echo i915; else echo xe; fi; }
+
+# xe was merged in Linux 6.8 (drivers/gpu/drm/xe); on an older kernel there is no
+# xe module, so xe.force_probe does nothing.
+kernel_has_xe() { ! kernel_lt 6.8; }
+
 # Whether a GPU platform (an intel_gpu_platform name) has XMX systolic matrix
 # engines: Mesa's has_systolic (src/intel/dev/intel_device_info.c) for the ids in
 # include/pci_ids/iris_pci_ids.h. Prints nothing for a platform Mesa does not list.
@@ -1249,13 +1267,12 @@ doctor_intel() {
         read -r drv id <<< "${e}"
         IFS='|' read -r name mink fw <<< "$(intel_gpu_platform "${id}")"
         echo "  ok: Intel ${name:-GPU} (${id:-?}) bound to ${drv}"
-        if [ -n "${mink}" ] && kernel_lt "${mink}" && [ "${name}" = Battlemage ] && [ "${mink}" != 6.12 ]; then
-            # xe.force_probe cannot bind an id missing from xe's table, so a
-            # bound late Battlemage id on an older kernel is a stable backport.
-            echo "  ok: ${name} (${id}) is in this kernel's xe id table (a stable backport; mainline lists it from ${mink})"
+        opt=$(intel_gpu_fw_driver "${fw}")
+        if [ -n "${mink}" ] && kernel_lt "${mink}" && intel_gpu_id_late "${id}"; then
+            # force_probe cannot bind an id missing from the driver's table, so a
+            # bound late id on an older kernel is a stable or distro backport.
+            echo "  ok: ${name} (${id}) is in this kernel's ${opt} id table (a stable backport; mainline lists it from ${mink})"
         elif [ -n "${mink}" ] && kernel_lt "${mink}"; then
-            opt=xe
-            [ "${fw#i915/}" = "${fw}" ] || opt=i915
             echo "  ${YLW}warn${RST}: ${name} (${id}) needs kernel ${mink}+ (running $(kernel_release)); older kernels need ${opt}.force_probe=${id#0x}"
         fi
         if [ -n "${fw}" ]; then
@@ -1427,9 +1444,13 @@ doctor_intel_unbound() {
         elif IFS='|' read -r name mink fw <<< "$(intel_gpu_platform "${id}")" && [ "${name}" = "Max (Ponte Vecchio)" ]; then
             lines+="  ${YLW}warn${RST}: Intel ${name} (${id}) has no driver — no upstream i915 or xe binds it (pvc_info/pvc_desc list no ids); Intel's supported driver is the out-of-tree intel-i915-dkms LTS (2523.x) on an OS from https://dgpu-docs.intel.com/overview/support-matrix/max-and-flex-support-matrix.html"$'\n'
         elif [ "${name}" = "Flex (ATS-M)" ]; then
-            lines+="  ${YLW}warn${RST}: Intel ${name} (${id}) has no driver — upstream i915 and xe both still require force_probe for it; install Intel's intel-i915-dkms LTS (2523.x), or boot with xe.force_probe=${id#0x} i915.force_probe=!${id#0x} (not production upstream; revert: remove both parameters)"$'\n'
-        elif [ "${name}" = Battlemage ] && [ "${mink}" != 6.12 ] && kernel_lt "${mink}"; then
-            lines+="  ${YLW}warn${RST}: Intel ${name} (${id}) has no driver — xe lists this id from kernel ${mink} (running $(kernel_release)); upgrade the kernel, xe.force_probe cannot add an id missing from xe's table"$'\n'
+            if kernel_has_xe; then
+                lines+="  ${YLW}warn${RST}: Intel ${name} (${id}) has no driver — upstream i915 and xe both still require force_probe for it; install Intel's intel-i915-dkms LTS (2523.x), or force-probe xe (not production upstream; exact apply and revert: k3d-gpu doctor --experimental, xe-force-probe)"$'\n'
+            else
+                lines+="  ${YLW}warn${RST}: Intel ${name} (${id}) has no driver — upstream i915 still requires force_probe for it and kernel $(kernel_release) has no xe (merged in 6.8); install Intel's intel-i915-dkms LTS (2523.x)"$'\n'
+            fi
+        elif [ -n "${mink}" ] && kernel_lt "${mink}" && intel_gpu_id_late "${id}"; then
+            lines+="  ${YLW}warn${RST}: Intel ${name} (${id}) has no driver — $(intel_gpu_fw_driver "${fw}") lists this id from kernel ${mink} (running $(kernel_release)); upgrade the kernel, force_probe cannot add an id missing from the driver's table"$'\n'
         elif [ "${fw#i915/}" != "${fw}" ]; then
             # A GuC firmware under i915/ means i915 is the default driver for the part.
             lines+="  ${YLW}warn${RST}: Intel ${name} (${id}) has no driver — load i915 (kernel ${mink}+): sudo modprobe i915"$'\n'
@@ -1661,14 +1682,32 @@ exp_intel_gpu_pci() {
     done
 }
 
-# Unbound Intel GPUs: PCI device ids without the 0x, comma separated.
+# True when any Intel GPU (not an NPU) has no driver bound.
+exp_any_unbound_gpu() {
+    local dev
+    while read -r dev; do
+        [ -n "${dev}" ] && [ -z "$(bound_driver "${dev}")" ] || continue
+        [ -z "$(npu_platform "$(pci_id "${dev}/device")")" ] && return 0
+    done < <(exp_intel_gpu_pci)
+    return 1
+}
+
+# Unbound Intel GPUs xe.force_probe can bind: PCI device ids without the 0x,
+# comma separated. Skips Max (no xe id), a late id below its kernel, and every
+# GPU on a kernel with no xe (before 6.8).
 exp_unbound_gpu_ids() {
-    local dev ids=()
+    kernel_has_xe || return 0
+    local dev id name mink ids=()
     while read -r dev; do
         [ -n "${dev}" ] || continue
         [ -z "$(bound_driver "${dev}")" ] || continue
-        [ -z "$(npu_platform "$(cat "${dev}/device" 2>/dev/null)")" ] || continue
-        ids+=("$(pci_id "${dev}/device" | sed 's/^0x//')")
+        id=$(pci_id "${dev}/device")
+        [ -z "$(npu_platform "${id}")" ] || continue
+        IFS='|' read -r name mink _ <<< "$(intel_gpu_platform "${id}")"
+        # No xe id for Max; a late id below its kernel is missing from the table.
+        [ "${name}" != "Max (Ponte Vecchio)" ] || continue
+        if [ -n "${mink}" ] && kernel_lt "${mink}" && intel_gpu_id_late "${id}"; then continue; fi
+        ids+=("${id#0x}")
     done < <(exp_intel_gpu_pci)
     local IFS=,
     echo "${ids[*]}"
@@ -1775,7 +1814,13 @@ exp_xe_force_probe() {
         value)    echo "brings a new GPU up before distro kernels support it, so agents can schedule on it" ;;
         detect)   [ -n "$(exp_unbound_gpu_ids)" ] ;;
         prereq)   [ -n "$(exp_unbound_gpu_ids)" ] && return 0
-                  echo "no unbound Intel GPU: every Intel GPU on this host already has a driver, or there is none (force_probe only helps a GPU the kernel did not bind)"
+                  if exp_any_unbound_gpu && ! kernel_has_xe; then
+                      echo "kernel $(kernel_release) has no xe (merged in Linux 6.8); see k3d-gpu doctor for the unbound GPU"
+                  elif exp_any_unbound_gpu; then
+                      echo "no unbound Intel GPU xe.force_probe can bind: Max has no upstream xe id, and an id newer than this kernel's xe table needs a newer kernel (see k3d-gpu doctor)"
+                  else
+                      echo "no unbound Intel GPU: every Intel GPU on this host already has a driver, or there is none (force_probe only helps a GPU the kernel did not bind)"
+                  fi
                   return 1 ;;
         apply)    ids=$(exp_unbound_gpu_ids)
                   EXP_HOST+=("xe-force-probe: Intel GPU ${ids} has no driver. Host change (taints the kernel; pre-production support can hang the GPU):"
@@ -4683,10 +4728,14 @@ hs_checks() {
         if [ "${name}" = "Max (Ponte Vecchio)" ]; then
             [ -n "${drv}" ] || notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) has no upstream driver (no i915 or xe id); Intel's supported driver is the out-of-tree intel-i915-dkms LTS (2523.x)"$'\n'
         elif [ "${name}" = "Flex (ATS-M)" ]; then
-            [ -n "${drv}" ] || notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs intel-i915-dkms LTS (2523.x), or the boot options xe.force_probe=${id#0x} i915.force_probe=!${id#0x} (not production upstream)"$'\n'
-        elif [ "${name}" = Battlemage ] && [ "${mink}" != 6.12 ] && [ -z "${drv}" ] && kernel_lt "${mink}"; then
-            # The id is missing from this kernel's xe table; force_probe cannot add it.
-            notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs kernel ${mink}+ (running $(kernel_release)); xe.force_probe cannot add an id missing from xe's table"$'\n'
+            if [ -z "${drv}" ] && kernel_has_xe; then
+                notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs intel-i915-dkms LTS (2523.x), or xe force-probe (not production upstream; exact apply and revert: k3d-gpu doctor --experimental, xe-force-probe)"$'\n'
+            elif [ -z "${drv}" ]; then
+                notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs intel-i915-dkms LTS (2523.x); kernel $(kernel_release) has no xe (merged in 6.8)"$'\n'
+            fi
+        elif [ -n "${mink}" ] && [ -z "${drv}" ] && kernel_lt "${mink}" && intel_gpu_id_late "${id}"; then
+            # The id is missing from this kernel's driver table; force_probe cannot add it.
+            notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs kernel ${mink}+ (running $(kernel_release)); force_probe cannot add an id missing from the driver's table"$'\n'
         elif [ -n "${mink}" ] && [ -z "${drv}" ] && kernel_lt "${mink}" && [ "${fw#i915/}" != "${fw}" ]; then
             # i915 is the default driver for this part; xe does not support it on these kernels.
             notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs the boot option i915.force_probe=${id#0x} (or kernel ${mink}+)"$'\n'

@@ -14,7 +14,7 @@ scx: absent — kernel 6.16.0-1-generic has no /sys/kernel/sched_ext/state (need
   status:   sched_ext merged in Linux 6.12; schedulers (scx_lavd, scx_layered) out of tree, sched-ext/scx v1.1.4
   families: any x86 host on Linux 6.12+ with CONFIG_SCHED_CLASS_EXT; most useful on hybrid P/E parts
   value:    latency-aware or layered CPU scheduling for agent processes, swapped at runtime with no reboot
-xe-force-probe: available
+xe-force-probe: absent — no unbound Intel GPU xe.force_probe can bind: Max has no upstream xe id, and an id newer than this kernel's xe table needs a newer kernel (see k3d-gpu doctor)
   status:   xe.force_probe (unsafe param, taints the kernel); Nova Lake-P and Crescent Island still need it in Linux 7.3-rc
   families: Intel GPUs the running kernel will not bind: Nova Lake-P, Crescent Island, MTL/ARL/ADL/TGL/DG2 on xe
   value:    brings a new GPU up before distro kernels support it, so agents can schedule on it
