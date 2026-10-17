@@ -29,8 +29,8 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H13 | H12's adoption works when Helm applies client-side, as Helm 3 (EAT pins v3.14.0) always does; with Helm 4, `K3D_GPU_BALLOONS=external` installs with its default server-side apply, and adoption needs `--server-side=false`. | Same checks as H12 (a)/(b) (exit 0, revision 1 `deployed`, `vllm-balloon` present, DaemonSet Ready, `k3d-gpu test` passes, `vllm` container on P-cores, `redis` namespace on E-cores, `vllm-balloon` kept across a `.skip` restart for adoption arms). Arms: A3 = default cluster + Helm v3.14.0; A4 = default cluster + Helm v4.1.1 `--server-side=false`; B4 = external cluster + Helm v4.1.1 defaults; B3 = external cluster + Helm v3.14.0. | Pre-registered 2026-10-17 04:23Z, after H12 run a1 failed, before any H13 run. Same image, cluster name, values and probe script as H12; the Helm binary and the `--server-side` flag are the only changes. Helm v3.14.0 from get.helm.sh, sha256 f43e1c33…6651 checked against its .sha256sum. n=3 per arm, order A3 A4 B4 B3, B3 B4 A4 A3, A3 A4 B4 B3, fresh cluster per run. Outcome -> conclusion: every run of an arm meets every check -> that arm SUPPORTED; H13 SUPPORTED only if all four arms are; any failure in an arm -> REFUTED for that arm, and the README states only the arms that held. Confounds as H12. | REFUTED |
 | H14 | Helm installs EAT's chart values over a k3d-gpu cluster in two ways: on a `K3D_GPU_BALLOONS=external` cluster with no extra flag (Helm 3 and 4), and on a default cluster with Helm 3 `--force` or Helm 4 `--force-conflicts`, which replace the adopted BalloonsPolicy spec. | Every run meets H12's checks: helm exit 0, revision 1 `deployed`, BalloonsPolicy has `vllm-balloon` and `agent-control-plane`, DaemonSet Ready, `k3d-gpu test` passes, a `vllm` container gets only P-cores and a pod in namespace `redis` only E-cores; on default clusters `vllm-balloon` survives a `docker restart` of the server after `.skip`. | Pre-registered 2026-10-17 before any H14 run, after H13 runs A3-1 and A4-2 and a 2-cluster spike (log below). Arms: A3f = default cluster, Helm v3.14.0 `--force`; A4f = default cluster, Helm v4.1.1 `--force-conflicts`; B4 = external cluster, Helm v4.1.1 defaults; B3 = external cluster, Helm v3.14.0 defaults. n=3 per arm, order A3f A4f B4 B3 B3 B4 A4f A3f A3f A4f B4 B3, fresh cluster per run, same image, values and probe script as H12. Outcome -> conclusion: all runs of an arm pass every check -> that arm SUPPORTED, and only SUPPORTED arms are documented as working; any failed check -> that arm REFUTED. Confounds as H12. | SUPPORTED |
 | H15 | On an iGPU-only Intel host, the `K3D_GPU_INTEL_SHARED=auto` default (8 pods per iGPU) lets two `gpu.intel.com/i915` pods use the UHD 770 at once, at no loss of total throughput against running them one at a time. | (F) On a cluster from this branch's image with the default, node allocatable `gpu.intel.com/i915` = 8, the plugin DaemonSet args are `-shared-dev-num=8 -allocation-policy=balanced` and survive `docker restart` of the server node, and two pods requesting `gpu.intel.com/i915: 1` are both Running with overlapping run intervals and exit 0; a control cluster with `K3D_GPU_INTEL_SHARED=1` advertises 1 and keeps the second pod Pending while the first runs. (T) With a VA-API media workload (1080p H.264 decode, `scale_vaapi` to 720p, `h264_vaapi` encode, 6000 frames per pod, `linuxserver/ffmpeg:version-9.0.2-cli`), the aggregate fps of two concurrent pods is at least 0.9x the median solo fps, each concurrent pod gets at least 0.4x solo, no pod fails and dmesg logs no new i915 GPU hang. | Pre-registered 2026-10-16 PDT (2026-10-17T06:04Z, commit 1350533, pushed) before any H15 run. One shared cluster (default env) and one control cluster, both from `docker build -t $TAG .` on `claude/igpu-sharing-r2`. Timed arms on the shared cluster: S = one pod alone, C = two pods started together on a wall-clock barrier; n=3 per arm, order S C C S S C. Per run: package W (RAPL), load (1 min), swap used, package throttle count delta. Outcome -> conclusion: F holds and every C run meets T -> SUPPORTED, keep `auto` = 8 on iGPU-only hosts; F holds but aggregate < 0.9x solo in 2 or more C runs -> REFUTED, `auto` becomes 1 (sharing opt-in); any failed pod or GPU hang -> REFUTED, `auto` becomes 1; solo spread (max - min) above 20% of its median -> INCONCLUSIVE, rerun. | SUPPORTED |
-| H16 | On k3s 1.37, `K3D_GPU_DRA=1` hands the UHD 770 to a pod through the Intel GPU DRA driver (gpu-v0.12.1) and no device plugin. | On a cluster from this branch's image with `K3D_GPU_DRA=1` on an i9-13900T: no `intel-gpu-plugin` DaemonSet, a ResourceSlice of driver `gpu.intel.com` lists the iGPU, node allocatable has no `gpu.intel.com/i915`, `up` reports `intel=1`, and every pod that names a ResourceClaimTemplate for DeviceClass `gpu.intel.com` lists `renderD128` under `/dev/dri` and ends `Succeeded`. | Pre-registered 2026-10-17 (this commit, pushed before the first run) together with H17, same runs: 3 DRA clusters (arm D). Refuted by a plugin DaemonSet, no slice, an i915 extended resource, or any claim pod without `renderD128` or not `Succeeded`. | PENDING |
-| H17 | DRA mode can become the default (auto) Intel GPU path when the driver is baked in, without losing what the device-plugin default gives on an iGPU host. | On the same host, all three: (a) two pods that each claim the iGPU through their own ResourceClaim from one template are both `Running` at once, as two `gpu.intel.com/i915: 1` pods are under the plugin's sharing default (H15); (b) median pod latency (create to `Succeeded`, busybox `ls /dev/dri`, image preloaded) in DRA mode is at most 1.2x the plugin's; (c) median `k3d-gpu up` wall time in DRA mode is at most 1.2x the plugin's. | Arms D (`K3D_GPU_DRA=1`) and P (default), one fresh cluster per run, n=3 runs per arm, order D P P D D P; per run 1 timed `up` and 3 timed pods (reported as the run's median), then the 2-pod check read 20 s after creation. Per run: package W over `up` (RAPL), load (1 min), swap used, package throttle count delta. Outcome -> conclusion: (a) fails in any D run -> REFUTED, DRA stays opt-in (`K3D_GPU_DRA=0` default), since auto would take away H15's sharing; (a) holds but (b) or (c) fails -> REFUTED, DRA stays opt-in; all hold -> SUPPORTED, DRA may become auto in a later change; F of H16 fails -> H17 not evaluated (DRA mode broken). A timing arm whose spread (max - min) exceeds 30% of its median -> that part INCONCLUSIVE. Prediction before measuring: REFUTED by (a), because gpu-v0.12.1 publishes no shared counters or multi-allocation (docs/experimental.md). | PENDING |
+| H16 | On k3s 1.37, `K3D_GPU_DRA=1` hands the UHD 770 to a pod through the Intel GPU DRA driver (gpu-v0.12.1) and no device plugin. | On a cluster from this branch's image with `K3D_GPU_DRA=1` on an i9-13900T: no `intel-gpu-plugin` DaemonSet, a ResourceSlice of driver `gpu.intel.com` lists the iGPU, node allocatable has no `gpu.intel.com/i915`, `up` reports `intel=1`, and every pod that names a ResourceClaimTemplate for DeviceClass `gpu.intel.com` lists `renderD128` under `/dev/dri` and ends `Succeeded`. | Pre-registered 2026-10-17 (this commit, pushed before the first run) together with H17, same runs: 3 DRA clusters (arm D). Refuted by a plugin DaemonSet, no slice, an i915 extended resource, or any claim pod without `renderD128` or not `Succeeded`. | SUPPORTED |
+| H17 | DRA mode can become the default (auto) Intel GPU path when the driver is baked in, without losing what the device-plugin default gives on an iGPU host. | On the same host, all three: (a) two pods that each claim the iGPU through their own ResourceClaim from one template are both `Running` at once, as two `gpu.intel.com/i915: 1` pods are under the plugin's sharing default (H15); (b) median pod latency (create to `Succeeded`, busybox `ls /dev/dri`, image preloaded) in DRA mode is at most 1.2x the plugin's; (c) median `k3d-gpu up` wall time in DRA mode is at most 1.2x the plugin's. | Arms D (`K3D_GPU_DRA=1`) and P (default), one fresh cluster per run, n=3 runs per arm, order D P P D D P; per run 1 timed `up` and 3 timed pods (reported as the run's median), then the 2-pod check read 20 s after creation. Per run: package W over `up` (RAPL), load (1 min), swap used, package throttle count delta. Outcome -> conclusion: (a) fails in any D run -> REFUTED, DRA stays opt-in (`K3D_GPU_DRA=0` default), since auto would take away H15's sharing; (a) holds but (b) or (c) fails -> REFUTED, DRA stays opt-in; all hold -> SUPPORTED, DRA may become auto in a later change; F of H16 fails -> H17 not evaluated (DRA mode broken). A timing arm whose spread (max - min) exceeds 30% of its median -> that part INCONCLUSIVE. Prediction before measuring: REFUTED by (a), because gpu-v0.12.1 publishes no shared counters or multi-allocation (docs/experimental.md). | REFUTED |
 
 ## Falsification log
 
@@ -80,6 +80,7 @@ new evidence (new hardware, new driver, new model, changed method).
 | 2026-10-16 | idea (no branch): tool-idle IAA compaction into zswap | Provenance search | Anticipated by AgentZip (arXiv:2609.11294) phase-aligned compression with restore prefetch | DO-NOT-RE-ATTACK |
 | 2026-10-16 | idea (no branch): freeze-consistent fork of agent sandboxes | Provenance search | Anticipated by E2B `fork({count:N})` and Modal snapshots | DO-NOT-RE-ATTACK |
 | 2026-10-17 | H15 | i9-13900T, UHD 770: shared cluster (default env) F checks, 6 timed runs S C C S S C; control cluster `K3D_GPU_INTEL_SHARED=1` (header and per-run table in [H15 run](#h15-run-i9-13900t-2026-10-17)) | Held. F: allocatable 8, args `["-shared-dev-num=8","-allocation-policy=balanced"]` before and after `docker restart`, `k3d-gpu test` rc 0; both pods of every C run Succeeded from the same start second. Solo median 548.4 fps (spread 20.1, 3.7%); two-pod aggregate median 649.6 fps = 1.18x solo (min 1.16x), each pod 0.58-0.59x solo; 0 failed pods, 0 GPU hangs. Control: allocatable 1, second pod Pending (`Insufficient gpu.intel.com/i915`) until the first finished | DO-NOT-RE-ATTACK on UHD 770 / i915 with this media workload; a compute workload (OpenVINO, oneAPI) or an Xe2/Xe3 iGPU is new evidence |
+| 2026-10-17 | H16, H17 | i9-13900T, UHD 770: 6 fresh clusters D P P D D P (one `up`, 3 timed claim or i915 pods and a 2-pod check each), plus a `k3d-gpu test` cluster in DRA mode and a manual `k3d cluster create` from the same image (header and table in [H16/H17 run](#h16h17-run-i9-13900t-2026-10-17)) | H16 held in all 3 DRA runs. H17 (a) failed in all 3: the second claim pod stayed Pending (`cannot allocate all claims`) while 2 i915 pods ran at once in all 3 plugin runs; (b) and (c) held (pod latency 1.00x, `up` 1.06x) | DO-NOT-RE-ATTACK for gpu-v0.12.1: DRA mode stays opt-in. Re-attack when an Intel GPU DRA driver release publishes shared or multi-allocatable devices (consumable capacity or `allowMultipleAllocations`) |
 
 ## Research leads
 
@@ -410,6 +411,91 @@ docker restart k3d-h15-server-0   # args and the count survive
 scripts/k3d-gpu down
 ```
 
+### H16/H17 run (i9-13900T, 2026-10-17)
+
+```text
+# provenance
+date:            2026-10-17T07:20:31Z..07:28:56Z (pre-registered in 205dfb6, pushed 07:15:01Z)
+hypothesis:      H16, H17
+host cpu:        13th Gen Intel(R) Core(TM) i9-13900T (8 P-cores, 16 E-cores)
+host kernel:     6.6.128-1-MANJARO
+accelerators:    nvidia=2 (RTX 4000 SFF Ada, RTX 2000E Ada), intel=1 (UHD 770, 0xa780, i915, PCI 0000:00:02.0), hybrid
+k3d-gpu commit:  8477aed (claude/intel-gpu-dra-r2 on origin/main 6de91c0; launcher identical to 205dfb6,
+                 8477aed only regenerated test goldens)
+node image:      sha256:8a8a093acd20, docker build -t k3d-gpu:dra-r2-f859afb . from this branch
+                 (k3s v1.37.1+k3s1, intel/intel-gpu-plugin:0.37.1,
+                 ghcr.io/intel/intel-gpu-resource-driver:v0.12.1@sha256:1479956240397c7207c3d38c0d296bd591cd66f26d432452f9a2d75336843776)
+model:           none; workload = busybox:1.37 `ls /dev/dri` (imported into each cluster, imagePullPolicy IfNotPresent)
+runtime:         D: pods name ResourceClaimTemplate h16-gpu (DeviceClass gpu.intel.com);
+                 P: pods request gpu.intel.com/i915: 1 (plugin default, -shared-dev-num=8)
+energy source:   /sys/class/powercap/intel-rapl:0 (package-0), confounds only
+runs per arm:    3 (order D P P D D P), one fresh cluster per run, 10 s idle between runs
+```
+
+Each run: `k3d-gpu up` timed wall to wall (node image cached, add-on images pulled
+by each fresh cluster), 3 pods created one after another and timed from `kubectl
+apply` to phase `Succeeded` (0.2 s poll), then two `sleep 40` pods created together
+and their phases read 20 s later. The runner is now `bench/dra_round.sh`: the
+script used for the run, with the cluster name and paths made parameters and RAPL
+read with `sudo -n` afterwards; one validation round of it (D, not counted) gave
+`up` 36.1 s, pods 2.57 / 2.87 / 2.84 s and Running, Pending.
+
+| Run | Arm | `up` s | pod latency s (3 pods) | run median | 2 pods at 20 s | package W over `up` | load (1 min) | swap used MiB | throttle delta |
+|-----|-----|--------|------------------------|------------|----------------|---------------------|--------------|---------------|----------------|
+| 1 | D | 39.5 | 3.18 / 2.64 / 2.90 | 2.90 | Running, Pending | 74.5 | 2.72 | 108046 | 52946 |
+| 2 | P | 39.4 | 3.68 / 2.64 / 2.36 | 2.64 | Running, Running | 80.0 | 3.85 | 108044 | 75578 |
+| 3 | P | 36.0 | 3.17 / 2.64 / 2.92 | 2.92 | Running, Running | 75.8 | 3.54 | 108043 | 13478 |
+| 4 | D | 40.3 | 2.89 / 2.89 / 2.90 | 2.89 | Running, Pending | 72.1 | 2.45 | 108042 | 19414 |
+| 5 | D | 40.1 | 3.11 / 2.88 / 2.92 | 2.92 | Running, Pending | 74.6 | 2.94 | 108040 | 37308 |
+| 6 | P | 37.8 | 2.90 / 2.68 / 2.91 | 2.90 | Running, Running | 77.7 | 4.20 | 108045 | 15014 |
+
+| Measure | D median | D p90 (n=3: max) | D spread | P median | P p90 (n=3: max) | P spread | D / P |
+|---------|----------|------------------|----------|----------|------------------|----------|-------|
+| `up` s | 40.1 | 40.3 | 0.8 (2.0%) | 37.8 | 39.4 | 3.4 (9.0%) | 1.06x |
+| pod latency s (run medians) | 2.90 | 2.92 | 0.03 (1.0%) | 2.90 | 2.92 | 0.28 (9.7%) | 1.00x |
+| pods running at once | 1 of 2 (all 3 runs) | | | 2 of 2 (all 3 runs) | | | |
+
+H16 facts, the same in every D run: DaemonSets listed no `intel-gpu-plugin`
+(only `intel-gpu-resource-driver-kubelet-plugin` and the nodeSelector-gated
+`intel-gpu-plugin-wsl`), one ResourceSlice of driver `gpu.intel.com` with device
+`0000-00-02-0-0xa780` (attribute driver `i915`), node allocatable had no
+`gpu.intel.com/i915`, `up` printed `Accelerators schedulable: nvidia=2 intel=1
+hybrid=1`, and all 9 claim pods listed `card0 renderD128` and ended `Succeeded`.
+In every P run allocatable showed `gpu.intel.com/i915` 8. The second D pod's
+scheduling message was `0/1 nodes are available: 1 cannot allocate all claims`,
+with its claim `pending` next to the first one's `allocated,reserved`.
+
+Confounds: package W over `up` stayed in the host's idle band (72-80 W) for both
+arms, load 2.45-4.20, swap flat at 108040-108046 MiB; the throttle delta (sum of
+`package_throttle_count` over all CPUs) varied 13478-75578 with no pattern by arm.
+A detect_test.sh run from another worktree was on the host during the campaign.
+Two earlier campaign starts (07:18Z) never ran a round: `round.sh` was not
+executable, then `sudo -n` had no cached credential; no cluster was created and
+no number was recorded.
+
+Extra live checks on the same image: `K3D_GPU_DRA=1 k3d-gpu up && k3d-gpu test`
+ran the `intel-gpu-dra-test` claim pod (it listed `card0` and `renderD128`) with
+rc 0; the kubelet plugin logged `Sent initial health status, devices: 1`
+(ResourceHealthStatus, on by default in 1.37). A plain `k3d cluster create
+--image <this image>` with no `--disable` (the manual README path, and what an
+older launcher does) ran `intel-gpu-plugin` and left the DRA DaemonSet at DESIRED
+0 (node selector `k3d-gpu.io/intel-gpu-dra=true`), with no ResourceSlice.
+
+Verdict: H16 SUPPORTED, confidence high (every fact held in 3 of 3 runs). H17
+REFUTED, confidence high: part (a) failed in 3 of 3 DRA runs and held in 3 of 3
+plugin runs, and the outcome does not depend on timing; (b) and (c) held with
+margins far above the spreads. `K3D_GPU_DRA` stays opt-in (default 0): auto would
+remove H15's iGPU sharing default, and the agent and recipes request
+`gpu.intel.com/xe|i915`, which DRA mode does not advertise.
+
+```bash
+# Reproduce on an Intel iGPU host, from this branch.
+TAG=k3d-gpu:dra-r2 && docker build -t "$TAG" . && docker pull busybox:1.37
+export IMAGE=$TAG OUT=$(mktemp -d)
+n=0; for m in D P P D D P; do sleep 10; n=$((n + 1)); bench/dra_round.sh "$m" "$n"; done
+cat "$OUT/results.txt"   # one RESULT line per run; per-run logs in $OUT
+```
+
 ## Scope corrections
 
 Limits on what a SUPPORTED verdict may be quoted as saying.
@@ -442,3 +528,7 @@ Limits on what a SUPPORTED verdict may be quoted as saying.
   EUs alone (OpenVINO, oneAPI) may gain nothing from sharing, and nothing here
   measures memory pressure between pods. It shows that concurrent pods work and
   lose no total throughput; it does not show isolation.
+- **H16/H17** cover one UHD 770 (i915) and the Intel GPU DRA driver gpu-v0.12.1
+  on k3s v1.37.1. H17's refutation is about this driver release, which publishes
+  each GPU as one exclusive device; it says nothing about DRA itself, nor about
+  discrete Intel GPUs, where the plugin default is also one pod per GPU.

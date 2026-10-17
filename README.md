@@ -1185,6 +1185,16 @@ cluster created any other way never runs it. The driver runs with
 binding management off, so it never moves a host GPU between xe/i915 and vfio-pci.
 Pods ask for `gpu.intel.com` claims, not `gpu.intel.com/xe` or `/i915` resources.
 
+DRA mode stays opt-in, also on k3s 1.37 where DRA is GA, because with gpu-v0.12.1
+it loses what the default gives: the driver publishes each GPU as one exclusive
+device, so a second pod's claim stays Pending where the plugin's iGPU sharing
+default runs both [ledger:H17]; `K3D_GPU_INTEL_SHARED`, `_ALLOCATION` and
+`_MONITORING` configure the plugin and are ignored (with a warning) in DRA mode;
+and `k3d-gpu agent` and the recipes request `gpu.intel.com/xe|i915`, which DRA mode
+does not advertise. A claim pod gets the iGPU through the driver on k3s 1.37
+[ledger:H16]. The `dra` experimental feature only sets Kubernetes gates and does
+not switch the Intel GPU path.
+
 ---
 
 ## Prerequisites
