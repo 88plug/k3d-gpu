@@ -38,6 +38,7 @@ nav:
       - Capacity oracle: oracle.md
       - Capacity leaderboard: leaderboard.md
       - Capacity oracle matrix: oracle-matrix.md
+      - Capacity oracle design: moat-design.md
       - Security audit: security-audit.md
   - Development:
       - Branch consolidation: dev/consolidation.md
