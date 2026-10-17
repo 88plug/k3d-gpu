@@ -26,5 +26,16 @@ RUN apt-get update \
 # ("error: externally-managed-environment"). EAT exports PIP_BREAK_SYSTEM_PACKAGES
 # but sudo drops it; /etc/pip.conf applies to every user. Throwaway container only.
 
+# Helm v3.14.0, the version setup-bastion.yml asks for, from its release tarball
+# by sha256. setup-bastion.yml installs helm by running get-helm-3 from helm's
+# `main` branch, but only when /usr/local/bin/helm is missing (`creates:`), so
+# with helm already here that floating script is downloaded and never run.
+ARG HELM_VERSION=v3.14.0
+ARG HELM_SHA256=f43e1c3387de24547506ab05d24e5309c0ce0b228c23bd8aa64e9ec4b8206651
+RUN curl -fsSL -o /tmp/helm.tgz "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz" \
+    && echo "${HELM_SHA256}  /tmp/helm.tgz" | sha256sum -c - \
+    && tar -xzf /tmp/helm.tgz -C /usr/local/bin --strip-components=1 linux-amd64/helm \
+    && rm /tmp/helm.tgz
+
 USER ubuntu
 WORKDIR /home/ubuntu

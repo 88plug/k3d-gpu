@@ -8,7 +8,9 @@ Kubernetes", an existing kubeconfig). No EAT file is edited.
 
 Verified on a Lenovo P360 Ultra: i9-13900T (8 P-cores = CPUs 0-15, 16 E-cores =
 CPUs 16-31, AVX2 + AVX-VNNI only), 125 GB RAM, Docker 29.3, k3d 5.9.0, k3s
-v1.34.1+k3s1 (2026-10-16).
+v1.34.1+k3s1 (2026-10-16). Re-run end to end on a fresh cluster with the node
+image built from this repo on 2026-10-16: 5 PLAY RECAPs `failed=0`, the model
+Ready 4 min after deploy, `eat-check.sh` passed.
 
 What comes up: EAT's LiteLLM gateway (GenAI Gateway, with its Langfuse trace
 stack), ingress-nginx, Redis Stack, pgvector, agent-sandbox v0.5.0 with a warm
@@ -37,7 +39,8 @@ EAT_WORK=$PWD/eat-work integrations/eat/eat-up.sh model cpu-qwen3-1-7b
 kubectl wait -n default --for=condition=Ready pod \
   -l app.kubernetes.io/instance=vllm-qwen-3-1-7b-cpu --timeout=1200s
 
-# 4. End-to-end check: chat through LiteLLM, then one agent step in a sandbox.
+# 4. End-to-end check: chat and a tool call through LiteLLM, then model-written
+#    Python run in a sandbox.
 EAT_WORK=$PWD/eat-work integrations/eat/eat-check.sh
 
 # Tear down.
@@ -57,11 +60,14 @@ that off the host.
 | `brownfield.sh` | runs in the bastion; answers EAT's prompts and calls its brownfield functions |
 | `bastion.Dockerfile` | Ubuntu 24.04 (digest-pinned) plus what EAT's one-click installer installs |
 | `agentic-config.cfg` | EAT's own component toggles: gateway, ingress, Redis, pgvector, agent sandbox on; Kubespray, observability, models, KubeRay, CPU balloons off |
-| `vllm-values.yaml` | k3d-gpu values merged over EAT's `vllm/xeon-values.yaml` (memory limit, P-core balloon) |
+| `vllm-values.yaml` | k3d-gpu values merged over EAT's `vllm/xeon-values.yaml` (memory limit, P-core balloon, image digest) |
 | `eat-check.sh` | the end-state check below |
 
-The gateway is reached on the k3d node IP. ingress-nginx binds hostPort 80/443
-there, with `Host: api.example.com` (`cluster_url` in `agentic-config.cfg`) over
+`tests/eat_test.sh` runs `eat-check.sh` against stub `kubectl` and `curl`
+(no cluster) and checks that every script here is committed executable.
+
+The gateway is reached on the host IP of the running ingress-nginx controller
+pod (the k3d node IP). ingress-nginx binds hostPort 80/443 there, with `Host: api.example.com` (`cluster_url` in `agentic-config.cfg`) over
 TLS with a self-signed cert. The host's own ports 80/443 are not used.
 
 ## Observed end state
@@ -71,13 +77,38 @@ TLS with a self-signed cert. The host's own ports 80/443 are not used.
 ```
 ==> Chat through LiteLLM at https://api.example.com (ingress on 172.20.0.2)...
     Kubernetes is an open-source platform for automating the deployment, scaling, and management of containerized applications.
-==> Agent step: model writes Python through LiteLLM, agent sandbox runs it...
-    model wrote: print(sum(i**2 for i in range(1, 11)))
-    sandbox python-pool-g5m49: {"stdout":"385\n","stderr":"","exit_code":0}
+==> Tool call through LiteLLM...
+    get_weather({"city": "Portland"})
+==> Code run: model writes Python through LiteLLM, agent sandbox runs it...
+    model wrote:
+      sum_of_squares = sum(i**2 for i in range(1, 11))
+      print(sum_of_squares)
+    sandbox python-pool-hv9sd: {"stdout":"385\n","stderr":"","exit_code":0}
 ==> EAT check passed.
 ```
 
-Raw gateway response (`POST /v1/chat/completions`, `model: Qwen/Qwen3-1.7B`):
+The check fails unless the chat reply is non-empty, the tool request comes back
+as `finish_reason: tool_calls` naming `get_weather` (vLLM's `hermes` parser, set
+by EAT's catalog), and the sandbox prints exactly `385`. The code run is a
+scripted pipeline: bash hands the model's text to the sandbox router. It is not
+an agent loop and not a tool call.
+
+The code goes to the router as `python3 -c '<code>'`, single-quoted by jq's
+`@sh`. agent-sandbox v0.5.0's `python-runtime-sandbox` splits the command with
+`shlex.split` (newer releases run it under `/bin/sh -c`; both read `@sh` quoting
+back unchanged). Bash's `printf %q` does not survive `shlex.split` for
+multi-line code. Sent to the live v0.5.0 router:
+
+```
+python3 -c s\ =\ sum\(i\*\*2\ for\ i\ in\ range\(1,\ 11\)\)$'\n'print\(s\)
+  -> SyntaxError: invalid syntax, exit_code 1
+python3 -c 's = sum(i**2 for i in range(1, 11))
+print(s)'
+  -> {"stdout":"385\n","stderr":"","exit_code":0}
+```
+
+Raw gateway response from the first run (`POST /v1/chat/completions`,
+`model: Qwen/Qwen3-1.7B`):
 
 ```
 "system_fingerprint":"vllm-0.24.0-5616035f","choices":[{"finish_reason":"stop",...
@@ -85,17 +116,19 @@ Raw gateway response (`POST /v1/chat/completions`, `model: Qwen/Qwen3-1.7B`):
 "usage":{"completion_tokens":27,"prompt_tokens":20,"total_tokens":47}   HTTP 200
 ```
 
-Tool calling through the gateway works too (vLLM's `hermes` parser, set by
-EAT's catalog). A `get_weather` tool request returned
-`"finish_reason":"tool_calls"` with `{"name":"get_weather","arguments":"{\"city\": \"Portland\"}"}`.
-
 vLLM lands on P-cores through k3d-gpu's balloons policy:
 
 ```
 nri-resource-policy-balloons: assigning container default/vllm-qwen-3-1-7b-cpu-.../vllm to balloon performance[0]{cpus:"0-7", mems:"0"}
 vllm pod: Cpus_allowed_list: 0-7          (host /sys/devices/cpu_core/cpus: 0-15)
 vllm:     OpenMP core ids=[1, 3, 5, 7]; Explicitly set (6.0/16.0) GiB for KV cache
+vllm pod: image vllm/vllm-openai-cpu@sha256:b0e6f860...981a1   (from vllm-values.yaml)
 ```
+
+`cpu: "8"` is 8 logical CPUs: CPUs 0-7 are 4 P-cores with both hyperthreads.
+vLLM's CPU backend runs one OpenMP thread per physical core, so it computes on
+4 threads (`core ids=[1, 3, 5, 7]`); the sibling threads stay in the balloon,
+idle. Raise `cpu` to give vLLM more P-cores.
 
 ## Blockers hit, and the fix for each
 
@@ -174,7 +207,8 @@ vllm:     OpenMP core ids=[1, 3, 5, 7]; Explicitly set (6.0/16.0) GiB for KV cac
     nri-plugins v0.14.0 resolves that annotation to a balloon type by name before
     any match expression (`chooseBalloonDef`, cmd/plugins/balloons/policy/balloons-policy.go:747).
     So `cpu_balloon_annotation: performance` with `cpu: "8"` puts vLLM in
-    k3d-gpu's P-core balloon, sized to 8 CPUs, as observed above.
+    k3d-gpu's P-core balloon, sized to 8 logical CPUs (4 P-cores), as observed
+    above.
 
 Not a blocker: **AMX/AVX-512 are not required.** The CPU vLLM image with EAT's
 exact Qwen3 settings (`VLLM_CPU_SGL_KERNEL=1`, bf16, block size 128, chunked
@@ -184,6 +218,27 @@ in a plain `docker run` probe and in the cluster. vLLM logs one fallback:
 needs ISA this CPU lacks. That costs speed, not correctness. EAT's AMX check
 (`lscpu | grep -i amx`, get_optimized_cpu_topology.yaml:597-603) runs only in
 the balloon path, which is off here.
+
+## Versions: pinned and floating
+
+Pinned here: EAT by tag and commit (`eat-up.sh` refuses any other HEAD), the
+bastion base image by digest, Helm v3.14.0 baked into the bastion by sha256,
+and the vLLM image by digest (`vllm-values.yaml`). EAT itself pins
+ingress-nginx 4.12.2 (`ingress_controller` in `agentic-metadata.cfg`),
+kubectl v1.29.0, agent-sandbox v0.5.0 and the LiteLLM/Langfuse charts it ships.
+
+Helm needed care: `setup-bastion.yml` installs it by running `get-helm-3` from
+helm's `main` branch, unless `/usr/local/bin/helm` exists (`creates:`). With
+Helm baked in, that task reports `ok` and the script it downloads is never run.
+
+Still floating, all inside EAT's own playbooks and not reachable without
+editing EAT: the bastion's apt packages (from the current Ubuntu 24.04
+archive), the pip packages `setup-bastion.yml` installs (`ansible`,
+`ansible-core`, `kubernetes`, `pyyaml`, `jsonpatch`, `requests`, `urllib3`, no
+versions), its `ansible-galaxy collection install --force` of `kubernetes.core`,
+`community.kubernetes`, `community.general` and `ansible.posix`, and the
+registration job's `curlimages/curl:latest`. A later run can resolve any of
+these to a newer release than the one observed.
 
 ## What stays unsupported, and why
 

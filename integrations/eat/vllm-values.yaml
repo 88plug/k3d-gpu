@@ -15,3 +15,9 @@ memory: 16Gi
 # P-core CPUs vLLM gets. EAT's own policy (deploy_nri_balloon_policy) stays off.
 cpu_balloon_annotation: performance
 cpu: "8"
+
+# EAT's xeon-values.yaml names this image by tag only. Same tag, pinned to its
+# multi-arch index digest; the chart renders "<repository>:<tag>".
+image:
+  repository: vllm/vllm-openai-cpu
+  tag: "v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1"
