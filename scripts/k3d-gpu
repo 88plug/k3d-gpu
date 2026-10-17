@@ -57,13 +57,14 @@
 #   plan    engine, model and placement from the measured (green) matrix cells, --explain prints why
 #   audit   posture checks: unauthenticated listeners off loopback, images not in images.lock
 #   sandbox up|down|status
+#   model-share --image REF --agent-image REF [--replicas N] [--name NAME]
 #           kubernetes-sigs/agent-sandbox with a warm pool of sandboxes pinned to E-cores
 #   tune    run|show|space|env|fingerprint|reset: search the OVMS agent's serving config on
 #           this host; keep a winner only if it beats the default; agent up applies it
 
 set -euo pipefail
 
-VERSION="0.1.31"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.36"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 # The node image defaults to the tag built from this launcher's own release
 # (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
@@ -87,6 +88,7 @@ INTEL_DRA_DRIVER="gpu.intel.com" # DRA driver name, also the name of its DeviceC
 INTEL_DRA_LABEL="k3d-gpu.io/intel-gpu-dra=true" # node label the DRA kubelet plugin selects
 SANDBOX_MANIFEST="${K3D_GPU_SANDBOX:-${SHARE_DIR}/agent-sandbox.yml}"
 SANDBOX_PROFILE_MANIFEST="${K3D_GPU_SANDBOX_PROFILE:-${SHARE_DIR}/agent-sandbox-k3d.yml}"
+MODEL_SHARE_MANIFEST="${K3D_GPU_MODEL_SHARE:-${SHARE_DIR}/model-share.yml}"
 SANDBOX_TIMEOUT="${K3D_GPU_SANDBOX_TIMEOUT:-180}" # seconds `sandbox up` waits for a warm sandbox
 SYSROOT="${K3D_GPU_SYSROOT:-}" # prefix for /sys and /dev reads (tests point it at a fake tree)
 TEST_IMAGE="${K3D_GPU_TEST_IMAGE:-nvidia/cuda:13.4.3-base-ubuntu26.04}"
@@ -116,6 +118,13 @@ k3d-gpu ${VERSION} — accelerator-ready k3d clusters (NVIDIA, Intel GPU/iGPU/NP
 
 Usage: k3d-gpu <command>
 
+  quickstart [--no-ui]
+            One command to a local chat: cluster, LLM server (model picked by RAM
+            tier), Open WebUI with a generated admin account, port-forward on
+            127.0.0.1:8080 (next free port when taken). Re-run to resume
+  uninstall [--yes] [--images] [--cluster]
+            Remove what quickstart made: port-forward, the cluster it created (with
+            models and chats; --cluster also one it reused), state; --images node image
   up        Create cluster '${CLUSTER}' with passthrough for every detected accelerator
   down      Delete cluster '${CLUSTER}'
   test      Run a pod per detected accelerator and print its device view
@@ -140,6 +149,14 @@ Usage: k3d-gpu <command>
             has XMX, else on the CPU (P-cores); or vLLM on an Arc GPU (K3D_GPU_AGENT_BACKEND).
             --with adds a vision-language model, Whisper speech-to-text (NPU first)
             and DL Streamer video analytics (GPU media engines) on what the LLM leaves
+  agent prefix [--json] [--device CPU|GPU] [--min-tokens N] [--kv-kib K] [--tokenizer FILE] FILE|DIR...
+            Read agent manifests (JSON: name, system, tools) before deploy and report
+            which agents share a prompt head the KV prefix cache can reuse, in whole
+            KV blocks, and tool schemas whose key order breaks sharing. Device follows
+            K3D_GPU_AGENT_DEVICE (CPU or GPU), else CPU, labelled as assumed. Tokens are
+            chars/4 unless --tokenizer names the model's tokenizer.json. OVMS block
+            sizes only. Prefix caching is already on in OVMS (--pull default); this
+            only reports and plans one shared engine
   recipe npu-embeddings
             Print an OVMS embeddings-on-NPU manifest for this host (pipe to kubectl apply -f -)
   facts [--json | --html [--facts FILE] [--matrix FILE]]
@@ -163,6 +180,11 @@ Usage: k3d-gpu <command>
   sandbox up|down|status
             Install kubernetes-sigs/agent-sandbox with a warm pool of sandboxes on
             E-cores (k3d-gpu.io/cores=efficient), check where they run, or remove it
+  model-share --image REF --agent-image REF [--replicas N] [--name NAME]
+            Print a Deployment whose N agent replicas mount one model OCI image as a
+            read-only image volume (pipe to kubectl apply -f -). It warns when this
+            cluster's snapshotter, the device or an unpinned tag would give each
+            replica its own copy (EXPERIMENTS.md H28)
   apply --plan-hash H [--engine E] [--device D] [--model M] [--port N]
             Run the plan ('agent up' with its image, device, model and P-core
             count) only if the plan, recomputed now with the same options,
@@ -180,6 +202,15 @@ Usage: k3d-gpu <command>
             reps per step stop once the p95 CI clears the SLO. Prints agents per
             box (or the bracket when --budget runs out), stores the bracket per
             host+engine so a rerun only refines it. Full options: capacity --help
+  bench --vs ollama|llamacpp|ovms [--id Hn] [--out DIR] [--budget S] [--rounds N]
+        [--warmup N] [--max-tokens N] [--cpuset LIST] [--k3d-url URL --k3d-model M]
+        [--keep-cache] [--dry-run]
+            Head-to-head: start the competitor's pinned image and weights
+            (competitors.lock) with its defaults next to this cluster's 'agent up'
+            server, drive both with one client, interleaved rounds and RAPL
+            J/token, and write the result JSON plus an EXPERIMENTS.md run section.
+            The model cache volume is removed after unless --keep-cache;
+            K3D_GPU_SIGNOFF="Name <email>" signs the run section
   phase-steer [--json] [--prefill CPUS --decode CPUS]
             Experimental, read-only (H20 PENDING): per-phase CPU split for one
             llama.cpp server per agent, prefill on the P-cores and decode on the
@@ -244,6 +275,10 @@ Environment:
                         OVMS serving knobs 'tune' sets: balloon core type (performance |
                         efficient), --max_num_seqs, --cache_size (GB), --enable_prefix_caching,
                         --plugin_config (flat JSON) (default: unset = the OVMS default)
+  K3D_GPU_CHAT_PORT     quickstart chat UI port on 127.0.0.1 (default: first free of 8080-8099)
+  K3D_GPU_CHAT_UI       Open WebUI yaml (default: the repo's share/, then ${SHARE_DIR}/agent-chat-ui.yml)
+  K3D_GPU_QUICKSTART_DIR  quickstart state: admin password, port-forward pid and log
+                        (default: ~/.local/state/k3d-gpu/quickstart)
 
 Docs: https://github.com/88plug/k3d-gpu
 EOF
@@ -1474,6 +1509,41 @@ doctor_numa() {
         done
         lines+="  info: RDT allocation (rdt_a:${rdt}) — resctrl classes are available but left off: the balloons policy ships control.rdt.enable: false because enabling it rewrites the host's /sys/fs/resctrl. To opt in, mount resctrl on the host (mount -t resctrl resctrl /sys/fs/resctrl) and set control.rdt.enable: true in nri-balloons.yml; usePodQoSAsDefaultClass then gives BestEffort/Burstable/Guaranteed pods 33%/66%/100% of the L3"$'\n'
     fi
+    doctor_isolation "${flags#*:}"
+}
+
+# Noisy-neighbour isolation for agent pods, picked from the CPU's own flags
+# (never from the SKU name): rdt-mba (CAT + MBA: cache share and DRAM bandwidth),
+# rdt-cat (CAT only: cache share), cpu-cap (CPU limit only). Holding a neighbour
+# to one E-core L2 cluster is not a mode: H26 tests it (EXPERIMENTS.md).
+isolation_mode() {
+    local flags=" $1 "
+    if [[ "${flags}" == *" rdt_a "* && "${flags}" == *" mba "* ]]; then echo rdt-mba
+    elif [[ "${flags}" == *" rdt_a "* ]] && [[ "${flags}" == *" cat_l3 "* || "${flags}" == *" cat_l2 "* ]]; then echo rdt-cat
+    else echo cpu-cap
+    fi
+}
+
+# One doctor line naming the isolation mode. Host changes are printed with their
+# exact apply and revert, never made; the RDT opt-in itself is the RDT line above.
+doctor_isolation() {
+    local mode mounted=no
+    mode=$(isolation_mode "$1")
+    [ ! -d "${SYSROOT}/sys/fs/resctrl/info" ] || mounted=yes
+    case "${mode}" in
+        rdt-mba)
+            lines+="  info: noisy-neighbour isolation: rdt-mba — CAT + MBA can cap a neighbour's cache share and DRAM bandwidth through the RDT opt-in above (resctrl mounted: ${mounted}); the shipped classes set cache shares only, so add mbAllocation: {all: [\"50%\"]} to the BestEffort class for bandwidth; the classes run inside the NRI balloons policy, which up deploys on hybrid or multi-NUMA hosts only"$'\n' ;;
+        rdt-cat)
+            lines+="  info: noisy-neighbour isolation: rdt-cat — CAT can cap a neighbour's cache share through the RDT opt-in above (resctrl mounted: ${mounted}); no MBA, so DRAM bandwidth stays shared; the classes run inside the NRI balloons policy, which up deploys on hybrid or multi-NUMA hosts only"$'\n' ;;
+        *)
+            if has_hybrid && [ -n "$(ecore_clusters)" ]; then
+                lines+="  info: noisy-neighbour isolation: cpu-cap — no rdt_a flag, so cache and DRAM bandwidth stay shared; give a bandwidth-heavy neighbour a CPU limit. Holding it to one E-core L2 cluster (k3d-gpu.io/cores=ecluster) is not recommended: H26 measures it against the same workers spread over the E-cores (EXPERIMENTS.md H26)"$'\n'
+            elif has_hybrid; then
+                lines+="  info: noisy-neighbour isolation: cpu-cap — no rdt_a flag; E-core L2 clusters are not readable (no cpu*/cache in sysfs); give a neighbour a CPU limit. Cache and DRAM bandwidth stay shared"$'\n'
+            else
+                lines+="  info: noisy-neighbour isolation: cpu-cap — no rdt_a flag and no E-cores; give a neighbour a CPU limit. Cache and DRAM bandwidth stay shared"$'\n'
+            fi ;;
+    esac
 }
 
 # Xeon built-in accelerators. `up` deploys DSA/IAA/QAT plugins once the host
@@ -3205,6 +3275,58 @@ cmd_doctor() {
     if [ "${perf}" -eq 1 ]; then doctor_perf; else doctor; fi
 }
 
+# ---- host proxy ----------------------------------------------------------------
+# k3s and its containerd read HTTP_PROXY, HTTPS_PROXY and NO_PROXY from their
+# environment (https://docs.k3s.io/advanced#configuring-an-http-proxy), and k3d
+# does not pass the host's on by itself, so `up` hands them to every node with
+# k3d --env (KEY=VALUE@NODEFILTER; a literal '@' is escaped as '\@'). NO_PROXY
+# gains loopback and the cluster's pod and service networks and DNS suffixes.
+
+# proxy_value <NAME>: $NAME, else its lower-case spelling.
+proxy_value() {
+    local lower="${1,,}"
+    printf '%s' "${!1:-${!lower:-}}"
+}
+
+# NO_PROXY for the cluster: the host's own entries plus the cluster's.
+proxy_no_proxy() {
+    local own
+    own=$(proxy_value NO_PROXY)
+    printf '%s' "${own:+${own},}127.0.0.1,localhost,10.42.0.0/16,10.43.0.0/16,.svc,.cluster.local"
+}
+
+# NAME=VALUE lines (HTTP_PROXY, HTTPS_PROXY, NO_PROXY); nothing without a proxy.
+proxy_env() {
+    local k v
+    [ -n "$(proxy_value HTTP_PROXY)$(proxy_value HTTPS_PROXY)" ] || return 0
+    for k in HTTP_PROXY HTTPS_PROXY; do
+        v=$(proxy_value "${k}")
+        [ -z "${v}" ] || printf '%s=%s\n' "${k}" "${v}"
+    done
+    printf 'NO_PROXY=%s\n' "$(proxy_no_proxy)"
+}
+
+# k3d create args carrying the proxy into every node.
+proxy_k3d_args() {
+    local kv
+    while IFS= read -r kv; do
+        [ -n "${kv}" ] && printf -- '--env=%s@server:*;agent:*\n' "${kv//@/\\@}"
+    done < <(proxy_env)
+}
+
+# YAML env entries (12-space indent) carrying the proxy into a container;
+# nothing without a proxy. Values are JSON-quoted.
+proxy_yaml_env() {
+    local kv v
+    while IFS= read -r kv; do
+        [ -n "${kv}" ] || continue
+        v=${kv#*=}
+        v=${v//\\/\\\\}
+        v=${v//\"/\\\"}
+        printf '            - name: %s\n              value: "%s"\n' "${kv%%=*}" "${v}"
+    done < <(proxy_env)
+}
+
 cmd_up() {
     require docker
     require k3d
@@ -3368,6 +3490,10 @@ cmd_up() {
     while read -r arg; do
         [ -n "${arg}" ] && create_args+=("${arg}")
     done < <(exp_k3d_args)
+    while IFS= read -r arg; do
+        [ -n "${arg}" ] && create_args+=("${arg}")
+    done < <(proxy_k3d_args)
+    [ -z "$(proxy_env)" ] || info "Proxy: HTTP(S)_PROXY and NO_PROXY (plus the cluster networks) go to every node"
     exp_print_host
 
     # k3d cannot change an existing cluster's node image; name the image it runs.
@@ -4475,6 +4601,59 @@ cmd_sandbox() {
     esac
 }
 
+# ---- model-share ----------------------------------------------------------------
+# N agent replicas mount one model OCI image as a read-only image volume and mmap
+# it. Sharing one page-cache copy needs three things, each detected here:
+#   snapshotter  overlayfs keeps one lower dir per layer, so every pod's view
+#                resolves to the same inodes; native copies the layer per view.
+#                Read from the k3s-generated containerd config in the server node.
+#   scope        CPU-resident weights only. A GPU or NPU runtime copies the
+#                weights into per-process device buffers, so each replica pays for
+#                its own device copy; the template requests no device.
+#   pinning      a tag can resolve to a new digest on another node or a re-pull.
+# The measured effect is EXPERIMENTS.md H28 (PENDING until the probe runs).
+
+# Snapshotter of the running cluster's server node, or nothing when there is none.
+ms_snapshotter() {
+    local node="k3d-${CLUSTER}-server-0"
+    type -P docker >/dev/null || return 0
+    docker exec "${node}" sh -c 'cat /var/lib/rancher/k3s/agent/etc/containerd/config*.toml' 2>/dev/null \
+        | sed -n 's/^[[:space:]]*snapshotter[[:space:]]*=[[:space:]]*"\([a-z0-9_-]*\)".*/\1/p' | head -n 1
+}
+
+cmd_model_share() {
+    local image="" agent="" replicas=1 name=model-share snap
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --image)       image="${2:-}"; shift ;;
+            --agent-image) agent="${2:-}"; shift ;;
+            --replicas)    replicas="${2:-}"; shift ;;
+            --name)        name="${2:-}"; shift ;;
+            *) err "usage: k3d-gpu model-share --image REF --agent-image REF [--replicas N] [--name NAME]" ;;
+        esac
+        shift
+    done
+    # [host[:port]/]path[:tag][@sha256:digest]; a k3d registry always has a port.
+    local ref='^[a-z0-9][a-z0-9._-]*(:[0-9]{1,5}(/[a-z0-9][a-z0-9._-]*)+|(/[a-z0-9][a-z0-9._-]*)*)(:[A-Za-z0-9._-]+)?(@sha256:[0-9a-f]{64})?$'
+    [[ "${image}" =~ ${ref} ]] || err "model-share: --image '${image}' is not an image reference"
+    [[ "${agent}" =~ ${ref} ]] || err "model-share: --agent-image '${agent}' is not an image reference"
+    [[ "${replicas}" =~ ^[1-9][0-9]{0,3}$ ]] || err "model-share: --replicas must be 1-9999, got '${replicas}'"
+    [[ "${name}" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]] || err "model-share: --name '${name}' is not a DNS-1123 label"
+    [[ "${image}" == *@sha256:* ]] \
+        || warn "model-share: ${image} is not pinned by digest; replicas on a re-pull can mount different weights (append @sha256:...)"
+    [ -f "${MODEL_SHARE_MANIFEST}" ] || err "${MODEL_SHARE_MANIFEST} not found"
+    snap=$(ms_snapshotter || true)
+    case "${snap}" in
+        "") info "model-share: no running cluster '${CLUSTER}' to read the snapshotter from; sharing needs overlayfs (the k3s default)" >&2 ;;
+        overlayfs) ;;
+        *) warn "model-share: cluster '${CLUSTER}' uses the ${snap} snapshotter; it can give each pod its own copy of the layer, so budget ${replicas} x model size. Recreate it on a filesystem that supports overlayfs (k3d-gpu down && k3d-gpu up)" ;;
+    esac
+    echo "# k3d-gpu model-share: replicas=${replicas} snapshotter=${snap:-unknown}"
+    sed -e "/^[[:space:]]*#/d" \
+        -e "s|K3D_GPU_MS_AGENT_IMAGE|${agent}|g" -e "s|K3D_GPU_MS_IMAGE|${image}|g" \
+        -e "s|^  replicas: 1$|  replicas: ${replicas}|" -e "s|K3D_GPU_MS_NAME|${name}|g" "${MODEL_SHARE_MANIFEST}"
+}
+
 # ---- host setup -----------------------------------------------------------------
 # `host-setup` checks the host userspace each detected accelerator needs, then
 # prints the commands that install it (Intel compute runtime, Level Zero, media
@@ -5225,7 +5404,9 @@ agent_manifest() {
         args+=$'\n'"${item}'--plugin_config=${v}'"
     fi
     # Optional pod fields, built here: quotes inside ${x:+...} in a heredoc are removed.
-    local podlabels="" podspec=""
+    local podlabels="" podspec="" pullenv=""
+    pullenv=$(proxy_yaml_env)
+    [ -z "${pullenv}" ] || pullenv=$'\n          env:\n'"${pullenv}"
     [ -z "${hybrid}" ] || podlabels=$'\n        k3d-gpu.io/cores: '"${cores}"
     [ -z "${gid}" ] || podspec+=$'\n        supplementalGroups: ['"${gid}"']'
     [ -z "${amx}" ] || podspec+=$'\n      nodeSelector:\n        feature.node.kubernetes.io/cpu-cpuid.AMXTILE: "true"'
@@ -5284,7 +5465,7 @@ spec:
         # graph is rewritten, so a device change takes effect with no download.
         - name: pull
           image: ${AGENT_IMAGE}
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: IfNotPresent${pullenv}
           args:
             - --pull
             - --source_model=${AGENT_MODEL}
@@ -6182,6 +6363,22 @@ cmd_agent_down() {
     info "Model caches kept in the namespace's PVCs. Remove everything: kubectl delete namespace ${AGENT_NS}"
 }
 
+# Shared-prefix report of agent manifests (console/shared_prefix.py, H25). The
+# KV block size follows the device: --device, else K3D_GPU_AGENT_DEVICE when it
+# names CPU or GPU, else CPU, reported as assumed (auto resolves only at deploy).
+cmd_agent_prefix() {
+    require python3
+    local dir dev=CPU a
+    dir=$(console_dir) || err "agent prefix: console/shared_prefix.py not found next to the launcher or in ${SHARE_DIR}/console (set K3D_GPU_CONSOLE)"
+    [ -f "${dir}/shared_prefix.py" ] || err "agent prefix: ${dir}/shared_prefix.py missing"
+    local assumed=--device-assumed
+    case "${K3D_GPU_AGENT_DEVICE:-}" in [Cc][Pp][Uu]|[Gg][Pp][Uu]) dev=${K3D_GPU_AGENT_DEVICE^^} assumed="" ;; esac
+    for a in "$@"; do [ "${a}" != --device ] || { dev=""; assumed=""; }; done
+    [ $# -gt 0 ] || err "usage: k3d-gpu agent prefix [--json] [--device CPU|GPU] [--min-tokens N] [--kv-kib K] [--tokenizer FILE] FILE|DIR..."
+    [ "${AGENT_BACKEND}" = ovms ] || warn "agent prefix: KV block sizes and the plan are OVMS's; backend ${AGENT_BACKEND} is not modelled"
+    python3 "${dir}/shared_prefix.py" ${dev:+--device "${dev}"} ${assumed:+"${assumed}"} "$@"
+}
+
 cmd_agent() {
     case "${AGENT_BACKEND}" in
         ovms|vllm|llm-scaler) ;;
@@ -6201,7 +6398,49 @@ cmd_agent() {
                 # shellcheck disable=SC2086 # word list of add-on names
                 agent_stack_manifest ${addons}
             fi ;;
-        *) err "usage: k3d-gpu agent up|down|status|manifest [--with vlm,stt,video]" ;;
+        prefix)   cmd_agent_prefix "$@" ;;
+        *) err "usage: k3d-gpu agent up|down|status|manifest [--with vlm,stt,video] | prefix FILE|DIR..." ;;
+    esac
+}
+
+# ---- quickstart and uninstall: the retail path ---------------------------------
+# `quickstart` takes a machine with docker, k3d and kubectl to a chat UI on
+# 127.0.0.1 in one command: cluster, LLM server, Open WebUI with an admin
+# account, and a port-forward. Every step reads the live state first and skips
+# what is already done, so a second run changes nothing and an interrupted run
+# resumes (OVMS --pull resumes a half-downloaded model from its .lfs_part files).
+# Detection picks the config: the backend and device follow `agent up`'s auto
+# (a Gaudi gets vLLM), and on the OVMS path the model follows the host's RAM
+# tier. Every K3D_GPU_AGENT_* the user sets wins.
+# `uninstall` removes what quickstart made: the port-forward, the cluster when
+# quickstart created it (with the model and chat volumes inside), and
+# quickstart's state files.
+
+QS_DIR="${K3D_GPU_QUICKSTART_DIR:-${XDG_STATE_HOME:-${HOME:-}/.local/state}/k3d-gpu/quickstart}"
+QS_STEPS=5
+QS_MIN_MI=2048  # smallest memory request quickstart gives the LLM server
+
+# This launcher's path; quickstart runs its `up` and `agent up` through it.
+qs_self() { readlink -f "${BASH_SOURCE[0]}"; }
+
+# Chat UI manifest: K3D_GPU_CHAT_UI, then the repo checkout, then the packaged copy.
+chat_ui_manifest() {
+    local d self
+    self=$(readlink -f "${BASH_SOURCE[0]}")
+    for d in "${K3D_GPU_CHAT_UI:-}" "$(dirname "${self}")/../share/agent-chat-ui.yml" "${SHARE_DIR}/agent-chat-ui.yml"; do
+        if [ -n "${d}" ] && [ -f "${d}" ]; then echo "${d}"; return 0; fi
+    done
+    return 1
+}
+
+# qs_model_mi <model>: the memory request (MiB) a tier model wants; 0 when the
+# model is not one of the tiers.
+qs_model_mi() {
+    case "$1" in
+        *Qwen3-1.7B*) echo 4096 ;;
+        *Qwen3-4B*)   echo 6144 ;;
+        *Qwen3-8B*)   echo 10240 ;;
+        *)            echo 0 ;;
     esac
 }
 
@@ -6549,6 +6788,355 @@ cmd_capacity() {
     exec python3 "${script}" "$@"
 }
 
+# "<model> <memory request> <revision>" for the host's RAM tier (MemTotal). The
+# tiers keep the int4 weights near a quarter of RAM or less, leaving room for
+# k3s, the KV cache and the desktop: under 12 GiB (8 GB machines) Qwen3-1.7B,
+# under 24 GiB (16 GB machines) Qwen3-4B, the agent's default, else Qwen3-8B.
+# An unreadable MemTotal gets the default. The memory request is capped at
+# MemTotal minus 1 GiB for Open WebUI's request and 768 MiB for k3s, so the pod
+# can schedule on a small host (a WSL2 VM gets half of Windows' RAM); below
+# QS_MIN_MI the memory is "-" and quickstart stops. Revisions are the Hugging
+# Face commit of each repo (huggingface.co/api/models/<model>, "sha"). Only
+# the 4B model is measured on this project's test bed (EXPERIMENTS.md H6), and
+# the 8B cold path once (H9); the 1.7B tier is a prediction.
+qs_tier() {
+    local kb model rev want cap
+    kb=$(meminfo_kb MemTotal)
+    [[ "${kb}" =~ ^[0123456789]{1,12}$ ]] || kb=0
+    if [ "${kb}" -eq 0 ] || { [ "${kb}" -ge $((12 * 1048576)) ] && [ "${kb}" -lt $((24 * 1048576)) ]; }; then
+        model=OpenVINO/Qwen3-4B-int4-ov rev=b467368d16b75df14055562fe927ae8e1f15f7ef
+    elif [ "${kb}" -lt $((12 * 1048576)) ]; then
+        model=OpenVINO/Qwen3-1.7B-int4-ov rev=6f32d81e9deebeca30bb5490a7176cf4fa8c79e3
+    else
+        model=OpenVINO/Qwen3-8B-int4-ov rev=5c47abf4b8e12ebe8e99745bb0c1ec17e0c0abcc
+    fi
+    want=$(qs_model_mi "${model}")
+    cap=$((kb / 1024 - 1024 - 768))
+    if [ "${kb}" -eq 0 ] || [ "${cap}" -ge "${want}" ]; then
+        echo "${model} $((want / 1024))Gi ${rev}"
+    elif [ "${cap}" -ge "${QS_MIN_MI}" ]; then
+        echo "${model} ${cap}Mi ${rev}"
+    else
+        echo "${model} - ${rev}"
+    fi
+}
+
+# progress_bar <done> <total> [width]: "[#####-----]  50%". A total of 0 or less,
+# or a non-number, prints an empty bar and "  ?%". done above total shows 100%.
+progress_bar() {
+    local done=$1 total=$2 width=${3:-30} fill pct bar
+    [[ "${width}" =~ ^[0123456789]{1,3}$ ]] && [ "${width}" -ge 1 ] && [ "${width}" -le 200 ] || width=30
+    if ! [[ "${done}" =~ ^[0123456789]{1,15}$ && "${total}" =~ ^[0123456789]{1,15}$ ]] || [ "${total}" -le 0 ]; then
+        printf '[%s]   ?%%' "$(printf '%*s' "${width}" "" | tr ' ' '-')"
+        return 0
+    fi
+    [ "${done}" -le "${total}" ] || done=${total}
+    fill=$((done * width / total))
+    pct=$((done * 100 / total))
+    bar=$(printf '%*s' "${fill}" "" | tr ' ' '#')$(printf '%*s' "$((width - fill))" "" | tr ' ' '-')
+    printf '[%s] %3d%%' "${bar}" "${pct}"
+}
+
+# qs_step <n> <text>: the step line, "[2/5]" with the overall bar.
+qs_step() { echo "${GRN}==>${RST} [$1/${QS_STEPS}] $(progress_bar "$(($1 - 1))" "${QS_STEPS}" 10) $2"; }
+
+# Lines of WSL2 guidance; nothing off WSL. Docker Desktop documents GPU
+# paravirtualization for NVIDIA only (https://docs.docker.com/desktop/features/gpu/);
+# the Intel path is /dev/dxg plus /usr/lib/wsl, as in OpenVINO's container recipe
+# (https://github.com/openvinotoolkit/docker_ci/blob/master/docs/accelerators.md).
+# The Intel NPU has no WSL2 driver (https://github.com/intel/linux-npu-driver/issues/56).
+# agent_device requests gpu.intel.com/xe, i915, a Gaudi or the CPU, never
+# gpu.intel.com/dxg, so under WSL2 quickstart's LLM runs on the CPU.
+# Host changes are printed as suggestions, never run.
+qs_wsl_guidance() {
+    grep -qi microsoft "${SYSROOT}/proc/version" 2>/dev/null || return 0
+    echo "WSL2 detected. The LLM runs on the CPU here: the agent does not request the WSL2 GPU (gpu.intel.com/dxg) yet."
+    if [ ! -e "${SYSROOT}/dev/dxg" ]; then
+        echo "  /dev/dxg is missing: no GPU paravirtualization. quickstart still needs an accelerator 'k3d-gpu detect' reports."
+        echo "  Suggested, in Windows PowerShell: wsl --update; wsl --shutdown"
+    elif [ -e "${SYSROOT}${WSL_LIB}/lib/nvidia-smi" ]; then
+        echo "  /dev/dxg and the NVIDIA driver (${WSL_LIB}/lib/nvidia-smi) are present: the cluster gets the NVIDIA GPU."
+    elif [ -n "$(wsl_intel_drivers)" ]; then
+        echo "  /dev/dxg and the Intel driver (${WSL_LIB}/drivers/iigd_dch*) are present: the cluster advertises the Intel GPU as gpu.intel.com/dxg."
+        echo "  This path is unit-tested only; it has not been run on a Windows machine."
+    else
+        echo "  /dev/dxg is present but no Intel or NVIDIA driver is under ${WSL_LIB}."
+        echo "  Suggested: install the current GPU driver on Windows, then run wsl --shutdown."
+    fi
+    echo "  Docker: Docker Desktop with WSL integration enabled for this distro, or Docker Engine inside it."
+    echo "  Docker Desktop's --gpus flag is NVIDIA-only; the Intel GPU goes through /dev/dxg instead."
+    echo "  The Intel NPU is not reachable from WSL2 (intel/linux-npu-driver#56)."
+}
+
+# Pid of the port-forward quickstart started, while it runs. A pid whose
+# command line is not that port-forward (a pid recycled after a reboot or a
+# crash) does not count, and its stale file is removed.
+qs_pf_pid() {
+    local pid cmd
+    pid=$(cat "${QS_DIR}/port-forward.pid" 2>/dev/null) || return 1
+    [[ "${pid}" =~ ^[0-9]{1,10}$ ]] || return 1
+    cmd=$(tr '\0' ' ' < "/proc/${pid}/cmdline" 2>/dev/null) || cmd=""
+    if [[ "${cmd}" == *port-forward*svc/open-webui* ]]; then
+        echo "${pid}"
+        return 0
+    fi
+    rm -f -- "${QS_DIR}/port-forward.pid"
+    return 1
+}
+
+# qs_port_free <port>: nothing listens on 127.0.0.1:<port>.
+qs_port_free() { ! (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
+
+# The chat port: K3D_GPU_CHAT_PORT when set, else 8080 or the next free port
+# up to 8099.
+qs_port() {
+    local p
+    if [ -n "${K3D_GPU_CHAT_PORT:-}" ]; then echo "${K3D_GPU_CHAT_PORT}"; return 0; fi
+    for p in $(seq 8080 8099); do
+        if qs_port_free "${p}"; then echo "${p}"; return 0; fi
+    done
+    echo 8080
+}
+
+# The Open WebUI admin Secret, created once with a random password that is also
+# written to ${QS_DIR}/chat-admin (mode 0600), so sign-up is never open. The
+# Secret is read from that file, so the password is never on a command line.
+qs_admin_secret() {
+    local file="${QS_DIR}/chat-admin" pw email=admin@localhost
+    if kubectl -n "${AGENT_NS}" get secret open-webui-admin >/dev/null 2>&1; then
+        [ -f "${file}" ] || warn "chat: Secret open-webui-admin exists but ${file} does not; sign in with the password set before"
+        return 0
+    fi
+    pw=$(head -c 30 /dev/urandom | base64 | tr -d '/+=\n' | head -c 20)
+    [ "${#pw}" -ge 16 ] || err "chat: could not generate a password"
+    (umask 077; printf 'email=%s\npassword=%s\n' "${email}" "${pw}" > "${file}")
+    kubectl create namespace "${AGENT_NS}" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+    kubectl -n "${AGENT_NS}" create secret generic open-webui-admin --from-env-file="${file}" >/dev/null
+}
+
+# Total size of a model's files from the Hugging Face API, or 0 when offline or
+# python3 is missing.
+qs_model_bytes() {
+    local n
+    command -v python3 >/dev/null 2>&1 || { echo 0; return 0; }
+    n=$(curl -fsS --max-time 10 "https://huggingface.co/api/models/$1?blobs=true" 2>/dev/null \
+        | python3 -c 'import json, sys
+print(sum(s.get("size") or 0 for s in json.load(sys.stdin).get("siblings", [])))' 2>/dev/null) || n=0
+    [[ "${n}" =~ ^[0-9]+$ ]] || n=0
+    echo "${n}"
+}
+
+# Bytes of the model on the PVC so far (half-downloaded .lfs_part files count),
+# read from the pull init container while it runs; 0 otherwise.
+qs_pulled_bytes() {
+    local pod n
+    pod=$(kubectl -n "${AGENT_NS}" get pod -l app=ovms -o name 2>/dev/null | sed -n 1p)
+    [ -n "${pod}" ] || { echo 0; return 0; }
+    n=$(kubectl -n "${AGENT_NS}" exec "${pod}" -c pull -- du -sb "/models/$1" 2>/dev/null | awk 'NR == 1 {print $1}') || n=0
+    [[ "${n}" =~ ^[0-9]+$ ]] || n=0
+    echo "${n}"
+}
+
+# qs_agent_ready <model> <memory>: the OVMS Deployment is ready, serves <model>
+# and requests <memory>.
+qs_agent_ready() {
+    local got
+    got=$(kubectl -n "${AGENT_NS}" get deployment ovms \
+        -o jsonpath='{.status.readyReplicas} {.spec.template.spec.containers[0].resources.requests.memory} {.spec.template.spec.containers[0].args}' 2>/dev/null) || return 1
+    [ "${got%% *}" = 1 ] && [[ "${got}" == *"--model_path=/models/$1\""* ]] && [[ " ${got} " == *" $2 "* ]]
+}
+
+# The backend `agent up` will run: the user's, else vllm on a cluster that
+# advertises a Gaudi (agent_device's auto), else ovms.
+qs_backend() {
+    if [ -n "${K3D_GPU_AGENT_BACKEND:-}" ]; then echo "${K3D_GPU_AGENT_BACKEND,,}"
+    elif [ "${K3D_GPU_AGENT_DEVICE:-auto}" != CPU ] && [ "$(resource_total habana.ai/gaudi)" -gt 0 ]; then echo vllm
+    else echo ovms
+    fi
+}
+
+# quickstart [--no-ui]
+cmd_quickstart() {
+    local ui=1 model mem rev tmodel tmem pid exe manifest total done_b last=-1 pid_run t missing="" accel backend port line
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --no-ui) ui="" ;;
+            *) err "unknown quickstart option: $1 (use --no-ui)" ;;
+        esac
+        shift
+    done
+    exe=$(qs_self)
+    mkdir -p "${QS_DIR}"
+
+    qs_step 1 "Checking this machine"
+    qs_wsl_guidance
+    for t in docker k3d kubectl; do command -v "${t}" >/dev/null 2>&1 || missing+=" ${t}"; done
+    [ -z "${missing}" ] || err "missing:${missing} — 'k3d-gpu doctor' prints how to install them"
+    docker info >/dev/null 2>&1 || err "docker is installed but not reachable (is the daemon running, and is this user in the docker group?)"
+    if [ -n "$(proxy_value HTTPS_PROXY)$(proxy_value HTTP_PROXY)" ]; then
+        info "proxy detected: the cluster nodes and the model download get HTTP(S)_PROXY; NO_PROXY adds the cluster networks"
+    fi
+    if ! k3d cluster get "${CLUSTER}" >/dev/null 2>&1; then
+        accel=$( (resolve_vendors >/dev/null 2>&1 && echo "${ACTIVE[*]}") 2>/dev/null || true)
+        [ -n "${accel}" ] || err "no accelerator k3d-gpu supports was detected, and quickstart has no CPU-only path yet — 'k3d-gpu doctor' says what is missing (K3D_GPU_VENDORS overrides detection)"
+    fi
+    read -r tmodel tmem rev <<< "$(qs_tier)"
+    model=${K3D_GPU_AGENT_MODEL:-${tmodel}}
+    if [ -n "${K3D_GPU_AGENT_MEMORY:-}" ]; then
+        mem=${K3D_GPU_AGENT_MEMORY}
+    elif [ "${model}" != "${tmodel}" ] && [ "$(qs_model_mi "${model}")" -gt 0 ] && [ "${tmem}" != - ]; then
+        # An overridden tier model gets its own memory, within the host's cap.
+        t=$(qs_model_mi "${model}")
+        if [[ "${tmem}" == *Mi ]] && [ "${tmem%Mi}" -lt "${t}" ]; then mem=${tmem}; else mem="$((t / 1024))Gi"; fi
+    else
+        mem=${tmem}
+    fi
+    [ "${model}" = "${tmodel}" ] || rev=""
+    rev=${K3D_GPU_AGENT_REVISION:-${rev}}
+    [ "${mem}" != - ] || err "RAM $(kb_gib "$(meminfo_kb MemTotal)") GiB is too small: the LLM server needs a ${QS_MIN_MI}Mi memory request beside k3s and the chat UI. Suggested on WSL2: raise memory= in %UserProfile%\\.wslconfig, then wsl --shutdown"
+    info "RAM $(kb_gib "$(meminfo_kb MemTotal)") GiB: model ${model}${rev:+ @ ${rev:0:12}}, memory ${mem}"
+
+    qs_step 2 "Cluster '${CLUSTER}'"
+    if k3d cluster get "${CLUSTER}" >/dev/null 2>&1; then
+        info "cluster '${CLUSTER}' exists; reusing it"
+    else
+        "${exe}" up || err "'k3d-gpu up' failed; fix the error above and run quickstart again"
+        : > "${QS_DIR}/cluster-created"
+    fi
+    kubectl config use-context "k3d-${CLUSTER}" >/dev/null 2>&1 || true
+    kubectl get nodes >/dev/null 2>&1 || err "cluster '${CLUSTER}' is not reachable — run 'k3d-gpu doctor'"
+
+    backend=$(qs_backend)
+    if [ "${backend}" != ovms ]; then
+        # vLLM (a Gaudi, or the user's choice): agent up picks its own model and memory.
+        qs_step 3 "LLM server (${backend})"
+        "${exe}" agent up || err "'k3d-gpu agent up' failed; run quickstart again to resume"
+    elif qs_agent_ready "${model}" "${mem}"; then
+        qs_step 3 "LLM server (${model})"
+        info "agent already serving ${model}"
+    else
+        qs_step 3 "LLM server (${model})"
+        total=$(qs_model_bytes "${model}")
+        # A background job of a non-interactive shell starts with SIGINT ignored,
+        # so Ctrl-C (or a TERM) stops `agent up` here, before a resumed run
+        # starts another. Set before the job starts, so no signal falls between.
+        pid_run=""
+        trap 'if [ -n "${pid_run}" ]; then kill -TERM "${pid_run}" 2>/dev/null; pkill -TERM -P "${pid_run}" 2>/dev/null; fi; exit 130' INT TERM
+        # Only what the user left unset is passed. A tier model is a Qwen3, so it
+        # gets Qwen3's parsers (agent_config sets them for its own default only).
+        if [ "${model}" = "${tmodel}" ]; then
+            K3D_GPU_AGENT_TOOL_PARSER="${K3D_GPU_AGENT_TOOL_PARSER-hermes3}" \
+            K3D_GPU_AGENT_REASONING_PARSER="${K3D_GPU_AGENT_REASONING_PARSER-qwen3}" \
+            K3D_GPU_AGENT_MODEL="${model}" K3D_GPU_AGENT_MEMORY="${mem}" K3D_GPU_AGENT_REVISION="${rev}" \
+                "${exe}" agent up &
+        else
+            K3D_GPU_AGENT_MODEL="${model}" K3D_GPU_AGENT_MEMORY="${mem}" K3D_GPU_AGENT_REVISION="${rev}" \
+                "${exe}" agent up &
+        fi
+        pid_run=$!
+        # A download line each time the bytes on the PVC change; the server's own
+        # lines interleave.
+        while kill -0 "${pid_run}" 2>/dev/null; do
+            sleep "${K3D_GPU_QUICKSTART_POLL:-5}"
+            done_b=$(qs_pulled_bytes "${model}")
+            [ "${done_b}" -gt 0 ] && [ "${done_b}" != "${last}" ] || continue
+            last=${done_b}
+            if [ "${total}" -gt 0 ]; then
+                echo "    download $(progress_bar "${done_b}" "${total}") $((done_b / 1000000)) / $((total / 1000000)) MB"
+            else
+                echo "    download $((done_b / 1000000)) MB"
+            fi
+        done
+        if ! wait "${pid_run}"; then
+            trap - INT TERM
+            err "'k3d-gpu agent up' failed; run quickstart again to resume (the download continues where it stopped)"
+        fi
+        trap - INT TERM
+    fi
+
+    if [ -z "${ui}" ]; then
+        echo "${GRN}==>${RST} [${QS_STEPS}/${QS_STEPS}] $(progress_bar 1 1 10) Ready (no chat UI)"
+        info "OpenAI API: kubectl -n ${AGENT_NS} port-forward svc/${backend} 8000:8000"
+        return 0
+    fi
+    [ "${backend}" = ovms ] || err "the chat UI talks to OVMS (svc/ovms) only; with backend ${backend}, run quickstart --no-ui"
+
+    qs_step 4 "Chat UI (Open WebUI)"
+    manifest=$(chat_ui_manifest) || err "chat UI manifest agent-chat-ui.yml not found (set K3D_GPU_CHAT_UI)"
+    qs_admin_secret
+    # The UI's default model is the one served: the value line after DEFAULT_MODELS.
+    line=$(grep -n -A1 'name: DEFAULT_MODELS$' "${manifest}" | sed -n 's/^\([0-9]*\)-  *value: .*/\1/p')
+    [[ "${line}" =~ ^[0-9]+$ ]] || err "chat UI manifest ${manifest} has no DEFAULT_MODELS value"
+    awk -v n="${line}" -v m="${model##*/}" 'NR == n + 0 { sub(/value: .*/, "value: \"" m "\"") } { print }' "${manifest}" \
+        | kubectl apply -f - >/dev/null
+    kubectl -n "${AGENT_NS}" rollout status deployment/open-webui --timeout=600s \
+        || err "chat UI not ready — kubectl -n ${AGENT_NS} logs deploy/open-webui"
+
+    if pid=$(qs_pf_pid); then
+        port=$(cat "${QS_DIR}/port" 2>/dev/null || echo "${K3D_GPU_CHAT_PORT:-8080}")
+        qs_step 5 "Port-forward on 127.0.0.1:${port}"
+        info "port-forward already running (pid ${pid})"
+    else
+        port=$(qs_port)
+        [ -n "${K3D_GPU_CHAT_PORT:-}" ] || [ "${port}" = 8080 ] || info "port 8080 is taken; using ${port}"
+        qs_step 5 "Port-forward on 127.0.0.1:${port}"
+        nohup kubectl -n "${AGENT_NS}" port-forward --address 127.0.0.1 svc/open-webui "${port}:8080" \
+            > "${QS_DIR}/port-forward.log" 2>&1 < /dev/null &
+        echo "$!" > "${QS_DIR}/port-forward.pid"
+        echo "${port}" > "${QS_DIR}/port"
+        sleep 2
+        qs_pf_pid >/dev/null || err "port-forward did not start — ${QS_DIR}/port-forward.log"
+    fi
+    echo "${GRN}==>${RST} [${QS_STEPS}/${QS_STEPS}] $(progress_bar 1 1 10) Ready"
+    info "Chat: http://127.0.0.1:${port}  (sign in with the email and password in ${QS_DIR}/chat-admin)"
+    info "Remove everything: k3d-gpu uninstall"
+}
+
+# uninstall [--yes] [--images] [--cluster]: stops quickstart's port-forward,
+# deletes cluster '${CLUSTER}' when quickstart created it (the model and chat
+# volumes live inside it; --cluster also deletes one quickstart only reused),
+# and quickstart's state files; --images also removes the node image. Without
+# --yes it asks on a terminal and refuses when there is none.
+cmd_uninstall() {
+    local yes="" images="" force_cluster="" pid ans created=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --yes|-y) yes=1 ;;
+            --images) images=1 ;;
+            --cluster) force_cluster=1 ;;
+            *) err "unknown uninstall option: $1 (use --yes, --images, --cluster)" ;;
+        esac
+        shift
+    done
+    [ -f "${QS_DIR}/cluster-created" ] && created=1
+    if [ -n "${created}${force_cluster}" ]; then
+        echo "This removes cluster '${CLUSTER}' with its downloaded models and chats, and ${QS_DIR}${images:+, and image ${IMAGE}}."
+    else
+        echo "This removes quickstart's port-forward and ${QS_DIR}${images:+, and image ${IMAGE}}; cluster '${CLUSTER}' was not created by quickstart and is kept (--cluster deletes it)."
+    fi
+    if [ -z "${yes}" ]; then
+        [ -t 0 ] || err "uninstall: no terminal to ask on; pass --yes to confirm"
+        read -r -p "Continue? [y/N] " ans
+        [[ "${ans}" =~ ^[Yy]$ ]] || { info "uninstall: cancelled"; return 0; }
+    fi
+    if pid=$(qs_pf_pid); then kill "${pid}" 2>/dev/null || true; fi
+    if ! command -v k3d >/dev/null 2>&1 || ! k3d cluster get "${CLUSTER}" >/dev/null 2>&1; then
+        info "no cluster '${CLUSTER}'"
+    elif [ -n "${created}${force_cluster}" ]; then
+        k3d cluster delete "${CLUSTER}"
+    else
+        info "cluster '${CLUSTER}' kept (quickstart did not create it; --cluster deletes it)"
+    fi
+    if [ -n "${images}" ] && command -v docker >/dev/null 2>&1; then
+        if docker image rm "${IMAGE}" >/dev/null 2>&1; then info "removed image ${IMAGE}"; else info "image ${IMAGE} not present"; fi
+    fi
+    # Only quickstart's own files; the directory goes when nothing else is in it.
+    rm -f -- "${QS_DIR}/chat-admin" "${QS_DIR}/port-forward.pid" "${QS_DIR}/port-forward.log" \
+        "${QS_DIR}/port" "${QS_DIR}/cluster-created"
+    rmdir -- "${QS_DIR}" 2>/dev/null || true
+    info "uninstall: done"
+}
+
 # ---- facts and plan: the console spine ------------------------------------------
 # `facts` puts what detect, doctor, doctor --perf and report read into one JSON
 # document, facts/v1 (console/facts.v1.schema.json). console/facts.py normalizes
@@ -6854,6 +7442,196 @@ print(d["decision"], e.get("name") or "-", e.get("device") or "-", e.get("image"
         K3D_GPU_AGENT_IMAGE="${image}" K3D_GPU_AGENT_CPUS="${cpus}" exec "$(readlink -f "${BASH_SOURCE[0]}")" agent up
 }
 
+# Directory holding vs.py, llm_load.py and competitors.lock: K3D_GPU_BENCH, else
+# the repo's bench/ next to this script, else the installed share directory.
+bench_dir() {
+    local d
+    d="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../bench"
+    if [ -n "${K3D_GPU_BENCH:-}" ]; then echo "${K3D_GPU_BENCH}"
+    elif [ -f "${d}/vs.py" ]; then (cd "${d}" && pwd)
+    else echo "${SHARE_DIR}/bench"; fi
+}
+
+free_port() { python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])'; }
+
+# Short CPU name for the ledger heading (i9-13900T, Ultra 7 155H, Core 5 120U,
+# N100, Xeon w5-2455X); empty when none matches, and vs.py then uses the full name.
+cpu_short() {
+    grep -oE 'i[3579]-[0-9A-Z]+|Ultra [3579] [0-9A-Z]+|Core [3579] [0-9]+[A-Z]*|\bN[0-9]{2,3}\b|Xeon [A-Za-z0-9-]+( [A-Za-z0-9-]+)?' <<< "$1" | head -n1
+}
+
+# bench_alive NAME: returns 0 while the container runs; once it has exited, prints
+# its last log lines and stops with its exit code and OOMKilled flag.
+bench_alive() {
+    local st code oom
+    st=$(docker inspect -f '{{.State.Running}} {{.State.ExitCode}} {{.State.OOMKilled}}' "$1" 2>/dev/null) || st="false ? ?"
+    [ "${st%% *}" != true ] || return 0
+    docker logs --tail 30 "$1" >&2 2>&1 || true
+    read -r _ code oom <<< "${st}"
+    err "bench: container $1 exited (exit code ${code}, OOMKilled ${oom})"
+}
+
+cmd_bench() {
+    require python3
+    local stack="" kurl="" kmodel="" budget=900 rounds=3 warmup=3 maxtok=128 id="" out="" cpuset="" dry="" keep=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --dry-run) dry=1; shift; continue ;;
+            --keep-cache) keep=1; shift; continue ;;
+            --vs|--k3d-url|--k3d-model|--budget|--rounds|--warmup|--max-tokens|--id|--out|--cpuset)
+                [ $# -ge 2 ] || err "bench: $1 needs a value" ;;
+            *) err "unknown bench option: $1 (see 'k3d-gpu help')" ;;
+        esac
+        case "$1" in
+            --vs) stack=$2 ;; --k3d-url) kurl=$2 ;; --k3d-model) kmodel=$2 ;; --budget) budget=$2 ;;
+            --rounds) rounds=$2 ;; --warmup) warmup=$2 ;; --max-tokens) maxtok=$2 ;; --id) id=$2 ;;
+            --out) out=$2 ;; --cpuset) cpuset=$2 ;;
+        esac
+        shift 2
+    done
+    [ -n "${stack}" ] || err "bench: --vs <stack> is required (ollama, llamacpp or ovms)"
+    local n
+    for n in "${budget}" "${rounds}" "${warmup}" "${maxtok}"; do
+        [[ "${n}" =~ ^[0-9]+$ ]] || err "bench: --budget, --rounds, --warmup and --max-tokens take whole numbers, got '${n}'"
+    done
+    [ -z "${id}" ] || [[ "${id}" =~ ^H[0-9]+$ ]] || err "bench: --id must look like H10, got '${id}'"
+    [ -z "${cpuset}" ] || [[ "${cpuset}" =~ ^[0-9,-]+$ ]] || err "bench: --cpuset takes a CPU list like 0-15, got '${cpuset}'"
+    if [ -n "${kurl}" ] && [ -z "${kmodel}" ]; then err "bench: --k3d-url needs --k3d-model"; fi
+    id=${id:-H0}
+    out=${out:-bench-${id}-${stack}}
+    local dir lock fields image port api health served pull cache dri quant device user apath asha rev args=()
+    dir=$(bench_dir)
+    lock="${dir}/competitors.lock"
+    [ -f "${lock}" ] || err "bench: ${lock} missing (set K3D_GPU_BENCH to the bench/ directory)"
+    # Tab-separated, so an empty field is written as '-' (read would merge tabs).
+    fields=$(python3 -c 'import json, sys
+s = json.load(open(sys.argv[1]))["stacks"].get(sys.argv[2])
+if s is None:
+    sys.exit(3)
+print("\t".join(str(x) or "-" for x in (s["image"], s["port"], s["api"], s["health"], s["served_model"], s["pull"],
+                                        s["cache"], "1" if s.get("dri") else "0", s["quant_tier"], s["device"],
+                                        s.get("user", ""), s["artifact_path"], s["artifact_sha256"], s["model_revision"])))
+for a in s["args"]:
+    print(a)' "${lock}" "${stack}") \
+        || err "bench: unknown stack '${stack}' (use ollama, llamacpp or ovms)"
+    IFS=$'\t' read -r image port api health served pull cache dri quant device user apath asha rev <<< "$(head -n1 <<< "${fields}")"
+    mapfile -t args < <(tail -n +2 <<< "${fields}")
+
+    local name="k3dgpu-g-vs-${stack}" hport docker_args gid v np devs="none (CPU only)"
+    hport=$(free_port)
+    docker_args=(run -d --name "${name}" -p "127.0.0.1:${hport}:${port}" -v "${name}-cache:${cache}")
+    [ "${user}" = - ] || docker_args+=(--user "${user}")
+    [ -z "${cpuset}" ] || docker_args+=(--cpuset-cpus "${cpuset}")
+    # The container downloads the model itself, so the host's proxy settings go in,
+    # with the loopback added to NO_PROXY.
+    if [ -n "${HTTP_PROXY:-}${HTTPS_PROXY:-}${http_proxy:-}${https_proxy:-}" ]; then
+        for v in HTTP_PROXY HTTPS_PROXY http_proxy https_proxy; do
+            [ -z "${!v:-}" ] || docker_args+=(-e "${v}=${!v}")
+        done
+        np="${NO_PROXY:-${no_proxy:-}}"
+        np="${np:+${np},}127.0.0.1,localhost"
+        docker_args+=(-e "NO_PROXY=${np}" -e "no_proxy=${np}")
+    fi
+    if [ "${dri}" = 1 ]; then
+        if is_wsl; then
+            # WSL2: the GPU is /dev/dxg plus the host's user-mode driver in /usr/lib/wsl.
+            docker_args+=(--device /dev/dxg -v "${WSL_LIB}:${WSL_LIB}:ro")
+            devs="/dev/dxg + ${WSL_LIB}"
+        elif [ -e /dev/dri ]; then
+            docker_args+=(--device /dev/dri)
+            for gid in $(stat -c %g /dev/dri/render* 2>/dev/null | sort -u); do docker_args+=(--group-add "${gid}"); done
+            devs="/dev/dri"
+        fi
+    fi
+    docker_args+=("${image}" ${args[@]+"${args[@]}"})
+    local vs_args=(run --id "${id}" --out "${out}/result.json" --ledger "${out}/ledger.md"
+        --rounds "${rounds}" --warmup "${warmup}" --max-tokens "${maxtok}")
+    if [ -n "${dry}" ]; then
+        echo "docker ${docker_args[*]}"
+        echo "verify: sha256 ${apath} = ${asha}"
+        echo "python3 ${dir}/vs.py ${vs_args[*]} --arm k3d-gpu=${kurl:-<port-forward svc/ovms>},${kmodel:-<agent model>} --arm ${stack}=http://127.0.0.1:${hport}${api},${served}"
+        return 0
+    fi
+
+    require docker
+    require curl
+    local t0=${SECONDS} pf="" pfport kdevice="" kbackend="" ktransport="direct (--k3d-url)" app kctx="k3d-${CLUSTER}" got
+    if docker inspect "${name}" >/dev/null 2>&1; then err "bench: container ${name} already exists (docker rm -f ${name})"; fi
+    if [ -z "${kurl}" ]; then
+        # The k3d-gpu arm as deployed now: the live server, its device and its model.
+        require kubectl
+        for app in "${AGENT_APPS[@]}" ""; do
+            [ -n "${app}" ] || err "bench: no agent service in ${AGENT_NS} on ${kctx}; run 'k3d-gpu agent up' first (or pass --k3d-url and --k3d-model)"
+            kubectl --context "${kctx}" -n "${AGENT_NS}" get "service/${app}" >/dev/null 2>&1 && break
+        done
+        read -r kdevice kbackend <<< "$(kubectl --context "${kctx}" -n "${AGENT_NS}" get deployment "${app}" \
+            -o jsonpath='{.spec.template.metadata.annotations.k3d-gpu\.io/agent-device} {.spec.template.metadata.annotations.k3d-gpu\.io/agent-backend}' 2>/dev/null)"
+        pfport=$(free_port)
+        kubectl --context "${kctx}" -n "${AGENT_NS}" port-forward "service/${app}" "${pfport}:8000" >/dev/null 2>&1 &
+        pf=$!
+        ktransport="kubectl port-forward (API-server stream)"
+        local kapi=/v3 mpath=/v1/config
+        [ "${app}" != vllm ] || { kapi=/v1; mpath=/v1/models; }
+        kurl="http://127.0.0.1:${pfport}${kapi}"
+        local mj=""
+        for _ in $(seq 1 30); do
+            mj=$(curl --noproxy '*' -sf -m 5 "http://127.0.0.1:${pfport}${mpath}") && break
+            sleep 1
+        done
+        [ -n "${mj}" ] || err "bench: the ${app} server on ${kctx} did not answer ${mpath}"
+        kmodel=$(python3 -c 'import json, sys
+d = json.loads(sys.argv[1])
+ids = [m["id"] for m in d["data"]] if isinstance(d, dict) and "data" in d else list(d)
+print(ids[0] if ids else "")' "${mj}") || kmodel=""
+        [ -n "${kmodel}" ] || err "bench: the ${app} server on ${kctx} lists no model"
+        # Competitors run a 4-bit build; a k3d-gpu arm on another tier is a different test.
+        [[ "${kmodel,,}" =~ int4|q4|4bit|awq|gptq ]] \
+            || err "bench: the k3d-gpu arm serves '${kmodel}', not a 4-bit build; the competitors run 4-bit (pass --k3d-url and --k3d-model to compare anyway)"
+    fi
+    # shellcheck disable=SC2064 # expand now: the names are fixed for this run
+    trap "docker rm -f '${name}' >/dev/null 2>&1 || true; [ -n '${keep}' ] || docker volume rm '${name}-cache' >/dev/null 2>&1 || true; [ -z '${pf}' ] || kill '${pf}' 2>/dev/null || true" EXIT
+    mkdir -p "${out}"
+    info "bench: starting ${stack} (${image})"
+    docker "${docker_args[@]}" >/dev/null || err "bench: docker run failed"
+    until curl --noproxy '*' -sf -o /dev/null "http://127.0.0.1:${hport}${health}"; do
+        bench_alive "${name}"
+        [ $((SECONDS - t0)) -lt "${budget}" ] || { docker logs --tail 30 "${name}" >&2; err "bench: ${stack} not healthy within the ${budget}s budget"; }
+        sleep 3
+    done
+    if [ "${pull}" = ollama ]; then
+        info "bench: ollama pull ${served}"
+        curl --noproxy '*' -sf -m "$((budget - (SECONDS - t0) + 1))" "http://127.0.0.1:${hport}/api/pull" \
+            -d "{\"model\":\"${served}\",\"stream\":false}" >/dev/null || err "bench: ollama pull ${served} failed"
+    fi
+    # A model that loads lazily (OVMS pull, llama.cpp download) answers once loaded.
+    until curl --noproxy '*' -sf -o /dev/null -m 120 "http://127.0.0.1:${hport}${api}/chat/completions" -H 'Content-Type: application/json' \
+            -d "{\"model\":\"${served}\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":2}"; do
+        bench_alive "${name}"
+        [ $((SECONDS - t0)) -lt "${budget}" ] || { docker logs --tail 30 "${name}" >&2; err "bench: ${stack} not serving ${served} within the ${budget}s budget"; }
+        sleep 5
+    done
+    # The weights served must be the pinned ones: hash the file the server loaded.
+    got=$(docker exec "${name}" sha256sum "${apath}" 2>/dev/null | cut -d' ' -f1)
+    [ "${got}" = "${asha}" ] || err "bench: ${apath} in ${name} hashes to '${got:-missing}', competitors.lock pins ${asha} (${rev}); refusing to measure other weights"
+    local left=$((budget - (SECONDS - t0))) ctx signer cpu
+    [ "${left}" -gt 0 ] || err "bench: budget spent on startup"
+    cpu=$(sed -n 's/^model name[[:space:]]*: //p' /proc/cpuinfo | head -n1)
+    ctx=$(python3 -c 'import json, sys; print(json.dumps(dict(zip(sys.argv[1::2], sys.argv[2::2]))))' \
+        host_cpu "${cpu}" host_cpu_short "$(cpu_short "${cpu}")" \
+        host_kernel "$(uname -r)" commit "$(cd "${dir}" && git rev-parse HEAD 2>/dev/null || echo "k3d-gpu ${VERSION}")" \
+        image "${image}" quant_tier "${quant}" device "${device}${cpuset:+, cpuset ${cpuset}}" vs_devices "${devs}" \
+        model_revision "${rev}" artifact "${apath} sha256 ${got}" \
+        k3d_device "${kdevice:-unknown}" k3d_backend "${kbackend:-unknown}" \
+        k3d_transport "${ktransport}" vs_transport "docker-proxy on 127.0.0.1")
+    # Sign-off is opt-in: K3D_GPU_SIGNOFF="Name <email>" puts it in the ledger section.
+    signer=${K3D_GPU_SIGNOFF:-}
+    python3 "${dir}/vs.py" "${vs_args[@]}" --budget-s "${left}" --context "${ctx}" --signed-off-by "${signer}" \
+        --arm "k3d-gpu=${kurl},${kmodel}" --arm "${stack}=http://127.0.0.1:${hport}${api},${served}" \
+        || err "bench: vs.py failed"
+    info "bench: ${out}/result.json and ${out}/ledger.md (add the run section to EXPERIMENTS.md and set the row's verdict; render docs: bench/vs.py docs --out docs/benchmarks.md bench-*/result.json)"
+    [ -z "${keep}" ] || info "bench: model cache kept in docker volume ${name}-cache (docker volume rm ${name}-cache)"
+}
+
 # ---- phase-steer (H20, experimental) ----------------------------------------------
 # cpulist_hexmask <cpulist>: the CPUs as a hex affinity mask, "0x" with CPU 0 in
 # the lowest bit, the form llama.cpp's -C/--cpu-mask and -Cb/--cpu-mask-batch read
@@ -6973,10 +7751,14 @@ case "${1:-help}" in
     plan)    shift; cmd_plan "$@" ;;
     audit)   shift; cmd_audit "$@" ;;
     sandbox) cmd_sandbox "${2:-}" ;;
+    model-share) shift; cmd_model_share "$@" ;;
     apply)   shift; cmd_apply "$@" ;;
     tune)    shift; cmd_tune "$@" ;;
     capacity) shift; cmd_capacity "$@" ;;
+    bench)   shift; cmd_bench "$@" ;;
     phase-steer) shift; cmd_phase_steer "$@" ;;
+    quickstart) shift; cmd_quickstart "$@" ;;
+    uninstall)  shift; cmd_uninstall "$@" ;;
     version|--version|-v) echo "k3d-gpu ${VERSION}" ;;
     help|--help|-h) usage ;;
     *) usage; exit 1 ;;

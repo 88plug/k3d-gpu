@@ -35,6 +35,8 @@ stdenvNoCC.mkDerivation {
       (root + "/bench/apb/apb.py")
       (root + "/bench/apb/capacity.py")
       (root + "/images.lock")
+      (root + "/bench/vs.py")
+      (root + "/bench/competitors.lock")
       (root + "/README.md")
       (root + "/LICENSE.md")
     ];
@@ -54,7 +56,8 @@ stdenvNoCC.mkDerivation {
     install -Dm644 -t "$out/share/k3d-gpu/telemetry/optional" share/telemetry/optional/*.yml
     install -Dm644 -t "$out/share/k3d-gpu/console" console/*.py console/*.json
     install -Dm644 images.lock "$out/share/k3d-gpu/images.lock"
-    install -Dm755 -t "$out/share/k3d-gpu/bench" bench/llm_load.py bench/energy.sh
+    install -Dm755 -t "$out/share/k3d-gpu/bench" bench/vs.py bench/llm_load.py bench/energy.sh
+    install -Dm644 bench/competitors.lock "$out/share/k3d-gpu/bench/competitors.lock"
     install -Dm644 -t "$out/share/k3d-gpu/bench" bench/agent_trace.py bench/agent_trace_gen.py
     install -Dm644 -t "$out/share/k3d-gpu/bench/apb" bench/apb/apb.py bench/apb/capacity.py
     install -Dm644 README.md "$out/share/doc/k3d-gpu/README.md"

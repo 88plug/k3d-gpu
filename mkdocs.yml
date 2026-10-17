@@ -20,6 +20,7 @@ hooks:
 # entry until its file exists in docs/ ("not yet published").
 nav:
   - Home: index.md
+  - Quickstart: quickstart.md
   - Intel platforms: intel.md
   - Platform matrix: platforms.md
   - Operations:
@@ -37,6 +38,7 @@ nav:
   - Evidence:
       - Intel capability map: intel-capability-map.md
       - Benchmark landscape: benchmark-landscape.md
+      - Head-to-head benchmarks: benchmarks.md
       - Provenance: provenance.md
       - Security audit: security-audit.md
   - Development:

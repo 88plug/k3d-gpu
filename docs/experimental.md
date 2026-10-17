@@ -178,6 +178,13 @@ by how many families the feature covers.
 - **Value**: a pod can mount a model (OpenVINO IR, GGUF, safetensors) shipped as
   an OCI artifact. containerd pulls and deduplicates it, with no init-container
   copy and no PVC.
+- **Agent fleets**: `k3d-gpu model-share --image REF --agent-image REF --replicas N`
+  prints a Deployment whose replicas all mount one model image read-only. It warns
+  when the cluster's snapshotter is not overlayfs, or when the model image is not
+  pinned by digest. The template is for CPU-resident weights: a GPU or NPU runtime
+  copies the weights into per-process device buffers, so it requests no device. Whether the replicas then share one page-cache copy, and what
+  that does to per-pod memory and ready time, is EXPERIMENTS.md H28 (PENDING);
+  no number is claimed until the probe in `bench/zero-copy-models/` has run.
 
 ### 3. `npu-turbo`: NPU turbo, plus HW-scheduler guidance
 
