@@ -303,11 +303,21 @@ has "successful install runs apt-get" "${out}" "apt-get install -y"
 eq "successful install leaves no temp dir" "$(ls -A "${TMP}/itmp")" ""
 inst_ver=$(sed -n 's/^K3D_GPU_VERSION=//p' "${INSTALLER}")
 since=$(sed -n 's/^QUICKSTART_SINCE=//p' "${INSTALLER}")
-if [ "$(printf '%s\n%s\n' "${inst_ver}" "${since}" | sort -V | head -n1)" = "${since}" ]; then
-    has "installer hint: quickstart (pin has it)" "${out}" "then k3d-gpu quickstart"
-else
-    has "installer hint: names the first quickstart release" "${out}" "ships in ${since}"
-fi
+# docs/quickstart.md step 1 runs this installer and step 2 runs `k3d-gpu quickstart`:
+# the pin must be a release that has the command (blind test: every persona hit
+# a 0.1.28 pin with no quickstart).
+[ "$(printf '%s\n%s\n' "${inst_ver}" "${since}" | sort -V | head -n1)" = "${since}" ] \
+    && ok "installer pin ${inst_ver} has quickstart (since ${since})" || fail "installer pin ${inst_ver} predates quickstart ${since}"
+has "installer hint: quickstart (pin has it)" "${out}" "then k3d-gpu quickstart"
+# quickstart first shipped in aur-v0.1.33 (0.1.29..0.1.32 lack it).
+eq "QUICKSTART_SINCE names the first release with the command" "${since}" "0.1.33"
+lacks "quickstart.md has no stale pre-release note" "$(cat "${ROOT}/docs/quickstart.md")" "until the 0.1.29"
+lacks "README has no stale pre-release note" "$(cat "${ROOT}/README.md")" "from 0.1.29"
+# Every Markdown table in the docs has exactly one header separator row (blind
+# test: quickstart.md "Which model you get" had two stacked headers).
+bad_tables=$(awk 'FNR==1{n=0} /^\|/{ if ($0 ~ /^\|[ :|]*-[ :|-]*\|[ ]*$/) n++; if (n>1) {print FILENAME": "FNR; n=0}; next} {n=0}' \
+    "${ROOT}/README.md" "${ROOT}"/docs/*.md)
+eq "no Markdown table has two header rows" "${bad_tables}" ""
 launcher_ver=$(sed -n 's/^VERSION="\([^"]*\)".*/\1/p' "${LAUNCHER}")
 [ "$(printf '%s\n%s\n' "${inst_ver}" "${launcher_ver}" | sort -V | tail -n1)" = "${launcher_ver}" ] \
     && ok "installer pin ${inst_ver} is not newer than the launcher ${launcher_ver}" || fail "installer pin ${inst_ver} newer than launcher ${launcher_ver}"

@@ -34,8 +34,7 @@ A Docker-based [rancher/k3s](https://hub.docker.com/r/rancher/k3s) node image on
 
 ## Quick Start (k3d-gpu CLI)
 
-Just want a local chat? `k3d-gpu quickstart` (from 0.1.29; until that
-release, `scripts/k3d-gpu quickstart` in a checkout) goes from a machine with
+Just want a local chat? `k3d-gpu quickstart` (0.1.33 and newer) goes from a machine with
 Docker and a detected accelerator to a chat UI on `127.0.0.1:8080` in one
 command: cluster, LLM server (model picked
 from your RAM), Open WebUI with a generated admin account. `k3d-gpu uninstall`

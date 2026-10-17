@@ -6,10 +6,9 @@ cloud account and no API key. It is one command, and you can run it again
 safely.
 
 !!! note "Version"
-    `quickstart` ships in k3d-gpu 0.1.29. The installer below is pinned to
-    0.1.28, which has no `quickstart` command, until the 0.1.29 release exists
-    and the installer pin moves to it. Until then, run it from a checkout:
-    `git clone https://github.com/88plug/k3d-gpu && k3d-gpu/scripts/k3d-gpu quickstart`.
+    `quickstart` ships in k3d-gpu 0.1.33 and newer. The installer below is
+    pinned to a release that has it. Per-machine paths and honest time
+    expectations: [first-run.md](first-run.md).
 
 ## What you need
 
@@ -86,8 +85,6 @@ where it stopped.
 
 The model is picked from the RAM the machine has:
 
-| RAM (as the OS reports it) | Model | Download | Memory reserved |
-|---|---|---|---|
 | RAM (as the OS reports it) | Model | Pinned commit | Download | Memory reserved |
 |---|---|---|---|---|
 | under 12 GiB (8 GB machines) | `OpenVINO/Qwen3-1.7B-int4-ov` | `6f32d81e` | [~1.2 GB](https://huggingface.co/api/models/OpenVINO/Qwen3-1.7B-int4-ov?blobs=true) (1208326810 bytes) | 4 GiB |
