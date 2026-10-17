@@ -2544,22 +2544,38 @@ report_memory() {
     printf '"memory":{"total_kib":%s,"available_kib":%s}' "$(json_num "${total}")" "$(json_num "${avail}")"
 }
 
-# GuC or HuC state from the i915/xe debugfs (root only): `<kind>_info` starts
-# "GuC firmware: <path>" then "status: <state>" and a "found" version line.
-uc_info() {  # uc_info <card minor> <guc|huc>
-    local f path="" status="" version=""
-    for f in "${SYSROOT}"/sys/kernel/debug/dri/"$1"/gt*/uc/"$2"_info; do
+# GuC or HuC state from the i915/xe debugfs (root only), one gt*/uc/<kind>_info
+# per GT. Both drivers start "<Kind> firmware: <path>" then "status: <state>".
+# i915 (intel_uc_fw_dump) then prints "version: found X" or "version: wanted W,
+# found X"; xe (xe_uc_fw_print) prints "wanted release version W", "found
+# release version X" and, for GuC, "found compatibility version Y". The firmware
+# version is X. A GT without the microcontroller says "<Kind> not supported" or
+# "status: N/A"; on Meteor Lake and later the HuC is on the media GT (gt1), so a
+# GT that has it wins over one that does not. The device's debugfs dir is
+# dri/<PCI address> on newer kernels (dri/<minor> is then a symlink to it), else
+# dri/<minor>.
+uc_info() {  # uc_info <card minor> <guc|huc> <PCI address>
+    local f path status version uc_st="" fw="" ver="" note="" dir="${SYSROOT}/sys/kernel/debug/dri/$1"
+    [ -d "${SYSROOT}/sys/kernel/debug/dri/$3" ] && dir="${SYSROOT}/sys/kernel/debug/dri/$3"
+    for f in "${dir}"/gt*/uc/"$2"_info; do
         [ -r "${f}" ] || continue
+        status=$(sed -n 's/^[[:space:]]*status: //p' "${f}" | head -n1)
+        if [ -z "${status}" ]; then
+            note=${note:-$(head -n1 "${f}")}
+            continue
+        fi
         path=$(awk -F': ' 'NR == 1 {print $2}' "${f}")
-        status=$(awk '$1 == "status:" {print $2; exit}' "${f}")
-        version=$(awk '/found/ {v = $NF} END {print v}' "${f}")
-        break
+        version=$(awk '$1 == "found" && $2 == "release" {print $NF; exit}
+                       $1 == "version:" && /found/ {print $NF; exit}' "${f}")
+        [ -z "${uc_st}" ] || [ "${uc_st}" = "N/A" ] || [ "${uc_st}" = "DISABLED" ] || continue
+        uc_st=${status} fw=${path} ver=${version}
     done
-    if [ -n "${status}" ]; then
-        printf '{"status":%s,"firmware":%s,"version":%s}' "$(json_str "${status}")" \
-            "$(json_str_or_null "${path}")" "$(json_str_or_null "${version}")"
+    if [ -n "${uc_st}" ]; then
+        printf '{"status":%s,"firmware":%s,"version":%s}' "$(json_str "${uc_st}")" \
+            "$(json_str_or_null "${fw}")" "$(json_str_or_null "${ver}")"
     else
-        printf '{"status":null,"note":"debugfs not readable (run as root) or no %s"}' "$2"
+        printf '{"status":null,"note":%s}' \
+            "$(json_str "${note:-debugfs not readable (run as root) or no $2}")"
     fi
 }
 
@@ -2599,7 +2615,7 @@ report_intel_gpus() {
             [ -e "${r}/device" ] && [ "$(pci_addr "${r}/device")" = "${bdf}" ] && render=${r##*/}
         done
         IFS='|' read -r name _ <<< "$(intel_gpu_platform "${id}")"
-        engines=$(gpu_engines "${card}" "${dev}") guc=$(uc_info "${card##*card}" guc) huc=$(uc_info "${card##*card}" huc)
+        engines=$(gpu_engines "${card}" "${dev}") guc=$(uc_info "${card##*card}" guc "${bdf}") huc=$(uc_info "${card##*card}" huc "${bdf}")
         out+="${out:+,}{\"card\":$(json_str "${card##*/}"),\"render_node\":$(json_str_or_null "${render}"),\"pci\":$(json_str "${bdf}"),\"device_id\":$(json_str_or_null "${id}"),\"platform\":$(json_str_or_null "${name}"),\"driver\":$(json_str_or_null "${drv}"),\"engines\":${engines},\"guc\":${guc},\"huc\":${huc}}"
         report_line "Intel GPU ${card##*/}: ${name:+${name} }${id} on ${drv:-no driver} (${bdf}${render:+, ${render}})"
         report_line "  engines: $(grep -o '"name":"[^"]*"' <<< "${engines}" | cut -d'"' -f4 | paste -sd' ')"

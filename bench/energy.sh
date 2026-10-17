@@ -91,6 +91,10 @@ n=$(samples)
 echo >&4          # take a final sample now
 wait_samples $((n + 1)) 10
 exec 4>&-         # reader exits
+# A periodic sample can land just before the trigger, so the trigger's own sample
+# may still be in flight: wait for the reader to exit, then read a settled file.
+wait "${READER}" 2>/dev/null || true
+nsamples=$(samples)
 
 # Sum consecutive deltas; a smaller reading than the previous one is a wrap.
 read -r total_uj joules seconds watts < <(awk -v range="${RANGE}" '
@@ -100,9 +104,9 @@ read -r total_uj joules seconds watts < <(awk -v range="${RANGE}" '
     END { s = t1 - t0; printf "%.0f %.3f %.3f %.3f\n", uj, uj / 1e6, s, (s > 0 ? uj / 1e6 / s : 0) }' "${SAMPLES}")
 wall=$(awk -v a="${t0}" -v b="${t1}" 'BEGIN { printf "%.3f", b - a }')
 
-echo "energy: zone=${ZONE} (${NAME}) joules=${joules} seconds=${seconds} avg_watts=${watts} command_seconds=${wall} samples=$(samples) exit=${rc}" >&2
+echo "energy: zone=${ZONE} (${NAME}) joules=${joules} seconds=${seconds} avg_watts=${watts} command_seconds=${wall} samples=${nsamples} exit=${rc}" >&2
 if [ -n "${JSON_OUT}" ]; then
     printf '{"zone":"%s","name":"%s","joules":%s,"seconds":%s,"avg_watts":%s,"command_seconds":%s,"energy_uj":%s,"max_energy_range_uj":%s,"samples":%s,"exit_code":%s}\n' \
-        "${ZONE}" "${NAME}" "${joules}" "${seconds}" "${watts}" "${wall}" "${total_uj}" "${RANGE}" "$(samples)" "${rc}" > "${JSON_OUT}"
+        "${ZONE}" "${NAME}" "${joules}" "${seconds}" "${watts}" "${wall}" "${total_uj}" "${RANGE}" "${nsamples}" "${rc}" > "${JSON_OUT}"
 fi
 exit "${rc}"

@@ -387,7 +387,7 @@ and writes `k3d-gpu-report.json` and a self-contained `k3d-gpu-report.html`
 |----------|----------|--------|
 | `host.cpu` | model, online CPUs, P-core / E-core lists and counts, AI ISA flags (`avx*`, `avx_vnni`, `avx512*`, `amx_*`, `fma`, `f16c`) | `/proc/cpuinfo`, `/sys/devices/cpu_core\|cpu_atom/cpus` |
 | `host.memory` | total and available KiB | `/proc/meminfo` |
-| `host.intel_gpus[]` | card, render node, PCI address and id, driver, engines, GuC/HuC status, firmware and version | `/sys/class/drm/card*`: i915 `engine/<name>/capabilities`; xe `device/tile*/gt*/engines/<class>`; GuC/HuC from debugfs `dri/<n>/gt*/uc/{guc,huc}_info` |
+| `host.intel_gpus[]` | card, render node, PCI address and id, driver, engines, GuC/HuC status, firmware and version | `/sys/class/drm/card*`: i915 `engine/<name>/capabilities`; xe `device/tile*/gt*/engines/<class>`; GuC/HuC from debugfs `dri/<PCI address or n>/gt*/uc/{guc,huc}_info` (first GT that has it; the firmware release version) |
 | `host.npus[]`, `host.gaudi`, `host.dsa`, `host.iaa`, `host.qat[]` | NPU accel nodes; Gaudi PCI devices / accel nodes / driver; DSA/IAA devices and user work queues; QAT PFs and VF counts | `/sys/class/accel`, `/sys/bus/pci`, `/sys/bus/dsa`, `/dev/dsa`, `/dev/iax` |
 | `host.nvidia` | driver version; per GPU: PCI address, model, device id, minor | `/sys/module/nvidia/version`, `/proc/driver/nvidia/gpus/*/information` (no `nvidia-smi`) |
 | `host.rapl[]` | zone, name, wrap point (`max_energy_range_uj`), whether `energy_uj` is readable | `/sys/class/powercap/intel-rapl*` |

@@ -1676,8 +1676,9 @@ for e in "rcs0 " "bcs0 " "vcs0 hevc sfc" "vecs0 sfc"; do
     echo "${caps}" > "${r}/sys/class/drm/card0/engine/${en}/capabilities"
 done
 mkdir -p "${r}/sys/kernel/debug/dri/0/gt0/uc"
-printf 'GuC firmware: i915/tgl_guc_70.bin\n\tstatus: RUNNING\n\tversion: wanted 70.0.0\n\tversion: found 70.49.4\n' > "${r}/sys/kernel/debug/dri/0/gt0/uc/guc_info"
-printf 'HuC firmware: i915/tgl_huc.bin\n\tstatus: RUNNING\n\tversion: found 7.9.3\n' > "${r}/sys/kernel/debug/dri/0/gt0/uc/huc_info"
+# i915 intel_uc_fw_dump(): one "version:" line, "found X" or "wanted W, found X".
+printf 'GuC firmware: i915/tgl_guc_70.bin\n\tstatus: RUNNING\n\tversion: found 70.49.4\n\tuCode: 336448 bytes\n\tRSA: 256 bytes\nGuC status 0x8002f0ec:\n\tBootrom status = 0x76\n' > "${r}/sys/kernel/debug/dri/0/gt0/uc/guc_info"
+printf 'HuC firmware: i915/tgl_huc.bin\n\tstatus: RUNNING\n\tversion: wanted 7.10.0, found 7.9.3\n\tuCode: 589760 bytes\n\tRSA: 256 bytes\nHuC status: 0x00090001\n' > "${r}/sys/kernel/debug/dri/0/gt0/uc/huc_info"
 mkdir -p "${r}/sys/module/nvidia" "${r}/proc/driver/nvidia/gpus/0000:01:00.0"
 echo 590.48.01 > "${r}/sys/module/nvidia/version"
 pci "${r}" 0000:01:00.0 0x10de 0x27b0 nvidia
@@ -1767,6 +1768,40 @@ else
     FAILS=$((FAILS + 1)); echo "FAIL report: text summary names the GPU and the cluster state"
     sed 's/^/  | /' "${WORK}/report.txt"
 fi
+
+# Root-readable xe debugfs (xe_uc_fw_print): "wanted release version W", then
+# "found release version X" and, for GuC, "found compatibility version Y". The
+# firmware version is the release one. HuC sits on the media GT (gt1); gt0 has
+# no HuC (status N/A) and must not hide it. Newer kernels name the debugfs dir
+# after the PCI address (dri/<minor> is only a symlink to it); this tree has only that.
+r=$(newroot report-xe-root)
+pci "${r}" 0000:00:02.0 0x8086 0x64a0 xe; render "${r}" 0000:00:02.0 128
+mkdir -p "${r}/sys/class/drm/card0" "${r}/sys/kernel/debug/dri/0000:00:02.0/gt0/uc" "${r}/sys/kernel/debug/dri/0000:00:02.0/gt1/uc"
+ln -sfn "${r}/sys/devices/pci0000:00/0000:00:02.0" "${r}/sys/class/drm/card0/device"
+printf 'GuC firmware: xe/lnl_guc_70.bin\n\tstatus: RUNNING\n\twanted release version 70.29.2\n\tfound release version 70.44.1\n\tfound compatibility version 1.13.4\n\tuCode: 360768 bytes\n\tRSA: 384 bytes\n' > "${r}/sys/kernel/debug/dri/0000:00:02.0/gt0/uc/guc_info"
+printf 'HuC firmware: \n\tstatus: N/A\n\twanted release version 0.0.0\n' > "${r}/sys/kernel/debug/dri/0000:00:02.0/gt0/uc/huc_info"
+printf 'HuC firmware: xe/lnl_huc.bin\n\tstatus: RUNNING\n\twanted release version 9.4.13\n\tfound release version 9.4.13.0\n\tuCode: 1236992 bytes\n\nHuC status: 0x00000001\n' > "${r}/sys/kernel/debug/dri/0000:00:02.0/gt1/uc/huc_info"
+report_says "report: xe GuC version is the release version, not the compatibility one" "${r}" \
+    'r["host"]["intel_gpus"][0]["guc"] == {"status": "RUNNING", "firmware": "xe/lnl_guc_70.bin", "version": "70.44.1"}'
+report_says "report: xe HuC on the media GT is found past an unsupported gt0" "${r}" \
+    'r["host"]["intel_gpus"][0]["huc"] == {"status": "RUNNING", "firmware": "xe/lnl_huc.bin", "version": "9.4.13.0"}'
+
+# i915 Meteor Lake: gt0 says "HuC not supported" (no status line), gt1 has it.
+r=$(newroot report-mtl-root)
+pci "${r}" 0000:00:02.0 0x8086 0x7d55 i915; render "${r}" 0000:00:02.0 128
+mkdir -p "${r}/sys/class/drm/card0" "${r}/sys/kernel/debug/dri/0/gt0/uc" "${r}/sys/kernel/debug/dri/0/gt1/uc"
+ln -sfn "${r}/sys/devices/pci0000:00/0000:00:02.0" "${r}/sys/class/drm/card0/device"
+printf 'HuC not supported\n' > "${r}/sys/kernel/debug/dri/0/gt0/uc/huc_info"
+printf 'HuC firmware: i915/mtl_huc_gsc.bin\n\tstatus: RUNNING\n\tversion: found 8.5.4\n' > "${r}/sys/kernel/debug/dri/0/gt1/uc/huc_info"
+printf 'GuC firmware: i915/mtl_guc_70.bin\n\tstatus: LOAD FAIL\n\tversion: wanted 70.44.1, found 70.12.0\n' > "${r}/sys/kernel/debug/dri/0/gt0/uc/guc_info"
+printf 'GuC not supported\n' > "${r}/sys/kernel/debug/dri/0/gt1/uc/guc_info"
+report_says "report: i915 HuC on gt1 is found past 'HuC not supported' on gt0" "${r}" \
+    'r["host"]["intel_gpus"][0]["huc"] == {"status": "RUNNING", "firmware": "i915/mtl_huc_gsc.bin", "version": "8.5.4"}'
+report_says "report: a two-word status (LOAD FAIL) is kept whole; found, not wanted, version" "${r}" \
+    'r["host"]["intel_gpus"][0]["guc"] == {"status": "LOAD FAIL", "firmware": "i915/mtl_guc_70.bin", "version": "70.12.0"}'
+rm "${r}/sys/kernel/debug/dri/0/gt0/uc/guc_info"
+report_says "report: readable debugfs with no GuC says so, not 'run as root'" "${r}" \
+    '(g := r["host"]["intel_gpus"][0]["guc"]) and g["status"] is None and g["note"] == "GuC not supported"'
 
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
