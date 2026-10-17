@@ -1187,7 +1187,9 @@ the in-process stub in `bench/test_agent_trace.py`.
 (LiteLLM gateway, Redis, pgvector, agent sandbox, CPU vLLM) on a single k3d-gpu
 node through EAT's own brownfield path, on a non-Xeon client CPU. Its vLLM pod
 joins the hybrid balloons policy's `performance` balloon through EAT's own chart
-annotation, so EAT's CPU balloons stay off and `hybrid` stays on.
+annotation, so EAT's CPU balloons stay off and `hybrid` stays on. It deploys EAT's
+latest tag, `release-1.0.3-hotfix`; OpenShell (`deploy_openshell`) is on EAT `main`
+only, so `eat-up.sh` refuses it (see [docs/platforms.md](docs/platforms.md)).
 
 ### Experimental features (auto-adapting)
 

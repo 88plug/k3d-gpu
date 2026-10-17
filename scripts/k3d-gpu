@@ -61,7 +61,7 @@
 
 set -euo pipefail
 
-VERSION="0.1.28"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.30"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 # The node image defaults to the tag built from this launcher's own release
 # (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
@@ -150,6 +150,10 @@ Usage: k3d-gpu <command>
             Engine, model and placement for this box, picked only from measured
             (green) matrix cells; with none it says "unmeasured, run prove"
             --hash prints the plan hash: sha256 of the --json output
+  plan --predict SKU|auto|list [--json] [--mts N] [--channels N]
+            Roofline prediction (decode/prefill tok/s, derived agents per box) for
+            an Intel SKU from its spec fields, fitted on one measured host row;
+            labelled calibrated or extrapolated. A model output (H24 PENDING)
   audit [--json|--observe] [--observed FILE] [--plan FILE] [--lock FILE]
             Posture checks of the running cluster: fails on an unauthenticated
             listener off loopback, an image not pinned in images.lock, a runtime
@@ -2280,6 +2284,41 @@ perf_cpu() {
     fi
 }
 
+# Uncore (ring/LLC on client parts, mesh/LLC/memory controller on Xeon) frequency
+# range from intel_uncore_frequency: legacy package_NN_die_NN, or TPMI uncoreNN with
+# ELC. min/max/initial are world-readable; writes need root, so a lowered ceiling is
+# a suggestion with its exact revert. Pinning the floor high for LLM decode is
+# pre-registered as EXPERIMENTS.md H29 and stays unsuggested until it is measured.
+perf_uncore() {
+    local base=/sys/devices/system/cpu/intel_uncore_frequency d rel name imin imax mn mx elc n=0
+    for d in "${SYSROOT}${base}"/package_*_die_* "${SYSROOT}${base}"/uncore[0-9]*; do
+        [ -d "${d}" ] || continue
+        rel=${d#"${SYSROOT}"} name=${d##*/}
+        imin=$(rd "${rel}/initial_min_freq_khz") imax=$(rd "${rel}/initial_max_freq_khz")
+        mn=$(rd "${rel}/min_freq_khz") mx=$(rd "${rel}/max_freq_khz")
+        [[ "${imin}${imax}${mn}${mx}" =~ ^[0-9]+$ ]] || continue
+        if [ "${n}" -eq 0 ]; then
+            perf_section "Uncore frequency (intel_uncore_frequency)" \
+                "max_freq_khz at initial_max_freq_khz and min_freq_khz at initial_min_freq_khz: the hardware (UFS, or ELC on TPMI parts) picks the uncore clock inside the full range. A floor pinned high for decode is under test (EXPERIMENTS.md H29, PENDING), so it is not suggested" \
+                "https://docs.kernel.org/admin-guide/pm/intel_uncore_frequency_scaling.html"
+        fi
+        n=$((n + 1))
+        if lt "${mx}" "${imax}"; then
+            perf_flag warn "${name}: max_freq_khz ${mx} is below the hardware ceiling ${imax}" "${base}/${name}/max_freq_khz" \
+                "a lowered uncore ceiling caps ring/LLC (client) or mesh and memory-controller (Xeon) clock, and token generation reads every weight once per token through it" \
+                "echo ${imax} | sudo tee ${base}/${name}/max_freq_khz" "echo ${mx} | sudo tee ${base}/${name}/max_freq_khz"
+        elif lt "${imin}" "${mn}"; then
+            perf_info "${name}: floor raised to ${mn} kHz (hardware floor ${imin}); costs idle package power, revert: echo ${imin} | sudo tee ${base}/${name}/min_freq_khz" \
+                "${base}/${name}/min_freq_khz"
+        else
+            perf_ok "${name}: $((mn / 1000))-$((mx / 1000)) MHz, the full hardware range" "${base}/${name}/{min,max}_freq_khz"
+        fi
+        elc=$(rd "${rel}/elc_floor_freq_khz")
+        [ -z "${elc}" ] || perf_info "${name}: ELC floor ${elc} kHz, thresholds low $(rd "${rel}/elc_low_threshold_percent")% high $(rd "${rel}/elc_high_threshold_percent")% (enable $(rd "${rel}/elc_high_threshold_enable"))" \
+            "${base}/${name}/elc_*"
+    done
+}
+
 perf_cstates() {
     local base=/sys/devices/system/cpu drv maxc s name lat dis deep="" deep_names="" deepest=""
     drv=$(rd "${base}/cpuidle/current_driver")
@@ -3135,6 +3174,7 @@ perf_docker() {
 
 doctor_perf() {
     perf_cpu
+    perf_uncore
     perf_cstates
     perf_thermal
     perf_rapl
@@ -6231,15 +6271,49 @@ cmd_facts() {
     info "Wrote ${state}/facts.json"
 }
 
+# plan --predict SKU|auto|list [--json] [--mts N] [--channels N]: roofline
+# prediction from Intel spec fields (console/sku_model.py, H24 PENDING).
+plan_predict() {
+    local dir sku=$1 args=()
+    shift
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --json) args+=(--json) ;;
+            --mts|--channels)
+                [ $# -ge 2 ] || err "plan: $1 needs a value"
+                args+=("$1" "$2")
+                shift ;;
+            *) err "unknown plan --predict option: $1 (use --json, --mts, --channels)" ;;
+        esac
+        shift
+    done
+    dir=$(console_dir) || err "plan: console/ not found next to the launcher or in ${SHARE_DIR}/console (set K3D_GPU_CONSOLE)"
+    [ -f "${dir}/sku_model.py" ] || err "plan: ${dir}/sku_model.py not found"
+    require python3
+    if [ "${sku}" = "list" ]; then
+        python3 "${dir}/sku_model.py" list ${args[@]+"${args[@]}"}
+    else
+        python3 "${dir}/sku_model.py" predict "${sku}" ${args[@]+"${args[@]}"}
+    fi
+}
+
 # plan [--explain|--json|--hash] [--facts FILE] [--matrix FILE] [--engine E]
 #      [--device D] [--model M] [--bind ADDR] [--port N]
+# plan --predict SKU|auto|list [--json] [--mts N] [--channels N]
 cmd_plan() {
     local dir mode=text facts="" matrix="" args=() out
+    if [ "${1:-}" = "--predict" ]; then
+        [ $# -ge 2 ] || err "plan: --predict needs a SKU, auto or list"
+        shift
+        plan_predict "$@"
+        return
+    fi
     while [ $# -gt 0 ]; do
         case "$1" in
             --explain) mode=explain ;;
             --json) mode=json ;;
             --hash) mode="hash" ;;
+            --predict) err "plan: --predict must be the first option" ;;
             --facts|--matrix|--engine|--device|--model|--bind|--port)
                 [ $# -ge 2 ] || err "plan: $1 needs a value"
                 case "$1" in
