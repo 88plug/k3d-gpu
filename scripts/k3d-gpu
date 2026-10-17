@@ -150,6 +150,10 @@ Usage: k3d-gpu <command>
             Engine, model and placement for this box, picked only from measured
             (green) matrix cells; with none it says "unmeasured, run prove"
             --hash prints the plan hash: sha256 of the --json output
+  plan --predict SKU|auto|list [--json] [--mts N] [--channels N]
+            Roofline prediction (decode/prefill tok/s, derived agents per box) for
+            an Intel SKU from its spec fields, fitted on one measured host row;
+            labelled calibrated or extrapolated. A model output (H24 PENDING)
   audit [--json|--observe] [--observed FILE] [--plan FILE] [--lock FILE]
             Posture checks of the running cluster: fails on an unauthenticated
             listener off loopback, an image not pinned in images.lock, a runtime
@@ -6196,15 +6200,49 @@ cmd_facts() {
     info "Wrote ${state}/facts.json"
 }
 
+# plan --predict SKU|auto|list [--json] [--mts N] [--channels N]: roofline
+# prediction from Intel spec fields (console/sku_model.py, H24 PENDING).
+plan_predict() {
+    local dir sku=$1 args=()
+    shift
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --json) args+=(--json) ;;
+            --mts|--channels)
+                [ $# -ge 2 ] || err "plan: $1 needs a value"
+                args+=("$1" "$2")
+                shift ;;
+            *) err "unknown plan --predict option: $1 (use --json, --mts, --channels)" ;;
+        esac
+        shift
+    done
+    dir=$(console_dir) || err "plan: console/ not found next to the launcher or in ${SHARE_DIR}/console (set K3D_GPU_CONSOLE)"
+    [ -f "${dir}/sku_model.py" ] || err "plan: ${dir}/sku_model.py not found"
+    require python3
+    if [ "${sku}" = "list" ]; then
+        python3 "${dir}/sku_model.py" list ${args[@]+"${args[@]}"}
+    else
+        python3 "${dir}/sku_model.py" predict "${sku}" ${args[@]+"${args[@]}"}
+    fi
+}
+
 # plan [--explain|--json|--hash] [--facts FILE] [--matrix FILE] [--engine E]
 #      [--device D] [--model M] [--bind ADDR] [--port N]
+# plan --predict SKU|auto|list [--json] [--mts N] [--channels N]
 cmd_plan() {
     local dir mode=text facts="" matrix="" args=() out
+    if [ "${1:-}" = "--predict" ]; then
+        [ $# -ge 2 ] || err "plan: --predict needs a SKU, auto or list"
+        shift
+        plan_predict "$@"
+        return
+    fi
     while [ $# -gt 0 ]; do
         case "$1" in
             --explain) mode=explain ;;
             --json) mode=json ;;
             --hash) mode="hash" ;;
+            --predict) err "plan: --predict must be the first option" ;;
             --facts|--matrix|--engine|--device|--model|--bind|--port)
                 [ $# -ge 2 ] || err "plan: $1 needs a value"
                 case "$1" in
