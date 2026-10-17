@@ -154,7 +154,7 @@ doctor_says "doctor reports the node image of a current cluster" \
 doctor_says "doctor without a cluster says nothing about the node image" \
     "!node image" -
 
-if bash "${K3D_GPU}" help | grep -qE "K3D_GPU_IMAGE .*default: $(ere "${PINNED}")[;)]"; then
+if bash "${K3D_GPU}" help | grep -E "K3D_GPU_IMAGE .*default: $(ere "${PINNED}")[;)]" >/dev/null; then
     pass "help shows the pinned default image"
 else
     fail "help shows the pinned default image"

@@ -377,6 +377,44 @@ Re-run this search if any of these happen:
 - Intel EAS/EAT adds a k3s or laptop profile (watch EAT PR #19 and enterprise-inference PR #22).
 - OVMS starts requesting k8s resources itself, for example a KServe runtime that sets device limits from node allocatable.
 
+## 9. H28 prior-art search: zero-copy model sharing through image volumes
+
+Searched 2026-10-17. **Verdict:** the mechanism is prior art (image-volume model
+delivery, mmap tensor sharing, overlay/EROFS page-cache sharing), so no "first" claim
+is made for it. No prior art found (search log [provenance:P280]) that measures
+per-pod PSS, RSS and memcg charge, plus time-to-ready, for N co-located agent pods
+mmapping one model from an image volume versus a per-pod copy, on containerd 2.3 /
+k3s v1.37. Only that measured delta ([ledger:H28], PENDING) may be claimed. Coverage
+is moderate: the WebSearch budget ran out, arXiv's API returned HTTP 429 and SearXNG
+returned only noise; Exa, GitHub search and direct fetches ran.
+
+Closest neighbours: for measurement, Kliukovkin 2026 [provenance:P283] (time to
+first prediction and node disk only, no memory); for memory, Tetris [provenance:P284]
+(not OCI, not k8s-native, needs a modified TF Serving).
+
+Search log (P280):
+
+| # | Venue | Query | Closest |
+|---|---|---|---|
+| 1 | SearXNG search_many (10 queries) | KEP-4639 image volume AI model; image volume GA 1.35 model weights; KServe modelcar page cache; Red Hat image volume LLM mmap; CNCF ModelPack; llama.cpp mmap page cache shared; zero-copy model loading shared page cache pods; ServerlessLLM OSDI 2024; Docker Model Runner OCI GGUF mmap; KitOps ModelKit image volume | Bing noise only |
+| 2 | Exa | Kubernetes image volumes OCI artifact to serve AI model weights to pods | P281, KubeAI, Plainsight |
+| 3 | Exa | KServe modelcars OCI image model storage sidecar shared page cache memory | P282 |
+| 4 | Exa | multiple containers share page cache for same model file mmap LLM memory deduplication | P285, P286 |
+| 5 | Exa | Kubernetes v1.36 image volumes stable GA ImageVolume feature gate | P281 |
+| 6 | Exa | Tetris memory-efficient serverless inference through tensor sharing USENIX ATC | P284 |
+| 7 | Exa | benchmark image volume model pod startup time memory PSS shared page cache llama.cpp multiple replicas same node | P283, P287 |
+| 8 | Exa | image volume pods share page cache model weights memory RSS PSS measured N replicas same node containerd | nothing that measures PSS |
+| 9 | Exa | erofs page cache sharing across containers merged kernel | P286 |
+| 10 | Exa | containerd CRI image volume implementation snapshot view mount per pod KEP-4639 | P288 |
+| 11 | Exa | k3s v1.37 release containerd version | P288 |
+| 12 | GitHub repo search | "image volume model", "oci model weights kubernetes", "page cache model sharing", "mmap model weights shared", "modelpack" | none relevant |
+| 13 | GitHub issue search | "imagevolume memory shared pods model", "modelcar page cache memory", "llama.cpp mmap shared multiple instances memory" | P287, giantswarm#564 (mlock/memcg note) |
+| 14 | arXiv API | "page cache" model inference sharing; "image volume" kubernetes; ServerlessLLM; mmap weights serverless | HTTP 429, not searched |
+
+Not covered (reopen before publishing a novelty line): BlitzScale, λScale,
+HydraServe, OpenVINO mmap docs, LKML beyond EROFS, MLSys/EuroSys proceedings,
+Docker Model Runner internals.
+
 ## Quoted-number register
 
 Numbers this project quotes from someone else: upstream benchmarks, vendor specs,
@@ -389,6 +427,16 @@ Source does not back a claim. `tests/claims_check.sh` enforces both rules.
 
 | # | Claim | Source | Retrieved |
 |---|-------|--------|-----------|
+| P210 | H21 search log (2026-10-17 UTC): SearXNG 16 queries (Bing only, 0 relevant), Exa 4 (2 returned, 2 rate-limited), WebSearch 0 (budget spent), arXiv API 0 (301 then HTTP 429), OpenAlex 18 queries, GitHub repo search 10 queries, repo reads (kubernetes-power-manager, platform-aware-scheduling, peaks, clever, nri-plugins balloons), torvalds/linux commit search, kubernetes/enhancements issue search. Coverage partial: ACM/USENIX, MLSys, OSDI, EuroSys and arXiv not searched directly. No prior art found for a Kubernetes admission/placement controller that packs LLM-agent sandbox pods across P-core/E-core pools in one node from measured per-pod RAPL energy under a p95 turn SLO; every part alone has prior art (P211-P219). | https://api.openalex.org/works?search=energy-aware%20Kubernetes%20scheduler%20Kepler ; https://github.com/sustainable-computing-io/kepler/blob/main/docs/developer/power-attribution-guide.md ; https://github.com/containers/nri-plugins/blob/main/docs/resource-policy/policy/balloons.md | 2026-10-17 |
+| P211 | Kepler attributes node active power to a workload as (workload CPU time delta / node CPU time delta) x active power, over RAPL package/core/DRAM/uncore zones; CPU time is not weighted by core type. Verify against a pinned source revision before quoting a number. | https://github.com/sustainable-computing-io/kepler/blob/main/docs/developer/power-attribution-guide.md | 2026-10-17 |
+| P212 | Octopus-Man (HPCA 2015) maps latency-sensitive work to the least power-hungry cores that meet QoS on an Intel heterogeneous prototype; up to 41% CPU-power saving within QoS. | https://doi.org/10.1109/HPCA.2015.7056037 | 2026-10-17 |
+| P213 | Hipster (HPCA 2017) uses heuristics plus RL over big/little cores and DVFS for latency-critical work under a QoS target; up to 18% energy saved on ARM big.LITTLE. | https://doi.org/10.1109/HPCA.2017.13 | 2026-10-17 |
+| P214 | Linux EAS on Intel hybrid (merged for 6.16): prefers E-cores with spare capacity, only on hybrid platforms without SMT, with schedutil (intel_pstate passive). | https://github.com/torvalds/linux/commit/7b010f9b9061 | 2026-10-17 |
+| P215 | nri-plugins balloons: `preferCoreType` efficient or performance on hybrid parts, and `cpuClasses` (EPP, frequency, SST-CP) per balloon; static, no energy feedback. H21's baseline. | https://github.com/containers/nri-plugins/blob/main/docs/resource-policy/policy/balloons.md | 2026-10-17 |
+| P216 | Energy-aware Kubernetes pod placement across nodes from power models or Kepler data: PEAKS, CLEVER, TNSM 2025 multi-objective scheduler, WattsApp (UCC 2020). | https://github.com/sustainable-computing-io/peaks ; https://doi.org/10.1109/TNSM.2025.3630045 ; https://doi.org/10.1109/UCC48980.2020.00027 | 2026-10-17 |
+| P217 | Per-process/pod RAPL attribution with counter models: Wattmeter (eBPF), Nf-PEAK (CLOUD 2026, MAPE 6.6-10.9%), SmartWatts. Core-type-aware weighting is partly covered. | https://doi.org/10.1145/3727200.3727214 ; https://doi.org/10.1109/CLOUD72782.2026.00032 | 2026-10-17 |
+| P218 | TokenWatt: E-cores at 2.31x the J/token of P-cores for CPU LLM inference on a Core Ultra 7 155H (equal power, slower cores). A falsification risk for any "E-cores win J/turn" claim. | https://github.com/etisamhaq/tokenwatt | 2026-10-17 |
+| P219 | Agent energy measurement and agent core pooling without energy placement: A-LEMS/EpG (RAPL per-turn joules), Agora (role-pooled cores for agent tail latency). | https://arxiv.org/html/2605.22883 ; https://doi.org/10.48550/arxiv.2608.04458 | 2026-10-17 |
 | P240 | H24 prior-art search log (2026-10-17): searxng 21 queries (Bing noise, engine filter ineffective), Exa 3 (2 rate-limited), arXiv export API 7 (rate-limited, not executed), arXiv abstracts read 2402.16363 2406.01698 2312.03134 2405.05465 2407.07304 2407.00029 2311.00502 2411.19542, GitHub repository search 6, primary code reads (LLM-Viewer `hardware_params.py`, GenZ `system_configs.py`, agent-sandbox `capacity.py` @43194cb9, quantprobe docs). Gaps: MLSys/OSDI/EuroSys proceedings not searched directly; no k8s KEP hit; Intel docs not reached. Verdict: every part of H24 has prior art (P241-P249); no prior art found for the combination. | EXPERIMENTS.md section "H24 pre-registration"; full query list in the H24 pull request description | 2026-10-17 |
 | P241 | LLM-Viewer models LLM inference with a spec-sheet roofline and has an `intel_13900k` entry (89.6 GB/s); not calibrated, no P/E split, AMX, iGPU, NPU or agents-per-box. | https://arxiv.org/abs/2402.16363 ; https://github.com/hahnyuan/LLM-Viewer (`hardwares/hardware_params.py`) | 2026-10-17 |
 | P242 | quantprobe: spec bandwidth x efficiency calibrated on one box, held-out external validation, "8.4% median error"; GPU cards only (Intel Arc rows spec-only). | https://github.com/FedericoTs/quantprobe (`docs/HARDWARE_TABLE.md`, `docs/HARDWARE.md`) | 2026-10-17 |
@@ -417,6 +465,16 @@ Source does not back a claim. `tests/claims_check.sh` enforces both rules.
 | P265 | intel/goresctrl provides the rdt, sst and blockio packages under nri-plugins and containerd/CRI-O class-based RDT | https://github.com/intel/goresctrl | 2026-10-17 |
 | P266 | Koordinator koordlet ships per-pod resctrl LLC/MB isolation (`ResctrlConfig{LLC, MB}`); KEP-3008 QoS-class resources issue is closed | https://github.com/koordinator-sh/koordinator/blob/c5afca711320cb6bbc8fe74a0c90af8d0e44dbcb/apis/extension/resctrl.go | 2026-10-17 |
 | P267 | WebSearch not run (call budget exhausted): kernel lists, OSDI/EuroSys/MLSys full text and Intel TCC CAT on embedded Core are uncovered, so H26 novelty is "partial search" | | 2026-10-17 |
+| P280 | H28 prior-art search log: image-volume model delivery, mmap tensor sharing and overlay page-cache sharing are prior art; no measurement of per-pod PSS/memcg for N pods mmapping one image-volume model found | This file, section 9 (search log, 2026-10-17) | 2026-10-17 |
+| P281 | KEP-4639 OCI VolumeSource: read-only OCI image mounts, motivated by mounting model weights; GA (stable) in Kubernetes v1.36 | https://github.com/kubernetes/enhancements/blob/6ebe0a94771723b3f27cb4a757f0cc22f29e38a2/keps/sig-node/4639-oci-volume-source/README.md and https://kubernetes.io/blog/2026/04/22/kubernetes-v1-36-release/ | 2026-10-17 |
+| P282 | KServe `oci+native://` image-volume model storage (PR 5558) and modelcars; docs state no benchmark data is available yet | https://github.com/kserve/kserve/pull/5558 and https://github.com/kserve/kserve/issues/4083 | 2026-10-17 |
+| P283 | Kliukovkin 2026: oci-native vs modelcar vs s3 on kind 1.36.1 / containerd 2.3.1; warm oci-native start 11.5-11.7 s for 2-140 GB; time and disk only | https://arxiv.org/abs/2607.16596 and https://github.com/kliukovkin/oci-model-delivery-bench | 2026-10-17 |
+| P284 | Tetris (USENIX ATC'22): tensor sharing across serverless inference instances, up to 93% memory saved, up to 91.6% faster startup | https://www.usenix.org/conference/atc22/presentation/li-jie | 2026-10-17 |
+| P285 | UPM/USM: madvise-driven page merging for serverless ML, PSS per container down 26-55% at n=16 | https://arxiv.org/abs/2311.13588v1 | 2026-10-17 |
+| P286 | EROFS page-cache sharing across containers (inode_share, domain_id) merged for Linux 7.0-rc1 | https://github.com/torvalds/linux/commit/3893854000a81897a1a332ec50931f74761fbf71 | 2026-10-17 |
+| P287 | LLMKube: llama.cpp mmap sharing, each extra instance 0.19-0.36x model size CPU-only, about 1.03-1.38x with GPU offload | https://dev.to/defilan/one-gpu-four-ways-to-share-it-ten-scenarios-and-the-one-number-that-inverts-on-your-hardware-1bih | 2026-10-17 |
+| P288 | containerd CRI image-volume mount path (unpack, snapshotter Prepare per pod sandbox, mount); k3s v1.37.1+k3s1 ships containerd v2.3.4-k3s1 | https://github.com/containerd/containerd/blob/v2.3.3/internal/cri/server/container_image_mount.go and https://github.com/k3s-io/k3s/releases/tag/v1.37.1%2Bk3s1 | 2026-10-17 |
+| P289 | cgroup v2 memory ownership: page cache is charged to the cgroup that first touches it | https://github.com/torvalds/linux/blob/v6.6/Documentation/admin-guide/cgroup-v2.rst (section "Memory Ownership") | 2026-10-17 |
 | P290 | H29 prior-art search log, 2026-10-17. Found: uncore DVFS for memory-bound HPC phases, phase-aware CPU/GPU/memory DVFS for mobile LLMs, phase-aware GPU DVFS for LLM serving, static k8s uncore control (P291-P299). Not found: prefill/decode phase-aware core + uncore split for LLM inference on Intel x86 CPUs measured in J/token against the UFS/ELC default. Incomplete: SearXNG/Bing results irrelevant, Exa rate-limited after 4 queries, WebSearch budget exhausted, arXiv API 429, GitHub code search 403; ACM/IEEE full text, OSDI/EuroSys, LKML and KEPs not searched; Splitwise, DynamoLLM, POLCA recalled, not fetched. Re-run arXiv `all:uncore AND all:LLM`, GitHub code `intel_uncore_frequency` with llama/vllm/ollama, and LKML before citing the novelty line. Amended before any run: the H29 probe holds a static core cap + uncore pin for the whole request, which is the setting of P295 (Sundriyal 2018, ReAPER 2023) and of FUSE per-phase DVFS (P293) in spirit; no novelty line is claimed for H29, only its measured delta | Exa queries "uncore frequency scaling for LLM inference energy efficiency decode phase memory-bound CPU", "Intel Kubernetes Power Manager uncore frequency CRD", "dynamic uncore frequency scaling paper HPC energy savings memory-bound phases", "LLM inference on Xeon CPU uncore frequency energy per token measurement", "intel_uncore_frequency efficiency latency control ELC TPMI kernel documentation"; GitHub repo search `uncore+llm`, `uncore+inference`, `uncore+frequency+transformer` (0/0/0 repos) | 2026-10-17 |
 | P291 | Linux `intel_uncore_frequency`: `initial_min/max_freq_khz` (read-only), `min/max_freq_khz` (root write), `current_freq_khz`; TPMI `uncoreNN` per fabric cluster with ELC `elc_floor_freq_khz`, `elc_low/high_threshold_percent`, `elc_high_threshold_enable` | https://docs.kernel.org/admin-guide/pm/intel_uncore_frequency_scaling.html | 2026-10-17 |
 | P292 | Intel Kubernetes Power Manager ships an `Uncore` CRD (`power.intel.com/v1`, sysMin/sysMax/dieSelector) since v2.1.0: static k8s uncore control, not phase- or LLM-aware | https://github.com/intel/kubernetes-power-manager ; https://github.com/intel/power-optimization-library | 2026-10-17 |
