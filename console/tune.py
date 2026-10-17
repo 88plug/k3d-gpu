@@ -1026,7 +1026,7 @@ def print_step(res):
         name = " ".join(f"{k}={v}" for k, v in config_env(e["config"]))
         print(f"  screen {fmt(e['score']) if e['ok'] else 'failed'}  {name}")
     if res.get("confirm"):
-        print_summary(res["confirm"])
+        print_summary(res["confirm"], ref="incumbent", final=False)
     print(f"decision: {res['decision']} ({res['trials']} trials)")
 
 
@@ -1034,10 +1034,10 @@ def fmt(x):
     return "-" if x is None else f"{x:.4g}"
 
 
-def print_summary(res):
+def print_summary(res, ref="default", final=True):
     m = res["metric"]
     b = res["baseline"][m]
-    print(f"objective {res['objective']} ({m}); default median {fmt(b['median'])} "
+    print(f"objective {res['objective']} ({m}); {ref} median {fmt(b['median'])} "
           f"[{fmt(b['min'])}..{fmt(b['max'])}] n={b['n']}")
     for v in res["verdicts"]:
         s = v["summary"][m]
@@ -1053,8 +1053,9 @@ def print_summary(res):
         name = "default" if p["config"].get("baseline") else " ".join(f"{k}={x}" for k, x in config_env(p["config"]))
         print(f"  {fmt(md['aggregate_tokens_per_s'])} {fmt(md['ttft_s'])} {fmt(md['joules_per_token'])} "
               f"{fmt(md['tokens_per_cpu_s'])}  {name}")
-    why = "" if res["winner"] else " (no config beat the default by the pre-registered criteria)"
-    print(f"decision: {res['decision']}{why}")
+    if final:
+        why = "" if res["winner"] else " (no config beat the default by the pre-registered criteria)"
+        print(f"decision: {res['decision']}{why}")
 
 
 def cmd_env(a):
