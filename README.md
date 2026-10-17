@@ -43,6 +43,7 @@ k3d-gpu detect          # list accelerators on this host and their k8s resources
 k3d-gpu doctor          # preflight: accelerators, kernel/firmware, docker, runtimes, k3d, kubectl
 k3d-gpu host-setup      # check host drivers/userspace, print pinned install commands (--apply runs them)
 k3d-gpu doctor --perf   # read-only host tuning advisor for inference (add --model-gb N)
+k3d-gpu report          # what the host and the cluster have, per engine (text + JSON + HTML)
 k3d-gpu up              # create the cluster (device plugins auto-deploy), verify each accelerator > 0
 k3d-gpu test            # per accelerator: nvidia-smi pod / device-node listing pod
 k3d-gpu logs            # tail the k3s server container logs
@@ -372,6 +373,87 @@ is deleted.
 | `K3D_GPU_AGENT_TIMEOUT` | `1800` | seconds `agent up` waits for download + load |
 | `K3D_GPU_AGENT_LOG_LEVEL` | `INFO` | `DEBUG` also logs the compiled model's execution device (and every request) |
 | `K3D_GPU_AGENT_IMAGE` | `openvino/model_server@sha256:a928…fc58` (2026.4.1-gpu) | server image |
+
+### Inventory report
+
+`k3d-gpu report` says what this host and cluster actually have, engine by
+engine. It reads sysfs, procfs, debugfs (GuC/HuC firmware, root only) and the
+cluster's node objects and nothing else, runs no benchmarks and takes well under a second. It prints a summary
+and writes `k3d-gpu-report.json` and a self-contained `k3d-gpu-report.html`
+(no external assets) into the current directory, or into `k3d-gpu report DIR`.
+`k3d-gpu report --json` prints only the JSON.
+
+| JSON key | Contents | Source |
+|----------|----------|--------|
+| `host.cpu` | model, online CPUs, P-core / E-core lists and counts, AI ISA flags (`avx*`, `avx_vnni`, `avx512*`, `amx_*`, `fma`, `f16c`) | `/proc/cpuinfo`, `/sys/devices/cpu_core\|cpu_atom/cpus` |
+| `host.memory` | total and available KiB | `/proc/meminfo` |
+| `host.intel_gpus[]` | card, render node, PCI address and id, driver, engines, GuC/HuC status, firmware and version | `/sys/class/drm/card*`: i915 `engine/<name>/capabilities`; xe `device/tile*/gt*/engines/<class>`; GuC/HuC from debugfs `dri/<PCI address or n>/gt*/uc/{guc,huc}_info` (first GT that has it; the firmware release version) |
+| `host.npus[]`, `host.gaudi`, `host.dsa`, `host.iaa`, `host.qat[]` | NPU accel nodes; Gaudi PCI devices / accel nodes / driver; DSA/IAA devices and user work queues; QAT PFs and VF counts | `/sys/class/accel`, `/sys/bus/pci`, `/sys/bus/dsa`, `/dev/dsa`, `/dev/iax` |
+| `host.nvidia` | driver version; per GPU: PCI address, model, device id, minor | `/sys/module/nvidia/version`, `/proc/driver/nvidia/gpus/*/information` (no `nvidia-smi`) |
+| `host.rapl[]` | zone, name, wrap point (`max_energy_range_uj`), whether `energy_uj` is readable | `/sys/class/powercap/intel-rapl*` |
+| `detected[]` | the accelerators `up` would enable and their resources | same detection as `k3d-gpu detect` |
+| `cluster` | `present`, or the `reason` it is not; per node: every allocatable resource and the accelerator labels (`k3d-gpu.io/*`, `nvidia.com/*`, `habana.ai/*`, NFD `*feature.node.kubernetes.io/*`) | `kubectl --context k3d-<K3D_GPU_CLUSTER> get nodes` |
+
+`cluster` always uses the `k3d-<K3D_GPU_CLUSTER>` context, never whatever
+context is current, so the report cannot describe the wrong cluster. GuC/HuC
+state lives in debugfs, which only root can read: without root the report says
+`status: null` with a note rather than guessing. `energy_uj` is root-only too.
+The document carries `"schema": "k3d-gpu.report/v1"`.
+
+### Measurement harness (`bench/`)
+
+Three small tools for measuring workloads on a k3d-gpu cluster. They are not
+installed by the package; run them from a checkout.
+
+**`bench/energy.sh`** — energy one command used, from a RAPL counter (default
+`intel-rapl:0`, the CPU package, which includes the iGPU on client parts):
+
+```bash
+bench/energy.sh [--zone intel-rapl:0] [--interval 5] [--json out.json] -- <command> [args...]
+# energy: zone=intel-rapl:0 (package-0) joules=148.882 seconds=2.015 avg_watts=73.873 command_seconds=2.001 samples=2 exit=0
+```
+
+The command runs as you; only the counter reads run as root, in one `sudo`
+reader process. With no terminal, set `SUDO_ASKPASS` to a program that prints
+the password. The counter wraps at `max_energy_range_uj`; the reader samples it
+every `--interval` seconds and every step's delta is summed, so wraps are
+counted. Package power includes everything else running on the host, so
+measure an idle baseline the same way (`-- sleep 60`) and subtract it.
+
+**`bench/llm_load.py`** — streams chat requests at an OpenAI-compatible
+endpoint (Python 3 standard library only). `--base-url` is the API root:
+`http://HOST:PORT/v3` for OpenVINO Model Server, `.../v1` for vLLM, llama.cpp
+and Ollama.
+
+```bash
+bench/llm_load.py --base-url http://127.0.0.1:8000/v3 --model MODEL \
+    --requests 16 --concurrency 1,4 --max-tokens 128 [--ignore-eos] --out run.json
+```
+
+Each concurrency level is a phase. Per request it records `first_chunk_s`,
+`ttft_s` (first content), `latency_s`, `output_tokens` (from
+`stream_options.include_usage`, `null` if the server sends no usage),
+`tokens_per_s` and `decode_tokens_per_s`. Per phase it records median / p90 /
+min / max of each, plus wall time and aggregate tokens/s. OVMS sends a
+role-only first chunk as soon as the first token exists, and its usage chunk
+only comes from continuous-batching servables.
+
+**`bench/noisy.sh`** — a CPU-burning neighbour pod
+(`stress-ng` 0.22.01, pinned by digest) in the current kube context:
+
+```bash
+bench/noisy.sh start --cores efficient --workers 4   # or performance, or none (unlabelled)
+bench/noisy.sh status
+bench/noisy.sh stop
+```
+
+`--cores` sets `k3d-gpu.io/cores`, so on a hybrid node the balloons policy
+pins it. CPU request = limit = `--workers` unless `--cpu` says otherwise.
+`start` waits until the pod runs and prints its `Cpus_allowed_list`.
+`KUBECTL_ARGS="--context k3d-NAME"` picks the cluster.
+
+`tests/bench_test.sh` tests all three without root, a cluster or a model,
+using a fake RAPL tree and `tests/openai_stub.py`, a streaming stub server.
 
 ---
 

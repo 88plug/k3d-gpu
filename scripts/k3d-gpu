@@ -32,6 +32,7 @@
 #   detect  print the accelerators found on this host and their k8s resources
 #   doctor  preflight: accelerators present, docker running, runtimes, k3d installed
 #           --perf: read-only host tuning advisor for inference serving
+#   report  what the host and the cluster have, per engine (text + JSON + HTML)
 #   logs    tail server container logs
 #   host-setup  check the host userspace and print (--apply: run) the pinned install commands
 #   agent   up|down|status|manifest: OpenAI-compatible LLM server (OpenVINO Model
@@ -78,6 +79,8 @@ Usage: k3d-gpu <command>
   doctor --perf [--model-gb N]
             Read-only host tuning advisor for inference (CPU/GPU clocks, power
             limits, THP, swap, IRQs, persistence): evidence, why, apply + revert
+  report    Host + cluster inventory per engine; writes k3d-gpu-report.{json,html}
+            (report DIR writes there; report --json prints the JSON only)
   logs      Tail k3s server container logs
   host-setup [--apply] [--distro D]
             Check the host drivers/userspace (vainfo, clinfo, libva, libstdc++) and print
@@ -2444,6 +2447,386 @@ cmd_detect() {
     done
 }
 
+# ---- report -------------------------------------------------------------------
+# `report` describes what the host and the cluster actually have, per engine, as
+# a text summary plus JSON and a self-contained HTML page. It only reads: sysfs,
+# procfs, debugfs when readable (root), and the cluster's node objects when the
+# k3d-<cluster> kubeconfig context exists. No benchmarks.
+
+REPORT_SCHEMA="k3d-gpu.report/v1"
+
+# JSON string literal for $1.
+json_str() {
+    local s=$1
+    s=${s//\\/\\\\}
+    s=${s//\"/\\\"}
+    s=${s//$'\n'/\\n}
+    s=${s//$'\t'/\\t}
+    s=${s//$'\r'/}
+    s=${s//[[:cntrl:]]/}
+    printf '"%s"' "${s}"
+}
+
+# JSON string, or null when $1 is empty.
+json_str_or_null() { if [ -n "$1" ]; then json_str "$1"; else printf null; fi; }
+
+# JSON number when $1 is a non-negative integer, else null.
+json_num() { if [[ "$1" =~ ^[0-9]+$ ]]; then printf '%s' "$1"; else printf null; fi; }
+
+json_bool() { if "$@"; then printf true; else printf false; fi; }
+
+# JSON array of strings from the words of $1.
+json_words() {
+    local w out=""
+    for w in $1; do out+="${out:+,}$(json_str "${w}")"; done
+    printf '[%s]' "${out}"
+}
+
+# First line of a file, or empty.
+read1() { local v=""; { read -r v < "$1"; } 2>/dev/null || true; printf '%s' "${v}"; }
+
+# Number of CPUs in a kernel cpulist ("0-15,17,20-21" -> 19).
+cpulist_count() {
+    local part a b n=0 parts
+    IFS=',' read -r -a parts <<< "$1"
+    for part in ${parts[@]+"${parts[@]}"}; do
+        [ -n "${part}" ] || continue
+        a=${part%-*} b=${part#*-}
+        n=$((n + b - a + 1))
+    done
+    echo "${n}"
+}
+
+# Human summary lines go to fd 3, so sections can run inside $( ) for their JSON
+# while the summary still reaches the terminal (or /dev/null with --json).
+report_line() { echo "  $*" >&3; }
+
+# Flags from /proc/cpuinfo that matter for AI kernels: AVX/AVX2/AVX-VNNI/
+# AVX-512*/AMX*, FMA and F16C.
+cpu_ai_flags() {
+    local flags
+    flags=$(grep -m1 '^flags' "${SYSROOT}/proc/cpuinfo" 2>/dev/null || true)
+    tr ' ' '\n' <<< "${flags#*:}" | grep -E '^(avx|amx_|fma$|f16c$)' | sort | paste -sd' ' || true
+}
+
+report_cpu() {
+    local model online isa amx p e hybrid=false
+    model=$(grep -m1 '^model name' "${SYSROOT}/proc/cpuinfo" 2>/dev/null || true)
+    model=${model#*: }
+    online=$(read1 "${SYSROOT}/sys/devices/system/cpu/online")
+    isa=$(cpu_ai_flags)
+    amx=$(amx_flags)
+    p=$(hybrid_cpus core) e=$(hybrid_cpus atom)
+    if has_hybrid; then hybrid=true; else p="" e=""; fi
+    printf '"cpu":{"model":%s,"online":%s,"logical_cpus":%s,"hybrid":%s,"p_cores":%s,"e_cores":%s,"p_core_cpus":%s,"e_core_cpus":%s,"isa":%s,"avx_vnni":%s,"avx512":%s,"amx":%s}' \
+        "$(json_str_or_null "${model}")" "$(json_str_or_null "${online}")" \
+        "$(json_num "$([ -n "${online}" ] && cpulist_count "${online}")")" "${hybrid}" \
+        "$(json_str_or_null "${p}")" "$(json_str_or_null "${e}")" \
+        "$(json_num "$([ -n "${p}" ] && cpulist_count "${p}")")" "$(json_num "$([ -n "${e}" ] && cpulist_count "${e}")")" \
+        "$(json_words "${isa}")" "$(json_bool grep -qw avx_vnni <<< "${isa}")" \
+        "$(json_bool grep -qw 'avx512[a-z0-9_]*' <<< "${isa}")" "$(json_words "${amx}")"
+}
+
+report_cpu_text() {
+    local model isa
+    model=$(grep -m1 '^model name' "${SYSROOT}/proc/cpuinfo" 2>/dev/null || true)
+    isa=$(cpu_ai_flags)
+    report_line "CPU: ${model#*: }"
+    if has_hybrid; then report_line "  P-cores $(hybrid_cpus core), E-cores $(hybrid_cpus atom)"; fi
+    report_line "  AI ISA: ${isa:-none}"
+    report_line "Memory: $(awk '$1 == "MemTotal:" {t = $2} $1 == "MemAvailable:" {a = $2} END {printf "%.1f GiB total, %.1f GiB available", t / 1048576, a / 1048576}' "${SYSROOT}/proc/meminfo" 2>/dev/null || true)"
+}
+
+report_memory() {
+    local total avail
+    total=$(awk '$1 == "MemTotal:" {print $2}' "${SYSROOT}/proc/meminfo" 2>/dev/null || true)
+    avail=$(awk '$1 == "MemAvailable:" {print $2}' "${SYSROOT}/proc/meminfo" 2>/dev/null || true)
+    printf '"memory":{"total_kib":%s,"available_kib":%s}' "$(json_num "${total}")" "$(json_num "${avail}")"
+}
+
+# GuC or HuC state from the i915/xe debugfs (root only), one gt*/uc/<kind>_info
+# per GT. Both drivers start "<Kind> firmware: <path>" then "status: <state>".
+# i915 (intel_uc_fw_dump) then prints "version: found X" or "version: wanted W,
+# found X"; xe (xe_uc_fw_print) prints "wanted release version W", "found
+# release version X" and, for GuC, "found compatibility version Y". The firmware
+# version is X. A GT without the microcontroller says "<Kind> not supported" or
+# "status: N/A"; on Meteor Lake and later the HuC is on the media GT (gt1), so a
+# GT that has it wins over one that does not. The device's debugfs dir is
+# dri/<PCI address> on newer kernels (dri/<minor> is then a symlink to it), else
+# dri/<minor>.
+uc_info() {  # uc_info <card minor> <guc|huc> <PCI address>
+    local f path status version uc_st="" fw="" ver="" note="" dir="${SYSROOT}/sys/kernel/debug/dri/$1"
+    [ -d "${SYSROOT}/sys/kernel/debug/dri/$3" ] && dir="${SYSROOT}/sys/kernel/debug/dri/$3"
+    for f in "${dir}"/gt*/uc/"$2"_info; do
+        [ -r "${f}" ] || continue
+        status=$(sed -n 's/^[[:space:]]*status: //p' "${f}" | head -n1)
+        if [ -z "${status}" ]; then
+            note=${note:-$(head -n1 "${f}")}
+            continue
+        fi
+        path=$(awk -F': ' 'NR == 1 {print $2}' "${f}")
+        version=$(awk '$1 == "found" && $2 == "release" {print $NF; exit}
+                       $1 == "version:" && /found/ {print $NF; exit}' "${f}")
+        [ -z "${uc_st}" ] || [ "${uc_st}" = "N/A" ] || [ "${uc_st}" = "DISABLED" ] || continue
+        uc_st=${status} fw=${path} ver=${version}
+    done
+    if [ -n "${uc_st}" ]; then
+        printf '{"status":%s,"firmware":%s,"version":%s}' "$(json_str "${uc_st}")" \
+            "$(json_str_or_null "${fw}")" "$(json_str_or_null "${ver}")"
+    else
+        printf '{"status":null,"note":%s}' \
+            "$(json_str "${note:-debugfs not readable (run as root) or no $2}")"
+    fi
+}
+
+# "RUNNING" from a uc_info object, or "unknown (needs root)".
+uc_status() {
+    local st
+    st=$(grep -o '"status":"[^"]*"' <<< "$1" | cut -d'"' -f4 || true)
+    echo "${st:-unknown (debugfs needs root)}"
+}
+
+# Engines of an Intel DRM card. i915 lists one dir per engine instance under
+# card/engine (rcs0, vcs1, ...) with a capabilities file; xe lists one dir per
+# engine class under device/tile*/gt*/engines (rcs, ccs, ...).
+gpu_engines() {
+    local card=$1 dev=$2 e out="" seen=" "
+    for e in "${card}"/engine/* "${dev}"/tile*/gt*/engines/*; do
+        [ -d "${e}" ] || continue
+        [[ "${seen}" == *" ${e##*/} "* ]] && continue
+        seen+="${e##*/} "
+        out+="${out:+,}{\"name\":$(json_str "${e##*/}"),\"capabilities\":$(json_words "$(read1 "${e}/capabilities")")}"
+    done
+    printf '[%s]' "${out}"
+}
+
+# PCI address of a sysfs device dir.
+pci_addr() { basename "$(readlink -f "$1")"; }
+
+# Intel DRM cards (card0, not connectors like card0-DP-1).
+report_intel_gpus() {
+    local card dev bdf id drv render r name engines guc huc out=""
+    for card in "${SYSROOT}"/sys/class/drm/card*; do
+        [[ "${card##*/}" =~ ^card[0-9]+$ ]] || continue
+        dev="${card}/device"
+        [ "$(read1 "${dev}/vendor")" = "0x8086" ] || continue
+        bdf=$(pci_addr "${dev}") id=$(read1 "${dev}/device") drv=$(bound_driver "${dev}") render=""
+        for r in "${SYSROOT}"/sys/class/drm/renderD*; do
+            [ -e "${r}/device" ] && [ "$(pci_addr "${r}/device")" = "${bdf}" ] && render=${r##*/}
+        done
+        IFS='|' read -r name _ <<< "$(intel_gpu_platform "${id}")"
+        engines=$(gpu_engines "${card}" "${dev}") guc=$(uc_info "${card##*card}" guc "${bdf}") huc=$(uc_info "${card##*card}" huc "${bdf}")
+        out+="${out:+,}{\"card\":$(json_str "${card##*/}"),\"render_node\":$(json_str_or_null "${render}"),\"pci\":$(json_str "${bdf}"),\"device_id\":$(json_str_or_null "${id}"),\"platform\":$(json_str_or_null "${name}"),\"driver\":$(json_str_or_null "${drv}"),\"engines\":${engines},\"guc\":${guc},\"huc\":${huc}}"
+        report_line "Intel GPU ${card##*/}: ${name:+${name} }${id} on ${drv:-no driver} (${bdf}${render:+, ${render}})"
+        report_line "  engines: $(grep -o '"name":"[^"]*"' <<< "${engines}" | cut -d'"' -f4 | paste -sd' ')"
+        report_line "  GuC $(uc_status "${guc}"), HuC $(uc_status "${huc}")"
+    done
+    printf '"intel_gpus":[%s]' "${out}"
+}
+
+report_npus() {
+    local a dev id name out=""
+    for a in "${SYSROOT}"/sys/class/accel/accel[0-9]*; do
+        dev="${a}/device"
+        [ "$(read1 "${dev}/vendor")" = "0x8086" ] && [ "$(bound_driver "${dev}")" = "intel_vpu" ] || continue
+        id=$(read1 "${dev}/device")
+        IFS='|' read -r name _ <<< "$(npu_platform "${id}")"
+        out+="${out:+,}{\"accel\":$(json_str "${a##*/}"),\"pci\":$(json_str "$(pci_addr "${dev}")"),\"device_id\":$(json_str_or_null "${id}"),\"driver\":\"intel_vpu\",\"platform\":$(json_str_or_null "${name}")}"
+        report_line "Intel NPU ${a##*/}: ${name:-device} ${id}"
+    done
+    printf '"npus":[%s]' "${out}"
+}
+
+report_gaudi() {
+    local nodes pcis=0 v
+    nodes=$(accel_nodes | grep -c '^0x1da3 ' || true)
+    for v in "${SYSROOT}"/sys/bus/pci/devices/*/vendor; do
+        [ "$(read1 "${v}")" = "0x1da3" ] && pcis=$((pcis + 1))
+    done
+    [ "$((nodes + pcis))" -eq 0 ] || report_line "Gaudi: ${pcis} PCI device(s), ${nodes} accel node(s)"
+    printf '"gaudi":{"accel_nodes":%s,"pci_devices":%s,"driver_loaded":%s}' "${nodes}" "${pcis}" \
+        "$(json_bool test -d "${SYSROOT}/sys/module/habanalabs")"
+}
+
+# DSA/IAA devices on the dsa bus and their user work queues.
+report_idxd() {  # report_idxd <json key> <bus prefix> <dev dir>
+    local n wqs
+    n=$({ compgen -G "${SYSROOT}/sys/bus/dsa/devices/$2[0-9]*" || true; } | wc -l)
+    wqs=$({ compgen -G "${SYSROOT}/dev/$3/wq*" || true; } | wc -l)
+    [ "$((n + wqs))" -eq 0 ] || report_line "${1^^}: ${n} device(s), ${wqs} user work queue(s)"
+    printf '"%s":{"devices":%s,"work_queues":%s}' "$1" "${n}" "${wqs}"
+}
+
+report_qat() {
+    local dev id vfs drv out=""
+    for dev in "${SYSROOT}"/sys/bus/pci/devices/*; do
+        [ "$(read1 "${dev}/vendor")" = "0x8086" ] || continue
+        id=$(read1 "${dev}/device")
+        [[ " ${QAT_PF_IDS} " == *" ${id} "* ]] || continue
+        vfs=$({ compgen -G "${dev}/virtfn*" || true; } | wc -l)
+        drv=$(bound_driver "${dev}")
+        out+="${out:+,}{\"pci\":$(json_str "${dev##*/}"),\"device_id\":$(json_str "${id}"),\"driver\":$(json_str_or_null "${drv}"),\"vfs\":${vfs}}"
+        report_line "QAT ${dev##*/}: ${id} on ${drv:-no driver}, ${vfs} VF(s)"
+    done
+    printf '"qat":[%s]' "${out}"
+}
+
+# Value of a "Key: <spaces> value" line in a /proc/driver/nvidia file.
+nv_field() { sed -n "s/^$1:[[:space:]]*\(.*[^[:space:]]\)[[:space:]]*\$/\1/p" "$2"; }
+
+# NVIDIA GPUs from the driver's procfs (no nvidia-smi needed).
+report_nvidia() {
+    local info model bdf minor out=""
+    for info in "${SYSROOT}"/proc/driver/nvidia/gpus/*/information; do
+        [ -r "${info}" ] || continue
+        model=$(nv_field Model "${info}")
+        bdf=$(nv_field "Bus Location" "${info}")
+        minor=$(nv_field "Device Minor" "${info}")
+        out+="${out:+,}{\"pci\":$(json_str "${bdf}"),\"model\":$(json_str_or_null "${model}"),\"device_id\":$(json_str_or_null "$(read1 "${SYSROOT}/sys/bus/pci/devices/${bdf}/device")"),\"minor\":$(json_num "${minor}")}"
+        report_line "NVIDIA GPU ${minor}: ${model} (${bdf})"
+    done
+    printf '"nvidia":{"driver":%s,"gpus":[%s]}' "$(json_str_or_null "$(read1 "${SYSROOT}/sys/module/nvidia/version")")" "${out}"
+}
+
+# RAPL zones. energy_uj is root-only on current kernels; max_energy_range_uj is
+# where the counter wraps.
+report_rapl() {
+    local z out="" names=""
+    for z in "${SYSROOT}"/sys/class/powercap/intel-rapl*:*; do
+        [ -r "${z}/name" ] || continue
+        out+="${out:+,}{\"zone\":$(json_str "${z##*/}"),\"name\":$(json_str "$(read1 "${z}/name")"),\"max_energy_range_uj\":$(json_num "$(read1 "${z}/max_energy_range_uj")"),\"energy_readable\":$(json_bool test -r "${z}/energy_uj")}"
+        names+=" ${z##*/}=$(read1 "${z}/name")"
+    done
+    [ -z "${names}" ] || report_line "RAPL:${names}"
+    printf '"rapl":[%s]' "${out}"
+}
+
+report_detected() {
+    local v out=""
+    resolve_vendors
+    for v in ${ACTIVE[@]+"${ACTIVE[@]}"}; do
+        out+="${out:+,}{\"vendor\":$(json_str "${v}"),\"resources\":$(json_words "$(vendor_resources "${v}" | paste -sd' ')")}"
+    done
+    report_line "Detected: ${ACTIVE[*]:-nothing}"
+    printf '"detected":[%s]' "${out}"
+}
+
+# Node labels the launcher and the plugins set (which accelerator, which policy).
+REPORT_LABEL_RE='^(k3d-gpu\.io/|nvidia\.com/|habana\.ai/|intel\.feature\.node\.kubernetes\.io/|feature\.node\.kubernetes\.io/)'
+
+# One tab-separated line per node (N name), allocatable resource (A node key value)
+# and label (L node key value).
+# shellcheck disable=SC2016 # a go-template, not shell expansions
+REPORT_NODES_TMPL='{{range .items}}N{{"\t"}}{{.metadata.name}}{{"\n"}}{{$n := .metadata.name}}{{range $k, $v := .status.allocatable}}A{{"\t"}}{{$n}}{{"\t"}}{{$k}}{{"\t"}}{{$v}}{{"\n"}}{{end}}{{range $k, $v := .metadata.labels}}L{{"\t"}}{{$n}}{{"\t"}}{{$k}}{{"\t"}}{{$v}}{{"\n"}}{{end}}{{end}}'
+
+node_json() { printf '{"name":%s,"allocatable":{%s},"labels":{%s}}' "$(json_str "$1")" "$2" "$3"; }
+
+# Per node: every allocatable resource and the accelerator labels. Uses the
+# k3d-<cluster> context explicitly, never whatever context happens to be current.
+report_cluster() {
+    local ctx="k3d-${CLUSTER}" reason="" lines kind node key val nodes="" cur="" alloc="" labels="" summary=""
+    if ! command -v kubectl >/dev/null 2>&1; then
+        reason="kubectl not found"
+    elif ! kubectl config get-contexts -o name 2>/dev/null | grep -x "${ctx}" >/dev/null; then
+        reason="no kubeconfig context ${ctx} (cluster not created, or KUBECONFIG points elsewhere)"
+    elif ! lines=$(kubectl --context "${ctx}" --request-timeout=10s get nodes -o go-template="${REPORT_NODES_TMPL}" 2>/dev/null); then
+        reason="API server unreachable through context ${ctx}"
+    fi
+    if [ -n "${reason}" ]; then
+        report_line "Cluster ${CLUSTER}: not available — ${reason}"
+        printf '"cluster":{"name":%s,"context":%s,"present":false,"reason":%s,"nodes":[]}' \
+            "$(json_str "${CLUSTER}")" "$(json_str "${ctx}")" "$(json_str "${reason}")"
+        return
+    fi
+    while IFS=$'\t' read -r kind node key val; do
+        case "${kind}" in
+            N) [ -z "${cur}" ] || nodes+="${nodes:+,}$(node_json "${cur}" "${alloc}" "${labels}")"
+               cur=${node} alloc="" labels="" ;;
+            A) alloc+="${alloc:+,}$(json_str "${key}"):$(json_str "${val}")"
+               [[ "${key}" == */* ]] && [ "${val}" != 0 ] && summary+=" ${key}=${val}" ;;
+            L) [[ "${key}" =~ ${REPORT_LABEL_RE} ]] || continue
+               labels+="${labels:+,}$(json_str "${key}"):$(json_str "${val}")" ;;
+        esac
+    done <<< "${lines}"
+    [ -z "${cur}" ] || nodes+="${nodes:+,}$(node_json "${cur}" "${alloc}" "${labels}")"
+    report_line "Cluster ${CLUSTER} (${ctx}): advertises${summary:- no extended resources}"
+    printf '"cluster":{"name":%s,"context":%s,"present":true,"reason":null,"nodes":[%s]}' \
+        "$(json_str "${CLUSTER}")" "$(json_str "${ctx}")" "${nodes}"
+}
+
+report_json() {
+    local host
+    report_cpu_text
+    host="$(report_cpu),$(report_memory),$(report_intel_gpus),$(report_npus),$(report_gaudi)"
+    host+=",$(report_idxd dsa dsa dsa),$(report_idxd iaa iax iax),$(report_qat),$(report_nvidia),$(report_rapl)"
+    printf '{"schema":"%s","k3d_gpu_version":"%s","generated_at":%s,"hostname":%s,"host":{"kernel":%s,%s},%s,%s}\n' \
+        "${REPORT_SCHEMA}" "${VERSION}" "$(json_str "$(date -u +%Y-%m-%dT%H:%M:%SZ)")" \
+        "$(json_str "$(read1 "${SYSROOT}/proc/sys/kernel/hostname")")" "$(json_str "$(kernel_release)")" \
+        "${host}" "$(report_detected)" "$(report_cluster)"
+}
+
+# Self-contained HTML: the JSON is embedded verbatim ("</" escaped so it cannot
+# close the script tag) and rendered as nested tables by inline JS.
+report_html() {
+    local json=${1//<\//<\\/}
+    cat <<EOF
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>k3d-gpu report</title>
+<style>
+:root{--bg:#fafaf8;--fg:#1c1c1a;--mut:#6b6b66;--line:#ddddd6;--key:#f0f0ea;--yes:#1f7a3d;--no:#a33}
+@media (prefers-color-scheme:dark){:root{--bg:#161615;--fg:#e8e8e2;--mut:#9a9a92;--line:#33332f;--key:#20201e;--yes:#5cc77d;--no:#e07070}}
+body{margin:0;padding:24px 16px;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,sans-serif}
+main{max-width:980px;margin:0 auto}h1{font-size:20px;margin:0 0 4px}p.meta{color:var(--mut);margin:0 0 20px}
+h2{font-size:13px;margin:22px 0 8px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut)}
+.wrap{overflow-x:auto}table{border-collapse:collapse;width:100%}td,th{border:1px solid var(--line);padding:4px 8px;vertical-align:top;text-align:left}
+th{background:var(--key);font-weight:600;white-space:nowrap;width:1%}code{font:12px ui-monospace,monospace}
+.t{color:var(--yes)}.f{color:var(--no)}.n{color:var(--mut)}
+</style></head><body><main>
+<h1>k3d-gpu report</h1><p class="meta" id="meta"></p><div id="out"></div>
+<script id="report" type="application/json">${json}</script>
+<script>
+const r = JSON.parse(document.getElementById("report").textContent);
+const el = (t, c, s) => { const e = document.createElement(t); if (c) e.className = c; if (s !== undefined) e.textContent = s; return e; };
+function render(v) {
+  if (v === null) return el("span", "n", "null");
+  if (typeof v === "boolean") return el("span", v ? "t" : "f", String(v));
+  if (typeof v !== "object") return el("code", "", String(v));
+  if (Array.isArray(v) && v.every(x => x === null || typeof x !== "object")) return el("code", "", v.length ? v.join(" ") : "none");
+  const w = el("div", "wrap"), t = el("table");
+  for (const [k, x] of Object.entries(v)) {
+    const tr = el("tr"), td = el("td");
+    tr.append(el("th", "", Array.isArray(v) ? "#" + k : k)); td.append(render(x)); tr.append(td); t.append(tr);
+  }
+  w.append(t);
+  return w;
+}
+document.getElementById("meta").textContent = r.hostname + " · " + r.generated_at + " · k3d-gpu " + r.k3d_gpu_version;
+const out = document.getElementById("out");
+for (const [k, x] of [...Object.entries(r.host), ["detected", r.detected], ["cluster", r.cluster]]) { out.append(el("h2", "", k)); out.append(render(x)); }
+</script></main></body></html>
+EOF
+}
+
+# report [--json] [dir]: text summary plus <dir>/k3d-gpu-report.{json,html}, or
+# only the JSON on stdout with --json.
+cmd_report() {
+    local json dir=.
+    if [ "${1:-}" = "--json" ]; then
+        report_json 3>/dev/null
+        return
+    fi
+    [ -z "${1:-}" ] || dir=$1
+    [ -d "${dir}" ] || err "report directory ${dir} does not exist"
+    info "k3d-gpu report: host${SYSROOT:+ ${SYSROOT}}, cluster ${CLUSTER}"
+    exec 3>&1
+    json=$(report_json)
+    exec 3>&-
+    printf '%s\n' "${json}" > "${dir}/k3d-gpu-report.json"
+    report_html "${json}" > "${dir}/k3d-gpu-report.html"
+    info "Wrote ${dir}/k3d-gpu-report.json and ${dir}/k3d-gpu-report.html"
+}
+
 cmd_logs() {
     require docker
     docker logs -f "k3d-${CLUSTER}-server-0"
@@ -3243,6 +3626,7 @@ case "${1:-help}" in
     test)    cmd_test    ;;
     detect)  cmd_detect  ;;
     doctor)  shift; cmd_doctor "$@" ;;
+    report)  cmd_report "${2:-}" ;;
     logs)    cmd_logs    ;;
     host-setup) shift; cmd_host_setup "$@" ;;
     agent)   cmd_agent "${2:-}" ;;
