@@ -67,10 +67,21 @@ def accelerators(hw):
     return sorted(ids)
 
 
-def sku(hw):
+def sku(hw, engine=None):
+    """CPU plus the device the engine ran on. Devices that did not serve the
+    run are not part of the label (the cell key still separates them)."""
     names = [hw["cpu"]["model"] or "unknown CPU"]
-    names += sorted({g["platform"] or g["device_id"] for g in hw["intel_gpus"]})
-    names += sorted({g["model"] or g["device_id"] for g in hw["nvidia"]["gpus"]})
+    if engine == "igpu":
+        names += sorted({g["platform"] or g["device_id"] for g in hw["intel_gpus"]})
+    elif engine == "npu":
+        names += sorted({f"NPU {n['device_id']}" for n in hw["npus"]})
+    elif engine == "nvidia":
+        names += sorted({g["model"] or g["device_id"] for g in hw["nvidia"]["gpus"]})
+    elif engine == "gaudi" and hw["gaudi"]["devices"]:
+        names.append(f"Gaudi x{hw['gaudi']['devices']}")
+    elif engine != "cpu":
+        names += sorted({g["platform"] or g["device_id"] for g in hw["intel_gpus"]})
+        names += sorted({g["model"] or g["device_id"] for g in hw["nvidia"]["gpus"]})
     return " + ".join(names)
 
 
@@ -154,7 +165,7 @@ def build(paths, trusted_dirs=(), submitters=None, url_base=DEFAULT_URL_BASE, re
                    pl1_bucket(b["power"]["pl1_w"]), dram_bucket(hw["memory"]), lever_vector(b["levers"]))
         sub = submitters.get(b["content_sha256"]) or (
             "maintainer-lab" if b["provenance"]["source"] == "maintainer-lab" else b["content_sha256"])
-        c = cells.setdefault(cell_id, {"sku": sku(hw), "entries": []})
+        c = cells.setdefault(cell_id, {"sku": sku(hw, b["results"]["engine"]), "entries": []})
         c["entries"].append({"kind": b["kind"], "file": rel, "url": url_base + rel, "submitter": sub,
                              "maintainer": b["provenance"]["source"] == "maintainer-lab",
                              "note": b["provenance"]["note"], "tags": res.tags, "ab": b["ab"],

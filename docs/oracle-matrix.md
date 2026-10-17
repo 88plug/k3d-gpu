@@ -17,7 +17,7 @@ n > 1; n counts submitters, one vote each. Tier: provisional (n = 1), community,
 
 | SKU | Engine | Decode tok/s | Prefill TTFT s | PL1 | DRAM | Levers set | n | Tier | Tags | Data |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 13th Gen Intel(R) Core(TM) i9-13900T + Raptor Lake-S + NVIDIA RTX 2000E Ada Generation + NVIDIA RTX 4000 SFF Ada Generation | igpu | 9.89 | 29.53 | unknown | unknown | openvino_int4=on,pe_pinning=on,xmx_gate=off | 1 | provisional | unreleased-build | [bundle](https://github.com/88plug/k3d-gpu/blob/main/oracle/seed/maintainer-i9-13900T-h6-gpu.json) [ledger:H6] |
+| 13th Gen Intel(R) Core(TM) i9-13900T + Raptor Lake-S | igpu | 9.89 | 29.53 | unknown | unknown | openvino_int4=on,pe_pinning=on,xmx_gate=off | 1 | provisional | unreleased-build | [bundle](https://github.com/88plug/k3d-gpu/blob/main/oracle/seed/maintainer-i9-13900T-h6-gpu.json) [ledger:H6] |
 
 ## Key `cbea63192097`: single-stream-v1, cpu
 
@@ -27,7 +27,7 @@ n > 1; n counts submitters, one vote each. Tier: provisional (n = 1), community,
 
 | SKU | Engine | Decode tok/s | Prefill TTFT s | PL1 | DRAM | Levers set | n | Tier | Tags | Data |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 13th Gen Intel(R) Core(TM) i9-13900T + Raptor Lake-S + NVIDIA RTX 2000E Ada Generation + NVIDIA RTX 4000 SFF Ada Generation | cpu | 15.66 | 11.21 | unknown | unknown | openvino_int4=on,pe_pinning=on,xmx_gate=on | 1 | provisional | unreleased-build | [bundle](https://github.com/88plug/k3d-gpu/blob/main/oracle/seed/maintainer-i9-13900T-h6-cpu.json) [ledger:H6] |
+| 13th Gen Intel(R) Core(TM) i9-13900T | cpu | 15.66 | 11.21 | unknown | unknown | openvino_int4=on,pe_pinning=on,xmx_gate=on | 1 | provisional | unreleased-build | [bundle](https://github.com/88plug/k3d-gpu/blob/main/oracle/seed/maintainer-i9-13900T-h6-cpu.json) [ledger:H6] |
 
 ## Intel Advantage uplifts (paired A/B only)
 

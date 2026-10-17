@@ -1,4 +1,5 @@
 {
+ "inputs": [],
  "review": 0,
  "rows": [
   {
@@ -18,7 +19,7 @@
    "model": "OpenVINO/Qwen3-4B-int4-ov",
    "n": 1,
    "predicted_decode_roofline_tok_s": null,
-   "sku": "13th Gen Intel(R) Core(TM) i9-13900T + Raptor Lake-S + NVIDIA RTX 2000E Ada Generation + NVIDIA RTX 4000 SFF Ada Generation",
+   "sku": "13th Gen Intel(R) Core(TM) i9-13900T",
    "slo_s": null,
    "tags": [
     "unreleased-build"
@@ -43,7 +44,7 @@
    "model": "OpenVINO/Qwen3-4B-int4-ov",
    "n": 1,
    "predicted_decode_roofline_tok_s": null,
-   "sku": "13th Gen Intel(R) Core(TM) i9-13900T + Raptor Lake-S + NVIDIA RTX 2000E Ada Generation + NVIDIA RTX 4000 SFF Ada Generation",
+   "sku": "13th Gen Intel(R) Core(TM) i9-13900T + Raptor Lake-S",
    "slo_s": null,
    "tags": [
     "unreleased-build"

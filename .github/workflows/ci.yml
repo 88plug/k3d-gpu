@@ -131,6 +131,7 @@ jobs:
           fetch-depth: 0 # V4 reads the server image each release tag pins
       - run: python3 oracle/test_oracle.py
       - run: python3 oracle/test_fuzz.py
+      - run: python3 oracle/test_adversarial.py
       - name: Validate every committed bundle (maintainer seed trusted, data/oracle not)
         run: |
           mapfile -t seed < <(find oracle/seed -name '*.json' | sort)
@@ -141,7 +142,7 @@ jobs:
         run: |
           python3 oracle/matrix.py --trusted oracle/seed --md "${RUNNER_TEMP}/oracle-matrix.md" oracle/seed
           diff -u docs/oracle-matrix.md "${RUNNER_TEMP}/oracle-matrix.md"
-      - name: docs/leaderboard.{md,json} match the committed bundles
+      - name: docs/leaderboard.{md,json} match the bundles they list (new data/oracle files are pending)
         run: python3 oracle/leaderboard.py --check
 
   claims-check:

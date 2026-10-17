@@ -19,6 +19,7 @@ golden files)
 from __future__ import annotations
 
 import base64
+import contextlib
 import copy
 import io
 import json
@@ -642,6 +643,67 @@ class MatrixTest(unittest.TestCase):
         self.assertTrue(rows)
         for ln in rows:
             self.assertIn("https://github.com/88plug/k3d-gpu/blob/main/oracle/seed/", ln)
+
+
+class LeaderboardCheckTest(unittest.TestCase):
+    """CI runs `leaderboard.py --check` on every pull request. A community PR
+    adds only data/oracle/<sha>.json, so the check must pass on it; the
+    maintainer regenerates after merge."""
+
+    def setUp(self):
+        import leaderboard as L
+        self.L = L
+        self.tmp = tempfile.mkdtemp(dir=WORK)
+        self.data = os.path.join(self.tmp, "data", "oracle")
+        os.makedirs(self.data)
+        self.md, self.js = os.path.join(self.tmp, "leaderboard.md"), os.path.join(self.tmp, "leaderboard.json")
+        shutil.copy(os.path.join(REPO, "docs", "leaderboard.md"), self.md)
+        shutil.copy(os.path.join(REPO, "docs", "leaderboard.json"), self.js)
+        self.saved = (L.DATA, L.MD_OUT, L.JSON_OUT)
+        L.DATA = self.data
+
+    def tearDown(self):
+        self.L.DATA, self.L.MD_OUT, self.L.JSON_OUT = self.saved
+
+    def run_check(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = self.L.main(["--check", "--md", self.md, "--json", self.js])
+        return rc, out.getvalue()
+
+    def test_a_data_only_pull_request_passes_the_ci_steps(self):
+        b = cap_bundle()
+        self.assertEqual(check(b).verdict, "accept")
+        name = f"{b['content_sha256']}.json"
+        with open(os.path.join(self.data, name), "w") as f:
+            f.write(S.pretty(b))
+        # The CI validate step on the data file, then the leaderboard check.
+        self.assertEqual(V.validate(S.load_json(os.path.join(self.data, name)), pins=PINS).verdict, "accept")
+        rc, out = self.run_check()
+        self.assertEqual(rc, 0, out)
+        self.assertIn(f"data/oracle/{name} is pending", out)
+        # The maintainer regenerates after merge; the check then lists it as an input.
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(self.L.main(["--md", self.md, "--json", self.js]), 0)
+        self.assertEqual(S.load_json(self.js)["inputs"], [name])
+        rc, out = self.run_check()
+        self.assertEqual((rc, out), (0, ""))
+        # Deleting a listed input makes the committed board stale.
+        os.remove(os.path.join(self.data, name))
+        rc, out = self.run_check()
+        self.assertEqual(rc, 1, out)
+        self.assertIn("is listed as an input but is gone", out)
+
+    def test_committed_board_is_current(self):
+        self.L.DATA = self.saved[0]
+        rc, out = self.run_check()
+        self.assertEqual(rc, 0, out)
+
+    def test_sku_names_only_the_serving_device(self):
+        b = seed("cpu")
+        self.assertEqual(M.sku(b["hardware"], "cpu"), b["hardware"]["cpu"]["model"])
+        self.assertNotIn("NVIDIA", M.sku(seed("gpu")["hardware"], "igpu"))
+        self.assertIn("Raptor Lake-S", M.sku(seed("gpu")["hardware"], "igpu"))
 
 
 # ------------------------------------------------------------------ share

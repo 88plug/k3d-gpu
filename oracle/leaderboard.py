@@ -7,9 +7,10 @@ writes one row per matrix cell:
 
   agents per box   validator-recomputed APB at the bundle's p95 turn SLO
   decode tok/s     validator-recomputed single-stream decode median
-  tok/s/W          output tokens per package joule (tok/s per W), from the
-                   step's samples and its J per turn; "-" when no energy was
-                   recorded
+  tok/s/W          output tokens per package joule (tok/s per W) at the
+                   agents-per-box step (the largest agent count that met the
+                   SLO), from that step's samples and its J per turn; "-" when
+                   no energy was recorded
   basis            "measured" for every number above. "predicted" is reserved
                    for the bandwidth roofline (V8), printed in its own column
                    and never mixed into a measured column.
@@ -21,7 +22,11 @@ docs/leaderboard.json (the same rows, machine-readable).
 
   leaderboard.py [--md OUT.md] [--json OUT.json] [--check]
 
---check regenerates both and exits 1 when the committed files differ (CI).
+--check regenerates both from the bundles the committed leaderboard.json lists
+as its inputs (plus oracle/seed/) and exits 1 when the committed files differ
+(CI). A data/oracle/ bundle that is not an input yet (a community pull request,
+or one merged before the maintainer regenerated) is reported as pending and
+does not fail the check; `validate.py --strict` is the gate for those files.
 """
 
 from __future__ import annotations
@@ -29,6 +34,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import statistics
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -57,7 +63,7 @@ def tokens_per_joule(bundle, agents):
 
 
 def median(vals):
-    return sorted(vals)[len(vals) // 2] if vals else None
+    return statistics.median(vals) if vals else None
 
 
 def load(url_base_rel):
@@ -66,8 +72,17 @@ def load(url_base_rel):
         return json.load(f)
 
 
-def build(seed=SEED, data=DATA, repo=REPO):
-    paths = [p for p in (seed, data) if os.path.isdir(p)]
+def data_files(data=DATA):
+    """The bundles under data/, as paths relative to it, sorted."""
+    if not os.path.isdir(data):
+        return []
+    return sorted(os.path.relpath(p, data) for p in M.collect([data]))
+
+
+def build(seed=SEED, data=DATA, repo=REPO, inputs=None):
+    """inputs: the data/ bundles to read (relative to `data`); None reads all."""
+    inputs = data_files(data) if inputs is None else sorted(inputs)
+    paths = ([seed] if os.path.isdir(seed) else []) + [os.path.join(data, f) for f in inputs]
     m = M.build(paths, trusted_dirs=[seed], repo=repo)
     rows = []
     for c in m["cells"]:
@@ -100,7 +115,7 @@ def build(seed=SEED, data=DATA, repo=REPO):
             "ledger": c["ledger"], "data": c["data"],
         })
     rows.sort(key=lambda r: (r["sku"], r["engine"], r["comparison_key"]))
-    return {"schema": SCHEMA, "rows": rows, "review": len(m["review"])}
+    return {"schema": SCHEMA, "rows": rows, "review": len(m["review"]), "inputs": inputs}
 
 
 def fmt(x, nd=2):
@@ -116,7 +131,9 @@ def markdown(board):
          "[Capacity oracle](oracle.md).", "",
          "**Measured** columns come from a run on that box. **Predicted** columns are the bandwidth",
          "roofline (memory bandwidth / weight bytes) and are never a measurement; `-` means the bundle",
-         "does not carry the inputs. Rows are sorted by SKU, not ranked.", "",
+         "does not carry the inputs. `k3d-gpu share` does not record memory channels, MT/s or weight",
+         "bytes yet, so that column is not computed for any row it builds. The SKU is the CPU plus the",
+         "device the engine ran on. Rows are sorted by SKU, not ranked.", "",
          "| SKU | Engine | Agents per box (measured) | Decode tok/s (measured) | tok/s/W (measured) "
          "| Decode roofline tok/s (predicted) | n | Tier | Tags | Data |",
          "|---|---|---|---|---|---|---|---|---|---|"]
@@ -142,8 +159,16 @@ def main(argv=None):
     ap.add_argument("--json", default=JSON_OUT)
     ap.add_argument("--check", action="store_true", help="exit 1 when the committed files are stale")
     a = ap.parse_args(argv)
-    md, js = render(build())
     if a.check:
+        try:
+            with open(a.json) as f:
+                listed = json.load(f).get("inputs") or []
+        except (OSError, ValueError):
+            listed = []
+        present = set(data_files(DATA))
+        pending = sorted(present - set(listed))
+        missing = sorted(set(listed) - present)
+        md, js = render(build(data=DATA, inputs=[f for f in listed if f in present]))
         stale = []
         for path, text in ((a.md, md), (a.json, js)):
             try:
@@ -154,7 +179,13 @@ def main(argv=None):
                 stale.append(path)
         for p in stale:
             print(f"leaderboard: {os.path.relpath(p, REPO)} is stale; run python3 oracle/leaderboard.py")
+        for p in missing:
+            print(f"leaderboard: data/oracle/{p} is listed as an input but is gone")
+        for p in pending:
+            print(f"leaderboard: data/oracle/{p} is pending; a maintainer adds it by running "
+                  "python3 oracle/leaderboard.py after merge")
         return 1 if stale else 0
+    md, js = render(build(data=DATA))
     for path, text in ((a.md, md), (a.json, js)):
         with open(path, "w") as f:
             f.write(text)

@@ -8,11 +8,13 @@ linked bundle. Machine-readable: [leaderboard.json](leaderboard.json). How to ad
 
 **Measured** columns come from a run on that box. **Predicted** columns are the bandwidth
 roofline (memory bandwidth / weight bytes) and are never a measurement; `-` means the bundle
-does not carry the inputs. Rows are sorted by SKU, not ranked.
+does not carry the inputs. `k3d-gpu share` does not record memory channels, MT/s or weight
+bytes yet, so that column is not computed for any row it builds. The SKU is the CPU plus the
+device the engine ran on. Rows are sorted by SKU, not ranked.
 
 | SKU | Engine | Agents per box (measured) | Decode tok/s (measured) | tok/s/W (measured) | Decode roofline tok/s (predicted) | n | Tier | Tags | Data |
 |---|---|---|---|---|---|---|---|---|---|
-| 13th Gen Intel(R) Core(TM) i9-13900T + Raptor Lake-S + NVIDIA RTX 2000E Ada Generation + NVIDIA RTX 4000 SFF Ada Generation | cpu | - | 15.66 | - | - | 1 | provisional | unreleased-build | [bundle](https://github.com/88plug/k3d-gpu/blob/main/oracle/seed/maintainer-i9-13900T-h6-cpu.json) [ledger:H6] |
-| 13th Gen Intel(R) Core(TM) i9-13900T + Raptor Lake-S + NVIDIA RTX 2000E Ada Generation + NVIDIA RTX 4000 SFF Ada Generation | igpu | - | 9.89 | - | - | 1 | provisional | unreleased-build | [bundle](https://github.com/88plug/k3d-gpu/blob/main/oracle/seed/maintainer-i9-13900T-h6-gpu.json) [ledger:H6] |
+| 13th Gen Intel(R) Core(TM) i9-13900T | cpu | - | 15.66 | - | - | 1 | provisional | unreleased-build | [bundle](https://github.com/88plug/k3d-gpu/blob/main/oracle/seed/maintainer-i9-13900T-h6-cpu.json) [ledger:H6] |
+| 13th Gen Intel(R) Core(TM) i9-13900T + Raptor Lake-S | igpu | - | 9.89 | - | - | 1 | provisional | unreleased-build | [bundle](https://github.com/88plug/k3d-gpu/blob/main/oracle/seed/maintainer-i9-13900T-h6-gpu.json) [ledger:H6] |
 
 Bundles in review (quarantined or outliers, not shown): 0.
