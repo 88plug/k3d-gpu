@@ -2153,6 +2153,208 @@ else
     FAILS=$((FAILS + 1)); echo "FAIL baked NodeFeatureRules also set: ${dup}"
 fi
 
+# ---- NPU firmware vs user space, device access, recipe ------------------------
+
+# fwver <root> <relpath> <version string>: a firmware file under lib/firmware that
+# embeds <version string> between binary bytes, as intel/vpu/vpu_*.bin do.
+fwver() {
+    mkdir -p "$(dirname "$1/lib/firmware/$2")"
+    printf '\x7fhdr\x00\x01\x02%s\x00\xfftail' "$3" > "$1/lib/firmware/$2"
+}
+
+# npu_host <root> <pci id> [mode]: an NPU bound to intel_vpu with /dev/accel/accel0
+# in that mode (owned by the test user's group), on kernel 6.18.
+npu_host() {
+    kernel "$1" 6.18.1
+    pci "$1" 0000:00:0b.0 0x8086 "$2" intel_vpu; accel "$1" 0000:00:0b.0 0
+    chmod "${3:-660}" "$1/dev/accel/accel0"
+}
+
+OLD_40XX='Nov 13 2025*NPU40xx*ci_tag_ud202548_vpu_rc_20251112_1901-1-g72f907ffc78*72f907ffc780df5579a2fed65afc4944da8b0e44'
+NEW_40XX='Jun 30 2026*NPU40xx*build/ci/npu-fw-ci-ci_branch_UD202628_npu_release_26ww25-20260626_085052-f9a611865dbf3e6b37a17a0b01a7e81e7fc812e7-1-g3b431d96211*3b431d96211eb618edf1f7c444daa8185f1e686c'
+
+r=$(newroot npu-fw-old)
+npu_host "${r}" 0x643e
+fwver "${r}" intel/vpu/vpu_40xx_v1.bin "${OLD_40XX}"
+doctor_says "NPU firmware older than the OVMS image's NPU driver warns" "${r}" \
+    'warn.*NPU firmware built 2025-11-13 is older than the 2026-06-30 firmware of linux-npu-driver v1\.35\.0'
+doctor_says "older NPU firmware points at the intel-fw-npu release" "${r}" 'releases/tag/v1\.35\.0'
+
+r=$(newroot npu-fw-same)
+npu_host "${r}" 0x643e
+fwver "${r}" intel/vpu/vpu_40xx_v1.bin "${NEW_40XX}"
+doctor_says "NPU firmware from linux-npu-driver v1.35.0 is ok" "${r}" 'ok: NPU firmware built 2026-06-30, not older'
+doctor_says "NPU firmware from linux-npu-driver v1.35.0 does not warn" "${r}" 'is older than' negate
+
+r=$(newroot npu-fw-mtl)
+npu_host "${r}" 0x7d1d
+fwver "${r}" intel/vpu/vpu_37xx_v1.bin '20260701*MTL_CLIENT_SILICON-NVR+NN-deployment*3b431d96211e*3b431d96211e*3b431d96211'
+doctor_says "Meteor Lake firmware date format (YYYYMMDD) is read" "${r}" 'ok: NPU firmware built 2026-07-01'
+
+r=$(newroot npu-fw-ptl)
+npu_host "${r}" 0xb03e
+fwver "${r}" intel/vpu/vpu_50xx_v1.bin 'Jul  2 2026*NPU50xx*build/ci/x*3b431d96211e'
+doctor_says "space-padded day in a 50xx firmware date is read" "${r}" 'ok: NPU firmware built 2026-07-02'
+
+r=$(newroot npu-fw-xz)
+npu_host "${r}" 0x643e
+fwver "${r}" intel/vpu/vpu_40xx_v1.bin "${OLD_40XX}"
+xz "${r}/lib/firmware/intel/vpu/vpu_40xx_v1.bin"
+doctor_says "xz-compressed NPU firmware is decompressed and dated" "${r}" 'present \(/lib/firmware/intel/vpu/vpu_40xx_v1\.bin\.xz\)'
+doctor_says "xz-compressed old NPU firmware warns" "${r}" 'warn.*built 2025-11-13'
+
+r=$(newroot npu-fw-order)
+npu_host "${r}" 0x643e
+fwver "${r}" intel/vpu/vpu_40xx_v1.bin "${OLD_40XX}"
+fwver "${r}" updates/intel/vpu/vpu_40xx_v1.bin "${NEW_40XX}"
+zstd -q --rm "${r}/lib/firmware/updates/intel/vpu/vpu_40xx_v1.bin"
+doctor_says "uncompressed /lib/firmware beats a compressed updates/ file, as in the kernel" "${r}" \
+    'warn.*built 2025-11-13'
+fwver "${r}" "updates/6.18.1/intel/vpu/vpu_40xx_v1.bin" "${NEW_40XX}"
+doctor_says "uncompressed updates/<release> beats /lib/firmware" "${r}" \
+    'present \(/lib/firmware/updates/6\.18\.1/intel/vpu/vpu_40xx_v1\.bin\)'
+
+r=$(newroot npu-fw-v0)
+npu_host "${r}" 0x643e
+fwver "${r}" intel/vpu/vpu_40xx_v0.0.bin "${NEW_40XX}"
+fwver "${r}" intel/vpu/vpu_40xx_v1.bin "${OLD_40XX}"
+doctor_says "vpu_40xx_v1.bin is loaded before vpu_40xx_v0.0.bin" "${r}" 'warn.*built 2025-11-13'
+
+r=$(newroot npu-fw-blank)
+npu_host "${r}" 0x643e
+firmware "${r}" intel/vpu/vpu_40xx_v1.bin
+doctor_says "NPU firmware without a version string is reported, not judged" "${r}" 'note: no build date readable'
+
+GID=$(id -g)
+if [ "${GID}" -ne 0 ]; then
+    r=$(newroot npu-gid)
+    npu_host "${r}" 0x643e 660
+    doctor_says "group-only NPU node names the supplemental group" "${r}" \
+        "ok: /dev/accel/accel0 is group ${GID}, mode 660: non-root pods need securityContext.supplementalGroups: \[${GID}\]"
+    out=$(K3D_GPU_SYSROOT="${r}" K3D_GPU_SHARE="${K3D_GPU%/scripts/k3d-gpu}/share" bash "${K3D_GPU}" recipe npu-embeddings 2>&1)
+    if grep -q "supplementalGroups: \[${GID}\]" <<< "${out}" && ! grep -v '^[[:space:]]*#' <<< "${out}" | grep -q K3D_GPU_NPU_RENDER_GID; then
+        PASS=$((PASS + 1)); echo "ok   recipe npu-embeddings fills in the NPU group"
+    else
+        FAILS=$((FAILS + 1)); echo "FAIL recipe npu-embeddings fills in the NPU group"; sed 's/^/  | /' <<< "${out}"
+    fi
+else
+    echo "skip group-owned NPU node cases (running as root)"
+fi
+
+r=$(newroot npu-world)
+npu_host "${r}" 0x643e 666
+doctor_says "world read-write NPU node needs no group" "${r}" 'ok: /dev/accel/accel0 is mode 666: pods of any user'
+
+r=$(newroot npu-rootonly)
+npu_host "${r}" 0x643e 600
+doctor_says "owner-only NPU node warns" "${r}" 'warn.*only root pods'
+doctor_says "owner-only NPU node gets the udev rule" "${r}" 'SUBSYSTEM=="accel", GROUP="render", MODE="0660"'
+
+r=$(newroot npu-recipe-none)
+if env K3D_GPU_SYSROOT="${r}" K3D_GPU_SHARE="${K3D_GPU%/scripts/k3d-gpu}/share" bash "${K3D_GPU}" recipe npu-embeddings >/dev/null 2>&1; then
+    FAILS=$((FAILS + 1)); echo "FAIL recipe npu-embeddings without an NPU must fail"
+else
+    PASS=$((PASS + 1)); echo "ok   recipe npu-embeddings without an NPU fails"
+fi
+
+# Firmware search follows the kernel: firmware_class.path first, then the four
+# /lib/firmware dirs (no /usr/lib), and intel_vpu's firmware= replaces the name list.
+r=$(newroot npu-fw-usrlib)
+npu_host "${r}" 0x643e
+mkdir -p "${r}/usr/lib/firmware/intel/vpu"
+printf '%s' "${NEW_40XX}" > "${r}/usr/lib/firmware/intel/vpu/vpu_40xx_v1.bin"
+doctor_says "NPU firmware only under /usr/lib/firmware is not what the kernel loads" "${r}" \
+    'warn.*intel/vpu/vpu_40xx_\* firmware not found'
+
+r=$(newroot npu-fw-classpath)
+npu_host "${r}" 0x643e
+fwver "${r}" updates/intel/vpu/vpu_40xx_v1.bin "${OLD_40XX}"
+mkdir -p "${r}/opt/fw/intel/vpu" "${r}/sys/module/firmware_class/parameters"
+printf '%s' "${NEW_40XX}" > "${r}/opt/fw/intel/vpu/vpu_40xx_v1.bin"
+echo /opt/fw > "${r}/sys/module/firmware_class/parameters/path"
+doctor_says "firmware_class.path beats /lib/firmware/updates" "${r}" \
+    'present \(/opt/fw/intel/vpu/vpu_40xx_v1\.bin\)'
+
+r=$(newroot npu-fw-param)
+npu_host "${r}" 0x643e
+fwver "${r}" intel/vpu/vpu_40xx_v1.bin "${NEW_40XX}"
+fwver "${r}" intel/vpu/custom.bin "${OLD_40XX}"
+mkdir -p "${r}/sys/module/intel_vpu/parameters"
+echo intel/vpu/custom.bin > "${r}/sys/module/intel_vpu/parameters/firmware"
+doctor_says "intel_vpu firmware= names the file the driver loads" "${r}" \
+    'present \(/lib/firmware/intel/vpu/custom\.bin\)'
+doctor_says "intel_vpu firmware= is dated, not the default name" "${r}" 'warn.*built 2025-11-13'
+echo '(null)' > "${r}/sys/module/intel_vpu/parameters/firmware"
+doctor_says "unset intel_vpu firmware= reads (null) and keeps the default names" "${r}" \
+    'present \(/lib/firmware/intel/vpu/vpu_40xx_v1\.bin\)'
+echo intel/vpu/missing.bin > "${r}/sys/module/intel_vpu/parameters/firmware"
+doctor_says "intel_vpu firmware= naming a missing file does not fall back to the defaults" "${r}" \
+    'warn.*firmware not found'
+
+# A device node owned by group 0. The test user cannot chgrp to root, so a stat
+# stub reports group 0 for every file.
+GID0BIN="${WORK}/gid0bin"
+mkdir -p "${GID0BIN}"
+cat > "${GID0BIN}/stat" <<EOF
+#!/bin/sh
+$(command -v stat) "\$@" | awk '{\$1 = 0; print}'
+EOF
+chmod +x "${GID0BIN}/stat"
+SHARE="${K3D_GPU%/scripts/k3d-gpu}/share"
+
+r=$(newroot npu-gid0-660)
+npu_host "${r}" 0x643e 660
+doctor_says "group-0 NPU node with mode 660 warns" "${r}" 'warn.*/dev/accel/accel0 is group 0, mode 660: only root pods' \
+    "" PATH="${GID0BIN}:${STUB_BIN}:${PATH}"
+if out=$(env K3D_GPU_SYSROOT="${r}" K3D_GPU_SHARE="${SHARE}" PATH="${GID0BIN}:${PATH}" bash "${K3D_GPU}" recipe npu-embeddings 2>&1); then
+    FAILS=$((FAILS + 1)); echo "FAIL recipe npu-embeddings refuses a group-0, mode-660 node"; awk '{print "  | " $0}' <<< "${out}"
+elif grep -q 'is group 0, mode 660; only root pods can open it' <<< "${out}"; then
+    PASS=$((PASS + 1)); echo "ok   recipe npu-embeddings refuses a group-0, mode-660 node"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL recipe npu-embeddings refuses a group-0, mode-660 node (message)"; awk '{print "  | " $0}' <<< "${out}"
+fi
+
+r=$(newroot npu-gid0-666)
+npu_host "${r}" 0x643e 666
+out=$(env K3D_GPU_SYSROOT="${r}" K3D_GPU_SHARE="${SHARE}" PATH="${GID0BIN}:${PATH}" bash "${K3D_GPU}" recipe npu-embeddings 2>&1)
+if grep -q 'supplementalGroups: \[\]$' <<< "${out}"; then
+    PASS=$((PASS + 1)); echo "ok   recipe npu-embeddings gives a group-0, mode-666 node no supplemental group"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL recipe npu-embeddings gives a group-0, mode-666 node no supplemental group"; awk '{print "  | " $0}' <<< "${out}"
+fi
+
+# `up` publishes the NPU node's group as a node label. k3d records its arguments;
+# kubectl reports one allocatable NPU so verification passes at once.
+UPBIN="${WORK}/upbin"
+mkdir -p "${UPBIN}"
+printf '#!/bin/sh\nexit 0\n' > "${UPBIN}/docker"
+printf '#!/bin/sh\necho "$@" >> "${UP_LOG}"\n' > "${UPBIN}/k3d"
+printf '#!/bin/sh\ncase "$*" in *go-template*) echo "npu.intel.com/accel 1" ;; esac\nexit 0\n' > "${UPBIN}/kubectl"
+chmod +x "${UPBIN}"/*
+if [ "${GID}" -ne 0 ]; then
+    r=$(newroot npu-up)
+    npu_host "${r}" 0x643e 660
+    UP_LOG="${WORK}/up.log"
+    out=$(env K3D_GPU_SYSROOT="${r}" UP_LOG="${UP_LOG}" PATH="${UPBIN}:${PATH}" bash "${K3D_GPU}" up 2>&1)
+    if grep -q -- "--k3s-node-label=k3d-gpu.io/npu-render-gid=${GID}@server:\*;agent:\*" "${UP_LOG}"; then
+        PASS=$((PASS + 1)); echo "ok   up labels the node with the NPU render group"
+    else
+        FAILS=$((FAILS + 1)); echo "FAIL up labels the node with the NPU render group"
+        sed 's/^/  | /' "${UP_LOG}" 2>/dev/null; sed 's/^/  | /' <<< "${out}"
+    fi
+fi
+r=$(newroot npu-up-gid0)
+npu_host "${r}" 0x643e 666
+UP_LOG="${WORK}/up-gid0.log"
+out=$(env K3D_GPU_SYSROOT="${r}" UP_LOG="${UP_LOG}" PATH="${GID0BIN}:${UPBIN}:${PATH}" bash "${K3D_GPU}" up 2>&1)
+if grep -q -- "--k3s-node-label=intel.feature.node.kubernetes.io/npu=true" "${UP_LOG}" \
+   && ! grep -q -- "npu-render-gid" "${UP_LOG}"; then
+    PASS=$((PASS + 1)); echo "ok   up does not label a group-0 NPU node"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL up does not label a group-0 NPU node"
+    sed 's/^/  | /' "${UP_LOG}" 2>/dev/null; awk '{print "  | " $0}' <<< "${out}"
+fi
+
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

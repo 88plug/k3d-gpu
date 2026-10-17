@@ -17,6 +17,7 @@ k3d cluster create gpu
   --k3s-arg=--disable=traefik@server:0
   --k3s-node-label=nvidia.com/gpu.present=false@server:*;agent:*
   --k3s-node-label=intel.feature.node.kubernetes.io/npu=true@server:*;agent:*
+  --k3s-node-label=k3d-gpu.io/npu-render-gid=<gid>@server:*;agent:*
   --k3s-node-label=intel.feature.node.kubernetes.io/iaa=true@server:*;agent:*
   --volume=/dev/char:/dev/char:ro@server:*;agent:*
   --k3s-node-label=k3d-gpu.io/hybrid-cpu=true@server:*;agent:*

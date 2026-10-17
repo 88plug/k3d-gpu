@@ -1,0 +1,161 @@
+# Text embeddings on the Intel NPU (Core Ultra): OpenVINO Model Server answering
+# the OpenAI-compatible POST /v3/embeddings on port 8000 of Service npu-embeddings.
+# Not baked into the node image. Render and apply it with:
+#   k3d-gpu recipe npu-embeddings | kubectl apply -f -
+# The launcher replaces K3D_GPU_NPU_RENDER_GID in supplementalGroups with the
+# group of the host's /dev/accel/accelN (also published as the node label
+# k3d-gpu.io/npu-render-gid): pods get that device with the host's owner and mode,
+# and OVMS runs as uid 5000, so it needs the group to open the NPU.
+#
+# Image: openvino/model_server:2026.4.1-gpu (CPU=1 GPU=1 NPU=1), which bakes
+# linux-npu-driver v1.35.0 + Level Zero 1.33.1. `k3d-gpu doctor` warns when the
+# host's NPU firmware is older than that driver's (2026-06-30).
+#
+# Model: OpenVINO/Qwen3-Embedding-0.6B-int8-ov, pinned to a Hugging Face commit and
+# fetched file by file (OVMS pull mode has no revision pin). It is in the OVMS
+# 2026.4 embeddings demo's NPU-validated list, pooling LAST.
+#
+# max_length rules (OVMS v2026.4.1 src/embeddings/embeddings_servable.cpp and
+# embeddings_calculator_ov.cc):
+#   - Always set --max_length on NPU. Unset, OVMS takes the model's own limit from
+#     config.json (max_position_embeddings, then n_positions, seq_len, seq_length,
+#     n_ctx, sliding_window): 32768 for this model.
+#   - max_length < 1024: the model is reshaped to a static [1, max_length] shape
+#     and every input is right-padded to max_length, so NPU time grows with
+#     max_length, not with the text. Multi-input requests run one input at a time.
+#   - max_length >= 1024 (or unset): the NPUW LLM text-embedding pipeline
+#     (NPUW_LLM, NPUW_TEXT_EMBED) with MAX_PROMPT_LEN = max_length.
+#   - max_length above the model's own limit fails the load; 0 is rejected.
+#   - Inputs longer than max_length are a 400 ("Input length N longer than
+#     allowed M") unless --truncate true. The 2026.4 docs spell the flag
+#     --max_legth in docs/parameters.md; the CLI parser accepts --max_length.
+apiVersion: v1
+kind: Service
+metadata:
+  name: npu-embeddings
+  labels:
+    app: npu-embeddings
+spec:
+  selector:
+    app: npu-embeddings
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: npu-embeddings
+  labels:
+    app: npu-embeddings
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # one NPU per node; a rolling update would wait for a second one
+  selector:
+    matchLabels:
+      app: npu-embeddings
+  template:
+    metadata:
+      labels:
+        app: npu-embeddings
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 5000 # the image's ovms user
+        runAsGroup: 5000
+        supplementalGroups: [K3D_GPU_NPU_RENDER_GID]
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: fetch-model
+          image: openvino/model_server:2026.4.1-gpu@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: HF_REPO
+              value: OpenVINO/Qwen3-Embedding-0.6B-int8-ov
+            - name: HF_REVISION
+              value: 80d352d7061ec3e5caa3f26dc4e1f67bb8a21a5e
+            - name: MODEL_FILES
+              value: >-
+                config.json openvino_config.json openvino_model.xml openvino_model.bin
+                openvino_tokenizer.xml openvino_tokenizer.bin openvino_detokenizer.xml
+                openvino_detokenizer.bin tokenizer.json tokenizer_config.json
+                special_tokens_map.json added_tokens.json vocab.json merges.txt
+                chat_template.jinja 1_Pooling/config.json
+          command: ["bash", "-ec"]
+          args:
+            - |
+              d=/models/qwen3-embedding-0.6b
+              [ -f "${d}/.fetched-${HF_REVISION}" ] && exit 0
+              for f in ${MODEL_FILES}; do
+                curl -fsSL --retry 5 --create-dirs -o "${d}/${f}" \
+                  "https://huggingface.co/${HF_REPO}/resolve/${HF_REVISION}/${f}"
+              done
+              touch "${d}/.fetched-${HF_REVISION}"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: models
+              mountPath: /models
+      containers:
+        - name: ovms
+          image: openvino/model_server:2026.4.1-gpu@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58
+          imagePullPolicy: IfNotPresent
+          args:
+            # Flags from OVMS v2026.4.1 docs/parameters.md (embeddings) and the embeddings demo NPU commands.
+            - --model_path
+            - /models/qwen3-embedding-0.6b
+            - --model_name
+            - qwen3-embedding-0.6b
+            - --rest_port
+            - "8000"
+            - --task
+            - embeddings
+            - --target_device
+            - NPU
+            - --pooling
+            - LAST
+            - --max_length
+            - "512"
+            - --truncate
+            - "true"
+          ports:
+            - name: http
+              containerPort: 8000
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              memory: 6Gi
+              npu.intel.com/accel: 1
+          # The NPU compiles the model on first load; give it time before liveness.
+          startupProbe:
+            httpGet:
+              path: /v3/models/qwen3-embedding-0.6b
+              port: http
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /v3/models/qwen3-embedding-0.6b
+              port: http
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: models
+              mountPath: /models
+      volumes:
+        - name: models
+          emptyDir:
+            sizeLimit: 4Gi
+      nodeSelector:
+        intel.feature.node.kubernetes.io/npu: "true"

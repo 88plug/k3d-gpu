@@ -49,6 +49,7 @@ k3d-gpu up              # create the cluster (device plugins auto-deploy), verif
 k3d-gpu test            # per accelerator: nvidia-smi pod / device-node listing pod
 k3d-gpu logs            # tail the k3s server container logs
 k3d-gpu agent up        # OpenAI-compatible LLM server on the Intel GPU (else CPU)
+k3d-gpu recipe npu-embeddings | kubectl apply -f -   # OVMS embeddings on the NPU
 k3d-gpu down            # delete the cluster
 ```
 
@@ -69,6 +70,7 @@ Behaviour is tunable via environment variables:
 | `K3D_GPU_DSA_PLUGIN` / `_IAA_` / `_QAT_` | `/usr/share/k3d-gpu/intel-{dsa,iaa,qat}-plugin.yml` | same, for the Xeon accelerator plugins |
 | `K3D_GPU_HYBRID_PLUGIN` | `/usr/share/k3d-gpu/nri-balloons.yml` | same, for the NRI balloons policy (hybrid and NUMA hosts) |
 | `K3D_GPU_AGENT_*`    | see [Agent](#agent-an-openai-compatible-llm-on-the-best-intel-engine) | `k3d-gpu agent` settings |
+| `K3D_GPU_NPU_EMBEDDINGS` | `/usr/share/k3d-gpu/npu-embeddings.yml` | template printed by `k3d-gpu recipe npu-embeddings` |
 | `K3D_GPU_DEVICE_TEST_IMAGE` | `busybox:1.37`                     | image used by `k3d-gpu test` for Intel GPU/NPU and Gaudi |
 | `K3D_GPU_TEST_IMAGE` | `nvidia/cuda:13.4.2-base-ubuntu26.04`     | image used by `k3d-gpu test`         |
 
@@ -168,6 +170,33 @@ Workload images bring their own user space: Intel compute-runtime / Level Zero
 for GPUs, the [NPU driver](https://github.com/intel/linux-npu-driver) + OpenVINO
 for the NPU. Gaudi runs in the plugin's plain mode, which hands pods the devices
 without the habana container runtime; full Gaudi workloads may still expect it.
+
+### Intel NPU: firmware, device access, embeddings
+
+- **Firmware vs user space.** The NPU firmware is on the host
+  (`/lib/firmware/intel/vpu/vpu_*`); the Level Zero NPU driver and compiler are
+  in the serving image. `openvino/model_server:2026.4.1-gpu` bakes
+  [linux-npu-driver](https://github.com/intel/linux-npu-driver) v1.35.0, whose
+  firmware is built 2026-06-30. Per linux-npu-driver's "Firmware version
+  mismatch" note, the firmware must come from the driver release that matches
+  the compiler; older firmware fails with
+  `MAPPED_INFERENCE_VERSION is NOT compatible`. `doctor` reads the build date
+  out of the file the kernel loads (same search order as the kernel, `.zst`/`.xz`
+  included) and warns when it is older. Fix: install `intel-fw-npu` from the
+  v1.35.0 release (it lands in `/lib/firmware/updates/intel/vpu`, which the
+  kernel prefers) and reload `intel_vpu`.
+- **Device access.** Pods get `/dev/accel/accelN` with the host's owner, group
+  and mode. A non-root pod (OVMS runs as uid 5000) needs that group in
+  `securityContext.supplementalGroups` unless the node is mode 0666 (systemd's
+  default; Ubuntu uses 0660). `doctor` prints the group, and `up` labels the node
+  `k3d-gpu.io/npu-render-gid=<gid>`.
+- **Embeddings recipe.** `k3d-gpu recipe npu-embeddings | kubectl apply -f -`
+  runs OVMS 2026.4.1 with `OpenVINO/Qwen3-Embedding-0.6B-int8-ov` (pinned
+  commit) on the NPU and serves `POST /v3/embeddings` on Service
+  `npu-embeddings:8000`. It uses `--max_length 512`: below 1024, OVMS reshapes
+  the model to a static `[1, max_length]` shape and pads every input to it;
+  1024 and above uses the NPUW LLM text-embedding pipeline. The manifest
+  (`share/npu-embeddings.yml`) documents the rules.
 
 Force or limit vendors with `K3D_GPU_VENDORS=nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa`.
 A loaded `nvidia` or `habanalabs` kernel module counts as present even before
