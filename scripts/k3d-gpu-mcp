@@ -15,7 +15,8 @@ Read tools:
   accelerators        `k3d-gpu report --json`, or detect + node allocatable when
                       the launcher has no report subcommand
   recommend_placement pod-spec fragment for llm|embeddings|media|batch
-  agent_endpoint      OVMS OpenAI /v3 base URL and models from `k3d-gpu agent up`
+  agent_endpoint      OVMS OpenAI /v3 base URL and models from `k3d-gpu agent up`,
+                      or the remote endpoint `k3d-gpu agent up --remote` recorded
   cluster_health      node readiness and device-plugin DaemonSet rollout
   hardware            `k3d-gpu facts --json` (facts/v1), byte for byte
   plan_launch         `k3d-gpu plan --json` (plan/v1), byte for byte, plus its hash
@@ -47,6 +48,7 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.parse
 
 SERVER_NAME = "k3d-gpu-mcp"
 
@@ -69,7 +71,8 @@ INSTRUCTIONS = (
     "Xeon AMX, hybrid P/E cores). Call accelerators first to see what the host and cluster "
     "offer, then recommend_placement to get the pod-spec fragment for a workload. "
     "agent_endpoint returns the OpenAI-compatible URL of the in-cluster model server if "
-    "'k3d-gpu agent up' deployed one. hardware returns the host's facts/v1 document and "
+    "'k3d-gpu agent up' deployed one, or the remote endpoint 'k3d-gpu agent up --remote' "
+    "recorded (remote: true; pods read it from Secret k3d-gpu-llm). hardware returns the host's facts/v1 document and "
     "plan_launch the engine, model and placement picked from measured matrix cells, with a "
     "plan hash. apply is the only write: it runs a plan only after the user confirms its "
     "hash in this client, and only while the plan still hashes the same."
@@ -178,7 +181,9 @@ TOOLS = [
         "name": "agent_endpoint",
         "title": "Agent endpoint",
         "description": "OpenAI-compatible base URL (/v3) and served models of the OpenVINO Model "
-                       "Server that 'k3d-gpu agent up' deploys, with in-cluster and host access.",
+                       "Server that 'k3d-gpu agent up' deploys, with in-cluster and host access; "
+                       "or, after 'k3d-gpu agent up --remote', the remote endpoint (remote: true), "
+                       "its model and whether the Secret holds a key (never the key).",
         "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
         "annotations": {"readOnlyHint": True, "openWorldHint": False},
     },
@@ -480,14 +485,41 @@ def recommend(args, report):
 
 # ---- agent_endpoint --------------------------------------------------------------
 
+REMOTE_SECRET = "k3d-gpu-llm"
+# Annotations and whether a key is present; the template never prints a data value.
+REMOTE_TEMPLATE = ('{{index .metadata.annotations "k3d-gpu.io/base-url"}}{{"\\t"}}'
+                   '{{index .metadata.annotations "k3d-gpu.io/model"}}{{"\\t"}}'
+                   '{{if .data.OPENAI_API_KEY}}key{{end}}')
+
+
+def remote_endpoint():
+    """The endpoint 'k3d-gpu agent up --remote' recorded in Secret k3d-gpu-llm, or None."""
+    rc, out, _ = kubectl("-n", AGENT_NS, "get", "secret", REMOTE_SECRET, "-o", "go-template=" + REMOTE_TEMPLATE)
+    if rc != 0:
+        return None
+    base, model, key = (out.rstrip("\n").split("\t") + ["", "", ""])[:3]
+    base = "" if base == "<no value>" else base
+    model = "" if model == "<no value>" else model
+    return {"remote": True, "deployed": True, "ready": bool(base and key), "namespace": AGENT_NS,
+            "service": None, "device": None, "baseUrl": base or None,
+            "host": urllib.parse.urlsplit(base).hostname if base else None,
+            "models": [model] if model else [], "keyPresent": key == "key",
+            "secret": REMOTE_SECRET, "podEnv": {"envFrom": [{"secretRef": {"name": REMOTE_SECRET}}]},
+            "hostAccess": None, "apiServerProxy": None,
+            "reason": None if base and key else f"Secret {AGENT_NS}/{REMOTE_SECRET} has no endpoint or no key"}
+
+
 def agent_endpoint():
     proxy = f"/api/v1/namespaces/{AGENT_NS}/services/{AGENT_SVC}:{AGENT_PORT_NAME}/proxy"
-    result = {"deployed": False, "ready": False, "namespace": AGENT_NS, "service": AGENT_SVC,
+    result = {"remote": False, "deployed": False, "ready": False, "namespace": AGENT_NS, "service": AGENT_SVC,
               "device": None, "baseUrl": None, "hostAccess": None, "apiServerProxy": proxy + "/v3",
               "models": [], "reason": None}
     if not context_present():
         result["reason"] = f"no kubeconfig context {CONTEXT} — run 'k3d-gpu up'"
         return result
+    remote = remote_endpoint()
+    if remote:
+        return remote
     svc, reason = kubectl_json("-n", AGENT_NS, "get", "service", AGENT_SVC)
     if svc is None:
         result["reason"] = f"service {AGENT_NS}/{AGENT_SVC} not found — deploy it with 'k3d-gpu agent up' ({reason})"

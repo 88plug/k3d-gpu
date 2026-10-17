@@ -51,6 +51,14 @@ jobs:
       - run: tests/experimental_test.sh
       - run: tests/phase_steer_test.sh
 
+  remote-tests:
+    name: Remote OpenAI endpoints (resolver, Secret, sandbox egress, redaction)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - run: python3 tests/remote_test.py
+      - run: tests/remote_test.sh
+
   telemetry-tests:
     name: Telemetry manifests
     runs-on: ubuntu-latest

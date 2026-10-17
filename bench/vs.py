@@ -19,6 +19,12 @@ prompt set, the same max_tokens, temperature 0 and ignore_eos:
   - budget: when --budget-s runs out, no new segment starts and the verdict is
     INCONCLUSIVE (budget).
 
+A --remote-arm is a third-party OpenAI-compatible endpoint (k3d-gpu bench --vs
+remote): its bearer key comes from OPENAI_API_KEY, it samples at temperature
+REMOTE_TEMPERATURE without ignore_eos (a shared fleet may serve neither greedy
+nor ignore_eos), and the run is held to REMOTE_BUDGET (one round, at most one
+warmup, max_tokens <= 64), so it costs the endpoint a handful of requests.
+
 Verdict for "the k3d-gpu arm decodes faster than <stack>": the per-round median
 decode tok/s ratio (k3d-gpu / competitor) must be at least 1 + --margin in every
 round for SUPPORTED, at most 1 - --margin in every round for REFUTED, and
@@ -45,6 +51,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import llm_load  # noqa: E402
 
 SCHEMA = "k3d-gpu.bench-vs/v1"
+REMOTE_TEMPERATURE = 0.6
+REMOTE_BUDGET = {"rounds": 1, "warmup": 1, "max_tokens": 64}
 DEFAULT_PROMPTS = (
     "Explain in three short paragraphs how a CPU cache hierarchy reduces memory latency.",
     "Write a Python function that returns the n-th Fibonacci number iteratively, with a docstring.",
@@ -104,9 +112,11 @@ def parse_arm(spec):
 def request(arm, prompt, opts, deadline=None):
     # The per-request timeout never reaches past the budget's deadline.
     timeout = opts.timeout if deadline is None else max(1.0, min(opts.timeout, deadline - time.monotonic()))
+    remote = arm.get("name") in (getattr(opts, "remote_arm", None) or [])
     args = SimpleNamespace(base_url=arm["base_url"], model=arm["model"], prompt=prompt,
-                           max_tokens=opts.max_tokens, temperature=0.0, ignore_eos=True,
-                           api_key=None, timeout=timeout)
+                           max_tokens=opts.max_tokens, temperature=REMOTE_TEMPERATURE if remote else 0.0,
+                           ignore_eos=not remote, api_key=os.environ.get("OPENAI_API_KEY") if remote else None,
+                           timeout=timeout)
     s = llm_load.one_request(args, 0)
     # A server that sends no usage: fall back to content chunks (one token each
     # on llama.cpp, Ollama and OVMS streaming) and say so.
@@ -224,6 +234,9 @@ def cmd_run(opts):
         "schema": SCHEMA, "id": opts.id, "stack": vs["name"], "arms": arms,
         "params": {"rounds": opts.rounds, "warmup": opts.warmup, "max_tokens": opts.max_tokens,
                    "temperature": 0.0, "ignore_eos": True, "concurrency": 1, "margin": opts.margin,
+                   "remote_arms": opts.remote_arm or [],
+                   "remote_sampling": ({"temperature": REMOTE_TEMPERATURE, "ignore_eos": False}
+                                       if opts.remote_arm else None),
                    "budget_s": opts.budget_s, "prompts": prompts,
                    "energy_zone": f"{opts.powercap}/{opts.zone}"},
         "context": json.loads(opts.context) if opts.context else {},
@@ -385,6 +398,8 @@ def main(argv=None):
     r.add_argument("--zone", default="intel-rapl:0")
     r.add_argument("--context", help="JSON object recorded in the result (host, image, commit)")
     r.add_argument("--signed-off-by", default="")
+    r.add_argument("--remote-arm", action="append", default=[],
+                   help="arm NAME is a third-party endpoint: key from OPENAI_API_KEY, sampled, budgeted")
     d = sub.add_parser("docs")
     d.add_argument("results", nargs="*")
     d.add_argument("--ledger", default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "EXPERIMENTS.md"),
@@ -394,6 +409,13 @@ def main(argv=None):
     if opts.cmd == "run":
         if opts.rounds < 1 or opts.warmup < 0 or opts.max_tokens < 2:
             raise SystemExit("vs: --rounds >= 1, --warmup >= 0, --max-tokens >= 2")
+        names = [parse_arm(a)["name"] for a in opts.arm]
+        for n in opts.remote_arm:
+            if n not in names:
+                raise SystemExit(f"vs: --remote-arm {n} names no --arm")
+        if opts.remote_arm and any(getattr(opts, k) > v for k, v in REMOTE_BUDGET.items()):
+            raise SystemExit("vs: a --remote-arm run is budgeted: " +
+                             ", ".join(f"--{k.replace('_', '-')} <= {v}" for k, v in REMOTE_BUDGET.items()))
         return cmd_run(opts)
     return cmd_docs(opts)
 

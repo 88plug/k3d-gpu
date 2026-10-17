@@ -41,6 +41,9 @@ command: cluster, LLM server (model picked
 from your RAM), Open WebUI with a generated admin account. `k3d-gpu uninstall`
 removes it all. See [docs/quickstart.md](docs/quickstart.md), and the pinned,
 sha256-checked installer `packaging/install.sh`.
+No accelerator, or a team endpoint? `k3d-gpu quickstart --remote` uses any
+OpenAI-compatible endpoint (`OPENAI_BASE_URL`, `OPENAI_API_KEY`) instead of a
+local model: see [docs/remote-endpoints.md](docs/remote-endpoints.md).
 
 The `k3d-gpu` launcher wraps the whole workflow — no need to remember
 `k3d cluster create` flags. Install it with your package manager (see [Install](#install)), then:

@@ -21,6 +21,7 @@ hooks:
 nav:
   - Home: index.md
   - Quickstart: quickstart.md
+  - Remote endpoints: remote-endpoints.md
   - Intel platforms: intel.md
   - Platform matrix: platforms.md
   - Operations:

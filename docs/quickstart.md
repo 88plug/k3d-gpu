@@ -125,6 +125,9 @@ Other options:
 - `k3d-gpu quickstart --no-ui`: only the OpenAI-compatible API, no chat UI.
 - `K3D_GPU_CHAT_PORT=9090`: use this local port instead of the first free one
   from 8080.
+- `k3d-gpu quickstart --remote`: chat against an OpenAI-compatible endpoint
+  from `OPENAI_BASE_URL` and `OPENAI_API_KEY` instead of a local model. It needs
+  no accelerator and downloads no model; see [Remote endpoints](remote-endpoints.md).
 
 ## Windows (WSL2)
 
