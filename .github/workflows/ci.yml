@@ -28,6 +28,13 @@ jobs:
       - run: tests/eat_test.sh
       - run: tests/experimental_test.sh
 
+  agent-manifests:
+    name: Agent manifests (kubeconform)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: tests/agent_kubeconform.sh
+
   claims-check:
     name: Docs claims guard
     runs-on: ubuntu-latest

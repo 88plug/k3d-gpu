@@ -1694,7 +1694,8 @@ fi
 
 # ---- agent: device selection and manifest rendering ---------------------------
 # `agent manifest` reads the cluster through kubectl. The stub answers the
-# allocatable query from STUB_ALLOC ("<resource> <count>" lines) and a label
+# allocatable query from STUB_ALLOC ("<resource> <count>" lines), the pod-limits
+# query from STUB_USED ("<namespace> <resource> <count>" lines) and a label
 # selector query with one node when the label is listed in STUB_NODE_LABELS.
 ASTUB="${WORK}/abin"
 mkdir -p "${ASTUB}"
@@ -1703,10 +1704,15 @@ cat > "${ASTUB}/kubectl" <<'EOF'
 [ -z "${STUB_LOG:-}" ] || echo "kubectl $*" >> "${STUB_LOG}"
 case "$*" in
     *allocatable*) printf '%s\n' "${STUB_ALLOC:-}" ;;
+    "get pods -A "*) printf '%s\n' "${STUB_USED:-}" ;;
     "get nodes -l "*)
         for l in ${STUB_NODE_LABELS:-}; do [ "$l" = "$4" ] && echo node/k3d-agent-server-0; done ;;
     apply*) echo applied >> "${STUB_APPLY_LOG:-/dev/null}"
         if [ -n "${STUB_LOG:-}" ]; then cat >> "${STUB_LOG}"; else cat >/dev/null; fi ;;
+    "-n k3d-gpu-agent get deployment ovms-vlm -o jsonpath="*)
+        echo '["--rest_port=8000","--model_name=Qwen3-VL-4B-Instruct-int4-ov"]' ;;
+    *" exec deployment/ovms-vlm "*)
+        if [ -n "${STUB_VLM_REPLY:-}" ]; then echo "${STUB_VLM_REPLY}"; else echo '{"choices":[{"message":{"content":"Red"}}]}'; fi ;;
     *" exec "*) [ -n "${STUB_EXEC:-}" ] || exit 1; printf '%s\n' "${STUB_EXEC}" ;;
     "create --raw "*) cat >/dev/null; [ -n "${STUB_EXEC:-}" ] || exit 1; printf '%s\n' "${STUB_EXEC}" ;;
 esac
@@ -2602,6 +2608,299 @@ agent_log_before "agent up on a Gaudi stops the OVMS server before applying" \
 agent_log_has "agent up on a Gaudi waits for deployment/vllm" 'rollout status deployment/vllm'
 agent_log_has "agent up on a Gaudi warms up through /v1/chat/completions" \
     'create --raw /api/v1/namespaces/k3d-gpu-agent/services/vllm:http/proxy/v1/chat/completions'
+
+# ---- agent add-ons: device plan around the LLM and add-on manifests ----------
+# `agent manifest --with ...` keeps the LLM on agent_select's device and plans
+# the add-ons against the units it and pods in other namespaces leave free.
+# deploy_doc prints one Deployment of a rendered manifest.
+deploy_doc() {
+    awk -v want="$1" '
+        function flush() { if (kind == "Deployment" && name == want) printf "%s", buf; buf = ""; kind = ""; name = "" }
+        /^---$/ { flush(); next }
+        { buf = buf $0 "\n" }
+        /^kind: / { kind = $2 }
+        /^  name: / && name == "" { name = $2 }
+        END { flush() }'
+}
+
+# addon_says <name> <root> <want rc: 0|fail> <deployment|-> <ERE> [negate] [env...]: with the
+# agent arguments in WITH, the named Deployment (or, for -, all output incl. stderr) must match.
+addon_says() {
+    local name=$1 root=$2 want=$3 doc=$4 re=$5 negate=${6:-} out rc hit=0
+    shift 6 2>/dev/null || shift $#
+    # shellcheck disable=SC2086 # WITH is a word list
+    out=$(env K3D_GPU_SYSROOT="${root}" PATH="${ASTUB}:${PATH}" "$@" bash "${K3D_GPU}" agent manifest ${WITH} 2>&1)
+    rc=$?
+    [ "${doc}" = - ] || out=$(deploy_doc "${doc}" <<< "${out}")
+    grep -E -- "${re}" <<< "${out}" >/dev/null && hit=1
+    if { { [ -z "${negate}" ] && [ "${hit}" -eq 1 ]; } || { [ -n "${negate}" ] && [ "${hit}" -eq 0 ]; }; } \
+       && { { [ "${want}" = 0 ] && [ "${rc}" -eq 0 ]; } || { [ "${want}" = fail ] && [ "${rc}" -ne 0 ]; }; }; then
+        PASS=$((PASS + 1)); echo "ok   ${name}"
+    else
+        FAILS=$((FAILS + 1))
+        echo "FAIL ${name} (rc=${rc}, want ${want}, ${doc}: ${negate:+not }/${re}/)"
+        awk '{print "  | " $0}' <<< "${out}"
+    fi
+}
+
+r=$(newroot addon-igpu-npu)
+pci "${r}" 0000:00:02.0 0x8086 0xa780 i915; render "${r}" 0000:00:02.0 128
+pci "${r}" 0000:00:0b.0 0x8086 0x7d1d intel_vpu; accel "${r}" 0000:00:0b.0 0
+rgid=$(stat -c %g "${r}/dev/dri/renderD128")
+agid=$(stat -c %g "${r}/dev/accel/accel0")
+SHARED=$'cpu 32\ngpu.intel.com/i915 3\nnpu.intel.com/accel 1'
+ONE=$'cpu 32\ngpu.intel.com/i915 1\nnpu.intel.com/accel 1'
+XMX=gpu.intel.com/xmx=true
+WITH="--with vlm,stt,video"
+addon_says "with GPU units for all, video gets the iGPU" "${r}" 0 video-analytics \
+    'gpu\.intel\.com/i915: "?1"?' "" STUB_ALLOC="${SHARED}"
+addon_says "with GPU units for all, vlm gets the iGPU" "${r}" 0 ovms-vlm \
+    '--target_device=GPU$' "" STUB_ALLOC="${SHARED}"
+addon_says "with GPU units for all, an XMX LLM keeps the iGPU" "${r}" 0 ovms \
+    '--target_device=GPU$' "" STUB_ALLOC="${SHARED}" STUB_NODE_LABELS="${XMX}"
+addon_says "add-ons do not change the LLM's auto rule: no XMX, CPU" "${r}" 0 ovms \
+    '--target_device=CPU$' "" STUB_ALLOC="${SHARED}"
+addon_says "stt goes to the NPU first" "${r}" 0 ovms-stt \
+    'npu\.intel\.com/accel: "?1"?' "" STUB_ALLOC="${SHARED}"
+addon_says "stt on the NPU runs Whisper there" "${r}" 0 ovms-stt \
+    '--target_device=NPU$' "" STUB_ALLOC="${SHARED}"
+addon_says "stt NPU pod joins the accel node's group" "${r}" 0 ovms-stt \
+    "supplementalGroups: \[${agid}\]" "" STUB_ALLOC="${SHARED}"
+addon_says "video GPU pod joins the render group" "${r}" 0 video-analytics \
+    "supplementalGroups: \[${rgid}\]" "" STUB_ALLOC="${SHARED}"
+addon_says "add-ons run the OVMS image" "${r}" 0 ovms-stt \
+    'image: openvino/model_server@sha256:[0-9a-f]{64}' "" STUB_ALLOC="${SHARED}"
+addon_says "one unshared iGPU, no XMX: the LLM is on CPU and video gets the iGPU" "${r}" 0 video-analytics \
+    'k3d-gpu.io/agent-device: GPU' "" STUB_ALLOC="${ONE}"
+addon_says "one unshared iGPU, no XMX: vlm falls back to CPU" "${r}" 0 ovms-vlm \
+    '--target_device=CPU$' "" STUB_ALLOC="${ONE}"
+addon_says "one unshared iGPU, XMX: the LLM keeps it" "${r}" 0 ovms \
+    '--target_device=GPU$' "" STUB_ALLOC="${ONE}" STUB_NODE_LABELS="${XMX}"
+addon_says "one unshared iGPU, XMX: video decodes on CPU" "${r}" 0 video-analytics \
+    'k3d-gpu.io/agent-device: CPU' "" STUB_ALLOC="${ONE}" STUB_NODE_LABELS="${XMX}"
+addon_says "one unshared iGPU: CPU fallbacks request no GPU" "${r}" 0 ovms-vlm \
+    'gpu\.intel\.com' negate STUB_ALLOC="${ONE}"
+addon_says "a GPU fallback to CPU is reported" "${r}" 0 - \
+    'vlm: no Intel GPU unit is left' "" STUB_ALLOC="${ONE}"
+addon_says "K3D_GPU_AGENT_DEVICE=GPU keeps the iGPU for the LLM" "${r}" 0 ovms \
+    '--target_device=GPU$' "" STUB_ALLOC="${ONE}" K3D_GPU_AGENT_DEVICE=GPU
+addon_says "... and video then falls back to CPU" "${r}" 0 video-analytics \
+    'k3d-gpu.io/agent-device: CPU' "" STUB_ALLOC="${ONE}" K3D_GPU_AGENT_DEVICE=GPU
+addon_says "an add-on's explicit request wins the GPU over add-on priority" "${r}" 0 ovms-vlm \
+    '--target_device=GPU$' "" STUB_ALLOC="${ONE}" K3D_GPU_AGENT_VLM_DEVICE=gpu
+addon_says "... and video then decodes on CPU" "${r}" 0 video-analytics \
+    'k3d-gpu.io/agent-device: CPU' "" STUB_ALLOC="${ONE}" K3D_GPU_AGENT_VLM_DEVICE=GPU
+addon_says "an add-on's explicit GPU request fails when the LLM holds the only one" "${r}" fail - \
+    'no free Intel GPU' "" STUB_ALLOC="${ONE}" STUB_NODE_LABELS="${XMX}" K3D_GPU_AGENT_VLM_DEVICE=GPU
+addon_says "a GPU held by a pod elsewhere is not free" "${r}" 0 video-analytics \
+    'k3d-gpu.io/agent-device: CPU' "" STUB_ALLOC="${ONE}" STUB_USED='default gpu.intel.com/i915 1'
+addon_says "the agent's own pods do not hold units against the plan" "${r}" 0 video-analytics \
+    'k3d-gpu.io/agent-device: GPU' "" STUB_ALLOC="${ONE}" STUB_USED='k3d-gpu-agent gpu.intel.com/i915 1'
+addon_says "an NPU held elsewhere sends stt to a GPU" "${r}" 0 ovms-stt \
+    '--target_device=GPU$' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 4\nnpu.intel.com/accel 1' STUB_USED='other npu.intel.com/accel 1'
+addon_says "an LLM on the NPU leaves stt the GPU" "${r}" 0 ovms-stt \
+    '--target_device=GPU$' "" STUB_ALLOC="${SHARED}" K3D_GPU_AGENT_DEVICE=NPU
+addon_says "explicit GPU with none free fails" "${r}" fail - \
+    'no free Intel GPU' "" STUB_ALLOC="${ONE}" K3D_GPU_AGENT_VLM_DEVICE=GPU K3D_GPU_AGENT_VIDEO_DEVICE=GPU
+addon_says "video on the NPU is rejected" "${r}" fail - \
+    'media engines' "" STUB_ALLOC="${SHARED}" K3D_GPU_AGENT_VIDEO_DEVICE=NPU
+addon_says "an unknown add-on device is rejected" "${r}" fail - \
+    "unknown K3D_GPU_AGENT_STT_DEVICE 'DSP'" "" STUB_ALLOC="${SHARED}" K3D_GPU_AGENT_STT_DEVICE=DSP
+addon_says "the LLM's own override still applies" "${r}" 0 ovms \
+    '--target_device=CPU$' "" STUB_ALLOC="${SHARED}" STUB_NODE_LABELS="${XMX}" K3D_GPU_AGENT_DEVICE=CPU
+
+# A vLLM LLM holds K3D_GPU_AGENT_GPUS units; the add-ons stay on OVMS.
+XE3=$'cpu 32\ngpu.intel.com/xe 3\nnpu.intel.com/accel 1'
+WITH="--with vlm,video"
+addon_says "vllm LLM with add-ons renders the vllm Deployment" "${r}" 0 vllm \
+    'gpu\.intel\.com/xe: "?2"?' "" STUB_ALLOC="${XE3}" K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_AGENT_GPUS=2
+addon_says "vllm on 2 of 3 GPU units leaves video the third" "${r}" 0 video-analytics \
+    'k3d-gpu.io/agent-device: GPU' "" STUB_ALLOC="${XE3}" K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_AGENT_GPUS=2
+addon_says "... and vlm none" "${r}" 0 ovms-vlm \
+    '--target_device=CPU$' "" STUB_ALLOC="${XE3}" K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_AGENT_GPUS=2
+addon_says "an add-on next to vllm runs the OVMS image, not vLLM's" "${r}" 0 ovms-vlm \
+    'image: openvino/model_server@sha256:[0-9a-f]{64}' "" STUB_ALLOC="${XE3}" K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_AGENT_GPUS=2
+addon_says "a Gaudi LLM leaves the Intel GPU to video" "${r}" 0 video-analytics \
+    'k3d-gpu.io/agent-device: GPU' "" STUB_ALLOC=$'cpu 32\nhabana.ai/gaudi 1\ngpu.intel.com/i915 1'
+
+WITH="--with stt"
+addon_says "stt alone, no NPU, one XMX iGPU: the LLM keeps the GPU" "${r}" 0 ovms \
+    '--target_device=GPU$' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' STUB_NODE_LABELS="${XMX}"
+addon_says "stt alone, no NPU, one XMX iGPU: stt runs on CPU" "${r}" 0 ovms-stt \
+    '--target_device=CPU$' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' STUB_NODE_LABELS="${XMX}"
+addon_says "stt alone, no NPU, two GPU units: stt gets one" "${r}" 0 ovms-stt \
+    '--target_device=GPU$' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 2' STUB_NODE_LABELS="${XMX}"
+addon_says "stt pulls Whisper as a speech2text task" "${r}" 0 ovms-stt \
+    '--task=speech2text$' "" STUB_ALLOC="${SHARED}"
+addon_says "default Whisper is large-v3-turbo" "${r}" 0 ovms-stt \
+    '--source_model=OpenVINO/whisper-large-v3-turbo-fp16-ov$' "" STUB_ALLOC="${SHARED}"
+addon_says "K3D_GPU_AGENT_STT_MODEL picks another Whisper" "${r}" 0 ovms-stt \
+    '--model_name=whisper-base-int8-ov$' "" STUB_ALLOC="${SHARED}" K3D_GPU_AGENT_STT_MODEL=OpenVINO/whisper-base-int8-ov
+addon_says "add-ons not asked for are not rendered" "${r}" 0 - \
+    'name: (ovms-vlm|video-analytics)$' negate STUB_ALLOC="${SHARED}"
+
+WITH="--with=VLM"
+addon_says "add-on names are case-insensitive" "${r}" 0 ovms-vlm \
+    '--task=text_generation$' "" STUB_ALLOC="${SHARED}"
+addon_says "default VLM is Qwen3-VL-4B int4" "${r}" 0 ovms-vlm \
+    '--source_model=OpenVINO/Qwen3-VL-4B-Instruct-int4-ov$' "" STUB_ALLOC="${SHARED}"
+addon_says "VLM on the NPU uses the fp16 Phi-3.5-vision IR" "${r}" 0 ovms-vlm \
+    '--source_model=OpenVINO/Phi-3.5-vision-instruct-fp16-ov$' "" STUB_ALLOC="${SHARED}" K3D_GPU_AGENT_VLM_DEVICE=NPU
+addon_says "K3D_GPU_AGENT_VLM_MODEL overrides the VLM" "${r}" 0 ovms-vlm \
+    '--model_name=Qwen3-VL-8B-Instruct-int4-ov$' "" STUB_ALLOC="${SHARED}" K3D_GPU_AGENT_VLM_MODEL=OpenVINO/Qwen3-VL-8B-Instruct-int4-ov
+addon_says "image URLs are refused unless domains are allowed" "${r}" 0 ovms-vlm \
+    'allowed_media_domains' negate STUB_ALLOC="${SHARED}"
+addon_says "K3D_GPU_AGENT_VLM_MEDIA_DOMAINS allows image URLs" "${r}" 0 ovms-vlm \
+    '--allowed_media_domains=example.com$' "" STUB_ALLOC="${SHARED}" K3D_GPU_AGENT_VLM_MEDIA_DOMAINS=example.com
+addon_says "VLM on the NPU lifts the 1024-token prompt limit images count against" "${r}" 0 ovms-vlm \
+    '--max_prompt_len=4096$' "" STUB_ALLOC="${SHARED}" K3D_GPU_AGENT_VLM_DEVICE=NPU
+addon_says "K3D_GPU_AGENT_VLM_MAX_PROMPT_LEN sets the NPU prompt limit" "${r}" 0 ovms-vlm \
+    '--max_prompt_len=8192$' "" STUB_ALLOC="${SHARED}" K3D_GPU_AGENT_VLM_DEVICE=NPU K3D_GPU_AGENT_VLM_MAX_PROMPT_LEN=8192
+addon_says "VLM on the GPU has no NPU prompt limit" "${r}" 0 ovms-vlm \
+    'max_prompt_len' negate STUB_ALLOC="${SHARED}"
+
+WITH="--with video"
+addon_says "GPU video decodes into VA surfaces" "${r}" 0 - \
+    'decodebin3 ! vapostproc ! video/x-raw\(memory:VAMemory\)' "" STUB_ALLOC="${SHARED}"
+addon_says "GPU video ranks the va decoders first" "${r}" 0 video-analytics \
+    'value: vah264dec:MAX,vah265dec:MAX' "" STUB_ALLOC="${SHARED}"
+addon_says "CPU video leaves decoder ranks alone" "${r}" 0 video-analytics \
+    'GST_PLUGIN_FEATURE_RANK' negate STUB_ALLOC='cpu 32'
+addon_says "CPU video requests no GPU" "${r}" 0 video-analytics \
+    'gpu\.intel\.com' negate STUB_ALLOC='cpu 32'
+addon_says "the DL Streamer image is pinned by digest" "${r}" 0 video-analytics \
+    'image: intel/dlstreamer@sha256:[0-9a-f]{64}' "" STUB_ALLOC="${SHARED}"
+addon_says "the model is checked against its sha256" "${r}" 0 video-analytics \
+    'sha256sum -c' "" STUB_ALLOC="${SHARED}"
+addon_says "the sample clip is fetched by default" "${r}" 0 video-analytics \
+    'input\.mp4 https://' "" STUB_ALLOC="${SHARED}"
+addon_says "a video source skips the sample clip" "${r}" 0 video-analytics \
+    'input\.mp4 https://' negate STUB_ALLOC="${SHARED}" K3D_GPU_AGENT_VIDEO_SOURCE=rtsp://cam/stream
+addon_says "a video source reaches the pipeline" "${r}" 0 video-analytics \
+    'value: "rtsp://cam/stream"' "" STUB_ALLOC="${SHARED}" K3D_GPU_AGENT_VIDEO_SOURCE=rtsp://cam/stream
+addon_says "a host path as video source is rejected (the pod cannot see it)" "${r}" fail - \
+    'K3D_GPU_AGENT_VIDEO_SOURCE must be a stream URI' "" STUB_ALLOC="${SHARED}" K3D_GPU_AGENT_VIDEO_SOURCE=/home/me/cam.mp4
+addon_says "a file:// video source is rejected too" "${r}" fail - \
+    'K3D_GPU_AGENT_VIDEO_SOURCE must be a stream URI' "" STUB_ALLOC="${SHARED}" K3D_GPU_AGENT_VIDEO_SOURCE=file:///home/me/cam.mp4
+addon_says "a video source with a quote cannot break out of the YAML string" "${r}" fail - \
+    'K3D_GPU_AGENT_VIDEO_SOURCE must be a stream URI' "" STUB_ALLOC="${SHARED}" K3D_GPU_AGENT_VIDEO_SOURCE='rtsp://cam/x"
+        privileged: true'
+addon_says "a video source with a backslash is rejected" "${r}" fail - \
+    'K3D_GPU_AGENT_VIDEO_SOURCE must be a stream URI' "" STUB_ALLOC="${SHARED}" K3D_GPU_AGENT_VIDEO_SOURCE='rtsp://cam/a\b'
+addon_says "a video source with a gst-launch '!' is rejected" "${r}" fail - \
+    'K3D_GPU_AGENT_VIDEO_SOURCE must be a stream URI' "" STUB_ALLOC="${SHARED}" K3D_GPU_AGENT_VIDEO_SOURCE='rtsp://cam/a!fakesink'
+addon_says "a video source with a space is rejected" "${r}" fail - \
+    'K3D_GPU_AGENT_VIDEO_SOURCE must be a stream URI' "" STUB_ALLOC="${SHARED}" K3D_GPU_AGENT_VIDEO_SOURCE='rtsp://cam/a b'
+addon_says "an https video source with a query string is accepted" "${r}" 0 video-analytics \
+    'value: "https://cam.example/live\.m3u8\?token=abc&x=1"' "" STUB_ALLOC="${SHARED}" \
+    K3D_GPU_AGENT_VIDEO_SOURCE='https://cam.example/live.m3u8?token=abc&x=1'
+
+r=$(newroot addon-hybrid)
+hybrid "${r}" 0-15 16-31
+WITH="--with vlm,video"
+addon_says "on a hybrid node an offloaded add-on sits on E-cores" "${r}" 0 video-analytics \
+    'k3d-gpu.io/cores: efficient' "" STUB_ALLOC="${SHARED}" STUB_NODE_LABELS=k3d-gpu.io/hybrid-cpu=true
+addon_says "on a hybrid node a CPU add-on sits on P-cores" "${r}" 0 ovms-vlm \
+    'k3d-gpu.io/cores: performance' "" STUB_ALLOC="${ONE}" STUB_NODE_LABELS=k3d-gpu.io/hybrid-cpu=true
+
+WITH="--with tts"
+addon_says "an unknown add-on is rejected" "${r}" fail - "unknown agent add-on 'tts'" "" STUB_ALLOC="${SHARED}"
+WITH="--with"
+addon_says "--with needs a list" "${r}" fail - '--with needs a list' "" STUB_ALLOC="${SHARED}"
+WITH="--gpu"
+addon_says "an unknown agent option is rejected" "${r}" fail - "unknown agent option '--gpu'" "" STUB_ALLOC="${SHARED}"
+WITH=""
+
+# up_applies <name> <yes|no> [env...]: whether `agent up ${WITH}` applies anything.
+# It must stop first when the plan fails: the planners run inside command
+# substitutions, where set -e does not reach.
+up_applies() {
+    local name=$1 want=$2 applied="${WORK}/applied.log"
+    shift 2
+    rm -f "${applied}"
+    # shellcheck disable=SC2086 # WITH is a word list
+    env K3D_GPU_SYSROOT="${r}" PATH="${ASTUB}:${PATH}" STUB_APPLY_LOG="${applied}" "$@" \
+        bash "${K3D_GPU}" agent up ${WITH} >/dev/null 2>&1
+    if { [ "${want}" = no ] && [ ! -s "${applied}" ]; } || { [ "${want}" = yes ] && [ -s "${applied}" ]; }; then
+        PASS=$((PASS + 1)); echo "ok   ${name}"
+    else
+        FAILS=$((FAILS + 1)); echo "FAIL ${name} (applied: $([ -s "${applied}" ] && echo yes || echo no), want ${want})"
+    fi
+}
+WITH="--with stt"
+up_applies "agent up applies nothing when an add-on's device is missing" no \
+    STUB_ALLOC='cpu 8' K3D_GPU_AGENT_STT_DEVICE=NPU
+up_applies "agent up --with applies nothing when the LLM's device is missing" no \
+    STUB_ALLOC='cpu 8' K3D_GPU_AGENT_DEVICE=GPU
+up_applies "agent up applies a plan that fits" yes STUB_ALLOC=$'cpu 8\nnpu.intel.com/accel 1'
+WITH=""
+
+# `agent up ${WITH}` must delete the add-ons left out of WITH before it applies
+# the plan, because the plan counts the agent namespace's devices as free.
+log="${WORK}/addon-kubectl.log"
+WARM='{"choices":[{"message":{"content":"hi"}}]}'
+addon_up() {
+    : > "${log}"
+    # shellcheck disable=SC2086 # WITH is a word list
+    env K3D_GPU_SYSROOT="${r}" PATH="${ASTUB}:${PATH}" STUB_LOG="${log}" STUB_EXEC="${WARM}" "$@" \
+        bash "${K3D_GPU}" agent up ${WITH} 2>&1
+}
+WITH="--with vlm"
+addon_up STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' >/dev/null
+agent_log_before "agent up --with vlm first removes a video add-on from an earlier run" \
+    'delete .*deployment/video-analytics' '^kubectl apply -f -$'
+agent_log_before "... and an stt add-on" 'delete .*deployment/ovms-stt' '^kubectl apply -f -$'
+agent_log_before "... and waits for their pods to go" 'delete .*--cascade=foreground --wait=true' '^kubectl apply -f -$'
+if grep -E -- 'delete .*deployment/ovms-vlm( |$)' "${log}" >/dev/null; then
+    FAILS=$((FAILS + 1)); echo "FAIL ... but keeps the vlm it is about to update"; awk '{print "  | " $0}' "${log}"
+else
+    PASS=$((PASS + 1)); echo "ok   ... but keeps the vlm it is about to update"
+fi
+# The VLM warm-up POSTs from inside its pod, as the LLM's does: through the API
+# server's service proxy OVMS answers "Mediapipe graph definition ... not found".
+agent_log_has "the VLM warm-up runs inside the vlm pod" 'exec deployment/ovms-vlm -c ovms -- curl .*/v3/chat/completions'
+agent_log_has "agent up waits for the vlm add-on" 'rollout status deployment/ovms-vlm'
+if grep -q 'create --raw' "${log}"; then
+    FAILS=$((FAILS + 1)); echo "FAIL no OVMS warm-up goes through the service proxy"; awk '{print "  | " $0}' "${log}"
+else
+    PASS=$((PASS + 1)); echo "ok   no OVMS warm-up goes through the service proxy"
+fi
+WITH=""
+addon_up STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' >/dev/null
+agent_log_before "plain agent up removes every add-on before taking the GPU" \
+    'delete deployment/ovms-vlm service/ovms-vlm deployment/ovms-stt service/ovms-stt deployment/video-analytics configmap/video-analytics' \
+    '^kubectl apply -f -$'
+WITH="--with vlm,stt,video"
+addon_up STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 3\nnpu.intel.com/accel 1' >/dev/null
+if grep -E -- 'delete .*(ovms-vlm|ovms-stt|video-analytics)' "${log}" >/dev/null; then
+    FAILS=$((FAILS + 1)); echo "FAIL agent up with every add-on removes none"; awk '{print "  | " $0}' "${log}"
+else
+    PASS=$((PASS + 1)); echo "ok   agent up with every add-on removes none"
+fi
+WITH=""
+
+# A VLM reply without choices (OVMS answering with an error) fails agent up.
+WITH="--with vlm"
+out=$(addon_up STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 2' \
+    STUB_VLM_REPLY='{"error":"Mediapipe graph definition with requested name is not found"}') && rc=0 || rc=$?
+if [ "${rc}" -ne 0 ] && grep -q 'vlm warm-up request failed' <<< "${out}"; then
+    PASS=$((PASS + 1)); echo "ok   a VLM warm-up reply without choices fails agent up"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL a VLM warm-up reply without choices fails agent up (rc=${rc})"; awk '{print "  | " $0}' <<< "${out}"
+fi
+WITH=""
+
+# agent down deletes the LLM and every add-on, and keeps the model PVCs.
+: > "${log}"
+env K3D_GPU_SYSROOT="${r}" PATH="${ASTUB}:${PATH}" STUB_LOG="${log}" bash "${K3D_GPU}" agent down >/dev/null 2>&1
+agent_log_has "agent down removes the OVMS LLM" 'delete deployment/ovms service/ovms'
+agent_log_has "agent down removes every add-on" \
+    'delete deployment/ovms-vlm service/ovms-vlm deployment/ovms-stt service/ovms-stt deployment/video-analytics configmap/video-analytics'
+if grep -qi 'pvc\|persistentvolumeclaim' "${log}"; then
+    FAILS=$((FAILS + 1)); echo "FAIL agent down keeps the model PVCs"; awk '{print "  | " $0}' "${log}"
+else
+    PASS=$((PASS + 1)); echo "ok   agent down keeps the model PVCs"
+fi
 
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
