@@ -24,6 +24,11 @@
 #   ORDER  arm per round ("C T T C C T": baseline first, interleaved; the
 #          warm-up round r0 is extra and never scored)
 #   WORK   results and scratch kubeconfig dir (default: a mktemp dir)
+#   LOAD_LEVEL  none|typical|heavy: background load from bench/load/load.py on the
+#          load CPUs for the whole locked part (amendment A2). When set, the node
+#          is pinned to the other CPUs, and before every scored round (10 s idle
+#          gap, no pod running) 3 windows of 5 s are sampled, tagged with the arm,
+#          into $WORK/load-<level>.jsonl; the run ends with a `load.py matched` line.
 # Eviction and the page-residency check run as root inside a helper container
 # that mounts the node's /var/lib/rancher/k3s volume read-only: fsync, then
 # posix_fadvise(DONTNEED) on this round's model file only, then mincore. No
@@ -44,6 +49,8 @@ MIB=${MIB:-1024}
 ORDER=${ORDER:-"C T T C C T"}
 GUARD_S=780    # no new round after 13 min; a round takes <= ~6.5 min
 SELF=$(readlink -f "$0")
+LOADPY="$(dirname "${SELF}")/../load/load.py"
+LOAD_LEVEL=${LOAD_LEVEL:-}
 
 pod() {  # $1 arm  $2 round  $3 index
     local src="/m/model/blob-r$2" init=""
@@ -156,9 +163,11 @@ mi() { awk -v k="$1:" '$1 == k { print $2 }' /proc/meminfo; }  # kB
 confounds() {  # load1,swap_used_kB,throttle_count,pkgW (5 s)
     local t e0 e1 w=-
     t=$(cat /sys/devices/system/cpu/cpu0/thermal_throttle/package_throttle_count 2>/dev/null || echo -)
-    if e0=$(sudo -n cat /sys/class/powercap/intel-rapl:0/energy_uj 2>/dev/null); then
+    local su=(sudo -n)
+    [ -z "${SUDO_ASKPASS:-}" ] || su=(sudo -A)
+    if e0=$("${su[@]}" cat /sys/class/powercap/intel-rapl:0/energy_uj 2>/dev/null); then
         sleep 5
-        e1=$(sudo -n cat /sys/class/powercap/intel-rapl:0/energy_uj)
+        e1=$("${su[@]}" cat /sys/class/powercap/intel-rapl:0/energy_uj)
         [ "${e1}" -ge "${e0}" ] && w=$(((e1 - e0) / 5000000))
     fi
     echo "$(cut -d' ' -f1 /proc/loadavg),$(($(mi SwapTotal) - $(mi SwapFree))),${t},${w}"
@@ -240,6 +249,42 @@ round() {  # $1 arm  $2 round  $3 kind (scored|warmup)
     kubectl delete pod -l "h28=r${r}" --wait=true >/dev/null
 }
 
+# Number of this level's background containers running (0 for level none).
+load_running() {
+    docker ps --filter "label=io.k3d-gpu.bench-load.level=${LOAD_LEVEL}" -q | wc -l
+}
+
+# Owner check, 10 s idle gap, then 3 x 5 s background windows tagged with arm $1.
+load_window() {
+    local want=3
+    [ "${LOAD_LEVEL}" != none ] || want=0
+    if [ "$(load_running)" -ne "${want}" ]; then
+        echo "ABORT,background-lost,level=${LOAD_LEVEL},running=$(load_running)"
+        return 1
+    fi
+    sleep 10
+    "${LOADPY}" sample --seconds 5 --windows 3 --tag "$1" --level "${LOAD_LEVEL}" \
+        --cpus "$(load_cpus)" --out "${WORK}/load-${LOAD_LEVEL}.jsonl"
+}
+
+load_cpus() { "${LOADPY}" cpus; }
+
+# Online CPUs not in the load set, as a cpulist (the node's CPUs under A2).
+node_cpus() {
+    python3 - "$(load_cpus)" <<'PY'
+import sys
+def parse(t):
+    out = []
+    for p in t.strip().split(","):
+        a, _, b = p.partition("-")
+        out += range(int(a), int(b or a) + 1)
+    return out
+online = parse(open("/sys/devices/system/cpu/online").read())
+load = set(parse(sys.argv[1]))
+print(",".join(str(c) for c in online if c not in load))
+PY
+}
+
 f_cluster() {  # true while any k3dgpu-f-* cluster exists
     k3d cluster list -o json | python3 -c 'import json, sys; sys.exit(0 if any(c["name"].startswith("k3dgpu-f-") for c in json.load(sys.stdin)) else 1)'
 }
@@ -249,14 +294,21 @@ f_cluster() {  # true while any k3dgpu-f-* cluster exists
 locked() {
     local rc=0 r=0
     if f_cluster; then echo "RETRY,k3dgpu-f-* appeared while waiting for the lock" >&2; return 75; fi
+    if [ -n "${LOAD_LEVEL}" ]; then
+        "${LOADPY}" start --level "${LOAD_LEVEL}" --ttl 1500 >&2
+    fi
     timeout -k 15 1020 "${SELF}" _rounds || rc=$?
+    if [ -n "${LOAD_LEVEL}" ]; then
+        echo "load,end,level=${LOAD_LEVEL},running=$(load_running)"
+        "${LOADPY}" stop >&2 || true
+    fi
     k3d cluster delete "${CL}" >/dev/null 2>&1 || true
     for _ in 0 ${ORDER}; do docker image rm -f "h28-model:r${r}" >/dev/null 2>&1 || true; r=$((r + 1)); done
     return "${rc}"
 }
 
 run_locked() {
-    local start=${SECONDS} r=0 arm snap imgs k3s free
+    local start=${SECONDS} r=0 arm snap imgs k3s free pin
     WORK=${WORK:-$(mktemp -d)}
     export KUBECONFIG="${WORK}/kubeconfig"
     trap 'exit 143' TERM INT
@@ -272,22 +324,35 @@ run_locked() {
     k3d cluster create "${CL}" --image "${IMAGE}" --wait --kubeconfig-update-default=false \
         --kubeconfig-switch-context=false >/dev/null
     k3d kubeconfig get "${CL}" > "${KUBECONFIG}"
+    pin=all
+    if [ -n "${LOAD_LEVEL}" ]; then
+        pin=$(node_cpus)
+        docker update --cpuset-cpus "${pin}" "k3d-${CL}-server-0" >/dev/null
+    fi
     imgs=("${PYIMG}")
     for _ in 0 ${ORDER}; do imgs+=("h28-model:r${r}"); r=$((r + 1)); done
     k3d image import -c "${CL}" "${imgs[@]}" >/dev/null
     snap=$(docker exec "k3d-${CL}-server-0" sh -c 'cat /var/lib/rancher/k3s/agent/etc/containerd/config*.toml' 2>/dev/null \
         | sed -n 's/^[[:space:]]*snapshotter[[:space:]]*=[[:space:]]*"\([a-z0-9_-]*\)".*/\1/p' | head -n 1)
     k3s=$(kubectl version -o json | python3 -c 'import json, sys; print(json.load(sys.stdin)["serverVersion"]["gitVersion"])')
-    echo "meta,k3s=${k3s},snapshotter=${snap:-unknown},pyimg=${PYIMG},N=${N},MiB=${MIB},order=${ORDER// /},kernel=$(uname -r),cpu=$(sed -n 's/^model name[[:space:]]*: //p' /proc/cpuinfo | head -n 1)"
+    echo "meta,k3s=${k3s},snapshotter=${snap:-unknown},pyimg=${PYIMG},N=${N},MiB=${MIB},order=${ORDER// /},load=${LOAD_LEVEL:-unset},load_cpus=$(load_cpus),node_cpus=${pin},kernel=$(uname -r),cpu=$(sed -n 's/^model name[[:space:]]*: //p' /proc/cpuinfo | head -n 1)"
     echo "# pod,arm,round,i,ready_ms,rss_kB,pss_kB,shared_clean_kB,own_file_resident_pages,podcg_memory_current_B,podcg_file_B,kind"
     echo "# round,arm,round,cold_pages_left,model_resident_kB,dCached_kB,dAnon_kB,swapout_kB,load1,swap_used_kB,throttle_count,pkgW,kind"
     round C 0 warmup
     r=1
     for arm in ${ORDER}; do
         if (( SECONDS - start > GUARD_S )); then echo "ABORT,time-guard,round=${r}"; break; fi
+        if [ -n "${LOAD_LEVEL}" ]; then load_window "${arm}" || break; fi
         round "${arm}" "${r}" scored
         r=$((r + 1))
     done
+    if [ -n "${LOAD_LEVEL}" ]; then
+        if "${LOADPY}" matched "${WORK}/load-${LOAD_LEVEL}.jsonl" > "${WORK}/matched-${LOAD_LEVEL}.json"; then
+            echo "matched,${LOAD_LEVEL},MATCHED"
+        else
+            echo "matched,${LOAD_LEVEL},$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["verdict"])' "${WORK}/matched-${LOAD_LEVEL}.json" | tr ',' ';')"
+        fi
+    fi
 }
 
 case "${1:-}" in
@@ -295,7 +360,7 @@ case "${1:-}" in
     run)
         : "${LOCK:?set LOCK (live-experiment lock file)}" "${IMAGE:?set IMAGE}"
         WORK=${WORK:-$(mktemp -d)}
-        export WORK IMAGE PYIMG N MIB ORDER
+        export WORK IMAGE PYIMG N MIB ORDER LOAD_LEVEL
         out="${WORK}/h28-$(date -u +%Y%m%dT%H%M%SZ).csv"
         while :; do
             while f_cluster; do sleep 30; done

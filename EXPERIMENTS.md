@@ -421,6 +421,55 @@ ran and no number exists. The prep images were removed. Next step: `probe.sh pre
 then `probe.sh run` under live.lock. The verdict is scored only against the rows
 above and A1.
 
+**Amendment A2: matched background load, registered 2026-10-17T23:47:02Z, before any
+H28 measurement.** The row, the pre-registration table and A1 stay as written. A2 changes
+only the background the arms run under. The arms, the order, n, the metrics, the
+predictions, the null, the outcome table and the A1 priors are unchanged.
+
+Real Intel boxes are busy. The earlier confound was background load that was not
+controlled and drifted between arms. High load as such was never the problem. So:
+- **Background:** `bench/load/load.py start --level L` on the load CPUs (E-cores 16-31 on
+  this i9-13900T) for the whole locked part of the level. It starts before the cluster is
+  created and stops just before the cluster is deleted, inside the lock. The k3d node
+  container is pinned (`docker update --cpuset-cpus`) to the other online CPUs (P-cores
+  0-15), so the pods and the background do not share a core. Both are recorded in `meta`.
+- **Levels:** `typical` first. It is the headline and the ledger verdict. `heavy` follows
+  as the robustness check, on a second lock hold, only if time remains. Each level has
+  its own `probe.sh prep` (unique images) and its own lock hold of at most 20 min.
+  The pre-registered 17 min kill and 13 min no-new-round guard are unchanged.
+- **Order and n (unchanged):** an untimed warm-up r0 (arm C), then C T T C C T. That is
+  interleaved and counterbalanced. n = 3 rounds per arm, 8 pods per round.
+- **Load windows:** before every scored round, the previous round's pods are deleted.
+  Then an owner check runs: exactly 3 `io.k3d-gpu.bench-load` containers of the level
+  must be running, or the level aborts as INCONCLUSIVE ("background lost"). Then the host
+  sits through a 10 s idle gap. Then `load.py sample --seconds 5 --windows 3 --tag ARM`
+  runs, with no pod of the probe running. That gives 9 windows per arm per level.
+- **Matching:** `load.py matched` over the level's windows, with TOLERANCE as committed in
+  402518e and unchanged since: busy_pct 5 pp; load1 max(1, 15%); pkg_w max(3 W, 10%);
+  throttle_per_min max(10, 25%); swap used 256 MiB; swap growth 64 MiB per window.
+- **Verdict per level:** `bench/zero-copy-models/summarize.py RUN.csv LOAD.jsonl` scores
+  the rows above and A1, written down before the run. Memory: T median PSS <= 160 MiB,
+  Shared_Clean >= 0.9x size and `model_resident_kB` <= 1.1x size. Duplication check: C
+  resident >= 0.8 x (N+1) x size and C PSS >= 0.9x size, or the probe is blind. Time: T/C
+  ratio of the median round-median ready time <= 0.5, and max(T) < min(C) over round
+  medians. The null is T PSS >= 0.5x size, T resident >= 0.5 x N x size, or ratio >= 0.8,
+  and it reads REFUTED. Memory holds with ratio in (0.5, 0.8) or overlapping rounds reads
+  REFUTED (time part). The 30% spread gate is fixed here as (max - min) / median of the
+  round medians of ready time and of resident, per arm. A swap-out above 256 MiB voids
+  the round, as pre-registered.
+- **INCONCLUSIVE only when:** (1) the load is unmatched (the metric is named), (2) the
+  background was lost, (3) 2 or more rounds of an arm are void or missing (the budget
+  counts here), (4) the spread gate fires, or (5) the probe is blind. High load alone
+  never voids a level.
+- **Confidence (as pre-registered):** the fraction of non-void rounds that meet their arm's
+  prediction, times (1 - p). Here p is the exact one-sided Mann-Whitney p of T < C on the
+  round-median ready time. With 3 v 3 its floor is 0.05.
+- **Predictions unchanged:** SUPPORTED. The A1 priors are unchanged: SUPPORTED 0.45,
+  REFUTED (time part) 0.35, the other rows 0.05 each. The background runs on the E-cores
+  and the pods on the P-cores. So the load is expected to change absolute ready times
+  (shared DRAM bandwidth and package power) but not the page-cache sharing.
+- RAPL is read through `sudo -A` (reads only).
+
 Generalization (prediction, by family): page-cache sharing is a kernel and filesystem
 property, so the memory result should hold on every Intel family (Core, Core Ultra,
 Atom/N-series, Xeon) with the saving (N-1) x size, while weights stay CPU-resident.

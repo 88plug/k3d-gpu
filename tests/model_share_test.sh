@@ -115,6 +115,36 @@ expect "probe: waits for f- clusters" "k3dgpu-f-" "$(cat "${PROBE}")"
 expect "probe run: needs LOCK"        "LOCK" "$("${PROBE}" run 2>&1)"
 expect "probe: unknown verb fails"    "usage" "$("${PROBE}" bogus 2>&1)"
 
+# A2: matched background load.
+expect "probe A2: load stopped in lock" '"${LOADPY}" stop' "$(sed -n "/^locked()/,/^}/p" "${PROBE}")"
+expect "probe A2: owner check"        "ABORT,background-lost" "$(cat "${PROBE}")"
+expect "probe A2: windows tagged arm" '--tag "$1"' "$(sed -n "/^load_window()/,/^}/p" "${PROBE}")"
+expect "probe A2: matched line"       '"${LOADPY}" matched' "$(cat "${PROBE}")"
+expect "probe A2: node pinned"        "docker update --cpuset-cpus" "$(cat "${PROBE}")"
+SUM="${ROOT}/bench/zero-copy-models/summarize.py"
+fake() {  # $1 T ready ms  $2 T resident kB  $3 C ready ms
+    echo "meta,k3s=v1.37.1+k3s1,N=8,MiB=1024,order=CTTCCT"
+    local r=1 a i rd res pss
+    for a in C T T C C T; do
+        if [ "${a}" = T ]; then rd=$1; res=$2; pss=131072; else rd=$3; res=$((9 * 1048576)); pss=1048576; fi
+        for i in 1 2 3 4 5 6 7 8; do
+            echo "pod,${a},${r},${i},$((rd + r)),1100000,${pss},1048576,262144,1,1,scored"
+        done
+        echo "round,${a},${r},0,${res},${res},0,0,15,1,1,90,scored"
+        r=$((r + 1))
+    done
+}
+fake 2500 1048576 10000 > "${WORK}/s.csv"
+expect "summarize: supported"         '"verdict": "SUPPORTED"' "$(python3 "${SUM}" "${WORK}/s.csv")"
+fake 7000 1048576 10000 > "${WORK}/s.csv"
+expect "summarize: time part refuted" '"verdict": "REFUTED (time part)"' "$(python3 "${SUM}" "${WORK}/s.csv")"
+fake 2500 $((8 * 1048576)) 10000 > "${WORK}/s.csv"
+expect "summarize: no sharing refuted" '"verdict": "REFUTED"' "$(python3 "${SUM}" "${WORK}/s.csv")"
+fake 2500 1048576 10000 > "${WORK}/s.csv"
+printf '%s\n' '{"tag": "C", "level": "typical", "busy_pct": 40, "load1": 10}' \
+    '{"tag": "T", "level": "typical", "busy_pct": 60, "load1": 10}' > "${WORK}/l.jsonl"
+expect "summarize: unmatched load"    "INCONCLUSIVE: load unmatched" "$(python3 "${SUM}" "${WORK}/s.csv" "${WORK}/l.jsonl")"
+
 if command -v kubeconform >/dev/null 2>&1; then
     ms overlayfs --image "${MODEL}" --agent-image "${AGENT}" --replicas 8 | sed '/^rc=/d' > "${WORK}/ms.yaml"
     printf '%s\n' "${pt}" > "${WORK}/t.yaml"
