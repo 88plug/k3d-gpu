@@ -36,7 +36,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H7 | OVMS's decode lead over EAT's vLLM CPU engine in the H2 run comes from weight precision, not from the engine. | On the i9-13900T 16-CPU P-core balloon, one checkpoint served by OVMS 2026.4.1 and by vLLM CPU v0.24.0 at matched weight precision decodes within 15% between the two engines, and the two land within 15% of each other in effective weight bandwidth (weight bytes x decode tok/s). | Pre-registered 2026-10-16, before any run. One checkpoint and revision (`Qwen/Qwen3-4B-Instruct-2507`, revision recorded) for both engines: OVMS loads an OpenVINO IR exported from it with 16-bit weights, vLLM loads it in bf16. A second arm at int4 in both engines runs only if vLLM v0.24.0 CPU is first shown to load an int4 build of the same checkpoint. vLLM runs with EAT's chart defaults and once with `--enforce-eager` dropped, to split engine from config. H2 workloads and energy method, arms interleaved ABBA, 5 rounds. Refuted if the decode gap at matched precision is 15% or more. | PENDING |
 | H24 | A spec-only roofline (DRAM channels x MT/s x 8 B; cores x int8 MAC/clk x GHz), calibrated on one 8-P-core point of this host, predicts decode, prefill and 4-in-flight throughput of core configurations it was not fitted on, within 25% MAPE. This is the transfer law `k3d-gpu plan --predict <sku>` relies on. | Held-out arms B (4 P-cores), C (8 E-cores), D (16 E-cores) on the i9-13900T, Qwen3-4B int4, OVMS 2026.4.1 (H6 digest). M0 (`console/sku_model.py arms`) predicts decode 15.7 / 15.7 / 15.7, prefill 86 / 32.3 / 64.5, c4 62.6 / 32.3 / 62.6 tok/s for B / C / D (C compute-bound at c4). Competing M1 (min(spec BW, measured per-cpuset triad BW)) predicts decode = 15.7 x triad(arm) / triad(A). Author prior: M0 decode REFUTED (B ~12.5, C ~8, D ~12), M0 prefill holds, M1 decode holds within 20%. | Pre-registered 2026-10-17T12:15Z, before any H24 run; `tests/console/test_sku_model.py` checks the model's numbers equal these within 1%. Probe `bench/sku-model/probe.py` (self-limits to 19 min). 4 OVMS containers `sci-h24-{A,B,C,D}`, same image digest and weights sha256 as H6, all loaded at once, one served at a time; no k3d cluster. stream_probe triad per arm x2. Visit order A B C D D C B A; per visit: 5 s idle sample, 3 decode (30-token prompt with nonce, 128 out, `ignore_eos`), 2 prefill (unique ~512-token prompt, 16 out), 1 c=4 (4 x 128 out). n per arm: decode 6, prefill 4, c4 2. Calibration = this run's arm A (H6's 15.66 is a sanity check: A within 15%). Outcome -> conclusion: see [H24 pre-registration](#h24-pre-registration). Live run not yet taken (2026-10-17: lock held by another live experiment for the whole work budget); review fixes in ed20aa4. | PENDING |
 | H29 | On a client Intel hybrid CPU, B=1 agent decode on the P-cores spends less energy per token at the same speed when the P-cores are capped and the uncore (ring/LLC) floor is pinned high, and the uncore pin is what keeps the speed. Static config held for the whole request (prefill included); not phase-aware. On client parts `intel_uncore_frequency` sets the ring/LLC clock, not the IMC/DRAM clock. | On an i9-13900T (`intel_uncore_frequency` legacy, ring 0.8-4.7 GHz, EPP performance), OVMS 2026.4.1 + `OpenVINO/Qwen3-4B-int4-ov` from `k3d-gpu agent up` (CPU): arm UC (pod CPUs `scaling_max_freq` 2.8 GHz + uncore min = max = 4.7 GHz) vs stock A gives median decode tok/s >= 0.97x and median package J/token <= 0.90x, lower in every paired round, on BOTH gross J/token and marginal J/token against the same round's stock-arm idle; and UC beats C (cap only) by >= 3% tok/s, or by >= 5% J/token on both metrics, in every paired round. Prior: SUPPORTED 0.10, REFUTED-split 0.20, REFUTED 0.50, INCONCLUSIVE 0.20. | Pre-registered 2026-10-17 05:13 PDT before any run (no measurement taken yet). AMENDED 2026-10-17 before any run, after two refuters: (1) the per-arm marginal metric subtracted each arm's own idle, which removes a pinned ring's standing idle cost from exactly the U/UC arms; the decision now uses gross J/token AND marginal J/token against the stock arm's idle of the same round (per-arm marginal recorded, not decided on); (2) "phase-aware" dropped: the knobs are static per request; (3) up to 8 rounds, deadline-bound (Williams square balanced at 4 and 8), L on even rounds; (4) added manipulation checks: U ring >= target - 100 MHz, A pod-CPU MHz >= cap + 200 MHz (else INCONCLUSIVE); (5) decode tok/s uses completion_tokens, the J/token denominator; (6) temperature abort 95 C; (7) the locked runner refreshes sudo itself (`sudo -A -v`), since a no-tty sudo timestamp is per parent process. Physics note (refuters, not fetched): on Alder/Raptor Lake client parts the ring may share the P-core VccIA rail, which favours REFUTED. `bench/uncore-phase/run.sh` (cluster `k3dgpu-i-uncore-phase`, scratch KUBECONFIG, under the live lock, <= 20 min wall) runs `bench/uncore-phase/probe.py`. Arms A (stock), U (uncore floor pinned to `initial_max_freq_khz`), C (P-core cap), UC (C + U), L (uncore pinned 2.0 GHz, regime control); n = 5 rounds per primary arm, n = 3 for L (rounds 0/2/4); arm order a 4x4 Williams square by round (amended before any run: rotate-then-reverse-odd-rounds put only A or C first, caught by the unit test); one 192-token streamed greedy `ignore_eos` request per cell after 6 s settle and a 5 s idle window under the same arm; one unrecorded stock warm-up. Marginal J/token = (package J - idle W x t) / tokens; gross J/token also reported. Per cell: ring MHz (`current_freq_khz`), pod-CPU MHz, package temp, throttle count delta, pswpin/pswpout, load1, busy fraction inside and outside the pod. Cells with a throttle increment or > 100 MiB swap-in are excluded. Outcome -> conclusion: < 4 valid cells in a primary arm, or A tok/s spread > 10% of median -> INCONCLUSIVE; L ring > 2.1 GHz or C cores > 2.9 GHz -> INCONCLUSIVE (knob not honoured); both parts hold -> SUPPORTED; only the first part holds -> REFUTED-split (doctor suggests the cap only); first part fails -> REFUTED. Confidence = 1 - one-sided sign-test p over paired rounds (n/n rounds: 4 = 0.938, 5 = 0.969, 8 = 0.996). Every sysfs write logged and restored (probe `finally`, signal handler, runner EXIT trap from a pre-run snapshot). Prior art exists (uncore DVFS for memory-bound HPC phases, phase-aware DVFS for mobile and GPU LLM inference, the Intel KPM Uncore CRD, hardware ELC; [provenance:P291]-[provenance:P299]); a static joint core + uncore setting is the setting of [provenance:P295], so no novelty is claimed for the mechanism, only the measured delta on this test bed (search log [provenance:P290], incomplete). | PENDING |
-| H22 | Cross-engine speculative decoding (draft on the iGPU, target on the P-cores) raises single-stream decode tok/s over both the target alone and same-engine (P-core) drafting. | On an i9-13900T, OVMS 2026.4.1, `OpenVINO/Qwen3-4B-int4-ov` target on the 16-CPU P-core balloon, `OpenVINO/Qwen3-0.6B-int4-ov` Fast Draft with `draft_device: "GPU"` (UHD 770), `num_assistant_tokens` 5: median paired decode tok/s C/B >= 1.05 and C/A >= 1.10. Written before measuring (2026-10-17T05:08-07:00): REFUTED expected, C/B ~ 0.68 (0.55-0.85), C/A ~ 0.82 (0.65-1.0), because GenAI 2026.4.1 runs draft then verify serially (no overlap) and the UHD 770 runs a 0.6B draft slower than the P-cores. | Pre-registered 2026-10-17 before any H22 run ([H22 pre-registration](#h22-pre-registration-i9-13900t)). `bench/hetero-spec/probe.sh`: one OVMS pod, 5 graphs, per-request Latin-square interleave, n=8 rounds, `bench/hetero-spec/analyze.py` verdict. Refuted if C/B <= 0.95 in >= 7/8 rounds or C/A < 1.0. | PENDING |
+| H22 | Cross-engine speculative decoding (draft on the iGPU, target on the P-cores) raises single-stream decode tok/s over both the target alone and same-engine (P-core) drafting. | On an i9-13900T, OVMS 2026.4.1, `OpenVINO/Qwen3-4B-int4-ov` target on the 16-CPU P-core balloon, `OpenVINO/Qwen3-0.6B-int4-ov` Fast Draft with `draft_device: "GPU"` (UHD 770), `num_assistant_tokens` 5: median paired decode tok/s C/B >= 1.05 and C/A >= 1.10. Written before measuring (2026-10-17T05:08-07:00): REFUTED expected, C/B ~ 0.68 (0.55-0.85), C/A ~ 0.82 (0.65-1.0), because GenAI 2026.4.1 runs draft then verify serially (no overlap) and the UHD 770 runs a 0.6B draft slower than the P-cores. | Pre-registered 2026-10-17 before any H22 run ([H22 pre-registration](#h22-pre-registration-i9-13900t)). `bench/hetero-spec/probe.sh`: one OVMS pod, 5 graphs, per-request cyclic-rotation interleave, n=8 rounds, `bench/hetero-spec/analyze.py` verdict. Refuted if C/B <= 0.95 in >= 7/8 rounds or C/A < 1.0. Result ([H22 result](#h22-result-i9-13900t-2026-10-17)): the outcome table's noise row fired (A 11.3 tok/s, outside 15.7 +-15%; 8/8 rounds throttle-flagged). Directionally C lost to B in 8/8 rounds, median C/B 0.78 (95% CI 0.69-0.85), C/A 1.07. Scope: serial OVMS Fast Draft, UHD 770, 35 W T-SKU, AVX-VNNI (no AMX), no NPU. | INCONCLUSIVE |
 
 ## Falsification log
 
@@ -921,6 +921,68 @@ absent). It does not test a parallel draft/verify design (Dovetail, DuoDecoding)
 measurement shows a speedup (a cross-engine draft lost on Lunar Lake [provenance:P222]). `auto` puts the draft on the target's
 own device: in the serial engine a cross-engine draft wins only if it is faster there,
 and no host measurement says so yet.
+
+### H22 result (i9-13900T, 2026-10-17)
+
+**Reproduce:** commit `a8aeb01` (branch `claude/inv-hetero-spec`), i9-13900T
+(UHD 770, 35 W T-SKU, 131 GB RAM, avx_vnni, no AMX, no `/dev/accel`), kernel
+6.6.128-1-MANJARO, k3d v5.9.0 / k3s v1.35.5-k3s1, OVMS 2026.4.1
+(`openvino/model_server@sha256:a928903f...76fc58`), models pulled by that image's
+`--pull` on 2026-10-17. Run 2026-10-17 06:29-06:44 PDT under the box-wide live lock:
+
+```bash
+# outside the lock: pre-stage both models into ~/h22-models (OVMS --pull layout)
+SUDO_PASS=... flock -w 10800 <scratchpad>/live.lock bench/hetero-spec/probe.sh <out>
+python3 bench/hetero-spec/analyze.py bench/hetero-spec/results/2026-10-17-run2.jsonl
+```
+
+Raw records: `bench/hetero-spec/results/2026-10-17-run2.jsonl` (40 requests, n = 8
+rounds x 5 arms, all with `usage.completion_tokens` = 256, none dropped).
+
+**Verdict: INCONCLUSIVE (setup too noisy)**, applied mechanically by `analyze.py`.
+Two pre-registered guardrails fired: A's median 11.3 tok/s sits 28% under the
+15.7 tok/s H6 calibration (band +-15%), and 8/8 rounds are flagged because the
+package throttle counter rose during every round (package 79-93 C, 1-min load
+14-26: the box was shared). The pre-registered action is one re-run in a quieter
+window. Nothing here backs a claim.
+
+P0 passed: i915 render-busy 0 ns during an A request and 8.65 s during a C request,
+so the C draft did run on the iGPU (no silent CPU fallback). Per-request render
+time in C 8.1-10.0 s, in DG 5.3-5.7 s, in A/B/DP 0.
+
+| Arm | median tok/s | min-max | J/token (median, package) | TTFT s (median) |
+|---|---|---|---|---|
+| A target alone (CPU) | 11.28 | 8.53-12.12 | 8.75 | 0.35 |
+| B Fast Draft, draft on CPU | 15.22 | 12.64-17.43 | 6.64 | 0.47 |
+| C Fast Draft, draft on iGPU | 12.03 | 10.65-13.17 | 8.67 | 0.66 |
+| DP 0.6B alone, CPU | 49.46 | 46.12-51.82 | 2.27 | 0.08 |
+| DG 0.6B alone, iGPU | 32.99 | 31.71-34.40 | 3.17 | 0.21 |
+
+Paired by round: C/B median 0.781 (bootstrap 95% CI 0.694-0.849), C < B in 8/8
+rounds (sign test p = 0.0078, so 1 - p = 0.992 for the direction); C/A median
+1.074. Derived draft cost: t_d(P) 20.2 ms/token, t_d(iGPU) 30.3 ms/token, so the
+iGPU drafts 1.5x slower than the P-cores here and the serial engine pays that on
+every step. The prediction (C/B ~ 0.68, 0.55-0.85) holds in direction and its range
+contains the observed 0.78; C/A came out above the predicted ~0.82 because B's
+speculation gain (B/A 1.35) is large on this host.
+
+Confidence: none in the verdict sense (INCONCLUSIVE carries no confidence). The
+direction "iGPU draft is slower than the P-core draft" has 8/8 paired rounds, but
+both arms ran on a throttling, shared package, so it stays a direction, not a
+result. Product effect: none. `K3D_GPU_AGENT_DRAFT` stays `off` by default and
+`auto` keeps the draft on the target's device, which is what the measured
+t_d(P) < t_d(iGPU) would pick anyway. Not exercised: a parallel draft/verify engine
+(Dovetail, DuoDecoding), AMX targets, NPU drafts, a gamma sweep.
+
+Run 1 (06:03-06:18) was void: a probe bug (two-line host samples under `pipefail`,
+and an fd glob of another user's `/proc/<pid>/fdinfo`) dropped every request record
+and read P0 as 0 GPU busy, so `analyze.py` printed REFUTED from P0. That output is
+not a result; the bug is fixed in `a8aeb01` and covered by a selftest in
+`tests/bench_test.sh`.
+
+Exploratory, not pre-registered and not a claim: B (same-engine CPU Fast Draft)
+beat A in 8/8 rounds (median B/A 1.35) at 24% less package energy per token.
+That is a separate hypothesis for a later ledger entry.
 
 ### Wave 1 host (H1-H4, i9-13900T, 2026-10-16)
 
