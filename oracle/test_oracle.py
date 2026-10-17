@@ -267,6 +267,47 @@ class PrivacyTest(unittest.TestCase):
                     self.assertIn("V3", rules(res2))
                     shutil.rmtree(root)
 
+    def test_private_registry_and_served_model_names_never_reach_a_bundle(self):
+        c = copy.deepcopy(CAP)
+        c["endpoint"]["image"] = "harbor.corp-lab.example/openvino/model_server@sha256:" + "a" * 64
+        b = P.project_capacity(HOST_REPORT, c, RUN, HOST_ROOT, version="0.1.19", model_id=MODEL)
+        self.assertIsNone(b["tool"]["server_image"])
+        self.assertNotIn("corp-lab", B.canonical(b).decode())
+        for ref in ("docker.io/openvino/model_server", "openvino/model_server", "quay.io/a/b"):
+            self.assertTrue(B.public_image(ref), ref)
+        # A served name other than the default model needs an explicit --model-id.
+        for served in ("alice-ml/private-finetune", "models/qwen", "box-1234/m"):
+            c["endpoint"]["model"] = served
+            with self.assertRaises(P.ProjectionError):
+                P.project_capacity(HOST_REPORT, c, RUN, HOST_ROOT, version="0.1.19", server_image=AGENT_IMAGE)
+        c["endpoint"]["model"] = MODEL.split("/")[-1]
+        b = P.project_capacity(HOST_REPORT, c, RUN, HOST_ROOT, version="0.1.19", server_image=AGENT_IMAGE)
+        self.assertEqual(b["workload"]["model"]["id"], MODEL)
+
+    def test_hostile_values_in_copied_fields_are_dropped(self):
+        root = os.path.join(WORK, "hostile")
+        shutil.copytree(HOST_ROOT, root, symlinks=True)
+        for rel, text in (("sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference", "box-7f3a"),
+                          ("sys/firmware/acpi/platform_profile", "box-7f3a")):
+            p = os.path.join(root, rel)
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with open(p, "w") as fh:
+                fh.write(text + "\n")
+        self.assertEqual(P.power(root), {**P.power(root), "epp": None, "platform_profile": None})
+        rep = copy.deepcopy(HOST_REPORT)
+        host = rep["host"]
+        host["cpu"]["model"] = "Intel/box-7f3a"
+        host["intel_gpus"] = [{"device_id": "0xa7a0", "platform": "box-7f3a.lan", "driver": "box",
+                               "guc": {"version": "box-7f3a"}, "engines": [{"name": "box-7f3a"}]}]
+        host["nvidia"] = {"driver": "box", "gpus": [{"device_id": "0x2bb1", "model": "box-7f3a"}]}
+        hw = P.hardware(rep, root)
+        self.assertIsNone(hw["cpu"]["model"])
+        (g,) = hw["intel_gpus"]
+        self.assertEqual((g["platform"], g["driver"], g["guc"]), (None, None, None))
+        self.assertIsNone(hw["nvidia"]["driver"])
+        self.assertIsNone(hw["nvidia"]["gpus"][0]["model"])
+        self.assertNotIn("box-7f3a", json.dumps(hw))
+
     def test_dropped_report_sections(self):
         b = cap_bundle()
         text = B.canonical(b).decode()
@@ -437,6 +478,35 @@ class ValidatorTest(unittest.TestCase):
         b["hardware"]["memory"].update(channels=2, configured_mts=4800)
         b["workload"]["model"]["weights_bytes"] = 2 * 10 ** 9
         self.assertEqual(check(reseal(b), trusted=True).verdict, "accept")
+
+    def test_V5_reply_longer_than_max_tokens(self):
+        b = copy.deepcopy(self.b)
+        b["results"]["capacity"]["steps"][0]["reps"][0]["out_tok"][0] = 10 ** 7
+        res = check(reseal(b))
+        self.assertEqual(res.verdict, "reject")
+        self.assertIn("V5", rules(res))
+        s = seed("cpu")
+        s["results"]["single_stream"]["decode"]["out_tok"][0] = 257
+        res = check(reseal(s), trusted=True)
+        self.assertEqual(res.verdict, "reject")
+        self.assertIn("V5", rules(res))
+
+    def test_V8_without_roofline_absurd_decode_goes_to_review(self):
+        s = seed("cpu")
+        d = s["results"]["single_stream"]["decode"]
+        d["e2e_us"] = [t + 1000 for t in d["ttft_us"]]
+        res = check(reseal(s), trusted=True)
+        self.assertEqual(res.verdict, "quarantine")
+        self.assertIn("V8", rules(res))
+        s["levers"].append({"id": "spec_decode", "detected": True, "state": "on"})
+        self.assertEqual(check(reseal(s), trusted=True).verdict, "accept")
+
+    def test_V3_private_registry_image(self):
+        b = copy.deepcopy(self.b)
+        b["tool"]["server_image"] = "harbor.corp-lab.example/ovms@sha256:" + "a" * 64
+        res = check(reseal(b), pins={"0.1.19": b["tool"]["server_image"]})
+        self.assertEqual(res.verdict, "reject")
+        self.assertIn("V3", rules(res))
 
     def test_V9_energy(self):
         b = copy.deepcopy(self.b)

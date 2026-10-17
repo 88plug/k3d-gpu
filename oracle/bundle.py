@@ -29,6 +29,27 @@ LEVERS = ("pe_pinning", "prefill_guard", "xmx_gate", "amx", "numa_replica", "ope
           "spec_decode", "itd")
 
 
+# Registries a server image may name in a bundle. A reference whose first
+# component holds a "." or ":" or is "localhost" names a registry host
+# (distribution/reference); any other host is a private mirror, and its name
+# would identify the submitter's network.
+PUBLIC_REGISTRIES = ("docker.io", "registry-1.docker.io", "quay.io", "ghcr.io", "gcr.io", "registry.k8s.io",
+                     "nvcr.io", "public.ecr.aws", "mcr.microsoft.com", "vault.habana.ai")
+
+
+def image_registry(ref: str) -> str | None:
+    """Registry host of an image reference, None for a Docker Hub short name."""
+    first, sep, _ = ref.partition("/")
+    if sep and ("." in first or ":" in first or first == "localhost"):
+        return first
+    return None
+
+
+def public_image(ref: str) -> bool:
+    host = image_registry(ref)
+    return host is None or host in PUBLIC_REGISTRIES
+
+
 def canonical(obj) -> bytes:
     """Canonical JSON: sorted keys, no whitespace, ASCII only."""
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=True,

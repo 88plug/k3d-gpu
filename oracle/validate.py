@@ -54,6 +54,12 @@ ROOFLINE = 1.15          # V8
 ENERGY_TOL = 0.10        # V9
 DRIFT_MAX = 1.25         # V10
 MONO_DROP = 0.5          # V11
+# V8 without a roofline (memory channels, speed or weight size unknown): one
+# decode stream above this many tokens/s goes to review. Shared-DRAM engines
+# top out near 845 GB/s per socket (Xeon 6: 12 channels x 8800 MT/s x 8 B),
+# HBM accelerators near 8 TB/s; a 1 GB int4 model then reads at most ~845 and
+# ~8000 tokens/s, and real single-stream decode stays well under both.
+STREAM_TOK_S_MAX = {"cpu": 1000.0, "igpu": 1000.0, "npu": 1000.0, "gaudi": 8000.0, "nvidia": 8000.0}
 
 CANARIES = [
     ("a MAC address", re.compile(r"(?i)(?<![0-9a-f])([0-9a-f]{2}[:-]){5}[0-9a-f]{2}(?![0-9a-f])")),
@@ -141,6 +147,12 @@ def think_mean(family, agents, reps, time_scale):
     return (statistics.mean(waits) if waits else 0.0) * time_scale
 
 
+def max_tokens_of(family, agents, rep):
+    """Largest max_tokens the replayer sent in rep `rep` of step N (same seed as think_mean)."""
+    tr = apb.build_trace(family, agents, 1000 * agents + rep)
+    return max(t.get("max_tokens", 128) for sess in tr["sessions"] for t in sess["turns"])
+
+
 def to_us(v):
     return None if v is None or v == math.inf else int(round(v * 1e6))
 
@@ -197,6 +209,13 @@ def recompute_capacity(b, res):
         if not all(columns_ok(r) for r in s["reps"]):
             res.flag("reject", "V1", f"N={s['agents']}: sample columns differ in length")
             return
+        if w["trace"]:
+            for i, r in enumerate(s["reps"], 1):
+                cap_tok = max_tokens_of(w["trace"], s["agents"], i)
+                if any(t is not None and t > cap_tok for t in r["out_tok"]):
+                    res.flag("reject", "V5", f"N={s['agents']} rep {i}: a reply has more tokens than the "
+                             f"trace's max_tokens {cap_tok}")
+                    return
         reps = [(rows_of(r), {"agents": s["agents"]}) for r in s["reps"]]
         ramp = apb.score_step(reps, stop, base_tool)
         early = any(apb.early_fail(rows, meta, stop) for rows, meta in reps)
@@ -296,6 +315,11 @@ def single_stream_metrics(b, res):
             res.flag("reject", "V1", f"{k}: sample columns differ in length")
             return
     d, p = ss["decode"], ss["prefill"]
+    shape = b["workload"]["single_stream"]
+    for k, cols in (("decode", d), ("prefill", p)):
+        if any(t is not None and t > shape[k]["max_tokens"] for t in cols["out_tok"]):
+            res.flag("reject", "V5", f"{k}: a reply has more tokens than max_tokens {shape[k]['max_tokens']}")
+            return
     dtps, rounds = [], []
     for e2e, ttft, out, rnd in zip(d["e2e_us"], d["ttft_us"], d["out_tok"], d["round"]):
         if None in (e2e, ttft, out) or out < 2 or e2e <= ttft:
@@ -327,8 +351,12 @@ def roofline(b, res):
     hw, m = b["hardware"]["memory"], b["workload"]["model"]
     spec = any(lv["id"] == "spec_decode" and lv["state"] == "on" for lv in b["levers"])
     dec = res.recomputed.get("decode_tok_s")
-    if (b["results"]["engine"] not in ("cpu", "igpu") or spec or dec is None
-            or None in (hw["channels"], hw["configured_mts"], m["weights_bytes"])):
+    if spec or dec is None:
+        return
+    if None in (hw["channels"], hw["configured_mts"], m["weights_bytes"]) or b["results"]["engine"] not in ("cpu", "igpu"):
+        cap = STREAM_TOK_S_MAX.get(b["results"]["engine"])
+        if cap is not None and dec > cap:
+            res.flag("quarantine", "V8", f"decode {dec:.1f} tok/s per stream above {cap:.0f} with no roofline to check it")
         return
     bw = hw["channels"] * hw["configured_mts"] * 1e6 * 8
     limit = ROOFLINE * bw / m["weights_bytes"]
@@ -360,6 +388,9 @@ def validate(b, *, raw_size=None, trusted=False, known_hashes=(), local_identifi
         res.flag("reject", "V2", "content_sha256 does not match the bundle")
     elif b["content_sha256"] in set(known_hashes):
         res.flag("reject", "V2", "duplicate of a bundle already in the data set")
+    img = b["tool"]["server_image"]
+    if img is not None and not B.public_image(img):
+        res.flag("reject", "V3", f"$.tool.server_image names a private registry {B.image_registry(img)!r}")
     hits = canary_hits(b, local_identifiers)
     for h in hits[:20]:
         res.flag("reject", "V3", h)
