@@ -1,4 +1,4 @@
-audit FAIL: 1 of 11 checks failed (images.lock: 35 images, k3s v1.37.1-k3s1)
+audit FAIL: 1 of 11 checks failed (images.lock: 36 images, k3s v1.37.1-k3s1)
 ok   listener 0.0.0.0:39651 kube-apiserver: off loopback, auth client-cert (docker port 6443/tcp on k3d-gpu-server-0)
 FAIL image docker.io/library/app:dev: no registry digest, so it cannot match images.lock; on k3d-gpu-server-0
      fix: remove it, or load the image from a registry reference that images.lock pins
