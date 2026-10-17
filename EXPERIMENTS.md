@@ -1904,6 +1904,45 @@ on this host, not an invention. It does not test one shared engine versus N
 per-agent engines, or static versus dynamic `cache_size`. Those arms are the
 follow-up. No "auto-enable" claim is possible: prefix caching is already on.
 
+**Amendment A2: matched background load** (written 2026-10-17T19:40Z, after run 1
+and before any matched-load round; nothing below has been measured). Run 1 ran
+under uncontrolled load (other workflows' clusters, 1-min load 18-29) that
+drifted between arms. Real Intel boxes are busy, so A2 does not ask for an idle
+host; it puts every arm under the SAME controlled background load and records it.
+- **Load.** `bench/load/load.py` (#95), stress-ng 0.22.01 pinned by digest, on
+  the E-cores 16-31 (`load.py cpus`); OVMS stays on the 16-CPU P-core balloon.
+  Levels, in this order: `typical` (headline) then `heavy` (robustness), the
+  second only if the lock budget allows. One cluster serves both levels; the
+  load runs for the whole level (started before cluster setup for `typical`,
+  switched with a 30 s settle before the first `heavy` round).
+- **Order.** Interleaved `load.py order ON OFF --reps 3` = ON OFF ON OFF ON OFF
+  per level (replaces ON OFF OFF ON ON OFF). A fresh pod and a new prefix seed
+  every round as before; seeds 2511-2516 (`typical`) and 2521-2526 (`heavy`).
+  n = 3 rounds per arm per level, 15 added-agent samples per arm. Cap: 20 min
+  of lock time per level (18:30 no-new-round rule; the first level includes
+  cluster setup). Rounds not run count as missing, under the same arm rules.
+- **Load record.** Each round: `load.py sample --seconds 10 --windows 2 --tag
+  ARM --level LEVEL` after the pod is Ready and before the warm-up request, so
+  the windows hold the background the arm runs under with the agent idle, not
+  the arm's own prefill. Each window: load-CPU busy %, 1-min load, RAPL
+  package W, core throttle events/min, swap used and swap growth. RAPL energy,
+  throttle delta, 1-min load, swap and container count per round as in run 1.
+- **Matching rule** (fixed in `load.py` TOLERANCE before this amendment): per
+  level, the spread across arms of the per-arm means must stay within busy
+  ±5 points, 1-min load max(1, 15%), package W max(3 W, 10%), throttle/min
+  max(10, 25%), swap used ±256 MiB, swap growth ±64 MiB per window. Unmatched
+  load makes that level INCONCLUSIVE and names the metric; `probe.py score
+  --load` applies this. High load alone never voids a round. Known risk,
+  stated now and not adjusted later: the 1-min load still carries part of the
+  previous round's prefill when a window starts.
+- **Unchanged.** Every prediction, threshold, prior and guardrail in the
+  pre-registration and A1 (T: CI lower bound ≥ 4x, c ≥ 0.8x OFF, a1 ON within
+  ±15% of OFF; M bands 0.5x / 0.8x). The guardrail action "re-run at lower load"
+  becomes "re-run at matched load". The ledger verdict is T at `typical`;
+  `heavy` is reported as robustness and cannot change it. Absolute times are
+  expected to stretch under load; the ratio prediction is unchanged.
+  Confidence = (pairs ≥ 4x + 1) / (pairs + 2) over cross-round ON/OFF pairs.
+
 ### H25 run (i9-13900T, 2026-10-17)
 
 ```text
