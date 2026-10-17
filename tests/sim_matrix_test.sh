@@ -67,21 +67,40 @@ EOF
 # kubectl: logs every call. Node allocatable comes from STUB_ALLOCATABLE; a
 # label query finds the single server node; the balloons policy lists the type
 # names baked in share/nri-balloons.yml; every other call succeeds silently
-# (so baked plugin daemonsets "exist" and rollouts "finish").
+# (so baked plugin daemonsets "exist" and rollouts "finish"). Once `up` rewrites
+# the node's intel-gpu-plugin.yaml (see docker below), the DaemonSet reports its
+# args, and -shared-dev-num=N multiplies the Intel GPU counts as kubelet would.
 cat > "${BASE_BIN}/kubectl" <<'EOF'
 #!/bin/bash
 echo "kubectl $*" >> "${STUB_LOG}"
+mf="${STUB_LOG%/*}/intel-gpu-plugin.yaml"
 case "$*" in
-    "get nodes -o go-template="*) cat "${STUB_ALLOCATABLE}" ;;
+    "get nodes -o go-template="*)
+        n=1
+        [ -f "${mf}" ] && n=$(sed -n 's/^ *- "-shared-dev-num=\([0-9]*\)"$/\1/p' "${mf}")
+        awk -v n="${n:-1}" '$1 ~ /^gpu\.intel\.com\/(i915|xe)$/ { $2 *= n } { print }' "${STUB_ALLOCATABLE}" ;;
+    *"get daemonset intel-gpu-plugin -o jsonpath="*)
+        [ -f "${mf}" ] && printf '[%s]' "$(sed -n 's/^ *- \("-.*"\)$/\1/p' "${mf}" | paste -sd, -)" ;;
     "get nodes -l "*" -o name") echo "node/k3d-gpu-server-0" ;;
     *"get balloonspolicy default -o jsonpath={.spec.balloonTypes[*].name}") echo "replica performance efficient lowpower ecluster pcore-physical latency shared" ;;
 esac
 exit 0
 EOF
 # docker: `docker info` succeeds; runtimes and CDI devices come from
-# STUB_DOCKER_RUNTIMES and STUB_DOCKER_CDI, as in tests/detect_test.sh.
+# STUB_DOCKER_RUNTIMES and STUB_DOCKER_CDI, as in tests/detect_test.sh. In the
+# server node, intel-gpu-plugin.yaml reads as the baked share/ copy until `up`
+# writes it (docker exec -i ... sh), which lands next to STUB_LOG.
 cat > "${BASE_BIN}/docker" <<'EOF'
 #!/bin/bash
+mf="${STUB_LOG%/*}/intel-gpu-plugin.yaml"
+if [ "$1" = exec ]; then
+    case "$*" in
+        *" cat /var/lib/rancher/k3s/server/manifests/intel-gpu-plugin.yaml")
+            if [ -f "${mf}" ]; then cat "${mf}"; else cat "${K3D_GPU_SHARE}/intel-gpu-plugin.yml"; fi ;;
+        "exec -i "*" sh -c "*"intel-gpu-plugin.yaml"*) cat > "${mf}" ;;
+    esac
+    exit 0
+fi
 [ "$1" = info ] || exit 0
 case "$*" in
     *Runtimes*) for r in ${STUB_DOCKER_RUNTIMES:-}; do echo "${r}"; done ;;

@@ -78,8 +78,14 @@ VENDORS_REQUEST="${K3D_GPU_VENDORS:-auto}"
 NODE_LABELS="${K3D_GPU_NODE_LABELS:-}" # extra key=value node labels, comma-separated
 K3S_ARGS="${K3D_GPU_K3S_ARGS:-}"       # extra k3s server flags, space-separated
 BALLOONS="${K3D_GPU_BALLOONS:-k3s}"    # owner of the NRI balloons policy: k3s (baked addon) | external
+INTEL_SHARED_REQUEST="${K3D_GPU_INTEL_SHARED:-auto}"     # containers per Intel GPU (-shared-dev-num)
+INTEL_ALLOCATION="${K3D_GPU_INTEL_ALLOCATION:-balanced}" # -allocation-policy when shared
+INTEL_MONITORING="${K3D_GPU_INTEL_MONITORING:-0}"        # 1 adds -enable-monitoring
+INTEL_APPLY_TIMEOUT="${K3D_GPU_INTEL_APPLY_TIMEOUT:-60}"  # seconds to wait for k3s to apply the plugin args
+INTEL_IGPU_SHARED=8 # what K3D_GPU_INTEL_SHARED=auto picks when every Intel GPU is integrated
 FAIL=0           # set by doctor_* checks
 INTEL_DRIVERS=() # "<driver> <pci-device-id>" per Intel render node (filled by detect_intel)
+INTEL_BDFS=()    # PCI address per Intel render node, same order (filled by detect_intel)
 NPU_IDS=()       # PCI device id per Intel NPU accel node (filled by detect_npu)
 
 RED=$'\e[31m' GRN=$'\e[32m' YLW=$'\e[33m' RST=$'\e[0m'
@@ -136,6 +142,10 @@ Environment:
   K3D_GPU_VENDORS       auto | comma list of nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa,wsl (default: auto)
   K3D_GPU_NODE_LABELS   extra node labels, comma list of key=value (default: none)
   K3D_GPU_K3S_ARGS      extra k3s server flags, space-separated, e.g. --disable=servicelb (default: none)
+  K3D_GPU_INTEL_SHARED  auto | pods that may share one Intel GPU (default: auto =
+                        ${INTEL_IGPU_SHARED} when every Intel GPU is integrated, else 1)
+  K3D_GPU_INTEL_ALLOCATION  balanced | packed | none: GPU a shared pod lands on (default: balanced)
+  K3D_GPU_INTEL_MONITORING  1 adds gpu.intel.com/monitoring (every GPU, for exporters) (default: 0)
   K3D_GPU_SHARE         dir holding the fallback plugin yamls (default: /usr/share/k3d-gpu)
   K3D_GPU_PLUGIN        NVIDIA plugin yaml   (default: ${SHARE_DIR}/nvidia-device-plugin.yml)
   K3D_GPU_INTEL_PLUGIN  Intel GPU plugin yaml  (default: ${SHARE_DIR}/intel-gpu-plugin.yml)
@@ -209,18 +219,114 @@ bound_driver() {
     return 0
 }
 
-# Fills INTEL_DRIVERS with "<driver> <pci-device-id>" per Intel DRM render node
-# bound to xe or i915.
+# Fills INTEL_DRIVERS with "<driver> <pci-device-id>" and INTEL_BDFS with the PCI
+# address per Intel DRM render node bound to xe or i915.
 detect_intel() {
     INTEL_DRIVERS=()
+    INTEL_BDFS=()
     local dev drv
     for dev in "${SYSROOT}"/sys/class/drm/renderD*/device; do
         [ -r "${dev}/vendor" ] || continue
         [ "$(cat "${dev}/vendor")" = "0x8086" ] || continue
         drv=$(bound_driver "${dev}")
-        case "${drv}" in xe|i915) INTEL_DRIVERS+=("${drv} $(cat "${dev}/device" 2>/dev/null)") ;; esac
+        case "${drv}" in
+            xe|i915)
+                INTEL_DRIVERS+=("${drv} $(cat "${dev}/device" 2>/dev/null)")
+                INTEL_BDFS+=("$(basename "$(readlink -f "${dev}")")")
+                ;;
+        esac
     done
     return 0
+}
+
+# ---- Intel GPU sharing ----------------------------------------------------------
+# The Intel GPU plugin (intel-device-plugins v0.37.1, cmd/gpu_plugin) registers
+# each GPU -shared-dev-num times, so that many containers can be scheduled onto it
+# at once. Each of them gets the whole device: no memory or compute partitioning,
+# only a scheduling ceiling. -allocation-policy (balanced, packed, none) picks the
+# GPU a shared request lands on when there are several. -enable-monitoring adds
+# gpu.intel.com/monitoring, one per node, which hands a container every Intel GPU
+# (for exporters such as XPU Manager).
+
+# True for a discrete Intel GPU id: DG1 (0x4905-0x4909), Alchemist and Arc Pro A
+# (0x56xx), Ponte Vecchio (0x0bd0-0x0bdb), and the intel_gpu_platform families
+# Battlemage and Crescent Island.
+intel_gpu_discrete() {
+    case "$1" in 0x490[5-9]|0x56[0-9a-f][0-9a-f]|0x0bd[0-9ab]) return 0 ;; esac
+    case "$(intel_gpu_platform "$1")" in Battlemage\|*|"Crescent Island|"*) return 0 ;; esac
+    return 1
+}
+
+# True when the host has Intel GPUs and all of them are integrated. Intel puts its
+# integrated graphics at PCI 0000:00:02.0 (its SR-IOV VFs at 00:02.1-7); discrete
+# cards sit behind a root port on another bus. A discrete id at that slot (a card
+# passed through to a VM guest) does not count as integrated.
+intel_all_integrated() {
+    [ "${#INTEL_BDFS[@]}" -gt 0 ] || return 1
+    local i
+    for i in "${!INTEL_BDFS[@]}"; do
+        [[ "${INTEL_BDFS[i]}" == 0000:00:02.[0-7] ]] || return 1
+        ! intel_gpu_discrete "${INTEL_DRIVERS[i]#* }" || return 1
+    done
+}
+
+# Problem with the K3D_GPU_INTEL_* settings, one per line; nothing when valid.
+intel_config_error() {
+    case "${INTEL_SHARED_REQUEST}" in
+        auto) ;;
+        ""|0*|*[!0-9]*) echo "K3D_GPU_INTEL_SHARED='${INTEL_SHARED_REQUEST}' must be auto or a positive integer" ;;
+    esac
+    case "${INTEL_ALLOCATION}" in
+        balanced|packed|none) ;;
+        *) echo "K3D_GPU_INTEL_ALLOCATION='${INTEL_ALLOCATION}' must be balanced, packed or none" ;;
+    esac
+    case "${INTEL_MONITORING}" in
+        0|1) ;;
+        *) echo "K3D_GPU_INTEL_MONITORING='${INTEL_MONITORING}' must be 0 or 1" ;;
+    esac
+}
+
+# Containers per Intel GPU. auto shares an integrated GPU (the host desktop already
+# shares it with every app, so exclusivity buys nothing) and keeps a discrete GPU
+# exclusive: the plugin applies one count to every GPU on the node.
+intel_shared() {
+    if [ "${INTEL_SHARED_REQUEST}" != "auto" ]; then
+        echo "${INTEL_SHARED_REQUEST}"
+    elif intel_all_integrated; then
+        echo "${INTEL_IGPU_SHARED}"
+    else
+        echo 1
+    fi
+}
+
+# Intel GPU plugin args for the current settings, one per line; none = upstream defaults.
+intel_plugin_args() {
+    local n
+    n=$(intel_shared)
+    if [ "${n}" != 1 ]; then  # validated: a positive integer with no leading zero
+        echo "-shared-dev-num=${n}"
+        echo "-allocation-policy=${INTEL_ALLOCATION}"
+    fi
+    if [ "${INTEL_MONITORING}" = 1 ]; then echo "-enable-monitoring"; fi
+}
+
+# Intel GPU plugin manifest on stdin -> the same manifest with an args list (one
+# arg per line in $1) after the plugin container's image line (tag or digest).
+intel_manifest_with_args() {
+    awk -v args="$1" '
+        /^[[:space:]]*args:/ { print "intel-gpu-plugin manifest already sets args" > "/dev/stderr"; bad = 1; exit 1 }
+        { print }
+        /^[[:space:]]*image:.*intel-gpu-plugin[:@]/ {
+            ind = $0; sub(/[^[:space:]].*/, "", ind)
+            print ind "args:"
+            n = split(args, a, "\n")
+            for (i = 1; i <= n; i++) if (a[i] != "") print ind "  - \"" a[i] "\""
+            found++
+        }
+        END {
+            if (bad) exit 1
+            if (found != 1) { print "expected one intel-gpu-plugin image line, found " found + 0 > "/dev/stderr"; exit 1 }
+        }'
 }
 
 # Print "<pci-vendor> <driver> <pci-device-id>" per /dev/accel/accelN compute
@@ -1098,6 +1204,26 @@ doctor_intel() {
     done <<< "$(intel_engine_cards)"
     labels=$(intel_gpu_labels | paste -sd' ')
     [ -z "${labels}" ] || echo "  ok: up labels the node ${labels}"
+    doctor_intel_sharing
+}
+
+doctor_intel_sharing() {
+    local problems n
+    problems=$(intel_config_error)
+    if [ -n "${problems}" ]; then
+        sed "s/^/  ${RED}fail${RST}: /" <<< "${problems}"
+        FAIL=1
+        return
+    fi
+    n=$(intel_shared)
+    if [ "${n}" = 1 ]; then
+        echo "  ok: GPU sharing off: one pod per Intel GPU (K3D_GPU_INTEL_SHARED=${INTEL_SHARED_REQUEST})"
+    else
+        echo "  ok: GPU sharing on: up to ${n} pods per Intel GPU, ${INTEL_ALLOCATION} allocation (K3D_GPU_INTEL_SHARED=${INTEL_SHARED_REQUEST}); pods share its memory and engines with no isolation"
+    fi
+    if [ "${INTEL_MONITORING}" = 1 ]; then
+        echo "  ok: gpu.intel.com/monitoring enabled (one per node, grants every Intel GPU)"
+    fi
 }
 
 doctor_npu() {
@@ -2949,6 +3075,12 @@ cmd_up() {
     resolve_vendors
     [ "${#ACTIVE[@]}" -gt 0 ] || err "no supported accelerator detected (NVIDIA, Intel GPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX, hybrid P/E cores, NUMA, WSL2 Intel GPU) — run 'k3d-gpu doctor' or set K3D_GPU_VENDORS"
     info "Accelerators: ${ACTIVE[*]}"
+    local intel_args="" problems
+    if is_active intel; then
+        problems=$(intel_config_error)
+        [ -z "${problems}" ] || err "${problems}"
+        intel_args=$(intel_plugin_args)
+    fi
     exp_collect
 
     local create_args=(
@@ -3111,6 +3243,7 @@ cmd_up() {
         [ -n "${ds}" ] || continue
         ensure_plugin "${v}" "${ns}" "${ds}" "${manifest}"
     done
+    if [ -n "${intel_args}" ]; then configure_intel_plugin "${intel_args}"; fi
     # nri-plugins v0.14.0 reads two core kinds, cpu_core and cpu_atom, and will not
     # start while an online CPU is in neither (pkg/sysfs checkCoreKinds). Arrow
     # Lake-H lists its LP E-cores in cpu_lowpower, so hand them to the E-core kind
@@ -3173,6 +3306,62 @@ node_image_check() {
         return 0
     fi
     return 1
+}
+
+# Give the Intel GPU plugin the args in $1 (one per line). The baked manifest is
+# rewritten in place inside the server node: k3s re-applies every file in its
+# manifests dir on each start and rescans it every 15 s, so the file, not a
+# kubectl patch, is what survives a node restart. The new file is written as a
+# dotfile first (k3s ignores those) and renamed over the old one.
+configure_intel_plugin() {
+    local args=$1 node="k3d-${CLUSTER}-server-0" src out got first
+    local dir=/var/lib/rancher/k3s/server/manifests
+    local file="${dir}/intel-gpu-plugin.yaml"
+    first=$(sed -n 1p <<< "${args}")
+    info "Configuring intel GPU device plugin: $(paste -sd' ' <<< "${args}")"
+    if src=$(docker exec "${node}" cat "${file}" 2>/dev/null); then
+        out=$(intel_manifest_with_args "${args}" <<< "${src}") \
+            || err "cannot add args to ${file} in ${node}"
+        docker exec -i "${node}" sh -c "cat > '${dir}/.intel-gpu-plugin.yaml.new' && mv '${dir}/.intel-gpu-plugin.yaml.new' '${file}'" \
+            <<< "${out}" || err "cannot write ${file} in ${node}"
+        local dl=$((SECONDS + INTEL_APPLY_TIMEOUT))
+        while [ "${SECONDS}" -lt "${dl}" ]; do
+            got=$(kubectl -n kube-system get daemonset intel-gpu-plugin \
+                -o jsonpath='{.spec.template.spec.containers[0].args}' 2>/dev/null || true)
+            [[ "${got}" == *"\"${first}\""* ]] && break
+            sleep 3
+        done
+        if [[ "${got}" != *"\"${first}\""* ]]; then
+            warn "k3s has not applied the new intel-gpu-plugin args after ${INTEL_APPLY_TIMEOUT}s — inspect: kubectl -n kube-system get addon intel-gpu-plugin -o yaml"
+            return 0
+        fi
+    else
+        # A custom image without the baked manifest: ensure_plugin applied ours.
+        out=$(intel_manifest_with_args "${args}" < "${INTEL_PLUGIN_MANIFEST}") \
+            || err "cannot add args to ${INTEL_PLUGIN_MANIFEST}"
+        kubectl apply -f - <<< "${out}"
+    fi
+    intel_wait_shared
+}
+
+# New args roll the plugin pod (maxUnavailable 1, no surge), and until the new pod
+# registers, kubelet still advertises the old count. Wait for the rollout, then for
+# allocatable to reach the shared count on every detected GPU, so verify_gpus and
+# its summary report the configured sharing.
+intel_wait_shared() {
+    local n want got=0 dl
+    n=$(intel_shared)
+    [ "${n}" != 1 ] && [ "${#INTEL_DRIVERS[@]}" -gt 0 ] || return 0
+    want=$((n * ${#INTEL_DRIVERS[@]}))
+    kubectl -n kube-system rollout status daemonset/intel-gpu-plugin --timeout="${INTEL_APPLY_TIMEOUT}s" >/dev/null 2>&1 || true
+    dl=$((SECONDS + INTEL_APPLY_TIMEOUT))
+    while :; do
+        got=$(vendor_total intel)
+        [ "${got}" -ge "${want}" ] && return 0
+        [ "${SECONDS}" -lt "${dl}" ] || break
+        sleep 3
+    done
+    warn "cluster advertises ${got} Intel GPU slots, expected ${want} (${n} per GPU, ${#INTEL_DRIVERS[@]} GPU(s)) — inspect: kubectl -n kube-system logs ds/intel-gpu-plugin"
 }
 
 ensure_plugin() {
@@ -3333,6 +3522,9 @@ cmd_test() {
             [ "$(resource_total "${res}")" -gt 0 ] || continue
             device_test "intel-gpu-test" "${res}" /dev/dri
         done < <(vendor_resources intel)
+        if [ "$(resource_total gpu.intel.com/monitoring)" -gt 0 ]; then
+            device_test "intel-gpu-monitoring-test" gpu.intel.com/monitoring /dev/dri
+        fi
     fi
     if is_active npu; then
         device_test "npu-test" "npu.intel.com/accel" /dev/accel

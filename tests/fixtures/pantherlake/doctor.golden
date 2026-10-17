@@ -9,6 +9,7 @@
   ok: Intel Panther Lake (0xb080) bound to xe
   ok: xe/ptl_guc_* firmware present
   ok: up labels the node gpu.intel.com/xmx=true
+  ok: GPU sharing on: up to 8 pods per Intel GPU, balanced allocation (K3D_GPU_INTEL_SHARED=auto); pods share its memory and engines with no isolation
 ==> Checking Intel NPU (Core Ultra)...
   ok: Intel NPU Panther Lake (0xb03e) bound to intel_vpu
   ok: intel/vpu/vpu_50xx_* firmware present (/lib/firmware/intel/vpu/vpu_50xx_v1.bin)

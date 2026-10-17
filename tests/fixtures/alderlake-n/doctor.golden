@@ -9,6 +9,7 @@
   ok: Intel Alder Lake-N (0x46d1) bound to i915
   ok: i915/adlp_guc_* firmware present
   ok: up labels the node gpu.intel.com/xmx=false
+  ok: GPU sharing on: up to 8 pods per Intel GPU, balanced allocation (K3D_GPU_INTEL_SHARED=auto); pods share its memory and engines with no isolation
 ==> Intel CPU built-in accelerators...
   ok: CPU ISA: AVXVNNI CETIBT GFNI SHA VAES — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
   info: RDT allocation (rdt_a: cat_l2 cdp_l2) — resctrl classes are available but left off: the balloons policy ships control.rdt.enable: false because enabling it rewrites the host's /sys/fs/resctrl. To opt in, mount resctrl on the host (mount -t resctrl resctrl /sys/fs/resctrl) and set control.rdt.enable: true in nri-balloons.yml; usePodQoSAsDefaultClass then gives BestEffort/Burstable/Guaranteed pods 33%/66%/100% of the L3

@@ -121,6 +121,9 @@ Behaviour is tunable via environment variables:
 | `K3D_GPU_K3S_ARGS`   | none                                      | extra k3s server flags, space-separated (e.g. `--disable=servicelb`) |
 | `K3D_GPU_PLUGIN`     | `/usr/share/k3d-gpu/nvidia-device-plugin.yml` | fallback manifest (only used if a custom image lacks the baked one) |
 | `K3D_GPU_INTEL_PLUGIN` | `/usr/share/k3d-gpu/intel-gpu-plugin.yml` | same, for the Intel GPU plugin |
+| `K3D_GPU_INTEL_SHARED` | `auto`                                  | pods that may share one Intel GPU; `auto` = 8 when every Intel GPU is integrated, else 1 ([sharing](#sharing-an-intel-gpu)) |
+| `K3D_GPU_INTEL_ALLOCATION` | `balanced`                          | `balanced`, `packed` or `none`: which GPU a shared pod lands on |
+| `K3D_GPU_INTEL_MONITORING` | `0`                                 | `1` adds `gpu.intel.com/monitoring` (every Intel GPU, for exporters) |
 | `K3D_GPU_GAUDI_PLUGIN` | `/usr/share/k3d-gpu/gaudi-device-plugin.yml` | same, for the Gaudi plugin |
 | `K3D_GPU_NPU_PLUGIN` | `/usr/share/k3d-gpu/intel-npu-plugin.yml` | same, for the Intel NPU plugin |
 | `K3D_GPU_DSA_PLUGIN` / `_IAA_` / `_QAT_` | `/usr/share/k3d-gpu/intel-{dsa,iaa,qat}-plugin.yml` | same, for the Xeon accelerator plugins |
@@ -261,6 +264,61 @@ Workload images bring their own user space: Intel compute-runtime / Level Zero
 for GPUs, the [NPU driver](https://github.com/intel/linux-npu-driver) + OpenVINO
 for the NPU. Gaudi runs in the plugin's plain mode, which hands pods the devices
 without the habana container runtime; full Gaudi workloads may still expect it.
+
+### Sharing an Intel GPU
+
+By default the Intel GPU plugin hands each GPU to one container. Then an
+inference server takes the iGPU and an embeddings pod or a media transcode
+pod stays Pending. `K3D_GPU_INTEL_SHARED=<n>` sets the plugin's
+`-shared-dev-num`, so `n` pods can each request `gpu.intel.com/i915: 1` (or
+`xe`) on one GPU at once. For example, OVMS, an embeddings server and a media
+pod can all run on a UHD 770.
+
+| Setting | Plugin flag (intel-device-plugins v0.37.1) | Effect |
+|---------|--------------------------------------------|--------|
+| `K3D_GPU_INTEL_SHARED=auto` (default) | `-shared-dev-num=8` if every Intel GPU is the integrated one (PCI `00:02.0`), else none | allocatable `gpu.intel.com/<driver>` = 8 per iGPU |
+| `K3D_GPU_INTEL_SHARED=<n>` | `-shared-dev-num=<n>` | allocatable = `n` per GPU, every GPU on the node |
+| `K3D_GPU_INTEL_ALLOCATION` | `-allocation-policy=balanced\|packed\|none` (only passed when shared) | which GPU a shared request lands on: spread out, fill one first, or kubelet's order |
+| `K3D_GPU_INTEL_MONITORING=1` | `-enable-monitoring` | adds one `gpu.intel.com/monitoring` per node that grants every Intel GPU, for exporters such as XPU Manager; `k3d-gpu test` checks it |
+
+Why the default is like this:
+
+- **An iGPU is already shared.** The host desktop, browser and video player
+  all use it. Exclusive allocation inside the cluster isolates nothing.
+- **Sharing costs no total throughput here.** On a UHD 770, two media pods
+  (VA-API 1080p decode, scale, H.264 encode) ran together.
+  Each got 0.59x the speed of one pod alone, so together they did 1.18x the work per second [ledger:H15].
+  Exclusive allocation would have left the second pod Pending until the first
+  finished. A compute job that keeps every EU busy may gain nothing; see the
+  ledger's scope note.
+- **A discrete GPU stays exclusive.** The count applies to every Intel GPU on
+  the node. So a host with an Arc card (with or without an iGPU) keeps
+  one-pod-per-GPU unless you set a number. A discrete id at the iGPU's PCI slot
+  (a card passed through to a VM) also stays exclusive.
+- **Why 8.** The count is only a scheduling ceiling and reserves nothing.
+  8 covers an inference server, embeddings, media and a few jobs. It still
+  stops dozens of pods from silently piling onto a 32-EU iGPU. Upstream's
+  sharing overlay uses 30.
+
+Tradeoffs when sharing is on:
+
+- **No isolation.** Every pod gets the whole device node (`/dev/dri/renderD*`).
+  The driver keeps each process in its own GPU address space, but there is no
+  memory or compute partitioning and no quota. A pod that hangs the GPU
+  triggers an engine reset, which can also kill other pods' in-flight work.
+- **Memory contention.** An iGPU has no VRAM; it uses system RAM. Kubernetes
+  does not count GPU memory, so pods can together exhaust it. A large model in
+  OVMS plus embeddings can fail allocations or push the host into swap. Size
+  the models to fit together.
+- **Engine contention.** Pods are time-sliced on the same EUs and media
+  engines. Latency rises when pods are busy at the same time. Do not share a
+  GPU that runs latency-critical work.
+- **Fixed for the cluster's life.** The launcher writes the flags into the
+  node's baked `intel-gpu-plugin.yaml` (k3s re-applies that file on every
+  start, so a `kubectl patch` would not stick). To change them, recreate the
+  cluster.
+
+`k3d-gpu doctor` prints the sharing mode it will use.
 
 ### Intel NPU: firmware, device access, embeddings
 
