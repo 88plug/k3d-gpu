@@ -1078,7 +1078,11 @@ the kubeconfig files' modes) and fails, with a fix per finding, on:
 - Open WebUI with `WEBUI_AUTH` off.
 
 The default layout (`up` then `agent up`, endpoint through `kubectl
-port-forward` on 127.0.0.1) passes. `audit --json` prints `k3d-gpu.audit/v1`;
+port-forward` on 127.0.0.1) passes the listener, image, kubeconfig and Open
+WebUI rules (`tests/console/audit/default`). Within an hour of its first start
+it still fails the runtime-pull rule: the node image does not bake the k3s
+system images, the device plugins or the agent images yet, so containerd pulls
+them then. `audit --json` prints `k3d-gpu.audit/v1`;
 `audit --observe` prints what it read (`k3d-gpu.observed/v1`), and `audit
 --observed FILE` checks a saved one instead of the cluster. `--plan FILE` adds
 the endpoint a `plan --json` document plans: off loopback it must be `oidc`.
