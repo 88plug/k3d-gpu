@@ -64,7 +64,7 @@
 
 set -euo pipefail
 
-VERSION="0.1.44"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.47"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 # The node image defaults to the tag built from this launcher's own release
 # (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
@@ -90,6 +90,9 @@ SANDBOX_MANIFEST="${K3D_GPU_SANDBOX:-${SHARE_DIR}/agent-sandbox.yml}"
 SANDBOX_PROFILE_MANIFEST="${K3D_GPU_SANDBOX_PROFILE:-${SHARE_DIR}/agent-sandbox-k3d.yml}"
 MODEL_SHARE_MANIFEST="${K3D_GPU_MODEL_SHARE:-${SHARE_DIR}/model-share.yml}"
 SANDBOX_TIMEOUT="${K3D_GPU_SANDBOX_TIMEOUT:-180}" # seconds `sandbox up` waits for a warm sandbox
+HYBRID_GUARD_TEMPLATE="${K3D_GPU_HYBRID_GUARD_PLUGIN:-${SHARE_DIR}/nri-balloons-guard.yml}"
+PREFILL_GUARD="${K3D_GPU_PREFILL_GUARD:-}"  # opt-in E-core cap: kHz or N% (guard_khz); off when empty
+STATE_DIR="${K3D_GPU_STATE_DIR:-${XDG_STATE_HOME:-${HOME:-}/.local/state}/k3d-gpu}"
 SYSROOT="${K3D_GPU_SYSROOT:-}" # prefix for /sys and /dev reads (tests point it at a fake tree)
 TEST_IMAGE="${K3D_GPU_TEST_IMAGE:-nvidia/cuda:13.4.3-base-ubuntu26.04}"
 DEVICE_TEST_IMAGE="${K3D_GPU_DEVICE_TEST_IMAGE:-busybox:1.37}"
@@ -181,7 +184,7 @@ Usage: k3d-gpu <command>
   plan [--explain|--json|--hash] [--engine E] [--device cpu|gpu|npu|hpu] [--model M]
        [--bind ADDR] [--port N] [--facts FILE] [--matrix FILE]
             Engine, model and placement for this box, picked only from measured
-            (green) matrix cells; with none it says "unmeasured, run prove"
+            (green) matrix cells; with none it says "unmeasured" (quickstart/agent up still serve)
             --hash prints the plan hash: sha256 of the --json output
   plan --predict SKU|auto|list [--json] [--mts N] [--channels N]
             Roofline prediction (decode/prefill tok/s, derived agents per box) for
@@ -264,6 +267,15 @@ Environment:
   K3D_GPU_WSL_PLUGIN    WSL2 Intel GPU plugin yaml (default: ${SHARE_DIR}/intel-gpu-wsl-plugin.yml)
   K3D_GPU_BALLOONS      k3s | external: owner of the NRI balloons policy (default: k3s)
   K3D_GPU_NPU_EMBEDDINGS NPU embeddings recipe (default: ${SHARE_DIR}/npu-embeddings.yml)
+  K3D_GPU_PREFILL_GUARD opt-in, hybrid CPUs only (default: off). Caps the max frequency
+                        of the E-cores running pods labelled k3d-gpu.io/cores=efficient,
+                        as kHz (2000000) or a percent of the E-core max (50%), so P-core
+                        inference keeps more of the package power/thermal budget. Writes
+                        host cpufreq through the NRI balloons policy; 'down' writes the
+                        values recorded at 'up' back. With it set, doctor --perf shows the
+                        package throttle counters
+  K3D_GPU_HYBRID_GUARD_PLUGIN  guard manifest template (default: ${SHARE_DIR}/nri-balloons-guard.yml)
+  K3D_GPU_STATE_DIR     guard state per cluster (default: ${STATE_DIR})
   K3D_GPU_MODEL_GB      model size checked by doctor --perf (same as --model-gb)
   K3D_GPU_AGENT_DEVICE  agent device: auto | CPU | GPU | NPU | HPU (default: auto; auto
                         takes a Gaudi first, served by vLLM)
@@ -785,6 +797,124 @@ latency_prefer_favored() {
     kubectl -n kube-system patch balloonspolicy default --type=json \
         -p "[{\"op\":\"add\",\"path\":\"/spec/balloonTypes/${i}/preferCloseToDevices\",\"value\":[${json%,}]}]" \
         || warn "could not point the latency balloon at the favored CPUs $1"
+}
+
+# ---- prefill guard (opt-in) ----------------------------------------------------
+# K3D_GPU_PREFILL_GUARD caps scaling_max_freq of the CPUs in the efficient
+# balloon through a CPU class of the NRI balloons policy (share/nri-balloons-guard.yml).
+
+# cpufreq_vals <cpulist> <attr>: the numeric values of a cpufreq attr, one per line.
+cpufreq_vals() {
+    local cpu v
+    for cpu in $(cpulist_expand "$1"); do
+        v=$(head -n1 "${SYSROOT}/sys/devices/system/cpu/cpu${cpu}/cpufreq/$2" 2>/dev/null) || continue
+        [[ "${v}" =~ ^[0-9]{1,9}$ ]] && echo "${v}"
+    done
+}
+cpufreq_max() { cpufreq_vals "$1" "$2" | sort -n | sed -n '$p'; }
+cpufreq_min() { cpufreq_vals "$1" "$2" | sort -n | head -n1; }
+online_cpus() { head -n1 "${SYSROOT}/sys/devices/system/cpu/online" 2>/dev/null || true; }
+
+# guard_khz <request>: the E-core cap in kHz for "<kHz>" or "<1-100>%" of the
+# highest E-core cpuinfo_max_freq (rounded down to a MHz); prints nothing for ""
+# or "off". Prints the reason and fails on any other form, or on a cap below the
+# E-core cpuinfo_min_freq or not below the E-core maximum.
+guard_khz() {
+    local req=$1 atom emax emin khz
+    case "${req}" in ""|off) return 0 ;; esac
+    atom=$(hybrid_cpus atom)
+    emax=$(cpufreq_max "${atom}" cpuinfo_max_freq)
+    emin=$(cpufreq_min "${atom}" cpuinfo_min_freq)
+    if [ -z "${emax}" ]; then
+        echo "no E-core cpuinfo_max_freq in /sys/devices/system/cpu/cpu*/cpufreq (cpufreq off, or a VM)"; return 1
+    fi
+    if [[ "${req}" =~ ^([1-9][0-9]?|100)%$ ]]; then
+        khz=$(( emax * ${req%\%} / 100 / 1000 * 1000 ))
+    elif [[ "${req}" =~ ^[1-9][0-9]{0,8}$ ]]; then
+        khz=${req}
+    else
+        echo "K3D_GPU_PREFILL_GUARD='${req}' must be a frequency in kHz (e.g. 2000000) or 1-100% of the E-core max"; return 1
+    fi
+    if [ -n "${emin}" ] && [ "${khz}" -lt "${emin}" ]; then
+        echo "K3D_GPU_PREFILL_GUARD=${req} is ${khz} kHz, below the E-core minimum ${emin} kHz (cpuinfo_min_freq)"; return 1
+    fi
+    if [ "${khz}" -ge "${emax}" ]; then
+        echo "K3D_GPU_PREFILL_GUARD=${req} is ${khz} kHz, not below the E-core maximum ${emax} kHz: it would cap nothing"; return 1
+    fi
+    echo "${khz}"
+}
+
+# guard_record: "<cpu> <scaling_max_freq kHz>" for every online CPU.
+guard_record() {
+    local cpu v
+    for cpu in $(cpulist_expand "$(online_cpus)"); do
+        v=$(head -n1 "${SYSROOT}/sys/devices/system/cpu/cpu${cpu}/cpufreq/scaling_max_freq" 2>/dev/null) || continue
+        [[ "${v}" =~ ^[0-9]{1,9}$ ]] && echo "${cpu} ${v}"
+    done
+}
+
+# guard_cooling_active: print the first ACPI processor cooling device in a nonzero
+# state. It caps cpufreq through its own freq QoS request, so scaling_max_freq
+# reads the cooled value while it is active (drivers/acpi/processor_thermal.c).
+guard_cooling_active() {
+    local d s
+    for d in "${SYSROOT}"/sys/class/thermal/cooling_device*; do
+        [ "$(head -n1 "${d}/type" 2>/dev/null)" = Processor ] || continue
+        s=$(head -n1 "${d}/cur_state" 2>/dev/null)
+        [[ "${s}" =~ ^[0-9]+$ ]] && [ "${s}" -gt 0 ] && { echo "${d##*/} cur_state ${s}"; return 0; }
+    done
+    return 1
+}
+
+# guard_record_valid <file>: non-empty, and every line is "<cpu> <kHz>".
+guard_record_valid() { [ -s "$1" ] && ! grep -qvE '^[0-9]{1,5} [0-9]{1,9}$' "$1"; }
+
+# Run as root in the privileged node container, whose /sys is the host's; reads the record on stdin.
+GUARD_RESTORE_SH='rc=0; while read -r c v; do echo "$v" > "/sys/devices/system/cpu/cpu$c/cpufreq/scaling_max_freq" || rc=1; done; exit $rc'
+# guard_manual_restore <record>: the same restore as a host command.
+guard_manual_restore() {
+    # shellcheck disable=SC2016 # printed for the user to run, not expanded here
+    printf 'while read -r c v; do echo "$v" | sudo tee /sys/devices/system/cpu/cpu$c/cpufreq/scaling_max_freq >/dev/null; done < %s\n' "$1"
+}
+
+# guard_prepare: validate K3D_GPU_PREFILL_GUARD, record every CPU's scaling_max_freq
+# (once: an existing record holds the pre-guard values), render the guard policy
+# into ${STATE_DIR}/<cluster>/ and print its path. Messages go to stderr.
+guard_prepare() {
+    local khz hmax dir rec emax other cool
+    has_hybrid || err "K3D_GPU_PREFILL_GUARD needs a hybrid CPU (P-cores + E-cores): it caps the E-cores of the efficient balloon, and this host has no cpu_core + cpu_atom split. On Xeon see docs/prefill-guard.md"
+    is_active hybrid || err "K3D_GPU_PREFILL_GUARD needs the hybrid vendor; add hybrid to K3D_GPU_VENDORS"
+    [ "${BALLOONS}" != external ] || err "K3D_GPU_PREFILL_GUARD needs the baked NRI balloons policy; K3D_GPU_BALLOONS=external leaves the policy to a Helm release"
+    khz=$(guard_khz "${PREFILL_GUARD}") || err "${khz}"
+    # A second guarded cluster would record the first one's caps as "original".
+    for other in "${STATE_DIR}"/*/scaling_max_freq; do
+        [ -e "${other}" ] || continue
+        [ "${other}" = "${STATE_DIR}/${CLUSTER}/scaling_max_freq" ] && continue
+        other=${other%/scaling_max_freq}
+        err "prefill guard: cluster '${other##*/}' still holds a guard record (${other}); run K3D_GPU_CLUSTER=${other##*/} k3d-gpu down first"
+    done
+    emax=$(cpufreq_max "$(hybrid_cpus atom)" cpuinfo_max_freq)
+    hmax=$(cpufreq_max "$(online_cpus)" cpuinfo_max_freq)
+    [ -n "${hmax}" ] || err "cannot read cpuinfo_max_freq of the online CPUs (/sys/devices/system/cpu/online)"
+    [ -f "${HYBRID_GUARD_TEMPLATE}" ] || err "prefill guard template ${HYBRID_GUARD_TEMPLATE} not found"
+    [[ "${STATE_DIR}" == /* ]] || err "K3D_GPU_STATE_DIR must be an absolute path (k3d mounts from it), got '${STATE_DIR}'"
+    [[ "${CLUSTER}" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] || err "K3D_GPU_CLUSTER '${CLUSTER}' must be a DNS label"
+    dir="${STATE_DIR}/${CLUSTER}"
+    rec="${dir}/scaling_max_freq"
+    if [ ! -s "${rec}" ] && cool=$(guard_cooling_active); then
+        err "prefill guard: ACPI processor passive cooling is active (${cool}), so scaling_max_freq reads a cooled value; recording it would make 'down' keep that cap. Retry when the CPU is cooler"
+    fi
+    mkdir -p "${dir}"
+    if [ -s "${rec}" ]; then
+        info "prefill guard: keeping the restore record ${rec} from an earlier guarded cluster" >&2
+    else
+        guard_record > "${rec}"
+    fi
+    guard_record_valid "${rec}" || err "prefill guard: restore record ${rec} is empty or malformed (want '<cpu> <kHz>' lines)"
+    sed -e "s/__K3D_GPU_GUARD_MAX__/${khz}kHz/" -e "s/__K3D_GPU_HOST_MAX__/${hmax}kHz/" \
+        "${HYBRID_GUARD_TEMPLATE}" > "${dir}/nri-balloons.yaml"
+    info "prefill guard: the NRI balloons policy caps E-cores in the efficient balloon at $((khz / 1000)) MHz (E-core max $((emax / 1000)) MHz) and resets every other CPU to its own maximum, by writing host scaling_max_freq. Undo: k3d-gpu down (writes back ${rec})" >&2
+    echo "${dir}/nri-balloons.yaml"
 }
 
 # Kernel CPU list ("0-3,8,10-11") -> one CPU number per line. Only what the
@@ -1403,17 +1533,32 @@ vendor_daemonset() {  # prints: namespace name manifest
     esac
 }
 
+# tool_hint docker|k3d|kubectl: how to install it on this distro (doctor's fail line).
+# k3d on the AUR is rancher-k3d-bin; k3d-git there is the K-3D 3D modeller.
+INSTALLER_URL="https://raw.githubusercontent.com/88plug/k3d-gpu/main/packaging/install.sh"
+tool_hint() {
+    local d; d=$(hs_distro)
+    case "$1:${d}" in
+        docker:arch|docker:manjaro) echo "sudo pacman -S docker && sudo systemctl enable --now docker" ;;
+        docker:*)    echo "https://docs.docker.com/engine/install/ (WSL2: Docker Desktop with WSL integration)" ;;
+        k3d:arch|k3d:manjaro) echo "yay -S rancher-k3d-bin" ;;
+        k3d:*)       echo "packaging/install.sh puts a pinned k3d in ~/.local/bin: ${INSTALLER_URL}" ;;
+        kubectl:arch|kubectl:manjaro) echo "sudo pacman -S kubectl" ;;
+        kubectl:*)   echo "packaging/install.sh puts a pinned kubectl in ~/.local/bin: ${INSTALLER_URL}" ;;
+    esac
+}
+
 doctor_common() {
     info "Checking docker..."
     if command -v docker >/dev/null 2>&1; then
         if docker info >/dev/null 2>&1; then
             echo "  ok: docker running"
         else
-            echo "  ${RED}fail${RST}: docker installed but daemon unreachable (sudo systemctl start docker)"
+            echo "  ${RED}fail${RST}: docker installed but daemon unreachable (sudo systemctl enable --now docker; as non-root also: sudo usermod -aG docker \$USER, then log in again)"
             FAIL=1
         fi
     else
-        echo "  ${RED}fail${RST}: docker not installed (sudo pacman -S docker)"
+        echo "  ${RED}fail${RST}: docker not installed ($(tool_hint docker))"
         FAIL=1
     fi
 
@@ -1421,12 +1566,12 @@ doctor_common() {
     if command -v k3d >/dev/null 2>&1; then
         echo "  ok: $(k3d version | head -1)"
     else
-        echo "  ${RED}fail${RST}: k3d not installed (yay -S k3d-git)"
+        echo "  ${RED}fail${RST}: k3d not installed ($(tool_hint k3d))"
         FAIL=1
     fi
 
     info "Checking kubectl..."
-    command -v kubectl >/dev/null 2>&1 && echo "  ok" || { echo "  ${RED}fail${RST}: kubectl not installed (sudo pacman -S kubectl)"; FAIL=1; }
+    command -v kubectl >/dev/null 2>&1 && echo "  ok" || { echo "  ${RED}fail${RST}: kubectl not installed ($(tool_hint kubectl))"; FAIL=1; }
 }
 
 doctor_nvidia() {
@@ -2950,6 +3095,45 @@ perf_rapl() {
     done
 }
 
+# Hybrid hosts only: P-cores and E-cores share one package power and thermal
+# budget, so pinning them apart does not stop an E-core neighbour from clocking
+# P-core inference down. The kernel counts package thermal throttle events since
+# boot; when there are any, suggest the opt-in prefill guard. Until H5 is
+# measured the section is printed only for a guard that is requested
+# (K3D_GPU_PREFILL_GUARD) or recorded for this cluster, never unprompted.
+perf_prefill_guard() {
+    local p first tt cnt tot core=0 cpu v pl khz rec="${STATE_DIR}/${CLUSTER}/scaling_max_freq"
+    has_hybrid || return 0
+    case "${PREFILL_GUARD}" in ""|off) [ -e "${rec}" ] || return 0 ;; esac
+    p=$(hybrid_cpus core)
+    first=$(cpulist_expand "${p}" | head -n1)
+    tt=/sys/devices/system/cpu/cpu${first}/thermal_throttle
+    cnt=$(rd "${tt}/package_throttle_count")
+    [ -n "${cnt}" ] || [ -e "${rec}" ] || return 0
+    perf_section "Package power/thermal coupling on a hybrid CPU (prefill guard, opt-in)" \
+        "the package does not throttle under load. P-cores and E-cores share one power and thermal budget, so with disjoint cpusets an E-core neighbour can still slow P-core inference by heating the package" \
+        "https://github.com/torvalds/linux/blob/v6.12/drivers/thermal/intel/therm_throt.c (thermal_throttle counters), https://github.com/containers/nri-plugins/blob/v0.14.0/docs/resource-policy/policy/balloons.md#cpu-tuning"
+    if [ -e "${rec}" ]; then
+        perf_info "prefill guard record for cluster '${CLUSTER}': ${rec} ('k3d-gpu down' writes these scaling_max_freq values back)" "${rec}"
+    fi
+    if lt 0 "${cnt}"; then
+        tot=$(rd "${tt}/package_throttle_total_time_ms")
+        for cpu in $(cpulist_expand "${p}"); do
+            v=$(rd "/sys/devices/system/cpu/cpu${cpu}/thermal_throttle/core_throttle_count")
+            [[ "${v}" =~ ^[0-9]{1,15}$ ]] && core=$((core + v))
+        done
+        pl=$(rd "${tt}/package_power_limit_count")
+        khz=$(guard_khz 50%) || khz=""
+        perf_flag note "package throttled ${cnt} times since boot ($([[ "${tot}" =~ ^[0-9]+$ ]] && echo "$((tot / 1000)) s in total" || echo "total time unknown"); P-core core_throttle_count ${core}${pl:+, package_power_limit_count ${pl}})" \
+            "${tt}/package_throttle_{count,total_time_ms}" \
+            "each count is a PROCHOT event: the package reached its thermal limit and every core clocked down, P-cores included. The opt-in prefill guard caps the E-cores of the efficient balloon${khz:+ (50% = $((khz / 1000)) MHz here)} through an NRI balloons CPU class, so P-core inference keeps more of the budget and E-core pods run slower. Unmeasured until EXPERIMENTS.md H5 runs; it recreates the cluster" \
+            "k3d-gpu down && K3D_GPU_PREFILL_GUARD=50% k3d-gpu up" \
+            "k3d-gpu down && k3d-gpu up"
+    elif [ -n "${cnt}" ]; then
+        perf_ok "package_throttle_count ${cnt} since boot" "${tt}/package_throttle_count"
+    fi
+}
+
 perf_memory() {
     local thp defrag sw total avail stot sfree used hp hpsz hfree
     thp=$(rd /sys/kernel/mm/transparent_hugepage/enabled)
@@ -3680,6 +3864,7 @@ doctor_perf() {
     perf_cstates
     perf_thermal
     perf_rapl
+    perf_prefill_guard
     perf_memory
     perf_dram
     perf_ksm
@@ -3792,6 +3977,10 @@ cmd_up() {
         fi
     fi
     exp_collect
+    local guard_manifest=""
+    if [ -n "${PREFILL_GUARD}" ] && [ "${PREFILL_GUARD}" != off ]; then
+        guard_manifest=$(guard_prepare) || exit 1
+    fi
 
     local create_args=(
         --image="${IMAGE}"
@@ -3861,9 +4050,15 @@ cmd_up() {
     # Hybrid P/E cores: the baked NRI balloons policy is gated by this label. NRI is
     # on in k3s's containerd for a privileged (non-userns) node, and the node sees
     # the host's cpu_core/cpu_atom/cpu_lowpower PMUs, so balloons can pin by core type. Only the
-    # node's own cgroup cpusets change; nothing host-wide (cpufreq, RDT) is touched.
+    # node's own cgroup cpusets change; nothing host-wide (cpufreq, RDT) is touched,
+    # unless the opt-in prefill guard is on: its rendered policy replaces the baked
+    # one in the server's k3s manifests dir, so k3s deploys it from the start.
     if is_active hybrid; then
         create_args+=(--k3s-node-label="${HYBRID_LABEL}@server:*;agent:*")
+        if [ -n "${guard_manifest}" ]; then
+            create_args+=(--volume="${guard_manifest}:/var/lib/rancher/k3s/server/manifests/nri-balloons.yaml@server:*")
+            HYBRID_PLUGIN_MANIFEST=${guard_manifest}
+        fi
     fi
     # NUMA (multi-socket, SNC, HBM/CXL memory nodes): the same balloons policy also
     # schedules on nodes labelled k3d-gpu.io/numa-nodes, and its replica balloon
@@ -4237,8 +4432,30 @@ verify_gpus() {
 
 cmd_down() {
     require k3d
+    guard_restore
     info "Deleting k3d cluster '${CLUSTER}'..."
     k3d cluster delete "${CLUSTER}"
+}
+
+# guard_restore: when a prefill guard ran on this cluster, write the recorded
+# scaling_max_freq values back through the privileged server node (its /sys is the
+# host's), before the node is deleted. k3d deletes the node container without
+# draining pods, so the policy makes no further writes after this.
+guard_restore() {
+    local dir="${STATE_DIR}/${CLUSTER}" rec
+    rec="${dir}/scaling_max_freq"
+    [[ "${CLUSTER}" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] || return 0
+    [ -e "${rec}" ] || return 0
+    if ! guard_record_valid "${rec}"; then
+        warn "prefill guard: restore record ${rec} is malformed; not applied. Check it, then restore by hand: $(guard_manual_restore "${rec}")"
+        return 0
+    fi
+    info "prefill guard: writing back the scaling_max_freq recorded at 'up' (${rec})..."
+    if docker exec -i "k3d-${CLUSTER}-server-0" sh -c "${GUARD_RESTORE_SH}" < "${rec}"; then
+        rm -rf "${dir}"
+    else
+        warn "prefill guard: restore through the node failed; record kept. Restore by hand: $(guard_manual_restore "${rec}")"
+    fi
 }
 
 # Run a one-shot pod requesting one device of the given resource and listing the
@@ -5374,7 +5591,7 @@ hs_checks() {
         fi
     fi
     # Kernel side: parts newer than the kernel's default xe support.
-    local notes=""
+    local notes="" opts=""
     for e in ${HS_INTEL_GPUS[@]+"${HS_INTEL_GPUS[@]}"}; do
         is_hs_target intel || break
         read -r id drv <<< "${e}"
@@ -5394,10 +5611,12 @@ hs_checks() {
         elif [ -n "${mink}" ] && [ -z "${drv}" ] && kernel_lt "${mink}" && [ "${fw#i915/}" != "${fw}" ]; then
             # i915 is the default driver for this part; xe does not support it on these kernels.
             notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs the boot option i915.force_probe=${id#0x} (or kernel ${mink}+)"$'\n'
+            opts+=" i915.force_probe=${id#0x}"
         elif [ -z "${drv}" ] && intel_gpu_no_force_probe "${id}" && kernel_lt "${mink}"; then
             notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs kernel ${mink}+ (running $(kernel_release)); force_probe cannot bind it on older kernels"$'\n'
         elif [ -z "${mink}" ] || { [ -z "${drv}" ] && kernel_lt "${mink}"; }; then
             notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs the boot options xe.force_probe=${id#0x} i915.force_probe=!${id#0x}${mink:+ (or kernel ${mink}+)}"$'\n'
+            opts+=" xe.force_probe=${id#0x} i915.force_probe=!${id#0x}"
         elif kernel_lt "${mink}"; then
             notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) is supported by default from kernel ${mink} (running $(kernel_release))"$'\n'
         fi
@@ -5406,7 +5625,8 @@ hs_checks() {
         info "Kernel (printed only; --apply never changes boot options)..."
         printf '%s' "${notes}"
         case "${HS_DISTRO}" in
-            fedora) echo "  add them: sudo grubby --update-kernel=ALL --args='<options>'" ;;
+            fedora) if [ -n "${opts}" ]; then echo "  add them: sudo grubby --update-kernel=ALL --args='${opts# }'"
+                    else echo "  or move to a newer kernel: sudo dnf upgrade --refresh, then reboot"; fi ;;
             ubuntu-*) echo "  add them to GRUB_CMDLINE_LINUX_DEFAULT in /etc/default/grub, then: sudo update-grub" ;;
             arch|manjaro) echo "  add them to GRUB_CMDLINE_LINUX_DEFAULT in /etc/default/grub, then: sudo grub-mkconfig -o /boot/grub/grub.cfg (systemd-boot: the options line in /boot/loader/entries/*.conf)" ;;
         esac
@@ -7700,8 +7920,9 @@ qs_agent_ready() {
 # The backend `agent up` will run: the user's, else vllm on a cluster that
 # advertises a Gaudi (agent_device's auto), else ovms.
 qs_backend() {
+    local dev=${K3D_GPU_AGENT_DEVICE:-auto}
     if [ -n "${K3D_GPU_AGENT_BACKEND:-}" ]; then echo "${K3D_GPU_AGENT_BACKEND,,}"
-    elif [ "${K3D_GPU_AGENT_DEVICE:-auto}" != CPU ] && [ "$(resource_total habana.ai/gaudi)" -gt 0 ]; then echo vllm
+    elif [ "${dev^^}" = AUTO ] && [ "$(resource_total habana.ai/gaudi)" -gt 0 ]; then echo vllm
     else echo ovms
     fi
 }
@@ -8704,6 +8925,11 @@ if exp_is_list; then
 fi
 exp_resolve
 
+# up, down, test and logs take no arguments; a stray one (a cluster name) is refused
+# so `down mycluster` cannot act on the default cluster instead.
+case "${1:-help}" in
+    up|down|test|logs) [ $# -le 1 ] || err "'$1' takes no arguments (got: ${*:2}); set K3D_GPU_CLUSTER to pick the cluster" ;;
+esac
 case "${1:-help}" in
     up)      cmd_up      ;;
     down)    cmd_down    ;;

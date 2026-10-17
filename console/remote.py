@@ -159,12 +159,11 @@ def mask(key):
 
 class Endpoint:
     def __init__(self, a, env, key="need"):
-        """key: "need" (a remote host must have one), "load" (read it if set), or
-        "none" (never read: commands that only render manifests or resolve names)."""
+        """key: "need" (a remote host must have one) or "load" (read it if set)."""
         self.base, self.origin = resolve_base(a.remote, env)
         self.host = urllib.parse.urlsplit(self.base).hostname
         self.port = urllib.parse.urlsplit(self.base).port or (443 if self.base.startswith("https") else 80)
-        self.key, self.key_source = load_key(a.api_key_file, env) if key != "none" else (None, None)
+        self.key, self.key_source = load_key(a.api_key_file, env)
         if key == "need" and not self.key and not is_local_host(self.host):
             raise RemoteError(f"remote endpoint {self.base} needs a key: set OPENAI_API_KEY or pass --api-key-file FILE")
         self.model = a.model or (env.get("OPENAI_MODEL") or "").strip() or None
@@ -175,8 +174,6 @@ class Endpoint:
             # would see the Authorization header in clear text.
             handlers.append(urllib.request.ProxyHandler({}))
         self._opener = urllib.request.build_opener(*handlers)
-        # K3D_GPU_REMOTE_ADDRS pins the host's addresses (sandbox egress) instead of DNS.
-        self.pinned_addrs = (env.get("K3D_GPU_REMOTE_ADDRS") or "").strip() or None
 
     def scrub(self, text):
         return text.replace(self.key, mask(self.key)) if self.key else text
@@ -301,15 +298,15 @@ def render_chat_ui(text, base, model):
             f"# (model {model}); endpoint and key come from Secret {SECRET}.\n" + text)
 
 
-def endpoint_addrs(ep, pinned=None):
+def endpoint_addrs(host, port, pinned=None):
     """Sorted addresses of the endpoint host (IPv4 first). Each must be a public address."""
     if pinned:
         addrs = [a.strip() for a in pinned.split(",") if a.strip()]
     else:
         try:
-            infos = socket.getaddrinfo(ep.host, ep.port, proto=socket.IPPROTO_TCP)
+            infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
         except OSError as e:
-            raise RemoteError(f"cannot resolve {ep.host}: {e}", EXIT_ENDPOINT)
+            raise RemoteError(f"cannot resolve {host}: {e}", EXIT_ENDPOINT)
         addrs = [i[4][0] for i in infos]
     out = set()
     for a in addrs:
@@ -318,11 +315,11 @@ def endpoint_addrs(ep, pinned=None):
         except ValueError:
             raise RemoteError(f"--addrs: {a!r} is not an IP address")
         if not ip.is_global:
-            raise RemoteError(f"{ep.host} resolves to {ip}, not a public address; the sandbox egress pin is for "
+            raise RemoteError(f"{host} resolves to {ip}, not a public address; the sandbox egress pin is for "
                               "public endpoints (in-cluster endpoints need no egress rule)")
         out.add(ip)
     if not out:
-        raise RemoteError(f"{ep.host} resolves to no address", EXIT_ENDPOINT)
+        raise RemoteError(f"{host} resolves to no address", EXIT_ENDPOINT)
     return [str(i) for i in sorted(out, key=lambda i: (i.version, i))]
 
 
@@ -491,21 +488,41 @@ def read_manifest(path):
         raise RemoteError(f"{path}: {e.strerror}")
 
 
-def cmd_chat_ui(ep, a):
-    sys.stdout.write(render_chat_ui(read_manifest(a.manifest), ep.base, need_model(ep, a)))
+# The manifest renderers and addrs work from the base URL alone: they never build
+# an Endpoint, so the key is not read in their process at all.
+
+def target(a, env):
+    """(base URL, host, port) without the key."""
+    base = resolve_base(a.remote, env)[0]
+    u = urllib.parse.urlsplit(base)
+    return base, u.hostname, u.port or (443 if u.scheme == "https" else 80)
+
+
+def pinned_addrs(a, env):
+    return a.addrs or (env.get("K3D_GPU_REMOTE_ADDRS") or "").strip() or None
+
+
+def cmd_chat_ui(a, env):
+    base = target(a, env)[0]
+    model = a.model or (env.get("OPENAI_MODEL") or "").strip()
+    if not model:
+        raise RemoteError("chat-ui needs a model: pass --model (or OPENAI_MODEL)")
+    sys.stdout.write(render_chat_ui(read_manifest(a.manifest), base, model))
     return 0
 
 
-def cmd_sandbox_profile(ep, a):
-    if ep.base.startswith("http://"):
+def cmd_sandbox_profile(a, env):
+    base, host, port = target(a, env)
+    if base.startswith("http://"):
         raise RemoteError("the sandbox egress pin is for https endpoints; an in-cluster endpoint needs no egress rule")
-    addrs = endpoint_addrs(ep, a.addrs or ep.pinned_addrs)
-    sys.stdout.write(render_sandbox(read_manifest(a.manifest), ep.host, ep.port, addrs))
+    addrs = endpoint_addrs(host, port, pinned_addrs(a, env))
+    sys.stdout.write(render_sandbox(read_manifest(a.manifest), host, port, addrs))
     return 0
 
 
-def cmd_addrs(ep, a):
-    out(",".join(endpoint_addrs(ep, a.addrs or ep.pinned_addrs)))
+def cmd_addrs(a, env):
+    _, host, port = target(a, env)
+    out(",".join(endpoint_addrs(host, port, pinned_addrs(a, env))))
     return 0
 
 
@@ -526,15 +543,18 @@ def cmd_exec(ep, a):
 
 COMMANDS = {
     "check": (cmd_check, "need"), "show": (cmd_show, "load"), "models": (cmd_models, "need"),
-    "resolve": (cmd_resolve, "need"), "secret": (cmd_secret, "need"), "chat-ui": (cmd_chat_ui, "none"),
-    "sandbox-profile": (cmd_sandbox_profile, "none"), "addrs": (cmd_addrs, "none"), "exec": (cmd_exec, "need"),
+    "resolve": (cmd_resolve, "need"), "secret": (cmd_secret, "need"), "exec": (cmd_exec, "need"),
 }
+KEYLESS = {"chat-ui": cmd_chat_ui, "sandbox-profile": cmd_sandbox_profile, "addrs": cmd_addrs}
 
 
 def parse(argv):
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--remote", metavar="URL", help="endpoint base URL (overrides OPENAI_BASE_URL)")
     common.add_argument("--model", help="model id (overrides OPENAI_MODEL)")
+    keyless = argparse.ArgumentParser(add_help=False)
+    keyless.add_argument("--remote", metavar="URL", help="endpoint base URL (overrides OPENAI_BASE_URL)")
+    keyless.add_argument("--model", help="model id (overrides OPENAI_MODEL)")
     common.add_argument("--api-key-file", metavar="FILE", help="file with the key (overrides OPENAI_API_KEY)")
     ap = argparse.ArgumentParser(prog="k3d-gpu remote", description="Any OpenAI-compatible endpoint.")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -548,12 +568,12 @@ def parse(argv):
     p = sub.add_parser("secret", parents=[common])
     p.add_argument("--namespace", required=True)
     p.add_argument("--probe", action="store_true")
-    p = sub.add_parser("chat-ui", parents=[common])
+    p = sub.add_parser("chat-ui", parents=[keyless])
     p.add_argument("manifest")
-    p = sub.add_parser("sandbox-profile", parents=[common])
+    p = sub.add_parser("sandbox-profile", parents=[keyless])
     p.add_argument("manifest")
     p.add_argument("--addrs", help="comma-separated addresses instead of resolving the host")
-    p = sub.add_parser("addrs", parents=[common])
+    p = sub.add_parser("addrs", parents=[keyless])
     p.add_argument("--addrs", help=argparse.SUPPRESS)
     p = sub.add_parser("exec", parents=[common], help="run a command with OPENAI_API_KEY set")
     p.add_argument("argv", nargs=argparse.REMAINDER)
@@ -566,8 +586,10 @@ def main(argv=None, env=None):
         a = parse(sys.argv[1:] if argv is None else argv)
     except SystemExit as e:
         return e.code if isinstance(e.code, int) else EXIT_CONFIG
-    fn, key = COMMANDS[a.cmd]
     try:
+        if a.cmd in KEYLESS:
+            return KEYLESS[a.cmd](a, env)
+        fn, key = COMMANDS[a.cmd]
         return fn(Endpoint(a, env, key), a)
     except RemoteError as e:
         print(f"remote: {e}", file=sys.stderr, flush=True)

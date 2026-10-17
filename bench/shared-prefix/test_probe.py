@@ -5,14 +5,16 @@ import json
 import os
 import sys
 import tempfile
+import time
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import probe  # noqa: E402
 
 
-def rnd(arm, seed, added, a1=9.6, c=9.5, drss=110.0, tokens=1650):
-    req = lambda t: {"ttft": t, "total": t + 0.5, "text_len": 5, "prompt_tokens": tokens, "error": None}  # noqa: E731
+def rnd(arm, seed, added, a1=9.6, c=9.5, drss=110.0, tokens=1650, text_len=5, completion=None):
+    req = lambda t: {"ttft": t, "total": t + 0.5, "text_len": text_len, "prompt_tokens": tokens,  # noqa: E731
+                     "completion_tokens": completion, "error": None}
     S = [dict(req(a1), agent="a1")] + [dict(req(t), agent=f"a{i + 2}") for i, t in enumerate(added)]
     S.append(dict(req(c), agent="c"))
     return {"arm": arm, "seed": seed, "S": S, "B": [dict(req(1.0), agent=f"b{k}") for k in range(6)],
@@ -87,6 +89,39 @@ class Request(unittest.TestCase):
         self.assertGreater(r["text_len"], 0)
         self.assertEqual(r["prompt_tokens"], 1634)
 
+    def test_role_chunk_is_first_token_when_parser_holds_text(self):
+        # The OVMS stream seen live (H25 run 2): a role delta with content null
+        # after prefill, then only the finish chunk and usage.
+        import http.server
+        import threading
+        events = [(0.3, {"choices": [{"index": 0, "delta": {"role": "assistant", "content": None}}]}),
+                  (0.2, {"choices": [{"index": 0, "delta": {}, "finish_reason": "length"}]}),
+                  (0.0, {"choices": [], "usage": {"prompt_tokens": 1634, "completion_tokens": 8}})]
+
+        class H(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                self.rfile.read(int(self.headers["Content-Length"]))
+                self.send_response(200)
+                self.end_headers()
+                for delay, e in events:
+                    time.sleep(delay)
+                    self.wfile.write(f"data: {json.dumps(e)}\n\n".encode())
+                    self.wfile.flush()
+                self.wfile.write(b"data: [DONE]\n\n")
+
+            def log_message(self, *a):
+                pass
+
+        srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+        threading.Thread(target=srv.handle_request, daemon=True).start()
+        r = probe.request(f"http://127.0.0.1:{srv.server_port}/v3/chat/completions", "s", "u", [{}])
+        srv.server_close()
+        self.assertIsNone(r["error"])
+        self.assertTrue(0.25 <= r["ttft"] < 0.45, r["ttft"])
+        self.assertGreater(r["total"], r["ttft"] + 0.15)
+        self.assertEqual(r["text_len"], 0)
+        self.assertEqual(r["completion_tokens"], 8)
+
 
 class Score(unittest.TestCase):
     def run_score(self, rounds):
@@ -128,6 +163,57 @@ class Score(unittest.TestCase):
             r["graph_ok"] = False
         off = [rnd("OFF", s, [9.6] * 5) for s in (2, 3, 6)]
         self.assertTrue(self.run_score(on + off)["T"].startswith("INCONCLUSIVE"))
+
+    def load_file(self, d, on_load1, off_load1):
+        f = os.path.join(d, "load.jsonl")
+        with open(f, "w") as fh:
+            for arm, l1 in (("ON", on_load1), ("OFF", off_load1)):
+                for _ in range(2):
+                    fh.write(json.dumps({"tag": arm, "level": "typical", "busy_pct": 37.0, "load1": l1,
+                                         "pkg_w": 40.0, "throttle_per_min": 0.0, "swap_used_mib": 100.0,
+                                         "swap_delta_mib": 0.0}) + "\n")
+        return f
+
+    def score_with_load(self, rounds, on_load1, off_load1):
+        with tempfile.TemporaryDirectory() as d:
+            files = []
+            for i, r in enumerate(rounds):
+                files.append(os.path.join(d, f"round-{i}.json"))
+                json.dump(r, open(files[-1], "w"))
+            return probe.score(files, self.load_file(d, on_load1, off_load1))
+
+    def test_matched_high_load_keeps_verdict(self):
+        on = [rnd("ON", s, [0.9, 0.85, 0.95, 0.9, 0.88]) for s in (1, 3, 5)]
+        off = [rnd("OFF", s, [9.6, 9.4, 9.7, 9.5, 9.8]) for s in (2, 4, 6)]
+        out = self.score_with_load(on + off, 24.0, 25.0)  # high but matched
+        self.assertTrue(out["load"]["matched"])
+        self.assertEqual(out["T"], "SUPPORTED")
+
+    def test_unmatched_load_is_inconclusive(self):
+        on = [rnd("ON", s, [0.9, 0.85, 0.95, 0.9, 0.88]) for s in (1, 3, 5)]
+        off = [rnd("OFF", s, [9.6, 9.4, 9.7, 9.5, 9.8]) for s in (2, 4, 6)]
+        out = self.score_with_load(on + off, 5.0, 20.0)
+        self.assertFalse(out["load"]["matched"])
+        self.assertTrue(out["T"].startswith("INCONCLUSIVE: load unmatched (load1"), out["T"])
+        self.assertEqual(out["M"], out["T"])
+
+    def test_no_burst_rounds_score_t_and_leave_m_open(self):
+        def nb(r):
+            r.update(B=[], drss_per_agent_mib=None)
+            return r
+        on = [nb(rnd("ON", s, [0.9, 0.85, 0.95, 0.9, 0.88], text_len=0, completion=8)) for s in (1, 3, 5)]
+        off = [nb(rnd("OFF", s, [9.6, 9.4, 9.7, 9.5, 9.8], text_len=0, completion=8)) for s in (2, 4, 6)]
+        out = self.run_score(on + off)
+        self.assertEqual(out["void"], {})
+        self.assertEqual(out["T"], "SUPPORTED")
+        self.assertTrue(out["M"].startswith("INCONCLUSIVE"))
+
+    def test_zero_completion_tokens_is_empty_output(self):
+        on = [rnd("ON", s, [0.9] * 5, text_len=0, completion=0) for s in (1, 3, 5)]
+        off = [rnd("OFF", s, [9.6] * 5) for s in (2, 4, 6)]
+        out = self.run_score(on + off)
+        self.assertIn("empty output", out["void"]["ON/1"])
+        self.assertTrue(out["T"].startswith("INCONCLUSIVE"))
 
     def test_missing_arm(self):
         on = [rnd("ON", s, [0.9] * 5) for s in (1, 4, 5)]

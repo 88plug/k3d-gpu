@@ -31,6 +31,21 @@ lib() { sed '/^case "\${1:-help}" in$/,$d' "${LAUNCHER}"; }
 # meminfo <dir> <kB>: a SYSROOT whose /proc/meminfo has that MemTotal.
 meminfo() { mkdir -p "$1/proc"; printf 'MemTotal:       %s kB\nMemAvailable:   1000 kB\n' "$2" > "$1/proc/meminfo"; }
 
+# ---- tool_hint: doctor's install hint per distro --------------------------------
+# Blind test: doctor said `yay -S k3d-git` on every distro; k3d-git is the K-3D 3D
+# modeller. Rancher k3d on the AUR is rancher-k3d-bin (5.9.0, the version install.sh pins).
+hint() { local d="${TMP}/hint-$1"; mkdir -p "${d}/etc"; echo "ID=$1" > "${d}/etc/os-release"; (source <(lib); SYSROOT=${d}; tool_hint "$2"); }
+has   "Arch k3d hint names rancher-k3d-bin" "$(hint arch k3d)" "yay -S rancher-k3d-bin"
+lacks "no hint names k3d-git" "$(hint arch k3d)$(hint ubuntu k3d)$(hint manjaro k3d)" "k3d-git"
+has   "Ubuntu k3d hint points at install.sh" "$(hint ubuntu k3d)" "packaging/install.sh"
+lacks "Ubuntu k3d hint is not pacman/yay" "$(hint ubuntu k3d)" "yay"
+has   "Arch docker hint enables the service" "$(hint arch docker)" "systemctl enable --now docker"
+lacks "Ubuntu docker hint is not pacman" "$(hint ubuntu docker)" "pacman"
+has   "Fedora kubectl hint points at install.sh" "$(hint fedora kubectl)" "packaging/install.sh"
+has   "Manjaro kubectl hint is pacman" "$(hint manjaro kubectl)" "sudo pacman -S kubectl"
+grep -q "k3d-git" "${ROOT}/packaging/aur/PKGBUILD" "${ROOT}/packaging/aur/.SRCINFO" \
+    && fail "PKGBUILD optdepends names k3d-git (the K-3D modeller)" || ok "PKGBUILD optdepends does not name k3d-git"
+
 # ---- qs_tier: model and memory by RAM tier ------------------------------------
 tier() { local d="${TMP}/tier-$1"; meminfo "${d}" "$1"; (source <(lib); SYSROOT=${d}; qs_tier); }
 eq "8 GB host -> 1.7B"   "$(tier 8000000)"   "OpenVINO/Qwen3-1.7B-int4-ov 4Gi 6f32d81e9deebeca30bb5490a7176cf4fa8c79e3"
@@ -303,15 +318,59 @@ has "successful install runs apt-get" "${out}" "apt-get install -y"
 eq "successful install leaves no temp dir" "$(ls -A "${TMP}/itmp")" ""
 inst_ver=$(sed -n 's/^K3D_GPU_VERSION=//p' "${INSTALLER}")
 since=$(sed -n 's/^QUICKSTART_SINCE=//p' "${INSTALLER}")
-if [ "$(printf '%s\n%s\n' "${inst_ver}" "${since}" | sort -V | head -n1)" = "${since}" ]; then
-    has "installer hint: quickstart (pin has it)" "${out}" "then k3d-gpu quickstart"
+# docs/quickstart.md step 1 runs this installer and step 2 runs `k3d-gpu quickstart`:
+# the pin must be a release that has the command (blind test: every persona hit
+# a 0.1.28 pin with no quickstart).
+[ "$(printf '%s\n%s\n' "${inst_ver}" "${since}" | sort -V | head -n1)" = "${since}" ] \
+    && ok "installer pin ${inst_ver} has quickstart (since ${since})" || fail "installer pin ${inst_ver} predates quickstart ${since}"
+has "installer hint: quickstart (pin has it)" "${out}" "then k3d-gpu quickstart"
+# quickstart first shipped in aur-v0.1.33 (0.1.29..0.1.32 lack it).
+eq "QUICKSTART_SINCE names the first release with the command" "${since}" "0.1.33"
+lacks "quickstart.md has no stale pre-release note" "$(cat "${ROOT}/docs/quickstart.md")" "until the 0.1.29"
+lacks "README has no stale pre-release note" "$(cat "${ROOT}/README.md")" "from 0.1.29"
+# Every Markdown table in the docs has exactly one header separator row (blind
+# test: quickstart.md "Which model you get" had two stacked headers).
+bad_tables=$(awk 'FNR==1{n=0} /^\|/{ if ($0 ~ /^\|[ :|]*-[ :|-]*\|[ ]*$/) n++; if (n>1) {print FILENAME": "FNR; n=0}; next} {n=0}' \
+    "${ROOT}/README.md" "${ROOT}"/docs/*.md)
+eq "no Markdown table has two header rows" "${bad_tables}" ""
+# docs/first-run.md: one path per blind-test persona, in the docs nav; times are
+# predictions except the one ledger row (H9) it cites.
+fr="${ROOT}/docs/first-run.md"
+if [ -f "${fr}" ]; then
+    frt=$(cat "${fr}")
+    for sec in "WSL2" "N100" "Lunar Lake" "Xeon 6" "Arc B580" "NVIDIA GPU"; do has "first-run covers ${sec}" "${frt}" "${sec}"; done
+    has "first-run cites H9 as the only measured run" "${frt}" "Ledger row H9"
+    has "first-run labels other times as predictions" "${frt}" "is a **prediction**"
+    has "first-run tells NVIDIA users the LLM is on the CPU" "${frt}" "the LLM runs on the CPU, not the NVIDIA GPU"
+    has "first-run Arch path uses rancher-k3d-bin" "${frt}" "yay -S rancher-k3d-bin"
+    grep -q "first-run.md" "${ROOT}/mkdocs.yml" && ok "first-run.md is in the mkdocs nav" || fail "first-run.md not in the mkdocs nav"
 else
-    has "installer hint: names the first quickstart release" "${out}" "ships in ${since}"
+    fail "docs/first-run.md missing"
 fi
+lacks "README prerequisites drop nvidia-docker2" "$(sed -n '/^## Prerequisites/,/^### /p' "${ROOT}/README.md")" "nvidia-docker2"
 launcher_ver=$(sed -n 's/^VERSION="\([^"]*\)".*/\1/p' "${LAUNCHER}")
 [ "$(printf '%s\n%s\n' "${inst_ver}" "${launcher_ver}" | sort -V | tail -n1)" = "${launcher_ver}" ] \
     && ok "installer pin ${inst_ver} is not newer than the launcher ${launcher_ver}" || fail "installer pin ${inst_ver} newer than launcher ${launcher_ver}"
 grep -q "cmd_quickstart" "${LAUNCHER}" && ok "launcher has quickstart" || fail "launcher lacks quickstart"
+
+# ---- qs_backend agrees with agent_device ----------------------------------------
+# On a Gaudi host only an AUTO device (any case) sends the agent to vLLM; any other
+# device makes `agent up` deploy OVMS, so quickstart must take the OVMS path.
+qsb() { (source <(lib); resource_total() { [ "$1" = habana.ai/gaudi ] && echo 1 || echo 0; }; qs_backend); }
+for d in auto AUTO Auto; do eq "gaudi + device ${d} -> vllm" "$(K3D_GPU_AGENT_DEVICE=${d} qsb)" vllm; done
+eq "gaudi + device unset -> vllm" "$(unset K3D_GPU_AGENT_DEVICE; qsb)" vllm
+for d in CPU cpu GPU gpu NPU HETERO:GPU,CPU; do eq "gaudi + device ${d} -> ovms" "$(K3D_GPU_AGENT_DEVICE=${d} qsb)" ovms; done
+eq "explicit backend wins" "$(K3D_GPU_AGENT_DEVICE=cpu K3D_GPU_AGENT_BACKEND=VLLM qsb)" vllm
+
+# ---- argument-less commands refuse extra arguments ----------------------------
+# `k3d-gpu down mycluster` must not delete the default cluster instead.
+for c in up down test logs; do
+    rm -f "${TMP}/argstate/log"; mkdir -p "${TMP}/argstate"
+    out=$(PATH="${B}:${PATH}" STUB_STATE="${TMP}/argstate" timeout 20 bash "${LAUNCHER}" "${c}" mycluster 2>&1); rc=$?
+    [ "${rc}" -ne 0 ] && ok "${c} with an extra argument exits non-zero" || fail "${c} with an extra argument: rc=0"
+    has "${c} names the stray argument" "${out}" "mycluster"
+    lacks "${c} with an extra argument runs nothing" "$(cat "${TMP}/argstate/log" 2>/dev/null)" "k3d cluster"
+done
 
 echo "quickstart_test: ${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

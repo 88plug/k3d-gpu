@@ -50,6 +50,7 @@ jobs:
       - run: tests/reserved_cpus_test.sh
       - run: tests/experimental_test.sh
       - run: tests/phase_steer_test.sh
+      - run: tests/prefill_guard_test.sh
 
   remote-tests:
     name: Remote OpenAI endpoints (resolver, Secret, sandbox egress, redaction)
@@ -147,6 +148,8 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - run: tests/claims_check_test.sh
       - run: tests/claims_check.sh
+      - run: python3 tests/ledger_drift_check_test.py
+      - run: python3 tests/ledger_drift_check.py
 
   bench-tests:
     name: Bench harness tests
@@ -177,6 +180,7 @@ jobs:
       - run: python3 bench/apb/test_apb.py
       - run: python3 bench/apb/test_stage.py
       - run: python3 bench/test_agent_trace.py
+      - run: python3 bench/load/test_load.py
 
   mcp-tests:
     name: MCP server tests

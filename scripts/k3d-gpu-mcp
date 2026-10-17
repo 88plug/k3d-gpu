@@ -220,7 +220,7 @@ TOOLS += [
         "title": "Plan a launch",
         "description": "Engine, model, placement, port and auth for this host, picked only from "
                        "measured (green) matrix cells; exactly what 'k3d-gpu plan --json' prints. "
-                       "With no green cell it says 'unmeasured, run `k3d-gpu prove` on this box' and "
+                       "With no green cell it says 'unmeasured: no green cell for this box; quickstart and agent up still pick by device' and "
                        "names no engine. The second text item and _meta['" + PLAN_HASH_META + "'] carry "
                        "the plan hash that apply needs. Changes nothing.",
         "inputSchema": {"type": "object", "properties": PLAN_PROPS, "additionalProperties": False},

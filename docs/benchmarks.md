@@ -34,3 +34,74 @@ k3d-gpu up && k3d-gpu agent up
 k3d-gpu bench --vs ollama --id H30 --budget 900 --out bench-H30
 bench/vs.py docs --out docs/benchmarks.md bench-H*/result.json
 ```
+
+<!-- bench/vs.py docs keeps everything below this line -->
+
+## Busy-box methodology (background load)
+
+Real Intel boxes are busy: agents, builds, browsers and other tenants share the
+CPU. A probe result has to hold under that, so every probe runs its arms under
+one controlled background load from `bench/load/load.py`. What spoils a comparison
+is load that drifts between arms, not load that is high, so:
+
+- every arm runs under the SAME level, interleaved (`load.py order A B --reps 3`
+  gives `A B A B A B`);
+- the background is sampled per arm and recorded: 1-min loadavg, busy share of the
+  load CPUs, package W (RAPL `energy_uj`), `core_throttle_count` events per minute,
+  swap used and swap growth;
+- a run is INCONCLUSIVE only when `load.py matched` finds the arms' load unmatched
+  under the pre-registered tolerance below, never because the load is high;
+- the `typical` level is the headline; `heavy` is the robustness check.
+
+Levels (N = the load CPU set; the image is stress-ng 0.22.01 pinned by digest,
+the same pin as `bench/noisy.sh`):
+
+| Level | CPU workers | Memory bandwidth | Page-cache churn |
+|---|---|---|---|
+| `none` | none | none | none |
+| `typical` | N `--cpu` workers at `--cpu-load 30` | `max(1, N//8)` `--stream` workers, docker `--cpus` = 0.5 per worker | 1 `--hdd` worker (write+unlink 256m), docker `--cpus 0.25` |
+| `heavy` | N `--cpu` workers at `--cpu-load 100` | `max(1, N//4)` `--stream` workers, no quota | 2 `--hdd` workers, no quota |
+
+`typical` keeps about `0.37` of the load CPUs' time busy on a 16 E-core part
+(`load.duty()`; between `0.30` and `0.40` for 8 to 64 load CPUs) plus DRAM
+traffic: a busy dev or agent box. `heavy` saturates those CPUs: a noisy neighbour.
+
+Load CPUs (`load.py cpus`): on a hybrid part the E-cores from
+`/sys/devices/cpu_atom/cpus`; otherwise the highest-numbered half of the physical
+cores, whole cores with their SMT siblings, so the load never shares a core with a
+probe on the low cores. `--cpus LIST` overrides.
+
+Matching rule, fixed before any probe uses it (`TOLERANCE` in `load.py`). For each
+metric the spread of the per-arm means (max minus min over all arms) must be within
+`max(abs, rel x largest arm mean)`:
+
+| Metric | abs | rel |
+|---|---|---|
+| `busy_pct` (load CPUs, points) | `5` | `0` |
+| `load1` | `1.0` | `0.15` |
+| `pkg_w` (W) | `3` | `0.10` |
+| `throttle_per_min` | `10` | `0.25` |
+| `swap_used_mib` | `256` | `0` |
+| `swap_delta_mib` (per window) | `64` | `0` |
+
+A metric no arm measured (no RAPL access) is reported `unmeasured` and skipped; a
+metric only some arms measured fails. Mixed levels or fewer than two arms fail.
+Sample background-only windows (load on, probe idle) just before each arm, tagged
+with the arm, so the probe's own work does not count as background.
+
+Interface:
+
+```bash
+bench/load/load.py start --level typical --ttl 1800   # idempotent; replaces another level
+bench/load/load.py sample --seconds 10 --tag A --level typical --out bg.jsonl
+#   ... run arm A, then sample --tag B, run arm B, and so on (ABAB) ...
+bench/load/load.py matched bg.jsonl                   # exit 0 MATCHED, 3 INCONCLUSIVE
+bench/load/load.py stop                               # removes only io.k3d-gpu.bench-load=1 containers
+bench/load/smoke.sh                                   # local smoke, no cluster
+```
+
+Every load container is labelled `io.k3d-gpu.bench-load=1`, runs with `--rm`, and
+stress-ng's own `--timeout` (the `--ttl`, at most 4 h) ends it even if `stop` never
+runs; `start` also removes any of its containers whose
+`io.k3d-gpu.bench-load.expires` time has passed. RAPL needs root: set
+`SUDO_ASKPASS` (`sudo -A`) or have `sudo -n` work, else `pkg_w` is null.

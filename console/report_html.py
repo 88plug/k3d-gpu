@@ -221,7 +221,7 @@ def findings(doc, title):
 def capacity(facts):
     rows = facts["capacity"]
     if not rows:
-        return '<p class="mut">No capacity run recorded on this host; run <code>k3d-gpu prove</code>.</p>'
+        return '<p class="mut">No capacity run recorded on this host; run <code>k3d-gpu capacity</code>.</p>'
     body = []
     for r in rows:
         ci = "%s–%s" % tuple(r["ci95"]) if r["ci95"] else '<span class="mut">none</span>'

@@ -193,6 +193,20 @@ class StubPair(unittest.TestCase):
         self.assertIn("[ledger:H10] | ollama", rows[0])
         self.assertIn("SUPPORTED", rows[0])
 
+    def test_docs_keeps_text_below_the_marker(self):
+        _, _, out = self.run_vs(["--itl", "0.002"], ["--itl", "0.008"])
+        page = os.path.join(self.tmp, "kept.md")
+        with open(page, "w") as f:
+            f.write("old generated text\n\n" + vs.KEEP_MARKER + "\n\n## Busy-box methodology\nkept\n")
+        vs.main(["docs", out, "--ledger", "/nonexistent", "--out", page])
+        vs.main(["docs", out, "--ledger", "/nonexistent", "--out", page])
+        with open(page) as f:
+            text = f.read()
+        self.assertNotIn("old generated text", text)
+        self.assertEqual(text.count(vs.KEEP_MARKER), 1)
+        self.assertTrue(text.endswith(vs.KEEP_MARKER + "\n\n## Busy-box methodology\nkept\n"))
+        self.assertIn("[ledger:H10] | ollama", text)
+
     def test_docs_rejects_foreign_json(self):
         bad = os.path.join(self.tmp, "bad.json")
         with open(bad, "w") as f:

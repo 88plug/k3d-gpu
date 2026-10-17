@@ -317,6 +317,9 @@ def hnum(hid):
     return int(hid.lstrip("H")) if hid.lstrip("H").isdigit() else 0
 
 
+KEEP_MARKER = "<!-- bench/vs.py docs keeps everything below this line -->"
+
+
 def cmd_docs(opts):
     results = {}
     for path in opts.results:
@@ -374,8 +377,15 @@ def cmd_docs(opts):
             "```bash", "k3d-gpu up && k3d-gpu agent up",
             "k3d-gpu bench --vs ollama --id H30 --budget 900 --out bench-H30",
             "bench/vs.py docs --out docs/benchmarks.md bench-H*/result.json", "```"]
+    # Hand-written sections after KEEP_MARKER in the existing page survive a regenerate.
+    try:
+        with open(opts.out) as f:
+            prev = f.read()
+    except OSError:
+        prev = ""
+    kept = prev[prev.index(KEEP_MARKER):] if KEEP_MARKER in prev else ""
     with open(opts.out, "w") as f:
-        f.write("\n".join(out) + "\n")
+        f.write("\n".join(out) + "\n" + ("\n" + kept if kept else ""))
     return 0
 
 

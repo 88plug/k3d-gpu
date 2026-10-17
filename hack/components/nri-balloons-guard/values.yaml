@@ -1,0 +1,74 @@
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - {key: k3d-gpu.io/hybrid-cpu, operator: In, values: ["true"]}
+      - matchExpressions:
+        - {key: k3d-gpu.io/numa-nodes, operator: Exists}
+config:
+  reservedResources:
+    cpu: 1000m
+  agent:
+    nodeResourceTopology: true
+    podResourceAPI: true
+  allocatorTopologyBalancing: true
+  reservedPoolNamespaces: [kube-system]
+  loadClasses:
+  - {name: ecluster-l2, level: l2cache}
+  balloonTypes:
+  # -- NUMA replica (k3d-gpu numa vendor) --
+  - name: replica
+    pinMemory: true
+    allocatorTopologyBalancing: true
+    shareIdleCPUsInSame: numa
+    preferNewBalloons: true
+    preferCloseToDevices: ["podresourceapi:*/*"]
+    matchExpressions:
+    - {key: pod/labels/k3d-gpu.io/cores, operator: Equals, values: [replica]}
+  # -- end NUMA replica --
+  - name: performance
+    preferCoreType: performance
+    matchExpressions:
+    - {key: pod/labels/k3d-gpu.io/cores, operator: Equals, values: [performance]}
+  - name: efficient
+    preferCoreType: efficient
+    cpuClass: prefill-guard
+    matchExpressions:
+    - {key: pod/labels/k3d-gpu.io/cores, operator: Equals, values: [efficient]}
+  - name: lowpower
+    preferCoreType: efficient
+    matchExpressions:
+    - {key: pod/labels/k3d-gpu.io/cores, operator: Equals, values: [lowpower]}
+  - name: ecluster
+    preferCoreType: efficient
+    minCPUs: 4
+    maxCPUs: 4
+    loads: [ecluster-l2]
+    matchExpressions:
+    - {key: pod/labels/k3d-gpu.io/cores, operator: Equals, values: [ecluster]}
+  - name: pcore-physical
+    preferCoreType: performance
+    preferSpreadOnPhysicalCores: false
+    hideHyperthreads: true
+    matchExpressions:
+    - {key: pod/labels/k3d-gpu.io/cores, operator: Equals, values: [pcore-physical]}
+  - name: latency
+    preferCoreType: performance
+    preferSpreadOnPhysicalCores: false
+    hideHyperthreads: true
+    maxCPUs: 2
+    matchExpressions:
+    - {key: pod/labels/k3d-gpu.io/cores, operator: Equals, values: [latency]}
+  - name: shared
+    shareIdleCPUsInSame: system
+    maxBalloons: 1
+    matchExpressions:
+    - {key: name, operator: AlwaysTrue}
+  cpuClasses:
+  - name: default
+    maxFreq: __K3D_GPU_HOST_MAX__
+  - name: prefill-guard
+    maxFreq: __K3D_GPU_GUARD_MAX__
+  log:
+    debug: [none]

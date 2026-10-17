@@ -6,10 +6,9 @@ cloud account and no API key. It is one command, and you can run it again
 safely.
 
 !!! note "Version"
-    `quickstart` ships in k3d-gpu 0.1.29. The installer below is pinned to
-    0.1.28, which has no `quickstart` command, until the 0.1.29 release exists
-    and the installer pin moves to it. Until then, run it from a checkout:
-    `git clone https://github.com/88plug/k3d-gpu && k3d-gpu/scripts/k3d-gpu quickstart`.
+    `quickstart` ships in k3d-gpu 0.1.33 and newer. The installer below is
+    pinned to a release that has it. Per-machine paths and honest time
+    expectations: [first-run.md](first-run.md).
 
 ## What you need
 
@@ -58,13 +57,15 @@ You see five steps, each with a progress bar:
 1. **Checking this machine**: the tools are present, Docker answers, an
    accelerator is detected, a proxy is noticed, and a model is picked from
    your RAM.
-2. **Cluster**: a local Kubernetes cluster in Docker, with your Intel GPU, NPU
-   or CPU cores passed through. A cluster quickstart creates is the one
+2. **Cluster**: a local Kubernetes cluster in Docker, with your detected
+   accelerators (Intel GPU, NPU, NVIDIA GPU, CPU cores) passed through. A cluster quickstart creates is the one
    `uninstall` deletes.
 3. **LLM server**: OpenVINO Model Server downloads the model, with a download
    bar, and loads it. The device is picked for you, as `k3d-gpu agent up`
    picks it: an Intel GPU with XMX matrix engines when you have one, otherwise
-   the CPU's performance cores. On a Gaudi the server is vLLM instead, and the
+   the CPU (its performance cores on a hybrid CPU). An NVIDIA GPU is never
+   used for this LLM, and neither is an iGPU without XMX (UHD, Iris Xe,
+   N-series). On a Gaudi the server is vLLM instead, and the
    chat UI step needs `--no-ui` (the UI talks to OpenVINO Model Server only).
 4. **Chat UI**: Open WebUI, with an admin account created for you.
 5. **Port-forward**: the UI on `127.0.0.1` only, not on your network.
@@ -86,8 +87,6 @@ where it stopped.
 
 The model is picked from the RAM the machine has:
 
-| RAM (as the OS reports it) | Model | Download | Memory reserved |
-|---|---|---|---|
 | RAM (as the OS reports it) | Model | Pinned commit | Download | Memory reserved |
 |---|---|---|---|---|
 | under 12 GiB (8 GB machines) | `OpenVINO/Qwen3-1.7B-int4-ov` | `6f32d81e` | [~1.2 GB](https://huggingface.co/api/models/OpenVINO/Qwen3-1.7B-int4-ov?blobs=true) (1208326810 bytes) | 4 GiB |
@@ -171,7 +170,7 @@ It asks before deleting, or pass `--yes`. It removes:
 
 `--images` also removes the cluster's node image. The k3d-gpu package itself
 stays; remove it with `sudo apt remove k3d-gpu`, `sudo dnf remove k3d-gpu` or
-`sudo zypper remove k3d-gpu`.
+`sudo zypper remove k3d-gpu`, or on Arch `yay -R k3d-gpu`.
 
 ## How long does it take?
 
