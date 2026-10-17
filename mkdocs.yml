@@ -21,6 +21,7 @@ hooks:
 nav:
   - Home: index.md
   - Intel platforms: intel.md
+  - Platforms: platforms.md
   - Operations:
       - Telemetry: telemetry.md
       - Failure modes: failure-modes.md

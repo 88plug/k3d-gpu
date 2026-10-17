@@ -12,7 +12,8 @@ Sources (kernel paths are Linux v6.18 (torvalds/linux tag v6.18) unless a tag is
   pci.ids 2026.10.15 names it "Core Ultra 200H/200V Series Processors NPU".
 - cpu family 6, model 197: INTEL_ARROWLAKE_H IFM(6, 0xC5) in
   arch/x86/include/asm/intel-family.h.
-- i915/mtl_guc_70.bin, intel/vpu/vpu_37xx_v1.bin: linux-firmware tag 20260916 WHENCE.
+- i915/mtl_guc_70.bin, intel/vpu/vpu_37xx_v1.bin and its vpu_37xx_v0.0.bin link
+  (the name kernels before 6.16 load, ivpu_fw.c): linux-firmware tag 20260916 WHENCE.
 - flags line: lscpu "Flags:" in a WSL2 guest on a Core Ultra 9 285H (kernel 6.6.87),
   https://raw.githubusercontent.com/huyurong-ruc/openmp-csr-spmv/main/results/perf/environment.txt.
   It is a guest's view: it carries "hypervisor" and lacks the CET and PKU flags a

@@ -1,0 +1,3 @@
+cpu 16
+pods 110
+npu.intel.com/accel 1

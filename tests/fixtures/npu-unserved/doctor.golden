@@ -1,0 +1,37 @@
+WARN: Intel NPU 0x1234 is not served by intel-npu-plugin 0.37.1 — skipping the NPU (K3D_GPU_NPU_PLUGIN=<newer plugin yaml> overrides; see 'k3d-gpu doctor')
+==> Checking docker...
+  ok: docker running
+==> Checking k3d...
+  ok: k3d version v0.0.0-stub
+==> Checking kubectl...
+  ok
+==> Detected accelerators: intel iaa hybrid
+==> Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...
+  ok: Intel Panther Lake (0xb080) bound to xe
+  ok: xe/ptl_guc_* firmware present
+  info: Intel Panther Lake (0xb080) at 0000:00:02.0: GuC version not checked: debugfs needs root (sudo k3d-gpu doctor)
+  ok: up labels the node gpu.intel.com/xmx=true
+  ok: GPU sharing on: up to 8 pods per Intel GPU, balanced allocation (K3D_GPU_INTEL_SHARED=auto); pods share its memory and engines with no isolation
+==> Checking Intel NPU (Core Ultra)...
+  ok: Intel NPU (unknown generation) (0x1234) bound to intel_vpu
+  warn: intel-npu-plugin 0.37.1 does not list 0x1234: it logs 'Unknown device ID' and advertises
+        no npu.intel.com/accel for it, so auto detection skips it. Fix: a newer intel/intel-npu-plugin via
+        K3D_GPU_NPU_PLUGIN=<plugin yaml>, which up then uses with the NPU label
+  warn: /dev/accel/accel0 is group <gid>, mode 644: only root pods can open it. Add the udev rule
+        SUBSYSTEM=="accel", GROUP="render", MODE="0660" (systemd 254+ ships it in 50-udev-default.rules)
+  note: workload images need the NPU user-space driver (github.com/intel/linux-npu-driver) and Level Zero
+==> Intel CPU built-in accelerators...
+  ok: CPU ISA: AVXVNNI — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
+  ok: IAA: 1 device(s), 1 user work queue(s) — deployed by 'k3d-gpu up' (intel-iaa-plugin)
+  ok: hybrid CPU: P-cores 0-3, E-cores 4-11, LP E-cores 12-15 — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient|lowpower|ecluster|pcore-physical|latency
+  ok: E-core clusters (shared L2): 4-7 8-11 — k3d-gpu.io/cores=ecluster gives a pod 4 E-cores of one cluster
+  ok: physical P-cores (one thread per core): 0-3 — k3d-gpu.io/cores=pcore-physical and latency show pods one thread per core
+  info: per socket: socket 0: DSA 0, IAA 1, QAT 0 (no ARK default on file for this CPU)
+==> Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...
+  ok: dra available (auto)
+  ok: image-volume available (auto)
+
+==> All checks passed.
+exit=0
+--- calls
+kubectl --context k3d-gpu --request-timeout=5s get nodes -o name

@@ -3841,6 +3841,187 @@ else
     PASS=$((PASS + 1)); echo "ok   every agent-sandbox image is pinned by digest"
 fi
 
+# NPU firmware names follow the running kernel (ivpu_fw.c fw_names[] per tag).
+r=$(newroot npu-k68-v1-only)
+kernel "${r}" 6.8.0-45-generic
+pci "${r}" 0000:00:0b.0 0x8086 0x643e intel_vpu; accel "${r}" 0000:00:0b.0 0
+firmware "${r}" intel/vpu/vpu_40xx_v1.bin
+doctor_says "kernel 6.8 never loads vpu_40xx_v1.bin" "${r}" \
+    'warn.*vpu_40xx_\* firmware not found; kernel 6\.8\.0-45-generic loads vpu_40xx\.bin,intel/vpu/vpu_40xx_v0\.0\.bin'
+r=$(newroot npu-k68-root-name)
+kernel "${r}" 6.8.0-45-generic
+pci "${r}" 0000:00:0b.0 0x8086 0x7d1d intel_vpu; accel "${r}" 0000:00:0b.0 0
+firmware "${r}" mtl_vpu.bin
+doctor_says "kernel 6.8 loads mtl_vpu.bin for 37xx" "${r}" 'present \(/lib/firmware/mtl_vpu\.bin\)'
+r=$(newroot npu-k612-no-mtl-name)
+kernel "${r}" 6.12.48
+pci "${r}" 0000:00:0b.0 0x8086 0x7d1d intel_vpu; accel "${r}" 0000:00:0b.0 0
+firmware "${r}" mtl_vpu.bin
+doctor_says "kernel 6.12 no longer loads mtl_vpu.bin" "${r}" 'warn.*vpu_37xx_\* firmware not found'
+r=$(newroot npu-k65)
+kernel "${r}" 6.5.0
+pci "${r}" 0000:00:0b.0 0x8086 0x7d1d intel_vpu; accel "${r}" 0000:00:0b.0 0
+firmware "${r}" intel/vpu/mtl_vpu_v0.0.bin
+doctor_says "kernel 6.5 loads intel/vpu/mtl_vpu_v0.0.bin" "${r}" 'present \(/lib/firmware/intel/vpu/mtl_vpu_v0\.0\.bin\)'
+
+# intel-fw-npu's updates/.../vpu_50xx_v1.bin is not what 6.13-6.15 loads.
+r=$(newroot npu-ptl-k614-fwnpu)
+kernel "${r}" 6.14.0-33-generic
+pci "${r}" 0000:00:0b.0 0x8086 0xb03e intel_vpu; accel "${r}" 0000:00:0b.0 0
+firmware "${r}" intel/vpu/vpu_50xx_v0.0.bin
+firmware "${r}" updates/intel/vpu/vpu_50xx_v1.bin
+doctor_says "PTL on 6.14 dates linux-firmware's vpu_50xx_v0.0.bin" "${r}" 'present \(/lib/firmware/intel/vpu/vpu_50xx_v0\.0\.bin\)'
+doctor_says "PTL on 6.14 with intel-fw-npu suggests the v0.0 link" "${r}" \
+    'run: +sudo ln -s vpu_50xx_v1\.bin /lib/firmware/updates/intel/vpu/vpu_50xx_v0\.0\.bin'
+doctor_says "PTL on 6.14 with intel-fw-npu gives the revert" "${r}" \
+    'revert: sudo rm /lib/firmware/updates/intel/vpu/vpu_50xx_v0\.0\.bin'
+r=$(newroot npu-ptl-k616-fwnpu)
+kernel "${r}" 6.16.3
+pci "${r}" 0000:00:0b.0 0x8086 0xb03e intel_vpu; accel "${r}" 0000:00:0b.0 0
+firmware "${r}" updates/intel/vpu/vpu_50xx_v1.bin
+doctor_says "PTL on 6.16 loads intel-fw-npu's v1 with no link hint" "${r}" 'sudo ln -s' negate
+
+# 60xx: no firmware is published; say so rather than "install intel-fw-npu".
+r=$(newroot npu-nvl-param)
+kernel "${r}" 6.19.0
+pci "${r}" 0000:00:0b.0 0x8086 0xd71d intel_vpu; accel "${r}" 0000:00:0b.0 0
+doctor_says "bound Nova Lake NPU without firmware says none is published" "${r}" 'no published NPU firmware for 60xx'
+doctor_says "Nova Lake NPU is not told to install intel-fw-npu" "${r}" 'install linux-firmware or intel-fw-npu' negate
+r=$(newroot npu-nvl-unbound)
+kernel "${r}" 6.19.0
+pci "${r}" 0000:00:0b.0 0x8086 0xd71d "" 0x120000
+mkdir -p "${r}/sys/module/intel_vpu"
+doctor_says "unbound Nova Lake NPU with intel_vpu loaded: no published 60xx firmware" "${r}" \
+    'Nova Lake \(0xd71d\) has no driver.*no published NPU firmware for 60xx'
+
+# Unbound NPU: first cause wins (kernel, module, firmware).
+r=$(newroot npu-lnl-nomod)
+kernel "${r}" 6.18.1
+pci "${r}" 0000:00:0b.0 0x8086 0x643e "" 0x120000
+doctor_says "unbound NPU with intel_vpu not loaded gives modprobe and its revert" "${r}" \
+    'sudo modprobe intel_vpu \(revert: sudo modprobe -r intel_vpu\)'
+r=$(newroot npu-lnl-nofw)
+kernel "${r}" 6.18.1
+pci "${r}" 0000:00:0b.0 0x8086 0x643e "" 0x120000
+mkdir -p "${r}/sys/module/intel_vpu"
+doctor_says "unbound NPU with intel_vpu loaded and no firmware names the firmware" "${r}" \
+    'found no 40xx firmware \(intel/vpu/vpu_40xx_v1\.bin,intel/vpu/vpu_40xx_v0\.0\.bin\)'
+
+# Plugin coverage: an intel_vpu id the pinned plugin does not list.
+r=$(newroot npu-unknown-id)
+kernel "${r}" 7.3.0
+pci "${r}" 0000:00:0b.0 0x8086 0x1234 intel_vpu; accel "${r}" 0000:00:0b.0 0
+doctor_says "NPU id outside the plugin's npuIDs is flagged" "${r}" 'warn.*intel-npu-plugin [0-9.]+ does not list 0x1234'
+r=$(newroot npu-known-id)
+kernel "${r}" 6.18.1
+pci "${r}" 0000:00:0b.0 0x8086 0xb03e intel_vpu; accel "${r}" 0000:00:0b.0 0
+doctor_says "PTL NPU is served by the pinned plugin" "${r}" 'does not list' negate
+# The id list is keyed to the plugin tag share/intel-npu-plugin.yml pins.
+tag=$(sed -n 's/^NPU_PLUGIN_TAG="\(.*\)"$/\1/p' "${K3D_GPU}")
+if [ -n "${tag}" ] && grep -q "image: intel/intel-npu-plugin:${tag}\$" "$(dirname "${K3D_GPU}")/../share/intel-npu-plugin.yml"; then
+    PASS=$((PASS + 1)); echo "ok   NPU_PLUGIN_TAG matches the pinned intel-npu-plugin image"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL NPU_PLUGIN_TAG (${tag}) matches the pinned intel-npu-plugin image"
+fi
+
+# Auto detection skips an NPU the bundled plugin does not serve; flags override.
+r=$(newroot npu-unserved-detect)
+kernel "${r}" 7.3.0
+pci "${r}" 0000:00:0b.0 0x8086 0x1234 intel_vpu; accel "${r}" 0000:00:0b.0 0
+expect "auto detection skips an NPU the bundled plugin does not serve" "${r}" ""
+expect "K3D_GPU_NPU_PLUGIN makes an unlisted NPU id active" "${r}" "npu npu.intel.com/accel" \
+    K3D_GPU_NPU_PLUGIN=/opt/newer-npu-plugin.yml
+expect "K3D_GPU_VENDORS=npu forces an unlisted NPU id active" "${r}" "npu npu.intel.com/accel" K3D_GPU_VENDORS=npu
+doctor_says "doctor explains an NPU auto detection skipped" "${r}" 'warn.*intel-npu-plugin [0-9.]+ does not list 0x1234'
+doctor_says "K3D_GPU_NPU_PLUGIN skips the bundled id check" "${r}" 'does not list' negate \
+    K3D_GPU_NPU_PLUGIN=/opt/newer-npu-plugin.yml
+doctor_says "K3D_GPU_NPU_PLUGIN gets a note instead" "${r}" 'note: K3D_GPU_NPU_PLUGIN=/opt/newer-npu-plugin\.yml replaces the bundled plugin' "" \
+    K3D_GPU_NPU_PLUGIN=/opt/newer-npu-plugin.yml
+# The stub cluster advertises no npu.intel.com/accel, so up exits non-zero after
+# k3d create; the recorded create arguments are what these check.
+up_says "up labels an unlisted NPU when K3D_GPU_VENDORS=npu forces it" fail \
+    '^--k3s-node-label=intel\.feature\.node\.kubernetes\.io/npu=true' "" K3D_GPU_SYSROOT="${r}" K3D_GPU_VENDORS=npu
+up_says "up labels an unlisted NPU under K3D_GPU_NPU_PLUGIN" fail \
+    '^--k3s-node-label=intel\.feature\.node\.kubernetes\.io/npu=true' "" K3D_GPU_SYSROOT="${r}" K3D_GPU_VENDORS=auto \
+    K3D_GPU_NPU_PLUGIN=/opt/newer-npu-plugin.yml
+r=$(newroot npu-unreadable-id)
+kernel "${r}" 6.18.1
+pci "${r}" 0000:00:0b.0 0x8086 0x643e intel_vpu; accel "${r}" 0000:00:0b.0 0
+: > "${r}/sys/devices/pci0000:00/0000:00:0b.0/device"
+doctor_says "unreadable NPU device id is named as such" "${r}" 'its PCI device id is unreadable'
+doctor_says "unreadable NPU device id is not called unserved" "${r}" 'does not list' negate
+
+# A kernel older than the NPU's support gets no firmware-name advice.
+r=$(newroot npu-nvl-k614)
+kernel "${r}" 6.14.0
+pci "${r}" 0000:00:0b.0 0x8086 0xd71d intel_vpu; accel "${r}" 0000:00:0b.0 0
+doctor_says "Nova Lake on 6.14 says the kernel is too old" "${r}" 'warn.*Nova Lake NPU needs kernel 6\.19\+'
+doctor_says "Nova Lake on 6.14 skips the 60xx firmware message" "${r}" 'no published NPU firmware' negate
+
+# Unreadable kernel version: no kernel cause, no version-specific name list.
+r=$(newroot npu-ptl-nokernel)
+kernel "${r}" ""
+pci "${r}" 0000:00:0b.0 0x8086 0xb03e intel_vpu; accel "${r}" 0000:00:0b.0 0
+doctor_says "empty osrelease is reported as unreadable" "${r}" 'kernel version unreadable'
+doctor_says "empty osrelease does not list pre-6.6 mtl names for PTL" "${r}" 'mtl_vpu' negate
+r=$(newroot npu-ptl-nokernel-unbound)
+kernel "${r}" ""
+pci "${r}" 0000:00:0b.0 0x8086 0xb03e "" 0x120000
+doctor_says "empty osrelease: unbound NPU is not blamed on the kernel" "${r}" 'predates its intel_vpu support' negate
+doctor_says "empty osrelease: unbound NPU gets the modprobe hint" "${r}" 'sudo modprobe intel_vpu'
+
+# The intel-fw-npu v0.0 link is suggested only when it changes the loaded file.
+# fwnpu_ptl <name> <kernel>: PTL NPU with intel-fw-npu's updates/.../vpu_50xx_v1.bin.
+fwnpu_ptl() {
+    local r
+    r=$(newroot "$1"); kernel "${r}" "$2"
+    pci "${r}" 0000:00:0b.0 0x8086 0xb03e intel_vpu; accel "${r}" 0000:00:0b.0 0
+    firmware "${r}" updates/intel/vpu/vpu_50xx_v1.bin
+    echo "${r}"
+}
+r=$(fwnpu_ptl npu-fwnpu-root-name 6.14.0)
+firmware "${r}" vpu_50xx.bin
+doctor_says "root-level vpu_50xx.bin wins: no v0.0 link advice" "${r}" 'sudo ln -s' negate
+r=$(fwnpu_ptl npu-fwnpu-param 6.14.0)
+firmware "${r}" intel/vpu/vpu_50xx_v0.0.bin
+put "${r}" /sys/module/intel_vpu/parameters/firmware my_vpu.bin
+firmware "${r}" my_vpu.bin
+doctor_says "firmware= parameter set: no v0.0 link advice" "${r}" 'sudo ln -s' negate
+r=$(newroot npu-fwnpu-k65)
+kernel "${r}" 6.5.0
+pci "${r}" 0000:00:0b.0 0x8086 0x7d1d intel_vpu; accel "${r}" 0000:00:0b.0 0
+firmware "${r}" intel/vpu/mtl_vpu_v0.0.bin
+firmware "${r}" updates/intel/vpu/vpu_37xx_v1.bin
+doctor_says "kernel 6.5 requests mtl names: no v0.0 link advice" "${r}" 'sudo ln -s' negate
+r=$(fwnpu_ptl npu-fwnpu-custom 6.14.0)
+mkdir -p "${r}/opt/fw/intel/vpu"; touch "${r}/opt/fw/intel/vpu/vpu_50xx_v0.0.bin"
+put "${r}" /sys/module/firmware_class/parameters/path /opt/fw
+doctor_says "firmware_class.path copy wins: no v0.0 link advice" "${r}" 'sudo ln -s' negate
+r=$(fwnpu_ptl npu-fwnpu-dangling 6.14.0)
+firmware "${r}" intel/vpu/vpu_50xx_v0.0.bin
+ln -s vpu_50xx_v9.bin "${r}/lib/firmware/updates/intel/vpu/vpu_50xx_v0.0.bin"
+doctor_says "dangling v0.0 link: advice uses ln -sfn" "${r}" \
+    'run: +sudo ln -sfn vpu_50xx_v1\.bin /lib/firmware/updates/intel/vpu/vpu_50xx_v0\.0\.bin'
+doctor_says "dangling v0.0 link: revert restores the old target" "${r}" \
+    'revert: sudo ln -sfn vpu_50xx_v9\.bin /lib/firmware/updates/intel/vpu/vpu_50xx_v0\.0\.bin'
+doctor_says "dangling v0.0 link: no plain ln -s" "${r}" 'sudo ln -s vpu' negate
+r=$(newroot npu-fwnpu-zst)
+kernel "${r}" 6.14.0
+pci "${r}" 0000:00:0b.0 0x8086 0xb03e intel_vpu; accel "${r}" 0000:00:0b.0 0
+firmware "${r}" intel/vpu/vpu_50xx_v0.0.bin.zst
+firmware "${r}" updates/intel/vpu/vpu_50xx_v1.bin.zst
+doctor_says "compressed intel-fw-npu v1 gets a .zst link" "${r}" \
+    'run: +sudo ln -s vpu_50xx_v1\.bin\.zst /lib/firmware/updates/intel/vpu/vpu_50xx_v0\.0\.bin\.zst'
+r=$(newroot npu-fwnpu-zst-late)
+kernel "${r}" 6.14.0
+pci "${r}" 0000:00:0b.0 0x8086 0xb03e intel_vpu; accel "${r}" 0000:00:0b.0 0
+firmware "${r}" intel/vpu/vpu_50xx_v0.0.bin
+firmware "${r}" updates/intel/vpu/vpu_50xx_v1.bin.zst
+doctor_says "a .zst link loses to an uncompressed v0.0: no advice" "${r}" 'sudo ln -s' negate
+r=$(fwnpu_ptl npu-fwnpu-stop 6.14.0)
+firmware "${r}" intel/vpu/vpu_50xx_v0.0.bin
+doctor_says "v0.0 link advice says to stop NPU users first" "${r}" "Stop what uses the NPU first \('k3d-gpu down'"
+
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

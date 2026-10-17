@@ -1,0 +1,15 @@
+Platform: Core Ultra 200V (Lunar Lake) NPU 4 on intel_vpu under Ubuntu 24.04's
+GA kernel 6.8, linux-firmware installed. NPU-only fixture: it exercises the
+pre-6.9 intel_vpu firmware names.
+
+Sources:
+- 0x8086 0x643e NPU: drivers/accel/ivpu/ivpu_drv.h (PCI_DEVICE_ID_LNL, 40xx IP);
+  listed in intel-device-plugins v0.37.1 cmd/npu_plugin/npu_plugin.go.
+- Firmware names the kernel requests on 6.8: fw_names[] in drivers/accel/ivpu/ivpu_fw.c
+  at tag v6.8 (vpu_40xx.bin, then intel/vpu/vpu_40xx_v0.0.bin; never _v1).
+- intel/vpu/vpu_40xx_v1.bin and its vpu_40xx_v0.0.bin link: linux-firmware tag
+  20260916 WHENCE.
+
+Derived from tests/fixtures/pantherlake (layout, NPU at 00:0b.0, CPU tree) with
+the iGPU and IAA removed. Not from hardware: the CPU tree (pantherlake's, not
+Lunar Lake's 4P+4LPE topology), the kernel release string, the BDF.
