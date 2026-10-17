@@ -1,0 +1,20 @@
+==> Checking docker...
+  ok: docker running
+==> Checking k3d...
+  ok: k3d version v0.0.0-stub
+==> Checking kubectl...
+  ok
+
+  fail: no supported accelerator detected (NVIDIA, Intel GPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX, hybrid P/E cores, NUMA, WSL2 Intel GPU)
+==> Intel devices with no driver bound...
+  warn: Intel Battlemage (0xe223) has no driver — xe lists this id from kernel 6.17 (running 6.16.0-1-generic); upgrade the kernel, xe.force_probe cannot add an id missing from xe's table
+==> Intel CPU built-in accelerators...
+  ok: CPU ISA: AVX512BF16 AVX512F AVX512VNNI — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
+==> Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...
+  ok: dra available (auto)
+  ok: image-volume available (auto)
+
+ERROR: One or more checks failed.
+exit=1
+--- calls
+kubectl --context k3d-gpu --request-timeout=5s get nodes -o name

@@ -33,6 +33,7 @@ nav:
       - Speculative decoding: design/speculative-decoding.md
   - Evidence:
       - Intel capability map: intel-capability-map.md
+      - Discrete Intel GPU platforms: platforms.md
       - Benchmark landscape: benchmark-landscape.md
       - Provenance: provenance.md
       - Security audit: security-audit.md

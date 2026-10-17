@@ -309,6 +309,28 @@ kernel "${r}" 6.11.2
 pci "${r}" 0000:03:00.0 0x8086 0xe214 xe; render "${r}" 0000:03:00.0 128
 doctor_says "0xe214 is not a Battlemage id in the kernel" "${r}" 'Intel Battlemage \(' negate
 
+r=$(newroot bmg-b60-backport)
+kernel "${r}" 6.14.3
+pci "${r}" 0000:03:00.0 0x8086 0xe211 xe; render "${r}" 0000:03:00.0 128
+doctor_says "Pro B60 bound on 6.14 is a stable backport, not force_probe" "${r}" 'is in this kernel.s xe id table.*6\.15'
+doctor_says "Pro B60 bound on 6.14 gets no force_probe" "${r}" 'force_probe=e211' negate
+
+r=$(newroot bmg-b580-616)
+kernel "${r}" 6.16.1
+pci "${r}" 0000:03:00.0 0x8086 0xe20b xe; render "${r}" 0000:03:00.0 128
+doctor_says "B580 on 6.16 has no kernel warning" "${r}" 'Battlemage.*(needs kernel|stable backport)' negate
+
+r=$(newroot dg2-a770)
+kernel "${r}" 6.8.0
+pci "${r}" 0000:03:00.0 0x8086 0x56a0 i915; render "${r}" 0000:03:00.0 128
+doctor_says "Arc A770 is Alchemist DG2-G10" "${r}" 'Intel Alchemist DG2-G10 \(0x56a0\) bound to i915'
+doctor_says "Arc A770 gets the xmx label" "${r}" 'gpu.intel.com/xmx=true'
+
+r=$(newroot dg2-a770-old)
+kernel "${r}" 6.1.0
+pci "${r}" 0000:03:00.0 0x8086 0x56a0 i915; render "${r}" 0000:03:00.0 128
+doctor_says "Arc A770 on 6.1 needs 6.2 or i915.force_probe" "${r}" 'Alchemist DG2-G10.*6\.2\+.*i915.force_probe=56a0'
+
 r=$(newroot arl-s)
 kernel "${r}" 6.10.4
 pci "${r}" 0000:00:02.0 0x8086 0xb640 i915; render "${r}" 0000:00:02.0 128
