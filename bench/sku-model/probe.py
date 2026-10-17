@@ -7,8 +7,8 @@ script measures; it never edits the predictions. It self-limits to DEADLINE_S
 (17 min) from start and keeps partial data.
 
   run:    sudo -E python3 bench/sku-model/probe.py --out DIR
-          (env IMAGE = the H6 OVMS image by digest, MODELS = dir with
-          OpenVINO/Qwen3-4B-int4-ov; run under the live-work flock)
+          (env IMAGE = the H6 OVMS image by digest, MODELS = dir with one repository
+          per arm, MODELS/{A,B,C,D}/OpenVINO/Qwen3-4B-int4-ov; run under the live-work flock)
   score:  python3 bench/sku-model/probe.py --score DIR/raw.jsonl
   plan:   python3 bench/sku-model/probe.py --dry-run   (prints the visit plan, no docker)
 
@@ -118,6 +118,15 @@ def rapl_uj():
     return int(read("/sys/class/powercap/intel-rapl:0/energy_uj", "0") or 0)
 
 
+def rapl_max_uj():
+    return int(read("/sys/class/powercap/intel-rapl:0/max_energy_range_uj", "0") or 0)
+
+
+def rapl_delta_uj(e0, e1, top):
+    """Counter delta; energy_uj wraps at max_energy_range_uj."""
+    return e1 - e0 if e1 >= e0 or not top else e1 + top - e0
+
+
 def throttle_count():
     # One package counter, exposed identically under every cpu; read it once.
     return int(read("/sys/devices/system/cpu/cpu0/thermal_throttle/package_throttle_count", "0") or 0)
@@ -168,14 +177,25 @@ def topology_ok():
 
 # ------------------------------------------------------------- OVMS
 def launch(image, models, arm):
+    # One repository per arm: --source_model rewrites graph.pbtxt (it carries
+    # plugin_config) on every start, so a shared mount races between arms.
     a = ARMS[arm]
     plugin = json.dumps({"SCHEDULING_CORE_TYPE": a["core"], "INFERENCE_NUM_THREADS": str(a["threads"])})
     return ["docker", "run", "-d", "--name", name(arm), "--cpuset-cpus", a["cpus"],
-            "-p", f"127.0.0.1:{a['port']}:8000", "-v", f"{models}:/models", image,
+            "-p", f"127.0.0.1:{a['port']}:8000", "-v", f"{models}/{arm}:/models", image,
             "--source_model", SOURCE_MODEL, "--model_repository_path", "/models",
             "--model_name", MODEL, "--task", "text_generation", "--target_device", "CPU",
             "--rest_port", "8000", "--max_num_seqs", "8", "--cache_size", "2",
             "--enable_prefix_caching", "false", "--plugin_config", plugin]
+
+
+def graph_plugin_config(pbtxt):
+    """plugin_config dict from an OVMS graph.pbtxt, or None."""
+    for ln in pbtxt.splitlines():
+        ln = ln.strip()
+        if ln.startswith("plugin_config:"):
+            return json.loads(ln.split("'")[1])
+    return None
 
 
 def chat(port, prompt, max_tokens, ignore_eos=True):
@@ -199,7 +219,9 @@ def chat(port, prompt, max_tokens, ignore_eos=True):
             if ev.get("usage"):
                 usage = ev["usage"]
             for ch in ev.get("choices", []):
-                if (ch.get("delta") or {}).get("content"):
+                d = ch.get("delta") or {}
+                # OVMS streams Qwen3 thinking as reasoning_content, not content.
+                if d.get("content") or d.get("reasoning_content"):
                     now = time.perf_counter()
                     ttft = ttft if ttft is not None else now - t0
                     t_last = now
@@ -221,7 +243,7 @@ def decode_prompt():
 
 
 def prefill_prompt():
-    words = " ".join(f"w{secrets.randbelow(10**6)}" for _ in range(420))
+    words = " ".join(f"w{secrets.randbelow(10**6)}" for _ in range(72))  # ~7 tokens per word -> ~512
     return f"{nonce()} Summarise these tokens in one word: {words}"
 
 
@@ -302,7 +324,7 @@ def visit(arm, idx):
     rec["rest_busy"] = busy(s2, s3, [c for c in s3 if c not in cpus])
     rec["throttle_delta"] = throttle_count() - th0
     secs = time.monotonic() - w0
-    rec["package_w"] = (rapl_uj() - e0) / 1e6 / secs if secs > 0 else None
+    rec["package_w"] = rapl_delta_uj(e0, rapl_uj(), rapl_max_uj()) / 1e6 / secs if secs > 0 else None
     rec["freq_mhz_mean"] = statistics.mean([f for f in freqs if f]) if any(freqs) else None
     rec["coretemp_max_c"] = max([t for t in temps if t], default=None)
     rec["pswpin_delta"] = v1.get("pswpin", 0) - v0.get("pswpin", 0)
@@ -510,8 +532,13 @@ def main():
             emit({"kind": "abort", "reason": f"not ready in {READY_S}s: {sorted(pending)}"})
             return 3
         for arm in ARMS:
+            cfg = graph_plugin_config(read(os.path.join(models, arm, SOURCE_MODEL, "graph.pbtxt"), ""))
             emit({"kind": "startup_log", "arm": arm,
-                  "log": sh("docker", "logs", name(arm), check=False).stderr[-4000:]})
+                  "log": sh("docker", "logs", name(arm), check=False).stderr[-4000:],
+                  "graph_plugin_config": cfg})
+            if cfg != json.loads(launch(image, models, arm)[-1]):
+                emit({"kind": "abort", "reason": f"arm {arm} graph plugin_config {cfg}"})
+                return 3
         if mem_available_gb() < 20:
             emit({"kind": "abort", "reason": f"MemAvailable {mem_available_gb():.1f} GB < 20"})
             return 3

@@ -36,12 +36,13 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H21 | Joule-aware packing (joule-pack): per-pod energy from RAPL (package, core, uncore) split by cgroup CPU time drives P/E balloon placement that beats main's static `efficient` agent label on agents-per-watt under a p95 turn SLO. | (a) Among placements U (unlabelled), P, E, X (`ecluster`) for N=12 closed-loop synthetic agents (busybox 1.37 sha256 turn sized to 0.25 s on an E-core, 1 s think, 333m each), the best SLO-meeting placement (p95 ≤ 1.0 s) has agents-per-watt (N / marginal package W) ≥ 1.15x arm E in every paired round; (b) in arm M (6 P + 6 E pods) the P pods' cgroup CPU-time share is within ±0.10 of their core-domain energy share from arms P and E. Prediction before measuring: REFUTED on both: best/E 1.00-1.08 (best = E or X), best/U ≥ 1.3, CPU-share error ≤ -0.25 (E overcharged). Prior art (not claimed): CPU-time-proportional pod RAPL split is Kepler's model; joule-aware QoS placement on heterogeneous cores is Octopus-Man/Hipster ([provenance:P211] [provenance:P212] [provenance:P213]); search log [provenance:P210]. | Pre-registered 2026-10-17T12:13Z before any H21 run. One fresh cluster `k3dgpu-i-joule-pack`, scratch KUBECONFIG, inside the shared live lock, ≤ 19 min. Calibration pod (not counted) sizes the turn. 3 rounds, order U P E X M / M X E P U / E U M P X, 12 s idle window before every arm, 8 s warm-up + 32 s measured per arm. RAPL zones found by name (package-0, core, uncore, psys) sampled 1 s; uncore on client parts is PP1 (mostly iGPU), so it is a negative control and the non-core residual is package − core; marginal W = arm minus the mean of the bracketing idle windows; cpusets audited from `/proc/self/status` against `/sys/devices/cpu_core/cpus` and `cpu_atom/cpus`. Confounds every 5 s: package throttle count, max thermal-zone temp, load1, swap used, container count. Outcome -> conclusion: (a) ≥ 1.15x in 3/3 rounds -> SUPPORTED, build the controller and test it against a static `ecluster` rule; < 1.15x in at least 2 rounds -> REFUTED, no controller; best/U ≥ 1.3 in 3/3 -> new H for an `efficient` agent default (label, not meter). (b) \|err\| ≤ 0.10 in 3/3 with M core within 25% of (P+E)/2 -> SUPPORTED; err ≤ -0.15 in 3/3 -> REFUTED, attribution must weight by core type; additivity gap > 25% -> INCONCLUSIVE. Uncore marginal \|Δ\| > 0.5 W, P marginal < idle spread, or idle spread > 50% of median E marginal -> INCONCLUSIVE. n=3 paired rounds (sign test p = 0.125 at 3/3; directional confidence 1 − 0.5^k, ceiling 0.875). Runner: `bench/joule-pack/probe.sh`; analysis: `bench/joule-pack/joulepack.py verdict`. Amendment 2026-10-17, after review and before any H21 run: (a) is also scored on marginal package J per turn (arm W × window / turns), because P/U arms do more turns per window and agents/W alone penalizes them; (a) is SUPPORTED only if both metrics give ≥ 1.15x in 3/3, and REFUTED if E/best J per turn is < 1.15x in ≥ 2 rounds; the ratio uses E's measured value even when E misses the SLO (reported as a flag, never an infinite win); p95 is nearest-rank ceil(0.95 n). Limits stated up front: N is fixed at 12 so the SLO is not expected to bind and admission is not exercised; the workload is pure-ALU, not a real agent; (a) is an oracle headroom gate over static labels, not a test of the controller. | INCONCLUSIVE ([run](#h21-run-i9-13900t-2026-10-17)) |
 | H9 | `k3d-gpu quickstart` takes a clean host to a working chat (Open WebUI answering through the agent) within the retail budget. | Time to first agent (quickstart start to its Ready line, with a chat answered through the UI after) is under 5 min when the node, OVMS and Open WebUI images and the model are already cached (warm arm), and under 15 min from nothing cached (cold arm). | Prediction stated in the task brief before the run (2026-10-17); the run itself was started before this row was committed. One fresh cluster `k3dgpu-g-retail`, scratch `KUBECONFIG`, no node image, no in-cluster images and no model PVC (cold arm), hard budget `timeout 900`. End state checked by signing in to Open WebUI with the generated admin and getting a chat reply through `/api/chat/completions`. Outcome -> conclusion: cold arm over 15 min or no reply -> REFUTED; both arms under target with n>=3 each -> SUPPORTED; anything less -> INCONCLUSIVE. Wave 1 ran the cold arm n=1 ([H9 run](#h9-run-i9-13900t-2026-10-17)). | INCONCLUSIVE |
 | H23 | Thermal/power headroom published as a per-pod consumable resource (watts) stops a k3d-gpu node from oversubscribing into thermal throttling without losing throughput, and beats a power-blind pod-count cap. | On an i9-13900T (k3s v1.37, PL1 = PL2 = 117 W, thermally bound), 24 fixed-work pods (12 hot: stress-ng `--cpu-method matrixprod`; 12 cool: same plus `--cpu-load 40`): arm T (node advertises `power.k3d-gpu.io/watts` = fitted thermal headroom, pods request their calibrated watts) has (a) package throttle time <= 0.5x arm B (no admission cap), (b) makespan <= B, and (c) makespan or throttle time better than arm C (`k3d-gpu.io/slots` cap = same budget / mean pod watts) by more than the arm spread. Prediction before measuring: REFUTED, T throttle <= 0.5x B but makespan >= 1.10x B, T within C's spread. | Pre-registered 2026-10-17T12:08Z before any H23 run (this commit, pushed before the first run). One cluster `k3dgpu-i-thermal-resource`, scratch KUBECONFIG, in `flock` with a 20 min wall budget. n=3 per arm, order B T C C T B B T C. Fixed work per pod (`--cpu-ops` from in-lock calibration). Per run: makespan, cpu0 `package_throttle_total_time_ms` delta, RAPL package J and W, max package temp, start temp, 1-min load, swap used, per-pod Pending->Running gap. Decision: arm ranges non-overlapping (3v3 permutation p = 0.05) or \|Δmedian\| > max arm spread. Outcome table in [H23 pre-registration](#h23-pre-registration-2026-10-17). Runner: `bench/thermal-resource/probe.sh`, model `research/thermal-resource/headroom_model.py`. Result ([H23 run](#h23-run-i9-13900t-2026-10-17)): the Amendment 1 budget gate fired after calibration (O0), before the cluster: fitted budget 10 W, 2 slots (< 4) at w_hot 5 / w_cool 3 W. Arms B/T/C were not run (0 of 9). The "idle" window drew 72-99 W (median 81.3 W) on the shared host, so background load used the headroom. Missing probe: the 9-run B/T/C series on a host whose idle window is quiet (spread < 5 W) or with a budget gate that clears. | INCONCLUSIVE ([run](#h23-run-i9-13900t-2026-10-17)) |
-| H7 | OVMS's decode lead over EAT's vLLM CPU engine in the H2 run comes from weight precision, not from the engine. | On the i9-13900T 16-CPU P-core balloon, one checkpoint served by OVMS 2026.4.1 and by vLLM CPU v0.24.0 at matched weight precision decodes within 15% between the two engines, and the two land within 15% of each other in effective weight bandwidth (weight bytes x decode tok/s). | Pre-registered 2026-10-16, before any run. One checkpoint and revision (`Qwen/Qwen3-4B-Instruct-2507`, revision recorded) for both engines: OVMS loads an OpenVINO IR exported from it with 16-bit weights, vLLM loads it in bf16. A second arm at int4 in both engines runs only if vLLM v0.24.0 CPU is first shown to load an int4 build of the same checkpoint. vLLM runs with EAT's chart defaults and once with `--enforce-eager` dropped, to split engine from config. H2 workloads and energy method, arms interleaved ABBA, 5 rounds. Refuted if the decode gap at matched precision is 15% or more. | PENDING |
+| H7 | OVMS's decode lead over EAT's vLLM CPU engine in the H2 run comes from weight precision, not from the engine. | On the i9-13900T 16-CPU P-core balloon, one checkpoint served by OVMS 2026.4.1 and by vLLM CPU v0.24.0 at matched weight precision decodes within 15% between the two engines, and the two land within 15% of each other in effective weight bandwidth (weight bytes x decode tok/s). | Pre-registered 2026-10-16, before any run. One checkpoint and revision (`Qwen/Qwen3-4B-Instruct-2507`, revision recorded) for both engines: OVMS loads an OpenVINO IR exported from it with 16-bit weights, vLLM loads it in bf16. A second arm at int4 in both engines runs only if vLLM v0.24.0 CPU is first shown to load an int4 build of the same checkpoint. vLLM runs with EAT's chart defaults and once with `--enforce-eager` dropped, to split engine from config. H2 workloads and energy method, arms interleaved ABBA, 5 rounds. Refuted if the decode gap at matched precision is 15% or more. Run 2026-10-17 at 16 CPUs, 3 OVMS and 2 vLLM blocks, decode gap 15.6% of vLLM's rate (13.5% of OVMS's), on the line ([H7 run](#h7-run-i9-13900t-2026-10-17)). | INCONCLUSIVE |
+| H8 | Agents per box (APB: the largest number of closed-loop tool-using agents whose pooled p95 LLM turn latency stays <= 10 s on the `support` agent trace) on the i9-13900T depends on the serving arm as pre-registered in `bench/apb/PROTOCOL.md` section 7. | A1 OVMS int4 on the P-cores: APB in [4, 12] (confidence 0.6). A2 OVMS int4 on the UHD 770: 0 (0.8). A3 EAT's default vLLM CPU bf16: 0 (0.9). A4 vLLM CUDA AWQ int4 on the RTX 4000 SFF Ada: above A1 (0.75). Written 2026-10-16, before any run. | `k3d-gpu capacity --slo 10 --budget 12` per arm on a fresh cluster, one arm per 15-min hold (`bench/apb/arm.sh`). An arm's prediction is refuted by a scored APB outside it; a bracket that still contains the prediction decides nothing. Wave 1 (2026-10-17): A4 >= 32, A1 0 by rule with N=1 on the SLO edge, A2 and A3 unscored ([H8 run](#h8-run-i9-13900t-2026-10-17)). | INCONCLUSIVE |
 | H19 | `k3d-gpu tune run --objective throughput` on the CPU agent stack (OVMS 2026.4.1, `OpenVINO/Qwen3-4B-int4-ov`, i9-13900T) does not crown a config whose gain over the default is run-to-run noise. | (a) The tune completes and writes a profile whose decision is either `default`, or `tuned` with a winner that an independent replication confirms. (b) The search's own null control, the explicit restatement of the default (`CPUS=16 CORES=performance MAX_NUM_SEQS=256 CACHE_SIZE=0 PREFIX_CACHING=true`, which the pilot showed writes a `graph.pbtxt` byte-identical to the default's), is never accepted. (c) Replication: the tuned winner, or with decision `default` the finalist with the best confirmation median, is measured again against the default in fresh trials outside the tune. Prediction: decision `default` (single-stream decode is memory-bound and the default already takes all 16 P-core CPUs), and the replication shows no gain beyond the noise gates. | Pre-registered 2026-10-17T09:15Z, before the counted tune, after two pilot trials (default and the explicit default, budget 4 x 64 tokens: 15.3/49.3/48.7 vs 15.3/49.8/46.8 aggregate tok/s at concurrency 1/4/8, identical graphs). Cluster `k3dgpu-r2-tune` from `docker build -t k3d-gpu:r2-tune .`, scratch `KUBECONFIG` and profile dir. Command: `k3d-gpu tune run --objective throughput --devices CPU --precisions int4` with the default criteria (n0=27, eta=3, n=5 confirmation runs per side in rotating order, margin 5%, k=1, alpha 0.05 Bonferroni, TTFT guardrail 25%, quality probe, `--unique-prompts` load). One tune (its confirmation is the n=5 interleaved step). Replication: 5 fresh trials per side, order A B B A A B B A A B (A = default), the tune's final budget (16 requests x 128 tokens at concurrency 1,4,8), same acceptance test (`tune.py` gates). Confounds sampled every 5 s for the whole run: package W (RAPL), 1-min load, swap used, sum of `package_throttle_count`. Outcome -> conclusion: (b) the explicit default accepted -> REFUTED (the gates pass noise); decision `tuned` and the replication fails the gates -> REFUTED (a noise winner was crowned); decision `tuned` and the replication passes -> SUPPORTED (a real winner); decision `default` and the replicated finalist also fails the gates -> SUPPORTED; decision `default` but the replication passes every gate -> INCONCLUSIVE (the tune missed a real gain, a power question, not a noise crown); the tune fails to finish or the default trial fails -> INCONCLUSIVE. | PENDING |
 | H30 | The k3d-gpu auto-config (`k3d-gpu up` + `k3d-gpu agent up`) decodes faster than Ollama 0.40.5 on the CPU (`qwen3:4b-q4_K_M`, manifest sha256 2bfd38a7) with vendor defaults, at the same model family and 4-bit tier. | k3d-gpu median decode tok/s is at least 1.05x ollama's in every one of 3 interleaved rounds; package J/token is reported alongside. | Pre-registered 2026-10-17, before any run. `k3d-gpu bench --vs ollama --id H30 --budget 900`: one client, the same 4 prompts, max_tokens 128, temperature 0, `ignore_eos` sent to both arms, 3 warmup requests per arm (inside the budget), rounds A,B / B,A / A,B, one request in flight, RAPL package counter per arm segment. Weights pinned: `bench` hashes the served file inside the competitor container and refuses to measure unless it matches `bench/competitors.lock`. Outcome -> conclusion: k3d-gpu/ollama median decode tok/s at least 1.05 in every round -> SUPPORTED; ollama/k3d-gpu at least 1.05 in every round -> REFUTED; mixed rounds, failed requests, an arm whose median output stops short of 128 tokens, arms counting tokens differently (usage vs stream chunks), or a spent 15-minute budget -> INCONCLUSIVE. Confound recorded per run: the k3d-gpu arm is reached through `kubectl port-forward`, the competitor through docker-proxy, so tunnel latency lands on the k3d-gpu arm only (a bias toward REFUTED). Ollama's OpenAI layer has no `ignore_eos` and streams Qwen3 thinking as `delta.reasoning`, which the client counts as output (openai/openai.go at v0.40.5). Prediction: SUPPORTED where `agent up` picks an Intel GPU, since Ollama 0.40.5 runs this model on the CPU here; REFUTED or INCONCLUSIVE on a CPU-only host. | PENDING |
 | H31 | The k3d-gpu auto-config (`k3d-gpu up` + `k3d-gpu agent up`) decodes faster than llama.cpp server b11706 on the CPU (`Qwen/Qwen3-4B-GGUF` Q4_K_M at revision bc640142) with vendor defaults, at the same model family and 4-bit tier. | k3d-gpu median decode tok/s is at least 1.05x llamacpp's in every one of 3 interleaved rounds; package J/token is reported alongside. | Pre-registered 2026-10-17, before any run. `k3d-gpu bench --vs llamacpp --id H31 --budget 900`: one client, the same 4 prompts, max_tokens 128, temperature 0, `ignore_eos` sent to both arms, 3 warmup requests per arm (inside the budget), rounds A,B / B,A / A,B, one request in flight, RAPL package counter per arm segment. Weights pinned: `bench` hashes the served file inside the competitor container and refuses to measure unless it matches `bench/competitors.lock`. Outcome -> conclusion: k3d-gpu/llamacpp median decode tok/s at least 1.05 in every round -> SUPPORTED; llamacpp/k3d-gpu at least 1.05 in every round -> REFUTED; mixed rounds, failed requests, an arm whose median output stops short of 128 tokens, arms counting tokens differently (usage vs stream chunks), or a spent 15-minute budget -> INCONCLUSIVE. Confound recorded per run: the k3d-gpu arm is reached through `kubectl port-forward`, the competitor through docker-proxy, so tunnel latency lands on the k3d-gpu arm only (a bias toward REFUTED). Prediction: SUPPORTED where `agent up` picks an Intel GPU; REFUTED or INCONCLUSIVE on a CPU-only host. | PENDING |
 | H32 | The k3d-gpu auto-config (`k3d-gpu up` + `k3d-gpu agent up`) decodes faster than plain OVMS 2026.4.1 with its own device choice (`OpenVINO/Qwen3-4B-int4-ov` at revision b467368) with vendor defaults, at the same model family and 4-bit tier. | k3d-gpu median decode tok/s is at least 1.05x ovms's in every one of 3 interleaved rounds; package J/token is reported alongside. | Pre-registered 2026-10-17, before any run. `k3d-gpu bench --vs ovms --id H32 --budget 900`: one client, the same 4 prompts, max_tokens 128, temperature 0, `ignore_eos` sent to both arms, 3 warmup requests per arm (inside the budget), rounds A,B / B,A / A,B, one request in flight, RAPL package counter per arm segment. Weights pinned: `bench` hashes the served file inside the competitor container and refuses to measure unless it matches `bench/competitors.lock`. Outcome -> conclusion: k3d-gpu/ovms median decode tok/s at least 1.05 in every round -> SUPPORTED; ovms/k3d-gpu at least 1.05 in every round -> REFUTED; mixed rounds, failed requests, an arm whose median output stops short of 128 tokens, arms counting tokens differently (usage vs stream chunks), or a spent 15-minute budget -> INCONCLUSIVE. Confound recorded per run: the k3d-gpu arm is reached through `kubectl port-forward`, the competitor through docker-proxy, so tunnel latency lands on the k3d-gpu arm only (a bias toward REFUTED). The OVMS container gets `/dev/dri` (or `/dev/dxg` plus `/usr/lib/wsl` on WSL2) and the devices passed are recorded; a run where the competitor had no GPU node while the k3d-gpu arm ran on one is reported as such in the run section. Prediction: INCONCLUSIVE: same engine, same weights and the same device on a GPU host, so the gap should sit inside the margin. | PENDING |
-| H24 | A spec-only roofline (DRAM channels x MT/s x 8 B; cores x int8 MAC/clk x GHz), calibrated on one 8-P-core point of this host, predicts decode, prefill and 4-in-flight throughput of core configurations it was not fitted on, within 25% MAPE. This is the transfer law `k3d-gpu plan --predict <sku>` relies on. | Held-out arms B (4 P-cores), C (8 E-cores), D (16 E-cores) on the i9-13900T, Qwen3-4B int4, OVMS 2026.4.1 (H6 digest). M0 (`console/sku_model.py arms`) predicts decode 15.7 / 15.7 / 15.7, prefill 86 / 32.3 / 64.5, c4 62.6 / 32.3 / 62.6 tok/s for B / C / D (C compute-bound at c4). Competing M1 (min(spec BW, measured per-cpuset triad BW)) predicts decode = 15.7 x triad(arm) / triad(A). Author prior: M0 decode REFUTED (B ~12.5, C ~8, D ~12), M0 prefill holds, M1 decode holds within 20%. | Pre-registered 2026-10-17T12:15Z, before any H24 run; `tests/console/test_sku_model.py` checks the model's numbers equal these within 1%. Probe `bench/sku-model/probe.py` (self-limits to 19 min). 4 OVMS containers `sci-h24-{A,B,C,D}`, same image digest and weights sha256 as H6, all loaded at once, one served at a time; no k3d cluster. stream_probe triad per arm x2. Visit order A B C D D C B A; per visit: 5 s idle sample, 3 decode (30-token prompt with nonce, 128 out, `ignore_eos`), 2 prefill (unique ~512-token prompt, 16 out), 1 c=4 (4 x 128 out). n per arm: decode 6, prefill 4, c4 2. Calibration = this run's arm A (H6's 15.66 is a sanity check: A within 15%). Outcome -> conclusion: see [H24 pre-registration](#h24-pre-registration). Live run not yet taken (2026-10-17: lock held by another live experiment for the whole work budget); review fixes in ed20aa4. | PENDING |
+| H24 | A spec-only roofline (DRAM channels x MT/s x 8 B; cores x int8 MAC/clk x GHz), calibrated on one 8-P-core point of this host, predicts decode, prefill and 4-in-flight throughput of core configurations it was not fitted on, within 25% MAPE. This is the transfer law `k3d-gpu plan --predict <sku>` relies on. | Held-out arms B (4 P-cores), C (8 E-cores), D (16 E-cores) on the i9-13900T, Qwen3-4B int4, OVMS 2026.4.1 (H6 digest). M0 (`console/sku_model.py arms`) predicts decode 15.7 / 15.7 / 15.7, prefill 86 / 32.3 / 64.5, c4 62.6 / 32.3 / 62.6 tok/s for B / C / D (C compute-bound at c4). Competing M1 (min(spec BW, measured per-cpuset triad BW)) predicts decode = 15.7 x triad(arm) / triad(A). Author prior: M0 decode REFUTED (B ~12.5, C ~8, D ~12), M0 prefill holds, M1 decode holds within 20%. | Pre-registered 2026-10-17T12:15Z, before any H24 run; `tests/console/test_sku_model.py` checks the model's numbers equal these within 1%. Probe `bench/sku-model/probe.py` (self-limits to 19 min). 4 OVMS containers `sci-h24-{A,B,C,D}`, same image digest and weights sha256 as H6, all loaded at once, one served at a time; no k3d cluster. stream_probe triad per arm x2. Visit order A B C D D C B A; per visit: 5 s idle sample, 3 decode (30-token prompt with nonce, 128 out, `ignore_eos`), 2 prefill (unique ~512-token prompt, 16 out), 1 c=4 (4 x 128 out). n per arm: decode 6, prefill 4, c4 2. Calibration = this run's arm A (H6's 15.66 is a sanity check: A within 15%). Outcome -> conclusion: see [H24 pre-registration](#h24-pre-registration). Review fixes in ed20aa4. Result ([H24 run](#h24-run-i9-13900t-2026-10-17)), run 1 at `a19f52c`, 10:47-11:04 PDT: the scorer returned "INCONCLUSIVE (missing cells: partial run)". 6 of 8 visits ran (A once, so no drift sentinel); every TTFT was null because OVMS streams Qwen3 thinking as `reasoning_content`, so decode c=1 and prefill have n = 0; every visit had package throttling (coretemp 95-99 C). Scored c4 cells (M0 calibrated on A, 45.9 tok/s, n=1): B 34.6 (-25%, n=1), C 22.2 (-6%, n=2), D 30.4 (-34%, n=2). Unscored end-to-end proxy (128 / e2e) for decode, relative to A (13.0 tok/s): B 0.78, C 0.57, D 0.71 (M0 predicts 1.0; M1 triad ratio 0.99 / 0.69 / 0.80). Missing probe: re-run at `cce5fd8` (reasoning_content counted, ~512-token prefill). | INCONCLUSIVE ([run](#h24-run-i9-13900t-2026-10-17)) |
 | H25 | Agents that send a byte-identical system prompt and tool schemas to one OVMS CPU server reuse one prefix KV, so an added agent's first request skips the shared prefill. Whether the shared blocks also cut resident memory per live agent is measured too, not assumed. Pre-registered 2026-10-17T05:08-07:00, before any H25 run. | On an i9-13900T, OVMS 2026.4.1 (digest a928903f…), `OpenVINO/Qwen3-4B-int4-ov` b467368d on the 16-CPU P-core balloon, shared prefix Ps ≈ 1536 tokens, private Pp = 96, max_tokens 8, thinking off. (T) The median TTFT of an added agent (agents 2..6, sequential) is ≥ 4x lower with the shipping default (prefix caching on, cache_size 0) than with `--enable_prefix_caching=false`; the lower bound of the 95% bootstrap CI of the ratio is ≥ 4x. Point prediction: OFF 9.6 s ± 15% (Ps+Pp at the 172 tok/s of H6), ON 0.9 s (0.6-1.4). (C) An ON agent with one token changed at system position 16 measures ≥ 0.8x the OFF median. (M) Memory per added live agent in a 6-agent burst: OFF ≈ 117 MiB (52 blocks x 32 tok x 72 KiB u8). Expectation (prior 0.5): ON ΔRSS per agent is ≥ 0.8x OFF, because dynamic-pool growth counts full prompts; physical sharing alone would give ≈ 9-12 MiB. Null H0: added-agent TTFT ON/OFF < 2x with c equal to the ON agents (no cross-agent reuse); for M, ON ΔRSS per agent ≥ 0.8x OFF. | `bench/shared-prefix/run.sh` under the live lock, 20 min cap. Fresh OVMS pod every round, arm order ON OFF OFF ON ON OFF (n = 3 rounds per arm, 15 added-agent samples per arm), new prefix seed every round. Per round: warm-up, sequential agents a1..a6 plus the perturbed control c, then a 6-agent barrier burst with 1 Hz sampling of pod `memory.current`. Confounds per round: RAPL package energy, 1-min load, swap used, pod `memory.swap.current`, package throttle-count delta, running container count. Outcome table and guardrails in [H25 pre-registration](#h25-pre-registration). The deploy-time detector (`k3d-gpu agent prefix`) is scored by unit tests, not by this probe. Prior art exists (vLLM APC, SGLang RadixAttention on Xeon, OVMS prefix caching, KVFlow, KVComm): a claim states only the measured delta [provenance:P250] [provenance:P252] [provenance:P253] [provenance:P259]. Run 2026-10-17: TTFT null in every request (probe read only content deltas), so both parts void; exploratory end-to-end latency 4.96x (CI 4.68-5.33), see [H25 run](#h25-run-i9-13900t-2026-10-17). | INCONCLUSIVE |
 | H26 | On a hybrid Intel client with no RDT (i9-13900T: no `rdt_a`/`cat_l3`/`mba`/`cqm` flags, no `/sys/fs/resctrl`), confining a memory-bandwidth neighbour to one E-core L2 cluster (`k3d-gpu.io/cores: ecluster`, 4 E-cores) cuts the agent's p95 latency inflation by at least half against the same neighbour in the `efficient` balloon. On hosts with `rdt_a`+`mba`, nri-plugins RDT classes are the predicted remedy instead (not testable on this host; H26-X). | R = I(MC4)/I(ME15) <= 0.5, where I(arm) = p95(arm)/p95(Q) - 1 on agent request latency. Point prediction: p95(Q) ~2.3 s, I(ME15) >= +100% (replicates H3 PM), I(MC4) +20..+50%, R ~0.3; I(ME4) within spread of I(MC4) (core count, not L2 topology, does the work). Competing prior (prior-art note): L2 confinement helps little against a DRAM hog (LLC and memory controller stay shared, no MBA), improvement < 10%. | Pre-registered 2026-10-17T12:18Z before any H26 run; see [H26 pre-registration](#h26-pre-registration-i9-13900t-2026-10-17). Probe `bench/rdt-isolate/run.sh` (analysis `bench/rdt-isolate/analyze.py`). Agent = OVMS 2026.4.1 `OpenVINO/Qwen3-4B-int4-ov`, `k3d-gpu agent up` on CPU with 15 CPU; unique ~30-token prompt x 32 out, greedy, `ignore_eos`, streamed. Arms: Q none; ME15 `stress-ng --stream 15` on `efficient`; ME4 `--stream 4` on `efficient`; MC4 `--stream 4` on `ecluster`; every neighbour `--stream-l3-size 128m` (same total DRAM footprint). 3 blocks x 10 requests per arm (n=30), order Q ME15 ME4 MC4 / MC4 ME4 ME15 Q / Q ME15 ME4 MC4, one cluster `k3dgpu-i-rdt-isolate`. Outcome -> conclusion in the section. | PENDING |
 | H28 | On k3s v1.37.1+k3s1 (containerd v2.3.4-k3s1), N agent pods that mount one model through an image volume and mmap it read-only share one page-cache copy, so the per-agent memory cost is near zero, and they become ready faster than pods that copy the model into their own emptyDir. | On an i9-13900T, 1 GiB unique blob, N=8: arm T (image volume + mmap) median PSS per pod <= 160 MiB, Shared_Clean >= 0.9x size, host ΔCached per round <= 1.25x size; arm C (init `cp` to emptyDir, then mmap) PSS >= 0.9x size, ΔCached >= 0.8xNxsize; T round-median time-to-ready (cold source, create to READY after faulting in the whole mapping) <= 0.5x C, and max(T) < min(C). Null: T PSS >= 0.5x size, or ΔCached >= 0.5xNxsize, or T time >= 0.8x C. | Pre-registered 2026-10-17T12:13:48Z before any H28 run. `bench/zero-copy-models/probe.sh` (prep outside the lock, run under live.lock, cluster `k3dgpu-i-zero-copy-models`, scratch KUBECONFIG, locked part killed at 20 min). n=3 rounds per arm, 8 pods per round, order C T T C C T, unique image per round, source file evicted per round (fsync + posix_fadvise DONTNEED in a helper container; mincore must read 0), no global drop_caches. Confounds per round: load1, swap used, swap-out, package throttle count, RAPL W. Outcome -> conclusion: see the [H28 pre-registration](#h28-pre-registration-i9-13900t-2026-10-17). Prior art: KEP-4639, KServe `oci+native://`, Tetris (ATC'22), overlayfs page-cache sharing [provenance:P280]; only the measured delta may be claimed. Prediction: SUPPORTED. | PENDING |
@@ -72,6 +73,7 @@ new evidence (new hardware, new driver, new model, changed method).
 | 2026-10-17 | H21 | i9-13900T: `bench/joule-pack/probe.sh` at bdd1a02, 3 rounds x 5 arms, interleaved (header and table in [H21 run](#h21-run-i9-13900t-2026-10-17)) | INCONCLUSIVE on (a) and (b). Idle package floor 90.7 W median, spread 26.5 W over 16 idle windows, against arm marginals of -3.3..10.8 W: the shared host (53 containers, other experiments' load) swamps the signal; throttle counter moved in 11/15 arms. Per-round best/E 1.75x, 104.9x, 2.18x (agents/W) are noise, not a result | Not DO-NOT-RE-ATTACK: re-run only on a quiet host (no other containers, idle spread < 2 W); add an N sweep before claiming anything about the SLO |
 | 2026-10-17 | H20 | i9-13900T: `bench/phase-steer/probe.py` at a171ded (A1 design: 4 agents, disjoint slices, `--poll 0`), 4 of 10 cells recorded (SP, PS, ALL, PS) before the 20-min cap (header and numbers in [H20 run](#h20-run-i9-13900t-2026-10-17)) | INCONCLUSIVE: 0 turns inside the 60 s window in all 4 cells. Cached turns took 58-75 s (decode 2.2-2.4 tok/s, prefill 12-22 tok/s) on a host with load1 11.6-18.3 and 52 other containers; package throttle counter +578..+6148 and pswpin > 0 in every cell. No J/token or p95 exists for any arm | Not DO-NOT-RE-ATTACK: re-run once, after an amendment that measures whole turns (per-turn RAPL integration, or a window of at least 5 turn times), on a host below 10% background busy |
 | 2026-10-17 | H22 | i9-13900T: `bench/hetero-spec/probe.sh`, runs 2 (06:29) and 3 (08:40, quiet gate passed), 8 rounds x 5 arms each (headers in [H22 result](#h22-result-i9-13900t-2026-10-17) and [H22 re-run](#h22-re-run-i9-13900t-2026-10-17)) | INCONCLUSIVE twice on the noise row: A 11.3 and 12.7 tok/s vs the 15.7 calibration, every round throttle-flagged; in run 3 the probe's own 16-CPU decode heated the 35 W package to 86-97 C. Directionally C < B in 16/16 rounds (C/B 0.78, 0.73), C/A 1.07, 0.91 | Not DO-NOT-RE-ATTACK, but do not re-run on this host: the throttle is self-induced. Re-run only on a package that holds the target without throttling, or after an amendment that recalibrates A under load |
+| 2026-10-17 | H24 | i9-13900T: `bench/sku-model/probe.py` at `a19f52c`, run 1 (10:47 PDT, quiet gate passed), 4 OVMS arms, visits A B C D D C (deadline before B A) (header in [H24 run](#h24-run-i9-13900t-2026-10-17)) | INCONCLUSIVE (partial run): decode c=1 and prefill n = 0 (TTFT never captured: OVMS streams Qwen3 thinking as `reasoning_content`); prefill prompts were ~2920 tokens, not ~512; throttling on every visit. Scored c4 vs M0: B -25% (n=1), C -6%, D -34%. Unscored decode proxy (128 / e2e) relative to A: B 0.78, C 0.57, D 0.71, against M0 1.0 | Not DO-NOT-RE-ATTACK: harness faults, fixed in `cce5fd8` (tests in `bench/sku-model/test_probe.py`). Re-run once at `cce5fd8`; the proxy says M0 decode will likely fail (row 2 or 3) |
 | 2026-10-17 | H23 | i9-13900T: `bench/thermal-resource/probe.sh` at `cbc3a08`, run 1 (09:32 PDT, quiet gate passed), calibration then budget gate (header in [H23 run](#h23-run-i9-13900t-2026-10-17)) | INCONCLUSIVE (O0): budget 10 W, 2 slots, gate needs >= 4; 0 of 9 arm runs. Fit R_th 0.297 C/W, T_idle 79.3 C, P_th 91.6 W against an idle-window median of 81.3 W (range 72.3-98.9 W, 6.3% of the idle window already throttled). Bootstrap of the idle median (fit fixed): budget 95% interval 6-11 W, never >= 16 W | Not DO-NOT-RE-ATTACK: the pre-registered O0 condition (idle within 10 C of T_tcc) did not hold (79.3 C vs 95 C). The shortfall is background draw on a shared host, so re-run once on a quieter window; if it gates again, move H23 to a host that idles >= 20 C below T_tcc |
 | 2026-10-16 | idea: slack-gated fused prefill (`archive/invent-agent-phase-sched`) | EDF turn deadlines plus an adaptive chunk budget in the OVMS/GenAI scheduler; refuter re-ran `bench/phase_sched/phase_sim2.py` instrumented, N=5-7 | Killed. The engine is 98-99% busy at N=5-7, so R = N·W − Z and A@SLO = floor((SLO+Z)/W): reordering cannot shrink per-turn work W. With one SLO for every turn, EDF equals FCFS. A@20 s = 5 for FCFS-256/512/1024 and adaptive+EDF. Prior art: Niyama (arXiv:2503.22562) teaches the whole arrangement; Sarathi chunked prefill | DO-NOT-RE-ATTACK: scheduling order cannot beat the response-time law on a saturated engine. Reopen only with a lever that cuts prefill tokens per turn |
 | 2026-10-16 | idea: E-core prefill offload with KV handoff (`archive/invent-agent-phase-sched`) | Refuter re-ran `hyb_sim.py` unchanged at SLO 10, 15, 20 and 30 s | Killed. Decode is ~75% of LLM time per turn (396 prefill vs 96 decode tokens), so a second prefill pool removes the smaller share. 1 → 1 agents at 10 s, 3 → 3 at 15 s, 5 → 5 at 20 s; a gain only at a lax 30 s SLO | DO-NOT-RE-ATTACK at SLO ≤ 20 s on this host: prefill is not the binding constraint once prefix caching is on |
@@ -110,6 +112,8 @@ new evidence (new hardware, new driver, new model, changed method).
 | 2026-10-17 | H29 | i9-13900T: `bench/uncore-phase/run-locked.sh` on cluster `k3dgpu-i-uncore-phase`, 32 of 36 planned cells (rounds 0-6; the deadline stopped it before round 7), arms A/U/C/UC n=7, L n=3 (header and numbers in [H29 run](#h29-run-i9-13900t-2026-10-17)) | Not decided. Gate 1: A decode spread 23.2% > 10%. Gate 2 (not reached by the analyzer, read from the data): U ring 2900 MHz in 7/7 cells vs the 4700 MHz pin, so the U arm did not test a high ring. Indicative only, under the confound: UC/A paired median decode 0.926x, gross J/token 1.115x (lower in 1 of 7 rounds); C/A 0.976x and 1.055x | Not settled: re-run on a quiet host (CPUs outside the pod < 10% busy, idle package power near the host's own idle), and first check that `min_freq_khz = max_freq_khz = 4700000` holds the ring at 4.7 GHz under decode load |
 | 2026-10-17 | H25 | i9-13900T: OVMS CPU, shipping prefix caching ON vs `--enable_prefix_caching=false`, 6 agents with a 1538-token shared head, 5 of 6 rounds under 1-min load 18-29 ([H25 run](#h25-run-i9-13900t-2026-10-17)) | INCONCLUSIVE: TTFT null in all requests (no content delta with tools), all rounds void. Exploratory end-to-end: added agent 3.42 s ON vs 16.99 s OFF (4.96x, CI 4.68-5.33); ΔRSS per agent 72.9 vs 116.1 MiB (0.63x, M INCONCLUSIVE) | No: re-run with the tool-call TTFT fix at low load |
 | 2026-10-16 | H3 (motivates H5) | Wave-1, host level, no cluster, i9-13900T: inference pinned to CPUs 0-14, a 15-worker `stress-ng` neighbour pinned to E-cores 17-31 (disjoint cpusets), n = 4 per arm. | Quiet median prefill 7.03 s. Prefill rose 30% with a register-only neighbour (`--cpu-method loop`), 31% with the mixed one, 40% with `matrixprod`; decode rose 6%. The host was already at PROCHOT (`package_throttle_count` about 22M, package 91-96 C under load). A register-only neighbour doing nearly the cache-heavy damage points at package power/thermal/clock coupling, not cache. Reported by the wave-1 run; its Reproduce header and raw results are not in this repository yet, so this row settles nothing and backs no claim. | No: re-run under H3's k3d-gpu probe with a full header. |
+| 2026-10-17 | H8 | i9-13900T, `k3d-gpu capacity --slo 10 --force` per arm (budget 12 min or what the 15-min hold left), each arm on a fresh cluster, model staged into the node ([H8 run](#h8-run-i9-13900t-2026-10-17)) | A4 vLLM CUDA (RTX 4000 SFF Ada, AWQ): APB >= 32, every step to `--max` 32 passed, p95 5.96 s at 32. A1 OVMS int4 P-cores: APB 0 by rule in 2 of 2 runs: N=1 `insufficient` (n 39 < 60) at p95 9.65 and 9.86 s; pooled over both runs n 78, p95 9.75 s, CI 9.56-10.34 (exploratory). A2 OVMS int4 UHD 770: >= 0, open (warm-up p95 26.1 s at N=1; a scored rep needs ~20 min). A3 EAT vLLM CPU defaults: not scored, OOMKilled at its 16Gi limit in the warm-up, 2 of 2 runs | No: A1-A3 need longer budgets, A3 a memory limit that holds the trace |
+| 2026-10-17 | H7 | i9-13900T: OVMS `OpenVINO/Qwen3-4B-fp16-ov` vs EAT's vLLM CPU `Qwen/Qwen3-4B` bf16, 16 P-core CPUs each, one server at a time, blocks A B B A A B, block 6 cut by the 20-min cap ([H7 run](#h7-run-i9-13900t-2026-10-17)) | Decode median 4.31 tok/s OVMS (n 6, 4.06-4.38) vs 3.73 vLLM (n 4, 3.69-3.82): 1.156x, block-median ratios 1.08-1.18, on both sides of the 15% line. TTFT on ~417 tokens 5.15 s vs 22.28 s (4.3x). H2's 3.4x decode gap is mostly precision | No: the pre-registered 5 ABBA rounds, the `--enforce-eager`-dropped arm and energy are not run yet |
 
 ## Research leads
 
@@ -1091,6 +1095,82 @@ OUT=$(mktemp -d)
 flock -w 10800 "$LOCK" timeout 1140 sudo -E python3 bench/sku-model/probe.py --out "$OUT"
 python3 bench/sku-model/probe.py --score "$OUT/raw.jsonl"
 ```
+
+### H24 run (i9-13900T, 2026-10-17)
+
+**Reproduce:** commit `a19f52c` (run at local `d5b7d02`, same `bench/sku-model/` tree, before rebase; `main` 09c3ef3 plus the per-arm model
+repository fix), i9-13900T, kernel 6.6.128-1-MANJARO, OVMS
+`openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58`
+(2026.4.1-gpu, the H6 digest), `OpenVINO/Qwen3-4B-int4-ov` with
+`openvino_model.bin` sha256 `074214fa...df2f9` (equal to H6), one hard-linked
+repository per arm. Lock taken 10:46:28 PDT. Quiet gate (1-min load <= 8 and
+package <= 80 C, polled every 30 s, up to 30 min) cleared on poll 2. Probe
+10:47:28-11:03:58 (990 s, exit 0, stopped by its own deadline after 6 visits).
+No k3d cluster; 0 `sci-h24-*` containers left. No sysfs file was written.
+
+```bash
+# quiet gate passed: load1 5.57, package 73 C (loadavg 5.57 10.08 10.19)
+flock -w 14400 <scratchpad>/live.lock bash -c 'sudo -A -v; sudo -n timeout 1140 env IMAGE=<digest> MODELS=<repo-per-arm> python3 bench/sku-model/probe.py --out <out>'
+python3 bench/sku-model/probe.py --score <out>/raw.jsonl
+# end: load1 11.05, package 78 C (loadavg 11.05 12.72 11.95)
+```
+
+Deviations, both fixed in the harness before scoring anything:
+- `a19f52c`: OVMS `--source_model` rewrites `graph.pbtxt`, which carries
+  `plugin_config`, on every start; the four arms shared one mount and started
+  together, so an arm could load another arm's threads and core type. Each arm
+  now mounts its own repository and the probe aborts unless the graph matches.
+  This run read back all four configs as launched (A 8 thr PCORE, B 4 PCORE,
+  C 8 ECORE, D 16 ECORE).
+- `sudo -n timeout 1140 env ...` instead of the documented
+  `timeout 1140 sudo -E ...`: sudo's timestamp is per parent pid without a tty.
+
+Raw files: `bench/sku-model/results/2026-10-17-run1/` (`raw.jsonl`, scorer
+output `score.json`, gate log).
+
+**Verdict: INCONCLUSIVE (missing cells: partial run)**, applied by the
+pre-registered scorer. Three harness faults, found in this run's raw data:
+1. Every `ttft_s` was null. OVMS 2026.4.1 streams Qwen3 thinking as
+   `delta.reasoning_content`; the probe counted only `delta.content`. So decode
+   c=1 and prefill (both TTFT-based) have n = 0 in all arms.
+2. The prefill prompt (420 `w<int>` words) tokenized to 2915-2939 tokens, not
+   the pre-registered ~512, so each visit took 2-3 min and the deadline stopped
+   the run after A B C D D C. A ran once: no drift sentinel, no A-vs-H6 check.
+3. One RAPL reading wrapped (`package_w` -1310 W, visit 2).
+Fixed in `cce5fd8` with failing-first tests. Row 6 noise markers also fired:
+package throttle count rose in every visit (658-7972), coretemp 95-99 C under
+load, so C and D each have >= 2 flagged visits even with complete data.
+Idle-container controls passed (other servers < 0.06% of a core), cpuset idle
+busy 0.03-0.27, no swap.
+
+Scored cells (c4 aggregate; M0 calibrated on this run's A):
+
+| Arm | c4 tok/s (n, spread) | M0 x k | error |
+|---|---|---|---|
+| A (calibration) | 45.94 (1) | - | - |
+| B 4P | 34.58 (1) | 45.94 | -24.7% |
+| C 8E | 22.17 (2, 0.2%) | 23.63 | -6.2% |
+| D 16E | 30.37 (2, 0.5%) | 45.94 | -33.9% |
+
+Unscored proxies, not the pre-registered metrics (they include the prompt's
+prefill and, for prefill, assume the arm's decode rate for the 15 tail tokens):
+
+| Arm | decode 128/e2e tok/s (n, spread) | / A | M0 / A | M1 / A (triad) | prefill tok/s, ~2.9k-token prompt (n) | / A | M0 / A |
+|---|---|---|---|---|---|---|---|
+| A | 13.01 (3, 0.8%) | 1.00 | 1.00 | 1.00 (38.9 GB/s) | 159.9 (2) | 1.00 | 1.00 |
+| B | 10.15 (3, 0.2%) | 0.78 | 1.00 | 0.99 (38.4) | 89.9 (2) | 0.56 | 0.50 |
+| C | 7.37 (6, 6.6%) | 0.57 | 1.00 | 0.69 (26.8) | 53.3 (4) | 0.33 | 0.19 |
+| D | 9.26 (6, 11.8%) | 0.71 | 1.00 | 0.80 (30.9) | 89.0 (4) | 0.56 | 0.38 |
+
+Confidence: 0.95 that this run cannot score H24 (it is missing 6 of 9 held-out
+cells by construction). On direction only: the decode proxy misses M0 by 22%,
+43% and 29% with within-arm spread <= 12%, and misses M1 by 21%, 18% and 11%;
+the prior for row 3 (both fail) or row 2 (M1 holds) rises, about 0.8 that a
+clean re-run refutes M0 decode. A's proxy (13.0) is 17% under H6's 15.66, past
+the 15% sanity line; throttling (3056 MHz mean on the P-cores, 95 C) and the
+proxy's prefill share both push it down. Prefill at ~2.9k tokens is not the
+pre-registered length, so it says nothing about row 4. Missing probe: one
+re-run at `cce5fd8` in a window where the package stays under throttle.
 
 ### H22 pre-registration (i9-13900T)
 
@@ -2096,6 +2176,181 @@ the probe stops after calibration (n = 1 calibration, 0 arm runs).
 | O0 | Gate reports degenerate (first or second gate) | INCONCLUSIVE: the model has no headroom to sell on this host; arms B/T/C not run | 0.85 | DO-NOT-RE-ATTACK on this host while idle is within 10 C of T_tcc; re-run on a host that idles >= 20 C below T_tcc |
 | O1-O6 | As above, if the gate passes | As above | 0.15 (scaled) | As above |
 
+### H8 run (i9-13900T, 2026-10-17)
+
+```text
+# provenance
+date:            2026-10-17T16:18:44Z (first lock) .. 18:12:14Z (last cluster deleted)
+hypothesis:      H8 (bench/apb/PROTOCOL.md section 7 predictions)
+host cpu:        13th Gen Intel(R) Core(TM) i9-13900T
+host kernel:     6.6.128-1-MANJARO
+accelerators:    nvidia=2 (RTX 4000 SFF Ada, RTX 2000E Ada; driver 590.48.01), intel=8 (UHD 770, i915, shared), hybrid=1
+k3d-gpu commit:  1a54ffb (main) + this change's bench/apb scripts and vllm-cuda.yaml fix; k3d v5.9.0
+node image:      cryptoandcoffee/k3d-gpu:0.1.41, image ID sha256:4556ee04444b7e7111a603476d16d0fa25d7ba3a3fffb9b04be9978c456817ac
+model:           A1/A2 OpenVINO/Qwen3-4B-int4-ov b467368d; A3 Qwen/Qwen3-4B-Instruct-2507 cdbee75f (bf16);
+                 A4 Qwen/Qwen3-4B-AWQ 74d4bd2b. Local `hf download --local-dir` copies, staged into the node (hostPath)
+runtime:         A1/A2 openvino/model_server@sha256:a928903f…6fc58 (`agent manifest`: A1 auto = CPU, P-cores 0-15;
+                 A2 K3D_GPU_AGENT_DEVICE=GPU, gpu.intel.com/i915); A3 vllm/vllm-openai-cpu:v0.24.0@sha256:b0e6f860…981a1,
+                 EAT 0d3438d chart render for cpu-qwen3-4b + integrations/eat/vllm-values.yaml (cpu 8 -> CPUs 0-7,
+                 memory 16Gi, KV 6 GiB) + --max-model-len 32768; A4 vllm/vllm-openai@sha256:a4a4c043…c3a6b,
+                 bench/apb/vllm-cuda.yaml on the RTX 4000 (runtimeClass nvidia)
+energy source:   RAPL intel-rapl:0 package + psys (capacity's sudo -n reader) and nvidia-smi power.draw, both GPUs
+runs per arm:    one `k3d-gpu capacity` run per arm (A1 twice); each arm in its own 15-min lock hold on a fresh cluster
+```
+
+Driver: `bench/apb/arm.sh ARM` (cluster `up`, model copied into the node, the arm's
+manifest, `k3d-gpu capacity --budget B --step-cap B*60 --slo 10 --force --fresh`,
+cluster deleted). B = 12 min, or less when bring-up left less of the 15-min hold.
+The runs used a scratch copy of that script with the same steps (the committed one
+differs in paths only); A1's first run predates `--step-cap` and kept capacity's
+default 180 s. Every run had to use `--force`: the box was never quiet (package 80.6-84.6 W at
+start against the 41 W bar, 53 other containers, 1-min load 3.3-9.3). capacity
+lists that as a confound; it slows every arm.
+
+| Arm | APB at p95 <= 10 s | Binding limit | What ran |
+|-----|--------------------|---------------|----------|
+| A1 OVMS int4, P-cores (auto) | 0 by the scoring rule; N=1 undecided (p95 9.65 and 9.86 s, CI straddles 10 s) | time: one N=1 rep takes ~5 min, so a run fits one scored rep and n stays 39 < 60 (`insufficient`) | 2 runs, 12-min budget each, 1 scored N=1 rep each |
+| A2 OVMS int4, UHD 770 (forced) | >= 0, upper end open | `--budget`: a scored N=1 rep needs ~20.5 min | 12-min budget; warm-up only (7 turns, p95 26.1 s, discarded) |
+| A3 EAT vLLM CPU bf16 (defaults) | not measured | server OOMKilled at its 16Gi limit, 2 of 2 runs | 6.7 and 6.4-min budgets (vLLM start took 6 min); warm-up only |
+| A4 vLLM CUDA, RTX 4000 SFF Ada, AWQ | >= 32 (`--max`) | none hit: every step to N=32 passed; flags cpu_thermal_throttle, gpu0_power_cap | 9.7-min budget, 6 scored steps |
+
+A4 steps (pooled p95 with bootstrap 95% CI, n window requests, net J per output token):
+
+| N | p50 s | p95 s | p95 CI | n | output tok/s | TTFT p95 s | J/token net |
+|---|-------|-------|--------|---|--------------|------------|-------------|
+| 1 | 0.55 | 1.48 | 1.46-1.49 | 82 | 32.7 | 0.18 | 0.79 |
+| 2 | 0.57 | 1.53 | 1.33-1.55 | 72 | 60.8 | 0.22 | 0.53 |
+| 4 | 0.62 | 1.65 | 1.46-1.69 | 69 | 114.8 | 0.27 | 0.30 |
+| 8 | 0.79 | 1.93 | 1.75-2.04 | 149 | 201.8 | 0.36 | 0.20 |
+| 16 | 1.24 | 3.18 | 3.09-3.30 | 280 | 320.8 | 0.63 | 0.13 |
+| 32 | 2.30 | 5.96 | 5.83-6.15 | 609 | 377.4 | 1.27 | 0.11 |
+
+A4 per-rep p95 at N=1 and N=2: 1.48/1.49 s and 1.53/1.52 s (spread 0.01 s);
+N >= 4 ran one rep each (the CI cleared the SLO). Prefix-cache hit 0.96 of
+prompt tokens at every N. Tool-call validity 0.80-0.93 (protocol check 2 wants
+>= 0.9 at N=1: 0.86, a near miss). No drift check: the budget ran out first.
+
+A1: run 1 kept capacity's default `--step-cap 180`, which stopped N=1 after one
+rep with 5.6 min of budget left; run 2 set `--step-cap` to the budget, and the
+second rep still did not start because capacity estimated it at 380 s with
+325 s left. Both runs scored one N=1 rep: p95 9.65 s (CI 9.41-10.34) and 9.86 s
+(CI 9.56-10.56), n 39, p50 4.50 and 4.62 s, decode 17.2 and 16.6 tok/s median,
+TTFT 2.5-2.6 s median on ~3.3k-token prompts. Pooling the two reps (two
+clusters, same arm; exploratory, not a pre-registered step): n 78, p95 9.75 s,
+CI 9.56-10.34, a pass on the point estimate. So one agent sits on the 10 s line
+and N=2 was never reached. The N=1 p95 is 34-37% above PROTOCOL.md's predicted
+7.2 s, past its 30% demand-model falsifier: completion lengths match the model
+(median 33 tokens, 34 on A4), so the host load is the first suspect. Tool-call
+validity 0.73 (check 2 wants >= 0.9).
+
+capacity reports these runs as "search closed: APB = 0" and stores N=1 as the
+upper end, so a rerun with a larger `--budget` returns the stored 0 without
+measuring; `--fresh` is needed. That treats a step ended by the budget like a
+measured failure; it is a reporting gap in capacity, not a property of the box.
+
+A2: the warm-up's first turn took 119.6 s (kernel compile on a fresh cluster),
+the next six 15.3-27.9 s with TTFT 5.7-14.5 s; every turn after the first is over
+the 10 s SLO at N=1, so APB 0 is the expected answer, but no scored step ran and
+the bracket stays open.
+
+A3: run 2 recorded the vLLM container `OOMKilled` (exit 137, restartCount 1)
+during the 2-session warm-up. The first turn (a ~3.1k-token prompt) hit the
+120 s client timeout, the server died on a later turn and the rest were refused.
+Run 1, not instrumented for it, shows the same sequence (timeouts, then
+`RemoteDisconnected`, then connection refused). EAT's defaults (16Gi limit, 6 GiB KV, `--max-num-batched-tokens 2048`)
+do not hold this trace's ~3.1-3.5k-token prompts on this host. That is an
+outcome of the defaults, not an APB; PROTOCOL.md's "0 (0.9)" is untested.
+
+A4 needed one fix first: run 1 crash-looped in `EngineCore failed to start` with
+`ValueError: VLLM_PORT 'tcp://10.43.141.188:8000' appears to be a URI`. The
+Service is named `vllm`, so Kubernetes service links set `VLLM_PORT`, which vLLM
+reads as its own setting. `bench/apb/vllm-cuda.yaml` now sets
+`enableServiceLinks: false`; run 3 came up in 196 s (image pull 2 min).
+
+Predictions (PROTOCOL.md section 7) against these results: A4 > A1 held (A4 >= 32
+against 0 by rule with N=1 on the SLO edge). A1 in [4, 12] is refuted by the scoring rule (APB 0 in both runs), though N=1 sits on the SLO edge. A2 = 0 and A3 = 0 are not tested (no
+scored step). Verdict **INCONCLUSIVE**: two of four arms have no scored step.
+
+Next probe, in order: A2 with a 45-min budget (two scored N=1 reps); A3 with
+the memory limit raised until the warm-up survives (record it as a deviation
+from EAT's defaults); A1 with a 30-min budget (two or more N=1 reps, then N=2); A4 with
+`--max 64`.
+
+Reproduce:
+
+```bash
+# Model copies (revisions as in the header), then one arm per run:
+hf download OpenVINO/Qwen3-4B-int4-ov --revision b467368d16b75df14055562fe927ae8e1f15f7ef --local-dir "$M/Qwen3-4B-int4-ov"
+hf download Qwen/Qwen3-4B-Instruct-2507 --revision cdbee75f17c01a7cc42f958dc650907174af0554 --local-dir "$M/Qwen3-4B-Instruct-2507"
+hf download Qwen/Qwen3-4B-AWQ --revision 74d4bd2bd4bff9cafc9345221320bffb08b406a3 --local-dir "$M/Qwen3-4B-AWQ"
+git clone --depth 1 --branch release-1.0.3-hotfix https://github.com/intel/enterprise-agent-toolkit eat   # 0d3438d
+for arm in ovms-cpu ovms-igpu eat-vllm-cpu vllm-cuda; do
+    APB_MODELS=$M APB_EAT_CHART=$PWD/eat/core/helm-charts/vllm bench/apb/arm.sh "$arm"
+done
+```
+
+### H7 run (i9-13900T, 2026-10-17)
+
+```text
+# provenance
+date:            2026-10-17T17:26:54Z (lock taken) .. 17:46:28Z (cluster deleted)
+hypothesis:      H7
+host cpu:        13th Gen Intel(R) Core(TM) i9-13900T
+host kernel:     6.6.128-1-MANJARO
+accelerators:    as the H8 run (not used: both arms on the CPU)
+k3d-gpu commit:  1a54ffb (main) + this change's bench/apb/h7.sh and stage.py; k3d v5.9.0
+node image:      cryptoandcoffee/k3d-gpu:0.1.41 (sha256:4556ee04…817ac)
+model:           one checkpoint, Qwen/Qwen3-4B 1cfa9a72: A = OpenVINO/Qwen3-4B-fp16-ov 00298f1c (fp16 IR exported
+                 from it; openvino_model.bin 8,044,936,594 B, sha256 8ada14248ee24b94…), B = Qwen/Qwen3-4B bf16
+                 safetensors (8,044,982,000 B)
+runtime:         A openvino/model_server@sha256:a928903f…6fc58, `agent manifest` CPU, 16 CPUs, P-core balloon;
+                 B vllm/vllm-openai-cpu:v0.24.0@sha256:b0e6f860…981a1, EAT 0d3438d chart defaults (default
+                 model config: bf16, --enforce-eager, chunked prefill 2048, prefix caching) + vllm-values.yaml
+                 with cpu=16, KV 6 GiB, --max-model-len 32768. Both read Cpus_allowed_list 0-15 in every block
+energy source:   none (not measured in this run)
+runs per arm:    blocks A B B A A B, one server up at a time; block 6 (B) was cut by the 20-min cap: A 3 blocks, B 2
+```
+
+`bench/apb/h7.sh`. Per block, after a warm-up request: 2 decode requests (128
+tokens, `ignore_eos`, unique prompt so no prefix-cache hit) and 1 TTFT request
+(a unique ~417-token prompt, 4 output tokens), all through `bench/llm_load.py`.
+
+| Block | Engine | decode tok/s | TTFT s (prompt tokens) |
+|-------|--------|--------------|------------------------|
+| 1 | A OVMS fp16 | 4.06, 4.15 | 5.22 (416) |
+| 2 | B vLLM bf16 | 3.69, 3.71 | 22.45 (417) |
+| 3 | B vLLM bf16 | 3.75, 3.82 | 22.11 (417) |
+| 4 | A OVMS fp16 | 4.33, 4.38 | 5.15 (419) |
+| 5 | A OVMS fp16 | 4.37, 4.29 | 4.96 (418) |
+
+Decode median A 4.31 tok/s (n 6, range 4.06-4.38), B 3.73 tok/s (n 4, range
+3.69-3.82). A/B = 1.156: OVMS decodes 15.6% faster, i.e. vLLM is 13.5% slower.
+Block-median ratios run from 1.08 (block 1 vs block 3) to 1.18 (block 4 vs block
+2); the two adjacent pairs give 1.11 (blocks 1-2) and 1.15 (blocks 3-4). Weights
+are the same size, so effective weight bandwidth has the same ratio: 34.7 vs
+30.0 GB/s. TTFT on the ~417-token prompt: A 5.15 s median (prefill ~81 tok/s), B
+22.28 s (~19 tok/s), 4.3x.
+
+Verdict **INCONCLUSIVE**. The pre-registered line is a 15% decode gap; the pooled
+gap is 15.6% measured against vLLM and 13.5% against OVMS, and the block-level
+ratios fall on both sides of it. The run is short of the pre-registration: 3 and
+2 blocks instead of 5 ABBA rounds, no `--enforce-eager`-dropped arm, no energy,
+and the checkpoint is Qwen3-4B, not Qwen3-4B-Instruct-2507, because OpenVINO
+publishes a 16-bit IR of the former (`OpenVINO/Qwen3-4B-fp16-ov`) and exporting
+one in the run would have cost the cap. What the run does show: H2's 3.4x
+decode gap (OVMS int4 15.67 vs vLLM bf16 4.63 tok/s) shrinks to about 1.16x when
+both engines read 16-bit weights, so most of that gap is weight precision; the
+prefill gap (4.3x) is not explained by precision and is outside H7's prediction.
+Host: 53 other containers running, as in H8.
+
+Reproduce:
+
+```bash
+hf download OpenVINO/Qwen3-4B-fp16-ov --revision 00298f1c614ffdc000814d8cbe1b7613aa73cdca --local-dir "$M/Qwen3-4B-fp16-ov"
+hf download Qwen/Qwen3-4B --revision 1cfa9a7208912126459214e8b04321603b3df60c --local-dir "$M/Qwen3-4B"
+APB_MODELS=$M APB_EAT_CHART=$PWD/eat/core/helm-charts/vllm bench/apb/h7.sh
+```
+
 ### H23 run (i9-13900T, 2026-10-17)
 
 **Reproduce:** commit `0f346f3` (`main`; `bench/thermal-resource/` and
@@ -2185,6 +2440,11 @@ Limits on what a SUPPORTED verdict may be quoted as saying.
 - **RAPL counter wrap**: `energy_uj` wraps at `max_energy_range_uj` in the same
   directory. A run whose end reading is below its start reading must add that
   range back or be discarded.
+- **H8** APB is for one shared host (53 other containers, ~81 W package at idle,
+  CPU thermal throttling in every arm), the synthetic `support` trace, 10 s SLO and
+  `kubectl port-forward` access. An open bracket (`>= n`) is a lower bound only.
+  A4 compares a dGPU with AWQ int4 against CPU and iGPU arms at OpenVINO int4:
+  different hardware and quantization, not an engine comparison.
 - **H11** compares launcher paths on a cached image. It says nothing about pull
   time for an image that is not cached, which depends on the registry and link.
 - **H14** covers the i9-13900T (P-cores 0-15, E-cores 16-31), chart v0.14.0,
