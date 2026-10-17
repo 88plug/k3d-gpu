@@ -21,13 +21,18 @@ the next green cell on a usable target: OVMS on the CPU, or llama.cpp on Vulkan
 on another GPU. Every such fix is listed. With no pick and a fix to apply, the
 decision is "fix", not an engine.
 
-  plan.py --mode text|explain|json --matrix FILE [--engine E] [--device D]
+The plan hash is "sha256:" plus the hex SHA-256 of the --json output bytes. A
+write (`k3d-gpu apply`, the MCP apply tool) runs only when the hash it is given
+equals the hash of the plan recomputed at that moment.
+
+  plan.py --mode text|explain|json|hash --matrix FILE [--engine E] [--device D]
           [--model M] [--bind ADDR] [--port N] < facts.json
 
 Python standard library only.
 """
 
 import argparse
+import hashlib
 import ipaddress
 import json
 import os
@@ -243,9 +248,14 @@ def plan(facts, matrix, overrides=None):
     return doc
 
 
+def plan_hash(doc):
+    """"sha256:<hex>" of the canonical plan/v1 bytes, the exact `plan --json` output."""
+    return "sha256:" + hashlib.sha256(factsmod.dumps(doc)).hexdigest()
+
+
 def main(argv):
     ap = argparse.ArgumentParser(prog="k3d-gpu plan", description="engine, model and placement from green matrix cells")
-    ap.add_argument("--mode", choices=("text", "explain", "json"), default="text")
+    ap.add_argument("--mode", choices=("text", "explain", "json", "hash"), default="text")
     ap.add_argument("--matrix", required=True)
     ap.add_argument("--engine")
     ap.add_argument("--device")
@@ -273,6 +283,8 @@ def main(argv):
         return 2
     if args.mode == "json":
         sys.stdout.buffer.write(factsmod.dumps(doc))
+    elif args.mode == "hash":
+        sys.stdout.write(plan_hash(doc) + "\n")
     else:
         lines = doc["explain"] if args.mode == "explain" else doc["summary"]
         sys.stdout.buffer.write(("\n".join(lines) + "\n").encode("utf-8"))

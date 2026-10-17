@@ -183,8 +183,9 @@ commands the launcher runs for you.
 
 `k3d-gpu-mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server
 that lets an AI agent see which engines the cluster has and place work on them. It
-speaks stdio, needs only `python3` (3.8+, standard library) next to the `k3d-gpu`
-launcher and `kubectl`, and is read-only: it never creates or deletes anything.
+speaks stdio and needs only `python3` (3.8+, standard library) next to the `k3d-gpu`
+launcher and `kubectl`. Every tool but `apply` is read-only, and `apply` runs only
+a plan whose hash the user confirmed in the client.
 
 | Tool | Returns |
 |------|---------|
@@ -192,6 +193,22 @@ launcher and `kubectl`, and is read-only: it never creates or deletes anything.
 | `recommend_placement` | `workload`: `llm` \| `embeddings` \| `media` \| `batch`, `objective`: `latency` (default) \| `throughput` \| `efficiency`. The best engine the cluster advertises and the pod-spec fragment to merge: the extended-resource limit, `k3d-gpu.io/cores=performance\|efficient` with a CPU request (the balloon is sized by it) on hybrid CPUs, the AMX `nodeSelector` on the CPU path. An `llm` at `latency` or `throughput` takes the Intel GPU only on a `gpu.intel.com/xmx=true` node, the same rule as `k3d-gpu agent up` |
 | `agent_endpoint` | the OpenVINO Model Server from `k3d-gpu agent up`: in-cluster `/v3` base URL, a `port-forward` command and `localhost` URL for the host, device, served models (`/v3/models`) |
 | `cluster_health` | node readiness, per-node accelerator counts, device-plugin DaemonSet rollout (and plugins missing for host-detected devices), and a list of problems |
+| `hardware` | the host's `facts/v1` document: the exact bytes `k3d-gpu facts --json` prints |
+| `plan_launch` | `engine`, `device`, `model`, `port` (all optional). The exact bytes `k3d-gpu plan --json` prints with those options, plus the plan hash (`sha256` of those bytes, what `k3d-gpu plan --hash` prints) in a second text item and in `_meta["k3d-gpu.io/planHash"]`. There is no `bind`: an off-loopback listener is never set up over MCP |
+| `apply` | `plan_hash` and the options given to `plan_launch`. The only write: `k3d-gpu apply --plan-hash`, which runs `k3d-gpu agent up` with the plan's device and model. See below |
+
+`apply` writes only after a human confirms the plan hash in the client. On the
+first call it recomputes the plan; if the plan names no engine or no longer
+hashes to `plan_hash`, it refuses. Otherwise it answers `input_required` with a
+form elicitation that shows the plan and its hash (MCP 2026-07-28 multi
+round-trip requests), and runs the plan only when the client retries with the
+user's `accept` and `confirm: true`. The `requestState` it hands out is signed
+with a per-process key, expires after 10 minutes, is bound to the call's
+arguments and works once. It refuses when the client declares no form
+elicitation, in a session opened with the legacy `initialize` handshake, and
+when the user declines; the refusal names the `k3d-gpu apply --plan-hash ...`
+command the user can run in a terminal instead. `k3d-gpu apply` checks the hash
+again before it writes.
 
 Protocol: MCP **2026-07-28** (per-request `_meta`, `server/discover`) and, for
 clients that still open with the `initialize` handshake, 2025-11-25, 2025-06-18,
@@ -1053,6 +1070,12 @@ offline and fetches nothing. The only URLs in it are links a reader can follow
 (the finding sources and the project page). `--facts FILE` renders a saved
 facts/v1 document and `--matrix FILE` a different matrix. The page takes nothing
 from the clock, so the same facts give the same bytes.
+
+`plan --hash` prints the plan hash, `sha256:` plus the SHA-256 of the
+`plan --json` bytes. `k3d-gpu apply --plan-hash HASH` with the same options
+recomputes the plan and runs it (`agent up` with the plan's OVMS device and
+model) only if it still hashes to `HASH`; a changed host, matrix or option set
+gives another hash and apply refuses, as it does for a plan with no engine.
 
 ### Audit and images.lock (`audit`)
 

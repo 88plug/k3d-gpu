@@ -116,6 +116,10 @@ Include relevant details:
 - Changed an image in `share/`, the Dockerfile or an image pin in `scripts/k3d-gpu`?
   Run `scripts/images-lock update` (it reads the registries) and commit
   `images.lock`; CI's `scripts/images-lock check` fails until you do.
+- `tests/console_mcp_test.sh` checks that the MCP tools `hardware` and
+  `plan_launch` return the CLI `facts --json` and `plan --json` bytes on every
+  fixture, and that the MCP `apply` tool writes nothing without a plan hash the
+  user confirmed in the client.
 - Have hardware the matrix lacks? Capture it (reads ids, driver bindings, device
   node names, CPU flags, kernel release and firmware file names; as root also the
   GuC/HuC firmware records from debugfs):

@@ -92,6 +92,8 @@ jobs:
       - env:
           CONSOLE_JSONSCHEMA_PYTHON: /tmp/jsonschema/bin/python
         run: tests/audit_test.sh
+      - name: MCP equals the CLI --json; MCP writes need a confirmed plan hash
+        run: tests/console_mcp_test.sh
 
   # images.lock must list every image share/, the Dockerfile and the launcher
   # reference, at the digests they pin (offline; `scripts/images-lock update`

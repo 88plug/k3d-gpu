@@ -11,12 +11,24 @@ Protocol: dual-era server per the MCP specification, revision 2026-07-28
   legacy  the `initialize` handshake of 2025-11-25 and earlier, for clients
           that predate 2026-07-28.
 
-Tools (all read-only):
+Read tools:
   accelerators        `k3d-gpu report --json`, or detect + node allocatable when
                       the launcher has no report subcommand
   recommend_placement pod-spec fragment for llm|embeddings|media|batch
   agent_endpoint      OVMS OpenAI /v3 base URL and models from `k3d-gpu agent up`
   cluster_health      node readiness and device-plugin DaemonSet rollout
+  hardware            `k3d-gpu facts --json` (facts/v1), byte for byte
+  plan_launch         `k3d-gpu plan --json` (plan/v1), byte for byte, plus its hash
+
+Write tool:
+  apply               `k3d-gpu apply --plan-hash H`, only after the human confirms
+                      that plan hash in the client (elicitation, 2026-07-28 multi
+                      round-trip). Refused when the hash does not match the plan
+                      recomputed now, when the client declares no form
+                      elicitation, and when the human declines.
+
+A renderer never computes: hardware and plan_launch return the launcher's stdout
+unchanged as their text content, and its parsed JSON as structuredContent.
 
 Environment:
   K3D_GPU_BIN          k3d-gpu launcher (default: next to this file, else PATH)
@@ -24,11 +36,17 @@ Environment:
   K3D_GPU_MCP_TIMEOUT  seconds per kubectl/launcher call (default: 60)
 """
 
+import base64
+import hashlib
+import hmac
 import json
 import os
+import re
+import secrets
 import shutil
 import subprocess
 import sys
+import time
 
 SERVER_NAME = "k3d-gpu-mcp"
 
@@ -51,12 +69,24 @@ INSTRUCTIONS = (
     "Xeon AMX, hybrid P/E cores). Call accelerators first to see what the host and cluster "
     "offer, then recommend_placement to get the pod-spec fragment for a workload. "
     "agent_endpoint returns the OpenAI-compatible URL of the in-cluster model server if "
-    "'k3d-gpu agent up' deployed one. All tools are read-only."
+    "'k3d-gpu agent up' deployed one. hardware returns the host's facts/v1 document and "
+    "plan_launch the engine, model and placement picked from measured matrix cells, with a "
+    "plan hash. apply is the only write: it runs a plan only after the user confirms its "
+    "hash in this client, and only while the plan still hashes the same."
 )
 
 CLUSTER = os.environ.get("K3D_GPU_CLUSTER", "gpu")
 CONTEXT = "k3d-" + CLUSTER
 TIMEOUT = float(os.environ.get("K3D_GPU_MCP_TIMEOUT", "60"))
+# apply runs `agent up`, which waits for the model to download and load.
+APPLY_TIMEOUT = float(os.environ.get("K3D_GPU_MCP_APPLY_TIMEOUT", "1900"))
+# A confirmation request expires after this many seconds.
+CONFIRM_TTL = 600
+PLAN_HASH_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+CONFIRM_KEY = "confirm_plan"
+PLAN_HASH_META = "k3d-gpu.io/planHash"
+# Keys requestState is signed with; per process, so state from another session fails.
+STATE_KEY = secrets.token_bytes(32)
 
 # `k3d-gpu agent up` (OpenVINO Model Server): namespace, Service and its port name.
 AGENT_NS, AGENT_SVC, AGENT_PORT_NAME = "k3d-gpu-agent", "ovms", "http"
@@ -162,7 +192,57 @@ TOOLS = [
         "annotations": {"readOnlyHint": True, "openWorldHint": False},
     },
 ]
+# plan options an agent may set. There is no bind: an off-loopback listener is
+# `share`, which is never exposed over MCP.
+PLAN_PROPS = {
+    "engine": {"type": "string", "minLength": 1, "description": "Only cells of this engine (ovms, vllm, llama.cpp)."},
+    "device": {"type": "string", "enum": ["cpu", "gpu", "npu", "hpu"], "description": "Only cells on this kind of target."},
+    "model": {"type": "string", "minLength": 1, "description": "Only cells of this model (Hugging Face repo id)."},
+    "port": {"type": "integer", "minimum": 1, "maximum": 65535, "description": "Endpoint port."},
+}
+TOOLS += [
+    {
+        "name": "hardware",
+        "title": "Hardware facts",
+        "description": "The host's facts/v1 document, exactly what 'k3d-gpu facts --json' prints: "
+                       "CPU, GPU, NPU and Gaudi targets with their usability, firmware, doctor and "
+                       "doctor --perf findings, release pins and the host fingerprint.",
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+    },
+    {
+        "name": "plan_launch",
+        "title": "Plan a launch",
+        "description": "Engine, model, placement, port and auth for this host, picked only from "
+                       "measured (green) matrix cells; exactly what 'k3d-gpu plan --json' prints. "
+                       "With no green cell it says 'unmeasured, run `k3d-gpu prove` on this box' and "
+                       "names no engine. The second text item and _meta['" + PLAN_HASH_META + "'] carry "
+                       "the plan hash that apply needs. Changes nothing.",
+        "inputSchema": {"type": "object", "properties": PLAN_PROPS, "additionalProperties": False},
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+    },
+    {
+        "name": "apply",
+        "title": "Apply a plan",
+        "description": "Run a plan from plan_launch ('k3d-gpu agent up' with its device and model). "
+                       "Pass the plan's hash and the same options given to plan_launch. The user must "
+                       "confirm the hash in this client (form elicitation); apply is refused without "
+                       "that confirmation, when the user declines, and when the plan recomputed now "
+                       "hashes differently.",
+        "inputSchema": {
+            "type": "object",
+            "properties": dict(PLAN_PROPS, plan_hash={
+                "type": "string", "pattern": PLAN_HASH_RE.pattern,
+                "description": "The hash plan_launch returned, sha256:<64 hex>."}),
+            "required": ["plan_hash"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False, "destructiveHint": True, "idempotentHint": False,
+                        "openWorldHint": False},
+    },
+]
 TOOL_NAMES = [t["name"] for t in TOOLS]
+WRITE_TOOLS = [t["name"] for t in TOOLS if not t["annotations"]["readOnlyHint"]]
 
 
 class ToolError(Exception):
@@ -188,15 +268,16 @@ def launcher_version():
     return parts[1] if rc == 0 and len(parts) == 2 and parts[0] == "k3d-gpu" else "unknown"
 
 
-def run(argv):
+def run(argv, timeout=None):
     """(returncode, stdout, stderr); returncode 127 when the program is missing."""
+    timeout = timeout or TIMEOUT
     try:
         p = subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True, text=True,
-                           timeout=TIMEOUT)
+                           timeout=timeout)
     except FileNotFoundError:
         return 127, "", argv[0] + ": not found"
     except subprocess.TimeoutExpired:
-        return 124, "", f"{argv[0]} timed out after {TIMEOUT:g}s"
+        return 124, "", f"{argv[0]} timed out after {timeout:g}s"
     return p.returncode, p.stdout, p.stderr.strip()
 
 
@@ -490,21 +571,207 @@ def cluster_health():
     return health
 
 
+# ---- hardware, plan_launch: the launcher's --json, unchanged -----------------------
+
+class Verbatim:
+    """A tool result whose text content is a command's stdout, byte for byte."""
+
+    def __init__(self, text, data, extra=None, meta=None):
+        self.text, self.data, self.extra, self.meta = text, data, extra or [], meta
+
+
+def launcher_json(argv):
+    """(stdout, parsed) of a launcher command that prints one JSON document."""
+    exe = launcher()
+    rc, out, errtext = run([exe] + argv)
+    if rc != 0:
+        raise ToolError(f"'k3d-gpu {' '.join(argv)}' failed: {errtext or f'exit {rc}'}")
+    try:
+        data = json.loads(out)
+    except ValueError:
+        raise ToolError(f"'k3d-gpu {' '.join(argv)}' printed invalid JSON") from None
+    return out, data
+
+
+def plan_argv(args):
+    argv = []
+    for key in ("engine", "device", "model", "port"):
+        if key in args:
+            argv += ["--" + key, str(args[key])]
+    return argv
+
+
+def plan_hash(text):
+    """The plan hash: sha256 of the `plan --json` stdout, as `k3d-gpu plan --hash` prints."""
+    return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def hardware():
+    out, data = launcher_json(["facts", "--json"])
+    return Verbatim(out, data)
+
+
+def plan_launch(args):
+    out, data = launcher_json(["plan", "--json"] + plan_argv(args))
+    h = plan_hash(out)
+    note = f"plan hash: {h}"
+    if data.get("decision") == "green":
+        note += " (apply needs this hash and the same options; the user confirms it in the client)"
+    else:
+        note += " (nothing to apply: the plan names no engine)"
+    return Verbatim(out, data, [note], {PLAN_HASH_META: h})
+
+
+# ---- apply: the write, behind a human-confirmed plan hash ----------------------------
+
+def b64(raw):
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def unb64(text):
+    return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
+
+
+def args_digest(args):
+    return hashlib.sha256(json.dumps(args, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def sign_state(payload):
+    body = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    mac = hmac.new(STATE_KEY, body, hashlib.sha256).digest()
+    return b64(body) + "." + b64(mac)
+
+
+def verify_state(state):
+    """The payload of a requestState this process signed, or None."""
+    if not isinstance(state, str) or state.count(".") != 1:
+        return None
+    body_text, mac_text = state.split(".")
+    try:
+        body, mac = unb64(body_text), unb64(mac_text)
+    except ValueError:
+        return None
+    if not hmac.compare_digest(hmac.new(STATE_KEY, body, hashlib.sha256).digest(), mac):
+        return None
+    try:
+        payload = json.loads(body)
+    except ValueError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def form_elicitation(caps):
+    """True when the client capabilities declare form-mode elicitation."""
+    el = caps.get("elicitation") if isinstance(caps, dict) else None
+    if not isinstance(el, dict):
+        return False
+    return not el or isinstance(el.get("form"), dict)
+
+
+def cli_hint(args):
+    return " ".join(["k3d-gpu", "apply", "--plan-hash", args["plan_hash"]] + plan_argv(args))
+
+
+class Apply:
+    """The apply tool. One instance per server, so used confirmations stay used."""
+
+    def __init__(self):
+        self.used = set()
+
+    def current_plan(self, args):
+        out, data = launcher_json(["plan", "--json"] + plan_argv(args))
+        got = plan_hash(out)
+        if got != args["plan_hash"]:
+            raise ToolError(f"refused: the plan now hashes to {got}, not {args['plan_hash']} (the host, "
+                            "matrix or options changed); call plan_launch again and have the user "
+                            "confirm the new plan")
+        if data.get("decision") != "green":
+            raise ToolError(f"refused: the plan names no engine: {data.get('message')}")
+        return data
+
+    def __call__(self, args, ctx):
+        plan = self.current_plan(args)
+        if ctx.get("legacy"):
+            raise ToolError("refused: apply needs the user to confirm the plan hash in the client, "
+                            "which this server asks for with 2026-07-28 multi round-trip elicitation; "
+                            "this session negotiated an older protocol. The user can run it in a "
+                            f"terminal: {cli_hint(args)}")
+        if not form_elicitation(ctx.get("caps")):
+            raise ToolError("refused: apply needs the user to confirm the plan hash in the client, and "
+                            "this client declares no form elicitation capability. The user can run it "
+                            f"in a terminal: {cli_hint(args)}")
+        digest = args_digest(args)
+        state = ctx.get("requestState")
+        if state is None:
+            return self.ask(args, plan, digest)
+        payload = verify_state(state)
+        if payload is None:
+            raise ToolError("refused: requestState was not issued by this server")
+        if payload.get("args") != digest or payload.get("tool") != "apply":
+            raise ToolError("refused: this confirmation was given for a different apply request")
+        if payload.get("exp", 0) < time.time():
+            raise ToolError("refused: the confirmation expired; call apply again")
+        if payload.get("nonce") in self.used:
+            raise ToolError("refused: this confirmation was already used; call apply again")
+        answer = (ctx.get("inputResponses") or {}).get(CONFIRM_KEY)
+        if not isinstance(answer, dict) or answer.get("action") != "accept":
+            action = answer.get("action") if isinstance(answer, dict) else None
+            self.used.add(payload["nonce"])
+            raise ToolError(f"refused: the user did not confirm plan {args['plan_hash']} "
+                            f"({action or 'no answer'})")
+        content = answer.get("content")
+        if not isinstance(content, dict) or content.get("confirm") is not True:
+            self.used.add(payload["nonce"])
+            raise ToolError(f"refused: the user did not confirm plan {args['plan_hash']}")
+        self.used.add(payload["nonce"])
+        exe = launcher()
+        rc, out, errtext = run([exe, "apply", "--plan-hash", args["plan_hash"]] + plan_argv(args),
+                               timeout=APPLY_TIMEOUT)
+        if rc != 0:
+            raise ToolError(f"'{cli_hint(args)}' failed: {errtext or f'exit {rc}'}")
+        return {"applied": True, "plan_hash": args["plan_hash"], "cell": plan.get("cell"),
+                "output": out.splitlines()}
+
+    def ask(self, args, plan, digest):
+        state = sign_state({"tool": "apply", "args": digest, "exp": int(time.time()) + CONFIRM_TTL,
+                            "nonce": secrets.token_hex(16)})
+        message = "\n".join(["k3d-gpu wants to apply this plan:"] + plan.get("summary", [])
+                            + [f"plan hash: {args['plan_hash']}",
+                               "Applying runs 'k3d-gpu agent up' with this engine and model."])
+        request = {"method": "elicitation/create", "params": {
+            "mode": "form", "message": message,
+            "requestedSchema": {"type": "object", "properties": {"confirm": {
+                "type": "boolean", "title": "Apply plan " + args["plan_hash"][:19],
+                "description": "Run this plan on this host.", "default": False}},
+                "required": ["confirm"]}}}
+        return {"resultType": "input_required", "inputRequests": {CONFIRM_KEY: request},
+                "requestState": state}
+
+
 # ---- MCP / JSON-RPC ----------------------------------------------------------------
 
-def call_tool(name, args):
+APPLY = Apply()
+
+
+def call_tool(name, args, ctx):
     if name == "accelerators":
         return accelerators()
     if name == "recommend_placement":
         return recommend(args, accelerators())
     if name == "agent_endpoint":
         return agent_endpoint()
+    if name == "hardware":
+        return hardware()
+    if name == "plan_launch":
+        return plan_launch(args)
+    if name == "apply":
+        return APPLY(args, ctx)
     return cluster_health()
 
 
 def check_args(name, args):
-    """Check args against the tool's inputSchema (flat properties: enum, required,
-    additionalProperties: false)."""
+    """Check args against the tool's inputSchema (flat properties: type, enum,
+    pattern, minLength, minimum, maximum, required, additionalProperties: false)."""
     schema = next(t["inputSchema"] for t in TOOLS if t["name"] == name)
     props = schema["properties"]
     extra = sorted(set(args) - set(props))
@@ -514,17 +781,37 @@ def check_args(name, args):
         if key not in args:
             raise ToolError(f"missing required argument {key!r}")
     for key, val in args.items():
-        enum = props[key].get("enum")
+        prop = props[key]
+        kind = prop.get("type")
+        if kind == "string" and not isinstance(val, str):
+            raise ToolError(f"{key} must be a string, got {val!r}")
+        if kind == "integer" and (isinstance(val, bool) or not isinstance(val, int)):
+            raise ToolError(f"{key} must be an integer, got {val!r}")
+        enum = prop.get("enum")
         if enum and val not in enum:
             raise ToolError(f"{key} must be one of {', '.join(enum)}, got {val!r}")
+        if "pattern" in prop and not re.search(prop["pattern"], val):
+            raise ToolError(f"{key} must match {prop['pattern']}, got {val!r}")
+        if kind == "string" and len(val) < prop.get("minLength", 0):
+            raise ToolError(f"{key} must not be empty")
+        if kind == "integer" and not prop["minimum"] <= val <= prop["maximum"]:
+            raise ToolError(f"{key} must be {prop['minimum']}-{prop['maximum']}, got {val}")
 
 
-def tool_result(name, args):
+def tool_result(name, args, ctx):
     try:
         check_args(name, args)
-        data = call_tool(name, args)
+        data = call_tool(name, args, ctx)
     except ToolError as e:
         return {"content": [{"type": "text", "text": str(e)}], "isError": True}
+    if isinstance(data, Verbatim):
+        result = {"content": [{"type": "text", "text": t} for t in [data.text] + data.extra],
+                  "structuredContent": data.data, "isError": False}
+        if data.meta:
+            result["_meta"] = data.meta
+        return result
+    if data.get("resultType") == "input_required":
+        return data
     return {"content": [{"type": "text", "text": json.dumps(data, indent=2, sort_keys=True)}],
             "structuredContent": data, "isError": False}
 
@@ -584,7 +871,12 @@ class Server:
             args = params.get("arguments") or {}
             if not isinstance(args, dict):
                 raise RpcError(INVALID_PARAMS, "arguments must be an object")
-            return tool_result(name, args)
+            meta = params.get("_meta")
+            modern = isinstance(meta, dict) and meta.get(META_VERSION) in MODERN_VERSIONS
+            ctx = {"legacy": not modern, "caps": meta.get(META_CAPS) if modern else None,
+                   "inputResponses": params.get("inputResponses"),
+                   "requestState": params.get("requestState")}
+            return tool_result(name, args, ctx)
         raise RpcError(METHOD_NOT_FOUND, f"Method not found: {method}")
 
     def message(self, line):
@@ -614,8 +906,8 @@ class Server:
         except Exception as e:  # keep serving; the client sees the failure
             print(f"{SERVER_NAME}: {method} {type(e).__name__}: {e!r}", file=sys.stderr)
             return error_response(rid, INTERNAL_ERROR, f"Internal error: {type(e).__name__}")
-        result["resultType"] = "complete"
-        result["_meta"] = {META_SERVER: SERVER_INFO}
+        result.setdefault("resultType", "complete")
+        result["_meta"] = dict(result.get("_meta") or {}, **{META_SERVER: SERVER_INFO})
         return {"jsonrpc": "2.0", "id": rid, "result": result}
 
 
