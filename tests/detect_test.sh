@@ -269,6 +269,24 @@ r=$(newroot ptl-old-kernel)
 kernel "${r}" 6.16.3
 pci "${r}" 0000:00:02.0 0x8086 0xb080 xe; render "${r}" 0000:00:02.0 128
 doctor_says "Panther Lake iGPU on 6.16 warns about kernel 6.17" "${r}" 'Panther Lake.*6\.17'
+doctor_says "Panther Lake iGPU on 6.16 gets no force_probe advice" "${r}" 'force_probe=b0' negate
+
+# Wildcat Lake iGPU: v6.17 INTEL_PTL_IDS binds 0xfd80/0xfd81 to ptl_desc.
+r=$(newroot wcl-old-kernel)
+kernel "${r}" 6.16.3
+pci "${r}" 0000:00:02.0 0x8086 0xfd80 xe; render "${r}" 0000:00:02.0 128
+doctor_says "Wildcat Lake iGPU on 6.16 warns about kernel 6.17" "${r}" 'Wildcat Lake.*6\.17'
+doctor_says "Wildcat Lake iGPU on 6.16 gets no force_probe advice" "${r}" 'force_probe=fd8' negate
+r=$(newroot wcl-unbound-old)
+kernel "${r}" 6.16.3
+pci "${r}" 0000:00:02.0 0x8086 0xfd80 "" 0x030000
+doctor_says "unbound Wildcat Lake on 6.16 asks for kernel 6.17" "${r}" 'Wildcat Lake \(0xfd80\) has no driver.*kernel 6\.17\+'
+doctor_says "unbound Wildcat Lake on 6.16 gets no force_probe advice" "${r}" 'force_probe=fd8' negate
+r=$(newroot wcl-617)
+kernel "${r}" 6.17.2
+pci "${r}" 0000:00:02.0 0x8086 0xfd80 xe; render "${r}" 0000:00:02.0 128
+firmware "${r}" xe/ptl_guc_70.bin
+doctor_says "Wildcat Lake iGPU on 6.17 has no kernel warning" "${r}" 'needs [0-9]' negate
 
 r=$(newroot lnl-ok)
 kernel "${r}" 6.18.1
@@ -618,6 +636,57 @@ kernel "${r}" 6.18.1
 hybrid "${r}" 0-11 12-21
 doctor_says "without cache sysfs no atom CPU is called LP" "${r}" 'ok: hybrid CPU: P-cores 0-11, E-cores 12-21 '
 doctor_says "without cache sysfs no LP line" "${r}" 'LP E-cores' negate
+
+# Lunar Lake (6/189): 4 P without SMT + 4 Skymont in cpu_atom, none with an L3.
+r=$(newroot lnl-cpu)
+kernel "${r}" 6.18.1
+cpuinfo "${r}" 6 189 "fpu avx2 avx_vnni"
+hybrid "${r}" 0-3 4-7
+for c in 0 1 2 3; do cpucache "${r}" "${c}" 3 0-3; cpucache "${r}" "${c}" 2 "${c}"; corecpus "${r}" "${c}" "${c}"; done
+for c in 4 5 6 7; do cpucache "${r}" "${c}" 2 4-7; corecpus "${r}" "${c}" "${c}"; done
+doctor_says "Lunar Lake: every cpu_atom CPU is an LP E-core" "${r}" 'ok: hybrid CPU: P-cores 0-3, E-cores none, LP E-cores 4-7 '
+doctor_says "Lunar Lake: no E-core cluster line" "${r}" 'E-core clusters' negate
+doctor_says "Lunar Lake: the expected topology gives no note" "${r}" 'Lunar Lake topology' negate
+cpucache "${r}" 4 3 0-7
+doctor_says "Lunar Lake: an E-core with an L3 still has 4+4 cores, no note" "${r}" 'Lunar Lake topology' negate
+# No cache sysfs (VM, container): no LP split, but the core counts still match.
+r=$(newroot lnl-no-cache)
+kernel "${r}" 6.18.1
+cpuinfo "${r}" 6 189 "fpu avx2 avx_vnni"
+hybrid "${r}" 0-3 4-7
+doctor_says "Lunar Lake without cache sysfs reads E-cores 4-7" "${r}" 'ok: hybrid CPU: P-cores 0-3, E-cores 4-7 '
+doctor_says "Lunar Lake without cache sysfs gives no note" "${r}" 'Lunar Lake topology' negate
+r=$(newroot lnl-5atom)
+kernel "${r}" 6.18.1
+cpuinfo "${r}" 6 189 "fpu avx2 avx_vnni"
+hybrid "${r}" 0-3 4-8
+doctor_says "Lunar Lake model with 5 atom CPUs gives a topology note" "${r}" 'note: Lunar Lake topology is 4 P-cores \+ 4 LP E-cores'
+r=$(newroot lnl-lowpower)
+kernel "${r}" 6.18.1
+cpuinfo "${r}" 6 189 "fpu avx2 avx_vnni"
+hybrid "${r}" 0-3 4-7
+mkdir -p "${r}/sys/devices/cpu_lowpower"; echo 8-9 > "${r}/sys/devices/cpu_lowpower/cpus"
+doctor_says "Lunar Lake model with a cpu_lowpower PMU gives a topology note" "${r}" 'note: Lunar Lake topology is 4 P-cores \+ 4 LP E-cores'
+r=$(newroot lnl-garbled)
+kernel "${r}" 6.18.1
+cpuinfo "${r}" 6 189 "fpu avx2 avx_vnni"
+hybrid "${r}" 0-3x 4-7
+doctor_says "Lunar Lake model with a garbled cpu_core list warns" "${r}" 'warn.*malformed CPU list'
+doctor_says "Lunar Lake model with a garbled cpu_core list gives no note" "${r}" 'Lunar Lake topology' negate
+
+# Arrow Lake-U (6/181): SMT P-cores, LP E-cores in cpu_atom without an L3.
+r=$(newroot arlu-cpu)
+kernel "${r}" 6.18.1
+cpuinfo "${r}" 6 181 "fpu avx2 avx_vnni"
+hybrid "${r}" 0-3 4-13
+for c in $(seq 0 11); do cpucache "${r}" "${c}" 3 0-11; done
+for c in 0 1; do cpucache "${r}" "${c}" 2 0-1; corecpus "${r}" "${c}" 0-1; done
+for c in 2 3; do cpucache "${r}" "${c}" 2 2-3; corecpus "${r}" "${c}" 2-3; done
+for c in $(seq 4 11); do cpucache "${r}" "${c}" 2 "$(( c < 8 ? 4 : 8 ))-$(( c < 8 ? 7 : 11 ))"; corecpus "${r}" "${c}" "${c}"; done
+for c in 12 13; do cpucache "${r}" "${c}" 2 12-13; corecpus "${r}" "${c}" "${c}"; done
+doctor_says "Arrow Lake-U: LP E-cores split out of cpu_atom" "${r}" 'ok: hybrid CPU: P-cores 0-3, E-cores 4-11, LP E-cores 12-13 '
+doctor_says "Arrow Lake-U: one thread per SMT P-core" "${r}" 'ok: physical P-cores \(one thread per core\): 0,2 '
+doctor_says "Arrow Lake-U: no Lunar Lake note" "${r}" 'Lunar Lake topology' negate
 
 # Favored cores (ITMT): CPPC highest_perf, 68 on 8-11 vs 65 on the other P-cores
 # and 39 on E-cores, as read on the i9-13900T development host.

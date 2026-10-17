@@ -62,7 +62,7 @@
 
 set -euo pipefail
 
-VERSION="0.1.36"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.37"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 # The node image defaults to the tag built from this launcher's own release
 # (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
@@ -879,6 +879,8 @@ doctor_accel_sockets() {
 # i915 part the kernel is the first release whose pciids header lists the id and
 # whose i915_pci.c no longer sets require_force_probe for its platform (ADL-S
 # from 5.16; ADL-P, and so ADL-N and RPL-P/U, from 5.17; MTL from 6.7).
+# Wildcat Lake 0xfd80/0xfd81 are in v6.17's INTEL_PTL_IDS, bound to ptl_desc
+# (no require_force_probe); v6.18 moved them to INTEL_WCL_IDS.
 intel_gpu_platform() {
     case "$1" in
         0x468[028a]|0x469[023])             echo "Alder Lake-S|5.16|i915/tgl_guc_" ;;
@@ -898,11 +900,19 @@ intel_gpu_platform() {
         0x6420|0x64a0|0x64b0)               echo "Lunar Lake|6.12|xe/lnl_guc_" ;;
         0xe20[29bcd]|0xe21[0126]|0xe22[0-3]) echo "Battlemage|6.12|xe/bmg_guc_" ;;
         0xb08[0-7f]|0xb090|0xb0a0|0xb0b0)   echo "Panther Lake|6.17|xe/ptl_guc_" ;;
-        0xfd80|0xfd81)                      echo "Wildcat Lake|6.18|xe/ptl_guc_" ;;
+        0xfd80|0xfd81)                      echo "Wildcat Lake|6.17|xe/ptl_guc_" ;;
         0xd74[0-35ab])                      echo "Nova Lake-S|7.3|xe/nvl_guc_" ;;
         0xd75[0-7f])                        echo "Nova Lake-P||" ;;
         0x674[c-f]|0x6750)                  echo "Crescent Island||" ;;
     esac
+}
+
+# Whether xe.force_probe cannot bring up this GPU on a kernel older than its
+# default-binding kernel. Panther Lake and Wildcat Lake (GuC firmware xe/ptl_guc_):
+# no xe_uc_fw.c before v6.17 has a PANTHERLAKE firmware entry, and no pciids.h
+# before v6.17 lists 0xfd80/0xfd81, so only the kernel upgrade helps.
+intel_gpu_no_force_probe() {
+    [ "$(intel_gpu_platform "$1" | cut -d'|' -f3)" = "xe/ptl_guc_" ]
 }
 
 # Whether a GPU platform (an intel_gpu_platform name) has XMX systolic matrix
@@ -1285,7 +1295,11 @@ doctor_intel() {
         if [ -n "${mink}" ] && kernel_lt "${mink}"; then
             opt=xe
             [ "${fw#i915/}" = "${fw}" ] || opt=i915
-            echo "  ${YLW}warn${RST}: ${name} (${id}) needs kernel ${mink}+ (running $(kernel_release)); older kernels need ${opt}.force_probe=${id#0x}"
+            if intel_gpu_no_force_probe "${id}"; then
+                echo "  ${YLW}warn${RST}: ${name} (${id}) needs kernel ${mink}+ (running $(kernel_release)); no older kernel can drive it, force_probe included"
+            else
+                echo "  ${YLW}warn${RST}: ${name} (${id}) needs kernel ${mink}+ (running $(kernel_release)); older kernels need ${opt}.force_probe=${id#0x}"
+            fi
         fi
         if [ -n "${fw}" ]; then
             if firmware_present "${fw}"; then
@@ -1456,6 +1470,8 @@ doctor_intel_unbound() {
         elif IFS='|' read -r name mink fw <<< "$(intel_gpu_platform "${id}")" && [ "${fw#i915/}" != "${fw}" ]; then
             # A GuC firmware under i915/ means i915 is the default driver for the part.
             lines+="  ${YLW}warn${RST}: Intel ${name} (${id}) has no driver — load i915 (kernel ${mink}+): sudo modprobe i915"$'\n'
+        elif intel_gpu_no_force_probe "${id}" && kernel_lt "${mink}"; then
+            lines+="  ${YLW}warn${RST}: Intel ${name} (${id}) has no driver — it needs kernel ${mink}+ (running $(kernel_release)); force_probe cannot bind it on older kernels"$'\n'
         else
             lines+="  ${YLW}warn${RST}: Intel ${name:-GPU/accelerator} (${id}) has no driver — if dmesg says xe does not support it yet, boot with xe.force_probe=${id#0x} i915.force_probe=!${id#0x}"$'\n'
         fi
@@ -1577,9 +1593,25 @@ doctor_cpu_accels() {
         lines+="  ok: hybrid CPU: P-cores $(hybrid_cpus core), E-cores $(efficient_cpus) — up leaves the NRI balloons policy to another stack (K3D_GPU_BALLOONS=${BALLOONS}, K3D_GPU_VENDORS=${VENDORS_REQUEST})"$'\n'
     elif has_hybrid; then
         lp=$(lowpower_cpus) e=$(efficient_cpus) cl=$(ecore_clusters) pp=$(pcore_physical_cpus)
-        lines+="  ok: hybrid CPU: P-cores $(hybrid_cpus core), E-cores ${e:-none}${lp:+, LP E-cores ${lp}} — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient|lowpower|ecluster|pcore-physical|latency"$'\n'
+        # With no non-LP E-cores (Lunar Lake) the efficient and ecluster balloons have no CPUs to offer.
+        lines+="  ok: hybrid CPU: P-cores $(hybrid_cpus core), E-cores ${e:-none}${lp:+, LP E-cores ${lp}} — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance${e:+|efficient}|lowpower${e:+|ecluster}|pcore-physical|latency"$'\n'
         [ -z "${cl}" ] || lines+="  ok: E-core clusters (shared L2): ${cl} — k3d-gpu.io/cores=ecluster gives a pod 4 E-cores of one cluster"$'\n'
         [ -z "${pp}" ] || lines+="  ok: physical P-cores (one thread per core): ${pp} — k3d-gpu.io/cores=pcore-physical and latency show pods one thread per core"$'\n'
+        # Lunar Lake (INTEL_LUNARLAKE_M, family 6 model 189) is hybrid_big_small in
+        # arch/x86/events/intel/core.c: every SKU on ARK has 4 P-cores without SMT
+        # and 4 LP E-cores, all in cpu_atom, and no cpu_lowpower PMU. The note
+        # compares PMU core counts only: whether the LP split above found them
+        # depends on cache sysfs, which a VM or container may not expose.
+        if [ "$(cpu_family_model)" = "6 189" ]; then
+            local lnl_p lnl_e
+            lnl_p=$(hybrid_cpus core) lnl_e=$(hybrid_cpus atom)
+            if ! lnl_p=$([ -z "${lnl_p}" ] || cpulist_expand "${lnl_p}") || ! lnl_e=$([ -z "${lnl_e}" ] || cpulist_expand "${lnl_e}"); then
+                lines+="  ${YLW}warn${RST}: cpu_core or cpu_atom lists a malformed CPU list ($(hybrid_cpus core) / $(hybrid_cpus atom)); the Lunar Lake core-count check is skipped"$'\n'
+            elif [ -n "$(hybrid_cpus lowpower)" ] || [ "$(grep -c . <<< "${lnl_p}")" -ne 4 ] \
+                || [ "$(grep -c . <<< "${lnl_e}")" -ne 4 ]; then
+                lines+="  note: Lunar Lake topology is 4 P-cores + 4 LP E-cores in cpu_atom; this host differs, so the balloons follow sysfs as read above"$'\n'
+            fi
+        fi
     elif is_active hybrid; then
         lines+="  ${RED}fail${RST}: hybrid requested but the CPU has no online P-core and E-core PMUs (/sys/devices/cpu_core, cpu_atom or cpu_lowpower)"$'\n'
         FAIL=1
@@ -1726,6 +1758,7 @@ exp_unbound_gpu_ids() {
         [ -n "${dev}" ] || continue
         [ -z "$(bound_driver "${dev}")" ] || continue
         [ -z "$(npu_platform "$(cat "${dev}/device" 2>/dev/null)")" ] || continue
+        ! intel_gpu_no_force_probe "$(pci_id "${dev}/device")" || continue
         ids+=("$(pci_id "${dev}/device" | sed 's/^0x//')")
     done < <(exp_intel_gpu_pci)
     local IFS=,
@@ -4886,6 +4919,8 @@ hs_checks() {
         if [ -n "${mink}" ] && [ -z "${drv}" ] && kernel_lt "${mink}" && [ "${fw#i915/}" != "${fw}" ]; then
             # i915 is the default driver for this part; xe does not support it on these kernels.
             notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs the boot option i915.force_probe=${id#0x} (or kernel ${mink}+)"$'\n'
+        elif [ -z "${drv}" ] && intel_gpu_no_force_probe "${id}" && kernel_lt "${mink}"; then
+            notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs kernel ${mink}+ (running $(kernel_release)); force_probe cannot bind it on older kernels"$'\n'
         elif [ -z "${mink}" ] || { [ -z "${drv}" ] && kernel_lt "${mink}"; }; then
             notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs the boot options xe.force_probe=${id#0x} i915.force_probe=!${id#0x}${mink:+ (or kernel ${mink}+)}"$'\n'
         elif kernel_lt "${mink}"; then
