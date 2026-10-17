@@ -1,0 +1,250 @@
+nri_cpu_balloons: hybrid-aware CPU reservation and balloon placement
+
+Against intel/enterprise-agent-toolkit @0ecf67a. Prepared for upstream; not sent.
+Apply from the EAT checkout root: git apply enterprise-agent-toolkit.patch
+
+compute_reserved_cpus.sh assumes Xeon numbering, where the second half of each
+NUMA node's CPU ids are the hyperthread siblings of the first half. Intel hybrid
+client CPUs number siblings adjacently (0-1, 2-3, ...) and add E-cores without
+siblings. On an i9-13900T (P-cores 0-15, E-cores 16-31) the 8-CPU default
+reserves 0,1,2,3,16,17,18,19: two whole P-cores lost to system pods.
+
+- compute_reserved_cpus.sh reads /sys/devices/system/node/node*/cpulist and each
+  CPU's topology/thread_siblings_list, and reserves whole physical cores, lowest
+  ids first. When /sys/devices/cpu_core and cpu_atom both list CPUs (hybrid) it
+  takes E-cores first. Xeon layouts give the same lists as before (1 and 2 NUMA
+  nodes, with and without HT, 3/7/8 CPUs). One case differs on purpose: with HT
+  on and a NUMA node smaller than twice its share, the old script took the
+  lowest CPU ids (half-cores), the new one still takes whole cores. The
+  i9-13900T now gets 16-23. It no longer needs lscpu.
+- get_optimized_cpu_topology.yaml sets nri_hybrid_cpu from the same PMU files
+  (grep, since sysfs files report a size even when empty). That file only runs
+  when the role computes nri_reserved_cpu_list, so set nri_hybrid_cpu yourself
+  when you pass nri_reserved_cpu_list (defaults/main.yaml says so).
+- generic-balloon-values.yaml.j2, only when nri_hybrid_cpu is true: vllm-balloon
+  gets preferCoreType: performance, and a new agent-control-plane balloon type
+  (preferCoreType: efficient, one balloon, at least 2 CPUs) takes the namespaces
+  in nri_agent_namespaces, listed before "reserved" so they match first. The
+  rendered values are unchanged on non-hybrid hosts.
+- defaults/main.yaml: nri_agent_namespaces = genai-gateway (LiteLLM, Langfuse),
+  redis, pgvector, agent-sandbox-system, openshell-system, openshell-sandboxes,
+  flowise, as deployed by this repo.
+
+Checks run: the script against fake sysfs trees (k3d-gpu tests/reserved_cpus_test.sh);
+the template rendered for hybrid and Xeon, then helm template with chart
+nri-resource-policy-balloons v0.14.0, and the BalloonsPolicy validated against
+that chart's CRD schema; shellcheck v0.11.0. Not run on a live cluster.
+
+diff --git a/core/roles/nri_cpu_balloons/defaults/main.yaml b/core/roles/nri_cpu_balloons/defaults/main.yaml
+--- a/core/roles/nri_cpu_balloons/defaults/main.yaml
++++ b/core/roles/nri_cpu_balloons/defaults/main.yaml
+@@ -23,6 +23,19 @@
+     preferNewBalloons: true
+     hideHyperthreads: false
+ 
++# Agent control-plane namespaces. On a hybrid CPU (P-cores + E-cores) they share one
++# E-core balloon, the vLLM balloon prefers P-cores and the reserved CPUs come from E-cores.
++# nri_hybrid_cpu is detected only when this role computes nri_reserved_cpu_list; if
++# you set nri_reserved_cpu_list, set nri_hybrid_cpu: true too on a hybrid CPU.
++nri_agent_namespaces:
++  - genai-gateway
++  - redis
++  - pgvector
++  - agent-sandbox-system
++  - openshell-system
++  - openshell-sandboxes
++  - flowise
++
+ # System reserved CPU percentage (for single node clusters)
+ system_reserved_cpu_percent: 50
+ 
+diff --git a/core/roles/nri_cpu_balloons/templates/generic-balloon-values.yaml.j2 b/core/roles/nri_cpu_balloons/templates/generic-balloon-values.yaml.j2
+--- a/core/roles/nri_cpu_balloons/templates/generic-balloon-values.yaml.j2
++++ b/core/roles/nri_cpu_balloons/templates/generic-balloon-values.yaml.j2
+@@ -21,6 +21,15 @@
+       minCPUs: 1
+       maxCPUs: 1024
+       allocatorPriority: "high"
++{% if nri_hybrid_cpu | default(false) | bool %}
++      # Hybrid CPU (P-cores + E-cores): inference on P-cores, agent services on E-cores.
++      preferCoreType: "performance"
++    - name: "agent-control-plane"
++      preferCoreType: "efficient"
++      minCPUs: 2
++      maxBalloons: 1
++      namespaces: {{ nri_agent_namespaces | to_json }}
++{% endif %}
+     - name: "reserved"
+       allocatorPriority: "high"
+       namespaces:
+diff --git a/core/roles/utils/files/compute_reserved_cpus.sh b/core/roles/utils/files/compute_reserved_cpus.sh
+--- a/core/roles/utils/files/compute_reserved_cpus.sh
++++ b/core/roles/utils/files/compute_reserved_cpus.sh
+@@ -1,69 +1,86 @@
+ #!/bin/bash
+ # Copyright (C) 2025-2026 Intel Corporation
+ # SPDX-License-Identifier: Apache-2.0
++#
++# Prints NRI_RESERVED_CPU_LIST=<cpus>: TOTAL_RESERVED CPUs spread evenly over the
++# NUMA nodes. Each node gives whole physical cores (a CPU and its hyperthread
++# siblings, from topology/thread_siblings_list), lowest CPU ids first. On a hybrid
++# CPU (both /sys/devices/cpu_core and cpu_atom list CPUs) E-cores are taken before
++# P-cores, so the reserve does not eat the cores inference runs on.
++# SYSFS overrides the sysfs root (tests point it at a fake tree).
+ set -euo pipefail
+ 
+-TOTAL_RESERVED=$1
+-if [ -z "$TOTAL_RESERVED" ] || [ "$TOTAL_RESERVED" -le 0 ]; then
++TOTAL_RESERVED=${1:-}
++if ! [[ "$TOTAL_RESERVED" =~ ^[0-9]+$ ]] || [ "$TOTAL_RESERVED" -le 0 ]; then
+   echo "Error: missing or invalid TOTAL_RESERVED argument (must be > 0)" >&2
+   exit 1
+ fi
++SYSFS=${SYSFS:-/sys}
+ 
+-total_numa=$(lscpu | awk -F: '/NUMA node\(s\):/{print $2}' | tr -d ' ')
+-if [ -z "$total_numa" ]; then
+-  echo "Error: failed to detect NUMA nodes from lscpu" >&2
+-  exit 1
+-fi
++# Kernel CPU list ("0-3,8,10-11") -> one CPU number per line.
++expand_cpulist() {
++  local part
++  for part in ${1//,/ }; do
++    if [[ "$part" == *-* ]]; then seq "${part%-*}" "${part#*-}"; else echo "$part"; fi
++  done
++}
+ 
+-threads_per_core=$(lscpu | awk '/Thread.*per core:/{print $4}')
+-[ -n "$threads_per_core" ] || threads_per_core=1
++# NUMA nodes as CPU lists, one per line; a kernel without NUMA sysfs is one node.
++numa_cpulists() {
++  local node cpus found=false
++  for node in $(printf '%s\n' "$SYSFS"/devices/system/node/node[0-9]* | sort -V); do
++    # sysfs files report a size even when empty, so test the content (memory-only nodes have no CPUs).
++    cpus=$(cat "$node/cpulist" 2>/dev/null || true)
++    [ -n "$cpus" ] || continue
++    found=true
++    echo "$cpus"
++  done
++  if [ "$found" = false ]; then cat "$SYSFS/devices/system/cpu/online" 2>/dev/null || true; fi
++}
+ 
+-ht_enabled=false
+-[ "$threads_per_core" -eq 2 ] && ht_enabled=true
++declare -A ecore=()
++atom=$(cat "$SYSFS/devices/cpu_atom/cpus" 2>/dev/null || true)
++core=$(cat "$SYSFS/devices/cpu_core/cpus" 2>/dev/null || true)
++if [ -n "$atom" ] && [ -n "$core" ]; then
++  for cpu in $(expand_cpulist "$atom"); do ecore[$cpu]=1; done
++fi
+ 
++numa_lists=$(numa_cpulists)
++total_numa=$(grep -c . <<< "$numa_lists" || true)
++if [ "$total_numa" -eq 0 ]; then
++  echo "Error: failed to read NUMA node CPU lists from $SYSFS" >&2
++  exit 1
++fi
+ cpus_per_numa=$(( (TOTAL_RESERVED + total_numa - 1) / total_numa ))
+ out=""
+ 
+-for i in $(seq 0 $((total_numa - 1))); do
+-  line=$(lscpu | grep "NUMA node$i CPU" | cut -d: -f2 | xargs)
+-  if [ -z "$line" ]; then
+-    echo "Error: failed to read NUMA node$i CPU list from lscpu" >&2
+-    exit 1
+-  fi
+-  IFS=',' read -ra segments <<< "$line"
+-  declare -a all_cpus=()
+-  for seg in "${segments[@]}"; do
+-    seg=$(echo "$seg" | xargs)
+-    if [[ "$seg" == *"-"* ]]; then
+-      IFS='-' read -r start end <<< "$seg"
+-      for ((c=start; c<=end; c++)); do all_cpus+=("$c"); done
+-    else
+-      all_cpus+=("$seg")
+-    fi
+-  done
+-  IFS=$'\n' sorted=($(printf '%s\n' "${all_cpus[@]}" | sort -n))
+-  unset IFS
+-  total_cpus_in_numa=${#sorted[@]}
+-  if [ "$ht_enabled" = true ] && [ "$total_cpus_in_numa" -ge "$((cpus_per_numa * 2))" ]; then
+-    half=$((total_cpus_in_numa / 2))
+-    physical_half=("${sorted[@]:0:$half}")
+-    ht_half=("${sorted[@]:$half:$half}")
+-    reserve_from_physical=$(( (cpus_per_numa + 1) / 2 ))
+-    reserve_from_ht=$(( cpus_per_numa - reserve_from_physical ))
+-    selected=()
+-    for ((j=0; j<reserve_from_physical && j<${#physical_half[@]}; j++)); do
+-      selected+=("${physical_half[$j]}")
+-    done
+-    for ((j=0; j<reserve_from_ht && j<${#ht_half[@]}; j++)); do
+-      selected+=("${ht_half[$j]}")
++while read -r cpulist; do
++  declare -A in_node=() seen=()
++  for cpu in $(expand_cpulist "$cpulist"); do in_node[$cpu]=1; done
++  # One line per physical core: "<rank> <first cpu> <cpus in the core>", rank 0 = E-core.
++  cores=$(
++    for cpu in $(printf '%s\n' "${!in_node[@]}" | sort -n); do
++      [ -z "${seen[$cpu]:-}" ] || continue
++      siblings=$(cat "$SYSFS/devices/system/cpu/cpu$cpu/topology/thread_siblings_list" 2>/dev/null || echo "$cpu")
++      members=""
++      for s in $(expand_cpulist "$siblings"); do
++        [ -n "${in_node[$s]:-}" ] || continue
++        seen[$s]=1
++        members="$members $s"
++      done
++      echo "$([ -n "${ecore[$cpu]:-}" ] && echo 0 || echo 1) $cpu$members"
++    done | sort -k1,1n -k2,2n
++  )
++  selected=()
++  while read -r _ _ members; do
++    for cpu in $members; do
++      [ "${#selected[@]}" -lt "$cpus_per_numa" ] || break 2
++      selected+=("$cpu")
+     done
+-  else
+-    selected=("${sorted[@]:0:$cpus_per_numa}")
+-  fi
+-  IFS=$'\n' selected_sorted=($(printf '%s\n' "${selected[@]}" | sort -n))
+-  unset IFS
+-  for cpu in "${selected_sorted[@]}"; do out="${out}${cpu},"; done
+-done
++  done <<< "$cores"
++  for cpu in $(printf '%s\n' "${selected[@]}" | sort -n); do out="${out}${cpu},"; done
++  unset in_node seen
++done <<< "$numa_lists"
+ 
+ out="${out%,}"
+ if [ -z "$out" ]; then
+diff --git a/core/roles/utils/tasks/get_optimized_cpu_topology.yaml b/core/roles/utils/tasks/get_optimized_cpu_topology.yaml
+--- a/core/roles/utils/tasks/get_optimized_cpu_topology.yaml
++++ b/core/roles/utils/tasks/get_optimized_cpu_topology.yaml
+@@ -364,6 +364,27 @@
+   ansible.builtin.debug:
+     msg: "nri_reserved_cpu_list={{ nri_reserved_cpu_list }}"
+ 
++# Intel hybrid CPUs register one PMU per core type, each listing its online CPUs.
++# sysfs files report a size even when empty, so test the content, not -s.
++- name: Detect hybrid CPU (P-cores and E-cores)
++  kubernetes.core.k8s_exec:
++    pod: "{{ optimizer_pod_name }}"
++    container: ubuntu
++    namespace: kube-system
++    command: bash -c "grep -q . /sys/devices/cpu_core/cpus 2>/dev/null && grep -q . /sys/devices/cpu_atom/cpus 2>/dev/null && echo yes || echo no"
++  register: hybrid_cpu_check
++  changed_when: false
++  when: nri_hybrid_cpu is not defined
++  tags:
++    - install
++
++- name: Set nri_hybrid_cpu fact
++  ansible.builtin.set_fact:
++    nri_hybrid_cpu: "{{ (hybrid_cpu_check.stdout | default('') | trim) == 'yes' }}"
++  when: nri_hybrid_cpu is not defined
++  tags:
++    - install
++
+ - name: Parse accurate CPU topology results
+   ansible.builtin.set_fact:
+     numa_cpu_counts: >-

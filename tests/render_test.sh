@@ -95,6 +95,42 @@ cp "${f}" "${WORK}/first.yml"
 run "${r}" demo
 cmp -s "${f}" "${WORK}/first.yml"
 verdict $? "re-rendering the same pin is byte-identical" "$(diff "${WORK}/first.yml" "${f}")"
+! grep -q 'meta.helm.sh/' "${f}"
+verdict $? "without HELM_ADOPTABLE no Helm ownership annotations are added" "$(grep 'meta.helm.sh/' "${f}")"
+
+# --- HELM_ADOPTABLE --------------------------------------------------------------
+r=$(newroot adoptable 1.0.0 "${SUM100}")
+echo HELM_ADOPTABLE=yes >> "${r}/hack/components/demo/component.conf"
+run "${r}" demo
+f="${r}/share/demo.yml"
+# The templated ConfigMap carries both annotations right under metadata; the CRD none.
+cm=$(awk '/^# Source: demo\/templates\/cm.yaml/{t=1} t' "${f}")
+crd=$(awk '/^# Source: demo\/crds\//{t=1} /^---$/{if (t) exit} t' "${f}")
+if [ "${RC}" -eq 0 ] \
+    && [ "$(grep -A3 -x 'metadata:' <<< "${cm}")" = $'metadata:\n  annotations:\n    meta.helm.sh/release-name: demo-rel\n    meta.helm.sh/release-namespace: demo-ns' ] \
+    && ! grep -q 'meta.helm.sh/' <<< "${crd}" && [ -n "${crd}" ]; then
+    ok "HELM_ADOPTABLE=yes annotates templated objects with the release, not CRDs"
+else
+    fail "HELM_ADOPTABLE=yes annotates templated objects with the release, not CRDs" "rc=${RC} ${OUT}
+$(cat "${f}" 2>/dev/null)"
+fi
+
+# A template that already has metadata.annotations would get a duplicate key.
+r=$(newroot adoptable-dup 1.0.0 "${SUM100}")
+echo HELM_ADOPTABLE=yes >> "${r}/hack/components/demo/component.conf"
+mkdir -p "${WORK}/dupsrc"
+tar -xzf "${WORK}/served/demo-1.0.0.tgz" -C "${WORK}/dupsrc"
+sed -i 's/^metadata:$/metadata:\n  annotations:\n    a: b/' "${WORK}/dupsrc/demo/templates/cm.yaml"
+helm package "${WORK}/dupsrc/demo" --version 1.0.1 --destination "${WORK}/dupchart" >/dev/null
+cp "${WORK}/dupchart/demo-1.0.1.tgz" "${WORK}/served/"
+helm repo index "${WORK}/served" --url "${URL}"
+sed -i "s/^CHART_VERSION=.*/CHART_VERSION=1.0.1/; s/^CHART_SHA256=.*/CHART_SHA256=$(sha256sum "${WORK}/served/demo-1.0.1.tgz" | cut -d' ' -f1)/" \
+    "${r}/hack/components/demo/component.conf"
+run "${r}" demo
+[ "${RC}" -ne 0 ] && grep -q 'already has metadata.annotations' <<< "${OUT}" && [ ! -e "${r}/share/demo.yml" ]
+verdict $? "HELM_ADOPTABLE refuses a template that already has annotations" "rc=${RC} ${OUT}"
+rm -f "${WORK}/served/demo-1.0.1.tgz"
+helm repo index "${WORK}/served" --url "${URL}"
 
 # --- sha256 pin ----------------------------------------------------------------
 r=$(newroot badsum 1.0.0 "${SUM110}")

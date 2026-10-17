@@ -26,6 +26,8 @@
 #   wsl     Intel GPU on Windows through WSL2 GPU-PV (/dev/dxg + /usr/lib/wsl)
 #                                                         -> gpu.intel.com/dxg
 #           NVIDIA on WSL2 is the nvidia vendor: --gpus hands the node /dev/dxg via the toolkit.
+#           K3D_GPU_BALLOONS=external leaves the balloons policy (hybrid, numa) to a Helm
+#           release (e.g. Intel's Enterprise Agent Toolkit); without hybrid or numa it is disabled.
 #           DSA/IAA/QAT need host setup first (work queues / SR-IOV VFs); doctor says what is missing.
 #   up also labels nodes with CPU ISA extensions (NFD cpu-cpuid names), Intel GPU XMX and
 #   media engine counts, and the NPU generation; doctor prints the labels.
@@ -73,6 +75,7 @@ DEVICE_TEST_IMAGE="${K3D_GPU_DEVICE_TEST_IMAGE:-busybox:1.37}"
 VENDORS_REQUEST="${K3D_GPU_VENDORS:-auto}"
 NODE_LABELS="${K3D_GPU_NODE_LABELS:-}" # extra key=value node labels, comma-separated
 K3S_ARGS="${K3D_GPU_K3S_ARGS:-}"       # extra k3s server flags, space-separated
+BALLOONS="${K3D_GPU_BALLOONS:-k3s}"    # owner of the NRI balloons policy: k3s (baked addon) | external
 FAIL=0           # set by doctor_* checks
 INTEL_DRIVERS=() # "<driver> <pci-device-id>" per Intel render node (filled by detect_intel)
 NPU_IDS=()       # PCI device id per Intel NPU accel node (filled by detect_npu)
@@ -133,6 +136,7 @@ Environment:
   K3D_GPU_QAT_PLUGIN    Intel QAT plugin yaml  (default: ${SHARE_DIR}/intel-qat-plugin.yml)
   K3D_GPU_HYBRID_PLUGIN NRI balloons yaml for hybrid and numa (default: ${SHARE_DIR}/nri-balloons.yml)
   K3D_GPU_WSL_PLUGIN    WSL2 Intel GPU plugin yaml (default: ${SHARE_DIR}/intel-gpu-wsl-plugin.yml)
+  K3D_GPU_BALLOONS      k3s | external: owner of the NRI balloons policy (default: k3s)
   K3D_GPU_NPU_EMBEDDINGS NPU embeddings recipe (default: ${SHARE_DIR}/npu-embeddings.yml)
   K3D_GPU_MODEL_GB      model size checked by doctor --perf (same as --model-gb)
   K3D_GPU_AGENT_DEVICE  agent device: auto | CPU | GPU | NPU | HPU (default: auto; auto
@@ -907,8 +911,18 @@ resolve_vendors() {
             esac
         done
     fi
+    case "${BALLOONS}" in
+        k3s|external) ;;
+        *) err "unknown K3D_GPU_BALLOONS '${BALLOONS}' (use k3s or external)" ;;
+    esac
     return 0
 }
+
+# The baked NRI balloons addon runs only on a hybrid or NUMA host with k3s owning it.
+# A node runs one NRI resource policy; otherwise it is left to whatever stack installs
+# one (Intel's Enterprise Agent Toolkit installs the same chart as Helm release
+# nri-resource-policy-balloons in kube-system).
+balloons_baked() { { is_active hybrid || is_active numa; } && [ "${BALLOONS}" = k3s ]; }
 
 is_active() {
     local v
@@ -954,9 +968,9 @@ vendor_daemonset() {  # prints: namespace name manifest
         dsa)    echo "kube-system intel-dsa-plugin ${DSA_PLUGIN_MANIFEST}" ;;
         iaa)    echo "kube-system intel-iaa-plugin ${IAA_PLUGIN_MANIFEST}" ;;
         qat)    echo "kube-system intel-qat-plugin ${QAT_PLUGIN_MANIFEST}" ;;
-        hybrid) echo "kube-system nri-resource-policy-balloons ${HYBRID_PLUGIN_MANIFEST}" ;;
+        hybrid) if balloons_baked; then echo "kube-system nri-resource-policy-balloons ${HYBRID_PLUGIN_MANIFEST}"; fi ;;
         # The same balloons policy; listed once when the host is hybrid too.
-        numa)   is_active hybrid || echo "kube-system nri-resource-policy-balloons ${HYBRID_PLUGIN_MANIFEST}" ;;
+        numa)   if ! is_active hybrid && balloons_baked; then echo "kube-system nri-resource-policy-balloons ${HYBRID_PLUGIN_MANIFEST}"; fi ;;
         wsl)    echo "kube-system intel-gpu-plugin-wsl ${WSL_PLUGIN_MANIFEST}" ;;
     esac
 }
@@ -1187,7 +1201,7 @@ doctor_intel_unbound() {
 # NUMA placement and RDT, appended to the caller's ${lines}. RDT is guidance only:
 # turning it on rewrites the host's resctrl groups, which the launcher never does.
 doctor_numa() {
-    local count cpu_nodes="" mem_only="" n snc sockets flags rdt=""
+    local count cpu_nodes="" mem_only="" n snc sockets flags rdt="" own
     count=$(numa_count)
     for n in $(numa_nodes); do
         if [ -n "$(numa_cpus "${n}")" ]; then cpu_nodes+=" ${n}"; else mem_only+=" ${n}"; fi
@@ -1196,7 +1210,9 @@ doctor_numa() {
         snc=$(snc_per_l3)
         sockets=$(numa_sockets | awk 'END {print NR}')
         [ "${sockets}" -gt 0 ] || sockets="?"
-        lines+="  ok: NUMA: ${count} node(s) ($(wc -w <<< "${cpu_nodes}") with CPUs), SNC ${snc:-unknown} per L3, ${sockets} socket(s) — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=replica for a balloon inside one NUMA node, memory pinned to it, near the pod's devices"$'\n'
+        own="up deploys the NRI balloons policy"
+        balloons_baked || own="up leaves the NRI balloons policy to another stack (K3D_GPU_BALLOONS=${BALLOONS}, K3D_GPU_VENDORS=${VENDORS_REQUEST})"
+        lines+="  ok: NUMA: ${count} node(s) ($(wc -w <<< "${cpu_nodes}") with CPUs), SNC ${snc:-unknown} per L3, ${sockets} socket(s) — ${own}; label pods k3d-gpu.io/cores=replica for a balloon inside one NUMA node, memory pinned to it, near the pod's devices"$'\n'
         [ -z "${mem_only}" ] || lines+="  info: NUMA node(s)$(sed 's/ /, /g; s/^,//' <<< "${mem_only}") have memory but no CPUs (HBM flat mode or CXL); replica pods follow the kernel's node distances, and a balloon type with memoryTypes [HBM] or [DRAM] narrows them"$'\n'
     elif is_active numa; then
         lines+="  ${RED}fail${RST}: NUMA requested but the host has ${count} NUMA node(s) (/sys/devices/system/node)"$'\n'
@@ -1255,7 +1271,9 @@ doctor_cpu_accels() {
         lines+="  ${RED}fail${RST}: QAT requested but no QAT PF with VFs"$'\n'
         FAIL=1
     fi
-    if has_hybrid; then
+    if has_hybrid && ! balloons_baked; then
+        lines+="  ok: hybrid CPU: P-cores $(hybrid_cpus core), E-cores $(efficient_cpus) — up leaves the NRI balloons policy to another stack (K3D_GPU_BALLOONS=${BALLOONS}, K3D_GPU_VENDORS=${VENDORS_REQUEST})"$'\n'
+    elif has_hybrid; then
         lp=$(lowpower_cpus) e=$(efficient_cpus) cl=$(ecore_clusters) pp=$(pcore_physical_cpus)
         lines+="  ok: hybrid CPU: P-cores $(hybrid_cpus core), E-cores ${e:-none}${lp:+, LP E-cores ${lp}} — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient|lowpower|ecluster|pcore-physical|latency"$'\n'
         [ -z "${cl}" ] || lines+="  ok: E-core clusters (shared L2): ${cl} — k3d-gpu.io/cores=ecluster gives a pod 4 E-cores of one cluster"$'\n'
@@ -2984,6 +3002,13 @@ cmd_up() {
         create_args+=(--volume="${WSL_LIB}:${WSL_LIB}:ro@server:*;agent:*")
         [ -e /dev/dxg ] || warn "no /dev/dxg on host — the WSL2 GPU will not be visible in the node"
     fi
+    # k3s re-applies every baked manifest at each start (pkg/deploy WatchFiles), which
+    # would undo a Helm upgrade of the policy. --disable=nri-balloons makes k3s delete
+    # the baked nri-balloons.yaml and every object it created instead, so a Helm
+    # release can own the node's NRI policy.
+    if ! balloons_baked; then
+        create_args+=(--k3s-arg="--disable=nri-balloons@server:*")
+    fi
     # AMX is a CPU feature: no plugin, just NFD-style labels pods can select on.
     if is_active amx; then
         while read -r label; do
@@ -3073,10 +3098,10 @@ cmd_up() {
     # start while an online CPU is in neither (pkg/sysfs checkCoreKinds). Arrow
     # Lake-H lists its LP E-cores in cpu_lowpower, so hand them to the E-core kind
     # through the plugin's OVERRIDE_SYS_ATOM_CPUS.
-    if is_active hybrid && [ -n "$(hybrid_cpus lowpower)" ]; then
+    if is_active hybrid && balloons_baked && [ -n "$(hybrid_cpus lowpower)" ]; then
         kubectl -n kube-system set env daemonset/nri-resource-policy-balloons "OVERRIDE_SYS_ATOM_CPUS=$(ecore_kind_cpus)"
     fi
-    if is_active hybrid && [ -n "${fav}" ]; then
+    if is_active hybrid && balloons_baked && [ -n "${fav}" ]; then
         latency_prefer_favored "${fav%% *}"
     fi
     exp_post_up
