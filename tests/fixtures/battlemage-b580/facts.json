@@ -77,6 +77,15 @@
         "from": null,
         "level": "ok",
         "revert": null,
+        "section": "Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...",
+        "text": "GPU sharing off: one pod per Intel GPU (K3D_GPU_INTEL_SHARED=auto)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
         "section": "Intel CPU built-in accelerators...",
         "text": "CPU ISA: AVX512BF16 AVX512F AVX512VNNI — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)",
         "why": null
