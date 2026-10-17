@@ -74,12 +74,12 @@ class RemoteError(Exception):
         self.code = code
 
 
-_SECRETS = []  # every key this process loaded; scrub() masks them in any text
+_LOADED = []  # every key this process loaded; scrub() masks them in any text
 
 
 def scrub(text):
     text = str(text)
-    for k in _SECRETS:
+    for k in _LOADED:
         text = text.replace(k, mask(k))
     return text
 
@@ -217,7 +217,7 @@ def load_key(path, env):
 def _checked_key(key, source):
     """A key is printable ASCII without spaces (an HTTP header value). Anything else
     is refused by its source's name only: the message never quotes the value."""
-    _SECRETS.append(key)
+    _LOADED.append(key)
     if not re.fullmatch(r"[\x21-\x7e]+", key):
         raise RemoteError(f"the key from {source} has a space, a line break, a control or a non-ASCII "
                           "character inside it (a pasted multi-line value?); it must be one line of "

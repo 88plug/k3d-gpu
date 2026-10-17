@@ -450,18 +450,18 @@ class Hostile(unittest.TestCase):
     """Endpoints, gateways and portals that misbehave: the key never reaches any
     output, and every failure is a clean message with exit 4, never a traceback."""
 
-    SECRET = "sk-test-SECRETVALUE1234567"
+    PLANTED = "sk-test-PLANTEDVALUE1234567"
 
     def setUp(self):
         self.stub = Stub(key=None)
-        self.env = {"OPENAI_BASE_URL": self.stub.url, "OPENAI_API_KEY": self.SECRET}
+        self.env = {"OPENAI_BASE_URL": self.stub.url, "OPENAI_API_KEY": self.PLANTED}
 
     def tearDown(self):
         self.stub.close()
 
     def assertClean(self, text):
-        self.assertNotIn(self.SECRET, text)
-        self.assertNotIn(self.SECRET[:14], text, "a partial key prefix leaked")
+        self.assertNotIn(self.PLANTED, text)
+        self.assertNotIn(self.PLANTED[:14], text, "a partial key prefix leaked")
         self.assertNotIn("Traceback", text)
 
     def test_json_error_echoing_the_authorization_header_is_scrubbed(self):
@@ -493,7 +493,7 @@ class Hostile(unittest.TestCase):
                 self.assertClean(p.stdout + p.stderr)
 
     def test_key_with_a_newline_is_refused_by_name_only(self):
-        p = run_cli(["check"], dict(self.env, OPENAI_API_KEY=self.SECRET + "\nline2"))
+        p = run_cli(["check"], dict(self.env, OPENAI_API_KEY=self.PLANTED + "\nline2"))
         self.assertEqual(p.returncode, 2, p.stderr)
         self.assertClean(p.stdout + p.stderr)
         self.assertNotIn("line2", p.stdout + p.stderr)
@@ -503,8 +503,8 @@ class Hostile(unittest.TestCase):
     def test_key_file_with_inner_whitespace_or_control_chars_is_refused(self):
         with tempfile.TemporaryDirectory() as d:
             kf = os.path.join(d, "k")
-            for body in (f"OPENAI_API_KEY={self.SECRET} tail\n", f"OPENAI_API_KEY={self.SECRET}\x07\n",
-                         f"OPENAI_API_KEY={self.SECRET}…\n"):
+            for body in (f"OPENAI_API_KEY={self.PLANTED} tail\n", f"OPENAI_API_KEY={self.PLANTED}\x07\n",
+                         f"OPENAI_API_KEY={self.PLANTED}…\n"):
                 with open(kf, "w") as f:
                     f.write(body)
                 os.chmod(kf, 0o600)
