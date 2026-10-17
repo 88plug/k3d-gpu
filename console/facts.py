@@ -94,7 +94,7 @@ def parse_transcript(text, code):
 def target(**kw):
     t = {"id": None, "kind": None, "vendor": None, "device_id": None, "pci": None, "platform": None,
          "driver": None, "resource": None, "xmx": None, "generation": None, "usable": True,
-         "reason": None, "cpu": None}
+         "reason": None, "fix": None, "cpu": None}
     t.update(kw)
     return t
 
@@ -119,16 +119,23 @@ def build_targets(host, lookups, detected):
             "numa_nodes": lookups.get("numa_nodes") or 0,
         })]
     gpu_info = lookups.get("intel_gpu", {})
+    gate = lookups.get("gpu_gate", {})
     for g in host["intel_gpus"]:
         drv = g["driver"]
-        usable = drv in INTEL_GPU_DRIVERS
+        bound = drv in INTEL_GPU_DRIVERS
+        reason = fix = None
+        if not bound:
+            reason = "no xe or i915 driver bound (driver: %s)" % (drv or "none")
+            fix = "bind it to xe or i915: k3d-gpu doctor names the module or force_probe option for this id"
+        elif g["pci"] in gate:
+            # The launcher's firmware gatekeeper (gpu_gate) refused this GPU.
+            reason, fix = gate[g["pci"]]["reason"], gate[g["pci"]]["fix"]
         out.append(target(
             id="gpu:" + g["pci"], kind="gpu", vendor="intel", device_id=g["device_id"], pci=g["pci"],
             platform=g["platform"], driver=drv,
-            resource="gpu.intel.com/" + drv if usable else None,
+            resource="gpu.intel.com/" + drv if bound else None,
             xmx=gpu_info.get(g["device_id"] or "", {}).get("xmx"),
-            usable=usable,
-            reason=None if usable else "no xe or i915 driver bound (driver: %s)" % (drv or "none")))
+            usable=reason is None, reason=reason, fix=fix))
     for n in host["npus"]:
         out.append(target(
             id="npu:" + n["pci"], kind="npu", vendor="intel", device_id=n["device_id"], pci=n["pci"],
@@ -144,13 +151,15 @@ def build_targets(host, lookups, detected):
         out.append(target(id="gpu:nvidia", kind="gpu", vendor="nvidia", driver="nvidia", resource="nvidia.com/gpu"))
     ga = host["gaudi"]
     if ga["pci_devices"] or ga["accel_nodes"]:
-        reason = None
+        reason = fix = None
         if not ga["driver_loaded"]:
             reason = "habanalabs driver not loaded"
+            fix = "install the Intel Gaudi driver (habanalabs), then sudo modprobe habanalabs"
         elif not ga["accel_nodes"]:
             reason = "no /dev/accel nodes"
+            fix = "update the habanalabs driver: the Gaudi device plugin needs /dev/accel/accel* nodes"
         out.append(target(id="hpu", kind="hpu", vendor="habana", driver="habanalabs" if ga["driver_loaded"] else None,
-                          resource="habana.ai/gaudi", usable=reason is None, reason=reason))
+                          resource="habana.ai/gaudi", usable=reason is None, reason=reason, fix=fix))
     out.sort(key=lambda t: (KIND_ORDER[t["kind"]], t["id"]))
     return out
 
@@ -224,7 +233,7 @@ def summary(doc):
     schema_check.check(doc, load_schema())
     lines = ["facts/v1 for %s (k3d-gpu %s)" % (doc["fingerprint"], doc["release"]["k3d_gpu_version"])]
     for t in doc["targets"]:
-        state = "usable" if t["usable"] else "not usable: " + t["reason"]
+        state = "usable" if t["usable"] else "not usable: %s; fix: %s" % (t["reason"], t["fix"])
         lines.append("  %-18s %s — %s" % (t["id"], describe(t), state))
     for name in ("doctor", "perf"):
         counts = {}

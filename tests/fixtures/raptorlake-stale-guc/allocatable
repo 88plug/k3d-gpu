@@ -1,0 +1,4 @@
+cpu 32
+pods 110
+nvidia.com/gpu 2
+gpu.intel.com/i915 1

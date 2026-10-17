@@ -15,7 +15,8 @@
 # firmware file names, plus the tuning, thermal, memory, PCIe-link, IOMMU and
 # isolation state `doctor --perf` reads. No serial numbers, MACs or firmware
 # contents are copied: SMBIOS memory records keep their numeric fields only. Run
-# as root to include the root-only inputs (CPU 0 MSRs, SMBIOS type 17);
+# as root to include the root-only inputs (CPU 0 MSRs, SMBIOS type 17, GuC/HuC
+# firmware records from the i915/xe debugfs);
 # /proc/1/mounts gives the host's root mount even from a container with the host
 # tree mounted as <source-root>.
 
@@ -339,6 +340,21 @@ for gt in "${SRC}"/sys/class/drm/card[0-9]*/gt/gt[0-9]*; do
 done
 for f0 in "${SRC}"/sys/class/drm/card[0-9]*/device/tile[0-9]*/gt[0-9]*/freq0; do
     attrs_at "${f0}" cur_freq act_freq min_freq max_freq rp0_freq rpn_freq power_profile
+done
+
+# GuC and HuC firmware records from the i915/xe debugfs (root only): the header
+# the driver prints (firmware file, status, wanted and found versions, sizes),
+# not the register and log dump after it. dri/<minor> is a symlink to
+# dri/<PCI address> on newer kernels.
+for d in "${SRC}"/sys/kernel/debug/dri/*; do
+    if [ -L "${d}" ]; then link "${d}"; continue; fi
+    for f in "${d}"/gt[0-9]*/uc/guc_info "${d}"/gt[0-9]*/uc/huc_info; do
+        [ -r "${f}" ] || continue
+        o="${OUT}/$(rel "$(dirname "${f}")")/$(basename "${f}")"
+        mkdir -p "$(dirname "${o}")"
+        awk 'NR == 1 || /^\t/ || /^[A-Za-z]+ firmware wanted: / { print; next } { exit }' "${f}" > "${o}" 2>/dev/null \
+            || rm -f "${o}"
+    done
 done
 
 find "${OUT}" -type d -empty -exec touch {}/.keep \;

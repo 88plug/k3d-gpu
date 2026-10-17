@@ -1,0 +1,6 @@
+pick: synthetic.uhd770.ovms (decode 5 tok/s, highest of 4 green cell(s) on this host)
+engine: ovms on GPU (openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58)
+model: OpenVINO/Qwen3-4B-int4-ov, int4
+placement: gpu:0000:00:02.0 via gpu.intel.com/i915
+endpoint: 127.0.0.1:8000, auth loopback-key (no login, gateway key in a 0600 file)
+exit=0

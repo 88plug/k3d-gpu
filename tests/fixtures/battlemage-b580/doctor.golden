@@ -8,6 +8,7 @@
 ==> Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...
   ok: Intel Battlemage (0xe20b) bound to xe
   ok: xe/bmg_guc_* firmware present
+  info: Intel Battlemage (0xe20b) at 0000:03:00.0: GuC version not checked: debugfs needs root (sudo k3d-gpu doctor)
   ok: up labels the node gpu.intel.com/xmx=true
   ok: GPU sharing off: one pod per Intel GPU (K3D_GPU_INTEL_SHARED=auto)
 ==> Intel CPU built-in accelerators...

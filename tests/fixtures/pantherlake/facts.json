@@ -84,6 +84,15 @@
       {
         "apply": null,
         "from": null,
+        "level": "info",
+        "revert": null,
+        "section": "Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...",
+        "text": "Intel Panther Lake (0xb080) at 0000:00:02.0: GuC version not checked: debugfs needs root (sudo k3d-gpu doctor)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
         "level": "ok",
         "revert": null,
         "section": "Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...",
@@ -405,6 +414,7 @@
   "release": {
     "k3d_gpu_version": "<version>",
     "pins": {
+      "llama.cpp": "ghcr.io/ggml-org/llama.cpp@sha256:be586c648cb79d2cd75d0c38a6541e1f16c47a7c6621d3e711470a467fc38744",
       "ovms": "openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58"
     }
   },
@@ -425,6 +435,7 @@
       },
       "device_id": null,
       "driver": null,
+      "fix": null,
       "generation": null,
       "id": "cpu",
       "kind": "cpu",
@@ -440,6 +451,7 @@
       "cpu": null,
       "device_id": "0xb080",
       "driver": "xe",
+      "fix": null,
       "generation": null,
       "id": "gpu:0000:00:02.0",
       "kind": "gpu",
@@ -455,6 +467,7 @@
       "cpu": null,
       "device_id": "0xb03e",
       "driver": "intel_vpu",
+      "fix": null,
       "generation": "50xx",
       "id": "npu:0000:00:0b.0",
       "kind": "npu",

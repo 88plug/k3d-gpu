@@ -1,0 +1,18 @@
+facts: sha256:d24cd9499c08d2e9502194f71775d7929d6c28871e7c2ad26b17b8ba9c1da0a1
+targets:
+  cpu: 13th Gen Intel(R) Core(TM) i9-13900T, family:model 6:183, P-cores 0-15 (16), E-cores 16-31 (16); usable
+  gpu:0000:00:02.0: intel Raptor Lake-S, 0xa780, on i915, no XMX; not usable: GuC i915/tgl_guc_70.1.1.bin 70.1.1 is older than the 70.5.1 i915 wants
+  gpu:nvidia: nvidia, on nvidia; usable
+matrix: 4 cells, 4 on a target of this host
+  synthetic.cpu-pcores.ovms on cpu: green (report synthetic-fallback-1, decode 2 tok/s)
+  synthetic.nvidia.llama-cpp-vulkan on gpu:nvidia: green (report synthetic-fallback-2, decode 3 tok/s)
+  synthetic.uhd770.llama-cpp-vulkan on gpu:0000:00:02.0: green (report synthetic-fallback-3, decode 4 tok/s); excluded: target gpu:0000:00:02.0 not usable: GuC i915/tgl_guc_70.1.1.bin 70.1.1 is older than the 70.5.1 i915 wants
+  synthetic.uhd770.ovms on gpu:0000:00:02.0: green (report synthetic-fallback-4, decode 5 tok/s); excluded: target gpu:0000:00:02.0 not usable: GuC i915/tgl_guc_70.1.1.bin 70.1.1 is older than the 70.5.1 i915 wants
+decision:
+  pick: synthetic.nvidia.llama-cpp-vulkan (decode 3 tok/s, highest of 2 green cell(s) on this host)
+  engine: llama.cpp on Vulkan (ghcr.io/ggml-org/llama.cpp@sha256:be586c648cb79d2cd75d0c38a6541e1f16c47a7c6621d3e711470a467fc38744)
+  model: Qwen/Qwen3-4B-GGUF, q4_k_m
+  placement: gpu:nvidia via nvidia.com/gpu
+  endpoint: 127.0.0.1:8080, auth loopback-key (no login, gateway key in a 0600 file)
+  gpu:0000:00:02.0 refused: GuC i915/tgl_guc_70.1.1.bin 70.1.1 is older than the 70.5.1 i915 wants; fix: install linux-firmware with i915/tgl_guc_70.bin 70.5.1 or newer, then reboot
+exit=0

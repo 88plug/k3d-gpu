@@ -1846,6 +1846,87 @@ agent_says "K3D_GPU_AGENT_LOG_LEVEL=DEBUG reaches the server" "${r}" 0 '--log_le
 agent_says "a custom model leaves parser choice to OVMS" "${r}" 0 'tool_parser' negate \
     STUB_ALLOC='cpu 8' K3D_GPU_AGENT_MODEL=OpenVINO/Phi-4-mini-instruct-int4-ov
 
+# ---- firmware gatekeeper: GuC state from debugfs -------------------------------
+# Formats are the kernel's own: i915 intel_uc_fw_dump() prints "GuC firmware:
+# <selected>", "GuC firmware wanted: <path>" when it fell back to another file,
+# "status: <S>" and "version: found X" or "version: wanted W, found X"; xe
+# xe_uc_fw_print() prints "wanted release version W" and "found release version X"
+# (drivers/gpu/drm/i915/gt/uc/intel_uc_fw.c, drivers/gpu/drm/xe/xe_uc_fw.c, v7.3).
+# gate_root <name> <device id> <driver> <debugfs dir> <guc_info text> [huc_info text]
+gate_root() {
+    local r
+    r=$(newroot "$1")
+    kernel "${r}" 6.18.0
+    pci "${r}" 0000:00:02.0 0x8086 "$2" "$3"; render "${r}" 0000:00:02.0 128
+    mkdir -p "${r}/sys/class/drm/card0" "${r}/sys/kernel/debug/dri/$4/gt0/uc"
+    ln -sfn "${r}/sys/devices/pci0000:00/0000:00:02.0" "${r}/sys/class/drm/card0/device"
+    printf '%b' "$5" > "${r}/sys/kernel/debug/dri/$4/gt0/uc/guc_info"
+    [ -z "${6:-}" ] || printf '%b' "$6" > "${r}/sys/kernel/debug/dri/$4/gt0/uc/huc_info"
+    echo "${r}"
+}
+# doctor_rc <root>: doctor's exit code.
+doctor_rc() { env K3D_GPU_SYSROOT="$1" PATH="${STUB_BIN}:${PATH}" bash "${K3D_GPU}" doctor >/dev/null 2>&1; echo $?; }
+
+r=$(gate_root gate-i915-stale 0xa780 i915 0 'GuC firmware: i915/tgl_guc_70.1.1.bin\nGuC firmware wanted: i915/tgl_guc_70.bin\n\tstatus: RUNNING\n\tversion: wanted 70.5.1, found 70.1.1\n\tuCode: 1 bytes\n')
+doctor_says "gate: i915 GuC older than the driver wants refuses the GPU" "${r}" \
+    '^  .\[31mfail.\[0m: Intel Raptor Lake-S \(0xa780\) at 0000:00:02\.0: GuC i915/tgl_guc_70\.1\.1\.bin 70\.1\.1 is older than the 70\.5\.1 i915 wants; GPU engines refused; fix: install linux-firmware with i915/tgl_guc_70\.bin 70\.5\.1 or newer, then reboot$'
+if [ "$(doctor_rc "${r}")" -ne 0 ]; then PASS=$((PASS + 1)); echo "ok   gate: a refused GPU fails doctor"
+else FAILS=$((FAILS + 1)); echo "FAIL gate: a refused GPU fails doctor"; fi
+
+r=$(gate_root gate-xe-stale 0xe20b xe 0000:00:02.0 'GuC firmware: xe/bmg_guc_70.bin\n\tstatus: RUNNING\n\twanted release version 70.54.0\n\tfound release version 70.36.0\n\tfound compatibility version 1.20.0\n')
+doctor_says "gate: xe GuC release below the wanted release refuses the GPU" "${r}" \
+    'fail.\[0m: Intel Battlemage \(0xe20b\) at 0000:00:02\.0: GuC xe/bmg_guc_70\.bin 70\.36\.0 is older than the 70\.54\.0 xe wants; GPU engines refused; fix: install linux-firmware with xe/bmg_guc_70\.bin 70\.54\.0 or newer, then reboot$'
+
+r=$(gate_root gate-missing 0x7d51 i915 0 'GuC firmware: i915/mtl_guc_70.bin\n\tstatus: MISSING\n\tversion: wanted 70.53.0, found 0.0.0\n')
+doctor_says "gate: missing GuC firmware refuses the GPU with an install fix" "${r}" \
+    'fail.\[0m: .*GuC i915/mtl_guc_70\.bin status MISSING; GPU engines refused; fix: install linux-firmware with i915/mtl_guc_70\.bin, then reboot$'
+
+r=$(gate_root gate-loadfail 0x7d51 i915 0 'GuC firmware: i915/mtl_guc_70.bin\n\tstatus: LOAD FAIL\n\tversion: found 70.53.0\n')
+doctor_says "gate: a GuC that failed to load refuses the GPU" "${r}" \
+    'fail.\[0m: .*GuC i915/mtl_guc_70\.bin status LOAD FAIL; GPU engines refused; fix: install the current linux-firmware \(i915/mtl_guc_70\.bin\), then reboot; dmesg \| grep -i guc shows the driver.s reason$'
+
+r=$(gate_root gate-current 0xa780 i915 0 'GuC firmware: i915/tgl_guc_70.bin\n\tstatus: RUNNING\n\tversion: found 70.49.4\n')
+doctor_says "gate: a running GuC at or above the wanted version passes" "${r}" \
+    'ok: Intel Raptor Lake-S \(0xa780\) at 0000:00:02\.0: GuC i915/tgl_guc_70\.bin 70\.49\.4 running'
+doctor_says "gate: a running GuC refuses nothing" "${r}" 'refused' negate
+
+r=$(gate_root gate-numeric 0xe20b xe 0 'GuC firmware: xe/bmg_guc_70.bin\n\tstatus: RUNNING\n\twanted release version 70.9.0\n\tfound release version 70.10.0\n\tfound compatibility version 1.2.0\n')
+doctor_says "gate: versions compare numerically (70.10.0 is not older than 70.9.0)" "${r}" 'refused' negate
+
+r=$(gate_root gate-adl-s 0x4680 i915 0 'GuC firmware: i915/tgl_guc_70.1.1.bin\nGuC firmware wanted: i915/tgl_guc_70.bin\n\tstatus: RUNNING\n\tversion: wanted 70.5.1, found 70.1.1\n')
+doctor_says "gate: a stale GuC on Alder Lake-S (execlists) warns with the fix" "${r}" \
+    'warn.\[0m: Intel Alder Lake-S \(0x4680\) at 0000:00:02\.0: GuC i915/tgl_guc_70\.1\.1\.bin 70\.1\.1 is older than the 70\.5\.1 i915 wants \(i915 submits through execlists on Alder Lake-S, so engines are not refused\); fix: install linux-firmware with i915/tgl_guc_70\.bin 70\.5\.1 or newer, then reboot$'
+doctor_says "gate: a stale GuC on Alder Lake-S refuses nothing" "${r}" 'GPU engines refused' negate
+
+r=$(gate_root gate-disabled 0x9a49 i915 0 'GuC firmware: i915/tgl_guc_70.1.1.bin\n\tstatus: DISABLED\n\tversion: found 0.0.0\n')
+doctor_says "gate: a GuC the driver does not use (DISABLED) refuses nothing" "${r}" 'refused' negate
+
+r=$(gate_root gate-huc 0x7d51 i915 0 'GuC firmware: i915/mtl_guc_70.bin\n\tstatus: RUNNING\n\tversion: found 70.53.0\n' 'HuC firmware: i915/mtl_huc_gsc.bin\n\tstatus: ERROR\n\tversion: found 8.5.4\n')
+doctor_says "gate: a failed HuC warns with a fix" "${r}" \
+    'warn.\[0m: Intel Arrow Lake-H \(0x7d51\) at 0000:00:02\.0: HuC i915/mtl_huc_gsc\.bin status ERROR \(media decode/encode only; inference is not affected\); fix: install the current linux-firmware \(i915/mtl_huc_gsc\.bin\), then reboot'
+doctor_says "gate: a failed HuC refuses no engine" "${r}" 'refused' negate
+
+r=$(newroot gate-noroot)
+kernel "${r}" 6.18.0
+pci "${r}" 0000:00:02.0 0x8086 0xa780 i915; render "${r}" 0000:00:02.0 128
+mkdir -p "${r}/sys/class/drm/card0"; ln -sfn "${r}/sys/devices/pci0000:00/0000:00:02.0" "${r}/sys/class/drm/card0/device"
+doctor_says "gate: unreadable debugfs says the GuC was not checked" "${r}" \
+    'info: Intel Raptor Lake-S \(0xa780\) at 0000:00:02\.0: GuC version not checked: debugfs needs root \(sudo k3d-gpu doctor\)'
+doctor_says "gate: unreadable debugfs refuses nothing" "${r}" 'refused' negate
+
+# agent: the gatekeeper's refusal beats the XMX auto rule, and a forced GPU stops.
+r=$(gate_root agent-gate 0xe20b xe 0 'GuC firmware: xe/bmg_guc_70.bin\n\tstatus: RUNNING\n\twanted release version 70.54.0\n\tfound release version 70.36.0\n')
+agent_says "gate: auto falls back to OVMS on the CPU when the Intel GPU is refused" "${r}" 0 \
+    '--target_device=CPU' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/xe 1' STUB_NODE_LABELS=gpu.intel.com/xmx=true
+agent_says "gate: auto names the refusal and its fix" "${r}" 0 \
+    'Intel GPU 0000:00:02\.0 refused: GuC xe/bmg_guc_70\.bin 70\.36\.0 is older than the 70\.54\.0 xe wants; fix: install linux-firmware with xe/bmg_guc_70\.bin 70\.54\.0 or newer, then reboot; using OVMS on the CPU' \
+    "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/xe 1' STUB_NODE_LABELS=gpu.intel.com/xmx=true
+agent_says "gate: the CPU fallback requests no GPU" "${r}" 0 \
+    'gpu\.intel\.com/xe' negate STUB_ALLOC=$'cpu 32\ngpu.intel.com/xe 1' STUB_NODE_LABELS=gpu.intel.com/xmx=true
+agent_says "gate: K3D_GPU_AGENT_DEVICE=GPU on a refused GPU fails with the fix" "${r}" fail \
+    'K3D_GPU_AGENT_DEVICE=GPU but Intel GPU 0000:00:02\.0 is refused: .*fix: install linux-firmware' "" \
+    STUB_ALLOC=$'cpu 32\ngpu.intel.com/xe 1' K3D_GPU_AGENT_DEVICE=GPU
+
 # OVMS --pull clones the model repo's default branch and has no revision option,
 # so `agent status` reports the commit that was downloaded.
 status_says() {

@@ -1,0 +1,4 @@
+gpu:0000:00:02.0 refused: GuC i915/tgl_guc_70.1.1.bin 70.1.1 is older than the 70.5.1 i915 wants; fix: install linux-firmware with i915/tgl_guc_70.bin 70.5.1 or newer, then reboot
+no green cell left on a usable target: apply a fix above, then plan again
+bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)
+exit=0
