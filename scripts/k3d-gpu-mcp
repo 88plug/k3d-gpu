@@ -486,10 +486,13 @@ def recommend(args, report):
 # ---- agent_endpoint --------------------------------------------------------------
 
 REMOTE_SECRET = "k3d-gpu-llm"
-# Annotations and whether a key is present; the template never prints a data value.
+# A keyless endpoint (loopback, in-cluster, LAN) stores the literal 'none'.
+REMOTE_NO_KEY_B64 = "bm9uZQ=="
+# Annotations and whether a key is present; the template never prints a data value
+# (it compares the key's base64 with that of 'none' and prints a word).
 REMOTE_TEMPLATE = ('{{index .metadata.annotations "k3d-gpu.io/base-url"}}{{"\\t"}}'
                    '{{index .metadata.annotations "k3d-gpu.io/model"}}{{"\\t"}}'
-                   '{{if .data.OPENAI_API_KEY}}key{{end}}')
+                   '{{with .data.OPENAI_API_KEY}}{{if eq . "' + REMOTE_NO_KEY_B64 + '"}}none{{else}}key{{end}}{{end}}')
 
 
 def remote_endpoint():
@@ -500,13 +503,15 @@ def remote_endpoint():
     base, model, key = (out.rstrip("\n").split("\t") + ["", "", ""])[:3]
     base = "" if base == "<no value>" else base
     model = "" if model == "<no value>" else model
-    return {"remote": True, "deployed": True, "ready": bool(base and key), "namespace": AGENT_NS,
+    usable = key in ("key", "none")  # none: keyless on purpose (remote.py allows it only for your hosts)
+    return {"remote": True, "deployed": True, "ready": bool(base and usable), "namespace": AGENT_NS,
             "service": None, "device": None, "baseUrl": base or None,
             "host": urllib.parse.urlsplit(base).hostname if base else None,
             "models": [model] if model else [], "keyPresent": key == "key",
             "secret": REMOTE_SECRET, "podEnv": {"envFrom": [{"secretRef": {"name": REMOTE_SECRET}}]},
             "hostAccess": None, "apiServerProxy": None,
-            "reason": None if base and key else f"Secret {AGENT_NS}/{REMOTE_SECRET} has no endpoint or no key"}
+            "local": None,
+            "reason": None if base and usable else f"Secret {AGENT_NS}/{REMOTE_SECRET} has no endpoint or no key"}
 
 
 def agent_endpoint():
@@ -518,8 +523,15 @@ def agent_endpoint():
         result["reason"] = f"no kubeconfig context {CONTEXT} — run 'k3d-gpu up'"
         return result
     remote = remote_endpoint()
+    local = local_endpoint(result, proxy)
     if remote:
+        # The remote endpoint leads; a local model server beside it is under "local".
+        remote["local"] = local if local["deployed"] else None
         return remote
+    return local
+
+
+def local_endpoint(result, proxy):
     svc, reason = kubectl_json("-n", AGENT_NS, "get", "service", AGENT_SVC)
     if svc is None:
         result["reason"] = f"service {AGENT_NS}/{AGENT_SVC} not found — deploy it with 'k3d-gpu agent up' ({reason})"

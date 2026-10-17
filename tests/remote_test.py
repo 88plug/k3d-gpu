@@ -52,6 +52,9 @@ class Stub:
         self.models, self.key, self.seen = list(models), key, []
         self.reply = reply or {"content": "OK", "finish_reason": "stop"}
         self.redirect_to = redirect_to
+        # path -> fn(auth header) -> (status, raw body bytes, [(header, value)]): canned
+        # answers that bypass the key check (error pages, gateways, portals).
+        self.routes = {}
         stub = self
 
         class H(http.server.BaseHTTPRequestHandler):
@@ -70,6 +73,16 @@ class Stub:
 
             def handle_any(self, body=None):
                 stub.seen.append({"path": self.path, "auth": self.headers.get("Authorization"), "body": body})
+                if self.path in stub.routes:
+                    code, raw, headers = stub.routes[self.path](self.headers.get("Authorization") or "")
+                    self.send_response(code)
+                    for k, v in headers:
+                        self.send_header(k, v)
+                    if not any(k.lower() == "content-length" for k, _ in headers):
+                        self.send_header("Content-Length", str(len(raw)))
+                    self.end_headers()
+                    self.wfile.write(raw)
+                    return
                 if stub.redirect_to:
                     self.send(302, {}, [("Location", stub.redirect_to + "/v1/models")])
                     return
@@ -133,8 +146,6 @@ class Normalize(unittest.TestCase):
         ("", "empty"),
         ("llm.example.net/v1", "http"),
         ("ftp://llm.example.net/v1", "http"),
-        ("http://llm.example.net/v1", "https"),
-        ("http://10.0.0.5:8000/v1", "https"),
         ("https://user:pw@llm.example.net/v1", "user"),
         ("https://llm.example.net/v1?x=1", "query"),
         ("https:///v1", "host"),
@@ -423,6 +434,227 @@ class Manifests(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertIn("port: 8443", out)
         self.assertNotIn("port: 443\n", out.split("podTemplate")[0])
+
+
+def run_cli(argv, env):
+    """remote.py as a process (CLEAN_ENV + env); returns the CompletedProcess."""
+    return subprocess.run([sys.executable, os.path.join(ROOT, "console", "remote.py")] + argv,
+                          env=dict(CLEAN_ENV, **env), capture_output=True, text=True, timeout=30)
+
+
+def json_body(obj):
+    return json.dumps(obj).encode()
+
+
+class Hostile(unittest.TestCase):
+    """Endpoints, gateways and portals that misbehave: the key never reaches any
+    output, and every failure is a clean message with exit 4, never a traceback."""
+
+    SECRET = "sk-test-SECRETVALUE1234567"
+
+    def setUp(self):
+        self.stub = Stub(key=None)
+        self.env = {"OPENAI_BASE_URL": self.stub.url, "OPENAI_API_KEY": self.SECRET}
+
+    def tearDown(self):
+        self.stub.close()
+
+    def assertClean(self, text):
+        self.assertNotIn(self.SECRET, text)
+        self.assertNotIn(self.SECRET[:14], text, "a partial key prefix leaked")
+        self.assertNotIn("Traceback", text)
+
+    def test_json_error_echoing_the_authorization_header_is_scrubbed(self):
+        self.stub.routes["/v1/models"] = lambda auth: (
+            500, json_body({"error": {"message": f"bad token {auth}"}}), [("Content-Type", "application/json")])
+        for argv in (["models"], ["check"], ["check", "--json"], ["resolve", "--probe"]):
+            p = run_cli(argv, self.env)
+            with self.subTest(argv=argv):
+                self.assertEqual(p.returncode, 4, p.stderr)
+                self.assertClean(p.stdout + p.stderr)
+                self.assertIn("bad token Bearer sk-", p.stdout + p.stderr)
+
+    def test_chat_error_echoing_the_header_is_scrubbed(self):
+        self.stub.routes["/v1/chat/completions"] = lambda auth: (
+            502, json_body({"error": {"message": f"upstream refused {auth}"}}), [])
+        for argv in (["check"], ["check", "--json"]):
+            p = run_cli(argv, self.env)
+            with self.subTest(argv=argv):
+                self.assertEqual(p.returncode, 4)
+                self.assertClean(p.stdout + p.stderr)
+
+    def test_non_json_body_with_the_key_across_the_cut_is_scrubbed(self):
+        for pad in range(160, 200):
+            self.stub.routes["/v1/models"] = lambda auth, pad=pad: (
+                500, ("x" * pad + auth + " trailing").encode(), [("Content-Type", "text/plain")])
+            p = run_cli(["models"], self.env)
+            with self.subTest(pad=pad):
+                self.assertEqual(p.returncode, 4)
+                self.assertClean(p.stdout + p.stderr)
+
+    def test_key_with_a_newline_is_refused_by_name_only(self):
+        p = run_cli(["check"], dict(self.env, OPENAI_API_KEY=self.SECRET + "\nline2"))
+        self.assertEqual(p.returncode, 2, p.stderr)
+        self.assertClean(p.stdout + p.stderr)
+        self.assertNotIn("line2", p.stdout + p.stderr)
+        self.assertIn("OPENAI_API_KEY", p.stderr)
+        self.assertEqual(self.stub.seen, [], "nothing is sent with a malformed key")
+
+    def test_key_file_with_inner_whitespace_or_control_chars_is_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            kf = os.path.join(d, "k")
+            for body in (f"OPENAI_API_KEY={self.SECRET} tail\n", f"OPENAI_API_KEY={self.SECRET}\x07\n",
+                         f"OPENAI_API_KEY={self.SECRET}…\n"):
+                with open(kf, "w") as f:
+                    f.write(body)
+                os.chmod(kf, 0o600)
+                p = run_cli(["check", "--api-key-file", kf], {"OPENAI_BASE_URL": self.stub.url})
+                with self.subTest(body=repr(body)):
+                    self.assertEqual(p.returncode, 2, p.stderr)
+                    self.assertClean(p.stdout + p.stderr)
+                    self.assertIn(kf, p.stderr)
+
+    def test_models_as_a_top_level_list_is_a_clean_error(self):
+        self.stub.routes["/v1/models"] = lambda auth: (200, json_body([{"id": "a"}]), [])
+        p = run_cli(["check"], self.env)
+        self.assertEqual(p.returncode, 4, p.stderr)
+        self.assertClean(p.stdout + p.stderr)
+        self.assertIn("model list", p.stderr)
+
+    def test_truncated_body_is_a_clean_error(self):
+        self.stub.routes["/v1/models"] = lambda auth: (200, b'{"data": [', [("Content-Length", "500")])
+        p = run_cli(["models"], self.env)
+        self.assertEqual(p.returncode, 4, p.stderr)
+        self.assertClean(p.stdout + p.stderr)
+
+    def test_rate_limit_is_named_with_retry_after(self):
+        self.stub.routes["/v1/models"] = lambda auth: (
+            429, json_body({"error": {"message": "slow down"}}), [("Retry-After", "7")])
+        p = run_cli(["check", "--json"], self.env)
+        self.assertEqual(p.returncode, 4)
+        self.assertIn("rate limit", p.stderr.lower())
+        self.assertIn("Retry-After 7", p.stderr)
+        self.assertNotEqual(json.loads(p.stdout)["auth"], "rejected")
+
+    def test_html_portal_on_models_is_not_auth_ok(self):
+        self.stub.routes["/v1/models"] = lambda auth: (
+            200, b"<html><body>Sign in to the guest network</body></html>", [("Content-Type", "text/html")])
+        p = run_cli(["check", "--json"], self.env)
+        self.assertEqual(p.returncode, 4)
+        self.assertNotEqual(json.loads(p.stdout)["auth"], "ok")
+        self.assertIn("not JSON", p.stderr)
+
+    def test_no_models_route_with_an_explicit_model_goes_on_to_the_chat(self):
+        self.stub.routes["/v1/models"] = lambda auth: (404, json_body({"error": {"message": "no route"}}), [])
+        rc, out, err = cli("check", "--model", "zai-org/GLM-5.3", env=self.env)
+        self.assertEqual(rc, 0, out + err)
+        self.assertIn("chat      ok", out)
+        self.assertIn("auth      ok", out)
+        self.assertIn("no GET /models", out)
+        self.assertTrue(any(s["path"] == "/v1/chat/completions" for s in self.stub.seen))
+        rc, out, err = cli("resolve", "--probe", env=dict(self.env, OPENAI_MODEL="m1"))
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(out.split("\t")[1], "m1")
+        self.assertIn("no GET /models", err)
+        self.stub.routes["/v1/models"] = lambda auth: (405, b"", [])
+        rc, out, err = cli("check", "--model", "zai-org/GLM-5.3", env=self.env)
+        self.assertEqual(rc, 0, out + err)
+
+    def test_no_models_route_without_a_model_still_fails(self):
+        self.stub.routes["/v1/models"] = lambda auth: (404, json_body({"error": {"message": "no route"}}), [])
+        rc, _, err = cli("check", env=self.env)
+        self.assertEqual(rc, 4)
+        self.assertIn("--model", err)
+
+    def test_no_traceback_from_an_unexpected_error_and_no_key(self):
+        def boom(ep, a):
+            raise RuntimeError(f"unexpected with {ep.key}")
+        saved = remote.COMMANDS["show"]
+        remote.COMMANDS["show"] = (boom, "load")
+        try:
+            rc, out, err = cli("show", env=self.env)
+        finally:
+            remote.COMMANDS["show"] = saved
+        self.assertEqual(rc, 4)
+        self.assertClean(out + err)
+        self.assertIn("RuntimeError", err)
+
+
+class Policy(unittest.TestCase):
+    """Where plain http is allowed, and which hosts count as yours."""
+
+    def test_keyless_http_to_a_lan_or_docker_host_is_allowed(self):
+        for url in ("http://192.168.1.10:11434/v1", "http://host.k3d.internal:8000/v1", "http://10.0.0.5:8000/v1"):
+            rc, out, err = cli("resolve", "--model", "m", env={"OPENAI_BASE_URL": url})
+            with self.subTest(url=url):
+                self.assertEqual(rc, 0, err)
+                self.assertTrue(out.startswith(url + "\t"))
+
+    def test_http_to_a_public_host_needs_no_key_check_and_never_takes_one(self):
+        rc, _, err = cli("resolve", "--model", "m", env={"OPENAI_BASE_URL": "http://llm.example.net/v1"})
+        self.assertEqual(rc, 2)
+        self.assertIn("needs a key", err)
+        rc, _, err = cli("resolve", "--model", "m", env={"OPENAI_BASE_URL": "http://llm.example.net/v1",
+                                                       "OPENAI_API_KEY": KEY})
+        self.assertEqual(rc, 2)
+        self.assertIn("clear text", err)
+        self.assertNotIn(KEY, err)
+
+    def test_keyed_http_to_a_private_host_warns(self):
+        rc, _, err = cli("resolve", "--model", "m", env={"OPENAI_BASE_URL": "http://192.168.1.10:8000/v1",
+                                                       "OPENAI_API_KEY": KEY})
+        self.assertEqual(rc, 0, err)
+        self.assertIn("clear text", err)
+        self.assertIn("warn", err)
+        rc, _, err = cli("resolve", "--model", "m", env={"OPENAI_BASE_URL": "http://127.0.0.1:8000/v1",
+                                                       "OPENAI_API_KEY": KEY})
+        self.assertEqual((rc, err), (0, ""))
+
+    def test_is_local(self):
+        mine = ["http://127.0.0.1:8000/v3", "http://localhost:8000", "http://[::1]:8000/v1",
+                "http://ovms.k3d-gpu-agent.svc:8000/v3", "http://vllm.ns.svc.cluster.local:8000/v1",
+                "http://foo.cluster.local/v1", "http://10.0.0.5:8000/v1", "http://192.168.1.10:11434/v1",
+                "http://172.16.4.4/v1", "http://169.254.1.1/v1", "http://host.k3d.internal:8000/v1",
+                "http://[fd00::1]:8000/v1"]
+        theirs = ["https://gaudi.example.net/v1", "https://gaudi.example.net?x=.svc", "https://evil.svc.example.com/v1",
+                  "https://127.0.0.1.example.com/v1", "https://8.8.8.8/v1", "not a url", "",
+                  "https://gaudi.example.net/#.svc", "https://u@127.0.0.1.example.com/"]
+        for u in mine:
+            with self.subTest(u=u):
+                self.assertEqual(cli("is-local", u)[0], 0)
+        for u in theirs:
+            with self.subTest(u=u):
+                self.assertEqual(cli("is-local", u)[0], 1)
+
+
+class Normalize2(unittest.TestCase):
+    def test_more_forms(self):
+        for raw, want in [("https://h.example/v1/v1", "https://h.example/v1"),
+                          ("https://h.example/v1/models", "https://h.example/v1"),
+                          ("https://h.example/v1/models/", "https://h.example/v1"),
+                          ("https://h.example:443/v1", "https://h.example/v1"),
+                          ("http://127.0.0.1:80/v1", "http://127.0.0.1/v1"),
+                          ("https://h.example:80/v1", "https://h.example:80/v1")]:
+            with self.subTest(raw=raw):
+                self.assertEqual(remote.normalize_url(raw)[0], want)
+
+    def test_port_zero_is_refused(self):
+        with self.assertRaises(remote.RemoteError) as cm:
+            remote.normalize_url("https://h.example:0/v1")
+        self.assertIn("port", str(cm.exception))
+
+    def test_openai_host_and_base_path(self):
+        r = remote.resolve_base
+        self.assertEqual(r(None, {"OPENAI_HOST": "https://h.example/openai"}),
+                         ("https://h.example/openai/v1", "OPENAI_HOST"))
+        self.assertEqual(r(None, {"OPENAI_HOST": "https://h.example/v1"}), ("https://h.example/v1", "OPENAI_HOST"))
+        self.assertEqual(r(None, {"OPENAI_HOST": "https://h.example", "OPENAI_BASE_PATH": "v1/chat/completions"}),
+                         ("https://h.example/v1", "OPENAI_HOST"))
+        self.assertEqual(r(None, {"OPENAI_HOST": "https://h.example/", "OPENAI_BASE_PATH": "/api/v2/chat/completions"}),
+                         ("https://h.example/api/v2", "OPENAI_HOST"))
+        # OPENAI_BASE_PATH goes with OPENAI_HOST only.
+        self.assertEqual(r(None, {"OPENAI_BASE_URL": "https://a.example/v1", "OPENAI_BASE_PATH": "x/y"}),
+                         ("https://a.example/v1", "OPENAI_BASE_URL"))
 
 
 class Files(unittest.TestCase):

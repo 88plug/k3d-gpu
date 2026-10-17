@@ -104,10 +104,11 @@ out=$(run eval 'remote_parse --remote --no-ui; echo "R=${REMOTE} A=${REMOTE_ARGS
 eq "parse: bare --remote takes no value that is not a URL" "${out}" "R=1 A= REST=--no-ui"
 out=$(run eval 'remote_parse --remote=https://y.example/v1; echo "${REMOTE_ARGS[*]}"')
 eq "parse: --remote=URL" "${out}" "--remote https://y.example/v1"
-for u in http://127.0.0.1:8000/v3 http://localhost:8000 'http://[::1]:8000/v1' http://ovms.k3d-gpu-agent.svc:8000/v3 http://vllm.ns.svc.cluster.local:8000/v1; do
+for u in http://127.0.0.1:8000/v3 http://localhost:8000 'http://[::1]:8000/v1' http://ovms.k3d-gpu-agent.svc:8000/v3 http://vllm.ns.svc.cluster.local:8000/v1 \
+         http://10.0.0.5:8000/v1 http://192.168.1.10:11434/v1 http://host.k3d.internal:8000/v1; do
     run remote_url_local "${u}" >/dev/null && ok "local: ${u}" || fail "local: ${u}"
 done
-for u in https://gaudi.example.net/v1 http://10.0.0.5:8000/v1 https://evil.svc.example.com/v1 https://127.0.0.1.example.com/v1; do
+for u in https://gaudi.example.net/v1 'https://gaudi.example.net?x=.svc' 'https://gaudi.example.net/#.svc' https://evil.svc.example.com/v1 https://127.0.0.1.example.com/v1; do
     run remote_url_local "${u}" >/dev/null && fail "not local: ${u}" || ok "not local: ${u}"
 done
 
@@ -212,15 +213,22 @@ has "capacity --url to a remote host: refused the same way" "${out}" "needs --dr
 out=$(run cmd_capacity --url http://127.0.0.1:8000/v3 --model m)
 has "capacity --url to loopback: unchanged" "${out}" "capacity-args --url http://127.0.0.1:8000/v3 --model m"
 lacks "capacity loopback: no budget added" "${out}" "--budget 5"
+out=$(run cmd_capacity --url http://192.168.1.20:8000/v1/chat/completions --model m)
+has "capacity --url to a LAN host: unchanged (yours, as before)" "${out}" "capacity-args --url http://192.168.1.20:8000/v1/chat/completions --model m"
+lacks "capacity LAN: no budget added" "${out}" "--budget 5"
+out=$(run cmd_capacity --url 'https://gaudi.example.net/v1/chat/completions?x=.svc' --model m)
+has "capacity --url: a .svc in the query is not in-cluster" "${out}" "needs --dry-run, or --i-own-this-endpoint"
 : > "${S}/endpoint.log"
 out=$(OPENAI_BASE_URL="${URL}" OPENAI_API_KEY="${KEY}" run cmd_capacity --remote --dry-run)
-has "capacity --remote --dry-run: resolved, nothing sent" "${out}" "capacity-args --dry-run --url ${URL} --model auto"
+has "capacity --remote --dry-run: resolved, nothing sent" "${out}" "capacity-args --dry-run --url ${URL}/chat/completions --model auto"
 eq "capacity --remote --dry-run: no request" "$(wc -l < "${S}/endpoint.log")" 0
 out=$(run eval "remote_resolve() { printf 'https://gaudi.example.net/v1\tm\tOPENAI_BASE_URL\n'; }; cmd_capacity --remote --i-own-this-endpoint --slo 5 --api-key-file ${TMP}/key.env")
-has "capacity --remote owned: budgeted" "${out}" "capacity-args --slo 5 --url https://gaudi.example.net/v1 --model m --budget 5 --max 4"
+has "capacity --remote owned: budgeted, chat completions URL" "${out}" "capacity-args --slo 5 --url https://gaudi.example.net/v1/chat/completions --model m --budget 5 --max 4"
+has "capacity --remote owned: sampling 0.6, <= 64 tokens" "${out}" '"temperature": 0.6, "max_tokens": 64'
+lacks "capacity --remote owned: never temperature 0" "${out}" '"temperature": 0.0' 
 has "capacity --remote owned: key handed over in the environment" "${out}" "capacity-key set"
 out=$(run eval "remote_resolve() { printf 'https://gaudi.example.net/v1\tm\tx\n'; }; cmd_capacity --remote --i-own-this-endpoint --budget 2 --max 2")
-has "capacity owned: the user's budget kept" "${out}" "--budget 2 --max 2 --url https://gaudi.example.net/v1 --model m"
+has "capacity owned: the user's budget kept" "${out}" "--budget 2 --max 2 --url https://gaudi.example.net/v1/chat/completions --model m"
 lacks "capacity owned: no second budget" "${out}" "--budget 5"
 out=$(run cmd_tune run --remote)
 has "tune --remote is refused" "${out}" "a remote endpoint has no knob"
@@ -238,11 +246,32 @@ has "doctor --remote: reachable" "${out}" "ok: ${URL} answers GET /models; model
 has "doctor --remote: passes" "${out}" "FAIL=0"
 out=$(OPENAI_BASE_URL="${URL}" OPENAI_API_KEY="sk-test-wrong-000000000" run eval 'REMOTE=1; FAIL=0; doctor_remote; echo "FAIL=${FAIL}"')
 has "doctor --remote: rejected key fails" "${out}" "FAIL=1"
+: > "${S}/endpoint.log"
 out=$(OPENAI_BASE_URL="${URL}" OPENAI_API_KEY="sk-test-wrong-000000000" run eval 'FAIL=0; doctor_remote; echo "FAIL=${FAIL}"')
-has "doctor, env only: a warning" "${out}" "warn"
+has "doctor, env only: names it" "${out}" "'k3d-gpu doctor --remote' checks it"
 has "doctor, env only: does not fail" "${out}" "FAIL=0"
+eq "doctor, env only: no request, the key goes nowhere" "$(wc -l < "${S}/endpoint.log")" 0
 out=$(run eval 'doctor_remote; echo done')
 eq "doctor without an endpoint: silent" "${out}" "done"
+
+# ---- capacity --remote end to end: the real capacity.py against the stub ----------
+# Loopback is yours (no budget), but --remote still needs the opt-in. The stub logs
+# every request's path: capacity must POST to /v1/chat/completions, never the root.
+: > "${S}/endpoint.log"
+out=$(OPENAI_API_KEY="${KEY}" XDG_STATE_HOME="${TMP}/state" K3D_GPU_BENCH="${ROOT}/bench" timeout 120 \
+    "${LAUNCHER}" capacity --remote "${URL}" --i-own-this-endpoint --force --quiet-s 0.2 --interval 0.2 \
+    --max 1 --reps 1 --budget 0.05 --step-cap 5 --out "${TMP}/cap" 2>&1 | tee -a "${ALL_OUT}")
+posts=$(grep -c '^POST /v1/chat/completions auth=ok' "${S}/endpoint.log")
+[ "${posts}" -ge 1 ] && ok "capacity --remote: real requests reach POST /v1/chat/completions (${posts})" \
+    || fail "capacity --remote: no POST /v1/chat/completions: $(head -c 300 "${S}/endpoint.log") ${out:0:300}"
+lacks "capacity --remote: nothing POSTed to the API root" "$(cat "${S}/endpoint.log")" "POST /v1 "
+
+# ---- uninstall on a reused cluster deletes the endpoint Secrets ----------------------
+: > "${S}/kubectl.log"; rm -f "${S}/qs/cluster-created"
+out=$(run eval 'k3d() { return 0; }; cmd_uninstall --yes')
+has "uninstall, kept cluster: says the Secret goes" "${out}" "Secret k3d-gpu-llm (it holds the key)"
+has "uninstall, kept cluster: agent Secret deleted" "$(cat "${S}/kubectl.log")" "-n k3d-gpu-agent delete secret k3d-gpu-llm --ignore-not-found"
+has "uninstall, kept cluster: sandbox Secret deleted" "$(cat "${S}/kubectl.log")" "-n agent-sandbox delete secret k3d-gpu-llm --ignore-not-found"
 
 # ---- K3D_GPU_VENDORS=none ------------------------------------------------------------
 out=$(K3D_GPU_VENDORS=none run eval 'VENDORS_REQUEST=none; detect_intel() { :; }; detect_npu() { :; }; resolve_vendors; echo "n=${#ACTIVE[@]}"; verify_gpus')

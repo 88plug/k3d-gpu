@@ -333,14 +333,14 @@ check "agent: deployed but not answering is not ready" "${out}" \
 # never prints a data value, so the key cannot reach the client.
 d=$(fixtures agent-remote)
 context "${d}"
-REMOTE_TPL='go-template={{index .metadata.annotations "k3d-gpu.io/base-url"}}{{"\t"}}{{index .metadata.annotations "k3d-gpu.io/model"}}{{"\t"}}{{if .data.OPENAI_API_KEY}}key{{end}}'
+REMOTE_TPL='go-template={{index .metadata.annotations "k3d-gpu.io/base-url"}}{{"\t"}}{{index .metadata.annotations "k3d-gpu.io/model"}}{{"\t"}}{{with .data.OPENAI_API_KEY}}{{if eq . "bm9uZQ=="}}none{{else}}key{{end}}{{end}}'
 printf 'https://llm.example.net/v1\tzai-org/GLM-5.3\tkey' | fixture "${d}" -n k3d-gpu-agent get secret k3d-gpu-llm -o "${REMOTE_TPL}"
 out=$(session "${d}" "$(call 1 agent_endpoint)")
 check "agent: remote endpoint from the Secret" "${out}" \
     'sc(1)["remote"] is True and sc(1)["baseUrl"] == "https://llm.example.net/v1" and sc(1)["host"] == "llm.example.net" and sc(1)["models"] == ["zai-org/GLM-5.3"] and sc(1)["keyPresent"] is True and sc(1)["ready"]'
 check "agent: remote tells pods how to read it" "${out}" \
     'sc(1)["podEnv"] == {"envFrom": [{"secretRef": {"name": "k3d-gpu-llm"}}]}'
-if grep -q 'get secret k3d-gpu-llm -o go-template' "${d}/calls" && ! grep -Eq 'jsonpath=.*data|-o (json|yaml)' "${d}/calls"; then
+if grep -q 'get secret k3d-gpu-llm -o go-template' "${d}/calls" && ! grep secret "${d}/calls" | grep -Eq 'jsonpath=.*data|-o (json|yaml)'; then
     PASS=$((PASS + 1)); echo "ok   agent: remote reads the Secret with the template only (no -o json/yaml, no data jsonpath)"
 else
     FAILS=$((FAILS + 1)); echo "FAIL agent: remote Secret read: $(grep secret "${d}/calls")"
@@ -349,6 +349,22 @@ printf 'https://llm.example.net/v1\tzai-org/GLM-5.3\t' | fixture "${d}" -n k3d-g
 out=$(session "${d}" "$(call 1 agent_endpoint)")
 check "agent: remote Secret without a key is not ready" "${out}" \
     'sc(1)["remote"] and sc(1)["keyPresent"] is False and not sc(1)["ready"] and "no key" in sc(1)["reason"]'
+# A keyless endpoint (LAN, in-cluster) stores the literal 'none': no key, and ready.
+printf 'http://192.168.1.10:11434/v1\tllama3\tnone' | fixture "${d}" -n k3d-gpu-agent get secret k3d-gpu-llm -o "${REMOTE_TPL}"
+out=$(session "${d}" "$(call 1 agent_endpoint)")
+check "agent: keyless remote ('none') has no key and is ready" "${out}" \
+    'sc(1)["remote"] and sc(1)["keyPresent"] is False and sc(1)["ready"] and sc(1)["local"] is None'
+# Remote and a local OVMS side by side: the remote leads, the local one is beside it.
+printf 'https://llm.example.net/v1\tzai-org/GLM-5.3\tkey' | fixture "${d}" -n k3d-gpu-agent get secret k3d-gpu-llm -o "${REMOTE_TPL}"
+fixture "${d}" -n k3d-gpu-agent get service ovms -o json <<'EOF'
+{"spec":{"ports":[{"name":"http","port":8000,"targetPort":"http"}]}}
+EOF
+fixture "${d}" get --raw /api/v1/namespaces/k3d-gpu-agent/services/ovms:http/proxy/v3/models <<'EOF'
+{"object":"list","data":[{"id":"Qwen3-4B-int4-ov","object":"model"}]}
+EOF
+out=$(session "${d}" "$(call 1 agent_endpoint)")
+check "agent: remote beside a local OVMS reports both" "${out}" \
+    'sc(1)["remote"] and sc(1)["baseUrl"] == "https://llm.example.net/v1" and sc(1)["local"]["deployed"] and sc(1)["local"]["models"] == ["Qwen3-4B-int4-ov"] and sc(1)["local"]["remote"] is False'
 d=$(fixtures agent-local-flag)
 context "${d}"
 out=$(session "${d}" "$(call 1 agent_endpoint)")

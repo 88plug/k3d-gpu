@@ -3,13 +3,20 @@
 
 One resolver feeds every command (scripts/k3d-gpu calls this file):
 
-  base URL  --remote URL > OPENAI_BASE_URL > OPENAI_API_BASE (legacy) > OPENAI_HOST (+ /v1)
+  base URL  --remote URL > OPENAI_BASE_URL > OPENAI_API_BASE (legacy)
+            > OPENAI_HOST + OPENAI_BASE_PATH (Goose's pair; without it, OPENAI_HOST + /v1)
   key       --api-key-file FILE > OPENAI_API_KEY        (never a command-line value)
   model     --model > OPENAI_MODEL > the only id GET /models lists
 
 The base URL is normalized (normalize_url): a bare host gets /v1, a trailing
-/chat/completions is dropped, userinfo, queries and plain http to a non-local
-host are refused, so the key never crosses the network in clear text.
+/chat/completions or /models is dropped, /v1/v1 becomes /v1, the scheme's
+default port is dropped, and userinfo, queries and fragments are refused. Plain
+http carries a key only to a host of yours (loopback, in-cluster, a private
+address, host.k3d.internal; the last two with a warning); without a key any
+http endpoint is fine (a keyless Ollama or vLLM on the LAN).
+
+Every message this process prints has the key replaced by its mask, whatever
+the server echoed back, and nothing exits with a traceback.
 
 Requests go only to the configured host: redirects are not followed at all, so
 the Authorization header can never be replayed to a host a 3xx names.
@@ -23,6 +30,7 @@ the Authorization header can never be replayed to a host a 3xx names.
   remote.py sandbox-profile MANIFEST [--addrs]  sandbox profile whose egress is only the endpoint
   remote.py addrs                               the endpoint host's addresses (sandbox drift check)
   remote.py exec -- CMD...                      run CMD with OPENAI_API_KEY in its environment
+  remote.py is-local URL                        exit 0 when URL's host is yours (see is_own_host)
 
 K3D_GPU_REMOTE_ADDRS=a,b pins the host's addresses for sandbox-profile and addrs
 instead of resolving it.
@@ -34,6 +42,7 @@ Python 3 standard library only.
 
 import argparse
 import base64
+import http.client
 import ipaddress
 import json
 import os
@@ -51,6 +60,11 @@ ENV_OBJECT = "k3d-gpu-llm"  # the Secret pods read the endpoint from
 MAX_TOKENS_CAP = 64
 TEMPERATURE = 0.6  # never 0: shared fleets serve sampling, and greedy is a different code path
 LOCAL_SUFFIXES = (".svc", ".svc.cluster.local", ".cluster.local")
+# Names that resolve only inside a LAN or to the docker host: a host of yours, but
+# not this machine or cluster, so a key sent there in clear text gets a warning.
+PRIVATE_NAMES = ("host.k3d.internal", "host.docker.internal")
+PRIVATE_SUFFIXES = (".local", ".lan", ".home.arpa", ".internal")
+DEFAULT_PORTS = {"http": 80, "https": 443}
 EXIT_CONFIG, EXIT_AUTH, EXIT_ENDPOINT = 2, 3, 4
 
 
@@ -60,9 +74,20 @@ class RemoteError(Exception):
         self.code = code
 
 
+_SECRETS = []  # every key this process loaded; scrub() masks them in any text
+
+
+def scrub(text):
+    text = str(text)
+    for k in _SECRETS:
+        text = text.replace(k, mask(k))
+    return text
+
+
 # ---- resolution ---------------------------------------------------------------
 
 def is_local_host(host):
+    """This machine or this cluster: loopback, localhost, *.svc, *.cluster.local."""
     host = (host or "").lower().strip("[]")
     if host == "localhost" or host.endswith(LOCAL_SUFFIXES):
         return True
@@ -70,6 +95,36 @@ def is_local_host(host):
         return ipaddress.ip_address(host).is_loopback
     except ValueError:
         return False
+
+
+def is_private_host(host):
+    """The LAN or the docker host: a private or link-local address, host.k3d.internal,
+    or a name under .local, .lan, .home.arpa or .internal."""
+    host = (host or "").lower().strip("[]")
+    if host in PRIVATE_NAMES or host.endswith(PRIVATE_SUFFIXES):
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return ip.is_private or ip.is_link_local
+
+
+def is_own_host(host):
+    """A host of yours (local or private), not someone else's endpoint: the launcher
+    sends load to these without --i-own-this-endpoint."""
+    return is_local_host(host) or is_private_host(host)
+
+
+def url_host(url):
+    """The host of an http(s) URL, or None; never guessed from the raw string."""
+    try:
+        u = urllib.parse.urlsplit((url or "").strip())
+    except ValueError:
+        return None
+    if u.scheme.lower() not in ("http", "https"):
+        return None
+    return u.hostname
 
 
 def normalize_url(raw):
@@ -91,29 +146,39 @@ def normalize_url(raw):
         port = u.port
     except ValueError:
         raise RemoteError(f"endpoint URL has a bad port: {raw!r}")
-    if scheme == "http" and not is_local_host(u.hostname):
-        raise RemoteError(f"plain http to {u.hostname} would send the key in clear text; use https "
-                          "(http is accepted for loopback and in-cluster *.svc hosts only)")
+    if port == 0:
+        raise RemoteError(f"endpoint URL has a bad port: {raw!r}")
+    if port == DEFAULT_PORTS[scheme]:
+        port = None
     host = u.hostname.lower()
     if ":" in host:
         host = f"[{host}]"
     netloc = host + (f":{port}" if port else "")
     path = u.path.rstrip("/")
     warnings = []
-    if path.endswith("/chat/completions"):
-        path = path[: -len("/chat/completions")]
-        warnings.append("dropped /chat/completions from the endpoint: it takes the API root (…/v1)")
+    for suffix in ("/chat/completions", "/models"):
+        if path.endswith(suffix):
+            path = path[: -len(suffix)]
+            warnings.append(f"dropped {suffix} from the endpoint: it takes the API root (…/v1)")
+    if path.endswith("/v1/v1"):
+        path = path[: -len("/v1")]
+        warnings.append("collapsed /v1/v1 to /v1")
     if not path:
         path = "/v1"
     return f"{scheme}://{netloc}{path}", warnings
 
 
 def resolve_base(flag, env):
-    """(base URL, origin) by precedence --remote > OPENAI_BASE_URL > OPENAI_API_BASE > OPENAI_HOST."""
+    """(base URL, origin) by precedence --remote > OPENAI_BASE_URL > OPENAI_API_BASE > OPENAI_HOST.
+    OPENAI_HOST is a host (Goose's convention): OPENAI_BASE_PATH, default v1, is
+    appended to it, and a trailing chat/completions is dropped as for any URL."""
     for origin, value in (("--remote", flag), ("OPENAI_BASE_URL", env.get("OPENAI_BASE_URL")),
                           ("OPENAI_API_BASE", env.get("OPENAI_API_BASE")),
                           ("OPENAI_HOST", env.get("OPENAI_HOST"))):
         if value and value.strip():
+            if origin == "OPENAI_HOST":
+                base_path = (env.get("OPENAI_BASE_PATH") or "").strip().strip("/") or "v1"
+                value = value.strip().rstrip("/") + "/" + base_path
             return normalize_url(value)[0], origin
     raise RemoteError("no remote endpoint: pass --remote URL or set OPENAI_BASE_URL "
                       "(or OPENAI_API_BASE, or OPENAI_HOST without /v1)")
@@ -142,11 +207,22 @@ def load_key(path, env):
             key = lines[0]
         if not key:
             raise RemoteError(f"--api-key-file {path} holds no key (a bare key, or an OPENAI_API_KEY= line)")
-        return key, path
+        return _checked_key(key, path)
     key = env.get("OPENAI_API_KEY")
     if key and key.strip():
-        return key.strip(), "OPENAI_API_KEY"
+        return _checked_key(key.strip(), "OPENAI_API_KEY")
     return None, None
+
+
+def _checked_key(key, source):
+    """A key is printable ASCII without spaces (an HTTP header value). Anything else
+    is refused by its source's name only: the message never quotes the value."""
+    _SECRETS.append(key)
+    if not re.fullmatch(r"[\x21-\x7e]+", key):
+        raise RemoteError(f"the key from {source} has a space, a line break, a control or a non-ASCII "
+                          "character inside it (a pasted multi-line value?); it must be one line of "
+                          "printable characters")
+    return key, source
 
 
 def mask(key):
@@ -164,22 +240,29 @@ class Endpoint:
         self.host = urllib.parse.urlsplit(self.base).hostname
         self.port = urllib.parse.urlsplit(self.base).port or (443 if self.base.startswith("https") else 80)
         self.key, self.key_source = load_key(a.api_key_file, env)
-        if key == "need" and not self.key and not is_local_host(self.host):
+        local, private = is_local_host(self.host), is_private_host(self.host)
+        if key == "need" and not self.key and not (local or private):
             raise RemoteError(f"remote endpoint {self.base} needs a key: set OPENAI_API_KEY or pass --api-key-file FILE")
+        if self.key and self.base.startswith("http://") and not local:
+            if not private:
+                raise RemoteError(f"plain http to {self.host} would send the key in clear text; use https "
+                                  "(http carries a key only to loopback, in-cluster, private-address or "
+                                  "host.k3d.internal hosts; a keyless endpoint may use http anywhere)")
+            warn(f"plain http to {self.host}: the key crosses your network in clear text")
         self.model = a.model or (env.get("OPENAI_MODEL") or "").strip() or None
         self.model_source = "--model" if a.model else ("OPENAI_MODEL" if self.model else None)
+        self.headers, self.is_json = None, False  # of the last response
         handlers = [_NoRedirect(self.host)]
-        if is_local_host(self.host):
-            # Plain http to loopback or *.svc: never through an HTTP_PROXY, which
+        if local or private:
+            # A host of yours (often plain http): never through an HTTP_PROXY, which
             # would see the Authorization header in clear text.
             handlers.append(urllib.request.ProxyHandler({}))
         self._opener = urllib.request.build_opener(*handlers)
 
-    def scrub(self, text):
-        return text.replace(self.key, mask(self.key)) if self.key else text
-
     def call(self, method, path, body=None, timeout=60):
-        """(HTTP status, parsed JSON or None, seconds). Raises RemoteError when unreachable."""
+        """(HTTP status, parsed JSON (or {"_text": first 200 chars}), seconds). The body
+        is scrubbed of the key before it is parsed or cut. Raises RemoteError when the
+        endpoint is unreachable or answers something that is not HTTP."""
         url = self.base + path
         assert urllib.parse.urlsplit(url).hostname == self.host
         req = urllib.request.Request(url, method=method, data=None if body is None else json.dumps(body).encode())
@@ -190,33 +273,69 @@ class Endpoint:
             req.add_header("Authorization", f"Bearer {self.key}")
         t0 = time.monotonic()
         try:
-            with self._opener.open(req, timeout=timeout) as r:
-                raw, status = r.read(), r.status
-        except urllib.error.HTTPError as e:
-            raw, status = e.read(), e.code
+            try:
+                with self._opener.open(req, timeout=timeout) as r:
+                    status, self.headers = r.status, r.headers
+                    raw = r.read()
+            except urllib.error.HTTPError as e:
+                status, self.headers = e.code, e.headers
+                try:
+                    raw = e.read()
+                finally:
+                    e.close()
         except RemoteError:
             raise
-        except (urllib.error.URLError, OSError) as e:
-            reason = getattr(e, "reason", e)
-            raise RemoteError(self.scrub(f"{self.host}: unreachable ({reason})"), EXIT_ENDPOINT)
+        except (urllib.error.URLError, OSError, http.client.HTTPException, ValueError) as e:
+            reason = getattr(e, "reason", None) or f"{type(e).__name__}: {e}"
+            raise RemoteError(scrub(f"{self.host}: unreachable or not HTTP ({reason})"), EXIT_ENDPOINT)
         dt = time.monotonic() - t0
+        text = scrub(raw.decode("utf-8", "replace"))
         try:
-            data = json.loads(raw)
+            data, self.is_json = json.loads(text), True
         except ValueError:
-            data = {"_text": self.scrub(raw[:200].decode("utf-8", "replace"))}
+            data, self.is_json = {"_text": text[:200]}, False
         return status, data, dt
 
-    def models(self):
-        status, data, dt = self.call("GET", "/models", timeout=30)
+    def retry_after(self):
+        ra = self.headers.get("Retry-After") if self.headers is not None else None
+        return f", Retry-After {scrub(ra.strip())[:40]}" if ra else ""
+
+    def http_error(self, what, status, data):
+        """RemoteError for a non-2xx answer: 401/403 a refused key, 429 a rate limit."""
         if status in (401, 403):
-            raise RemoteError(f"{self.host} rejected the key (HTTP {status} on GET /models); check the key from "
-                              f"{self.key_source or 'OPENAI_API_KEY'} ({mask(self.key)})", EXIT_AUTH)
+            return RemoteError(f"{self.host} rejected the key (HTTP {status} on {what}); check the key from "
+                               f"{self.key_source or 'OPENAI_API_KEY'} ({mask(self.key)})", EXIT_AUTH)
+        if status == 429:
+            return RemoteError(f"{self.host} is rate limiting (HTTP 429 on {what}{self.retry_after()}); the key "
+                               f"was not refused, try again later. {_detail(data)}".rstrip(), EXIT_ENDPOINT)
+        return RemoteError(f"{what}: HTTP {status} {_detail(data)}".rstrip(), EXIT_ENDPOINT)
+
+    def models(self):
+        """(ids, seconds). ids is None when the endpoint has no GET /models route (404
+        or 405) and a model was named: the chat request is then the only check."""
+        status, data, dt = self.call("GET", "/models", timeout=30)
+        if status in (404, 405):
+            if self.model:
+                return None, dt
+            raise RemoteError(f"GET {self.base}/models: HTTP {status}, no model list here; name the model with "
+                              "--model (or OPENAI_MODEL) and the chat request checks it", EXIT_ENDPOINT)
         if status != 200:
-            raise RemoteError(f"GET {self.base}/models: HTTP {status} {_detail(data)}", EXIT_ENDPOINT)
-        ids = [m.get("id") for m in (data.get("data") or []) if isinstance(m, dict) and m.get("id")]
+            raise self.http_error(f"GET {self.base}/models", status, data)
+        if not self.is_json:
+            raise RemoteError(f"GET {self.base}/models answered HTTP 200 but not JSON ({_detail(data)[:80]!r}); "
+                              "a login or captive portal page? The endpoint takes the API root (…/v1)",
+                              EXIT_ENDPOINT)
+        if not isinstance(data, dict) or not isinstance(data.get("data"), list):
+            raise RemoteError(f"GET {self.base}/models answered JSON that is not an OpenAI model list "
+                              "({\"data\": [...]}); is the endpoint the API root (…/v1)?", EXIT_ENDPOINT)
+        ids = [m.get("id") for m in data["data"] if isinstance(m, dict) and isinstance(m.get("id"), str) and m["id"]]
         return ids, dt
 
     def pick_model(self, ids, warn):
+        if ids is None:
+            warn(f"{self.host} has no GET /models route: model {self.model} ({self.model_source}) is not "
+                 "verified there; the chat request is the check")
+            return self.model, self.model_source
         if self.model:
             if self.model not in ids:
                 warn(f"model {self.model} is not listed by {self.host} (it lists: {', '.join(ids) or 'nothing'}); "
@@ -353,7 +472,7 @@ def out(*a):
 
 
 def warn(msg):
-    print(f"remote: warn: {msg}", file=sys.stderr, flush=True)
+    print(f"remote: warn: {scrub(msg)}", file=sys.stderr, flush=True)
 
 
 def cmd_check(ep, a):
@@ -394,7 +513,7 @@ def cmd_check(ep, a):
         rep["auth"] = "rejected" if e.code == EXIT_AUTH else "unknown"
         show()
         raise
-    rep.update(auth="ok", models_latency_s=round(dt, 3), models=ids)
+    rep.update(auth="ok" if ids is not None else "unknown", models_latency_s=round(dt, 3), models=ids or [])
     try:
         rep["model"], rep["model_source"] = ep.pick_model(ids, note)
     except RemoteError:
@@ -406,12 +525,15 @@ def cmd_check(ep, a):
     c = {"status": status, "latency_s": round(dt, 3), "finish_reason": None, "completion_tokens": None,
          "content": None, "reasoning": False, "verdict": "fail"}
     rep["chat"] = c
-    choice = ((data.get("choices") or [None])[0] or {}) if isinstance(data, dict) else {}
+    choices = data.get("choices") if isinstance(data, dict) else None
+    choice = choices[0] if isinstance(choices, list) and choices and isinstance(choices[0], dict) else {}
     if status == 200 and choice:
-        msg = choice.get("message") or {}
+        rep["auth"] = "ok"
+        msg = choice.get("message") if isinstance(choice.get("message"), dict) else {}
+        usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
         c.update(finish_reason=choice.get("finish_reason"),
-                 completion_tokens=(data.get("usage") or {}).get("completion_tokens"),
-                 content=(msg.get("content") or "").strip()[:80] or None,
+                 completion_tokens=usage.get("completion_tokens"),
+                 content=str(msg.get("content") or "").strip()[:80] or None,
                  reasoning=bool(msg.get("reasoning") or msg.get("reasoning_content")))
         if c["content"]:
             c["verdict"] = "ok"
@@ -422,9 +544,13 @@ def cmd_check(ep, a):
                     f"{MAX_TOKENS_CAP}" if c["reasoning"] else ""))
         show()
         return 0
+    if status in (401, 403):
+        rep["auth"] = "rejected"
     show()
-    code = EXIT_AUTH if status in (401, 403) else EXIT_ENDPOINT
-    raise RemoteError(f"POST {ep.base}/chat/completions: HTTP {status} {_detail(data)}", code)
+    if status == 200:
+        raise RemoteError(f"POST {ep.base}/chat/completions answered HTTP 200 without a choice "
+                          f"({_detail(data)[:80]!r})", EXIT_ENDPOINT)
+    raise ep.http_error(f"POST {ep.base}/chat/completions", status, data)
 
 
 def cmd_show(ep, a):
@@ -526,6 +652,13 @@ def cmd_addrs(a, env):
     return 0
 
 
+def cmd_is_local(a, env):
+    """Exit 0 when the URL's host is yours (is_own_host), 1 otherwise. One parser
+    for the launcher and remote.py, so both judge a URL the same way."""
+    host = url_host(a.url)
+    return 0 if host and is_own_host(host) else 1
+
+
 def cmd_exec(ep, a):
     """Runs a command with the resolved key as OPENAI_API_KEY in its environment
     (capacity, bench --vs remote): the key never passes through stdout or argv."""
@@ -545,7 +678,8 @@ COMMANDS = {
     "check": (cmd_check, "need"), "show": (cmd_show, "load"), "models": (cmd_models, "need"),
     "resolve": (cmd_resolve, "need"), "secret": (cmd_secret, "need"), "exec": (cmd_exec, "need"),
 }
-KEYLESS = {"chat-ui": cmd_chat_ui, "sandbox-profile": cmd_sandbox_profile, "addrs": cmd_addrs}
+KEYLESS = {"chat-ui": cmd_chat_ui, "sandbox-profile": cmd_sandbox_profile, "addrs": cmd_addrs,
+           "is-local": cmd_is_local}
 
 
 def parse(argv):
@@ -575,6 +709,8 @@ def parse(argv):
     p.add_argument("--addrs", help="comma-separated addresses instead of resolving the host")
     p = sub.add_parser("addrs", parents=[keyless])
     p.add_argument("--addrs", help=argparse.SUPPRESS)
+    p = sub.add_parser("is-local", help="exit 0 when the URL's host is yours")
+    p.add_argument("url")
     p = sub.add_parser("exec", parents=[common], help="run a command with OPENAI_API_KEY set")
     p.add_argument("argv", nargs=argparse.REMAINDER)
     return ap.parse_args(argv)
@@ -592,8 +728,11 @@ def main(argv=None, env=None):
         fn, key = COMMANDS[a.cmd]
         return fn(Endpoint(a, env, key), a)
     except RemoteError as e:
-        print(f"remote: {e}", file=sys.stderr, flush=True)
+        print(f"remote: {scrub(e)}", file=sys.stderr, flush=True)
         return e.code
+    except Exception as e:  # never a traceback: it would print locals and header values
+        print(f"remote: internal error: {type(e).__name__}: {scrub(e)}", file=sys.stderr, flush=True)
+        return EXIT_ENDPOINT
 
 
 if __name__ == "__main__":

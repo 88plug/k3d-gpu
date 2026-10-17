@@ -131,8 +131,9 @@ Usage: k3d-gpu <command>
   remote check|show|models [--remote URL] [--model M] [--api-key-file FILE] [--json]
             An OpenAI-compatible endpoint instead of (or beside) a local model.
             URL from --remote, else OPENAI_BASE_URL, OPENAI_API_BASE, OPENAI_HOST
-            (+ /v1); key from --api-key-file, else OPENAI_API_KEY (never an
-            argument); model from --model, else OPENAI_MODEL, else the only one
+            + OPENAI_BASE_PATH (default v1); key from --api-key-file, else
+            OPENAI_API_KEY (never an argument; plain http carries it only to a
+            host of yours); model from --model, else OPENAI_MODEL, else the only one
             served. check: GET /models plus one 16-token chat, with host, models,
             latency and auth; the key shows masked. Redirects are never followed
   uninstall [--yes] [--images] [--cluster]
@@ -197,8 +198,10 @@ Usage: k3d-gpu <command>
   sandbox up|down|status
             Install kubernetes-sigs/agent-sandbox with a warm pool of sandboxes on
             E-cores (k3d-gpu.io/cores=efficient), check where they run, or remove it.
-            up --remote [URL]: egress only to the endpoint's host:port (no DNS),
-            endpoint in the sandbox's Secret k3d-gpu-llm; status checks the pin
+            up --remote [URL]: egress only to the endpoint's addresses and port
+            (no DNS; on a CDN those addresses also serve its other sites), and
+            endpoint in the sandbox's Secret k3d-gpu-llm, which sandbox code can
+            read (use a key you would hand to that code); status checks the pin
   model-share --image REF --agent-image REF [--replicas N] [--name NAME]
             Print a Deployment whose N agent replicas mount one model OCI image as a
             read-only image volume (pipe to kubectl apply -f -). It warns when this
@@ -2585,26 +2588,32 @@ doctor() {
     [ "${FAIL}" -eq 0 ] && info "All checks passed." || { err "One or more checks failed."; }
 }
 
-# Remote endpoint reachability: with --remote, or when OPENAI_BASE_URL (or
-# OPENAI_API_BASE, OPENAI_HOST) is set. One GET /models with the key, sent only to
-# that host. A failure fails doctor with --remote and is a warning otherwise.
+# Remote endpoint reachability, with --remote only: one GET /models with the key,
+# sent only to that host; a failure fails doctor. Without --remote an OPENAI_*
+# endpoint in the environment is named, never contacted (it may be set for
+# another tool, and only --remote sends the key anywhere).
 doctor_remote() {
-    local fields
-    [ -n "${REMOTE}" ] || [ -n "${OPENAI_BASE_URL:-}${OPENAI_API_BASE:-}${OPENAI_HOST:-}" ] || return 0
+    local fields line
+    if [ -z "${REMOTE}" ]; then
+        [ -n "${OPENAI_BASE_URL:-}${OPENAI_API_BASE:-}${OPENAI_HOST:-}" ] || return 0
+        echo ""
+        info "Remote OpenAI-compatible endpoint:"
+        echo "  info: an OPENAI_* endpoint is set in the environment; not contacted ('k3d-gpu doctor --remote' checks it)"
+        return 0
+    fi
     echo ""
     info "Remote OpenAI-compatible endpoint:"
     if ! command -v python3 >/dev/null 2>&1; then
-        echo "  ${YLW}warn${RST}: python3 missing; remote endpoints need it"
-        [ -z "${REMOTE}" ] || FAIL=1
+        echo "  ${RED}fail${RST}: python3 missing; remote endpoints need it"
+        FAIL=1
         return 0
     fi
     if fields=$(remote_py resolve --probe ${REMOTE_ARGS[@]+"${REMOTE_ARGS[@]}"} 2>&1); then
-        echo "  ok: ${fields%%$'\t'*} answers GET /models; model $(cut -f2 <<< "${fields}") (k3d-gpu remote check runs one chat too)"
-    elif [ -n "${REMOTE}" ]; then
+        line=${fields##*$'\n'}
+        echo "  ok: ${line%%$'\t'*} answers GET /models; model $(cut -f2 <<< "${line}") (k3d-gpu remote check runs one chat too)"
+    else
         echo "  ${RED}fail${RST}: ${fields##*remote: }"
         FAIL=1
-    else
-        echo "  ${YLW}warn${RST}: ${fields##*remote: } (set but unused until a command gets --remote)"
     fi
 }
 
@@ -7200,7 +7209,7 @@ cmd_agent() {
 
 # ---- remote: any OpenAI-compatible endpoint instead of a local model ----------
 # console/remote.py resolves the endpoint (--remote URL > OPENAI_BASE_URL >
-# OPENAI_API_BASE > OPENAI_HOST + /v1), the key (--api-key-file > OPENAI_API_KEY)
+# OPENAI_API_BASE > OPENAI_HOST + OPENAI_BASE_PATH), the key (--api-key-file > OPENAI_API_KEY)
 # and the model (--model > OPENAI_MODEL > the only id GET /models lists). It holds
 # the only code that sends the key, always to that host and never through a
 # redirect. The launcher never puts the key on a command line: kubectl reads the
@@ -7314,8 +7323,10 @@ cmd_remote() {
     remote_py "${sub}" ${REMOTE_ARGS[@]+"${REMOTE_ARGS[@]}"} ${REMOTE_REST[@]+"${REMOTE_REST[@]}"}
 }
 
-# remote_url_local <url>: a loopback or in-cluster URL, not someone else's endpoint.
-remote_url_local() { [[ "$1" =~ ^https?://(127\.[0-9.]+|localhost|\[::1\]|[^/:]*\.svc(\.cluster\.local)?)(:[0-9]+)?(/|$) ]]; }
+# remote_url_local <url>: the URL's host is yours (loopback, in-cluster, a private
+# address, host.k3d.internal), not someone else's endpoint. remote.py parses the
+# URL, so the launcher and remote.py judge it the same way.
+remote_url_local() { remote_py is-local "$1"; }
 
 # remote_guard <what> <dry-run 0|1>: load and benchmark runs never target an endpoint
 # the user has not claimed. --dry-run sends nothing; --i-own-this-endpoint opts in.
@@ -7711,7 +7722,7 @@ capacity_script() {
 # gets no load unless the user owns it: --dry-run sends nothing, and with
 # --i-own-this-endpoint the ramp keeps a budget (--budget 5 --max 4 unless given).
 cmd_capacity() {
-    local script dry=0 url="" budget="" max="" i fields base model origin
+    local script dry=0 url="" budget="" max="" xbody="" i fields base model origin
     script=$(capacity_script) \
         || err "capacity: apb/capacity.py not found in the repo's bench/ or ${SHARE_DIR}/bench (set K3D_GPU_BENCH)"
     require python3
@@ -7724,6 +7735,7 @@ cmd_capacity() {
             --url=*) url=${!i#*=} ;;
             --budget|--budget=*) budget=1 ;;
             --max|--max=*) max=1 ;;
+            --extra-body|--extra-body=*) xbody=1 ;;
         esac
     done
     if [ -n "${REMOTE}" ]; then
@@ -7736,7 +7748,8 @@ cmd_capacity() {
         fi
         IFS=$'\t' read -r base model origin <<< "${fields}"
         [ "${model}" != - ] || model=auto
-        set -- "$@" --url "${base}" --model "${model}"
+        # capacity.py --url is the chat completions URL itself, not the API root.
+        set -- "$@" --url "${base}/chat/completions" --model "${model}"
         url=${base}
     else
         # Without --remote, --model is capacity's own option.
@@ -7751,11 +7764,14 @@ cmd_capacity() {
     if [ -n "${url}" ] && ! remote_url_local "${url}" && [ "${dry}" = 0 ]; then
         [ -n "${budget}" ] || set -- "$@" --budget 5
         [ -n "${max}" ] || set -- "$@" --max 4
+        # Sampling as a shared fleet serves it (never temperature 0), at most 64
+        # tokens a turn; the extra body overrides the trace's own values.
+        [ -n "${xbody}" ] || set -- "$@" --extra-body '{"chat_template_kwargs": {"enable_thinking": false}, "temperature": 0.6, "max_tokens": 64}'
         info "capacity: ${url} is remote: budgeted ramp ($*)"
-        # remote.py runs it with the key from --api-key-file in its environment.
-        [ -z "${REMOTE_KEYFILE}" ] \
-            || exec python3 "$(console_dir)/remote.py" exec --remote "${url}" --api-key-file "${REMOTE_KEYFILE}" -- python3 "${script}" "$@"
     fi
+    # remote.py runs it with the key from --api-key-file in its environment.
+    [ -z "${REMOTE_KEYFILE}" ] || [ "${dry}" = 1 ] \
+        || exec python3 "$(console_dir)/remote.py" exec --remote "${url}" --api-key-file "${REMOTE_KEYFILE}" -- python3 "${script}" "$@"
     exec python3 "${script}" "$@"
 }
 
@@ -8139,7 +8155,7 @@ cmd_uninstall() {
     if [ -n "${created}${force_cluster}" ]; then
         echo "This removes cluster '${CLUSTER}' with its downloaded models and chats, and ${QS_DIR}${images:+, and image ${IMAGE}}."
     else
-        echo "This removes quickstart's port-forward and ${QS_DIR}${images:+, and image ${IMAGE}}; cluster '${CLUSTER}' was not created by quickstart and is kept (--cluster deletes it)."
+        echo "This removes quickstart's port-forward, the remote endpoint's Secret ${LLM_SECRET} (it holds the key) and ${QS_DIR}${images:+, and image ${IMAGE}}; cluster '${CLUSTER}' was not created by quickstart and is kept (--cluster deletes it)."
     fi
     if [ -z "${yes}" ]; then
         [ -t 0 ] || err "uninstall: no terminal to ask on; pass --yes to confirm"
@@ -8153,6 +8169,14 @@ cmd_uninstall() {
         k3d cluster delete "${CLUSTER}"
     else
         info "cluster '${CLUSTER}' kept (quickstart did not create it; --cluster deletes it)"
+        # The key stays nowhere quickstart --remote, agent up --remote or sandbox
+        # up --remote wrote it.
+        if command -v kubectl >/dev/null 2>&1; then
+            local ns
+            for ns in "${AGENT_NS}" "${SANDBOX_NS}"; do
+                kubectl --context "k3d-${CLUSTER}" -n "${ns}" delete secret "${LLM_SECRET}" --ignore-not-found >/dev/null 2>&1 || true
+            done
+        fi
     fi
     if [ -n "${images}" ] && command -v docker >/dev/null 2>&1; then
         if docker image rm "${IMAGE}" >/dev/null 2>&1; then info "removed image ${IMAGE}"; else info "image ${IMAGE} not present"; fi
