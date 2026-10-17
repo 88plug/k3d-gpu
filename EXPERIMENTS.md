@@ -2629,6 +2629,66 @@ INCONCLUSIVE. Next probe, to be pre-registered before use: a decay gap of at lea
 predecessor), and a load container owner check so a run can see its own background vanish
 and stop.
 
+### H27 amendment A1: matched background load (2026-10-17)
+
+Written 2026-10-17T22:10Z, before any H27 run. The ledger row above stays the
+pre-registration. A1 changes only the background the arms run under. The arms, the
+round order, n, the gate, the scoring rules (a), (b) and (c), the outcome priors and the
+predictions stay as written.
+
+Real Intel boxes are busy. In earlier runs the background load was uncontrolled and drifted
+between arms. A1 runs every arm under the same controlled background load,
+interleaved. It records that load per arm. A level is INCONCLUSIVE because its load is
+unmatched across arms, never because the load is high.
+
+- **Background:** `bench/load/load.py start --level L` on the load CPUs (E-cores 16-31 on
+  this i9-13900T). OVMS stays on P-cores 0-15, as pre-registered. The background starts
+  before the 60 s swap preflight and the OVMS cold loads. It runs for the whole level and
+  stops after the last timed request. Levels: `typical` first, which is the headline and the
+  ledger verdict. Then `heavy` as the robustness check, only if lock time remains.
+- **Order and n (unchanged):** warm-up, P1, R1 ABCD, R2 DCBA, P2, R3 ABCD, R4 DCBA,
+  R5 ABCD, P3. Arms are int4, int8, fp16 and int4' (the negative control). n = 5 reference
+  requests per arm per level, plus 3 probe repeats.
+- **Load windows:** before every reference request, OVMS sits idle for a 10 s gap. Then
+  `load.py sample --seconds 5 --tag ARM --level L` runs, and then the request. That gives
+  5 windows per arm per level, with no request in flight during any window. Matching is
+  `load.py matched` over the level's 20 windows, with TOLERANCE as committed in 402518e
+  and unchanged since: busy_pct 5 pp; load1 max(1, 15%); pkg_w max(3 W, 10%);
+  throttle_per_min max(10, 25%); swap used 256 MiB; swap growth 64 MiB per window.
+- **Why a 10 s gap is enough (checked before the run):** H26 failed matching because its
+  E-core hog's run queue carried into the next arm's windows. Here the treatment runs on the
+  P-cores, so it cannot touch E-core busy, and P-core throttling and power stop when the
+  request ends. Only the 1-min load average carries over. I simulated that average
+  (60 s EMA, 16 runnable threads per request, request lengths int4 9 s, int8 14 s,
+  fp16 26 s). Across the ABCD/DCBA predecessor mix, the per-arm carry-over spread is
+  0.8-1.0 at gaps of 0-30 s. The limit is max(1, 15% of about 25) = 3.75 or more.
+- **Owner check:** before each window, exactly 3 `io.k3d-gpu.bench-load` containers of that
+  level must be running. If the background vanishes, the level aborts and reads
+  INCONCLUSIVE ("background lost"). This repeats the H26 heavy failure on purpose so it
+  cannot go unseen.
+- **Not used for matching:** the per-request confounds in `turn.py` (RAPL W, throttle,
+  load1, P-core busy, pgmajfault, pswpin) include the request itself. They are reported per
+  arm but do not decide matching.
+- **Quality pass:** NLL is teacher-forced and deterministic, so the load cannot change it.
+  It runs once, under the lock, after the `typical` level, with no background running.
+  Both levels score against that one `nll.json`.
+- **Budget:** each level's timed part aborts at 19 min of its own wall time. The NLL pass
+  is capped at 10 min. `heavy` starts only if 19 min of the lock budget remain, and the
+  whole lock hold is capped at 40 min. A level the watchdog aborts is INCONCLUSIVE
+  ("budget"). The `k3dgpu-i-amx-autoquant-*` containers and the load containers are removed
+  before the lock is released. No k3d cluster is made, as pre-registered.
+- **Verdict per level:** (a), (b) and (c), plus the O5 INCONCLUSIVE rules, as pre-registered.
+  A level is INCONCLUSIVE only if (1) its load is unmatched, naming the metric, (2) the
+  background was lost, (3) the budget ran out, or (4) an O5 gate fired. High load alone
+  never voids a level. The ledger verdict is the `typical` one, and `heavy` is reported as
+  robustness. Confidence is as pre-registered: high means 5/5 round wins (sign test
+  p = 0.031) and 3/3 probe agreement; medium means 4/5 or 2/3.
+- RAPL is read through `sudo -A`, reads only.
+- **Predictions unchanged:** (a) holds; (b) is REFUTED because the pick is int4, the
+  default (delta 0). The latency ranges in the row were set for an idle host. They are
+  predictions, not decision rules, and A1 does not move them. Priors unchanged: O1 0.55,
+  O2 0.25, O3 0.08, O4 0.04, O5 0.08.
+
 ### H23 pre-registration (2026-10-17)
 
 Written 2026-10-17T12:08Z, before any measurement. Ledger id H23; provenance ids
