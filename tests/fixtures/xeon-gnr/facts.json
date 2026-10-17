@@ -73,7 +73,7 @@
         "level": "ok",
         "revert": null,
         "section": "Intel CPU built-in accelerators...",
-        "text": "AMX (amx_bf16 amx_fp16 amx_int8 amx_tile) — CPU instructions, usable in any pod; up labels nodes feature.node.kubernetes.io/cpu-cpuid.AMX*",
+        "text": "AMX (amx_bf16 amx_int8 amx_tile) — CPU instructions, usable in any pod; up labels nodes feature.node.kubernetes.io/cpu-cpuid.AMX*",
         "why": null
       },
       {
@@ -205,12 +205,11 @@
       }
     ]
   },
-  "fingerprint": "sha256:c6cf997d6262dd26482731bb1b7d4713c3ab9515fced18959f58627617454cbd",
+  "fingerprint": "sha256:82ea170a5135e1a8de1ee15bd371d18af985c5d6bda9e8ad4afc2ac05e3fcae2",
   "host": {
     "cpu": {
       "amx": [
         "amx_bf16",
-        "amx_fp16",
         "amx_int8",
         "amx_tile"
       ],
@@ -221,7 +220,6 @@
       "hybrid": false,
       "isa": [
         "amx_bf16",
-        "amx_fp16",
         "amx_int8",
         "amx_tile",
         "avx2",
@@ -336,7 +334,7 @@
         "amx": true,
         "e_count": null,
         "e_cpus": null,
-        "family_model": null,
+        "family_model": "6:173",
         "hybrid": false,
         "logical_cpus": null,
         "model_name": "Intel(R) Xeon(R) 6960P",

@@ -156,7 +156,7 @@
       }
     ]
   },
-  "fingerprint": "sha256:bee3e99e2c9e71ec025ee4a9cd5e5cd4663fc7b0262408ac2283dd3b88a28704",
+  "fingerprint": "sha256:f49915b3e05a592efb34e0a0d4ebb5ba069172515dea6e3bd4d621b68b30f7d3",
   "host": {
     "cpu": {
       "amx": [
@@ -282,7 +282,7 @@
         "amx": true,
         "e_count": null,
         "e_cpus": null,
-        "family_model": null,
+        "family_model": "6:143",
         "hybrid": false,
         "logical_cpus": null,
         "model_name": "Intel(R) Xeon(R) CPU Max 9480",

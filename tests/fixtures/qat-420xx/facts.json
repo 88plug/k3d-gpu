@@ -17,7 +17,6 @@
     {
       "resources": [
         "feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true",
-        "feature.node.kubernetes.io/cpu-cpuid.AMXFP16=true",
         "feature.node.kubernetes.io/cpu-cpuid.AMXINT8=true",
         "feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true"
       ],
@@ -60,7 +59,7 @@
         "level": "ok",
         "revert": null,
         "section": "Intel CPU built-in accelerators...",
-        "text": "AMX (amx_bf16 amx_fp16 amx_int8 amx_tile) — CPU instructions, usable in any pod; up labels nodes feature.node.kubernetes.io/cpu-cpuid.AMX*",
+        "text": "AMX (amx_bf16 amx_int8 amx_tile) — CPU instructions, usable in any pod; up labels nodes feature.node.kubernetes.io/cpu-cpuid.AMX*",
         "why": null
       },
       {
@@ -170,7 +169,6 @@
     "cpu": {
       "amx": [
         "amx_bf16",
-        "amx_fp16",
         "amx_int8",
         "amx_tile"
       ],
@@ -181,7 +179,6 @@
       "hybrid": false,
       "isa": [
         "amx_bf16",
-        "amx_fp16",
         "amx_int8",
         "amx_tile",
         "avx2",
@@ -245,7 +242,6 @@
   "hostname": "",
   "labels": {
     "feature.node.kubernetes.io/cpu-cpuid.AMXBF16": "true",
-    "feature.node.kubernetes.io/cpu-cpuid.AMXFP16": "true",
     "feature.node.kubernetes.io/cpu-cpuid.AMXINT8": "true",
     "feature.node.kubernetes.io/cpu-cpuid.AMXTILE": "true",
     "feature.node.kubernetes.io/cpu-cpuid.AVX512BF16": "true",
