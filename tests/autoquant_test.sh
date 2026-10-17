@@ -103,6 +103,17 @@ grep -q -- '--source_model=OpenVINO/Qwen3-4B-int4-ov' <<< "${m}" \
 m=$(hostrun K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3-4B-fp16-ov)
 grep -q -- '--source_model=OpenVINO/Qwen3-4B-fp16-ov' <<< "${m}" && ! grep -q 'agent-precision-source' <<< "${m}" \
     && ok "agent manifest: K3D_GPU_AGENT_MODEL pins over the cache" || fail "model pin: ${m}"
+# quickstart passes its RAM-tier model with K3D_GPU_AGENT_MODEL_TIER=1: not a user
+# pin when it is the default model the probe arms measure, so the winner serves.
+m=$(hostrun K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3-4B-int4-ov K3D_GPU_AGENT_MODEL_TIER=1 K3D_GPU_AGENT_MEMORY=6Gi K3D_GPU_AGENT_MEMORY_TIER=1)
+grep -q -- '--source_model=OpenVINO/Qwen3-4B-int8-ov' <<< "${m}" && grep -q 'memory: 8Gi' <<< "${m}" \
+    && ok "agent manifest: a quickstart tier model takes the measured pick and its memory" || fail "tier model: ${m}"
+m=$(hostrun K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3-4B-int4-ov K3D_GPU_AGENT_MODEL_TIER=1 K3D_GPU_AGENT_MEMORY=5Gi)
+grep -q -- '--source_model=OpenVINO/Qwen3-4B-int8-ov' <<< "${m}" && grep -q 'memory: 5Gi' <<< "${m}" \
+    && ok "agent manifest: a tier model with a user memory keeps that memory" || fail "tier model, user memory: ${m}"
+m=$(hostrun K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3-8B-int4-ov K3D_GPU_AGENT_MODEL_TIER=1)
+grep -q -- '--source_model=OpenVINO/Qwen3-8B-int4-ov' <<< "${m}" && ! grep -q 'agent-precision-source' <<< "${m}" \
+    && ok "agent manifest: a tier model the probe did not measure is kept" || fail "8B tier: ${m}"
 m=$(hostrun K3D_GPU_AGENT_MEMORY=5Gi)
 grep -q 'memory: 5Gi' <<< "${m}" && grep -q 'below the 8Gi' <<< "${m}" \
     && ok "agent manifest: a memory override under the winner's need is honored with a warning" || fail "mem: ${m}"
