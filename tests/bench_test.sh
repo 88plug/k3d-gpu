@@ -186,6 +186,17 @@ check "noisy: bad --cores is rejected" noisy_bad_cores
 check "agent_trace: unit tests against the in-process stub" \
     env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/test_agent_trace.py"
 
+check "shared-prefix (H25): prompt generator and scorer" \
+    env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/shared-prefix/test_probe.py"
+
+# ---- uncore-phase (H29) -----------------------------------------------------------
+
+check "uncore-phase: probe unit tests (order, sign test, verdict rules, knob restore)" \
+    env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/uncore-phase/test_probe.py"
+
+check "phase-steer: H20 probe unit tests" \
+    env -u IMAGE PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/phase-steer/test_probe.py"
+
 # ---- research/ models -------------------------------------------------------------
 
 check "research: agents-per-box ceiling selftest" \
@@ -196,6 +207,8 @@ check "research: spec-decoding model unit tests" \
     env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/research/spec-decoding/test_specdec_model.py"
 check "research: power-envelope model unit tests" \
     env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/research/tseries-envelope/test_envelope_model.py"
+check "bench: sku-model probe scorer, client and plan (H24)" \
+    python3 "${ROOT}/bench/sku-model/test_probe.py"
 if command -v cc >/dev/null; then
     check "research: stream_probe.c compiles" \
         cc -fsyntax-only -fopenmp "${ROOT}/research/agents-per-box-ceiling/stream_probe.c"

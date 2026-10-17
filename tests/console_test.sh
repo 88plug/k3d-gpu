@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Console spine tests: facts/v1 and plan(). No cluster, no network.
 #
-#   - unit and property tests of console/ (tests/console/test_console.py)
+#   - unit and property tests of console/ (tests/console/test_console.py,
+#     tests/console/test_shared_prefix.py)
 #   - every tests/fixtures/*/facts.json and plan.json and both matrices validate
 #     (tests/sim_matrix_test.sh writes and byte-checks those goldens)
 #   - the schema subset validator agrees with the jsonschema package
@@ -35,6 +36,11 @@ ok()   { PASS=$((PASS + 1)); echo "ok   $*"; }
 fail() { FAILS=$((FAILS + 1)); echo "FAIL $*"; }
 
 if python3 "${DIR}/test_console.py"; then ok "console unit and property tests"; else fail "console unit and property tests"; fi
+if python3 "${DIR}/test_sku_model.py"; then ok "sku_model unit and property tests (H24)"; else fail "sku_model unit and property tests (H24)"; fi
+if python3 "${DIR}/test_shared_prefix.py"; then ok "shared-prefix detector (H25) unit and property tests"; else fail "shared-prefix detector (H25) unit and property tests"; fi
+
+# k3d-gpu agent prefix reads the fixtures without a cluster.
+if "${K3D_GPU}" agent prefix --json "${DIR}/shared-prefix" | python3 -c 'import json,sys; r=json.load(sys.stdin); assert r["plan"]["engine"]=="shared" and r["block_tokens"]==32'; then ok "agent prefix --json on fixtures"; else fail "agent prefix --json on fixtures"; fi
 
 # Every golden document validates against its schema.
 validate() {  # validate <ref or ""> <file>...
@@ -207,6 +213,20 @@ expect_fail "schema violations" plan --facts "${WORK}/bad.json"
 echo 'not json' > "${WORK}/junk.json"
 expect_fail "plan:" plan --facts "${WORK}/junk.json"
 expect_fail "schema violations" plan --facts "${F}" --matrix "${WORK}/bad.json"
+
+# plan --predict (console/sku_model.py, H24): the launcher passes through and
+# the JSON says what it is (a model output, labelled).
+if out=$("${K3D_GPU}" plan --predict i9-13900t --json --mts 3600 --channels 2) \
+    && python3 -c 'import json,sys; p=json.loads(sys.argv[1]); assert p["schema"]=="sku-predict/v1" and p["status"]=="extrapolated" and p["cpu"]["decode_tok_s"]==15.7, p' "${out}"; then
+    ok "plan --predict i9-13900t --json"
+else
+    fail "plan --predict i9-13900t --json"
+fi
+if "${K3D_GPU}" plan --predict list | grep -q '^xeon-6980p '; then ok "plan --predict list"; else fail "plan --predict list"; fi
+expect_fail "plan: --predict needs a SKU" plan --predict
+expect_fail "unknown SKU" plan --predict i9-99999
+expect_fail "unknown plan --predict option" plan --predict n100 --bogus
+expect_fail "--predict must be the first option" plan --json --predict n100
 
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
