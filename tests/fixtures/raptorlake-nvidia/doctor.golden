@@ -24,6 +24,7 @@
   ok: E-core clusters (shared L2): 16-19 20-23 24-27 28-31 — k3d-gpu.io/cores=ecluster gives a pod 4 E-cores of one cluster
   ok: physical P-cores (one thread per core): 0,2,4,6,8,10,12,14 — k3d-gpu.io/cores=pcore-physical and latency show pods one thread per core
   ok: favored CPUs 8-11 (highest_perf 68, next 65) — up annotates nodes k3d-gpu.io/favored-cpus=8-11 and points the latency balloon at them
+  info: noisy-neighbour isolation: cpu-cap — no rdt_a flag, so cache and DRAM bandwidth stay shared; give a bandwidth-heavy neighbour a CPU limit. Holding it to one E-core L2 cluster (k3d-gpu.io/cores=ecluster) is not recommended: H26 measures it against the same workers spread over the E-cores (EXPERIMENTS.md H26)
 ==> Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...
   ok: dra available (auto)
   ok: image-volume available (auto)

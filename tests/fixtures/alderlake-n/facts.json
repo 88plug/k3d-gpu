@@ -111,6 +111,15 @@
       {
         "apply": null,
         "from": null,
+        "level": "info",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "noisy-neighbour isolation: rdt-cat — CAT can cap a neighbour's cache share through the RDT opt-in above (resctrl mounted: no); no MBA, so DRAM bandwidth stays shared; the classes run inside the NRI balloons policy, which up deploys on hybrid or multi-NUMA hosts only",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
         "level": "ok",
         "revert": null,
         "section": "Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...",

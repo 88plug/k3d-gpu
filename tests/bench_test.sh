@@ -177,14 +177,48 @@ noisy_bad_cores() {
     [ $? -eq 2 ]
 }
 
+noisy_stream_ecluster() {
+    "${NOISY[@]}" start --cores ecluster --stressor stream --workers 4 --dry-run > "${NJ}" || return 1
+    pyassert "${NJ}" <<'EOF'
+c = j["spec"]["containers"][0]
+assert j["metadata"]["labels"]["k3d-gpu.io/cores"] == "ecluster", j
+assert "--stream 4 --stream-l3-size 128m " in c["command"][2] and "--cpu " not in c["command"][2]
+assert c["resources"]["limits"] == {"cpu": "4", "memory": "1Gi"} == c["resources"]["requests"]
+EOF
+}
+noisy_cpu_default_mem() {
+    "${NOISY[@]}" start --workers 2 --dry-run > "${NJ}" || return 1
+    pyassert "${NJ}" <<'EOF'
+c = j["spec"]["containers"][0]
+assert c["resources"]["limits"]["memory"] == "64Mi" and "--stream" not in c["command"][2]
+EOF
+}
+noisy_bad_stream() {
+    local rc
+    "${NOISY[@]}" start --stressor bogus --dry-run; rc=$?
+    [ "${rc}" -eq 2 ] || return 1
+    "${NOISY[@]}" start --stressor stream --stream-bytes '1;x' --dry-run; rc=$?
+    [ "${rc}" -eq 2 ]
+}
+
+check "noisy: stream neighbour on ecluster has a fixed footprint and 1Gi" noisy_stream_ecluster
+check "noisy: cpu stressor keeps 64Mi and no stream args" noisy_cpu_default_mem
+check "noisy: bad --stressor and --stream-bytes are rejected" noisy_bad_stream
 check "noisy: efficient pod is labelled, sized and pinned to the image digest" noisy_efficient
 check "noisy: unlabelled pod has no cores label; --cpu overrides the request" noisy_unlabelled
 check "noisy: bad --cores is rejected" noisy_bad_cores
 
 # ---- agent_trace.py ---------------------------------------------------------------
 
+check "rdt-isolate: H26 analysis and client unit tests" \
+    env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/rdt-isolate/test_analyze.py"
+check "rdt-isolate: run.sh parses" bash -n "${ROOT}/bench/rdt-isolate/run.sh"
+
 check "agent_trace: unit tests against the in-process stub" \
     env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/test_agent_trace.py"
+
+check "shared-prefix (H25): prompt generator and scorer" \
+    env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/shared-prefix/test_probe.py"
 
 # ---- uncore-phase (H29) -----------------------------------------------------------
 

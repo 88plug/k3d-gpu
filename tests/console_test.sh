@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Console spine tests: facts/v1 and plan(). No cluster, no network.
 #
-#   - unit and property tests of console/ (tests/console/test_console.py)
+#   - unit and property tests of console/ (tests/console/test_console.py,
+#     tests/console/test_shared_prefix.py)
 #   - every tests/fixtures/*/facts.json and plan.json and both matrices validate
 #     (tests/sim_matrix_test.sh writes and byte-checks those goldens)
 #   - the schema subset validator agrees with the jsonschema package
@@ -36,6 +37,10 @@ fail() { FAILS=$((FAILS + 1)); echo "FAIL $*"; }
 
 if python3 "${DIR}/test_console.py"; then ok "console unit and property tests"; else fail "console unit and property tests"; fi
 if python3 "${DIR}/test_sku_model.py"; then ok "sku_model unit and property tests (H24)"; else fail "sku_model unit and property tests (H24)"; fi
+if python3 "${DIR}/test_shared_prefix.py"; then ok "shared-prefix detector (H25) unit and property tests"; else fail "shared-prefix detector (H25) unit and property tests"; fi
+
+# k3d-gpu agent prefix reads the fixtures without a cluster.
+if "${K3D_GPU}" agent prefix --json "${DIR}/shared-prefix" | python3 -c 'import json,sys; r=json.load(sys.stdin); assert r["plan"]["engine"]=="shared" and r["block_tokens"]==32'; then ok "agent prefix --json on fixtures"; else fail "agent prefix --json on fixtures"; fi
 
 # Every golden document validates against its schema.
 validate() {  # validate <ref or ""> <file>...
