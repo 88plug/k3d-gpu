@@ -143,6 +143,7 @@ stubbed launcher and kubectl.
 - No CUDA toolkit in the node image — driver libs are injected from the host, workloads bring their own CUDA  
 - Exposes the standard K3s entrypoint (`/bin/k3s agent`); volumes for kubelet, k3s state, CNI, logs  
 - Tunable via build arguments for the K3s and Ubuntu versions  
+- Agent framework quickstarts for the cluster's OpenAI-compatible model endpoint (OpenAI Agents SDK with MCP, LangGraph, CrewAI, LlamaIndex, Intel Enterprise Agent Toolkit's LiteLLM gateway) in [`examples/agents/`](examples/agents/)  
 
 ---
 
