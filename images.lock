@@ -1,6 +1,14 @@
 {
   "images": [
     {
+      "digest": "sha256:3848efe52c047cf6b5961eb070deaf9eca53bd5328f0d819fbb68ad56c65fb19",
+      "name": "docker.io/intel/dlstreamer",
+      "sources": [
+        "scripts/k3d-gpu K3D_GPU_AGENT_VIDEO_IMAGE"
+      ],
+      "tag": null
+    },
+    {
       "digest": "sha256:386e6bec28b3f25a0e4e1c0fb726f026e8ed199bd74e4aa0fb226631359f7daf",
       "name": "docker.io/intel/gaudi-device-plugin",
       "sources": [
@@ -17,10 +25,19 @@
       "tag": "0.37.1"
     },
     {
+      "digest": "sha256:edf037861d5c6c8b15a76a595645564f5b53858c641345e7b630b31b05cf9c5c",
+      "name": "docker.io/intel/intel-gpu-levelzero",
+      "sources": [
+        "share/intel-gpu-wsl-plugin.yml"
+      ],
+      "tag": "0.37.1"
+    },
+    {
       "digest": "sha256:004641b2547d58f1eadce58473fa160ad71377de1eb588cf1f82832387bf3e33",
       "name": "docker.io/intel/intel-gpu-plugin",
       "sources": [
-        "share/intel-gpu-plugin.yml"
+        "share/intel-gpu-plugin.yml",
+        "share/intel-gpu-wsl-plugin.yml"
       ],
       "tag": "0.37.1"
     },
@@ -47,6 +64,14 @@
         "share/intel-qat-plugin.yml"
       ],
       "tag": "0.37.1"
+    },
+    {
+      "digest": "sha256:52218ad85513ab6686d4c090c83c2bd8c5b02423c63aa4dabd41837fe641fe3b",
+      "name": "docker.io/intel/llm-scaler-vllm",
+      "sources": [
+        "scripts/k3d-gpu AGENT_DEFAULT_IMAGE"
+      ],
+      "tag": null
     },
     {
       "digest": "sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e",
@@ -76,9 +101,18 @@
       "digest": "sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58",
       "name": "docker.io/openvino/model_server",
       "sources": [
-        "scripts/k3d-gpu K3D_GPU_AGENT_IMAGE"
+        "scripts/k3d-gpu AGENT_OVMS_IMAGE"
       ],
       "tag": null
+    },
+    {
+      "digest": "sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58",
+      "name": "docker.io/openvino/model_server",
+      "sources": [
+        "scripts/k3d-gpu NPU_UMD_IMAGE",
+        "share/npu-embeddings.yml"
+      ],
+      "tag": "2026.4.1-gpu"
     },
     {
       "digest": "sha256:ca7f37d993d82ef0dcdcfecb2e0e2618ea541dbaffc620c8cedebe01a82acd0d",
@@ -153,12 +187,36 @@
       "tag": "3.10.2"
     },
     {
+      "digest": "sha256:95ac815038c4b3537b173798bfe3b89bdf525a52bd653cd14d4deb01f1062be7",
+      "name": "docker.io/vllm/vllm-openai-xpu",
+      "sources": [
+        "scripts/k3d-gpu AGENT_DEFAULT_IMAGE"
+      ],
+      "tag": null
+    },
+    {
       "digest": "sha256:a8c8297c72744f25dbcf70fdb4a64bb787f428a3f9ab4dfabb0eb1377da0070f",
       "name": "ghcr.io/containers/nri-plugins/nri-resource-policy-balloons",
       "sources": [
         "share/nri-balloons.yml"
       ],
       "tag": "v0.14.0"
+    },
+    {
+      "digest": "sha256:9b5424634b74f0c6905109fc46f90a7f569ab7bde1211d3ac5f9c32a17895e60",
+      "name": "ghcr.io/home-operations/drm-exporter",
+      "sources": [
+        "share/telemetry/intel-gpu-exporter.yml"
+      ],
+      "tag": null
+    },
+    {
+      "digest": "sha256:539009b75c64159ca2202f52b94ae736ab3883c3497d30d65bd3d179357e1859",
+      "name": "ghcr.io/intel/xpumanager/xpumd",
+      "sources": [
+        "share/telemetry/optional/intel-xpumd.yml"
+      ],
+      "tag": "v2.3.0"
     },
     {
       "digest": "sha256:10e6a78ba2d172493460a9e8a92c496aaa7a64dc4d26d622a2e95e0c736081c9",
@@ -177,12 +235,44 @@
       "tag": "v0.20.1"
     },
     {
+      "digest": "sha256:148b0c025e5f2850256816fa33754fbf4733b7a086697a95613fc0ba3db5b003",
+      "name": "nvcr.io/nvidia/k8s/dcgm-exporter",
+      "sources": [
+        "share/telemetry/dcgm-exporter.yml"
+      ],
+      "tag": "4.6.1-4.8.4-distroless"
+    },
+    {
+      "digest": "sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0",
+      "name": "quay.io/prometheus/node-exporter",
+      "sources": [
+        "share/telemetry/node-exporter.yml"
+      ],
+      "tag": "v1.12.1"
+    },
+    {
+      "digest": "sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e",
+      "name": "quay.io/prometheus/prometheus",
+      "sources": [
+        "share/telemetry/prometheus.yml"
+      ],
+      "tag": "v3.15.0"
+    },
+    {
       "digest": "sha256:2fa1c99ad09bdf2c8ad97706a4ad2fd548c84d5ecd70ba32a6152c667b96c4d2",
       "name": "registry.k8s.io/nfd/node-feature-discovery",
       "sources": [
         "share/node-feature-discovery.yml"
       ],
       "tag": "v0.19.0"
+    },
+    {
+      "digest": "sha256:5d064465d751a73a729e7ecdc32c0ba5de0df1d305debb60a3d9a85b4fd3a967",
+      "name": "vault.habana.ai/gaudi-docker/1.24.2/ubuntu24.04/habanalabs/vllm-0.30.0-ptupstream-2.13.0",
+      "sources": [
+        "scripts/k3d-gpu AGENT_DEFAULT_IMAGE"
+      ],
+      "tag": null
     }
   ],
   "k3s_tag": "v1.37.1-k3s1",

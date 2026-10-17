@@ -7,10 +7,12 @@
                                read k3s's own image list, rewrite images.lock
 
 Sources of image references (the lock holds all of them and nothing else):
-  - share/*.yml                every `image:` line (the baked manifests)
+  - share/**/*.yml             every `image:` line (the baked manifests and the
+                               opt-in ones under share/telemetry/)
   - Dockerfile                 every FROM, with its ARG defaults substituted
   - scripts/k3d-gpu            the K3D_GPU_*_IMAGE defaults (agent and test pods),
-                               except K3D_GPU_IMAGE, the node image this repo builds
+                               except K3D_GPU_IMAGE, the node image this repo builds,
+                               and every literal *_IMAGE="ref" pin (the agent backends)
   - k3s's system images        k3s-images.txt of the Dockerfile's K3S_TAG release
                                (coredns, local-path-provisioner, metrics-server,
                                pause, ...): k3s itself starts them in the cluster
@@ -38,6 +40,7 @@ import urllib.request
 LOCK_SCHEMA = "k3d-gpu.images-lock/v1"
 DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 SCRIPT_IMAGE_RE = re.compile(r'^[A-Z_]+="\$\{(K3D_GPU_[A-Z_]*IMAGE):-([^}]+)\}"', re.M)
+PLAIN_IMAGE_RE = re.compile(r'^\s*([A-Z_]*IMAGE)="([^"$]+)"', re.M)
 SHARE_IMAGE_RE = re.compile(r"^\s*(?:-\s+)?image:\s*[\"']?([^\"'\s#]+)", re.M)
 NODE_IMAGE_VAR = "K3D_GPU_IMAGE"  # the node image this repo builds from the Dockerfile
 K3S_IMAGES_URL = "https://github.com/k3s-io/k3s/releases/download/%s/k3s-images.txt"
@@ -85,20 +88,25 @@ def collect(root):
         e["digest"] = e["digest"] or digest
         e["sources"].add(source)
 
-    share = os.path.join(root, "share")
-    for f in sorted(os.listdir(share)):
-        if f.endswith((".yml", ".yaml")):
-            with open(os.path.join(share, f), encoding="utf-8") as fh:
-                for ref in SHARE_IMAGE_RE.findall(fh.read()):
-                    add(ref, "share/" + f)
+    for dirpath, dirnames, filenames in os.walk(os.path.join(root, "share")):
+        dirnames.sort()
+        for f in sorted(filenames):
+            if f.endswith((".yml", ".yaml")):
+                path = os.path.join(dirpath, f)
+                with open(path, encoding="utf-8") as fh:
+                    for ref in SHARE_IMAGE_RE.findall(fh.read()):
+                        add(ref, os.path.relpath(path, root).replace(os.sep, "/"))
     with open(os.path.join(root, "Dockerfile"), encoding="utf-8") as fh:
         froms, args = dockerfile_froms(fh.read())
     for ref in froms:
         add(ref, "Dockerfile")
     with open(os.path.join(root, "scripts", "k3d-gpu"), encoding="utf-8") as fh:
-        for var, ref in SCRIPT_IMAGE_RE.findall(fh.read()):
-            if var != NODE_IMAGE_VAR:
-                add(ref, "scripts/k3d-gpu " + var)
+        text = fh.read()
+    for var, ref in SCRIPT_IMAGE_RE.findall(text):
+        if var != NODE_IMAGE_VAR:
+            add(ref, "scripts/k3d-gpu " + var)
+    for var, ref in PLAIN_IMAGE_RE.findall(text):
+        add(ref, "scripts/k3d-gpu " + var)
     k3s_tag = args.get("K3S_TAG")
     if not k3s_tag:
         raise ValueError("Dockerfile has no ARG K3S_TAG default")

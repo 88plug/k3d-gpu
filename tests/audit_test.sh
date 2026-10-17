@@ -72,7 +72,15 @@ lock_drift "a new image in share/" "not in images.lock: docker.io/library/redis:
 lock_drift "a bumped plugin tag" "not in images.lock: docker.io/intel/intel-gpu-plugin:0.38.0" \
     "sed -i 's/intel-gpu-plugin:0.37.1/intel-gpu-plugin:0.38.0/' share/intel-gpu-plugin.yml"
 lock_drift "the stale entry a bump leaves" "stale in images.lock: docker.io/intel/intel-gpu-plugin:0.37.1" \
-    "sed -i 's/intel-gpu-plugin:0.37.1/intel-gpu-plugin:0.38.0/' share/intel-gpu-plugin.yml"
+    "sed -i 's/intel-gpu-plugin:0.37.1/intel-gpu-plugin:0.38.0/' share/intel-gpu-plugin.yml share/intel-gpu-wsl-plugin.yml"
+lock_drift "a bumped image under share/telemetry" \
+    "not in images.lock: quay.io/prometheus/node-exporter:v9.9.9 (from share/telemetry/node-exporter.yml)" \
+    "sed -i 's/node-exporter:v[0-9.]*/node-exporter:v9.9.9/' share/telemetry/node-exporter.yml"
+lock_drift "a bumped plain image pin in the launcher" \
+    "not in images.lock: docker.io/openvino/model_server:2099.1.0-gpu (from scripts/k3d-gpu NPU_UMD_IMAGE)" \
+    "sed -i 's|^NPU_UMD_IMAGE=.*|NPU_UMD_IMAGE=\"openvino/model_server:2099.1.0-gpu\"|' scripts/k3d-gpu"
+lock_drift "a moved backend digest in the launcher" "vllm/vllm-openai-xpu: the repo pins sha256:$(printf 'e%.0s' {1..64})" \
+    "sed -i 's|vllm/vllm-openai-xpu@sha256:[0-9a-f]*|vllm/vllm-openai-xpu@sha256:$(printf 'e%.0s' {1..64})|' scripts/k3d-gpu"
 lock_drift "a changed pinned digest" "the repo pins sha256:$(printf 'f%.0s' {1..64})" \
     "sed -i 's/node-feature-discovery:v0.19.0@sha256:[0-9a-f]*/node-feature-discovery:v0.19.0@sha256:$(printf 'f%.0s' {1..64})/' share/node-feature-discovery.yml"
 lock_drift "a k3s bump" "images.lock is for k3s v1.37.1-k3s1, the Dockerfile pins v1.38.0-k3s1" \

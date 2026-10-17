@@ -28,6 +28,7 @@ test "$(k3d-gpu version)" = "k3d-gpu ${VERSION}"
 for f in /src/share/*.yml /src/share/telemetry/*.yml /src/share/telemetry/optional/*.yml; do
     test "$(sha256sum < "$f")" = "$(sha256sum < "/usr/share/k3d-gpu/${f#/src/share/}")"
 done
+test "$(sha256sum < /src/images.lock)" = "$(sha256sum < /usr/share/k3d-gpu/images.lock)"
 for f in /src/console/*.py /src/console/*.json; do
     test "$(sha256sum < "$f")" = "$(sha256sum < "/usr/share/k3d-gpu/console/${f##*/}")"
 done
