@@ -1471,6 +1471,7 @@ case "$*" in
     "get nodes -l "*)
         for l in ${STUB_NODE_LABELS:-}; do [ "$l" = "$4" ] && echo node/k3d-agent-server-0; done ;;
     apply*) echo applied >> "${STUB_APPLY_LOG:-/dev/null}" ;;
+    *" exec "*) [ -n "${STUB_EXEC:-}" ] || exit 1; printf '%s\n' "${STUB_EXEC}" ;;
 esac
 exit 0
 EOF
@@ -1497,14 +1498,28 @@ agent_says() {
 r=$(newroot agent-igpu)
 pci "${r}" 0000:00:02.0 0x8086 0xa780 i915; render "${r}" 0000:00:02.0 128
 gid=$(stat -c %g "${r}/dev/dri/renderD128")
-agent_says "agent picks GPU when the cluster advertises gpu.intel.com/i915" "${r}" 0 \
-    '--target_device=GPU' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1'
+agent_says "agent picks GPU when the cluster advertises gpu.intel.com/i915 and XMX" "${r}" 0 \
+    '--target_device=GPU' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' STUB_NODE_LABELS=gpu.intel.com/xmx=true
 agent_says "agent GPU pod requests one gpu.intel.com/i915" "${r}" 0 \
-    'gpu\.intel\.com/i915: "?1"?' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1'
+    'gpu\.intel\.com/i915: "?1"?' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' STUB_NODE_LABELS=gpu.intel.com/xmx=true
 agent_says "agent GPU pod joins the host render group" "${r}" 0 \
-    "supplementalGroups: \[${gid}\]" "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1'
+    "supplementalGroups: \[${gid}\]" "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' STUB_NODE_LABELS=gpu.intel.com/xmx=true
 agent_says "agent picks gpu.intel.com/xe when that is what the cluster has" "${r}" 0 \
-    'gpu\.intel\.com/xe: "?1"?' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/xe 2'
+    'gpu\.intel\.com/xe: "?1"?' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/xe 2' STUB_NODE_LABELS=gpu.intel.com/xmx=true
+agent_says "auto GPU pod is placed on an XMX node" "${r}" 0 \
+    'gpu\.intel\.com/xmx: "true"' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/xe 1' STUB_NODE_LABELS=gpu.intel.com/xmx=true
+# Measured on an i9-13900T (UHD 770, no XMX): P-cores decode 15.7 tok/s and
+# prefill 172 tok/s, the GPU 9.9 and 66. Without XMX auto stays on the CPU.
+agent_says "auto picks CPU when the Intel GPU has no XMX" "${r}" 0 \
+    '--target_device=CPU' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' STUB_NODE_LABELS=gpu.intel.com/xmx=false
+agent_says "auto picks CPU when no node says the GPU has XMX" "${r}" 0 \
+    '--target_device=CPU' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/xe 1'
+agent_says "auto CPU on a no-XMX GPU node requests no GPU" "${r}" 0 \
+    'gpu\.intel\.com' negate STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' STUB_NODE_LABELS=gpu.intel.com/xmx=false
+agent_says "K3D_GPU_AGENT_DEVICE=GPU uses a GPU without XMX" "${r}" 0 \
+    '--target_device=GPU' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' K3D_GPU_AGENT_DEVICE=GPU
+agent_says "a forced GPU pod is not tied to XMX nodes" "${r}" 0 \
+    'gpu\.intel\.com/xmx' negate STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' K3D_GPU_AGENT_DEVICE=GPU
 agent_says "agent falls back to CPU when no Intel GPU is allocatable" "${r}" 0 \
     '--target_device=CPU' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 0'
 agent_says "agent CPU pod requests no GPU" "${r}" 0 \
@@ -1546,12 +1561,19 @@ hybrid "${r}" 0-15 16-31
 pci "${r}" 0000:00:02.0 0x8086 0xa780 i915; render "${r}" 0000:00:02.0 128
 agent_says "on a hybrid node the server pod is pinned to P-cores" "${r}" 0 \
     'k3d-gpu.io/cores: performance' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' STUB_NODE_LABELS=k3d-gpu.io/hybrid-cpu=true
+agent_says "auto on a hybrid node with a no-XMX GPU runs on the CPU" "${r}" 0 \
+    '--target_device=CPU' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' \
+    STUB_NODE_LABELS='k3d-gpu.io/hybrid-cpu=true gpu.intel.com/xmx=false'
+agent_says "auto on a hybrid node with a no-XMX GPU takes every P-core" "${r}" 0 \
+    'cpu: "16"' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' \
+    STUB_NODE_LABELS='k3d-gpu.io/hybrid-cpu=true gpu.intel.com/xmx=false'
 agent_says "a non-hybrid cluster gets no core-type label" "${r}" 0 \
     'k3d-gpu.io/cores' negate STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1'
 agent_says "hybrid CPU inference sizes the balloon to every P-core CPU" "${r}" 0 \
     'cpu: "16"' "" STUB_ALLOC='cpu 32' STUB_NODE_LABELS=k3d-gpu.io/hybrid-cpu=true
 agent_says "GPU inference on a hybrid node asks for a small P-core balloon" "${r}" 0 \
-    'cpu: "2"' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' STUB_NODE_LABELS=k3d-gpu.io/hybrid-cpu=true
+    'cpu: "2"' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' \
+    STUB_NODE_LABELS='k3d-gpu.io/hybrid-cpu=true gpu.intel.com/xmx=true'
 agent_says "K3D_GPU_AGENT_CPUS overrides the CPU request" "${r}" 0 \
     'cpu: "6"' "" STUB_ALLOC='cpu 32' STUB_NODE_LABELS=k3d-gpu.io/hybrid-cpu=true K3D_GPU_AGENT_CPUS=6
 
@@ -1564,7 +1586,8 @@ agent_says "CPU inference lands on an AMX node when there is one" "${r}" 0 \
     'feature.node.kubernetes.io/cpu-cpuid.AMXTILE: "true"' "" \
     STUB_ALLOC='cpu 56' STUB_NODE_LABELS=feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true
 agent_says "GPU inference is not tied to AMX nodes" "${r}" 0 \
-    'AMXTILE' negate STUB_ALLOC=$'cpu 56\ngpu.intel.com/xe 1' STUB_NODE_LABELS=feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true
+    'AMXTILE' negate STUB_ALLOC=$'cpu 56\ngpu.intel.com/xe 1' \
+    STUB_NODE_LABELS='feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true gpu.intel.com/xmx=true'
 
 r=$(newroot agent-model)
 agent_says "default model is Qwen3-4B" "${r}" 0 '--source_model=OpenVINO/Qwen3-4B-int4-ov$' "" STUB_ALLOC='cpu 8'
@@ -1579,6 +1602,23 @@ agent_says "K3D_GPU_AGENT_LOG_LEVEL=DEBUG reaches the server" "${r}" 0 '--log_le
     STUB_ALLOC='cpu 8' K3D_GPU_AGENT_LOG_LEVEL=DEBUG
 agent_says "a custom model leaves parser choice to OVMS" "${r}" 0 'tool_parser' negate \
     STUB_ALLOC='cpu 8' K3D_GPU_AGENT_MODEL=OpenVINO/Phi-4-mini-instruct-int4-ov
+
+# OVMS --pull clones the model repo's default branch and has no revision option,
+# so `agent status` reports the commit that was downloaded.
+status_says() {
+    local name=$1 re=$2 out
+    shift 2
+    out=$(env PATH="${ASTUB}:${PATH}" "$@" bash "${K3D_GPU}" agent status 2>&1)
+    if grep -qE -- "${re}" <<< "${out}"; then
+        PASS=$((PASS + 1)); echo "ok   ${name}"
+    else
+        FAILS=$((FAILS + 1)); echo "FAIL ${name} (/${re}/)"; awk '{print "  | " $0}' <<< "${out}"
+    fi
+}
+sha=0123456789abcdef0123456789abcdef01234567
+status_says "agent status prints the downloaded model commit" "model revision: ${sha}" STUB_EXEC="${sha}"
+status_says "agent status says unknown for a non-sha revision" 'model revision: unknown' STUB_EXEC=garbage
+status_says "agent status says unknown when the pod cannot be read" 'model revision: unknown'
 
 echo ""
 echo "${PASS} passed, ${FAILS} failed"

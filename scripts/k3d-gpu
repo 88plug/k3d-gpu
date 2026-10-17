@@ -35,7 +35,7 @@
 #   logs    tail server container logs
 #   host-setup  check the host userspace and print (--apply: run) the pinned install commands
 #   agent   up|down|status|manifest: OpenAI-compatible LLM server (OpenVINO Model
-#           Server) on the cluster's best Intel engine (GPU, else CPU; NPU on request)
+#           Server) on the cluster's best Intel engine (an XMX GPU, else CPU on P-cores; NPU on request)
 
 set -euo pipefail
 
@@ -86,7 +86,7 @@ Usage: k3d-gpu <command>
             them after a y/N prompt
   agent up|down|status|manifest
             OpenAI-compatible LLM server (OpenVINO Model Server) in the current
-            cluster, on its Intel GPU if it has one, else CPU
+            cluster: on its Intel GPU if that GPU has XMX, else on the CPU (P-cores)
   version   Show version
   help      Show this message
 
@@ -2943,18 +2943,30 @@ cpu_list_count() {
 }
 
 # "<OVMS device> <extended resource or ->". K3D_GPU_AGENT_DEVICE forces one.
-# auto: an allocatable Intel GPU (xe first: Battlemage/Lunar Lake and newer),
-# else CPU. auto never picks the NPU, as OVMS's own detection does not: LLMs on
-# the NPU run the stateful pipeline only (no continuous batching).
+# auto: the Intel GPU (xe first: Battlemage/Lunar Lake and newer) only when it is
+# allocatable and a node labels it gpu.intel.com/xmx=true; otherwise CPU, on the
+# P-cores of a hybrid node. A GPU without XMX loses to the P-cores: on an
+# i9-13900T, Qwen3-4B int4 decodes 15.7 tok/s and prefills 172 tok/s on the
+# P-cores, 9.9 and 66 on the UHD 770 (EXPERIMENTS.md H6); the GPU only saves CPU
+# (~1 busy CPU instead of ~8). auto never picks the NPU, as OVMS's own detection
+# does not: LLMs on the NPU run the stateful pipeline only (no continuous batching).
+AGENT_XMX_LABEL="gpu.intel.com/xmx=true"
 agent_device() {
     local want=${K3D_GPU_AGENT_DEVICE:-auto} res
     case "${want^^}" in
-        AUTO|GPU)
+        AUTO)
+            if [ -n "$(labelled_nodes "${AGENT_XMX_LABEL}")" ]; then
+                for res in gpu.intel.com/xe gpu.intel.com/i915; do
+                    if [ "$(resource_total "${res}")" -gt 0 ]; then echo "GPU ${res}"; return 0; fi
+                done
+            fi
+            echo "CPU -"
+            ;;
+        GPU)
             for res in gpu.intel.com/xe gpu.intel.com/i915; do
                 if [ "$(resource_total "${res}")" -gt 0 ]; then echo "GPU ${res}"; return 0; fi
             done
-            [ "${want^^}" = AUTO ] || err "K3D_GPU_AGENT_DEVICE=GPU but the cluster advertises no Intel GPU (gpu.intel.com/xe or i915) — check 'k3d-gpu detect' and recreate the cluster"
-            echo "CPU -"
+            err "K3D_GPU_AGENT_DEVICE=GPU but the cluster advertises no Intel GPU (gpu.intel.com/xe or i915) — check 'k3d-gpu detect' and recreate the cluster"
             ;;
         NPU)
             [ "$(resource_total npu.intel.com/accel)" -gt 0 ] \
@@ -2962,7 +2974,7 @@ agent_device() {
             echo "NPU npu.intel.com/accel"
             ;;
         CPU) echo "CPU -" ;;
-        *) err "unknown K3D_GPU_AGENT_DEVICE '${want}' (use CPU, GPU or NPU)" ;;
+        *) err "unknown K3D_GPU_AGENT_DEVICE '${want}' (use auto, CPU, GPU or NPU)" ;;
     esac
 }
 
@@ -3035,6 +3047,11 @@ agent_manifest() {
     [ -z "${hybrid}" ] || podlabels=$'\n        k3d-gpu.io/cores: performance'
     [ -z "${gid}" ] || podspec+=$'\n        supplementalGroups: ['"${gid}"']'
     [ -z "${amx}" ] || podspec+=$'\n      nodeSelector:\n        feature.node.kubernetes.io/cpu-cpuid.AMXTILE: "true"'
+    # auto chose the GPU because a node has XMX: keep the pod on such a node.
+    local want=${K3D_GPU_AGENT_DEVICE:-auto}
+    if [ "${device}" = GPU ] && [ "${want^^}" = AUTO ]; then
+        podspec+=$'\n      nodeSelector:\n        gpu.intel.com/xmx: "true"'
+    fi
 
     cat <<EOF
 apiVersion: v1
@@ -3159,6 +3176,23 @@ agent_warmup() {
     info "warm-up reply ($((SECONDS - start))s): $(sed -n 's/.*"content":"\([^"]*\)".*/\1/p' <<< "${reply}" | sed -n 1p)"
 }
 
+# Commit of the model repo the pod downloaded, or "unknown". OVMS 2026.4.1 --pull
+# clones the default branch with no way to ask for a revision, so the weights
+# are pinned only after the fact: this is the sha to compare against.
+agent_model_revision() {
+    local rev
+    # shellcheck disable=SC2016 # expanded by the pod's shell
+    rev=$(kubectl -n "${AGENT_NS}" exec deployment/ovms -c ovms -- sh -c '
+        g=$1/.git; h=$(cat "$g/HEAD") || exit 1
+        case $h in
+            "ref: "*) r=${h#ref: }
+                if [ -f "$g/$r" ]; then cat "$g/$r"; else grep " $r\$" "$g/packed-refs" | cut -d" " -f1; fi ;;
+            *) echo "$h" ;;
+        esac' sh "/models/${AGENT_MODEL}" 2>/dev/null | sed -n 1p) || rev=""
+    [[ "${rev}" =~ ^[0-9a-f]{40}$ ]] || rev=unknown
+    echo "${rev}"
+}
+
 cmd_agent_up() {
     require kubectl
     kubectl get nodes >/dev/null 2>&1 || err "no cluster reachable — run 'k3d-gpu up' first"
@@ -3169,6 +3203,7 @@ cmd_agent_up() {
     kubectl -n "${AGENT_NS}" rollout status deployment/ovms --timeout="${AGENT_TIMEOUT}s" \
         || err "server not ready — kubectl -n ${AGENT_NS} logs deploy/ovms -c pull; kubectl -n ${AGENT_NS} logs deploy/ovms"
     agent_warmup
+    info "model ${AGENT_MODEL} at commit $(agent_model_revision) (OVMS pulls the default branch; compare with 'k3d-gpu agent status' later)"
     info "OpenAI API ready, model '${AGENT_MODEL_NAME}':
        kubectl -n ${AGENT_NS} port-forward svc/ovms 8000:8000
        curl http://localhost:8000/v3/chat/completions -H 'Content-Type: application/json' \\
@@ -3179,6 +3214,7 @@ cmd_agent_status() {
     require kubectl
     kubectl -n "${AGENT_NS}" get deployment,pod,pvc,service -o wide
     info "device: $(kubectl -n "${AGENT_NS}" get deployment ovms -o jsonpath='{.spec.template.metadata.annotations.k3d-gpu\.io/agent-device}' 2>/dev/null || echo '?')"
+    info "model revision: $(agent_model_revision)"
     info "models (/v1/config):"
     kubectl get --raw "${AGENT_PROXY}/v1/config" 2>/dev/null || warn "server not answering yet"
     echo ""

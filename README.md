@@ -296,7 +296,7 @@ K3D_GPU_AGENT_DEVICE=CPU k3d-gpu agent up   # same model on the CPU instead
 kubectl -n k3d-gpu-agent port-forward svc/ovms 8000:8000 &
 curl http://localhost:8000/v3/chat/completions -H 'Content-Type: application/json' \
   -d '{"model":"Qwen3-4B-int4-ov","messages":[{"role":"user","content":"hi"}]}'
-k3d-gpu agent status             # pod, PVC, device, model state (/v1/config)
+k3d-gpu agent status             # pod, PVC, device, model commit, model state (/v1/config)
 k3d-gpu agent down               # stop serving; the downloaded model stays
 k3d-gpu agent manifest           # print the YAML instead of applying it
 ```
@@ -305,9 +305,11 @@ The device comes from what the cluster advertises, not from the host alone:
 
 | Cluster has | Device | Pod gets |
 |-------------|--------|----------|
-| allocatable `gpu.intel.com/xe`, else `gpu.intel.com/i915` | `GPU` | one GPU; the host render group is added as a supplemental group |
-| neither | `CPU` | no device; on a node labelled `...cpu-cpuid.AMXTILE=true` it is pinned there |
+| allocatable `gpu.intel.com/xe`, else `gpu.intel.com/i915`, on a node labelled `gpu.intel.com/xmx=true` | `GPU` | one GPU, a `gpu.intel.com/xmx: "true"` node selector; the host render group is added as a supplemental group |
+| anything else, including an Intel GPU without XMX (or with `xmx` unknown) | `CPU` | no device; the P-cores on a hybrid node; on a node labelled `...cpu-cpuid.AMXTILE=true` it is pinned there |
 | `npu.intel.com/accel`, only with `K3D_GPU_AGENT_DEVICE=NPU` | `NPU` | the NPU and its accel node's group |
+
+`K3D_GPU_AGENT_DEVICE=GPU` uses any allocatable Intel GPU, XMX or not.
 
 `auto` never picks the NPU, same as OVMS's own device detection: LLMs on the NPU
 run the stateful pipeline only (no continuous batching, static prompt shapes).
@@ -336,21 +338,31 @@ The Intel plugins inject devices through CDI, which already gives the device
 node to the pod's own user. The render group is a fallback for plugins that
 pass plain device nodes.
 
-Measured on an i9-13900T (UHD 770 iGPU, 8 P-cores). Qwen3-4B int4,
-256-token answers, three runs each:
+Why `auto` wants XMX: measured on an i9-13900T (UHD 770 iGPU, no XMX; 8
+P-cores), Qwen3-4B int4, 5 rounds per arm ([ledger:H6]):
 
-| Device | Decode | CPUs the pod holds |
-|--------|--------|--------------------|
-| `GPU` (UHD 770) | 9.7–10.0 tokens/s | 2 (P-cores) |
-| `CPU` | 12.7–14.8 tokens/s | 16 (every P-core) |
+| Device | Decode | Prefill (~1.9k-token prompt) | Pod CPU use |
+|--------|--------|------------------------------|-------------|
+| `CPU` on the P-cores | 15.7 tokens/s [ledger:H6] | 172 tokens/s [ledger:H6] | 7.9 CPUs |
+| `GPU` (UHD 770) | 9.9 tokens/s [ledger:H6] | 66 tokens/s [ledger:H6] | 1.0 CPU |
 
-On a small iGPU like this one the P-cores decode faster. `auto` still picks
-the GPU, because it leaves the P-cores free for everything else. Set
-`K3D_GPU_AGENT_DEVICE=CPU` when tokens per second matter more.
+A GPU without XMX matrix engines loses to the P-cores at both decode and
+prefill, so `auto` serves on the P-cores. What the GPU buys is CPU: its pod keeps
+about one CPU busy instead of eight. Set `K3D_GPU_AGENT_DEVICE=GPU` when the
+P-cores are needed for other work more than the model needs speed. An Intel
+GPU with XMX (Arc A/B-series, Lunar Lake iGPUs; `k3d-gpu up` labels
+the node `gpu.intel.com/xmx=true`) is where `auto` moves the model to the GPU.
+
+Model weights are not pinned to a revision: OVMS 2026.4.1 `--pull` clones the
+Hugging Face repo's default branch and has no revision option (`--source_model`
+takes a repo id only). `agent up` and `agent status` print the commit that was
+downloaded (`model revision: <sha>`, read from the clone's `.git` in the PVC),
+so a change shows up as a different sha. The PVC keeps that download until it
+is deleted.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `K3D_GPU_AGENT_DEVICE` | `auto` | `CPU`, `GPU` or `NPU` (any case) to force one; forcing a device the cluster does not advertise fails |
+| `K3D_GPU_AGENT_DEVICE` | `auto` | `auto`: GPU only on an XMX node, else CPU. `CPU`, `GPU` or `NPU` (any case) to force one; forcing a device the cluster does not advertise fails |
 | `K3D_GPU_AGENT_MODEL` | `OpenVINO/Qwen3-4B-int4-ov` | Hugging Face model in OpenVINO IR format |
 | `K3D_GPU_AGENT_MODEL_NAME` | last part of the model id | name clients send as `model` |
 | `K3D_GPU_AGENT_TOOL_PARSER` / `_REASONING_PARSER` | `hermes3` / `qwen3` for the default model, unset otherwise | unset lets OVMS detect them from the chat template; empty turns one off |
