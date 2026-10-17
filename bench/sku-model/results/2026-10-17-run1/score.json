@@ -1,0 +1,109 @@
+{
+ "header": {
+  "kind": "header",
+  "image": "openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58",
+  "kernel": "6.6.128-1-MANJARO",
+  "start": 1792259249.6707106,
+  "cpu": "13th Gen Intel(R) Core(TM) i9-13900T",
+  "predictions_m0": {
+   "A": {
+    "decode_c1": 15.7,
+    "prefill": 172.0,
+    "c4_agg": 62.6
+   },
+   "B": {
+    "decode_c1": 15.7,
+    "prefill": 86.0,
+    "c4_agg": 62.6
+   },
+   "C": {
+    "decode_c1": 15.7,
+    "prefill": 32.2,
+    "c4_agg": 32.2
+   },
+   "D": {
+    "decode_c1": 15.7,
+    "prefill": 64.5,
+    "c4_agg": 62.6
+   }
+  }
+ },
+ "cells": [
+  {
+   "arm": "B",
+   "metric": "decode_c1",
+   "n": 0,
+   "measured": null
+  },
+  {
+   "arm": "B",
+   "metric": "prefill",
+   "n": 0,
+   "measured": null
+  },
+  {
+   "arm": "B",
+   "metric": "c4_agg",
+   "n": 1,
+   "measured": 34.58,
+   "m0": 45.94,
+   "err": -0.247,
+   "spread": null
+  },
+  {
+   "arm": "C",
+   "metric": "decode_c1",
+   "n": 0,
+   "measured": null
+  },
+  {
+   "arm": "C",
+   "metric": "prefill",
+   "n": 0,
+   "measured": null
+  },
+  {
+   "arm": "C",
+   "metric": "c4_agg",
+   "n": 2,
+   "measured": 22.17,
+   "m0": 23.63,
+   "err": -0.062,
+   "spread": 0.002
+  },
+  {
+   "arm": "D",
+   "metric": "decode_c1",
+   "n": 0,
+   "measured": null
+  },
+  {
+   "arm": "D",
+   "metric": "prefill",
+   "n": 0,
+   "measured": null
+  },
+  {
+   "arm": "D",
+   "metric": "c4_agg",
+   "n": 2,
+   "measured": 30.37,
+   "m0": 45.94,
+   "err": -0.339,
+   "spread": 0.005
+  }
+ ],
+ "triad_gbs": {
+  "A": 38.85,
+  "B": 38.4,
+  "C": 26.8,
+  "D": 30.9
+ },
+ "m1_decode": {},
+ "absolute_decode": {},
+ "absolute_decode_mape": null,
+ "a_vs_h6": null,
+ "a_drift": null,
+ "mape": 0.216,
+ "verdict": "INCONCLUSIVE (missing cells: partial run)"
+}
