@@ -14,7 +14,8 @@ class K3dGpu < Formula
   def install
     libexec.install "scripts/k3d-gpu"
     pkgshare.install Dir["share/*.yml", "share/telemetry"]
-    (pkgshare/"bench").install "bench/vs.py", "bench/llm_load.py", "bench/competitors.lock"
+    # Dir[] so a release tarball cut before bench/ shipped still installs.
+    (pkgshare/"bench").install Dir["bench/vs.py", "bench/llm_load.py", "bench/competitors.lock"]
     # The launcher reads its manifests from K3D_GPU_SHARE (default /usr/share/k3d-gpu).
     (bin/"k3d-gpu").write_env_script libexec/"k3d-gpu", K3D_GPU_SHARE: "${K3D_GPU_SHARE:-#{pkgshare}}"
   end
@@ -24,6 +25,5 @@ class K3dGpu < Formula
     assert_match "#{pkgshare}/nvidia-device-plugin.yml", shell_output("#{bin}/k3d-gpu help")
     assert_match "/x/nvidia-device-plugin.yml", shell_output("K3D_GPU_SHARE=/x #{bin}/k3d-gpu help")
     assert_path_exists pkgshare/"nvidia-device-plugin.yml"
-    assert_path_exists pkgshare/"bench/competitors.lock"
   end
 end
