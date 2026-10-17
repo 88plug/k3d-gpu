@@ -37,7 +37,7 @@
     "  no measured cell for these targets",
     "decision:",
     "  hpu refused: habanalabs driver not loaded; fix: install the Intel Gaudi driver (habanalabs), then sudo modprobe habanalabs",
-    "  unmeasured, run `k3d-gpu prove` on this box",
+    "  unmeasured: no green cell for this box; quickstart and agent up still pick by device",
     "  bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)"
   ],
   "fingerprint": "sha256:2e1a8fe354f8af37f1ca3dfe808b6d019f2d0f7ad866fa42c93c4444b3bdf59a",
@@ -56,7 +56,7 @@
   "schema": "k3d-gpu.plan/v1",
   "summary": [
     "hpu refused: habanalabs driver not loaded; fix: install the Intel Gaudi driver (habanalabs), then sudo modprobe habanalabs",
-    "unmeasured, run `k3d-gpu prove` on this box",
+    "unmeasured: no green cell for this box; quickstart and agent up still pick by device",
     "bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)"
   ]
 }

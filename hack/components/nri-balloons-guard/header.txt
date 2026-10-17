@@ -1,0 +1,27 @@
+# NRI balloons resource policy for Intel hybrid CPUs, PREFILL GUARD variant (opt-in)
+# Source: https://github.com/containers/nri-plugins (helm chart nri-resource-policy-balloons @VERSION@),
+# rendered by `hack/render-component nri-balloons-guard` (helm template --include-crds) with the values below.
+# Template: `k3d-gpu up` with K3D_GPU_PREFILL_GUARD set fills the two placeholders,
+# writes the result under K3D_GPU_STATE_DIR and mounts it over the baked
+# nri-balloons.yaml in the server node's k3s manifests dir. Never baked into the image.
+#
+# Same values as share/nri-balloons.yml (every balloon type, NUMA replica included,
+# and the same Helm release annotations); only the BalloonsPolicy gains CPU classes:
+#   prefill-guard  on the efficient balloon type: scaling_max_freq of its CPUs is
+#                  set to __K3D_GPU_GUARD_MAX__ (the cap, "<kHz>kHz"), so E-core
+#                  neighbours draw less of the package power and thermal budget
+#                  that P-core inference shares with them
+#   default        every other balloon (performance, lowpower, ecluster, pcore-physical,
+#                  latency, shared, replica, reserved) and idle CPUs (the policy's
+#                  implicit "default" class): scaling_max_freq set to
+#                  __K3D_GPU_HOST_MAX__, the highest cpuinfo_max_freq on the host. The
+#                  kernel clamps it to each CPU's own maximum, so a CPU leaving the
+#                  efficient balloon is uncapped again.
+# Numbers, not "turbo": v0.14.0 resolves min/base/turbo from the first online CPU
+# only (pkg/resmgr/cpuclass/internal/cpufreq/platform.go), which on a hybrid part
+# with favoured cores is below their maximum. EPP is not set: v0.14.0 accepts
+# energyPerformancePreference but its cpufreq writer only writes scaling_min_freq,
+# scaling_max_freq and scaling_governor (internal/cpufreq/sysfs.go).
+# This writes host cpufreq (through the node's /sys); `k3d-gpu down` writes the
+# scaling_max_freq values recorded before `up` back.
+#

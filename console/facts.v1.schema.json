@@ -27,7 +27,7 @@
         "additionalProperties": false,
         "required": ["vendor", "resources"],
         "properties": {
-          "vendor": {"enum": ["nvidia", "intel", "npu", "gaudi", "dsa", "iaa", "qat", "amx", "hybrid", "numa"]},
+          "vendor": {"enum": ["nvidia", "intel", "wsl", "npu", "gaudi", "dsa", "iaa", "qat", "amx", "hybrid", "numa"]},
           "resources": {"type": "array", "items": {"type": "string"}}
         }
       }

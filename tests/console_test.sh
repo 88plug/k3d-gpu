@@ -79,11 +79,22 @@ if [ -z "${bad}" ]; then
 else
     fail "baked matrix: wrong decision for${bad}"
 fi
-if grep -L 'unmeasured, run `k3d-gpu prove` on this box' "${REPO}"/tests/fixtures/*/plan-explain.golden | grep -q .; then
-    fail "a fixture plan-explain.golden lacks the unmeasured line"
+UNMEASURED_LINE='unmeasured: no green cell for this box; quickstart and agent up still pick by device'
+# Captured, not piped to grep -q: under pipefail an early-exiting grep -q made
+# the old check pass vacuously.
+lacking=$(grep -LF "${UNMEASURED_LINE}" "${REPO}"/tests/fixtures/*/plan-explain.golden)
+if [ -n "${lacking}" ]; then
+    fail "plan-explain.golden lacks the unmeasured line: ${lacking}"
 else
-    ok "every fixture's --explain says unmeasured, run prove"
+    ok "every fixture's --explain says unmeasured and names a real next step"
 fi
+# Blind test: plan sent users to `k3d-gpu prove`, which is not a command (it is
+# a design in docs/console-design.md only).
+grep -q '^    prove)' "${REPO}/scripts/k3d-gpu" && ok "prove is a subcommand" || {
+    hits=$(grep -lF 'k3d-gpu prove' "${REPO}"/console/*.py "${REPO}/scripts/k3d-gpu" "${REPO}/scripts/k3d-gpu-mcp" \
+        "${REPO}/README.md" "${REPO}/docs/platforms.md" "${REPO}"/tests/fixtures/*/plan-explain.golden 2>/dev/null)
+    [ -z "${hits}" ] && ok "no output or user doc names the missing 'k3d-gpu prove'" || fail "missing 'k3d-gpu prove' named in: ${hits}"
+}
 for name in ${FIX_FIXTURES}; do
     if python3 - "${REPO}/tests/fixtures/${name}/plan.json" <<'EOF'
 import json, sys
@@ -159,6 +170,25 @@ if cmp -s "${WORK}/a.json" "${WORK}/state/k3d-gpu/facts.json" && cmp -s "${WORK}
     ok "facts --json, detect --json, doctor --json and the state file are the same bytes"
 else
     fail "facts --json, detect --json, doctor --json and the state file differ"
+fi
+# WSL2 (blind test: facts/plan failed with "vendor: 'wsl' not in [...]"). A WSL2
+# sysroot: meteorlake CPU, microsoft kernel, /dev/dxg and the Intel WSL driver.
+WSLROOT="${WORK}/wsl-sysroot"
+cp -r "${REPO}/tests/fixtures/meteorlake/sysroot" "${WSLROOT}"
+mkdir -p "${WSLROOT}/proc" "${WSLROOT}/dev" "${WSLROOT}/usr/lib/wsl/drivers/iigd_dch.inf_amd64_x"
+echo "Linux version 6.6.87.2-microsoft-standard-WSL2" > "${WSLROOT}/proc/version"
+touch "${WSLROOT}/dev/dxg"
+wslrun() { PATH="${WORK}/bin:${PATH}" XDG_STATE_HOME="${WORK}/state-wsl" K3D_GPU_SYSROOT="${WSLROOT}" "${K3D_GPU}" "$@"; }
+if wslrun detect 2>&1 | grep -q "wsl"; then ok "WSL2 sysroot detects the wsl vendor"; else fail "WSL2 sysroot: detect lacks wsl"; fi
+if wslrun facts --json > "${WORK}/wsl-facts.json" 2> "${WORK}/wsl-facts.err" && validate "" "${WORK}/wsl-facts.json"; then
+    ok "WSL2: facts --json builds and validates as facts/v1"
+else
+    fail "WSL2: facts --json"; sed 's/^/  | /' "${WORK}/wsl-facts.err"
+fi
+if wslrun plan --json > "${WORK}/wsl-plan.json" 2> "${WORK}/wsl-plan.err" && validate "#/\$defs/plan" "${WORK}/wsl-plan.json"; then
+    ok "WSL2: plan --json builds and validates as plan/v1"
+else
+    fail "WSL2: plan --json"; sed 's/^/  | /' "${WORK}/wsl-plan.err"
 fi
 # The OVMS pin is the OVMS image whatever agent backend is set; K3D_GPU_AGENT_IMAGE
 # overrides it only for the OVMS backend.

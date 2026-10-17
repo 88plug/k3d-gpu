@@ -198,6 +198,7 @@
       "digest": "sha256:a8c8297c72744f25dbcf70fdb4a64bb787f428a3f9ab4dfabb0eb1377da0070f",
       "name": "ghcr.io/containers/nri-plugins/nri-resource-policy-balloons",
       "sources": [
+        "share/nri-balloons-guard.yml",
         "share/nri-balloons.yml"
       ],
       "tag": "v0.14.0"
