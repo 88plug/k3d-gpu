@@ -64,7 +64,7 @@
 
 set -euo pipefail
 
-VERSION="0.1.36"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.38"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 # The node image defaults to the tag built from this launcher's own release
 # (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
@@ -202,6 +202,10 @@ Usage: k3d-gpu <command>
             reps per step stop once the p95 CI clears the SLO. Prints agents per
             box (or the bracket when --budget runs out), stores the bracket per
             host+engine so a rerun only refines it. Full options: capacity --help
+  autoquant [--json] [--facts FILE] [--store RESULTS]
+            The CPU agent's weight precision: the measured winner cached for
+            this host fingerprint (bench/amx-autoquant/probe.sh --store), else
+            int4 (EXPERIMENTS.md H27); also lists the probe arms the CPU allows
   bench --vs ollama|llamacpp|ovms [--id Hn] [--out DIR] [--budget S] [--rounds N]
         [--warmup N] [--max-tokens N] [--cpuset LIST] [--k3d-url URL --k3d-model M]
         [--keep-cache] [--dry-run]
@@ -248,6 +252,9 @@ Environment:
                         a Gaudi; llm-scaler needs an Intel GPU, Arc B-series validated)
   K3D_GPU_AGENT_MODEL   agent Hugging Face model (default: OpenVINO/Qwen3-4B-int4-ov,
                         Qwen/Qwen3-4B on vllm/llm-scaler)
+  K3D_GPU_AUTOQUANT     auto | off: on OVMS/CPU with no K3D_GPU_AGENT_MODEL, serve the
+                        precision measured for this host fingerprint (default: auto)
+  K3D_GPU_AUTOQUANT_CACHE  measured-pick cache (default: \$XDG_STATE_HOME/k3d-gpu/autoquant.json)
   K3D_GPU_AGENT_GPUS    vllm/llm-scaler: GPUs (or Gaudis) to shard the model across (default: 1)
   K3D_GPU_AGENT_MAX_LEN vllm/llm-scaler: max context tokens (default: 8192)
   K3D_GPU_AGENT_VLM_DEVICE, K3D_GPU_AGENT_STT_DEVICE, K3D_GPU_AGENT_VIDEO_DEVICE
@@ -896,6 +903,8 @@ doctor_accel_sockets() {
 # i915 part the kernel is the first release whose pciids header lists the id and
 # whose i915_pci.c no longer sets require_force_probe for its platform (ADL-S
 # from 5.16; ADL-P, and so ADL-N and RPL-P/U, from 5.17; MTL from 6.7).
+# Wildcat Lake 0xfd80/0xfd81 are in v6.17's INTEL_PTL_IDS, bound to ptl_desc
+# (no require_force_probe); v6.18 moved them to INTEL_WCL_IDS.
 intel_gpu_platform() {
     case "$1" in
         0x468[028a]|0x469[023])             echo "Alder Lake-S|5.16|i915/tgl_guc_" ;;
@@ -915,11 +924,19 @@ intel_gpu_platform() {
         0x6420|0x64a0|0x64b0)               echo "Lunar Lake|6.12|xe/lnl_guc_" ;;
         0xe20[29bcd]|0xe21[0126]|0xe22[0-3]) echo "Battlemage|6.12|xe/bmg_guc_" ;;
         0xb08[0-7f]|0xb090|0xb0a0|0xb0b0)   echo "Panther Lake|6.17|xe/ptl_guc_" ;;
-        0xfd80|0xfd81)                      echo "Wildcat Lake|6.18|xe/ptl_guc_" ;;
+        0xfd80|0xfd81)                      echo "Wildcat Lake|6.17|xe/ptl_guc_" ;;
         0xd74[0-35ab])                      echo "Nova Lake-S|7.3|xe/nvl_guc_" ;;
         0xd75[0-7f])                        echo "Nova Lake-P||" ;;
         0x674[c-f]|0x6750)                  echo "Crescent Island||" ;;
     esac
+}
+
+# Whether xe.force_probe cannot bring up this GPU on a kernel older than its
+# default-binding kernel. Panther Lake and Wildcat Lake (GuC firmware xe/ptl_guc_):
+# no xe_uc_fw.c before v6.17 has a PANTHERLAKE firmware entry, and no pciids.h
+# before v6.17 lists 0xfd80/0xfd81, so only the kernel upgrade helps.
+intel_gpu_no_force_probe() {
+    [ "$(intel_gpu_platform "$1" | cut -d'|' -f3)" = "xe/ptl_guc_" ]
 }
 
 # Whether a GPU platform (an intel_gpu_platform name) has XMX systolic matrix
@@ -1302,7 +1319,11 @@ doctor_intel() {
         if [ -n "${mink}" ] && kernel_lt "${mink}"; then
             opt=xe
             [ "${fw#i915/}" = "${fw}" ] || opt=i915
-            echo "  ${YLW}warn${RST}: ${name} (${id}) needs kernel ${mink}+ (running $(kernel_release)); older kernels need ${opt}.force_probe=${id#0x}"
+            if intel_gpu_no_force_probe "${id}"; then
+                echo "  ${YLW}warn${RST}: ${name} (${id}) needs kernel ${mink}+ (running $(kernel_release)); no older kernel can drive it, force_probe included"
+            else
+                echo "  ${YLW}warn${RST}: ${name} (${id}) needs kernel ${mink}+ (running $(kernel_release)); older kernels need ${opt}.force_probe=${id#0x}"
+            fi
         fi
         if [ -n "${fw}" ]; then
             if firmware_present "${fw}"; then
@@ -1473,6 +1494,8 @@ doctor_intel_unbound() {
         elif IFS='|' read -r name mink fw <<< "$(intel_gpu_platform "${id}")" && [ "${fw#i915/}" != "${fw}" ]; then
             # A GuC firmware under i915/ means i915 is the default driver for the part.
             lines+="  ${YLW}warn${RST}: Intel ${name} (${id}) has no driver — load i915 (kernel ${mink}+): sudo modprobe i915"$'\n'
+        elif intel_gpu_no_force_probe "${id}" && kernel_lt "${mink}"; then
+            lines+="  ${YLW}warn${RST}: Intel ${name} (${id}) has no driver — it needs kernel ${mink}+ (running $(kernel_release)); force_probe cannot bind it on older kernels"$'\n'
         else
             lines+="  ${YLW}warn${RST}: Intel ${name:-GPU/accelerator} (${id}) has no driver — if dmesg says xe does not support it yet, boot with xe.force_probe=${id#0x} i915.force_probe=!${id#0x}"$'\n'
         fi
@@ -1594,9 +1617,25 @@ doctor_cpu_accels() {
         lines+="  ok: hybrid CPU: P-cores $(hybrid_cpus core), E-cores $(efficient_cpus) — up leaves the NRI balloons policy to another stack (K3D_GPU_BALLOONS=${BALLOONS}, K3D_GPU_VENDORS=${VENDORS_REQUEST})"$'\n'
     elif has_hybrid; then
         lp=$(lowpower_cpus) e=$(efficient_cpus) cl=$(ecore_clusters) pp=$(pcore_physical_cpus)
-        lines+="  ok: hybrid CPU: P-cores $(hybrid_cpus core), E-cores ${e:-none}${lp:+, LP E-cores ${lp}} — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient|lowpower|ecluster|pcore-physical|latency"$'\n'
+        # With no non-LP E-cores (Lunar Lake) the efficient and ecluster balloons have no CPUs to offer.
+        lines+="  ok: hybrid CPU: P-cores $(hybrid_cpus core), E-cores ${e:-none}${lp:+, LP E-cores ${lp}} — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance${e:+|efficient}|lowpower${e:+|ecluster}|pcore-physical|latency"$'\n'
         [ -z "${cl}" ] || lines+="  ok: E-core clusters (shared L2): ${cl} — k3d-gpu.io/cores=ecluster gives a pod 4 E-cores of one cluster"$'\n'
         [ -z "${pp}" ] || lines+="  ok: physical P-cores (one thread per core): ${pp} — k3d-gpu.io/cores=pcore-physical and latency show pods one thread per core"$'\n'
+        # Lunar Lake (INTEL_LUNARLAKE_M, family 6 model 189) is hybrid_big_small in
+        # arch/x86/events/intel/core.c: every SKU on ARK has 4 P-cores without SMT
+        # and 4 LP E-cores, all in cpu_atom, and no cpu_lowpower PMU. The note
+        # compares PMU core counts only: whether the LP split above found them
+        # depends on cache sysfs, which a VM or container may not expose.
+        if [ "$(cpu_family_model)" = "6 189" ]; then
+            local lnl_p lnl_e
+            lnl_p=$(hybrid_cpus core) lnl_e=$(hybrid_cpus atom)
+            if ! lnl_p=$([ -z "${lnl_p}" ] || cpulist_expand "${lnl_p}") || ! lnl_e=$([ -z "${lnl_e}" ] || cpulist_expand "${lnl_e}"); then
+                lines+="  ${YLW}warn${RST}: cpu_core or cpu_atom lists a malformed CPU list ($(hybrid_cpus core) / $(hybrid_cpus atom)); the Lunar Lake core-count check is skipped"$'\n'
+            elif [ -n "$(hybrid_cpus lowpower)" ] || [ "$(grep -c . <<< "${lnl_p}")" -ne 4 ] \
+                || [ "$(grep -c . <<< "${lnl_e}")" -ne 4 ]; then
+                lines+="  note: Lunar Lake topology is 4 P-cores + 4 LP E-cores in cpu_atom; this host differs, so the balloons follow sysfs as read above"$'\n'
+            fi
+        fi
     elif is_active hybrid; then
         lines+="  ${RED}fail${RST}: hybrid requested but the CPU has no online P-core and E-core PMUs (/sys/devices/cpu_core, cpu_atom or cpu_lowpower)"$'\n'
         FAIL=1
@@ -1743,6 +1782,7 @@ exp_unbound_gpu_ids() {
         [ -n "${dev}" ] || continue
         [ -z "$(bound_driver "${dev}")" ] || continue
         [ -z "$(npu_platform "$(cat "${dev}/device" 2>/dev/null)")" ] || continue
+        ! intel_gpu_no_force_probe "$(pci_id "${dev}/device")" || continue
         ids+=("$(pci_id "${dev}/device" | sed 's/^0x//')")
     done < <(exp_intel_gpu_pci)
     local IFS=,
@@ -4903,6 +4943,8 @@ hs_checks() {
         if [ -n "${mink}" ] && [ -z "${drv}" ] && kernel_lt "${mink}" && [ "${fw#i915/}" != "${fw}" ]; then
             # i915 is the default driver for this part; xe does not support it on these kernels.
             notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs the boot option i915.force_probe=${id#0x} (or kernel ${mink}+)"$'\n'
+        elif [ -z "${drv}" ] && intel_gpu_no_force_probe "${id}" && kernel_lt "${mink}"; then
+            notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs kernel ${mink}+ (running $(kernel_release)); force_probe cannot bind it on older kernels"$'\n'
         elif [ -z "${mink}" ] || { [ -z "${drv}" ] && kernel_lt "${mink}"; }; then
             notes+="  ${YLW}kernel${RST}: Intel ${name} (${id}) needs the boot options xe.force_probe=${id#0x} i915.force_probe=!${id#0x}${mink:+ (or kernel ${mink}+)}"$'\n'
         elif kernel_lt "${mink}"; then
@@ -5368,6 +5410,7 @@ agent_manifest() {
     fi
     cpus=$(agent_cpus "${device}" "${hybrid}")
     [ "${device}" = CPU ] || gid=$(agent_device_gid "${device}")
+    [ "${device}" != CPU ] || agent_autoquant
     if [ "${AGENT_APP}" = vllm ]; then vllm_manifest; return 0; fi
     local via=""
     [ "${res}" = - ] || via=" (${res})"
@@ -5453,7 +5496,7 @@ spec:
       labels:
         app: ovms${podlabels}
       annotations:
-        k3d-gpu.io/agent-device: ${device}
+        k3d-gpu.io/agent-device: ${device}${AGENT_AUTOQUANT_ANN:-}
     spec:
       securityContext:
         runAsUser: 5000
@@ -6319,6 +6362,11 @@ cmd_agent_up() {
             video) agent_video_check ;;
         esac
     done
+    # agent_manifest ran in a subshell: read the weights it rendered (autoquant may
+    # have swapped them) so the commit below is the served model's.
+    local served
+    served=$(grep -m1 -o -- '--source_model=[^[:space:]]*' <<< "${manifest}" | cut -d= -f2- || true)
+    [ -z "${served}" ] || AGENT_MODEL=${served}
     if [ "${AGENT_APP}" = vllm ]; then
         info "model ${AGENT_MODEL} at revision ${AGENT_REVISION:-main (unpinned; set K3D_GPU_AGENT_REVISION)}"
     else
@@ -7442,6 +7490,119 @@ print(d["decision"], e.get("name") or "-", e.get("device") or "-", e.get("image"
         K3D_GPU_AGENT_IMAGE="${image}" K3D_GPU_AGENT_CPUS="${cpus}" exec "$(readlink -f "${BASH_SOURCE[0]}")" agent up
 }
 
+# ---- autoquant -----------------------------------------------------------------
+# The CPU agent's weight precision (EXPERIMENTS.md H27). A probe
+# (bench/amx-autoquant/probe.sh) measures turn latency and an NLL quality delta per
+# precision and stores the gated winner under this host's fingerprint (CPU model,
+# ISA, P/E topology, microcode, memory, OVMS image). `agent up` on OVMS/CPU serves
+# the cached winner while the fingerprint matches, else the static int4 default.
+# Nothing is probed automatically: with no stored run every host serves int4. The
+# served model name stays the default's, so clients that name it keep working;
+# the pod's k3d-gpu.io/agent-model annotation names the weights actually served.
+# K3D_GPU_AGENT_MODEL overrides both; K3D_GPU_AUTOQUANT=off ignores the cache.
+autoquant_cache() { echo "${K3D_GPU_AUTOQUANT_CACHE:-${XDG_STATE_HOME:-${HOME}/.local/state}/k3d-gpu/autoquant.json}"; }
+
+# "--microcode X --mem-kib N" from this host's procfs, one word per line (each pair only when read).
+autoquant_host_args() {
+    local mc mem
+    mc=$(grep -m1 '^microcode[[:space:]]*:' "${SYSROOT}/proc/cpuinfo" 2>/dev/null || true)
+    mc=${mc#*: }
+    mem=$(awk '/^MemTotal:/ {print $2; exit}' "${SYSROOT}/proc/meminfo" 2>/dev/null || true)
+    if [[ "${mc}" =~ ^0x[0-9a-fA-F]+$ ]]; then printf -- '--microcode\n%s\n' "${mc}"; fi
+    if [[ "${mem}" =~ ^[0-9]+$ ]]; then printf -- '--mem-kib\n%s\n' "${mem}"; fi
+    return 0
+}
+
+# autoquant_run <facts file or ""> <autoquant.py args...>: console/autoquant.py
+# with --cache, on this host's facts/v1 plus its microcode and memory size, or on
+# the facts file alone (no host reads, so a fixture fingerprints the same anywhere).
+autoquant_run() {
+    local dir facts=$1 host_args=()
+    shift
+    dir=$(console_dir) || return 1
+    [ -f "${dir}/autoquant.py" ] || return 1
+    command -v python3 >/dev/null 2>&1 || return 1
+    if [ -n "${facts}" ]; then
+        python3 "${dir}/autoquant.py" "$@" --cache "$(autoquant_cache)" --runtime "${AGENT_OVMS_IMAGE}" < "${facts}"
+    else
+        mapfile -t host_args < <(autoquant_host_args)
+        facts_json "${dir}" | python3 "${dir}/autoquant.py" "$@" --cache "$(autoquant_cache)" \
+            --runtime "${AGENT_OVMS_IMAGE}" ${host_args[@]+"${host_args[@]}"}
+    fi
+}
+
+autoquant_select() { autoquant_run "${1:-}" select; }
+
+# Swap AGENT_MODEL (and AGENT_MEMORY) to the measured winner for an OVMS agent on
+# the CPU, when nothing pins the model. Only a measured cache entry for this
+# host's fingerprint changes anything.
+agent_autoquant() {
+    local doc fields precision model memory source
+    [ "${AGENT_APP}" = ovms ] && [ -z "${K3D_GPU_AGENT_MODEL:-}" ] || return 0
+    [ "${K3D_GPU_AUTOQUANT:-auto}" != off ] || return 0
+    [ -f "$(autoquant_cache)" ] || return 0
+    doc=$(autoquant_select) || { warn "autoquant: cache present but select failed, keeping ${AGENT_MODEL}"; return 0; }
+    fields=$(python3 -c 'import json, sys; d = json.load(sys.stdin); print(d["precision"], d["model"], d["memory"], d["source"])' <<< "${doc}") || return 0
+    read -r precision model memory source <<< "${fields}"
+    if [ "${source}" != measured ]; then
+        info "autoquant: no measured pick for this host fingerprint (${source}), serving ${AGENT_MODEL}" >&2
+        return 0
+    fi
+    AGENT_MODEL=${model}
+    AGENT_AUTOQUANT_ANN=$'\n        k3d-gpu.io/agent-model: '"${model}"$'\n        k3d-gpu.io/agent-precision-source: autoquant-measured'
+    if [ -z "${K3D_GPU_AGENT_MEMORY:-}" ]; then
+        AGENT_MEMORY=${memory}
+    elif [ "$(mem_gib "${K3D_GPU_AGENT_MEMORY}")" -lt "$(mem_gib "${memory}")" ]; then
+        warn "autoquant: K3D_GPU_AGENT_MEMORY=${K3D_GPU_AGENT_MEMORY} is below the ${memory} that ${precision} needs; the pod may be OOM-killed"
+    fi
+    info "autoquant: measured pick ${precision} for this host, serving ${AGENT_MODEL} (K3D_GPU_AGENT_MODEL or K3D_GPU_AUTOQUANT=off overrides)" >&2
+}
+
+# mem_gib <k8s quantity Ni|NGi|NMi>: whole GiB, 0 when unparsed.
+mem_gib() {
+    case "$1" in
+        *Gi) echo "${1%Gi}" | grep -Eo '^[0-9]+' || echo 0 ;;
+        *Mi) local m; m=$(echo "${1%Mi}" | grep -Eo '^[0-9]+' || echo 0); echo $((m / 1024)) ;;
+        *) echo 0 ;;
+    esac
+}
+
+# autoquant [--json] [--facts FILE] [--store RESULTS]: the precision `agent up`
+# would serve on the CPU, why, and the probe arms this CPU's ISA allows. --store
+# caches the gated winner of a probe's results file under this host's fingerprint.
+cmd_autoquant() {
+    local mode=text facts="" results="" out
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --json) mode=json ;;
+            --facts|--store)
+                [ $# -ge 2 ] || err "autoquant: $1 needs a value"
+                if [ "$1" = --facts ]; then facts=$2; else results=$2; fi
+                shift ;;
+            *) err "unknown autoquant option: $1 (use --json, --facts FILE, --store RESULTS)" ;;
+        esac
+        shift
+    done
+    [ -z "${facts}" ] || [ -f "${facts}" ] || err "autoquant: facts file ${facts} does not exist"
+    if [ -n "${results}" ]; then
+        [ -f "${results}" ] || err "autoquant: results file ${results} does not exist"
+        autoquant_run "${facts}" store --results "${results}" \
+            || err "autoquant: no precision passed the quality gate, nothing cached"
+        info "autoquant: cached in $(autoquant_cache)"
+        return
+    fi
+    out=$(autoquant_select "${facts}") || err "autoquant: could not compute (needs python3 and console/autoquant.py)"
+    if [ "${mode}" = json ]; then printf '%s\n' "${out}"; return; fi
+    python3 -c 'import json, sys
+d = json.load(sys.stdin)
+print("precision: %s (%s) from %s" % (d["precision"], d["model"], d["source"]))
+print("fingerprint: %s" % d["fingerprint"])
+for a in d["arms"]:
+    print("  arm %-5s %-18s %s" % (a["precision"], a["path"], a["model"]))
+if d["source"] != "measured":
+    print("measure: bench/amx-autoquant/probe.sh --store (EXPERIMENTS.md H27)")' <<< "${out}"
+}
+
 # Directory holding vs.py, llm_load.py and competitors.lock: K3D_GPU_BENCH, else
 # the repo's bench/ next to this script, else the installed share directory.
 bench_dir() {
@@ -7755,6 +7916,7 @@ case "${1:-help}" in
     apply)   shift; cmd_apply "$@" ;;
     tune)    shift; cmd_tune "$@" ;;
     capacity) shift; cmd_capacity "$@" ;;
+    autoquant) shift; cmd_autoquant "$@" ;;
     bench)   shift; cmd_bench "$@" ;;
     phase-steer) shift; cmd_phase_steer "$@" ;;
     quickstart) shift; cmd_quickstart "$@" ;;

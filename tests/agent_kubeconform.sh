@@ -14,6 +14,8 @@ K8S_VERSION=$(sed -n 's/^ARG K3S_TAG="v\([0-9.]*\)-k3s.*/\1/p' "$(dirname "$0")/
 KUBECONFORM_IMAGE="ghcr.io/yannh/kubeconform@sha256:faffaf43f95aa6425306e1ab8d6fcad72acb9049158f38e574c085ea1ec0f64e"
 
 WORK=$(mktemp -d)
+# A measured autoquant pick on this dev box (EXPERIMENTS.md H27) must not leak into goldens.
+export K3D_GPU_AUTOQUANT_CACHE="${WORK}/no-autoquant.json"
 trap 'rm -rf "${WORK}"' EXIT
 mkdir -p "${WORK}/bin" "${WORK}/out" "${WORK}/root/sys" "${WORK}/root/dev"
 cat > "${WORK}/bin/kubectl" <<'EOF'

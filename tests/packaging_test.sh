@@ -50,9 +50,12 @@ check "nfpm ships console/*.py to /usr/share/k3d-gpu/console/" \
     grep -Pzq 'src: console/\*\.py\n +dst: /usr/share/k3d-gpu/console/\n' "${NFPM}"
 check "nfpm ships console/*.json to /usr/share/k3d-gpu/console/" \
     grep -Pzq 'src: console/\*\.json\n +dst: /usr/share/k3d-gpu/console/\n' "${NFPM}"
-for f in "${ROOT}"/console/*.py "${ROOT}"/console/*.json; do
-    check "PKGBUILD installs console/${f##*/}" grep -Eq "for f in (.* )?${f##*/}( |;)" "${PKGBUILD}"
-done
+# The AUR recipe globs console/ like nfpm and nix, so a new console module
+# needs no packaging edit (and no merge conflict between parallel PRs).
+check "PKGBUILD installs console/*.py and console/*.json" \
+    grep -Eq 'for f in console/\*\.py console/\*\.json; do' "${PKGBUILD}"
+check "PKGBUILD installs console files to /usr/share/k3d-gpu/console/" \
+    grep -Fq 'install -Dm644 "$f" "$pkgdir/usr/share/k3d-gpu/$f"' "${PKGBUILD}"
 for f in llm_load.py energy.sh; do
     check "nfpm ships bench/${f} (k3d-gpu tune)" \
         grep -Pzq "src: bench/${f//./\\.}\n +dst: /usr/share/k3d-gpu/bench/${f//./\\.}\n" "${NFPM}"
