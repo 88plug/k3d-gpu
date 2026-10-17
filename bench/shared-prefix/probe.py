@@ -6,11 +6,12 @@
                                                 warm-up, phase S (a1..a6, c), phase B (b1..b6)
   probe.py score FILE...                        T ratio, bootstrap CI, spread, M, verdict
 
-Prompts follow the H25 pre-registration in EXPERIMENTS.md: system text plus 12
-EAT-style tool schemas with frozen key order, about 1536 tokens (chars/4,
-the real count is read back from usage.prompt_tokens and must be identical
-across agents and arms), a 96-token private message per agent, and a control
-c with one word changed at about token 16 of the system text.
+Prompts follow the H25 pre-registration in EXPERIMENTS.md (amendment A1):
+system text plus 12 EAT-style tool schemas with frozen key order, a shared
+prefix of about 1536 Qwen3 tokens after the chat template, a 96-token private
+message per agent, and a control c with one word changed at about token 16 of
+the system text. Token counts are seed-invariant by construction; the server's
+usage.prompt_tokens must still be identical across agents and arms.
 Stdlib only.
 """
 
@@ -26,17 +27,20 @@ import time
 import urllib.request
 
 MODEL = os.environ.get("H25_MODEL", "Qwen3-4B-int4-ov")  # the agent stack's AGENT_MODEL_NAME
-PS_CHARS = 1536 * 4
-PP_CHARS = 96 * 4
+# Token-exact prompts. Every WORDS entry is one Qwen3 token after a space (and
+# two after a quote), so a text of n words has the same token count for every
+# seed; tests/.../test_probe.py checks this against the Qwen3 tokenizer.
+DESC_WORDS = 31    # per tool description
+ARG_WORDS = 9      # per "id" argument description
+SYSTEM_WORDS = 140
+PRIVATE_WORDS = 93  # + "a1:" (3 tokens) = 96-token private message
 WORDS = ("record order invoice ticket asset vendor policy account region status "
          "priority owner window budget metric report service queue").split()
+CONTROL_WORD = "customer"  # one token, not in WORDS
 
 
-def words(rng, n_chars):
-    out = []
-    while sum(len(w) + 1 for w in out) < n_chars:
-        out.append(rng.choice(WORDS))
-    return " ".join(out)[:n_chars]
+def words(rng, n):
+    return " ".join(rng.choice(WORDS) for _ in range(n))
 
 
 def gen(seed):
@@ -44,24 +48,23 @@ def gen(seed):
     tools = []
     for k in range(12):
         tools.append({"type": "function", "function": {
-            "name": f"eat_tool_{k}_{rng.choice(WORDS)}",
-            "description": words(rng, 160),
+            "name": f"eat_tool_{k:02d}",
+            "description": words(rng, DESC_WORDS),
             "parameters": {"type": "object",
-                           "properties": {"id": {"type": "string", "description": words(rng, 60)},
+                           "properties": {"id": {"type": "string", "description": words(rng, ARG_WORDS)},
                                           "limit": {"type": "integer"}},
                            "required": ["id"]}}})
-    tool_chars = sum(len(json.dumps(t, ensure_ascii=False)) + 1 for t in tools)
-    system = f"seed {seed}. " + words(rng, max(64, PS_CHARS - tool_chars))
-    # Control c: one word changed at about token 16 (char 64) of the system text.
-    i = system.index(" ", 64)
-    j = system.index(" ", i + 1)
-    control = system[:i + 1] + "PERTURBED" + system[j:]
+    sw = words(rng, SYSTEM_WORDS).split()
+    system = f"seed {seed:04d}. " + " ".join(sw)
+    # Control c: the word at about token 16 of the system text replaced by
+    # another one-token word, so c has the same token count as the agents.
+    control = f"seed {seed:04d}. " + " ".join(sw[:10] + [CONTROL_WORD] + sw[11:])
 
     def private(tag):
-        return f"{tag}: " + words(rng, PP_CHARS)
+        return f"{tag}: " + words(rng, PRIVATE_WORDS)
 
     return {"seed": seed, "system": system, "control_system": control, "tools": tools,
-            "a": [private(f"a{n}") for n in range(1, 7)], "c": private("c"),
+            "a": [private(f"a{n}") for n in range(1, 7)], "c": private("c1"),
             "b": [private(f"b{n}") for n in range(1, 7)], "warmup": f"warm {seed} {rng.random()}"}
 
 

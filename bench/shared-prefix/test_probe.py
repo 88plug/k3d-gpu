@@ -29,6 +29,34 @@ class Gen(unittest.TestCase):
         self.assertEqual(len(a["tools"]), 12)
         self.assertNotEqual(probe.gen(8)["system"], a["system"])
 
+    def test_word_counts_are_seed_invariant(self):
+        # Token counts are fixed by word counts (one token per word); check the
+        # word and character-class shape is identical for every seed and agent.
+        shape = lambda s: [len(s.split()), s.count('"')]  # noqa: E731
+        ref = None
+        for seed in range(2501, 2507):
+            g = probe.gen(seed)
+            privs = {len(u.split()) for u in g["a"] + g["b"] + [g["c"]]}
+            self.assertEqual(privs, {probe.PRIVATE_WORDS + 1})
+            self.assertEqual(len(g["system"].split()), len(g["control_system"].split()))
+            got = [shape(g["system"])] + [shape(json.dumps(t)) for t in g["tools"]]
+            ref = ref or got
+            self.assertEqual(got, ref)
+
+    @unittest.skipUnless(os.environ.get("H25_TOKENIZER_DIR"), "set H25_TOKENIZER_DIR to the staged Qwen3 model dir")
+    def test_qwen3_token_counts_identical(self):
+        from tokenizers import Tokenizer  # tokenizers 0.22.2
+        t = Tokenizer.from_file(os.path.join(os.environ["H25_TOKENIZER_DIR"], "tokenizer.json"))
+        n = lambda s: len(t.encode(s, add_special_tokens=False).ids)  # noqa: E731
+        counts = set()
+        for seed in range(2501, 2507):
+            g = probe.gen(seed)
+            self.assertEqual({n(u) for u in g["a"] + g["b"] + [g["c"]]}, {96})
+            counts.add((n(g["system"]), n(g["control_system"]),
+                        tuple(n(json.dumps(x, ensure_ascii=False)) for x in g["tools"])))
+        self.assertEqual(len(counts), 1, counts)
+        self.assertEqual(next(iter(counts))[0], next(iter(counts))[1])
+
 
 class Score(unittest.TestCase):
     def run_score(self, rounds):

@@ -1037,7 +1037,7 @@ Outside the lock (no cluster, no load):
 Inside `flock -w 10800 .../live.lock` (wait first until no `k3dgpu-f-*`
 cluster exists), wall-time cap 20 min, hard abort at 18:30 elapsed. On abort
 the cluster is deleted and rounds not run count as missing.
-- Cluster `k3dgpu-i-shared-prefix`, scratch KUBECONFIG, model dir mounted with `-v`, OVMS image imported.
+- Cluster `k3dgpu-i-shared-prefix`, scratch KUBECONFIG, model dir copied into the node and used as a hostPath (A1), OVMS image imported.
 - The agent CPU manifest with one change: models come from a hostPath instead of the PVC. Image, args, P-core balloon, 16 CPUs and `--log_level=INFO` are the same in both arms.
 - Arm ON: no extra pull args. Arm OFF: `--enable_prefix_caching=false` on the pull container. graph.pbtxt is read back after every init; a mismatch voids the round.
 
@@ -1076,6 +1076,33 @@ T0·rate) is first-order SKU-invariant on the CPU path, and the absolute saving
 per added agent is Ps / prefill rate, so it is largest on low-core parts
 (Alder Lake-N) and smallest on AMX Xeons. The Core Ultra iGPU path uses
 16-token blocks and u4 KV, so its memory per token differs and is untested.
+
+**Amendment A1** (2026-10-17, before any live round; nothing measured yet).
+Two refuters reviewed b3e2797. Agreed and fixed:
+- Calibration. chars/4 was wrong for this vocabulary: private messages were
+  55-61 Qwen3 tokens (not 96) and varied within a seed; the head varied
+  1319-1330 across seeds, so every round would void on the
+  identical-`prompt_tokens` guardrail. `gen()` now builds every text from a
+  fixed number of words, each one Qwen3 token. Checked offline with the staged
+  model's own `tokenizer.json` and `chat_template.jinja` (tokenizers 0.22.2,
+  jinja2 3.1.6): for seeds 2501-2506 every agent prompt is 1634 tokens, the
+  shared head is Ps = 1538 (inside 1536 ± 32), every private message is
+  Pp = 96, and c is also 1634. `test_probe.py` asserts this when
+  `H25_TOKENIZER_DIR` is set, and asserts the seed-invariant word shape always.
+- Model dir: it is copied into the node with `docker cp` and used as a
+  hostPath, not mounted with `-v`.
+- The OFF `sed` was checked offline against `k3d-gpu agent manifest` output:
+  the line `            - --task=text_generation` exists exactly once.
+- Detector (`k3d-gpu agent prefix`): real token counts with `--tokenizer`;
+  device labelled as assumed when `K3D_GPU_AGENT_DEVICE` is auto; warning on
+  non-OVMS backends; groups under `--min-tokens` reusable tokens are dropped;
+  non-UTF-8 and empty inputs exit 2. Greedy grouping is documented, not changed.
+
+Agreed and not fixed in this run: the probe measures OVMS's shipped prefix
+caching against a negative control, so a pass is a per-added-agent datapoint
+on this host, not an invention. It does not test one shared engine versus N
+per-agent engines, or static versus dynamic `cache_size`. Those arms are the
+follow-up. No "auto-enable" claim is possible: prefix caching is already on.
 
 
 ## Scope corrections

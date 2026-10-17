@@ -11,8 +11,14 @@ KV cache sees it:
     with another key order is another prefix.
   - OVMS hashes KV blocks from token 0 (32 tokens per block on CPU, 16 on
     GPU), so only whole blocks of the common prefix are reusable.
-  - Tokens are estimated as characters / 4 (no tokenizer in the stdlib). Every
-    token count in the output is marked `_est`.
+  - Tokens are estimated as characters / 4 unless --tokenizer names the
+    staged model's tokenizer.json (needs the `tokenizers` package); then the
+    common prefix is counted in real tokens. chars/4 over-counts tool-schema
+    JSON by about 15-40% on Qwen3 (measured, H25 refuter log). Every token
+    count in the output is marked `_est` unless a tokenizer was used.
+  - Grouping is greedy and input-ordered: when a third agent shares less, the
+    group's prefix shrinks to what all members share. Pairs that share more
+    than their group are not reported separately.
 
 Output: groups of agents that share at least `min_tokens` reusable tokens, the
 agents that would share more if their tool schemas were sent with sorted keys,
@@ -25,7 +31,8 @@ dynamic pool turns sharing into resident memory saved is H25 (M), PENDING.
 Manifest format (JSON, one agent per file, or a list of agents):
   {"name": "planner", "system": "...", "tools": [{"type": "function", ...}]}
 
-Usage: shared_prefix.py [--device CPU|GPU] [--min-tokens N] [--kv-kib K] [--json] PATH...
+Usage: shared_prefix.py [--device CPU|GPU] [--device-assumed] [--min-tokens N] [--kv-kib K]
+                        [--tokenizer FILE] [--json] PATH...
        (a PATH that is a directory reads its *.json files, sorted)
 Stdlib only.
 """
@@ -77,11 +84,6 @@ def tokens_est(chars):
     return chars // CHARS_PER_TOKEN
 
 
-def reusable_tokens(chars, block):
-    """Whole KV blocks of a shared prefix: only those hash the same (F4)."""
-    return (tokens_est(chars) // block) * block
-
-
 def load(paths):
     agents = []
     for p in paths:
@@ -92,7 +94,7 @@ def load(paths):
             try:
                 with open(f, encoding="utf-8") as fh:
                     doc = json.load(fh)
-            except (OSError, json.JSONDecodeError) as e:
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
                 raise ManifestError(f"{f}: {e}") from e
             for a in doc if isinstance(doc, list) else [doc]:
                 if not isinstance(a, dict):
@@ -100,6 +102,8 @@ def load(paths):
                 a = dict(a)
                 a.setdefault("name", os.path.splitext(os.path.basename(f))[0])
                 agents.append(a)
+    if not agents:
+        raise ManifestError("no agent manifests found (a directory is read for *.json)")
     names = [a["name"] for a in agents]
     dup = sorted({n for n in names if names.count(n) > 1})
     if dup:
@@ -126,7 +130,22 @@ def group(heads, min_chars):
     return groups
 
 
-def analyse(agents, device="CPU", min_tokens=256, kv_kib=None):
+def token_counter(path):
+    """Return f(text) -> token count from a tokenizer.json, or None for chars/4."""
+    if not path:
+        return None
+    try:
+        from tokenizers import Tokenizer
+    except ImportError as e:
+        raise ManifestError("--tokenizer needs the Python `tokenizers` package") from e
+    try:
+        t = Tokenizer.from_file(path)
+    except Exception as e:  # tokenizers raises its own Exception type
+        raise ManifestError(f"{path}: {e}") from e
+    return lambda text: len(t.encode(text, add_special_tokens=False).ids)
+
+
+def analyse(agents, device="CPU", min_tokens=256, kv_kib=None, count=None, device_assumed=False):
     device = device.upper()
     if device not in BLOCK:
         raise ManifestError(f"device must be CPU or GPU, not {device!r}")
@@ -139,15 +158,22 @@ def analyse(agents, device="CPU", min_tokens=256, kv_kib=None):
     canon = [render_head(a, canonical=True) for a in agents]
     min_chars = min_tokens * CHARS_PER_TOKEN
 
+    def reuse_of(i, plen):
+        # Whole KV blocks: only those hash the same (F4). of the common prefix of head i, in real or estimated tokens.
+        n = count(raw[i][:plen]) if count else tokens_est(plen)
+        return (n // block) * block, n
+
     out_groups = []
     for plen, idx in group(raw, min_chars):
         if len(idx) < 2:
             continue
-        reuse = reusable_tokens(plen, block)
+        reuse, ntok = reuse_of(idx[0], plen)
+        if reuse < min_tokens:
+            continue
         out_groups.append({
             "agents": [names[i] for i in idx],
             "shared_chars": plen,
-            "shared_tokens_est": tokens_est(plen),
+            "shared_tokens_est": ntok,
             "reusable_tokens_est": reuse,
             "kv_mib_per_added_agent_unshared_est": round(reuse * kib / 1024, 1),
         })
@@ -155,8 +181,9 @@ def analyse(agents, device="CPU", min_tokens=256, kv_kib=None):
     fixes = []
     for i in range(len(agents)):
         for j in range(i + 1, len(agents)):
-            r = reusable_tokens(common_prefix(raw[i], raw[j]), block)
-            c = reusable_tokens(common_prefix(canon[i], canon[j]), block)
+            r = reuse_of(i, common_prefix(raw[i], raw[j]))[0]
+            pc = common_prefix(canon[i], canon[j])
+            c = ((count(canon[i][:pc]) if count else tokens_est(pc)) // block) * block
             if c - r >= block and c >= min_tokens:
                 fixes.append({"agents": [names[i], names[j]], "reusable_tokens_est": r,
                               "reusable_tokens_sorted_keys_est": c})
@@ -173,6 +200,8 @@ def analyse(agents, device="CPU", min_tokens=256, kv_kib=None):
     return {
         "version": "shared-prefix/v1",
         "device": device,
+        "device_assumed": bool(device_assumed),
+        "token_counts": "tokenizer" if count else "chars/4 estimate",
         "block_tokens": block,
         "kv_kib_per_token": kib,
         "min_tokens": min_tokens,
@@ -185,7 +214,10 @@ def analyse(agents, device="CPU", min_tokens=256, kv_kib=None):
 
 def human(r):
     lines = [f"{r['agents']} agent(s), {r['device']} KV blocks of {r['block_tokens']} tokens "
-             f"(token counts are estimates, chars/4)"]
+             f"(token counts: {r['token_counts']})"]
+    if r["device_assumed"]:
+        lines.append("device assumed CPU: K3D_GPU_AGENT_DEVICE=auto resolves at deploy; "
+                     "pass --device GPU for a host whose agent runs on an XMX GPU")
     if not r["groups"]:
         lines.append(f"no two agents share a prompt head of {r['min_tokens']}+ tokens; "
                      "one engine per agent loses nothing to prefix reuse")
@@ -208,10 +240,13 @@ def main(argv=None):
     ap.add_argument("--device", default="CPU")
     ap.add_argument("--min-tokens", type=int, default=256)
     ap.add_argument("--kv-kib", type=float)
+    ap.add_argument("--tokenizer")
+    ap.add_argument("--device-assumed", action="store_true")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
     try:
-        r = analyse(load(a.paths), a.device, a.min_tokens, a.kv_kib)
+        r = analyse(load(a.paths), a.device, a.min_tokens, a.kv_kib,
+                    token_counter(a.tokenizer), a.device_assumed)
     except ManifestError as e:
         print(f"shared_prefix: {e}", file=sys.stderr)
         return 2

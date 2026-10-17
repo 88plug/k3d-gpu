@@ -138,12 +138,14 @@ Usage: k3d-gpu <command>
             has XMX, else on the CPU (P-cores); or vLLM on an Arc GPU (K3D_GPU_AGENT_BACKEND).
             --with adds a vision-language model, Whisper speech-to-text (NPU first)
             and DL Streamer video analytics (GPU media engines) on what the LLM leaves
-  agent prefix [--json] [--device CPU|GPU] [--min-tokens N] FILE|DIR...
+  agent prefix [--json] [--device CPU|GPU] [--min-tokens N] [--kv-kib K] [--tokenizer FILE] FILE|DIR...
             Read agent manifests (JSON: name, system, tools) before deploy and report
             which agents share a prompt head the KV prefix cache can reuse, in whole
             KV blocks, and tool schemas whose key order breaks sharing. Device follows
-            K3D_GPU_AGENT_DEVICE (CPU or GPU), else CPU. Prefix caching is already on
-            in OVMS (--pull default); this only reports and plans one shared engine
+            K3D_GPU_AGENT_DEVICE (CPU or GPU), else CPU, labelled as assumed. Tokens are
+            chars/4 unless --tokenizer names the model's tokenizer.json. OVMS block
+            sizes only. Prefix caching is already on in OVMS (--pull default); this
+            only reports and plans one shared engine
   recipe npu-embeddings
             Print an OVMS embeddings-on-NPU manifest for this host (pipe to kubectl apply -f -)
   facts [--json | --html [--facts FILE] [--matrix FILE]]
@@ -6069,16 +6071,18 @@ cmd_agent_down() {
 
 # Shared-prefix report of agent manifests (console/shared_prefix.py, H25). The
 # KV block size follows the device: --device, else K3D_GPU_AGENT_DEVICE when it
-# names CPU or GPU, else CPU (the agent stack's fallback device).
+# names CPU or GPU, else CPU, reported as assumed (auto resolves only at deploy).
 cmd_agent_prefix() {
     require python3
     local dir dev=CPU a
     dir=$(console_dir) || err "agent prefix: console/shared_prefix.py not found next to the launcher or in ${SHARE_DIR}/console (set K3D_GPU_CONSOLE)"
     [ -f "${dir}/shared_prefix.py" ] || err "agent prefix: ${dir}/shared_prefix.py missing"
-    case "${K3D_GPU_AGENT_DEVICE:-}" in [Cc][Pp][Uu]|[Gg][Pp][Uu]) dev=${K3D_GPU_AGENT_DEVICE^^} ;; esac
-    for a in "$@"; do [ "${a}" != --device ] || dev=""; done
-    [ $# -gt 0 ] || err "usage: k3d-gpu agent prefix [--json] [--device CPU|GPU] [--min-tokens N] FILE|DIR..."
-    python3 "${dir}/shared_prefix.py" ${dev:+--device "${dev}"} "$@"
+    local assumed=--device-assumed
+    case "${K3D_GPU_AGENT_DEVICE:-}" in [Cc][Pp][Uu]|[Gg][Pp][Uu]) dev=${K3D_GPU_AGENT_DEVICE^^} assumed="" ;; esac
+    for a in "$@"; do [ "${a}" != --device ] || { dev=""; assumed=""; }; done
+    [ $# -gt 0 ] || err "usage: k3d-gpu agent prefix [--json] [--device CPU|GPU] [--min-tokens N] [--kv-kib K] [--tokenizer FILE] FILE|DIR..."
+    [ "${AGENT_BACKEND}" = ovms ] || warn "agent prefix: KV block sizes and the plan are OVMS's; backend ${AGENT_BACKEND} is not modelled"
+    python3 "${dir}/shared_prefix.py" ${dev:+--device "${dev}"} ${assumed:+"${assumed}"} "$@"
 }
 
 cmd_agent() {

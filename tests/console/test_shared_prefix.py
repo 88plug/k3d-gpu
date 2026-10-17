@@ -16,6 +16,7 @@ import json
 import os
 import random
 import sys
+import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 
@@ -114,6 +115,43 @@ class Errors(unittest.TestCase):
         r = sp.analyse([])
         self.assertEqual((r["agents"], r["groups"]), (0, []))
 
+    def test_empty_dir_and_non_utf8(self):
+        with tempfile.TemporaryDirectory() as d:
+            rc, _, err = self.run_main(d)
+            self.assertEqual(rc, 2)
+            self.assertIn("no agent manifests", err)
+            bad = os.path.join(d, "bad.json")
+            with open(bad, "wb") as f:
+                f.write(b'{"name": "\xff\xfe"}')
+            rc, _, err = self.run_main(bad)
+            self.assertEqual(rc, 2)
+
+    def test_device_assumed_labelled(self):
+        rc, out, _ = self.run_main("--device-assumed", FIX)
+        self.assertEqual(rc, 0)
+        self.assertIn("device assumed CPU", out)
+        rc, out, _ = self.run_main("--json", "--device-assumed", FIX)
+        self.assertTrue(json.loads(out)["device_assumed"])
+
+    def test_counter_is_used(self):
+        # A counter of one token per char gives 4x the chars/4 estimate.
+        agents = sp.load([FIX])
+        est = sp.analyse(agents)
+        real = sp.analyse(agents, count=len)
+        self.assertEqual(real["token_counts"], "tokenizer")
+        g0, g1 = est["groups"][0], real["groups"][0]
+        self.assertEqual(g1["shared_tokens_est"], g0["shared_chars"])
+        self.assertEqual(g1["reusable_tokens_est"], g0["shared_chars"] // 32 * 32)
+
+    @unittest.skipUnless(os.environ.get("H25_TOKENIZER_DIR"), "set H25_TOKENIZER_DIR to a Qwen3 model dir")
+    def test_real_tokenizer(self):
+        rc, out, _ = self.run_main("--json", "--tokenizer",
+                                   os.path.join(os.environ["H25_TOKENIZER_DIR"], "tokenizer.json"), FIX)
+        self.assertEqual(rc, 0)
+        r = json.loads(out)
+        est = sp.analyse(sp.load([FIX]))
+        self.assertLess(r["groups"][0]["shared_tokens_est"], est["groups"][0]["shared_tokens_est"])
+
     def test_json_main(self):
         rc, out, _ = self.run_main("--json", FIX)
         self.assertEqual(rc, 0)
@@ -152,6 +190,7 @@ class Property(unittest.TestCase):
                 self.assertTrue(all(h[: g["shared_chars"]] == hs[0][: g["shared_chars"]] for h in hs), SEED)
                 self.assertGreaterEqual(g["shared_chars"], mt * 4, SEED)
                 self.assertEqual(g["reusable_tokens_est"], (g["shared_chars"] // 4) // blk * blk, SEED)
+                self.assertGreaterEqual(g["reusable_tokens_est"], mt, SEED)
             self.assertEqual(len(seen), len(set(seen)), SEED)  # an agent is in at most one group
             self.assertEqual(r["plan"]["engine"], "shared" if r["groups"] else "per-agent-ok", SEED)
             self.assertTrue(r["plan"]["enable_prefix_caching"], SEED)
