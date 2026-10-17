@@ -18,7 +18,8 @@
 #   flock -o -w 10800 <scratchpad>/live.lock bench/amx-autoquant/probe.sh
 # (-o: the lock fd is not inherited, so only flock itself holds the lock).
 # after `k3d cluster list` shows no k3dgpu-f-* cluster. No k3d cluster is made.
-# Only containers named k3dgpu-i-amx-autoquant-* are created and removed. No
+# Only containers named k3dgpu-i-amx-autoquant-<arm>-<run id> are created, and a run
+# removes only the containers (and background load) it started itself. No
 # sysfs writes; RAPL is read with `sudo -n cat`.
 #
 # Env: AUTOQUANT_DIR (default ${XDG_CACHE_HOME:-~/.cache}/k3d-gpu/amx-autoquant),
@@ -55,6 +56,11 @@ LOAD_LEVEL="${LOAD_LEVEL:-none}"
 AUTOQUANT_NLL="${AUTOQUANT_NLL:-run}"
 LOAD="${ROOT}/bench/load/load.py"
 GAP=10 WINDOW=5 NLL_CAP=600
+# Container names carry a per-invocation id, and cleanup removes only what this
+# invocation started, so another checkout's cleanup (or test) never hits a live run.
+RID="$(date -u +%H%M%S)-$$"
+OWNED=() LOAD_OWNED=0
+cname() { echo "${PREFIX}-$1-${RID}"; }
 declare -A PORT=([int4]=18101 [int8]=18102 [fp16]=18103)
 
 log() { printf '[%4ds] %s\n' "$((SECONDS))" "$*" | tee -a "${RUN:-/dev/null}/probe.log" >&2; }
@@ -64,8 +70,8 @@ plan() {
     echo "H27 plan: budget ${BUDGET} s (abort at ${ABORT_AT} s), cpus ${CPUS}, dir ${DIR}"
     echo "  background load: ${LOAD_LEVEL}; before each reference request ${GAP} s idle + ${WINDOW} s load window; NLL ${AUTOQUANT_NLL}"
     [ "${LOAD_LEVEL}" = none ] || python3 "${LOAD}" plan --level "${LOAD_LEVEL}" --ttl 1500 | sed 's/^/  /'
-    for p in ${PRECS}; do echo "  container ${PREFIX}-${p} ${OVMS_IMAGE} port ${PORT[${p}]} model OpenVINO/Qwen3-4B-${p}-ov"; done
-    echo "  container ${PREFIX}-nll ${PY_IMAGE} (${PIP_PINS})"
+    for p in ${PRECS}; do echo "  container $(cname "${p}") ${OVMS_IMAGE} port ${PORT[${p}]} model OpenVINO/Qwen3-4B-${p}-ov"; done
+    echo "  container $(cname nll) ${PY_IMAGE} (${PIP_PINS})"
     echo "  schedule: warmup, P1, R1 ABCD, R2 DCBA, P2, R3 ABCD, R4 DCBA, R5 ABCD, P3; probe order P1 int4,int8,fp16, P2 reversed, P3 forward; stop OVMS, NLL"
 }
 
@@ -97,9 +103,9 @@ json.dump({"turn": tok.decode(ids[1000:1396]), "probe": tok.decode(ids[2000:2128
 
 cleanup() {
     local c
-    for c in ${PRECS} nll; do docker rm -f "${PREFIX}-${c}" >/dev/null 2>&1 || true; done
-    [ "${LOAD_LEVEL}" = none ] || python3 "${LOAD}" stop >/dev/null 2>&1 || true
-    log "cleanup: removed ${PREFIX}-* containers and the background load"
+    for c in "${OWNED[@]}"; do docker rm -f "${c}" >/dev/null 2>&1 || true; done
+    [ "${LOAD_OWNED}" -eq 0 ] || python3 "${LOAD}" stop >/dev/null 2>&1 || true
+    log "cleanup: removed ${#OWNED[@]} container(s) this run started; background load stopped: ${LOAD_OWNED}"
 }
 
 watchdog() {
@@ -107,9 +113,9 @@ watchdog() {
         [ "${SECONDS}" -lt "${ABORT_AT}" ] || { log "watchdog: ${ABORT_AT} s reached"; kill -TERM $$; return; }
         local avail
         avail=$(awk '/^MemAvailable:/ {print $2; exit}' /proc/meminfo)
-        if [ "${avail}" -lt $((8 * 1024 * 1024)) ] && docker inspect "${PREFIX}-fp16" >/dev/null 2>&1; then
+        if [ "${avail}" -lt $((8 * 1024 * 1024)) ] && docker inspect "$(cname fp16)" >/dev/null 2>&1; then
             log "guard: MemAvailable ${avail} kB < 8 GiB, stopping fp16 first"
-            docker rm -f "${PREFIX}-fp16" >/dev/null 2>&1 || true
+            docker rm -f "$(cname fp16)" >/dev/null 2>&1 || true
         fi
     done
 }
@@ -158,6 +164,7 @@ run() {
     log "preflight"
     if k3d cluster list 2>/dev/null | grep -q '^k3dgpu-f-'; then die "a k3dgpu-f-* cluster exists"; fi
     if [ "${LOAD_LEVEL}" != none ]; then
+        LOAD_OWNED=1
         python3 "${LOAD}" start --level "${LOAD_LEVEL}" --ttl 1500 | tee -a "${RUN}/probe.log"
         python3 "${LOAD}" status >> "${RUN}/probe.log"
     fi
@@ -171,7 +178,8 @@ run() {
     { uptime; docker ps --format '{{.Names}}' | wc -l; cat "${DIR}/model-shas.txt"; } > "${RUN}/baseline.txt"
     local p t
     for p in ${PRECS}; do
-        docker run -d --name "${PREFIX}-${p}" --cpuset-cpus "${CPUS}" -p "127.0.0.1:${PORT[${p}]}:8000" \
+        OWNED+=("$(cname "${p}")")
+        docker run -d --name "$(cname "${p}")" --cpuset-cpus "${CPUS}" -p "127.0.0.1:${PORT[${p}]}:8000" \
             -v "${DIR}/models:/models" "${OVMS_IMAGE}" --rest_port 8000 \
             --model_path "/models/OpenVINO/Qwen3-4B-${p}-ov" --model_name "${p}" --log_level INFO >/dev/null
         t=${SECONDS}
@@ -180,7 +188,7 @@ run() {
             sleep 2
         done
         log "${p} ready (cold load $((SECONDS - t)) s)"
-        docker logs "${PREFIX}-${p}" 2>&1 | grep -iE 'INFERENCE_PRECISION|KV_CACHE_PRECISION|DYNAMIC_QUANT' \
+        docker logs "$(cname "${p}")" 2>&1 | grep -iE 'INFERENCE_PRECISION|KV_CACHE_PRECISION|DYNAMIC_QUANT' \
             > "${RUN}/precision-${p}.txt" || echo "not exposed" > "${RUN}/precision-${p}.txt"
     done
     turn --phase warmup --label W --order int4,int8,fp16
@@ -192,8 +200,8 @@ run() {
     reference R4 "int4',fp16,int8,int4"
     reference R5 "int4,int8,fp16,int4'"
     probe_repeat P3 int4,int8,fp16
-    for p in ${PRECS}; do docker stats --no-stream --format "${p} {{.MemUsage}}" "${PREFIX}-${p}" >> "${RUN}/rss.txt" || true; done
-    for p in ${PRECS}; do docker rm -f "${PREFIX}-${p}" >/dev/null; done
+    for p in ${PRECS}; do docker stats --no-stream --format "${p} {{.MemUsage}}" "$(cname "${p}")" >> "${RUN}/rss.txt" || true; done
+    for p in ${PRECS}; do docker rm -f "$(cname "${p}")" >/dev/null; done
     if [ "${LOAD_LEVEL}" != none ]; then
         log "background at the end of the timed part: $(load_running) of 3 load containers running"
         python3 "${LOAD}" stop | tee -a "${RUN}/probe.log"
@@ -213,11 +221,12 @@ run() {
 nll_pass() {
     log "NLL pass"
     local tn=${SECONDS}
-    timeout "${NLL_CAP}" docker run --rm --name "${PREFIX}-nll" --user "${UIDGID}" --cpuset-cpus "${CPUS}" \
+    OWNED+=("$(cname nll)")
+    timeout "${NLL_CAP}" docker run --rm --name "$(cname nll)" --user "${UIDGID}" --cpuset-cpus "${CPUS}" \
         -v "${DIR}:/w" -v "${HERE}:/b:ro" -e HOME=/w \
         "${PY_IMAGE}" /w/venv/bin/python /b/nll.py --models /w/models --heldout /w/text/heldout.txt \
         --wikitext /w/text/wikitext2.txt --out "/w/${RUN##*/}/nll.json" || log "NLL pass failed: dNLL will be null"
-    docker rm -f "${PREFIX}-nll" >/dev/null 2>&1 || true
+    docker rm -f "$(cname nll)" >/dev/null 2>&1 || true
     log "NLL pass wall $((SECONDS - tn)) s (quality cost, outside the 60 s probe budget)"
 }
 
@@ -238,7 +247,7 @@ case "${1:-}" in
     --nll)
         RUN="${2:?usage: probe.sh --nll RUN_DIR}"; RUN="${RUN%/}"
         [ -f "${RUN}/results.jsonl" ] && [ "${RUN%/*}" = "${DIR}" ] || { echo "not a run dir under ${DIR}: ${RUN}" >&2; exit 2; }
-        trap 'docker rm -f "${PREFIX}-nll" >/dev/null 2>&1 || true' EXIT
+        trap 'docker rm -f "$(cname nll)" >/dev/null 2>&1 || true' EXIT
         SECONDS=0; nll_pass; summarize "${RUN}" "${RUN}/nll.json" ;;
     --summarize)
         RUN="${2:?usage: probe.sh --summarize RUN_DIR [NLL_JSON]}"; RUN="${RUN%/}"
