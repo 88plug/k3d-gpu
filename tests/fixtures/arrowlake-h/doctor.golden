@@ -17,6 +17,10 @@
 ==> Intel CPU built-in accelerators...
   ok: CPU ISA: AVXVNNI GFNI SHA VAES — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
   ok: hybrid CPU: P-cores 0-5, E-cores 6-13 — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient
+==> Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...
+  ok: dra available (auto)
+  ok: image-volume available (auto)
+  ok: npu-turbo available (auto)
 
 ==> All checks passed.
 exit=0

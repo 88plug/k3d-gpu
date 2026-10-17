@@ -1,4 +1,5 @@
 ==> Accelerators: intel
+==> Experimental features (auto): dra image-volume
 ==> Creating k3d cluster 'gpu' with image cryptoandcoffee/k3d-gpu:latest...
 ==> Waiting for nodes Ready...
 ==> intel device plugin auto-deployed by k3s.
@@ -17,6 +18,8 @@ k3d cluster create gpu
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.GFNI=true@server:*;agent:*
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.SHA=true@server:*;agent:*
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.VAES=true@server:*;agent:*
+  --k3s-node-label=experimental.k3d-gpu.io/dra=true@server:*;agent:*
+  --k3s-node-label=experimental.k3d-gpu.io/image-volume=true@server:*;agent:*
 kubectl wait --for=condition=Ready nodes --all --timeout=120s
 kubectl -n kube-system get daemonset intel-gpu-plugin
 kubectl -n kube-system rollout status daemonset/intel-gpu-plugin --timeout=120s

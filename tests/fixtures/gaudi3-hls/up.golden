@@ -1,4 +1,5 @@
 ==> Accelerators: gaudi amx
+==> Experimental features (auto): dra image-volume
 ==> Creating k3d cluster 'gpu' with image cryptoandcoffee/k3d-gpu:latest...
 ==> Waiting for nodes Ready...
 ==> gaudi device plugin auto-deployed by k3s.
@@ -18,6 +19,8 @@ k3d cluster create gpu
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AVX512BF16=true@server:*;agent:*
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AVX512F=true@server:*;agent:*
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AVX512VNNI=true@server:*;agent:*
+  --k3s-node-label=experimental.k3d-gpu.io/dra=true@server:*;agent:*
+  --k3s-node-label=experimental.k3d-gpu.io/image-volume=true@server:*;agent:*
 kubectl wait --for=condition=Ready nodes --all --timeout=120s
 kubectl -n habana-system get daemonset habanalabs-device-plugin-daemonset
 kubectl -n habana-system rollout status daemonset/habanalabs-device-plugin-daemonset --timeout=120s
