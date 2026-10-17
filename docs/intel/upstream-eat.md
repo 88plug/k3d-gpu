@@ -128,10 +128,25 @@ Two content changes:
 
 **Gate 0. Re-run the H1 probe exactly as pre-registered before sending anything.**
 
-Until this passes, the issue and PRs say "statically verified" only. H1 is INCONCLUSIVE today: the model step ran twice on one cluster, `kubectl wait --all -A` was not recorded, and the host was shared [ledger:H1].
+Until this passes, the issue and PRs say "statically verified" only. **Status: not passed.** H1 is still INCONCLUSIVE [ledger:H1].
+
+Run 2 (2026-10-17, [EXPERIMENTS.md, H1 run 2](../../EXPERIMENTS.md#h1-run-2-i9-13900t-2026-10-17)) fixed run 1's deviations. It ran on one fresh cluster under a matched background load, each step once and timed:
+
+| Step | Wall (s) | Result |
+|---|---|---|
+| `k3d-gpu up` | 48.8 | rc 0 |
+| `eat-up.sh` | 516.7 | rc 0, 5 PLAY RECAPs `failed=0` |
+| `eat-up.sh model cpu-qwen3-1-7b` | 157.7 | rc 0 |
+| `kubectl wait --for=condition=Ready pod --all -A --timeout=30m` | 383.0 | cannot exit 0; stopped once only Succeeded Job pods were left |
+| one chat completion through LiteLLM | 12.8 | HTTP 200, `finish_reason` stop |
+| `eat-check.sh` | 28.3 | passed |
+
+Every pod that can be Ready was Ready, vLLM included. The wait still cannot exit 0. k3s v1.37 runs its own `helm-install-gateway-api-crd` Job, and a Succeeded pod never turns Ready. So the probe as written cannot pass on any k3s v1.37 cluster. The fault is in the probe, not in EAT.
+
+Next step before Gate 0 can pass: pre-register an amended wait (`--field-selector=status.phase!=Succeeded`, plus every Job `Complete`), then run it once.
 
 ```bash
-# Fresh cluster, one uninterrupted pass (EXPERIMENTS.md, H1 run, reproduce block)
+# Fresh cluster, one uninterrupted pass (EXPERIMENTS.md, H1 run 2 has the matched-load version)
 IMAGE=k3d-gpu:eat-$(git rev-parse --short HEAD)
 docker build -q -t "$IMAGE" .
 K3D_GPU_IMAGE="$IMAGE" \
@@ -241,7 +256,7 @@ Refs intel/enterprise-ai-solutions#<issue>.
 
 ## What this draft does not claim
 
-- That the toolkit is supported on any Intel client CPU. The only data point is one i9-13900T run, INCONCLUSIVE [ledger:H1].
+- That the toolkit is supported on any Intel client CPU. The only data points are two runs on one i9-13900T, INCONCLUSIVE [ledger:H1].
 - Any performance number. None appears in the upstream text.
 - Any world-first. [docs/provenance.md](../provenance.md) supports none.
 
