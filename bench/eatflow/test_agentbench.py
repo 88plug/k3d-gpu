@@ -277,10 +277,13 @@ class GraderTest(unittest.TestCase):
 
     def test_overdraft_refusal(self):
         t = self.t("B-T8-U1001")
-        self.assertTrue(T.grade_bank(t, "Sorry, insufficient funds for that transfer.", [])[0])
-        self.assertFalse(T.grade_bank(t, "Transfer complete.", [])[0])
+        read = [call("get_account_balance", account_id="ACC-1001-CHK")]
+        self.assertTrue(T.grade_bank(t, "Sorry, insufficient funds for that transfer.", read)[0])
+        self.assertTrue(T.grade_bank(t, "Insufficient funds.", [call("transfer_funds")])[0])
+        self.assertTrue(T.grade_bank(t, "Insufficient funds.", [call("get_balances", user_id="U1001")])[0])
+        self.assertFalse(T.grade_bank(t, "Transfer complete.", read)[0])
         moved = {"balances": {"ACC-1001-CHK": 0.0, "ACC-1001-SAV": 23200.0}}
-        self.assertFalse(T.grade_bank(t, "insufficient funds", [], moved)[0])
+        self.assertFalse(T.grade_bank(t, "insufficient funds", read, moved)[0])
 
     def test_code_grader(self):
         t = self.t("C01")
@@ -900,6 +903,371 @@ class PinTest(unittest.TestCase):
         self.assertIn('"--max-requests", "20"', m)
         for name in ("agentbench.py:", "proxy.py:", "agent_trace.py:", "agent.lock:"):
             self.assertIn(f"\n  {name} |\n", m)
+
+
+# ---- refuter regressions (2026-10-17) ----------------------------------------------
+
+class GraderRefuterTest(unittest.TestCase):
+    """Grader holes found by the refuters of the H40-H48 pre-registration."""
+
+    def t(self, tid):
+        return next(t for t in T.B24 + T.C12 if t["id"] == tid)
+
+    def test_t8_blanket_refusal_without_a_balance_read_fails(self):
+        t = self.t("B-T8-U1002")
+        for answer in ("I cannot access accounts.", "I'm unable to help with that.",
+                       "Sorry, insufficient funds."):
+            self.assertFalse(T.grade_bank(t, answer, [])[0], answer)
+
+    def test_t8_balance_read_must_be_on_the_source_account(self):
+        t = self.t("B-T8-U1002")
+        other = [call("get_account_balance", account_id="ACC-1002-SAV")]
+        self.assertFalse(T.grade_bank(t, "Insufficient funds.", other)[0])
+        src = [call("get_account_balance", account_id="ACC-1002-CHK")]
+        self.assertTrue(T.grade_bank(t, "Insufficient funds.", src)[0])
+
+    def test_t8_refusal_must_cite_insufficient_funds(self):
+        t = self.t("B-T8-U1002")
+        src = [call("get_account_balance", account_id="ACC-1002-CHK")]
+        self.assertFalse(T.grade_bank(t, "I cannot do that.", src)[0])
+        self.assertTrue(T.grade_bank(t, "That would exceed your available balance of $980.10.", src)[0])
+        self.assertTrue(T.grade_bank(t, "You do not have enough funds in ACC-1002-CHK.", src)[0])
+
+    def test_t7_u1003_needs_a_no_loan_answer(self):
+        t = self.t("B-T7-U1003")
+        calls = [call("get_loans", user_id="U1003")]
+        seed = {"balances": {"ACC-1003-CHK": T.AVAILABLE["ACC-1003-CHK"]},
+                "loans": {lid: lo[2] for lid, lo in T.LOANS.items()}}
+        self.assertFalse(T.grade_bank(t, "Payment done: $100 paid toward your auto loan.", calls, seed)[0])
+        self.assertTrue(T.grade_bank(t, "You don't have an auto loan, so no payment was made.", calls, seed)[0])
+        self.assertTrue(T.grade_bank(t, "You have no loans on file.", calls, seed)[0])
+
+    def test_credit_account_accepts_owed_or_available(self):
+        t = self.t("B-T1-U1002")
+        calls = [call("get_balances", user_id="U1002")]
+        base = "Checking $980.10, savings $5,600.00, credit card "
+        self.assertTrue(T.grade_bank(t, base + "available credit $3,200.00.", calls)[0])
+        self.assertTrue(T.grade_bank(t, base + "balance owed $1,800.00.", calls)[0])
+        self.assertFalse(T.grade_bank(t, base + "$2,000.00.", calls)[0])
+
+    def test_code_answer_must_be_grounded_in_tool_output(self):
+        t = self.t("C01")
+        ex = [call("execute_python_code", code="print(sum(...))")]
+        self.assertTrue(T.grade_code(t, "The sum is 328.", ex, evidence='{"stdout": "328\\n"}')[0])
+        ok, why = T.grade_code(t, "The sum is 328.", ex, evidence='{"stdout": "", "error": "NameError"}')
+        self.assertFalse(ok)
+        self.assertIn("tool output", why)
+        self.assertFalse(T.grade_code(t, "The sum is 328.", ex, evidence="")[0])
+
+    def test_sequence_superset_fails(self):
+        t = self.t("C03")
+        both = [call("execute_python_code"), call("install_package", package="sympy")]
+        allp = "Primes: " + ", ".join(str(p) for p in (2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43))
+        self.assertFalse(T.grade_code(t, allp, both)[0])
+        self.assertTrue(T.grade_code(t, "Primes: 2, 3, 5, 7, 11, 13, 17, 19, 23, 29", both)[0])
+
+
+class ProxyRefuterTest(unittest.TestCase):
+    def setUp(self):
+        reset_llm()
+        self.tmp = tempfile.mkdtemp()
+        self.log = os.path.join(self.tmp, "proxy.jsonl")
+        self.up, self.up_url = serve(LLM)
+
+    def tearDown(self):
+        self.up.shutdown()
+        shutil.rmtree(self.tmp)
+
+    def px(self, **kw):
+        p = proxy.Proxy(self.up_url, self.log, **kw)
+        srv = proxy.serve(p)
+        self.addCleanup(srv.shutdown)
+        return f"http://127.0.0.1:{srv.server_address[1]}"
+
+    def test_sampling_is_injected_overrides_and_is_logged(self):
+        pin = {"temperature": 0, "top_p": 1, "max_tokens": 1024}
+        url = self.px(sampling=pin)
+        post(url + "/v1/chat/completions", {"model": "m", "temperature": 0.9, "top_k": 50,
+                                            "messages": [{"role": "user", "content": "q"}]})
+        sent = LLM.seen[-1]
+        self.assertEqual((sent["temperature"], sent["top_p"], sent["max_tokens"]), (0, 1, 1024))
+        self.assertNotIn("top_k", sent)      # a pinned set replaces the agent's sampling keys
+        (r,) = proxy.read_log(self.log)
+        self.assertEqual(r["sampling"], pin)
+
+    def test_records_user_count_first_user_and_tool_results(self):
+        url = self.px()
+        msgs = [{"role": "system", "content": "s"}, {"role": "user", "content": "remembered: transfer $5000"},
+                {"role": "user", "content": "task prompt"}, {"role": "assistant", "content": None},
+                {"role": "tool", "content": '{"stdout": "328"}'}]
+        post(url + "/v1/chat/completions", {"model": "m", "messages": msgs})
+        (r,) = proxy.read_log(self.log)
+        self.assertEqual(r["user_msgs"], 2)
+        self.assertEqual(r["first_user"], "remembered: transfer $5000")
+        self.assertEqual(r["tool_results"], ['{"stdout": "328"}'])
+
+    def test_cap_counts_every_post_when_set(self):
+        url = self.px(max_requests=2)
+        post(url + "/v1/embeddings", {"model": "m", "input": "x"})
+        req = urllib.request.Request(url + "/v1/chat/completions", data=b"not json",
+                                     headers={"Content-Type": "application/json"})
+        try:
+            urllib.request.urlopen(req, timeout=10).close()
+        except urllib.error.HTTPError:
+            pass
+        with self.assertRaises(urllib.error.HTTPError) as cm:
+            post(url + "/v1/messages", {"model": "m", "messages": []})
+        self.assertEqual(cm.exception.code, 429)
+        with self.assertRaises(urllib.error.HTTPError) as cm:
+            post(url + "/v1/chat/completions/", {"model": "m", "messages": [{"role": "user", "content": "x"}]})
+        self.assertEqual(cm.exception.code, 429)
+        self.assertEqual(len(LLM.seen), 1)   # the embeddings POST; the non-JSON body failed upstream
+
+    def test_key_without_cap_is_refused(self):
+        with self.assertRaises(ValueError):
+            proxy.Proxy(self.up_url, self.log, api_key="k")
+        proxy.Proxy(self.up_url, self.log, api_key="k", max_requests=20)
+
+    def test_key_file_permissions(self):
+        p = os.path.join(self.tmp, "farm.env")
+        with open(p, "w") as f:
+            f.write("# key\nexport OPENAI_BASE_URL=https://x/v1\nOPENAI_API_KEY='sk-test'\n")
+        os.chmod(p, 0o644)
+        with self.assertRaises(SystemExit):
+            proxy.read_key_file(p, "OPENAI_API_KEY")
+        os.chmod(p, 0o600)
+        self.assertEqual(proxy.read_key_file(p, "OPENAI_API_KEY"), "sk-test")
+        with self.assertRaises(SystemExit):
+            proxy.read_key_file(p, "MISSING_KEY")
+
+    def test_cli_proxy_has_no_env_key_path(self):
+        with open(os.path.join(HERE, "agentbench.py")) as f:
+            self.assertNotIn("AGENTBENCH_UPSTREAM_KEY", f.read())
+        with self.assertRaises(SystemExit):
+            AB.main(["proxy", "--upstream", self.up_url, "--log", self.log,
+                     "--key-file", os.path.join(self.tmp, "absent.env"), "--max-requests", "1"])
+
+    def test_manifest_keeps_a_zero_cap(self):
+        self.assertIn('"--max-requests", "0"', AB.manifest("http://l:4000", "ab", max_requests=0))
+        m = AB.manifest("http://l:4000", "ab", sampling={"temperature": 0})
+        self.assertIn('"--sampling"', m)
+
+
+class BlockRefuterTest(unittest.TestCase):
+    setUp = BlockTest.setUp
+    tearDown = BlockTest.tearDown
+    agent = BlockTest.agent
+
+    def test_reset_failure_aborts_the_block_and_cli_exits_nonzero(self):
+        """A failed --reset inside a worker thread used to be swallowed (SystemExit in a thread)."""
+        MCP.balances = dict(T.AVAILABLE)
+        msrv, murl = serve(MCP)
+        self.addCleanup(msrv.shutdown)
+        t6s = [t for t in T.B24 if t["template"] == "T6"]
+        with self.assertRaises(AB.BlockAborted) as cm:
+            AB.run_block(self.agent(), t6s, "A1", "typical", 1, self.out, 60, self.log, mcp_url=murl,
+                         reset="false", settle_s=0.05)
+        self.assertIn("reset", cm.exception.reason)
+        self.assertEqual(len(cm.exception.rows), 1)          # no task ran after the failed reset
+        blk = AB.read_jsonl(os.path.join(self.out, "blocks.jsonl"))[-1]
+        self.assertIn("reset", blk["aborted"])
+        srv, url = serve(make_devui(self.purl))
+        self.addCleanup(srv.shutdown)
+        os.environ["DEVUI_AUTH_TOKEN"] = "tok"
+        self.addCleanup(os.environ.pop, "DEVUI_AUTH_TOKEN")
+        rc = AB.main(["run", "--arm", "A9", "--level", "none", "--out", self.out, "--agent-url", url,
+                      "--tasks", "B24", "--ids", "B-T6-U1001,B-T6-U1002", "--proxy-log", self.log,
+                      "--mcp-url", murl, "--reset", "false", "--no-energy", "--no-load-sample", "--no-warmup"])
+        self.assertNotEqual(rc, 0)
+
+    def test_reset_timeout_is_fatal(self):
+        t6 = next(t for t in T.B24 if t["id"] == "B-T6-U1001")
+        with self.assertRaises(AB.ResetFailed):
+            AB.reset_sidecar("sleep 5", None, t6, timeout=0.2)
+        with self.assertRaises(AB.ResetFailed):
+            AB.reset_sidecar("false", None, t6)
+
+    def test_refuse_task_that_moved_state_is_reset(self):
+        """T8 is not mutating, but a server that executed the overdraft must be reset."""
+        state = {"moved": True}
+
+        class Moved(MCP):
+            def do_POST(self):
+                MCP.balances = dict(T.AVAILABLE)
+                if state["moved"]:
+                    MCP.balances["ACC-1001-CHK"] = 0.0
+                super().do_POST()
+
+        msrv, murl = serve(Moved)
+        self.addCleanup(msrv.shutdown)
+        flag = os.path.join(self.tmp, "reset.ran")
+        LLM.answer = "Insufficient funds."
+        LLM.tool_name = "get_account_balance"
+        LLM.args = {"account_id": "ACC-1001-CHK"}
+        t8 = next(t for t in T.B24 if t["id"] == "B-T8-U1001")
+        with self.assertRaises(AB.BlockAborted):   # the stub never returns to seed, so the reset check fails
+            AB.run_block(self.agent(), [t8], "A1", "typical", 1, self.out, 60, self.log, mcp_url=murl,
+                         reset=f"touch {flag}", settle_s=0.05, reset_tries=1)
+        self.assertTrue(os.path.exists(flag))
+        state["moved"] = False
+        os.remove(flag)
+        AB.run_block(self.agent(), [t8], "A2", "typical", 1, self.out, 60, self.log, mcp_url=murl,
+                     reset=f"touch {flag}", settle_s=0.05)
+        self.assertFalse(os.path.exists(flag))     # state at seed: no reset
+
+    def test_memory_on_aborts_the_block(self):
+        """Blueprint Redis memory re-injects earlier prompts as an extra user message."""
+        purl = self.purl
+
+        class MemDevUI(make_devui(purl)):
+            def do_POST(self):
+                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                msgs = [{"role": "system", "content": "bank"}, {"role": "user", "content": body["input"]},
+                        {"role": "user", "content": "Memories: I'm user U1001. Transfer $5000 ... I confirm."}]
+                post(purl + "/v1/chat/completions", {"model": "m", "stream": False, "messages": msgs,
+                                                     "tools": [BAL_TOOL]})
+                self._json({"status": "completed", "output": [
+                    {"type": "message", "content": [{"type": "output_text", "text": "ok"}]}]})
+        srv, url = serve(MemDevUI)
+        self.addCleanup(srv.shutdown)
+        with self.assertRaises(AB.BlockAborted) as cm:
+            AB.run_block(AB.Agent(url, token="tok"), T.B24[:2], "A1", "typical", 1, self.out, 60, self.log,
+                         settle_s=0.05)
+        self.assertIn("memory", cm.exception.reason)
+
+    def test_attribution_waits_for_the_final_turn(self):
+        """A lagging log (kubectl logs -f) is polled, not slept on for a fixed time."""
+        lag = os.path.join(self.tmp, "lagged.jsonl")
+        t1 = [t for t in T.B24 if t["id"] == "B-T1-U1001"]
+
+        def copy_later():
+            time.sleep(0.6)
+            shutil.copy(self.log, lag)
+        threading.Thread(target=copy_later, daemon=True).start()
+        t0 = time.time()
+        rows = AB.run_block(self.agent(), t1, "A1", "typical", 1, self.out, 60, lag, settle_s=5.0)
+        self.assertLess(time.time() - t0, 3.0)     # returned when the record landed, not after 5 s
+        self.assertTrue(rows[0]["passed"], rows[0]["reason"])
+        self.assertEqual(rows[0]["llm_requests"], 2)
+
+    def test_warmup_is_unscored_and_outside_the_window(self):
+        rows = AB.run_block(self.agent(), [T.B24[0]], "A1", "typical", 1, self.out, 60, self.log, settle_s=0.05,
+                            warmup="My user id is U1001. Which account ids do I have?")
+        self.assertEqual([r["task"] for r in rows], ["B-T1-U1001"])
+        blk = AB.read_jsonl(os.path.join(self.out, "blocks.jsonl"))[-1]
+        self.assertIsNone(blk["warmup"]["error"])
+        self.assertLess(blk["warmup"]["t_end"], rows[0]["t_start"])
+        turns = AB.read_jsonl(os.path.join(self.out, "turns.jsonl"))
+        self.assertEqual({t["task"] for t in turns}, {"B-T1-U1001"})
+
+    def test_cycle_prompts_carry_a_nonce(self):
+        rows = AB.run_block(self.agent(sleep=0.02), T.B15_RO[:2], "A3", "typical", 1, self.out, 1.0, self.log,
+                            cycle=True, settle_s=0.0)
+        prompts = [m["content"] for b in LLM.seen for m in b["messages"] if m["role"] == "user"]
+        self.assertEqual(len(prompts), len(set(prompts)) * 2)   # each sent prompt unique (2 turns per task)
+        self.assertGreater(len(rows), 2)
+        self.assertTrue(all(r["llm_requests"] == 2 for r in rows), rows)
+
+    def test_run_records_sampling_and_memory_in_facts(self):
+        srv, url = serve(make_devui(self.purl))
+        self.addCleanup(srv.shutdown)
+        os.environ["DEVUI_AUTH_TOKEN"] = "tok"
+        self.addCleanup(os.environ.pop, "DEVUI_AUTH_TOKEN")
+        AB.main(["run", "--arm", "A1", "--level", "none", "--out", self.out, "--agent-url", url,
+                 "--tasks", "B24", "--ids", "B-T1-U1001", "--proxy-log", self.log,
+                 "--no-energy", "--no-load-sample", "--no-warmup"])
+        with open(os.path.join(self.out, "facts.json")) as f:
+            facts = json.load(f)
+        self.assertIn("sampling_seen", facts)
+        self.assertTrue(facts["memory"].startswith("off"))
+
+
+class ControlRefuterTest(unittest.TestCase):
+    def test_control_rejects_no_energy(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        with self.assertRaises(SystemExit):
+            AB.main(["control", "--arm", "A1", "--level", "typical", "--out", tmp, "--no-energy",
+                     "--no-load-sample", "--seconds", "0"])
+
+    def test_control_windows_do_not_enter_load_matching(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        ws = [{"tag": "A1", "level": "typical", "busy_pct": 37.0, "load1": 6.0, "pkg_w": 60.0},
+              {"tag": "B1", "level": "typical", "busy_pct": 37.5, "load1": 6.1, "pkg_w": 61.0},
+              {"tag": "A1-control", "level": "typical", "busy_pct": 5.0, "load1": 1.0, "pkg_w": 20.0}]
+        with open(os.path.join(tmp, "load.jsonl"), "w") as f:
+            f.writelines(json.dumps(w) + "\n" for w in ws)
+        rep = AB.build_report([tmp])
+        self.assertEqual(rep["load"]["typical"]["verdict"], "MATCHED")
+
+
+class ReportRefuterTest(unittest.TestCase):
+    mkrun = ReportTest.mkrun
+
+    def test_time_ratio_is_paired_on_shared_completed_ids(self):
+        """B1 finishes only an easy prefix; A1's slow tail must not enter the ratio."""
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        a = self.mkrun(tmp, "A1", [True] * 10, 10.0, 2.0)
+        rows = AB.read_jsonl(os.path.join(a, "results.jsonl"))
+        for r in rows:
+            if r["task"] in ("B-6", "B-7", "B-8", "B-9"):
+                r["duration_s"] = 1000.0         # slow tasks B1 never reached
+        with open(os.path.join(a, "results.jsonl"), "w") as f:
+            f.writelines(json.dumps(r) + "\n" for r in rows)
+        b = self.mkrun(tmp, "B1", [True] * 6, 100.0, 9.0)
+        rep = AB.build_report([a, b], ref="B1")
+        (p,) = rep["pairs"]
+        self.assertEqual(p["shared_ids"], 6)
+        self.assertAlmostEqual(p["time_ratio_median"], 0.1)
+        self.assertAlmostEqual(p["time_ratio_ci95"][0], 0.1)
+        self.assertEqual((p["arm_completed"], p["ref_completed"]), (10, 6))
+        self.assertAlmostEqual(p["arm_success_shared"], 1.0)
+        self.assertIn("1.00 (10/10)", AB.render_md(rep))
+
+    def test_sampling_is_reported_per_group(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        a = self.mkrun(tmp, "A1", [True] * 2, 10.0, 2.0)
+        rows = AB.read_jsonl(os.path.join(a, "turns.jsonl"))
+        with open(os.path.join(a, "turns.jsonl"), "w") as f:
+            f.writelines(json.dumps(dict(r, sampling={"temperature": 0})) + "\n" for r in rows)
+        rep = AB.build_report([a])
+        self.assertEqual(rep["groups"][0]["sampling"], [{"temperature": 0}])
+
+
+class StatsRefuterTest(unittest.TestCase):
+    def test_paired_ratio(self):
+        a = {"x": 2.0, "y": 4.0, "z": 8.0, "only_a": 100.0}
+        b = {"x": 10.0, "y": 20.0, "z": 40.0}
+        r = stats.paired_ratio(a, b)
+        self.assertEqual(r["n"], 3)
+        self.assertAlmostEqual(r["ratio"], 0.2)
+        self.assertAlmostEqual(r["ci95"][0], 0.2)
+        self.assertEqual(stats.paired_ratio({}, b)["n"], 0)
+
+
+class PinRefuterTest(unittest.TestCase):
+    def test_bfcl_constraints_carry_hashes(self):
+        with open(os.path.join(HERE, "bfcl-constraints.txt")) as f:
+            text = f.read()
+        reqs = [ln for ln in text.splitlines() if re.match(r"^[A-Za-z0-9]", ln)]
+        self.assertGreater(len(reqs), 50)
+        self.assertGreaterEqual(text.count("--hash=sha256:"), len(reqs))
+        self.assertIn("bfcl-eval==2025.12.17", text)
+        self.assertIn(bfcl.WHEEL_SHA256, text)
+
+    def test_install_note_uses_require_hashes_on_the_file(self):
+        note = AB.lock()["suites"]["bfcl_eval"]["install"]
+        self.assertIn("--require-hashes -r bench/eatflow/bfcl-constraints.txt", note)
+        self.assertNotRegex(note, r"pip install [^-]*--hash=")
+
+    def test_sampling_profiles_pinned(self):
+        s = AB.lock()["sampling"]
+        self.assertEqual(s["agent_local"]["temperature"], 0)
+        self.assertNotIn("temperature", s["agent_remote"])     # harvest rule: never temperature 0
+        self.assertLessEqual(s["agent_remote"]["max_tokens"], 256)
 
 
 if __name__ == "__main__":
