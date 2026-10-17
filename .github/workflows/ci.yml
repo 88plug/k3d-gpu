@@ -135,6 +135,17 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - run: tests/bench_test.sh
 
+  tune-tests:
+    name: k3d-gpu tune tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      # TUNE_E2E_FULL: two whole tunes against tests/fake_ovms.py, one where no
+      # config changes the speed (must keep the default) and one with a real winner.
+      - run: tests/tune_test.sh
+        env:
+          TUNE_E2E_FULL: "1"
+
   mcp-tests:
     name: MCP server tests
     runs-on: ubuntu-latest

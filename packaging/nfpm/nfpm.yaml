@@ -20,7 +20,7 @@ description: |-
 depends:
   - bash
 suggests:
-  - python3  # k3d-gpu facts and plan (console/)
+  - python3  # k3d-gpu facts, plan and tune (console/, bench/)
 contents:
   - src: scripts/k3d-gpu
     dst: /usr/bin/k3d-gpu
@@ -50,6 +50,15 @@ contents:
     dst: /usr/share/k3d-gpu/images.lock
     file_info:
       mode: 0644
+  # k3d-gpu tune loads the agent with these.
+  - src: bench/llm_load.py
+    dst: /usr/share/k3d-gpu/bench/llm_load.py
+    file_info:
+      mode: 0755
+  - src: bench/energy.sh
+    dst: /usr/share/k3d-gpu/bench/energy.sh
+    file_info:
+      mode: 0755
   - src: README.md
     dst: /usr/share/doc/k3d-gpu/README.md
     file_info:
@@ -76,6 +85,11 @@ contents:
     file_info:
       mode: 0755
   - dst: /usr/share/k3d-gpu/telemetry/optional
+    type: dir
+    packager: rpm
+    file_info:
+      mode: 0755
+  - dst: /usr/share/k3d-gpu/bench
     type: dir
     packager: rpm
     file_info:

@@ -53,6 +53,13 @@ check "nfpm ships console/*.json to /usr/share/k3d-gpu/console/" \
 for f in "${ROOT}"/console/*.py "${ROOT}"/console/*.json; do
     check "PKGBUILD installs console/${f##*/}" grep -Eq "for f in (.* )?${f##*/}( |;)" "${PKGBUILD}"
 done
+for f in llm_load.py energy.sh; do
+    check "nfpm ships bench/${f} (k3d-gpu tune)" \
+        grep -Pzq "src: bench/${f//./\\.}\n +dst: /usr/share/k3d-gpu/bench/${f//./\\.}\n" "${NFPM}"
+    check "PKGBUILD installs bench/${f}" grep -qE "install -Dm755 bench/${f} +\"\\\$pkgdir/usr/share/k3d-gpu/bench/${f}\"" "${PKGBUILD}"
+done
+check "nix installs bench/llm_load.py and energy.sh" \
+    grep -qF 'install -Dm755 -t "$out/share/k3d-gpu/bench" bench/llm_load.py bench/energy.sh' "${NIXPKG}"
 check "nfpm ships images.lock to /usr/share/k3d-gpu/" \
     grep -Pzq 'src: images\.lock\n +dst: /usr/share/k3d-gpu/images\.lock\n' "${NFPM}"
 check "PKGBUILD installs images.lock" \
