@@ -540,8 +540,12 @@ cpu_flags() {
 # AMX feature flags from /proc/cpuinfo, sorted, one line (empty when absent).
 amx_flags() {
     # Kernel flag names are [a-z0-9_]; anything else is not a flag and must not
-    # become a node label.
-    cpu_flags | LC_ALL=C grep -E '^amx_[a-z0-9_]+$' | sort | paste -sd' ' || true
+    # become a node label. AMX-TRANSPOSE was removed in Intel ISE rev 059
+    # (319433-061 revision history) and AMX-TF32 in ISE rev 062
+    # (https://cdrdv2.intel.com/v1/dl/getContent/671368; gcc-patches 2026-June
+    # 722128). cpufeatures.h has never defined either flag, so stock kernels
+    # never print them; the filter covers custom kernels that might.
+    cpu_flags | LC_ALL=C grep -E '^amx_[a-z0-9_]+$' | LC_ALL=C grep -vxE 'amx_(tf32|transpose)' | sort | paste -sd' ' || true
 }
 
 # NFD-style node labels for the host's AMX flags (amx_tile -> ...cpu-cpuid.AMXTILE=true),
@@ -603,6 +607,26 @@ cpu_family_model() {
     awk -F: '/^cpu family[[:space:]]*:/ && f == "" { f = $2 + 0 }
              /^model[[:space:]]*:/ && m == "" { m = $2 + 0 }
              END { if (f != "" && m != "") print f, m }' "${SYSROOT}/proc/cpuinfo" 2>/dev/null || true
+}
+
+# cpu_isa_predicted "<family> <model>": "<name>|<ISA list>|<source>" for CPU
+# models whose newest ISA /proc/cpuinfo cannot show. The kernel prints a flag
+# only when its cpufeatures.h comment starts with a quoted name
+# (arch/x86/kernel/cpu/mkcapflags.sh): AMX_FP16 (on newer kernels) and APX are
+# unquoted, and AVX10, AMX_FP8 and AMX_COMPLEX have no cpufeatures.h entry; only
+# KVM's arch/x86/kvm/reverse_cpuid.h defines their X86_FEATURE_* macros. The lists are gcc's -march masks
+# (gcc/config/i386/i386.h PTA_*), not a CPUID read; NFD reads CPUID itself and
+# labels cpu-cpuid.AVX10_VERSION, APX_F, AMXFP8. Family/model ids:
+# arch/x86/include/asm/intel-family.h; they are Intel ids, so the caller checks
+# vendor_id GenuineIntel first (AMD Llano also prints family 18 model 1).
+cpu_isa_predicted() {
+    case "$1" in
+        "6 173") echo "Granite Rapids-X|AVX10.1, AMX-FP16|PTA_GRANITERAPIDS" ;;                 # INTEL_GRANITERAPIDS_X 0xAD
+        "6 174") echo "Granite Rapids-D|AVX10.1, AMX-FP16, AMX-COMPLEX|PTA_GRANITERAPIDS_D" ;;  # INTEL_GRANITERAPIDS_D 0xAE
+        "19 1")  echo "Diamond Rapids-X|AVX10.2, APX_F, AMX-FP8, AMX-FP16, AMX-COMPLEX, AMX-AVX512, AMX-MOVRS, MOVRS|PTA_DIAMONDRAPIDS" ;;  # INTEL_DIAMONDRAPIDS_X 19/0x01
+        "18 1")  echo "Nova Lake|AVX10.1, AVX10.2, APX_F, MOVRS, no AMX|PTA_NOVALAKE" ;;         # INTEL_NOVALAKE 18/0x01
+        "18 3")  echo "Nova Lake-L|AVX10.1, AVX10.2, APX_F, MOVRS, no AMX|PTA_NOVALAKE" ;;       # INTEL_NOVALAKE_L 18/0x03
+    esac
 }
 
 # Hybrid CPUs register one PMU per core type; each lists its online CPUs. Arrow
@@ -1828,8 +1852,15 @@ doctor_hbm() {
 # Xeon built-in accelerators. `up` deploys DSA/IAA/QAT plugins once the host
 # side is set up (work queues, SR-IOV VFs); this says what is still missing.
 doctor_cpu_accels() {
-    local amx isa dev bdf vfs n wqs kind name prefix devdir lines="" lp e cl pp fav fv fn
+    local amx isa pred fm dev bdf vfs n wqs kind name prefix devdir lines="" lp e cl pp fav fv fn
     amx=$(amx_flags)
+    fm=$(cpu_family_model)
+    pred=""
+    [ "$(cpuinfo_field vendor_id)" != GenuineIntel ] || pred=$(cpu_isa_predicted "${fm}")
+    if [ -n "${pred}" ]; then
+        IFS='|' read -r name isa prefix <<< "${pred}"
+        lines+="  info: ${name} (family ${fm% *}, model ${fm#* }): ISA predicted by gcc ${prefix}, not read from CPUID: ${isa} — /proc/cpuinfo may not show these (kernel-dependent); NFD labels what CPUID reports (cpu-cpuid.AVX10_VERSION, APX_F, AMXFP8) and oneDNN/OpenVINO pick them with no flag"$'\n'
+    fi
     [ -z "${amx}" ] || lines+="  ok: AMX (${amx}) — CPU instructions, usable in any pod; up labels nodes feature.node.kubernetes.io/cpu-cpuid.AMX*"$'\n'
     isa=$(cpu_isa_labels | sed 's#^feature\.node\.kubernetes\.io/cpu-cpuid\.##; s#=true$##' | paste -sd' ')
     [ -z "${isa}" ] || lines+="  ok: CPU ISA: ${isa} — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)"$'\n'
@@ -2670,17 +2701,24 @@ perf_cpu() {
 
 # Uncore (ring/LLC on client parts, mesh/LLC/memory controller on Xeon) frequency
 # range from intel_uncore_frequency: legacy package_NN_die_NN, or TPMI uncoreNN with
-# ELC. min/max/initial are world-readable; writes need root, so a lowered ceiling is
-# a suggestion with its exact revert. Pinning the floor high for LLM decode is
-# pre-registered as EXPERIMENTS.md H29 and stays unsuggested until it is measured.
+# ELC. min/max/initial are world-readable; current_freq_khz is 0400 and is not read
+# (drivers/platform/x86/intel/uncore-frequency/uncore-frequency-common.c). Writes need
+# root, so a lowered ceiling is a suggestion with its exact revert. TPMI parts also
+# list package_XX_die_YY roots for the same clocks; only the clusters are reported so
+# one cap gives one finding. Pinning the floor high for LLM decode is pre-registered
+# as EXPERIMENTS.md H29 and stays unsuggested until it is measured.
 perf_uncore() {
-    local base=/sys/devices/system/cpu/intel_uncore_frequency d rel name imin imax mn mx elc n=0
+    local base=/sys/devices/system/cpu/intel_uncore_frequency d rel name imin imax mn mx elc n=0 tpmi=0
+    compgen -G "${SYSROOT}${base}/uncore[0-9]*" >/dev/null && tpmi=1
     for d in "${SYSROOT}${base}"/package_*_die_* "${SYSROOT}${base}"/uncore[0-9]*; do
         [ -d "${d}" ] || continue
         rel=${d#"${SYSROOT}"} name=${d##*/}
+        [ "${tpmi}" = 0 ] || [[ "${name}" != package_* ]] || continue
         imin=$(rd "${rel}/initial_min_freq_khz") imax=$(rd "${rel}/initial_max_freq_khz")
         mn=$(rd "${rel}/min_freq_khz") mx=$(rd "${rel}/max_freq_khz")
-        [[ "${imin}${imax}${mn}${mx}" =~ ^[0-9]+$ ]] || continue
+        [[ "${imax}" =~ ^[0-9]+$ && "${mx}" =~ ^[0-9]+$ ]] || continue
+        # The floor is judged only when both min files read as numbers.
+        [[ "${imin}" =~ ^[0-9]+$ && "${mn}" =~ ^[0-9]+$ ]] || imin="" mn=""
         if [ "${n}" -eq 0 ]; then
             perf_section "Uncore frequency (intel_uncore_frequency)" \
                 "max_freq_khz at initial_max_freq_khz and min_freq_khz at initial_min_freq_khz: the hardware (UFS, or ELC on TPMI parts) picks the uncore clock inside the full range. A floor pinned high for decode is under test (EXPERIMENTS.md H29, PENDING), so it is not suggested" \
@@ -2691,11 +2729,15 @@ perf_uncore() {
             perf_flag warn "${name}: max_freq_khz ${mx} is below the hardware ceiling ${imax}" "${base}/${name}/max_freq_khz" \
                 "a lowered uncore ceiling caps ring/LLC (client) or mesh and memory-controller (Xeon) clock, and token generation reads every weight once per token through it" \
                 "echo ${imax} | sudo tee ${base}/${name}/max_freq_khz" "echo ${mx} | sudo tee ${base}/${name}/max_freq_khz"
-        elif lt "${imin}" "${mn}"; then
+        elif lt "${imax}" "${mx}"; then
+            perf_info "${name}: max_freq_khz ${mx} is above initial_max_freq_khz ${imax} (raised after boot)" "${base}/${name}/max_freq_khz, initial_max_freq_khz"
+        elif [ -n "${mn}" ] && lt "${imin}" "${mn}"; then
             perf_info "${name}: floor raised to ${mn} kHz (hardware floor ${imin}); costs idle package power, revert: echo ${imin} | sudo tee ${base}/${name}/min_freq_khz" \
                 "${base}/${name}/min_freq_khz"
-        else
+        elif [ -n "${mn}" ]; then
             perf_ok "${name}: $((mn / 1000))-$((mx / 1000)) MHz, the full hardware range" "${base}/${name}/{min,max}_freq_khz"
+        else
+            perf_ok "${name}: max $((mx / 1000)) MHz, the hardware ceiling" "${base}/${name}/max_freq_khz"
         fi
         elc=$(rd "${rel}/elc_floor_freq_khz")
         [ -z "${elc}" ] || perf_info "${name}: ELC floor ${elc} kHz, thresholds low $(rd "${rel}/elc_low_threshold_percent")% high $(rd "${rel}/elc_high_threshold_percent")% (enable $(rd "${rel}/elc_high_threshold_enable"))" \
@@ -3431,7 +3473,7 @@ perf_nvidia() {
 }
 
 perf_isolation() {
-    local km p v kv="" units=0 u d bdf g gn m mb others cls types="" sld mit flags tme cet sc pf f
+    local km p v kv="" units=0 u d bdf g gn m mb others cls types="" sld mit flags tme cet sc pf f kr
     [ -n "$(cpuinfo_field flags)" ] || return 0   # procfs files report size 0, so no -s test
     perf_section "Isolation for sandboxed agents" \
         "/dev/kvm usable for microVM sandboxes, each GPU alone in its IOMMU group, split-lock detection on, CET known, GPU observation streams limited to CAP_PERFMON" \
@@ -3450,6 +3492,36 @@ perf_isolation() {
             "sudo modprobe kvm_intel" "sudo modprobe -r kvm_intel"
     else
         perf_info "no VT-x (vmx flag) exposed: no microVM sandboxes (VT-x off in BIOS, or a VM without nested virtualization)" "/proc/cpuinfo"
+    fi
+
+    # TDX: kvm_intel's tdx parameter (0444, arch/x86/kvm/vmx/tdx.c, new in Linux
+    # 6.16: the file is absent at v6.15) says the host runs TDX guests; tdx_guest
+    # (cpuinfo) or /dev/tdx_guest says this node is one. The kernel sets
+    # tdx_host_platform only after tdx_init() finds the BIOS-enabled KeyID range
+    # (arch/x86/virt/vmx/tdx/tdx.c), so no BIOS step is suggested. Loading
+    # kvm_intel with TDX is a host change, so it is only suggested.
+    v=$(rd "${km}/tdx")
+    if cpu_flag tdx_guest || [ -e "${SYSROOT}/dev/tdx_guest" ]; then
+        perf_info "this node is a TDX guest (confidential VM): attestation reports via configfs-tsm /sys/kernel/config/tsm/report" "/proc/cpuinfo (tdx_guest), /dev/tdx_guest"
+    elif [ "${v}" = Y ]; then
+        perf_info "kvm_intel tdx=Y: the host runs TDX guests, so untrusted agent sandboxes can run as confidential microVMs (Kata kata-qemu-tdx RuntimeClass)" "${km}/tdx"
+    elif cpu_flag tdx_host_platform && cpu_flag vmx; then
+        kr=$(kernel_release); kr=${kr%%[!0-9.]*}
+        if [ -n "${v}" ]; then
+            perf_flag note "the CPU reports tdx_host_platform but kvm_intel runs without TDX (tdx=${v}): no confidential microVM sandboxes" "/proc/cpuinfo (tdx_host_platform), ${km}/tdx" \
+                "kvm_intel creates TDX guests only when loaded with tdx=1; stop running VMs and microVM sandboxes first, since modprobe -r kvm_intel fails while one holds /dev/kvm" \
+                "sudo modprobe -r kvm_intel && sudo modprobe kvm_intel tdx=1" \
+                "sudo modprobe -r kvm_intel && sudo modprobe kvm_intel tdx=0"
+        elif ver_lt "${kr}" 6.16; then
+            perf_info "the CPU reports tdx_host_platform, but kernel $(kernel_release) has no KVM TDX host support (needs Linux 6.16+): no confidential microVM sandboxes" "/proc/cpuinfo (tdx_host_platform), /proc/sys/kernel/osrelease"
+        elif [ -d "${SYSROOT}/sys/module/kvm_intel" ]; then
+            perf_info "the CPU reports tdx_host_platform, but kvm_intel has no tdx parameter: this kernel is built without CONFIG_KVM_INTEL_TDX" "/proc/cpuinfo (tdx_host_platform), ${km}/tdx"
+        else
+            perf_flag note "the CPU reports tdx_host_platform but kvm_intel is not loaded: no microVM or confidential microVM sandboxes" "/proc/cpuinfo (tdx_host_platform), /sys/module/kvm_intel" \
+                "kvm_intel creates TDX guests only when loaded with tdx=1 (kernels built with CONFIG_KVM_INTEL_TDX)" \
+                "sudo modprobe kvm_intel tdx=1" \
+                "sudo modprobe -r kvm_intel"
+        fi
     fi
 
     # IOMMU and per-GPU groups

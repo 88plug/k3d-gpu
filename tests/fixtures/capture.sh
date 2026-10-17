@@ -136,11 +136,12 @@ for cpu in "${SRC}"/sys/devices/system/cpu/cpu[0-9]*; do
     done
 done
 
-# First CPU's family, model, model name and flags, and the kernel release.
+# First CPU's vendor, family, model, model name and flags, and the kernel release.
 if [ -r "${SRC}/proc/cpuinfo" ]; then
     mkdir -p "${OUT}/proc"
     {
         printf 'processor\t: 0\n'
+        grep -m1 '^vendor_id[[:space:]]*:' "${SRC}/proc/cpuinfo" || true
         grep -m1 '^cpu family[[:space:]]*:' "${SRC}/proc/cpuinfo" || true
         grep -m1 '^model[[:space:]]*:' "${SRC}/proc/cpuinfo" || true
         grep -m1 '^model name' "${SRC}/proc/cpuinfo" || true
@@ -155,7 +156,7 @@ fi
 # Device nodes as empty files; /dev/char links only for DSA/IAA work queues.
 for node in "${SRC}"/dev/dri/card[0-9]* "${SRC}"/dev/dri/renderD* "${SRC}"/dev/accel/* \
             "${SRC}"/dev/dsa/wq* "${SRC}"/dev/iax/wq* "${SRC}"/dev/nvidia[0-9]* "${SRC}"/dev/nvidiactl \
-            "${SRC}"/dev/hl[0-9]* "${SRC}"/dev/kvm "${SRC}"/dev/vhost-vsock; do
+            "${SRC}"/dev/hl[0-9]* "${SRC}"/dev/kvm "${SRC}"/dev/vhost-vsock "${SRC}"/dev/tdx_guest; do
     [ -e "${node}" ] || continue
     mkdir -p "$(dirname "${OUT}/${node#"${SRC}"/}")"
     : > "${OUT}/${node#"${SRC}"/}"
@@ -249,7 +250,12 @@ if [ -d "${C}" ]; then
     for s in "${C}"/cpu0/cpuidle/state[0-9]*; do attrs_at "${s}" name latency disable; done
 fi
 attrs_at "${SRC}/sys/module/intel_idle/parameters" max_cstate
-attrs_at "${SRC}/sys/module/kvm_intel/parameters" nested enable_apicv ept
+attrs_at "${SRC}/sys/module/kvm_intel/parameters" nested enable_apicv ept tdx
+# Uncore frequency limits and ELC (0644/0444; current_freq_khz is 0400 and is not read).
+for u in "${C}"/intel_uncore_frequency/*; do
+    attrs_at "${u}" initial_min_freq_khz initial_max_freq_khz min_freq_khz max_freq_khz \
+        elc_floor_freq_khz elc_low_threshold_percent elc_high_threshold_percent elc_high_threshold_enable
+done
 
 # coretemp package sensors (TjMax is tempN_crit).
 for h in "${SRC}"/sys/class/hwmon/hwmon*; do

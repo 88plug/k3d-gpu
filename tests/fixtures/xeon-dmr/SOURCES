@@ -1,0 +1,30 @@
+Platform: two-socket Diamond Rapids-X (Xeon, CPU family 19 model 1) server. A
+pre-launch fixture: no Diamond Rapids hardware or ARK page was read, so the
+topology, NUMA layout, DSA/IAA placement and work queues are copied unchanged from
+xeon-gnr (Granite Rapids SNC3), and only the items below are Diamond Rapids data.
+
+Sources (kernel paths are torvalds/linux master as read for this fixture; the
+fixture's own osrelease is 6.18.1, a release new enough (6.16+) that kvm_intel has
+the tdx parameter):
+- Family 19, model 0x01: arch/x86/include/asm/intel-family.h INTEL_DIAMONDRAPIDS_X.
+- DSA 0x1212 / IAA 0x1216: include/linux/pci_ids.h (PCI_DEVICE_ID_INTEL_DSA_DMR,
+  PCI_DEVICE_ID_INTEL_IAA_DMR) and the idxd_pci_tbl in drivers/dma/idxd/init.c.
+- tdx_host_platform (7*32+7, quoted name, so printed in cpuinfo):
+  arch/x86/include/asm/cpufeatures.h.
+- /sys/module/kvm_intel/parameters/tdx: module_param_named(tdx, enable_tdx, bool,
+  0444) in arch/x86/kvm/vmx/tdx.c (new in v6.16); reads N when kvm_intel is loaded
+  without tdx=1.
+- /sys/devices/system/cpu/intel_uncore_frequency/uncore00/{initial_max_freq_khz,
+  max_freq_khz}: drivers/platform/x86/intel/uncore-frequency/uncore-frequency-common.c
+  (uncore%02d is the TPMI layout).
+- Predicted ISA reported by doctor: gcc/config/i386/i386.h PTA_DIAMONDRAPIDS
+  (https://gcc.gnu.org/git/?p=gcc.git;a=blob_plain;f=gcc/config/i386/i386.h;hb=HEAD).
+
+Not from hardware: the brand string "Genuine Intel(R) CPU 0000" (the form
+pre-production parts print), the cpuinfo flags line (xeon-gnr's plus vmx and
+tdx_host_platform, minus amx_fp16, which newer kernels such as 6.18 no longer
+print; AVX10, APX_F and AMX_FP8 have no cpuinfo flag), /dev/kvm (an empty file,
+as kvm_intel is loaded; with vmx set and no /sys/class/iommu copied from xeon-gnr,
+doctor --perf also notes VT-d), both uncore
+frequencies (2200000 / 1800000 kHz, chosen to exercise the cap warning), tdx=N,
+and everything copied from xeon-gnr (see tests/fixtures/xeon-gnr/SOURCES).

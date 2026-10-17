@@ -1,0 +1,4 @@
+cpu 288
+pods 110
+dsa.intel.com/wq-user-dedicated 2
+iaa.intel.com/wq-user-dedicated 2

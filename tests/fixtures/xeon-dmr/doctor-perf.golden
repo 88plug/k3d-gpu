@@ -1,0 +1,31 @@
+==> CPU frequency (driver none)
+  good: cores ramp to full turbo the moment a request arrives: EPP performance or balance_performance, turbo on, no frequency caps — token generation is a latency-bound loop and every ramp-up shows in time-to-first-token
+  src:  https://docs.kernel.org/admin-guide/pm/intel_pstate.html#energy-vs-performance-hints, https://docs.kernel.org/admin-guide/pm/cpufreq.html
+  info: no cpufreq policy exposed (VM or cpufreq disabled) — nothing to tune here
+        from: /sys/devices/system/cpu/cpu0/cpufreq/
+==> Uncore frequency (intel_uncore_frequency)
+  good: max_freq_khz at initial_max_freq_khz and min_freq_khz at initial_min_freq_khz: the hardware (UFS, or ELC on TPMI parts) picks the uncore clock inside the full range. A floor pinned high for decode is under test (EXPERIMENTS.md H29, PENDING), so it is not suggested
+  src:  https://docs.kernel.org/admin-guide/pm/intel_uncore_frequency_scaling.html
+  warn: uncore00: max_freq_khz 1800000 is below the hardware ceiling 2200000
+        from:   /sys/devices/system/cpu/intel_uncore_frequency/uncore00/max_freq_khz
+        why:    a lowered uncore ceiling caps ring/LLC (client) or mesh and memory-controller (Xeon) clock, and token generation reads every weight once per token through it
+        apply:  echo 2200000 | sudo tee /sys/devices/system/cpu/intel_uncore_frequency/uncore00/max_freq_khz
+        revert: echo 1800000 | sudo tee /sys/devices/system/cpu/intel_uncore_frequency/uncore00/max_freq_khz
+==> Isolation for sandboxed agents
+  good: /dev/kvm usable for microVM sandboxes, each GPU alone in its IOMMU group, split-lock detection on, CET known, GPU observation streams limited to CAP_PERFMON
+  src:  https://docs.kernel.org/driver-api/vfio.html (IOMMU groups), https://docs.kernel.org/admin-guide/kernel-parameters.html (split_lock_detect), https://docs.kernel.org/admin-guide/sysctl/kernel.html (split_lock_mitigate), kernel source drivers/gpu/drm/i915/i915_perf.c and drivers/gpu/drm/xe/xe_observation.c (paranoid sysctls), Intel SDM vol. 4 335592-093 (IA32_S_CET 6A2H, IA32_TME_ACTIVATE 982H)
+  info: /dev/kvm present: microVM sandboxes (Kata, Firecracker) can run here
+        from: /dev/kvm, /sys/module/kvm_intel/parameters/*
+  note: the CPU reports tdx_host_platform but kvm_intel runs without TDX (tdx=N): no confidential microVM sandboxes
+        from:   /proc/cpuinfo (tdx_host_platform), /sys/module/kvm_intel/parameters/tdx
+        why:    kvm_intel creates TDX guests only when loaded with tdx=1; stop running VMs and microVM sandboxes first, since modprobe -r kvm_intel fails while one holds /dev/kvm
+        apply:  sudo modprobe -r kvm_intel && sudo modprobe kvm_intel tdx=1
+        revert: sudo modprobe -r kvm_intel && sudo modprobe kvm_intel tdx=0
+  note: no IOMMU unit registered: no DMA isolation between devices, no GPU passthrough into a microVM
+        from:   /sys/class/iommu/
+        why:    VFIO hands a device to a VM only with its IOMMU group; without VT-d enabled there are no groups
+        apply:  BIOS: enable VT-d, then add intel_iommu=on to the kernel command line and reboot
+        revert: remove intel_iommu=on from the kernel command line and reboot
+
+==> 3 suggestion(s). Read-only: nothing on this host was changed.
+exit=0
