@@ -1084,6 +1084,7 @@ A1 replaces it; the table above is kept for the record but no longer decides.
 - Prediction (A1): REFUTED (R ~1). P-cores have private L2; L2 placement of the hog
   partitions none of the shared LLC, ring or IMC. Priors: SUPPORTED 0.10, REFUTED as stated 0.20,
   REFUTED 0.45, INCONCLUSIVE 0.25.
+- Run status (2026-10-17T12:58Z): the A1 probe queued for the live lock at 12:33Z and did not get it inside the 40 min work budget (another live experiment held it); no timed block ran, no cluster was made. H26 stays PENDING; the next run is `SUDO_ASKPASS=<askpass> flock -w 10800 $LOCK bench/rdt-isolate/run.sh` on b7d2f16 or later.
 
 ## Scope corrections
 
