@@ -1,14 +1,36 @@
-# NRI balloons resource policy for Intel hybrid CPUs (P-cores + E-cores)
+# NRI balloons resource policy for Intel hybrid CPUs (P-cores + E-cores) and NUMA hosts
 # Source: https://github.com/containers/nri-plugins (helm chart nri-resource-policy-balloons @VERSION@),
 # rendered by `hack/render-component nri-balloons` (helm template --include-crds) with the values below.
 # Scheduled only onto nodes labelled k3d-gpu.io/hybrid-cpu=true, which the k3d-gpu
-# launcher sets when /sys/devices/cpu_core and cpu_atom both list online CPUs.
+# launcher sets when /sys/devices/cpu_core lists online CPUs and cpu_atom or
+# cpu_lowpower does too, or carrying k3d-gpu.io/numa-nodes, which it sets when the
+# host has more than one NUMA node (multi-socket or SNC Xeon, HBM/CXL memory nodes).
 #
-# Balloon types (first match wins):
-#   performance  pods labelled k3d-gpu.io/cores=performance -> P-cores (preferCoreType)
-#   efficient    pods labelled k3d-gpu.io/cores=efficient   -> E-cores
-#   shared       everything else, one balloon that shares every idle CPU, so
-#                unlabelled pods keep the whole machine
+# Balloon types (first match wins; the pod label is k3d-gpu.io/cores=<type>):
+#   performance     P-cores (preferCoreType)
+#   efficient       E-cores
+#   lowpower        E-core kind, for idle supervisors and heartbeats. nri-plugins
+#                   v0.14.0 has two core kinds (cpu_core, cpu_atom), so it cannot
+#                   tell an LP E-core from an E-core; `k3d-gpu doctor` lists which
+#                   CPUs are LP E-cores
+#   ecluster        4 E-cores; the ecluster-l2 load makes the allocator avoid an
+#                   L2 another ecluster balloon holds, so each should get one
+#                   4-core E-core cluster (a preference, not a guarantee)
+#   pcore-physical  P-cores; containers see one thread per physical core
+#                   (hideHyperthreads), the sibling stays idle
+#   latency         like pcore-physical, at most 2 CPUs per balloon; `up`
+#                   annotates nodes k3d-gpu.io/favored-cpus with the top-CPPC CPUs
+#                   and adds their L2 cache dirs to this type's preferCloseToDevices
+#   shared          everything else, one balloon that shares every idle CPU, so
+#                   unlabelled pods keep the whole machine
 # A balloon is sized by its pods' CPU requests; kube-system runs on the 1-CPU reserve.
 # Only cpusets inside the node's cgroup change: no cpufreq, C-state or RDT controls.
+#
+# NUMA (k3d-gpu numa vendor): listed first, it matches only its own label.
+#   replica      pods labelled k3d-gpu.io/cores=replica -> a new balloon inside one
+#                NUMA node (allocatorTopologyBalancing spreads replicas across
+#                nodes), memory pinned to that node (pinMemory), idle CPUs shared
+#                only within it, and placed next to the devices the kubelet gave
+#                the pod (podresourceapi:*/* matches every extended resource;
+#                needs agent.podResourceAPI)
 #

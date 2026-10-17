@@ -993,7 +993,8 @@ tests/render_test.sh
 
 CI fails when a committed manifest differs from its pinned render. The daily
 build-and-push workflow runs `--latest` for every component and opens one PR per
-component (branch `autobump/<name>`); merging it rebuilds the image.
+component (branch `autobump/<name>`); merging it changes `share/`, so auto-release cuts a
+launcher release and the node image is rebuilt for it.
 
 ---
 
