@@ -186,6 +186,15 @@ check "noisy: bad --cores is rejected" noisy_bad_cores
 check "agent_trace: unit tests against the in-process stub" \
     env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/test_agent_trace.py"
 
+# ---- hetero-spec (H22) ---------------------------------------------------------------
+
+check "hetero-spec: analyze.py applies the H22 outcome table" \
+    env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/hetero-spec/test_analyze.py"
+check "hetero-spec: probe.sh parses" bash -n "${ROOT}/bench/hetero-spec/probe.sh"
+check "hetero-spec: prompts.jsonl has 8 prompts with id and text" \
+    python3 -c 'import json, sys; p = [json.loads(l) for l in open(sys.argv[1])]; assert len(p) == 8 and all(x["id"] and x["text"] for x in p)' \
+    "${ROOT}/bench/hetero-spec/prompts.jsonl"
+
 # ---- research/ models -------------------------------------------------------------
 
 check "research: agents-per-box ceiling selftest" \

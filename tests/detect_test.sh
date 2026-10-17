@@ -1780,6 +1780,35 @@ agent_says "an unknown K3D_GPU_AGENT_DEVICE is rejected" "${r}" fail \
 agent_says "auto never picks the NPU" "${r}" 0 \
     '--target_device=NPU' negate STUB_ALLOC=$'cpu 32\nnpu.intel.com/accel 1'
 
+# H22 hetero-spec: Fast Draft is off by default (it forces greedy decoding); auto
+# drafts on the target's own device; a named device adds its resource to the pod.
+agent_says "no draft model by default" "${r}" 0 \
+    'draft' negate STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1'
+agent_says "K3D_GPU_AGENT_DRAFT=auto drafts on the target device (CPU)" "${r}" 0 \
+    '--draft_device=CPU' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' K3D_GPU_AGENT_DRAFT=auto
+agent_says "auto draft on a CPU target requests no GPU" "${r}" 0 \
+    'gpu\.intel\.com' negate STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' K3D_GPU_AGENT_DRAFT=auto
+agent_says "auto draft names the default draft model" "${r}" 0 \
+    '--draft_source_model=OpenVINO/Qwen3-0\.6B-int4-ov' "" STUB_ALLOC='cpu 32' K3D_GPU_AGENT_DRAFT=auto
+agent_says "auto draft follows a GPU target" "${r}" 0 \
+    '--draft_device=GPU' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/xe 1' STUB_NODE_LABELS=gpu.intel.com/xmx=true K3D_GPU_AGENT_DRAFT=auto
+agent_says "K3D_GPU_AGENT_DRAFT=GPU puts the draft on the iGPU, target stays CPU" "${r}" 0 \
+    '--target_device=CPU' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' K3D_GPU_AGENT_DRAFT=GPU
+agent_says "a GPU draft on a CPU target requests one gpu.intel.com/i915" "${r}" 0 \
+    'gpu\.intel\.com/i915: "?1"?' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' K3D_GPU_AGENT_DRAFT=GPU
+agent_says "a GPU draft pod joins the host render group" "${r}" 0 \
+    "supplementalGroups: \[${gid}\]" "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' K3D_GPU_AGENT_DRAFT=GPU
+agent_says "a GPU draft with no allocatable Intel GPU fails" "${r}" fail \
+    'no Intel GPU' "" STUB_ALLOC='cpu 32' K3D_GPU_AGENT_DRAFT=GPU
+agent_says "a NPU draft with no allocatable NPU fails" "${r}" fail \
+    'no Intel NPU' "" STUB_ALLOC='cpu 32' K3D_GPU_AGENT_DRAFT=NPU
+agent_says "a NPU draft requests npu.intel.com/accel" "${r}" 0 \
+    'npu\.intel\.com/accel: "?1"?' "" STUB_ALLOC=$'cpu 32\nnpu.intel.com/accel 1' K3D_GPU_AGENT_DRAFT=NPU
+agent_says "an unknown K3D_GPU_AGENT_DRAFT is rejected" "${r}" fail \
+    'unknown K3D_GPU_AGENT_DRAFT' "" STUB_ALLOC='cpu 32' K3D_GPU_AGENT_DRAFT=TPU
+agent_says "the draft override is case-insensitive" "${r}" 0 \
+    '--draft_device=GPU' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' K3D_GPU_AGENT_DRAFT=gpu
+
 # A device that cannot be honoured must stop `agent up` before anything is applied.
 applylog="${WORK}/apply.log"
 if env K3D_GPU_SYSROOT="${r}" PATH="${ASTUB}:${PATH}" STUB_ALLOC='cpu 32' STUB_APPLY_LOG="${applylog}" \
