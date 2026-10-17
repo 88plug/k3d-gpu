@@ -221,10 +221,23 @@ PY
     done
     n=$(grep -c 'rollout restart deployment/ovms' "${WORK}/kube/restarts" 2>/dev/null || true)
     if [ "${n:-0}" = 1 ]; then ok "a repeated config gets a fresh pod"; else bad "repeated config restarts" "restarts: ${n:-0}"; fi
+    # ...unless the budget says warm is fine (incremental screening).
+    mkdir -p "${t}/warm"
+    cp "${t}/tp/config.json" "${t}/warm/"
+    echo '{"requests": 4, "max_tokens": 32, "repeats": 1, "concurrency": [1], "cold": false}' > "${t}/warm/budget.json"
+    rm -f "${WORK}/kube/restarts"
+    run env K3D_GPU_SYSROOT="${h1}" K3D_GPU_BENCH="${BENCH}" "${K3D_GPU}" tune _trial \
+        "${t}/warm/config.json" "${t}/warm/budget.json" "${t}/warm/result.json" >/dev/null 2>&1
+    n=$(grep -c 'rollout restart deployment/ovms' "${WORK}/kube/restarts" 2>/dev/null || true)
+    if [ "${n:-0}" = 0 ] && grep -q '"ok": true' "${t}/warm/result.json"; then
+        ok "a warm-budget trial of the deployed config measures the running pod"
+    else
+        bad "warm trial restarts" "restarts: ${n:-0}; $(head -c 300 "${t}/warm/result.json" 2>/dev/null)"
+    fi
 
     if [ "${TUNE_E2E_FULL:-}" = 1 ]; then
         # Null server: no config changes its speed, so nothing may be crowned.
-        out=$(run env K3D_GPU_SYSROOT="${h1}" K3D_GPU_BENCH="${BENCH}" FAKE_OVMS_FLAT=1 "${K3D_GPU}" tune run \
+        out=$(run env K3D_GPU_SYSROOT="${h1}" K3D_GPU_BENCH="${BENCH}" FAKE_OVMS_FLAT=1 "${K3D_GPU}" tune run --full \
             --objective throughput --precisions int4 --no-hetero --n0 6 --n 5 --concurrency 1,2 2>&1)
         [ -z "${TUNE_TEST_LOG:-}" ] || printf '%s\n' "${out}" > "${TUNE_TEST_LOG}.null"
         grep -q '^decision: default' <<< "${out}" && ok "full tune on a null server keeps the default" \
@@ -233,7 +246,7 @@ PY
         [ -z "${out}" ] && ok "a 'default' profile exports nothing" || bad "default profile exports" "${out}"
         # The fake server halves per-token time for PERFORMANCE_HINT=THROUGHPUT;
         # --n0 30 includes every one-knob change of the default, that one too.
-        out=$(run env K3D_GPU_SYSROOT="${h1}" K3D_GPU_BENCH="${BENCH}" "${K3D_GPU}" tune run \
+        out=$(run env K3D_GPU_SYSROOT="${h1}" K3D_GPU_BENCH="${BENCH}" "${K3D_GPU}" tune run --full \
             --objective throughput --precisions int4 --no-hetero --n0 30 --n 5 --concurrency 1,2 2>&1)
         [ -z "${TUNE_TEST_LOG:-}" ] || printf '%s\n' "${out}" > "${TUNE_TEST_LOG}"
         if grep -q '^decision: tuned' <<< "${out}" && grep -q 'ACCEPT.*PERFORMANCE_HINT":"THROUGHPUT' <<< "${out}"; then
@@ -245,6 +258,26 @@ PY
         grep -q 'THROUGHPUT' <<< "${out}" && ok "the tuned profile is what 'agent up' applies next" || bad "profile after tune" "${out}"
         grep -q '"PERFORMANCE_HINT":"THROUGHPUT"' "${WORK}/kube/applied.yaml" \
             && ok "tune ends with the winner deployed" || bad "final deploy" "$(grep -n plugin "${WORK}/kube/applied.yaml")"
+        # Incremental (the default 'tune run'): from a fresh default, the
+        # THROUGHPUT hint is one knob away and must win; the next run starts
+        # from it and keeps it.
+        run env K3D_GPU_SYSROOT="${h1}" "${K3D_GPU}" tune reset >/dev/null 2>&1
+        out=$(run env K3D_GPU_SYSROOT="${h1}" K3D_GPU_BENCH="${BENCH}" "${K3D_GPU}" tune run \
+            --objective throughput --precisions int4 --no-hetero --n 5 --concurrency 1,2 --budget 30 2>&1)
+        [ -z "${TUNE_TEST_LOG:-}" ] || printf '%s\n' "${out}" > "${TUNE_TEST_LOG}.step1"
+        if grep -q '^decision: challenger' <<< "${out}" && grep -q 'ACCEPT.*PERFORMANCE_HINT":"THROUGHPUT' <<< "${out}"; then
+            ok "incremental tune crowns the rewarded neighbour"
+        else
+            bad "incremental tune" "$(tail -30 <<< "${out}")"
+        fi
+        out=$(run env K3D_GPU_SYSROOT="${h1}" K3D_GPU_BENCH="${BENCH}" "${K3D_GPU}" tune run \
+            --objective throughput --precisions int4 --no-hetero --n 5 --concurrency 1,2 --budget 30 2>&1)
+        [ -z "${TUNE_TEST_LOG:-}" ] || printf '%s\n' "${out}" > "${TUNE_TEST_LOG}.step2"
+        if grep -q 'incumbent: .*THROUGHPUT' <<< "${out}" && grep -Eq '^decision: (incumbent|converged)' <<< "${out}"; then
+            ok "the next incremental run starts from the winner and keeps it"
+        else
+            bad "incremental resume" "$(tail -30 <<< "${out}")"
+        fi
     else
         skip "full tune (TUNE_E2E_FULL=1)"
     fi

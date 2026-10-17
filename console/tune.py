@@ -587,7 +587,6 @@ def search(evaluator, configs, objective, *, eta=3, n_confirm=5, margin=0.05, k=
     Returns a result dict (see write_profile for the persisted shape).
     """
     metric, sign = OBJECTIVES[objective]
-    gmetric, gsign = GUARDRAIL[objective]
     say = log or (lambda *_: None)
     conc = concurrency_for(objective, levels)
     baseline = {"baseline": True}
@@ -620,6 +619,22 @@ def search(evaluator, configs, objective, *, eta=3, n_confirm=5, margin=0.05, k=
             # Nothing left to rank; the remaining rungs would only re-measure.
             break
 
+    res = _confirm(evaluator, baseline, alive, objective, n_confirm=n_confirm, margin=margin, k=k,
+                   alpha=alpha, guard_tol=guard_tol, ttft_slo=ttft_slo, conc=conc, say=say)
+    res["criteria"]["eta"] = eta
+    res["ledger"] = ledger
+    return res
+
+
+def _confirm(evaluator, baseline, alive, objective, *, n_confirm, margin, k, alpha, guard_tol,
+             ttft_slo, conc, say, deadline=None, clock=time.monotonic):
+    """Fresh interleaved runs of baseline + alive, then the acceptance gates.
+
+    baseline is the config every candidate must beat ({"baseline": true} for
+    the real default, or the incumbent). With a deadline, no trial starts after
+    it; a confirmation cut short returns None (nothing is decided)."""
+    metric, sign = OBJECTIVES[objective]
+    gmetric, gsign = GUARDRAIL[objective]
     # Bonferroni over m finalists asks each for p <= alpha/m, but n runs against
     # n give an exact Mann-Whitney p no smaller than 1/C(2n, n). Confirm only the
     # best m the test can resolve; the rest could never be accepted.
@@ -642,11 +657,15 @@ def search(evaluator, configs, objective, *, eta=3, n_confirm=5, margin=0.05, k=
             key = config_key(cfg)
             if fails[key]:
                 continue
+            if deadline is not None and clock() >= deadline:
+                say("budget ran out during confirmation: nothing decided")
+                return None
             ok, err, ms = evaluate(evaluator, cfg, budget, ttft_slo)
             if not ok:
                 fails[key] = err
                 if cfg is baseline:
-                    raise RuntimeError(f"the default config failed during confirmation: {err}")
+                    raise RuntimeError(f"the {'default' if cfg.get('baseline') else 'incumbent'} config "
+                                       f"failed during confirmation: {err}")
                 continue
             samples[key].extend(ms)
 
@@ -708,15 +727,127 @@ def search(evaluator, configs, objective, *, eta=3, n_confirm=5, margin=0.05, k=
         "objective": objective, "metric": metric,
         "criteria": {"margin": margin, "k": k, "alpha": alpha, "alpha_per_candidate": alpha_each,
                      "n_confirm": n_confirm, "guardrail": gmetric, "guard_tol": guard_tol,
-                     "ttft_slo_s": ttft_slo, "eta": eta},
+                     "ttft_slo_s": ttft_slo},
         "decision": "tuned" if winner else "default",
         "winner": winner["config"] if winner else None,
         "baseline": base_sum,
         "verdicts": verdicts,
         "pareto": front,
         "confirm_failures": {k_: e for k_, e in fails.items() if e},
-        "ledger": ledger,
     }
+
+
+# ---- incremental tuning: neighbours of the incumbent ----------------------------------
+# A run starts from the host's current best (the profile's winner, else the
+# default), screens every untried one-knob neighbour with one short trial, and
+# confirms only the best screener against the incumbent with the same gates as
+# the full search. The incumbent stays unless a challenger passes them.
+
+SCREEN = DEFAULT_RUNGS[0]
+
+
+def centre(facts, device):
+    """Explicit form of the default on a device, restricted to its axes."""
+    a = axes(facts, device)
+    dev_default = default_config(facts, "GPU" if device.startswith("HETERO") else device)
+    choice = dict(dev_default, **{k: None for k in PLUGIN_AXES})
+    return {n: (choice.get(n) if choice.get(n) in a[n] else a[n][0]) for n in a}
+
+
+def as_choice(facts, cfg):
+    """A validated config -> (device, axis choice) on that device's axes."""
+    if cfg.get("baseline"):
+        dev = facts["default_device"]
+        return dev, centre(facts, dev)
+    ch = {n: cfg.get(n) for n in ("model", "cores", "cpus", "max_num_seqs", "cache_size",
+                                  "enable_prefix_caching")}
+    ch.update({k: cfg["plugin_config"].get(k) for k in PLUGIN_AXES})
+    return cfg["device"], ch
+
+
+def neighbours(facts, incumbent):
+    """Feasible configs one knob away from the incumbent: each other value of
+    each axis on its device, and each other device at its default."""
+    device, ch = as_choice(facts, incumbent)
+    a = axes(facts, device)
+    out, seen = [], {config_key(build(device, ch))}
+
+    def add(c):
+        k = config_key(c)
+        if feasible(facts, c) and k not in seen:
+            seen.add(k)
+            out.append(c)
+
+    for n in a:
+        for v in a[n]:
+            if v != ch.get(n):
+                add(build(device, dict(ch, **{n: v})))
+    for d in facts["devices"]:
+        if d != device:
+            add(build(d, centre(facts, d)))
+    return out
+
+
+def incremental(evaluator, facts, incumbent, objective, *, budget_s=600.0, tried=(), n_confirm=5,
+                margin=0.05, k=1.0, alpha=0.05, guard_tol=0.25, ttft_slo=10.0, levels=(1, 4, 8),
+                clock=time.monotonic, log=None):
+    """One incremental step. Returns a result dict; "decision" is
+    "challenger" (a neighbour passed every gate: it is the new incumbent),
+    "incumbent" (kept) or "converged" (every neighbour already screened)."""
+    metric, sign = OBJECTIVES[objective]
+    say = log or (lambda *_: None)
+    deadline = clock() + budget_s
+    conc = concurrency_for(objective, levels)
+    tried = set(tried)
+    cands = [c for c in neighbours(facts, incumbent) if config_key(c) not in tried]
+    out = {"objective": objective, "metric": metric, "incumbent": incumbent, "decision": "incumbent",
+           "winner": None, "screened": [], "challenger": None, "confirm": None, "budget_s": budget_s}
+    if not cands:
+        say("every neighbour of the incumbent was already screened: converged")
+        out["decision"] = "converged"
+        return out
+    # cold=False: a trial whose manifest is already deployed (the incumbent, as a
+    # rule) is measured on the running pod instead of after a restart.
+    budget = dict(SCREEN, concurrency=conc, cold=False)
+    t0 = clock()
+    ok, err, ms = evaluate(evaluator, incumbent, budget, ttft_slo)
+    inc_score = score(ms, metric, sign) if ok else None
+    if inc_score is None:
+        raise RuntimeError(f"the incumbent failed its screening trial: {err or 'no ' + metric}")
+    trial_s = max(clock() - t0, 1e-9)
+    # A confirmation trial is FINAL-sized (8x the tokens of a screen) plus a
+    # deploy; reserve 2 x n_confirm of them at twice a screen's wall time.
+    reserve = 2 * n_confirm * 2 * trial_s
+    best = None
+    for c in cands:
+        if clock() + trial_s > deadline - reserve:
+            say(f"screening stopped at {len(out['screened'])}/{len(cands)} neighbours to keep time to confirm")
+            break
+        ok, err, ms = evaluate(evaluator, c, budget, ttft_slo)
+        sc = score(ms, metric, sign) if ok else None
+        out["screened"].append({"config": c, "ok": sc is not None, "error": err,
+                                "score": None if sc is None else sign * sc})
+        # score() is sign * median, so higher is better for every objective.
+        if sc is not None and sc > inc_score + margin * abs(inc_score):
+            if best is None or sc > best[0]:
+                best = (sc, c)
+    out["incumbent_screen"] = sign * inc_score
+    if best is None:
+        say(f"no neighbour beat the incumbent by {margin:.0%} in screening: incumbent kept")
+        return out
+    out["challenger"] = best[1]
+    say("confirming the best screener against the incumbent: "
+        + " ".join(f"{k_}={v}" for k_, v in config_env(best[1])))
+    res = _confirm(evaluator, incumbent, [best[1]], objective, n_confirm=n_confirm, margin=margin, k=k,
+                   alpha=alpha, guard_tol=guard_tol, ttft_slo=ttft_slo, conc=conc, say=say,
+                   deadline=deadline, clock=clock)
+    if res is None:
+        out["decision"] = "budget"
+        return out
+    out["confirm"] = res
+    if res["winner"] is not None:
+        out["decision"], out["winner"] = "challenger", res["winner"]
+    return out
 
 
 # ---- profiles -------------------------------------------------------------------------
@@ -827,6 +958,78 @@ def cmd_run(a):
     return 0
 
 
+def load_profile(path, fingerprint):
+    """The stored profile for this host, or None (missing, other host, old schema)."""
+    try:
+        prof = load(path)
+    except (OSError, ValueError):
+        return None
+    if prof.get("schema") != SCHEMA or prof.get("fingerprint") != fingerprint:
+        return None
+    return prof
+
+
+def step_profile(prev, res, now):
+    """Profile after one incremental step: the incumbent (winner), and per
+    incumbent the neighbours already screened against it."""
+    prof = dict(prev or {})
+    inc = res["incumbent"]
+    screened = dict(prof.get("screened") or {})
+    done = screened.setdefault(config_key(inc), [])
+    for e in res["screened"]:
+        k = config_key(e["config"])
+        if k not in done:
+            done.append(k)
+    history = list(prof.get("history") or [])
+    history.append({"at": now, "incumbent": inc, "decision": res["decision"],
+                    "challenger": res["challenger"], "screened": len(res["screened"]),
+                    "incumbent_screen": res.get("incumbent_screen")})
+    if res["decision"] == "challenger":
+        prof["winner"], prof["decision"] = res["winner"], "tuned"
+        screened.setdefault(config_key(res["winner"]), [])
+    elif not prof.get("decision"):
+        prof["decision"], prof["winner"] = ("default", None) if inc.get("baseline") else ("tuned", inc)
+    prof.update(objective=res["objective"], metric=res["metric"], screened=screened,
+                history=history[-50:], last_step=res)
+    return prof
+
+
+def cmd_step(a):
+    facts = load(a.facts)
+    say = lambda s: print(f"tune: {s}", file=sys.stderr)  # noqa: E731
+    prev = load_profile(a.out, a.fingerprint)
+    if prev and prev.get("objective") not in (None, a.objective):
+        say(f"stored profile was tuned for {prev['objective']}: starting from the default for {a.objective}")
+        prev = None
+    inc = prev["winner"] if prev and prev.get("decision") == "tuned" and prev.get("winner") else {"baseline": True}
+    inc = validate_config(inc)
+    tried = ((prev or {}).get("screened") or {}).get(config_key(inc), [])
+    say("incumbent: " + (" ".join(f"{k}={v}" for k, v in config_env(inc)) or "the default")
+        + f"; {len(tried)} neighbour(s) already screened; budget {a.budget:g} min")
+    workdir = a.workdir or tempfile.mkdtemp(prefix="k3d-gpu-tune-")
+    ev = CommandEvaluator(a.trial_cmd, workdir)
+    res = incremental(ev, facts, inc, a.objective, budget_s=a.budget * 60, tried=tried, n_confirm=a.n,
+                      margin=a.margin, k=a.k, alpha=a.alpha, guard_tol=a.guard_tol, ttft_slo=a.ttft_slo,
+                      levels=[int(x) for x in a.concurrency.split(",")], log=say)
+    res["trials"], res["workdir"] = ev.calls, workdir
+    prof = step_profile(prev, res, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+    write_profile(a.out, prof, a.fingerprint, json.loads(a.fingerprint_inputs), facts)
+    print_step(res)
+    return 0
+
+
+def print_step(res):
+    m = res["metric"]
+    inc = " ".join(f"{k}={v}" for k, v in config_env(res["incumbent"])) or "default"
+    print(f"objective {res['objective']} ({m}); incumbent {inc}; screen {fmt(res.get('incumbent_screen'))}")
+    for e in res["screened"]:
+        name = " ".join(f"{k}={v}" for k, v in config_env(e["config"]))
+        print(f"  screen {fmt(e['score']) if e['ok'] else 'failed'}  {name}")
+    if res.get("confirm"):
+        print_summary(res["confirm"])
+    print(f"decision: {res['decision']} ({res['trials']} trials)")
+
+
 def fmt(x):
     return "-" if x is None else f"{x:.4g}"
 
@@ -863,7 +1066,14 @@ def cmd_env(a):
 def cmd_show(a):
     prof = load(a.profile)
     print(f"profile {a.profile}\nfingerprint {prof.get('fingerprint')} created {prof.get('created_at')}")
-    print_summary(prof)
+    if "verdicts" in prof:
+        print_summary(prof)
+    else:
+        win = prof.get("winner")
+        print(f"decision: {prof.get('decision')}; incumbent "
+              + (" ".join(f"{k}={v}" for k, v in config_env(win)) if win else "the default"))
+        for h in prof.get("history") or []:
+            print(f"  {h['at']} {h['decision']}: {h['screened']} neighbour(s) screened")
 
 
 def cmd_quality(a):
@@ -882,13 +1092,15 @@ def cmd_assemble(a):
 
 
 def cmd_budget(a):
-    """Budget JSON -> "<requests> <max_tokens> <repeats> <concurrency csv>" for the shell."""
+    """Budget JSON -> "<requests> <max_tokens> <repeats> <concurrency csv> <cold 1|0>" for the shell."""
     b = load(a.budget)
     vals = [b["requests"], b["max_tokens"], b["repeats"]]
     if not all(isinstance(v, int) and 0 < v <= 100000 for v in vals) or \
             not all(isinstance(c, int) and 0 < c <= 1024 for c in b["concurrency"]):
         raise ContractError("budget values must be positive integers")
-    print(*vals, ",".join(str(c) for c in b["concurrency"]))
+    if not isinstance(b.get("cold", True), bool):
+        raise ContractError("budget cold must be true or false")
+    print(*vals, ",".join(str(c) for c in b["concurrency"]), 1 if b.get("cold", True) else 0)
 
 
 def cmd_trial_result(a):
@@ -947,6 +1159,24 @@ def main(argv=None):
     r.add_argument("--concurrency", default="1,4,8")
     r.set_defaults(fn=cmd_run)
 
+    st = sub.add_parser("step", help="incremental: screen the incumbent's neighbours, confirm the best")
+    st.add_argument("--facts", required=True)
+    st.add_argument("--trial-cmd", required=True)
+    st.add_argument("--objective", choices=sorted(OBJECTIVES), default="throughput")
+    st.add_argument("--out", required=True, help="profile: read for the incumbent, rewritten after")
+    st.add_argument("--fingerprint", required=True)
+    st.add_argument("--fingerprint-inputs", default="{}")
+    st.add_argument("--workdir", default=None)
+    st.add_argument("--budget", type=float, default=10.0, help="minutes (default 10)")
+    st.add_argument("--n", type=int, default=5, help="confirmation runs per side (>= 5)")
+    st.add_argument("--margin", type=float, default=0.05)
+    st.add_argument("--k", type=float, default=1.0)
+    st.add_argument("--alpha", type=float, default=0.05)
+    st.add_argument("--guard-tol", type=float, default=0.25)
+    st.add_argument("--ttft-slo", type=float, default=10.0)
+    st.add_argument("--concurrency", default="1,4,8")
+    st.set_defaults(fn=cmd_step)
+
     e = sub.add_parser("env", help="K3D_GPU_AGENT_* lines for a profile or a config")
     g = e.add_mutually_exclusive_group(required=True)
     g.add_argument("--profile")
@@ -982,7 +1212,7 @@ def main(argv=None):
     tr.set_defaults(fn=cmd_trial_result)
 
     a = p.parse_args(argv)
-    if a.cmd == "run" and a.n < 5:
+    if a.cmd in ("run", "step") and a.n < 5:
         p.error("--n must be >= 5 (the acceptance criteria need at least five runs per side)")
     try:
         return a.fn(a) or 0

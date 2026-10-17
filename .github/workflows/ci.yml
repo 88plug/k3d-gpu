@@ -148,6 +148,15 @@ jobs:
         env:
           TUNE_E2E_FULL: "1"
 
+  capacity-tests:
+    name: k3d-gpu capacity tests (stub server)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - run: python3 bench/apb/test_capacity.py
+      - run: python3 bench/apb/test_apb.py
+      - run: python3 bench/test_agent_trace.py
+
   mcp-tests:
     name: MCP server tests
     runs-on: ubuntu-latest

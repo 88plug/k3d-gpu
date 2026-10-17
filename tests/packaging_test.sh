@@ -58,6 +58,14 @@ for f in llm_load.py energy.sh; do
         grep -Pzq "src: bench/${f//./\\.}\n +dst: /usr/share/k3d-gpu/bench/${f//./\\.}\n" "${NFPM}"
     check "PKGBUILD installs bench/${f}" grep -qE "install -Dm755 bench/${f} +\"\\\$pkgdir/usr/share/k3d-gpu/bench/${f}\"" "${PKGBUILD}"
 done
+for f in agent_trace.py agent_trace_gen.py apb/apb.py apb/capacity.py; do
+    check "nfpm ships bench/${f} (k3d-gpu capacity)" \
+        grep -Pzq "src: bench/${f//./\\.}\n +dst: /usr/share/k3d-gpu/bench/${f//./\\.}\n" "${NFPM}"
+done
+check "PKGBUILD installs bench/agent_trace*.py and apb/{apb,capacity}.py" \
+    grep -qF 'for f in agent_trace.py agent_trace_gen.py apb/apb.py apb/capacity.py; do' "${PKGBUILD}"
+check "nix installs bench/apb/apb.py and capacity.py" \
+    grep -qF 'install -Dm644 -t "$out/share/k3d-gpu/bench/apb" bench/apb/apb.py bench/apb/capacity.py' "${NIXPKG}"
 check "nix installs bench/llm_load.py and energy.sh" \
     grep -qF 'install -Dm755 -t "$out/share/k3d-gpu/bench" bench/llm_load.py bench/energy.sh' "${NIXPKG}"
 check "nfpm ships images.lock to /usr/share/k3d-gpu/" \

@@ -12,7 +12,7 @@ optdepends=(
     'k3d-git: k3d CLI to manage clusters'
     'kubectl: query and apply manifests'
     'nvidia-container-toolkit: GPU container runtime for Docker'
-    'python: k3d-gpu-mcp (the MCP server for AI agents), k3d-gpu facts, plan, audit and tune'
+    'python: k3d-gpu-mcp (the MCP server for AI agents), k3d-gpu facts, plan, audit, tune and capacity'
 )
 source=("git+https://github.com/88plug/k3d-gpu.git#tag=aur-v${pkgver}")
 sha256sums=('SKIP')
@@ -44,6 +44,9 @@ package() {
     install -Dm644 images.lock "$pkgdir/usr/share/k3d-gpu/images.lock"
     install -Dm755 bench/llm_load.py "$pkgdir/usr/share/k3d-gpu/bench/llm_load.py"
     install -Dm755 bench/energy.sh   "$pkgdir/usr/share/k3d-gpu/bench/energy.sh"
+    for f in agent_trace.py agent_trace_gen.py apb/apb.py apb/capacity.py; do
+        install -Dm644 "bench/$f" "$pkgdir/usr/share/k3d-gpu/bench/$f"
+    done
     install -Dm644 share/agent-sandbox.yml      "$pkgdir/usr/share/k3d-gpu/agent-sandbox.yml"
     install -Dm644 share/agent-sandbox-k3d.yml  "$pkgdir/usr/share/k3d-gpu/agent-sandbox-k3d.yml"
     install -Dm644 README.md  "$pkgdir/usr/share/doc/$pkgname/README.md"

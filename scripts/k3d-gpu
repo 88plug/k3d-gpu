@@ -164,9 +164,18 @@ Usage: k3d-gpu <command>
             count) only if the plan, recomputed now with the same options,
             still hashes to H; a plan on a port other than 8000 is refused
   tune run|show|space|env|fingerprint|reset
-            Search the OVMS agent's serving config (device, precision, OpenVINO
-            plugin_config, batching, P/E cores, CPUs) on this host; keep the
-            winner only if it beats the default; 'agent up' then applies it
+            Tune the OVMS agent's serving config (device, precision, OpenVINO
+            plugin_config, batching, P/E cores, CPUs) on this host. 'run' starts
+            from this host's current best, screens its one-knob neighbours and
+            confirms the best against it within --budget (default 10 min); the
+            incumbent stays unless the challenger wins beyond noise. 'run --full'
+            is the full successive-halving search. 'agent up' applies the result
+  capacity [--slo 10] [--trace support] [--max 32] [--budget 15] [--engine auto|cpu|igpu|npu|gaudi|nvidia]
+            Agents per box: doubles closed-loop agents against the cluster's OVMS/vLLM
+            chat endpoint until the p95 turn latency breaks the SLO, then bisects;
+            reps per step stop once the p95 CI clears the SLO. Prints agents per
+            box (or the bracket when --budget runs out), stores the bracket per
+            host+engine so a rerun only refines it. Full options: capacity --help
   version   Show version
   help      Show this message
 
@@ -221,7 +230,7 @@ Environment:
   K3D_GPU_TUNE          auto | off: apply this host's tuned profile in 'agent up' (default: auto)
   K3D_GPU_TUNE_DIR      tuned profiles       (default: ~/.config/k3d-gpu/tune)
   K3D_GPU_TUNE_PY       tune driver          (default: the repo's console/tune.py, then ${SHARE_DIR}/console/tune.py)
-  K3D_GPU_BENCH         dir with llm_load.py and energy.sh (default: the repo's bench/, then ${SHARE_DIR}/bench)
+  K3D_GPU_BENCH         dir with llm_load.py, energy.sh and apb/capacity.py (default: the repo's bench/, then ${SHARE_DIR}/bench)
   K3D_GPU_AGENT_CORES, K3D_GPU_AGENT_MAX_NUM_SEQS, K3D_GPU_AGENT_CACHE_SIZE,
   K3D_GPU_AGENT_PREFIX_CACHING, K3D_GPU_AGENT_PLUGIN_CONFIG
                         OVMS serving knobs 'tune' sets: balloon core type (performance |
@@ -6300,7 +6309,7 @@ tune_pod_cpu_usec() {
 # A failure is a result ({"ok": false}), not an error: the search drops the config.
 cmd_tune_trial() {
     local cfg=$1 budget=$2 out=$3 dir requests max_tokens repeats conc key val bench
-    local name port rep runs before after rc line deadline gen
+    local name port rep runs before after rc line deadline gen cold
     TRIAL_PF=""
     dir=$(dirname "${out}")
     runs="${dir}/runs.jsonl"
@@ -6311,8 +6320,8 @@ cmd_tune_trial() {
         exit 0
     }
     bench=$(tune_bench_dir) || trial_fail "bench/llm_load.py not found"
-    read -r requests max_tokens repeats conc <<< "$(tune_py budget "${budget}")"
-    [ -n "${conc}" ] || trial_fail "bad budget ${budget}"
+    read -r requests max_tokens repeats conc cold <<< "$(tune_py budget "${budget}")"
+    [ -n "${cold}" ] || trial_fail "bad budget ${budget}"
     local -a env_lines=()
     mapfile -t env_lines < <(tune_py env --config "${cfg}" || echo "INVALID=")
     [[ "${env_lines[*]-}" != *INVALID=* ]] || trial_fail "config rejected by tune.py"
@@ -6336,8 +6345,10 @@ cmd_tune_trial() {
         cmd_agent_up
     ) >"${dir}/deploy.log" 2>&1 || trial_fail "agent up failed (${dir}/deploy.log)"
     # An unchanged manifest leaves the generation, and the warm pod with its
-    # prefix cache, as they were: restart it so every trial starts cold.
-    if [ -n "${gen}" ] && [ "${gen}" = "$(kubectl -n "${AGENT_NS}" get deployment ovms -o 'jsonpath={.metadata.generation}' 2>/dev/null || true)" ]; then
+    # prefix cache, as they were: restart it so every trial starts cold, unless
+    # the budget says warm is fine (incremental screening; the load runs
+    # --unique-prompts, so the prefix cache gives it nothing).
+    if [ "${cold}" = 1 ] && [ -n "${gen}" ] && [ "${gen}" = "$(kubectl -n "${AGENT_NS}" get deployment ovms -o 'jsonpath={.metadata.generation}' 2>/dev/null || true)" ]; then
         { kubectl -n "${AGENT_NS}" rollout restart deployment/ovms \
             && kubectl -n "${AGENT_NS}" rollout status deployment/ovms --timeout="${AGENT_TIMEOUT}s"; } \
             >>"${dir}/deploy.log" 2>&1 || trial_fail "restart of the unchanged deployment failed (${dir}/deploy.log)"
@@ -6388,7 +6399,7 @@ cmd_tune_trial() {
 }
 
 cmd_tune_run() {
-    local objective=throughput dry="" arg inputs facts_file fp workdir
+    local objective=throughput dry="" full="" budget=10 arg inputs facts_file fp workdir
     local -a extra=()
     while [ $# -gt 0 ]; do
         arg=$1
@@ -6399,6 +6410,8 @@ cmd_tune_run() {
             --devices)     TUNE_DEVICES=${2:?--devices needs a value}; shift 2 ;;
             --no-hetero)   TUNE_HETERO=""; shift ;;
             --dry-run)     dry=1; shift ;;
+            --full)        full=1; shift ;;
+            --budget)      budget=${2:?--budget needs minutes}; shift 2 ;;
             --n|--n0|--eta|--seed|--margin|--k|--alpha|--guard-tol|--ttft-slo|--concurrency)
                 extra+=("${arg}" "${2:?${arg} needs a value}"); shift 2 ;;
             *) err "unknown tune option '${arg}' (see 'k3d-gpu help')" ;;
@@ -6430,10 +6443,23 @@ cmd_tune_run() {
     mkdir -p "${TUNE_DIR}"
     export TUNE_ENERGY  # read by every 'tune _trial' the driver starts
     info "tune: objective ${objective}, profile ${TUNE_DIR}/${fp}.json, trials in ${workdir}"
-    tune_py run --facts "${facts_file}" --objective "${objective}" --out "${TUNE_DIR}/${fp}.json" \
-        --fingerprint "${fp}" --fingerprint-inputs "${inputs}" --workdir "${workdir}" \
-        --trial-cmd "$(printf '%q' "$0") tune _trial" ${extra[@]+"${extra[@]}"} \
-        || err "tune failed — trials and logs are in ${workdir}"
+    if [ -n "${full}" ]; then
+        tune_py run --facts "${facts_file}" --objective "${objective}" --out "${TUNE_DIR}/${fp}.json" \
+            --fingerprint "${fp}" --fingerprint-inputs "${inputs}" --workdir "${workdir}" \
+            --trial-cmd "$(printf '%q' "$0") tune _trial" ${extra[@]+"${extra[@]}"} \
+            || err "tune failed — trials and logs are in ${workdir}"
+    else
+        local i
+        for ((i = 0; i < ${#extra[@]}; i += 2)); do
+            case "${extra[i]}" in
+                --n0|--eta|--seed) err "${extra[i]} applies to 'tune run --full' only" ;;
+            esac
+        done
+        tune_py step --facts "${facts_file}" --objective "${objective}" --out "${TUNE_DIR}/${fp}.json" \
+            --fingerprint "${fp}" --fingerprint-inputs "${inputs}" --workdir "${workdir}" \
+            --budget "${budget}" --trial-cmd "$(printf '%q' "$0") tune _trial" ${extra[@]+"${extra[@]}"} \
+            || err "tune failed — trials and logs are in ${workdir}"
+    fi
     info "Re-deploying the agent with the result (the tuned profile, or the default when nothing won)..."
     cmd_agent_up
 }
@@ -6452,8 +6478,31 @@ cmd_tune() {
         reset)       rm -f "$(tune_profile_path)"; info "removed $(tune_profile_path); 'agent up' deploys the default" ;;
         _trial)      [ $# -eq 3 ] || err "usage: k3d-gpu tune _trial <config.json> <budget.json> <out.json>"
                      cmd_tune_trial "$@" ;;
-        *) err "usage: k3d-gpu tune run [--objective throughput|ttft|joules|cpu-offload] [--energy] [--devices CPU,GPU,NPU] [--precisions int4,int8,fp16] [--no-hetero] [--dry-run] | show | space | env | fingerprint | reset" ;;
+        *) err "usage: k3d-gpu tune run [--budget MIN] [--full] [--objective throughput|ttft|joules|cpu-offload] [--energy] [--devices CPU,GPU,NPU] [--precisions int4,int8,fp16] [--no-hetero] [--dry-run] | show | space | env | fingerprint | reset" ;;
     esac
+}
+
+# ---- capacity: agents per box at a p95 turn SLO -----------------------------
+# The search is bench/apb/capacity.py (Python stdlib only). Found next to a repo
+# checkout first, then in the packaged copy under ${SHARE_DIR}/bench.
+capacity_script() {
+    local d self
+    self=$(readlink -f "${BASH_SOURCE[0]}")
+    for d in "${K3D_GPU_BENCH:-}" "$(dirname "${self}")/../bench" "${SHARE_DIR}/bench"; do
+        if [ -n "${d}" ] && [ -f "${d}/apb/capacity.py" ]; then
+            echo "${d}/apb/capacity.py"
+            return 0
+        fi
+    done
+    return 1
+}
+
+cmd_capacity() {
+    local script
+    script=$(capacity_script) \
+        || err "capacity: apb/capacity.py not found in the repo's bench/ or ${SHARE_DIR}/bench (set K3D_GPU_BENCH)"
+    require python3
+    exec python3 "${script}" "$@"
 }
 
 # ---- facts and plan: the console spine ------------------------------------------
@@ -6752,6 +6801,7 @@ case "${1:-help}" in
     sandbox) cmd_sandbox "${2:-}" ;;
     apply)   shift; cmd_apply "$@" ;;
     tune)    shift; cmd_tune "$@" ;;
+    capacity) shift; cmd_capacity "$@" ;;
     version|--version|-v) echo "k3d-gpu ${VERSION}" ;;
     help|--help|-h) usage ;;
     *) usage; exit 1 ;;

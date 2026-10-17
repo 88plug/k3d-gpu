@@ -9,6 +9,8 @@ every run reproducible.
   python3 tests/tune_test.py            # all tests
 """
 
+import contextlib
+import io
 import json
 import math
 import os
@@ -489,6 +491,187 @@ class EndToEndTest(unittest.TestCase):
         self.assertEqual(results["tuned"]["errors"], 0)
         self.assertEqual(results["tuned"]["best_concurrency"], 2)
         self.assertTrue(math.isfinite(results["tuned"]["aggregate_tokens_per_s"]))
+
+
+# ---- incremental tuning ---------------------------------------------------------------
+
+class Clock:
+    def __init__(self):
+        self.t = 0.0
+
+    def __call__(self):
+        return self.t
+
+
+class Timed:
+    """Wraps an evaluator: every trial advances the fake clock."""
+
+    def __init__(self, ev, clock, seconds):
+        self.ev, self.clock, self.seconds, self.calls = ev, clock, seconds, 0
+
+    def __call__(self, cfg, budget):
+        self.calls += 1
+        self.clock.t += self.seconds
+        return self.ev(cfg, budget)
+
+
+def knobs(cfg):
+    dev, ch = tune.as_choice(FACTS, cfg)
+    return dict(ch, device=dev)
+
+
+class NeighbourTest(unittest.TestCase):
+    def test_one_knob_at_a_time(self):
+        inc = tune.validate_config({"baseline": True})
+        base = knobs(inc)
+        ns = tune.neighbours(FACTS, inc)
+        self.assertTrue(ns)
+        for c in ns:
+            diff = {k for k in base if knobs(c).get(k) != base[k]}
+            if c["device"] == base["device"]:
+                self.assertEqual(len(diff), 1, (diff, c))
+            else:  # a device switch lands on that device's own default
+                self.assertEqual(knobs(c), dict(tune.centre(FACTS, c["device"]), device=c["device"]))
+        self.assertEqual(len({tune.config_key(c) for c in ns}), len(ns))
+        self.assertTrue(all(tune.feasible(FACTS, c) for c in ns))
+
+    def test_far_fewer_than_the_space(self):
+        self.assertLess(len(tune.neighbours(FACTS, {"baseline": True})), len(tune.full_space(FACTS)) / 10)
+
+
+HINT = "THROUGHPUT"
+
+
+def is_hint(c):
+    return not c.get("baseline") and c["plugin_config"].get("PERFORMANCE_HINT") == HINT
+
+
+class IncrementalTest(unittest.TestCase):
+    def test_finds_the_better_neighbour(self):
+        # true_tps: PERFORMANCE_HINT=THROUGHPUT on the default GPU is +12%.
+        ev = tune.SimEvaluator(cost_from(true_tps))
+        res = tune.incremental(ev, FACTS, {"baseline": True}, "throughput", budget_s=1e9)
+        self.assertEqual(res["decision"], "challenger")
+        self.assertTrue(is_hint(res["winner"]), res["winner"])
+        self.assertTrue(res["confirm"]["verdicts"][0]["accepted"])
+
+    def test_keeps_a_local_optimum(self):
+        ev = tune.SimEvaluator(cost_from(lambda c: 20.0 if is_hint(c) else 10.0))
+        inc = next(c for c in tune.neighbours(FACTS, {"baseline": True}) if is_hint(c))
+        res = tune.incremental(ev, FACTS, inc, "throughput", budget_s=1e9)
+        self.assertEqual(res["decision"], "incumbent")
+        self.assertIsNone(res["challenger"])
+        self.assertIsNone(res["confirm"])  # nothing beat it in screening: no confirmation spent
+
+    def test_no_crown_on_pure_noise(self):
+        crowned = 0
+        for seed in range(20):
+            ev = tune.SimEvaluator(cost_from(lambda c: 10.0), noise=0.05, seed=seed)
+            res = tune.incremental(ev, FACTS, {"baseline": True}, "throughput", budget_s=1e9)
+            crowned += res["decision"] == "challenger"
+        self.assertLessEqual(crowned, 1, f"noise crowned in {crowned}/20 seeds")
+
+    def test_budget_stops_screening_to_keep_time_to_confirm(self):
+        clock = Clock()
+        ev = Timed(tune.SimEvaluator(cost_from(true_tps)), clock, 30.0)
+        # 30 s a trial; confirm reserve = 2 x 5 x 2 x 30 s = 600 s; budget 900 s.
+        res = tune.incremental(ev, FACTS, {"baseline": True}, "throughput", budget_s=900.0, clock=clock)
+        self.assertLess(len(res["screened"]), len(tune.neighbours(FACTS, {"baseline": True})))
+        self.assertLessEqual(clock.t, 900.0 + 30.0)  # overshoot at most one trial
+
+    def test_budget_expiry_mid_confirmation_decides_nothing(self):
+        clock = Clock()
+        ev = Timed(tune.SimEvaluator(cost_from(lambda c: 20.0 if is_hint(c) else 10.0)), clock, 30.0)
+        n = len(tune.neighbours(FACTS, {"baseline": True}))
+        # Screens take 30 s, so all n fit with the 600 s confirm reserve; then the
+        # confirmation trials run 4x slower than estimated and the budget ends mid-way.
+        orig = ev.__call__
+        ev.seconds_for = lambda b: 120.0 if b["requests"] >= 16 else 30.0
+
+        def call(cfg, budget):
+            ev.seconds = ev.seconds_for(budget)
+            return orig(cfg, budget)
+        res = tune.incremental(call, FACTS, {"baseline": True}, "throughput",
+                               budget_s=30.0 * (n + 1) + 600.0, clock=clock)
+        self.assertEqual(len(res["screened"]), n)
+        self.assertTrue(is_hint(res["challenger"]))
+        self.assertEqual(res["decision"], "budget")
+        self.assertIsNone(res["winner"])
+
+    def test_resume_skips_screened_and_converges(self):
+        ev = tune.SimEvaluator(cost_from(lambda c: 10.0))
+        inc = {"baseline": True}
+        all_n = tune.neighbours(FACTS, inc)
+        res1 = tune.incremental(ev, FACTS, inc, "throughput", budget_s=1e9)
+        prof = tune.step_profile(None, res1, "t1")
+        self.assertEqual(prof["decision"], "default")
+        tried = prof["screened"][tune.config_key(inc)]
+        self.assertEqual(len(tried), len(all_n))
+        res2 = tune.incremental(ev, FACTS, inc, "throughput", budget_s=1e9, tried=tried)
+        self.assertEqual(res2["decision"], "converged")
+        self.assertEqual(res2["screened"], [])
+
+    def test_partial_screen_then_resume_tries_only_the_rest(self):
+        ev = tune.SimEvaluator(cost_from(lambda c: 10.0))
+        inc = {"baseline": True}
+        all_keys = {tune.config_key(c) for c in tune.neighbours(FACTS, inc)}
+        tried = sorted(all_keys)[:5]
+        res = tune.incremental(ev, FACTS, inc, "throughput", budget_s=1e9, tried=tried)
+        got = {tune.config_key(e["config"]) for e in res["screened"]}
+        self.assertEqual(got, all_keys - set(tried))
+
+    def test_winner_becomes_the_next_incumbent(self):
+        ev = tune.SimEvaluator(cost_from(true_tps))
+        res = tune.incremental(ev, FACTS, {"baseline": True}, "throughput", budget_s=1e9)
+        prof = tune.step_profile(None, res, "t1")
+        self.assertEqual(prof["decision"], "tuned")
+        self.assertEqual(prof["winner"], res["winner"])
+        self.assertEqual(prof["screened"][tune.config_key(res["winner"])], [])
+
+
+class StepCliTest(unittest.TestCase):
+    """tune.py step end to end: a trial command backed by SimEvaluator, the
+    profile written, read back as the next run's incumbent."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp)
+        self.facts = os.path.join(self.tmp, "facts.json")
+        with open(self.facts, "w") as f:
+            json.dump(FACTS, f)
+        self.trial = os.path.join(self.tmp, "trial.py")
+        with open(self.trial, "w") as f:
+            f.write(
+                "import json, sys\n"
+                f"sys.path.insert(0, {os.path.join(ROOT, 'console')!r})\n"
+                "import tune\n"
+                "cfg, budget, out = (json.load(open(p)) for p in sys.argv[1:3]), None, sys.argv[3]\n"
+                "cfg, budget = cfg\n"
+                "hint = not cfg.get('baseline') and cfg['plugin_config'].get('PERFORMANCE_HINT') == 'THROUGHPUT'\n"
+                "ev = tune.SimEvaluator(lambda c: (20.0 if hint else 10.0, 0.5, 35.0, 1.0, 1.0))\n"
+                "json.dump(ev(cfg, budget), open(out, 'w'))\n")
+        self.prof = os.path.join(self.tmp, "prof.json")
+
+    def step(self):
+        argv = ["step", "--facts", self.facts, "--trial-cmd", f"{sys.executable} {self.trial}",
+                "--out", self.prof, "--fingerprint", "fp", "--workdir", os.path.join(self.tmp, "w"),
+                "--concurrency", "1"]
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            rc = tune.main(argv)
+        self.assertEqual(rc, 0)
+        return out.getvalue(), tune.load(self.prof)
+
+    def test_two_steps(self):
+        out, prof = self.step()
+        self.assertIn("decision: challenger", out)
+        self.assertEqual(prof["decision"], "tuned")
+        self.assertTrue(is_hint(prof["winner"]))
+        self.assertEqual(tune.profile_env(self.prof, "fp"), tune.config_env(prof["winner"]))
+        out, prof2 = self.step()  # starts from the winner: its neighbours are not faster
+        self.assertIn("decision: incumbent", out)
+        self.assertEqual(prof2["winner"], prof["winner"])
+        self.assertEqual(len(prof2["history"]), 2)
 
 
 if __name__ == "__main__":
