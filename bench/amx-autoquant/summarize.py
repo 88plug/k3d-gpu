@@ -9,7 +9,11 @@ held-out set, and a flag. Also reported, never used to drop data:
   - per-arm spread (min, median, max), confounds per request
   - wins of the reference pick over every other passing arm, per round
 
+  - with --load (H27 amendment A1): the background-load match of the arms'
+    windows (bench/load/load.py `matched`); unmatched adds an INCONCLUSIVE note
+
   summarize.py --requests results.jsonl --nll nll.json --out results.json [--gate 0.05]
+               [--load load.jsonl]
 """
 
 import argparse
@@ -21,6 +25,9 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "console"))
 import autoquant  # noqa: E402
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "load"))
+import load  # noqa: E402
+
 MAJFAULT_FLAG = 1000
 
 
@@ -30,6 +37,7 @@ def main():
     ap.add_argument("--nll")
     ap.add_argument("--out", required=True)
     ap.add_argument("--gate", type=float, default=autoquant.GATE_NATS)
+    ap.add_argument("--load", help="load.py sample windows (JSON lines), one tag per arm")
     a = ap.parse_args()
     reqs = [json.loads(line) for line in open(a.requests, encoding="utf-8") if line.strip()]
     nll = json.load(open(a.nll, encoding="utf-8")) if a.nll and os.path.exists(a.nll) else {}
@@ -59,6 +67,11 @@ def main():
         notes.append("INCONCLUSIVE: int4'/int4 outside [0.9, 1.1] in rounds %s" % bad_ctrl)
     if held and all(isinstance(held.get(p), float) for p in held) and len({held[p] for p in held}) == 1:
         notes.append("INCONCLUSIVE: every NLL equal, the quality proxy is broken")
+    match = None
+    if a.load:
+        match = load.matched([json.loads(line) for line in open(a.load, encoding="utf-8") if line.strip()])
+        if not match["matched"]:
+            notes.append(match["verdict"])
     winner, reasons = autoquant.pick({"arms": arms}, a.gate)
     wins = {}
     if winner:
@@ -82,7 +95,7 @@ def main():
            "probe_picks": probe_picks,
            "probe_agree": sum(1 for v in probe_picks.values() if v["pick"] == winner),
            "probe_repeats": len(probe_picks),
-           "errors": [r for r in reqs if r.get("error")], "notes": notes,
+           "errors": [r for r in reqs if r.get("error")], "notes": notes, "load": match,
            "probe_span_note": "probe wall per repeat is in probe.log (budget 60 s)" if probe_t else None}
     with open(a.out, "w", encoding="utf-8") as f:
         json.dump(doc, f, indent=2)
