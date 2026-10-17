@@ -402,6 +402,64 @@ kernel "${r}" 6.11.2
 pci "${r}" 0000:03:00.0 0x8086 0xe214 xe; render "${r}" 0000:03:00.0 128
 doctor_says "0xe214 is not a Battlemage id in the kernel" "${r}" 'Intel Battlemage \(' negate
 
+r=$(newroot bmg-b60-backport)
+kernel "${r}" 6.14.3
+pci "${r}" 0000:03:00.0 0x8086 0xe211 xe; render "${r}" 0000:03:00.0 128
+doctor_says "Pro B60 bound on 6.14 is a stable backport, not force_probe" "${r}" 'is in this kernel.s xe id table.*6\.15'
+doctor_says "Pro B60 bound on 6.14 gets no force_probe" "${r}" 'force_probe=e211' negate
+
+r=$(newroot bmg-b580-616)
+kernel "${r}" 6.16.1
+pci "${r}" 0000:03:00.0 0x8086 0xe20b xe; render "${r}" 0000:03:00.0 128
+doctor_says "B580 on 6.16 has no kernel warning" "${r}" 'Battlemage.*(needs kernel|stable backport)' negate
+
+r=$(newroot dg2-a770)
+kernel "${r}" 6.8.0
+pci "${r}" 0000:03:00.0 0x8086 0x56a0 i915; render "${r}" 0000:03:00.0 128
+doctor_says "Arc A770 is Alchemist DG2-G10" "${r}" 'Intel Alchemist DG2-G10 \(0x56a0\) bound to i915'
+doctor_says "Arc A770 gets the xmx label" "${r}" 'gpu.intel.com/xmx=true'
+
+r=$(newroot dg2-a770-old)
+kernel "${r}" 6.1.0
+pci "${r}" 0000:03:00.0 0x8086 0x56a0 i915; render "${r}" 0000:03:00.0 128
+doctor_says "Arc A770 on 6.1 needs 6.2 or i915.force_probe" "${r}" 'Alchemist DG2-G10.*6\.2\+.*i915.force_probe=56a0'
+
+# Late Alchemist ids joined i915's table after DG2 bound by default (6.2):
+# 56BA-56BD in 6.7, 56BE/56BF in 6.10. force_probe cannot add a missing id.
+r=$(newroot dg2-56ba-66)
+kernel "${r}" 6.6.0
+pci "${r}" 0000:03:00.0 0x8086 0x56ba i915; render "${r}" 0000:03:00.0 128
+doctor_says "bound 0x56ba on 6.6 is a backport" "${r}" 'Alchemist DG2-G11 \(0x56ba\) is in this kernel.s i915 id table.*6\.7'
+doctor_says "bound 0x56ba on 6.6 gets no force_probe" "${r}" 'force_probe=56ba' negate
+
+r=$(newroot dg2-56ba-65-unbound)
+kernel "${r}" 6.5.0
+pci "${r}" 0000:03:00.0 0x8086 0x56ba "" 0x030000
+doctor_says "unbound 0x56ba on 6.5 needs a kernel" "${r}" 'DG2-G11 \(0x56ba\) has no driver .*i915 lists this id from kernel 6\.7 .*upgrade the kernel'
+doctor_says "unbound 0x56ba on 6.5 gets no modprobe or force_probe" "${r}" '0x56ba.*(modprobe i915|force_probe=56ba)' negate
+
+r=$(newroot dg2-56be-69-unbound)
+kernel "${r}" 6.9.0
+pci "${r}" 0000:03:00.0 0x8086 0x56be "" 0x030000
+doctor_says "unbound 0x56be on 6.9 needs 6.10" "${r}" 'DG2-G10 \(0x56be\) has no driver .*from kernel 6\.10 '
+doctor_says "unbound 0x56be on 6.9 gets no modprobe" "${r}" '0x56be.*modprobe i915' negate
+
+r=$(newroot dg2-56be-68)
+kernel "${r}" 6.8.0
+pci "${r}" 0000:03:00.0 0x8086 0x56be i915; render "${r}" 0000:03:00.0 128
+doctor_says "bound 0x56be on 6.8 is a backport" "${r}" 'DG2-G10 \(0x56be\) is in this kernel.s i915 id table.*6\.10'
+
+r=$(newroot flex-515-unbound)
+kernel "${r}" 5.15.0
+pci "${r}" 0000:03:00.0 0x8086 0x56c1 "" 0x038000
+doctor_says "unbound Flex on 5.15 gets dkms" "${r}" 'Flex \(ATS-M\) \(0x56c1\) has no driver .*has no xe .*intel-i915-dkms'
+doctor_says "unbound Flex on 5.15 gets no xe.force_probe" "${r}" 'xe.force_probe|force-probe xe' negate
+
+r=$(newroot flex-68-unbound)
+kernel "${r}" 6.8.0
+pci "${r}" 0000:03:00.0 0x8086 0x56c1 "" 0x038000
+doctor_says "unbound Flex on 6.8 points at the exact experimental apply" "${r}" 'Flex \(ATS-M\) \(0x56c1\) has no driver .*doctor --experimental, xe-force-probe'
+
 r=$(newroot arl-s)
 kernel "${r}" 6.10.4
 pci "${r}" 0000:00:02.0 0x8086 0xb640 i915; render "${r}" 0000:00:02.0 128

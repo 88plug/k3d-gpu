@@ -1,0 +1,24 @@
+dra: available
+  status:   Kubernetes gates: alpha in 1.34-1.35, beta default-on in 1.36 (DRAExtendedResource GA in 1.37)
+  families: all: NVIDIA, Intel GPU and Gaudi DRA drivers, CPU (dra-driver-cpu)
+  value:    partitionable devices, consumable capacity, binding conditions, extended-resource requests served by DRA, device health in pod status
+image-volume: available
+  status:   Kubernetes ImageVolume: beta default-off in 1.33-1.34, beta default-on in 1.35, GA (locked on) from 1.36
+  families: all: models shipped as OCI images, mounted read-only into any accelerator pod
+  value:    model weights pulled, cached and deduplicated by containerd; no init-container copy or PVC
+npu-turbo: absent — no Intel NPU accel node bound to intel_vpu under /sys/class/accel (needs Meteor Lake or newer and the intel_vpu driver)
+  status:   OpenVINO 2026.4.0 NPU property NPU_TURBO; ivpu sched_mode param (HW scheduler auto-selected on new firmware)
+  families: Intel NPU: Meteor/Arrow Lake (37xx), Lunar Lake (40xx), Panther/Wildcat Lake (50xx), Nova Lake (60xx)
+  value:    sustained max NPU clocks for latency-bound agent inference; HW scheduler gives per-context priority and preemption
+scx: absent — kernel 6.8.0-85-generic has no /sys/kernel/sched_ext/state (needs Linux 6.12+ built with CONFIG_SCHED_CLASS_EXT)
+  status:   sched_ext merged in Linux 6.12; schedulers (scx_lavd, scx_layered) out of tree, sched-ext/scx v1.1.4
+  families: any x86 host on Linux 6.12+ with CONFIG_SCHED_CLASS_EXT; most useful on hybrid P/E parts
+  value:    latency-aware or layered CPU scheduling for agent processes, swapped at runtime with no reboot
+xe-force-probe: absent — no unbound Intel GPU xe.force_probe can bind: Max has no upstream xe id, and an id newer than this kernel's xe table needs a newer kernel (see k3d-gpu doctor)
+  status:   xe.force_probe (unsafe param, taints the kernel); Nova Lake-P and Crescent Island still need it in Linux 7.3-rc
+  families: Intel GPUs the running kernel will not bind: Nova Lake-P, Crescent Island, MTL/ARL/ADL/TGL/DG2 on xe
+  value:    brings a new GPU up before distro kernels support it, so agents can schedule on it
+xe-sriov: absent — no Intel GPU bound to xe reports SR-IOV (sriov_totalvfs missing or 0; needs a PF-capable part, CONFIG_PCI_IOV, xe.max_vfs not 0 and VT-d on)
+  status:   xe SR-IOV PF: xe.max_vfs param, configfs sriov/max_vfs since Linux 6.19; PF on BMG and PTL without force_probe
+  families: Panther/Wildcat Lake iGPU, Battlemage / Arc Pro B, Nova Lake, Crescent Island (bound to xe)
+  value:    hardware-isolated GPU slices: each VF is its own render node and gpu.intel.com/xe resource

@@ -1,0 +1,2 @@
+processor	: 0
+flags		: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc avx2 avx512f avx512dq avx512_bf16 avx512_vnni

@@ -1,0 +1,17 @@
+Platform: Intel Data Center GPU Flex 140 (ATS-M75) with no driver bound on a
+6.8 kernel (upstream i915 and xe both keep require_force_probe for ATS-M).
+
+Sources:
+- 0x8086 0x56c1, class 0x038000: INTEL_ATS_M75_IDS in
+  https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/include/drm/intel/pciids.h; NFD platform-labeling-rules.yaml v0.37.1
+  (Flex_140=56c1, class 0380).
+- ats_m_info / ats_m_desc .require_force_probe: drivers/gpu/drm/i915/i915_pci.c,
+  drivers/gpu/drm/xe/xe_pci.c (master).
+- intel-i915-dkms LTS 2523.x: https://dgpu-docs.intel.com/overview/hardware-table.html
+
+Layout: copied from battlemage-b580 (same BDF, PCIe path, cpuinfo), in the form
+tests/fixtures/capture.sh writes; only the files named above differ.
+
+Not from hardware: BDF and PCIe path, the kernel release string, the cpuinfo
+flags line. Doctor output for this part is predicted by the sources above, not
+measured.

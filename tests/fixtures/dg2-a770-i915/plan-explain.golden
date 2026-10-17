@@ -1,0 +1,13 @@
+facts: sha256:9527a1ddc1b5f4de21efd41d007c592b08dc670b2c026c0de9c6a2dc74cca5e9
+targets:
+  cpu: unknown CPU; usable
+  gpu:0000:03:00.0: intel Alchemist DG2-G10, 0x56a0, on i915, XMX; usable
+matrix: 2 cells, 0 on a target of this host
+  no measured cell for these targets
+decision:
+  unmeasured, run `k3d-gpu prove` on this box
+  bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)
+exit=0
+--- calls
+kubectl config get-contexts -o name
+kubectl --context k3d-gpu --request-timeout=5s get nodes -o name

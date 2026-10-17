@@ -1,0 +1,15 @@
+Platform: Intel Arc Pro B60 (Battlemage G21) bound to xe on a 6.14 kernel, the
+case where a stable backport (6.14.y) carries the id before mainline 6.15.
+
+Sources:
+- 0x8086 0xe211 "Arc Pro B60": pci.ids 2026.10.17; Intel ARK 243916 "Device ID 0xE211".
+- id first in mainline include/drm/intel/pciids.h at v6.15; present in
+  linux-6.14.y (https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/plain/include/drm/intel/pciids.h?h=linux-6.14.y).
+- xe/bmg_guc_70.bin: drivers/gpu/drm/xe/xe_uc_fw.c fw_def(BATTLEMAGE ... 70, 54, 0).
+
+Layout: copied from battlemage-b580 (same BDF, PCIe path, cpuinfo), in the form
+tests/fixtures/capture.sh writes; only the files named above differ.
+
+Not from hardware: BDF and PCIe path, the kernel release string, the cpuinfo
+flags line. Doctor output for this part is predicted by the sources above, not
+measured.
