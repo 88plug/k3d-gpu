@@ -377,6 +377,35 @@ Re-run this search if any of these happen:
 - Intel EAS/EAT adds a k3s or laptop profile (watch EAT PR #19 and enterprise-inference PR #22).
 - OVMS starts requesting k8s resources itself, for example a KServe runtime that sets device limits from node allocatable.
 
+## H23 prior-art search (2026-10-17)
+
+Search behind [`EXPERIMENTS.md` H23](../EXPERIMENTS.md#h23-pre-registration-2026-10-17),
+row P230 below. **Verdict: prior art exists for most of H23.** Watts as an
+extended resource (GEOPM + Kueue), power-aware Kubernetes placement (Intel TAS,
+Apple), predicted power/thermal slack placement (TAPAS, SmartOClock, ThermE) and
+the closed-form PL1/PL2/Tau turbo model (Menra et al.) are all published.
+Nothing was found for per-pod watts as DRA consumable capacity set from a
+turbo-budget model on client hybrid parts, but the search was degraded
+(web-search budget used up, GitHub code search rate-limited after 7 queries,
+SearXNG returned only Bing noise). Re-run the DRA and code queries before any
+"no prior art" wording.
+
+| Query batch | Tool | Queries or URLs | Result |
+|---|---|---|---|
+| 1 | SearXNG search_many | "Kubernetes scheduler power budget watts extended resource"; "Kubernetes DRA consumable capacity KEP-5075"; "Intel telemetry aware scheduling thermal power Kubernetes"; "Kubernetes power manager Intel RAPL"; "power capping Kubernetes pods scheduling RAPL paper"; "power as a schedulable resource Kubernetes arXiv"; "thermal-aware container scheduling Kubernetes throttling prediction"; "Kepler kubernetes power-aware scheduling PEAKS" | Bing-only noise, nothing usable |
+| 2 | Exa | "Kubernetes scheduling power budget as a resource, pods request watts, power capping" | GEOPM/Kueue `intel.com/power`; Apple plugins; Climatik; TNSM 2025; Compute Gardener; KEP-5517 |
+| 3 | Exa | "Intel platform-aware-scheduling telemetry aware scheduling thermal power policy" | TAS power demo (RAPL, 80% of TDP filter) |
+| 4 | Exa | "KEP-5075 DRA consumable capacity ResourceSlice shared device capacity" | KEP-5075; examples are bandwidth and memory only |
+| 5 | Exa | "TAPAS thermal- and power-aware scheduling LLM inference cloud" | TAPAS, ASPLOS 2025 |
+| 6 | Exa | "predict thermal throttling turbo budget PL1 PL2 tau model scheduler headroom" | Intel PL1/PL2/Tau definition; Menra Euro-Par 2026; Michaud CAL 2020; `intel_ips.c`; ThermE |
+| 7 | Exa | "DRA ResourceSlice advertising power watts or thermal headroom as consumable capacity for pods" | none for power or watts; OKD GPU "power/thermal profiles" (attribute selection only) |
+| 8 | gh search repos | "kubernetes power aware scheduler"; "dra power"; "kubernetes thermal scheduling"; "power capping kubernetes"; "rapl kubernetes scheduler"; "kubernetes extended resource watts"; "power-aware scheduling kubernetes"; "power capping"; "thermal aware kubernetes"; "power aware scheduler"; "kepler scheduler"; "energy aware scheduler kubernetes" | only sustainable-computing-io/power_capping_operator (a stub) |
+| 9 | gh search code | "allowMultipleAllocations power watts"; "resourceslice power watts dra"; "dra driver power budget"; "consumable capacity power"; "ResourceSlice watts"; "resource.k8s.io power watts"; "deviceClassName power watts" | 0 hits; the next 6 queries were rate-limited (HTTP 403) |
+| 10 | fetch | kubernetes/enhancements#5075; geopm kubecon-na-23 README; Kepler power_capping_operator; SmartOClock; intel/kubernetes-power-manager; Thunderbolt OSDI 2020; Dynamo ISCA 2016; Flex ISCA 2021; arXiv 2610.00267 | confirms the rows below; KEP-5075 beta target 1.36; kubernetes-power-manager discontinued |
+
+Not searched: arXiv, MLSys, OSDI and EuroSys full-text listings; LKML;
+wg-device-management notes.
+
 ## Quoted-number register
 
 Numbers this project quotes from someone else: upstream benchmarks, vendor specs,
@@ -417,6 +446,16 @@ Source does not back a claim. `tests/claims_check.sh` enforces both rules.
 | P265 | intel/goresctrl provides the rdt, sst and blockio packages under nri-plugins and containerd/CRI-O class-based RDT | https://github.com/intel/goresctrl | 2026-10-17 |
 | P266 | Koordinator koordlet ships per-pod resctrl LLC/MB isolation (`ResctrlConfig{LLC, MB}`); KEP-3008 QoS-class resources issue is closed | https://github.com/koordinator-sh/koordinator/blob/c5afca711320cb6bbc8fe74a0c90af8d0e44dbcb/apis/extension/resctrl.go | 2026-10-17 |
 | P267 | WebSearch not run (call budget exhausted): kernel lists, OSDI/EuroSys/MLSys full text and Intel TCC CAT on embedded Core are uncovered, so H26 novelty is "partial search" | | 2026-10-17 |
+| P230 | H23 prior-art search log (10 query batches, 2026-10-17, degraded): watts-as-a-resource, power-aware k8s scheduling, predictive slack placement and the turbo model are prior art; nothing found for per-pod watts as DRA consumable capacity | Section "H23 prior-art search (2026-10-17)" above; primary hits https://static.sched.com/hosted_files/kccncna2023/bd/KubeCon23%20Power%20Capping.pdf , https://github.com/kubernetes/enhancements/blob/master/keps/sig-scheduling/5075-dra-consumable-capacity/README.md | 2026-10-17 |
+| P231 | DRA consumable capacity (KEP-5075): `allowMultipleAllocations`, `capacity.requestPolicy`, `consumedCapacity`; alpha in 1.34 and 1.35, beta target 1.36; `DeviceCapacity.Value` is a fixed total | https://github.com/kubernetes/enhancements/blob/master/keps/sig-scheduling/5075-dra-consumable-capacity/README.md , https://github.com/kubernetes/enhancements/issues/5075 | 2026-10-17 |
+| P232 | A node extended resource is advertised by a JSON PATCH of the node's `/status` (capacity); values are integers and the scheduler accounts requests against it | https://kubernetes.io/docs/tasks/administer-cluster/extended-resource-node/ | 2026-10-17 |
+| P233 | Intel Telemetry Aware Scheduling power demo: RAPL package power via collectd/Prometheus, `dontschedule` above 80% of TDP, score prefers the lowest-power node (node-level filter, no per-pod accounting) | https://github.com/intel/platform-aware-scheduling/tree/master/telemetry-aware-scheduling/docs/power | 2026-10-17 |
+| P234 | GEOPM + Kueue (KubeCon NA 2023): power as extended resource `intel.com/power`, 1 W = 1 device, Kueue `nominalQuota: 10000` W, per-job GEOPM cap; static admin budget | https://static.sched.com/hosted_files/kccncna2023/bd/KubeCon23%20Power%20Capping.pdf , https://github.com/geopm/geopm/tree/cloud/service/kubecon-na-23 | 2026-10-17 |
+| P235 | RAPL PL1 is enforced on an exponentially weighted moving average with time window Tau; PL2 bounds short bursts. Turbo duration t_max = Tau * ln((PL2 - P0) / (PL2 - PL1)) (Menra et al., Euro-Par 2026, fitted on Xeon Skylake-SP to Sapphire Rapids) | https://edc.intel.com/content/www/us/en/design/ipla/software-development-platforms/client/platforms/alder-lake-desktop/12th-generation-intel-core-processors-datasheet-volume-1-of-2/004/package-power-control/ , https://menraromial.com/pdf/talk/RAPL-power-capping-and-turbo-boost.pdf | 2026-10-17 |
+| P236 | TAPAS (ASPLOS 2025): predicts thermal and power slack for placement, cuts thermal throttling events by 97% | https://arxiv.org/abs/2501.02600 | 2026-10-17 |
+| P237 | Apple, "Power-Aware Scheduling in Kubernetes" (KubeCon EU 2023): Filter and Score plugins enforce server and rack power caps from a power model | https://static.sched.com/hosted_files/kccnceu2023/ef/KubeCon%20%2B%20CloudNativeCon%20EU23_power-aware-scheduling.PPT.pdf | 2026-10-17 |
+| P238 | coretemp exposes package temperature and TjMax as `tempN_input` / `tempN_crit` (millidegrees C); `tcc_offset_degree_celsius` (int340x processor thermal device) lowers the TCC activation point below TjMax | https://docs.kernel.org/hwmon/coretemp.html , https://docs.kernel.org/driver-api/thermal/intel_dptf.html | 2026-10-17 |
+| P239 | stress-ng `--cpu-ops N` stops a stressor after N bogo operations; `--cpu-load P` loads the CPU P percent | https://github.com/ColinIanKing/stress-ng/blob/master/README.md , https://manpages.ubuntu.com/manpages/noble/man1/stress-ng.1.html | 2026-10-17 |
 | P290 | H29 prior-art search log, 2026-10-17. Found: uncore DVFS for memory-bound HPC phases, phase-aware CPU/GPU/memory DVFS for mobile LLMs, phase-aware GPU DVFS for LLM serving, static k8s uncore control (P291-P299). Not found: prefill/decode phase-aware core + uncore split for LLM inference on Intel x86 CPUs measured in J/token against the UFS/ELC default. Incomplete: SearXNG/Bing results irrelevant, Exa rate-limited after 4 queries, WebSearch budget exhausted, arXiv API 429, GitHub code search 403; ACM/IEEE full text, OSDI/EuroSys, LKML and KEPs not searched; Splitwise, DynamoLLM, POLCA recalled, not fetched. Re-run arXiv `all:uncore AND all:LLM`, GitHub code `intel_uncore_frequency` with llama/vllm/ollama, and LKML before citing the novelty line. Amended before any run: the H29 probe holds a static core cap + uncore pin for the whole request, which is the setting of P295 (Sundriyal 2018, ReAPER 2023) and of FUSE per-phase DVFS (P293) in spirit; no novelty line is claimed for H29, only its measured delta | Exa queries "uncore frequency scaling for LLM inference energy efficiency decode phase memory-bound CPU", "Intel Kubernetes Power Manager uncore frequency CRD", "dynamic uncore frequency scaling paper HPC energy savings memory-bound phases", "LLM inference on Xeon CPU uncore frequency energy per token measurement", "intel_uncore_frequency efficiency latency control ELC TPMI kernel documentation"; GitHub repo search `uncore+llm`, `uncore+inference`, `uncore+frequency+transformer` (0/0/0 repos) | 2026-10-17 |
 | P291 | Linux `intel_uncore_frequency`: `initial_min/max_freq_khz` (read-only), `min/max_freq_khz` (root write), `current_freq_khz`; TPMI `uncoreNN` per fabric cluster with ELC `elc_floor_freq_khz`, `elc_low/high_threshold_percent`, `elc_high_threshold_enable` | https://docs.kernel.org/admin-guide/pm/intel_uncore_frequency_scaling.html | 2026-10-17 |
 | P292 | Intel Kubernetes Power Manager ships an `Uncore` CRD (`power.intel.com/v1`, sysMin/sysMax/dieSelector) since v2.1.0: static k8s uncore control, not phase- or LLM-aware | https://github.com/intel/kubernetes-power-manager ; https://github.com/intel/power-optimization-library | 2026-10-17 |
