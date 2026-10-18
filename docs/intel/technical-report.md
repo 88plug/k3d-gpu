@@ -10,7 +10,7 @@ This report covers what was measured, and how. Every result comes from one host:
 
 - Twelve hypotheses are SUPPORTED. All twelve are scoped to that host.
 - Eight are REFUTED. Six of them changed shipped defaults.
-- Seventeen are INCONCLUSIVE, mostly because the shared host throttles or its load was unmatched. Five are PENDING, three of them from the agent benchmark (H43, H45, H47), pre-registered on 2026-10-17 and not run in its first campaign.
+- Seventeen are INCONCLUSIVE, mostly because the shared host throttles or its load was unmatched. Six are PENDING: three from the agent benchmark (H43, H45, H47), pre-registered on 2026-10-17 and not run in its first campaign, and H49 (k3d-gpu vs EAT stock inside EAT, both arms interleaved in one hold), pre-registered on 2026-10-18.
 - Every other Intel family is detected and configured in fixture tests only. None has a measurement.
 
 No world-first, superlative or priority claim is made; [docs/provenance.md](../provenance.md) supports none.
