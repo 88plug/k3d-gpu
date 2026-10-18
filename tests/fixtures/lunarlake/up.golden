@@ -2,6 +2,7 @@
 ==> Experimental features (auto): dra image-volume npu-turbo
 ==> Creating k3d cluster 'gpu' with image cryptoandcoffee/k3d-gpu:<version>...
 ==> Waiting for nodes Ready...
+==> Waiting for cluster DNS (CoreDNS)...
 ==> intel device plugin auto-deployed by k3s.
 ==> npu device plugin auto-deployed by k3s.
 ==> hybrid device plugin auto-deployed by k3s.
@@ -27,6 +28,8 @@ k3d cluster create gpu
   --k3s-node-label=experimental.k3d-gpu.io/image-volume=true@server:*;agent:*
   --k3s-node-label=experimental.k3d-gpu.io/npu-turbo=true@server:*;agent:*
 kubectl wait --for=condition=Ready nodes --all --timeout=120s
+kubectl -n kube-system get deployment/coredns
+kubectl -n kube-system rollout status deployment/coredns --timeout=180s
 kubectl -n kube-system get daemonset intel-gpu-plugin
 kubectl -n kube-system get daemonset intel-npu-plugin
 kubectl -n kube-system get daemonset nri-resource-policy-balloons
