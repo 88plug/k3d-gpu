@@ -1,0 +1,27 @@
+{
+ "arm": "R",
+ "mode": "server-fc",
+ "level": "none",
+ "energy": null,
+ "completed": [
+  "parallel_multiple_40",
+  "multiple_158",
+  "irrelevance_203",
+  "multiple_154",
+  "irrelevance_119",
+  "multiple_181",
+  "irrelevance_77",
+  "multiple_135"
+ ],
+ "stopped": "done",
+ "passed": {
+  "parallel_multiple_40": 1,
+  "multiple_158": 1,
+  "irrelevance_203": 0,
+  "multiple_154": 1,
+  "irrelevance_119": 1,
+  "multiple_181": 1,
+  "irrelevance_77": 1,
+  "multiple_135": 1
+ }
+}

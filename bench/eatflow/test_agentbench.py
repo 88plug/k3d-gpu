@@ -914,13 +914,14 @@ class PinTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             AB.plan("H999")
 
-    def test_ledger_rows_pending_once(self):
+    def test_ledger_rows_once_with_a_verdict(self):
         with open(os.path.join(ROOT, "EXPERIMENTS.md")) as f:
             text = f.read()
         table = text.split("## Hypotheses", 1)[1].split("\n## ", 1)[0]
         for h in AB.lock()["hypotheses"]:
-            rows = re.findall(rf"^\| {h} \|.*\| *(\w+) *\|$", table, re.M)
-            self.assertEqual(rows, ["PENDING"], h)
+            rows = re.findall(rf"^\| {h} \|.*\| *([A-Z]+)[^|]*\|$", table, re.M)
+            self.assertEqual(len(rows), 1, h)
+            self.assertIn(rows[0], ("PENDING", "SUPPORTED", "REFUTED", "INCONCLUSIVE"), h)
 
     def test_manifest(self):
         m = AB.manifest("http://litellm.eat:4000", "ab", max_requests=20)
