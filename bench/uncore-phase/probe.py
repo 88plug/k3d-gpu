@@ -440,7 +440,7 @@ def main():
     ap.add_argument("--core-cap-khz", type=int, default=2800000)
     ap.add_argument("--uncore-low-khz", type=int, default=2000000)
     ap.add_argument("--deadline-s", type=float, default=600)
-    ap.add_argument("--temp-abort-c", type=float, default=95)
+    ap.add_argument("--temp-abort-c", type=float, default=99)  # A3: 1 C under TjMax (coretemp temp1_crit 100 C); A2 run 1 used 95
     ap.add_argument("--swap-flag-pages", type=int, default=25600)  # 100 MiB of 4 KiB pages
     ap.add_argument("--out")
     ap.add_argument("--write-log")
