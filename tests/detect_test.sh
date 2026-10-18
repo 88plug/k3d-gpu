@@ -2140,10 +2140,25 @@ agent_says "an unknown K3D_GPU_AGENT_DEVICE is rejected" "${r}" fail \
 agent_says "auto never picks the NPU" "${r}" 0 \
     '--target_device=NPU' negate STUB_ALLOC=$'cpu 32\nnpu.intel.com/accel 1'
 
-# H22 hetero-spec: Fast Draft is off by default (until a host measurement shows a gain); auto
-# drafts on the target's own device; a named device adds its resource to the pod.
-agent_says "no draft model by default" "${r}" 0 \
-    'draft' negate STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1'
+# H34: by default a CPU target serving an OpenVINO Qwen3 model drafts on the CPU (the
+# measured win); every other target has no draft; off disables it. H22: auto drafts on the
+# target's own device; a named device adds its resource to the pod.
+agent_says "a CPU target drafts on the CPU by default" "${r}" 0 \
+    '--draft_device=CPU' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1'
+agent_says "... with the default draft model" "${r}" 0 \
+    '--draft_source_model=OpenVINO/Qwen3-0\.6B-int4-ov' "" STUB_ALLOC='cpu 32'
+agent_says "... and requests no GPU for it" "${r}" 0 \
+    'gpu\.intel\.com' negate STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1'
+agent_says "K3D_GPU_AGENT_DRAFT=off: no draft" "${r}" 0 \
+    'draft' negate STUB_ALLOC='cpu 32' K3D_GPU_AGENT_DRAFT=off
+agent_says "K3D_GPU_AGENT_DRAFT=OFF: no draft (case-insensitive)" "${r}" 0 \
+    'draft' negate STUB_ALLOC='cpu 32' K3D_GPU_AGENT_DRAFT=OFF
+agent_says "no default draft for a non-Qwen3 target model" "${r}" 0 \
+    'draft' negate STUB_ALLOC='cpu 32' K3D_GPU_AGENT_MODEL=OpenVINO/Phi-4-mini-instruct-int4-ov
+agent_says "no default draft with a custom draft model" "${r}" 0 \
+    'draft' negate STUB_ALLOC='cpu 32' K3D_GPU_AGENT_DRAFT_MODEL=OpenVINO/Qwen3-1.7B-int4-ov
+agent_says "no default draft for a GPU target" "${r}" 0 \
+    'draft' negate STUB_ALLOC=$'cpu 32\ngpu.intel.com/xe 1' STUB_NODE_LABELS=gpu.intel.com/xmx=true
 agent_says "K3D_GPU_AGENT_DRAFT=auto drafts on the target device (CPU)" "${r}" 0 \
     '--draft_device=CPU' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' K3D_GPU_AGENT_DRAFT=auto
 agent_says "auto draft on a CPU target requests no GPU" "${r}" 0 \

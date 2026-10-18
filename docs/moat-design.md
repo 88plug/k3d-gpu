@@ -380,7 +380,7 @@ J/turn.
 | `iaa_zswap` | SPR, EMR, GNR, SRF, PTL | `has_iaa`, `share/intel-iaa-plugin.yml` | opt-in host change (zswap compressor `deflate-iaa`) via `host-setup` | cited from the in-review kernel series (https://lwn.net/Articles/1039687/); none measured | max sandboxes under a fixed memory cap: no zswap / zstd / deflate-iaa |
 | `dsa_dto` | SPR and newer Xeon, SRF | `has_dsa`, `share/intel-dsa-plugin.yml` | opt-in DTO preload for copy-heavy tool pods (not built) | cited (https://arxiv.org/abs/2305.02480); none measured | H3 arm b with a memcpy neighbour, DTO off/on; inference TTFT/TPOT p95 |
 | `rdt` | Xeon | `doctor_numa` reports `rdt_a` | off by default (it rewrites host resctrl); opt-in | none | CAT/MBA on vs off under an LLC/bandwidth neighbour |
-| `kv_u4`, `spec_decode` | every OpenVINO engine | OVMS flags | opt-in, behind an accuracy gate (tool-call validity on the APB traces) | none measured | APB with `--kv_cache_precision u4` vs auto; draft on the CPU vs none |
+| `kv_u4`, `spec_decode` | every OpenVINO engine | OVMS flags | `kv_u4` opt-in, behind an accuracy gate (tool-call validity on the APB traces); `spec_decode` on by default for a CPU target serving an OpenVINO Qwen3 model (CPU draft, `K3D_GPU_AGENT_DRAFT=off` disables it) | `spec_decode`: CPU draft 1.39x decode tok/s, 0.75x J/token on the i9-13900T under matched load [ledger:H34]; `kv_u4` none measured | APB with `--kv_cache_precision u4` vs auto; agent tasks with the CPU draft vs none (H47) |
 | `itd` | hybrid | CPUID.06H in `doctor --perf` | detected only: Linux does not consume the ITD classes | none; recorded so a future kernel gets a ready before/after | none |
 
 Not in the profile, by design: flags that restate OpenVINO defaults (u8 KV and
