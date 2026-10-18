@@ -1,0 +1,21 @@
+# provenance
+2026-10-18T13:49:25Z
+Model name:                              13th Gen Intel(R) Core(TM) i9-13900T
+6.6.128-1-MANJARO
+c914a851e0e60aa82a5ddb682345ed0592876d22
+image openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58
+074214fa29ab1b479536fc7184ef3036e7b355a5835e8590b61b70a8de1df2f9  /home/andrew/.cache/k3dgpu-h24/A/OpenVINO/Qwen3-4B-int4-ov/openvino_model.bin
+load_cpus 16-31
+containers 52
+Swap:         191999      153875       38124
+1.72 2.61 7.77 6/13955 422297
+level typical start 2026-10-18T13:49:29Z loadavg 1.72 2.61 7.77
+started typical on 16-31 (3 containers, ttl 1320s)
+removed 3 container(s)
+level typical end 2026-10-18T14:03:36Z wall_s=847 loadavg 14.14 16.07 13.55
+level heavy start 2026-10-18T14:03:36Z loadavg 14.14 16.07 13.55
+started heavy on 16-31 (3 containers, ttl 1320s)
+removed 3 container(s)
+level heavy end 2026-10-18T14:21:57Z wall_s=1101 loadavg 34.20 34.08 27.58
+removed 0 container(s)
+end 2026-10-18T14:21:57Z load_left=0 sci_left=0
