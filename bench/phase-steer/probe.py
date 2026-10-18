@@ -13,8 +13,15 @@ unmatched across SP/PS/ALL (load.py TOLERANCE) or a gate fails. Each agent's
 prefix is prefilled once and restored into every fresh server from a saved
 slot; a cell is one synchronized round of whole turns.
 
+Amendment A3 (2026-10-18): the load is scored by amendment 27 (load.py
+matched_a27). Two 10 s baseline windows before the prefix prep; before each
+cell a load.py settle gap whose last window is the cell's pre-window (its
+package W is the idle W, its busy the pre-cell E busy); 5 s during windows
+while the round runs, with every E-core counted as treatment CPU (every arm's
+servers run in cpuset 0-31). A level with missing load is VOID.
+
 Stdlib only. Needs root for RAPL (`sudo`). Caps its own wall time (default
-19.5 min) and removes every `sci-h20-*` container it started, on exit or abort.
+22 min under A3) and removes every `sci-h20-*` container it started, on exit or abort.
 Run it under the live lock:
 
   flock -w 10800 "$LOCK" sudo python3 bench/phase-steer/probe.py \
@@ -53,7 +60,9 @@ REQUIRED_FLAGS = ["--cpu-mask", "--cpu-mask-batch", "--cpu-strict", "--cpu-stric
 RAPL = "/sys/class/powercap/intel-rapl:0"
 PREFIX_TOK, TURN_TOK, OUT_TOK = 1024, 396, 96
 PRIMARY = ("SP", "PS", "ALL")
-LOAD_WINDOW_S = 15
+LOAD_WINDOW_S = 15       # A2 pre-cell window (A3: replaced by the settle gap)
+BASELINE_WINDOWS, BASELINE_S = 2, 10
+DURING_S = 5
 CACHE_SLACK = 8          # a scored turn may process at most TURN_TOK + this many prompt tokens
 FIRST_CELL_EST_S = 300   # wall check before any cell has been timed
 SATURATED = 0.90         # pre-cell E busy above this: the PS busy test is replaced by affinity
@@ -313,14 +322,23 @@ def round_turns(args, seed):
     return rows, errors
 
 
-def run_cell(args, arm, rep, cell, deadline):
+def during_sampler(arm, level, ecpus, sink, stop):
+    """A3: 5 s during windows until stopped; every E-core is treatment CPU (cpuset 0-31)."""
+    while not stop.is_set():
+        sink.append(loadtool.window(DURING_S, ecpus, tag=arm, level=level, phase="during", exclude=ecpus))
+
+
+def run_cell(args, arm, rep, cell, deadline, baseline=None):
     pcpus, ecpus = expand(P), expand(E)
-    load = loadtool.window(LOAD_WINDOW_S, ecpus, tag=arm, level=args.level)
+    if baseline is None:
+        load = loadtool.window(LOAD_WINDOW_S, ecpus, tag=arm, level=args.level)
+    else:
+        load = loadtool.settle(baseline, lambda s: loadtool.window(s, ecpus, tag=arm, level=args.level, phase="pre"))
     idle_w = load["pkg_w"]
     pre_e = (load["busy_pct"] or 0) / 100
     c0 = time.monotonic()
     names = start_servers(args, arm, cell, args.agents)
-    rows, errors, rounds = [], [], []
+    rows, errors, rounds, during = [], [], [], []
     try:
         wait_healthy(args.agents, args.port0, min(deadline, time.monotonic() + 120))
         for i in range(args.agents):
@@ -329,8 +347,19 @@ def run_cell(args, arm, rep, cell, deadline):
         mhz = {"P": mean_mhz(pcpus), "E": mean_mhz(ecpus)}
         for k in range(args.rounds):
             b0, e0, w0, thr0, sw0 = cpu_busy(), energy_uj(), time.monotonic(), throttle_total(), pswpin()
+            stop, sink, th = threading.Event(), [], None
+            if baseline is not None:
+                th = threading.Thread(target=during_sampler, args=(arm, args.level, ecpus, sink, stop), daemon=True)
+                th.start()
+            t_round0 = time.time()
             r, err = round_turns(args, cell * 10 + k)
+            t_round1 = time.time()
             b1, e1, w1, thr1, sw1 = cpu_busy(), energy_uj(), time.monotonic(), throttle_total(), pswpin()
+            if th is not None:
+                stop.set()
+                th.join()
+                # keep only windows that ended inside the round
+                during += [w for w in sink if t_round0 < w["ts"] <= t_round1]
             rows += r
             errors += err
             rounds.append({"s": w1 - w0, "j": energy_delta_j(e0, e1), "thr": thr1 - thr0, "swp": sw1 - sw0,
@@ -350,10 +379,11 @@ def run_cell(args, arm, rep, cell, deadline):
         "tokens": toks, "joules": round(joules, 2), "idle_w": idle_w,
         "j_per_tok": round(joules / toks, 4) if toks else None,
         "j_per_tok_net": round((joules - idle_w * secs) / toks, 4) if toks and idle_w is not None else None,
-        "errors": errors, "busy": busy, "pre_busy": {"E": round(pre_e, 4)}, "load": load,
+        "errors": errors, "busy": busy, "pre_busy": {"E": round(pre_e, 4)}, "load": load, "during": during,
         "affinity": affinity, "overlap": overlap(affinity), "placement_ok": placement_ok(arm, affinity), "mhz": mhz,
         "throttle_delta": sum(r["thr"] for r in rounds), "pswpin_delta": sum(r["swp"] for r in rounds),
-        "load1": rd("/proc/loadavg").split()[0], "cell_s": round(time.monotonic() - c0 + LOAD_WINDOW_S, 1),
+        "load1": rd("/proc/loadavg").split()[0],
+        "cell_s": round(time.monotonic() - c0 + (LOAD_WINDOW_S if baseline is None else load.get("settle_s", 0)), 1),
     }
 
 
@@ -372,7 +402,7 @@ def prechecks(args):
     if not os.access(f"{RAPL}/energy_uj", os.R_OK):
         raise SystemExit(f"refusing: {RAPL}/energy_uj not readable (run with sudo)")
     steer = sh(os.path.join(os.path.dirname(__file__), "..", "..", "scripts", "k3d-gpu"), "phase-steer", "--json", check=False)
-    return {"kind": "header", "amendment": "A2", "level": args.level, "rounds": args.rounds,
+    return {"kind": "header", "amendment": "A3", "level": args.level, "rounds": args.rounds,
             "load_containers": [r[1] for r in loadtool.running()],
             "image": args.image, "model": args.model, "agents": args.agents,
             "poll": args.poll, "slices": {a: [server_args(a, i) for i in range(args.agents)] for a in PHASES}, "order": ORDER[: args.cells], "cpu_core": rd("/sys/devices/cpu_core/cpus"),
@@ -389,6 +419,13 @@ def run(args):
             out.write(json.dumps(d) + "\n")
             out.flush()
         emit(dict(prechecks(args), t=time.time()))
+        # A3: the level baseline for every settle gap, before anything of the probe runs.
+        base = [dict(loadtool.window(BASELINE_S, expand(E), tag="baseline", level=args.level, phase="baseline"),
+                     kind="baseline") for _ in range(BASELINE_WINDOWS)]
+        for w in base:
+            emit(w)
+        ref = {m: statistics.mean([w[m] for w in base if w.get(m) is not None] or [0])
+               for m in ("busy_pct", "throttle_per_min")}
         emit({"kind": "prep", "slots": prep_slots(args, deadline), "s": round(time.monotonic() - start, 1),
               "t": time.time()})
         reps, longest = {}, FIRST_CELL_EST_S
@@ -398,7 +435,7 @@ def run(args):
                 break
             reps[arm] = reps.get(arm, 0) + 1
             c0 = time.monotonic()
-            emit(run_cell(args, arm, reps[arm], cell, deadline))
+            emit(run_cell(args, arm, reps[arm], cell, deadline, baseline=ref))
             longest = max(longest if cell else 0, time.monotonic() - c0)
         emit({"kind": "end", "wall_s": round(time.monotonic() - start, 1), "t": time.time()})
 
@@ -471,8 +508,12 @@ def mann_whitney_p(lo, hi):
 
 
 def load_match(cells):
-    """A2: load.py matched() over the pre-cell windows of the primary arms."""
-    ws = [c["load"] for c in cells if c.get("load") and c["arm"] in PRIMARY]
+    """load.py matched() over the primary arms' windows: A2 the pre-cell window;
+    A3 the settle pre-window and the during windows (matched_a27)."""
+    ws = []
+    for c in cells:
+        if c["arm"] in PRIMARY:
+            ws += ([c["load"]] if c.get("load") else []) + list(c.get("during") or [])
     return loadtool.matched(ws) if ws else {"matched": False, "verdict": "INCONCLUSIVE: no load windows"}
 
 
@@ -481,7 +522,7 @@ def verdict(s, load=None):
     if any(s.get(a, {}).get("n", 0) < 3 for a in PRIMARY):
         return "INCONCLUSIVE", "a primary arm has fewer than 3 reps"
     if load is not None and not load["matched"]:
-        return "INCONCLUSIVE", load["verdict"]
+        return ("VOID" if load.get("void") else "INCONCLUSIVE"), load["verdict"]
     sp, ps, al = s["SP"], s["PS"], s["ALL"]
     neg = s.get("NEG")
     if any(x["median_ttft"] is None or x["j_per_tok_net"] is None for x in (sp, ps, al)):
@@ -515,6 +556,9 @@ def analyze(path, level=None):
     out = {"arms": s, "verdict": v, "reason": why, "level": level}
     if load is not None:
         out["load"] = load
+        out["verdict_if_matched"] = verdict(s)
+        out["settle_s"] = {a: [c["load"].get("settle_s") for c in cells if c["arm"] == a and c.get("load")]
+                           for a in s}
     sp, ps, al = (s.get(a, {}) for a in PRIMARY)
     if sp.get("j_cells") and ps.get("j_cells"):
         out["ps_over_sp_j"] = round(ps["j_per_tok_net"] / sp["j_per_tok_net"], 4)
@@ -538,7 +582,7 @@ def main(argv=None):
     ap.add_argument("--slots", default="h20-slots", help="host dir for the saved prefix slots (A2)")
     ap.add_argument("--rounds", type=int, default=1, help="scored synchronized rounds per cell (A2: 1)")
     ap.add_argument("--cells", type=int, default=len(ORDER))
-    ap.add_argument("--budget", type=float, default=1170, help="wall seconds, capped at 1170 (19.5 min)")
+    ap.add_argument("--budget", type=float, default=1320, help="wall seconds, capped at 1320 (22 min, A3)")
     ap.add_argument("--port0", type=int, default=18600)
     a = ap.parse_args(argv)
     if a.analyze:
@@ -546,7 +590,7 @@ def main(argv=None):
         return 0
     if not a.image or not a.model or not a.level:
         ap.error("--image (or $IMAGE), --model and --level are required for a run")
-    a.budget = min(a.budget, 1170)
+    a.budget = min(a.budget, 1320)
     try:
         run(a)
     finally:

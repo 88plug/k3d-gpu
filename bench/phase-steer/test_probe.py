@@ -205,6 +205,81 @@ class Outcomes(unittest.TestCase):
             os.unlink(f.name)
 
 
+class Amendment27(unittest.TestCase):
+    """A3: pre-windows from the settle gap and during windows, scored by matched_a27."""
+
+    @staticmethod
+    def win(arm, phase, busy=40.0, thr=100.0, run=3, **kw):
+        w = {"tag": arm, "level": "typical", "phase": phase, "busy_pct": busy, "load1": 8.0,
+             "pkg_w": 60.0, "throttle_per_min": thr, "swap_used_mib": 100.0, "swap_delta_mib": 0.0,
+             "load_expected": 3, "load_running": run, "ts": 1.0}
+        if phase == "pre":
+            w.update(settled=True, settle_s=10)
+        w.update(kw)
+        return w
+
+    def cells(self, pre=None, during=None):
+        out = []
+        for _ in range(3):
+            for arm, jt in (("SP", 1.0), ("PS", 0.8), ("ALL", 0.9)):
+                c = cell(arm, jt)
+                c["load"] = (pre or {}).get(arm) or self.win(arm, "pre")
+                # every E-core is treatment CPU: during busy unmeasured in every arm
+                c["during"] = (during or {}).get(arm) or [self.win(arm, "during", busy=None) for _ in range(3)]
+                out.append(c)
+        out.append(cell("NEG", 1.0, ttft=5))
+        return out
+
+    def test_matched_scores_table(self):
+        cells = self.cells()
+        load = probe.load_match(cells)
+        self.assertEqual(load["rule"], "amendment-27")
+        self.assertTrue(load["matched"], load["verdict"])
+        during_busy = [c for c in load["checks"] if c["phase"] == "during" and c["metric"] == "busy_pct"]
+        self.assertEqual(during_busy[0]["status"], "unmeasured")
+        self.assertEqual(probe.verdict(probe.summarize(cells), load)[0], "SUPPORTED")
+
+    def test_outcomes_never_gate(self):
+        hot = [self.win("PS", "during", busy=None, thr=5000.0, pkg_w=120.0, load1=30.0) for _ in range(3)]
+        cells = self.cells(during={"PS": hot})
+        self.assertEqual(probe.verdict(probe.summarize(cells), probe.load_match(cells))[0], "SUPPORTED")
+
+    def test_pre_throttle_gates(self):
+        cells = self.cells(pre={"PS": self.win("PS", "pre", thr=2000.0)})
+        v, why = probe.verdict(probe.summarize(cells), probe.load_match(cells))
+        self.assertEqual(v, "INCONCLUSIVE")
+        self.assertIn("pre throttle_per_min", why)
+
+    def test_missing_load_is_void(self):
+        cells = self.cells(during={"ALL": [self.win("ALL", "during", busy=None, run=2)]})
+        v, why = probe.verdict(probe.summarize(cells), probe.load_match(cells))
+        self.assertEqual(v, "VOID")
+        self.assertIn("load missing", why)
+
+    def test_analyze_reports_settle_and_verdict_if_matched(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as f:
+            f.write(json.dumps(dict(self.win("baseline", "baseline"), kind="baseline")) + "\n")
+            for c in self.cells(pre={"PS": self.win("PS", "pre", thr=2000.0)}):
+                f.write(json.dumps(dict(c, level="typical")) + "\n")
+        try:
+            out = probe.analyze(f.name, "typical")
+        finally:
+            os.unlink(f.name)
+        self.assertEqual(out["verdict"], "INCONCLUSIVE")
+        self.assertEqual(out["verdict_if_matched"][0], "SUPPORTED")
+        self.assertEqual(out["settle_s"]["SP"], [10, 10, 10])
+
+    def test_a2_windows_keep_legacy_rule(self):
+        cells = []
+        for _ in range(3):
+            for arm, jt in (("SP", 1.0), ("PS", 0.8), ("ALL", 0.9)):
+                c = cell(arm, jt)
+                c["load"] = {k: v for k, v in self.win(arm, "pre").items()
+                             if k not in ("phase", "load_expected", "load_running", "settled", "settle_s")}
+                cells.append(c)
+        self.assertEqual(probe.load_match(cells)["rule"], "legacy")
+
+
 class Cli(unittest.TestCase):
     def test_budget_capped(self):
         with self.assertRaises(SystemExit):
