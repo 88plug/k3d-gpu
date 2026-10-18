@@ -13,7 +13,10 @@ Usage:
   bench/load/load.py stop                                   # removes only this tool's containers
   bench/load/load.py status
   bench/load/load.py sample --seconds S [--windows N] [--tag ARM] [--level L] [--out FILE.jsonl]
-  bench/load/load.py matched FILE.jsonl [...]               # exit 0 MATCHED, 3 INCONCLUSIVE
+                            [--phase baseline|pre|during] [--treatment-cpus LIST]
+  bench/load/load.py settle --baseline BASE.jsonl --tag ARM --level L [--out FILE.jsonl]
+                            # amendment 27: wait (max 60 s) for the level baseline, write the pre-window
+  bench/load/load.py matched FILE.jsonl [...]               # exit 0 MATCHED, 3 INCONCLUSIVE, 4 VOID
   bench/load/load.py order A B --reps 3                     # A B A B A B
 
 Levels (N = the load CPU set, E-cores on a hybrid part; see load_cpus()):
@@ -62,6 +65,22 @@ TOLERANCE = {
     "swap_used_mib": {"abs": 256.0, "rel": 0.0},
     "swap_delta_mib": {"abs": 64.0, "rel": 0.0},    # swap growth per window
 }
+
+# Amendment 27 (EXPERIMENTS.md), for windows that carry a "phase"; windows without
+# one keep the rule above, so earlier runs read the same as when they were scored.
+# COVARIATES are matched across arms under TOLERANCE. "pre" windows are sampled with
+# the arm idle at the end of the settle gap before it starts; "during" windows while
+# it runs, with busy_pct taken over the load CPUs the treatment does not use.
+# OUTCOMES are what the treatment itself moves (a cache-off arm does ~10x the prefill
+# and throttles more): reported per arm during the arm, never gating.
+COVARIATES = {
+    "pre": ("busy_pct", "throttle_per_min", "swap_used_mib", "swap_delta_mib"),
+    "during": ("busy_pct", "swap_used_mib", "swap_delta_mib"),
+}
+OUTCOMES = ("pkg_w", "throttle_per_min", "load1")
+PHASES = ("baseline", "pre", "during")
+SETTLE_WINDOW_S = 5
+SETTLE_MAX_S = 60
 
 
 # ---- CPU set ----------------------------------------------------------------------
@@ -300,19 +319,48 @@ def energy_delta(e0, e1, max_range):
     return d
 
 
-def window(seconds, cpus, sysfs="/sys", proc="/proc", tag=None, level=None):
-    """One sample window: the background load the host carried over `seconds`."""
+def load_running_count():
+    """Running containers of this tool, or None when docker cannot be asked."""
+    try:
+        p = subprocess.run(["docker", "ps", "-q", "--filter", f"label={LABEL}=1",
+                            "--filter", "status=running"], capture_output=True, text=True)
+    except OSError:
+        return None
+    return len(p.stdout.split()) if p.returncode == 0 else None
+
+
+def load_expected(level, cpus):
+    """Containers a level runs on a CPU set; None for an unknown level."""
+    return len(components(level, len(cpus))) if level in LEVELS and cpus else None
+
+
+def window(seconds, cpus, sysfs="/sys", proc="/proc", tag=None, level=None,
+           phase=None, exclude=(), presence=None):
+    """One sample window: the background load the host carried over `seconds`.
+
+    With a phase (amendment 27): busy_pct covers the load CPUs minus `exclude` (the
+    CPUs the treatment uses), and the window records how many of this tool's load
+    containers ran (the minimum of a count at its start and at its end, via
+    `presence`, default docker) against the number the level runs."""
+    if phase is not None:
+        if phase not in PHASES:
+            raise ValueError(f"phase must be one of {PHASES}")
+        presence = presence or load_running_count
+    busy_set = sorted(set(cpus) - set(exclude))
     zone = rapl_zone(sysfs)
     max_range = int(_read(f"{zone}/max_energy_range_uj") or 0) if zone else 0
+    n0 = presence() if presence else None
     s0, sw0, th0, e0 = _read(f"{proc}/stat"), swap_used_mib(_read(f"{proc}/meminfo")), throttle_total(sysfs), read_energy_uj(zone)
     t0 = time.monotonic()
     time.sleep(seconds)
     e1, dt = read_energy_uj(zone), time.monotonic() - t0
     s1, sw1, th1 = _read(f"{proc}/stat"), swap_used_mib(_read(f"{proc}/meminfo")), throttle_total(sysfs)
-    b0, t0j = cpu_times(s0, cpus)
-    b1, t1j = cpu_times(s1, cpus)
+    n1 = presence() if presence else None
+    b0, t0j = cpu_times(s0, busy_set)
+    b1, t1j = cpu_times(s1, busy_set)
     de = energy_delta(e0, e1, max_range)
-    return {
+    dt = max(dt, 1e-9)
+    w = {
         "ts": time.time(), "tag": tag, "level": level, "seconds": round(dt, 3),
         "cpus": format_cpulist(cpus),
         "busy_pct": round(100 * (b1 - b0) / (t1j - t0j), 2) if t1j > t0j else None,
@@ -322,6 +370,34 @@ def window(seconds, cpus, sysfs="/sys", proc="/proc", tag=None, level=None):
         "swap_used_mib": round(sw1, 1),
         "swap_delta_mib": round(sw1 - sw0, 1),
     }
+    if phase is not None:
+        w.update(phase=phase, busy_cpus=format_cpulist(busy_set),
+                 load_expected=load_expected(level, cpus),
+                 load_running=None if n0 is None or n1 is None else min(n0, n1))
+    return w
+
+
+def settle(baseline, sample, window_s=SETTLE_WINDOW_S, max_s=SETTLE_MAX_S):
+    """Hog-decay gap (amendment 27): sample `window_s` windows until one reads busy_pct
+    and throttle_per_min within TOLERANCE of the level baseline (the limit is
+    max(abs, rel * baseline)), or `max_s` has passed. Returns the last window, which is
+    the arm's pre-window, with "settled" and "settle_s" added. A metric the baseline
+    did not measure is not waited on."""
+    elapsed = 0
+    while True:
+        w = sample(window_s)
+        elapsed += window_s
+        ok = True
+        for m in ("busy_pct", "throttle_per_min"):
+            base = baseline.get(m)
+            if base is None:
+                continue
+            tol = TOLERANCE[m]
+            v = w.get(m)
+            if v is None or abs(v - base) > max(tol["abs"], tol["rel"] * abs(base)):
+                ok = False
+        if ok or elapsed >= max_s:
+            return dict(w, settled=ok, settle_s=elapsed)
 
 
 # ---- matching -----------------------------------------------------------------------
@@ -330,44 +406,127 @@ def _mean(xs):
     return sum(xs) / len(xs)
 
 
-def matched(windows):
-    """Decide whether the arms' background load is matched under TOLERANCE.
-
-    windows: sample dicts carrying "tag" (the arm). Returns
-    {"matched": bool, "verdict": "MATCHED" | "INCONCLUSIVE: ...", "checks": [...]}.
-    How high the load is never enters the decision; only the spread across arms."""
+def _by_arm(windows):
     arms = {}
     for w in windows:
         arms.setdefault(w.get("tag"), []).append(w)
+    return arms
+
+
+def _spread(arms, metric):
+    """Per-arm means of one metric: (check dict, spread or None, have-all bool)."""
+    per = {}
+    for arm, ws in arms.items():
+        vals = [w[metric] for w in ws if w.get(metric) is not None]
+        per[arm] = _mean(vals) if vals else None
+    have = [v for v in per.values() if v is not None]
+    c = {"metric": metric, "arms": {str(k): (round(v, 3) if v is not None else None) for k, v in per.items()}}
+    return c, have, len(have) == len(per)
+
+
+def _check(arms, metric, label, reasons):
+    """One TOLERANCE check of the per-arm means; appends a reason on failure."""
+    tol = TOLERANCE[metric]
+    c, have, complete = _spread(arms, metric)
+    if not have:
+        c["status"] = "unmeasured"
+    elif not complete:
+        c["status"] = "fail"
+        reasons.append(f"{label} measured in some arms only")
+    else:
+        spread = max(have) - min(have)
+        limit = max(tol["abs"], tol["rel"] * max(abs(v) for v in have))
+        c.update(spread=round(spread, 3), limit=round(limit, 3))
+        c["status"] = "ok" if spread <= limit else "fail"
+        if spread > limit:
+            reasons.append(f"{label} spread {spread:.2f} > {limit:.2f}")
+    return c
+
+
+def _verdict(reasons):
+    return "MATCHED" if not reasons else "INCONCLUSIVE: load unmatched (" + "; ".join(reasons) + ")"
+
+
+def matched(windows):
+    """Decide whether the arms' background load is matched.
+
+    windows: sample dicts carrying "tag" (the arm). Windows with a "phase" are judged
+    by amendment 27 (matched_a27); a set without any keeps the earlier rule
+    (every TOLERANCE metric gates), so runs scored under it read the same.
+    Returns {"matched": bool, "verdict": "MATCHED" | "INCONCLUSIVE: ..." | "VOID: ...",
+    "rule": ..., "checks": [...], ...}. How high the load is never enters the decision;
+    only the spread across arms."""
+    if any("phase" in w for w in windows):
+        return matched_a27(windows)
+    arms = _by_arm(windows)
     checks, reasons = [], []
     if len(arms) < 2:
         reasons.append(f"need >= 2 arms, got {sorted(map(str, arms))}")
     levels = {w.get("level") for w in windows}
     if len(levels) > 1:
         reasons.append(f"mixed load levels {sorted(map(str, levels))}")
-    for metric, tol in TOLERANCE.items():
-        per = {}
-        for arm, ws in arms.items():
-            vals = [w[metric] for w in ws if w.get(metric) is not None]
-            per[arm] = _mean(vals) if vals else None
-        have = [v for v in per.values() if v is not None]
-        c = {"metric": metric, "arms": {str(k): (round(v, 3) if v is not None else None) for k, v in per.items()}}
-        if not have:
-            c["status"] = "unmeasured"
-        elif len(have) < len(per):
-            c["status"] = "fail"
-            reasons.append(f"{metric} measured in some arms only")
-        else:
-            spread = max(have) - min(have)
-            limit = max(tol["abs"], tol["rel"] * max(abs(v) for v in have))
-            c.update(spread=round(spread, 3), limit=round(limit, 3))
-            c["status"] = "ok" if spread <= limit else "fail"
-            if spread > limit:
-                reasons.append(f"{metric} spread {spread:.2f} > {limit:.2f}")
-        checks.append(c)
-    ok = not reasons
-    return {"matched": ok, "verdict": "MATCHED" if ok else "INCONCLUSIVE: load unmatched (" + "; ".join(reasons) + ")",
-            "checks": checks}
+    for metric in TOLERANCE:
+        checks.append(_check(arms, metric, metric, reasons))
+    return {"matched": not reasons, "verdict": _verdict(reasons), "rule": "legacy", "checks": checks}
+
+
+def matched_a27(windows):
+    """Amendment 27. Gating: the COVARIATES of each phase (pre-window busy, throttle and
+    swap with the arm idle after the settle gap; during-arm busy of the load CPUs the
+    treatment does not use, and swap). Reported, never gating: the OUTCOMES during the
+    arm. VOID (never scored) when any window saw fewer load containers running than
+    its level runs, or could not count them. Every arm needs a pre-window. "baseline"
+    windows (the level reference for settle) do not enter."""
+    void, reasons = [], []
+    if any("phase" not in w for w in windows):
+        reasons.append("window without phase in an amendment-27 run")
+    ws = [w for w in windows if w.get("phase") in ("pre", "during")]
+    arms = _by_arm(ws)
+    if len(arms) < 2:
+        reasons.append(f"need >= 2 arms, got {sorted(map(str, arms))}")
+    levels = {w.get("level") for w in ws}
+    if len(levels) > 1:
+        reasons.append(f"mixed load levels {sorted(map(str, levels))}")
+    for w in ws:
+        if w.get("level") == "none":
+            continue
+        exp, run = w.get("load_expected"), w.get("load_running")
+        where = f"arm {w.get('tag')} {w.get('phase')} window"
+        if exp is None or run is None:
+            void.append(f"load presence unverified ({where})")
+        elif run < exp:
+            void.append(f"load missing: {run} of {exp} containers running ({where})")
+    checks = []
+    for phase, metrics in COVARIATES.items():
+        sub = {a: [w for w in aw if w["phase"] == phase] for a, aw in arms.items()}
+        if phase == "pre":
+            missing = sorted(str(a) for a, aw in sub.items() if not aw)
+            if missing:
+                reasons.append(f"no pre-window for arm(s) {', '.join(missing)}")
+            sub = {a: aw for a, aw in sub.items() if aw}
+        if not any(sub.values()):
+            continue
+        for metric in metrics:
+            c = _check(sub, metric, f"{phase} {metric}", reasons)
+            c["phase"] = phase
+            checks.append(c)
+    outcomes = []
+    during = {a: [w for w in aw if w["phase"] == "during"] for a, aw in arms.items()}
+    for metric in OUTCOMES:
+        c, have, _ = _spread(during, metric)
+        if have:
+            c["spread"] = round(max(have) - min(have), 3)
+        outcomes.append(c)
+    unsettled = {}
+    for w in ws:
+        if w["phase"] == "pre" and w.get("settled") is False:
+            unsettled[str(w.get("tag"))] = unsettled.get(str(w.get("tag")), 0) + 1
+    if void:
+        verdict = "VOID: " + "; ".join(void)
+    else:
+        verdict = _verdict(reasons)
+    return {"matched": not void and not reasons, "void": bool(void), "verdict": verdict,
+            "rule": "amendment-27", "checks": checks, "outcomes": outcomes, "unsettled": unsettled}
 
 
 def order(arms, reps):
@@ -395,6 +554,17 @@ def main(argv=None):
     p.add_argument("--level")
     p.add_argument("--cpus")
     p.add_argument("--out", help="append JSON lines here (default: stdout)")
+    p.add_argument("--phase", choices=PHASES, help="amendment 27 window phase")
+    p.add_argument("--treatment-cpus", default="",
+                   help="CPUs the treatment uses; left out of busy_pct (amendment 27)")
+    p = sub.add_parser("settle")
+    p.add_argument("--baseline", required=True, help="JSON lines of the level's baseline windows")
+    p.add_argument("--tag", required=True)
+    p.add_argument("--level", required=True, choices=LEVELS)
+    p.add_argument("--cpus")
+    p.add_argument("--window", type=float, default=SETTLE_WINDOW_S)
+    p.add_argument("--max", type=float, default=SETTLE_MAX_S)
+    p.add_argument("--out", help="append the pre-window here (default: stdout)")
     p = sub.add_parser("matched")
     p.add_argument("files", nargs="+")
     p = sub.add_parser("order")
@@ -422,11 +592,30 @@ def main(argv=None):
         fh = open(o.out, "a") if o.out else sys.stdout
         try:
             for _ in range(o.windows):
-                fh.write(json.dumps(window(o.seconds, cpus, tag=o.tag, level=o.level)) + "\n")
+                w = window(o.seconds, cpus, tag=o.tag, level=o.level, phase=o.phase,
+                           exclude=parse_cpulist(o.treatment_cpus))
+                fh.write(json.dumps(w) + "\n")
                 fh.flush()
         finally:
             if o.out:
                 fh.close()
+    elif o.cmd == "settle":
+        with open(o.baseline) as f:
+            base = [json.loads(line) for line in f if line.strip()]
+        ref = {}
+        for m in ("busy_pct", "throttle_per_min"):
+            vals = [w[m] for w in base if w.get(m) is not None]
+            ref[m] = _mean(vals) if vals else None
+        w = settle(ref, lambda s: window(s, cpus, tag=o.tag, level=o.level, phase="pre"),
+                   window_s=o.window, max_s=o.max)
+        line = json.dumps(w) + "\n"
+        if o.out:
+            with open(o.out, "a") as f:
+                f.write(line)
+        else:
+            sys.stdout.write(line)
+        print(f"settle: {'settled' if w['settled'] else 'NOT settled'} after {w['settle_s']:g} s",
+              file=sys.stderr)
     elif o.cmd == "matched":
         ws = []
         for path in o.files:
@@ -434,7 +623,7 @@ def main(argv=None):
                 ws += [json.loads(line) for line in f if line.strip()]
         r = matched(ws)
         print(json.dumps(r, indent=1))
-        return 0 if r["matched"] else 3
+        return 0 if r["matched"] else 4 if r.get("void") else 3
     elif o.cmd == "order":
         print(" ".join(order(o.arms, o.reps)))
     return 0
