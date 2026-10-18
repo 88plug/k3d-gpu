@@ -91,7 +91,7 @@ class StubPair(unittest.TestCase):
 
     def test_load_window_before_every_segment(self):
         lo = os.path.join(self.tmp, "load.jsonl")
-        env = {"VS_LOAD_WINDOW_S": "0.05", "VS_LOAD_OUT": lo, "VS_LOAD_LEVEL": "typical"}
+        env = {"VS_LOAD_WINDOW_S": "0.05", "VS_LOAD_OUT": lo, "VS_LOAD_LEVEL": "typical", "VS_LOAD_SETTLE_S": "0.2"}
         old = {k: os.environ.get(k) for k in env}
         os.environ.update(env)
         try:
@@ -107,6 +107,12 @@ class StubPair(unittest.TestCase):
         order = [a for r in res["rounds"] for a in r["order"]]
         self.assertEqual([w["tag"] for w in wins], order)
         self.assertTrue(all(w["level"] == "typical" for w in wins))
+        # Each window follows an idle settle gap of VS_LOAD_SETTLE_S (H31/H32 amendment A2).
+        self.assertTrue(all(w["settle_s"] == 0.2 for w in wins))
+        segs = [r[side] for r in res["rounds"] for side in ("k3d", "vs")]
+        segs.sort(key=lambda s: s["t_start"])
+        for prev, nxt in zip(segs, segs[1:]):
+            self.assertGreaterEqual(nxt["t_start"] - (prev["t_start"] + prev["wall_s"]), 0.2)
         starts = [r[side]["t_start"] for r in res["rounds"] for side in ("k3d", "vs")]
         self.assertTrue(all(isinstance(t, float) for t in starts))
         import vs_matched

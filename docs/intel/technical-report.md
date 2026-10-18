@@ -8,9 +8,9 @@ k3d-gpu turns one Linux host into a single-node k3s cluster (k3d) that detects t
 
 This report covers what was measured, and how. Every result comes from one host: an i9-13900T (Raptor Lake-S, 8 P-cores and 16 E-cores, UHD 770 iGPU with no XMX, AVX-VNNI, no AMX, no NPU). It is a T-SKU rated at 35 W base power, but its firmware runs PL1 = PL2 = 117 W, so it does not run the T-series 35 W envelope.
 
-- Ten hypotheses are SUPPORTED. All ten are scoped to that host.
+- Eleven hypotheses are SUPPORTED. All eleven are scoped to that host.
 - Seven are REFUTED. Six of them changed shipped defaults.
-- Fourteen are INCONCLUSIVE, mostly because the shared host throttles or its load was unmatched. Eleven are PENDING, nine of them the agent benchmark (H40-H48), pre-registered on 2026-10-17.
+- Thirteen are INCONCLUSIVE, mostly because the shared host throttles or its load was unmatched. Eleven are PENDING, nine of them the agent benchmark (H40-H48), pre-registered on 2026-10-17.
 - Every other Intel family is detected and configured in fixture tests only. None has a measurement.
 
 No world-first, superlative or priority claim is made; [docs/provenance.md](../provenance.md) supports none.
@@ -61,6 +61,7 @@ The host is a shared, live machine: about 53 other containers, about 80 W idle p
 | H30 | Under matched background load, the `k3d-gpu up` + `agent up` defaults (OVMS int4 on the 16 P-cores) decoded Qwen3-4B at 10.96 tok/s against Ollama 0.40.5 defaults at 7.05 tok/s (Q4_K_M, all CPUs), 3/3 rounds [ledger:H30] | One host, `typical` load, n = 12 requests per arm, 128 tokens. Configuration on the same CPU, not a GPU |
 | H19 | `k3d-gpu tune run --budget 4` did not crown noise under matched `typical` load: it kept the default (decision `incumbent`), and its only screened neighbour (`CORES=efficient`) failed the gates in a 3+3 replication (ratio 1.32, CI 0.73-1.87, p = 0.35) [ledger:H19] | Derived confidence 0.25. Screened 1 of 10 neighbours, so it shows no false crown, not that the default is best or that tuning beats it |
 | H34 | Same-engine OVMS Fast Draft (0.6B int4 draft on the P-cores) beat the 4B int4 target alone under matched `typical` background load on a busy box: 1.39x decode tok/s and 0.75x package J/token, B better in 12/12 interleaved pairs [ledger:H34] | OVMS 2026.4.1 serial Fast Draft, gamma 5, single stream. The `heavy` level was load-unmatched (INCONCLUSIVE) |
+| H31 | Under matched background load, the `k3d-gpu up` + `agent up` defaults (OVMS int4 on the 16 P-cores with CPU Fast Draft) decoded Qwen3-4B at 15.60 tok/s against llama.cpp b11706 defaults at 10.31 tok/s (Q4_K_M, all CPUs), 3/3 rounds [ledger:H31] | One host, `typical` load, n = 12 requests per arm, 128 tokens. Configuration on the same CPU, not a GPU |
 
 ### REFUTED (all but H27 changed a default)
 
@@ -83,10 +84,10 @@ The host is a shared, live machine: about 53 other containers, about 80 W idle p
 | H9 | Cold `quickstart` reached a working Open WebUI chat inside its budget [ledger:H9] | n=1, warm arm not run |
 | H22 | The iGPU draft lost to the P-core draft in 16/16 paired rounds. Separately, a same-engine P-core draft beat the target alone in 8/8 rounds in both runs; that matches Intel's published Lunar Lake CPU-draft ratio [provenance:P222] [ledger:H22] | The noise guardrail fired in both runs: the probe's own 16-CPU load throttles the package. The same-engine draft was tested on its own as H34 (SUPPORTED) |
 | H20, H21, H23, H24, H25, H29 | Energy and phase-steering mechanisms [ledger:H20] [ledger:H21] [ledger:H23] [ledger:H24] [ledger:H25] [ledger:H29] | Idle package power spread swamped the signal, or the run was partial |
-| H31, H32 | The `k3d-gpu up` + `agent up` defaults (CPU, 16 P-cores) decoded faster than llama.cpp b11706 and plain OVMS 2026.4.1 defaults in 3/3 rounds each [ledger:H31] [ledger:H32] | Background load unmatched across arms (throttle events, and 1-min load for H32), likely carry-over from the competitors' all-CPU segments; plain OVMS's device was not logged |
+| H32 | The `k3d-gpu up` + `agent up` defaults (CPU, 16 P-cores, Fast Draft) decoded faster than plain OVMS 2026.4.1 defaults, which picked the iGPU, in 3/3 rounds [ledger:H32] | Background load unmatched across arms on throttle events, in both the A1 and the A2 run |
 | H26 | E-core L2-cluster confinement of a DRAM-bandwidth neighbour: the measured R (p95 inflation, cluster over spread) was 0.83, CI 0.61-0.87, at `typical` background load, which is not a verdict [ledger:H26] | Background load unmatched across arms at both levels (hog carry-over into the load windows; the `heavy` load was removed mid-run) |
 
-PENDING with a pre-registration: H5 (prefill guard on/off with an E-core neighbour), H28 (image-volume model sharing), and the agent benchmark H40-H48 ([agent-benchmarks.md](../agent-benchmarks.md): real EAT blueprint flows and BFCL, graded, on a busy box). The external bake-offs are in the tables above: only the Ollama one is decided, so llama.cpp and plain OVMS carry no "faster than" claim.
+PENDING with a pre-registration: H5 (prefill guard on/off with an E-core neighbour), H28 (image-volume model sharing), and the agent benchmark H40-H48 ([agent-benchmarks.md](../agent-benchmarks.md): real EAT blueprint flows and BFCL, graded, on a busy box). The external bake-offs are in the tables above: the Ollama and llama.cpp ones are decided, so plain OVMS carries no "faster than" claim.
 
 ## Per-family support matrix
 
