@@ -1,0 +1,255 @@
+{
+ "header": {
+  "kind": "header",
+  "image": "openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58",
+  "kernel": "6.6.128-1-MANJARO",
+  "start": 1792331401.2786803,
+  "cpu": "13th Gen Intel(R) Core(TM) i9-13900T",
+  "predictions_m0": {
+   "A": {
+    "decode_c1": 15.7,
+    "prefill": 172.0,
+    "c4_agg": 62.6
+   },
+   "B": {
+    "decode_c1": 15.7,
+    "prefill": 86.0,
+    "c4_agg": 62.6
+   },
+   "C": {
+    "decode_c1": 15.7,
+    "prefill": 32.2,
+    "c4_agg": 32.2
+   },
+   "D": {
+    "decode_c1": 15.7,
+    "prefill": 64.5,
+    "c4_agg": 62.6
+   }
+  },
+  "level": "typical"
+ },
+ "cells": [
+  {
+   "arm": "B",
+   "metric": "decode_c1",
+   "n": 6,
+   "measured": 11.73,
+   "m0": 13.9,
+   "err": -0.156,
+   "spread": 0.03
+  },
+  {
+   "arm": "B",
+   "metric": "prefill",
+   "n": 4,
+   "measured": 107.54,
+   "m0": 91.81,
+   "err": 0.171,
+   "spread": 0.005
+  },
+  {
+   "arm": "B",
+   "metric": "c4_agg",
+   "n": 2,
+   "measured": 38.86,
+   "m0": 48.35,
+   "err": -0.196,
+   "spread": 0.039
+  },
+  {
+   "arm": "C",
+   "metric": "decode_c1",
+   "n": 6,
+   "measured": 7.36,
+   "m0": 13.9,
+   "err": -0.47,
+   "spread": 0.044
+  },
+  {
+   "arm": "C",
+   "metric": "prefill",
+   "n": 4,
+   "measured": 46.66,
+   "m0": 34.38,
+   "err": 0.357,
+   "spread": 0.017
+  },
+  {
+   "arm": "C",
+   "metric": "c4_agg",
+   "n": 2,
+   "measured": 19.8,
+   "m0": 24.87,
+   "err": -0.204,
+   "spread": 0.031
+  },
+  {
+   "arm": "D",
+   "metric": "decode_c1",
+   "n": 6,
+   "measured": 6.14,
+   "m0": 13.9,
+   "err": -0.558,
+   "spread": 0.022
+  },
+  {
+   "arm": "D",
+   "metric": "prefill",
+   "n": 4,
+   "measured": 38.97,
+   "m0": 68.86,
+   "err": -0.434,
+   "spread": 0.021
+  },
+  {
+   "arm": "D",
+   "metric": "c4_agg",
+   "n": 2,
+   "measured": 15.9,
+   "m0": 48.35,
+   "err": -0.671,
+   "spread": 0.02
+  }
+ ],
+ "triad_gbs": {
+  "A": 39.45,
+  "B": 38.05,
+  "C": 26.75,
+  "D": 29.2
+ },
+ "m1_decode": {
+  "B": {
+   "measured": 11.73,
+   "m1": 13.4,
+   "err": -0.125
+  },
+  "C": {
+   "measured": 7.36,
+   "m1": 9.42,
+   "err": -0.219
+  },
+  "D": {
+   "measured": 6.14,
+   "m1": 10.29,
+   "err": -0.403
+  }
+ },
+ "absolute_decode": {
+  "A": {
+   "measured": 13.9,
+   "m0_abs": 15.7,
+   "m0_abs_err": -0.115,
+   "baseline": 25.45,
+   "baseline_err": -0.454
+  },
+  "B": {
+   "measured": 11.73,
+   "m0_abs": 15.7,
+   "m0_abs_err": -0.253,
+   "baseline": 25.45,
+   "baseline_err": -0.539
+  },
+  "C": {
+   "measured": 7.36,
+   "m0_abs": 15.7,
+   "m0_abs_err": -0.531,
+   "baseline": 25.45,
+   "baseline_err": -0.711
+  },
+  "D": {
+   "measured": 6.14,
+   "m0_abs": 15.7,
+   "m0_abs_err": -0.609,
+   "baseline": 25.45,
+   "baseline_err": -0.759
+  }
+ },
+ "absolute_decode_mape": {
+  "m0": 0.464,
+  "baseline": 0.67
+ },
+ "a_vs_h6": -0.11251160332352883,
+ "a_drift": 0.029387245558499153,
+ "mape": 0.358,
+ "load": {
+  "matched": false,
+  "verdict": "INCONCLUSIVE: load unmatched (load1 spread 8.19 > 2.82; throttle_per_min spread 665.20 > 417.74)",
+  "checks": [
+   {
+    "metric": "busy_pct",
+    "arms": {
+     "A": 43.705,
+     "B": 44.215,
+     "C": 47.455,
+     "D": 45.77
+    },
+    "spread": 3.75,
+    "limit": 5.0,
+    "status": "ok"
+   },
+   {
+    "metric": "load1",
+    "arms": {
+     "A": 10.595,
+     "B": 15.285,
+     "C": 16.43,
+     "D": 18.785
+    },
+    "spread": 8.19,
+    "limit": 2.818,
+    "status": "fail"
+   },
+   {
+    "metric": "pkg_w",
+    "arms": {
+     "A": 93.825,
+     "B": 94.79,
+     "C": 93.42,
+     "D": 93.485
+    },
+    "spread": 1.37,
+    "limit": 9.479,
+    "status": "ok"
+   },
+   {
+    "metric": "throttle_per_min",
+    "arms": {
+     "A": 1084.18,
+     "B": 1670.945,
+     "C": 1018.325,
+     "D": 1005.745
+    },
+    "spread": 665.2,
+    "limit": 417.736,
+    "status": "fail"
+   },
+   {
+    "metric": "swap_used_mib",
+    "arms": {
+     "A": 153765.6,
+     "B": 153763.7,
+     "C": 153758.05,
+     "D": 153694.45
+    },
+    "spread": 71.15,
+    "limit": 256.0,
+    "status": "ok"
+   },
+   {
+    "metric": "swap_delta_mib",
+    "arms": {
+     "A": -0.8,
+     "B": -0.1,
+     "C": -1.1,
+     "D": -0.85
+    },
+    "spread": 1.0,
+    "limit": 64.0,
+    "status": "ok"
+   }
+  ]
+ },
+ "verdict": "INCONCLUSIVE: load unmatched (load1 spread 8.19 > 2.82; throttle_per_min spread 665.20 > 417.74)",
+ "verdict_if_matched": "REFUTED (row 3: M0 and M1 decode fail)"
+}

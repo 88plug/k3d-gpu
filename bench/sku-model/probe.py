@@ -19,12 +19,20 @@ Arms on an i9-13900T (cpus 0-15 = 8 P-cores x 2 threads, 16-31 = 16 E-cores):
   D 16E cpus 16-31, 16 threads, ECORE_ONLY
 Only containers named sci-h24-* are started or removed. No sysfs writes.
 Stdlib only.
+
+Amendment A1 (matched background load, EXPERIMENTS.md "H24 Amendment A1"): with
+--level, the caller holds bench/load/load.py at that level for the whole run. Each
+visit's 60 s idle wait is replaced by one load.py window (--load-window-s, the arm
+idle) tagged with the arm. The scorer calls a level INCONCLUSIVE when those windows
+are unmatched under load.py TOLERANCE; busy and throttle flags are recorded, not
+gates (the load match covers them); the swap flag stays a gate.
 """
 
 from __future__ import annotations
 
 import argparse
 import glob
+import importlib.util
 import json
 import os
 import secrets
@@ -41,6 +49,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(REPO, "console"))
 import sku_model  # noqa: E402
+
+_spec = importlib.util.spec_from_file_location("loadtool", os.path.join(REPO, "bench", "load", "load.py"))
+loadtool = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(loadtool)
 
 # Internal deadline sits 120 s under the outer `timeout 1140` so cleanup and
 # scoring finish before the outer SIGTERM.
@@ -115,7 +127,8 @@ def busy(t0, t1, cpus):
 
 
 def rapl_uj():
-    return int(read("/sys/class/powercap/intel-rapl:0/energy_uj", "0") or 0)
+    # energy_uj is root-only: load.py reads it directly when allowed, else via sudo for that read only.
+    return loadtool.read_energy_uj("/sys/class/powercap/intel-rapl:0") or 0
 
 
 def rapl_max_uj():
@@ -262,19 +275,25 @@ def wait_ready(arms):
 
 
 # ------------------------------------------------------------- visit
-def visit(arm, idx):
+def visit(arm, idx, level=None, load_window_s=10.0, load_cpus=None):
     a = ARMS[arm]
     port, cpus = a["port"], list(a["cpu_list"])
-    rec = {"arm": arm, "visit": idx, "t": time.time()}
-    # Wait (up to IDLE_WAIT_S) for the arm cpuset to go quiet; flag if it never does.
+    rec = {"arm": arm, "visit": idx, "t": time.time(), "level": level}
     waited = time.monotonic()
-    while True:
+    if level:
+        # A1: one load.py window with the arm idle, tagged with the arm; no idle wait.
         s0 = cpu_times()
-        time.sleep(5)
-        s1 = cpu_times()
-        rec["idle_busy"] = busy(s0, s1, cpus)
-        if rec["idle_busy"] <= 0.10 or time.monotonic() - waited >= IDLE_WAIT_S or left() < 200:
-            break
+        rec["load"] = loadtool.window(load_window_s, load_cpus or loadtool.load_cpus(), tag=arm, level=level)
+        rec["idle_busy"] = busy(s0, cpu_times(), cpus)
+    else:
+        # Wait (up to IDLE_WAIT_S) for the arm cpuset to go quiet; flag if it never does.
+        while True:
+            s0 = cpu_times()
+            time.sleep(5)
+            s1 = cpu_times()
+            rec["idle_busy"] = busy(s0, s1, cpus)
+            if rec["idle_busy"] <= 0.10 or time.monotonic() - waited >= IDLE_WAIT_S or left() < 200:
+                break
     rec["idle_wait_s"] = round(time.monotonic() - waited, 1)
     rec["flag_busy"] = rec["idle_busy"] > 0.10
     others = {o: container_usage_usec(o) for o in ARMS if o != arm}
@@ -367,8 +386,9 @@ def score(path):
         meas[arm] = {m: (statistics.median(x) if x else None,
                          (max(x) - min(x)) / statistics.median(x) if len(x) > 1 else None, len(x))
                      for m, x in (("decode_c1", d), ("prefill", p), ("c4_agg", c))}
-        meas[arm]["flagged_visits"] = sum(1 for v in vs if v["flag_busy"] or v["flag_swap"]
-                                          or v["throttle_delta"] > 0)
+        # A1: under matched load busy and throttle are recorded, not gates.
+        meas[arm]["flagged_visits"] = sum(1 for v in vs if v["flag_swap"] or (
+            not v.get("load") and (v["flag_busy"] or v["throttle_delta"] > 0)))
     # Calibration from this run's arm A (pre-registered), not from H6.
     k = {m: (meas["A"][m][0] / pred["A"][m]) if meas["A"][m][0] else None
          for m in ("decode_c1", "prefill", "c4_agg")}
@@ -424,7 +444,12 @@ def score(path):
                       if meas["A"]["decode_c1"][0] else None)
     out["a_drift"] = a_drift
     out["mape"] = round(statistics.mean(errs), 3) if errs else None
+    windows = [v["load"] for v in visits if v.get("load")]
+    out["load"] = loadtool.matched(windows) if windows else None
     out["verdict"] = verdict(out, meas)
+    if out["load"] and not out["load"]["matched"]:
+        out["verdict_if_matched"] = out["verdict"]
+        out["verdict"] = out["load"]["verdict"]
     print(json.dumps(out, indent=1))
     return out
 
@@ -436,7 +461,9 @@ def verdict(out, meas):
         return "INCONCLUSIVE (missing cells: partial run)"
     spreads = [meas[a][m][1] for a in ARMS for m in ("decode_c1", "prefill", "c4_agg")
                if meas[a][m][1] is not None]
-    if (out["a_drift"] or 0) > 0.10 or any(s > 0.20 for s in spreads) or any(
+    if out["a_drift"] is None:
+        return "INCONCLUSIVE (row 6: no drift sentinel, A measured once)"
+    if out["a_drift"] > 0.10 or any(s > 0.20 for s in spreads) or any(
             meas[a]["flagged_visits"] >= 2 for a in ARMS):
         return "INCONCLUSIVE (row 6: noise floor)"
     if not any(abs(c["err"]) > 0.25 for c in cells) and out["mape"] <= 0.25:
@@ -489,6 +516,10 @@ def main():
     ap.add_argument("--out")
     ap.add_argument("--score")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--level", choices=loadtool.LEVELS,
+                    help="A1: load.py level the caller holds (recorded; one load window per visit)")
+    ap.add_argument("--load-window-s", type=float, default=10.0)
+    ap.add_argument("--load-cpus", help="load.py window CPUs (default: load.py load_cpus())")
     a = ap.parse_args()
     # SIGTERM (outer timeout) -> SystemExit, so the `finally` below removes sci-h24-*.
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
@@ -523,7 +554,7 @@ def main():
           "kernel": os.uname().release, "start": time.time(),
           "cpu": next((ln.split(":", 1)[1].strip() for ln in open("/proc/cpuinfo")
                        if ln.startswith("model name")), None),
-          "predictions_m0": sku_model.h24_arms()})
+          "predictions_m0": sku_model.h24_arms(), "level": a.level})
     try:
         for arm in ARMS:
             sh(*launch(image, models, arm))
@@ -563,7 +594,8 @@ def main():
             if t is not None and t >= 100:
                 emit({"kind": "visit_skipped", "arm": arm, "reason": f"coretemp {t}"})
                 continue
-            emit(dict(visit(arm, i), kind="visit"))
+            emit(dict(visit(arm, i, a.level, a.load_window_s,
+                            loadtool.parse_cpulist(a.load_cpus) if a.load_cpus else None), kind="visit"))
     finally:
         for arm in ARMS:
             sh("docker", "rm", "-f", name(arm), check=False)

@@ -22,14 +22,14 @@ import probe  # noqa: E402
 PRED = probe.sku_model.h24_arms()
 
 
-def raw_file(factor=None, triad=None, drift=1.0, flag_arm=None, drop=None):
+def raw_file(factor=None, triad=None, drift=1.0, flag_arm=None, drop=None, load=None, drop_last_a=False):
     """Visits that measure PRED x factor[arm][metric] (default 1)."""
     factor = factor or {}
     rows = [{"kind": "header", "predictions_m0": PRED}]
     for arm, g in (triad or {}).items():
         rows += [{"kind": "triad", "arm": arm, "rep": r, "gbs": g} for r in range(2)]
     for i, arm in enumerate(probe.ORDER):
-        if drop and arm in drop:
+        if (drop and arm in drop) or (drop_last_a and arm == "A" and i > 0):
             continue
         f = factor.get(arm, {})
         last_a = arm == "A" and i == len(probe.ORDER) - 1
@@ -40,8 +40,13 @@ def raw_file(factor=None, triad=None, drift=1.0, flag_arm=None, drop=None):
         samples += [["prefill", {"prompt_tokens": 500, "ttft_s": 500 / p, "completion_tokens": 16}]
                     for _ in range(2)]
         samples.append(["c4", {"agg_tok_s": c, "completion_tokens": 512}])
-        rows.append({"kind": "visit", "arm": arm, "visit": i, "void": False, "samples": samples,
-                     "flag_busy": arm == flag_arm, "flag_swap": False, "throttle_delta": 0})
+        v = {"kind": "visit", "arm": arm, "visit": i, "void": False, "samples": samples,
+             "flag_busy": arm == flag_arm, "flag_swap": False, "throttle_delta": 0}
+        if load:
+            # A1: a load.py window per visit; busy/throttle flags fire but are not gates.
+            v.update(flag_busy=True, throttle_delta=500, level="typical",
+                     load=dict(load(arm), tag=arm, level="typical"))
+        rows.append(v)
     f = tempfile.NamedTemporaryFile("w", delete=False, suffix=".jsonl")
     f.write("\n".join(json.dumps(r) for r in rows) + "\n")
     f.close()
@@ -78,6 +83,27 @@ class Score(unittest.TestCase):
 
     def test_flagged_visits_inconclusive(self):
         self.assertIn("row 6", scored(raw_file(flag_arm="C"))["verdict"])
+
+    def test_no_drift_sentinel_inconclusive(self):
+        self.assertIn("no drift sentinel", scored(raw_file(drop_last_a=True))["verdict"])
+
+    @staticmethod
+    def win(busy=37.0, w=60.0):
+        return lambda arm: {"busy_pct": busy, "load1": 9.0, "pkg_w": w, "throttle_per_min": 100.0,
+                            "swap_used_mib": 1000.0, "swap_delta_mib": 0.0}
+
+    def test_matched_load_high_is_not_a_gate(self):
+        # High, matched load with busy and throttle flags on every visit still scores.
+        v = scored(raw_file(load=self.win()))
+        self.assertTrue(v["load"]["matched"])
+        self.assertTrue(v["verdict"].startswith("SUPPORTED"), v["verdict"])
+
+    def test_unmatched_load_inconclusive(self):
+        load = lambda arm: dict(self.win()(arm), pkg_w=90.0 if arm == "C" else 60.0)  # noqa: E731
+        v = scored(raw_file(load=load))
+        self.assertTrue(v["verdict"].startswith("INCONCLUSIVE: load unmatched"), v["verdict"])
+        self.assertIn("pkg_w", v["verdict"])
+        self.assertTrue(v["verdict_if_matched"].startswith("SUPPORTED"))
 
     def test_partial_inconclusive(self):
         self.assertIn("partial", scored(raw_file(drop="D"))["verdict"])
