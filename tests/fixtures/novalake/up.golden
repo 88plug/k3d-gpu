@@ -2,6 +2,7 @@
 ==> Experimental features (auto): dra image-volume
 ==> Creating k3d cluster 'gpu' with image cryptoandcoffee/k3d-gpu:<version>...
 ==> Waiting for nodes Ready...
+==> Waiting for cluster DNS (CoreDNS)...
 ==> hybrid device plugin auto-deployed by k3s.
 ==> Verifying accelerators are schedulable...
 ==> Accelerators schedulable: hybrid=1. Try: k3d-gpu test
@@ -18,6 +19,8 @@ k3d cluster create gpu
   --k3s-node-label=experimental.k3d-gpu.io/dra=true@server:*;agent:*
   --k3s-node-label=experimental.k3d-gpu.io/image-volume=true@server:*;agent:*
 kubectl wait --for=condition=Ready nodes --all --timeout=120s
+kubectl -n kube-system get deployment/coredns
+kubectl -n kube-system rollout status deployment/coredns --timeout=180s
 kubectl -n kube-system get daemonset nri-resource-policy-balloons
 kubectl -n kube-system rollout status daemonset/nri-resource-policy-balloons --timeout=120s
 kubectl get nodes -l k3d-gpu.io/hybrid-cpu=true -o name

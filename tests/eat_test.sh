@@ -187,7 +187,7 @@ remote() {
     : > "${rlog}"
     env PATH="${RBIN}:${PATH}" EAT_WORK="${WORK}/eat-work" EAT_KUBECONFIG="${WORK}/kubeconfig" STUB_LOG="${rlog}" \
         STUB_KEY_B64="${RKEY_B64}" STUB_BASE="http://127.0.0.1:${EPORT}/v1" OPENAI_BASE_URL="http://127.0.0.1:${EPORT}" \
-        OPENAI_API_KEY="${RKEY}" "${EAT}/eat-remote.sh" "$@" 2>&1
+        OPENAI_API_KEY="${RKEY}" "${EAT}/eat-remote.sh" 2>&1
 }
 out=$(remote) && rc=0 || rc=$?
 log=$(cat "${rlog}")
