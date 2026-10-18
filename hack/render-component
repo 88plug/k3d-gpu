@@ -22,6 +22,11 @@
 #             RELEASE in NAMESPACE adopts the baked objects instead of refusing them
 #             (helm pkg/action/validate.go checkOwnership). CRDs need none: helm
 #             skips CRDs that already exist.
+#             IMAGE_PINS="name:tag@sha256:... ...": every `image: name:tag` the chart
+#             renders is written as its pin, so the baked manifest is pinned by
+#             digest. A rendered image with no pin fails the render; --latest
+#             resolves the pins of the new release's images from their registry
+#             (scripts/images-lock digest) and records them.
 # A new kind is one render_<kind> function plus its required keys in KIND_KEYS.
 #
 # Env: RENDER_ROOT  repo root holding hack/components and OUTPUT (default: this checkout)
@@ -43,6 +48,27 @@ set_pin() { sed -i "s|^$2=.*|$2=$3|" "$1"; }
 
 # not_older <current> <candidate>: candidate sorts at or after current.
 not_older() { [ "$(printf '%s\n' "$1" "$2" | sort -V | tail -n1)" = "$2" ]; }
+
+# pin_images <manifest> <latest>: rewrite each `image: name:tag` line to its
+# IMAGE_PINS entry (resolved from the registry with --latest); IMAGE_PINS is left
+# holding exactly the pins the manifest uses.
+pin_images() {
+    local out=$1 latest=$2 ref p pin used=""
+    while read -r ref; do
+        [ -n "${ref}" ] || continue
+        pin=
+        for p in ${IMAGE_PINS:-}; do [ "${p%@sha256:*}" = "${ref}" ] && pin=${p}; done
+        if [ -z "${pin}" ]; then
+            [ "${latest}" = 1 ] || die "${NAME}: rendered image ${ref} has no IMAGE_PINS entry (render with --latest)"
+            pin="${ref}@$("${HACK_DIR}/../scripts/images-lock" digest "${ref}")" \
+                || die "${NAME}: cannot resolve the digest of ${ref}"
+        fi
+        [[ "${pin}" =~ @sha256:[0-9a-f]{64}$ ]] || die "${NAME}: IMAGE_PINS entry '${pin}' is not name:tag@sha256:<digest>"
+        sed -i -E "s|^([[:space:]]*(- )?image: )\"?${ref//./\\.}\"?$|\1${pin}|" "${out}"
+        used="${used:+${used} }${pin}"
+    done < <(sed -nE 's/^[[:space:]]*(- )?image: "?([^"@[:space:]]+)"?$/\2/p' "${out}" | sort -u)
+    IMAGE_PINS=${used}
+}
 
 # helm_owned <release> <namespace>: on stdin a `helm template` stream; add Helm's
 # release annotations under metadata: of every object from the chart's templates/.
@@ -99,12 +125,15 @@ render_helm() {
     if [ "${HELM_ADOPTABLE:-no}" = yes ] && awk '/^---$/ {n = 0} /^  annotations:$/ && ++n > 1 {bad = 1} END {exit !bad}' "${tmp}/out.yml"; then
         die "${NAME}: a templated object already has metadata.annotations; HELM_ADOPTABLE cannot add a second block"
     fi
+    pin_images "${tmp}/out.yml" "${latest}"
     mkdir -p "$(dirname "${ROOT}/${OUTPUT}")"
     mv "${tmp}/out.yml" "${ROOT}/${OUTPUT}"
     # Pins move only once the render succeeded, so they always match OUTPUT.
     if [ "${latest}" = 1 ]; then
         set_pin "${dir}/component.conf" CHART_VERSION "${CHART_VERSION}"
         set_pin "${dir}/component.conf" CHART_SHA256 "${sum}"
+        grep -q '^IMAGE_PINS=' "${dir}/component.conf" || echo 'IMAGE_PINS=""' >> "${dir}/component.conf"
+        set_pin "${dir}/component.conf" IMAGE_PINS "\"${IMAGE_PINS}\""
     fi
     echo "rendered ${NAME} ${CHART_VERSION} -> ${OUTPUT}"
 }

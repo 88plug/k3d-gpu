@@ -98,8 +98,8 @@ HYBRID_GUARD_TEMPLATE="${K3D_GPU_HYBRID_GUARD_PLUGIN:-${SHARE_DIR}/nri-balloons-
 PREFILL_GUARD="${K3D_GPU_PREFILL_GUARD:-}"  # opt-in E-core cap: kHz or N% (guard_khz); off when empty
 STATE_DIR="${K3D_GPU_STATE_DIR:-${XDG_STATE_HOME:-${HOME:-}/.local/state}/k3d-gpu}"
 SYSROOT="${K3D_GPU_SYSROOT:-}" # prefix for /sys and /dev reads (tests point it at a fake tree)
-TEST_IMAGE="${K3D_GPU_TEST_IMAGE:-nvidia/cuda:13.4.3-base-ubuntu26.04}"
-DEVICE_TEST_IMAGE="${K3D_GPU_DEVICE_TEST_IMAGE:-busybox:1.37}"
+TEST_IMAGE="${K3D_GPU_TEST_IMAGE:-nvidia/cuda:13.4.3-base-ubuntu26.04@sha256:e2eb43e25d404e2c48716f80afdb8989a84c4da588f5509330322842084d97b0}"
+DEVICE_TEST_IMAGE="${K3D_GPU_DEVICE_TEST_IMAGE:-busybox:1.37@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e}"
 VENDORS_REQUEST="${K3D_GPU_VENDORS:-auto}"
 NODE_LABELS="${K3D_GPU_NODE_LABELS:-}" # extra key=value node labels, comma-separated
 K3S_ARGS="${K3D_GPU_K3S_ARGS:-}"       # extra k3s server flags, space-separated
@@ -1346,7 +1346,7 @@ npu_labels() {
 # (docs/overview.md, "Firmware version mismatch") says the firmware must come from
 # the driver release that matches the NPU compiler; older firmware fails with
 # "MAPPED_INFERENCE_VERSION is NOT compatible with the ELF".
-NPU_UMD_IMAGE="openvino/model_server:2026.4.1-gpu"
+NPU_UMD_IMAGE="openvino/model_server:2026.4.1-gpu@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58"
 NPU_UMD_DRIVER="v1.35.0"
 NPU_UMD_FW_DATE="20260630"
 
@@ -1802,14 +1802,14 @@ doctor_npu() {
         fi
         date=$(npu_fw_date "${fw}")
         if [ -z "${date}" ]; then
-            echo "  note: no build date readable in ${fw#"${SYSROOT}"}; cannot compare it with ${NPU_UMD_IMAGE}'s NPU driver ${NPU_UMD_DRIVER}"
+            echo "  note: no build date readable in ${fw#"${SYSROOT}"}; cannot compare it with ${NPU_UMD_IMAGE%@*}'s NPU driver ${NPU_UMD_DRIVER}"
         elif [ "${date}" -lt "${NPU_UMD_FW_DATE}" ]; then
-            echo "  ${YLW}warn${RST}: NPU firmware built $(ymd "${date}") is older than the $(ymd "${NPU_UMD_FW_DATE}") firmware of linux-npu-driver ${NPU_UMD_DRIVER}, the NPU user space in ${NPU_UMD_IMAGE};"
+            echo "  ${YLW}warn${RST}: NPU firmware built $(ymd "${date}") is older than the $(ymd "${NPU_UMD_FW_DATE}") firmware of linux-npu-driver ${NPU_UMD_DRIVER}, the NPU user space in ${NPU_UMD_IMAGE%@*};"
             echo "        NPU inference can fail with 'MAPPED_INFERENCE_VERSION is NOT compatible'. Install intel-fw-npu from"
             echo "        https://github.com/intel/linux-npu-driver/releases/tag/${NPU_UMD_DRIVER} (it goes to /lib/firmware/updates/intel/vpu, which"
             echo "        the kernel prefers), then reload: sudo modprobe -r intel_vpu && sudo modprobe intel_vpu"
         else
-            echo "  ok: NPU firmware built $(ymd "${date}"), not older than linux-npu-driver ${NPU_UMD_DRIVER}'s ($(ymd "${NPU_UMD_FW_DATE}")) in ${NPU_UMD_IMAGE}"
+            echo "  ok: NPU firmware built $(ymd "${date}"), not older than linux-npu-driver ${NPU_UMD_DRIVER}'s ($(ymd "${NPU_UMD_FW_DATE}")) in ${NPU_UMD_IMAGE%@*}"
         fi
     done
     gen=$(npu_labels)

@@ -116,6 +116,13 @@ Include relevant details:
 - Changed an image in `share/`, the Dockerfile or an image pin in `scripts/k3d-gpu`?
   Run `scripts/images-lock update` (it reads the registries) and commit
   `images.lock`; CI's `scripts/images-lock check` fails until you do.
+- Every image reference in the repo is pinned `name:tag@sha256:<digest>`. Write
+  the tag, run `scripts/images-lock repin <file>` (it reads the registries) to add
+  the digest; `tests/image_pins_test.sh` (`scripts/images-lock pins`) fails on a
+  tag-only or `:latest` reference that `images.unpinned` does not list with a
+  reason. A rendered component's image pins live in its `component.conf`
+  (`IMAGE_PINS`). The nightly `repin-images` job opens a PR when a registry moves
+  a digest under an unchanged tag.
 - `tests/console_mcp_test.sh` checks that the MCP tools `hardware` and
   `plan_launch` return the CLI `facts --json` and `plan --json` bytes on every
   fixture, and that the MCP `apply` tool writes nothing without a plan hash the
