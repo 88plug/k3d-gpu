@@ -48,7 +48,7 @@ dry_ollama() {
         && grep -q -- '--cpuset-cpus 0-15 ollama/ollama:0.40.5@sha256:5d3a2f25' <<< "${o}" \
         && grep -q -- '--id H10 ' <<< "${o}" \
         && grep -q -- '--arm ollama=http://127.0.0.1:[0-9]*/v1,qwen3:4b-q4_K_M$' <<< "${o}" \
-        && grep -q '^verify: sha256 /root/.ollama/models/manifests/registry.ollama.ai/library/qwen3/4b-q4_K_M = 2bfd38a7' <<< "${o}"
+        && grep -q '^verify: sha256 /root/.ollama/models/blobs/sha256-163553aea1b1de62de7c5eb2ef5afb756b4b3133308d9ae7e42e951d8d696ef5 = 163553ae' <<< "${o}"
 }
 # llama.cpp fetches the GGUF at the pinned revision (-mu .../resolve/<rev>/...), not -hf's head.
 dry_llamacpp() {

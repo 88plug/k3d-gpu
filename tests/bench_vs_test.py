@@ -89,6 +89,34 @@ class StubPair(unittest.TestCase):
         self.assertEqual(res["params"]["temperature"], 0.0)
         self.assertTrue(res["params"]["ignore_eos"])
 
+    def test_load_window_before_every_segment(self):
+        lo = os.path.join(self.tmp, "load.jsonl")
+        env = {"VS_LOAD_WINDOW_S": "0.05", "VS_LOAD_OUT": lo, "VS_LOAD_LEVEL": "typical"}
+        old = {k: os.environ.get(k) for k in env}
+        os.environ.update(env)
+        try:
+            res, _, _ = self.run_vs(["--itl", "0.001"], ["--itl", "0.001"])
+        finally:
+            for k, v in old.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+        with open(lo) as f:
+            wins = [json.loads(line) for line in f]
+        order = [a for r in res["rounds"] for a in r["order"]]
+        self.assertEqual([w["tag"] for w in wins], order)
+        self.assertTrue(all(w["level"] == "typical" for w in wins))
+        starts = [r[side]["t_start"] for r in res["rounds"] for side in ("k3d", "vs")]
+        self.assertTrue(all(isinstance(t, float) for t in starts))
+        import vs_matched
+        st = vs_matched.analyse(res, wins, resamples=200)
+        self.assertEqual(st["n"], {"k3d-gpu": 12, "ollama": 12})
+        self.assertEqual(st["load_windows"], {"k3d-gpu": 3, "ollama": 3})
+        self.assertIn(st["load_matched"], (True, False))
+        self.assertLessEqual(st["confidence"], 1 - vs_matched.sign_p(st["round_wins"], 3))
+        self.assertLessEqual(st["ratio_ci95"][0], st["ratio_ci95"][1])
+
     def test_budget_exhausted_is_inconclusive(self):
         res, _, _ = self.run_vs(["--itl", "0.002"], ["--itl", "0.008"], "--budget-s", "0")
         self.assertEqual(res["verdict"], "INCONCLUSIVE")
@@ -268,7 +296,10 @@ class Units(unittest.TestCase):
             self.assertTrue(s["artifact_path"].startswith(s["cache"] + "/"), name)
         self.assertIn("/resolve/bc640142c66e1fdd12af0bd68f40445458f3869b/Qwen3-4B-Q4_K_M.gguf", " ".join(lock["llamacpp"]["args"]))
         self.assertNotIn("-hf", lock["llamacpp"]["args"])
-        self.assertTrue(lock["ollama"]["artifact_path"].endswith("/" + lock["ollama"]["served_model"].replace(":", "/")))
+        # Ollama rewrites its on-disk manifest copy, so the pin is the content-addressed model layer.
+        o = lock["ollama"]
+        self.assertTrue(o["artifact_path"].endswith("/models/blobs/sha256-" + o["artifact_sha256"]))
+        self.assertIn("model layer sha256:" + o["artifact_sha256"], o["model_revision"])
         self.assertEqual(lock["ovms"]["user"], "0")
 
     def test_competitors_lock_pins_every_image_by_digest(self):

@@ -41,9 +41,9 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H7 | OVMS's decode lead over EAT's vLLM CPU engine in the H2 run comes from weight precision, not from the engine. | On the i9-13900T 16-CPU P-core balloon, one checkpoint served by OVMS 2026.4.1 and by vLLM CPU v0.24.0 at matched weight precision decodes within 15% between the two engines, and the two land within 15% of each other in effective weight bandwidth (weight bytes x decode tok/s). | Pre-registered 2026-10-16, before any run. One checkpoint and revision (`Qwen/Qwen3-4B-Instruct-2507`, revision recorded) for both engines: OVMS loads an OpenVINO IR exported from it with 16-bit weights, vLLM loads it in bf16. A second arm at int4 in both engines runs only if vLLM v0.24.0 CPU is first shown to load an int4 build of the same checkpoint. vLLM runs with EAT's chart defaults and once with `--enforce-eager` dropped, to split engine from config. H2 workloads and energy method, arms interleaved ABBA, 5 rounds. Refuted if the decode gap at matched precision is 15% or more. Run 2026-10-17 at 16 CPUs, 3 OVMS and 2 vLLM blocks, decode gap 15.6% of vLLM's rate (13.5% of OVMS's), on the line ([H7 run](#h7-run-i9-13900t-2026-10-17)). | INCONCLUSIVE |
 | H8 | Agents per box (APB: the largest number of closed-loop tool-using agents whose pooled p95 LLM turn latency stays <= 10 s on the `support` agent trace) on the i9-13900T depends on the serving arm as pre-registered in `bench/apb/PROTOCOL.md` section 7. | A1 OVMS int4 on the P-cores: APB in [4, 12] (confidence 0.6). A2 OVMS int4 on the UHD 770: 0 (0.8). A3 EAT's default vLLM CPU bf16: 0 (0.9). A4 vLLM CUDA AWQ int4 on the RTX 4000 SFF Ada: above A1 (0.75). Written 2026-10-16, before any run. | `k3d-gpu capacity --slo 10 --budget 12` per arm on a fresh cluster, one arm per 15-min hold (`bench/apb/arm.sh`). An arm's prediction is refuted by a scored APB outside it; a bracket that still contains the prediction decides nothing. Wave 1 (2026-10-17): A4 >= 32, A1 0 by rule with N=1 on the SLO edge, A2 and A3 unscored ([H8 run](#h8-run-i9-13900t-2026-10-17)). | INCONCLUSIVE |
 | H19 | `k3d-gpu tune run --objective throughput` on the CPU agent stack (OVMS 2026.4.1, `OpenVINO/Qwen3-4B-int4-ov`, i9-13900T) does not crown a config whose gain over the default is run-to-run noise. | (a) The tune completes and writes a profile whose decision is either `default`, or `tuned` with a winner that an independent replication confirms. (b) The search's own null control, the explicit restatement of the default (`CPUS=16 CORES=performance MAX_NUM_SEQS=256 CACHE_SIZE=0 PREFIX_CACHING=true`, which the pilot showed writes a `graph.pbtxt` byte-identical to the default's), is never accepted. (c) Replication: the tuned winner, or with decision `default` the finalist with the best confirmation median, is measured again against the default in fresh trials outside the tune. Prediction: decision `default` (single-stream decode is memory-bound and the default already takes all 16 P-core CPUs), and the replication shows no gain beyond the noise gates. | Pre-registered 2026-10-17T09:15Z, before the counted tune, after two pilot trials (default and the explicit default, budget 4 x 64 tokens: 15.3/49.3/48.7 vs 15.3/49.8/46.8 aggregate tok/s at concurrency 1/4/8, identical graphs). Cluster `k3dgpu-r2-tune` from `docker build -t k3d-gpu:r2-tune .`, scratch `KUBECONFIG` and profile dir. Command: `k3d-gpu tune run --objective throughput --devices CPU --precisions int4` with the default criteria (n0=27, eta=3, n=5 confirmation runs per side in rotating order, margin 5%, k=1, alpha 0.05 Bonferroni, TTFT guardrail 25%, quality probe, `--unique-prompts` load). One tune (its confirmation is the n=5 interleaved step). Replication: 5 fresh trials per side, order A B B A A B B A A B (A = default), the tune's final budget (16 requests x 128 tokens at concurrency 1,4,8), same acceptance test (`tune.py` gates). Confounds sampled every 5 s for the whole run: package W (RAPL), 1-min load, swap used, sum of `package_throttle_count`. Outcome -> conclusion: (b) the explicit default accepted -> REFUTED (the gates pass noise); decision `tuned` and the replication fails the gates -> REFUTED (a noise winner was crowned); decision `tuned` and the replication passes -> SUPPORTED (a real winner); decision `default` and the replicated finalist also fails the gates -> SUPPORTED; decision `default` but the replication passes every gate -> INCONCLUSIVE (the tune missed a real gain, a power question, not a noise crown); the tune fails to finish or the default trial fails -> INCONCLUSIVE. | PENDING |
-| H30 | The k3d-gpu auto-config (`k3d-gpu up` + `k3d-gpu agent up`) decodes faster than Ollama 0.40.5 on the CPU (`qwen3:4b-q4_K_M`, manifest sha256 2bfd38a7) with vendor defaults, at the same model family and 4-bit tier. | k3d-gpu median decode tok/s is at least 1.05x ollama's in every one of 3 interleaved rounds; package J/token is reported alongside. | Pre-registered 2026-10-17, before any run. `k3d-gpu bench --vs ollama --id H30 --budget 900`: one client, the same 4 prompts, max_tokens 128, temperature 0, `ignore_eos` sent to both arms, 3 warmup requests per arm (inside the budget), rounds A,B / B,A / A,B, one request in flight, RAPL package counter per arm segment. Weights pinned: `bench` hashes the served file inside the competitor container and refuses to measure unless it matches `bench/competitors.lock`. Outcome -> conclusion: k3d-gpu/ollama median decode tok/s at least 1.05 in every round -> SUPPORTED; ollama/k3d-gpu at least 1.05 in every round -> REFUTED; mixed rounds, failed requests, an arm whose median output stops short of 128 tokens, arms counting tokens differently (usage vs stream chunks), or a spent 15-minute budget -> INCONCLUSIVE. Confound recorded per run: the k3d-gpu arm is reached through `kubectl port-forward`, the competitor through docker-proxy, so tunnel latency lands on the k3d-gpu arm only (a bias toward REFUTED). Ollama's OpenAI layer has no `ignore_eos` and streams Qwen3 thinking as `delta.reasoning`, which the client counts as output (openai/openai.go at v0.40.5). Prediction: SUPPORTED where `agent up` picks an Intel GPU, since Ollama 0.40.5 runs this model on the CPU here; REFUTED or INCONCLUSIVE on a CPU-only host. | PENDING |
-| H31 | The k3d-gpu auto-config (`k3d-gpu up` + `k3d-gpu agent up`) decodes faster than llama.cpp server b11706 on the CPU (`Qwen/Qwen3-4B-GGUF` Q4_K_M at revision bc640142) with vendor defaults, at the same model family and 4-bit tier. | k3d-gpu median decode tok/s is at least 1.05x llamacpp's in every one of 3 interleaved rounds; package J/token is reported alongside. | Pre-registered 2026-10-17, before any run. `k3d-gpu bench --vs llamacpp --id H31 --budget 900`: one client, the same 4 prompts, max_tokens 128, temperature 0, `ignore_eos` sent to both arms, 3 warmup requests per arm (inside the budget), rounds A,B / B,A / A,B, one request in flight, RAPL package counter per arm segment. Weights pinned: `bench` hashes the served file inside the competitor container and refuses to measure unless it matches `bench/competitors.lock`. Outcome -> conclusion: k3d-gpu/llamacpp median decode tok/s at least 1.05 in every round -> SUPPORTED; llamacpp/k3d-gpu at least 1.05 in every round -> REFUTED; mixed rounds, failed requests, an arm whose median output stops short of 128 tokens, arms counting tokens differently (usage vs stream chunks), or a spent 15-minute budget -> INCONCLUSIVE. Confound recorded per run: the k3d-gpu arm is reached through `kubectl port-forward`, the competitor through docker-proxy, so tunnel latency lands on the k3d-gpu arm only (a bias toward REFUTED). Prediction: SUPPORTED where `agent up` picks an Intel GPU; REFUTED or INCONCLUSIVE on a CPU-only host. | PENDING |
-| H32 | The k3d-gpu auto-config (`k3d-gpu up` + `k3d-gpu agent up`) decodes faster than plain OVMS 2026.4.1 with its own device choice (`OpenVINO/Qwen3-4B-int4-ov` at revision b467368) with vendor defaults, at the same model family and 4-bit tier. | k3d-gpu median decode tok/s is at least 1.05x ovms's in every one of 3 interleaved rounds; package J/token is reported alongside. | Pre-registered 2026-10-17, before any run. `k3d-gpu bench --vs ovms --id H32 --budget 900`: one client, the same 4 prompts, max_tokens 128, temperature 0, `ignore_eos` sent to both arms, 3 warmup requests per arm (inside the budget), rounds A,B / B,A / A,B, one request in flight, RAPL package counter per arm segment. Weights pinned: `bench` hashes the served file inside the competitor container and refuses to measure unless it matches `bench/competitors.lock`. Outcome -> conclusion: k3d-gpu/ovms median decode tok/s at least 1.05 in every round -> SUPPORTED; ovms/k3d-gpu at least 1.05 in every round -> REFUTED; mixed rounds, failed requests, an arm whose median output stops short of 128 tokens, arms counting tokens differently (usage vs stream chunks), or a spent 15-minute budget -> INCONCLUSIVE. Confound recorded per run: the k3d-gpu arm is reached through `kubectl port-forward`, the competitor through docker-proxy, so tunnel latency lands on the k3d-gpu arm only (a bias toward REFUTED). The OVMS container gets `/dev/dri` (or `/dev/dxg` plus `/usr/lib/wsl` on WSL2) and the devices passed are recorded; a run where the competitor had no GPU node while the k3d-gpu arm ran on one is reported as such in the run section. Prediction: INCONCLUSIVE: same engine, same weights and the same device on a GPU host, so the gap should sit inside the margin. | PENDING |
+| H30 | The k3d-gpu auto-config (`k3d-gpu up` + `k3d-gpu agent up`) decodes faster than Ollama 0.40.5 on the CPU (`qwen3:4b-q4_K_M`, manifest sha256 2bfd38a7) with vendor defaults, at the same model family and 4-bit tier. | k3d-gpu median decode tok/s is at least 1.05x ollama's in every one of 3 interleaved rounds; package J/token is reported alongside. | Pre-registered 2026-10-17, before any run. `k3d-gpu bench --vs ollama --id H30 --budget 900`: one client, the same 4 prompts, max_tokens 128, temperature 0, `ignore_eos` sent to both arms, 3 warmup requests per arm (inside the budget), rounds A,B / B,A / A,B, one request in flight, RAPL package counter per arm segment. Weights pinned: `bench` hashes the served file inside the competitor container and refuses to measure unless it matches `bench/competitors.lock`. Outcome -> conclusion: k3d-gpu/ollama median decode tok/s at least 1.05 in every round -> SUPPORTED; ollama/k3d-gpu at least 1.05 in every round -> REFUTED; mixed rounds, failed requests, an arm whose median output stops short of 128 tokens, arms counting tokens differently (usage vs stream chunks), or a spent 15-minute budget -> INCONCLUSIVE. Confound recorded per run: the k3d-gpu arm is reached through `kubectl port-forward`, the competitor through docker-proxy, so tunnel latency lands on the k3d-gpu arm only (a bias toward REFUTED). Ollama's OpenAI layer has no `ignore_eos` and streams Qwen3 thinking as `delta.reasoning`, which the client counts as output (openai/openai.go at v0.40.5). Prediction: SUPPORTED where `agent up` picks an Intel GPU, since Ollama 0.40.5 runs this model on the CPU here; REFUTED or INCONCLUSIVE on a CPU-only host. Amended 2026-10-18 before any run: matched background load, see [H30-H32 amendment A1](#h30-h32-amendment-a1-matched-background-load-2026-10-18). Run 2026-10-18 (A1, `typical`, load matched): k3d-gpu 10.96 tok/s (CI 10.86-11.18) vs Ollama 7.05 (6.95-7.14), ratio 1.55 (CI 1.53-1.59), 3/3 rounds, n = 12 per arm, J/token 8.52 vs 14.35, derived confidence 0.875. `agent up` picked the CPU (16 P-cores), so the CPU-branch prediction (REFUTED or INCONCLUSIVE) was wrong. See [H30-H32 run](#h30-h32-run-matched-background-load-i9-13900t-2026-10-18). | SUPPORTED |
+| H31 | The k3d-gpu auto-config (`k3d-gpu up` + `k3d-gpu agent up`) decodes faster than llama.cpp server b11706 on the CPU (`Qwen/Qwen3-4B-GGUF` Q4_K_M at revision bc640142) with vendor defaults, at the same model family and 4-bit tier. | k3d-gpu median decode tok/s is at least 1.05x llamacpp's in every one of 3 interleaved rounds; package J/token is reported alongside. | Pre-registered 2026-10-17, before any run. `k3d-gpu bench --vs llamacpp --id H31 --budget 900`: one client, the same 4 prompts, max_tokens 128, temperature 0, `ignore_eos` sent to both arms, 3 warmup requests per arm (inside the budget), rounds A,B / B,A / A,B, one request in flight, RAPL package counter per arm segment. Weights pinned: `bench` hashes the served file inside the competitor container and refuses to measure unless it matches `bench/competitors.lock`. Outcome -> conclusion: k3d-gpu/llamacpp median decode tok/s at least 1.05 in every round -> SUPPORTED; llamacpp/k3d-gpu at least 1.05 in every round -> REFUTED; mixed rounds, failed requests, an arm whose median output stops short of 128 tokens, arms counting tokens differently (usage vs stream chunks), or a spent 15-minute budget -> INCONCLUSIVE. Confound recorded per run: the k3d-gpu arm is reached through `kubectl port-forward`, the competitor through docker-proxy, so tunnel latency lands on the k3d-gpu arm only (a bias toward REFUTED). Prediction: SUPPORTED where `agent up` picks an Intel GPU; REFUTED or INCONCLUSIVE on a CPU-only host. Amended 2026-10-18 before any run: matched background load, see [H30-H32 amendment A1](#h30-h32-amendment-a1-matched-background-load-2026-10-18). Run 2026-10-18 (A1, `typical`): load unmatched on throttle events/min (spread 184 > 142). Measured: k3d-gpu 11.20 tok/s (CI 11.07-11.33) vs llama.cpp 8.21 (7.99-8.29), ratio 1.36 (CI 1.34-1.41), 3/3 rounds, n = 12 per arm, derived confidence 0.875, verdict if matched SUPPORTED. See [H30-H32 run](#h30-h32-run-matched-background-load-i9-13900t-2026-10-18). | INCONCLUSIVE |
+| H32 | The k3d-gpu auto-config (`k3d-gpu up` + `k3d-gpu agent up`) decodes faster than plain OVMS 2026.4.1 with its own device choice (`OpenVINO/Qwen3-4B-int4-ov` at revision b467368) with vendor defaults, at the same model family and 4-bit tier. | k3d-gpu median decode tok/s is at least 1.05x ovms's in every one of 3 interleaved rounds; package J/token is reported alongside. | Pre-registered 2026-10-17, before any run. `k3d-gpu bench --vs ovms --id H32 --budget 900`: one client, the same 4 prompts, max_tokens 128, temperature 0, `ignore_eos` sent to both arms, 3 warmup requests per arm (inside the budget), rounds A,B / B,A / A,B, one request in flight, RAPL package counter per arm segment. Weights pinned: `bench` hashes the served file inside the competitor container and refuses to measure unless it matches `bench/competitors.lock`. Outcome -> conclusion: k3d-gpu/ovms median decode tok/s at least 1.05 in every round -> SUPPORTED; ovms/k3d-gpu at least 1.05 in every round -> REFUTED; mixed rounds, failed requests, an arm whose median output stops short of 128 tokens, arms counting tokens differently (usage vs stream chunks), or a spent 15-minute budget -> INCONCLUSIVE. Confound recorded per run: the k3d-gpu arm is reached through `kubectl port-forward`, the competitor through docker-proxy, so tunnel latency lands on the k3d-gpu arm only (a bias toward REFUTED). The OVMS container gets `/dev/dri` (or `/dev/dxg` plus `/usr/lib/wsl` on WSL2) and the devices passed are recorded; a run where the competitor had no GPU node while the k3d-gpu arm ran on one is reported as such in the run section. Prediction: INCONCLUSIVE: same engine, same weights and the same device on a GPU host, so the gap should sit inside the margin. Amended 2026-10-18 before any run: matched background load, see [H30-H32 amendment A1](#h30-h32-amendment-a1-matched-background-load-2026-10-18). Run 2026-10-18 (A1, `typical`): load unmatched on 1-min load (2.75 > 2.48) and throttle events/min (224 > 85). Measured: k3d-gpu 11.11 tok/s (CI 10.43-11.44, CPU) vs plain OVMS 6.50 (6.38-6.72; its device was not logged), ratio 1.71 (CI 1.60-1.77), 3/3 rounds, n = 12 per arm, derived confidence 0.875, verdict if matched SUPPORTED. See [H30-H32 run](#h30-h32-run-matched-background-load-i9-13900t-2026-10-18). | INCONCLUSIVE |
 | H24 | A spec-only roofline (DRAM channels x MT/s x 8 B; cores x int8 MAC/clk x GHz), calibrated on one 8-P-core point of this host, predicts decode, prefill and 4-in-flight throughput of core configurations it was not fitted on, within 25% MAPE. This is the transfer law `k3d-gpu plan --predict <sku>` relies on. | Held-out arms B (4 P-cores), C (8 E-cores), D (16 E-cores) on the i9-13900T, Qwen3-4B int4, OVMS 2026.4.1 (H6 digest). M0 (`console/sku_model.py arms`) predicts decode 15.7 / 15.7 / 15.7, prefill 86 / 32.3 / 64.5, c4 62.6 / 32.3 / 62.6 tok/s for B / C / D (C compute-bound at c4). Competing M1 (min(spec BW, measured per-cpuset triad BW)) predicts decode = 15.7 x triad(arm) / triad(A). Author prior: M0 decode REFUTED (B ~12.5, C ~8, D ~12), M0 prefill holds, M1 decode holds within 20%. | Pre-registered 2026-10-17T12:15Z, before any H24 run; `tests/console/test_sku_model.py` checks the model's numbers equal these within 1%. Probe `bench/sku-model/probe.py` (self-limits to 19 min). 4 OVMS containers `sci-h24-{A,B,C,D}`, same image digest and weights sha256 as H6, all loaded at once, one served at a time; no k3d cluster. stream_probe triad per arm x2. Visit order A B C D D C B A; per visit: 5 s idle sample, 3 decode (30-token prompt with nonce, 128 out, `ignore_eos`), 2 prefill (unique ~512-token prompt, 16 out), 1 c=4 (4 x 128 out). n per arm: decode 6, prefill 4, c4 2. Calibration = this run's arm A (H6's 15.66 is a sanity check: A within 15%). Outcome -> conclusion: see [H24 pre-registration](#h24-pre-registration). Review fixes in ed20aa4. Result ([H24 run](#h24-run-i9-13900t-2026-10-17)), run 1 at `a19f52c`, 10:47-11:04 PDT: the scorer returned "INCONCLUSIVE (missing cells: partial run)". 6 of 8 visits ran (A once, so no drift sentinel); every TTFT was null because OVMS streams Qwen3 thinking as `reasoning_content`, so decode c=1 and prefill have n = 0; every visit had package throttling (coretemp 95-99 C). Scored c4 cells (M0 calibrated on A, 45.9 tok/s, n=1): B 34.6 (-25%, n=1), C 22.2 (-6%, n=2), D 30.4 (-34%, n=2). Unscored end-to-end proxy (128 / e2e) for decode, relative to A (13.0 tok/s): B 0.78, C 0.57, D 0.71 (M0 predicts 1.0; M1 triad ratio 0.99 / 0.69 / 0.80). Missing probe: re-run at `cce5fd8` (reasoning_content counted, ~512-token prefill). | INCONCLUSIVE ([run](#h24-run-i9-13900t-2026-10-17)) |
 | H25 | Agents that send a byte-identical system prompt and tool schemas to one OVMS CPU server reuse one prefix KV, so an added agent's first request skips the shared prefill. Whether the shared blocks also cut resident memory per live agent is measured too, not assumed. Pre-registered 2026-10-17T05:08-07:00, before any H25 run. | On an i9-13900T, OVMS 2026.4.1 (digest a928903f…), `OpenVINO/Qwen3-4B-int4-ov` b467368d on the 16-CPU P-core balloon, shared prefix Ps ≈ 1536 tokens, private Pp = 96, max_tokens 8, thinking off. (T) The median TTFT of an added agent (agents 2..6, sequential) is ≥ 4x lower with the shipping default (prefix caching on, cache_size 0) than with `--enable_prefix_caching=false`; the lower bound of the 95% bootstrap CI of the ratio is ≥ 4x. Point prediction: OFF 9.6 s ± 15% (Ps+Pp at the 172 tok/s of H6), ON 0.9 s (0.6-1.4). (C) An ON agent with one token changed at system position 16 measures ≥ 0.8x the OFF median. (M) Memory per added live agent in a 6-agent burst: OFF ≈ 117 MiB (52 blocks x 32 tok x 72 KiB u8). Expectation (prior 0.5): ON ΔRSS per agent is ≥ 0.8x OFF, because dynamic-pool growth counts full prompts; physical sharing alone would give ≈ 9-12 MiB. Null H0: added-agent TTFT ON/OFF < 2x with c equal to the ON agents (no cross-agent reuse); for M, ON ΔRSS per agent ≥ 0.8x OFF. | `bench/shared-prefix/run.sh` under the live lock, 20 min cap. Fresh OVMS pod every round, arm order ON OFF OFF ON ON OFF (n = 3 rounds per arm, 15 added-agent samples per arm), new prefix seed every round. Per round: warm-up, sequential agents a1..a6 plus the perturbed control c, then a 6-agent barrier burst with 1 Hz sampling of pod `memory.current`. Confounds per round: RAPL package energy, 1-min load, swap used, pod `memory.swap.current`, package throttle-count delta, running container count. Outcome table and guardrails in [H25 pre-registration](#h25-pre-registration). The deploy-time detector (`k3d-gpu agent prefix`) is scored by unit tests, not by this probe. Prior art exists (vLLM APC, SGLang RadixAttention on Xeon, OVMS prefix caching, KVFlow, KVComm): a claim states only the measured delta [provenance:P250] [provenance:P252] [provenance:P253] [provenance:P259]. Run 1 (2026-10-17): TTFT null in every request (probe read only content deltas), both parts void; exploratory end-to-end 4.96x (CI 4.68-5.33), see [H25 run](#h25-run-i9-13900t-2026-10-17). Run 3 (A2 matched background load on the E-cores, A3 first-chunk TTFT, phase S only): T INCONCLUSIVE at `typical` and `heavy` because load was unmatched on core throttle events/min (typical 37.9 vs 105.7, heavy 2422 vs 1014; busy, 1-min load, package W and swap matched), and at `typical` the ON spread gate failed too. Measured: added agent 1.32 s ON vs 12.44 s OFF at `typical` (9.44x, CI 6.99-9.90, 9/9 pairs ≥ 4x, derived confidence 0.91), 2.76 vs 25.56 s at `heavy` (9.27x, CI 8.96-9.73); M not re-measured. See [H25 run 3](#h25-run-3-matched-background-load-i9-13900t-2026-10-17). | INCONCLUSIVE |
 | H26 | On a hybrid Intel client with no RDT (i9-13900T: no `rdt_a`/`cat_l3`/`mba`/`cqm` flags, no `/sys/fs/resctrl`), confining a memory-bandwidth neighbour to one E-core L2 cluster (`k3d-gpu.io/cores: ecluster`, 4 E-cores) cuts the agent's p95 latency inflation by at least half against the same neighbour in the `efficient` balloon. On hosts with `rdt_a`+`mba`, nri-plugins RDT classes are the predicted remedy instead (not testable on this host; H26-X). | R = I(MC4)/I(ME15) <= 0.5, where I(arm) = p95(arm)/p95(Q) - 1 on agent request latency. Point prediction: p95(Q) ~2.3 s, I(ME15) >= +100% (replicates H3 PM), I(MC4) +20..+50%, R ~0.3; I(ME4) within spread of I(MC4) (core count, not L2 topology, does the work). Competing prior (prior-art note): L2 confinement helps little against a DRAM hog (LLC and memory controller stay shared, no MBA), improvement < 10%. | Pre-registered 2026-10-17T12:18Z before any H26 run; see [H26 pre-registration](#h26-pre-registration-i9-13900t-2026-10-17). Probe `bench/rdt-isolate/run.sh` (analysis `bench/rdt-isolate/analyze.py`). Agent = OVMS 2026.4.1 `OpenVINO/Qwen3-4B-int4-ov`, `k3d-gpu agent up` on CPU with 15 CPU; unique ~30-token prompt x 32 out, greedy, `ignore_eos`, streamed. Arms: Q none; ME15 `stress-ng --stream 15` on `efficient`; ME4 `--stream 4` on `efficient`; MC4 `--stream 4` on `ecluster`; every neighbour `--stream-l3-size 128m` (same total DRAM footprint). 3 blocks x 10 requests per arm (n=30), order Q ME15 ME4 MC4 / MC4 ME4 ME15 Q / Q ME15 ME4 MC4, one cluster `k3dgpu-i-rdt-isolate`. Outcome -> conclusion in the section. Run 2026-10-17 (A2, matched-load design, 12 blocks per level, n = 30 per arm): INCONCLUSIVE at `typical` and `heavy` because background load was unmatched across arms (`typical`: E-core busy 7.3 > 5.0 pp, 1-min load 10.6 > 5.1, throttle/min 411 > 156, from hog carry-over into the windows; `heavy`: the load containers were removed from outside at 21:33:30Z). Measured at `typical`: p95 Q 3.70 s, ME15 10.65 s (+188%), ME4 5.31 s (+43%), MC4 5.04 s (+36%); R = 0.83 (CI 0.61-0.87), P(R >= 0.8) 0.72, verdict if matched REFUTED. See [H26 run](#h26-run-matched-background-load-i9-13900t-2026-10-17). | INCONCLUSIVE |
@@ -3552,6 +3552,171 @@ lowest idle sample while the budget subtracts the median. The pre-registered O0
 action (DO-NOT-RE-ATTACK while idle is within 10 C of T_tcc) does not apply.
 Missing probe: the B/T/C series on a quiet window (idle spread < 5 W), or on a host
 that idles >= 20 C below T_tcc.
+
+### H30-H32 amendment A1: matched background load (2026-10-18)
+
+Written 2026-10-18T05:06Z and pushed before any H30, H31 or H32 request. No competitor
+container has served a request and no outcome is known. The rows' claims, arms, prompts,
+max_tokens, margin, rounds, warmups, budget, outcome table and predictions are unchanged.
+A1 adds the background-load design every probe on this shared host now runs under, and
+fixes one weights pin that could never pass.
+
+- **Host and load.** The shared i9-13900T. `bench/load/load.py start --level typical`
+  holds the E-cores (16-31) for the whole timed part of each row (headline). `heavy`
+  runs only if a later lock hold has time left; it is reported as robustness and is not
+  the verdict. Other tenants keep running and are recorded, not removed.
+- **Load per arm.** `bench/vs.py` (env `VS_LOAD_WINDOW_S=10`, `VS_LOAD_OUT`) samples one
+  10 s `load.py` window right before every timed segment, with no request in flight,
+  tagged with the arm that segment runs. That gives 3 windows per arm per row.
+  `load.py matched` decides with its fixed TOLERANCE (busy 5 pp; 1-min load 1.0 or 15%;
+  package W 3 or 10%; throttle/min 10 or 25%; swap used 256 MiB; swap growth 64 MiB).
+  Unmatched load makes the row INCONCLUSIVE whatever the ratios say, and the verdict it
+  would have had is reported next to it.
+- **n.** As registered: 3 interleaved rounds (A,B / B,A / A,B), 4 prompts x 128 tokens
+  per arm segment, so 12 timed requests and 3 segment medians per arm. 3 warmups per arm.
+- **Statistics, fixed now.** Per arm, the median decode tok/s of the 12 requests with a
+  95% CI from 10 000 bootstrap resamples; the k3d-gpu/competitor ratio of those medians
+  with a 95% bootstrap CI (resampling requests within each arm). Derived confidence =
+  min(P_boot, 1 - p_sign), where P_boot is the bootstrap share of ratios on the verdict's
+  side of the margin (>= 1.05 for SUPPORTED, <= 1/1.05 for REFUTED, inside for
+  INCONCLUSIVE) and p_sign is the one-sided sign test over the 3 rounds (3/3 gives
+  0.875 at most). The verdict itself is still the registered per-round rule.
+- **One cluster per row.** `k3dgpu-q-h30`, `k3dgpu-q-h31`, `k3dgpu-q-h32`, each created
+  by `k3d-gpu up` + `k3d-gpu agent up` with default settings inside its own lock hold,
+  scratch `KUBECONFIG` (never `~/.kube/config`), and deleted with the load stopped before
+  the lock is released. One competitor per lock hold, at most 20 min of wall time per
+  hold. The device and backend `agent up` picks are recorded. Competitor weights are
+  prefetched into bench's cache volume before the lock (download only, hash checked);
+  bench still hashes the served file before it measures.
+- **Ollama pin fix.** `competitors.lock` pinned the sha256 of Ollama's on-disk manifest
+  copy. Ollama 0.40.5 rewrites that copy (it appends the registry manifest's own digest
+  as an extra layer entry), so the file hashes to 2506fc96…, not to the registry digest
+  2bfd38a7…, and bench would refuse every run. The registry still serves manifest
+  2bfd38a7 (checked 2026-10-18 with `curl registry.ollama.ai/v2/library/qwen3/manifests/4b-q4_K_M`),
+  and its model layer is sha256 163553ae…. The pin is now that model-layer blob
+  (`/root/.ollama/models/blobs/sha256-163553ae…`, content-addressed, rehashed and equal).
+  Same weights, a file that can be checked.
+- **Predictions, unchanged.** H30: SUPPORTED where `agent up` picks an Intel GPU,
+  REFUTED or INCONCLUSIVE on CPU. H31: same. H32: INCONCLUSIVE (same engine, weights and
+  device on a GPU host).
+
+### H30-H32 run: matched background load (i9-13900T, 2026-10-18)
+
+Run under [amendment A1](#h30-h32-amendment-a1-matched-background-load-2026-10-18), level
+`typical` only. `heavy` was not run. One lock hold per competitor, each with its own fresh
+cluster, deleted with the load stopped before release.
+
+```text
+# Reproduce
+date:            H30 2026-10-18T05:48:01Z (lock) .. 05:59:31Z (released, 690 s)
+                 H31 2026-10-18T06:08:23Z .. 06:20:28Z (725 s)
+                 H32 2026-10-18T06:44:33Z .. 06:56:26Z (713 s)
+                 amendment A1 pushed 05:08Z (2929261), before any request
+hypothesis:      H30, H31, H32 (rows + amendment A1)
+host cpu:        13th Gen Intel(R) Core(TM) i9-13900T (P 0-15, E 16-31), UHD 770 iGPU, 125 GiB RAM,
+                 about 145-148 GiB in swap, 52 other containers running at each start
+host kernel:     6.6.128-1-MANJARO
+k3d-gpu commit:  8c9f81c (branch claude/verdict-h30-h32-ml; main a326f59 + A1 + bench/vs.py load windows)
+clusters:        k3dgpu-q-h30, k3dgpu-q-h31, k3dgpu-q-h32; scratch KUBECONFIG; node image
+                 cryptoandcoffee/k3d-gpu:0.1.55; `k3d-gpu up` 38-50 s, `k3d-gpu agent up` 127-149 s
+k3d-gpu arm:     `agent up` defaults picked OpenVINO/Qwen3-4B-int4-ov b467368d on CPU, P-cores,
+                 16 CPUs (OVMS 2026.4.1), not the iGPU; reached through kubectl port-forward
+competitors:     H30 ollama/ollama:0.40.5@sha256:5d3a2f25…8241, served model layer sha256 163553ae… (checked)
+                 H31 ghcr.io/ggml-org/llama.cpp:server-b11706@sha256:f41d47ee…a485, gguf sha256 7485fe6f… (checked)
+                 H32 openvino/model_server:2026.4.1-gpu@sha256:a928903f…6fc58 with /dev/dri, bin sha256 074214fa… (checked)
+                 all with vendor defaults: no --cpuset, so they could use all 32 CPUs, E-cores included
+load:            bench/load/load.py typical, stress-ng 0.22.01 @sha256:2ea9a7c3…1cbe on E-cores 16-31;
+                 one 10 s window before every timed segment, no request in flight, tagged per arm
+energy source:   RAPL intel-rapl:0 energy_uj (sudo -A, reads only)
+command:         SUDO_ASKPASS=<askpass> VS_LOAD_WINDOW_S=10 VS_LOAD_OUT=load.jsonl VS_LOAD_LEVEL=typical \
+                   k3d-gpu bench --vs <stack> --id <Hn> --budget 900 --out bench-<Hn>
+                 bench/vs_matched.py bench-<Hn>/result.json load.jsonl
+runs per arm:    3 warmups + 3 interleaved rounds x 4 prompts x 128 tokens: n = 12 requests, 3 load windows
+raw results:     result.json sha256 H30 42bc0ae9…9a0c, H31 8da4ad8d…6bfc, H32 6d76e996…22f3
+```
+
+**Decode speed** (median of 12 requests; 95% CI from 10 000 bootstrap resamples; ratio =
+k3d-gpu/competitor of those medians, requests resampled within each arm):
+
+| Row | k3d-gpu tok/s (CI) | competitor tok/s (CI) | ratio (CI) | per-round ratios | J/token k3d-gpu / competitor | TTFT s k3d-gpu / competitor |
+|-----|--------------------|-----------------------|------------|------------------|------------------------------|-----------------------------|
+| H30 ollama | 10.96 (10.86-11.18) | 7.05 (6.95-7.14) | 1.55 (1.53-1.59) | 1.55, 1.58, 1.57 | 8.52 / 14.35 | 0.33 / 0.89 |
+| H31 llamacpp | 11.20 (11.07-11.33) | 8.21 (7.99-8.29) | 1.36 (1.34-1.41) | 1.37, 1.35, 1.40 | 8.46 / 11.59 | 0.29 / 0.69 |
+| H32 ovms | 11.11 (10.43-11.44) | 6.50 (6.38-6.72) | 1.71 (1.60-1.77) | 1.73, 1.68, 1.65 | 8.52 / 15.15 | 0.30 / 0.98 |
+
+Every request in every arm returned 128 tokens counted from `usage`, with no failures and
+3/3 warmups ok, so no outcome-table exclusion fired. Every run ended inside the budget
+(479-544 s of about 886 s).
+
+**Background load per arm** (means of 3 windows of 10 s; limits from `load.py` TOLERANCE):
+
+| Row | arm | E-core busy % | 1-min load | package W | throttle/min | swap used MiB | swap growth MiB |
+|-----|-----|---------------|------------|-----------|--------------|---------------|-----------------|
+| H30 | k3d-gpu | 53.2 | 19.08 | 93.1 | 351 | 147746 | -1.3 |
+| H30 | ollama | 56.8 | 19.30 | 93.5 | 347 | 147745 | -0.4 |
+| H30 | spread / limit | 3.6 / 5.0 ok | 0.22 / 2.90 ok | 0.4 / 9.3 ok | 4 / 88 ok | 0.9 / 256 ok | 0.9 / 64 ok |
+| H31 | k3d-gpu | 51.5 | 17.65 | 93.4 | 383 | 147110 | -0.7 |
+| H31 | llamacpp | 50.8 | 18.77 | 93.6 | 567 | 147108 | -0.9 |
+| H31 | spread / limit | 0.7 / 5.0 ok | 1.12 / 2.82 ok | 0.3 / 9.4 ok | **184 / 142 fail** | 2.0 / 256 ok | 0.2 / 64 ok |
+| H32 | k3d-gpu | 55.7 | 13.76 | 90.2 | 116 | 145395 | -51.4 |
+| H32 | ovms | 55.8 | 16.50 | 93.2 | 339 | 145306 | -1.1 |
+| H32 | spread / limit | 0.1 / 5.0 ok | **2.75 / 2.48 fail** | 3.0 / 9.3 ok | **224 / 85 fail** | 89 / 256 ok | 50 / 64 ok |
+
+Load matched: H30 **yes**, H31 **no** (throttle events), H32 **no** (1-min load and
+throttle events). In both unmatched rows the competitor's windows carried more throttling
+and load. The windows are taken with no request in flight, but each competitor window
+follows the competitor's previous segment or warmup, and the competitors run on all 32
+CPUs by default, E-cores included. That is likely carry-over from the arm itself rather
+than drift in the background. This is inferred; the run cannot separate the two.
+
+**Derived confidence** (A1: min(P_boot, 1 - p_sign)): P_boot = 1.00 in all three rows (no
+bootstrap ratio fell below 1.05), and 3/3 rounds on one side give p_sign = 0.125, so the
+confidence in the measured direction is 0.875 for each row. That is the ceiling 3 rounds
+allow.
+
+**Verdicts:**
+- **H30: SUPPORTED** (load matched). k3d-gpu decoded 1.55x Ollama's rate in every round,
+  CI 1.53-1.59, at 0.59x Ollama's package J/token. Derived confidence 0.875. The
+  hypothesis holds, but the prediction's mechanism was wrong. `agent up` picked the CPU
+  (16 P-cores), not the iGPU, and the registered prediction for a CPU pick was "REFUTED or
+  INCONCLUSIVE". The gap comes from configuration on the same CPU, not from a GPU.
+- **H31: INCONCLUSIVE** (load unmatched on throttle events). If matched it would be
+  SUPPORTED: 1.36x, CI 1.34-1.41, 3/3 rounds, confidence 0.875 in that direction. The
+  prediction for a CPU pick ("REFUTED or INCONCLUSIVE") would again have been wrong
+  about the measured direction.
+- **H32: INCONCLUSIVE** (load unmatched on 1-min load and throttle events). If matched it
+  would be SUPPORTED: 1.71x, CI 1.60-1.77, 3/3 rounds, confidence 0.875 in that
+  direction. The registered prediction was INCONCLUSIVE because the gap would sit inside
+  the margin. The measured gap is far outside it. The premise "same device" did not hold:
+  the k3d-gpu arm ran on CPU. Which device plain OVMS chose with `/dev/dri` passed was not
+  logged (its container is removed at the end of the run). That is a gap in this run.
+
+No row is REFUTED, so no DO-NOT-RE-ATTACK applies. Re-attack H31 and H32 with a new
+amendment written before the run. It should fix the carry-over: a longer idle gap before
+each window, or windows that skip the first seconds after a segment. It should also log
+the OVMS competitor's device (`docker logs` before removal), and keep the competitors'
+vendor defaults.
+
+Confounds: one shared host (52 other containers, about 146 GiB in swap), the `typical`
+load on the E-cores, n = 12 requests per arm (3 rounds), and a different cluster and
+model pod per row. The k3d-gpu arm also went through `kubectl port-forward`, which biases
+against k3d-gpu. Ollama counts Qwen3 thinking tokens as output, and both arms reached 128
+tokens.
+
+docs/benchmarks.md was rendered by `bench/vs.py docs` from the three result files with
+H31 and H32 set to their ledger verdict (INCONCLUSIVE, load unmatched).
+
+```bash
+# Reproduce one row (H30 shown) from this commit. Host: docker, k3d, kubectl, RAPL via sudo.
+lscpu | grep 'Model name'; uname -r; git rev-parse HEAD
+export KUBECONFIG=$PWD/h30.kubeconfig K3D_GPU_CLUSTER=k3dgpu-q-h30
+scripts/k3d-gpu up && scripts/k3d-gpu agent up        # logs the device it picks
+bench/load/load.py start --level typical --ttl 1500; sleep 20
+SUDO_ASKPASS=<askpass> VS_LOAD_WINDOW_S=10 VS_LOAD_OUT=load.jsonl VS_LOAD_LEVEL=typical \
+  scripts/k3d-gpu bench --vs ollama --id H30 --budget 900 --out bench-H30
+bench/vs_matched.py bench-H30/result.json load.jsonl   # medians, CIs, load_matched, confidence
+bench/load/load.py stop; scripts/k3d-gpu down
+```
 
 ## Scope corrections
 
