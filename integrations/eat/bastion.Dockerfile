@@ -9,7 +9,7 @@
 #
 # Runs as the image's own uid-1000 `ubuntu` user: EAT refuses to run as root and
 # its bastion playbook reads /home/<ansible_user>/.kube/config.
-FROM ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
+FROM ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
 
 # What EAT's own one-click installer (deploy-agentic-stack.sh install_prereqs)
 # installs, plus sudo (EAT calls it internally) and rsync (ansible.posix.synchronize).

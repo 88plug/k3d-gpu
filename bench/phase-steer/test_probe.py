@@ -70,12 +70,17 @@ class Masks(unittest.TestCase):
         self.assertTrue(probe.placement_ok("ALL", {"a0": ["0-31"], "a1": ["0-31"]}))
 
     def test_order_latin_square(self):
-        rows = [probe.ORDER[i:i + 3] for i in (0, 3, 6)]
+        primary = [a for a in probe.ORDER if a != "NEG"]
+        rows = [primary[i:i + 3] for i in (0, 3, 6)]
         for r in rows:
             self.assertEqual(sorted(r), sorted(probe.PRIMARY))
         for pos in range(3):
             self.assertEqual(sorted(r[pos] for r in rows), sorted(probe.PRIMARY))
-        self.assertEqual(probe.ORDER[-1], "NEG")
+        self.assertEqual(probe.ORDER.index("NEG"), 3)  # A2: NEG fourth
+        self.assertEqual(probe.ORDER.count("NEG"), 1)
+
+    def test_slot_flag_required(self):
+        self.assertIn("--slot-save-path", probe.REQUIRED_FLAGS)
 
 
 class Readings(unittest.TestCase):
@@ -111,8 +116,66 @@ class Outcomes(unittest.TestCase):
     def test_inconclusive_neg(self):
         self.assertEqual(table(neg_ttft=0.5), "INCONCLUSIVE")
 
-    def test_inconclusive_throttle_one_arm(self):
-        self.assertEqual(table(thr=1), "INCONCLUSIVE")
+    def test_throttle_one_arm_no_longer_gates(self):
+        # A2: in-cell throttle/pswpin are recorded; the background load match gates instead.
+        self.assertEqual(table(thr=1, swp=3), "SUPPORTED")
+
+    def test_inconclusive_cache_miss(self):
+        cells = []
+        for _ in range(3):
+            cells += [cell("SP", 1.0), cell("PS", 0.8), cell("ALL", 0.9)]
+        cells[0]["turns"][0]["prompt_n"] = 1420
+        cells.append(cell("NEG", 1.0, ttft=5))
+        self.assertTrue(probe.cache_miss(cells[0]))
+        self.assertEqual(probe.verdict(probe.summarize(cells))[0], "INCONCLUSIVE")
+
+    def test_cache_hit_within_slack(self):
+        c = cell("SP", 1.0)
+        c["turns"][0]["prompt_n"] = probe.TURN_TOK + probe.CACHE_SLACK
+        self.assertFalse(probe.cache_miss(c))
+
+    def test_saturated_e_cores_use_affinity_only(self):
+        c = cell("PS", 0.8, e_busy=0.97)
+        c["pre_busy"] = {"E": 0.96}
+        self.assertFalse(probe.contaminated(c))
+        c["pre_busy"] = {"E": 0.50}
+        c["busy"]["E"] = 0.52
+        self.assertTrue(probe.contaminated(c))
+
+    def test_load_unmatched_is_inconclusive(self):
+        cells = []
+        for _ in range(3):
+            for arm, jt in (("SP", 1.0), ("PS", 0.8), ("ALL", 0.9)):
+                c = cell(arm, jt)
+                c["load"] = {"tag": arm, "level": "typical", "busy_pct": 40.0 if arm != "PS" else 60.0,
+                             "load1": 8.0, "pkg_w": 60.0, "throttle_per_min": 0.0,
+                             "swap_used_mib": 100.0, "swap_delta_mib": 0.0}
+                cells.append(c)
+        cells.append(cell("NEG", 1.0, ttft=5))
+        load = probe.load_match(cells)
+        self.assertFalse(load["matched"])
+        v, why = probe.verdict(probe.summarize(cells), load)
+        self.assertEqual(v, "INCONCLUSIVE")
+        self.assertIn("busy_pct", why)
+        for c in cells:
+            if c.get("load"):
+                c["load"]["busy_pct"] = 40.0
+        self.assertEqual(probe.verdict(probe.summarize(cells), probe.load_match(cells))[0], "SUPPORTED")
+
+    def test_high_load_alone_never_voids(self):
+        cells = []
+        for _ in range(3):
+            for arm, jt in (("SP", 1.0), ("PS", 0.8), ("ALL", 0.9)):
+                c = cell(arm, jt)
+                c["load"] = {"tag": arm, "level": "heavy", "busy_pct": 99.0, "load1": 40.0, "pkg_w": 110.0,
+                             "throttle_per_min": 500.0, "swap_used_mib": 4000.0, "swap_delta_mib": 0.0}
+                cells.append(c)
+        cells.append(cell("NEG", 1.0, ttft=5))
+        self.assertTrue(probe.load_match(cells)["matched"])
+
+    def test_mann_whitney(self):
+        self.assertAlmostEqual(probe.mann_whitney_p([1, 2, 3], [4, 5, 6]), 0.05)
+        self.assertAlmostEqual(probe.mann_whitney_p([4, 5, 6], [1, 2, 3]), 1.0)
 
     def test_inconclusive_contaminated(self):
         self.assertEqual(table(e_busy=0.02), "INCONCLUSIVE")

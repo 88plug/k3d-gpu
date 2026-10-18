@@ -3906,7 +3906,7 @@ pci "${r}" 0000:00:02.0 0x8086 0xa780 i915; render "${r}" 0000:00:02.0 128
 
 n=$(node_with_manifest igpu-auto)
 up_check "up adds shared-dev-num and allocation-policy under the plugin image" "${r}" "${n}" 0 "${MF}" \
-'          image: intel/intel-gpu-plugin:0.37.1
+'          image: intel/intel-gpu-plugin:0.37.1@sha256:004641b2547d58f1eadce58473fa160ad71377de1eb588cf1f82832387bf3e33
           args:
             - "-shared-dev-num=8"
             - "-allocation-policy=balanced"
@@ -4427,7 +4427,7 @@ pci "${r}" 0000:00:0b.0 0x8086 0xb03e intel_vpu; accel "${r}" 0000:00:0b.0 0
 doctor_says "PTL NPU is served by the pinned plugin" "${r}" 'does not list' negate
 # The id list is keyed to the plugin tag share/intel-npu-plugin.yml pins.
 tag=$(sed -n 's/^NPU_PLUGIN_TAG="\(.*\)"$/\1/p' "${K3D_GPU}")
-if [ -n "${tag}" ] && grep -q "image: intel/intel-npu-plugin:${tag}\$" "$(dirname "${K3D_GPU}")/../share/intel-npu-plugin.yml"; then
+if [ -n "${tag}" ] && grep -qE "image: intel/intel-npu-plugin:${tag//./\\.}@sha256:[0-9a-f]{64}\$" "$(dirname "${K3D_GPU}")/../share/intel-npu-plugin.yml"; then
     PASS=$((PASS + 1)); echo "ok   NPU_PLUGIN_TAG matches the pinned intel-npu-plugin image"
 else
     FAILS=$((FAILS + 1)); echo "FAIL NPU_PLUGIN_TAG (${tag}) matches the pinned intel-npu-plugin image"

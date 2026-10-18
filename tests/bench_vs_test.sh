@@ -108,7 +108,8 @@ exited_container_fails_fast() {
     grep -q 'exited (exit code 137, OOMKilled true)' <<< "${o}" && grep -q 'out of memory' <<< "${o}" \
         && [ $((SECONDS - s)) -lt 10 ] \
         && grep -q "^curl --noproxy \* " "${FAKE}/log" \
-        && grep -q '^docker volume rm k3dgpu-g-vs-ollama-cache' "${FAKE}/log"
+        && grep -q '^docker volume rm k3dgpu-g-vs-ollama-cache' "${FAKE}/log" \
+        && grep -q 'out of memory' "${FAKE}/out/competitor.log"
 }
 keep_cache_keeps_volume() {
     : > "${FAKE}/log"
@@ -126,7 +127,7 @@ check "dry-run ovms: defaults, no --target_device, /v3 arm" dry_ovms
 check "dry-run --k3d-url replaces the port-forward" dry_k3d_url
 check "dry-run forwards host proxy settings, loopback in NO_PROXY" dry_proxy
 check "dry-run adds no proxy settings when the host has none" dry_no_proxy_env
-check "exited competitor fails fast with its logs; cache volume removed" exited_container_fails_fast
+check "exited competitor fails fast with its logs; logs kept in competitor.log; cache volume removed" exited_container_fails_fast
 check "--keep-cache keeps the cache volume" keep_cache_keeps_volume
 check "help lists --keep-cache and K3D_GPU_SIGNOFF" grep -q 'K3D_GPU_SIGNOFF' <("${K}" help)
 check "help lists bench" help_lists_bench
@@ -139,6 +140,7 @@ refuses "k3d-url without model" "--k3d-url needs --k3d-model" --vs ollama --k3d-
 refuses "missing value" "--budget needs a value" --vs ollama --budget
 refuses "unknown option" "unknown bench option: --fast" --vs ollama --fast
 check "bench/vs.py unit tests (stub servers)" python3 "${ROOT}/tests/bench_vs_test.py"
+check "bench/tune-noise/analyze.py unit tests (H19)" python3 "${ROOT}/tests/tune_noise_test.py"
 agent_plan() { "${K}" bench agent plan H42 | grep -q '"hypothesis": "H42"'; }
 agent_missing() {
     local o

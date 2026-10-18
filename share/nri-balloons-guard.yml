@@ -1876,7 +1876,7 @@ spec:
                 fieldPath: spec.nodeName
           - name: ENABLE_TEST_APIS
             value: "1"
-          image: ghcr.io/containers/nri-plugins/nri-resource-policy-balloons:v0.14.0
+          image: ghcr.io/containers/nri-plugins/nri-resource-policy-balloons:v0.14.0@sha256:a8c8297c72744f25dbcf70fdb4a64bb787f428a3f9ab4dfabb0eb1377da0070f
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false

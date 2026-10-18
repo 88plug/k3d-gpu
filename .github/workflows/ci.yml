@@ -127,7 +127,7 @@ jobs:
     name: Console spine (facts/v1, plan, audit)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - name: Install jsonschema for the schema cross-check (pinned)
         run: python3 -m venv /tmp/jsonschema && /tmp/jsonschema/bin/pip install --disable-pip-version-check jsonschema==4.26.0
       - env:
@@ -141,21 +141,23 @@ jobs:
 
   # images.lock must list every image share/, the Dockerfile and the launcher
   # reference, at the digests they pin (offline; `scripts/images-lock update`
-  # refreshes it from the registries).
+  # refreshes it from the registries). Every image reference in the repo is
+  # pinned name:tag@sha256, except those images.unpinned lists with a reason.
   images-lock:
-    name: images.lock complete
+    name: images.lock complete, every image pinned by digest
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - run: scripts/images-lock check
+      - run: tests/image_pins_test.sh
 
   report-html:
     name: report.html (goldens, offline load in headless Chrome)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - id: chrome
-        uses: browser-actions/setup-chrome@v2.2.0
+        uses: browser-actions/setup-chrome@48ad923757ca74d66703209fe939badbdf80f2f4 # v2.2.0
         with:
           chrome-version: 155.0.8059.84
       # The headless load runs Chrome in a network namespace (unshare -rn);
@@ -366,7 +368,7 @@ jobs:
   pkgbuild-lint:
     name: Lint PKGBUILD in Arch container
     runs-on: ubuntu-latest
-    container: archlinux:latest
+    container: archlinux:latest@sha256:3c64b538588416593f69a1aebd2f2ec0f2541b29159f32556fa7def2167147a0
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - name: Install tools
