@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # live.sh: one agent-benchmark arm, live, inside one hold of the shared lock.
 #
-#   bench/eatflow/live.sh ARM OUT            ARM = A1 A2 A3 B1 C1 C2 (local), R (remote),
+#   bench/eatflow/live.sh ARM OUT            ARM = A1 A2 A3 A3ref B1 C1 C2 (local), R (remote),
 #                                            S (smoke: a stub server already on port 18630)
 #
 # Local arm (EXPERIMENTS.md H40-H48 amendment 19): the model server runs in a fresh
@@ -174,15 +174,18 @@ case ${ARM} in
         python3 "${REPO}/bench/apb/stage.py" ovms "${OUT}/agent.yaml" "${OUT}/deploy.yaml"
         stage Qwen3-4B-Instruct-2507-int4-ov k3dgpu/Qwen3-4B-Instruct-2507-int4-ov 5000
         NS=k3d-gpu-agent DEP=ovms SVC=ovms SPORT=8000 ;;
-    A3)
+    A3|A3ref)
+        # A3: AWQ 4-bit; A3ref (H40, H41 reference): the bf16 weights on the same engine and GPU.
+        w=Qwen3-4B-Instruct-2507-AWQ
+        [ "${ARM}" = A3ref ] && w=Qwen3-4B-Instruct-2507
         cluster_up
         gpu=$(nvidia-smi --query-gpu=name,uuid --format=csv,noheader | awk -F', ' '/RTX 4000/ {print $2}')
         image=vllm/vllm-openai@sha256:a4a4c0437bf7240089da5f08aa370c4aee17ae5290f7a3b468825ee26c4c3a6b
         sed -e "s|@VLLM_IMAGE@|${image}|" -e "s|@GPU_UUID@|${gpu}|" \
             -e "s|--served-model-name=Qwen/Qwen3-4B-AWQ|--served-model-name=${SERVED}|" \
             "${REPO}/bench/apb/vllm-cuda.yaml" > "${OUT}/cuda.yaml"
-        python3 "${REPO}/bench/apb/stage.py" cuda "${OUT}/cuda.yaml" "${OUT}/deploy.yaml" Qwen3-4B-Instruct-2507-AWQ
-        stage Qwen3-4B-Instruct-2507-AWQ Qwen3-4B-Instruct-2507-AWQ 0
+        python3 "${REPO}/bench/apb/stage.py" cuda "${OUT}/cuda.yaml" "${OUT}/deploy.yaml" "${w}"
+        stage "${w}" "${w}" 0
         gpu_flag=(--gpu-power)
         NS=apb-vllm DEP=vllm SVC=vllm SPORT=8000 ;;
     B1)
@@ -252,6 +255,25 @@ docker run -d --name k3dgpu-a-litellm --network host -v "${OUT}/litellm.yaml:/ap
     "${LITELLM_IMAGE}" --config /app/config.yaml --port "${P_LLM}" --host 127.0.0.1 >/dev/null
 docker inspect --format '{{.Image}} {{index .Config.Image}}' k3dgpu-a-litellm > "${OUT}/litellm-image.txt"
 wait_http "http://127.0.0.1:${P_LLM}/health/liveliness" 120 || { echo "litellm did not start"; docker logs k3dgpu-a-litellm | tail -20; exit 1; }
+if [ "${ARM}" = A3ref ]; then
+    # H40: BFCL's board handler (completions, BFCL's own template) at no load; then H41's
+    # reference: server-fc (the engine's tool parser) at LEVEL load. No agent is involved.
+    half=$(( (CAP - $(el) - 60) / 2 ))
+    [ "${half}" -ge 120 ] || { echo "NOT DELIVERABLE: ${half} s per BFCL half"; exit 3; }
+    stamp "bfcl board, load none, budget ${half}"
+    ${AB} bfcl --mode board --arm A3ref --level none --out "${OUT}/bfcl-board" --upstream "http://127.0.0.1:${P_LLM}" \
+        --python "${LIVE_BFCL_PY:?}" --threads 4 --budget-s "${half}" "${gpu_flag[@]}" 2>&1 | tail -3 | tee -a "${OUT}/live.log"
+    half=$(( CAP - $(el) - 60 ))
+    [ "${half}" -le 600 ] || half=600
+    stamp "load ${LEVEL}"
+    python3 "${REPO}/bench/load/load.py" start --level "${LEVEL}" --ttl $(( half + 120 )) > "${OUT}/load-start.log" 2>&1
+    stamp "bfcl server-fc, budget ${half}"
+    ${AB} bfcl --mode server-fc --arm A3ref --level "${LEVEL}" --out "${OUT}/bfcl-fc" --upstream "http://127.0.0.1:${P_LLM}" \
+        --served-model "${ALIAS}" --python "${LIVE_BFCL_PY}" --threads 4 --budget-s "${half}" "${gpu_flag[@]}" 2>&1 \
+        | tail -3 | tee -a "${OUT}/live.log"
+    stamp finished
+    exit 0
+fi
 start_mcp || { echo "mcp did not start"; exit 1; }
 start_agent "${ALIAS}" || { echo "agent did not start"; tail -20 "${OUT}/agent.log"; exit 1; }
 
