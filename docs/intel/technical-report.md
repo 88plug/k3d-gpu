@@ -8,9 +8,9 @@ k3d-gpu turns one Linux host into a single-node k3s cluster (k3d) that detects t
 
 This report covers what was measured, and how. Every result comes from one host: an i9-13900T (Raptor Lake-S, 8 P-cores and 16 E-cores, UHD 770 iGPU with no XMX, AVX-VNNI, no AMX, no NPU). It is a T-SKU rated at 35 W base power, but its firmware runs PL1 = PL2 = 117 W, so it does not run the T-series 35 W envelope.
 
-- Seven hypotheses are SUPPORTED. All seven are scoped to that host.
+- Eight hypotheses are SUPPORTED. All eight are scoped to that host.
 - Seven are REFUTED. Six of them changed shipped defaults.
-- Twelve are INCONCLUSIVE, mostly because the shared host throttles or its load was unmatched. Fifteen are PENDING, nine of them the agent benchmark (H40-H48), pre-registered on 2026-10-17.
+- Fourteen are INCONCLUSIVE, mostly because the shared host throttles or its load was unmatched. Twelve are PENDING, nine of them the agent benchmark (H40-H48), pre-registered on 2026-10-17.
 - Every other Intel family is detected and configured in fixture tests only. None has a measurement.
 
 No world-first, superlative or priority claim is made; [docs/provenance.md](../provenance.md) supports none.
@@ -58,6 +58,7 @@ The host is a shared, live machine: about 53 other containers, about 80 W idle p
 | H16 | `K3D_GPU_DRA=1` hands the iGPU to a pod through the Intel GPU DRA driver gpu-v0.12.1 with no device plugin, 3/3 runs [ledger:H16] | One UHD 770, k3s 1.37 |
 | H1b | Intel EAT `release-1.0.3-hotfix` deployed and served on this 24-core client CPU in one pass: every pod not in phase Succeeded was Ready, both Jobs completed, a chat completion returned HTTP 200, and no Xeon-only instruction or label was needed [ledger:H1b] | n=1, shared host under background load, k3s v1.37.1. Reachability only, no speed |
 | H18 | `k3d-gpu sandbox up` kept sandbox pods on an E-core (CPU 24) behind default-deny egress. RFC1918 and tailscale targets were refused, PyPI was reachable, 3/3 runs [ledger:H18] | kube-router on k3s v1.37.1 |
+| H30 | Under matched background load, the `k3d-gpu up` + `agent up` defaults (OVMS int4 on the 16 P-cores) decoded Qwen3-4B at 10.96 tok/s against Ollama 0.40.5 defaults at 7.05 tok/s (Q4_K_M, all CPUs), 3/3 rounds [ledger:H30] | One host, `typical` load, n = 12 requests per arm, 128 tokens. Configuration on the same CPU, not a GPU |
 
 ### REFUTED (all but H27 changed a default)
 
@@ -80,9 +81,10 @@ The host is a shared, live machine: about 53 other containers, about 80 W idle p
 | H9 | Cold `quickstart` reached a working Open WebUI chat inside its budget [ledger:H9] | n=1, warm arm not run |
 | H22 | The iGPU draft lost to the P-core draft in 16/16 paired rounds. Separately, a same-engine P-core draft beat the target alone in 8/8 rounds in both runs; that matches Intel's published Lunar Lake CPU-draft ratio [provenance:P222] [ledger:H22] | The noise guardrail fired in both runs: the probe's own 16-CPU load throttles the package. The same-engine draft needs its own pre-registered row |
 | H20, H21, H23, H24, H25, H29 | Energy and phase-steering mechanisms [ledger:H20] [ledger:H21] [ledger:H23] [ledger:H24] [ledger:H25] [ledger:H29] | Idle package power spread swamped the signal, or the run was partial |
+| H31, H32 | The `k3d-gpu up` + `agent up` defaults (CPU, 16 P-cores) decoded faster than llama.cpp b11706 and plain OVMS 2026.4.1 defaults in 3/3 rounds each [ledger:H31] [ledger:H32] | Background load unmatched across arms (throttle events, and 1-min load for H32), likely carry-over from the competitors' all-CPU segments; plain OVMS's device was not logged |
 | H26 | E-core L2-cluster confinement of a DRAM-bandwidth neighbour: the measured R (p95 inflation, cluster over spread) was 0.83, CI 0.61-0.87, at `typical` background load, which is not a verdict [ledger:H26] | Background load unmatched across arms at both levels (hog carry-over into the load windows; the `heavy` load was removed mid-run) |
 
-PENDING with a pre-registration: H5 (prefill guard on/off with an E-core neighbour), H19 (noise guard tuning), H28 (image-volume model sharing), and the external bake-offs H30 (Ollama 0.40.5), H31 (llama.cpp b11706) and H32 (plain OVMS device choice), and the agent benchmark H40-H48 ([agent-benchmarks.md](../agent-benchmarks.md): real EAT blueprint flows and BFCL, graded, on a busy box). Until H30-H32 run, there is no "faster than X" comparison of any kind.
+PENDING with a pre-registration: H5 (prefill guard on/off with an E-core neighbour), H19 (noise guard tuning), H28 (image-volume model sharing), and the agent benchmark H40-H48 ([agent-benchmarks.md](../agent-benchmarks.md): real EAT blueprint flows and BFCL, graded, on a busy box). The external bake-offs are in the tables above: only the Ollama one is decided, so llama.cpp and plain OVMS carry no "faster than" claim.
 
 ## Per-family support matrix
 
