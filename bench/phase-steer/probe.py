@@ -6,6 +6,13 @@ four CPU-mask arms (SP, PS, ALL, NEG) in the pre-registered Latin-square order,
 and writes one JSON line per cell (energy, latency, placement, confounds).
 `--analyze FILE` turns those lines into the pre-registered verdict.
 
+Amendment A2 (2026-10-18): every arm runs under the same bench/load/load.py
+background load (started by the runner); a 15 s load window before each cell is
+recorded with the cell, and the verdict is INCONCLUSIVE only when that load is
+unmatched across SP/PS/ALL (load.py TOLERANCE) or a gate fails. Each agent's
+prefix is prefilled once and restored into every fresh server from a saved
+slot; a cell is one synchronized round of whole turns.
+
 Stdlib only. Needs root for RAPL (`sudo`). Caps its own wall time (default
 19.5 min) and removes every `sci-h20-*` container it started, on exit or abort.
 Run it under the live lock:
@@ -16,6 +23,7 @@ Run it under the live lock:
 """
 import argparse
 import glob
+import importlib.util
 import json
 import os
 import random
@@ -38,12 +46,22 @@ P, E, ALLC = "0-15", "16-31", "0-31"
 PHASES = {  # arm: (decode slice, prefill slice); None = no mask, non-strict
     "SP": ("P", "P"), "PS": ("E", "P"), "ALL": (None, None), "NEG": ("P", "E"),
 }
-ORDER = ["SP", "PS", "ALL", "PS", "ALL", "SP", "ALL", "SP", "PS", "NEG"]
+# A2: the A1 Latin square with NEG moved to fourth, so a short level keeps its gate.
+ORDER = ["SP", "PS", "ALL", "NEG", "PS", "ALL", "SP", "ALL", "SP", "PS"]
 REQUIRED_FLAGS = ["--cpu-mask", "--cpu-mask-batch", "--cpu-strict", "--cpu-strict-batch", "--parallel", "--load-mode",
-                  "--poll", "--poll-batch"]
+                  "--poll", "--poll-batch", "--slot-save-path"]
 RAPL = "/sys/class/powercap/intel-rapl:0"
 PREFIX_TOK, TURN_TOK, OUT_TOK = 1024, 396, 96
 PRIMARY = ("SP", "PS", "ALL")
+LOAD_WINDOW_S = 15
+CACHE_SLACK = 8          # a scored turn may process at most TURN_TOK + this many prompt tokens
+FIRST_CELL_EST_S = 300   # wall check before any cell has been timed
+SATURATED = 0.90         # pre-cell E busy above this: the PS busy test is replaced by affinity
+
+_spec = importlib.util.spec_from_file_location(
+    "loadtool", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "load", "load.py"))
+loadtool = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(loadtool)
 
 
 def expand(cpulist):
@@ -121,12 +139,6 @@ def mean_mhz(cpus):
     return round(statistics.mean(v) / 1000) if v else None
 
 
-def watts_over(seconds):
-    a, t0 = energy_uj(), time.monotonic()
-    time.sleep(seconds)
-    return energy_delta_j(a, energy_uj()) / (time.monotonic() - t0)
-
-
 def slice_cpus(kind, i):
     """Agent i's disjoint CPUs: kind 'P' or 'E' (i9-13900T layout, asserted in prechecks)."""
     return [4 * i, 4 * i + 2] if kind == "P" else [16 + 4 * i + k for k in range(4)]
@@ -182,8 +194,9 @@ def start_servers(args, arm, cell, n):
         name = f"sci-h20-c{cell}-a{i}"
         sh("docker", "run", "-d", "--rm", "--name", name, "--cpuset-cpus", ALLC,
            "--ulimit", "memlock=-1:-1", "-p", f"127.0.0.1:{args.port0 + i}:8080",
-           "-v", f"{os.path.abspath(args.model)}:/m/model.gguf:ro", args.image,
-           "-m", "/m/model.gguf", "--host", "0.0.0.0", "--port", "8080", "-c", "2048",
+           "-v", f"{os.path.abspath(args.model)}:/m/model.gguf:ro",
+           "-v", f"{os.path.abspath(args.slots)}:/slots", args.image,
+           "-m", "/m/model.gguf", "--host", "0.0.0.0", "--port", "8080", "-c", "2048", "--slot-save-path", "/slots/",
            "--parallel", "1", "--poll", str(args.poll), "--poll-batch", str(int(args.poll > 0)),
            *server_args(arm, i), "--load-mode", "mmap+mlock")
         names.append(name)
@@ -216,13 +229,21 @@ def thread_affinity(name):
     return sorted(lists)
 
 
+def post(port, path, body, timeout=300):
+    req = urllib.request.Request(f"http://127.0.0.1:{port}{path}", json.dumps(body).encode(),
+                                 {"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read())
+
+
 def turn(port, tokens):
+    """One streamed turn: (t0, token arrival stamps, prompt tokens the server processed)."""
     body = json.dumps({"prompt": tokens, "n_predict": OUT_TOK, "ignore_eos": True,
                        "cache_prompt": True, "stream": True, "temperature": 0}).encode()
     req = urllib.request.Request(f"http://127.0.0.1:{port}/completion", body, {"Content-Type": "application/json"})
     t0 = time.monotonic()
-    stamps = []
-    with urllib.request.urlopen(req, timeout=120) as r:
+    stamps, prompt_n = [], None
+    with urllib.request.urlopen(req, timeout=300) as r:
         for raw in r:
             line = raw.decode().strip()
             if line.startswith("data:"):
@@ -230,75 +251,110 @@ def turn(port, tokens):
                 if ev.get("content") or ev.get("tokens"):
                     stamps.append(time.monotonic())
                 if ev.get("stop"):
+                    prompt_n = (ev.get("timings") or {}).get("prompt_n")
                     break
-    return t0, stamps
+    return t0, stamps, prompt_n
 
 
-def agent(i, port, prefix, stop, rows, errors):
-    rng = random.Random(1000 + i)
-    while not stop.is_set():
-        tokens = prefix + [rng.randrange(1000, 100000) for _ in range(TURN_TOK)]
-        try:
-            t0, s = turn(port, tokens)
-            rows.append({"agent": i, "start": t0, "first": s[0] if s else None,
-                         "end": s[-1] if s else time.monotonic(), "tokens": len(s)})
-        except Exception as ex:  # a failed request is a guardrail breach, recorded
-            errors.append(f"agent {i}: {ex}")
-            time.sleep(0.5)
+def prefixes(n):
+    return [[random.Random(i).randrange(1000, 100000) for _ in range(PREFIX_TOK)] for i in range(n)]
 
 
-def run_cell(args, arm, rep, cell, idle_w, deadline):
-    pcpus, ecpus = expand(P), expand(E)
-    s0, pre_t = cpu_busy(), time.monotonic()
-    time.sleep(5)
-    s1 = cpu_busy()
-    pre_busy = {"P": busy_frac(s0, s1, pcpus), "E": busy_frac(s0, s1, ecpus)}
-    names = start_servers(args, arm, cell, args.agents)
+def slot_file(i):
+    return f"h20-a{i}.bin"
+
+
+def prep_slots(args, deadline):
+    """A2: prefill each agent's prefix once (SP slices) and save it as a slot file."""
+    if all(os.path.exists(os.path.join(args.slots, slot_file(i))) for i in range(args.agents)):
+        return "reused"
+    names = start_servers(args, "SP", "prep", args.agents)
+    errs = []
     try:
         wait_healthy(args.agents, args.port0, min(deadline, time.monotonic() + 120))
-        stop, rows, errors = threading.Event(), [], []
-        prefixes = [[random.Random(i).randrange(1000, 100000) for _ in range(PREFIX_TOK)] for i in range(args.agents)]
-        th = [threading.Thread(target=agent, args=(i, args.port0 + i, prefixes[i], stop, rows, errors), daemon=True)
-              for i in range(args.agents)]
+
+        def one(i, p):
+            try:
+                post(args.port0 + i, "/completion", {"prompt": p, "n_predict": 1, "cache_prompt": True, "temperature": 0})
+                post(args.port0 + i, "/slots/0?action=save", {"filename": slot_file(i)})
+            except Exception as ex:
+                errs.append(f"agent {i}: {ex}")
+        th = [threading.Thread(target=one, args=(i, p)) for i, p in enumerate(prefixes(args.agents))]
         for t in th:
             t.start()
-        time.sleep(args.warm)
-        while len({r["agent"] for r in rows if r["tokens"]}) < args.agents and time.monotonic() < deadline:
-            time.sleep(0.5)
-        affinity = {n: thread_affinity(n) for n in names}
-        b0, e0, w0, thr0, sw0 = cpu_busy(), energy_uj(), time.monotonic(), throttle_total(), pswpin()
-        mhz = {"P": mean_mhz(pcpus), "E": mean_mhz(ecpus)}
-        time.sleep(min(args.window, max(0, deadline - time.monotonic())))
-        b1, e1, w1, thr1, sw1 = cpu_busy(), energy_uj(), time.monotonic(), throttle_total(), pswpin()
-        stop.set()
         for t in th:
-            t.join(timeout=130)
+            t.join()
     finally:
         remove(names)
-    secs = w1 - w0
-    turns = [r for r in rows if r["start"] >= w0 and r["end"] <= w1 and r["tokens"]]
+    if errs:
+        raise RuntimeError(f"prefix prep failed: {errs}")
+    return "prefilled"
+
+
+def round_turns(args, seed):
+    """One synchronized round: every agent sends one whole turn at the same moment."""
+    rows, errors = [], []
+    pres = prefixes(args.agents)
+
+    def one(i):
+        rng = random.Random(seed * 100 + i)
+        tokens = pres[i] + [rng.randrange(1000, 100000) for _ in range(TURN_TOK)]
+        try:
+            t0, s, pn = turn(args.port0 + i, tokens)
+            rows.append({"agent": i, "start": t0, "first": s[0] if s else None,
+                         "end": s[-1] if s else time.monotonic(), "tokens": len(s), "prompt_n": pn})
+        except Exception as ex:  # a failed request is a guardrail breach, recorded
+            errors.append(f"agent {i}: {ex}")
+    th = [threading.Thread(target=one, args=(i,)) for i in range(args.agents)]
+    for t in th:
+        t.start()
+    for t in th:
+        t.join()
+    return rows, errors
+
+
+def run_cell(args, arm, rep, cell, deadline):
+    pcpus, ecpus = expand(P), expand(E)
+    load = loadtool.window(LOAD_WINDOW_S, ecpus, tag=arm, level=args.level)
+    idle_w = load["pkg_w"]
+    pre_e = (load["busy_pct"] or 0) / 100
+    c0 = time.monotonic()
+    names = start_servers(args, arm, cell, args.agents)
+    rows, errors, rounds = [], [], []
+    try:
+        wait_healthy(args.agents, args.port0, min(deadline, time.monotonic() + 120))
+        for i in range(args.agents):
+            post(args.port0 + i, "/slots/0?action=restore", {"filename": slot_file(i)})
+        affinity = {n: thread_affinity(n) for n in names}
+        mhz = {"P": mean_mhz(pcpus), "E": mean_mhz(ecpus)}
+        for k in range(args.rounds):
+            b0, e0, w0, thr0, sw0 = cpu_busy(), energy_uj(), time.monotonic(), throttle_total(), pswpin()
+            r, err = round_turns(args, cell * 10 + k)
+            b1, e1, w1, thr1, sw1 = cpu_busy(), energy_uj(), time.monotonic(), throttle_total(), pswpin()
+            rows += r
+            errors += err
+            rounds.append({"s": w1 - w0, "j": energy_delta_j(e0, e1), "thr": thr1 - thr0, "swp": sw1 - sw0,
+                           "busy": {"P": busy_frac(b0, b1, pcpus), "E": busy_frac(b0, b1, ecpus)}})
+    finally:
+        remove(names)
+    secs = sum(r["s"] for r in rounds)
+    joules = sum(r["j"] for r in rounds)
+    turns = [r for r in rows if r["tokens"]]
     toks = sum(r["tokens"] for r in turns)
-    joules = energy_delta_j(e0, e1)
+    busy = {k: round(statistics.mean(r["busy"][k] or 0 for r in rounds), 4) for k in ("P", "E")} if rounds else {"P": None, "E": None}
     return {
-        "kind": "cell", "arm": arm, "rep": rep, "cell": cell, "window_s": round(secs, 2),
+        "kind": "cell", "arm": arm, "rep": rep, "cell": cell, "level": args.level, "window_s": round(secs, 2),
         "turns": [{"latency": r["end"] - r["start"], "ttft": r["first"] - r["start"],
-                   "tpot": (r["end"] - r["first"]) / max(1, r["tokens"] - 1), "tokens": r["tokens"]} for r in turns],
-        "tokens": toks, "joules": round(joules, 2), "idle_w": round(idle_w, 2),
+                   "tpot": (r["end"] - r["first"]) / max(1, r["tokens"] - 1), "tokens": r["tokens"],
+                   "prompt_n": r["prompt_n"]} for r in turns],
+        "tokens": toks, "joules": round(joules, 2), "idle_w": idle_w,
         "j_per_tok": round(joules / toks, 4) if toks else None,
-        "j_per_tok_net": round((joules - idle_w * secs) / toks, 4) if toks else None,
-        "errors": errors, "busy": {"P": busy_frac(b0, b1, pcpus), "E": busy_frac(b0, b1, ecpus)},
-        "pre_busy": pre_busy, "affinity": affinity, "overlap": overlap(affinity),
-        "placement_ok": placement_ok(arm, affinity), "mhz": mhz,
-        "throttle_delta": thr1 - thr0, "pswpin_delta": sw1 - sw0, "load1": rd("/proc/loadavg").split()[0],
-        "pre_t": pre_t,
+        "j_per_tok_net": round((joules - idle_w * secs) / toks, 4) if toks and idle_w is not None else None,
+        "errors": errors, "busy": busy, "pre_busy": {"E": round(pre_e, 4)}, "load": load,
+        "affinity": affinity, "overlap": overlap(affinity), "placement_ok": placement_ok(arm, affinity), "mhz": mhz,
+        "throttle_delta": sum(r["thr"] for r in rounds), "pswpin_delta": sum(r["swp"] for r in rounds),
+        "load1": rd("/proc/loadavg").split()[0], "cell_s": round(time.monotonic() - c0 + LOAD_WINDOW_S, 1),
     }
-
-
-def drain(idle_w, limit=20):
-    t0 = time.monotonic()
-    while time.monotonic() - t0 < limit:
-        if watts_over(2) <= idle_w + 3:
-            return
 
 
 def prechecks(args):
@@ -316,7 +372,9 @@ def prechecks(args):
     if not os.access(f"{RAPL}/energy_uj", os.R_OK):
         raise SystemExit(f"refusing: {RAPL}/energy_uj not readable (run with sudo)")
     steer = sh(os.path.join(os.path.dirname(__file__), "..", "..", "scripts", "k3d-gpu"), "phase-steer", "--json", check=False)
-    return {"kind": "header", "image": args.image, "model": args.model, "agents": args.agents,
+    return {"kind": "header", "amendment": "A2", "level": args.level, "rounds": args.rounds,
+            "load_containers": [r[1] for r in loadtool.running()],
+            "image": args.image, "model": args.model, "agents": args.agents,
             "poll": args.poll, "slices": {a: [server_args(a, i) for i in range(args.agents)] for a in PHASES}, "order": ORDER[: args.cells], "cpu_core": rd("/sys/devices/cpu_core/cpus"),
             "cpu_atom": rd("/sys/devices/cpu_atom/cpus"),
             "hfi": " hfi " in f" {rd('/proc/cpuinfo')} ", "itd": " itd " in f" {rd('/proc/cpuinfo')} ",
@@ -331,15 +389,17 @@ def run(args):
             out.write(json.dumps(d) + "\n")
             out.flush()
         emit(dict(prechecks(args), t=time.time()))
-        reps = {}
+        emit({"kind": "prep", "slots": prep_slots(args, deadline), "s": round(time.monotonic() - start, 1),
+              "t": time.time()})
+        reps, longest = {}, FIRST_CELL_EST_S
         for cell, arm in enumerate(ORDER[: args.cells]):
-            if time.monotonic() + args.warm + args.window + 45 > deadline:
+            if time.monotonic() + longest > deadline:
                 emit({"kind": "abort", "reason": "wall budget", "cell": cell, "t": time.time()})
                 break
-            idle_w = watts_over(5)
             reps[arm] = reps.get(arm, 0) + 1
-            emit(run_cell(args, arm, reps[arm], cell, idle_w, deadline))
-            drain(idle_w)
+            c0 = time.monotonic()
+            emit(run_cell(args, arm, reps[arm], cell, deadline))
+            longest = max(longest if cell else 0, time.monotonic() - c0)
         emit({"kind": "end", "wall_s": round(time.monotonic() - start, 1), "t": time.time()})
 
 
@@ -360,14 +420,15 @@ def summarize(cells):
         jt = [c["j_per_tok_net"] for c in a["cells"] if c["j_per_tok_net"] is not None]
         p95s = [pct([t["latency"] for t in c["turns"]], 0.95) for c in a["cells"] if c["turns"]]
         out[arm] = {
-            "n": len(a["cells"]), "j_per_tok_net": statistics.median(jt) if jt else None,
+            "n": len(a["cells"]), "j_cells": jt, "j_per_tok_net": statistics.median(jt) if jt else None,
             "j_spread": (max(jt) - min(jt)) if jt else None,
+            "turns": len(a["turns"]),
             "p95_latency": pct([t["latency"] for t in a["turns"]], 0.95),
             "p95_spread": (max(p95s) - min(p95s)) if p95s else None,
             "p95_ttft": pct([t["ttft"] for t in a["turns"]], 0.95),
             "median_ttft": statistics.median([t["ttft"] for t in a["turns"]]) if a["turns"] else None,
             "median_tpot": statistics.median([t["tpot"] for t in a["turns"]]) if a["turns"] else None,
-            "tok_s": statistics.median([c["tokens"] / c["window_s"] for c in a["cells"]]),
+            "tok_s": statistics.median([c["tokens"] / c["window_s"] for c in a["cells"] if c["window_s"]] or [0]),
             "errors": sum(len(c["errors"]) for c in a["cells"]),
             "throttled": sum(1 for c in a["cells"] if c["throttle_delta"] > 0),
             "swapped": sum(1 for c in a["cells"] if c["pswpin_delta"] > 0),
@@ -376,33 +437,62 @@ def summarize(cells):
     return out
 
 
+def cache_miss(c):
+    return any(t.get("prompt_n") is not None and t["prompt_n"] > TURN_TOK + CACHE_SLACK for t in c["turns"])
+
+
 def contaminated(c):
     """Placement proof: every server on its own pinned slice (A1); PS must load
-    the E-cores above background, SP must not."""
-    if c.get("placement_ok") is False or c.get("overlap"):
+    the E-cores above background, SP must not (A2: unless the background already
+    saturates them, where only the affinity proof applies); every scored turn
+    hit the restored prefix (A2)."""
+    if c.get("placement_ok") is False or c.get("overlap") or cache_miss(c):
         return True
     e, pe = c["busy"]["E"] or 0, c["pre_busy"]["E"] or 0
     if c["arm"] == "PS":
-        return e <= pe + 0.05
+        return pe <= SATURATED and e <= pe + 0.05
     if c["arm"] == "SP":
         return e > pe + 0.05
     return False
 
 
-def verdict(s):
-    """Pre-registered outcome table -> (verdict, reason)."""
+def mann_whitney_p(lo, hi):
+    """Exact one-sided p that `lo` values sit below `hi` values by chance (U statistic)."""
+    import itertools
+    pooled = lo + hi
+    u = sum((a < b) + 0.5 * (a == b) for a in lo for b in hi)
+    count = total = 0
+    for idx in itertools.combinations(range(len(pooled)), len(lo)):
+        a = [pooled[i] for i in idx]
+        b = [pooled[i] for i in range(len(pooled)) if i not in idx]
+        total += 1
+        count += sum((x < y) + 0.5 * (x == y) for x in a for y in b) >= u
+    return count / total if total else None
+
+
+def load_match(cells):
+    """A2: load.py matched() over the pre-cell windows of the primary arms."""
+    ws = [c["load"] for c in cells if c.get("load") and c["arm"] in PRIMARY]
+    return loadtool.matched(ws) if ws else {"matched": False, "verdict": "INCONCLUSIVE: no load windows"}
+
+
+def verdict(s, load=None):
+    """Pre-registered outcome table, Amendment A2 gates -> (verdict, reason)."""
     if any(s.get(a, {}).get("n", 0) < 3 for a in PRIMARY):
         return "INCONCLUSIVE", "a primary arm has fewer than 3 reps"
+    if load is not None and not load["matched"]:
+        return "INCONCLUSIVE", load["verdict"]
     sp, ps, al = s["SP"], s["PS"], s["ALL"]
     neg = s.get("NEG")
+    if any(x["median_ttft"] is None or x["j_per_tok_net"] is None for x in (sp, ps, al)):
+        return "INCONCLUSIVE", "a primary arm has no measured turn"
     if not neg or neg["median_ttft"] is None or neg["median_ttft"] <= max(x["median_ttft"] for x in (sp, ps, al)):
         return "INCONCLUSIVE", "NEG does not have the worst median TTFT: the probe cannot see placement"
-    if sp["j_per_tok_net"] and sp["j_spread"] > 0.2 * sp["j_per_tok_net"]:
+    if sp["j_spread"] > 0.2 * sp["j_per_tok_net"]:
         return "INCONCLUSIVE", "SP J/token spread above 20% of its median"
-    for k in ("throttled", "swapped", "contaminated"):
-        hit = [a for a in PRIMARY if s[a][k]]
-        if len(hit) == 1 or any(s[a][k] > 1 for a in PRIMARY):
-            return "INCONCLUSIVE", f"confound '{k}' in {hit}"
+    hit = [a for a in PRIMARY if s[a]["contaminated"]]
+    if len(hit) == 1 or any(s[a]["contaminated"] > 1 for a in PRIMARY):
+        return "INCONCLUSIVE", f"confound 'contaminated' in {hit}"
     if ps["j_per_tok_net"] > 0.85 * sp["j_per_tok_net"]:
         return "REFUTED", "PS J/token above 0.85x SP"
     guard = (ps["p95_latency"] <= sp["p95_latency"] + sp["p95_spread"] and ps["p95_ttft"] <= 1.2 * sp["p95_ttft"]
@@ -414,12 +504,26 @@ def verdict(s):
     return "SUPPORTED", "PS <= 0.85x SP J/token, p95 within SP spread, guardrails hold, beats ALL"
 
 
-def analyze(path):
-    cells = [json.loads(l) for l in open(path) if l.strip()]
-    cells = [c for c in cells if c.get("kind") == "cell"]
+def analyze(path, level=None):
+    with open(path) as f:
+        rows = [json.loads(l) for l in f if l.strip()]
+    cells = [c for c in rows if c.get("kind") == "cell" and (level is None or c.get("level") == level)]
     s = summarize(cells)
-    v, why = verdict(s)
-    return {"arms": s, "verdict": v, "reason": why}
+    a2 = any("load" in c for c in cells)
+    load = load_match(cells) if a2 else None
+    v, why = verdict(s, load)
+    out = {"arms": s, "verdict": v, "reason": why, "level": level}
+    if load is not None:
+        out["load"] = load
+    sp, ps, al = (s.get(a, {}) for a in PRIMARY)
+    if sp.get("j_cells") and ps.get("j_cells"):
+        out["ps_over_sp_j"] = round(ps["j_per_tok_net"] / sp["j_per_tok_net"], 4)
+        p = mann_whitney_p(ps["j_cells"], sp["j_cells"])
+        out["mw_p_ps_below_sp"] = round(p, 4)
+        out["confidence_j_leg"] = round(1 - p, 4)
+    if al.get("j_cells") and ps.get("j_cells"):
+        out["all_over_ps_j"] = round(al["j_per_tok_net"] / ps["j_per_tok_net"], 4)
+    return out
 
 
 def main(argv=None):
@@ -430,17 +534,18 @@ def main(argv=None):
     ap.add_argument("--out", default="h20.jsonl")
     ap.add_argument("--agents", type=int, default=4)
     ap.add_argument("--poll", type=int, default=0, help="ggml --poll/--poll-batch for every arm (0 = no spin)")
-    ap.add_argument("--warm", type=float, default=15)
-    ap.add_argument("--window", type=float, default=60)
+    ap.add_argument("--level", help="bench/load/load.py level the runner holds (recorded; filters --analyze)")
+    ap.add_argument("--slots", default="h20-slots", help="host dir for the saved prefix slots (A2)")
+    ap.add_argument("--rounds", type=int, default=1, help="scored synchronized rounds per cell (A2: 1)")
     ap.add_argument("--cells", type=int, default=len(ORDER))
     ap.add_argument("--budget", type=float, default=1170, help="wall seconds, capped at 1170 (19.5 min)")
     ap.add_argument("--port0", type=int, default=18600)
     a = ap.parse_args(argv)
     if a.analyze:
-        print(json.dumps(analyze(a.analyze), indent=1, sort_keys=True))
+        print(json.dumps(analyze(a.analyze, a.level), indent=1, sort_keys=True))
         return 0
-    if not a.image or not a.model:
-        ap.error("--image (or $IMAGE) and --model are required for a run")
+    if not a.image or not a.model or not a.level:
+        ap.error("--image (or $IMAGE), --model and --level are required for a run")
     a.budget = min(a.budget, 1170)
     try:
         run(a)
