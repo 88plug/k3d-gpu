@@ -104,12 +104,15 @@ k3d-gpu quickstart --remote --api-key-file ~/.config/llm.env --no-ui
    as the local path.
 
 Open WebUI resolves the endpoint's name through cluster DNS (CoreDNS forwards
-to the node's resolver). If its pod log shows a name resolution error, check
-from inside the cluster with
+to the node's resolver). A node is Ready before k3s has started CoreDNS, and a
+pod that looks a name up in that window gets `Temporary failure in name
+resolution` for every name, so `k3d-gpu up` returns only once CoreDNS is rolled
+out. If a pod log still shows a name resolution error, check from inside the
+cluster with
 `kubectl run dnscheck --rm -it --restart=Never --image=busybox:1.37 -- nslookup llm.example.com`
-and fix the host's resolver or CoreDNS forwarding. The chat UI path is tested
-against rendered manifests and a stub endpoint, not end to end with a live
-Open WebUI.
+and fix the host's resolver or CoreDNS forwarding. The chat UI path ran end
+to end against a live endpoint: one chat through Open WebUI's own API
+(EXPERIMENTS.md F2a).
 
 ## The Secret
 
@@ -236,16 +239,29 @@ EAT_MODEL=my-org/my-model EAT_TEMPERATURE=0.6 EAT_MAX_TOKENS=64 integrations/eat
 1. It writes the Secret into namespace `genai-gateway`.
 2. It gives LiteLLM's Deployment the env var `K3D_GPU_REMOTE_OPENAI_API_KEY`
    from that Secret, as a `secretKeyRef`.
-3. It registers the model through LiteLLM's `POST /model/new` with
-   `api_key: os.environ/K3D_GPU_REMOTE_OPENAI_API_KEY`. The key is in neither
-   the request nor LiteLLM's database.
+3. It adds the model to the gateway's config file (ConfigMap
+   `genai-gateway-config`, `proxy_config.yaml`) as a `model_list` entry with
+   `api_key: os.environ/K3D_GPU_REMOTE_OPENAI_API_KEY`, between two
+   `# k3d-gpu eat-remote` marker lines, and restarts the gateway to load it. A
+   second run replaces that entry. The key is in neither the ConfigMap nor
+   LiteLLM's database.
+
+The model is not registered through `POST /model/new`: LiteLLM (v1.83.14 in
+EAT's gateway) resolves `os.environ/` references only in its config file. A
+model added through the API is stored in its database as given, and the
+reference string itself goes out as the bearer token, so the endpoint answers
+401. `eat-remote.sh` deletes such a database entry for the same model and
+endpoint, which an older version of the script made. A gateway config with a
+`model_list` of its own is left alone; add the entry there by hand.
 
 It does not use EAT's own register playbook, which fixes `api_key` to `none`. A
-`helm upgrade` of the gateway drops the env var; run `eat-remote.sh` again
-after one.
+`helm upgrade` of the gateway drops the env var and the config entry; run
+`eat-remote.sh` again after one.
 
-This path is tested against stubs only. It has not run against a live EAT
-gateway.
+This path ran end to end against a live EAT gateway and a live endpoint:
+`eat-check.sh` passed (chat, tool call, sandbox code run), and the key was in
+neither the gateway database dump, `kubectl describe` nor the cluster's events
+(EXPERIMENTS.md F2b).
 
 ## Variables Open WebUI, SDKs and tools read
 

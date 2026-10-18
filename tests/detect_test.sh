@@ -4090,7 +4090,7 @@ file_has "non-DRA up never sets the DRA node label" "${LOG}" 'intel-gpu-dra=true
 
 run_says up "DRA on Kubernetes 1.34 fails: the driver is supported on 1.36+" "${r}" fail \
     'v1\.34\.1\+k3s1.*gpu-v0\.12\.1 needs Kubernetes 1\.36\+' K3D_GPU_DRA=1 STUB_SLICES="${DRA_SLICES}"
-file_has "DRA on 1.34 never waits for the kubelet plugin" "${LOG}" 'rollout status' negate
+file_has "DRA on 1.34 never waits for the kubelet plugin" "${LOG}" 'rollout status daemonset/intel-gpu-resource-driver-kubelet-plugin' negate
 run_says up "DRA on Kubernetes 1.37 passes the version gate" "${r}" 0 'schedulable: intel=1\.' \
     K3D_GPU_DRA=1 STUB_K8S_VERSION=v1.37.0+k3s1 STUB_SLICES="${DRA_SLICES}"
 run_says up "DRA without resource.k8s.io/v1 fails with the cluster version" "${r}" fail \

@@ -137,59 +137,99 @@ check_says "eat-check refuses a non-numeric temperature" fail 'EAT_TEMPERATURE m
 
 # 4. eat-remote.sh: a remote endpoint as a LiteLLM model. The key reaches the
 #    cluster only as the Secret on kubectl's stdin, the gateway gets it as a
-#    secretKeyRef (set env --from=secret), and /model/new names the env var, never
-#    the key. The master key header goes to curl on stdin, not argv.
+#    secretKeyRef (set env --from=secret), and the model is a model_list entry in
+#    the gateway's config file whose api_key names the env var, never the key.
+#    LiteLLM resolves os.environ/ only in its config file: a /model/new body is
+#    stored in its database as is, and the literal "os.environ/..." string goes out
+#    as the bearer token (live, LiteLLM v1.83.14: the endpoint answered 401). The
+#    master key header goes to curl on stdin, not argv.
 RKEY="sk-test-eat-remote-0123456789"
 RKEY_B64=$(printf '%s' "${RKEY}" | base64 -w0)
 RBIN="${WORK}/rbin"
 mkdir -p "${RBIN}"
 coproc ESTUB { exec python3 "${ROOT}/tests/openai_auth_stub.py" --key "${RKEY}" --models "zai-org/GLM-5.3"; }
 read -r _ EPORT <&"${ESTUB[0]}"
+# kubectl stub: the gateway ConfigMap lives in ${STUB_LOG}.cm (its proxy_config.yaml),
+# a merge patch of it rewrites that file.
 cat > "${RBIN}/kubectl" <<'EOF'
 #!/usr/bin/env bash
 echo "kubectl $*" >> "${STUB_LOG}"
 case "$*" in
     *"apply --server-side"*) grep -q "OPENAI_API_KEY: ${STUB_KEY_B64}" && echo "secret-on-stdin" >> "${STUB_LOG}" ;;
+    *"get configmap genai-gateway-config -o json"*) jq -n --rawfile c "${STUB_LOG}.cm" '{data: {"proxy_config.yaml": $c}}' ;;
+    *"patch configmap genai-gateway-config"*)
+        while [ $# -gt 0 ] && [ "$1" != -p ]; do shift; done
+        jq -j '.data["proxy_config.yaml"]' <<< "$2" > "${STUB_LOG}.cm" ;;
     *port-forward*) exec sleep 30 ;;
 esac
 exit 0
 EOF
+# curl stub: /model/info lists one database deployment of the model on the same
+# api_base (what an older eat-remote.sh registered) and one other model.
 cat > "${RBIN}/curl" <<'EOF'
 #!/usr/bin/env bash
 echo "curl $*" >> "${STUB_LOG}"
 grep -q 'Authorization: Bearer sk-stub' && echo "master-key-on-stdin" >> "${STUB_LOG}"
 case "$*" in
-    *"/models?"*) [ -f "${STUB_LOG}.listed" ] && echo '{"data":[{"id":"zai-org/GLM-5.3"}]}' || echo '{"data":[]}' ;;
-    *"/model/new"*) echo '{}' ;;
+    *"/models?"*) echo '{"data":[{"id":"zai-org/GLM-5.3"}]}' ;;
+    *"/model/info"*) jq -nc --arg b "${STUB_BASE}" '{data: [
+        {model_name: "zai-org/GLM-5.3", litellm_params: {api_base: $b}, model_info: {id: "stale-db-1", db_model: true}},
+        {model_name: "zai-org/GLM-5.3", litellm_params: {api_base: $b}, model_info: {id: "cfg-1", db_model: false}},
+        {model_name: "Qwen/Qwen3-1.7B", litellm_params: {api_base: "http://vllm"}, model_info: {id: "q-1", db_model: true}}]}' ;;
+    *"/model/delete"*) echo '{}' ;;
 esac
 EOF
 chmod +x "${RBIN}/kubectl" "${RBIN}/curl"
 rlog="${WORK}/rlog"
-: > "${rlog}"
-out=$(env PATH="${RBIN}:${PATH}" EAT_WORK="${WORK}/eat-work" EAT_KUBECONFIG="${WORK}/kubeconfig" STUB_LOG="${rlog}" \
-    STUB_KEY_B64="${RKEY_B64}" OPENAI_BASE_URL="http://127.0.0.1:${EPORT}" OPENAI_API_KEY="${RKEY}" \
-    "${EAT}/eat-remote.sh" 2>&1) && rc=0 || rc=$?
+printf '\nrouter_settings:\n  routing_strategy: usage-based-routing-v2\ngeneral_settings:\n  disable_spend_logs: false\n' > "${rlog}.cm"
+cp "${rlog}.cm" "${rlog}.cm0"
+remote() {
+    : > "${rlog}"
+    env PATH="${RBIN}:${PATH}" EAT_WORK="${WORK}/eat-work" EAT_KUBECONFIG="${WORK}/kubeconfig" STUB_LOG="${rlog}" \
+        STUB_KEY_B64="${RKEY_B64}" STUB_BASE="http://127.0.0.1:${EPORT}/v1" OPENAI_BASE_URL="http://127.0.0.1:${EPORT}" \
+        OPENAI_API_KEY="${RKEY}" "${EAT}/eat-remote.sh" 2>&1
+}
+out=$(remote) && rc=0 || rc=$?
 log=$(cat "${rlog}")
+cfg=$(cat "${rlog}.cm")
 if [ "${rc}" -eq 0 ]; then ok "eat-remote registers the endpoint"; else fail "eat-remote rc=${rc}: ${out}"; fi
 grep -q '^secret-on-stdin$' <<< "${log}" && ok "eat-remote: Secret on stdin, server-side" || fail "eat-remote: Secret not on stdin"
 grep -q 'set env deployment/genai-gateway-deployment --from=secret/k3d-gpu-llm --keys=OPENAI_API_KEY --prefix=K3D_GPU_REMOTE_' <<< "${log}" \
     && ok "eat-remote: gateway env is a secretKeyRef" || fail "eat-remote: gateway env"
 grep -q 'master-key-on-stdin' <<< "${log}" && ok "eat-remote: master key header on stdin" || fail "eat-remote: master key header"
-grep -q 'os.environ/K3D_GPU_REMOTE_OPENAI_API_KEY' <<< "${log}" && grep -q '"api_base":"http://127.0.0.1:'"${EPORT}"'/v1"' <<< "${log}" \
-    && ok "eat-remote: /model/new names the env var and the /v1 base" || fail "eat-remote: /model/new body: ${log}"
-if grep -Fq -- "${RKEY}" <<< "${log}${out}" || grep -Fq -- "${RKEY_B64}" <<< "${log}${out}" || grep -Fq 'sk-stub' <<< "${log}"; then
-    fail "eat-remote: a key reached argv or output"
+if grep -q '"api_key":"os.environ/K3D_GPU_REMOTE_OPENAI_API_KEY"' <<< "${cfg}" && grep -q '"api_base":"http://127.0.0.1:'"${EPORT}"'/v1"' <<< "${cfg}" \
+    && grep -q '"model":"openai/zai-org/GLM-5.3"' <<< "${cfg}" && grep -q '^model_list:$' <<< "${cfg}"; then
+    ok "eat-remote: the config file's model_list names the env var and the /v1 base"
 else
-    ok "eat-remote: no key on any argv or in the output"
+    fail "eat-remote: config file: ${cfg}"
 fi
-touch "${rlog}.listed"; : > "${rlog}"
-out=$(env PATH="${RBIN}:${PATH}" EAT_WORK="${WORK}/eat-work" EAT_KUBECONFIG="${WORK}/kubeconfig" STUB_LOG="${rlog}" \
-    STUB_KEY_B64="${RKEY_B64}" OPENAI_BASE_URL="http://127.0.0.1:${EPORT}" OPENAI_API_KEY="${RKEY}" \
-    "${EAT}/eat-remote.sh" 2>&1) && rc=0 || rc=$?
-if [ "${rc}" -eq 0 ] && grep -q 'already serves' <<< "${out}" && ! grep -q '/model/new' "${rlog}"; then
-    ok "eat-remote: a registered model is not registered again"
+python3 -c 'import sys, yaml; c = yaml.safe_load(open(sys.argv[1])); m = c["model_list"][0]
+assert m["model_name"] == "zai-org/GLM-5.3" and m["litellm_params"]["api_key"] == "os.environ/K3D_GPU_REMOTE_OPENAI_API_KEY", m
+assert c["router_settings"]["routing_strategy"] == "usage-based-routing-v2"' "${rlog}.cm" 2>/dev/null \
+    && ok "eat-remote: the config file is valid YAML with the old settings kept" || fail "eat-remote: config not YAML: ${cfg}"
+grep -q '/model/new' <<< "${log}" && fail "eat-remote: still calls /model/new" || ok "eat-remote: no /model/new (LiteLLM would send the reference as the key)"
+grep -q 'patch deployment genai-gateway-deployment .*k3d-gpu.io/eat-remote' <<< "${log}" \
+    && ok "eat-remote: the gateway restarts when the config changes" || fail "eat-remote: no pod template annotation: ${log}"
+grep -q '/model/delete .*"id":"stale-db-1"' <<< "${log}" && ok "eat-remote: an older database registration of the model is deleted" \
+    || fail "eat-remote: stale database deployment kept: ${log}"
+grep -q '"id":"cfg-1"\|"id":"q-1"' <<< "${log}" && fail "eat-remote: deleted a deployment it did not make" || ok "eat-remote: other deployments kept"
+if grep -Fq -- "${RKEY}" <<< "${log}${out}${cfg}" || grep -Fq -- "${RKEY_B64}" <<< "${log}${out}${cfg}" || grep -Fq 'sk-stub' <<< "${log}"; then
+    fail "eat-remote: a key reached argv, output or the config"
 else
-    fail "eat-remote idempotence: ${out}"
+    ok "eat-remote: no key on any argv, in the output or in the config"
+fi
+out=$(remote) && rc=0 || rc=$?
+if [ "${rc}" -eq 0 ] && [ "$(grep -c '^model_list:$' "${rlog}.cm")" -eq 1 ] && [ "$(grep -c 'K3D_GPU_REMOTE_OPENAI_API_KEY' "${rlog}.cm")" -eq 1 ]; then
+    ok "eat-remote: a second run replaces its entry, not adds one"
+else
+    fail "eat-remote rerun: rc=${rc} ${out} $(cat "${rlog}.cm")"
+fi
+printf 'model_list:\n  - model_name: x\n' > "${rlog}.cm"
+out=$(remote) && rc=0 || rc=$?
+if [ "${rc}" -ne 0 ] && grep -q 'has its own model_list' <<< "${out}" && ! grep -q 'patch configmap' "${rlog}"; then
+    ok "eat-remote: a config with its own model_list is left alone"
+else
+    fail "eat-remote: own model_list: rc=${rc} ${out}"
 fi
 kill "${ESTUB_PID}" 2>/dev/null || true
 
