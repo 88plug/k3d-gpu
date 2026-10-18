@@ -111,7 +111,7 @@ spec:
   restartPolicy: Never
   containers:
     - name: hold
-      image: busybox:1.37
+      image: busybox:1.37@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
       command: [sleep, "600"]
       volumeMounts:
         - name: models

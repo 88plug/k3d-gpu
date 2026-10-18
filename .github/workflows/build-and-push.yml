@@ -149,7 +149,7 @@ jobs:
         run: |
           kt=$(grep '^ARG K3S_TAG' Dockerfile | cut -d= -f2 | tr -d '"')
           pp=$(grep -oE 'k8s-device-plugin:v[0-9]+\.[0-9]+\.[0-9]+' share/nvidia-device-plugin.yml | cut -d: -f2)
-          ti=$(grep -oE 'K3D_GPU_TEST_IMAGE:-nvidia/cuda:[^}]*' scripts/k3d-gpu | sed 's#.*nvidia/cuda:##')
+          ti=$(grep -oE 'K3D_GPU_TEST_IMAGE:-nvidia/cuda:[^}@]*' scripts/k3d-gpu | sed 's#.*nvidia/cuda:##')
           {
             echo "k3s=$kt"
             echo "k3sdigest=$(grep '^ARG K3S_DIGEST' Dockerfile | cut -d= -f2 | tr -d '"')"
@@ -195,7 +195,11 @@ jobs:
           done
           sed -i "s|gaudi-device-plugin:[0-9]*\.[0-9]*\.[0-9]*-[0-9]*|gaudi-device-plugin:${{ steps.gaudi_plugin.outputs.latest }}|" share/gaudi-device-plugin.yml
           sed -i "s|K3D_GPU_TEST_IMAGE:-nvidia/cuda:[^}]*|K3D_GPU_TEST_IMAGE:-nvidia/cuda:${{ steps.cuda.outputs.latest }}|" scripts/k3d-gpu
-          # Re-pin every image by digest (and k3s's own image list) for the new tags.
+          # The seds moved tags only: write each bumped reference's digest from its
+          # registry, then re-pin images.lock (and k3s's own image list) for them.
+          scripts/images-lock repin share/nvidia-device-plugin.yml share/intel-*-plugin.yml \
+            share/gaudi-device-plugin.yml scripts/k3d-gpu
+          scripts/images-lock pins
           scripts/images-lock update
           scripts/images-lock check
 
@@ -299,8 +303,6 @@ jobs:
           context: .
           push: true
           platforms: linux/amd64
-          build-args: |
-            UBUNTU_TAG=26.04
           labels: |
             org.opencontainers.image.version=${{ inputs.release }}
             org.opencontainers.image.revision=aur-v${{ inputs.release }}
@@ -323,7 +325,7 @@ jobs:
           push: true
           platforms: linux/amd64
           build-args: |
-            UBUNTU_TAG=24.04
+            UBUNTU_IMAGE=ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
           labels: |
             org.opencontainers.image.version=${{ inputs.release }}
             org.opencontainers.image.revision=aur-v${{ inputs.release }}
@@ -465,9 +467,87 @@ jobs:
             Re-rendered `${{ matrix.component }}` from its pinned upstream at
             `${{ steps.render.outputs.version }}` with `hack/render-component --latest`.
 
-            - Pins (version + sha256) moved in `hack/components/${{ matrix.component }}/component.conf`.
+            - Pins (version, chart sha256, image digests) moved in `hack/components/${{ matrix.component }}/component.conf`.
             - `tests/detect_test.sh` and `tests/render_test.sh` passed in the workflow run
               that opened this PR.
             - Merging rebuilds the node image with the new manifest baked in.
 
             Review the manifest diff for new CRDs, RBAC, images and flags before merging.
+
+  # ─── Image digests ───────────────────────────────────────────────────────
+  # Every image reference is pinned name:tag@sha256 (scripts/images-lock pins).
+  # A registry can re-point a tag (a rebuilt base image, a security respin) with
+  # no new tag, which the version checks above never see. Daily: re-resolve the
+  # tag of every pinned reference, write the registry's digest where it moved,
+  # re-pin images.lock, run the image tests, and open or update one PR on branch
+  # autobump/image-digests. A PR opened with GITHUB_TOKEN starts no CI workflows,
+  # so the tests run here before it opens.
+  repin-images:
+    if: ${{ !inputs.release }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: main
+
+      - name: Install pinned helm
+        run: |
+          hack/install-helm "$RUNNER_TEMP/bin"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Move every digest a registry re-pointed
+        id: repin
+        run: |
+          scripts/images-lock repin | tee "$RUNNER_TEMP/repin.txt"
+          scripts/images-lock update
+          scripts/images-lock check
+          scripts/images-lock pins
+          {
+            echo "changes<<REPIN_EOF"
+            cat "$RUNNER_TEMP/repin.txt"
+            echo "REPIN_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      # A rendered component's image pins live in its component.conf (IMAGE_PINS);
+      # repin moved them with the manifest, so the render must still match share/.
+      - name: Committed manifests match their pinned render
+        run: |
+          git add -A
+          hack/render-component
+          git diff --exit-code -- share/ || { echo "::error::share/ differs from hack/render-component output after repin"; exit 1; }
+
+      - name: Image pin, audit, detection and render tests
+        run: |
+          tests/image_pins_test.sh
+          tests/audit_test.sh
+          tests/detect_test.sh
+          tests/render_test.sh
+
+      - name: Open or update the digest PR
+        if: steps.repin.outputs.changes != ''
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          branch: autobump/image-digests
+          delete-branch: true
+          commit-message: "chore(images): move the digests the registries re-pointed"
+          title: "chore(images): move the digests the registries re-pointed"
+          labels: dependencies
+          body: |
+            `scripts/images-lock repin` re-resolved the tag of every pinned image
+            reference; these digests moved (same tag, new image):
+
+            ```
+            ${{ steps.repin.outputs.changes }}
+            ```
+
+            - `images.lock` re-pinned with `scripts/images-lock update`; `check` and `pins` pass.
+            - `tests/image_pins_test.sh`, `tests/audit_test.sh`, `tests/detect_test.sh`,
+              `tests/render_test.sh` and the render check passed in the workflow run that
+              opened this PR.
+
+            Review what the upstream rebuild changed before merging. A change under
+            `share/`, `scripts/` or the Dockerfile cuts a launcher release on merge.

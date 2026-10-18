@@ -23,7 +23,9 @@ prompt set, the same max_tokens, temperature 0 and ignore_eos:
     environment, one bench/load/load.py window of that many seconds is sampled
     before every timed segment, with no request in flight, tagged with the arm
     the segment is about to run, and appended to VS_LOAD_OUT as a JSON line
-    (`load.py matched VS_LOAD_OUT` then compares the arms). The windows count
+    (`load.py matched VS_LOAD_OUT` then compares the arms). With VS_LOAD_SETTLE_S
+    set, the run first idles that many seconds before each window, so the window
+    does not catch the previous segment's own load. Windows and settle gaps count
     against the budget.
 
 A --remote-arm is a third-party OpenAI-compatible endpoint (k3d-gpu bench --vs
@@ -144,14 +146,18 @@ def median(xs):
     return statistics.median(xs) if xs else None
 
 
-def load_window(seconds, tag, out):
-    """Sample one background-load window (bench/load/load.py) and append it to out."""
+def load_window(seconds, tag, out, settle=0.0):
+    """Idle `settle` seconds, then sample one background-load window
+    (bench/load/load.py) and append it to out."""
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "load"))
     try:
         import load  # noqa: E402
     except ImportError:
         raise SystemExit("vs: VS_LOAD_WINDOW_S needs bench/load/load.py next to vs.py (a repo checkout)")
+    if settle > 0:
+        time.sleep(settle)
     w = load.window(seconds, load.load_cpus(), tag=tag, level=os.environ.get("VS_LOAD_LEVEL"))
+    w["settle_s"] = settle
     with open(out, "a") as f:
         f.write(json.dumps(w, sort_keys=True) + "\n")
     return w
@@ -241,6 +247,7 @@ def cmd_run(opts):
             warm[arm["name"]].append(request(arm, prompts[i % len(prompts)], opts, deadline)["ok"])
     load_s = float(os.environ.get("VS_LOAD_WINDOW_S") or 0)
     load_out = os.environ.get("VS_LOAD_OUT")
+    settle_s = float(os.environ.get("VS_LOAD_SETTLE_S") or 0)
     rounds = []
     for r in range(0 if budget_hit else opts.rounds):
         order = [("k3d", k3d), ("vs", vs)] if r % 2 == 0 else [("vs", vs), ("k3d", k3d)]
@@ -250,7 +257,7 @@ def cmd_run(opts):
                 budget_hit = True
                 break
             if load_s > 0 and load_out:
-                load_window(load_s, arm["name"], load_out)
+                load_window(load_s, arm["name"], load_out, settle_s)
             rec[side] = segment(arm, prompts, opts, rapl, deadline)
         if budget_hit:
             break

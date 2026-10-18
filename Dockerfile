@@ -2,8 +2,9 @@ ARG K3S_TAG="v1.37.1-k3s1"
 ARG K3S_DIGEST="sha256:ca7f37d993d82ef0dcdcfecb2e0e2618ea541dbaffc620c8cedebe01a82acd0d"
 #https://hub.docker.com/r/rancher/k3s/tags  (multi-arch index digest of K3S_TAG;
 # rancher stopped publishing per-arch "-amd64" tags after v1.34.1-k3s1)
-ARG UBUNTU_TAG="26.04"
-#https://hub.docker.com/_/ubuntu/tags  (26.04 = default/latest; 24.04 also built)
+ARG UBUNTU_IMAGE="ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944"
+#https://hub.docker.com/_/ubuntu/tags  (26.04 = default/latest; 24.04 also built),
+# pinned by multi-arch index digest; scripts/images-lock repin moves it
 
 FROM rancher/k3s:$K3S_TAG@$K3S_DIGEST AS k3s
 
@@ -13,7 +14,7 @@ FROM rancher/k3s:$K3S_TAG@$K3S_DIGEST AS k3s
 # workload image. So we build on plain ubuntu (not nvidia/cuda) — this tracks the
 # newest Ubuntu LTS without waiting for NVIDIA to publish a CUDA base for it, and
 # sheds the unused CUDA layer.
-FROM ubuntu:$UBUNTU_TAG
+FROM ${UBUNTU_IMAGE}
 
 # Install the NVIDIA container toolkit (distro-agnostic stable/deb repo — the
 # package set is identical regardless of the Ubuntu version underneath).
