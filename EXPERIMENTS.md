@@ -3710,6 +3710,64 @@ the probe stops after calibration (n = 1 calibration, 0 arm runs).
 | O0 | Gate reports degenerate (first or second gate) | INCONCLUSIVE: the model has no headroom to sell on this host; arms B/T/C not run | 0.85 | DO-NOT-RE-ATTACK on this host while idle is within 10 C of T_tcc; re-run on a host that idles >= 20 C below T_tcc |
 | O1-O6 | As above, if the gate passes | As above | 0.15 (scaled) | As above |
 
+**Amendment A2: matched background load (2026-10-18, before any A2 measurement).**
+Written 2026-10-18T13:09Z on `claude/verdict-thermal-resource-ml` and pushed before
+the lock is taken. Run 1 (O0) is not re-read. Unchanged: the hypothesis, the null,
+the arms B/T/C and their requests, the 24-pod workload, the thermal model and its
+10 C margin, the Amendment 1 budget gate (O0), the run order B T C C T B B T C, n = 3
+per arm, the 75 s makespan cap, the cooldown rule, the TjMax abort, the decision rule
+(non-overlapping 3v3 ranges, permutation p = 0.05, or |Δmedian| > max arm spread),
+criteria (a)-(c), the outcome table O0-O6, the priors and the prediction (O0 if the
+gate fires, else O3 REFUTED: T throttle <= 0.5x B, T makespan >= 1.10x B, T within
+C's spread).
+
+- **Why.** Run 1 was stopped by background draw nobody controlled (idle window
+  72-99 W on the shared host). Real Intel boxes are busy, so A2 does not wait for a
+  quiet window: every arm runs under the same held background load, the load is
+  recorded per arm, and a level is INCONCLUSIVE for load only when that load is
+  unmatched across arms. How high it is never voids a run.
+- **Load.** `bench/load/load.py` (stress-ng 0.22.01 pinned by digest) on the E-cores
+  16-31. `typical` is the headline; `heavy` is the robustness check and runs only if
+  the lock hold has time left after `typical`. The level is started 30 s before the
+  probe and held through calibration, the gate and all runs. The H23 pods are not
+  pinned, so they share the E-cores with the load as well as the package power and
+  thermal budget: contention is part of the treatment. The calibration "idle" window
+  is therefore the loaded idle, and the budget the model sells is headroom net of the
+  neighbour.
+- **Load per arm.** The 5 s pre-run package reading becomes a 10 s `load.py` window
+  after the cooldown, with no H23 pod running, tagged with the arm (`load.jsonl`):
+  E-core busy %, load1, package W, `core_throttle_count` events/min, swap used, swap
+  growth. 3 windows per arm.
+- **Matching tolerance** (`load.py` TOLERANCE, fixed before this amendment): over the
+  B, T and C per-arm means, spread within busy 5 points; load1 max(1.0, 15%); package
+  W max(3 W, 10%); throttle/min max(10, 25%); swap used 256 MiB; swap growth 64 MiB.
+  Unmatched -> INCONCLUSIVE naming the metric, with the verdict the level would have
+  had reported next to it.
+- **Void rules.** Under a held level the "pre-run W > idle median + 15 W" and "swap
+  growth > 512 MiB" voids are recorded, not applied: the per-arm match covers that
+  drift, and those rules would void runs because the load is high. A censored run
+  (75 s cap) is still void; O6 (>= 2 void runs, or an arm spread > 25% of its
+  median) still applies.
+- **Statistics.** Per arm: median and min-max of makespan, `throttle_ms_per_pod`
+  (criterion a), net throttle and package W. Derived confidence = 1 - permutation p
+  for a decided comparison (0.95 at 3v3 non-overlap), as registered.
+- **Timing.** One lock hold; per level at most 20 min of wall time (30 s settle +
+  probe budget 1080 s + 60 s watchdog grace). Cluster `k3dgpu-i-thermal-resource`,
+  scratch `KUBECONFIG`, created and deleted by the probe inside each level; load
+  containers removed before the lock is released.
+- **Method fix.** The probe now reads RAPL with `sudo -A` when `SUDO_ASKPASS` is set
+  (run 1 needed a `sudo` shim on `PATH`), the same rule as `load.py`.
+- **Probe.** `SUDO_ASKPASS=<helper> LOCK=<live lock> bench/thermal-resource/run.sh OUT`
+  (LEVELS "typical heavy").
+
+**Expectation for the gate, not a gate.** From the H29 A2 run on this host, `typical`
+holds the package at about 93 W and 90-96 C before any work; run 1's fit put idle at
+79 C. With the loaded idle within 10 C of T_tcc (95 C) the model's threshold P_th
+falls to or below the loaded idle and the budget to 0-10 W, so O0 (budget gate) is
+expected again at both levels (prior 0.85, unchanged). If it fires, that is the
+pre-registered O0, not a load-matching failure: under a busy box the model has no
+headroom to sell, and B/T/C are not run.
+
 ### H8 run (i9-13900T, 2026-10-17)
 
 ```text
