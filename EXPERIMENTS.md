@@ -60,7 +60,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H44 | Busy-box robustness: on B24's first 12 tasks, the p95 turn-latency inflation heavy/none is <= 1.25x for A1 (inference on the P-cores, load on the E-cores) and >= 1.5x for B1 (EAT stock floats onto the loaded E-cores). | A1 <= 1.25 (0.65). B1 >= 1.5 (0.6). | `k3d-gpu bench agent run --tasks B24 --limit 12` for A1 and B1, blocks none/heavy/none/heavy at 5 min each (20 min per arm). SUPPORTED: both hold. REFUTED: A1 inflation CI lower bound > 1.25, or B1 <= 1.25 as well (no difference). Otherwise INCONCLUSIVE. | INCONCLUSIVE |
 | H45 | Graded agents per box (largest N on the ramp 1, 2, 4, 8 at which pooled p95 turn latency <= 10 s, success >= the arm's N=1 success - 10 points, error rate <= 1% and >= 60 window requests) on the read-only banking set B15-RO at typical load. | A3 >= 8 (0.8). A1 in [1, 4] (0.55). C1 <= 1 (0.7, `OLLAMA_NUM_PARALLEL=1` serializes). C2 <= A1 (0.6). B1 not run, predicted 0. An arm's prediction is refuted by a scored APB outside its range; a bracket that still contains the prediction decides nothing. | `k3d-gpu bench agent apb` per arm (A1 A3 C1 C2), 5 min per step. The synthetic `k3d-gpu capacity --slo 10` APB is reported beside it, not scored. | PENDING |
 | H46 | Joules per successful banking task (differential: block energy minus the mean power of a load-only control window at the same load, times the block time, over the successful tasks): A1 needs at most 0.4x of B1's. | A1/B1 <= 0.4 (0.7). A3 < A1 including dGPU power (0.7). A2 > A1 (0.6). | H42's blocks plus one 120 s `k3d-gpu bench agent control` window per arm with its server up and idle. SUPPORTED: ratio CI upper bound <= 0.4. REFUTED: ratio CI lower bound > 0.7. INCONCLUSIVE: B1 with zero successes (J per success undefined), load unmatched, or RAPL unreadable. | INCONCLUSIVE |
-| H47 | CPU draft speculative decoding helps agent tasks: A4 (A1 plus a CPU draft, `OpenVINO/Qwen3-0.6B-int4-ov` @ `f864c610`) cuts B24's median time per task by >= 10% vs A1 with delta success >= -5 points. Runs only if H34 is SUPPORTED when the campaign starts; otherwise not run, recorded. | A 0-15% gain; INCONCLUSIVE likely (tool-call turns are 40-96 tokens, little to amortize, and the draft competes for the P-cores). Confidence it is SUPPORTED: 0.35. | `k3d-gpu bench agent run --tasks B24`, A4 vs A1 paired and interleaved at typical load. SUPPORTED: gain CI lower bound >= 10% with success held. REFUTED: gain CI upper bound < 0. Otherwise INCONCLUSIVE. Design replaced 2026-10-18, before any H47 run, by the within-hold interleaved design ([H47 and H49 pre-registration](#h47-and-h49-pre-registration-within-hold-interleaved-design-2026-10-18)): A1 and A4 as two model names in one OVMS pod, one hold, pairs A B B A over B24's task ids, load sampled per task and matched per pair (rule L1); the statistic, thresholds and prediction above are unchanged. | PENDING |
+| H47 | CPU draft speculative decoding helps agent tasks: A4 (A1 plus a CPU draft, `OpenVINO/Qwen3-0.6B-int4-ov` @ `f864c610`) cuts B24's median time per task by >= 10% vs A1 with delta success >= -5 points. Runs only if H34 is SUPPORTED when the campaign starts; otherwise not run, recorded. | A 0-15% gain; INCONCLUSIVE likely (tool-call turns are 40-96 tokens, little to amortize, and the draft competes for the P-cores). Confidence it is SUPPORTED: 0.35. | `k3d-gpu bench agent run --tasks B24`, A4 vs A1 paired and interleaved at typical load. SUPPORTED: gain CI lower bound >= 10% with success held. REFUTED: gain CI upper bound < 0. Otherwise INCONCLUSIVE. Design replaced 2026-10-18, before any H47 run, by the within-hold interleaved design ([H47 and H49 pre-registration](#h47-and-h49-pre-registration-within-hold-interleaved-design-2026-10-18)): A1 and A4 as two model names in one OVMS pod, one hold, pairs A B B A over B24's task ids, load sampled per task and matched per pair (rule L1); the statistic, thresholds and prediction above are unchanged. Result ([H47 run](#h47-run-i9-13900t-2026-10-18)): 24 pairs in 2 holds, none void or over budget; load rule L1 matched 13 of 24 pairs (< 16 and < 75%), so INCONCLUSIVE. On the 13 matched pairs: gain 21.2% (95% CI 15.8-27.5%), delta success 0 (11/13 both arms), J per attempt A4/A1 0.82 (0.77-0.88); 0.98 of bootstrap resamples show a gain of at least 10%. | INCONCLUSIVE |
 | H48 | The graders are sound: remote GLM-5.3 through harvest (arm R, gaudi.farmgpu.net, never a node's :8299) passes >= 11 of the measured items among 4 B24 tasks and 8 S100 ids, under a hard cap of 20 LLM requests. | >= 11 pass (0.8). | One `k3d-gpu bench agent proxy --max-requests 20 --key-file FILE --sampling agent_remote` in front of harvest carries every request: first `bfcl --mode server-fc --limit 8 --proxy-url` (8 single-turn ids, 8 requests), then `run --tasks B24 --ids B-T1-U1001,B-T3-U1002,B-T5-U1003,B-T8-U1001` through the same proxy; a task cut by the request cap or by the 256-token cap (`finish_reason=length`) is unmeasured. Latency and energy are not reported. SUPPORTED: >= 10 measured and <= 1 measured item fails. REFUTED: >= 3 measured items fail, and every failed item's task and grader are audited before H41-H46 are read. Otherwise INCONCLUSIVE (amendment 17; originally >= 11 / 10 / <= 9 of 12). | REFUTED |
 | H49 | Inside EAT's banking flow (`intel/enterprise-ai-blueprints` v1.0.0 banking-assistant, B24 at N=1, typical load), the k3d-gpu auto-config stack A1 (OVMS int4 on the P-cores with the CPU Fast Draft of #116) delivers far more tasks within the 120 s turn budget than EAT stock B1 (vLLM CPU, bf16), when both arms run in one hold, interleaved task by task. A stack-vs-stack claim (amendment 16). | Written 2026-10-18T07:50-07:00, before any H49 measurement. Within-budget success (graded pass, every turn <= 120 s, task <= the 240 s cap; turn timeouts and cap hits are measured failures, not missing data): A1 >= 0.70 (0.75), B1 <= 0.10 (0.8), paired A1 - B1 >= +60 points (0.7). Secondary, not gated: J per completed task, paired J per attempt, p95 turn, with over-budget counts per arm. | [H47 and H49 pre-registration](#h47-and-h49-pre-registration-within-hold-interleaved-design-2026-10-18): both servers in one cluster in one hold, pairs over B24's task ids in A B B A order, a reset to seed after every mutating attempt, load sampled per attempt and matched per pair on background CPU (rule L1), up to 12 holds for 24 pairs. SUPPORTED: paired difference CI lower bound >= +30 points and A1 within-budget success >= 0.6, load rule and idle-arm check passed. REFUTED: CI upper bound < +30 points. Otherwise INCONCLUSIVE (also: < 16 matched pairs, < 75% of pairs matched, > 2 void pairs, or the idle arm's server above 0.5 CPU). | PENDING |
 | F2a | Open WebUI in a k3d-gpu cluster reaches a public remote endpoint by name: `k3d-gpu quickstart --remote https://gaudi.farmgpu.net` (no hostAliases) gives a chat through Open WebUI's own API that returns. An earlier run saw `Temporary failure in name resolution` for gaudi.farmgpu.net from a pod. | Pre-registered 2026-10-17, before measuring: the in-cluster failure is a cluster DNS gap (CoreDNS forwarding to an upstream the node container cannot use), not the endpoint; once fixed, one `POST /api/chat/completions` returns `finish_reason=stop` with non-empty content (0.7). | Fresh cluster `k3dgpu-f2-*` (scratch KUBECONFIG, node CPUs 8-15), `nslookup` from a pod before any change, CoreDNS Corefile and node `/etc/resolv.conf` read; root cause fixed in the product if it is a k3d-gpu config gap (regression test first); then one chat through Open WebUI's API with the generated admin account, max_tokens <= 64, temperature 0.6. SUPPORTED: chat returns. REFUTED: no chat returns after the fix. Run (2026-10-17, i9-13900T, k3s v1.35.5, node CPUs 8-15): the prediction's mechanism was wrong. CoreDNS forwarding works (node resolv.conf is k3d's 192.168.32.1 DNAT to Docker's 127.0.0.11; busybox and glibc lookups from pods resolve). The failure is a startup race: `k3d-gpu up` returned on node Ready, when the CoreDNS Deployment was 1 s old (image still pulling); a glibc pod started then got `gaierror(-3, 'Temporary failure in name resolution')` for 11 s (4 tries), first success at 13 s. Fix: `up` waits for the CoreDNS rollout; after it, the same pod resolved on its first try (0.0 s). Then `quickstart --remote https://gaudi.farmgpu.net` with no hostAliases: Open WebUI listed `zai-org/GLM-5.3` and one `POST /api/chat/completions` returned finish_reason=stop, content 'OK', 0.41 s; 0 name resolution errors in its log. | SUPPORTED |
@@ -784,6 +784,102 @@ one. Every later B1 attempt (pairs 1-15) then drew HTTP 404 within 2 ms and was 
   the 240 s cap, with one 60.8 s turn recorded before it. The design, statistic, thresholds
   and prediction do not change.
 - H47 is unaffected. None of its 48 attempts reached the cap, so no agent was restarted.
+
+### H47 run (i9-13900T, 2026-10-18)
+
+**Reproduce:**
+
+```text
+# provenance
+date:            2026-10-18T15:52:07Z (hold 1) and 16:05:31Z (hold 2); pairs from 15:53:58Z
+hypothesis:      H47
+host cpu:        13th Gen Intel(R) Core(TM) i9-13900T (8 P-cores, 16 E-cores, 125 GiB RAM)
+host kernel:     6.6.128-1-MANJARO
+accelerators:    k3d-gpu up: nvidia=2 intel=8 hybrid=1 (neither arm uses a GPU)
+k3d-gpu commit:  bca4a51 (#131, the runner and amendment P1)
+node image:      cryptoandcoffee/k3d-gpu@sha256:e367c7fa6a466b57bc135c16d984bd28b87006d8aad96fcf3aa13ecadd4c1b29
+model:           k3dgpu/Qwen3-4B-Instruct-2507-int4-ov (openvino_model.bin sha256 5c1e36e4...); A4 draft
+                 OpenVINO/Qwen3-0.6B-int4-ov @ f864c610 (openvino_model.bin sha256 28613e99...)
+runtime:         openvino/model_server@sha256:a928903f... (2026.4.1), one pod on the P-core balloon,
+                 graphs bench/eatflow/h47/ (A1 no draft, A4 draft_device CPU), tool_parser hermes3;
+                 LiteLLM v1.83.14-stable.patch.2@sha256:73cbb215... per arm; blueprint 758d484
+energy source:   RAPL package (/sys/class/powercap/intel-rapl:0, read through K3D_GPU_RAPL_EXEC)
+runs per arm:    24 attempts (24 pairs, 2 holds: 18 + 6)
+```
+
+Commands: `scratchpad hold.sh` = `flock -w 14400 live.lock` then `LIVE_MODE=pairs LIVE_CAP=1500
+LIVE_HOLD=<n> LIVE_PAIRS_DIR=<dir> timeout -k 30 1530 bench/eatflow/live.sh H47 <out>`, then
+`k3d-gpu bench agent pairs-report <dir> --hyp H47 --arm-a A1 --arm-b A4`. Records (attempts with
+their load windows, pairs, turns, warm-ups, `analysis.json`, the hold logs and pins):
+[bench/eatflow/results/2026-10-18/H47/](bench/eatflow/results/2026-10-18/H47/).
+
+Typical background load on the E-cores (16-31) for each whole hold. Both arms were ready 82 s
+into each hold. Hold 1 ran pairs 0-17 and stopped at the 600 s guard; hold 2 ran pairs 18-23.
+No attempt reached the turn budget or the task cap, no pair was void, and nothing was
+censored. The OVMS pod read 0.0006 CPU (median) with no request in flight, so the idle check
+passes.
+
+Per pair (seconds per attempt, graded outcome, background CPU of each attempt's window in
+CPU-s/s; matched = the two attempts' `bg_cpu` within 0.8):
+
+| j | Task | A1 s | A1 | A4 s | A4 | bg_cpu A1 / A4 | Matched |
+|---|---|---|---|---|---|---|---|
+| 0 | B-T1-U1001 | 17.5 | pass | 14.0 | pass | 10.93 / 11.37 | yes |
+| 1 | B-T2-U1001 | 7.1 | pass | 4.6 | pass | 10.26 / 10.09 | yes |
+| 2 | B-T3-U1001 | 35.0 | pass | 25.2 | pass | 11.81 / 10.62 | no |
+| 3 | B-T4-U1001 | 7.8 | pass | 5.8 | pass | 11.09 / 10.11 | no |
+| 4 | B-T5-U1001 | 17.6 | pass | 14.5 | pass | 11.06 / 10.15 | no |
+| 5 | B-T6-U1001 | 24.6 | pass | 18.5 | pass | 11.54 / 11.58 | yes |
+| 6 | B-T7-U1001 | 18.7 | pass | 14.7 | pass | 11.17 / 11.21 | yes |
+| 7 | B-T8-U1001 | 13.2 | pass | 12.9 | pass | 11.27 / 10.75 | yes |
+| 8 | B-T1-U1002 | 21.7 | pass | 18.3 | pass | 11.37 / 11.67 | yes |
+| 9 | B-T2-U1002 | 7.2 | pass | 4.9 | pass | 10.83 / 11.08 | yes |
+| 10 | B-T3-U1002 | 24.8 | pass | 16.9 | pass | 11.86 / 10.15 | no |
+| 11 | B-T4-U1002 | 11.9 | pass | 8.1 | pass | 12.19 / 11.64 | yes |
+| 12 | B-T5-U1002 | 9.4 | fail | 9.9 | fail | 11.27 / 9.79 | no |
+| 13 | B-T6-U1002 | 23.4 | pass | 17.3 | pass | 11.84 / 10.67 | no |
+| 14 | B-T7-U1002 | 17.8 | pass | 14.2 | pass | 10.57 / 10.76 | yes |
+| 15 | B-T8-U1002 | 11.4 | pass | 10.9 | pass | 10.55 / 12.27 | no |
+| 16 | B-T1-U1003 | 13.2 | pass | 13.3 | pass | 10.69 / 10.74 | yes |
+| 17 | B-T2-U1003 | 7.3 | pass | 5.1 | pass | 10.66 / 11.77 | no |
+| 18 | B-T3-U1003 | 17.5 | pass | 12.1 | pass | 11.09 / 9.22 | no |
+| 19 | B-T4-U1003 | 7.5 | fail | 7.6 | fail | 10.28 / 10.36 | yes |
+| 20 | B-T5-U1003 | 8.4 | fail | 8.9 | fail | 10.85 / 9.60 | no |
+| 21 | B-T6-U1003 | 21.7 | pass | 15.7 | pass | 10.40 / 9.88 | yes |
+| 22 | B-T7-U1003 | 12.4 | fail | 9.8 | fail | 9.74 / 9.93 | yes |
+| 23 | B-T8-U1003 | 14.1 | pass | 12.4 | pass | 11.56 / 10.07 | no |
+
+Load rule L1: **13 of 24 pairs matched**. The unmatched pairs' `bg_cpu` gaps run 0.91-1.87
+CPU-s/s on a background of about 11 CPU-s/s (the production tenants plus the typical load),
+over windows of 5-35 s. At the arm level, over the matched pairs, mean `bg_cpu` is 10.86 vs
+10.85 (spread 0.01, limit 0.8) and mean swap used is 136192 vs 136248 MiB (spread 56, limit
+256). Both pass. Recorded per arm and not gated (A1 / A4, matched pairs): load1 17.6 / 17.9,
+package 98.6 / 103.4 W, throttle 222 / 379 per min, E-core busy 62.8 / 62.6%, swap growth
+-196 / +87 MiB/min.
+
+On the 13 matched pairs (all 13 completed on both arms):
+
+- Paired time ratio A4/A1 0.788 (95% CI 0.725-0.842), so the **gain is 21.2% (CI 15.8-27.5%)**.
+- Delta success A4 - A1 is 0 points (CI 0..0). Within-budget success is 11/13 on both arms
+  (0.85, Wilson 0.58-0.96).
+- Turn p95 is 18.8 s for A1 and 14.7 s for A4. J per completed task (gross package) is 1478 J
+  for A1 and 1245 J for A4. Paired J per attempt A4/A1 is 0.816 (CI 0.770-0.882).
+
+**Verdict: INCONCLUSIVE.** The load gate fails: 13 matched pairs is under 16, and 13/24 is
+under 75%. The effect itself is not in doubt. The gain's CI lower bound (15.8%) clears the
+10% bar, delta success is 0, and a CI upper bound under 0 (REFUTED) is far away. Derived
+confidence: 0.98 of the paired bootstrap resamples on the matched pairs have a gain of 10% or
+more, and 0.003 have a gain under 0. This confidence measures the effect, not the verdict,
+because the verdict is held by the load gate. Not registered, a sensitivity check only: on
+all 24 pairs the ratio is 0.786 (CI 0.721-0.842), and A4 was faster in 20 of 24.
+
+Guardrail: each pair's two attempts had the same graded outcome in 24 of 24, the same
+answer text in 15 of 24, and 49 LLM requests per arm. Greedy speculative decoding should not
+change the target's output, so the 9 differing answers are a difference in wording, not
+in outcome. Failures, the same on both arms: B-T5 of U1002 and U1003 (no balance call),
+B-T4-U1003 (no no-loan answer), B-T7-U1003 (no loan read). The prediction (a 0-15% gain,
+SUPPORTED at 0.35) underestimated the gain. Tool-call turns are short, but A4's median turn
+was 3.6 s against A1's 5.1 s.
 
 ### H28 pre-registration (i9-13900T, 2026-10-17)
 

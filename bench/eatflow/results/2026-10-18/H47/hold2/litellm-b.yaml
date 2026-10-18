@@ -1,0 +1,7 @@
+model_list:
+  - model_name: Qwen/Qwen3-4B-Instruct-2507
+    litellm_params:
+      model: openai/qwen3-4b-instruct-2507-a4
+      api_base: http://127.0.0.1:18630/v1
+      api_key: not-needed
+      timeout: 600
