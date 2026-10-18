@@ -123,6 +123,53 @@ class StubPair(unittest.TestCase):
         self.assertLessEqual(st["confidence"], 1 - vs_matched.sign_p(st["round_wins"], 3))
         self.assertLessEqual(st["ratio_ci95"][0], st["ratio_ci95"][1])
 
+    def test_phased_load_record_amendment_27(self):
+        lo = os.path.join(self.tmp, "load.jsonl")
+        env = {"VS_LOAD_WINDOW_S": "0.05", "VS_LOAD_OUT": lo, "VS_LOAD_LEVEL": "typical", "VS_LOAD_PHASED": "1",
+               "VS_LOAD_SETTLE_WINDOW_S": "0.05", "VS_LOAD_SETTLE_MAX_S": "0.1", "VS_LOAD_DURING_S": "0.02",
+               "VS_LOAD_TREATMENT_CPUS": "0"}
+        old = {k: os.environ.get(k) for k in env}
+        os.environ.update(env)
+        load = vs._load_mod()
+        real = load.load_running_count
+        load.load_running_count = lambda: 0  # typical runs at least one container: all missing
+        try:
+            res, _, _ = self.run_vs(["--itl", "0.002"], ["--itl", "0.002"])
+        finally:
+            load.load_running_count = real
+            for k, v in old.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+        with open(lo) as f:
+            wins = [json.loads(line) for line in f]
+        # Two baseline windows first, then per segment one pre-window followed by its during windows.
+        self.assertEqual([w["phase"] for w in wins[:2]], ["baseline", "baseline"])
+        order = [a for r in res["rounds"] for a in r["order"]]
+        pres = [w for w in wins if w["phase"] == "pre"]
+        self.assertEqual([w["tag"] for w in pres], order)
+        self.assertTrue(all("settled" in w and w["settle_s"] > 0 for w in pres))
+        seq, cur = [], None
+        for w in wins[2:]:
+            if w["phase"] == "pre":
+                cur = [w["tag"]]
+                seq.append(cur)
+            else:
+                self.assertEqual(w["phase"], "during")
+                self.assertEqual(w["tag"], cur[0])
+                cur.append(w)
+        self.assertTrue(all(len(c) >= 2 for c in seq), "every segment has at least one during window")
+        self.assertTrue(all(w["level"] == "typical" and "load_running" in w for w in wins))
+        import vs_matched
+        st = vs_matched.analyse(res, wins, resamples=200)
+        self.assertEqual(st["load_rule"], "amendment-27")
+        self.assertEqual(st["load_settle_s"].keys(), {"k3d-gpu", "ollama"})
+        self.assertEqual([o["metric"] for o in st["load_outcomes"]], ["pkg_w", "throttle_per_min", "load1"])
+        # A window with fewer load containers than the level runs makes the run VOID, never scored.
+        self.assertTrue(st["load_void"])
+        self.assertFalse(st["load_matched"])
+
     def test_budget_exhausted_is_inconclusive(self):
         res, _, _ = self.run_vs(["--itl", "0.002"], ["--itl", "0.008"], "--budget-s", "0")
         self.assertEqual(res["verdict"], "INCONCLUSIVE")

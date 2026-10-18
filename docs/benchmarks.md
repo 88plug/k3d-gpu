@@ -22,13 +22,13 @@ on the k3d-gpu arm only.
 |---|---|---|---|---|---|
 | [ledger:H30] | ollama | 4-bit (GGUF Q4_K_M) | 11.06 / 7.02 | 8.52 / 14.35 | SUPPORTED |
 | [ledger:H31] | llamacpp | 4-bit (GGUF Q4_K_M) | 15.63 / 10.26 | 6.06 / 9.28 | SUPPORTED |
-| [ledger:H32] | ovms | 4-bit (OpenVINO int4) | 16.26 / 10.24 | 5.92 / 9.70 | INCONCLUSIVE |
+| [ledger:H32] | ovms | 4-bit (OpenVINO int4) | 16.16 / 10.15 | 6.08 / 9.92 | SUPPORTED |
 
 Why each verdict:
 
 - [ledger:H30] (ollama): k3d-gpu ahead by the margin in every round (k3d-gpu/competitor ratios 1.55, 1.58, 1.57).
 - [ledger:H31] (llamacpp): k3d-gpu ahead by the margin in every round (k3d-gpu/competitor ratios 1.52, 1.54, 1.50).
-- [ledger:H32] (ovms): load unmatched under the matched-load amendment A2 (throttle events per minute), so the per-round ratios 1.61, 1.58, 1.59 do not decide.
+- [ledger:H32] (ovms): k3d-gpu ahead by the margin in every round (k3d-gpu/competitor ratios 1.60, 1.59, 1.61).
 
 Run one and regenerate this page (rows without a result file stay PENDING):
 
