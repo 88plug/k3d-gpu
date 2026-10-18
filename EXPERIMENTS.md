@@ -763,6 +763,27 @@ Where it fills a gap in the design above or departs from it:
     SUPPORTED side: H49, A1 - B1 >= +0.30; H47, gain >= 10% (the share with gain < 0 is also
     reported).
 
+### H47 and H49 amendment P2: H49 hold 1 is void (2026-10-18)
+
+Recorded 2026-10-18 at 09:45 PDT, after H49 hold 1 and before any other H49 hold. H49 hold
+1 (09:11-09:33 PDT, runner `bca4a51`) is void because of a fault in the harness. B1's
+first attempt reached the 240 s cap, so the runner restarted B1's agent (amendment P1,
+item 5). The restarted DevUI serves its entity under a new id, but the runner kept the old
+one. Every later B1 attempt (pairs 1-15) then drew HTTP 404 within 2 ms and was scored
+`fail_graded`. The hold was stopped by hand at pair 15.
+
+- Fix: after a restart the runner looks the entity id up again. An HTTP 404 from DevUI is
+  void, like an unreachable agent: a harness fault, not the arm's answer. Regression tests:
+  `test_restart_after_cap_resolves_the_new_entity` (fails without the fix) and
+  `test_http_404_from_the_agent_is_void`.
+- H49 starts again at pair 0 in a new pairs directory, at the fixed commit. Hold 1's records
+  are kept beside the run as void and do not enter any statistic, as with H48 run 1
+  (amendment 22). Hold 1 counts toward the 12-hold limit.
+- Disclosed: hold 1's one valid pair was pair 0 (B-T1-U1001). A1 passed in 13.1 s; B1 hit
+  the 240 s cap, with one 60.8 s turn recorded before it. The design, statistic, thresholds
+  and prediction do not change.
+- H47 is unaffected. None of its 48 attempts reached the cap, so no agent was restarted.
+
 ### H28 pre-registration (i9-13900T, 2026-10-17)
 
 Registered 2026-10-17T12:13:48Z, before any H28 measurement. Probe: `bench/zero-copy-models/probe.sh`;
