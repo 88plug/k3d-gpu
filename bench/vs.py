@@ -27,6 +27,14 @@ prompt set, the same max_tokens, temperature 0 and ignore_eos:
     set, the run first idles that many seconds before each window, so the window
     does not catch the previous segment's own load. Windows and settle gaps count
     against the budget.
+  - amendment 27 load record (VS_LOAD_PHASED=1, with VS_LOAD_WINDOW_S and
+    VS_LOAD_OUT): before the warmups, two VS_LOAD_WINDOW_S `baseline` windows;
+    before every timed segment, `load.py settle` (5 s windows until load-CPU busy
+    and throttle/min are within tolerance of the baseline, at most 60 s; the last
+    window is the segment's `pre` window); while the segment runs, 5 s `during`
+    windows with busy taken over the load CPUs minus VS_LOAD_TREATMENT_CPUS.
+    `load.py matched` then scores the arms by matched_a27. VS_LOAD_SETTLE_S is
+    not used in this mode.
 
 A --remote-arm is a third-party OpenAI-compatible endpoint (k3d-gpu bench --vs
 remote): its bearer key comes from OPENAI_API_KEY, it samples at temperature
@@ -53,6 +61,7 @@ import re
 import statistics
 import subprocess
 import sys
+import threading
 import time
 from types import SimpleNamespace
 
@@ -163,6 +172,56 @@ def load_window(seconds, tag, out, settle=0.0):
     return w
 
 
+def _load_mod():
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "load"))
+    try:
+        import load  # noqa: E402
+    except ImportError:
+        raise SystemExit("vs: VS_LOAD_PHASED needs bench/load/load.py next to vs.py (a repo checkout)")
+    return load
+
+
+class PhasedLoad:
+    """Amendment 27 load record for one vs run (EXPERIMENTS.md, H32 amendment A3)."""
+
+    def __init__(self, out, seconds, level, treatment_cpus="", settle_window_s=None, settle_max_s=None,
+                 during_s=5.0):
+        self.load = _load_mod()
+        self.out, self.seconds, self.level = out, seconds, level
+        self.cpus = self.load.load_cpus()
+        self.exclude = self.load.parse_cpulist(treatment_cpus) if treatment_cpus else []
+        self.settle_window_s = settle_window_s or self.load.SETTLE_WINDOW_S
+        self.settle_max_s = settle_max_s or self.load.SETTLE_MAX_S
+        self.during_s = during_s
+        self.ref = None
+
+    def _write(self, w):
+        with open(self.out, "a") as f:
+            f.write(json.dumps(w, sort_keys=True) + "\n")
+
+    def baseline(self, n=2):
+        ws = [self.load.window(self.seconds, self.cpus, tag="baseline", level=self.level, phase="baseline")
+              for _ in range(n)]
+        for w in ws:
+            self._write(w)
+        self.ref = {}
+        for m in ("busy_pct", "throttle_per_min"):
+            vals = [w[m] for w in ws if w.get(m) is not None]
+            self.ref[m] = sum(vals) / len(vals) if vals else None
+
+    def pre(self, tag):
+        w = self.load.settle(self.ref or {}, lambda s: self.load.window(s, self.cpus, tag=tag, level=self.level,
+                                                                       phase="pre"),
+                             window_s=self.settle_window_s, max_s=self.settle_max_s)
+        self._write(w)
+        return w
+
+    def during(self, tag, stop):
+        while not stop.is_set():
+            self._write(self.load.window(self.during_s, self.cpus, tag=tag, level=self.level, phase="during",
+                                         exclude=self.exclude))
+
+
 def segment(arm, prompts, opts, rapl, deadline=None):
     t_start = time.time()
     e0 = rapl.read()
@@ -237,6 +296,17 @@ def cmd_run(opts):
     start = time.monotonic()
     deadline = start + opts.budget_s
     budget_hit = False
+    load_s = float(os.environ.get("VS_LOAD_WINDOW_S") or 0)
+    load_out = os.environ.get("VS_LOAD_OUT")
+    settle_s = float(os.environ.get("VS_LOAD_SETTLE_S") or 0)
+    phased = None
+    if load_s > 0 and load_out and os.environ.get("VS_LOAD_PHASED") == "1":
+        phased = PhasedLoad(load_out, load_s, os.environ.get("VS_LOAD_LEVEL"),
+                            os.environ.get("VS_LOAD_TREATMENT_CPUS", ""),
+                            float(os.environ.get("VS_LOAD_SETTLE_WINDOW_S") or 0) or None,
+                            float(os.environ.get("VS_LOAD_SETTLE_MAX_S") or 0) or None,
+                            float(os.environ.get("VS_LOAD_DURING_S") or 5))
+        phased.baseline()
     warm = {}
     for arm in (k3d, vs):
         warm[arm["name"]] = []
@@ -245,9 +315,6 @@ def cmd_run(opts):
                 budget_hit = True
                 break
             warm[arm["name"]].append(request(arm, prompts[i % len(prompts)], opts, deadline)["ok"])
-    load_s = float(os.environ.get("VS_LOAD_WINDOW_S") or 0)
-    load_out = os.environ.get("VS_LOAD_OUT")
-    settle_s = float(os.environ.get("VS_LOAD_SETTLE_S") or 0)
     rounds = []
     for r in range(0 if budget_hit else opts.rounds):
         order = [("k3d", k3d), ("vs", vs)] if r % 2 == 0 else [("vs", vs), ("k3d", k3d)]
@@ -256,6 +323,17 @@ def cmd_run(opts):
             if time.monotonic() >= deadline:
                 budget_hit = True
                 break
+            if phased:
+                phased.pre(arm["name"])
+                stop = threading.Event()
+                t = threading.Thread(target=phased.during, args=(arm["name"], stop), daemon=True)
+                t.start()
+                try:
+                    rec[side] = segment(arm, prompts, opts, rapl, deadline)
+                finally:
+                    stop.set()
+                    t.join()
+                continue
             if load_s > 0 and load_out:
                 load_window(load_s, arm["name"], load_out, settle_s)
             rec[side] = segment(arm, prompts, opts, rapl, deadline)

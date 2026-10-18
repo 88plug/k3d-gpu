@@ -8,7 +8,8 @@ bootstrap CI, the k3d-gpu/competitor ratio of those medians with its 95% CI
 (requests resampled within each arm), P_boot (the share of resampled ratios on
 the verdict's side of the margin), the one-sided sign test over rounds, the
 derived confidence min(P_boot, 1 - p_sign), and the load per arm with the
-`bench/load/load.py matched` decision (EXPERIMENTS.md, H30-H32 amendment A1).
+`bench/load/load.py matched` decision (EXPERIMENTS.md, H30-H32 amendment A1; windows with a
+`phase` are scored by amendment 27).
 Python 3 standard library only.
 """
 import argparse
@@ -76,6 +77,15 @@ def analyse(res, windows, seed=1, resamples=10000):
         out["load_checks"] = m["checks"]
         out["load_matched"] = m["matched"]
         out["load_verdict"] = m["verdict"]
+        out["load_rule"] = m.get("rule")
+        if m.get("rule") == "amendment-27":
+            out["load_void"] = m["void"]
+            out["load_outcomes"] = m["outcomes"]
+            out["load_unsettled"] = m["unsettled"]
+            out["load_settle_s"] = {t: [w.get("settle_s") for w in windows if w.get("phase") == "pre" and w["tag"] == t]
+                                    for t in sorted({w["tag"] for w in windows if w.get("phase") == "pre"})}
+            out["load_running"] = sorted({(w.get("load_running"), w.get("load_expected")) for w in windows
+                                          if w.get("phase")}, key=str)
     return out
 
 
