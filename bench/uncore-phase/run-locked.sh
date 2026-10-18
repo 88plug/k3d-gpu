@@ -35,6 +35,9 @@ SNAP="${OUT}/knobs.before"
     echo "${UNC}/max_freq_khz $(cat "${UNC}/max_freq_khz")"
     for f in /sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_max_freq; do echo "${f} $(cat "${f}")"; done
 } > "${SNAP}"
+# Created here, as the caller, so the root probe appends to it and the runner's own
+# restore line (written as the caller) still lands.
+: >> "${OUT}/writes.log"
 
 # Returns 1 if any write failed; each write's status is checked explicitly because
 # `set -e` does not apply inside a function called from a `||` list.
