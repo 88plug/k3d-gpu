@@ -139,6 +139,7 @@ refuses "k3d-url without model" "--k3d-url needs --k3d-model" --vs ollama --k3d-
 refuses "missing value" "--budget needs a value" --vs ollama --budget
 refuses "unknown option" "unknown bench option: --fast" --vs ollama --fast
 check "bench/vs.py unit tests (stub servers)" python3 "${ROOT}/tests/bench_vs_test.py"
+check "bench/tune-noise/analyze.py unit tests (H19)" python3 "${ROOT}/tests/tune_noise_test.py"
 agent_plan() { "${K}" bench agent plan H42 | grep -q '"hypothesis": "H42"'; }
 agent_missing() {
     local o
