@@ -18,6 +18,12 @@ prompt set, the same max_tokens, temperature 0 and ignore_eos:
     with neither, energy is recorded as null.
   - budget: when --budget-s runs out, no new segment starts and the verdict is
     INCONCLUSIVE (budget).
+  - background load (optional): with VS_LOAD_WINDOW_S and VS_LOAD_OUT set in the
+    environment, one bench/load/load.py window of that many seconds is sampled
+    before every timed segment, with no request in flight, tagged with the arm
+    the segment is about to run, and appended to VS_LOAD_OUT as a JSON line
+    (`load.py matched VS_LOAD_OUT` then compares the arms). The windows count
+    against the budget.
 
 A --remote-arm is a third-party OpenAI-compatible endpoint (k3d-gpu bench --vs
 remote): its bearer key comes from OPENAI_API_KEY, it samples at temperature
@@ -136,7 +142,18 @@ def median(xs):
     return statistics.median(xs) if xs else None
 
 
+def load_window(seconds, tag, out):
+    """Sample one background-load window (bench/load/load.py) and append it to out."""
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "load"))
+    import load  # noqa: E402
+    w = load.window(seconds, load.load_cpus(), tag=tag, level=os.environ.get("VS_LOAD_LEVEL"))
+    with open(out, "a") as f:
+        f.write(json.dumps(w, sort_keys=True) + "\n")
+    return w
+
+
 def segment(arm, prompts, opts, rapl, deadline=None):
+    t_start = time.time()
     e0 = rapl.read()
     t0 = time.perf_counter()
     samples = [request(arm, p, opts, deadline) for p in prompts]
@@ -146,7 +163,7 @@ def segment(arm, prompts, opts, rapl, deadline=None):
     toks = sum(s["output_tokens"] or 0 for s in ok)
     joules = rapl.delta_j(e0, e1)
     return {
-        "arm": arm["name"], "wall_s": wall, "joules": joules, "output_tokens": toks,
+        "arm": arm["name"], "t_start": t_start, "wall_s": wall, "joules": joules, "output_tokens": toks,
         "j_per_token": (joules / toks) if (joules is not None and toks) else None,
         "failed": len(samples) - len(ok),
         "decode_tokens_per_s": median(s["decode_tokens_per_s"] for s in ok),
@@ -217,6 +234,8 @@ def cmd_run(opts):
                 budget_hit = True
                 break
             warm[arm["name"]].append(request(arm, prompts[i % len(prompts)], opts, deadline)["ok"])
+    load_s = float(os.environ.get("VS_LOAD_WINDOW_S") or 0)
+    load_out = os.environ.get("VS_LOAD_OUT")
     rounds = []
     for r in range(0 if budget_hit else opts.rounds):
         order = [("k3d", k3d), ("vs", vs)] if r % 2 == 0 else [("vs", vs), ("k3d", k3d)]
@@ -225,6 +244,8 @@ def cmd_run(opts):
             if time.monotonic() >= deadline:
                 budget_hit = True
                 break
+            if load_s > 0 and load_out:
+                load_window(load_s, arm["name"], load_out)
             rec[side] = segment(arm, prompts, opts, rapl, deadline)
         if budget_hit:
             break
