@@ -3,7 +3,7 @@
 > **DRAFT: not submitted; awaiting owner approval.**
 > Nothing here has been filed, opened, forked or pushed to any `intel/*` repository. A maintainer of this repo sends each piece by hand, in the order below, after approving it.
 
-Drafted 2026-10-17 against these heads, re-read with `gh api` on 2026-10-17 (unchanged):
+Drafted 2026-10-17 against these heads, re-read with `gh api` on 2026-10-17 and 2026-10-18 (unchanged; #19 is a draft PR):
 
 | Repo | Ref | SHA |
 |---|---|---|
@@ -15,7 +15,7 @@ Drafted 2026-10-17 against these heads, re-read with `gh api` on 2026-10-17 (unc
 
 The deploy path belongs in EAS, not EAT. EAT receives a docs pointer only.
 
-- EAT PR #19 (open, mergeable, CI green, no review decision yet) deletes EAT's own installer and cluster layer: `deploy-agentic-stack.sh`, `core/lib/**`, `core/playbooks/**` and `core/roles/**`, 173 files in all.
+- EAT PR #19 (open as a draft, mergeable, CI green, no review decision yet) deletes EAT's own installer and cluster layer: `deploy-agentic-stack.sh`, `core/lib/**`, `core/playbooks/**` and `core/roles/**`, 173 files in all.
 - After #19, EAT ships only `components.yaml`, `config.yaml`, `roles/<component>/` and `charts/`. It installs through `es_auto_installer.sh install agent-toolkit` in EAS.
 - EAS already has a bring-your-own-cluster (BYO) path, `existing_kubernetes: <kubeconfig>`, which skips Kubespray. A k3d cluster is a BYO cluster. No new mode is needed, only five small fixes to that path.
 - An EAT code patch against today's `main` would edit files #19 deletes. That would waste review time, so this draft has none.
@@ -81,7 +81,7 @@ On the regenerated 0006, `checks/eas-envoy-reinstall.py` (now reading `controlle
 
 ## EAT patch (full content)
 
-Base: PR #19 head `9d842f5`. It was checked with `patch -p1 --dry-run` on copies of both files from that commit, and both hunks apply.
+Base: PR #19 head `9d842f5`. It was checked with `patch -p1 --dry-run` on copies of both files from that commit, and both hunks apply. `git apply --check` on the same two files passed again on 2026-10-18.
 
 It links to the EAS page from 0005, the same way #19's docs index already links the EAS rack-scale guide. **Send it only after EAS merges 0005**; until then the link is a 404.
 

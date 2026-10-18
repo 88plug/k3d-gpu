@@ -238,8 +238,54 @@ Open upstream work that changes this integration:
 - [EAT PR #19](https://github.com/intel/enterprise-agent-toolkit/pull/19) replaces
   `deploy-agentic-stack.sh` with `es_auto_installer.sh install agent-toolkit`.
   `eat-up.sh` and `brownfield.sh` stay on `release-1.0.3-hotfix` until a tag after #19.
+  The status of every open EAT PR is in the table below.
 - [enterprise-inference PR #22](https://github.com/intel/enterprise-inference/pull/22)
   adds a `vllm-xpu` runtime that requests `gpu.intel.com/xe` by default. The Intel GPU
   plugin defines both `xe` and `i915` resources
   ([gpu_plugin.go](https://github.com/intel/intel-device-plugins-for-kubernetes/blob/main/cmd/gpu_plugin/gpu_plugin.go)),
   and `k3d-gpu detect` already reports the one the bound driver gives.
+
+### Open EAT pull requests (checked 2026-10-18)
+
+Read with `gh` and the GitHub tarball API only. EAT `main` is still `0ecf67a`, and
+`release-1.0.3-hotfix` still points at `0d3438d`.
+
+| PR | Head | What it changes | Impact on k3d-gpu | Action |
+|---|---|---|---|---|
+| [#5](https://github.com/intel/enterprise-agent-toolkit/pull/5) Bitnami to SolDevelo images | `eba339a`, conflicts with `main` | `bitnami/kubectl:latest` in the GenAI Gateway restore job, and `bitnamilegacy/os-shell` in a Keycloak playbook | None today. Neither line runs on our path: `restoreJob.enabled` is `false`, and the pinned tag has no Keycloak playbook. Every Bitnami image our path renders pulled on 2026-10-18 (`docker manifest inspect`, amd64 and arm64). See the note below | None. Recheck if a `bitnamilegacy` pull fails |
+| [#19](https://github.com/intel/enterprise-agent-toolkit/pull/19) unified convention | `9d842f5`, unchanged; draft, CI green, no review | Deletes `deploy-agentic-stack.sh`, `core/lib`, `core/playbooks` and `core/roles`; installs through EAS `es_auto_installer.sh` | Ends the path `eat-up.sh` uses, once a tag ships it. The drafted EAT docs patch in [upstream-eat.md](intel/upstream-eat.md) still passes `git apply --check` on `9d842f5` | Keep `eat-up.sh` on the tag. Move to the EAS BYO path after a tag that includes #19 |
+| [#20](https://github.com/intel/enterprise-agent-toolkit/pull/20) OpenClaw operator | `200ae58`, based on #19's branch | Optional `openclaw_operator` role (`claw_enabled: false`): operator chart and image `0.38.3` pinned by digest, 3 CRDs (`openclaw.rocks/v1alpha1`) | Not reachable from the pinned tag. The operator itself fits one k3d-gpu node: CPU only (100m / 128Mi request), no GPU, no webhook, `kubeVersion >=1.28`, and both images publish amd64. Its example instance is the gap (see below) | None until #19 and #20 merge into a tag |
+
+Bitnami images on the pinned path. `deploy-genai-gateway.yml` runs `helm dependency update`
+on `genai-gateway`, whose `Chart.yaml` asks for `postgresql >=13.3.0` and `redis >=18.0.0`.
+That ignores the vendored `Chart.lock` (16.7.4 / 21.1.3). On 2026-10-18, Helm v3.14.0 (the
+bastion's version) resolved postgresql 18.12.4 and redis 28.3.1. Their default tag is
+`latest`, so with EAT's repository overrides the gateway pulls
+`bitnamilegacy/postgresql:latest` (PostgreSQL 17.5.0, built 2025-07-21) and
+`bitnamilegacy/redis:latest` (8.0.3, built 2025-07-17). The Langfuse chart is pinned
+(`1.5.30`) and pulls `bitnamilegacy/{postgresql:17.3.0,valkey:8.0.2,clickhouse:25.2.1,zookeeper:3.9.3,minio:2024.12.18}`
+at fixed `-debian-12-rN` tags. The H1b run (2026-10-17) recorded pod names, not image
+references, so which images it pulled is not on record. Two things can still change under
+the pinned tag. Bitnami calls `bitnamilegacy` a temporary migration archive with no
+updates ([bitnami/containers#83267](https://github.com/bitnami/containers/issues/83267)).
+And a newer postgresql or redis chart can come out against a frozen `latest` image.
+
+Gaps for the #20 example instance (`docs/examples/openclaw-instance.yaml`) on k3d-gpu:
+
+- It calls the EAS inference layer's `ai-gateway` in `envoy-gateway-system`. The
+  `release-1.0.3-hotfix` stack has LiteLLM behind ingress-nginx instead, so `baseUrl`
+  has to change.
+- Its namespace joins the Istio ambient mesh, and its egress rule names HBONE port 15008.
+  A k3d-gpu cluster has no Istio, and k3s enforces `NetworkPolicy` by default. Without the mesh, the
+  rule must name the gateway's own port.
+- It needs a model with a 32k+ context, because the agent prompt is about 19,500 tokens.
+  The example uses `qwen2-5-coder-14b`, about 28 GiB of bf16 weights on CPU. Qwen3-1.7B
+  (40960 tokens) fits the window; its agent quality is untested.
+- The gateway's request buffer must exceed Envoy's 32 KiB default. That applies to the
+  EAS gateway only, not to LiteLLM.
+- Storage (a 10Gi PVC by default) and the `restricted` Pod Security labels work as-is
+  on k3s with `local-path`.
+
+k3d-gpu needs no change to run the operator. Running the example end to end needs the
+EAS BYO path after #19, or a `baseUrl` and egress rule pointed at LiteLLM. Both are
+UNVERIFIED.
