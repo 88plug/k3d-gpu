@@ -15,6 +15,9 @@ Subcommands (k3d-gpu bench agent <subcommand> ...):
   control   load-only control window (energy baseline for J per success)
   apb       agents-per-box ramp N = 1, 2, 4, 8 on B15-RO, graded
   bfcl      BFCL S100 through the proxy (board or server-fc mode)
+  pairs     one hold of within-hold interleaved pairs, both arms live (H47, H49)
+  pairs-report  the pre-registered H47/H49 statistics and verdict of a pairs directory
+  cgroup    the cgroup v2 directory of a pod, by pod UID
   regrade   apply the current graders to recorded blocks (originals kept)
   report    report.json + report.md from run directories
   tasks     list a task set
@@ -39,6 +42,7 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", "load"))
 import bfcl  # noqa: E402
 import energy  # noqa: E402
+import pairs as PR  # noqa: E402
 import proxy  # noqa: E402
 import stats  # noqa: E402
 import tasks as T  # noqa: E402
@@ -1106,6 +1110,58 @@ def cmd_bfcl(a):
     return 0
 
 
+def cmd_pairs(a):
+    """One hold of H47/H49 pairs: two in-process proxies (one per arm), one shared sidecar."""
+    os.makedirs(a.out, exist_ok=True)
+    write_facts(a.out, a, {"hold": a.hold})
+    os.rename(os.path.join(a.out, "facts.json"), os.path.join(a.out, f"facts-hold{a.hold}.json"))
+    samp = sampling_set(a.sampling)
+    arms, srvs = {}, []
+    for arm, url, up, port, restart, pod in ((a.arm_a, a.agent_a, a.upstream_a, a.proxy_port_a, a.restart_a, a.pod_a),
+                                             (a.arm_b, a.agent_b, a.upstream_b, a.proxy_port_b, a.restart_b, a.pod_b)):
+        plog = os.path.join(a.out, f"proxy-{arm}.jsonl")
+        srv = proxy.serve(proxy.Proxy(up, plog, sampling=samp), "127.0.0.1", port)
+        srvs.append(srv)
+        arms[arm] = {"agent": Agent(url, os.environ.get("DEVUI_AUTH_TOKEN"), a.entity), "proxy_log": plog,
+                     "restart": restart, "pod": pod}
+        log(f"{arm}: agent {url}, proxy 127.0.0.1:{srv.server_address[1]} -> {up}, pod cgroup {pod}")
+    lm = _load_mod()
+    probe = PR.Probe({arm: v["pod"] for arm, v in arms.items()}, lm.load_cpus() if lm else [], rapl=not a.no_rapl)
+    ts = T.taskset(a.tasks)
+    rc = 0
+    try:
+        n = PR.run_hold(sys.modules[__name__], arms, a.arm_a, a.arm_b, ts, a.out, a.deadline, probe, a.mcp_url,
+                        a.reset, a.hold, cap_s=a.cap_s, guard_s=a.guard_s, settle_s=a.settle_s, idle_s=a.idle_s,
+                        warmup=None if a.no_warmup else WARMUP["bank"], log=log, quiesce_s=a.quiesce_s,
+                        warmup_timeout_s=a.warmup_timeout_s)
+        log(f"hold {a.hold}: {n} complete pair(s); next pair {PR.next_pair(a.out)} of {len(ts)}")
+    except PR.HoldAborted as e:
+        log(f"hold {a.hold} ABORTED: {e}")
+        rc = 1
+    finally:
+        for s in srvs:
+            s.shutdown()
+    return rc
+
+
+def cmd_pairs_report(a):
+    res = PR.analyze(PR.read_jsonl(os.path.join(a.dir, "attempts.jsonl")),
+                     PR.read_jsonl(os.path.join(a.dir, "pairs.jsonl")), a.hyp, a.arm_a, a.arm_b,
+                     holds=len({p["hold"] for p in PR.read_jsonl(os.path.join(a.dir, "pairs.jsonl"))}))
+    with open(os.path.join(a.dir, "analysis.json"), "w") as f:
+        json.dump(res, f, indent=1, default=lambda v: None)
+    print(json.dumps({k: res[k] for k in res if k != "per_pair"}, indent=1, default=lambda v: None))
+    return 0
+
+
+def cmd_cgroup(a):
+    p = PR.find_pod_cgroup(a.uid, a.root)
+    if not p:
+        raise SystemExit(f"agentbench: no cgroup for pod {a.uid} under {a.root}")
+    print(p)
+    return 0
+
+
 def cmd_regrade(a):
     for d in a.runs:
         print(f"{d}: {regrade(d)} row(s) changed (originals in results.raw.jsonl)")
@@ -1218,6 +1274,47 @@ def parse(argv):
     p.add_argument("--limit", type=int, help="first N ids of S100's run order (H48: 8)")
     p.add_argument("--proxy-url", help="a running proxy (e.g. one shared request cap) instead of --upstream")
     p.set_defaults(func=cmd_bfcl)
+
+    p = sub.add_parser("pairs", help="one hold of within-hold interleaved pairs (H47, H49)")
+    p.add_argument("--hyp", required=True, choices=("H47", "H49"))
+    p.add_argument("--hold", type=int, required=True, help="hold number (1, 2, ...)")
+    p.add_argument("--out", required=True, help="pairs directory, shared by every hold of the hypothesis")
+    p.add_argument("--deadline", type=float, required=True, help="epoch seconds at which the hold must end")
+    p.add_argument("--tasks", default="B24", choices=sorted(T.TASKSETS))
+    for x in ("a", "b"):
+        p.add_argument(f"--arm-{x}", required=True)
+        p.add_argument(f"--agent-{x}", required=True, help="that arm's DevUI")
+        p.add_argument(f"--upstream-{x}", required=True, help="that arm's LiteLLM root")
+        p.add_argument(f"--proxy-port-{x}", type=int, required=True)
+        p.add_argument(f"--restart-{x}", help="command that restarts that arm's agent (after a task-cap hit)")
+        p.add_argument(f"--pod-{x}", required=True, help="that arm's server pod cgroup dir (agentbench cgroup)")
+    p.add_argument("--entity")
+    p.add_argument("--mcp-url", required=True)
+    p.add_argument("--reset", required=True, help="sidecar reset command (must read back the seed)")
+    p.add_argument("--sampling", default="agent_local")
+    p.add_argument("--cap-s", type=float, default=PR.TASK_CAP_S)
+    p.add_argument("--guard-s", type=float, default=PR.PAIR_GUARD_S)
+    p.add_argument("--idle-s", type=float, default=0.0,
+                   help="shared pod: sample it this long with no request in flight before each attempt")
+    p.add_argument("--settle-s", type=float, default=30.0)
+    p.add_argument("--no-warmup", action="store_true")
+    p.add_argument("--no-rapl", action="store_true")
+    p.add_argument("--quiesce-s", type=float, default=300.0,
+                   help="after an over-budget attempt, wait up to this long for that arm's pod to idle")
+    p.add_argument("--warmup-timeout-s", type=float, default=float(TASK_TIMEOUT_S))
+    p.set_defaults(func=cmd_pairs)
+
+    p = sub.add_parser("pairs-report", help="H47/H49 statistics and verdict of a pairs directory")
+    p.add_argument("dir")
+    p.add_argument("--hyp", required=True, choices=("H47", "H49"))
+    p.add_argument("--arm-a", required=True)
+    p.add_argument("--arm-b", required=True)
+    p.set_defaults(func=cmd_pairs_report)
+
+    p = sub.add_parser("cgroup", help="cgroup v2 directory of a pod")
+    p.add_argument("--uid", required=True)
+    p.add_argument("--root", default="/sys/fs/cgroup")
+    p.set_defaults(func=cmd_cgroup)
 
     p = sub.add_parser("regrade", help="apply the current graders to recorded blocks")
     p.add_argument("runs", nargs="+")

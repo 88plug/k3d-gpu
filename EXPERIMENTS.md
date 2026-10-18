@@ -660,6 +660,61 @@ pair order, the per-task `bg_cpu` sample, rule L1, void handling and the 600 s p
 guard. That PR must pass the gate before the first hold. If it must deviate from anything
 above, a dated amendment is recorded here first.
 
+### H47 and H49 amendment P1: the runner (2026-10-18)
+
+Recorded 2026-10-18, with the runner, before any H47 or H49 pair was measured. A smoke hold
+per hypothesis brought both arms up and sent only the unscored warm-ups (pair-start guard
+set past the hold), so no pair ran. In the H49 smoke both servers were ready 421 s into the hold, and B1's
+warm-up took 362 s (its first turn hit the 120 s proxy timeout twice before the client's
+retry answered), so an H49 hold of 40 min leaves room for about 20 min of pairs. Runner: `bench/eatflow/live.sh` with `LIVE_MODE=pairs`,
+`agentbench pairs` and `agentbench pairs-report` (`bench/eatflow/pairs.py`; regression
+tests in `bench/eatflow/test_pairs.py`, the `ovms2` stage mode in `bench/apb/test_stage.py`).
+Where it fills a gap in the design above or departs from it:
+
+1. Holds. H47 holds last at most 25 min and H49 holds at most 40 min, with the lock released
+   between holds (the 20-min cap of amendment 19 was for one-arm holds). Both servers must
+   be ready with at least 900 s of the hold left, or the hold is NOT DELIVERABLE and runs no
+   pair. The pairs deadline is the hold start plus its length minus 120 s for teardown; the
+   600 s pair-start guard applies to that deadline. H47: at most 2 holds. H49: holds until
+   24 pairs or 12 holds. The cluster is `k3dgpu-e-h47` or `k3dgpu-e-h49`, and the host
+   containers are prefixed `k3dgpu-e-`.
+2. Reset check. After a reset the seed must read back (amendment 15); the warm-up prompt is
+   not sent again. A B1 warm-up takes minutes at typical load (its H42 turns took 69-329 s),
+   which does not fit the 120 s the pair guard allows for resets. The pinned Agent Framework
+   reconnects a lost MCP session and retries the call once (`agent_framework/_mcp.py`,
+   `ClosedResourceError` and session-terminated handling). An attempt whose agent cannot be
+   reached is void.
+3. Warm-up. One unscored prompt per arm per hold, with the harness task timeout (600 s), after
+   the background load starts. A failed warm-up stops the hold before any pair.
+4. Budgets and outcome order. The task cap is a 240 s timeout on the DevUI request (DevUI
+   answers once, when the task is done); the turn budget is the proxy's 120 s timeout. An
+   attempt with any turn over 120 s (a proxy timeout error, or `e2e_s` > 120) is
+   `over_turn`, even if the cap was hit later; otherwise one that reached the cap is
+   `over_task`; otherwise it is graded. A turn that errored counts as +inf in the p95.
+5. Abandoned work. After `over_task` the arm's agent is restarted, since it may still be
+   working on the abandoned task. After `over_turn` or `over_task` the runner waits, up to
+   300 s, until that arm's pod reads at most 0.5 CPU over 1 s, and records the wait
+   (`quiesce.jsonl`). This stops an abandoned decode from running into the next attempt.
+6. A1's draft. OVMS 2026.4.1 `--pull` puts the draft in `<target>/OpenVINO-Qwen3-0.6B-int4-ov`.
+   The pinned draft (`f864c610`; `openvino_model.bin` sha256 `28613e99...`, byte-identical to a
+   clone of that commit) is staged there without `.git`, so the pull serves it offline.
+7. H47's pod. `stage.py ovms2` keeps the `agent manifest` OVMS Deployment (image, P-cores,
+   resources) and serves two graph names from `bench/eatflow/h47/`: `graph-a1.pbtxt` and
+   `graph-a4.pbtxt` are the graphs OVMS 2026.4.1 `--pull` writes for this target with
+   `--tool_parser=hermes3`, without and with `--draft_source_model=OpenVINO/Qwen3-0.6B-int4-ov
+   --draft_device=CPU`. They differ only in the draft lines. The model paths are made
+   absolute. A1 is `qwen3-4b-instruct-2507` and A4 is `qwen3-4b-instruct-2507-a4`.
+8. Idle check. H49: the other arm's pod CPU over each attempt window. H47 (one pod): a 3 s
+   sample of the pod with no request in flight, right before each attempt.
+9. Two agents on one host. DevUI's port is fixed at 8090 (`main.py`), so arm A's agent binds
+   127.0.0.1:8090 and arm B's binds 127.0.0.2:8090. Each agent's `OPENAI_BASE_URL` is its own
+   proxy, and each proxy forwards to that arm's LiteLLM.
+10. Void. An unreachable agent, an end-state read failure, a failed reset (the hold then
+    stops), a pair missing an attempt, or a pair that ends past the deadline.
+11. Derived confidence. The share of 2000 paired bootstrap resamples (seed 40) on the
+    SUPPORTED side: H49, A1 - B1 >= +0.30; H47, gain >= 10% (the share with gain < 0 is also
+    reported).
+
 ### H28 pre-registration (i9-13900T, 2026-10-17)
 
 Registered 2026-10-17T12:13:48Z, before any H28 measurement. Probe: `bench/zero-copy-models/probe.sh`;

@@ -58,6 +58,31 @@ class StageTest(unittest.TestCase):
         self.assertEqual(deployment(out)["volumes"], [{"name": "models", "hostPath": HOST}])
         self.assertEqual(deployment(out)["containers"][0]["args"], ["--rest_port=8000"])
 
+    def test_ovms2_two_graph_names_in_one_pod(self):
+        docs = copy.deepcopy(OVMS)
+        docs[2]["metadata"] = {"name": "ovms", "namespace": "k3d-gpu-agent"}
+        ps = docs[2]["spec"]["template"]["spec"]
+        ps["initContainers"] = [{"name": "pull", "args": ["--pull"]}]
+        ps["containers"][0]["args"] = ["--rest_port=8000", "--model_path=/models/x", "--model_name=m",
+                                       "--cache_dir=/models/.ov_cache", "--log_level=INFO"]
+        g = os.path.join(os.path.dirname(HERE), "eatflow", "h47")
+        out = stage.two_graphs(docs, "k3dgpu/M", [("a1", os.path.join(g, "graph-a1.pbtxt")),
+                                                  ("a4", os.path.join(g, "graph-a4.pbtxt"))])
+        self.assertEqual([d["kind"] for d in out], ["Namespace", "ConfigMap", "Deployment"])
+        dep = deployment(out)
+        self.assertNotIn("initContainers", dep)
+        self.assertEqual(dep["containers"][0]["args"], ["--rest_port=8000", "--cache_dir=/models/.ov_cache",
+                                                        "--log_level=INFO", "--config_path=/graphs/config.json"])
+        self.assertIn({"name": "graphs", "configMap": {"name": "ovms-graphs"}}, dep["volumes"])
+        data = out[1]["data"]
+        cfg = __import__("json").loads(data["config.json"])
+        self.assertEqual([m["config"]["name"] for m in cfg["model_config_list"]], ["a1", "a4"])
+        self.assertIn('models_path: "/models/k3dgpu/M"', data["a1.pbtxt"])
+        self.assertNotIn("draft_models_path", data["a1.pbtxt"])
+        self.assertIn('draft_models_path: "/models/k3dgpu/M/OpenVINO-Qwen3-0.6B-int4-ov"', data["a4.pbtxt"])
+        self.assertIn('draft_device: "CPU"', data["a4.pbtxt"])
+        self.assertIn('tool_parser: "hermes3"', data["a4.pbtxt"])
+
     def test_vllm_local_model_and_offline(self):
         out = stage.stage("vllm", copy.deepcopy(EAT), "Qwen3-4B", "32768")
         self.assertEqual([d["kind"] for d in out], ["ConfigMap", "Deployment"])
