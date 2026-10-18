@@ -35,6 +35,7 @@ cleanup() {
     mark "cleanup done (load stopped, cluster deleted)"
 }
 trap cleanup EXIT
+trap 'exit 143' TERM INT
 
 mark "start level=${level} cluster=${K3D_GPU_CLUSTER} commit=$(git -C "${repo}" rev-parse --short HEAD)"
 "${k3d}" up >"${out}/up.log" 2>&1
