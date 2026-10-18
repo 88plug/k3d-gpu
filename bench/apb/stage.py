@@ -17,6 +17,13 @@ where a mode below says otherwise.
                                             --model /data/DIR, --max-model-len MAXLEN,
                                             HF_HUB_OFFLINE=1, no HF token secret, readiness
                                             probe from 10 s (the chart waits 120 s)
+  stage.py ovms2 IN OUT MODEL NAME1=G1 NAME2=G2
+                                            `k3d-gpu agent manifest` as in ovms, then one pod
+                                            serving two graph names (H47 A1 and A4): no pull
+                                            init container, a ConfigMap ovms-graphs with
+                                            config.json and the two graphs (OVMS --pull output,
+                                            models_path and draft_models_path made absolute
+                                            under /models/MODEL), --config_path
   stage.py cuda IN OUT DIR                  bench/apb/vllm-cuda.yaml: cache emptyDir ->
                                             hostPath, --model=/cache/DIR, no --revision (the
                                             copy was downloaded at that revision)
@@ -24,6 +31,9 @@ where a mode below says otherwise.
 Needs PyYAML.
 """
 
+import json
+import os
+import re
 import sys
 
 import yaml
@@ -52,6 +62,36 @@ def values(base, overlay, kv_gib):
         if "VLLM_CPU_KVCACHE_SPACE" in cmv:
             cmv["VLLM_CPU_KVCACHE_SPACE"] = kv_gib
     return out
+
+
+def absolute_graph(text, model):
+    """An OVMS --pull graph with its model paths made absolute under /models/MODEL."""
+    root = f"/models/{model}"
+    text = re.sub(r'(?m)^(\s*)models_path: "\./"', lambda m: f'{m.group(1)}models_path: "{root}"', text)
+    return re.sub(r'(?m)^(\s*)draft_models_path: "([^"/][^"]*)"',
+                  lambda m: f'{m.group(1)}draft_models_path: "{root}/{m.group(2)}"', text)
+
+
+def two_graphs(docs, model, graphs):
+    """graphs: [(served name, graph file path)]. See the ovms2 mode in the docstring."""
+    out = stage("ovms", docs)
+    dep = next(d for d in out if d.get("kind") == "Deployment")
+    ns = dep["metadata"]["namespace"]
+    data = {"config.json": json.dumps({"model_config_list": [
+        {"config": {"name": n, "base_path": "/graphs", "graph_path": f"{n}.pbtxt"}} for n, _ in graphs]}, indent=1)}
+    for n, path in graphs:
+        with open(path) as f:
+            data[f"{n}.pbtxt"] = absolute_graph(f.read(), model)
+    ps = dep["spec"]["template"]["spec"]
+    ps.pop("initContainers", None)
+    c = ps["containers"][0]
+    keep = [a for a in c["args"] if a.startswith(("--rest_port=", "--cache_dir=", "--log_level="))]
+    c["args"] = keep + ["--config_path=/graphs/config.json"]
+    c.setdefault("volumeMounts", []).append({"name": "graphs", "mountPath": "/graphs"})
+    ps["volumes"].append({"name": "graphs", "configMap": {"name": "ovms-graphs"}})
+    cm = {"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "ovms-graphs", "namespace": ns}, "data": data}
+    i = out.index(dep)
+    return out[:i] + [cm] + out[i:]
 
 
 def stage(mode, docs, *extra):
@@ -113,6 +153,11 @@ def main(argv):
     src, dst = argv[1:3]
     with open(src) as f:
         docs = [d for d in yaml.safe_load_all(f) if d]
+    if mode == "ovms2":
+        model, pairs = argv[3], [x.split("=", 1) for x in argv[4:6]]
+        with open(dst, "w") as f:
+            yaml.safe_dump_all(two_graphs(docs, model, pairs), f, sort_keys=False)
+        return 0
     with open(dst, "w") as f:
         yaml.safe_dump_all(stage(mode, docs, *argv[3:]), f, sort_keys=False)
     return 0
