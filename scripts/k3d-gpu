@@ -9025,9 +9025,9 @@ for a in s["args"]:
     local t0=${SECONDS} pf="" pfport kdevice="" kbackend="" ktransport="direct (--k3d-url)" app kctx="k3d-${CLUSTER}" got
     if docker inspect "${name}" >/dev/null 2>&1; then err "bench: container ${name} already exists (docker rm -f ${name})"; fi
     [ -n "${kurl}" ] || bench_k3d_arm 4bit
-    # shellcheck disable=SC2064 # expand now: the names are fixed for this run
     mkdir -p "${out}"
     # The competitor's own log (device it chose, load messages) is kept in competitor.log.
+    # shellcheck disable=SC2064 # expand now: the names are fixed for this run
     trap "docker logs '${name}' > '${out}/competitor.log' 2>&1 || true; docker rm -f '${name}' >/dev/null 2>&1 || true; [ -n '${keep}' ] || docker volume rm '${name}-cache' >/dev/null 2>&1 || true; [ -z '${pf}' ] || kill '${pf}' 2>/dev/null || true" EXIT
     info "bench: starting ${stack} (${image})"
     docker "${docker_args[@]}" >/dev/null || err "bench: docker run failed"
