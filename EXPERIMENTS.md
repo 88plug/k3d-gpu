@@ -60,8 +60,9 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H44 | Busy-box robustness: on B24's first 12 tasks, the p95 turn-latency inflation heavy/none is <= 1.25x for A1 (inference on the P-cores, load on the E-cores) and >= 1.5x for B1 (EAT stock floats onto the loaded E-cores). | A1 <= 1.25 (0.65). B1 >= 1.5 (0.6). | `k3d-gpu bench agent run --tasks B24 --limit 12` for A1 and B1, blocks none/heavy/none/heavy at 5 min each (20 min per arm). SUPPORTED: both hold. REFUTED: A1 inflation CI lower bound > 1.25, or B1 <= 1.25 as well (no difference). Otherwise INCONCLUSIVE. | INCONCLUSIVE |
 | H45 | Graded agents per box (largest N on the ramp 1, 2, 4, 8 at which pooled p95 turn latency <= 10 s, success >= the arm's N=1 success - 10 points, error rate <= 1% and >= 60 window requests) on the read-only banking set B15-RO at typical load. | A3 >= 8 (0.8). A1 in [1, 4] (0.55). C1 <= 1 (0.7, `OLLAMA_NUM_PARALLEL=1` serializes). C2 <= A1 (0.6). B1 not run, predicted 0. An arm's prediction is refuted by a scored APB outside its range; a bracket that still contains the prediction decides nothing. | `k3d-gpu bench agent apb` per arm (A1 A3 C1 C2), 5 min per step. The synthetic `k3d-gpu capacity --slo 10` APB is reported beside it, not scored. | PENDING |
 | H46 | Joules per successful banking task (differential: block energy minus the mean power of a load-only control window at the same load, times the block time, over the successful tasks): A1 needs at most 0.4x of B1's. | A1/B1 <= 0.4 (0.7). A3 < A1 including dGPU power (0.7). A2 > A1 (0.6). | H42's blocks plus one 120 s `k3d-gpu bench agent control` window per arm with its server up and idle. SUPPORTED: ratio CI upper bound <= 0.4. REFUTED: ratio CI lower bound > 0.7. INCONCLUSIVE: B1 with zero successes (J per success undefined), load unmatched, or RAPL unreadable. | INCONCLUSIVE |
-| H47 | CPU draft speculative decoding helps agent tasks: A4 (A1 plus a CPU draft, `OpenVINO/Qwen3-0.6B-int4-ov` @ `f864c610`) cuts B24's median time per task by >= 10% vs A1 with delta success >= -5 points. Runs only if H34 is SUPPORTED when the campaign starts; otherwise not run, recorded. | A 0-15% gain; INCONCLUSIVE likely (tool-call turns are 40-96 tokens, little to amortize, and the draft competes for the P-cores). Confidence it is SUPPORTED: 0.35. | `k3d-gpu bench agent run --tasks B24`, A4 vs A1 paired and interleaved at typical load. SUPPORTED: gain CI lower bound >= 10% with success held. REFUTED: gain CI upper bound < 0. Otherwise INCONCLUSIVE. | PENDING |
+| H47 | CPU draft speculative decoding helps agent tasks: A4 (A1 plus a CPU draft, `OpenVINO/Qwen3-0.6B-int4-ov` @ `f864c610`) cuts B24's median time per task by >= 10% vs A1 with delta success >= -5 points. Runs only if H34 is SUPPORTED when the campaign starts; otherwise not run, recorded. | A 0-15% gain; INCONCLUSIVE likely (tool-call turns are 40-96 tokens, little to amortize, and the draft competes for the P-cores). Confidence it is SUPPORTED: 0.35. | `k3d-gpu bench agent run --tasks B24`, A4 vs A1 paired and interleaved at typical load. SUPPORTED: gain CI lower bound >= 10% with success held. REFUTED: gain CI upper bound < 0. Otherwise INCONCLUSIVE. Design replaced 2026-10-18, before any H47 run, by the within-hold interleaved design ([H47 and H49 pre-registration](#h47-and-h49-pre-registration-within-hold-interleaved-design-2026-10-18)): A1 and A4 as two model names in one OVMS pod, one hold, pairs A B B A over B24's task ids, load sampled per task and matched per pair (rule L1); the statistic, thresholds and prediction above are unchanged. | PENDING |
 | H48 | The graders are sound: remote GLM-5.3 through harvest (arm R, gaudi.farmgpu.net, never a node's :8299) passes >= 11 of the measured items among 4 B24 tasks and 8 S100 ids, under a hard cap of 20 LLM requests. | >= 11 pass (0.8). | One `k3d-gpu bench agent proxy --max-requests 20 --key-file FILE --sampling agent_remote` in front of harvest carries every request: first `bfcl --mode server-fc --limit 8 --proxy-url` (8 single-turn ids, 8 requests), then `run --tasks B24 --ids B-T1-U1001,B-T3-U1002,B-T5-U1003,B-T8-U1001` through the same proxy; a task cut by the request cap or by the 256-token cap (`finish_reason=length`) is unmeasured. Latency and energy are not reported. SUPPORTED: >= 10 measured and <= 1 measured item fails. REFUTED: >= 3 measured items fail, and every failed item's task and grader are audited before H41-H46 are read. Otherwise INCONCLUSIVE (amendment 17; originally >= 11 / 10 / <= 9 of 12). | REFUTED |
+| H49 | Inside EAT's banking flow (`intel/enterprise-ai-blueprints` v1.0.0 banking-assistant, B24 at N=1, typical load), the k3d-gpu auto-config stack A1 (OVMS int4 on the P-cores with the CPU Fast Draft of #116) delivers far more tasks within the 120 s turn budget than EAT stock B1 (vLLM CPU, bf16), when both arms run in one hold, interleaved task by task. A stack-vs-stack claim (amendment 16). | Written 2026-10-18T07:50-07:00, before any H49 measurement. Within-budget success (graded pass, every turn <= 120 s, task <= the 240 s cap; turn timeouts and cap hits are measured failures, not missing data): A1 >= 0.70 (0.75), B1 <= 0.10 (0.8), paired A1 - B1 >= +60 points (0.7). Secondary, not gated: J per completed task, paired J per attempt, p95 turn, with over-budget counts per arm. | [H47 and H49 pre-registration](#h47-and-h49-pre-registration-within-hold-interleaved-design-2026-10-18): both servers in one cluster in one hold, pairs over B24's task ids in A B B A order, a reset to seed after every mutating attempt, load sampled per attempt and matched per pair on background CPU (rule L1), up to 12 holds for 24 pairs. SUPPORTED: paired difference CI lower bound >= +30 points and A1 within-budget success >= 0.6, load rule and idle-arm check passed. REFUTED: CI upper bound < +30 points. Otherwise INCONCLUSIVE (also: < 16 matched pairs, < 75% of pairs matched, > 2 void pairs, or the idle arm's server above 0.5 CPU). | PENDING |
 | F2a | Open WebUI in a k3d-gpu cluster reaches a public remote endpoint by name: `k3d-gpu quickstart --remote https://gaudi.farmgpu.net` (no hostAliases) gives a chat through Open WebUI's own API that returns. An earlier run saw `Temporary failure in name resolution` for gaudi.farmgpu.net from a pod. | Pre-registered 2026-10-17, before measuring: the in-cluster failure is a cluster DNS gap (CoreDNS forwarding to an upstream the node container cannot use), not the endpoint; once fixed, one `POST /api/chat/completions` returns `finish_reason=stop` with non-empty content (0.7). | Fresh cluster `k3dgpu-f2-*` (scratch KUBECONFIG, node CPUs 8-15), `nslookup` from a pod before any change, CoreDNS Corefile and node `/etc/resolv.conf` read; root cause fixed in the product if it is a k3d-gpu config gap (regression test first); then one chat through Open WebUI's API with the generated admin account, max_tokens <= 64, temperature 0.6. SUPPORTED: chat returns. REFUTED: no chat returns after the fix. Run (2026-10-17, i9-13900T, k3s v1.35.5, node CPUs 8-15): the prediction's mechanism was wrong. CoreDNS forwarding works (node resolv.conf is k3d's 192.168.32.1 DNAT to Docker's 127.0.0.11; busybox and glibc lookups from pods resolve). The failure is a startup race: `k3d-gpu up` returned on node Ready, when the CoreDNS Deployment was 1 s old (image still pulling); a glibc pod started then got `gaierror(-3, 'Temporary failure in name resolution')` for 11 s (4 tries), first success at 13 s. Fix: `up` waits for the CoreDNS rollout; after it, the same pod resolved on its first try (0.0 s). Then `quickstart --remote https://gaudi.farmgpu.net` with no hostAliases: Open WebUI listed `zai-org/GLM-5.3` and one `POST /api/chat/completions` returned finish_reason=stop, content 'OK', 0.41 s; 0 name resolution errors in its log. | SUPPORTED |
 | F2b | EAT's LiteLLM gateway serves the remote model registered by `integrations/eat/eat-remote.sh`, with the key only as an env reference. | Pre-registered 2026-10-17, before measuring: one completion through LiteLLM returns (0.7); the key string appears 0 times in the gateway DB dump, `kubectl describe` of the gateway Deployment/pods/Secret, and events (0.9). | `eat-remote.sh --remote https://gaudi.farmgpu.net --model zai-org/GLM-5.3` against EAT's genai-gateway in the same cluster, then one chat through LiteLLM (max_tokens <= 64, temperature 0.6), then `grep -c` of the key over `pg_dump`, `kubectl describe` and `kubectl get events -A`. SUPPORTED: completion returns and 0 key hits. REFUTED: any key hit, or no completion. Run (2026-10-17, same host, EAT release-1.0.3-hotfix, LiteLLM v1.83.14-stable.patch.2): first with eat-remote.sh as shipped, REFUTED: the chat came back 401 from the endpoint. LiteLLM resolves `os.environ/` only for config-file models; a `/model/new` model is loaded from its database with the reference string as the api_key (proxy_server.py `_add_deployment` decrypts only). Fixed eat-remote.sh to write a config-file `model_list` entry instead and delete the stale database entry; rerun: `eat-check.sh` passed (chat, tool call get_weather, sandbox printed 385), and the key (raw and base64) had 0 hits in `pg_dumpall` of the gateway's Postgres (169 KB), `kubectl describe` of the gateway namespace's Deployments, pods, Secrets and ConfigMaps, the Deployment YAML and `kubectl get events -A`. The verdict is for the fixed script. | SUPPORTED |
 
@@ -547,6 +548,163 @@ from the 0600 env file through `proxy --key-file`; no record or log of either ru
 contains it (checked by string search).
 
 **Not run:** H43, H45, H47 and B1's H44 blocks (amendment 25). They stay PENDING.
+
+### H47 and H49 pre-registration: within-hold interleaved design (2026-10-18)
+
+Written 2026-10-18T07:50-07:00, before any H47 or H49 measurement and before any harness
+code for it. Nothing here is a measurement; the swap analysis below reads only windows
+already committed under `bench/eatflow/results/2026-10-17/`.
+
+**Root cause of the H41, H42 and H46 INCONCLUSIVE verdicts.** Each arm ran in its own
+hold of the shared lock, and the holds were up to 9.5 hours apart. The host's other
+tenants moved between holds: swap used drifted 4.2-15.7 GiB, and the 1-min load, package
+power and throttle rate moved with it. `load.py matched` compares arm means, so it saw the
+drift between holds and reported it as unmatched load. That is the right reading of that
+design: the arms really did run on different hosts in time. The fix is to stop comparing
+holds. Both arms must run inside one hold, interleaved task by task, with load sampled
+per task and matched per pair.
+
+**Design (H47 and H49).**
+
+1. One hold, both arms live. Both model servers run at once in one cluster
+   `k3dgpu-a-h<id>`. On the host, each arm has its own LiteLLM (the one alias
+   `Qwen/Qwen3-4B-Instruct-2507`, backend = that arm's server), its own recording proxy and
+   its own banking agent (DevUI, `ENABLE_MEMORY=false`). One FastMCP sidecar is shared.
+   Only one task is in flight at any time, so the idle arm's server carries no request.
+2. Pairs. A pair is one task id run once on each arm. Pairs follow B24's fixed order;
+   pair j runs A then B when j is even and B then A when j is odd. The sequence is
+   therefore A B B A A B B A over the same task ids. A pair never spans two holds.
+3. Reset. After every task attempt that may have moved state (T6, T7, or any attempt whose
+   end state left the seed), the sidecar is reset and must read back the seed before the
+   next attempt (amendment 15). The second arm of a pair therefore starts from the same
+   seed as the first.
+4. Warm-up. One unscored warm-up prompt per arm at the start of each hold (amendment 12).
+5. Per-task load sample. Each attempt records, over its own window from send to final
+   turn: host busy CPU-seconds per second over all 32 CPUs (`/proc/stat`), the CPU usage of
+   each arm's server pod (cgroup `cpu.stat` `usage_usec`), package energy (RAPL),
+   `load1`, throttle events, swap used and swap growth, and E-core busy %. Background CPU
+   is `bg_cpu` = host busy CPU-s/s minus both arm pods' CPU-s/s. It covers the background
+   load generator, the production tenants, the agent, LiteLLM and the proxy, and it
+   excludes the arms' own work.
+6. No block-budget censoring. A pair starts only if the hold has at least 600 s left
+   (two task caps of 240 s plus 120 s for resets). A pair cut by the hold timeout anyway is
+   void: both of its attempts are dropped and counted.
+7. Idle-arm check. For every attempt, the other arm's pod CPU over that window is
+   recorded. If its median over all attempts exceeds 0.5 CPU, the arms were not
+   independent and the comparison is INCONCLUSIVE.
+8. Statistics. Common rules (H40-H48) apply unless stated: Wilson 95% per arm; arm vs arm is
+   a paired bootstrap on matched pairs (2000 resamples, seed 40); time and energy ratios use
+   `stats.paired_ratio`.
+
+**Load rule for interleaved designs (amendment L1 to `bench/load/load.py` matching,
+2026-10-18; new runs only).** Applies to H47, H49 and later interleaved designs. Every
+verdict already recorded keeps the rule it was graded with and is not re-graded.
+
+- Per pair: matched when |`bg_cpu`(A) - `bg_cpu`(B)| <= 0.8 CPU-s/s. That is
+  `TOLERANCE` `busy_pct` abs 5 pp of the 16 load CPUs, restated in CPUs, because the arms'
+  own work must not enter the metric. B1 is EAT stock and its vLLM floats onto the loaded
+  E-cores, so E-core busy % would measure the arm, not the background. Unmatched pairs are
+  dropped from every statistic and counted. In the committed one-arm windows, 12 of 100
+  adjacent 30 s window pairs differ by more than 5 pp E-core busy, so about 3 of 24 pairs
+  are expected to drop.
+- Arm level, over the matched pairs: mean `bg_cpu` spread <= 0.8 CPU-s/s, and mean
+  `swap_used_mib` spread <= 256 MiB (unchanged).
+- Recorded and reported per arm, not gated: swap growth (as MiB/min, because per-task
+  windows run 8-240 s), `load1`, `pkg_w`, `throttle_per_min` and E-core `busy_pct`. In a
+  within-hold design `load1`, `pkg_w`, throttle and E-core busy are driven by which arm is
+  working, so a spread there measures the arm, not the host.
+- INCONCLUSIVE when fewer than 16 pairs are matched, fewer than 75% of the pairs run are
+  matched, or the arm-level check fails.
+
+Swap tolerance, re-examined from recorded idle drift, not from any H47 or H49 outcome.
+Committed data: the nine one-arm load files of 2026-10-17/18 with at least 8 windows
+(`A1`, `A2`, `B1`, `C1`, `C2` `run/load.jsonl`; `H41-A1`, `H41-B1`, `H41-C1`, `H41-C2`
+`bfcl-fc/load.jsonl`; 14-30 windows of 30 s, 6.5-14.5 min each). One arm ran in each, so
+any spread between labels is host drift alone. Relabelling each file's windows A B B A in
+time order and running `load.matched`:
+
+- `swap_used_mib` arm-mean spread: 0.0-98.3 MiB, median 11.8. All 9 inside 256 MiB. Inside
+  one hold, interleaved, 256 MiB is defensible: the null never comes within 2.6x of it. It
+  failed H41/H42 only because those arms ran hours apart (4.2-15.7 GiB). It stays 256 MiB.
+- `swap_delta_mib` arm-mean spread: 0.2-121.9 MiB per window, over 64 MiB in 3 of 9 files
+  (A2 121.9, C1 96.7, C2 71.3). The 64 MiB gate fires on pure host drift in a third of
+  null holds, so it is a coin flip, not a load check. In an interleaved design swap growth
+  is a host-wide rate that hits both arms by construction. As in H27 amendment A3, swap
+  growth is recorded per attempt and reported per arm, never a gate.
+- Per adjacent window pair, |swap used A - B| > 256 MiB in 13 of 100 pairs (up to 985
+  MiB, step jumps from the production tenants). So swap used is matched at the arm level,
+  not per pair; per pair it would drop pairs on step events that no arm caused.
+
+The ~140 GiB of swapped-out production pages is a level, not a rate. A fixed level does not
+change between paired attempts minutes apart. Only the step jumps do, and those are what
+the rule above records.
+
+**H49. k3d-gpu auto-config vs EAT stock, inside EAT, on B24.**
+
+- Arms. A1: k3d-gpu `agent manifest` as in amendment 19 (OVMS 2026.4.1, OpenVINO int4
+  self-export `k3dgpu/Qwen3-4B-Instruct-2507-int4-ov`, P-cores) plus the Fast Draft default
+  of #116 (`OpenVINO/Qwen3-0.6B-int4-ov` @ `f864c610` on the CPU). Recorded scope: the
+  default rule (`agent_draft_measured` in `scripts/k3d-gpu`) drafts only for model ids
+  matching `OpenVINO/Qwen3-<n>B-`. The benchmark's self-exported id does not match, so A1
+  sets `K3D_GPU_AGENT_DRAFT=CPU` to get the draft the default applies to an OpenVINO Qwen3
+  id. B1: EAT stock vLLM CPU, bf16, `xeon-values.yaml` as shipped with the 6 GiB KV cache of
+  amendment 19, no pinning. Both in one cluster (node labels for B1 as in `live.sh`).
+- Set and level: B24, N=1, typical load on the E-cores, 24 pairs. Holds run until 24 pairs
+  or 12 holds, whichever comes first; the hold count is reported.
+- Budgets. Turn: the proxy's 120 s timeout. Task cap: 240 s for both arms, two turns at the
+  turn budget. Of the 45 B24 tasks A1 and C2 completed in H42, 42 took 2 LLM requests and 3
+  took 3. A1's slowest B24 task took 39 s, so the cap does not bind A1.
+- Outcome of each attempt, every one a measured result:
+  - `pass_budget`: graded pass, every turn <= 120 s, task <= 240 s.
+  - `fail_graded`: finished within both budgets, graded fail.
+  - `over_turn`: a turn hit the 120 s proxy timeout.
+  - `over_task`: the task reached the 240 s cap.
+  - `void`: infrastructure fault not caused by the arm (reset did not read back the seed,
+    sidecar down, pair cut by the hold timeout). Dropped with its pair and counted; more than
+    2 void pairs makes H49 INCONCLUSIVE.
+  `over_turn` and `over_task` are failures to deliver within budget, never missing data and
+  never lower bounds. Their counts are reported per arm.
+- Primary: within-budget success, the share of attempts that are `pass_budget`, per arm
+  (Wilson) and paired A1 - B1 on matched pairs (bootstrap CI).
+- Secondary, reported and not gated: J per completed task (gross package RAPL over the
+  attempt window; completed = `pass_budget` or `fail_graded`; undefined for an arm with
+  none, stated so). Both servers are resident throughout, so each attempt's energy includes
+  the idle arm equally. The paired J-per-attempt ratio A1/B1 is also reported; B1's
+  over-budget attempts stop at the cap, so its J is a lower bound and the ratio an upper
+  bound. Also p95 turn latency per arm (nearest rank, timeouts as +inf) and median time per
+  attempt.
+- Prediction, before measuring: A1 within-budget success >= 0.70 (0.75). B1 <= 0.10
+  (0.8): its H42 turns took 69, 75 and 329 s under typical load. Paired difference >= +60
+  points (0.7).
+- SUPPORTED: the paired difference's 95% CI lower bound >= +30 points and A1 within-budget
+  success >= 0.6, with the load rule passed and the idle-arm check passed. REFUTED: the CI
+  upper bound < +30 points. Otherwise INCONCLUSIVE.
+- Scope: a stack-vs-stack claim (amendment 16). It does not isolate runtime, placement,
+  precision or the draft.
+
+**H47 (row unchanged, design replaced).** The row's rule "runs only if H34 is SUPPORTED when
+the campaign starts" is met: H34 was SUPPORTED on 2026-10-17 at 23:21 PDT, and this
+campaign starts after this pre-registration.
+
+- Arms: A1 = the H49 A1 stack with `K3D_GPU_AGENT_DRAFT=off`. A4 = the same with
+  `K3D_GPU_AGENT_DRAFT=CPU`. Both run in one OVMS pod on the P-cores serving two model
+  names, as H34 did with its arms A and B. One cluster, one pod; each arm has its own
+  LiteLLM, proxy and agent as in the design above.
+- Set and level: B24, N=1, typical load, 24 pairs, at most 2 holds. Same pair order, resets,
+  per-task sampling, idle check (here the idle check reads the OVMS pod's CPU while no
+  request is in flight) and load rule L1.
+- Statistic and verdict, unchanged from the row: gain = 1 - paired median time ratio
+  A4/A1 on matched pairs where both completed (amendment 9), and delta success A4 - A1 on
+  matched pairs. SUPPORTED: gain CI lower bound >= 10% with delta success >= -5 points.
+  REFUTED: gain CI upper bound < 0. Otherwise INCONCLUSIVE. Prediction unchanged: 0-15%
+  gain, SUPPORTED at 0.35.
+
+**Run order and harness.** H47 runs before H49 (it is short and checks the runner on the
+fast arm). The runner (`live.sh` with `LIVE_MODE=pairs` and an `agentbench pairs`
+subcommand) does not exist yet. It lands in its own PR, with regression tests for the
+pair order, the per-task `bg_cpu` sample, rule L1, void handling and the 600 s pair-start
+guard. That PR must pass the gate before the first hold. If it must deviate from anything
+above, a dated amendment is recorded here first.
 
 ### H28 pre-registration (i9-13900T, 2026-10-17)
 
