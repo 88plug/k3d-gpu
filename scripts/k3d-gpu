@@ -1802,14 +1802,14 @@ doctor_npu() {
         fi
         date=$(npu_fw_date "${fw}")
         if [ -z "${date}" ]; then
-            echo "  note: no build date readable in ${fw#"${SYSROOT}"}; cannot compare it with ${NPU_UMD_IMAGE}'s NPU driver ${NPU_UMD_DRIVER}"
+            echo "  note: no build date readable in ${fw#"${SYSROOT}"}; cannot compare it with ${NPU_UMD_IMAGE%@*}'s NPU driver ${NPU_UMD_DRIVER}"
         elif [ "${date}" -lt "${NPU_UMD_FW_DATE}" ]; then
-            echo "  ${YLW}warn${RST}: NPU firmware built $(ymd "${date}") is older than the $(ymd "${NPU_UMD_FW_DATE}") firmware of linux-npu-driver ${NPU_UMD_DRIVER}, the NPU user space in ${NPU_UMD_IMAGE};"
+            echo "  ${YLW}warn${RST}: NPU firmware built $(ymd "${date}") is older than the $(ymd "${NPU_UMD_FW_DATE}") firmware of linux-npu-driver ${NPU_UMD_DRIVER}, the NPU user space in ${NPU_UMD_IMAGE%@*};"
             echo "        NPU inference can fail with 'MAPPED_INFERENCE_VERSION is NOT compatible'. Install intel-fw-npu from"
             echo "        https://github.com/intel/linux-npu-driver/releases/tag/${NPU_UMD_DRIVER} (it goes to /lib/firmware/updates/intel/vpu, which"
             echo "        the kernel prefers), then reload: sudo modprobe -r intel_vpu && sudo modprobe intel_vpu"
         else
-            echo "  ok: NPU firmware built $(ymd "${date}"), not older than linux-npu-driver ${NPU_UMD_DRIVER}'s ($(ymd "${NPU_UMD_FW_DATE}")) in ${NPU_UMD_IMAGE}"
+            echo "  ok: NPU firmware built $(ymd "${date}"), not older than linux-npu-driver ${NPU_UMD_DRIVER}'s ($(ymd "${NPU_UMD_FW_DATE}")) in ${NPU_UMD_IMAGE%@*}"
         fi
     done
     gen=$(npu_labels)

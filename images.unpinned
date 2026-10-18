@@ -27,3 +27,4 @@ tests/detect_test.sh                  example/k3s-arm64:1                   chec
 tests/fuzz/props.py                   busybox:1.37                          the image string the overrides properties compare, run against stubs
 tests/image_test.sh                   *                                     node-image resolution tests against stub registries (registry.local, localhost:5000)
 tests/model_share_test.sh             localhost:5000/agent                  checks a registry port is not read as a tag
+tests/image_pins_test.sh              *                                     the pin gate's own unpinned inputs
