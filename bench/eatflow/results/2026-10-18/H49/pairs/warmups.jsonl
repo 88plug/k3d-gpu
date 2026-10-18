@@ -1,0 +1,14 @@
+{"hold": 2, "arm": "A1", "seconds": 20.526, "error": null, "answer": "ACC-1001-CHK  \nACC-1001-SAV"}
+{"hold": 2, "arm": "B1", "seconds": 336.039, "error": null, "answer": "ACC-1001-CHK\nACC-1001-SAV"}
+{"hold": 3, "arm": "A1", "seconds": 26.9, "error": null, "answer": "ACC-1001-CHK  \nACC-1001-SAV"}
+{"hold": 3, "arm": "B1", "seconds": 341.093, "error": null, "answer": "ACC-1001-CHK\nACC-1001-SAV"}
+{"hold": 4, "arm": "A1", "seconds": 20.214, "error": null, "answer": "ACC-1001-CHK  \nACC-1001-SAV"}
+{"hold": 4, "arm": "B1", "seconds": 327.984, "error": null, "answer": "ACC-1001-CHK\nACC-1001-SAV"}
+{"hold": 5, "arm": "A1", "seconds": 20.21, "error": null, "answer": "ACC-1001-CHK  \nACC-1001-SAV"}
+{"hold": 5, "arm": "B1", "seconds": 324.025, "error": null, "answer": "ACC-1001-CHK\nACC-1001-SAV"}
+{"hold": 6, "arm": "A1", "seconds": 19.926, "error": null, "answer": "ACC-1001-CHK  \nACC-1001-SAV"}
+{"hold": 6, "arm": "B1", "seconds": 328.81, "error": null, "answer": "ACC-1001-CHK\nACC-1001-SAV"}
+{"hold": 7, "arm": "A1", "seconds": 20.25, "error": null, "answer": "ACC-1001-CHK  \nACC-1001-SAV"}
+{"hold": 7, "arm": "B1", "seconds": 325.253, "error": null, "answer": "ACC-1001-CHK\nACC-1001-SAV"}
+{"hold": 8, "arm": "A1", "seconds": 20.275, "error": null, "answer": "ACC-1001-CHK  \nACC-1001-SAV"}
+{"hold": 8, "arm": "B1", "seconds": 336.215, "error": null, "answer": "ACC-1001-CHK\nACC-1001-SAV"}
