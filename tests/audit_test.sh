@@ -57,8 +57,9 @@ validate "#/\$defs/images_lock" "${REPO}/images.lock" && ok "images.lock validat
 # lock_drift <name> <want substring> <shell edit run inside the scratch copy>
 lock_drift() {
     local name=$1 want=$2 edit=$3 root="${WORK}/lockcopy" out rc
-    rm -rf "${root}"; mkdir -p "${root}/scripts"
+    rm -rf "${root}"; mkdir -p "${root}/scripts" "${root}/integrations"
     cp -r "${REPO}/share" "${REPO}/console" "${root}/"
+    cp -r "${REPO}/integrations/eat" "${root}/integrations/"
     cp "${REPO}/Dockerfile" "${REPO}/images.lock" "${root}/"
     cp "${REPO}/scripts/k3d-gpu" "${REPO}/scripts/images-lock" "${root}/scripts/"
     (cd "${root}" && eval "${edit}")

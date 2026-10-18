@@ -1,0 +1,40 @@
+# k3d-gpu values for EAT's GenAI Gateway chart (core/helm-charts/genai-gateway),
+# merged over its values.yaml by gateway-charts.py into a copy of the chart that
+# deploy-genai-gateway.yml installs. Nothing in EAT's checkout is edited.
+#
+# Every image is name:tag@sha256 at the tag EAT's path resolved on 2026-10-18, so
+# the pins change no behaviour. The digests are the registries' manifest digests
+# (multi-arch index), read with `scripts/images-lock digest`. The bitnami charts
+# render "<registry>/<repository>:<tag>", and the gateway's own template
+# "<repository>:<tag>", so a tag of "<tag>@sha256:..." reaches the pod as is.
+
+image:
+  repository: docker.litellm.ai/berriai/litellm
+  tag: "v1.83.14-stable.patch.2@sha256:73cbb215d3d43ae5b42816217b200386eb08d567767fcb36cba163152c5f3c79"
+
+# EAT names only the repository; the charts' default tag is `latest`. These are the
+# images bitnamilegacy's :latest served on 2026-10-18 (one digest, two tags each).
+postgresql:
+  image:
+    repository: bitnamilegacy/postgresql
+    tag: "17.5.0-debian-12-r20@sha256:42a8200d35971f931b869ef5252d996e137c6beb4b8f1b6d2181dc7d1b6f62e0"
+redis:
+  image:
+    repository: bitnamilegacy/redis
+    tag: "8.0.3-debian-12-r2@sha256:5927ff3702df7106bbb7dcc0f8e3d053d979253c3aecce53f07f40db990f823b"
+
+# Read by gateway-charts.py and dropped from the values; the chart never sees it.
+k3d-gpu:
+  # Chart.yaml asks for postgresql >=13.3.0 and redis >=18.0.0, and the playbook runs
+  # `helm dependency update`, which takes the newest chart in range. These are the
+  # versions that resolved on 2026-10-18 (Helm v3.14.0, oci://registry-1.docker.io/bitnamicharts):
+  # postgresql 18.12.4 (chart digest sha256:be5907fe1e4d70f2dabb0cb2429d3c4476c39c2240df67445950d3909e011070),
+  # redis 28.3.1 (sha256:778d8d31eb0d5b697ec0928bcf4a5abc3a642e0b0c19291ef9bfaa48c40f703a).
+  dependencies:
+    postgresql: 18.12.4
+    redis: 28.3.1
+  # templates/deployment.yaml names its wait-for-postgres-redis init image literally
+  # (no value reads it); the copy gets this one in its place.
+  waitImage:
+    repository: busybox
+    tag: "1.36@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662"

@@ -61,6 +61,9 @@ that off the host.
 | `bastion.Dockerfile` | Ubuntu 24.04 (digest-pinned) plus what EAT's one-click installer installs |
 | `agentic-config.cfg` | EAT's own component toggles: gateway, ingress, Redis, pgvector, agent sandbox on; Kubespray, observability, models, KubeRay, CPU balloons off |
 | `vllm-values.yaml` | k3d-gpu values merged over EAT's `vllm/xeon-values.yaml` (memory limit, P-core balloon, image digest) |
+| `gateway-charts.py` | writes pinned copies of EAT's GenAI Gateway chart directories; `brownfield.sh` passes them to `deploy-genai-gateway.yml` |
+| `gateway-values.yaml` | the gateway chart's pins: postgresql and redis chart versions, LiteLLM, PostgreSQL, Redis and init images by digest |
+| `gateway-trace-values.yaml` | the Langfuse trace stack's pins: Langfuse web and worker, PostgreSQL, Valkey, ClickHouse, ZooKeeper, MinIO by digest |
 | `eat-check.sh` | the end-state check below |
 
 `tests/eat_test.sh` runs `eat-check.sh` against stub `kubectl` and `curl`
@@ -223,9 +226,40 @@ the balloon path, which is off here.
 
 Pinned here: EAT by tag and commit (`eat-up.sh` refuses any other HEAD), the
 bastion base image by digest, Helm v3.14.0 baked into the bastion by sha256,
-and the vLLM image by digest (`vllm-values.yaml`). EAT itself pins
-ingress-nginx 4.12.2 (`ingress_controller` in `agentic-metadata.cfg`),
-kubectl v1.29.0, agent-sandbox v0.5.0 and the LiteLLM/Langfuse charts it ships.
+the vLLM image by digest (`vllm-values.yaml`), and the GenAI Gateway's charts
+and images. EAT itself pins ingress-nginx 4.12.2 (`ingress_controller` in
+`agentic-metadata.cfg`), kubectl v1.29.0, agent-sandbox v0.5.0 and the
+Langfuse chart 1.5.30. `images.lock` lists every image pinned here, and
+`scripts/images-lock pins` fails CI on any image in these files without a digest.
+
+The GenAI Gateway needed its own fix. `deploy-genai-gateway.yml` runs
+`helm dependency update` on `genai-gateway`, whose `Chart.yaml` asks for
+postgresql `>=13.3.0` and redis `>=18.0.0`. On 2026-10-18 that resolved
+postgresql 18.12.4 and redis 28.3.1, whose default tag is `latest`: with
+EAT's repository overrides the gateway pulled `bitnamilegacy/postgresql:latest`
+and `bitnamilegacy/redis:latest`. Bitnami keeps `bitnamilegacy` only as a
+temporary archive ([bitnami/containers#83267](https://github.com/bitnami/containers/issues/83267)).
+In stack mode `brownfield.sh` runs `gateway-charts.py`, which copies EAT's
+`genai-gateway` and `genai-gateway-trace` chart directories to `~/k3d-gpu-charts`
+in the bastion and pins them:
+
+- `Chart.yaml`: postgresql 18.12.4 and redis 28.3.1 exactly.
+- `values.yaml`: `gateway-values.yaml` merged in. LiteLLM
+  `v1.83.14-stable.patch.2`, PostgreSQL `17.5.0-debian-12-r20` and Redis
+  `8.0.3-debian-12-r2`, each by digest. The last two are the tags that carry
+  `latest`'s digest, so the same images run.
+- `templates/deployment.yaml`: the literal `busybox:1.36` init image, by digest.
+- `charts/langfuse/values.yaml`: `gateway-trace-values.yaml` merged in. Langfuse
+  web and worker `3.173.0` (the 1.5.30 chart's appVersion) and the five
+  `bitnamilegacy` subchart images at the tags they already rendered, each by digest.
+
+`brownfield.sh` passes the copies to that playbook only, as extra vars
+`helm_charts_base_genai` and `helm_charts_base_genai_trace`. Extra vars take
+precedence over the playbook's `vars_files`. `gateway-charts.py` stops the
+deploy if EAT's files no longer match: an overlay repository or tag EAT's
+values do not name, a missing dependency, or no `busybox:1.36` line. Rendered
+with Helm v3.14.0 on 2026-10-18, the copies differ from EAT's charts only in
+the 11 `image:` lines, each now `<tag>@sha256:...`.
 
 Helm needed care: `setup-bastion.yml` installs it by running `get-helm-3` from
 helm's `main` branch, unless `/usr/local/bin/helm` exists (`creates:`). With
@@ -237,8 +271,12 @@ archive), the pip packages `setup-bastion.yml` installs (`ansible`,
 `ansible-core`, `kubernetes`, `pyyaml`, `jsonpatch`, `requests`, `urllib3`, no
 versions), its `ansible-galaxy collection install --force` of `kubernetes.core`,
 `community.kubernetes`, `community.general` and `ansible.posix`, and the
-registration job's `curlimages/curl:latest`. A later run can resolve any of
-these to a newer release than the one observed.
+registration job's `curlimages/curl:latest`. Outside the gateway, EAT's
+bundled charts name images by tag only: Redis Stack
+`redis/redis-stack-server:7.4.0-v8` and pgvector `pgvector/pgvector:pg16`, and
+agent-sandbox builds its router and runtime images in the cluster from its
+source. A later run can resolve any of these to a newer release than the one
+observed.
 
 ## What stays unsupported, and why
 

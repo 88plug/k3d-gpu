@@ -11,6 +11,8 @@
 #   EAT_KUBECONFIG   kubeconfig of the target cluster (default: /kube/config)
 #   EAT_VLLM_VALUES  values merged over EAT's vllm/xeon-values.yaml (default: /vllm-values.yaml)
 #   EAT_VLLM_KV_GIB  VLLM_CPU_KVCACHE_SPACE for every catalog model, in GiB (default: 6)
+#   K3D_GPU_EAT_DIR  integrations/eat of k3d-gpu (default: /k3d-gpu-eat): gateway-charts.py
+#                    and the gateway values overlays
 #
 # Variables set below without a local use are read by EAT's sourced functions.
 # shellcheck disable=SC1091,SC2034,SC2153,SC2154
@@ -21,6 +23,7 @@ EAT_DIR="${EAT_DIR:-/home/ubuntu/eat}"
 EAT_KUBECONFIG="${EAT_KUBECONFIG:-/kube/config}"
 EAT_VLLM_VALUES="${EAT_VLLM_VALUES:-/vllm-values.yaml}"
 EAT_VLLM_KV_GIB="${EAT_VLLM_KV_GIB:-6}"
+K3D_GPU_EAT_DIR="${K3D_GPU_EAT_DIR:-/k3d-gpu-eat}"
 CERT_DIR="${HOME}/certs"
 
 mode="${1:-stack}"
@@ -60,6 +63,28 @@ cd "${CORE_DIR}"
 kubeconfig_file="${EAT_KUBECONFIG}"
 
 if [ "${mode}" = "stack" ]; then
+    # GenAI Gateway: deploy-genai-gateway.yml installs from the chart directories in
+    # helm_charts_base_genai{,_trace}, set by its vars_files. Extra vars take precedence
+    # over those, so that playbook alone gets copies with exact dependency versions and
+    # every image pinned by digest (gateway-charts.py; EAT's checkout is not edited).
+    charts="${HOME}/k3d-gpu-charts"
+    python3 "${K3D_GPU_EAT_DIR}/gateway-charts.py" "${CORE_DIR}/helm-charts" \
+        "${K3D_GPU_EAT_DIR}/gateway-values.yaml" "${K3D_GPU_EAT_DIR}/gateway-trace-values.yaml" "${charts}"
+    gateway_vars="${HOME}/k3d-gpu-gateway-vars.yml"
+    printf 'helm_charts_base_genai: %s\nhelm_charts_base_genai_trace: %s\n' \
+        "${charts}/genai-gateway" "${charts}/genai-gateway-trace" > "${gateway_vars}"
+    # EAT's functions run in this shell and call ansible-playbook by name. The
+    # marker file records that the gateway playbook got the copies.
+    gateway_marker="${HOME}/k3d-gpu-gateway-pinned"
+    rm -f "${gateway_marker}"
+    ansible-playbook() {
+        case " $* " in
+            *"deploy-genai-gateway.yml "*)
+                : > "${gateway_marker}"
+                command ansible-playbook "$@" --extra-vars "@${gateway_vars}" ;;
+            *) command ansible-playbook "$@" ;;
+        esac
+    }
     # Answers, in prompt order:
     #   5    platform menu: EAT detects the platform before its bastion playbook
     #        installs kubectl, so a fresh bastion always asks (and k3s's
@@ -67,6 +92,10 @@ if [ "${mode}" = "stack" ]; then
     #   1    brownfield menu: Deploy Inference Stack
     #   yes  "continue with Brownfield Deployment setup?"
     printf '5\n1\nyes\n' | brownfield_deployment
+    if grep -Eq '^deploy_genai_gateway=on' "${EAT_DIR}/core/inventory/agentic-config.cfg" && [ ! -f "${gateway_marker}" ]; then
+        echo "ERROR: deploy-genai-gateway.yml never ran through the pinning wrapper" >&2
+        exit 1
+    fi
     exit
 fi
 

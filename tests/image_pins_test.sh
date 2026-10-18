@@ -7,8 +7,12 @@
 #     whose ARG default is unpinned), on an allow line that matches nothing and on
 #     an allow line with no reason; it passes on variables, digest-only refs, a CRD
 #     schema `image:` key, prose (*.md, docs/) and an allowed reference
+#   - Helm values name an image as sibling `repository:` / `tag:` keys: pins fails
+#     on such a pair with no digest, with no tag, or tagged latest
+#   - images.lock collects the values pairs and Dockerfile FROMs under integrations/eat
 #   - `repin` (registry stubbed) appends the digest to a name:tag, moves a stale
-#     digest, leaves allowed and digest-only refs alone, and is idempotent
+#     digest, leaves allowed and digest-only refs alone, does the same for a values
+#     tag, and is idempotent
 #
 # Usage: tests/image_pins_test.sh
 
@@ -88,6 +92,49 @@ pins_case "a CRD schema image: key" ok \
     "printf 'properties:\n  image:\n    type: string\n' > share/a.yml"
 pins_case "prose (*.md, docs/)" ok \
     "mkdir -p docs; printf 'docker run busybox:1.37\nimage: redis:7.4\n' | tee README.md > docs/x.txt"
+# Helm values name an image as sibling repository: and tag: keys (EAT's charts, our overlays).
+pins_case "a values repository/tag pair" "integrations/eat/gw-values.yaml:3: bitnamilegacy/redis:8.0.3-debian-12-r2 is not pinned" \
+    "mkdir -p integrations/eat; printf 'redis:\n  image:\n    repository: bitnamilegacy/redis\n    tag: \"8.0.3-debian-12-r2\"\n' > integrations/eat/gw-values.yaml"
+pins_case "a values repository with no tag (the chart's default tag, here latest)" \
+    "integrations/eat/gw-values.yaml:3: bitnamilegacy/postgresql is not pinned" \
+    "mkdir -p integrations/eat; printf 'postgresql:\n  image:\n    repository: bitnamilegacy/postgresql\n  auth:\n    tag: x\n' > integrations/eat/gw-values.yaml"
+pins_case "a values pair tagged latest" "bitnamilegacy/redis:latest@${D1} is tagged latest" \
+    "printf 'image:\n  tag: latest@${D1}\n  repository: bitnamilegacy/redis\n' > values.yaml"
+pins_case "a values pair with a registry key" "values.yaml:2: docker.io/langfuse/langfuse:3.173.0 is not pinned" \
+    "printf 'image:\n  repository: langfuse/langfuse\n  registry: docker.io\n  pullPolicy: Always\n  tag: 3.173.0\n' > values.yaml"
+pins_case "values pairs pinned name:tag@sha256, nested and quoted" ok \
+    "printf 'image:\n  repository: \"docker.litellm.ai/berriai/litellm\"\n  tag: \"v1.83.14-stable.patch.2@${D1}\"\nclickhouse:\n  zookeeper:\n    image:\n      repository: bitnamilegacy/zookeeper\n      tag: 3.9.3-debian-12-r8@${D2}\n' > values.yaml"
+pins_case "a workflow's with: repository: (a repo, not an image)" ok \
+    "mkdir -p .github/workflows; printf 'steps:\n  - uses: x/y@v1\n    with:\n      repository: owner/repo\n      tag: v1\n' > .github/workflows/x.yml"
+pins_case "a values repository whose value is on the next line or a variable" ok \
+    "printf 'properties:\n  repository:\n    type: string\nimage:\n  repository: {{ .Values.x }}\n  tag: \"1\"\n' > share/a.yml"
+
+# ---- images.lock sources: integrations/eat values pairs and Dockerfile FROMs ----
+scratch
+mkdir -p "${WORK}/r/integrations/eat"
+printf 'ARG K3S_TAG=v1.37.1-k3s1\nFROM debian:trixie-slim@%s\n' "${D1}" > "${WORK}/r/Dockerfile"
+: > "${WORK}/r/scripts/k3d-gpu"
+printf 'FROM ubuntu:24.04@%s\n' "${D1}" > "${WORK}/r/integrations/eat/bastion.Dockerfile"
+printf 'image:\n  repository: bitnamilegacy/redis\n  tag: "8.0.3-debian-12-r2@%s"\n' "${D2}" > "${WORK}/r/integrations/eat/gw-values.yaml"
+printf 'cluster_url=api.example.com\n' > "${WORK}/r/integrations/eat/agentic-config.cfg"
+if out=$(python3 - "${WORK}/r" "${D1}" "${D2}" 2>&1 <<'EOF'
+import importlib.machinery, importlib.util, sys
+root, d1, d2 = sys.argv[1:]
+loader = importlib.machinery.SourceFileLoader("images_lock", root + "/scripts/images-lock")
+spec = importlib.util.spec_from_loader("images_lock", loader)
+m = importlib.util.module_from_spec(spec)
+loader.exec_module(m)
+found, _ = m.collect(root)
+want = {
+    ("docker.io/bitnamilegacy/redis", "8.0.3-debian-12-r2"): (d2, {"integrations/eat/gw-values.yaml"}),
+    ("docker.io/library/ubuntu", "24.04"): (d1, {"integrations/eat/bastion.Dockerfile"}),
+}
+for key, (digest, sources) in want.items():
+    got = found.get(key)
+    assert got == {"digest": digest, "sources": sources}, (key, got)
+EOF
+); then ok "images.lock collects integrations/eat values pairs and Dockerfile FROMs"
+else fail "images-lock collect integrations/eat"; sed 's/^/  | /' <<< "${out}"; fi
 
 # ---- repin, with the registry stubbed ----
 scratch
@@ -97,6 +144,17 @@ cat > "${WORK}/r/share/a.yml" <<EOF
 - image: openvino/model_server@${D1}
 EOF
 printf 'TEST_IMAGE="${K3D_GPU_TEST_IMAGE:-nvidia/cuda:13.4.3-base-ubuntu26.04}"\n' > "${WORK}/r/scripts/run"
+mkdir -p "${WORK}/r/integrations/eat"
+cat > "${WORK}/r/integrations/eat/gw-values.yaml" <<EOF
+redis:
+  image:
+    repository: bitnamilegacy/redis
+    tag: "8.0.3-debian-12-r2"
+postgresql:
+  image:
+    repository: bitnamilegacy/postgresql
+    tag: "17.5.0-debian-12-r20@${D1}"
+EOF
 chmod 755 "${WORK}/r/scripts/run"
 repin() {
     python3 - "${WORK}/r" "${D2}" <<'EOF'
@@ -123,6 +181,10 @@ else fail "repin \${FOO_IMAGE:-default}"; sed 's/^/  | /' "${WORK}/r/scripts/run
 if [ "$(cat "${WORK}/r/share/local.yml")" = "- image: app/local:dev" ]; then ok "repin leaves an allowed reference alone"
 else fail "repin touched an allowed reference"; fi
 if [ -x "${WORK}/r/scripts/run" ]; then ok "repin keeps a rewritten script executable"; else fail "repin dropped the executable bit"; fi
+if grep -qxF "    tag: \"8.0.3-debian-12-r2@${D2}\"" "${WORK}/r/integrations/eat/gw-values.yaml" \
+   && grep -qxF "    tag: \"17.5.0-debian-12-r20@${D2}\"" "${WORK}/r/integrations/eat/gw-values.yaml"; then
+    ok "repin pins a values tag and moves a stale one"
+else fail "repin values pair"; sed 's/^/  | /' "${WORK}/r/integrations/eat/gw-values.yaml"; fi
 if out=$(repin 2>&1) && [ -z "${out}" ]; then ok "repin is idempotent"; else fail "repin changed a pinned tree again"; sed 's/^/  | /' <<< "${out}"; fi
 
 echo ""

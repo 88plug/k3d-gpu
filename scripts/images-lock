@@ -22,6 +22,9 @@ Sources of image references (the lock holds all of them and nothing else):
   - scripts/k3d-gpu            the K3D_GPU_*_IMAGE defaults (agent and test pods),
                                except K3D_GPU_IMAGE, the node image this repo builds,
                                and every literal *_IMAGE="ref" pin (the agent backends)
+  - integrations/eat/          the Helm values overlays (*.yaml, *.yml: each repository:/tag:
+                               pair) and the bastion's FROM (*.Dockerfile): the images
+                               the EAT deploy path pulls
   - k3s's system images        k3s-images.txt of the Dockerfile's K3S_TAG release
                                (coredns, local-path-provisioner, metrics-server,
                                pause, ...): k3s itself starts them in the cluster
@@ -29,8 +32,10 @@ Sources of image references (the lock holds all of them and nothing else):
 `pins` and `repin` read every tracked text file except prose (*.md, docs/) and
 recorded data (research/, data/, oracle/raw/, */results/). An image reference is
 the value of an `image:` / "image": key, a `container:` key, a FROM line, a
-*IMAGE= / *IMG= assignment, a ${*IMAGE:-default} or a docker:// URL; a value that
-holds a variable ($, {, @VAR@) is no literal and is skipped. A reference is pinned
+*IMAGE= / *IMG= assignment, a ${*IMAGE:-default}, a docker:// URL, or a Helm values
+mapping's sibling `repository:` (with `registry:`) and `tag:` keys in a *.yaml/*.yml
+file outside .github/, the tag carrying the digest as tag@sha256:...; a value that holds a variable ($, {, @VAR@) is no
+literal and is skipped. A reference is pinned
 when it carries @sha256:<64 hex> and its tag is not `latest`. Files or references
 that images.unpinned allows are skipped by `repin` unless already name:tag@sha256.
 
@@ -91,6 +96,9 @@ REF_CONTEXTS = [re.compile(c, re.M) for c in (
 PINNED_RE = re.compile(r"(?<![A-Za-z0-9._/@])(?P<ref>" + NAME_TAG
                        + r")@(?P<digest>sha256:[0-9a-f]{64})(?![0-9a-f])")
 SKIP_PREFIXES = ("docs/", "research/", "data/", "oracle/raw/")
+# One `key: value` line of a Helm values mapping; group 4 is the inline value, unquoted.
+VALUES_KEY_RE = re.compile(r"""^([ \t]*)(repository|registry|tag):[ \t]*(["']?)([^\s"'#]*)\3[ \t]*(?:#.*)?$""")
+EAT_DIR = "integrations/eat"
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "console"))
 from audit import parse_ref  # noqa: E402  (one image-reference parser for the lock and the audit)
@@ -114,6 +122,46 @@ def dockerfile_froms(text):
             if m.group(2):
                 stages.add(m.group(2))
     return out, args
+
+
+def values_refs(text):
+    """[(line, ref, end offset)] for each `repository:` key with an inline value in a
+    Helm values mapping: its sibling `registry:` and `tag:` keys (same indent, same
+    mapping) complete the reference. end is where the tag value ends (where repin
+    writes a digest), None when there is no tag. A null tag counts as none."""
+    rows = text.splitlines(keepends=True)
+    starts, pos = [], 0
+    for row in rows:
+        starts.append(pos)
+        pos += len(row)
+
+    def key(j):
+        return VALUES_KEY_RE.match(rows[j].rstrip("\r\n"))
+
+    for i in range(len(rows)):
+        m = key(i)
+        if not m or m.group(2) != "repository" or not m.group(4):
+            continue
+        level, sib = len(m.group(1)), {}
+        for rng in (range(i - 1, -1, -1), range(i + 1, len(rows))):
+            for j in rng:
+                row = rows[j]
+                if not row.strip() or row.lstrip().startswith("#"):
+                    continue
+                if len(row) - len(row.lstrip(" \t")) < level:
+                    break  # the mapping ends
+                k = key(j)
+                if k and len(k.group(1)) == level and k.group(2) != "repository":
+                    sib[k.group(2)] = (j, k)
+        reg, tag = sib.get("registry"), sib.get("tag")
+        if tag and tag[1].group(4).lower() in ("", "null", "~"):
+            tag = None
+        ref = (reg[1].group(4) + "/" if reg and reg[1].group(4) else "") + m.group(4)
+        end = None
+        if tag:
+            ref += ":" + tag[1].group(4)
+            end = starts[tag[0]] + tag[1].end(4)
+        yield i + 1, ref, end
 
 
 def collect(root):
@@ -147,6 +195,17 @@ def collect(root):
             add(ref, "scripts/k3d-gpu " + var)
     for var, ref in PLAIN_IMAGE_RE.findall(text):
         add(ref, "scripts/k3d-gpu " + var)
+    eat = os.path.join(root, EAT_DIR)
+    for f in sorted(os.listdir(eat)) if os.path.isdir(eat) else []:
+        path, source = os.path.join(eat, f), EAT_DIR + "/" + f
+        if f.endswith((".yml", ".yaml")):
+            with open(path, encoding="utf-8") as fh:
+                for _, ref, _ in values_refs(fh.read()):
+                    add(ref, source)
+        elif f.endswith(".Dockerfile"):
+            with open(path, encoding="utf-8") as fh:
+                for ref in dockerfile_froms(fh.read())[0]:
+                    add(ref, source)
     k3s_tag = args.get("K3S_TAG")
     if not k3s_tag:
         raise ValueError("Dockerfile has no ARG K3S_TAG default")
@@ -257,6 +316,16 @@ def image_refs(text, path=""):
             if (line, v) not in seen:
                 seen.add((line, v))
                 yield line, v, m.start("v") + raw.find(v) + len(v)
+    # Helm values live in YAML; a workflow's `with: repository:` names a repo, not an image.
+    is_values = path.endswith((".yaml", ".yml")) and not path.startswith(".github/")
+    for line, v, end in values_refs(text) if is_values else ():
+        if any(ch in v for ch in "${}<>*") or "@" in v.replace("@sha256:", "") or not REF_RE.match(v):
+            continue
+        if "/" not in v and ":" not in v:
+            continue  # a bare word, as above
+        if (line, v) not in seen:
+            seen.add((line, v))
+            yield line, v, end
 
 
 def is_pinned(ref):
@@ -324,9 +393,15 @@ def repin(root, paths):
                 d = resolved(m.group("ref"))
                 if d != m.group("digest"):
                     edits[m.span("digest")] = d
-        for _, ref, end in image_refs(text):
+        for _, ref, end in image_refs(text, path):
             name, tag, digest = parse_ref(ref)
-            if not digest and tag is not None and not allowed(allow, path, ref):
+            if end is None or tag is None:
+                continue
+            if digest:  # PINNED_RE moved name:tag@sha256 written as one; this is a values tag@sha256
+                d = resolved(ref)
+                if d != digest:
+                    edits[(end - len(digest), end)] = d
+            elif not allowed(allow, path, ref):
                 edits[(end, end)] = "@" + resolved(ref)
         if not edits:
             continue
@@ -440,7 +515,8 @@ def main(argv):
     if args.command == "pins":
         print("ok   every image reference is pinned by digest or allowed in %s" % ALLOW_FILE)
     else:
-        print("ok   images.lock matches share/, the Dockerfile, scripts/k3d-gpu and k3s %s" % collect(args.root)[1])
+        print("ok   images.lock matches share/, the Dockerfile, scripts/k3d-gpu, integrations/eat and k3s %s"
+              % collect(args.root)[1])
     return 0
 
 
