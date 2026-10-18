@@ -29,7 +29,7 @@ def fake_tree():
 
 
 def args(**kw):
-    d = dict(core_cap_khz=2800000, uncore_low_khz=2000000, swap_flag_pages=25600)
+    d = dict(core_cap_khz=2800000, uncore_low_khz=2000000, swap_flag_pages=25600, level=None)
     d.update(kw)
     return SimpleNamespace(**d)
 
@@ -167,6 +167,65 @@ class Verdict(unittest.TestCase):
     def test_inconclusive_uncore_pin_not_honoured(self):
         out = run_analyze(table(uc=(15.4, 1.6, 13.0), c=(14.0, 1.7), ring_u=3000))
         self.assertIn("uncore pin not honoured", out)
+
+
+def loaded(rows, level="typical", pkg_w=None):
+    """A2 rows: every cell carries a load.py window; pkg_w maps arm -> package W."""
+    for x in rows:
+        x["level"] = level
+        x["load"] = {"tag": x["arm"], "level": level, "busy_pct": 40.0, "load1": 14.0,
+                     "pkg_w": (pkg_w or {}).get(x["arm"], 90.0), "throttle_per_min": 100.0,
+                     "swap_used_mib": 1000.0, "swap_delta_mib": 0.0}
+    return rows
+
+
+def run_analyze_level(rows, level):
+    with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as f:
+        for x in rows:
+            f.write(json.dumps(x) + "\n")
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        probe.analyze(f.name, args(level=level))
+    os.unlink(f.name)
+    return buf.getvalue()
+
+
+class MatchedLoad(unittest.TestCase):
+    def test_matched_load_keeps_the_verdict(self):
+        out = run_analyze_level(loaded(table(uc=(15.4, 1.6, 13.0), c=(14.0, 1.7, 10.0))), "typical")
+        self.assertIn("LOAD MATCHED", out)
+        self.assertIn("VERDICT SUPPORTED", out)
+
+    def test_unmatched_load_is_inconclusive_and_names_the_metric(self):
+        rows = loaded(table(uc=(15.4, 1.6, 13.0), c=(14.0, 1.7, 10.0)), pkg_w={"UC": 110.0})
+        out = run_analyze_level(rows, "typical")
+        self.assertIn("VERDICT INCONCLUSIVE: load unmatched (pkg_w spread", out)
+        self.assertIn("would be: SUPPORTED", out)
+
+    def test_high_but_matched_load_is_not_inconclusive(self):
+        rows = loaded(table(uc=(14.0, 1.5, 13.0), c=(14.0, 1.5, 10.0)), pkg_w={k: 117.0 for k in probe.PRIMARY})
+        out = run_analyze_level(rows, "typical")
+        self.assertIn("LOAD MATCHED", out)
+        self.assertIn("VERDICT REFUTED:", out)
+
+    def test_throttle_in_a2_cells_is_recorded_not_excluded(self):
+        rows = loaded(table(uc=(15.4, 1.6, 13.0), c=(14.0, 1.7, 10.0)))
+        for x in rows:
+            x["throttle_delta"] = 5
+            x["pswpin"] = 10 ** 6
+        self.assertIn("VERDICT SUPPORTED", run_analyze_level(rows, "typical"))
+
+    def test_level_filter(self):
+        rows = loaded(table(uc=(15.4, 1.6, 13.0), c=(14.0, 1.7, 10.0)), level="typical")
+        rows += loaded(table(uc=(14.0, 1.5, 13.0), c=(14.0, 1.5, 10.0)), level="heavy")
+        self.assertIn("VERDICT SUPPORTED", run_analyze_level(rows, "typical"))
+        self.assertIn("VERDICT REFUTED:", run_analyze_level(rows, "heavy"))
+
+    def test_boot_ci_brackets_the_median(self):
+        lo, hi = probe.boot_ci([0.8, 0.85, 0.9, 0.95, 1.0])
+        self.assertLessEqual(lo, 0.9)
+        self.assertGreaterEqual(hi, 0.9)
+        self.assertEqual(probe.boot_ci([0.9] * 5), (0.9, 0.9))
 
 
 class KnobWrites(unittest.TestCase):
