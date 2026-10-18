@@ -1,0 +1,131 @@
+{
+  "headline_level": "typical",
+  "levels": {
+    "heavy": {
+      "arm_A": {
+        "j_per_token_median": 23.139,
+        "tps_max": 6.112,
+        "tps_median": 4.718,
+        "tps_min": 2.636
+      },
+      "arm_B": {
+        "j_per_token_median": 18.154,
+        "tps_max": 7.368,
+        "tps_median": 5.983,
+        "tps_min": 4.427
+      },
+      "b_cheaper_pairs": 8,
+      "b_faster_pairs": 8,
+      "confidence": null,
+      "dropped_requests": 0,
+      "greedy_identical_pairs": 7,
+      "j_ratio_ci95": [
+        0.5332,
+        0.9654
+      ],
+      "j_ratio_median": 0.8516,
+      "load_matched": false,
+      "load_per_arm": {
+        "busy_pct": {
+          "A": 99.924,
+          "B": 99.938
+        },
+        "load1": {
+          "A": 43.335,
+          "B": 45.96
+        },
+        "pkg_w": {
+          "A": 104.62,
+          "B": 104.517
+        },
+        "swap_delta_mib": {
+          "A": -49.287,
+          "B": 31.137
+        },
+        "swap_used_mib": {
+          "A": 144933.725,
+          "B": 145131.938
+        },
+        "throttle_per_min": {
+          "A": 2011.179,
+          "B": 2117.744
+        }
+      },
+      "load_verdict": "INCONCLUSIVE: load unmatched (swap_delta_mib spread 80.42 > 64.00)",
+      "n_pairs": 8,
+      "outcome": "INCONCLUSIVE: load unmatched (swap_delta_mib spread 80.42 > 64.00)",
+      "sign_p_j": 0.007812,
+      "sign_p_tps": 0.007812,
+      "tps_ratio_ci95": [
+        1.0864,
+        1.891
+      ],
+      "tps_ratio_median": 1.2133,
+      "verdict": "INCONCLUSIVE"
+    },
+    "typical": {
+      "arm_A": {
+        "j_per_token_median": 10.213,
+        "tps_max": 10.787,
+        "tps_median": 9.731,
+        "tps_min": 7.291
+      },
+      "arm_B": {
+        "j_per_token_median": 8.316,
+        "tps_max": 14.885,
+        "tps_median": 12.659,
+        "tps_min": 11.115
+      },
+      "b_cheaper_pairs": 12,
+      "b_faster_pairs": 12,
+      "confidence": 0.9995,
+      "dropped_requests": 0,
+      "greedy_identical_pairs": 11,
+      "j_ratio_ci95": [
+        0.7142,
+        0.8278
+      ],
+      "j_ratio_median": 0.7508,
+      "load_matched": true,
+      "load_per_arm": {
+        "busy_pct": {
+          "A": 56.72,
+          "B": 58.666
+        },
+        "load1": {
+          "A": 21.637,
+          "B": 22.338
+        },
+        "pkg_w": {
+          "A": 94.29,
+          "B": 94.288
+        },
+        "swap_delta_mib": {
+          "A": 28.867,
+          "B": 0.525
+        },
+        "swap_used_mib": {
+          "A": 144096.333,
+          "B": 144093.942
+        },
+        "throttle_per_min": {
+          "A": 543.185,
+          "B": 426.073
+        }
+      },
+      "load_verdict": "MATCHED",
+      "n_pairs": 12,
+      "outcome": "B >= +20% tok/s and <= -15% J/token, both directions resolved",
+      "sign_p_j": 0.000488,
+      "sign_p_tps": 0.000488,
+      "tps_ratio_ci95": [
+        1.2846,
+        1.4467
+      ],
+      "tps_ratio_median": 1.3887,
+      "verdict": "SUPPORTED"
+    }
+  },
+  "outcome": "B >= +20% tok/s and <= -15% J/token, both directions resolved",
+  "verdict": "SUPPORTED"
+}

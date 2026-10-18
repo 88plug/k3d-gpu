@@ -8,7 +8,7 @@ k3d-gpu turns one Linux host into a single-node k3s cluster (k3d) that detects t
 
 This report covers what was measured, and how. Every result comes from one host: an i9-13900T (Raptor Lake-S, 8 P-cores and 16 E-cores, UHD 770 iGPU with no XMX, AVX-VNNI, no AMX, no NPU). It is a T-SKU rated at 35 W base power, but its firmware runs PL1 = PL2 = 117 W, so it does not run the T-series 35 W envelope.
 
-- Seven hypotheses are SUPPORTED. All seven are scoped to that host.
+- Eight hypotheses are SUPPORTED. All eight are scoped to that host.
 - Seven are REFUTED. Six of them changed shipped defaults.
 - Twelve are INCONCLUSIVE, mostly because the shared host throttles or its load was unmatched. Fifteen are PENDING, nine of them the agent benchmark (H40-H48), pre-registered on 2026-10-17.
 - Every other Intel family is detected and configured in fixture tests only. None has a measurement.
@@ -58,6 +58,7 @@ The host is a shared, live machine: about 53 other containers, about 80 W idle p
 | H16 | `K3D_GPU_DRA=1` hands the iGPU to a pod through the Intel GPU DRA driver gpu-v0.12.1 with no device plugin, 3/3 runs [ledger:H16] | One UHD 770, k3s 1.37 |
 | H1b | Intel EAT `release-1.0.3-hotfix` deployed and served on this 24-core client CPU in one pass: every pod not in phase Succeeded was Ready, both Jobs completed, a chat completion returned HTTP 200, and no Xeon-only instruction or label was needed [ledger:H1b] | n=1, shared host under background load, k3s v1.37.1. Reachability only, no speed |
 | H18 | `k3d-gpu sandbox up` kept sandbox pods on an E-core (CPU 24) behind default-deny egress. RFC1918 and tailscale targets were refused, PyPI was reachable, 3/3 runs [ledger:H18] | kube-router on k3s v1.37.1 |
+| H34 | Same-engine OVMS Fast Draft (0.6B int4 draft on the P-cores) beat the 4B int4 target alone under matched `typical` background load on a busy box: 1.39x decode tok/s and 0.75x package J/token, B better in 12/12 interleaved pairs [ledger:H34] | OVMS 2026.4.1 serial Fast Draft, gamma 5, single stream. The `heavy` level was load-unmatched (INCONCLUSIVE) |
 
 ### REFUTED (all but H27 changed a default)
 
@@ -78,7 +79,7 @@ The host is a shared, live machine: about 53 other containers, about 80 W idle p
 | H7 | With both engines on 16-bit weights, the OVMS/vLLM-CPU decode ratio was about 1.16, against about 3.4 at mismatched precision (H2's int4 vs bf16). Most of the decode gap is weight precision. The prefill gap stayed large [ledger:H7] | 3+2 blocks instead of 5 ABBA rounds; block ratios straddle the pre-registered line; no energy arm |
 | H8 | One 4B agent on the P-cores (OVMS int4) sits at the 10 s p95 SLO, with CIs on both sides. EAT's vLLM CPU defaults were OOMKilled at their 16Gi limit on a ~3.1-3.5k-token trace in 2/2 runs. The RTX arm is NVIDIA and is not read as an Intel result [ledger:H8] | Two of four arms have no scored step |
 | H9 | Cold `quickstart` reached a working Open WebUI chat inside its budget [ledger:H9] | n=1, warm arm not run |
-| H22 | The iGPU draft lost to the P-core draft in 16/16 paired rounds. Separately, a same-engine P-core draft beat the target alone in 8/8 rounds in both runs; that matches Intel's published Lunar Lake CPU-draft ratio [provenance:P222] [ledger:H22] | The noise guardrail fired in both runs: the probe's own 16-CPU load throttles the package. The same-engine draft needs its own pre-registered row |
+| H22 | The iGPU draft lost to the P-core draft in 16/16 paired rounds. Separately, a same-engine P-core draft beat the target alone in 8/8 rounds in both runs; that matches Intel's published Lunar Lake CPU-draft ratio [provenance:P222] [ledger:H22] | The noise guardrail fired in both runs: the probe's own 16-CPU load throttles the package. The same-engine draft was tested on its own as H34 (SUPPORTED) |
 | H20, H21, H23, H24, H25, H29 | Energy and phase-steering mechanisms [ledger:H20] [ledger:H21] [ledger:H23] [ledger:H24] [ledger:H25] [ledger:H29] | Idle package power spread swamped the signal, or the run was partial |
 | H26 | E-core L2-cluster confinement of a DRAM-bandwidth neighbour: the measured R (p95 inflation, cluster over spread) was 0.83, CI 0.61-0.87, at `typical` background load, which is not a verdict [ledger:H26] | Background load unmatched across arms at both levels (hog carry-over into the load windows; the `heavy` load was removed mid-run) |
 
