@@ -51,6 +51,31 @@ jobs:
       - run: tests/experimental_test.sh
       - run: tests/phase_steer_test.sh
       - run: tests/prefill_guard_test.sh
+      - run: tests/ci_wiring_test.sh
+
+  quickstart-tests:
+    name: Quickstart, uninstall and installer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - run: tests/quickstart_test.sh
+      - run: tests/quickstart_adversarial_test.sh
+
+  fuzz-props:
+    name: Launcher input properties (fuzz)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      # A fresh seed each run; a failure prints its FUZZ_SEED replay line.
+      - run: python3 tests/fuzz/props.py
+
+  remote-tests:
+    name: Remote OpenAI endpoints (resolver, Secret, sandbox egress, redaction)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - run: python3 tests/remote_test.py
+      - run: tests/remote_test.sh
 
   telemetry-tests:
     name: Telemetry manifests
@@ -89,6 +114,14 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - run: tests/kubeconform.sh
+
+  share-manifests:
+    name: share/ manifests (kubeconform, CRD schemas)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends python3-yaml
+      - run: tests/share_kubeconform.sh
 
   console-tests:
     name: Console spine (facts/v1, plan, audit)

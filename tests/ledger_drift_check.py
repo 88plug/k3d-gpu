@@ -20,6 +20,8 @@ A doc states a verdict for row Hn in any of these forms:
   count      "Six hypotheses are SUPPORTED", "Eight are PENDING": the number
              must equal the ledger's count for that verdict.
 
+A row id may carry one lowercase letter (H1b, a re-run row of H1).
+
 Usage: tests/ledger_drift_check.py [repo-root]
 """
 
@@ -33,10 +35,10 @@ NUMBERS = {w: i for i, w in enumerate(
     "zero one two three four five six seven eight nine ten eleven twelve thirteen "
     "fourteen fifteen sixteen seventeen eighteen nineteen twenty".split())}
 
-ID = re.compile(r"(?<![\w:-])H(\d+)(?![\w-])")
-REF = re.compile(r"\[ledger:H(\d+)\]")
-PROSE = re.compile(r"(?<![\w:-])H(\d+)(?![\w-])([^.;|]{0,80}?)\b(" + V + r")\b")
-BEFORE_REF = re.compile(r"\b(" + V + r")\**\s*\[ledger:H(\d+)\]")
+ID = re.compile(r"(?<![\w:-])H(\d+[a-z]?)(?![\w-])")
+REF = re.compile(r"\[ledger:H(\d+[a-z]?)\]")
+PROSE = re.compile(r"(?<![\w:-])H(\d+[a-z]?)(?![\w-])([^.;|]{0,80}?)\b(" + V + r")\b")
+BEFORE_REF = re.compile(r"\b(" + V + r")\**\s*\[ledger:H(\d+[a-z]?)\]")
 HEADING = re.compile(r"^#+\s+\**(" + V + r")\b")
 LIST_LINE = re.compile(r"^\s*(?:[-*]\s+)?\**(" + V + r")\b[^:]{0,40}:")
 COUNT = re.compile(r"\b(\d+|" + "|".join(NUMBERS) + r")\s+(?:hypotheses\s+|rows\s+)?(?:are|is)\s+(" + V + r")\b",
@@ -49,7 +51,7 @@ def ledger(root):
     for line in (root / "EXPERIMENTS.md").read_text().splitlines():
         if line.startswith("## "):
             inside = line.startswith("## Hypotheses")
-        m = re.match(r"^\|\s*(H\d+)\s*\|", line)
+        m = re.match(r"^\|\s*(H\d+[a-z]?)\s*\|", line)
         if not (inside and m):
             continue
         cells = [c for c in re.sub(r"\\\|", "", line).split("|")]
@@ -139,7 +141,7 @@ def check_file(path, rel, rows):
                 hid = next(iter(ids))
                 if hid not in seen:
                     expect(n, hid, next(iter(said)), "table cell")
-            if section and cells and re.fullmatch(r"[\sH\d,\-\[\]ledgr:]*", cells[0]) and ids_in(cells[0]):
+            if section and cells and re.fullmatch(r"(?:[\s,\-\]]|\[ledger:|H\d+[a-z]?)*", cells[0]) and ids_in(cells[0]):
                 for hid in sorted(ids_in(cells[0])):
                     expect(n, hid, section, "section heading")
         lm = LIST_LINE.match(line)

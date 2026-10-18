@@ -68,7 +68,7 @@
 
 set -euo pipefail
 
-VERSION="0.1.52"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.55"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 # The node image defaults to the tag built from this launcher's own release
 # (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
@@ -129,6 +129,17 @@ Usage: k3d-gpu <command>
             One command to a local chat: cluster, LLM server (model picked by RAM
             tier), Open WebUI with a generated admin account, port-forward on
             127.0.0.1:8080 (next free port when taken). Re-run to resume
+  quickstart --remote [URL] [--model M] [--api-key-file FILE] [--no-ui]
+            The same chat against any OpenAI-compatible endpoint: no accelerator
+            needed, no model download, no local LLM server (see 'remote' below)
+  remote check|show|models [--remote URL] [--model M] [--api-key-file FILE] [--json]
+            An OpenAI-compatible endpoint instead of (or beside) a local model.
+            URL from --remote, else OPENAI_BASE_URL, OPENAI_API_BASE, OPENAI_HOST
+            + OPENAI_BASE_PATH (default v1); key from --api-key-file, else
+            OPENAI_API_KEY (never an argument; plain http carries it only to a
+            host of yours); model from --model, else OPENAI_MODEL, else the only one
+            served. check: GET /models plus one 16-token chat, with host, models,
+            latency and auth; the key shows masked. Redirects are never followed
   uninstall [--yes] [--images] [--cluster]
             Remove what quickstart made: port-forward, the cluster it created (with
             models and chats; --cluster also one it reused), state; --images node image
@@ -136,7 +147,7 @@ Usage: k3d-gpu <command>
   down      Delete cluster '${CLUSTER}'
   test      Run a pod per detected accelerator and print its device view
   detect    Print accelerators found on this host and their Kubernetes resources
-  doctor    Diagnostic preflight checks
+  doctor    Diagnostic preflight checks (--remote [URL]: also the endpoint, no accelerator needed)
   doctor --experimental
             Also list every experimental feature and why it is (un)available here
   doctor --perf [--model-gb N]
@@ -151,6 +162,10 @@ Usage: k3d-gpu <command>
             the pinned install commands for Intel GPU/NPU and the NVIDIA container
             toolkit + CDI (Ubuntu 24.04/26.04, Fedora, Arch, Manjaro). --apply runs
             them after a y/N prompt
+  agent up --remote [URL] [--model M] [--api-key-file FILE]
+            No local server: Secret k3d-gpu-llm (OPENAI_BASE_URL, OPENAI_API_KEY,
+            OPENAI_MODEL) in the agent namespace for pods' envFrom; status checks
+            it, down deletes it
   agent up|down|status|manifest [--with vlm,stt,video]
             OpenAI-compatible LLM server in the current cluster: vLLM on its Gaudi
             if it has one, else OpenVINO Model Server on its Intel GPU if that GPU
@@ -187,7 +202,11 @@ Usage: k3d-gpu <command>
             pull, a key file readable by others, or Open WebUI without sign-in
   sandbox up|down|status
             Install kubernetes-sigs/agent-sandbox with a warm pool of sandboxes on
-            E-cores (k3d-gpu.io/cores=efficient), check where they run, or remove it
+            E-cores (k3d-gpu.io/cores=efficient), check where they run, or remove it.
+            up --remote [URL]: egress only to the endpoint's addresses and port
+            (no DNS; on a CDN those addresses also serve its other sites), and
+            endpoint in the sandbox's Secret k3d-gpu-llm, which sandbox code can
+            read (use a key you would hand to that code); status checks the pin
   model-share --image REF --agent-image REF [--replicas N] [--name NAME]
             Print a Deployment whose N agent replicas mount one model OCI image as a
             read-only image volume (pipe to kubectl apply -f -). It warns when this
@@ -220,6 +239,9 @@ Usage: k3d-gpu <command>
             The CPU agent's weight precision: the measured winner cached for
             this host fingerprint (bench/amx-autoquant/probe.sh --store), else
             int4 (EXPERIMENTS.md H27); also lists the probe arms the CPU allows
+  bench --vs remote --i-own-this-endpoint [--remote URL] [--model M] [--dry-run]
+            The agent against a remote endpoint, budgeted (1 round, <= 64 tokens);
+            capacity --remote needs --dry-run or --i-own-this-endpoint the same way
   bench --vs ollama|llamacpp|ovms [--id Hn] [--out DIR] [--budget S] [--rounds N]
         [--warmup N] [--max-tokens N] [--cpuset LIST] [--k3d-url URL --k3d-model M]
         [--keep-cache] [--dry-run]
@@ -1450,7 +1472,7 @@ resolve_vendors() {
         IFS=',' read -r -a req <<< "${VENDORS_REQUEST}"
         for v in "${req[@]}"; do
             case "${v}" in
-                "") ;;
+                ""|none) ;; # none: a plain k3s cluster (a remote endpoint needs no accelerator)
                 nvidia|intel|npu|gaudi|dsa|iaa|qat|amx|hybrid|numa|wsl) is_active "${v}" || ACTIVE+=("${v}") ;;
                 *) err "unknown vendor '${v}' in K3D_GPU_VENDORS (use nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa,wsl)" ;;
             esac
@@ -2564,7 +2586,10 @@ doctor() {
     resolve_vendors
     doctor_common
 
-    if [ "${#ACTIVE[@]}" -eq 0 ]; then
+    if [ "${#ACTIVE[@]}" -eq 0 ] && [ -n "${REMOTE}" ]; then
+        echo ""
+        echo "  ok: no accelerator detected; a remote endpoint (--remote) needs none (K3D_GPU_VENDORS=none k3d-gpu up)"
+    elif [ "${#ACTIVE[@]}" -eq 0 ]; then
         echo ""
         echo "  ${RED}fail${RST}: no supported accelerator detected (NVIDIA, Intel GPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX, hybrid P/E cores, NUMA, WSL2 Intel GPU)"
         FAIL=1
@@ -2582,9 +2607,39 @@ doctor() {
     doctor_cpu_accels
     doctor_cluster
     doctor_experimental "${DOCTOR_EXP_ALL:-0}"
+    doctor_remote
 
     echo ""
     [ "${FAIL}" -eq 0 ] && info "All checks passed." || { err "One or more checks failed."; }
+}
+
+# Remote endpoint reachability, with --remote only: one GET /models with the key,
+# sent only to that host; a failure fails doctor. Without --remote an OPENAI_*
+# endpoint in the environment is named, never contacted (it may be set for
+# another tool, and only --remote sends the key anywhere).
+doctor_remote() {
+    local fields line
+    if [ -z "${REMOTE}" ]; then
+        [ -n "${OPENAI_BASE_URL:-}${OPENAI_API_BASE:-}${OPENAI_HOST:-}" ] || return 0
+        echo ""
+        info "Remote OpenAI-compatible endpoint:"
+        echo "  info: an OPENAI_* endpoint is set in the environment; not contacted ('k3d-gpu doctor --remote' checks it)"
+        return 0
+    fi
+    echo ""
+    info "Remote OpenAI-compatible endpoint:"
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo "  ${RED}fail${RST}: python3 missing; remote endpoints need it"
+        FAIL=1
+        return 0
+    fi
+    if fields=$(remote_py resolve --probe ${REMOTE_ARGS[@]+"${REMOTE_ARGS[@]}"} 2>&1); then
+        line=${fields##*$'\n'}
+        echo "  ok: ${line%%$'\t'*} answers GET /models; model $(cut -f2 <<< "${line}") (k3d-gpu remote check runs one chat too)"
+    else
+        echo "  ${RED}fail${RST}: ${fields##*remote: }"
+        FAIL=1
+    fi
 }
 
 # ---- doctor --perf: host tuning advisor --------------------------------------
@@ -3872,6 +3927,9 @@ doctor_perf() {
 
 cmd_doctor() {
     local perf=0 json=0
+    remote_parse "$@"
+    set -- ${REMOTE_REST[@]+"${REMOTE_REST[@]}"}
+    [ -n "${REMOTE}" ] || [ "${#REMOTE_ARGS[@]}" -eq 0 ] || err "doctor: --model and --api-key-file go with --remote"
     while [ $# -gt 0 ]; do
         case "$1" in
             --perf) perf=1 ;;
@@ -3879,7 +3937,7 @@ cmd_doctor() {
             --json) json=1 ;;
             --model-gb) [ $# -ge 2 ] || err "--model-gb needs a size in GiB"; PERF_MODEL_GB=$2; shift ;;
             --model-gb=*) PERF_MODEL_GB=${1#*=} ;;
-            *) err "unknown doctor option: $1 (use --perf [--model-gb N], --experimental or --json)" ;;
+            *) err "unknown doctor option: $1 (use --perf [--model-gb N], --experimental, --json or --remote [URL])" ;;
         esac
         shift
     done
@@ -3943,14 +4001,26 @@ proxy_yaml_env() {
     done < <(proxy_env)
 }
 
+# The default node image (${IMAGE_REPO}) is built for linux/amd64 only
+# (build-and-push.yml platforms), so on another CPU `up` needs a K3D_GPU_IMAGE
+# built for that CPU.
+require_node_image_arch() {
+    [ -z "${K3D_GPU_IMAGE:-}" ] || return 0
+    case "$(uname -m)" in
+        x86_64|amd64) return 0 ;;
+    esac
+    err "node image ${IMAGE} is published for linux/amd64 only and this host is $(uname -m) — build a k3s node image for this CPU and set K3D_GPU_IMAGE to it"
+}
+
 cmd_up() {
+    require_node_image_arch
     require docker
     require k3d
     require kubectl
 
     resolve_vendors
-    [ "${#ACTIVE[@]}" -gt 0 ] || err "no supported accelerator detected (NVIDIA, Intel GPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX, hybrid P/E cores, NUMA, WSL2 Intel GPU) — run 'k3d-gpu doctor' or set K3D_GPU_VENDORS"
-    info "Accelerators: ${ACTIVE[*]}"
+    [ "${#ACTIVE[@]}" -gt 0 ] || [ "${VENDORS_REQUEST}" = none ] || err "no supported accelerator detected (NVIDIA, Intel GPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX, hybrid P/E cores, NUMA, WSL2 Intel GPU) — run 'k3d-gpu doctor' or set K3D_GPU_VENDORS"
+    info "Accelerators: ${ACTIVE[*]:-none (K3D_GPU_VENDORS=none)}"
     local intel_args="" problems
     if intel_dra && ! is_active intel; then
         err "K3D_GPU_DRA=1 needs an Intel GPU and none is active (${ACTIVE[*]}) — run 'k3d-gpu doctor' or set K3D_GPU_VENDORS"
@@ -4385,8 +4455,9 @@ vendor_total() {
 # scheduler. A "Done" message is worthless if the resource count is 0 — the most
 # common failure mode is a cluster that comes up healthy but advertises nothing.
 verify_gpus() {
-    info "Verifying accelerators are schedulable..."
     local v ns ds manifest total deadline summary="" failed=""
+    if [ "${#ACTIVE[@]}" -eq 0 ]; then info "No accelerators requested; cluster ready."; return 0; fi
+    info "Verifying accelerators are schedulable..."
     for v in "${ACTIVE[@]}"; do
         read -r ns ds manifest <<< "$(vendor_daemonset "${v}")"
         if [ -n "${ds}" ]; then
@@ -5192,17 +5263,32 @@ SANDBOX_CRDS=(
 
 sandbox_up() {
     require kubectl
-    local f ready="" deadline
+    local f ready="" deadline profile fields base model origin
     for f in "${SANDBOX_MANIFEST}" "${SANDBOX_PROFILE_MANIFEST}"; do
         [ -f "${f}" ] || err "${f} not found — set K3D_GPU_SHARE, K3D_GPU_SANDBOX or K3D_GPU_SANDBOX_PROFILE"
     done
+    if [ -n "${REMOTE}" ]; then
+        # Remote: egress is the endpoint's host:port only (no DNS; hostAliases pin
+        # the name), and the sandbox reads the endpoint from its own Secret copy.
+        fields=$(remote_resolve)
+        IFS=$'\t' read -r base model origin <<< "${fields}"
+        profile=$(remote_py sandbox-profile "${SANDBOX_PROFILE_MANIFEST}" --remote "${base}") \
+            || err "could not pin the sandbox egress to ${base}"
+        info "remote endpoint ${base} (from ${origin}): sandbox egress is ${base#*://} only, no DNS"
+    fi
     info "Installing agent-sandbox ${SANDBOX_VERSION} (${SANDBOX_MANIFEST})..."
     kubectl apply -f "${SANDBOX_MANIFEST}"
     # The profile's SandboxTemplate and SandboxWarmPool need their CRDs served first.
     kubectl wait --for=condition=Established "${SANDBOX_CRDS[@]}" --timeout=60s
     kubectl -n agent-sandbox-system rollout status deployment/agent-sandbox-controller --timeout=180s
+    # The Secret exists before the warm pool's pods, which read it at start.
+    [ -z "${REMOTE}" ] || remote_secret_apply "${SANDBOX_NS}" "${base}" "${model}"
     info "Applying the E-core sandbox profile (${SANDBOX_PROFILE_MANIFEST})..."
-    kubectl apply -f "${SANDBOX_PROFILE_MANIFEST}"
+    if [ -n "${REMOTE}" ]; then
+        kubectl apply -f - <<< "${profile}"
+    else
+        kubectl apply -f "${SANDBOX_PROFILE_MANIFEST}"
+    fi
     if [ -z "$(kubectl get nodes -l "${HYBRID_LABEL}" -o name 2>/dev/null || true)" ]; then
         warn "no node labelled ${HYBRID_LABEL}: k3d-gpu.io/cores=efficient does nothing here and sandboxes use every CPU"
     fi
@@ -5221,8 +5307,22 @@ sandbox_up() {
 # inside the E-cores, or the pinning is not in effect.
 sandbox_status() {
     require kubectl
-    local pod got pods ecores="" fail=0
+    local pod got pods ecores="" fail=0 pinned host addrs now
     kubectl -n "${SANDBOX_NS}" get sandboxwarmpools,sandboxes 2>/dev/null || true
+    # A profile from `sandbox up --remote` pins the endpoint's addresses; a CDN can
+    # move the name to others, which the egress rule then blocks.
+    pinned=$(kubectl -n "${SANDBOX_NS}" get sandboxtemplate "${SANDBOX_POOL}" \
+        -o go-template='{{index .metadata.annotations "k3d-gpu.io/remote-host"}} {{index .metadata.annotations "k3d-gpu.io/remote-addrs"}}' 2>/dev/null) || pinned=""
+    read -r host addrs <<< "${pinned}"
+    if [ -n "${host}" ] && [ "${host}" != "<no" ]; then
+        now=$(remote_py addrs --remote "https://${host}" 2>/dev/null) || now="unresolved"
+        if [ "${now}" = "${addrs}" ]; then
+            echo "  ok: egress pinned to ${host} (${now})"
+        else
+            echo "  ${RED}fail${RST}: ${host} now resolves to ${now}, the egress rule allows ${addrs} — re-run 'k3d-gpu sandbox up --remote'"
+            fail=1
+        fi
+    fi
     pods=$(kubectl -n "${SANDBOX_NS}" get pods -l k3d-gpu.io/cores=efficient \
         -o jsonpath='{range .items[?(@.status.phase=="Running")]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
     [ -n "${pods}" ] || err "no running sandbox pods in namespace ${SANDBOX_NS} — run 'k3d-gpu sandbox up'"
@@ -5241,7 +5341,7 @@ sandbox_status() {
             fail=1
         fi
     done <<< "${pods}"
-    [ "${fail}" -eq 0 ] || err "sandbox pods are not pinned to E-cores"
+    [ "${fail}" -eq 0 ] || err "sandbox pods are not pinned to E-cores, or the endpoint moved"
 }
 
 sandbox_down() {
@@ -5254,11 +5354,17 @@ sandbox_down() {
 }
 
 cmd_sandbox() {
-    case "${1:-}" in
+    local sub=${1:-}
+    [ $# -eq 0 ] || shift
+    remote_parse "$@"
+    [ "${#REMOTE_REST[@]}" -eq 0 ] || err "unknown sandbox option: ${REMOTE_REST[0]}"
+    [ -z "${REMOTE}" ] || [ "${sub}" = up ] || err "--remote goes with 'sandbox up'"
+    [ -n "${REMOTE}" ] || [ "${#REMOTE_ARGS[@]}" -eq 0 ] || err "--model and --api-key-file go with --remote"
+    case "${sub}" in
         up)     sandbox_up     ;;
         down)   sandbox_down   ;;
         status) sandbox_status ;;
-        *) err "usage: k3d-gpu sandbox up|down|status" ;;
+        *) err "usage: k3d-gpu sandbox up|down|status (up --remote [URL] [--api-key-file F]: egress only to that endpoint)" ;;
     esac
 }
 
@@ -5908,6 +6014,17 @@ cpu_list_count() {
 # A GPU the firmware gatekeeper refuses (gpu_gate) is never picked: auto falls
 # back to OVMS on the CPU and says why; a forced GPU, or a vLLM backend that needs
 # the GPU, stops with the one-line fix.
+# The cluster has an Intel GPU only as a DRA device (K3D_GPU_DRA=1): no
+# gpu.intel.com/xe or i915 extended resource, but a ResourceSlice device a
+# gpu.intel.com claim can get. The agent stack requests extended resources only.
+agent_dra_gpu() {
+    [ $(( $(resource_total gpu.intel.com/xe) + $(resource_total gpu.intel.com/i915) )) -eq 0 ] \
+        && [ "$(intel_dra_devices)" -gt 0 ]
+}
+agent_dra_note() {
+    echo "the cluster exposes its Intel GPU through DRA (K3D_GPU_DRA=1), and the agent stack requests gpu.intel.com/xe or i915 only — recreate the cluster with K3D_GPU_DRA=0 to serve on the GPU"
+}
+
 AGENT_XMX_LABEL="gpu.intel.com/xmx=true"
 agent_device() {
     local want=${K3D_GPU_AGENT_DEVICE:-auto} res gaudi_ok=1 refused bdf why fix need="K3D_GPU_AGENT_DEVICE=GPU"
@@ -5942,6 +6059,7 @@ agent_device() {
                     return 0
                 done
             fi
+            ! agent_dra_gpu || warn "agent: $(agent_dra_note); using OVMS on the CPU"
             echo "CPU -"
             ;;
         GPU)
@@ -5952,6 +6070,7 @@ agent_device() {
             for res in gpu.intel.com/xe gpu.intel.com/i915; do
                 if [ "$(resource_total "${res}")" -gt 0 ]; then echo "GPU ${res}"; return 0; fi
             done
+            ! agent_dra_gpu || err "${need}: $(agent_dra_note)"
             [ "${AGENT_APP}" != vllm ] || err "K3D_GPU_AGENT_BACKEND=${AGENT_BACKEND} runs on an Intel GPU only (vllm also on a Gaudi), and the cluster advertises no gpu.intel.com/xe or i915 — check 'k3d-gpu detect' and recreate the cluster"
             err "K3D_GPU_AGENT_DEVICE=GPU but the cluster advertises no Intel GPU (gpu.intel.com/xe or i915) — check 'k3d-gpu detect' and recreate the cluster"
             ;;
@@ -5978,6 +6097,7 @@ agent_device() {
             for res in gpu.intel.com/xe gpu.intel.com/i915; do
                 if [ "$(resource_total "${res}")" -gt 0 ]; then echo "HETERO:GPU,CPU ${res}"; return 0; fi
             done
+            ! agent_dra_gpu || err "K3D_GPU_AGENT_DEVICE=${want}: $(agent_dra_note)"
             err "K3D_GPU_AGENT_DEVICE=${want} but the cluster advertises no Intel GPU (gpu.intel.com/xe or i915)"
             ;;
         CPU) echo "CPU -" ;;
@@ -6015,18 +6135,26 @@ agent_draft() {
     esac
     want=${want^^}
     if [ "${want}" = "${target}" ] || [ "${want}" = CPU ]; then echo "${want} -"; return 0; fi
+    # A HETERO target already holds the GPU the draft runs on.
+    if [ "${want}" = GPU ] && [[ "${target}" == HETERO:* ]]; then echo "GPU -"; return 0; fi
     case "${want}" in
         GPU)
             [ -z "$(intel_gpu_refusal)" ] || err "K3D_GPU_AGENT_DRAFT=GPU but the Intel GPU is refused — see 'k3d-gpu doctor'"
             for res in gpu.intel.com/xe gpu.intel.com/i915; do
-                if [ "$(resource_total "${res}")" -gt 0 ]; then echo "GPU ${res}"; return 0; fi
+                [ "$(resource_total "${res}")" -gt 0 ] || continue
+                if [ $(( $(resource_total "${res}") - $(resource_used_elsewhere "${res}") )) -gt 0 ]; then echo "GPU ${res}"; return 0; fi
+                err "K3D_GPU_AGENT_DRAFT=GPU but the cluster has no free Intel GPU (${res}) — see what holds it: kubectl get pods -A"
             done
+            agent_dra_gpu && err "K3D_GPU_AGENT_DRAFT=GPU: $(agent_dra_note)"
             err "K3D_GPU_AGENT_DRAFT=GPU but the cluster advertises no Intel GPU (gpu.intel.com/xe or i915)"
             ;;
         NPU)
-            [ "$(resource_total npu.intel.com/accel)" -gt 0 ] \
-                || err "K3D_GPU_AGENT_DRAFT=NPU but the cluster advertises no Intel NPU (npu.intel.com/accel)"
-            echo "NPU npu.intel.com/accel"
+            res=npu.intel.com/accel
+            [ "$(resource_total "${res}")" -gt 0 ] \
+                || err "K3D_GPU_AGENT_DRAFT=NPU but the cluster advertises no Intel NPU (${res})"
+            [ $(( $(resource_total "${res}") - $(resource_used_elsewhere "${res}") )) -gt 0 ] \
+                || err "K3D_GPU_AGENT_DRAFT=NPU but the cluster has no free Intel NPU (${res}) — see what holds it: kubectl get pods -A"
+            echo "NPU ${res}"
             ;;
     esac
 }
@@ -6640,12 +6768,12 @@ agent_plan_take() {
 }
 
 # "<service> <OVMS/OpenVINO device> <extended resource or ->" per add-on given,
-# in the order given. The LLM (AGENT_SEL, from agent_select) holds its units
-# first. Explicit add-on requests are served next and fail when the cluster has
+# in the order given. The LLM (AGENT_SEL, from agent_select) and its Fast Draft
+# hold their units first. Explicit add-on requests are served next and fail when the cluster has
 # no free unit; auto add-ons then claim what is left by priority.
 agent_plan() {
     local -A free=() got=() want=()
-    local svc res kind gpus llm_res n=1
+    local svc res kind gpus llm_res draft_res n=1
     for res in gpu.intel.com/xe gpu.intel.com/i915 npu.intel.com/accel; do
         free[${res}]=$(( $(resource_total "${res}") - $(resource_used_elsewhere "${res}") ))
     done
@@ -6654,6 +6782,12 @@ agent_plan() {
     if [ -n "${free[${llm_res}]+x}" ]; then
         [ "${AGENT_APP}" != vllm ] || n=${AGENT_GPUS}
         free[${llm_res}]=$(( free[${llm_res}] - n ))
+    fi
+    # OVMS Fast Draft on a second device holds one unit of it as well.
+    if [ "${AGENT_APP}" = ovms ]; then
+        draft_res=$(agent_draft "${AGENT_SEL%% *}") || exit 1
+        draft_res=${draft_res#* }
+        [ -z "${free[${draft_res}]+x}" ] || free[${draft_res}]=$(( free[${draft_res}] - 1 ))
     fi
     for svc in "$@"; do want[${svc}]=$(agent_want "${svc}") || exit 1; done
 
@@ -7117,6 +7251,17 @@ cmd_agent_status() {
         ann=$(kubectl -n "${AGENT_NS}" get deployment "${app}" -o jsonpath='{.spec.template.metadata.annotations.k3d-gpu\.io/agent-device}' 2>/dev/null) || continue
         info "add-on ${app} on ${ann:-?}"
     done
+    # A remote endpoint (agent up --remote): its Secret here, and the sandbox's copy
+    # (sandbox up --remote) must name the same endpoint.
+    local rc=0 mine theirs
+    remote_cluster_status "${AGENT_NS}" || rc=$?
+    [ "${rc}" -ne 1 ] || return 0
+    mine=$(remote_secret_info "${AGENT_NS}") || mine=""
+    if theirs=$(remote_secret_info "${SANDBOX_NS}") && [ "${theirs}" != "${mine}" ]; then
+        echo "  ${RED}fail${RST}: Secret ${SANDBOX_NS}/${LLM_SECRET} names '${theirs/$'\t'/ }', not '${mine/$'\t'/ }' — re-run 'k3d-gpu sandbox up --remote'"
+        rc=2
+    fi
+    [ "${rc}" -eq 0 ] || err "remote endpoint check failed"
 }
 
 # Leaves the PVCs so the next 'agent up' reuses the downloaded model.
@@ -7126,6 +7271,7 @@ cmd_agent_down() {
     for app in "${AGENT_APPS[@]}"; do
         kubectl -n "${AGENT_NS}" delete "deployment/${app}" "service/${app}" --ignore-not-found
     done
+    kubectl -n "${AGENT_NS}" delete secret "${LLM_SECRET}" --ignore-not-found
     agent_prune
     info "Model caches kept in the namespace's PVCs. Remove everything: kubectl delete namespace ${AGENT_NS}"
 }
@@ -7147,12 +7293,23 @@ cmd_agent_prefix() {
 }
 
 cmd_agent() {
+    local sub=${1:-} addons
+    [ $# -eq 0 ] || shift
+    if [ "${sub}" != prefix ]; then
+        remote_parse "$@"
+        set -- ${REMOTE_REST[@]+"${REMOTE_REST[@]}"}
+    fi
+    if [ -n "${REMOTE}" ]; then
+        [ "${sub}" = up ] || err "--remote goes with 'agent up' ('agent status' and 'agent down' find the endpoint's Secret themselves)"
+        [ $# -eq 0 ] || err "agent up --remote takes no other options (got: $*)"
+        cmd_agent_remote_up
+        return
+    fi
+    [ "${#REMOTE_ARGS[@]}" -eq 0 ] && [ -z "${OWN_ENDPOINT}" ] || err "--model, --api-key-file and --i-own-this-endpoint go with --remote"
     case "${AGENT_BACKEND}" in
         ovms|vllm|llm-scaler) ;;
         *) err "unknown K3D_GPU_AGENT_BACKEND '${K3D_GPU_AGENT_BACKEND}' (use ovms, vllm or llm-scaler)" ;;
     esac
-    local sub=${1:-} addons
-    [ $# -eq 0 ] || shift
     case "${sub}" in
         up)       cmd_agent_up "$@" ;;
         down)     cmd_agent_down ;;
@@ -7166,8 +7323,136 @@ cmd_agent() {
                 agent_stack_manifest ${addons}
             fi ;;
         prefix)   cmd_agent_prefix "$@" ;;
-        *) err "usage: k3d-gpu agent up|down|status|manifest [--with vlm,stt,video] | prefix FILE|DIR..." ;;
+        *) err "usage: k3d-gpu agent up|down|status|manifest [--with vlm,stt,video] | up --remote [URL] [--model M] [--api-key-file F] | prefix FILE|DIR..." ;;
     esac
+}
+
+# ---- remote: any OpenAI-compatible endpoint instead of a local model ----------
+# console/remote.py resolves the endpoint (--remote URL > OPENAI_BASE_URL >
+# OPENAI_API_BASE > OPENAI_HOST + OPENAI_BASE_PATH), the key (--api-key-file > OPENAI_API_KEY)
+# and the model (--model > OPENAI_MODEL > the only id GET /models lists). It holds
+# the only code that sends the key, always to that host and never through a
+# redirect. The launcher never puts the key on a command line: kubectl reads the
+# Secret on stdin, and a child that needs the key gets it in its environment.
+# In the cluster the endpoint is Secret k3d-gpu-llm (OPENAI_BASE_URL,
+# OPENAI_API_KEY, OPENAI_MODEL), which pods read with envFrom or secretKeyRef.
+# Only --remote switches a command to the endpoint: an OPENAI_* variable alone
+# never replaces a local model.
+LLM_SECRET="k3d-gpu-llm"
+REMOTE=""          # --remote given
+REMOTE_ARGS=()     # --remote URL, --model M, --api-key-file F for remote.py
+REMOTE_KEYFILE=""  # --api-key-file
+OWN_ENDPOINT=""    # --i-own-this-endpoint: load and benchmark runs may target it
+REMOTE_REST=()     # the arguments remote_parse did not take
+
+# remote_parse ARGS...: takes --remote [URL], --remote=URL, --model M,
+# --api-key-file F and --i-own-this-endpoint; the rest lands in REMOTE_REST.
+remote_parse() {
+    REMOTE_REST=()
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --remote)
+                REMOTE=1
+                if [[ "${2:-}" =~ ^[A-Za-z][A-Za-z0-9+.-]*:// ]]; then REMOTE_ARGS+=(--remote "$2"); shift; fi ;;
+            --remote=*) REMOTE=1; REMOTE_ARGS+=(--remote "${1#*=}") ;;
+            --model|--api-key-file)
+                [ $# -ge 2 ] || err "$1 needs a value"
+                REMOTE_ARGS+=("$1" "$2")
+                [ "$1" != --api-key-file ] || REMOTE_KEYFILE=$2
+                shift ;;
+            --model=*|--api-key-file=*)
+                REMOTE_ARGS+=("${1%%=*}" "${1#*=}")
+                [ "${1%%=*}" != --api-key-file ] || REMOTE_KEYFILE=${1#*=} ;;
+            --i-own-this-endpoint) OWN_ENDPOINT=1 ;;
+            *) REMOTE_REST+=("$1") ;;
+        esac
+        shift
+    done
+}
+
+remote_py() {
+    local d
+    command -v python3 >/dev/null 2>&1 || err "remote endpoints need python3"
+    d=$(console_dir) || err "console/remote.py not found next to the launcher or in ${SHARE_DIR}/console (set K3D_GPU_CONSOLE)"
+    [ -f "${d}/remote.py" ] || err "${d}/remote.py missing"
+    python3 "${d}/remote.py" "$@"
+}
+
+# remote_resolve: "base<TAB>model<TAB>origin" after one GET /models, which checks
+# the key and picks the model.
+remote_resolve() {
+    remote_py resolve --probe ${REMOTE_ARGS[@]+"${REMOTE_ARGS[@]}"} || err "remote endpoint not usable (above); 'k3d-gpu remote check' says more"
+}
+
+# remote_secret_apply <namespace> <base> <model>: Secret k3d-gpu-llm. remote.py hands
+# it to kubectl on stdin and server-side, so no last-applied-configuration annotation
+# copies the key into the object's metadata (which `kubectl describe` prints).
+remote_secret_apply() {
+    local ns=$1 keyargs=()
+    [ -z "${REMOTE_KEYFILE}" ] || keyargs=(--api-key-file "${REMOTE_KEYFILE}")
+    kubectl create namespace "${ns}" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+    remote_py secret --namespace "${ns}" --remote "$2" --model "$3" ${keyargs[@]+"${keyargs[@]}"} \
+        || err "could not write Secret ${ns}/${LLM_SECRET}"
+}
+
+# remote_secret_info <namespace>: "base<TAB>model" from the Secret's annotations
+# (its data is not read); fails when there is no Secret.
+remote_secret_info() {
+    kubectl -n "$1" get secret "${LLM_SECRET}" \
+        -o go-template='{{index .metadata.annotations "k3d-gpu.io/base-url"}}{{"\t"}}{{index .metadata.annotations "k3d-gpu.io/model"}}' 2>/dev/null
+}
+
+# remote_cluster_status <namespace>: the endpoint in that namespace's Secret, checked
+# with the key the pods get (GET /models). 1: no Secret, 2: the check failed.
+remote_cluster_status() {
+    local ns=$1 got base model key
+    got=$(remote_secret_info "${ns}") || return 1
+    IFS=$'\t' read -r base model <<< "${got}"
+    info "remote endpoint ${base}, model ${model} (Secret ${ns}/${LLM_SECRET}; no local model server)"
+    key=$(kubectl -n "${ns}" get secret "${LLM_SECRET}" -o jsonpath='{.data.OPENAI_API_KEY}' 2>/dev/null | base64 -d 2>/dev/null) || key=""
+    if OPENAI_API_KEY="${key}" remote_py models --remote "${base}" > /dev/null; then
+        echo "  ok: ${base#*://} answers GET /models with the Secret's key"
+    else
+        echo "  ${RED}fail${RST}: ${base#*://} did not answer GET /models with the Secret's key"
+        return 2
+    fi
+}
+
+cmd_agent_remote_up() {
+    require kubectl
+    local fields base model origin
+    kubectl get nodes >/dev/null 2>&1 || err "no cluster reachable — run 'k3d-gpu up' first (K3D_GPU_VENDORS=none for a cluster without accelerators)"
+    fields=$(remote_resolve)
+    IFS=$'\t' read -r base model origin <<< "${fields}"
+    info "remote endpoint ${base} (from ${origin}), model ${model}: no local model server"
+    remote_secret_apply "${AGENT_NS}" "${base}" "${model}"
+    info "Secret ${AGENT_NS}/${LLM_SECRET} holds OPENAI_BASE_URL, OPENAI_API_KEY and OPENAI_MODEL; a pod reads it with
+       envFrom: [{secretRef: {name: ${LLM_SECRET}}}]
+     Chat UI against it: k3d-gpu quickstart --remote"
+}
+
+# remote check|show|models [--remote URL] [--model M] [--api-key-file F] [--json] [--max-tokens N]
+cmd_remote() {
+    local sub=${1:-}
+    [ $# -eq 0 ] || shift
+    case "${sub}" in
+        check|show|models) ;;
+        *) err "usage: k3d-gpu remote check|show|models [--remote URL] [--model M] [--api-key-file FILE] [--json]" ;;
+    esac
+    remote_parse "$@"
+    remote_py "${sub}" ${REMOTE_ARGS[@]+"${REMOTE_ARGS[@]}"} ${REMOTE_REST[@]+"${REMOTE_REST[@]}"}
+}
+
+# remote_url_local <url>: the URL's host is yours (loopback, in-cluster, a private
+# address, host.k3d.internal), not someone else's endpoint. remote.py parses the
+# URL, so the launcher and remote.py judge it the same way.
+remote_url_local() { remote_py is-local "$1"; }
+
+# remote_guard <what> <dry-run 0|1>: load and benchmark runs never target an endpoint
+# the user has not claimed. --dry-run sends nothing; --i-own-this-endpoint opts in.
+remote_guard() {
+    [ "$2" = 1 ] || [ -n "${OWN_ENDPOINT}" ] \
+        || err "$1 sends load; against a remote endpoint it needs --dry-run, or --i-own-this-endpoint when the endpoint is yours (it then runs budgeted)"
 }
 
 # ---- quickstart and uninstall: the retail path ---------------------------------
@@ -7515,8 +7800,14 @@ cmd_tune_run() {
 }
 
 cmd_tune() {
-    local sub=${1:-}
+    local sub=${1:-} a
     shift || true
+    for a in "$@"; do
+        case "${a}" in
+            --remote|--remote=*|--i-own-this-endpoint)
+                err "tune searches the serving config of the local OVMS agent it redeploys; a remote endpoint has no knob k3d-gpu can turn ('k3d-gpu remote check' measures it once)" ;;
+        esac
+    done
     case "${sub}" in
         run)         cmd_tune_run "$@" ;;
         space)       cmd_tune_run --dry-run "$@" ;;
@@ -7547,11 +7838,60 @@ capacity_script() {
     return 1
 }
 
+# A remote endpoint (--remote, or --url to a host that is not loopback or in-cluster)
+# gets no load unless the user owns it: --dry-run sends nothing, and with
+# --i-own-this-endpoint the ramp keeps a budget (--budget 5 --max 4 unless given).
 cmd_capacity() {
-    local script
+    local script dry=0 url="" budget="" max="" xbody="" i fields base model origin
     script=$(capacity_script) \
         || err "capacity: apb/capacity.py not found in the repo's bench/ or ${SHARE_DIR}/bench (set K3D_GPU_BENCH)"
     require python3
+    remote_parse "$@"
+    set -- ${REMOTE_REST[@]+"${REMOTE_REST[@]}"}
+    for ((i = 1; i <= $#; i++)); do
+        case "${!i}" in
+            --dry-run) dry=1 ;;
+            --url) i=$((i + 1)); url=${!i:-} ;;
+            --url=*) url=${!i#*=} ;;
+            --budget|--budget=*) budget=1 ;;
+            --max|--max=*) max=1 ;;
+            --extra-body|--extra-body=*) xbody=1 ;;
+        esac
+    done
+    if [ -n "${REMOTE}" ]; then
+        [ -z "${url}" ] || err "capacity: --remote and --url name two endpoints; give one"
+        remote_guard "capacity" "${dry}"
+        if [ "${dry}" = 1 ]; then
+            fields=$(remote_py resolve ${REMOTE_ARGS[@]+"${REMOTE_ARGS[@]}"}) || err "capacity: no remote endpoint (above)"
+        else
+            fields=$(remote_resolve)
+        fi
+        IFS=$'\t' read -r base model origin <<< "${fields}"
+        [ "${model}" != - ] || model=auto
+        # capacity.py --url is the chat completions URL itself, not the API root.
+        set -- "$@" --url "${base}/chat/completions" --model "${model}"
+        url=${base}
+    else
+        # Without --remote, --model is capacity's own option.
+        for ((i = 0; i < ${#REMOTE_ARGS[@]}; i += 2)); do
+            case "${REMOTE_ARGS[i]}" in
+                --model) set -- "$@" --model "${REMOTE_ARGS[i + 1]}" ;;
+                *) err "capacity: ${REMOTE_ARGS[i]} goes with --remote" ;;
+            esac
+        done
+        [ -z "${url}" ] || remote_url_local "${url}" || remote_guard "capacity --url ${url}" "${dry}"
+    fi
+    if [ -n "${url}" ] && ! remote_url_local "${url}" && [ "${dry}" = 0 ]; then
+        [ -n "${budget}" ] || set -- "$@" --budget 5
+        [ -n "${max}" ] || set -- "$@" --max 4
+        # Sampling as a shared fleet serves it (never temperature 0), at most 64
+        # tokens a turn; the extra body overrides the trace's own values.
+        [ -n "${xbody}" ] || set -- "$@" --extra-body '{"chat_template_kwargs": {"enable_thinking": false}, "temperature": 0.6, "max_tokens": 64}'
+        info "capacity: ${url} is remote: budgeted ramp ($*)"
+    fi
+    # remote.py runs it with the key from --api-key-file in its environment.
+    [ -z "${REMOTE_KEYFILE}" ] || [ "${dry}" = 1 ] \
+        || exec python3 "$(console_dir)/remote.py" exec --remote "${url}" --api-key-file "${REMOTE_KEYFILE}" -- python3 "${script}" "$@"
     exec python3 "${script}" "$@"
 }
 
@@ -7704,13 +8044,28 @@ qs_pulled_bytes() {
     echo "${n}"
 }
 
-# qs_agent_ready <model> <memory>: the OVMS Deployment is ready, serves <model>
-# and requests <memory>.
+# The ovms Deployment of a rendered agent manifest (stdin) as sorted lines: each
+# container's image and args, its resource requests and limits. The same lines
+# qs_agent_ready reads from the live Deployment.
+qs_ovms_sig() {
+    awk '
+        /^---/ { dep = 0; on = 0; next }
+        /^kind: Deployment$/ { dep = 1 }
+        dep && /^  name: ovms$/ { on = 1 }
+        !on { next }
+        /^ *- '\''?--/ { sub(/^ *- /, ""); gsub(/^'\''|'\''$/, ""); print; next }
+        /^ +(image|cpu|memory): / { sub(/^ +/, ""); gsub(/"/, ""); print; next }
+        /^ +[A-Za-z0-9.-]+\/[A-Za-z0-9.-]+: [0-9]+$/ { sub(/^ +/, ""); print }' | sort
+}
+
+# qs_agent_ready <rendered manifest>: the OVMS Deployment is ready and runs what
+# `agent manifest` renders now (model, memory, device, draft, parsers, tune knobs).
 qs_agent_ready() {
-    local got
-    got=$(kubectl -n "${AGENT_NS}" get deployment ovms \
-        -o jsonpath='{.status.readyReplicas} {.spec.template.spec.containers[0].resources.requests.memory} {.spec.template.spec.containers[0].args}' 2>/dev/null) || return 1
-    [ "${got%% *}" = 1 ] && [[ "${got}" == *"--model_path=/models/$1\""* ]] && [[ " ${got} " == *" $2 "* ]]
+    local want got
+    want=$(qs_ovms_sig <<< "$1")
+    [ -n "${want}" ] || return 1
+    got=$(kubectl -n "${AGENT_NS}" get deployment ovms -o go-template='ready: {{with .status.readyReplicas}}{{.}}{{end}}{{"\n"}}{{range .spec.template.spec.initContainers}}image: {{.image}}{{"\n"}}{{range .args}}{{.}}{{"\n"}}{{end}}{{end}}{{range .spec.template.spec.containers}}image: {{.image}}{{"\n"}}{{range .args}}{{.}}{{"\n"}}{{end}}{{with .resources}}{{with .requests}}{{range $k, $v := .}}{{$k}}: {{$v}}{{"\n"}}{{end}}{{end}}{{with .limits}}{{range $k, $v := .}}{{$k}}: {{$v}}{{"\n"}}{{end}}{{end}}{{end}}{{end}}' 2>/dev/null) || return 1
+    [ "$(sed -n 1p <<< "${got}")" = "ready: 1" ] && [ "$(sed 1d <<< "${got}" | sort)" = "${want}" ]
 }
 
 # The backend `agent up` will run: the user's, else vllm on a cluster that
@@ -7723,18 +8078,98 @@ qs_backend() {
     fi
 }
 
-# quickstart [--no-ui]
+# qs_ui_up <manifest text>: steps 4 and 5, the chat UI and its port-forward.
+qs_ui_up() {
+    local pid port
+    qs_step 4 "Chat UI (Open WebUI)"
+    qs_admin_secret
+    kubectl apply -f - <<< "$1" >/dev/null
+    kubectl -n "${AGENT_NS}" rollout status deployment/open-webui --timeout=600s \
+        || err "chat UI not ready — kubectl -n ${AGENT_NS} logs deploy/open-webui"
+
+    if pid=$(qs_pf_pid); then
+        port=$(cat "${QS_DIR}/port" 2>/dev/null || echo "${K3D_GPU_CHAT_PORT:-8080}")
+        qs_step 5 "Port-forward on 127.0.0.1:${port}"
+        info "port-forward already running (pid ${pid})"
+    else
+        port=$(qs_port)
+        [ -n "${K3D_GPU_CHAT_PORT:-}" ] || [ "${port}" = 8080 ] || info "port 8080 is taken; using ${port}"
+        qs_step 5 "Port-forward on 127.0.0.1:${port}"
+        nohup kubectl -n "${AGENT_NS}" port-forward --address 127.0.0.1 svc/open-webui "${port}:8080" \
+            > "${QS_DIR}/port-forward.log" 2>&1 < /dev/null &
+        echo "$!" > "${QS_DIR}/port-forward.pid"
+        echo "${port}" > "${QS_DIR}/port"
+        sleep 2
+        qs_pf_pid >/dev/null || err "port-forward did not start — ${QS_DIR}/port-forward.log"
+    fi
+    echo "${GRN}==>${RST} [${QS_STEPS}/${QS_STEPS}] $(progress_bar 1 1 10) Ready"
+    info "Chat: http://127.0.0.1:${port}  (sign in with the email and password in ${QS_DIR}/chat-admin)"
+    info "Remove everything: k3d-gpu uninstall"
+}
+
+# quickstart --remote: the cluster and the chat UI against a remote OpenAI-compatible
+# endpoint. No accelerator gate, no model download, no local LLM server. A host with
+# no accelerator gets a plain cluster (K3D_GPU_VENDORS=none).
+cmd_quickstart_remote() {
+    local ui=$1 exe=$2 t missing="" fields base model origin accel manifest rendered
+    qs_step 1 "Checking this machine and the remote endpoint"
+    for t in docker k3d kubectl python3; do command -v "${t}" >/dev/null 2>&1 || missing+=" ${t}"; done
+    [ -z "${missing}" ] || err "missing:${missing} — 'k3d-gpu doctor' prints how to install them"
+    docker info >/dev/null 2>&1 || err "docker is installed but not reachable (is the daemon running, and is this user in the docker group?)"
+    fields=$(remote_resolve)
+    IFS=$'\t' read -r base model origin <<< "${fields}"
+    info "remote endpoint ${base} (from ${origin}), model ${model}: no model download, no local LLM server"
+
+    qs_step 2 "Cluster '${CLUSTER}'"
+    if k3d cluster get "${CLUSTER}" >/dev/null 2>&1; then
+        info "cluster '${CLUSTER}' exists; reusing it"
+    else
+        accel=$( (resolve_vendors >/dev/null 2>&1 && echo "${ACTIVE[*]}") 2>/dev/null || true)
+        if [ -n "${accel}" ] || [ -n "${K3D_GPU_VENDORS:-}" ]; then
+            "${exe}" up || err "'k3d-gpu up' failed; fix the error above and run quickstart again"
+        else
+            info "no accelerator detected: a plain cluster (K3D_GPU_VENDORS=none) is enough for a remote endpoint"
+            K3D_GPU_VENDORS=none "${exe}" up || err "'k3d-gpu up' failed; fix the error above and run quickstart again"
+        fi
+        : > "${QS_DIR}/cluster-created"
+    fi
+    kubectl config use-context "k3d-${CLUSTER}" >/dev/null 2>&1 || true
+    kubectl get nodes >/dev/null 2>&1 || err "cluster '${CLUSTER}' is not reachable — run 'k3d-gpu doctor'"
+
+    qs_step 3 "Remote endpoint (Secret ${AGENT_NS}/${LLM_SECRET})"
+    remote_secret_apply "${AGENT_NS}" "${base}" "${model}"
+    if [ -z "${ui}" ]; then
+        echo "${GRN}==>${RST} [${QS_STEPS}/${QS_STEPS}] $(progress_bar 1 1 10) Ready (no chat UI)"
+        info "pods read the endpoint with envFrom: [{secretRef: {name: ${LLM_SECRET}}}] (namespace ${AGENT_NS})"
+        return 0
+    fi
+    manifest=$(chat_ui_manifest) || err "chat UI manifest agent-chat-ui.yml not found (set K3D_GPU_CHAT_UI)"
+    rendered=$(remote_py chat-ui "${manifest}" --remote "${base}" --model "${model}") || err "could not render the chat UI for ${base}"
+    qs_ui_up "${rendered}"
+}
+
+# quickstart [--no-ui] [--remote [URL] [--model M] [--api-key-file F]]
 cmd_quickstart() {
-    local ui=1 model mem rev tmodel tmem pid exe manifest total done_b last=-1 pid_run t missing="" accel backend port line
+    local ui=1 model mem rev tmodel tmem exe manifest total done_b last=-1 pid_run t missing="" accel backend line
+    local rendered="" served name="" qenv=()
+    remote_parse "$@"
+    set -- ${REMOTE_REST[@]+"${REMOTE_REST[@]}"}
     while [ $# -gt 0 ]; do
         case "$1" in
             --no-ui) ui="" ;;
-            *) err "unknown quickstart option: $1 (use --no-ui)" ;;
+            *) err "unknown quickstart option: $1 (use --no-ui, --remote [URL], --model M, --api-key-file FILE)" ;;
         esac
         shift
     done
     exe=$(qs_self)
     mkdir -p "${QS_DIR}"
+    if [ -n "${REMOTE}" ]; then
+        cmd_quickstart_remote "${ui}" "${exe}"
+        return
+    fi
+    [ "${#REMOTE_ARGS[@]}" -eq 0 ] || err "--model and --api-key-file go with --remote"
+    [ -z "${OPENAI_BASE_URL:-}${OPENAI_API_BASE:-}${OPENAI_HOST:-}" ] \
+        || info "an OpenAI endpoint is set in the environment; 'k3d-gpu quickstart --remote' uses it instead of a local model"
 
     qs_step 1 "Checking this machine"
     qs_wsl_guidance
@@ -7774,12 +8209,32 @@ cmd_quickstart() {
     kubectl config use-context "k3d-${CLUSTER}" >/dev/null 2>&1 || true
     kubectl get nodes >/dev/null 2>&1 || err "cluster '${CLUSTER}' is not reachable — run 'k3d-gpu doctor'"
 
+    # The environment of `agent up`: only what the user left unset is passed. A
+    # tier model is a Qwen3, so it gets Qwen3's parsers (agent_config sets them for
+    # its own default only). The *_TIER marks say the model and memory are tier
+    # picks, which a measured autoquant pick may replace.
+    qenv=(K3D_GPU_AGENT_MODEL="${model}" K3D_GPU_AGENT_MEMORY="${mem}" K3D_GPU_AGENT_REVISION="${rev}")
+    if [ "${model}" = "${tmodel}" ]; then
+        qenv+=(K3D_GPU_AGENT_TOOL_PARSER="${K3D_GPU_AGENT_TOOL_PARSER-hermes3}"
+               K3D_GPU_AGENT_REASONING_PARSER="${K3D_GPU_AGENT_REASONING_PARSER-qwen3}")
+    fi
+    [ -n "${K3D_GPU_AGENT_MODEL:-}" ] || qenv+=(K3D_GPU_AGENT_MODEL_TIER=1)
+    [ -n "${K3D_GPU_AGENT_MEMORY:-}" ] || qenv+=(K3D_GPU_AGENT_MEMORY_TIER=1)
+
     backend=$(qs_backend)
+    if [ "${backend}" = ovms ]; then
+        # What agent up would deploy now: the model it serves (autoquant may pick
+        # one), its served name, and every setting qs_agent_ready compares.
+        rendered=$(env "${qenv[@]}" "${exe}" agent manifest 2>/dev/null) || rendered=""
+        served=$(qs_ovms_sig <<< "${rendered}" | sed -n 's/^--source_model=//p' | sed -n 1p)
+        name=$(qs_ovms_sig <<< "${rendered}" | sed -n 's/^--model_name=//p' | sed -n 1p)
+        model=${served:-${model}}
+    fi
     if [ "${backend}" != ovms ]; then
         # vLLM (a Gaudi, or the user's choice): agent up picks its own model and memory.
         qs_step 3 "LLM server (${backend})"
         "${exe}" agent up || err "'k3d-gpu agent up' failed; run quickstart again to resume"
-    elif qs_agent_ready "${model}" "${mem}"; then
+    elif qs_agent_ready "${rendered}"; then
         qs_step 3 "LLM server (${model})"
         info "agent already serving ${model}"
     else
@@ -7790,17 +8245,7 @@ cmd_quickstart() {
         # starts another. Set before the job starts, so no signal falls between.
         pid_run=""
         trap 'if [ -n "${pid_run}" ]; then kill -TERM "${pid_run}" 2>/dev/null; pkill -TERM -P "${pid_run}" 2>/dev/null; fi; exit 130' INT TERM
-        # Only what the user left unset is passed. A tier model is a Qwen3, so it
-        # gets Qwen3's parsers (agent_config sets them for its own default only).
-        if [ "${model}" = "${tmodel}" ]; then
-            K3D_GPU_AGENT_TOOL_PARSER="${K3D_GPU_AGENT_TOOL_PARSER-hermes3}" \
-            K3D_GPU_AGENT_REASONING_PARSER="${K3D_GPU_AGENT_REASONING_PARSER-qwen3}" \
-            K3D_GPU_AGENT_MODEL="${model}" K3D_GPU_AGENT_MEMORY="${mem}" K3D_GPU_AGENT_REVISION="${rev}" \
-                "${exe}" agent up &
-        else
-            K3D_GPU_AGENT_MODEL="${model}" K3D_GPU_AGENT_MEMORY="${mem}" K3D_GPU_AGENT_REVISION="${rev}" \
-                "${exe}" agent up &
-        fi
+        env "${qenv[@]}" "${exe}" agent up &
         pid_run=$!
         # A download line each time the bytes on the PVC change; the server's own
         # lines interleave.
@@ -7829,35 +8274,11 @@ cmd_quickstart() {
     fi
     [ "${backend}" = ovms ] || err "the chat UI talks to OVMS (svc/ovms) only; with backend ${backend}, run quickstart --no-ui"
 
-    qs_step 4 "Chat UI (Open WebUI)"
     manifest=$(chat_ui_manifest) || err "chat UI manifest agent-chat-ui.yml not found (set K3D_GPU_CHAT_UI)"
-    qs_admin_secret
     # The UI's default model is the one served: the value line after DEFAULT_MODELS.
     line=$(grep -n -A1 'name: DEFAULT_MODELS$' "${manifest}" | sed -n 's/^\([0-9]*\)-  *value: .*/\1/p')
     [[ "${line}" =~ ^[0-9]+$ ]] || err "chat UI manifest ${manifest} has no DEFAULT_MODELS value"
-    awk -v n="${line}" -v m="${model##*/}" 'NR == n + 0 { sub(/value: .*/, "value: \"" m "\"") } { print }' "${manifest}" \
-        | kubectl apply -f - >/dev/null
-    kubectl -n "${AGENT_NS}" rollout status deployment/open-webui --timeout=600s \
-        || err "chat UI not ready — kubectl -n ${AGENT_NS} logs deploy/open-webui"
-
-    if pid=$(qs_pf_pid); then
-        port=$(cat "${QS_DIR}/port" 2>/dev/null || echo "${K3D_GPU_CHAT_PORT:-8080}")
-        qs_step 5 "Port-forward on 127.0.0.1:${port}"
-        info "port-forward already running (pid ${pid})"
-    else
-        port=$(qs_port)
-        [ -n "${K3D_GPU_CHAT_PORT:-}" ] || [ "${port}" = 8080 ] || info "port 8080 is taken; using ${port}"
-        qs_step 5 "Port-forward on 127.0.0.1:${port}"
-        nohup kubectl -n "${AGENT_NS}" port-forward --address 127.0.0.1 svc/open-webui "${port}:8080" \
-            > "${QS_DIR}/port-forward.log" 2>&1 < /dev/null &
-        echo "$!" > "${QS_DIR}/port-forward.pid"
-        echo "${port}" > "${QS_DIR}/port"
-        sleep 2
-        qs_pf_pid >/dev/null || err "port-forward did not start — ${QS_DIR}/port-forward.log"
-    fi
-    echo "${GRN}==>${RST} [${QS_STEPS}/${QS_STEPS}] $(progress_bar 1 1 10) Ready"
-    info "Chat: http://127.0.0.1:${port}  (sign in with the email and password in ${QS_DIR}/chat-admin)"
-    info "Remove everything: k3d-gpu uninstall"
+    qs_ui_up "$(awk -v n="${line}" -v m="${name:-${model##*/}}" 'NR == n + 0 { sub(/value: .*/, "value: \"" m "\"") } { print }' "${manifest}")"
 }
 
 # uninstall [--yes] [--images] [--cluster]: stops quickstart's port-forward,
@@ -7880,7 +8301,7 @@ cmd_uninstall() {
     if [ -n "${created}${force_cluster}" ]; then
         echo "This removes cluster '${CLUSTER}' with its downloaded models and chats, and ${QS_DIR}${images:+, and image ${IMAGE}}."
     else
-        echo "This removes quickstart's port-forward and ${QS_DIR}${images:+, and image ${IMAGE}}; cluster '${CLUSTER}' was not created by quickstart and is kept (--cluster deletes it)."
+        echo "This removes quickstart's port-forward, the remote endpoint's Secret ${LLM_SECRET} (it holds the key) and ${QS_DIR}${images:+, and image ${IMAGE}}; cluster '${CLUSTER}' was not created by quickstart and is kept (--cluster deletes it)."
     fi
     if [ -z "${yes}" ]; then
         [ -t 0 ] || err "uninstall: no terminal to ask on; pass --yes to confirm"
@@ -7894,6 +8315,14 @@ cmd_uninstall() {
         k3d cluster delete "${CLUSTER}"
     else
         info "cluster '${CLUSTER}' kept (quickstart did not create it; --cluster deletes it)"
+        # The key stays nowhere quickstart --remote, agent up --remote or sandbox
+        # up --remote wrote it.
+        if command -v kubectl >/dev/null 2>&1; then
+            local ns
+            for ns in "${AGENT_NS}" "${SANDBOX_NS}"; do
+                kubectl --context "k3d-${CLUSTER}" -n "${ns}" delete secret "${LLM_SECRET}" --ignore-not-found >/dev/null 2>&1 || true
+            done
+        fi
     fi
     if [ -n "${images}" ] && command -v docker >/dev/null 2>&1; then
         if docker image rm "${IMAGE}" >/dev/null 2>&1; then info "removed image ${IMAGE}"; else info "image ${IMAGE} not present"; fi
@@ -8285,9 +8714,14 @@ autoquant_select() { autoquant_run "${1:-}" select; }
 # Swap AGENT_MODEL (and AGENT_MEMORY) to the measured winner for an OVMS agent on
 # the CPU, when nothing pins the model. Only a measured cache entry for this
 # host's fingerprint changes anything.
+# quickstart passes its RAM-tier picks with K3D_GPU_AGENT_MODEL_TIER=1 and
+# K3D_GPU_AGENT_MEMORY_TIER=1: a tier model is no pin when it is the default the
+# probe arms measure, and a tier memory gives way to the winner's.
 agent_autoquant() {
-    local doc fields precision model memory source
-    [ "${AGENT_APP}" = ovms ] && [ -z "${K3D_GPU_AGENT_MODEL:-}" ] || return 0
+    local doc fields precision model memory source pin=${K3D_GPU_AGENT_MODEL:-} mem=${K3D_GPU_AGENT_MEMORY:-}
+    [ -z "${K3D_GPU_AGENT_MODEL_TIER:-}" ] || [ "${pin}" != "${AGENT_DEFAULT_MODEL}" ] || pin=""
+    [ -z "${K3D_GPU_AGENT_MEMORY_TIER:-}" ] || mem=""
+    [ "${AGENT_APP}" = ovms ] && [ -z "${pin}" ] || return 0
     [ "${K3D_GPU_AUTOQUANT:-auto}" != off ] || return 0
     [ -f "$(autoquant_cache)" ] || return 0
     doc=$(autoquant_select) || { warn "autoquant: cache present but select failed, keeping ${AGENT_MODEL}"; return 0; }
@@ -8299,10 +8733,10 @@ agent_autoquant() {
     fi
     AGENT_MODEL=${model}
     AGENT_AUTOQUANT_ANN=$'\n        k3d-gpu.io/agent-model: '"${model}"$'\n        k3d-gpu.io/agent-precision-source: autoquant-measured'
-    if [ -z "${K3D_GPU_AGENT_MEMORY:-}" ]; then
+    if [ -z "${mem}" ]; then
         AGENT_MEMORY=${memory}
-    elif [ "$(mem_gib "${K3D_GPU_AGENT_MEMORY}")" -lt "$(mem_gib "${memory}")" ]; then
-        warn "autoquant: K3D_GPU_AGENT_MEMORY=${K3D_GPU_AGENT_MEMORY} is below the ${memory} that ${precision} needs; the pod may be OOM-killed"
+    elif [ "$(mem_gib "${mem}")" -lt "$(mem_gib "${memory}")" ]; then
+        warn "autoquant: K3D_GPU_AGENT_MEMORY=${mem} is below the ${memory} that ${precision} needs; the pod may be OOM-killed"
     fi
     info "autoquant: measured pick ${precision} for this host, serving ${AGENT_MODEL} (K3D_GPU_AGENT_MODEL or K3D_GPU_AUTOQUANT=off overrides)" >&2
 }
@@ -8381,6 +8815,78 @@ bench_alive() {
     err "bench: container $1 exited (exit code ${code}, OOMKilled ${oom})"
 }
 
+# bench_k3d_arm [4bit]: the k3d-gpu arm as deployed now, through a port-forward.
+# Sets cmd_bench's kurl, kmodel, kdevice, kbackend, ktransport and pf. With 4bit the
+# served model must be a 4-bit build (the docker competitors run 4-bit).
+bench_k3d_arm() {
+    # The k3d-gpu arm as deployed now: the live server, its device and its model.
+    require kubectl
+    require curl
+    for app in "${AGENT_APPS[@]}" ""; do
+        [ -n "${app}" ] || err "bench: no agent service in ${AGENT_NS} on ${kctx}; run 'k3d-gpu agent up' first (or pass --k3d-url and --k3d-model)"
+        kubectl --context "${kctx}" -n "${AGENT_NS}" get "service/${app}" >/dev/null 2>&1 && break
+    done
+    read -r kdevice kbackend <<< "$(kubectl --context "${kctx}" -n "${AGENT_NS}" get deployment "${app}" \
+        -o jsonpath='{.spec.template.metadata.annotations.k3d-gpu\.io/agent-device} {.spec.template.metadata.annotations.k3d-gpu\.io/agent-backend}' 2>/dev/null)"
+    pfport=$(free_port)
+    kubectl --context "${kctx}" -n "${AGENT_NS}" port-forward "service/${app}" "${pfport}:8000" >/dev/null 2>&1 &
+    pf=$!
+    ktransport="kubectl port-forward (API-server stream)"
+    local kapi=/v3 mpath=/v1/config
+    [ "${app}" != vllm ] || { kapi=/v1; mpath=/v1/models; }
+    kurl="http://127.0.0.1:${pfport}${kapi}"
+    local mj=""
+    for _ in $(seq 1 30); do
+        mj=$(curl --noproxy '*' -sf -m 5 "http://127.0.0.1:${pfport}${mpath}") && break
+        sleep 1
+    done
+    [ -n "${mj}" ] || err "bench: the ${app} server on ${kctx} did not answer ${mpath}"
+    kmodel=$(python3 -c 'import json, sys
+d = json.loads(sys.argv[1])
+ids = [m["id"] for m in d["data"]] if isinstance(d, dict) and "data" in d else list(d)
+print(ids[0] if ids else "")' "${mj}") || kmodel=""
+    [ -n "${kmodel}" ] || err "bench: the ${app} server on ${kctx} lists no model"
+    # Competitors run a 4-bit build; a k3d-gpu arm on another tier is a different test.
+    [ "${1:-}" != 4bit ] || [[ "${kmodel,,}" =~ int4|q4|4bit|awq|gptq ]] \
+        || err "bench: the k3d-gpu arm serves '${kmodel}', not a 4-bit build; the competitors run 4-bit (pass --k3d-url and --k3d-model to compare anyway)"
+}
+
+# bench --vs remote: the k3d-gpu arm against a remote OpenAI-compatible endpoint.
+# Never against an endpoint the user has not claimed (--i-own-this-endpoint), and
+# always budgeted: one round, one warmup, at most 64 tokens, four prompts (vs.py
+# --remote-arm enforces the same). Uses cmd_bench's locals.
+bench_vs_remote() {
+    local fields base rmodel origin pf="" pfport app kctx="k3d-${CLUSTER}" kdevice="" kbackend="" ktransport="direct (--k3d-url)" ctx
+    remote_guard "bench --vs remote" "${dry:-0}"
+    rounds=1 warmup=1
+    [ "${maxtok}" -le 64 ] || maxtok=64
+    if [ -n "${dry}" ]; then
+        fields=$(remote_py resolve ${REMOTE_ARGS[@]+"${REMOTE_ARGS[@]}"}) || err "bench: no remote endpoint (above)"
+        IFS=$'\t' read -r base rmodel origin <<< "${fields}"
+        echo "python3 $(bench_dir)/vs.py run --id ${id} --out ${out}/result.json --ledger ${out}/ledger.md --rounds ${rounds} --warmup ${warmup} --max-tokens ${maxtok} --remote-arm remote --arm k3d-gpu=${kurl:-<port-forward svc/ovms>},${kmodel:-<agent model>} --arm remote=${base},${rmodel/#-/<the only model GET /models lists>}"
+        return 0
+    fi
+    fields=$(remote_resolve)
+    IFS=$'\t' read -r base rmodel origin <<< "${fields}"
+    # vs.py reads the key from OPENAI_API_KEY; remote.py exec puts --api-key-file's there.
+    local keyrun=()
+    [ -z "${REMOTE_KEYFILE}" ] || keyrun=(python3 "$(console_dir)/remote.py" exec --remote "${base}" --api-key-file "${REMOTE_KEYFILE}" --)
+    [ -n "${kurl}" ] || bench_k3d_arm
+    # shellcheck disable=SC2064 # expand now: the pid is fixed for this run
+    trap "[ -z '${pf}' ] || kill '${pf}' 2>/dev/null || true" EXIT
+    mkdir -p "${out}"
+    ctx=$(python3 -c 'import json, sys; print(json.dumps(dict(zip(sys.argv[1::2], sys.argv[2::2]))))' \
+        host_kernel "$(uname -r)" commit "$(cd "$(bench_dir)" && git rev-parse HEAD 2>/dev/null || echo "k3d-gpu ${VERSION}")" \
+        k3d_device "${kdevice:-unknown}" k3d_backend "${kbackend:-unknown}" k3d_transport "${ktransport}" \
+        vs_transport "https to ${base#*://} (from ${origin})")
+    info "bench: k3d-gpu arm vs remote ${base} (${rmodel}): ${rounds} round, ${warmup} warmup, ${maxtok} tokens"
+    ${keyrun[@]+"${keyrun[@]}"} python3 "$(bench_dir)/vs.py" run --id "${id}" --out "${out}/result.json" \
+        --ledger "${out}/ledger.md" --rounds "${rounds}" --warmup "${warmup}" --max-tokens "${maxtok}" \
+        --budget-s "${budget}" --context "${ctx}" --signed-off-by "${K3D_GPU_SIGNOFF:-}" --remote-arm remote \
+        --arm "k3d-gpu=${kurl},${kmodel}" --arm "remote=${base},${rmodel}" || err "bench: vs.py failed"
+    info "bench: ${out}/result.json and ${out}/ledger.md"
+}
+
 cmd_bench() {
     require python3
     if [ "${1:-}" = agent ]; then
@@ -8391,6 +8897,8 @@ cmd_bench() {
         exec python3 "${agent}" "$@"
     fi
     local stack="" kurl="" kmodel="" budget=900 rounds=3 warmup=3 maxtok=128 id="" out="" cpuset="" dry="" keep=""
+    remote_parse "$@"
+    set -- ${REMOTE_REST[@]+"${REMOTE_REST[@]}"}
     while [ $# -gt 0 ]; do
         case "$1" in
             --dry-run) dry=1; shift; continue ;;
@@ -8406,7 +8914,8 @@ cmd_bench() {
         esac
         shift 2
     done
-    [ -n "${stack}" ] || err "bench: --vs <stack> is required (ollama, llamacpp or ovms)"
+    [ -n "${stack}" ] || err "bench: --vs <stack> is required (ollama, llamacpp, ovms or remote)"
+    [ "${stack}" = remote ] || [ -z "${REMOTE}${OWN_ENDPOINT}${REMOTE_ARGS[*]:-}" ] || err "bench: --remote, --model, --api-key-file and --i-own-this-endpoint go with --vs remote"
     local n
     for n in "${budget}" "${rounds}" "${warmup}" "${maxtok}"; do
         [[ "${n}" =~ ^[0-9]+$ ]] || err "bench: --budget, --rounds, --warmup and --max-tokens take whole numbers, got '${n}'"
@@ -8416,6 +8925,10 @@ cmd_bench() {
     if [ -n "${kurl}" ] && [ -z "${kmodel}" ]; then err "bench: --k3d-url needs --k3d-model"; fi
     id=${id:-H0}
     out=${out:-bench-${id}-${stack}}
+    if [ "${stack}" = remote ]; then
+        bench_vs_remote
+        return
+    fi
     local dir lock fields image port api health served pull cache dri quant device user apath asha rev args=()
     dir=$(bench_dir)
     lock="${dir}/competitors.lock"
@@ -8474,37 +8987,7 @@ for a in s["args"]:
     require curl
     local t0=${SECONDS} pf="" pfport kdevice="" kbackend="" ktransport="direct (--k3d-url)" app kctx="k3d-${CLUSTER}" got
     if docker inspect "${name}" >/dev/null 2>&1; then err "bench: container ${name} already exists (docker rm -f ${name})"; fi
-    if [ -z "${kurl}" ]; then
-        # The k3d-gpu arm as deployed now: the live server, its device and its model.
-        require kubectl
-        for app in "${AGENT_APPS[@]}" ""; do
-            [ -n "${app}" ] || err "bench: no agent service in ${AGENT_NS} on ${kctx}; run 'k3d-gpu agent up' first (or pass --k3d-url and --k3d-model)"
-            kubectl --context "${kctx}" -n "${AGENT_NS}" get "service/${app}" >/dev/null 2>&1 && break
-        done
-        read -r kdevice kbackend <<< "$(kubectl --context "${kctx}" -n "${AGENT_NS}" get deployment "${app}" \
-            -o jsonpath='{.spec.template.metadata.annotations.k3d-gpu\.io/agent-device} {.spec.template.metadata.annotations.k3d-gpu\.io/agent-backend}' 2>/dev/null)"
-        pfport=$(free_port)
-        kubectl --context "${kctx}" -n "${AGENT_NS}" port-forward "service/${app}" "${pfport}:8000" >/dev/null 2>&1 &
-        pf=$!
-        ktransport="kubectl port-forward (API-server stream)"
-        local kapi=/v3 mpath=/v1/config
-        [ "${app}" != vllm ] || { kapi=/v1; mpath=/v1/models; }
-        kurl="http://127.0.0.1:${pfport}${kapi}"
-        local mj=""
-        for _ in $(seq 1 30); do
-            mj=$(curl --noproxy '*' -sf -m 5 "http://127.0.0.1:${pfport}${mpath}") && break
-            sleep 1
-        done
-        [ -n "${mj}" ] || err "bench: the ${app} server on ${kctx} did not answer ${mpath}"
-        kmodel=$(python3 -c 'import json, sys
-d = json.loads(sys.argv[1])
-ids = [m["id"] for m in d["data"]] if isinstance(d, dict) and "data" in d else list(d)
-print(ids[0] if ids else "")' "${mj}") || kmodel=""
-        [ -n "${kmodel}" ] || err "bench: the ${app} server on ${kctx} lists no model"
-        # Competitors run a 4-bit build; a k3d-gpu arm on another tier is a different test.
-        [[ "${kmodel,,}" =~ int4|q4|4bit|awq|gptq ]] \
-            || err "bench: the k3d-gpu arm serves '${kmodel}', not a 4-bit build; the competitors run 4-bit (pass --k3d-url and --k3d-model to compare anyway)"
-    fi
+    [ -n "${kurl}" ] || bench_k3d_arm 4bit
     # shellcheck disable=SC2064 # expand now: the names are fixed for this run
     trap "docker rm -f '${name}' >/dev/null 2>&1 || true; [ -n '${keep}' ] || docker volume rm '${name}-cache' >/dev/null 2>&1 || true; [ -z '${pf}' ] || kill '${pf}' 2>/dev/null || true" EXIT
     mkdir -p "${out}"
@@ -8672,7 +9155,8 @@ case "${1:-help}" in
     facts)   shift; cmd_facts "$@" ;;
     plan)    shift; cmd_plan "$@" ;;
     audit)   shift; cmd_audit "$@" ;;
-    sandbox) cmd_sandbox "${2:-}" ;;
+    sandbox) shift; cmd_sandbox "$@" ;;
+    remote)  shift; cmd_remote "$@" ;;
     model-share) shift; cmd_model_share "$@" ;;
     apply)   shift; cmd_apply "$@" ;;
     tune)    shift; cmd_tune "$@" ;;

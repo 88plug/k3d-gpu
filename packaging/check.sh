@@ -37,6 +37,7 @@ for f in vs.py llm_load.py competitors.lock; do
 done
 k3d-gpu help | grep -F "/usr/share/k3d-gpu/nvidia-device-plugin.yml" >/dev/null
 test -x /usr/bin/k3d-gpu
+test -x /usr/bin/k3d-gpu-mcp
 '
 
 nfpm_build() {

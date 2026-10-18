@@ -2058,6 +2058,7 @@ cat > "${ASTUB}/kubectl" <<'EOF'
 case "$*" in
     *allocatable*) printf '%s\n' "${STUB_ALLOC:-}" ;;
     "get pods -A "*) printf '%s\n' "${STUB_USED:-}" ;;
+    "get resourceslices "*) printf '%s\n' "${STUB_SLICES:-}" ;;
     "get nodes -l "*)
         for l in ${STUB_NODE_LABELS:-}; do [ "$l" = "$4" ] && echo node/k3d-agent-server-0; done ;;
     apply*) echo applied >> "${STUB_APPLY_LOG:-/dev/null}"
@@ -3249,6 +3250,47 @@ addon_says "an unknown add-on device is rejected" "${r}" fail - \
     "unknown K3D_GPU_AGENT_STT_DEVICE 'DSP'" "" STUB_ALLOC="${SHARED}" K3D_GPU_AGENT_STT_DEVICE=DSP
 addon_says "the LLM's own override still applies" "${r}" 0 ovms \
     '--target_device=CPU$' "" STUB_ALLOC="${SHARED}" STUB_NODE_LABELS="${XMX}" K3D_GPU_AGENT_DEVICE=CPU
+
+# Fast Draft on a second device holds that unit too: the add-ons plan around it,
+# and a draft device held elsewhere is not free.
+WITH="--with vlm"
+addon_says "a GPU draft holds the only iGPU: vlm falls back to CPU" "${r}" 0 ovms-vlm \
+    '--target_device=CPU$' "" STUB_ALLOC="${ONE}" K3D_GPU_AGENT_DEVICE=CPU K3D_GPU_AGENT_DRAFT=GPU
+addon_says "... and the draft keeps its GPU limit" "${r}" 0 ovms \
+    'gpu\.intel\.com/i915: "?1"?' "" STUB_ALLOC="${ONE}" K3D_GPU_AGENT_DEVICE=CPU K3D_GPU_AGENT_DRAFT=GPU
+addon_says "a GPU draft plus an explicit GPU vlm on one unit fails" "${r}" fail - \
+    'no free Intel GPU' "" STUB_ALLOC="${ONE}" K3D_GPU_AGENT_DEVICE=CPU K3D_GPU_AGENT_DRAFT=GPU K3D_GPU_AGENT_VLM_DEVICE=GPU
+WITH="--with stt"
+addon_says "an NPU draft holds the NPU: stt goes to the GPU" "${r}" 0 ovms-stt \
+    '--target_device=GPU$' "" STUB_ALLOC="${ONE}" K3D_GPU_AGENT_DEVICE=CPU K3D_GPU_AGENT_DRAFT=NPU
+WITH=""
+addon_says "a GPU draft with the GPU held elsewhere fails" "${r}" fail - \
+    'K3D_GPU_AGENT_DRAFT=GPU.*no free' "" STUB_ALLOC="${ONE}" STUB_USED='default gpu.intel.com/i915 1' K3D_GPU_AGENT_DEVICE=CPU K3D_GPU_AGENT_DRAFT=GPU
+addon_says "an NPU draft with the NPU held elsewhere fails" "${r}" fail - \
+    'K3D_GPU_AGENT_DRAFT=NPU.*no free' "" STUB_ALLOC="${ONE}" STUB_USED='other npu.intel.com/accel 1' K3D_GPU_AGENT_DEVICE=CPU K3D_GPU_AGENT_DRAFT=NPU
+n=$(env K3D_GPU_SYSROOT="${r}" PATH="${ASTUB}:${PATH}" STUB_ALLOC="${ONE}" K3D_GPU_AGENT_DEVICE=HETERO:GPU,CPU K3D_GPU_AGENT_DRAFT=GPU \
+    bash "${K3D_GPU}" agent manifest 2>/dev/null | deploy_doc ovms | grep -cE 'gpu\.intel\.com/i915: "?1"?')
+if [ "${n}" = 1 ]; then PASS=$((PASS + 1)); echo "ok   a GPU draft on a HETERO target shares its GPU (one limit)"
+else FAILS=$((FAILS + 1)); echo "FAIL a GPU draft on a HETERO target shares its GPU (one limit): ${n} limits"; fi
+
+# DRA mode (K3D_GPU_DRA=1): the GPU is a ResourceSlice device, not gpu.intel.com/xe|i915.
+# The agent stack requests the extended resources only, so it says so instead of
+# serving on the CPU silently or blaming the cluster.
+DSL="gpu.intel.com node0 1 xe"
+agent_says "DRA GPU: auto serves on CPU and says why" "${r}" 0 \
+    'Intel GPU through DRA' "" STUB_ALLOC='cpu 32' STUB_SLICES="${DSL}" STUB_NODE_LABELS="${XMX}"
+agent_says "DRA GPU: auto still renders a CPU target" "${r}" 0 \
+    '--target_device=CPU' "" STUB_ALLOC='cpu 32' STUB_SLICES="${DSL}" STUB_NODE_LABELS="${XMX}"
+agent_says "no GPU at all: auto prints no DRA note" "${r}" 0 \
+    'DRA' negate STUB_ALLOC='cpu 32'
+agent_says "DRA GPU: a forced GPU names DRA" "${r}" fail \
+    'Intel GPU through DRA.*K3D_GPU_DRA=0' "" STUB_ALLOC='cpu 32' STUB_SLICES="${DSL}" K3D_GPU_AGENT_DEVICE=GPU
+agent_says "DRA GPU: HETERO names DRA" "${r}" fail \
+    'Intel GPU through DRA' "" STUB_ALLOC='cpu 32' STUB_SLICES="${DSL}" K3D_GPU_AGENT_DEVICE=HETERO:GPU,CPU
+agent_says "DRA GPU: the vllm backend names DRA" "${r}" fail \
+    'Intel GPU through DRA' "" STUB_ALLOC='cpu 32' STUB_SLICES="${DSL}" K3D_GPU_AGENT_BACKEND=vllm
+agent_says "DRA GPU: a GPU draft names DRA" "${r}" fail \
+    'Intel GPU through DRA' "" STUB_ALLOC='cpu 32' STUB_SLICES="${DSL}" K3D_GPU_AGENT_DRAFT=GPU
 
 # A vLLM LLM holds K3D_GPU_AGENT_GPUS units; the add-ons stay on OVMS.
 XE3=$'cpu 32\ngpu.intel.com/xe 3\nnpu.intel.com/accel 1'
@@ -4529,6 +4571,21 @@ says "share runs from the packaged copy under K3D_GPU_SHARE/oracle" 0 'There is 
 says "packaged share finds no capacity run and says so" 2 'no finished capacity run' \
     env K3D_GPU_SHARE="${SOLO}/share" XDG_STATE_HOME="${SOLO}/state" K3D_GPU_SYSROOT="${SOLO}/root" bash "${SOLO}/bin/k3d-gpu" share --dry-run
 
+# The node image is published for linux/amd64 only (build-and-push.yml platforms), so
+# `up` on another CPU stops before docker runs unless K3D_GPU_IMAGE names an image for it.
+ARCH_BIN="${WORK}/arch-bin"
+mkdir -p "${ARCH_BIN}"
+printf '#!/bin/sh\n[ "$1" = -m ] && { echo aarch64; exit 0; }\nexec /usr/bin/env -i uname "$@"\n' > "${ARCH_BIN}/uname"
+for t in docker k3d kubectl; do
+    printf '#!/bin/sh\necho "%s $*" >> "%s/arch-calls"\nexit 1\n' "${t}" "${WORK}" > "${ARCH_BIN}/${t}"
+done
+chmod +x "${ARCH_BIN}"/*
+ARCH_ROOT=$(newroot arch-empty)
+says "up on aarch64 with the default node image names the amd64-only image" 1 'published for linux/amd64 only.*K3D_GPU_IMAGE' \
+    env -u K3D_GPU_IMAGE PATH="${ARCH_BIN}:${PATH}" K3D_GPU_SYSROOT="${ARCH_ROOT}" bash "${K3D_GPU}" up
+says "up on aarch64 stops before docker runs" 0 '^$' bash -c "cat '${WORK}/arch-calls' 2>/dev/null; true"
+says "up on aarch64 with K3D_GPU_IMAGE set passes the arch check" 1 'no supported accelerator' \
+    env K3D_GPU_IMAGE=example/k3s-arm64:1 PATH="${ARCH_BIN}:${PATH}" K3D_GPU_SYSROOT="${ARCH_ROOT}" bash "${K3D_GPU}" up
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

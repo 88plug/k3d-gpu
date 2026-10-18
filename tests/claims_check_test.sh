@@ -106,6 +106,9 @@ check "claim citing a SUPPORTED ledger entry passes" "$(repo 'It hits 42 tok/s [
 check "claim citing a PENDING ledger entry fails" "$(repo 'It hits 42 tok/s [ledger:H1].')" fail 'H1.*PENDING'
 check "claim citing a REFUTED ledger entry fails" "$(repo 'It hits 42 tok/s [ledger:H3].')" fail 'H3.*REFUTED'
 check "claim citing an unknown ledger entry fails" "$(repo 'It hits 42 tok/s [ledger:H7].')" fail 'H7.*not in EXPERIMENTS.md'
+sfx=$(repo 'It hits 42 tok/s [ledger:H2b].')
+sed -i 's/^| H2 | two | p | probe | \*\*SUPPORTED\*\* |$/&\n| H2b | two, re-run | p | probe | PENDING |/' "${sfx}/EXPERIMENTS.md"
+check "a lettered row id (H2b) is a ledger row of its own" "${sfx}" fail 'H2b.*PENDING'
 check "ledger rows outside the hypothesis table do not count" "$(repo 'It hits 42 tok/s [ledger:H9].')" fail 'H9.*not in EXPERIMENTS.md'
 check "claim citing a provenance entry passes" "$(repo 'Upstream reports 42 tok/s [provenance:P1].')" 0
 check "provenance entry without a source fails" "$(repo 'Upstream reports 42 tok/s [provenance:P2].')" fail 'P2.*no source'
