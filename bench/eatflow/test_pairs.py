@@ -308,6 +308,53 @@ class HoldTest(unittest.TestCase):
         self.assertEqual(ps[0]["status"], "void")
         self.assertIn("reset", ps[0]["void_reason"])
 
+    def test_restart_after_cap_resolves_the_new_entity(self):
+        """H49 hold 1: a restarted DevUI serves its entity under a new id; the cached id
+        then drew HTTP 404 on every later attempt of that arm."""
+        purl = "http://127.0.0.1:%d" % proxy.serve(proxy.Proxy(
+            "http://127.0.0.1:%d" % self.up.server_address[1], self.arms["B1"]["proxy_log"])).server_address[1]
+        flag = os.path.join(self.tmp, "restarted")
+        base = make_devui(purl)
+
+        class Restartable(base):
+            def _eid(self):
+                return "banking_agent_2" if os.path.exists(flag) else "banking_agent"
+
+            def do_GET(self):
+                self._json({"entities": [{"id": self._eid()}]})
+
+            def do_POST(self):
+                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                if body["metadata"]["entity_id"] != self._eid():
+                    return self._json({"error": "entity not found"}, 404)
+                if not os.path.exists(flag):
+                    import time
+                    time.sleep(1.0)                      # first attempt runs past the cap
+                body["metadata"]["entity_id"] = "banking_agent"
+                data = json.dumps(body).encode()
+                self.rfile = __import__("io").BytesIO(data)
+                self.headers.replace_header("Content-Length", str(len(data)))
+                return base.do_POST(self)
+        srv, url = serve(Restartable)
+        self.addCleanup(srv.shutdown)
+        self.arms["B1"].update(agent=AB.Agent(url, token="tok"), restart=f"touch {flag}", entity=None)
+        PR.run_hold(AB, self.arms, "A1", "B1", T.B24[:2], self.out, deadline=1e12, probe=FakeProbe(),
+                    mcp_url=self.murl, reset="true", hold=1, settle_s=0.05, cap_s=0.5)
+        at = {(r["j"], r["arm"]): r for r in PR.read_jsonl(os.path.join(self.out, "attempts.jsonl"))}
+        self.assertEqual(at[(0, "B1")]["outcome"], "over_task")
+        self.assertIsNone(at[(1, "B1")]["error"], at[(1, "B1")]["error"])
+        self.assertEqual(at[(1, "B1")]["llm_requests"], 2)
+
+    def test_http_404_from_the_agent_is_void(self):
+        self.arms["B1"]["agent"].entity = "gone"
+        self.arms["B1"]["agent"].opener = lambda req, timeout: (_ for _ in ()).throw(
+            __import__("urllib.error").error.HTTPError(req.full_url, 404, "Not Found", {}, None))
+        PR.run_hold(AB, self.arms, "A1", "B1", T.B24[:1], self.out, deadline=1e12, probe=FakeProbe(),
+                    mcp_url=self.murl, reset="true", hold=1, settle_s=0.05)
+        ps = PR.read_jsonl(os.path.join(self.out, "pairs.jsonl"))
+        self.assertEqual(ps[0]["status"], "void")
+        self.assertIn("404", ps[0]["void_reason"])
+
     def test_unreachable_agent_is_void(self):
         self.arms["B1"]["agent"] = AB.Agent("http://127.0.0.1:9", token="tok")
         n = PR.run_hold(AB, self.arms, "A1", "B1", T.B24[:1], self.out, deadline=1e12, probe=FakeProbe(),

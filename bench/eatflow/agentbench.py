@@ -1123,7 +1123,7 @@ def cmd_pairs(a):
         srv = proxy.serve(proxy.Proxy(up, plog, sampling=samp), "127.0.0.1", port)
         srvs.append(srv)
         arms[arm] = {"agent": Agent(url, os.environ.get("DEVUI_AUTH_TOKEN"), a.entity), "proxy_log": plog,
-                     "restart": restart, "pod": pod}
+                     "restart": restart, "pod": pod, "entity": a.entity}
         log(f"{arm}: agent {url}, proxy 127.0.0.1:{srv.server_address[1]} -> {up}, pod cgroup {pod}")
     lm = _load_mod()
     probe = PR.Probe({arm: v["pod"] for arm, v in arms.items()}, lm.load_cpus() if lm else [], rapl=not a.no_rapl)

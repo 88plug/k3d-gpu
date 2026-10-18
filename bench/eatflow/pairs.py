@@ -219,7 +219,8 @@ def next_pair(out):
 
 def attempt(ab, arms, arm, task, j, hold, probe, out, mcp_url, cap_s=TASK_CAP_S, settle_s=30.0,
             idle_s=0.0, clock=time.time, opener=urllib.request.urlopen, quiesce_s=0.0):
-    """One scored attempt of `task` on `arm`. arms[arm] = {"agent", "proxy_log", "restart"}.
+    """One scored attempt of `task` on `arm`. arms[arm] = {"agent", "proxy_log", "restart", "entity"}
+    (entity: a fixed DevUI entity id, or None to resolve it from /v1/entities).
     idle_s > 0: before the attempt, sample the (shared) pod with no request in flight; that
     reading is the attempt's idle_cpu. Else idle_cpu is the other arm's pod CPU in-window."""
     me = arms[arm]
@@ -249,7 +250,8 @@ def attempt(ab, arms, arm, task, j, hold, probe, out, mcp_url, cap_s=TASK_CAP_S,
         raise HoldAborted(f"agent memory is on: {task['id']} on {arm} carried {users} user messages")
     calls = ab.flat_calls(recs)
     end, void_reason = None, None
-    if err and "connection refused" in err.lower():
+    if err and ("connection refused" in err.lower() or "http error 404" in err.lower()):
+        # The agent's endpoint or entity is gone: a harness fault, not the arm's answer.
         void_reason = f"agent not reachable: {err}"
     if mcp_url and task.get("end_state"):
         try:
@@ -278,6 +280,8 @@ def attempt(ab, arms, arm, task, j, hold, probe, out, mcp_url, cap_s=TASK_CAP_S,
         ok_r, msg = run_cmd(me["restart"])
         if not ok_r:
             raise HoldAborted(f"agent restart of {arm} after the cap failed: {msg}")
+        # A restarted DevUI registers its entity under a new id: resolve it again.
+        me["agent"].entity = me.get("entity")
     if kind in ("over_task", "over_turn") and quiesce_s > 0:
         waited, settled = quiesce(probe, arm, quiesce_s)
         append(os.path.join(out, "quiesce.jsonl"), {"hold": hold, "j": j, "arm": arm, "after": kind,
