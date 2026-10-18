@@ -33,10 +33,24 @@ Run (root: RAPL energy_uj, current_freq_khz and all writes need it), server reac
   python3 bench/uncore-phase/probe.py --analyze OUT.jsonl
   --dry-run prints the cell order and the writes it would make, writes nothing.
 K3D_GPU_SYSROOT=<dir> prefixes every sysfs/procfs path (the unit tests use a fake tree).
+
+Amendment A2 (2026-10-18, EXPERIMENTS.md "H29 amendment A2"): the runner holds one
+bench/load/load.py background level (typical, then heavy) for every arm. Each cell's
+idle window is a load.py window (--load-window-s, knobs applied, no request) tagged
+with the arm; its package W is the cell's idle W. --analyze --level L decides one
+level: INCONCLUSIVE when the A/U/C/UC windows are unmatched under load.py TOLERANCE
+(the verdict it would have had is printed with it). In A2 cells, throttle and swap-in
+deltas are recorded and do not exclude cells; run 1 cells (no load window) keep the
+original exclusion.
 Stdlib only.
 """
-import argparse, http.client, json, os, signal, statistics, sys, threading, time, urllib.parse
+import argparse, http.client, importlib.util, json, os, random, signal, statistics, sys, threading, time, urllib.parse
 from math import comb
+
+_spec = importlib.util.spec_from_file_location(
+    "loadtool", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "load", "load.py"))
+loadtool = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(loadtool)
 
 ROOT = os.environ.get("K3D_GPU_SYSROOT", "")
 CPU = ROOT + "/sys/devices/system/cpu"
@@ -46,7 +60,7 @@ RAPL_CORE = ROOT + "/sys/class/powercap/intel-rapl:0:0/energy_uj"
 RAPL_WRAP = ROOT + "/sys/class/powercap/intel-rapl:0/max_energy_range_uj"
 THROTTLE = CPU + "/cpu0/thermal_throttle/package_throttle_count"
 PRIMARY = ["A", "U", "C", "UC"]
-SETTLE_S, IDLE_S, SAMPLE_S = 6.0, 5.0, 0.5
+SETTLE_S, SAMPLE_S = 6.0, 0.5
 PROMPT = "Write a long, detailed technical essay about memory hierarchies in modern CPUs."
 
 
@@ -229,6 +243,7 @@ def order(rounds):
 
 def measure(a):
     cpus = cpulist(a.cpus)
+    load_cpus = cpulist(a.load_cpus) if a.load_cpus else loadtool.load_cpus()
     others = [c for c in sorted(stat_busy()) if c not in cpus]
     k = Knobs(cpus, a.write_log, a.dry_run)
     cells = order(a.rounds)
@@ -251,8 +266,8 @@ def measure(a):
                     print("deadline hit: stopping (partial run)", file=sys.stderr); break
                 k.apply(arm, a); time.sleep(SETTLE_S)
                 s = Sampler(cpus); s.start()
-                p0 = rd(RAPL_PKG); time.sleep(IDLE_S); p1 = rd(RAPL_PKG)
-                idle_w = energy_delta(p0, p1) / IDLE_S
+                load = loadtool.window(a.load_window_s, load_cpus, tag=arm, level=a.level)
+                idle_w = load["pkg_w"]
                 ring_idle = statistics.median(s.ring) if s.ring else None
                 s.ring.clear(); s.mhz.clear()
                 th0, vm0, b0, l1 = rd(THROTTLE), vmstat(), stat_busy(), os.getloadavg()[0]
@@ -263,7 +278,7 @@ def measure(a):
                 vm1, b1, th1 = vmstat(), stat_busy(), rd(THROTTLE)
                 dt, ej = t1 - t0, energy_delta(e0, e1)
                 toks = (usage or {}).get("completion_tokens") or chunks
-                rec = {"round": r, "arm": arm, "ts": time.time(), "tokens": toks, "chunks": chunks,
+                rec = {"round": r, "arm": arm, "level": a.level, "load": load, "ts": time.time(), "tokens": toks, "chunks": chunks,
                        "ttft_s": ttft, "decode_tok_s": dec, "wall_s": dt, "pkg_j": ej,
                        "core_j": energy_delta(c0, c1), "idle_w": idle_w,
                        "gross_j_tok": ej / toks, "marg_j_tok": (ej - idle_w * dt) / toks,
@@ -295,13 +310,42 @@ def sign_conf(diffs):
     return round(1 - p, 3)
 
 
+def boot_ci(ratios, n=10000, seed=29):
+    """Percentile 95% CI of the median of paired-round ratios (bootstrap over rounds)."""
+    rng = random.Random(seed)
+    meds = sorted(statistics.median(rng.choices(ratios, k=len(ratios))) for _ in range(n))
+    return meds[int(0.025 * n)], meds[int(0.975 * n) - 1]
+
+
 def analyze(path, a):
     with open(path) as f:
-        rows = [json.loads(line) for line in f]
+        rows = [json.loads(line) for line in f if line.strip()]
+    if getattr(a, "level", None):
+        rows = [x for x in rows if x.get("level") == a.level]
     def bad(x):
-        return (x["throttle_delta"] or 0) > 0 or x["pswpin"] > a.swap_flag_pages or not x["decode_tok_s"]
+        if not x["decode_tok_s"]:
+            return True
+        if "load" in x:  # A2: recorded, not a gate; the load match covers the background
+            return False
+        return (x["throttle_delta"] or 0) > 0 or x["pswpin"] > a.swap_flag_pages
     ok = [x for x in rows if not bad(x)]
     print(f"cells {len(rows)}, valid {len(ok)}, flagged {len(rows) - len(ok)}")
+    windows = [x["load"] for x in rows if x.get("load") and x["arm"] in PRIMARY]
+    load_bad = None
+    if windows:
+        lm = loadtool.matched(windows)
+        for c in lm["checks"]:
+            print(f"load {c['metric']:16} " + " ".join(f"{k}={v}" for k, v in sorted(c["arms"].items()))
+                  + f" spread {c.get('spread')} limit {c.get('limit')} {c['status']}")
+        print(f"LOAD {lm['verdict']}")
+        if not lm["matched"]:
+            load_bad = lm["verdict"]
+
+    def verdict(msg):
+        if load_bad:
+            print(f"VERDICT {load_bad} [gated out, would be: {msg}]")
+        else:
+            print(f"VERDICT {msg}")
     by = {arm: [x for x in ok if x["arm"] == arm] for arm in PRIMARY + ["L"]}
     def med(arm, k):
         v = [x[k] for x in by[arm] if x[k] is not None]
@@ -335,19 +379,19 @@ def analyze(path, a):
         return [rx[i] / ry[i] for i in sorted(rx) if i in ry]
 
     if any(len(by[arm]) < 4 for arm in PRIMARY):
-        print("VERDICT INCONCLUSIVE: < 4 valid cells in a primary arm"); return
+        verdict("INCONCLUSIVE: < 4 valid cells in a primary arm"); return
     a_noise = spr("A", "decode_tok_s") / med("A", "decode_tok_s")
     if a_noise > 0.10:
-        print(f"VERDICT INCONCLUSIVE: baseline tok/s spread {a_noise:.1%} > 10%"); return
+        verdict(f"INCONCLUSIVE: baseline tok/s spread {a_noise:.1%} > 10%"); return
     if by["L"] and (med("L", "ring_mhz") or 1e9) > a.uncore_low_khz / 1000 + 100:
-        print("VERDICT INCONCLUSIVE: uncore writes not honoured (L ring above target)"); return
+        verdict("INCONCLUSIVE: uncore writes not honoured (L ring above target)"); return
     if (med("C", "pod_cpu_mhz") or 1e9) > a.core_cap_khz / 1000 + 100:
-        print("VERDICT INCONCLUSIVE: core cap not honoured"); return
+        verdict("INCONCLUSIVE: core cap not honoured"); return
     if (med("A", "pod_cpu_mhz") or 0) < a.core_cap_khz / 1000 + 200:
-        print("VERDICT INCONCLUSIVE: stock cores not above the cap (cap does not bind)"); return
+        verdict("INCONCLUSIVE: stock cores not above the cap (cap does not bind)"); return
     u_t = med("U", "ring_target_mhz")
     if u_t is not None and (med("U", "ring_mhz") or 0) < u_t - 100:
-        print("VERDICT INCONCLUSIVE: uncore pin not honoured (U ring below target)"); return
+        verdict("INCONCLUSIVE: uncore pin not honoured (U ring below target)"); return
     m = statistics.median
     uc_a_tok, uc_a_j = paired("UC", "A", "decode_tok_s"), paired("UC", "A", "margc_j_tok")
     uc_a_g = paired("UC", "A", "gross_j_tok")
@@ -365,6 +409,10 @@ def analyze(path, a):
     print(f"UC/C tok/s {m(uc_c_tok):.3f}  margc J/tok {m(uc_c_j):.3f}  gross J/tok {m(uc_c_g):.3f}  "
           f"conf(UC faster) {sign_conf([1 - r for r in uc_c_tok])}  conf(UC gross lower) {sign_conf([r - 1 for r in uc_c_g])}")
     print(f"U/A  tok/s {m(u_a_tok):.3f}  gross J/tok {m(u_a_g):.3f}")
+    for name, rs in (("UC/A tok/s", uc_a_tok), ("UC/A gross", uc_a_g), ("UC/A margc", uc_a_j),
+                     ("C/A tok/s", c_a_tok), ("C/A gross", c_a_g), ("UC/C tok/s", uc_c_tok), ("UC/C gross", uc_c_g)):
+        lo, hi = boot_ci(rs)
+        print(f"{name:10} per-round ratios {[round(r, 3) for r in rs]} median {m(rs):.3f} boot95 [{lo:.3f}, {hi:.3f}]")
     if l_a_tok:
         print(f"L/A  tok/s {m(l_a_tok):.3f}  (ring on decode's critical path if <= 0.95)")
     def lower(ratios, cut):
@@ -374,11 +422,11 @@ def analyze(path, a):
         or (lower(uc_c_j, 0.95) and lower(uc_c_g, 0.95))
     c_alone = m(c_a_tok) >= 0.97 and lower(c_a_j, 0.90) and lower(c_a_g, 0.90)
     if part1 and part2:
-        print("VERDICT SUPPORTED (H29 as stated: core cap + uncore pin)")
+        verdict("SUPPORTED (H29 as stated: core cap + uncore pin)")
     elif part1:
-        print("VERDICT REFUTED (split): core cap alone carries the saving; the uncore pin adds nothing")
+        verdict("REFUTED (split): core cap alone carries the saving; the uncore pin adds nothing")
     else:
-        print("VERDICT REFUTED: UC does not hold tok/s within 3% at >= 10% lower J/token (gross and common-idle marginal)"
+        verdict("REFUTED: UC does not hold tok/s within 3% at >= 10% lower J/token (gross and common-idle marginal)"
               + ("; core cap alone (C) does" if c_alone else ""))
 
 
@@ -392,12 +440,15 @@ def main():
     ap.add_argument("--core-cap-khz", type=int, default=2800000)
     ap.add_argument("--uncore-low-khz", type=int, default=2000000)
     ap.add_argument("--deadline-s", type=float, default=600)
-    ap.add_argument("--temp-abort-c", type=float, default=95)
+    ap.add_argument("--temp-abort-c", type=float, default=99)  # A3: 1 C under TjMax (coretemp temp1_crit 100 C); A2 run 1 used 95
     ap.add_argument("--swap-flag-pages", type=int, default=25600)  # 100 MiB of 4 KiB pages
     ap.add_argument("--out")
     ap.add_argument("--write-log")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--analyze")
+    ap.add_argument("--level", choices=loadtool.LEVELS, help="A2 background level (recorded; --analyze filters on it)")
+    ap.add_argument("--load-cpus", help="load.py window CPUs (default: load.py load_cpus())")
+    ap.add_argument("--load-window-s", type=float, default=10.0)
     a = ap.parse_args()
     if a.analyze:
         analyze(a.analyze, a); return
