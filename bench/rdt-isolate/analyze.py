@@ -22,6 +22,10 @@ P(R >= 0.8) is reported beside it.
 Amendment A2: with load.jsonl (bench/load/load.py sample windows, tagged by arm,
 taken with no hog running), a level whose background load is unmatched under
 load.py's TOLERANCE is INCONCLUSIVE; "verdict_if_matched" keeps the A1 result.
+Amendment A3: windows that carry a "phase" are scored by load.py's amendment 27
+rule (matched_a27: pre-window and during-arm covariates gate, outcomes are only
+reported); a level where any window saw fewer load containers than it runs is
+VOID (never scored, re-run).
 Python 3 standard library only.
 """
 
@@ -138,11 +142,12 @@ def bgload():
     return mod
 
 
-def load_summary(windows, metrics):
-    """Per-arm means of each matching metric over the background windows."""
+def load_summary(windows, metrics, phase=None):
+    """Per-arm means of each matching metric over the background windows (of one
+    phase, when given)."""
     out = {}
     for a in ARMS:
-        ws = [w for w in windows if w.get("tag") == a]
+        ws = [w for w in windows if w.get("tag") == a and (phase is None or w.get("phase") == phase)]
         out[a] = {"windows": len(ws)}
         for m in metrics:
             vals = [w[m] for w in ws if w.get(m) is not None]
@@ -160,11 +165,18 @@ def verdict(reqs, blocks, n_boot=10000, windows=None):
     if windows is not None:
         bl = bgload()
         m = bl.matched(windows)
-        main.update(load_matched=m["matched"], load_checks=m["checks"],
-                    load_by_arm=load_summary(windows, bl.TOLERANCE),
+        main.update(load_matched=m["matched"], load_checks=m["checks"], load_rule=m["rule"],
                     verdict_if_matched=main["verdict"])
+        if m["rule"] == "amendment-27":
+            main.update(load_outcomes=m["outcomes"], load_unsettled=m["unsettled"],
+                        load_by_arm={ph: load_summary(windows, bl.TOLERANCE, ph) for ph in ("pre", "during")})
+            if any(w.get("phase") == "pre" for w in windows):
+                main["settle_s"] = {a: [w.get("settle_s") for w in windows
+                                        if w.get("tag") == a and w.get("phase") == "pre"] for a in ARMS}
+        else:
+            main["load_by_arm"] = load_summary(windows, bl.TOLERANCE)
         if not m["matched"]:
-            main["verdict"] = "INCONCLUSIVE"
+            main["verdict"] = "VOID" if m.get("void") else "INCONCLUSIVE"
             main["reason"] = m["verdict"].split(": ", 1)[1]
     return main
 
