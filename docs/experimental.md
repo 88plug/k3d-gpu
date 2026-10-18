@@ -183,7 +183,7 @@ by how many families the feature covers.
   when the cluster's snapshotter is not overlayfs, or when the model image is not
   pinned by digest. The template is for CPU-resident weights: a GPU or NPU runtime
   copies the weights into per-process device buffers, so it requests no device. Whether the replicas then share one page-cache copy, and what
-  that does to per-pod memory and ready time, is EXPERIMENTS.md H28 (PENDING);
+  that does to per-pod memory and ready time, is EXPERIMENTS.md H28 (SUPPORTED);
   no number is claimed until the probe in `bench/zero-copy-models/` has run.
 
 ### 3. `npu-turbo`: NPU turbo, plus HW-scheduler guidance

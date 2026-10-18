@@ -413,7 +413,7 @@ delivery, mmap tensor sharing, overlay/EROFS page-cache sharing), so no "first" 
 is made for it. No prior art found (search log [provenance:P280]) that measures
 per-pod PSS, RSS and memcg charge, plus time-to-ready, for N co-located agent pods
 mmapping one model from an image volume versus a per-pod copy, on containerd 2.3 /
-k3s v1.37. Only that measured delta ([ledger:H28], PENDING) may be claimed. Coverage
+k3s v1.37. Only that measured delta ([ledger:H28], SUPPORTED) may be claimed. Coverage
 is moderate: the WebSearch budget ran out, arXiv's API returned HTTP 429 and SearXNG
 returned only noise; Exa, GitHub search and direct fetches ran.
 

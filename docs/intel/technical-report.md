@@ -8,9 +8,9 @@ k3d-gpu turns one Linux host into a single-node k3s cluster (k3d) that detects t
 
 This report covers what was measured, and how. Every result comes from one host: an i9-13900T (Raptor Lake-S, 8 P-cores and 16 E-cores, UHD 770 iGPU with no XMX, AVX-VNNI, no AMX, no NPU). It is a T-SKU rated at 35 W base power, but its firmware runs PL1 = PL2 = 117 W, so it does not run the T-series 35 W envelope.
 
-- Fourteen hypotheses are SUPPORTED. All fourteen are scoped to that host.
+- Fifteen hypotheses are SUPPORTED. All fifteen are scoped to that host.
 - Eight are REFUTED. Six of them changed shipped defaults.
-- Sixteen are INCONCLUSIVE, mostly because the shared host throttles or its load was unmatched. Five are PENDING: two from the agent benchmark (H43, H45), pre-registered on 2026-10-17 and not run in its first campaign, and H49 (k3d-gpu vs EAT stock inside EAT, both arms interleaved in one hold), pre-registered on 2026-10-18.
+- Sixteen are INCONCLUSIVE, mostly because the shared host throttles or its load was unmatched. Four are PENDING: H5, two from the agent benchmark (H43, H45), pre-registered on 2026-10-17 and not run in its first campaign, and H49 (k3d-gpu vs EAT stock inside EAT, both arms interleaved in one hold), pre-registered on 2026-10-18.
 - Every other Intel family is detected and configured in fixture tests only. None has a measurement.
 
 No world-first, superlative or priority claim is made; [docs/provenance.md](../provenance.md) supports none.
@@ -64,6 +64,7 @@ The host is a shared, live machine: about 53 other containers, about 80 W idle p
 | H31 | Under matched background load, the `k3d-gpu up` + `agent up` defaults (OVMS int4 on the 16 P-cores with CPU Fast Draft) decoded Qwen3-4B at 15.60 tok/s against llama.cpp b11706 defaults at 10.31 tok/s (Q4_K_M, all CPUs), 3/3 rounds [ledger:H31] | One host, `typical` load, n = 12 requests per arm, 128 tokens. Configuration on the same CPU, not a GPU |
 | H32 | Under matched background load (amendment 27), the `k3d-gpu up` + `agent up` defaults (OVMS int4 on the 16 P-cores with CPU Fast Draft) decoded Qwen3-4B at 16.15 tok/s against plain OVMS 2026.4.1 defaults at 10.14 tok/s (same int4 weights; plain OVMS picked the iGPU), 3/3 rounds [ledger:H32] | One host, `typical` load, n = 12 requests per arm, 128 tokens. Compares two device choices, so it says nothing about OVMS on the same device |
 | H25 | With OVMS's shipped prefix caching on, an added agent that sends the same 1538-token system prompt and tools got its first chunk in 1.02 s against 10.87 s with caching off: 10.61x, CI 10.36-10.74, 9/9 round pairs ≥ 4x, under matched `typical` background load (amendment 27) [ledger:H25] | One host, Qwen3-4B int4 on the 16 P-cores, one prefix shape; `heavy` load and memory per agent not measured. Measures a shipped OVMS feature; k3d-gpu enables nothing |
+| H28 | Eight pods that mmap one 1 GiB model through an image volume shared one page-cache copy: PSS 132.5 MiB per pod and 1.00x the model size on the node, against 1028.5 MiB and 9.00x for pods that copy it into an emptyDir; they were ready in 2980 ms vs 6333 ms (0.47x, CI 0.45-0.55, complete separation), under matched `typical` background load (amendment 27) [ledger:H28] | One host, overlayfs, N = 8, a 1 GiB file read page by page, CPU-resident weights. The time part clears 0.5x by a small margin |
 | H40 | The agent harness reproduces the BFCL board: bf16 Qwen3-4B-Instruct-2507 on vLLM CUDA scored 88.0% on the fixed 100-id subset in BFCL's own mode (board-weighted 84.9%, band 77.9-91.9%), every category inside its binomial interval [ledger:H40] | A check of the harness, not of the hardware; one 100-id subset, one run, on the NVIDIA dGPU |
 
 ### REFUTED (all but H27 and H48 changed a default)
@@ -91,7 +92,7 @@ The host is a shared, live machine: about 53 other containers, about 80 W idle p
 | H26 | E-core L2-cluster confinement of a DRAM-bandwidth neighbour: the measured R (p95 inflation, cluster over spread) was 0.83, CI 0.61-0.87, at `typical` background load, which is not a verdict [ledger:H26] | Background load unmatched across arms at both levels (hog carry-over into the load windows; the `heavy` load was removed mid-run) |
 | H41, H42, H44, H46 | Agent benchmark on Intel's EAT banking flow (B24) and BFCL S100 at `typical` load. The k3d-gpu CPU stack (OVMS int4, P-cores) passed 20/24 banking tasks (task median 15.6 s); the RTX 4000 AWQ stack finished them in 0.12x that time; EAT's stock vLLM CPU bf16 stack finished 1 of 24 in its hold. BFCL S100 in server-fc mode: OVMS int4 passed 81 of 100 ids, bf16 on vLLM CUDA 88 of 100. Heavy E-core load stretched the CPU stack's p95 turn 2.59x (CI 0.87-2.94) [ledger:H41] [ledger:H42] [ledger:H44] [ledger:H46] | Background load unmatched across holds (swap use and throttle on the shared host); each arm ran one block, not ABBA; B1's J per success undefined |
 
-PENDING with a pre-registration: H5 (prefill guard on/off with an E-core neighbour), H28 (image-volume model sharing), and the agent-benchmark rows its first campaign did not run, H43 (coding agent under E-core load) and H45 (graded agents per box) ([agent-benchmarks.md](../agent-benchmarks.md)). The external bake-offs are in the tables above: the Ollama, llama.cpp and plain OVMS ones are all decided.
+PENDING with a pre-registration: H5 (prefill guard on/off with an E-core neighbour), and the agent-benchmark rows its first campaign did not run, H43 (coding agent under E-core load) and H45 (graded agents per box) ([agent-benchmarks.md](../agent-benchmarks.md)). The external bake-offs are in the tables above: the Ollama, llama.cpp and plain OVMS ones are all decided.
 
 ## Per-family support matrix
 
