@@ -14,11 +14,18 @@
 #   2. The gateway Deployment gets K3D_GPU_REMOTE_OPENAI_API_KEY as a secretKeyRef to
 #      it (kubectl set env --from=secret). EAT's genai-gateway chart renders its env as
 #      literals only (templates/deployment.yaml), so Helm values would hold the key in
-#      clear text; a later `helm upgrade` drops this env, rerun this script then.
-#   3. POST /model/new registers the model with api_key "os.environ/K3D_GPU_REMOTE_OPENAI_API_KEY",
-#      which LiteLLM resolves from the pod's environment, so the key is in neither the
-#      request nor LiteLLM's database. EAT's register playbook is not used: it fixes
-#      api_key to "none". Skipped when GET /models already lists the model.
+#      clear text.
+#   3. The model goes into the gateway's config file (ConfigMap genai-gateway-config,
+#      proxy_config.yaml) as a model_list entry with api_key
+#      "os.environ/K3D_GPU_REMOTE_OPENAI_API_KEY", between k3d-gpu marker lines, and the
+#      gateway restarts to load it. LiteLLM resolves os.environ/ references only in that
+#      file: a model added with POST /model/new is stored in its database as given, and
+#      the reference string itself goes out as the bearer token (the endpoint answers
+#      401). So the key is in neither LiteLLM's database nor the ConfigMap. EAT's
+#      register playbook is not used: it fixes api_key to "none". A database entry an
+#      older eat-remote.sh made for the same model and endpoint is deleted.
+#   A later `helm upgrade` of the gateway drops the env and the config entry: rerun
+#   this script then. A config that has a model_list of its own is left alone.
 #
 # Then check it with a sampled, short request (a shared endpoint may not serve greedy):
 #   EAT_MODEL=<model> EAT_TEMPERATURE=0.6 EAT_MAX_TOKENS=64 integrations/eat/eat-check.sh
@@ -36,6 +43,9 @@ GW_NS=genai-gateway
 GW_DEPLOY=genai-gateway-deployment
 GW_SVC=genai-gateway-service
 GW_PORT="${EAT_GATEWAY_PORT:-4000}"
+GW_CONFIG=genai-gateway-config
+MARK_BEGIN="# k3d-gpu eat-remote: begin"
+MARK_END="# k3d-gpu eat-remote: end"
 KEY_ENV=K3D_GPU_REMOTE_OPENAI_API_KEY
 LOCAL_PORT="${EAT_REMOTE_LOCAL_PORT:-14000}"
 
@@ -74,6 +84,24 @@ remote_py secret --namespace "${GW_NS}" --remote "${base}" --model "${model}" ${
 info "Gateway env ${KEY_ENV} from that Secret (secretKeyRef)..."
 kubectl -n "${GW_NS}" set env "deployment/${GW_DEPLOY}" --from=secret/k3d-gpu-llm --keys=OPENAI_API_KEY \
     --prefix=K3D_GPU_REMOTE_ >/dev/null
+
+info "Model ${model} in the gateway's config file (ConfigMap ${GW_NS}/${GW_CONFIG})..."
+cfg=$(kubectl -n "${GW_NS}" get configmap "${GW_CONFIG}" -o json | jq -r '.data["proxy_config.yaml"] // empty') \
+    || err "cannot read ConfigMap ${GW_NS}/${GW_CONFIG}"
+[ -n "${cfg}" ] || err "ConfigMap ${GW_NS}/${GW_CONFIG} has no proxy_config.yaml"
+# Drop the block an earlier run wrote, then append this run's.
+cfg=$(sed "/^${MARK_BEGIN}\$/,/^${MARK_END}\$/d" <<< "${cfg}")
+grep -q '^model_list:' <<< "${cfg}" \
+    && err "the gateway config has its own model_list; add ${model} there with api_key os.environ/${KEY_ENV}"
+entry=$(jq -cn --arg m "${model}" --arg b "${base}" --arg k "os.environ/${KEY_ENV}" \
+    '{model_name: $m, litellm_params: {model: ("openai/" + $m), api_base: $b, api_key: $k}, model_info: {mode: "chat"}}')
+cfg=$(printf '%s\n%s\nmodel_list:\n  - %s\n%s\n' "${cfg}" "${MARK_BEGIN}" "${entry}" "${MARK_END}")
+kubectl -n "${GW_NS}" patch configmap "${GW_CONFIG}" --type merge \
+    -p "$(jq -cn --arg c "${cfg}" '{data: {"proxy_config.yaml": $c}}')" >/dev/null
+# LiteLLM reads its config at start: a new pod template when the entry changes.
+sum=$(printf '%s' "${entry}" | sha256sum | cut -c1-16)
+kubectl -n "${GW_NS}" patch deployment "${GW_DEPLOY}" --type merge \
+    -p "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"k3d-gpu.io/eat-remote\":\"${sum}\"}}}}}" >/dev/null
 kubectl -n "${GW_NS}" rollout status "deployment/${GW_DEPLOY}" --timeout=300s
 
 kubectl -n "${GW_NS}" port-forward "svc/${GW_SVC}" "${LOCAL_PORT}:${GW_PORT}" >/dev/null 2>&1 &
@@ -82,19 +110,18 @@ trap 'kill "${pf}" 2>/dev/null || true' EXIT
 gw="http://127.0.0.1:${LOCAL_PORT}"
 # gw_curl ARGS...: curl to the gateway with the master key header read from stdin.
 gw_curl() { curl -sS --noproxy '*' -H @- "$@" <<< "Authorization: Bearer ${master}"; }
-listed=""
+minfo=""
 for _ in $(seq 1 30); do
-    listed=$(gw_curl -f "${gw}/models?return_wildcard_routes=false" 2>/dev/null) && break
+    minfo=$(gw_curl -f "${gw}/model/info" 2>/dev/null) && break
     sleep 1
 done
-[ -n "${listed}" ] || err "the gateway did not answer GET /models through the port-forward"
-if jq -e --arg m "${model}" '.data[]? | select(.id == $m)' <<< "${listed}" >/dev/null; then
-    info "LiteLLM already serves ${model}; nothing to register"
-    exit 0
-fi
-body=$(jq -cn --arg m "${model}" --arg b "${base}" --arg k "os.environ/${KEY_ENV}" \
-    '{model_name: $m, litellm_params: {model: ("openai/" + $m), api_base: $b, api_key: $k}, model_info: {mode: "chat"}}')
-info "Registering ${model} in LiteLLM (POST /model/new)..."
-gw_curl -f -X POST "${gw}/model/new" -H 'content-type: application/json' -d "${body}" >/dev/null \
-    || err "LiteLLM refused /model/new"
+[ -n "${minfo}" ] || err "the gateway did not answer GET /model/info through the port-forward"
+for id in $(jq -r --arg m "${model}" --arg b "${base}" \
+    '.data[]? | select(.model_name == $m and .litellm_params.api_base == $b and .model_info.db_model == true) | .model_info.id' <<< "${minfo}"); do
+    info "Deleting ${model} from LiteLLM's database (id ${id}, an older eat-remote.sh registration)..."
+    gw_curl -f -X POST "${gw}/model/delete" -H 'content-type: application/json' -d "$(jq -cn --arg i "${id}" '{id: $i}')" >/dev/null \
+        || err "LiteLLM refused /model/delete for ${id}"
+done
+gw_curl -f "${gw}/models?return_wildcard_routes=false" | jq -e --arg m "${model}" '.data[]? | select(.id == $m)' >/dev/null \
+    || err "the gateway does not list ${model} after the restart: kubectl -n ${GW_NS} logs deploy/${GW_DEPLOY}"
 info "Done. Check: EAT_MODEL=${model} EAT_TEMPERATURE=0.6 EAT_MAX_TOKENS=64 ${HERE}/eat-check.sh"

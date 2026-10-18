@@ -278,6 +278,24 @@ out=$(K3D_GPU_VENDORS=none run eval 'VENDORS_REQUEST=none; detect_intel() { :; }
 has "vendors none: nothing active" "${out}" "n=0"
 has "vendors none: verify passes" "${out}" "No accelerators requested; cluster ready."
 
+# ---- up waits for cluster DNS ---------------------------------------------------------
+# Node Ready comes before CoreDNS: k3s creates its Deployment only then, and a pod that
+# resolves a public name in that window gets EAI_AGAIN ("Temporary failure in name
+# resolution"). up returns only once CoreDNS is rolled out.
+out=$(run eval 'DNS_WAIT_S=3; kubectl() { echo "kubectl $*" >> "${STUB_STATE}/dns.log"; [ "$*" != "-n kube-system get deployment/coredns" ] || [ -e "${STUB_STATE}/dns-n" ] || { touch "${STUB_STATE}/dns-n"; return 1; }; }; sleep() { :; }; wait_cluster_dns; cat "${STUB_STATE}/dns.log"; rm -f "${STUB_STATE}/dns.log"')
+rm -f "${S}/dns-n"
+has "up: waits for the CoreDNS Deployment to exist" "${out}" "kubectl -n kube-system get deployment/coredns"
+has "up: waits for its rollout" "${out}" "kubectl -n kube-system rollout status deployment/coredns"
+out=$(run eval 'DNS_WAIT_S=2; kubectl() { echo "kubectl $*" >> "${STUB_STATE}/dns.log"; [ "$1 $2 $3" != "-n kube-system get" ]; }; sleep() { :; }; wait_cluster_dns; echo rc=$?; cat "${STUB_STATE}/dns.log"; rm -f "${STUB_STATE}/dns.log"')
+has "up: no CoreDNS Deployment -> warns, does not fail" "${out}" "no CoreDNS Deployment"
+has "up: no CoreDNS Deployment -> rc 0" "${out}" "rc=0"
+lacks "up: no CoreDNS Deployment -> no rollout wait" "${out}" "rollout status"
+out=$(run eval 'K3S_ARGS="--disable=coredns"; kubectl() { echo "kubectl $*" >> "${STUB_STATE}/dns.log"; }; wait_cluster_dns; echo rc=$?; cat "${STUB_STATE}/dns.log" 2>/dev/null; rm -f "${STUB_STATE}/dns.log"')
+lacks "up: --disable=coredns -> no DNS wait" "${out}" "coredns"
+has "up: --disable=coredns -> rc 0" "${out}" "rc=0"
+out=$(run eval 'declare -f cmd_up')
+has "up: cmd_up waits for cluster DNS" "${out}" "wait_cluster_dns"
+
 # ---- redaction: the key never left the endpoint, the Secret's stdin and env --------
 for f in "${S}"/kubectl.log "${S}"/k3d.log "${S}"/self.log "${S}"/endpoint.log "${S}"/applied "${S}"/ui.yaml "${ALL_OUT}"; do
     [ -f "${f}" ] || continue

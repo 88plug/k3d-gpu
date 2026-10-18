@@ -68,7 +68,7 @@
 
 set -euo pipefail
 
-VERSION="0.1.55"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.56"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 # The node image defaults to the tag built from this launcher's own release
 # (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
@@ -4205,6 +4205,7 @@ cmd_up() {
 
     info "Waiting for nodes Ready..."
     kubectl wait --for=condition=Ready nodes --all --timeout=120s
+    wait_cluster_dns
     if intel_dra; then check_dra_api; fi
 
     # Favored cores (top CPPC highest_perf) as a node annotation; once the balloons
@@ -4239,6 +4240,28 @@ cmd_up() {
     exp_post_up
 
     verify_gpus
+}
+
+# wait_cluster_dns: returns once CoreDNS is rolled out. A node is Ready before k3s
+# has created the CoreDNS Deployment (and before its image is pulled), and in that
+# window the kube-dns Service has no endpoints: a pod's lookup is rejected at once and
+# glibc reports EAI_AGAIN, "Temporary failure in name resolution", for any name.
+# Skipped when k3s runs without its CoreDNS (K3D_GPU_K3S_ARGS --disable=coredns).
+DNS_WAIT_S=60
+wait_cluster_dns() {
+    [[ " ${K3S_ARGS} " != *" --disable=coredns "* ]] || return 0
+    info "Waiting for cluster DNS (CoreDNS)..."
+    local i
+    for ((i = 0; i < DNS_WAIT_S; i++)); do
+        kubectl -n kube-system get deployment/coredns >/dev/null 2>&1 && break
+        sleep 1
+    done
+    if [ "${i}" -ge "${DNS_WAIT_S}" ]; then
+        warn "no CoreDNS Deployment after ${DNS_WAIT_S} s; pods may not resolve names yet"
+        return 0
+    fi
+    kubectl -n kube-system rollout status deployment/coredns --timeout=180s >/dev/null \
+        || warn "CoreDNS is not ready; pods may not resolve names yet (kubectl -n kube-system get pods -l k8s-app=kube-dns)"
 }
 
 # k3d pulls the node image only when it is absent locally (k3d-io/k3d
