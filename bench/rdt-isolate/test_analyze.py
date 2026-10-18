@@ -147,6 +147,57 @@ class MatchedLoad(unittest.TestCase):
         self.assertEqual(analyze.verdict(reqs, blocks, n_boot=100, windows=w)["verdict"], "REFUTED")
 
 
+def phased(during_busy=None, pre_throttle=None, running=3):
+    """Amendment A3 windows: one pre-window and 4 during windows per block (12 blocks);
+    the hog raises throttle and package W during ME15 only (an outcome)."""
+    out = [{"tag": "baseline", "level": "typical", "phase": "baseline", "busy_pct": 40.0,
+            "throttle_per_min": 100.0, "load_expected": 3, "load_running": 3}]
+    for arm in ("Q", "ME15", "ME4", "MC4") * 3:
+        base = {"tag": arm, "level": "typical", "load1": 20.0, "swap_used_mib": 1000.0,
+                "swap_delta_mib": 0.0, "load_expected": 3, "load_running": running}
+        out.append(dict(base, phase="pre", busy_pct=40.0, pkg_w=60.0, settled=True, settle_s=5,
+                        throttle_per_min=(pre_throttle or {}).get(arm, 100.0)))
+        for _ in range(4):
+            out.append(dict(base, phase="during", busy_pct=(during_busy or {}).get(arm, 41.0),
+                            pkg_w=90.0 if arm == "ME15" else 70.0,
+                            throttle_per_min=2000.0 if arm == "ME15" else 150.0))
+    return out
+
+
+class Amendment27(unittest.TestCase):
+    """Amendment A3: windows with a phase are scored by load.py matched_a27."""
+
+    def setUp(self):
+        self.reqs, self.blocks = synth(2.3, {"Q": 1.0, "ME15": 2.0, "ME4": 1.6, "MC4": 1.55})
+
+    def test_treatment_outcomes_do_not_gate(self):
+        out = analyze.verdict(self.reqs, self.blocks, n_boot=200, windows=phased())
+        self.assertEqual(out["load_rule"], "amendment-27")
+        self.assertTrue(out["load_matched"], out.get("reason"))
+        self.assertEqual(out["verdict"], "REFUTED")
+        self.assertEqual(out["load_by_arm"]["pre"]["MC4"]["windows"], 3)
+        self.assertEqual(out["load_by_arm"]["during"]["ME15"]["windows"], 12)
+        self.assertEqual(out["settle_s"]["Q"], [5, 5, 5])
+        thr = [o for o in out["load_outcomes"] if o["metric"] == "throttle_per_min"][0]
+        self.assertGreater(thr["spread"], 1000)
+
+    def test_during_busy_drift_is_inconclusive(self):
+        out = analyze.verdict(self.reqs, self.blocks, n_boot=100, windows=phased(during_busy={"ME15": 60.0}))
+        self.assertEqual(out["verdict"], "INCONCLUSIVE")
+        self.assertEqual(out["verdict_if_matched"], "REFUTED")
+        self.assertIn("during busy_pct", out["reason"])
+
+    def test_pre_throttle_drift_is_inconclusive(self):
+        out = analyze.verdict(self.reqs, self.blocks, n_boot=100, windows=phased(pre_throttle={"ME4": 400.0}))
+        self.assertEqual(out["verdict"], "INCONCLUSIVE")
+        self.assertIn("pre throttle_per_min", out["reason"])
+
+    def test_missing_load_is_void(self):
+        out = analyze.verdict(self.reqs, self.blocks, n_boot=100, windows=phased(running=2))
+        self.assertEqual(out["verdict"], "VOID")
+        self.assertIn("load missing", out["reason"])
+
+
 class Client(unittest.TestCase):
     def test_prompts_are_unique(self):
         self.assertEqual(len({client.prompt(n) for n in range(1000)}), 1000)

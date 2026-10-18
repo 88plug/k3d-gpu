@@ -7,7 +7,12 @@
 # runs all 12 blocks under the same controlled background load (bench/load/load.py
 # on the E-cores); before each hog starts, 3 x 5 s load windows are sampled with
 # no hog running, and analyze.py makes the level INCONCLUSIVE if they are
-# unmatched across arms. Run it under the live lock:
+# unmatched across arms. Amendment A3 (amendment 27 load rule, matched_a27): per
+# level, 2 x 10 s baseline windows before the first block; before each hog starts,
+# load.py settle (5 s windows until busy and throttle are back at the baseline, at
+# most 60 s; its last window is the block's pre-window) replaces the A2 windows;
+# while the block's requests run, 5 s during windows with busy taken over the load
+# CPUs minus the hog's cpuset. Run it under the live lock:
 #
 #   flock -w 14400 "$LOCK" bench/rdt-isolate/run.sh
 #
@@ -19,8 +24,8 @@
 # sudo is non-interactive: sudo -A when SUDO_ASKPASS is set, else sudo -n; a read
 # that fails records null and the analysis then says INCONCLUSIVE.
 # Env: OUT results dir (default ./h26-out), K3D_GPU_IMAGE node image (optional),
-#      K3D_GPU_CLUSTER (default k3dgpu-i-rdt-isolate), ABORT_S (default 1080, per level),
-#      TOTAL_S (default 2340, the whole run),
+#      K3D_GPU_CLUSTER (default k3dgpu-r-rdt-isolate), ABORT_S (default 1260, per level),
+#      TOTAL_S (default 1380, the whole run, so the hold with cleanup stays under 25 min),
 #      MODELS (optional) host dir holding OpenVINO/Qwen3-4B-int4-ov as a git+LFS clone;
 #      it is copied into the agent's ovms-models PVC before `agent up`, so the
 #      locked run does not wait on a Hugging Face download (the pull init then
@@ -30,9 +35,9 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "${HERE}/../.." && pwd)
 OUT=${OUT:-${PWD}/h26-out}
-ABORT_S=${ABORT_S:-1080}
-TOTAL_S=${TOTAL_S:-2340}
-NAME=${K3D_GPU_CLUSTER:-k3dgpu-i-rdt-isolate}
+ABORT_S=${ABORT_S:-1260}
+TOTAL_S=${TOTAL_S:-1380}
+NAME=${K3D_GPU_CLUSTER:-k3dgpu-r-rdt-isolate}
 LEVELS=${LEVELS:-typical heavy}
 mkdir -p "${OUT}"
 KUBECONFIG="${OUT}/kubeconfig-$$"
@@ -40,11 +45,12 @@ export KUBECONFIG K3D_GPU_CLUSTER="${NAME}" K3D_GPU_SHARE="${K3D_GPU_SHARE:-${RO
 L=("${ROOT}/scripts/k3d-gpu")
 NOISY=("${ROOT}/bench/noisy.sh")
 LOAD=(python3 "${ROOT}/bench/load/load.py")
-PORT=18080 PF=""
+PORT=18080 PF="" DUR=""
 LOG="${OUT}/run.log"
 log() { echo "$(date -u +%FT%TZ) $*" | tee -a "${LOG}"; }
 cleanup() {
     [ -z "${PF}" ] || kill "${PF}" 2>/dev/null
+    [ -z "${DUR}" ] || kill "${DUR}" 2>/dev/null
     "${NOISY[@]}" stop >/dev/null 2>&1
     log "load stop: $("${LOAD[@]}" stop 2>&1)"
     log "deleting cluster ${NAME}"
@@ -170,11 +176,13 @@ if [ $((TOTAL_S - SECONDS)) -lt 600 ]; then
 fi
 D="${OUT}/${level}"
 mkdir -p "${D}"
-REQ="${D}/requests.jsonl" BLK="${D}/blocks.jsonl" LJ="${D}/load.jsonl"
-: > "${REQ}"; : > "${BLK}"; : > "${LJ}"
+REQ="${D}/requests.jsonl" BLK="${D}/blocks.jsonl" LJ="${D}/load.jsonl" BJ="${D}/baseline.jsonl"
+: > "${REQ}"; : > "${BLK}"; : > "${LJ}"; : > "${BJ}"
 LT0=${SECONDS}
 log "level ${level}: load $("${LOAD[@]}" start --level "${level}" --ttl 1500)"
 sleep 20  # let the background reach its steady state before the first window
+# A3: the level reference for every settle gap, taken once before the first block.
+"${LOAD[@]}" sample --seconds 10 --windows 2 --phase baseline --tag baseline --level "${level}" --out "${BJ}"
 r0=$(restarts)
 block=0
 for spec in "1 Q" "1 ME15" "1 ME4" "1 MC4" "2 MC4" "2 ME4" "2 ME15" "2 Q" "3 Q" "3 ME15" "3 ME4" "3 MC4"; do
@@ -185,8 +193,9 @@ for spec in "1 Q" "1 ME15" "1 ME4" "1 MC4" "2 MC4" "2 ME4" "2 ME15" "2 Q" "3 Q" 
         echo "{\"block\": ${block}, \"round\": ${rd}, \"arm\": \"${arm}\", \"void\": true, \"reason\": \"abort budget\"}" >> "${BLK}"
         continue
     fi
-    # A2: background load with no hog and the agent idle, tagged with the coming arm.
-    "${LOAD[@]}" sample --seconds 5 --windows 3 --tag "${arm}" --level "${level}" --out "${LJ}"
+    # A3: settle gap with no hog and the agent idle; its last window is this arm's pre-window.
+    "${LOAD[@]}" settle --baseline "${BJ}" --tag "${arm}" --level "${level}" --out "${LJ}" 2>&1 \
+        | sed "s/^/$(date -u +%FT%TZ) level ${level} block ${block} ${arm} /" | tee -a "${LOG}"
     ncpus=-
     case "${arm}" in
         ME15) "${NOISY[@]}" start --cores efficient --stressor stream --workers 15 > "${OUT}/n.txt" 2>&1 ;;
@@ -196,6 +205,10 @@ for spec in "1 Q" "1 ME15" "1 ME4" "1 MC4" "2 MC4" "2 ME4" "2 ME15" "2 Q" "3 Q" 
     esac
     [ "${arm}" = Q ] || ncpus=$(grep -o 'Cpus_allowed_list:[[:space:]]*[0-9,-]*' "${OUT}/n.txt" | awk '{print $2}')
     sleep 5
+    # A3: during windows while the requests run, busy over the load CPUs the hog does not hold.
+    "${LOAD[@]}" sample --seconds 5 --windows 60 --phase during --treatment-cpus "${ncpus/#-/}" \
+        --tag "${arm}" --level "${level}" --out "${LJ}" &
+    DUR=$!
     e0=$(rapl); t0=$(throttles); s0=$(pswpin); read -r b0 j0 <<< "$(pbusy)"
     imc "${block}" > "${OUT}/imc-${block}.gbs" &
     ip=$!
@@ -204,6 +217,7 @@ for spec in "1 Q" "1 ME15" "1 ME4" "1 MC4" "2 MC4" "2 ME4" "2 ME15" "2 Q" "3 Q" 
     pp=$!
     python3 "${HERE}/client.py" --base-url "${BASE}" --model "${MODEL}" --arm "${arm}" --block "${block}" --round "${rd}" >> "${REQ}"
     wait "${ip}" "${pp}"
+    kill "${DUR}" 2>/dev/null; wait "${DUR}" 2>/dev/null; DUR=""
     e1=$(rapl); t1=$(throttles); s1=$(pswpin); read -r b1 j1 <<< "$(pbusy)"
     [ "${arm}" = Q ] || "${NOISY[@]}" stop >> "${LOG}" 2>&1
     python3 - "${block}" "${rd}" "${arm}" "${ncpus:--}" "$(cat "${OUT}/psr-${block}.txt")" "${EGROUPS}" "$(cat "${OUT}/imc-${block}.gbs")" "${e0}" "${e1}" "$((t1 - t0))" "$((s1 - s0))" \
