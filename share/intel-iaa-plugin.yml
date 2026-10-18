@@ -35,7 +35,7 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: spec.nodeName
-        image: intel/intel-iaa-plugin:0.37.1
+        image: intel/intel-iaa-plugin:0.37.1@sha256:6391dcd3b2f3ca487675503e850db5ec77ec3dd2054867e1de196d4986bc60bc
         imagePullPolicy: IfNotPresent
         securityContext:
           seLinuxOptions:

@@ -31,7 +31,7 @@ spec:
       priorityClassName: "system-node-critical"
       containers:
         - name: intel-npu-plugin
-          image: intel/intel-npu-plugin:0.37.1
+          image: intel/intel-npu-plugin:0.37.1@sha256:cdcf6f4c662c0d1ee4e3fc841a56e1a097706c880f8f98fd3ff51d7a8f02b547
           imagePullPolicy: IfNotPresent
           env:
             - name: NODE_NAME

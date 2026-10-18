@@ -35,7 +35,7 @@ spec:
       priorityClassName: "system-node-critical"
       containers:
         - name: intel-gpu-plugin
-          image: intel/intel-gpu-plugin:0.37.1
+          image: intel/intel-gpu-plugin:0.37.1@sha256:004641b2547d58f1eadce58473fa160ad71377de1eb588cf1f82832387bf3e33
           imagePullPolicy: IfNotPresent
           args:
             - "-wsl"
@@ -80,7 +80,7 @@ spec:
         # Level Zero sidecar: loads Intel compute-runtime against /dev/dxg and the
         # driver store, and tells the plugin which Level Zero devices are Intel GPUs.
         - name: intel-gpu-levelzero
-          image: intel/intel-gpu-levelzero:0.37.1
+          image: intel/intel-gpu-levelzero:0.37.1@sha256:edf037861d5c6c8b15a76a595645564f5b53858c641345e7b630b31b05cf9c5c
           imagePullPolicy: IfNotPresent
           args:
             - "-v=2"
