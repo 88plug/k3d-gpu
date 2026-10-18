@@ -1,0 +1,38 @@
+# k3d-gpu values for the GenAI Gateway's Langfuse trace stack, merged by
+# gateway-charts.py over a copy of EAT's genai-gateway-trace/charts/langfuse/values.yaml.
+# deploy-genai-gateway.yml installs langfuse/langfuse --version 1.5.30 (pinned by
+# EAT) with that file as its values. Nothing in EAT's checkout is edited.
+#
+# Every image is name:tag@sha256 at the tag the chart rendered on 2026-10-18 (Langfuse
+# appVersion 3.173.0; EAT's bitnamilegacy repositories at the subcharts' default
+# tags), so the pins change no behaviour. Digests: `scripts/images-lock digest`.
+
+langfuse:
+  web:
+    image:
+      repository: langfuse/langfuse
+      tag: "3.173.0@sha256:dd9874fb6a29aa6b3070754760876b42d0e440bb34537d7196d51bc15abb0068"
+  worker:
+    image:
+      repository: langfuse/langfuse-worker
+      tag: "3.173.0@sha256:5e7a487540a61b2c419e869684915839b412fa46aaaf0fd43022f25f8875ba4f"
+postgresql:
+  image:
+    repository: bitnamilegacy/postgresql
+    tag: "17.3.0-debian-12-r1@sha256:51db17ce1aa19e1b4ba65bf4ff45f0afcde6b59e44623d0005142703b91f4a1e"
+redis:
+  image:
+    repository: bitnamilegacy/valkey
+    tag: "8.0.2-debian-12-r2@sha256:aab90418824b01d493189fe67607517eaa7a8c9c49a3c68d150b20f0eb968196"
+clickhouse:
+  image:
+    repository: bitnamilegacy/clickhouse
+    tag: "25.2.1-debian-12-r0@sha256:3c1f49548968dce24832ea2487647fe80dcfbd832d2dbb2e9e735629d7c7fc31"
+  zookeeper:
+    image:
+      repository: bitnamilegacy/zookeeper
+      tag: "3.9.3-debian-12-r8@sha256:8e7392e91b6cacfa951cd4a0d9c3a2c51c09a494084cbb6d62d1eab7b30c36d8"
+s3:
+  image:
+    repository: bitnamilegacy/minio
+    tag: "2024.12.18-debian-12-r1@sha256:c0ede65eb88e47138470202c517bacf55ab3c27df848030b7b46e69d34b7d192"

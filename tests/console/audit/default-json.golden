@@ -73,12 +73,12 @@
   ],
   "cluster": "gpu",
   "lock": {
-    "images": 38,
+    "images": 51,
     "k3s_tag": "v1.37.1-k3s1"
   },
   "schema": "k3d-gpu.audit/v1",
   "summary": [
-    "audit PASS: 0 of 10 checks failed (images.lock: 38 images, k3s v1.37.1-k3s1)"
+    "audit PASS: 0 of 10 checks failed (images.lock: 51 images, k3s v1.37.1-k3s1)"
   ],
   "verdict": "pass"
 }

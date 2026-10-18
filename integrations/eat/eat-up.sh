@@ -77,5 +77,6 @@ docker run --rm --network host \
     -v "${EAT_KUBECONFIG}:/kube/config:ro" \
     -v "${HERE}/brownfield.sh:/brownfield.sh:ro" \
     -v "${EAT_VLLM_VALUES}:/vllm-values.yaml:ro" \
+    -v "${HERE}:/k3d-gpu-eat:ro" \
     -e EAT_VLLM_KV_GIB="${EAT_VLLM_KV_GIB}" \
     "${BASTION_IMAGE}" bash /brownfield.sh "$@" 2>&1 | tee "${log}"

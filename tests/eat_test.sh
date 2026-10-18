@@ -10,6 +10,8 @@
 #        python-runtime-sandbox) and for one that runs it under /bin/sh -c
 #      - the check fails when the sandbox prints anything but 385
 #   3. eat-up.sh refuses deploy_openshell=on, which the pinned EAT tag cannot deploy.
+#   5. The GenAI Gateway installs from copies of its charts with exact dependency
+#      versions and every image name:tag@sha256 (gateway-charts.py, brownfield.sh).
 # Needs bash, jq, python3.
 
 set -euo pipefail
@@ -269,6 +271,239 @@ openshell_case "off then on, last wins" refuse 'deploy_openshell=off' 'deploy_op
 openshell_case "commented out" pass '# deploy_openshell=on'
 openshell_case "ON is not on to EAT" pass 'deploy_openshell=ON'
 openshell_case "other key mentioning it" pass 'note=deploy_openshell=on'
+
+# 5. The GenAI Gateway path installs pinned charts and images. EAT's
+#    deploy-genai-gateway.yml syncs helm_charts_base_genai{,_trace} to the node, runs
+#    `helm dependency update` on genai-gateway (Chart.yaml ranges postgresql >=13.3.0,
+#    redis >=18.0.0, whose newest charts default to bitnamilegacy/*:latest) and installs
+#    Langfuse with charts/langfuse/values.yaml. gateway-charts.py writes copies of both
+#    chart dirs with exact dependency versions and every image name:tag@sha256, from
+#    gateway-values.yaml and gateway-trace-values.yaml; EAT's checkout is not touched.
+#    brownfield.sh hands the copies to that one playbook as extra vars.
+FIX="${WORK}/eat-fixture"
+GW="${FIX}/core/helm-charts/genai-gateway"
+LF="${FIX}/core/helm-charts/genai-gateway-trace/charts/langfuse"
+mkdir -p "${GW}/templates" "${GW}/charts" "${LF}" "${FIX}/core/inventory"
+# The shapes of EAT 0d3438d's files, cut to the keys that matter here.
+cat > "${GW}/Chart.yaml" <<'EOF'
+apiVersion: v2
+name: genaigateway
+version: 0.1.0
+dependencies:
+  - name: postgresql
+    version: ">=13.3.0"
+    repository: oci://registry-1.docker.io/bitnamicharts
+    condition: postgresql.enabled
+  - name: redis
+    version: ">=18.0.0"
+    repository: oci://registry-1.docker.io/bitnamicharts
+    condition: redis.enabled
+EOF
+cat > "${GW}/values.yaml" <<'EOF'
+image:
+  repository: docker.litellm.ai/berriai/litellm
+  tag: v1.83.14-stable.patch.2
+  pullPolicy: Always
+env:
+  REDIS_PORT: "6379"
+config:
+  proxy_config_yaml: |
+    router_settings:
+      routing_strategy: usage-based-routing-v2
+postgresql:
+  enabled: true
+  image:
+    repository: bitnamilegacy/postgresql
+  auth:
+    database: litellm
+redis:
+  enabled: true
+  image:
+    repository: "bitnamilegacy/redis"
+  auth:
+    enabled: true
+EOF
+cat > "${GW}/templates/deployment.yaml" <<'EOF'
+    spec:
+      initContainers:
+        - name: wait-for-postgres-redis
+          image: busybox:1.36
+      containers:
+        - name: litellm-container
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+EOF
+: > "${GW}/charts/postgresql-16.7.4.tgz"
+cat > "${LF}/values.yaml" <<'EOF'
+global:
+  security:
+    allowInsecureImages: true
+langfuse:
+  image:
+    tag: Null
+  web:
+    image:
+      repository: langfuse/langfuse
+      tag: Null
+  worker:
+    image:
+      repository: langfuse/langfuse-worker
+      tag: Null
+postgresql:
+  image:
+    repository: bitnamilegacy/postgresql
+redis:
+  image:
+    repository: bitnamilegacy/valkey
+clickhouse:
+  image:
+    repository: bitnamilegacy/clickhouse
+  zookeeper:
+    image:
+      repository: bitnamilegacy/zookeeper
+s3:
+  image:
+    repository: bitnamilegacy/minio
+EOF
+fixture_sum() { (cd "${FIX}" && find . -type f -print0 | sort -z | xargs -0 sha256sum); }
+FIX_SUM=$(fixture_sum)
+
+OUT="${WORK}/gateway-charts"
+if out=$("${EAT}/gateway-charts.py" "${FIX}/core/helm-charts" "${EAT}/gateway-values.yaml" \
+        "${EAT}/gateway-trace-values.yaml" "${OUT}" 2>&1); then
+    ok "gateway-charts.py writes the pinned chart copies"
+else
+    fail "gateway-charts.py: ${out}"
+fi
+# The tags are the ones EAT's path resolved on 2026-10-18 (postgresql and redis: the
+# digests bitnamilegacy's :latest served), so the pins change no behaviour.
+if out=$(python3 - "${OUT}" 2>&1 <<'EOF'
+import re, sys, yaml
+out = sys.argv[1]
+pinned = re.compile(r"^[^@\s]+@sha256:[0-9a-f]{64}$")
+chart = yaml.safe_load(open(out + "/genai-gateway/Chart.yaml"))
+deps = {d["name"]: d for d in chart["dependencies"]}
+assert deps["postgresql"]["version"] == "18.12.4" and deps["redis"]["version"] == "28.3.1", deps
+assert deps["redis"]["repository"] == "oci://registry-1.docker.io/bitnamicharts" and deps["redis"]["condition"] == "redis.enabled", deps
+gw = yaml.safe_load(open(out + "/genai-gateway/values.yaml"))
+lf = yaml.safe_load(open(out + "/genai-gateway-trace/charts/langfuse/values.yaml"))
+want = {
+    "litellm": (gw["image"], "docker.litellm.ai/berriai/litellm", "v1.83.14-stable.patch.2"),
+    "gateway postgresql": (gw["postgresql"]["image"], "bitnamilegacy/postgresql", "17.5.0-debian-12-r20"),
+    "gateway redis": (gw["redis"]["image"], "bitnamilegacy/redis", "8.0.3-debian-12-r2"),
+    "langfuse web": (lf["langfuse"]["web"]["image"], "langfuse/langfuse", "3.173.0"),
+    "langfuse worker": (lf["langfuse"]["worker"]["image"], "langfuse/langfuse-worker", "3.173.0"),
+    "langfuse postgresql": (lf["postgresql"]["image"], "bitnamilegacy/postgresql", "17.3.0-debian-12-r1"),
+    "langfuse valkey": (lf["redis"]["image"], "bitnamilegacy/valkey", "8.0.2-debian-12-r2"),
+    "langfuse clickhouse": (lf["clickhouse"]["image"], "bitnamilegacy/clickhouse", "25.2.1-debian-12-r0"),
+    "langfuse zookeeper": (lf["clickhouse"]["zookeeper"]["image"], "bitnamilegacy/zookeeper", "3.9.3-debian-12-r8"),
+    "langfuse minio": (lf["s3"]["image"], "bitnamilegacy/minio", "2024.12.18-debian-12-r1"),
+}
+for what, (img, repo, tag) in want.items():
+    assert img["repository"] == repo, (what, img)
+    assert pinned.match(str(img["tag"])) and img["tag"].split("@")[0] == tag, (what, img)
+# EAT's own values survive the merge.
+assert gw["image"]["pullPolicy"] == "Always" and gw["env"]["REDIS_PORT"] == "6379", gw
+assert gw["postgresql"]["auth"]["database"] == "litellm" and gw["redis"]["auth"]["enabled"] is True, gw
+assert gw["config"]["proxy_config_yaml"].startswith("router_settings:\n  routing_strategy: usage-based-routing-v2"), gw["config"]
+assert lf["global"]["security"]["allowInsecureImages"] is True and lf["langfuse"]["image"]["tag"] is None, lf
+assert "k3d-gpu" not in gw and "k3d-gpu" not in lf
+EOF
+); then ok "gateway charts: exact dependency versions, every image name:tag@sha256 at today's tag, EAT's values kept"
+else fail "gateway charts content"; sed 's/^/  | /' <<< "${out}"; fi
+tdiff=$(diff "${GW}/templates/deployment.yaml" "${OUT}/genai-gateway/templates/deployment.yaml" || true)
+if grep -Eq '^> +image: busybox:1\.36@sha256:[0-9a-f]{64}$' <<< "${tdiff}" \
+   && grep -Eq '^< +image: busybox:1\.36$' <<< "${tdiff}" && [ "$(grep -c '^[<>]' <<< "${tdiff}")" -eq 2 ]; then
+    ok "gateway charts: the wait-for-postgres-redis init image is pinned, nothing else in the template moves"
+else
+    fail "gateway charts template"; sed 's/^/  | /' <<< "${tdiff}"
+fi
+if [ "$(fixture_sum)" = "${FIX_SUM}" ]; then ok "gateway charts: EAT's checkout is left as it was"
+else fail "gateway-charts.py changed EAT's checkout"; fi
+cp -r "${OUT}" "${WORK}/gateway-charts.first"
+if out=$("${EAT}/gateway-charts.py" "${FIX}/core/helm-charts" "${EAT}/gateway-values.yaml" \
+        "${EAT}/gateway-trace-values.yaml" "${OUT}" 2>&1) && diff -r "${WORK}/gateway-charts.first" "${OUT}" >/dev/null; then
+    ok "gateway charts: a second run over the same out dir writes the same files"
+else fail "gateway-charts.py rerun: ${out}"; fi
+# Refusals: an EAT that no longer matches the overlay must stop the deploy, not
+# install half-pinned charts.
+gw_refuses() {
+    local name=$1 re=$2 edit=$3 out rc
+    rm -rf "${WORK}/fx2"; cp -r "${FIX}" "${WORK}/fx2"
+    (cd "${WORK}/fx2/core/helm-charts" && eval "${edit}")
+    out=$("${EAT}/gateway-charts.py" "${WORK}/fx2/core/helm-charts" "${EAT}/gateway-values.yaml" \
+        "${EAT}/gateway-trace-values.yaml" "${WORK}/fx2-out" 2>&1) && rc=0 || rc=$?
+    if [ "${rc}" -ne 0 ] && grep -Eq -- "${re}" <<< "${out}"; then ok "gateway-charts.py refuses ${name}"
+    else fail "gateway-charts.py ${name} (rc=${rc}, /${re}/): ${out}"; fi
+}
+gw_refuses "a template without the busybox:1.36 init image" 'busybox:1\.36' \
+    "sed -i 's/busybox:1.36/busybox:1.37/' genai-gateway/templates/deployment.yaml"
+gw_refuses "a Chart.yaml without the redis dependency" 'has no redis dependency' \
+    "python3 -c 'import yaml; p=\"genai-gateway/Chart.yaml\"; c=yaml.safe_load(open(p)); c[\"dependencies\"]=c[\"dependencies\"][:1]; yaml.safe_dump(c, open(p, \"w\"))'"
+gw_refuses "a Langfuse values file without a key the overlay pins" 'zookeeper' \
+    "python3 -c 'import yaml; p=\"genai-gateway-trace/charts/langfuse/values.yaml\"; c=yaml.safe_load(open(p)); del c[\"clickhouse\"][\"zookeeper\"]; yaml.safe_dump(c, open(p, \"w\"))'"
+gw_refuses "an image repository the overlay does not expect" 'bitnami/redis' \
+    "sed -i 's#bitnamilegacy/redis#bitnami/redis#' genai-gateway/values.yaml"
+
+# brownfield.sh stack mode against a stub EAT: the gateway playbook, and only it,
+# gets the chart copies as extra vars; the menu answers are unchanged.
+BF="${WORK}/bf"
+mkdir -p "${BF}/bin" "${BF}/home"
+cp -r "${FIX}" "${BF}/eat"
+echo 'cluster_url=api.example.com' > "${BF}/eat/core/inventory/agentic-config.cfg"
+cat > "${BF}/eat/deploy-agentic-stack.sh" <<'EOF'
+_source_core_libs() { CORE_DIR="${EAT_DIR}/core"; }
+brownfield_deployment() {
+    local a b c
+    read -r a; read -r b; read -r c
+    echo "answers ${a} ${b} ${c}" >> "${STUB_LOG}"
+    cd "${CORE_DIR}"
+    ansible-playbook -i hosts playbooks/deploy-ingress-controller.yml --extra-vars "secret_name=api.example.com"
+    ansible-playbook -i hosts playbooks/deploy-genai-gateway.yml --extra-vars "secret_name=api.example.com" --vault-password-file v
+}
+EOF
+cat > "${BF}/bin/sudo" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+cat > "${BF}/bin/openssl" <<'EOF'
+#!/usr/bin/env bash
+while [ $# -gt 0 ]; do case "$1" in -keyout|-out) : > "$2"; shift ;; esac; shift; done
+EOF
+cat > "${BF}/bin/ansible-playbook" <<'EOF'
+#!/usr/bin/env bash
+echo "ansible-playbook $*" >> "${STUB_LOG}"
+for a in "$@"; do
+    case "${a}" in @*) cat "${a#@}" >> "${STUB_LOG}" ;; esac
+done
+EOF
+chmod +x "${BF}/bin/"*
+: > "${BF}/log"
+out=$(env PATH="${BF}/bin:${PATH}" HOME="${BF}/home" STUB_LOG="${BF}/log" EAT_DIR="${BF}/eat" \
+    EAT_KUBECONFIG="${WORK}/kubeconfig" K3D_GPU_EAT_DIR="${EAT}" bash "${EAT}/brownfield.sh" 2>&1) && rc=0 || rc=$?
+log=$(cat "${BF}/log")
+if [ "${rc}" -eq 0 ] && grep -qx 'answers 5 1 yes' <<< "${log}"; then ok "brownfield.sh stack: runs with the same menu answers"
+else fail "brownfield.sh stack rc=${rc}: ${out} ${log}"; fi
+gw_call=$(grep '^ansible-playbook .*deploy-genai-gateway.yml' <<< "${log}" || true)
+if grep -Eq -- "--extra-vars @${BF}/home/[^ ]+\.yml" <<< "${gw_call}" \
+   && grep -qx "helm_charts_base_genai: ${BF}/home/k3d-gpu-charts/genai-gateway" <<< "${log}" \
+   && grep -qx "helm_charts_base_genai_trace: ${BF}/home/k3d-gpu-charts/genai-gateway-trace" <<< "${log}" \
+   && grep -q 'busybox:1.36@sha256:' "${BF}/home/k3d-gpu-charts/genai-gateway/templates/deployment.yaml"; then
+    ok "brownfield.sh stack: the gateway playbook installs the pinned chart copies"
+else
+    fail "brownfield.sh stack: gateway call: ${gw_call}"; sed 's/^/  | /' <<< "${log}"
+fi
+ingress_call=$(grep '^ansible-playbook .*deploy-ingress-controller.yml' <<< "${log}" || true)
+if [ "${ingress_call}" = 'ansible-playbook -i hosts playbooks/deploy-ingress-controller.yml --extra-vars secret_name=api.example.com' ]; then
+    ok "brownfield.sh stack: other playbooks run as EAT calls them"
+else fail "brownfield.sh stack: ingress call: ${ingress_call}"; fi
+# A gateway playbook the wrapper never sees (enabled in the config) fails the deploy.
+echo 'deploy_genai_gateway=on' >> "${BF}/eat/core/inventory/agentic-config.cfg"
+sed -i 's#playbooks/deploy-genai-gateway.yml#playbooks/deploy-genai-gateway-renamed.yaml#' "${BF}/eat/deploy-agentic-stack.sh"
+out=$(env PATH="${BF}/bin:${PATH}" HOME="${BF}/home" STUB_LOG="${BF}/log" EAT_DIR="${BF}/eat" \
+    EAT_KUBECONFIG="${WORK}/kubeconfig" K3D_GPU_EAT_DIR="${EAT}" bash "${EAT}/brownfield.sh" 2>&1) && rc=0 || rc=$?
+if [ "${rc}" -ne 0 ] && grep -q 'never ran through the pinning wrapper' <<< "${out}"; then
+    ok "brownfield.sh stack: fails when the gateway playbook bypasses the pins"
+else fail "brownfield.sh stack: bypass not caught (rc=${rc}): ${out}"; fi
 
 echo ""
 echo "${PASS} passed, ${FAILS} failed"

@@ -265,10 +265,20 @@ bastion's version) resolved postgresql 18.12.4 and redis 28.3.1. Their default t
 `bitnamilegacy/redis:latest` (8.0.3, built 2025-07-17). The Langfuse chart is pinned
 (`1.5.30`) and pulls `bitnamilegacy/{postgresql:17.3.0,valkey:8.0.2,clickhouse:25.2.1,zookeeper:3.9.3,minio:2024.12.18}`
 at fixed `-debian-12-rN` tags. The H1b run (2026-10-17) recorded pod names, not image
-references, so which images it pulled is not on record. Two things can still change under
-the pinned tag. Bitnami calls `bitnamilegacy` a temporary migration archive with no
-updates ([bitnami/containers#83267](https://github.com/bitnami/containers/issues/83267)).
-And a newer postgresql or redis chart can come out against a frozen `latest` image.
+references, so which images it pulled is not on record. Bitnami calls `bitnamilegacy` a
+temporary migration archive with no updates
+([bitnami/containers#83267](https://github.com/bitnami/containers/issues/83267)).
+
+Pinned on our side since 2026-10-18, with no EAT file edited. `brownfield.sh` hands
+`deploy-genai-gateway.yml` copies of both gateway chart directories as extra vars
+(`helm_charts_base_genai{,_trace}`), written by `integrations/eat/gateway-charts.py`.
+`genai-gateway`'s `Chart.yaml` asks for exactly postgresql 18.12.4 and redis 28.3.1, the
+versions that resolved that day. Every image the playbook renders is name:tag@sha256 at the
+tag it resolved that day. `latest` became `bitnamilegacy/postgresql:17.5.0-debian-12-r20`
+and `bitnamilegacy/redis:8.0.3-debian-12-r2`, the tags that share `latest`'s digest. The
+pins are in `gateway-values.yaml` and `gateway-trace-values.yaml`, and listed in `images.lock`.
+`scripts/images-lock pins` fails CI on any values `repository:` there without a digest.
+Rendered with Helm v3.14.0, the pinned charts differ from EAT's only in the 11 `image:` lines.
 
 Gaps for the #20 example instance (`docs/examples/openclaw-instance.yaml`) on k3d-gpu:
 

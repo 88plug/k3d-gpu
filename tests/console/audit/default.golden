@@ -1,4 +1,4 @@
-audit PASS: 0 of 10 checks failed (images.lock: 38 images, k3s v1.37.1-k3s1)
+audit PASS: 0 of 10 checks failed (images.lock: 51 images, k3s v1.37.1-k3s1)
 ok   listener 0.0.0.0:39651 kube-apiserver: off loopback, auth client-cert (docker port 6443/tcp on k3d-gpu-server-0)
 ok   image docker.io/intel/intel-gpu-plugin:0.37.1: sha256:004641b2547d in images.lock (share/intel-gpu-plugin.yml, share/intel-gpu-wsl-plugin.yml); on k3d-gpu-server-0
 ok   image docker.io/openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58: sha256:a928903fe429 in images.lock (scripts/k3d-gpu AGENT_OVMS_IMAGE); on k3d-gpu-server-0

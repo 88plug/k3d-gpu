@@ -139,8 +139,8 @@ jobs:
       - name: MCP equals the CLI --json; MCP writes need a confirmed plan hash
         run: tests/console_mcp_test.sh
 
-  # images.lock must list every image share/, the Dockerfile and the launcher
-  # reference, at the digests they pin (offline; `scripts/images-lock update`
+  # images.lock must list every image share/, the Dockerfile, the launcher and the
+  # EAT integration reference, at the digests they pin (offline; `scripts/images-lock update`
   # refreshes it from the registries). Every image reference in the repo is
   # pinned name:tag@sha256, except those images.unpinned lists with a reason.
   images-lock:

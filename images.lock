@@ -1,6 +1,62 @@
 {
   "images": [
     {
+      "digest": "sha256:3c1f49548968dce24832ea2487647fe80dcfbd832d2dbb2e9e735629d7c7fc31",
+      "name": "docker.io/bitnamilegacy/clickhouse",
+      "sources": [
+        "integrations/eat/gateway-trace-values.yaml"
+      ],
+      "tag": "25.2.1-debian-12-r0"
+    },
+    {
+      "digest": "sha256:c0ede65eb88e47138470202c517bacf55ab3c27df848030b7b46e69d34b7d192",
+      "name": "docker.io/bitnamilegacy/minio",
+      "sources": [
+        "integrations/eat/gateway-trace-values.yaml"
+      ],
+      "tag": "2024.12.18-debian-12-r1"
+    },
+    {
+      "digest": "sha256:51db17ce1aa19e1b4ba65bf4ff45f0afcde6b59e44623d0005142703b91f4a1e",
+      "name": "docker.io/bitnamilegacy/postgresql",
+      "sources": [
+        "integrations/eat/gateway-trace-values.yaml"
+      ],
+      "tag": "17.3.0-debian-12-r1"
+    },
+    {
+      "digest": "sha256:42a8200d35971f931b869ef5252d996e137c6beb4b8f1b6d2181dc7d1b6f62e0",
+      "name": "docker.io/bitnamilegacy/postgresql",
+      "sources": [
+        "integrations/eat/gateway-values.yaml"
+      ],
+      "tag": "17.5.0-debian-12-r20"
+    },
+    {
+      "digest": "sha256:5927ff3702df7106bbb7dcc0f8e3d053d979253c3aecce53f07f40db990f823b",
+      "name": "docker.io/bitnamilegacy/redis",
+      "sources": [
+        "integrations/eat/gateway-values.yaml"
+      ],
+      "tag": "8.0.3-debian-12-r2"
+    },
+    {
+      "digest": "sha256:aab90418824b01d493189fe67607517eaa7a8c9c49a3c68d150b20f0eb968196",
+      "name": "docker.io/bitnamilegacy/valkey",
+      "sources": [
+        "integrations/eat/gateway-trace-values.yaml"
+      ],
+      "tag": "8.0.2-debian-12-r2"
+    },
+    {
+      "digest": "sha256:8e7392e91b6cacfa951cd4a0d9c3a2c51c09a494084cbb6d62d1eab7b30c36d8",
+      "name": "docker.io/bitnamilegacy/zookeeper",
+      "sources": [
+        "integrations/eat/gateway-trace-values.yaml"
+      ],
+      "tag": "3.9.3-debian-12-r8"
+    },
+    {
       "digest": "sha256:3848efe52c047cf6b5961eb070deaf9eca53bd5328f0d819fbb68ad56c65fb19",
       "name": "docker.io/intel/dlstreamer",
       "sources": [
@@ -74,12 +130,44 @@
       "tag": null
     },
     {
+      "digest": "sha256:dd9874fb6a29aa6b3070754760876b42d0e440bb34537d7196d51bc15abb0068",
+      "name": "docker.io/langfuse/langfuse",
+      "sources": [
+        "integrations/eat/gateway-trace-values.yaml"
+      ],
+      "tag": "3.173.0"
+    },
+    {
+      "digest": "sha256:5e7a487540a61b2c419e869684915839b412fa46aaaf0fd43022f25f8875ba4f",
+      "name": "docker.io/langfuse/langfuse-worker",
+      "sources": [
+        "integrations/eat/gateway-trace-values.yaml"
+      ],
+      "tag": "3.173.0"
+    },
+    {
+      "digest": "sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662",
+      "name": "docker.io/library/busybox",
+      "sources": [
+        "integrations/eat/gateway-values.yaml"
+      ],
+      "tag": "1.36"
+    },
+    {
       "digest": "sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e",
       "name": "docker.io/library/busybox",
       "sources": [
         "scripts/k3d-gpu K3D_GPU_DEVICE_TEST_IMAGE"
       ],
       "tag": "1.37"
+    },
+    {
+      "digest": "sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac",
+      "name": "docker.io/library/ubuntu",
+      "sources": [
+        "integrations/eat/bastion.Dockerfile"
+      ],
+      "tag": "24.04"
     },
     {
       "digest": "sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944",
@@ -187,12 +275,28 @@
       "tag": "3.10.2"
     },
     {
+      "digest": "sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1",
+      "name": "docker.io/vllm/vllm-openai-cpu",
+      "sources": [
+        "integrations/eat/vllm-values.yaml"
+      ],
+      "tag": "v0.24.0"
+    },
+    {
       "digest": "sha256:95ac815038c4b3537b173798bfe3b89bdf525a52bd653cd14d4deb01f1062be7",
       "name": "docker.io/vllm/vllm-openai-xpu",
       "sources": [
         "scripts/k3d-gpu AGENT_DEFAULT_IMAGE"
       ],
       "tag": null
+    },
+    {
+      "digest": "sha256:73cbb215d3d43ae5b42816217b200386eb08d567767fcb36cba163152c5f3c79",
+      "name": "docker.litellm.ai/berriai/litellm",
+      "sources": [
+        "integrations/eat/gateway-values.yaml"
+      ],
+      "tag": "v1.83.14-stable.patch.2"
     },
     {
       "digest": "sha256:a8c8297c72744f25dbcf70fdb4a64bb787f428a3f9ab4dfabb0eb1377da0070f",
