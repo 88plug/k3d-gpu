@@ -131,7 +131,7 @@ for i in "${!ARMS[@]}"; do
     [ -z "${pf}" ] || kill "${pf}" 2>/dev/null
     kubectl -n "${NS}" port-forward svc/ovms 18025:8000 > /dev/null 2>&1 & pf=$!
     sleep 2
-    "${LOAD[@]}" sample --seconds 5 --windows 100000 --phase during --treatment-cpus "${tcpus}" \
+    "${LOAD[@]}" sample --seconds 5 --windows 60 --phase during --treatment-cpus "${tcpus}" \
         --tag "${arm}" --level "${level}" --out "${D}/load.jsonl" & dur=$!
     timeout "$(left)" python3 "${P}" round --seed "${seed}" --arm "${arm}" \
         --url http://127.0.0.1:18025/v3/chat/completions \
