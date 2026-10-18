@@ -279,6 +279,36 @@ class MatchedTest(unittest.TestCase):
     def test_order_interleaves(self):
         self.assertEqual(load.order(["A", "B"], 3), ["A", "B", "A", "B", "A", "B"])
 
+    def test_tolerance_is_the_registered_rule(self):
+        # EXPERIMENTS.md amendment 26 (2026-10-18) re-examined the swap rows and kept them.
+        self.assertEqual(load.TOLERANCE["swap_used_mib"], {"abs": 256.0, "rel": 0.0})
+        self.assertEqual(load.TOLERANCE["swap_delta_mib"], {"abs": 64.0, "rel": 0.0})
+
+
+class DriftTest(unittest.TestCase):
+    @staticmethod
+    def series(swaps):
+        return [{"ts": float(i), "tag": "X", "level": "typical", "busy_pct": 30.0, "load1": 10.0,
+                 "pkg_w": 90.0, "throttle_per_min": 100.0, "swap_used_mib": s, "swap_delta_mib": 0.0}
+                for i, s in enumerate(swaps)]
+
+    def test_null_labels_are_abba_in_time_order(self):
+        import drift
+        ws = list(reversed(self.series([0, 1, 2, 3, 4, 5])))
+        self.assertEqual([w["tag"] for w in drift.null_labels(ws)], list("ABBAAB"))
+        self.assertEqual([w["ts"] for w in drift.null_labels(ws)], [0, 1, 2, 3, 4, 5])
+
+    def test_linear_drift_cancels_under_abba(self):
+        import drift
+        sp = drift.spreads(self.series([1000.0 * i for i in range(8)]))  # 7 GiB over the hold
+        self.assertEqual(sp["swap_used_mib"][0], 0.0)
+        self.assertEqual(sp["swap_used_mib"][2], "ok")
+
+    def test_pairs_count_failures(self):
+        import drift
+        n, fails, anyfail = drift.pair_fails(self.series([0.0, 100.0, 0.0, 300.0, 5.0]))
+        self.assertEqual((n, fails["swap_used_mib"], anyfail), (2, 1, 1))
+
 
 if __name__ == "__main__":
     unittest.main()
