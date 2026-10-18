@@ -393,6 +393,52 @@ Recorded 2026-10-18 03:30 PDT, after the H42 blocks and before any block below:
     rule H47 is not run). B1 ran one H42 block: it completed 1 task, and the hold's timeout
     cut its H46 control window, so B1's J per success is undefined.
 
+Recorded 2026-10-18T14:49Z (07:49 PDT), before any run under it. Method change to
+`bench/load/load.py matched`; it applies to every probe that samples that tool, not only
+H40-H48, and to NEW runs only:
+
+27. Matching splits covariates from outcomes. **Why:** the earlier rule (H24 A1, H25 A2,
+    H20 A2, H30-H32 A1/A2 and the rest) gated on every recorded metric, including package W,
+    throttle events/min and 1-min load, and those move with the treatment itself: a
+    cache-OFF arm does about 10x the prefill of cache-ON, so it heats the package and
+    throttles more. Matching on a post-treatment variable can void a real effect. It voided
+    [H25 run 3](#h25-run-3-matched-background-load-i9-13900t-2026-10-17) (every metric
+    matched but throttle/min, 67.8 > 26.4 at typical, 1407.7 > 605.5 at heavy),
+    [H32 run A2](#h31-h32-run-a2-idle-gap-before-each-load-window-i9-13900t-2026-10-18)
+    (throttle/min 147.9 > 147.7, everything else matched) and
+    [H20 run 2](#h20-run-2-amendment-a2-matched-background-load-i9-13900t-2026-10-18)
+    (throttle/min only, at both levels; the pre-cell throttle rate followed the arm that had
+    just run). [H26](#h26-run-matched-background-load-i9-13900t-2026-10-17) failed on
+    carry-over (windows started seconds after the previous hog was deleted, so its run queue
+    and throttling were still in the window) and at heavy its background containers vanished
+    mid-level while the blocks went on being scored. **Rule** (`matched_a27`, picked when the
+    windows carry a `phase`):
+    (a) Covariates, gated under the unchanged `TOLERANCE` limits: from a **pre-window**
+    sampled with the arm idle at the end of a settle gap before each arm starts, load-CPU
+    `busy_pct`, `throttle_per_min`, `swap_used_mib` and `swap_delta_mib`; from windows
+    **during** the arm, `busy_pct` over the load CPUs the treatment does not use
+    (`--treatment-cpus` removes the ones it does) and the two swap metrics. Every arm needs
+    at least one pre-window.
+    (b) Outcomes, reported per arm and never gating: `pkg_w`, `throttle_per_min` and `load1`
+    during the arm.
+    (c) Hog-decay gap (`load.py settle`): after any arm or hog stops, 5 s windows are sampled
+    until one reads `busy_pct` and `throttle_per_min` within tolerance of the level baseline
+    (`max(abs, rel x baseline)`, the baseline being `--phase baseline` windows taken once
+    after the level starts and before the first arm), at most 60 s. That window is the
+    arm's pre-window. A gap that hits 60 s is recorded (`settled: false`) and reported; the
+    pre-window covariates still decide.
+    (d) Missing load: every phased window counts this tool's running load containers at its
+    start and end (`load_running`, the minimum) against the number its level runs
+    (`load_expected`). Any window with fewer, or with no count, makes the run **VOID**
+    (`load.py matched` exit 4): never scored, re-run. Level `none` expects none.
+    Windows without a `phase` keep the earlier rule unchanged, so no earlier run is
+    regraded: H20, H25, H26 and H32 keep their INCONCLUSIVE verdicts. A probe adopts
+    amendment 27 by sampling with `--phase`; its run section says which rule scored it.
+    Unit tests: `bench/load/test_load.py` (`Amendment27Test`, `SettleTest`,
+    `WindowPhaseTest`): a treatment that raises throttle 10x during the arm still
+    matches; background drift in the pre-window busy or throttle, in during-arm load-CPU
+    busy, or in swap does not; a vanished load container voids.
+
 Static proof of the harness (no cluster, 2026-10-17): the unit suite against stub servers;
 BFCL S100 in both modes through the proxy against a stub endpoint with the pinned wheel
 (100 of 100 ids written and scored; a stub that never calls a tool scores exactly the 15

@@ -89,16 +89,44 @@ metric the spread of the per-arm means (max minus min over all arms) must be wit
 
 A metric no arm measured (no RAPL access) is reported `unmeasured` and skipped; a
 metric only some arms measured fails. Mixed levels or fewer than two arms fail.
-Sample background-only windows (load on, probe idle) just before each arm, tagged
-with the arm, so the probe's own work does not count as background.
+
+### Covariates and outcomes (amendment 27, new runs)
+
+The rule above gates on every metric, including package W, throttle events and the
+1-min load. Those move with the treatment itself: an arm that does more prefill heats
+the package and throttles more, so matching on them can void a real effect. That is
+what left H25, H32 and H20 inconclusive on throttle alone, and H26 also carried the
+previous hog into its windows and lost its background mid-level ([EXPERIMENTS.md
+amendment 27](https://github.com/88plug/k3d-gpu/blob/main/EXPERIMENTS.md)). Windows
+sampled with `--phase` are judged by amendment 27; windows without one keep the rule
+above, so earlier runs read as they were scored.
+
+| Window | When | Matched (covariates, `TOLERANCE` limits) | Reported only (outcomes) |
+|---|---|---|---|
+| `baseline` | once per level, after `start`, before the first arm | not matched; the settle reference | |
+| `pre` | arm idle, at the end of the settle gap before each arm | `busy_pct`, `throttle_per_min`, `swap_used_mib`, `swap_delta_mib` | |
+| `during` | while the arm runs | `busy_pct` over the load CPUs minus `--treatment-cpus`, `swap_used_mib`, `swap_delta_mib` | `pkg_w`, `throttle_per_min`, `load1` |
+
+- **Settle gap.** `load.py settle` samples 5 s windows after an arm or hog stops until
+  one reads `busy_pct` and `throttle_per_min` within tolerance of the level baseline
+  (`max(abs, rel x baseline)`), for at most 60 s, and writes that window as the arm's
+  `pre` window with `settled` and `settle_s`. A gap that times out is reported in
+  `unsettled`; the covariates still decide.
+- **Missing load.** Each phased window counts this tool's running containers at its
+  start and end against the number its level runs. One short, or one it could not
+  count, makes the run `VOID` (exit 4): never scored, re-run.
+- Every arm needs a `pre` window.
 
 Interface:
 
 ```bash
 bench/load/load.py start --level typical --ttl 1800   # idempotent; replaces another level
-bench/load/load.py sample --seconds 10 --tag A --level typical --out bg.jsonl
-#   ... run arm A, then sample --tag B, run arm B, and so on (ABAB) ...
-bench/load/load.py matched bg.jsonl                   # exit 0 MATCHED, 3 INCONCLUSIVE
+bench/load/load.py sample --seconds 10 --phase baseline --level typical --out base.jsonl
+bench/load/load.py settle --baseline base.jsonl --tag A --level typical --out bg.jsonl
+bench/load/load.py sample --seconds 10 --phase during --tag A --level typical \
+    --treatment-cpus 16-19 --out bg.jsonl             # while arm A runs (omit the flag if it stays off the load CPUs)
+#   ... arm A ends; settle --tag B, run arm B with its during windows, and so on (ABAB) ...
+bench/load/load.py matched bg.jsonl                   # exit 0 MATCHED, 3 INCONCLUSIVE, 4 VOID
 bench/load/load.py stop                               # removes only io.k3d-gpu.bench-load=1 containers
 bench/load/smoke.sh                                   # local smoke, no cluster
 ```

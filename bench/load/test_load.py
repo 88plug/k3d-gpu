@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Unit tests for bench/load/load.py (no docker, no root, fake sysfs/procfs)."""
+import io
+import json
 import os
 import shutil
 import sys
@@ -278,6 +280,216 @@ class MatchedTest(unittest.TestCase):
 
     def test_order_interleaves(self):
         self.assertEqual(load.order(["A", "B"], 3), ["A", "B", "A", "B", "A", "B"])
+
+
+def pre(tag, busy=60.0, thr=50.0, swap=100.0, dswap=0.0, level="typical", load1=8.0, w=40.0, running=3):
+    """An amendment-27 pre-window: arm idle, sampled at the end of the settle gap."""
+    return {"tag": tag, "level": level, "phase": "pre", "busy_pct": busy, "throttle_per_min": thr,
+            "swap_used_mib": swap, "swap_delta_mib": dswap, "load1": load1, "pkg_w": w,
+            "load_expected": 3, "load_running": running, "settled": True}
+
+
+def during(tag, busy=60.0, thr=50.0, w=40.0, load1=8.0, swap=100.0, dswap=0.0, level="typical", running=3):
+    """An amendment-27 window sampled while the arm runs."""
+    return {"tag": tag, "level": level, "phase": "during", "busy_pct": busy, "throttle_per_min": thr,
+            "pkg_w": w, "load1": load1, "swap_used_mib": swap, "swap_delta_mib": dswap,
+            "load_expected": 3, "load_running": running}
+
+
+class Amendment27Test(unittest.TestCase):
+    """Covariates are matched; post-treatment outcomes are reported, never gating."""
+
+    def run_ab(self, a_pre, b_pre, a_dur, b_dur):
+        return load.matched([a_pre, a_dur, b_pre, b_dur, dict(a_pre), dict(a_dur), dict(b_pre), dict(b_dur)])
+
+    def test_treatment_that_raises_throttle_still_matches(self):
+        # Cache OFF does ~10x the prefill: during the arm it throttles 10x, draws more
+        # package power and raises load1. Those are outcomes of the treatment.
+        r = self.run_ab(pre("ON", thr=40), pre("OFF", thr=44),
+                        during("ON", thr=40, w=90, load1=18), during("OFF", thr=400, w=110, load1=26))
+        self.assertTrue(r["matched"], r)
+        self.assertEqual(r["verdict"], "MATCHED")
+        self.assertEqual(r["rule"], "amendment-27")
+        outs = {o["metric"]: o for o in r["outcomes"]}
+        self.assertEqual(set(outs), {"pkg_w", "throttle_per_min", "load1"})
+        self.assertEqual(outs["throttle_per_min"]["arms"], {"ON": 40.0, "OFF": 400.0})
+        gated_during = {c["metric"] for c in r["checks"] if c["phase"] == "during"}
+        self.assertFalse(gated_during & {"pkg_w", "throttle_per_min", "load1"})
+
+    def test_background_drift_in_the_pre_window_busy_does_not_match(self):
+        r = self.run_ab(pre("A", busy=40), pre("B", busy=60), during("A"), during("B"))
+        self.assertFalse(r["matched"])
+        self.assertTrue(r["verdict"].startswith("INCONCLUSIVE"), r["verdict"])
+        self.assertIn("pre busy_pct", r["verdict"])
+
+    def test_background_drift_in_the_pre_window_throttle_does_not_match(self):
+        # Both arms idle, yet one arm's baseline throttles far more: the host drifted.
+        r = self.run_ab(pre("A", thr=40), pre("B", thr=600), during("A", thr=40), during("B", thr=40))
+        self.assertFalse(r["matched"])
+        self.assertIn("pre throttle_per_min", r["verdict"])
+
+    def test_load_cpu_busy_drift_during_the_arm_does_not_match(self):
+        r = self.run_ab(pre("A"), pre("B"), during("A", busy=40), during("B", busy=70))
+        self.assertFalse(r["matched"])
+        self.assertIn("during busy_pct", r["verdict"])
+
+    def test_swap_drift_does_not_match(self):
+        r = self.run_ab(pre("A", swap=100), pre("B", swap=900), during("A", swap=100), during("B", swap=100))
+        self.assertFalse(r["matched"])
+        self.assertIn("swap_used_mib", r["verdict"])
+
+    def test_missing_load_container_voids_the_run(self):
+        r = self.run_ab(pre("A"), pre("B"), during("A"), during("B", running=0))
+        self.assertFalse(r["matched"])
+        self.assertTrue(r["void"])
+        self.assertTrue(r["verdict"].startswith("VOID"), r["verdict"])
+
+    def test_unverified_load_presence_voids_the_run(self):
+        r = self.run_ab(pre("A"), pre("B"), during("A"), during("B", running=None))
+        self.assertTrue(r["void"], r)
+
+    def test_level_none_needs_no_containers(self):
+        ws = [dict(pre(t, level="none", running=0), load_expected=0) for t in "AB"]
+        ws += [dict(during(t, level="none", running=0), load_expected=0) for t in "AB"]
+        self.assertTrue(load.matched(ws)["matched"])
+
+    def test_every_arm_needs_a_pre_window(self):
+        r = load.matched([pre("A"), during("A"), during("B")])
+        self.assertFalse(r["matched"])
+        self.assertIn("pre-window", r["verdict"])
+
+    def test_during_windows_in_some_arms_only_fails(self):
+        r = load.matched([pre("A"), pre("B"), during("A")])
+        self.assertFalse(r["matched"])
+        self.assertIn("during busy_pct measured in some arms only", r["verdict"])
+
+    def test_baseline_windows_do_not_enter(self):
+        base = dict(pre("A", busy=5, thr=900), phase="baseline")
+        self.assertTrue(load.matched([base, pre("A"), pre("B"), during("A"), during("B")])["matched"])
+
+    def test_window_without_phase_in_an_amendment_27_run_fails(self):
+        r = load.matched([pre("A"), pre("B"), during("A"), win("B")])
+        self.assertFalse(r["matched"])
+        self.assertIn("phase", r["verdict"])
+
+    def test_windows_without_phase_keep_the_legacy_rule(self):
+        # Old runs are never regraded: no phase field -> the A1/A2 rule, throttle gating.
+        r = load.matched([win("A", thr=40), win("B", thr=400)])
+        self.assertFalse(r["matched"])
+        self.assertEqual(r["rule"], "legacy")
+        self.assertIn("throttle_per_min", r["verdict"])
+
+
+class MatchedCliTest(unittest.TestCase):
+    def exit_code(self, ws):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        path = os.path.join(tmp, "w.jsonl")
+        with open(path, "w") as f:
+            f.write("".join(json.dumps(w) + "\n" for w in ws))
+        with mock.patch("sys.stdout", new_callable=io.StringIO):
+            return load.main(["matched", path])
+
+    def test_exit_codes(self):
+        self.assertEqual(self.exit_code([pre("A"), pre("B")]), 0)
+        self.assertEqual(self.exit_code([pre("A", busy=10), pre("B", busy=90)]), 3)
+        self.assertEqual(self.exit_code([pre("A"), pre("B", running=2)]), 4)
+
+
+class WindowPhaseTest(unittest.TestCase):
+    def fake(self, stat_pairs):
+        stats = iter(stat_pairs)
+        real_read = load._read
+
+        def reader(path):
+            if path.endswith("/stat"):
+                return next(stats)
+            if path.endswith("meminfo"):
+                return "SwapTotal: 0 kB\nSwapFree: 0 kB\n"
+            if path.endswith("loadavg"):
+                return "1.0 1.0 1.0 1/1 1\n"
+            return real_read(path)
+        return reader
+
+    def test_treatment_cpus_are_left_out_of_busy(self):
+        reader = self.fake(["cpu1 0 0 0 100 0 0 0 0\ncpu2 0 0 0 100 0 0 0 0\n",
+                            "cpu1 100 0 0 100 0 0 0 0\ncpu2 0 0 0 200 0 0 0 0\n"])
+        with mock.patch.object(load, "_read", reader), mock.patch.object(load.time, "sleep"), \
+                mock.patch.object(load, "rapl_zone", return_value=None):
+            w = load.window(1.0, [1, 2], tag="A", level="typical", phase="during",
+                            exclude=[1], presence=lambda: 3)
+        self.assertEqual(w["busy_pct"], 0.0)          # only cpu2, the core the treatment left alone
+        self.assertEqual(w["busy_cpus"], "2")
+        self.assertEqual(w["phase"], "during")
+        self.assertEqual((w["load_expected"], w["load_running"]), (3, 3))
+
+    def test_presence_is_the_minimum_of_start_and_end(self):
+        counts = iter([3, 1])
+        reader = self.fake(["cpu0 0 0 0 1 0 0 0 0\n", "cpu0 0 0 0 2 0 0 0 0\n"])
+        with mock.patch.object(load, "_read", reader), mock.patch.object(load.time, "sleep"), \
+                mock.patch.object(load, "rapl_zone", return_value=None):
+            w = load.window(0.0, [0], level="typical", phase="pre", presence=lambda: next(counts))
+        self.assertEqual(w["load_running"], 1)
+
+    def test_all_load_cpus_excluded_leaves_busy_unmeasured(self):
+        reader = self.fake(["cpu0 0 0 0 1 0 0 0 0\n", "cpu0 0 0 0 2 0 0 0 0\n"])
+        with mock.patch.object(load, "_read", reader), mock.patch.object(load.time, "sleep"), \
+                mock.patch.object(load, "rapl_zone", return_value=None):
+            w = load.window(0.0, [0], level="none", phase="during", exclude=[0], presence=lambda: 0)
+        self.assertIsNone(w["busy_pct"])
+        self.assertEqual(w["load_expected"], 0)
+
+    def test_legacy_window_has_no_phase(self):
+        reader = self.fake(["cpu0 0 0 0 1 0 0 0 0\n", "cpu0 0 0 0 2 0 0 0 0\n"])
+        with mock.patch.object(load, "_read", reader), mock.patch.object(load.time, "sleep"), \
+                mock.patch.object(load, "rapl_zone", return_value=None):
+            w = load.window(0.0, [0], level="typical")
+        self.assertNotIn("phase", w)
+        self.assertNotIn("load_running", w)
+
+
+class SettleTest(unittest.TestCase):
+    BASE = {"busy_pct": 37.0, "throttle_per_min": 40.0}
+
+    def sampler(self, values):
+        it = iter(values)
+
+        def sample(seconds):
+            busy, thr = next(it)
+            return {"busy_pct": busy, "throttle_per_min": thr, "seconds": seconds}
+        return sample
+
+    def test_waits_for_carry_over_to_decay(self):
+        # The previous arm's hog: busy and throttle stay high, then decay to the baseline.
+        w = load.settle(self.BASE, self.sampler([(80, 900), (55, 300), (38, 45)]), window_s=5, max_s=60)
+        self.assertTrue(w["settled"])
+        self.assertEqual(w["settle_s"], 15)
+        self.assertEqual(w["busy_pct"], 38)
+
+    def test_gives_up_at_the_cap_and_says_so(self):
+        w = load.settle(self.BASE, self.sampler([(80, 900)] * 20), window_s=5, max_s=60)
+        self.assertFalse(w["settled"])
+        self.assertEqual(w["settle_s"], 60)
+
+    def test_tolerance_boundary(self):
+        # busy within 5 points, throttle within max(10, 25% of 40) = 10
+        w = load.settle(self.BASE, self.sampler([(42, 50)]), window_s=5, max_s=60)
+        self.assertEqual((w["settled"], w["settle_s"]), (True, 5))
+        w = load.settle(self.BASE, self.sampler([(42, 50.5), (42, 50)]), window_s=5, max_s=60)
+        self.assertEqual(w["settle_s"], 10)
+        w = load.settle(self.BASE, self.sampler([(42.5, 40), (42, 40)]), window_s=5, max_s=60)
+        self.assertEqual(w["settle_s"], 10)
+
+    def test_unmeasured_baseline_metric_is_not_waited_on(self):
+        w = load.settle({"busy_pct": 37.0, "throttle_per_min": None}, self.sampler([(37, 999)]),
+                        window_s=5, max_s=60)
+        self.assertTrue(w["settled"])
+
+    def test_matched_reports_unsettled_pre_windows(self):
+        ws = [pre("A"), dict(pre("B"), settled=False), during("A"), during("B")]
+        r = load.matched(ws)
+        self.assertTrue(r["matched"], r)   # the covariates decide; a timed-out gap is reported
+        self.assertEqual(r["unsettled"], {"B": 1})
 
 
 if __name__ == "__main__":
