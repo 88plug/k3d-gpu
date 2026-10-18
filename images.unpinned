@@ -1,0 +1,29 @@
+# Image references allowed without a digest pin. `scripts/images-lock pins` (CI and
+# tests/image_pins_test.sh) fails on any other name:tag, bare name or :latest
+# reference, and on a line here that matches nothing.
+#
+# <path glob> <reference, or * for every reference in the file> <reason>
+
+# Built on the user's machine from a Dockerfile in this repo; no registry holds them.
+Makefile                              k3d-gpu-dev:local                     built from .devcontainer/ by `make dev-image`, run by `make check-container`
+examples/dataplane/pgvector-backup.yaml k3d-gpu/pg-zlib-accel:18-zla1.1.0  built from images/pg-zlib-accel.Dockerfile and loaded with `k3d image import`
+examples/dataplane/redis-dto.yaml     k3d-gpu/redis-dto:8.10.2-dto-fbf41a6  built on the target host from images/redis-dto.Dockerfile (-march=native) and loaded with `k3d image import`
+
+# A rolling distro: pacman needs a current keyring, so the tag stays `latest` and
+# `scripts/images-lock repin` moves the digest beside it.
+.github/workflows/ci.yml              archlinux:latest@sha256:*             Arch is rolling; the PKGBUILD lint runs makepkg/namcap against current Arch
+
+# The H16/H17 harness loads busybox:1.37 into the cluster with `k3d image import`
+# so the timed pods start from the node's store; a digest reference would make
+# containerd pull from the registry inside the timed window.
+bench/dra_round.sh                    busybox:1.37                          pre-imported by tag; pod start is the measured quantity
+
+# Test inputs: strings fed to the code under test, never pulled.
+bench/apb/test_capacity.py            nginx:1                               a stand-in Deployment the capacity discovery must ignore
+tests/console/*                       *                                     recorded containerd/kubectl state and fake refs the audit tests read
+tests/detect_test.sh                  example/ovms:latest                   checks the agent warns on a tag-only K3D_GPU_AGENT_IMAGE
+tests/detect_test.sh                  example/vllm-gaudi:dev                checks K3D_GPU_AGENT_IMAGE is used verbatim
+tests/detect_test.sh                  example/k3s-arm64:1                   checks K3D_GPU_IMAGE passes the aarch64 guard
+tests/fuzz/props.py                   busybox:1.37                          the image string the overrides properties compare, run against stubs
+tests/image_test.sh                   *                                     node-image resolution tests against stub registries (registry.local, localhost:5000)
+tests/model_share_test.sh             localhost:5000/agent                  checks a registry port is not read as a tag

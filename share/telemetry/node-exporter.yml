@@ -99,7 +99,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: core-type
-          image: quay.io/prometheus/node-exporter:v1.12.1
+          image: quay.io/prometheus/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "/scripts/core-type.sh"]
           securityContext:
@@ -118,7 +118,7 @@ spec:
               readOnly: true
       containers:
         - name: node-exporter
-          image: quay.io/prometheus/node-exporter:v1.12.1
+          image: quay.io/prometheus/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
           imagePullPolicy: IfNotPresent
           args:
             - --web.listen-address=:9100

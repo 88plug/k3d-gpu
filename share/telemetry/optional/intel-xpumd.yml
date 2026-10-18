@@ -278,7 +278,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: xpumd
-        image: "ghcr.io/intel/xpumanager/xpumd:v2.3.0"
+        image: "ghcr.io/intel/xpumanager/xpumd:v2.3.0@sha256:539009b75c64159ca2202f52b94ae736ab3883c3497d30d65bd3d179357e1859"
         imagePullPolicy: IfNotPresent
         args:
         - "--config=/etc/xpumd/config-receiver-crashlog.yaml"
