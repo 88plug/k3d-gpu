@@ -197,6 +197,45 @@ class Score(unittest.TestCase):
         self.assertTrue(out["T"].startswith("INCONCLUSIVE: load unmatched (load1"), out["T"])
         self.assertEqual(out["M"], out["T"])
 
+    def score_with_a27(self, rounds, off_during_throttle, off_pre_busy=37.0, off_running=4):
+        """Amendment 27 windows (as run.sh A4 writes them): one pre and two during per arm."""
+        with tempfile.TemporaryDirectory() as d:
+            files = []
+            for i, r in enumerate(rounds):
+                files.append(os.path.join(d, f"round-{i}.json"))
+                json.dump(r, open(files[-1], "w"))
+            f = os.path.join(d, "load.jsonl")
+            with open(f, "w") as fh:
+                for arm in ("ON", "OFF"):
+                    off = arm == "OFF"
+                    base = {"tag": arm, "level": "typical", "load_expected": 4, "swap_used_mib": 100.0,
+                            "swap_delta_mib": 0.0, "load1": 20.0, "pkg_w": 90.0}
+                    fh.write(json.dumps(dict(base, phase="pre", busy_pct=off_pre_busy if off else 37.0,
+                                             throttle_per_min=10.0, settled=True, load_running=4)) + "\n")
+                    for _ in range(2):
+                        fh.write(json.dumps(dict(base, phase="during", busy_pct=37.0,
+                                                 throttle_per_min=off_during_throttle if off else 10.0,
+                                                 load_running=off_running if off else 4)) + "\n")
+            return probe.score(files, f)
+
+    def a27_rounds(self):
+        return ([rnd("ON", s, [0.9, 0.85, 0.95, 0.9, 0.88]) for s in (1, 3, 5)]
+                + [rnd("OFF", s, [9.6, 9.4, 9.7, 9.5, 9.8]) for s in (2, 4, 6)])
+
+    def test_a27_treatment_throttle_does_not_gate(self):
+        out = self.score_with_a27(self.a27_rounds(), off_during_throttle=1400.0)
+        self.assertEqual(out["load"]["rule"], "amendment-27")
+        self.assertTrue(out["load"]["matched"], out["load"])
+        self.assertEqual(out["T"], "SUPPORTED")
+
+    def test_a27_pre_window_drift_is_inconclusive(self):
+        out = self.score_with_a27(self.a27_rounds(), off_during_throttle=10.0, off_pre_busy=60.0)
+        self.assertTrue(out["T"].startswith("INCONCLUSIVE: load unmatched (pre busy_pct"), out["T"])
+
+    def test_a27_missing_load_is_void(self):
+        out = self.score_with_a27(self.a27_rounds(), off_during_throttle=10.0, off_running=3)
+        self.assertTrue(out["T"].startswith("VOID: load missing"), out["T"])
+
     def test_no_burst_rounds_score_t_and_leave_m_open(self):
         def nb(r):
             r.update(B=[], drss_per_agent_mib=None)
