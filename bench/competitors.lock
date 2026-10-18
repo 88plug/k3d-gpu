@@ -1,6 +1,6 @@
 {
   "schema": "k3d-gpu.competitors-lock/v1",
-  "note": "Competitor stacks for 'k3d-gpu bench --vs'. Every image is pinned by registry digest (verified with docker buildx imagetools inspect on 2026-10-17). Each stack serves the same model family and 4-bit tier as the k3d-gpu arm (Qwen3-4B, int4 / Q4_K_M), with its own vendor defaults. Weights are pinned too: after the model loads, 'bench' hashes artifact_path inside the container and refuses to measure unless it equals artifact_sha256 (the Hugging Face LFS sha256 at model_revision, or the Ollama registry manifest digest).",
+  "note": "Competitor stacks for 'k3d-gpu bench --vs'. Every image is pinned by registry digest (verified with docker buildx imagetools inspect on 2026-10-17). Each stack serves the same model family and 4-bit tier as the k3d-gpu arm (Qwen3-4B, int4 / Q4_K_M), with its own vendor defaults. Weights are pinned too: after the model loads, 'bench' hashes artifact_path inside the container and refuses to measure unless it equals artifact_sha256 (the Hugging Face LFS sha256 at model_revision, or, for Ollama, the model-layer blob digest listed in the pinned registry manifest; Ollama rewrites its on-disk manifest copy, so that file does not hash to the registry digest).",
   "stacks": {
     "llamacpp": {
       "api": "/v1",
@@ -22,8 +22,8 @@
     "ollama": {
       "api": "/v1",
       "args": [],
-      "artifact_path": "/root/.ollama/models/manifests/registry.ollama.ai/library/qwen3/4b-q4_K_M",
-      "artifact_sha256": "2bfd38a7daaf4b1037efe517ccb73d1a3bbd4822cf89f1a82be1569050a114e0",
+      "artifact_path": "/root/.ollama/models/blobs/sha256-163553aea1b1de62de7c5eb2ef5afb756b4b3133308d9ae7e42e951d8d696ef5",
+      "artifact_sha256": "163553aea1b1de62de7c5eb2ef5afb756b4b3133308d9ae7e42e951d8d696ef5",
       "cache": "/root/.ollama",
       "device": "cpu",
       "docs": "https://github.com/ollama/ollama/blob/v0.40.5/openai/openai.go",
@@ -31,7 +31,7 @@
       "ignore_eos": false,
       "image": "ollama/ollama:0.40.5@sha256:5d3a2f25f9825628daba94dc0b1d421c7d57d6c03ae5faa9ba050e058bab8241",
       "model": "qwen3:4b-q4_K_M",
-      "model_revision": "registry.ollama.ai/library/qwen3:4b-q4_K_M manifest sha256:2bfd38a7daaf4b1037efe517ccb73d1a3bbd4822cf89f1a82be1569050a114e0",
+      "model_revision": "registry.ollama.ai/library/qwen3:4b-q4_K_M manifest sha256:2bfd38a7daaf4b1037efe517ccb73d1a3bbd4822cf89f1a82be1569050a114e0, model layer sha256:163553aea1b1de62de7c5eb2ef5afb756b4b3133308d9ae7e42e951d8d696ef5",
       "port": 11434,
       "pull": "ollama",
       "quant_tier": "4-bit (GGUF Q4_K_M)",

@@ -68,7 +68,7 @@
 
 set -euo pipefail
 
-VERSION="0.1.55"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.57"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 # The node image defaults to the tag built from this launcher's own release
 # (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
@@ -304,7 +304,8 @@ Environment:
   K3D_GPU_AGENT_MODEL   agent Hugging Face model (default: OpenVINO/Qwen3-4B-int4-ov,
                         Qwen/Qwen3-4B on vllm/llm-scaler)
   K3D_GPU_AGENT_DRAFT   ovms Fast Draft speculative decoding: off | auto | CPU | GPU | NPU
-                        (default: off until a host measurement shows a speedup;
+                        (default: a CPU draft for a CPU target serving an OpenVINO Qwen3
+                        model, where H34 measured a win, none otherwise; off disables it;
                         auto = the target's device; GPU = an Intel GPU, the first advertised)
   K3D_GPU_AGENT_DRAFT_MODEL  draft model (default: OpenVINO/Qwen3-0.6B-int4-ov)
   K3D_GPU_AUTOQUANT     auto | off: on OVMS/CPU with no K3D_GPU_AGENT_MODEL, serve the
@@ -4205,6 +4206,7 @@ cmd_up() {
 
     info "Waiting for nodes Ready..."
     kubectl wait --for=condition=Ready nodes --all --timeout=120s
+    wait_cluster_dns
     if intel_dra; then check_dra_api; fi
 
     # Favored cores (top CPPC highest_perf) as a node annotation; once the balloons
@@ -4239,6 +4241,28 @@ cmd_up() {
     exp_post_up
 
     verify_gpus
+}
+
+# wait_cluster_dns: returns once CoreDNS is rolled out. A node is Ready before k3s
+# has created the CoreDNS Deployment (and before its image is pulled), and in that
+# window the kube-dns Service has no endpoints: a pod's lookup is rejected at once and
+# glibc reports EAI_AGAIN, "Temporary failure in name resolution", for any name.
+# Skipped when k3s runs without its CoreDNS (K3D_GPU_K3S_ARGS --disable=coredns).
+DNS_WAIT_S=60
+wait_cluster_dns() {
+    [[ " ${K3S_ARGS} " != *" --disable=coredns "* ]] || return 0
+    info "Waiting for cluster DNS (CoreDNS)..."
+    local i
+    for ((i = 0; i < DNS_WAIT_S; i++)); do
+        kubectl -n kube-system get deployment/coredns >/dev/null 2>&1 && break
+        sleep 1
+    done
+    if [ "${i}" -ge "${DNS_WAIT_S}" ]; then
+        warn "no CoreDNS Deployment after ${DNS_WAIT_S} s; pods may not resolve names yet"
+        return 0
+    fi
+    kubectl -n kube-system rollout status deployment/coredns --timeout=180s >/dev/null \
+        || warn "CoreDNS is not ready; pods may not resolve names yet (kubectl -n kube-system get pods -l k8s-app=kube-dns)"
 }
 
 # k3d pulls the node image only when it is absent locally (k3d-io/k3d
@@ -6116,17 +6140,30 @@ agent_select() {
 }
 
 # OVMS Fast Draft speculative decoding: "<draft device> <extra resource or ->", or
-# "- -" for none. K3D_GPU_AGENT_DRAFT: off (default) | auto | CPU | GPU | NPU.
-# off is the default until a measured speedup exists: a draft on another engine
-# lost on Lunar Lake (openvinotoolkit/openvino discussions/36484) and H22 is the
-# host measurement. auto drafts on the target's own device:
-# GenAI 2026.4.1 runs draft then verify serially (EXPERIMENTS.md H22), so a draft
-# on another engine pays only if it is faster there, and no measurement says so
-# yet. A named device overrides; one the target does not already hold adds its
-# resource to the pod.
-AGENT_DRAFT_MODEL="${K3D_GPU_AGENT_DRAFT_MODEL:-OpenVINO/Qwen3-0.6B-int4-ov}"
+# "- -" for none. K3D_GPU_AGENT_DRAFT: unset (default) | off | auto | CPU | GPU | NPU.
+# Unset drafts on the CPU only where a measurement says it wins: a CPU target serving
+# an OpenVINO Qwen3 model with the default Qwen3-0.6B draft (EXPERIMENTS.md H34:
+# 1.39x decode tok/s, 0.75x package J/token under matched background load). Any other
+# target stays draft-free: a draft on another engine lost on Lunar Lake
+# (openvinotoolkit/openvino discussions/36484) and on the UHD 770 (H22), and a draft
+# from another model family would not share the target's tokenizer. off disables it.
+# auto drafts on the target's own device: GenAI 2026.4.1 runs draft then verify
+# serially (H22), so a draft on another engine pays only if it is faster there.
+# A named device overrides; one the target does not already hold adds its resource
+# to the pod.
+AGENT_DRAFT_DEFAULT_MODEL=OpenVINO/Qwen3-0.6B-int4-ov
+AGENT_DRAFT_MODEL="${K3D_GPU_AGENT_DRAFT_MODEL:-${AGENT_DRAFT_DEFAULT_MODEL}}"
+# The measured pairing: CPU target, OpenVINO Qwen3 target model, default draft model.
+agent_draft_measured() {
+    [ "$1" = CPU ] && [ "${AGENT_DRAFT_MODEL}" = "${AGENT_DRAFT_DEFAULT_MODEL}" ] \
+        && [[ "${AGENT_MODEL:-}" =~ ^OpenVINO/Qwen3-[0-9.]+B- ]] && [ "${AGENT_MODEL}" != "${AGENT_DRAFT_MODEL}" ]
+}
 agent_draft() {
-    local target=$1 want=${K3D_GPU_AGENT_DRAFT:-off} res
+    local target=$1 want=${K3D_GPU_AGENT_DRAFT:-default} res
+    if [ "${want}" = default ]; then
+        if agent_draft_measured "${target}"; then echo "CPU -"; else echo "- -"; fi
+        return 0
+    fi
     case "${want^^}" in
         OFF|0|"") echo "- -"; return 0 ;;
         AUTO) echo "${target} -"; return 0 ;;

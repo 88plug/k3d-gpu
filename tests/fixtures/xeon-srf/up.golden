@@ -2,6 +2,7 @@
 ==> Experimental features (auto): dra image-volume
 ==> Creating k3d cluster 'gpu' with image cryptoandcoffee/k3d-gpu:<version>...
 ==> Waiting for nodes Ready...
+==> Waiting for cluster DNS (CoreDNS)...
 ==> dsa device plugin auto-deployed by k3s.
 ==> iaa device plugin auto-deployed by k3s.
 ==> Verifying accelerators are schedulable...
@@ -22,6 +23,8 @@ k3d cluster create gpu
   --k3s-node-label=experimental.k3d-gpu.io/dra=true@server:*;agent:*
   --k3s-node-label=experimental.k3d-gpu.io/image-volume=true@server:*;agent:*
 kubectl wait --for=condition=Ready nodes --all --timeout=120s
+kubectl -n kube-system get deployment/coredns
+kubectl -n kube-system rollout status deployment/coredns --timeout=180s
 kubectl -n kube-system get daemonset intel-dsa-plugin
 kubectl -n kube-system get daemonset intel-iaa-plugin
 kubectl -n kube-system rollout status daemonset/intel-dsa-plugin --timeout=120s
