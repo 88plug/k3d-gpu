@@ -13,15 +13,23 @@
 #        K3D_GPU_IMAGE  node image for `k3d-gpu up` (default: the launcher's pin)
 #        DRY_RUN=1      print the pod manifests for each arm and exit (no cluster)
 #        CAL_ONLY=1     stop after calibration and the budget gate (no cluster)
+#        LOAD_LEVEL     Amendment A2: the bench/load/load.py level the caller holds
+#                       (typical|heavy). Each run's pre-run reading becomes a 10 s
+#                       load.py window tagged with the arm (OUT/load.jsonl), pre-run
+#                       watts and swap growth are recorded instead of voiding the run,
+#                       and the summary ends with `load.py matched` over B, T and C.
 # Exit 4 = INCONCLUSIVE before any run: the fitted budget admits < 4 or all 24
 # pods (headroom_model.py degenerate()), so arms T/C cannot differ from B.
-# Root is only used to read RAPL energy_uj (sudo -n); nothing in sysfs is written.
+# Root is only used to read RAPL energy_uj (sudo -A with SUDO_ASKPASS, else sudo -n);
+# nothing in sysfs is written.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 MODEL="${ROOT}/research/thermal-resource/headroom_model.py"
 # stress-ng pin from research/tseries-envelope/README.md
 STRESS=ghcr.io/colinianking/stress-ng:72a9d0cae0f420a887991d4024d3101c4af7a4fc@sha256:2ea9a7c3828eda1b1ca3d0b0c5a669ec252f9caf97a6a33aedcea6b2a66d1cbe
 TAG=h23-stress:pin
+LOADPY="${ROOT}/bench/load/load.py"
+LOAD_LEVEL=${LOAD_LEVEL:-}
 NAME=k3dgpu-i-thermal-resource
 ORDER=(B T C C T B B T C)
 NPODS=24 SOLO_S=12 CAP_S=75 COOL_CAP_S=45
@@ -48,7 +56,10 @@ RAPL=""
 for z in /sys/class/powercap/intel-rapl:[0-9]; do
     case "$(cat "${z}/name" 2>/dev/null)" in package*) RAPL=${z}; break ;; esac
 done
-energy_uj() { sudo -n cat "${RAPL}/energy_uj"; }
+# sudo keeps no timestamp across the nested subshells without a tty, so with
+# SUDO_ASKPASS set every read uses -A (the same rule as bench/load/load.py).
+if [ -n "${SUDO_ASKPASS:-}" ]; then SUDO_R="sudo -A"; else SUDO_R="sudo -n"; fi
+energy_uj() { ${SUDO_R} cat "${RAPL}/energy_uj"; }
 E_RANGE=$(cat "${RAPL:-/nonexistent}/max_energy_range_uj" 2>/dev/null || echo 0)
 throttle_ms() { cat /sys/devices/system/cpu/cpu0/thermal_throttle/package_throttle_total_time_ms; }
 swap_mib() { awk '/^SwapTotal/ {t = $2} /^SwapFree/ {f = $2} END {printf "%d", (t - f) / 1024}' /proc/meminfo; }
@@ -126,7 +137,7 @@ WATCHDOG=$!
 
 [ -n "${TEMP_FILE}" ] || { log "no coretemp Package id 0 sensor"; exit 2; }
 [ -n "${RAPL}" ] && [ "${E_RANGE}" -gt 0 ] || { log "no package RAPL zone"; exit 2; }
-energy_uj >/dev/null || { log "sudo -n cannot read RAPL energy_uj"; exit 2; }
+energy_uj >/dev/null || { log "${SUDO_R} cannot read RAPL energy_uj"; exit 2; }
 docker pull -q "${STRESS}" >/dev/null && docker tag "${STRESS}" "${TAG}"
 help=$(docker run --rm --entrypoint stress-ng "${TAG}" --help 2>&1 || true)
 for f in --cpu-ops --cpu-load --cpu-method; do
@@ -232,7 +243,14 @@ for arm in "${ORDER[@]}"; do
         awk -v t="$(temp_c)" -v r="${start_ref}" 'BEGIN {exit !(t <= r + 3)}' && break
         sleep 1
     done
-    pre_w=$(watts 5); t0c=$(temp_c); [ -n "${start_ref}" ] || start_ref=${t0c}
+    if [ -n "${LOAD_LEVEL}" ]; then
+        # A2: 10 s load window tagged with the arm, no h23 pod running
+        pre_w=$(python3 "${LOADPY}" sample --seconds 10 --tag "${arm}" --level "${LOAD_LEVEL}" \
+            | tee -a "${OUT}/load.jsonl" | python3 -c 'import json, sys; print(json.loads(sys.stdin.readline())["pkg_w"])')
+    else
+        pre_w=$(watts 5)
+    fi
+    t0c=$(temp_c); [ -n "${start_ref}" ] || start_ref=${t0c}
     l1=$(load1); s0=$(swap_mib); th0=$(throttle_ms); e0=$(energy_uj); maxc=${t0c}
     manifest "${arm}" "${cpu}" "${w_hot}" "${w_cool}" "${ops_hot}" "${ops_cool}" > "${OUT}/pods-${run}.yaml"
     ts=$(date +%s.%N)
@@ -275,8 +293,11 @@ PY
     thd=$(( th1 - th0 ))
     thn=$(awk -v d="${thd}" -v b="${th_bg}" -v m="${mk}" 'BEGIN {printf "%d", d - b * m / 30}')
     void=0
-    awk -v w="${pre_w}" -v i="${p_idle_med}" 'BEGIN {exit !(w > i + 15)}' && void=1
-    [ $(( s1 - s0 )) -gt 512 ] && void=1
+    # A2: under a held load level the per-arm load match replaces these two rules
+    if [ -z "${LOAD_LEVEL}" ]; then
+        awk -v w="${pre_w}" -v i="${p_idle_med}" 'BEGIN {exit !(w > i + 15)}' && void=1
+        [ $(( s1 - s0 )) -gt 512 ] && void=1
+    fi
     # a censored run did less work, so its throttle time is not comparable
     [ "${censored}" = 1 ] && void=1
     tpp=$(awk -v t="${thn}" -v n="${done_n}" 'BEGIN {printf "%.1f", (n > 0) ? t / n : -1}')
@@ -295,3 +316,6 @@ for arm in "BTC":
         if v:
             print("%s %-16s n=%d median=%.2f min=%.2f max=%.2f spread=%.2f" % (arm, name, len(v), v[len(v) // 2], v[0], v[-1], v[-1] - v[0]))
 PY
+if [ -n "${LOAD_LEVEL}" ] && [ -s "${OUT}/load.jsonl" ]; then
+    python3 "${LOADPY}" matched "${OUT}/load.jsonl" | tee -a "${OUT}/summary.txt" || true
+fi

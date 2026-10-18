@@ -1,6 +1,6 @@
 # Thermal headroom as a per-pod resource (H23)
 
-Status: **PENDING**. Pre-registered in
+Status: **INCONCLUSIVE** (O0 budget gate, run 1 and run 2 under matched load; DO-NOT-RE-ATTACK on the i9-13900T). Pre-registered in
 [`EXPERIMENTS.md`](../../EXPERIMENTS.md#h23-pre-registration-2026-10-17) before
 any measurement; the prediction there is REFUTED. Nothing here is wired into
 `k3d-gpu` until H23 is SUPPORTED.
@@ -15,6 +15,9 @@ any measurement; the prediction there is REFUTED. Nothing here is wired into
   one cluster `k3dgpu-i-thermal-resource`, 9 runs B T C C T B B T C, 18.5 min
   budget with a watchdog, cluster deleted on exit). `DRY_RUN=1` prints the pod
   lists of the three arms.
+- `bench/thermal-resource/run.sh`: Amendment A2 runner; takes the live lock and runs
+  the probe under each `bench/load/load.py` level (`typical`, then `heavy`), with a
+  10 s load window per arm (`LOAD_LEVEL`).
 
 Prior art and the search log: `docs/provenance.md`, section "H23 prior-art
 search", rows P230-P239.
