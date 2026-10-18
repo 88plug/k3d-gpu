@@ -163,6 +163,15 @@ one capped proxy. `LIVE_MODE=bfcl` runs one server-fc BFCL block instead of the 
 (H44; `live_table.py --h44 OUT ARM` prints the p95 inflation). Root-only RAPL counters are read through `K3D_GPU_RAPL_EXEC` (a
 read-only container with the powercap paths unmasked) when sudo is not available.
 
+`LIVE_MODE=pairs` (ARM `H47` or `H49`) runs both arms of one comparison in one cluster
+`k3dgpu-e-<arm>`, each with its own LiteLLM, proxy and agent and one shared MCP sidecar,
+and runs pairs over B24 in A B B A order, one attempt at a time, into `LIVE_PAIRS_DIR`
+(shared by every hold; `LIVE_HOLD` numbers the hold). Each attempt records its own load
+window, with background CPU being host busy CPU minus the two arm pods' cgroup CPU.
+`k3d-gpu bench agent pairs-report DIR --hyp H49 --arm-a A1 --arm-b B1` applies load rule L1
+and the pre-registered verdict ([EXPERIMENTS.md](../EXPERIMENTS.md), "H47 and H49
+pre-registration" and amendment P1).
+
 `k3d-gpu bench agent regrade RUN` applies the current graders to a recorded block (the
 first rows stay in `results.raw.jsonl`); `bench/eatflow/live_table.py RUNS` prints the
 per-arm table (completed, success, turn p95, J per task, load matched).

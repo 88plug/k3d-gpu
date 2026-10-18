@@ -27,7 +27,9 @@
 #   LIVE_BUDGET     measurement budget cap, s (default 720)
 #   LIVE_MODE       agent (default): B24 at LIVE_LEVEL, then a control window;
 #                   bfcl: H41, BFCL S100 server-fc at LIVE_LEVEL, no agent (amendment 23);
-#                   h44: B24's first 12 tasks in blocks none/heavy/none/heavy (amendment 24)
+#                   h44: B24's first 12 tasks in blocks none/heavy/none/heavy (amendment 24);
+#                   pairs: ARM = H47 or H49, both arms live in cluster k3dgpu-e-<arm>, one hold
+#                   of interleaved pairs into LIVE_PAIRS_DIR (LIVE_HOLD = this hold's number)
 set -uo pipefail
 
 ARM=${1:?usage: live.sh ARM OUT}
@@ -47,7 +49,9 @@ P_SRV=18630 P_LLM=18640 P_PROXY=18620 P_MCP=18600
 LITELLM_IMAGE=docker.litellm.ai/berriai/litellm:v1.83.14-stable.patch.2@sha256:73cbb215d3d43ae5b42816217b200386eb08d567767fcb36cba163152c5f3c79  # EAT 0d3438d genai-gateway; the index digest the 2026-10-17/18 holds pulled
 RAPL_IMAGE=python:3.14.8-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170
 lc=$(echo "${ARM}" | tr 'A-Z' 'a-z')
-export K3D_GPU_CLUSTER=k3dgpu-a-${lc}
+PFX=k3dgpu-a
+[ "${MODE}" = pairs ] && PFX=k3dgpu-e
+export K3D_GPU_CLUSTER=${PFX}-${lc}
 mkdir -p "${OUT}"
 OUT=$(cd "${OUT}" && pwd)
 export KUBECONFIG=${OUT}/kubeconfig XDG_STATE_HOME=${OUT}/state
@@ -64,7 +68,8 @@ cleanup() {
     python3 "${REPO}/bench/load/load.py" stop >/dev/null 2>&1
     for p in "${pids[@]}"; do kill "${p}" 2>/dev/null; done
     [ -f "${OUT}/mcp.pid" ] && kill "$(cat "${OUT}/mcp.pid")" 2>/dev/null
-    docker rm -f "k3dgpu-a-litellm" "k3dgpu-a-${lc}-srv" k3dgpu-a-rapl >/dev/null 2>&1
+    for f in "${OUT}"/agent-*.pid; do [ -f "${f}" ] && kill "$(cat "${f}")" 2>/dev/null; done
+    docker rm -f "${PFX}-litellm" "${PFX}-litellm-a" "${PFX}-litellm-b" "${PFX}-${lc}-srv" "${PFX}-rapl" >/dev/null 2>&1
     k3d cluster delete "${K3D_GPU_CLUSTER}" >/dev/null 2>&1
     stamp "done"
 }
@@ -146,12 +151,12 @@ if [ "${ARM}" = R ]; then
 fi
 
 M=${LIVE_MODELS:?}
-docker rm -f k3dgpu-a-rapl >/dev/null 2>&1
+docker rm -f "${PFX}-rapl" >/dev/null 2>&1
 # RAPL energy_uj is root-only; a read-only container with the powercap paths unmasked
 # reads it (K3D_GPU_RAPL_EXEC), as no sudo is available to the harness.
-docker run -d --name k3dgpu-a-rapl --security-opt systempaths=unconfined --security-opt apparmor=unconfined \
+docker run -d --name "${PFX}-rapl" --security-opt systempaths=unconfined --security-opt apparmor=unconfined \
     --read-only --network none "${RAPL_IMAGE}" sleep 7200 >/dev/null
-export K3D_GPU_RAPL_EXEC="docker exec k3dgpu-a-rapl"
+export K3D_GPU_RAPL_EXEC="docker exec ${PFX}-rapl"
 
 nodes() { docker ps --filter "label=k3d.cluster=${K3D_GPU_CLUSTER}" --filter "label=k3d.role=server" --format '{{.Names}}'; }
 stage() {  # stage <local dir> <path under /var/apb-models> <uid>
@@ -167,6 +172,153 @@ cluster_up() {
     stamp "k3d-gpu up"
     timeout 300 "${K}" up > "${OUT}/up.log" 2>&1 || { echo "up failed"; tail -20 "${OUT}/up.log"; exit 1; }
 }
+if [ "${MODE}" = pairs ]; then
+    # H47 / H49 (EXPERIMENTS.md "H47 and H49 pre-registration"): both arms live in one
+    # cluster, each with its own LiteLLM, proxy (in-process in `agentbench pairs`) and
+    # agent; one shared MCP sidecar; pairs A B B A over B24, one attempt in flight at a time.
+    # LIVE_PAIRS_DIR: the pairs directory shared by every hold; LIVE_HOLD: this hold's number;
+    # LIVE_PAIRS_GUARD: the pair-start guard, s (default 600; a smoke sets it past the hold).
+    PD=${LIVE_PAIRS_DIR:?} HOLD=${LIVE_HOLD:?}
+    mkdir -p "${PD}"
+    PD=$(cd "${PD}" && pwd)
+    case ${ARM} in
+        H47) A=A1 B=A4 ;;
+        H49) A=A1 B=B1; export K3D_GPU_NODE_LABELS=ei-infra-eligible=true,ei-inference-eligible=true ;;
+        *) echo "pairs: ARM must be H47 or H49"; exit 2 ;;
+    esac
+    TGT=k3dgpu/Qwen3-4B-Instruct-2507-int4-ov
+    DRAFT_DIR=OpenVINO-Qwen3-0.6B-int4-ov     # where OVMS --pull puts the draft, inside the target dir
+    stage_path() {  # stage_path <local dir> <path under /var/apb-models> <uid>: chown that path only
+        local n
+        for n in $(nodes); do
+            docker exec "${n}" mkdir -p "/var/apb-models/$2" /var/apb-models/.ov_cache
+            docker cp "${M}/$1/." "${n}:/var/apb-models/$2/"
+            docker exec "${n}" rm -rf "/var/apb-models/$2/.cache" "/var/apb-models/$2/.git"
+            docker exec "${n}" chown -R "$3:$3" "/var/apb-models/$2"
+            docker exec "${n}" chown 5000:5000 /var/apb-models/.ov_cache
+            docker exec "${n}" chmod 1777 /var/apb-models
+        done
+    }
+    cluster_up
+    stage_path Qwen3-4B-Instruct-2507-int4-ov "${TGT}" 5000
+    stage_path Qwen3-0.6B-int4-ov "${TGT}/${DRAFT_DIR}" 5000
+    draft=CPU
+    [ "${ARM}" = H47 ] && draft=off
+    K3D_GPU_AGENT_MODEL=${TGT} K3D_GPU_AGENT_MODEL_NAME=${SERVED} K3D_GPU_AGENT_DRAFT=${draft} \
+        K3D_GPU_AGENT_TOOL_PARSER=hermes3 K3D_GPU_AGENT_REASONING_PARSER='' K3D_GPU_AUTOQUANT=off \
+        "${K}" agent manifest > "${OUT}/agent.yaml" 2> "${OUT}/agent.err" || { cat "${OUT}/agent.err"; exit 1; }
+    SERVED_A=${SERVED}
+    if [ "${ARM}" = H47 ]; then
+        # One OVMS pod, two graph names: A1 (no draft) and A4 (CPU Fast Draft), the graphs
+        # OVMS 2026.4.1 --pull writes for those settings (bench/eatflow/h47/).
+        SERVED_B=${SERVED}-a4
+        python3 "${REPO}/bench/apb/stage.py" ovms2 "${OUT}/agent.yaml" "${OUT}/deploy-a.yaml" "${TGT}" \
+            "${SERVED_A}=${HERE}/h47/graph-a1.pbtxt" "${SERVED_B}=${HERE}/h47/graph-a4.pbtxt"
+    else
+        python3 "${REPO}/bench/apb/stage.py" ovms "${OUT}/agent.yaml" "${OUT}/deploy-a.yaml"
+        chart=${LIVE_EAT_CHART:?}
+        printf 'image:\n  tag: "v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1"\n' \
+            > "${OUT}/pin.yaml"
+        python3 "${REPO}/bench/apb/stage.py" values "${chart}/xeon-values.yaml" "${OUT}/pin.yaml" 6 "${OUT}/values.yaml"
+        helm template vllm-qwen-3-4b-cpu "${chart}" --values "${OUT}/values.yaml" \
+            --set LLM_MODEL_ID=${ALIAS} --set global.monitoring=false \
+            --set svcmonitor.enabled=false --set ingress.enabled=false --set route.enabled=false > "${OUT}/eat.yaml"
+        python3 "${REPO}/bench/apb/stage.py" vllm "${OUT}/eat.yaml" "${OUT}/deploy-b.yaml" Qwen3-4B-Instruct-2507 8192
+        stage_path Qwen3-4B-Instruct-2507 Qwen3-4B-Instruct-2507 1001
+        kubectl apply -f "${OUT}/deploy-b.yaml" > /dev/null
+    fi
+    kubectl apply -f "${OUT}/deploy-a.yaml" > /dev/null
+    stamp wait-ready
+    ready() {  # ready NS DEP: rolled out with at least 900 s of the hold left
+        local left=$(( CAP - $(el) - 900 ))
+        [ "${left}" -gt 0 ] && kubectl -n "$1" rollout status "deploy/$2" --timeout="${left}s"
+    }
+    if ! ready k3d-gpu-agent ovms || { [ "${ARM}" = H49 ] && ! ready default vllm-qwen-3-4b-cpu; }; then
+        echo "NOT DELIVERABLE: not ready with 900 s of the hold left" | tee -a "${OUT}/live.log"
+        kubectl get pods -A > "${OUT}/pods.txt" 2>&1
+        kubectl -n k3d-gpu-agent logs deploy/ovms --all-containers > "${OUT}/server-a.log" 2>&1
+        [ "${ARM}" = H49 ] && kubectl -n default logs deploy/vllm-qwen-3-4b-cpu > "${OUT}/server-b.log" 2>&1
+        exit 3
+    fi
+    stamp ready
+    podinfo() {  # podinfo NS: "<uid> <image> <imageID>" of the running pod
+        kubectl -n "$1" get pods --field-selector=status.phase=Running \
+            -o jsonpath='{.items[0].metadata.uid} {.items[0].spec.containers[0].image} {.items[0].status.containerStatuses[0].imageID}'
+    }
+    podinfo k3d-gpu-agent > "${OUT}/image-a.txt"
+    read -r uid_a _ < "${OUT}/image-a.txt"
+    kubectl -n k3d-gpu-agent port-forward svc/ovms "${P_SRV}:8000" > "${OUT}/pf-a.log" 2>&1 &
+    pids+=($!)
+    cg_a=$(${AB} cgroup --uid "${uid_a}") || { echo "no cgroup for the A pod"; exit 1; }
+    cg_b=${cg_a}
+    BPORT=${P_SRV}
+    if [ "${ARM}" = H49 ]; then
+        podinfo default > "${OUT}/image-b.txt"
+        read -r uid_b _ < "${OUT}/image-b.txt"
+        BPORT=$(( P_SRV + 1 ))
+        kubectl -n default port-forward svc/vllm-qwen-3-4b-cpu-service "${BPORT}:80" > "${OUT}/pf-b.log" 2>&1 &
+        pids+=($!)
+        cg_b=$(${AB} cgroup --uid "${uid_b}") || { echo "no cgroup for the B pod"; exit 1; }
+    fi
+    echo "pod cgroups: ${A} ${cg_a}; ${B} ${cg_b}" | tee -a "${OUT}/live.log"
+    grep -h usage_usec "${cg_a}/cpu.stat" "${cg_b}/cpu.stat" | tee -a "${OUT}/live.log" | grep -q . \
+        || { echo "pod cpu.stat unreadable"; exit 1; }
+    wait_http "http://127.0.0.1:${P_SRV}/v1/models" 120 || { echo "A server not answering"; exit 3; }
+    curl -fsS "http://127.0.0.1:${P_SRV}/v1/models" > "${OUT}/models-a.json"
+    if [ "${ARM}" = H49 ]; then
+        wait_http "http://127.0.0.1:${BPORT}/v1/models" 300 || { echo "B server not answering"; exit 3; }
+        curl -fsS "http://127.0.0.1:${BPORT}/v1/models" > "${OUT}/models-b.json"
+        SERVED_B=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['data'][0]['id'])" "${OUT}/models-b.json")
+    fi
+    litellm() {  # litellm x served port llm_port
+        printf 'model_list:\n  - model_name: %s\n    litellm_params:\n      model: openai/%s\n      api_base: http://127.0.0.1:%s/v1\n      api_key: not-needed\n      timeout: 600\n' \
+            "${ALIAS}" "$2" "$3" > "${OUT}/litellm-$1.yaml"
+        docker run -d --name "${PFX}-litellm-$1" --network host -v "${OUT}/litellm-$1.yaml:/app/config.yaml:ro" \
+            "${LITELLM_IMAGE}" --config /app/config.yaml --port "$4" --host 127.0.0.1 >/dev/null
+        docker inspect --format '{{.Image}} {{index .Config.Image}}' "${PFX}-litellm-$1" > "${OUT}/litellm-image-$1.txt"
+        wait_http "http://127.0.0.1:$4/health/liveliness" 120 || { echo "litellm $1 did not start"; exit 1; }
+    }
+    litellm a "${SERVED_A}" "${P_SRV}" "${P_LLM}"
+    litellm b "${SERVED_B}" "${BPORT}" "$(( P_LLM + 1 ))"
+    echo "served: ${A}=${SERVED_A} ${B}=${SERVED_B}" | tee -a "${OUT}/live.log"
+    start_mcp || { echo "mcp did not start"; exit 1; }
+    # One agent per arm. DevUI's port is fixed (8090), so the arms bind two loopback addresses.
+    for x in a b; do
+        if [ "${x}" = a ]; then host=127.0.0.1 pport=${P_PROXY}; else host=127.0.0.2 pport=$(( P_PROXY + 1 )); fi
+        {
+            echo '#!/usr/bin/env bash'
+            echo "# (Re)start the ${x} arm's banking agent and wait for its DevUI."
+            echo "[ -f '${OUT}/agent-${x}.pid' ] && kill \"\$(cat '${OUT}/agent-${x}.pid')\" 2>/dev/null"
+            echo "for _ in \$(seq 100); do (exec 3<>/dev/tcp/${host}/8090) 2>/dev/null || break; sleep 0.1; done"
+            echo "cd '${BP}' && (OPENAI_BASE_URL=http://127.0.0.1:${pport}/v1 OPENAI_API_KEY=not-needed MODEL_NAME='${ALIAS}' \\"
+            echo "    MCP_SERVER_URL=http://127.0.0.1:${P_MCP}/mcp ENABLE_MEMORY=false AUTO_OPEN_BROWSER=false \\"
+            echo "    DEVUI_HOST=${host} exec '${PY}' main.py >> '${OUT}/agent-${x}.log' 2>&1 &"
+            echo "    echo \$! > '${OUT}/agent-${x}.pid')"
+            echo "for _ in \$(seq 45); do"
+            echo "    curl -fsS -o /dev/null --max-time 5 -H \"Authorization: Bearer \${DEVUI_AUTH_TOKEN}\" http://${host}:8090/v1/entities && exit 0"
+            echo "    sleep 2"
+            echo "done"
+            echo "exit 1"
+        } > "${OUT}/agent-${x}.sh"
+        chmod 700 "${OUT}/agent-${x}.sh"
+        "${OUT}/agent-${x}.sh" || { echo "agent ${x} did not start"; tail -20 "${OUT}/agent-${x}.log"; exit 1; }
+    done
+    stamp "load ${LEVEL}"
+    python3 "${REPO}/bench/load/load.py" start --level "${LEVEL}" --ttl $(( CAP - $(el) + 60 )) > "${OUT}/load-start.log" 2>&1
+    deadline=$(( t0 + CAP - 120 ))     # teardown fits in the last 120 s of the hold
+    idle=()
+    [ "${ARM}" = H47 ] && idle=(--idle-s 3)
+    stamp "pairs hold ${HOLD}, deadline +$(( deadline - t0 ))s"
+    ${AB} pairs --hyp "${ARM}" --hold "${HOLD}" --out "${PD}" --deadline "${deadline}" --tasks B24 \
+        --arm-a "${A}" --agent-a http://127.0.0.1:8090 --upstream-a "http://127.0.0.1:${P_LLM}" \
+        --proxy-port-a "${P_PROXY}" --restart-a "${OUT}/agent-a.sh" --pod-a "${cg_a}" \
+        --arm-b "${B}" --agent-b http://127.0.0.2:8090 --upstream-b "http://127.0.0.1:$(( P_LLM + 1 ))" \
+        --proxy-port-b "$(( P_PROXY + 1 ))" --restart-b "${OUT}/agent-b.sh" --pod-b "${cg_b}" \
+        --mcp-url "http://127.0.0.1:${P_MCP}/mcp" --reset "${OUT}/reset-mcp.sh" --sampling agent_local \
+        --guard-s "${LIVE_PAIRS_GUARD:-600}" "${idle[@]}" 2>&1 | tee -a "${OUT}/live.log"
+    stamp finished
+    exit 0
+fi
 gpu_flag=()
 case ${ARM} in
     A1|A2)
@@ -209,12 +361,12 @@ case ${ARM} in
         NS=default DEP=vllm-qwen-3-4b-cpu SVC=vllm-qwen-3-4b-cpu-service SPORT=80 ;;
     C1)
         stamp "ollama"
-        docker run -d --name "k3dgpu-a-${lc}-srv" -p "127.0.0.1:${P_SRV}:11434" -v "${M}/ollama:/root/.ollama" \
+        docker run -d --name "${PFX}-${lc}-srv" -p "127.0.0.1:${P_SRV}:11434" -v "${M}/ollama:/root/.ollama" \
             ollama/ollama:0.40.5@sha256:5d3a2f25f9825628daba94dc0b1d421c7d57d6c03ae5faa9ba050e058bab8241 >/dev/null
         SERVED=qwen3:4b-instruct-2507-q4_K_M ;;
     C2)
         stamp "llama.cpp"
-        docker run -d --name "k3dgpu-a-${lc}-srv" -p "127.0.0.1:${P_SRV}:8080" -v "${M}/gguf:/models:ro" \
+        docker run -d --name "${PFX}-${lc}-srv" -p "127.0.0.1:${P_SRV}:8080" -v "${M}/gguf:/models:ro" \
             ghcr.io/ggml-org/llama.cpp:server-b11706@sha256:f41d47eee678c02656eefc9ed8cce76cab584aa7032805eeef0e6639fcfda485 \
             -m /models/Qwen3-4B-Instruct-2507-Q4_K_M.gguf --alias "${SERVED}" --jinja --host 0.0.0.0 --port 8080 >/dev/null ;;
     S)  stamp "smoke: a stub server is already on 127.0.0.1:${P_SRV}" ;;
@@ -240,7 +392,7 @@ case ${ARM} in
     C1) wait_http "http://127.0.0.1:${P_SRV}/api/version" 120 && \
             curl -fsS "http://127.0.0.1:${P_SRV}/api/tags" > "${OUT}/ollama-tags.json" ;;
     *) wait_http "http://127.0.0.1:${P_SRV}/v1/models" 600 ;;
-esac || { echo "NOT DELIVERABLE: server not answering"; docker logs "k3dgpu-a-${lc}-srv" > "${OUT}/server.log" 2>&1; exit 3; }
+esac || { echo "NOT DELIVERABLE: server not answering"; docker logs "${PFX}-${lc}-srv" > "${OUT}/server.log" 2>&1; exit 3; }
 curl -fsS "http://127.0.0.1:${P_SRV}/v1/models" > "${OUT}/models.json"
 # LiteLLM targets the name the server itself serves (the EAT chart names its own).
 SERVED=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['data'][0]['id'])" "${OUT}/models.json")
@@ -255,10 +407,10 @@ model_list:
       api_key: not-needed
       timeout: 600
 EOF
-docker run -d --name k3dgpu-a-litellm --network host -v "${OUT}/litellm.yaml:/app/config.yaml:ro" \
+docker run -d --name "${PFX}-litellm" --network host -v "${OUT}/litellm.yaml:/app/config.yaml:ro" \
     "${LITELLM_IMAGE}" --config /app/config.yaml --port "${P_LLM}" --host 127.0.0.1 >/dev/null
-docker inspect --format '{{.Image}} {{index .Config.Image}}' k3dgpu-a-litellm > "${OUT}/litellm-image.txt"
-wait_http "http://127.0.0.1:${P_LLM}/health/liveliness" 120 || { echo "litellm did not start"; docker logs k3dgpu-a-litellm | tail -20; exit 1; }
+docker inspect --format '{{.Image}} {{index .Config.Image}}' "${PFX}-litellm" > "${OUT}/litellm-image.txt"
+wait_http "http://127.0.0.1:${P_LLM}/health/liveliness" 120 || { echo "litellm did not start"; docker logs "${PFX}-litellm" | tail -20; exit 1; }
 if [ "${ARM}" = A3ref ]; then
     # H40: BFCL's board handler (completions, BFCL's own template) at no load; then H41's
     # reference: server-fc (the engine's tool parser) at LEVEL load. No agent is involved.
