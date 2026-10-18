@@ -816,6 +816,8 @@ is deleted.
 | `K3D_GPU_AGENT_DEVICE` | `auto` | `auto`: a Gaudi, else the GPU only on an XMX node, else CPU. `CPU`, `GPU`, `NPU` or `HPU` (any case) to force one; forcing a device the cluster does not advertise, or an Intel GPU the firmware gatekeeper refuses, fails |
 | `K3D_GPU_AGENT_MODEL` | `OpenVINO/Qwen3-4B-int4-ov` | Hugging Face model in OpenVINO IR format |
 | `K3D_GPU_AGENT_MODEL_NAME` | last part of the model id | name clients send as `model` |
+| `K3D_GPU_AGENT_DRAFT` | unset | OVMS Fast Draft speculative decoding. Unset: a CPU target serving an OpenVINO Qwen3 model drafts with `OpenVINO/Qwen3-0.6B-int4-ov` on the CPU (1.39x decode tok/s, 0.75x package J/token on an i9-13900T under matched background load [ledger:H34]); any other target has no draft. `off` disables it; `auto` drafts on the target's device; `CPU`, `GPU` or `NPU` name the draft device |
+| `K3D_GPU_AGENT_DRAFT_MODEL` | `OpenVINO/Qwen3-0.6B-int4-ov` | draft model; a non-default draft model is used only with an explicit `K3D_GPU_AGENT_DRAFT` |
 | `K3D_GPU_AGENT_TOOL_PARSER` / `_REASONING_PARSER` | `hermes3` / `qwen3` for the default model, unset otherwise | unset lets OVMS detect them from the chat template; empty turns one off |
 | `K3D_GPU_AGENT_CPUS` | see above | CPU request (balloon size on hybrid nodes) |
 | `K3D_GPU_AGENT_MEMORY` | `6Gi` | memory request |
