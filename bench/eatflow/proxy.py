@@ -17,6 +17,7 @@ at one place for every engine. Per LLM request it appends one JSON line:
   tool_source              structured | content | none
   tool_valid               every call valid (agent_trace.validate_calls), or None
   usage, completion_tokens, prompt_tokens, cached_tokens, finish_reason ("length" = cut by max_tokens)
+  error_body               the first 1000 bytes of an error response (why the upstream refused)
 
 Other requests (GET /models, health) are forwarded and not logged. With --max-requests,
 every forwarded POST takes one slot, whatever its path or body; requests beyond the cap
@@ -307,6 +308,9 @@ def make_handler(px):
             r = Recorder(t0)
             headers = {k: v for k, v in self.headers.items() if k.lower() not in HOP}
             if px.api_key:
+                # Header names are case-insensitive and httpx sends them lowercased: drop the
+                # client's own authorization in any case, so exactly one reaches the upstream.
+                headers = {k: v for k, v in headers.items() if k.lower() != "authorization"}
                 headers["Authorization"] = f"Bearer {px.api_key}"
             conn = px.connection()
             st = {"status": None, "err": None, "logged": False}
@@ -326,7 +330,8 @@ def make_handler(px):
                     "ttft_s": None if r.t_first is None else round(r.t_first - t0, 6),
                     "e2e_s": round(t_end - t0, 6),
                     "content": r.content[:4000], "tool_calls": calls, "tool_source": source, "tool_valid": allv,
-                    "finish_reason": r.finish, "usage": r.usage, "prompt_tokens": u.get("prompt_tokens"),
+                    "finish_reason": r.finish, "error_body": st.get("body"),
+                    "usage": r.usage, "prompt_tokens": u.get("prompt_tokens"),
                     "completion_tokens": u.get("completion_tokens"),
                     "cached_tokens": (u.get("prompt_tokens_details") or {}).get("cached_tokens"),
                 })
@@ -355,6 +360,8 @@ def make_handler(px):
                     self.wfile.write(b"0\r\n\r\n")
                 else:
                     data = resp.read()
+                    if resp.status >= 400:
+                        st["body"] = data[:1000].decode(errors="replace")
                     r.feed_json(data)
                     finish()
                     self.send_header("Content-Length", str(len(data)))

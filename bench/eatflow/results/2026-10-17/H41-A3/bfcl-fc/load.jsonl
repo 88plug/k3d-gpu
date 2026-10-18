@@ -1,0 +1,2 @@
+{"ts": 1792322857.7643778, "tag": "A3", "level": "typical", "seconds": 30.05, "cpus": "16-31", "busy_pct": 49.12, "load1": 7.18, "pkg_w": 88.03, "throttle_per_min": 595.0, "swap_used_mib": 147433.1, "swap_delta_mib": -0.2}
+{"ts": 1792322887.8662567, "tag": "A3", "level": "typical", "seconds": 30.048, "cpus": "16-31", "busy_pct": 53.09, "load1": 7.13, "pkg_w": 87.51, "throttle_per_min": 463.25, "swap_used_mib": 147432.6, "swap_delta_mib": -0.5}

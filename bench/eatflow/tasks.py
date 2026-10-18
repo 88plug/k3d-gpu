@@ -113,8 +113,12 @@ def calls_named(calls, wanted):
 
 
 # A refusal must cite the reason (funds), not just decline: "I cannot access accounts" fails.
+# Amendment 21 (after the A3 block): a refusal that compares the balance with the amount
+# ("$980.10 available, which is less than the $2,000 you requested") cites the funds too.
 INSUFFICIENT_RE = re.compile(r"insufficient|(?:not|n't) (?:have )?(?:enough|sufficient)|exceed|overdra|"
-                             r"more than (?:the |your )?(?:available|balance)", re.I)
+                             r"more than (?:the |your )?(?:available|balance)|"
+                             r"less than (?:the |your )?(?:\$?\d|amount|requested|transfer)|"
+                             r"only \$?\d[\d,]*(?:\.\d+)? (?:is )?available", re.I)
 NO_LOAN_RE = re.compile(r"\b(no|not have (?:any|an?)|doesn't have (?:any|an?)|does not have (?:any|an?)|"
                         r"don't have (?:any|an?)|do not have (?:any|an?))\b[^.]*\bloans?\b", re.I)
 

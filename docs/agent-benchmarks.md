@@ -150,6 +150,23 @@ k3d-gpu bench agent report run/H42-* --ref B1 --out run/H42-report
   paired differences against `--ref`, BFCL accuracy per category beside the board-weighted
   expectation, agents per box, and the load-matching verdict per level.
 
+## Live runs on one box
+
+`bench/eatflow/live.sh ARM OUT` runs one arm inside one hold of a shared lock (at most 20
+min): a fresh k3d-gpu cluster `k3dgpu-a-<arm>` for the k3d-gpu and EAT-stock servers (or a
+host container for the Ollama and llama.cpp vendor stacks), then on the host EAT's LiteLLM
+(the version EAT pins), the recording proxy, and the banking agent and MCP sidecar from the
+pinned blueprint commit with `ENABLE_MEMORY=false`. It runs B24 under background load, a
+120 s load-only control window, and tears everything down. `R` runs the remote arm through
+one capped proxy. `LIVE_MODE=bfcl` runs one server-fc BFCL block instead of the agent
+(H41), and `LIVE_MODE=h44` runs B24's first 12 tasks in none/heavy/none/heavy blocks
+(H44; `live_table.py --h44 OUT ARM` prints the p95 inflation). Root-only RAPL counters are read through `K3D_GPU_RAPL_EXEC` (a
+read-only container with the powercap paths unmasked) when sudo is not available.
+
+`k3d-gpu bench agent regrade RUN` applies the current graders to a recorded block (the
+first rows stay in `results.raw.jsonl`); `bench/eatflow/live_table.py RUNS` prints the
+per-arm table (completed, success, turn p95, J per task, load matched).
+
 ## How the harness itself was checked
 
 Without a cluster, on 2026-10-17:
@@ -169,5 +186,7 @@ Without a cluster, on 2026-10-17:
 - The harness never submits anything anywhere: no leaderboard, no vendor portal.
 - External numbers from other vendors or suites are context only, with their URL and
   read date, and are never turned into a ratio against these runs.
-- A claim in the README or these docs needs a SUPPORTED ledger row; until H40-H48 run,
-  there is none.
+- A claim in the README or these docs needs a SUPPORTED ledger row. From the first
+  campaign (2026-10-17 and 18, [EXPERIMENTS.md](../EXPERIMENTS.md#h40-h48-run-i9-13900t-2026-10-17-and-18))
+  only H40 is SUPPORTED: the harness reproduces the BFCL board. It says nothing about
+  any stack's speed or quality, so no performance claim rests on this harness yet.

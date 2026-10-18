@@ -1,0 +1,5 @@
+{"ts": 1792329022.3602014, "tag": "A1", "level": "none", "seconds": 30.072, "cpus": "16-31", "busy_pct": 24.37, "load1": 9.24, "pkg_w": 92.71, "throttle_per_min": 977.64, "swap_used_mib": 154388.3, "swap_delta_mib": -14.2}
+{"ts": 1792329052.5010107, "tag": "A1", "level": "none", "seconds": 30.068, "cpus": "16-31", "busy_pct": 23.71, "load1": 9.91, "pkg_w": 90.88, "throttle_per_min": 985.76, "swap_used_mib": 154379.3, "swap_delta_mib": -9.0}
+{"ts": 1792329082.6339173, "tag": "A1", "level": "none", "seconds": 30.065, "cpus": "16-31", "busy_pct": 21.19, "load1": 10.34, "pkg_w": 90.4, "throttle_per_min": 1836.02, "swap_used_mib": 154369.1, "swap_delta_mib": -10.2}
+{"ts": 1792329112.7697873, "tag": "A1", "level": "none", "seconds": 30.068, "cpus": "16-31", "busy_pct": 21.73, "load1": 10.27, "pkg_w": 91.67, "throttle_per_min": 1779.94, "swap_used_mib": 154358.6, "swap_delta_mib": -10.5}
+{"ts": 1792329142.895857, "tag": "A1", "level": "none", "seconds": 30.055, "cpus": "16-31", "busy_pct": 23.26, "load1": 11.19, "pkg_w": 91.36, "throttle_per_min": 874.38, "swap_used_mib": 154349.6, "swap_delta_mib": -9.0}
