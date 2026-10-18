@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
-# H25 live run (EXPERIMENTS.md, "H25 pre-registration", amendments A2, A3):
+# H25 live run (EXPERIMENTS.md, "H25 pre-registration", amendments A2, A3, A4):
 # cross-agent shared prefix KV on one OVMS CPU server, arm ON (shipping default)
 # vs arm OFF (--enable_prefix_caching=false on the pull container), interleaved
 # ON OFF ON OFF ON OFF under the same controlled background load
 # (bench/load/load.py on the E-cores), a fresh pod and a new prefix seed every
-# round, phase S only (A3). Per level: 20 min cap (no new round after 18:30 of
-# the level; the first level includes cluster setup). The cluster and the load
-# containers are removed on any exit. Run it under the shared live lock:
+# round, phase S only (A3). Load is matched by amendment 27 (A4): per level,
+# baseline windows before the first round; before each round a settle gap
+# (load.py settle, max 60 s) whose last window is the round's pre-window; 5 s
+# during windows while the round runs, busy taken over the load CPUs minus the
+# pod's cpuset. Per level: 20 min cap (no new round after 18:30 of the level;
+# the first level includes cluster setup); HOLD caps the whole run. The cluster
+# and the load containers are removed on any exit. Run it under the shared live
+# lock:
 #
 #   flock -w 14400 "$LOCK" bench/shared-prefix/run.sh
 #
@@ -16,12 +21,17 @@
 #       OUT     results dir (scratch kubeconfig, logs, LEVEL/round-*.json,
 #               LEVEL/load.jsonl, LEVEL/score.json)
 #       LEVELS  load levels in order (default "typical heavy"; "none" = no load)
+#       CLUSTER k3d cluster name (default k3dgpu-i-shared-prefix)
+#       SEED_BASE  level k seeds are SEED_BASE + 10k + 1..6 (default 2510)
+#       HOLD    seconds the whole run may take (default 0 = no cap); a level
+#               starts only if a full level still fits, a round only if 120 s do
 # Package energy needs root to read RAPL (sudo -A with SUDO_ASKPASS, else
 # sudo -n); without it, energy and package W are null.
 set -uo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 : "${IMAGE:?set IMAGE}" "${MODELS:?set MODELS}" "${OUT:?set OUT}"
-name=k3dgpu-i-shared-prefix
+name=${CLUSTER:-k3dgpu-i-shared-prefix}
+HOLD=${HOLD:-0}
 export KUBECONFIG="${OUT}/kubeconfig" K3D_GPU_CLUSTER="${name}" K3D_GPU_IMAGE="${IMAGE}"
 export K3D_GPU_SHARE="${K3D_GPU_SHARE:-${ROOT}/share}" K3D_GPU_AGENT_BACKEND=ovms K3D_GPU_AGENT_DEVICE=CPU
 L="${ROOT}/scripts/k3d-gpu"
@@ -33,6 +43,7 @@ NODE_MODELS=/var/lib/h25-models
 GRAPH=/models/OpenVINO/Qwen3-4B-int4-ov/graph.pbtxt
 CAP=1110      # 18:30 in seconds: no new round after this
 START=${SECONDS}
+T0=${SECONDS}
 read -ra ARMS <<< "$("${LOAD[@]}" order ON OFF --reps 3)"
 pf=""
 
@@ -41,9 +52,15 @@ mkdir -p "${OUT}"
 sudo_() { if [ -n "${SUDO_ASKPASS:-}" ]; then sudo -A "$@"; else sudo -n "$@"; fi; }
 rapl() { sudo_ cat /sys/class/powercap/intel-rapl:0/energy_uj 2>/dev/null || echo -; }
 throttles() { cat /sys/devices/system/cpu/cpu*/thermal_throttle/package_throttle_count 2>/dev/null | awk '{s += $1} END {print s + 0}'; }
-left() { echo $(( CAP - (SECONDS - START) )); }
+left() {
+    local l=$(( CAP - (SECONDS - START) )) h
+    if [ "${HOLD}" -gt 0 ]; then h=$(( HOLD - 90 - (SECONDS - T0) )); [ "${h}" -ge "${l}" ] || l=${h}; fi
+    echo "${l}"
+}
+dur=""
 cleanup() {
     [ -z "${pf}" ] || kill "${pf}" 2>/dev/null
+    [ -z "${dur}" ] || kill "${dur}" 2>/dev/null
     k3d cluster delete "${name}" >/dev/null 2>&1
     "${LOAD[@]}" stop >/dev/null 2>&1
     rm -f "${KUBECONFIG}"
@@ -82,14 +99,19 @@ grep -q "path: ${NODE_MODELS}" "${OUT}/on.yaml" || { echo "manifest rewrite fail
 sed 's/^\(\( *\)- --task=text_generation\)$/\1\n\2- --enable_prefix_caching=false/' "${OUT}/on.yaml" > "${OUT}/off.yaml"
 [ "$(diff "${OUT}/on.yaml" "${OUT}/off.yaml" | grep -c '^>')" = 1 ] || { echo "OFF manifest differs by more than one line"; exit 1; }
 
-base=2510
+base=${SEED_BASE:-2510}
 for level in ${LEVELS}; do
 if [ "${level}" != "${first}" ]; then
+    if [ "${HOLD}" -gt 0 ] && [ $(( HOLD - 90 - (SECONDS - T0) )) -lt $(( CAP + 60 )) ]; then
+        echo "level ${level} not run: HOLD cap"; continue
+    fi
     START=${SECONDS}
     echo "load ${level}: $("${LOAD[@]}" start --level "${level}" --ttl 1500)"
     sleep 30
 fi
 D="${OUT}/${level}"; mkdir -p "${D}"
+# A4 (amendment 27): the level reference for the settle gap, before the first round.
+"${LOAD[@]}" sample --seconds 10 --windows 2 --phase baseline --tag baseline --level "${level}" --out "${D}/baseline.jsonl"
 seed=${base}; base=$((base + 10))
 for i in "${!ARMS[@]}"; do
     arm=${ARMS[$i]}; seed=$((seed + 1)); r=$((i + 1))
@@ -101,18 +123,22 @@ for i in "${!ARMS[@]}"; do
         || { echo "${level} round ${r} (${arm}) void: pod not ready"; continue; }
     want=true; [ "${arm}" = ON ] || want=false
     got=$(kubectl -n "${NS}" exec deploy/ovms -c ovms -- grep -o 'enable_prefix_caching: *[a-z]*' "${GRAPH}" | awk '{print $2}')
-    sleep 30  # A3: let the previous round's prefill decay out of the 1-min load
-    "${LOAD[@]}" sample --seconds 10 --windows 2 --tag "${arm}" --level "${level}" --out "${D}/load.jsonl"
-    echo "level=${level} round=${r} arm=${arm} seed=${seed} graph_prefix_caching=${got:-missing} load1=$(cut -d' ' -f1 /proc/loadavg) swap_used_mib=$(free -m | awk '/^Swap/ {print $3}') containers=$(docker ps -q | wc -l)"
+    tcpus=$(kubectl -n "${NS}" exec deploy/ovms -c ovms -- grep Cpus_allowed_list /proc/1/status | awk '{print $2}')
+    # A4: settle gap; its last window is this round's pre-window (in load.jsonl).
+    "${LOAD[@]}" settle --baseline "${D}/baseline.jsonl" --tag "${arm}" --level "${level}" --out "${D}/load.jsonl"
+    echo "level=${level} round=${r} arm=${arm} seed=${seed} graph_prefix_caching=${got:-missing} pod_cpus=${tcpus:-unknown} load1=$(cut -d' ' -f1 /proc/loadavg) swap_used_mib=$(free -m | awk '/^Swap/ {print $3}') containers=$(docker ps -q | wc -l)"
     e0=$(rapl); th0=$(throttles)
     [ -z "${pf}" ] || kill "${pf}" 2>/dev/null
     kubectl -n "${NS}" port-forward svc/ovms 18025:8000 > /dev/null 2>&1 & pf=$!
     sleep 2
+    "${LOAD[@]}" sample --seconds 5 --windows 60 --phase during --treatment-cpus "${tcpus}" \
+        --tag "${arm}" --level "${level}" --out "${D}/load.jsonl" & dur=$!
     timeout "$(left)" python3 "${P}" round --seed "${seed}" --arm "${arm}" \
         --url http://127.0.0.1:18025/v3/chat/completions \
         --no-burst \
         --out "${D}/round-${r}.json"
     e1=$(rapl); th1=$(throttles)
+    kill "${dur}" 2>/dev/null; wait "${dur}" 2>/dev/null; dur=""
     python3 - "${D}/round-${r}.json" "${got}" "${want}" "${e0}" "${e1}" "${th0}" "${th1}" <<'EOF'
 import json, sys
 p, got, want, e0, e1, t0, t1 = sys.argv[1:]
