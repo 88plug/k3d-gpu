@@ -435,6 +435,8 @@ H40-H48, and to NEW runs only:
     Windows without a `phase` keep the earlier rule unchanged, so no earlier run is
     regraded: H20, H25, H26 and H32 keep their INCONCLUSIVE verdicts. A probe adopts
     amendment 27 by sampling with `--phase`; its run section says which rule scored it.
+    Load rule L1 (the H47/H49 interleaved, per-pair design) is separate and unchanged: a
+    design that pre-registers L1 is scored by L1.
     Unit tests: `bench/load/test_load.py` (`Amendment27Test`, `SettleTest`,
     `WindowPhaseTest`): a treatment that raises throttle 10x during the arm still
     matches; background drift in the pre-window busy or throttle, in during-arm load-CPU
