@@ -1501,13 +1501,13 @@ These are Docker **build args** (not runtime env):
 |--------------|-----------------------|----------------------------------------------|
 | `K3S_TAG`    | `v1.37.1-k3s1`        | K3s image tag from `rancher/k3s` (auto-bumped) |
 | `K3S_DIGEST` | `sha256:ca7f37d9…`    | index digest of `K3S_TAG` (auto-bumped with it) |
-| `UBUNTU_TAG` | `26.04`               | Ubuntu base tag (`26.04` default; `24.04` also published) |
+| `UBUNTU_IMAGE` | `ubuntu:26.04@sha256:…` | Ubuntu base image, pinned by digest (`26.04` default; `24.04` also published) |
 
 Build a specific Ubuntu base:
 
 ```bash
 docker build \
-  --build-arg UBUNTU_TAG="24.04" \
+  --build-arg UBUNTU_IMAGE="ubuntu:24.04" \
   -t cryptoandcoffee/k3d-gpu:ubuntu24.04 .
 ```
 

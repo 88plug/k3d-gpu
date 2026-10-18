@@ -35,7 +35,7 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: spec.nodeName
-        image: intel/intel-qat-plugin:0.37.1
+        image: intel/intel-qat-plugin:0.37.1@sha256:4751706168d6d0e100e6391e3bb288fc9386920c5c2f733f2073d04f830c7418
         # Upstream default is 4xxxvf,420xxvf; also cover 6xxx and C62x.
         args: ["-kernel-vf-drivers=4xxxvf,420xxvf,6xxxvf,c6xxvf"]
         securityContext:

@@ -1,0 +1,2 @@
+{"ts": 1792280760.4503086, "tag": "B1-control", "level": "typical", "seconds": 30.047, "cpus": "16-31", "busy_pct": 17.83, "load1": 25.65, "pkg_w": 87.84, "throttle_per_min": 3746.19, "swap_used_mib": 156892.9, "swap_delta_mib": -2.2}
+{"ts": 1792280790.5405579, "tag": "B1-control", "level": "typical", "seconds": 30.045, "cpus": "16-31", "busy_pct": 5.32, "load1": 17.48, "pkg_w": 86.43, "throttle_per_min": 2851.74, "swap_used_mib": 156889.9, "swap_delta_mib": -3.0}

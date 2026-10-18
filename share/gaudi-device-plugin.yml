@@ -39,7 +39,7 @@ spec:
           effect: NoSchedule
       containers:
         - name: habanalabs-device-plugin-ctr
-          image: docker.io/intel/gaudi-device-plugin:1.24.2-481
+          image: docker.io/intel/gaudi-device-plugin:1.24.2-481@sha256:386e6bec28b3f25a0e4e1c0fb726f026e8ed199bd74e4aa0fb226631359f7daf
           securityContext:
             privileged: true
           volumeMounts:

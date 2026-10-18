@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Unit tests for bench/eatflow (stub servers only: no cluster, no docker, no root)."""
+import http.client
 import http.server
 import json
 import os
@@ -10,6 +11,7 @@ import tempfile
 import threading
 import time
 import unittest
+import urllib.parse
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -48,6 +50,7 @@ class LLM(http.server.BaseHTTPRequestHandler):
     Body knobs: answer (str), args (dict), delay (s before the first delta)."""
     protocol_version = "HTTP/1.1"
     seen = []
+    auth_seen = []
     answer = "Checking 4,250.75 and savings $18,200.00."
     args = {"user_id": "U1001"}
     delay = 0.0
@@ -66,6 +69,7 @@ class LLM(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         LLM.seen.append(body)
+        LLM.auth_seen.append(self.headers.get_all("Authorization") or [])
         if "/fail/" in self.path:
             self.send_response(500)
             self.send_header("Content-Length", "2")
@@ -114,13 +118,20 @@ class LLM(http.server.BaseHTTPRequestHandler):
 
 def reset_llm():
     LLM.seen = []
+    LLM.auth_seen = []
     LLM.answer = "Checking 4,250.75 and savings $18,200.00."
     LLM.args = {"user_id": "U1001"}
     LLM.delay = 0.0
     LLM.tool_name = "get_balances"
 
 
-def make_devui(llm_base, sleep=0.0):
+def spaced(text):
+    """Agent Framework's Message.text joins text items with " " when other content items sit
+    between the stream deltas (seen with harvest): '$4,250.75' comes back as '$ 4 , 250 . 75'."""
+    return " ".join(re.findall(r"\w+|[^\w\s]", text))
+
+
+def make_devui(llm_base, sleep=0.0, render=None):
     """A stand-in for Agent Framework DevUI: two LLM turns per task through llm_base."""
     class DevUI(http.server.BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -152,6 +163,8 @@ def make_devui(llm_base, sleep=0.0):
             _, raw = post(llm_base + "/v1/chat/completions", {"model": "m", "stream": False, "messages": msgs,
                                                                "tools": [BAL_TOOL]})
             text = json.loads(raw)["choices"][0]["message"]["content"]
+            if render:
+                text = render(text)
             self._json({"status": "completed", "output": [
                 {"type": "message", "content": [{"type": "output_text", "text": text}]}]})
     return DevUI
@@ -368,6 +381,7 @@ class ProxyTest(unittest.TestCase):
         (r,) = proxy.read_log(self.log)
         self.assertEqual(r["status"], 500)
         self.assertEqual(r["error"], "HTTP 500")
+        self.assertEqual(r["error_body"], "{}")      # why the upstream refused
 
     def test_non_llm_requests_pass_through_unlogged(self):
         url = self.px()
@@ -430,8 +444,8 @@ class BlockTest(unittest.TestCase):
         self.psrv.shutdown()
         shutil.rmtree(self.tmp)
 
-    def agent(self, sleep=0.0):
-        srv, url = serve(make_devui(self.purl, sleep))
+    def agent(self, sleep=0.0, render=None):
+        srv, url = serve(make_devui(self.purl, sleep, render))
         self.addCleanup(srv.shutdown)
         return AB.Agent(url, token="tok")
 
@@ -900,13 +914,14 @@ class PinTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             AB.plan("H999")
 
-    def test_ledger_rows_pending_once(self):
+    def test_ledger_rows_once_with_a_verdict(self):
         with open(os.path.join(ROOT, "EXPERIMENTS.md")) as f:
             text = f.read()
         table = text.split("## Hypotheses", 1)[1].split("\n## ", 1)[0]
         for h in AB.lock()["hypotheses"]:
-            rows = re.findall(rf"^\| {h} \|.*\| *(\w+) *\|$", table, re.M)
-            self.assertEqual(rows, ["PENDING"], h)
+            rows = re.findall(rf"^\| {h} \|.*\| *([A-Z]+)[^|]*\|$", table, re.M)
+            self.assertEqual(len(rows), 1, h)
+            self.assertIn(rows[0], ("PENDING", "SUPPORTED", "REFUTED", "INCONCLUSIVE"), h)
 
     def test_manifest(self):
         m = AB.manifest("http://litellm.eat:4000", "ab", max_requests=20)
@@ -943,6 +958,21 @@ class GraderRefuterTest(unittest.TestCase):
         self.assertFalse(T.grade_bank(t, "I cannot do that.", src)[0])
         self.assertTrue(T.grade_bank(t, "That would exceed your available balance of $980.10.", src)[0])
         self.assertTrue(T.grade_bank(t, "You do not have enough funds in ACC-1002-CHK.", src)[0])
+
+    def test_t8_live_refusals_that_compare_balance_and_amount(self):
+        """Amendment 21: real A3 answers (2026-10-17) that the first regex graded as failures."""
+        t = self.t("B-T8-U1002")
+        att = [call("transfer_funds", from_account="ACC-1002-CHK", to_account="ACC-1002-SAV", amount=2000)]
+        for answer in (
+                "I'm sorry, but the transfer cannot proceed. The source account (ACC-1002-CHK) has only $980.10 "
+                "available, which is less than the $2,000 you requested.",
+                "The source account (ACC-1002-CHK) has an available balance of $980.10, which is less than the "
+                "$2,000 you requested.",
+                "The transfer cannot proceed: only $980.10 is available."):
+            self.assertTrue(T.grade_bank(t, answer, att)[0], answer)
+        for answer in ("The transfer cannot proceed.", "Transfer of $2,000 complete; your balance is $0.00.",
+                       "I can't do that right now."):
+            self.assertFalse(T.grade_bank(t, answer, att)[0], answer)
 
     def test_t7_u1003_needs_a_no_loan_answer(self):
         t = self.t("B-T7-U1003")
@@ -1046,6 +1076,22 @@ class ProxyRefuterTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             proxy.Proxy(self.up_url, self.log, api_key="k")
         proxy.Proxy(self.up_url, self.log, api_key="k", max_requests=20)
+
+    def test_key_replaces_a_lowercase_client_authorization(self):
+        """httpx (h11) sends header names lowercased; the proxy used to forward the client's
+        'authorization' next to its own 'Authorization', and Cloudflare answers two with 400."""
+        url = self.px(api_key="sk-real", max_requests=5)
+        u = urllib.parse.urlsplit(url)
+        conn = http.client.HTTPConnection(u.hostname, u.port, timeout=10)
+        data = json.dumps({"model": "m", "messages": [{"role": "user", "content": "q"}]}).encode()
+        conn.putrequest("POST", "/v1/chat/completions", skip_accept_encoding=True)
+        for k, v in (("content-type", "application/json"), ("authorization", "Bearer not-needed"),
+                     ("content-length", str(len(data)))):
+            conn.putheader(k, v)
+        conn.endheaders(data)
+        self.assertEqual(conn.getresponse().status, 200)
+        conn.close()
+        self.assertEqual(LLM.auth_seen[-1], ["Bearer sk-real"])
 
     def test_key_file_permissions(self):
         p = os.path.join(self.tmp, "farm.env")
@@ -1169,6 +1215,54 @@ class BlockRefuterTest(unittest.TestCase):
         self.assertTrue(rows[0]["passed"], rows[0]["reason"])
         self.assertEqual(rows[0]["llm_requests"], 2)
 
+    def test_regrade_applies_current_graders_and_keeps_originals(self):
+        LLM.answer = "Checking 4,250.75."
+        rows = AB.run_block(self.agent(), [T.B24[0]], "A1", "typical", 1, self.out, 60, self.log, settle_s=0.05)
+        self.assertFalse(rows[0]["passed"])                   # 18,200.00 missing
+        p = os.path.join(self.out, "results.jsonl")
+        r = AB.read_jsonl(p)[0]
+        r["answer"] = "Checking $4,250.75, savings $18,200.00."
+        with open(p, "w") as f:
+            f.write(json.dumps(r) + "\n")
+        self.assertEqual(AB.regrade(self.out), 1)
+        (new,) = AB.read_jsonl(p)
+        self.assertTrue(new["passed"])
+        self.assertIn("18200.00", new["regraded"]["from"])
+        self.assertTrue(os.path.exists(os.path.join(self.out, "results.raw.jsonl")))
+        self.assertEqual(AB.regrade(self.out), 1)             # idempotent: always from the raw rows
+
+    def test_whitespace_split_devui_answer_is_graded_on_the_model_text(self):
+        """Arm R, first live block: every number came back from DevUI split by spaces, so
+        correct answers failed 'amount 4250.75 missing'. The model's own text (proxy) is
+        graded when it equals the DevUI answer up to whitespace."""
+        LLM.answer = "Checking $4,250.75, savings $18,200.00."
+        rows = AB.run_block(self.agent(render=spaced), [T.B24[0]], "R", "none", 1, self.out, 60, self.log,
+                            settle_s=0.05)
+        self.assertTrue(rows[0]["passed"], rows[0]["reason"])
+        self.assertEqual(rows[0]["answer"], spaced(LLM.answer))     # what DevUI returned is kept
+        self.assertEqual(rows[0]["answer_source"], "model")
+
+    def test_devui_answer_that_differs_beyond_whitespace_is_graded_as_is(self):
+        LLM.answer = "Checking $4,250.75, savings $18,200.00."
+        rows = AB.run_block(self.agent(render=lambda t: "Checking $4,250.75."), [T.B24[0]], "A1", "typical", 1,
+                            self.out, 60, self.log, settle_s=0.05)
+        self.assertFalse(rows[0]["passed"])
+        self.assertEqual(rows[0]["answer_source"], "devui")
+
+    def test_regrade_uses_the_model_text_for_a_whitespace_split_answer(self):
+        LLM.answer = "Checking $4,250.75, savings $18,200.00."
+        AB.run_block(self.agent(), [T.B24[0]], "R", "none", 1, self.out, 60, self.log, settle_s=0.05)
+        p = os.path.join(self.out, "results.jsonl")
+        r = AB.read_jsonl(p)[0]
+        r.update(answer=spaced(LLM.answer), passed=False, status="fail", reason="amount 4250.75 missing")
+        r.pop("answer_source", None)
+        with open(p, "w") as f:
+            f.write(json.dumps(r) + "\n")
+        self.assertEqual(AB.regrade(self.out), 1)
+        (new,) = AB.read_jsonl(p)
+        self.assertTrue(new["passed"], new["reason"])
+        self.assertEqual(new["answer_source"], "model")
+
     def test_warmup_is_unscored_and_outside_the_window(self):
         rows = AB.run_block(self.agent(), [T.B24[0]], "A1", "typical", 1, self.out, 60, self.log, settle_s=0.05,
                             warmup="My user id is U1001. Which account ids do I have?")
@@ -1290,6 +1384,63 @@ class PinRefuterTest(unittest.TestCase):
         self.assertEqual(s["agent_local"]["temperature"], 0)
         self.assertNotIn("temperature", s["agent_remote"])     # harvest rule: never temperature 0
         self.assertLessEqual(s["agent_remote"]["max_tokens"], 256)
+
+
+class InflationTest(unittest.TestCase):
+    """H44: pooled p95 turn latency heavy over none, per arm, from several block dirs."""
+
+    def mk(self, root, name, arm, level, e2es):
+        d = os.path.join(root, name)
+        os.makedirs(d)
+        with open(os.path.join(d, "turns.jsonl"), "w") as f:
+            f.writelines(json.dumps({"task": f"B-{i}", "arm": arm, "level": level, "n": 1, "ts_send": i,
+                                     "e2e_s": e, "error": None}) + "\n" for i, e in enumerate(e2es))
+        return d
+
+    def test_pooled_ratio_over_blocks(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        ds = [self.mk(tmp, "n1", "A1", "none", [1.0] * 10), self.mk(tmp, "h1", "A1", "heavy", [2.0] * 10),
+              self.mk(tmp, "n2", "A1", "none", [1.0] * 10), self.mk(tmp, "h2", "A1", "heavy", [2.0] * 10),
+              self.mk(tmp, "other", "B1", "heavy", [99.0] * 10)]
+        r = AB.inflation(ds, "A1")
+        self.assertEqual((r["n_num"], r["n_den"]), (20, 20))
+        self.assertAlmostEqual(r["ratio"], 2.0)
+        self.assertAlmostEqual(r["ci95"][0], 2.0)
+        self.assertIsNone(r["note"])
+
+    def test_infinite_reference_p95_is_undefined(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        ds = [self.mk(tmp, "n", "B1", "none", [200.0] * 5), self.mk(tmp, "h", "B1", "heavy", [300.0] * 5)]
+        r = AB.inflation(ds, "B1")
+        self.assertIsNone(r["ratio"])
+        self.assertIn("undefined", r["note"])
+
+    def test_infinite_numerator_is_inf(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        ds = [self.mk(tmp, "n", "A1", "none", [5.0] * 5), self.mk(tmp, "h", "A1", "heavy", [500.0] * 5)]
+        r = AB.inflation(ds, "A1")
+        self.assertEqual(r["ratio"], float("inf"))
+
+    def test_resamples_with_an_infinite_reference_p95_are_skipped(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        ds = [self.mk(tmp, "n", "A1", "none", [1.0] * 19 + [500.0]),
+              self.mk(tmp, "h", "A1", "heavy", [2.0] * 19 + [500.0])]
+        r = AB.inflation(ds, "A1")
+        self.assertAlmostEqual(r["ratio"], 2.0)
+        lo, hi = r["ci95"]
+        self.assertTrue(lo == lo and hi == hi, r)   # no NaN
+        self.assertLessEqual(lo, hi)
+
+    def test_no_turns_at_a_level(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        r = AB.inflation([self.mk(tmp, "n", "A1", "none", [5.0] * 5)], "A1")
+        self.assertIsNone(r["ratio"])
+        self.assertIn("no heavy turns", r["note"])
 
 
 if __name__ == "__main__":

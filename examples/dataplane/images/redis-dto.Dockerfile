@@ -11,12 +11,12 @@
 # redis:8.10.2 is Debian trixie (docker-library/official-images library/redis),
 # so libdto is built on trixie too and links against the same glibc.
 
-ARG REDIS_TAG=8.10.2
+ARG REDIS_IMAGE=redis:8.10.2@sha256:2c2dff791878316e3b083188be0d578423b24813cdda5de0e80ea4f7b3e6bfd6
 # intel/DTO has no release after v1.1 (2024-07); this main commit carries the
 # CMake build and the DTO_ACCEL_CONFIG_SUPPORT / DTO_NUMA_SUPPORT switches.
 ARG DTO_COMMIT=fbf41a67e3719a1c9a8692b6952afe0d88043c76
 
-FROM debian:trixie-slim AS build
+FROM debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f AS build
 ARG DTO_COMMIT
 # Toolchain only; the source is pinned to DTO_COMMIT.
 # hadolint ignore=DL3008
@@ -32,7 +32,7 @@ RUN cmake -S dto -B dto/build -DCMAKE_BUILD_TYPE=Release \
     && cmake --build dto/build -j"$(nproc)" \
     && cmake --install dto/build --prefix /opt/dto
 
-FROM redis:${REDIS_TAG}
+FROM ${REDIS_IMAGE}
 COPY --from=build /opt/dto/lib/libdto.so* /usr/local/lib/
 COPY dto-launch.sh /usr/local/bin/dto-launch
 RUN chmod 0755 /usr/local/bin/dto-launch && ldconfig

@@ -1,0 +1,3 @@
+{"ts": 1792281642.6131706, "tag": "C2-control", "level": "typical", "seconds": 30.048, "cpus": "16-31", "busy_pct": 52.86, "load1": 14.27, "pkg_w": 96.37, "throttle_per_min": 878.6, "swap_used_mib": 159945.6, "swap_delta_mib": -9.5}
+{"ts": 1792281672.7098167, "tag": "C2-control", "level": "typical", "seconds": 30.049, "cpus": "16-31", "busy_pct": 52.48, "load1": 12.88, "pkg_w": 93.46, "throttle_per_min": 315.48, "swap_used_mib": 159916.6, "swap_delta_mib": -28.9}
+{"ts": 1792281702.8083656, "tag": "C2-control", "level": "typical", "seconds": 30.05, "cpus": "16-31", "busy_pct": 51.98, "load1": 11.13, "pkg_w": 96.3, "throttle_per_min": 279.54, "swap_used_mib": 159843.1, "swap_delta_mib": -73.2}

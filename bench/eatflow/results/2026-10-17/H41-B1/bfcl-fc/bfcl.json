@@ -1,0 +1,34 @@
+{
+ "arm": "B1",
+ "mode": "server-fc",
+ "level": "typical",
+ "energy": {
+  "seconds": 779.811,
+  "package_j": 82466.376287,
+  "psys_j": 137795.203517,
+  "gpu_j": null,
+  "energy_j": 82466.376287,
+  "mean_w": 105.752
+ },
+ "completed": [
+  "parallel_multiple_40",
+  "multiple_158",
+  "irrelevance_203",
+  "multiple_154",
+  "irrelevance_119",
+  "multiple_181",
+  "irrelevance_77",
+  "multiple_135"
+ ],
+ "stopped": "budget",
+ "passed": {
+  "parallel_multiple_40": 0,
+  "multiple_158": 0,
+  "irrelevance_203": 0,
+  "multiple_154": 0,
+  "irrelevance_119": 1,
+  "multiple_181": 0,
+  "irrelevance_77": 1,
+  "multiple_135": 0
+ }
+}

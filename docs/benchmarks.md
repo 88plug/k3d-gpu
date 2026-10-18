@@ -20,12 +20,15 @@ on the k3d-gpu arm only.
 
 | Ledger | Competitor | Tier | Decode tok/s (k3d-gpu / competitor) | J/token (k3d-gpu / competitor) | Verdict |
 |---|---|---|---|---|---|
-| [ledger:H30] | ollama | 4-bit (GGUF Q4_K_M) | not run | not run | PENDING |
-| [ledger:H31] | llamacpp | 4-bit (GGUF Q4_K_M) | not run | not run | PENDING |
-| [ledger:H32] | ovms | 4-bit (OpenVINO int4) | not run | not run | PENDING |
+| [ledger:H30] | ollama | 4-bit (GGUF Q4_K_M) | 11.06 / 7.02 | 8.52 / 14.35 | SUPPORTED |
+| [ledger:H31] | llamacpp | 4-bit (GGUF Q4_K_M) | 15.63 / 10.26 | 6.06 / 9.28 | SUPPORTED |
+| [ledger:H32] | ovms | 4-bit (OpenVINO int4) | 16.26 / 10.24 | 5.92 / 9.70 | INCONCLUSIVE |
 
-No head-to-head has run yet, so this page makes no speed or energy claim. The goal
-of each row is a measured answer, whichever way it falls.
+Why each verdict:
+
+- [ledger:H30] (ollama): k3d-gpu ahead by the margin in every round (k3d-gpu/competitor ratios 1.55, 1.58, 1.57).
+- [ledger:H31] (llamacpp): k3d-gpu ahead by the margin in every round (k3d-gpu/competitor ratios 1.52, 1.54, 1.50).
+- [ledger:H32] (ovms): load unmatched under the matched-load amendment A2 (throttle events per minute), so the per-round ratios 1.61, 1.58, 1.59 do not decide.
 
 Run one and regenerate this page (rows without a result file stay PENDING):
 
