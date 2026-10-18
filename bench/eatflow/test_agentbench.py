@@ -1385,5 +1385,62 @@ class PinRefuterTest(unittest.TestCase):
         self.assertLessEqual(s["agent_remote"]["max_tokens"], 256)
 
 
+class InflationTest(unittest.TestCase):
+    """H44: pooled p95 turn latency heavy over none, per arm, from several block dirs."""
+
+    def mk(self, root, name, arm, level, e2es):
+        d = os.path.join(root, name)
+        os.makedirs(d)
+        with open(os.path.join(d, "turns.jsonl"), "w") as f:
+            f.writelines(json.dumps({"task": f"B-{i}", "arm": arm, "level": level, "n": 1, "ts_send": i,
+                                     "e2e_s": e, "error": None}) + "\n" for i, e in enumerate(e2es))
+        return d
+
+    def test_pooled_ratio_over_blocks(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        ds = [self.mk(tmp, "n1", "A1", "none", [1.0] * 10), self.mk(tmp, "h1", "A1", "heavy", [2.0] * 10),
+              self.mk(tmp, "n2", "A1", "none", [1.0] * 10), self.mk(tmp, "h2", "A1", "heavy", [2.0] * 10),
+              self.mk(tmp, "other", "B1", "heavy", [99.0] * 10)]
+        r = AB.inflation(ds, "A1")
+        self.assertEqual((r["n_num"], r["n_den"]), (20, 20))
+        self.assertAlmostEqual(r["ratio"], 2.0)
+        self.assertAlmostEqual(r["ci95"][0], 2.0)
+        self.assertIsNone(r["note"])
+
+    def test_infinite_reference_p95_is_undefined(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        ds = [self.mk(tmp, "n", "B1", "none", [200.0] * 5), self.mk(tmp, "h", "B1", "heavy", [300.0] * 5)]
+        r = AB.inflation(ds, "B1")
+        self.assertIsNone(r["ratio"])
+        self.assertIn("undefined", r["note"])
+
+    def test_infinite_numerator_is_inf(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        ds = [self.mk(tmp, "n", "A1", "none", [5.0] * 5), self.mk(tmp, "h", "A1", "heavy", [500.0] * 5)]
+        r = AB.inflation(ds, "A1")
+        self.assertEqual(r["ratio"], float("inf"))
+
+    def test_resamples_with_an_infinite_reference_p95_are_skipped(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        ds = [self.mk(tmp, "n", "A1", "none", [1.0] * 19 + [500.0]),
+              self.mk(tmp, "h", "A1", "heavy", [2.0] * 19 + [500.0])]
+        r = AB.inflation(ds, "A1")
+        self.assertAlmostEqual(r["ratio"], 2.0)
+        lo, hi = r["ci95"]
+        self.assertTrue(lo == lo and hi == hi, r)   # no NaN
+        self.assertLessEqual(lo, hi)
+
+    def test_no_turns_at_a_level(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        r = AB.inflation([self.mk(tmp, "n", "A1", "none", [5.0] * 5)], "A1")
+        self.assertIsNone(r["ratio"])
+        self.assertIn("no heavy turns", r["note"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

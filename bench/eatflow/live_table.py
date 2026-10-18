@@ -2,6 +2,7 @@
 """live_table.py: the per-arm results table of a live campaign (bench/eatflow/live.sh).
 
   live_table.py RUNS_DIR [--ref A1]
+  live_table.py --h44 ARM_DIR ARM      H44: p95 turn inflation heavy/none over ARM_DIR/h44-*
 
 One row per arm directory RUNS_DIR/<ARM>/run: completed tasks, success (k/n, Wilson
 95%), censored, turn p95, task median, gross J per completed task, differential J per
@@ -41,8 +42,14 @@ def arm_rows(runs):
 def main(argv):
     ap = argparse.ArgumentParser()
     ap.add_argument("runs")
+    ap.add_argument("arm", nargs="?")
     ap.add_argument("--ref", default="A1")
+    ap.add_argument("--h44", action="store_true", help="RUNS is one arm's live dir; print its H44 inflation")
     a = ap.parse_args(argv)
+    if a.h44:
+        dirs = sorted(glob.glob(os.path.join(a.runs, "h44-*")))
+        print(json.dumps(AB.inflation(dirs, a.arm), default=str))
+        return 0
     rows = arm_rows(a.runs)
     ref = rows.get(a.ref)
     print("| Arm | Load | Completed / 24 | Success (k/n, Wilson 95%) | Censored | Turn p95 s | Task median s | "

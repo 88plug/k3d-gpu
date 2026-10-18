@@ -647,6 +647,32 @@ def collect(run_dirs):
     return rows, recs, blocks, loads, controls, bfcls, apbs
 
 
+def inflation(run_dirs, arm, num="heavy", den="none"):
+    """H44: p95 turn latency of `arm` at level `num` over level `den`, turns pooled over
+    every block dir given, with a seeded bootstrap CI (stats.ratio_ci, stat = p95).
+
+    Errors and turns over the proxy timeout count as +inf (latencies()). A +inf p95 at
+    `den` leaves the ratio undefined (None, with a note); a +inf p95 at `num` only is +inf."""
+    recs = [r for r in collect(run_dirs)[1] if r.get("arm") == arm]
+    lat = {lv: latencies([r for r in recs if r.get("level") == lv]) for lv in (num, den)}
+    p95 = lambda xs: stats.nearest_rank(xs, 95)  # noqa: E731
+    out = {"arm": arm, "num": num, "den": den, "n_num": len(lat[num]), "n_den": len(lat[den]),
+           "p95_num": p95(lat[num]), "p95_den": p95(lat[den]), "ratio": None, "ci95": [None, None], "note": None}
+    for lv in (num, den):
+        if not lat[lv]:
+            out["note"] = f"no {lv} turns"
+            return out
+    if out["p95_den"] == INF:
+        out["note"] = f"undefined: the {den} p95 is +inf (turns over {proxy.TIMEOUT_S:.0f} s or errors)"
+        return out
+    if out["p95_num"] == INF:
+        out["ratio"] = INF
+        return out
+    point, (lo, hi) = stats.ratio_ci(lat[num], lat[den], stat=p95)
+    out["ratio"], out["ci95"] = point, [lo, hi]
+    return out
+
+
 def build_report(run_dirs, ref=None):
     rows, recs, blocks, loads, controls, bfcls, apbs = collect(run_dirs)
     groups = {}

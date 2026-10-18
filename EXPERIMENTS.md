@@ -348,6 +348,45 @@ lock, each hold at most 20 min wall time):
     min), in the order R, A3, A1, B1, C2, C1, A2; time ratios then come from single blocks
     and the verdict says so.
 
+Recorded 2026-10-18 03:30 PDT, after the H42 blocks and before any block below:
+
+21. Two grader fixes were made during the campaign, after the blocks they changed, from
+    those blocks' recorded answers; each has a regression test, and `regrade` applied them
+    to every block (the first rows stay in `results.raw.jsonl`). This is post hoc and is
+    reported as such. (a) `069b7ae` (2026-10-17 15:20 PDT, after A3's block): T8 also
+    accepts a refusal that states the balance is below the amount. (b) `1fbbe39` (23:11
+    PDT, after R's second block): when DevUI's answer equals the model's own text at the
+    proxy up to whitespace, the model's text is graded (Agent Framework joins split text
+    items with spaces, so `$4,250.75` came back as `$ 4 , 250 . 75`). Rows changed: A3 3
+    (all T8), R 4; every other block 0.
+22. H48. Run 1 (2026-10-17 15:04, `837bf0b`) is void: the proxy forwarded two
+    Authorization headers and Cloudflare answered HTTP 400 (fixed in `0ed40bc`). Run 2
+    (23:07, `71db3ac`) is the first valid run and is scored as pre-registered, with the
+    graders it ran with. One more hold (run 3: the same 12 items, cap 20, `agent_remote`,
+    graders as of this amendment) checks the fixed graders; it is reported beside run 2 and
+    does not replace run 2's verdict.
+23. H41 runs one hold per arm, in the order A1, A3, C2, C1, B1: the item-19 topology,
+    `live.sh` with `LIVE_MODE=bfcl`, one server-fc block of S100 at typical load with a
+    budget of what the hold leaves (at most 900 s), not ABBA halves. The reference is
+    A3ref's server-fc block of 2026-10-18 00:48 (typical load, 100 ids, 88.0%). Load is
+    matched per arm against A3ref's windows. With swap use on this host drifting by GBs
+    between holds (spread limit 256 MiB), an unmatched verdict is likely and is stated
+    before measuring.
+24. H44 runs for A1 only, in one hold: `live.sh` with `LIVE_MODE=h44`, B24's first 12
+    tasks in blocks none/heavy/none/heavy of equal budget (at most 300 s; what the hold
+    leaves, about 180 s), one output directory per block. Inflation = pooled p95 turn
+    latency at heavy over pooled p95 at none, with `stats.ratio_ci` (2000 resamples, seed
+    40), computed by `agentbench.inflation`. B1 is not run: its turns at typical took
+    69-329 s at the proxy, over the 120 s turn timeout, so its p95 is +inf at every level
+    and the ratio is undefined, and four B1 blocks with their warm-ups do not fit a hold.
+    H44 can therefore end REFUTED (A1's CI lower bound > 1.25) or INCONCLUSIVE, not
+    SUPPORTED.
+25. Not run in this campaign, recorded: H43 (the coding agent is not wired into the live
+    runner), H45 (four 300 s ramp steps plus bring-up exceed a 20-min hold), H47 (H34 was
+    SUPPORTED at 2026-10-17 23:21 PDT, after this campaign started at 15:04, so by its own
+    rule H47 is not run). B1 ran one H42 block: it completed 1 task, and the hold's timeout
+    cut its H46 control window, so B1's J per success is undefined.
+
 Static proof of the harness (no cluster, 2026-10-17): the unit suite against stub servers;
 BFCL S100 in both modes through the proxy against a stub endpoint with the pinned wheel
 (100 of 100 ids written and scored; a stub that never calls a tool scores exactly the 15

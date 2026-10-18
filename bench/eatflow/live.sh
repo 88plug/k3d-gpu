@@ -25,6 +25,9 @@
 #   LIVE_LEVEL      background load level (default typical; R always none)
 #   LIVE_CAP        wall-clock cap of the hold, s (default 1140)
 #   LIVE_BUDGET     measurement budget cap, s (default 720)
+#   LIVE_MODE       agent (default): B24 at LIVE_LEVEL, then a control window;
+#                   bfcl: H41, BFCL S100 server-fc at LIVE_LEVEL, no agent (amendment 23);
+#                   h44: B24's first 12 tasks in blocks none/heavy/none/heavy (amendment 24)
 set -uo pipefail
 
 ARM=${1:?usage: live.sh ARM OUT}
@@ -37,6 +40,7 @@ BP=${LIVE_BLUEPRINT:?}/usecases/banking-assistant/src
 PY=${LIVE_PY:?}
 CAP=${LIVE_CAP:-1140}
 LEVEL=${LIVE_LEVEL:-typical}
+MODE=${LIVE_MODE:-agent}
 ALIAS=Qwen/Qwen3-4B-Instruct-2507
 SERVED=qwen3-4b-instruct-2507
 P_SRV=18630 P_LLM=18640 P_PROXY=18620 P_MCP=18600
@@ -274,8 +278,43 @@ if [ "${ARM}" = A3ref ]; then
     stamp finished
     exit 0
 fi
+if [ "${MODE}" = bfcl ]; then
+    # H41: server-fc (the engine's tool parser) at LEVEL load, one block, no agent.
+    budget=$(( CAP - $(el) - 120 ))
+    [ "${budget}" -le 900 ] || budget=900
+    [ "${budget}" -ge 120 ] || { echo "NOT DELIVERABLE: ${budget} s left for BFCL"; exit 3; }
+    stamp "load ${LEVEL}"
+    python3 "${REPO}/bench/load/load.py" start --level "${LEVEL}" --ttl $(( budget + 120 )) > "${OUT}/load-start.log" 2>&1
+    stamp "bfcl server-fc, budget ${budget}"
+    ${AB} bfcl --mode server-fc --arm "${ARM}" --level "${LEVEL}" --out "${OUT}/bfcl-fc" --upstream "http://127.0.0.1:${P_LLM}" \
+        --served-model "${ALIAS}" --python "${LIVE_BFCL_PY:?}" --threads 4 --budget-s "${budget}" "${gpu_flag[@]}" 2>&1 \
+        | tail -3 | tee -a "${OUT}/live.log"
+    stamp finished
+    exit 0
+fi
 start_mcp || { echo "mcp did not start"; exit 1; }
 start_agent "${ALIAS}" || { echo "agent did not start"; tail -20 "${OUT}/agent.log"; exit 1; }
+
+if [ "${MODE}" = h44 ]; then
+    # H44: B24's first 12 tasks, blocks none/heavy/none/heavy of equal budget, one out dir each.
+    blk=$(( (CAP - $(el) - 60) / 4 - 60 ))
+    [ "${blk}" -le 300 ] || blk=300
+    [ "${blk}" -ge 120 ] || { echo "NOT DELIVERABLE: ${blk} s per H44 block"; exit 3; }
+    i=0
+    for lv in none heavy none heavy; do
+        i=$(( i + 1 ))
+        python3 "${REPO}/bench/load/load.py" stop >/dev/null 2>&1
+        [ "${lv}" = none ] || python3 "${REPO}/bench/load/load.py" start --level "${lv}" --ttl $(( blk + 180 )) \
+            >> "${OUT}/load-start.log" 2>&1
+        stamp "h44 block ${i} ${lv}, budget ${blk}"
+        ${AB} run --arm "${ARM}" --level "${lv}" --out "${OUT}/h44-${i}-${lv}" --agent-url http://127.0.0.1:8090 \
+            --tasks B24 --limit 12 --upstream "http://127.0.0.1:${P_LLM}" --proxy-port "${P_PROXY}" \
+            --sampling agent_local --mcp-url "http://127.0.0.1:${P_MCP}/mcp" --reset "${OUT}/reset-mcp.sh" \
+            --budget-s "${blk}" "${gpu_flag[@]}" 2>&1 | tail -3 | tee -a "${OUT}/live.log"
+    done
+    stamp finished
+    exit 0
+fi
 
 # Left after the block: the warm-up (before the window), the H46 control window and teardown.
 budget=$(( CAP - $(el) - 330 ))
