@@ -3848,7 +3848,7 @@ config is faster under E-core load is open; the replication's CI spans 0.73-1.87
 
 ### H31-H32 amendment A2: idle gap before each load window (2026-10-18)
 
-Written 2026-10-18T10:35Z and pushed before any A2 request. The A1 run left H31 and H32
+Written 2026-10-18T10:32Z and pushed 10:33Z (48f55c5), before any A2 request. The A1 run left H31 and H32
 INCONCLUSIVE on unmatched load, and the competitor's windows carried more throttling
 and 1-min load, likely carry-over from the competitor's own previous segment. A2
 re-runs H31 and H32 only (H30 is SUPPORTED under matched load and is not re-run). The
