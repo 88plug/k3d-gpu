@@ -109,6 +109,13 @@ class StubPair(unittest.TestCase):
         self.assertTrue(all(w["level"] == "typical" for w in wins))
         starts = [r[side]["t_start"] for r in res["rounds"] for side in ("k3d", "vs")]
         self.assertTrue(all(isinstance(t, float) for t in starts))
+        import vs_matched
+        st = vs_matched.analyse(res, wins, resamples=200)
+        self.assertEqual(st["n"], {"k3d-gpu": 12, "ollama": 12})
+        self.assertEqual(st["load_windows"], {"k3d-gpu": 3, "ollama": 3})
+        self.assertIn(st["load_matched"], (True, False))
+        self.assertLessEqual(st["confidence"], 1 - vs_matched.sign_p(st["round_wins"], 3))
+        self.assertLessEqual(st["ratio_ci95"][0], st["ratio_ci95"][1])
 
     def test_budget_exhausted_is_inconclusive(self):
         res, _, _ = self.run_vs(["--itl", "0.002"], ["--itl", "0.008"], "--budget-s", "0")

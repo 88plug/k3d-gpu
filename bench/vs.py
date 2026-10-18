@@ -14,7 +14,8 @@ prompt set, the same max_tokens, temperature 0 and ignore_eos:
   - one request in flight; each arm segment sends every prompt once
   - energy: the RAPL package counter (--powercap, zone --zone) is read at the
     start and end of every arm segment; J/token = segment joules / segment
-    output tokens. Read directly when readable, else through `sudo -n cat`;
+    output tokens. Read directly when readable, else through `sudo -A cat`
+    (SUDO_ASKPASS set) or `sudo -n cat`;
     with neither, energy is recorded as null.
   - budget: when --budget-s runs out, no new segment starts and the verdict is
     INCONCLUSIVE (budget).
@@ -91,7 +92,8 @@ class Rapl:
         except (OSError, ValueError):
             return None
         try:
-            out = subprocess.run(["sudo", "-n", "cat", self.path], capture_output=True, text=True, timeout=10)
+            sudo = ["sudo", "-A"] if os.environ.get("SUDO_ASKPASS") else ["sudo", "-n"]
+            out = subprocess.run(sudo + ["cat", self.path], capture_output=True, text=True, timeout=10)
             return int(out.stdout.strip()) if out.returncode == 0 else None
         except (OSError, ValueError, subprocess.SubprocessError):
             return None
