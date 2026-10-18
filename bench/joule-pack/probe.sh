@@ -7,7 +7,10 @@
 # Run it inside the shared live lock, never two live probes at once:
 #   OUT=$(mktemp -d) flock -w 10800 <lockfile> bench/joule-pack/probe.sh
 #
-# Env: OUT (results dir, required); IMAGE (node image, default: the launcher's
+# Env: OUT (results dir, required); LOAD_LEVEL (none|typical|heavy, default none:
+# bench/load/load.py background load on its CPU set for the whole run, and one
+# load.py sample window inside every idle window, tagged with the arm that
+# follows, into $OUT/load.jsonl; the verdict then requires matched load); IMAGE (node image, default: the launcher's
 # pinned one); SUDO_ASKPASS (sudo -A), else sudo must work non-interactively
 # (sudo -n) in this process: RAPL energy_uj is root-only, and a `sudo -v` taken
 # in another shell does not carry over when there is no tty.
@@ -37,6 +40,8 @@ BUDGET=${BUDGET:-1140}
 HARD_STOP=${HARD_STOP:-1200}
 T0=$(date +%s)
 NS=h21
+LOAD_LEVEL=${LOAD_LEVEL:-none}
+LOADPY="${ROOT}/bench/load/load.py"
 mkdir -p "${OUT}"
 [ -n "${AGENT_IMAGE}" ] || { echo "no busybox pin in images.lock" >&2; exit 2; }
 
@@ -47,6 +52,7 @@ cleanup() {
     [ -n "${SAMPLER:-}" ] && "${ELEV[@]}" kill "${SAMPLER}" 2>/dev/null
     [ -n "${CONF:-}" ] && kill "${CONF}" 2>/dev/null
     k3d cluster delete "${NAME}" >/dev/null 2>&1
+    [ "${LOAD_LEVEL}" != none ] && python3 "${LOADPY}" stop >> "${OUT}/events.log" 2>&1
     rm -f "${KUBECONFIG}"
     echo "cleanup done at +$(( $(date +%s) - T0 ))s" >> "${OUT}/events.log"
 }
@@ -97,6 +103,12 @@ sleep 3
     echo "C $(date +%s) load1=$(cut -d' ' -f1 /proc/loadavg) swap_mib=$(free -m | awk '/^Swap/ {print $3}') throttle=${th} temp_mC=$(cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null | sort -n | tail -1) containers=$(docker ps -q | wc -l)"
     sleep 5; done ) > "${OUT}/confounds.txt" &
 CONF=$!
+case "${LOAD_LEVEL}" in none|typical|heavy) ;; *) echo "LOAD_LEVEL must be none|typical|heavy" >&2; exit 2 ;; esac
+if [ "${LOAD_LEVEL}" != none ]; then
+    python3 "${LOADPY}" start --level "${LOAD_LEVEL}" --ttl $(( HARD_STOP + 120 )) >> "${OUT}/events.log" 2>&1 \
+        || { echo "load start failed (see ${OUT}/events.log)" >&2; exit 1; }
+fi
+echo "LOAD ${LOAD_LEVEL} cpus=$(python3 "${LOADPY}" cpus)" >> "${OUT}/events.log"
 
 "${ROOT}/scripts/k3d-gpu" up > "${OUT}/up.log" 2>&1 || { echo "up failed (see ${OUT}/up.log)" >&2; exit 1; }
 docker pull -q "${AGENT_IMAGE}" >/dev/null && k3d image import -c "${NAME}" "${AGENT_IMAGE}" >> "${OUT}/up.log" 2>&1
@@ -155,7 +167,16 @@ BYTES=$(awk '/^T /{print $4-$3}' "${OUT}/cal.log" | sort -g | awk -v cb="${CAL_B
 [ "${BYTES}" -gt 0 ] || { echo "calibration failed (see ${OUT}/cal.log)" >&2; exit 1; }
 echo "BYTES ${BYTES}" >> "${OUT}/events.log"
 
-window_idle() { local s; s=$(date +%s); sleep "${IDLE}" & wait $!; echo "W idle ${s} $((s + IDLE))" >> "${OUT}/windows.txt"; }
+window_idle() { # [next arm]: background-load sample tagged with the arm that follows
+    local s ls=; s=$(date +%s)
+    if [ -n "${1:-}" ]; then
+        python3 "${LOADPY}" sample --seconds $(( IDLE - 2 )) --tag "$1" --level "${LOAD_LEVEL}" \
+            --out "${OUT}/load.jsonl" 2>> "${OUT}/events.log" & ls=$!
+    fi
+    sleep "${IDLE}" & wait $!
+    [ -n "${ls}" ] && wait "${ls}"
+    echo "W idle ${s} $((s + IDLE))" >> "${OUT}/windows.txt"
+}
 window_arm() { # <round> <arm>
     local at=$(( $(date +%s) + 6 )) i lab p
     for i in $(seq 1 "${N}"); do
@@ -180,7 +201,7 @@ for r in 1 2 3; do
         if [ "$(left)" -lt $(( IDLE + WARM + MEAS + 75 )) ]; then
             echo "budget stop before r${r} ${arm}" >> "${OUT}/events.log"; break 2
         fi
-        window_idle
+        window_idle "${arm}"
         window_arm "${r}" "${arm}"
     done
 done

@@ -151,8 +151,9 @@ class Place(unittest.TestCase):
 
 
 def fake_run(d, arm_w, rounds=3, lat=None, uncore=0.0, idle_jitter=0.0, cpu=None, bad_cpuset=False,
-             core_frac=0.8, turns=None):
-    """Synthetic probe.sh output. arm_w: {arm: marginal package W}; idle floor 75 W."""
+             core_frac=0.8, turns=None, load=None, idle_ramp=0.0):
+    """Synthetic probe.sh output. arm_w: {arm: marginal package W}; idle floor 75 W,
+    rising idle_ramp W per idle window. load: {arm: busy_pct} writes load.jsonl."""
     lat = lat or {}
     turns = turns or {}
     cpu = cpu or {"performance": 10.0, "efficient": 10.0}
@@ -161,7 +162,7 @@ def fake_run(d, arm_w, rounds=3, lat=None, uncore=0.0, idle_jitter=0.0, cpu=None
     write(os.path.join(d, "pools.txt"), "performance 0-15\nefficient 16-31\n")
     order = ["UPEXM", "MXEPU", "EUMPX"][:rounds]
     t, e = 1000, [0, 0, 0, 0]
-    rapl, wins = [], []
+    rapl, wins, loadl = [], [], []
 
     def run(sec, pkg, unc):
         nonlocal t
@@ -176,11 +177,16 @@ def fake_run(d, arm_w, rounds=3, lat=None, uncore=0.0, idle_jitter=0.0, cpu=None
     for r, arms in enumerate(order, 1):
         for a in arms:
             s = t
-            run(12, 75.0 + (idle_jitter if idle_i % 2 else 0.0), 1.0)
+            floor = 75.0 + idle_ramp * idle_i
+            run(12, floor + (idle_jitter if idle_i % 2 else 0.0), 1.0)
             idle_i += 1
             wins.append("W idle %d %d" % (s, t))
+            if load is not None:
+                loadl.append(json.dumps({"tag": a, "level": "typical", "busy_pct": load.get(a, 37.0),
+                                         "load1": 20.0, "pkg_w": 100.0, "throttle_per_min": 0.0,
+                                         "swap_used_mib": 1000.0, "swap_delta_mib": 0.0}))
             s = t
-            run(40, 75.0 + arm_w[a], 1.0 + uncore)
+            run(40, floor + idle_ramp / 2 + arm_w[a], 1.0 + uncore)
             wins.append("W %s %d %d round=%d" % (a, s, t, r))
             for i in range(1, 13):
                 lab = {"U": "none", "P": "performance", "E": "efficient", "X": "ecluster"}.get(a)
@@ -195,8 +201,10 @@ def fake_run(d, arm_w, rounds=3, lat=None, uncore=0.0, idle_jitter=0.0, cpu=None
                 lines.append("U1 %d %d" % (t, int(cpu.get(lab, 1.0) / 6 * 1e6)))
                 write(os.path.join(d, "r%d-%s-a-%s-%d.log" % (r, a, a.lower(), i)), "\n".join(lines) + "\n")
     s = t
-    run(12, 75.0, 1.0)
+    run(12, 75.0 + idle_ramp * idle_i, 1.0)
     wins.append("W idle %d %d" % (s, t))
+    if load is not None:
+        write(os.path.join(d, "load.jsonl"), "\n".join(loadl) + "\n")
     write(os.path.join(d, "rapl.txt"), "\n".join(rapl) + "\n")
     write(os.path.join(d, "windows.txt"), "\n".join(wins) + "\n")
     return d
@@ -240,6 +248,32 @@ class Verdict(unittest.TestCase):
     def test_floor_noise_inconclusive(self):
         r = self.v(idle_jitter=5.0)
         self.assertEqual(r["a"]["verdict"], "INCONCLUSIVE")
+
+    def test_matched_load_decides(self):
+        r = self.v(load={})
+        self.assertTrue(r["load"]["matched"])
+        self.assertEqual(r["a"]["verdict"], "REFUTED")
+        self.assertEqual(r["b"]["verdict"], "REFUTED")
+
+    def test_unmatched_load_inconclusive(self):
+        r = self.v(load={"E": 50.0})
+        self.assertFalse(r["load"]["matched"])
+        self.assertEqual(r["a"]["verdict"], "INCONCLUSIVE")
+        self.assertEqual(r["b"]["verdict"], "INCONCLUSIVE")
+        self.assertTrue(any("load unmatched" in f for f in r["inconclusive_flags"]))
+
+    def test_matched_load_bracket_jitter_inconclusive(self):
+        r = self.v(load={}, idle_jitter=5.0)
+        self.assertEqual(r["a"]["verdict"], "INCONCLUSIVE")
+        self.assertIn("median idle bracket drift > 50% of median E marginal", r["inconclusive_flags"])
+
+    def test_slow_floor_drift(self):
+        # Floor rises 1 W per idle window: run-wide spread 15 W voids the original
+        # design, but each arm's bracket drifts 1 W, so the matched-load design decides.
+        self.assertEqual(self.v(idle_ramp=1.0)["a"]["verdict"], "INCONCLUSIVE")
+        r = self.v(idle_ramp=1.0, load={})
+        self.assertEqual(r["a"]["verdict"], "REFUTED")
+        self.assertAlmostEqual(r["idle_bracket_drift_w"]["median"], 1.0, places=2)
 
     def test_wrong_cpuset_voids(self):
         r = self.v(bad_cpuset=True)
