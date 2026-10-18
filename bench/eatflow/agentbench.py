@@ -115,6 +115,20 @@ def answer_text(resp):
     return "\n".join(out).strip()
 
 
+def graded_answer(answer, recs):
+    """The text to grade, and its source ("model" or "devui").
+
+    DevUI's answer is Agent Framework's Message.text, which joins text items with " " when
+    other content items sit between the stream deltas: '$4,250.75' then reads
+    '$ 4 , 250 . 75'. When the model's own text (the task's turns at the proxy, in order)
+    equals the DevUI answer up to whitespace, that text is graded instead."""
+    model = "\n".join(r["content"] for r in sorted(recs, key=lambda r: r.get("ts_send") or 0)
+                      if r.get("content")).strip()
+    if model and answer and model != answer and "".join(model.split()) == "".join(answer.split()):
+        return model, "model"
+    return answer, "devui"
+
+
 # ---- banking MCP end state ---------------------------------------------------------
 
 def mcp_call(url, name, args, opener=urllib.request.urlopen, timeout=30):
@@ -395,8 +409,9 @@ def run_block(agent, task_list, arm, level, n, out, budget_s, proxy_log, mcp_url
                 end = mcp_state(mcp_url, t, opener)
             except (OSError, ValueError, urllib.error.URLError) as e:
                 end, err = None, f"end-state read failed: {e}"
+        graded, source = graded_answer(answer, recs)
         if kind is None:
-            ok, reason = T.grader_for(t)(t, answer, calls, end,
+            ok, reason = T.grader_for(t)(t, graded, calls, end,
                                          evidence=evidence_text(recs) if proxy_log else None)
             kind = "pass" if ok else "fail"
         else:
@@ -406,6 +421,7 @@ def run_block(agent, task_list, arm, level, n, out, budget_s, proxy_log, mcp_url
                "nonce": nonce or None, "status": kind, "passed": kind == "pass", "strict": strict,
                "reason": reason, "t_start": t0, "t_end": t1, "duration_s": round(dur, 3),
                "censored": kind == "censored", "response_status": status, "answer": (answer or "")[:2000],
+               "answer_source": source,
                "error": err, "llm_requests": len(recs), "user_msgs_max": users,
                "truncated": any(r.get("finish_reason") == "length" for r in recs), "end_state": end,
                "calls": [{k: c.get(k) for k in ("name", "valid", "reason")} for c in calls],
@@ -510,7 +526,8 @@ def regrade(run_dir):
                 == (r["task"], r["arm"], r["level"], r["n"], r.get("step"))
                 and r["t_start"] <= (x.get("ts_send") or 0) <= r["t_end"]]
         calls = flat_calls(recs)
-        ok, reason = T.grader_for(t)(t, r["answer"], calls, state, evidence=evidence_text(recs))
+        graded, r["answer_source"] = graded_answer(r["answer"], recs)
+        ok, reason = T.grader_for(t)(t, graded, calls, state, evidence=evidence_text(recs))
         if ok != r["passed"]:
             changed += 1
             r["regraded"] = {"from": r["reason"]}

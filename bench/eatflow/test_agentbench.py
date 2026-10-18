@@ -125,7 +125,13 @@ def reset_llm():
     LLM.tool_name = "get_balances"
 
 
-def make_devui(llm_base, sleep=0.0):
+def spaced(text):
+    """Agent Framework's Message.text joins text items with " " when other content items sit
+    between the stream deltas (seen with harvest): '$4,250.75' comes back as '$ 4 , 250 . 75'."""
+    return " ".join(re.findall(r"\w+|[^\w\s]", text))
+
+
+def make_devui(llm_base, sleep=0.0, render=None):
     """A stand-in for Agent Framework DevUI: two LLM turns per task through llm_base."""
     class DevUI(http.server.BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -157,6 +163,8 @@ def make_devui(llm_base, sleep=0.0):
             _, raw = post(llm_base + "/v1/chat/completions", {"model": "m", "stream": False, "messages": msgs,
                                                                "tools": [BAL_TOOL]})
             text = json.loads(raw)["choices"][0]["message"]["content"]
+            if render:
+                text = render(text)
             self._json({"status": "completed", "output": [
                 {"type": "message", "content": [{"type": "output_text", "text": text}]}]})
     return DevUI
@@ -436,8 +444,8 @@ class BlockTest(unittest.TestCase):
         self.psrv.shutdown()
         shutil.rmtree(self.tmp)
 
-    def agent(self, sleep=0.0):
-        srv, url = serve(make_devui(self.purl, sleep))
+    def agent(self, sleep=0.0, render=None):
+        srv, url = serve(make_devui(self.purl, sleep, render))
         self.addCleanup(srv.shutdown)
         return AB.Agent(url, token="tok")
 
@@ -1221,6 +1229,38 @@ class BlockRefuterTest(unittest.TestCase):
         self.assertIn("18200.00", new["regraded"]["from"])
         self.assertTrue(os.path.exists(os.path.join(self.out, "results.raw.jsonl")))
         self.assertEqual(AB.regrade(self.out), 1)             # idempotent: always from the raw rows
+
+    def test_whitespace_split_devui_answer_is_graded_on_the_model_text(self):
+        """Arm R, first live block: every number came back from DevUI split by spaces, so
+        correct answers failed 'amount 4250.75 missing'. The model's own text (proxy) is
+        graded when it equals the DevUI answer up to whitespace."""
+        LLM.answer = "Checking $4,250.75, savings $18,200.00."
+        rows = AB.run_block(self.agent(render=spaced), [T.B24[0]], "R", "none", 1, self.out, 60, self.log,
+                            settle_s=0.05)
+        self.assertTrue(rows[0]["passed"], rows[0]["reason"])
+        self.assertEqual(rows[0]["answer"], spaced(LLM.answer))     # what DevUI returned is kept
+        self.assertEqual(rows[0]["answer_source"], "model")
+
+    def test_devui_answer_that_differs_beyond_whitespace_is_graded_as_is(self):
+        LLM.answer = "Checking $4,250.75, savings $18,200.00."
+        rows = AB.run_block(self.agent(render=lambda t: "Checking $4,250.75."), [T.B24[0]], "A1", "typical", 1,
+                            self.out, 60, self.log, settle_s=0.05)
+        self.assertFalse(rows[0]["passed"])
+        self.assertEqual(rows[0]["answer_source"], "devui")
+
+    def test_regrade_uses_the_model_text_for_a_whitespace_split_answer(self):
+        LLM.answer = "Checking $4,250.75, savings $18,200.00."
+        AB.run_block(self.agent(), [T.B24[0]], "R", "none", 1, self.out, 60, self.log, settle_s=0.05)
+        p = os.path.join(self.out, "results.jsonl")
+        r = AB.read_jsonl(p)[0]
+        r.update(answer=spaced(LLM.answer), passed=False, status="fail", reason="amount 4250.75 missing")
+        r.pop("answer_source", None)
+        with open(p, "w") as f:
+            f.write(json.dumps(r) + "\n")
+        self.assertEqual(AB.regrade(self.out), 1)
+        (new,) = AB.read_jsonl(p)
+        self.assertTrue(new["passed"], new["reason"])
+        self.assertEqual(new["answer_source"], "model")
 
     def test_warmup_is_unscored_and_outside_the_window(self):
         rows = AB.run_block(self.agent(), [T.B24[0]], "A1", "typical", 1, self.out, 60, self.log, settle_s=0.05,
