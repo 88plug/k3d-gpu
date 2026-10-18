@@ -80,7 +80,7 @@ def ratio_ci(xs, ys, stat=median, boot=BOOT, seed=SEED):
     for _ in range(boot):
         a = stat([xs[rng.randrange(len(xs))] for _ in xs])
         b = stat([ys[rng.randrange(len(ys))] for _ in ys])
-        if b:
+        if b and b != math.inf:          # a resample whose reference is +inf has no ratio
             vals.append(a / b)
     if not vals:
         return point, (None, None)
