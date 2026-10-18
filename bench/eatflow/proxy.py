@@ -308,6 +308,9 @@ def make_handler(px):
             r = Recorder(t0)
             headers = {k: v for k, v in self.headers.items() if k.lower() not in HOP}
             if px.api_key:
+                # Header names are case-insensitive and httpx sends them lowercased: drop the
+                # client's own authorization in any case, so exactly one reaches the upstream.
+                headers = {k: v for k, v in headers.items() if k.lower() != "authorization"}
                 headers["Authorization"] = f"Bearer {px.api_key}"
             conn = px.connection()
             st = {"status": None, "err": None, "logged": False}

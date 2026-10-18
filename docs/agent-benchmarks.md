@@ -150,6 +150,21 @@ k3d-gpu bench agent report run/H42-* --ref B1 --out run/H42-report
   paired differences against `--ref`, BFCL accuracy per category beside the board-weighted
   expectation, agents per box, and the load-matching verdict per level.
 
+## Live runs on one box
+
+`bench/eatflow/live.sh ARM OUT` runs one arm inside one hold of a shared lock (at most 20
+min): a fresh k3d-gpu cluster `k3dgpu-a-<arm>` for the k3d-gpu and EAT-stock servers (or a
+host container for the Ollama and llama.cpp vendor stacks), then on the host EAT's LiteLLM
+(the version EAT pins), the recording proxy, and the banking agent and MCP sidecar from the
+pinned blueprint commit with `ENABLE_MEMORY=false`. It runs B24 under background load, a
+120 s load-only control window, and tears everything down. `R` runs the remote arm through
+one capped proxy. Root-only RAPL counters are read through `K3D_GPU_RAPL_EXEC` (a
+read-only container with the powercap paths unmasked) when sudo is not available.
+
+`k3d-gpu bench agent regrade RUN` applies the current graders to a recorded block (the
+first rows stay in `results.raw.jsonl`); `bench/eatflow/live_table.py RUNS` prints the
+per-arm table (completed, success, turn p95, J per task, load matched).
+
 ## How the harness itself was checked
 
 Without a cluster, on 2026-10-17:

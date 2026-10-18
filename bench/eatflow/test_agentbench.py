@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Unit tests for bench/eatflow (stub servers only: no cluster, no docker, no root)."""
+import http.client
 import http.server
 import json
 import os
@@ -10,6 +11,7 @@ import tempfile
 import threading
 import time
 import unittest
+import urllib.parse
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -48,6 +50,7 @@ class LLM(http.server.BaseHTTPRequestHandler):
     Body knobs: answer (str), args (dict), delay (s before the first delta)."""
     protocol_version = "HTTP/1.1"
     seen = []
+    auth_seen = []
     answer = "Checking 4,250.75 and savings $18,200.00."
     args = {"user_id": "U1001"}
     delay = 0.0
@@ -66,6 +69,7 @@ class LLM(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         LLM.seen.append(body)
+        LLM.auth_seen.append(self.headers.get_all("Authorization") or [])
         if "/fail/" in self.path:
             self.send_response(500)
             self.send_header("Content-Length", "2")
@@ -114,6 +118,7 @@ class LLM(http.server.BaseHTTPRequestHandler):
 
 def reset_llm():
     LLM.seen = []
+    LLM.auth_seen = []
     LLM.answer = "Checking 4,250.75 and savings $18,200.00."
     LLM.args = {"user_id": "U1001"}
     LLM.delay = 0.0
@@ -1062,6 +1067,22 @@ class ProxyRefuterTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             proxy.Proxy(self.up_url, self.log, api_key="k")
         proxy.Proxy(self.up_url, self.log, api_key="k", max_requests=20)
+
+    def test_key_replaces_a_lowercase_client_authorization(self):
+        """httpx (h11) sends header names lowercased; the proxy used to forward the client's
+        'authorization' next to its own 'Authorization', and Cloudflare answers two with 400."""
+        url = self.px(api_key="sk-real", max_requests=5)
+        u = urllib.parse.urlsplit(url)
+        conn = http.client.HTTPConnection(u.hostname, u.port, timeout=10)
+        data = json.dumps({"model": "m", "messages": [{"role": "user", "content": "q"}]}).encode()
+        conn.putrequest("POST", "/v1/chat/completions", skip_accept_encoding=True)
+        for k, v in (("content-type", "application/json"), ("authorization", "Bearer not-needed"),
+                     ("content-length", str(len(data)))):
+            conn.putheader(k, v)
+        conn.endheaders(data)
+        self.assertEqual(conn.getresponse().status, 200)
+        conn.close()
+        self.assertEqual(LLM.auth_seen[-1], ["Bearer sk-real"])
 
     def test_key_file_permissions(self):
         p = os.path.join(self.tmp, "farm.env")
