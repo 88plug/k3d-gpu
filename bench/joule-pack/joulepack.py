@@ -214,6 +214,24 @@ def load_run(out):
     return zones, samples, pools, wins, conf
 
 
+def _loadmod():
+    import importlib.util
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "load", "load.py")
+    spec = importlib.util.spec_from_file_location("bench_load", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def load_windows(out):
+    """Background-load sample windows (load.jsonl from LOAD_LEVEL runs), or None."""
+    path = os.path.join(out, "load.jsonl")
+    if not os.path.exists(path):
+        return None
+    with open(path) as f:
+        return [json.loads(l) for l in f if l.strip()]
+
+
 def window_watts(zones, samples, t0, t1):
     pts = [s for s in samples if t0 <= s[0] <= t1]
     if len(pts) < 3:
@@ -278,6 +296,7 @@ def analyse(out, n=N_AGENTS, slo=SLO_S):
                             bad_cpuset.append(os.path.basename(f))
             if u0 is not None and u1 is not None and lab in cpu:
                 cpu[lab] += (u1 - u0) / 1e6
+        bracket = [x["package"] for x in idles]
         thr = _conf_delta(conf, t0, t1, "throttle")
         swap = _conf_delta(conf, t0, t1, "swap_mib")
         rows.append({
@@ -287,6 +306,7 @@ def analyse(out, n=N_AGENTS, slo=SLO_S):
             "cpu_s": cpu, "bad_cpuset": bad_cpuset,
             "flag_throttle": thr > 3 * max(idle_thr or [0.0]) and thr > 0,
             "flag_swap": swap > 512,
+            "idle_bracket_drift_w": abs(bracket[0] - bracket[1]) if len(bracket) == 2 else math.nan,
         })
     return rows, idle_pkg
 
@@ -307,11 +327,32 @@ def verdict(out, n=N_AGENTS, slo=SLO_S, min_gain=MIN_GAIN):
     if any(abs(r["marginal_w"].get("uncore", 0.0)) > 0.5 for r in rows):
         inconc.append("uncore marginal |dW| > 0.5")
     p_m = [r["marginal_w"]["package"] for r in rows if r["arm"] == "P"]
-    if p_m and not math.isnan(spread) and min(p_m) < spread:
-        inconc.append("P marginal < idle spread")
     e_m = [r["marginal_w"]["package"] for r in rows if r["arm"] == "E"]
-    if e_m and not math.isnan(spread) and spread > 0.5 * st.median(e_m):
-        inconc.append("idle spread > 50% of median E marginal")
+    lw = load_windows(out)
+    if lw is None:
+        # Original design (2026-10-17): floor gates on the run-wide idle spread.
+        if p_m and not math.isnan(spread) and min(p_m) < spread:
+            inconc.append("P marginal < idle spread")
+        if e_m and not math.isnan(spread) and spread > 0.5 * st.median(e_m):
+            inconc.append("idle spread > 50% of median E marginal")
+    else:
+        # Matched-load amendment (2026-10-18): the arms' background load must match
+        # (bench/load/load.py TOLERANCE), and the floor gates use the drift between
+        # the two idle windows that bracket each arm, which is what the marginal
+        # subtracts; the run-wide idle spread is reported, not gated.
+        res["load"] = _loadmod().matched(lw)
+        if not res["load"]["matched"]:
+            inconc.append(res["load"]["verdict"])
+        drift = [r["idle_bracket_drift_w"] for r in rows if not math.isnan(r["idle_bracket_drift_w"])]
+        md = st.median(drift) if drift else math.nan
+        res["idle_bracket_drift_w"] = {"median": md, "max": max(drift) if drift else math.nan, "n": len(drift)}
+        if math.isnan(md):
+            inconc.append("no bracketed arm")
+        else:
+            if p_m and min(p_m) < md:
+                inconc.append("P marginal < median idle bracket drift")
+            if e_m and md > 0.5 * st.median(e_m):
+                inconc.append("median idle bracket drift > 50% of median E marginal")
     res["inconclusive_flags"] = inconc
     res["validity_flags"] = sorted({"throttle r%s %s" % (r["round"], r["arm"]) for r in rows if r["flag_throttle"]}
                                    | {"swap r%s %s" % (r["round"], r["arm"]) for r in rows if r["flag_swap"]})
@@ -453,6 +494,12 @@ def main(argv=None):
                     x["turns"], x["p95_s"], x["agents_per_w"], x["j_per_turn"], fl))
             print("idle pkg W: median %.2f spread %.2f n=%d" % (r["idle_pkg_w"]["median"], r["idle_pkg_w"]["spread"],
                                                                r["idle_pkg_w"]["n"]))
+            if "load" in r:
+                print("background load: %s" % r["load"]["verdict"])
+                for c in r["load"]["checks"]:
+                    print("  %-16s %s %s" % (c["metric"], c["status"], json.dumps(c["arms"], sort_keys=True)))
+                b = r["idle_bracket_drift_w"]
+                print("idle bracket drift W: median %.2f max %.2f n=%d" % (b["median"], b["max"], b["n"]))
             for k in ("invalid", "inconclusive_flags", "validity_flags"):
                 if r[k]:
                     print("%s: %s" % (k, "; ".join(r[k])))
