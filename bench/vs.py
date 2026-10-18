@@ -147,7 +147,10 @@ def median(xs):
 def load_window(seconds, tag, out):
     """Sample one background-load window (bench/load/load.py) and append it to out."""
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "load"))
-    import load  # noqa: E402
+    try:
+        import load  # noqa: E402
+    except ImportError:
+        raise SystemExit("vs: VS_LOAD_WINDOW_S needs bench/load/load.py next to vs.py (a repo checkout)")
     w = load.window(seconds, load.load_cpus(), tag=tag, level=os.environ.get("VS_LOAD_LEVEL"))
     with open(out, "a") as f:
         f.write(json.dumps(w, sort_keys=True) + "\n")
