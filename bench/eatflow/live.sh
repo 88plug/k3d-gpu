@@ -28,7 +28,7 @@
 #   LIVE_MODE       agent (default): B24 at LIVE_LEVEL, then a control window;
 #                   bfcl: H41, BFCL S100 server-fc at LIVE_LEVEL, no agent (amendment 23);
 #                   h44: B24's first 12 tasks in blocks none/heavy/none/heavy (amendment 24);
-#                   pairs: ARM = H47 or H49, both arms live in cluster k3dgpu-e-<arm>, one hold
+#                   pairs: ARM = H47, H49, H47b or H49b, both arms live in cluster k3dgpu-e-<arm>, one hold
 #                   of interleaved pairs into LIVE_PAIRS_DIR (LIVE_HOLD = this hold's number)
 set -uo pipefail
 
@@ -178,13 +178,16 @@ if [ "${MODE}" = pairs ]; then
     # agent; one shared MCP sidecar; pairs A B B A over B24, one attempt in flight at a time.
     # LIVE_PAIRS_DIR: the pairs directory shared by every hold; LIVE_HOLD: this hold's number;
     # LIVE_PAIRS_GUARD: the pair-start guard, s (default 600; a smoke sets it past the hold).
+    # H47b / H49b: the same designs under load rule L2 ("H47b and H49b pre-registration"): a
+    # level baseline once per hold, then a settle gap and a pre-window before every attempt.
     PD=${LIVE_PAIRS_DIR:?} HOLD=${LIVE_HOLD:?}
+    DESIGN=${ARM%b}
     mkdir -p "${PD}"
     PD=$(cd "${PD}" && pwd)
-    case ${ARM} in
+    case ${DESIGN} in
         H47) A=A1 B=A4 ;;
         H49) A=A1 B=B1; export K3D_GPU_NODE_LABELS=ei-infra-eligible=true,ei-inference-eligible=true ;;
-        *) echo "pairs: ARM must be H47 or H49"; exit 2 ;;
+        *) echo "pairs: ARM must be H47, H49, H47b or H49b"; exit 2 ;;
     esac
     TGT=k3dgpu/Qwen3-4B-Instruct-2507-int4-ov
     DRAFT_DIR=OpenVINO-Qwen3-0.6B-int4-ov     # where OVMS --pull puts the draft, inside the target dir
@@ -203,12 +206,12 @@ if [ "${MODE}" = pairs ]; then
     stage_path Qwen3-4B-Instruct-2507-int4-ov "${TGT}" 5000
     stage_path Qwen3-0.6B-int4-ov "${TGT}/${DRAFT_DIR}" 5000
     draft=CPU
-    [ "${ARM}" = H47 ] && draft=off
+    [ "${DESIGN}" = H47 ] && draft=off
     K3D_GPU_AGENT_MODEL=${TGT} K3D_GPU_AGENT_MODEL_NAME=${SERVED} K3D_GPU_AGENT_DRAFT=${draft} \
         K3D_GPU_AGENT_TOOL_PARSER=hermes3 K3D_GPU_AGENT_REASONING_PARSER='' K3D_GPU_AUTOQUANT=off \
         "${K}" agent manifest > "${OUT}/agent.yaml" 2> "${OUT}/agent.err" || { cat "${OUT}/agent.err"; exit 1; }
     SERVED_A=${SERVED}
-    if [ "${ARM}" = H47 ]; then
+    if [ "${DESIGN}" = H47 ]; then
         # One OVMS pod, two graph names: A1 (no draft) and A4 (CPU Fast Draft), the graphs
         # OVMS 2026.4.1 --pull writes for those settings (bench/eatflow/h47/).
         SERVED_B=${SERVED}-a4
@@ -233,11 +236,11 @@ if [ "${MODE}" = pairs ]; then
         local left=$(( CAP - $(el) - 900 ))
         [ "${left}" -gt 0 ] && kubectl -n "$1" rollout status "deploy/$2" --timeout="${left}s"
     }
-    if ! ready k3d-gpu-agent ovms || { [ "${ARM}" = H49 ] && ! ready default vllm-qwen-3-4b-cpu; }; then
+    if ! ready k3d-gpu-agent ovms || { [ "${DESIGN}" = H49 ] && ! ready default vllm-qwen-3-4b-cpu; }; then
         echo "NOT DELIVERABLE: not ready with 900 s of the hold left" | tee -a "${OUT}/live.log"
         kubectl get pods -A > "${OUT}/pods.txt" 2>&1
         kubectl -n k3d-gpu-agent logs deploy/ovms --all-containers > "${OUT}/server-a.log" 2>&1
-        [ "${ARM}" = H49 ] && kubectl -n default logs deploy/vllm-qwen-3-4b-cpu > "${OUT}/server-b.log" 2>&1
+        [ "${DESIGN}" = H49 ] && kubectl -n default logs deploy/vllm-qwen-3-4b-cpu > "${OUT}/server-b.log" 2>&1
         exit 3
     fi
     stamp ready
@@ -252,7 +255,7 @@ if [ "${MODE}" = pairs ]; then
     cg_a=$(${AB} cgroup --uid "${uid_a}") || { echo "no cgroup for the A pod"; exit 1; }
     cg_b=${cg_a}
     BPORT=${P_SRV}
-    if [ "${ARM}" = H49 ]; then
+    if [ "${DESIGN}" = H49 ]; then
         podinfo default > "${OUT}/image-b.txt"
         read -r uid_b _ < "${OUT}/image-b.txt"
         BPORT=$(( P_SRV + 1 ))
@@ -265,7 +268,7 @@ if [ "${MODE}" = pairs ]; then
         || { echo "pod cpu.stat unreadable"; exit 1; }
     wait_http "http://127.0.0.1:${P_SRV}/v1/models" 120 || { echo "A server not answering"; exit 3; }
     curl -fsS "http://127.0.0.1:${P_SRV}/v1/models" > "${OUT}/models-a.json"
-    if [ "${ARM}" = H49 ]; then
+    if [ "${DESIGN}" = H49 ]; then
         wait_http "http://127.0.0.1:${BPORT}/v1/models" 300 || { echo "B server not answering"; exit 3; }
         curl -fsS "http://127.0.0.1:${BPORT}/v1/models" > "${OUT}/models-b.json"
         SERVED_B=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['data'][0]['id'])" "${OUT}/models-b.json")
@@ -307,7 +310,15 @@ if [ "${MODE}" = pairs ]; then
     python3 "${REPO}/bench/load/load.py" start --level "${LEVEL}" --ttl $(( CAP - $(el) + 60 )) > "${OUT}/load-start.log" 2>&1
     deadline=$(( t0 + CAP - 120 ))     # teardown fits in the last 120 s of the hold
     idle=()
-    [ "${ARM}" = H47 ] && idle=(--idle-s 3)
+    [ "${DESIGN}" = H47 ] && idle=(--idle-s 3)
+    l2=()
+    if [ "${ARM}" != "${DESIGN}" ]; then
+        # Rule L2: the level baseline (2 x 10 s, both arms idle, before the warm-ups).
+        stamp "baseline ${LEVEL}"
+        python3 "${REPO}/bench/load/load.py" sample --seconds 10 --windows 2 --phase baseline --tag baseline \
+            --level "${LEVEL}" --out "${PD}/baseline-hold${HOLD}.jsonl"
+        l2=(--baseline "${PD}/baseline-hold${HOLD}.jsonl" --level "${LEVEL}")
+    fi
     stamp "pairs hold ${HOLD}, deadline +$(( deadline - t0 ))s"
     ${AB} pairs --hyp "${ARM}" --hold "${HOLD}" --out "${PD}" --deadline "${deadline}" --tasks B24 \
         --arm-a "${A}" --agent-a http://127.0.0.1:8090 --upstream-a "http://127.0.0.1:${P_LLM}" \
@@ -315,7 +326,7 @@ if [ "${MODE}" = pairs ]; then
         --arm-b "${B}" --agent-b http://127.0.0.2:8090 --upstream-b "http://127.0.0.1:$(( P_LLM + 1 ))" \
         --proxy-port-b "$(( P_PROXY + 1 ))" --restart-b "${OUT}/agent-b.sh" --pod-b "${cg_b}" \
         --mcp-url "http://127.0.0.1:${P_MCP}/mcp" --reset "${OUT}/reset-mcp.sh" --sampling agent_local \
-        --guard-s "${LIVE_PAIRS_GUARD:-600}" "${idle[@]}" 2>&1 | tee -a "${OUT}/live.log"
+        --guard-s "${LIVE_PAIRS_GUARD:-600}" "${idle[@]}" "${l2[@]}" 2>&1 | tee -a "${OUT}/live.log"
     stamp finished
     exit 0
 fi

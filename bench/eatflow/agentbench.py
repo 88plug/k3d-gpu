@@ -48,6 +48,7 @@ import stats  # noqa: E402
 import tasks as T  # noqa: E402
 
 LOCK_PATH = os.path.join(HERE, "agent.lock")
+PAIRS_HYPS = ("H47", "H49", "H47b", "H49b")   # b: load rule L2
 INF = float("inf")
 SLO_S = 10.0
 RAMP = (1, 2, 4, 8)
@@ -1110,6 +1111,25 @@ def cmd_bfcl(a):
     return 0
 
 
+def pre_window(lm, baseline_path, level, pre_s):
+    """Rule L2: pre(arm) runs `load.py settle` against the hold's level baseline (5 s windows
+    until busy and throttle read within TOLERANCE of it, at most 60 s), then one pre_s window
+    of the load CPUs, both arms idle. The pre-window carries the settle result."""
+    with open(baseline_path) as f:
+        base = [json.loads(x) for x in f if x.strip()]
+    ref = {}
+    for m in ("busy_pct", "throttle_per_min"):
+        vals = [w[m] for w in base if w.get(m) is not None]
+        ref[m] = sum(vals) / len(vals) if vals else None
+    cpus = lm.load_cpus()
+
+    def pre(arm):
+        s = lm.settle(ref, lambda sec: lm.window(sec, cpus, tag=arm, level=level, phase="pre"))
+        w = lm.window(pre_s, cpus, tag=arm, level=level, phase="pre")
+        return dict(w, settled=s["settled"], settle_s=s["settle_s"])
+    return pre
+
+
 def cmd_pairs(a):
     """One hold of H47/H49 pairs: two in-process proxies (one per arm), one shared sidecar."""
     os.makedirs(a.out, exist_ok=True)
@@ -1128,12 +1148,17 @@ def cmd_pairs(a):
     lm = _load_mod()
     probe = PR.Probe({arm: v["pod"] for arm, v in arms.items()}, lm.load_cpus() if lm else [], rapl=not a.no_rapl)
     ts = T.taskset(a.tasks)
+    pre = None
+    if a.hyp.endswith("b"):
+        if not (lm and a.baseline and a.level):
+            raise SystemExit("agentbench pairs: rule L2 needs bench/load/load.py, --baseline and --level")
+        pre = pre_window(lm, a.baseline, a.level, a.pre_s)
     rc = 0
     try:
         n = PR.run_hold(sys.modules[__name__], arms, a.arm_a, a.arm_b, ts, a.out, a.deadline, probe, a.mcp_url,
                         a.reset, a.hold, cap_s=a.cap_s, guard_s=a.guard_s, settle_s=a.settle_s, idle_s=a.idle_s,
                         warmup=None if a.no_warmup else WARMUP["bank"], log=log, quiesce_s=a.quiesce_s,
-                        warmup_timeout_s=a.warmup_timeout_s)
+                        warmup_timeout_s=a.warmup_timeout_s, pre=pre)
         log(f"hold {a.hold}: {n} complete pair(s); next pair {PR.next_pair(a.out)} of {len(ts)}")
     except PR.HoldAborted as e:
         log(f"hold {a.hold} ABORTED: {e}")
@@ -1276,7 +1301,7 @@ def parse(argv):
     p.set_defaults(func=cmd_bfcl)
 
     p = sub.add_parser("pairs", help="one hold of within-hold interleaved pairs (H47, H49)")
-    p.add_argument("--hyp", required=True, choices=("H47", "H49"))
+    p.add_argument("--hyp", required=True, choices=PAIRS_HYPS)
     p.add_argument("--hold", type=int, required=True, help="hold number (1, 2, ...)")
     p.add_argument("--out", required=True, help="pairs directory, shared by every hold of the hypothesis")
     p.add_argument("--deadline", type=float, required=True, help="epoch seconds at which the hold must end")
@@ -1302,11 +1327,14 @@ def parse(argv):
     p.add_argument("--quiesce-s", type=float, default=300.0,
                    help="after an over-budget attempt, wait up to this long for that arm's pod to idle")
     p.add_argument("--warmup-timeout-s", type=float, default=float(TASK_TIMEOUT_S))
+    p.add_argument("--baseline", help="rule L2 (H47b, H49b): JSON lines of this hold's level baseline windows")
+    p.add_argument("--level", help="rule L2: the background load level")
+    p.add_argument("--pre-s", type=float, default=PR.PRE_S, help="rule L2: pre-window length, s")
     p.set_defaults(func=cmd_pairs)
 
     p = sub.add_parser("pairs-report", help="H47/H49 statistics and verdict of a pairs directory")
     p.add_argument("dir")
-    p.add_argument("--hyp", required=True, choices=("H47", "H49"))
+    p.add_argument("--hyp", required=True, choices=PAIRS_HYPS)
     p.add_argument("--arm-a", required=True)
     p.add_argument("--arm-b", required=True)
     p.set_defaults(func=cmd_pairs_report)

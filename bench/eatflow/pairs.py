@@ -6,23 +6,33 @@ task set's fixed order. Each attempt is sampled over its own window (send to ans
 busy CPU-s/s over every CPU, each arm pod's cgroup CPU-s/s, package energy, load1, throttle,
 swap and E-core busy. Background CPU (bg_cpu) is the host's busy CPU-s/s minus the arm pods'.
 
-Load rule L1: a pair is matched when its two attempts' bg_cpu differ by at most 0.8 CPU-s/s;
-over the matched pairs, the arms' mean bg_cpu and mean swap used must be within 0.8 CPU-s/s
-and 256 MiB. Python 3 standard library only.
+Load rule L1 (H47, H49): a pair is matched when its two attempts' bg_cpu differ by at most
+0.8 CPU-s/s; over the matched pairs, the arms' mean bg_cpu and mean swap used must be within
+0.8 CPU-s/s and 256 MiB.
+
+Load rule L2 (H47b, H49b, EXPERIMENTS.md "H47b and H49b pre-registration"): before each
+attempt, with both arms idle, `load.py settle` then a pre-window. A pair is matched when its
+two pre-windows agree on every amendment-27 pre covariate within load.TOLERANCE and both show
+the level's full load. The arm-level check is amendment 27 (load.matched_a27) over the matched
+pairs' pre-windows. bg_cpu, package W and throttle during the attempt are reported, never
+gated. Python 3 standard library only.
 """
 import glob
 import json
 import os
 import shlex
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
 
-import energy
-import proxy
-import stats
-import tasks as T
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "load"))
+import energy  # noqa: E402
+import load as LOAD  # noqa: E402
+import proxy  # noqa: E402
+import stats  # noqa: E402
+import tasks as T  # noqa: E402
 
 PAIR_GUARD_S = 600.0        # a pair starts only with this much of the hold left
 TASK_CAP_S = 240.0          # per attempt, both arms
@@ -33,6 +43,8 @@ IDLE_CPU = 0.5              # median idle-arm pod CPU above this: arms not indep
 MIN_MATCHED = 16
 MIN_MATCHED_FRAC = 0.75
 MAX_VOID = 2                # H49
+PRE_S = 10.0                # rule L2 pre-window: one throttle event reads 6/min, under TOLERANCE abs 10
+PRE_COVARIATES = LOAD.COVARIATES["pre"]   # busy_pct, throttle_per_min, swap_used_mib, swap_delta_mib
 OUTCOMES = ("pass_budget", "fail_graded", "over_turn", "over_task", "void")
 
 
@@ -218,12 +230,19 @@ def next_pair(out):
 
 
 def attempt(ab, arms, arm, task, j, hold, probe, out, mcp_url, cap_s=TASK_CAP_S, settle_s=30.0,
-            idle_s=0.0, clock=time.time, opener=urllib.request.urlopen, quiesce_s=0.0):
+            idle_s=0.0, clock=time.time, opener=urllib.request.urlopen, quiesce_s=0.0, pre=None):
     """One scored attempt of `task` on `arm`. arms[arm] = {"agent", "proxy_log", "restart", "entity"}
     (entity: a fixed DevUI entity id, or None to resolve it from /v1/entities).
     idle_s > 0: before the attempt, sample the (shared) pod with no request in flight; that
-    reading is the attempt's idle_cpu. Else idle_cpu is the other arm's pod CPU in-window."""
+    reading is the attempt's idle_cpu. Else idle_cpu is the other arm's pod CPU in-window.
+    pre(arm) (rule L2): called first, with both arms idle; returns the settle gap's pre-window,
+    stored with both pods' CPU over it."""
     me = arms[arm]
+    pre_w = None
+    if pre is not None:
+        p0, pt0 = probe.snap(), clock()
+        pre_w = dict(pre(arm), t_start=pt0)
+        pre_w.update(t_end=clock(), pod_cpu=probe.window(p0, probe.snap()).get("pod_cpu"))
     idle_cpu = None
     if idle_s > 0:
         i0 = probe.snap()
@@ -270,6 +289,8 @@ def attempt(ab, arms, arm, task, j, hold, probe, out, mcp_url, cap_s=TASK_CAP_S,
            "turns_s": [None if r.get("error") else r.get("e2e_s") for r in recs], "turn_over": sum(turn_over(r) for r in recs),
            "end_state": end, "calls": [{k: c.get(k) for k in ("name", "valid", "reason")} for c in calls],
            "idle_cpu": idle_cpu, "window": win}
+    if pre is not None:
+        row["pre"] = pre_w
     with open(os.path.join(out, "turns.jsonl"), "a") as f:
         for r in recs:
             f.write(json.dumps(dict(r, task=task["id"], arm=arm, j=j, hold=hold)) + "\n")
@@ -308,7 +329,7 @@ def quiesce(probe, arm, limit_s, step_s=1.0, below=IDLE_CPU):
 
 def run_hold(ab, arms, a, b, task_list, out, deadline, probe, mcp_url, reset, hold, cap_s=TASK_CAP_S,
              guard_s=PAIR_GUARD_S, settle_s=30.0, idle_s=0.0, warmup=None, clock=time.time,
-             opener=urllib.request.urlopen, log=lambda m: None, quiesce_s=0.0, warmup_timeout_s=600.0):
+             opener=urllib.request.urlopen, log=lambda m: None, quiesce_s=0.0, warmup_timeout_s=600.0, pre=None):
     """Pairs until the task list ends or the hold leaves less than guard_s. Returns the
     number of complete pairs written. Every pair, complete or void, goes to pairs.jsonl."""
     os.makedirs(out, exist_ok=True)
@@ -334,7 +355,7 @@ def run_hold(ab, arms, a, b, task_list, out, deadline, probe, mcp_url, reset, ho
         try:
             for arm in order(j, a, b):
                 row, needs_reset = attempt(ab, arms, arm, t, j, hold, probe, out, mcp_url, cap_s, settle_s,
-                                           idle_s, clock, opener, quiesce_s)
+                                           idle_s, clock, opener, quiesce_s, pre)
                 rows.append(row)
                 if row["outcome"] == "void":
                     void = row["reason"]
@@ -407,12 +428,54 @@ def l1(table, a, b, tol=L1_BG_CPU, swap_tol=ARM_SWAP_MIB):
             "arm_ok": bool(m) and not reasons, "reasons": reasons}
 
 
-def per_arm_load(table, js, arm):
-    """Recorded, not gated: means over the arm's attempts in pairs js."""
-    ws = [table[j][arm]["window"] for j in js]
+def pre_mismatch(x, y):
+    """Why two pre-windows do not match under rule L2 (None when they match): the first of a
+    missing pre-window, a window with fewer load containers than its level runs (or no count),
+    or a pre covariate outside load.TOLERANCE (limit max(abs, rel x the larger value))."""
+    if not x or not y:
+        return "pre-window missing"
+    for w in (x, y):
+        if w.get("level") != "none" and (w.get("load_running") is None or w.get("load_expected") is None
+                                         or w["load_running"] < w["load_expected"]):
+            return "load missing"
+    for m in PRE_COVARIATES:
+        u, v = x.get(m), y.get(m)
+        if u is None or v is None:
+            return m
+        tol = LOAD.TOLERANCE[m]
+        if abs(u - v) > max(tol["abs"], tol["rel"] * max(abs(u), abs(v))):
+            return m
+    return None
+
+
+def l2(table, a, b):
+    """Rule L2. Per pair: the two attempts' pre-windows (both arms idle, after the settle gap)
+    match on every amendment-27 pre covariate. Arm level: load.matched_a27 over the matched
+    pairs' pre-windows. During-attempt load never enters."""
+    m, u, by = [], [], {}
+    for j, p in table.items():
+        why = pre_mismatch(p[a].get("pre"), p[b].get("pre"))
+        if why is None:
+            m.append(j)
+        else:
+            u.append(j)
+            by[why] = by.get(why, 0) + 1
+    reasons, check = [], None
+    if m:
+        ws = [dict(table[j][arm]["pre"], tag=arm, phase="pre") for j in m for arm in (a, b)]
+        check = LOAD.matched_a27(ws)
+        if not check["matched"]:
+            reasons.append(check["verdict"])
+    return {"matched": m, "unmatched": u, "unmatched_by": by, "arm_check": check,
+            "arm_ok": bool(m) and not reasons, "reasons": reasons}
+
+
+def per_arm_load(table, js, arm, key="window"):
+    """Recorded, not gated: means over the arm's attempts in pairs js (key "pre": the pre-windows)."""
+    ws = [table[j][arm][key] for j in js if table[j][arm].get(key)]
     out = {}
     for k in ("bg_cpu", "host_cpu", "swap_used_mib", "swap_growth_mib_per_min", "load1", "pkg_w",
-              "throttle_per_min", "ecore_busy_pct"):
+              "throttle_per_min", "ecore_busy_pct", "busy_pct", "swap_delta_mib", "settle_s"):
         v = [w[k] for w in ws if w.get(k) is not None]
         out[k] = round(_mean(v), 3) if v else None
     return out
@@ -431,9 +494,12 @@ def boot_share(d, pred, boot=stats.BOOT, seed=stats.SEED, stat=None):
 
 
 def analyze(attempts, pairs, hyp, a, b, holds=None):
-    """The pre-registered statistics and verdict of H47 (a=A1, b=A4) or H49 (a=A1, b=B1)."""
+    """The pre-registered statistics and verdict of H47 (a=A1, b=A4) or H49 (a=A1, b=B1), under
+    load rule L1; H47b and H49b are the same designs under rule L2."""
+    rule_name = "L2" if hyp.endswith("b") else "L1"
+    base = hyp[:3]
     table, void = pair_table(attempts, pairs, a, b)
-    rule = l1(table, a, b)
+    rule = l2(table, a, b) if rule_name == "L2" else l1(table, a, b)
     m = rule["matched"]
     run = len(table)
     idle = [table[j][arm]["idle_cpu"] for j in table for arm in (a, b) if table[j][arm].get("idle_cpu") is not None]
@@ -450,13 +516,13 @@ def analyze(attempts, pairs, hyp, a, b, holds=None):
     if idle_med is None or idle_med > IDLE_CPU:
         gates.append(f"idle-arm pod CPU median {idle_med} > {IDLE_CPU}" if idle_med is not None
                      else "idle-arm pod CPU unmeasured")
-    if hyp == "H49" and void > MAX_VOID:
+    if base == "H49" and void > MAX_VOID:
         gates.append(f"{void} void pairs > {MAX_VOID}")
     counts = {arm: {o: sum(1 for j in table if table[j][arm]["outcome"] == o) for o in OUTCOMES}
               for arm in (a, b)}
-    res = {"hypothesis": hyp, "arms": [a, b], "holds": holds, "pairs_run": run, "void_pairs": void,
+    res = {"hypothesis": hyp, "rule": rule_name, "arms": [a, b], "holds": holds, "pairs_run": run, "void_pairs": void,
            "matched": len(m), "unmatched": len(rule["unmatched"]), "unmatched_ids": [table[j]["task"] for j in rule["unmatched"]],
-           "load": {k: rule[k] for k in ("arm_bg_cpu", "arm_swap_used_mib", "arm_ok", "reasons")},
+           "load": {k: rule[k] for k in rule if k not in ("matched", "unmatched")},
            "load_per_arm": {arm: per_arm_load(table, m, arm) for arm in (a, b)},
            "idle_cpu_median": idle_med, "outcomes_all_run_pairs": counts, "gates": gates,
            "per_pair": [{"j": j, "task": table[j]["task"], "matched": j in m,
@@ -465,6 +531,16 @@ def analyze(attempts, pairs, hyp, a, b, holds=None):
                                "pkg_j": table[j][arm]["window"].get("pkg_j"),
                                "swap_used_mib": table[j][arm]["window"].get("swap_used_mib")}
                             for arm in (a, b)}} for j in sorted(table)]}
+    if rule_name == "L2":
+        # Outcomes, never gates: during-attempt load (bg_cpu, package W, throttle) on the matched
+        # pairs and on every pair run; the pre-windows on the matched pairs.
+        res["load_during_per_arm"] = res["load_per_arm"]
+        res["load_during_all_pairs_per_arm"] = {arm: per_arm_load(table, sorted(table), arm) for arm in (a, b)}
+        res["load_pre_per_arm"] = {arm: per_arm_load(table, m, arm, "pre") for arm in (a, b)}
+        for row in res["per_pair"]:
+            for arm in (a, b):
+                p = table[row["j"]][arm].get("pre") or {}
+                row[arm]["pre"] = {k: p.get(k) for k in PRE_COVARIATES + ("settled", "settle_s", "load_running")}
     ok = {arm: {table[j]["task"]: int(table[j][arm]["outcome"] == "pass_budget") for j in m} for arm in (a, b)}
     succ = {}
     for arm in (a, b):
@@ -487,7 +563,7 @@ def analyze(attempts, pairs, hyp, a, b, holds=None):
     ja = {table[j]["task"]: table[j][a]["window"]["pkg_j"] for j in m if table[j][a]["window"].get("pkg_j")}
     jb = {table[j]["task"]: table[j][b]["window"]["pkg_j"] for j in m if table[j][b]["window"].get("pkg_j")}
     res["j_per_attempt_ratio"] = stats.paired_ratio(ja, jb)
-    if hyp == "H49":
+    if base == "H49":
         pd = stats.paired_diff(ok[a], ok[b])
         res["paired_diff"] = pd
         lo, hi = pd["ci95"]
