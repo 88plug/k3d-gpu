@@ -1,0 +1,678 @@
+{
+ "hypothesis": "H47",
+ "arms": [
+  "A1",
+  "A4"
+ ],
+ "holds": 2,
+ "pairs_run": 24,
+ "void_pairs": 0,
+ "matched": 13,
+ "unmatched": 11,
+ "unmatched_ids": [
+  "B-T3-U1001",
+  "B-T4-U1001",
+  "B-T5-U1001",
+  "B-T3-U1002",
+  "B-T5-U1002",
+  "B-T6-U1002",
+  "B-T8-U1002",
+  "B-T2-U1003",
+  "B-T3-U1003",
+  "B-T5-U1003",
+  "B-T8-U1003"
+ ],
+ "load": {
+  "arm_bg_cpu": {
+   "A1": 10.864646153846154,
+   "A4": 10.85253076923077
+  },
+  "arm_swap_used_mib": {
+   "A1": 136191.7,
+   "A4": 136247.65384615384
+  },
+  "arm_ok": true,
+  "reasons": []
+ },
+ "load_per_arm": {
+  "A1": {
+   "bg_cpu": 10.865,
+   "host_cpu": 18.54,
+   "swap_used_mib": 136191.7,
+   "swap_growth_mib_per_min": -195.623,
+   "load1": 17.561,
+   "pkg_w": 98.587,
+   "throttle_per_min": 221.985,
+   "ecore_busy_pct": 62.794
+  },
+  "A4": {
+   "bg_cpu": 10.853,
+   "host_cpu": 18.391,
+   "swap_used_mib": 136247.654,
+   "swap_growth_mib_per_min": 86.702,
+   "load1": 17.902,
+   "pkg_w": 103.394,
+   "throttle_per_min": 378.635,
+   "ecore_busy_pct": 62.62
+  }
+ },
+ "idle_cpu_median": 0.0006,
+ "outcomes_all_run_pairs": {
+  "A1": {
+   "pass_budget": 20,
+   "fail_graded": 4,
+   "over_turn": 0,
+   "over_task": 0,
+   "void": 0
+  },
+  "A4": {
+   "pass_budget": 20,
+   "fail_graded": 4,
+   "over_turn": 0,
+   "over_task": 0,
+   "void": 0
+  }
+ },
+ "gates": [
+  "13 matched pairs < 16",
+  "13/24 pairs matched < 75%"
+ ],
+ "per_pair": [
+  {
+   "j": 0,
+   "task": "B-T1-U1001",
+   "matched": true,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 17.53,
+    "idle_cpu": 0.0005,
+    "bg_cpu": 10.9319,
+    "pkg_j": 1731.769,
+    "swap_used_mib": 136996.6
+   },
+   "A4": {
+    "outcome": "pass_budget",
+    "duration_s": 14.021,
+    "idle_cpu": 0.0006,
+    "bg_cpu": 11.3719,
+    "pkg_j": 1438.616,
+    "swap_used_mib": 136957.1
+   }
+  },
+  {
+   "j": 1,
+   "task": "B-T2-U1001",
+   "matched": true,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 7.077,
+    "idle_cpu": 0.0005,
+    "bg_cpu": 10.2574,
+    "pkg_j": 708.904,
+    "swap_used_mib": 136934.1
+   },
+   "A4": {
+    "outcome": "pass_budget",
+    "duration_s": 4.571,
+    "idle_cpu": 0.0005,
+    "bg_cpu": 10.0925,
+    "pkg_j": 494.428,
+    "swap_used_mib": 136946.1
+   }
+  },
+  {
+   "j": 2,
+   "task": "B-T3-U1001",
+   "matched": false,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 35.02,
+    "idle_cpu": 0.0004,
+    "bg_cpu": 11.8099,
+    "pkg_j": 3463.697,
+    "swap_used_mib": 137017.2
+   },
+   "A4": {
+    "outcome": "pass_budget",
+    "duration_s": 25.244,
+    "idle_cpu": 0.0007,
+    "bg_cpu": 10.6238,
+    "pkg_j": 2633.796,
+    "swap_used_mib": 136946.8
+   }
+  },
+  {
+   "j": 3,
+   "task": "B-T4-U1001",
+   "matched": false,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 7.761,
+    "idle_cpu": 0.0007,
+    "bg_cpu": 11.0854,
+    "pkg_j": 786.766,
+    "swap_used_mib": 136904.6
+   },
+   "A4": {
+    "outcome": "pass_budget",
+    "duration_s": 5.797,
+    "idle_cpu": 0.0008,
+    "bg_cpu": 10.1121,
+    "pkg_j": 629.887,
+    "swap_used_mib": 136935.3
+   }
+  },
+  {
+   "j": 4,
+   "task": "B-T5-U1001",
+   "matched": false,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 17.639,
+    "idle_cpu": 0.0006,
+    "bg_cpu": 11.0621,
+    "pkg_j": 1773.633,
+    "swap_used_mib": 136863.6
+   },
+   "A4": {
+    "outcome": "pass_budget",
+    "duration_s": 14.513,
+    "idle_cpu": 0.0007,
+    "bg_cpu": 10.1521,
+    "pkg_j": 1538.835,
+    "swap_used_mib": 136832.1
+   }
+  },
+  {
+   "j": 5,
+   "task": "B-T6-U1001",
+   "matched": true,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 24.624,
+    "idle_cpu": 0.0006,
+    "bg_cpu": 11.5365,
+    "pkg_j": 2414.345,
+    "swap_used_mib": 136442.3
+   },
+   "A4": {
+    "outcome": "pass_budget",
+    "duration_s": 18.453,
+    "idle_cpu": 0.0005,
+    "bg_cpu": 11.5848,
+    "pkg_j": 1897.334,
+    "swap_used_mib": 136583.6
+   }
+  },
+  {
+   "j": 6,
+   "task": "B-T7-U1001",
+   "matched": true,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 18.675,
+    "idle_cpu": 0.0005,
+    "bg_cpu": 11.169,
+    "pkg_j": 1831.352,
+    "swap_used_mib": 136380.3
+   },
+   "A4": {
+    "outcome": "pass_budget",
+    "duration_s": 14.716,
+    "idle_cpu": 0.0005,
+    "bg_cpu": 11.2143,
+    "pkg_j": 1494.065,
+    "swap_used_mib": 136347.8
+   }
+  },
+  {
+   "j": 7,
+   "task": "B-T8-U1001",
+   "matched": true,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 13.205,
+    "idle_cpu": 0.0005,
+    "bg_cpu": 11.2661,
+    "pkg_j": 1286.488,
+    "swap_used_mib": 136043.3
+   },
+   "A4": {
+    "outcome": "pass_budget",
+    "duration_s": 12.879,
+    "idle_cpu": 0.0006,
+    "bg_cpu": 10.7471,
+    "pkg_j": 1313.334,
+    "swap_used_mib": 136316.8
+   }
+  },
+  {
+   "j": 8,
+   "task": "B-T1-U1002",
+   "matched": true,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 21.739,
+    "idle_cpu": 0.0006,
+    "bg_cpu": 11.3746,
+    "pkg_j": 2144.892,
+    "swap_used_mib": 135987.6
+   },
+   "A4": {
+    "outcome": "pass_budget",
+    "duration_s": 18.298,
+    "idle_cpu": 0.0005,
+    "bg_cpu": 11.6736,
+    "pkg_j": 1891.307,
+    "swap_used_mib": 136210.3
+   }
+  },
+  {
+   "j": 9,
+   "task": "B-T2-U1002",
+   "matched": true,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 7.213,
+    "idle_cpu": 0.0005,
+    "bg_cpu": 10.8266,
+    "pkg_j": 715.157,
+    "swap_used_mib": 135966.8
+   },
+   "A4": {
+    "outcome": "pass_budget",
+    "duration_s": 4.916,
+    "idle_cpu": 0.0006,
+    "bg_cpu": 11.0832,
+    "pkg_j": 519.778,
+    "swap_used_mib": 136196.0
+   }
+  },
+  {
+   "j": 10,
+   "task": "B-T3-U1002",
+   "matched": false,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 24.821,
+    "idle_cpu": 0.0006,
+    "bg_cpu": 11.8622,
+    "pkg_j": 2443.381,
+    "swap_used_mib": 136187.5
+   },
+   "A4": {
+    "outcome": "pass_budget",
+    "duration_s": 16.912,
+    "idle_cpu": 0.0006,
+    "bg_cpu": 10.1472,
+    "pkg_j": 1760.57,
+    "swap_used_mib": 136101.8
+   }
+  },
+  {
+   "j": 11,
+   "task": "B-T4-U1002",
+   "matched": true,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 11.944,
+    "idle_cpu": 0.0006,
+    "bg_cpu": 12.1917,
+    "pkg_j": 1203.509,
+    "swap_used_mib": 136145.0
+   },
+   "A4": {
+    "outcome": "pass_budget",
+    "duration_s": 8.093,
+    "idle_cpu": 0.0007,
+    "bg_cpu": 11.6431,
+    "pkg_j": 866.413,
+    "swap_used_mib": 136136.3
+   }
+  },
+  {
+   "j": 12,
+   "task": "B-T5-U1002",
+   "matched": false,
+   "A1": {
+    "outcome": "fail_graded",
+    "duration_s": 9.385,
+    "idle_cpu": 0.0006,
+    "bg_cpu": 11.2713,
+    "pkg_j": 936.59,
+    "swap_used_mib": 136110.0
+   },
+   "A4": {
+    "outcome": "fail_graded",
+    "duration_s": 9.875,
+    "idle_cpu": 0.0005,
+    "bg_cpu": 9.7886,
+    "pkg_j": 1020.179,
+    "swap_used_mib": 136087.0
+   }
+  },
+  {
+   "j": 13,
+   "task": "B-T6-U1002",
+   "matched": false,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 23.426,
+    "idle_cpu": 0.0006,
+    "bg_cpu": 11.8368,
+    "pkg_j": 2281.484,
+    "swap_used_mib": 135903.0
+   },
+   "A4": {
+    "outcome": "pass_budget",
+    "duration_s": 17.333,
+    "idle_cpu": 0.0005,
+    "bg_cpu": 10.6689,
+    "pkg_j": 1769.825,
+    "swap_used_mib": 136054.7
+   }
+  },
+  {
+   "j": 14,
+   "task": "B-T7-U1002",
+   "matched": true,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 17.768,
+    "idle_cpu": 0.0006,
+    "bg_cpu": 10.5728,
+    "pkg_j": 1744.402,
+    "swap_used_mib": 135868.2
+   },
+   "A4": {
+    "outcome": "pass_budget",
+    "duration_s": 14.188,
+    "idle_cpu": 0.0005,
+    "bg_cpu": 10.7559,
+    "pkg_j": 1449.29,
+    "swap_used_mib": 135840.0
+   }
+  },
+  {
+   "j": 15,
+   "task": "B-T8-U1002",
+   "matched": false,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 11.368,
+    "idle_cpu": 0.0005,
+    "bg_cpu": 10.5507,
+    "pkg_j": 1111.151,
+    "swap_used_mib": 135797.5
+   },
+   "A4": {
+    "outcome": "pass_budget",
+    "duration_s": 10.863,
+    "idle_cpu": 0.0006,
+    "bg_cpu": 12.2683,
+    "pkg_j": 1089.336,
+    "swap_used_mib": 135819.0
+   }
+  },
+  {
+   "j": 16,
+   "task": "B-T1-U1003",
+   "matched": true,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 13.213,
+    "idle_cpu": 0.0006,
+    "bg_cpu": 10.6942,
+    "pkg_j": 1306.328,
+    "swap_used_mib": 135781.7
+   },
+   "A4": {
+    "outcome": "pass_budget",
+    "duration_s": 13.321,
+    "idle_cpu": 0.0007,
+    "bg_cpu": 10.7431,
+    "pkg_j": 1373.053,
+    "swap_used_mib": 135757.7
+   }
+  },
+  {
+   "j": 17,
+   "task": "B-T2-U1003",
+   "matched": false,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 7.305,
+    "idle_cpu": 0.0006,
+    "bg_cpu": 10.6594,
+    "pkg_j": 732.783,
+    "swap_used_mib": 135734.0
+   },
+   "A4": {
+    "outcome": "pass_budget",
+    "duration_s": 5.088,
+    "idle_cpu": 0.0006,
+    "bg_cpu": 11.7675,
+    "pkg_j": 522.693,
+    "swap_used_mib": 135745.0
+   }
+  },
+  {
+   "j": 18,
+   "task": "B-T3-U1003",
+   "matched": false,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 17.503,
+    "idle_cpu": 0.0006,
+    "bg_cpu": 11.0881,
+    "pkg_j": 1728.931,
+    "swap_used_mib": 135909.5
+   },
+   "A4": {
+    "outcome": "pass_budget",
+    "duration_s": 12.074,
+    "idle_cpu": 0.0005,
+    "bg_cpu": 9.2204,
+    "pkg_j": 1286.845,
+    "swap_used_mib": 135900.2
+   }
+  },
+  {
+   "j": 19,
+   "task": "B-T4-U1003",
+   "matched": true,
+   "A1": {
+    "outcome": "fail_graded",
+    "duration_s": 7.478,
+    "idle_cpu": 0.0006,
+    "bg_cpu": 10.279,
+    "pkg_j": 746.085,
+    "swap_used_mib": 136019.0
+   },
+   "A4": {
+    "outcome": "fail_graded",
+    "duration_s": 7.6,
+    "idle_cpu": 0.0008,
+    "bg_cpu": 10.3593,
+    "pkg_j": 787.386,
+    "swap_used_mib": 135965.9
+   }
+  },
+  {
+   "j": 20,
+   "task": "B-T5-U1003",
+   "matched": false,
+   "A1": {
+    "outcome": "fail_graded",
+    "duration_s": 8.371,
+    "idle_cpu": 0.0004,
+    "bg_cpu": 10.8494,
+    "pkg_j": 833.512,
+    "swap_used_mib": 136018.3
+   },
+   "A4": {
+    "outcome": "fail_graded",
+    "duration_s": 8.894,
+    "idle_cpu": 0.0004,
+    "bg_cpu": 9.6044,
+    "pkg_j": 940.963,
+    "swap_used_mib": 136010.7
+   }
+  },
+  {
+   "j": 21,
+   "task": "B-T6-U1003",
+   "matched": true,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 21.693,
+    "idle_cpu": 0.0006,
+    "bg_cpu": 10.3961,
+    "pkg_j": 2141.586,
+    "swap_used_mib": 135966.5
+   },
+   "A4": {
+    "outcome": "pass_budget",
+    "duration_s": 15.726,
+    "idle_cpu": 0.0005,
+    "bg_cpu": 9.8822,
+    "pkg_j": 1649.079,
+    "swap_used_mib": 136002.5
+   }
+  },
+  {
+   "j": 22,
+   "task": "B-T7-U1003",
+   "matched": true,
+   "A1": {
+    "outcome": "fail_graded",
+    "duration_s": 12.423,
+    "idle_cpu": 0.0006,
+    "bg_cpu": 9.7445,
+    "pkg_j": 1240.133,
+    "swap_used_mib": 135960.7
+   },
+   "A4": {
+    "outcome": "fail_graded",
+    "duration_s": 9.764,
+    "idle_cpu": 0.0007,
+    "bg_cpu": 9.9319,
+    "pkg_j": 1007.481,
+    "swap_used_mib": 135959.4
+   }
+  },
+  {
+   "j": 23,
+   "task": "B-T8-U1003",
+   "matched": false,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 14.074,
+    "idle_cpu": 0.0008,
+    "bg_cpu": 11.5604,
+    "pkg_j": 1373.436,
+    "swap_used_mib": 135946.7
+   },
+   "A4": {
+    "outcome": "pass_budget",
+    "duration_s": 12.376,
+    "idle_cpu": 0.0008,
+    "bg_cpu": 10.0695,
+    "pkg_j": 1274.636,
+    "swap_used_mib": 135953.4
+   }
+  }
+ ],
+ "within_budget_success": {
+  "A1": {
+   "k": 11,
+   "n": 13,
+   "rate": 0.8461538461538461,
+   "wilson95": [
+    0.5776536898051745,
+    0.9567418216419186
+   ]
+  },
+  "A4": {
+   "k": 11,
+   "n": 13,
+   "rate": 0.8461538461538461,
+   "wilson95": [
+    0.5776536898051745,
+    0.9567418216419186
+   ]
+  }
+ },
+ "outcomes_matched": {
+  "A1": {
+   "pass_budget": 11,
+   "fail_graded": 2,
+   "over_turn": 0,
+   "over_task": 0,
+   "void": 0
+  },
+  "A4": {
+   "pass_budget": 11,
+   "fail_graded": 2,
+   "over_turn": 0,
+   "over_task": 0,
+   "void": 0
+  }
+ },
+ "turn_p95_s": {
+  "A1": 18.816017,
+  "A4": 14.729177
+ },
+ "attempt_median_s": {
+  "A1": 13.213,
+  "A4": 13.321
+ },
+ "j_per_completed_task": {
+  "A1": {
+   "n": 13,
+   "j_per_completed_task": 1478.1
+  },
+  "A4": {
+   "n": 13,
+   "j_per_completed_task": 1244.7
+  }
+ },
+ "j_per_attempt_ratio": {
+  "n": 13,
+  "ratio": 1.2257512223363776,
+  "ci95": [
+   1.1340792372681958,
+   1.2986557951438347
+  ]
+ },
+ "time_ratio_a4_a1": {
+  "n": 13,
+  "ratio": 0.7880053547523427,
+  "ci95": [
+   0.7249343106071082,
+   0.8417130502783016
+  ]
+ },
+ "gain": 0.21199464524765732,
+ "gain_ci95": [
+  0.15828694972169843,
+  0.2750656893928918
+ ],
+ "delta_success": {
+  "n": 13,
+  "diff": 0.0,
+  "ci95": [
+   0.0,
+   0.0
+  ],
+  "lb95_one_sided": 0.0,
+  "ub95_one_sided": 0.0
+ },
+ "both_completed": 13,
+ "confidence": {
+  "support_share": 0.9835,
+  "refute_share": 0.0025,
+  "method": "share of 2000 paired bootstrap resamples (seed 40) of the median log ratio with gain >= 10% (support) or gain < 0 (refute)"
+ },
+ "verdict": "INCONCLUSIVE"
+}

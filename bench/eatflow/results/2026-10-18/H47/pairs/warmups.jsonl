@@ -1,0 +1,4 @@
+{"hold": 1, "arm": "A1", "seconds": 20.492, "error": null, "answer": "ACC-1001-CHK  \nACC-1001-SAV"}
+{"hold": 1, "arm": "A4", "seconds": 20.582, "error": null, "answer": "ACC-1001-CHK  \nACC-1001-SAV"}
+{"hold": 2, "arm": "A1", "seconds": 19.684, "error": null, "answer": "ACC-1001-CHK  \nACC-1001-SAV"}
+{"hold": 2, "arm": "A4", "seconds": 22.234, "error": null, "answer": "ACC-1001-CHK  \nACC-1001-SAV"}
