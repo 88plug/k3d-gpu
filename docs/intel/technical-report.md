@@ -10,7 +10,7 @@ This report covers what was measured, and how. Every result comes from one host:
 
 - Fifteen hypotheses are SUPPORTED. All fifteen are scoped to that host.
 - Eight are REFUTED. Six of them changed shipped defaults.
-- Seventeen are INCONCLUSIVE, mostly because the shared host throttles or its load was unmatched. Three are PENDING: H5 and two from the agent benchmark (H43, H45), pre-registered on 2026-10-17 and not run in its first campaign.
+- Seventeen are INCONCLUSIVE, mostly because the shared host throttles or its load was unmatched. Five are PENDING: H5, two from the agent benchmark (H43, H45), pre-registered on 2026-10-17 and not run in its first campaign, and H47b and H49b, pre-registered on 2026-10-18 to re-run H47 and H49 with pairs matched on idle pre-windows.
 - Every other Intel family is detected and configured in fixture tests only. None has a measurement.
 
 No world-first, superlative or priority claim is made; [docs/provenance.md](../provenance.md) supports none.
@@ -92,7 +92,7 @@ The host is a shared, live machine: about 53 other containers, about 80 W idle p
 | H26 | E-core L2-cluster confinement of a DRAM-bandwidth neighbour: the measured R (p95 inflation, cluster over spread) was 0.83, CI 0.61-0.87, at `typical` background load, which is not a verdict [ledger:H26] | Background load unmatched across arms at both levels (hog carry-over into the load windows; the `heavy` load was removed mid-run) |
 | H41, H42, H44, H46 | Agent benchmark on Intel's EAT banking flow (B24) and BFCL S100 at `typical` load. The k3d-gpu CPU stack (OVMS int4, P-cores) passed 20/24 banking tasks (task median 15.6 s); the RTX 4000 AWQ stack finished them in 0.12x that time; EAT's stock vLLM CPU bf16 stack finished 1 of 24 in its hold. BFCL S100 in server-fc mode: OVMS int4 passed 81 of 100 ids, bf16 on vLLM CUDA 88 of 100. Heavy E-core load stretched the CPU stack's p95 turn 2.59x (CI 0.87-2.94) [ledger:H41] [ledger:H42] [ledger:H44] [ledger:H46] | Background load unmatched across holds (swap use and throttle on the shared host); each arm ran one block, not ABBA; B1's J per success undefined |
 
-PENDING with a pre-registration: H5 (prefill guard on/off with an E-core neighbour), and the agent-benchmark rows its first campaign did not run, H43 (coding agent under E-core load) and H45 (graded agents per box) ([agent-benchmarks.md](../agent-benchmarks.md)). The external bake-offs are in the tables above: the Ollama, llama.cpp and plain OVMS ones are all decided.
+PENDING with a pre-registration: H5 (prefill guard on/off with an E-core neighbour), and the agent-benchmark rows its first campaign did not run, H43 (coding agent under E-core load) and H45 (graded agents per box) ([agent-benchmarks.md](../agent-benchmarks.md)); and H47b and H49b, the two interleaved agent comparisons re-run with pairs matched on idle pre-windows (load rule L2). The external bake-offs are in the tables above: the Ollama, llama.cpp and plain OVMS ones are all decided.
 
 ## Per-family support matrix
 

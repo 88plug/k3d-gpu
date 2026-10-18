@@ -376,5 +376,171 @@ class HoldTest(unittest.TestCase):
             self.assertEqual(json.load(f)["verdict"], "SUPPORTED")
 
 
+def pre(busy=37.0, thr=200.0, swap=136000.0, dswap=0.0, running=3, expected=3, settled=True):
+    """One pre-window (rule L2): the load.py window with both arms idle, after the settle gap."""
+    return {"phase": "pre", "level": "typical", "seconds": 10.0, "busy_pct": busy, "throttle_per_min": thr,
+            "swap_used_mib": swap, "swap_delta_mib": dswap, "load_expected": expected, "load_running": running,
+            "settled": settled, "settle_s": 5, "pod_cpu": {"A1": 0.01, "B1": 0.01}}
+
+
+def att2(j, arm, bg, p, **kw):
+    r = att(j, arm, bg=bg, **kw)
+    r["pre"] = p
+    return r
+
+
+class L2Test(unittest.TestCase):
+    """Rule L2 (H47b, H49b): pairs are matched on their pre-windows, taken with both arms
+    idle; bg_cpu, package W and throttle during the attempt are outcomes, never gates."""
+
+    def h49_like(self, n=24, b_pre=None):
+        # The H49 run: B1's unpinned vLLM displaced the E-core load, so bg_cpu during B1 read
+        # 0.3-4.3 CPU-s/s lower than during A1 (22 of 24 pairs). The idle pre-windows agree.
+        at = []
+        for j in range(n):
+            at += [att2(j, "A1", 10.5, pre(busy=37.0 + 0.5 * (j % 3)), swap=150000.0),
+                   att2(j, "B1", 10.5 - 0.3 - 0.17 * j, (b_pre or pre)(busy=38.0 - 0.5 * (j % 2)),
+                        outcome="over_turn" if j % 6 else "pass_budget", swap=152000.0)]
+        return at
+
+    def test_unpinned_arm_depressing_during_bg_still_matches(self):
+        at = self.h49_like()
+        table, _ = PR.pair_table(at, pairs_of(24), "A1", "B1")
+        self.assertEqual(len(PR.l1(table, "A1", "B1")["matched"]), 3)   # L1 drops 21 of 24 here
+        r = PR.l2(table, "A1", "B1")
+        self.assertEqual(len(r["matched"]), 24)
+        self.assertTrue(r["arm_ok"], r["reasons"])
+        res = PR.analyze(at, pairs_of(24), "H49b", "A1", "B1")
+        self.assertEqual(res["rule"], "L2")
+        self.assertEqual(res["matched"], 24)
+        self.assertEqual(res["gates"], [])
+        self.assertEqual(res["verdict"], "SUPPORTED")
+        # during-attempt load is reported per arm, never gated
+        out = res["load_during_per_arm"]
+        self.assertGreater(out["A1"]["bg_cpu"] - out["B1"]["bg_cpu"], 2.0)
+        self.assertIn("busy_pct", res["load_pre_per_arm"]["B1"])
+
+    def test_background_drift_between_pre_windows_does_not_match(self):
+        cases = {
+            "busy_pct": dict(busy=45.1),            # 8.1 pp > 5 pp
+            "throttle_per_min": dict(thr=300.0),    # 100 > max(10, 0.25 x 300)
+            "swap_used_mib": dict(swap=136300.0),   # 300 MiB > 256
+            "swap_delta_mib": dict(dswap=80.0),     # 80 MiB > 64
+        }
+        for metric, kw in cases.items():
+            with self.subTest(metric=metric):
+                at = [att2(0, "A1", 10.0, pre()), att2(0, "B1", 10.0, pre(**kw)),   # identical during
+                      att2(1, "A1", 10.0, pre()), att2(1, "B1", 10.0, pre())]
+                r = PR.l2(PR.pair_table(at, pairs_of(2), "A1", "B1")[0], "A1", "B1")
+                self.assertEqual(r["matched"], [1])
+                self.assertEqual(r["unmatched"], [0])
+                self.assertEqual(r["unmatched_by"], {metric: 1})
+
+    def test_tolerance_edges_match(self):
+        at = [att2(0, "A1", 10.0, pre(busy=37.0, thr=8.0, swap=1000.0, dswap=0.0)),
+              att2(0, "B1", 10.0, pre(busy=42.0, thr=18.0, swap=1256.0, dswap=64.0))]
+        r = PR.l2(PR.pair_table(at, pairs_of(1), "A1", "B1")[0], "A1", "B1")
+        self.assertEqual(r["matched"], [0])
+
+    def test_missing_pre_or_missing_load_is_unmatched(self):
+        no_pre = att(0, "B1")
+        at = [att2(0, "A1", 10.0, pre()), no_pre,
+              att2(1, "A1", 10.0, pre()), att2(1, "B1", 10.0, pre(running=2)),
+              att2(2, "A1", 10.0, pre()), att2(2, "B1", 10.0, pre(running=None)),
+              att2(3, "A1", 10.0, pre()), att2(3, "B1", 10.0, dict(pre(), busy_pct=None))]
+        r = PR.l2(PR.pair_table(at, pairs_of(4), "A1", "B1")[0], "A1", "B1")
+        self.assertEqual(r["matched"], [])
+        self.assertEqual(r["unmatched_by"], {"pre-window missing": 1, "load missing": 2, "busy_pct": 1})
+
+    def test_arm_level_reads_pre_windows_only(self):
+        # During-attempt swap and bg_cpu differ by far more than L1 allows; pre-windows agree.
+        at = []
+        for j in range(20):
+            at += [att2(j, "A1", 11.0, pre(), swap=100000.0), att2(j, "B1", 7.0, pre(), swap=110000.0)]
+        r = PR.l2(PR.pair_table(at, pairs_of(20), "A1", "B1")[0], "A1", "B1")
+        self.assertEqual(len(r["matched"]), 20)
+        self.assertTrue(r["arm_ok"], r["reasons"])
+        self.assertEqual(r["arm_check"]["rule"], "amendment-27")
+
+    def test_h49b_gates_unchanged(self):
+        at = self.h49_like(n=15)
+        res = PR.analyze(at, pairs_of(15), "H49b", "A1", "B1")
+        self.assertEqual(res["verdict"], "INCONCLUSIVE")
+        self.assertTrue(any("matched pairs < 16" in g for g in res["gates"]))
+        # 18 of 24 matched (75%) passes; 17 of 24 does not
+        for k, ok in ((18, True), (17, False)):
+            at = self.h49_like()
+            for r in at:
+                if r["arm"] == "B1" and r["j"] >= k:
+                    r["pre"] = pre(busy=60.0)
+            res = PR.analyze(at, pairs_of(24), "H49b", "A1", "B1")
+            self.assertEqual(res["matched"], k)
+            self.assertEqual(not any("pairs matched <" in g for g in res["gates"]), ok, res["gates"])
+        at = self.h49_like()
+        res = PR.analyze(at, pairs_of(24, void=(21, 22, 23)), "H49b", "A1", "B1")
+        self.assertTrue(any("void" in g for g in res["gates"]))
+
+    def test_h47b_uses_l2(self):
+        at = []
+        for j in range(24):
+            at += [att2(j, "A1", 11.0, pre(), dur=20.0), att2(j, "A4", 9.0, pre(), dur=15.0 + (j % 3) * 0.5)]
+        res = PR.analyze(at, pairs_of(24), "H47b", "A1", "A4")
+        self.assertEqual(res["rule"], "L2")
+        self.assertEqual(res["verdict"], "SUPPORTED")
+        self.assertEqual(PR.analyze(at, pairs_of(24), "H47", "A1", "A4")["rule"], "L1")
+
+    def test_hold_takes_a_pre_window_before_each_attempt(self):
+        calls = []
+
+        def take(arm):
+            calls.append(arm)
+            return pre()
+        h = HoldTest("test_cli_report")
+        h.setUp()
+        try:
+            PR.run_hold(AB, h.arms, "A1", "B1", T.B24[:2], h.out, deadline=1e12, probe=FakeProbe(),
+                        mcp_url=h.murl, reset="true", hold=1, settle_s=0.05, pre=take)
+            at = PR.read_jsonl(os.path.join(h.out, "attempts.jsonl"))
+        finally:
+            h.tearDown()
+        self.assertEqual(calls, ["A1", "B1", "B1", "A1"])
+        self.assertEqual([r["arm"] for r in at], calls)
+        for r in at:
+            self.assertEqual(r["pre"]["phase"], "pre")
+            self.assertIn("A1", r["pre"]["pod_cpu"])      # both arms' pods over the pre-window
+            self.assertLessEqual(r["pre"]["t_end"], r["t_start"])
+
+    def test_pre_window_settles_then_samples(self):
+        """agentbench's L2 pre(arm): settle against the hold's baseline, then one pre_s window."""
+        import types
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        base = os.path.join(tmp, "baseline.jsonl")
+        with open(base, "w") as f:
+            for _ in range(2):
+                f.write(json.dumps({"phase": "baseline", "busy_pct": 37.0, "throttle_per_min": 100.0}) + "\n")
+        seen = []
+        busy = iter([60.0, 50.0, 38.0, 39.0])             # hog decay: settles on the third 5 s window
+
+        def window(sec, cpus, tag=None, level=None, phase=None):
+            seen.append((sec, tag, level, phase))
+            return pre(busy=next(busy), thr=100.0)
+        lm = types.SimpleNamespace(settle=PR.LOAD.settle, window=window, load_cpus=lambda: [16, 17])
+        w = AB.pre_window(lm, base, "typical", 10.0)("B1")
+        self.assertEqual(seen, [(5, "B1", "typical", "pre")] * 3 + [(10.0, "B1", "typical", "pre")])
+        self.assertEqual((w["busy_pct"], w["settled"], w["settle_s"]), (39.0, True, 15))
+
+    def test_cli_report_h49b(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        for name, rows in (("attempts.jsonl", self.h49_like()), ("pairs.jsonl", pairs_of(24))):
+            with open(os.path.join(tmp, name), "w") as f:
+                f.writelines(json.dumps(r) + "\n" for r in rows)
+        self.assertEqual(AB.main(["pairs-report", tmp, "--hyp", "H49b", "--arm-a", "A1", "--arm-b", "B1"]), 0)
+        with open(os.path.join(tmp, "analysis.json")) as f:
+            res = json.load(f)
+        self.assertEqual((res["rule"], res["verdict"]), ("L2", "SUPPORTED"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)
