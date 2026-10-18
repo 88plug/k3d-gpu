@@ -44,7 +44,7 @@ MODE=${LIVE_MODE:-agent}
 ALIAS=Qwen/Qwen3-4B-Instruct-2507
 SERVED=qwen3-4b-instruct-2507
 P_SRV=18630 P_LLM=18640 P_PROXY=18620 P_MCP=18600
-LITELLM_IMAGE=docker.litellm.ai/berriai/litellm:v1.83.14-stable.patch.2  # EAT 0d3438d genai-gateway
+LITELLM_IMAGE=docker.litellm.ai/berriai/litellm:v1.83.14-stable.patch.2@sha256:73cbb215d3d43ae5b42816217b200386eb08d567767fcb36cba163152c5f3c79  # EAT 0d3438d genai-gateway; the index digest the 2026-10-17/18 holds pulled
 RAPL_IMAGE=python:3.14.8-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170
 lc=$(echo "${ARM}" | tr 'A-Z' 'a-z')
 export K3D_GPU_CLUSTER=k3dgpu-a-${lc}
