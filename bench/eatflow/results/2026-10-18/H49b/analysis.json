@@ -1,0 +1,232 @@
+{
+ "hypothesis": "H49b",
+ "rule": "L2",
+ "arms": [
+  "A1",
+  "B1"
+ ],
+ "holds": 0,
+ "pairs_run": 0,
+ "void_pairs": 0,
+ "matched": 0,
+ "unmatched": 0,
+ "unmatched_ids": [],
+ "load": {
+  "unmatched_by": {},
+  "arm_check": null,
+  "arm_ok": false,
+  "reasons": []
+ },
+ "load_per_arm": {
+  "A1": {
+   "bg_cpu": null,
+   "host_cpu": null,
+   "swap_used_mib": null,
+   "swap_growth_mib_per_min": null,
+   "load1": null,
+   "pkg_w": null,
+   "throttle_per_min": null,
+   "ecore_busy_pct": null,
+   "busy_pct": null,
+   "swap_delta_mib": null,
+   "settle_s": null
+  },
+  "B1": {
+   "bg_cpu": null,
+   "host_cpu": null,
+   "swap_used_mib": null,
+   "swap_growth_mib_per_min": null,
+   "load1": null,
+   "pkg_w": null,
+   "throttle_per_min": null,
+   "ecore_busy_pct": null,
+   "busy_pct": null,
+   "swap_delta_mib": null,
+   "settle_s": null
+  }
+ },
+ "idle_cpu_median": null,
+ "outcomes_all_run_pairs": {
+  "A1": {
+   "pass_budget": 0,
+   "fail_graded": 0,
+   "over_turn": 0,
+   "over_task": 0,
+   "void": 0
+  },
+  "B1": {
+   "pass_budget": 0,
+   "fail_graded": 0,
+   "over_turn": 0,
+   "over_task": 0,
+   "void": 0
+  }
+ },
+ "gates": [
+  "0 matched pairs < 16",
+  "no complete pair",
+  "idle-arm pod CPU unmeasured"
+ ],
+ "per_pair": [],
+ "load_during_per_arm": {
+  "A1": {
+   "bg_cpu": null,
+   "host_cpu": null,
+   "swap_used_mib": null,
+   "swap_growth_mib_per_min": null,
+   "load1": null,
+   "pkg_w": null,
+   "throttle_per_min": null,
+   "ecore_busy_pct": null,
+   "busy_pct": null,
+   "swap_delta_mib": null,
+   "settle_s": null
+  },
+  "B1": {
+   "bg_cpu": null,
+   "host_cpu": null,
+   "swap_used_mib": null,
+   "swap_growth_mib_per_min": null,
+   "load1": null,
+   "pkg_w": null,
+   "throttle_per_min": null,
+   "ecore_busy_pct": null,
+   "busy_pct": null,
+   "swap_delta_mib": null,
+   "settle_s": null
+  }
+ },
+ "load_during_all_pairs_per_arm": {
+  "A1": {
+   "bg_cpu": null,
+   "host_cpu": null,
+   "swap_used_mib": null,
+   "swap_growth_mib_per_min": null,
+   "load1": null,
+   "pkg_w": null,
+   "throttle_per_min": null,
+   "ecore_busy_pct": null,
+   "busy_pct": null,
+   "swap_delta_mib": null,
+   "settle_s": null
+  },
+  "B1": {
+   "bg_cpu": null,
+   "host_cpu": null,
+   "swap_used_mib": null,
+   "swap_growth_mib_per_min": null,
+   "load1": null,
+   "pkg_w": null,
+   "throttle_per_min": null,
+   "ecore_busy_pct": null,
+   "busy_pct": null,
+   "swap_delta_mib": null,
+   "settle_s": null
+  }
+ },
+ "load_pre_per_arm": {
+  "A1": {
+   "bg_cpu": null,
+   "host_cpu": null,
+   "swap_used_mib": null,
+   "swap_growth_mib_per_min": null,
+   "load1": null,
+   "pkg_w": null,
+   "throttle_per_min": null,
+   "ecore_busy_pct": null,
+   "busy_pct": null,
+   "swap_delta_mib": null,
+   "settle_s": null
+  },
+  "B1": {
+   "bg_cpu": null,
+   "host_cpu": null,
+   "swap_used_mib": null,
+   "swap_growth_mib_per_min": null,
+   "load1": null,
+   "pkg_w": null,
+   "throttle_per_min": null,
+   "ecore_busy_pct": null,
+   "busy_pct": null,
+   "swap_delta_mib": null,
+   "settle_s": null
+  }
+ },
+ "within_budget_success": {
+  "A1": {
+   "k": 0,
+   "n": 0,
+   "rate": null,
+   "wilson95": [
+    null,
+    null
+   ]
+  },
+  "B1": {
+   "k": 0,
+   "n": 0,
+   "rate": null,
+   "wilson95": [
+    null,
+    null
+   ]
+  }
+ },
+ "outcomes_matched": {
+  "A1": {
+   "pass_budget": 0,
+   "fail_graded": 0,
+   "over_turn": 0,
+   "over_task": 0,
+   "void": 0
+  },
+  "B1": {
+   "pass_budget": 0,
+   "fail_graded": 0,
+   "over_turn": 0,
+   "over_task": 0,
+   "void": 0
+  }
+ },
+ "turn_p95_s": {
+  "A1": null,
+  "B1": null
+ },
+ "attempt_median_s": {
+  "A1": null,
+  "B1": null
+ },
+ "j_per_completed_task": {
+  "A1": {
+   "n": 0,
+   "j_per_completed_task": null
+  },
+  "B1": {
+   "n": 0,
+   "j_per_completed_task": null
+  }
+ },
+ "j_per_attempt_ratio": {
+  "n": 0,
+  "ratio": null,
+  "ci95": [
+   null,
+   null
+  ]
+ },
+ "paired_diff": {
+  "n": 0,
+  "diff": null,
+  "ci95": [
+   null,
+   null
+  ],
+  "lb95_one_sided": null,
+  "ub95_one_sided": null
+ },
+ "confidence": {
+  "support_share": null,
+  "method": "share of 2000 paired bootstrap resamples (seed 40) with A1 - B1 >= +0.30"
+ },
+ "verdict": "INCONCLUSIVE"
+}

@@ -1,0 +1,1 @@
+sha256:4815a9815aacc67af8898cf6ebfa9ad07b19b7b368d4ef4d1141b8f8801770f4 docker.litellm.ai/berriai/litellm:v1.83.14-stable.patch.2@sha256:73cbb215d3d43ae5b42816217b200386eb08d567767fcb36cba163152c5f3c79

@@ -1,0 +1,20 @@
+{"hold": 1, "arm": "A1", "seconds": 20.704, "error": null, "answer": "ACC-1001-CHK  \nACC-1001-SAV"}
+{"hold": 1, "arm": "B1", "seconds": 343.192, "error": null, "answer": "ACC-1001-CHK\nACC-1001-SAV"}
+{"hold": 2, "arm": "A1", "seconds": 21.234, "error": null, "answer": "ACC-1001-CHK  \nACC-1001-SAV"}
+{"hold": 2, "arm": "B1", "seconds": 343.169, "error": null, "answer": "ACC-1001-CHK\nACC-1001-SAV"}
+{"hold": 3, "arm": "A1", "seconds": 23.978, "error": null, "answer": "ACC-1001-CHK  \nACC-1001-SAV"}
+{"hold": 3, "arm": "B1", "seconds": 434.263, "error": null, "answer": "ACC-1001-CHK\nACC-1001-SAV"}
+{"hold": 4, "arm": "A1", "seconds": 21.745, "error": null, "answer": "ACC-1001-CHK  \nACC-1001-SAV"}
+{"hold": 4, "arm": "B1", "seconds": 377.617, "error": null, "answer": "ACC-1001-CHK\nACC-1001-SAV"}
+{"hold": 5, "arm": "A1", "seconds": 22.941, "error": null, "answer": "ACC-1001-CHK  \nACC-1001-SAV"}
+{"hold": 5, "arm": "B1", "seconds": 406.565, "error": null, "answer": "ACC-1001-CHK\nACC-1001-SAV"}
+{"hold": 6, "arm": "A1", "seconds": 23.473, "error": null, "answer": "ACC-1001-CHK  \nACC-1001-SAV"}
+{"hold": 6, "arm": "B1", "seconds": 399.011, "error": null, "answer": "ACC-1001-CHK\nACC-1001-SAV"}
+{"hold": 7, "arm": "A1", "seconds": 23.083, "error": null, "answer": "ACC-1001-CHK  \nACC-1001-SAV"}
+{"hold": 7, "arm": "B1", "seconds": 386.892, "error": null, "answer": "ACC-1001-CHK\nACC-1001-SAV"}
+{"hold": 8, "arm": "A1", "seconds": 23.433, "error": null, "answer": "ACC-1001-CHK  \nACC-1001-SAV"}
+{"hold": 8, "arm": "B1", "seconds": 391.922, "error": null, "answer": "ACC-1001-CHK\nACC-1001-SAV"}
+{"hold": 9, "arm": "A1", "seconds": 23.298, "error": null, "answer": "ACC-1001-CHK  \nACC-1001-SAV"}
+{"hold": 9, "arm": "B1", "seconds": 395.227, "error": null, "answer": "ACC-1001-CHK\nACC-1001-SAV"}
+{"hold": 10, "arm": "A1", "seconds": 23.169, "error": null, "answer": "ACC-1001-CHK  \nACC-1001-SAV"}
+{"hold": 10, "arm": "B1", "seconds": 402.049, "error": null, "answer": "ACC-1001-CHK\nACC-1001-SAV"}
