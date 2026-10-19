@@ -1,0 +1,125 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: k3d-gpu-agent
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ovms-graphs
+  namespace: k3d-gpu-agent
+data:
+  config.json: "{\n \"model_config_list\": [\n  {\n   \"config\": {\n    \"name\"\
+    : \"qwen3-4b-instruct-2507\",\n    \"base_path\": \"/graphs\",\n    \"graph_path\"\
+    : \"qwen3-4b-instruct-2507.pbtxt\"\n   }\n  },\n  {\n   \"config\": {\n    \"\
+    name\": \"qwen3-4b-instruct-2507-a4\",\n    \"base_path\": \"/graphs\",\n    \"\
+    graph_path\": \"qwen3-4b-instruct-2507-a4.pbtxt\"\n   }\n  }\n ]\n}"
+  qwen3-4b-instruct-2507.pbtxt: "# File created with: OpenVINO Model Server 2026.4.1.cfc9ac721\n\
+    # OVMS_GRAPH_QUEUE_MAX_SIZE: AUTO\n\n    input_stream: \"HTTP_REQUEST_PAYLOAD:input\"\
+    \n    output_stream: \"HTTP_RESPONSE_PAYLOAD:output\"\n    node: {\n    name:\
+    \ \"LLMExecutor\"\n    calculator: \"HttpLLMCalculator\"\n    input_stream: \"\
+    LOOPBACK:loopback\"\n    input_stream: \"HTTP_REQUEST_PAYLOAD:input\"\n    input_side_packet:\
+    \ \"LLM_NODE_RESOURCES:llm\"\n    input_side_packet: \"LLM_NODE_EXECUTION_CONTEXTS:llm_ctx\"\
+    \n    output_stream: \"LOOPBACK:loopback\"\n    output_stream: \"HTTP_RESPONSE_PAYLOAD:output\"\
+    \n    input_stream_info: {\n        tag_index: 'LOOPBACK:0',\n        back_edge:\
+    \ true\n    }\n    node_options: {\n        [type.googleapis.com / mediapipe.LLMCalculatorOptions]:\
+    \ {\n            max_num_seqs:256,\n            device: \"CPU\",\n           \
+    \ models_path: \"/models/k3dgpu/Qwen3-4B-Instruct-2507-int4-ov\",\n          \
+    \  enable_prefix_caching: true,\n            cache_size: 0,\n            tool_parser:\
+    \ \"hermes3\",\n        }\n    }\n    input_stream_handler {\n        input_stream_handler:\
+    \ \"SyncSetInputStreamHandler\",\n        options {\n        [mediapipe.SyncSetInputStreamHandlerOptions.ext]\
+    \ {\n            sync_set {\n            tag_index: \"LOOPBACK:0\"\n         \
+    \   }\n        }\n        }\n    }\n    }\n"
+  qwen3-4b-instruct-2507-a4.pbtxt: "# File created with: OpenVINO Model Server 2026.4.1.cfc9ac721\n\
+    # OVMS_GRAPH_QUEUE_MAX_SIZE: AUTO\n\n    input_stream: \"HTTP_REQUEST_PAYLOAD:input\"\
+    \n    output_stream: \"HTTP_RESPONSE_PAYLOAD:output\"\n    node: {\n    name:\
+    \ \"LLMExecutor\"\n    calculator: \"HttpLLMCalculator\"\n    input_stream: \"\
+    LOOPBACK:loopback\"\n    input_stream: \"HTTP_REQUEST_PAYLOAD:input\"\n    input_side_packet:\
+    \ \"LLM_NODE_RESOURCES:llm\"\n    input_side_packet: \"LLM_NODE_EXECUTION_CONTEXTS:llm_ctx\"\
+    \n    output_stream: \"LOOPBACK:loopback\"\n    output_stream: \"HTTP_RESPONSE_PAYLOAD:output\"\
+    \n    input_stream_info: {\n        tag_index: 'LOOPBACK:0',\n        back_edge:\
+    \ true\n    }\n    node_options: {\n        [type.googleapis.com / mediapipe.LLMCalculatorOptions]:\
+    \ {\n            max_num_seqs:256,\n            device: \"CPU\",\n           \
+    \ models_path: \"/models/k3dgpu/Qwen3-4B-Instruct-2507-int4-ov\",\n          \
+    \  enable_prefix_caching: true,\n            cache_size: 0,\n            tool_parser:\
+    \ \"hermes3\",\n            # Speculative decoding configuration\n           \
+    \ draft_models_path: \"/models/k3dgpu/Qwen3-4B-Instruct-2507-int4-ov/OpenVINO-Qwen3-0.6B-int4-ov\"\
+    ,\n            draft_device: \"CPU\",\n        }\n    }\n    input_stream_handler\
+    \ {\n        input_stream_handler: \"SyncSetInputStreamHandler\",\n        options\
+    \ {\n        [mediapipe.SyncSetInputStreamHandlerOptions.ext] {\n            sync_set\
+    \ {\n            tag_index: \"LOOPBACK:0\"\n            }\n        }\n       \
+    \ }\n    }\n    }\n"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ovms
+  namespace: k3d-gpu-agent
+  labels:
+    app: ovms
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ovms
+  template:
+    metadata:
+      labels:
+        app: ovms
+        k3d-gpu.io/cores: performance
+      annotations:
+        k3d-gpu.io/agent-device: CPU
+    spec:
+      securityContext:
+        runAsUser: 5000
+        runAsGroup: 5000
+        fsGroup: 5000
+      containers:
+      - name: ovms
+        image: openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58
+        imagePullPolicy: IfNotPresent
+        args:
+        - --rest_port=8000
+        - --cache_dir=/models/.ov_cache
+        - --log_level=INFO
+        - --config_path=/graphs/config.json
+        ports:
+        - name: http
+          containerPort: 8000
+        readinessProbe:
+          httpGet:
+            path: /v2/health/ready
+            port: http
+          periodSeconds: 5
+        resources:
+          requests:
+            cpu: '16'
+            memory: 6Gi
+        volumeMounts:
+        - name: models
+          mountPath: /models
+        - name: graphs
+          mountPath: /graphs
+      volumes:
+      - name: models
+        hostPath:
+          path: /var/apb-models
+          type: Directory
+      - name: graphs
+        configMap:
+          name: ovms-graphs
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ovms
+  namespace: k3d-gpu-agent
+spec:
+  selector:
+    app: ovms
+  ports:
+  - name: http
+    port: 8000
+    targetPort: http
