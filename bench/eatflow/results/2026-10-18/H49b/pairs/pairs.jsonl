@@ -1,0 +1,24 @@
+{"j": 0, "task": "B-T1-U1001", "hold": 1, "status": "complete", "void_reason": null, "order": ["A1", "B1"]}
+{"j": 1, "task": "B-T2-U1001", "hold": 1, "status": "complete", "void_reason": null, "order": ["B1", "A1"]}
+{"j": 2, "task": "B-T3-U1001", "hold": 1, "status": "complete", "void_reason": null, "order": ["A1", "B1"]}
+{"j": 3, "task": "B-T4-U1001", "hold": 2, "status": "complete", "void_reason": null, "order": ["B1", "A1"]}
+{"j": 4, "task": "B-T5-U1001", "hold": 2, "status": "complete", "void_reason": null, "order": ["A1", "B1"]}
+{"j": 5, "task": "B-T6-U1001", "hold": 2, "status": "complete", "void_reason": null, "order": ["B1", "A1"]}
+{"j": 6, "task": "B-T7-U1001", "hold": 3, "status": "complete", "void_reason": null, "order": ["A1", "B1"]}
+{"j": 7, "task": "B-T8-U1001", "hold": 3, "status": "complete", "void_reason": null, "order": ["B1", "A1"]}
+{"j": 8, "task": "B-T1-U1002", "hold": 4, "status": "void", "void_reason": "hold 4 killed externally at ~17:22 after both attempts and before the pair row was written (runner process ended, not the deadline); recorded 2026-10-19 before hold 5 so the pair is not repeated", "order": ["A1", "B1"]}
+{"j": 9, "task": "B-T2-U1002", "hold": 5, "status": "complete", "void_reason": null, "order": ["B1", "A1"]}
+{"j": 10, "task": "B-T3-U1002", "hold": 5, "status": "complete", "void_reason": null, "order": ["A1", "B1"]}
+{"j": 11, "task": "B-T4-U1002", "hold": 6, "status": "complete", "void_reason": null, "order": ["B1", "A1"]}
+{"j": 12, "task": "B-T5-U1002", "hold": 6, "status": "complete", "void_reason": null, "order": ["A1", "B1"]}
+{"j": 13, "task": "B-T6-U1002", "hold": 6, "status": "complete", "void_reason": null, "order": ["B1", "A1"]}
+{"j": 14, "task": "B-T7-U1002", "hold": 7, "status": "complete", "void_reason": null, "order": ["A1", "B1"]}
+{"j": 15, "task": "B-T8-U1002", "hold": 7, "status": "complete", "void_reason": null, "order": ["B1", "A1"]}
+{"j": 16, "task": "B-T1-U1003", "hold": 8, "status": "complete", "void_reason": null, "order": ["A1", "B1"]}
+{"j": 17, "task": "B-T2-U1003", "hold": 8, "status": "complete", "void_reason": null, "order": ["B1", "A1"]}
+{"j": 18, "task": "B-T3-U1003", "hold": 8, "status": "complete", "void_reason": null, "order": ["A1", "B1"]}
+{"j": 19, "task": "B-T4-U1003", "hold": 9, "status": "complete", "void_reason": null, "order": ["B1", "A1"]}
+{"j": 20, "task": "B-T5-U1003", "hold": 9, "status": "complete", "void_reason": null, "order": ["A1", "B1"]}
+{"j": 21, "task": "B-T6-U1003", "hold": 9, "status": "complete", "void_reason": null, "order": ["B1", "A1"]}
+{"j": 22, "task": "B-T7-U1003", "hold": 10, "status": "complete", "void_reason": null, "order": ["A1", "B1"]}
+{"j": 23, "task": "B-T8-U1003", "hold": 10, "status": "complete", "void_reason": null, "order": ["B1", "A1"]}
