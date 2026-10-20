@@ -6,6 +6,13 @@ name: Auto-release AUR
 # cryptoandcoffee/k3d-gpu:X.Y.Z, so after tagging this dispatches build-and-push.yml
 # with release=X.Y.Z; that run publishes the image and then dispatches aur-deploy.yml.
 # Dispatches bypass the GITHUB_TOKEN downstream-trigger limit.
+#
+# hack/release_cas.sh releases from a fresh origin/main and pushes main and the
+# tag in one atomic push, retrying when another writer moved main. A push
+# run whose commits an earlier run already released exits with no tag. The
+# concurrency group only queues runs; correctness does not depend on it. Push and
+# dispatch runs queue separately, so a pending forced dispatch is never replaced
+# by a push run that finds nothing to release.
 
 on:
   push:
@@ -25,61 +32,27 @@ jobs:
   release:
     if: "github.actor != '88plug-bot' && !contains(github.event.head_commit.message, '[skip release]')"
     runs-on: ubuntu-latest
+    concurrency:
+      group: auto-release-${{ github.event_name }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
+          ref: main
           fetch-depth: 0
 
-      - name: Compute next AUR patch version
-        id: ver
-        run: |
-          LATEST=$(git tag -l 'aur-v*' --sort=-v:refname | head -1)
-          if [ -z "$LATEST" ]; then
-            NEXT="aur-v0.1.0"
-          else
-            VER=${LATEST#aur-v}
-            MAJ=$(echo "$VER" | cut -d. -f1)
-            MIN=$(echo "$VER" | cut -d. -f2)
-            PATCH=$(echo "$VER" | cut -d. -f3)
-            NEXT="aur-v${MAJ}.${MIN}.$((PATCH+1))"
-          fi
-          echo "tag=$NEXT" >> "$GITHUB_OUTPUT"
-          echo "ver=${NEXT#aur-v}" >> "$GITHUB_OUTPUT"
-
-      - name: Sync version into tracked files
+      - name: Release (atomic push of main and the tag)
+        id: rel
         env:
-          VER: ${{ steps.ver.outputs.ver }}
-        run: |
-          # Keep the launcher's VERSION, PKGBUILD pkgver, and .SRCINFO in lockstep
-          # with the AUR tag. .SRCINFO is edited by sed (not makepkg) so the lines
-          # match exactly what `makepkg --printsrcinfo` produces — the ci.yml drift
-          # check then passes. pkgrel stays 1.
-          sed -i "s|^VERSION=\".*\"|VERSION=\"${VER}\"|" scripts/k3d-gpu
-          sed -i "s|^pkgver=.*|pkgver=${VER}|" packaging/aur/PKGBUILD
-          sed -i \
-            -e "s|^\tpkgver = .*|\tpkgver = ${VER}|" \
-            -e "s|#tag=aur-v.*|#tag=aur-v${VER}|" \
-            packaging/aur/.SRCINFO
-
-      - name: Commit, tag and push
-        env:
-          VER: ${{ steps.ver.outputs.ver }}
+          EVENT: ${{ github.event_name }}
         run: |
           git config user.name  "88plug-bot"
           git config user.email "andrew@88plug.com"
-          git add scripts/k3d-gpu packaging/aur/PKGBUILD packaging/aur/.SRCINFO
-          # Tracked files already at VER means an earlier run pushed the release commit but not
-          # the tag; tag the current HEAD (same VERSION) instead of failing on an empty commit.
-          if git diff --cached --quiet; then
-            echo "tracked files already at ${VER}; tagging HEAD"
-          else
-            git commit -m "release: aur-v${VER} [skip release]"
-            git push origin HEAD:main
-          fi
-          git tag ${{ steps.ver.outputs.tag }}
-          git push origin ${{ steps.ver.outputs.tag }}
+          hack/release_cas.sh
 
       - name: Dispatch image build for the release
+        if: steps.rel.outputs.ver != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh workflow run build-and-push.yml --ref main -f release=${{ steps.ver.outputs.ver }}
+          VER: ${{ steps.rel.outputs.ver }}
+        run: gh workflow run build-and-push.yml --ref main -f "release=${VER}"

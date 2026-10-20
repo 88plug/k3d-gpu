@@ -144,5 +144,20 @@ c=1; [ "$rc" -ne 0 ] && [ "$(tags)" = "aur-v0.1.5 " ] && [ "$(cat "$h.n")" = 5 ]
   && ! o log --format=%s "$(main)" | grep -q '^release: ' && c=0
 check retry_bound $c "rc=$rc tags=$(tags) attempts=$(cat "$h.n" 2>/dev/null)"
 
+# concurrent_dispatch: two forced runs at one tip both release, distinct versions.
+setup concurrent_dispatch; runner a; runner b
+h=$(hook b 1 "cd $(printf %q "$D/a") && GIT_COMMITTER_NAME=runner-a EVENT=workflow_dispatch GITHUB_OUTPUT=$(printf %q "$D/a.out") bash $(printf %q "$REL") > $(printf %q "$D/a.log") 2>&1; echo \$? > $(printf %q "$D/a.rc")")
+release b workflow_dispatch "$h"; rc=$?
+c=1; [ "$rc" -eq 0 ] && [ "$(cat "$D/a.rc" 2>/dev/null)" = 0 ] && [ "$(tags)" = "aur-v0.1.5 aur-v0.1.6 aur-v0.1.7 " ] && c=0
+check concurrent_dispatch $c "rcA=$(cat "$D/a.rc" 2>/dev/null) rcB=$rc tags=$(tags)"
+
+# version_ahead_of_tag: main's VERSION is above the last tag (a release commit
+# whose tag push never landed); the next release goes above both.
+setup version_ahead_of_tag
+( cd "$D/seed" && sed -i 's/^VERSION="0.1.5"/VERSION="0.1.6"/' scripts/k3d-gpu && git commit -qam "stamp 0.1.6" && git push -q origin HEAD:main )
+runner r; release r workflow_dispatch; rc=$?
+c=1; [ "$rc" -eq 0 ] && [ "$(tagsha aur-v0.1.7)" = "$(main)" ] && c=0
+check version_ahead_of_tag $c "rc=$rc tags=$(tags) $(tail -1 "$D/r.log")"
+
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]
