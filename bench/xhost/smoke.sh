@@ -42,3 +42,13 @@ echo "pod ready: $((SECONDS - t0)) s"
 kubectl -n k3d-gpu-agent exec deploy/ovms -c ovms -- grep Cpus_allowed_list /proc/1/status
 kubectl -n k3d-gpu-agent exec deploy/ovms -c ovms -- cat /models/OpenVINO/Qwen3-4B-int4-ov/graph.pbtxt | grep -vE '^\s*$' | head -40
 kubectl -n k3d-gpu-agent logs deploy/ovms -c ovms 2>/dev/null | grep -iE 'PRECISION|NUM_STREAMS|INFERENCE_NUM_THREADS|device|AMX|draft' | head -20
+echo "taints after $((SECONDS - t0)) s: $(kubectl get node -o jsonpath='{.items[0].spec.taints}')"
+k3d cluster delete "${name}" >/dev/null 2>&1
+# The H28 path: a plain `k3d cluster create` with probe.sh's K3D_GPU_K3S_ARGS translation.
+read -r -a extra <<< "$(bash "${ROOT}/bench/zero-copy-models/probe.sh" create-args)"
+echo "plain create args: ${extra[*]}"
+k3d cluster create "${name}" --image "${IMAGE:-cryptoandcoffee/k3d-gpu:0.1.61}" --wait --kubeconfig-update-default=false --kubeconfig-switch-context=false "${extra[@]}" >/dev/null \
+    || { echo "plain create failed"; exit 1; }
+k3d kubeconfig get "${name}" > "${KUBECONFIG}"
+sleep 90
+echo "plain create taints after 90 s: $(kubectl get node -o jsonpath='{.items[0].spec.taints}')"

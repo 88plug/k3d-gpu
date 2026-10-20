@@ -245,6 +245,10 @@ check "amx-autoquant (H27): --dry-run names the pinned weight revisions" \
     sh -c 'o=$(bash "$1" --dry-run) && echo "$o" | grep -qx "  revision int4 b467368d16b75df14055562fe927ae8e1f15f7ef" && echo "$o" | grep -qx "  revision int8 fd9c3cc8adf942151e48904b7341a57eae58d8d5" && echo "$o" | grep -qx "  revision fp16 00298f1c614ffdc000814d8cbe1b7613aa73cdca"' _ "${ROOT}/bench/amx-autoquant/probe.sh"
 check "zero-copy-models (H28): score.py applies the H28 outcome table" \
     env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/zero-copy-models/test_score.py"
+check "zero-copy-models (H28): plain cluster create adds no k3s flag by default" \
+    sh -c 'test "$(env -u K3D_GPU_K3S_ARGS bash "$1" create-args)" = ""' _ "${ROOT}/bench/zero-copy-models/probe.sh"
+check "zero-copy-models (H28x): K3D_GPU_K3S_ARGS reaches the server as --k3s-arg (crescent C1)" \
+    sh -c 'test "$(K3D_GPU_K3S_ARGS="--kubelet-arg=eviction-hard=nodefs.available<1% --disable=traefik" bash "$1" create-args)" = "--k3s-arg --kubelet-arg=eviction-hard=nodefs.available<1%@server:* --k3s-arg --disable=traefik@server:*"' _ "${ROOT}/bench/zero-copy-models/probe.sh"
 check "xhost: hold.sh parses" bash -n "${ROOT}/bench/xhost/hold.sh"
 check "xhost: clusters.py selects only k3dgpu-x-* clusters" \
     sh -c 'test "$(printf "%s" "[{\"name\":\"k3dgpu-x-h25\"},{\"name\":\"k3dgpu-e-h50\"},{\"name\":\"k3dgpu-x-h28\"},{\"name\":\"k3dgpu-h52\"},{\"name\":\"xk3dgpu-x-a\"}]" | python3 "$1")" = "k3dgpu-x-h25 k3dgpu-x-h28"' _ "${ROOT}/bench/xhost/clusters.py"
