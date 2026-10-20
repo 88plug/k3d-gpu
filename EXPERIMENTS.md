@@ -52,7 +52,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H29 | On a client Intel hybrid CPU, B=1 agent decode on the P-cores spends less energy per token at the same speed when the P-cores are capped and the uncore (ring/LLC) floor is pinned high, and the uncore pin is what keeps the speed. Static config held for the whole request (prefill included); not phase-aware. On client parts `intel_uncore_frequency` sets the ring/LLC clock, not the IMC/DRAM clock. | On an i9-13900T (`intel_uncore_frequency` legacy, ring 0.8-4.7 GHz, EPP performance), OVMS 2026.4.1 + `OpenVINO/Qwen3-4B-int4-ov` from `k3d-gpu agent up` (CPU): arm UC (pod CPUs `scaling_max_freq` 2.8 GHz + uncore min = max = 4.7 GHz) vs stock A gives median decode tok/s >= 0.97x and median package J/token <= 0.90x, lower in every paired round, on BOTH gross J/token and marginal J/token against the same round's stock-arm idle; and UC beats C (cap only) by >= 3% tok/s, or by >= 5% J/token on both metrics, in every paired round. Prior: SUPPORTED 0.10, REFUTED-split 0.20, REFUTED 0.50, INCONCLUSIVE 0.20. | Pre-registered 2026-10-17 05:13 PDT before any run (no measurement taken yet). AMENDED 2026-10-17 before any run, after two refuters: (1) the per-arm marginal metric subtracted each arm's own idle, which removes a pinned ring's standing idle cost from exactly the U/UC arms; the decision now uses gross J/token AND marginal J/token against the stock arm's idle of the same round (per-arm marginal recorded, not decided on); (2) "phase-aware" dropped: the knobs are static per request; (3) up to 8 rounds, deadline-bound (Williams square balanced at 4 and 8), L on even rounds; (4) added manipulation checks: U ring >= target - 100 MHz, A pod-CPU MHz >= cap + 200 MHz (else INCONCLUSIVE); (5) decode tok/s uses completion_tokens, the J/token denominator; (6) temperature abort 95 C; (7) the locked runner refreshes sudo itself (`sudo -A -v`), since a no-tty sudo timestamp is per parent process. Physics note (refuters, not fetched): on Alder/Raptor Lake client parts the ring may share the P-core VccIA rail, which favours REFUTED. `bench/uncore-phase/run.sh` (cluster `k3dgpu-i-uncore-phase`, scratch KUBECONFIG, under the live lock, <= 20 min wall) runs `bench/uncore-phase/probe.py`. Arms A (stock), U (uncore floor pinned to `initial_max_freq_khz`), C (P-core cap), UC (C + U), L (uncore pinned 2.0 GHz, regime control); n = 5 rounds per primary arm, n = 3 for L (rounds 0/2/4); arm order a 4x4 Williams square by round (amended before any run: rotate-then-reverse-odd-rounds put only A or C first, caught by the unit test); one 192-token streamed greedy `ignore_eos` request per cell after 6 s settle and a 5 s idle window under the same arm; one unrecorded stock warm-up. Marginal J/token = (package J - idle W x t) / tokens; gross J/token also reported. Per cell: ring MHz (`current_freq_khz`), pod-CPU MHz, package temp, throttle count delta, pswpin/pswpout, load1, busy fraction inside and outside the pod. Cells with a throttle increment or > 100 MiB swap-in are excluded. Outcome -> conclusion: < 4 valid cells in a primary arm, or A tok/s spread > 10% of median -> INCONCLUSIVE; L ring > 2.1 GHz or C cores > 2.9 GHz -> INCONCLUSIVE (knob not honoured); both parts hold -> SUPPORTED; only the first part holds -> REFUTED-split (doctor suggests the cap only); first part fails -> REFUTED. Confidence = 1 - one-sided sign-test p over paired rounds (n/n rounds: 4 = 0.938, 5 = 0.969, 8 = 0.996). Every sysfs write logged and restored (probe `finally`, signal handler, runner EXIT trap from a pre-run snapshot). Prior art exists (uncore DVFS for memory-bound HPC phases, phase-aware DVFS for mobile and GPU LLM inference, the Intel KPM Uncore CRD, hardware ELC; [provenance:P291]-[provenance:P299]); a static joint core + uncore setting is the setting of [provenance:P295], so no novelty is claimed for the mechanism, only the measured delta on this test bed (search log [provenance:P290], incomplete). Run 1 (2026-10-17, [H29 run](#h29-run-i9-13900t-2026-10-17)): INCONCLUSIVE on two pre-registered gates. Stock-arm decode spread 23.2% of median (9.14-11.77 tok/s, n=7; limit 10%), and the U pin was not honoured under load (ring 2900 MHz in 7/7 U cells against a 4700 MHz target). CPUs outside the pod were 61-97% busy, and package idle was 85-117 W, so RAPL package energy carried other tenants' load. AMENDED A2 2026-10-18 before any A2 run ([H29 amendment A2](#h29-amendment-a2-matched-background-load-2026-10-18)): every arm under the same `bench/load/load.py` background load (typical headline, heavy robustness), load recorded per arm, INCONCLUSIVE for load only when unmatched under load.py TOLERANCE; predictions, gates and outcome table unchanged; A3 (before the A2 re-run) moves the temperature abort from 95 C to 99 C, since the held load keeps the package at 90-96 C. Run 2 (2026-10-18, matched-load design, [H29 run 2](#h29-run-2-matched-background-load-i9-13900t-2026-10-18)): INCONCLUSIVE at both levels. Typical (headline): load unmatched across arms (throttle/min spread 1761 > 723, load1, swap growth; E busy matched within 0.6 points) and the 99 C abort stopped it after 8 cells. Heavy (robustness, n = 6-7 per arm): load unmatched on throttle/min only (C/UC idle 6-9 W higher at the 117 W PL1, so the cap shifts package budget to the E-core neighbour), stock decode spread 12.9% > 10%, and the U pin not honoured (ring 2900 MHz vs 4700; 0 of 16 U cells across all runs at target). Gated-out direction REFUTED: heavy UC/A decode 0.956x [0.925-0.981], gross J/token 1.084x [1.049-1.129], higher in 6/6 rounds (sign-test confidence 0.984). Confidence the run cannot decide: 0.95; that a matched run here would return SUPPORTED: about 0.02. Not testable as written on this host: the ring never reaches the pin while the E-cores carry load. | INCONCLUSIVE |
 | H22 | Cross-engine speculative decoding (draft on the iGPU, target on the P-cores) raises single-stream decode tok/s over both the target alone and same-engine (P-core) drafting. | On an i9-13900T, OVMS 2026.4.1, `OpenVINO/Qwen3-4B-int4-ov` target on the 16-CPU P-core balloon, `OpenVINO/Qwen3-0.6B-int4-ov` Fast Draft with `draft_device: "GPU"` (UHD 770), `num_assistant_tokens` 5: median paired decode tok/s C/B >= 1.05 and C/A >= 1.10. Written before measuring (2026-10-17T05:08-07:00): REFUTED expected, C/B ~ 0.68 (0.55-0.85), C/A ~ 0.82 (0.65-1.0), because GenAI 2026.4.1 runs draft then verify serially (no overlap) and the UHD 770 runs a 0.6B draft slower than the P-cores. | Pre-registered 2026-10-17 before any H22 run ([H22 pre-registration](#h22-pre-registration-i9-13900t)). `bench/hetero-spec/probe.sh`: one OVMS pod, 5 graphs, per-request cyclic-rotation interleave, n=8 rounds, `bench/hetero-spec/analyze.py` verdict. Refuted if C/B <= 0.95 in >= 7/8 rounds or C/A < 1.0. Result ([H22 result](#h22-result-i9-13900t-2026-10-17)): the outcome table's noise row fired (A 11.3 tok/s, outside 15.7 +-15%; 8/8 rounds throttle-flagged). Directionally C lost to B in 8/8 rounds, median C/B 0.78 (95% CI 0.69-0.85), C/A 1.07. The pre-registered re-run ([H22 re-run](#h22-re-run-i9-13900t-2026-10-17)) started in a quiet window (load1 3.96, package 79 C) and the noise row fired again: A 12.7 tok/s (19% under 15.7), 8/8 rounds throttle-flagged, because the probe's own 16-CPU load heats the package (35 W rated base power, run at PL1 = PL2 = 117 W) to 86-97 C. Directionally C lost to B in 8/8 rounds again, median C/B 0.73 (95% CI 0.63-0.75), C/A 0.91. Both runs: C < B in 16/16 rounds. Missing probe: a run on a package that does not throttle under the target's own load. Scope: serial OVMS Fast Draft, UHD 770, T-SKU rated 35 W base power but run at PL1 = PL2 = 117 W, AVX-VNNI (no AMX), no NPU. | INCONCLUSIVE |
 | H34 | Same-engine CPU Fast Draft speeds up and cheapens single-stream decode: OVMS 2026.4.1 Fast Draft with the `OpenVINO/Qwen3-0.6B-int4-ov` draft on the P-cores (H22 arm B) beats the `OpenVINO/Qwen3-4B-int4-ov` target alone (H22 arm A), both on the 16-CPU P-core balloon, under a controlled, matched background load on the E-cores. | Written 2026-10-17T22:04-07:00, before any H34 measurement. At the `typical` load level (headline): median paired B/A decode tok/s >= 1.20 and median paired B/A package J/token <= 0.85, with the tok/s ratio's 95% bootstrap CI above 1.0 and the J/token ratio's CI below 1.0. `heavy` is the robustness check, same rule. Expected from H22's exploratory B/A (1.35 and 1.32 tok/s, 0.76 and 0.82 J/token, n = 8 each on a noisy box): SUPPORTED at typical, prior 0.55. | Pre-registered ([H34 pre-registration](#h34-pre-registration-i9-13900t)). `bench/hetero-spec/h34.sh`: one OVMS pod, arms A and B, `bench/load/load.py` level on the E-cores, pairs in A B / B A order, n >= 8 pairs per level, a 5 s load window before every request, `bench/hetero-spec/h34.py` verdict. REFUTED if the tok/s CI upper bound < 1.20 or the J/token CI lower bound > 0.85. INCONCLUSIVE only if load is unmatched across arms (`load.py` TOLERANCE), < 8 complete pairs, or the CIs leave the effect unresolved. Result ([H34 result](#h34-result-i9-13900t-2026-10-17)): at `typical`, load MATCHED, n = 12 pairs, B/A decode tok/s 1.389 (95% CI 1.285-1.447) and package J/token 0.751 (0.714-0.828), B better on both in 12/12 pairs (sign p = 0.00049, confidence 0.9995); A 9.73, B 12.66 tok/s on a busy box (E-cores 57-59% busy, load1 ~22, throttling). `heavy` (robustness): INCONCLUSIVE, load unmatched (swap growth spread 80 > 64 MiB); descriptively B won 8/8, tok/s ratio 1.21, J/token ratio 0.85. Scope: OVMS 2026.4.1 serial Fast Draft, gamma 5, this host, single stream. | SUPPORTED |
-| H5 | On a hybrid CPU whose package throttles, the opt-in prefill guard (`K3D_GPU_PREFILL_GUARD`, an E-core `scaling_max_freq` cap) protects P-core prefill from an E-core-pinned CPU neighbour. | At one or more cap levels the neighbour's median P-core prefill penalty (median `ttft_s` over the quiet median, minus 1) is at most half the guard-off penalty, and the p90 penalty is below the guard-off p90 penalty. | Pre-registered in [docs/prefill-guard.md](docs/prefill-guard.md#pre-registered-ab-test-h5): stage 1 host-level, arms quiet / guard off / caps at 75%, 50% and the E-core minimum, five Latin-square rounds per neighbour method (`matrixprod`, `loop`), n = 5 per arm; neighbour bogo-ops/s, a tool-latency proxy, decode tok/s and package power always reported. Stage 2 repeats the chosen level through `k3d-gpu up` and checks the NRI write path and the `down` restore. Refuted if no cap level reaches half; inconclusive if the guard-off penalty is inside the quiet spread or the quiet arm drifts. Amended 2026-10-19 (A1) before any H5 measurement: the H3 run's OVMS, model and unique ~1000-token prompt on CPUs 0-14, the neighbour in H3's `stress-ng` image under `--cpuset-cpus 17-31`, one lock hold per round, spread and drift defined, verdict per method with `matrixprod` deciding H5, stage 2 only after a SUPPORTED stage 1; see [H5 amendment A1](#h5-amendment-a1-stage-1-harness-and-definitions-2026-10-19). | PENDING |
+| H5 | On a hybrid CPU whose package throttles, the opt-in prefill guard (`K3D_GPU_PREFILL_GUARD`, an E-core `scaling_max_freq` cap) protects P-core prefill from an E-core-pinned CPU neighbour. | At one or more cap levels the neighbour's median P-core prefill penalty (median `ttft_s` over the quiet median, minus 1) is at most half the guard-off penalty, and the p90 penalty is below the guard-off p90 penalty. | Pre-registered in [docs/prefill-guard.md](docs/prefill-guard.md#pre-registered-ab-test-h5): stage 1 host-level, arms quiet / guard off / caps at 75%, 50% and the E-core minimum, five Latin-square rounds per neighbour method (`matrixprod`, `loop`), n = 5 per arm; neighbour bogo-ops/s, a tool-latency proxy, decode tok/s and package power always reported. Stage 2 repeats the chosen level through `k3d-gpu up` and checks the NRI write path and the `down` restore. Refuted if no cap level reaches half; inconclusive if the guard-off penalty is inside the quiet spread or the quiet arm drifts. Amended 2026-10-19 (A1) before any H5 measurement: the H3 run's OVMS, model and unique ~1000-token prompt on CPUs 0-14, the neighbour in H3's `stress-ng` image under `--cpuset-cpus 17-31`, one lock hold per round, spread and drift defined, verdict per method with `matrixprod` deciding H5, stage 2 only after a SUPPORTED stage 1; see [H5 amendment A1](#h5-amendment-a1-stage-1-harness-and-definitions-2026-10-19). Stage 1 run 2026-10-20 (50 runs, every gate passed): no cap level reaches half the guard-off penalty. `matrixprod`: N0 +40.6% (bar +20.3%), C75 +36.4%, C50 +28.1%, CMIN +23.3%, at neighbour losses of 3.6%, 35.0% and 72.4%; `loop`: N0 +39.8%, best CMIN +23.7%; package power 114-115 W in every neighbour arm, capped or not (PL1 117 W). Stage 2 not run (no level chosen). See [H5 run](#h5-run-stage-1-i9-13900t-2026-10-20). | REFUTED |
 | H40 | The agent harness reproduces the BFCL board: BFCL v4 (`bfcl-eval==2025.12.17`, gorilla `f7cf7359`) in the board's own mode (registry `Qwen/Qwen3-4B-Instruct-2507-FC`, BFCL applies the chat template and calls `/v1/completions`) on the fixed 100-id subset S100, sent through LiteLLM and the recording proxy, scores bf16 `Qwen/Qwen3-4B-Instruct-2507` @ `cdbee75f` on vLLM CUDA (arm A3ref) like the leaderboard row. | S100 accuracy in [77.9, 91.9]: the board-weighted 84.9 (row "Qwen3-4B-Instruct-2507 (FC)" of https://gorilla.cs.berkeley.edu/data_overall.csv, read 2026-10-17) +/- 7, the binomial 95% half-width at n=100. Every category within its own binomial 95% CI of the board value. Confidence 0.75. | `k3d-gpu bench agent bfcl --mode board --arm A3ref --level none`, n=100, one block, measurement budget 20 min ([pre-registration](#h40-h48-pre-registration-agent-benchmark-2026-10-17)). SUPPORTED: both hold, and H41 may be read. REFUTED: overall outside the band; the harness differs from the board (template, parser, handler) and H41 is not scored until fixed. INCONCLUSIVE: fewer than 100 ids completed, or failed requests. | SUPPORTED |
 | H41 | Serving a 4-bit build keeps tool-calling quality: on BFCL-S100 in server-fc mode (the engine's own tool parser parses the calls), each of A1 (k3d-gpu CPU, OVMS int4), A3 (k3d-gpu RTX 4000, AWQ 4-bit), B1 (EAT stock vLLM CPU, bf16), C1 (Ollama Q4_K_M) and C2 (llama.cpp Q4_K_M) scores within 8 points of A3ref (bf16, vLLM CUDA) run in the same mode. | Per arm, the one-sided paired-bootstrap 95% lower bound of (arm - A3ref) on the shared completed ids is >= -8 points. A1, A3, C2 hold (0.7 each); B1 holds but completes only 60-100 ids (0.6); C1 holds (0.55, the highest risk: Ollama's template and tool path). | `k3d-gpu bench agent bfcl --mode server-fc`, typical load, A B ... B A order in 10-min halves, 20 min per arm, `load.py matched` across arms. Read only after H40 is SUPPORTED. Per arm: SUPPORTED when the lower bound >= -8; REFUTED when the upper bound < -8; INCONCLUSIVE when the CI straddles -8, fewer than 60 shared ids, or load unmatched (exit 3). | INCONCLUSIVE |
 | H42 | On Intel's real EAT banking flow (`intel/enterprise-ai-blueprints` v1.0.0 banking-assistant, task set B24 at N=1, typical load), the k3d-gpu CPU stack A1 (OVMS, OpenVINO int4 self-export, P-cores) succeeds as often as the GPU stack and finishes a task in a third of the time of the EAT stock stack B1 (vLLM CPU, bf16) or less. A stack-vs-stack claim: A1 and B1 differ in runtime, placement and weight precision (int4 vs bf16) together, so the ratio does not isolate any one of them (amendment 16). | (1) Success on completed task ids, stated with the count, every arm that finishes: A1 >= 0.75, A3 >= 0.75, C2 >= 0.70; C1 <= A1 - 10 points (4k-context truncation, 0.5). (2) Paired median time ratio A1/B1 on the task ids both completed <= 0.35 (point 0.15, range 0.08-0.35, confidence 0.75). (3) A3 median time per task < A1 (0.85). (4) A2 > A1 (0.8). (5) B1 completes <= 12 of 24 tasks in 20 min (0.7). | `k3d-gpu bench agent run --tasks B24` per arm (A1 A2 A3 B1 C1 C2), A B ... B A in 10-min halves, `--mcp-url` end-state grading with `--reset` after each mutating task; sampling `agent_local`, agent memory off (amendments 7-20). SUPPORTED: (1)-(4) hold with load matched. REFUTED: A1/B1 time-ratio CI lower bound > 0.5, or A1 success < 0.6. Otherwise, or load unmatched, INCONCLUSIVE. Censored tasks are lower bounds, never failures. | INCONCLUSIVE |
@@ -1544,6 +1544,115 @@ Implementation: [`bench/prefill-guard/run.sh`](bench/prefill-guard/run.sh) (one 
 `bench/prefill-guard/test_analyze.py` covers SUPPORTED with the chosen level, REFUTED,
 half without the p90 condition, N0 inside the Q spread, a cap read that misses, missing and
 failed runs, the primary-method verdict, and cap then restore against a fake sysfs.
+
+### H5 run: stage 1 (i9-13900T, 2026-10-20)
+
+**Reproduce:**
+
+```text
+# provenance
+date:            2026-10-20T05:49:23Z (first run) to 2026-10-20T09:56:12Z (last run), 10 lock holds
+hypothesis:      H5 (stage 1, host level, no cluster)
+host cpu:        13th Gen Intel(R) Core(TM) i9-13900T (P = CPUs 0-15, E = 16-31; E max 3900000 kHz,
+                 min 800000 kHz; intel_pstate active, governor powersave, EPP performance)
+host kernel:     6.6.128-1-MANJARO
+accelerators:    k3d-gpu detect: nvidia, intel (i915), hybrid (no accelerator used; no cluster)
+k3d-gpu commit:  45862ee (#147, amendment A1 and bench/prefill-guard)
+node image:      none (no cluster)
+model:           OpenVINO/Qwen3-4B-int4-ov @ b467368d, openvino_model.bin sha256 074214fa29ab1b47...;
+                 prompt bench/prefill-guard/prompt.txt sha256 1321749d2aa5dd10..., 1024-1027 prompt tokens
+runtime:         openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58
+                 (2026.4.1), CPU, docker --cpuset-cpus 0-14, no device flags; neighbour
+                 ghcr.io/colinianking/stress-ng@sha256:2ea9a7c3828eda1b1ca3d0b0c5a669ec252f9caf97a6a33aedcea6b2a66d1cbe
+                 (0.22.01), --cpuset-cpus 17-31, --cpu 15 --cpu-method <m> --timeout 150s --metrics-brief
+energy source:   RAPL package (/sys/class/powercap/intel-rapl:0/energy_uj, read through sudo);
+                 PL1 117 W, PL2 230 W (constraint_*_power_limit_uw)
+runs per arm:    5 per method (15 prefill requests, 5 decode requests); 50 runs
+```
+
+Commands: one `live.lock` hold per round, `matrixprod` rounds 1-5 then `loop` rounds 1-5:
+
+```bash
+bench/prefill-guard/cpufreq.sh snapshot > snapshot.txt          # as root, once, before round 1
+PG_SNAPSHOT=snapshot.txt PG_MODEL_DIR=<dir of OpenVINO/Qwen3-4B-int4-ov> PG_LOCK=<live.lock> \
+  bench/prefill-guard/run.sh <out> <matrixprod|loop> <1-5>     # one round, sudo for cpufreq.sh
+bench/prefill-guard/analyze.py <out> --out <out>/analysis.json
+```
+
+Records (per run `run.json`, `prefill.json`, `decode.json`, the neighbour's `nb.log`; per round
+the server log and warm-up; the cpufreq snapshot and the read after the last round;
+`analysis.json`; `SHA256SUMS`):
+[bench/prefill-guard/results/2026-10-20/H5/](bench/prefill-guard/results/2026-10-20/H5/).
+
+All 50 runs completed: every request returned, every cap read during a capped run showed the
+cap on all 16 of CPUs 16-31, and the neighbour was still running at the cap read and at the end
+of every run's measurements (47.6-104.0 s after the 15 s lead). Rounds waited 0-15 min for the
+lock between holds. Start-of-run package temperature read 77-100 C and `load1` 5.6-17.4, from
+the shared host's background load.
+
+Penalty = arm median (or p90) `ttft_s` / Q median (or p90) - 1, over 15 requests per arm.
+Neighbour loss = 1 - median bogo-ops/s / N0's. Tool proxy, decode and power are run medians;
+throttle is the `package_throttle_count` delta over the measured window.
+
+`matrixprod` (primary):
+
+| Arm | TTFT median / p90 s | Run medians s | Penalty median / p90 | Neighbour bogo-ops/s (loss) | Tool proxy s (x N0) | Decode tok/s (x N0) | Package W | Throttle |
+|---|---|---|---|---|---|---|---|---|
+| Q | 7.15 / 8.25 | 6.90, 7.19, 7.29, 7.28, 6.82 | - | - | 0.89 | 10.43 | 102.1 | 1111 |
+| N0 | 10.05 / 11.62 | 10.62, 9.32, 11.41, 9.85, 10.27 | +40.6% / +40.8% | 20713 | 1.70 | 9.35 | 114.6 | 96 |
+| C75 | 9.75 / 14.98 | 8.58, 9.65, 9.71, 14.98, 9.96 | +36.4% / +81.6% | 19968 (3.6%) | 1.79 (1.05) | 9.38 (1.00) | 114.8 | 112 |
+| C50 | 9.16 / 9.73 | 9.16, 8.95, 9.73, 9.29, 9.06 | +28.1% / +18.0% | 13465 (35.0%) | 2.70 (1.59) | 9.44 (1.01) | 115.0 | 586 |
+| CMIN | 8.82 / 9.28 | 8.30, 8.98, 8.95, 9.00, 8.82 | +23.3% / +12.5% | 5719 (72.4%) | 6.36 (3.74) | 11.52 (1.23) | 114.6 | 3749 |
+
+Q spread 0.470 s (6.6% of the Q median); N0's +40.6% is above it. Drift 0.193 s (rounds 1-2
+vs 4-5), inside the spread (amendment A1 disclosed that this test cannot fire). Half the N0
+penalty is +20.3%: C75 +36.4%, C50 +28.1%, CMIN +23.3%, so no level reaches it. C50 and CMIN
+have a p90 penalty below N0's; C75 does not (one run at 14.98 s).
+
+`loop` (secondary):
+
+| Arm | TTFT median / p90 s | Run medians s | Penalty median / p90 | Neighbour bogo-ops/s (loss) | Tool proxy s (x N0) | Decode tok/s (x N0) | Package W | Throttle |
+|---|---|---|---|---|---|---|---|---|
+| Q | 6.57 / 7.28 | 6.15, 6.58, 7.28, 6.57, 6.02 | - | - | 0.82 | 11.13 | 103.4 | 806 |
+| N0 | 9.19 / 10.01 | 9.92, 9.71, 9.02, 8.87, 8.68 | +39.8% / +37.6% | 27657 | 0.85 | 10.37 | 114.2 | 102 |
+| C75 | 9.11 / 10.20 | 8.97, 9.17, 10.12, 8.81, 9.11 | +38.7% / +40.2% | 26592 (3.9%) | 0.91 (1.07) | 10.37 (1.00) | 113.9 | 142 |
+| C50 | 8.47 / 9.12 | 7.96, 8.36, 8.53, 8.96, 8.33 | +28.9% / +25.3% | 18218 (34.1%) | 1.31 (1.53) | 10.40 (1.00) | 114.3 | 441 |
+| CMIN | 8.13 / 9.22 | 7.84, 7.93, 8.82, 8.43, 8.18 | +23.7% / +26.7% | 8102 (70.7%) | 2.90 (3.40) | 10.79 (1.04) | 114.8 | 2386 |
+
+Q spread 1.262 s (19.2% of the Q median); N0's +39.8% is above it. Drift 0.227 s. Half the N0
+penalty is +19.9%: no level reaches it (best CMIN +23.7%).
+
+**Verdict: REFUTED** (`matrixprod`, the primary method, per amendment A1): no cap level
+reaches half the guard-off prefill penalty. `loop` is REFUTED by the same rule. Every
+INCONCLUSIVE gate passed in both methods (no missing or failed run, every cap read showed the
+cap, N0 penalty above the Q spread, no drift). Stage 2 does not run: it repeats the level
+stage 1 chooses, and stage 1 chose none (amendment A1, item 8). The NRI write path and the
+`down` restore through the node stay verified only against the stubs in
+`tests/prefill_guard_test.sh`.
+
+What the numbers show, beside the verdict. The deepest cap (CMIN, E-cores at 800 MHz) cut
+the median prefill penalty from about +40% to about +23% in both methods, at a cost of
+71-72% of the neighbour's throughput and a 3.4-3.7x slower tool proxy on an E-core. The
+50% cap (the doctor suggestion) cut it to about +28% at a 34-35% neighbour loss. Package
+power sat at 114-115 W in every neighbour arm, capped or not, against a 117 W PL1, and the
+throttle count rose as the cap deepened. So the cap lowered E-core clocks without lowering
+package power; the budget it freed did not return the P-core prefill to Q.
+
+Confounds:
+
+- Shared host. About 50 production containers and other sessions ran throughout; `load1`
+  read 5.6-17.4 at run start and package temperature 77-100 C. The Latin square spreads
+  this over arms; it does not remove it.
+- The tool proxy runs on CPU 16, inside the capped set, so its slowdown is the cap's direct
+  cost, as registered.
+- Decode tok/s is one 128-token request per run; it is reported, not gated.
+- Stage 1 is host level: the server and neighbour are host containers, not k3d-gpu pods, and
+  the cap is written directly, as the pre-registration's stage 1 specifies.
+
+cpufreq restore: the snapshot of all 32 CPUs' `scaling_max_freq`, `scaling_min_freq`,
+`scaling_governor` and `energy_performance_preference` (128 lines, sha256 `7403983b...`) read
+back identical after each of the 50 runs, at the end of each of the 10 rounds, and once more
+after the campaign (`cpufreq-snapshot.txt` and `cpufreq-after.txt` in the records are equal).
 
 ### H28 pre-registration (i9-13900T, 2026-10-17)
 

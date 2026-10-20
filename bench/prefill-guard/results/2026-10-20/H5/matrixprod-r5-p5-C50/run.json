@@ -1,0 +1,47 @@
+{
+ "arm": "C50",
+ "method": "matrixprod",
+ "round": 5,
+ "position": 5,
+ "cap_khz": 1950000,
+ "t_start": "2026-10-20T07:35:23.616Z",
+ "t_end": "2026-10-20T07:37:54.566Z",
+ "pkg_temp_start_c": 87.0,
+ "load1_start": 10.03,
+ "package_throttle_delta": 611,
+ "rapl_energy_j": 7782.333,
+ "measure_s": 67.673,
+ "package_w": 115.0,
+ "cap_read_khz": [
+  1950000,
+  1950000,
+  1950000,
+  1950000,
+  1950000,
+  1950000,
+  1950000,
+  1950000,
+  1950000,
+  1950000,
+  1950000,
+  1950000,
+  1950000,
+  1950000,
+  1950000,
+  1950000
+ ],
+ "neighbour_running_at_cap_read": "true",
+ "neighbour_running_at_end": "true",
+ "neighbour": {
+  "bogo_ops": 2019946,
+  "real_s": 150.0,
+  "bogo_ops_per_s_real": 13466.07
+ },
+ "tool_proxy_s": 2.704,
+ "exit_codes_prefill_decode_tool": [
+  0,
+  0,
+  0
+ ],
+ "cpufreq_restored_identical": true
+}

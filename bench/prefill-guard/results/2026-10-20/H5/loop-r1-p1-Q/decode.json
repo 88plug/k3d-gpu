@@ -1,0 +1,95 @@
+{
+  "tool": "k3d-gpu/bench/llm_load.py",
+  "schema": 1,
+  "started_at": "2026-10-20T07:49:57Z",
+  "config": {
+    "base_url": "http://127.0.0.1:18005/v3",
+    "model": "Qwen3-4B-int4-ov",
+    "prompt": "Read the following operations log of a busy server and keep it in mind.\n\n1. A container runtime measures the cold buffers once the counter wraps.\n2. A storage volume rejects a partial checksum before the deadline passes.\n3. The NIC queue retries a partial checksum before the deadline passes.\n4. The memory controller throttles the hottest key at the end of each epoch.\n5. Each worker thread pins the idle cores when the budget runs out.\n6. A container runtime retries every pending request while the package stays hot.\n7. The page allocator measures a burst of interrupts if the node reports pressure.\n8. The memory controller throttles a burst of interrupts at the end of each epoch.\n9. The memory controller moves every pending request before the deadline passes.\n10. Each worker thread retries a burst of interrupts after the lock is released.\n11. The load balancer drains the next timer tick while the package stays hot.\n12. The memory controller rejects the next timer tick if the node reports pressure.\n13. The load balancer records the hottest key if the node reports pressure.\n14. The memory controller moves one shard of the index when the budget runs out.\n15. A cgroup measures the queued writes before the deadline passes.\n16. A container runtime samples the cold buffers once the counter wraps.\n17. A cache line measures the hottest key under a steady background load.\n18. The NIC queue rejects the hottest key after the lock is released.\n19. The NIC queue evicts the cold buffers after the lock is released.\n20. The scheduler measures every pending request once the counter wraps.\n21. The page allocator records the idle cores if the node reports pressure.\n22. A cgroup pins the queued writes before the deadline passes.\n23. The NIC queue records the cold buffers after the lock is released.\n24. A container runtime retries the oldest dirty page while the package stays hot.\n25. The NIC queue drains the idle cores once the counter wraps.\n26. The thermal governor measures the slowest replica when the budget runs out.\n27. A container runtime rejects the hottest key under a steady background load.\n28. The scheduler pins the oldest dirty page while the package stays hot.\n29. A cgroup flushes the queued writes once the counter wraps.\n30. The memory controller drains one shard of the index when the budget runs out.\n31. The load balancer samples the hottest key under a steady background load.\n32. The memory controller throttles a partial checksum after the lock is released.\n33. A storage volume rejects one shard of the index at the end of each epoch.\n34. The memory controller rejects every pending request when the budget runs out.\n35. A container runtime flushes a stale lease before the deadline passes.\n36. Each worker thread rejects the queued writes once the counter wraps.\n37. The load balancer evicts a partial checksum if the node reports pressure.\n38. The memory controller records a partial checksum before the deadline passes.\n39. The NIC queue drains the next timer tick after the lock is released.\n40. A storage volume batches a burst of interrupts if the node reports pressure.\n41. A cache line moves a stale lease once the counter wraps.\n42. The memory controller records a stale lease under a steady background load.\n43. The memory controller evicts the queued writes after the lock is released.\n44. The thermal governor evicts the slowest replica once the counter wraps.\n45. The NIC queue measures one shard of the index at the end of each epoch.\n46. The page allocator moves the oldest dirty page if the node reports pressure.\n47. The thermal governor moves a partial checksum at the end of each epoch.\n48. A cgroup moves the oldest dirty page at the end of each epoch.\n49. The load balancer flushes the idle cores once the counter wraps.\n50. A cache line drains the cold buffers before the deadline passes.\n51. The load balancer drains the idle cores under a steady background load.\n52. The NIC queue measures the cold buffers under a steady background load.\n53. A cgroup samples a burst of interrupts before the deadline passes.\n54. The NIC queue flushes one shard of the index once the counter wraps.\n55. The kernel measures the slowest replica under a steady background load.\n56. The thermal governor samples a partial checksum once the counter wraps.\n57. A cgroup measures a partial checksum once the counter wraps.\n58. A storage volume pins the hottest key after the lock is released.\n59. A storage volume evicts the hottest key once the counter wraps.\n60. The thermal governor moves the idle cores after the lock is released.\n\nIn one sentence, name the component that appears most often in the log.",
+    "max_tokens": 128,
+    "temperature": 0.0,
+    "ignore_eos": true,
+    "unique_prompts": true,
+    "requests": 1,
+    "concurrency": "1",
+    "warmup": 0,
+    "timeout": 600.0,
+    "label": null,
+    "out": "/tmp/claude-1000/-home-andrew-k3d-gpu/86e13552-98b8-48e1-b1aa-9fbfea1a0978/scratchpad/h5/stage1/loop-r1-p1-Q/decode.json",
+    "run_id": "c64ac5fa"
+  },
+  "phases": [
+    {
+      "concurrency": 1,
+      "requests": 1,
+      "ok": 1,
+      "errors": 0,
+      "wall_s": 18.20973169291392,
+      "output_tokens_total": 128,
+      "aggregate_tokens_per_s": 7.02920845614708,
+      "requests_per_s": 0.05491569106364906,
+      "stats": {
+        "first_chunk_s": {
+          "n": 1,
+          "median": 6.1300787958316505,
+          "p90": 6.1300787958316505,
+          "min": 6.1300787958316505,
+          "max": 6.1300787958316505
+        },
+        "ttft_s": {
+          "n": 1,
+          "median": 6.215484896209091,
+          "p90": 6.215484896209091,
+          "min": 6.215484896209091,
+          "max": 6.215484896209091
+        },
+        "latency_s": {
+          "n": 1,
+          "median": 18.208400565199554,
+          "p90": 18.208400565199554,
+          "min": 18.208400565199554,
+          "max": 18.208400565199554
+        },
+        "output_tokens": {
+          "n": 1,
+          "median": 128,
+          "p90": 128,
+          "min": 128,
+          "max": 128
+        },
+        "tokens_per_s": {
+          "n": 1,
+          "median": 7.02972232743152,
+          "p90": 7.02972232743152,
+          "min": 7.02972232743152,
+          "max": 7.02972232743152
+        },
+        "decode_tokens_per_s": {
+          "n": 1,
+          "median": 10.589585010455641,
+          "p90": 10.589585010455641,
+          "min": 10.589585010455641,
+          "max": 10.589585010455641
+        }
+      },
+      "samples": [
+        {
+          "index": 0,
+          "ok": true,
+          "error": null,
+          "chunks": 120,
+          "content_chunks": 117,
+          "text_chars": 629,
+          "first_chunk_s": 6.1300787958316505,
+          "ttft_s": 6.215484896209091,
+          "latency_s": 18.208400565199554,
+          "output_tokens": 128,
+          "tokens_per_s": 7.02972232743152,
+          "decode_tokens_per_s": 10.589585010455641,
+          "prompt_tokens": 1024,
+          "finished": true
+        }
+      ]
+    }
+  ]
+}

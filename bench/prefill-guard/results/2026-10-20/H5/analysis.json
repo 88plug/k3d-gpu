@@ -1,0 +1,270 @@
+{
+ "h5_verdict": "REFUTED",
+ "methods": {
+  "loop": {
+   "arms": {
+    "C50": {
+     "decode_ratio_n0": 1.0026978339903958,
+     "decode_tps_median": 10.402552569040074,
+     "half": false,
+     "n_requests": 15,
+     "neighbour_bogo_ops_s_median": 18217.73,
+     "neighbour_loss": 0.3413029219856515,
+     "p90_below_n0": true,
+     "p90_penalty": 0.2526205359176441,
+     "package_w_median": 114.27,
+     "passes": false,
+     "penalty": 0.2886955904094983,
+     "pkg_temp_start_c_median": 89.0,
+     "run_medians_s": [
+      7.9622722109779716,
+      8.358845253009349,
+      8.529545599129051,
+      8.964519338682294,
+      8.334595856256783
+     ],
+     "throttle_delta_median": 441,
+     "tool_proxy_ratio_n0": 1.5321637426900585,
+     "tool_proxy_s_median": 1.31,
+     "ttft_median_s": 8.468175213318318,
+     "ttft_p90_s": 9.115241445135325
+    },
+    "C75": {
+     "decode_ratio_n0": 0.9999442296748949,
+     "decode_tps_median": 10.373985125613634,
+     "half": false,
+     "n_requests": 15,
+     "neighbour_bogo_ops_s_median": 26591.84,
+     "neighbour_loss": 0.038520863629822544,
+     "p90_below_n0": false,
+     "p90_penalty": 0.4023203493082175,
+     "package_w_median": 113.94,
+     "passes": false,
+     "penalty": 0.38674363577774984,
+     "pkg_temp_start_c_median": 87.0,
+     "run_medians_s": [
+      8.969079463742673,
+      9.168752909637988,
+      10.124114045873284,
+      8.80794330406934,
+      9.11246082559228
+     ],
+     "throttle_delta_median": 142,
+     "tool_proxy_ratio_n0": 1.065497076023392,
+     "tool_proxy_s_median": 0.911,
+     "ttft_median_s": 9.11246082559228,
+     "ttft_p90_s": 10.204597642179579
+    },
+    "CMIN": {
+     "decode_ratio_n0": 1.0399892301062592,
+     "decode_tps_median": 10.789434534192381,
+     "half": false,
+     "n_requests": 15,
+     "neighbour_bogo_ops_s_median": 8102.37,
+     "neighbour_loss": 0.7070432241562963,
+     "p90_below_n0": true,
+     "p90_penalty": 0.2671518610730217,
+     "package_w_median": 114.81,
+     "passes": false,
+     "penalty": 0.23699919311283724,
+     "pkg_temp_start_c_median": 90.0,
+     "run_medians_s": [
+      7.839241878129542,
+      7.934260368347168,
+      8.820185115095228,
+      8.42977868206799,
+      8.183954064268619
+     ],
+     "throttle_delta_median": 2386,
+     "tool_proxy_ratio_n0": 3.3964912280701753,
+     "tool_proxy_s_median": 2.904,
+     "ttft_median_s": 8.128471909090877,
+     "ttft_p90_s": 9.220984991174191
+    },
+    "N0": {
+     "decode_tps_median": 10.374563718405033,
+     "n_requests": 15,
+     "neighbour_bogo_ops_s_median": 27657.22,
+     "p90_penalty": 0.3760562450198508,
+     "package_w_median": 114.17,
+     "penalty": 0.3984606445274419,
+     "pkg_temp_start_c_median": 88.0,
+     "run_medians_s": [
+      9.921117263380438,
+      9.706364911980927,
+      9.019176637753844,
+      8.866001978050917,
+      8.681098747067153
+     ],
+     "throttle_delta_median": 102,
+     "tool_proxy_s_median": 0.855,
+     "ttft_median_s": 9.18945471290499,
+     "ttft_p90_s": 10.013475394807756
+    },
+    "Q": {
+     "decode_tps_median": 11.131563598674333,
+     "n_requests": 15,
+     "neighbour_bogo_ops_s_median": null,
+     "p90_penalty": 0.0,
+     "package_w_median": 103.39,
+     "penalty": 0.0,
+     "pkg_temp_start_c_median": 84.0,
+     "run_medians_s": [
+      6.152832319028676,
+      6.577896095812321,
+      7.276937575079501,
+      6.57112143188715,
+      6.015258928760886
+     ],
+     "throttle_delta_median": 806,
+     "tool_proxy_s_median": 0.822,
+     "ttft_median_s": 6.57112143188715,
+     "ttft_p90_s": 7.276937575079501
+    }
+   },
+   "cap_read_failures": [],
+   "method": "loop",
+   "passing_levels": [],
+   "problems": [],
+   "q_drift_s": 0.2274256448727101,
+   "q_spread_rel": 0.19200355059581892,
+   "q_spread_s": 1.2616786463186145,
+   "reason": "no cap level reaches half the N0 penalty",
+   "runs": 25,
+   "verdict": "REFUTED"
+  },
+  "matrixprod": {
+   "arms": {
+    "C50": {
+     "decode_ratio_n0": 1.0096622244888895,
+     "decode_tps_median": 9.438126055258213,
+     "half": false,
+     "n_requests": 15,
+     "neighbour_bogo_ops_s_median": 13464.71,
+     "neighbour_loss": 0.34993006709406926,
+     "p90_below_n0": true,
+     "p90_penalty": 0.18004365213291273,
+     "package_w_median": 115.0,
+     "passes": false,
+     "penalty": 0.2814270585524934,
+     "pkg_temp_start_c_median": 87.0,
+     "run_medians_s": [
+      9.155759742949158,
+      8.954967442899942,
+      9.734699836932123,
+      9.28777793282643,
+      9.058152700774372
+     ],
+     "throttle_delta_median": 586,
+     "tool_proxy_ratio_n0": 1.5896531452087008,
+     "tool_proxy_s_median": 2.704,
+     "ttft_median_s": 9.16349515505135,
+     "ttft_p90_s": 9.734699836932123
+    },
+    "C75": {
+     "decode_ratio_n0": 1.003911992781259,
+     "decode_tps_median": 9.384374007902938,
+     "half": false,
+     "n_requests": 15,
+     "neighbour_bogo_ops_s_median": 19967.94,
+     "neighbour_loss": 0.03595714901623204,
+     "p90_below_n0": false,
+     "p90_penalty": 0.8159979261058274,
+     "package_w_median": 114.76,
+     "passes": false,
+     "penalty": 0.3635953160077625,
+     "pkg_temp_start_c_median": 86.0,
+     "run_medians_s": [
+      8.582306998316199,
+      9.648096356075257,
+      9.705267426092178,
+      14.980966749135405,
+      9.961085556540638
+     ],
+     "throttle_delta_median": 112,
+     "tool_proxy_ratio_n0": 1.0529100529100528,
+     "tool_proxy_s_median": 1.791,
+     "ttft_median_s": 9.751081021968275,
+     "ttft_p90_s": 14.980966749135405
+    },
+    "CMIN": {
+     "decode_ratio_n0": 1.2323180281999018,
+     "decode_tps_median": 11.519469192982474,
+     "half": false,
+     "n_requests": 15,
+     "neighbour_bogo_ops_s_median": 5719.12,
+     "neighbour_loss": 0.7238835478312591,
+     "p90_below_n0": true,
+     "p90_penalty": 0.1254226748180325,
+     "package_w_median": 114.58,
+     "passes": false,
+     "penalty": 0.23281613112917565,
+     "pkg_temp_start_c_median": 91.0,
+     "run_medians_s": [
+      8.299873468000442,
+      8.984295994974673,
+      8.945011680014431,
+      8.995282818097621,
+      8.815878023859113
+     ],
+     "throttle_delta_median": 3749,
+     "tool_proxy_ratio_n0": 3.739564961787184,
+     "tool_proxy_s_median": 6.361,
+     "ttft_median_s": 8.815878023859113,
+     "ttft_p90_s": 9.28410733724013
+    },
+    "N0": {
+     "decode_tps_median": 9.347805460421156,
+     "n_requests": 15,
+     "neighbour_bogo_ops_s_median": 20712.71,
+     "p90_penalty": 0.40843991371960375,
+     "package_w_median": 114.64,
+     "penalty": 0.4059020108337583,
+     "pkg_temp_start_c_median": 90.0,
+     "run_medians_s": [
+      10.620122886728495,
+      9.320793240796775,
+      11.41394529491663,
+      9.853222324047238,
+      10.268160230945796
+     ],
+     "throttle_delta_median": 96,
+     "tool_proxy_s_median": 1.701,
+     "ttft_median_s": 10.053616535384208,
+     "ttft_p90_s": 11.618841195944697
+    },
+    "Q": {
+     "decode_tps_median": 10.433739713134115,
+     "n_requests": 15,
+     "neighbour_bogo_ops_s_median": null,
+     "p90_penalty": 0.0,
+     "package_w_median": 102.08,
+     "penalty": 0.0,
+     "pkg_temp_start_c_median": 85.0,
+     "run_medians_s": [
+      6.896486022975296,
+      7.19107158202678,
+      7.287732458673418,
+      7.28303031809628,
+      6.8180413893423975
+     ],
+     "throttle_delta_median": 1111,
+     "tool_proxy_s_median": 0.893,
+     "ttft_median_s": 7.151008006185293,
+     "ttft_p90_s": 8.2494404502213
+    }
+   },
+   "cap_read_failures": [],
+   "method": "matrixprod",
+   "passing_levels": [],
+   "problems": [],
+   "q_drift_s": 0.19301826204173267,
+   "q_spread_rel": 0.06568179883517945,
+   "q_spread_s": 0.4696910693310201,
+   "reason": "no cap level reaches half the N0 penalty",
+   "runs": 25,
+   "verdict": "REFUTED"
+  }
+ },
+ "schema": "k3d-gpu.h5-stage1/v1"
+}
