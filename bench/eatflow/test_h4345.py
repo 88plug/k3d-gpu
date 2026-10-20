@@ -250,6 +250,22 @@ class CodingPinTest(unittest.TestCase):
         self.assertIn("--require-hashes -r bench/eatflow/coding-constraints.txt", ca["install"])
 
 
+class CodeReserveTest(unittest.TestCase):
+    """Amendment W2: the code-mode reserve refuses a hold only when its blocks cannot reach
+    the 120 s least budget (H43-A1's first hold was refused at +62 s by a reserve of 1160 s)."""
+
+    def test_reserve_matches_the_block_budget(self):
+        with open(os.path.join(HERE, "live.sh")) as f:
+            live = f.read()
+        per, setup = map(int, re.search(r"RESERVE=\$\(\( \$\{#CODE_LEVELS\[@\]\} \* (\d+) \+ (\d+) \)\)", live).groups())
+        over = int(re.search(r'blk=\$\(\( \(CAP - \$\(el\) - 60\) / nb - (\d+) \)\)', live).group(1))
+        self.assertEqual(per, 120 + over)
+        self.assertLessEqual(setup - 60, 120)                    # teardown 60 s + setup at most 2 min
+        cap = 1170
+        for nb, ready in ((4, 80), (2, 521)):                    # A1 one hold; A3 per hold (W1 item 6)
+            self.assertGreater(cap - ready - (nb * per + setup), 0, nb)
+
+
 # ---- H43: SDK compatibility shim ----------------------------------------------------
 
 class ShimTest(unittest.TestCase):

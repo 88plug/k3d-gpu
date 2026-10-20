@@ -1465,6 +1465,18 @@ Regression tests in `bench/eatflow/test_h4345.py`:
   only runner change prompted by a smoke run was the step-length variable for smoke runs
   (`LIVE_APB_STEP_S`, default 300), after (b)'s first attempt stopped as not deliverable.
 
+### H43 amendment W2: the code-mode reserve (2026-10-19)
+
+Written 2026-10-19 at 23:58 PDT, before any H43 block ran. The first A1 hold (23:48:58-23:50:03
+PDT, harness `dc2e1aa`) exited 62 s in, before its server answered, as "not deliverable".
+`live.sh` reserved 4 x 230 + 240 = 1160 s after the server answers. That is more than the 1170 s
+hold leaves after bring-up, although W1 item 6 needs only that each block can reach 120 s. No
+task, warm-up or load window ran, so the hold measured nothing and is void. The campaign was
+stopped before any other hold took the lock. Fix: the code-mode reserve is nb x 230 + 150 s
+(per block 120 s plus 110 s, 60 s of teardown, 90 s of sandbox, router, Redis and agent setup),
+checked by `CodeReserveTest` in `bench/eatflow/test_h4345.py`. Nothing else changes. A1's hold
+runs again as W1 item 6's one A1 hold, and A3's two holds run as before.
+
 ### H5 amendment A1: stage-1 harness and definitions (2026-10-19)
 
 Written 2026-10-19T22:30-07:00, before any H5 measurement. It fixes what the

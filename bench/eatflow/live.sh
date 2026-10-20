@@ -59,10 +59,12 @@ RAPL_IMAGE=python:3.14.8-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd
 # RedisContextProvider needs (FT.CREATE); the 8.10.2-alpine index digest, read 2026-10-19.
 REDIS_IMAGE=redis:8.10.2-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
 # Time a mode needs after the server answers: rollout and server-wait give up past it.
+# code: per block 120 s (the least budget) + 110 s (restart, 30 s gap, warm-up), 60 s of
+# teardown, ~90 s of sandbox, router, Redis and agent setup (H43 amendment W2).
 RESERVE=420
 case ${MODE} in
     code) read -r -a CODE_LEVELS <<< "${LIVE_CODE_LEVELS:-typical heavy heavy typical}"
-          RESERVE=$(( ${#CODE_LEVELS[@]} * 230 + 240 )) ;;
+          RESERVE=$(( ${#CODE_LEVELS[@]} * 230 + 150 )) ;;
     apb)  RESERVE=$(( $(tr ',' '\n' <<< "${LIVE_APB_RAMP:-1,2}" | grep -c .) * ${LIVE_APB_STEP_S:-300} + 300 )) ;;
 esac
 lc=$(echo "${ARM}" | tr 'A-Z' 'a-z')
