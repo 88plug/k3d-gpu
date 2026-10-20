@@ -302,6 +302,21 @@ class Ranking(unittest.TestCase):
         d = mo.optimize(bundle(GEMMA), "ovms", "CPU", {"hw_class": "cpu:Intel(R) Xeon(R) 6741P", "ledger": ledger})
         self.assertEqual(d["variant"], "qat-convert")
 
+    def test_ledger_rule_follows_the_hardware_class(self):
+        with open(os.path.join(HERE, "model-opt", "ledger.md"), encoding="utf-8") as f:
+            rows = mo.ledger_rows(f.read())
+        i9, gnr = "cpu:13th Gen Intel(R) Core(TM) i9-13900T", "cpu:Intel(R) Xeon(R) 6741P"
+        self.assertEqual(mo.ledger_rule(rows, "H34", i9), ("on", "H34", "SUPPORTED"))
+        self.assertEqual(mo.ledger_rule(rows, "H34", gnr), ("off", "H34x", "REFUTED"))
+        self.assertEqual(mo.ledger_rule(rows, "H34", "cpu:Intel(R) Core(TM) Ultra 9 285K"), ("unknown", None, None))
+        self.assertEqual(mo.ledger_rule(rows, "H34", "cpu:"), ("unknown", None, None))
+        self.assertEqual(mo.ledger_rule(rows, "H27", gnr), ("off", "H27x", "REFUTED"))
+        # PENDING and INCONCLUSIVE rows decide nothing; a later SUPPORTED replication turns it on.
+        rows2 = mo.ledger_rows("## Hypotheses\n| H34y | on the Xeon 6960P | p | m | INCONCLUSIVE |\n| H34z | on the Xeon 6960P | p | m | PENDING |\n")
+        self.assertEqual(mo.ledger_rule(rows2, "H34", "cpu:Intel(R) Xeon(R) 6960P")[0], "unknown")
+        rows2 = mo.ledger_rows("## Hypotheses\n| H34y | on the Xeon 6960P | p | m | SUPPORTED |\n| H340 | on the Xeon 6960P | p | m | REFUTED |\n")
+        self.assertEqual(mo.ledger_rule(rows2, "H34", "cpu:Intel(R) Xeon(R) 6960P"), ("on", "H34y", "SUPPORTED"))
+
     def test_measurement_promotes_only_faster_at_equal_or_better_quality(self):
         base = {"model": GEMMA, "variant": "qat-convert", "baseline": "OpenVINO/gemma-4-26b-a4b-it-int4-ov", "hw_class": "gpu:Battlemage"}
         for speedup, quality, promoted in ((1.2, "equal", True), (1.2, "better", True), (1.2, "worse", False), (0.9, "better", False)):

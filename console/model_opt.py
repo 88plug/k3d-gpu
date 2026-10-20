@@ -568,6 +568,25 @@ def ledger_rows(text):
     return out
 
 
+def ledger_rule(rows, family, hw_class):
+    """("on" | "off" | "unknown", row id or None, verdict or None) for one hardware class.
+
+    The family's rows are the row itself and its replications (H34, H34x, H34y...).
+    A row counts for the class when its text names the class (class_tokens). A
+    REFUTED row for the class turns the default off, else a SUPPORTED one turns it
+    on; PENDING and INCONCLUSIVE rows decide nothing, and a class no row names is
+    unknown."""
+    pat = re.compile(r"^%s[a-z]*$" % re.escape(family))
+    toks = [t.lower() for t in class_tokens(hw_class)]
+    hits = sorted((rid, v) for rid, (v, text) in rows.items()
+                  if pat.match(rid) and toks and any(t in text.lower() for t in toks))
+    for want, out in (("REFUTED", "off"), ("SUPPORTED", "on")):
+        for rid, v in hits:
+            if v == want:
+                return out, rid, v
+    return "unknown", None, None
+
+
 def ledger_promotes(rows, variant_key, hw_class):
     """(True, why) when the variant's promotion row is SUPPORTED and names this hardware class."""
     row = PROMOTION_ROWS.get(variant_key)
@@ -1102,6 +1121,10 @@ def main(argv):
     f.add_argument("--out")
     f.add_argument("--cache")
     f.add_argument("--fixtures")
+    lr = sub.add_parser("ledger-rule")
+    lr.add_argument("--family", required=True)
+    lr.add_argument("--hw-class", required=True)
+    lr.add_argument("--ledger")
     p = sub.add_parser("optimize")
     p.add_argument("--bundle", required=True)
     p.add_argument("--engine", required=True, choices=("ovms", "vllm", "llama.cpp"))
@@ -1118,6 +1141,10 @@ def main(argv):
     p.add_argument("--measurements")
     p.add_argument("--format", default="json", choices=("json", "shell", "summary", "explain", "eat"))
     a = ap.parse_args(argv[1:])
+    if a.cmd == "ledger-rule":
+        out, rid, verdict = ledger_rule(ledger_rows(read_text(a.ledger)), a.family, a.hw_class)
+        sys.stdout.write("%s %s %s\n" % (out, rid or "-", verdict or "-"))
+        return 0
     if a.cmd == "fetch":
         if a.fixtures or a.cache or not a.out:
             b = load_or_fetch(a.model, a.revision, cache=a.cache, fixtures=a.fixtures)

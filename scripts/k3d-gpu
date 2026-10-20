@@ -352,7 +352,8 @@ Environment:
                         Qwen/Qwen3-4B on vllm/llm-scaler)
   K3D_GPU_AGENT_DRAFT   ovms Fast Draft speculative decoding: off | auto | CPU | GPU | NPU
                         (default: a CPU draft for a CPU target serving an OpenVINO Qwen3
-                        model, where H34 measured a win, none otherwise; off disables it;
+                        model on a CPU class an H34-family EXPERIMENTS.md row measured as a
+                        win (a refuting row or no row: none), none otherwise; off disables it;
                         auto = the target's device; GPU = an Intel GPU, the first advertised)
   K3D_GPU_AGENT_DRAFT_MODEL  draft model (default: OpenVINO/Qwen3-0.6B-int4-ov)
   K3D_GPU_AGENT_VARIANT agent up/plan --model: serve this variant id (or qat-convert) instead
@@ -6776,10 +6777,41 @@ agent_select() {
 # to the pod.
 AGENT_DRAFT_DEFAULT_MODEL=OpenVINO/Qwen3-0.6B-int4-ov
 AGENT_DRAFT_MODEL="${K3D_GPU_AGENT_DRAFT_MODEL:-${AGENT_DRAFT_DEFAULT_MODEL}}"
-# The measured pairing: CPU target, OpenVINO Qwen3 target model, default draft model.
-agent_draft_measured() {
+# The measured pairing: CPU target, OpenVINO Qwen3 target model, default draft model,
+# on a CPU class the ledger says it wins on (agent_ledger_rule H34).
+agent_draft_pairing() {
     [ "$1" = CPU ] && [ "${AGENT_DRAFT_MODEL}" = "${AGENT_DRAFT_DEFAULT_MODEL}" ] \
         && [[ "${AGENT_MODEL:-}" =~ ^OpenVINO/Qwen3-[0-9.]+B- ]] && [ "${AGENT_MODEL}" != "${AGENT_DRAFT_MODEL}" ]
+}
+agent_draft_measured() {
+    agent_draft_pairing "$1" && [ "$(agent_ledger_rule H34)" = on ]
+}
+
+# agent_ledger_rule <family> [-v]: on | off | unknown for this host's CPU class, from
+# the EXPERIMENTS.md rows of that family (H34 and its replications H34x...):
+# a REFUTED row naming the class wins, then a SUPPORTED one; no row, no ledger
+# or no python3 is unknown. -v prints "<rule> <row> <verdict>".
+agent_ledger_rule() {
+    local dir ledger out
+    out="unknown - -"
+    if dir=$(console_dir) && ledger=$(model_opt_ledger) && [ -n "${ledger}" ] && [ -f "${ledger}" ] \
+        && command -v python3 >/dev/null 2>&1; then
+        out=$(python3 "${dir}/model_opt.py" ledger-rule --family "$1" --ledger "${ledger}" \
+            --hw-class "cpu:$(cpuinfo_field "model name")" 2>/dev/null) || out="unknown - -"
+    fi
+    if [ "${2:-}" = -v ]; then echo "${out}"; else echo "${out%% *}"; fi
+}
+
+# One line on why a CPU target that could draft does not.
+agent_draft_note() {
+    local rule row verdict cpu
+    agent_draft_pairing "$1" && [ -z "${K3D_GPU_AGENT_DRAFT:-}" ] && [ -z "${AGENT_OPT_SPEC:-}" ] || return 0
+    read -r rule row verdict <<< "$(agent_ledger_rule H34 -v)"
+    cpu=$(cpuinfo_field "model name")
+    case "${rule}" in
+        off) info "agent: no CPU Fast Draft: EXPERIMENTS.md ${row} is ${verdict} on ${cpu:-this CPU} (K3D_GPU_AGENT_DRAFT=CPU forces it)" >&2 ;;
+        unknown) info "agent: no CPU Fast Draft: no EXPERIMENTS.md H34-family row measured ${cpu:-this CPU} (K3D_GPU_AGENT_DRAFT=CPU forces it)" >&2 ;;
+    esac
 }
 agent_draft() {
     local target=$1 want=${K3D_GPU_AGENT_DRAFT:-default} res
@@ -6914,6 +6946,7 @@ agent_manifest() {
     args="${item}--target_device=${device}"
     draft_sel=$(agent_draft "${device}") || exit 1
     read -r draft draft_res <<< "${draft_sel}"
+    [ "${draft}" != - ] || agent_draft_note "${device}"
     if [ "${draft}" != - ]; then
         info "agent: Fast Draft ${AGENT_DRAFT_MODEL} on ${draft}" >&2
         args+=$'\n'"${item}--draft_source_model=${AGENT_DRAFT_MODEL}"$'\n'"${item}--draft_device=${draft}"
@@ -9999,6 +10032,12 @@ agent_autoquant() {
     [ -z "${AGENT_OPT_MODEL}" ] || return 0
     [ "${K3D_GPU_AUTOQUANT:-auto}" != off ] || return 0
     [ -f "$(autoquant_cache)" ] || return 0
+    local rule row verdict
+    read -r rule row verdict <<< "$(agent_ledger_rule H27 -v)"
+    if [ "${rule}" = off ]; then
+        info "autoquant: EXPERIMENTS.md ${row} is ${verdict} on this CPU class, so the cached pick is not used: serving ${AGENT_MODEL}" >&2
+        return 0
+    fi
     doc=$(autoquant_select) || { warn "autoquant: cache present but select failed, keeping ${AGENT_MODEL}"; return 0; }
     fields=$(python3 -c 'import json, sys; d = json.load(sys.stdin); print(d["precision"], d["model"], d["memory"], d["source"])' <<< "${doc}") || return 0
     read -r precision model memory source <<< "${fields}"

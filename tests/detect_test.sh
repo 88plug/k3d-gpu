@@ -2405,15 +2405,34 @@ agent_says "an unknown K3D_GPU_AGENT_DEVICE is rejected" "${r}" fail \
 agent_says "auto never picks the NPU" "${r}" 0 \
     '--target_device=NPU' negate STUB_ALLOC=$'cpu 32\nnpu.intel.com/accel 1'
 
-# H34: by default a CPU target serving an OpenVINO Qwen3 model drafts on the CPU (the
-# measured win); every other target has no draft; off disables it. H22: auto drafts on the
-# target's own device; a named device adds its resource to the pod.
-agent_says "a CPU target drafts on the CPU by default" "${r}" 0 \
-    '--draft_device=CPU' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1'
-agent_says "... with the default draft model" "${r}" 0 \
-    '--draft_source_model=OpenVINO/Qwen3-0\.6B-int4-ov' "" STUB_ALLOC='cpu 32'
-agent_says "... and requests no GPU for it" "${r}" 0 \
-    'gpu\.intel\.com' negate STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1'
+# H34: by default a CPU target serving an OpenVINO Qwen3 model drafts on the CPU where
+# the ledger measured the win for that CPU class (H34 SUPPORTED on the i9-13900T); a
+# class an H34-family row refutes (H34x, Xeon 6741P), or that no row names, has no draft.
+# Every other target has no draft; off disables it. H22: auto drafts on the target's own
+# device; a named device adds its resource to the pod. The ledger is a fixed stub.
+LEDGER="$(dirname "${K3D_GPU}")/../tests/console/model-opt/ledger.md"
+cpuroot() { local d; d=$(newroot "$1"); mkdir -p "${d}/proc"; printf 'model name\t: %s\n' "$2" > "${d}/proc/cpuinfo"; echo "${d}"; }
+r_i9=$(cpuroot agent-i9 '13th Gen Intel(R) Core(TM) i9-13900T')
+r_gnr=$(cpuroot agent-6741p 'Intel(R) Xeon(R) 6741P')
+r_new=$(cpuroot agent-unmeasured 'Intel(R) Core(TM) Ultra 9 285K')
+agent_says "a CPU target drafts on the CPU by default on the i9-13900T (H34 SUPPORTED)" "${r_i9}" 0 \
+    '--draft_device=CPU' "" STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' K3D_GPU_MODEL_OPT_LEDGER="${LEDGER}"
+agent_says "... with the default draft model" "${r_i9}" 0 \
+    '--draft_source_model=OpenVINO/Qwen3-0\.6B-int4-ov' "" STUB_ALLOC='cpu 32' K3D_GPU_MODEL_OPT_LEDGER="${LEDGER}"
+agent_says "... and requests no GPU for it" "${r_i9}" 0 \
+    'gpu\.intel\.com' negate STUB_ALLOC=$'cpu 32\ngpu.intel.com/i915 1' K3D_GPU_MODEL_OPT_LEDGER="${LEDGER}"
+agent_says "no default CPU draft on the Xeon 6741P (H34x REFUTED)" "${r_gnr}" 0 \
+    'draft_source_model' negate STUB_ALLOC='cpu 32' K3D_GPU_MODEL_OPT_LEDGER="${LEDGER}"
+agent_says "... and the row that turned it off is named" "${r_gnr}" 0 \
+    'no CPU Fast Draft: EXPERIMENTS.md H34x is REFUTED on Intel\(R\) Xeon\(R\) 6741P' "" STUB_ALLOC='cpu 32' K3D_GPU_MODEL_OPT_LEDGER="${LEDGER}"
+agent_says "... and K3D_GPU_AGENT_DRAFT=CPU still forces it" "${r_gnr}" 0 \
+    '--draft_device=CPU' "" STUB_ALLOC='cpu 32' K3D_GPU_MODEL_OPT_LEDGER="${LEDGER}" K3D_GPU_AGENT_DRAFT=CPU
+agent_says "no default CPU draft on a CPU class no row measured" "${r_new}" 0 \
+    'draft_source_model' negate STUB_ALLOC='cpu 32' K3D_GPU_MODEL_OPT_LEDGER="${LEDGER}"
+agent_says "... and says so" "${r_new}" 0 \
+    'no EXPERIMENTS.md H34-family row measured' "" STUB_ALLOC='cpu 32' K3D_GPU_MODEL_OPT_LEDGER="${LEDGER}"
+agent_says "no default CPU draft without a ledger" "${r_i9}" 0 \
+    'draft_source_model' negate STUB_ALLOC='cpu 32' K3D_GPU_MODEL_OPT_LEDGER="${WORK}/no-ledger.md"
 agent_says "K3D_GPU_AGENT_DRAFT=off: no draft" "${r}" 0 \
     'draft' negate STUB_ALLOC='cpu 32' K3D_GPU_AGENT_DRAFT=off
 agent_says "K3D_GPU_AGENT_DRAFT=OFF: no draft (case-insensitive)" "${r}" 0 \
@@ -3589,7 +3608,7 @@ agent_says "DRA GPU: auto serves on CPU and says why" "${r}" 0 \
 agent_says "DRA GPU: auto still renders a CPU target" "${r}" 0 \
     '--target_device=CPU' "" STUB_ALLOC='cpu 32' STUB_SLICES="${DSL}" STUB_NODE_LABELS="${XMX}"
 agent_says "no GPU at all: auto prints no DRA note" "${r}" 0 \
-    'DRA' negate STUB_ALLOC='cpu 32'
+    'through DRA' negate STUB_ALLOC='cpu 32'
 agent_says "DRA GPU: a forced GPU names DRA" "${r}" fail \
     'Intel GPU through DRA.*K3D_GPU_DRA=0' "" STUB_ALLOC='cpu 32' STUB_SLICES="${DSL}" K3D_GPU_AGENT_DEVICE=GPU
 agent_says "DRA GPU: HETERO names DRA" "${r}" fail \
