@@ -195,7 +195,7 @@ Usage: k3d-gpu <command>
   plan --predict SKU|auto|list [--json] [--mts N] [--channels N]
             Roofline prediction (decode/prefill tok/s, derived agents per box) for
             an Intel SKU from its spec fields, fitted on one measured host row;
-            labelled calibrated or extrapolated. A model output (H24 PENDING)
+            labelled calibrated or extrapolated. A model output (H24 INCONCLUSIVE)
   audit [--json|--observe] [--observed FILE] [--plan FILE] [--lock FILE]
             Posture checks of the running cluster: fails on an unauthenticated
             listener off loopback, an image not pinned in images.lock, a runtime
@@ -258,7 +258,7 @@ Usage: k3d-gpu <command>
             results. Repo checkout only. Full options: bench agent --help;
             guide: docs/agent-benchmarks.md
   phase-steer [--json] [--prefill CPUS --decode CPUS]
-            Experimental, read-only (H20 PENDING): per-phase CPU split for one
+            Experimental, read-only (H20 INCONCLUSIVE): per-phase CPU split for one
             llama.cpp server per agent, prefill on the P-cores and decode on the
             E-cores (LP E-cores left out), as -Cb/-C masks; off on one core type
   version   Show version
@@ -2042,10 +2042,104 @@ doctor_hbm() {
     [ -z "${dax}" ] || lines+="  info: dax device(s)${dax} in devdax mode — HBM the kernel left soft-reserved (Xeon CPU Max flat mode), unused by pods. To use it: sudo daxctl reconfigure-device --mode=system-ram <dev> for each (lasts until reboot; rerun it from a boot-time unit), or boot with efi=nosoftreserve; revert: sudo daxctl reconfigure-device --mode=devdax --force <dev>, or drop the cmdline flag. HBM then shows as memory-only NUMA nodes"$'\n'
 }
 
+# The kernel VF driver name intel-qat-plugin v0.37.1 files a QAT PF's VFs under,
+# by PF id (qatDeviceDriver in cmd/qat_plugin/dpdkdrv/dpdkdrv.go maps the VF id
+# that follows each PF id: 4941, 4943, 4945 -> 4xxxvf, 4947 -> 420xxvf, ...).
+qat_vf_driver() {
+    case "$1" in
+        0x4940|0x4942|0x4944) echo 4xxxvf ;;
+        0x4946) echo 420xxvf ;;
+        0x4948) echo 6xxxvf ;;
+        0x37c8) echo c6xxvf ;;
+    esac
+}
+
+# Host steps that turn on present-but-unconfigured DSA/IAA/QAT, one tab-separated
+# line per device: <kind> <device> <run> <revert>. Nothing here runs them; doctor
+# prints them and host-setup --apply runs them after a y/N prompt. None persist
+# across a reboot.
+# DSA/IAA (only when a kind has no user work queue at all, and only disabled
+# devices: the kernel refuses config writes to an enabled one) get what the
+# intel-device-plugins v0.37.1 idxd initcontainer sets per group (demo/dsa.conf,
+# demo/iaa.conf): 1 engine, 1 group, 1 user WQ, size 16, priority 10, on the
+# kernel's "user" WQ driver. The WQ is shared when the device has user PASID
+# (drivers/dma/idxd/device.c refuses a shared WQ without it, and one with
+# threshold 0), else dedicated. Flags per accel-config v4.1.9 man pages.
+# QAT gets every VF the PF supports, as the plugin's qat initcontainer does
+# (tee sriov_numvfs < sriov_totalvfs).
+accel_enable_steps() {
+    local kind name prefix devdir dev d id mode ac="sudo accel-config" total wq
+    for kind in "DSA dsa dsa" "IAA iax iax"; do
+        read -r name prefix devdir <<< "${kind}"
+        ! compgen -G "${SYSROOT}/dev/${devdir}/wq*" >/dev/null || continue
+        while read -r dev; do
+            [ -n "${dev}" ] || continue
+            [ "$(cat "${dev}/state" 2>/dev/null || echo disabled)" = disabled ] || continue
+            d=${dev##*/}
+            id=${d#"${prefix}"}
+            wq="${d}/wq${id}.0"
+            mode=dedicated
+            [ "$(cat "${dev}/pasid_enabled" 2>/dev/null)" != 1 ] || mode="shared --threshold=15"
+            printf '%s\t%s\t%s\t%s\n' "${name}" "${d}" \
+                "${ac} config-engine ${d}/engine${id}.0 --group-id=0 && ${ac} config-wq ${wq} --group-id=0 --type=user --mode=${mode} --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && ${ac} enable-device ${d} && ${ac} enable-wq ${wq}" \
+                "${ac} disable-wq ${wq} && ${ac} disable-device ${d}"
+        done < <({ compgen -G "${SYSROOT}/sys/bus/dsa/devices/${prefix}[0-9]*" || true; } | sort -V)
+    done
+    for dev in "${SYSROOT}"/sys/bus/pci/devices/*; do
+        [ "$(cat "${dev}/vendor" 2>/dev/null)" = "0x8086" ] || continue
+        [ -n "$(qat_vf_driver "$(cat "${dev}/device" 2>/dev/null)")" ] || continue
+        [ -n "$(bound_driver "${dev}")" ] || continue
+        ! compgen -G "${dev}/virtfn*" >/dev/null || continue
+        total=$(cat "${dev}/sriov_totalvfs" 2>/dev/null) || continue
+        [[ "${total}" =~ ^[1-9][0-9]*$ ]] || continue
+        printf 'QAT\t%s\techo %s | sudo tee /sys/bus/pci/devices/%s/sriov_numvfs\techo 0 | sudo tee /sys/bus/pci/devices/%s/sriov_numvfs\n' \
+            "${dev##*/}" "${total}" "${dev##*/}" "${dev##*/}"
+    done
+}
+
+# One line naming every present-but-unconfigured engine (auto detection only),
+# or nothing: "DSA dsa0 dsa2, IAA iax1, QAT 0000:01:00.0".
+accel_disabled_list() {
+    [ "${VENDORS_REQUEST}" = auto ] || return 0
+    accel_enable_steps | awk -F'\t' '
+        $1 != k { if (out != "") out = out ", "; out = out $1; k = $1 }
+        { out = out " " $2 }
+        END { if (out != "") print out }'
+}
+
+# The `up`/`detect` note for present-but-unconfigured engines, or nothing.
+accel_disabled_note() {
+    local list
+    list=$(accel_disabled_list)
+    [ -z "${list}" ] || echo "present but disabled: ${list} (no work queues / VFs), so not in the cluster — enable them: k3d-gpu host-setup --apply, then k3d-gpu down && k3d-gpu up (exact commands: k3d-gpu doctor)"
+}
+
+# accel-config (intel/idxd-config) where its packages and its README build
+# (--prefix=/usr) install it, which is on sudo's secure_path everywhere.
+has_accel_config() { [ -x "${SYSROOT}/usr/bin/accel-config" ]; }
+
+# accel-config install command for the distro, or empty when there is no package.
+accel_config_install() {
+    case "$1" in
+        ubuntu-*) echo "sudo apt-get update && sudo apt-get install -y accel-config" ;;
+        fedora)   echo "sudo dnf install -y accel-config" ;;
+    esac
+}
+
 # Xeon built-in accelerators. `up` deploys DSA/IAA/QAT plugins once the host
 # side is set up (work queues, SR-IOV VFs); this says what is still missing.
 doctor_cpu_accels() {
     local amx isa pred fm dev bdf vfs n wqs kind name prefix devdir lines="" lp e cl pp fav fv fn
+    local steps k d run rev drv total ac_fix=""
+    steps=$(accel_enable_steps)
+    if grep -qE '^(DSA|IAA)'$'\t' <<< "${steps}" && ! has_accel_config; then
+        ac_fix=$(accel_config_install "$(hs_distro)")
+        if [ -n "${ac_fix}" ]; then
+            ac_fix="  ${YLW}warn${RST}: accel-config is not installed"$'\n'"        apply:  ${ac_fix}"$'\n'
+        else
+            ac_fix="  ${YLW}warn${RST}: accel-config is not installed and this distro has no package: build intel/idxd-config accel-config-v4.1.9 with --prefix=/usr (https://github.com/intel/idxd-config)"$'\n'
+        fi
+    fi
     amx=$(amx_flags)
     fm=$(cpu_family_model)
     pred=""
@@ -2065,7 +2159,22 @@ doctor_cpu_accels() {
         if [ "${wqs}" -gt 0 ]; then
             lines+="  ok: ${name}: ${n} device(s), ${wqs} user work queue(s) — deployed by 'k3d-gpu up' (intel-${name,,}-plugin)"$'\n'
         elif [ "${n}" -gt 0 ]; then
-            lines+="  ${YLW}warn${RST}: ${name}: ${n} device(s) but no user work queues — configure them on the host with accel-config"$'\n'
+            if grep -q "^${name}"$'\t' <<< "${steps}"; then
+                lines+="  ${YLW}warn${RST}: ${name}: ${n} device(s) but no user work queues, so not in the cluster — configure them with accel-config as intel-${name,,}-plugin's idxd initcontainer does (per device below; lasts until reboot), or all at once: k3d-gpu host-setup --apply; then k3d-gpu down && k3d-gpu up"$'\n'
+                lines+="${ac_fix}"
+                ac_fix=""
+                while IFS=$'\t' read -r k d run rev; do
+                    [ "${k}" = "${name}" ] || continue
+                    if [[ "${run}" == *--mode=shared* ]]; then
+                        lines+="  ${YLW}warn${RST}: ${name} ${d}: disabled — 1 engine, 1 group, 1 shared user WQ (the device has user PASID)"$'\n'
+                    else
+                        lines+="  ${YLW}warn${RST}: ${name} ${d}: disabled — 1 engine, 1 group, 1 dedicated user WQ (no user PASID: a shared WQ needs intel_iommu=on,sm_on)"$'\n'
+                    fi
+                    lines+="        apply:  ${run}"$'\n'"        revert: ${rev}"$'\n'
+                done <<< "${steps}"
+            else
+                lines+="  ${YLW}warn${RST}: ${name}: ${n} device(s) but no user work queues and none is disabled (enabled with kernel work queues, or halted), so k3d-gpu leaves them to their owner"$'\n'
+            fi
         fi
         if is_active "${name,,}" && [ "${wqs}" -eq 0 ]; then
             lines+="  ${RED}fail${RST}: ${name} requested but no /dev/${devdir}/wq* work queues"$'\n'
@@ -2083,7 +2192,15 @@ doctor_cpu_accels() {
         elif [ "${vfs}" -gt 0 ]; then
             lines+="  ok: QAT ${bdf}: ${vfs} VF(s) — deployed by 'k3d-gpu up' (intel-qat-plugin binds them to vfio-pci)"$'\n'
         else
-            lines+="  ${YLW}warn${RST}: QAT ${bdf}: no VFs — enable on the host: echo N > /sys/bus/pci/devices/${bdf}/sriov_numvfs"$'\n'
+            drv=$(bound_driver "${dev}")
+            total=$(cat "${dev}/sriov_totalvfs" 2>/dev/null) || total=""
+            if [[ ! "${total}" =~ ^[1-9][0-9]*$ ]]; then
+                lines+="  ${YLW}warn${RST}: QAT ${bdf} (${drv}): no VFs and no SR-IOV (sriov_totalvfs missing or 0) — turn on SR-IOV and VT-d in the BIOS and boot with intel_iommu=on"$'\n'
+            else
+                IFS=$'\t' read -r run rev < <(awk -F'\t' -v b="${bdf}" '$1 == "QAT" && $2 == b { print $3 "\t" $4 }' <<< "${steps}") || true
+                lines+="  ${YLW}warn${RST}: QAT ${bdf} (${drv}): no VFs (sriov_numvfs 0), so not in the cluster — create all ${total} as intel-qat-plugin's qat initcontainer does; the plugin takes them as $(qat_vf_driver "$(cat "${dev}/device")") and binds them to vfio-pci (lasts until reboot), or: k3d-gpu host-setup --apply; then k3d-gpu down && k3d-gpu up"$'\n'
+                lines+="        apply:  ${run}"$'\n'"        revert: ${rev}"$'\n'
+            fi
         fi
     done
     if has_qat && [ ! -d "${SYSROOT}/sys/bus/pci/drivers/vfio-pci" ]; then
@@ -2947,7 +3064,7 @@ perf_uncore() {
         [[ "${imin}" =~ ^[0-9]+$ && "${mn}" =~ ^[0-9]+$ ]] || imin="" mn=""
         if [ "${n}" -eq 0 ]; then
             perf_section "Uncore frequency (intel_uncore_frequency)" \
-                "max_freq_khz at initial_max_freq_khz and min_freq_khz at initial_min_freq_khz: the hardware (UFS, or ELC on TPMI parts) picks the uncore clock inside the full range. A floor pinned high for decode is under test (EXPERIMENTS.md H29, PENDING), so it is not suggested" \
+                "max_freq_khz at initial_max_freq_khz and min_freq_khz at initial_min_freq_khz: the hardware (UFS, or ELC on TPMI parts) picks the uncore clock inside the full range. A floor pinned high for decode is unproven (EXPERIMENTS.md H29, INCONCLUSIVE), so it is not suggested" \
                 "https://docs.kernel.org/admin-guide/pm/intel_uncore_frequency_scaling.html"
         fi
         n=$((n + 1))
@@ -4020,6 +4137,8 @@ cmd_up() {
     require kubectl
 
     resolve_vendors
+    ACCEL_DISABLED=$(accel_disabled_note)
+    [ -z "${ACCEL_DISABLED}" ] || warn "${ACCEL_DISABLED}"
     [ "${#ACTIVE[@]}" -gt 0 ] || [ "${VENDORS_REQUEST}" = none ] || err "no supported accelerator detected (NVIDIA, Intel GPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX, hybrid P/E cores, NUMA, WSL2 Intel GPU) — run 'k3d-gpu doctor' or set K3D_GPU_VENDORS"
     info "Accelerators: ${ACTIVE[*]:-none (K3D_GPU_VENDORS=none)}"
     local intel_args="" problems
@@ -4507,6 +4626,7 @@ verify_gpus() {
     done
     # An explicit K3D_GPU_VENDORS request must fully succeed. In auto mode one
     # working accelerator is enough (e.g. a spare iGPU that never registers).
+    [ -z "${ACCEL_DISABLED:-}" ] || warn "${ACCEL_DISABLED}"
     if [ -n "${failed}" ] && { [ "${VENDORS_REQUEST}" != "auto" ] || [ -z "${summary}" ]; }; then
         err "accelerator(s) not schedulable:${failed}"
     fi
@@ -4690,7 +4810,9 @@ cmd_detect() {
         *) err "unknown detect option: $1 (use --json)" ;;
     esac
     resolve_vendors
-    local v
+    local v note
+    note=$(accel_disabled_note)
+    [ -z "${note}" ] || warn "${note}"
     for v in ${ACTIVE[@]+"${ACTIVE[@]}"}; do
         echo "${v} $(vendor_resources "${v}" | paste -sd' ')"
     done
@@ -5402,7 +5524,7 @@ cmd_sandbox() {
 #                weights into per-process device buffers, so each replica pays for
 #                its own device copy; the template requests no device.
 #   pinning      a tag can resolve to a new digest on another node or a re-pull.
-# The measured effect is EXPERIMENTS.md H28 (PENDING until the probe runs).
+# The measured effect is EXPERIMENTS.md H28 (SUPPORTED).
 
 # Snapshotter of the running cluster's server node, or nothing when there is none.
 ms_snapshotter() {
@@ -5729,6 +5851,71 @@ hs_checks() {
 
 hs_add() { HS_PLAN+=("$1"); }
 
+# Fills HS_ACCEL with accel_enable_steps for the kinds host-setup handles: all of
+# them under auto detection, else only dsa/iaa/qat named in K3D_GPU_VENDORS.
+hs_accel_targets() {
+    local line kind want=",${VENDORS_REQUEST// /},"
+    HS_ACCEL=""
+    while IFS= read -r line; do
+        [ -n "${line}" ] || continue
+        kind=${line%%$'\t'*}
+        [ "${VENDORS_REQUEST}" = auto ] || [[ "${want}" == *",${kind,,},"* ]] || continue
+        HS_ACCEL+="${line}"$'\n'
+    done < <(accel_enable_steps)
+    return 0
+}
+
+# accel-config is needed and neither installed nor packaged for this distro.
+hs_accel_config_missing() {
+    grep -qE '^(DSA|IAA)'$'\t' <<< "${HS_ACCEL}" && ! has_accel_config \
+        && [ -z "$(accel_config_install "${HS_DISTRO}")" ]
+}
+
+hs_check_accels() {
+    local k d run rev
+    [ -n "${HS_ACCEL}" ] || return 0
+    info "Checking Xeon DSA/IAA/QAT..."
+    while IFS=$'\t' read -r k d run rev; do
+        [ -n "${k}" ] || continue
+        case "${k}" in
+            QAT) hs_warn "QAT ${d} ($(bound_driver "${SYSROOT}/sys/bus/pci/devices/${d}")): no VFs — the plan below creates them" ;;
+            *)   hs_warn "${k} ${d}: no user work queue — the plan below configures one" ;;
+        esac
+    done <<< "${HS_ACCEL}"
+    if hs_accel_config_missing; then
+        hs_warn "accel-config is not packaged for ${HS_DISTRO}: build intel/idxd-config accel-config-v4.1.9 with --prefix=/usr (https://github.com/intel/idxd-config) and rerun; the plan leaves DSA/IAA out until then"
+    fi
+}
+
+# The DSA/IAA/QAT steps doctor prints, plus accel-config and vfio-pci when missing.
+# HS_REVERT gets each step's revert, printed and never run.
+hs_plan_accels() {
+    local k d run rev ac vfio=0
+    HS_REVERT=()
+    [ -n "${HS_ACCEL}" ] || return 0
+    if grep -qE '^(DSA|IAA)'$'\t' <<< "${HS_ACCEL}" && ! has_accel_config; then
+        ac=$(accel_config_install "${HS_DISTRO}")
+        [ -z "${ac}" ] || hs_add "${ac}"
+    fi
+    if grep -q '^QAT'$'\t' <<< "${HS_ACCEL}" && [ ! -d "${SYSROOT}/sys/bus/pci/drivers/vfio-pci" ]; then
+        vfio=1
+        hs_add "sudo modprobe vfio-pci"
+    fi
+    while IFS=$'\t' read -r k d run rev; do
+        [ -n "${k}" ] || continue
+        if [ "${k}" != QAT ] && hs_accel_config_missing; then continue; fi
+        hs_add "${run}"
+        HS_REVERT+=("${rev}")
+    done <<< "${HS_ACCEL}"
+    [ "${vfio}" -eq 0 ] || HS_REVERT+=("sudo modprobe -r vfio-pci   # skip if VMs or other devices use vfio-pci")
+}
+
+hs_print_reverts() {
+    [ "${#HS_REVERT[@]}" -gt 0 ] || return 0
+    echo "  DSA/IAA/QAT changes last until reboot. To undo them sooner (k3d-gpu never runs these), then k3d-gpu down && k3d-gpu up:"
+    printf '    revert: %s\n' "${HS_REVERT[@]}"
+}
+
 # libva and every libva-* that vainfo depends on, pinned to the PPA build together:
 # the release's libva-x11-2/libva-wayland2 depend on libva2 << 2.20.0.1.
 hs_libva_pkgs() {
@@ -5851,13 +6038,15 @@ cmd_host_setup() {
     esac
 
     hs_targets
-    if [ "${#HS_TARGETS[@]}" -eq 0 ]; then
-        info "No Intel GPU, Intel NPU or NVIDIA GPU found — nothing to set up (K3D_GPU_VENDORS=intel,npu,nvidia forces a plan)"
+    hs_accel_targets
+    if [ "${#HS_TARGETS[@]}" -eq 0 ] && [ -z "${HS_ACCEL}" ]; then
+        info "No Intel GPU, Intel NPU, NVIDIA GPU or unconfigured DSA/IAA/QAT found — nothing to set up (K3D_GPU_VENDORS=intel,npu,nvidia forces a plan)"
         return 0
     fi
-    info "Host setup for ${HS_DISTRO}: ${HS_TARGETS[*]}"
+    info "Host setup for ${HS_DISTRO}: $({ printf '%s\n' ${HS_TARGETS[@]+"${HS_TARGETS[@]}"}; cut -f1 <<< "${HS_ACCEL}" | tr '[:upper:]' '[:lower:]'; } | awk 'NF && !seen[$0]++' | paste -sd' ')"
     HS_BROKEN=0 HS_MISSING=0
     hs_checks
+    hs_check_accels
 
     # A host whose every check passed needs nothing; proposing a full system
     # upgrade and a docker restart there would only risk a working setup.
@@ -5868,14 +6057,22 @@ cmd_host_setup() {
     fi
 
     HS_PLAN=()
-    case "${HS_DISTRO}" in
-        ubuntu-*) hs_plan_ubuntu "${HS_DISTRO#ubuntu-}" ;;
-        fedora) hs_plan_fedora ;;
-        arch|manjaro) hs_plan_arch ;;
-    esac
+    if [ "${#HS_TARGETS[@]}" -gt 0 ]; then
+        case "${HS_DISTRO}" in
+            ubuntu-*) hs_plan_ubuntu "${HS_DISTRO#ubuntu-}" ;;
+            fedora) hs_plan_fedora ;;
+            arch|manjaro) hs_plan_arch ;;
+        esac
+    fi
+    hs_plan_accels
     echo ""
+    if [ "${#HS_PLAN[@]}" -eq 0 ]; then
+        info "Nothing host-setup can run here: each warning above names its fix."
+        return 0
+    fi
     info "Install plan (${#HS_PLAN[@]} commands):"
     printf '    %s\n' "${HS_PLAN[@]}"
+    hs_print_reverts
     if is_hs_target nvidia; then
         echo "  note: the NVIDIA kernel driver itself is not part of this plan; install it from your distro first"
     fi
@@ -5903,6 +6100,7 @@ cmd_host_setup() {
         info "+ ${cmd}"
         bash -c "set -euo pipefail; ${cmd}" || err "command failed: ${cmd}"
     done
+    hs_print_reverts
     info "Host setup done. Check again with: k3d-gpu host-setup && k3d-gpu doctor"
 }
 
@@ -8514,7 +8712,7 @@ cmd_facts() {
 }
 
 # plan --predict SKU|auto|list [--json] [--mts N] [--channels N]: roofline
-# prediction from Intel spec fields (console/sku_model.py, H24 PENDING).
+# prediction from Intel spec fields (console/sku_model.py, H24 INCONCLUSIVE).
 plan_predict() {
     local dir sku=$1 args=()
     shift
@@ -9118,7 +9316,7 @@ phase_steer_plan() {
 # ggml strict mode pins thread j to the j-th set bit in every process, so N
 # agents given one strict mask would all stack on its first CPUs (H20 A1).
 # Nothing is applied: H20 in
-# EXPERIMENTS.md is PENDING, and the split becomes a default only if it holds.
+# EXPERIMENTS.md is INCONCLUSIVE, and the split becomes a default only if it holds.
 cmd_phase_steer() {
     local json=0 pre="" dlist="" state p d lp reason pm="" dm=""
     while [ $# -gt 0 ]; do
@@ -9146,7 +9344,7 @@ on = state != "off"
 def opt(v):
     return None if v in ("-", "") else v
 print(json.dumps({
-    "schema": "phase-steer/v1", "state": state, "reason": reason, "ledger": "H20 PENDING",
+    "schema": "phase-steer/v1", "state": state, "reason": reason, "ledger": "H20 INCONCLUSIVE",
     "prefill_cpus": opt(p), "decode_cpus": opt(d), "lowpower_cpus": opt(lp),
     "prefill_mask": opt(pm), "decode_mask": opt(dm),
     "llama_server_args": ["--cpu-mask-batch", pm, "--cpu-mask", dm] if on else [],
@@ -9154,7 +9352,7 @@ print(json.dumps({
 PY
         return 0
     fi
-    info "phase-steer (experimental, H20 PENDING: no command applies it)"
+    info "phase-steer (experimental, H20 INCONCLUSIVE: no command applies it)"
     if [ "${state}" = off ]; then
         echo "  off: ${reason}"
         return 0

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cross-SKU roofline predictor for `k3d-gpu plan --predict <sku>` (H24, PENDING).
+"""Cross-SKU roofline predictor for `k3d-gpu plan --predict <sku>` (H24, INCONCLUSIVE).
 
 Maps public Intel spec-sheet fields (P/E core mix, memory channels x MT/s,
 AVX-VNNI / AMX, iGPU EUs / XMX, NPU TOPS) to single-box LLM throughput (decode,
@@ -14,7 +14,7 @@ Models (pre-registered in EXPERIMENTS.md, H24):
   M1  decode_c1 = eta_m' * min(BW_spec, triad(cpuset)) / W, with triad measured
       per core set (needs a triad table per microarchitecture; none ships yet).
 
-Nothing here is measured. H24 is PENDING: until it is SUPPORTED, every number
+Nothing here is measured. H24 is INCONCLUSIVE: until it is SUPPORTED, every number
 this prints is a model output, not a claim.
 
 Usage:
@@ -218,7 +218,7 @@ def predict(key, mts=None, channels=None, model="qwen3-4b", host_measured=False)
         "sku": key, "name": s["name"], "family": s["family"],
         "model": MODELS[model]["repo"],
         "status": label,
-        "hypothesis": "H24 PENDING: model output, not a measured claim",
+        "hypothesis": "H24 INCONCLUSIVE: model output, not a measured claim",
         "inputs": {"mts": mts, "channels": channels, "bw_spec_gbs": round(bw / 1e9, 1),
                    "inference_cores": notes, "sandbox_cores": sandbox_cores,
                    "amx": s["amx"], "igpu_eu": s["igpu_eu"], "xmx": s["xmx"],

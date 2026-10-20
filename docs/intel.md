@@ -50,8 +50,10 @@ never estimated. Every "no other" claim refers to the search log in
   the `xe.force_probe=<id>` or `i915.force_probe=<id>` needed for parts newer than
   the kernel, and the missing
   host step for DSA/IAA work queues (`accel-config`) and QAT VFs
-  (`sriov_numvfs`, `vfio-pci`). The launcher never changes host configuration
-  itself.
+  (`sriov_numvfs`, `vfio-pci`), each as an exact per-device apply and revert
+  command. `up` and `detect` name the engines left out for want of that step.
+  The launcher never changes host configuration itself; `host-setup --apply`
+  runs the same commands after a y/N prompt.
 - **A schedulability assertion.** `up` fails unless every detected engine has
   more than zero schedulable units. `test` runs one pod per engine: `nvidia-smi`
   for NVIDIA, a pod that requests the Intel resource and lists the device nodes
@@ -109,9 +111,9 @@ the plugins, and asserts the result, with no manual step.
 | Intel GPU, `xe` (Battlemage, Lunar / Panther Lake, Crescent Island) | `gpu.intel.com/xe` | yes | yes | no | Lunar Lake, Battlemage dGPU, kernel/firmware checks, `xe.force_probe` hints, `vfio-pci` excluded |
 | Intel NPU | `npu.intel.com/accel`; node label `k3d-gpu.io/npu.gen` | yes | yes | no | Lunar / Meteor Lake, `0x7d1d` named by CPU model (Meteor Lake vs. Arrow Lake-H), NPU vs. Gaudi, unbound NPU, firmware checks, forced `npu` fails `doctor` |
 | Gaudi 3 | `habana.ai/gaudi` | yes | yes (plain mode, no habana runtime) | no | `habanalabs` accel nodes, no-driver case, NPU + Gaudi on one host |
-| DSA | `dsa.intel.com/wq-user-*` | yes | yes | no | user work queues, no-work-queue case, `accel-config` hint, forced `dsa` fails `doctor` |
-| IAA | `iaa.intel.com/wq-user-*` | yes | yes | no | user work queues, no-work-queue case, `accel-config` hint |
-| QAT (C62x, 4xxx, 420xx, 6xxx) | `qat.intel.com/*` | yes | yes | no | 4xxx and C62x PF with VFs, no VFs, unbound PF, `vfio-pci` check |
+| DSA | `dsa.intel.com/wq-user-*` | yes | yes | no | user work queues, no-work-queue case with per-device `accel-config` apply/revert (dedicated, or shared with PASID), enabled device left alone, forced `dsa` fails `doctor` |
+| IAA | `iaa.intel.com/wq-user-*` | yes | yes | no | user work queues, no-work-queue case with per-device `accel-config` apply/revert |
+| QAT (C62x, 4xxx, 420xx, 6xxx) | `qat.intel.com/*` | yes | yes | no | 4xxx and C62x PF with VFs, no VFs (apply = `sriov_totalvfs`, plugin VF driver named), no SR-IOV, unbound PF, `vfio-pci` check |
 | AMX | `feature.node.kubernetes.io/cpu-cpuid.AMX*=true` (labels, no plugin) | yes | yes (labels) | no | AMX flags detected and reported; CPU without AMX |
 | CPU ISA (AVX-VNNI, AVX-512, VAES, GFNI, SHA, CET) | `feature.node.kubernetes.io/cpu-cpuid.<NAME>=true` (NFD names, labels only) | yes | yes (labels) | labels read on the UHD 770 host by `doctor`; not applied to a live cluster | NFD name mapping, `pku` unlabelled, no-flag CPU |
 | Hybrid P/E cores | `k3d-gpu.io/hybrid-cpu=true`; pod label `k3d-gpu.io/cores` | yes | yes | **yes** at `109154d`: performance pod on CPU 0, efficient pod on CPU 20. The strict P/E placement check in `test` passed live on the merged tree (performance `0`, efficient `24`). The `ecluster`, `pcore-physical`, `latency` (on favored CPUs 8 and 10) and `lowpower` balloons verified live on the i9-13900T ([results](#how-hybrid-pe-pinning-works)); the Arrow Lake-H `cpu_lowpower` override is sim-only (UNVERIFIED live). | detection, no online E-cores, non-hybrid, forced, `doctor` lists, `test` placement pass and both failure modes; `cpu_lowpower` and no-L3 LP E-cores, E-core clusters, physical P-cores, favored CPUs from CPPC and MSR `0x771`, `latency` patched to the favored L2 dirs |

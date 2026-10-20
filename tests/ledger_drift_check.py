@@ -4,7 +4,9 @@ from the Hypotheses table in EXPERIMENTS.md.
 
 The ledger verdict of a row is the first word of its last cell (PENDING,
 SUPPORTED, REFUTED or INCONCLUSIVE). Scanned: README.md, docs/*.md and
-docs/intel/*.md, outside fenced code blocks, inline code and HTML comments.
+docs/intel/*.md, outside fenced code blocks, inline code and HTML comments;
+and, in prose form only, every line of scripts/k3d-gpu (its --help text,
+messages and comments) and console/*.py (the predictor's output labels).
 A doc states a verdict for row Hn in any of these forms:
 
   prose      "H5 is PENDING", "(H1) is INCONCLUSIVE", "H28 (PENDING)": the id,
@@ -159,6 +161,18 @@ def check_file(path, rel, rows):
     return errors
 
 
+def check_script(path, rel, rows):
+    """Prose verdicts ("H24 PENDING", "H29, PENDING") on any line of a script."""
+    errors = []
+    for n, line in enumerate(path.read_text().splitlines(), 1):
+        for m in PROSE.finditer(line):
+            hid = "H" + m.group(1)
+            if ID.search(m.group(2)) or hid not in rows or rows[hid] == m.group(3):
+                continue
+            errors.append(f"{rel}:{n}: {hid} reads {m.group(3)} (prose) but EXPERIMENTS.md says {rows[hid]}")
+    return errors
+
+
 def main(argv):
     root = pathlib.Path(argv[1] if len(argv) > 1 else pathlib.Path(__file__).resolve().parent.parent)
     rows = ledger(root)
@@ -168,6 +182,10 @@ def main(argv):
     errors = [f"EXPERIMENTS.md: {h} has no verdict word in its last cell" for h in bad]
     for f in files:
         errors += check_file(f, str(f.relative_to(root)), rows)
+    code = [root / "scripts" / "k3d-gpu"] + sorted((root / "console").glob("*.py"))
+    for f in (f for f in code if f.is_file()):
+        files.append(f)
+        errors += check_script(f, str(f.relative_to(root)), rows)
     if errors:
         print("\n".join(errors))
         print(f"ledger_drift_check: {len(errors)} verdict(s) disagree with EXPERIMENTS.md")

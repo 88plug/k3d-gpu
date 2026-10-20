@@ -40,6 +40,7 @@ def run(doc, ledger=LEDGER, path="docs/guide.md"):
     with tempfile.TemporaryDirectory() as d:
         root = pathlib.Path(d)
         (root / "docs" / "intel").mkdir(parents=True)
+        (root / path).parent.mkdir(parents=True, exist_ok=True)
         (root / "EXPERIMENTS.md").write_text(ledger)
         (root / path).write_text(doc)
         out = io.StringIO()
@@ -77,6 +78,9 @@ class Agrees(unittest.TestCase):
 
     def test_matching_prose(self):
         self.assertClean("H2 is REFUTED, and H4 is PENDING.\n")
+
+    def test_cli_agreeing_verdict_passes(self):
+        self.assertClean("    info \"phase-steer (experimental, H4 PENDING)\" | tee x\n", path="scripts/k3d-gpu")
 
     def test_matching_reference(self):
         self.assertClean("Status: INCONCLUSIVE [ledger:H1].\n")
@@ -158,6 +162,17 @@ class Drift(unittest.TestCase):
 
     def test_readme_is_scanned(self):
         self.assertDrift("H2 is PENDING.\n", r"README.md:1", path="README.md")
+
+    def test_cli_help_text_is_scanned(self):
+        self.assertDrift("            labelled calibrated. A model output (H2 PENDING)\n",
+                         r"scripts/k3d-gpu:1: H2 reads PENDING \(prose\).*REFUTED", path="scripts/k3d-gpu")
+
+    def test_cli_comment_is_scanned(self):
+        self.assertDrift("# prediction from spec fields (console/sku_model.py, H5 PENDING).\n",
+                         r"scripts/k3d-gpu:1: H5 reads PENDING.*INCONCLUSIVE", path="scripts/k3d-gpu")
+
+    def test_console_python_is_scanned(self):
+        self.assertDrift('"hypothesis": "H2 PENDING: model output",\n', r"console/sku_model.py:1: H2", path="console/sku_model.py")
 
 
 class RealRepo(unittest.TestCase):

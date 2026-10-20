@@ -3,7 +3,7 @@
 # (KEP-4639, GA from 1.36; k3s v1.37.1 bundles containerd v2.3.4) and mmaps the
 # weights in place. With the overlayfs snapshotter all replicas read the same
 # lower-layer inodes, so the kernel can keep one page-cache copy for the node.
-# The memory and ready-time effect is EXPERIMENTS.md H28 (PENDING, unmeasured).
+# The memory and ready-time effect is EXPERIMENTS.md H28 (SUPPORTED).
 # The image must carry the model as a filesystem tar layer (FROM scratch + COPY);
 # containerd does not mount raw ModelPack weight blobs as image volumes.
 apiVersion: apps/v1

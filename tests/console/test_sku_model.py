@@ -151,7 +151,7 @@ class NonHybrid(unittest.TestCase):
             self.assertEqual(rc, 0, key)
             p = json.loads(out)
             self.assertEqual(p["status"], "extrapolated", key)
-            self.assertIn("PENDING", p["hypothesis"])
+            self.assertEqual(p["hypothesis"], "H24 INCONCLUSIVE: model output, not a measured claim")
             self.assertEqual(p["agents_per_box"]["status"], "derived")
             rc, out, _ = run(["predict", key])
             self.assertEqual(rc, 0, key)
