@@ -140,5 +140,48 @@ class Grader(unittest.TestCase):
         self.assertIsNone(gsm8k.last_number("no digits"))
 
 
+try:
+    import yaml  # noqa: F401
+    import ladder
+except ImportError:  # PyYAML missing: the ladder test is skipped, the rest still run
+    ladder = None
+
+
+@unittest.skipIf(ladder is None, "PyYAML not installed")
+class Ladder(unittest.TestCase):
+    def doc(self):
+        return [{"kind": "ConfigMap"}, {"kind": "Deployment", "spec": {"template": {"spec": {
+            "volumes": [{"name": "model-volume", "hostPath": {"path": "/models/hf"}},
+                        {"name": "host-gpu-libs", "hostPath": {"path": "/usr/lib/x86_64-linux-gnu"}},
+                        {"name": "host-opencl-vendors", "hostPath": {"path": "/etc/OpenCL/vendors"}}],
+            "containers": [{
+                "command": ["bash", "-c", "source /opt/intel/oneapi/setvars.sh --force && export "
+                            "LD_LIBRARY_PATH=/host-gpu-libs:${LD_LIBRARY_PATH} && python3 -m x \"$@\"", "--"],
+                "args": ["--disable-log-requests", "--port", "8000"],
+                "volumeMounts": [{"name": "model-volume"}, {"name": "host-gpu-libs"},
+                                 {"name": "host-opencl-vendors"}]}]}}}}]
+
+    def dep(self, docs):
+        return docs[1]["spec"]["template"]["spec"]
+
+    def test_rung_a(self):
+        ps = self.dep(ladder.apply(self.doc(), "a"))
+        self.assertEqual([v["name"] for v in ps["volumes"]], ["model-volume"])
+        c = ps["containers"][0]
+        self.assertEqual([m["name"] for m in c["volumeMounts"]], ["model-volume"])
+        self.assertNotIn("LD_LIBRARY_PATH", c["command"][2])
+        self.assertIn("setvars.sh", c["command"][2])
+        self.assertIn("--disable-log-requests", c["args"])
+
+    def test_rung_d(self):
+        c = self.dep(ladder.apply(self.doc(), "d"))["containers"][0]
+        self.assertNotIn("setvars.sh", c["command"][2])
+        self.assertEqual(c["args"], ["--port", "8000", "--max-model-len", "32768"])
+
+    def test_bad_rung(self):
+        with self.assertRaises(SystemExit):
+            ladder.apply(self.doc(), "e")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -3,7 +3,7 @@
 # pre-registration", measurement protocol, and amendment G1.
 # Needs: KUBECONFIG, OUT (this hold's run dir), ROOT (repo checkout), PATH with k3d/kubectl.
 C1_ARGS="--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1%"
-NODE_IMAGE=${NODE_IMAGE:-cryptoandcoffee/k3d-gpu@sha256:8cd264aa68c77681d7fa474693944de0db8d55de5881253e4029bf72a67e175c}
+NODE_IMAGE=${NODE_IMAGE:-cryptoandcoffee/k3d-gpu:0.1.61}   # @sha256:8cd264aa68c7... on crescent
 MODELS=${MODELS:-${HOME}/k3dgpu-gemma/models}
 
 say() { echo "== $* $(date -u +%FT%TZ)" | tee -a "${OUT}/arms.log"; }
@@ -88,4 +88,38 @@ n1_phase() {
         --unique-prompts --timeout 600 --label "${name}" --out "${OUT}/${name}.n1.json" \
         >> "${OUT}/arms.log" 2>&1
     echo "after $(date -u +%FT%TZ) $(gpu_energy "${card}")" >> "${OUT}/${name}.gpu-energy"
+}
+
+# full_phases NAME BASE_URL CARDS EXTRA_BODY: H54b's protocol for one arm (steps 2-4): 60 s idle,
+# N=1 (8 requests, 3 warmup), N=4 (16), N=16 (32), each 256 tokens, ignore_eos, temperature 0,
+# unique prompts; TTFT: 4 requests at N=1 on ttft_prompt.txt, max_tokens 16; GSM8K items 0-49.
+# RAPL package-0 per phase and the cards' xe energy counters around the whole arm. MODEL_ID: the
+# served model name (default m).
+full_phases() {
+    local name=$1 url=$2 cards=$3 extra=${4:-} c n ex=()
+    [ -z "${extra}" ] || ex=(--extra-body "${extra}")
+    "${ROOT}/bench/energy.sh" --json "${OUT}/${name}.idle-energy.json" -- sleep 60 2>>"${OUT}/arms.log"
+    for c in ${cards//,/ }; do echo "before card${c} $(date -u +%FT%TZ) $(gpu_energy "${c}")"; done > "${OUT}/${name}.gpu-energy"
+    for n in 1:8 4:16 16:32; do
+        "${ROOT}/bench/energy.sh" --json "${OUT}/${name}.n${n%%:*}-energy.json" -- \
+            python3 "${ROOT}/bench/llm_load.py" --base-url "${url}" --model "${MODEL_ID:-m}" --requests "${n##*:}" \
+            --concurrency "${n%%:*}" --warmup 3 --max-tokens 256 --temperature 0 --ignore-eos \
+            --unique-prompts --timeout 900 --label "${name}" "${ex[@]}" --out "${OUT}/${name}.n${n%%:*}.json" \
+            >> "${OUT}/arms.log" 2>&1
+    done
+    python3 "${ROOT}/bench/llm_load.py" --base-url "${url}" --model "${MODEL_ID:-m}" --requests 4 --concurrency 1 \
+        --warmup 0 --max-tokens 16 --temperature 0 --unique-prompts --timeout 900 --label "${name}" \
+        --prompt "$(cat "${ROOT}/bench/h54gpu/ttft_prompt.txt")" "${ex[@]}" --out "${OUT}/${name}.ttft.json" \
+        >> "${OUT}/arms.log" 2>&1
+    local nt=()
+    [ -z "${extra}" ] || nt=(--no-think)
+    python3 "${ROOT}/bench/h54gpu/gsm8k.py" run --base-url "${url}" --model "${MODEL_ID:-m}" \
+        --items "${HOME}/k3dgpu-gemma/data/gsm8k-test.jsonl" --first 0 --last 49 "${nt[@]}" \
+        --out "${OUT}/${name}.gsm8k.json" >> "${OUT}/arms.log" 2>&1
+    for c in ${cards//,/ }; do echo "after card${c} $(date -u +%FT%TZ) $(gpu_energy "${c}")"; done >> "${OUT}/${name}.gpu-energy"
+}
+
+# disk_ok GB: true when `/` stays at or below 96% used after GB more is written (amendment G1).
+disk_ok() {
+    df -P -B1 / | awk -v need="$1" 'NR==2 {exit !((($3 + need * 1e9) / ($3 + $4)) <= 0.96)}'
 }
