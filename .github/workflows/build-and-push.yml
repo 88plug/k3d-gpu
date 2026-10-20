@@ -144,6 +144,27 @@ jobs:
           [ -n "$latest" ] || { echo "::error::no CUDA test-image tag resolved"; exit 1; }
           echo "latest=$latest" >> "$GITHUB_OUTPUT"
 
+      # ─── 4. NVIDIA container toolkit apt packages (the Dockerfile's pins) ─
+      - name: Get latest NVIDIA container toolkit version
+        id: nvctk
+        run: |
+          idx=$(curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 \
+            https://nvidia.github.io/libnvidia-container/stable/deb/amd64/Packages)
+          # newest X.Y.Z-N (no ~rc) of a package in the index
+          newest() {
+            printf '%s\n' "$idx" | awk -v p="$1" '/^Package: /{n=$2} /^Version: /{if (n == p) print $2}' \
+              | grep -E '^[0-9]+\.[0-9]+\.[0-9]+-[0-9]+$' | sort -V | tail -n1
+          }
+          ctk=$(newest nvidia-container-toolkit)
+          rt=$(newest nvidia-container-runtime)
+          [ -n "$ctk" ] && [ -n "$rt" ] || { echo "::error::no NVIDIA container toolkit version resolved"; exit 1; }
+          # The Dockerfile installs these four at one version.
+          for p in nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1; do
+            printf '%s\n' "$idx" | awk -v p="$p" -v v="$ctk" '/^Package: /{n=$2} /^Version: /{if (n == p && $2 == v) f=1} END{exit !f}' \
+              || { echo "::error::$p $ctk not in NVIDIA's apt repo yet"; exit 1; }
+          done
+          { echo "ctk=$ctk"; echo "runtime=$rt"; } >> "$GITHUB_OUTPUT"
+
       - name: Read current pinned versions
         id: current
         run: |
@@ -157,6 +178,8 @@ jobs:
             echo "intel=$(grep -oE 'intel-gpu-plugin:[0-9]+\.[0-9]+\.[0-9]+' share/intel-gpu-plugin.yml | cut -d: -f2)"
             echo "gaudi=$(grep -oE 'gaudi-device-plugin:[0-9]+\.[0-9]+\.[0-9]+-[0-9]+' share/gaudi-device-plugin.yml | cut -d: -f2)"
             echo "testcuda=$ti"
+            echo "nvctk=$(grep '^ARG NVIDIA_CTK_VERSION' Dockerfile | cut -d= -f2 | tr -d '"')"
+            echo "nvrt=$(grep '^ARG NVIDIA_CONTAINER_RUNTIME_VERSION' Dockerfile | cut -d= -f2 | tr -d '"')"
           } >> "$GITHUB_OUTPUT"
 
       - name: Determine if a release is needed
@@ -170,7 +193,9 @@ jobs:
              [ "${{ steps.nvidia_plugin.outputs.latest }}" != "${{ steps.current.outputs.plugin }}" ] || \
              [ "${{ steps.intel_plugin.outputs.latest }}" != "${{ steps.current.outputs.intel }}" ] || \
              [ "${{ steps.gaudi_plugin.outputs.latest }}" != "${{ steps.current.outputs.gaudi }}" ] || \
-             [ "${{ steps.cuda.outputs.latest }}" != "${{ steps.current.outputs.testcuda }}" ]; then
+             [ "${{ steps.cuda.outputs.latest }}" != "${{ steps.current.outputs.testcuda }}" ] || \
+             [ "${{ steps.nvctk.outputs.ctk }}" != "${{ steps.current.outputs.nvctk }}" ] || \
+             [ "${{ steps.nvctk.outputs.runtime }}" != "${{ steps.current.outputs.nvrt }}" ]; then
             changed=true
           fi
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
@@ -185,6 +210,8 @@ jobs:
         run: |
           sed -i "s|^ARG K3S_TAG=.*|ARG K3S_TAG=\"${{ steps.k3s.outputs.latest }}\"|" Dockerfile
           sed -i "s|^ARG K3S_DIGEST=.*|ARG K3S_DIGEST=\"${{ steps.k3s.outputs.digest }}\"|" Dockerfile
+          sed -i "s|^ARG NVIDIA_CTK_VERSION=.*|ARG NVIDIA_CTK_VERSION=\"${{ steps.nvctk.outputs.ctk }}\"|" Dockerfile
+          sed -i "s|^ARG NVIDIA_CONTAINER_RUNTIME_VERSION=.*|ARG NVIDIA_CONTAINER_RUNTIME_VERSION=\"${{ steps.nvctk.outputs.runtime }}\"|" Dockerfile
           sed -i "s|k8s-device-plugin:v[0-9]*\.[0-9]*\.[0-9]*|k8s-device-plugin:${{ steps.nvidia_plugin.outputs.latest }}|" share/nvidia-device-plugin.yml
           sed -i "s|intel-gpu-plugin:[0-9]*\.[0-9]*\.[0-9]*|intel-gpu-plugin:${{ steps.intel_plugin.outputs.latest }}|" share/intel-gpu-plugin.yml
           # The WSL variant runs the same plugin plus its Level Zero sidecar from that release.
