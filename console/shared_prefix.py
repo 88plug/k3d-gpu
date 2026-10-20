@@ -26,7 +26,9 @@ and a plan. The plan never turns prefix caching on: OVMS 2026.4.1 `--pull`
 already enables it by default. It says whether one shared engine serves every
 group, and gives the KV memory that the shared prefix would take per added
 agent if it were not shared. That memory number is a prediction; whether the
-dynamic pool turns sharing into resident memory saved is H25 (M), PENDING.
+dynamic pool turns sharing into resident memory saved is unmeasured: H25 is
+SUPPORTED on time to first token (T) only, and its memory part (M) is
+INCONCLUSIVE.
 
 Manifest format (JSON, one agent per file, or a list of agents):
   {"name": "planner", "system": "...", "tools": [{"type": "function", ...}]}

@@ -195,7 +195,7 @@ Usage: k3d-gpu <command>
   plan --predict SKU|auto|list [--json] [--mts N] [--channels N]
             Roofline prediction (decode/prefill tok/s, derived agents per box) for
             an Intel SKU from its spec fields, fitted on one measured host row;
-            labelled calibrated or extrapolated. A model output (H24 PENDING)
+            labelled calibrated or extrapolated. A model output (H24 INCONCLUSIVE)
   audit [--json|--observe] [--observed FILE] [--plan FILE] [--lock FILE]
             Posture checks of the running cluster: fails on an unauthenticated
             listener off loopback, an image not pinned in images.lock, a runtime
@@ -258,7 +258,7 @@ Usage: k3d-gpu <command>
             results. Repo checkout only. Full options: bench agent --help;
             guide: docs/agent-benchmarks.md
   phase-steer [--json] [--prefill CPUS --decode CPUS]
-            Experimental, read-only (H20 PENDING): per-phase CPU split for one
+            Experimental, read-only (H20 INCONCLUSIVE): per-phase CPU split for one
             llama.cpp server per agent, prefill on the P-cores and decode on the
             E-cores (LP E-cores left out), as -Cb/-C masks; off on one core type
   version   Show version
@@ -2947,7 +2947,7 @@ perf_uncore() {
         [[ "${imin}" =~ ^[0-9]+$ && "${mn}" =~ ^[0-9]+$ ]] || imin="" mn=""
         if [ "${n}" -eq 0 ]; then
             perf_section "Uncore frequency (intel_uncore_frequency)" \
-                "max_freq_khz at initial_max_freq_khz and min_freq_khz at initial_min_freq_khz: the hardware (UFS, or ELC on TPMI parts) picks the uncore clock inside the full range. A floor pinned high for decode is under test (EXPERIMENTS.md H29, PENDING), so it is not suggested" \
+                "max_freq_khz at initial_max_freq_khz and min_freq_khz at initial_min_freq_khz: the hardware (UFS, or ELC on TPMI parts) picks the uncore clock inside the full range. A floor pinned high for decode is unproven (EXPERIMENTS.md H29, INCONCLUSIVE), so it is not suggested" \
                 "https://docs.kernel.org/admin-guide/pm/intel_uncore_frequency_scaling.html"
         fi
         n=$((n + 1))
@@ -5402,7 +5402,7 @@ cmd_sandbox() {
 #                weights into per-process device buffers, so each replica pays for
 #                its own device copy; the template requests no device.
 #   pinning      a tag can resolve to a new digest on another node or a re-pull.
-# The measured effect is EXPERIMENTS.md H28 (PENDING until the probe runs).
+# The measured effect is EXPERIMENTS.md H28 (SUPPORTED).
 
 # Snapshotter of the running cluster's server node, or nothing when there is none.
 ms_snapshotter() {
@@ -8514,7 +8514,7 @@ cmd_facts() {
 }
 
 # plan --predict SKU|auto|list [--json] [--mts N] [--channels N]: roofline
-# prediction from Intel spec fields (console/sku_model.py, H24 PENDING).
+# prediction from Intel spec fields (console/sku_model.py, H24 INCONCLUSIVE).
 plan_predict() {
     local dir sku=$1 args=()
     shift
@@ -9118,7 +9118,7 @@ phase_steer_plan() {
 # ggml strict mode pins thread j to the j-th set bit in every process, so N
 # agents given one strict mask would all stack on its first CPUs (H20 A1).
 # Nothing is applied: H20 in
-# EXPERIMENTS.md is PENDING, and the split becomes a default only if it holds.
+# EXPERIMENTS.md is INCONCLUSIVE, and the split becomes a default only if it holds.
 cmd_phase_steer() {
     local json=0 pre="" dlist="" state p d lp reason pm="" dm=""
     while [ $# -gt 0 ]; do
@@ -9146,7 +9146,7 @@ on = state != "off"
 def opt(v):
     return None if v in ("-", "") else v
 print(json.dumps({
-    "schema": "phase-steer/v1", "state": state, "reason": reason, "ledger": "H20 PENDING",
+    "schema": "phase-steer/v1", "state": state, "reason": reason, "ledger": "H20 INCONCLUSIVE",
     "prefill_cpus": opt(p), "decode_cpus": opt(d), "lowpower_cpus": opt(lp),
     "prefill_mask": opt(pm), "decode_mask": opt(dm),
     "llama_server_args": ["--cpu-mask-batch", pm, "--cpu-mask", dm] if on else [],
@@ -9154,7 +9154,7 @@ print(json.dumps({
 PY
         return 0
     fi
-    info "phase-steer (experimental, H20 PENDING: no command applies it)"
+    info "phase-steer (experimental, H20 INCONCLUSIVE: no command applies it)"
     if [ "${state}" = off ]; then
         echo "  off: ${reason}"
         return 0

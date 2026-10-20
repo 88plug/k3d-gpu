@@ -4,7 +4,7 @@
   info: no cpufreq policy exposed (VM or cpufreq disabled) — nothing to tune here
         from: /sys/devices/system/cpu/cpu0/cpufreq/
 ==> Uncore frequency (intel_uncore_frequency)
-  good: max_freq_khz at initial_max_freq_khz and min_freq_khz at initial_min_freq_khz: the hardware (UFS, or ELC on TPMI parts) picks the uncore clock inside the full range. A floor pinned high for decode is under test (EXPERIMENTS.md H29, PENDING), so it is not suggested
+  good: max_freq_khz at initial_max_freq_khz and min_freq_khz at initial_min_freq_khz: the hardware (UFS, or ELC on TPMI parts) picks the uncore clock inside the full range. A floor pinned high for decode is unproven (EXPERIMENTS.md H29, INCONCLUSIVE), so it is not suggested
   src:  https://docs.kernel.org/admin-guide/pm/intel_uncore_frequency_scaling.html
   warn: uncore00: max_freq_khz 1800000 is below the hardware ceiling 2200000
         from:   /sys/devices/system/cpu/intel_uncore_frequency/uncore00/max_freq_khz

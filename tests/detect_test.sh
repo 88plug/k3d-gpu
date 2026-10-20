@@ -1996,7 +1996,7 @@ r=$(newroot perf-uncore-floor)
 uncore "${r}" package_00_die_00 800000 4700000 4700000 4700000
 perf_says "perf: a raised uncore floor is information with its revert" "${r}" 'info: package_00_die_00: floor raised to 4700000 kHz \(hardware floor 800000\).*echo 800000 \| sudo tee'
 perf_says "perf: a raised uncore floor is not a suggestion" "${r}" 'warn: package_00_die_00' negate
-perf_says "perf: the uncore section never suggests a pin while H29 is pending" "${r}" 'under test \(EXPERIMENTS\.md H29, PENDING\)'
+perf_says "perf: the uncore section never suggests a pin while H29 is unproven" "${r}" 'unproven \(EXPERIMENTS\.md H29, INCONCLUSIVE\)'
 r=$(newroot perf-uncore-tpmi)
 uncore "${r}" uncore00 800000 2200000 800000 2200000
 uncore "${r}" uncore01 800000 2500000 800000 2500000

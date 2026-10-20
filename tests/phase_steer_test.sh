@@ -66,7 +66,7 @@ check "llama args" "--cpu-mask-batch 0xffff --cpu-mask 0xffff0000" \
 check "no strict placement (agents would stack)" "" "$(field llama_server_args <<< "${json}" | grep -o strict)"
 check "off has no args" "" "$(run xeon-gnr --json | field llama_server_args)"
 check "schema" "phase-steer/v1" "$(field schema <<< "${json}")"
-check "ledger status" "H20 PENDING" "$(field ledger <<< "${json}")"
+check "ledger status" "H20 INCONCLUSIVE" "$(field ledger <<< "${json}")"
 
 # Text output.
 out=$(run raptorlake-nvidia)
