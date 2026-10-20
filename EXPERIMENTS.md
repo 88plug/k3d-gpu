@@ -1715,7 +1715,7 @@ entries that ask for another, Xeon/AMX, XMX, non-throttling or quiet host, and t
    upstream checksum; node image `cryptoandcoffee/k3d-gpu:0.1.61` (the launcher's default,
    k3s v1.37.1); OVMS `openvino/model_server@sha256:a928903f...76fc58` (2026.4.1, as every
    original row); `load.py`'s stress-ng pin. Models are downloaded on the host at the original
-   rows' commits, never copied: `OpenVINO/Qwen3-4B-int4-ov` @ `b467368d` (`openvino_model.bin`
+   rows' commits (`bench/xhost/fetch_models.py`), never copied: `OpenVINO/Qwen3-4B-int4-ov` @ `b467368d` (`openvino_model.bin`
    sha256 `074214fa29ab1b47...`, the H6/H25 file), `OpenVINO/Qwen3-0.6B-int4-ov` @ `f864c610`
    (sha256 `28613e994a6e1aaf...`, the H47 file), and for H27x `-int8-ov` @ `fd9c3cc8`, `-fp16-ov`
    @ `00298f1c` (the commits of H27's `model-shas.txt`; `probe.sh --prepare` now downloads
@@ -1761,8 +1761,11 @@ entries that ask for another, Xeon/AMX, XMX, non-throttling or quiet host, and t
 **Setup smokes (not scored).** Smoke 1 (21:54-22:05Z, `smoke.sh`, no C1): `up` 31 s with
 `K3D_GPU_VENDORS=none`, node pinned to 0-23,48-71, the agent manifest asked 48 CPUs with the
 CPU Fast Draft, and the pod stayed Pending for 600 s (no `PodScheduled`), the disk-pressure
-failure C1 fixes. Smoke 2 (with C1, and the H28 plain-create path) is reported in the first run
-section. No inference request was sent in either.
+failure C1 fixes. Smoke 2 (22:14-22:20Z, with C1): `up` 48 s, the agent pod Ready at 89 s,
+`Cpus_allowed_list` 0-23,48-71, graph `device: "CPU"` with the Fast Draft
+(`draft_device: "CPU"`), no node taint; then the H28 path (plain `k3d cluster create` with
+C1 as `--k3s-arg ...@server:*`) had no taint after 90 s. No inference request was sent in either.
+Smoke records: `bench/xhost/results/2026-10-20/smoke{1,2}/`.
 
 ### H50-H52 pre-registration: the Xeon 6741P (2026-10-20)
 
