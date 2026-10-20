@@ -158,7 +158,7 @@ embeddings) goes to the cores or engines the LLM does not need.
 |---|---|---|---|---|
 | **This host** (RPL-S + 2x Ada) | RTX 4000 SFF (x16, 20 GB): main model replica. | RTX 2000E (x4, 16 GB): draft or small model and embeddings, all resident (no KV streaming over the x4 link, no P2P). Fallback: one `ECORE_ONLY` stream of 4 threads per E-cluster. | E-cores 16-31 (cluster-aligned); HT siblings 1,3,…,15 for light I/O. Favored CPUs 8 and 10 for the serving frontend / GPU feeder thread. UHD 770: media decode and small INT8 vision models. | Dual Ada carries decode. CPU decode is capped by 57.6 GB/s (COMPUTED) DRAM. The box is thermally and current-limited, so keep CPU load off P-cores that feed the GPUs. |
 | **ADL/RPL desktop, no dGPU** | P-cores, physical only, pinned (OpenVINO `PCORE_ONLY`, HT off) with INT4 weights. | E-cluster streams (`ECORE_ONLY`, 4 threads each). | E-cores; iGPU for media and side models. | No XMX on Xe-LP; iGPU decode lags the CPU on these parts (see [C12](benchmark-landscape.md)). |
-| **ADL/RPL mobile (Iris Xe)** | P-cores or iGPU (INT4, DP4a path); pick by H2 measurement. | iGPU INT8 or E-cores. | E-cores. | Iris Xe has more EUs; still no XMX. The CPU and iGPU share one DRAM bus. |
+| **ADL/RPL mobile (Iris Xe)** | P-cores (INT4). H2 found the no-XMX UHD 770 slower than the P-cores [ledger:H2]; Iris Xe is unmeasured. | iGPU INT8 or E-cores. | E-cores. | Iris Xe has more EUs; still no XMX. The CPU and iGPU share one DRAM bus. |
 | **N-series / Twin Lake** | Remote LLM. Local only ≤1.5B INT4 on the CPU. | CPU (AVX-VNNI). | **Primary role: sandbox host.** 10-40 sandboxed tool agents (estimate, UNVERIFIED). | Single channel, 38.4 GB/s (COMPUTED); no NPU; E-cores only. |
 | **Meteor Lake** | iGPU (Xe-LPG, no XMX: non-systolic path) for ≤3B. | NPU (one stream), or CPU. | E-cores; **LP E-cores** for idle supervisors and heartbeats. | NPU is sequential under OVMS; iGPU lacks XMX. |
 | **Arrow Lake-H** | iGPU with XMX (OVMS GPU, continuous batching). | NPU 3 (one stream) or E-cores. | E-cores; LP E-cores (`cpu_lowpower`) for idle loops. | XMX + 89.6 GB/s (COMPUTED). No HT, so sandboxes get whole cores. |
@@ -174,6 +174,16 @@ embeddings) goes to the cores or engines the LLM does not need.
 ## 3. k3d-gpu gaps: code changes and fixtures
 
 Ordered by value. Line numbers refer to `scripts/k3d-gpu` on `main` at `1e73f47`.
+
+Status on `main` at `a32a970` (2026-10-20), read from `scripts/k3d-gpu` and the fixtures:
+G1-G8 and G10-G13 shipped (platform names, `npu.gen`, `lowpower`, `ecluster`,
+`pcore-physical`, `latency` on favored CPUs, NFD ISA labels, `gpu.intel.com/xmx`, media
+labels and the shared iGPU, NUMA-replica balloons, the Xeon fixtures, the SDSi note).
+G9 shipped as the XMX gate in `agent up`. G14 is partial: `share/telemetry/` ships
+Prometheus, node-exporter and the Intel GPU exporter, not the IMC/PSI admission signal.
+G16 shipped differently, as `model-share` (one page-cache copy through an image volume,
+[ledger:H28]). G15 and G17 are open: no `ov-config` annotation, and no Kata RuntimeClass
+(`doctor --perf` only reports `/dev/kvm`).
 
 | # | Gap | Concrete change | Fixture needed |
 |---|---|---|---|
