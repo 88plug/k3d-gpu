@@ -245,16 +245,17 @@ Open upstream work that changes this integration:
   ([gpu_plugin.go](https://github.com/intel/intel-device-plugins-for-kubernetes/blob/main/cmd/gpu_plugin/gpu_plugin.go)),
   and `k3d-gpu detect` already reports the one the bound driver gives.
 
-### Open EAT pull requests (checked 2026-10-18)
+### Open EAT pull requests (checked 2026-10-19)
 
-Read with `gh` and the GitHub tarball API only. EAT `main` is still `0ecf67a`, and
-`release-1.0.3-hotfix` still points at `0d3438d`.
+Read with `gh`, `git ls-remote` and a read-only clone only. EAT `main` is still `0ecf67a`,
+`release-1.0.3-hotfix` still points at `0d3438d`, and no newer tag exists.
 
 | PR | Head | What it changes | Impact on k3d-gpu | Action |
 |---|---|---|---|---|
 | [#5](https://github.com/intel/enterprise-agent-toolkit/pull/5) Bitnami to SolDevelo images | `eba339a`, conflicts with `main` | `bitnami/kubectl:latest` in the GenAI Gateway restore job, and `bitnamilegacy/os-shell` in a Keycloak playbook | None today. Neither line runs on our path: `restoreJob.enabled` is `false`, and the pinned tag has no Keycloak playbook. Every Bitnami image our path renders pulled on 2026-10-18 (`docker manifest inspect`, amd64 and arm64). See the note below | None. Recheck if a `bitnamilegacy` pull fails |
 | [#19](https://github.com/intel/enterprise-agent-toolkit/pull/19) unified convention | `9d842f5`, unchanged; draft, CI green, no review | Deletes `deploy-agentic-stack.sh`, `core/lib`, `core/playbooks` and `core/roles`; installs through EAS `es_auto_installer.sh` | Ends the path `eat-up.sh` uses, once a tag ships it. The drafted EAT docs patch in [upstream-eat.md](intel/upstream-eat.md) still passes `git apply --check` on `9d842f5` | Keep `eat-up.sh` on the tag. Move to the EAS BYO path after a tag that includes #19 |
 | [#20](https://github.com/intel/enterprise-agent-toolkit/pull/20) OpenClaw operator | `200ae58`, based on #19's branch | Optional `openclaw_operator` role (`claw_enabled: false`): operator chart and image `0.38.3` pinned by digest, 3 CRDs (`openclaw.rocks/v1alpha1`) | Not reachable from the pinned tag. The operator itself fits one k3d-gpu node: CPU only (100m / 128Mi request), no GPU, no webhook, `kubeVersion >=1.28`, and both images publish amd64. Its example instance is the gap (see below) | None until #19 and #20 merge into a tag |
+| [#21](https://github.com/intel/enterprise-agent-toolkit/pull/21) Release 1.1.0 | `c86c42b`, opened 2026-10-19, based on `main`; 195 files, CI green, no review | Keeps the old layout (`deploy-agentic-stack.sh`, `core/lib`); adds guardrails, Kata, vLLM Semantic Router, rack-scale and XPU paths; vLLM CPU image `v0.24.0` to `v0.28.0`; NRI balloons role reworked | None on the pinned tag. On a tag cut from #21: `core/lib/brownfield/` and `deploy-genai-gateway.yml` are unchanged, every function `brownfield.sh` calls still exists, and `gateway-charts.py` runs clean on its charts. Two changes would bite, both read from source, not run (see below) | Before moving `eat-up.sh` to a 1.1.0 tag: turn the guardrail off and re-pin the vLLM image |
 
 Bitnami images on the pinned path. `deploy-genai-gateway.yml` runs `helm dependency update`
 on `genai-gateway`, whose `Chart.yaml` asks for `postgresql >=13.3.0` and `redis >=18.0.0`.
@@ -279,6 +280,35 @@ and `bitnamilegacy/redis:8.0.3-debian-12-r2`, the tags that share `latest`'s dig
 pins are in `gateway-values.yaml` and `gateway-trace-values.yaml`, and listed in `images.lock`.
 `scripts/images-lock pins` fails CI on any values `repository:` there without a digest.
 Rendered with Helm v3.14.0, the pinned charts differ from EAT's only in the 11 `image:` lines.
+
+What #21 (`c86c42b`) changes for `eat-up.sh`, compared with `release-1.0.3-hotfix`.
+Read from a read-only clone; nothing here has run against a 1.1.0 stack.
+
+- Unchanged: `core/lib/brownfield/` (so the `5 / 1 / yes` prompt answers),
+  `core/playbooks/deploy-genai-gateway.yml` (so the `helm_charts_base_genai{,_trace}`
+  extra vars), and `genai-gateway/Chart.yaml`. `_source_core_libs`, `brownfield_deployment`,
+  `manage_kubeconfig`, `read_config_file`, `prompt_for_input`, `setup_initial_env`,
+  `setup_bastion` and `deploy_inference_llm_models_playbook` are all still defined.
+  `cpu-qwen3-1-7b` is still in `deploy-inference-models.yml`, and `Qwen/Qwen3-1.7B` is
+  still a `modelConfigs` key in `xeon-values.yaml`.
+- `gateway-charts.py` runs clean on #21's `core/helm-charts`: every pinned repository and
+  tag still matches, and the dependencies resolve to postgresql 18.12.4 and redis 28.3.1.
+  The gateway values add `customRouter.enabled: true` and a second LiteLLM callback
+  (`custom_hybrid_router.proxy_handler_instance`), loaded from a ConfigMap, not a new image.
+- Guardrail on by default. `deploy-agentic-stack.sh` sets `DEPLOY_GUARDRAILS="${DEPLOY_GUARDRAILS:-on}"`
+  at top level (line 195), which runs when `brownfield.sh` sources it. The `deploy_guardrails`
+  key in `agentic-config.cfg` is read only inside `main()` (line 1138), which a sourced run
+  skips. `fresh-install.sh` (line 419) then deploys the `Qwen/Qwen3Guard-Gen-0.6B` guard.
+  `brownfield.sh` would have to export `DEPLOY_GUARDRAILS=off` to keep today's stack.
+- vLLM image. #21's `xeon-values.yaml` (line 34) moves `vllm/vllm-openai-cpu` from
+  `v0.24.0` to `v0.28.0`. `vllm-values.yaml` merges over it with no tag check, so it would
+  keep `v0.24.0` by digest under 1.1.0's model configs. Re-pin it with the bump.
+- New `agentic-config.cfg` keys (`deploy_kata_containers`, `kata_runtime`, `deploy_ceph`,
+  `rack_scale_mode`, `deploy_guardrails`, `deploy_vllm_sr`, `deploy_openshell`) are all
+  opt-in except `deploy_guardrails`. The NRI balloons role is reworked (`install_nri.yaml`
+  removed); `eat-up.sh` keeps `deploy_nri_balloon_policy=off`, so k3d-gpu's policy stays the
+  only one.
+- #21 does not contain #19: it keeps `deploy-agentic-stack.sh`, which #19 deletes.
 
 Gaps for the #20 example instance (`docs/examples/openclaw-instance.yaml`) on k3d-gpu:
 

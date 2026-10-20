@@ -53,9 +53,9 @@ git am --signoff integrations/eat/upstream/patches/0002-eas-istio-global-platfor
 
 | Check | Result |
 |---|---|
-| `git apply --check`, each patch on a fresh EAS copy, then the whole series in order | all pass on EAS `main` `7c02ca2` (2026-10-17; [checks/apply-check.sh](checks/apply-check.sh) does the same on a clone) |
-| Same, against the head of intel/enterprise-ai-solutions#40 (`bbb3a53`) | 0002-0005 apply; 0006 does not, because #40 predates EAS #42, which moved the EnvoyProxy task from `install.yaml` to `controller.yaml` |
-| `ansible-lint` 26.8.0 (the version EAS CI pins in `.github/workflows/ansible-lint.yml`) with EAS CI's exact flags (`--skip-list name,var-naming,fqcn,yaml,jinja,key-order roles/ playbooks/`) on the patched tree | `Passed: 0 failure(s), 0 warning(s)`, profile `production`, same as unpatched `main` (on `7743bac`; not re-run on `7c02ca2`) |
+| `git apply --check`, each patch on a fresh EAS copy, then the whole series in order | all pass on EAS `main` `e8f3ebc` (2026-10-19, [checks/apply-check.sh](checks/apply-check.sh) on a clone), after 0005 was regenerated for EAS #49's new `docs/README.md` row |
+| Same, against the head of intel/enterprise-ai-solutions#40 (`bbb3a53`) | 0002-0004 apply. 0005 does not, because its context now has EAS #49's row. 0006 does not, because #40 predates EAS #42, which moved the EnvoyProxy task from `install.yaml` to `controller.yaml` |
+| `ansible-lint` 26.8.0 (the version EAS CI pins in `.github/workflows/ansible-lint.yml`) with EAS CI's exact flags (`--skip-list name,var-naming,fqcn,yaml,jinja,key-order roles/ playbooks/`) on the patched tree | `Passed: 0 failure(s), 0 warning(s)`, profile `production`, same as unpatched `main` (on `e8f3ebc`, 2026-10-19) |
 | `yamllint -d relaxed` on every YAML file the patches touch | no findings apart from line length; EAS CI skips the `yaml` rule |
 | 0002 behaviour, `helm template` of EAS `charts/istio` (base/istiod/cni/ztunnel 1.27.3) | `global.platform=k3d` mounts `/bin` + `/var/lib/rancher/k3s/agent/etc/cni/net.d`; unset keeps `/opt/cni/bin` + `/etc/cni/net.d`; unknown value fails `unknown platform`. The Jinja `values:` expression evaluates to `{}` when empty |
 | 0003 behaviour | `advanced-balloon-values.yaml.j2`, rendered with sample inputs, goes through `helm template` for chart v0.14.0; the `BalloonsPolicy` validates against the v0.14.0 CRD schema; the image resolves to `ghcr.io/containers/nri-plugins/nri-resource-policy-balloons:v0.14.0` |
@@ -79,13 +79,12 @@ integrations/eat/upstream/checks/eas-envoy-reinstall.py <unpatched EAS checkout>
 - **nri-plugins.** Latest release `v0.14.0` (2026-08-21) per the GitHub releases API and the Helm repo index. The chart and app versions are `v0.14.0`.
 - **k3d v5.9.0 flags used in 0005.** `--image`, `--k3s-arg ARG@NODEFILTER`, `-p ...@loadbalancer`, `--wait` and `kubeconfig get`, checked in k3d's docs at tag v5.9.0. `rancher/k3s:v1.34.12-k3s1` exists on Docker Hub, and its minor version matches EAS's pinned kubectl v1.34.3.
 
-## Not verified (needs a live k3d cluster; not run in this wave)
+## Live probes (Gate 2)
 
-None of the patches has run against a real cluster. These are the probes to run, on one throwaway k3d cluster, before sending anything:
+All six ran on 2026-10-20 against EAS `main` `e8f3ebc` with the five patches, on one host, one throwaway k3d cluster at a time. Results and the three 0005 fixes they forced are in [docs/intel/upstream-eat.md, Gate 2](../../../docs/intel/upstream-eat.md#test-plan). In short: stock `rancher/k3s` needs `istio_platform: k3s` (its containerd searches only `/var/lib/rancher/k3s/data/cni`), the k3d-gpu node image needs `k3d` (`/usr/bin`), and 0004, 0006 and the NRI coexistence behave as described above. The probes:
 
-1. **0002, CNI binaries.** Does the stock `rancher/k3s` image's containerd look for CNI binaries in `/bin`, which is what Istio's k3d profile assumes?
+1. **0002, CNI binaries.** Which directory does containerd search for CNI binaries? Istio's k3d profile writes to `/bin`, its k3s profile to `/var/lib/rancher/k3s/data/cni`.
    `docker exec k3d-eas-server-0 sh -c 'grep -n -A3 cni /var/lib/rancher/k3s/agent/etc/containerd/config.toml'`
-   The k3d-gpu node image is Ubuntu with merged `/usr`, so the k3s profile path (`/var/lib/rancher/k3s/data/cni`) may be the right one there. Check both.
 2. **0002, ambient chaining.** After install, does `istio-cni` chain into flannel's conflist?
    `docker exec k3d-eas-server-0 ls /var/lib/rancher/k3s/agent/etc/cni/net.d`
 3. **0006.** Is the envoy DaemonSet scheduled on the k3s server?

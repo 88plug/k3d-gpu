@@ -3,13 +3,14 @@
 > **DRAFT: not submitted; awaiting owner approval.**
 > Nothing here has been filed, opened, forked or pushed to any `intel/*` repository. A maintainer of this repo sends each piece by hand, in the order below, after approving it.
 
-Drafted 2026-10-17 against these heads, re-read with `gh api` on 2026-10-17 and 2026-10-18 (unchanged; #19 is a draft PR):
+Drafted 2026-10-17. Heads re-read on 2026-10-19 with `gh api` and `git ls-remote`: EAT is unchanged and #19 is still a draft PR; EAS `main` moved from `7c02ca2` to `e8f3ebc`.
 
 | Repo | Ref | SHA |
 |---|---|---|
 | intel/enterprise-agent-toolkit (EAT) | PR #19 head, "Migration Agentic Toolkit into Unified Convention" | `9d842f5c3b88ad2ec6ea5f7d66a003718bdac828` |
 | intel/enterprise-agent-toolkit (EAT) | `main` | `0ecf67a8331e8b502ef41e08bf6d2881416178c5` |
-| intel/enterprise-ai-solutions (EAS) | `main` | `7c02ca206cccea6119f380312708eb8b97d146f5` |
+| intel/enterprise-ai-solutions (EAS) | `main` | `e8f3ebc927a7659081f6604d157591bddfca40a9` |
+| intel/enterprise-inference | `main`, cloned by `init inference` in Gate 2 | `aaca1e505a8f7947cd455d2dea5f433213a95cad` |
 
 ## Where the change belongs
 
@@ -36,7 +37,8 @@ Upstream will not take a dependency on this repo, and should not. The EAS page s
 Which mode to use with EAS:
 
 - **Default k3d-gpu cluster** (k3d-gpu owns the balloons policy): set `kubernetes_cpu_policy: best-effort` in EAS, so EAS does not install a second NRI policy.
-  - Not verified end to end with EAS; it is probe 6 in the test plan.
+  - Gate 2 probe 6: a full `install inference` on a default k3d-gpu cluster left exactly one `nri-resource-policy-balloons` DaemonSet, k3d-gpu's own, and listed `nri_cpu_balloons` as skipped. One run on one host.
+  - The k3d-gpu node image needs `istio_platform: k3d`, not `k3s` (Gate 2 probe 1).
 - **`K3D_GPU_BALLOONS=external` cluster**: EAS's own `nri-balloons` policy can own the node.
   - H14 proved this mode with the nri-plugins chart v0.14.0 and EAT's values [ledger:H14]. It did not exercise EAS's `nri_cpu_balloons` role.
 
@@ -47,7 +49,7 @@ EAT (after #19 merges; one PR, docs only)
 ├── README.md            +1 row in "Choose how to run it"
 └── docs/README.md       +1 row in the "Deploy" table
 
-EAS (main 7c02ca2; one concern per PR, in this order)
+EAS (main e8f3ebc; one concern per PR, in this order)
 ├── roles/envoy_gateway/tasks/controller.yaml       0006  control-plane affinity, operator Exists
 ├── configs/defaults/global_config.yaml             0002  istio_platform documented
 ├── roles/istio/defaults/main.yaml                  0002  istio_platform: ""
@@ -63,21 +65,21 @@ EAS (main 7c02ca2; one concern per PR, in this order)
 └── docs/README.md                                  0005  +1 row under Deploy
 ```
 
-The EAS patch files, in full, are in this repo. Each was checked with `git apply --check` on a copy of the tree read from the GitHub tarball API (no clone, no fork), one patch at a time, then the five applied in order:
+The EAS patch files, in full, are in this repo. Each was checked with `git apply --check` on a read-only clone (no fork), one patch at a time, then the five applied in order:
 
-| Patch | File | EAS `main` 7c02ca2 | EAS #40 head bbb3a53 |
+| Patch | File | EAS `main` e8f3ebc | EAS #40 head bbb3a53 |
 |---|---|---|---|
 | 0006 | [0006-eas-envoy-control-plane-affinity.patch](../../integrations/eat/upstream/patches/0006-eas-envoy-control-plane-affinity.patch) | applies. Regenerated 2026-10-17 against `roles/envoy_gateway/tasks/controller.yaml` (blob `cf1824b`), where EAS #42 (88fd2ae) moved the EnvoyProxy task; the previous `install.yaml` patch fails there | does not apply: #40 predates #42 and still has the task in `install.yaml`; it has to rebase onto `main` |
 | 0002 | [0002-eas-istio-global-platform.patch](../../integrations/eat/upstream/patches/0002-eas-istio-global-platform.patch) | applies | applies |
 | 0004 | [0004-eas-byo-node-topology-labels.patch](../../integrations/eat/upstream/patches/0004-eas-byo-node-topology-labels.patch) | applies | applies |
 | 0003 | [0003-eas-pin-nri-balloons-chart.patch](../../integrations/eat/upstream/patches/0003-eas-pin-nri-balloons-chart.patch) | applies | applies |
-| 0005 | [0005-eas-docs-single-node-k3d.patch](../../integrations/eat/upstream/patches/0005-eas-docs-single-node-k3d.patch) | applies; rewrite to reviewer norms first (see below) | applies |
+| 0005 | [0005-eas-docs-single-node-k3d.patch](../../integrations/eat/upstream/patches/0005-eas-docs-single-node-k3d.patch) | applies after its 2026-10-19 regeneration (Gate 1) and the two Gate 2 fixes; rewrite to reviewer norms first (see below) | does not apply: its `docs/README.md` context now includes EAS #49's OpenShift row, which #40 predates |
 | series 0002-0006 | all five in order | applies | n/a |
 | EAT docs patch | the diff below | n/a (EAS only) | n/a |
 
 The EAT docs patch below applies on EAT PR #19 head `9d842f5` and does not apply on EAT `main` `0ecf67a`, as intended: it edits the docs tables #19 adds.
 
-On the regenerated 0006, `checks/eas-envoy-reinstall.py` (now reading `controller.yaml`) passes: fresh install and re-install over the unpatched object both leave the affinity and no `nodeSelector`. Unpatched `main` fails both, as expected. `yamllint -d relaxed` on the patched `controller.yaml` reports nothing. `ansible-lint` was not re-run on this tree.
+Gate 1 below has the static results on `e8f3ebc`, `ansible-lint` included.
 
 ## EAT patch (full content)
 
@@ -170,7 +172,19 @@ EAT_WORK=$PWD/eat-work integrations/eat/eat-check.sh   # expect: ==> EAT check p
 scripts/k3d-gpu down
 ```
 
-**Gate 1. Static checks.** `git apply --check` (each patch, then the series) and the envoy re-install check pass on EAS `main` 7c02ca2 with the regenerated 0006 (table above). Re-run `ansible-lint` and the topology check before sending.
+**Gate 1. Static checks.** **Status: passed on EAS `main` `e8f3ebc` (2026-10-19), after 0005 was regenerated.** Run from a read-only clone; every command below, with the tools in a fresh venv (ansible-core 2.21.5, ansible-lint 26.8.0, shellcheck 0.11.0):
+
+| Check | EAS `main` `e8f3ebc` |
+|---|---|
+| `apply-check.sh`, each patch alone | 0002, 0003, 0004, 0006 apply. 0005 as drafted failed on `docs/README.md`: EAS #49 (`e8f3ebc`) added a "Deploy on OpenShift" row under the hunk's context. 0005 was regenerated: same k3d row, still right after "Multi-Node & BYO Cluster", context now includes the OpenShift row. Then all five apply, and still do after the Gate 2 fixes to `docs/deploy/k3d.md` |
+| `apply-check.sh`, series with `git am` | applies |
+| `eas-byo-topology.sh`, tree with 0004 | 11 of 11 cases ok. Unpatched `main` fails "BYO 3 nodes" and "BYO 3 nodes, one hand label", as expected |
+| `eas-envoy-reinstall.py`, unpatched to 0006 | fresh install and re-install both ok. Unpatched to unpatched fails both, as expected |
+| `ansible-lint` with EAS CI's flags | `Passed: 0 failure(s), 0 warning(s)`, profile `production`, on unpatched `main` and on the tree with all five patches |
+| `shellcheck --severity=error es_auto_installer.sh` | clean, unpatched and patched |
+| `yamllint -d relaxed`, every YAML file the patches touch | nothing apart from line length |
+
+The only EAS commit since `7c02ca2` is #49, "detect the cluster platform (OpenShift or Kubernetes)". It adds a preflight that probes a BYO cluster once (`playbooks/includes/preflight_platform.yaml`). A k3s cluster serves no `config.openshift.io/v1`, so it reads as `kubernetes`; no patch touches that file.
 
 ```bash
 integrations/eat/upstream/checks/apply-check.sh <EAS clone at main>        # every patch alone, then the series
@@ -181,14 +195,31 @@ ansible-lint --skip-list name,var-naming,fqcn,yaml,jinja,key-order roles/ playbo
 shellcheck --severity=error es_auto_installer.sh
 ```
 
-**Gate 2. Live probes on one throwaway k3d cluster.** None has run yet. They come from the "Not verified" list in `integrations/eat/upstream/README.md`.
+**Gate 2. Live probes on one throwaway k3d cluster.** **Status: all six ran on 2026-10-20 (UTC) on one i9-13900T host. Probes 1 and 2 found a defect in 0005, now fixed; probe 5 needed one deviation.** EAS `main` `e8f3ebc` with all five patches applied, from an Ubuntu 24.04 bastion container on the host network (`configure` supports Ubuntu and RHEL only; this host runs Manjaro). Each run took the shared live lock, used one cluster named `k3dgpu-gate2`, and deleted it afterwards.
 
-1. containerd CNI bin dir: is it `/bin` (Istio's k3d profile) or `/var/lib/rancher/k3s/data/cni` (its k3s profile)?
-2. Does `istio-cni` chain into flannel's conflist in `/var/lib/rancher/k3s/agent/etc/cni/net.d`?
-3. Does `kubectl -n envoy-gateway-system get ds -o wide` show a scheduled envoy pod after the regenerated 0006? Is the old `nodeSelector` gone after a re-install?
-4. 0004: do `install` then `teardown infrastructure` add and then remove the `workload-class` labels? Is a hand-set label kept? Does a kubeconfig without node `patch` RBAC let the install finish?
-5. 0005 end to end: follow the page exactly, then send one chat completion through the gateway.
-6. NRI coexistence: on a default k3d-gpu cluster with `kubernetes_cpu_policy: best-effort`, is exactly one `nri-resource-policy-balloons` DaemonSet present?
+| # | Probe | Cluster | Result |
+|---|---|---|---|
+| 1 | containerd's CNI `bin_dirs` | stock `rancher/k3s:v1.34.12-k3s1` | `["/var/lib/rancher/k3s/data/cni"]` only; `/bin` also holds the plugins, but containerd does not search it. Istio's **k3s** profile matches, its k3d profile does not |
+| 1 | same | default k3d-gpu cluster (k3s v1.37.1, Ubuntu 26.04 node image) | `["/usr/bin"]`, and `/bin` is a symlink to `usr/bin`. Here the **k3d** profile matches and the k3s profile does not |
+| 2 | `istio-cni` chained into flannel's conflist | stock k3s, `istio_platform: k3d` (0005 as drafted) | Chained: `10-flannel.conflist` lists `flannel`, `portmap`, `bandwidth`, `istio-cni`. But the binary landed in `/bin`, so every new pod in an ambient namespace failed `failed to find plugin "istio-cni" in path [/var/lib/rancher/k3s/data/cni]`, and the install stalled at the envoy-gateway certgen Job. **0005 now says `istio_platform: k3s`** |
+| 2 | same | stock k3s, `istio_platform: k3s` | Chained the same way, binary in `/var/lib/rancher/k3s/data/cni/istio-cni`, `istio-cni-node` and `ztunnel` 1/1. `install inference` rc 0, PLAY RECAP `failed=0`, in 956 s and again in 972 s on a second fresh cluster |
+| 2 | same | k3d-gpu cluster: `k3s`, then `k3d` | `k3s`: the same `failed to find plugin` error, path `[/usr/bin]`. `k3d`: binary in `/usr/bin`, `install inference` rc 0, `failed=0`, 863 s |
+| 3 | envoy DaemonSet after 0006 | stock k3s | 1/1 Ready on the k3s server, `NODE SELECTOR <none>`, `EnvoyProxy` carries the `Exists` affinity |
+| 3 | re-install over the unpatched selector | stock k3s | Merge-patched `nodeSelector: {node-role.kubernetes.io/control-plane: ""}` onto `eg-proxy-config` (what the unpatched task leaves), then `install gateway --only`: rc 0, the `nodeSelector` key gone, DaemonSet still 1/1 |
+| 4 | 0004 labels, install then teardown | stock k3s, 1 server + 2 agents, agent-1 hand-labelled `workload-class=gpu` | `install kubernetes --only`: server `platform`, agent-0 `inference`, agent-1 kept `gpu`. `teardown infrastructure`: all three labels removed, the hand-set one included, as the 0004 docs state |
+| 4 | kubeconfig without node `patch` | same; ServiceAccount with get/list/watch on everything | `kubectl auth can-i patch nodes`: `no`. `install kubernetes --only`: rc 0, `failed=0 ignored=2`, three 403s logged, no labels |
+| 5 | 0005 end to end, then one chat completion | stock k3s | Page followed step by step with the two fixes below. `model-manager deploy qwen3-0-6b --wait`, Keycloak client-credentials token, then `POST https://inference.solutions.ai/llm-inference/qwen3-0-6b/v1/chat/completions` through `127.0.0.1:443`: HTTP 200, 64 completion tokens, `finish_reason` `length` (the `max_tokens` cap). The same call without a token: HTTP 401. **Deviation:** the default catalog sets `require_amx: true`; this host has no AMX, so the model pod stayed Pending until `require_amx: false` was set in `env/local/models.yaml` and the model redeployed |
+| 6 | one NRI policy | default k3d-gpu cluster, `kubernetes_cpu_policy: best-effort` | Full `install inference`: exactly one `nri-resource-policy-balloons` DaemonSet, k3d-gpu's (pinned by digest, created before the install); the installer listed `nri_cpu_balloons` under "Skipped (disabled)" |
+
+Teardown: `teardown infrastructure` rc 0, `failed=0`, on both stock-k3s runs, and the node kept only its k3s labels.
+
+Fixes made to 0005 from these probes (the regenerated patch passes Gate 1 again):
+
+- `istio_platform: k3d` became `k3s`, and the "What differs" row now names containerd's `bin_dirs` (probes 1 and 2).
+- Step 1 exports `KUBECONFIG`. On BYO the installer writes no `env/local/kubeconfig.yaml`, so `model-manager` fell back to `localhost:8080` and failed (probe 5).
+- Step 4 adds `inference.${DOMAIN}` to `/etc/hosts`. The default `auth_type: jwt` serves models there (probe 5).
+
+The k3d-gpu image result does not go upstream, because the upstream page names plain k3d only. It means a default k3d-gpu cluster needs `istio_platform: k3d`, the opposite of stock k3s.
 
 Each EAS PR body carries the testing block that EAT PR #20 uses: install, validate, re-install with no changes, teardown, teardown again, and lint results.
 
@@ -212,7 +243,8 @@ This repo's git policy (no assistant attribution lines) does not conflict with a
 The source is [issue-k3s-byo.md](../../integrations/eat/upstream/issue-k3s-byo.md). Before filing:
 
 - repoint every permalink from `7743bac` to the current EAS `main` SHA;
-- move gap 2 to `roles/envoy_gateway/tasks/controller.yaml#L174-L178` (7c02ca2).
+- move gap 2 to `roles/envoy_gateway/tasks/controller.yaml#L174-L178` (`e8f3ebc`; #49 did not touch the file);
+- replace the "Not yet run end-to-end" block with the Gate 2 results above, one host, n=1.
 
 ### EAS PR (one per patch; example for 0006)
 

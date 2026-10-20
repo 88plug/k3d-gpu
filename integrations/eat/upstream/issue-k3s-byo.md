@@ -47,6 +47,9 @@ Ambient mode needs istio-cni to write into the cluster's CNI config directory. T
 |---|---|
 | `""` | Renders exactly as today |
 | `k3d` | Mounts `/bin` and `/var/lib/rancher/k3s/agent/etc/cni/net.d` |
+| `k3s` | Mounts `/var/lib/rancher/k3s/data/cni` and `/var/lib/rancher/k3s/agent/etc/cni/net.d` |
+
+On a k3d cluster from the stock `rancher/k3s:v1.34.12-k3s1` image, containerd's CNI `bin_dirs` is `/var/lib/rancher/k3s/data/cni` only. With `k3d` the `istio-cni` binary lands in `/bin`, and pods in ambient namespaces fail with `failed to find plugin "istio-cni" in path [/var/lib/rancher/k3s/data/cni]`. With `k3s` the install finishes. So the docs page uses `k3s`, for k3d as well.
 | unknown value | Chart fails with `unknown platform` |
 
 ### 2. Envoy data plane schedules no pods on k3s
@@ -133,12 +136,12 @@ These are for completeness. Since #19 deletes the files, we would only send a fi
 **Not yet run end-to-end:** a full `./es_auto_installer.sh install inference` on a k3d cluster. The probes we will run before opening PRs:
 
 ```bash
-# 1. CNI paths: does the rancher/k3s image's containerd use /bin for CNI binaries (the k3d profile)?
+# 1. CNI paths: which bin_dirs does the rancher/k3s image's containerd use? (k3d profile: /bin, k3s profile: /var/lib/rancher/k3s/data/cni)
 docker exec k3d-eas-server-0 sh -c 'grep -n -A3 "cni" /var/lib/rancher/k3s/agent/etc/containerd/config.toml'
 # 2. Envoy data plane schedules on a k3s server node with patch 0006, also after re-installing over an unpatched install
 kubectl -n envoy-gateway-system get ds -o wide
 kubectl -n envoy-gateway-system get envoyproxy eg-proxy-config -o yaml | grep -A2 nodeSelector   # expect no output
-# 3. istio-cni chained into flannel's conflist with istio_platform: k3d
+# 3. istio-cni chained into flannel's conflist with istio_platform: k3s
 docker exec k3d-eas-server-0 ls /var/lib/rancher/k3s/agent/etc/cni/net.d
 # 4. The whole BYO install, then a chat completion through the gateway
 ./es_auto_installer.sh install inference --env local
