@@ -249,6 +249,17 @@ check "zero-copy-models (H28): plain cluster create adds no k3s flag by default"
     sh -c 'test "$(env -u K3D_GPU_K3S_ARGS bash "$1" create-args)" = ""' _ "${ROOT}/bench/zero-copy-models/probe.sh"
 check "zero-copy-models (H28x): K3D_GPU_K3S_ARGS reaches the server as --k3s-arg (crescent C1)" \
     sh -c 'test "$(K3D_GPU_K3S_ARGS="--kubelet-arg=eviction-hard=nodefs.available<1% --disable=traefik" bash "$1" create-args)" = "--k3s-arg --kubelet-arg=eviction-hard=nodefs.available<1%@server:* --k3s-arg --disable=traefik@server:*"' _ "${ROOT}/bench/zero-copy-models/probe.sh"
+check "crescent (H56): hold.sh locks, slotted gate and scoped cleanup" "${ROOT}/tests/crescent_hold_test.sh"
+check "crescent (H56): serving slot covariate, lockwait and the H56 scorer" \
+    env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/eatflow/crescent/test_crescent.py"
+check "crescent (H56): h56.sh parses and prints its order and caps" \
+    sh -c 'bash -n "$1" && test "$(H56_PRINT_CONFIG=1 bash "$1" 1)" = "order=AWWAAWWA a=2400/2370/720 sibling=3000/2970/1800 sync_max=840"' _ "${ROOT}/bench/eatflow/crescent/h56.sh"
+check "crescent (H56): live.sh without a slot keeps its names, ports and DevUI" \
+    sh -c 'test "$(env -u LIVE_SLOT -u LIVE_NODE_CPUS LIVE_PRINT_SLOT=1 LIVE_BLUEPRINT=/nonexistent LIVE_PY=python3 bash "$1" A1 "$2/live-s")" = "cluster=k3dgpu-a-a1 ports=18630,18640,18620,18600,18650,18660 devui=127.0.0.1 node_cpus="' _ "${ROOT}/bench/eatflow/live.sh" "${WORK}"
+check "crescent (H56): live.sh slot 1 moves the cluster, ports and DevUI" \
+    sh -c 'test "$(env -u LIVE_NODE_CPUS LIVE_SLOT=1 LIVE_PRINT_SLOT=1 LIVE_BLUEPRINT=/nonexistent LIVE_PY=python3 bash "$1" A1 "$2/live-s")" = "cluster=k3dgpu-a-s1-a1 ports=18730,18740,18720,18700,18750,18760 devui=127.0.0.3 node_cpus="' _ "${ROOT}/bench/eatflow/live.sh" "${WORK}"
+check "crescent (H56): live.sh refuses a slot outside agent mode and arm A1" \
+    sh -c 'LIVE_SLOT=1 LIVE_MODE=pairs LIVE_PRINT_SLOT=1 LIVE_BLUEPRINT=/nonexistent LIVE_PY=python3 bash "$1" H50 "$2/live-s"; test $? = 2 && { LIVE_SLOT=0 LIVE_PRINT_SLOT=1 LIVE_BLUEPRINT=/nonexistent LIVE_PY=python3 bash "$1" B1 "$2/live-s"; test $? = 2; }' _ "${ROOT}/bench/eatflow/live.sh" "${WORK}"
 check "xhost: hold.sh parses" bash -n "${ROOT}/bench/xhost/hold.sh"
 check "xhost: clusters.py selects only k3dgpu-x-* clusters" \
     sh -c 'test "$(printf "%s" "[{\"name\":\"k3dgpu-x-h25\"},{\"name\":\"k3dgpu-e-h50\"},{\"name\":\"k3dgpu-x-h28\"},{\"name\":\"k3dgpu-h52\"},{\"name\":\"xk3dgpu-x-a\"}]" | python3 "$1")" = "k3dgpu-x-h25 k3dgpu-x-h28"' _ "${ROOT}/bench/xhost/clusters.py"
