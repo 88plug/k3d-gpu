@@ -26,6 +26,7 @@ ENERGY=${REPO}/bench/energy.sh
 CPUS=${H7X_CPUS:-16}
 NODE_CPUS=${H7X_NODE_CPUS:-}
 ORDER=${H7X_ORDER:-"A B B A A B B A A B C"}
+READY_S=${H7X_READY_S:-900}   # per engine start (the first vLLM start pulls its image)
 export K3D_GPU_CLUSTER=${K3D_GPU_CLUSTER:-apb-h7x}
 if [ "${H7X_PRINT_CONFIG:-0}" = 1 ]; then echo "cluster=${K3D_GPU_CLUSTER} cpus=${CPUS} node_cpus=${NODE_CPUS} order=${ORDER}"; exit 0; fi
 M=${APB_MODELS:?set APB_MODELS to the dir of local model copies}
@@ -116,13 +117,13 @@ up_engine() {  # up_engine A|B|C: every other server scaled to 0 first, so only 
     down_all
     case $1 in
         A) kubectl -n k3d-gpu-agent scale deploy/ovms --replicas=1 >/dev/null
-           kubectl -n k3d-gpu-agent rollout status deploy/ovms --timeout=900s >/dev/null || return 1
+           kubectl -n k3d-gpu-agent rollout status deploy/ovms --timeout="${READY_S}s" >/dev/null || return 1
            kubectl -n k3d-gpu-agent port-forward svc/ovms 18000:8000 >/dev/null 2>&1 &
            PF=$! BASE=http://127.0.0.1:18000/v3 MODEL=Qwen3-4B-fp16-ov NS=k3d-gpu-agent ;;
         B|C) d=vllm-qwen-3-4b-cpu; s=vllm-qwen-3-4b-cpu-service
            [ "$1" = C ] && { d=vllm-c; s=vllm-c-service; }
            kubectl -n default scale "deploy/${d}" --replicas=1 >/dev/null
-           kubectl -n default rollout status "deploy/${d}" --timeout=900s >/dev/null || return 1
+           kubectl -n default rollout status "deploy/${d}" --timeout="${READY_S}s" >/dev/null || return 1
            kubectl -n default port-forward "svc/${s}" 18001:80 >/dev/null 2>&1 &
            PF=$! BASE=http://127.0.0.1:18001/v1 MODEL=Qwen/Qwen3-4B NS=default ;;
     esac
@@ -148,7 +149,11 @@ for e in ${ORDER}; do
     stamp "block ${i} engine ${e} start"
     if ! up_engine "${e}"; then
         echo "block ${i} engine ${e} did not come up" | tee -a "${OUT}/notes.txt"
-        kubectl -n "${NS:-default}" get pods -o wide >> "${OUT}/notes.txt" 2>&1
+        { kubectl get pods -A -o wide; kubectl describe pods -n default; kubectl describe pods -n k3d-gpu-agent
+          for p in $(kubectl get pods -n default -o name; kubectl get pods -n k3d-gpu-agent -o name); do
+              echo "--- logs ${p}"; kubectl logs -n default "${p}" --all-containers --tail=60 2>/dev/null \
+                  || kubectl logs -n k3d-gpu-agent "${p}" --all-containers --tail=60; done
+        } >> "${OUT}/notes.txt" 2>&1
         [ "${e}" = C ] && continue
         exit 2
     fi
