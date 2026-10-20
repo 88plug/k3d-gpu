@@ -50,7 +50,7 @@ IMG = {
 # boot: the readiness limit, s (1,500 for bf16 vLLM loads). deploy: who renders the arm.
 # probe: one boot attempt per hold. svc/port/api: where the OpenAI API answers.
 ARMS = {
-    "B1g": dict(rank=None, boot=1500, deploy="eat-vllm", svc="vllm-gemma4-service", ns="default", port=80, api="/v1"),
+    "B1g": dict(rank=None, boot=1500, deploy="eat-vllm", svc="vllm-gemma4-26b-a4b-cpu-service", ns="default", port=80, api="/v1"),
     "B3g": dict(rank=None, boot=900, deploy="eat-ovms", svc="ovms-model-server", ns="default", port=8080, api="/v3"),
     "A1o": dict(rank=0, boot=900, deploy="k3d-gpu", model=OVB, svc="ovms", ns="k3d-gpu-agent", port=8000, api="/v3"),
     "A1g": dict(rank=2, boot=900, deploy="k3d-gpu", model=OVQ, svc="ovms", ns="k3d-gpu-agent", port=8000, api="/v3"),
@@ -121,12 +121,18 @@ def derive_vllm(arm, docs):
     names and labels changed so it cannot be mistaken for B1g."""
     name = ARMS[arm]["svc"]
     out = [{"apiVersion": "v1", "kind": "Namespace", "metadata": {"name": NS}}]
+    cms = {}   # B1g's ConfigMap names -> this arm's (the env and the chat-template ConfigMaps)
+    for d in docs:
+        if d.get("kind") == "ConfigMap":
+            old = d["metadata"]["name"]
+            cms[old] = f"{name}-chat-templates" if old.endswith("-chat-templates") else f"{name}-config"
     for d in docs:
         d = json.loads(json.dumps(d))
         kind = d.get("kind")
-        d["metadata"] = {"name": f"{name}-config" if kind == "ConfigMap" else name, "namespace": NS,
+        old = d["metadata"]["name"]
+        d["metadata"] = {"name": cms.get(old, name) if kind == "ConfigMap" else name, "namespace": NS,
                          "labels": {"app": name}}
-        if kind == "ConfigMap":
+        if kind == "ConfigMap" and d["metadata"]["name"].endswith("-config"):
             d["data"]["VLLM_CPU_OMP_THREADS_BIND"] = THREADS
         elif kind == "Service":
             d["spec"]["selector"] = {"app": name}
@@ -135,9 +141,14 @@ def derive_vllm(arm, docs):
             d["spec"]["selector"] = {"matchLabels": {"app": name}}
             t = d["spec"]["template"]
             t["metadata"] = {"labels": {"app": name}}
+            for v in t["spec"].get("volumes") or []:
+                if "configMap" in v:
+                    v["configMap"]["name"] = cms[v["configMap"]["name"]]
             c = t["spec"]["containers"][0]
             c["image"] = IMG["vllm032"]
-            c["envFrom"] = [{"configMapRef": {"name": f"{name}-config"}}]
+            for e in c.get("envFrom") or []:
+                if "configMapRef" in e:
+                    e["configMapRef"]["name"] = cms[e["configMapRef"]["name"]]
             a = c["args"]
             if arm == "Vi":
                 a[a.index("--model") + 1] = f"/data/{AUTOROUND}"

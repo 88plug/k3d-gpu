@@ -221,12 +221,18 @@ class Renders(unittest.TestCase):
                    "containers": [{"name": "vllm", "image": h54.IMG["vllm024"], "envFrom": [{"configMapRef": {"name": "vllm-gemma4-config"}}],
                                    "args": ["--block-size", "128", "--enforce-eager", "--model", f"/data/{h54.QAT}",
                                             "--served-model-name", h54.SERVED, "--port", "2080", "--max-model-len", "8192"]}]}}}}
-        return [cm, svc, dep]
+        tpl = {"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "vllm-gemma4-chat-templates"}, "data": {"t.jinja": "x"}}
+        dep["spec"]["template"]["spec"]["volumes"] = [{"name": "chat-templates", "configMap": {"name": "vllm-gemma4-chat-templates"}}]
+        return [cm, tpl, svc, dep]
 
     def test_derive_vllm(self):
         docs = self.b1g()
         out = h54.derive_vllm("Vq", docs)
-        cm, svc, dep = out[1], out[2], out[3]
+        cm, tpl, svc, dep = out[1], out[2], out[3], out[4]
+        self.assertEqual(tpl["metadata"]["name"], "vq-chat-templates")
+        self.assertEqual(dep["spec"]["template"]["spec"]["volumes"][0]["configMap"]["name"], "vq-chat-templates")
+        self.assertEqual(dep["spec"]["template"]["spec"]["containers"][0]["envFrom"][0]["configMapRef"]["name"], "vq-config")
+        self.assertNotIn("VLLM_CPU_OMP_THREADS_BIND", tpl["data"])
         self.assertEqual(cm["data"]["VLLM_CPU_OMP_THREADS_BIND"], "0-47")
         self.assertEqual(cm["data"]["VLLM_CPU_KVCACHE_SPACE"], "40")
         c = dep["spec"]["template"]["spec"]["containers"][0]
@@ -235,11 +241,11 @@ class Renders(unittest.TestCase):
         self.assertIn("--enforce-eager", c["args"])                       # B1g's flags kept
         self.assertEqual(svc["spec"]["selector"], {"app": "vq"})
         self.assertEqual(dep["metadata"]["namespace"], "h54")
-        self.assertEqual(docs[2]["spec"]["template"]["spec"]["containers"][0]["image"], h54.IMG["vllm024"])  # input untouched
-        mtp = h54.derive_vllm("Vq-mtp", docs)[3]["spec"]["template"]["spec"]["containers"][0]["args"]
+        self.assertEqual(docs[3]["spec"]["template"]["spec"]["containers"][0]["image"], h54.IMG["vllm024"])  # input untouched
+        mtp = h54.derive_vllm("Vq-mtp", docs)[4]["spec"]["template"]["spec"]["containers"][0]["args"]
         spec = json.loads(mtp[mtp.index("--speculative-config") + 1])
         self.assertEqual(spec, {"method": "gemma4_mtp", "model": f"/data/{h54.DRAFTER}"})   # vLLM's default length
-        vi = h54.derive_vllm("Vi", docs)[3]["spec"]["template"]["spec"]["containers"][0]["args"]
+        vi = h54.derive_vllm("Vi", docs)[4]["spec"]["template"]["spec"]["containers"][0]["args"]
         self.assertEqual(vi[vi.index("--model") + 1], f"/data/{h54.AUTOROUND}")
 
 

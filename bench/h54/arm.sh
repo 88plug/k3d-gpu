@@ -35,11 +35,14 @@ stamp "start (${left} s of the hold left)"
 
 # ---- render --------------------------------------------------------------------------------
 M=${OUT}/deploy.yaml
-eat_vllm() {  # B1g: EAT's chart at 0d3438d, xeon-values.yaml, tag pinned to its digest, KV 40 GiB
+eat_vllm() {  # B1g: EAT's chart at 0d3438d as its playbook installs cpu-gemma4-26b-a4b (release name,
+    # xeon-values.yaml, chat-template ConfigMap, hostIPC), the tag pinned to its digest, KV 40 GiB,
+    # monitoring and ingress off (they need EAT's operators), the QAT weights staged in place
     printf 'image:\n  tag: "v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1"\n' > "${OUT}/pin.yaml"
     ${PY} "${REPO}/bench/apb/stage.py" values "${EAT:?}/core/helm-charts/vllm/xeon-values.yaml" "${OUT}/pin.yaml" 40 "${OUT}/values.yaml"
-    helm template vllm-gemma4 "${EAT}/core/helm-charts/vllm" --values "${OUT}/values.yaml" \
-        --set LLM_MODEL_ID=google/gemma-4-26B-A4B-it --set global.monitoring=false --set svcmonitor.enabled=false \
+    helm template vllm-gemma4-26b-a4b-cpu "${EAT}/core/helm-charts/vllm" --values "${OUT}/values.yaml" \
+        --set LLM_MODEL_ID=google/gemma-4-26B-A4B-it --set chatTemplateConfigMap.enabled=true --set hostIPC=true \
+        --set global.monitoring=false --set svcmonitor.enabled=false \
         --set ingress.enabled=false --set route.enabled=false > "${OUT}/eat.yaml" || return 1
     ${PY} "${REPO}/bench/apb/stage.py" vllm "${OUT}/eat.yaml" "$1" google_gemma-4-26B-A4B-it-qat-q4_0-unquantized 8192
 }
