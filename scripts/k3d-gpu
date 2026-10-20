@@ -1292,12 +1292,39 @@ intel_engine_cards() {
 # engine_count <card dir> <class prefix>: engines named <prefix><instance> (vcs0, vcs1, ...).
 engine_count() { local n; n=$({ compgen -G "$1/engine/$2[0-9]*" || true; } | wc -l); echo $((n)); }
 
+# xe has no per-engine sysfs. Its engine counts are in the DRM usage stats of a client
+# (Documentation/gpu/drm-usage-stats.rst): one drm-cycles-<class> line per engine class, and
+# drm-engine-capacity-<class> when the class has more than one engine (absent means one).
+# drm_fdinfo <renderD name>: those stats for a client opened on the node, read-only (no
+# context, no work); empty when it cannot be opened. Tests put them in proc/drm-fdinfo/.
+drm_fdinfo() {
+    if [ -n "${SYSROOT}" ]; then cat "${SYSROOT}/proc/drm-fdinfo/$1" 2>/dev/null; return 0; fi
+    cat /proc/self/fdinfo/9 2>/dev/null 9< "/dev/dri/$1" || true
+}
+# xe_media_engines: "<renderD> <vcs> <vecs>" for each Intel render node on xe whose usage
+# stats come from xe.
+xe_media_engines() {
+    local rd info
+    for rd in "${SYSROOT}"/sys/class/drm/renderD[0-9]*; do
+        [ "$(cat "${rd}/device/vendor" 2>/dev/null)" = 0x8086 ] || continue
+        [ "$(basename "$(readlink "${rd}/device/driver" 2>/dev/null)")" = xe ] || continue
+        info=$(drm_fdinfo "${rd##*/}")
+        grep -qE '^drm-driver:[[:space:]]+xe$' <<< "${info}" || continue
+        awk -v rd="${rd##*/}" '
+            /^drm-cycles-vcs:/ { v = 1 } /^drm-cycles-vecs:/ { e = 1 }
+            /^drm-engine-capacity-vcs:/ { vc = $2 } /^drm-engine-capacity-vecs:/ { ec = $2 }
+            END { print rd, (v ? (vc ? vc : 1) : 0), (e ? (ec ? ec : 1) : 0) }' <<< "${info}"
+    done
+    return 0
+}
+
 # Node labels for the detected Intel GPUs. gpu.intel.com/xmx is true when any GPU
 # has XMX and false when every GPU is known to lack it. When it is true,
 # k3d-gpu.io/xmx.<driver>=false marks a driver (i915, xe) that also holds a GPU
 # without known XMX: its device plugin resource may hand out that GPU.
 # gpu.intel.com/media-vcs and media-vecs count the video decode/encode and video
-# enhancement engines of the i915 card with the most video engines.
+# enhancement engines of the card with the most video engines: i915 cards from their engine
+# directories, xe cards from their DRM usage stats (xe_media_engines).
 intel_gpu_labels() {
     local e name x xmx=false unknown=0 card vcs best=-1 vecs=0 partial=""
     for e in ${INTEL_DRIVERS[@]+"${INTEL_DRIVERS[@]}"}; do
@@ -1314,6 +1341,10 @@ intel_gpu_labels() {
         vcs=$(engine_count "${card}" vcs)
         if [ "${vcs}" -gt "${best}" ]; then best=${vcs}; vecs=$(engine_count "${card}" vecs); fi
     done <<< "$(intel_engine_cards)"
+    while read -r card vcs x; do
+        [ -n "${card}" ] || continue
+        if [ "${vcs}" -gt "${best}" ]; then best=${vcs}; vecs=${x}; fi
+    done <<< "$(xe_media_engines)"
     if [ "${best}" -ge 0 ]; then
         echo "gpu.intel.com/media-vcs=${best}"
         echo "gpu.intel.com/media-vecs=${vecs}"
@@ -1648,7 +1679,7 @@ doctor_intel() {
         FAIL=1
         return
     fi
-    local e drv id name mink fw opt card eng caps engines labels
+    local e drv id name mink fw opt card eng caps engines labels vcs x
     for e in "${INTEL_DRIVERS[@]}"; do
         read -r drv id <<< "${e}"
         IFS='|' read -r name mink fw <<< "$(intel_gpu_platform "${id}")"
@@ -1684,6 +1715,10 @@ doctor_intel() {
         done
         echo "  ok: ${card##*/} media engines: ${engines:-none}"
     done <<< "$(intel_engine_cards)"
+    while read -r card vcs x; do
+        [ -n "${card}" ] || continue
+        echo "  ok: ${card} media engines: vcs x${vcs}, vecs x${x} (xe DRM usage stats)"
+    done <<< "$(xe_media_engines)"
     labels=$(intel_gpu_labels | paste -sd' ')
     [ -z "${labels}" ] || echo "  ok: up labels the node ${labels}"
     doctor_intel_sharing

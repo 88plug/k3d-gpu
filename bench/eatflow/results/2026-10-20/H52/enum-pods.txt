@@ -1,0 +1,5 @@
+NAME         READY   STATUS      RESTARTS   AGE    IP           NODE                      NOMINATED NODE   READINESS GATES
+gpu-enum-1   0/1     Completed   0          2m1s   10.42.0.12   k3d-k3dgpu-h52-server-0   <none>           <none>
+gpu-enum-2   0/1     Completed   0          2m1s   10.42.0.13   k3d-k3dgpu-h52-server-0   <none>           <none>
+gpu-enum-3   0/1     Completed   0          2m1s   10.42.0.14   k3d-k3dgpu-h52-server-0   <none>           <none>
+gpu-enum-4   0/1     Completed   0          2m1s   10.42.0.15   k3d-k3dgpu-h52-server-0   <none>           <none>

@@ -68,8 +68,8 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H50 | On EAT's own target CPU (Xeon 6741P, Granite Rapids, AMX), inside EAT's banking flow, the k3d-gpu CPU stack A1 (OVMS int4 with the CPU Fast Draft, `agent manifest`) still delivers far more B24 tasks within the 120 s turn budget than EAT stock B1 (vLLM CPU bf16, `xeon-values.yaml` as shipped, AMX on), both arms in one hold, interleaved. H49b's comparison moved to the hardware EAT is built for. A stack-vs-stack claim (amendment 16). | Written 2026-10-20, before any measurement on the Xeon. A1 within-budget success >= 0.70 (0.8). B1 >= 0.60 (0.7): with AMX bf16 its turns should fit 120 s. Paired A1 - B1 in [-0.15, +0.20] (0.6). L2 matches >= 16 pairs and >= 75% (0.6), and the gates are read first, so the expected verdict is REFUTED (0.5), INCONCLUSIVE (0.45, mostly the L2 gates), SUPPORTED (0.05). Not gated: median attempt A1/B1 <= 0.7 (0.6). | H49b's design, statistic, outcome classes, grader, gates and thresholds on `crescent`; see [H50-H52 pre-registration](#h50-h52-pre-registration-the-xeon-6741p-2026-10-20). Holds of at most 40 min until 24 pairs or 8 holds. SUPPORTED: paired difference CI lower bound >= +30 points and A1 >= 0.6, with L2, the void and idle-arm checks passed. REFUTED: CI upper bound < +30 points. Otherwise INCONCLUSIVE. `bench/eatflow/crescent/pairs-hold.sh H50 <n>` (`LIVE_MODE=pairs LIVE_CAP=2370 live.sh H50`, KV 40 GiB), `agentbench pairs-report --hyp H50 --arm-a A1 --arm-b B1`. | PENDING |
 | H50o | H50's comparison with arm B3, EAT's own OVMS chart (`core/helm-charts/ovms` at release-1.0.3-hotfix, stock values, `openvino/model_server` 2025.4, the closest OpenVINO/ model it pulls, `OpenVINO/Qwen3-4B-int4-ov`) instead of B1: A1 delivers far more B24 tasks within budget than B3. With H50 it splits B1 -> A1 into EAT switching its own engine (B1 -> B3) and what k3d-gpu adds on top (B3 -> A1). | Written 2026-10-20, before any measurement. B3's stock graph has no tool parser (the chart's `ovms --pull` writes none) and its model reasons by default, so its tool calls arrive as text: B3 within-budget success <= 0.10 (0.7), paired A1 - B3 >= +60 points (0.65). Pair yield: a B3 attempt should end within 30-90 s (a failed tool call or a reasoned text answer), so a 40-min hold should run 15-25 pairs and 24 pairs fit 2-3 holds; L2 passes (0.6), so SUPPORTED (0.5), INCONCLUSIVE (0.45). | As H50 with arm B = B3 (same pairs, gates, thresholds, statistic, cluster per hold `k3dgpu-e-h50o`); holds of at most 40 min until 24 pairs or 6 holds. The B1 -> B3 and B3 -> A1 splits are described from the two rows' matched pairs, never gated. `bench/eatflow/crescent/pairs-hold.sh H50o <n>`, `agentbench pairs-report --hyp H50o --arm-a A1 --arm-b B3`. | PENDING |
 | H51 | Graded agents per box on the Xeon 6741P: H45's ramp, gates and scoring (B15-RO, typical load, 300 s steps, pooled p95 turn <= 10 s, success >= the arm's N=1 success - 10 points, errors <= 1%, >= 60 window requests), extended to N=16, for A1 and B1. | Written 2026-10-20, before any measurement. A1 in [1, 8] (0.5). B1 in [0, 4] (0.5). B1 <= A1 (0.55). | H45's `apb` runner and scorer (`apb-score --hyp H51`, ramp 1, 2, 4, 8, 16), one fresh cluster per hold, at most 4 holds of at most 40 min. A prediction holds when the arm's bracket lies inside its range and is refuted when it lies outside; B1 <= A1 is decided only on matched load. REFUTED when any prediction is refuted, SUPPORTED when all three hold, else INCONCLUSIVE. Runs only if H50's holds end within their cap. | PENDING |
-| H52 | A plain `k3d-gpu up` (no flags, the auto-adapt default) on the Xeon 6741P host as found detects and enables every engine actually present and advertises each usable one to the scheduler, with nothing missing and nothing phantom; engines present but not configured on the host are named, not advertised. | Written 2026-10-20 from an inventory read from sysfs, lspci and CPUID, not from k3d-gpu. 4 x Arc Pro B70 (xe) as `gpu.intel.com/xe: 4`; AMX TILE, BF16, INT8, FP16 and 14 AVX-512/VNNI labels; no hybrid, NUMA, NVIDIA, Gaudi or NPU objects; DSA, IAA and QAT named as present but unconfigured (0.4: `up` may not name them). | The table in [H50-H52 pre-registration](#h50-h52-pre-registration-the-xeon-6741p-2026-10-20): `k3d-gpu doctor`, `K3D_GPU_CLUSTER=k3dgpu-h52 k3d-gpu up`, `kubectl get node -o json`, `k3d-gpu test`, and one enumeration pod per B70. SUPPORTED: every row matches. REFUTED: any row does not. | PENDING |
-| H52b | After `k3d-gpu host-setup --apply` configures the host's DSA, IAA and QAT (the fix that adds that path, merged first), a plain `k3d-gpu up` also advertises them, and each one reaches a pod; the host is then restored exactly. | Written 2026-10-20, before the fix exists. DSA, IAA and QAT allocatable > 0, each at the count host-setup reports configuring; their test pods see `/dev/dsa`, `/dev/iax`, `/dev/vfio` (0.6). The H52 rows are unchanged. | Runs after H52, once the host-setup fix is merged; same procedure plus `host-setup --apply` before `up` and its printed revert after. SUPPORTED: the three engines advertised and reached, the H52 rows unchanged, and the host inventory read back equal to the one taken before. REFUTED: any of these fails. | PENDING |
+| H52 | A plain `k3d-gpu up` (no flags, the auto-adapt default) on the Xeon 6741P host as found detects and enables every engine actually present and advertises each usable one to the scheduler, with nothing missing and nothing phantom; engines present but not configured on the host are named, not advertised. | Written 2026-10-20 from an inventory read from sysfs, lspci and CPUID, not from k3d-gpu. 4 x Arc Pro B70 (xe) as `gpu.intel.com/xe: 4`; AMX TILE, BF16, INT8, FP16 and 14 AVX-512/VNNI labels; no hybrid, NUMA, NVIDIA, Gaudi or NPU objects; DSA, IAA and QAT named as present but unconfigured (0.4: `up` may not name them). | The table in [H50-H52 pre-registration](#h50-h52-pre-registration-the-xeon-6741p-2026-10-20): `k3d-gpu doctor`, `K3D_GPU_CLUSTER=k3dgpu-h52 k3d-gpu up`, `kubectl get node -o json`, `k3d-gpu test`, and one enumeration pod per B70. SUPPORTED: every row matches. REFUTED: any row does not. Run 2026-10-20 ([H52 run](#h52-run-xeon-6741p-2026-10-20)): the four B70s (`gpu.intel.com/xe: 4`, `xmx=true`), AMX (TILE, BF16, INT8, FP16) and all 14 AVX-512/VNNI labels detected and reached pods, nothing phantom; but no media engine label on `xe`, and `up` does not name the unconfigured DSA, IAA and QAT (`doctor` does). | REFUTED |
+| H52b | After `k3d-gpu host-setup --apply` configures the host's DSA, IAA and QAT (the fix that adds that path, merged first), a plain `k3d-gpu up` also advertises them, and each one reaches a pod; the host is then restored exactly. | Written 2026-10-20, before the fix exists. DSA, IAA and QAT allocatable > 0, each at the count host-setup reports configuring; their test pods see `/dev/dsa`, `/dev/iax`, `/dev/vfio` (0.6). The other rows read as H52's expected table, media labels included ([amendment D1](#h52-amendment-d1-the-fixes-and-h52b-2026-10-20)). | Runs after H52, once the host-setup fix is merged; same procedure plus `host-setup --apply` before `up` and its printed revert after. SUPPORTED: the three engines advertised and reached, the H52 rows unchanged, and the host inventory read back equal to the one taken before. REFUTED: any of these fails. | PENDING |
 | F2a | Open WebUI in a k3d-gpu cluster reaches a public remote endpoint by name: `k3d-gpu quickstart --remote https://gaudi.farmgpu.net` (no hostAliases) gives a chat through Open WebUI's own API that returns. An earlier run saw `Temporary failure in name resolution` for gaudi.farmgpu.net from a pod. | Pre-registered 2026-10-17, before measuring: the in-cluster failure is a cluster DNS gap (CoreDNS forwarding to an upstream the node container cannot use), not the endpoint; once fixed, one `POST /api/chat/completions` returns `finish_reason=stop` with non-empty content (0.7). | Fresh cluster `k3dgpu-f2-*` (scratch KUBECONFIG, node CPUs 8-15), `nslookup` from a pod before any change, CoreDNS Corefile and node `/etc/resolv.conf` read; root cause fixed in the product if it is a k3d-gpu config gap (regression test first); then one chat through Open WebUI's API with the generated admin account, max_tokens <= 64, temperature 0.6. SUPPORTED: chat returns. REFUTED: no chat returns after the fix. Run (2026-10-17, i9-13900T, k3s v1.35.5, node CPUs 8-15): the prediction's mechanism was wrong. CoreDNS forwarding works (node resolv.conf is k3d's 192.168.32.1 DNAT to Docker's 127.0.0.11; busybox and glibc lookups from pods resolve). The failure is a startup race: `k3d-gpu up` returned on node Ready, when the CoreDNS Deployment was 1 s old (image still pulling); a glibc pod started then got `gaierror(-3, 'Temporary failure in name resolution')` for 11 s (4 tries), first success at 13 s. Fix: `up` waits for the CoreDNS rollout; after it, the same pod resolved on its first try (0.0 s). Then `quickstart --remote https://gaudi.farmgpu.net` with no hostAliases: Open WebUI listed `zai-org/GLM-5.3` and one `POST /api/chat/completions` returned finish_reason=stop, content 'OK', 0.41 s; 0 name resolution errors in its log. | SUPPORTED |
 | F2b | EAT's LiteLLM gateway serves the remote model registered by `integrations/eat/eat-remote.sh`, with the key only as an env reference. | Pre-registered 2026-10-17, before measuring: one completion through LiteLLM returns (0.7); the key string appears 0 times in the gateway DB dump, `kubectl describe` of the gateway Deployment/pods/Secret, and events (0.9). | `eat-remote.sh --remote https://gaudi.farmgpu.net --model zai-org/GLM-5.3` against EAT's genai-gateway in the same cluster, then one chat through LiteLLM (max_tokens <= 64, temperature 0.6), then `grep -c` of the key over `pg_dump`, `kubectl describe` and `kubectl get events -A`. SUPPORTED: completion returns and 0 key hits. REFUTED: any key hit, or no completion. Run (2026-10-17, same host, EAT release-1.0.3-hotfix, LiteLLM v1.83.14-stable.patch.2): first with eat-remote.sh as shipped, REFUTED: the chat came back 401 from the endpoint. LiteLLM resolves `os.environ/` only for config-file models; a `/model/new` model is loaded from its database with the reference string as the api_key (proxy_server.py `_add_deployment` decrypts only). Fixed eat-remote.sh to write a config-file `model_list` entry instead and delete the stale database entry; rerun: `eat-check.sh` passed (chat, tool call get_weather, sandbox printed 385), and the key (raw and base64) had 0 hits in `pg_dumpall` of the gateway's Postgres (169 KB), `kubectl describe` of the gateway namespace's Deployments, pods, Secrets and ConfigMaps, the Deployment YAML and `kubectl get events -A`. The verdict is for the fixed script. | SUPPORTED |
 
@@ -1818,6 +1818,110 @@ predictions, the matched-load comparison, the CLI, the last-step test).
 4, only if H50 ended within its cap), H52b when its fix is merged. A protocol change is a dated
 amendment merged before the data it governs. A wiring smoke on crescent is allowed, runs no
 scored task, is discarded and is disclosed in the run section.
+
+### H52 run (Xeon 6741P, 2026-10-20)
+
+**Reproduce:**
+
+```text
+# provenance
+date:            2026-10-20T21:31:15Z to 21:34:26Z (one hold, no wait: load1 1.42, no aiperf process)
+hypothesis:      H52
+host cpu:        Intel(R) Xeon(R) 6741P (Granite Rapids, family 6 model 173), 48 cores / 96 threads,
+                 1 socket, 1 NUMA node, microcode 0xa000133, 503 GiB RAM
+host kernel:     7.0.0-31-generic
+accelerators:    host inventory: 4 x Arc Pro B70 (xe), AMX, AVX-512, 3 DSA, 3 IAA, 3 QAT, 3 DLB 2.5
+k3d-gpu commit:  fda704f (#152)
+node image:      cryptoandcoffee/k3d-gpu@sha256:8cd264aa68c77681d7fa474693944de0db8d55de5881253e4029bf72a67e175c (0.1.61),
+                 k3s v1.37.1+k3s1, containerd 2.3.4-k3s1; k3d v5.9.0, kubectl v1.35.2
+runtime:         enumeration pods vllm/vllm-openai-xpu:v0.28.0@sha256:4756b66a... (`xpu-smi discovery`),
+                 k3d-gpu test pods busybox:1.37@sha256:bdf57e52...
+serving load:    load1 1.9-3.6 over the hold, the two SGLang servers 2.4 CPU-s/s, aiperf idle
+```
+
+Commands: `bench/eatflow/crescent/hold.sh H52 1800 bash bench/eatflow/crescent/h52.sh <out>` (the
+only k3d-gpu variable set is `K3D_GPU_CLUSTER=k3dgpu-h52`). Records (doctor, up, node object,
+`k3d-gpu test`, enumeration, inventory, serving samples):
+[bench/eatflow/results/2026-10-20/H52/](bench/eatflow/results/2026-10-20/H52/).
+
+`up` took 38 s and printed `Accelerators: intel amx` and `Accelerators schedulable: intel=4
+amx=1`. Node allocatable: `cpu` 96, `gpu.intel.com/xe` 4, nothing else extended.
+
+| Engine | Expected (pre-registered) | Detected | Row |
+|---|---|---|---|
+| Intel GPU | `gpu.intel.com/xe` 4; no i915 resource; `gpu.intel.com/xmx=true`; media engine labels; ASPEED not counted | `gpu.intel.com/xe: 4`, no i915 resource, `xmx=true`, product `Arc_Pro_B70` (4); **no media label** (`gpu.intel.com/media-vcs`/`media-vecs` absent) | **no** |
+| AMX | AMXTILE, AMXBF16, AMXINT8, AMXFP16; no AMXCOMPLEX | exactly those four; `k3d-gpu test` AMX pod read `amx_tile` | yes |
+| AVX-512 and VNNI | one label per listed flag (14) | all 14 (plus NFD's other CPUID labels, e.g. AVX10_512) | yes |
+| DSA | named by `up` as present, not configured; not advertised | not advertised; **`up` does not name it** (`doctor` does: "3 device(s) but no user work queues") | **no** |
+| IAA | as DSA | not advertised; **not named by `up`** (`doctor`: "3 device(s) but no user work queues") | **no** |
+| QAT | as DSA (no VFs) | not advertised; **not named by `up`** (`doctor`: "no VFs" for each PF) | **no** |
+| DLB | not scored; not advertised | not advertised | (not scored) |
+| Core types, NUMA | no hybrid or NUMA label; no balloons pod; allocatable CPU 96 | none; no balloons DaemonSet; 96 | yes |
+| Other vendors | none active, no resource | none (`nvidia.com/gpu.present=false`, which k3d-gpu sets to keep its plugin off) | yes |
+
+Enumeration pods: all four `gpu.intel.com/xe: 1` pods Succeeded. Two logs were captured and show
+one distinct card each (`renderD131` = 0000:96:00.0 and `renderD129` = 0000:48:00.0, `xpu-smi
+discovery` naming one "Intel(R) Arc(TM) Pro B70 Graphics"); the other two logs were lost
+("unable to retrieve container logs"), because the harness read each log only after waiting for
+every pod in turn. `k3d-gpu test`'s GPU pod saw `renderD129`. That item is therefore unverified
+for two cards, a harness fault fixed for H52b ([amendment D1](#h52-amendment-d1-the-fixes-and-h52b-2026-10-20)).
+
+**Verdict: REFUTED.** Four rows do not match. (1) On `xe`, k3d-gpu sets no media engine labels:
+`intel_gpu_labels` counts engines from i915's `/sys/class/drm/cardN/engine/` directories, which
+`xe` does not have (the B70's media GT lists only the classes `vcs` and `vecs`), and the
+existing test "xe GPU without an engine dir gets no media label" fixed that as intended. The
+kernel does report the counts to any DRM client: a read-only open of `renderD128` shows
+`drm-engine-capacity-vcs: 2` and `drm-engine-capacity-vecs: 2` in its fdinfo. (2-4) `up` does
+not say that DSA, IAA and QAT are present but unconfigured; `doctor` does. Nothing phantom was
+advertised, and every usable engine (four B70s, AMX, AVX-512) was detected and reached a pod.
+The prediction (DSA, IAA and QAT named, 0.4) was refuted; the media miss was not predicted.
+
+### H52 amendment D1: the fixes and H52b (2026-10-20)
+
+Recorded 2026-10-20, after the [H52 run](#h52-run-xeon-6741p-2026-10-20) and before any H52b
+step. H52 keeps its verdict (REFUTED). The H52b row is unchanged except as listed.
+
+1. Media engines on `xe` (this PR). `intel_gpu_labels` and `doctor` also count the engines of
+   each Intel render node on `xe` from the DRM usage stats of a read-only client on the node
+   (`drm_fdinfo`, `xe_media_engines`): one `drm-cycles-<class>` line per engine class and
+   `drm-engine-capacity-<class>` when a class has more than one engine (absent means one;
+   Documentation/gpu/drm-usage-stats.rst). The open creates no context and submits no work; a
+   node the user cannot open gives no label, as before. `doctor` prints
+   `renderDN media engines: vcs xN, vecs xM (xe DRM usage stats)`. Regression tests in
+   `tests/detect_test.sh` with the B70's fdinfo captured on this host (capacity 2 and 2), a
+   class without a capacity line (one), no video class (zero) and usage stats from another
+   driver (ignored). `bench/eatflow/crescent/inventory.sh` now prints each render node's usage
+   stats too, as the independent source for the count.
+2. The enumeration pods (`h52.sh`). Each pod prints its listing and `xpu-smi discovery`, then a
+   marker, then sleeps; the harness reads its log once the marker appears (at most 600 s) and
+   then deletes it, so no log is lost to a completed container.
+3. `up` naming DSA, IAA and QAT, and `host-setup --apply` for them: the separate change H52b
+   already names, merged before H52b runs.
+4. H52b's reading of the other rows: "every H52 row other than DSA, IAA and QAT reads as in
+   H52" becomes "reads as H52's expected table", so the GPU row now needs
+   `gpu.intel.com/media-vcs=2` and `gpu.intel.com/media-vecs=2` (the counts the kernel reports
+   in item 1's inventory).
+5. Disk pressure (see amendment C1). H52b's `up` stays plain. If the node is tainted
+   `node.kubernetes.io/disk-pressure` before its test pods schedule, H52b runs once more with
+   C1's kubelet thresholds and records it; eviction thresholds do not enter detection.
+
+### Crescent amendment C1: kubelet eviction thresholds on a 95%-full disk (2026-10-20)
+
+Recorded 2026-10-20, after an H50 wiring smoke (no task sent, discarded) and before any H50,
+H50o, H51 or H53 measurement. The host's `/` was 95-96% used by its other tenants (169 GB free
+of 3.6 TB; this campaign's images, models and venvs are about 30 GB of it). The kubelet's
+default hard eviction (`nodefs.available<10%`, `imagefs.available<15%`) therefore marks the
+k3d node `DiskPressure` within a minute of `up`, taints it `NoSchedule`, and evicts pods: in
+the smoke both servers stayed Pending and the NFD workers were evicted. H52 ran before the
+taint landed.
+
+- Every H50, H50o, H51 and H53 hold creates its cluster with
+  `K3D_GPU_K3S_ARGS="--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1%"`
+  (k3s passes it to the kubelet; set in `bench/eatflow/crescent/pairs-hold.sh` and
+  `apb-hold.sh`). It changes when the kubelet evicts, nothing else; it applies to both arms of
+  every comparison alike. Shared rule 1's 97% guard and the hold wrapper's disk watchdog stay:
+  a hold stops above 97%.
+- The smoke is disclosed in the H50 run section and is not scored.
 
 ### H5 amendment A1: stage-1 harness and definitions (2026-10-19)
 
