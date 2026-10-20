@@ -493,11 +493,23 @@ def boot_share(d, pred, boot=stats.BOOT, seed=stats.SEED, stat=None):
     return sum(1 for _ in range(boot) if pred(stat([d[rng.randrange(n)] for _ in range(n)]))) / boot
 
 
+# Hypothesis id -> (design, load rule). H47b and H49b are H47 and H49 under rule L2; H50 is
+# H49b's design on the Xeon 6741P, H50o the same with arm B3 (EXPERIMENTS.md "H50-H52 pre-registration").
+DESIGNS = {"H47": ("H47", "L1"), "H49": ("H49", "L1"), "H47b": ("H47", "L2"), "H49b": ("H49", "L2"),
+           "H50": ("H49", "L2"), "H50o": ("H49", "L2")}
+
+
+def design(hyp):
+    """(design, load rule) of a pairs hypothesis id."""
+    if hyp not in DESIGNS:
+        raise ValueError(f"{hyp}: not a pairs hypothesis ({', '.join(DESIGNS)})")
+    return DESIGNS[hyp]
+
+
 def analyze(attempts, pairs, hyp, a, b, holds=None):
     """The pre-registered statistics and verdict of H47 (a=A1, b=A4) or H49 (a=A1, b=B1), under
-    load rule L1; H47b and H49b are the same designs under rule L2."""
-    rule_name = "L2" if hyp.endswith("b") else "L1"
-    base = hyp[:3]
+    load rule L1; H47b, H49b and H50 are those designs under rule L2 (DESIGNS)."""
+    base, rule_name = design(hyp)
     table, void = pair_table(attempts, pairs, a, b)
     rule = l2(table, a, b) if rule_name == "L2" else l1(table, a, b)
     m = rule["matched"]

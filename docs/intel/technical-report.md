@@ -10,7 +10,8 @@ This report covers what was measured, and how. Every result comes from one host:
 
 - Fifteen hypotheses are SUPPORTED. All fifteen are scoped to that host.
 - Eleven are REFUTED. Six of them changed shipped defaults.
-- Nineteen are INCONCLUSIVE, mostly because the shared host throttles or its load was unmatched. None is PENDING.
+- Nineteen are INCONCLUSIVE, mostly because the shared host throttles or its load was unmatched.
+- Five are PENDING: the Xeon 6741P rows (H50, H50o, H51, H52, H52b), pre-registered and not yet run.
 - Every other Intel family is detected and configured in fixture tests only. None has a measurement.
 
 No world-first, superlative or priority claim is made; [docs/provenance.md](../provenance.md) supports none.

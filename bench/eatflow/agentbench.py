@@ -50,7 +50,7 @@ import stats  # noqa: E402
 import tasks as T  # noqa: E402
 
 LOCK_PATH = os.path.join(HERE, "agent.lock")
-PAIRS_HYPS = ("H47", "H49", "H47b", "H49b")   # b: load rule L2
+PAIRS_HYPS = tuple(PR.DESIGNS)   # H47b, H49b, H50: load rule L2 (pairs.DESIGNS)
 INF = float("inf")
 SLO_S = 10.0
 RAMP = (1, 2, 4, 8)
@@ -1203,6 +1203,40 @@ def h45_score(arms, load=None):
     return out
 
 
+# H51 (EXPERIMENTS.md "H50-H52 pre-registration"): H45's graded ramp to N=16 on the Xeon
+# 6741P, arms A1 and B1, each with a predicted range, plus the comparison B1 <= A1.
+H51_RAMP = (1, 2, 4, 8, 16)
+H51_RANGES = {"A1": (1, 8), "B1": (0, 4)}
+
+
+def h51_score(arms, load=None):
+    """H51 verdict. arms: {arm: {"bracket": [lo, hi]}} from apb_from_holds(ramp=H51_RAMP); load:
+    `load.py matched` over A1's and B1's windows. Per arm as h45_score. B1 <= A1 needs matched
+    load, then holds when B1's upper bound <= A1's lower bound and is refuted when B1's lower
+    bound > A1's upper bound. REFUTED when any prediction is refuted, SUPPORTED when all three
+    hold, else INCONCLUSIVE."""
+    out = {"hypothesis": "H51", "arms": {}, "b1_le_a1": None, "load": load}
+    for arm, rng in H51_RANGES.items():
+        b = (arms.get(arm) or {}).get("bracket")
+        out["arms"][arm] = {"bracket": b, "range": list(rng), "status": _in_range(b, rng) if b else "undecided"}
+    a1, b1 = (arms.get("A1") or {}).get("bracket"), (arms.get("B1") or {}).get("bracket")
+    if not (a1 and b1):
+        st = "undecided"
+    elif not (load and load.get("matched")):
+        st = "unmatched"
+    elif b1[1] <= a1[0]:
+        st = "holds"
+    elif b1[0] > a1[1]:
+        st = "refuted"
+    else:
+        st = "undecided"
+    out["b1_le_a1"] = {"status": st}
+    sts = [v["status"] for v in out["arms"].values()] + [st]
+    out["verdict"] = ("REFUTED" if "refuted" in sts else "SUPPORTED" if all(x == "holds" for x in sts)
+                      else "INCONCLUSIVE")
+    return out
+
+
 # H43 pre-registered thresholds.
 H43_RATIO_MAX = 1.5
 H43_DELTA_MIN = -0.10
@@ -1307,20 +1341,21 @@ def cmd_apb(a):
 
 
 def cmd_apb_score(a):
-    """H45: per-arm agents per box from each arm's hold dirs, the C2-vs-A1 load check over
-    their load.jsonl windows, and the pre-registered verdict."""
+    """H45 or H51: per-arm agents per box from each arm's hold dirs, the load check of the
+    comparison (H45 C2 vs A1, H51 B1 vs A1) over their load.jsonl windows, and the verdict."""
+    ramp, cmp, score = (H51_RAMP, "B1", h51_score) if a.hyp == "H51" else (RAMP, "C2", h45_score)
     arms, dirs = {}, {}
     for spec in a.arm:
         arm, _, ds = spec.partition("=")
         dirs[arm] = [d for d in ds.split(",") if d]
         arms[arm] = apb_from_holds([d for d in dirs[arm] if os.path.exists(os.path.join(d, "apb.json"))],
-                                   level=a.level, step_s=a.step_s)
+                                   ramp=ramp, level=a.level, step_s=a.step_s)
         arms[arm]["holds"] = dirs[arm]
     load = None
-    if "A1" in dirs and "C2" in dirs:
-        ws = [w for arm in ("A1", "C2") for d in dirs[arm] for w in read_jsonl(os.path.join(d, "load.jsonl"))]
+    if "A1" in dirs and cmp in dirs:
+        ws = [w for arm in ("A1", cmp) for d in dirs[arm] for w in read_jsonl(os.path.join(d, "load.jsonl"))]
         load = _load_mod().matched(ws) if ws else None
-    res = h45_score(arms, load)
+    res = score(arms, load)
     res["per_arm"] = arms
     text = json.dumps(res, indent=1, default=str)
     if a.out:
@@ -1409,7 +1444,7 @@ def cmd_pairs(a):
     probe = PR.Probe({arm: v["pod"] for arm, v in arms.items()}, lm.load_cpus() if lm else [], rapl=not a.no_rapl)
     ts = T.taskset(a.tasks)
     pre = None
-    if a.hyp.endswith("b"):
+    if PR.design(a.hyp)[1] == "L2":
         if not (lm and a.baseline and a.level):
             raise SystemExit("agentbench pairs: rule L2 needs bench/load/load.py, --baseline and --level")
         pre = pre_window(lm, a.baseline, a.level, a.pre_s)
@@ -1555,7 +1590,8 @@ def parse(argv):
     p.add_argument("--load-phase", choices=("during",), help="amendment 27: tag the load windows")
     p.set_defaults(func=cmd_apb)
 
-    p = sub.add_parser("apb-score", help="H45: agents per box from several holds per arm, and the verdict")
+    p = sub.add_parser("apb-score", help="H45 or H51: agents per box from several holds per arm, and the verdict")
+    p.add_argument("--hyp", choices=("H45", "H51"), default="H45", help="H51: ramp to N=16, arms A1 and B1")
     p.add_argument("--arm", action="append", required=True, help="ARM=DIR[,DIR]: that arm's hold dirs in order")
     p.add_argument("--level", default="typical", help="every hold must have run at this level")
     p.add_argument("--step-s", type=float, default=300.0, help="every hold must have run steps of this length")

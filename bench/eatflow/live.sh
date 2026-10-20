@@ -20,6 +20,8 @@
 #   LIVE_BLUEPRINT  enterprise-ai-blueprints checkout at 758d484                      (required)
 #   LIVE_PY         python with the blueprint's requirements.txt pins                 (required)
 #   LIVE_EAT_CHART  EAT core/helm-charts/vllm at 0d3438d                              (B1)
+#   LIVE_EAT_OVMS_CHART EAT core/helm-charts/ovms at 0d3438d                         (H50o B3)
+#   LIVE_EAT_KV_GIB B1 VLLM_CPU_KVCACHE_SPACE, GiB (default 6, the 125 GiB desktop; H50: 40, as shipped)
 #   LIVE_KEY_FILE   0600 env file with OPENAI_BASE_URL and OPENAI_API_KEY             (R)
 #   LIVE_BFCL_PY    python of the hashed BFCL venv                                    (R)
 #   LIVE_LEVEL      background load level (default typical; R always none)
@@ -28,7 +30,7 @@
 #   LIVE_MODE       agent (default): B24 at LIVE_LEVEL, then a control window;
 #                   bfcl: H41, BFCL S100 server-fc at LIVE_LEVEL, no agent (amendment 23);
 #                   h44: B24's first 12 tasks in blocks none/heavy/none/heavy (amendment 24);
-#                   pairs: ARM = H47, H49, H47b or H49b, both arms live in cluster k3dgpu-e-<arm>, one hold
+#                   pairs: ARM = H47, H49, H47b, H49b or H50, both arms live in cluster k3dgpu-e-<arm>, one hold
 #                   of interleaved pairs into LIVE_PAIRS_DIR (LIVE_HOLD = this hold's number);
 #                   code: H43 (amendment W1), the coding agent on C12 with `k3d-gpu sandbox up`, one
 #                   block per level in LIVE_CODE_LEVELS (default "typical heavy heavy typical") into
@@ -36,6 +38,7 @@
 #                   apb: H45 (amendment W1), the graded ramp steps LIVE_APB_RAMP (default 1,2) on B15-RO
 #                   at LIVE_LEVEL with amendment-27 windows, LIVE_APB_BASE = the hold dir holding N=1;
 #                   then, on the arm's last hold, `k3d-gpu capacity --slo 10` with what the hold leaves
+#                   (last hold: a step failed or N=LIVE_APB_TOP passed; default 8, H51 16)
 #   LIVE_CODE_PY    python with the coding blueprint's pins and k8s-agent-sandbox 1.0.7    (code)
 set -uo pipefail
 
@@ -49,6 +52,7 @@ BP=${LIVE_BLUEPRINT:?}/usecases/banking-assistant/src
 PY=${LIVE_PY:?}
 CAP=${LIVE_CAP:-1140}
 LEVEL=${LIVE_LEVEL:-typical}
+KV_GIB=${LIVE_EAT_KV_GIB:-6}
 MODE=${LIVE_MODE:-agent}
 ALIAS=Qwen/Qwen3-4B-Instruct-2507
 SERVED=qwen3-4b-instruct-2507
@@ -58,6 +62,11 @@ RAPL_IMAGE=python:3.14.8-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd
 # H43: the coding agent's Redis memory. Redis 8 bundles the query engine the blueprint's
 # RedisContextProvider needs (FT.CREATE); the 8.10.2-alpine index digest, read 2026-10-19.
 REDIS_IMAGE=redis:8.10.2-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
+# H50o B3: EAT's OVMS chart image tag (core/helm-charts/ovms values.yaml "2025.4") pinned to the
+# index digest read 2026-10-20, and the OpenVINO model its init container pulls (the closest
+# OpenVINO/ Qwen3 4B the chart accepts without an HF token; there is no OpenVINO/ Instruct-2507).
+B3_TAG=2025.4@sha256:c370720007564bbdcbca13b9b714e4537068542cda512e8095259e66b617962a
+B3_MODEL=OpenVINO/Qwen3-4B-int4-ov
 # Time a mode needs after the server answers: rollout and server-wait give up past it.
 # code: per block 120 s (the least budget) + 110 s (restart, 30 s gap, warm-up), 60 s of
 # teardown, ~90 s of sandbox, router, Redis and agent setup (H43 amendment W2).
@@ -200,15 +209,29 @@ if [ "${MODE}" = pairs ]; then
     # LIVE_PAIRS_GUARD: the pair-start guard, s (default 600; a smoke sets it past the hold).
     # H47b / H49b: the same designs under load rule L2 ("H47b and H49b pre-registration"): a
     # level baseline once per hold, then a settle gap and a pre-window before every attempt.
+    # H50 ("H50-H52 pre-registration"): H49b's design and rule on the Xeon 6741P. H50o: the same
+    # with B3, EAT's own OVMS chart (core/helm-charts/ovms) at its stock values, as arm B.
     PD=${LIVE_PAIRS_DIR:?} HOLD=${LIVE_HOLD:?}
-    DESIGN=${ARM%b}
+    case ${ARM} in
+        H47) DESIGN=H47 RULE=L1 ;;
+        H49) DESIGN=H49 RULE=L1 ;;
+        H47b) DESIGN=H47 RULE=L2 ;;
+        H49b) DESIGN=H49 RULE=L2 ;;
+        H50) DESIGN=H49 RULE=L2 ;;
+        H50o) DESIGN=H50o RULE=L2 ;;
+        *) echo "pairs: ARM must be H47, H49, H47b, H49b, H50 or H50o"; exit 2 ;;
+    esac
     mkdir -p "${PD}"
     PD=$(cd "${PD}" && pwd)
     case ${DESIGN} in
         H47) A=A1 B=A4 ;;
         H49) A=A1 B=B1; export K3D_GPU_NODE_LABELS=ei-infra-eligible=true,ei-inference-eligible=true ;;
-        *) echo "pairs: ARM must be H47, H49, H47b or H49b"; exit 2 ;;
+        H50o) A=A1 B=B3 ;;
     esac
+    # The B arm's server (every design but H47's one pod): namespace, Deployment, Service,
+    # service port and OpenAI path.
+    B_NS=default B_DEP=vllm-qwen-3-4b-cpu B_SVC=vllm-qwen-3-4b-cpu-service B_SPORT=80 B_API=/v1
+    [ "${DESIGN}" = H50o ] && B_DEP=ovms-model-server B_SVC=ovms-model-server B_SPORT=8080 B_API=/v3
     TGT=k3dgpu/Qwen3-4B-Instruct-2507-int4-ov
     DRAFT_DIR=OpenVINO-Qwen3-0.6B-int4-ov     # where OVMS --pull puts the draft, inside the target dir
     stage_path() {  # stage_path <local dir> <path under /var/apb-models> <uid>: chown that path only
@@ -237,12 +260,21 @@ if [ "${MODE}" = pairs ]; then
         SERVED_B=${SERVED}-a4
         python3 "${REPO}/bench/apb/stage.py" ovms2 "${OUT}/agent.yaml" "${OUT}/deploy-a.yaml" "${TGT}" \
             "${SERVED_A}=${HERE}/h47/graph-a1.pbtxt" "${SERVED_B}=${HERE}/h47/graph-a4.pbtxt"
+    elif [ "${DESIGN}" = H50o ]; then
+        # B3: EAT's OVMS chart as shipped (OpenVINO model pulled by its init container, its
+        # PVC, 12-CPU requests and limits), with the image tag pinned to its digest and the
+        # routes that need EAT's ingress and APISIX turned off.
+        python3 "${REPO}/bench/apb/stage.py" ovms "${OUT}/agent.yaml" "${OUT}/deploy-a.yaml"
+        helm template ovms-model-server "${LIVE_EAT_OVMS_CHART:?}" --set modelSource=${B3_MODEL} \
+            --set image.tag="${B3_TAG}" --set ingress.enabled=false --set apisixRoute.enabled=false \
+            > "${OUT}/deploy-b.yaml"
+        kubectl apply -f "${OUT}/deploy-b.yaml" > /dev/null
     else
         python3 "${REPO}/bench/apb/stage.py" ovms "${OUT}/agent.yaml" "${OUT}/deploy-a.yaml"
         chart=${LIVE_EAT_CHART:?}
         printf 'image:\n  tag: "v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1"\n' \
             > "${OUT}/pin.yaml"
-        python3 "${REPO}/bench/apb/stage.py" values "${chart}/xeon-values.yaml" "${OUT}/pin.yaml" 6 "${OUT}/values.yaml"
+        python3 "${REPO}/bench/apb/stage.py" values "${chart}/xeon-values.yaml" "${OUT}/pin.yaml" "${KV_GIB}" "${OUT}/values.yaml"
         helm template vllm-qwen-3-4b-cpu "${chart}" --values "${OUT}/values.yaml" \
             --set LLM_MODEL_ID=${ALIAS} --set global.monitoring=false \
             --set svcmonitor.enabled=false --set ingress.enabled=false --set route.enabled=false > "${OUT}/eat.yaml"
@@ -256,11 +288,11 @@ if [ "${MODE}" = pairs ]; then
         local left=$(( CAP - $(el) - 900 ))
         [ "${left}" -gt 0 ] && kubectl -n "$1" rollout status "deploy/$2" --timeout="${left}s"
     }
-    if ! ready k3d-gpu-agent ovms || { [ "${DESIGN}" = H49 ] && ! ready default vllm-qwen-3-4b-cpu; }; then
+    if ! ready k3d-gpu-agent ovms || { [ "${DESIGN}" != H47 ] && ! ready "${B_NS}" "${B_DEP}"; }; then
         echo "NOT DELIVERABLE: not ready with 900 s of the hold left" | tee -a "${OUT}/live.log"
         kubectl get pods -A > "${OUT}/pods.txt" 2>&1
         kubectl -n k3d-gpu-agent logs deploy/ovms --all-containers > "${OUT}/server-a.log" 2>&1
-        [ "${DESIGN}" = H49 ] && kubectl -n default logs deploy/vllm-qwen-3-4b-cpu > "${OUT}/server-b.log" 2>&1
+        [ "${DESIGN}" != H47 ] && kubectl -n "${B_NS}" logs "deploy/${B_DEP}" --all-containers > "${OUT}/server-b.log" 2>&1
         exit 3
     fi
     stamp ready
@@ -275,11 +307,11 @@ if [ "${MODE}" = pairs ]; then
     cg_a=$(${AB} cgroup --uid "${uid_a}") || { echo "no cgroup for the A pod"; exit 1; }
     cg_b=${cg_a}
     BPORT=${P_SRV}
-    if [ "${DESIGN}" = H49 ]; then
-        podinfo default > "${OUT}/image-b.txt"
+    if [ "${DESIGN}" != H47 ]; then
+        podinfo "${B_NS}" > "${OUT}/image-b.txt"
         read -r uid_b _ < "${OUT}/image-b.txt"
         BPORT=$(( P_SRV + 1 ))
-        kubectl -n default port-forward svc/vllm-qwen-3-4b-cpu-service "${BPORT}:80" > "${OUT}/pf-b.log" 2>&1 &
+        kubectl -n "${B_NS}" port-forward "svc/${B_SVC}" "${BPORT}:${B_SPORT}" > "${OUT}/pf-b.log" 2>&1 &
         pids+=($!)
         cg_b=$(${AB} cgroup --uid "${uid_b}") || { echo "no cgroup for the B pod"; exit 1; }
     fi
@@ -288,21 +320,23 @@ if [ "${MODE}" = pairs ]; then
         || { echo "pod cpu.stat unreadable"; exit 1; }
     wait_http "http://127.0.0.1:${P_SRV}/v1/models" 120 || { echo "A server not answering"; exit 3; }
     curl -fsS "http://127.0.0.1:${P_SRV}/v1/models" > "${OUT}/models-a.json"
-    if [ "${DESIGN}" = H49 ]; then
-        wait_http "http://127.0.0.1:${BPORT}/v1/models" 300 || { echo "B server not answering"; exit 3; }
-        curl -fsS "http://127.0.0.1:${BPORT}/v1/models" > "${OUT}/models-b.json"
+    API_B=/v1
+    if [ "${DESIGN}" != H47 ]; then
+        API_B=${B_API}
+        wait_http "http://127.0.0.1:${BPORT}${API_B}/models" 300 || { echo "B server not answering"; exit 3; }
+        curl -fsS "http://127.0.0.1:${BPORT}${API_B}/models" > "${OUT}/models-b.json"
         SERVED_B=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['data'][0]['id'])" "${OUT}/models-b.json")
     fi
-    litellm() {  # litellm x served port llm_port
-        printf 'model_list:\n  - model_name: %s\n    litellm_params:\n      model: openai/%s\n      api_base: http://127.0.0.1:%s/v1\n      api_key: not-needed\n      timeout: 600\n' \
-            "${ALIAS}" "$2" "$3" > "${OUT}/litellm-$1.yaml"
+    litellm() {  # litellm x served port llm_port api_path
+        printf 'model_list:\n  - model_name: %s\n    litellm_params:\n      model: openai/%s\n      api_base: http://127.0.0.1:%s%s\n      api_key: not-needed\n      timeout: 600\n' \
+            "${ALIAS}" "$2" "$3" "$5" > "${OUT}/litellm-$1.yaml"
         docker run -d --name "${PFX}-litellm-$1" --network host -v "${OUT}/litellm-$1.yaml:/app/config.yaml:ro" \
             "${LITELLM_IMAGE}" --config /app/config.yaml --port "$4" --host 127.0.0.1 >/dev/null
         docker inspect --format '{{.Image}} {{index .Config.Image}}' "${PFX}-litellm-$1" > "${OUT}/litellm-image-$1.txt"
         wait_http "http://127.0.0.1:$4/health/liveliness" 120 || { echo "litellm $1 did not start"; exit 1; }
     }
-    litellm a "${SERVED_A}" "${P_SRV}" "${P_LLM}"
-    litellm b "${SERVED_B}" "${BPORT}" "$(( P_LLM + 1 ))"
+    litellm a "${SERVED_A}" "${P_SRV}" "${P_LLM}" /v1
+    litellm b "${SERVED_B}" "${BPORT}" "$(( P_LLM + 1 ))" "${API_B}"
     echo "served: ${A}=${SERVED_A} ${B}=${SERVED_B}" | tee -a "${OUT}/live.log"
     start_mcp || { echo "mcp did not start"; exit 1; }
     # One agent per arm. DevUI's port is fixed (8090), so the arms bind two loopback addresses.
@@ -332,7 +366,7 @@ if [ "${MODE}" = pairs ]; then
     idle=()
     [ "${DESIGN}" = H47 ] && idle=(--idle-s 3)
     l2=()
-    if [ "${ARM}" != "${DESIGN}" ]; then
+    if [ "${RULE}" = L2 ]; then
         # Rule L2: the level baseline (2 x 10 s, both arms idle, before the warm-ups).
         stamp "baseline ${LEVEL}"
         python3 "${REPO}/bench/load/load.py" sample --seconds 10 --windows 2 --phase baseline --tag baseline \
@@ -383,7 +417,7 @@ case ${ARM} in
         # sized to fit this host (6 GiB); no k3d-gpu balloon overlay, stock max_model_len 8192.
         printf 'image:\n  tag: "v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1"\n' \
             > "${OUT}/pin.yaml"
-        python3 "${REPO}/bench/apb/stage.py" values "${chart}/xeon-values.yaml" "${OUT}/pin.yaml" 6 "${OUT}/values.yaml"
+        python3 "${REPO}/bench/apb/stage.py" values "${chart}/xeon-values.yaml" "${OUT}/pin.yaml" "${KV_GIB}" "${OUT}/values.yaml"
         helm template vllm-qwen-3-4b-cpu "${chart}" --values "${OUT}/values.yaml" \
             --set LLM_MODEL_ID=${ALIAS} --set global.monitoring=false \
             --set svcmonitor.enabled=false --set ingress.enabled=false --set route.enabled=false > "${OUT}/eat.yaml"
@@ -588,8 +622,8 @@ if [ "${MODE}" = apb ]; then
     rc=${PIPESTATUS[0]}
     [ "${rc}" = 0 ] || { echo "ABORTED: apb exited ${rc}" | tee -a "${OUT}/live.log"; exit 1; }
     # The synthetic APB, reported beside the graded one and never scored: on the arm's last
-    # hold (a step failed, or N=8 ran), with what the hold leaves (at most 3 min, at least 1).
-    last=$(python3 -c "import json,sys; s=json.load(open(sys.argv[1]))['steps'][-1]; print(int(not s['pass'] or s['n'] == 8))" \
+    # hold (a step failed, or N=LIVE_APB_TOP ran: default 8, H51 16), with what the hold leaves (at most 3 min, at least 1).
+    last=$(python3 -c "import json,sys; s=json.load(open(sys.argv[1]))['steps'][-1]; print(int(not s['pass'] or s['n'] == ${LIVE_APB_TOP:-8}))" \
         "${D}/apb.json" 2>/dev/null || echo 0)
     cmin=$(( (CAP - $(el) - 150) / 60 ))
     [ "${cmin}" -le 3 ] || cmin=3
