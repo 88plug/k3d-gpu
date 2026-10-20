@@ -219,8 +219,10 @@ def format_from_dir(d, cfg):
         q = (qc.get("quantization_configs") or {}).get("lm_model") or qc
         bits = q.get("bits")
         if bits in (4, 8):
-            g = q.get("group_size") or -1
-            if g <= 0:
+            g = q.get("group_size")
+            if g is None and bits == 4:
+                g = 128                     # optimum-intel's int4 default group size
+            if not g or g <= 0:
                 return f"ov-int{bits}"
             return f"ov-int{bits}-{'sym' if q.get('sym') else 'asym'}-g{g}"
         return "ov-int8"
@@ -228,6 +230,12 @@ def format_from_dir(d, cfg):
     method = str(q.get("quant_method", "")).lower()
     if q.get("bits") == 4 and q.get("group_size"):
         return f"w4a16-g{q['group_size']}"
+    for grp in (q.get("config_groups") or {}).values():      # compressed-tensors
+        wq = (grp or {}).get("weights") or {}
+        if wq.get("num_bits") == 4 and wq.get("type", "int") == "int" and wq.get("group_size"):
+            return f"w4a16-g{wq['group_size']}"
+        if wq.get("num_bits") == 8 and wq.get("type") == "float":
+            return "fp8"
     if "fp8" in method or q.get("fmt") in ("e4m3", "float8_e4m3fn"):
         return "fp8"
     tc = cfg.get("text_config") if isinstance(cfg.get("text_config"), dict) else cfg

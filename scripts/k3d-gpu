@@ -9048,21 +9048,26 @@ plan_predict() {
     fi
 }
 
-# hf_config <repo id> <revision>: path of the repo's config.json at that revision,
-# fetched from Hugging Face. A commit-sha revision is immutable, so it is cached
-# under the state dir; a branch or tag is fetched again each time.
+# hf_config <repo id> <revision>: a directory holding the repo's config.json at
+# that revision, fetched from Hugging Face, and its openvino_config.json when the
+# repo has one (an OpenVINO IR's weight format is there). A commit-sha revision
+# is immutable, so it is cached under the state dir; a branch or tag is fetched
+# again each time.
 hf_config() {
-    local id=$1 rev=$2 url out tmp
-    url="${K3D_GPU_HF_ENDPOINT:-https://huggingface.co}/${id}/resolve/${rev}/config.json"
-    mkdir -p "${STATE_DIR}/hf-config"
-    out="${STATE_DIR}/hf-config/${id//\//__}@${rev}.config.json"
-    if [[ "${rev}" =~ ^[0-9a-f]{7,40}$ ]] && [ -s "${out}" ]; then echo "${out}"; return 0; fi
+    local id=$1 rev=$2 base out tmp
+    base="${K3D_GPU_HF_ENDPOINT:-https://huggingface.co}/${id}/resolve/${rev}"
+    out="${STATE_DIR}/hf-config/${id//\//__}@${rev}"
+    if [[ "${rev}" =~ ^[0-9a-f]{7,40}$ ]] && [ -s "${out}/config.json" ]; then echo "${out}"; return 0; fi
     require curl
-    tmp=$(mktemp "${STATE_DIR}/hf-config/.config.XXXXXX")
-    if ! curl -fsSL --max-time 60 -o "${tmp}" "${url}"; then
-        rm -f "${tmp}"
-        err "plan: cannot fetch ${url} (for a gated repo pass --model DIR with a local copy)"
+    mkdir -p "${STATE_DIR}/hf-config"
+    tmp=$(mktemp -d "${STATE_DIR}/hf-config/.fetch.XXXXXX")
+    if ! curl -fsSL --max-time 60 -o "${tmp}/config.json" "${base}/config.json"; then
+        rm -rf "${tmp}"
+        err "plan: cannot fetch ${base}/config.json (for a gated repo pass --model DIR with a local copy)"
     fi
+    curl -fsSL --max-time 60 -o "${tmp}/openvino_config.json" "${base}/openvino_config.json" 2>/dev/null \
+        || rm -f "${tmp}/openvino_config.json"
+    rm -rf "${out}"
     mv -f "${tmp}" "${out}"
     echo "${out}"
 }

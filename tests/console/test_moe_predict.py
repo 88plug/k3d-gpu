@@ -180,6 +180,20 @@ class Formats(unittest.TestCase):
         cfg = {"quantization_config": {"quant_method": "auto-round", "bits": 4, "group_size": 128, "sym": True}}
         self.assertEqual(mp.format_from_dir(d2, cfg), "w4a16-g128")
         self.assertEqual(mp.format_from_dir(d2, {"text_config": {"dtype": "bfloat16"}}), "bf16")
+        # llm-compressor compressed-tensors (RedHatAI/Qwen3.8-27B-INT4@91bd022d config.json).
+        ct = {"quantization_config": {"quant_method": "compressed-tensors", "config_groups": {"group_0": {
+            "weights": {"num_bits": 4, "group_size": 128, "symmetric": True, "type": "int"}}}}}
+        self.assertEqual(mp.format_from_dir(d2, ct), "w4a16-g128")
+        fp8 = {"quantization_config": {"quant_method": "compressed-tensors", "config_groups": {"group_0": {
+            "weights": {"num_bits": 8, "type": "float", "strategy": "channel"}}}}}
+        self.assertEqual(mp.format_from_dir(d2, fp8), "fp8")
+        # OpenVINO/Qwen3.8-27B-int4-ov@7b20ea8c: group_size null is optimum-intel's int4 default, 128.
+        d3 = os.path.join(TMP, "ovnull")
+        os.makedirs(d3, exist_ok=True)
+        with open(os.path.join(d3, "openvino_config.json"), "w") as f:
+            json.dump({"quantization_config": {"quantization_configs": {"lm_model": {
+                "bits": 4, "group_size": None, "sym": False}}}}, f)
+        self.assertEqual(mp.format_from_dir(d3, {}), "ov-int4-asym-g128")
 
 
 class Gguf(unittest.TestCase):

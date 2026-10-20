@@ -301,10 +301,22 @@ mkdir -p "${WORK}/hf/google/gemma-test/resolve/f1e06dc5"
 cp "${GEMMA_CFG}" "${WORK}/hf/google/gemma-test/resolve/f1e06dc5/config.json"
 if out=$(mrun plan --predict --model google/gemma-test@f1e06dc5 --json) \
     && python3 -c 'import json,sys; d=json.loads(sys.argv[1]); m=d["model"]; assert m["id"]=="google/gemma-test" and m["revision"]=="f1e06dc5" and m["source_rank"]==1 and d["weights"]["format"]=="bf16", m' "${out}" \
-    && [ -s "${WORK}/moe-state/hf-config/google__gemma-test@f1e06dc5.config.json" ]; then
+    && [ -s "${WORK}/moe-state/hf-config/google__gemma-test@f1e06dc5/config.json" ] \
+    && [ ! -e "${WORK}/moe-state/hf-config/google__gemma-test@f1e06dc5/openvino_config.json" ]; then
     ok "plan --predict --model org/name@sha fetches and caches config.json"
 else
     fail "plan --predict --model org/name@sha"; sed 's/^/  | /' <<< "${out}"
+fi
+# An OpenVINO IR repo: the format comes from its openvino_config.json.
+mkdir -p "${WORK}/hf/OpenVINO/gemma-ov/resolve/4e5885c3"
+cp "${GEMMA_CFG}" "${WORK}/hf/OpenVINO/gemma-ov/resolve/4e5885c3/config.json"
+echo '{"quantization_config": {"quantization_configs": {"lm_model": {"bits": 4, "group_size": 64, "sym": false}}}}' \
+    > "${WORK}/hf/OpenVINO/gemma-ov/resolve/4e5885c3/openvino_config.json"
+if out=$(mrun plan --predict --model OpenVINO/gemma-ov --revision 4e5885c3 --placement cpu --json) \
+    && python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["weights"]["format"]=="ov-int4-asym-g64" and d["rows"][0]["engine"]=="ovms", d["weights"]' "${out}"; then
+    ok "plan --predict --model OpenVINO repo: format from openvino_config.json, engine ovms"
+else
+    fail "plan --predict --model OpenVINO repo"; sed 's/^/  | /' <<< "${out}"
 fi
 expect_fail "--bandwidth goes with --perf" doctor --bandwidth
 expect_fail "--model needs a value" plan --predict --model
