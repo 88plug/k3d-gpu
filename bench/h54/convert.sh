@@ -10,7 +10,6 @@
 # Each build is written to OUT.partial and renamed when it and its manifest.json are complete.
 set -euo pipefail
 G=${HOME}/k3dgpu-gemma
-HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 M=${G}/models
 FULL_IMAGE=ghcr.io/ggml-org/llama.cpp:full-b11749@sha256:aefb375acf22d45551b0650af7e96361ad1a3abc65ad2bde215f23488da2711e
 QAT=${M}/google_gemma-4-26B-A4B-it-qat-q4_0-unquantized

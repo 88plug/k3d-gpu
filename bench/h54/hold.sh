@@ -12,7 +12,8 @@ ROW=$1 HOLD=$2
 shift 2
 G=${HOME}/k3dgpu-gemma
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-export REPO=$(cd "${HERE}/../.." && pwd) G
+REPO=$(cd "${HERE}/../.." && pwd)
+export REPO G
 case ${ROW} in smoke*) R=${G}/smoke/${ROW}/hold${HOLD} ;; *) R=${G}/results/H54${ROW}/hold${HOLD} ;; esac
 mkdir -p "${R}"
 export PATH=${G}/h54a/bin:${G}/bin:${PATH} EAT=${G}/h54a/eat-src
