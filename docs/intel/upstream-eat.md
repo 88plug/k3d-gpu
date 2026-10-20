@@ -3,7 +3,7 @@
 > **DRAFT: not submitted; awaiting owner approval.**
 > Nothing here has been filed, opened, forked or pushed to any `intel/*` repository. A maintainer of this repo sends each piece by hand, in the order below, after approving it.
 
-Drafted 2026-10-17. Heads re-read on 2026-10-19 with `gh api` and `git ls-remote`: EAT is unchanged and #19 is still a draft PR; EAS `main` moved from `7c02ca2` to `e8f3ebc`.
+Drafted 2026-10-17. Heads re-read on 2026-10-19 with `gh api` and `git ls-remote`: EAT is unchanged and #19 is still a draft PR; EAS `main` moved from `7c02ca2` to `e8f3ebc`. Re-read on 2026-10-20: no head in the table moved. EAT #21 (Release 1.1.0) opened on 2026-10-19; see [its impact](#release-110-pr-21-impact).
 
 | Repo | Ref | SHA |
 |---|---|---|
@@ -41,6 +41,24 @@ Which mode to use with EAS:
   - The k3d-gpu node image needs `istio_platform: k3d`, not `k3s` (Gate 2 probe 1).
 - **`K3D_GPU_BALLOONS=external` cluster**: EAS's own `nri-balloons` policy can own the node.
   - H14 proved this mode with the nri-plugins chart v0.14.0 and EAT's values [ledger:H14]. It did not exercise EAS's `nri_cpu_balloons` role.
+
+## Release 1.1.0 (PR #21) impact
+
+[EAT #21](https://github.com/intel/enterprise-agent-toolkit/pull/21) (head `c86c42b`, open,
+no review) is based on `main` and keeps the old layout, so it does not contain #19 and
+changes nothing above: the deploy path still belongs in EAS, and the EAT docs patch still
+targets #19. What it changes for a k3d or k3d-gpu cluster, read from source only:
+
+| #21 adds | Already covered by k3d-gpu | Expected on a k3d-gpu cluster |
+|---|---|---|
+| Arc B60/B70 XPU path (`compute_platform=xpu`, `vllm-openai-xpu:v0.28.0`, TP4 `gemma-4-31B-it`) | B70 detection, `gpu.intel.com/xe` asserted by `up`, vLLM XPU `v0.31.0` by digest through `agent up` | Host Level Zero and OpenCL libraries mounted by `hostPath` resolve inside the k3d node container, not on the host |
+| Intel GPU plugin from intel-device-plugins `main` (`intel_gpu_plugin_ref`, unpinned) | Plugin `0.37.1` baked into the node image | Two GPU plugin DaemonSets on one node |
+| NUMA-aware NRI balloons, one `BalloonsPolicy` per node | Baked balloons for hybrid P/E and multi-NUMA hosts; `K3D_GPU_BALLOONS=external` [ledger:H14] | Two policies if `deploy_nri_balloon_policy=yes`; `eat-up.sh` sets `off` |
+| Kata sandboxes (`kata-fc`, `kata-qemu`) | `doctor --perf` reports `/dev/kvm` on the host | Kata needs `/dev/kvm` inside the k3d node, which `up` does not pass through |
+| Qwen3Guard guardrails, on by default; vLLM CPU `v0.28.0`; OVMS as a Docker engine; NVIDIA B300 profile; vLLM Semantic Router | none of these | The guardrail deploys on a sourced brownfield run unless `DEPLOY_GUARDRAILS=off` ([platforms.md](../platforms.md#intel-enterprise-agent-toolkit-eat)) |
+
+Every cell in the last column is an expectation. They are being checked on one host with
+4x Arc Pro B70; no result is in yet, and nothing here is sent upstream until they are.
 
 ## File tree
 

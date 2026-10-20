@@ -245,7 +245,7 @@ Open upstream work that changes this integration:
   ([gpu_plugin.go](https://github.com/intel/intel-device-plugins-for-kubernetes/blob/main/cmd/gpu_plugin/gpu_plugin.go)),
   and `k3d-gpu detect` already reports the one the bound driver gives.
 
-### Open EAT pull requests (checked 2026-10-19)
+### Open EAT pull requests (checked 2026-10-20)
 
 Read with `gh`, `git ls-remote` and a read-only clone only. EAT `main` is still `0ecf67a`,
 `release-1.0.3-hotfix` still points at `0d3438d`, and no newer tag exists.
@@ -255,7 +255,7 @@ Read with `gh`, `git ls-remote` and a read-only clone only. EAT `main` is still 
 | [#5](https://github.com/intel/enterprise-agent-toolkit/pull/5) Bitnami to SolDevelo images | `eba339a`, conflicts with `main` | `bitnami/kubectl:latest` in the GenAI Gateway restore job, and `bitnamilegacy/os-shell` in a Keycloak playbook | None today. Neither line runs on our path: `restoreJob.enabled` is `false`, and the pinned tag has no Keycloak playbook. Every Bitnami image our path renders pulled on 2026-10-18 (`docker manifest inspect`, amd64 and arm64). See the note below | None. Recheck if a `bitnamilegacy` pull fails |
 | [#19](https://github.com/intel/enterprise-agent-toolkit/pull/19) unified convention | `9d842f5`, unchanged; draft, CI green, no review | Deletes `deploy-agentic-stack.sh`, `core/lib`, `core/playbooks` and `core/roles`; installs through EAS `es_auto_installer.sh` | Ends the path `eat-up.sh` uses, once a tag ships it. The drafted EAT docs patch in [upstream-eat.md](intel/upstream-eat.md) still passes `git apply --check` on `9d842f5` | Keep `eat-up.sh` on the tag. Move to the EAS BYO path after a tag that includes #19 |
 | [#20](https://github.com/intel/enterprise-agent-toolkit/pull/20) OpenClaw operator | `200ae58`, based on #19's branch | Optional `openclaw_operator` role (`claw_enabled: false`): operator chart and image `0.38.3` pinned by digest, 3 CRDs (`openclaw.rocks/v1alpha1`) | Not reachable from the pinned tag. The operator itself fits one k3d-gpu node: CPU only (100m / 128Mi request), no GPU, no webhook, `kubeVersion >=1.28`, and both images publish amd64. Its example instance is the gap (see below) | None until #19 and #20 merge into a tag |
-| [#21](https://github.com/intel/enterprise-agent-toolkit/pull/21) Release 1.1.0 | `c86c42b`, opened 2026-10-19, based on `main`; 195 files, CI green, no review | Keeps the old layout (`deploy-agentic-stack.sh`, `core/lib`); adds guardrails, Kata, vLLM Semantic Router, rack-scale and XPU paths; vLLM CPU image `v0.24.0` to `v0.28.0`; NRI balloons role reworked | None on the pinned tag. On a tag cut from #21: `core/lib/brownfield/` and `deploy-genai-gateway.yml` are unchanged, every function `brownfield.sh` calls still exists, and `gateway-charts.py` runs clean on its charts. Two changes would bite, both read from source, not run (see below) | Before moving `eat-up.sh` to a 1.1.0 tag: turn the guardrail off and re-pin the vLLM image |
+| [#21](https://github.com/intel/enterprise-agent-toolkit/pull/21) Release 1.1.0 | `c86c42b`, opened 2026-10-19, based on `main`; 204 files against `release-1.0.3-hotfix`, CI green, no review | Keeps the old layout (`deploy-agentic-stack.sh`, `core/lib`); adds Qwen3Guard guardrails (on by default), Kata sandboxes (`kata-fc` Firecracker and `kata-qemu`), vLLM Semantic Router, rack-scale mode, an NVIDIA B300 profile, and an Arc B60/B70 XPU path (`compute_platform=xpu`); OVMS as a Docker engine; vLLM CPU image `v0.24.0` to `v0.28.0`; NRI balloons role reworked into NUMA-aware per-node policies | None on the pinned tag. On a tag cut from #21: `core/lib/brownfield/` and `deploy-genai-gateway.yml` are unchanged, every function `brownfield.sh` calls still exists, and `gateway-charts.py` runs clean on its charts. Two changes would bite, and the XPU path would overlap what k3d-gpu already installs; all read from source, not run (see below) | Before moving `eat-up.sh` to a 1.1.0 tag: turn the guardrail off and re-pin the vLLM image. Validation on 4x Arc Pro B70 is in progress, no results yet |
 
 Bitnami images on the pinned path. `deploy-genai-gateway.yml` runs `helm dependency update`
 on `genai-gateway`, whose `Chart.yaml` asks for `postgresql >=13.3.0` and `redis >=18.0.0`.
@@ -309,6 +309,32 @@ Read from a read-only clone; nothing here has run against a 1.1.0 stack.
   removed); `eat-up.sh` keeps `deploy_nri_balloon_policy=off`, so k3d-gpu's policy stays the
   only one.
 - #21 does not contain #19: it keeps `deploy-agentic-stack.sh`, which #19 deletes.
+
+#21's XPU path (`compute_platform=xpu`, `docs/intel-arc-xpu-deployment.md`), set against
+a k3d-gpu cluster. Read from `c86c42b`; every overlap below is an expectation until the
+B70 runs land:
+
+- What it deploys: `vllm/vllm-openai-xpu:v0.28.0` from `core/helm-charts/vllm/xpu-values.yaml`,
+  default model `google/gemma-4-31B-it` at tensor parallel 4, resource `gpu.intel.com/xe`
+  (`i915` on older drivers), `supplementalGroups: [990, 44]`, node affinity on
+  `ei-inference-eligible=true`, and the host's Level Zero and OpenCL libraries through
+  `hostPath` (`/usr/lib/x86_64-linux-gnu`, `/etc/OpenCL/vendors`,
+  `/usr/lib/x86_64-linux-gnu/intel-opencl`).
+- What k3d-gpu already covers: B70 detection and the Intel GPU plugin `0.37.1`, baked
+  and pinned; `gpu.intel.com/xe` advertised and asserted by `up`; the label through
+  `K3D_GPU_NODE_LABELS`; vLLM XPU through `K3D_GPU_AGENT_BACKEND=vllm` (`v0.31.0`, by digest).
+- Expected collision: a second GPU plugin. `deploy-intel-gpu-plugin.yml` applies
+  `deployments/gpu_plugin/base/intel-gpu-plugin.yaml` from intel-device-plugins `main`
+  (`intel_gpu_plugin_ref` defaults to `main`, unpinned) beside the baked DaemonSet.
+- Expected collision: a second balloons policy. The reworked `nri_cpu_balloons` role
+  renders one NUMA-sized `BalloonsPolicy` per node (`node.<name>`). #21 still installs
+  it only on `deploy_nri_balloon_policy == "yes"` (`fresh-install.sh` line 247), so
+  `eat-up.sh`'s `off` keeps it away; a config that turns it on meets k3d-gpu's policy.
+- Expected gap: the `hostPath` libraries resolve inside the k3d node container, not
+  on the host. The node image would have to carry compatible Level Zero and OpenCL
+  user space at those paths, or the pod would mount empty or mismatched libraries.
+- Expected gap: Kata (`kata-fc`, `kata-qemu`) needs `/dev/kvm` and nested
+  virtualization inside the k3d node, which k3d-gpu does not pass through today.
 
 Gaps for the #20 example instance (`docs/examples/openclaw-instance.yaml`) on k3d-gpu:
 
