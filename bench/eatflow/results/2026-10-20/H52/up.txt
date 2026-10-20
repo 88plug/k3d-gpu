@@ -1,0 +1,29 @@
+[32m==>[0m Accelerators: intel amx
+[32m==>[0m Experimental features (auto): dra image-volume
+[32m==>[0m Creating k3d cluster 'k3dgpu-h52' with image cryptoandcoffee/k3d-gpu:0.1.61...
+[36mINFO[0m[0000] Prep: Network                                
+[36mINFO[0m[0000] Created network 'k3d-k3dgpu-h52'             
+[36mINFO[0m[0000] Created image volume k3d-k3dgpu-h52-images   
+[36mINFO[0m[0000] Starting new tools node...                   
+[36mINFO[0m[0000] Pulling image 'ghcr.io/k3d-io/k3d-tools:5.9.0' 
+[36mINFO[0m[0001] Creating node 'k3d-k3dgpu-h52-server-0'      
+[36mINFO[0m[0001] Starting node 'k3d-k3dgpu-h52-tools'         
+[36mINFO[0m[0001] Using the k3d-tools node to gather environment information 
+[36mINFO[0m[0001] HostIP: using network gateway 172.19.0.1 address 
+[36mINFO[0m[0001] Starting cluster 'k3dgpu-h52'                
+[36mINFO[0m[0001] Starting servers...                          
+[36mINFO[0m[0001] Starting node 'k3d-k3dgpu-h52-server-0'      
+[36mINFO[0m[0005] All agents already running.                  
+[36mINFO[0m[0005] All helpers already running.                 
+[36mINFO[0m[0005] Injecting records for hostAliases (incl. host.k3d.internal) and for 1 network members into CoreDNS configmap... 
+[36mINFO[0m[0007] Cluster 'k3dgpu-h52' created successfully!   
+[36mINFO[0m[0007] You can now use it like this:                
+kubectl cluster-info
+[32m==>[0m Waiting for nodes Ready...
+node/k3d-k3dgpu-h52-server-0 condition met
+[32m==>[0m Waiting for cluster DNS (CoreDNS)...
+[32m==>[0m intel device plugin auto-deployed by k3s.
+[32m==>[0m Verifying accelerators are schedulable...
+Waiting for daemon set "intel-gpu-plugin" rollout to finish: 0 of 1 updated pods are available...
+daemon set "intel-gpu-plugin" successfully rolled out
+[32m==>[0m Accelerators schedulable: intel=4 amx=1. Try: k3d-gpu test

@@ -1,0 +1,40 @@
+[32m==>[0m Checking docker...
+  ok: docker running
+[32m==>[0m Checking k3d...
+  ok: k3d version v5.9.0
+[32m==>[0m Checking kubectl...
+  ok
+[32m==>[0m Detected accelerators: intel amx
+[32m==>[0m Checking Intel GPU (Arc, Battlemage, Core Ultra iGPU, Crescent Island)...
+  ok: Intel Battlemage (0xe223) bound to xe
+  ok: xe/bmg_guc_* firmware present
+  ok: Intel Battlemage (0xe223) bound to xe
+  ok: xe/bmg_guc_* firmware present
+  ok: Intel Battlemage (0xe223) bound to xe
+  ok: xe/bmg_guc_* firmware present
+  ok: Intel Battlemage (0xe223) bound to xe
+  ok: xe/bmg_guc_* firmware present
+  info: Intel Battlemage (0xe223) at 0000:12:00.0: GuC version not checked: debugfs needs root (sudo k3d-gpu doctor)
+  info: Intel Battlemage (0xe223) at 0000:48:00.0: GuC version not checked: debugfs needs root (sudo k3d-gpu doctor)
+  info: Intel Battlemage (0xe223) at 0000:7c:00.0: GuC version not checked: debugfs needs root (sudo k3d-gpu doctor)
+  info: Intel Battlemage (0xe223) at 0000:96:00.0: GuC version not checked: debugfs needs root (sudo k3d-gpu doctor)
+  ok: up labels the node gpu.intel.com/xmx=true
+  ok: GPU sharing off: one pod per Intel GPU (K3D_GPU_INTEL_SHARED=auto)
+[32m==>[0m Intel CPU built-in accelerators...
+  info: Granite Rapids-X (family 6, model 173): ISA predicted by gcc PTA_GRANITERAPIDS, not read from CPUID: AVX10.1, AMX-FP16 — /proc/cpuinfo may not show these (kernel-dependent); NFD labels what CPUID reports (cpu-cpuid.AVX10_VERSION, APX_F, AMXFP8) and oneDNN/OpenVINO pick them with no flag
+  ok: AMX (amx_bf16 amx_int8 amx_tile) — CPU instructions, usable in any pod; up labels nodes feature.node.kubernetes.io/cpu-cpuid.AMX*
+  ok: CPU ISA: AVX512BF16 AVX512F AVX512VNNI AVXVNNI CETIBT CETSS GFNI SHA VAES — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
+  [33mwarn[0m: DSA: 3 device(s) but no user work queues — configure them on the host with accel-config
+  [33mwarn[0m: IAA: 3 device(s) but no user work queues — configure them on the host with accel-config
+  [33mwarn[0m: QAT 0000:01:00.0: no VFs — enable on the host: echo N > /sys/bus/pci/devices/0000:01:00.0/sriov_numvfs
+  [33mwarn[0m: QAT 0000:06:00.0: no VFs — enable on the host: echo N > /sys/bus/pci/devices/0000:06:00.0/sriov_numvfs
+  [33mwarn[0m: QAT 0000:0b:00.0: no VFs — enable on the host: echo N > /sys/bus/pci/devices/0000:0b:00.0/sriov_numvfs
+  info: RDT allocation (rdt_a: cat_l2 cat_l3 cdp_l2 cdp_l3 mba) — resctrl classes are available but left off: the balloons policy ships control.rdt.enable: false because enabling it rewrites the host's /sys/fs/resctrl. To opt in, mount resctrl on the host (mount -t resctrl resctrl /sys/fs/resctrl) and set control.rdt.enable: true in nri-balloons.yml; usePodQoSAsDefaultClass then gives BestEffort/Burstable/Guaranteed pods 33%/66%/100% of the L3
+  info: noisy-neighbour isolation: rdt-mba — CAT + MBA can cap a neighbour's cache share and DRAM bandwidth through the RDT opt-in above (resctrl mounted: no); the shipped classes set cache shares only, so add mbAllocation: {all: ["50%"]} to the BestEffort class for bandwidth; the classes run inside the NRI balloons policy, which up deploys on hybrid or multi-NUMA hosts only
+  info: per socket: socket 0: DSA 3, IAA 3, QAT 3 (no ARK default on file for this CPU)
+  info: Intel On Demand interface present (intel_vsec.sdsi.0): on On Demand SKUs, instances above the ARK default are activated by a license (https://github.com/intel/intel-sdsi); ask the platform vendor whether activation is offered
+[32m==>[0m Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...
+  ok: dra available (auto)
+  ok: image-volume available (auto)
+
+[32m==>[0m All checks passed.

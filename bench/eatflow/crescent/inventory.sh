@@ -28,6 +28,11 @@ for c in /sys/class/drm/card[0-9]* /sys/class/drm/renderD*; do
     [ -e "${c}/device/vendor" ] || continue
     echo "$(basename "${c}") $(r "${c}/device/vendor"):$(r "${c}/device/device") $(name "${c}/device/driver") $(basename "$(readlink -f "${c}/device")")"
 done
+echo "## DRM usage stats of a read-only client per Intel render node (engine classes, capacity)"
+for rd in /dev/dri/renderD*; do
+    [ -e "${rd}" ] || continue
+    echo "${rd##*/}: $(cat /proc/self/fdinfo/9 2>/dev/null 9< "${rd}" | grep -E '^(drm-driver|drm-pdev|drm-cycles-[a-z]+|drm-engine-capacity-[a-z]+):' | sed -E 's/^drm-cycles-([a-z]+):.*/\1/; s/^drm-engine-capacity-/cap-/; s/:[[:space:]]+/=/' | paste -sd' ')"
+done
 echo "## idxd devices"
 for d in /sys/bus/dsa/devices/dsa* /sys/bus/dsa/devices/iax*; do
     [ -e "${d}/state" ] || continue

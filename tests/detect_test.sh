@@ -382,6 +382,7 @@ printf 'processor\t: 0\nflags\t\t: fpu sse2 avx512f amx_bf16 amx_tile amx_int8\n
 mkdir -p "${r}/sys/bus/dsa/devices/dsa0" "${r}/sys/bus/dsa/devices/iax1"
 pci "${r}" 0000:6b:00.0 0x8086 0x4940 4xxx 0x0b4000
 echo 0 > "${r}/sys/devices/pci0000:00/0000:6b:00.0/sriov_numvfs"
+echo 16 > "${r}/sys/devices/pci0000:00/0000:6b:00.0/sriov_totalvfs"
 doctor_says "Xeon AMX flags are reported" "${r}" 'AMX.*amx_bf16.*amx_int8.*amx_tile'
 doctor_says "DSA without work queues points at accel-config" "${r}" 'DSA.*accel-config'
 doctor_says "IAA without work queues points at accel-config" "${r}" 'IAA.*accel-config'
@@ -640,6 +641,32 @@ r=$(newroot media-xe)
 kernel "${r}" 6.18.1
 pci "${r}" 0000:03:00.0 0x8086 0xe20b xe; render "${r}" 0000:03:00.0 128
 doctor_says "xe GPU without an engine dir gets no media label" "${r}" 'media-vcs' negate
+# xe has no per-engine sysfs; its engine counts come from the DRM usage stats of a client on the
+# render node (drm-usage-stats.rst: drm-cycles-<class>, drm-engine-capacity-<class> when > 1).
+# Values from an Arc Pro B70 (0xe223) on xe, kernel 7.0.0-31 (crescent, 2026-10-20).
+xe_fdinfo() { mkdir -p "$1/proc/drm-fdinfo"; printf "$3" > "$1/proc/drm-fdinfo/renderD$2"; }
+B70_FDINFO='drm-driver:\txe\ndrm-pdev:\t0000:12:00.0\ndrm-cycles-rcs:\t0\ndrm-total-cycles-rcs:\t5798\ndrm-cycles-vcs:\t0\ndrm-total-cycles-vcs:\t5798\ndrm-engine-capacity-vcs:\t2\ndrm-cycles-vecs:\t0\ndrm-total-cycles-vecs:\t5798\ndrm-engine-capacity-vecs:\t2\ndrm-cycles-bcs:\t0\ndrm-cycles-ccs:\t0\n'
+r=$(newroot media-xe-b70)
+kernel "${r}" 7.0.0
+pci "${r}" 0000:12:00.0 0x8086 0xe223 xe; render "${r}" 0000:12:00.0 128
+xe_fdinfo "${r}" 128 "${B70_FDINFO}"
+doctor_says "xe media engines come from the DRM usage stats" "${r}" 'ok: renderD128 media engines: vcs x2, vecs x2 \(xe DRM usage stats\)'
+doctor_says "xe media engine counts are node labels" "${r}" 'gpu\.intel\.com/xmx=true gpu\.intel\.com/media-vcs=2 gpu\.intel\.com/media-vecs=2'
+r=$(newroot media-xe-one)
+kernel "${r}" 7.0.0
+pci "${r}" 0000:12:00.0 0x8086 0xe223 xe; render "${r}" 0000:12:00.0 128
+xe_fdinfo "${r}" 128 'drm-driver:\txe\ndrm-cycles-rcs:\t0\ndrm-cycles-vcs:\t0\ndrm-cycles-vecs:\t0\n'
+doctor_says "an xe engine class with no capacity line counts one" "${r}" 'media-vcs=1 gpu\.intel\.com/media-vecs=1'
+r=$(newroot media-xe-novcs)
+kernel "${r}" 7.0.0
+pci "${r}" 0000:12:00.0 0x8086 0xe223 xe; render "${r}" 0000:12:00.0 128
+xe_fdinfo "${r}" 128 'drm-driver:\txe\ndrm-cycles-rcs:\t0\ndrm-cycles-ccs:\t0\n'
+doctor_says "xe usage stats with no video class count zero" "${r}" 'media-vcs=0 gpu\.intel\.com/media-vecs=0'
+r=$(newroot media-xe-i915stats)
+kernel "${r}" 7.0.0
+pci "${r}" 0000:12:00.0 0x8086 0xe223 xe; render "${r}" 0000:12:00.0 128
+xe_fdinfo "${r}" 128 'drm-driver:\ti915\ndrm-engine-video:\t0 ns\ndrm-engine-capacity-video:\t2\n'
+doctor_says "usage stats from another driver are not read as xe" "${r}" 'media-vcs' negate
 
 # CPU ISA labels under NFD's names (klauspost/cpuid feature ids).
 r=$(newroot isa)
@@ -1141,6 +1168,111 @@ pci "${r}" 0000:6b:00.0 0x8086 0x4940 "" 0x0b4000
 doctor_says "DSA/IAA without idxd loaded are still counted per socket" "${r}" \
     'info: per socket: socket 0: DSA 1, IAA 1, QAT 1 \(ARK default'
 doctor_says "DSA/IAA without idxd loaded are not flagged below the ARK default" "${r}" 'below the ARK default' negate
+
+# ---- unconfigured DSA/IAA/QAT: exact enable + revert commands ---------------------
+
+# gnr_unconfigured <root>: Xeon 6 (Granite Rapids) as it boots: DSA dsa0/dsa2 and IAA
+# iax1 on idxd, disabled, no work queues (dsa2 has user PASID), and 4xxx + 420xx QAT
+# PFs with SR-IOV but no VFs. sysfs names per Documentation/ABI/stable/sysfs-driver-dma-idxd.
+gnr_unconfigured() {
+    local d
+    kernel "$1" 6.18.1
+    printf 'processor\t: 0\nflags\t\t: fpu avx512f amx_bf16 amx_tile amx_int8\n' > "$1/proc/cpuinfo"
+    idxd_dev "$1" 0000:e7:01.0 0x11fb dsa0 0
+    idxd_dev "$1" 0000:e7:02.0 0x1216 iax1 0
+    idxd_dev "$1" 0000:f2:01.0 0x11fb dsa2 0
+    for d in dsa0 iax1 dsa2; do
+        echo disabled > "$1/sys/bus/dsa/devices/${d}/state"
+        echo 0 > "$1/sys/bus/dsa/devices/${d}/pasid_enabled"
+    done
+    echo 1 > "$1/sys/bus/dsa/devices/dsa2/pasid_enabled"
+    pci "$1" 0000:01:00.0 0x8086 0x4940 4xxx 0x0b4000
+    pci "$1" 0000:02:00.0 0x8086 0x4946 420xx 0x0b4000
+    for d in 0000:01:00.0 0000:02:00.0; do
+        echo 16 > "$1/sys/devices/pci0000:00/${d}/sriov_totalvfs"
+        echo 0 > "$1/sys/devices/pci0000:00/${d}/sriov_numvfs"
+    done
+}
+
+r=$(newroot gnr-unconfigured)
+gnr_unconfigured "${r}"
+ac="sudo accel-config"
+doctor_says "unconfigured DSA: exact accel-config apply for dsa0 (dedicated, no PASID)" "${r}" \
+    "^ {8}apply: +${ac} config-engine dsa0/engine0\.0 --group-id=0 && ${ac} config-wq dsa0/wq0\.0 --group-id=0 --type=user --mode=dedicated --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && ${ac} enable-device dsa0 && ${ac} enable-wq dsa0/wq0\.0$"
+doctor_says "unconfigured DSA: exact revert for dsa0" "${r}" \
+    "^ {8}revert: ${ac} disable-wq dsa0/wq0\.0 && ${ac} disable-device dsa0$"
+doctor_says "unconfigured DSA with user PASID gets a shared WQ with a threshold" "${r}" \
+    "^ {8}apply: +${ac} config-engine dsa2/engine2\.0 --group-id=0 && ${ac} config-wq dsa2/wq2\.0 --group-id=0 --type=user --mode=shared --threshold=15 --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && ${ac} enable-device dsa2 && ${ac} enable-wq dsa2/wq2\.0$"
+doctor_says "unconfigured IAA: exact accel-config apply for iax1" "${r}" \
+    "^ {8}apply: +${ac} config-engine iax1/engine1\.0 --group-id=0 && ${ac} config-wq iax1/wq1\.0 --group-id=0 --type=user --mode=dedicated --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && ${ac} enable-device iax1 && ${ac} enable-wq iax1/wq1\.0$"
+doctor_says "unconfigured IAA: exact revert for iax1" "${r}" \
+    "^ {8}revert: ${ac} disable-wq iax1/wq1\.0 && ${ac} disable-device iax1$"
+doctor_says "DSA warning names host-setup --apply as the one command" "${r}" \
+    'warn.*: DSA: 2 device\(s\) but no user work queues.*k3d-gpu host-setup --apply'
+doctor_says "QAT 4xxx: VF count is sriov_totalvfs, not N" "${r}" \
+    '^ {8}apply: +echo 16 \| sudo tee /sys/bus/pci/devices/0000:01:00\.0/sriov_numvfs$'
+doctor_says "QAT 4xxx: exact revert" "${r}" \
+    '^ {8}revert: echo 0 \| sudo tee /sys/bus/pci/devices/0000:01:00\.0/sriov_numvfs$'
+doctor_says "QAT 4xxx names the plugin's VF driver 4xxxvf" "${r}" 'warn.*: QAT 0000:01:00\.0 \(4xxx\): no VFs.*4xxxvf'
+doctor_says "QAT 420xx names the plugin's VF driver 420xxvf" "${r}" 'warn.*: QAT 0000:02:00\.0 \(420xx\): no VFs.*420xxvf'
+doctor_says "no placeholder N VF count is printed" "${r}" 'echo N ' negate
+expect "unconfigured DSA/IAA/QAT stay out of detect's stdout" "${r}" \
+"amx feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true feature.node.kubernetes.io/cpu-cpuid.AMXINT8=true feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true"
+out=$(env K3D_GPU_SYSROOT="${r}" bash "${K3D_GPU}" detect 2>&1 >/dev/null)
+if grep -E 'present but disabled: DSA dsa0 dsa2, IAA iax1, QAT 0000:01:00\.0 0000:02:00\.0 .*k3d-gpu host-setup --apply' <<< "${out}" >/dev/null; then
+    PASS=$((PASS + 1)); echo "ok   detect names present-but-disabled engines and the enable command on stderr"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL detect names present-but-disabled engines and the enable command on stderr"; sed 's/^/  | /' <<< "${out}"
+fi
+doctor_says "missing accel-config with no distro package says how to build it" "${r}" \
+    'warn.*: accel-config is not installed and this distro has no package: build intel/idxd-config accel-config-v4\.1\.9'
+mkdir -p "${r}/etc"; printf 'ID=ubuntu\nVERSION_ID="24.04"\n' > "${r}/etc/os-release"
+doctor_says "missing accel-config on ubuntu gives the apt install as its apply" "${r}" \
+    '^ {8}apply: +sudo apt-get update && sudo apt-get install -y accel-config$'
+mkdir -p "${r}/usr/bin"; printf '#!/bin/sh\n' > "${r}/usr/bin/accel-config"; chmod +x "${r}/usr/bin/accel-config"
+doctor_says "installed accel-config is not flagged" "${r}" 'accel-config is not installed' negate
+doctor_says "each DSA device is its own finding with its WQ mode" "${r}" 'warn.*: DSA dsa0: disabled — 1 engine, 1 group, 1 dedicated user WQ'
+echo enabled > "${r}/sys/bus/dsa/devices/dsa0/state"
+doctor_says "an enabled DSA device (kernel work queues) gets no config commands" "${r}" 'dsa0/engine0' negate
+rm "${r}/sys/devices/pci0000:00/0000:01:00.0/sriov_totalvfs"
+doctor_says "QAT PF without sriov_totalvfs points at BIOS SR-IOV, no tee" "${r}" \
+    'warn.*: QAT 0000:01:00\.0 \(4xxx\): no VFs and no SR-IOV.*sriov_totalvfs'
+doctor_says "QAT PF without sriov_totalvfs gets no numvfs command" "${r}" '0000:01:00\.0/sriov_numvfs' negate
+
+# Two-digit device ids name their engine and WQ by the same id, in numeric order;
+# a kind that already has a user WQ gets no commands for its other devices.
+r=$(newroot idxd-ids)
+kernel "${r}" 6.18.1
+idxd_dev "${r}" 0000:e7:01.0 0x11fb dsa2 0
+idxd_dev "${r}" 0000:e8:01.0 0x11fb dsa10 0
+idxd_dev "${r}" 0000:e9:01.0 0x1216 iax11 0
+idxd_dev "${r}" 0000:ea:01.0 0x1216 iax3 0
+mkdir -p "${r}/dev/iax"; touch "${r}/dev/iax/wq3.0"
+doctor_says "dsa10 is configured as dsa10/engine10.0 and dsa10/wq10.0" "${r}" \
+    "^ {8}apply: +${ac} config-engine dsa10/engine10\.0 --group-id=0 && ${ac} config-wq dsa10/wq10\.0 .*enable-wq dsa10/wq10\.0$"
+out=$(env K3D_GPU_SYSROOT="${r}" PATH="${STUB_BIN}:${PATH}" bash "${K3D_GPU}" doctor 2>&1 | grep -oE 'warn.*: DSA dsa[0-9]+' | grep -oE 'dsa[0-9]+$' | paste -sd' ')
+if [ "${out}" = "dsa2 dsa10" ]; then
+    PASS=$((PASS + 1)); echo "ok   DSA devices are listed in numeric order"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL DSA devices are listed in numeric order (got '${out}')"
+fi
+doctor_says "a kind with a user WQ gets no commands for its other devices" "${r}" 'iax11' negate
+mkdir -p "${r}/dev/dsa"; touch "${r}/dev/dsa/wq2.0"
+doctor_says "a kind with a user WQ is ok" "${r}" 'ok: DSA: 2 device\(s\), 1 user work queue'
+
+r=$(newroot idxd-enabled)
+kernel "${r}" 6.18.1
+idxd_dev "${r}" 0000:e7:01.0 0x11fb dsa0 0
+echo enabled > "${r}/sys/bus/dsa/devices/dsa0/state"
+doctor_says "an all-enabled kind with no user WQ is left to its owner" "${r}" \
+    'warn.*: DSA: 1 device\(s\) but no user work queues and none is disabled'
+doctor_says "an all-enabled kind gets no host-setup pointer" "${r}" 'DSA.*host-setup --apply' negate
+
+r=$(newroot qat-no-driver-novf)
+kernel "${r}" 6.18.1
+pci "${r}" 0000:01:00.0 0x8086 0x4940 "" 0x0b4000
+echo 16 > "${r}/sys/devices/pci0000:00/0000:01:00.0/sriov_totalvfs"
+doctor_says "QAT PF with no driver gets no numvfs command" "${r}" 'sriov_numvfs' negate
 
 r=$(newroot socket-counts-none)
 kernel "${r}" 6.18.1
@@ -1996,7 +2128,7 @@ r=$(newroot perf-uncore-floor)
 uncore "${r}" package_00_die_00 800000 4700000 4700000 4700000
 perf_says "perf: a raised uncore floor is information with its revert" "${r}" 'info: package_00_die_00: floor raised to 4700000 kHz \(hardware floor 800000\).*echo 800000 \| sudo tee'
 perf_says "perf: a raised uncore floor is not a suggestion" "${r}" 'warn: package_00_die_00' negate
-perf_says "perf: the uncore section never suggests a pin while H29 is pending" "${r}" 'under test \(EXPERIMENTS\.md H29, PENDING\)'
+perf_says "perf: the uncore section never suggests a pin while H29 is unproven" "${r}" 'unproven \(EXPERIMENTS\.md H29, INCONCLUSIVE\)'
 r=$(newroot perf-uncore-tpmi)
 uncore "${r}" uncore00 800000 2200000 800000 2200000
 uncore "${r}" uncore01 800000 2500000 800000 2500000

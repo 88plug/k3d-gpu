@@ -1480,6 +1480,8 @@ changes nothing unless you pass `--apply` and answer `y`.
 | Media driver + libva | `ppa:kobuk-team/intel-graphics`, pinned 26.3.2 / 2.24.1 | `libva-intel-media-driver` | `intel-media-driver libva` |
 | NPU driver + firmware | GitHub linux-npu-driver v1.38.0 archive, sha256-checked (includes `intel-fw-npu`) | `intel-npu-driver intel-npu-firmware` | `intel-npu-driver linux-firmware-intel` |
 | NVIDIA container toolkit | NVIDIA apt repo, pinned 1.20.1-1; CDI via `nvidia-cdi-refresh` | NVIDIA dnf repo, pinned 1.20.1-1 | `nvidia-container-toolkit`; CDI via `nvidia-cdi-refresh` (1.20.1-1+), else `nvidia-ctk cdi generate` |
+| DSA / IAA user work queues | `accel-config` (universe), then per disabled device: 1 engine, 1 group, 1 user WQ (shared with user PASID, else dedicated) | `accel-config`, same steps | no package: build intel/idxd-config accel-config-v4.1.9; the plan leaves DSA/IAA out until then |
+| QAT VFs | `sriov_numvfs` = the PF's `sriov_totalvfs`, `modprobe vfio-pci` | same | same |
 
 Fedora, Arch and Manjaro repos serve only their current build, so those plans
 install the repo version; Arch and Manjaro always use `pacman -Syu`. Before the
@@ -1489,6 +1491,7 @@ the fix:
 - **Media driver ahead of libva** (`vainfo`: `iHD_drv_video.so has no function __vaDriverInit_1_0`): the driver exports `__vaDriverInit_1_<N>` for libva 2.N and libva is older. Checked from the files and by running `vainfo`.
 - **Compute runtime ahead of libstdc++** (`version 'GLIBCXX_3.4.35' not found`; `clinfo` silently loses the Intel platform): the runtime was built by a newer GCC than the installed `gcc-libs`. Checked by comparing symbol versions, running `clinfo -l` and `ldd` on the registered ICD.
 - Parts newer than the kernel's default support get boot options (printed, never applied): `i915.force_probe=<id>` for i915 parts (Meteor Lake, Arrow Lake), `xe.force_probe=<id> i915.force_probe=!<id>` for xe parts.
+- **Xeon DSA, IAA and QAT present but unconfigured** (no user work queue, no VFs): the plan carries the same per-device commands `k3d-gpu doctor` prints, as the intel-device-plugins v0.37.1 initcontainers configure them, and prints each revert. These last until reboot. `up` and `detect` name such engines and point here.
 
 Downloads go to `${XDG_CACHE_HOME:-~/.cache}/k3d-gpu/host-setup` (override: `K3D_GPU_SETUP_DIR`), which must be a directory you own; it is set to mode 0700. On Ubuntu an apt pin keeps the PPA's `intel-opencl-icd`/`libze*`/`libigc*` builds from replacing the GitHub .debs.
 

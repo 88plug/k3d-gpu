@@ -1,0 +1,31 @@
+== gpu-enum-1 Succeeded
+total 0
+crw-rw---- 1 root root 226,   4 Oct 20 21:34 card4
+crw-rw---- 1 root root 226, 131 Oct 20 21:34 renderD131
+                                                                  
+  Device ID     Device Information                                
+  0             Device Name: Intel(R) Arc(TM) Pro B70 Graphics    
+                Device State: normal                              
+                Vendor Name: Intel(R) Corporation                 
+                SOC UUID: 00000000-0000-0096-0000-0000e2238086    
+                PCI BDF Address: 0000:96:00.0                     
+                DRM Device: /dev/dri/card4                        
+                Function Type: physical                           
+                                                                  
+== gpu-enum-2 Succeeded
+unable to retrieve container logs for containerd://01566063fd94c4954ca62ef3ee776679545e4e9c83e426a008d2b5080f78e062== gpu-enum-3 Succeeded
+total 0
+crw-rw---- 1 root root 226,   2 Oct 20 21:34 card2
+crw-rw---- 1 root root 226, 129 Oct 20 21:34 renderD129
+                                                                  
+  Device ID     Device Information                                
+  0             Device Name: Intel(R) Arc(TM) Pro B70 Graphics    
+                Device State: normal                              
+                Vendor Name: Intel(R) Corporation                 
+                SOC UUID: 00000000-0000-0048-0000-0000e2238086    
+                PCI BDF Address: 0000:48:00.0                     
+                DRM Device: /dev/dri/card2                        
+                Function Type: physical                           
+                                                                  
+== gpu-enum-4 Succeeded
+unable to retrieve container logs for containerd://d2f79b9937493d9d5a9558a26928bd73fdb2b077f76018b809af0477cf905b92

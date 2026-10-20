@@ -362,6 +362,103 @@ for d in usr/lib/x86_64-linux-gnu usr/lib64; do
     says "Level Zero loader found under ${d}" "Level Zero loader: libze_loader.so.1"
 done
 
+# ---- Xeon DSA/IAA work queues and QAT VFs --------------------------------------
+
+# xeon_accels <root>: Granite Rapids as it boots: DSA dsa0 and IAA iax1 on idxd,
+# disabled, no work queues; a 4xxx QAT PF with SR-IOV (16 VFs) but none enabled.
+xeon_accels() {
+    local d
+    mkdir -p "$1/sys/bus/dsa/devices"
+    for d in dsa0 iax1; do
+        mkdir -p "$1/sys/bus/dsa/devices/${d}"
+        echo disabled > "$1/sys/bus/dsa/devices/${d}/state"
+        echo 0 > "$1/sys/bus/dsa/devices/${d}/pasid_enabled"
+    done
+    pci "$1" 0000:01:00.0 0x8086 0x4940 0x0b4000 4xxx
+    echo 16 > "$1/sys/devices/pci0000:00/0000:01:00.0/sriov_totalvfs"
+    echo 0 > "$1/sys/devices/pci0000:00/0000:01:00.0/sriov_numvfs"
+}
+AC="sudo accel-config"
+DSA_RUN="${AC} config-engine dsa0/engine0.0 --group-id=0 && ${AC} config-wq dsa0/wq0.0 --group-id=0 --type=user --mode=dedicated --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && ${AC} enable-device dsa0 && ${AC} enable-wq dsa0/wq0.0"
+IAA_RUN="${AC} config-engine iax1/engine1.0 --group-id=0 && ${AC} config-wq iax1/wq1.0 --group-id=0 --type=user --mode=dedicated --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && ${AC} enable-device iax1 && ${AC} enable-wq iax1/wq1.0"
+QAT_RUN="echo 16 | sudo tee /sys/bus/pci/devices/0000:01:00.0/sriov_numvfs"
+
+r=$(newroot xeon-accels)
+osrel "${r}" ubuntu 24.04
+xeon_accels "${r}"
+run "${r}" ""
+rc_is "Xeon with unconfigured accelerators: dry run exits 0" 0
+not_says "a Xeon with no GPU is not 'nothing to set up'" "nothing to set up"
+says "DSA without work queues is a check that fails" "DSA dsa0: no user work queue"
+says "IAA without work queues is a check that fails" "IAA iax1: no user work queue"
+says "QAT without VFs is a check that fails" "QAT 0000:01:00.0 (4xxx): no VFs"
+says "plan installs accel-config on ubuntu" "sudo apt-get update && sudo apt-get install -y accel-config"
+says "plan has the same DSA command doctor prints" "${DSA_RUN}"
+says "plan has the same IAA command doctor prints" "${IAA_RUN}"
+says "plan enables every QAT VF the PF supports" "${QAT_RUN}"
+says "plan loads vfio-pci for the QAT plugin" "sudo modprobe vfio-pci"
+says "revert is printed for DSA" "${AC} disable-wq dsa0/wq0.0 && ${AC} disable-device dsa0"
+says "revert is printed for IAA" "${AC} disable-wq iax1/wq1.0 && ${AC} disable-device iax1"
+says "revert is printed for QAT" "echo 0 | sudo tee /sys/bus/pci/devices/0000:01:00.0/sriov_numvfs"
+not_says "accelerator-only plan has no GPU packages" "ca-certificates"
+ran_nothing "accelerator dry run calls nothing"
+
+run "${r}" "n" --apply
+says "declined accelerator apply says so" "Aborted: nothing was run."
+ran_nothing "declined accelerator apply calls nothing"
+
+run "${r}" "y" --apply
+rc_is "accelerator apply exits 0" 0
+logged "apply installs accel-config" "sudo apt-get install -y accel-config"
+logged "apply configures the DSA engine" "sudo accel-config config-engine dsa0/engine0.0 --group-id=0"
+logged "apply configures the DSA work queue" "sudo accel-config config-wq dsa0/wq0.0 --group-id=0 --type=user --mode=dedicated --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu"
+logged "apply enables the IAA work queue" "sudo accel-config enable-wq iax1/wq1.0"
+logged "apply creates the QAT VFs" "sudo tee /sys/bus/pci/devices/0000:01:00.0/sriov_numvfs"
+says "apply prints the revert after running" "revert: echo 0 | sudo tee /sys/bus/pci/devices/0000:01:00.0/sriov_numvfs"
+
+mkdir -p "${r}/usr/bin"; printf '#!/bin/sh\n' > "${r}/usr/bin/accel-config"; chmod +x "${r}/usr/bin/accel-config"
+mkdir -p "${r}/sys/bus/pci/drivers/vfio-pci"
+run "${r}" ""
+not_says "installed accel-config is not reinstalled" "install -y accel-config"
+not_says "loaded vfio-pci is not loaded again" "modprobe vfio-pci"
+
+r=$(newroot xeon-accels-pasid)
+osrel "${r}" ubuntu 24.04
+xeon_accels "${r}"
+echo 1 > "${r}/sys/bus/dsa/devices/dsa0/pasid_enabled"
+run "${r}" ""
+says "a DSA device with user PASID gets a shared WQ in the plan" "${AC} config-wq dsa0/wq0.0 --group-id=0 --type=user --mode=shared --threshold=15 --wq-size=16"
+run "${r}" "" K3D_GPU_VENDORS=qat
+says "K3D_GPU_VENDORS=qat plans the QAT VFs" "${QAT_RUN}"
+not_says "K3D_GPU_VENDORS=qat leaves DSA/IAA out" "accel-config"
+run "${r}" "" K3D_GPU_VENDORS=dsa
+says "K3D_GPU_VENDORS=dsa plans DSA" "${AC} config-engine dsa0/engine0.0"
+not_says "K3D_GPU_VENDORS=dsa leaves IAA out" "iax1"
+not_says "K3D_GPU_VENDORS=dsa leaves QAT out" "sriov_numvfs"
+
+r=$(newroot xeon-accels-fedora)
+osrel "${r}" fedora 44
+xeon_accels "${r}"
+run "${r}" ""
+says "fedora installs accel-config from its repo" "sudo dnf install -y accel-config"
+
+r=$(newroot xeon-accels-arch)
+osrel "${r}" arch
+xeon_accels "${r}"
+run "${r}" ""
+says "arch has no accel-config package and says how to get it" "accel-config is not packaged for arch"
+not_says "arch plan leaves out DSA/IAA commands it cannot run" "config-engine dsa0"
+says "arch plan still enables QAT VFs" "${QAT_RUN}"
+
+r=$(newroot xeon-accels-ready)
+osrel "${r}" ubuntu 24.04
+xeon_accels "${r}"
+mkdir -p "${r}/dev/dsa" "${r}/dev/iax"; touch "${r}/dev/dsa/wq0.0" "${r}/dev/iax/wq1.0"
+mkdir -p "${r}/sys/devices/pci0000:00/0000:01:01.0"; ln -sfn "${r}/sys/devices/pci0000:00/0000:01:01.0" "${r}/sys/devices/pci0000:00/0000:01:00.0/virtfn0"
+run "${r}" ""
+says "configured accelerators: nothing to set up" "nothing to set up"
+not_says "configured accelerators get no accel-config steps" "accel-config"
+
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

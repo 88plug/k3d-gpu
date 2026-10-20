@@ -1,0 +1,54 @@
+# date 2026-10-20T21:31:15Z host 905a08313800 kernel 7.0.0-31-generic
+cpu:  Intel(R) Xeon(R) 6741P microcode 0xa000133
+online 0-95 nodes node0 cpu_atom=no smt=1
+amx_tile=1 amx_bf16=1 amx_int8=1 amx_fp16=0 amx_complex=0 avx512f=1 avx512_bf16=1 avx512_fp16=1 avx512_vnni=1 avx_vnni=1 
+## pci (Intel GPU, DSA, IAA, QAT, DLB)
+0000:00:01.0 0x8086:0x0b25 class=0x088000 driver=idxd numa=0 sriov=/ qat_state= qat_cfg=
+0000:00:02.0 0x8086:0x0cfe class=0x088000 driver=idxd numa=0 sriov=/ qat_state= qat_cfg=
+0000:01:00.0 0x8086:0x4944 class=0x0b4000 driver=4xxx numa=0 sriov=0/16 qat_state=up qat_cfg=sym;asym
+0000:03:00.0 0x8086:0x2714 class=0x0b4000 driver= numa=0 sriov=0/16 qat_state= qat_cfg=
+0000:05:01.0 0x8086:0x0b25 class=0x088000 driver=idxd numa=0 sriov=/ qat_state= qat_cfg=
+0000:05:02.0 0x8086:0x0cfe class=0x088000 driver=idxd numa=0 sriov=/ qat_state= qat_cfg=
+0000:06:00.0 0x8086:0x4944 class=0x0b4000 driver=4xxx numa=0 sriov=0/16 qat_state=up qat_cfg=dc
+0000:08:00.0 0x8086:0x2714 class=0x0b4000 driver= numa=0 sriov=0/16 qat_state= qat_cfg=
+0000:0a:01.0 0x8086:0x0b25 class=0x088000 driver=idxd numa=0 sriov=/ qat_state= qat_cfg=
+0000:0a:02.0 0x8086:0x0cfe class=0x088000 driver=idxd numa=0 sriov=/ qat_state= qat_cfg=
+0000:0b:00.0 0x8086:0x4944 class=0x0b4000 driver=4xxx numa=0 sriov=0/16 qat_state=up qat_cfg=sym;asym
+0000:0d:00.0 0x8086:0x2714 class=0x0b4000 driver= numa=0 sriov=0/16 qat_state= qat_cfg=
+0000:12:00.0 0x8086:0xe223 class=0x030000 driver=xe numa=0 sriov=0/7 qat_state= qat_cfg=
+0000:48:00.0 0x8086:0xe223 class=0x030000 driver=xe numa=0 sriov=0/7 qat_state= qat_cfg=
+0000:7c:00.0 0x8086:0xe223 class=0x030000 driver=xe numa=0 sriov=0/7 qat_state= qat_cfg=
+0000:96:00.0 0x8086:0xe223 class=0x030000 driver=xe numa=0 sriov=0/7 qat_state= qat_cfg=
+## drm
+card0 0x1a03:0x2000 ast 0000:2d:00.0
+card1 0x8086:0xe223 xe 0000:12:00.0
+card2 0x8086:0xe223 xe 0000:48:00.0
+card3 0x8086:0xe223 xe 0000:7c:00.0
+card4 0x8086:0xe223 xe 0000:96:00.0
+renderD128 0x8086:0xe223 xe 0000:12:00.0
+renderD129 0x8086:0xe223 xe 0000:48:00.0
+renderD130 0x8086:0xe223 xe 0000:7c:00.0
+renderD131 0x8086:0xe223 xe 0000:96:00.0
+## idxd devices
+dsa0 state=disabled pci=0000:00:01.0 max_wqs=16 max_engines=4
+dsa2 state=disabled pci=0000:05:01.0 max_wqs=16 max_engines=4
+dsa4 state=disabled pci=0000:0a:01.0 max_wqs=16 max_engines=4
+iax1 state=enabled pci=0000:00:02.0 max_wqs=16 max_engines=8
+iax3 state=enabled pci=0000:05:02.0 max_wqs=16 max_engines=8
+iax5 state=enabled pci=0000:0a:02.0 max_wqs=16 max_engines=8
+## idxd work queues not in the reset state (disabled, size 0, no group)
+wq1.0 state=enabled size=256 group=0 mode=dedicated type=kernel name=iaa_crypto driver=crypto
+wq3.0 state=enabled size=256 group=0 mode=dedicated type=kernel name=iaa_crypto driver=crypto
+wq5.0 state=enabled size=256 group=0 mode=dedicated type=kernel name=iaa_crypto driver=crypto
+## idxd engines in a group
+engine1.0 group=0
+engine3.0 group=0
+engine5.0 group=0
+## device nodes
+/dev/dsa: absent
+/dev/iax: absent
+/dev/accel: absent
+/dev/qat_adf_ctl: absent
+/dev/vfio: ./vfio
+## modules
+iaa_crypto idxd intel_qat qat_4xxx xe

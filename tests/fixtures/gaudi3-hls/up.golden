@@ -1,3 +1,4 @@
+WARN: present but disabled: DSA dsa0, IAA iax1 (no work queues / VFs), so not in the cluster — enable them: k3d-gpu host-setup --apply, then k3d-gpu down && k3d-gpu up (exact commands: k3d-gpu doctor)
 ==> Accelerators: gaudi amx
 ==> Experimental features (auto): dra image-volume
 ==> Creating k3d cluster 'gpu' with image cryptoandcoffee/k3d-gpu:<version>...
@@ -5,6 +6,7 @@
 ==> Waiting for cluster DNS (CoreDNS)...
 ==> gaudi device plugin auto-deployed by k3s.
 ==> Verifying accelerators are schedulable...
+WARN: present but disabled: DSA dsa0, IAA iax1 (no work queues / VFs), so not in the cluster — enable them: k3d-gpu host-setup --apply, then k3d-gpu down && k3d-gpu up (exact commands: k3d-gpu doctor)
 ==> Accelerators schedulable: gaudi=8 amx=1. Try: k3d-gpu test
 exit=0
 --- calls
