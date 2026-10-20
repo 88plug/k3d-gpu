@@ -585,7 +585,7 @@ def apb_gate(step_rows, step_recs, base_success, slo=SLO_S):
     checks = {
         "n_requests": len(lat), "p95_s": p95, "success": succ, "error_rate": err,
         "p95_ok": p95 is not None and p95 <= slo,
-        "success_ok": succ is not None and base_success is not None and succ >= base_success - 0.10,
+        "success_ok": succ is not None and base_success is not None and succ >= base_success - 0.10 - 1e-9,
         "errors_ok": err is not None and err <= 0.01,
         "n_ok": len(lat) >= 60,
     }
@@ -963,9 +963,10 @@ def cmd_manifest(a):
     return 0
 
 
-def _block_tools(a, tag, load_file="load.jsonl"):
+def _block_tools(a, tag, load_file="load.jsonl", phase=None):
     os.makedirs(a.out, exist_ok=True)
-    sampler = None if a.no_load_sample else LoadSampler(os.path.join(a.out, load_file), tag, a.level, a.sample_s)
+    sampler = None if a.no_load_sample else LoadSampler(os.path.join(a.out, load_file), tag, a.level, a.sample_s,
+                                                        phase=phase)
     meter = None if a.no_energy else energy.Meter(gpu=a.gpu_power)
     return sampler, meter
 
@@ -988,7 +989,7 @@ def cmd_run(a):
     if not plog:
         raise SystemExit("agentbench: --proxy-log FILE (in-cluster proxy) or --upstream URL is required")
     agent = Agent(a.agent_url, os.environ.get("DEVUI_AUTH_TOKEN"), a.entity)
-    sampler, meter = _block_tools(a, a.arm)
+    sampler, meter = _block_tools(a, a.arm, phase=a.load_phase)
     ts = T.taskset(a.tasks)
     if a.ids:
         want = a.ids.split(",")
@@ -1072,26 +1073,35 @@ def run_apb(agent, arm, level, out, step_s, proxy_log, ramp=RAMP, warmup_s=30.0,
     if ramp[0] != 1 and base is None:
         raise ValueError(f"ramp {ramp} does not start at N=1: pass the N=1 success as base")
     steps = []
+    res = {"arm": arm, "level": level, "slo_s": SLO_S, "step_s": step_s, "ramp": list(ramp), "base_success": base,
+           "apb": 0, "steps": steps}
+
+    def save():
+        res.update(base_success=base, apb=agents_per_box(steps))
+        with open(os.path.join(out, "apb.json"), "w") as f:
+            json.dump(res, f, indent=1)
+
     for n in ramp:
         t0 = clock()
         rows = block(agent, T.B15_RO, arm, level, n, out, step_s, proxy_log, cycle=True, clock=clock,
                      settle_s=settle_s, step=f"apb-{n}", warmup=warmup if n == ramp[0] else None,
                      meter=meter_factory() if meter_factory else None,
                      sampler=sampler_factory() if sampler_factory else None)
-        recs = window_requests(proxy.read_log(proxy_log), t0 + warmup_s)
+        # The unscored warm-up runs inside block(); the window opens warmup_s after it ends.
+        w_end = max([t0] + [(b.get("warmup") or {}).get("t_end") or t0
+                            for b in read_jsonl(os.path.join(out, "blocks.jsonl")) if b.get("step") == f"apb-{n}"])
+        recs = window_requests(proxy.read_log(proxy_log), w_end + warmup_s)
         recs = [r for r in recs if (r.get("ts_send") or 0) <= clock()]
         if n == 1:
             done = [r for r in rows if not r["censored"]]
             base = sum(r["passed"] for r in done) / len(done) if done else None
         ok, checks = apb_gate(rows, recs, base)
-        steps.append({"n": n, "pass": ok, "checks": checks})
+        steps.append({"n": n, "pass": ok, "checks": checks, "window_from": w_end + warmup_s})
         log(f"apb {arm} N={n}: {'pass' if ok else 'FAIL'} {checks}")
+        save()
         if not ok:
             break
-    res = {"arm": arm, "level": level, "slo_s": SLO_S, "ramp": list(ramp), "base_success": base,
-           "apb": agents_per_box(steps), "steps": steps}
-    with open(os.path.join(out, "apb.json"), "w") as f:
-        json.dump(res, f, indent=1)
+    save()
     return res
 
 
@@ -1103,17 +1113,38 @@ def apb_base(hold_dir):
     return s1[0]["checks"]["success"] if s1 else r.get("base_success")
 
 
-def apb_from_holds(hold_dirs, ramp=RAMP):
+def hold_void(hold_dir):
+    """Amendment 27 (d): a reason when a hold's phased load windows saw fewer load containers
+    than its level runs (or could not count them); None otherwise."""
+    for w in read_jsonl(os.path.join(hold_dir, "load.jsonl")):
+        if w.get("phase") in ("pre", "during") and w.get("level") != "none":
+            exp, run = w.get("load_expected"), w.get("load_running")
+            if exp is None or run is None or run < exp:
+                return f"load missing in a {w['phase']} window ({run} of {exp} containers)"
+    return None
+
+
+def apb_from_holds(hold_dirs, ramp=RAMP, level=None, step_s=None):
     """H45: one arm's agents per box from the apb.json of each hold it ran, in ramp order.
 
     bracket [lo, hi]: lo = the largest N with every step up to it passed; hi = lo once a
     step failed or the last step passed (complete), else the largest N on the ramp (a hold
     the ramp needed did not run). No hold at all: [0, max]. A hold after a failed step, or a
-    gap in the ramp, is an error."""
-    steps = []
+    gap in the ramp, is an error. With level/step_s, a hold run at another level or step
+    length is an error. A VOID hold (hold_void) and every later hold are not scored."""
+    steps, void = [], None
     for d in hold_dirs:
         with open(os.path.join(d, "apb.json")) as f:
-            steps += json.load(f)["steps"]
+            r = json.load(f)
+        if level is not None and r.get("level") != level:
+            raise ValueError(f"{d}: level {r.get('level')!r}, not {level!r}")
+        if step_s is not None and r.get("step_s") != step_s:
+            raise ValueError(f"{d}: step_s {r.get('step_s')!r}, not {step_s!r}")
+        void = hold_void(d)
+        if void:
+            void = f"{d}: {void}"
+            break
+        steps += r["steps"]
     steps.sort(key=lambda s: s["n"])
     ns = [s["n"] for s in steps]
     if ns != list(ramp[:len(ns)]):
@@ -1123,7 +1154,8 @@ def apb_from_holds(hold_dirs, ramp=RAMP):
             raise ValueError(f"step N={s['n']} failed, yet later steps ran")
     lo = agents_per_box(steps)
     complete = bool(steps) and (not steps[-1]["pass"] or steps[-1]["n"] == ramp[-1])
-    return {"apb": lo, "bracket": [lo, lo if complete else ramp[-1]], "complete": complete, "steps": steps}
+    return {"apb": lo, "bracket": [lo, lo if complete else ramp[-1]], "complete": complete, "steps": steps,
+            "void": void}
 
 
 # H45 pre-registered predictions: the agents-per-box range each arm's APB must fall in.
@@ -1185,10 +1217,31 @@ def stretch(run_dirs, arm, num="heavy", den="typical"):
     completed and failed (its time is the timeout). Verdict (H43 row): SUPPORTED when ratio
     <= 1.5 and delta >= -10 points; REFUTED when the ratio's CI lower bound > 1.5; else
     INCONCLUSIVE (also with no shared completed id)."""
-    rows = [r for r in collect(run_dirs)[0] if r.get("arm") == arm and not r.get("censored")]
+    rows_all, _, _, loads, _, _, _ = collect(run_dirs)
+    gaps = [(w["ts"] - (w.get("seconds") or 0), w["ts"]) for w in loads
+            if w.get("phase") and w.get("level") not in (None, "none")
+            and (w.get("load_running") is None or w.get("load_expected") is None
+                 or w["load_running"] < w["load_expected"])]
+    dropped = {"memory": [], "load_missing": []}
+    rows = []
+    for r in rows_all:
+        if r.get("arm") != arm or r.get("censored"):
+            continue
+        if (r.get("user_msgs_max") or 0) > 1:
+            dropped["memory"].append(f"{r['task']}@{r['level']}")
+            continue
+        if any(a < r.get("t_end", 0) and r.get("t_start", 0) < b for a, b in gaps):
+            dropped["load_missing"].append(f"{r['task']}@{r['level']}")
+            continue
+        rows.append(r)
     t = {lv: {r["task"]: r for r in rows if r.get("level") == lv} for lv in (num, den)}
-    pr = stats.paired_ratio({k: v["duration_s"] for k, v in t[num].items()},
-                            {k: v["duration_s"] for k, v in t[den].items()})
+
+    def secs(r):   # a task that ended in an error or the timeout counts as +inf time
+        return INF if r.get("error") else r["duration_s"]
+    tn, td = {k: secs(v) for k, v in t[num].items()}, {k: secs(v) for k, v in t[den].items()}
+    both_inf = sorted(i for i in set(tn) & set(td) if tn[i] == INF and td[i] == INF)
+    pr = stats.paired_ratio({k: v for k, v in tn.items() if k not in both_inf},
+                            {k: v for k, v in td.items() if k not in both_inf})
     ids = sorted(set(t[num]) & set(t[den]))
     pd = stats.paired_diff({i: int(bool(t[num][i]["passed"])) for i in ids},
                            {i: int(bool(t[den][i]["passed"])) for i in ids})
@@ -1197,7 +1250,15 @@ def stretch(run_dirs, arm, num="heavy", den="typical"):
            "success": {lv: [sum(bool(t[lv][i]["passed"]) for i in ids), len(ids)] for lv in (num, den)},
            "median_s": {lv: stats.median([t[lv][i]["duration_s"] for i in ids]) if ids else None
                         for lv in (num, den)},
-           "completed": {lv: len(t[lv]) for lv in (num, den)}}
+           "completed": {lv: len(t[lv]) for lv in (num, den)}, "dropped": dropped, "both_inf": both_inf,
+           "ratio_of_medians": None,
+           "censored_only_at": {lv: sorted(({r["task"] for r in rows_all if r.get("arm") == arm
+                                             and r.get("level") == lv and r.get("censored")}
+                                            - set(t[lv])) & set(t[den if lv == num else num]))
+                                for lv in (num, den)}}
+    mn, md = out["median_s"][num], out["median_s"][den]
+    if mn is not None and md:
+        out["ratio_of_medians"] = mn / md
     if not pr["n"]:
         v = "INCONCLUSIVE"
     elif pr["ratio"] <= H43_RATIO_MAX and pd["diff"] >= H43_DELTA_MIN - 1e-9:
@@ -1219,7 +1280,15 @@ def cmd_apb(a):
         raise SystemExit("agentbench: --proxy-log FILE or --upstream URL is required")
     agent = Agent(a.agent_url, os.environ.get("DEVUI_AUTH_TOKEN"), a.entity)
     ramp = tuple(int(x) for x in a.ramp.split(","))
-    base = apb_base(a.base_from) if a.base_from else None
+    base = None
+    if a.base_from:
+        with open(os.path.join(a.base_from, "apb.json")) as f:
+            prev = json.load(f)
+        prev_n = [s["n"] for s in prev["steps"]]
+        if (not prev["steps"] or not all(s["pass"] for s in prev["steps"]) or prev_n[0] != 1
+                or prev.get("level") != a.level):
+            raise SystemExit(f"agentbench: --base-from {a.base_from}: needs passed steps from N=1 at {a.level}")
+        base = apb_base(a.base_from)
     try:
         res = run_apb(agent, a.arm, a.level, a.out, a.step_s, plog, settle_s=a.settle_s, ramp=ramp, base=base,
                       meter_factory=None if a.no_energy else (lambda: energy.Meter(gpu=a.gpu_power)),
@@ -1244,7 +1313,8 @@ def cmd_apb_score(a):
     for spec in a.arm:
         arm, _, ds = spec.partition("=")
         dirs[arm] = [d for d in ds.split(",") if d]
-        arms[arm] = apb_from_holds([d for d in dirs[arm] if os.path.exists(os.path.join(d, "apb.json"))])
+        arms[arm] = apb_from_holds([d for d in dirs[arm] if os.path.exists(os.path.join(d, "apb.json"))],
+                                   level=a.level, step_s=a.step_s)
         arms[arm]["holds"] = dirs[arm]
     load = None
     if "A1" in dirs and "C2" in dirs:
@@ -1466,6 +1536,7 @@ def parse(argv):
     p.add_argument("--task-timeout-s", type=float, default=TASK_TIMEOUT_S)
     p.add_argument("--pre-task", help="command run before the warm-up and every task, outside its time "
                                       "(H43: purge the coding agent's memory); must exit 0")
+    p.add_argument("--load-phase", choices=("during",), help="amendment 27: tag the load windows")
     p.set_defaults(func=cmd_run)
 
     p = sub.add_parser("control", help="load-only control window")
@@ -1486,6 +1557,8 @@ def parse(argv):
 
     p = sub.add_parser("apb-score", help="H45: agents per box from several holds per arm, and the verdict")
     p.add_argument("--arm", action="append", required=True, help="ARM=DIR[,DIR]: that arm's hold dirs in order")
+    p.add_argument("--level", default="typical", help="every hold must have run at this level")
+    p.add_argument("--step-s", type=float, default=300.0, help="every hold must have run steps of this length")
     p.add_argument("--out", help="also write the JSON here")
     p.set_defaults(func=cmd_apb_score)
 

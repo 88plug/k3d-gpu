@@ -7,9 +7,11 @@ H45: the ramp split across holds, the per-arm agents-per-box from several holds,
 phased load windows, and the pre-registered prediction scorer."""
 import http.server
 import importlib
+import itertools
 import importlib.util
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -84,13 +86,15 @@ def row(task, level, dur, passed=True, status=None, arm="A1"):
             "censored": status == "censored", "duration_s": dur, "strict": passed, "calls": []}
 
 
-class StretchTest(unittest.TestCase):
+class StretchBase:
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp)
         self.typ = os.path.join(self.tmp, "typical")
         self.hvy = os.path.join(self.tmp, "heavy")
 
+
+class StretchTest(StretchBase, unittest.TestCase):
     def test_paired_on_ids_completed_at_both_levels(self):
         write_rows(self.typ, [row(f"C{i:02d}", "typical", 10.0) for i in range(1, 9)]
                    + [row("C09", "typical", 5.0, status="censored", passed=False)])
@@ -225,6 +229,27 @@ class RouterTest(unittest.TestCase):
             self.assertIn(s, m)
 
 
+# ---- H43: pins ---------------------------------------------------------------------
+
+class CodingPinTest(unittest.TestCase):
+    def test_lock_live_and_constraints_agree(self):
+        lk = AB.lock()
+        with open(os.path.join(HERE, "live.sh")) as f:
+            live = f.read()
+        self.assertIn(f"REDIS_IMAGE={lk['images']['redis']['ref']}\n", live)
+        ca = lk["suites"]["coding_agent"]
+        with open(os.path.join(HERE, "coding-constraints.txt")) as f:
+            text = f.read()
+        reqs = [ln for ln in text.splitlines() if re.match(r"^[A-Za-z0-9]", ln)]
+        self.assertGreater(len(reqs), 50)
+        self.assertGreaterEqual(text.count("--hash=sha256:"), len(reqs))
+        for pin in (f"k8s-agent-sandbox=={ca['k8s_agent_sandbox']}", "kubernetes==35.0.0",
+                    "agent-framework-core==1.19.0", "agent-framework-redis==1.0.0b260918"):
+            self.assertIn(pin + " \\\n", text)
+        self.assertIn(ca["wheel_sha256"], text)
+        self.assertIn("--require-hashes -r bench/eatflow/coding-constraints.txt", ca["install"])
+
+
 # ---- H43: SDK compatibility shim ----------------------------------------------------
 
 class ShimTest(unittest.TestCase):
@@ -250,7 +275,7 @@ class ShimTest(unittest.TestCase):
 
 # ---- H45: ramp across holds ----------------------------------------------------------
 
-class RampTest(unittest.TestCase):
+class RampBase:
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp)
@@ -266,6 +291,15 @@ class RampTest(unittest.TestCase):
             return [{"passed": True, "censored": False}] * k + [{"passed": False, "censored": False}] * (10 - k)
         return blk
 
+    def hold(self, name, ramp, base=None, e2e=lambda n: 1.0):
+        d = os.path.join(self.tmp, name)
+        os.makedirs(d)
+        AB.run_apb(None, "A1", "typical", d, 1, self.log, ramp=ramp, base=base, warmup_s=-10,
+                   block=self.blk(e2e))
+        return d
+
+
+class RampTest(RampBase, unittest.TestCase):
     def test_second_hold_uses_the_first_holds_base_success(self):
         calls = []
         h2 = os.path.join(self.tmp, "h2")
@@ -283,13 +317,6 @@ class RampTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             AB.run_apb(None, "A3", "typical", self.tmp, 1, self.log, ramp=(4, 8), warmup_s=-10,
                        block=self.blk(lambda n: 1.0))
-
-    def hold(self, name, ramp, base=None, e2e=lambda n: 1.0):
-        d = os.path.join(self.tmp, name)
-        os.makedirs(d)
-        AB.run_apb(None, "A1", "typical", d, 1, self.log, ramp=ramp, base=base, warmup_s=-10,
-                   block=self.blk(e2e))
-        return d
 
     def test_apb_from_two_holds(self):
         h1 = self.hold("h1", (1, 2))
@@ -328,6 +355,116 @@ class RampTest(unittest.TestCase):
         s.join(1)
         self.assertTrue(seen and all(k["phase"] == "during" for k in seen))
         self.assertEqual(AB.read_jsonl(os.path.join(self.tmp, "l.jsonl"))[0]["phase"], "during")
+
+
+class RampRefuterTest(RampBase, unittest.TestCase):
+    """Regressions from the PR #148 review (2026-10-19, before any H43/H45 measurement)."""
+
+    def test_minus_ten_points_exactly_passes_the_success_gate(self):
+        rows = [{"passed": True, "censored": False}] * 7 + [{"passed": False, "censored": False}] * 3
+        ok, c = AB.apb_gate(rows, [{"e2e_s": 1.0, "error": None, "ts_send": 1}] * 60, 0.8)
+        self.assertTrue(c["success_ok"], c)
+
+    def test_the_window_opens_thirty_seconds_after_the_warmup_ends(self):
+        d = os.path.join(self.tmp, "h")
+        os.makedirs(d)
+        base = time.time()
+
+        def blk(agent, ts, arm, level, n, out, step_s, plog, **kw):
+            # a 40 s warm-up whose 5 turns land at base+5..+35, then step turns from base+80 on
+            with open(os.path.join(out, "blocks.jsonl"), "a") as f:
+                f.write(json.dumps({"step": f"apb-{n}", "warmup": {"t_end": base + 40.0}}) + "\n")
+            with open(self.log, "w") as f:
+                f.writelines(json.dumps({"ts_send": base + 5 + 7.5 * i, "e2e_s": 30.0}) + "\n" for i in range(5))
+                f.writelines(json.dumps({"ts_send": base + 80 + i * 0.01, "e2e_s": 1.0}) + "\n" for i in range(60))
+            return [{"passed": True, "censored": False}] * 10
+        ticks = itertools.chain([base], itertools.repeat(base + 1000.0))
+        res = AB.run_apb(None, "A1", "typical", d, 300, self.log, ramp=(1,), block=blk, clock=lambda: next(ticks))
+        self.assertTrue(res["steps"][0]["pass"], res["steps"][0]["checks"])   # no 30 s warm-up turn in p95
+        self.assertEqual(res["steps"][0]["checks"]["n_requests"], 60)
+        self.assertAlmostEqual(res["steps"][0]["window_from"], base + 70.0)
+
+    def test_apb_json_is_written_after_every_step(self):
+        d = os.path.join(self.tmp, "h")
+        os.makedirs(d)
+        n_seen = []
+
+        def blk(agent, ts, arm, level, n, out, step_s, plog, **kw):
+            n_seen.append(n)
+            if n == 8:
+                raise AB.BlockAborted("boom", [])
+            return self.blk(lambda n: 1.0)(agent, ts, arm, level, n, out, step_s, plog, **kw)
+        with self.assertRaises(AB.BlockAborted):
+            AB.run_apb(None, "A3", "typical", d, 1, self.log, ramp=(4, 8), base=1.0, warmup_s=-10, block=blk)
+        with open(os.path.join(d, "apb.json")) as f:
+            r = json.load(f)
+        self.assertEqual([s["n"] for s in r["steps"]], [4])
+        self.assertEqual((r["level"], r["step_s"]), ("typical", 1))
+
+    def test_scoring_refuses_another_level_or_step_length(self):
+        h1 = self.hold("h1", (1, 2))
+        with self.assertRaises(ValueError):
+            AB.apb_from_holds([h1], level="typical", step_s=300)
+        with self.assertRaises(ValueError):
+            AB.apb_from_holds([h1], level="heavy", step_s=1)
+        self.assertEqual(AB.apb_from_holds([h1], level="typical", step_s=1)["apb"], 2)
+
+    def test_a_void_hold_and_every_later_hold_are_not_scored(self):
+        h1 = self.hold("h1", (1, 2))
+        h2 = self.hold("h2", (4, 8), base=1.0)
+        with open(os.path.join(h2, "load.jsonl"), "w") as f:
+            f.write(json.dumps({"phase": "during", "level": "typical", "load_expected": 3, "load_running": 2}) + "\n")
+        r = AB.apb_from_holds([h1, h2])
+        self.assertEqual((r["bracket"], r["complete"]), ([2, 8], False))
+        self.assertIn("2 of 3", r["void"])
+        with open(os.path.join(h1, "load.jsonl"), "w") as f:
+            f.write(json.dumps({"phase": "pre", "level": "typical", "load_expected": 3, "load_running": None}) + "\n")
+        self.assertEqual(AB.apb_from_holds([h1, h2])["bracket"], [0, 8])
+
+    def test_base_from_must_be_a_passed_first_hold_at_the_same_level(self):
+        h1 = self.hold("h1", (1, 2), e2e=lambda n: 1.0 if n == 1 else 20.0)
+        with self.assertRaises(SystemExit):
+            AB.main(["apb", "--arm", "A1", "--level", "typical", "--out", os.path.join(self.tmp, "h2"),
+                     "--agent-url", "http://127.0.0.1:9", "--proxy-log", self.log, "--ramp", "4,8",
+                     "--base-from", h1, "--no-energy", "--no-load-sample"])
+
+
+class StretchRefuterTest(StretchBase, unittest.TestCase):
+    def test_rows_with_memory_on_or_missing_load_are_dropped(self):
+        a = row("C01", "typical", 10.0)
+        b = dict(row("C01", "heavy", 10.0), user_msgs_max=2)
+        c, d = dict(row("C02", "typical", 10.0), t_start=100.0, t_end=110.0), row("C02", "heavy", 30.0)
+        write_rows(self.typ, [a, c])
+        write_rows(self.hvy, [b, d])
+        with open(os.path.join(self.typ, "load.jsonl"), "w") as f:
+            f.write(json.dumps({"ts": 115.0, "seconds": 10.0, "phase": "during", "level": "typical",
+                                "load_expected": 3, "load_running": 1}) + "\n")
+        r = AB.stretch([self.typ, self.hvy], "A1")
+        self.assertEqual(r["n"], 0)
+        self.assertEqual(r["dropped"], {"memory": ["C01@heavy"], "load_missing": ["C02@typical"]})
+
+    def test_an_error_counts_as_infinite_time(self):
+        write_rows(self.typ, [row(f"C{i:02d}", "typical", 10.0) for i in range(1, 11)])
+        write_rows(self.hvy, [dict(row(f"C{i:02d}", "heavy", 2.0, passed=False, status="fail"), error="HTTP 500")
+                              for i in range(1, 10)] + [row("C10", "heavy", 10.0)])
+        r = AB.stretch([self.typ, self.hvy], "A1")
+        self.assertEqual(r["ratio"], float("inf"))
+        self.assertEqual(r["verdict"], "REFUTED")
+
+    def test_an_id_that_errored_at_both_levels_leaves_the_ratio_but_not_success(self):
+        e = {"error": "HTTP 500", "passed": False, "status": "fail"}
+        write_rows(self.typ, [row("C01", "typical", 10.0), dict(row("C02", "typical", 1.0), **e)])
+        write_rows(self.hvy, [row("C01", "heavy", 11.0), dict(row("C02", "heavy", 1.0), **e)])
+        r = AB.stretch([self.typ, self.hvy], "A1")
+        self.assertEqual((r["n"], r["both_inf"], len(r["ids"])), (1, ["C02"], 2))
+        self.assertAlmostEqual(r["ratio"], 1.1)
+
+    def test_censored_only_at_one_level_is_reported(self):
+        write_rows(self.typ, [row("C01", "typical", 10.0), row("C02", "typical", 10.0)])
+        write_rows(self.hvy, [row("C01", "heavy", 12.0), row("C02", "heavy", 99.0, status="censored", passed=False)])
+        r = AB.stretch([self.typ, self.hvy], "A1")
+        self.assertEqual(r["censored_only_at"], {"heavy": ["C02"], "typical": []})
+        self.assertAlmostEqual(r["ratio_of_medians"], 1.2)
 
 
 # ---- H45: prediction scorer ----------------------------------------------------------
@@ -379,7 +516,8 @@ class H45ScoreTest(unittest.TestCase):
             d = os.path.join(tmp, name)
             os.makedirs(d)
             with open(os.path.join(d, "apb.json"), "w") as f:
-                json.dump({"arm": arm, "steps": [{"n": n, "pass": p, "checks": {"success": 1.0}} for n, p in steps]}, f)
+                json.dump({"arm": arm, "level": "typical", "step_s": 300.0,
+                           "steps": [{"n": n, "pass": p, "checks": {"success": 1.0}} for n, p in steps]}, f)
             with open(os.path.join(d, "load.jsonl"), "w") as f:
                 for ph in ("pre", "during"):
                     f.write(json.dumps({"tag": arm, "level": "typical", "phase": ph, "busy_pct": phase_busy,

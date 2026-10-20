@@ -56,13 +56,13 @@ P_SRV=18630 P_LLM=18640 P_PROXY=18620 P_MCP=18600 P_ROUTER=18650 P_REDIS=18660
 LITELLM_IMAGE=docker.litellm.ai/berriai/litellm:v1.83.14-stable.patch.2@sha256:73cbb215d3d43ae5b42816217b200386eb08d567767fcb36cba163152c5f3c79  # EAT 0d3438d genai-gateway; the index digest the 2026-10-17/18 holds pulled
 RAPL_IMAGE=python:3.14.8-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170
 # H43: the coding agent's Redis memory. Redis 8 bundles the query engine the blueprint's
-# RedisContextProvider needs (FT.CREATE); redis 8.10.2-alpine, linux/amd64 pulled 2026-10-19.
-REDIS_IMAGE=redis@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
+# RedisContextProvider needs (FT.CREATE); the 8.10.2-alpine index digest, read 2026-10-19.
+REDIS_IMAGE=redis:8.10.2-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
 # Time a mode needs after the server answers: rollout and server-wait give up past it.
 RESERVE=420
 case ${MODE} in
     code) read -r -a CODE_LEVELS <<< "${LIVE_CODE_LEVELS:-typical heavy heavy typical}"
-          RESERVE=$(( ${#CODE_LEVELS[@]} * 180 + 240 )) ;;
+          RESERVE=$(( ${#CODE_LEVELS[@]} * 230 + 240 )) ;;
     apb)  RESERVE=$(( $(tr ',' '\n' <<< "${LIVE_APB_RAMP:-1,2}" | grep -c .) * ${LIVE_APB_STEP_S:-300} + 300 )) ;;
 esac
 lc=$(echo "${ARM}" | tr 'A-Z' 'a-z')
@@ -511,33 +511,47 @@ EOF
     CBP=${LIVE_BLUEPRINT}/usecases/coding-agent-maf/src
     "${LIVE_CODE_PY:?}" -c "import k8s_agent_sandbox, importlib.metadata as m; print('k8s-agent-sandbox', m.version('k8s-agent-sandbox'))" \
         | tee -a "${OUT}/live.log"
-    (cd "${CBP}" && PYTHONPATH="${HERE}/coding" \
-        OPENAI_BASE_URL="http://127.0.0.1:${P_PROXY}/v1" OPENAI_API_KEY=not-needed MODEL_NAME="${ALIAS}" \
-        REDIS_URL="redis://127.0.0.1:${P_REDIS}" SANDBOX_ROUTER_URL="http://127.0.0.1:${P_ROUTER}" \
-        SANDBOX_ROUTER_TOKEN="${rtok}" SANDBOX_NAMESPACE=agent-sandbox SANDBOX_TEMPLATE=python-ecores \
-        SANDBOX_WARMPOOL=python-ecores WORKSPACE_DIR="${OUT}/workspace" AUTO_OPEN_BROWSER=false \
-        DEVUI_HOST=127.0.0.1 exec "${LIVE_CODE_PY}" main.py) >> "${OUT}/agent.log" 2>&1 &
-    pids+=($!)
-    end=$(( $(date +%s) + 90 ))
-    until curl -fsS -o /dev/null --max-time 5 -H "Authorization: Bearer ${DEVUI_AUTH_TOKEN}" \
-            "http://127.0.0.1:8090/v1/entities"; do
-        [ "$(date +%s)" -lt "${end}" ] || { echo "coding agent did not start"; tail -20 "${OUT}/agent.log"; exit 1; }
-        sleep 2
-    done
+    # (Re)start the agent: kill the last one (its censored task would keep running and write
+    # memory), release its sandbox claims, start a fresh process, wait for its DevUI.
+    code_agent() {
+        [ -f "${OUT}/agent-code.pid" ] && kill "$(cat "${OUT}/agent-code.pid")" 2>/dev/null
+        for _ in $(seq 100); do (exec 3<>/dev/tcp/127.0.0.1/8090) 2>/dev/null || break; sleep 0.1; done
+        kubectl -n agent-sandbox delete sandboxclaims --all --wait=false >/dev/null 2>&1
+        (cd "${CBP}" && PYTHONPATH="${HERE}/coding" \
+            OPENAI_BASE_URL="http://127.0.0.1:${P_PROXY}/v1" OPENAI_API_KEY=not-needed MODEL_NAME="${ALIAS}" \
+            REDIS_URL="redis://127.0.0.1:${P_REDIS}" SANDBOX_ROUTER_URL="http://127.0.0.1:${P_ROUTER}" \
+            SANDBOX_ROUTER_TOKEN="${rtok}" SANDBOX_NAMESPACE=agent-sandbox SANDBOX_TEMPLATE=python-ecores \
+            SANDBOX_WARMPOOL=python-ecores WORKSPACE_DIR="${OUT}/workspace" AUTO_OPEN_BROWSER=false \
+            DEVUI_HOST=127.0.0.1 exec "${LIVE_CODE_PY}" main.py) >> "${OUT}/agent.log" 2>&1 &
+        echo $! > "${OUT}/agent-code.pid"
+        pids+=($!)
+        local end=$(( $(date +%s) + 90 ))
+        until curl -fsS -o /dev/null --max-time 5 -H "Authorization: Bearer ${DEVUI_AUTH_TOKEN}" \
+                "http://127.0.0.1:8090/v1/entities"; do
+            [ "$(date +%s)" -lt "${end}" ] || { echo "coding agent did not start"; tail -20 "${OUT}/agent.log"; return 1; }
+            sleep 2
+        done
+    }
     nb=${#CODE_LEVELS[@]}
-    blk=$(( (CAP - $(el) - 60) / nb - 60 ))
+    # Per block: agent restart (~10 s) and a 30 s gap after the level's load starts.
+    blk=$(( (CAP - $(el) - 60) / nb - 110 ))
     [ "${blk}" -le 300 ] || blk=300
     [ "${blk}" -ge 120 ] || { echo "NOT DELIVERABLE: ${blk} s per H43 block"; exit 3; }
     i=0
     for lv in "${CODE_LEVELS[@]}"; do
         i=$(( i + 1 ))
         python3 "${REPO}/bench/load/load.py" stop >/dev/null 2>&1
-        [ "${lv}" = none ] || python3 "${REPO}/bench/load/load.py" start --level "${lv}" --ttl $(( blk + 180 )) \
+        code_agent || exit 1
+        [ "${lv}" = none ] || python3 "${REPO}/bench/load/load.py" start --level "${lv}" --ttl $(( CAP + 60 )) \
             >> "${OUT}/load-start.log" 2>&1
+        sleep 30
         stamp "h43 block ${i} ${lv}, budget ${blk}"
         ${AB} run --arm "${ARM}" --level "${lv}" --out "${CDIR}/h43-${lc}-${lv}" --agent-url http://127.0.0.1:8090 \
             --tasks C12 --upstream "http://127.0.0.1:${P_LLM}" --proxy-port "${P_PROXY}" --sampling agent_local \
-            --pre-task "${OUT}/purge-mem.sh" --budget-s "${blk}" "${gpu_flag[@]}" 2>&1 | tail -3 | tee -a "${OUT}/live.log"
+            --pre-task "${OUT}/purge-mem.sh" --load-phase during --budget-s "${blk}" "${gpu_flag[@]}" 2>&1 \
+            | tail -3 | tee -a "${OUT}/live.log"
+        rc=${PIPESTATUS[0]}
+        [ "${rc}" = 0 ] || { echo "ABORTED: H43 block ${i} exited ${rc}; the hold stops" | tee -a "${OUT}/live.log"; exit 1; }
     done
     kubectl -n agent-sandbox get sandboxes,sandboxclaims -o wide > "${OUT}/sandboxes.txt" 2>&1
     K3D_GPU_SHARE="${REPO}/share" "${K}" sandbox status >> "${OUT}/sandboxes.txt" 2>&1
@@ -569,6 +583,8 @@ if [ "${MODE}" = apb ]; then
     ${AB} apb --arm "${ARM}" --level "${LEVEL}" --out "${D}" --agent-url http://127.0.0.1:8090 \
         --upstream "http://127.0.0.1:${P_LLM}" --proxy-port "${P_PROXY}" --sampling agent_local --step-s "${LIVE_APB_STEP_S:-300}" \
         --ramp "${ramp}" "${base[@]}" --load-phase during "${gpu_flag[@]}" 2>&1 | tail -6 | tee -a "${OUT}/live.log"
+    rc=${PIPESTATUS[0]}
+    [ "${rc}" = 0 ] || { echo "ABORTED: apb exited ${rc}" | tee -a "${OUT}/live.log"; exit 1; }
     # The synthetic APB, reported beside the graded one and never scored: on the arm's last
     # hold (a step failed, or N=8 ran), with what the hold leaves (at most 3 min, at least 1).
     last=$(python3 -c "import json,sys; s=json.load(open(sys.argv[1]))['steps'][-1]; print(int(not s['pass'] or s['n'] == 8))" \
