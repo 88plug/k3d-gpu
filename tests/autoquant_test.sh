@@ -103,6 +103,12 @@ grep -q -- '--source_model=OpenVINO/Qwen3-4B-int4-ov' <<< "${m}" \
 m=$(hostrun K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3-4B-fp16-ov)
 grep -q -- '--source_model=OpenVINO/Qwen3-4B-fp16-ov' <<< "${m}" && ! grep -q 'agent-precision-source' <<< "${m}" \
     && ok "agent manifest: K3D_GPU_AGENT_MODEL pins over the cache" || fail "model pin: ${m}"
+# --model names the model: the optimizer's variant is served, not the cache's Qwen3-4B pick.
+m=$(env K3D_GPU_SYSROOT="${HROOT}" PATH="${WORK}/bin:${PATH}" K3D_GPU_AUTOQUANT_CACHE="${ICACHE}" \
+    K3D_GPU_HF_FIXTURES="${ROOT}/tests/fixtures/hf" XDG_CACHE_HOME="${WORK}/xdg" K3D_GPU_FIT=off \
+    bash "${K3D_GPU}" agent manifest --model microsoft/Phi-4-mini-instruct 2>&1)
+grep -q -- '--source_model=OpenVINO/Phi-4-mini-instruct-int4-ov' <<< "${m}" && ! grep -q 'agent-precision-source' <<< "${m}" \
+    && ok "agent manifest --model: the autoquant cache does not replace the model" || fail "--model over the cache: ${m}"
 # quickstart passes its RAM-tier model with K3D_GPU_AGENT_MODEL_TIER=1: not a user
 # pin when it is the default model the probe arms measure, so the winner serves.
 m=$(hostrun K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3-4B-int4-ov K3D_GPU_AGENT_MODEL_TIER=1 K3D_GPU_AGENT_MEMORY=6Gi K3D_GPU_AGENT_MEMORY_TIER=1)

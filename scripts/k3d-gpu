@@ -178,10 +178,14 @@ Usage: k3d-gpu <command>
             OpenAI-compatible LLM server in the current cluster: vLLM on its Gaudi
             if it has one, else OpenVINO Model Server on its Intel GPU if that GPU
             has XMX, else on the CPU (P-cores); or vLLM on an Arc GPU (K3D_GPU_AGENT_BACKEND).
-            --model M (or K3D_GPU_AGENT_MODEL) serves M sized by 'fit': context,
-            sequences, GPUs and the pod memory limit come from what this host has
-            free, and a model that cannot fit is refused with the reason; then
-            'agent guard' runs in the background
+            --model M: a Hugging Face id is optimized for that engine from its HF
+            metadata (the variant: official > RedHatAI > community, QAT for int4;
+            speculative decoding within the engine's limits; thinking off for agents;
+            parsers; text-only load; 'plan --model ID --explain' shows each choice and
+            its source; no network: a built-in map). The served model (or a local dir,
+            or K3D_GPU_AGENT_MODEL) is then sized by 'fit': context, sequences, GPUs and
+            the pod memory limit come from what this host has free, and a model that
+            cannot fit is refused with the reason; then 'agent guard' runs in the background
             --with adds a vision-language model, Whisper speech-to-text (NPU first)
             and DL Streamer video analytics (GPU media engines) on what the LLM leaves
   agent guard [--once] [--interval S]
@@ -210,7 +214,8 @@ Usage: k3d-gpu <command>
             Engine, model and placement for this box, picked only from measured
             (green) matrix cells; with none it says "unmeasured" (quickstart/agent up still serve)
             --hash prints the plan hash: sha256 of the --json output
-            --model M also prints the fit of M on this host (below)
+            --model M also prints the fit of M on this host (below); a Hugging Face id
+            also adds the model optimizer's choices ('agent up --model' applies them)
   fit [--model M] [--revision R] [--explain|--json] [--engine vllm|ovms|llama.cpp]
       [--device cpu|gpu] [--ctx N] [--seqs N] [--gpus N] [--kv-dtype T] [--host FILE]
             Size a model (Hugging Face id or local dir; default: the agent model) to
@@ -350,6 +355,14 @@ Environment:
                         model, where H34 measured a win, none otherwise; off disables it;
                         auto = the target's device; GPU = an Intel GPU, the first advertised)
   K3D_GPU_AGENT_DRAFT_MODEL  draft model (default: OpenVINO/Qwen3-0.6B-int4-ov)
+  K3D_GPU_AGENT_VARIANT agent up/plan --model: serve this variant id (or qat-convert) instead
+                        of the ranked pick (default: the optimizer's pick)
+  K3D_GPU_AGENT_THINKING agent up/plan --model: off | on | model (the card's default)
+                        (default: off, for agent workloads)
+  K3D_GPU_AGENT_PRECISION agent up --model on vLLM: bf16 | int4 (default: bf16)
+  K3D_GPU_MODEL_OPT     auto | off: off serves --model exactly as given (default: auto)
+  K3D_GPU_HF_FIXTURES   directory of saved model metadata bundles to read instead of
+                        Hugging Face (tests, air-gapped hosts)
   K3D_GPU_AUTOQUANT     auto | off: on OVMS/CPU with no K3D_GPU_AGENT_MODEL, serve the
                         precision measured for this host fingerprint (default: auto)
   K3D_GPU_AUTOQUANT_CACHE  measured-pick cache (default: \$XDG_STATE_HOME/k3d-gpu/autoquant.json)
@@ -6771,14 +6784,14 @@ agent_draft_measured() {
 agent_draft() {
     local target=$1 want=${K3D_GPU_AGENT_DRAFT:-default} res
     if [ "${want}" = default ]; then
-        if agent_draft_measured "${target}"; then echo "CPU -"; else echo "- -"; fi
+        if [ -z "${AGENT_OPT_SPEC:-}" ] && agent_draft_measured "${target}"; then echo "CPU -"; else echo "- -"; fi
         return 0
     fi
     case "${want^^}" in
-        OFF|0|"") echo "- -"; return 0 ;;
+        OFF|0|""|MTP) echo "- -"; return 0 ;;
         AUTO) echo "${target} -"; return 0 ;;
         CPU|GPU|NPU) ;;
-        *) err "unknown K3D_GPU_AGENT_DRAFT '${want}' (use off, auto, CPU, GPU or NPU)" ;;
+        *) err "unknown K3D_GPU_AGENT_DRAFT '${want}' (use off, auto, CPU, GPU, NPU or mtp)" ;;
     esac
     want=${want^^}
     if [ "${want}" = "${target}" ] || [ "${want}" = CPU ]; then echo "${want} -"; return 0; fi
@@ -6914,6 +6927,7 @@ agent_manifest() {
     fi
     [ -z "${AGENT_TOOL_PARSER}" ] || args+=$'\n'"${item}--tool_parser=${AGENT_TOOL_PARSER}"
     [ -z "${AGENT_REASONING_PARSER}" ] || args+=$'\n'"${item}--reasoning_parser=${AGENT_REASONING_PARSER}"
+    args+=$(agent_opt_items "${item}")
     # Serving knobs ('k3d-gpu tune' sets these; a user can too). --pull rewrites
     # graph.pbtxt on every start, so a change applies without a re-download.
     v=${K3D_GPU_AGENT_MAX_NUM_SEQS:-}
@@ -7180,6 +7194,7 @@ vllm_manifest() {
     [ -z "${AGENT_TOOL_PARSER}" ] \
         || args+=$'\n'"${item}--enable-auto-tool-choice"$'\n'"${item}--tool-call-parser=${AGENT_TOOL_PARSER}"
     [ -z "${AGENT_REASONING_PARSER}" ] || args+=$'\n'"${item}--reasoning-parser=${AGENT_REASONING_PARSER}"
+    args+=$(agent_opt_items "${item}")
     for e in "${envs[@]}"; do
         env+=$'\n'"            - name: ${e%%=*}"$'\n'"              value: \"${e#*=}\""
     done
@@ -7838,6 +7853,7 @@ cmd_agent_up() {
     kubectl get nodes >/dev/null 2>&1 || err "no cluster reachable — run 'k3d-gpu up' first"
     tune_apply_profile
     agent_select
+    agent_optimize
     local logs="kubectl -n ${AGENT_NS} logs deploy/${AGENT_APP}"
     # agent_fit records the fit it renders (for the guard) only here, never on `agent manifest`.
     if [ -z "${addons}" ]; then
@@ -7974,12 +7990,23 @@ cmd_agent() {
         cmd_agent_remote_up
         return
     fi
-    # Without --remote, --model names the local model (as K3D_GPU_AGENT_MODEL does).
+    # Without --remote, --model names the local model: a Hugging Face id goes through
+    # the model optimizer (agent_optimize, which picks the variant fit then sizes); a
+    # local directory is served as given, like K3D_GPU_AGENT_MODEL. K3D_GPU_AGENT_OPT_MODEL
+    # carries the id into the environment the guard re-renders with.
     if [ "${#REMOTE_ARGS[@]}" -eq 2 ] && [ "${REMOTE_ARGS[0]}" = --model ] && { [ "${sub}" = up ] || [ "${sub}" = manifest ]; }; then
-        export K3D_GPU_AGENT_MODEL="${REMOTE_ARGS[1]}"
+        if is_hf_id "${REMOTE_ARGS[1]}" && [ ! -d "${REMOTE_ARGS[1]}" ]; then
+            [ -z "${K3D_GPU_AGENT_MODEL:-}" ] || err "--model and K3D_GPU_AGENT_MODEL both name a model: use one"
+            export K3D_GPU_AGENT_OPT_MODEL="${REMOTE_ARGS[1]}"
+        else
+            export K3D_GPU_AGENT_MODEL="${REMOTE_ARGS[1]}"
+            agent_config
+        fi
         AGENT_MODEL_CHOSEN=1
         REMOTE_ARGS=()
-        agent_config
+    fi
+    if [ -n "${K3D_GPU_AGENT_OPT_MODEL:-}" ]; then
+        AGENT_OPT_MODEL=${K3D_GPU_AGENT_OPT_MODEL} AGENT_MODEL_CHOSEN=1
     fi
     [ "${#REMOTE_ARGS[@]}" -eq 0 ] && [ -z "${OWN_ENDPOINT}" ] || err "--api-key-file and --i-own-this-endpoint go with --remote (--model also names a local model for agent up)"
     case "${AGENT_BACKEND}" in
@@ -7994,6 +8021,7 @@ cmd_agent() {
             addons=$(agent_addons "$@")
             tune_apply_profile >&2
             agent_select
+            agent_optimize
             if [ -z "${addons}" ]; then agent_manifest; else
                 # shellcheck disable=SC2086 # word list of add-on names
                 agent_stack_manifest ${addons}
@@ -9286,8 +9314,23 @@ cmd_plan() {
     else
         out=$(facts_json "${dir}") || err "plan: could not build facts/v1"
     fi
-    local rc=0 model="" i
+    local model="" i meta="" ledger rc=0
+    for ((i = 0; i < ${#args[@]}; i++)); do
+        [ "${args[i]}" != --model ] || model=${args[i + 1]}
+    done
+    if [ -n "${model}" ] && is_hf_id "${model}" && [ "${K3D_GPU_MODEL_OPT:-auto}" != off ]; then
+        meta=$(mktemp)
+        if model_opt_bundle "${model}" "${meta}" 2>/dev/null; then
+            ledger=$(model_opt_ledger)
+            args+=(--model-meta "${meta}" --measurements "$(model_opt_measurements)" --thinking "${K3D_GPU_AGENT_THINKING:-off}")
+            [ -z "${ledger}" ] || args+=(--ledger "${ledger}")
+            [ -z "${K3D_GPU_AGENT_VARIANT:-}" ] || args+=(--variant "${K3D_GPU_AGENT_VARIANT}")
+        else
+            warn "plan: no model metadata for ${model}; planning without the model optimizer"
+        fi
+    fi
     python3 "${dir}/plan.py" --mode "${mode}" --matrix "${matrix}" ${args[@]+"${args[@]}"} <<< "${out}" || rc=$?
+    [ -z "${meta}" ] || rm -f "${meta}"
     # --model also sizes that model to this host (text and --explain; --json and --hash
     # stay the plan/v1 bytes the apply hash covers). K3D_GPU_FIT=off leaves it out.
     for ((i = 0; i < ${#args[@]}; i += 2)); do [ "${args[i]}" != --model ] || model=${args[i + 1]}; done
@@ -9790,6 +9833,157 @@ autoquant_run() {
 
 autoquant_select() { autoquant_run "${1:-}" select; }
 
+# ---- model optimizer: agent up --model <hf-id> (console/model_opt.py) ---------
+# Reads the model's Hugging Face metadata (and every variant the trusted orgs
+# publish of it), then picks for the engine and device agent_select chose: the
+# variant, speculative decoding, thinking default, parsers and text-only load.
+# Env flags override single choices (K3D_GPU_AGENT_VARIANT, _THINKING, _DRAFT,
+# _PRECISION, _TOOL_PARSER, _REASONING_PARSER, _REVISION, _MODEL_NAME);
+# K3D_GPU_MODEL_OPT=off serves the id as given. Any failure (no network, an
+# unknown model) keeps the engine's defaults with one line saying so.
+AGENT_OPT_MODEL=""   # agent up --model
+AGENT_OPT_ARGS=()    # extra server arguments the optimizer chose
+AGENT_OPT_SPEC=""    # its speculative decoding kind, when it chose one
+
+model_opt_cache() { echo "${XDG_CACHE_HOME:-${HOME}/.cache}/k3d-gpu/hf"; }
+model_opt_measurements() { echo "${XDG_CACHE_HOME:-${HOME}/.cache}/k3d-gpu/variant-measurements.json"; }
+# EXPERIMENTS.md next to the console directory (a repo checkout), for promotions;
+# K3D_GPU_MODEL_OPT_LEDGER names another file.
+model_opt_ledger() {
+    local d
+    if [ -n "${K3D_GPU_MODEL_OPT_LEDGER:-}" ]; then echo "${K3D_GPU_MODEL_OPT_LEDGER}"; return 0; fi
+    d=$(console_dir) || return 0
+    [ ! -f "$(dirname "${d}")/EXPERIMENTS.md" ] || echo "$(dirname "${d}")/EXPERIMENTS.md"
+}
+is_hf_id() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; }
+
+# model_opt_bundle <hf-id> <file>: the metadata bundle (HF, its cache, the
+# fixtures dir or the built-in map; model_opt.py never fails on a fetch).
+model_opt_bundle() {
+    local dir
+    dir=$(console_dir) || return 1
+    python3 "${dir}/model_opt.py" fetch --model "$1" --cache "$(model_opt_cache)" \
+        ${K3D_GPU_HF_FIXTURES:+--fixtures "${K3D_GPU_HF_FIXTURES}"} --out "$2"
+}
+
+# The hardware class a ledger row or a local measurement names (plan.py hw_class).
+agent_hw_class() {
+    local e id name
+    case "${AGENT_SEL%% *}" in
+        HPU) echo hpu ;;
+        GPU|HETERO:*)
+            resolve_vendors >/dev/null 2>&1 || true
+            for e in ${INTEL_DRIVERS[@]+"${INTEL_DRIVERS[@]}"}; do
+                id=${e#* }
+                IFS='|' read -r name _ <<< "$(intel_gpu_platform "${id}")"
+                [ -z "${name}" ] || { echo "gpu:${name}"; return 0; }
+            done
+            echo gpu ;;
+        *) echo "cpu:$(cpuinfo_field "model name")" ;;
+    esac
+}
+
+# "<CPU model> + <n>x <resource> (<platform>)" for the optimizer's one-line summary.
+agent_host_text() {
+    local res=${AGENT_SEL#* } cpu cls
+    cpu=$(cpuinfo_field "model name")
+    cpu=${cpu:-CPU}
+    if [ "${res}" = - ]; then echo "${cpu}"; return 0; fi
+    cls=$(agent_hw_class)
+    case "${cls}" in *:*) cls=" (${cls#*:})" ;; *) cls="" ;; esac
+    echo "${cpu} + $(resource_total "${res}")x ${res}${cls}"
+}
+
+# agent_opt_as_given <why>: no optimizer decision. vLLM serves the id as given;
+# OVMS pulls only OpenVINO IR (*-ov), so any other id keeps OVMS's default model.
+agent_opt_as_given() {
+    if [ "${AGENT_APP}" = ovms ] && [[ "${AGENT_OPT_MODEL,,}" != *-ov ]]; then
+        warn "$1: ${AGENT_OPT_MODEL} is not an OpenVINO IR, so OVMS keeps its default model"
+        agent_config
+    else
+        warn "$1: serving ${AGENT_OPT_MODEL} with the engine's defaults"
+    fi
+}
+
+# The optimizer's server arguments as YAML list items, one per line, each a
+# single-quoted scalar (model_opt.py refuses an argument with a quote or newline).
+# Prefixed with a newline so the caller appends them to its own list.
+agent_opt_items() {
+    local a
+    for a in ${AGENT_OPT_ARGS[@]+"${AGENT_OPT_ARGS[@]}"}; do printf "\n%s'%s'" "$1" "${a}"; done
+}
+
+# Applies the optimizer's choices for AGENT_OPT_MODEL to the agent settings.
+agent_optimize() {
+    [ -n "${AGENT_OPT_MODEL}" ] || return 0
+    local dir bundle out errf engine=${AGENT_APP} device=${AGENT_SEL%% *} vver=0.31.0 draft=auto ledger meas
+    local OPT_MODEL="" OPT_REVISION="" OPT_TOOL_PARSER="" OPT_REASONING_PARSER="" OPT_SPEC=""
+    local OPT_CONVERSION="" OPT_ARGS_JSON="[]" OPT_SUMMARY="" OPT_FALLBACK_MODEL="" OPT_FALLBACK_REVISION="" OPT_WARNING=""
+    AGENT_MODEL=${AGENT_OPT_MODEL}
+    AGENT_MODEL_NAME=${K3D_GPU_AGENT_MODEL_NAME:-${AGENT_OPT_MODEL##*/}}
+    AGENT_REVISION=${K3D_GPU_AGENT_REVISION:-}
+    AGENT_TOOL_PARSER=${K3D_GPU_AGENT_TOOL_PARSER-}
+    AGENT_REASONING_PARSER=${K3D_GPU_AGENT_REASONING_PARSER-}
+    if [ "${K3D_GPU_MODEL_OPT:-auto}" = off ]; then
+        info "model optimizer off (K3D_GPU_MODEL_OPT=off): serving ${AGENT_MODEL} as given" >&2
+        return 0
+    fi
+    if ! dir=$(console_dir) || ! command -v python3 >/dev/null 2>&1; then
+        agent_opt_as_given "model optimizer unavailable (needs python3 and console/model_opt.py)"
+        return 0
+    fi
+    [[ "${device}" != HETERO:* ]] || device=GPU
+    case "${AGENT_BACKEND}" in llm-scaler) vver=0.26.0 ;; esac
+    [ -z "${AGENT_HPU:-}" ] || vver=0.30.0
+    # An explicit Fast Draft device (auto, CPU, GPU, NPU) is agent_draft's: the optimizer then adds none.
+    case "${K3D_GPU_AGENT_DRAFT:-}" in "") ;; [Mm][Tt][Pp]) draft=mtp ;; *) draft=off ;; esac
+    bundle=$(mktemp)
+    info "model optimizer: reading the Hugging Face metadata of ${AGENT_OPT_MODEL} and its variants (cached for a day in $(model_opt_cache))" >&2
+    if ! model_opt_bundle "${AGENT_OPT_MODEL}" "${bundle}" 2>/dev/null; then
+        rm -f "${bundle}"
+        agent_opt_as_given "model optimizer: no metadata for ${AGENT_OPT_MODEL}"
+        return 0
+    fi
+    ledger=$(model_opt_ledger)
+    meas=$(model_opt_measurements)
+    errf=$(mktemp)
+    out=$(python3 "${dir}/model_opt.py" optimize --bundle "${bundle}" --engine "${engine}" --device "${device}" \
+        --vllm-version "${vver}" --thinking "${K3D_GPU_AGENT_THINKING:-off}" --draft "${draft}" \
+        --hw-class "$(agent_hw_class)" --host "$(agent_host_text)" ${K3D_GPU_AGENT_VARIANT:+--variant "${K3D_GPU_AGENT_VARIANT}"} \
+        ${K3D_GPU_AGENT_PRECISION:+--precision "${K3D_GPU_AGENT_PRECISION}"} \
+        ${K3D_GPU_AGENT_PREFIX_CACHING:+--prefix-caching "${K3D_GPU_AGENT_PREFIX_CACHING}"} \
+        ${ledger:+--ledger "${ledger}"} --measurements "${meas}" --format shell 2>"${errf}") || {
+        rm -f "${bundle}"
+        agent_opt_as_given "model optimizer failed ($(tr '\n' ' ' < "${errf}"))"
+        rm -f "${errf}"
+        return 0
+    }
+    [ ! -s "${errf}" ] || warn "model optimizer: $(tr '\n' ' ' < "${errf}")"
+    rm -f "${bundle}" "${errf}"
+    eval "${out}"
+    if [ -z "${OPT_MODEL}" ] && [ -z "${OPT_CONVERSION}" ]; then
+        # Nothing this engine can serve: the engine's own defaults, as without --model.
+        warn "model optimizer: ${OPT_WARNING}"
+        agent_config
+        return 0
+    fi
+    [ -z "${OPT_WARNING}" ] || warn "model optimizer: ${OPT_WARNING}"
+    if [ -n "${OPT_CONVERSION}" ]; then
+        warn "model optimizer chose the QAT-matched conversion, which is not built here yet: serving ${OPT_FALLBACK_MODEL} (the conversion commands: k3d-gpu plan --model ${AGENT_OPT_MODEL} --explain)"
+        OPT_MODEL=${OPT_FALLBACK_MODEL} OPT_REVISION=${OPT_FALLBACK_REVISION}
+    fi
+    [ -z "${OPT_MODEL}" ] || AGENT_MODEL=${OPT_MODEL}
+    [ -n "${K3D_GPU_AGENT_REVISION:-}" ] || AGENT_REVISION=${OPT_REVISION}
+    [ -n "${K3D_GPU_AGENT_TOOL_PARSER+x}" ] || AGENT_TOOL_PARSER=${OPT_TOOL_PARSER}
+    [ -n "${K3D_GPU_AGENT_REASONING_PARSER+x}" ] || AGENT_REASONING_PARSER=${OPT_REASONING_PARSER}
+    AGENT_OPT_SPEC=${OPT_SPEC}
+    AGENT_OPT_ARGS=()
+    if [ "${OPT_ARGS_JSON}" != "[]" ]; then
+        mapfile -t AGENT_OPT_ARGS < <(python3 -c 'import json, sys; [print(a) for a in json.loads(sys.argv[1])]' "${OPT_ARGS_JSON}")
+    fi
+    info "${OPT_SUMMARY}" >&2
+}
+
 # Swap AGENT_MODEL (and AGENT_MEMORY) to the measured winner for an OVMS agent on
 # the CPU, when nothing pins the model. Only a measured cache entry for this
 # host's fingerprint changes anything.
@@ -9801,6 +9995,8 @@ agent_autoquant() {
     [ -z "${K3D_GPU_AGENT_MODEL_TIER:-}" ] || [ "${pin}" != "${AGENT_DEFAULT_MODEL}" ] || pin=""
     [ -z "${K3D_GPU_AGENT_MEMORY_TIER:-}" ] || mem=""
     [ "${AGENT_APP}" = ovms ] && [ -z "${pin}" ] || return 0
+    # --model names the model: the optimizer picked its variant, autoquant's cache is for the default.
+    [ -z "${AGENT_OPT_MODEL}" ] || return 0
     [ "${K3D_GPU_AUTOQUANT:-auto}" != off ] || return 0
     [ -f "$(autoquant_cache)" ] || return 0
     doc=$(autoquant_select) || { warn "autoquant: cache present but select failed, keeping ${AGENT_MODEL}"; return 0; }

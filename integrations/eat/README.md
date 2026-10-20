@@ -133,6 +133,32 @@ vLLM's CPU backend runs one OpenMP thread per physical core, so it computes on
 4 threads (`core ids=[1, 3, 5, 7]`); the sibling threads stay in the balloon,
 idle. Raise `cpu` to give vLLM more P-cores.
 
+## Model optimizer on EAT's values
+
+`eat-up.sh model <id>` applies k3d-gpu's model optimizer (`console/model_opt.py`,
+the one behind `agent up --model`) to the catalog model, as values only.
+`eat-opt.py` runs in the bastion after the values merge. It reads the Hugging
+Face id from the `--set LLM_MODEL_ID="..."` line of EAT's playbook block for that
+catalog id. It asks the optimizer what that model wants on vLLM on the CPU, at the
+chart's vLLM version (the image tag, `v0.24.0`). Then it edits that model's
+`modelConfigs` entry in the merged values file:
+
+- engine arguments the entry lacks are appended. EAT's own arguments are never
+  removed or changed: a flag EAT already sets is kept and reported.
+- a speculative config is set (with `speculative.enabled`) when the optimizer
+  chose one. vLLM v0.24.0 marks speculative decoding unsupported on the CPU, so
+  none is chosen today.
+- the model id stays EAT's. The playbook passes it with `--set`, which wins over
+  any values file, so a different variant is reported as not applied.
+
+Each change is printed against EAT stock. For `cpu-gemma4-26b-a4b` that is
+`+ --reasoning-parser gemma4`, `+ --default-chat-template-kwargs
+{"enable_thinking": false}` and `+ --language-model-only`. EAT's
+`--tool-call-parser gemma4` is kept. The values come from the saved metadata in
+`tests/eat_test.sh`. `EAT_MODEL_OPT=off` skips the optimizer;
+`EAT_THINKING=on|model` changes the thinking default. With no network the
+optimizer uses its built-in map, or leaves the values as merged with one line.
+
 ## Blockers hit, and the fix for each
 
 1. **No EAT menu reaches brownfield.** `brownfield_deployment()` is defined in

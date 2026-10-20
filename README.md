@@ -872,6 +872,65 @@ is deleted.
 | `K3D_GPU_AGENT_IMAGE` | `openvino/model_server@sha256:a928…fc58` (2026.4.1-gpu) | server image |
 | `K3D_GPU_AGENT_BACKEND` | `ovms` (`vllm` on a Gaudi) | `ovms`, `vllm` or `llm-scaler` (see below) |
 
+#### Any Hugging Face model: `agent up --model`
+
+`k3d-gpu agent up --model <org/name>` serves any Hugging Face model with no other
+flag. The engine and device are picked as above. The model optimizer
+(`console/model_opt.py`) then reads the model's public Hugging Face metadata and
+that of every variant the trusted orgs publish of it, found by name and by
+`base_model` link, each at the commit Hugging Face resolved. It sets:
+
+- **Variant.** Official first: the model's author, `Intel/` (AutoRound included)
+  and `OpenVINO/`. Then `RedHatAI/`, then `88plug/` or a self-built conversion. For
+  an int4 target a QAT checkpoint wins within its tier. A lower-ranked variant is
+  served only when a measurement says it is faster at equal-or-better quality on
+  this hardware class: a SUPPORTED `EXPERIMENTS.md` row naming the class, or a row
+  in `~/.cache/k3d-gpu/variant-measurements.json`. NVFP4/MXFP4 are never served on
+  an Intel device. OVMS serves an OpenVINO IR and vLLM a safetensors checkpoint.
+  vLLM is pinned to the variant's commit.
+- **QAT.** A model with unquantized QAT weights (Gemma 4 `-qat-q4_0-unquantized`,
+  for Q4_0: symmetric int4, blocks of 32) also gets a self-built candidate: an
+  OpenVINO IR at INT4_SYM group 32, made by a pinned one-time conversion
+  (`console/convert-pins.json`, moved nightly to the newest compatible releases).
+  It ranks below the official IR until H54q measures it, and
+  `K3D_GPU_AGENT_VARIANT=qat-convert` forces it. `plan --explain` prints the
+  commands. A QAT target only takes a QAT drafter, as the model card requires.
+- **Speculative decoding.** It uses the engine's documented method and stays inside
+  that engine's limits. vLLM uses a built-in MTP head (`{"method":"mtp"}`) or an
+  official `-assistant` drafter. OVMS uses a bundled `openvino_mtp_model.xml`, but
+  OVMS MTP needs prefix caching off and greedy decoding. Prefix reuse is measured
+  ([ledger:H25]), so MTP stays off unless `K3D_GPU_AGENT_DRAFT=mtp`. A Gaudi has no
+  speculative decoding by default: vllm-gaudi marks it experimental with
+  torch.compile.
+- **Thinking.** It is off for agent workloads (`K3D_GPU_AGENT_THINKING=on|off|model`).
+  vLLM gets `--default-chat-template-kwargs`. A Qwen3.8-style template also gets the
+  `reasoning_effort` value that injects no system prompt. OVMS has no server-side
+  default, so clients send `chat_template_kwargs`. With thinking off, vLLM gets the
+  card's non-thinking sampling through `--override-generation-config`.
+- **Parsers and text-only load.** Tool and reasoning parsers are set by model
+  family. A vision model is served text-only on vLLM (`--language-model-only`).
+- **Unsupported models.** An architecture the engine does not run on Intel devices
+  is refused with the reason, for example Qwen3.8-Flash-Next (`qwen4_exp`) on vLLM
+  and OVMS. So is a model with no variant the engine can serve. Each keeps the
+  engine's default model with one line.
+
+`k3d-gpu plan --model <org/name> --explain` prints every choice as
+`fact -> choice [source]`, with the variant ranking. Its first line is a one-line
+summary. With no network the optimizer uses a small built-in map of known-good
+variants; `tests/console/test_model_opt.py` checks the map against the saved
+metadata. Metadata is cached for a day under `~/.cache/k3d-gpu/hf`. Without
+`--model` nothing changes.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `K3D_GPU_AGENT_VARIANT` | the ranked pick | serve this variant id, or `qat-convert` |
+| `K3D_GPU_AGENT_THINKING` | `off` | `on`, `off`, or `model` (the chat template's own default) |
+| `K3D_GPU_AGENT_PRECISION` | `bf16` | vLLM only: `int4` serves the best-ranked int4 checkpoint |
+| `K3D_GPU_AGENT_DRAFT` | the optimizer's choice | `off` disables speculative decoding, `mtp` forces an MTP head or drafter |
+| `K3D_GPU_MODEL_OPT` | `auto` | `off` serves `--model` exactly as given |
+| `K3D_GPU_HF_FIXTURES` | unset | directory of saved metadata bundles to read instead of Hugging Face |
+| `K3D_GPU_MODEL_OPT_LEDGER` | the checkout's `EXPERIMENTS.md` | ledger read for promotions |
+
 #### vLLM backends for discrete Arc (Battlemage)
 
 `K3D_GPU_AGENT_BACKEND=vllm` or `llm-scaler` swaps OVMS for vLLM, serving the

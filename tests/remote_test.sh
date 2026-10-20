@@ -160,6 +160,9 @@ out=$(run cmd_agent up --api-key-file "${S}/kubectl.log")
 has "agent: --api-key-file without --remote is refused" "${out}" "go with --remote"
 out=$(run cmd_agent up --model m)
 has "agent: --model without --remote names the local model (sized by fit)" "${out}" "fit: no metadata for m"
+# An HF id goes through the model optimizer; it names its fallback when HF has no metadata.
+out=$(run cmd_agent status --model m)
+has "agent status: --model without --remote is refused" "${out}" "go with --remote"
 
 # ---- quickstart --remote ---------------------------------------------------------
 : > "${S}/endpoint.log"; : > "${S}/kubectl.log"; rm -f "${S}/cluster" "${S}/self.log"
