@@ -7,6 +7,9 @@
 #     whose ARG default is unpinned), on an allow line that matches nothing and on
 #     an allow line with no reason; it passes on variables, digest-only refs, a CRD
 #     schema `image:` key, prose (*.md, docs/) and an allowed reference
+#   - a Dockerfile's apt install of an NVIDIA package (nvidia-*, libnvidia-*) without
+#     =version, or with an ARG whose default is empty, fails pins; across continuation
+#     lines, in *.Dockerfile too
 #   - Helm values name an image as sibling `repository:` / `tag:` keys: pins fails
 #     on such a pair with no digest, with no tag, or tagged latest
 #   - images.lock collects the values pairs and Dockerfile FROMs under integrations/eat
@@ -92,6 +95,18 @@ pins_case "a CRD schema image: key" ok \
     "printf 'properties:\n  image:\n    type: string\n' > share/a.yml"
 pins_case "prose (*.md, docs/)" ok \
     "mkdir -p docs; printf 'docker run busybox:1.37\nimage: redis:7.4\n' | tee README.md > docs/x.txt"
+# A Dockerfile's apt-get install of NVIDIA packages pins pkg=version (the nightly
+# rebuild would otherwise install whatever NVIDIA's repo serves that day).
+pins_case "an unpinned apt nvidia-container-toolkit" "Dockerfile:4: apt package nvidia-container-toolkit is not pinned" \
+    "printf 'FROM ubuntu:26.04@${D1}\nRUN apt-get update && apt-get install -y nvidia-container-toolkit=1.20.1-1 curl \\\\\n    nvidia-container-toolkit-base=1.20.1-1 \\\\\n    && apt-get install -y nvidia-container-toolkit\n' > Dockerfile"
+pins_case "an unpinned apt libnvidia-container1 on a continuation line" "Dockerfile:3: apt package libnvidia-container1 is not pinned" \
+    "printf 'FROM ubuntu:26.04@${D1}\nRUN apt-get install -y --no-install-recommends curl \\\\\n    libnvidia-container1 util-linux\n' > Dockerfile"
+pins_case "an apt NVIDIA pin whose ARG default is empty" "apt package nvidia-container-runtime is not pinned" \
+    "printf 'FROM ubuntu:26.04@${D1}\nARG RT_VERSION\nRUN apt-get install -y nvidia-container-runtime=\${RT_VERSION}\n' > Dockerfile"
+pins_case "apt NVIDIA packages pinned literally and by ARG" ok \
+    "printf 'FROM ubuntu:26.04@${D1}\nARG NVIDIA_CTK_VERSION=\"1.20.1-1\"\nRUN apt-get install -y curl nvidia-container-toolkit=\${NVIDIA_CTK_VERSION} \\\\\n    libnvidia-container1=1.20.1-1 && echo nvidia-smi\n' > Dockerfile"
+pins_case "an unpinned apt NVIDIA package in a *.Dockerfile" "images/x.Dockerfile:1: apt package nvidia-container-toolkit-base is not pinned" \
+    "mkdir -p images; printf 'RUN apt install -y nvidia-container-toolkit-base\n' > images/x.Dockerfile"
 # Helm values name an image as sibling repository: and tag: keys (EAT's charts, our overlays).
 pins_case "a values repository/tag pair" "integrations/eat/gw-values.yaml:3: bitnamilegacy/redis:8.0.3-debian-12-r2 is not pinned" \
     "mkdir -p integrations/eat; printf 'redis:\n  image:\n    repository: bitnamilegacy/redis\n    tag: \"8.0.3-debian-12-r2\"\n' > integrations/eat/gw-values.yaml"

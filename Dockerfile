@@ -16,6 +16,13 @@ FROM rancher/k3s:$K3S_TAG@$K3S_DIGEST AS k3s
 # sheds the unused CUDA layer.
 FROM ${UBUNTU_IMAGE}
 
+# NVIDIA container toolkit pins, read from the repo's Packages index
+# (https://nvidia.github.io/libnvidia-container/stable/deb/amd64/Packages); the
+# nightly check job bumps both. The toolkit, its base and the libnvidia-container
+# libraries share one version; nvidia-container-runtime is a meta package with its own.
+ARG NVIDIA_CTK_VERSION="1.20.1-1"
+ARG NVIDIA_CONTAINER_RUNTIME_VERSION="3.14.0-1"
+
 # Install the NVIDIA container toolkit (distro-agnostic stable/deb repo — the
 # package set is identical regardless of the Ubuntu version underneath).
 RUN apt-get update && apt-get install -y curl gnupg ca-certificates \
@@ -23,7 +30,10 @@ RUN apt-get update && apt-get install -y curl gnupg ca-certificates \
     && curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
       sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
       tee /etc/apt/sources.list.d/nvidia-container-toolkit.list \
-    && apt-get update && apt-get install -y nvidia-container-toolkit-base nvidia-container-toolkit nvidia-container-runtime util-linux \
+    && apt-get update && apt-get install -y \
+      nvidia-container-toolkit-base=${NVIDIA_CTK_VERSION} nvidia-container-toolkit=${NVIDIA_CTK_VERSION} \
+      libnvidia-container-tools=${NVIDIA_CTK_VERSION} libnvidia-container1=${NVIDIA_CTK_VERSION} \
+      nvidia-container-runtime=${NVIDIA_CONTAINER_RUNTIME_VERSION} util-linux \
     && nvidia-ctk runtime configure --runtime=containerd \
     && rm -rf /var/lib/apt/lists/*
 
