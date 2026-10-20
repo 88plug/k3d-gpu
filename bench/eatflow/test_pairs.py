@@ -583,7 +583,8 @@ class H50Test(unittest.TestCase):
         self.assertRegex(live, r"\n\s*H49b\) DESIGN=H49 RULE=L2 ;;")
         self.assertIn('if [ "${RULE}" = L2 ]; then', live)
         # A1 is the CPU stack even where the auto device would pick an XMX Intel GPU (crescent).
-        self.assertIn("K3D_GPU_AGENT_DEVICE=CPU K3D_GPU_AGENT_MODEL=${TGT}", live)
+        self.assertIn("    draft=${A_DRAFT} dev=CPU\n", live)
+        self.assertIn("K3D_GPU_AGENT_DEVICE=${dev} K3D_GPU_AGENT_MODEL=${TGT}", live)
         # B1's KV cache: 6 GiB by default (H49, H49b on the 125 GiB desktop); H50 runs EAT's
         # shipped Qwen3-4B value (40 GiB) through LIVE_EAT_KV_GIB.
         self.assertIn("KV_GIB=${LIVE_EAT_KV_GIB:-6}", live)
@@ -609,6 +610,110 @@ class H50Test(unittest.TestCase):
         self.assertIn("B_DEP=ovms-model-server B_SVC=ovms-model-server B_SPORT=8080 B_API=/v3", live)
         self.assertIn('litellm b "${SERVED_B}" "${BPORT}" "$(( P_LLM + 1 ))" "${API_B}"', live)
         self.assertIn('wait_http "http://127.0.0.1:${BPORT}${API_B}/models" 300', live)
+
+
+class ModelSetTest(unittest.TestCase):
+    """Crescent amendment M1: LIVE_MODEL_SET picks every arm's model; qwen3-4b (the default)
+    keeps the H47-H49b values, gemma4 is EAT's cpu-gemma4-26b-a4b with QAT weights."""
+
+    def sets(self):
+        import re
+        with open(os.path.join(HERE, "live.sh")) as f:
+            live = f.read()
+        block = live[live.index("case ${MODEL_SET} in"):live.index("SAMPLING=${LIVE_SAMPLING:-${SAMPLING}}")]
+        out = {}
+        for name, body in re.findall(r"\n    ([a-z0-9-]+)\)\n(.*?);;", block, re.S):
+            out[name] = dict(re.findall(r"([A-Z][A-Z0-9_]*)=(\S+)", body))
+        return live, out
+
+    def test_default_keeps_the_desktop_values(self):
+        live, sets = self.sets()
+        self.assertIn("MODEL_SET=${LIVE_MODEL_SET:-qwen3-4b}", live)
+        q = sets["qwen3-4b"]
+        self.assertEqual((q["ALIAS"], q["TGT"], q["A_TOOL"], q["A_DRAFT"], q["B_DIR"], q["B_REL"], q["B_CHAT"],
+                          q["SAMPLING"]),
+                         ("Qwen/Qwen3-4B-Instruct-2507", "k3dgpu/Qwen3-4B-Instruct-2507-int4-ov", "hermes3", "CPU",
+                          "Qwen3-4B-Instruct-2507", "vllm-qwen-3-4b-cpu", "false", "agent_local"))
+
+    def test_gemma4(self):
+        live, sets = self.sets()
+        g = sets["gemma4"]
+        self.assertEqual((g["ALIAS"], g["A_TOOL"], g["A_DRAFT"], g["B_DIR"], g["B_REL"], g["B_CHAT"], g["SAMPLING"]),
+                         ("google/gemma-4-26B-A4B-it", "gemma4", "off", "gemma-4-26B-A4B-it-qat-q4_0-unquantized",
+                          "vllm-gemma4-26b-a4b-cpu", "true", "agent_gemma4"))
+        self.assertIn('[ "${MODEL_SET}" = gemma4 ] && B3_MODEL=OpenVINO/gemma-4-26b-a4b-it-int4-ov', live)
+        self.assertIn("K3D_GPU_AGENT_TOOL_PARSER=${A_TOOL}", live)
+        self.assertNotIn("--sampling agent_local", live)
+        self.assertEqual(live.count('--sampling "${SAMPLING}"'), 5)
+        self.assertEqual(live.count("--set chatTemplateConfigMap.enabled=${B_CHAT}"), 2)
+        # The card's sampling (README "Sampling Parameters", generation_config.json), pinned.
+        self.assertEqual(AB.sampling_set("agent_gemma4"),
+                         {"temperature": 1.0, "top_p": 0.95, "top_k": 64, "max_tokens": 1024})
+        self.assertEqual(AB.sampling_set("agent_local"), {"temperature": 0, "top_p": 1, "max_tokens": 1024})
+
+
+class H53Test(unittest.TestCase):
+    """H53 (EXPERIMENTS.md "H53 pre-registration"): H50's design on Arc Pro B70s with Qwen3.8-27B:
+    AG (k3d-gpu auto device, one card) vs B2 (EAT PR #21 XPU path, LIVE_B2_TP cards) and B2h
+    (EAT's nearest profile, xpu-qwen36-27b, on the same weights)."""
+
+    def live(self):
+        with open(os.path.join(HERE, "live.sh")) as f:
+            return f.read()
+
+    def test_h53_reads_as_h49b(self):
+        for hyp, b in (("H53", "B2"), ("H53h", "B2h")):
+            self.assertEqual(PR.design(hyp), ("H49", "L2"))
+            self.assertIn(hyp, AB.PAIRS_HYPS)
+            at = [dict(r, arm={"A1": "AG", "B1": b}[r["arm"]]) for r in L2Test.h49_like(L2Test())]
+            res = PR.analyze(at, pairs_of(24), hyp, "AG", b)
+            self.assertEqual((res["rule"], res["arms"], res["verdict"]), ("L2", ["AG", b], "SUPPORTED"))
+
+    def test_live_sh_arms(self):
+        live = self.live()
+        self.assertRegex(live, r"\n\s*H53\) DESIGN=H53 RULE=L2 ;;")
+        self.assertRegex(live, r"\n\s*H53h\) DESIGN=H53h RULE=L2 ;;")
+        self.assertIn("H53) A=AG B=B2; export K3D_GPU_NODE_LABELS=ei-infra-eligible=true,ei-inference-eligible=true", live)
+        self.assertIn("H53h) A=AG B=B2h;", live)
+        # AG: k3d-gpu's own choice (auto device, default draft); A1 stays on the CPU.
+        self.assertIn('[ -n "${GPU}" ] && dev=auto draft=default', live)
+        self.assertIn("K3D_GPU_AGENT_DEVICE=${dev} K3D_GPU_AGENT_MODEL=${TGT}", live)
+        # B2: PR #21's values file, LIVE_B2_TP cards (2 by default), the pinned tag, stage.py xpu
+        # with the boot ladder; B2h renders EAT's nearest profile for the same weights.
+        self.assertIn("B2_TAG=v0.28.0@sha256:4756b66a077627133cee653b551f6f5eaa1b9a981b5eea13edd33fcd3b0d3ca3", live)
+        self.assertIn('--values "${chart}/xpu-values.yaml" --values "${OUT}/pin.yaml"', live)
+        self.assertIn('--set LLM_MODEL_ID="${mid}" --set tensor_parallel_size="${LIVE_B2_TP:-2}"', live)
+        self.assertIn('[ "${DESIGN}" = H53h ] && mid=${B2H_PROFILE:?}', live)
+        self.assertIn('stage.py" xpu "${OUT}/eat.yaml" "${OUT}/deploy-b.yaml" "${B_DIR}" 32768', live)
+        self.assertIn('"ladder=${LIVE_B2_LADDER:-}" "${flags[@]}"', live)
+        self.assertIn("need=$(( 1 + ${LIVE_B2_TP:-2} ))", live)
+        _, sets = ModelSetTest.sets(ModelSetTest())
+        q = sets["qwen38"]
+        self.assertEqual((q["ALIAS"], q["TGT"], q["A_TOOL"], q["B_DIR"], q["SAMPLING"], q["B2H_PROFILE"]),
+                         ("Qwen/Qwen3.8-27B", "OpenVINO/Qwen3.8-27B-int4-ov", "qwen3coder", "Qwen3.8-27B",
+                          "agent_qwen38", "Qwen/Qwen3.6-27B"))
+        # The card's instruct (non-thinking) sampling with thinking off, the same for every arm.
+        self.assertEqual(AB.sampling_set("agent_qwen38"),
+                         {"temperature": 0.7, "top_p": 0.8, "top_k": 20, "presence_penalty": 1.5, "max_tokens": 1024,
+                          "chat_template_kwargs": {"enable_thinking": False}})
+        body = {"temperature": 0, "top_p": 1, "messages": []}
+        proxy.pin_sampling(body, AB.sampling_set("agent_qwen38"))
+        self.assertEqual(body["chat_template_kwargs"], {"enable_thinking": False})
+        self.assertEqual(body["temperature"], 0.7)
+
+    def test_live_sh_keeps_the_arms_off_the_serving_cards(self):
+        live = self.live()
+        # No free-card list, no hold; placeholders on every card, freed only on LIVE_GPU_FREE;
+        # each GPU arm's card checked before any request.
+        self.assertIn("free=${LIVE_GPU_FREE:?", live)
+        self.assertIn("resources: {limits: {gpu.intel.com/xe: 1}}", live)
+        self.assertIn('if [[ " ${free} " == *" ${bdf} "* ]]; then kubectl -n default delete pod "gpu-hold-${i}"', live)
+        self.assertIn('[[ " ${free} " == *" ${bdf} "* ]] || { echo "ABORTED: ${obj} holds ${bdf}, not a free card"; exit 3; }', live)
+        self.assertIn('for rd in $(kubectl -n "${ns}" exec "${obj}" -c "${ctr}" -- ls /dev/dri | grep renderD); do', live)
+        i_hold, i_apply, i_check, i_pairs = (live.index("gpu-hold-%s"), live.index('kubectl apply -f "${OUT}/deploy-a.yaml"'),
+                                            live.index("not a free card"), live.index("${AB} pairs --hyp"))
+        self.assertLess(i_hold, i_apply)
+        self.assertLess(i_check, i_pairs)
 
 
 if __name__ == "__main__":

@@ -494,9 +494,10 @@ def boot_share(d, pred, boot=stats.BOOT, seed=stats.SEED, stat=None):
 
 
 # Hypothesis id -> (design, load rule). H47b and H49b are H47 and H49 under rule L2; H50 is
-# H49b's design on the Xeon 6741P, H50o the same with arm B3 (EXPERIMENTS.md "H50-H52 pre-registration").
+# H49b's design on the Xeon 6741P, H50o the same with arm B3 (EXPERIMENTS.md "H50-H52 pre-registration");
+# H53 and H53h the same design on two Arc Pro B70s (EXPERIMENTS.md "H53 pre-registration").
 DESIGNS = {"H47": ("H47", "L1"), "H49": ("H49", "L1"), "H47b": ("H47", "L2"), "H49b": ("H49", "L2"),
-           "H50": ("H49", "L2"), "H50o": ("H49", "L2")}
+           "H50": ("H49", "L2"), "H50o": ("H49", "L2"), "H53": ("H49", "L2"), "H53h": ("H49", "L2")}
 
 
 def design(hyp):

@@ -95,6 +95,62 @@ class StageTest(unittest.TestCase):
         self.assertEqual(deployment(out)["volumes"][0], {"name": "model-volume", "hostPath": HOST})
         self.assertEqual(deployment(out)["volumes"][1], {"name": "tmp", "emptyDir": {}})
 
+    def test_xpu_drops_host_gpu_libs_and_adds_tool_flags(self):
+        # EAT PR #21 (c86c42b) xpu-values.yaml render: the host's Level Zero and OpenCL dirs by
+        # hostPath, prepended to LD_LIBRARY_PATH. In a k3d node those paths are the node's own.
+        mounts = [{"mountPath": "/data", "name": "model-volume"},
+                  {"mountPath": "/host-gpu-libs", "name": "host-gpu-libs", "readOnly": True},
+                  {"mountPath": "/usr/lib/x86_64-linux-gnu/libze_loader.so.1", "name": "host-gpu-libs",
+                   "subPath": "libze_loader.so.1"},
+                  {"mountPath": "/etc/OpenCL/vendors", "name": "host-opencl-vendors"},
+                  {"mountPath": "/usr/lib/x86_64-linux-gnu/intel-opencl", "name": "host-intel-opencl"}]
+        xpu = copy.deepcopy(EAT)
+        ps = xpu[3]["spec"]["template"]["spec"]
+        ps["containers"][0].update(volumeMounts=mounts, command=[
+            "bash", "-c", "source /opt/intel/oneapi/setvars.sh --force && export LD_LIBRARY_PATH="
+            "/host-gpu-libs:${LD_LIBRARY_PATH} && python3 -m vllm.entrypoints.openai.api_server \"$@\"", "--"])
+        ps["volumes"] += [{"name": n, "hostPath": {"path": p, "type": "Directory"}} for n, p in (
+            ("host-gpu-libs", "/usr/lib/x86_64-linux-gnu"), ("host-opencl-vendors", "/etc/OpenCL/vendors"),
+            ("host-intel-opencl", "/usr/lib/x86_64-linux-gnu/intel-opencl"))]
+        out = stage.stage("xpu", copy.deepcopy(xpu), "Qwen3-4B", "32768")
+        d = deployment(out)
+        c = d["containers"][0]
+        self.assertEqual([m["name"] for m in c["volumeMounts"]], ["model-volume"])
+        self.assertEqual([v["name"] for v in d["volumes"]], ["model-volume", "tmp"])
+        self.assertEqual(c["command"][2], "source /opt/intel/oneapi/setvars.sh --force && "
+                         "python3 -m vllm.entrypoints.openai.api_server \"$@\"")
+        self.assertEqual(c["args"][-2:], ["--max-model-len", "32768"])        # as the vllm mode
+        self.assertEqual(out[0]["data"]["HF_HUB_OFFLINE"], "1")
+        # H53h: the tool flags EAT's catalog gives this model on the CPU, appended.
+        out = stage.stage("xpu", copy.deepcopy(xpu), "Qwen3-4B", "32768",
+                          "--enable-auto-tool-choice", "--tool-call-parser", "hermes")
+        self.assertEqual(deployment(out)["containers"][0]["args"][-3:],
+                         ["--enable-auto-tool-choice", "--tool-call-parser", "hermes"])
+        # The H53 boot ladder: b drops the setvars.sh source, c --disable-log-requests, d adds
+        # --enforce-eager; nothing else changes.
+        xpu[3]["spec"]["template"]["spec"]["containers"][0]["args"].append("--disable-log-requests")
+        out = stage.stage("xpu", copy.deepcopy(xpu), "Qwen3-4B", "32768", "ladder=bcd", "--tool-call-parser", "hermes")
+        c = deployment(out)["containers"][0]
+        self.assertEqual(c["command"][2], "python3 -m vllm.entrypoints.openai.api_server \"$@\"")
+        self.assertNotIn("--disable-log-requests", c["args"])
+        self.assertEqual(c["args"][-3:], ["--tool-call-parser", "hermes", "--enforce-eager"])
+        out = stage.stage("xpu", copy.deepcopy(xpu), "Qwen3-4B", "32768", "ladder=b")
+        c = deployment(out)["containers"][0]
+        self.assertIn("--disable-log-requests", c["args"])
+        self.assertNotIn("--enforce-eager", c["args"])
+        self.assertNotIn("setvars", c["command"][2])
+        with self.assertRaises(SystemExit):
+            stage.stage("xpu", copy.deepcopy(xpu), "Qwen3-4B", "32768", "ladder=x")
+
+    def test_vllm_leaves_the_chat_template_configmap_alone(self):
+        # EAT's chatTemplateConfigMap (Gemma 4 on vLLM CPU v0.24.0, amendment M1) is mounted over
+        # the examples dir: an added HF_HUB_OFFLINE key would become a stray file there.
+        docs = [{"kind": "ConfigMap", "metadata": {"name": "r-chat-templates"},
+                 "data": {"tool_chat_template_gemma4.jinja": "{{ x }}"}}] + copy.deepcopy(EAT)
+        out = stage.stage("vllm", docs, "gemma", "8192")
+        self.assertEqual(out[0]["data"], {"tool_chat_template_gemma4.jinja": "{{ x }}"})
+        self.assertEqual(out[1]["data"]["HF_HUB_OFFLINE"], "1")
+
     def test_cuda_local_model_without_revision(self):
         out = stage.stage("cuda", copy.deepcopy(CUDA), "Qwen3-4B-AWQ")
         c = deployment(out)["containers"][0]
