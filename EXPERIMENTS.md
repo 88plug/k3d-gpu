@@ -1302,6 +1302,125 @@ the pre-registration's null estimate warned (H47b matched 4 of 10 the same way).
 prediction (A1 >= 0.70, B1 <= 0.10, difference >= +60 points) is close on the descriptive
 numbers, except B1's 0.22, but none of them is a verdict. The L2 tolerances are not changed here.
 
+### H43 and H45 amendment W1: the live runner (2026-10-19)
+
+Written 2026-10-19, before any H43 or H45 measurement, with the runner in the same PR. Nothing
+here is a measurement. The H43 and H45 rows (hypotheses, predictions, probes, thresholds,
+verdict rules) and the
+[H40-H48 pre-registration](#h40-h48-pre-registration-agent-benchmark-2026-10-17) are unchanged.
+Amendment 25 left both unrun: H43 because "the coding agent is not wired into the live runner",
+H45 because "four 300 s ramp steps plus bring-up exceed a 20-min hold". This fixes the choices
+the rows left open.
+
+Common to both: holds as in item 19 (the shared lock, at most 20 min: `LIVE_CAP=1170` inside
+`timeout 1200`), a fresh cluster `k3dgpu-a-<arm>` or a host container, deleted after the hold,
+also on failure. A hold does not start when `/` is above 97% full. Sampling `agent_local`.
+Harness: the merge commit of this PR.
+
+**H43.**
+
+1. Sandbox: `k3d-gpu sandbox up`, as the row names it: agent-sandbox v1.0.7, warm pool
+   `python-ecores`, pods labelled `k3d-gpu.io/cores=efficient` (the E-core balloon), 1 CPU each.
+2. SDK bridge. The blueprint at `758d484` pins `k8s-agent-sandbox==0.4.6`, which claims a sandbox
+   through the v1alpha1 SandboxClaim API with `create_sandbox(template=...)`. agent-sandbox
+   v1.0.7 serves only v1beta1, and its SandboxClaim requires `warmPoolRef`, so the pinned agent
+   cannot claim a sandbox from `sandbox up`. The agent runs with `k8s-agent-sandbox==1.0.7` (the
+   SDK released for that controller) and `bench/eatflow/coding/sitecustomize.py`, which maps the
+   agent's `create_sandbox(template=T, namespace=N, warmpool=W)` to 1.0.7's
+   `create_sandbox(W or T, namespace=N)`. `agent.py` and `main.py` are unchanged. The other
+   packages are the banking venv's (the blueprint's pins) plus `kubernetes==35.0.0`, as the
+   coding blueprint pins it. `ray` is not installed: the agent imports it only with
+   `RAY_ENABLED=true`. Agent environment: `SANDBOX_NAMESPACE=agent-sandbox`,
+   `SANDBOX_TEMPLATE=python-ecores`, `SANDBOX_WARMPOOL=python-ecores`.
+3. Router. The agent reaches its sandbox through upstream's sandbox-router, which `sandbox up`
+   does not install (EAT pulls it by a floating staging tag). `bench/eatflow/sbrouter.py` is
+   that router's HTTP path in the Python standard library: it forwards to `X-Sandbox-Pod-IP`, or
+   else to `<X-Sandbox-ID>.<X-Sandbox-Namespace>.svc.cluster.local:<X-Sandbox-Port>`, and drops the
+   router headers. It runs in the cluster (namespace `agent-sandbox-system`, label
+   `app=sandbox-router`, which the sandbox NetworkPolicy admits; the pinned `proxy_python` image;
+   a bearer token per hold) and is port-forwarded to the host agent. No placement label.
+4. Memory. The coding agent always attaches a RedisContextProvider; it has no `ENABLE_MEMORY`
+   switch. Amendment 8's aim (no earlier task re-injected) is kept by purging. Redis 8.10.2
+   (by digest in `live.sh`) runs on the host. Before the warm-up and before every task, every
+   key is deleted and `DBSIZE` must read 0 (`run --pre-task`, outside the task's time). A failed
+   purge aborts the block. The search index is not a key and stays. Amendment 8's abort on a
+   request with more than one user message still applies.
+5. Arms. The row's statistic is A1's, so A1 decides the verdict. A3 runs as context. B1 is not
+   run, for amendment 24's reasons: its B24 turns took 69-329 s, over the 120 s turn timeout,
+   and after its 343-434 s warm-up no C12 block fits a hold.
+6. Blocks. A1: one hold, blocks typical, heavy, heavy, typical. These are the row's ABBA halves,
+   taken over levels within the arm as in H44. Each level's two halves share one results
+   directory, so the second half resumes C12's order where the first stopped; a censored task
+   runs again. Budget per block: (`CAP` - elapsed - 60)/4 - 60 s, at most 300, at least 120.
+   One warm-up prompt before each block. A3's vLLM CUDA server answered 419-521 s into its
+   2026-10-17 and 18 holds, so four blocks do not fit one hold. A3 gets two holds: typical then
+   heavy, then heavy then typical, each block (`CAP` - elapsed - 60)/2 - 60 s. The background load
+   restarts at each block's level, as in H44. No load-matching gate: the comparison is A1
+   against itself across levels. Load is recorded per block.
+7. Statistic. The ratio is amendment 9's paired time ratio heavy/typical over the C12 ids A1
+   completed at both levels, exp(median of per-id log ratios), paired bootstrap CI (2000
+   resamples, seed 40). Completed means not censored by the block budget; a task over the 600 s
+   timeout is completed and failed. Delta success is heavy minus typical on the same ids.
+   `k3d-gpu bench agent stretch DIRS --arm A1` applies the row's rule. With no shared completed
+   id the verdict is INCONCLUSIVE.
+
+**H45.**
+
+8. Ramp across holds. Bring-up sets the steps per hold. A1, C1 and C2 (servers answering 18-89 s
+   into their 2026-10-17 holds) run N=1, 2 in a first hold and N=4, 8 in a second. A3 runs one
+   step per hold. A hold runs only when every earlier step passed. Later steps gate success on
+   the N=1 success from the arm's first hold (`apb --base-from`). Order: A1, A3, C1, C2, each
+   arm's holds back to back. At most 10 holds.
+9. Not deliverable. A hold whose server does not answer with its steps plus 300 s still left
+   exits without measuring. That arm's later steps are not run (no retry hold), and its APB is
+   the bracket reached so far.
+10. Scoring. `k3d-gpu bench agent apb-score` gives each arm a bracket [lo, hi]: lo is the
+    largest N whose steps all passed; hi = lo once a step failed or N=8 passed, else 8. A
+    prediction holds when the bracket lies inside its range and is refuted when it lies
+    outside. A bracket that straddles the range edge decides nothing, as the row says. The row
+    reads REFUTED when any arm's prediction is refuted, SUPPORTED when all four hold, and
+    INCONCLUSIVE otherwise.
+11. Load. Amendment 27 windows: per hold, a level baseline (2 x 10 s), then `load.py settle`,
+    whose last window is the arm's pre-window, then "during" windows over the steps. No
+    treatment CPUs are removed: A1 runs on the P-cores, and A3's vLLM, C1 and C2 are not pinned.
+    Only "C2 <= A1" compares arms. It is decided only when `load.py matched` over A1's and C2's
+    windows reads MATCHED; INCONCLUSIVE or VOID leaves it undecided, and a VOID comparison is not
+    re-run in this campaign. The per-arm ranges are not comparisons and are not gated.
+12. The synthetic APB, reported and never scored. On each arm's last hold (a step failed, or
+    N=8 ran) and at the same load: `k3d-gpu capacity --slo 10 --url <server>/v1/chat/completions
+    --force --fresh` with what the hold leaves, at most 3 min, skipped under 1 min.
+
+Implementation: `bench/eatflow/agentbench.py` (`run --pre-task`, `apb --ramp --base-from
+--load-phase`, `apb_from_holds`, `h45_score`, `stretch`; subcommands `apb-score`, `stretch`),
+`bench/eatflow/sbrouter.py`, `bench/eatflow/coding/sitecustomize.py` and `bench/eatflow/live.sh`
+(`LIVE_MODE=code` and `apb`). Regression tests in `bench/eatflow/test_h4345.py`: the purge runs
+before the warm-up and every task, outside the task's time, and a failed purge aborts; the
+stretch ratio pairs only ids completed at both levels, counts a timed-out task as completed
+and failed, and reads each verdict at its edge (-10 points exactly holds; a CI straddling 1.5
+is INCONCLUSIVE); the router routes by header, prefers the pod IP, refuses a missing token or
+bad header and answers 502 for an unreachable sandbox; the shim maps `template` to the warm
+pool; a second hold's ramp gates on the first hold's N=1 success and refuses to run without
+it; APB brackets from one or two holds, and a hold after a failed step is refused; the load
+sampler tags "during" windows; per-arm ranges, straddling brackets, and C2 <= A1 under
+matched, unmatched and missing load.
+
+**Disclosed before running.**
+
+- A1's B24 turn p95 at typical was 20.9 s in H42 (N=1, one block), over the 10 s SLO; C1 and C2
+  read 42.0 and 39.4 s. If that repeats on B15-RO, A1's APB is 0, outside its predicted [1, 4],
+  and H45 reads REFUTED under item 10.
+- H44's A1 heavy/none p95 inflation was 2.59 (CI 0.87-2.94) on B24 turns. That is not H43's
+  statistic (heavy/typical time per task on C12), and it is not evidence for H43.
+- Wiring smoke, before this amendment was merged and not scored or kept: two runs on 2026-10-19,
+  22:33-22:48 PDT. (a) A1 in `code` mode at level none (not an H43 level), one 300 s C12 block:
+  sandboxes were claimed from `python-ecores` and pinned to CPUs 24-25 (E-cores), `install_package`
+  reached PyPI, and every request carried one user message; 8 tasks ran. (b) C2 in `apb` mode at
+  typical with one 60 s N=1 step (the registered step is 300 s), then `capacity`: the baseline,
+  pre- and during windows were written with 3 of 3 load containers running. The step read
+  p95 30.4 s on 6 requests. Both runs tested the wiring only. The choices above were written
+  before either ran; only the runner's step-length variable for smoke runs (`LIVE_APB_STEP_S`,
+  default 300) was added after (b)'s first attempt stopped as not deliverable.
+
 ### H28 pre-registration (i9-13900T, 2026-10-17)
 
 Registered 2026-10-17T12:13:48Z, before any H28 measurement. Probe: `bench/zero-copy-models/probe.sh`;

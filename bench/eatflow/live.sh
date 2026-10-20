@@ -29,7 +29,14 @@
 #                   bfcl: H41, BFCL S100 server-fc at LIVE_LEVEL, no agent (amendment 23);
 #                   h44: B24's first 12 tasks in blocks none/heavy/none/heavy (amendment 24);
 #                   pairs: ARM = H47, H49, H47b or H49b, both arms live in cluster k3dgpu-e-<arm>, one hold
-#                   of interleaved pairs into LIVE_PAIRS_DIR (LIVE_HOLD = this hold's number)
+#                   of interleaved pairs into LIVE_PAIRS_DIR (LIVE_HOLD = this hold's number);
+#                   code: H43 (amendment W1), the coding agent on C12 with `k3d-gpu sandbox up`, one
+#                   block per level in LIVE_CODE_LEVELS (default "typical heavy heavy typical") into
+#                   LIVE_CODE_DIR/h43-<arm>-<level> (shared by an arm's holds, so a level's halves resume);
+#                   apb: H45 (amendment W1), the graded ramp steps LIVE_APB_RAMP (default 1,2) on B15-RO
+#                   at LIVE_LEVEL with amendment-27 windows, LIVE_APB_BASE = the hold dir holding N=1;
+#                   then, on the arm's last hold, `k3d-gpu capacity --slo 10` with what the hold leaves
+#   LIVE_CODE_PY    python with the coding blueprint's pins and k8s-agent-sandbox 1.0.7    (code)
 set -uo pipefail
 
 ARM=${1:?usage: live.sh ARM OUT}
@@ -45,9 +52,19 @@ LEVEL=${LIVE_LEVEL:-typical}
 MODE=${LIVE_MODE:-agent}
 ALIAS=Qwen/Qwen3-4B-Instruct-2507
 SERVED=qwen3-4b-instruct-2507
-P_SRV=18630 P_LLM=18640 P_PROXY=18620 P_MCP=18600
+P_SRV=18630 P_LLM=18640 P_PROXY=18620 P_MCP=18600 P_ROUTER=18650 P_REDIS=18660
 LITELLM_IMAGE=docker.litellm.ai/berriai/litellm:v1.83.14-stable.patch.2@sha256:73cbb215d3d43ae5b42816217b200386eb08d567767fcb36cba163152c5f3c79  # EAT 0d3438d genai-gateway; the index digest the 2026-10-17/18 holds pulled
 RAPL_IMAGE=python:3.14.8-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170
+# H43: the coding agent's Redis memory. Redis 8 bundles the query engine the blueprint's
+# RedisContextProvider needs (FT.CREATE); redis 8.10.2-alpine, linux/amd64 pulled 2026-10-19.
+REDIS_IMAGE=redis@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
+# Time a mode needs after the server answers: rollout and server-wait give up past it.
+RESERVE=420
+case ${MODE} in
+    code) read -r -a CODE_LEVELS <<< "${LIVE_CODE_LEVELS:-typical heavy heavy typical}"
+          RESERVE=$(( ${#CODE_LEVELS[@]} * 180 + 240 )) ;;
+    apb)  RESERVE=$(( $(tr ',' '\n' <<< "${LIVE_APB_RAMP:-1,2}" | grep -c .) * ${LIVE_APB_STEP_S:-300} + 300 )) ;;
+esac
 lc=$(echo "${ARM}" | tr 'A-Z' 'a-z')
 PFX=k3dgpu-a
 [ "${MODE}" = pairs ] && PFX=k3dgpu-e
@@ -69,7 +86,8 @@ cleanup() {
     for p in "${pids[@]}"; do kill "${p}" 2>/dev/null; done
     [ -f "${OUT}/mcp.pid" ] && kill "$(cat "${OUT}/mcp.pid")" 2>/dev/null
     for f in "${OUT}"/agent-*.pid; do [ -f "${f}" ] && kill "$(cat "${f}")" 2>/dev/null; done
-    docker rm -f "${PFX}-litellm" "${PFX}-litellm-a" "${PFX}-litellm-b" "${PFX}-${lc}-srv" "${PFX}-rapl" >/dev/null 2>&1
+    docker rm -f "${PFX}-litellm" "${PFX}-litellm-a" "${PFX}-litellm-b" "${PFX}-${lc}-srv" "${PFX}-rapl" \
+        "${PFX}-redis" >/dev/null 2>&1
     k3d cluster delete "${K3D_GPU_CLUSTER}" >/dev/null 2>&1
     stamp "done"
 }
@@ -387,7 +405,7 @@ esac
 if [ -n "${NS:-}" ]; then
     kubectl apply -f "${OUT}/deploy.yaml" > /dev/null
     stamp wait-ready
-    left=$(( CAP - $(el) - 420 ))
+    left=$(( CAP - $(el) - RESERVE ))
     if [ "${left}" -le 0 ] || ! kubectl -n "${NS}" rollout status "deploy/${DEP}" --timeout="${left}s"; then
         echo "NOT DELIVERABLE: not ready within the cap" | tee -a "${OUT}/live.log"
         kubectl -n "${NS}" describe pods | tail -30 > "${OUT}/describe.txt"
@@ -399,10 +417,12 @@ if [ -n "${NS:-}" ]; then
     pids+=($!)
 fi
 stamp server-wait
+sw=600
+case ${MODE} in code|apb) sw=$(( CAP - $(el) - RESERVE )); [ "${sw}" -le 600 ] || sw=600 ;; esac
 case ${ARM} in
     C1) wait_http "http://127.0.0.1:${P_SRV}/api/version" 120 && \
             curl -fsS "http://127.0.0.1:${P_SRV}/api/tags" > "${OUT}/ollama-tags.json" ;;
-    *) wait_http "http://127.0.0.1:${P_SRV}/v1/models" 600 ;;
+    *) [ "${sw}" -gt 0 ] && wait_http "http://127.0.0.1:${P_SRV}/v1/models" "${sw}" ;;
 esac || { echo "NOT DELIVERABLE: server not answering"; docker logs "${PFX}-${lc}-srv" > "${OUT}/server.log" 2>&1; exit 3; }
 curl -fsS "http://127.0.0.1:${P_SRV}/v1/models" > "${OUT}/models.json"
 # LiteLLM targets the name the server itself serves (the EAT chart names its own).
@@ -455,8 +475,116 @@ if [ "${MODE}" = bfcl ]; then
     stamp finished
     exit 0
 fi
+if [ "${MODE}" = code ]; then
+    # H43 (amendment W1): `k3d-gpu sandbox up` (agent-sandbox v1.0.7, warm pool python-ecores on
+    # the E-cores), the router the blueprint's SDK calls (bench/eatflow/sbrouter.py), Redis for
+    # its memory (purged before every task), and the coding agent from the pinned blueprint
+    # commit with k8s-agent-sandbox 1.0.7 behind the shim in bench/eatflow/coding/.
+    CDIR=${LIVE_CODE_DIR:-${OUT}}
+    mkdir -p "${CDIR}"
+    CDIR=$(cd "${CDIR}" && pwd)
+    stamp "sandbox up"
+    K3D_GPU_SHARE="${REPO}/share" timeout 300 "${K}" sandbox up > "${OUT}/sandbox-up.log" 2>&1 \
+        || { echo "NOT DELIVERABLE: sandbox up failed"; tail -20 "${OUT}/sandbox-up.log"; exit 3; }
+    rtok=$(python3 -c "import secrets; print(secrets.token_hex(16))")
+    printf 'token=%s\n' "${rtok}" > "${OUT}/router.env"
+    chmod 600 "${OUT}/router.env"
+    kubectl -n agent-sandbox-system create secret generic sandbox-router --from-env-file="${OUT}/router.env" >/dev/null
+    python3 "${HERE}/sbrouter.py" manifest > "${OUT}/router.yaml"
+    kubectl apply -f "${OUT}/router.yaml" >/dev/null
+    kubectl -n agent-sandbox-system rollout status deploy/sandbox-router --timeout=120s >/dev/null \
+        || { echo "NOT DELIVERABLE: sandbox router not ready"; exit 3; }
+    kubectl -n agent-sandbox-system port-forward svc/sandbox-router-svc "${P_ROUTER}:8080" > "${OUT}/pf-router.log" 2>&1 &
+    pids+=($!)
+    wait_http "http://127.0.0.1:${P_ROUTER}/healthz" 60 || { echo "router port-forward failed"; exit 1; }
+    docker run -d --name "${PFX}-redis" -p "127.0.0.1:${P_REDIS}:6379" "${REDIS_IMAGE}" >/dev/null
+    docker inspect --format '{{.Image}} {{index .Config.Image}}' "${PFX}-redis" > "${OUT}/redis-image.txt"
+    # Memory purge (--pre-task): delete every key, then read back none. The search index is
+    # not a key, so it stays; the agent's RedisContextProvider then finds no earlier turn.
+    cat > "${OUT}/purge-mem.sh" <<EOF
+#!/usr/bin/env bash
+docker exec ${PFX}-redis sh -c 'redis-cli --scan | xargs -r redis-cli del >/dev/null' || exit 1
+[ "\$(docker exec ${PFX}-redis redis-cli dbsize)" = 0 ]
+EOF
+    chmod +x "${OUT}/purge-mem.sh"
+    for _ in $(seq 30); do docker exec "${PFX}-redis" redis-cli ping 2>/dev/null | grep -q PONG && break; sleep 1; done
+    CBP=${LIVE_BLUEPRINT}/usecases/coding-agent-maf/src
+    "${LIVE_CODE_PY:?}" -c "import k8s_agent_sandbox, importlib.metadata as m; print('k8s-agent-sandbox', m.version('k8s-agent-sandbox'))" \
+        | tee -a "${OUT}/live.log"
+    (cd "${CBP}" && PYTHONPATH="${HERE}/coding" \
+        OPENAI_BASE_URL="http://127.0.0.1:${P_PROXY}/v1" OPENAI_API_KEY=not-needed MODEL_NAME="${ALIAS}" \
+        REDIS_URL="redis://127.0.0.1:${P_REDIS}" SANDBOX_ROUTER_URL="http://127.0.0.1:${P_ROUTER}" \
+        SANDBOX_ROUTER_TOKEN="${rtok}" SANDBOX_NAMESPACE=agent-sandbox SANDBOX_TEMPLATE=python-ecores \
+        SANDBOX_WARMPOOL=python-ecores WORKSPACE_DIR="${OUT}/workspace" AUTO_OPEN_BROWSER=false \
+        DEVUI_HOST=127.0.0.1 exec "${LIVE_CODE_PY}" main.py) >> "${OUT}/agent.log" 2>&1 &
+    pids+=($!)
+    end=$(( $(date +%s) + 90 ))
+    until curl -fsS -o /dev/null --max-time 5 -H "Authorization: Bearer ${DEVUI_AUTH_TOKEN}" \
+            "http://127.0.0.1:8090/v1/entities"; do
+        [ "$(date +%s)" -lt "${end}" ] || { echo "coding agent did not start"; tail -20 "${OUT}/agent.log"; exit 1; }
+        sleep 2
+    done
+    nb=${#CODE_LEVELS[@]}
+    blk=$(( (CAP - $(el) - 60) / nb - 60 ))
+    [ "${blk}" -le 300 ] || blk=300
+    [ "${blk}" -ge 120 ] || { echo "NOT DELIVERABLE: ${blk} s per H43 block"; exit 3; }
+    i=0
+    for lv in "${CODE_LEVELS[@]}"; do
+        i=$(( i + 1 ))
+        python3 "${REPO}/bench/load/load.py" stop >/dev/null 2>&1
+        [ "${lv}" = none ] || python3 "${REPO}/bench/load/load.py" start --level "${lv}" --ttl $(( blk + 180 )) \
+            >> "${OUT}/load-start.log" 2>&1
+        stamp "h43 block ${i} ${lv}, budget ${blk}"
+        ${AB} run --arm "${ARM}" --level "${lv}" --out "${CDIR}/h43-${lc}-${lv}" --agent-url http://127.0.0.1:8090 \
+            --tasks C12 --upstream "http://127.0.0.1:${P_LLM}" --proxy-port "${P_PROXY}" --sampling agent_local \
+            --pre-task "${OUT}/purge-mem.sh" --budget-s "${blk}" "${gpu_flag[@]}" 2>&1 | tail -3 | tee -a "${OUT}/live.log"
+    done
+    kubectl -n agent-sandbox get sandboxes,sandboxclaims -o wide > "${OUT}/sandboxes.txt" 2>&1
+    K3D_GPU_SHARE="${REPO}/share" "${K}" sandbox status >> "${OUT}/sandboxes.txt" 2>&1
+    stamp finished
+    exit 0
+fi
 start_mcp || { echo "mcp did not start"; exit 1; }
 start_agent "${ALIAS}" || { echo "agent did not start"; tail -20 "${OUT}/agent.log"; exit 1; }
+
+if [ "${MODE}" = apb ]; then
+    # H45 (amendment W1): this hold's ramp steps on B15-RO at LEVEL, amendment-27 windows: the
+    # level baseline (2 x 10 s), a settle gap whose last window is the arm's pre-window, then
+    # "during" windows over the steps. Each step is 300 s; the first 30 s are not scored.
+    ramp=${LIVE_APB_RAMP:-1,2}
+    D=${OUT}/apb
+    mkdir -p "${D}"
+    base=()
+    [ -n "${LIVE_APB_BASE:-}" ] && base=(--base-from "${LIVE_APB_BASE}")
+    nsteps=$(tr ',' '\n' <<< "${ramp}" | grep -c .)
+    stamp "load ${LEVEL}"
+    python3 "${REPO}/bench/load/load.py" start --level "${LEVEL}" --ttl $(( CAP - $(el) + 60 )) > "${OUT}/load-start.log" 2>&1
+    python3 "${REPO}/bench/load/load.py" sample --seconds 10 --windows 2 --phase baseline --tag baseline \
+        --level "${LEVEL}" --out "${D}/baseline.jsonl"
+    python3 "${REPO}/bench/load/load.py" settle --baseline "${D}/baseline.jsonl" --tag "${ARM}" --level "${LEVEL}" \
+        --out "${D}/load.jsonl"
+    left=$(( CAP - $(el) - 150 - nsteps * ${LIVE_APB_STEP_S:-300} ))
+    [ "${left}" -ge 0 ] || { echo "NOT DELIVERABLE: ${left} s short for ${nsteps} step(s)"; exit 3; }
+    stamp "apb ramp ${ramp}"
+    ${AB} apb --arm "${ARM}" --level "${LEVEL}" --out "${D}" --agent-url http://127.0.0.1:8090 \
+        --upstream "http://127.0.0.1:${P_LLM}" --proxy-port "${P_PROXY}" --sampling agent_local --step-s "${LIVE_APB_STEP_S:-300}" \
+        --ramp "${ramp}" "${base[@]}" --load-phase during "${gpu_flag[@]}" 2>&1 | tail -6 | tee -a "${OUT}/live.log"
+    # The synthetic APB, reported beside the graded one and never scored: on the arm's last
+    # hold (a step failed, or N=8 ran), with what the hold leaves (at most 3 min, at least 1).
+    last=$(python3 -c "import json,sys; s=json.load(open(sys.argv[1]))['steps'][-1]; print(int(not s['pass'] or s['n'] == 8))" \
+        "${D}/apb.json" 2>/dev/null || echo 0)
+    cmin=$(( (CAP - $(el) - 150) / 60 ))
+    [ "${cmin}" -le 3 ] || cmin=3
+    if [ "${last}" = 1 ] && [ "${cmin}" -ge 1 ]; then
+        stamp "capacity --slo 10, budget ${cmin} min"
+        timeout $(( cmin * 60 + 60 )) "${K}" capacity --slo 10 --url "http://127.0.0.1:${P_SRV}/v1/chat/completions" \
+            --model "${SERVED}" --budget "${cmin}" --force --fresh --state-dir "${OUT}/capacity-state" \
+            --out "${OUT}/capacity" > "${OUT}/capacity.log" 2>&1
+        tail -3 "${OUT}/capacity.log" | tee -a "${OUT}/live.log"
+    fi
+    stamp finished
+    exit 0
+fi
 
 if [ "${MODE}" = h44 ]; then
     # H44: B24's first 12 tasks, blocks none/heavy/none/heavy of equal budget, one out dir each.

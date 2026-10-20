@@ -13,7 +13,9 @@ Subcommands (k3d-gpu bench agent <subcommand> ...):
   manifest  print a ConfigMap + Deployment + Service running the proxy in-cluster
   run       one block: a task set against one arm at one load level
   control   load-only control window (energy baseline for J per success)
-  apb       agents-per-box ramp N = 1, 2, 4, 8 on B15-RO, graded
+  apb       agents-per-box ramp N = 1, 2, 4, 8 on B15-RO, graded (--ramp: this hold's steps)
+  apb-score H45: agents per box from each arm's holds, and the pre-registered verdict
+  stretch   H43: one arm's paired time ratio heavy/typical on C12, and the verdict
   bfcl      BFCL S100 through the proxy (board or server-fc mode)
   pairs     one hold of within-hold interleaved pairs, both arms live (H47, H49)
   pairs-report  the pre-registered H47/H49 statistics and verdict of a pairs directory
@@ -256,10 +258,12 @@ class Results:
 class LoadSampler(threading.Thread):
     """bench/load/load.py windows, tagged with the arm, appended to load.jsonl."""
 
-    def __init__(self, path, tag, level, seconds=30.0, window=None):
+    def __init__(self, path, tag, level, seconds=30.0, window=None, phase=None):
+        """phase: amendment 27 window phase ("during" for windows while the arm works)."""
         super().__init__(daemon=True)
         lm = _load_mod()
-        self.window = window or (lambda s: lm.window(s, lm.load_cpus(), tag=tag, level=level))
+        kw = {"phase": phase} if phase else {}
+        self.window = window or (lambda s: lm.window(s, lm.load_cpus(), tag=tag, level=level, **kw))
         self.path, self.seconds = path, seconds
         self.stop_ev = threading.Event()
 
@@ -319,7 +323,7 @@ def warmup_prompt(task_list):
 def run_block(agent, task_list, arm, level, n, out, budget_s, proxy_log, mcp_url=None, reset=None,
               cycle=False, task_timeout=TASK_TIMEOUT_S, clock=time.time, settle_s=30.0,
               opener=urllib.request.urlopen, sampler=None, meter=None, step=None, warmup=None,
-              reset_tries=60):
+              reset_tries=60, pre_task=None):
     """Closed-loop block: n workers take tasks until the set is done (or, with cycle,
     until the budget ends). Each finished task is graded and appended to
     results.jsonl. Returns the rows of this block.
@@ -330,7 +334,10 @@ def run_block(agent, task_list, arm, level, n, out, budget_s, proxy_log, mcp_url
     so no two requests repeat. After a mutating task, or any task whose end state reads
     back off the seed, --reset runs, the seed is read back, and the warm-up prompt must
     answer again before the next task. Any failure there, or a request that carries more
-    than one user message (agent memory on), aborts the block: BlockAborted."""
+    than one user message (agent memory on), aborts the block: BlockAborted.
+
+    pre_task: called before the warm-up and before every task, outside the task's time
+    (H43: purge the coding agent's Redis memory). An exception aborts the block."""
     os.makedirs(out, exist_ok=True)
     res = Results(os.path.join(out, "results.jsonl"))
     skip = set() if cycle else res.done(arm, level, n) & {t["id"] for t in task_list}
@@ -358,7 +365,19 @@ def run_block(agent, task_list, arm, level, n, out, budget_s, proxy_log, mcp_url
                 abort["reason"] = reason
         abort_ev.set()
 
+    def prep(what):
+        if not pre_task:
+            return True
+        try:
+            pre_task()
+            return True
+        except Exception as e:  # noqa: BLE001 - any pre-task failure invalidates the block
+            stop(f"pre-task before {what} failed: {type(e).__name__}: {e}")
+            return False
+
     if warmup:
+        if not prep("the warm-up"):
+            finish(0.0, None)
         w0 = clock()
         ans, _, err = agent.ask(warmup, timeout=task_timeout)
         blk["warmup"] = {"prompt": warmup, "seconds": round(clock() - w0, 3), "error": err,
@@ -450,6 +469,8 @@ def run_block(agent, task_list, arm, level, n, out, budget_s, proxy_log, mcp_url
             if t is None:
                 return
             try:
+                if not prep(t["id"]):
+                    return
                 one(t, cyc, nonce)
             except ResetFailed as e:
                 stop(f"reset after {t['id']} failed: {e}")
@@ -981,7 +1002,8 @@ def cmd_run(a):
     try:
         rows = run_block(agent, ts, a.arm, a.level, a.concurrency, a.out, a.budget_s, plog, a.mcp_url, a.reset,
                          cycle=a.cycle, task_timeout=a.task_timeout_s, sampler=sampler, meter=meter,
-                         warmup=None if a.no_warmup else warmup_prompt(ts), settle_s=a.settle_s)
+                         warmup=None if a.no_warmup else warmup_prompt(ts), settle_s=a.settle_s,
+                         pre_task=pre_task_cmd(a.pre_task) if a.pre_task else None)
     except BlockAborted as e:
         rows, rc = e.rows, 1
         log(f"block ABORTED: {e.reason}")
@@ -991,6 +1013,16 @@ def cmd_run(a):
     k = sum(r["passed"] for r in rows)
     log(f"{a.arm} {a.level} N={a.concurrency}: {k}/{len(rows)} passed; results in {a.out}/results.jsonl")
     return rc
+
+
+def pre_task_cmd(cmd, timeout=120):
+    """--pre-task: a command (no shell) that must exit 0 within timeout before every task."""
+    def run():
+        p = subprocess.run(shlex.split(cmd), check=False, capture_output=True, timeout=timeout)
+        if p.returncode != 0:
+            tail = (p.stderr or b"").decode(errors="replace").strip()[-300:]
+            raise RuntimeError(f"--pre-task exit {p.returncode}: {tail}")
+    return run
 
 
 def record_turn_facts(out, arm, level, n):
@@ -1032,8 +1064,14 @@ def cmd_control(a):
 
 def run_apb(agent, arm, level, out, step_s, proxy_log, ramp=RAMP, warmup_s=30.0,
             clock=time.time, settle_s=30.0, block=run_block, meter_factory=None, sampler_factory=None,
-            warmup=None):
-    steps, base = [], None
+            warmup=None, base=None):
+    """The graded ramp. ramp: the steps this hold runs (H45 amendment W1: 1, 2 in one hold,
+    4, 8 in the next); a ramp that does not start at N=1 needs `base`, the N=1 success of
+    the earlier hold (apb_base). Stops at the first failing step."""
+    ramp = tuple(ramp)
+    if ramp[0] != 1 and base is None:
+        raise ValueError(f"ramp {ramp} does not start at N=1: pass the N=1 success as base")
+    steps = []
     for n in ramp:
         t0 = clock()
         rows = block(agent, T.B15_RO, arm, level, n, out, step_s, proxy_log, cycle=True, clock=clock,
@@ -1050,10 +1088,126 @@ def run_apb(agent, arm, level, out, step_s, proxy_log, ramp=RAMP, warmup_s=30.0,
         log(f"apb {arm} N={n}: {'pass' if ok else 'FAIL'} {checks}")
         if not ok:
             break
-    res = {"arm": arm, "level": level, "slo_s": SLO_S, "apb": agents_per_box(steps), "steps": steps}
+    res = {"arm": arm, "level": level, "slo_s": SLO_S, "ramp": list(ramp), "base_success": base,
+           "apb": agents_per_box(steps), "steps": steps}
     with open(os.path.join(out, "apb.json"), "w") as f:
         json.dump(res, f, indent=1)
     return res
+
+
+def apb_base(hold_dir):
+    """The N=1 success of a hold's apb.json (the success gate's reference for later steps)."""
+    with open(os.path.join(hold_dir, "apb.json")) as f:
+        r = json.load(f)
+    s1 = [s for s in r["steps"] if s["n"] == 1]
+    return s1[0]["checks"]["success"] if s1 else r.get("base_success")
+
+
+def apb_from_holds(hold_dirs, ramp=RAMP):
+    """H45: one arm's agents per box from the apb.json of each hold it ran, in ramp order.
+
+    bracket [lo, hi]: lo = the largest N with every step up to it passed; hi = lo once a
+    step failed or the last step passed (complete), else the largest N on the ramp (a hold
+    the ramp needed did not run). No hold at all: [0, max]. A hold after a failed step, or a
+    gap in the ramp, is an error."""
+    steps = []
+    for d in hold_dirs:
+        with open(os.path.join(d, "apb.json")) as f:
+            steps += json.load(f)["steps"]
+    steps.sort(key=lambda s: s["n"])
+    ns = [s["n"] for s in steps]
+    if ns != list(ramp[:len(ns)]):
+        raise ValueError(f"steps {ns} are not a prefix of the ramp {list(ramp)}")
+    for s in steps[:-1]:
+        if not s["pass"]:
+            raise ValueError(f"step N={s['n']} failed, yet later steps ran")
+    lo = agents_per_box(steps)
+    complete = bool(steps) and (not steps[-1]["pass"] or steps[-1]["n"] == ramp[-1])
+    return {"apb": lo, "bracket": [lo, lo if complete else ramp[-1]], "complete": complete, "steps": steps}
+
+
+# H45 pre-registered predictions: the agents-per-box range each arm's APB must fall in.
+H45_RANGES = {"A3": (8, 8), "A1": (1, 4), "C1": (0, 1)}
+
+
+def _in_range(bracket, rng):
+    lo, hi = bracket
+    if rng[0] <= lo and hi <= rng[1]:
+        return "holds"
+    if hi < rng[0] or lo > rng[1]:
+        return "refuted"
+    return "undecided"
+
+
+def h45_score(arms, load=None):
+    """H45 verdict (pre-registration and amendment W1). arms: {arm: {"bracket": [lo, hi]}}
+    from apb_from_holds; load: `load.py matched` over A1's and C2's windows.
+
+    Per arm: holds when its bracket lies inside the predicted range, refuted when it lies
+    outside, else undecided (an arm with no bracket is undecided). C2 <= A1 is a comparison:
+    it needs matched load, then holds when C2's upper bound <= A1's lower bound and is
+    refuted when C2's lower bound > A1's upper bound. Row: REFUTED when any prediction is
+    refuted, SUPPORTED when all four hold, else INCONCLUSIVE."""
+    out = {"arms": {}, "c2_le_a1": None, "load": load}
+    for arm, rng in H45_RANGES.items():
+        b = (arms.get(arm) or {}).get("bracket")
+        out["arms"][arm] = {"bracket": b, "range": list(rng), "status": _in_range(b, rng) if b else "undecided"}
+    a1, c2 = (arms.get("A1") or {}).get("bracket"), (arms.get("C2") or {}).get("bracket")
+    if not (a1 and c2):
+        st = "undecided"
+    elif not (load and load.get("matched")):
+        st = "unmatched"
+    elif c2[1] <= a1[0]:
+        st = "holds"
+    elif c2[0] > a1[1]:
+        st = "refuted"
+    else:
+        st = "undecided"
+    out["c2_le_a1"] = {"status": st}
+    out["arms"]["C2"] = {"bracket": c2, "range": "<= A1", "status": st if st in ("holds", "refuted") else "undecided"}
+    sts = [v["status"] for k, v in out["arms"].items() if k != "C2"] + [st]
+    out["verdict"] = ("REFUTED" if "refuted" in sts else "SUPPORTED" if all(x == "holds" for x in sts)
+                      else "INCONCLUSIVE")
+    return out
+
+
+# H43 pre-registered thresholds.
+H43_RATIO_MAX = 1.5
+H43_DELTA_MIN = -0.10
+
+
+def stretch(run_dirs, arm, num="heavy", den="typical"):
+    """H43: `arm`'s time per task at level `num` over level `den`, paired on the task ids
+    completed at both levels (amendment 9's time ratio: exp(median per-id log ratio), paired
+    bootstrap 2000 resamples, seed 40), and the success difference num - den on the same ids.
+
+    Completed = not censored by the block budget; a task over the per-task timeout is
+    completed and failed (its time is the timeout). Verdict (H43 row): SUPPORTED when ratio
+    <= 1.5 and delta >= -10 points; REFUTED when the ratio's CI lower bound > 1.5; else
+    INCONCLUSIVE (also with no shared completed id)."""
+    rows = [r for r in collect(run_dirs)[0] if r.get("arm") == arm and not r.get("censored")]
+    t = {lv: {r["task"]: r for r in rows if r.get("level") == lv} for lv in (num, den)}
+    pr = stats.paired_ratio({k: v["duration_s"] for k, v in t[num].items()},
+                            {k: v["duration_s"] for k, v in t[den].items()})
+    ids = sorted(set(t[num]) & set(t[den]))
+    pd = stats.paired_diff({i: int(bool(t[num][i]["passed"])) for i in ids},
+                           {i: int(bool(t[den][i]["passed"])) for i in ids})
+    out = {"arm": arm, "num": num, "den": den, "n": pr["n"], "ids": ids, "ratio": pr["ratio"], "ci95": pr["ci95"],
+           "delta_success": pd["diff"], "delta_ci95": pd["ci95"],
+           "success": {lv: [sum(bool(t[lv][i]["passed"]) for i in ids), len(ids)] for lv in (num, den)},
+           "median_s": {lv: stats.median([t[lv][i]["duration_s"] for i in ids]) if ids else None
+                        for lv in (num, den)},
+           "completed": {lv: len(t[lv]) for lv in (num, den)}}
+    if not pr["n"]:
+        v = "INCONCLUSIVE"
+    elif pr["ratio"] <= H43_RATIO_MAX and pd["diff"] >= H43_DELTA_MIN - 1e-9:
+        v = "SUPPORTED"
+    elif pr["ci95"][0] > H43_RATIO_MAX:
+        v = "REFUTED"
+    else:
+        v = "INCONCLUSIVE"
+    out["verdict"] = v
+    return out
 
 
 
@@ -1064,11 +1218,14 @@ def cmd_apb(a):
     if not plog:
         raise SystemExit("agentbench: --proxy-log FILE or --upstream URL is required")
     agent = Agent(a.agent_url, os.environ.get("DEVUI_AUTH_TOKEN"), a.entity)
+    ramp = tuple(int(x) for x in a.ramp.split(","))
+    base = apb_base(a.base_from) if a.base_from else None
     try:
-        res = run_apb(agent, a.arm, a.level, a.out, a.step_s, plog, settle_s=a.settle_s,
+        res = run_apb(agent, a.arm, a.level, a.out, a.step_s, plog, settle_s=a.settle_s, ramp=ramp, base=base,
                       meter_factory=None if a.no_energy else (lambda: energy.Meter(gpu=a.gpu_power)),
                       sampler_factory=None if a.no_load_sample else
-                      (lambda: LoadSampler(os.path.join(a.out, "load.jsonl"), a.arm, a.level, a.sample_s)),
+                      (lambda: LoadSampler(os.path.join(a.out, "load.jsonl"), a.arm, a.level, a.sample_s,
+                                           phase=a.load_phase)),
                       warmup=None if a.no_warmup else WARMUP["bank"])
     except BlockAborted as e:
         log(f"apb ABORTED: {e.reason}")
@@ -1076,7 +1233,40 @@ def cmd_apb(a):
     finally:
         if srv:
             srv.shutdown()
-    print(f"agents per box ({a.arm}, {a.level}): {res['apb']}")
+    print(f"agents per box ({a.arm}, {a.level}, ramp {list(ramp)}): {res['apb']}")
+    return 0
+
+
+def cmd_apb_score(a):
+    """H45: per-arm agents per box from each arm's hold dirs, the C2-vs-A1 load check over
+    their load.jsonl windows, and the pre-registered verdict."""
+    arms, dirs = {}, {}
+    for spec in a.arm:
+        arm, _, ds = spec.partition("=")
+        dirs[arm] = [d for d in ds.split(",") if d]
+        arms[arm] = apb_from_holds([d for d in dirs[arm] if os.path.exists(os.path.join(d, "apb.json"))])
+        arms[arm]["holds"] = dirs[arm]
+    load = None
+    if "A1" in dirs and "C2" in dirs:
+        ws = [w for arm in ("A1", "C2") for d in dirs[arm] for w in read_jsonl(os.path.join(d, "load.jsonl"))]
+        load = _load_mod().matched(ws) if ws else None
+    res = h45_score(arms, load)
+    res["per_arm"] = arms
+    text = json.dumps(res, indent=1, default=str)
+    if a.out:
+        with open(a.out, "w") as f:
+            f.write(text + "\n")
+    print(text)
+    return 0
+
+
+def cmd_stretch(a):
+    res = stretch(a.runs, a.arm, a.num, a.den)
+    text = json.dumps(res, indent=1)
+    if a.out:
+        with open(a.out, "w") as f:
+            f.write(text + "\n")
+    print(text)
     return 0
 
 
@@ -1274,6 +1464,8 @@ def parse(argv):
     p.add_argument("--mcp-url", help="banking MCP endpoint for end-state grading, e.g. http://127.0.0.1:8000/mcp")
     p.add_argument("--reset", help="command that restarts the MCP sidecar after a mutating task")
     p.add_argument("--task-timeout-s", type=float, default=TASK_TIMEOUT_S)
+    p.add_argument("--pre-task", help="command run before the warm-up and every task, outside its time "
+                                      "(H43: purge the coding agent's memory); must exit 0")
     p.set_defaults(func=cmd_run)
 
     p = sub.add_parser("control", help="load-only control window")
@@ -1287,7 +1479,23 @@ def parse(argv):
     p.add_argument("--agent-url", required=True)
     p.add_argument("--entity")
     p.add_argument("--step-s", type=float, default=300.0)
+    p.add_argument("--ramp", default=",".join(map(str, RAMP)), help="steps this hold runs, e.g. 4,8 (H45 W1)")
+    p.add_argument("--base-from", help="an earlier hold's dir: its N=1 success gates these steps")
+    p.add_argument("--load-phase", choices=("during",), help="amendment 27: tag the load windows")
     p.set_defaults(func=cmd_apb)
+
+    p = sub.add_parser("apb-score", help="H45: agents per box from several holds per arm, and the verdict")
+    p.add_argument("--arm", action="append", required=True, help="ARM=DIR[,DIR]: that arm's hold dirs in order")
+    p.add_argument("--out", help="also write the JSON here")
+    p.set_defaults(func=cmd_apb_score)
+
+    p = sub.add_parser("stretch", help="H43: paired time ratio heavy/typical of one arm, and the verdict")
+    p.add_argument("runs", nargs="+")
+    p.add_argument("--arm", required=True)
+    p.add_argument("--num", default="heavy")
+    p.add_argument("--den", default="typical")
+    p.add_argument("--out", help="also write the JSON here")
+    p.set_defaults(func=cmd_stretch)
 
     p = sub.add_parser("bfcl", help="BFCL S100 through the proxy")
     block_args(p)
