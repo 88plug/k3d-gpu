@@ -4,7 +4,7 @@ owns the platform roles after intel/enterprise-agent-toolkit#19 (open as of
 2026-10-16) moves the agent toolkit onto es_auto_installer.sh. Cross-post a
 short pointer to intel/enterprise-agent-toolkit only if #19 stalls.
 Every link below is a permalink to the default branch as of 2026-10-16:
-  EAS intel/enterprise-ai-solutions@7743bac7e3d334da6eda602db10f7eec6b0360c5
+  EAS intel/enterprise-ai-solutions@e8f3ebc927a7659081f6604d157591bddfca40a9
   EAT intel/enterprise-agent-toolkit@0ecf67a8331e8b502ef41e08bf6d2881416178c5
 -->
 
@@ -26,17 +26,17 @@ Would you accept these as separate PRs? We have them ready and are happy to adju
 
 | Area | Why it works | Code |
 |---|---|---|
-| Version gate | `serverVersion.minor` is stripped to digits, so `v1.34.12+k3s1` passes the minimum-version check | [roles/kubernetes/tasks/validate.yaml#L60-L72](https://github.com/intel/enterprise-ai-solutions/blob/7743bac7e3d334da6eda602db10f7eec6b0360c5/roles/kubernetes/tasks/validate.yaml#L60-L72) |
-| BYO kubeconfig | `_resolve_kubeconfig` reads `existing_kubernetes`, then exports `KUBECONFIG` and `K8S_AUTH_KUBECONFIG` for every role | [es_auto_installer.sh#L1326-L1344](https://github.com/intel/enterprise-ai-solutions/blob/7743bac7e3d334da6eda602db10f7eec6b0360c5/es_auto_installer.sh#L1326-L1344), [#L1446-L1452](https://github.com/intel/enterprise-ai-solutions/blob/7743bac7e3d334da6eda602db10f7eec6b0360c5/es_auto_installer.sh#L1446-L1452) |
-| Storage | `storage_backend: local-path` installs no provisioner, and components provision from the default StorageClass; k3s ships `local-path` as its default | [roles/storage/defaults/main.yaml#L31-L34](https://github.com/intel/enterprise-ai-solutions/blob/7743bac7e3d334da6eda602db10f7eec6b0360c5/roles/storage/defaults/main.yaml#L31-L34), [configs/defaults/global_config.yaml#L23-L26](https://github.com/intel/enterprise-ai-solutions/blob/7743bac7e3d334da6eda602db10f7eec6b0360c5/configs/defaults/global_config.yaml#L23-L26) |
-| Load balancer | `metallb_enabled: false` leaves `LoadBalancer` Services to k3s's built-in ServiceLB | [configs/defaults/global_config.yaml#L125](https://github.com/intel/enterprise-ai-solutions/blob/7743bac7e3d334da6eda602db10f7eec6b0360c5/configs/defaults/global_config.yaml#L125) |
-| CPU policy | `best-effort` is an accepted `kubernetes_cpu_policy` and turns NRI off, for nodes where NRI is unavailable or already owned | [playbooks/includes/preflight.yaml#L201-L259](https://github.com/intel/enterprise-ai-solutions/blob/7743bac7e3d334da6eda602db10f7eec6b0360c5/playbooks/includes/preflight.yaml#L201-L259) |
+| Version gate | `serverVersion.minor` is stripped to digits, so `v1.34.12+k3s1` passes the minimum-version check | [roles/kubernetes/tasks/validate.yaml#L60-L72](https://github.com/intel/enterprise-ai-solutions/blob/e8f3ebc927a7659081f6604d157591bddfca40a9/roles/kubernetes/tasks/validate.yaml#L60-L72) |
+| BYO kubeconfig | `_resolve_kubeconfig` reads `existing_kubernetes`, then exports `KUBECONFIG` and `K8S_AUTH_KUBECONFIG` for every role | [es_auto_installer.sh#L1340-L1358](https://github.com/intel/enterprise-ai-solutions/blob/e8f3ebc927a7659081f6604d157591bddfca40a9/es_auto_installer.sh#L1340-L1358), [#L1446-L1452](https://github.com/intel/enterprise-ai-solutions/blob/e8f3ebc927a7659081f6604d157591bddfca40a9/es_auto_installer.sh#L1460-L1466) |
+| Storage | `storage_backend: local-path` installs no provisioner, and components provision from the default StorageClass; k3s ships `local-path` as its default | [roles/storage/defaults/main.yaml#L31-L34](https://github.com/intel/enterprise-ai-solutions/blob/e8f3ebc927a7659081f6604d157591bddfca40a9/roles/storage/defaults/main.yaml#L31-L34), [configs/defaults/global_config.yaml#L23-L26](https://github.com/intel/enterprise-ai-solutions/blob/e8f3ebc927a7659081f6604d157591bddfca40a9/configs/defaults/global_config.yaml#L23-L26) |
+| Load balancer | `metallb_enabled: false` leaves `LoadBalancer` Services to k3s's built-in ServiceLB | [configs/components.yaml#L82-L84](https://github.com/intel/enterprise-ai-solutions/blob/e8f3ebc927a7659081f6604d157591bddfca40a9/configs/components.yaml#L82-L84) |
+| CPU policy | `best-effort` is an accepted `kubernetes_cpu_policy` and turns NRI off, for nodes where NRI is unavailable or already owned | [playbooks/includes/preflight.yaml#L209-L267](https://github.com/intel/enterprise-ai-solutions/blob/e8f3ebc927a7659081f6604d157591bddfca40a9/playbooks/includes/preflight.yaml#L209-L267) |
 
 ## Gaps
 
 ### 1. Istio CNI mounts the wrong host paths on k3s/k3d
 
-Ambient mode needs istio-cni to write into the cluster's CNI config directory. The istio role installs the vendored umbrella chart (base/istiod/cni/ztunnel 1.27.3) without `global.platform` ([roles/istio/tasks/install.yaml#L75-L88](https://github.com/intel/enterprise-ai-solutions/blob/7743bac7e3d334da6eda602db10f7eec6b0360c5/roles/istio/tasks/install.yaml#L75-L88), [charts/istio/values.yaml#L30-L31](https://github.com/intel/enterprise-ai-solutions/blob/7743bac7e3d334da6eda602db10f7eec6b0360c5/charts/istio/values.yaml#L30-L31)). The cni chart therefore mounts `/etc/cni/net.d` and `/opt/cni/bin`. k3s keeps its CNI config in `/var/lib/rancher/k3s/agent/etc/cni/net.d`.
+Ambient mode needs istio-cni to write into the cluster's CNI config directory. The istio role installs the vendored umbrella chart (base/istiod/cni/ztunnel 1.27.3) without `global.platform` ([roles/istio/tasks/install.yaml#L70-L83](https://github.com/intel/enterprise-ai-solutions/blob/e8f3ebc927a7659081f6604d157591bddfca40a9/roles/istio/tasks/install.yaml#L70-L83), [charts/istio/values.yaml#L30-L31](https://github.com/intel/enterprise-ai-solutions/blob/e8f3ebc927a7659081f6604d157591bddfca40a9/charts/istio/values.yaml#L30-L31)). The cni chart therefore mounts `/etc/cni/net.d` and `/opt/cni/bin`. k3s keeps its CNI config in `/var/lib/rancher/k3s/agent/etc/cni/net.d`.
 
 - Istio's [platform prerequisites](https://istio.io/latest/docs/ambient/install/platform-prerequisites/) require `global.platform=k3d` or `k3s` there.
 - cni 1.27.3 reads `platform` or `global.platform` and merges `files/profile-platform-<name>.yaml` ([manifests/helm-profiles/platform-k3d.yaml @1.27.3](https://github.com/istio/istio/blob/1.27.3/manifests/helm-profiles/platform-k3d.yaml)).
@@ -54,7 +54,7 @@ On a k3d cluster from the stock `rancher/k3s:v1.34.12-k3s1` image, containerd's 
 
 ### 2. Envoy data plane schedules no pods on k3s
 
-The `EnvoyProxy` pins the envoy DaemonSet to control-plane nodes with an exact-value selector, `node-role.kubernetes.io/control-plane: ""` ([roles/envoy_gateway/tasks/install.yaml#L199-L219](https://github.com/intel/enterprise-ai-solutions/blob/7743bac7e3d334da6eda602db10f7eec6b0360c5/roles/envoy_gateway/tasks/install.yaml#L199-L219)).
+The `EnvoyProxy` pins the envoy DaemonSet to control-plane nodes with an exact-value selector, `node-role.kubernetes.io/control-plane: ""` ([roles/envoy_gateway/tasks/controller.yaml#L159-L179](https://github.com/intel/enterprise-ai-solutions/blob/e8f3ebc927a7659081f6604d157591bddfca40a9/roles/envoy_gateway/tasks/controller.yaml#L159-L179)).
 
 - kubeadm and Kubespray set this label to `""`.
 - k3s sets it to `"true"` ([k3s pkg/server/server.go#L550](https://github.com/k3s-io/k3s/blob/843c32de489c25ccc1bde53d21c5fd7df23c706e/pkg/server/server.go#L550)).
@@ -67,10 +67,10 @@ The patch also sets `nodeSelector: null`. `kubernetes.core.k8s` updates an exist
 
 ### 3. BYO clusters never get node-topology labels, but teardown removes them
 
-- With `existing_kubernetes` set, the kubernetes role ends before `post_install` ([roles/kubernetes/tasks/install.yaml#L23-L25](https://github.com/intel/enterprise-ai-solutions/blob/7743bac7e3d334da6eda602db10f7eec6b0360c5/roles/kubernetes/tasks/install.yaml#L23-L25)).
-- `apply_node_topology.yaml` is also gated on `_k8s_needs_ssh`, which BYO never sets ([#L27-L34](https://github.com/intel/enterprise-ai-solutions/blob/7743bac7e3d334da6eda602db10f7eec6b0360c5/roles/kubernetes/tasks/apply_node_topology.yaml#L27-L34)).
-- Teardown, however, strips `workload-class` from BYO nodes as "labels we added" ([roles/kubernetes/tasks/teardown.yaml#L10-L39](https://github.com/intel/enterprise-ai-solutions/blob/7743bac7e3d334da6eda602db10f7eec6b0360c5/roles/kubernetes/tasks/teardown.yaml#L10-L39)).
-- The docs tell users to label by hand ([docs/deploy/topologies.md#L214](https://github.com/intel/enterprise-ai-solutions/blob/7743bac7e3d334da6eda602db10f7eec6b0360c5/docs/deploy/topologies.md#L214)).
+- With `existing_kubernetes` set, the kubernetes role ends before `post_install` ([roles/kubernetes/tasks/install.yaml#L23-L25](https://github.com/intel/enterprise-ai-solutions/blob/e8f3ebc927a7659081f6604d157591bddfca40a9/roles/kubernetes/tasks/install.yaml#L23-L25)).
+- `apply_node_topology.yaml` is also gated on `_k8s_needs_ssh`, which BYO never sets ([#L27-L34](https://github.com/intel/enterprise-ai-solutions/blob/e8f3ebc927a7659081f6604d157591bddfca40a9/roles/kubernetes/tasks/apply_node_topology.yaml#L27-L34)).
+- Teardown, however, strips `workload-class` from BYO nodes as "labels we added" ([roles/kubernetes/tasks/teardown.yaml#L10-L39](https://github.com/intel/enterprise-ai-solutions/blob/e8f3ebc927a7659081f6604d157591bddfca40a9/roles/kubernetes/tasks/teardown.yaml#L10-L39)).
+- The docs tell users to label by hand ([docs/deploy/topologies.md#L214](https://github.com/intel/enterprise-ai-solutions/blob/e8f3ebc927a7659081f6604d157591bddfca40a9/docs/deploy/topologies.md#L214)).
 
 This is not k3s-specific, but it is the first thing a multi-node k3d user hits.
 
@@ -89,7 +89,7 @@ This changes behaviour for existing multi-node BYO users, who were told to label
 
 ### 4. NRI balloons chart is unpinned
 
-The nri-plugins Helm release is installed with no `chart_version` ([roles/nri_cpu_balloons/tasks/install_advanced.yaml#L197-L214](https://github.com/intel/enterprise-ai-solutions/blob/7743bac7e3d334da6eda602db10f7eec6b0360c5/roles/nri_cpu_balloons/tasks/install_advanced.yaml#L197-L214)). The chart defaults its image tag to its appVersion, so each run takes whatever release is newest that day, policy binary included. Other roles pin their charts already, for example `seaweedfs_chart_version` and `istio_csr_helm_chart_version`.
+The nri-plugins Helm release is installed with no `chart_version` ([roles/nri_cpu_balloons/tasks/install_advanced.yaml#L197-L214](https://github.com/intel/enterprise-ai-solutions/blob/e8f3ebc927a7659081f6604d157591bddfca40a9/roles/nri_cpu_balloons/tasks/install_advanced.yaml#L197-L214)). The chart defaults its image tag to its appVersion, so each run takes whatever release is newest that day, policy binary included. Other roles pin their charts already, for example `seaweedfs_chart_version` and `istio_csr_helm_chart_version`.
 
 This matters more on dev clusters: only one NRI resource policy can own a node, and a version drift between two installers is hard to diagnose.
 
@@ -119,7 +119,7 @@ These are for completeness. Since #19 deletes the files, we would only send a fi
 
 ## Questions for maintainers
 
-1. **NRI ownership on BYO.** Should the installer detect an NRI resource policy that is already running and skip, or fail early, instead of `helm upgrade --install` over it? Only one policy can own a node. Today the only choice is `kubernetes_cpu_policy: best-effort`, while the template comment says not to change it ([configs/defaults/global_config.yaml#L101-L106](https://github.com/intel/enterprise-ai-solutions/blob/7743bac7e3d334da6eda602db10f7eec6b0360c5/configs/defaults/global_config.yaml#L101-L106)).
+1. **NRI ownership on BYO.** Should the installer detect an NRI resource policy that is already running and skip, or fail early, instead of `helm upgrade --install` over it? Only one policy can own a node. Today the only choice is `kubernetes_cpu_policy: best-effort`, while the template comment says not to change it ([configs/defaults/global_config.yaml#L100-L105](https://github.com/intel/enterprise-ai-solutions/blob/e8f3ebc927a7659081f6604d157591bddfca40a9/configs/defaults/global_config.yaml#L100-L105)).
 2. **Intel GPU plugin (enterprise-ai-solutions#40).** The new `intel_gpu_plugin` role applies the upstream manifest from `ref: main` with no namespace. Would a pinned release tag, plus a skip when a GPU plugin DaemonSet already exists, fit? Clusters that already run the plugin, in `kube-system` for example, would otherwise get a second one.
 3. **Placement of the docs page.** Is `docs/deploy/` the right home, or would you prefer it folded into `topologies.md`?
 
