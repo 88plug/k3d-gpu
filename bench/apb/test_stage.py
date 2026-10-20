@@ -127,17 +127,17 @@ class StageTest(unittest.TestCase):
         self.assertEqual(deployment(out)["containers"][0]["args"][-3:],
                          ["--enable-auto-tool-choice", "--tool-call-parser", "hermes"])
         # The H53 boot ladder: b drops the setvars.sh source, c --disable-log-requests, d adds
-        # --enforce-eager; nothing else changes.
+        # #21's declared --max-model-len 32768; MAXLEN "-" keeps the chart's own (none).
         xpu[3]["spec"]["template"]["spec"]["containers"][0]["args"].append("--disable-log-requests")
-        out = stage.stage("xpu", copy.deepcopy(xpu), "Qwen3-4B", "32768", "ladder=bcd", "--tool-call-parser", "hermes")
+        out = stage.stage("xpu", copy.deepcopy(xpu), "Qwen3-4B", "-", "ladder=bcd", "--tool-call-parser", "hermes")
         c = deployment(out)["containers"][0]
         self.assertEqual(c["command"][2], "python3 -m vllm.entrypoints.openai.api_server \"$@\"")
         self.assertNotIn("--disable-log-requests", c["args"])
-        self.assertEqual(c["args"][-3:], ["--tool-call-parser", "hermes", "--enforce-eager"])
-        out = stage.stage("xpu", copy.deepcopy(xpu), "Qwen3-4B", "32768", "ladder=b")
+        self.assertEqual(c["args"][-4:], ["--tool-call-parser", "hermes", "--max-model-len", "32768"])
+        out = stage.stage("xpu", copy.deepcopy(xpu), "Qwen3-4B", "-", "ladder=b")
         c = deployment(out)["containers"][0]
         self.assertIn("--disable-log-requests", c["args"])
-        self.assertNotIn("--enforce-eager", c["args"])
+        self.assertNotIn("--max-model-len", c["args"])
         self.assertNotIn("setvars", c["command"][2])
         with self.assertRaises(SystemExit):
             stage.stage("xpu", copy.deepcopy(xpu), "Qwen3-4B", "32768", "ladder=x")

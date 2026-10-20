@@ -17,7 +17,7 @@ where a mode below says otherwise.
                                             --model /data/DIR, --max-model-len MAXLEN,
                                             HF_HUB_OFFLINE=1, no HF token secret, readiness
                                             probe from 10 s (the chart waits 120 s)
-  stage.py xpu IN OUT DIR MAXLEN [ladder=STEPS] [FLAG...]
+  stage.py xpu IN OUT DIR MAXLEN|- [ladder=STEPS] [FLAG...]
                                             EAT PR #21 xpu-values.yaml render: as vllm, minus
                                             the host Level Zero/OpenCL hostPath mounts and
                                             their LD_LIBRARY_PATH prepend (a k3d node has no
@@ -117,9 +117,10 @@ def stage(mode, docs, *extra):
             mdir, maxlen, *flags = extra
             if mode == "vllm" and flags:
                 raise SystemExit("stage.py vllm: IN OUT DIR MAXLEN")
-            # xpu: an optional first flag ladder=<steps> (H53's boot ladder, EXPERIMENTS.md "H53
+            # xpu: MAXLEN "-" leaves the chart's own (none for EAT's Qwen3.6-27B profile); an
+            # optional first flag ladder=<steps> (H53's boot ladder, EXPERIMENTS.md "H53
             # pre-registration"): b drops the setvars.sh source, c drops --disable-log-requests,
-            # d adds --enforce-eager.
+            # d adds --max-model-len 32768 (#21's declared max_model_len).
             ladder = ""
             if flags and flags[0].startswith("ladder="):
                 ladder = flags.pop(0)[len("ladder="):]
@@ -140,7 +141,7 @@ def stage(mode, docs, *extra):
                 c["envFrom"] = [e for e in c["envFrom"] if "secretRef" not in e]
                 a = c["args"]
                 a[a.index("--model") + 1] = "/data/" + mdir
-                a += ["--max-model-len", str(maxlen)] + list(flags)
+                a += (["--max-model-len", str(maxlen)] if maxlen != "-" else []) + list(flags)
                 c["readinessProbe"].update(initialDelaySeconds=10, periodSeconds=5, failureThreshold=200)
                 if mode == "xpu":
                     # EAT PR #21 mounts the host's Level Zero and OpenCL runtime by hostPath and
@@ -159,7 +160,7 @@ def stage(mode, docs, *extra):
                     if "c" in ladder:
                         c["args"] = [x for x in c["args"] if x != "--disable-log-requests"]
                     if "d" in ladder:
-                        c["args"].append("--enforce-eager")
+                        c["args"] += ["--max-model-len", "32768"]
         elif mode == "cuda":
             (mdir,) = extra
             if kind == "Deployment":

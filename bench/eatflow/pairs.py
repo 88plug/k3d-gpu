@@ -17,7 +17,7 @@ the level's full load. The arm-level check is amendment 27 (load.matched_a27) ov
 pairs' pre-windows. bg_cpu, package W and throttle during the attempt are reported, never
 gated.
 
-Load rule L3 (H50, H50o, H53, H53h; EXPERIMENTS.md "Crescent amendment A3"): the same
+Load rule L3 (H50, H50o, H53; EXPERIMENTS.md "Crescent amendment A3"): the same
 pre-windows, no match filter. Every complete pair enters the statistic; a balance gate (a
 sign-flip test of arm on each pre covariate, p < 0.01 gates) replaces it; a two-regressor
 adjustment and L2's matched subset are reported, never gated. The arm order of pair j is drawn
@@ -511,13 +511,13 @@ def boot_share(d, pred, boot=stats.BOOT, seed=stats.SEED, stat=None):
 
 # Rule L3 rows: the seed of their arm order, fixed in the pre-registration (amendment A3).
 ORDER_SEEDS = {"H50": "H50-crescent-2026-10-20", "H50o": "H50o-crescent-2026-10-20",
-               "H53": "H53-crescent-2026-10-20", "H53h": "H53h-crescent-2026-10-20"}
+               "H53": "H53-crescent-2026-10-20"}
 
 # Hypothesis id -> (design, load rule). H47b and H49b are H47 and H49 under rule L2; H50 is
 # H49b's design on the Xeon 6741P, H50o the same with arm B3 (EXPERIMENTS.md "H50-H52 pre-registration");
-# H53 and H53h the same design on two Arc Pro B70s (EXPERIMENTS.md "H53 pre-registration").
+# H53 the H49 statistic over solo-hold block pairs on the Arc Pro B70s (solo.py, "H53 pre-registration").
 DESIGNS = {"H47": ("H47", "L1"), "H49": ("H49", "L1"), "H47b": ("H47", "L2"), "H49b": ("H49", "L2"),
-           "H50": ("H49", "L3"), "H50o": ("H49", "L3"), "H53": ("H49", "L3"), "H53h": ("H49", "L3")}
+           "H50": ("H49", "L3"), "H50o": ("H49", "L3"), "H53": ("H49", "L3")}
 
 
 def design(hyp):
@@ -627,8 +627,8 @@ def l3(table, a, b, alpha=0.01, boot=stats.BOOT, seed=stats.SEED):
 
 def analyze(attempts, pairs, hyp, a, b, holds=None, registration=None):
     """The pre-registered statistics and verdict of H47 (a=A1, b=A4) or H49 (a=A1, b=B1), under
-    load rule L1; H47b and H49b are those designs under rule L2; H50, H50o, H53 and H53h the H49
-    design under rule L3, which needs the pairs directory's registration (DESIGNS, register)."""
+    load rule L1; H47b and H49b are those designs under rule L2; H50, H50o and H53 (its block
+    pairs, solo.py) the H49 design under rule L3, which needs the directory's registration."""
     base, rule_name = design(hyp)
     if rule_name == "L3":
         want = {"hyp": hyp, "rule": "L3", "seed": ORDER_SEEDS[hyp]}

@@ -23,7 +23,8 @@
 #   LIVE_EAT_OVMS_CHART EAT core/helm-charts/ovms at 0d3438d                         (H50o B3)
 #   LIVE_EAT_XPU_CHART EAT core/helm-charts/vllm at PR #21 c86c42b                   (H53 B2)
 #   LIVE_GPU_FREE   PCI addresses of the Intel GPUs the H53 arms may use               (H53)
-#   LIVE_B2_TP      B2's tensor_parallel_size, cards (default 2)                              (H53)
+#   LIVE_B2_TP      B2's tensor_parallel_size, cards (default 4, #21's own value)            (H53)
+#   LIVE_SOLO       solo mode: the one arm of this hold, AG or B2                           (H53)
 #   LIVE_B2_LADDER  H53 B2 boot ladder steps the smoke found needed (b, c, d; default none) (H53)
 #   LIVE_MODEL_SET  qwen3-4b (default) or gemma4 (crescent amendment M1): every arm's model
 #   LIVE_SAMPLING   the proxy's pinned sampling profile (default: the model set's; agent.lock)
@@ -37,6 +38,7 @@
 #   LIVE_MODE       agent (default): B24 at LIVE_LEVEL, then a control window;
 #                   bfcl: H41, BFCL S100 server-fc at LIVE_LEVEL, no agent (amendment 23);
 #                   h44: B24's first 12 tasks in blocks none/heavy/none/heavy (amendment 24);
+#                   solo: ARM = H53, one arm (LIVE_SOLO) per hold on the Arc Pro B70s (bench/eatflow/solo.py);
 #                   pairs: ARM = H47, H49, H47b, H49b, H50 or H50o, both arms live in cluster k3dgpu-e-<arm>, one hold
 #                   of interleaved pairs into LIVE_PAIRS_DIR (LIVE_HOLD = this hold's number);
 #                   code: H43 (amendment W1), the coding agent on C12 with `k3d-gpu sandbox up`, one
@@ -75,11 +77,11 @@ case ${MODEL_SET} in
         TGT=k3dgpu/gemma-4-26B-A4B-it-qat-int4-ov TGT_DIR=gemma-4-26B-A4B-it-qat-int4-ov A_TOOL=gemma4 A_DRAFT=off
         B_DIR=gemma-4-26B-A4B-it-qat-q4_0-unquantized B_REL=vllm-gemma4-26b-a4b-cpu B_CHAT=true SAMPLING=agent_gemma4 ;;
     qwen38)
-        # H53 (GPU): AG's OpenVINO IR and B2's bf16 weights; B2H_PROFILE is the EAT PR #21 entry
-        # B2h renders (its nearest profile, xpu-qwen36-27b), pointed at these weights.
+        # H53 (GPU): AG's OpenVINO IR and B2's bf16 weights; B2_PROFILE is the EAT PR #21 catalog
+        # entry B2 renders for this model size (xpu-qwen36-27b), pointed at these weights.
         ALIAS=Qwen/Qwen3.8-27B SERVED=qwen3.8-27b
         TGT=OpenVINO/Qwen3.8-27B-int4-ov TGT_DIR=Qwen3.8-27B-int4-ov A_TOOL=qwen3coder A_DRAFT=off
-        B_DIR=Qwen3.8-27B B_REL=vllm-qwen38-27b-xpu B_CHAT=false SAMPLING=agent_qwen38 B2H_PROFILE=Qwen/Qwen3.6-27B ;;
+        B_DIR=Qwen3.8-27B B_REL=vllm-qwen38-27b-xpu B_CHAT=false SAMPLING=agent_qwen38 B2_PROFILE=Qwen/Qwen3.6-27B ;;
     *) echo "LIVE_MODEL_SET must be qwen3-4b, gemma4 or qwen38"; exit 2 ;;
 esac
 SAMPLING=${LIVE_SAMPLING:-${SAMPLING}}
@@ -119,7 +121,7 @@ case ${MODE} in
 esac
 lc=$(echo "${ARM}" | tr 'A-Z' 'a-z')
 PFX=k3dgpu-a
-[ "${MODE}" = pairs ] && PFX=k3dgpu-e
+case ${MODE} in pairs|solo) PFX=k3dgpu-e ;; esac
 export K3D_GPU_CLUSTER=${PFX}-${lc}
 mkdir -p "${OUT}"
 OUT=$(cd "${OUT}" && pwd)
@@ -242,6 +244,128 @@ cluster_up() {
     stamp "k3d-gpu up"
     timeout 300 "${K}" up > "${OUT}/up.log" 2>&1 || { echo "up failed"; tail -20 "${OUT}/up.log"; exit 1; }
 }
+if [ "${MODE}" = solo ]; then
+    # H53 ("H53 pre-registration", LIVE_MODEL_SET=qwen38): one arm per hold on the Arc Pro B70s,
+    # holds in the order AG, B2, B2, AG, scored as block pairs (bench/eatflow/solo.py). LIVE_SOLO:
+    # AG (k3d-gpu's auto device and draft: OVMS on one card) or B2 (EAT PR #21's vLLM XPU path,
+    # its xpu-qwen36-27b profile on these weights, LIVE_B2_TP cards). LIVE_GPU_FREE: the PCI
+    # addresses of the cards the hold may use; every other card is held by a placeholder pod.
+    PD=${LIVE_PAIRS_DIR:?} HOLD=${LIVE_HOLD:?} SOLO=${LIVE_SOLO:?LIVE_SOLO is AG or B2}
+    read -r FAMILY RULE <<< "$(python3 "${HERE}/pairs.py" design "${ARM}")"
+    [ "${ARM}" = H53 ] && [ "${RULE:-}" = L3 ] || { echo "solo: ARM must be H53 (a rule-L3 row)"; exit 2; }
+    mkdir -p "${PD}"
+    PD=$(cd "${PD}" && pwd)
+    export K3D_GPU_NODE_LABELS=ei-infra-eligible=true,ei-inference-eligible=true
+    TP=${LIVE_B2_TP:-4}
+    case ${SOLO} in AG) need=1 ;; B2) need=${TP} ;; *) echo "LIVE_SOLO must be AG or B2"; exit 2 ;; esac
+    cluster_up
+    # Hold every card outside LIVE_GPU_FREE with a placeholder pod (one card each), then free
+    # the placeholders on the cards this hold may use.
+    free=${LIVE_GPU_FREE:?H53 needs LIVE_GPU_FREE, the PCI addresses of the cards the hold may use}
+    n=$(kubectl get node -o jsonpath='{.items[0].status.allocatable.gpu\.intel\.com/xe}')
+    for i in $(seq 1 "${n:-0}"); do
+        printf 'apiVersion: v1\nkind: Pod\nmetadata: {name: gpu-hold-%s, namespace: default, labels: {k3d-gpu.io/gpu-hold: "1"}}\nspec:\n  containers:\n  - name: hold\n    image: %s\n    command: ["sleep", "86400"]\n    resources: {limits: {gpu.intel.com/xe: 1}}\n' \
+            "${i}" "${HOLD_IMAGE}" | kubectl apply -f - > /dev/null
+    done
+    kubectl wait --for=condition=Ready pod -l k3d-gpu.io/gpu-hold=1 -n default --timeout=180s > /dev/null 2>&1
+    : > "${OUT}/gpu-hold.txt"
+    for i in $(seq 1 "${n:-0}"); do
+        rd=$(kubectl -n default exec "gpu-hold-${i}" -- ls /dev/dri | grep renderD | head -1)
+        bdf=$(basename "$(readlink -f "/sys/class/drm/${rd}/device")")
+        echo "gpu-hold-${i} ${rd} ${bdf}" >> "${OUT}/gpu-hold.txt"
+        if [[ " ${free} " == *" ${bdf} "* ]]; then kubectl -n default delete pod "gpu-hold-${i}" --wait > /dev/null; fi
+    done
+    nfree=$(awk -v f=" ${free} " 'index(f, " " $3 " ")' "${OUT}/gpu-hold.txt" | wc -l)
+    [ "${nfree}" -ge "${need}" ] || { echo "NOT DELIVERABLE: ${nfree} of the free cards (${free}) seen, ${need} needed"; cat "${OUT}/gpu-hold.txt"; exit 3; }
+    if [ "${SOLO}" = AG ]; then
+        stage_path "${TGT_DIR}" "${TGT}" 5000
+        K3D_GPU_AGENT_DEVICE=auto K3D_GPU_AGENT_MODEL=${TGT} K3D_GPU_AGENT_MODEL_NAME=${SERVED} K3D_GPU_AGENT_DRAFT=default \
+            K3D_GPU_AGENT_TOOL_PARSER=${A_TOOL} K3D_GPU_AGENT_REASONING_PARSER='' K3D_GPU_AUTOQUANT=off \
+            "${K}" agent manifest > "${OUT}/agent.yaml" 2> "${OUT}/agent.err" || { cat "${OUT}/agent.err"; exit 1; }
+        grep -q -- '--target_device=GPU' "${OUT}/agent.yaml" || { echo "NOT DELIVERABLE: AG is not on the GPU"; exit 3; }
+        python3 "${REPO}/bench/apb/stage.py" ovms "${OUT}/agent.yaml" "${OUT}/deploy.yaml"
+        NS=k3d-gpu-agent DEP=ovms SVC=ovms SPORT=8000 CTR=ovms
+    else
+        # B2: EAT PR #21's xpu-values.yaml with its catalog profile for this model size
+        # (B2_PROFILE), the tag pinned to its digest and TP cards; the host-runtime mounts a k3d
+        # node cannot satisfy are dropped and the boot ladder applied (stage.py xpu).
+        chart=${LIVE_EAT_XPU_CHART:?}
+        printf 'image:\n  tag: "%s"\n' "${B2_TAG}" > "${OUT}/pin.yaml"
+        helm template "${B_REL}" "${chart}" --values "${chart}/xpu-values.yaml" --values "${OUT}/pin.yaml" \
+            --set LLM_MODEL_ID="${B2_PROFILE:?}" --set tensor_parallel_size="${TP}" --set global.monitoring=false \
+            --set svcmonitor.enabled=false --set ingress.enabled=false --set route.enabled=false > "${OUT}/eat.yaml"
+        STAGE_HOST_DIR=${B_HOST} python3 "${REPO}/bench/apb/stage.py" xpu "${OUT}/eat.yaml" "${OUT}/deploy.yaml" \
+            "${B_DIR}" - "ladder=${LIVE_B2_LADDER:-}"
+        [ "${B_HOST}" = /var/apb-models ] && stage_path "${B_DIR}" "${B_DIR}" 1001
+        NS=default DEP=${B_REL} SVC=${B_REL}-service SPORT=80 CTR=vllm
+    fi
+    kubectl apply -f "${OUT}/deploy.yaml" > /dev/null
+    stamp wait-ready
+    left=$(( CAP - $(el) - 900 ))
+    if [ "${left}" -le 0 ] || ! kubectl -n "${NS}" rollout status "deploy/${DEP}" --timeout="${left}s"; then
+        echo "NOT DELIVERABLE: not ready with 900 s of the hold left" | tee -a "${OUT}/live.log"
+        kubectl get pods -A > "${OUT}/pods.txt" 2>&1
+        kubectl -n "${NS}" logs "deploy/${DEP}" --all-containers > "${OUT}/server.log" 2>&1
+        exit 3
+    fi
+    stamp ready
+    # Every card the arm holds must be a free card, as many as it asked for.
+    got=0
+    for rd in $(kubectl -n "${NS}" exec "deploy/${DEP}" -c "${CTR}" -- ls /dev/dri | grep renderD); do
+        bdf=$(basename "$(readlink -f "/sys/class/drm/${rd}/device")")
+        echo "${DEP} ${rd} ${bdf}" | tee -a "${OUT}/gpu-arms.txt"
+        [[ " ${free} " == *" ${bdf} "* ]] || { echo "ABORTED: ${DEP} holds ${bdf}, not a free card"; exit 3; }
+        got=$(( got + 1 ))
+    done
+    [ "${got}" -eq "${need}" ] || { echo "ABORTED: ${DEP} holds ${got} card(s), not ${need}"; exit 3; }
+    kubectl -n "${NS}" get pods --field-selector=status.phase=Running \
+        -o jsonpath='{.items[0].metadata.uid} {.items[0].spec.containers[0].image} {.items[0].status.containerStatuses[0].imageID}' \
+        > "${OUT}/image.txt"
+    read -r uid _ < "${OUT}/image.txt"
+    kubectl -n "${NS}" port-forward "svc/${SVC}" "${P_SRV}:${SPORT}" > "${OUT}/pf.log" 2>&1 &
+    pids+=($!)
+    cg=$(${AB} cgroup --uid "${uid}") || { echo "no cgroup for the pod"; exit 1; }
+    wait_http "http://127.0.0.1:${P_SRV}/v1/models" 300 || { echo "NOT DELIVERABLE: server not answering"; exit 3; }
+    curl -fsS "http://127.0.0.1:${P_SRV}/v1/models" > "${OUT}/models.json"
+    SERVED_X=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['data'][0]['id'])" "${OUT}/models.json")
+    printf 'model_list:\n  - model_name: %s\n    litellm_params:\n      model: openai/%s\n      api_base: http://127.0.0.1:%s/v1\n      api_key: not-needed\n      timeout: 600\n' \
+        "${ALIAS}" "${SERVED_X}" "${P_SRV}" > "${OUT}/litellm.yaml"
+    docker run -d --name "${PFX}-litellm" --network host -v "${OUT}/litellm.yaml:/app/config.yaml:ro" \
+        "${LITELLM_IMAGE}" --config /app/config.yaml --port "${P_LLM}" --host 127.0.0.1 >/dev/null
+    docker inspect --format '{{.Image}} {{index .Config.Image}}' "${PFX}-litellm" > "${OUT}/litellm-image.txt"
+    wait_http "http://127.0.0.1:${P_LLM}/health/liveliness" 120 || { echo "litellm did not start"; exit 1; }
+    start_mcp || { echo "mcp did not start"; exit 1; }
+    {
+        echo '#!/usr/bin/env bash'
+        echo "# (Re)start the banking agent and wait for its DevUI."
+        echo "[ -f '${OUT}/agent.pid' ] && kill \"\$(cat '${OUT}/agent.pid')\" 2>/dev/null"
+        echo "for _ in \$(seq 100); do (exec 3<>/dev/tcp/127.0.0.1/8090) 2>/dev/null || break; sleep 0.1; done"
+        echo "cd '${BP}' && (OPENAI_BASE_URL=http://127.0.0.1:${P_PROXY}/v1 OPENAI_API_KEY=not-needed MODEL_NAME='${ALIAS}' \\"
+        echo "    MCP_SERVER_URL=http://127.0.0.1:${P_MCP}/mcp ENABLE_MEMORY=false AUTO_OPEN_BROWSER=false \\"
+        echo "    DEVUI_HOST=127.0.0.1 exec '${PY}' main.py >> '${OUT}/agent.log' 2>&1 &"
+        echo "    echo \$! > '${OUT}/agent.pid')"
+        echo "for _ in \$(seq 45); do"
+        echo "    curl -fsS -o /dev/null --max-time 5 -H \"Authorization: Bearer \${DEVUI_AUTH_TOKEN}\" http://127.0.0.1:8090/v1/entities && exit 0"
+        echo "    sleep 2"
+        echo "done"
+        echo "exit 1"
+    } > "${OUT}/agent.sh"
+    chmod 700 "${OUT}/agent.sh"
+    "${OUT}/agent.sh" || { echo "agent did not start"; tail -20 "${OUT}/agent.log"; exit 1; }
+    stamp "load ${LEVEL}"
+    python3 "${REPO}/bench/load/load.py" start --level "${LEVEL}" --ttl $(( CAP - $(el) + 60 )) > "${OUT}/load-start.log" 2>&1
+    deadline=$(( t0 + CAP - 120 ))
+    stamp "baseline ${LEVEL}"
+    python3 "${REPO}/bench/load/load.py" sample --seconds 10 --windows 2 --phase baseline --tag baseline \
+        --level "${LEVEL}" --out "${PD}/baseline-hold${HOLD}.jsonl"
+    stamp "solo hold ${HOLD} (${SOLO}), deadline +$(( deadline - t0 ))s"
+    ${AB} solo --hyp "${ARM}" --hold "${HOLD}" --arm "${SOLO}" --out "${PD}" --deadline "${deadline}" --tasks B24 \
+        --agent http://127.0.0.1:8090 --upstream "http://127.0.0.1:${P_LLM}" --proxy-port "${P_PROXY}" \
+        --restart "${OUT}/agent.sh" --pod "${cg}" --mcp-url "http://127.0.0.1:${P_MCP}/mcp" --reset "${OUT}/reset-mcp.sh" \
+        --sampling "${SAMPLING}" --baseline "${PD}/baseline-hold${HOLD}.jsonl" --level "${LEVEL}" 2>&1 | tee -a "${OUT}/live.log"
+    stamp finished
+    exit 0
+fi
 if [ "${MODE}" = pairs ]; then
     # H47 / H49 (EXPERIMENTS.md "H47 and H49 pre-registration"): both arms live in one
     # cluster, each with its own LiteLLM, proxy (in-process in `agentbench pairs`) and
@@ -252,18 +376,13 @@ if [ "${MODE}" = pairs ]; then
     # level baseline once per hold, then a settle gap and a pre-window before every attempt.
     # H50 ("H50-H52 pre-registration"): H49b's design and rule on the Xeon 6741P. H50o: the same
     # with B3, EAT's own OVMS chart (core/helm-charts/ovms) at its stock values, as arm B.
-    # H53 ("H53 pre-registration", LIVE_MODEL_SET=qwen38): the same design on Arc Pro B70s: AG,
-    # k3d-gpu's auto device and draft (OVMS on one GPU), vs B2, EAT PR #21's vLLM XPU path
-    # (xpu-values.yaml, LIVE_B2_TP cards); H53h: B2h = EAT's nearest profile (B2H_PROFILE).
-    # LIVE_GPU_FREE: the PCI addresses of the cards the arms may use; every other card is held
-    # by a placeholder pod for the whole hold, so the device plugin cannot hand it out.
     PD=${LIVE_PAIRS_DIR:?} HOLD=${LIVE_HOLD:?}
     # The load rule comes from bench/eatflow/pairs.py DESIGNS, the only table of it.
     read -r FAMILY RULE <<< "$(python3 "${HERE}/pairs.py" design "${ARM}")"
     [ -n "${RULE:-}" ] || { echo "pairs: ${ARM} is not a pairs hypothesis"; exit 2; }
-    # What to deploy: the family's arms, or the row's own B arm (H50o: B3; H53, H53h: the B70s).
+    # What to deploy: the family's arms, or the row's own B arm (H50o: B3).
     DESIGN=${FAMILY}
-    case ${ARM} in H50o|H53|H53h) DESIGN=${ARM} ;; esac
+    [ "${ARM}" = H50o ] && DESIGN=H50o
     [ "${ARM}" = H50 ] && KV_GIB=${LIVE_EAT_KV_GIB:-40}   # EAT's shipped KV cache (40 GiB)
     mkdir -p "${PD}"
     PD=$(cd "${PD}" && pwd)
@@ -271,11 +390,7 @@ if [ "${MODE}" = pairs ]; then
         H47) A=A1 B=A4 ;;
         H49) A=A1 B=B1; export K3D_GPU_NODE_LABELS=ei-infra-eligible=true,ei-inference-eligible=true ;;
         H50o) A=A1 B=B3 ;;
-        H53) A=AG B=B2; export K3D_GPU_NODE_LABELS=ei-infra-eligible=true,ei-inference-eligible=true ;;
-        H53h) A=AG B=B2h; export K3D_GPU_NODE_LABELS=ei-infra-eligible=true,ei-inference-eligible=true ;;
     esac
-    GPU=""
-    case ${DESIGN} in H53*) GPU=1 ;; esac
     # The B arm's server (every design but H47's one pod): namespace, Deployment, Service,
     # service port and OpenAI path.
     B_NS=default B_DEP=${B_REL} B_SVC=${B_REL}-service B_SPORT=80 B_API=/v1
@@ -298,30 +413,7 @@ if [ "${MODE}" = pairs ]; then
     draft=${A_DRAFT} dev=CPU
     [ "${DESIGN}" = H47 ] && draft=off
     # A1 is the CPU stack: on a host with an XMX Intel GPU (crescent's B70s) the auto device
-    # would pick the GPU, so the device is named (on the i9-13900T, auto chose CPU). AG is
-    # k3d-gpu's own choice on that host: the auto device and the default draft rule.
-    [ -n "${GPU}" ] && dev=auto draft=default
-    if [ -n "${GPU}" ]; then
-        # Hold every card outside LIVE_GPU_FREE with a placeholder pod (one card each), then
-        # free the placeholders on the cards the two arms may use.
-        free=${LIVE_GPU_FREE:?H53 needs LIVE_GPU_FREE, the PCI addresses of the cards the arms may use}
-        n=$(kubectl get node -o jsonpath='{.items[0].status.allocatable.gpu\.intel\.com/xe}')
-        for i in $(seq 1 "${n:-0}"); do
-            printf 'apiVersion: v1\nkind: Pod\nmetadata: {name: gpu-hold-%s, namespace: default, labels: {k3d-gpu.io/gpu-hold: "1"}}\nspec:\n  containers:\n  - name: hold\n    image: %s\n    command: ["sleep", "86400"]\n    resources: {limits: {gpu.intel.com/xe: 1}}\n' \
-                "${i}" "${HOLD_IMAGE}" | kubectl apply -f - > /dev/null
-        done
-        kubectl wait --for=condition=Ready pod -l k3d-gpu.io/gpu-hold=1 -n default --timeout=180s > /dev/null 2>&1
-        : > "${OUT}/gpu-hold.txt"
-        for i in $(seq 1 "${n:-0}"); do
-            rd=$(kubectl -n default exec "gpu-hold-${i}" -- ls /dev/dri | grep renderD | head -1)
-            bdf=$(basename "$(readlink -f "/sys/class/drm/${rd}/device")")
-            echo "gpu-hold-${i} ${rd} ${bdf}" >> "${OUT}/gpu-hold.txt"
-            if [[ " ${free} " == *" ${bdf} "* ]]; then kubectl -n default delete pod "gpu-hold-${i}" --wait > /dev/null; fi
-        done
-        nfree=$(awk -v f=" ${free} " 'index(f, " " $3 " ")' "${OUT}/gpu-hold.txt" | wc -l)
-        need=$(( 1 + ${LIVE_B2_TP:-2} ))   # AG takes one card, B2 its TP
-        [ "${nfree}" -ge "${need}" ] || { echo "NOT DELIVERABLE: ${nfree} of the free cards (${free}) seen, ${need} needed"; cat "${OUT}/gpu-hold.txt"; exit 3; }
-    fi
+    # would pick the GPU, so the device is named (on the i9-13900T, auto chose CPU).
     K3D_GPU_AGENT_DEVICE=${dev} K3D_GPU_AGENT_MODEL=${TGT} K3D_GPU_AGENT_MODEL_NAME=${SERVED} K3D_GPU_AGENT_DRAFT=${draft} \
         K3D_GPU_AGENT_TOOL_PARSER=${A_TOOL} K3D_GPU_AGENT_REASONING_PARSER='' K3D_GPU_AUTOQUANT=off \
         "${K}" agent manifest > "${OUT}/agent.yaml" 2> "${OUT}/agent.err" || { cat "${OUT}/agent.err"; exit 1; }
@@ -340,24 +432,6 @@ if [ "${MODE}" = pairs ]; then
         helm template ovms-model-server "${LIVE_EAT_OVMS_CHART:?}" --set modelSource="${B3_MODEL}" \
             --set image.tag="${B3_TAG}" --set ingress.enabled=false --set apisixRoute.enabled=false \
             > "${OUT}/deploy-b.yaml"
-        kubectl apply -f "${OUT}/deploy-b.yaml" > /dev/null
-    elif [ -n "${GPU}" ]; then
-        # B2: EAT PR #21's XPU path, xpu-values.yaml with the model, LIVE_B2_TP cards and the
-        # image tag pinned to its digest; the model is staged offline as for B1, and the
-        # host-runtime mounts a k3d node cannot satisfy are dropped (stage.py xpu). B2h renders
-        # EAT's nearest profile (B2H_PROFILE) for the same weights.
-        python3 "${REPO}/bench/apb/stage.py" ovms "${OUT}/agent.yaml" "${OUT}/deploy-a.yaml"
-        chart=${LIVE_EAT_XPU_CHART:?}
-        printf 'image:\n  tag: "%s"\n' "${B2_TAG}" > "${OUT}/pin.yaml"
-        mid=${ALIAS}
-        [ "${DESIGN}" = H53h ] && mid=${B2H_PROFILE:?}
-        helm template "${B_REL}" "${chart}" --values "${chart}/xpu-values.yaml" --values "${OUT}/pin.yaml" \
-            --set LLM_MODEL_ID="${mid}" --set tensor_parallel_size="${LIVE_B2_TP:-2}" --set global.monitoring=false \
-            --set svcmonitor.enabled=false --set ingress.enabled=false --set route.enabled=false > "${OUT}/eat.yaml"
-        flags=()
-        STAGE_HOST_DIR=${B_HOST} python3 "${REPO}/bench/apb/stage.py" xpu "${OUT}/eat.yaml" "${OUT}/deploy-b.yaml" \
-            "${B_DIR}" 32768 "ladder=${LIVE_B2_LADDER:-}" "${flags[@]}"
-        [ "${B_HOST}" = /var/apb-models ] && stage_path "${B_DIR}" "${B_DIR}" 1001
         kubectl apply -f "${OUT}/deploy-b.yaml" > /dev/null
     else
         python3 "${REPO}/bench/apb/stage.py" ovms "${OUT}/agent.yaml" "${OUT}/deploy-a.yaml"
@@ -386,22 +460,6 @@ if [ "${MODE}" = pairs ]; then
         exit 3
     fi
     stamp ready
-    if [ -n "${GPU}" ]; then
-        # Every card a GPU arm holds must be a free card, and each arm must hold as many cards as
-        # it asked for (AG one, B2 its TP); otherwise stop before any request.
-        grep -q -- '--target_device=GPU' "${OUT}/agent.yaml" || { echo "ABORTED: AG is not on the GPU"; exit 3; }
-        for w in "k3d-gpu-agent deploy/ovms ovms 1" "${B_NS} deploy/${B_DEP} vllm ${LIVE_B2_TP:-2}"; do
-            read -r ns obj ctr want <<< "${w}"
-            got=0
-            for rd in $(kubectl -n "${ns}" exec "${obj}" -c "${ctr}" -- ls /dev/dri | grep renderD); do
-                bdf=$(basename "$(readlink -f "/sys/class/drm/${rd}/device")")
-                echo "${obj} ${rd} ${bdf}" | tee -a "${OUT}/gpu-arms.txt"
-                [[ " ${free} " == *" ${bdf} "* ]] || { echo "ABORTED: ${obj} holds ${bdf}, not a free card"; exit 3; }
-                got=$(( got + 1 ))
-            done
-            [ "${got}" -eq "${want}" ] || { echo "ABORTED: ${obj} holds ${got} card(s), not ${want}"; exit 3; }
-        done
-    fi
     # The CPU ISA each server sees (amx_tile lines in its /proc/cpuinfo) and the B server's
     # log lines naming its CPU backend (H50: B1 is meant to run with AMX).
     kubectl -n k3d-gpu-agent exec deploy/ovms -c ovms -- grep -c amx_tile /proc/cpuinfo > "${OUT}/isa-a.txt" 2>&1

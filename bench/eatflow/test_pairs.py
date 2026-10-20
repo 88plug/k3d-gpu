@@ -586,7 +586,7 @@ class H50Test(unittest.TestCase):
             live = f.read()
         # H50 runs the H49 arms (A1 vs B1); the rule comes from pairs.py.
         self.assertIn('[ "${ARM}" = H50 ] && KV_GIB=${LIVE_EAT_KV_GIB:-40}', live)   # 40 GiB unless set
-        self.assertIn("case ${ARM} in H50o|H53|H53h) DESIGN=${ARM} ;; esac", live)
+        self.assertIn('[ "${ARM}" = H50o ] && DESIGN=H50o', live)
         self.assertIn('if [ "${RULE}" != L1 ]; then', live)
         # A1 is the CPU stack even where the auto device would pick an XMX Intel GPU (crescent).
         self.assertIn("    draft=${A_DRAFT} dev=CPU\n", live)
@@ -736,7 +736,7 @@ class ModelSetTest(unittest.TestCase):
         self.assertIn('[ "${MODEL_SET}" = gemma4 ] && B3_MODEL=OpenVINO/gemma-4-26b-a4b-it-int4-ov', live)
         self.assertIn("K3D_GPU_AGENT_TOOL_PARSER=${A_TOOL}", live)
         self.assertNotIn("--sampling agent_local", live)
-        self.assertEqual(live.count('--sampling "${SAMPLING}"'), 5)
+        self.assertEqual(live.count('--sampling "${SAMPLING}"'), 6)
         self.assertEqual(live.count("--set chatTemplateConfigMap.enabled=${B_CHAT}"), 2)
         # LIVE_MOUNT_B: B's weights mounted read-only (k3d-gpu K3D_GPU_VOLUMES), not copied.
         self.assertIn('K3D_GPU_VOLUMES="$(readlink -f "${LIVE_MODELS:?}/${B_DIR}"):${B_HOST}/${B_DIR}:ro"', live)
@@ -750,42 +750,38 @@ class ModelSetTest(unittest.TestCase):
 
 
 class H53Test(unittest.TestCase):
-    """H53 (EXPERIMENTS.md "H53 pre-registration"): H50's design on Arc Pro B70s with Qwen3.8-27B:
-    AG (k3d-gpu auto device, one card) vs B2 (EAT PR #21 XPU path, LIVE_B2_TP cards) and B2h
-    (EAT's nearest profile, xpu-qwen36-27b, on the same weights)."""
+    """H53 (EXPERIMENTS.md "H53 pre-registration"): Qwen3.8-27B on the Arc Pro B70s in solo holds,
+    AG (k3d-gpu auto device, one card) and B2 (EAT PR #21's xpu-qwen36-27b profile, TP 4), scored
+    as block pairs under rule L3 (solo.py; test_solo.py covers the pairing)."""
 
     def live(self):
         with open(os.path.join(HERE, "live.sh")) as f:
             return f.read()
 
-    def test_h53_reads_as_h49b(self):
-        for hyp, b in (("H53", "B2"), ("H53h", "B2h")):
-            self.assertEqual(PR.design(hyp), ("H49", "L3"))
-            self.assertIn(hyp, AB.PAIRS_HYPS)
-            at = [dict(r, arm={"A1": "AG", "B1": b}[r["arm"]]) for r in L2Test.h49_like(L2Test())]
-            res = PR.analyze(at, pairs_of(24), hyp, "AG", b,
-                             registration={"hyp": hyp, "rule": "L3", "seed": PR.ORDER_SEEDS[hyp]})
-            self.assertEqual((res["rule"], res["arms"], res["verdict"]), ("L3", ["AG", b], "SUPPORTED"))
+    def test_h53_is_an_l3_row(self):
+        self.assertEqual(PR.design("H53"), ("H49", "L3"))
+        self.assertIn("H53", AB.PAIRS_HYPS)
+        with self.assertRaises(ValueError):
+            PR.design("H53h")
 
-    def test_live_sh_arms(self):
+    def test_live_sh_solo_mode(self):
         live = self.live()
-        self.assertIn("H53) A=AG B=B2; export K3D_GPU_NODE_LABELS=ei-infra-eligible=true,ei-inference-eligible=true", live)
-        self.assertIn("H53h) A=AG B=B2h;", live)
-        # AG: k3d-gpu's own choice (auto device, default draft); A1 stays on the CPU.
-        self.assertIn('[ -n "${GPU}" ] && dev=auto draft=default', live)
-        self.assertIn("K3D_GPU_AGENT_DEVICE=${dev} K3D_GPU_AGENT_MODEL=${TGT}", live)
-        # B2: PR #21's values file, LIVE_B2_TP cards (2 by default), the pinned tag, stage.py xpu
-        # with the boot ladder; B2h renders EAT's nearest profile for the same weights.
+        blk = live[live.index('if [ "${MODE}" = solo ]; then'):live.index('if [ "${MODE}" = pairs ]; then')]
+        self.assertIn('[ "${ARM}" = H53 ] && [ "${RULE:-}" = L3 ]', blk)
+        self.assertIn("case ${SOLO} in AG) need=1 ;; B2) need=${TP} ;;", blk)
+        self.assertIn("TP=${LIVE_B2_TP:-4}", blk)
+        # AG: k3d-gpu's own choice (auto device, default draft), and it must be on the GPU.
+        self.assertIn("K3D_GPU_AGENT_DEVICE=auto K3D_GPU_AGENT_MODEL=${TGT}", blk)
+        self.assertIn("K3D_GPU_AGENT_DRAFT=default", blk)
+        self.assertIn("grep -q -- '--target_device=GPU' \"${OUT}/agent.yaml\" || { echo \"NOT DELIVERABLE: AG is not on the GPU\"", blk)
+        # B2: PR #21's values with its catalog profile for this size, the pinned tag, TP, the ladder.
         self.assertIn("B2_TAG=v0.28.0@sha256:4756b66a077627133cee653b551f6f5eaa1b9a981b5eea13edd33fcd3b0d3ca3", live)
-        self.assertIn('--values "${chart}/xpu-values.yaml" --values "${OUT}/pin.yaml"', live)
-        self.assertIn('--set LLM_MODEL_ID="${mid}" --set tensor_parallel_size="${LIVE_B2_TP:-2}"', live)
-        self.assertIn('[ "${DESIGN}" = H53h ] && mid=${B2H_PROFILE:?}', live)
-        self.assertIn('stage.py" xpu "${OUT}/eat.yaml" "${OUT}/deploy-b.yaml" \\\n            "${B_DIR}" 32768', live)
-        self.assertIn('"ladder=${LIVE_B2_LADDER:-}" "${flags[@]}"', live)
-        self.assertIn("need=$(( 1 + ${LIVE_B2_TP:-2} ))", live)
+        self.assertIn('--set LLM_MODEL_ID="${B2_PROFILE:?}" --set tensor_parallel_size="${TP}"', blk)
+        self.assertIn('"${B_DIR}" - "ladder=${LIVE_B2_LADDER:-}"', blk)
+        self.assertIn('${AB} solo --hyp "${ARM}" --hold "${HOLD}" --arm "${SOLO}"', blk)
         _, sets = ModelSetTest.sets(ModelSetTest())
         q = sets["qwen38"]
-        self.assertEqual((q["ALIAS"], q["TGT"], q["A_TOOL"], q["B_DIR"], q["SAMPLING"], q["B2H_PROFILE"]),
+        self.assertEqual((q["ALIAS"], q["TGT"], q["A_TOOL"], q["B_DIR"], q["SAMPLING"], q["B2_PROFILE"]),
                          ("Qwen/Qwen3.8-27B", "OpenVINO/Qwen3.8-27B-int4-ov", "qwen3coder", "Qwen3.8-27B",
                           "agent_qwen38", "Qwen/Qwen3.6-27B"))
         # The card's instruct (non-thinking) sampling with thinking off, the same for every arm.
@@ -794,26 +790,20 @@ class H53Test(unittest.TestCase):
                           "chat_template_kwargs": {"enable_thinking": False}})
         body = {"temperature": 0, "top_p": 1, "messages": []}
         proxy.pin_sampling(body, AB.sampling_set("agent_qwen38"))
-        self.assertEqual(body["chat_template_kwargs"], {"enable_thinking": False})
-        self.assertEqual(body["temperature"], 0.7)
+        self.assertEqual((body["chat_template_kwargs"], body["temperature"]), ({"enable_thinking": False}, 0.7))
 
-    def test_live_sh_keeps_the_arms_off_the_serving_cards(self):
+    def test_live_sh_keeps_the_arm_off_the_serving_cards(self):
         live = self.live()
-        # No free-card list, no hold; placeholders on every card, freed only on LIVE_GPU_FREE;
-        # each GPU arm's card checked before any request.
-        self.assertIn("free=${LIVE_GPU_FREE:?", live)
-        self.assertIn("resources: {limits: {gpu.intel.com/xe: 1}}", live)
-        self.assertIn('if [[ " ${free} " == *" ${bdf} "* ]]; then kubectl -n default delete pod "gpu-hold-${i}"', live)
-        self.assertIn('[[ " ${free} " == *" ${bdf} "* ]] || { echo "ABORTED: ${obj} holds ${bdf}, not a free card"; exit 3; }', live)
-        self.assertIn('for rd in $(kubectl -n "${ns}" exec "${obj}" -c "${ctr}" -- ls /dev/dri | grep renderD); do', live)
-        # An arm holding no card (AG fell back to the CPU) or the wrong count stops the hold too.
-        self.assertIn("grep -q -- '--target_device=GPU' \"${OUT}/agent.yaml\" || { echo \"ABORTED: AG is not on the GPU\"", live)
-        self.assertIn('"${B_NS} deploy/${B_DEP} vllm ${LIVE_B2_TP:-2}"', live)
-        self.assertIn('[ "${got}" -eq "${want}" ] || { echo "ABORTED: ${obj} holds ${got} card(s), not ${want}"; exit 3; }', live)
-        i_hold, i_apply, i_check, i_pairs = (live.index("gpu-hold-%s"), live.index('kubectl apply -f "${OUT}/deploy-a.yaml"'),
-                                            live.index("not a free card"), live.index("${AB} pairs --hyp"))
+        blk = live[live.index('if [ "${MODE}" = solo ]; then'):live.index('if [ "${MODE}" = pairs ]; then')]
+        self.assertIn("free=${LIVE_GPU_FREE:?", blk)
+        self.assertIn("resources: {limits: {gpu.intel.com/xe: 1}}", blk)
+        self.assertIn('if [[ " ${free} " == *" ${bdf} "* ]]; then kubectl -n default delete pod "gpu-hold-${i}"', blk)
+        self.assertIn('[[ " ${free} " == *" ${bdf} "* ]] || { echo "ABORTED: ${DEP} holds ${bdf}, not a free card"; exit 3; }', blk)
+        self.assertIn('[ "${got}" -eq "${need}" ] || { echo "ABORTED: ${DEP} holds ${got} card(s), not ${need}"; exit 3; }', blk)
+        i_hold, i_apply, i_check, i_run = (blk.index("gpu-hold-%s"), blk.index('kubectl apply -f "${OUT}/deploy.yaml"'),
+                                          blk.index("not a free card"), blk.index("${AB} solo --hyp"))
         self.assertLess(i_hold, i_apply)
-        self.assertLess(i_check, i_pairs)
+        self.assertLess(i_check, i_run)
 
 
 if __name__ == "__main__":
