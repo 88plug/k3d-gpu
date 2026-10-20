@@ -13,6 +13,10 @@ against a simulated sysfs. Measured results are filled in from a ledger and are
 never estimated. Every "no other" claim refers to the search log in
 [provenance.md](https://github.com/88plug/k3d-gpu/blob/cbbc84e55d7f9a8270ccce9a7cec870304b76597/docs/provenance.md).
 
+For every Xeon on-die engine and platform feature from E5 v2 to Diamond Rapids,
+with detection, enablement and what k3d-gpu does with each, see the
+[on-die accelerator reference](intel-on-die-accelerators.md).
+
 - [What it adds](#what-it-adds)
 - [Local Kubernetes landscape](#local-kubernetes-landscape)
 - [Capability matrix](#capability-matrix)
@@ -405,3 +409,31 @@ hardware, a recorded run.
   installer on k3s: accept `+k3s` versions in platform detection, pass Istio's
   `global.platform`, pin the nri-plugins chart, and label nodes on
   bring-your-own clusters. Drafted, not sent ([upstream-eat.md](intel/upstream-eat.md)).
+
+Proposed from the [on-die accelerator reference](intel-on-die-accelerators.md#4-k3d-gpu-gap-list).
+These are proposals, not commitments: none is scheduled, and each speed-related item
+needs a pre-registered hypothesis in [EXPERIMENTS.md](../EXPERIMENTS.md) before any
+default changes. The launcher still never changes host configuration; host steps stay
+printed suggestions with an apply and a revert.
+
+- **AMX engagement check.** A `test` pod that requests AMX permission
+  (`arch_prctl(ARCH_REQ_XCOMP_PERM)`) and runs one oneDNN matmul with
+  `ONEDNN_VERBOSE=1`, failing when no `amx` kernel runs. oneDNN falls back to
+  AVX-512 silently when the permission is missing.
+- **DSA/IAA host-setup detail.** For disabled `dsa*`/`iax*` devices, print an exact
+  `accel-config load-config` with its revert, check `pasid_enabled` and scalable
+  mode, and warn that pods need `CAP_SYS_RAWIO` to mmap a work-queue portal
+  (INTEL-SA-01084). Report IAA work queues bound to `iaa_crypto`, which `detect`
+  does not see today, with zswap `deflate-iaa` as a suggestion and revert.
+- **Speed Select read-out.** Read `intel-speed-select turbo-freq info` and
+  `base-freq info` on TPMI Xeons and feed the high-priority cores into
+  `k3d-gpu.io/favored-cpus`, so the `latency` balloon picks them as it does on
+  client parts. Read-only.
+- **RDT on Skylake-SP family.** Detect the kernel quirk that hides L3 CAT on
+  SKX/CLX/CPX (model 0x55) and suggest `rdt=l3cat` with its revert; report L2 CAT
+  on Granite Rapids.
+- **TPMI power-limit reasons.** Read and decode `tpmi-*/plr` status when debugfs is
+  readable, so `tune` and `doctor` can name the limit behind a throughput dip.
+- **Detect-only rows.** Report DLB (8086:2710/2714, no in-tree driver), vRAN Boost
+  (8086:57c0/57c2), QAT 420xx (Gen5) and 6xxx (Gen6), and add the 6741P (3 each
+  of QAT/DLB/DSA/IAA) and Xeon 6 SoC defaults to the per-socket ARK comparison.
