@@ -1,0 +1,3 @@
+int4 4.863GiB / 503.3GiB
+int8 8.081GiB / 503.3GiB
+fp16 15.42GiB / 503.3GiB
