@@ -676,6 +676,53 @@ class L3Test(unittest.TestCase):
         with self.assertRaises(PR.HoldAborted):
             PR.register(tmp, "H50o")                                 # another hypothesis in the same dir
         self.assertIsNone(PR.register(tempfile.mkdtemp(dir=tmp), "H49b"))   # L1/L2 rows: none
+        self.assertFalse([n for n in os.listdir(tmp) if n.endswith(".tmp")])
+
+    def test_an_empty_registration_is_a_clear_abort(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        open(os.path.join(tmp, "registration.json"), "w").close()      # a crash mid-write (pre-S3 code)
+        with self.assertRaisesRegex(PR.HoldAborted, "is not a registration"):
+            PR.register(tmp, "H50")
+
+    def test_balance_tests_log1p_throttle(self):
+        # One huge throttle reading on arm B: raw differences hand it all the weight; log1p
+        # keeps it one pair among many.
+        at = self.noisy()
+        for r in at:
+            if r["arm"] == "B1" and r["j"] == 0:
+                r["pre"] = dict(r["pre"], throttle_per_min=1e9)
+        table = PR.pair_table(at, pairs_of(24), "A1", "B1")[0]
+        import math
+        raw = [table[j]["A1"]["pre"]["throttle_per_min"] - table[j]["B1"]["pre"]["throttle_per_min"] for j in table]
+        logd = [math.log1p(table[j]["A1"]["pre"]["throttle_per_min"]) - math.log1p(table[j]["B1"]["pre"]["throttle_per_min"])
+                for j in table]
+        got = PR.l3(table, "A1", "B1")["balance"]["throttle_per_min"]
+        self.assertAlmostEqual(got["mean_diff"], round(sum(logd) / len(logd), 4))
+        self.assertNotAlmostEqual(got["mean_diff"], sum(raw) / len(raw))
+
+    def test_period_balanced_estimate_is_reported_never_gated(self):
+        ps = [dict(p, order=["A1", "B1"] if p["j"] % 3 else ["B1", "A1"]) for p in pairs_of(24)]
+        res = PR.analyze(self.noisy(), ps, "H50", "A1", "B1", registration=self.reg())
+        pb = res["period_balanced"]
+        self.assertEqual((pb["A1_first"]["n"], pb["B1_first"]["n"]), (16, 8))
+        self.assertAlmostEqual(pb["estimate"], round((pb["A1_first"]["mean_d"] + pb["B1_first"]["mean_d"]) / 2, 4))
+        self.assertEqual(res["gates"], [])
+
+    def test_an_l3_row_needs_its_ledger_row(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        saved = PR.LEDGER
+        self.addCleanup(setattr, PR, "LEDGER", saved)
+        PR.LEDGER = os.path.join(tmp, "EXPERIMENTS.md")
+        with self.assertRaisesRegex(ValueError, "pre-register it first"):
+            PR.design("H50")
+        self.assertEqual(PR.design("H49b"), ("H49", "L2"))           # L1/L2 rows predate the rule
+        with open(PR.LEDGER, "w") as f:
+            f.write("| H50 | x | PENDING |\n| H50o-extra | x |\n")
+        self.assertEqual(PR.design("H50"), ("H49", "L3"))
+        with self.assertRaises(ValueError):
+            PR.design("H50o")                                        # "| H50o-extra |" is not "| H50o |"
 
     def test_seeded_order_is_deterministic_and_balanced(self):
         s = PR.ORDER_SEEDS["H50"]
@@ -742,6 +789,29 @@ class ModelSetTest(unittest.TestCase):
         self.assertIn('K3D_GPU_VOLUMES="$(readlink -f "${LIVE_MODELS:?}/${B_DIR}"):${B_HOST}/${B_DIR}:ro"', live)
         self.assertEqual(live.count("STAGE_HOST_DIR=${B_HOST} python3"), 3)
         self.assertEqual(live.count('[ "${B_HOST}" = /var/apb-models ] && stage'), 3)
+        # ...and the mounted dir must match the listing models.sh wrote after its sha256 check.
+        self.assertIn('cmp -s "${OUT}/b-listing.txt" "${LIVE_MODELS}/${B_DIR}.listing"', live)
+        with open(os.path.join(HERE, "crescent", "models.sh")) as f:
+            models = f.read()
+        self.assertIn('"${HERE}/listing.sh" "${M}/gemma-4-26B-A4B-it-qat-q4_0-unquantized" > '
+                      '"${M}/gemma-4-26B-A4B-it-qat-q4_0-unquantized.listing"', models)
+        self.assertIn('"${HERE}/listing.sh" "${M}/Qwen3.8-27B" > "${M}/Qwen3.8-27B.listing"', models)
+
+    def test_listing_sees_a_changed_file(self):
+        import subprocess
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        for n, body in (("config.json", "{}"), ("model-00001.safetensors", "x" * 10)):
+            with open(os.path.join(tmp, n), "w") as f:
+                f.write(body)
+        ls = lambda: subprocess.run(["bash", os.path.join(HERE, "crescent", "listing.sh"), tmp],  # noqa: E731
+                                    capture_output=True, text=True, check=True).stdout
+        a = ls()
+        self.assertEqual(a, ls())
+        self.assertIn("model-00001.safetensors 10 ", a)
+        with open(os.path.join(tmp, "model-00001.safetensors"), "a") as f:
+            f.write("y")
+        self.assertNotEqual(a, ls())
         # The card's sampling (README "Sampling Parameters", generation_config.json), pinned.
         self.assertEqual(AB.sampling_set("agent_gemma4"),
                          {"temperature": 1.0, "top_p": 0.95, "top_k": 64, "max_tokens": 1024,
@@ -750,7 +820,7 @@ class ModelSetTest(unittest.TestCase):
 
 
 class H53Test(unittest.TestCase):
-    """H53 (EXPERIMENTS.md "H53 pre-registration"): Qwen3.8-27B on the Arc Pro B70s in solo holds,
+    """H53 (H53: not yet pre-registered; pairs.design refuses it until EXPERIMENTS.md has its row): Qwen3.8-27B on the Arc Pro B70s in solo holds,
     AG (k3d-gpu auto device, one card) and B2 (EAT PR #21's xpu-qwen36-27b profile, TP 4), scored
     as block pairs under rule L3 (solo.py; test_solo.py covers the pairing)."""
 
@@ -759,6 +829,15 @@ class H53Test(unittest.TestCase):
             return f.read()
 
     def test_h53_is_an_l3_row(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        saved = PR.LEDGER
+        self.addCleanup(setattr, PR, "LEDGER", saved)
+        with self.assertRaisesRegex(ValueError, "pre-register it first"):
+            PR.design("H53")                                         # main has no H53 row yet
+        PR.LEDGER = os.path.join(tmp, "EXPERIMENTS.md")
+        with open(PR.LEDGER, "w") as f:
+            f.write("| H53 | x | PENDING |\n")
         self.assertEqual(PR.design("H53"), ("H49", "L3"))
         self.assertIn("H53", AB.PAIRS_HYPS)
         with self.assertRaises(ValueError):

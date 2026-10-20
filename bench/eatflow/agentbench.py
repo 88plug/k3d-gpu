@@ -1470,6 +1470,13 @@ def cmd_solo(a):
     """One solo hold (H53): one arm alone, in the row's seeded task order, under rule L3's
     settle gap and pre-window (bench/eatflow/solo.py)."""
     import solo as SOLO
+    try:
+        PR.design(a.hyp)                                   # refuses a row not yet pre-registered
+        want = PR.expected_arm(a.hyp, a.hold)
+    except (ValueError, KeyError) as e:
+        raise SystemExit(f"agentbench solo: {e!r}")
+    if a.arm != want:
+        raise SystemExit(f"agentbench solo: {a.hyp} hold {a.hold} runs {want}, not {a.arm}")
     os.makedirs(a.out, exist_ok=True)
     write_facts(a.out, a, {"hold": a.hold, "arm": a.arm})
     os.rename(os.path.join(a.out, "facts.json"), os.path.join(a.out, f"facts-hold{a.hold}.json"))
@@ -1509,7 +1516,7 @@ def cmd_solo_report(a):
     at, ps = SOLO.block_pairs(PR.read_jsonl(os.path.join(a.dir, "attempts.jsonl")),
                               PR.read_jsonl(os.path.join(a.dir, "solo.jsonl")), a.arm_a, a.arm_b)
     res = PR.analyze(at, ps, a.hyp, a.arm_a, a.arm_b, holds=len({r["hold"] for r in PR.read_jsonl(
-        os.path.join(a.dir, "solo.jsonl"))}), registration=reg)
+        os.path.join(a.dir, "solo.jsonl"))}), registration=reg, solo=True)
     res["design"] = "solo holds in blocks (bench/eatflow/solo.py): pairs cross holds; no idle second server"
     with open(os.path.join(a.dir, "analysis.json"), "w") as f:
         json.dump(res, f, indent=1, default=lambda v: None)

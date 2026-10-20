@@ -121,7 +121,7 @@ class StageTest(unittest.TestCase):
                          "python3 -m vllm.entrypoints.openai.api_server \"$@\"")
         self.assertEqual(c["args"][-2:], ["--max-model-len", "32768"])        # as the vllm mode
         self.assertEqual(out[0]["data"]["HF_HUB_OFFLINE"], "1")
-        # H53h: the tool flags EAT's catalog gives this model on the CPU, appended.
+        # Extra args (the tool flags of EAT's CPU catalog entry for this model), appended.
         out = stage.stage("xpu", copy.deepcopy(xpu), "Qwen3-4B", "32768",
                           "--enable-auto-tool-choice", "--tool-call-parser", "hermes")
         self.assertEqual(deployment(out)["containers"][0]["args"][-3:],

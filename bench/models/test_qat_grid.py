@@ -62,6 +62,14 @@ class GridTest(unittest.TestCase):
         absmax = (np.clip(np.rint(b / s), -8, 7) * s).reshape(w.shape)
         self.assertGreater(G.rel_rms(absmax, w), 0.02)
 
+    def test_gate(self):
+        self.assertTrue(G.gate({"matched": 98, "skipped": 2}, "matched", 0.02)[0])
+        self.assertFalse(G.gate({"matched": 97, "skipped": 3}, "matched", 0.02)[0])
+        self.assertFalse(G.gate({"matched": 0, "skipped": 0}, "matched", 0.02)[0])
+        snap = {"snapped": 10, "skipped": {"no_match": 0, "not_i4": 0, "size": 0, "far": 1}}
+        self.assertFalse(G.gate(snap, "snapped", 0.02)[0])
+        self.assertTrue(G.gate(snap, "snapped", 0.1)[0])
+
     def test_zero_block_and_kinds(self):
         q, d = G.snap_blocks(np.zeros((2, 32)))
         self.assertTrue((q == 0).all())
@@ -115,10 +123,30 @@ class IRTest(unittest.TestCase):
             self.assertEqual(before["matched"], 1)
             self.assertGreater(before["summary"]["attention"]["median"], 0.02)
             snapped = os.path.join(d, "s.xml")
-            self.assertEqual(G.main(["snap", ir, d, snapped]), 0)
+            rep = os.path.join(d, "snap.json")
+            self.assertEqual(G.main(["snap", ir, d, snapped, "--report", rep]), 0)
+            r = json.load(open(rep))
+            self.assertEqual((r["weights"], r["snapped"]), (1, 1))
+            t = r["tensors"][0]
+            self.assertAlmostEqual(t["pre_rel_rms"], before["tensors"][0]["rel_rms"], places=4)
+            self.assertLess(t["snapped_vs_qat_rel_rms"], 0.01)
+            self.assertGreater(t["snapped_vs_export_rel_rms"], 0.02)
             self.assertEqual(G.main(["check", snapped, d, "--out", out]), 0)
             after = json.load(open(out))
             self.assertLess(after["summary"]["attention"]["median"], 0.01)
+
+    def test_snap_leaves_a_far_match_alone(self):
+        rng = np.random.default_rng(4)
+        w = bf16(qat_weight(rng))
+        other = bf16(qat_weight(rng))      # same shape, unrelated values: a wrong match
+        with tempfile.TemporaryDirectory() as d:
+            write_st(os.path.join(d, "w.safetensors"), {"model.language_model.layers.0.self_attn.q_proj.weight": other})
+            ir = self.ir(d, w, "absmax")
+            rep = os.path.join(d, "snap.json")
+            self.assertEqual(G.main(["snap", ir, d, os.path.join(d, "s.xml"), "--report", rep]), 0)
+            r = json.load(open(rep))
+            self.assertEqual((r["snapped"], r["skipped"]["far"]), (0, 1))
+            self.assertEqual(G.main(["gate", rep, "snapped"]), 1)
 
 
 if __name__ == "__main__":

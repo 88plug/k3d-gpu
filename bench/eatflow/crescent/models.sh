@@ -12,6 +12,7 @@ set -euo pipefail
 B=${HOME}/k3dgpu-bench
 M=${B}/models
 G=${HOME}/k3dgpu-gemma/models
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 mkdir -p "${M}"
 verify() {  # verify DIR REPO REV
     python3 - "$1" "$2" "$3" <<'EOF'
@@ -51,6 +52,8 @@ case ${1:?usage: models.sh gemma4|qwen38|verify DIR REPO REV} in
         verify "${G}/google_gemma-4-26B-A4B-it-qat-q4_0-unquantized" google/gemma-4-26B-A4B-it-qat-q4_0-unquantized \
             f1e06dc520982d9b9edd76859fdb7ab209449949
         ln -sfn "${G}/google_gemma-4-26B-A4B-it-qat-q4_0-unquantized" "${M}/gemma-4-26B-A4B-it-qat-q4_0-unquantized"
+        # The fingerprint live.sh checks before every hold that mounts these weights (LIVE_MOUNT_B).
+        "${HERE}/listing.sh" "${M}/gemma-4-26B-A4B-it-qat-q4_0-unquantized" > "${M}/gemma-4-26B-A4B-it-qat-q4_0-unquantized.listing"
         ir=${GEMMA_QAT_IR:-${G}/k3dgpu_gemma-4-26B-A4B-it-qat-int4-sym-g32-ov}   # bench/models/export_qat_ov.sh
         ln -sfn "${ir}" "${M}/gemma-4-26B-A4B-it-qat-int4-ov"
         (cd "${ir}" && sha256sum ./*.xml ./*.bin) ;;
@@ -58,6 +61,7 @@ case ${1:?usage: models.sh gemma4|qwen38|verify DIR REPO REV} in
         fetch Qwen/Qwen3.8-27B 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0 "${M}/Qwen3.8-27B"
         fetch OpenVINO/Qwen3.8-27B-int4-ov 7b20ea8c7df7223a85ff27bab5c473f0cb038943 "${M}/Qwen3.8-27B-int4-ov"
         verify "${M}/Qwen3.8-27B" Qwen/Qwen3.8-27B 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+        "${HERE}/listing.sh" "${M}/Qwen3.8-27B" > "${M}/Qwen3.8-27B.listing"
         verify "${M}/Qwen3.8-27B-int4-ov" OpenVINO/Qwen3.8-27B-int4-ov 7b20ea8c7df7223a85ff27bab5c473f0cb038943 ;;
     verify) verify "$2" "$3" "$4" ;;
     *) echo "usage: models.sh gemma4|qwen38|verify DIR REPO REV"; exit 2 ;;

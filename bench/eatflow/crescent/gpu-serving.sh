@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # gpu-serving.sh stop|start|check [CONTAINER]: free or restore the two B70 cards of one live
-# SGLang pair on crescent for H53 (EXPERIMENTS.md "H53 pre-registration"). Default container
+# SGLang pair on crescent for H53 (H53: not yet pre-registered; pairs.design refuses it until EXPERIMENTS.md has its row). Default container
 # qwen38-b-hr (ZE_AFFINITY_MASK=2,3: cards 0000:7c:00.0 and 0000:96:00.0, port 30001).
 #   stop   save `docker inspect` to ~/k3dgpu-bench/restore/, refuse while an aiperf process
 #          runs in aiperf010, then `docker stop` (never rm) and record the time
@@ -21,7 +21,7 @@ port=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${C}
 [[ "${port}" =~ ^[0-9]+$ ]] || { echo "gpu-serving.sh: no serving port found for ${C}"; exit 2; }
 mask=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${C}" | sed -n 's/^ZE_AFFINITY_MASK=//p' | head -1)
 ev() { echo "$(date -u +%FT%TZ) ${C} $*" | tee -a "${D}/serving-events.log"; }
-state() { echo "$(date -u +%FT%TZ) $*" > "${B}/gpu-state.txt"; }
+state() { echo "$(date -u +%FT%TZ) $*" > "${B}/gpu-state.txt.$$" && mv -f "${B}/gpu-state.txt.$$" "${B}/gpu-state.txt"; }   # whole or not at all
 check() {
     local h m r
     h=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://127.0.0.1:${port}/health")

@@ -4317,12 +4317,15 @@ cmd_up() {
     # would otherwise hold for the same controller's LoadBalancer service.
     # Host directories mounted into every node (a model cache read by hostPath, with no copy
     # into the node's own filesystem): K3D_GPU_VOLUMES=HOST:NODE[:ro|rw],... (ro by default).
-    local vol vols host node mode
+    local vol vols host node mode extra
     IFS=',' read -r -a vols <<< "${K3D_GPU_VOLUMES:-}"
     for vol in ${vols[@]+"${vols[@]}"}; do
-        vol=${vol// /}
         [ -n "${vol}" ] || continue
-        IFS=':' read -r host node mode <<< "${vol}"
+        # Whitespace is refused, never stripped, and so are @ ; = (k3d's node-filter syntax), so
+        # the directory mounted is exactly the one named.
+        [[ "${vol}" =~ [[:space:]@\;=] ]] && err "K3D_GPU_VOLUMES entry '${vol}' has whitespace or one of @ ; =: name the directory exactly"
+        IFS=':' read -r host node mode extra <<< "${vol}"
+        [ -z "${extra}" ] || err "K3D_GPU_VOLUMES entry '${vol}' is not HOST:NODE[:ro|rw]"
         mode=${mode:-ro}
         [[ "${host}" == /* && "${node}" == /* ]] || err "K3D_GPU_VOLUMES entry '${vol}' needs absolute HOST:NODE paths"
         [ -d "${host}" ] || err "K3D_GPU_VOLUMES: host directory '${host}' does not exist"

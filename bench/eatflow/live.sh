@@ -92,6 +92,13 @@ if [ "${LIVE_MOUNT_B:-}" = 1 ]; then
     B_HOST=/var/apb-ro
     K3D_GPU_VOLUMES="$(readlink -f "${LIVE_MODELS:?}/${B_DIR}"):${B_HOST}/${B_DIR}:ro"
     export K3D_GPU_VOLUMES
+    # The mounted directory must be the one verified at setup (bench/eatflow/crescent/models.sh
+    # wrote <B_DIR>.listing after its sha256 check): same files, sizes, mtimes and index hashes.
+    mkdir -p "${OUT}"
+    bash "${HERE}/crescent/listing.sh" "${LIVE_MODELS}/${B_DIR}" > "${OUT}/b-listing.txt" \
+        || { echo "NOT DELIVERABLE: cannot list ${B_DIR}"; exit 3; }
+    cmp -s "${OUT}/b-listing.txt" "${LIVE_MODELS}/${B_DIR}.listing" \
+        || { echo "NOT DELIVERABLE: ${B_DIR} differs from its setup listing"; exit 3; }
 fi
 P_SRV=18630 P_LLM=18640 P_PROXY=18620 P_MCP=18600 P_ROUTER=18650 P_REDIS=18660
 LITELLM_IMAGE=docker.litellm.ai/berriai/litellm:v1.83.14-stable.patch.2@sha256:73cbb215d3d43ae5b42816217b200386eb08d567767fcb36cba163152c5f3c79  # EAT 0d3438d genai-gateway; the index digest the 2026-10-17/18 holds pulled
@@ -245,7 +252,7 @@ cluster_up() {
     timeout 300 "${K}" up > "${OUT}/up.log" 2>&1 || { echo "up failed"; tail -20 "${OUT}/up.log"; exit 1; }
 }
 if [ "${MODE}" = solo ]; then
-    # H53 ("H53 pre-registration", LIVE_MODEL_SET=qwen38): one arm per hold on the Arc Pro B70s,
+    # H53 (refused until pre-registered, LIVE_MODEL_SET=qwen38): one arm per hold on the Arc Pro B70s,
     # holds in the order AG, B2, B2, AG, scored as block pairs (bench/eatflow/solo.py). LIVE_SOLO:
     # AG (k3d-gpu's auto device and draft: OVMS on one card) or B2 (EAT PR #21's vLLM XPU path,
     # its xpu-qwen36-27b profile on these weights, LIVE_B2_TP cards). LIVE_GPU_FREE: the PCI

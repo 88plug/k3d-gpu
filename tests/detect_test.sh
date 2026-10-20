@@ -2809,6 +2809,17 @@ up_says "K3D_GPU_VOLUMES rejects a missing host dir" fail 'nope' negate \
     K3D_GPU_VOLUMES="${WORK}/vol/nope:/var/models"
 up_says "K3D_GPU_VOLUMES rejects a mode other than ro or rw" fail 'vol' negate \
     K3D_GPU_VOLUMES="${WORK}/vol/models:/var/models:z"
+# A path is mounted exactly as named: whitespace is refused (not stripped into another existing
+# directory), and so are k3d's filter characters and a fourth field.
+mkdir -p "${WORK}/vol/mymodels"
+up_says "K3D_GPU_VOLUMES refuses whitespace instead of stripping it" fail 'mymodels' negate \
+    K3D_GPU_VOLUMES="${WORK}/vol/my models:/var/models"
+up_says "K3D_GPU_VOLUMES refuses @ in a path" fail 'vol' negate \
+    K3D_GPU_VOLUMES="${WORK}/vol/models:/var/m@server:0"
+up_says "K3D_GPU_VOLUMES refuses ; and =" fail 'vol' negate \
+    K3D_GPU_VOLUMES="${WORK}/vol/models:/var/m;x=y"
+up_says "K3D_GPU_VOLUMES refuses a fourth field" fail 'vol' negate \
+    K3D_GPU_VOLUMES="${WORK}/vol/models:/var/models:ro:x"
 
 # Node Feature Discovery reads the host's kernel config, builtin modules and
 # os-release; the node image has its own /boot, /lib and /etc, so `up` mounts

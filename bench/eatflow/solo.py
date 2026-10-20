@@ -1,13 +1,15 @@
-"""Solo holds and block pairs (EXPERIMENTS.md "H53 pre-registration").
+"""Solo holds and block pairs (H53: not yet pre-registered; pairs.design refuses it until EXPERIMENTS.md has its row).
 
 When the two arms cannot be live at once (H53: AG takes one Arc Pro B70, B2 all four), each hold
 runs one arm alone over the task set, in a task order drawn from the row's registered seed, with
 rule L3's settle gap and pre-window before every attempt (pairs.attempt). Holds run in the
 pre-registered arm order A, B, B, A, ...: block k pairs hold 2k-1 with hold 2k, and a pair is one
 task id with a complete attempt from each hold of its block. The pairs are then scored by
-pairs.analyze exactly as within-hold pairs are (rule L3), with two differences stated in the
-pre-registration: the pairs cross holds, and there is no idle second server, so the idle-arm
-check reads 0. Python 3 standard library only.
+pairs.analyze exactly as within-hold pairs are (rule L3), with two differences: the pairs
+cross holds, and there is no idle second server, so the idle-arm check does not apply
+(analyze(solo=True)). No H53 hold runs before its row is in EXPERIMENTS.md (pairs.design), and
+each hold must run the arm the registered sequence gives its number (pairs.expected_arm).
+Python 3 standard library only.
 """
 import os
 import random
@@ -80,34 +82,38 @@ def run_solo(ab, arms, arm, task_list, out, deadline, probe, mcp_url, reset, hol
 
 
 def block_pairs(attempts, solo_rows, a, b):
-    """Synthetic within-pair records for pairs.analyze: (attempts, pairs). Holds are taken in
-    order 1, 2, 3, ...; block k = (hold 2k-1, hold 2k), whose two holds must be one of each arm.
-    A pair is a task index j with a solo row in both holds of the block; its key is 1000 * k + j
-    and its task id "<task>#b<k>" (a task once per block). Both rows complete: a complete pair;
-    either void: a void pair; run in one hold only (the other ended first): no pair. idle_cpu is
-    0.0: no second server is live in a solo hold."""
-    holds = sorted({r["hold"] for r in solo_rows})
+    """Synthetic within-pair records for pairs.analyze: (attempts, pairs). Block k is hold
+    numbers (2k-1, 2k), whose two holds must be one of each arm; a block missing either hold has
+    no pairs. A pair is a task index j with a solo row in both holds of the block; its key is
+    1000 * k + j, its task id "<task>#b<k>" (a task once per block) and its order the arms of
+    holds 2k-1, 2k. Both rows complete: a complete pair; either void: a void pair; run in one
+    hold only (the other ended first): no pair. idle_cpu stays as recorded (None: no second
+    server is live in a solo hold)."""
     arm_of = {}
     for r in solo_rows:
-        arm_of.setdefault(r["hold"], r["arm"])
+        if arm_of.setdefault(r["hold"], r["arm"]) != r["arm"]:
+            raise ValueError(f"hold {r['hold']} has rows of {arm_of[r['hold']]} and {r['arm']}")
     by = {(r["hold"], r["j"]): r for r in attempts}
     status = {(r["hold"], r["j"]): r for r in solo_rows}
     out_at, out_pairs = [], []
-    for k in range(len(holds) // 2):
-        h1, h2 = holds[2 * k], holds[2 * k + 1]
+    for k in range(1, max(arm_of, default=0) // 2 + 1):
+        h1, h2 = 2 * k - 1, 2 * k
+        if h1 not in arm_of or h2 not in arm_of:
+            continue                                      # a block missing a hold: no pairs
         if {arm_of[h1], arm_of[h2]} != {a, b}:
-            raise ValueError(f"block {k + 1}: holds {h1}, {h2} run {arm_of[h1]}, {arm_of[h2]}, not {a} and {b}")
+            raise ValueError(f"block {k}: holds {h1}, {h2} run {arm_of[h1]}, {arm_of[h2]}, not {a} and {b}")
         js = sorted({j for (h, j) in status if h in (h1, h2)})
         for j in js:
-            key = 1000 * (k + 1) + j
+            key = 1000 * k + j
             s1, s2 = status.get((h1, j)), status.get((h2, j))
             if s1 is None or s2 is None:
                 continue                                  # not run in one hold of the block: no pair
             ok = s1["status"] == "complete" and s2["status"] == "complete"
-            task = f"{s1['task']}#b{k + 1}"               # a task id once per block
-            out_pairs.append({"j": key, "task": task, "hold": k + 1, "status": "complete" if ok else "void",
+            task = f"{s1['task']}#b{k}"                   # a task id once per block
+            out_pairs.append({"j": key, "task": task, "hold": k, "status": "complete" if ok else "void",
+                              "order": [arm_of[h1], arm_of[h2]],
                               "void_reason": None if ok else (s1.get("void_reason") or s2.get("void_reason"))})
             if ok:
                 for h in (h1, h2):
-                    out_at.append(dict(by[(h, j)], j=key, task=task, idle_cpu=0.0, solo_hold=h))
+                    out_at.append(dict(by[(h, j)], j=key, task=task, solo_hold=h))
     return out_at, out_pairs

@@ -27,6 +27,7 @@ from the registered seed (order), and each pairs directory carries one registrat
 import glob
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -419,7 +420,7 @@ def pair_table(attempts, pairs, a, b):
         if p is None or p["status"] != "complete" or a not in rs or b not in rs:
             void += 1
             continue
-        table[j] = {"task": p["task"], a: rs[a], b: rs[b]}
+        table[j] = {"task": p["task"], a: rs[a], b: rs[b], "first": (p.get("order") or [None])[0]}
     return table, void
 
 
@@ -515,39 +516,76 @@ ORDER_SEEDS = {"H50": "H50-crescent-2026-10-20", "H50o": "H50o-crescent-2026-10-
 
 # Hypothesis id -> (design, load rule). H47b and H49b are H47 and H49 under rule L2; H50 is
 # H49b's design on the Xeon 6741P, H50o the same with arm B3 (EXPERIMENTS.md "H50-H52 pre-registration");
-# H53 the H49 statistic over solo-hold block pairs on the Arc Pro B70s (solo.py, "H53 pre-registration").
+# H53 the H49 statistic over solo-hold block pairs on the Arc Pro B70s (solo.py; refused until H53 is pre-registered).
 DESIGNS = {"H47": ("H47", "L1"), "H49": ("H49", "L1"), "H47b": ("H47", "L2"), "H49b": ("H49", "L2"),
            "H50": ("H49", "L3"), "H50o": ("H49", "L3"), "H53": ("H49", "L3")}
 
 
+# The ledger a rule-L3 row must be pre-registered in before any of its holds runs.
+LEDGER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "EXPERIMENTS.md")
+
+# Solo-hold rows: hold h runs ARM_SEQUENCE[hyp][(h - 1) % len] (block k = holds 2k-1, 2k).
+ARM_SEQUENCE = {"H53": ("AG", "B2", "B2", "AG")}
+
+
+def preregistered(hyp, ledger=None):
+    """True when the ledger's hypotheses table has a row for hyp (a line starting "| hyp |")."""
+    try:
+        with open(ledger or LEDGER) as f:
+            text = f.read()
+    except OSError:
+        return False
+    return re.search(rf"^\| {re.escape(hyp)} \|", text, re.M) is not None
+
+
 def design(hyp):
-    """(design, load rule) of a pairs hypothesis id."""
+    """(design, load rule) of a pairs hypothesis id. A rule-L3 row is refused until EXPERIMENTS.md
+    carries its pre-registered row: no hold, and no score, before the protocol is on main."""
     if hyp not in DESIGNS:
         raise ValueError(f"{hyp}: not a pairs hypothesis ({', '.join(DESIGNS)})")
+    if DESIGNS[hyp][1] == "L3" and not preregistered(hyp):
+        raise ValueError(f"{hyp}: no '| {hyp} |' row in {os.path.normpath(LEDGER)}; pre-register it first")
     return DESIGNS[hyp]
 
 
+def expected_arm(hyp, hold):
+    """The arm hold number `hold` (1, 2, ...) of a solo-hold row must run."""
+    seq = ARM_SEQUENCE[hyp]
+    if hold < 1:
+        raise ValueError(f"{hyp}: hold numbers start at 1, not {hold}")
+    return seq[(hold - 1) % len(seq)]
+
+
 def register(out, hyp):
-    """The registration of a rule-L3 pairs directory: {"hyp", "rule", "seed"}, written once
-    (O_CREAT | O_EXCL, under the host lock) by the first hold; every later hold must find the
-    same one, or the hold stops. None for an L1 or L2 row (no registration)."""
+    """The registration of a rule-L3 pairs directory: {"hyp", "rule", "seed"}, written once by
+    the first hold (under the host lock): a temp file, then os.link to registration.json, which
+    fails if the name exists, so the file appears whole or not at all. Every later hold must find
+    the same one, or the hold stops. None for an L1 or L2 row (no registration)."""
     fam, rule = design(hyp)
     if rule != "L3":
         return None
     want = {"hyp": hyp, "rule": rule, "seed": ORDER_SEEDS[hyp]}
     path = os.path.join(out, "registration.json")
     os.makedirs(out, exist_ok=True)
+    tmp = f"{path}.{os.getpid()}.tmp"
+    with open(tmp, "w") as f:
+        f.write(json.dumps(want) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
     try:
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+        os.link(tmp, path)
+        return want
     except FileExistsError:
-        with open(path) as f:
-            have = json.load(f)
+        try:
+            with open(path) as f:
+                have = json.load(f)
+        except ValueError as e:
+            raise HoldAborted(f"{path} is not a registration ({e}); inspect it, do not delete it blind")
         if have != want:
             raise HoldAborted(f"{path} registers {have}, this hold is {want}")
         return have
-    with os.fdopen(fd, "w") as f:
-        f.write(json.dumps(want) + "\n")
-    return want
+    finally:
+        os.unlink(tmp)
 
 
 def sign_flip_p(d, n_draw=10000, seed=stats.SEED):
@@ -587,7 +625,7 @@ def _ols(rows):
 
 def l3(table, a, b, alpha=0.01, boot=stats.BOOT, seed=stats.SEED):
     """Rule L3 over every complete pair. balance: per pre covariate, the sign-flip p of
-    pre(a) - pre(b); balance_ok when every p >= alpha. adjusted (reported, never gated):
+    pre(a) - pre(b) (throttle on log1p); balance_ok when every p >= alpha. adjusted (reported, never gated):
     dy = ok(a) - ok(b) ~ 1 + dlog1p(throttle/min) + dbusy, intercept with a paired bootstrap CI.
     sign_flip_p: of dy itself."""
     import math
@@ -595,9 +633,11 @@ def l3(table, a, b, alpha=0.01, boot=stats.BOOT, seed=stats.SEED):
     js = sorted(table)
     bal = {}
     for m in PRE_COVARIATES:
+        # throttle_per_min is heavy-tailed (12-3342/min on crescent): tested on log1p, as adjusted.
+        f = math.log1p if m == "throttle_per_min" else (lambda v: v)
         d = [(table[j][a].get("pre") or {}).get(m) for j in js]
         e = [(table[j][b].get("pre") or {}).get(m) for j in js]
-        dd = [x - y for x, y in zip(d, e) if x is not None and y is not None]
+        dd = [f(x) - f(y) for x, y in zip(d, e) if x is not None and y is not None]
         bal[m] = {"n": len(dd), "mean_diff": round(sum(dd) / len(dd), 4) if dd else None, "p": sign_flip_p(dd)}
     bad = [m for m, v in bal.items() if v["p"] is not None and v["p"] < alpha]
     dy = {j: int(table[j][a]["outcome"] == "pass_budget") - int(table[j][b]["outcome"] == "pass_budget") for j in js}
@@ -625,10 +665,12 @@ def l3(table, a, b, alpha=0.01, boot=stats.BOOT, seed=stats.SEED):
             "adjusted": adj, "sign_flip_p": sign_flip_p(list(dy.values()))}
 
 
-def analyze(attempts, pairs, hyp, a, b, holds=None, registration=None):
+def analyze(attempts, pairs, hyp, a, b, holds=None, registration=None, solo=False):
     """The pre-registered statistics and verdict of H47 (a=A1, b=A4) or H49 (a=A1, b=B1), under
     load rule L1; H47b and H49b are those designs under rule L2; H50, H50o and H53 (its block
-    pairs, solo.py) the H49 design under rule L3, which needs the directory's registration."""
+    pairs, solo.py) the H49 design under rule L3, which needs the directory's registration.
+    solo: block pairs of solo holds, where no second server is live, so the idle-arm check does
+    not apply and is not gated (it is reported as not applicable, never as a synthesized 0)."""
     base, rule_name = design(hyp)
     if rule_name == "L3":
         want = {"hyp": hyp, "rule": "L3", "seed": ORDER_SEEDS[hyp]}
@@ -655,7 +697,9 @@ def analyze(attempts, pairs, hyp, a, b, holds=None, registration=None):
             gates.append("arm-level load check failed: " + "; ".join(rule["reasons"]))
     if not run:
         gates.append("no complete pair")
-    if idle_med is None or idle_med > IDLE_CPU:
+    if solo:
+        idle_med = "not applicable: solo holds"
+    elif idle_med is None or idle_med > IDLE_CPU:
         gates.append(f"idle-arm pod CPU median {idle_med} > {IDLE_CPU}" if idle_med is not None
                      else "idle-arm pod CPU unmeasured")
     if base == "H49" and void > MAX_VOID:
@@ -680,6 +724,15 @@ def analyze(attempts, pairs, hyp, a, b, holds=None, registration=None):
                for arm in (a, b)}
         res["l2_secondary"] = {"matched": len(l2r["matched"]), "unmatched_by": l2r["unmatched_by"],
                                "paired_diff": stats.paired_diff(okm[a], okm[b]) if l2r["matched"] else None}
+        # Secondary, never a gate (amendment A3 review S2): the period-balanced crossover
+        # estimate, the mean of d = ok(a) - ok(b) over a-first pairs and over b-first pairs, averaged.
+        per = {}
+        for first in (a, b):
+            ds = [int(table[j][a]["outcome"] == "pass_budget") - int(table[j][b]["outcome"] == "pass_budget")
+                  for j in m if table[j].get("first") == first]
+            per[f"{first}_first"] = {"n": len(ds), "mean_d": round(sum(ds) / len(ds), 4) if ds else None}
+        both = [v["mean_d"] for v in per.values()]
+        res["period_balanced"] = dict(per, estimate=round(sum(both) / 2, 4) if None not in both else None)
     if rule_name in ("L2", "L3"):
         # Outcomes, never gates: during-attempt load (bg_cpu, package W, throttle) on the matched
         # pairs and on every pair run; the pre-windows on the matched pairs.
@@ -760,10 +813,14 @@ INF = float("inf")
 
 if __name__ == "__main__":
     # `pairs.py design HYP`: "<design> <rule>" (live.sh reads the rule from here, DESIGNS only).
-    if len(sys.argv) == 3 and sys.argv[1] == "design":
-        try:
+    # `pairs.py arm HYP N`: the arm solo hold N must run (solo-hold.sh checks it before the lock).
+    try:
+        if len(sys.argv) == 3 and sys.argv[1] == "design":
             print(*design(sys.argv[2]))
-        except ValueError as e:
-            raise SystemExit(str(e))
-    else:
-        raise SystemExit("usage: pairs.py design HYP")
+        elif len(sys.argv) == 4 and sys.argv[1] == "arm":
+            design(sys.argv[2])
+            print(expected_arm(sys.argv[2], int(sys.argv[3])))
+        else:
+            raise SystemExit("usage: pairs.py design HYP | pairs.py arm HYP N")
+    except (ValueError, KeyError) as e:
+        raise SystemExit(f"pairs.py: {e!r}")

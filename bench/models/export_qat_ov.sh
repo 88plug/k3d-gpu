@@ -35,18 +35,27 @@ t0=$(date +%s)
 secs=$(( $(date +%s) - t0 ))
 # The QAT grid (bench/models/qat_grid.py): each INT4 model file's error against the checkpoint
 # as exported, then its int4 values and scales rewritten with scale = the block's grid step,
-# then the error again; both reports stay beside the IR (grid-*.json).
+# then the error again; all three reports stay beside the IR (grid-*.json, snap-*.json).
+# The export fails, and nothing is renamed into place, when no weight anywhere matched the
+# checkpoint, or when a file left more than QAT_MAX_SKIP of its compressed weights unsnapped.
+gate() { python3 "${HERE}/qat_grid.py" gate "$1" "$2" --max-skip "${QAT_MAX_SKIP:-0.02}"; }
+matched_any=0
 for xml in "${OUT}.partial"/openvino*model.xml; do
     [ -e "${xml}" ] || continue
     b=$(basename "${xml}" .xml)
     "${V}/bin/python" "${HERE}/qat_grid.py" check "${xml}" "${SRC}" --out "${OUT}.partial/grid-${b}-export.json"
-    if [ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["matched"])' "${OUT}.partial/grid-${b}-export.json")" -gt 0 ]; then
-        "${V}/bin/python" "${HERE}/qat_grid.py" snap "${xml}" "${SRC}" "${OUT}.partial/${b}.snap.xml"
-        mv -f "${OUT}.partial/${b}.snap.xml" "${xml}"
-        mv -f "${OUT}.partial/${b}.snap.bin" "${xml%.xml}.bin"
-        "${V}/bin/python" "${HERE}/qat_grid.py" check "${xml}" "${SRC}" --out "${OUT}.partial/grid-${b}-snapped.json"
-    fi
+    n=$(python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); print(r["matched"] + r["skipped"])' "${OUT}.partial/grid-${b}-export.json")
+    [ "${n}" -gt 0 ] || continue        # no compressed weights in this file (fp16 embeddings, say)
+    gate "${OUT}.partial/grid-${b}-export.json" matched || { echo "QAT grid: ${b} matched too few weights"; exit 4; }
+    matched_any=1
+    "${V}/bin/python" "${HERE}/qat_grid.py" snap "${xml}" "${SRC}" "${OUT}.partial/${b}.snap.xml" \
+        --report "${OUT}.partial/snap-${b}.json"
+    gate "${OUT}.partial/snap-${b}.json" snapped || { echo "QAT grid: ${b} snapped too few weights"; exit 4; }
+    mv -f "${OUT}.partial/${b}.snap.xml" "${xml}"
+    mv -f "${OUT}.partial/${b}.snap.bin" "${xml%.xml}.bin"
+    "${V}/bin/python" "${HERE}/qat_grid.py" check "${xml}" "${SRC}" --out "${OUT}.partial/grid-${b}-snapped.json"
 done
+[ "${matched_any}" = 1 ] || { echo "QAT grid: no model file matched the checkpoint"; exit 4; }
 python3 - "${OUT}.partial" "${REPO}" "${REV}" "${TASK}" "${secs}" "${V}" "${cmd[@]}" <<'EOF'
 import hashlib, json, os, subprocess, sys
 out, repo, rev, task, secs, venv, *cmd = sys.argv[1:]
@@ -66,6 +75,9 @@ pins = [x for x in freeze if x.split("==")[0].lower() in ("optimum-intel", "opti
 grid = {n[len("grid-"):-len(".json")]: {k: v for k, v in json.load(open(os.path.join(out, n))).items()
                                          if k in ("matched", "skipped", "summary")}
         for n in sorted(os.listdir(out)) if n.startswith("grid-") and n.endswith(".json")}
+grid.update({n[:-len(".json")]: {k: v for k, v in json.load(open(os.path.join(out, n))).items()
+                                 if k in ("weights", "snapped", "skipped", "max_pre", "summary")}
+             for n in sorted(os.listdir(out)) if n.startswith("snap-") and n.endswith(".json")})
 json.dump({"source": {"repo": repo, "revision": rev}, "task": task, "weights": "int4 sym, group 32, ratio 1.0",
            "command": [c.replace(".partial", "") if c.endswith(".partial") else c for c in cmd],
            "qat_grid": grid, "export_seconds": int(secs), "pins": pins, "note": os.environ.get("EXPORT_NOTE", ""),

@@ -11,9 +11,12 @@ group-32 export keeps that benefit only if each block's scale is that step; an a
       for every INT4 weight in the IR whose name matches a QAT tensor of the same size, the
       rel-RMS error of the IR's dequantized weight against the QAT weight, summarised per kind
       (attention, experts, other); writes JSON
-  qat_grid.py snap IR.xml QAT_DIR OUT.xml
+  qat_grid.py snap IR.xml QAT_DIR OUT.xml [--report JSON]
       rewrites each matched INT4 weight (its int4 values and its scale) from the QAT weight with
-      scale = the block's grid step, and saves the IR to OUT.xml (other constants unchanged)
+      scale = the block's grid step, and saves the IR to OUT.xml (other constants unchanged);
+      a weight whose export error against its match exceeds SNAP_MAX_PRE is left alone
+  qat_grid.py gate REPORT matched|snapped [--max-skip F]
+      exit 1 unless the report counted at least one weight and skipped at most F of them
 
 The IR side needs the openvino Python package (the export venv); the checkpoint side reads
 safetensors with numpy only. Weight layout: OpenVINO's compressed weight is [out, groups, 32]
@@ -200,24 +203,45 @@ def cmd_check(a):
     return 0
 
 
+# snap: a weight whose export already sits this far from the checkpoint tensor it was matched to
+# is not that tensor in that layout (a scaled, permuted or mis-named match); it is left alone.
+# Absmax-based INT4 export error on this checkpoint is 6-9% (model-cards/REFERENCE.md 3.2).
+SNAP_MAX_PRE = 0.15
+
+
 def cmd_snap(a):
+    """Rewrite each matched i4 weight from the checkpoint with scale = the block's grid step. A
+    weight whose pre-snap error against its match exceeds SNAP_MAX_PRE is skipped and counted.
+    Per tensor, the report keeps the pre-snap error (export vs checkpoint) and the snapped
+    weight's error against the IR as exported: the check run after a snap compares with the
+    reference the snap wrote from, so only these two numbers can show a wrong match."""
     import openvino as ov
     model = ov.Core().read_model(a.ir)
     idx = st_index(a.qat)
-    done, skipped = 0, 0
-    for name, c, sc, op in compressed_weights(model):
+    rows, skipped = [], {"no_match": 0, "not_i4": 0, "size": 0, "far": 0}
+    weights = compressed_weights(model)
+    for name, c, sc, op in weights:
         qn = match_name(name, idx)
         shape = list(c.get_output_shape(0))
-        if not qn or c.get_element_type().get_type_name() != "i4":     # symmetric (i4, no zero point) only
-            skipped += 1
+        if not qn:
+            skipped["no_match"] += 1
+            continue
+        if c.get_element_type().get_type_name() != "i4":     # symmetric (i4, no zero point) only
+            skipped["not_i4"] += 1
             continue
         cands = as_blocks_like(st_read(idx[qn]), int(np.prod(shape)))
         if not cands:
-            skipped += 1
+            skipped["size"] += 1
             continue
         w_ir = np.asarray(dequant(op), dtype=np.float32).reshape(-1)
         best = min(cands, key=lambda x: rel_rms(w_ir, x.reshape(-1)))
+        pre = rel_rms(w_ir, best.reshape(-1))
+        if pre > SNAP_MAX_PRE:
+            skipped["far"] += 1
+            rows.append({"ir": name, "qat": qn, "kind": kind(qn), "pre_rel_rms": round(pre, 5), "snapped": False})
+            continue
         q, d = snap_blocks(blocks(best.astype(np.float64)))
+        snapped = (q.astype(np.float64) * d[:, None].astype(np.float64)).reshape(-1)
         sshape = list(sc.get_output_shape(0))
         newc = ov.opset13.constant(q.reshape(shape), dtype=ov.Type.i4)
         news = ov.opset13.constant(d.reshape(sshape).astype(np.float16), dtype=sc.get_element_type())
@@ -225,10 +249,32 @@ def cmd_snap(a):
         news.set_friendly_name(sc.get_friendly_name())
         c.output(0).replace(newc.output(0))
         sc.output(0).replace(news.output(0))
-        done += 1
+        rows.append({"ir": name, "qat": qn, "kind": kind(qn), "pre_rel_rms": round(pre, 5),
+                     "snapped_vs_export_rel_rms": round(rel_rms(snapped, w_ir), 5),
+                     "snapped_vs_qat_rel_rms": round(rel_rms(snapped, best.reshape(-1)), 5), "snapped": True})
     ov.save_model(model, a.out, compress_to_fp16=False)
-    print(json.dumps({"snapped": done, "skipped": skipped, "out": a.out}))
+    done = sum(r["snapped"] for r in rows)
+    res = {"weights": len(weights), "snapped": done, "skipped": skipped, "max_pre": SNAP_MAX_PRE, "tensors": rows,
+           "summary": {k: {"n": len(v), "pre_median": v[len(v) // 2][0], "pre_max": v[-1][0],
+                           "snapped_vs_export_max": max(x[1] for x in v)}
+                       for k in ("attention", "experts", "other")
+                       for v in [sorted((r["pre_rel_rms"], r["snapped_vs_export_rel_rms"])
+                                        for r in rows if r["snapped"] and r["kind"] == k)] if v}}
+    if a.report:
+        with open(a.report, "w") as f:
+            json.dump(res, f, indent=1)
+    print(json.dumps({k: res[k] for k in ("weights", "snapped", "skipped", "summary")}))
     return 0
+
+
+def gate(report, key, max_skip):
+    """(ok, line): a check report (key "matched") or snap report (key "snapped") passes when it
+    counted at least one weight and skipped at most max_skip of them."""
+    done = report[key]
+    sk = report["skipped"]
+    skip = sum(sk.values()) if isinstance(sk, dict) else sk
+    share = skip / max(done + skip, 1)
+    return done > 0 and share <= max_skip, f"{key}={done} skipped={skip} share={share:.4f} cap={max_skip}"
 
 
 def main(argv=None):
@@ -243,7 +289,17 @@ def main(argv=None):
     s.add_argument("ir")
     s.add_argument("qat")
     s.add_argument("out")
+    s.add_argument("--report", help="per-tensor JSON: pre-snap error, snapped vs the exported weight")
+    g = sub.add_parser("gate")
+    g.add_argument("report")
+    g.add_argument("key", choices=("matched", "snapped"))
+    g.add_argument("--max-skip", type=float, default=0.02)
     a = p.parse_args(argv)
+    if a.cmd == "gate":
+        with open(a.report) as f:
+            ok, line = gate(json.load(f), a.key, a.max_skip)
+        print(f"{a.report}: {line}")
+        return 0 if ok else 1
     return cmd_check(a) if a.cmd == "check" else cmd_snap(a)
 
 

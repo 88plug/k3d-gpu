@@ -17,6 +17,25 @@ import tasks as T  # noqa: E402
 SEED = PR.ORDER_SEEDS["H53"]
 
 
+def setUpModule():
+    """A ledger with an H53 row: pairs.design refuses H53 while EXPERIMENTS.md has none."""
+    global _LEDGER_DIR
+    _LEDGER_DIR = tempfile.mkdtemp()
+    path = os.path.join(_LEDGER_DIR, "EXPERIMENTS.md")
+    with open(path, "w") as f:
+        f.write("| # | Hypothesis |\n|---|---|\n| H53 | test row | PENDING |\n")
+    _saved.append(PR.LEDGER)
+    PR.LEDGER = path
+
+
+def tearDownModule():
+    PR.LEDGER = _saved.pop()
+    shutil.rmtree(_LEDGER_DIR)
+
+
+_saved = []
+
+
 def pre(busy=48.0, thr=300.0):
     return {"phase": "pre", "level": "typical", "seconds": 10.0, "busy_pct": busy, "throttle_per_min": thr,
             "swap_used_mib": 0.0, "swap_delta_mib": 0.0, "load_expected": 3, "load_running": 3}
@@ -57,9 +76,14 @@ class BlockTest(unittest.TestCase):
         self.assertEqual(len(p2), 48)
         self.assertEqual(len(a2), 96)
         self.assertEqual(len({p["task"] for p in p2}), 48)             # a task once per block
-        self.assertTrue(all(r["idle_cpu"] == 0.0 for r in a2))
-        res = PR.analyze(a2, p2, "H53", "AG", "B2", registration={"hyp": "H53", "rule": "L3", "seed": SEED})
+        self.assertTrue(all(r["idle_cpu"] is None for r in a2))       # recorded, never synthesized
+        self.assertEqual({tuple(p["order"]) for p in p2}, {("AG", "B2"), ("B2", "AG")})
+        res = PR.analyze(a2, p2, "H53", "AG", "B2", registration={"hyp": "H53", "rule": "L3", "seed": SEED},
+                         solo=True)
         self.assertEqual((res["rule"], res["matched"], res["void_pairs"]), ("L3", 48, 0))
+        self.assertEqual(res["idle_cpu_median"], "not applicable: solo holds")
+        self.assertEqual(res["period_balanced"]["AG_first"]["n"], 24)
+        self.assertEqual(res["period_balanced"]["B2_first"]["n"], 24)
         self.assertEqual(res["within_budget_success"]["AG"]["k"], 48)
         self.assertEqual(res["verdict"], "SUPPORTED")
 
@@ -71,11 +95,60 @@ class BlockTest(unittest.TestCase):
         self.assertEqual(len(p2), 20 + 24)
         self.assertEqual(sum(p["status"] == "void" for p in p2), 1)
 
+    def test_without_solo_the_unmeasured_idle_check_gates(self):
+        at, rows = two_blocks()
+        a2, p2 = S.block_pairs(at, rows, "AG", "B2")
+        res = PR.analyze(a2, p2, "H53", "AG", "B2", registration={"hyp": "H53", "rule": "L3", "seed": SEED})
+        self.assertIn("idle-arm pod CPU unmeasured", res["gates"])
+
+    def test_blocks_are_hold_numbers_not_positions(self):
+        at, rows = two_blocks()
+        drop2 = [r for r in rows if r["hold"] != 2]                    # hold 2 never ran
+        a2, p2 = S.block_pairs(at, drop2, "AG", "B2")
+        self.assertEqual({p["hold"] for p in p2}, {2})                 # block 1 has no pairs; 3 and 4 are block 2
+        self.assertEqual(len(p2), 24)
+        only34 = [r for r in rows if r["hold"] in (3, 4)]
+        self.assertEqual({p["hold"] for p in S.block_pairs(at, only34, "AG", "B2")[1]}, {2})
+
+    def test_a_hold_with_two_arms_is_refused(self):
+        at, rows = two_blocks()
+        rows[0] = dict(rows[0], arm="B2")
+        with self.assertRaises(ValueError):
+            S.block_pairs(at, rows, "AG", "B2")
+
     def test_a_block_needs_one_hold_of_each_arm(self):
         at, rows = two_blocks()
         rows = [dict(r, arm="AG") if r["hold"] == 2 else r for r in rows]
         with self.assertRaises(ValueError):
             S.block_pairs(at, rows, "AG", "B2")
+
+
+class SequenceTest(unittest.TestCase):
+    def test_expected_arm(self):
+        self.assertEqual([PR.expected_arm("H53", h) for h in range(1, 9)],
+                         ["AG", "B2", "B2", "AG", "AG", "B2", "B2", "AG"])
+        with self.assertRaises(ValueError):
+            PR.expected_arm("H53", 0)
+
+    def test_cli_solo_refuses_the_wrong_arm_and_an_unregistered_row(self):
+        import agentbench as AB
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        out = os.path.join(tmp, "solo")
+        args = lambda hold, arm: ["solo", "--hyp", "H53", "--hold", str(hold), "--arm", arm, "--out", out,  # noqa: E731
+                                  "--deadline", "0", "--agent", "http://x", "--upstream", "http://x",
+                                  "--proxy-port", "0", "--pod", "p", "--mcp-url", "http://x", "--reset", "r",
+                                  "--baseline", "b", "--level", "typical"]
+        with self.assertRaises(SystemExit) as cm:
+            AB.main(args(2, "AG"))
+        self.assertIn("runs B2, not AG", str(cm.exception))
+        saved = PR.LEDGER
+        PR.LEDGER = os.path.join(tmp, "none.md")
+        self.addCleanup(setattr, PR, "LEDGER", saved)
+        with self.assertRaises(SystemExit) as cm:
+            AB.main(args(1, "AG"))
+        self.assertIn("pre-register it first", str(cm.exception))
+        self.assertFalse(os.path.exists(out))                          # refused before anything is written
 
 
 class ReportTest(unittest.TestCase):

@@ -2200,12 +2200,12 @@ moves must not decide the comparison, is kept by a balance gate instead of a mat
 5. Arm order: pair j runs A first or B first by a coin from `Random("<seed>:<j>")`, a pure
    function of the registered seed and j (so a resumed hold draws the same order), replacing the
    parity order whose position was confounded with task parity. Seeds: `H50-crescent-2026-10-20`,
-   `H50o-crescent-2026-10-20` (and `H53-...`, `H53h-...` for rows that cite this amendment).
+   `H50o-crescent-2026-10-20` (and `H53-crescent-2026-10-20` for H53, once it is pre-registered).
 6. The washout is unchanged: `load.py settle` (adaptive, at most 60 s) then the 10 s
    pre-window, before every attempt.
 7. Registration: the first hold of a pairs directory writes `registration.json` (`hyp`, `rule`,
-   `seed`) once (create-exclusive, under the host lock); every later hold must read the same
-   registration or it stops; `pairs-report` refuses an L3 row whose directory has none or a
+   `seed`) once (a temp file hard-linked into place, so it appears whole or not at all, under the
+   host lock); every later hold must read the same registration or it stops; `pairs-report` refuses an L3 row whose directory has none or a
    different one. `live.sh` reads the rule from `bench/eatflow/pairs.py` (`DESIGNS`, the only
    table of hypothesis to rule). A `pairs.jsonl` line still being written (no newline yet) is
    not read.
@@ -2221,6 +2221,38 @@ analysis without its registration, or with another, refuses; the seeded order is
 and close to balanced; replaying the committed H49b pairs under L3 gives 23 pairs, a passing
 balance gate and a paired difference of +0.609 (95% CI lower bound >= +0.30), which is a check
 of the code, not a verdict on H49b; `live.sh` has no hypothesis-to-rule table.
+
+**Review fixes, before any H50 data (2026-10-20):**
+- The balance test on `throttle_per_min` uses log1p of the reading, as the adjustment does. The
+  raw reading (12-3342/min on crescent, heavy-tailed) left the test almost no power.
+- Reported beside the primary, never gated: the period-balanced crossover estimate. It is the
+  mean of d = ok(A) - ok(B) over A-first pairs and over B-first pairs, averaged
+  (`period_balanced`). The seeded coin need not balance the order, and H49b showed a large
+  position effect.
+- `pairs.design` refuses a rule-L3 row until this file's hypotheses table has its row. No hold
+  runs and no score is computed before that.
+
+### Crescent amendment A4: A1 is k3d-gpu's best CPU config for the Xeon (2026-10-20)
+
+Written 2026-10-20, before any H50 or H50o measurement. It changes no arm. It records why A1's
+configuration is the right one for this hardware class.
+
+- **No CPU Fast Draft.** On this Xeon, H34x is REFUTED (PR #170). The Qwen3-0.6B int4 draft made
+  decode 0.758x the target alone (28.0 vs 37.2 tok/s), and J/token 1.24x. All 12 of 12 pairs
+  were worse.
+- **int4, not AMX bf16 or fp16.** H27x is REFUTED (PR #159, merged fcfd7ace). AMX bf16 and fp16
+  are still slower than int4 here.
+- Amendment M1 already sets A1 to int4 (the snapped QAT IR) with no draft. A1 therefore
+  coincides with the best measured CPU config, and needs no change.
+- **Where the config is set.** A1 is pinned explicitly, not left to k3d-gpu's automatic choice:
+  `K3D_GPU_AGENT_DEVICE=CPU`, int4 IR and `A_DRAFT=off`. These are set by the `gemma4` model set
+  in `bench/eatflow/live.sh`, at the commit that merges this amendment.
+- The model optimizer (PR #163, open) will make the draft default per hardware class. If it
+  merges before H50's first hold, the hold records whether `k3d-gpu auto` on this host selects
+  the same config, with the commit. A mismatch is recorded and does not change A1.
+- **Gemma 4's MTP drafter** (`google/gemma-4-26B-A4B-it-assistant`) is a different mechanism from
+  the 0.6B CPU draft. It is not an arm of H50 or H50o; it is H54's factor. Any MTP-on arm is
+  labelled separately.
 
 ### H5 amendment A1: stage-1 harness and definitions (2026-10-19)
 
