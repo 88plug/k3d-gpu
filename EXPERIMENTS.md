@@ -72,6 +72,10 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H52b | After `k3d-gpu host-setup --apply` configures the host's DSA, IAA and QAT (the fix that adds that path, merged first), a plain `k3d-gpu up` also advertises them, and each one reaches a pod; the host is then restored exactly. | Written 2026-10-20, before the fix exists. DSA, IAA and QAT allocatable > 0, each at the count host-setup reports configuring; their test pods see `/dev/dsa`, `/dev/iax`, `/dev/vfio` (0.6). The other rows read as H52's expected table, media labels included ([amendment D1](#h52-amendment-d1-the-fixes-and-h52b-2026-10-20)). | Runs after H52, once the host-setup fix is merged; same procedure plus `host-setup --apply` before `up` and its printed revert after. SUPPORTED: the three engines advertised and reached, the H52 rows unchanged, and the host inventory read back equal to the one taken before. REFUTED: any of these fails. | PENDING |
 | F2a | Open WebUI in a k3d-gpu cluster reaches a public remote endpoint by name: `k3d-gpu quickstart --remote https://gaudi.farmgpu.net` (no hostAliases) gives a chat through Open WebUI's own API that returns. An earlier run saw `Temporary failure in name resolution` for gaudi.farmgpu.net from a pod. | Pre-registered 2026-10-17, before measuring: the in-cluster failure is a cluster DNS gap (CoreDNS forwarding to an upstream the node container cannot use), not the endpoint; once fixed, one `POST /api/chat/completions` returns `finish_reason=stop` with non-empty content (0.7). | Fresh cluster `k3dgpu-f2-*` (scratch KUBECONFIG, node CPUs 8-15), `nslookup` from a pod before any change, CoreDNS Corefile and node `/etc/resolv.conf` read; root cause fixed in the product if it is a k3d-gpu config gap (regression test first); then one chat through Open WebUI's API with the generated admin account, max_tokens <= 64, temperature 0.6. SUPPORTED: chat returns. REFUTED: no chat returns after the fix. Run (2026-10-17, i9-13900T, k3s v1.35.5, node CPUs 8-15): the prediction's mechanism was wrong. CoreDNS forwarding works (node resolv.conf is k3d's 192.168.32.1 DNAT to Docker's 127.0.0.11; busybox and glibc lookups from pods resolve). The failure is a startup race: `k3d-gpu up` returned on node Ready, when the CoreDNS Deployment was 1 s old (image still pulling); a glibc pod started then got `gaierror(-3, 'Temporary failure in name resolution')` for 11 s (4 tries), first success at 13 s. Fix: `up` waits for the CoreDNS rollout; after it, the same pod resolved on its first try (0.0 s). Then `quickstart --remote https://gaudi.farmgpu.net` with no hostAliases: Open WebUI listed `zai-org/GLM-5.3` and one `POST /api/chat/completions` returned finish_reason=stop, content 'OK', 0.41 s; 0 name resolution errors in its log. | SUPPORTED |
 | F2b | EAT's LiteLLM gateway serves the remote model registered by `integrations/eat/eat-remote.sh`, with the key only as an env reference. | Pre-registered 2026-10-17, before measuring: one completion through LiteLLM returns (0.7); the key string appears 0 times in the gateway DB dump, `kubectl describe` of the gateway Deployment/pods/Secret, and events (0.9). | `eat-remote.sh --remote https://gaudi.farmgpu.net --model zai-org/GLM-5.3` against EAT's genai-gateway in the same cluster, then one chat through LiteLLM (max_tokens <= 64, temperature 0.6), then `grep -c` of the key over `pg_dump`, `kubectl describe` and `kubectl get events -A`. SUPPORTED: completion returns and 0 key hits. REFUTED: any key hit, or no completion. Run (2026-10-17, same host, EAT release-1.0.3-hotfix, LiteLLM v1.83.14-stable.patch.2): first with eat-remote.sh as shipped, REFUTED: the chat came back 401 from the endpoint. LiteLLM resolves `os.environ/` only for config-file models; a `/model/new` model is loaded from its database with the reference string as the api_key (proxy_server.py `_add_deployment` decrypts only). Fixed eat-remote.sh to write a config-file `model_list` entry instead and delete the stale database entry; rerun: `eat-check.sh` passed (chat, tool call get_weather, sandbox printed 385), and the key (raw and base64) had 0 hits in `pg_dumpall` of the gateway's Postgres (169 KB), `kubectl describe` of the gateway namespace's Deployments, pods, Secrets and ConfigMaps, the Deployment YAML and `kubectl get events -A`. The verdict is for the fixed script. | SUPPORTED |
+| H27x | H27's hypothesis on an AMX host (H27's "re-open for an AMX host"): on the Xeon 6741P (Granite Rapids, AMX), the <=60 s on-box probe (`bench/amx-autoquant/probe.sh`) picks the weight precision for agents better than the static int4 default. Same weights (`OpenVINO/Qwen3-4B-{int4,int8,fp16}-ov` at H27's commits), same parts (a) fidelity, (b) value, (c) cost. A replication: the original model is kept. | Written 2026-10-20, before any H27x measurement. (a) holds (0.85). (b) REFUTED (0.65, outcomes O1 + O2): the quality gate is a property of the weights (NLL at `INFERENCE_PRECISION_HINT=f32`), so int4 fails it again and the pick is int8, and decode stays bandwidth-bound, so int8 stays slower than int4 on the turn (outcome O2 again). (c) holds (0.9). Numbers: decode int4 25-45, int8 18-35, fp16 (bf16 on AMX) 10-22 tok/s; TTFT on 396 tokens 0.15-1.0 s for every arm; turn int4 2-4.5 s, int8 2.5-6 s, fp16 4-9 s. Priors: O1 0.05, O2 0.6, O3 0.05, O4 (int8 beats int4) 0.15, O5 0.15. | H27's row, outcome table and amendments A1-A3, unchanged except as listed in [the cross-host pre-registration](#cross-host-pre-registration-h25x-h27x-h28x-h34x-on-the-xeon-6741p-2026-10-20): OVMS containers on CPUs 0-23,48-71 (the CPUs outside `load.py`'s load set), `typical` only, weights downloaded at H27's pinned commits. Scorer `bench/amx-autoquant/summarize.py`. | PENDING |
+| H34x | H34's hypothesis on the Xeon 6741P: same-engine CPU Fast Draft (OVMS 2026.4.1, `OpenVINO/Qwen3-0.6B-int4-ov` draft on the CPU) beats the `OpenVINO/Qwen3-4B-int4-ov` target alone on single-stream decode, under matched background load. A replication: the original models are kept. | Written 2026-10-20, before any H34x measurement. At `typical`: median paired B/A decode tok/s 1.40 (1.15-1.70) and median paired B/A package J/token 0.75 (0.60-0.95); SUPPORTED by H34's rule (tok/s >= 1.20 with its CI above 1.0, J/token <= 0.85 with its CI below 1.0) at 0.6, REFUTED 0.25 (the draft's share of a faster target step grows), INCONCLUSIVE 0.15. | H34's `bench/hetero-spec/h34.sh` and `h34.py`, n = 12 pairs A B / B A, 5 s load window per request, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h34`, `K3D_GPU_VENDORS=none`, node container on CPUs 0-23,48-71, crescent amendment C1, `typical` only. | PENDING |
+| H25x | H25's hypothesis (T part) on the Xeon 6741P: agents that send a byte-identical system prompt and tools to one OVMS CPU server reuse one prefix KV, so an added agent's first chunk arrives at least 4x sooner with the shipping prefix caching on than with `--enable_prefix_caching=false`. A replication: the original model and prefix shape are kept. | Written 2026-10-20, before any H25x measurement. Added-agent median TTFT OFF 1.2 s (0.5-2.5), ON 0.15 s (0.06-0.4), ratio 8x (4.5-14), the ratio's 95% CI lower bound >= 4x; c/OFF >= 0.8. SUPPORTED 0.75; the risk is fixed per-request overhead, which a 5-10x faster prefill leaves as a larger share of the ON time. M (memory per agent) not measured, as in H25 run 4. | H25's `bench/shared-prefix/run.sh` and `probe.py score` (A3 first-chunk TTFT, A4 amendment-27 load rule), ON OFF interleaved 3+3 rounds, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h25`, `K3D_GPU_VENDORS=none`, node container on CPUs 0-23,48-71 (`NODE_CPUS`), crescent amendment C1, `typical` only. | PENDING |
+| H28x | H28's hypothesis on the Xeon 6741P: N = 8 agent pods that mmap one 1 GiB model through an image volume share one page-cache copy and become ready in at most half the time of pods that copy it into an emptyDir. A replication (H28 has no model; the 1 GiB blob is kept). | Written 2026-10-20, before any H28x measurement. Memory parts hold (0.95): T PSS <= 160 MiB per pod, model page cache about 1.0x size (T) vs about 9x (C). Time part uncertain: the copy runs at memory speed on this host, so the fixed pod-start cost is a larger share of both arms; T/C round-median ready 0.55 (0.35-0.8). SUPPORTED 0.35, REFUTED (time part) 0.5, other rows 0.15. | H28's `bench/zero-copy-models/probe.sh` (A1, A2), arms C T T C C T plus the unscored warm-up, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h28`, crescent amendment C1 passed to the plain `k3d cluster create`, `typical` only, scored by `bench/zero-copy-models/score.py` (H28's table, committed with this pre-registration). | PENDING |
 
 ## Falsification log
 
@@ -1628,6 +1632,151 @@ each arm's last hold ran out of budget for every arm. A1, C1 and C2 closed no st
 no APB (bracket from 0). A3 passed one step, at 1 agent (82 requests, p95 1.47 s), so its APB is
 >= 1. A 3 min budget is too short for this tool, which defaults to 15 min, so these brackets
 say nothing about the graded result.
+
+### Cross-host pre-registration: H25x, H27x, H28x, H34x on the Xeon 6741P (2026-10-20)
+
+Written 2026-10-20T22:20Z, before any H25x, H27x, H28x or H34x measurement. Nothing here is a
+measurement. Two setup smokes ran first under the lock (`bench/xhost/smoke.sh`, disclosed
+below); they send no inference request. Every verdict already recorded keeps the host and rule
+it was graded with; the i9-13900T rows are not re-graded.
+
+**Why.** Every SUPPORTED speed row ran on one i9-13900T. The `x` rows replicate the rows a
+second host can test on their original protocol and model, on the hardware Intel targets: a
+Xeon with AMX that does not throttle. H27 asked for an AMX host by name. The other `x` rows are
+SUPPORTED rows that back doc claims (H25, H28, H34). A replication keeps the original row's
+model, probe, scorer, thresholds and outcome table; every change is listed below, and nothing
+else differs. The H50-H54 rows on the same host belong to another campaign and are not touched.
+
+**Host (`crescent`).** As in the [H50-H52 pre-registration](#h50-h52-pre-registration-the-xeon-6741p-2026-10-20):
+Xeon 6741P (Granite Rapids, family 6 model 173, microcode 0xa000133), 1 socket, 48 cores /
+96 threads (SMT siblings `n` and `n+48`), 1 NUMA node, 503 GiB RAM, no swap, kernel
+7.0.0-31-generic, Docker 29.8.0. Flags include `amx_tile amx_int8 amx_bf16 avx512_bf16
+avx512_vnni` and RDT (`rdt_a cat_l3 mba`). RAPL `intel-rapl:0` (package-0) through `sudo -n`,
+reads only; PL1 300 W. Read-only before this pre-registration (21:40Z, load1 2.0-2.3): package
+131-137 W over six 5 s windows (spread 6 W), `x86_pkg_temp` 59 C (high 97 C), so loaded idle sits
+far below the throttle point. Four Arc Pro B70 serve `qwen38-a-hr` and `qwen38-b-hr`
+(`ZE_AFFINITY_MASK` 0,1 and 2,3, all four cards); no `x` arm uses a GPU, and nothing of the
+serving stack is stopped or changed.
+
+**Triage of every ledger item that names a second host** (the H-rows and falsification-log
+entries that ask for another, Xeon/AMX, XMX, non-throttling or quiet host, and the SUPPORTED rows):
+
+| Item | What it asks | On crescent | Why |
+|---|---|---|---|
+| H27 | AMX host for the precision probe | **H27x** | AMX present; original weights kept |
+| H34 (SUPPORTED) | replicate CPU Fast Draft | **H34x** | CPU only; original models |
+| H25 (SUPPORTED) | replicate added-agent TTFT | **H25x** | CPU only; original model |
+| H28 (SUPPORTED) | replicate image-volume sharing | **H28x** | host-agnostic; C1 needed for the disk |
+| H7 | 5 ABBA rounds, the eager-dropped arm, energy | runnable, not in this batch | needs an energy arm and an eager-dropped arm added to `bench/apb/h7.sh`; a later pre-registration |
+| H26-X | RDT/MBA classes against a DRAM hog | runnable, not in this batch | never pre-registered; needs a new design and host `resctrl` writes on a shared box |
+| H4 (XMX-gated `auto` rule) | sweep `auto` vs forced devices on an XMX GPU | blocked | all four B70 are held by the live serving; needs a free B70 window. H54 (Gemma, another campaign) covers XMX GPU vs CPU for its model only |
+| H22 (draft on another engine) | draft on a GPU, target on a non-throttling CPU | blocked | the draft engine on this host is a B70 (no iGPU); needs a free B70 |
+| H30, H31, H32 (SUPPORTED) | `agent up` auto vs competitors | blocked | `auto` picks a B70 here (`gpu.intel.com/xmx=true`), so the protocol needs a free B70 |
+| H15, H16 (SUPPORTED) | iGPU sharing, DRA | blocked / N/A | i915 iGPU rows; the B70 is `xe` (a new row, needs a free card) |
+| H9 | quickstart warm arm n>=3 | blocked | quickstart's device choice lands on a B70 here |
+| H23 | thermal headroom resource on a cool host | N/A as written | this host does not throttle (59 C idle, PL1 300 W); 24 pods on 48 CPUs never reach the cap, so arm B has no throttle to halve; needs a new workload, not a replication |
+| H6, H2 | iGPU without XMX vs P-cores | N/A | no iGPU |
+| H3, H5, H12-H14, H18, H20, H21, H24, H26, H29, H43, H44 | P/E placement, E-core load, uncore on a client part | N/A | P-core-only Xeon: no `cpu_atom`, and `up` bakes no balloons on a single-NUMA non-hybrid node |
+| H1, H1b, H8, H45 | EAT on a non-Xeon; agents per box | N/A / other campaign | H1 is non-Xeon by definition; H50-H51 run EAT and agents per box on this host |
+| H11, H17, H19, H40, H48 | launcher pin, DRA default, tune, graders | not needed | host-independent or not hardware rows |
+| H52 | detection | done by another campaign | not re-run |
+
+**Shared rules X1-X7** (every `x` row):
+
+1. **Lock and hold.** Each hold runs through `bench/xhost/hold.sh NAME CAP CMD`, inside
+   `flock -w 21600 ~/k3dgpu-bench.lock` (shared with the H50-H54 campaign, so no two
+   measurements overlap). It applies the same hold-start rule as that campaign's
+   `bench/eatflow/crescent/hold.sh` (load1 <= 12 and no aiperf process, 2-min polls for at most
+   60 min, then the hold runs flagged), runs no hold above 97% disk, samples the serving
+   covariate (`bench/eatflow/crescent/serving.py`, reported, never gating), and deletes every
+   `k3dgpu-x-*` cluster and the bench-load containers at the end, also on failure. Records go
+   to `~/k3dgpu-xhost/runs/NAME/`.
+2. **CPUs.** `bench/load/load.py` keeps its non-hybrid default: the load runs on the upper half
+   of the physical cores with their SMT siblings, CPUs 24-47,72-95. The treatment runs on the
+   other half, CPUs 0-23,48-71 (24 cores, 48 threads): the k3d node container is pinned there
+   with `docker update --cpuset-cpus` (as H28 A2 pinned it to the P-cores), and H27x's OVMS
+   containers get `--cpuset-cpus 0-23,48-71`. This is the host's analogue of "treatment on the
+   P-cores, load on the E-cores": disjoint cpusets on one package. It replaces the 16-CPU
+   P-core balloon of H25, H27 and H34; core count and core type differ from the i9 by design,
+   so a replication tests the hypothesis, not the i9's numbers. `load.py` reads `busy` over
+   the load CPUs minus the treatment's cpuset, as on the i9.
+3. **No accelerator stack.** H25x and H34x run `k3d-gpu up` with `K3D_GPU_VENDORS=none`, so
+   no GPU, DSA, IAA or QAT plugin is deployed and no device reaches the cluster; the agent
+   manifest is the CPU one (`K3D_GPU_AGENT_DEVICE=CPU`). On the i9 H34 ran with
+   `intel,hybrid`; on this host neither adds anything to a CPU pod. H28x creates its cluster
+   with plain `k3d cluster create`, as H28 does. H27x makes no cluster.
+4. **Disk ([crescent amendment C1](#crescent-amendment-c1-kubelet-eviction-thresholds-on-a-95-full-disk-2026-10-20)).** `/` is 95% used by other tenants, so every `x` cluster is
+   created with C1's kubelet thresholds,
+   `K3D_GPU_K3S_ARGS="--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1%"`
+   (for H28x passed to `k3d cluster create` as `--k3s-arg ...@server:*`, by `probe.sh`). Smoke 1
+   below showed the cause: without C1 the agent pod stayed Pending. C1 changes when the kubelet
+   evicts, nothing else, and applies to both arms alike. X1's 97% guard stays.
+5. **Pins.** k3d v5.9.0 and kubectl v1.35.2 in `~/k3dgpu-xhost/bin`, each checked against its
+   upstream checksum; node image `cryptoandcoffee/k3d-gpu:0.1.61` (the launcher's default at this pre-registration's base, set explicitly with `K3D_GPU_IMAGE` or `IMAGE` in every command,
+   k3s v1.37.1; a change: the originals ran 0.1.28 (H25 run 4), 0.1.55 (H34) and 0.1.59 (H28),
+   with the agent-manifest code unchanged since H25 run 4); OVMS `openvino/model_server@sha256:a928903f...76fc58` (2026.4.1, as every
+   original row); `load.py`'s stress-ng pin. Models are downloaded on the host at the original
+   rows' commits (`bench/xhost/fetch_models.py`), never copied: `OpenVINO/Qwen3-4B-int4-ov` @ `b467368d` (`openvino_model.bin`
+   sha256 `074214fa29ab1b47...`, the H6/H25 file), `OpenVINO/Qwen3-0.6B-int4-ov` @ `f864c610`
+   (sha256 `28613e994a6e1aaf...`, the H47 file), and for H27x `-int8-ov` @ `fd9c3cc8`, `-fp16-ov`
+   @ `00298f1c` (the commits of H27's `model-shas.txt`; `probe.sh --prepare` now downloads
+   exactly these). Versions are the original rows' (a replication's protocol is frozen); OVMS
+   2026.4.1 is also the newest OVMS release on 2026-10-20.
+6. **Level.** `typical` only, the ledger level of every original row. `heavy` is not run, to keep
+   holds short on a shared box; a row may not claim anything at `heavy`.
+7. **Verdict.** Each row is scored by its original scorer and thresholds and recorded with a
+   Reproduce header. A row whose run misses its protocol is INCONCLUSIVE.
+
+**Per row.**
+
+- **H27x.** Command:
+  `AUTOQUANT_DIR=~/k3dgpu-xhost/amx-autoquant AUTOQUANT_CPUS=0-23,48-71 LOAD_LEVEL=typical bench/amx-autoquant/probe.sh`
+  (after `--prepare` outside the lock), hold cap 2700 s (timed part aborts at 1140 s, NLL pass
+  capped at 600 s, as A1). Changes: the cpuset (X2); the held-out text is this repo's
+  `EXPERIMENTS.md` and `docs/*.md` frozen at `7d4cd10` (H27's was frozen at its own commit), so
+  dNLL is measured on a different 2026 text, with the same 0.05 nats/token gate and wikitext2
+  check, and the 396-token turn prompt and the 128-token probe prompt (`prompts.json`) are cut
+  from that text at H27's offsets. The OVMS precision log lines are recorded per arm (expected: bf16 inference precision
+  on AMX for the fp16 IR); AMX use is inferred from the CPU flags and OpenVINO's documented
+  default, not verified per kernel. Everything else is H27 + A1-A3.
+- **H34x.** Command: `K3D_GPU_IMAGE=cryptoandcoffee/k3d-gpu:0.1.61 H34_CLUSTER=k3dgpu-x-h34 H34_VENDORS=none H34_NODE_CPUS=0-23,48-71
+  H34_LEVELS=typical H22_MODELS=~/k3dgpu-xhost/models K3D_GPU_K3S_ARGS=<C1> bench/hetero-spec/h34.sh <out>`,
+  hold cap 1500 s (`H34_LEVEL_S` 1200, 12 pairs). Changes: X2, X3, X4, the cluster name. The pod
+  keeps its 16-CPU request and floats inside the node's 48 CPUs (no balloon on this host).
+  `h34.py` takes J/token from raw package energy, as H34 did; here the package carries about
+  130 W of other tenants' draw, so B/A J/token sits near 1 / (B/A tok/s) and adds little
+  evidence beyond the speed leg. The threshold is kept; the reading is reported with that note.
+- **H25x.** Command: `IMAGE=cryptoandcoffee/k3d-gpu:0.1.61 MODELS=~/k3dgpu-xhost/models OUT=<out>
+  LEVELS=typical CLUSTER=k3dgpu-x-h25 NODE_CPUS=0-23,48-71 SEED_BASE=2540 HOLD=1440
+  K3D_GPU_VENDORS=none K3D_GPU_K3S_ARGS=<C1> bench/shared-prefix/run.sh`, hold cap 1500 s. Changes:
+  X2, X3, X4, the cluster name, new seeds. The agent manifest sizes the CPU request as it ships
+  (half the node: 48) and keeps its default CPU Fast Draft in both arms, as H25 run 4 did. The
+  draft is staged pinned (`f864c610`) at `<target>/OpenVINO-Qwen3-0.6B-int4-ov`, where the
+  pull container looks for it (`fetch_models.py --draft`), so nothing is downloaded in the pod.
+- **H28x.** Command: `IMAGE=cryptoandcoffee/k3d-gpu:0.1.61 bench/zero-copy-models/probe.sh prep`
+  outside the lock, then `WORK=<out> IMAGE=... CLUSTER=k3dgpu-x-h28 LEVELS=typical HOLD=1440
+  LOCK=~/k3dgpu-xhost/inner.lock K3D_GPU_K3S_ARGS=<C1> bench/zero-copy-models/probe.sh run`
+  inside `bench/xhost/hold.sh` (the inner lock is private, since X1 already holds the shared
+  one), hold cap 1500 s, started only at <= 95% disk (`XHOST_DISK_START=95`; the run writes about 30 GiB and X1 stops it
+  at 97%). `probe.sh` already pins the node to the CPUs outside the load set.
+  Scored by `bench/zero-copy-models/score.py CSV typical/match.json`: H28's table and A1 applied
+  mechanically (void and spread rows first, then probe-blind, then the memory and time rows),
+  with unmatched load giving INCONCLUSIVE and a VOID load level (A2) VOID, to be re-run; H28
+  itself was scored by hand from the same table. A round with a failed mincore read (resident
+  -1) is void. The two REFUTED memory rows are told apart by the snapshotter in the CSV's meta
+  row. A T memory result between the SUPPORTED and REFUTED bounds, which the table leaves open,
+  reads INCONCLUSIVE.
+
+**Order.** H27x, H34x, H25x, H28x, one hold each, in turns with the other campaign on the lock.
+
+**Setup smokes (not scored).** Smoke 1 (21:54-22:05Z, `smoke.sh`, no C1): `up` 31 s with
+`K3D_GPU_VENDORS=none`, node pinned to 0-23,48-71, the agent manifest asked 48 CPUs with the
+CPU Fast Draft, and the pod stayed Pending for 600 s (no `PodScheduled`), the disk-pressure
+failure C1 fixes. Smoke 2 (22:14-22:20Z, with C1): `up` 48 s, the agent pod Ready at 89 s,
+`Cpus_allowed_list` 0-23,48-71, graph `device: "CPU"` with the Fast Draft
+(`draft_device: "CPU"`), no node taint; then the H28 path (plain `k3d cluster create` with
+C1 as `--k3s-arg ...@server:*`) had no taint after 90 s. No inference request was sent in either.
+Smoke records: `bench/xhost/results/2026-10-20/smoke{1,2}/`.
 
 ### H50-H52 pre-registration: the Xeon 6741P (2026-10-20)
 

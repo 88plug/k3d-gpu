@@ -27,10 +27,14 @@
 #               starts only if a full level still fits, a round only if 120 s do
 # Package energy needs root to read RAPL (sudo -A with SUDO_ASKPASS, else
 # sudo -n); without it, energy and package W are null.
+#       NODE_CPUS  cpuset for the node container after `up` (default none; H25x on a
+#               non-hybrid host: the CPUs outside the load set)
 set -uo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
-: "${IMAGE:?set IMAGE}" "${MODELS:?set MODELS}" "${OUT:?set OUT}"
 name=${CLUSTER:-k3dgpu-i-shared-prefix}
+NODE_CPUS=${NODE_CPUS:-}
+if [ "${SHARED_PREFIX_PRINT_CONFIG:-0}" = 1 ]; then echo "cluster=${name} node_cpus=${NODE_CPUS}"; exit 0; fi
+: "${IMAGE:?set IMAGE}" "${MODELS:?set MODELS}" "${OUT:?set OUT}"
 HOLD=${HOLD:-0}
 export KUBECONFIG="${OUT}/kubeconfig" K3D_GPU_CLUSTER="${name}" K3D_GPU_IMAGE="${IMAGE}"
 export K3D_GPU_SHARE="${K3D_GPU_SHARE:-${ROOT}/share}" K3D_GPU_AGENT_BACKEND=ovms K3D_GPU_AGENT_DEVICE=CPU
@@ -79,6 +83,10 @@ first=${LEVELS%% *}
 echo "load ${first}: $("${LOAD[@]}" start --level "${first}" --ttl 1500)"
 "${L}" up > "${OUT}/up.log" 2>&1 || { echo "up failed (see ${OUT}/up.log)"; exit 1; }
 node="k3d-${name}-server-0"
+if [ -n "${NODE_CPUS}" ]; then
+    docker update --cpuset-cpus "${NODE_CPUS}" "${node}" > /dev/null || { echo "node cpuset ${NODE_CPUS} not applied"; exit 1; }
+    echo "node ${node} pinned to CPUs ${NODE_CPUS}"
+fi
 docker exec "${node}" mkdir -p "${NODE_MODELS}"
 docker cp "${MODELS}/." "${node}:${NODE_MODELS}/"
 docker exec "${node}" chown -R 5000:5000 "${NODE_MODELS}"

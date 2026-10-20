@@ -63,6 +63,11 @@ LOADCPUS=$("${LOAD[@]}" cpus)
 NODECPUS=$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import load
 a = set(load.parse_cpulist(open("/sys/devices/system/cpu/online").read())) - set(load.parse_cpulist(sys.argv[2]))
 print(load.format_cpulist(a))' "${ROOT}/bench/load" "${LOADCPUS}")
+# K3D_GPU_K3S_ARGS (space-separated k3s server flags, as `k3d-gpu up` takes them) for the
+# plain `k3d cluster create`; crescent amendment C1 sets the kubelet eviction thresholds.
+CREATE_ARGS=()
+read -r -a _k3s <<< "${K3D_GPU_K3S_ARGS:-}"
+for f in "${_k3s[@]}"; do CREATE_ARGS+=(--k3s-arg "${f}@server:*"); done
 NR=$(wc -w <<< "${ORDER}")   # scored rounds per level
 NL=$(wc -w <<< "${LEVELS}")
 
@@ -313,7 +318,7 @@ run_locked() {
     level=${LEVELS%% *}
     echo "# load ${level}: $("${LOAD[@]}" start --level "${level}" --ttl $(( HOLD + 60 )))"
     k3d cluster create "${CL}" --image "${IMAGE}" --wait --kubeconfig-update-default=false \
-        --kubeconfig-switch-context=false >/dev/null
+        --kubeconfig-switch-context=false "${CREATE_ARGS[@]}" >/dev/null
     docker update --cpuset-cpus "${NODECPUS}" "k3d-${CL}-server-0" >/dev/null
     sudo -n true 2>/dev/null || export K3D_GPU_RAPL_EXEC="docker exec k3d-${CL}-server-0"
     k3d kubeconfig get "${CL}" > "${KUBECONFIG}"
@@ -376,5 +381,6 @@ case "${1:-}" in
     _locked) locked ;;
     _rounds) run_locked ;;
     render) pod "${2:?arm T|C}" "${3:?round}" "${4:?index}" ;;
+    create-args) echo "${CREATE_ARGS[*]}" ;;
     *) echo "usage: $0 prep|run|render ARM ROUND I" >&2; exit 2 ;;
 esac
