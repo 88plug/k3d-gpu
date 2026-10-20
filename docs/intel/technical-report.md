@@ -11,7 +11,7 @@ This report covers what was measured, and how. Every result but H52 (a Xeon 6741
 - Fifteen hypotheses are SUPPORTED. All fifteen are scoped to that host.
 - Twelve are REFUTED. Six of them changed shipped defaults.
 - Nineteen are INCONCLUSIVE, mostly because the shared host throttles or its load was unmatched.
-- Thirteen are PENDING: the Xeon 6741P rows H50, H50o, H51, H52b, H54a, H54q, H54b, H54c and H54d, and the cross-host replications H25x, H27x, H28x and H34x, pre-registered and not yet run. H52, the first row run on that host (a Xeon 6741P with four Arc Pro B70s), is REFUTED.
+- Fourteen are PENDING: the Xeon 6741P rows H50, H50o, H51, H52b, H54a, H54q, H54b, H54c and H54d, the cross-host replications H25x, H27x, H28x and H34x, and H56 (two holds at once in cpuset slices of that host), pre-registered and not yet run. H52, the first row run on that host (a Xeon 6741P with four Arc Pro B70s), is REFUTED.
 - Every other Intel family is detected and configured in fixture tests only. None has a measurement.
 
 No world-first, superlative or priority claim is made; [docs/provenance.md](../provenance.md) supports none.

@@ -12,6 +12,7 @@ Usage:
   bench/load/load.py start  --level none|typical|heavy [--cpus LIST] [--ttl SECONDS]
   bench/load/load.py stop                                   # removes only this tool's containers
   bench/load/load.py status
+  bench/load/load.py slice  --slots K --slot I [--sysfs DIR] # H56: slice I of K and its load CPUs
   bench/load/load.py sample --seconds S [--windows N] [--tag ARM] [--level L] [--out FILE.jsonl]
                             [--phase baseline|pre|during] [--treatment-cpus LIST]
   bench/load/load.py settle --baseline BASE.jsonl --tag ARM --level L [--out FILE.jsonl]
@@ -31,6 +32,12 @@ Levels (N = the load CPU set, E-cores on a hybrid part; see load_cpus()):
 Every container carries the label io.k3d-gpu.bench-load=1 (stop/status touch only
 those), runs with --rm, and stress-ng's own --timeout is the hard TTL; start also
 removes any of its containers whose io.k3d-gpu.bench-load.expires is past.
+
+Slots (H56, parallel slice holds on crescent): --slot I (default: LOAD_SLOT) names the
+containers k3d-gpu-bench-load-s<I>-<component>, adds the label
+io.k3d-gpu.bench-load.slot=I, and scopes plan/start/stop/status and the presence count
+to that slot. LOAD_CPUS, when set, replaces the default load CPU set. With neither set,
+every command behaves as before.
 Python 3 standard library only.
 """
 import argparse
@@ -123,23 +130,64 @@ def _read(path):
 def load_cpus(sysfs="/sys"):
     """The CPUs the background load runs on.
 
+    LOAD_CPUS (a slotted hold's load CPUs, H56), when set, is the answer.
     Hybrid Intel (cpu_atom PMU present and non-empty): the E-cores, as listed in
     /sys/devices/cpu_atom/cpus. Otherwise: the highest-numbered half of the physical
     cores (at least one), whole cores with their SMT siblings, so the load and a
     probe on the low cores never share a core.
     """
+    env = os.environ.get("LOAD_CPUS", "")
+    if env:
+        return parse_cpulist(env)
     online = set(parse_cpulist(_read(f"{sysfs}/devices/system/cpu/online") or "0"))
     atom = set(parse_cpulist(_read(f"{sysfs}/devices/cpu_atom/cpus"))) & online
     if atom:
         return sorted(atom)
+    return _top_half(_cores(online, sysfs), online)
+
+
+def _cores(online, sysfs):
+    """Physical cores as sorted tuples of their online threads, ordered by lowest CPU."""
     cores = {}
     for c in sorted(online):
         sib = _read(f"{sysfs}/devices/system/cpu/cpu{c}/topology/thread_siblings_list")
         key = tuple(parse_cpulist(sib)) if sib else (c,)
         cores[key] = True
-    keys = sorted(cores, key=min)
+    return sorted(cores, key=min)
+
+
+def _top_half(keys, online):
     half = keys[len(keys) - max(1, len(keys) // 2):]
     return sorted(c for k in half for c in k if c in online)
+
+
+def slice_cpus(k, i, sysfs="/sys"):
+    """(slice CPUs, load CPUs) of slice i of k (H56): the physical cores, in order of
+    their lowest CPU, cut into k equal runs, each with its SMT siblings; the load CPUs
+    are the top half of the slice's cores (rule 2's ratio inside the slice). k=1 gives
+    every online CPU and load_cpus(). Hybrid parts and core counts k does not divide
+    are refused (ValueError)."""
+    if not 1 <= k or not 0 <= i < k:
+        raise ValueError(f"slot {i} of {k}: want 0 <= slot < slots, slots >= 1")
+    online = set(parse_cpulist(_read(f"{sysfs}/devices/system/cpu/online") or "0"))
+    if set(parse_cpulist(_read(f"{sysfs}/devices/cpu_atom/cpus"))) & online:
+        raise ValueError("slices are defined for non-hybrid hosts only (cpu_atom present)")
+    keys = _cores(online, sysfs)
+    if len(keys) % k:
+        raise ValueError(f"{len(keys)} cores do not split into {k} equal slices")
+    n = len(keys) // k
+    mine = keys[i * n:(i + 1) * n]
+    return sorted(c for key in mine for c in key if c in online), _top_half(mine, online)
+
+
+def env_slot():
+    """LOAD_SLOT as an int, or None when unset or empty."""
+    v = os.environ.get("LOAD_SLOT", "")
+    return int(v) if v != "" else None
+
+
+def _slot_filter(slot):
+    return f"label={LABEL}.slot={slot}" if slot is not None else f"label={LABEL}=1"
 
 
 # ---- plan / start / stop ------------------------------------------------------------
@@ -177,8 +225,11 @@ def duty(level, n):
     return min(1.0, total / n)
 
 
-def plan(level, cpus, ttl=DEFAULT_TTL, now=None):
-    """The docker run argv for each container of a level. No side effects."""
+def plan(level, cpus, ttl=DEFAULT_TTL, now=None, slot=None):
+    """The docker run argv for each container of a level. No side effects. slot: the
+    H56 slot tag (name suffix and label); None is the untagged legacy load."""
+    if slot is not None and (not isinstance(slot, int) or slot < 0):
+        raise ValueError("slot must be a non-negative int")
     if level not in LEVELS:
         raise ValueError(f"level must be one of {LEVELS}")
     if not cpus:
@@ -190,8 +241,12 @@ def plan(level, cpus, ttl=DEFAULT_TTL, now=None):
     cl = format_cpulist(cpus)
     out = []
     for name, args, quota in components(level, len(cpus)):
-        argv = ["docker", "run", "-d", "--rm", "--name", f"k3d-gpu-bench-load-{name}",
-                "--label", f"{LABEL}=1", "--label", f"{LABEL}.level={level}",
+        tag = f"s{slot}-" if slot is not None else ""
+        argv = ["docker", "run", "-d", "--rm", "--name", f"k3d-gpu-bench-load-{tag}{name}",
+                "--label", f"{LABEL}=1"]
+        if slot is not None:
+            argv += ["--label", f"{LABEL}.slot={slot}"]
+        argv += ["--label", f"{LABEL}.level={level}",
                 "--label", f"{LABEL}.expires={expires}",
                 "--cpuset-cpus", cl, "--stop-timeout", "2", "--memory", "2g"]
         if quota is not None:
@@ -208,9 +263,10 @@ def _docker(*args, check=True):
     return p.stdout
 
 
-def running():
-    """[(id, level, expires)] of this tool's containers (any state)."""
-    out = _docker("ps", "-a", "--filter", f"label={LABEL}=1", "--format",
+def running(slot=None):
+    """[(id, level, expires)] of this tool's containers (any state); of one slot's
+    only when slot is given."""
+    out = _docker("ps", "-a", "--filter", _slot_filter(slot), "--format",
                   f'{{{{.ID}}}} {{{{.Label "{LABEL}.level"}}}} {{{{.Label "{LABEL}.expires"}}}}')
     rows = []
     for line in out.splitlines():
@@ -220,30 +276,30 @@ def running():
     return rows
 
 
-def stop():
-    ids = [r[0] for r in running()]
+def stop(slot=None):
+    ids = [r[0] for r in running(slot)]
     if ids:
         _docker("rm", "-f", *ids)
     return len(ids)
 
 
-def start(level, cpus, ttl=DEFAULT_TTL):
+def start(level, cpus, ttl=DEFAULT_TTL, slot=None):
     """Idempotent: the same level already running is left alone; another level (or
-    an expired leftover) is replaced."""
+    an expired leftover) is replaced. With a slot, only that slot's containers count."""
     now = int(time.time())
-    rows = running()
+    rows = running(slot)
     expired = [r[0] for r in rows if r[2] <= now]
     if expired:
         _docker("rm", "-f", *expired)
-        rows = running()
-    argvs = plan(level, cpus, ttl, now)
+        rows = running(slot)
+    argvs = plan(level, cpus, ttl, now, slot)
     if rows and {r[1] for r in rows} == {level} and len(rows) == len(argvs):
         return "already running"
-    stop()
+    stop(slot)
     for argv in argvs:
         p = subprocess.run(argv, capture_output=True, text=True)
         if p.returncode != 0:
-            stop()
+            stop(slot)
             raise SystemExit(f"load: {' '.join(argv)}: {p.stderr.strip()}")
     return f"started {level} on {format_cpulist(cpus)} ({len(argvs)} containers, ttl {ttl}s)"
 
@@ -319,10 +375,13 @@ def energy_delta(e0, e1, max_range):
     return d
 
 
-def load_running_count():
-    """Running containers of this tool, or None when docker cannot be asked."""
+def load_running_count(slot=None):
+    """Running containers of this tool (of one slot: the argument, else LOAD_SLOT), or
+    None when docker cannot be asked."""
+    if slot is None:
+        slot = env_slot()
     try:
-        p = subprocess.run(["docker", "ps", "-q", "--filter", f"label={LABEL}=1",
+        p = subprocess.run(["docker", "ps", "-q", "--filter", _slot_filter(slot),
                             "--filter", "status=running"], capture_output=True, text=True)
     except OSError:
         return None
@@ -545,8 +604,13 @@ def main(argv=None):
         p.add_argument("--level", required=True, choices=LEVELS)
         p.add_argument("--cpus", help="CPU list (default: load_cpus())")
         p.add_argument("--ttl", type=int, default=DEFAULT_TTL)
-    sub.add_parser("stop")
-    sub.add_parser("status")
+    for name in ("plan", "start", "stop", "status"):
+        p = sub.choices.get(name) or sub.add_parser(name)
+        p.add_argument("--slot", type=int, default=env_slot(), help="H56 slot tag (default: LOAD_SLOT)")
+    p = sub.add_parser("slice")
+    p.add_argument("--slots", type=int, required=True)
+    p.add_argument("--slot", type=int, required=True)
+    p.add_argument("--sysfs", default="/sys")
     p = sub.add_parser("sample")
     p.add_argument("--seconds", type=float, required=True)
     p.add_argument("--windows", type=int, default=1)
@@ -572,18 +636,22 @@ def main(argv=None):
     p.add_argument("--reps", type=int, default=2)
     o = ap.parse_args(argv)
 
+    if o.cmd == "slice":
+        cpus, ld = slice_cpus(o.slots, o.slot, o.sysfs)
+        print(f"{format_cpulist(cpus)} {format_cpulist(ld)}")
+        return 0
     cpus = parse_cpulist(o.cpus) if getattr(o, "cpus", None) else load_cpus()
     if o.cmd == "cpus":
         print(format_cpulist(cpus))
     elif o.cmd == "plan":
-        for argv_ in plan(o.level, cpus, o.ttl):
+        for argv_ in plan(o.level, cpus, o.ttl, slot=o.slot):
             print(" ".join(argv_))
     elif o.cmd == "start":
-        print(start(o.level, cpus, o.ttl))
+        print(start(o.level, cpus, o.ttl, o.slot))
     elif o.cmd == "stop":
-        print(f"removed {stop()} container(s)")
+        print(f"removed {stop(o.slot)} container(s)")
     elif o.cmd == "status":
-        rows = running()
+        rows = running(o.slot)
         for cid, level, exp in rows:
             print(f"{cid} level={level} expires_in={exp - int(time.time())}s")
         if not rows:

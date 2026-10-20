@@ -79,6 +79,33 @@ esac
 lc=$(echo "${ARM}" | tr 'A-Z' 'a-z')
 PFX=k3dgpu-a
 [ "${MODE}" = pairs ] && PFX=k3dgpu-e
+DEVUI=127.0.0.1
+# H56 slots (bench/eatflow/crescent/slots.sh sets LIVE_SLOT and LIVE_NODE_CPUS): slot i names
+# everything ${PFX}-s<i>-*, moves every port by 100*i and DevUI to 127.0.0.<2i+1>, pins the
+# server node, LiteLLM and RAPL containers to LIVE_NODE_CPUS and records the cpusets (cpuset.txt).
+if [ -n "${LIVE_SLOT:-}" ]; then
+    [[ "${LIVE_SLOT}" =~ ^[01]$ ]] || { echo "slots: LIVE_SLOT must be 0 or 1"; exit 2; }
+    { [ "${MODE}" = agent ] && [ "${ARM}" = A1 ]; } || { echo "slots: LIVE_MODE=agent ARM=A1 only"; exit 2; }
+    PFX=${PFX}-s${LIVE_SLOT}
+    o=$(( 100 * LIVE_SLOT ))
+    P_SRV=$(( P_SRV + o )) P_LLM=$(( P_LLM + o )) P_PROXY=$(( P_PROXY + o )) P_MCP=$(( P_MCP + o ))
+    P_ROUTER=$(( P_ROUTER + o )) P_REDIS=$(( P_REDIS + o ))
+    DEVUI=127.0.0.$(( 2 * LIVE_SLOT + 1 ))
+    export LOAD_SLOT=${LIVE_SLOT}
+fi
+if [ "${LIVE_PRINT_SLOT:-0}" = 1 ]; then
+    echo "cluster=${PFX}-${lc} ports=${P_SRV},${P_LLM},${P_PROXY},${P_MCP},${P_ROUTER},${P_REDIS} devui=${DEVUI} node_cpus=${LIVE_NODE_CPUS:-}"
+    exit 0
+fi
+cs=()
+[ -n "${LIVE_NODE_CPUS:-}" ] && cs=(--cpuset-cpus "${LIVE_NODE_CPUS}")
+if [ -n "${LIVE_SLOT:-}" ]; then
+    for p in "${P_SRV}" "${P_LLM}" "${P_PROXY}" "${P_MCP}" "${P_ROUTER}" "${P_REDIS}"; do
+        ! ss -Hltn "sport = :${p}" | grep -q . || { echo "slots: port ${p} is in use"; exit 2; }
+    done
+    ! ss -Hltn "sport = :8090" | awk '{print $4}' | grep -qE "^(${DEVUI//./\\.}|0\.0\.0\.0|\*|\[::\]):8090$" \
+        || { echo "slots: ${DEVUI}:8090 is in use"; exit 2; }
+fi
 export K3D_GPU_CLUSTER=${PFX}-${lc}
 mkdir -p "${OUT}"
 OUT=$(cd "${OUT}" && pwd)
@@ -137,11 +164,11 @@ chmod +x "${OUT}/reset-mcp.sh"
 start_agent() {  # start_agent MODEL_NAME
     (cd "${BP}" && OPENAI_BASE_URL="http://127.0.0.1:${P_PROXY}/v1" OPENAI_API_KEY=not-needed MODEL_NAME="$1" \
         MCP_SERVER_URL="http://127.0.0.1:${P_MCP}/mcp" ENABLE_MEMORY=false AUTO_OPEN_BROWSER=false \
-        DEVUI_HOST=127.0.0.1 exec "${PY}" main.py) >> "${OUT}/agent.log" 2>&1 &
+        DEVUI_HOST=${DEVUI} exec "${PY}" main.py) >> "${OUT}/agent.log" 2>&1 &
     pids+=($!)
     local end=$(( $(date +%s) + 90 ))
     until curl -fsS -o /dev/null --max-time 5 -H "Authorization: Bearer ${DEVUI_AUTH_TOKEN}" \
-            "http://127.0.0.1:8090/v1/entities"; do
+            "http://${DEVUI}:8090/v1/entities"; do
         [ "$(date +%s)" -lt "${end}" ] || return 1
         sleep 2
     done
@@ -183,7 +210,7 @@ M=${LIVE_MODELS:?}
 docker rm -f "${PFX}-rapl" >/dev/null 2>&1
 # RAPL energy_uj is root-only; a read-only container with the powercap paths unmasked
 # reads it (K3D_GPU_RAPL_EXEC), as no sudo is available to the harness.
-docker run -d --name "${PFX}-rapl" --security-opt systempaths=unconfined --security-opt apparmor=unconfined \
+docker run -d --name "${PFX}-rapl" "${cs[@]}" --security-opt systempaths=unconfined --security-opt apparmor=unconfined \
     --read-only --network none "${RAPL_IMAGE}" sleep 7200 >/dev/null
 export K3D_GPU_RAPL_EXEC="docker exec ${PFX}-rapl"
 
@@ -197,9 +224,35 @@ stage() {  # stage <local dir> <path under /var/apb-models> <uid>
         docker exec "${n}" chown -R "$3:$3" /var/apb-models
     done
 }
+# cpusets: H56's cpuset.txt, "<role> <name> <cpus>" lines that crescent/h56.py checks.
+cpusets() {
+    local n c
+    echo "expect_node ${LIVE_NODE_CPUS}"
+    echo "expect_load ${LOAD_CPUS:-}"
+    for n in $(nodes); do
+        echo "node ${n} $(docker inspect --format '{{.HostConfig.CpusetCpus}}' "${n}")"
+        echo "node_effective ${n} $(docker exec "${n}" cat /sys/fs/cgroup/cpuset.cpus.effective)"
+    done
+    for c in "${PFX}-litellm" "${PFX}-rapl"; do
+        echo "${c##*-} ${c} $(docker inspect --format '{{.HostConfig.CpusetCpus}}' "${c}")"
+    done
+    for c in $(docker ps --filter "label=io.k3d-gpu.bench-load.slot=${LIVE_SLOT}" --format '{{.Names}}'); do
+        echo "load ${c} $(docker inspect --format '{{.HostConfig.CpusetCpus}}' "${c}")"
+    done
+    echo "pod_allowed ${DEP} $(kubectl -n "${NS}" exec "deploy/${DEP}" -- sh -c 'grep Cpus_allowed_list /proc/self/status' | awk '{print $2}')"
+    echo "pod_nproc ${DEP} $(kubectl -n "${NS}" exec "deploy/${DEP}" -- nproc)"
+}
 cluster_up() {
     stamp "k3d-gpu up"
     timeout 300 "${K}" up > "${OUT}/up.log" 2>&1 || { echo "up failed"; tail -20 "${OUT}/up.log"; exit 1; }
+    if [ -n "${LIVE_NODE_CPUS:-}" ]; then
+        local n
+        for n in $(nodes); do
+            docker update --cpuset-cpus "${LIVE_NODE_CPUS}" "${n}" >> "${OUT}/up.log" 2>&1 \
+                || { echo "NOT DELIVERABLE: node cpuset ${LIVE_NODE_CPUS} not applied to ${n}"; exit 3; }
+        done
+        stamp "nodes pinned to ${LIVE_NODE_CPUS}"
+    fi
 }
 if [ "${MODE}" = pairs ]; then
     # H47 / H49 (EXPERIMENTS.md "H47 and H49 pre-registration"): both arms live in one
@@ -486,7 +539,7 @@ model_list:
       api_key: not-needed
       timeout: 600
 EOF
-docker run -d --name "${PFX}-litellm" --network host -v "${OUT}/litellm.yaml:/app/config.yaml:ro" \
+docker run -d --name "${PFX}-litellm" "${cs[@]}" --network host -v "${OUT}/litellm.yaml:/app/config.yaml:ro" \
     "${LITELLM_IMAGE}" --config /app/config.yaml --port "${P_LLM}" --host 127.0.0.1 >/dev/null
 docker inspect --format '{{.Image}} {{index .Config.Image}}' "${PFX}-litellm" > "${OUT}/litellm-image.txt"
 wait_http "http://127.0.0.1:${P_LLM}/health/liveliness" 120 || { echo "litellm did not start"; docker logs "${PFX}-litellm" | tail -20; exit 1; }
@@ -679,11 +732,14 @@ budget=$(( CAP - $(el) - 330 ))
 [ "${budget}" -ge 120 ] || { echo "NOT DELIVERABLE: ${budget} s left for measurement"; exit 3; }
 stamp "load ${LEVEL}"
 python3 "${REPO}/bench/load/load.py" start --level "${LEVEL}" --ttl $(( budget + 300 )) > "${OUT}/load-start.log" 2>&1
+[ -z "${LIVE_SLOT:-}" ] || cpusets > "${OUT}/cpuset.txt"
 stamp "run budget ${budget}"
-${AB} run --arm "${ARM}" --level "${LEVEL}" --out "${OUT}/run" --agent-url http://127.0.0.1:8090 --tasks B24 \
+${AB} run --arm "${ARM}" --level "${LEVEL}" --out "${OUT}/run" --agent-url "http://${DEVUI}:8090" --tasks B24 \
     --upstream "http://127.0.0.1:${P_LLM}" --proxy-port "${P_PROXY}" --sampling agent_local \
     --mcp-url "http://127.0.0.1:${P_MCP}/mcp" --reset "${OUT}/reset-mcp.sh" --budget-s "${budget}" \
     "${gpu_flag[@]}" 2>&1 | tail -5 | tee -a "${OUT}/live.log"
+[ -z "${LIVE_SLOT:-}" ] || echo "load_end - $(docker ps -q --filter "label=io.k3d-gpu.bench-load.slot=${LIVE_SLOT}" \
+    --filter status=running | wc -l)" >> "${OUT}/cpuset.txt"
 stamp "control 120 s (server idle, same load)"
 ${AB} control --arm "${ARM}" --level "${LEVEL}" --out "${OUT}/run" --seconds 120 "${gpu_flag[@]}" 2>&1 \
     | tail -2 | tee -a "${OUT}/live.log"
