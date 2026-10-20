@@ -3,10 +3,11 @@
 # pre-registered in EXPERIMENTS.md "H55 pre-registration". Pre-registered, not run.
 #
 # Forked from bench/prefill-guard/run.sh (H5 stage 1): same OVMS server, model,
-# prompt, pins and neighbour image. A round holds two locks (the bench lock, then
-# the live lock, in that order), starts OVMS on CPUs 0-14, warms it, runs 10
-# quiet pre-roll prefill requests (SLO = 1.10 x their median TTFT), then the five
-# arms in the Latin-square order of ROUND (1-5). Each run: 60 s idle; the
+# prompt, pins and neighbour image. A round holds the campaign lock (and, when
+# set, one extra lock after it), starts OVMS on CPUs 0-14, warms it, runs 20
+# quiet pre-roll prefill requests (the reference REF = their median TTFT, the
+# statistic ctl.py and analyze.py both use), then the five arms in the
+# Latin-square order of ROUND (1-5). Each run: 60 s idle; the
 # stress-ng neighbour on CPUs 17-31 with the arm's cpu.max (none for Q); for A_slo
 # ctl.py takes cpu.max over; 15 s lead; a 900 s window of closed-loop prefill
 # requests (load.py, 16 tokens); one 128-token decode request; the tool proxy on
@@ -14,9 +15,16 @@
 # H55 writes no cpufreq value; the campaign snapshot is checked, read only,
 # before the round and after each run.
 #
+# Hold cap: every child that can run for long (sleeps, requests, docker wait,
+# ctl.py, perf) runs in the background and the round waits on it, so the
+# watchdog's TERM interrupts the wait at once; the trap kills the child. Root
+# children run under setsid, so sudo relays the TERM to its command.
+#
 # Environment:
-#   AD_LIVE_LOCK   the live lock (the scratchpad live.lock H5 used); required
-#   AD_BENCH_LOCK  the bench lock; default ~/k3dgpu-bench.lock
+#   K3DGPU_LIVE_LOCK  the campaign lock; default ~/k3dgpu-bench.lock (the path
+#                     bench/eatflow/crescent/hold.sh takes)
+#   AD_EXTRA_LOCK     optional second lock, taken after it (a campaign still on
+#                     another path); unset: none
 #   AD_SNAPSHOT    campaign cpufreq snapshot (bench/prefill-guard/cpufreq.sh snapshot); required
 #   AD_MODEL_DIR   OpenVINO/Qwen3-4B-int4-ov directory (with graph.pbtxt); required
 #   AD_SUDO_PASS   file holding the sudo password (sudo -S); unset: sudo -n
@@ -39,8 +47,8 @@ LEAD_S=${AD_LEAD_S:-15}
 WINDOW_S=${AD_WINDOW_S:-900}
 NB_TIMEOUT_S=${AD_NB_TIMEOUT_S:-960}
 PORT=${AD_PORT:-18006}
-LIVE_LOCK=${AD_LIVE_LOCK:?AD_LIVE_LOCK is required}
-BENCH_LOCK=${AD_BENCH_LOCK:-${HOME}/k3dgpu-bench.lock}
+LOCK=${K3DGPU_LIVE_LOCK:-${HOME}/k3dgpu-bench.lock}
+EXTRA_LOCK=${AD_EXTRA_LOCK:-}
 SNAP=${AD_SNAPSHOT:?AD_SNAPSHOT is required}
 MODEL_DIR=${AD_MODEL_DIR:?AD_MODEL_DIR is required}
 SERVER=k3dgpu-h55-ovms
@@ -79,6 +87,27 @@ as_root() {
         nofd sudo -n "$@"
     fi
 }
+# fgw CMD...: run CMD in the background and wait on it. wait returns as soon as a
+# trap fires; the TERM trap kills fg_pid.
+fg_pid=""
+fgw() {
+    "$@" 8>&- 9>&- &
+    fg_pid=$!
+    wait "${fg_pid}"
+    local rc=$?
+    fg_pid=""
+    return "${rc}"
+}
+# spawn_root CMD...: start CMD as root in its own session; spawned = the sudo pid,
+# which relays a TERM from this shell (outside that session) to CMD.
+spawn_root() {
+    if [ -n "${AD_SUDO_PASS:-}" ]; then
+        setsid sudo -S -p '' "$@" < "${AD_SUDO_PASS}" 8>&- 9>&- &
+    else
+        setsid sudo -n "$@" 8>&- 9>&- &
+    fi
+    spawned=$!
+}
 
 log() { echo "$(date -u +%FT%TZ) $*" | tee -a "${OUT}/round${ROUND}.log" >&2; }
 now() { date +%s.%N; }
@@ -87,18 +116,22 @@ mkdir -p "${OUT}"
 use=$(df --output=pcent / | tail -1 | tr -dc 0-9)
 if [ "${use}" -gt 97 ]; then log "abort: / at ${use}%"; exit 3; fi
 
-exec 8>"${BENCH_LOCK}" 9>"${LIVE_LOCK}"
-log "waiting for ${BENCH_LOCK} then ${LIVE_LOCK}"
-flock -w 21600 8 || { log "bench lock timeout"; exit 4; }
-flock -w 21600 9 || { log "live lock timeout"; exit 4; }
-log "locks acquired; hold cap ${HOLD_S}s"
+exec 8>"${LOCK}"
+log "waiting for ${LOCK}"
+flock -w 21600 8 || { log "lock timeout: ${LOCK}"; exit 4; }
+if [ -n "${EXTRA_LOCK}" ]; then
+    exec 9>"${EXTRA_LOCK}"
+    flock -w 21600 9 || { log "lock timeout: ${EXTRA_LOCK}"; exit 4; }
+fi
+log "lock(s) acquired; hold cap ${HOLD_S}s"
 
 ctl_pid=""
+imc_pid=""
 cleanup() {
     [ -n "${watchdog:-}" ] && kill "${watchdog}" 2> /dev/null
+    for p in "${fg_pid}" "${ctl_pid}" "${imc_pid}"; do [ -n "${p}" ] && kill -TERM "${p}" 2> /dev/null; done
     nofd docker rm -f "${NB}" "${SERVER}" > /dev/null 2>&1
-    [ -n "${ctl_pid}" ] && as_root pkill -f "ctl.py --container ${NB} " > /dev/null 2>&1
-    log "exit: containers removed"
+    log "exit: children signalled, containers removed"
 }
 trap cleanup EXIT
 trap 'log "round ${ROUND} INCOMPLETE: hold cap or signal"; echo INCOMPLETE > "${OUT}/round${ROUND}.status"; exit 130' INT TERM
@@ -119,7 +152,7 @@ cgroup_cpumax() {
     cat "/sys/fs/cgroup${p}/cpu.max" 2> /dev/null
 }
 prefill() {  # prefill N OUTFILE: N closed-loop 16-token requests through llm_load.py
-    nofd python3 "${REPO}/bench/llm_load.py" --base-url "${BASE_URL}" --model "${MODEL_NAME}" \
+    fgw python3 "${REPO}/bench/llm_load.py" --base-url "${BASE_URL}" --model "${MODEL_NAME}" \
         --prompt "$(cat "${PROMPT_FILE}")" --unique-prompts --max-tokens 16 \
         --requests "$1" --warmup 0 --concurrency 1 --out "$2" > /dev/null
 }
@@ -137,11 +170,11 @@ for _ in $(seq 1 120); do
 done
 [ "${ok}" = 1 ] || { nofd docker logs "${SERVER}" > "${OUT}/server-r${ROUND}.log" 2>&1; log "abort: server not ready"; exit 6; }
 prefill 2 "${OUT}/warmup-r${ROUND}.json" || { log "abort: warm-up failed"; exit 6; }
-prefill 10 "${OUT}/preroll-r${ROUND}.json" || { log "abort: pre-roll failed"; exit 6; }
-SLO=$(python3 -c 'import json,statistics,sys; s=[x["ttft_s"] for p in json.load(open(sys.argv[1]))["phases"] for x in p["samples"] if x["ok"]]; assert len(s)==10, len(s); print(round(1.10*statistics.median(s), 4))' "${OUT}/preroll-r${ROUND}.json") \
+prefill 20 "${OUT}/preroll-r${ROUND}.json" || { log "abort: pre-roll failed"; exit 6; }
+REF=$(python3 -c 'import json,sys; sys.path.insert(0, sys.argv[2]); import ctl; s=[x["ttft_s"] for p in json.load(open(sys.argv[1]))["phases"] for x in p["samples"] if x["ok"]]; print(round(ctl.reference(s), 4))' "${OUT}/preroll-r${ROUND}.json" "${HERE}") \
     || { log "abort: pre-roll incomplete"; exit 6; }
-echo "${SLO}" > "${OUT}/slo-r${ROUND}.txt"
-log "server ready; SLO ${SLO}s"
+echo "${REF}" > "${OUT}/ref-r${ROUND}.txt"
+log "server ready; quiet reference ${REF}s (SLO = 1.10 x)"
 
 pos=0
 for arm in "${ORDER[@]}"; do
@@ -149,7 +182,7 @@ for arm in "${ORDER[@]}"; do
     d="${OUT}/r${ROUND}-p${pos}-${arm}"
     mkdir -p "${d}"
     log "run ${arm} (position ${pos}): idle ${IDLE_S}s"
-    sleep "${IDLE_S}"
+    fgw sleep "${IDLE_S}"
     q=$(quota_for "${arm}")
     temp0=$(cat "${PKG_ZONE}/temp"); load1=$(cut -d' ' -f1 /proc/loadavg); thr0=$(throttle)
     if [ -n "${q}" ]; then
@@ -162,17 +195,17 @@ for arm in "${ORDER[@]}"; do
     w0=$(python3 -c "import time; print(time.time() + ${LEAD_S})")
     w1=$(python3 -c "print(${w0} + ${WINDOW_S})")
     if [ "${arm}" = A_slo ]; then
-        as_root taskset -c "${TOOL_CPU}" python3 "${HERE}/ctl.py" --container "${NB}" --slo "${SLO}" \
-            --jsonl "${d}/load.jsonl" --log "${d}/ctl.jsonl" --until "${w1}" &
-        ctl_pid=$!
+        spawn_root taskset -c "${TOOL_CPU}" python3 "${HERE}/ctl.py" --container "${NB}" --ref "${REF}" \
+            --jsonl "${d}/load.jsonl" --log "${d}/ctl.jsonl" --until "${w1}"
+        ctl_pid=${spawned}
     fi
-    sleep "${LEAD_S}"
+    fgw sleep "${LEAD_S}"
     reads=()
     [ -n "${q}" ] && reads+=("$(cgroup_cpumax)")
-    as_root perf stat -a -x, -I 1000 -e "${IMC_EVENTS}" -o "${d}/imc.csv" -- sleep "${WINDOW_S}" > /dev/null 2>&1 &
-    imc_pid=$!
+    spawn_root perf stat -a -x, -I 1000 -e "${IMC_EVENTS}" -o "${d}/imc.csv" -- sleep "${WINDOW_S}" > /dev/null 2>&1
+    imc_pid=${spawned}
     rapl0=$(as_root bash "${CPUFREQ}" rapl); m0=$(now)
-    nofd python3 "${HERE}/load.py" --base-url "${BASE_URL}" --model "${MODEL_NAME}" \
+    fgw python3 "${HERE}/load.py" --base-url "${BASE_URL}" --model "${MODEL_NAME}" \
         --prompt-file "${PROMPT_FILE}" --until "${w1}" --out "${d}/load.jsonl"
     rc_load=$?
     rapl1=$(as_root bash "${CPUFREQ}" rapl); m1=$(now); thr1=$(throttle)
@@ -180,23 +213,23 @@ for arm in "${ORDER[@]}"; do
     nb_running=$(nofd docker inspect -f '{{.State.Running}}' "${NB}" 2> /dev/null) || nb_running=none
     ctl_alive=false
     [ -n "${ctl_pid}" ] && ps -p "${ctl_pid}" > /dev/null && ctl_alive=true
-    wait "${imc_pid}"
-    nofd python3 "${REPO}/bench/llm_load.py" --base-url "${BASE_URL}" --model "${MODEL_NAME}" \
+    wait "${imc_pid}"; imc_pid=""
+    fgw python3 "${REPO}/bench/llm_load.py" --base-url "${BASE_URL}" --model "${MODEL_NAME}" \
         --prompt "$(cat "${PROMPT_FILE}")" --unique-prompts --max-tokens 128 --ignore-eos \
         --requests 1 --warmup 0 --concurrency 1 --out "${d}/decode.json" > /dev/null
     rc_decode=$?
     tp0=$(now)
-    nofd taskset -c "${TOOL_CPU}" python3 -c 'import json; d=[{"k": i, "v": str(i) * 8} for i in range(200000)]; [json.loads(json.dumps(d)) for _ in range(3)]'
+    fgw taskset -c "${TOOL_CPU}" python3 -c 'import json; d=[{"k": i, "v": str(i) * 8} for i in range(200000)]; [json.loads(json.dumps(d)) for _ in range(3)]'
     rc_tool=$?
     tp1=$(now)
     if [ -n "${q}" ]; then
-        nofd timeout $((NB_TIMEOUT_S + 60)) docker wait "${NB}" > "${d}/nb.exit" 2>&1
+        fgw timeout $((NB_TIMEOUT_S + 60)) docker wait "${NB}" > "${d}/nb.exit" 2>&1
         nofd docker logs "${NB}" > "${d}/nb.log" 2>&1
         nofd docker rm -f "${NB}" > /dev/null 2>&1
     fi
     if [ -n "${ctl_pid}" ]; then wait "${ctl_pid}"; ctl_pid=""; fi
     snap_check && snap_ok=true || snap_ok=false
-    ARM="${arm}" ROUND="${ROUND}" POS="${pos}" SLO="${SLO}" Q="${q}" W0="${w0}" W1="${w1}" \
+    ARM="${arm}" ROUND="${ROUND}" POS="${pos}" REF="${REF}" Q="${q}" W0="${w0}" W1="${w1}" \
     TEMP0="${temp0}" LOAD1="${load1}" THR0="${thr0}" THR1="${thr1}" RAPL0="${rapl0}" RAPL1="${rapl1}" \
     M0="${m0}" M1="${m1}" READS="$(printf '%s|' "${reads[@]}")" NB_RUNNING="${nb_running}" CTL_ALIVE="${ctl_alive}" \
     TP0="${tp0}" TP1="${tp1}" RC="${rc_load},${rc_decode},${rc_tool}" SNAP_OK="${snap_ok}" \
@@ -217,7 +250,7 @@ if os.path.exists(log):
             bogo = {"bogo_ops": int(m.group(1)), "real_s": float(m.group(2)), "bogo_ops_per_s_real": float(m.group(5))}
 q = e["Q"] or None
 rec = {
-    "arm": e["ARM"], "round": int(e["ROUND"]), "position": int(e["POS"]), "slo_s": float(e["SLO"]),
+    "arm": e["ARM"], "round": int(e["ROUND"]), "position": int(e["POS"]), "ref_s": float(e["REF"]),
     "window_start": float(e["W0"]), "window_end": float(e["W1"]),
     # A_slo: ctl.py owns cpu.max, so its trace (ctl.jsonl) replaces the read-back check.
     "cpumax_set": None if e["ARM"] == "A_slo" else q,

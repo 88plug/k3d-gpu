@@ -258,6 +258,7 @@ jobs:
       - run: python3 bench/h57d/test_h57d.py
       - run: python3 bench/admission/test_ctl.py
       - run: python3 bench/admission/test_analyze.py
+      - run: bash bench/admission/test_run.sh
 
   mcp-tests:
     name: MCP server tests

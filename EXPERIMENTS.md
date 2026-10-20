@@ -94,7 +94,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H34x | H34's hypothesis on the Xeon 6741P: same-engine CPU Fast Draft (OVMS 2026.4.1, `OpenVINO/Qwen3-0.6B-int4-ov` draft on the CPU) beats the `OpenVINO/Qwen3-4B-int4-ov` target alone on single-stream decode, under matched background load. A replication: the original models are kept. | Written 2026-10-20, before any H34x measurement. At `typical`: median paired B/A decode tok/s 1.40 (1.15-1.70) and median paired B/A package J/token 0.75 (0.60-0.95); SUPPORTED by H34's rule (tok/s >= 1.20 with its CI above 1.0, J/token <= 0.85 with its CI below 1.0) at 0.6, REFUTED 0.25 (the draft's share of a faster target step grows), INCONCLUSIVE 0.15. | H34's `bench/hetero-spec/h34.sh` and `h34.py`, n = 12 pairs A B / B A, 5 s load window per request, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h34`, `K3D_GPU_VENDORS=none`, node container on CPUs 0-23,48-71, crescent amendment C1, `typical` only. Run 2026-10-20 ([H34x run](#h34x-run-xeon-6741p-2026-10-20)): load MATCHED, 12/12 pairs; B/A decode tok/s 0.758 (CI 0.688-0.809) and package J/token 1.241 (CI 1.168-1.347), B slower and costlier in 12/12 pairs (A 37.2, B 28.0 tok/s): the draft slows decode on this Xeon. | REFUTED |
 | H25x | H25's hypothesis (T part) on the Xeon 6741P: agents that send a byte-identical system prompt and tools to one OVMS CPU server reuse one prefix KV, so an added agent's first chunk arrives at least 4x sooner with the shipping prefix caching on than with `--enable_prefix_caching=false`. A replication: the original model and prefix shape are kept. | Written 2026-10-20, before any H25x measurement. Added-agent median TTFT OFF 1.2 s (0.5-2.5), ON 0.15 s (0.06-0.4), ratio 8x (4.5-14), the ratio's 95% CI lower bound >= 4x; c/OFF >= 0.8. SUPPORTED 0.75; the risk is fixed per-request overhead, which a 5-10x faster prefill leaves as a larger share of the ON time. M (memory per agent) not measured, as in H25 run 4. | H25's `bench/shared-prefix/run.sh` and `probe.py score` (A3 first-chunk TTFT, A4 amendment-27 load rule), ON OFF interleaved 3+3 rounds, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h25`, `K3D_GPU_VENDORS=none`, node container on CPUs 0-23,48-71 (`NODE_CPUS`), crescent amendment C1, `typical` only. Run 2026-10-21 ([H25x run](#h25x-run-xeon-6741p-2026-10-21)): load MATCHED (amendment 27), no round void; added agent's first chunk 0.245 s ON vs 1.724 s OFF (7.05x, CI 6.94-7.13, n = 15 per arm), c/OFF 0.99, every round pair >= 4x: T SUPPORTED; M not measured (A3). | SUPPORTED |
 | H28x | H28's hypothesis on the Xeon 6741P: N = 8 agent pods that mmap one 1 GiB model through an image volume share one page-cache copy and become ready in at most half the time of pods that copy it into an emptyDir. A replication (H28 has no model; the 1 GiB blob is kept). | Written 2026-10-20, before any H28x measurement. Memory parts hold (0.95): T PSS <= 160 MiB per pod, model page cache about 1.0x size (T) vs about 9x (C). Time part uncertain: the copy runs at memory speed on this host, so the fixed pod-start cost is a larger share of both arms; T/C round-median ready 0.55 (0.35-0.8). SUPPORTED 0.35, REFUTED (time part) 0.5, other rows 0.15. | H28's `bench/zero-copy-models/probe.sh` (A1, A2), arms C T T C C T plus the unscored warm-up, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h28`, crescent amendment C1 passed to the plain `k3d cluster create`, `typical` only, scored by `bench/zero-copy-models/score.py` (H28's table, committed with this pre-registration). | PENDING |
-| H55 | On the i9-13900T, an SLO gate on the E-core neighbour's `cpu.max`, set from the P-core inference server's own TTFT p95, keeps CPU-served prefill within +10% of quiet while the neighbour keeps more throughput than H5's frequency-cap frontier (CMIN: +23.3% at 72.4% neighbour loss) and than the best static quota at the same penalty. | Written 2026-10-20, before any H55 measurement. Pre-registered prior, not a result: N0 about +40% (H5 replicate), K50 +20 to +30% at about 50% loss, K25 +8 to +15% at about 75% loss, A_slo +10 to +20% at 65-80% loss, so the expected verdict is REFUTED: package power is the coupling, duty-cycling the neighbour is less power-efficient per op than H5's frequency cap, and a closed-loop c = 1 prefill load leaves no idle gap to admit it into. If H55 holds, A_slo reaches +10% or less at about 50% loss or less. | H5 amendment A1's host-level harness (OVMS 2026.4.1, `OpenVINO/Qwen3-4B-int4-ov`, `bench/prefill-guard/prompt.txt` with a unique tag per request, CPUs 0-14; `stress-ng --cpu 15 --cpu-method matrixprod` on CPUs 17-31; tool proxy on CPU 16), with a 900 s closed-loop prefill window per run (16 tokens, concurrency 1). Arms Q, N0 (`cpu.max max`), K50 (`750000 100000`), K25 (`375000 100000`) and A_slo (`bench/admission/ctl.py` steps 25-100% of 15 CPUs on windows of 20 requests: down if p95 > 1.10 x the round's quiet pre-roll median, up if p95 <= 0.9 x that), 5x5 Latin square, one round per lock hold. Supported only if A_slo's median penalty is at most +10%, its neighbour loss is below 72.4%, and no static arm reaches +10% at a loss no higher than A_slo's; inconclusive gates and the hold cap in [H55 pre-registration](#h55-pre-registration-slo-gated-admission-of-an-e-core-neighbour-2026-10-20). Not run. A SUPPORTED H55 does not ship a controller by itself: kubelet owns the sandbox pod's `cpu.max` (`limits cpu "1"`). | PENDING |
+| H55 | On the i9-13900T, an SLO gate on the E-core neighbour's `cpu.max`, set from the P-core inference server's own median TTFT, keeps CPU-served prefill within +10% of quiet while the neighbour keeps more throughput than H5's frequency-cap frontier (CMIN: +23.3% at 72.4% neighbour loss) and than the best static quota at the same penalty. | Written 2026-10-20, before any H55 measurement; control rule revised the same day, still before any measurement (see the section). Pre-registered prior, not a result: N0 about +40% (H5 replicate), K50 +20 to +30% at about 50% loss, K25 +8 to +15% at about 75% loss. A_slo climbs only while the penalty at its level is at most +5%, so it is expected to stay at the 25-37.5% levels, close to K25: +8 to +15% at 70-78% loss, failing (b) or (c). Expected verdict REFUTED: package power is the coupling, duty-cycling the neighbour is less power-efficient per op than H5's frequency cap, and a closed-loop c = 1 prefill load leaves no idle gap to admit it into. If H55 holds, A_slo settles at 50% or above at +10% or less. | H5 amendment A1's host-level harness (OVMS 2026.4.1, `OpenVINO/Qwen3-4B-int4-ov`, `bench/prefill-guard/prompt.txt` with a unique tag per request, CPUs 0-14; `stress-ng --cpu 15 --cpu-method matrixprod` on CPUs 17-31; tool proxy on CPU 16), with a 900 s closed-loop prefill window per run (16 tokens, concurrency 1). Arms Q, N0 (`cpu.max max`), K50 (`750000 100000`), K25 (`375000 100000`) and A_slo (`bench/admission/ctl.py` steps 25-100% of 15 CPUs on windows of 20 requests: down if the window median > 1.10 x the round's quiet reference, the median of 20 pre-roll requests; up if it is at most 1.05 x that), 5x5 Latin square, one round per lock hold. Supported only if A_slo's median penalty is at most +10%, its neighbour loss is below 72.4%, and no static arm reaches +10% at a loss no higher than A_slo's plus the neighbour's own N0 run-to-run spread; inconclusive gates and the hold cap in [H55 pre-registration](#h55-pre-registration-slo-gated-admission-of-an-e-core-neighbour-2026-10-20). Not run. A SUPPORTED H55 does not ship a controller by itself: kubelet owns the sandbox pod's `cpu.max` (`limits cpu "1"`). | PENDING |
 | H56 | Two measurement holds in disjoint cpuset slices of the Xeon 6741P do not perturb each other: an A1 B24 agent block in slice 0 (CPUs 0-23,48-71) behaves equivalently, in per-attempt time, within-budget success and tasks completed, alone and with a concurrent identical A1 hold in slice 1 (CPUs 24-47,72-95), without an all-core clock drop on slice 0 and with the package below its power limit. It decides whether crescent may run two A1-or-lighter holds at once ([adoption rule](#h56-pre-registration-parallel-slice-holds-on-crescent-2026-10-20)); it is not a k3d-gpu product claim. | Written 2026-10-20, before any run; predictions unchanged by the 2026-10-21 revision, priors updated to its narrower bands. Geometric-mean W/A time ratio 1.04 (0.99-1.09); paired success W - A -0.01 (-0.06 to +0.04); completion W/A 0.97 (0.90-1.00); own-slice MHz W/A 0.97; W package 0.75 PL1 (0.55-0.95), A package 0.5 PL1; time pairs 80 (50-96). Batch-1 int4 decode is DRAM-bound, and the sibling's decode and its stream load share DRAM, L3 and package power. Verdict priors: SUPPORTED 0.30, INCONCLUSIVE 0.45, REFUTED 0.25. | Stage 0 first, read-only: `bench/eatflow/crescent/lockwait.py` over both campaigns' `campaign.log`; if lock wait our slots could remove is under 0.10 of hold time, stage 1 is not run and the row stays PENDING (`h56.sh` refuses through `h56.py gate`). [Amendment S0](#h56-pre-registration-parallel-slice-holds-on-crescent-2026-10-20) (2026-10-21, before any stage-1 hold, stage-0 reading disclosed): the share is pooled lock wait over hold time across every campaign log on crescent, nothing netted out; bar 0.10 unchanged. Then one W wiring smoke, which must show slice-0 setup <= 900 s and >= 3 tasks in 120 s. Stage 1: `bench/eatflow/crescent/h56.sh N` for N = 1..8, order A W W A A W W A, one condition-hold per exclusive campaign lock (slot locks first). A: slice 0 alone, slice 1 idle. W: the sibling in slice 1 first (cap 3000 s, budget 1800 s), slice 0 from the sibling's run budget on (cap 2400 s, budget 720 s, the same as A). Hold pairs (1,2) (4,3) (5,6) (8,7), tasks by id; 90% two-stage bootstrap CIs (hold pairs, then tasks; 10,000, seed 56; TOST at alpha 0.05). SUPPORTED: all 8 positions filled, time CI inside [1/1.05, 1.05], success CI inside [-1/24, +1/24], completion W/A >= 1/1.05, >= 60 time pairs, own-slice MHz W/A >= 0.95, W package < 0.95 PL1 and PL1 read. REFUTED: the time CI wholly outside its band, the success CI wholly outside its band, or the completion CI wholly below 1/1.05. Otherwise INCONCLUSIVE. VOID holds are replaced, at most 2. `bench/eatflow/crescent/h56.py score`. | PENDING |
 
 ## Falsification log
@@ -3862,7 +3862,16 @@ after the campaign (`cpufreq-snapshot.txt` and `cpufreq-after.txt` in the record
 ### H55 pre-registration: SLO-gated admission of an E-core neighbour (2026-10-20)
 
 Written 2026-10-20, before any H55 measurement. Nothing below is a result. No H55 run, and
-no shortened harness check, has been made.
+no shortened harness check on the host, has been made.
+
+Revised 2026-10-20, still before any H55 measurement, after review found that the first
+control rule could not climb. It stepped up only when a window's p95 was at most
+0.9 x 1.10 = 0.99 x the quiet pre-roll median, and a p95 of 20 requests is almost never
+below the median. A_slo would have stayed at its 25% start, which is K25 plus a
+controller. The rule now uses one statistic, the median, for the reference, the control
+windows and the scoring. Other changes in the same revision: a 20-request pre-roll; the
+read-error, missing bogo-ops and two-read gates; the neighbour-spread margin in (c); the
+hold cap enforced on time; and one campaign lock by default.
 
 **Why.** H3 and H5 are REFUTED: on the i9-13900T, P/E placement is not isolation. E-core
 load slows CPU-served prefill on the P-cores through package power, the LLC and DRAM
@@ -3872,7 +3881,7 @@ control does better than a static setting: a controller that throttles the neigh
 as far as the inference server's own TTFT requires.
 
 **Hypothesis.** An SLO gate on the E-core neighbour's `cpu.max`, set from the P-core
-inference server's TTFT p95, keeps CPU-served prefill within +10% of quiet, while the
+inference server's median TTFT, keeps CPU-served prefill within +10% of quiet, while the
 neighbour keeps more throughput than both the H5 CMIN frontier and the best static quota at
 the same penalty.
 
@@ -3890,8 +3899,9 @@ request; the neighbour H5's `stress-ng` image, `--cpu 15 --cpu-method matrixprod
    one request after another until the window ends); one 128-token decode request
    (`--ignore-eos`); the tool proxy. Then the harness waits for the neighbour and
    `ctl.py` to exit. The requests of a run are those started inside the window.
-2. A round: one OVMS start, 2 unrecorded warm-up requests, then 10 quiet pre-roll prefill
-   requests. `SLO_r` = 1.10 x their median TTFT. Then the five arms in a 5x5 Latin square
+2. A round: one OVMS start, 2 unrecorded warm-up requests, then 20 quiet pre-roll prefill
+   requests. The round's reference `REF_r` is their median TTFT (`ctl.reference`), and
+   `SLO_r` = 1.10 x `REF_r`. Then the five arms in a 5x5 Latin square
    (round r starts at arm r of Q, N0, K50, K25, A_slo).
 3. Arms:
 
@@ -3907,13 +3917,17 @@ request; the neighbour H5's `stress-ng` image, `--cpu 15 --cpu-method matrixprod
    15 CPUs, period 100 ms. Every 1 s tick it re-resolves the neighbour's cgroup
    (`docker inspect` State.Pid, then `/proc/<pid>/cgroup`), reads `cpu.max` back, consumes
    the newline-terminated records `load.py` appended, and writes the absolute quota of the
-   current level. Each 20 completed requests close one window (non-overlapping); its p95 is
-   the nearest rank (the 19th of 20). It steps down one level if p95 > `SLO_r`, up one if
-   p95 <= 0.9 x `SLO_r`, and holds in between; the level is clamped to 25-100%. A read-back
-   that differs from its own last write is a stomp, logged and overwritten on the next
-   tick. A missing cgroup (ENOENT) means no write and one log line. `ctl.py` is the only
-   writer of that `cpu.max` during the run. `load.py` only appends and reads nothing back,
-   so the inference path never waits on the controller.
+   current level. Each 20 completed requests close one window (non-overlapping). It steps
+   down one level if the window median > `SLO_r`, up one if it is at most 1.05 x `REF_r`,
+   and holds in between; the level is clamped to 25-100%. A read-back that differs from
+   its own last write is a stomp, logged and overwritten on the next tick. Detection is
+   sampled: a foreign value is counted only if it is still there at a 1 s read-back. A
+   value written and reverted between two reads, or written between a read and the write
+   that follows it, is overwritten without being counted. A missing cgroup (ENOENT) means
+   no write and one log line; any other read error also means no write that tick, logged as
+   a read error. `ctl.py` is the one writer the harness starts for that `cpu.max`.
+   `load.py` only appends and reads nothing back, so the inference path never waits on the
+   controller.
 5. Also recorded in every run: package W (RAPL, over the window), the
    `package_throttle_count` delta, the tool proxy, decode tok/s, `load1` and package
    temperature at run start, the IMC `uncore_imc_free_running_{0,1}/data_total` trace
@@ -3926,50 +3940,70 @@ request; the neighbour H5's `stress-ng` image, `--cpu 15 --cpu-method matrixprod
 **Scoring** (`bench/admission/analyze.py`, over every request in each 900 s window).
 Penalty = arm median TTFT over all the arm's requests / Q median - 1; the p90 penalty is
 reported beside it. Neighbour loss = 1 - the arm's median bogo-ops/s (stress-ng
-`--metrics-brief`, real time, over its whole run) / N0's. Q spread = max - min of the five
+`--metrics-brief`, real time, over its whole run) / N0's. NB spread = (max - min of the
+five N0 runs' bogo-ops/s) / N0's median. Q spread = max - min of the five
 Q run medians; drift = |median of Q requests in rounds 1-2 - in rounds 4-5|, against that
 spread.
 
 **Verdict rule.**
 
 - INCONCLUSIVE if any gate fails: a run missing, or with a failed request; N0's penalty
-  inside the Q spread (divided by the Q median); drift above the spread; an A_slo run with
-  fewer than 4 full windows; a stomp, an ENOENT or a write error logged by `ctl.py` inside
-  the window; `ctl.py` dead at the window end; a neighbour not running at the window end; a
-  static arm whose `cpu.max` read-back differs from its set value.
+  inside the Q spread (divided by the Q median); drift above the spread; a neighbour run
+  with no bogo-ops/s value (the `--metrics-brief` line not found); an A_slo run with fewer
+  than 4 full windows; a stomp, an ENOENT, a read error or a write error logged by `ctl.py`
+  inside the window; `ctl.py` dead at the window end; a neighbour not running at the window
+  end; a static arm without both `cpu.max` reads (window start and end) equal to its set
+  value, a failed read counting as missing.
 - SUPPORTED only if all three hold: (a) A_slo's median penalty is at most +10%; (b) A_slo's
   neighbour loss is below 72.4% (H5 CMIN, `matrixprod`); (c) no static arm (N0, K50, K25)
-  has a penalty of at most +10% at a loss no higher than A_slo's.
+  has a penalty of at most +10% at a loss no higher than A_slo's plus the NB spread. A
+  static arm within the neighbour's own run-to-run noise of A_slo has not been beaten.
 - REFUTED otherwise. When only (c) fails, a static quota does as well, and the controller
-  is not earned.
+  is not earned. If A_slo stays at its 25% floor, it is K25 plus a controller, and (b) or
+  (c) fails.
 
 **Disclosed before running.**
 
 - As in H5 amendment A1, the drift test cannot fire: the median of two runs' pooled
   requests lies between those runs' medians. It is kept and reported.
-- A_slo starts at the lowest level, and one 900 s window holds about 5-6 windows of 20 at
-  the quiet TTFT, so it can climb at most that many levels in a run. A run that cannot
-  reach a level is scored as run.
+- A_slo starts at the lowest level and moves at most one level per window of 20. One 900 s
+  window holds about 6 windows at H5's quiet TTFT (7.15 s), and fewer when the neighbour
+  slows prefill. Six up-steps take it from 25% to 100%, but only when every window steps
+  up. A run that cannot reach a level is scored as run.
+- The rule climbs only while a window's median is at most 1.05 x `REF_r`: the controller
+  admits more neighbour only while the penalty at its level is about +5% or less, and holds
+  between +5% and +10%. That is a simulation of the rule, not a measurement:
+  `test_ctl.py` draws log-normal TTFTs fitted to H5's quiet arm (median 7.15 s, p90
+  8.25 s). Over 200 seeds of 6 quiet windows, at least 160 end at 75% or above, and at
+  most 10 end at the floor; the replaced rule left all 200 at the floor.
 - The neighbour outlives the window by the decode request and the tool proxy. `ctl.py`
   keeps ticking until the neighbour exits, so A_slo's loss includes that tail at its last
   level; the static arms' tail is at their set quota.
 - In A_slo, `ctl.py` is pinned to CPU 16, beside the tool proxy, and costs one
   `docker inspect` per second.
 - A host-side writer that re-asserts the scope's quota (a systemd `daemon-reload`, for
-  one) shows up as a stomp and makes the run INCONCLUSIVE.
+  one) makes the run INCONCLUSIVE when the foreign value is still there at a 1 s read-back.
+  One that `ctl.py` overwrites before reading it is not seen.
 
-**Pre-registered prior** (a prediction, not a result). N0 about +40% (an H5 replicate); K50
-+20 to +30% at about 50% loss; K25 +8 to +15% at about 75% loss; A_slo +10 to +20% at
-65-80% loss, settling at the 25-37.5% levels. Expected verdict: REFUTED. Package power is
-the coupling; duty-cycling the neighbour is less power-efficient per op than H5's frequency
-cap; and a closed-loop c = 1 prefill load has no idle gap to admit the neighbour into. If
-H55 holds, A_slo reaches +10% or less at a loss of about 50% or less.
+**Pre-registered prior** (a prediction, not a result; re-derived for the revised rule). N0
+about +40% (an H5 replicate); K50 +20 to +30% at about 50% loss; K25 +8 to +15% at about
+75% loss. Under that prior the penalty at 25% is already above the +5% up-band, so A_slo
+holds at, or steps back down to, the 25% floor, with at most an occasional step to 37.5%:
++8 to +15% at 70-78% loss, close to K25. Then (b) fails, or (c) does, because K25 lies
+within the NB spread. Expected verdict: REFUTED. Package power is the coupling;
+duty-cycling the neighbour is less power-efficient per op than H5's frequency cap; and a
+closed-loop c = 1 prefill load has no idle gap to admit the neighbour into. If H55 holds,
+A_slo settles at 50% or above at +10% or less, a loss of about 50% or less.
 
 **Hold cap and locks.** One round per lock hold, at most 7200 s per hold (a round needs
-about 90 min); at most 5 holds. The runner takes `~/k3dgpu-bench.lock` and then the live
-lock H5 used (`AD_LIVE_LOCK`), both with `flock -w 21600`, and refuses to start without
-both. No child inherits either lock descriptor. A hold that hits the cap writes
-`INCOMPLETE` for that round, which is not re-run inside the same hold. H55 writes no
+about 92 min); at most 5 holds. The runner takes `K3DGPU_LIVE_LOCK`, by default
+`~/k3dgpu-bench.lock` (the path `bench/eatflow/crescent/hold.sh` takes), and, when
+`AD_EXTRA_LOCK` is set, that lock after it, each with `flock -w 21600`. No child inherits
+a lock descriptor. Every child that can run long (the sleeps, the requests, `docker wait`,
+`ctl.py`, `perf`) runs in the background while the round waits on it, so the watchdog's
+TERM interrupts the wait at once, and the trap signals the child; root children run under
+`setsid`, so sudo relays that TERM to them. A hold that hits the cap writes `INCOMPLETE`
+for that round, which is not re-run inside the same hold. H55 writes no
 cpufreq value: the campaign cpufreq snapshot is checked, read only, before each round and
 after each run, and a mismatch aborts the round.
 
@@ -3984,9 +4018,15 @@ Implementation: [`bench/admission/run.sh`](bench/admission/run.sh) (one round),
 [`analyze.py`](bench/admission/analyze.py) (the rule above). Tests:
 `bench/admission/test_ctl.py` (stomp repair by an absolute store, ENOENT without a write,
 the 20-request window, the hysteresis band and its clamps, a partial trailing record, the
-nearest-rank p95, and `load.py` records feeding the controller against
-`tests/openai_stub.py`) and `bench/admission/test_analyze.py` (SUPPORTED, each REFUTED
-condition, each INCONCLUSIVE gate, and the results-tree reader). `run.sh` needs root
+median as the one statistic, a quiet trace climbing, a settle inside the band, a read error
+logged without a raise, and `load.py` records feeding the controller against
+`tests/openai_stub.py`), `bench/admission/test_analyze.py` (SUPPORTED, each REFUTED
+condition including the NB-spread margin, each INCONCLUSIVE gate, and the results-tree
+reader, including the two-read check), and
+`bench/admission/test_run.sh` (`run.sh` against shims for docker, curl and sudo and
+`tests/openai_stub.py`: a 6 s cap ends a 60 s window on time, with `INCOMPLETE` written,
+the lock released and no child left; the 20-request pre-roll and its median reference).
+On the host, `run.sh` needs root
 (RAPL, `perf`, the cpufreq snapshot and `ctl.py`'s write), so its end-to-end path is
 unverified until the first round.
 

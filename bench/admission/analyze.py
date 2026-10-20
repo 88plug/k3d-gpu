@@ -10,17 +10,19 @@ bench/admission/run.sh: run.json, load.jsonl (load.py), and for A_slo ctl.jsonl
   requests        every request started inside the 900 s window
   penalty(arm)    median ttft_s over all the arm's requests / Q median - 1
   loss(arm)       1 - median neighbour bogo-ops/s (real) / N0's
+  NB spread       (max - min of the five N0 per-run bogo-ops/s) / N0 median
   Q spread        (max - min of the five Q per-run medians) / Q median
   drift           |median of Q requests in rounds 1-2 - in rounds 4-5| > max - min
                   of the Q per-run medians (seconds)
   INCONCLUSIVE    a run missing or with a failed request; drift; N0 penalty
-                  inside the Q spread; an A_slo run with fewer than 4 windows, a
-                  stomp, ENOENT or a write error inside the window, or ctl.py dead
-                  at the window end; a neighbour that ended before the window; a
-                  static arm whose cpu.max read-back differs from its set value
+                  inside the Q spread; a neighbour run with no bogo-ops/s value; an
+                  A_slo run with fewer than 4 windows, a stomp, ENOENT, a read or
+                  write error inside the window, or ctl.py dead at the window end; a
+                  neighbour that ended before the window; a static arm without both
+                  cpu.max reads equal to its set value
   SUPPORTED       else, all of (a) A_slo penalty <= +10%, (b) A_slo loss < 72.4%
                   (H5 CMIN, matrixprod), (c) no static arm (N0, K50, K25) with
-                  penalty <= +10% and loss <= A_slo's loss
+                  penalty <= +10% and loss <= A_slo's loss + NB spread
   REFUTED         else
 Python 3 standard library only.
 """
@@ -75,14 +77,17 @@ def load_runs(root):
                "nb_bogo_s": nb.get("bogo_ops_per_s_real"),
                "nb_ended_before_window_end": (m.group(3) != "Q" and
                                               run.get("neighbour_running_at_window_end") is not True),
+               # Static arms: both reads (window start and end) present and equal to
+               # the set value. A read that failed is absent, and fails this.
                "cpumax_ok": (run.get("cpumax_set") is None or
-                             all(x == run["cpumax_set"] for x in run.get("cpumax_reads", [None])))}
+                             run.get("cpumax_reads") == [run["cpumax_set"]] * 2)}
         if rec["arm"] == "A_slo":
             ticks = _jsonl(os.path.join(d, "ctl.jsonl"))
             inside = [t for t in ticks if w0 <= t["t"] < w1]
             rec["ctl"] = {"windows": max([t.get("windows", 0) for t in ticks] or [0]),
                           "stomps": sum(1 for t in inside if t.get("stomp")),
                           "enoent": sum(1 for t in inside if t.get("event") == "no_neighbour"),
+                          "read_errors": sum(1 for t in inside if t.get("event") == "read_error"),
                           "write_errors": sum(1 for t in inside if t.get("event") == "write_error"),
                           "alive_at_window_end": bool(run.get("ctl_alive_at_window_end"))}
         runs.append(rec)
@@ -102,6 +107,8 @@ def analyze(runs):
                 reasons.append(f"{arm} round {rnd}: {r['failed']} failed request(s)")
             if not r["ttft"]:
                 reasons.append(f"{arm} round {rnd}: no completed request")
+            if arm != "Q" and r["nb_bogo_s"] is None:
+                reasons.append(f"{arm} round {rnd}: no neighbour bogo-ops/s (metrics-brief line missing)")
             if arm != "Q" and r["nb_ended_before_window_end"]:
                 reasons.append(f"{arm} round {rnd}: neighbour ended before the window")
             if arm in STATIC and not r["cpumax_ok"]:
@@ -110,7 +117,7 @@ def analyze(runs):
                 c = r["ctl"]
                 if c["windows"] < MIN_WINDOWS:
                     reasons.append(f"A_slo round {rnd}: {c['windows']} windows (< {MIN_WINDOWS})")
-                for k in ("stomps", "enoent", "write_errors"):
+                for k in ("stomps", "enoent", "read_errors", "write_errors"):
                     if c[k]:
                         reasons.append(f"A_slo round {rnd}: {c[k]} {k} in the window")
                 if not c["alive_at_window_end"]:
@@ -126,7 +133,9 @@ def analyze(runs):
     q_runs = [statistics.median(by[("Q", rnd)]["ttft"]) for rnd in ROUNDS]
     spread_s = max(q_runs) - min(q_runs)
     drift_s = abs(statistics.median(pooled("Q", (1, 2))) - statistics.median(pooled("Q", (4, 5))))
-    n0_bogo = statistics.median(by[("N0", rnd)]["nb_bogo_s"] for rnd in ROUNDS)
+    n0_runs = [by[("N0", rnd)]["nb_bogo_s"] for rnd in ROUNDS]
+    n0_bogo = statistics.median(n0_runs)
+    nb_spread = (max(n0_runs) - min(n0_runs)) / n0_bogo
     arms = {}
     for arm in ARMS[1:]:
         bogo = statistics.median(by[(arm, rnd)]["nb_bogo_s"] for rnd in ROUNDS)
@@ -134,7 +143,7 @@ def analyze(runs):
                      "p90_penalty": p90(pooled(arm)) / q_p90 - 1,
                      "loss": 1 - bogo / n0_bogo, "bogo_ops_per_s": bogo}
     out = {"q_median_s": q_med, "q_spread_s": spread_s, "q_spread": spread_s / q_med,
-           "drift_s": drift_s, "arms": arms, "failed_conditions": []}
+           "drift_s": drift_s, "nb_spread": nb_spread, "arms": arms, "failed_conditions": []}
     if arms["N0"]["penalty"] <= spread_s / q_med:
         reasons.append(f"N0 penalty {arms['N0']['penalty']:+.1%} inside the Q spread {spread_s / q_med:.1%}")
     if drift_s > spread_s:
@@ -151,7 +160,9 @@ def analyze(runs):
         reasons.append(f"(b) A_slo loss {a['loss']:.1%} >= {H5_CMIN_LOSS:.1%}")
     for arm in STATIC:
         s = arms[arm]
-        if s["penalty"] <= PENALTY_BAR and s["loss"] <= a["loss"]:
+        # A static arm within the neighbour's own run-to-run spread of A_slo's loss
+        # does as well: the controller has not been shown to beat it.
+        if s["penalty"] <= PENALTY_BAR and s["loss"] <= a["loss"] + nb_spread:
             if "c" not in failed:
                 failed.append("c")
             reasons.append(f"(c) static {arm} {s['penalty']:+.1%} at {s['loss']:.1%} loss does as well")

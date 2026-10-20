@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
 """ctl.py: the H55 A_slo controller. The one writer of the neighbour's cpu.max.
 
-  ctl.py --container NAME --slo SECONDS --jsonl LOAD.jsonl --log CTL.jsonl
+  ctl.py --container NAME --ref SECONDS --jsonl LOAD.jsonl --log CTL.jsonl
          --until EPOCH [--start-level 25]
 
+--ref is the round's quiet reference: the median TTFT of its 20 quiet pre-roll
+requests (reference()). Control and scoring use the same statistic, the median.
 Every 1 s tick it:
   1. resolves the neighbour's cgroup: docker State.Pid -> /proc/<pid>/cgroup ->
      /sys/fs/cgroup/<path>/cpu.max. No neighbour (ENOENT): no write, one log line;
-  2. reads cpu.max back; a value other than its own last write is a stomp;
+  2. reads cpu.max back; a value other than its own last write is a stomp. Only a
+     foreign value still there at this read is seen: one written and reverted
+     between two reads, or written between this read and the write below, is
+     overwritten without being counted. Another read error: no write, one log line;
   3. consumes the newline-terminated records load.py appended since the last
-     tick; each 20 completed (ok) requests close one window, whose p95 (nearest
-     rank, the 19th of 20) moves the level: down one if p95 > SLO, up one if
-     p95 <= 0.9 * SLO, else hold, clamped to LEVELS;
+     tick; each 20 completed (ok) requests close one window, whose median moves
+     the level: down one if it is above SLO = 1.10 x ref, up one if it is at most
+     1.05 x ref, else hold, clamped to LEVELS;
   4. writes the absolute quota of the current level. The write(2) is the one
      linearization point; the value depends only on the level, never on the
      read-back, so a stomp is overwritten on the next tick.
@@ -24,8 +29,8 @@ Python 3 standard library only.
 
 import argparse
 import json
-import math
 import os
+import statistics
 import subprocess
 import sys
 import time
@@ -34,22 +39,29 @@ LEVELS = (25.0, 37.5, 50.0, 62.5, 75.0, 87.5, 100.0)  # % of NB_CPUS
 NB_CPUS = 15
 PERIOD_US = 100000
 WINDOW = 20
-UP_FRACTION = 0.90
+DOWN_ABOVE = 1.10  # the SLO, as a multiple of the quiet reference; the +10% pass bar
+UP_AT_OR_BELOW = 1.05
 
 
 def quota_line(level):
     return f"{round(NB_CPUS * PERIOD_US * level / 100)} {PERIOD_US}\n"
 
 
-def p95(values):
-    v = sorted(values)
-    return v[max(0, math.ceil(0.95 * len(v)) - 1)]
+def window_stat(values):
+    return statistics.median(values)
 
 
-def step(idx, p, slo):
-    if p > slo:
+def reference(preroll):
+    """The quiet reference: the window statistic over exactly WINDOW quiet requests."""
+    if len(preroll) != WINDOW:
+        raise ValueError(f"need {WINDOW} quiet pre-roll requests, got {len(preroll)}")
+    return window_stat(preroll)
+
+
+def step(idx, stat, ref):
+    if stat > DOWN_ABOVE * ref:
         return max(0, idx - 1)
-    if p <= UP_FRACTION * slo:
+    if stat <= UP_AT_OR_BELOW * ref:
         return min(len(LEVELS) - 1, idx + 1)
     return idx
 
@@ -81,8 +93,8 @@ class Tail:
 
 
 class Controller:
-    def __init__(self, slo, tail, resolve, log, start_level=25.0):
-        self.slo = slo
+    def __init__(self, ref, tail, resolve, log, start_level=25.0):
+        self.ref = ref
         self.tail = tail
         self.resolve = resolve
         self.log = log
@@ -106,6 +118,11 @@ class Controller:
             entry["event"] = "no_neighbour"
             self.log(entry)
             return entry
+        except OSError as e:
+            entry["event"] = "read_error"
+            entry["error"] = f"{type(e).__name__}: {e}"
+            self.log(entry)
+            return entry
         entry["readback"] = readback.strip()
         if self.last_written is not None and readback.strip() != self.last_written.strip():
             self.stomps += 1
@@ -115,10 +132,10 @@ class Controller:
                 self.pending.append(rec["ttft_s"])
         while len(self.pending) >= WINDOW:
             win, self.pending = self.pending[:WINDOW], self.pending[WINDOW:]
-            p = p95(win)
-            self.idx = step(self.idx, p, self.slo)
+            m = window_stat(win)
+            self.idx = step(self.idx, m, self.ref)
             self.windows += 1
-            entry.setdefault("p95", []).append(p)
+            entry.setdefault("median", []).append(m)
         target = quota_line(self.level)
         entry.update(level=self.level, target=target.strip(), windows=self.windows)
         try:
@@ -152,7 +169,7 @@ def docker_resolver(container):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--container", required=True)
-    ap.add_argument("--slo", type=float, required=True)
+    ap.add_argument("--ref", type=float, required=True)
     ap.add_argument("--jsonl", required=True)
     ap.add_argument("--log", required=True)
     ap.add_argument("--until", type=float, required=True)
@@ -163,7 +180,7 @@ def main(argv=None):
     def log(entry):
         os.write(fd, (json.dumps(entry) + "\n").encode())
 
-    c = Controller(a.slo, Tail(a.jsonl), docker_resolver(a.container), log, a.start_level)
+    c = Controller(a.ref, Tail(a.jsonl), docker_resolver(a.container), log, a.start_level)
     seen = False
     while True:
         now = time.time()

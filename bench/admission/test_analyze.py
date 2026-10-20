@@ -17,7 +17,7 @@ N0_BOGO = 20000.0
 BASE = {"N0": (0.40, 0.0), "K50": (0.25, 0.50), "K25": (0.12, 0.75), "A_slo": (0.15, 0.70)}
 
 
-def runs(table=None, a_slo_ctl=None, nb_early=(), n=20):
+def runs(table=None, a_slo_ctl=None, nb_early=(), n=20, n0_jitter=0.0):
     """table: arm -> (penalty, loss). Every run of an arm has n requests at the
     arm's penalty over the Q median, so the pooled median is exact."""
     table = dict(BASE, **(table or {}))
@@ -27,11 +27,14 @@ def runs(table=None, a_slo_ctl=None, nb_early=(), n=20):
         out.append({"arm": "Q", "round": rnd, "ttft": [Q_RUN_MEDIANS[rnd - 1]] * n, "failed": 0,
                     "nb_bogo_s": None, "nb_ended_before_window_end": False, "cpumax_ok": True})
         for arm, (pen, loss) in table.items():
+            # n0_jitter spreads N0's per-run bogo-ops/s by +/- half that fraction (median kept).
+            j = n0_jitter * (rnd - 3) / 4 if arm == "N0" else 0.0
             r = {"arm": arm, "round": rnd, "ttft": [q_med * (1 + pen)] * n, "failed": 0,
-                 "nb_bogo_s": N0_BOGO * (1 - loss), "nb_ended_before_window_end": (arm, rnd) in nb_early,
+                 "nb_bogo_s": N0_BOGO * (1 - loss) * (1 + j),
+                 "nb_ended_before_window_end": (arm, rnd) in nb_early,
                  "cpumax_ok": True}
             if arm == "A_slo":
-                r["ctl"] = dict({"windows": 5, "stomps": 0, "enoent": 0, "write_errors": 0,
+                r["ctl"] = dict({"windows": 5, "stomps": 0, "enoent": 0, "read_errors": 0, "write_errors": 0,
                                  "alive_at_window_end": True}, **(a_slo_ctl or {}))
             out.append(r)
     return out
@@ -79,8 +82,28 @@ class Verdict(unittest.TestCase):
         r = self.v(table={"A_slo": (0.08, 0.40)}, nb_early={("K50", 3)})
         self.assertEqual(r["verdict"], "INCONCLUSIVE")
 
+    def test_static_within_neighbour_noise_counts_as_doing_as_well(self):
+        # K50 loses 1 point more than A_slo, inside N0's own run-to-run spread (4%):
+        # the controller has not beaten it, so (c) fails.
+        r = self.v(table={"A_slo": (0.08, 0.49), "K50": (0.09, 0.50)}, n0_jitter=0.04)
+        self.assertEqual(r["verdict"], "REFUTED", r["reasons"])
+        self.assertEqual(r["failed_conditions"], ["c"])
+        self.assertAlmostEqual(r["nb_spread"], 0.04, places=6)
+        # Outside that spread A_slo beats it.
+        r = self.v(table={"A_slo": (0.08, 0.40), "K50": (0.09, 0.50)}, n0_jitter=0.04)
+        self.assertEqual(r["verdict"], "SUPPORTED", r["reasons"])
+
+    def test_inconclusive_missing_bogo(self):
+        # stress-ng --metrics-brief line not found: no neighbour value, no crash.
+        for arm in ("N0", "K25", "A_slo"):
+            rs = runs(table={"A_slo": (0.08, 0.40)})
+            next(r for r in rs if r["arm"] == arm and r["round"] == 4)["nb_bogo_s"] = None
+            r = analyze.analyze(rs)
+            self.assertEqual(r["verdict"], "INCONCLUSIVE", arm)
+            self.assertTrue(any("bogo" in x for x in r["reasons"]), r["reasons"])
+
     def test_inconclusive_ctl_dead_or_enoent(self):
-        for bad in ({"alive_at_window_end": False}, {"enoent": 1}, {"write_errors": 1}):
+        for bad in ({"alive_at_window_end": False}, {"enoent": 1}, {"read_errors": 1}, {"write_errors": 1}):
             r = self.v(table={"A_slo": (0.08, 0.40)}, a_slo_ctl=bad)
             self.assertEqual(r["verdict"], "INCONCLUSIVE", bad)
 
@@ -99,6 +122,25 @@ class Verdict(unittest.TestCase):
 
 class Reader(unittest.TestCase):
     """load_runs reads a results tree written in run.sh's layout."""
+
+    def _static(self, root, reads):
+        d = os.path.join(root, "r2-p3-K50")
+        os.makedirs(d, exist_ok=True)
+        run = {"arm": "K50", "round": 2, "window_start": 0.0, "window_end": 10.0,
+               "neighbour": {"bogo_ops_per_s_real": 1.0}, "neighbour_running_at_window_end": True,
+               "cpumax_set": "750000 100000", "cpumax_reads": reads}
+        with open(os.path.join(d, "run.json"), "w") as f:
+            json.dump(run, f)
+        (r,) = analyze.load_runs(root)
+        return r["cpumax_ok"]
+
+    def test_static_readback_needs_both_reads(self):
+        # cgroup_cpumax failing yields no read; no evidence is not a pass.
+        for reads, want in (([], False), (["750000 100000"], False),
+                            (["750000 100000", "max 100000"], False),
+                            (["750000 100000", "750000 100000"], True)):
+            with tempfile.TemporaryDirectory() as root:
+                self.assertEqual(self._static(root, reads), want, reads)
 
     def test_load_runs(self):
         with tempfile.TemporaryDirectory() as root:
@@ -126,7 +168,7 @@ class Reader(unittest.TestCase):
         self.assertFalse(r["nb_ended_before_window_end"])
         self.assertTrue(r["cpumax_ok"])  # A_slo: ctl owns cpu.max, no static read-back check
         # ENOENT and stomps count only inside the window; windows is the last count.
-        self.assertEqual(r["ctl"], {"windows": 2, "stomps": 1, "enoent": 0, "write_errors": 0,
+        self.assertEqual(r["ctl"], {"windows": 2, "stomps": 1, "enoent": 0, "read_errors": 0, "write_errors": 0,
                                     "alive_at_window_end": True})
 
 

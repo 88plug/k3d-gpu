@@ -2,6 +2,7 @@
 """Tests for the H55 A_slo controller (ctl.py), against a fake cgroup directory."""
 
 import json
+import math
 import os
 import random
 import subprocess
@@ -53,9 +54,19 @@ class Fake:
         with open(self.jsonl, "a") as f:
             f.write("\n")
 
-    def controller(self, slo=10.0, level=25.0):
-        return ctl.Controller(slo=slo, tail=ctl.Tail(self.jsonl), resolve=self.resolve,
+    def controller(self, ref=10.0, level=25.0):
+        return ctl.Controller(ref=ref, tail=ctl.Tail(self.jsonl), resolve=self.resolve,
                               log=self.log.append, start_level=level)
+
+
+# H5's quiet prefill arm on this host: median 7.15 s, p90 8.25 s (EXPERIMENTS.md H5 run
+# table). A log-normal with that median and p90 stands in for a quiet trace.
+H5_Q_MEDIAN = 7.15
+H5_Q_SIGMA = math.log(8.25 / 7.15) / 1.2816
+
+
+def quiet(rng, n, scale=1.0):
+    return [scale * H5_Q_MEDIAN * math.exp(rng.gauss(0.0, H5_Q_SIGMA)) for _ in range(n)]
 
 
 class Ctl(unittest.TestCase):
@@ -90,26 +101,26 @@ class Ctl(unittest.TestCase):
 
     def test_window_needs_20(self):
         f = Fake(self.tmp)
-        c = f.controller(slo=10.0, level=50.0)
-        f.add([1.0] * 19)
+        c = f.controller(ref=10.0, level=50.0)
+        f.add([10.0] * 19)
         c.tick(1.0)
         self.assertEqual(c.windows, 0)
         self.assertEqual(c.level, 50.0)
-        f.add([1.0])
+        f.add([10.0])
         c.tick(2.0)
         self.assertEqual(c.windows, 1)
-        self.assertEqual(c.level, 62.5)  # p95 1.0 <= 0.9 * 10: one level up
+        self.assertEqual(c.level, 62.5)  # median 10.0 = ref <= 1.05 x ref: one level up
         self.assertEqual(f.read(), "937500 100000\n")
 
     def test_hysteresis_band(self):
         i50 = ctl.LEVELS.index(50.0)
-        self.assertEqual(ctl.step(i50, 9.5, 10.0), i50)       # in (0.9 SLO, SLO]: hold
-        self.assertEqual(ctl.step(i50, 10.0, 10.0), i50)      # = SLO: hold
-        self.assertEqual(ctl.step(i50, 10.01, 10.0), i50 - 1)  # > SLO: down
-        self.assertEqual(ctl.step(i50, 9.0, 10.0), i50 + 1)   # = 0.9 SLO: up
-        self.assertEqual(ctl.step(0, 99.0, 10.0), 0)          # clamp at 25%
+        self.assertEqual(ctl.step(i50, 10.5, 10.0), i50 + 1)   # = 1.05 ref: up
+        self.assertEqual(ctl.step(i50, 10.51, 10.0), i50)      # in (1.05 ref, 1.10 ref]: hold
+        self.assertEqual(ctl.step(i50, 11.0, 10.0), i50)       # = 1.10 ref (the SLO): hold
+        self.assertEqual(ctl.step(i50, 11.01, 10.0), i50 - 1)  # > SLO: down
+        self.assertEqual(ctl.step(0, 99.0, 10.0), 0)           # clamp at 25%
         top = len(ctl.LEVELS) - 1
-        self.assertEqual(ctl.step(top, 1.0, 10.0), top)       # clamp at 100%
+        self.assertEqual(ctl.step(top, 1.0, 10.0), top)        # clamp at 100%
         self.assertEqual(ctl.LEVELS[0], 25.0)
         self.assertEqual(ctl.LEVELS[-1], 100.0)
 
@@ -123,10 +134,70 @@ class Ctl(unittest.TestCase):
         c.tick(2.0)
         self.assertEqual(c.windows, 1)
 
-    def test_p95_nearest_rank(self):
-        xs = list(range(1, 21))
+    def test_window_statistic_is_the_median(self):
+        xs = [float(x) for x in range(1, 21)]
         random.Random(5).shuffle(xs)
-        self.assertEqual(ctl.p95(xs), 19)
+        self.assertEqual(ctl.window_stat(xs), 10.5)
+        # The reference is the same statistic over the 20-request quiet pre-roll.
+        self.assertEqual(ctl.reference(xs), 10.5)
+        with self.assertRaises(ValueError):
+            ctl.reference(xs[:19])
+
+    def test_quiet_trace_climbs(self):
+        # With no neighbour effect the controller must climb: 6 windows of 20 (one
+        # 900 s run at the quiet TTFT) from the 25% floor. The reference and every
+        # window are drawn from H5's quiet distribution, over 200 seeds. The rule this
+        # replaced (window p95 against 0.9 x 1.10 x the pre-roll median) left all 200
+        # at the floor.
+        final = []
+        for seed in range(200):
+            rng = random.Random(seed)
+            ref = ctl.reference(quiet(rng, ctl.WINDOW))
+            idx = 0
+            for _ in range(6):
+                idx = ctl.step(idx, ctl.window_stat(quiet(rng, ctl.WINDOW)), ref)
+            final.append(ctl.LEVELS[idx])
+        high = sum(v >= 75.0 for v in final)
+        floor = sum(v == 25.0 for v in final)
+        self.assertGreaterEqual(high, 160, f"{high}/200 quiet traces ended at 75% or above")
+        self.assertLessEqual(floor, 10, f"{floor}/200 quiet traces ended at the 25% floor")
+
+    def test_quiet_trace_through_the_controller(self):
+        rng = random.Random(7)
+        f = Fake(self.tmp)
+        c = f.controller(ref=ctl.reference(quiet(rng, ctl.WINDOW)), level=25.0)
+        levels = []
+        for t in range(6):
+            f.add(quiet(rng, ctl.WINDOW))
+            c.tick(float(t))
+            levels.append(c.level)
+        self.assertEqual(levels[0], 37.5)
+        self.assertGreater(levels[-1], 75.0)
+
+    def test_settles_where_the_penalty_enters_the_band(self):
+        # Penalty 16% x level: 25% -> +4% (up), 37.5% -> +6% (hold, inside (5%, 10%]).
+        f = Fake(self.tmp)
+        c = f.controller(ref=10.0, level=25.0)
+        for t in range(6):
+            f.add([10.0 * (1 + 0.16 * c.level / 100)] * ctl.WINDOW)
+            c.tick(float(t))
+        self.assertEqual(c.level, 37.5)
+        # A heavy neighbour (+20% at every level) walks it down to the floor and holds.
+        c = f.controller(ref=10.0, level=62.5)
+        for t in range(6):
+            f.add([12.0] * ctl.WINDOW)
+            c.tick(float(10 + t))
+        self.assertEqual(c.level, 25.0)
+
+    def test_readback_oserror_logged_not_raised(self):
+        f = Fake(self.tmp)
+        c = f.controller(level=50.0)
+        c.tick(1.0)
+        c.resolve = lambda: f.dir  # open() on a directory: IsADirectoryError, an OSError
+        e = c.tick(2.0)
+        self.assertEqual(e["event"], "read_error")
+        self.assertIn("IsADirectoryError", e["error"])
+        self.assertEqual(f.read(), "750000 100000\n")
 
     def test_absolute_not_delta(self):
         f = Fake(self.tmp)
@@ -170,7 +241,7 @@ class LoadToCtl(unittest.TestCase):
                     recs = [json.loads(line) for line in f]
                 self.assertGreaterEqual(len(recs), WINDOW_MIN)
                 self.assertTrue(all(r["ok"] and r["ttft_s"] > 0 and r["t_end"] >= r["t_start"] for r in recs))
-                c = fake.controller(slo=10.0, level=50.0)
+                c = fake.controller(ref=10.0, level=50.0)
                 c.tick(1.0)
                 self.assertEqual(c.windows, len(recs) // ctl.WINDOW)
         finally:
