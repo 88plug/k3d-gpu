@@ -1,0 +1,192 @@
+{
+  "measured_at": 1792536872.4764025,
+  "arms": {
+    "int4": {
+      "turn_s": [
+        2.9401946631260216,
+        3.058491500094533,
+        2.9873535647056997,
+        3.0154399988241494,
+        2.9417491289786994
+      ],
+      "dnll": 0.07222274511527615,
+      "flagged": false,
+      "flag_reason": null,
+      "spread": [
+        2.9401946631260216,
+        2.9873535647056997,
+        3.058491500094533
+      ],
+      "dnll_wikitext2": 0.06159032534246567
+    },
+    "int8": {
+      "turn_s": [
+        5.474587442353368,
+        5.41639898205176,
+        5.521278735715896,
+        5.514971669763327,
+        5.5032034371979535
+      ],
+      "dnll": -0.0030094751406557485,
+      "flagged": false,
+      "flag_reason": null,
+      "spread": [
+        5.41639898205176,
+        5.5032034371979535,
+        5.521278735715896
+      ],
+      "dnll_wikitext2": -0.010994450220156438
+    },
+    "fp16": {
+      "turn_s": [
+        4.132658309768885,
+        4.12092602904886,
+        4.3031549751758575,
+        4.231958080083132,
+        4.2248838930390775
+      ],
+      "dnll": 0.0,
+      "flagged": false,
+      "flag_reason": null,
+      "spread": [
+        4.12092602904886,
+        4.2248838930390775,
+        4.3031549751758575
+      ],
+      "dnll_wikitext2": 0.0
+    }
+  },
+  "gate_nats": 0.05,
+  "reference_pick": "fp16",
+  "reasons": [
+    "fp16: pass, median turn 4.225 s, dNLL 0.0000",
+    "int4: dNLL 0.0722 > gate 0.0500",
+    "int8: pass, median turn 5.503 s, dNLL -0.0030"
+  ],
+  "control_ratio": {
+    "R1": 1.0139767347181499,
+    "R2": 0.9681095113983423,
+    "R3": 1.010620396096142,
+    "R4": 0.9730867783218621,
+    "R5": 1.016743688179727
+  },
+  "reference_wins": {
+    "R1": true,
+    "R2": true,
+    "R3": true,
+    "R4": true,
+    "R5": true
+  },
+  "wins": 5,
+  "rounds": 5,
+  "probe_picks": {
+    "P1": {
+      "pick": "fp16",
+      "est_turn_s": {
+        "int4": 3.1586471151841256,
+        "int8": 5.583061420768049,
+        "fp16": 4.223087380177364
+      }
+    },
+    "P2": {
+      "pick": "fp16",
+      "est_turn_s": {
+        "fp16": 4.297643437525332,
+        "int8": 5.761361577507247,
+        "int4": 3.024035336823398
+      }
+    },
+    "P3": {
+      "pick": "fp16",
+      "est_turn_s": {
+        "int4": 3.224789709872341,
+        "int8": 5.72937987369134,
+        "fp16": 4.258179447615065
+      }
+    }
+  },
+  "probe_agree": 3,
+  "probe_repeats": 3,
+  "errors": [],
+  "notes": [],
+  "load": {
+    "matched": true,
+    "verdict": "MATCHED",
+    "rule": "legacy",
+    "checks": [
+      {
+        "metric": "busy_pct",
+        "arms": {
+          "int4": 37.318,
+          "int8": 37.47,
+          "fp16": 37.41,
+          "int4'": 37.424
+        },
+        "spread": 0.152,
+        "limit": 5.0,
+        "status": "ok"
+      },
+      {
+        "metric": "load1",
+        "arms": {
+          "int4": 25.728,
+          "int8": 25.262,
+          "fp16": 25.854,
+          "int4'": 25.356
+        },
+        "spread": 0.592,
+        "limit": 3.878,
+        "status": "ok"
+      },
+      {
+        "metric": "pkg_w",
+        "arms": {
+          "int4": 202.662,
+          "int8": 202.866,
+          "fp16": 204.564,
+          "int4'": 203.026
+        },
+        "spread": 1.902,
+        "limit": 20.456,
+        "status": "ok"
+      },
+      {
+        "metric": "throttle_per_min",
+        "arms": {
+          "int4": 0.0,
+          "int8": 0.0,
+          "fp16": 0.0,
+          "int4'": 0.0
+        },
+        "spread": 0.0,
+        "limit": 10.0,
+        "status": "ok"
+      },
+      {
+        "metric": "swap_used_mib",
+        "arms": {
+          "int4": 0.0,
+          "int8": 0.0,
+          "fp16": 0.0,
+          "int4'": 0.0
+        },
+        "spread": 0.0,
+        "limit": 256.0,
+        "status": "ok"
+      },
+      {
+        "metric": "swap_delta_mib",
+        "arms": {
+          "int4": 0.0,
+          "int8": 0.0,
+          "fp16": 0.0,
+          "int4'": 0.0
+        },
+        "spread": 0.0,
+        "limit": 64.0,
+        "status": "ok"
+      }
+    ]
+  },
+  "probe_span_note": "probe wall per repeat is in probe.log (budget 60 s)"
+}

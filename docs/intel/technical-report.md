@@ -1,17 +1,17 @@
 # k3d-gpu on Intel hardware: technical report
 
-Status: working report, 2026-10-20. Ledger: [EXPERIMENTS.md](../../EXPERIMENTS.md), verdicts as of origin/main `a32a970` (45 rows).
+Status: working report, 2026-10-20. Ledger: [EXPERIMENTS.md](../../EXPERIMENTS.md), verdicts as of origin/main `ef87f86` (59 rows).
 
 ## Abstract
 
 k3d-gpu turns one Linux host into a single-node k3s cluster (k3d) that detects the host's Intel hardware and configures it. It sets NRI balloons for hybrid P/E and NUMA CPUs, device plugins for iGPU, dGPU, NPU, DSA, IAA, QAT and Gaudi, and placement labels for agent and inference pods.
 
-This report covers what was measured, and how. Every result but H52 (a Xeon 6741P host) comes from one host: an i9-13900T (Raptor Lake-S, 8 P-cores and 16 E-cores, UHD 770 iGPU with no XMX, AVX-VNNI, no AMX, no NPU). It is a T-SKU rated at 35 W base power, but its firmware runs PL1 = PL2 = 117 W, so it does not run the T-series 35 W envelope.
+This report covers what was measured, and how. Every result but H52 and H27x (a Xeon 6741P host) comes from one host: an i9-13900T (Raptor Lake-S, 8 P-cores and 16 E-cores, UHD 770 iGPU with no XMX, AVX-VNNI, no AMX, no NPU). It is a T-SKU rated at 35 W base power, but its firmware runs PL1 = PL2 = 117 W, so it does not run the T-series 35 W envelope.
 
 - Fifteen hypotheses are SUPPORTED. All fifteen are scoped to that host.
-- Twelve are REFUTED. Six of them changed shipped defaults.
+- Thirteen are REFUTED. Six of them changed shipped defaults.
 - Nineteen are INCONCLUSIVE, mostly because the shared host throttles or its load was unmatched.
-- Eight are PENDING: the Xeon 6741P rows H50, H50o, H51 and H52b, and the cross-host replications H25x, H27x, H28x and H34x, pre-registered and not yet run. H52, the first row run on that host (a Xeon 6741P with four Arc Pro B70s), is REFUTED.
+- Twelve are PENDING: the Xeon 6741P rows H50, H50o, H51, H52b, H54a, H54q, H54b, H54c and H54d, and the cross-host replications H25x, H28x and H34x, pre-registered and not yet run. H52, the first row run on that host (a Xeon 6741P with four Arc Pro B70s), is REFUTED. H27x, H27 re-run on the Xeon (AMX), is REFUTED as on the i9.
 - Every other Intel family is detected and configured in fixture tests only. None has a measurement.
 
 No world-first, superlative or priority claim is made; [docs/provenance.md](../provenance.md) supports none.
@@ -68,7 +68,7 @@ The host is a shared, live machine: about 53 other containers, about 80 W idle p
 | H28 | Eight pods that mmap one 1 GiB model through an image volume shared one page-cache copy: PSS 132.5 MiB per pod and 1.00x the model size on the node, against 1028.5 MiB and 9.00x for pods that copy it into an emptyDir; they were ready in 2980 ms vs 6333 ms (0.47x, CI 0.45-0.55, complete separation), under matched `typical` background load (amendment 27) [ledger:H28] | One host, overlayfs, N = 8, a 1 GiB file read page by page, CPU-resident weights. The time part clears 0.5x by a small margin |
 | H40 | The agent harness reproduces the BFCL board: bf16 Qwen3-4B-Instruct-2507 on vLLM CUDA scored 88.0% on the fixed 100-id subset in BFCL's own mode (board-weighted 84.9%, band 77.9-91.9%), every category inside its binomial interval [ledger:H40] | A check of the harness, not of the hardware; one 100-id subset, one run, on the NVIDIA dGPU |
 
-### REFUTED (all but H5, H27, H43, H45 and H48 changed a default)
+### REFUTED (all but H5, H27, H27x, H43, H45 and H48 changed a default)
 
 | Row | What was refuted | Effect on the product |
 |---|---|---|
@@ -79,6 +79,7 @@ The host is a shared, live machine: about 53 other containers, about 80 W idle p
 | H12, H13 | A Helm release named like EAT's adopts the baked balloons policy without a force flag. It never changed the policy spec [ledger:H12] [ledger:H13] | The two H14 install paths |
 | H17 | DRA can be the default Intel GPU path with gpu-v0.12.1 [ledger:H17] | DRA stays opt-in |
 | H27 | An on-box precision probe beats the static int4 default on agent-turn latency. Under matched background load, int4 failed the probe's quality gate, so the probe and the reference both picked int8, and int8 is slower than int4 [ledger:H27] | None: int4 stays the static default, and `autoquant` is a quality gate on this host, not a speed win |
+| H27x | H27 on a Xeon 6741P with AMX, same weights and probe. int4 failed the quality gate again; the probe and the reference both picked fp16 (bf16 on AMX, which decoded faster than int8 here), and fp16's turn was 1.24 s slower than int4's [ledger:H27x] | None: int4 stays the static default on an AMX Xeon too |
 | H43 | Heavy E-core load keeps the CPU stack's time per C12 coding task (Intel's coding agent, its sandbox on the E-cores) within the pre-registered bound. In four short blocks it finished one task at both levels: 66.9 s at `typical`, 122.7 s at `heavy`. One task decides this verdict [ledger:H43] | None: sandbox placement is unchanged |
 | H45 | The CPU stack (OVMS int4, P-cores) serves 1-4 graded banking agents per box at `typical` load. It failed at one agent: turn p95 26.1 s against the 10 s SLO, and 31 requests against the 60 needed. The RTX 4000 AWQ stack held 8 agents, and Ollama failed at one [ledger:H45] | None: no default rests on agents per box |
 | H48 | The agent graders were sound as first run. A remote GLM-5.3 arm failed 5 of 12 items, 4 of them because DevUI joined the answer text with spaces; with that fixed, it passed 11 of 12 in a regrade and in a fresh run [ledger:H48] | Harness only: the grader was fixed and regression-tested before any agent verdict was read; no product default |

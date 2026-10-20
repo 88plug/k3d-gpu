@@ -1231,7 +1231,7 @@ doctor_says "missing accel-config on ubuntu gives the apt install as its apply" 
     '^ {8}apply: +sudo apt-get update && sudo apt-get install -y accel-config$'
 mkdir -p "${r}/usr/bin"; printf '#!/bin/sh\n' > "${r}/usr/bin/accel-config"; chmod +x "${r}/usr/bin/accel-config"
 doctor_says "installed accel-config is not flagged" "${r}" 'accel-config is not installed' negate
-doctor_says "each DSA device is its own finding with its WQ mode" "${r}" 'warn.*: DSA dsa0: disabled — 1 engine, 1 group, 1 dedicated user WQ'
+doctor_says "each DSA device is its own finding with its WQ mode" "${r}" 'warn.*: DSA dsa0: disabled, nothing configured — 1 engine, 1 group, 1 dedicated user WQ'
 echo enabled > "${r}/sys/bus/dsa/devices/dsa0/state"
 doctor_says "an enabled DSA device (kernel work queues) gets no config commands" "${r}" 'dsa0/engine0' negate
 rm "${r}/sys/devices/pci0000:00/0000:01:00.0/sriov_totalvfs"
@@ -1264,9 +1264,120 @@ r=$(newroot idxd-enabled)
 kernel "${r}" 6.18.1
 idxd_dev "${r}" 0000:e7:01.0 0x11fb dsa0 0
 echo enabled > "${r}/sys/bus/dsa/devices/dsa0/state"
-doctor_says "an all-enabled kind with no user WQ is left to its owner" "${r}" \
-    'warn.*: DSA: 1 device\(s\) but no user work queues and none is disabled'
-doctor_says "an all-enabled kind gets no host-setup pointer" "${r}" 'DSA.*host-setup --apply' negate
+doctor_says "an enabled device with no enabled WQ is left alone, with the reason" "${r}" \
+    'warn.*: DSA dsa0: left alone — enabled with no enabled work queue'
+doctor_says "a kind with nothing runnable gets no host-setup pointer" "${r}" 'DSA.*host-setup --apply' negate
+
+# ---- DSA/IAA held by kernel work queues (iaa_crypto, dmaengine) -------------------
+
+# idxd_wq <root> <wq> <state> <type> <size> <group> [driver]: a WQ on the dsa bus,
+# optionally bound to a WQ driver (crypto = iaa_crypto, dmaengine, user).
+idxd_wq() {
+    local w="$1/sys/bus/dsa/devices/$2"
+    mkdir -p "${w}"
+    echo "$3" > "${w}/state"; echo "$4" > "${w}/type"; echo "$5" > "${w}/size"; echo "$6" > "${w}/group_id"
+    if [ -n "${7:-}" ]; then
+        mkdir -p "$1/sys/bus/dsa/drivers/$7"
+        ln -sfn "$1/sys/bus/dsa/drivers/$7" "${w}/driver"
+    fi
+}
+idxd_engine() { mkdir -p "$1/sys/bus/dsa/devices/$2"; echo "$3" > "$1/sys/bus/dsa/devices/$2/group_id"; }
+idxd_group()  { mkdir -p "$1/sys/bus/dsa/devices/$2"; }
+
+# kernel_wqs <root>: as crescent boots. iax1: enabled, wq1.0 a kernel WQ (size 32)
+# on iaa_crypto ("crypto"), all 8 engines in group 0, 7 free WQs. iax3: enabled,
+# its kernel WQ claims all 128 entries. dsa0: enabled, wq0.0 a kernel WQ on
+# dmaengine with engine0.0 in group 0, three free engines and groups, user PASID.
+kernel_wqs() {
+    local i
+    kernel "$1" 6.18.1
+    idxd_dev "$1" 0000:e7:01.0 0x11fb dsa0 0
+    idxd_dev "$1" 0000:e7:02.0 0x1216 iax1 0
+    idxd_dev "$1" 0000:e8:02.0 0x1216 iax3 0
+    for d in dsa0 iax1 iax3; do
+        echo enabled > "$1/sys/bus/dsa/devices/${d}/state"
+        echo 128 > "$1/sys/bus/dsa/devices/${d}/max_work_queues_size"
+        echo 0 > "$1/sys/bus/dsa/devices/${d}/pasid_enabled"
+    done
+    echo 1 > "$1/sys/bus/dsa/devices/dsa0/pasid_enabled"
+    idxd_wq "$1" wq1.0 enabled kernel 32 0 crypto
+    idxd_wq "$1" wq3.0 enabled kernel 128 0 crypto
+    for i in 1 2 3 4 5 6 7; do
+        idxd_wq "$1" "wq1.${i}" disabled none 0 -1
+        idxd_wq "$1" "wq3.${i}" disabled none 0 -1
+    done
+    for i in 0 1 2 3 4 5 6 7; do idxd_engine "$1" "engine1.${i}" 0; idxd_engine "$1" "engine3.${i}" 0; done
+    for i in 0 1 2 3; do idxd_group "$1" "group1.${i}"; idxd_group "$1" "group3.${i}"; idxd_group "$1" "group0.${i}"; done
+    idxd_wq "$1" wq0.0 enabled kernel 32 0 dmaengine
+    for i in 1 2 3 4 5 6 7; do idxd_wq "$1" "wq0.${i}" disabled none 0 -1; done
+    idxd_engine "$1" engine0.0 0
+    for i in 1 2 3; do idxd_engine "$1" "engine0.${i}" -1; done
+}
+
+r=$(newroot kernel-wqs)
+kernel_wqs "${r}"
+snap=/var/lib/k3d-gpu
+doctor_says "IAA with a kernel WQ only: left alone unless opted in, kernel WQ named" "${r}" \
+    'warn.*: IAA iax1: enabled with kernel work queue\(s\) only \(iax1/wq1\.0\) — left alone unless you opt in \(k3d-gpu host-setup --apply --with-kernel-wqs'
+doctor_says "IAA kernel WQ: opt-in apply snapshots, disables, restores, adds a user WQ in the kernel WQ's group, re-enables" "${r}" \
+    "^ {8}apply: +sudo install -d -m 0700 ${snap} && ${ac} save-config -s ${snap}/idxd-all\.conf && sudo python3 -c '[^']*' ${snap}/idxd-all\.conf iax1 ${snap}/idxd-iax1\.conf && ${ac} disable-device iax1 && ${ac} load-config -c ${snap}/idxd-iax1\.conf && ${ac} config-wq iax1/wq1\.1 --group-id=0 --type=user --mode=dedicated --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && ${ac} enable-device iax1 && ${ac} enable-wq iax1/wq1\.0 && ${ac} enable-wq iax1/wq1\.1$"
+doctor_says "IAA kernel WQ: revert restores the snapshot, kernel WQ re-enabled" "${r}" \
+    "^ {8}revert: ${ac} disable-device iax1 && ${ac} load-config -c ${snap}/idxd-iax1\.conf && ${ac} enable-device iax1 && ${ac} enable-wq iax1/wq1\.0$"
+doctor_says "IAA kernel WQ: load-config never enables other devices (no -e)" "${r}" 'load-config -c [^ ]+ -e' negate
+doctor_says "IAA whose kernel WQ claims every entry is left alone with the count" "${r}" \
+    'warn.*: IAA iax3: left alone — kernel WQ\(s\) wq3\.0 \(crypto\) hold it and leave no free WQ or WQ entries \(128 of 128 claimed\)'
+doctor_says "iax3 gets no commands" "${r}" 'idxd-iax3|iax3/wq3\.1' negate
+doctor_says "DSA kernel WQ: a free engine and group give the user WQ its own group, shared with PASID" "${r}" \
+    "^ {8}apply: +sudo install -d -m 0700 ${snap} && ${ac} save-config -s ${snap}/idxd-all\.conf && sudo python3 -c '[^']*' ${snap}/idxd-all\.conf dsa0 ${snap}/idxd-dsa0\.conf && ${ac} disable-device dsa0 && ${ac} load-config -c ${snap}/idxd-dsa0\.conf && ${ac} config-engine dsa0/engine0\.1 --group-id=1 && ${ac} config-wq dsa0/wq0\.1 --group-id=1 --type=user --mode=shared --threshold=15 --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && ${ac} enable-device dsa0 && ${ac} enable-wq dsa0/wq0\.0 && ${ac} enable-wq dsa0/wq0\.1$"
+doctor_says "DSA kernel WQ: revert" "${r}" \
+    "^ {8}revert: ${ac} disable-device dsa0 && ${ac} load-config -c ${snap}/idxd-dsa0\.conf && ${ac} enable-device dsa0 && ${ac} enable-wq dsa0/wq0\.0$"
+doctor_says "a kernel-WQ device is never in a plain (non-opt-in) apply" "${r}" 'apply: +sudo accel-config config-engine (iax1|dsa0)/' negate
+out=$(env K3D_GPU_SYSROOT="${r}" bash "${K3D_GPU}" detect 2>&1 >/dev/null)
+if grep -E 'present but disabled: DSA dsa0\(kernel WQ\), IAA iax1\(kernel WQ\) .*k3d-gpu host-setup --apply; a device marked \(kernel WQ\) also needs --with-kernel-wqs' <<< "${out}" >/dev/null \
+    && ! grep -q 'iax3' <<< "${out}"; then
+    PASS=$((PASS + 1)); echo "ok   detect names kernel-WQ devices and the opt-in flag"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL detect names kernel-WQ devices and the opt-in flag"; sed 's/^/  | /' <<< "${out}"
+fi
+doctor_says "the snapshot filter fails when the device is missing, never writes an empty one" "${r}" \
+    "s or sys\.exit\(\"no \" \+ sys\.argv\[2\]"
+mkdir -p "${r}/sys/module/zswap/parameters"
+echo deflate-iaa > "${r}/sys/module/zswap/parameters/compressor"; echo Y > "${r}/sys/module/zswap/parameters/enabled"
+doctor_says "IAA under live zswap deflate-iaa is left alone" "${r}" \
+    "warn.*: IAA iax1: left alone — kernel WQ\(s\) wq1\.0 \(crypto\) serve zswap's deflate-iaa compressor"
+doctor_says "IAA under live zswap gets no commands" "${r}" 'idxd-iax1\.conf' negate
+doctor_says "zswap does not hold back DSA" "${r}" 'idxd-dsa0\.conf'
+echo N > "${r}/sys/module/zswap/parameters/enabled"
+doctor_says "zswap off but still on deflate-iaa (its pool keeps the pages) holds IAA too" "${r}" 'idxd-iax1\.conf' negate
+echo zstd > "${r}/sys/module/zswap/parameters/compressor"
+doctor_says "zswap on another compressor lets the IAA opt-in through" "${r}" 'idxd-iax1\.conf'
+
+# Edge cases of the free WQ / engine / group choice.
+r=$(newroot kernel-wq-edges)
+kernel "${r}" 6.18.1
+idxd_dev "${r}" 0000:e7:01.0 0x11fb dsa0 0
+idxd_dev "${r}" 0000:e7:02.0 0x1216 iax1 0
+idxd_dev "${r}" 0000:e8:01.0 0x11fb dsa2 0
+for d in dsa0 iax1 dsa2; do echo 128 > "${r}/sys/bus/dsa/devices/${d}/max_work_queues_size"; echo 1 > "${r}/sys/bus/dsa/devices/${d}/pasid_enabled"; done
+echo enabled > "${r}/sys/bus/dsa/devices/dsa0/state"; echo enabled > "${r}/sys/bus/dsa/devices/iax1/state"
+# dsa0: 120 of 128 claimed, engines 0.0-0.9 in groups 0..9, engine0.10 free, group0.10 free.
+idxd_wq "${r}" wq0.0 enabled kernel 120 0 dmaengine
+idxd_wq "${r}" wq0.1 disabled none 0 -1
+for i in 0 1 2 3 4 5 6 7 8 9; do idxd_engine "${r}" "engine0.${i}" "${i}"; idxd_group "${r}" "group0.${i}"; done
+idxd_engine "${r}" engine0.10 -1; idxd_group "${r}" group0.10
+doctor_says "partial room: the user WQ gets the 8 free entries, threshold 7, in the two-digit free group" "${r}" \
+    "${ac} config-engine dsa0/engine0\.10 --group-id=10 && ${ac} config-wq dsa0/wq0\.1 --group-id=10 --type=user --mode=shared --threshold=7 --wq-size=8 "
+# iax1: 127 of 128 claimed with PASID: one entry is too few for a shared WQ.
+idxd_wq "${r}" wq1.0 enabled kernel 127 0 crypto
+idxd_wq "${r}" wq1.1 disabled none 0 -1
+idxd_engine "${r}" engine1.0 0
+doctor_says "PASID with 1 free entry falls back to dedicated, size 1" "${r}" \
+    "${ac} config-wq iax1/wq1\.1 --group-id=0 --type=user --mode=dedicated --wq-size=1 "
+doctor_says "PASID with 1 free entry says why it is dedicated" "${r}" 'IAA iax1: .*1 dedicated user WQ \(1 free WQ entry is too few for a shared one\)'
+# dsa2: disabled, but someone left a WQ configured on it.
+idxd_wq "${r}" wq2.0 disabled kernel 32 0
+doctor_says "a disabled but configured device is left alone" "${r}" 'warn.*: DSA dsa2: left alone — disabled but already configured by someone else'
+doctor_says "a disabled but configured device gets no commands" "${r}" 'dsa2/engine|dsa2/wq2' negate
 
 r=$(newroot qat-no-driver-novf)
 kernel "${r}" 6.18.1

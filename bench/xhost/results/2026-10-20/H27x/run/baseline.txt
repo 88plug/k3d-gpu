@@ -1,0 +1,5 @@
+ 22:47:25 up 35 days, 1 min,  9 users,  load average: 14.74, 5.99, 7.08
+19
+OpenVINO/Qwen3-4B-int4-ov b467368d16b75df14055562fe927ae8e1f15f7ef
+OpenVINO/Qwen3-4B-int8-ov fd9c3cc8adf942151e48904b7341a57eae58d8d5
+OpenVINO/Qwen3-4B-fp16-ov 00298f1c614ffdc000814d8cbe1b7613aa73cdca

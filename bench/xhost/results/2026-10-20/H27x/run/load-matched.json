@@ -1,0 +1,79 @@
+{
+ "matched": true,
+ "verdict": "MATCHED",
+ "rule": "legacy",
+ "checks": [
+  {
+   "metric": "busy_pct",
+   "arms": {
+    "int4": 37.318,
+    "int8": 37.47,
+    "fp16": 37.41,
+    "int4'": 37.424
+   },
+   "spread": 0.152,
+   "limit": 5.0,
+   "status": "ok"
+  },
+  {
+   "metric": "load1",
+   "arms": {
+    "int4": 25.728,
+    "int8": 25.262,
+    "fp16": 25.854,
+    "int4'": 25.356
+   },
+   "spread": 0.592,
+   "limit": 3.878,
+   "status": "ok"
+  },
+  {
+   "metric": "pkg_w",
+   "arms": {
+    "int4": 202.662,
+    "int8": 202.866,
+    "fp16": 204.564,
+    "int4'": 203.026
+   },
+   "spread": 1.902,
+   "limit": 20.456,
+   "status": "ok"
+  },
+  {
+   "metric": "throttle_per_min",
+   "arms": {
+    "int4": 0.0,
+    "int8": 0.0,
+    "fp16": 0.0,
+    "int4'": 0.0
+   },
+   "spread": 0.0,
+   "limit": 10.0,
+   "status": "ok"
+  },
+  {
+   "metric": "swap_used_mib",
+   "arms": {
+    "int4": 0.0,
+    "int8": 0.0,
+    "fp16": 0.0,
+    "int4'": 0.0
+   },
+   "spread": 0.0,
+   "limit": 256.0,
+   "status": "ok"
+  },
+  {
+   "metric": "swap_delta_mib",
+   "arms": {
+    "int4": 0.0,
+    "int8": 0.0,
+    "fp16": 0.0,
+    "int4'": 0.0
+   },
+   "spread": 0.0,
+   "limit": 64.0,
+   "status": "ok"
+  }
+ ]
+}

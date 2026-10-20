@@ -1492,6 +1492,12 @@ the fix:
 - **Compute runtime ahead of libstdc++** (`version 'GLIBCXX_3.4.35' not found`; `clinfo` silently loses the Intel platform): the runtime was built by a newer GCC than the installed `gcc-libs`. Checked by comparing symbol versions, running `clinfo -l` and `ldd` on the registered ICD.
 - Parts newer than the kernel's default support get boot options (printed, never applied): `i915.force_probe=<id>` for i915 parts (Meteor Lake, Arrow Lake), `xe.force_probe=<id> i915.force_probe=!<id>` for xe parts.
 - **Xeon DSA, IAA and QAT present but unconfigured** (no user work queue, no VFs): the plan carries the same per-device commands `k3d-gpu doctor` prints, as the intel-device-plugins v0.37.1 initcontainers configure them, and prints each revert. These last until reboot. `up` and `detect` name such engines and point here.
+  A device that kernel work queues already hold (iaa_crypto, dmaengine) is left
+  alone unless you pass `--with-kernel-wqs`. Disabling an idxd device clears its
+  whole config, so that path snapshots it first (`accel-config save-config` to
+  `/var/lib/k3d-gpu/idxd-<dev>.conf`), writes the snapshot back, adds the user WQ
+  beside the kernel ones, and re-enables them. Its revert loads the same snapshot.
+  Under live zswap on `deflate-iaa` the IAA device is never touched.
 
 Downloads go to `${XDG_CACHE_HOME:-~/.cache}/k3d-gpu/host-setup` (override: `K3D_GPU_SETUP_DIR`), which must be a directory you own; it is set to mode 0700. On Ubuntu an apt pin keeps the PPA's `intel-opencl-icd`/`libze*`/`libigc*` builds from replacing the GitHub .debs.
 
