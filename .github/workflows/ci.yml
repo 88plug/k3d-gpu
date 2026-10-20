@@ -234,6 +234,7 @@ jobs:
       - run: python3 bench/eatflow/test_agentbench.py
       - run: python3 bench/eatflow/test_pairs.py
       - run: python3 bench/eatflow/test_h4345.py
+      - run: python3 bench/prefill-guard/test_analyze.py
 
   mcp-tests:
     name: MCP server tests
