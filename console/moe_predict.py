@@ -57,15 +57,17 @@ GPU_SPECS = {
 # pinned versions (EXPERIMENTS.md H54 pre-registration). Order is preference.
 ENGINES = [
     {"name": "ovms", "container": "ov", "devices": ("cpu", "gpu"), "tp": False, "formats": None,
-     "image": "openvino/model_server:2026.4.1 (CPU) / 2026.4.1-gpu"},
+     "images": ("openvino/model_server:2026.4.1@sha256:148e3fe802261ed0b5b634de3bbccdefe7176a218ec34a88e382b40704c34a1c",
+                "openvino/model_server:2026.4.1-gpu@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58")},
     {"name": "llm-scaler-vllm", "container": "safetensors", "devices": ("gpu",), "tp": True,
-     "formats": ("bf16", "fp16", "fp8", "w4a16"), "image": "intel/llm-scaler-vllm:1.5"},
+     "formats": ("bf16", "fp16", "fp8", "w4a16"), "images": ("intel/llm-scaler-vllm:1.5@sha256:52218ad85513ab6686d4c090c83c2bd8c5b02423c63aa4dabd41837fe641fe3b",)},
     {"name": "vllm-cpu", "container": "safetensors", "devices": ("cpu",), "tp": False,
-     "formats": ("bf16", "fp16", "w4a16"), "image": "vllm/vllm-openai-cpu:v0.32.0"},
+     "formats": ("bf16", "fp16", "w4a16"), "images": ("vllm/vllm-openai-cpu:v0.32.0@sha256:ffaba3989b9b96d95a576143c872a4110ce9800f5199b6a36eb27bdff1cbbe05",)},
     {"name": "sglang-cpu", "container": "safetensors", "devices": ("cpu",), "tp": False,
-     "formats": ("bf16", "fp8", "w4a16"), "image": "lmsysorg/sglang:v0.5.22-xeon"},
+     "formats": ("bf16", "fp8", "w4a16"), "images": ("lmsysorg/sglang:v0.5.22-xeon@sha256:4e5c413ed9a31f38f74e18aa9b645d65a0b0a023d42f63edb4e2b412ea1a230f",)},
     {"name": "llama.cpp", "container": "gguf", "devices": ("cpu", "gpu", "hybrid"), "tp": False,
-     "formats": None, "image": "ghcr.io/ggml-org/llama.cpp:server-b11749 / server-intel-b11749"},
+     "formats": None, "images": ("ghcr.io/ggml-org/llama.cpp:server-b11749@sha256:9fbaa06d7f4449e2ae0d02b40e0431f7c212dcf231c9e3a7777a6afc2cc8f312",
+                "ghcr.io/ggml-org/llama.cpp:server-intel-b11749@sha256:ae2d41ba73574a1e12cd237c88b512c8bb39ba6f703e873912b76cb8988a81bd")},
 ]
 # Architectures with a narrower engine set than their container suggests.
 ARCH_ENGINES = {"Qwen4ExpForConditionalGeneration": ("llama.cpp",), "qwen4exp": ("llama.cpp",)}
@@ -519,7 +521,9 @@ def predict(w, host, dram, opts):
         t = None if any(bw is None for _, bw, _ in terms) else sum(b / bw for _, bw, b in terms)
         if t is not None:
             t += hops * hop
+        images = next(e["images"] for e in ENGINES if e["name"] == names[0])
         rows.append({"placement": placement, "engine": names[0], "engines": names, "devices": devices,
+                     "images": list(images),
                      "terms": [{"memory": m, "gbs": round(bw / 1e9, 1) if bw else None, "bytes": b}
                                for m, bw, b in terms],
                      "hops": hops, "hop_us": round(hop * 1e6, 3),
