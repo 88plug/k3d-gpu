@@ -76,6 +76,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H34x | H34's hypothesis on the Xeon 6741P: same-engine CPU Fast Draft (OVMS 2026.4.1, `OpenVINO/Qwen3-0.6B-int4-ov` draft on the CPU) beats the `OpenVINO/Qwen3-4B-int4-ov` target alone on single-stream decode, under matched background load. A replication: the original models are kept. | Written 2026-10-20, before any H34x measurement. At `typical`: median paired B/A decode tok/s 1.40 (1.15-1.70) and median paired B/A package J/token 0.75 (0.60-0.95); SUPPORTED by H34's rule (tok/s >= 1.20 with its CI above 1.0, J/token <= 0.85 with its CI below 1.0) at 0.6, REFUTED 0.25 (the draft's share of a faster target step grows), INCONCLUSIVE 0.15. | H34's `bench/hetero-spec/h34.sh` and `h34.py`, n = 12 pairs A B / B A, 5 s load window per request, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h34`, `K3D_GPU_VENDORS=none`, node container on CPUs 0-23,48-71, crescent amendment C1, `typical` only. | PENDING |
 | H25x | H25's hypothesis (T part) on the Xeon 6741P: agents that send a byte-identical system prompt and tools to one OVMS CPU server reuse one prefix KV, so an added agent's first chunk arrives at least 4x sooner with the shipping prefix caching on than with `--enable_prefix_caching=false`. A replication: the original model and prefix shape are kept. | Written 2026-10-20, before any H25x measurement. Added-agent median TTFT OFF 1.2 s (0.5-2.5), ON 0.15 s (0.06-0.4), ratio 8x (4.5-14), the ratio's 95% CI lower bound >= 4x; c/OFF >= 0.8. SUPPORTED 0.75; the risk is fixed per-request overhead, which a 5-10x faster prefill leaves as a larger share of the ON time. M (memory per agent) not measured, as in H25 run 4. | H25's `bench/shared-prefix/run.sh` and `probe.py score` (A3 first-chunk TTFT, A4 amendment-27 load rule), ON OFF interleaved 3+3 rounds, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h25`, `K3D_GPU_VENDORS=none`, node container on CPUs 0-23,48-71 (`NODE_CPUS`), crescent amendment C1, `typical` only. | PENDING |
 | H28x | H28's hypothesis on the Xeon 6741P: N = 8 agent pods that mmap one 1 GiB model through an image volume share one page-cache copy and become ready in at most half the time of pods that copy it into an emptyDir. A replication (H28 has no model; the 1 GiB blob is kept). | Written 2026-10-20, before any H28x measurement. Memory parts hold (0.95): T PSS <= 160 MiB per pod, model page cache about 1.0x size (T) vs about 9x (C). Time part uncertain: the copy runs at memory speed on this host, so the fixed pod-start cost is a larger share of both arms; T/C round-median ready 0.55 (0.35-0.8). SUPPORTED 0.35, REFUTED (time part) 0.5, other rows 0.15. | H28's `bench/zero-copy-models/probe.sh` (A1, A2), arms C T T C C T plus the unscored warm-up, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h28`, crescent amendment C1 passed to the plain `k3d cluster create`, `typical` only, scored by `bench/zero-copy-models/score.py` (H28's table, committed with this pre-registration). | PENDING |
+| H7x | H7's hypothesis on the Xeon 6741P, run to H7's full protocol: OVMS's decode lead over EAT's vLLM CPU engine comes from weight precision, not from the engine. One checkpoint (`Qwen/Qwen3-4B` @ `1cfa9a72`), OVMS 2026.4.1 on its 16-bit IR (`OpenVINO/Qwen3-4B-fp16-ov` @ `00298f1c`) and vLLM CPU v0.24.0 in bf16 with EAT's chart defaults decode within 15% of each other, and land within 15% in effective weight bandwidth. A replication: H7's models and versions are kept. | Written 2026-10-20, before any H7x measurement. On AMX both engines compute in bf16 and batch-1 decode reads the same 8.0 GB per token, so the engine gap shrinks: R = OVMS/vLLM decode 1.10 (0.85-1.40); SUPPORTED 0.45, REFUTED 0.30, INCONCLUSIVE 0.25. Reported, not scored: prefill TTFT on ~1936 tokens vLLM/OVMS 1.5 (0.7-4; the i9 gap of 4.3x was outside H7's prediction), C/B decode (`--enforce-eager` dropped) 1.0-1.3, decode incremental J/token per arm. | `bench/apb/h7x.sh` (H7's `h7.sh` extended to the pre-registered protocol: H2's workloads and energy method, blocks A B B A A B B A A B, then one C block with `--enforce-eager` dropped), scored by `bench/apb/h7x.py`; decision rule, host changes and hold in [H7x pre-registration](#h7x-pre-registration-h7-to-its-full-protocol-on-the-xeon-6741p-2026-10-20). | PENDING |
 
 ## Falsification log
 
@@ -1632,6 +1633,76 @@ each arm's last hold ran out of budget for every arm. A1, C1 and C2 closed no st
 no APB (bracket from 0). A3 passed one step, at 1 agent (82 requests, p95 1.47 s), so its APB is
 >= 1. A 3 min budget is too short for this tool, which defaults to 15 min, so these brackets
 say nothing about the graded result.
+
+### H7x pre-registration: H7 to its full protocol on the Xeon 6741P (2026-10-20)
+
+Written 2026-10-20T23:10Z, before any H7x measurement (a render-only check of the manifests
+ran on the host; no server was started). H7 keeps its INCONCLUSIVE verdict on the i9-13900T.
+
+**Why.** H7's i9 run was short of its own pre-registration (3 and 2 blocks instead of 5 ABBA
+rounds, no `--enforce-eager`-dropped arm, no energy) and its decode gap (15.6% of vLLM's rate,
+13.5% of OVMS's) straddled the line. This row runs the whole protocol, on the CPU EAT's vLLM
+path is written for (Xeon with AMX), and fixes in advance how the 15% line is read.
+
+**Arms** (H7's): A = OVMS 2026.4.1 (`openvino/model_server@sha256:a928903f...76fc58`),
+`agent manifest` CPU, `OpenVINO/Qwen3-4B-fp16-ov` @ `00298f1c`, no draft
+(`K3D_GPU_AGENT_DRAFT=off`; H7 predates the CPU Fast Draft default); B = vLLM CPU v0.24.0
+(`vllm/vllm-openai-cpu:v0.24.0@sha256:b0e6f860...981a1`) with EAT's chart at `0d3438d`
+(`xeon-values.yaml` + `integrations/eat/vllm-values.yaml`, KV 6 GiB, `--max-model-len 32768`),
+`Qwen/Qwen3-4B` @ `1cfa9a72` in bf16; C = B with `--enforce-eager` removed and nothing else
+changed (its own Deployment and Service, selector label `h7x-arm: c`). The int4 second arm runs
+only if vLLM v0.24.0 CPU is first shown to load an int4 build of the same checkpoint (H7); it is
+not run.
+
+**Protocol** (H7: "H2 workloads and energy method, arms interleaved ABBA, 5 rounds").
+Blocks A B B A A B B A A B (H2's order, 5 blocks per arm), then one C block. One server runs at
+a time; consecutive blocks of one engine keep the server up, as `h7.sh` does. Per block: 1 decode
+and 1 prefill warm-up (excluded), `bench/energy.sh` over a 20 s model-loaded idle, then
+`bench/energy.sh` around each workload through `bench/llm_load.py` (temperature 0, `ignore_eos`,
+unique prompts, streamed): decode 5 x (default ~30-token prompt, 256 out, c=1); prefill
+5 x (unique ~1936-token prompt, 16 out, c=1); conc4 8 x 128 out at 4 in flight. Energy:
+RAPL `intel-rapl:0` package through `sudo`, incremental J = E - idle W x t (H2).
+
+**Decision rule** (fixed now; H7 left the reading of "within 15%" open). R = median A decode
+tok/s / median B decode tok/s over every request of the valid blocks; gap(x) = max(x, 1/x) - 1.
+Block pairs in run order (the k-th A block with the k-th B block; 5 pairs), r_k = ratio of
+their block medians. R_bw = R x (A weight bytes / B weight bytes) = R x 0.99999.
+- SUPPORTED: gap(R) < 0.15, gap(R_bw) < 0.15 and gap(r_k) < 0.15 for all 5 pairs.
+- REFUTED: gap(R) >= 0.15 and all 5 r_k on the same side of 1 as R with gap(r_k) >= 0.15
+  (either engine faster by 15% or more, consistently).
+- INCONCLUSIVE: anything else, or >= 2 void blocks in A or B (a block is void when its decode
+  phase has fewer than 5 ok requests or a request stops short of 256 tokens).
+- Reported, never gating: C/B decode, prefill TTFT and conc4 per arm, decode incremental
+  J/token per arm. `bench/apb/h7x.py` applies this mechanically (unit tests in
+  `bench/apb/test_h7x.py`).
+
+**Host changes** (as the cross-host rows, X1-X5 of the
+[cross-host pre-registration](#cross-host-pre-registration-h25x-h27x-h28x-h34x-on-the-xeon-6741p-2026-10-20)):
+`bench/xhost/hold.sh` on the shared lock; node container pinned to CPUs 0-23,48-71 and both
+engines sized to those 48 CPUs (`H7X_CPUS=48`; H7 gave each engine the whole 16-CPU P-core
+balloon); `K3D_GPU_VENDORS=none`; crescent C1 kubelet thresholds; node image
+`cryptoandcoffee/k3d-gpu:0.1.61`; models downloaded on the host at the pinned commits
+(`bench/xhost/fetch_models.py`). No background load, as H7 (it predates the matched-load
+design); the host's own serving stack is the background, recorded by `serving.py` and the
+hold's pre/post snapshots.
+
+**Hold.** One hold, cap 4200 s (11 blocks; a vLLM cold start is the slow step). If the cap ends
+the run before all 10 A/B blocks, the blocks that ran are scored by the same rule, and fewer than
+4 valid blocks in A or B reads INCONCLUSIVE.
+
+**Reproduce.**
+
+```bash
+X=~/k3dgpu-xhost
+C1="--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1%"
+$X/hfvenv/bin/python bench/xhost/fetch_models.py $X/models \
+  OpenVINO/Qwen3-4B-fp16-ov@00298f1c614ffdc000814d8cbe1b7613aa73cdca Qwen/Qwen3-4B@1cfa9a7208912126459214e8b04321603b3df60c
+git -C $X/eat-src checkout 0d3438d     # https://github.com/intel/enterprise-agent-toolkit
+bench/xhost/hold.sh H7x 4200 env K3D_GPU_IMAGE=cryptoandcoffee/k3d-gpu:0.1.61 K3D_GPU_VENDORS=none \
+  K3D_GPU_K3S_ARGS="$C1" K3D_GPU_CLUSTER=k3dgpu-x-h7 H7X_CPUS=48 H7X_NODE_CPUS=0-23,48-71 \
+  APB_MODELS=$X/models APB_EAT_CHART=$X/eat-src/core/helm-charts/vllm APB_OUT=$X/runs/H7x \
+  bench/apb/h7x.sh
+```
 
 ### Cross-host pre-registration: H25x, H27x, H28x, H34x on the Xeon 6741P (2026-10-20)
 
