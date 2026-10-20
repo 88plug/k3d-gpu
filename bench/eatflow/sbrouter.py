@@ -1,0 +1,196 @@
+#!/usr/bin/env python3
+"""sandbox router for the H43 live runner (Python 3 standard library only).
+
+The coding-agent-maf blueprint reaches its sandbox through upstream's sandbox-router
+(kubernetes-sigs/agent-sandbox clients/python/agentic-sandbox-client/sandbox-router),
+which `k3d-gpu sandbox up` does not install. This is that router's HTTP path, reduced
+to what the blueprint's `sandbox.commands.run` uses: each request is forwarded to the
+sandbox its headers name, X-Sandbox-Pod-IP when given, else
+http://<X-Sandbox-ID>.<X-Sandbox-Namespace>.svc.cluster.local:<X-Sandbox-Port>
+(port 8888 by default). Router headers, Authorization and hop-by-hop headers are not
+forwarded. With ROUTER_AUTH_TOKEN set, a request needs `Authorization: Bearer <token>`.
+No WebSocket path (the blueprint does not use one).
+
+  python3 sbrouter.py serve [--host 0.0.0.0] [--port 8080]   token from ROUTER_AUTH_TOKEN
+  python3 sbrouter.py manifest                                 ConfigMap + Deployment + Service
+"""
+import argparse
+import http.client
+import http.server
+import ipaddress
+import json
+import os
+import re
+import secrets
+import sys
+import threading
+import urllib.parse
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+DNS_LABEL = re.compile(r"^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$")
+ROUTER_HEADERS = {"x-sandbox-id", "x-sandbox-namespace", "x-sandbox-port", "x-sandbox-pod-ip", "x-sandbox-timeout"}
+HOP = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailers",
+       "transfer-encoding", "upgrade", "host", "authorization", "content-length"}
+TIMEOUT_S = 180.0
+
+
+class RoutingError(ValueError):
+    pass
+
+
+def target(headers, domain="cluster.local"):
+    """The sandbox base URL named by the router headers (upstream's _resolve_target)."""
+    sid = headers.get("X-Sandbox-ID")
+    if not sid:
+        raise RoutingError("X-Sandbox-ID header is required.")
+    if len(sid) > 63 or not DNS_LABEL.match(sid):
+        raise RoutingError("Invalid sandbox ID format.")
+    ns = headers.get("X-Sandbox-Namespace") or "default"
+    if len(ns) > 63 or not DNS_LABEL.match(ns):
+        raise RoutingError("Invalid namespace format.")
+    try:
+        port = int(headers.get("X-Sandbox-Port") or 8888)
+        if not 1 <= port <= 65535:
+            raise ValueError
+    except ValueError:
+        raise RoutingError("Invalid port format.")
+    pod_ip = headers.get("X-Sandbox-Pod-IP")
+    if pod_ip:
+        try:
+            ip = ipaddress.ip_address(pod_ip)
+        except ValueError:
+            raise RoutingError("Invalid target IP address format.")
+        if ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_unspecified:
+            raise RoutingError("Invalid target IP address.")
+        host = f"[{ip}]" if ip.version == 6 else str(ip)
+    else:
+        host = f"{sid}.{ns}.svc.{domain}"
+    return f"http://{host}:{port}"
+
+
+def make_handler(token, resolve):
+    class Router(http.server.BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, fmt, *args):
+            sys.stderr.write("sbrouter: " + fmt % args + "\n")
+
+        def _reply(self, code, obj):
+            data = json.dumps(obj).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def _proxy(self):
+            n = int(self.headers.get("Content-Length") or 0)
+            body = self.rfile.read(n) if n else None
+            if self.path == "/healthz":
+                return self._reply(200, {"status": "ok"})
+            if token:
+                parts = (self.headers.get("Authorization") or "").split()
+                if len(parts) != 2 or parts[0].lower() != "bearer" or not secrets.compare_digest(parts[1], token):
+                    return self._reply(401, {"detail": "Missing or invalid Authorization header."})
+            try:
+                base = resolve(self.headers)
+            except RoutingError as e:
+                return self._reply(400, {"detail": str(e)})
+            u = urllib.parse.urlsplit(base)
+            fwd = {k: v for k, v in self.headers.items() if k.lower() not in ROUTER_HEADERS | HOP}
+            try:
+                conn = http.client.HTTPConnection(u.hostname, u.port, timeout=TIMEOUT_S)
+                conn.request(self.command, self.path, body=body, headers=fwd)
+                r = conn.getresponse()
+                data = r.read()
+                conn.close()
+            except (OSError, http.client.HTTPException) as e:
+                return self._reply(502, {"detail": f"Could not connect to the backend sandbox: {e}"})
+            self.send_response(r.status)
+            for k, v in r.getheaders():
+                if k.lower() not in HOP:
+                    self.send_header(k, v)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        do_GET = do_POST = do_PUT = do_DELETE = do_PATCH = _proxy
+    return Router
+
+
+def serve(host, port, token=None, resolve=target):
+    srv = http.server.ThreadingHTTPServer((host, port), make_handler(token, resolve))
+    srv.daemon_threads = True
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv
+
+
+MANIFEST = """apiVersion: v1
+kind: ConfigMap
+metadata: {{name: sandbox-router, namespace: agent-sandbox-system}}
+data:
+  sbrouter.py: |
+{src}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {{name: sandbox-router, namespace: agent-sandbox-system, labels: {{app: sandbox-router}}}}
+spec:
+  replicas: 1
+  selector: {{matchLabels: {{app: sandbox-router}}}}
+  template:
+    metadata: {{labels: {{app: sandbox-router}}}}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: router
+          image: {image}
+          command: ["python3", "-u", "/app/sbrouter.py", "serve", "--host", "0.0.0.0", "--port", "8080"]
+          env:
+            - name: ROUTER_AUTH_TOKEN
+              valueFrom: {{secretKeyRef: {{name: sandbox-router, key: token}}}}
+          ports: [{{containerPort: 8080}}]
+          readinessProbe: {{httpGet: {{path: /healthz, port: 8080}}}}
+          volumeMounts: [{{name: src, mountPath: /app/sbrouter.py, subPath: sbrouter.py}}]
+      volumes: [{{name: src, configMap: {{name: sandbox-router}}}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {{name: sandbox-router-svc, namespace: agent-sandbox-system}}
+spec:
+  selector: {{app: sandbox-router}}
+  ports: [{{port: 8080, targetPort: 8080}}]
+"""
+
+
+def manifest():
+    """The router in-cluster (the token is a Secret `sandbox-router`, key `token`, made separately)."""
+    with open(os.path.join(HERE, "agent.lock")) as f:
+        image = json.load(f)["images"]["proxy_python"]["ref"]
+    with open(os.path.abspath(__file__)) as f:
+        src = "".join(f"    {ln}\n" if ln else "\n" for ln in f.read().split("\n"))
+    return MANIFEST.format(src=src, image=image)
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("serve")
+    p.add_argument("--host", default="0.0.0.0")  # nosec B104 - in-cluster service
+    p.add_argument("--port", type=int, default=8080)
+    sub.add_parser("manifest")
+    a = ap.parse_args(argv)
+    if a.cmd == "manifest":
+        sys.stdout.write(manifest())
+        return 0
+    token = os.environ.get("ROUTER_AUTH_TOKEN", "").strip() or None
+    if not token:
+        raise SystemExit("sbrouter: ROUTER_AUTH_TOKEN is required")
+    srv = serve(a.host, a.port, token)
+    print(f"sbrouter on {a.host}:{srv.server_address[1]}", flush=True)
+    threading.Event().wait()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

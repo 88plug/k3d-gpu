@@ -176,6 +176,16 @@ idle, `load.py settle` and a 10 s pre-window run; a pair is matched when both pr
 agree within amendment 27's tolerances, and during-attempt load is reported, never gated
 ("H47b and H49b pre-registration").
 
+`LIVE_MODE=code` (H43, ARM `A1` or `A3`) runs the coding agent on C12 with
+`k3d-gpu sandbox up`: the router its sandbox SDK calls (`bench/eatflow/sbrouter.py`, in the
+cluster), Redis for its memory, purged before every task (`run --pre-task`), and one block
+per level in `LIVE_CODE_LEVELS` into `LIVE_CODE_DIR`; `k3d-gpu bench agent stretch DIRS --arm A1`
+applies the pre-registered rule. `LIVE_MODE=apb` (H45) runs the ramp steps in `LIVE_APB_RAMP`
+(`apb --ramp 4,8 --base-from HOLD1` continues an earlier hold) with amendment-27 load
+windows, then `k3d-gpu capacity --slo 10` on the arm's last hold;
+`k3d-gpu bench agent apb-score --arm A1=HOLD1,HOLD2 ...` scores the predictions
+([EXPERIMENTS.md](../EXPERIMENTS.md), "H43 and H45 amendment W1").
+
 `k3d-gpu bench agent regrade RUN` applies the current graders to a recorded block (the
 first rows stay in `results.raw.jsonl`); `bench/eatflow/live_table.py RUNS` prints the
 per-arm table (completed, success, turn p95, J per task, load matched).
