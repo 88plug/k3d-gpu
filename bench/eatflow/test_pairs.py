@@ -579,9 +579,11 @@ class H50Test(unittest.TestCase):
         with open(os.path.join(HERE, "live.sh")) as f:
             live = f.read()
         # H50 runs the H49 arms (A1 vs B1) under rule L2, in its own cluster.
-        self.assertRegex(live, r"\n\s*H50\) DESIGN=H49 RULE=L2 ;;")
+        self.assertIn("H50) DESIGN=H49 RULE=L2 KV_GIB=${LIVE_EAT_KV_GIB:-40} ;;", live)   # 40 GiB unless set
         self.assertRegex(live, r"\n\s*H49b\) DESIGN=H49 RULE=L2 ;;")
         self.assertIn('if [ "${RULE}" = L2 ]; then', live)
+        # A1 is the CPU stack even where the auto device would pick an XMX Intel GPU (crescent).
+        self.assertIn("K3D_GPU_AGENT_DEVICE=CPU K3D_GPU_AGENT_MODEL=${TGT}", live)
         # B1's KV cache: 6 GiB by default (H49, H49b on the 125 GiB desktop); H50 runs EAT's
         # shipped Qwen3-4B value (40 GiB) through LIVE_EAT_KV_GIB.
         self.assertIn("KV_GIB=${LIVE_EAT_KV_GIB:-6}", live)

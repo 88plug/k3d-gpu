@@ -30,7 +30,7 @@
 #   LIVE_MODE       agent (default): B24 at LIVE_LEVEL, then a control window;
 #                   bfcl: H41, BFCL S100 server-fc at LIVE_LEVEL, no agent (amendment 23);
 #                   h44: B24's first 12 tasks in blocks none/heavy/none/heavy (amendment 24);
-#                   pairs: ARM = H47, H49, H47b, H49b or H50, both arms live in cluster k3dgpu-e-<arm>, one hold
+#                   pairs: ARM = H47, H49, H47b, H49b, H50 or H50o, both arms live in cluster k3dgpu-e-<arm>, one hold
 #                   of interleaved pairs into LIVE_PAIRS_DIR (LIVE_HOLD = this hold's number);
 #                   code: H43 (amendment W1), the coding agent on C12 with `k3d-gpu sandbox up`, one
 #                   block per level in LIVE_CODE_LEVELS (default "typical heavy heavy typical") into
@@ -217,7 +217,7 @@ if [ "${MODE}" = pairs ]; then
         H49) DESIGN=H49 RULE=L1 ;;
         H47b) DESIGN=H47 RULE=L2 ;;
         H49b) DESIGN=H49 RULE=L2 ;;
-        H50) DESIGN=H49 RULE=L2 ;;
+        H50) DESIGN=H49 RULE=L2 KV_GIB=${LIVE_EAT_KV_GIB:-40} ;;   # EAT's shipped Qwen3-4B KV cache
         H50o) DESIGN=H50o RULE=L2 ;;
         *) echo "pairs: ARM must be H47, H49, H47b, H49b, H50 or H50o"; exit 2 ;;
     esac
@@ -250,7 +250,9 @@ if [ "${MODE}" = pairs ]; then
     stage_path Qwen3-0.6B-int4-ov "${TGT}/${DRAFT_DIR}" 5000
     draft=CPU
     [ "${DESIGN}" = H47 ] && draft=off
-    K3D_GPU_AGENT_MODEL=${TGT} K3D_GPU_AGENT_MODEL_NAME=${SERVED} K3D_GPU_AGENT_DRAFT=${draft} \
+    # A1 is the CPU stack: on a host with an XMX Intel GPU (crescent's B70s) the auto device
+    # would pick the GPU, so the device is named (on the i9-13900T, auto chose CPU).
+    K3D_GPU_AGENT_DEVICE=CPU K3D_GPU_AGENT_MODEL=${TGT} K3D_GPU_AGENT_MODEL_NAME=${SERVED} K3D_GPU_AGENT_DRAFT=${draft} \
         K3D_GPU_AGENT_TOOL_PARSER=hermes3 K3D_GPU_AGENT_REASONING_PARSER='' K3D_GPU_AUTOQUANT=off \
         "${K}" agent manifest > "${OUT}/agent.yaml" 2> "${OUT}/agent.err" || { cat "${OUT}/agent.err"; exit 1; }
     SERVED_A=${SERVED}
@@ -265,7 +267,7 @@ if [ "${MODE}" = pairs ]; then
         # PVC, 12-CPU requests and limits), with the image tag pinned to its digest and the
         # routes that need EAT's ingress and APISIX turned off.
         python3 "${REPO}/bench/apb/stage.py" ovms "${OUT}/agent.yaml" "${OUT}/deploy-a.yaml"
-        helm template ovms-model-server "${LIVE_EAT_OVMS_CHART:?}" --set modelSource=${B3_MODEL} \
+        helm template ovms-model-server "${LIVE_EAT_OVMS_CHART:?}" --set modelSource="${B3_MODEL}" \
             --set image.tag="${B3_TAG}" --set ingress.enabled=false --set apisixRoute.enabled=false \
             > "${OUT}/deploy-b.yaml"
         kubectl apply -f "${OUT}/deploy-b.yaml" > /dev/null
@@ -296,6 +298,14 @@ if [ "${MODE}" = pairs ]; then
         exit 3
     fi
     stamp ready
+    # The CPU ISA each server sees (amx_tile lines in its /proc/cpuinfo) and the B server's
+    # log lines naming its CPU backend (H50: B1 is meant to run with AMX).
+    kubectl -n k3d-gpu-agent exec deploy/ovms -c ovms -- grep -c amx_tile /proc/cpuinfo > "${OUT}/isa-a.txt" 2>&1
+    if [ "${DESIGN}" != H47 ]; then
+        kubectl -n "${B_NS}" exec "deploy/${B_DEP}" -- grep -c amx_tile /proc/cpuinfo > "${OUT}/isa-b.txt" 2>&1
+        kubectl -n "${B_NS}" logs "deploy/${B_DEP}" 2>&1 | grep -iE 'amx|avx512|isa|cpu (backend|platform)|onednn' \
+            | head -40 > "${OUT}/isa-b-log.txt"
+    fi
     podinfo() {  # podinfo NS: "<uid> <image> <imageID>" of the running pod
         kubectl -n "$1" get pods --field-selector=status.phase=Running \
             -o jsonpath='{.items[0].metadata.uid} {.items[0].spec.containers[0].image} {.items[0].status.containerStatuses[0].imageID}'
@@ -388,6 +398,8 @@ gpu_flag=()
 case ${ARM} in
     A1|A2)
         cluster_up
+        # A1 is the CPU stack wherever the auto device would pick an XMX GPU (crescent); A2 the GPU.
+        export K3D_GPU_AGENT_DEVICE=CPU
         [ "${ARM}" = A2 ] && export K3D_GPU_AGENT_DEVICE=GPU
         K3D_GPU_AGENT_MODEL=k3dgpu/Qwen3-4B-Instruct-2507-int4-ov K3D_GPU_AGENT_MODEL_NAME=${SERVED} \
             K3D_GPU_AGENT_TOOL_PARSER=hermes3 K3D_GPU_AGENT_REASONING_PARSER='' K3D_GPU_AUTOQUANT=off \
@@ -414,7 +426,7 @@ case ${ARM} in
         cluster_up
         chart=${LIVE_EAT_CHART:?}
         # EAT stock: xeon-values.yaml as shipped, the tag pinned to its digest and the KV cache
-        # sized to fit this host (6 GiB); no k3d-gpu balloon overlay, stock max_model_len 8192.
+        # sized by LIVE_EAT_KV_GIB (6 GiB by default, to fit the 125 GiB desktop); no k3d-gpu balloon overlay, stock max_model_len 8192.
         printf 'image:\n  tag: "v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1"\n' \
             > "${OUT}/pin.yaml"
         python3 "${REPO}/bench/apb/stage.py" values "${chart}/xeon-values.yaml" "${OUT}/pin.yaml" "${KV_GIB}" "${OUT}/values.yaml"
@@ -602,6 +614,8 @@ if [ "${MODE}" = apb ]; then
     # level baseline (2 x 10 s), a settle gap whose last window is the arm's pre-window, then
     # "during" windows over the steps. Each step is 300 s; the first 30 s are not scored.
     ramp=${LIVE_APB_RAMP:-1,2}
+    top=${LIVE_APB_TOP:-8}
+    [[ "${top}" =~ ^[0-9]+$ ]] || { echo "LIVE_APB_TOP must be a number, got '${top}'"; exit 2; }
     D=${OUT}/apb
     mkdir -p "${D}"
     base=()
@@ -623,7 +637,7 @@ if [ "${MODE}" = apb ]; then
     [ "${rc}" = 0 ] || { echo "ABORTED: apb exited ${rc}" | tee -a "${OUT}/live.log"; exit 1; }
     # The synthetic APB, reported beside the graded one and never scored: on the arm's last
     # hold (a step failed, or N=LIVE_APB_TOP ran: default 8, H51 16), with what the hold leaves (at most 3 min, at least 1).
-    last=$(python3 -c "import json,sys; s=json.load(open(sys.argv[1]))['steps'][-1]; print(int(not s['pass'] or s['n'] == ${LIVE_APB_TOP:-8}))" \
+    last=$(python3 -c "import json,sys; s=json.load(open(sys.argv[1]))['steps'][-1]; print(int(not s['pass'] or s['n'] == ${top}))" \
         "${D}/apb.json" 2>/dev/null || echo 0)
     cmin=$(( (CAP - $(el) - 150) / 60 ))
     [ "${cmin}" -le 3 ] || cmin=3

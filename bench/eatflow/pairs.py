@@ -590,7 +590,7 @@ def analyze(attempts, pairs, hyp, a, b, holds=None):
             verdict = "INCONCLUSIVE"
         d = [ok[a][i] - ok[b][i] for i in sorted(ok[a])]
         res["confidence"] = {"support_share": boot_share(d, lambda v: v >= 0.30),
-                             "method": "share of 2000 paired bootstrap resamples (seed 40) with A1 - B1 >= +0.30"}
+                             "method": "share of 2000 paired bootstrap resamples (seed 40) with " + f"{a} - {b} >= +0.30"}
     else:
         both = [j for j in m if j in completed[a] and j in completed[b]]
         ta = {table[j]["task"]: table[j][b]["duration_s"] for j in both}   # A4

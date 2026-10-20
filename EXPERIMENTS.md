@@ -65,8 +65,8 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H49 | Inside EAT's banking flow (`intel/enterprise-ai-blueprints` v1.0.0 banking-assistant, B24 at N=1, typical load), the k3d-gpu auto-config stack A1 (OVMS int4 on the P-cores with the CPU Fast Draft of #116) delivers far more tasks within the 120 s turn budget than EAT stock B1 (vLLM CPU, bf16), when both arms run in one hold, interleaved task by task. A stack-vs-stack claim (amendment 16). | Written 2026-10-18T07:50-07:00, before any H49 measurement. Within-budget success (graded pass, every turn <= 120 s, task <= the 240 s cap; turn timeouts and cap hits are measured failures, not missing data): A1 >= 0.70 (0.75), B1 <= 0.10 (0.8), paired A1 - B1 >= +60 points (0.7). Secondary, not gated: J per completed task, paired J per attempt, p95 turn, with over-budget counts per arm. | [H47 and H49 pre-registration](#h47-and-h49-pre-registration-within-hold-interleaved-design-2026-10-18): both servers in one cluster in one hold, pairs over B24's task ids in A B B A order, a reset to seed after every mutating attempt, load sampled per attempt and matched per pair on background CPU (rule L1), up to 12 holds for 24 pairs. SUPPORTED: paired difference CI lower bound >= +30 points and A1 within-budget success >= 0.6, load rule and idle-arm check passed. REFUTED: CI upper bound < +30 points. Otherwise INCONCLUSIVE (also: < 16 matched pairs, < 75% of pairs matched, > 2 void pairs, or the idle arm's server above 0.5 CPU). Result ([H49 run](#h49-run-i9-13900t-2026-10-18)): 24 pairs over 7 valid holds (hold 1 void, amendment P2), no void pair; load rule L1 matched 2 of 24 pairs (< 16 and < 75%) and the arm-level swap check failed, so INCONCLUSIVE. B1's unpinned vLLM displaced the E-core load, so `bg_cpu` was lower in B1's window in 22 of 24 pairs. Not registered, all 24 pairs: within-budget success A1 20/24, B1 4/24 (19 over budget), paired difference +0.67 (95% CI +0.42 to +0.88). | INCONCLUSIVE |
 | H47b | H47's hypothesis (CPU draft speculative decoding helps agent tasks: A4 cuts B24's median time per task by >= 10% vs A1 with delta success >= -5 points), re-run with pairs matched on idle pre-windows (load rule L2) instead of during-attempt `bg_cpu` (L1). | As H47: a 0-15% gain; SUPPORTED at 0.35. No prediction of the matched-pair count (see the pre-registration's null estimate). | Pre-registered 2026-10-18T14:35-07:00, before any H47b measurement; see [H47b and H49b pre-registration](#h47b-and-h49b-pre-registration-load-rule-l2-pairs-matched-on-pre-windows-2026-10-18). Arms, tasks, budgets, A B B A order, holds (at most 2 of 25 min), voids, outcome classes, statistic and thresholds as H47. Only change: rule L2. Before each attempt, with both arms idle, `load.py settle` then a 10 s pre-window; a pair is matched when both pre-windows show the full load and agree on load-CPU busy, throttle/min, swap used and swap growth within amendment 27's `TOLERANCE`; arm-level check `matched_a27` on the matched pairs' pre-windows; during-attempt `bg_cpu`, package W and throttle reported, never gated. INCONCLUSIVE below 16 matched pairs or 75% matched, or on the arm-level or idle check. `LIVE_MODE=pairs live.sh H47b`, `agentbench pairs-report --hyp H47b`. Result ([H47b run](#h47b-run-i9-13900t-2026-10-18)): 10 pairs in the 2 permitted 25-min holds (each stopped at the 600 s pair-start guard; settle gaps took a median 35 s, 5 of 20 hit the 60 s cap), none void or over budget, idle check 0.0006 CPU; L2 matched 4 of 10 pairs (6 unmatched: throttle/min 5, busy 1), under 16 and under 75%, so INCONCLUSIVE; the arm-level check on the 4 passes. On the 4 matched pairs: gain 18.1% (95% CI 5.0-19.2%), delta success 0 (4/4 both arms), J per attempt A1/A4 1.15 (1.00-1.18); derived confidence 0.95 of bootstrap resamples at a gain >= 10%, 0 below 0 (4 pairs: direction only). Reproduce: the run section. | INCONCLUSIVE |
 | H49b | H49's hypothesis (inside EAT's banking flow, A1 delivers far more B24 tasks within the 120 s turn budget than EAT stock B1, both arms in one hold, interleaved), re-run with pairs matched on idle pre-windows (load rule L2) instead of during-attempt `bg_cpu` (L1), which B1's unpinned vLLM depressed in 22 of 24 H49 pairs. A stack-vs-stack claim (amendment 16). | As H49: A1 within-budget success >= 0.70 (0.75), B1 <= 0.10 (0.8), paired A1 - B1 >= +60 points (0.7). No prediction of the matched-pair count. | Pre-registered 2026-10-18T14:35-07:00, before any H49b measurement; see [H47b and H49b pre-registration](#h47b-and-h49b-pre-registration-load-rule-l2-pairs-matched-on-pre-windows-2026-10-18). Arms, tasks, budgets, A B B A order, holds (40 min, until 24 pairs or 12 holds), voids (> 2 void pairs INCONCLUSIVE), outcome classes, statistic and thresholds as H49. Only change: rule L2, as in H47b. SUPPORTED: paired difference CI lower bound >= +30 points and A1 within-budget success >= 0.6, with L2 and the idle-arm check passed. REFUTED: CI upper bound < +30 points. Otherwise INCONCLUSIVE. `LIVE_MODE=pairs live.sh H49b`, `agentbench pairs-report --hyp H49b`. Result ([H49b run](#h49b-run-i9-13900t-2026-10-18-and-19)): 24 pairs over 10 of 12 holds; 1 void pair (pair 8: hold 4 killed from outside after both attempts, before the pair row), idle check 0.0008 CPU; L2 matched 3 of 23 complete pairs (20 unmatched: throttle/min 10, busy 8, swap used 2), under 16 and under 75%, so INCONCLUSIVE; the arm-level check on the 3 passes. On the 3 matched pairs: A1 3/3, B1 1/3, paired difference +0.67 (95% CI 0.00 to +1.00); derived confidence 0.97 of bootstrap resamples at >= +0.30 (3 pairs: direction only). Outcomes, not gated, all pairs: during-attempt E-core busy A1 67.5% / B1 89.9%, throttle 65 / 3749 per min, package 101.7 / 99.0 W. Not registered, all 23 complete pairs: within-budget success A1 19/23, B1 5/23, paired difference +0.61 (95% CI +0.35 to +0.83). Reproduce: the run section. | INCONCLUSIVE |
-| H50 | On EAT's own target CPU (Xeon 6741P, Granite Rapids, AMX), inside EAT's banking flow, the k3d-gpu CPU stack A1 (OVMS int4 with the CPU Fast Draft, `agent manifest`) still delivers far more B24 tasks within the 120 s turn budget than EAT stock B1 (vLLM CPU bf16, `xeon-values.yaml` as shipped, AMX on), both arms in one hold, interleaved. H49b's comparison moved to the hardware EAT is built for. A stack-vs-stack claim (amendment 16). | Written 2026-10-20, before any measurement on the Xeon. A1 within-budget success >= 0.70 (0.8). B1 >= 0.60 (0.7): with AMX bf16 its turns should fit 120 s. Paired A1 - B1 in [-0.15, +0.20] (0.6), so the expected verdict is REFUTED (0.55), INCONCLUSIVE (0.35), SUPPORTED (0.10). Not gated: median attempt A1/B1 <= 0.7 (0.6); L2 matches >= 16 pairs and >= 75% (0.6). | H49b's design, statistic, outcome classes, grader, gates and thresholds on `crescent`; see [H50-H52 pre-registration](#h50-h52-pre-registration-the-xeon-6741p-2026-10-20). Holds of at most 40 min until 24 pairs or 8 holds. SUPPORTED: paired difference CI lower bound >= +30 points and A1 >= 0.6, with L2, the void and idle-arm checks passed. REFUTED: CI upper bound < +30 points. Otherwise INCONCLUSIVE. `LIVE_MODE=pairs LIVE_EAT_KV_GIB=40 live.sh H50`, `agentbench pairs-report --hyp H50 --arm-a A1 --arm-b B1`. | PENDING |
-| H50o | H50's comparison with arm B3, EAT's own OVMS chart (`core/helm-charts/ovms` at release-1.0.3-hotfix, stock values, `openvino/model_server` 2025.4, the closest OpenVINO/ model it pulls, `OpenVINO/Qwen3-4B-int4-ov`) instead of B1: A1 delivers far more B24 tasks within budget than B3. With H50 it splits B1 -> A1 into EAT switching its own engine (B1 -> B3) and what k3d-gpu adds on top (B3 -> A1). | Written 2026-10-20, before any measurement. B3's stock graph has no tool parser (the chart's `ovms --pull` writes none) and its model reasons by default, so its tool calls arrive as text: B3 within-budget success <= 0.10 (0.7), paired A1 - B3 >= +60 points (0.65), SUPPORTED (0.65). | As H50 with arm B = B3 (same pairs, gates, thresholds, statistic, cluster per hold `k3dgpu-e-h50o`); holds of at most 40 min until 24 pairs or 4 holds. The B1 -> B3 and B3 -> A1 splits are described from the two rows' matched pairs, never gated. `LIVE_MODE=pairs live.sh H50o`, `agentbench pairs-report --hyp H50o --arm-a A1 --arm-b B3`. | PENDING |
+| H50 | On EAT's own target CPU (Xeon 6741P, Granite Rapids, AMX), inside EAT's banking flow, the k3d-gpu CPU stack A1 (OVMS int4 with the CPU Fast Draft, `agent manifest`) still delivers far more B24 tasks within the 120 s turn budget than EAT stock B1 (vLLM CPU bf16, `xeon-values.yaml` as shipped, AMX on), both arms in one hold, interleaved. H49b's comparison moved to the hardware EAT is built for. A stack-vs-stack claim (amendment 16). | Written 2026-10-20, before any measurement on the Xeon. A1 within-budget success >= 0.70 (0.8). B1 >= 0.60 (0.7): with AMX bf16 its turns should fit 120 s. Paired A1 - B1 in [-0.15, +0.20] (0.6). L2 matches >= 16 pairs and >= 75% (0.6), and the gates are read first, so the expected verdict is REFUTED (0.5), INCONCLUSIVE (0.45, mostly the L2 gates), SUPPORTED (0.05). Not gated: median attempt A1/B1 <= 0.7 (0.6). | H49b's design, statistic, outcome classes, grader, gates and thresholds on `crescent`; see [H50-H52 pre-registration](#h50-h52-pre-registration-the-xeon-6741p-2026-10-20). Holds of at most 40 min until 24 pairs or 8 holds. SUPPORTED: paired difference CI lower bound >= +30 points and A1 >= 0.6, with L2, the void and idle-arm checks passed. REFUTED: CI upper bound < +30 points. Otherwise INCONCLUSIVE. `bench/eatflow/crescent/pairs-hold.sh H50 <n>` (`LIVE_MODE=pairs LIVE_CAP=2370 live.sh H50`, KV 40 GiB), `agentbench pairs-report --hyp H50 --arm-a A1 --arm-b B1`. | PENDING |
+| H50o | H50's comparison with arm B3, EAT's own OVMS chart (`core/helm-charts/ovms` at release-1.0.3-hotfix, stock values, `openvino/model_server` 2025.4, the closest OpenVINO/ model it pulls, `OpenVINO/Qwen3-4B-int4-ov`) instead of B1: A1 delivers far more B24 tasks within budget than B3. With H50 it splits B1 -> A1 into EAT switching its own engine (B1 -> B3) and what k3d-gpu adds on top (B3 -> A1). | Written 2026-10-20, before any measurement. B3's stock graph has no tool parser (the chart's `ovms --pull` writes none) and its model reasons by default, so its tool calls arrive as text: B3 within-budget success <= 0.10 (0.7), paired A1 - B3 >= +60 points (0.65). Pair yield: a B3 attempt should end within 30-90 s (a failed tool call or a reasoned text answer), so a 40-min hold should run 15-25 pairs and 24 pairs fit 2-3 holds; L2 passes (0.6), so SUPPORTED (0.5), INCONCLUSIVE (0.45). | As H50 with arm B = B3 (same pairs, gates, thresholds, statistic, cluster per hold `k3dgpu-e-h50o`); holds of at most 40 min until 24 pairs or 6 holds. The B1 -> B3 and B3 -> A1 splits are described from the two rows' matched pairs, never gated. `bench/eatflow/crescent/pairs-hold.sh H50o <n>`, `agentbench pairs-report --hyp H50o --arm-a A1 --arm-b B3`. | PENDING |
 | H51 | Graded agents per box on the Xeon 6741P: H45's ramp, gates and scoring (B15-RO, typical load, 300 s steps, pooled p95 turn <= 10 s, success >= the arm's N=1 success - 10 points, errors <= 1%, >= 60 window requests), extended to N=16, for A1 and B1. | Written 2026-10-20, before any measurement. A1 in [1, 8] (0.5). B1 in [0, 4] (0.5). B1 <= A1 (0.55). | H45's `apb` runner and scorer (`apb-score --hyp H51`, ramp 1, 2, 4, 8, 16), one fresh cluster per hold, at most 4 holds of at most 40 min. A prediction holds when the arm's bracket lies inside its range and is refuted when it lies outside; B1 <= A1 is decided only on matched load. REFUTED when any prediction is refuted, SUPPORTED when all three hold, else INCONCLUSIVE. Runs only if H50's holds end within their cap. | PENDING |
 | H52 | A plain `k3d-gpu up` (no flags, the auto-adapt default) on the Xeon 6741P host as found detects and enables every engine actually present and advertises each usable one to the scheduler, with nothing missing and nothing phantom; engines present but not configured on the host are named, not advertised. | Written 2026-10-20 from an inventory read from sysfs, lspci and CPUID, not from k3d-gpu. 4 x Arc Pro B70 (xe) as `gpu.intel.com/xe: 4`; AMX TILE, BF16, INT8, FP16 and 14 AVX-512/VNNI labels; no hybrid, NUMA, NVIDIA, Gaudi or NPU objects; DSA, IAA and QAT named as present but unconfigured (0.4: `up` may not name them). | The table in [H50-H52 pre-registration](#h50-h52-pre-registration-the-xeon-6741p-2026-10-20): `k3d-gpu doctor`, `K3D_GPU_CLUSTER=k3dgpu-h52 k3d-gpu up`, `kubectl get node -o json`, `k3d-gpu test`, and one enumeration pod per B70. SUPPORTED: every row matches. REFUTED: any row does not. | PENDING |
 | H52b | After `k3d-gpu host-setup --apply` configures the host's DSA, IAA and QAT (the fix that adds that path, merged first), a plain `k3d-gpu up` also advertises them, and each one reaches a pod; the host is then restored exactly. | Written 2026-10-20, before the fix exists. DSA, IAA and QAT allocatable > 0, each at the count host-setup reports configuring; their test pods see `/dev/dsa`, `/dev/iax`, `/dev/vfio` (0.6). The H52 rows are unchanged. | Runs after H52, once the host-setup fix is merged; same procedure plus `host-setup --apply` before `up` and its printed revert after. SUPPORTED: the three engines advertised and reached, the H52 rows unchanged, and the host inventory read back equal to the one taken before. REFUTED: any of these fails. | PENDING |
@@ -1653,6 +1653,9 @@ pre-registration, the two SGLang schedulers read about 2.3 CPUs at idle (`docker
 
 **Shared rules for the crescent holds.**
 
+Scripts: `bench/eatflow/crescent/` (`hold.sh` rules 1, 3 and 4; `serving.py` rule 3;
+`pairs-hold.sh`, `apb-hold.sh`, `h52.sh` and `inventory.sh` per hypothesis).
+
 1. Lock and hold start. Every hold runs inside `flock -w 7200 ~/k3dgpu-bench.lock`. In the
    lock, before the hold, the wrapper records `uptime`, the top 10 CPU processes, the
    processes in `aiperf010` other than its idle `sleep infinity`, and `df /`. If `load1` > 12
@@ -1662,10 +1665,11 @@ pre-registration, the two SGLang schedulers read about 2.3 CPUs at idle (`docker
 2. CPUs. No cpuset: the k3d node container gets all 96 logical CPUs. (A cpuset leaving 16,
    then 8, CPUs free was planned; the box owner lifted it before this pre-registration.) The
    background load runs on `load.py`'s non-hybrid default, the top half of the physical cores
-   with their SMT siblings: CPUs 24-47 and 72-95. A1 and B1 are not pinned on this host (see
-   H52: k3d-gpu applies no balloons policy to a single-socket non-hybrid node), so both arms
-   float over all 96 CPUs, as B1 did on the desktop.
-3. Serving covariate. A sampler in the hold wrapper writes `serving.jsonl` every 10 s:
+   with their SMT siblings: CPUs 24-47 and 72-95. A1 and B1 are not pinned on this host: k3d-gpu
+   labels a node for its balloons policy only when it is hybrid or has more than one NUMA node
+   (`cmd_up`, `balloons_baked` in `scripts/k3d-gpu`), so both arms float over all 96 CPUs, as
+   B1 did on the desktop.
+3. Serving covariate. A sampler beside every hold (`serving.py`) writes `serving.jsonl` every 10 s:
    `load1`, the CPU-s/s of every container this campaign did not create (from its cgroup
    `cpu.stat`), and the count of aiperf processes. It is reported per arm over the attempt
    windows (mean serving CPU, share of windows with aiperf active) and never gates a pair.
@@ -1691,8 +1695,11 @@ pre-registration, the two SGLang schedulers read about 2.3 CPUs at idle (`docker
 for H49b, with its amendments P1 and P2, except what this list changes.
 
 - Arms. A1: `k3d-gpu agent manifest` as in H49b (OVMS 2026.4.1 `a928903f...`, the int4 model
-  above, `K3D_GPU_AGENT_DRAFT=CPU` with the 0.6B draft, `tool_parser` hermes3). On this host
-  it requests half the node's CPUs (48) and gets no balloon. B1: EAT stock, `xeon-values.yaml`
+  above, `K3D_GPU_AGENT_DRAFT=CPU` with the 0.6B draft, `tool_parser` hermes3) with
+  `K3D_GPU_AGENT_DEVICE=CPU`. On this host the auto device would pick a B70, because the node
+  carries `gpu.intel.com/xmx=true`; on the i9-13900T (no XMX) auto chose the CPU, so naming the
+  device changes nothing there. On this host A1 requests half the node's CPUs (48) and gets
+  no balloon. B1: EAT stock, `xeon-values.yaml`
   at 0d3438d (= release-1.0.3-hotfix) with only the image tag pinned to its digest
   (`v0.24.0@sha256:b0e6f860...`) and the shipped Qwen3-4B KV cache, 40 GiB
   (`LIVE_EAT_KV_GIB=40`; H49b used 6 GiB to fit the 125 GiB desktop). max_model_len 8192,
@@ -1703,8 +1710,9 @@ for H49b, with its amendments P1 and P2, except what this list changes.
 - Holds. At most 40 min each (`LIVE_CAP=2370` inside `timeout -k 30 2400`), until 24 pairs or
   8 holds. The 900 s readiness rule and the 600 s pair-start guard stay. Cluster
   `k3dgpu-e-h50`, pairs directory `bench/eatflow/results/2026-10-20/H50/pairs/`.
-- Recorded per hold: B1's and A1's CPU ISA as their pods see it (`grep -o amx_tile
-  /proc/cpuinfo` count) and B1's vLLM log line naming its CPU backend.
+- Recorded per hold by `live.sh`: the `amx_tile` line count in each server pod's
+  `/proc/cpuinfo` (`isa-a.txt`, `isa-b.txt`) and B's log lines naming AMX, AVX-512, its ISA or
+  oneDNN (`isa-b-log.txt`).
 
 Predictions are in the row. Reasoning: on the desktop B1's turns took 69-329 s with AVX2 and
 no AMX; AMX bf16 matrix units and 8-channel DDR5 should bring its B24 tasks under the 240 s
@@ -1717,7 +1725,7 @@ expected to sit under +30 points.
 ingress and APISIX route turned off because they need EAT's ingress controller and APISIX.
 Everything else is the chart's default: the init container's `ovms --pull` from Hugging Face
 (the revision it pulls is read from its log and its weights' sha256 recorded), the PVC, 12-CPU
-requests and limits, `cache_size` 20, `enable_prefix_caching` true. Model: the chart accepts
+requests and limits, `cache_size` 20, and whatever graph `ovms --pull` writes (on 2026-10-20 it wrote `enable_prefix_caching: true` and no parsers; the graph each hold serves is saved). Model: the chart accepts
 an `OpenVINO/` model without a Hugging Face token; no `OpenVINO/` build of Instruct-2507
 exists, so B3 serves `OpenVINO/Qwen3-4B-int4-ov` (the Qwen3-4B hybrid model, @ `b467368d` when
 checked on 2026-10-20). Recorded scope: B3 therefore differs from A1 in model as well as
@@ -1729,7 +1737,7 @@ engine version and placement.
   2025.4 answers `/v3/models` and `/v3/chat/completions` (200) and not `/v1` (404), and an
   8-token reply began `<think>`. So B3's LiteLLM points at `/v3`, and B3's tool calls are
   expected to come back as text. No B24 task was sent.
-- Holds as H50, at most 4. Cluster `k3dgpu-e-h50o`, pairs directory `.../H50o/pairs/`.
+- Holds as H50, at most 6. Cluster `k3dgpu-e-h50o`, pairs directory `.../H50o/pairs/`.
 - B1 -> B3 and B3 -> A1. Described, never gated: per-arm within-budget success and median
   attempt time on each row's matched pairs, and the difference of the two paired differences
   (A1 - B1) - (A1 - B3) over task ids matched in both rows. A1 anchors both rows; the two
@@ -1739,10 +1747,12 @@ engine version and placement.
 
 **H51 (agents per box on the Xeon).** H45's runner, gates and scoring (amendment W1 items 8-12)
 with these changes. Ramp 1, 2, 4, 8, 16 (`apb-score --hyp H51`; the bracket's top is 16).
-Arms A1 and B1 as in H50, each in its own fresh cluster `k3dgpu-a-<arm>`; B1 with
+Arms: `live.sh` arms A1 and B1 as H45 ran them (A1: `agent manifest` with no draft, since the
+default draft rule does not match the self-exported id, now with `K3D_GPU_AGENT_DEVICE=CPU`;
+B1: as in H50), each in its own fresh cluster `k3dgpu-a-<arm>`; B1 with
 `LIVE_EAT_KV_GIB=40`. Holds of at most 40 min, at most 4 in all: each arm runs its ramp in one
 hold when bring-up leaves its steps plus 300 s, else N=1, 2, 4 in a first hold and N=8, 16 in a
-second (`LIVE_APB_BASE`). Order A1 then B1. Load typical; amendment 27 windows; a VOID hold as
+second (`LIVE_APB_BASE`); `bench/eatflow/crescent/apb-hold.sh` (`LIVE_APB_TOP=16`). Order A1 then B1. Load typical; amendment 27 windows; a VOID hold as
 W1 item 11. B1 <= A1 compares arms and is decided only when `load.py matched` over both arms'
 windows reads MATCHED. H51 runs only if H50's holds end within their cap. Predictions are in
 the row: the 60-request gate needs about 4.5 s per request at N=1, which A1 missed on the
@@ -1795,15 +1805,15 @@ must restore them in the revert, or H52b reads REFUTED.
 **Runner changes (this PR), with regression tests.** `bench/eatflow/pairs.py` maps each pairs
 hypothesis id to its design and load rule (`DESIGNS`: H50 and H50o are the H49 design under
 L2), so `agentbench pairs` and `pairs-report` accept them. `bench/eatflow/live.sh`: ARM H50
-and H50o in `LIVE_MODE=pairs`; B1's KV cache from `LIVE_EAT_KV_GIB` (default 6, as before);
+and H50o in `LIVE_MODE=pairs`; B1's KV cache from `LIVE_EAT_KV_GIB` (default 6, as before; 40 for H50);
 H50o's B3 deploy from `LIVE_EAT_OVMS_CHART` with the pinned tag, OVMS's `/v3` path for its
-LiteLLM and model list; `LIVE_APB_TOP` for the last ramp step. `bench/eatflow/agentbench.py`:
+LiteLLM and model list; `LIVE_APB_TOP` for the last ramp step; A1 names `K3D_GPU_AGENT_DEVICE=CPU`; the ISA records. The crescent scripts above. `bench/eatflow/agentbench.py`:
 `apb-score --hyp H51` (ramp to 16, `h51_score`). Tests: `H50Test` in `test_pairs.py` (H50 and
 H50o read as H49b, the void gate applies, the live.sh mappings, the KV parameter and B3's pins)
 and `H51ScoreTest` in `test_h4345.py` (brackets to 16 over one or two holds, the three
 predictions, the matched-load comparison, the CLI, the last-step test).
 
-**Order and caps.** H52 first (one hold), then H50 (up to 8 holds), H50o (up to 4), H51 (up to
+**Order and caps.** H52 first (one hold), then H50 (up to 8 holds), H50o (up to 6), H51 (up to
 4, only if H50 ended within its cap), H52b when its fix is merged. A protocol change is a dated
 amendment merged before the data it governs. A wiring smoke on crescent is allowed, runs no
 scored task, is discarded and is disclosed in the run section.

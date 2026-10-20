@@ -636,7 +636,8 @@ class H51ScoreTest(RampBase, unittest.TestCase):
     def test_live_sh_last_step_is_the_top_of_the_ramp(self):
         with open(os.path.join(HERE, "live.sh")) as f:
             live = f.read()
-        self.assertIn("s['n'] == ${LIVE_APB_TOP:-8}", live)
+        self.assertIn("top=${LIVE_APB_TOP:-8}", live)
+        self.assertIn("s['n'] == ${top}))", live)
 
 
 class H45MissingArmTest(unittest.TestCase):
