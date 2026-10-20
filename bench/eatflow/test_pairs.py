@@ -542,5 +542,74 @@ class L2Test(unittest.TestCase):
         self.assertEqual((res["rule"], res["verdict"]), ("L2", "SUPPORTED"))
 
 
+class H50Test(unittest.TestCase):
+    """H50 (EXPERIMENTS.md "H50-H52 pre-registration"): H49b's design, statistic and gates on
+    the Xeon 6741P. The hypothesis id names the design and the load rule, not its suffix."""
+
+    def test_h50_is_the_h49_design_under_l2(self):
+        self.assertEqual(PR.design("H50"), ("H49", "L2"))
+        self.assertEqual(PR.design("H49b"), ("H49", "L2"))
+        self.assertEqual(PR.design("H47"), ("H47", "L1"))
+        with self.assertRaises(ValueError):
+            PR.design("H51")
+        at = L2Test.h49_like(L2Test())
+        res = PR.analyze(at, pairs_of(24), "H50", "A1", "B1")
+        ref = PR.analyze(at, pairs_of(24), "H49b", "A1", "B1")
+        self.assertEqual(res["hypothesis"], "H50")
+        self.assertEqual((res["rule"], res["verdict"]), ("L2", "SUPPORTED"))
+        for k in ("matched", "paired_diff", "within_budget_success", "gates", "confidence"):
+            self.assertEqual(res[k], ref[k], k)
+        res = PR.analyze(at, pairs_of(24, void=(21, 22, 23)), "H50", "A1", "B1")
+        self.assertTrue(any("void" in g for g in res["gates"]))       # the H49 void gate applies
+
+    def test_cli_pairs_and_report_accept_h50(self):
+        self.assertIn("H50", AB.PAIRS_HYPS)
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        for name, rows in (("attempts.jsonl", L2Test.h49_like(L2Test())), ("pairs.jsonl", pairs_of(24))):
+            with open(os.path.join(tmp, name), "w") as f:
+                f.writelines(json.dumps(r) + "\n" for r in rows)
+        self.assertEqual(AB.main(["pairs-report", tmp, "--hyp", "H50", "--arm-a", "A1", "--arm-b", "B1"]), 0)
+        with open(os.path.join(tmp, "analysis.json")) as f:
+            res = json.load(f)
+        self.assertEqual((res["hypothesis"], res["rule"], res["verdict"]), ("H50", "L2", "SUPPORTED"))
+
+    def test_live_sh_maps_h50_and_sizes_the_eat_kv_cache(self):
+        import re
+        with open(os.path.join(HERE, "live.sh")) as f:
+            live = f.read()
+        # H50 runs the H49 arms (A1 vs B1) under rule L2, in its own cluster.
+        self.assertIn("H50) DESIGN=H49 RULE=L2 KV_GIB=${LIVE_EAT_KV_GIB:-40} ;;", live)   # 40 GiB unless set
+        self.assertRegex(live, r"\n\s*H49b\) DESIGN=H49 RULE=L2 ;;")
+        self.assertIn('if [ "${RULE}" = L2 ]; then', live)
+        # A1 is the CPU stack even where the auto device would pick an XMX Intel GPU (crescent).
+        self.assertIn("K3D_GPU_AGENT_DEVICE=CPU K3D_GPU_AGENT_MODEL=${TGT}", live)
+        # B1's KV cache: 6 GiB by default (H49, H49b on the 125 GiB desktop); H50 runs EAT's
+        # shipped Qwen3-4B value (40 GiB) through LIVE_EAT_KV_GIB.
+        self.assertIn("KV_GIB=${LIVE_EAT_KV_GIB:-6}", live)
+        self.assertEqual(len(re.findall(r'stage.py" values "\$\{chart\}/xeon-values.yaml" "\$\{OUT\}/pin.yaml" "\$\{KV_GIB\}"', live)), 2)
+        self.assertNotRegex(live, r'pin.yaml" 6 ')
+
+    def test_h50o_runs_eat_ovms_chart_as_arm_b3(self):
+        self.assertEqual(PR.design("H50o"), ("H49", "L2"))
+        self.assertIn("H50o", AB.PAIRS_HYPS)
+        at = [dict(r, arm="B3") if r["arm"] == "B1" else r for r in L2Test.h49_like(L2Test())]
+        res = PR.analyze(at, pairs_of(24), "H50o", "A1", "B3")
+        self.assertEqual((res["rule"], res["arms"], res["verdict"]), ("L2", ["A1", "B3"], "SUPPORTED"))
+        self.assertIn("paired_diff", res)
+        with open(os.path.join(HERE, "live.sh")) as f:
+            live = f.read()
+        self.assertRegex(live, r"\n\s*H50o\) DESIGN=H50o RULE=L2 ;;")
+        self.assertRegex(live, r"\n\s*H50o\) A=A1 B=B3 ;;")
+        # EAT's OVMS chart: its image tag pinned to a digest, the OpenVINO model it pulls,
+        # OVMS's OpenAI path /v3 for LiteLLM and the model list.
+        self.assertIn("B3_TAG=2025.4@sha256:c370720007564bbdcbca13b9b714e4537068542cda512e8095259e66b617962a", live)
+        self.assertIn("B3_MODEL=OpenVINO/Qwen3-4B-int4-ov\n", live)
+        self.assertIn('helm template ovms-model-server "${LIVE_EAT_OVMS_CHART:?}"', live)
+        self.assertIn("B_DEP=ovms-model-server B_SVC=ovms-model-server B_SPORT=8080 B_API=/v3", live)
+        self.assertIn('litellm b "${SERVED_B}" "${BPORT}" "$(( P_LLM + 1 ))" "${API_B}"', live)
+        self.assertIn('wait_http "http://127.0.0.1:${BPORT}${API_B}/models" 300', live)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

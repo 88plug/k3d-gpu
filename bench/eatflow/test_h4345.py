@@ -567,6 +567,80 @@ class H45ScoreTest(unittest.TestCase):
         with open(out) as f:
             self.assertEqual(json.load(f)["verdict"], "SUPPORTED")
 
+    def test_missing_arm_is_undecided_h45(self):
+        r = AB.h45_score({"A3": br(8), "A1": br(2), "C1": br(1)}, MATCHED)
+        self.assertEqual(r["verdict"], "INCONCLUSIVE")
+
+
+class H51ScoreTest(RampBase, unittest.TestCase):
+    """H51 (EXPERIMENTS.md "H50-H52 pre-registration"): H45's graded ramp extended to N=16 on
+    the Xeon 6741P, arms A1 and B1; predictions A1 in [1, 8], B1 in [0, 4], and B1 <= A1."""
+
+    def test_the_ramp_runs_to_sixteen(self):
+        self.assertEqual(AB.H51_RAMP, (1, 2, 4, 8, 16))
+        h1 = self.hold("h1", (1, 2, 4, 8, 16))
+        r = AB.apb_from_holds([h1], ramp=AB.H51_RAMP)
+        self.assertEqual((r["apb"], r["bracket"], r["complete"]), (16, [16, 16], True))
+        h2 = self.hold("h2", (1, 2, 4))                         # hold 2 not run yet: [4, 16]
+        r = AB.apb_from_holds([h2], ramp=AB.H51_RAMP)
+        self.assertEqual((r["bracket"], r["complete"]), ([4, 16], False))
+        h3 = self.hold("h3", (8, 16), base=AB.apb_base(h2), e2e=lambda n: 1.0 if n < 16 else 20.0)
+        r = AB.apb_from_holds([h2, h3], ramp=AB.H51_RAMP)
+        self.assertEqual((r["apb"], r["bracket"], r["complete"]), (8, [8, 8], True))
+        self.assertEqual(AB.apb_from_holds([], ramp=AB.H51_RAMP)["bracket"], [0, 16])
+
+    def test_score(self):
+        r = AB.h51_score({"A1": br(4), "B1": br(2)}, MATCHED)
+        self.assertEqual((r["arms"]["A1"]["status"], r["arms"]["B1"]["status"]), ("holds", "holds"))
+        self.assertEqual(r["b1_le_a1"]["status"], "holds")
+        self.assertEqual(r["verdict"], "SUPPORTED")
+        r = AB.h51_score({"A1": br(16), "B1": br(2)}, MATCHED)      # A1 above its range
+        self.assertEqual((r["arms"]["A1"]["status"], r["verdict"]), ("refuted", "REFUTED"))
+        r = AB.h51_score({"A1": br(2), "B1": br(4)}, MATCHED)       # B1 > A1
+        self.assertEqual((r["b1_le_a1"]["status"], r["verdict"]), ("refuted", "REFUTED"))
+        r = AB.h51_score({"A1": br(4), "B1": br(2)}, UNMATCHED)     # comparison needs matched load
+        self.assertEqual((r["b1_le_a1"]["status"], r["verdict"]), ("unmatched", "INCONCLUSIVE"))
+        r = AB.h51_score({"A1": br(4, 16), "B1": br(0)}, MATCHED)   # straddles A1's range
+        self.assertEqual((r["arms"]["A1"]["status"], r["verdict"]), ("undecided", "INCONCLUSIVE"))
+        r = AB.h51_score({"A1": br(4)}, MATCHED)
+        self.assertEqual((r["arms"]["B1"]["status"], r["verdict"]), ("undecided", "INCONCLUSIVE"))
+
+    def test_cli_apb_score_h51(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+
+        def hold(name, arm, steps):
+            d = os.path.join(tmp, name)
+            os.makedirs(d)
+            with open(os.path.join(d, "apb.json"), "w") as f:
+                json.dump({"arm": arm, "level": "typical", "step_s": 300.0,
+                           "steps": [{"n": n, "pass": p, "checks": {"success": 1.0}} for n, p in steps]}, f)
+            with open(os.path.join(d, "load.jsonl"), "w") as f:
+                for ph in ("pre", "during"):
+                    f.write(json.dumps({"tag": arm, "level": "typical", "phase": ph, "busy_pct": 40,
+                                        "throttle_per_min": 0, "swap_used_mib": 0, "swap_delta_mib": 0,
+                                        "load_expected": 3, "load_running": 3}) + "\n")
+            return d
+        a1 = hold("a1", "A1", [(1, True), (2, True), (4, True), (8, False)])
+        b1 = hold("b1", "B1", [(1, True), (2, False)])
+        out = os.path.join(tmp, "score.json")
+        self.assertEqual(AB.main(["apb-score", "--hyp", "H51", "--arm", f"A1={a1}", "--arm", f"B1={b1}",
+                                  "--out", out]), 0)
+        with open(out) as f:
+            r = json.load(f)
+        self.assertEqual((r["hypothesis"], r["arms"]["A1"]["bracket"], r["arms"]["B1"]["bracket"]),
+                         ("H51", [4, 4], [1, 1]))
+        self.assertTrue(r["load"]["matched"])
+        self.assertEqual(r["verdict"], "SUPPORTED")
+
+    def test_live_sh_last_step_is_the_top_of_the_ramp(self):
+        with open(os.path.join(HERE, "live.sh")) as f:
+            live = f.read()
+        self.assertIn("top=${LIVE_APB_TOP:-8}", live)
+        self.assertIn("s['n'] == ${top}))", live)
+
+
+class H45MissingArmTest(unittest.TestCase):
     def test_missing_arm_is_undecided(self):
         r = AB.h45_score({"A3": br(8), "A1": br(2), "C1": br(1)}, MATCHED)
         self.assertEqual(r["arms"]["C2"]["status"], "undecided")
