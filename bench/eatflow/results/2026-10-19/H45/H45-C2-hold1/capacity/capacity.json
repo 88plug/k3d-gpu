@@ -1,0 +1,140 @@
+{
+  "schema": "k3d-gpu.capacity/1",
+  "status": "partial",
+  "started_at": 1792492139.292875,
+  "finished_at": 1792492300.1671147,
+  "slo_s": 10.0,
+  "stop_slo_s": 10.0,
+  "trace": "support",
+  "max_agents": 32,
+  "reps": 3,
+  "search": "exponential-then-binary",
+  "budget_s": 180.0,
+  "step_cap_s": 180.0,
+  "state_path": "$RUNS/H45-C2-hold1/capacity-state/unspecified-qwen3-4b-instruct-2507-d0951c657bab.json",
+  "bracket_start": {
+    "lo": 0,
+    "hi": null
+  },
+  "bracket": {
+    "lo": 0,
+    "hi": null
+  },
+  "search_status": "budget",
+  "timeout_s": 120.0,
+  "time_scale": 1.0,
+  "extra_body": {
+    "chat_template_kwargs": {
+      "enable_thinking": false
+    }
+  },
+  "endpoint": {
+    "namespace": null,
+    "service": null,
+    "workload": null,
+    "server": null,
+    "engine": "unspecified",
+    "model": "qwen3-4b-instruct-2507",
+    "url": "http://127.0.0.1:18630/v1/chat/completions"
+  },
+  "host": {
+    "cpu_model": "13th Gen Intel(R) Core(TM) i9-13900T",
+    "logical_cpus": 32,
+    "pl1_w": 117.0,
+    "kernel": "6.6.128-1-MANJARO",
+    "loadavg": "17.50 17.36 15.55 11/15142 2697608"
+  },
+  "run_dir": "$RUNS/H45-C2-hold1/capacity",
+  "json_path": "$RUNS/H45-C2-hold1/capacity/capacity.json",
+  "agents_per_box": null,
+  "agents_per_box_interpolated": null,
+  "binding_limit": {
+    "kind": "budget",
+    "at_agents": null,
+    "detail": "--budget 3 min ran out: APB unknown (budget)",
+    "hardware": []
+  },
+  "steps": [],
+  "idle": null,
+  "drift_check": null,
+  "confounds": [
+    "synthetic, teacher-forced agent trace: measures the serving path, not task quality",
+    "RAPL package energy not readable (energy_uj is root-only on most kernels): J per turn has no CPU package term; run 'sudo -v' before capacity to enable the sudo -n reader",
+    "GPU energy integrates nvidia-smi power.draw of every NVIDIA GPU in the box",
+    "box not quiet at start (forced past: cpu_busy): other work shares the box",
+    "--budget ran out before the bracket closed: agents per box is the proven lower end (unknown when no step passed); a step the budget cut short is unmeasured, not a fail, and a rerun measures it (the bracket is stored)",
+    "endpoint given by --url: engine and server not read from the cluster",
+    "p95 pools requests as independent; turns of one session are correlated (per-rep p95 listed)"
+  ],
+  "quiet_check": {
+    "ok": false,
+    "forced": true,
+    "checks": [
+      {
+        "check": "cpu_busy",
+        "value": 0.2941048034934498,
+        "limit": 0.1,
+        "ok": false
+      },
+      {
+        "check": "pkg_power",
+        "value": null,
+        "limit": null,
+        "ok": null
+      },
+      {
+        "check": "gpu0_util",
+        "value": 1.0,
+        "limit": 10.0,
+        "ok": true
+      },
+      {
+        "check": "gpu0_power",
+        "value": 25.729090909090907,
+        "limit": 35.0,
+        "ok": true
+      },
+      {
+        "check": "gpu1_util",
+        "value": 0.0,
+        "limit": 10.0,
+        "ok": true
+      },
+      {
+        "check": "gpu1_power",
+        "value": 6.816363636363636,
+        "limit": 25.0,
+        "ok": true
+      }
+    ],
+    "sample": {
+      "cpu_busy": 0.2941048034934498,
+      "pkg_w": null,
+      "pl1_w": 117.0,
+      "gpus": [
+        {
+          "index": 0,
+          "power_w": 25.729090909090907,
+          "limit_w": 70.0,
+          "util": 1.0
+        },
+        {
+          "index": 1,
+          "power_w": 6.816363636363636,
+          "limit_w": 50.0,
+          "util": 0.0
+        }
+      ]
+    }
+  },
+  "next_rep_estimate": {
+    "agents": 1,
+    "seconds": 753.1
+  },
+  "apb_at_secondary_slo_p95_only": {
+    "5.0": {
+      "agents_per_box": 0,
+      "lower_bound": true
+    }
+  }
+}

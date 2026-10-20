@@ -1,0 +1,327 @@
+{
+ "arms": {
+  "A3": {
+   "bracket": [
+    8,
+    8
+   ],
+   "range": [
+    8,
+    8
+   ],
+   "status": "holds"
+  },
+  "A1": {
+   "bracket": [
+    0,
+    0
+   ],
+   "range": [
+    1,
+    4
+   ],
+   "status": "refuted"
+  },
+  "C1": {
+   "bracket": [
+    0,
+    0
+   ],
+   "range": [
+    0,
+    1
+   ],
+   "status": "holds"
+  },
+  "C2": {
+   "bracket": [
+    0,
+    0
+   ],
+   "range": "<= A1",
+   "status": "undecided"
+  }
+ },
+ "c2_le_a1": {
+  "status": "unmatched"
+ },
+ "load": {
+  "matched": false,
+  "void": false,
+  "verdict": "INCONCLUSIVE: load unmatched (pre throttle_per_min spread 688.57 > 255.40; pre swap_used_mib spread 967.30 > 256.00; during swap_used_mib spread 1933.52 > 256.00; during swap_delta_mib spread 662.87 > 64.00)",
+  "rule": "amendment-27",
+  "checks": [
+   {
+    "metric": "busy_pct",
+    "arms": {
+     "A1": 53.46,
+     "C2": 49.29
+    },
+    "spread": 4.17,
+    "limit": 5.0,
+    "status": "ok",
+    "phase": "pre"
+   },
+   {
+    "metric": "throttle_per_min",
+    "arms": {
+     "A1": 1021.6,
+     "C2": 333.03
+    },
+    "spread": 688.57,
+    "limit": 255.4,
+    "status": "fail",
+    "phase": "pre"
+   },
+   {
+    "metric": "swap_used_mib",
+    "arms": {
+     "A1": 164241.4,
+     "C2": 163274.1
+    },
+    "spread": 967.3,
+    "limit": 256.0,
+    "status": "fail",
+    "phase": "pre"
+   },
+   {
+    "metric": "swap_delta_mib",
+    "arms": {
+     "A1": -0.5,
+     "C2": -25.0
+    },
+    "spread": 24.5,
+    "limit": 64.0,
+    "status": "ok",
+    "phase": "pre"
+   },
+   {
+    "metric": "busy_pct",
+    "arms": {
+     "A1": 75.997,
+     "C2": 77.101
+    },
+    "spread": 1.104,
+    "limit": 5.0,
+    "status": "ok",
+    "phase": "during"
+   },
+   {
+    "metric": "swap_used_mib",
+    "arms": {
+     "A1": 161011.7,
+     "C2": 162945.222
+    },
+    "spread": 1933.522,
+    "limit": 256.0,
+    "status": "fail",
+    "phase": "during"
+   },
+   {
+    "metric": "swap_delta_mib",
+    "arms": {
+     "A1": -642.7,
+     "C2": 20.167
+    },
+    "spread": 662.867,
+    "limit": 64.0,
+    "status": "fail",
+    "phase": "during"
+   }
+  ],
+  "outcomes": [
+   {
+    "metric": "pkg_w",
+    "arms": {
+     "A1": 98.03,
+     "C2": 95.686
+    },
+    "spread": 2.344
+   },
+   {
+    "metric": "throttle_per_min",
+    "arms": {
+     "A1": 114.797,
+     "C2": 1023.667
+    },
+    "spread": 908.87
+   },
+   {
+    "metric": "load1",
+    "arms": {
+     "A1": 22.669,
+     "C2": 17.943
+    },
+    "spread": 4.726
+   }
+  ],
+  "unsettled": {}
+ },
+ "verdict": "REFUTED",
+ "per_arm": {
+  "A1": {
+   "apb": 0,
+   "bracket": [
+    0,
+    0
+   ],
+   "complete": true,
+   "steps": [
+    {
+     "n": 1,
+     "pass": false,
+     "checks": {
+      "n_requests": 31,
+      "p95_s": 26.060707,
+      "success": 0.9375,
+      "error_rate": 0.0,
+      "p95_ok": false,
+      "success_ok": true,
+      "errors_ok": true,
+      "n_ok": false
+     },
+     "window_from": 1792483681.166506
+    }
+   ],
+   "void": null,
+   "holds": [
+    "bench/eatflow/results/2026-10-19/H45/H45-A1-hold1/apb"
+   ]
+  },
+  "A3": {
+   "apb": 8,
+   "bracket": [
+    8,
+    8
+   ],
+   "complete": true,
+   "steps": [
+    {
+     "n": 1,
+     "pass": true,
+     "checks": {
+      "n_requests": 265,
+      "p95_s": 2.969331,
+      "success": 0.9398496240601504,
+      "error_rate": 0.0,
+      "p95_ok": true,
+      "success_ok": true,
+      "errors_ok": true,
+      "n_ok": true
+     },
+     "window_from": 1792485511.8370068
+    },
+    {
+     "n": 2,
+     "pass": true,
+     "checks": {
+      "n_requests": 486,
+      "p95_s": 3.16123,
+      "success": 0.9317269076305221,
+      "error_rate": 0.0,
+      "p95_ok": true,
+      "success_ok": true,
+      "errors_ok": true,
+      "n_ok": true
+     },
+     "window_from": 1792487278.0171816
+    },
+    {
+     "n": 4,
+     "pass": true,
+     "checks": {
+      "n_requests": 880,
+      "p95_s": 3.455167,
+      "success": 0.9532293986636972,
+      "error_rate": 0.0,
+      "p95_ok": true,
+      "success_ok": true,
+      "errors_ok": true,
+      "n_ok": true
+     },
+     "window_from": 1792488903.4448552
+    },
+    {
+     "n": 8,
+     "pass": true,
+     "checks": {
+      "n_requests": 1476,
+      "p95_s": 3.993565,
+      "success": 0.9071895424836601,
+      "error_rate": 0.0,
+      "p95_ok": true,
+      "success_ok": true,
+      "errors_ok": true,
+      "n_ok": true
+     },
+     "window_from": 1792490635.1771739
+    }
+   ],
+   "void": null,
+   "holds": [
+    "bench/eatflow/results/2026-10-19/H45/H45-A3-hold1/apb",
+    "bench/eatflow/results/2026-10-19/H45/H45-A3-hold2/apb",
+    "bench/eatflow/results/2026-10-19/H45/H45-A3-hold3/apb",
+    "bench/eatflow/results/2026-10-19/H45/H45-A3-hold4/apb"
+   ]
+  },
+  "C1": {
+   "apb": 0,
+   "bracket": [
+    0,
+    0
+   ],
+   "complete": true,
+   "steps": [
+    {
+     "n": 1,
+     "pass": false,
+     "checks": {
+      "n_requests": 16,
+      "p95_s": 61.206309,
+      "success": 1.0,
+      "error_rate": 0.0,
+      "p95_ok": false,
+      "success_ok": true,
+      "errors_ok": true,
+      "n_ok": false
+     },
+     "window_from": 1792491274.3090208
+    }
+   ],
+   "void": null,
+   "holds": [
+    "bench/eatflow/results/2026-10-19/H45/H45-C1-hold1/apb"
+   ]
+  },
+  "C2": {
+   "apb": 0,
+   "bracket": [
+    0,
+    0
+   ],
+   "complete": true,
+   "steps": [
+    {
+     "n": 1,
+     "pass": false,
+     "checks": {
+      "n_requests": 17,
+      "p95_s": 61.488323,
+      "success": 1.0,
+      "error_rate": 0.0,
+      "p95_ok": false,
+      "success_ok": true,
+      "errors_ok": true,
+      "n_ok": false
+     },
+     "window_from": 1792491868.6869235
+    }
+   ],
+   "void": null,
+   "holds": [
+    "bench/eatflow/results/2026-10-19/H45/H45-C2-hold1/apb"
+   ]
+  }
+ }
+}

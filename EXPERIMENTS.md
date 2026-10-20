@@ -56,9 +56,9 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H40 | The agent harness reproduces the BFCL board: BFCL v4 (`bfcl-eval==2025.12.17`, gorilla `f7cf7359`) in the board's own mode (registry `Qwen/Qwen3-4B-Instruct-2507-FC`, BFCL applies the chat template and calls `/v1/completions`) on the fixed 100-id subset S100, sent through LiteLLM and the recording proxy, scores bf16 `Qwen/Qwen3-4B-Instruct-2507` @ `cdbee75f` on vLLM CUDA (arm A3ref) like the leaderboard row. | S100 accuracy in [77.9, 91.9]: the board-weighted 84.9 (row "Qwen3-4B-Instruct-2507 (FC)" of https://gorilla.cs.berkeley.edu/data_overall.csv, read 2026-10-17) +/- 7, the binomial 95% half-width at n=100. Every category within its own binomial 95% CI of the board value. Confidence 0.75. | `k3d-gpu bench agent bfcl --mode board --arm A3ref --level none`, n=100, one block, measurement budget 20 min ([pre-registration](#h40-h48-pre-registration-agent-benchmark-2026-10-17)). SUPPORTED: both hold, and H41 may be read. REFUTED: overall outside the band; the harness differs from the board (template, parser, handler) and H41 is not scored until fixed. INCONCLUSIVE: fewer than 100 ids completed, or failed requests. | SUPPORTED |
 | H41 | Serving a 4-bit build keeps tool-calling quality: on BFCL-S100 in server-fc mode (the engine's own tool parser parses the calls), each of A1 (k3d-gpu CPU, OVMS int4), A3 (k3d-gpu RTX 4000, AWQ 4-bit), B1 (EAT stock vLLM CPU, bf16), C1 (Ollama Q4_K_M) and C2 (llama.cpp Q4_K_M) scores within 8 points of A3ref (bf16, vLLM CUDA) run in the same mode. | Per arm, the one-sided paired-bootstrap 95% lower bound of (arm - A3ref) on the shared completed ids is >= -8 points. A1, A3, C2 hold (0.7 each); B1 holds but completes only 60-100 ids (0.6); C1 holds (0.55, the highest risk: Ollama's template and tool path). | `k3d-gpu bench agent bfcl --mode server-fc`, typical load, A B ... B A order in 10-min halves, 20 min per arm, `load.py matched` across arms. Read only after H40 is SUPPORTED. Per arm: SUPPORTED when the lower bound >= -8; REFUTED when the upper bound < -8; INCONCLUSIVE when the CI straddles -8, fewer than 60 shared ids, or load unmatched (exit 3). | INCONCLUSIVE |
 | H42 | On Intel's real EAT banking flow (`intel/enterprise-ai-blueprints` v1.0.0 banking-assistant, task set B24 at N=1, typical load), the k3d-gpu CPU stack A1 (OVMS, OpenVINO int4 self-export, P-cores) succeeds as often as the GPU stack and finishes a task in a third of the time of the EAT stock stack B1 (vLLM CPU, bf16) or less. A stack-vs-stack claim: A1 and B1 differ in runtime, placement and weight precision (int4 vs bf16) together, so the ratio does not isolate any one of them (amendment 16). | (1) Success on completed task ids, stated with the count, every arm that finishes: A1 >= 0.75, A3 >= 0.75, C2 >= 0.70; C1 <= A1 - 10 points (4k-context truncation, 0.5). (2) Paired median time ratio A1/B1 on the task ids both completed <= 0.35 (point 0.15, range 0.08-0.35, confidence 0.75). (3) A3 median time per task < A1 (0.85). (4) A2 > A1 (0.8). (5) B1 completes <= 12 of 24 tasks in 20 min (0.7). | `k3d-gpu bench agent run --tasks B24` per arm (A1 A2 A3 B1 C1 C2), A B ... B A in 10-min halves, `--mcp-url` end-state grading with `--reset` after each mutating task; sampling `agent_local`, agent memory off (amendments 7-20). SUPPORTED: (1)-(4) hold with load matched. REFUTED: A1/B1 time-ratio CI lower bound > 0.5, or A1 success < 0.6. Otherwise, or load unmatched, INCONCLUSIVE. Censored tasks are lower bounds, never failures. | INCONCLUSIVE |
-| H43 | With the agent sandbox on the E-cores (coding-agent-maf, C12, `k3d-gpu sandbox up`), heavy E-core load stretches A1's median time per task by at most 1.5x over typical load while success stays within 10 points. | A1 holds on success but fails on time: ratio 1.6-2.5x, because the sandbox pods share the E-cores with the load and lack the P/E isolation the model server gets. Confidence 0.6. | `k3d-gpu bench agent run --tasks C12` for A1, A3, B1 at typical and at heavy, A B ... B A halves per level. SUPPORTED: ratio <= 1.5 and delta success >= -10 points. REFUTED: ratio CI lower bound > 1.5. Otherwise INCONCLUSIVE. | PENDING |
+| H43 | With the agent sandbox on the E-cores (coding-agent-maf, C12, `k3d-gpu sandbox up`), heavy E-core load stretches A1's median time per task by at most 1.5x over typical load while success stays within 10 points. | A1 holds on success but fails on time: ratio 1.6-2.5x, because the sandbox pods share the E-cores with the load and lack the P/E isolation the model server gets. Confidence 0.6. | `k3d-gpu bench agent run --tasks C12` for A1, A3, B1 at typical and at heavy, A B ... B A halves per level. SUPPORTED: ratio <= 1.5 and delta success >= -10 points. REFUTED: ratio CI lower bound > 1.5. Otherwise INCONCLUSIVE. Wired by amendments [W1](#h43-and-h45-amendment-w1-the-live-runner-2026-10-19) and [W2](#h43-amendment-w2-the-code-mode-reserve-2026-10-19) (B1 not run; the ABBA halves over levels within A1; paired ratio). Run 2026-10-20 ([H43 run](#h43-run-i9-13900t-2026-10-20)): A1 completed 1 C12 id at both levels in four 143 s blocks (C01: 66.9 s typical, 122.7 s heavy), ratio 1.84 with a degenerate CI 1.84-1.84, delta success 0 points; REFUTED by the rule on that one task. A3 (context): 1.03 (CI 1.01-1.07) on 12 ids. | REFUTED |
 | H44 | Busy-box robustness: on B24's first 12 tasks, the p95 turn-latency inflation heavy/none is <= 1.25x for A1 (inference on the P-cores, load on the E-cores) and >= 1.5x for B1 (EAT stock floats onto the loaded E-cores). | A1 <= 1.25 (0.65). B1 >= 1.5 (0.6). | `k3d-gpu bench agent run --tasks B24 --limit 12` for A1 and B1, blocks none/heavy/none/heavy at 5 min each (20 min per arm). SUPPORTED: both hold. REFUTED: A1 inflation CI lower bound > 1.25, or B1 <= 1.25 as well (no difference). Otherwise INCONCLUSIVE. | INCONCLUSIVE |
-| H45 | Graded agents per box (largest N on the ramp 1, 2, 4, 8 at which pooled p95 turn latency <= 10 s, success >= the arm's N=1 success - 10 points, error rate <= 1% and >= 60 window requests) on the read-only banking set B15-RO at typical load. | A3 >= 8 (0.8). A1 in [1, 4] (0.55). C1 <= 1 (0.7, `OLLAMA_NUM_PARALLEL=1` serializes). C2 <= A1 (0.6). B1 not run, predicted 0. An arm's prediction is refuted by a scored APB outside its range; a bracket that still contains the prediction decides nothing. | `k3d-gpu bench agent apb` per arm (A1 A3 C1 C2), 5 min per step. The synthetic `k3d-gpu capacity --slo 10` APB is reported beside it, not scored. | PENDING |
+| H45 | Graded agents per box (largest N on the ramp 1, 2, 4, 8 at which pooled p95 turn latency <= 10 s, success >= the arm's N=1 success - 10 points, error rate <= 1% and >= 60 window requests) on the read-only banking set B15-RO at typical load. | A3 >= 8 (0.8). A1 in [1, 4] (0.55). C1 <= 1 (0.7, `OLLAMA_NUM_PARALLEL=1` serializes). C2 <= A1 (0.6). B1 not run, predicted 0. An arm's prediction is refuted by a scored APB outside its range; a bracket that still contains the prediction decides nothing. | `k3d-gpu bench agent apb` per arm (A1 A3 C1 C2), 5 min per step. The synthetic `k3d-gpu capacity --slo 10` APB is reported beside it, not scored. Wired by amendment [W1](#h43-and-h45-amendment-w1-the-live-runner-2026-10-19) (the ramp split over 20-min holds; REFUTED when any prediction is refuted). Run 2026-10-20 ([H45 run](#h45-run-i9-13900t-2026-10-20)): A3 8 (holds), A1 0 (N=1: p95 26.1 s, 31 window requests; refuted), C1 0 (holds), C2 0 vs A1 undecided (amendment 27 load unmatched: pre throttle and swap). Synthetic capacity (3 min, not scored): every arm out of budget. | REFUTED |
 | H46 | Joules per successful banking task (differential: block energy minus the mean power of a load-only control window at the same load, times the block time, over the successful tasks): A1 needs at most 0.4x of B1's. | A1/B1 <= 0.4 (0.7). A3 < A1 including dGPU power (0.7). A2 > A1 (0.6). | H42's blocks plus one 120 s `k3d-gpu bench agent control` window per arm with its server up and idle. SUPPORTED: ratio CI upper bound <= 0.4. REFUTED: ratio CI lower bound > 0.7. INCONCLUSIVE: B1 with zero successes (J per success undefined), load unmatched, or RAPL unreadable. | INCONCLUSIVE |
 | H47 | CPU draft speculative decoding helps agent tasks: A4 (A1 plus a CPU draft, `OpenVINO/Qwen3-0.6B-int4-ov` @ `f864c610`) cuts B24's median time per task by >= 10% vs A1 with delta success >= -5 points. Runs only if H34 is SUPPORTED when the campaign starts; otherwise not run, recorded. | A 0-15% gain; INCONCLUSIVE likely (tool-call turns are 40-96 tokens, little to amortize, and the draft competes for the P-cores). Confidence it is SUPPORTED: 0.35. | `k3d-gpu bench agent run --tasks B24`, A4 vs A1 paired and interleaved at typical load. SUPPORTED: gain CI lower bound >= 10% with success held. REFUTED: gain CI upper bound < 0. Otherwise INCONCLUSIVE. Design replaced 2026-10-18, before any H47 run, by the within-hold interleaved design ([H47 and H49 pre-registration](#h47-and-h49-pre-registration-within-hold-interleaved-design-2026-10-18)): A1 and A4 as two model names in one OVMS pod, one hold, pairs A B B A over B24's task ids, load sampled per task and matched per pair (rule L1); the statistic, thresholds and prediction above are unchanged. Result ([H47 run](#h47-run-i9-13900t-2026-10-18)): 24 pairs in 2 holds, none void or over budget; load rule L1 matched 13 of 24 pairs (< 16 and < 75%), so INCONCLUSIVE. On the 13 matched pairs: gain 21.2% (95% CI 15.8-27.5%), delta success 0 (11/13 both arms), J per attempt A4/A1 0.82 (0.77-0.88); 0.98 of bootstrap resamples show a gain of at least 10%. | INCONCLUSIVE |
 | H48 | The graders are sound: remote GLM-5.3 through harvest (arm R, gaudi.farmgpu.net, never a node's :8299) passes >= 11 of the measured items among 4 B24 tasks and 8 S100 ids, under a hard cap of 20 LLM requests. | >= 11 pass (0.8). | One `k3d-gpu bench agent proxy --max-requests 20 --key-file FILE --sampling agent_remote` in front of harvest carries every request: first `bfcl --mode server-fc --limit 8 --proxy-url` (8 single-turn ids, 8 requests), then `run --tasks B24 --ids B-T1-U1001,B-T3-U1002,B-T5-U1003,B-T8-U1001` through the same proxy; a task cut by the request cap or by the 256-token cap (`finish_reason=length`) is unmeasured. Latency and energy are not reported. SUPPORTED: >= 10 measured and <= 1 measured item fails. REFUTED: >= 3 measured items fail, and every failed item's task and grader are audited before H41-H46 are read. Otherwise INCONCLUSIVE (amendment 17; originally >= 11 / 10 / <= 9 of 12). | REFUTED |
@@ -1476,6 +1476,153 @@ stopped before any other hold took the lock. Fix: the code-mode reserve is nb x 
 (per block 120 s plus 110 s, 60 s of teardown, 90 s of sandbox, router, Redis and agent setup),
 checked by `CodeReserveTest` in `bench/eatflow/test_h4345.py`. Nothing else changes. A1's hold
 runs again as W1 item 6's one A1 hold, and A3's two holds run as before.
+
+### H43 run (i9-13900T, 2026-10-20)
+
+**Reproduce:**
+
+```text
+# provenance
+date:            2026-10-20T07:06:44Z (A1 hold) and 07:37:55Z (A3 hold)
+hypothesis:      H43
+host cpu:        13th Gen Intel(R) Core(TM) i9-13900T (8 P-cores, 16 E-cores, 125 GiB RAM)
+host kernel:     6.6.128-1-MANJARO
+accelerators:    k3d-gpu up: nvidia=2 intel=8 hybrid=1 (A1 uses none; A3 the RTX 4000)
+k3d-gpu commit:  5ea35b7 (#149, amendment W2, on the W1 runner of #148)
+node image:      cryptoandcoffee/k3d-gpu@sha256:8cd264aa68c77681d7fa474693944de0db8d55de5881253e4029bf72a67e175c (0.1.61)
+model:           A1 k3dgpu/Qwen3-4B-Instruct-2507-int4-ov (openvino_model.bin sha256 5c1e36e4...);
+                 A3 cyankiwi/Qwen3-4B-Instruct-2507-AWQ-4bit @ c46e2277
+runtime:         A1 openvino/model_server@sha256:a928903f... (2026.4.1), P-core balloon, tool_parser hermes3;
+                 A3 vllm/vllm-openai@sha256:a4a4c043... (v0.31.0) on the RTX 4000;
+                 LiteLLM v1.83.14-stable.patch.2@sha256:73cbb215...; coding-agent-maf at 758d484 with
+                 k8s-agent-sandbox 1.0.7 (bench/eatflow/coding-constraints.txt); agent-sandbox v1.0.7,
+                 warm pool python-ecores (sandboxes on CPUs 24-25, E-cores); redis:8.10.2-alpine@sha256:38117873...
+energy source:   RAPL package (/sys/class/powercap/intel-rapl:0, read through K3D_GPU_RAPL_EXEC), plus
+                 nvidia-smi for A3
+runs per arm:    A1 4 blocks of 143 s (typical, heavy, heavy, typical); A3 2 blocks of 255 s (typical, heavy)
+```
+
+Commands: the scratchpad `hold.sh` runs `flock -w 21600 live.lock`, refuses `/` above 97%, then
+`LIVE_MODE=code LIVE_CAP=1170 LIVE_CODE_DIR=<dir> timeout -k 30 1200 bench/eatflow/live.sh A1 <out>`
+(A3: `LIVE_CODE_LEVELS="typical heavy"`), then deletes the cluster. Score:
+`k3d-gpu bench agent stretch <dir>/h43-a1-typical <dir>/h43-a1-heavy --arm A1`. Records (per-level
+results, turns, blocks, phased load windows, facts, the stretch output, pins, sandbox placement):
+[bench/eatflow/results/2026-10-19/H43/](bench/eatflow/results/2026-10-19/H43/).
+
+Holds. A first A1 hold at 2026-10-20T06:48:58Z exited 62 s in, before any task ran, and is void
+([amendment W2](#h43-amendment-w2-the-code-mode-reserve-2026-10-19)). The scored A1 hold: server
+up by 79 s (`sandbox up` then), blocks of 143 s from 131 s in, hold over at 870 s. Every
+load window showed 3 of 3 load containers. E-core busy read 77-93% at typical (the load plus the
+sandbox's own work) and 99.8-99.9% at heavy. Every LLM request carried one user message, and every
+purge read back 0 keys. No block aborted, and no row was dropped. The A3 hold: server up
+by 357 s, two blocks of 255 s. A3 completed all 12 C12 ids at both levels in its first hold (about 80 s
+per block), so the second A3 hold would have run no task under W1 item 6's resume rule and was not
+run.
+
+A1, per task (seconds; censored = cut by the block budget, measured again in the level's next block):
+
+| Task | Typical | Heavy |
+|---|---|---|
+| C01 | 66.9 pass | 142.9 censored (block 2), then 122.7 pass (block 3) |
+| C02 | 29.3 fail (610 not in the sandbox output) | 20.0 censored (block 3) |
+| C03 | 46.5 censored (block 1), then 99.9 pass (block 4) | not reached |
+| C04 | 42.8 censored (block 4) | not reached |
+
+On the 1 C12 id A1 completed at both levels (C01): paired time ratio heavy/typical **1.84**
+(paired bootstrap CI 1.84-1.84: one id, so every resample is the same), ratio of medians 1.84,
+delta success 0 points (1/1 at both levels). C02 was completed at typical and censored at heavy,
+so it leaves the ratio.
+
+**Verdict: REFUTED**, by the registered rule as `stretch` applies it: the ratio's CI lower bound
+(1.84) is above 1.5. The rule sets no minimum number of ids, and W1 set none. This verdict rests on
+one task: C01, 66.9 s at typical and 122.7 s at heavy. Its CI is degenerate, so it measures one
+task's stretch, not a distribution. It matches the row's prediction (ratio 1.6-2.5, success
+held). The 143 s blocks are the cause. Four blocks with an agent restart, a 30 s gap and a
+warm-up each fit a 20-min hold only that short (W1 item 6), and A1's C12 tasks took 29-123 s.
+
+A3 (context, not scored): 12 of 12 ids completed at both levels. Paired ratio heavy/typical 1.03
+(CI 1.01-1.07), success 4/12 typical and 5/12 heavy. Median task 3.0 s at both levels: on the GPU
+the agent's turns are short. Most A3 failures are graded misses: the expected value is missing
+from the answer, or absent from the sandbox output.
+
+### H45 run (i9-13900T, 2026-10-20)
+
+**Reproduce:**
+
+```text
+# provenance
+date:            2026-10-20T08:04:21Z (A1) to 10:31:43Z (C2 released); 7 holds, back to back per arm
+hypothesis:      H45
+host cpu:        13th Gen Intel(R) Core(TM) i9-13900T (8 P-cores, 16 E-cores, 125 GiB RAM)
+host kernel:     6.6.128-1-MANJARO
+accelerators:    k3d-gpu up: nvidia=2 intel=8 hybrid=1 (A3 uses the RTX 4000; A1, C1, C2 none)
+k3d-gpu commit:  5ea35b7 (#149; the H45 runner of #148, dc2e1aa, unchanged)
+node image:      cryptoandcoffee/k3d-gpu@sha256:8cd264aa68c77681d7fa474693944de0db8d55de5881253e4029bf72a67e175c (0.1.61)
+model:           A1 k3dgpu/Qwen3-4B-Instruct-2507-int4-ov (openvino_model.bin sha256 5c1e36e4...);
+                 A3 cyankiwi/Qwen3-4B-Instruct-2507-AWQ-4bit @ c46e2277; C1 qwen3:4b-instruct-2507-q4_K_M
+                 (manifest sha256 0edcdef3...); C2 unsloth Q4_K_M (LFS sha256 3605803b...)
+runtime:         A1 openvino/model_server@sha256:a928903f... (2026.4.1), P-core balloon, tool_parser hermes3;
+                 A3 vllm/vllm-openai@sha256:a4a4c043... (v0.31.0); C1 ollama/ollama:0.40.5@sha256:5d3a2f25...;
+                 C2 ghcr.io/ggml-org/llama.cpp:server-b11706@sha256:f41d47ee...; LiteLLM
+                 v1.83.14-stable.patch.2@sha256:73cbb215...; banking-assistant at 758d484, ENABLE_MEMORY=false
+energy source:   RAPL package (through K3D_GPU_RAPL_EXEC), plus nvidia-smi for A3
+runs per arm:    A1 1 hold (N=1); A3 4 holds (N=1, 2, 4, 8, one each); C1 1 hold (N=1); C2 1 hold (N=1)
+```
+
+Commands: the scratchpad `hold.sh` runs `flock -w 21600 live.lock`, refuses `/` above 97%, then
+`LIVE_MODE=apb LIVE_CAP=1170 LIVE_LEVEL=typical LIVE_APB_RAMP=<steps> [LIVE_APB_BASE=<first hold>/apb]
+timeout -k 30 1200 bench/eatflow/live.sh <arm> <out>`, then deletes the cluster. A hold ran only when
+every earlier step of its arm passed. Score:
+`k3d-gpu bench agent apb-score --arm A1=<h1>/apb --arm A3=<h1>/apb,<h2>/apb,<h3>/apb,<h4>/apb --arm C1=<h1>/apb --arm C2=<h1>/apb`.
+Records (per hold: `apb.json`, results, blocks, the baseline, pre- and during load windows, facts,
+proxy and turn logs gzipped, the capacity report; `apb-score.json`):
+[bench/eatflow/results/2026-10-19/H45/](bench/eatflow/results/2026-10-19/H45/).
+
+Holds. Servers came up 86 s (A1), 280-358 s (A3), 49 s (C1) and under a minute (C2) into
+their holds, so every hold was deliverable. Every baseline, pre- and during window showed 3 of 3
+load containers, so no hold is VOID. A1, C1 and C2 failed N=1, which ended each ramp after one
+hold. A3 passed every step. Every step ran 300 s, and its first 30 s after the warm-up were not
+scored.
+
+| Arm | Step | Window requests | Turn p95 s | Success (completed) | Errors | Gate |
+|---|---|---|---|---|---|---|
+| A1 | N=1 | 31 | 26.1 | 15/16 (0.94) | 0 | fail: p95 > 10 s, < 60 requests |
+| A3 | N=1 | 265 | 3.0 | 125/133 (0.94) | 0 | pass |
+| A3 | N=2 | 486 | 3.2 | 232/249 (0.93) | 0 | pass |
+| A3 | N=4 | 880 | 3.5 | 428/449 (0.95) | 0 | pass |
+| A3 | N=8 | 1476 | 4.0 | 694/765 (0.91) | 0 | pass (>= 0.94 - 0.10) |
+| C1 | N=1 | 16 | 61.2 | 8/8 (1.00) | 0 | fail: p95 > 10 s, < 60 requests |
+| C2 | N=1 | 17 | 61.5 | 9/9 (1.00) | 0 | fail: p95 > 10 s, < 60 requests |
+
+Agents per box (bracket from `apb-score`) against the predictions:
+
+| Arm | APB | Predicted | Status |
+|---|---|---|---|
+| A3 | 8 | >= 8 | holds |
+| A1 | 0 | [1, 4] | **refuted** |
+| C1 | 0 | <= 1 | holds |
+| C2 | 0 | <= A1 | undecided: load unmatched |
+
+Load, amendment 27 over A1's and C2's windows: **INCONCLUSIVE**. Pre-window `throttle_per_min`
+read 1022 vs 333 (limit 255), and swap used and swap growth differed by 0.9-1.9 GiB and
+663 MiB. Pre-window busy read 53.5 vs 49.3% and during-window busy 76.0 vs 77.1%; both are
+within the limit. So "C2 <= A1" (0 <= 0 on the brackets) decides nothing, as the
+pre-registration disclosed it likely would. During the steps, E-core busy read 72.6-79.5% for A1,
+53.4-58.6% for A3, 84.2-89.1% for C1 and 74.8-79.1% for C2. C1 and C2 are not pinned, so their
+servers share the load CPUs. Two of A3's four settle gaps ran the full 60 s without settling
+(recorded, not gated).
+
+**Verdict: REFUTED.** A1's agents per box is 0, outside its predicted [1, 4], and W1 item 10
+reads the row REFUTED when any prediction is refuted. A1 failed N=1 on two gates: turn p95
+26.1 s against the 10 s SLO, and 31 window requests against the minimum 60. A1's B24 turns in
+H42 (p95 20.9 s) pointed the same way, as the pre-registration disclosed. A3's 8 and C1's 0 hold
+their predictions. C2's prediction is undecided.
+
+The synthetic APB, reported beside and never scored: `k3d-gpu capacity --slo 10 --budget 3` in
+each arm's last hold ran out of budget for every arm. A1, C1 and C2 closed no step, so they have
+no APB (bracket from 0). A3 passed one step, at 1 agent (82 requests, p95 1.47 s), so its APB is
+>= 1. A 3 min budget is too short for this tool, which defaults to 15 min, so these brackets
+say nothing about the graded result.
 
 ### H5 amendment A1: stage-1 harness and definitions (2026-10-19)
 

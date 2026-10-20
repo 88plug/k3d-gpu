@@ -1,0 +1,28 @@
+{
+ "arm": "A3",
+ "level": "typical",
+ "slo_s": 10.0,
+ "step_s": 300.0,
+ "ramp": [
+  1
+ ],
+ "base_success": 0.9398496240601504,
+ "apb": 1,
+ "steps": [
+  {
+   "n": 1,
+   "pass": true,
+   "checks": {
+    "n_requests": 265,
+    "p95_s": 2.969331,
+    "success": 0.9398496240601504,
+    "error_rate": 0.0,
+    "p95_ok": true,
+    "success_ok": true,
+    "errors_ok": true,
+    "n_ok": true
+   },
+   "window_from": 1792485511.8370068
+  }
+ ]
+}
