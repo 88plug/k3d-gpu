@@ -8,8 +8,12 @@ name: Auto-release AUR
 # Dispatches bypass the GITHUB_TOKEN downstream-trigger limit.
 #
 # hack/release_cas.sh releases from a fresh origin/main and pushes main and the
-# tag in one atomic push, retrying when another writer moved main. A push
-# run whose commits an earlier run already released exits with no tag. The
+# tag in one atomic push (--atomic), retrying when another writer moved main or
+# took the tag. On those lock and non-fast-forward races GitHub rejected both
+# refs together in a branch-ref spike (not yet seen on a live release push); for
+# other rejection classes a release commit can land
+# without its tag, and the next run tags it in place. A push run whose commits
+# an earlier run already released exits with no tag. The
 # concurrency group only queues runs; correctness does not depend on it. Push and
 # dispatch runs queue separately, so a pending forced dispatch is never replaced
 # by a push run that finds nothing to release.
@@ -55,4 +59,4 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VER: ${{ steps.rel.outputs.ver }}
-        run: gh workflow run build-and-push.yml --ref main -f "release=${VER}"
+        run: gh workflow run build-and-push.yml --ref main -f release="$VER"
