@@ -168,7 +168,7 @@ What Intel has said in public, with the source for each line:
 
 That split, orchestration and serving on fast cores with agent tools on many small ones,
 is the placement k3d-gpu sets with one pod label, not isolation: package power, LLC and
-DRAM bandwidth stay shared, so E-core load still slows CPU-served inference on the
+DRAM bandwidth stay shared, so E-core load still slowed CPU-served prefill on the
 P-cores [ledger:H3]. Sandboxes on E-cores behind default-deny egress is SUPPORTED on the
 i9-13900T [ledger:H18]. No Xeon run backs it yet.
 

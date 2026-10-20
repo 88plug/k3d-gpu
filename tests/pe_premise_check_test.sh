@@ -101,34 +101,70 @@ else
 fi
 chmod 644 "${d}/docs/a.md"
 
-# 10. The five lines the sweep rewrote, verbatim from origin/main ef87f866, each at
-# its own path. Every one is flagged.
+# 10. The six lines the sweep rewrote, verbatim from origin/main ef87f866, each at
+# its own path (the doctor note at scripts/k3d-gpu:3316 shortened). Every one is flagged.
 d=$(tree pre_sweep)
 mkdir -p "${d}/scripts" "${d}/share"
 printf '| Placement | pod label `k3d-gpu.io/cores=efficient`, 1 CPU request: on a hybrid CPU the UI runs on E-cores and leaves the P-cores to inference. No effect on other hosts. |\n\n%s\n%s\n' \
     '`k3d-gpu.io/cores: efficient` and request one CPU, so on a hybrid host untrusted' \
     'agent tool execution runs on E-cores and the P-cores stay free for inference.' > "${d}/README.md"
 printf '%s\n' '# The profile labels them k3d-gpu.io/cores=efficient, so on a hybrid CPU the balloons' \
-    '# policy keeps them on E-cores and the P-cores stay free for inference.' > "${d}/scripts/k3d-gpu"
+    '# policy keeps them on E-cores and the P-cores stay free for inference.' \
+    '  "... through an NRI balloons CPU class, so P-core inference keeps more of the budget and E-core pods run slower. Unmeasured until EXPERIMENTS.md H5 runs; it recreates the cluster" \' \
+    > "${d}/scripts/k3d-gpu"
 printf '%s\n' '# puts every sandbox in the NRI balloons "efficient" balloon on hybrid hosts (k3d-gpu up' \
     '# deploys it), so the P-cores stay free for inference. The CPU request sizes the balloon.' > "${d}/share/agent-sandbox-k3d.yml"
 printf '%s\n' \
     'That split, orchestration and serving on fast cores with agent tools on many small ones,' \
     'is the placement k3d-gpu sets with one pod label: sandboxes on E-cores behind' > "${d}/docs/intel.md"
-expect pre_sweep_lines_fail "${d}" 1 README.md:1 README.md:4 scripts/k3d-gpu:2 share/agent-sandbox-k3d.yml:2 docs/intel.md:1
+expect pre_sweep_lines_fail "${d}" 1 README.md:1 README.md:4 scripts/k3d-gpu:2 scripts/k3d-gpu:3 share/agent-sandbox-k3d.yml:2 docs/intel.md:1
 
 # 10b. Where git history holds ef87f866 (a full clone, not CI's depth-1 checkout),
-# the guard flags exactly those five lines of that tree.
+# the guard flags exactly those six lines of that tree.
 REPO="$(cd "${HERE}/.." && pwd)"
 if git -C "${REPO}" cat-file -e 'ef87f866^{commit}' 2>/dev/null; then
     mkdir -p "${WORK}/ef87f866"
     git -C "${REPO}" archive ef87f866 README.md docs scripts/k3d-gpu share contrib console 2>/dev/null \
         | tar -x -C "${WORK}/ef87f866"
     expect origin_main_ef87f866_snapshot "${WORK}/ef87f866" 1 \
-        README.md:979 README.md:1374 scripts/k3d-gpu:5434 share/agent-sandbox-k3d.yml:6 docs/intel.md:165
+        README.md:979 README.md:1374 scripts/k3d-gpu:3316 scripts/k3d-gpu:5434 share/agent-sandbox-k3d.yml:6 docs/intel.md:165
 else
     ok "origin_main_ef87f866_snapshot (skipped: commit not in this clone)"
 fi
+
+# 12. Review phrasings the first guard let through, one file each; every one is flagged.
+d=$(tree review_phrasings)
+i=0
+while IFS= read -r line; do
+    i=$((i + 1)); printf '%s\n' "${line}" > "${d}/docs/p${i}.md"
+done << 'EOF'
+P-cores are reserved for inference.
+The label keeps inference on the P-cores, away from noisy agent tools.
+Agent tools never slow P-core inference.
+Keep sandbox load off the P-cores, so inference latency is unaffected.
+The opt-in prefill guard caps the E-cores, so P-core inference keeps more of the budget.
+Unmeasured until EXPERIMENTS.md H5 runs; it recreates the cluster.
+EOF
+expect review_phrasings_fail "${d}" 1 docs/p1.md:1 docs/p2.md:1 docs/p3.md:1 docs/p4.md:1 docs/p5.md:1 docs/p6.md:1
+
+# 13. An unrelated "stays shared" on the next line does not scope a claim: only
+# "not isolation" wording counts from an adjacent line.
+d=$(tree shared_adjacent)
+printf '%s\n' 'Sandboxes run on E-cores and the P-cores stay free for inference.' 'The LLC stays shared.' > "${d}/docs/a.md"
+expect unrelated_adjacent_shared_fails "${d}" 1 docs/a.md:1
+
+# 14. Docs subdirectories, share/*.yaml and other scripts are scanned.
+d=$(tree scope_paths)
+mkdir -p "${d}/docs/guide" "${d}/share" "${d}/scripts"
+printf 'The P-cores stay free for inference.\n' > "${d}/docs/guide/b.md"
+printf '# so the P-cores stay free for inference\n' > "${d}/share/x.yaml"
+printf '# so the P-cores stay free for inference\n' > "${d}/scripts/other"
+expect scan_scope_fails "${d}" 1 docs/guide/b.md:1 share/x.yaml:1 scripts/other:1
+
+# 15. EXPERIMENTS.md states hypotheses, refuted ones included, and is not scanned.
+d=$(tree experiments)
+printf '| H3 | P/E pinning isolates inference from noisy neighbours on a hybrid CPU. |\n' > "${d}/EXPERIMENTS.md"
+expect experiments_not_scanned "${d}" 0
 
 # 11. The guard is clean on this tree.
 expect repo_tree_clean "${REPO}" 0

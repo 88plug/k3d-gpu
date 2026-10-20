@@ -1476,7 +1476,7 @@ plus a one-replica warm pool in namespace `agent-sandbox`. Sandbox pods carry
 `k3d-gpu.io/cores: efficient` and request one CPU, so on a hybrid host untrusted
 agent tool execution runs on E-cores, apart from the P-cores that serve inference.
 That is placement, not isolation: package power, LLC and DRAM bandwidth stay shared,
-so a busy sandbox can still slow CPU-served inference on the P-cores [ledger:H3].
+and E-core load still slowed CPU-served prefill on the P-cores [ledger:H3].
 `up` waits for a warm sandbox, then runs `status`, which reads each sandbox's
 `Cpus_allowed_list` and fails if it is not inside the host's E-cores.
 `k3d-gpu sandbox down` removes it all.

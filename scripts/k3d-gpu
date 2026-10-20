@@ -3535,7 +3535,7 @@ perf_prefill_guard() {
         khz=$(guard_khz 50%) || khz=""
         perf_flag note "package throttled ${cnt} times since boot ($([[ "${tot}" =~ ^[0-9]+$ ]] && echo "$((tot / 1000)) s in total" || echo "total time unknown"); P-core core_throttle_count ${core}${pl:+, package_power_limit_count ${pl}})" \
             "${tt}/package_throttle_{count,total_time_ms}" \
-            "each count is a PROCHOT event: the package reached its thermal limit and every core clocked down, P-cores included. The opt-in prefill guard caps the E-cores of the efficient balloon${khz:+ (50% = $((khz / 1000)) MHz here)} through an NRI balloons CPU class, so P-core inference keeps more of the budget and E-core pods run slower. Unmeasured until EXPERIMENTS.md H5 runs; it recreates the cluster" \
+            "each count is a PROCHOT event: the package reached its thermal limit and every core clocked down, P-cores included. The opt-in prefill guard caps the E-cores of the efficient balloon${khz:+ (50% = $((khz / 1000)) MHz here)} through an NRI balloons CPU class, and E-core pods run slower. EXPERIMENTS.md H5 measured it on an i9-13900T and is REFUTED: no cap level halved the neighbour's P-core prefill penalty (+23.3% left at the E-core minimum, from +40.6%). It recreates the cluster" \
             "k3d-gpu down && K3D_GPU_PREFILL_GUARD=50% k3d-gpu up" \
             "k3d-gpu down && k3d-gpu up"
     elif [ -n "${cnt}" ]; then
