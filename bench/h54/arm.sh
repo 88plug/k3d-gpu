@@ -26,6 +26,17 @@ NSP=$(field ns) SVC=$(field svc) SPORT=$(field port) API=$(field api) BOOT=$(fie
 MODEL=$(served)
 PORT=$(( 18000 + RANDOM % 1000 ))
 pf=""
+# The port-forward runs in a respawning loop: kubectl port-forward can drop on a long phase.
+pf_loop() {
+    trap 'kill "${k}" 2>/dev/null; exit 0' TERM
+    while :; do
+        kubectl -n "${NSP}" port-forward "svc/${SVC}" "${PORT}:${SPORT}" >> "${OUT}/pf.log" 2>&1 &
+        k=$!
+        wait "${k}"
+        echo "port-forward exited $(date -u +%FT%TZ)" >> "${OUT}/pf.log"
+        sleep 1
+    done
+}
 cleanup_pf() { [ -z "${pf}" ] || kill "${pf}" 2>/dev/null; pf=""; }
 trap cleanup_pf EXIT
 
@@ -72,9 +83,9 @@ while [ $(( $(now) - t_apply )) -lt "${limit}" ]; do
         pf=""
         if kubectl -n "${NSP}" get endpoints "${SVC}" -o jsonpath='{.subsets[*].addresses[*].ip}' 2>/dev/null | grep -q . \
            || kubectl -n "${NSP}" get pods -o jsonpath='{.items[*].status.phase}' 2>/dev/null | grep -q Running; then
-            kubectl -n "${NSP}" port-forward "svc/${SVC}" "${PORT}:${SPORT}" >> "${OUT}/pf.log" 2>&1 &
+            pf_loop &
             pf=$!
-            sleep 2
+            sleep 3
         fi
     fi
     if [ -n "${pf}" ] && curl -fsS --max-time 10 "${base}/models" > "${OUT}/models.json" 2>/dev/null \
