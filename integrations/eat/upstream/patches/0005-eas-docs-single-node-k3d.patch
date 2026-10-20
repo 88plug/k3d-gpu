@@ -7,7 +7,7 @@ A walkthrough for running the platform on one developer machine through
 the existing BYO path (existing_kubernetes) on a k3d cluster: cluster
 create flags (Traefik off, host 80/443 mapped through k3d's load
 balancer), the global_config.yaml settings that differ on k3s
-(metallb_enabled: false for ServiceLB, istio_platform: k3d,
+(metallb_enabled: false for ServiceLB, istio_platform: k3s,
 local-path from k3s, best-effort when NRI is unavailable or already
 owned), /etc/hosts on loopback, and teardown.
 
@@ -15,12 +15,12 @@ Linked from docs/README.md under Deploy. The page notes the istio and
 envoy_gateway changes it depends on.
 ---
  docs/README.md     |   1 +
- docs/deploy/k3d.md | 118 +++++++++++++++++++++++++++++++++++++++++++++
- 2 files changed, 119 insertions(+)
+ docs/deploy/k3d.md | 119 +++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 120 insertions(+)
  create mode 100644 docs/deploy/k3d.md
 
 diff --git a/docs/README.md b/docs/README.md
-index 186dbe9..3427922 100644
+index 146bcf4..c15680c 100644
 --- a/docs/README.md
 +++ b/docs/README.md
 @@ -33,6 +33,7 @@ Install the platform, serve a model, deploy RAG, and go beyond a single node.
@@ -28,15 +28,15 @@ index 186dbe9..3427922 100644
  | [Deploy a Model](deploy/deploy_models.md) | Deploying, accessing, and managing LLM inference with `model-manager` |
  | [Multi-Node & BYO Cluster](deploy/topologies.md) | Deploying across several machines, or onto an existing cluster |
 +| [Single-Node Dev on k3d](deploy/k3d.md) | Running the platform on one machine inside k3d (k3s in Docker) for development |
+ | [Deploy on OpenShift](deploy/openshift.md) | Preparing an OpenShift + OpenShift AI cluster from the marketplace, then installing on top (preview) |
  | [NetApp ONTAP and Trident](deploy/netapp_ontap.md) | Deploying with Trident + ONTAP as the storage backend |
  | [Network Architecture](deploy/networking.md) | Network topology, IP allocation, and how a request reaches a model |
- 
 diff --git a/docs/deploy/k3d.md b/docs/deploy/k3d.md
 new file mode 100644
-index 0000000..6c806d7
+index 0000000..ee81a22
 --- /dev/null
 +++ b/docs/deploy/k3d.md
-@@ -0,0 +1,118 @@
+@@ -0,0 +1,119 @@
 +# Single-Node Dev on k3d
 +
 +[← Docs Index](../README.md)
@@ -55,7 +55,7 @@ index 0000000..6c806d7
 +| Cluster provisioning | k3d creates the cluster; Kubespray is skipped | `existing_kubernetes: <kubeconfig>` |
 +| `LoadBalancer` Services | k3s ServiceLB answers them on the node | `metallb_enabled: false` |
 +| Storage | k3s ships the `local-path` provisioner as the default StorageClass | `storage_backend: local-path` (the default) |
-+| Istio CNI paths | CNI config lives in `/var/lib/rancher/k3s/agent/etc/cni/net.d`, binaries in `/bin` | `istio_platform: k3d` |
++| Istio CNI paths | CNI config lives in `/var/lib/rancher/k3s/agent/etc/cni/net.d`, containerd loads CNI binaries from `/var/lib/rancher/k3s/data/cni` (its `bin_dirs`), not `/bin` | `istio_platform: k3s` (the `k3d` profile installs `istio-cni` into `/bin`, where containerd does not look) |
 +| Ingress controller | k3s bundles Traefik, which would claim ports 80 and 443 | `--disable=traefik` at cluster create |
 +| CPU pinning | containerd NRI is on unless k3s runs in a user namespace (rootless) | default `nri-balloons`; `best-effort` if NRI is off or another NRI policy already owns the node |
 +| Control-plane label | k3s labels servers `node-role.kubernetes.io/control-plane=true` | none |
@@ -79,7 +79,8 @@ index 0000000..6c806d7
 +mkdir -p ~/.kube
 +k3d kubeconfig get eas > ~/.kube/k3d-eas.yaml
 +chmod 600 ~/.kube/k3d-eas.yaml
-+kubectl --kubeconfig ~/.kube/k3d-eas.yaml get nodes
++export KUBECONFIG=~/.kube/k3d-eas.yaml   # kubectl and model-manager; a BYO install writes no env/local/kubeconfig.yaml
++kubectl get nodes
 +```
 +
 +The `-p` mappings forward ports 80 and 443 on the host, through k3d's load balancer container, to the ServiceLB pods on the node. The gateway is then reachable on `127.0.0.1`.
@@ -98,7 +99,7 @@ index 0000000..6c806d7
 +```yaml
 +existing_kubernetes: "/home/<you>/.kube/k3d-eas.yaml"   # absolute path to the kubeconfig from Step 1
 +metallb_enabled: false        # k3s ServiceLB serves LoadBalancer Services
-+istio_platform: k3d           # istio-cni uses k3s's CNI directories
++istio_platform: k3s           # istio-cni uses k3s's CNI directories
 +storage_backend: local-path   # provided by k3s
 +# kubernetes_cpu_policy: best-effort   # only when NRI is off or another NRI policy owns the node
 +```
@@ -121,7 +122,7 @@ index 0000000..6c806d7
 +
 +```bash
 +DOMAIN=$(yq '.base_domain_name' env/local/global_config.yaml)
-+echo "127.0.0.1  ${DOMAIN} grafana.${DOMAIN} keycloak.${DOMAIN} litellm.${DOMAIN}" | sudo tee -a /etc/hosts
++echo "127.0.0.1  ${DOMAIN} grafana.${DOMAIN} keycloak.${DOMAIN} inference.${DOMAIN} litellm.${DOMAIN}" | sudo tee -a /etc/hosts
 +```
 +
 +Import the self-signed CA as described in [Getting Started](../quickstart/quickstart.md#access-the-services).
