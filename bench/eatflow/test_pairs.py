@@ -17,6 +17,7 @@ import agentbench as AB  # noqa: E402
 import pairs as PR  # noqa: E402
 import proxy  # noqa: E402
 import tasks as T  # noqa: E402
+import stats  # noqa: E402
 from test_agentbench import LLM, MCP, make_devui, reset_llm, serve  # noqa: E402
 
 
@@ -543,23 +544,25 @@ class L2Test(unittest.TestCase):
 
 
 class H50Test(unittest.TestCase):
-    """H50 (EXPERIMENTS.md "H50-H52 pre-registration"): H49b's design, statistic and gates on
-    the Xeon 6741P. The hypothesis id names the design and the load rule, not its suffix."""
+    """H50 (EXPERIMENTS.md "H50-H52 pre-registration", amendments M1 and A3): the H49 design on
+    the Xeon 6741P under rule L3. The hypothesis id names the design and the load rule."""
 
-    def test_h50_is_the_h49_design_under_l2(self):
-        self.assertEqual(PR.design("H50"), ("H49", "L2"))
+    REG = {"hyp": "H50", "rule": "L3", "seed": PR.ORDER_SEEDS["H50"]}
+
+    def test_h50_is_the_h49_design_under_l3(self):
+        self.assertEqual(PR.design("H50"), ("H49", "L3"))
         self.assertEqual(PR.design("H49b"), ("H49", "L2"))
         self.assertEqual(PR.design("H47"), ("H47", "L1"))
         with self.assertRaises(ValueError):
             PR.design("H51")
         at = L2Test.h49_like(L2Test())
-        res = PR.analyze(at, pairs_of(24), "H50", "A1", "B1")
+        res = PR.analyze(at, pairs_of(24), "H50", "A1", "B1", registration=self.REG)
         ref = PR.analyze(at, pairs_of(24), "H49b", "A1", "B1")
         self.assertEqual(res["hypothesis"], "H50")
-        self.assertEqual((res["rule"], res["verdict"]), ("L2", "SUPPORTED"))
-        for k in ("matched", "paired_diff", "within_budget_success", "gates", "confidence"):
+        self.assertEqual((res["rule"], res["verdict"]), ("L3", "SUPPORTED"))
+        for k in ("paired_diff", "within_budget_success"):             # all 24 pairs match there too
             self.assertEqual(res[k], ref[k], k)
-        res = PR.analyze(at, pairs_of(24, void=(21, 22, 23)), "H50", "A1", "B1")
+        res = PR.analyze(at, pairs_of(24, void=(21, 22, 23)), "H50", "A1", "B1", registration=self.REG)
         self.assertTrue(any("void" in g for g in res["gates"]))       # the H49 void gate applies
 
     def test_cli_pairs_and_report_accept_h50(self):
@@ -569,38 +572,41 @@ class H50Test(unittest.TestCase):
         for name, rows in (("attempts.jsonl", L2Test.h49_like(L2Test())), ("pairs.jsonl", pairs_of(24))):
             with open(os.path.join(tmp, name), "w") as f:
                 f.writelines(json.dumps(r) + "\n" for r in rows)
+        with self.assertRaises(ValueError):                           # an L3 directory needs its registration
+            AB.main(["pairs-report", tmp, "--hyp", "H50", "--arm-a", "A1", "--arm-b", "B1"])
+        PR.register(tmp, "H50")
         self.assertEqual(AB.main(["pairs-report", tmp, "--hyp", "H50", "--arm-a", "A1", "--arm-b", "B1"]), 0)
         with open(os.path.join(tmp, "analysis.json")) as f:
             res = json.load(f)
-        self.assertEqual((res["hypothesis"], res["rule"], res["verdict"]), ("H50", "L2", "SUPPORTED"))
+        self.assertEqual((res["hypothesis"], res["rule"], res["verdict"]), ("H50", "L3", "SUPPORTED"))
 
     def test_live_sh_maps_h50_and_sizes_the_eat_kv_cache(self):
         import re
         with open(os.path.join(HERE, "live.sh")) as f:
             live = f.read()
-        # H50 runs the H49 arms (A1 vs B1) under rule L2, in its own cluster.
-        self.assertIn("H50) DESIGN=H49 RULE=L2 KV_GIB=${LIVE_EAT_KV_GIB:-40} ;;", live)   # 40 GiB unless set
-        self.assertRegex(live, r"\n\s*H49b\) DESIGN=H49 RULE=L2 ;;")
-        self.assertIn('if [ "${RULE}" = L2 ]; then', live)
+        # H50 runs the H49 arms (A1 vs B1); the rule comes from pairs.py.
+        self.assertIn('[ "${ARM}" = H50 ] && KV_GIB=${LIVE_EAT_KV_GIB:-40}', live)   # 40 GiB unless set
+        self.assertIn("case ${ARM} in H50o|H53|H53h) DESIGN=${ARM} ;; esac", live)
+        self.assertIn('if [ "${RULE}" != L1 ]; then', live)
         # A1 is the CPU stack even where the auto device would pick an XMX Intel GPU (crescent).
         self.assertIn("    draft=${A_DRAFT} dev=CPU\n", live)
         self.assertIn("K3D_GPU_AGENT_DEVICE=${dev} K3D_GPU_AGENT_MODEL=${TGT}", live)
         # B1's KV cache: 6 GiB by default (H49, H49b on the 125 GiB desktop); H50 runs EAT's
-        # shipped Qwen3-4B value (40 GiB) through LIVE_EAT_KV_GIB.
+        # shipped value (40 GiB) through LIVE_EAT_KV_GIB.
         self.assertIn("KV_GIB=${LIVE_EAT_KV_GIB:-6}", live)
         self.assertEqual(len(re.findall(r'stage.py" values "\$\{chart\}/xeon-values.yaml" "\$\{OUT\}/pin.yaml" "\$\{KV_GIB\}"', live)), 2)
         self.assertNotRegex(live, r'pin.yaml" 6 ')
 
     def test_h50o_runs_eat_ovms_chart_as_arm_b3(self):
-        self.assertEqual(PR.design("H50o"), ("H49", "L2"))
+        self.assertEqual(PR.design("H50o"), ("H49", "L3"))
         self.assertIn("H50o", AB.PAIRS_HYPS)
         at = [dict(r, arm="B3") if r["arm"] == "B1" else r for r in L2Test.h49_like(L2Test())]
-        res = PR.analyze(at, pairs_of(24), "H50o", "A1", "B3")
-        self.assertEqual((res["rule"], res["arms"], res["verdict"]), ("L2", ["A1", "B3"], "SUPPORTED"))
+        res = PR.analyze(at, pairs_of(24), "H50o", "A1", "B3",
+                         registration={"hyp": "H50o", "rule": "L3", "seed": PR.ORDER_SEEDS["H50o"]})
+        self.assertEqual((res["rule"], res["arms"], res["verdict"]), ("L3", ["A1", "B3"], "SUPPORTED"))
         self.assertIn("paired_diff", res)
         with open(os.path.join(HERE, "live.sh")) as f:
             live = f.read()
-        self.assertRegex(live, r"\n\s*H50o\) DESIGN=H50o RULE=L2 ;;")
         self.assertRegex(live, r"\n\s*H50o\) A=A1 B=B3 ;;")
         # EAT's OVMS chart: its image tag pinned to a digest, the OpenVINO model it pulls,
         # OVMS's OpenAI path /v3 for LiteLLM and the model list.
@@ -610,6 +616,92 @@ class H50Test(unittest.TestCase):
         self.assertIn("B_DEP=ovms-model-server B_SVC=ovms-model-server B_SPORT=8080 B_API=/v3", live)
         self.assertIn('litellm b "${SERVED_B}" "${BPORT}" "$(( P_LLM + 1 ))" "${API_B}"', live)
         self.assertIn('wait_http "http://127.0.0.1:${BPORT}${API_B}/models" 300', live)
+
+
+class L3Test(unittest.TestCase):
+    """Rule L3 (EXPERIMENTS.md "Crescent amendment A3"): every complete pair enters the
+    statistic; a balance gate (arm must not predict a pre-window covariate) replaces the match
+    filter; a two-regressor adjustment and L2's matched subset are reported, never gated; the arm
+    order of pair j comes from a registered seed; one registration file per pairs directory."""
+
+    def noisy(self, n=24, b_busy=0.0, seed=7):
+        import random
+        rng = random.Random(seed)
+        at = []
+        for j in range(n):
+            # Idle-time throttle and busy noise that L2's tolerances reject most of the time,
+            # drawn independently of the arm (H49b: 12-3342 events/min between idle windows).
+            pa = pre(busy=48 + rng.uniform(-6, 6), thr=rng.choice([12, 155, 298, 1063, 3342]))
+            pb = pre(busy=48 + b_busy + rng.uniform(-6, 6), thr=rng.choice([12, 155, 298, 1063, 3342]))
+            at += [att2(j, "A1", 10.5, pa), att2(j, "B1", 10.5, pb, outcome="pass_budget" if j % 5 == 0 else "over_turn")]
+        return at
+
+    def reg(self):
+        return {"hyp": "H50", "rule": "L3", "seed": PR.ORDER_SEEDS["H50"]}
+
+    def test_arm_independent_pre_noise_keeps_every_pair(self):
+        at = self.noisy()
+        self.assertLess(len(PR.l2(PR.pair_table(at, pairs_of(24), "A1", "B1")[0], "A1", "B1")["matched"]), 16)
+        res = PR.analyze(at, pairs_of(24), "H50", "A1", "B1", registration=self.reg())
+        self.assertEqual((res["rule"], res["matched"]), ("L3", 24))
+        self.assertEqual(res["gates"], [])
+        self.assertTrue(res["load"]["balance_ok"], res["load"]["balance"])
+        self.assertEqual(res["verdict"], "SUPPORTED")
+        self.assertIn("adjusted", res["load"])                      # reported, never gated
+        self.assertIn("l2_secondary", res)
+        self.assertLess(res["load"]["sign_flip_p"], 0.01)
+
+    def test_covariate_tracking_arm_is_inconclusive(self):
+        res = PR.analyze(self.noisy(b_busy=8.0), pairs_of(24), "H50", "A1", "B1", registration=self.reg())
+        self.assertFalse(res["load"]["balance_ok"])
+        self.assertEqual(res["verdict"], "INCONCLUSIVE")
+        self.assertTrue(any("covariate tracks arm: busy_pct" in g for g in res["gates"]), res["gates"])
+
+    def test_too_few_pairs_and_voids_still_gate(self):
+        res = PR.analyze(self.noisy(n=15), pairs_of(15), "H50", "A1", "B1", registration=self.reg())
+        self.assertTrue(any("complete pairs < 16" in g for g in res["gates"]), res["gates"])
+        res = PR.analyze(self.noisy(), pairs_of(24, void=(21, 22, 23)), "H50", "A1", "B1", registration=self.reg())
+        self.assertTrue(any("void" in g for g in res["gates"]))
+
+    def test_registration_is_required_and_must_match(self):
+        with self.assertRaises(ValueError):
+            PR.analyze(self.noisy(), pairs_of(24), "H50", "A1", "B1")
+        with self.assertRaises(ValueError):
+            PR.analyze(self.noisy(), pairs_of(24), "H50", "A1", "B1", registration=dict(self.reg(), rule="L2"))
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        r = PR.register(tmp, "H50")
+        self.assertEqual(r, self.reg())
+        self.assertEqual(PR.register(tmp, "H50"), r)               # a later hold: same registration
+        with self.assertRaises(PR.HoldAborted):
+            PR.register(tmp, "H50o")                                 # another hypothesis in the same dir
+        self.assertIsNone(PR.register(tempfile.mkdtemp(dir=tmp), "H49b"))   # L1/L2 rows: none
+
+    def test_seeded_order_is_deterministic_and_balanced(self):
+        s = PR.ORDER_SEEDS["H50"]
+        self.assertEqual([PR.order(j, "A", "B", s) for j in range(50)], [PR.order(j, "A", "B", s) for j in range(50)])
+        first = sum(PR.order(j, "A", "B", s) == ("A", "B") for j in range(1000))
+        self.assertTrue(450 <= first <= 550, first)
+        self.assertEqual([PR.order(j, "A", "B") for j in range(4)], [("A", "B"), ("B", "A")] * 2)   # parity
+
+    def test_replay_committed_h49b(self):
+        d = os.path.join(HERE, "results", "2026-10-18", "H49b", "pairs")
+        table, void = PR.pair_table(PR.read_jsonl(os.path.join(d, "attempts.jsonl")),
+                                    PR.read_jsonl(os.path.join(d, "pairs.jsonl")), "A1", "B1")
+        r = PR.l3(table, "A1", "B1")
+        self.assertEqual(len(table), 23)
+        self.assertTrue(r["balance_ok"], r["balance"])
+        ok = {arm: {table[j]["task"]: int(table[j][arm]["outcome"] == "pass_budget") for j in table} for arm in ("A1", "B1")}
+        pd = stats.paired_diff(ok["A1"], ok["B1"])
+        self.assertAlmostEqual(pd["diff"], 0.609, places=3)
+        self.assertGreaterEqual(pd["ci95"][0], 0.30)
+
+    def test_live_sh_reads_the_rule_from_pairs_py(self):
+        with open(os.path.join(HERE, "live.sh")) as f:
+            live = f.read()
+        self.assertEqual(live.count("RULE=L"), 0)
+        self.assertIn('read -r FAMILY RULE <<< "$(python3 "${HERE}/pairs.py" design "${ARM}")"', live)
+        self.assertIn('if [ "${RULE}" != L1 ]; then', live)
 
 
 class ModelSetTest(unittest.TestCase):
@@ -646,9 +738,14 @@ class ModelSetTest(unittest.TestCase):
         self.assertNotIn("--sampling agent_local", live)
         self.assertEqual(live.count('--sampling "${SAMPLING}"'), 5)
         self.assertEqual(live.count("--set chatTemplateConfigMap.enabled=${B_CHAT}"), 2)
+        # LIVE_MOUNT_B: B's weights mounted read-only (k3d-gpu K3D_GPU_VOLUMES), not copied.
+        self.assertIn('K3D_GPU_VOLUMES="$(readlink -f "${LIVE_MODELS:?}/${B_DIR}"):${B_HOST}/${B_DIR}:ro"', live)
+        self.assertEqual(live.count("STAGE_HOST_DIR=${B_HOST} python3"), 3)
+        self.assertEqual(live.count('[ "${B_HOST}" = /var/apb-models ] && stage'), 3)
         # The card's sampling (README "Sampling Parameters", generation_config.json), pinned.
         self.assertEqual(AB.sampling_set("agent_gemma4"),
-                         {"temperature": 1.0, "top_p": 0.95, "top_k": 64, "max_tokens": 1024})
+                         {"temperature": 1.0, "top_p": 0.95, "top_k": 64, "max_tokens": 1024,
+                          "chat_template_kwargs": {"enable_thinking": False}})
         self.assertEqual(AB.sampling_set("agent_local"), {"temperature": 0, "top_p": 1, "max_tokens": 1024})
 
 
@@ -663,16 +760,15 @@ class H53Test(unittest.TestCase):
 
     def test_h53_reads_as_h49b(self):
         for hyp, b in (("H53", "B2"), ("H53h", "B2h")):
-            self.assertEqual(PR.design(hyp), ("H49", "L2"))
+            self.assertEqual(PR.design(hyp), ("H49", "L3"))
             self.assertIn(hyp, AB.PAIRS_HYPS)
             at = [dict(r, arm={"A1": "AG", "B1": b}[r["arm"]]) for r in L2Test.h49_like(L2Test())]
-            res = PR.analyze(at, pairs_of(24), hyp, "AG", b)
-            self.assertEqual((res["rule"], res["arms"], res["verdict"]), ("L2", ["AG", b], "SUPPORTED"))
+            res = PR.analyze(at, pairs_of(24), hyp, "AG", b,
+                             registration={"hyp": hyp, "rule": "L3", "seed": PR.ORDER_SEEDS[hyp]})
+            self.assertEqual((res["rule"], res["arms"], res["verdict"]), ("L3", ["AG", b], "SUPPORTED"))
 
     def test_live_sh_arms(self):
         live = self.live()
-        self.assertRegex(live, r"\n\s*H53\) DESIGN=H53 RULE=L2 ;;")
-        self.assertRegex(live, r"\n\s*H53h\) DESIGN=H53h RULE=L2 ;;")
         self.assertIn("H53) A=AG B=B2; export K3D_GPU_NODE_LABELS=ei-infra-eligible=true,ei-inference-eligible=true", live)
         self.assertIn("H53h) A=AG B=B2h;", live)
         # AG: k3d-gpu's own choice (auto device, default draft); A1 stays on the CPU.
@@ -684,7 +780,7 @@ class H53Test(unittest.TestCase):
         self.assertIn('--values "${chart}/xpu-values.yaml" --values "${OUT}/pin.yaml"', live)
         self.assertIn('--set LLM_MODEL_ID="${mid}" --set tensor_parallel_size="${LIVE_B2_TP:-2}"', live)
         self.assertIn('[ "${DESIGN}" = H53h ] && mid=${B2H_PROFILE:?}', live)
-        self.assertIn('stage.py" xpu "${OUT}/eat.yaml" "${OUT}/deploy-b.yaml" "${B_DIR}" 32768', live)
+        self.assertIn('stage.py" xpu "${OUT}/eat.yaml" "${OUT}/deploy-b.yaml" \\\n            "${B_DIR}" 32768', live)
         self.assertIn('"ladder=${LIVE_B2_LADDER:-}" "${flags[@]}"', live)
         self.assertIn("need=$(( 1 + ${LIVE_B2_TP:-2} ))", live)
         _, sets = ModelSetTest.sets(ModelSetTest())
@@ -710,6 +806,10 @@ class H53Test(unittest.TestCase):
         self.assertIn('if [[ " ${free} " == *" ${bdf} "* ]]; then kubectl -n default delete pod "gpu-hold-${i}"', live)
         self.assertIn('[[ " ${free} " == *" ${bdf} "* ]] || { echo "ABORTED: ${obj} holds ${bdf}, not a free card"; exit 3; }', live)
         self.assertIn('for rd in $(kubectl -n "${ns}" exec "${obj}" -c "${ctr}" -- ls /dev/dri | grep renderD); do', live)
+        # An arm holding no card (AG fell back to the CPU) or the wrong count stops the hold too.
+        self.assertIn("grep -q -- '--target_device=GPU' \"${OUT}/agent.yaml\" || { echo \"ABORTED: AG is not on the GPU\"", live)
+        self.assertIn('"${B_NS} deploy/${B_DEP} vllm ${LIVE_B2_TP:-2}"', live)
+        self.assertIn('[ "${got}" -eq "${want}" ] || { echo "ABORTED: ${obj} holds ${got} card(s), not ${want}"; exit 3; }', live)
         i_hold, i_apply, i_check, i_pairs = (live.index("gpu-hold-%s"), live.index('kubectl apply -f "${OUT}/deploy-a.yaml"'),
                                             live.index("not a free card"), live.index("${AB} pairs --hyp"))
         self.assertLess(i_hold, i_apply)

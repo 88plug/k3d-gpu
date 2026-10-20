@@ -44,7 +44,9 @@ import sys
 
 import yaml
 
-HOST_DIR = "/var/apb-models"
+# The node directory hostPath volumes point at: models copied into the node, or STAGE_HOST_DIR
+# (live.sh LIVE_MOUNT_B: a read-only mount of the host's copy).
+HOST_DIR = os.environ.get("STAGE_HOST_DIR", "/var/apb-models")
 
 
 def host_path(volume, old):

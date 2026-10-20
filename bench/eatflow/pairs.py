@@ -15,7 +15,14 @@ attempt, with both arms idle, `load.py settle` then a pre-window. A pair is matc
 two pre-windows agree on every amendment-27 pre covariate within load.TOLERANCE and both show
 the level's full load. The arm-level check is amendment 27 (load.matched_a27) over the matched
 pairs' pre-windows. bg_cpu, package W and throttle during the attempt are reported, never
-gated. Python 3 standard library only.
+gated.
+
+Load rule L3 (H50, H50o, H53, H53h; EXPERIMENTS.md "Crescent amendment A3"): the same
+pre-windows, no match filter. Every complete pair enters the statistic; a balance gate (a
+sign-flip test of arm on each pre covariate, p < 0.01 gates) replaces it; a two-regressor
+adjustment and L2's matched subset are reported, never gated. The arm order of pair j is drawn
+from the registered seed (order), and each pairs directory carries one registration.json
+(register). Python 3 standard library only.
 """
 import glob
 import json
@@ -48,9 +55,14 @@ PRE_COVARIATES = LOAD.COVARIATES["pre"]   # busy_pct, throttle_per_min, swap_use
 OUTCOMES = ("pass_budget", "fail_graded", "over_turn", "over_task", "void")
 
 
-def order(j, a, b):
-    """Arms of pair j in run order: A B for even j, B A for odd j (A B B A A B B A ...)."""
-    return (a, b) if j % 2 == 0 else (b, a)
+def order(j, a, b, seed=None):
+    """Arms of pair j in run order. No seed: A B for even j, B A for odd j (A B B A ...), as
+    H47-H49b ran. A seed (rule L3): A first or B first by a coin drawn from Random(f"{seed}:{j}"),
+    a pure function of (seed, j), so a resumed hold draws the same order."""
+    if seed is None:
+        return (a, b) if j % 2 == 0 else (b, a)
+    import random
+    return (a, b) if random.Random(f"{seed}:{j}").random() < 0.5 else (b, a)
 
 
 def can_start(now, deadline, guard=PAIR_GUARD_S):
@@ -211,10 +223,13 @@ def run_cmd(cmd, timeout=300):
 
 
 def read_jsonl(path):
+    """The records of a JSON-lines file; a last line without its newline (a record still being
+    appended by a live hold) is not read."""
     if not os.path.exists(path):
         return []
     with open(path) as f:
-        return [json.loads(x) for x in f if x.strip()]
+        text = f.read()
+    return [json.loads(x) for x in text.split("\n")[:-1] if x.strip()]
 
 
 def append(path, row):
@@ -329,7 +344,8 @@ def quiesce(probe, arm, limit_s, step_s=1.0, below=IDLE_CPU):
 
 def run_hold(ab, arms, a, b, task_list, out, deadline, probe, mcp_url, reset, hold, cap_s=TASK_CAP_S,
              guard_s=PAIR_GUARD_S, settle_s=30.0, idle_s=0.0, warmup=None, clock=time.time,
-             opener=urllib.request.urlopen, log=lambda m: None, quiesce_s=0.0, warmup_timeout_s=600.0, pre=None):
+             opener=urllib.request.urlopen, log=lambda m: None, quiesce_s=0.0, warmup_timeout_s=600.0, pre=None,
+             seed=None):
     """Pairs until the task list ends or the hold leaves less than guard_s. Returns the
     number of complete pairs written. Every pair, complete or void, goes to pairs.jsonl."""
     os.makedirs(out, exist_ok=True)
@@ -353,7 +369,7 @@ def run_hold(ab, arms, a, b, task_list, out, deadline, probe, mcp_url, reset, ho
         t = task_list[j]
         rows, void = [], None
         try:
-            for arm in order(j, a, b):
+            for arm in order(j, a, b, seed):
                 row, needs_reset = attempt(ab, arms, arm, t, j, hold, probe, out, mcp_url, cap_s, settle_s,
                                            idle_s, clock, opener, quiesce_s, pre)
                 rows.append(row)
@@ -369,13 +385,13 @@ def run_hold(ab, arms, a, b, task_list, out, deadline, probe, mcp_url, reset, ho
                     break
         except HoldAborted as e:
             append(os.path.join(out, "pairs.jsonl"), {"j": j, "task": t["id"], "hold": hold, "status": "void",
-                                                       "void_reason": void or str(e), "order": list(order(j, a, b))})
+                                                       "void_reason": void or str(e), "order": list(order(j, a, b, seed))})
             raise
         if clock() > deadline:
             void = void or "pair ran past the hold deadline"
         append(os.path.join(out, "pairs.jsonl"), {"j": j, "task": t["id"], "hold": hold,
                                                    "status": "void" if void else "complete", "void_reason": void,
-                                                   "order": list(order(j, a, b))})
+                                                   "order": list(order(j, a, b, seed))})
         log(f"pair {j} {t['id']}: " + ", ".join(f"{r['arm']} {r['outcome']} {r['duration_s']:.1f}s" for r in rows)
             + (f" VOID ({void})" if void else ""))
         done += 0 if void else 1
@@ -493,11 +509,15 @@ def boot_share(d, pred, boot=stats.BOOT, seed=stats.SEED, stat=None):
     return sum(1 for _ in range(boot) if pred(stat([d[rng.randrange(n)] for _ in range(n)]))) / boot
 
 
+# Rule L3 rows: the seed of their arm order, fixed in the pre-registration (amendment A3).
+ORDER_SEEDS = {"H50": "H50-crescent-2026-10-20", "H50o": "H50o-crescent-2026-10-20",
+               "H53": "H53-crescent-2026-10-20", "H53h": "H53h-crescent-2026-10-20"}
+
 # Hypothesis id -> (design, load rule). H47b and H49b are H47 and H49 under rule L2; H50 is
 # H49b's design on the Xeon 6741P, H50o the same with arm B3 (EXPERIMENTS.md "H50-H52 pre-registration");
 # H53 and H53h the same design on two Arc Pro B70s (EXPERIMENTS.md "H53 pre-registration").
 DESIGNS = {"H47": ("H47", "L1"), "H49": ("H49", "L1"), "H47b": ("H47", "L2"), "H49b": ("H49", "L2"),
-           "H50": ("H49", "L2"), "H50o": ("H49", "L2"), "H53": ("H49", "L2"), "H53h": ("H49", "L2")}
+           "H50": ("H49", "L3"), "H50o": ("H49", "L3"), "H53": ("H49", "L3"), "H53h": ("H49", "L3")}
 
 
 def design(hyp):
@@ -507,25 +527,134 @@ def design(hyp):
     return DESIGNS[hyp]
 
 
-def analyze(attempts, pairs, hyp, a, b, holds=None):
+def register(out, hyp):
+    """The registration of a rule-L3 pairs directory: {"hyp", "rule", "seed"}, written once
+    (O_CREAT | O_EXCL, under the host lock) by the first hold; every later hold must find the
+    same one, or the hold stops. None for an L1 or L2 row (no registration)."""
+    fam, rule = design(hyp)
+    if rule != "L3":
+        return None
+    want = {"hyp": hyp, "rule": rule, "seed": ORDER_SEEDS[hyp]}
+    path = os.path.join(out, "registration.json")
+    os.makedirs(out, exist_ok=True)
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    except FileExistsError:
+        with open(path) as f:
+            have = json.load(f)
+        if have != want:
+            raise HoldAborted(f"{path} registers {have}, this hold is {want}")
+        return have
+    with os.fdopen(fd, "w") as f:
+        f.write(json.dumps(want) + "\n")
+    return want
+
+
+def sign_flip_p(d, n_draw=10000, seed=stats.SEED):
+    """Two-sided sign-flip (randomization) p of mean(d) = 0: every |d| keeps its size, its
+    sign is drawn at random; p = (count |mean| >= |observed| + 1) / (draws + 1)."""
+    import random
+    d = [x for x in d if x is not None]
+    if len(d) < 2:
+        return None
+    obs = abs(sum(d) / len(d))
+    if obs == 0:
+        return 1.0
+    rng = random.Random(seed)
+    hit = sum(1 for _ in range(n_draw)
+              if abs(sum(x if rng.random() < 0.5 else -x for x in d) / len(d)) >= obs - 1e-12)
+    return (hit + 1) / (n_draw + 1)
+
+
+def _ols(rows):
+    """Least squares y ~ 1 + x1 + x2 over [(y, x1, x2)]: [b0, b1, b2], or None if singular."""
+    xs = [(1.0, x1, x2) for _, x1, x2 in rows]
+    ys = [y for y, _, _ in rows]
+    a = [[sum(r[i] * r[k] for r in xs) for k in range(3)] for i in range(3)]
+    v = [sum(r[i] * y for r, y in zip(xs, ys)) for i in range(3)]
+    for c in range(3):                                   # Gauss-Jordan with partial pivoting
+        piv = max(range(c, 3), key=lambda r: abs(a[r][c]))
+        if abs(a[piv][c]) < 1e-12:
+            return None
+        a[c], a[piv], v[c], v[piv] = a[piv], a[c], v[piv], v[c]
+        for r in range(3):
+            if r != c:
+                f = a[r][c] / a[c][c]
+                a[r] = [x - f * y for x, y in zip(a[r], a[c])]
+                v[r] -= f * v[c]
+    return [v[i] / a[i][i] for i in range(3)]
+
+
+def l3(table, a, b, alpha=0.01, boot=stats.BOOT, seed=stats.SEED):
+    """Rule L3 over every complete pair. balance: per pre covariate, the sign-flip p of
+    pre(a) - pre(b); balance_ok when every p >= alpha. adjusted (reported, never gated):
+    dy = ok(a) - ok(b) ~ 1 + dlog1p(throttle/min) + dbusy, intercept with a paired bootstrap CI.
+    sign_flip_p: of dy itself."""
+    import math
+    import random
+    js = sorted(table)
+    bal = {}
+    for m in PRE_COVARIATES:
+        d = [(table[j][a].get("pre") or {}).get(m) for j in js]
+        e = [(table[j][b].get("pre") or {}).get(m) for j in js]
+        dd = [x - y for x, y in zip(d, e) if x is not None and y is not None]
+        bal[m] = {"n": len(dd), "mean_diff": round(sum(dd) / len(dd), 4) if dd else None, "p": sign_flip_p(dd)}
+    bad = [m for m, v in bal.items() if v["p"] is not None and v["p"] < alpha]
+    dy = {j: int(table[j][a]["outcome"] == "pass_budget") - int(table[j][b]["outcome"] == "pass_budget") for j in js}
+    rows = []
+    for j in js:
+        pa, pb = table[j][a].get("pre") or {}, table[j][b].get("pre") or {}
+        if None in (pa.get("throttle_per_min"), pb.get("throttle_per_min"), pa.get("busy_pct"), pb.get("busy_pct")):
+            continue
+        rows.append((dy[j], math.log1p(pa["throttle_per_min"]) - math.log1p(pb["throttle_per_min"]),
+                     pa["busy_pct"] - pb["busy_pct"]))
+    adj = {"model": "d(pass) ~ 1 + d(log1p throttle/min) + d(busy_pct), pre-windows", "n": len(rows),
+           "intercept": None, "ci95": [None, None]}
+    fit = _ols(rows) if len(rows) >= 4 else None
+    if fit:
+        rng = random.Random(seed)
+        bs = []
+        for _ in range(boot):
+            f = _ols([rows[rng.randrange(len(rows))] for _ in rows])
+            if f:
+                bs.append(f[0])
+        bs.sort()
+        adj.update(intercept=round(fit[0], 4), slopes=[round(fit[1], 4), round(fit[2], 4)],
+                   ci95=[round(bs[int(0.025 * len(bs))], 4), round(bs[int(0.975 * len(bs)) - 1], 4)] if bs else [None, None])
+    return {"matched": js, "unmatched": [], "balance": bal, "balance_ok": not bad, "balance_failed": bad,
+            "adjusted": adj, "sign_flip_p": sign_flip_p(list(dy.values()))}
+
+
+def analyze(attempts, pairs, hyp, a, b, holds=None, registration=None):
     """The pre-registered statistics and verdict of H47 (a=A1, b=A4) or H49 (a=A1, b=B1), under
-    load rule L1; H47b, H49b and H50 are those designs under rule L2 (DESIGNS)."""
+    load rule L1; H47b and H49b are those designs under rule L2; H50, H50o, H53 and H53h the H49
+    design under rule L3, which needs the pairs directory's registration (DESIGNS, register)."""
     base, rule_name = design(hyp)
+    if rule_name == "L3":
+        want = {"hyp": hyp, "rule": "L3", "seed": ORDER_SEEDS[hyp]}
+        if registration != want:
+            raise ValueError(f"{hyp}: registration {registration} is not {want}")
     table, void = pair_table(attempts, pairs, a, b)
-    rule = l2(table, a, b) if rule_name == "L2" else l1(table, a, b)
+    rule = {"L1": l1, "L2": l2, "L3": l3}[rule_name](table, a, b)
     m = rule["matched"]
     run = len(table)
     idle = [table[j][arm]["idle_cpu"] for j in table for arm in (a, b) if table[j][arm].get("idle_cpu") is not None]
     idle_med = stats.median(idle)
     gates = []
-    if len(m) < MIN_MATCHED:
-        gates.append(f"{len(m)} matched pairs < {MIN_MATCHED}")
-    if run and len(m) / run < MIN_MATCHED_FRAC:
-        gates.append(f"{len(m)}/{run} pairs matched < {MIN_MATCHED_FRAC:.0%}")
+    if rule_name == "L3":
+        if len(m) < MIN_MATCHED:
+            gates.append(f"{len(m)} complete pairs < {MIN_MATCHED}")
+        if not rule["balance_ok"]:
+            gates.append("covariate tracks arm: " + ", ".join(rule["balance_failed"]))
+    else:
+        if len(m) < MIN_MATCHED:
+            gates.append(f"{len(m)} matched pairs < {MIN_MATCHED}")
+        if run and len(m) / run < MIN_MATCHED_FRAC:
+            gates.append(f"{len(m)}/{run} pairs matched < {MIN_MATCHED_FRAC:.0%}")
+        if m and not rule["arm_ok"]:
+            gates.append("arm-level load check failed: " + "; ".join(rule["reasons"]))
     if not run:
         gates.append("no complete pair")
-    if m and not rule["arm_ok"]:
-        gates.append("arm-level load check failed: " + "; ".join(rule["reasons"]))
     if idle_med is None or idle_med > IDLE_CPU:
         gates.append(f"idle-arm pod CPU median {idle_med} > {IDLE_CPU}" if idle_med is not None
                      else "idle-arm pod CPU unmeasured")
@@ -544,7 +673,14 @@ def analyze(attempts, pairs, hyp, a, b, holds=None):
                                "pkg_j": table[j][arm]["window"].get("pkg_j"),
                                "swap_used_mib": table[j][arm]["window"].get("swap_used_mib")}
                             for arm in (a, b)}} for j in sorted(table)]}
-    if rule_name == "L2":
+    if rule_name == "L3":
+        # Secondary, never a gate: rule L2's matched subset and its paired difference.
+        l2r = l2(table, a, b)
+        okm = {arm: {table[j]["task"]: int(table[j][arm]["outcome"] == "pass_budget") for j in l2r["matched"]}
+               for arm in (a, b)}
+        res["l2_secondary"] = {"matched": len(l2r["matched"]), "unmatched_by": l2r["unmatched_by"],
+                               "paired_diff": stats.paired_diff(okm[a], okm[b]) if l2r["matched"] else None}
+    if rule_name in ("L2", "L3"):
         # Outcomes, never gates: during-attempt load (bg_cpu, package W, throttle) on the matched
         # pairs and on every pair run; the pre-windows on the matched pairs.
         res["load_during_per_arm"] = res["load_per_arm"]
@@ -620,3 +756,14 @@ def analyze(attempts, pairs, hyp, a, b, holds=None):
 
 
 INF = float("inf")
+
+
+if __name__ == "__main__":
+    # `pairs.py design HYP`: "<design> <rule>" (live.sh reads the rule from here, DESIGNS only).
+    if len(sys.argv) == 3 and sys.argv[1] == "design":
+        try:
+            print(*design(sys.argv[2]))
+        except ValueError as e:
+            raise SystemExit(str(e))
+    else:
+        raise SystemExit("usage: pairs.py design HYP")

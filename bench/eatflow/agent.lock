@@ -66,7 +66,7 @@
   "_note": "Pinned by the recording proxy into every agent LLM request (it replaces every sampling key the agent sent), so no engine default applies. agent_local: greedy, every local arm. agent_remote: arm R through harvest, which forbids temperature 0 and logprobs; top_k 1 is greedy there; GLM-5.3 always reasons, so reasoning_effort low (the operator's known-good harvest client setting) keeps the 256-token cap for the answer. BFCL keeps its own temperature 0.001 (the board's setting).",
   "agent_local": {"temperature": 0, "top_p": 1, "max_tokens": 1024},
   "agent_remote": {"top_k": 1, "max_tokens": 256, "reasoning_effort": "low"},
-  "agent_gemma4": {"_source": "crescent amendment M1: google/gemma-4-26B-A4B-it-qat-q4_0-unquantized @ f1e06dc5, README 'Sampling Parameters' and generation_config.json; thinking stays off (no <|think|> in the system prompt)", "temperature": 1.0, "top_p": 0.95, "top_k": 64, "max_tokens": 1024},
+  "agent_gemma4": {"_source": "crescent amendment M1: google/gemma-4-26B-A4B-it-qat-q4_0-unquantized @ f1e06dc5, README 'Sampling Parameters' and generation_config.json; thinking off: the template default (enable_thinking false) sent explicitly, as REFERENCE.md 1.1 gives it per request", "temperature": 1.0, "top_p": 0.95, "top_k": 64, "max_tokens": 1024, "chat_template_kwargs": {"enable_thinking": false}},
   "agent_qwen38": {"_source": "H53: Qwen/Qwen3.8-27B @ 1d4bf0f2 README 'Best Practices', instruct (non-thinking) mode; min_p 0.0 and repetition_penalty 1.0 are the engines' defaults and are not sent; thinking off by the card's chat_template_kwargs", "temperature": 0.7, "top_p": 0.8, "top_k": 20, "presence_penalty": 1.5, "max_tokens": 1024, "chat_template_kwargs": {"enable_thinking": false}}
  },
  "hypotheses": {

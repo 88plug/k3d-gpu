@@ -12,9 +12,9 @@ R=${B}/results/${HYP}
 mkdir -p "${R}/pairs"
 extra=()
 case ${HYP} in
-    H50) extra=(LIVE_MODEL_SET=gemma4 LIVE_EAT_KV_GIB=40) ;;
-    H50o) extra=(LIVE_MODEL_SET=gemma4) ;;
-    H53|H53h) extra=(LIVE_MODEL_SET=qwen38 LIVE_EAT_XPU_CHART="${B}/eat-pr21/core/helm-charts/vllm"
+    H50) extra=(LIVE_MODEL_SET=gemma4 LIVE_EAT_KV_GIB=40 LIVE_MOUNT_B=1) ;;
+    H50o) extra=(LIVE_MODEL_SET=gemma4 LIVE_MOUNT_B=1) ;;
+    H53|H53h) extra=(LIVE_MODEL_SET=qwen38 LIVE_MOUNT_B=1 LIVE_EAT_XPU_CHART="${B}/eat-pr21/core/helm-charts/vllm"
                      LIVE_GPU_FREE="${LIVE_GPU_FREE:?H53 needs LIVE_GPU_FREE}" LIVE_B2_TP="${LIVE_B2_TP:-2}"
                      LIVE_B2_LADDER="${LIVE_B2_LADDER:-}") ;;
     *) echo "pairs-hold.sh: HYP must be H50, H50o, H53 or H53h"; exit 2 ;;

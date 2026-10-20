@@ -19,7 +19,7 @@ disk() { df -P / | awk 'NR==2 {gsub("%", "", $5); print $5}'; }
 snapshot() { date -u +%FT%TZ; uptime; ps -eo pcpu,pid,user,comm --sort=-pcpu | head -11; echo "aiperf_procs: $(aiperf_n)"; df -P / | tail -1; }
 # This campaign's clusters only: k3dgpu-e-* (pairs), k3dgpu-a-* (one arm), k3dgpu-h5* (H52, H53). Another
 # campaign on this host (k3dgpu-x-*, ~/k3dgpu-xhost) shares the lock and owns its clusters.
-clusters() { k3d cluster list -o json 2>/dev/null | python3 -c 'import json,sys,re; print(" ".join(c["name"] for c in json.load(sys.stdin) if re.match(r"k3dgpu-(e|a|h5[0-9]b?)-?", c["name"])))'; }
+clusters() { k3d cluster list -o json 2>/dev/null | python3 -c 'import json,sys,re; print(" ".join(c["name"] for c in json.load(sys.stdin) if re.match(r"k3dgpu-(e|a)-|k3dgpu-h5[0-9]b?$", c["name"])))'; }
 
 log "waiting for the lock"
 exec 9> "${HOME}/k3dgpu-bench.lock"
@@ -43,6 +43,7 @@ while :; do
 done
 echo "${waited}" > "${R}/wait_s"
 snapshot > "${R}/pre.txt"
+sudo -n dmesg -T 2>/dev/null | grep -iE ' xe |drm|DEVICE_LOST|CAT error' | tail -200 > "${R}/dmesg-pre.txt"
 [ "$(disk)" -le 97 ] || { log "disk $(disk)% > 97%: no hold"; exit 5; }
 if [ -n "$(clusters)" ]; then read -r -a cl <<< "$(clusters)"; log "leftover clusters ${cl[*]}: deleting first"; k3d cluster delete "${cl[@]}" >/dev/null 2>&1; fi
 python3 "${HERE}/serving.py" "${R}/serving.jsonl" &
@@ -63,6 +64,7 @@ left=$(clusters)
 [ -z "${left}" ] || k3d cluster delete ${left} >/dev/null 2>&1
 python3 "${HERE}/../../load/load.py" stop >/dev/null 2>&1
 snapshot > "${R}/post.txt"
+sudo -n dmesg -T 2>/dev/null | grep -iE ' xe |drm|DEVICE_LOST|CAT error' | tail -200 > "${R}/dmesg-post.txt"
 echo "${rc}" > "${R}/rc"
 log "rc=${rc}; clusters deleted: ${left:-none}; now: $(clusters)"
 exit "${rc}"

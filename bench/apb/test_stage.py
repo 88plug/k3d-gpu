@@ -151,6 +151,19 @@ class StageTest(unittest.TestCase):
         self.assertEqual(out[0]["data"], {"tool_chat_template_gemma4.jinja": "{{ x }}"})
         self.assertEqual(out[1]["data"]["HF_HUB_OFFLINE"], "1")
 
+    def test_stage_host_dir_points_hostpath_at_a_mount(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as d:
+            src, dst = os.path.join(d, "in.yaml"), os.path.join(d, "out.yaml")
+            with open(src, "w") as f:
+                yaml.safe_dump_all(copy.deepcopy(EAT), f)
+            subprocess.run([sys.executable, os.path.join(HERE, "stage.py"), "vllm", src, dst, "gemma", "8192"],
+                           check=True, env=dict(os.environ, STAGE_HOST_DIR="/var/apb-ro"))
+            with open(dst) as f:
+                dep = [x for x in yaml.safe_load_all(f) if x and x["kind"] == "Deployment"][0]
+            vol = dep["spec"]["template"]["spec"]["volumes"][0]
+            self.assertEqual(vol, {"name": "model-volume", "hostPath": {"path": "/var/apb-ro", "type": "Directory"}})
+
     def test_cuda_local_model_without_revision(self):
         out = stage.stage("cuda", copy.deepcopy(CUDA), "Qwen3-4B-AWQ")
         c = deployment(out)["containers"][0]

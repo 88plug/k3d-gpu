@@ -14,8 +14,11 @@ C=${2:-qwen38-b-hr}
 B=${HOME}/k3dgpu-bench
 D=${B}/restore
 mkdir -p "${D}"
+# The serving port: the container's PORT variable (the qwen38 entry script reads it), else a
+# --port in its arguments; no fallback, so a check never reads another pair's server.
 port=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${C}" | sed -n 's/^PORT=//p' | head -1)
-port=${port:-30001}
+[ -n "${port}" ] || port=$(docker inspect --format '{{join .Args " "}}' "${C}" | grep -oE -- '--port[= ][0-9]+' | grep -oE '[0-9]+' | head -1)
+[[ "${port}" =~ ^[0-9]+$ ]] || { echo "gpu-serving.sh: no serving port found for ${C}"; exit 2; }
 mask=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${C}" | sed -n 's/^ZE_AFFINITY_MASK=//p' | head -1)
 ev() { echo "$(date -u +%FT%TZ) ${C} $*" | tee -a "${D}/serving-events.log"; }
 state() { echo "$(date -u +%FT%TZ) $*" > "${B}/gpu-state.txt"; }

@@ -23,10 +23,11 @@
 #   LIVE_EAT_OVMS_CHART EAT core/helm-charts/ovms at 0d3438d                         (H50o B3)
 #   LIVE_EAT_XPU_CHART EAT core/helm-charts/vllm at PR #21 c86c42b                   (H53 B2)
 #   LIVE_GPU_FREE   PCI addresses of the Intel GPUs the H53 arms may use               (H53)
-#   LIVE_B2_TP      B2's tensor_parallel_size, cards (default 2; H53r: 4, EAT's shipped value)  (H53)
+#   LIVE_B2_TP      B2's tensor_parallel_size, cards (default 2)                              (H53)
 #   LIVE_B2_LADDER  H53 B2 boot ladder steps the smoke found needed (b, c, d; default none) (H53)
 #   LIVE_MODEL_SET  qwen3-4b (default) or gemma4 (crescent amendment M1): every arm's model
 #   LIVE_SAMPLING   the proxy's pinned sampling profile (default: the model set's; agent.lock)
+#   LIVE_MOUNT_B    1: mount the B arm's weights read-only into the node instead of copying them
 #   LIVE_EAT_KV_GIB B1 VLLM_CPU_KVCACHE_SPACE, GiB (default 6, the 125 GiB desktop; H50: 40, as shipped)
 #   LIVE_KEY_FILE   0600 env file with OPENAI_BASE_URL and OPENAI_API_KEY             (R)
 #   LIVE_BFCL_PY    python of the hashed BFCL venv                                    (R)
@@ -82,6 +83,14 @@ case ${MODEL_SET} in
     *) echo "LIVE_MODEL_SET must be qwen3-4b, gemma4 or qwen38"; exit 2 ;;
 esac
 SAMPLING=${LIVE_SAMPLING:-${SAMPLING}}
+# LIVE_MOUNT_B=1 (crescent amendment M1): the B arm's weights are mounted read-only into the node
+# (K3D_GPU_VOLUMES) and its hostPath points there, instead of a copy into the node's filesystem.
+B_HOST=/var/apb-models
+if [ "${LIVE_MOUNT_B:-}" = 1 ]; then
+    B_HOST=/var/apb-ro
+    K3D_GPU_VOLUMES="$(readlink -f "${LIVE_MODELS:?}/${B_DIR}"):${B_HOST}/${B_DIR}:ro"
+    export K3D_GPU_VOLUMES
+fi
 P_SRV=18630 P_LLM=18640 P_PROXY=18620 P_MCP=18600 P_ROUTER=18650 P_REDIS=18660
 LITELLM_IMAGE=docker.litellm.ai/berriai/litellm:v1.83.14-stable.patch.2@sha256:73cbb215d3d43ae5b42816217b200386eb08d567767fcb36cba163152c5f3c79  # EAT 0d3438d genai-gateway; the index digest the 2026-10-17/18 holds pulled
 RAPL_IMAGE=python:3.14.8-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170
@@ -249,17 +258,13 @@ if [ "${MODE}" = pairs ]; then
     # LIVE_GPU_FREE: the PCI addresses of the cards the arms may use; every other card is held
     # by a placeholder pod for the whole hold, so the device plugin cannot hand it out.
     PD=${LIVE_PAIRS_DIR:?} HOLD=${LIVE_HOLD:?}
-    case ${ARM} in
-        H47) DESIGN=H47 RULE=L1 ;;
-        H49) DESIGN=H49 RULE=L1 ;;
-        H47b) DESIGN=H47 RULE=L2 ;;
-        H49b) DESIGN=H49 RULE=L2 ;;
-        H50) DESIGN=H49 RULE=L2 KV_GIB=${LIVE_EAT_KV_GIB:-40} ;;   # EAT's shipped Qwen3-4B KV cache
-        H50o) DESIGN=H50o RULE=L2 ;;
-        H53) DESIGN=H53 RULE=L2 ;;
-        H53h) DESIGN=H53h RULE=L2 ;;
-        *) echo "pairs: ARM must be H47, H49, H47b, H49b, H50, H50o, H53 or H53h"; exit 2 ;;
-    esac
+    # The load rule comes from bench/eatflow/pairs.py DESIGNS, the only table of it.
+    read -r FAMILY RULE <<< "$(python3 "${HERE}/pairs.py" design "${ARM}")"
+    [ -n "${RULE:-}" ] || { echo "pairs: ${ARM} is not a pairs hypothesis"; exit 2; }
+    # What to deploy: the family's arms, or the row's own B arm (H50o: B3; H53, H53h: the B70s).
+    DESIGN=${FAMILY}
+    case ${ARM} in H50o|H53|H53h) DESIGN=${ARM} ;; esac
+    [ "${ARM}" = H50 ] && KV_GIB=${LIVE_EAT_KV_GIB:-40}   # EAT's shipped KV cache (40 GiB)
     mkdir -p "${PD}"
     PD=$(cd "${PD}" && pwd)
     case ${DESIGN} in
@@ -337,10 +342,10 @@ if [ "${MODE}" = pairs ]; then
             > "${OUT}/deploy-b.yaml"
         kubectl apply -f "${OUT}/deploy-b.yaml" > /dev/null
     elif [ -n "${GPU}" ]; then
-        # B2: EAT PR #21's XPU path, xpu-values.yaml with the model, TP 1 and the image tag
-        # pinned to its digest; the model is staged offline as for B1, and the host-runtime
-        # mounts a k3d node cannot satisfy are dropped (stage.py xpu). B2h adds the tool flags
-        # EAT's catalog gives Qwen3-4B-Instruct-2507 (xeon-values.yaml, hermes).
+        # B2: EAT PR #21's XPU path, xpu-values.yaml with the model, LIVE_B2_TP cards and the
+        # image tag pinned to its digest; the model is staged offline as for B1, and the
+        # host-runtime mounts a k3d node cannot satisfy are dropped (stage.py xpu). B2h renders
+        # EAT's nearest profile (B2H_PROFILE) for the same weights.
         python3 "${REPO}/bench/apb/stage.py" ovms "${OUT}/agent.yaml" "${OUT}/deploy-a.yaml"
         chart=${LIVE_EAT_XPU_CHART:?}
         printf 'image:\n  tag: "%s"\n' "${B2_TAG}" > "${OUT}/pin.yaml"
@@ -350,9 +355,9 @@ if [ "${MODE}" = pairs ]; then
             --set LLM_MODEL_ID="${mid}" --set tensor_parallel_size="${LIVE_B2_TP:-2}" --set global.monitoring=false \
             --set svcmonitor.enabled=false --set ingress.enabled=false --set route.enabled=false > "${OUT}/eat.yaml"
         flags=()
-        python3 "${REPO}/bench/apb/stage.py" xpu "${OUT}/eat.yaml" "${OUT}/deploy-b.yaml" "${B_DIR}" 32768 \
-            "ladder=${LIVE_B2_LADDER:-}" "${flags[@]}"
-        stage_path "${B_DIR}" "${B_DIR}" 1001
+        STAGE_HOST_DIR=${B_HOST} python3 "${REPO}/bench/apb/stage.py" xpu "${OUT}/eat.yaml" "${OUT}/deploy-b.yaml" \
+            "${B_DIR}" 32768 "ladder=${LIVE_B2_LADDER:-}" "${flags[@]}"
+        [ "${B_HOST}" = /var/apb-models ] && stage_path "${B_DIR}" "${B_DIR}" 1001
         kubectl apply -f "${OUT}/deploy-b.yaml" > /dev/null
     else
         python3 "${REPO}/bench/apb/stage.py" ovms "${OUT}/agent.yaml" "${OUT}/deploy-a.yaml"
@@ -363,8 +368,8 @@ if [ "${MODE}" = pairs ]; then
         helm template "${B_REL}" "${chart}" --values "${OUT}/values.yaml" \
             --set LLM_MODEL_ID=${ALIAS} --set chatTemplateConfigMap.enabled=${B_CHAT} --set global.monitoring=false \
             --set svcmonitor.enabled=false --set ingress.enabled=false --set route.enabled=false > "${OUT}/eat.yaml"
-        python3 "${REPO}/bench/apb/stage.py" vllm "${OUT}/eat.yaml" "${OUT}/deploy-b.yaml" "${B_DIR}" 8192
-        stage_path "${B_DIR}" "${B_DIR}" 1001
+        STAGE_HOST_DIR=${B_HOST} python3 "${REPO}/bench/apb/stage.py" vllm "${OUT}/eat.yaml" "${OUT}/deploy-b.yaml" "${B_DIR}" 8192
+        [ "${B_HOST}" = /var/apb-models ] && stage_path "${B_DIR}" "${B_DIR}" 1001
         kubectl apply -f "${OUT}/deploy-b.yaml" > /dev/null
     fi
     kubectl apply -f "${OUT}/deploy-a.yaml" > /dev/null
@@ -382,14 +387,19 @@ if [ "${MODE}" = pairs ]; then
     fi
     stamp ready
     if [ -n "${GPU}" ]; then
-        # Every card a GPU arm holds must be a free card; otherwise stop before any request.
-        for w in "k3d-gpu-agent deploy/ovms ovms" "${B_NS} deploy/${B_DEP} vllm"; do
-            read -r ns obj ctr <<< "${w}"
+        # Every card a GPU arm holds must be a free card, and each arm must hold as many cards as
+        # it asked for (AG one, B2 its TP); otherwise stop before any request.
+        grep -q -- '--target_device=GPU' "${OUT}/agent.yaml" || { echo "ABORTED: AG is not on the GPU"; exit 3; }
+        for w in "k3d-gpu-agent deploy/ovms ovms 1" "${B_NS} deploy/${B_DEP} vllm ${LIVE_B2_TP:-2}"; do
+            read -r ns obj ctr want <<< "${w}"
+            got=0
             for rd in $(kubectl -n "${ns}" exec "${obj}" -c "${ctr}" -- ls /dev/dri | grep renderD); do
                 bdf=$(basename "$(readlink -f "/sys/class/drm/${rd}/device")")
                 echo "${obj} ${rd} ${bdf}" | tee -a "${OUT}/gpu-arms.txt"
                 [[ " ${free} " == *" ${bdf} "* ]] || { echo "ABORTED: ${obj} holds ${bdf}, not a free card"; exit 3; }
+                got=$(( got + 1 ))
             done
+            [ "${got}" -eq "${want}" ] || { echo "ABORTED: ${obj} holds ${got} card(s), not ${want}"; exit 3; }
         done
     fi
     # The CPU ISA each server sees (amx_tile lines in its /proc/cpuinfo) and the B server's
@@ -470,8 +480,8 @@ if [ "${MODE}" = pairs ]; then
     idle=()
     [ "${DESIGN}" = H47 ] && idle=(--idle-s 3)
     l2=()
-    if [ "${RULE}" = L2 ]; then
-        # Rule L2: the level baseline (2 x 10 s, both arms idle, before the warm-ups).
+    if [ "${RULE}" != L1 ]; then
+        # Rules L2 and L3: the level baseline (2 x 10 s, both arms idle, before the warm-ups).
         stamp "baseline ${LEVEL}"
         python3 "${REPO}/bench/load/load.py" sample --seconds 10 --windows 2 --phase baseline --tag baseline \
             --level "${LEVEL}" --out "${PD}/baseline-hold${HOLD}.jsonl"
@@ -527,8 +537,8 @@ case ${ARM} in
         helm template "${B_REL}" "${chart}" --values "${OUT}/values.yaml" \
             --set LLM_MODEL_ID=${ALIAS} --set chatTemplateConfigMap.enabled=${B_CHAT} --set global.monitoring=false \
             --set svcmonitor.enabled=false --set ingress.enabled=false --set route.enabled=false > "${OUT}/eat.yaml"
-        python3 "${REPO}/bench/apb/stage.py" vllm "${OUT}/eat.yaml" "${OUT}/deploy.yaml" "${B_DIR}" 8192
-        stage "${B_DIR}" "${B_DIR}" 1001
+        STAGE_HOST_DIR=${B_HOST} python3 "${REPO}/bench/apb/stage.py" vllm "${OUT}/eat.yaml" "${OUT}/deploy.yaml" "${B_DIR}" 8192
+        [ "${B_HOST}" = /var/apb-models ] && stage "${B_DIR}" "${B_DIR}" 1001
         NS=default DEP=${B_REL} SVC=${B_REL}-service SPORT=80 ;;
     C1)
         stamp "ollama"

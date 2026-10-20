@@ -14,7 +14,7 @@ base=()
 [ -z "${BASE}" ] || base=(LIVE_APB_BASE="${BASE}")
 exec "${HERE}/hold.sh" "H51-${ARM}-hold${N}" 2400 env K3D_GPU_K3S_ARGS="--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1%" \
     LIVE_MODE=apb LIVE_CAP=2370 LIVE_LEVEL=typical \
-    LIVE_APB_RAMP="${RAMP}" LIVE_APB_TOP=16 "${base[@]}" LIVE_MODEL_SET=gemma4 LIVE_EAT_KV_GIB=40 LIVE_MODELS="${B}/models" \
+    LIVE_APB_RAMP="${RAMP}" LIVE_APB_TOP=16 "${base[@]}" LIVE_MODEL_SET=gemma4 LIVE_MOUNT_B=1 LIVE_EAT_KV_GIB=40 LIVE_MODELS="${B}/models" \
     LIVE_BLUEPRINT="${B}/eab" LIVE_PY="${B}/mafvenv/bin/python" \
     LIVE_EAT_CHART="${B}/eat-src/core/helm-charts/vllm" PATH="${B}/bin:${PATH}" \
     bash "${HERE}/../live.sh" "${ARM}" "${R}/${ARM}-hold${N}"

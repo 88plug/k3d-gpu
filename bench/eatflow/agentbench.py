@@ -1444,16 +1444,18 @@ def cmd_pairs(a):
     probe = PR.Probe({arm: v["pod"] for arm, v in arms.items()}, lm.load_cpus() if lm else [], rapl=not a.no_rapl)
     ts = T.taskset(a.tasks)
     pre = None
-    if PR.design(a.hyp)[1] == "L2":
+    rule = PR.design(a.hyp)[1]
+    if rule in ("L2", "L3"):
         if not (lm and a.baseline and a.level):
-            raise SystemExit("agentbench pairs: rule L2 needs bench/load/load.py, --baseline and --level")
+            raise SystemExit(f"agentbench pairs: rule {rule} needs bench/load/load.py, --baseline and --level")
         pre = pre_window(lm, a.baseline, a.level, a.pre_s)
     rc = 0
     try:
+        reg = PR.register(a.out, a.hyp)          # L3: the registration, created once, then checked
         n = PR.run_hold(sys.modules[__name__], arms, a.arm_a, a.arm_b, ts, a.out, a.deadline, probe, a.mcp_url,
                         a.reset, a.hold, cap_s=a.cap_s, guard_s=a.guard_s, settle_s=a.settle_s, idle_s=a.idle_s,
                         warmup=None if a.no_warmup else WARMUP["bank"], log=log, quiesce_s=a.quiesce_s,
-                        warmup_timeout_s=a.warmup_timeout_s, pre=pre)
+                        warmup_timeout_s=a.warmup_timeout_s, pre=pre, seed=reg["seed"] if reg else None)
         log(f"hold {a.hold}: {n} complete pair(s); next pair {PR.next_pair(a.out)} of {len(ts)}")
     except PR.HoldAborted as e:
         log(f"hold {a.hold} ABORTED: {e}")
@@ -1465,9 +1467,15 @@ def cmd_pairs(a):
 
 
 def cmd_pairs_report(a):
+    reg = None
+    rp = os.path.join(a.dir, "registration.json")
+    if os.path.exists(rp):
+        with open(rp) as f:
+            reg = json.load(f)
     res = PR.analyze(PR.read_jsonl(os.path.join(a.dir, "attempts.jsonl")),
                      PR.read_jsonl(os.path.join(a.dir, "pairs.jsonl")), a.hyp, a.arm_a, a.arm_b,
-                     holds=len({p["hold"] for p in PR.read_jsonl(os.path.join(a.dir, "pairs.jsonl"))}))
+                     holds=len({p["hold"] for p in PR.read_jsonl(os.path.join(a.dir, "pairs.jsonl"))}),
+                     registration=reg)
     with open(os.path.join(a.dir, "analysis.json"), "w") as f:
         json.dump(res, f, indent=1, default=lambda v: None)
     print(json.dumps({k: res[k] for k in res if k != "per_pair"}, indent=1, default=lambda v: None))

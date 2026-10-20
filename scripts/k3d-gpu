@@ -270,6 +270,7 @@ Environment:
   K3D_GPU_VENDORS       auto | comma list of nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa,wsl (default: auto)
   K3D_GPU_NODE_LABELS   extra node labels, comma list of key=value (default: none)
   K3D_GPU_K3S_ARGS      extra k3s server flags, space-separated, e.g. --disable=servicelb (default: none)
+  K3D_GPU_VOLUMES       host dirs mounted into every node, comma list of HOST:NODE[:ro|rw] (ro by default)
   K3D_GPU_INTEL_SHARED  auto | pods that may share one Intel GPU (default: auto =
                         ${INTEL_IGPU_SHARED} when every Intel GPU is integrated, else 1)
   K3D_GPU_INTEL_ALLOCATION  balanced | packed | none: GPU a shared pod lands on (default: balanced)
@@ -4314,6 +4315,20 @@ cmd_up() {
     # Extra k3s server flags. Example: --disable=servicelb for stacks whose ingress
     # binds hostPort 80/443 itself (EAT's ingress-nginx), which k3s's ServiceLB
     # would otherwise hold for the same controller's LoadBalancer service.
+    # Host directories mounted into every node (a model cache read by hostPath, with no copy
+    # into the node's own filesystem): K3D_GPU_VOLUMES=HOST:NODE[:ro|rw],... (ro by default).
+    local vol vols host node mode
+    IFS=',' read -r -a vols <<< "${K3D_GPU_VOLUMES:-}"
+    for vol in ${vols[@]+"${vols[@]}"}; do
+        vol=${vol// /}
+        [ -n "${vol}" ] || continue
+        IFS=':' read -r host node mode <<< "${vol}"
+        mode=${mode:-ro}
+        [[ "${host}" == /* && "${node}" == /* ]] || err "K3D_GPU_VOLUMES entry '${vol}' needs absolute HOST:NODE paths"
+        [ -d "${host}" ] || err "K3D_GPU_VOLUMES: host directory '${host}' does not exist"
+        [[ "${mode}" =~ ^(ro|rw)$ ]] || err "K3D_GPU_VOLUMES entry '${vol}': mode must be ro or rw"
+        create_args+=(--volume="${host}:${node}:${mode}@server:*;agent:*")
+    done
     local flag flags
     read -r -a flags <<< "${K3S_ARGS}"
     for flag in ${flags[@]+"${flags[@]}"}; do
