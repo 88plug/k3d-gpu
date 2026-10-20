@@ -640,6 +640,32 @@ r=$(newroot media-xe)
 kernel "${r}" 6.18.1
 pci "${r}" 0000:03:00.0 0x8086 0xe20b xe; render "${r}" 0000:03:00.0 128
 doctor_says "xe GPU without an engine dir gets no media label" "${r}" 'media-vcs' negate
+# xe has no per-engine sysfs; its engine counts come from the DRM usage stats of a client on the
+# render node (drm-usage-stats.rst: drm-cycles-<class>, drm-engine-capacity-<class> when > 1).
+# Values from an Arc Pro B70 (0xe223) on xe, kernel 7.0.0-31 (crescent, 2026-10-20).
+xe_fdinfo() { mkdir -p "$1/proc/drm-fdinfo"; printf "$3" > "$1/proc/drm-fdinfo/renderD$2"; }
+B70_FDINFO='drm-driver:\txe\ndrm-pdev:\t0000:12:00.0\ndrm-cycles-rcs:\t0\ndrm-total-cycles-rcs:\t5798\ndrm-cycles-vcs:\t0\ndrm-total-cycles-vcs:\t5798\ndrm-engine-capacity-vcs:\t2\ndrm-cycles-vecs:\t0\ndrm-total-cycles-vecs:\t5798\ndrm-engine-capacity-vecs:\t2\ndrm-cycles-bcs:\t0\ndrm-cycles-ccs:\t0\n'
+r=$(newroot media-xe-b70)
+kernel "${r}" 7.0.0
+pci "${r}" 0000:12:00.0 0x8086 0xe223 xe; render "${r}" 0000:12:00.0 128
+xe_fdinfo "${r}" 128 "${B70_FDINFO}"
+doctor_says "xe media engines come from the DRM usage stats" "${r}" 'ok: renderD128 media engines: vcs x2, vecs x2 \(xe DRM usage stats\)'
+doctor_says "xe media engine counts are node labels" "${r}" 'gpu\.intel\.com/xmx=true gpu\.intel\.com/media-vcs=2 gpu\.intel\.com/media-vecs=2'
+r=$(newroot media-xe-one)
+kernel "${r}" 7.0.0
+pci "${r}" 0000:12:00.0 0x8086 0xe223 xe; render "${r}" 0000:12:00.0 128
+xe_fdinfo "${r}" 128 'drm-driver:\txe\ndrm-cycles-rcs:\t0\ndrm-cycles-vcs:\t0\ndrm-cycles-vecs:\t0\n'
+doctor_says "an xe engine class with no capacity line counts one" "${r}" 'media-vcs=1 gpu\.intel\.com/media-vecs=1'
+r=$(newroot media-xe-novcs)
+kernel "${r}" 7.0.0
+pci "${r}" 0000:12:00.0 0x8086 0xe223 xe; render "${r}" 0000:12:00.0 128
+xe_fdinfo "${r}" 128 'drm-driver:\txe\ndrm-cycles-rcs:\t0\ndrm-cycles-ccs:\t0\n'
+doctor_says "xe usage stats with no video class count zero" "${r}" 'media-vcs=0 gpu\.intel\.com/media-vecs=0'
+r=$(newroot media-xe-i915stats)
+kernel "${r}" 7.0.0
+pci "${r}" 0000:12:00.0 0x8086 0xe223 xe; render "${r}" 0000:12:00.0 128
+xe_fdinfo "${r}" 128 'drm-driver:\ti915\ndrm-engine-video:\t0 ns\ndrm-engine-capacity-video:\t2\n'
+doctor_says "usage stats from another driver are not read as xe" "${r}" 'media-vcs' negate
 
 # CPU ISA labels under NFD's names (klauspost/cpuid feature ids).
 r=$(newroot isa)

@@ -1,0 +1,6 @@
+[32m==>[0m Deploying intel-gpu-test test pod (busybox:1.37@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e, gpu.intel.com/xe)...
+total 0
+crw-rw----    1 root     root      226,   2 Oct 20 21:32 card2
+crw-rw----    1 root     root      226, 129 Oct 20 21:32 renderD129
+[32m==>[0m Deploying AMX test pod (busybox:1.37@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e, nodeSelector feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true)...
+amx_tile

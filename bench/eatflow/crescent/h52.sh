@@ -38,14 +38,21 @@ spec:
   containers:
   - name: enum
     image: ${ENUM_IMAGE}
-    command: ["sh", "-c", "ls -l /dev/dri; xpu-smi discovery"]
+    command: ["sh", "-c", "ls -l /dev/dri; xpu-smi discovery; echo ENUM-DONE; sleep 600"]
     resources: {limits: {gpu.intel.com/xe: 1}}
 EOF
 done
+# H52 amendment D1 item 2: read each log once its marker is there (the pod then sleeps).
 for i in $(seq 1 "${n:-0}"); do
-    kubectl wait --for=jsonpath='{.status.phase}'=Succeeded "pod/gpu-enum-${i}" --timeout=600s > /dev/null 2>&1
-    { echo "== gpu-enum-${i} $(kubectl get pod "gpu-enum-${i}" -o jsonpath='{.status.phase}')"; kubectl logs "gpu-enum-${i}"; } >> "${OUT}/gpu-enum.txt" 2>&1
+    log=""
+    for _ in $(seq 120); do
+        log=$(kubectl logs "gpu-enum-${i}" 2>/dev/null)
+        grep -q ENUM-DONE <<< "${log}" && break
+        sleep 5
+    done
+    { echo "== gpu-enum-${i} $(kubectl get pod "gpu-enum-${i}" -o jsonpath='{.status.phase}')"; echo "${log}"; } >> "${OUT}/gpu-enum.txt"
 done
 kubectl get pods -o wide > "${OUT}/enum-pods.txt" 2>&1
+kubectl -n default delete pod --all --wait=false > /dev/null 2>&1
 "${K}" down > "${OUT}/down.txt" 2>&1; echo "down rc=$?" >> "${OUT}/rc.txt"
 cat "${OUT}/rc.txt"
