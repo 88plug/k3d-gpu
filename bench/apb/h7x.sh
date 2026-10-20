@@ -9,7 +9,7 @@
 # greedy, ignore_eos, unique prompts. bench/apb/h7x.py scores the run.
 #
 # Environment:
-#   APB_MODELS     dir with Qwen3-4B-fp16-ov and Qwen3-4B (hf download --local-dir) (required)
+#   APB_MODELS     dir with OpenVINO/Qwen3-4B-fp16-ov and Qwen/Qwen3-4B (bench/xhost/fetch_models.py) (required)
 #   APB_EAT_CHART  EAT checkout's core/helm-charts/vllm at 0d3438d (required)
 #   APB_OUT        run directory parent (default ./apb-runs)
 #   H7X_CPUS       CPUs each engine is sized to (default 16, H7's P-core balloon)
@@ -91,8 +91,8 @@ if [ -n "${NODE_CPUS}" ]; then
     echo "node cpuset ${NODE_CPUS}" | tee "${OUT}/node-cpus.txt"
 fi
 stamp stage
-stage Qwen3-4B-fp16-ov OpenVINO/Qwen3-4B-fp16-ov
-stage Qwen3-4B Qwen3-4B
+stage OpenVINO/Qwen3-4B-fp16-ov OpenVINO/Qwen3-4B-fp16-ov
+stage Qwen/Qwen3-4B Qwen3-4B
 kubectl apply -f "${OUT}/ovms.yaml" -f "${OUT}/vllm.yaml" >/dev/null
 kubectl -n default scale deploy/vllm-qwen-3-4b-cpu --replicas=0 >/dev/null
 kubectl -n k3d-gpu-agent scale deploy/ovms --replicas=0 >/dev/null
@@ -153,6 +153,8 @@ for e in ${ORDER}; do
         exit 2
     fi
     stamp "block ${i} engine ${e} ready"
+    # H7X_SMOKE=1: bring each engine up once and send no request (setup check, never scored).
+    [ "${H7X_SMOKE:-0}" = 1 ] && continue
     python3 "${LOAD}" --base-url "${BASE}" --model "${MODEL}" --temperature 0 --max-tokens 256 --ignore-eos --unique-prompts \
         --requests 1 --warmup 0 --label warm >/dev/null 2>&1
     python3 "${LOAD}" --base-url "${BASE}" --model "${MODEL}" --temperature 0 --prompt "${PREFILL}" --max-tokens 16 --ignore-eos \
@@ -165,5 +167,5 @@ for e in ${ORDER}; do
 done
 git -C "${REPO}" rev-parse HEAD > "${OUT}/commit.txt"
 docker inspect --format '{{.Config.Image}} {{.Image}}' "$(nodes | head -1)" > "${OUT}/node-image.txt"
-python3 "${HERE}/h7x.py" "${OUT}" | tee "${OUT}/verdict.json"
+[ "${H7X_SMOKE:-0}" = 1 ] || python3 "${HERE}/h7x.py" "${OUT}" | tee "${OUT}/verdict.json"
 stamp finished
