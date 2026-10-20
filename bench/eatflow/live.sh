@@ -475,6 +475,18 @@ if [ "${MODE}" = pairs ]; then
         kubectl -n "${B_NS}" logs "deploy/${B_DEP}" 2>&1 | grep -iE 'amx|avx512|isa|cpu (backend|platform)|onednn' \
             | head -40 > "${OUT}/isa-b-log.txt"
     fi
+    # LIVE_MOUNT_B (crescent amendment M1): B1 serves its weights from the read-only bind
+    # (/cache in its pod), so a write there must fail with EROFS; record the host disk.
+    df -P / > "${OUT}/df.txt"
+    if [ "${B_HOST}" = /var/apb-ro ] && [ "${DESIGN}" != H47 ] && [ "${DESIGN}" != H50o ]; then
+        if kubectl -n "${B_NS}" exec "deploy/${B_DEP}" -- touch "/cache/${B_DIR}/.k3dgpu-rw-probe" \
+            > "${OUT}/ro-probe.txt" 2>&1; then
+            echo "NOT DELIVERABLE: ${B_DIR} is writable in the B pod" | tee -a "${OUT}/live.log"
+            exit 3
+        fi
+        grep -q 'Read-only file system' "${OUT}/ro-probe.txt" \
+            || { echo "NOT DELIVERABLE: the read-only probe failed for another reason" | tee -a "${OUT}/live.log"; exit 3; }
+    fi
     podinfo() {  # podinfo NS: "<uid> <image> <imageID>" of the running pod
         kubectl -n "$1" get pods --field-selector=status.phase=Running \
             -o jsonpath='{.items[0].metadata.uid} {.items[0].spec.containers[0].image} {.items[0].status.containerStatuses[0].imageID}'

@@ -791,6 +791,8 @@ class ModelSetTest(unittest.TestCase):
         self.assertEqual(live.count('[ "${B_HOST}" = /var/apb-models ] && stage'), 3)
         # ...and the mounted dir must match the listing models.sh wrote after its sha256 check.
         self.assertIn('cmp -s "${OUT}/b-listing.txt" "${LIVE_MODELS}/${B_DIR}.listing"', live)
+        self.assertIn('-- touch "/cache/${B_DIR}/.k3dgpu-rw-probe"', live)
+        self.assertIn("grep -q 'Read-only file system' \"${OUT}/ro-probe.txt\"", live)
         with open(os.path.join(HERE, "crescent", "models.sh")) as f:
             models = f.read()
         self.assertIn('"${HERE}/listing.sh" "${M}/gemma-4-26B-A4B-it-qat-q4_0-unquantized" > '
