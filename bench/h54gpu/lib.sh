@@ -3,7 +3,7 @@
 # pre-registration", measurement protocol, and amendment G1.
 # Needs: KUBECONFIG, OUT (this hold's run dir), ROOT (repo checkout), PATH with k3d/kubectl.
 C1_ARGS="--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1%"
-NODE_IMAGE=${NODE_IMAGE:-cryptoandcoffee/k3d-gpu:0.1.61}   # @sha256:8cd264aa68c7... on crescent
+NODE_IMAGE=${NODE_IMAGE:-cryptoandcoffee/k3d-gpu:0.1.61@sha256:8cd264aa68c77681d7fa474693944de0db8d55de5881253e4029bf72a67e175c}
 MODELS=${MODELS:-${HOME}/k3dgpu-gemma/models}
 
 say() { echo "== $* $(date -u +%FT%TZ)" | tee -a "${OUT}/arms.log"; }
