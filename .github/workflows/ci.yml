@@ -256,6 +256,8 @@ jobs:
       - run: python3 bench/h54/test_h54.py
       - run: python3 bench/h54gpu/test_h54gpu.py
       - run: python3 bench/h57d/test_h57d.py
+      - run: python3 bench/admission/test_ctl.py
+      - run: python3 bench/admission/test_analyze.py
 
   mcp-tests:
     name: MCP server tests
