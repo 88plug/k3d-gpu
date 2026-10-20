@@ -18,7 +18,12 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "${HERE}/../.." && pwd)"
 OUT=${1:-"${ROOT}/bench/hetero-spec/out-h34-$(date +%Y%m%dT%H%M%S)"}
-CLUSTER=k3dgpu-i-spec-decode-cpu
+CLUSTER=${H34_CLUSTER:-k3dgpu-i-spec-decode-cpu}
+# H34x (cross-host): K3D_GPU_VENDORS for `up` and an optional node-container cpuset
+# (the CPUs outside the load set on a non-hybrid host). Defaults are the i9 run's.
+VENDORS=${H34_VENDORS:-intel,hybrid}
+NODE_CPUS=${H34_NODE_CPUS:-}
+if [ "${H34_PRINT_CONFIG:-0}" = 1 ]; then echo "cluster=${CLUSTER} vendors=${VENDORS} node_cpus=${NODE_CPUS}"; exit 0; fi
 NS=spec-decode-cpu
 LEVELS=${H34_LEVELS:-"typical heavy"}
 PAIRS=${H34_PAIRS:-12}
@@ -153,8 +158,13 @@ EOF
 log "H34 probe -> ${OUT} (levels='${LEVELS}', pairs=${PAIRS}, level budget ${LEVEL_S}s)"
 sha256sum "${HERE}/prompts.jsonl" | tee -a "${LOG}"
 "${LOAD[@]}" stop >>"${LOG}" 2>&1
-K3D_GPU_CLUSTER=${CLUSTER} K3D_GPU_VENDORS=intel,hybrid timeout 300 "${ROOT}/scripts/k3d-gpu" up >>"${LOG}" 2>&1 \
+K3D_GPU_CLUSTER=${CLUSTER} K3D_GPU_VENDORS=${VENDORS} timeout 300 "${ROOT}/scripts/k3d-gpu" up >>"${LOG}" 2>&1 \
     || { log "ABORT: k3d-gpu up failed"; exit 4; }
+if [ -n "${NODE_CPUS}" ]; then
+    docker update --cpuset-cpus "${NODE_CPUS}" "k3d-${CLUSTER}-server-0" >>"${LOG}" 2>&1 \
+        || { log "ABORT: node cpuset ${NODE_CPUS} not applied"; exit 4; }
+    log "node k3d-${CLUSTER}-server-0 pinned to CPUs ${NODE_CPUS}"
+fi
 for node in $(docker ps --filter "label=k3d.cluster=${CLUSTER}" --format '{{.Names}}'); do
     case "${node}" in *-serverlb|*-tools) continue ;; esac
     timeout 180 docker cp "${MODELS}/." "${node}:/var/lib/h22-models" >>"${LOG}" 2>&1 \

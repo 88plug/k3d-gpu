@@ -236,6 +236,18 @@ check "bench: joule-pack (H21) unit tests" \
     env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/joule-pack/test_joulepack.py"
 check "shared-prefix (H25): prompt generator and scorer" \
     env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/shared-prefix/test_probe.py"
+check "shared-prefix (H25): run.sh parses" bash -n "${ROOT}/bench/shared-prefix/run.sh"
+check "shared-prefix (H25): run.sh pins no node cpuset by default" \
+    sh -c 'test "$(env -u CLUSTER -u NODE_CPUS SHARED_PREFIX_PRINT_CONFIG=1 bash "$1")" = "cluster=k3dgpu-i-shared-prefix node_cpus="' _ "${ROOT}/bench/shared-prefix/run.sh"
+check "shared-prefix (H25x): run.sh takes a node cpuset" \
+    sh -c 'test "$(SHARED_PREFIX_PRINT_CONFIG=1 CLUSTER=k3dgpu-x-h25 NODE_CPUS=0-23,48-71 bash "$1")" = "cluster=k3dgpu-x-h25 node_cpus=0-23,48-71"' _ "${ROOT}/bench/shared-prefix/run.sh"
+check "amx-autoquant (H27): --dry-run names the pinned weight revisions" \
+    sh -c 'o=$(bash "$1" --dry-run) && echo "$o" | grep -qx "  revision int4 b467368d16b75df14055562fe927ae8e1f15f7ef" && echo "$o" | grep -qx "  revision int8 fd9c3cc8adf942151e48904b7341a57eae58d8d5" && echo "$o" | grep -qx "  revision fp16 00298f1c614ffdc000814d8cbe1b7613aa73cdca"' _ "${ROOT}/bench/amx-autoquant/probe.sh"
+check "zero-copy-models (H28): score.py applies the H28 outcome table" \
+    env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/zero-copy-models/test_score.py"
+check "xhost: hold.sh parses" bash -n "${ROOT}/bench/xhost/hold.sh"
+check "xhost: clusters.py selects only k3dgpu-x-* clusters" \
+    sh -c 'test "$(printf "%s" "[{\"name\":\"k3dgpu-x-h25\"},{\"name\":\"k3dgpu-e-h50\"},{\"name\":\"k3dgpu-x-h28\"},{\"name\":\"k3dgpu-h52\"},{\"name\":\"xk3dgpu-x-a\"}]" | python3 "$1")" = "k3dgpu-x-h25 k3dgpu-x-h28"' _ "${ROOT}/bench/xhost/clusters.py"
 
 # ---- uncore-phase (H29) -----------------------------------------------------------
 
@@ -255,6 +267,10 @@ check "hetero-spec: host sample is one JSON object and gpu_busy is a number" \
 check "hetero-spec: h34.py applies the H34 outcome table" \
     env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/hetero-spec/test_h34.py"
 check "hetero-spec: h34.sh parses" bash -n "${ROOT}/bench/hetero-spec/h34.sh"
+check "hetero-spec: h34.sh keeps the i9 defaults (cluster, vendors, no node cpuset)" \
+    sh -c 'test "$(H34_PRINT_CONFIG=1 bash "$1")" = "cluster=k3dgpu-i-spec-decode-cpu vendors=intel,hybrid node_cpus="' _ "${ROOT}/bench/hetero-spec/h34.sh"
+check "hetero-spec: h34.sh takes the cross-host cluster, vendors and node cpuset (H34x)" \
+    sh -c 'test "$(H34_PRINT_CONFIG=1 H34_CLUSTER=k3dgpu-x-h34 H34_VENDORS=none H34_NODE_CPUS=0-23,48-71 bash "$1")" = "cluster=k3dgpu-x-h34 vendors=none node_cpus=0-23,48-71"' _ "${ROOT}/bench/hetero-spec/h34.sh"
 check "hetero-spec: prompts.jsonl has 8 prompts with id and text" \
     python3 -c 'import json, sys; p = [json.loads(l) for l in open(sys.argv[1])]; assert len(p) == 8 and all(x["id"] and x["text"] for x in p)' \
     "${ROOT}/bench/hetero-spec/prompts.jsonl"

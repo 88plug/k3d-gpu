@@ -52,6 +52,9 @@ PIP_INDEX="--extra-index-url https://download.pytorch.org/whl/cpu"
 # Containers run as the invoking user so the cache stays user-owned.
 UIDGID="$(id -u):$(id -g)"
 PRECS="int4 int8 fp16"
+# HF commits of the H27 run (model-shas.txt of 2026-10-17); --prepare downloads exactly these.
+declare -A REV=([int4]=b467368d16b75df14055562fe927ae8e1f15f7ef [int8]=fd9c3cc8adf942151e48904b7341a57eae58d8d5
+                [fp16]=00298f1c614ffdc000814d8cbe1b7613aa73cdca)
 LOAD_LEVEL="${LOAD_LEVEL:-none}"
 AUTOQUANT_NLL="${AUTOQUANT_NLL:-run}"
 LOAD="${ROOT}/bench/load/load.py"
@@ -71,6 +74,7 @@ plan() {
     echo "  background load: ${LOAD_LEVEL}; before each reference request ${GAP} s idle + ${WINDOW} s load window; NLL ${AUTOQUANT_NLL}"
     [ "${LOAD_LEVEL}" = none ] || python3 "${LOAD}" plan --level "${LOAD_LEVEL}" --ttl 1500 | sed 's/^/  /'
     for p in ${PRECS}; do echo "  container $(cname "${p}") ${OVMS_IMAGE} port ${PORT[${p}]} model OpenVINO/Qwen3-4B-${p}-ov"; done
+    for p in ${PRECS}; do echo "  revision ${p} ${REV[${p}]}"; done
     echo "  container $(cname nll) ${PY_IMAGE} (${PIP_PINS})"
     echo "  schedule: warmup, P1, R1 ABCD, R2 DCBA, P2, R3 ABCD, R4 DCBA, R5 ABCD, P3; probe order P1 int4,int8,fp16, P2 reversed, P3 forward; stop OVMS, NLL"
 }
@@ -80,10 +84,10 @@ prepare() {
     docker run --rm --name "${PREFIX}-prep" --user "${UIDGID}" -v "${DIR}:/w" -e HOME=/w "${PY_IMAGE}" sh -ec "
         python -m venv /w/venv && /w/venv/bin/pip install -q ${PIP_INDEX} ${PIP_PINS}
         /w/venv/bin/pip freeze > /w/pip-freeze.txt
-        for p in ${PRECS}; do
+        for spec in $(for p in ${PRECS}; do printf '%s@%s ' "${p}" "${REV[${p}]}"; done); do
             /w/venv/bin/python -c 'import sys; from huggingface_hub import snapshot_download, HfApi
-r = sys.argv[1]; snapshot_download(r, local_dir=\"/w/models/\" + r)
-print(r, HfApi().model_info(r).sha)' OpenVINO/Qwen3-4B-\$p-ov
+r, rev = sys.argv[1], sys.argv[2]; snapshot_download(r, revision=rev, local_dir=\"/w/models/\" + r)
+print(r, HfApi().model_info(r, revision=rev).sha)' OpenVINO/Qwen3-4B-\${spec%@*}-ov \${spec#*@}
         done > /w/model-shas.txt"
     # Held-out text: this repo's docs written in 2026 (after Qwen3's training data), frozen by commit.
     git -C "${ROOT}" rev-parse HEAD > "${DIR}/text/heldout.commit"
