@@ -44,8 +44,26 @@ while :; do
 done
 echo "${waited}" > "${R}/wait_s"
 snapshot > "${R}/pre.txt"
-[ "$(disk)" -le 97 ] || { log "disk $(disk)% > 97%: no hold"; exit 5; }
+start_max=${XHOST_DISK_START:-97}   # a hold starts only at or below this disk use (%)
+[ "$(disk)" -le "${start_max}" ] || { log "disk $(disk)% > ${start_max}%: no hold"; exit 5; }
 if [ -n "$(clusters)" ]; then read -r -a cl <<< "$(clusters)"; log "leftover clusters ${cl[*]}: deleting first"; k3d cluster delete "${cl[@]}" >/dev/null 2>&1; fi
+sp="" cp="" wd="" rc=1
+# Cleanup runs on every exit, also when this wrapper itself is signalled (e.g. SSH hangup):
+# stop CMD (TERM, so its own cleanup runs), the sampler and the watchdog, then delete this
+# campaign's clusters and the bench-load containers.
+cleanup() {
+    [ -z "${cp}" ] || { kill -TERM "${cp}" 2>/dev/null; wait "${cp}" 2>/dev/null; }
+    [ -z "${sp}${wd}" ] || kill ${sp} ${wd} 2>/dev/null
+    local left
+    left=$(clusters)
+    [ -z "${left}" ] || k3d cluster delete ${left} >/dev/null 2>&1
+    python3 "${ROOT}/bench/load/load.py" stop >/dev/null 2>&1
+    snapshot > "${R}/post.txt"
+    echo "${rc}" > "${R}/rc"
+    log "rc=${rc}; clusters deleted: ${left:-none}; now: $(clusters)"
+}
+trap cleanup EXIT
+trap 'rc=143; exit 143' TERM HUP INT
 python3 "${ROOT}/bench/eatflow/crescent/serving.py" "${R}/serving.jsonl" 9>&- &
 sp=$!
 log "start: $*"
@@ -58,12 +76,5 @@ cp=$!
 wd=$!
 wait "${cp}"
 rc=$?
-kill "${sp}" "${wd}" 2>/dev/null
-wait "${sp}" 2>/dev/null
-left=$(clusters)
-[ -z "${left}" ] || k3d cluster delete ${left} >/dev/null 2>&1
-python3 "${ROOT}/bench/load/load.py" stop >/dev/null 2>&1
-snapshot > "${R}/post.txt"
-echo "${rc}" > "${R}/rc"
-log "rc=${rc}; clusters deleted: ${left:-none}; now: $(clusters)"
+cp=""
 exit "${rc}"

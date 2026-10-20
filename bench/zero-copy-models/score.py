@@ -45,7 +45,9 @@ def rounds(path, level):
     out = []
     for (arm, rnd), row in sorted(rows.items()):
         ps = pods.get((arm, rnd), [])
-        void = row["void"] or not ps or (row["swapout_kB"] or 0) > 256 * 1024 or any(p["ready_ms"] < 0 for p in ps)
+        # A failed mincore read is written as -1: the round has no memory reading.
+        void = (row["void"] or not ps or (row["swapout_kB"] or 0) > 256 * 1024 or row["resident_kB"] < 0
+                or any(p["ready_ms"] < 0 for p in ps))
         rec = {"arm": arm, "round": rnd, "void": void, "resident_kB": row["resident_kB"]}
         if ps:
             rec.update({k: st.median(p[k] for p in ps) for k in ("ready_ms", "pss_kB", "shared_clean_kB")})
@@ -53,7 +55,18 @@ def rounds(path, level):
     return out
 
 
-def verdict(recs, matched, mib=1024, n=8):
+def snapshotter(path):
+    """The snapshotter the probe read from the k3s containerd config (its meta row)."""
+    with open(path) as f:
+        for line in f:
+            if line.startswith("meta,"):
+                for kv in line.strip().split(",")[1:]:
+                    if kv.startswith("snapshotter="):
+                        return kv.split("=", 1)[1]
+    return "unknown"
+
+
+def verdict(recs, matched, mib=1024, n=8, snap="unknown"):
     size = mib * 1024.0                      # kB
     arm = {a: [r for r in recs if r["arm"] == a and not r["void"]] for a in ("T", "C")}
     void = {a: sum(1 for r in recs if r["arm"] == a and r["void"]) for a in ("T", "C")}
@@ -72,7 +85,8 @@ def verdict(recs, matched, mib=1024, n=8):
     elif med["C"]["resident_kB"] < 0.8 * (n + 1) * size or med["C"]["pss_kB"] < 0.9 * size:
         out = dict(res, verdict="INCONCLUSIVE", row="probe blind: arm C shows no N-fold duplication")
     elif med["T"]["pss_kB"] >= 0.5 * size or med["T"]["resident_kB"] >= 0.5 * n * size:
-        out = dict(res, verdict="REFUTED", row="no page-cache sharing")
+        # The table's two REFUTED rows differ only by snapshotter (overlayfs vs native/fuse).
+        out = dict(res, verdict="REFUTED", row=f"no page-cache sharing (snapshotter {snap})")
     else:
         mem = (med["T"]["pss_kB"] <= 160 * 1024 and med["T"]["shared_clean_kB"] >= 0.9 * size
                and med["T"]["resident_kB"] <= 1.1 * size)
@@ -82,7 +96,10 @@ def verdict(recs, matched, mib=1024, n=8):
             out = dict(res, verdict="REFUTED", row="time part: T/C ready > 0.5 or rounds overlap")
         else:
             out = dict(res, verdict="INCONCLUSIVE", row="T memory between the SUPPORTED and REFUTED bounds")
-    if (matched or {}).get("verdict") != "MATCHED":
+    lv = (matched or {}).get("verdict")
+    if lv == "VOID":   # A2: a window with fewer load containers than the level runs; re-run
+        out = dict(out, verdict_if_matched=out["verdict"], verdict="VOID", row="load VOID: re-run the level")
+    elif lv != "MATCHED":
         out = dict(out, verdict_if_matched=out["verdict"], verdict="INCONCLUSIVE", row="load not MATCHED")
     return out
 
@@ -99,7 +116,7 @@ def main(argv=None):
         matched = json.load(open(a.match))
     except (OSError, ValueError):
         matched = None
-    json.dump(verdict(rounds(a.csv, a.level), matched, a.mib, a.n), sys.stdout, indent=1)
+    json.dump(verdict(rounds(a.csv, a.level), matched, a.mib, a.n, snapshotter(a.csv)), sys.stdout, indent=1)
     print()
 
 

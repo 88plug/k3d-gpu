@@ -32,7 +32,7 @@ def score_text(text, matched=MATCHED, level="typical"):
     with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False) as f:
         f.write(text)
     try:
-        return score.verdict(score.rounds(f.name, level), matched, MIB, 8)
+        return score.verdict(score.rounds(f.name, level), matched, MIB, 8, score.snapshotter(f.name))
     finally:
         os.unlink(f.name)
 
@@ -50,7 +50,7 @@ class Table(unittest.TestCase):
 
     def test_no_sharing_refuted(self):
         v = score_text(csv_text(t_pss=0.9 * SIZE, t_res=8.0 * SIZE))
-        self.assertEqual((v["verdict"], v["row"]), ("REFUTED", "no page-cache sharing"))
+        self.assertEqual((v["verdict"], v["row"]), ("REFUTED", "no page-cache sharing (snapshotter unknown)"))
 
     def test_probe_blind(self):
         v = score_text(csv_text(c_res=2.0 * SIZE))
@@ -65,6 +65,21 @@ class Table(unittest.TestCase):
     def test_unmatched_load_keeps_the_numbers(self):
         v = score_text(csv_text(), matched={"verdict": "INCONCLUSIVE"})
         self.assertEqual((v["verdict"], v["verdict_if_matched"]), ("INCONCLUSIVE", "SUPPORTED"))
+
+    def test_failed_mincore_read_voids_the_round(self):
+        # probe.sh writes model_resident_kB = -1 when a mincore read fails.
+        v = score_text(csv_text(t_res=-1))
+        self.assertEqual(v["verdict"], "INCONCLUSIVE")
+        self.assertEqual(v["void_rounds"]["T"], 3)
+
+    def test_void_load_level_is_void(self):
+        v = score_text(csv_text(), matched={"verdict": "VOID"})
+        self.assertEqual((v["verdict"], v["verdict_if_matched"]), ("VOID", "SUPPORTED"))
+
+    def test_snapshotter_named_in_the_no_sharing_row(self):
+        text = csv_text(t_pss=0.9 * SIZE, t_res=8.0 * SIZE).replace("meta,k3s=v1.37.1", "meta,k3s=v1.37.1,snapshotter=native,N=8")
+        v = score_text(text)
+        self.assertEqual((v["verdict"], v["row"]), ("REFUTED", "no page-cache sharing (snapshotter native)"))
 
     def test_other_level_and_warmup_ignored(self):
         v = score_text(csv_text(level="heavy") + csv_text(), level="typical")
