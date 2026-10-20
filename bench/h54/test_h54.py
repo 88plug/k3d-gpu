@@ -265,7 +265,7 @@ class Shim(unittest.TestCase):
             with open(os.path.join(HERE, "k3d-shim.sh")) as s, open(shim, "w") as f:
                 f.write(s.read())
             os.chmod(shim, 0o755)
-            env = dict(os.environ, HOME="/home/u")
+            env = dict(os.environ, HOME="/home/u", K3D_REAL=real)
             out = subprocess.run([shim, "cluster", "create", "k3dgpu-g-h54a-1", "--x"], capture_output=True, text=True, env=env).stdout
             self.assertIn("--volume=/home/u/k3dgpu-gemma/models:/var/apb-models@server:*;agent:*", out)
             out = subprocess.run([shim, "cluster", "create", "k3dgpu-e-h50"], capture_output=True, text=True, env=env).stdout

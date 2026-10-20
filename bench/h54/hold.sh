@@ -15,7 +15,7 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 export REPO=$(cd "${HERE}/../.." && pwd) G
 case ${ROW} in smoke*) R=${G}/smoke/${ROW}/hold${HOLD} ;; *) R=${G}/results/H54${ROW}/hold${HOLD} ;; esac
 mkdir -p "${R}"
-export PATH=${G}/bin:${PATH} EAT=${G}/eat-src
+export PATH=${G}/h54a/bin:${G}/bin:${PATH} EAT=${G}/h54a/eat-src
 export CLUSTER=k3dgpu-g-h54${ROW}-${HOLD} KUBECONFIG=${R}/kubeconfig
 log() { echo "== H54${ROW}-hold${HOLD} $* $(date -u +%FT%TZ)" | tee -a "${G}/results/campaign.log"; }
 aiperf_n() { docker top aiperf010 -eo pid,args 2>/dev/null | awk 'NR>1 && $0 !~ /sleep infinity/' | wc -l; }
