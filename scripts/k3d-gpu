@@ -3507,9 +3507,9 @@ perf_rapl() {
 # Hybrid hosts only: P-cores and E-cores share one package power and thermal
 # budget, so pinning them apart does not stop an E-core neighbour from clocking
 # P-core inference down. The kernel counts package thermal throttle events since
-# boot; when there are any, suggest the opt-in prefill guard. Until H5 is
-# measured the section is printed only for a guard that is requested
-# (K3D_GPU_PREFILL_GUARD) or recorded for this cluster, never unprompted.
+# boot; when there are any, suggest the opt-in prefill guard. H5 measured the
+# guard and is REFUTED, so the section is printed only for a guard that is
+# requested (K3D_GPU_PREFILL_GUARD) or recorded for this cluster, never unprompted.
 perf_prefill_guard() {
     local p first tt cnt tot core=0 cpu v pl khz rec="${STATE_DIR}/${CLUSTER}/scaling_max_freq"
     has_hybrid || return 0
@@ -5786,7 +5786,8 @@ cmd_logs() {
 # ---- agent-sandbox (opt-in) -------------------------------------------------------
 # kubernetes-sigs/agent-sandbox runs untrusted agent tool execution in sandbox pods.
 # The profile labels them k3d-gpu.io/cores=efficient, so on a hybrid CPU the balloons
-# policy keeps them on E-cores and the P-cores stay free for inference.
+# policy keeps them on E-cores, apart from P-core inference. That is placement, not
+# isolation: package power, LLC and DRAM bandwidth stay shared (EXPERIMENTS.md H3, H5).
 SANDBOX_VERSION="v1.0.7"
 SANDBOX_NS="agent-sandbox"
 SANDBOX_POOL="python-ecores"
