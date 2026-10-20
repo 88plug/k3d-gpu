@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # hack/release_cas.sh against a local bare origin over file:// (no network).
-# Writers race the release through RELEASE_CAS_BEFORE_PUSH, a hook the script
-# runs just before each push. Invariants checked after every case:
+# Writers race the release through a git wrapper on PATH: before the script's
+# `git push --atomic`, the wrapper runs the case's hook ($TEST_PREPUSH_HOOK). Invariants checked after every case:
 #   every aur-v* tag is an ancestor of main; every "release: aur-vX" commit on
 #   main carries tag aur-vX; no version is released twice; main VERSION equals
 #   the highest tag.
@@ -16,6 +16,15 @@ T=$(mktemp -d "${TMPDIR:-/tmp}/release_cas.XXXXXX")
 trap '[ -n "${KEEP:-}" ] || rm -rf "$T"' EXIT
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+REAL_GIT=$(command -v git)
+mkdir -p "$T/bin"
+cat > "$T/bin/git" <<STUB
+#!/usr/bin/env bash
+case " \$* " in *" push --atomic "*)
+  if [ -n "\${TEST_PREPUSH_HOOK:-}" ]; then "\$TEST_PREPUSH_HOOK"; fi;; esac
+exec $(printf %q "$REAL_GIT") "\$@"
+STUB
+chmod +x "$T/bin/git"
 PASS=0 FAILS=0
 ok()   { PASS=$((PASS + 1)); echo "ok   $1"; }
 fail() { FAILS=$((FAILS + 1)); echo "FAIL $1"; }
@@ -45,12 +54,12 @@ write() {
 runner() { git clone -q "file://$D/origin.git" "$D/$1" 2>/dev/null; }
 # release DIR EVENT [HOOK]: run the release body in a runner checkout.
 release() {
-  ( cd "$D/$1" && GIT_COMMITTER_NAME="runner-$1" EVENT=$2 RELEASE_CAS_BEFORE_PUSH=${3:-} GITHUB_OUTPUT="$D/$1.out" bash "$REL" ) > "$D/$1.log" 2>&1
+  ( cd "$D/$1" && PATH="$T/bin:$PATH" GIT_COMMITTER_NAME="runner-$1" EVENT=$2 TEST_PREPUSH_HOOK=${3:-} GITHUB_OUTPUT="$D/$1.out" bash "$REL" ) > "$D/$1.log" 2>&1
 }
 # hook NAME TIMES BODY: a pre-push hook running BODY on its first TIMES calls.
 hook() {
   local h=$D/$1.hook
-  printf '#!/usr/bin/env bash\nunset RELEASE_CAS_BEFORE_PUSH\nn=$(( $(cat %q 2>/dev/null || echo 0) + 1 )); echo $n > %q\n[ $n -le %s ] || exit 0\n%s\n' \
+  printf '#!/usr/bin/env bash\nunset TEST_PREPUSH_HOOK\nn=$(( $(cat %q 2>/dev/null || echo 0) + 1 )); echo $n > %q\n[ $n -le %s ] || exit 0\n%s\n' \
     "$h.n" "$h.n" "$2" "$3" > "$h"
   chmod +x "$h"; echo "$h"
 }
@@ -151,13 +160,36 @@ release b workflow_dispatch "$h"; rc=$?
 c=1; [ "$rc" -eq 0 ] && [ "$(cat "$D/a.rc" 2>/dev/null)" = 0 ] && [ "$(tags)" = "aur-v0.1.5 aur-v0.1.6 aur-v0.1.7 " ] && c=0
 check concurrent_dispatch $c "rcA=$(cat "$D/a.rc" 2>/dev/null) rcB=$rc tags=$(tags)"
 
-# version_ahead_of_tag: main's VERSION is above the last tag (a release commit
-# whose tag push never landed); the next release goes above both.
-setup version_ahead_of_tag
-( cd "$D/seed" && sed -i 's/^VERSION="0.1.5"/VERSION="0.1.6"/' scripts/k3d-gpu && git commit -qam "stamp 0.1.6" && git push -q origin HEAD:main )
-runner r; release r workflow_dispatch; rc=$?
-c=1; [ "$rc" -eq 0 ] && [ "$(tagsha aur-v0.1.7)" = "$(main)" ] && c=0
-check version_ahead_of_tag $c "rc=$rc tags=$(tags) $(tail -1 "$D/r.log")"
+# version_ahead_of_tag: main's VERSION was bumped above the last tag by hand;
+# that version is released, not the one after it.
+for ev in push workflow_dispatch; do
+  setup "version_ahead_$ev"
+  ( cd "$D/seed" && sed -i 's/^VERSION="0.1.5"/VERSION="0.1.6"/' scripts/k3d-gpu && git commit -qam "bump to 0.1.6" && git push -q origin HEAD:main )
+  runner r; release r "$ev"; rc=$?; m=$(main)
+  c=1; [ "$rc" -eq 0 ] && [ "$(tagsha aur-v0.1.6)" = "$m" ] && [ "$(tags)" = "aur-v0.1.5 aur-v0.1.6 " ] \
+    && o show "$m:packaging/aur/PKGBUILD" | grep -q '^pkgver=0.1.6' && c=0
+  check "version_ahead_of_tag ($ev)" $c "rc=$rc tags=$(tags) $(tail -1 "$D/r.log")"
+done
+
+# orphan_release_commit: a release commit whose tag never landed (a push that
+# GitHub applied only in part) is tagged in place by the next push run.
+setup orphan_release_commit
+( cd "$D/seed" && sed -i 's/0\.1\.5/0.1.6/' scripts/k3d-gpu packaging/aur/PKGBUILD packaging/aur/.SRCINFO \
+  && git commit -qam "release: aur-v0.1.6 [skip release]" && git push -q origin HEAD:main )
+orphan=$(main); runner r; release r push; rc=$?
+c=1; [ "$rc" -eq 0 ] && [ "$(main)" = "$orphan" ] && [ "$(tagsha aur-v0.1.6)" = "$orphan" ] && c=0
+check orphan_release_commit $c "rc=$rc tags=$(tags) $(tail -1 "$D/r.log")"
+
+# skip_marker_in_body: [skip release] in the commit body is honoured on push.
+setup skip_marker_in_body
+( cd "$D/seed" && echo "x" >> scripts/k3d-gpu && git commit -qa -m "install: pin" -m "[skip release]" && git push -q origin HEAD:main )
+before=$(main); runner r; release r push; rc=$?
+c=1; [ "$rc" -eq 0 ] && [ "$(main)" = "$before" ] && [ "$(tags)" = "aur-v0.1.5 " ] && c=0
+check skip_marker_in_body $c "rc=$rc tags=$(tags)"
+
+# no_env_command_hook: the release script runs no command named by the environment.
+if grep -n 'BEFORE_PUSH' "$REL"; then fail "no_env_command_hook: env-named command in $REL"
+else ok "no_env_command_hook"; fi
 
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]
