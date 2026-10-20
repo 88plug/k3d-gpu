@@ -80,7 +80,7 @@
         "level": "warn",
         "revert": null,
         "section": "Intel CPU built-in accelerators...",
-        "text": "DSA: 1 device(s) but no user work queues — configure them on the host with accel-config",
+        "text": "DSA: 1 device(s) but no user work queues, so not in the cluster — configure them with accel-config as intel-dsa-plugin's idxd initcontainer does (per device below; lasts until reboot), or all at once: k3d-gpu host-setup --apply; then k3d-gpu down && k3d-gpu up",
         "why": null
       },
       {
@@ -89,7 +89,34 @@
         "level": "warn",
         "revert": null,
         "section": "Intel CPU built-in accelerators...",
-        "text": "IAA: 1 device(s) but no user work queues — configure them on the host with accel-config",
+        "text": "accel-config is not installed and this distro has no package: build intel/idxd-config accel-config-v4.1.9 with --prefix=/usr (https://github.com/intel/idxd-config)",
+        "why": null
+      },
+      {
+        "apply": "sudo accel-config config-engine dsa0/engine0.0 --group-id=0 && sudo accel-config config-wq dsa0/wq0.0 --group-id=0 --type=user --mode=dedicated --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && sudo accel-config enable-device dsa0 && sudo accel-config enable-wq dsa0/wq0.0",
+        "from": null,
+        "level": "warn",
+        "revert": "sudo accel-config disable-wq dsa0/wq0.0 && sudo accel-config disable-device dsa0",
+        "section": "Intel CPU built-in accelerators...",
+        "text": "DSA dsa0: disabled — 1 engine, 1 group, 1 dedicated user WQ (no user PASID: a shared WQ needs intel_iommu=on,sm_on)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "warn",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "IAA: 1 device(s) but no user work queues, so not in the cluster — configure them with accel-config as intel-iaa-plugin's idxd initcontainer does (per device below; lasts until reboot), or all at once: k3d-gpu host-setup --apply; then k3d-gpu down && k3d-gpu up",
+        "why": null
+      },
+      {
+        "apply": "sudo accel-config config-engine iax1/engine1.0 --group-id=0 && sudo accel-config config-wq iax1/wq1.0 --group-id=0 --type=user --mode=dedicated --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && sudo accel-config enable-device iax1 && sudo accel-config enable-wq iax1/wq1.0",
+        "from": null,
+        "level": "warn",
+        "revert": "sudo accel-config disable-wq iax1/wq1.0 && sudo accel-config disable-device iax1",
+        "section": "Intel CPU built-in accelerators...",
+        "text": "IAA iax1: disabled — 1 engine, 1 group, 1 dedicated user WQ (no user PASID: a shared WQ needs intel_iommu=on,sm_on)",
         "why": null
       },
       {

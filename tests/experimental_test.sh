@@ -257,6 +257,26 @@ echo "5.15.0" > "${FLEXOLD}/proc/sys/kernel/osrelease"
 pci "${FLEXOLD}" 0000:03:00.0 0x8086 0x56c1 0x038000
 expect "xe-force-probe: no xe before 6.8" "kernel 5.15.0 has no xe" "$(run "${FLEXOLD}" xe-force-probe up)"
 
+# ---- up on a Xeon whose DSA/IAA/QAT are present but not set up ---------------------
+
+# Granite Rapids as it boots: AMX, DSA dsa0 and IAA iax1 disabled with no work
+# queues, and a 4xxx QAT PF with SR-IOV but no VFs. up must name them, not drop them.
+GNR=$(newroot gnr-unconfigured)
+printf 'processor\t: 0\nflags\t\t: fpu avx512f amx_bf16 amx_tile amx_int8\n' > "${GNR}/proc/cpuinfo"
+for d in dsa0 iax1; do
+    mkdir -p "${GNR}/sys/bus/dsa/devices/${d}"; echo disabled > "${GNR}/sys/bus/dsa/devices/${d}/state"
+done
+pci "${GNR}" 0000:01:00.0 0x8086 0x4940 0x0b4000 4xxx
+echo 16 > "${GNR}/sys/devices/pci0000:00/0000:01:00.0/sriov_totalvfs"
+out=$(VENDORS=auto run "${GNR}" off up)
+expect "up: present-but-disabled engines named up front" "WARN: present but disabled: DSA dsa0, IAA iax1, QAT 0000:01:00.0 " "${out}"
+expect "up: the one enable command is host-setup --apply" "present but disabled: .*enable them: k3d-gpu host-setup --apply, then k3d-gpu down && k3d-gpu up" "${out}"
+expect_count "up: repeated in the closing summary" "present but disabled: DSA dsa0, IAA iax1, QAT 0000:01:00.0 " 2 "${out}"
+expect "up: the summary still lists what is schedulable" "Accelerators schedulable: amx=1" "${out}"
+expect "up: never runs the host change itself" "accel-config|sriov_numvfs" "${out}" negate
+out=$(VENDORS=amx run "${GNR}" off up)
+expect "up: an explicit K3D_GPU_VENDORS list gets no disabled-engine note" "present but disabled" "${out}" negate
+
 # ---- framework rules ---------------------------------------------------------------
 
 # Auto-adapt: unset (or "auto") turns on every feature that is detected, mature

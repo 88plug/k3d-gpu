@@ -1,3 +1,4 @@
 WARN: Gaudi PCI device found but the habanalabs driver is not loaded — skipping Gaudi (Gaudi 3 needs Intel's out-of-tree habanalabs driver; mainline only covers up to Gaudi 2)
+WARN: present but disabled: DSA dsa0, IAA iax1 (no work queues / VFs), so not in the cluster — enable them: k3d-gpu host-setup --apply, then k3d-gpu down && k3d-gpu up (exact commands: k3d-gpu doctor)
 amx feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true feature.node.kubernetes.io/cpu-cpuid.AMXINT8=true feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true
 exit=0
