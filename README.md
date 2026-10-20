@@ -416,6 +416,43 @@ and cites its source; each suggestion prints a one-line apply command and the
 command that restores the value it found. It never writes to the host, and it
 exits 0 — the suggestions are advice, not failures.
 
+`k3d-gpu doctor --perf --bandwidth` is the one measuring step: it builds STREAM
+(`jeffhammond/STREAM` at a pinned commit, source checked by sha256) with
+`-O3 -march=native -fopenmp`, runs it with one thread per physical core and
+arrays four times the last-level cache, and caches the best Triad, with the CPU
+model and MemTotal it ran on, in `~/.local/state/k3d-gpu/bandwidth.json`. It
+takes about a minute and changes no host setting.
+
+### Bandwidth ceiling for a model (`plan --predict --model`)
+
+`k3d-gpu plan --predict --model ID[@REV]|DIR|FILE.gguf` predicts the batch-1
+decode ceiling of one model on this host: bandwidth divided by the weight bytes
+one token reads. Parameter counts come from the model's `config.json` (hidden
+sizes, heads, layer types, `num_experts` and `num_experts_per_tok` or their
+aliases); for a mixture of experts only `top_k / num_experts` of the expert
+weights count per token. A `.gguf` file is read from its tensor table instead,
+which gives exact bytes per tensor. `--format` sets the bytes per parameter
+(`bf16`, `fp8`, `w4a16-g128`, `ov-int4-asym-g128`, `ov-int4-sym-g32`, `q4_0`,
+`q4_k_m`, ...); without it the format comes from `openvino_config.json`, the
+config's `quantization_config`, or its dtype. A Hugging Face id is fetched as
+`config.json` only (cached when the revision is a commit sha).
+
+It prints one row per placement that fits: all on the CPU, all on one Intel GPU,
+tensor parallel over several, and, for a GGUF MoE, experts on the CPU with the
+rest on a GPU (`llama.cpp -ngl 99 -ot exps=CPU`), which adds both memory terms
+and a per-layer hop latency (`--hop-us`, assumed). Each row names the engine
+that serves that container on that device (OVMS for OpenVINO IR, llm-scaler-vLLM
+on Arc, vLLM or SGLang on the CPU, llama.cpp for GGUF). Every bandwidth is
+labelled: DRAM is `measured` when this host's `doctor --perf --bandwidth` cache
+exists, else `theoretical` from SMBIOS type 17 (populated channels times MT/s
+times 8 B, readable as root), or `given` with `--dram-gbs`; GPU VRAM size comes
+from the BAR and its bandwidth from the device's spec sheet. `--json` prints the
+same as `k3d-gpu.moe-predict/v1`.
+
+It is a predictor: it has no compute, KV-cache or kernel-efficiency term and does
+not model speculative decoding. How close a measurement comes to it is what
+EXPERIMENTS.md H54c tests.
+
 ### Xeon built-in accelerators
 
 Auto-detected too. `up` deploys their plugins once the host side is set up — the
