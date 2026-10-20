@@ -436,6 +436,48 @@ says "K3D_GPU_VENDORS=dsa plans DSA" "${AC} config-engine dsa0/engine0.0"
 not_says "K3D_GPU_VENDORS=dsa leaves IAA out" "iax1"
 not_says "K3D_GPU_VENDORS=dsa leaves QAT out" "sriov_numvfs"
 
+# iax1 held by an enabled kernel WQ on iaa_crypto (crescent's state), dsa0 untouched.
+r=$(newroot xeon-kernel-wq)
+osrel "${r}" ubuntu 24.04
+mkdir -p "${r}/usr/bin"; printf '#!/bin/sh\n' > "${r}/usr/bin/accel-config"; chmod +x "${r}/usr/bin/accel-config"
+B="${r}/sys/bus/dsa/devices"
+mkdir -p "${B}/dsa0" "${B}/iax1" "${B}/wq1.0" "${B}/wq1.1" "${B}/engine1.0" "${B}/group1.0" "${r}/sys/bus/dsa/drivers/crypto"
+echo disabled > "${B}/dsa0/state"; echo enabled > "${B}/iax1/state"; echo 128 > "${B}/iax1/max_work_queues_size"
+printf 'enabled\n' > "${B}/wq1.0/state"; echo 32 > "${B}/wq1.0/size"; echo 0 > "${B}/wq1.0/group_id"
+ln -sfn "${r}/sys/bus/dsa/drivers/crypto" "${B}/wq1.0/driver"
+printf 'disabled\n' > "${B}/wq1.1/state"; echo 0 > "${B}/wq1.1/size"; echo -1 > "${B}/wq1.1/group_id"
+echo 0 > "${B}/engine1.0/group_id"
+KWQ_RUN="${AC} disable-device iax1 && ${AC} load-config -c /var/lib/k3d-gpu/idxd-iax1.conf && ${AC} config-wq iax1/wq1.1 --group-id=0 --type=user --mode=dedicated --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && ${AC} enable-device iax1 && ${AC} enable-wq iax1/wq1.0 && ${AC} enable-wq iax1/wq1.1"
+KWQ_REV="${AC} disable-device iax1 && ${AC} load-config -c /var/lib/k3d-gpu/idxd-iax1.conf && ${AC} enable-device iax1 && ${AC} enable-wq iax1/wq1.0"
+run "${r}" ""
+says "kernel-WQ device is noted, not planned, without the opt-in" "note: IAA iax1: enabled with kernel work queues only — left alone; add --with-kernel-wqs"
+not_says "no kernel-WQ commands without the opt-in" "disable-device iax1"
+says "the untouched DSA device is still planned" "${AC} config-engine dsa0/engine0.0 --group-id=0"
+run "${r}" "y" --apply
+! grep -q 'iax1' "${STUB_LOG}"; check "apply without the opt-in never touches the kernel-WQ device" $? "iax1 in the call log"
+run "${r}" "" --with-kernel-wqs
+says "--with-kernel-wqs plans the snapshot of every device" "sudo install -d -m 0700 /var/lib/k3d-gpu && ${AC} save-config -s /var/lib/k3d-gpu/idxd-all.conf && sudo python3 -c"
+says "--with-kernel-wqs keeps only this device's snapshot" "/var/lib/k3d-gpu/idxd-all.conf iax1 /var/lib/k3d-gpu/idxd-iax1.conf && ${KWQ_RUN}"
+says "--with-kernel-wqs prints the snapshot revert" "revert: ${KWQ_REV}"
+run "${r}" "y" --apply --with-kernel-wqs
+rc_is "opt-in apply exits 0" 0
+s=$(grep -n 'save-config -s /var/lib/k3d-gpu/idxd-all.conf' "${STUB_LOG}" | cut -d: -f1)
+d=$(grep -n 'disable-device iax1' "${STUB_LOG}" | cut -d: -f1)
+l=$(grep -n 'load-config -c /var/lib/k3d-gpu/idxd-iax1.conf' "${STUB_LOG}" | cut -d: -f1)
+ordered=1
+[ -n "${s}" ] && [ -n "${d}" ] && [ -n "${l}" ] && [ "${s}" -lt "${d}" ] && [ "${d}" -lt "${l}" ] && ordered=0
+check "opt-in apply snapshots, then disables, then writes the snapshot back" "${ordered}" "order save=${s} disable=${d} load=${l}"
+logged "opt-in apply disables the device" "sudo accel-config disable-device iax1"
+logged "opt-in apply writes the snapshot back" "sudo accel-config load-config -c /var/lib/k3d-gpu/idxd-iax1.conf"
+logged "opt-in apply re-enables the kernel WQ" "sudo accel-config enable-wq iax1/wq1.0"
+logged "opt-in apply enables the user WQ" "sudo accel-config enable-wq iax1/wq1.1"
+run "${r}" "" --bogus-flag
+rc_is "unknown host-setup flag still fails" 1
+rm -rf "${B}/dsa0"
+run "${r}" "y" --apply
+says "only a held kernel-WQ device: nothing to install, and the note says why" "note: IAA iax1: enabled with kernel work queues only — left alone"
+ran_nothing "only a held kernel-WQ device: nothing is called"
+
 r=$(newroot xeon-accels-fedora)
 osrel "${r}" fedora 44
 xeon_accels "${r}"

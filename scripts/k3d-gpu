@@ -157,11 +157,13 @@ Usage: k3d-gpu <command>
             (report DIR writes there; report --json prints the JSON only;
             --no-cluster skips the cluster query)
   logs      Tail k3s server container logs
-  host-setup [--apply] [--distro D]
+  host-setup [--apply] [--with-kernel-wqs] [--distro D]
             Check the host drivers/userspace (vainfo, clinfo, libva, libstdc++) and print
             the pinned install commands for Intel GPU/NPU and the NVIDIA container
-            toolkit + CDI (Ubuntu 24.04/26.04, Fedora, Arch, Manjaro). --apply runs
-            them after a y/N prompt
+            toolkit + CDI (Ubuntu 24.04/26.04, Fedora, Arch, Manjaro), plus Xeon
+            DSA/IAA user work queues and QAT VFs. --apply runs them after a y/N
+            prompt. --with-kernel-wqs also adds a user WQ to DSA/IAA devices that
+            kernel work queues hold (snapshot, brief disable, kernel WQs restored)
   agent up --remote [URL] [--model M] [--api-key-file FILE]
             No local server: Secret k3d-gpu-llm (OPENAI_BASE_URL, OPENAI_API_KEY,
             OPENAI_MODEL) in the agent namespace for pods' envFrom; status checks
@@ -2089,35 +2091,141 @@ qat_vf_driver() {
     esac
 }
 
-# Host steps that turn on present-but-unconfigured DSA/IAA/QAT, one tab-separated
-# line per device: <kind> <device> <run> <revert>. Nothing here runs them; doctor
+# Where the opt-in kernel-WQ path keeps the accel-config snapshot its revert loads.
+IDXD_SNAPSHOT_DIR=/var/lib/k3d-gpu
+
+# One line per sysfs object of an idxd device on the dsa bus, sorted by number:
+# idxd_objs <wq|engine|group> <device id>. A missing attribute reads as unset.
+idxd_objs() { { compgen -G "${SYSROOT}/sys/bus/dsa/devices/$1$2.*" || true; } | sort -V; }
+idxd_attr() { cat "$1/$2" 2>/dev/null || echo "$3"; }
+
+# Host steps for present-but-unconfigured DSA/IAA/QAT, one tab-separated line per
+# device: <kind> <device> <class> <run> <revert>. Nothing here runs them; doctor
 # prints them and host-setup --apply runs them after a y/N prompt. None persist
-# across a reboot.
-# DSA/IAA (only when a kind has no user work queue at all, and only disabled
-# devices: the kernel refuses config writes to an enabled one) get what the
-# intel-device-plugins v0.37.1 idxd initcontainer sets per group (demo/dsa.conf,
-# demo/iaa.conf): 1 engine, 1 group, 1 user WQ, size 16, priority 10, on the
-# kernel's "user" WQ driver. The WQ is shared when the device has user PASID
-# (drivers/dma/idxd/device.c refuses a shared WQ without it, and one with
+# across a reboot. Classes:
+#   new     a disabled DSA/IAA device with nothing configured, or a QAT PF with
+#           no VFs. DSA/IAA get what the intel-device-plugins v0.37.1 idxd
+#           initcontainer sets per group (demo/dsa.conf, demo/iaa.conf): 1 engine,
+#           1 group, 1 user WQ, size 16, priority 10, on the kernel's "user" WQ
+#           driver. Disabling a device clears every WQ, group and engine setting
+#           of it (idxd_device_clear_state in drivers/dma/idxd/device.c), so the
+#           revert's disable-device is the unconfigured state it was read in.
+#   kernel  an enabled DSA/IAA device whose only enabled WQs are kernel ones (an
+#           iaa_crypto or dmaengine owner). Opt-in only (host-setup
+#           --with-kernel-wqs). The kernel refuses WQ size writes on an enabled
+#           device (sysfs.c wq_size_store) and disabling one wipes its kernel WQs'
+#           config, so: snapshot it (accel-config save-config holds every device;
+#           python3 keeps this one's entry, so load-config writes no other device),
+#           disable the device, write the snapshot back with load-config (no -e),
+#           add a free
+#           WQ (size 0) with up to 16 of the unclaimed entries, in a group of its
+#           own with a free engine (else in the kernel WQ's group), then enable the
+#           device, each WQ that was enabled, and the new one. The revert disables
+#           the device, loads the same snapshot and enables the device and the same
+#           kernel WQs: the state read, kernel WQs included.
+#   skip    left alone; <run> is "-" and <revert> says why.
+# Only a kind with no user work queue at all is considered. A WQ is shared when
+# the device has user PASID (device.c refuses a shared WQ without it, and one with
 # threshold 0), else dedicated. Flags per accel-config v4.1.9 man pages.
 # QAT gets every VF the PF supports, as the plugin's qat initcontainer does
 # (tee sriov_numvfs < sriov_totalvfs).
 accel_enable_steps() {
-    local kind name prefix devdir dev d id mode ac="sudo accel-config" total wq
+    local kind name prefix devdir dev d id ac="sudo accel-config" total o g
+    local state wq eng grp size room max claimed kwqs kdrv mode setup zs used reen k snap keep
     for kind in "DSA dsa dsa" "IAA iax iax"; do
         read -r name prefix devdir <<< "${kind}"
         ! compgen -G "${SYSROOT}/dev/${devdir}/wq*" >/dev/null || continue
         while read -r dev; do
             [ -n "${dev}" ] || continue
-            [ "$(cat "${dev}/state" 2>/dev/null || echo disabled)" = disabled ] || continue
             d=${dev##*/}
             id=${d#"${prefix}"}
-            wq="${d}/wq${id}.0"
+            state=$(idxd_attr "${dev}" state disabled)
+            # Free WQ (size 0, disabled), free engine (no group), claimed WQ entries,
+            # kernel WQs that are enabled and the drivers they are bound to.
+            wq="" eng="" claimed=0 kwqs="" kdrv="" g="" used=""
+            while read -r o; do
+                [ -n "${o}" ] || continue
+                size=$(idxd_attr "${o}" size 0)
+                [[ "${size}" =~ ^[0-9]+$ ]] || size=0
+                claimed=$((claimed + size))
+                used+=" $(idxd_attr "${o}" group_id -1)"
+                if [ "$(idxd_attr "${o}" state disabled)" = enabled ]; then
+                    kwqs+=" ${o##*/}" kdrv+=" $(bound_driver "${o}")"
+                    [ -n "${g}" ] || g=$(idxd_attr "${o}" group_id -1)
+                elif [ -z "${wq}" ] && [ "${size}" -eq 0 ]; then
+                    wq=${o##*/}
+                fi
+            done < <(idxd_objs wq "${id}")
+            while read -r o; do
+                [ -n "${o}" ] || continue
+                k=$(idxd_attr "${o}" group_id -1)
+                used+=" ${k}"
+                [ -n "${eng}" ] || [ "${k}" != -1 ] || eng=${o##*/}
+            done < <(idxd_objs engine "${id}")
+            # Group ids some engine or WQ is in, as " 0 2 " (unassigned is -1).
+            used=" $(tr ' ' '\n' <<< "${used}" | awk '$1 != "" && $1 != -1' | sort -un | paste -sd' ') "
             mode=dedicated
-            [ "$(cat "${dev}/pasid_enabled" 2>/dev/null)" != 1 ] || mode="shared --threshold=15"
-            printf '%s\t%s\t%s\t%s\n' "${name}" "${d}" \
-                "${ac} config-engine ${d}/engine${id}.0 --group-id=0 && ${ac} config-wq ${wq} --group-id=0 --type=user --mode=${mode} --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && ${ac} enable-device ${d} && ${ac} enable-wq ${wq}" \
-                "${ac} disable-wq ${wq} && ${ac} disable-device ${d}"
+            [ "$(idxd_attr "${dev}" pasid_enabled 0)" != 1 ] || mode=shared
+            if [ "${state}" = disabled ]; then
+                # Untouched: no WQ entries claimed and no engine in a group.
+                if [ "${claimed}" -gt 0 ] || [ "${used}" != "  " ]; then
+                    printf '%s\t%s\tskip\t-\t%s\n' "${name}" "${d}" "disabled but already configured by someone else (WQ entries or engines assigned); enable it with accel-config, or clear it"
+                    continue
+                fi
+                wq=${wq:-wq${id}.0} eng=${eng:-engine${id}.0}
+                [ "${mode}" = dedicated ] || mode="shared --threshold=15"
+                printf '%s\t%s\tnew\t%s\t%s\n' "${name}" "${d}" \
+                    "${ac} config-engine ${d}/${eng} --group-id=0 && ${ac} config-wq ${d}/${wq} --group-id=0 --type=user --mode=${mode} --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && ${ac} enable-device ${d} && ${ac} enable-wq ${d}/${wq}" \
+                    "${ac} disable-wq ${d}/${wq} && ${ac} disable-device ${d}"
+                continue
+            fi
+            if [ "${state}" != enabled ] || [ -z "${kwqs}" ]; then
+                printf '%s\t%s\tskip\t-\t%s\n' "${name}" "${d}" "${state} with no enabled work queue"
+                continue
+            fi
+            # zswap keeps pages compressed by deflate-iaa in its pool after the
+            # compressor is switched or zswap is turned off, so any deflate-iaa
+            # setting holds the device.
+            zs=$(cat "${SYSROOT}/sys/module/zswap/parameters/compressor" 2>/dev/null || true)
+            if [ "${name}" = IAA ] && [ "${zs}" = deflate-iaa ]; then
+                printf '%s\t%s\tskip\t-\t%s\n' "${name}" "${d}" "kernel WQ(s)${kwqs} (${kdrv# }) serve zswap's deflate-iaa compressor; disabling the device under zswap is unsafe. Set another zswap compressor and reboot (its pool keeps deflate-iaa pages), then rerun"
+                continue
+            fi
+            max=$(idxd_attr "${dev}" max_work_queues_size 128)
+            [[ "${max}" =~ ^[0-9]+$ ]] || max=128
+            room=$((max - claimed))
+            [ "${room}" -le 16 ] || room=16
+            if [ -z "${wq}" ] || [ "${room}" -lt 1 ]; then
+                printf '%s\t%s\tskip\t-\t%s\n' "${name}" "${d}" "kernel WQ(s)${kwqs} (${kdrv# }) hold it and leave no free WQ or WQ entries (${claimed} of ${max} claimed)"
+                continue
+            fi
+            # A group of its own when an engine and a group are free.
+            grp=""
+            if [ -n "${eng}" ]; then
+                while read -r o; do
+                    [ -n "${o}" ] && [ -z "${grp}" ] || continue
+                    [[ "${used}" == *" ${o##*.} "* ]] || grp=${o##*.}
+                done < <(idxd_objs group "${id}")
+            fi
+            setup=""
+            if [ -n "${grp}" ]; then
+                setup="${ac} config-engine ${d}/${eng} --group-id=${grp} && "
+            else
+                grp=${g}
+            fi
+            snap="${IDXD_SNAPSHOT_DIR}/idxd-${d}.conf"
+            keep="sudo python3 -c 'import json, sys; a = json.load(open(sys.argv[1])); a = a if isinstance(a, list) else [a]; s = [x for x in a if x.get(\"dev\") == sys.argv[2]]; s or sys.exit(\"no \" + sys.argv[2] + \" in \" + sys.argv[1]); json.dump(s, open(sys.argv[3], \"w\"), indent=1)' ${IDXD_SNAPSHOT_DIR}/idxd-all.conf ${d} ${snap}"
+            # A shared WQ needs a threshold of at least 1 below its size.
+            if [ "${mode}" = shared ] && [ "${room}" -ge 2 ]; then
+                mode="shared --threshold=$((room - 1))"
+            else
+                mode=dedicated
+            fi
+            reen=""
+            for k in ${kwqs}; do reen+=" && ${ac} enable-wq ${d}/${k}"; done
+            printf '%s\t%s\tkernel\t%s\t%s\n' "${name}" "${d}" \
+                "sudo install -d -m 0700 ${IDXD_SNAPSHOT_DIR} && ${ac} save-config -s ${IDXD_SNAPSHOT_DIR}/idxd-all.conf && ${keep} && ${ac} disable-device ${d} && ${ac} load-config -c ${snap} && ${setup}${ac} config-wq ${d}/${wq} --group-id=${grp} --type=user --mode=${mode} --wq-size=${room} --priority=10 --driver-name=user --name=k3d-gpu && ${ac} enable-device ${d}${reen} && ${ac} enable-wq ${d}/${wq}" \
+                "${ac} disable-device ${d} && ${ac} load-config -c ${snap} && ${ac} enable-device ${d}${reen}"
         done < <({ compgen -G "${SYSROOT}/sys/bus/dsa/devices/${prefix}[0-9]*" || true; } | sort -V)
     done
     for dev in "${SYSROOT}"/sys/bus/pci/devices/*; do
@@ -2127,26 +2235,29 @@ accel_enable_steps() {
         ! compgen -G "${dev}/virtfn*" >/dev/null || continue
         total=$(cat "${dev}/sriov_totalvfs" 2>/dev/null) || continue
         [[ "${total}" =~ ^[1-9][0-9]*$ ]] || continue
-        printf 'QAT\t%s\techo %s | sudo tee /sys/bus/pci/devices/%s/sriov_numvfs\techo 0 | sudo tee /sys/bus/pci/devices/%s/sriov_numvfs\n' \
+        printf 'QAT\t%s\tnew\techo %s | sudo tee /sys/bus/pci/devices/%s/sriov_numvfs\techo 0 | sudo tee /sys/bus/pci/devices/%s/sriov_numvfs\n' \
             "${dev##*/}" "${total}" "${dev##*/}" "${dev##*/}"
     done
 }
 
-# One line naming every present-but-unconfigured engine (auto detection only),
-# or nothing: "DSA dsa0 dsa2, IAA iax1, QAT 0000:01:00.0".
+# One line naming every present-but-unconfigured engine k3d-gpu has a command
+# for (auto detection only), or nothing: "DSA dsa0 dsa2, IAA iax1(kernel WQ),
+# QAT 0000:01:00.0".
 accel_disabled_list() {
     [ "${VENDORS_REQUEST}" = auto ] || return 0
     accel_enable_steps | awk -F'\t' '
+        $3 == "skip" { next }
         $1 != k { if (out != "") out = out ", "; out = out $1; k = $1 }
-        { out = out " " $2 }
+        { out = out " " $2 ($3 == "kernel" ? "(kernel WQ)" : "") }
         END { if (out != "") print out }'
 }
 
 # The `up`/`detect` note for present-but-unconfigured engines, or nothing.
 accel_disabled_note() {
-    local list
+    local list opt=""
     list=$(accel_disabled_list)
-    [ -z "${list}" ] || echo "present but disabled: ${list} (no work queues / VFs), so not in the cluster — enable them: k3d-gpu host-setup --apply, then k3d-gpu down && k3d-gpu up (exact commands: k3d-gpu doctor)"
+    [[ "${list}" != *"(kernel WQ)"* ]] || opt="; a device marked (kernel WQ) also needs --with-kernel-wqs"
+    [ -z "${list}" ] || echo "present but disabled: ${list} (no user work queues / VFs), so not in the cluster — enable them: k3d-gpu host-setup --apply${opt}, then k3d-gpu down && k3d-gpu up (exact commands: k3d-gpu doctor)"
 }
 
 # accel-config (intel/idxd-config) where its packages and its README build
@@ -2165,9 +2276,9 @@ accel_config_install() {
 # side is set up (work queues, SR-IOV VFs); this says what is still missing.
 doctor_cpu_accels() {
     local amx isa pred fm dev bdf vfs n wqs kind name prefix devdir lines="" lp e cl pp fav fv fn
-    local steps k d run rev drv total ac_fix=""
+    local steps k d cls run rev drv total ac_fix="" what
     steps=$(accel_enable_steps)
-    if grep -qE '^(DSA|IAA)'$'\t' <<< "${steps}" && ! has_accel_config; then
+    if grep -qE '^(DSA|IAA)'$'\t''[^[:space:]]*'$'\t''(new|kernel)'$'\t' <<< "${steps}" && ! has_accel_config; then
         ac_fix=$(accel_config_install "$(hs_distro)")
         if [ -n "${ac_fix}" ]; then
             ac_fix="  ${YLW}warn${RST}: accel-config is not installed"$'\n'"        apply:  ${ac_fix}"$'\n'
@@ -2194,22 +2305,35 @@ doctor_cpu_accels() {
         if [ "${wqs}" -gt 0 ]; then
             lines+="  ok: ${name}: ${n} device(s), ${wqs} user work queue(s) — deployed by 'k3d-gpu up' (intel-${name,,}-plugin)"$'\n'
         elif [ "${n}" -gt 0 ]; then
-            if grep -q "^${name}"$'\t' <<< "${steps}"; then
-                lines+="  ${YLW}warn${RST}: ${name}: ${n} device(s) but no user work queues, so not in the cluster — configure them with accel-config as intel-${name,,}-plugin's idxd initcontainer does (per device below; lasts until reboot), or all at once: k3d-gpu host-setup --apply; then k3d-gpu down && k3d-gpu up"$'\n'
+            if grep -qE "^${name}"$'\t''[^[:space:]]*'$'\t''(new|kernel)'$'\t' <<< "${steps}"; then
+                what=""
+                ! grep -qE "^${name}"$'\t''[^[:space:]]*'$'\t''kernel'$'\t' <<< "${steps}" || what=" (add --with-kernel-wqs for the devices kernel work queues hold)"
+                lines+="  ${YLW}warn${RST}: ${name}: ${n} device(s) but no user work queues, so not in the cluster — set them up with accel-config per device below (lasts until reboot); all at once: k3d-gpu host-setup --apply${what}; then k3d-gpu down && k3d-gpu up"$'\n'
                 lines+="${ac_fix}"
                 ac_fix=""
-                while IFS=$'\t' read -r k d run rev; do
-                    [ "${k}" = "${name}" ] || continue
-                    if [[ "${run}" == *--mode=shared* ]]; then
-                        lines+="  ${YLW}warn${RST}: ${name} ${d}: disabled — 1 engine, 1 group, 1 shared user WQ (the device has user PASID)"$'\n'
-                    else
-                        lines+="  ${YLW}warn${RST}: ${name} ${d}: disabled — 1 engine, 1 group, 1 dedicated user WQ (no user PASID: a shared WQ needs intel_iommu=on,sm_on)"$'\n'
-                    fi
-                    lines+="        apply:  ${run}"$'\n'"        revert: ${rev}"$'\n'
-                done <<< "${steps}"
             else
-                lines+="  ${YLW}warn${RST}: ${name}: ${n} device(s) but no user work queues and none is disabled (enabled with kernel work queues, or halted), so k3d-gpu leaves them to their owner"$'\n'
+                lines+="  ${YLW}warn${RST}: ${name}: ${n} device(s) but no user work queues, so not in the cluster; k3d-gpu leaves each one alone (below)"$'\n'
             fi
+            while IFS=$'\t' read -r k d cls run rev; do
+                [ "${k}" = "${name}" ] || continue
+                if [[ "${run}" == *--mode=shared* ]]; then
+                    what="1 shared user WQ (the device has user PASID)"
+                elif [ "$(idxd_attr "${SYSROOT}/sys/bus/dsa/devices/${d}" pasid_enabled 0)" = 1 ]; then
+                    what="1 dedicated user WQ (1 free WQ entry is too few for a shared one)"
+                else
+                    what="1 dedicated user WQ (no user PASID: a shared WQ needs intel_iommu=on,sm_on)"
+                fi
+                case "${cls}" in
+                    new)
+                        lines+="  ${YLW}warn${RST}: ${name} ${d}: disabled, nothing configured — 1 engine, 1 group, ${what}, as intel-${name,,}-plugin's idxd initcontainer does"$'\n'
+                        lines+="        apply:  ${run}"$'\n'"        revert: ${rev}"$'\n' ;;
+                    kernel)
+                        lines+="  ${YLW}warn${RST}: ${name} ${d}: enabled with kernel work queue(s) only ($(awk -F'enable-wq ' '{ for (i = 2; i < NF; i++) { split($i, a, " "); printf "%s%s", (i > 2 ? " " : ""), a[1] } }' <<< "${run}")) — left alone unless you opt in (k3d-gpu host-setup --apply --with-kernel-wqs, or the lines below): adds ${what} beside them. It disables the device for a moment, so its kernel users pause, and disabling clears the device's config: the config is snapshotted first (accel-config save-config, ${IDXD_SNAPSHOT_DIR}/idxd-${d}.conf) and written back, kernel WQs included; the revert loads the same snapshot"$'\n'
+                        lines+="        apply:  ${run}"$'\n'"        revert: ${rev}"$'\n' ;;
+                    *)
+                        lines+="  ${YLW}warn${RST}: ${name} ${d}: left alone — ${rev}"$'\n' ;;
+                esac
+            done <<< "${steps}"
         fi
         if is_active "${name,,}" && [ "${wqs}" -eq 0 ]; then
             lines+="  ${RED}fail${RST}: ${name} requested but no /dev/${devdir}/wq* work queues"$'\n'
@@ -2232,7 +2356,7 @@ doctor_cpu_accels() {
             if [[ ! "${total}" =~ ^[1-9][0-9]*$ ]]; then
                 lines+="  ${YLW}warn${RST}: QAT ${bdf} (${drv}): no VFs and no SR-IOV (sriov_totalvfs missing or 0) — turn on SR-IOV and VT-d in the BIOS and boot with intel_iommu=on"$'\n'
             else
-                IFS=$'\t' read -r run rev < <(awk -F'\t' -v b="${bdf}" '$1 == "QAT" && $2 == b { print $3 "\t" $4 }' <<< "${steps}") || true
+                IFS=$'\t' read -r run rev < <(awk -F'\t' -v b="${bdf}" '$1 == "QAT" && $2 == b { print $4 "\t" $5 }' <<< "${steps}") || true
                 lines+="  ${YLW}warn${RST}: QAT ${bdf} (${drv}): no VFs (sriov_numvfs 0), so not in the cluster — create all ${total} as intel-qat-plugin's qat initcontainer does; the plugin takes them as $(qat_vf_driver "$(cat "${dev}/device")") and binds them to vfio-pci (lasts until reboot), or: k3d-gpu host-setup --apply; then k3d-gpu down && k3d-gpu up"$'\n'
                 lines+="        apply:  ${run}"$'\n'"        revert: ${rev}"$'\n'
             fi
@@ -5886,16 +6010,22 @@ hs_checks() {
 
 hs_add() { HS_PLAN+=("$1"); }
 
-# Fills HS_ACCEL with accel_enable_steps for the kinds host-setup handles: all of
-# them under auto detection, else only dsa/iaa/qat named in K3D_GPU_VENDORS.
+# Fills HS_ACCEL with the accel_enable_steps host-setup runs, for the kinds it
+# handles (all under auto detection, else only dsa/iaa/qat in K3D_GPU_VENDORS):
+# class new, and class kernel only with --with-kernel-wqs. HS_HELD gets the rest.
 hs_accel_targets() {
-    local line kind want=",${VENDORS_REQUEST// /},"
-    HS_ACCEL=""
+    local line kind cls want=",${VENDORS_REQUEST// /},"
+    HS_ACCEL="" HS_HELD=""
     while IFS= read -r line; do
         [ -n "${line}" ] || continue
         kind=${line%%$'\t'*}
         [ "${VENDORS_REQUEST}" = auto ] || [[ "${want}" == *",${kind,,},"* ]] || continue
-        HS_ACCEL+="${line}"$'\n'
+        IFS=$'\t' read -r _ _ cls _ <<< "${line}"
+        if [ "${cls}" = new ] || { [ "${cls}" = kernel ] && [ "${HS_KERNEL_WQS}" -eq 1 ]; }; then
+            HS_ACCEL+="${line}"$'\n'
+        else
+            HS_HELD+="${line}"$'\n'
+        fi
     done < <(accel_enable_steps)
     return 0
 }
@@ -5907,16 +6037,25 @@ hs_accel_config_missing() {
 }
 
 hs_check_accels() {
-    local k d run rev
-    [ -n "${HS_ACCEL}" ] || return 0
+    local k d cls run rev
+    [ -n "${HS_ACCEL}${HS_HELD}" ] || return 0
     info "Checking Xeon DSA/IAA/QAT..."
-    while IFS=$'\t' read -r k d run rev; do
+    while IFS=$'\t' read -r k d cls run rev; do
         [ -n "${k}" ] || continue
-        case "${k}" in
-            QAT) hs_warn "QAT ${d} ($(bound_driver "${SYSROOT}/sys/bus/pci/devices/${d}")): no VFs — the plan below creates them" ;;
-            *)   hs_warn "${k} ${d}: no user work queue — the plan below configures one" ;;
+        case "${k}:${cls}" in
+            QAT:*)     hs_warn "QAT ${d} ($(bound_driver "${SYSROOT}/sys/bus/pci/devices/${d}")): no VFs — the plan below creates them" ;;
+            *:kernel)  hs_warn "${k} ${d}: kernel work queues only — --with-kernel-wqs: the plan below adds a user WQ beside them (snapshot, brief disable, kernel WQs restored)" ;;
+            *)         hs_warn "${k} ${d}: no user work queue — the plan below configures one" ;;
         esac
     done <<< "${HS_ACCEL}"
+    while IFS=$'\t' read -r k d cls run rev; do
+        [ -n "${k}" ] || continue
+        if [ "${cls}" = kernel ]; then
+            echo "  note: ${k} ${d}: enabled with kernel work queues only — left alone; add --with-kernel-wqs to put a user WQ beside them (k3d-gpu doctor prints the exact commands)"
+        else
+            echo "  note: ${k} ${d}: left alone — ${rev}"
+        fi
+    done <<< "${HS_HELD}"
     if hs_accel_config_missing; then
         hs_warn "accel-config is not packaged for ${HS_DISTRO}: build intel/idxd-config accel-config-v4.1.9 with --prefix=/usr (https://github.com/intel/idxd-config) and rerun; the plan leaves DSA/IAA out until then"
     fi
@@ -5936,7 +6075,7 @@ hs_plan_accels() {
         vfio=1
         hs_add "sudo modprobe vfio-pci"
     fi
-    while IFS=$'\t' read -r k d run rev; do
+    while IFS=$'\t' read -r k d _ run rev; do
         [ -n "${k}" ] || continue
         if [ "${k}" != QAT ] && hs_accel_config_missing; then continue; fi
         hs_add "${run}"
@@ -6055,14 +6194,15 @@ hs_plan_nvidia_runtime() {
 
 cmd_host_setup() {
     local apply=0 plan=0 cmd ans
-    HS_DISTRO=""
+    HS_DISTRO="" HS_KERNEL_WQS=0
     while [ $# -gt 0 ]; do
         case "$1" in
             --apply) apply=1 ;;
             --plan) plan=1 ;;
+            --with-kernel-wqs) HS_KERNEL_WQS=1 ;;
             --distro) [ $# -ge 2 ] || err "--distro needs a value"; HS_DISTRO=$2; shift ;;
             --distro=*) HS_DISTRO=${1#--distro=} ;;
-            *) err "unknown host-setup option '$1' (use --apply, --plan, --distro ubuntu-24.04|ubuntu-26.04|fedora|arch|manjaro)" ;;
+            *) err "unknown host-setup option '$1' (use --apply, --plan, --with-kernel-wqs, --distro ubuntu-24.04|ubuntu-26.04|fedora|arch|manjaro)" ;;
         esac
         shift
     done
@@ -6074,11 +6214,11 @@ cmd_host_setup() {
 
     hs_targets
     hs_accel_targets
-    if [ "${#HS_TARGETS[@]}" -eq 0 ] && [ -z "${HS_ACCEL}" ]; then
+    if [ "${#HS_TARGETS[@]}" -eq 0 ] && [ -z "${HS_ACCEL}${HS_HELD}" ]; then
         info "No Intel GPU, Intel NPU, NVIDIA GPU or unconfigured DSA/IAA/QAT found — nothing to set up (K3D_GPU_VENDORS=intel,npu,nvidia forces a plan)"
         return 0
     fi
-    info "Host setup for ${HS_DISTRO}: $({ printf '%s\n' ${HS_TARGETS[@]+"${HS_TARGETS[@]}"}; cut -f1 <<< "${HS_ACCEL}" | tr '[:upper:]' '[:lower:]'; } | awk 'NF && !seen[$0]++' | paste -sd' ')"
+    info "Host setup for ${HS_DISTRO}: $({ printf '%s\n' ${HS_TARGETS[@]+"${HS_TARGETS[@]}"}; cut -f1 <<< "${HS_ACCEL}${HS_HELD}" | tr '[:upper:]' '[:lower:]'; } | awk 'NF && !seen[$0]++' | paste -sd' ')"
     HS_BROKEN=0 HS_MISSING=0
     hs_checks
     hs_check_accels

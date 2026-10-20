@@ -80,7 +80,7 @@
         "level": "warn",
         "revert": null,
         "section": "Intel CPU built-in accelerators...",
-        "text": "DSA: 1 device(s) but no user work queues, so not in the cluster — configure them with accel-config as intel-dsa-plugin's idxd initcontainer does (per device below; lasts until reboot), or all at once: k3d-gpu host-setup --apply; then k3d-gpu down && k3d-gpu up",
+        "text": "DSA: 1 device(s) but no user work queues, so not in the cluster — set them up with accel-config per device below (lasts until reboot); all at once: k3d-gpu host-setup --apply; then k3d-gpu down && k3d-gpu up",
         "why": null
       },
       {
@@ -98,7 +98,7 @@
         "level": "warn",
         "revert": "sudo accel-config disable-wq dsa0/wq0.0 && sudo accel-config disable-device dsa0",
         "section": "Intel CPU built-in accelerators...",
-        "text": "DSA dsa0: disabled — 1 engine, 1 group, 1 dedicated user WQ (no user PASID: a shared WQ needs intel_iommu=on,sm_on)",
+        "text": "DSA dsa0: disabled, nothing configured — 1 engine, 1 group, 1 dedicated user WQ (no user PASID: a shared WQ needs intel_iommu=on,sm_on), as intel-dsa-plugin's idxd initcontainer does",
         "why": null
       },
       {
@@ -107,7 +107,7 @@
         "level": "warn",
         "revert": null,
         "section": "Intel CPU built-in accelerators...",
-        "text": "IAA: 1 device(s) but no user work queues, so not in the cluster — configure them with accel-config as intel-iaa-plugin's idxd initcontainer does (per device below; lasts until reboot), or all at once: k3d-gpu host-setup --apply; then k3d-gpu down && k3d-gpu up",
+        "text": "IAA: 1 device(s) but no user work queues, so not in the cluster — set them up with accel-config per device below (lasts until reboot); all at once: k3d-gpu host-setup --apply; then k3d-gpu down && k3d-gpu up",
         "why": null
       },
       {
@@ -116,7 +116,7 @@
         "level": "warn",
         "revert": "sudo accel-config disable-wq iax1/wq1.0 && sudo accel-config disable-device iax1",
         "section": "Intel CPU built-in accelerators...",
-        "text": "IAA iax1: disabled — 1 engine, 1 group, 1 dedicated user WQ (no user PASID: a shared WQ needs intel_iommu=on,sm_on)",
+        "text": "IAA iax1: disabled, nothing configured — 1 engine, 1 group, 1 dedicated user WQ (no user PASID: a shared WQ needs intel_iommu=on,sm_on), as intel-iaa-plugin's idxd initcontainer does",
         "why": null
       },
       {
