@@ -1,0 +1,47 @@
+{
+ "arm": "C50",
+ "method": "loop",
+ "round": 4,
+ "position": 1,
+ "cap_khz": 1950000,
+ "t_start": "2026-10-20T09:13:56.932Z",
+ "t_end": "2026-10-20T09:16:28.164Z",
+ "pkg_temp_start_c": 94.0,
+ "load1_start": 6.61,
+ "package_throttle_delta": 580,
+ "rapl_energy_j": 7394.719,
+ "measure_s": 64.449,
+ "package_w": 114.74,
+ "cap_read_khz": [
+  1950000,
+  1950000,
+  1950000,
+  1950000,
+  1950000,
+  1950000,
+  1950000,
+  1950000,
+  1950000,
+  1950000,
+  1950000,
+  1950000,
+  1950000,
+  1950000,
+  1950000,
+  1950000
+ ],
+ "neighbour_running_at_cap_read": "true",
+ "neighbour_running_at_end": "true",
+ "neighbour": {
+  "bogo_ops": 2785906,
+  "real_s": 150.0,
+  "bogo_ops_per_s_real": 18572.72
+ },
+ "tool_proxy_s": 1.31,
+ "exit_codes_prefill_decode_tool": [
+  0,
+  0,
+  0
+ ],
+ "cpufreq_restored_identical": true
+}

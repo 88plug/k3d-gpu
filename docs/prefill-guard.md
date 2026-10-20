@@ -13,9 +13,10 @@ The numbers and their status are in the falsification log of
 
 The prefill guard is the opt-in answer: it caps the maximum frequency of the
 E-cores that run `k3d-gpu.io/cores=efficient` pods, so that work draws less of
-the shared budget. It is off by default because it writes host cpufreq. Its
-benefit is not measured yet; the test that decides it is pre-registered below as
-hypothesis H5.
+the shared budget. It is off by default because it writes host cpufreq. The test
+pre-registered below as hypothesis H5 refuted it on the i9-13900T test bed
+[ledger:H5]: no cap level cut the neighbour's prefill penalty by half, and package
+power stayed near the 117 W power limit with the cap in force.
 
 ## Use
 
@@ -33,8 +34,8 @@ cap nothing), any other form, and any host without both `cpu_core` and
 `cpu_atom` CPUs. It refuses before it creates anything.
 
 `doctor --perf` prints this section only on hybrid hosts, and only when
-`K3D_GPU_PREFILL_GUARD` is set or a guard record exists for the cluster: while H5
-is PENDING it never suggests the guard unprompted. With the guard set, it
+`K3D_GPU_PREFILL_GUARD` is set or a guard record exists for the cluster: H5 is
+REFUTED [ledger:H5], so it never suggests the guard unprompted. With the guard set, it
 suggests it when `package_throttle_count` is above zero, and prints the counters
 it read:
 
@@ -261,4 +262,5 @@ creates clusters). It checks that the NRI path writes what stage 1 measured.
 5. `k3d-gpu down`, then the step 1 read again: it must match line for line.
 
 Not verified yet: the NRI write path (step 3) and the `down` restore through the
-node (step 5) have only run against stubs in `tests/prefill_guard_test.sh`.
+node (step 5) have only run against stubs in `tests/prefill_guard_test.sh`. Stage 1
+chose no level, so stage 2 did not run ([H5 run](../EXPERIMENTS.md#h5-run-stage-1-i9-13900t-2026-10-20)).

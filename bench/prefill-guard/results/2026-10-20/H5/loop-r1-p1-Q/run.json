@@ -1,0 +1,43 @@
+{
+ "arm": "Q",
+ "method": "loop",
+ "round": 1,
+ "position": 1,
+ "cap_khz": null,
+ "t_start": "2026-10-20T07:49:11.297Z",
+ "t_end": "2026-10-20T07:50:16.969Z",
+ "pkg_temp_start_c": 82.0,
+ "load1_start": 11.34,
+ "package_throttle_delta": 141,
+ "rapl_energy_j": 5136.54,
+ "measure_s": 50.017,
+ "package_w": 102.7,
+ "cap_read_khz": [
+  3900000,
+  3900000,
+  3900000,
+  3900000,
+  3900000,
+  3900000,
+  3900000,
+  3900000,
+  3900000,
+  3900000,
+  3900000,
+  3900000,
+  3900000,
+  3900000,
+  3900000,
+  3900000
+ ],
+ "neighbour_running_at_cap_read": "none",
+ "neighbour_running_at_end": "none",
+ "neighbour": null,
+ "tool_proxy_s": 0.926,
+ "exit_codes_prefill_decode_tool": [
+  0,
+  0,
+  0
+ ],
+ "cpufreq_restored_identical": true
+}

@@ -1,0 +1,43 @@
+{
+ "arm": "Q",
+ "method": "matrixprod",
+ "round": 1,
+ "position": 1,
+ "cap_khz": null,
+ "t_start": "2026-10-20T05:49:23.143Z",
+ "t_end": "2026-10-20T05:50:32.563Z",
+ "pkg_temp_start_c": 78.0,
+ "load1_start": 8.21,
+ "package_throttle_delta": 814,
+ "rapl_energy_j": 5486.129,
+ "measure_s": 53.741,
+ "package_w": 102.08,
+ "cap_read_khz": [
+  3900000,
+  3900000,
+  3900000,
+  3900000,
+  3900000,
+  3900000,
+  3900000,
+  3900000,
+  3900000,
+  3900000,
+  3900000,
+  3900000,
+  3900000,
+  3900000,
+  3900000,
+  3900000
+ ],
+ "neighbour_running_at_cap_read": "none",
+ "neighbour_running_at_end": "none",
+ "neighbour": null,
+ "tool_proxy_s": 0.893,
+ "exit_codes_prefill_decode_tool": [
+  0,
+  0,
+  0
+ ],
+ "cpufreq_restored_identical": true
+}
