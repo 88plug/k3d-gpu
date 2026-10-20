@@ -585,6 +585,8 @@ ASSUMPTIONS = [
     "tensor parallel and hybrid add 2 hops per layer x the hop latency (default 30 us, assumed)",
     "speculative decoding (MTP, EAGLE) is not modelled: these are per-forward ceilings",
     "vision/audio towers and MTP heads are not on the decode path and are not counted",
+    "from config.json one bytes-per-parameter covers every tensor; an embedding or head kept at "
+    "higher precision reads more (a .gguf gives exact bytes per tensor)",
 ]
 
 
