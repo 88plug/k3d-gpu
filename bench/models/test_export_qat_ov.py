@@ -50,5 +50,28 @@ class ExportArgsTest(unittest.TestCase):
         self.assertLess(text.index("matched_any}\" = 1"), text.index('mv -T "${OUT}.partial" "${OUT}"'))
 
 
+
+class GreedyCompareTest(unittest.TestCase):
+    def test_farm_swaps_only_the_named_files(self):
+        import tempfile
+        import shutil
+        sys_path = os.path.dirname(SCRIPT)
+        import sys
+        sys.path.insert(0, sys_path)
+        import greedy_compare as G
+        a, s = tempfile.mkdtemp(), tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, a)
+        self.addCleanup(shutil.rmtree, s)
+        for d, names in ((a, ("openvino_model.xml", "openvino_model.bin", "config.json")), (s, ("openvino_model.xml", "openvino_model.bin"))):
+            for n in names:
+                with open(os.path.join(d, n), "w") as f:
+                    f.write(d + n)
+        b = G.farm(a, s)
+        self.addCleanup(shutil.rmtree, b)
+        self.assertEqual(os.path.realpath(os.path.join(b, "openvino_model.xml")), os.path.realpath(os.path.join(s, "openvino_model.xml")))
+        self.assertEqual(os.path.realpath(os.path.join(b, "config.json")), os.path.realpath(os.path.join(a, "config.json")))
+        self.assertEqual([G.first_diff([1, 2, 3], [1, 2, 3]), G.first_diff([1, 2], [1, 3]), G.first_diff([1], [1, 2])], [None, 1, 1])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

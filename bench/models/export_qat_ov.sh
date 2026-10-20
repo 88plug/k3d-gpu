@@ -10,6 +10,9 @@
 # one. An existing OUT_DIR is left alone. TASK defaults to text-generation-with-past.
 #   OV_VENV      the export venv (default ~/k3dgpu-bench/ovenv; created from the pins if missing)
 #   EXPORT_NOTE  free text kept in manifest.json (e.g. why a pin is below the latest release)
+#   QAT_MAX_SKIP the share of a file's compressed weights the grid check or snap may skip (0.02)
+#   QAT_KEEP_UNSNAPPED  a directory (outside OUT_DIR) to move the model files to before the snap
+#                replaces them, for bench/models/greedy_compare.py OUT_DIR QAT_KEEP_UNSNAPPED
 set -euo pipefail
 DRY=""
 [ "${1:-}" = --dry-run ] && { DRY=1; shift; }
@@ -51,6 +54,10 @@ for xml in "${OUT}.partial"/openvino*model.xml; do
     "${V}/bin/python" "${HERE}/qat_grid.py" snap "${xml}" "${SRC}" "${OUT}.partial/${b}.snap.xml" \
         --report "${OUT}.partial/snap-${b}.json"
     gate "${OUT}.partial/snap-${b}.json" snapped || { echo "QAT grid: ${b} snapped too few weights"; exit 4; }
+    if [ -n "${QAT_KEEP_UNSNAPPED:-}" ]; then     # for bench/models/greedy_compare.py; outside OUT
+        mkdir -p "${QAT_KEEP_UNSNAPPED}"
+        mv -f "${xml}" "${xml%.xml}.bin" "${QAT_KEEP_UNSNAPPED}/"
+    fi
     mv -f "${OUT}.partial/${b}.snap.xml" "${xml}"
     mv -f "${OUT}.partial/${b}.snap.bin" "${xml%.xml}.bin"
     "${V}/bin/python" "${HERE}/qat_grid.py" check "${xml}" "${SRC}" --out "${OUT}.partial/grid-${b}-snapped.json"
