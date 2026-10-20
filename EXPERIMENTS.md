@@ -1674,7 +1674,8 @@ Scripts: `bench/eatflow/crescent/` (`hold.sh` rules 1, 3 and 4; `serving.py` rul
    `cpu.stat`), and the count of aiperf processes. It is reported per arm over the attempt
    windows (mean serving CPU, share of windows with aiperf active) and never gates a pair.
    L2's pre-window `busy_pct` already carries the serving CPU that lands on the load CPUs.
-4. Cleanup. Clusters are named `k3dgpu-*` and deleted after every hold, also on failure.
+4. Cleanup. This campaign's clusters (`k3dgpu-e-*`, `k3dgpu-a-*`, `k3dgpu-h52`, `k3dgpu-h52b`) are deleted
+   after every hold, also on failure; another campaign on the host (`k3dgpu-x-*`) shares the lock.
    Everything created on the host lives under `~/k3dgpu-bench/`. At the end the campaign's
    images, models and directories are removed, except a small results copy.
 5. Pins. k3d v5.9.0, kubectl v1.35.2 and Helm v4.1.1 in `~/k3dgpu-bench/bin`, each checked

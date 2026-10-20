@@ -4,7 +4,7 @@
 # rule (load1 <= 12 and no aiperf process, polled every 2 min for at most 60 min, then the hold
 # runs flagged), refuses to start above 97% disk, runs CMD under `timeout -k 30 CAP_S` with the
 # serving sampler beside it and a disk watchdog that stops CMD above 97%, then deletes every
-# k3dgpu-* cluster and this tool's load containers. Records go to ~/k3dgpu-bench/runs/NAME/.
+# cluster of this campaign (not k3dgpu-x-*) and this tool's load containers. Records go to ~/k3dgpu-bench/runs/NAME/.
 set -uo pipefail
 B=${HOME}/k3dgpu-bench
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -17,7 +17,9 @@ log() { echo "== ${name} $* $(date -u +%FT%TZ)" | tee -a "${B}/runs/campaign.log
 aiperf_n() { docker top aiperf010 -eo pid,args 2>/dev/null | awk 'NR>1 && $0 !~ /sleep infinity/' | wc -l; }
 disk() { df -P / | awk 'NR==2 {gsub("%", "", $5); print $5}'; }
 snapshot() { date -u +%FT%TZ; uptime; ps -eo pcpu,pid,user,comm --sort=-pcpu | head -11; echo "aiperf_procs: $(aiperf_n)"; df -P / | tail -1; }
-clusters() { k3d cluster list -o json 2>/dev/null | python3 -c 'import json,sys; print(" ".join(c["name"] for c in json.load(sys.stdin) if c["name"].startswith("k3dgpu-")))'; }
+# This campaign's clusters only: k3dgpu-e-* (pairs), k3dgpu-a-* (one arm), k3dgpu-h5* (H52, H53). Another
+# campaign on this host (k3dgpu-x-*, ~/k3dgpu-xhost) shares the lock and owns its clusters.
+clusters() { k3d cluster list -o json 2>/dev/null | python3 -c 'import json,sys,re; print(" ".join(c["name"] for c in json.load(sys.stdin) if re.match(r"k3dgpu-(e|a|h5[0-9]b?)-?", c["name"])))'; }
 
 log "waiting for the lock"
 exec 9> "${HOME}/k3dgpu-bench.lock"
