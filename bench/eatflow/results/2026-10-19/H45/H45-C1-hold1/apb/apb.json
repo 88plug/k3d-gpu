@@ -1,0 +1,29 @@
+{
+ "arm": "C1",
+ "level": "typical",
+ "slo_s": 10.0,
+ "step_s": 300.0,
+ "ramp": [
+  1,
+  2
+ ],
+ "base_success": 1.0,
+ "apb": 0,
+ "steps": [
+  {
+   "n": 1,
+   "pass": false,
+   "checks": {
+    "n_requests": 16,
+    "p95_s": 61.206309,
+    "success": 1.0,
+    "error_rate": 0.0,
+    "p95_ok": false,
+    "success_ok": true,
+    "errors_ok": true,
+    "n_ok": false
+   },
+   "window_from": 1792491274.3090208
+  }
+ ]
+}

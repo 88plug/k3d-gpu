@@ -1,0 +1,59 @@
+{
+ "arm": "A3",
+ "num": "heavy",
+ "den": "typical",
+ "n": 12,
+ "ids": [
+  "C01",
+  "C02",
+  "C03",
+  "C04",
+  "C05",
+  "C06",
+  "C07",
+  "C08",
+  "C09",
+  "C10",
+  "C11",
+  "C12"
+ ],
+ "ratio": 1.02811004784689,
+ "ci95": [
+  1.0140950667266457,
+  1.0679569892473117
+ ],
+ "delta_success": 0.08333333333333333,
+ "delta_ci95": [
+  0.0,
+  0.25
+ ],
+ "success": {
+  "heavy": [
+   5,
+   12
+  ],
+  "typical": [
+   4,
+   12
+  ]
+ },
+ "median_s": {
+  "heavy": 3.024,
+  "typical": 2.995
+ },
+ "completed": {
+  "heavy": 12,
+  "typical": 12
+ },
+ "dropped": {
+  "memory": [],
+  "load_missing": []
+ },
+ "both_inf": [],
+ "ratio_of_medians": 1.0096828046744575,
+ "censored_only_at": {
+  "heavy": [],
+  "typical": []
+ },
+ "verdict": "SUPPORTED"
+}

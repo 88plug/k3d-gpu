@@ -1,0 +1,222 @@
+{
+  "schema": "k3d-gpu.capacity/1",
+  "status": "partial",
+  "started_at": 1792490906.1728175,
+  "finished_at": 1792491066.529457,
+  "slo_s": 10.0,
+  "stop_slo_s": 10.0,
+  "trace": "support",
+  "max_agents": 32,
+  "reps": 3,
+  "search": "exponential-then-binary",
+  "budget_s": 180.0,
+  "step_cap_s": 180.0,
+  "state_path": "$RUNS/H45-A3-hold4/capacity-state/unspecified-qwen3-4b-instruct-2507-d0951c657bab.json",
+  "bracket_start": {
+    "lo": 0,
+    "hi": null
+  },
+  "bracket": {
+    "lo": 1,
+    "hi": null
+  },
+  "search_status": "budget",
+  "timeout_s": 120.0,
+  "time_scale": 1.0,
+  "extra_body": {
+    "chat_template_kwargs": {
+      "enable_thinking": false
+    }
+  },
+  "endpoint": {
+    "namespace": null,
+    "service": null,
+    "workload": null,
+    "server": null,
+    "engine": "unspecified",
+    "model": "qwen3-4b-instruct-2507",
+    "url": "http://127.0.0.1:18630/v1/chat/completions"
+  },
+  "host": {
+    "cpu_model": "13th Gen Intel(R) Core(TM) i9-13900T",
+    "logical_cpus": 32,
+    "pl1_w": 117.0,
+    "kernel": "6.6.128-1-MANJARO",
+    "loadavg": "12.12 10.85 11.69 8/15641 2587270"
+  },
+  "run_dir": "$RUNS/H45-A3-hold4/capacity",
+  "json_path": "$RUNS/H45-A3-hold4/capacity/capacity.json",
+  "agents_per_box": 1,
+  "agents_per_box_interpolated": null,
+  "binding_limit": {
+    "kind": "budget",
+    "at_agents": 1,
+    "detail": "--budget 3 min ran out: APB >= 1 (budget)",
+    "hardware": [
+      "cpu_thermal_throttle",
+      "gpu0_power_cap"
+    ]
+  },
+  "steps": [
+    {
+      "agents": 1,
+      "reps": 2,
+      "verdict": "pass",
+      "reasons": [],
+      "n": 82,
+      "p50_s": 0.5298683713190258,
+      "p95_s": 1.4701484148390591,
+      "p99_s": 1.4761230610311031,
+      "p95_ci95_s": [
+        1.4627683386206627,
+        1.4738858449272811
+      ],
+      "ttft_p95_s": 0.17836068384349346,
+      "errors": 0,
+      "error_rate": 0.0,
+      "tool_valid_any": 0.578125,
+      "cached_fraction": 0.9660253786328284,
+      "window_output_tok_per_s": 30.666257044766766,
+      "per_rep_p95_s": [
+        1.471386285033077,
+        1.4666571361012757
+      ],
+      "j_per_turn": {
+        "cpu_package": null,
+        "gpu": 92.27425868993718,
+        "gross": null,
+        "net": null
+      },
+      "j_per_output_token": {
+        "gross": null,
+        "net": null
+      },
+      "energy": {
+        "seconds": 139.12610912322998,
+        "turns": 91,
+        "out_tokens": 4262,
+        "pkg_j": null,
+        "psys_j": null,
+        "gpu_j": {
+          "0": 7464.862181111963,
+          "1": 932.0953596723203
+        },
+        "gross_j": null,
+        "net_j": null,
+        "gross_j_per_turn": null,
+        "gross_j_per_out_token": null,
+        "net_j_per_turn": null,
+        "net_j_per_out_token": null
+      },
+      "hardware": {
+        "package_throttle_events": 34,
+        "cpu_busy_mean": 0.3229438801730791,
+        "pkg_w_mean": null,
+        "pl1_w": 117.0,
+        "gpu": {
+          "0": {
+            "power_w_mean": 53.556275862068965,
+            "limit_w": 70.0,
+            "util_mean": 53.6,
+            "util_max": 100.0,
+            "power_cap_frac": 0.5517241379310345,
+            "thermal_frac": 0.0
+          },
+          "1": {
+            "power_w_mean": 6.703379310344828,
+            "limit_w": 50.0,
+            "util_mean": 0.0,
+            "util_max": 0.0,
+            "power_cap_frac": 0.0,
+            "thermal_frac": 0.0
+          }
+        }
+      },
+      "stop": "ci_below_slo",
+      "seconds": 139.33267090003937
+    }
+  ],
+  "idle": null,
+  "drift_check": null,
+  "confounds": [
+    "synthetic, teacher-forced agent trace: measures the serving path, not task quality",
+    "RAPL package energy not readable (energy_uj is root-only on most kernels): J per turn has no CPU package term; run 'sudo -v' before capacity to enable the sudo -n reader",
+    "GPU energy integrates nvidia-smi power.draw of every NVIDIA GPU in the box",
+    "box not quiet at start (forced past: cpu_busy, gpu0_util, gpu0_power): other work shares the box",
+    "CPU package thermal throttling during the ramp (+34 events): clocks, and so latency, depend on the box's cooling and on co-running work",
+    "--budget ran out before the bracket closed: agents per box is the proven lower end (unknown when no step passed); a step the budget cut short is unmeasured, not a fail, and a rerun measures it (the bracket is stored)",
+    "endpoint given by --url: engine and server not read from the cluster",
+    "p95 pools requests as independent; turns of one session are correlated (per-rep p95 listed)"
+  ],
+  "quiet_check": {
+    "ok": false,
+    "forced": true,
+    "checks": [
+      {
+        "check": "cpu_busy",
+        "value": 0.3347277722277722,
+        "limit": 0.1,
+        "ok": false
+      },
+      {
+        "check": "pkg_power",
+        "value": null,
+        "limit": null,
+        "ok": null
+      },
+      {
+        "check": "gpu0_util",
+        "value": 100.0,
+        "limit": 10.0,
+        "ok": false
+      },
+      {
+        "check": "gpu0_power",
+        "value": 38.050000000000004,
+        "limit": 35.0,
+        "ok": false
+      },
+      {
+        "check": "gpu1_util",
+        "value": 0.0,
+        "limit": 10.0,
+        "ok": true
+      },
+      {
+        "check": "gpu1_power",
+        "value": 6.732727272727273,
+        "limit": 25.0,
+        "ok": true
+      }
+    ],
+    "sample": {
+      "cpu_busy": 0.3347277722277722,
+      "pkg_w": null,
+      "pl1_w": 117.0,
+      "gpus": [
+        {
+          "index": 0,
+          "power_w": 38.050000000000004,
+          "limit_w": 70.0,
+          "util": 100.0
+        },
+        {
+          "index": 1,
+          "power_w": 6.732727272727273,
+          "limit_w": 50.0,
+          "util": 0.0
+        }
+      ]
+    }
+  },
+  "next_rep_estimate": {
+    "agents": 2,
+    "seconds": 34.9
+  },
+  "apb_at_secondary_slo_p95_only": {
+    "5.0": {
+      "agents_per_box": 1,
+      "lower_bound": true
+    }
+  }
+}

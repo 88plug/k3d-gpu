@@ -1,0 +1,14 @@
+NAME                                          READY   REASON              AGE
+sandbox.agents.x-k8s.io/python-ecores-8xkrr   True    DependenciesReady   5m35s
+sandbox.agents.x-k8s.io/python-ecores-cnx8x   True    DependenciesReady   2m27s
+
+NAME                                                             READY   SANDBOX               REASON              AGE
+sandboxclaim.extensions.agents.x-k8s.io/sandbox-claim-4f82dead   True    python-ecores-8xkrr   DependenciesReady   2m27s
+NAME                                                       READY   DESIRED   AGE
+sandboxwarmpool.extensions.agents.x-k8s.io/python-ecores   1       1         13m
+
+NAME                                          READY   REASON              AGE
+sandbox.agents.x-k8s.io/python-ecores-8xkrr   True    DependenciesReady   5m35s
+sandbox.agents.x-k8s.io/python-ecores-cnx8x   True    DependenciesReady   2m27s
+  ok: python-ecores-8xkrr: CPUs 24-25 (E-cores 16-31)
+  ok: python-ecores-cnx8x: CPUs 24-25 (E-cores 16-31)

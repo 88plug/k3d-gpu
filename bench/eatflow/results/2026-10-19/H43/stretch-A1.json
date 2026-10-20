@@ -1,0 +1,50 @@
+{
+ "arm": "A1",
+ "num": "heavy",
+ "den": "typical",
+ "n": 1,
+ "ids": [
+  "C01"
+ ],
+ "ratio": 1.835576491700314,
+ "ci95": [
+  1.835576491700314,
+  1.835576491700314
+ ],
+ "delta_success": 0.0,
+ "delta_ci95": [
+  0.0,
+  0.0
+ ],
+ "success": {
+  "heavy": [
+   1,
+   1
+  ],
+  "typical": [
+   1,
+   1
+  ]
+ },
+ "median_s": {
+  "heavy": 122.745,
+  "typical": 66.87
+ },
+ "completed": {
+  "heavy": 1,
+  "typical": 3
+ },
+ "dropped": {
+  "memory": [],
+  "load_missing": []
+ },
+ "both_inf": [],
+ "ratio_of_medians": 1.835576491700314,
+ "censored_only_at": {
+  "heavy": [
+   "C02"
+  ],
+  "typical": []
+ },
+ "verdict": "REFUTED"
+}

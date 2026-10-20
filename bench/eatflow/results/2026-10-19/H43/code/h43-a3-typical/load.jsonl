@@ -1,0 +1,1 @@
+{"ts": 1792482319.997095, "tag": "A3", "level": "typical", "seconds": 30.045, "cpus": "16-31", "busy_pct": 59.32, "load1": 11.12, "pkg_w": 85.22, "throttle_per_min": 11.98, "swap_used_mib": 164447.0, "swap_delta_mib": 54.4, "phase": "during", "busy_cpus": "16-31", "load_expected": 3, "load_running": 3}

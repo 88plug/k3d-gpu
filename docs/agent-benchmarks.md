@@ -4,7 +4,7 @@
 flows, graded for correctness, timed per LLM turn, on a box that is busy. It is the
 harness for the pre-registered hypotheses H40-H48 in
 [EXPERIMENTS.md](https://github.com/88plug/k3d-gpu/blob/main/EXPERIMENTS.md#h40-h48-pre-registration-agent-benchmark-2026-10-17).
-All of them are PENDING: this page describes the method, and no result is quoted here.
+Their verdicts live in the ledger: this page describes the method, and no result is quoted here.
 
 The code lives in [`bench/eatflow/`](https://github.com/88plug/k3d-gpu/tree/main/bench/eatflow)
 (Python 3 standard library only) and runs from a repo checkout.
