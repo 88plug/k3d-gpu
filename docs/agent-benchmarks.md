@@ -2,7 +2,7 @@
 
 `k3d-gpu bench agent` measures agent serving the way an agent uses it: real tool-calling
 flows, graded for correctness, timed per LLM turn, on a box that is busy. It is the
-harness for the pre-registered hypotheses H40-H48 in
+harness for the pre-registered hypotheses H40-H49 and the re-run rows H47b and H49b in
 [EXPERIMENTS.md](https://github.com/88plug/k3d-gpu/blob/main/EXPERIMENTS.md#h40-h48-pre-registration-agent-benchmark-2026-10-17).
 Their verdicts live in the ledger: this page describes the method, and no result is quoted here.
 
@@ -213,3 +213,5 @@ Without a cluster, on 2026-10-17:
   campaign (2026-10-17 and 18, [EXPERIMENTS.md](../EXPERIMENTS.md#h40-h48-run-i9-13900t-2026-10-17-and-18))
   only H40 is SUPPORTED: the harness reproduces the BFCL board. It says nothing about
   any stack's speed or quality, so no performance claim rests on this harness yet.
+  The later rows decided nothing in a stack's favour either: H43 and H45 are REFUTED,
+  and the re-runs H47b and H49b are INCONCLUSIVE (load-matched pairs too few).

@@ -1,6 +1,6 @@
 # k3d-gpu on Intel hardware: technical report
 
-Status: working report, 2026-10-17. Ledger: [EXPERIMENTS.md](../../EXPERIMENTS.md), verdicts as of origin/main `ad69fc0`.
+Status: working report, 2026-10-20. Ledger: [EXPERIMENTS.md](../../EXPERIMENTS.md), verdicts as of origin/main `a32a970` (45 rows).
 
 ## Abstract
 
@@ -117,7 +117,7 @@ The external bake-offs are in the tables above: the Ollama, llama.cpp and plain 
 
 ## Limitations
 
-1. **One host.** Every measurement is one i9-13900T. No result transfers to another family without its own row.
+1. **One host.** Every measurement is one i9-13900T. No result transfers to another family without its own row. A campaign on a Xeon 6741P (Granite Rapids, AMX) with 4x Arc Pro B70 is in progress; it has no row with a verdict yet.
 2. **Shared, throttling host.** The host is live and shared, and the package throttles under the probes' own load. Most INCONCLUSIVE verdicts come from this. H22 throttles itself, so it is barred from this host.
 3. **The XMX half of the device rule is untested.** H6 supports "stay on the P-cores when the iGPU has no XMX". Whether the iGPU wins when it has XMX is an open prediction.
 4. **Small n.** Most SUPPORTED rows are n=3 per arm, so they show direction and correctness, not effect-size precision.

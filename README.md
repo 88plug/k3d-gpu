@@ -61,10 +61,11 @@ k3d-gpu audit           # posture: open listeners off loopback, images not pinne
 k3d-gpu up              # create the cluster (device plugins auto-deploy), verify each accelerator > 0
 k3d-gpu test            # per accelerator: nvidia-smi pod / device-node listing pod
 k3d-gpu logs            # tail the k3s server container logs
-k3d-gpu agent up        # OpenAI-compatible LLM server on the Intel GPU (else CPU)
+k3d-gpu agent up        # OpenAI-compatible LLM server: Gaudi (vLLM), else an XMX Intel GPU, else P-cores (OVMS)
 k3d-gpu recipe npu-embeddings | kubectl apply -f -   # OVMS embeddings on the NPU
 k3d-gpu sandbox up      # opt-in: agent-sandbox with a warm pool of sandboxes on E-cores
 k3d-gpu down            # delete the cluster
+k3d-gpu help            # every command: also remote, plan --predict, tune, capacity, bench, model-share
 ```
 
 ### Install
