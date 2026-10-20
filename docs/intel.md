@@ -111,8 +111,8 @@ the plugins, and asserts the result, with no manual step.
 | Intel GPU, `xe` (Battlemage, Lunar / Panther Lake, Crescent Island) | `gpu.intel.com/xe` | yes | yes | no | Lunar Lake, Battlemage dGPU, kernel/firmware checks, `xe.force_probe` hints, `vfio-pci` excluded |
 | Intel NPU | `npu.intel.com/accel`; node label `k3d-gpu.io/npu.gen` | yes | yes | no | Lunar / Meteor Lake, `0x7d1d` named by CPU model (Meteor Lake vs. Arrow Lake-H), NPU vs. Gaudi, unbound NPU, firmware checks, forced `npu` fails `doctor` |
 | Gaudi 3 | `habana.ai/gaudi` | yes | yes (plain mode, no habana runtime) | no | `habanalabs` accel nodes, no-driver case, NPU + Gaudi on one host |
-| DSA | `dsa.intel.com/wq-user-*` | yes | yes | no | user work queues, no-work-queue case with per-device `accel-config` apply/revert (dedicated, or shared with PASID), enabled device left alone, forced `dsa` fails `doctor` |
-| IAA | `iaa.intel.com/wq-user-*` | yes | yes | no | user work queues, no-work-queue case with per-device `accel-config` apply/revert |
+| DSA | `dsa.intel.com/wq-user-*` | yes | yes | no | user work queues, no-work-queue case with per-device `accel-config` apply/revert (dedicated, or shared with PASID), kernel-WQ device opt-in (snapshot, own group on a free engine), forced `dsa` fails `doctor` |
+| IAA | `iaa.intel.com/wq-user-*` | yes | yes | no | user work queues, no-work-queue case with per-device `accel-config` apply/revert, iaa_crypto kernel-WQ opt-in with a snapshot revert, no room left, live zswap `deflate-iaa` left alone |
 | QAT (C62x, 4xxx, 420xx, 6xxx) | `qat.intel.com/*` | yes | yes | no | 4xxx and C62x PF with VFs, no VFs (apply = `sriov_totalvfs`, plugin VF driver named), no SR-IOV, unbound PF, `vfio-pci` check |
 | AMX | `feature.node.kubernetes.io/cpu-cpuid.AMX*=true` (labels, no plugin) | yes | yes (labels) | no | AMX flags detected and reported; CPU without AMX |
 | CPU ISA (AVX-VNNI, AVX-512, VAES, GFNI, SHA, CET) | `feature.node.kubernetes.io/cpu-cpuid.<NAME>=true` (NFD names, labels only) | yes | yes (labels) | labels read on the UHD 770 host by `doctor`; not applied to a live cluster | NFD name mapping, `pku` unlabelled, no-flag CPU |
