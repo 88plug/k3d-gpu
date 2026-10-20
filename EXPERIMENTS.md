@@ -1457,8 +1457,9 @@ Regression tests in `bench/eatflow/test_h4345.py`:
   (b) 22:41-22:48 PDT: C2 in `apb` mode at typical with one 60 s N=1 step (the registered step
   is 300 s), then `capacity`. The baseline, pre- and during windows were written with 3 of 3 load
   containers running. The step read p95 30.4 s on 6 requests. (c) After the review: A1 in `code`
-  mode, two blocks at level none, to check the agent restart and purge across a censored task
-  (SMOKE_C).
+  mode, two 251 s blocks at level none, 23:21-23:32 PDT, to check the agent restart and purge
+  across a censored task. The second block's fresh agent resumed at the task the first block
+  censored, every purge read back 0 keys, and every request carried one user message.
   These runs tested the wiring only. Items 1-12 were written before (a) ran. Items 4, 6, 7, 9, 10
   and 11 were then tightened after the review, from code reading, not from smoke results. The
   only runner change prompted by a smoke run was the step-length variable for smoke runs
