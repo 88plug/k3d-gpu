@@ -1,0 +1,50 @@
+{
+  "classes": {
+    "embed": {
+      "bytes": 738721800,
+      "tensors": 1
+    },
+    "ngram": {
+      "bytes": 20,
+      "tensors": 1
+    },
+    "other": {
+      "bytes": 13983170233,
+      "tensors": 3
+    },
+    "vision": {
+      "bytes": 573967772,
+      "tensors": 1
+    }
+  },
+  "files": [
+    {
+      "bytes": 4413547,
+      "name": "openvino_detokenizer.bin"
+    },
+    {
+      "bytes": 13961486336,
+      "name": "openvino_language_model.bin"
+    },
+    {
+      "bytes": 738721800,
+      "name": "openvino_text_embeddings_model.bin"
+    },
+    {
+      "bytes": 20,
+      "name": "openvino_text_embeddings_per_layer_model.bin"
+    },
+    {
+      "bytes": 17270350,
+      "name": "openvino_tokenizer.bin"
+    },
+    {
+      "bytes": 573967772,
+      "name": "openvino_vision_embeddings_model.bin"
+    }
+  ],
+  "format": "openvino",
+  "schema": "k3d-gpu.weights/v1",
+  "source": "OpenVINO/gemma-4-26b-a4b-it-int4-ov@4e5885c3f03844f5887982def09708bdc9f53f7a",
+  "total_bytes": 15295859825
+}

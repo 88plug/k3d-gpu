@@ -210,6 +210,15 @@ jobs:
       - run: tests/autoquant_test.sh
       - run: tests/bench_vs_test.sh
 
+  fit-tests:
+    name: k3d-gpu fit and guard tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      # tests/fit_test.py (the fit arithmetic on fixture hosts and models, the guard
+      # under simulated PSI) and the launcher's fit, agent manifest and agent guard.
+      - run: tests/fit_test.sh
+
   tune-tests:
     name: k3d-gpu tune tests
     runs-on: ubuntu-latest

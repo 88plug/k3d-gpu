@@ -1,0 +1,66 @@
+{
+  "bandwidth": {
+    "gbs": 136.5,
+    "label": "theoretical (LPDDR5X 8533 MT/s x 128-bit bus)",
+    "source": "/sys/firmware/dmi/entries/17-*/raw"
+  },
+  "cgroup": {
+    "current": null,
+    "limit": null,
+    "path": "/user.slice"
+  },
+  "cpu": {
+    "amx": false,
+    "avx2": true,
+    "avx512": false,
+    "cpus": 8,
+    "flags": [
+      "avx2",
+      "avx_vnni"
+    ],
+    "model": "Intel(R) Core(TM) Ultra 7 258V"
+  },
+  "gpus": [],
+  "hugepages": {
+    "pools": {
+      "1073741824": {
+        "free": 0,
+        "total": 0
+      },
+      "2097152": {
+        "free": 0,
+        "total": 0
+      }
+    },
+    "thp": "madvise"
+  },
+  "numa": [
+    {
+      "cpulist": "0-7",
+      "free": 3221225472,
+      "node": 0,
+      "total": 16428249907
+    }
+  ],
+  "psi": {
+    "full": {
+      "avg10": 0.0,
+      "avg300": 0.0,
+      "avg60": 0.0,
+      "total": 0
+    },
+    "some": {
+      "avg10": 0.0,
+      "avg300": 0.0,
+      "avg60": 0.0,
+      "total": 0
+    }
+  },
+  "ram": {
+    "available": 9663676416,
+    "swap_free": 6979321856,
+    "swap_total": 8589934592,
+    "total": 16428249907
+  },
+  "schema": "k3d-gpu.host/v1"
+}

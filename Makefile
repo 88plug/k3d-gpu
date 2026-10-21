@@ -30,6 +30,7 @@ test:
 	tests/ci_wiring_test.sh
 	tests/quickstart_test.sh
 	tests/quickstart_adversarial_test.sh
+	tests/fit_test.sh
 	python3 tests/fuzz/props.py
 
 # Shell scripts: *.sh plus any file whose shebang runs sh or bash.

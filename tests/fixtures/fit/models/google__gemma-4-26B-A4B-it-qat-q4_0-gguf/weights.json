@@ -1,0 +1,27 @@
+{
+  "classes": {
+    "embed": {
+      "bytes": 605552640,
+      "tensors": 1
+    },
+    "experts": {
+      "bytes": 12846382080,
+      "tensors": 90
+    },
+    "other": {
+      "bytes": 971604928,
+      "tensors": 567
+    }
+  },
+  "config_from": "google/gemma-4-26B-A4B-it-qat-q4_0-unquantized@f1e06dc520982d9b9edd76859fdb7ab209449949",
+  "files": [
+    {
+      "bytes": 14439363584,
+      "name": "gemma-4-26B_q4_0-it.gguf"
+    }
+  ],
+  "format": "gguf",
+  "schema": "k3d-gpu.weights/v1",
+  "source": "google/gemma-4-26B-A4B-it-qat-q4_0-gguf@d1c082be9cf3c8a514acf63b8761f4b41935842e",
+  "total_bytes": 14423539648
+}
