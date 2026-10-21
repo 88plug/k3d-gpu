@@ -3255,6 +3255,40 @@ looked at.
   later arms to hold 3 or out of the cap, recorded as not run.
 - The stall itself is a result about the stock arm and is reported in the H54a run section.
 
+### H54 amendment R4: the void rule's CPU part reads the arm's idle window (2026-10-21)
+
+Recorded 2026-10-21 after H54a hold 1, before hold 2. It governs holds 2 and 3. Nothing here
+changes a row's arms, models, statistic, gate, threshold, cap or prediction. A hold 2 was started
+at 08:50:49Z and stopped by hand at 08:51Z while it waited on the hold-start rule (load1 29), before
+its cluster existed and before any request; it is not counted as a hold. Its empty directory is
+kept as `hold2-stopped-prestart-0851Z`.
+
+**What prompted it.** The pre-registration voids a phase when the non-campaign containers' mean
+CPU over it exceeds 4 CPU-s/s (H50's shared rule 3). In hold 1 every phase of Lg and Lg-mtp was
+void on that part, on both tries, with no aiperf process. The non-campaign CPU is almost all the
+live SGLang pair (`qwen38-a-hr`, `qwen38-b-hr`), idle (no request), and it follows the arm's own
+load: 2.36-2.42 CPU-s/s with no arm load (B1g's boot and idle window; the gap between Lg and
+Lg-mtp, 08:41-08:42Z), 4.4-4.8 CPU-s/s while an arm loads the cores (B1g's warmup, every Lg and
+Lg-mtp phase). So the rule as written reads a post-treatment variable (the trap the H47b and H49b
+pre-registration names): every arm that uses the cores voids itself, and no N=1 metric can be
+recorded. The numbers above are the serving covariate only; when this was written, no decode rate
+or score of hold 1 had been compared across arms.
+
+**Rule.**
+
+- A phase is void when an aiperf process is in any serving sample overlapping it (unchanged), or
+  when the non-campaign containers' mean CPU over the arm's 60 s idle window (taken before the
+  warmup, with the arm's server up and no request) exceeds 4 CPU-s/s. The phase's own
+  non-campaign CPU is still recorded beside the check, descriptive only.
+- A void phase's one re-run is preceded by a fresh 60 s idle window (`energy-idle-<phase>.json`),
+  which then is the window for that re-run and later phases.
+- Carry (with R1's not-reached arms and R3's stopped servers): an arm whose N=1 phase was void on
+  both tries is carried to the next hold's front once (`h54.py carry`). Hold 1's Lg and Lg-mtp are
+  carried by this rule, B1g by R3, A1g and A1o by R1, so hold 2 runs B1g, Lg, Lg-mtp, A1g, A1o, then
+  Vq and Vq-mtp, as far as its time goes. The cap stays 3 holds; arms it leaves out are not run.
+- Hold 1's records are not re-scored under this rule: their void phases stay void, and an arm's
+  later measurement replaces them (R1).
+
 ### H57d pre-registration: Gemma 4 26B-A4B QAT on the AMX-less client CPU (i9-13900T, 2026-10-20)
 
 Written 2026-10-20, before any H57da, H57dm or H57db measurement. Nothing here is a measurement

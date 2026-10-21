@@ -7,7 +7,8 @@
                                                  an EAT chart or a k3d-gpu manifest (Lg, Lg-mtp, Sg)
   h54.py derive-vllm ARM EAT_DEPLOY.yaml OUT     Vq, Vq-mtp, Vi from B1g's staged EAT render
   h54.py gsm8k URL MODEL ITEMS.jsonl OUT.json    GSM8K quality spot-check (16 in flight)
-  h54.py void SERVING.jsonl T0 T1                exit 1 when the phase [T0, T1] is void
+  h54.py void SERVING.jsonl T0 T1 [W0 W1]        exit 1 when the phase [T0, T1] is void (R4: CPU
+                                                 read on the idle window [W0, W1])
   h54.py active-bytes FILE                       bytes read per decoded token from a GGUF or
                                                  safetensors tensor table
   h54.py score-a RESULTS_DIR                     the H54a verdict from the recorded arms
@@ -221,19 +222,27 @@ def gsm8k(url, model, items, workers=16):
 
 # ---- void phases (H50 serving covariate) -----------------------------------------------------
 
-def void(samples, t0, t1, cpu_max=4.0):
+def void(samples, t0, t1, cpu_max=4.0, w0=None, w1=None):
     """(void, reason) for the phase [t0, t1]: an aiperf process in any sample in it, or the
-    non-campaign containers' mean CPU-s/s over it above cpu_max. No sample in it is not void."""
-    # serving.py writes one sample per 10 s, covering (ts - seconds, ts].
-    win = [s for s in samples if s.get("ts", -1) > t0 and s["ts"] - s.get("seconds", 10) < t1]
-    if not win:
-        return False, "no serving sample"
+    non-campaign containers' mean CPU-s/s above cpu_max. Amendment R4: with a pre-phase idle
+    window [w0, w1] (the arm's 60 s idle, no arm load) the CPU part is read there, not over the
+    phase, whose non-campaign CPU the arm's own load raises; the phase's value is still reported.
+    No sample in the window read is not void."""
+    def within(a, b):
+        # serving.py writes one sample per 10 s, covering (ts - seconds, ts].
+        return [s for s in samples if s.get("ts", -1) > a and s["ts"] - s.get("seconds", 10) < b]
+    win = within(t0, t1)
     if any((s.get("aiperf_procs") or 0) > 0 for s in win):
         return True, "aiperf ran"
-    cpu = statistics.mean(s.get("serving_cpu") or 0.0 for s in win)
+    ph = f"; phase {statistics.mean(s.get('serving_cpu') or 0.0 for s in win):.2f}" if win else ""
+    ref = within(w0, w1) if w0 is not None else win
+    if not ref:
+        return False, "no serving sample" + (" in the idle window" if w0 is not None else "")
+    cpu = statistics.mean(s.get("serving_cpu") or 0.0 for s in ref)
+    where = "idle window " if w0 is not None else ""
     if cpu > cpu_max:
-        return True, f"non-campaign CPU {cpu:.2f} CPU-s/s > {cpu_max}"
-    return False, f"non-campaign CPU {cpu:.2f} CPU-s/s"
+        return True, f"non-campaign CPU {where}{cpu:.2f} CPU-s/s > {cpu_max}" + (ph if w0 is not None else "")
+    return False, f"non-campaign CPU {where}{cpu:.2f} CPU-s/s" + (ph if w0 is not None else "")
 
 
 # ---- active bytes per token ------------------------------------------------------------------
@@ -396,7 +405,8 @@ def served(out):
 
 def carry(results, hold, arms):
     """Arms hold HOLD passes to the next hold's front: not reached (or no record), and, once per
-    arm, failed because the server stopped answering after readiness."""
+    arm, failed because the server stopped answering after readiness (R3) or measured with its
+    N=1 phase void twice (R4)."""
     def st(h, a):
         try:
             return jload(os.path.join(results, f"hold{h}", a, "status.json"))
@@ -410,7 +420,20 @@ def carry(results, hold, arms):
         elif s["status"] == "failed" and str(s.get("reason", "")).startswith(STOPPED):
             if not any(str(st(h, a).get("reason", "")).startswith(STOPPED) for h in range(1, hold)):
                 out.append(a)
+        elif s["status"] == "measured" and n1_void(os.path.join(results, f"hold{hold}", a)):
+            # Amendment R4: the N=1 metric missing because its phase was void twice; once per arm.
+            if not any(n1_void(os.path.join(results, f"hold{h}", a)) for h in range(1, hold)):
+                out.append(a)
     return out
+
+
+def n1_void(d):
+    """True when the arm directory's N=1 phase was void on both tries (its metric is missing)."""
+    try:
+        n1 = jload(os.path.join(d, "phases.json")).get("n1") or {}
+    except (OSError, ValueError):
+        return False
+    return bool(n1.get("void") and n1.get("rerun_void"))
 
 
 def recheck(results):
@@ -502,7 +525,8 @@ def main(argv):
         print(f"gsm8k {res['correct']}/{res['n']} errors={res['errors']} wall={res['wall_s']}s")
     elif cmd == "void":
         samples = [json.loads(x) for x in open(a[0]) if x.strip()]
-        v, why = void(samples, float(a[1]), float(a[2]))
+        w = (float(a[3]), float(a[4])) if len(a) >= 5 else (None, None)
+        v, why = void(samples, float(a[1]), float(a[2]), w0=w[0], w1=w[1])
         print(json.dumps({"void": v, "reason": why}))
         return 1 if v else 0
     elif cmd == "active-bytes":
