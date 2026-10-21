@@ -2,7 +2,8 @@
 # release_cas.sh: cut the next aur-vX.Y.Z release on main (auto-release.yml).
 #
 # Each attempt starts from a fresh origin/main, stamps VERSION, pkgver and
-# .SRCINFO (committing only if that changes the tree), and pushes main and the
+# .SRCINFO, regenerates console/ledger-rules.json (committing only if that
+# changes the tree), and pushes main and the
 # tag in one `git push --atomic`. That push is the commit point. A lost race
 # (main moved, or the tag exists since the fetch) is a ref-lock or
 # non-fast-forward rejection; on that class GitHub updated neither ref in a
@@ -49,12 +50,15 @@ for attempt in $(seq 1 "${RELEASE_CAS_ATTEMPTS:-5}"); do
     VER=${LAST%.*}.$(( ${LAST##*.} + 1 ))
   fi
   sed -i "s|^VERSION=\".*\"|VERSION=\"${VER}\"|" scripts/k3d-gpu
+  # Packages carry no EXPERIMENTS.md: the ledger rows that set agent defaults
+  # ship as console/ledger-rules.json, regenerated here for the release.
+  python3 console/model_opt.py ledger-rules --ledger EXPERIMENTS.md --out console/ledger-rules.json
   sed -i "s|^pkgver=.*|pkgver=${VER}|" packaging/aur/PKGBUILD
   sed -i \
     -e "s|^\tpkgver = .*|\tpkgver = ${VER}|" \
     -e "s|#tag=aur-v.*|#tag=aur-v${VER}|" \
     packaging/aur/.SRCINFO
-  git add scripts/k3d-gpu packaging/aur/PKGBUILD packaging/aur/.SRCINFO
+  git add scripts/k3d-gpu packaging/aur/PKGBUILD packaging/aur/.SRCINFO console/ledger-rules.json
   git diff --cached --quiet || git commit -q -m "release: aur-v${VER} [skip release]"
   TAG=aur-v${VER}
   git tag "$TAG"
