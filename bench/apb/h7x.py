@@ -5,13 +5,15 @@ Reads b<i>-<E>-{decode,prefill,conc4}.json (bench/llm_load.py) and the matching
 b<i>-<E>-<w>-energy.json and b<i>-<E>-idle-energy.json (bench/energy.sh). E is A (OVMS fp16),
 B (vLLM CPU bf16, EAT chart defaults) or C (B without --enforce-eager).
 
-A block is void when its decode phase has fewer than 5 ok requests or any request stopped
-short of 256 output tokens. With >= 2 void blocks, or fewer than 4 valid blocks (a hold cut
+A block is void when its decode phase has fewer than 5 ok requests, any request stopped short
+of 256 output tokens or has no decode rate, or the engine's pod restarted during the block
+(restarts.txt: "b<i> <E> <restarts before> <restarts after>"). With >= 2 void blocks, or fewer than 4 valid blocks (a hold cut
 short by its cap), in arm A or B the run is INCONCLUSIVE.
 
 Decision (pre-registered in H7x): R = median A decode tok/s / median B decode tok/s over every
 request of the valid blocks; gap(x) = max(x, 1/x) - 1. Blocks pair in run order: the k-th A
-block with the k-th B block (ABBAABBAAB gives 5 pairs), r_k = ratio of their block medians.
+block with the k-th B block, void blocks included in the count (ABBAABBAAB gives 5 pairs); a pair
+with a void block is dropped. r_k = ratio of their block medians.
   SUPPORTED     gap(R) < 0.15, gap(R_bw) < 0.15 and gap(r_k) < 0.15 for every pair
   REFUTED       gap(R) >= 0.15 and every r_k on R's side of 1 with gap(r_k) >= 0.15
   INCONCLUSIVE  otherwise
@@ -41,8 +43,22 @@ def load(path):
         return None
 
 
+def restarts(run):
+    """{block: True} for blocks whose pod restarted (restarts.txt from h7x.sh)."""
+    out = {}
+    try:
+        with open(os.path.join(run, "restarts.txt")) as f:
+            for line in f:
+                p = line.split()
+                if len(p) == 4 and p[0].startswith("b"):
+                    out[int(p[0][1:])] = p[2] != p[3]
+    except OSError:
+        pass
+    return out
+
+
 def blocks(run):
-    out = []
+    out, rs = [], restarts(run)
     for p in glob.glob(os.path.join(run, "b*-*-decode.json")):
         m = re.match(r"b(\d+)-([ABC])-decode\.json$", os.path.basename(p))
         if not m:
@@ -57,7 +73,9 @@ def blocks(run):
         rec["idle"] = load(os.path.join(run, f"b{i}-{e}-idle-energy.json"))
         dec = [s for s in (rec["decode"] or {}).get("samples", []) if s.get("ok")]
         rec["decode_tps"] = [s["decode_tokens_per_s"] for s in dec if s.get("decode_tokens_per_s")]
-        rec["void"] = len(dec) < 5 or any(s.get("output_tokens") != 256 for s in dec)
+        rec["restarted"] = rs.get(i, False)
+        rec["void"] = (len(dec) < 5 or len(rec["decode_tps"]) < len(dec) or rec["restarted"]
+                       or any(s.get("output_tokens") != 256 for s in dec))
         out.append(rec)
     return sorted(out, key=lambda r: r["block"])
 
@@ -79,7 +97,9 @@ def score(recs):
     med = {e: st.median(t for r in arms[e] for t in r["decode_tps"]) for e in "ABC" if arms[e]}
     R = med["A"] / med["B"]
     R_bw = (A_BYTES * med["A"]) / (B_BYTES * med["B"])
-    pairs = [st.median(a["decode_tps"]) / st.median(b["decode_tps"]) for a, b in zip(arms["A"], arms["B"])]
+    run_order = {e: [r for r in recs if r["engine"] == e] for e in "AB"}
+    pairs = [st.median(a["decode_tps"]) / st.median(b["decode_tps"])
+             for a, b in zip(run_order["A"], run_order["B"]) if not (a["void"] or b["void"])]
     side = all((r > 1) == (R > 1) for r in pairs)
     if gap(R) < 0.15 and gap(R_bw) < 0.15 and all(gap(r) < 0.15 for r in pairs):
         v = "SUPPORTED"

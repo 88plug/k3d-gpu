@@ -40,7 +40,13 @@ export KUBECONFIG=${OUT}/kubeconfig
 t0=$(date +%s)
 stamp() { echo "== $1 $(date -u +%FT%TZ) (+$(( $(date +%s) - t0 ))s)"; }
 PF=
-cleanup() { [ -n "${PF}" ] && kill "${PF}" 2>/dev/null; stamp cleanup; k3d cluster delete "${K3D_GPU_CLUSTER}" >/dev/null 2>&1; stamp deleted; }
+scored=0
+score() {  # the decision rule over whatever blocks ran (also on a cap TERM)
+    [ "${scored}" = 1 ] || [ "${H7X_SMOKE:-0}" = 1 ] || [ "${H7X_RENDER_ONLY:-0}" = 1 ] && return 0
+    scored=1
+    python3 "${HERE}/h7x.py" "${OUT}" > "${OUT}/verdict.json" 2>>"${OUT}/notes.txt" && cat "${OUT}/verdict.json"
+}
+cleanup() { [ -n "${PF}" ] && kill "${PF}" 2>/dev/null; score; stamp cleanup; k3d cluster delete "${K3D_GPU_CLUSTER}" >/dev/null 2>&1; stamp deleted; }
 trap cleanup EXIT
 trap 'exit 143' TERM INT HUP
 nodes() { docker ps --filter "label=k3d.cluster=${K3D_GPU_CLUSTER}" --filter "label=k3d.role=server" --format '{{.Names}}'; }
@@ -57,7 +63,9 @@ stage() {  # stage <local dir> <path under /var/apb-models>
 
 stamp render
 # H7's OVMS arm has no draft (it predates the CPU Fast Draft default of #116).
-K3D_GPU_AGENT_DEVICE=CPU K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3-4B-fp16-ov K3D_GPU_AGENT_CPUS=${CPUS} K3D_GPU_AGENT_DRAFT=off \
+# H7 also predates the host fit (#174), which would size A's KV pool to this host; K3D_GPU_FIT=off
+# keeps the manifest as H7 rendered it.
+K3D_GPU_FIT=off K3D_GPU_AGENT_DEVICE=CPU K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3-4B-fp16-ov K3D_GPU_AGENT_CPUS=${CPUS} K3D_GPU_AGENT_DRAFT=off \
     "${K}" agent manifest > "${OUT}/agent.yaml" 2> "${OUT}/agent.err" || { cat "${OUT}/agent.err"; exit 1; }
 python3 "${HERE}/stage.py" ovms "${OUT}/agent.yaml" "${OUT}/ovms.yaml"
 if [ "${VLLM_MEM}" = fit ]; then
@@ -105,6 +113,11 @@ EOF
 [ -s "${OUT}/vllm-c.yaml" ] || { echo "C manifest not rendered"; exit 1; }
 diff <(grep -c -- --enforce-eager "${OUT}/vllm.yaml") <(echo 1) >/dev/null || { echo "B has no --enforce-eager"; exit 1; }
 if [ "${H7X_RENDER_ONLY:-0}" = 1 ]; then trap - EXIT; ls "${OUT}"; exit 0; fi
+if [ "${H7X_SMOKE:-0}" != 1 ]; then
+    # energy.sh reads RAPL through sudo; a block whose energy.sh fails leaves no record.
+    "${ENERGY}" --json "${OUT}/preflight-energy.json" -- sleep 1 2>>"${OUT}/energy.log" \
+        || { echo "RAPL preflight failed (bench/energy.sh): see energy.log"; exit 1; }
+fi
 stamp up
 K3D_GPU_NODE_LABELS=ei-infra-eligible=true,ei-inference-eligible=true timeout 300 "${K}" up > "${OUT}/up.log" 2>&1 \
     || { echo "up failed"; tail -20 "${OUT}/up.log"; exit 1; }
@@ -148,7 +161,12 @@ up_engine() {  # up_engine A|B|C: every other server scaled to 0 first, so only 
            kubectl -n default port-forward "svc/${s}" 18001:80 >/dev/null 2>&1 &
            PF=$! BASE=http://127.0.0.1:18001/v1 MODEL=Qwen/Qwen3-4B NS=default ;;
     esac
-    sleep 3
+    local k
+    for k in $(seq 60); do
+        curl -fsS -m 5 "${BASE}/models" >/dev/null 2>&1 && break
+        [ "${k}" = 60 ] && { echo "$1: ${BASE}/models not answering through the port-forward"; return 1; }
+        sleep 2
+    done
     cur=$1
     local n pid
     n=$(nodes | head -1)
@@ -156,6 +174,9 @@ up_engine() {  # up_engine A|B|C: every other server scaled to 0 first, so only 
     pid=$(docker exec "${n}" sh -c 'for p in /proc/[0-9]*; do c=$(tr "\0" " " < $p/cmdline 2>/dev/null); case $c in *ovms*--rest_port*|*vllm*--port*) echo ${p#/proc/}; break;; esac; done')
     [ -n "${pid}" ] && echo "$1 $(docker exec "${n}" grep Cpus_allowed_list "/proc/${pid}/status")" >> "${OUT}/cpus.txt"
     kubectl -n "${NS}" get pods -o jsonpath='{range .items[*]}{.spec.containers[0].image}{" "}{.status.containerStatuses[0].imageID}{" "}{.spec.containers[0].args}{"\n"}{end}' >> "${OUT}/image.txt"
+}
+restarts_now() {  # restart count of the serving pod (a change voids the block in h7x.py)
+    kubectl -n "${NS}" get pods -o jsonpath='{range .items[*]}{.status.containerStatuses[0].restartCount}{"+"}{end}' 2>/dev/null
 }
 load() {  # load <block> <engine> <workload> llm_load args...
     local b=$1 e=$2 w=$3; shift 3
@@ -187,12 +208,14 @@ for e in ${ORDER}; do
     python3 "${LOAD}" --base-url "${BASE}" --model "${MODEL}" --temperature 0 --prompt "${PREFILL}" --max-tokens 16 --ignore-eos \
         --unique-prompts --requests 1 --warmup 0 --label warm >/dev/null 2>&1
     "${ENERGY}" --json "${OUT}/b${i}-${e}-idle-energy.json" -- sleep 20 2>>"${OUT}/energy.log"
+    r0=$(restarts_now)
     load "${i}" "${e}" decode --max-tokens 256 --requests 5 --concurrency 1
     load "${i}" "${e}" prefill --prompt "${PREFILL}" --max-tokens 16 --requests 5 --concurrency 1
     load "${i}" "${e}" conc4 --max-tokens 128 --requests 8 --concurrency 4
+    echo "b${i} ${e} ${r0} $(restarts_now)" >> "${OUT}/restarts.txt"
     stamp "block ${i} engine ${e} done"
 done
 git -C "${REPO}" rev-parse HEAD > "${OUT}/commit.txt"
 docker inspect --format '{{.Config.Image}} {{.Image}}' "$(nodes | head -1)" > "${OUT}/node-image.txt"
-[ "${H7X_SMOKE:-0}" = 1 ] || python3 "${HERE}/h7x.py" "${OUT}" | tee "${OUT}/verdict.json"
+score
 stamp finished
