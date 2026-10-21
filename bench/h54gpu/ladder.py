@@ -41,7 +41,7 @@ def apply(docs, rung):
 def main(argv):
     rung, src, dst = argv
     with open(src) as f:
-        docs = list(yaml.safe_load_all(f))
+        docs = [d for d in yaml.safe_load_all(f) if d]   # helm's empty documents dump as `--- null`, which kubectl rejects
     with open(dst, "w") as f:
         yaml.safe_dump_all(apply(docs, rung), f, sort_keys=False)
 

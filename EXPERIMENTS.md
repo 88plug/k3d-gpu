@@ -3353,6 +3353,13 @@ only where their model was fetched and the disk guard passes). Arms not reached 
 Each hold's results directory starts with a `REPRODUCE` header (commit, command, images,
 models with revisions).
 
+**G1 revision 2 (2026-10-21 05:40Z, before any H54b or H54c measurement).** The 96% line grew to
+93.5 GB at 05:34Z (another tenant freed space), so `Qwen/Qwen3.8-27B` is fetched (guard: 55.6 GB
+plus B2q's 25 GB). B2q is the statistic's denominator, so it moves to the front: H54b hold 1:
+B2q, X1q. Hold 2: X1q-mtp, Lsq, Sq, Sq-mtp, Rq (each only where its model was fetched and the
+disk guard passes; the Intel q4km fetch runs between the holds). `ladder.py` now drops the
+chart render's empty documents (`--- null`, which kubectl rejects). Nothing else changes.
+
 ### H57d amendment R1: the H57d runner, the read-only Od render and the hold length (2026-10-21)
 
 Recorded 2026-10-21, before any scored H57d request. Two wiring smokes ran first under the

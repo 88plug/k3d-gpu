@@ -179,6 +179,16 @@ class Ladder(unittest.TestCase):
         self.assertNotIn("setvars.sh", c["command"][2])
         self.assertEqual(c["args"], ["--port", "8000", "--max-model-len", "32768"])
 
+    def test_main_drops_empty_docs(self):
+        with tempfile.TemporaryDirectory() as d:
+            src, dst = os.path.join(d, "in.yaml"), os.path.join(d, "out.yaml")
+            with open(src, "w") as f:
+                f.write("---\n" + yaml.safe_dump_all(self.doc()) + "---\n")
+            ladder.main(["a", src, dst])
+            text = open(dst).read()
+        self.assertNotIn("null", text)
+        self.assertEqual(len([x for x in yaml.safe_load_all(text)]), 2)
+
     def test_bad_rung(self):
         with self.assertRaises(SystemExit):
             ladder.apply(self.doc(), "e")
