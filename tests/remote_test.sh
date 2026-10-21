@@ -156,8 +156,10 @@ has "agent status: a sandbox copy naming another endpoint fails" "${out}" "names
 rm -f "${S}/secret-agent-sandbox"
 out=$(run cmd_agent down)
 has "agent down deletes the Secret" "$(cat "${S}/kubectl.log")" "delete secret k3d-gpu-llm --ignore-not-found"
+out=$(run cmd_agent up --api-key-file "${S}/kubectl.log")
+has "agent: --api-key-file without --remote is refused" "${out}" "go with --remote"
 out=$(run cmd_agent up --model m)
-has "agent: --model without --remote is refused" "${out}" "go with --remote"
+has "agent: --model without --remote names the local model (sized by fit)" "${out}" "fit: no metadata for m"
 
 # ---- quickstart --remote ---------------------------------------------------------
 : > "${S}/endpoint.log"; : > "${S}/kubectl.log"; rm -f "${S}/cluster" "${S}/self.log"

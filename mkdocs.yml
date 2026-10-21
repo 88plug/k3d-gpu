@@ -32,6 +32,7 @@ nav:
       - Accelerated dataplane: accelerated-dataplane.md
       - Experimental features: experimental.md
       - Prefill guard: prefill-guard.md
+      - Fit and guard: fit.md
   - Integrations:
       - GPUStack: integrations/gpustack.md
   - Design:
