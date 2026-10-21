@@ -24,6 +24,9 @@ BUSYBOX=${BUSYBOX:-busybox:1.37@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e3
 SCALER=${SCALER:-intel/llm-scaler-vllm:1.5@sha256:52218ad85513ab6686d4c090c83c2bd8c5b02423c63aa4dabd41837fe641fe3b}
 QWEN=hf/hub/models--Qwen--Qwen3.8-27B/snapshots/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
 REDHAT=RedHatAI_Qwen3.8-27B-INT4
+# OVMS 2026.4.1 --pull clones the default branch (k3d-gpu agent_model_revision); the pulled commit
+# is read after the boot and must equal this one.
+X1Q_REV=7b20ea8c7df7223a85ff27bab5c473f0cb038943
 LSQ_GGUF=Intel_Qwen3.8-27B-q4km-AutoRound/Qwen3.8-27B-Q4_K_M.gguf
 
 reproduce "bash bench/h54gpu/h54b.sh ${hold} $*" "${OVMS_GPU}" "${LCPP_INTEL}" "${SCALER}" "${BUSYBOX}"
@@ -70,11 +73,11 @@ YAML
 }
 dp_ok=""
 if [ "${#free[@]}" -eq 4 ]; then dp_ok=1; elif hold_busy; then dp_ok=1; fi
-say "device-plugin arms: ${dp_ok:+allowed}${dp_ok:-not run} ($(xargs < "${OUT}/gpu-hold.txt" 2>/dev/null))"
+say "device-plugin arms: $([ -n "${dp_ok}" ] && echo allowed || echo "not run") ($(xargs < "${OUT}/gpu-hold.txt" 2>/dev/null))"
 # SMOKE=1: the wiring smoke (amendment G1): cluster, placeholders and X1q's manifest render only;
 # no engine starts and no card is opened. Discarded.
 if [ -n "${SMOKE:-}" ]; then
-    K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3.8-27B-int4-ov K3D_GPU_AGENT_REVISION=7b20ea8c7c8ad1d81c2e6b1785ba7cd9ed80a26d \
+    K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3.8-27B-int4-ov K3D_GPU_AGENT_REVISION=${X1Q_REV} \
         K3D_GPU_AGENT_STORAGE=40Gi K3D_GPU_AGENT_IMAGE=${OVMS_GPU} K3D_GPU_AGENT_MODEL_NAME=m K3D_GPU_CLUSTER=${CL} \
         "${ROOT}/scripts/k3d-gpu" agent manifest > "${OUT}/X1q.yaml" 2>> "${OUT}/arms.log"
     kubectl get node -o jsonpath='{.items[0].status.allocatable}' > "${OUT}/allocatable.json"
@@ -134,7 +137,7 @@ run_pinned() {   # run_pinned NAME YAML
 
 run_agent() {   # run_agent NAME [mtp]: k3d-gpu's own OVMS manifest, auto device
     local name=$1 m=${OUT}/$1.yaml
-    K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3.8-27B-int4-ov K3D_GPU_AGENT_REVISION=7b20ea8c7c8ad1d81c2e6b1785ba7cd9ed80a26d \
+    K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3.8-27B-int4-ov K3D_GPU_AGENT_REVISION=${X1Q_REV} \
         K3D_GPU_AGENT_STORAGE=40Gi K3D_GPU_AGENT_IMAGE=${OVMS_GPU} K3D_GPU_AGENT_MODEL_NAME=m K3D_GPU_CLUSTER=${CL} \
         ${2:+K3D_GPU_AGENT_PREFIX_CACHING=false} "${ROOT}/scripts/k3d-gpu" agent manifest > "${m}" 2>> "${OUT}/arms.log" ||
         { say "arm ${name}: manifest failed"; return; }
@@ -145,6 +148,11 @@ run_agent() {   # run_agent NAME [mtp]: k3d-gpu's own OVMS manifest, auto device
         kubectl port-forward deploy/ovms 18000:8000 > "${OUT}/${name}.pf.log" 2>&1 &
         PF=$!
         sleep 5
+        # shellcheck disable=SC2016 # expanded by the pod's shell
+        kubectl exec deploy/ovms -c ovms -- sh -c 'g=/models/OpenVINO/Qwen3.8-27B-int4-ov/.git; h=$(cat "$g/HEAD");
+            case $h in "ref: "*) r=${h#ref: }; cat "$g/$r" 2>/dev/null || grep " $r$" "$g/packed-refs" | cut -d" " -f1 ;; *) echo "$h" ;; esac' \
+            > "${OUT}/${name}.model-revision" 2>&1
+        grep -q "^${X1Q_REV}$" "${OUT}/${name}.model-revision" || say "arm ${name}: pulled model revision is not ${X1Q_REV}"
         full_phases "${name}" "http://127.0.0.1:18000/v3" "${CARDS}" "${NOTHINK}"
         say "arm ${name} done"
     else

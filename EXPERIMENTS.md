@@ -2861,7 +2861,9 @@ has no volume option, so `k3d-wrap.sh`, installed as the hold's `k3d`, adds two 
 read-write at `/models/hf`. Arm flags, as each engine's docs at its pin give them:
 
 - X1q: `K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3.8-27B-int4-ov`, revision `7b20ea8c`, storage 40Gi,
-  image `2026.4.1-gpu@sha256:a928903f...`, served name `m`; the device stays auto.
+  image `2026.4.1-gpu@sha256:a928903f...`, served name `m`; the device stays auto. OVMS 2026.4.1 `--pull` clones the default branch (it takes no revision), so the
+  pulled commit is read from the model's `.git` after the boot and must be `7b20ea8c7df72...`
+  (the default branch on 2026-10-21); otherwise the arm is recorded as off-revision.
 - X1q-mtp: X1q, plus `--draft_model_path=.` on the pull container and
   `K3D_GPU_AGENT_PREFIX_CACHING=false`, as OVMS v2026.4.1's speculative-decoding demo has it
   (`num_assistant_tokens` defaults to 5).
