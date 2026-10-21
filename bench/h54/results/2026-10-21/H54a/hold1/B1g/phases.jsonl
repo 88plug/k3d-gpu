@@ -1,0 +1,5 @@
+{"phase": "n1", "try": 1, "t0": 1792571300.678156694, "t1": 1792571300.793155647, "check": {"void": false, "reason": "no serving sample"}}
+{"phase": "n4", "try": 1, "t0": 1792571300.855754759, "t1": 1792571300.966164550, "check": {"void": false, "reason": "no serving sample"}}
+{"phase": "n16", "try": 1, "t0": 1792571301.029497789, "t1": 1792571301.142160195, "check": {"void": false, "reason": "no serving sample"}}
+{"phase": "ttft", "try": 1, "t0": 1792571301.207411177, "t1": 1792571301.312047849, "check": {"void": false, "reason": "no serving sample"}}
+{"phase": "quality", "t0": 1792571301.379735711, "t1": 1792571301.471090265, "check": {"void": false, "reason": "no serving sample"}}

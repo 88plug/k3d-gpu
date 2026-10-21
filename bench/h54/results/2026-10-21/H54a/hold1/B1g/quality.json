@@ -1,0 +1,512 @@
+{
+ "items": [
+  0,
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19,
+  20,
+  21,
+  22,
+  23,
+  24,
+  25,
+  26,
+  27,
+  28,
+  29,
+  30,
+  31,
+  32,
+  33,
+  34,
+  35,
+  36,
+  37,
+  38,
+  39,
+  40,
+  41,
+  42,
+  43,
+  44,
+  45,
+  46,
+  47,
+  48,
+  49
+ ],
+ "n": 50,
+ "correct": 0,
+ "score": 0.0,
+ "errors": 50,
+ "wall_s": 0.0,
+ "prompt": "Solve the problem. End with a line 'Answer: <number>'.",
+ "rows": [
+  {
+   "idx": 0,
+   "ok": false,
+   "gold": "18",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.01
+  },
+  {
+   "idx": 1,
+   "ok": false,
+   "gold": "3",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.02
+  },
+  {
+   "idx": 2,
+   "ok": false,
+   "gold": "70000",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.01
+  },
+  {
+   "idx": 3,
+   "ok": false,
+   "gold": "540",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.01
+  },
+  {
+   "idx": 4,
+   "ok": false,
+   "gold": "20",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.02
+  },
+  {
+   "idx": 5,
+   "ok": false,
+   "gold": "64",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.02
+  },
+  {
+   "idx": 6,
+   "ok": false,
+   "gold": "260",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.01
+  },
+  {
+   "idx": 7,
+   "ok": false,
+   "gold": "160",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.01
+  },
+  {
+   "idx": 8,
+   "ok": false,
+   "gold": "45",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.01
+  },
+  {
+   "idx": 9,
+   "ok": false,
+   "gold": "460",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.01
+  },
+  {
+   "idx": 10,
+   "ok": false,
+   "gold": "366",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.01
+  },
+  {
+   "idx": 11,
+   "ok": false,
+   "gold": "694",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.01
+  },
+  {
+   "idx": 12,
+   "ok": false,
+   "gold": "13",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.01
+  },
+  {
+   "idx": 13,
+   "ok": false,
+   "gold": "18",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 14,
+   "ok": false,
+   "gold": "60",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 15,
+   "ok": false,
+   "gold": "125",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 16,
+   "ok": false,
+   "gold": "230",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 17,
+   "ok": false,
+   "gold": "57500",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 18,
+   "ok": false,
+   "gold": "7",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 19,
+   "ok": false,
+   "gold": "6",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 20,
+   "ok": false,
+   "gold": "15",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 21,
+   "ok": false,
+   "gold": "14",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 22,
+   "ok": false,
+   "gold": "7",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 23,
+   "ok": false,
+   "gold": "8",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.01
+  },
+  {
+   "idx": 24,
+   "ok": false,
+   "gold": "26",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 25,
+   "ok": false,
+   "gold": "2",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 26,
+   "ok": false,
+   "gold": "243",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 27,
+   "ok": false,
+   "gold": "16",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 28,
+   "ok": false,
+   "gold": "25",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 29,
+   "ok": false,
+   "gold": "104",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 30,
+   "ok": false,
+   "gold": "109",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 31,
+   "ok": false,
+   "gold": "80",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 32,
+   "ok": false,
+   "gold": "35",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 33,
+   "ok": false,
+   "gold": "70",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 34,
+   "ok": false,
+   "gold": "23",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 35,
+   "ok": false,
+   "gold": "9",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 36,
+   "ok": false,
+   "gold": "75",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 37,
+   "ok": false,
+   "gold": "2",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 38,
+   "ok": false,
+   "gold": "10",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 39,
+   "ok": false,
+   "gold": "18",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 40,
+   "ok": false,
+   "gold": "8",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 41,
+   "ok": false,
+   "gold": "200",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 42,
+   "ok": false,
+   "gold": "26",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 43,
+   "ok": false,
+   "gold": "48",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 44,
+   "ok": false,
+   "gold": "20",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 45,
+   "ok": false,
+   "gold": "104",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 46,
+   "ok": false,
+   "gold": "163",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 47,
+   "ok": false,
+   "gold": "800",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 48,
+   "ok": false,
+   "gold": "8",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  },
+  {
+   "idx": 49,
+   "ok": false,
+   "gold": "30",
+   "reply": "",
+   "usage": {},
+   "error": "URLError: <urlopen error [Errno 111] Connection refused>",
+   "s": 0.0
+  }
+ ]
+}

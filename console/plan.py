@@ -258,10 +258,17 @@ def plan(facts, matrix, overrides=None):
 AGENT_VLLM_VERSION = {"HPU": "0.30.0", "GPU": "0.31.0"}  # the agent's pinned vLLM images
 
 
-def agent_target(facts, doc):
+def agent_target(facts, doc, backend=None):
     """(engine, device, target) the model optimizer works for: the green cell's,
-    else what `agent up` picks by device (scripts/k3d-gpu agent_device)."""
+    else what `agent up` picks by device (scripts/k3d-gpu agent_device). backend is
+    K3D_GPU_AGENT_BACKEND: vllm or llm-scaler serve on an Intel GPU (or a Gaudi)."""
     targets = {t["id"]: t for t in facts["targets"]}
+    if backend in ("vllm", "llm-scaler"):
+        usable = [t for t in facts["targets"] if t["usable"]]
+        for kind, dev in (("hpu", "HPU"), ("gpu", "GPU")):
+            for t in usable:
+                if t["kind"] == kind and (kind == "hpu" or t["vendor"] == "intel"):
+                    return "vllm", dev, t
     if doc["decision"] == "green":
         t = targets[doc["placement"]["target"]]
         dev = {"cpu": "CPU", "gpu": "GPU", "npu": "NPU", "hpu": "HPU"}[t["kind"]]
@@ -302,9 +309,10 @@ def host_text(facts):
 
 def add_optimizer(doc, facts, meta, opts):
     """doc with the model optimizer's decision for its engine and device."""
-    engine, device, t = agent_target(facts, doc)
     o = dict(opts or {})
-    o.setdefault("vllm_version", AGENT_VLLM_VERSION.get(device, "0.31.0"))
+    backend = o.pop("backend", None)
+    engine, device, t = agent_target(facts, doc, backend)
+    o.setdefault("vllm_version", "0.26.0" if backend == "llm-scaler" else AGENT_VLLM_VERSION.get(device, "0.31.0"))
     o["hw_class"] = hw_class(t)
     opt = model_opt.optimize(meta, engine, device, o)
     line = model_opt.summary_line(opt, host_text(facts))
@@ -333,6 +341,7 @@ def main(argv):
     ap.add_argument("--measurements")
     ap.add_argument("--thinking", choices=("off", "on", "model"))
     ap.add_argument("--variant")
+    ap.add_argument("--agent-backend")
     args = ap.parse_args(argv[1:])
     schema = factsmod.load_schema()
     try:
@@ -366,7 +375,8 @@ def main(argv):
                 meas = {}
             try:
                 doc = add_optimizer(doc, facts, meta, {"ledger": ledger, "measurements": meas,
-                                                       "thinking": args.thinking, "variant": args.variant})
+                                                       "thinking": args.thinking, "variant": args.variant,
+                                                       "backend": args.agent_backend})
             except Exception as e:  # noqa: BLE001  the plan stands without the optimizer
                 sys.stderr.write("plan: model optimizer failed (%s: %s); planning without it\n" % (type(e).__name__, e))
         schema_check.check(doc, schema, "#/$defs/plan")

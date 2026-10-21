@@ -70,7 +70,7 @@
 
 set -euo pipefail
 
-VERSION="0.1.65"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.71"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 # The node image defaults to the tag built from this launcher's own release
 # (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
@@ -102,6 +102,8 @@ STATE_DIR="${K3D_GPU_STATE_DIR:-${XDG_STATE_HOME:-${HOME:-}/.local/state}/k3d-gp
 SYSROOT="${K3D_GPU_SYSROOT:-}" # prefix for /sys and /dev reads (tests point it at a fake tree)
 TEST_IMAGE="${K3D_GPU_TEST_IMAGE:-nvidia/cuda:13.4.3-base-ubuntu26.04@sha256:e2eb43e25d404e2c48716f80afdb8989a84c4da588f5509330322842084d97b0}"
 DEVICE_TEST_IMAGE="${K3D_GPU_DEVICE_TEST_IMAGE:-busybox:1.37@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e}"
+# AMX probe pod: an image with PyTorch's bundled oneDNN (vLLM's CPU release, torch 2.13.0+cpu, oneDNN 3.12).
+AMX_TEST_IMAGE="${K3D_GPU_AMX_TEST_IMAGE:-vllm/vllm-openai-cpu:v0.32.0@sha256:ffaba3989b9b96d95a576143c872a4110ce9800f5199b6a36eb27bdff1cbbe05}"
 VENDORS_REQUEST="${K3D_GPU_VENDORS:-auto}"
 NODE_LABELS="${K3D_GPU_NODE_LABELS:-}" # extra key=value node labels, comma-separated
 K3S_ARGS="${K3D_GPU_K3S_ARGS:-}"       # extra k3s server flags, space-separated
@@ -120,6 +122,32 @@ RED=$'\e[31m' GRN=$'\e[32m' YLW=$'\e[33m' RST=$'\e[0m'
 err()  { echo "${RED}ERROR:${RST} $*" >&2; exit 1; }
 info() { echo "${GRN}==>${RST} $*"; }
 warn() { echo "${YLW}WARN:${RST} $*" >&2; }
+
+# ---- kubeconfig: one file and one context per cluster -------------------------
+# Each run reaches its cluster through its own kubeconfig file and an explicit
+# --context, never through the current-context of ~/.kube/config, which every
+# concurrent `up` of another cluster would rewrite.
+#   K3D_GPU_KUBECONFIG  this file as is (a foreign cluster); kubectl uses its current-context
+#   KUBECONFIG          kept when it names one file that is not ~/.kube/config (a hold's own)
+#   otherwise           ${STATE_DIR}/kubeconfig-${CLUSTER}, written by `up` (or on first use)
+#   K3D_GPU_CONTEXT     the context (default k3d-${CLUSTER}; none with K3D_GPU_KUBECONFIG)
+KUBE_OWNED=0 KUBE_LAZY_TRIED=0
+if [ -n "${K3D_GPU_KUBECONFIG:-}" ]; then
+    KUBECONFIG="${K3D_GPU_KUBECONFIG}"
+elif [ -n "${KUBECONFIG:-}" ] && [[ "${KUBECONFIG}" != *:* && "${KUBECONFIG}" != "${STATE_DIR}/kubeconfig-"* ]] \
+     && [ "${KUBECONFIG}" != "${HOME:-}/.kube/config" ] && ! [ "${KUBECONFIG}" -ef "${HOME:-}/.kube/config" ]; then
+    :
+else
+    if [ -n "${KUBECONFIG:-}" ] && [ "${KUBECONFIG}" != "${STATE_DIR}/kubeconfig-${CLUSTER}" ]; then
+        echo "${GRN}==>${RST} KUBECONFIG ${KUBECONFIG} is not this cluster's own; using ${STATE_DIR}/kubeconfig-${CLUSTER} (K3D_GPU_KUBECONFIG names another file)" >&2
+    fi
+    KUBECONFIG="${STATE_DIR}/kubeconfig-${CLUSTER}" KUBE_OWNED=1
+fi
+export KUBECONFIG
+if [ -n "${K3D_GPU_CONTEXT:-}" ]; then KCTX=(--context "${K3D_GPU_CONTEXT}")
+elif [ -n "${K3D_GPU_KUBECONFIG:-}" ]; then KCTX=()
+else KCTX=(--context "k3d-${CLUSTER}")
+fi
 
 usage() {
     cat <<EOF
@@ -313,6 +341,10 @@ Usage: k3d-gpu <command>
 
 Environment:
   K3D_GPU_CLUSTER       cluster name         (default: gpu)
+  K3D_GPU_KUBECONFIG    kubeconfig to use as is (default: a single-file KUBECONFIG other than
+                        ~/.kube/config, else ${STATE_DIR}/kubeconfig-<cluster>)
+  K3D_GPU_CONTEXT       context every kubectl call names (default: k3d-<cluster>)
+  K3D_GPU_MERGE_KUBECONFIG  1: up also merges the context into ~/.kube/config, down removes it
   K3D_GPU_IMAGE         k3s node image       (default: ${IMAGE_REPO}:${VERSION}; ${IMAGE_REPO}:latest floats)
   K3D_GPU_VENDORS       auto | comma list of nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa,wsl |
                         auto,-<vendor>,...: auto detection minus those (default: auto)
@@ -344,7 +376,7 @@ Environment:
                         values recorded at 'up' back. With it set, doctor --perf shows the
                         package throttle counters
   K3D_GPU_HYBRID_GUARD_PLUGIN  guard manifest template (default: ${SHARE_DIR}/nri-balloons-guard.yml)
-  K3D_GPU_STATE_DIR     guard state per cluster (default: ${STATE_DIR})
+  K3D_GPU_STATE_DIR     guard state and kubeconfig per cluster (default: ${STATE_DIR})
   K3D_GPU_MODEL_GB      model size checked by doctor --perf (same as --model-gb)
   K3D_GPU_AGENT_DEVICE  agent device: auto | CPU | GPU | NPU | HPU (default: auto; auto
                         takes a Gaudi first, served by vLLM)
@@ -423,7 +455,78 @@ EOF
 }
 
 require() {
-    command -v "$1" >/dev/null 2>&1 || err "'$1' not found in PATH — see 'k3d-gpu doctor'"
+    type -P "$1" >/dev/null 2>&1 || err "'$1' not found in PATH — see 'k3d-gpu doctor'"
+}
+
+# kubectl: the binary, pinned to this cluster's context. A later --context in "$@"
+# still wins (kubectl takes the last one). nohup and the like run the binary, not
+# this function, so they pass ${KCTX[@]} themselves.
+kubectl() {
+    if [ "${KUBE_OWNED}" = 1 ] && [ ! -s "${KUBECONFIG}" ]; then kubeconfig_lazy; fi
+    command kubectl ${KCTX[@]+"${KCTX[@]}"} "$@"
+}
+
+# kubeconfig_materialize: write this cluster's own kubeconfig (mode 0600) from k3d.
+# Every writer of one file writes the same bytes; the rename publishes them whole.
+kubeconfig_materialize() {
+    local cfg tmp="${KUBECONFIG}.tmp.$$"
+    cfg=$(k3d kubeconfig get "${CLUSTER}" 2>/dev/null) && [ -n "${cfg}" ] || return 1
+    ( umask 077; mkdir -p "${KUBECONFIG%/*}" && printf '%s\n' "${cfg}" > "${tmp}" && mv -f "${tmp}" "${KUBECONFIG}" ) \
+        || { rm -f "${tmp}"; return 1; }
+}
+
+# kubeconfig_lazy: a cluster created before the launcher kept its own kubeconfig
+# gets it on first use; tried once per process.
+kubeconfig_lazy() {
+    [ "${KUBE_LAZY_TRIED}" = 0 ] || return 0
+    KUBE_LAZY_TRIED=1
+    if type -P k3d >/dev/null && k3d cluster get "${CLUSTER}" >/dev/null 2>&1; then kubeconfig_materialize || true; fi
+    return 0
+}
+
+# kubeconfig_default_locked <cmd...>: run <cmd> holding a lock on ~/.kube/config
+# (k3d's merge reads, merges and renames it with no lock of its own). The kernel
+# drops the fd lock when the subshell exits, so a crash leaves no stale lock.
+kubeconfig_default_locked() {
+    mkdir -p "${HOME}/.kube"
+    if type -P flock >/dev/null; then
+        ( exec 9>>"${HOME}/.kube/config.k3d-gpu.lock"; flock 9 && "$@" )
+    else
+        warn "flock not found: ~/.kube/config is changed without a lock (run again if a concurrent change drops it)"
+        "$@"
+    fi
+}
+
+kubeconfig_unmerge() {
+    local f="${HOME}/.kube/config"
+    command kubectl --kubeconfig "${f}" config delete-context "k3d-${CLUSTER}" >/dev/null 2>&1 || true
+    command kubectl --kubeconfig "${f}" config delete-cluster "k3d-${CLUSTER}" >/dev/null 2>&1 || true
+    command kubectl --kubeconfig "${f}" config delete-user "admin@k3d-${CLUSTER}" >/dev/null 2>&1 || true
+}
+
+# After `k3d cluster create`: fill the kubeconfig in use, and with
+# K3D_GPU_MERGE_KUBECONFIG=1 also merge the context into ~/.kube/config.
+kubeconfig_after_create() {
+    if [ "${KUBE_OWNED}" = 1 ]; then
+        kubeconfig_materialize || warn "could not write ${KUBECONFIG} from 'k3d kubeconfig get ${CLUSTER}'"
+    else
+        k3d kubeconfig merge "${CLUSTER}" --output "${KUBECONFIG}" >/dev/null
+    fi
+    if [ "${K3D_GPU_MERGE_KUBECONFIG:-0}" = 1 ]; then
+        kubeconfig_default_locked env KUBECONFIG="${HOME}/.kube/config" \
+            k3d kubeconfig merge "${CLUSTER}" --kubeconfig-merge-default --kubeconfig-switch-context=false >/dev/null
+        info "context k3d-${CLUSTER} merged into ~/.kube/config (its current-context is unchanged)"
+    else
+        info "kubectl for this cluster: export KUBECONFIG=${KUBECONFIG}"
+    fi
+}
+
+# After `k3d cluster delete`: drop the merged context and this cluster's own file.
+kubeconfig_after_delete() {
+    if [ "${K3D_GPU_MERGE_KUBECONFIG:-0}" = 1 ] && [ -f "${HOME}/.kube/config" ]; then
+        kubeconfig_default_locked kubeconfig_unmerge
+    fi
+    if [ "${KUBE_OWNED}" = 1 ]; then rm -f "${KUBECONFIG}"; fi
 }
 
 # ---- accelerator detection --------------------------------------------------
@@ -739,23 +842,32 @@ amx_flags() {
 # NFD-style node labels for the host's AMX flags (amx_tile -> ...cpu-cpuid.AMXTILE=true),
 # sorted. AMX-FP16 (CPUID.(7,1):EAX[21]) and AMX-COMPLEX (CPUID.(7,1):EDX[8]) are
 # never printed in /proc/cpuinfo (cpufeatures.h gives X86_FEATURE_AMX_FP16 no quoted
-# name and has no AMX_COMPLEX at all), so they come from the CPU model: LLVM X86.td
+# name and has no AMX_COMPLEX at all), so they come from CPUID (cpuid_isa) when it is
+# readable. Fallback when it is not: the CPU model, where LLVM X86.td
 # gives Granite Rapids (6/0xAD) AMX-FP16, Granite Rapids-D (6/0xAE) AMX-FP16 and
-# AMX-COMPLEX, Diamond Rapids (19/0x01) both (intel-family.h ids). Only on bare
-# metal (no hypervisor flag, which may mask CPUID bits) and only with amx_tile
+# AMX-COMPLEX, Diamond Rapids (19/0x01) both (intel-family.h ids), only on bare
+# metal (no hypervisor flag, which may mask CPUID bits). Either way only with amx_tile
 # present, which the kernel clears when it cannot switch AMX state (cpuid-deps.c).
 amx_labels() {
-    local f flags names=""
+    local f flags names="" isa
     flags=$(amx_flags)
     for f in ${flags}; do
         f=${f//_/}
         names+="${f^^}"$'\n'
     done
-    if [[ " ${flags} " == *" amx_tile "* ]] && ! cpu_flag hypervisor; then
-        case "$(cpu_family_model)" in
-            "6 173")        names+=$'AMXFP16\n' ;;
-            "6 174"|"19 1") names+=$'AMXFP16\nAMXCOMPLEX\n' ;;
-        esac
+    if [[ " ${flags} " == *" amx_tile "* ]]; then
+        isa=$(cpuid_isa)
+        if [ -n "${isa}" ]; then
+            # CPUID read: its bits decide, whatever the model table says.
+            [[ " ${isa#*|} " != *" AMX-FP16 "* ]] || names+=$'AMXFP16\n'
+            [[ " ${isa#*|} " != *" AMX-COMPLEX "* ]] || names+=$'AMXCOMPLEX\n'
+        elif ! cpu_flag hypervisor; then
+            # Fallback when CPUID is not readable: the CPU model table.
+            case "$(cpu_family_model)" in
+                "6 173")        names+=$'AMXFP16\n' ;;
+                "6 174"|"19 1") names+=$'AMXFP16\nAMXCOMPLEX\n' ;;
+            esac
+        fi
     fi
     printf '%s' "${names}" | LC_ALL=C sort -u | sed 's#.*#feature.node.kubernetes.io/cpu-cpuid.&=true#'
 }
@@ -815,6 +927,78 @@ cpu_isa_predicted() {
         "18 1")  echo "Nova Lake|AVX10.1, AVX10.2, APX_F, MOVRS, no AMX|PTA_NOVALAKE" ;;         # INTEL_NOVALAKE 18/0x01
         "18 3")  echo "Nova Lake-L|AVX10.1, AVX10.2, APX_F, MOVRS, no AMX|PTA_NOVALAKE" ;;       # INTEL_NOVALAKE_L 18/0x03
     esac
+}
+
+# cpuid_regs <leaf> <subleaf>: "<eax> <ebx> <ecx> <edx>" (8 hex digits each) of CPU 0.
+# As root, from /dev/cpu/0/cpuid: the file offset is leaf | subleaf << 32 and each
+# 16-byte read returns the four registers (arch/x86/kernel/cpuid.c). Otherwise, on a
+# real x86_64 host (no K3D_GPU_SYSROOT), the CPUID instruction itself through
+# python3 ctypes: CPUID is unprivileged. Empty when neither works (no root and no
+# python3, or a policy that refuses an executable mapping).
+cpuid_regs() {
+    local f="${SYSROOT}/dev/cpu/0/cpuid" v=""
+    if [ -r "${f}" ]; then
+        v=$(dd if="${f}" bs=16 count=1 skip=$(( $1 | $2 << 32 )) iflag=skip_bytes status=none 2>/dev/null \
+            | od -An -v -tx4 2>/dev/null | tr -s ' \n' ' ') || v=""
+    elif [ -z "${SYSROOT}" ] && [ "$(uname -m 2>/dev/null)" = x86_64 ] && command -v python3 >/dev/null; then
+        v=$(python3 - "$1" "$2" 2>/dev/null <<'EOF'
+import ctypes, mmap, sys
+# x86-64 SysV: edi = leaf, esi = subleaf, rdx = 16-byte output.
+code = bytes([0x53, 0x49, 0x89, 0xd0, 0x89, 0xf8, 0x89, 0xf1, 0x0f, 0xa2,  # push rbx; mov r8,rdx; mov eax,edi; mov ecx,esi; cpuid
+              0x41, 0x89, 0x00, 0x41, 0x89, 0x58, 0x04, 0x41, 0x89, 0x48, 0x08,  # mov [r8],eax; [r8+4],ebx; [r8+8],ecx
+              0x41, 0x89, 0x50, 0x0c, 0x5b, 0xc3])                         # mov [r8+12],edx; pop rbx; ret
+m = mmap.mmap(-1, mmap.PAGESIZE, prot=mmap.PROT_READ | mmap.PROT_WRITE | mmap.PROT_EXEC)
+m.write(code)
+fn = ctypes.CFUNCTYPE(None, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p)(ctypes.addressof(ctypes.c_char.from_buffer(m)))
+out = (ctypes.c_uint32 * 4)()
+fn(int(sys.argv[1]), int(sys.argv[2]), ctypes.addressof(out))
+print("%08x %08x %08x %08x" % tuple(out))
+EOF
+        ) || v=""
+    fi
+    [[ "${v}" =~ ^\ ?([0-9a-f]{8})\ ([0-9a-f]{8})\ ([0-9a-f]{8})\ ([0-9a-f]{8})\ ?$ ]] \
+        && echo "${BASH_REMATCH[1]} ${BASH_REMATCH[2]} ${BASH_REMATCH[3]} ${BASH_REMATCH[4]}"
+    return 0
+}
+
+# cpuid_isa: "<source>|<features>" read from CPUID on a GenuineIntel CPU, for the ISA
+# /proc/cpuinfo never prints: AVX10.<version>, AMX-FP16, AMX-COMPLEX, AVX-VNNI-INT8,
+# AVX-VNNI-INT16, AVX-NE-CONVERT, AVX-IFMA, APX_F. Bits per Intel ISE 319433-061
+# table 1-3: CPUID.(7,1):EAX[21] AMX_FP16, EAX[23] AVX_IFMA; EDX[4] AVX_VNNI_INT8,
+# EDX[5] AVX_NE_CONVERT, EDX[8] AMX_COMPLEX, EDX[10] AVX_VNNI_INT16, EDX[19] AVX10
+# (leaf 24H valid), EDX[21] APX_F; CPUID.(24H,0):EBX[7:0] the AVX10 version. Leaf 24H
+# is read only when CPUID.0:EAX (the highest basic leaf) reaches it. Empty when
+# CPUID cannot be read; "<source>|" when it was read and none of these is set.
+cpuid_isa() {
+    local src r0 r7 r24 max a d out="" v
+    [ "$(cpuinfo_field vendor_id)" = GenuineIntel ] || return 0
+    r0=$(cpuid_regs 0 0)
+    [ -n "${r0}" ] || return 0
+    src="the CPUID instruction"
+    [ ! -r "${SYSROOT}/dev/cpu/0/cpuid" ] || src="/dev/cpu/0/cpuid"
+    max=$((16#${r0%% *}))
+    r7=""
+    [ "${max}" -lt 7 ] || r7=$(cpuid_regs 7 1)
+    if [ -n "${r7}" ]; then
+        read -r a _ _ d <<< "${r7}"
+        a=$((16#${a})) d=$((16#${d}))
+        if (( d >> 19 & 1 )); then
+            v=""
+            if [ "${max}" -ge 36 ]; then
+                r24=$(cpuid_regs 36 0)
+                [ -z "${r24}" ] || v=$(( 16#$(cut -d' ' -f2 <<< "${r24}") & 255 ))
+            fi
+            if [ -n "${v}" ] && [ "${v}" -gt 0 ]; then out+=" AVX10.${v}"; else out+=" AVX10"; fi
+        fi
+        (( a >> 21 & 1 )) && out+=" AMX-FP16"
+        (( d >> 8 & 1 )) && out+=" AMX-COMPLEX"
+        (( d >> 4 & 1 )) && out+=" AVX-VNNI-INT8"
+        (( d >> 10 & 1 )) && out+=" AVX-VNNI-INT16"
+        (( d >> 5 & 1 )) && out+=" AVX-NE-CONVERT"
+        (( a >> 23 & 1 )) && out+=" AVX-IFMA"
+        (( d >> 21 & 1 )) && out+=" APX_F"
+    fi
+    echo "${src}|${out# }"
 }
 
 # Hybrid CPUs register one PMU per core type; each lists its online CPUs. Arrow
@@ -901,14 +1085,37 @@ cpu_highest_perf() {
     return 0
 }
 
-# Favored cores (ITMT): "<cpulist> <highest perf> <next value>" for the CPUs at
-# the top highest perf, empty when every CPU reports the same value.
-favored_cpus() {
+# top_cpus: "<cpu> <value>" lines -> "<cpulist> <top value> <next value>" for the
+# CPUs at the top value, empty when every CPU reports the same value.
+top_cpus() {
     local l v n
-    cpu_highest_perf | sort -k2,2nr -k1,1n | awk '
+    sort -k2,2nr -k1,1n | awk '
         NR == 1 {top = $2} $2 == top {l = l (l == "" ? "" : ",") $1; next}
         nv == "" {nv = $2} END {if (nv != "") print l, top, nv}' \
         | while read -r l v n; do echo "$(cpulist_compress "${l}") ${v} ${n}"; done
+}
+
+# Favored cores (ITMT): "<cpulist> <highest perf> <next value>" for the CPUs at
+# the top highest perf, empty when every CPU reports the same value.
+favored_cpus() { cpu_highest_perf | top_cpus; }
+
+# SST-BF high-priority cores: "<cpulist> <base kHz> <next kHz>" when the CPUs' cpufreq
+# base_frequency differ, which is how SST-BF being on shows (intel_pstate reports
+# each CPU's guaranteed frequency there; intel/CommsPowerManagement sst_bf.py
+# reads the same file). Empty when every CPU reports the same base.
+sst_bf_cpus() {
+    { grep -s '' "${SYSROOT}${CPU_SYS}"/cpu[0-9]*/cpufreq/base_frequency || true; } \
+        | sed -n 's#.*/cpu\([0-9][0-9]*\)/cpufreq/base_frequency:\([0-9]\{1,9\}\)$#\1 \2#p' | top_cpus
+}
+
+# The CPUs up annotates as favored and steers the latency balloon to:
+# "<cpulist> <top> <next> <cppc|sst-bf>", CPPC ranking first, else SST-BF HP cores.
+latency_cpus() {
+    local f
+    f=$(favored_cpus)
+    if [ -n "${f}" ]; then echo "${f} cppc"; return 0; fi
+    f=$(sst_bf_cpus)
+    [ -z "${f}" ] || echo "${f} sst-bf"
 }
 
 # favored_hint_devs <cpulist>: the L2 cache dir (cpu<N>/cache/index<i>, level 2)
@@ -1158,18 +1365,26 @@ numa_labels() {
 }
 
 # ---- accelerators per socket (doctor only) -----------------------------------------
-# Xeon processor number -> "<number> <DSA> <IAA> <QAT>": default devices per socket
-# from each SKU's ark.intel.com specifications page (Advanced Technologies).
+# Xeon processor number -> "<number> <DSA> <IAA> <QAT> <DLB>": default devices per
+# socket from each SKU's ark.intel.com specifications page (Advanced Technologies),
+# read 2026-10-20. What ARK does not list is not here: whether On Demand activation
+# is offered for a SKU (ARK lists "On Demand Activation Model" for 8480+ only) is
+# unverified, and Priority Core Turbo is no ARK field.
 #   8480+ https://www.intel.com/content/www/us/en/products/sku/231746/intel-xeon-platinum-8480-processor-105m-cache-2-00-ghz/specifications.html
 #   6980P https://www.intel.com/content/www/us/en/products/sku/240777/intel-xeon-6980p-processor-504m-cache-2-00-ghz/specifications.html
 #   6960P https://www.intel.com/content/www/us/en/products/sku/240775/intel-xeon-6960p-processor-432m-cache-2-70-ghz/specifications.html
 #   6780E https://www.intel.com/content/www/us/en/products/sku/240362/intel-xeon-6780e-processor-108m-cache-2-20-ghz/specifications.html
+#   6741P https://www.intel.com/content/www/us/en/products/sku/241828/intel-xeon-6741p-processor-288m-cache-2-50-ghz/specifications.html
+#         (crescent's CPU: 3 of each, matching the devices it enumerates [L-crescent])
+#   6716P-B https://www.intel.com/content/www/us/en/products/sku/242908/intel-xeon-6716pb-processor-160m-cache-2-50-ghz/specifications.html
 xeon_ark_accels() {
     case " $1 " in
-        *" 8480+ "*) echo "8480+ 1 1 1" ;;
-        *" 6980P "*) echo "6980P 4 4 4" ;;
-        *" 6960P "*) echo "6960P 4 4 4" ;;
-        *" 6780E "*) echo "6780E 2 2 2" ;;
+        *" 8480+ "*) echo "8480+ 1 1 1 1" ;;
+        *" 6980P "*) echo "6980P 4 4 4 4" ;;
+        *" 6960P "*) echo "6960P 4 4 4 4" ;;
+        *" 6780E "*) echo "6780E 2 2 2 2" ;;
+        *" 6741P "*) echo "6741P 3 3 3 3" ;;
+        *" 6716P-B "*) echo "6716P-B 1 0 1 1" ;;
     esac
 }
 
@@ -1194,6 +1409,9 @@ pci_socket() {
 # drivers/dma/idxd/registers.h.
 DSA_PCI_IDS="0x0b25 0x11fb 0x1212"
 IAA_PCI_IDS="0x0cfe 0x1216 0xb02d 0xfd2d"
+# DLB physical functions: 2710 (DLB 2.0, Sapphire Rapids), 2714 (DLB 2.5, Xeon 6),
+# per DPDK's dlb2 event driver (doc.dpdk.org/guides/eventdevs/dlb2.html).
+DLB_PCI_IDS="0x2710 0x2714"
 
 # "<socket> <DSA|IAA|QAT>" per DSA/IAA PCI function and QAT physical function, by
 # PCI id, so a device counts whether or not its driver is loaded.
@@ -1205,42 +1423,103 @@ accel_sockets() {
         if [[ " ${DSA_PCI_IDS} " == *" ${id} "* ]]; then kind=DSA
         elif [[ " ${IAA_PCI_IDS} " == *" ${id} "* ]]; then kind=IAA
         elif [[ " ${QAT_PF_IDS} " == *" ${id} "* ]]; then kind=QAT
+        elif [[ " ${DLB_PCI_IDS} " == *" ${id} "* ]]; then kind=DLB
         else continue
         fi
         echo "$(pci_socket "${dev}") ${kind}"
     done
 }
 
-# Doctor lines, appended to the caller's ${lines}: DSA/IAA/QAT per socket next to
-# the SKU's ARK default, a warning for each socket below it, and a note when the
-# On Demand (SDSi) interface exists.
+# Doctor lines, appended to the caller's ${lines}: DSA/IAA/QAT (and DLB when the
+# host has any) per socket next to the SKU's ARK default, a warning for each socket
+# below it, and a note when the On Demand (SDSi) interface exists.
 doctor_accel_sockets() {
-    local pairs sockets s k n want sku="" d_dsa="" d_iaa="" d_qat="" below line="" extra="" sdsi
+    local pairs sockets s k n want sku="" d_dsa="" d_iaa="" d_qat="" d_dlb="" below line="" extra="" sdsi kinds="DSA IAA QAT"
     pairs=$(accel_sockets)
     if [ -n "${pairs}" ]; then
         sockets=$({ numa_sockets; awk '{print $1}' <<< "${pairs}"; } | LC_ALL=C sort -u)
-        read -r sku d_dsa d_iaa d_qat <<< "$(xeon_ark_accels "$(cpu_model)")"
+        read -r sku d_dsa d_iaa d_qat d_dlb <<< "$(xeon_ark_accels "$(cpu_model)")"
+        # DLB has no mainline driver, so a host without any is shown without the column
+        # rather than as a socket below its default.
+        ! grep -q ' DLB$' <<< "${pairs}" || kinds+=" DLB"
         while read -r s; do
             line+="${line:+; }socket ${s}:"
             below=""
-            for k in DSA IAA QAT; do
+            for k in ${kinds}; do
                 n=$(grep -cxF "${s} ${k}" <<< "${pairs}" || true)
                 line+=" ${k} ${n},"
-                case "${k}" in DSA) want=${d_dsa} ;; IAA) want=${d_iaa} ;; *) want=${d_qat} ;; esac
+                case "${k}" in DSA) want=${d_dsa} ;; IAA) want=${d_iaa} ;; QAT) want=${d_qat} ;; *) want=${d_dlb} ;; esac
                 if [ -n "${want}" ] && [ "${n}" -lt "${want}" ]; then below+="${below:+, }${k} ${n}"; fi
             done
             line=${line%,}
             [ -z "${below}" ] || extra+="  ${YLW}warn${RST}: socket ${s}: ${below} below the ARK default for ${sku} — the BIOS may have the device disabled; check its accelerator settings"$'\n'
         done <<< "${sockets}"
         if [ -n "${sku}" ]; then
-            line+=" (ARK default for ${sku}: DSA ${d_dsa}, IAA ${d_iaa}, QAT ${d_qat} per socket)"
+            line+=" (ARK default for ${sku}: DSA ${d_dsa}, IAA ${d_iaa}, QAT ${d_qat}$([[ " ${kinds} " != *" DLB "* ]] || echo ", DLB ${d_dlb}") per socket)"
         else
             line+=" (no ARK default on file for this CPU)"
         fi
         lines+="  info: per socket: ${line}"$'\n'"${extra}"
     fi
+    doctor_dlb
     sdsi=$({ compgen -G "${SYSROOT}/sys/bus/auxiliary/devices/intel_vsec.sdsi.*" || true; } | sed 's#.*/##' | sort -V | paste -sd, | sed 's/,/, /g')
-    [ -z "${sdsi}" ] || lines+="  info: Intel On Demand interface present (${sdsi}): on On Demand SKUs, instances above the ARK default are activated by a license (https://github.com/intel/intel-sdsi); ask the platform vendor whether activation is offered"$'\n'
+    [ -z "${sdsi}" ] || lines+="  info: Intel On Demand interface present (${sdsi}): on On Demand SKUs, instances above the ARK default are activated by a license (https://github.com/intel/intel-sdsi); ask the platform vendor whether activation is offered$(sdsi_certs)"$'\n'
+    doctor_ifs
+}
+
+# "; <dev> state_certificate <N> B, ..." for each readable On Demand state certificate
+# (sysfs-driver-intel_sdsi: the current licenses, read through a mailbox; the
+# attribute is admin read-only). crescent's 6741P reads 32 B, where no AKC/CAP
+# license payload was seen (docs/intel-on-die-accelerators.md 5.1, [L-crescent]).
+sdsi_certs() {
+    local d out="" n
+    for d in "${SYSROOT}"/sys/bus/auxiliary/devices/intel_vsec.sdsi.*; do
+        [ -e "${d}/state_certificate" ] || continue
+        if [ -r "${d}/state_certificate" ]; then
+            n=$(wc -c < "${d}/state_certificate" 2>/dev/null) || continue
+            out+="${out:+, }${d##*/} state_certificate ${n// /} B"
+        else
+            out+="${out:+, }${d##*/} state_certificate root-only"
+        fi
+    done
+    [ -z "${out}" ] || echo "; ${out} (crescent's 6741P reads 32 B with no license payload seen)"
+}
+
+# DLB, appended to ${lines}: the PFs present and their driver. Mainline Linux has no
+# DLB driver (Intel ships an out-of-tree one; DPDK binds vfio-pci) and the Kubernetes
+# DLB device plugin was removed from intel-device-plugins-for-kubernetes on
+# 2026-09-01 (commit be6c943e4f), so k3d-gpu exposes nothing for it.
+doctor_dlb() {
+    local dev id n=0 ids="" drv=""
+    for dev in "${SYSROOT}"/sys/bus/pci/devices/*; do
+        [ "$(rf "${dev}/vendor")" = 0x8086 ] || continue
+        id=$(rf "${dev}/device")
+        [[ " ${DLB_PCI_IDS} " == *" ${id} "* ]] || continue
+        n=$((n + 1))
+        [[ " ${ids} " == *" ${id} "* ]] || ids+=" ${id}"
+        [ -z "$(bound_driver "${dev}")" ] || drv+=" $(bound_driver "${dev}")"
+    done
+    [ "${n}" -gt 0 ] || return 0
+    ids=$(for id in ${ids}; do case "${id}" in 0x2710) echo "8086:2710 DLB 2.0" ;; *) echo "8086:2714 DLB 2.5" ;; esac; done | paste -sd, | sed 's/,/, /g')
+    drv=$(tr ' ' '\n' <<< "${drv}" | sort -u | paste -sd' ')
+    lines+="  info: DLB: ${n} device(s) (${ids}), $( [ -n "${drv# }" ] && echo "driver ${drv# }" || echo "no driver bound") — mainline Linux has no DLB driver (Intel's out-of-tree driver or DPDK on vfio-pci) and the Kubernetes DLB device plugin was removed upstream (intel-device-plugins-for-kubernetes, 2026-09-01), so k3d-gpu exposes nothing for it"$'\n'
+}
+
+# In-Field Scan status, appended to ${lines}: each intel_ifs_<n> device's last result
+# and loaded test image (drivers/platform/x86/intel/ifs/sysfs.c: status is untested,
+# pass or fail; image_version none until an image is loaded). A test runs only when
+# root writes a CPU number to run_test and holds that core while it runs
+# (docs.kernel.org/arch/x86/ifs.html); k3d-gpu never writes it.
+doctor_ifs() {
+    local d n out="" kind img
+    for d in "${SYSROOT}"/sys/devices/virtual/misc/intel_ifs_[0-9]*; do
+        [ -r "${d}/status" ] || continue
+        n=${d##*_}
+        case "${n}" in 0) kind=scan ;; 1) kind="array BIST" ;; 2) kind=SBAF ;; *) kind="type ${n}" ;; esac
+        img=$(rf "${d}/image_version")
+        out+="${out:+; }${d##*/} (${kind}) $(rf "${d}/status")${img:+, image ${img}}"
+    done
+    [ -z "${out}" ] || lines+="  info: In-Field Scan: ${out} — k3d-gpu never starts a test (a scan holds the core while it runs; run one on a drained core: docs.kernel.org/arch/x86/ifs.html)"$'\n'
 }
 
 # ---- platform tables (doctor only) --------------------------------------------
@@ -1798,7 +2077,7 @@ doctor_common() {
     fi
 
     info "Checking kubectl..."
-    command -v kubectl >/dev/null 2>&1 && echo "  ok" || { echo "  ${RED}fail${RST}: kubectl not installed ($(tool_hint kubectl))"; FAIL=1; }
+    type -P kubectl >/dev/null 2>&1 && echo "  ok" || { echo "  ${RED}fail${RST}: kubectl not installed ($(tool_hint kubectl))"; FAIL=1; }
 }
 
 doctor_nvidia() {
@@ -2156,6 +2435,8 @@ doctor_numa() {
         FAIL=1
     fi
     doctor_hbm
+    doctor_snc
+    doctor_cxl
     flags=$(grep -m1 '^flags[[:space:]]*:' "${SYSROOT}/proc/cpuinfo" 2>/dev/null || true)
     if [[ " ${flags#*:} " == *" rdt_a "* ]]; then
         for n in cat_l2 cat_l3 cdp_l2 cdp_l3 mba; do
@@ -2163,7 +2444,41 @@ doctor_numa() {
         done
         lines+="  info: RDT allocation (rdt_a:${rdt}) — resctrl classes are available but left off: the balloons policy ships control.rdt.enable: false because enabling it rewrites the host's /sys/fs/resctrl. To opt in, mount resctrl on the host (mount -t resctrl resctrl /sys/fs/resctrl) and set control.rdt.enable: true in nri-balloons.yml; usePodQoSAsDefaultClass then gives BestEffort/Burstable/Guaranteed pods 33%/66%/100% of the L3"$'\n'
     fi
+    doctor_rdt "${flags#*:}"
     doctor_isolation "${flags#*:}"
+}
+
+# RDT details, appended to ${lines}, read-only. Skylake-SP and its successors on
+# the same model id (Cascade Lake, Cooper Lake: family 6 model 0x55) enumerate L3
+# CAT, but the kernel turns it off for erratum SKZ18 ("CAT may not restrict
+# cacheline allocation under certain conditions") and lets an owner who accepts
+# that turn it back on with rdt=l3cat (arch/x86/kernel/cpu/resctrl/core.c
+# __check_quirks_intel; commit d56593eb5ed). Mounted resctrl: the class and RMID
+# counts per resource (Documentation/filesystems/resctrl.rst, info/). The launcher
+# never mounts resctrl; up binds an existing mount read-only into the nodes so the
+# telemetry stack can read MBM (share/telemetry/node-exporter.yml).
+doctor_rdt() {
+    local flags=" $1 " cmdline i out="" r n m c
+    cmdline=$(cat "${SYSROOT}/proc/cmdline" 2>/dev/null || true)
+    if [ "$(cpu_family_model)" = "6 85" ] && [[ "${flags}" == *" cat_l3 "* ]] \
+       && ! [[ " ${cmdline} " =~ \ rdt=([^\ ]*,)?l3cat(,|\ ) ]]; then
+        lines+="  info: L3 CAT: CPUID has it (cat_l3) but the kernel turns it off on model 0x55 (Skylake-SP, Cascade Lake, Cooper Lake) for erratum SKZ18, CAT may not restrict cacheline allocation under certain conditions (resctrl core.c __check_quirks_intel, commit d56593eb5ed); an owner who accepts the erratum turns it back on with rdt=l3cat. Apply: sudo grubby --update-kernel=ALL --args=rdt=l3cat (Fedora/RHEL), or add rdt=l3cat to GRUB_CMDLINE_LINUX_DEFAULT in /etc/default/grub then sudo update-grub (Debian/Ubuntu) or sudo grub-mkconfig -o /boot/grub/grub.cfg; reboot. Revert: sudo grubby --update-kernel=ALL --remove-args=rdt=l3cat, or remove it from /etc/default/grub and rerun the same command; reboot"$'\n'
+    fi
+    i="${SYSROOT}/sys/fs/resctrl/info"
+    [ -d "${i}" ] || return 0
+    for r in L3 L3CODE L3DATA L2 L2CODE L2DATA; do
+        n=$(rd "/sys/fs/resctrl/info/${r}/num_closids"); m=$(rd "/sys/fs/resctrl/info/${r}/cbm_mask")
+        [ -n "${n}" ] || continue
+        c=${r:2}
+        out+="${out:+, }${r:0:2} CAT${c:+ ${c}} ${n} CLOS (cbm_mask ${m:-?})"
+    done
+    n=$(rd /sys/fs/resctrl/info/MB/num_closids)
+    [ -z "${n}" ] || out+="${out:+, }MBA ${n} CLOS"
+    n=$(rd /sys/fs/resctrl/info/L3_MON/num_rmids)
+    if [ -n "${n}" ]; then
+        out+="; L3 monitoring ${n} RMIDs ($(paste -sd' ' "${i}/L3_MON/mon_features" 2>/dev/null))"
+    fi
+    lines+="  info: resctrl mounted: ${out:-no resources listed} (read from /sys/fs/resctrl/info) — up binds it read-only into the nodes; the telemetry node-exporter exports MBM per resctrl group (k3d_gpu_resctrl_mbm_bytes_total)"$'\n'
 }
 
 # Noisy-neighbour isolation for agent pods, picked from the CPU's own flags
@@ -2198,6 +2513,69 @@ doctor_isolation() {
                 lines+="  info: noisy-neighbour isolation: cpu-cap — no rdt_a flag and no E-cores; give a neighbour a CPU limit. Cache and DRAM bandwidth stay shared"$'\n'
             fi ;;
     esac
+}
+
+# Compute dies of socket 0: the TPMI uncore domains (intel_uncore_frequency
+# uncore<NN>) whose agent_types list "core", the kernel's own split of a Xeon 6
+# package into compute and I/O dies (uncore-frequency-common.c; agent_types in
+# Documentation/admin-guide/pm/intel_uncore_frequency_scaling.rst). Empty when the
+# kernel does not publish agent_types.
+compute_dies() {
+    local d n=0 seen=0
+    for d in "${SYSROOT}${CPU_SYS}"/intel_uncore_frequency/uncore[0-9]*; do
+        [ -r "${d}/agent_types" ] || continue
+        seen=1
+        [ "$(rf "${d}/package_id")" = 0 ] || [ ! -r "${d}/package_id" ] || continue
+        [[ " $(rf "${d}/agent_types") " == *" core "* ]] && n=$((n + 1))
+    done
+    [ "${seen}" = 0 ] || echo "${n}"
+}
+
+# Sub-NUMA Clustering, appended to ${lines}. SNC is a BIOS setting: with it off on a
+# package of two or three compute dies, SNC2 or SNC3 (one NUMA node per compute die,
+# Intel Xeon 6 SNC guide 845720) is suggested as the owner's BIOS change with its
+# revert. SNC3 needs Linux 6.19 on a multi-socket Granite Rapids-X or Clearwater
+# Forest (6/0xAD, 6/0xDD): before it the scheduler fails to build its domains there in
+# SNC-3 (arch/x86/kernel/smpboot.c arch_sched_node_distance, commit 4d6dd05d07d,
+# first in v6.19; the fix applies only when there is more than one package).
+doctor_snc() {
+    local dies snc old=""
+    snc=$(snc_per_l3)
+    case "$(cpu_family_model)" in
+        "6 173"|"6 221") [ "$(numa_sockets | awk 'END {print NR}')" -le 1 ] || ! kernel_lt 6.19 || old=1 ;;
+    esac
+    if [ "${snc}" = 3 ] && [ -n "${old}" ]; then
+        lines+="  ${YLW}warn${RST}: SNC3 is on but Linux $(kernel_release) is older than 6.19: on a multi-socket Granite Rapids/Clearwater Forest the scheduler fails to build its domains in SNC-3 (sched/topology fix 4d6dd05d07d, first in 6.19) — boot 6.19 or newer"$'\n'
+    fi
+    dies=$(compute_dies)
+    [[ "${dies}" =~ ^[23]$ ]] && [ "${snc:-1}" = 1 ] || return 0
+    lines+="  info: SNC off (1 NUMA node per socket) on ${dies} compute dies (TPMI uncore domains with core agents): SNC${dies} makes each compute die its own NUMA node with its local memory channels (Intel Xeon 6 SNC guide 845720); up then labels k3d-gpu.io/snc=${dies} and replica pods get one node each$( [ "${dies}" = 3 ] && [ -n "${old}" ] && echo " — SNC3 needs Linux 6.19 or newer here (sched/topology fix 4d6dd05d07d for multi-socket SNC-3; running $(kernel_release))" || true)"$'\n'
+    lines+="        apply:  BIOS (owner action): set Sub-NUMA Clustering to SNC${dies} (the menu name varies by board), reboot, then k3d-gpu down && k3d-gpu up"$'\n'
+    lines+="        revert: BIOS: set Sub-NUMA Clustering back to Disabled, reboot"$'\n'
+}
+
+# CXL memory tiering knobs, appended to ${lines}, when a CXL memory device exists
+# (/sys/bus/cxl/devices/mem*): page demotion during reclaim (sysfs-kernel-mm-numa),
+# NUMA balancing's memory-tiering mode (kernel.numa_balancing bit 2, sysctl/kernel.rst)
+# and weighted interleave (sysfs-kernel-mm-mempolicy-weighted-interleave). Each change
+# is a suggestion with its revert to the value read here; demotion can move pages
+# outside a cgroup's cpuset.mems (the ABI says so), which is why it is not applied.
+doctor_cxl() {
+    local mems dem nb wi
+    mems=$({ compgen -G "${SYSROOT}/sys/bus/cxl/devices/mem[0-9]*" || true; } | sed 's#.*/##' | sort -V | paste -sd' ')
+    [ -n "${mems}" ] || return 0
+    dem=$(rd /sys/kernel/mm/numa/demotion_enabled)
+    nb=$(rd /proc/sys/kernel/numa_balancing)
+    wi=$(rd /sys/kernel/mm/mempolicy/weighted_interleave/auto)
+    lines+="  info: CXL memory device(s) ${mems}: demotion_enabled ${dem:-unknown}, numa_balancing ${nb:-unknown}, weighted_interleave auto ${wi:-unknown} — read only; the kernel tiering knobs below move idle pages to the slower CPU-less node and hot ones back"$'\n'
+    if [ "${dem}" = false ]; then
+        lines+="  info: page demotion is off: reclaim swaps pages out instead of moving them to the CXL node; on, it can move pages outside a cgroup's cpuset.mems (sysfs-kernel-mm-numa)"$'\n'
+        lines+="        apply:  echo true | sudo tee /sys/kernel/mm/numa/demotion_enabled"$'\n'"        revert: echo false | sudo tee /sys/kernel/mm/numa/demotion_enabled"$'\n'
+    fi
+    if [[ "${nb}" =~ ^[0-9]+$ ]] && (( (nb & 2) == 0 )); then
+        lines+="  info: NUMA balancing memory-tiering mode (bit 2) is off: it promotes hot pages from the CXL node back to DRAM (sysctl/kernel.rst numa_balancing)"$'\n'
+        lines+="        apply:  sudo sysctl kernel.numa_balancing=$((nb | 2))"$'\n'"        revert: sudo sysctl kernel.numa_balancing=${nb}"$'\n'
+    fi
 }
 
 # Xeon CPU Max (6/0x8F with on-package HBM) memory modes, appended to ${lines}.
@@ -2437,11 +2815,61 @@ accel_config_install() {
     esac
 }
 
+# Intel Speed Select (SST), appended to ${lines}, read-only: with /dev/isst_interface
+# (isst_if, TPMI on Xeon 6) it runs `intel-speed-select base-freq info -l 0` and
+# `turbo-freq info -l 0`, which only read (docs.kernel.org/admin-guide/pm/
+# intel-speed-select.html; output format tools/power/x86/intel-speed-select/
+# isst-display.c, printed to stderr). The tool comes from the host's PATH, else from
+# the running cluster's node image (Dockerfile pins it). Turning SST-BF or SST-TF on
+# changes the CPU's state, so those are suggestions with their exact revert.
+SST_TOOL=intel-speed-select
+doctor_sst() {
+    local -a tool
+    local node="k3d-${CLUSTER}-server-0" bf tf hp hpf lpf b0n b0f lpt how
+    [ -e "${SYSROOT}/dev/isst_interface" ] || return 0
+    if command -v "${SST_TOOL}" >/dev/null 2>&1; then
+        tool=("${SST_TOOL}") how="${SST_TOOL}"
+    elif [ "$(docker inspect -f '{{.State.Running}}' "${node}" 2>/dev/null)" = true ] \
+         && docker exec "${node}" sh -c "command -v ${SST_TOOL}" >/dev/null 2>&1; then
+        tool=(docker exec "${node}" "${SST_TOOL}") how="${SST_TOOL} in node ${node}"
+    else
+        lines+="  info: Speed Select interface present (/dev/isst_interface); ${SST_TOOL} is not on PATH — after up, doctor reads it through the node image's pinned copy (docker exec ${node} ${SST_TOOL}); or install it from the kernel tree (tools/power/x86/intel-speed-select)"$'\n'
+        return 0
+    fi
+    bf=$("${tool[@]}" base-freq info -l 0 2>&1) || true
+    tf=$("${tool[@]}" turbo-freq info -l 0 2>&1) || true
+    if grep -q 'Must run as root' <<< "${bf}${tf}"; then
+        lines+="  info: Speed Select interface present (/dev/isst_interface); ${SST_TOOL} needs root here: sudo k3d-gpu doctor (it runs base-freq info and turbo-freq info, which only read)"$'\n'
+        return 0
+    fi
+    hp=$(cpulist_compress "$(sed -n 's/^ *high-priority-cpu-list:\([0-9,]*\)$/\1/p' <<< "${bf}" | paste -sd,)")
+    hpf=$(sed -n 's/^ *high-priority-base-frequency(MHz):\([0-9]*\)$/\1/p' <<< "${bf}" | head -n1)
+    lpf=$(sed -n 's/^ *low-priority-base-frequency(MHz):\([0-9]*\)$/\1/p' <<< "${bf}" | head -n1)
+    b0n=$(sed -n 's/^ *high-priority-cores-count:\([0-9]*\)$/\1/p' <<< "${tf}" | head -n1)
+    b0f=$(sed -nE 's/^ *high-priority-max(-sse)?-frequency\(MHz\):([0-9]+)$/\2/p' <<< "${tf}" | head -n1)
+    lpt=$(sed -nE 's/^ *low-priority-max(-sse)?-frequency\(MHz\):([0-9]+)$/\2/p' <<< "${tf}" | head -n1)
+    local sum=""
+    if [ -n "${hp}" ]; then sum="base-freq high-priority CPUs ${hp} at ${hpf:-?} MHz, low-priority ${lpf:-?} MHz"
+    else sum="base-freq: no high-priority CPUs reported"; fi
+    if [ -n "${b0n}" ]; then sum+="; turbo-freq bucket-0: ${b0n} high-priority cores at ${b0f:-?} MHz, low-priority clipped to ${lpt:-?} MHz"
+    else sum+="; turbo-freq: no buckets reported"; fi
+    lines+="  info: Speed Select (/dev/isst_interface, ${how}): ${sum} (read-only: base-freq info -l 0, turbo-freq info -l 0)"$'\n'
+    [ -n "${hp}" ] || return 0
+    if [ -z "$(sst_bf_cpus)" ]; then
+        lines+="  info: SST-BF is off (every CPU reports the same cpufreq base_frequency). On, it raises the base of CPUs ${hp} to ${hpf:-?} MHz and lowers the others to ${lpf:-?} MHz; up then annotates ${hp} as favored. -a also sets SST-CP core priorities and the revert's -a clears them; the BIOS can lock SST"$'\n'
+        lines+="        apply:  sudo ${SST_TOOL} base-freq enable -a"$'\n'"        revert: sudo ${SST_TOOL} base-freq disable -a"$'\n'
+    fi
+    if [ -n "${b0n}" ]; then
+        lines+="  info: SST-TF: ${b0n} high-priority cores can turbo to ${b0f:-?} MHz while the others are clipped to ${lpt:-?} MHz (its on/off state is not read here); for CPUs ${hp}:"$'\n'
+        lines+="        apply:  sudo ${SST_TOOL} -c ${hp} turbo-freq enable -a"$'\n'"        revert: sudo ${SST_TOOL} turbo-freq disable -a"$'\n'
+    fi
+}
+
 # Xeon built-in accelerators. `up` deploys DSA/IAA/QAT plugins once the host
 # side is set up (work queues, SR-IOV VFs); this says what is still missing.
 doctor_cpu_accels() {
     local amx isa pred fm dev bdf vfs n wqs kind name prefix devdir lines="" lp e cl pp fav fv fn
-    local steps k d cls run rev drv total ac_fix="" what
+    local steps k d cls run rev drv total ac_fix="" what svc st
     steps=$(accel_enable_steps)
     if grep -qE '^(DSA|IAA)'$'\t''[^[:space:]]*'$'\t''(new|kernel)'$'\t' <<< "${steps}" && ! has_accel_config; then
         ac_fix=$(accel_config_install "$(hs_distro)")
@@ -2454,10 +2882,17 @@ doctor_cpu_accels() {
     amx=$(amx_flags)
     fm=$(cpu_family_model)
     pred=""
-    [ "$(cpuinfo_field vendor_id)" != GenuineIntel ] || pred=$(cpu_isa_predicted "${fm}")
+    isa=$(cpuid_isa)
+    if [ -n "${isa}" ]; then
+        name=${isa#*|}
+        [ -n "${name}" ] || name="none of AVX10, AMX-FP16, AMX-COMPLEX, AVX-VNNI-INT8, AVX-VNNI-INT16, AVX-NE-CONVERT, AVX-IFMA, APX_F"
+        lines+="  ok: CPUID (read through ${isa%%|*}): ${name} — ISA /proc/cpuinfo does not print (Intel ISE 319433-061 table 1-3: CPUID.(7,1), leaf 24H); the AMX-FP16/AMX-COMPLEX labels follow these bits"$'\n'
+    elif [ "$(cpuinfo_field vendor_id)" = GenuineIntel ]; then
+        pred=$(cpu_isa_predicted "${fm}")
+    fi
     if [ -n "${pred}" ]; then
         IFS='|' read -r name isa prefix <<< "${pred}"
-        lines+="  info: ${name} (family ${fm% *}, model ${fm#* }): ISA predicted by gcc ${prefix}, not read from CPUID: ${isa} — /proc/cpuinfo may not show these (kernel-dependent); NFD labels what CPUID reports (cpu-cpuid.AVX10_VERSION, APX_F, AMXFP8) and oneDNN/OpenVINO pick them with no flag"$'\n'
+        lines+="  info: ${name} (family ${fm% *}, model ${fm#* }): ISA predicted by gcc ${prefix}, not read from CPUID: ${isa} — fallback model table: CPUID is not readable here (sudo k3d-gpu doctor reads /dev/cpu/0/cpuid; needs the cpuid module); /proc/cpuinfo may not show these (kernel-dependent); NFD labels what CPUID reports (cpu-cpuid.AVX10_VERSION, APX_F, AMXFP8) and oneDNN/OpenVINO pick them with no flag"$'\n'
     fi
     [ -z "${amx}" ] || lines+="  ok: AMX (${amx}) — CPU instructions, usable in any pod; up labels nodes feature.node.kubernetes.io/cpu-cpuid.AMX*"$'\n'
     isa=$(cpu_isa_labels | sed 's#^feature\.node\.kubernetes\.io/cpu-cpuid\.##; s#=true$##' | paste -sd' ')
@@ -2511,10 +2946,13 @@ doctor_cpu_accels() {
         [[ " ${QAT_PF_IDS} " == *" $(cat "${dev}/device" 2>/dev/null) "* ]] || continue
         bdf=$(basename "${dev}")
         vfs=$({ compgen -G "${dev}/virtfn*" || true; } | wc -l)
+        # The PF's configured services and state (sysfs-driver-qat, qat_4xxx and qat_6xxx).
+        svc=$(rf "${dev}/qat/cfg_services"); svc=${svc:+, cfg_services ${svc}}
+        st=$(rf "${dev}/qat/state"); svc+=${st:+, state ${st}}
         if [ -z "$(bound_driver "${dev}")" ]; then
             lines+="  ${YLW}warn${RST}: QAT ${bdf}: no driver bound — load the QAT driver (qat_4xxx / qat_420xx / qat_6xxx / qat_c62x)"$'\n'
         elif [ "${vfs}" -gt 0 ]; then
-            lines+="  ok: QAT ${bdf}: ${vfs} VF(s) — deployed by 'k3d-gpu up' (intel-qat-plugin binds them to vfio-pci)"$'\n'
+            lines+="  ok: QAT ${bdf} ($(bound_driver "${dev}")${svc}): ${vfs} VF(s) — deployed by 'k3d-gpu up' (intel-qat-plugin binds them to vfio-pci)"$'\n'
         else
             drv=$(bound_driver "${dev}")
             total=$(cat "${dev}/sriov_totalvfs" 2>/dev/null) || total=""
@@ -2522,7 +2960,7 @@ doctor_cpu_accels() {
                 lines+="  ${YLW}warn${RST}: QAT ${bdf} (${drv}): no VFs and no SR-IOV (sriov_totalvfs missing or 0) — turn on SR-IOV and VT-d in the BIOS and boot with intel_iommu=on"$'\n'
             else
                 IFS=$'\t' read -r run rev < <(awk -F'\t' -v b="${bdf}" '$1 == "QAT" && $2 == b { print $4 "\t" $5 }' <<< "${steps}") || true
-                lines+="  ${YLW}warn${RST}: QAT ${bdf} (${drv}): no VFs (sriov_numvfs 0), so not in the cluster — create all ${total} as intel-qat-plugin's qat initcontainer does; the plugin takes them as $(qat_vf_driver "$(cat "${dev}/device")") and binds them to vfio-pci (lasts until reboot), or: k3d-gpu host-setup --apply; then k3d-gpu down && k3d-gpu up"$'\n'
+                lines+="  ${YLW}warn${RST}: QAT ${bdf} (${drv}${svc}): no VFs (sriov_numvfs 0), so not in the cluster — create all ${total} as intel-qat-plugin's qat initcontainer does; the plugin takes them as $(qat_vf_driver "$(cat "${dev}/device")") and binds them to vfio-pci (lasts until reboot), or: k3d-gpu host-setup --apply; then k3d-gpu down && k3d-gpu up"$'\n'
                 lines+="        apply:  ${run}"$'\n'"        revert: ${rev}"$'\n'
             fi
         fi
@@ -2561,11 +2999,18 @@ doctor_cpu_accels() {
         lines+="  ${RED}fail${RST}: hybrid requested but the CPU has no online P-core and E-core PMUs (/sys/devices/cpu_core, cpu_atom or cpu_lowpower)"$'\n'
         FAIL=1
     fi
-    fav=$(favored_cpus)
+    fav=$(latency_cpus)
     if [ -n "${fav}" ]; then
-        read -r fav fv fn <<< "${fav}"
-        lines+="  ok: favored CPUs ${fav} (highest_perf ${fv}, next ${fn}) — up annotates nodes k3d-gpu.io/favored-cpus=${fav} and points the latency balloon at them"$'\n'
+        read -r fav fv fn k <<< "${fav}"
+        d="points the latency balloon at them"
+        balloons_baked || d="would point the latency balloon at them; up deploys the balloons policy on hybrid or multi-NUMA hosts only, so here it is the annotation alone"
+        if [ "${k}" = cppc ]; then
+            lines+="  ok: favored CPUs ${fav} (highest_perf ${fv}, next ${fn}) — up annotates nodes k3d-gpu.io/favored-cpus=${fav} and ${d}"$'\n'
+        else
+            lines+="  ok: SST-BF active: high-priority CPUs ${fav} (base_frequency $((fv / 1000)) MHz, others $((fn / 1000)) MHz) — up annotates nodes k3d-gpu.io/favored-cpus=${fav} and ${d}"$'\n'
+        fi
     fi
+    doctor_sst
     doctor_numa
     doctor_accel_sockets
     if is_active amx && [ -z "${amx}" ]; then
@@ -2580,7 +3025,7 @@ doctor_cpu_accels() {
 
 # kubectl against this launcher's cluster (k3d names the context k3d-<cluster>),
 # with a short timeout so doctor never hangs on a stopped cluster.
-kc() { kubectl --context "k3d-${CLUSTER}" --request-timeout=5s "$@"; }
+kc() { kubectl --request-timeout=5s "$@"; }
 
 # doctor_ds <label> <namespace> <daemonset>: one line on the DaemonSet's readiness.
 # Returns 1 (and sets FAIL) unless every scheduled pod is Ready.
@@ -2606,7 +3051,7 @@ doctor_ds() {
 # a failure mode described in docs/failure-modes.md.
 doctor_cluster() {
     local v ns ds manifest policies node
-    command -v kubectl >/dev/null 2>&1 || return 0
+    type -P kubectl >/dev/null 2>&1 || return 0
     [ -n "$(kc get nodes -o name 2>/dev/null || true)" ] || return 0
     info "Checking cluster k3d-${CLUSTER}..."
 
@@ -3378,7 +3823,7 @@ perf_cpu() {
 # one cap gives one finding. Pinning the floor high for LLM decode is pre-registered
 # as EXPERIMENTS.md H29 and stays unsuggested until it is measured.
 perf_uncore() {
-    local base=/sys/devices/system/cpu/intel_uncore_frequency d rel name imin imax mn mx elc n=0 tpmi=0
+    local base=/sys/devices/system/cpu/intel_uncore_frequency d rel name imin imax mn mx elc cur n=0 tpmi=0
     compgen -G "${SYSROOT}${base}/uncore[0-9]*" >/dev/null && tpmi=1
     for d in "${SYSROOT}${base}"/package_*_die_* "${SYSROOT}${base}"/uncore[0-9]*; do
         [ -d "${d}" ] || continue
@@ -3410,8 +3855,10 @@ perf_uncore() {
             perf_ok "${name}: max $((mx / 1000)) MHz, the hardware ceiling" "${base}/${name}/max_freq_khz"
         fi
         elc=$(rd "${rel}/elc_floor_freq_khz")
-        [ -z "${elc}" ] || perf_info "${name}: ELC floor ${elc} kHz, thresholds low $(rd "${rel}/elc_low_threshold_percent")% high $(rd "${rel}/elc_high_threshold_percent")% (enable $(rd "${rel}/elc_high_threshold_enable"))" \
-            "${base}/${name}/elc_*"
+        cur=$(rd "${rel}/current_freq_khz")
+        [[ "${cur}" =~ ^[0-9]+$ ]] && cur="; current ${cur} kHz" || cur=""
+        [ -z "${elc}" ] || perf_info "${name}: ELC floor ${elc} kHz, thresholds low $(rd "${rel}/elc_low_threshold_percent")% high $(rd "${rel}/elc_high_threshold_percent")% (enable $(rd "${rel}/elc_high_threshold_enable"))${cur}; reported only, no ELC change is suggested (EXPERIMENTS.md H29 INCONCLUSIVE)" \
+            "${base}/${name}/elc_*${cur:+, current_freq_khz (root)}"
     done
 }
 
@@ -3529,6 +3976,46 @@ perf_thermal() {
         "Intel SDM vol. 4 335592-093 (R/WC0 log bits)"
 }
 
+# TPMI performance limit reasons (Xeon 6): per die and per CPU, the coarse and fine
+# reasons the power unit limited frequency (drivers/platform/x86/intel/plr_tpmi.c,
+# debugfs /sys/kernel/debug/tpmi-<dev>/plr/domain<n>/status, Linux 6.11). The file
+# starts with a "cpus" line for the die, then one "cpu<N>" line per CPU, each with
+# reason names or "none". debugfs is root-only; the bits are sticky until 0 is
+# written to the file (Documentation/ABI/testing/debugfs-tpmi). Read only.
+perf_plr() {
+    local f n=0 rel aux line
+    aux=$({ compgen -G "${SYSROOT}/sys/bus/auxiliary/devices/intel_vsec.tpmi-plr.*" || true; } | sed 's#.*/##' | sort -V | paste -sd, | sed 's/,/, /g')
+    for f in "${SYSROOT}"/sys/kernel/debug/tpmi-*/plr/domain*/status; do
+        [ -r "${f}" ] || continue
+        if [ "${n}" -eq 0 ]; then
+            perf_section "TPMI performance limit reasons" \
+                "none while serving: a reason names what held the die or a CPU below its requested frequency (power limit, thermal, current, platform PROCHOT)" \
+                "https://github.com/torvalds/linux/blob/master/drivers/platform/x86/intel/plr_tpmi.c, https://github.com/torvalds/linux/blob/master/Documentation/ABI/testing/debugfs-tpmi"
+        fi
+        n=$((n + 1))
+        rel=${f#"${SYSROOT}"}
+        line=$(awk '
+            $1 == "cpus" { $1 = ""; die = substr($0, 2); next }
+            $1 ~ /^cpu[0-9]+$/ { c = substr($1, 4); $1 = ""; r = substr($0, 2); if (!(r in l)) o[++k] = r; l[r] = l[r] (l[r] == "" ? "" : ",") c }
+            END { printf "%s|", die; for (i = 1; i <= k; i++) printf "%s%s=%s", (i > 1 ? ";" : ""), o[i], l[o[i]] }' "${f}" 2>/dev/null) || continue
+        local die=${line%%|*} rest=${line#*|} out="" grp
+        while IFS= read -r grp; do
+            [ -n "${grp}" ] || continue
+            out+="${out:+; }${grp%%=*} on $(cpulist_compress "${grp#*=}")"
+        done <<< "${rest//;/$'\n'}"
+        grp=${rel#/sys/kernel/debug/}; grp=${grp%/status}
+        perf_info "${grp%%/*} ${grp##*/}: die ${die:-?}; CPUs: ${out:-none listed}" "${rel} (root)"
+    done
+    if [ "${n}" -gt 0 ]; then
+        perf_info "the reasons are sticky until 0 is written to the status file (debugfs-tpmi ABI); doctor --perf only reads them" "debugfs-tpmi ABI"
+    elif [ -n "${aux}" ]; then
+        perf_section "TPMI performance limit reasons" \
+            "none while serving: a reason names what held the die or a CPU below its requested frequency" \
+            "https://github.com/torvalds/linux/blob/master/drivers/platform/x86/intel/plr_tpmi.c"
+        perf_info "TPMI performance limit reasons (${aux}): the status files are in debugfs, root only: sudo k3d-gpu doctor --perf" "/sys/kernel/debug/tpmi-*/plr/domain*/status"
+    fi
+}
+
 perf_rapl() {
     local z name en zn i cname lim max found=0 d pct
     pct=$(throttle_pct)
@@ -3577,9 +4064,9 @@ perf_rapl() {
 # Hybrid hosts only: P-cores and E-cores share one package power and thermal
 # budget, so pinning them apart does not stop an E-core neighbour from clocking
 # P-core inference down. The kernel counts package thermal throttle events since
-# boot; when there are any, suggest the opt-in prefill guard. Until H5 is
-# measured the section is printed only for a guard that is requested
-# (K3D_GPU_PREFILL_GUARD) or recorded for this cluster, never unprompted.
+# boot; when there are any, suggest the opt-in prefill guard. H5 measured the
+# guard and is REFUTED, so the section is printed only for a guard that is
+# requested (K3D_GPU_PREFILL_GUARD) or recorded for this cluster, never unprompted.
 perf_prefill_guard() {
     local p first tt cnt tot core=0 cpu v pl khz rec="${STATE_DIR}/${CLUSTER}/scaling_max_freq"
     has_hybrid || return 0
@@ -3605,7 +4092,7 @@ perf_prefill_guard() {
         khz=$(guard_khz 50%) || khz=""
         perf_flag note "package throttled ${cnt} times since boot ($([[ "${tot}" =~ ^[0-9]+$ ]] && echo "$((tot / 1000)) s in total" || echo "total time unknown"); P-core core_throttle_count ${core}${pl:+, package_power_limit_count ${pl}})" \
             "${tt}/package_throttle_{count,total_time_ms}" \
-            "each count is a PROCHOT event: the package reached its thermal limit and every core clocked down, P-cores included. The opt-in prefill guard caps the E-cores of the efficient balloon${khz:+ (50% = $((khz / 1000)) MHz here)} through an NRI balloons CPU class, so P-core inference keeps more of the budget and E-core pods run slower. Unmeasured until EXPERIMENTS.md H5 runs; it recreates the cluster" \
+            "each count is a PROCHOT event: the package reached its thermal limit and every core clocked down, P-cores included. The opt-in prefill guard caps the E-cores of the efficient balloon${khz:+ (50% = $((khz / 1000)) MHz here)} through an NRI balloons CPU class, and E-core pods run slower. EXPERIMENTS.md H5 measured it on an i9-13900T and is REFUTED: no cap level halved the neighbour's P-core prefill penalty (+23.3% left at the E-core minimum, from +40.6%). It recreates the cluster" \
             "k3d-gpu down && K3D_GPU_PREFILL_GUARD=50% k3d-gpu up" \
             "k3d-gpu down && k3d-gpu up"
     elif [ -n "${cnt}" ]; then
@@ -3802,9 +4289,25 @@ dram_por() {
     return 0
 }
 
+# xeon_mem_por <model name>: "<SKU> <channels per socket> <DDR5 MT/s> <MRDIMM MT/s, 0 =
+# not listed, ? = not checked> <source>" for Xeon 6. SKUs from their ARK pages (Memory
+# Specifications), read 2026-10-20; whole series only where Intel's Xeon 6 product
+# brief states it (6300 series: two DDR5 channels at up to 4,800 MT/s). MRDIMM is per
+# SKU, not per series: 6980P and 6960P list MRDIMM 8800, 6741P lists DDR5-6400 only.
+xeon_mem_por() {
+    case " $1 " in
+        *" 6980P "*) echo "6980P 12 6400 8800 https://www.intel.com/content/www/us/en/products/sku/240777/intel-xeon-6980p-processor-504m-cache-2-00-ghz/specifications.html" ;;
+        *" 6960P "*) echo "6960P 12 6400 8800 https://www.intel.com/content/www/us/en/products/sku/240775/intel-xeon-6960p-processor-432m-cache-2-70-ghz/specifications.html" ;;
+        *" 6741P "*) echo "6741P 8 6400 0 https://www.intel.com/content/www/us/en/products/sku/241828/intel-xeon-6741p-processor-288m-cache-2-50-ghz/specifications.html" ;;
+        *" 6780E "*) echo "6780E 8 6400 0 https://www.intel.com/content/www/us/en/products/sku/240362/intel-xeon-6780e-processor-108m-cache-2-20-ghz/specifications.html" ;;
+        *" 6716P-B "*) echo "6716P-B 4 6400 0 https://www.intel.com/content/www/us/en/products/sku/242908/intel-xeon-6716pb-processor-160m-cache-2-50-ghz/specifications.html" ;;
+        *Xeon*" 63"[0-9][0-9][PE]" "*) echo "$(sed -n 's/.* \(63[0-9][0-9][PE]\) .*/\1/p' <<< " $1 ") 2 4800 ? https://www.intel.com/content/www/us/en/products/docs/xeon-6-product-brief.html" ;;
+    esac
+}
+
 perf_dram() {
     local e raw rec slots=0 n=0 size type form spd cfg tw dw rk desc="" cmin="" rated="" ecc=1 eccu=0 widths=0
-    local line ch=2 dpc per por row peak t1 hb mc ce ue mcs="" mcf=""
+    local line ch=2 dpc per por row peak t1 hb mc ce ue mcs="" mcf="" last=""
     for e in "${SYSROOT}"/sys/firmware/dmi/entries/17-*; do
         [ -d "${e}" ] || continue
         slots=$((slots + 1))
@@ -3815,6 +4318,7 @@ perf_dram() {
         read -r size type form spd cfg tw dw rk <<< "${rec}"
         [ "${size}" -gt 0 ] || continue
         n=$((n + 1))
+        last="${form} ${tw} ${dw} ${rk}"
         t1="$(dram_type "${type}") $(dram_form "${form}") $(( size / 1024 )) GiB ${rk}R"
         if [[ " ${desc} " != *"|${t1}|"* ]]; then desc+="|${t1}|"; fi
         if [ -z "${cmin}" ] || [ "${cfg}" -lt "${cmin}" ]; then cmin=${cfg}; fi
@@ -3835,6 +4339,8 @@ perf_dram() {
         return 0
     fi
     desc=${desc#|}; desc=${desc%|}; desc=${desc//||/, }
+    # Form, widths and ranks of the last populated module, not of a trailing empty slot.
+    read -r form tw dw rk <<< "${last}"
     form=$(dram_form "${form}")
     perf_info "${n}x ${desc}$([ "${ecc}${eccu}" = 10 ] && echo ", ECC (${tw}/${dw}-bit)"): rated $(mts "${rated}"), configured $(mts "${cmin}"); ${n} of ${slots} slots populated" \
         "/sys/firmware/dmi/entries/17-*/raw (root)"
@@ -3878,6 +4384,27 @@ perf_dram() {
         peak=$(awk -v c="$(( n < ch ? n : ch ))" -v m="${cmin}" 'BEGIN {printf "%.1f", c * m * 8 / 1000}')
         perf_info "peak DRAM bandwidth ${peak} GB/s = $(( n < ch ? n : ch )) channels x ${cmin} MT/s x 8 B (computed; CPU and iGPU decode share it)" \
             "/sys/firmware/dmi/entries/17-*/raw (root)"
+    elif [ -n "$(xeon_mem_por "$(cpuinfo_field "model name")")" ]; then
+        local sku xch xddr xmr xsrc sk tch used
+        read -r sku xch xddr xmr xsrc <<< "$(xeon_mem_por "$(cpuinfo_field "model name")")"
+        sk=$(numa_sockets | awk 'END {print NR}'); [ "${sk}" -gt 0 ] || sk=1
+        tch=$((xch * sk)); used=$(( n < tch ? n : tch ))
+        case "${xmr}" in 0) xmr="MRDIMM not listed" ;; '?') xmr="MRDIMM per SKU: check ARK" ;; *) xmr="MRDIMM ${xmr} MT/s" ;; esac
+        perf_info "Xeon ${sku} (ARK): ${xch} memory channels per socket, DDR5 ${xddr} MT/s, ${xmr}" "${xsrc}"
+        peak=$(awk -v c="${used}" -v m="${cmin}" 'BEGIN {printf "%.1f", c * m * 8 / 1000}')
+        if [ "${n}" -ge "${tch}" ]; then
+            perf_ok "${n} modules on ${tch} channels (${sk} socket(s) x ${xch}): peak DRAM bandwidth ${peak} GB/s = ${used} channels x ${cmin} MT/s x 8 B (computed)" \
+                "/sys/firmware/dmi/entries/17-*/raw (root), ${xsrc}"
+        else
+            perf_info "${n} modules on ${tch} channels (${sk} socket(s) x ${xch}): $((tch - n)) channel(s) have no module (one module per channel assumed); peak DRAM bandwidth ${peak} GB/s = ${used} channels x ${cmin} MT/s x 8 B (computed); it scales with populated channels" \
+                "/sys/firmware/dmi/entries/17-*/raw (root), ${xsrc}"
+        fi
+        if lt "${cmin}" "${xddr}" && [ "${n}" -le "${tch}" ] && ! lt "${rated}" "${xddr}"; then
+            perf_flag note "configured ${cmin} MT/s is below the DDR5 ${xddr} MT/s ARK lists for ${sku} (modules rated ${rated})" \
+                "/sys/firmware/dmi/entries/17-*/raw (root)" \
+                "peak DRAM bandwidth scales with the transfer rate; with one module per channel the SKU supports ${xddr} MT/s (${xsrc})" \
+                "BIOS: set the memory frequency to ${xddr} MT/s (or Auto), then reboot" "BIOS: set it back to ${cmin} MT/s"
+        fi
     else
         peak=$(awk -v w="${widths}" -v m="${cmin}" 'BEGIN {printf "%.1f", w * m / 1000}')
         perf_info "peak DRAM bandwidth ${peak} GB/s = ${cmin} MT/s x ${widths} B of data width (computed, assuming one module per channel; this tool has no POR table for this CPU)" \
@@ -4355,6 +4882,7 @@ doctor_perf() {
     perf_uncore
     perf_cstates
     perf_thermal
+    perf_plr
     perf_rapl
     perf_prefill_guard
     perf_memory
@@ -4684,6 +5212,12 @@ cmd_up() {
     if { is_active dsa || is_active iaa; } && [ -d "${SYSROOT}/dev/char" ]; then
         create_args+=(--volume="/dev/char:/dev/char:ro@server:*;agent:*")
     fi
+    # A resctrl the host owner mounted is bound read-only into the nodes, where the
+    # opt-in telemetry stack reads MBM per resctrl group. Nothing is mounted when the
+    # host has none: mounting resctrl is the owner's call.
+    if [ -d "${SYSROOT}/sys/fs/resctrl/info" ]; then
+        create_args+=(--volume="/sys/fs/resctrl:/sys/fs/resctrl:ro@server:*;agent:*")
+    fi
     # Hybrid P/E cores: the baked NRI balloons policy is gated by this label. NRI is
     # on in k3s's containerd for a privileged (non-userns) node, and the node sees
     # the host's cpu_core/cpu_atom/cpu_lowpower PMUs, so balloons can pin by core type. Only the
@@ -4796,17 +5330,19 @@ cmd_up() {
     fi
     ensure_image
     info "Creating k3d cluster '${CLUSTER}' with image ${IMAGE}..."
-    k3d cluster create "${CLUSTER}" "${create_args[@]}"
+    k3d cluster create "${CLUSTER}" "${create_args[@]}" --kubeconfig-update-default=false
+    kubeconfig_after_create
 
     info "Waiting for nodes Ready..."
     kubectl wait --for=condition=Ready nodes --all --timeout=120s
     wait_cluster_dns
     if intel_dra; then check_dra_api; fi
 
-    # Favored cores (top CPPC highest_perf) as a node annotation; once the balloons
-    # policy exists, its latency balloon type is pointed at them too.
+    # Favored cores (top CPPC highest_perf, else the SST-BF high-priority cores) as a
+    # node annotation; once the balloons policy exists, its latency balloon type is
+    # pointed at them too.
     local fav
-    fav=$(favored_cpus)
+    fav=$(latency_cpus)
     if [ -n "${fav}" ]; then
         kubectl annotate nodes --all --overwrite "k3d-gpu.io/favored-cpus=${fav%% *}"
     fi
@@ -4829,7 +5365,7 @@ cmd_up() {
     if is_active hybrid && balloons_baked && [ -n "$(hybrid_cpus lowpower)" ]; then
         kubectl -n kube-system set env daemonset/nri-resource-policy-balloons "OVERRIDE_SYS_ATOM_CPUS=$(ecore_kind_cpus)"
     fi
-    if is_active hybrid && balloons_baked && [ -n "${fav}" ]; then
+    if balloons_baked && [ -n "${fav}" ]; then
         latency_prefer_favored "${fav%% *}"
     fi
     exp_post_up
@@ -5128,6 +5664,7 @@ cmd_down() {
     guard_restore
     info "Deleting k3d cluster '${CLUSTER}'..."
     k3d cluster delete "${CLUSTER}"
+    kubeconfig_after_delete
 }
 
 # guard_restore: when a prefill guard ran on this cluster, write the recorded
@@ -5221,6 +5758,54 @@ device_test() {
         || err "${name} test pod failed — run 'k3d-gpu doctor'"
 }
 
+# AMX in use, not just present: a pod requests the AMX tile state for itself
+# (arch_prctl(ARCH_REQ_XCOMP_PERM, XFEATURE_XTILEDATA), which every process must do
+# before it may touch the tiles: docs.kernel.org/arch/x86/xstate.html) and runs one
+# BF16 matmul through PyTorch's oneDNN with ONEDNN_VERBOSE=1, which logs the
+# implementation each primitive ran (oneDNN doc/performance/verbose.md). The test
+# passes only when a matmul ran an AMX implementation: oneDNN names those
+# avx512_core_amx (Sapphire/Emerald Rapids) or avx10_1_512_amx[_fp16] (Granite
+# Rapids) (src/cpu/x64/cpu_isa_traits.hpp). Without the permission, or in a VM that
+# hides AMX, oneDNN falls back to AVX-512 and only this check notices.
+AMX_PROBE_PY='import ctypes, os
+libc = ctypes.CDLL(None, use_errno=True)
+rc = libc.syscall(158, 0x1023, 18)  # SYS_arch_prctl, ARCH_REQ_XCOMP_PERM, XFEATURE_XTILEDATA (x86_64)
+print("amx-probe: ARCH_REQ_XCOMP_PERM:", "ok" if rc == 0 else os.strerror(ctypes.get_errno()), flush=True)
+import torch
+a = torch.randn(512, 512, dtype=torch.bfloat16)
+torch.matmul(a, a)
+print("amx-probe: torch", torch.__version__, "bf16 matmul done", flush=True)'
+
+# amx_probe_verdict <pod log>: "ok <impl>", "noamx <impl>" or "none".
+amx_probe_verdict() {
+    local impl
+    impl=$(sed -n 's/^onednn_verbose,\(v[0-9]*,\)\{0,1\}\(primitive,\)\{0,1\}exec,cpu,matmul,\([^,]*\),.*/\3/p' <<< "$1" | sort -u)
+    if grep -qE '(^|:)(avx512_core|avx10_[0-9]+_512)_amx' <<< "${impl}"; then
+        echo "ok $(grep -E '(^|:)(avx512_core|avx10_[0-9]+_512)_amx' <<< "${impl}" | paste -sd,)"
+    elif [ -n "${impl}" ]; then
+        echo "noamx $(paste -sd, <<< "${impl}")"
+    else
+        echo none
+    fi
+}
+
+amx_probe() {
+    local res out v
+    valid_image "${AMX_TEST_IMAGE}" || err "K3D_GPU_AMX_TEST_IMAGE '${AMX_TEST_IMAGE}' is not a valid image reference"
+    res=$(amx_labels | sed -n 1p)  # not head: early exit SIGPIPEs amx_labels under pipefail
+    info "Deploying AMX probe pod (${AMX_TEST_IMAGE}, nodeSelector ${res}): ARCH_REQ_XCOMP_PERM + one oneDNN BF16 matmul, ONEDNN_VERBOSE=1..."
+    out=$(run_pod amx-test "${AMX_TEST_IMAGE}" \
+        "{\"spec\":{\"nodeSelector\":{\"${res%=*}\":\"true\"},\"containers\":[{\"name\":\"amx-test\",\"image\":\"${AMX_TEST_IMAGE}\",\"command\":[\"python3\",\"-c\",$(json_str "${AMX_PROBE_PY}")],\"env\":[{\"name\":\"ONEDNN_VERBOSE\",\"value\":\"1\"},{\"name\":\"OMP_NUM_THREADS\",\"value\":\"2\"}]}]}}") \
+        || { printf '%s\n' "${out}"; err "AMX probe pod failed — run 'k3d-gpu doctor'"; }
+    grep -E '^amx-probe:|^onednn_verbose,(v[0-9]+,)?(info,cpu,isa|(primitive,)?exec,cpu,matmul)' <<< "${out}" || true
+    v=$(amx_probe_verdict "${out}")
+    case "${v}" in
+        ok\ *)    info "AMX in use: oneDNN matmul ran ${v#ok }" ;;
+        noamx\ *) err "oneDNN ran matmul with ${v#noamx }, not AMX — check the amx-probe ARCH_REQ_XCOMP_PERM line above, and that the node is not a VM hiding AMX" ;;
+        *)        err "no oneDNN matmul ran in the AMX probe (PyTorch sends BF16 matmul to oneDNN only on a CPU with AVX-512 BF16 or AMX) — run 'k3d-gpu doctor'" ;;
+    esac
+}
+
 # Image refs are pasted into the pod overrides JSON, so only accept reference characters.
 valid_image() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._/:@+-]*$ ]]; }
 
@@ -5269,11 +5854,7 @@ cmd_test() {
         device_test "${v}-test" "${res}" "${path}"
     done
     if is_active amx; then
-        res=$(amx_labels | sed -n 1p)  # not head: early exit SIGPIPEs amx_labels under pipefail
-        info "Deploying AMX test pod (${DEVICE_TEST_IMAGE}, nodeSelector ${res})..."
-        run_pod amx-test "${DEVICE_TEST_IMAGE}" \
-            "{\"spec\":{\"nodeSelector\":{\"${res%=*}\":\"true\"},\"containers\":[{\"name\":\"amx-test\",\"image\":\"${DEVICE_TEST_IMAGE}\",\"command\":[\"grep\",\"-m1\",\"-o\",\"amx_tile\",\"/proc/cpuinfo\"]}]}}" \
-            || err "AMX test pod failed — run 'k3d-gpu doctor'"
+        amx_probe
     fi
     if is_active hybrid; then
         # nri-plugins pins by two core kinds: cpu_core, and cpu_atom plus cpu_lowpower.
@@ -5742,7 +6323,7 @@ report_cluster() {
     local ctx="k3d-${CLUSTER}" reason="" lines kind node key val nodes="" cur="" alloc="" labels="" summary=""
     if [ "${REPORT_NO_CLUSTER:-0}" = 1 ]; then
         reason="not queried (--no-cluster)"
-    elif ! command -v kubectl >/dev/null 2>&1; then
+    elif ! type -P kubectl >/dev/null 2>&1; then
         reason="kubectl not found"
     elif ! kubectl config get-contexts -o name 2>/dev/null | grep -x "${ctx}" >/dev/null; then
         reason="no kubeconfig context ${ctx} (cluster not created, or KUBECONFIG points elsewhere)"
@@ -5887,7 +6468,8 @@ cmd_logs() {
 # ---- agent-sandbox (opt-in) -------------------------------------------------------
 # kubernetes-sigs/agent-sandbox runs untrusted agent tool execution in sandbox pods.
 # The profile labels them k3d-gpu.io/cores=efficient, so on a hybrid CPU the balloons
-# policy keeps them on E-cores and the P-cores stay free for inference.
+# policy keeps them on E-cores, apart from P-core inference. That is placement, not
+# isolation: package power, LLC and DRAM bandwidth stay shared (EXPERIMENTS.md H3, H5).
 SANDBOX_VERSION="v1.0.7"
 SANDBOX_NS="agent-sandbox"
 SANDBOX_POOL="python-ecores"
@@ -9421,7 +10003,7 @@ qs_ui_up() {
         port=$(qs_port)
         [ -n "${K3D_GPU_CHAT_PORT:-}" ] || [ "${port}" = 8080 ] || info "port 8080 is taken; using ${port}"
         qs_step 5 "Port-forward on 127.0.0.1:${port}"
-        nohup kubectl -n "${AGENT_NS}" port-forward --address 127.0.0.1 svc/open-webui "${port}:8080" \
+        nohup kubectl ${KCTX[@]+"${KCTX[@]}"} -n "${AGENT_NS}" port-forward --address 127.0.0.1 svc/open-webui "${port}:8080" \
             > "${QS_DIR}/port-forward.log" 2>&1 < /dev/null &
         echo "$!" > "${QS_DIR}/port-forward.pid"
         echo "${port}" > "${QS_DIR}/port"
@@ -9439,7 +10021,7 @@ qs_ui_up() {
 cmd_quickstart_remote() {
     local ui=$1 exe=$2 t missing="" fields base model origin accel manifest rendered
     qs_step 1 "Checking this machine and the remote endpoint"
-    for t in docker k3d kubectl python3; do command -v "${t}" >/dev/null 2>&1 || missing+=" ${t}"; done
+    for t in docker k3d kubectl python3; do type -P "${t}" >/dev/null 2>&1 || missing+=" ${t}"; done
     [ -z "${missing}" ] || err "missing:${missing} — 'k3d-gpu doctor' prints how to install them"
     docker info >/dev/null 2>&1 || err "docker is installed but not reachable (is the daemon running, and is this user in the docker group?)"
     fields=$(remote_resolve)
@@ -9459,7 +10041,6 @@ cmd_quickstart_remote() {
         fi
         : > "${QS_DIR}/cluster-created"
     fi
-    kubectl config use-context "k3d-${CLUSTER}" >/dev/null 2>&1 || true
     kubectl get nodes >/dev/null 2>&1 || err "cluster '${CLUSTER}' is not reachable — run 'k3d-gpu doctor'"
 
     qs_step 3 "Remote endpoint (Secret ${AGENT_NS}/${LLM_SECRET})"
@@ -9499,7 +10080,7 @@ cmd_quickstart() {
 
     qs_step 1 "Checking this machine"
     qs_wsl_guidance
-    for t in docker k3d kubectl; do command -v "${t}" >/dev/null 2>&1 || missing+=" ${t}"; done
+    for t in docker k3d kubectl; do type -P "${t}" >/dev/null 2>&1 || missing+=" ${t}"; done
     [ -z "${missing}" ] || err "missing:${missing} — 'k3d-gpu doctor' prints how to install them"
     docker info >/dev/null 2>&1 || err "docker is installed but not reachable (is the daemon running, and is this user in the docker group?)"
     if [ -n "$(proxy_value HTTPS_PROXY)$(proxy_value HTTP_PROXY)" ]; then
@@ -9532,7 +10113,6 @@ cmd_quickstart() {
         "${exe}" up || err "'k3d-gpu up' failed; fix the error above and run quickstart again"
         : > "${QS_DIR}/cluster-created"
     fi
-    kubectl config use-context "k3d-${CLUSTER}" >/dev/null 2>&1 || true
     kubectl get nodes >/dev/null 2>&1 || err "cluster '${CLUSTER}' is not reachable — run 'k3d-gpu doctor'"
 
     # The environment of `agent up`: only what the user left unset is passed. A
@@ -9639,11 +10219,12 @@ cmd_uninstall() {
         info "no cluster '${CLUSTER}'"
     elif [ -n "${created}${force_cluster}" ]; then
         k3d cluster delete "${CLUSTER}"
+        kubeconfig_after_delete
     else
         info "cluster '${CLUSTER}' kept (quickstart did not create it; --cluster deletes it)"
         # The key stays nowhere quickstart --remote, agent up --remote or sandbox
         # up --remote wrote it.
-        if command -v kubectl >/dev/null 2>&1; then
+        if type -P kubectl >/dev/null 2>&1; then
             local ns
             for ns in "${AGENT_NS}" "${SANDBOX_NS}"; do
                 kubectl --context "k3d-${CLUSTER}" -n "${ns}" delete secret "${LLM_SECRET}" --ignore-not-found >/dev/null 2>&1 || true
@@ -9946,22 +10527,59 @@ cmd_plan() {
             args+=(--model-meta "${meta}" --measurements "$(model_opt_measurements)" --thinking "${K3D_GPU_AGENT_THINKING:-off}")
             [ -z "${ledger}" ] || args+=(--ledger "${ledger}")
             [ -z "${K3D_GPU_AGENT_VARIANT:-}" ] || args+=(--variant "${K3D_GPU_AGENT_VARIANT}")
+            [ -z "${K3D_GPU_AGENT_BACKEND:-}" ] || args+=(--agent-backend "${K3D_GPU_AGENT_BACKEND}")
         else
             warn "plan: no model metadata for ${model}; planning without the model optimizer"
         fi
     fi
     python3 "${dir}/plan.py" --mode "${mode}" --matrix "${matrix}" ${args[@]+"${args[@]}"} <<< "${out}" || rc=$?
-    [ -z "${meta}" ] || rm -f "${meta}"
     # --model also sizes that model to this host (text and --explain; --json and --hash
     # stay the plan/v1 bytes the apply hash covers). K3D_GPU_FIT=off leaves it out.
-    for ((i = 0; i < ${#args[@]}; i += 2)); do [ "${args[i]}" != --model ] || model=${args[i + 1]}; done
+    # With the model optimizer, the fit is of the variant it picked, at its revision and
+    # on its device: what `agent up --model` sizes and serves.
+    local fit_args=() opt fmodel frev fdev
     if [ -n "${model}" ] && [ "${rc}" -eq 0 ] && { [ "${mode}" = text ] || [ "${mode}" = explain ]; } \
         && [ "${K3D_GPU_FIT:-auto}" != off ]; then
+        fit_args=(--model "${model}")
+        if [ -n "${meta}" ]; then
+            opt=$(python3 "${dir}/plan.py" --mode json --matrix "${matrix}" ${args[@]+"${args[@]}"} <<< "${out}" 2>/dev/null \
+                | python3 -c 'import json, sys
+o = json.load(sys.stdin).get("optimizer") or {}
+m = o.get("fallback_model") if o.get("conversion") else o.get("model")
+r = o.get("fallback_revision") if o.get("conversion") else o.get("revision")
+print(m or "-", r or "-", o.get("device") or "-", o.get("engine") or "-")' 2>/dev/null) || opt="- - - -"
+            local feng
+            read -r fmodel frev fdev feng <<< "${opt}"
+            if [ "${fmodel}" = - ] && [ "${feng}" != - ]; then
+                # The optimizer keeps the engine's default model, and agent up sizes that.
+                local AGENT_BACKEND=ovms AGENT_HPU=""
+                [ "${feng}" != vllm ] || AGENT_BACKEND=${K3D_GPU_AGENT_BACKEND:-vllm}
+                [ "${fdev}" != HPU ] || AGENT_HPU=1
+                agent_config
+                fmodel=${AGENT_MODEL} frev=${AGENT_DEFAULT_REVISION:-}
+                [ -n "${frev}" ] || frev=-
+                info "fit: the optimizer keeps the engine's default model for ${model}: sizing ${fmodel}"
+            fi
+            if [ "${fmodel}" = - ]; then
+                fit_args=()
+            else
+                fit_args=(--model "${fmodel}")
+                [ "${frev}" = - ] || fit_args+=(--revision "${frev}")
+                case "${fdev}" in
+                    CPU) fit_args+=(--device cpu) ;;
+                    GPU) fit_args+=(--device gpu) ;;
+                    *) fit_args=(); info "fit: ${fdev} is not modelled by fit (agent up serves it unsized)" ;;
+                esac
+            fi
+        fi
+    fi
+    [ -z "${meta}" ] || rm -f "${meta}"
+    if [ "${#fit_args[@]}" -gt 0 ]; then
         if [ "${mode}" = explain ]; then
             echo "fit:"
-            ( cmd_fit --model "${model}" --explain ) 2>&1 | sed 's/^/  /' || true
+            ( cmd_fit "${fit_args[@]}" --explain ) 2>&1 | sed 's/^/  /' || true
         else
-            ( cmd_fit --model "${model}" ) || true
+            ( cmd_fit "${fit_args[@]}" ) || true
         fi
     fi
     return "${rc}"

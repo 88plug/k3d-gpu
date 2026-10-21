@@ -66,6 +66,31 @@ class Void(unittest.TestCase):
         self.assertFalse(h54.void(ai, 130, 190)[0])      # the aiperf sample is outside this phase
         self.assertEqual(h54.void([], 0, 10), (False, "no serving sample"))
 
+    def test_idle_window_r4(self):
+        # Amendment R4: the arm's own load raises the idle SGLang pair from ~2.4 to ~4.7 CPU-s/s
+        # (hold 1); with an idle window the CPU part is read there, the phase value only reported.
+        induced = [self.s(t, 2.4 if t <= 60 else 4.7) for t in range(10, 300, 10)]
+        self.assertTrue(h54.void(induced, 100, 200)[0])                  # R1's rule
+        v, why = h54.void(induced, 100, 200, w0=0, w1=60)
+        self.assertFalse(v)
+        self.assertIn("idle window 2.40", why)
+        self.assertIn("phase 4.70", why)
+        busy_idle = [self.s(t, 5.0) for t in range(10, 300, 10)]
+        self.assertTrue(h54.void(busy_idle, 100, 200, w0=0, w1=60)[0])
+        ai = [self.s(t, 1.0, 1 if t == 150 else 0) for t in range(10, 300, 10)]
+        self.assertEqual(h54.void(ai, 100, 200, w0=0, w1=60), (True, "aiperf ran"))
+        self.assertEqual(h54.void(induced, 100, 200, w0=1000, w1=1060)[1], "no serving sample in the idle window")
+
+    def test_cli_window(self):
+        with tempfile.TemporaryDirectory() as d:
+            f = os.path.join(d, "s.jsonl")
+            with open(f, "w") as fh:
+                for t in range(10, 300, 10):
+                    fh.write(json.dumps(self.s(t, 2.4 if t <= 60 else 4.7)) + "\n")
+            run = lambda *a: subprocess.run([sys.executable, os.path.join(HERE, "h54.py"), "void", f, *a], capture_output=True)  # noqa: E731
+            self.assertEqual(run("100", "200").returncode, 1)
+            self.assertEqual(run("100", "200", "0", "60").returncode, 0)
+
     def test_sample_covering_phase_end(self):
         # A sample at ts=125 covers (115, 125]; a phase ending at 120 includes it.
         self.assertTrue(h54.void([self.s(125, 9.0)], 100, 120)[0])
@@ -191,6 +216,63 @@ class ScoreA(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_YAML, "PyYAML")
+class ServedCarry(unittest.TestCase):
+    """Amendment R3: an arm whose server stopped answering after readiness is failed, and is
+    carried to the next hold's front once."""
+    def arm(self, root, hold, name, status="measured", reason="", n1_ok=True, q_errors=0):
+        d = os.path.join(root, f"hold{hold}", name)
+        os.makedirs(d, exist_ok=True)
+        json.dump({"status": status, "reason": reason}, open(os.path.join(d, "status.json"), "w"))
+        if status == "measured":
+            s = [{"ok": True, "decode_tokens_per_s": 10.0}] if n1_ok else [{"ok": False, "decode_tokens_per_s": None}]
+            json.dump({"phases": [{"samples": s}]}, open(os.path.join(d, "load-n1.json"), "w"))
+            json.dump({"n": 50, "correct": 40, "score": 0.8, "errors": q_errors}, open(os.path.join(d, "quality.json"), "w"))
+        return d
+
+    def test_served(self):
+        with tempfile.TemporaryDirectory() as r:
+            self.assertTrue(h54.served(self.arm(r, 1, "Lg"))[0])
+            ok, why = h54.served(self.arm(r, 1, "B1g", n1_ok=False))
+            self.assertFalse(ok)
+            self.assertTrue(why.startswith(h54.STOPPED))
+            self.assertFalse(h54.served(self.arm(r, 1, "Vq", q_errors=50))[0])
+            self.assertTrue(h54.served(self.arm(r, 1, "Sg", q_errors=3))[0])
+            self.assertFalse(h54.served(os.path.join(r, "nothing"))[0])
+
+    def test_recheck_and_carry(self):
+        with tempfile.TemporaryDirectory() as r:
+            self.arm(r, 1, "B1g", n1_ok=False)                 # engine died after readiness
+            self.arm(r, 1, "Lg")
+            self.arm(r, 1, "A1g", status="not_reached", reason="680 s of the hold left (< 900)")
+            self.arm(r, 1, "A1o", status="not_deliverable", reason="no model list")
+            changed = h54.recheck(r)
+            self.assertEqual([os.path.basename(d) for d in changed], ["B1g"])
+            st = json.load(open(os.path.join(r, "hold1", "B1g", "status.json")))
+            self.assertEqual((st["status"], st["was"]), ("failed", "measured"))
+            self.assertEqual(h54.recheck(r), [])               # idempotent
+            self.assertEqual(h54.carry(r, 1, ["B1g", "Lg", "Lg-mtp", "A1g", "A1o"]), ["B1g", "Lg-mtp", "A1g"])
+            # a second stop in hold 2 is not carried again; a render failure is never carried
+            self.arm(r, 2, "B1g", status="failed", reason=h54.STOPPED + ": the N=1 phase completed no request")
+            self.arm(r, 2, "Vq", status="failed", reason="render failed")
+            self.assertEqual(h54.carry(r, 2, ["B1g", "Vq", "Vq-mtp"]), ["Vq-mtp"])
+
+    def test_carry_n1_void_r4(self):
+        with tempfile.TemporaryDirectory() as r:
+            for h in (1, 2):
+                d = self.arm(r, h, "Lg")
+                json.dump({"n1": {"void": True, "rerun_void": True}}, open(os.path.join(d, "phases.json"), "w"))
+            d = self.arm(r, 1, "Lg-mtp")
+            json.dump({"n1": {"void": True, "rerun_void": False}}, open(os.path.join(d, "phases.json"), "w"))
+            self.assertEqual(h54.carry(r, 1, ["Lg", "Lg-mtp"]), ["Lg"])   # re-run not void: kept
+            self.assertEqual(h54.carry(r, 2, ["Lg"]), [])                 # once per arm
+
+    def test_score_ignores_failed(self):
+        with tempfile.TemporaryDirectory() as r:
+            self.arm(r, 1, "B1g", n1_ok=False)
+            h54.recheck(r)
+            self.assertEqual(h54.score_a(r)["verdict"], "INCONCLUSIVE")
+
+
 class Renders(unittest.TestCase):
     def test_llamacpp(self):
         dep = h54.render("Lg")[1]
@@ -244,7 +326,8 @@ class Renders(unittest.TestCase):
         self.assertEqual(docs[3]["spec"]["template"]["spec"]["containers"][0]["image"], h54.IMG["vllm024"])  # input untouched
         mtp = h54.derive_vllm("Vq-mtp", docs)[4]["spec"]["template"]["spec"]["containers"][0]["args"]
         spec = json.loads(mtp[mtp.index("--speculative-config") + 1])
-        self.assertEqual(spec, {"method": "gemma4_mtp", "model": f"/data/{h54.DRAFTER}"})   # vLLM's default length
+        self.assertEqual(spec, {"method": "gemma4_mtp", "model": f"/data/{h54.DRAFTER}",
+                               "num_speculative_tokens": 1})   # vLLM's n_predict default, named (R2)
         vi = h54.derive_vllm("Vi", docs)[4]["spec"]["template"]["spec"]["containers"][0]["args"]
         self.assertEqual(vi[vi.index("--model") + 1], f"/data/{h54.AUTOROUND}")
 

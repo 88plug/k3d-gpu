@@ -1,0 +1,9 @@
+{"phase": "n1", "try": 1, "t0": 1792571423.494361191, "t1": 1792571468.289021807, "check": {"void": true, "reason": "non-campaign CPU 4.70 CPU-s/s > 4.0"}}
+{"phase": "n1", "try": 2, "t0": 1792571468.353109625, "t1": 1792571513.401473862, "check": {"void": true, "reason": "non-campaign CPU 4.72 CPU-s/s > 4.0"}}
+{"phase": "n4", "try": 1, "t0": 1792571513.463991441, "t1": 1792571562.041320560, "check": {"void": true, "reason": "non-campaign CPU 4.69 CPU-s/s > 4.0"}}
+{"phase": "n4", "try": 2, "t0": 1792571562.107903195, "t1": 1792571607.922365800, "check": {"void": true, "reason": "non-campaign CPU 4.69 CPU-s/s > 4.0"}}
+{"phase": "n16", "try": 1, "t0": 1792571607.985751412, "t1": 1792571701.688205301, "check": {"void": true, "reason": "non-campaign CPU 4.69 CPU-s/s > 4.0"}}
+{"phase": "n16", "try": 2, "t0": 1792571701.754026784, "t1": 1792571792.756359996, "check": {"void": true, "reason": "non-campaign CPU 4.68 CPU-s/s > 4.0"}}
+{"phase": "ttft", "try": 1, "t0": 1792571792.822083862, "t1": 1792571804.844266532, "check": {"void": true, "reason": "non-campaign CPU 4.50 CPU-s/s > 4.0"}}
+{"phase": "ttft", "try": 2, "t0": 1792571804.908673648, "t1": 1792571817.111244892, "check": {"void": true, "reason": "non-campaign CPU 4.44 CPU-s/s > 4.0"}}
+{"phase": "quality", "t0": 1792571817.177187277, "t1": 1792572043.765945644, "check": {"void": true, "reason": "non-campaign CPU 4.69 CPU-s/s > 4.0"}}

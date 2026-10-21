@@ -50,7 +50,7 @@
       "subject": "docker.io/rancher/mirrored-pause:3.10.2"
     },
     {
-      "detail": "sha256:a8c8297c7274 in images.lock (share/nri-balloons-guard.yml, share/nri-balloons.yml); on k3d-gpu-server-0",
+      "detail": "sha256:a8c8297c7274 in images.lock (share/nri-balloons-guard.yml); on k3d-gpu-server-0",
       "fix": null,
       "rule": "image",
       "status": "pass",
@@ -73,12 +73,12 @@
   ],
   "cluster": "gpu",
   "lock": {
-    "images": 54,
+    "images": 56,
     "k3s_tag": "v1.37.1-k3s1"
   },
   "schema": "k3d-gpu.audit/v1",
   "summary": [
-    "audit PASS: 0 of 10 checks failed (images.lock: 54 images, k3s v1.37.1-k3s1)"
+    "audit PASS: 0 of 10 checks failed (images.lock: 56 images, k3s v1.37.1-k3s1)"
   ],
   "verdict": "pass"
 }

@@ -1,0 +1,128 @@
+{
+  "tool": "k3d-gpu/bench/llm_load.py",
+  "schema": 1,
+  "started_at": "2026-10-21T09:22:48Z",
+  "config": {
+    "base_url": "http://127.0.0.1:18173/v1",
+    "model": "gemma",
+    "prompt": "Explain in three short paragraphs how a CPU cache hierarchy reduces memory latency, and what a cache miss costs.",
+    "max_tokens": 256,
+    "temperature": 0.0,
+    "ignore_eos": true,
+    "extra_body": null,
+    "unique_prompts": true,
+    "requests": 3,
+    "concurrency": "1",
+    "warmup": 0,
+    "timeout": 1800.0,
+    "label": "H54a Lg warmup",
+    "out": "/home/devcloud/k3dgpu-gemma/results/H54a/hold2/Lg/load-warmup.json",
+    "run_id": "04b4d131"
+  },
+  "phases": [
+    {
+      "concurrency": 1,
+      "requests": 3,
+      "ok": 3,
+      "errors": 0,
+      "wall_s": 16.85618104133755,
+      "output_tokens_total": 768,
+      "aggregate_tokens_per_s": 45.56192165453027,
+      "requests_per_s": 0.17797625646300888,
+      "stats": {
+        "first_chunk_s": {
+          "n": 3,
+          "median": 0.22791497269645333,
+          "p90": 0.2282968289218843,
+          "min": 0.20653697289526463,
+          "max": 0.2282968289218843
+        },
+        "ttft_s": {
+          "n": 3,
+          "median": 0.28834450896829367,
+          "p90": 0.2912588301114738,
+          "min": 0.2667403849773109,
+          "max": 0.2912588301114738
+        },
+        "latency_s": {
+          "n": 3,
+          "median": 5.6125748148187995,
+          "p90": 5.673296740744263,
+          "min": 5.568460573907942,
+          "max": 5.673296740744263
+        },
+        "output_tokens": {
+          "n": 3,
+          "median": 256,
+          "p90": 256,
+          "min": 256,
+          "max": 256
+        },
+        "tokens_per_s": {
+          "n": 3,
+          "median": 45.611864152632215,
+          "p90": 45.97320868168406,
+          "min": 45.12367529825632,
+          "max": 45.97320868168406
+        },
+        "decode_tokens_per_s": {
+          "n": 3,
+          "median": 47.894246745824354,
+          "p90": 48.09759680120616,
+          "min": 47.37982233388218,
+          "max": 48.09759680120616
+        }
+      },
+      "samples": [
+        {
+          "index": 0,
+          "ok": true,
+          "error": null,
+          "chunks": 256,
+          "content_chunks": 253,
+          "text_chars": 940,
+          "first_chunk_s": 0.20653697289526463,
+          "ttft_s": 0.2667403849773109,
+          "latency_s": 5.568460573907942,
+          "output_tokens": 256,
+          "tokens_per_s": 45.97320868168406,
+          "decode_tokens_per_s": 48.09759680120616,
+          "prompt_tokens": 51,
+          "finished": true
+        },
+        {
+          "index": 1,
+          "ok": true,
+          "error": null,
+          "chunks": 256,
+          "content_chunks": 253,
+          "text_chars": 916,
+          "first_chunk_s": 0.2282968289218843,
+          "ttft_s": 0.2912588301114738,
+          "latency_s": 5.673296740744263,
+          "output_tokens": 256,
+          "tokens_per_s": 45.12367529825632,
+          "decode_tokens_per_s": 47.37982233388218,
+          "prompt_tokens": 51,
+          "finished": true
+        },
+        {
+          "index": 2,
+          "ok": true,
+          "error": null,
+          "chunks": 256,
+          "content_chunks": 253,
+          "text_chars": 951,
+          "first_chunk_s": 0.22791497269645333,
+          "ttft_s": 0.28834450896829367,
+          "latency_s": 5.6125748148187995,
+          "output_tokens": 256,
+          "tokens_per_s": 45.611864152632215,
+          "decode_tokens_per_s": 47.894246745824354,
+          "prompt_tokens": 51,
+          "finished": true
+        }
+      ]
+    }
+  ]
+}

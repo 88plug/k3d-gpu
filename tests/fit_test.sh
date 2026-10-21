@@ -24,10 +24,13 @@ trap 'rm -rf "${WORK}"' EXIT
 mkdir -p "${WORK}/bin" "${WORK}/cache" "${WORK}/state" "${WORK}/root/proc/pressure" "${WORK}/root/sys" "${WORK}/root/dev"
 cat > "${WORK}/bin/kubectl" <<'EOF'
 #!/bin/sh
+while [ "${1:-}" = --context ]; do shift 2; done
 echo "kubectl $*" >> "${STUB_LOG:-/dev/null}"
 case "$*" in
     *allocatable*) printf '%s\n' "${STUB_ALLOC:-}" ;;
     *"jsonpath={.spec.replicas}"*) printf '%s' "${STUB_REPLICAS:-}" ;;
+    "get nodes -l "*)
+        for l in ${STUB_NODE_LABELS:-}; do [ "$l" = "$4" ] && echo node/k3d-agent-server-0; done ;;
     "apply -f -") cat > "${STUB_APPLIED:-/dev/null}" ;;
 esac
 exit 0
@@ -123,7 +126,8 @@ if ! render llama STUB_ALLOC=$'cpu 64\ngpu.intel.com/xe 4' K3D_GPU_AGENT_BACKEND
     ok "agent manifest: a fit only llama.cpp can serve is refused with the llama-server flags"
 else fail "agent manifest: llama.cpp-only fit refused" "$(cat "${WORK}/llama.err")"; fi
 
-out=$(bash "${K3D_GPU}" plan --facts "${ROOT}/tests/fixtures/battlemage-pro-b70-k616/facts.json" --model not/real-model 2>&1); rc=$?
+# Optimizer off, so plan fits the id as given (with it on, an unknown id keeps the engine's default).
+out=$(K3D_GPU_MODEL_OPT=off bash "${K3D_GPU}" plan --facts "${ROOT}/tests/fixtures/battlemage-pro-b70-k616/facts.json" --model not/real-model 2>&1); rc=$?
 K3D_GPU_FIT=off bash "${K3D_GPU}" plan --facts "${ROOT}/tests/fixtures/battlemage-pro-b70-k616/facts.json" --model not/real-model \
     > /dev/null 2>&1; rc_off=$?
 if [ "${rc}" -eq "${rc_off}" ] && grep -q 'no metadata for not/real-model' <<< "${out}"; then
@@ -215,6 +219,53 @@ out=$(XDG_STATE_HOME="${WORK}/empty" bash "${K3D_GPU}" agent guard --once 2>&1);
 if [ "${rc}" -ne 0 ] && grep -q 'no fit recorded' <<< "${out}"; then
     ok "agent guard without a recorded fit is an error"
 else fail "agent guard without a recorded fit" "${out}"; fi
+
+
+# --- plan --model and agent up --model: the same variant and the same fit ------------------
+# The model optimizer picks a variant at a pinned revision; plan must size that variant
+# (not the requested id) on the device agent up serves it on. The fit cache holds each
+# fixture model under its HF commit too (tests/fixtures/hf), as the optimizer pins it.
+python3 - "${ROOT}/tests/fixtures/hf" "${FIX}/models" "${WORK}/cache" <<'PY'
+import json, os, sys
+hf, models, cache = sys.argv[1:]
+for f in os.listdir(hf):
+    for rid, rec in json.load(open(os.path.join(hf, f)))["repos"].items():
+        src = os.path.join(models, rid.replace("/", "__"))
+        dst = os.path.join(cache, "%s@%s" % (rid.replace("/", "__"), rec["sha"]))
+        if os.path.isdir(src) and not os.path.lexists(dst):
+            os.symlink(src, dst)
+PY
+XB70="${ROOT}/tests/console/model-opt/xeon-b70.facts.json"
+GPU_ENV=(STUB_ALLOC=$'cpu 64\ngpu.intel.com/xe 1' STUB_NODE_LABELS=gpu.intel.com/xmx=true K3D_GPU_FIT_HOST="${XEON}")
+# parity <name> <model> [env...]: the variant and the fit line of `plan --model` equal
+# those `agent manifest --model` prints and renders.
+parity() {
+    local name=$1 model=$2; shift 2
+    local p a pv av pf af
+    p=$(env "$@" K3D_GPU_FIT_HOST="${XEON}" bash "${K3D_GPU}" plan --facts "${XB70}" --model "${model}" 2>&1)
+    a=$(env "${GPU_ENV[@]}" "$@" bash "${K3D_GPU}" agent manifest --model "${model}" 2>&1)
+    pv=$(sed -n 's/.*; picked \([^ ]*\) on .*/\1/p' <<< "${p}" | head -1)
+    av=$(grep -E '^ +- --source_model=|^            - [A-Za-z0-9][^ =]*/[^ ]*$' <<< "${a}" | head -1 | sed 's/.*--source_model=//; s/^ *- //')
+    pf=$(grep -o 'fit: .*' <<< "${p}" | head -1)
+    af=$(grep -o 'fit: .*' <<< "${a}" | head -1)
+    if [ -n "${pv}" ] && [ "${pv}" = "${av}" ] && [ -n "${pf}" ] && [ "${pf}" = "${af}" ]; then
+        ok "plan and agent up agree for ${name}: ${pv}; ${pf}"
+    else
+        fail "plan and agent up agree for ${name}" "plan: ${pv} | ${pf}
+agent: ${av} | ${af}
+--- plan
+${p}
+--- agent
+${a}"
+    fi
+}
+parity "the Gemma base id (OVMS on the B70: the int4 IR, not the bf16 base)" google/gemma-4-26B-A4B-it
+parity "Qwen3.8-27B (OVMS on the B70)" Qwen/Qwen3.8-27B
+parity "an explicit variant (RedHatAI INT4 on vLLM)" RedHatAI/Qwen3.8-27B-INT4 K3D_GPU_AGENT_BACKEND=vllm
+out=$(K3D_GPU_FIT_HOST="${XEON}" bash "${K3D_GPU}" plan --facts "${XB70}" --model google/gemma-4-26B-A4B-it 2>&1)
+if grep -q '^fit: OpenVINO/gemma-4-26b-a4b-it-int4-ov on' <<< "${out}"; then
+    ok "plan --model sizes the variant the optimizer picked"
+else fail "plan --model sizes the variant the optimizer picked" "${out}"; fi
 
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

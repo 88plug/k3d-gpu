@@ -1,0 +1,39 @@
+Platform: one-socket Xeon 6741P (Granite Rapids-SP, family 6 model 0xAD, 48 cores /
+96 threads), the CPU of crescent, the host of the cross-host runs in EXPERIMENTS.md.
+Its four Arc Pro B70 GPUs are left out (tests/console/moe/xeon6741p-4xb70 on the
+plan-moe-bandwidth branch covers them); this fixture is the CPU side for the on-die
+gap list (docs/intel-on-die-accelerators.md section 4).
+
+From the host (read 2026-10-20):
+- proc/cpuinfo (first processor block, so the real flags line: amx_tile/int8/bf16,
+  avx512_fp16, cat_l3, cat_l2, rdt_a, mba, no amx_fp16) and the 16 SMBIOS type 17
+  records (8x 64 GiB DDR5-6400 RDIMM, 8 slots empty), read as root on crescent for
+  tests/console/moe/xeon6741p-4xb70 (plan-moe-bandwidth branch); capture.sh keeps the
+  formatted area of each record and drops its strings.
+- MemTotal/MemFree/MemAvailable, CPU 0's L3 sharing list (0-95), kernel 7.0.0-31.
+- From the read-only inventory in docs/intel-on-die-accelerators.md section 5.1
+  [L-crescent]: 3 DSA (8086:0b25), 3 IAA (8086:0cfe), 3 QAT 402xx (8086:4944, driver
+  4xxx, two sym;asym and one dc, state up, 0 VFs), 3 DLB 2.5 (8086:2714, no driver);
+  /dev/isst_interface (isst_tpmi); SDSi bound with a 32-byte state_certificate; TPMI
+  PLR present; intel_ifs_0/1 untested with no image; HWP min = max = 3.8 GHz, EPP 0,
+  governor performance; four TPMI uncore domains with ELC 0; SNC off (one node);
+  resctrl registered but not mounted; zswap/demotion off; no CXL memory device.
+
+ARK (https://www.intel.com/content/www/us/en/products/sku/241828/intel-xeon-6741p-processor-288m-cache-2-50-ghz/specifications.html,
+read 2026-10-20): 8 memory channels, DDR5 6400 MT/s, no MRDIMM; QAT/DLB/DSA/IAA 3
+default devices each; SST-BF 12 high-priority cores at 2.6 GHz, 36 at 2.1 GHz;
+SST-TF yes; SST-PP no; base 2.5 GHz, max turbo 3.8 GHz.
+
+Not from hardware (made up, consistent with the above):
+- BDFs and root buses, the auxiliary device parent (0000:00:03.1), the SMT numbering
+  (siblings +48), per-CPU cache lists, the uncore domains' agent_types (two compute
+  dies with core agents, two I/O dies: the inventory reports 4 domains but not their
+  agent types), their min/max (800 MHz to 2.2 GHz compute, 2.5 GHz I/O), swap,
+  uptime, numa_balancing 1, and every cpufreq base_frequency at 2.5 GHz (SST-BF off:
+  the inventory read neither its state nor the high-priority CPUs).
+- No /dev/cpu/0/cpuid: its records sit at offset leaf | subleaf << 32, so leaf 7
+  subleaf 1 would be a 4 GiB file; tests/detect_test.sh covers the CPUID read with
+  sparse files instead (crescent's leaf 24H EBX is 0x70001, AVX10.1).
+- intel-speed-select is not on the fixed PATH, so doctor names the node image copy.
+
+Layout: exactly what tests/fixtures/capture.sh writes from a host-shaped tree.

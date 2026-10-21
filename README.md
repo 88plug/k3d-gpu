@@ -69,6 +69,12 @@ k3d-gpu down            # delete the cluster
 k3d-gpu help            # every command: also remote, plan --predict, tune, capacity, bench, model-share
 ```
 
+Each cluster has its own kubeconfig, `${K3D_GPU_STATE_DIR}/kubeconfig-<cluster>` (default state dir
+`~/.local/state/k3d-gpu`), and the launcher names the cluster's context on every kubectl call, so concurrent `up`s of different
+clusters never reach each other's. `up` leaves `~/.kube/config` alone: bare `kubectl` after `up`
+needs the `export KUBECONFIG=…` line it prints, or `K3D_GPU_MERGE_KUBECONFIG=1` to merge the
+context into `~/.kube/config` (current-context unchanged).
+
 ### Install
 
 Every package installs the same payload: the launcher at `bin/k3d-gpu`, the MCP server at `bin/k3d-gpu-mcp`,
@@ -1079,7 +1085,7 @@ kubectl -n k3d-gpu-agent port-forward svc/open-webui 8080:8080   # open http://l
 | Setting | Value |
 |---------|-------|
 | Connection | `OPENAI_API_BASE_URL=http://ovms.k3d-gpu-agent.svc:8000/v3` — OVMS serves the OpenAI API under `/v3`, not `/v1`. Open WebUI lists the models from `/v3/models`; `DEFAULT_MODELS=Qwen3-4B-int4-ov`. Ollama is off. |
-| Placement | pod label `k3d-gpu.io/cores=efficient`, 1 CPU request: on a hybrid CPU the UI runs on E-cores and leaves the P-cores to inference. No effect on other hosts. |
+| Placement | pod label `k3d-gpu.io/cores=efficient`, 1 CPU request: on a hybrid CPU the UI runs on E-cores, apart from the P-cores that serve inference. That is placement, not isolation: package power, LLC and DRAM bandwidth stay shared [ledger:H3]. No effect on other hosts. |
 | Storage | PVC `open-webui-data` (2Gi, `local-path`) at `/data` (`DATA_DIR`): users, chats, settings, uploads and the session key. |
 
 Security:
@@ -1474,7 +1480,9 @@ not switch the Intel GPU path.
 v1.0.7 (controller image pinned by digest) and a `python-ecores` SandboxTemplate
 plus a one-replica warm pool in namespace `agent-sandbox`. Sandbox pods carry
 `k3d-gpu.io/cores: efficient` and request one CPU, so on a hybrid host untrusted
-agent tool execution runs on E-cores and the P-cores stay free for inference.
+agent tool execution runs on E-cores, apart from the P-cores that serve inference.
+That is placement, not isolation: package power, LLC and DRAM bandwidth stay shared,
+and E-core load still slowed CPU-served prefill on the P-cores [ledger:H3].
 `up` waits for a warm sandbox, then runs `status`, which reads each sandbox's
 `Cpus_allowed_list` and fails if it is not inside the host's E-cores.
 `k3d-gpu sandbox down` removes it all.

@@ -1,0 +1,129 @@
+{
+ "assumptions": [
+  "ceiling = bandwidth / weight bytes read per token: no compute, KV-cache, activation or kernel-efficiency term",
+  "experts: top_k / num_experts of the expert bytes per token (uniform routing)",
+  "tensor parallel and hybrid add 2 hops per layer x the hop latency (default 30 us, assumed)",
+  "speculative decoding (MTP, EAGLE) is not modelled: these are per-forward ceilings",
+  "vision/audio towers and MTP heads are not on the decode path and are not counted",
+  "from config.json one bytes-per-parameter covers every tensor; an embedding or head kept at higher precision reads more (a .gguf gives exact bytes per tensor)"
+ ],
+ "bandwidth": {
+  "dram": {
+   "detail": "STREAM triad, 48 threads, 2026-10-21T00:13:12Z (doctor --perf --bandwidth)",
+   "gbs": 320.0,
+   "note": null,
+   "source": "measured",
+   "theoretical_gbs": null
+  },
+  "gpu": [
+   {
+    "gbs": 608.0,
+    "name": "Arc Pro B70",
+    "pci": "0000:12:00.0",
+    "source": "spec (ark.intel.com product 245797: Graphics Memory Bandwidth 608 GB/s)",
+    "vram_gib": 32.0,
+    "vram_source": "bar"
+   },
+   {
+    "gbs": 608.0,
+    "name": "Arc Pro B70",
+    "pci": "0000:48:00.0",
+    "source": "spec (ark.intel.com product 245797: Graphics Memory Bandwidth 608 GB/s)",
+    "vram_gib": 32.0,
+    "vram_source": "bar"
+   },
+   {
+    "gbs": 608.0,
+    "name": "Arc Pro B70",
+    "pci": "0000:7c:00.0",
+    "source": "spec (ark.intel.com product 245797: Graphics Memory Bandwidth 608 GB/s)",
+    "vram_gib": 32.0,
+    "vram_source": "bar"
+   },
+   {
+    "gbs": 608.0,
+    "name": "Arc Pro B70",
+    "pci": "0000:96:00.0",
+    "source": "spec (ark.intel.com product 245797: Graphics Memory Bandwidth 608 GB/s)",
+    "vram_gib": 32.0,
+    "vram_source": "bar"
+   }
+  ]
+ },
+ "host": {
+  "amx": true,
+  "cpu_model": "Intel(R) Xeon(R) 6741P",
+  "mem_gib": 503.3,
+  "physical_cores": 48
+ },
+ "model": {
+  "id": "google/gemma-4-26B-A4B-it-qat-q4_0-gguf",
+  "path": "/home/devcloud/k3dgpu-gemma/models/google_gemma-4-26B-A4B-it-qat-q4_0-gguf/gemma-4-26B_q4_0-it.gguf",
+  "revision": "d1c082be",
+  "source_rank": 1,
+  "source_rank_text": "model author or Intel"
+ },
+ "options": {
+  "engine": null,
+  "gpus": 1,
+  "hop_us": 30.0,
+  "placement": "gpu"
+ },
+ "pick": {
+  "decode_tok_s": 255.5,
+  "engine": "llama.cpp",
+  "placement": "gpu"
+ },
+ "rows": [
+  {
+   "decode_tok_s": 255.5,
+   "devices": "1x Arc Pro B70",
+   "engine": "llama.cpp",
+   "engines": [
+    "llama.cpp"
+   ],
+   "hop_us": 30.0,
+   "hops": 0,
+   "images": [
+    "ghcr.io/ggml-org/llama.cpp:server-b11749@sha256:9fbaa06d7f4449e2ae0d02b40e0431f7c212dcf231c9e3a7777a6afc2cc8f312",
+    "ghcr.io/ggml-org/llama.cpp:server-intel-b11749@sha256:ae2d41ba73574a1e12cd237c88b512c8bb39ba6f703e873912b76cb8988a81bd"
+   ],
+   "placement": "gpu",
+   "terms": [
+    {
+     "bytes": 2380055608,
+     "gbs": 608.0,
+     "memory": "vram"
+    }
+   ]
+  }
+ ],
+ "schema": "k3d-gpu.moe-predict/v1",
+ "skipped": [
+  {
+   "placement": "gpu-tp2",
+   "reason": "no engine for gguf q4_0 on gpu"
+  }
+ ],
+ "status": "prediction",
+ "status_note": "a bandwidth ceiling, not a measurement (EXPERIMENTS.md H54c measures it)",
+ "weights": {
+  "arch": "gemma4",
+  "bpp": null,
+  "container": "gguf",
+  "dense_bytes": 1577156728,
+  "experts_active_bytes": 802898880,
+  "experts_total_bytes": 12846382080,
+  "family": "gguf",
+  "format": "q4_0",
+  "format_source": "bytes by GGML type: q4_0 13.77 GB, q6_k 0.61 GB, f32 0.05 GB",
+  "layers": 30,
+  "moe": true,
+  "num_experts": 128,
+  "read_bytes": 2380055608,
+  "source": "GGUF tensor table (exact bytes)",
+  "tied": true,
+  "top_k": 8,
+  "total_bytes": 14423538808
+ }
+}

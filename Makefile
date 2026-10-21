@@ -24,6 +24,7 @@ check: test shellcheck hadolint kubeconform actionlint
 
 test:
 	tests/detect_test.sh
+	tests/kube_context_test.sh
 	tests/experimental_test.sh
 	tests/phase_steer_test.sh
 	tests/prefill_guard_test.sh

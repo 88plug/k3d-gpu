@@ -1,0 +1,53 @@
+{
+  "auth": "loopback-key",
+  "bind": "127.0.0.1",
+  "cell": null,
+  "considered": [
+    {
+      "cell": "raptorlake-s.cpu-pcores.ovms.qwen3-4b-int4",
+      "eligible": false,
+      "excluded": "no target on this host matches",
+      "reasons": [
+        "no k3d-gpu report run recorded",
+        "tool-calling eval not run"
+      ],
+      "status": "grey",
+      "target": null
+    },
+    {
+      "cell": "raptorlake-s.uhd770.ovms.qwen3-4b-int4",
+      "eligible": false,
+      "excluded": "no target on this host matches",
+      "reasons": [
+        "no k3d-gpu report run recorded",
+        "tool-calling eval not run"
+      ],
+      "status": "grey",
+      "target": null
+    }
+  ],
+  "decision": "unmeasured",
+  "engine": null,
+  "explain": [
+    "facts: sha256:fb331ec4470e1d09e74ab86aa24b2c180b64b1dc81e86d016e0af7218e8cd9b8",
+    "targets:",
+    "  cpu: Intel(R) Xeon(R) 6741P, family:model 6:173, 96 CPUs, AMX; usable",
+    "matrix: 2 cells, 0 on a target of this host",
+    "  no measured cell for these targets",
+    "decision:",
+    "  unmeasured: no green cell for this box; quickstart and agent up still pick by device",
+    "  bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)"
+  ],
+  "fingerprint": "sha256:fb331ec4470e1d09e74ab86aa24b2c180b64b1dc81e86d016e0af7218e8cd9b8",
+  "fixes": [],
+  "message": "unmeasured: no green cell for this box; quickstart and agent up still pick by device",
+  "model": null,
+  "overrides": {},
+  "placement": null,
+  "port": null,
+  "schema": "k3d-gpu.plan/v1",
+  "summary": [
+    "unmeasured: no green cell for this box; quickstart and agent up still pick by device",
+    "bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)"
+  ]
+}

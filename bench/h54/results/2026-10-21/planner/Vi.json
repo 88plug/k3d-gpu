@@ -1,0 +1,124 @@
+{
+ "assumptions": [
+  "ceiling = bandwidth / weight bytes read per token: no compute, KV-cache, activation or kernel-efficiency term",
+  "experts: top_k / num_experts of the expert bytes per token (uniform routing)",
+  "tensor parallel and hybrid add 2 hops per layer x the hop latency (default 30 us, assumed)",
+  "speculative decoding (MTP, EAGLE) is not modelled: these are per-forward ceilings",
+  "vision/audio towers and MTP heads are not on the decode path and are not counted",
+  "from config.json one bytes-per-parameter covers every tensor; an embedding or head kept at higher precision reads more (a .gguf gives exact bytes per tensor)"
+ ],
+ "bandwidth": {
+  "dram": {
+   "detail": "STREAM triad, 48 threads, 2026-10-21T00:13:12Z (doctor --perf --bandwidth)",
+   "gbs": 320.0,
+   "note": null,
+   "source": "measured",
+   "theoretical_gbs": null
+  },
+  "gpu": [
+   {
+    "gbs": 608.0,
+    "name": "Arc Pro B70",
+    "pci": "0000:12:00.0",
+    "source": "spec (ark.intel.com product 245797: Graphics Memory Bandwidth 608 GB/s)",
+    "vram_gib": 32.0,
+    "vram_source": "bar"
+   },
+   {
+    "gbs": 608.0,
+    "name": "Arc Pro B70",
+    "pci": "0000:48:00.0",
+    "source": "spec (ark.intel.com product 245797: Graphics Memory Bandwidth 608 GB/s)",
+    "vram_gib": 32.0,
+    "vram_source": "bar"
+   },
+   {
+    "gbs": 608.0,
+    "name": "Arc Pro B70",
+    "pci": "0000:7c:00.0",
+    "source": "spec (ark.intel.com product 245797: Graphics Memory Bandwidth 608 GB/s)",
+    "vram_gib": 32.0,
+    "vram_source": "bar"
+   },
+   {
+    "gbs": 608.0,
+    "name": "Arc Pro B70",
+    "pci": "0000:96:00.0",
+    "source": "spec (ark.intel.com product 245797: Graphics Memory Bandwidth 608 GB/s)",
+    "vram_gib": 32.0,
+    "vram_source": "bar"
+   }
+  ]
+ },
+ "host": {
+  "amx": true,
+  "cpu_model": "Intel(R) Xeon(R) 6741P",
+  "mem_gib": 503.3,
+  "physical_cores": 48
+ },
+ "model": {
+  "id": "Intel/gemma-4-26B-A4B-it-int4-AutoRound",
+  "path": "/home/devcloud/k3dgpu-gemma/k3d-gpu-plan/state/hf-config/Intel__gemma-4-26B-A4B-it-int4-AutoRound@edff6272",
+  "revision": "edff6272",
+  "source_rank": 1,
+  "source_rank_text": "model author or Intel"
+ },
+ "options": {
+  "engine": "vllm-cpu",
+  "gpus": null,
+  "hop_us": 30.0,
+  "placement": "cpu"
+ },
+ "pick": {
+  "decode_tok_s": 161.2,
+  "engine": "vllm-cpu",
+  "placement": "cpu"
+ },
+ "rows": [
+  {
+   "decode_tok_s": 161.2,
+   "devices": "CPU",
+   "engine": "vllm-cpu",
+   "engines": [
+    "vllm-cpu"
+   ],
+   "hop_us": 30.0,
+   "hops": 0,
+   "images": [
+    "vllm/vllm-openai-cpu:v0.32.0@sha256:ffaba3989b9b96d95a576143c872a4110ce9800f5199b6a36eb27bdff1cbbe05"
+   ],
+   "placement": "cpu",
+   "terms": [
+    {
+     "bytes": 1985560192,
+     "gbs": 320.0,
+     "memory": "dram"
+    }
+   ]
+  }
+ ],
+ "schema": "k3d-gpu.moe-predict/v1",
+ "skipped": [],
+ "status": "prediction",
+ "status_note": "a bandwidth ceiling, not a measurement (EXPERIMENTS.md H54c measures it)",
+ "weights": {
+  "arch": "Gemma4ForConditionalGeneration",
+  "bpp": 0.519531,
+  "container": "safetensors",
+  "dense_bytes": 1243994752,
+  "experts_active_bytes": 741565440,
+  "experts_total_bytes": 11865047040,
+  "family": "w4a16",
+  "format": "w4a16-g128",
+  "format_source": "int4 weights, fp16 scale and 4-bit zero point per 128 (GPTQ/AutoRound layout)",
+  "layers": 30,
+  "moe": true,
+  "num_experts": 128,
+  "params_active": 3821830144,
+  "params_total": 25232441344,
+  "read_bytes": 1985560192,
+  "source": "config.json shapes x bytes per parameter",
+  "top_k": 8,
+  "total_bytes": 13109041792
+ }
+}

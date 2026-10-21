@@ -1,5 +1,5 @@
 # NRI balloons resource policy for Intel hybrid CPUs (P-cores + E-cores) and NUMA hosts
-# Source: https://github.com/containers/nri-plugins (helm chart nri-resource-policy-balloons v0.14.0),
+# Source: https://github.com/containers/nri-plugins (helm chart nri-resource-policy-balloons v0.15.0),
 # rendered by `hack/render-component nri-balloons` (helm template --include-crds) with the values below.
 # Scheduled only onto nodes labelled k3d-gpu.io/hybrid-cpu=true, which the k3d-gpu
 # launcher sets when /sys/devices/cpu_core lists online CPUs and cpu_atom or
@@ -995,6 +995,20 @@ spec:
                   - name
                   type: object
                 type: array
+              dra:
+                description: |-
+                  DRAConfig provides configuration data for the DRA (Dynamic Resource
+                  Allocation) driver. The driver is owned by the resource manager, not by a
+                  policy, so this is common configuration for all policies.
+                properties:
+                  enabled:
+                    description: |-
+                      Enabled registers a DRA driver for this node and publishes the devices
+                      the active policy provides. A policy which provides no devices leaves a
+                      registered driver with no devices, which claims cannot be made against.
+                      Unset means off.
+                    type: boolean
+                type: object
               idleCPUClass:
                 description: |-
                   IdleCpuClass controls how unused CPUs outside any a
@@ -1272,15 +1286,16 @@ spec:
                       description: |-
                         Flags is a list of Linux scheduling flags to set.
                         SCHED_FLAG_<ORIG_NAME> translates to <orig-name> etc.
-                      enum:
-                      - reset-on-fork
-                      - reclaim
-                      - dl-overrun
-                      - keep-policy
-                      - keep-params
-                      - util-clamp-min
-                      - util-clamp-max
                       items:
+                        description: SchedulingFlag is a single Linux scheduling flag.
+                        enum:
+                        - reset-on-fork
+                        - reclaim
+                        - dl-overrun
+                        - keep-policy
+                        - keep-params
+                        - util-clamp-min
+                        - util-clamp-max
                         type: string
                       type: array
                     ioClass:
@@ -1699,7 +1714,7 @@ metadata:
   name: nri-resource-policy-balloons
   namespace: kube-system
   labels:
-    helm.sh/chart: nri-resource-policy-balloons-v0.14.0
+    helm.sh/chart: nri-resource-policy-balloons-v0.15.0
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/name: nri-resource-policy-balloons
     app.kubernetes.io/instance: nri-resource-policy-balloons
@@ -1713,7 +1728,7 @@ metadata:
     meta.helm.sh/release-namespace: kube-system
   name: nri-resource-policy-balloons
   labels:
-    helm.sh/chart: nri-resource-policy-balloons-v0.14.0
+    helm.sh/chart: nri-resource-policy-balloons-v0.15.0
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/name: nri-resource-policy-balloons
     app.kubernetes.io/instance: nri-resource-policy-balloons
@@ -1753,7 +1768,7 @@ metadata:
     meta.helm.sh/release-namespace: kube-system
   name: nri-resource-policy-balloons
   labels:
-    helm.sh/chart: nri-resource-policy-balloons-v0.14.0
+    helm.sh/chart: nri-resource-policy-balloons-v0.15.0
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/name: nri-resource-policy-balloons
     app.kubernetes.io/instance: nri-resource-policy-balloons
@@ -1776,7 +1791,7 @@ metadata:
   name: nri-resource-policy-balloons
   namespace: kube-system
   labels:
-    helm.sh/chart: nri-resource-policy-balloons-v0.14.0
+    helm.sh/chart: nri-resource-policy-balloons-v0.15.0
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/name: nri-resource-policy-balloons
     app.kubernetes.io/instance: nri-resource-policy-balloons
@@ -1808,7 +1823,7 @@ metadata:
   name: nri-resource-policy-balloons
   namespace: kube-system
   labels:
-    helm.sh/chart: nri-resource-policy-balloons-v0.14.0
+    helm.sh/chart: nri-resource-policy-balloons-v0.15.0
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/name: nri-resource-policy-balloons
     app.kubernetes.io/instance: nri-resource-policy-balloons
@@ -1829,7 +1844,7 @@ metadata:
     meta.helm.sh/release-name: nri-resource-policy-balloons
     meta.helm.sh/release-namespace: kube-system
   labels:
-    helm.sh/chart: nri-resource-policy-balloons-v0.14.0
+    helm.sh/chart: nri-resource-policy-balloons-v0.15.0
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/name: nri-resource-policy-balloons
     app.kubernetes.io/instance: nri-resource-policy-balloons
@@ -1843,7 +1858,7 @@ spec:
   template:
     metadata:
       labels:
-        helm.sh/chart: nri-resource-policy-balloons-v0.14.0
+        helm.sh/chart: nri-resource-policy-balloons-v0.15.0
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: nri-resource-policy-balloons
         app.kubernetes.io/instance: nri-resource-policy-balloons
@@ -1882,9 +1897,7 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: spec.nodeName
-          - name: ENABLE_TEST_APIS
-            value: "1"
-          image: ghcr.io/containers/nri-plugins/nri-resource-policy-balloons:v0.14.0@sha256:a8c8297c72744f25dbcf70fdb4a64bb787f428a3f9ab4dfabb0eb1377da0070f
+          image: ghcr.io/containers/nri-plugins/nri-resource-policy-balloons:v0.15.0@sha256:bacbef6f002f432b9fbe61ff0c583536da7ae816300ca82921ee697d759a1e80
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -1946,7 +1959,7 @@ metadata:
   name: default
   namespace: kube-system
   labels:
-    helm.sh/chart: nri-resource-policy-balloons-v0.14.0
+    helm.sh/chart: nri-resource-policy-balloons-v0.15.0
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/name: nri-resource-policy-balloons
     app.kubernetes.io/instance: nri-resource-policy-balloons
@@ -2066,6 +2079,7 @@ spec:
             all:
               unified: 100%
       usePodQoSAsDefaultClass: true
+  dra: {}
   instrumentation:
     httpEndpoint: :8891
     prometheusExport: false

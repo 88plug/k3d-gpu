@@ -1,0 +1,16 @@
+2026-10-21T09:56:12Z A1o start (1366 s of the hold left)
+2026-10-21T09:56:48Z A1o ready after 34 s
+energy: zone=intel-rapl:0 (package-0) joules=7918.456 seconds=60.018 avg_watts=131.934 command_seconds=60.003 samples=13 exit=0
+concurrency=1 ok=3/3 ttft_median=0.652s ttft_p90=0.655s latency_median=12.374s tok/s_median=20.7 aggregate_tok/s=20.6
+energy: zone=intel-rapl:0 (package-0) joules=10414.634 seconds=37.353 avg_watts=278.815 command_seconds=37.337 samples=9 exit=0
+concurrency=1 ok=8/8 ttft_median=0.605s ttft_p90=0.616s latency_median=12.345s tok/s_median=20.7 aggregate_tok/s=20.8
+energy: zone=intel-rapl:0 (package-0) joules=27971.857 seconds=98.481 avg_watts=284.032 command_seconds=98.465 samples=21 exit=0
+concurrency=4 ok=16/16 ttft_median=1.479s ttft_p90=1.533s latency_median=36.566s tok/s_median=7.0 aggregate_tok/s=27.7
+energy: zone=intel-rapl:0 (package-0) joules=40988.093 seconds=148.145 avg_watts=276.676 command_seconds=148.129 samples=31 exit=0
+concurrency=16 ok=32/32 ttft_median=3.440s ttft_p90=3.809s latency_median=66.506s tok/s_median=3.8 aggregate_tok/s=61.6
+energy: zone=intel-rapl:0 (package-0) joules=36263.340 seconds=133.101 avg_watts=272.450 command_seconds=133.085 samples=28 exit=0
+concurrency=1 ok=4/4 ttft_median=4.829s ttft_p90=4.860s latency_median=5.459s tok/s_median=2.9 aggregate_tok/s=2.9
+energy: zone=intel-rapl:0 (package-0) joules=5784.136 seconds=21.893 avg_watts=264.202 command_seconds=21.877 samples=6 exit=0
+2026-10-21T10:05:08Z A1o quality
+gsm8k 49/50 errors=0 wall=355.8s
+2026-10-21T10:11:04Z A1o status measured: phases and quality recorded

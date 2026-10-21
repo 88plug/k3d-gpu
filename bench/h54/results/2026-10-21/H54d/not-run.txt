@@ -1,0 +1,11 @@
+H54d: not run, no hold used (2026-10-21T10:15Z).
+1. A* is undefined. H54d's arm A is H54a's chosen arm, chosen among arms passing the quality gate
+   (score >= B1g's - 0.10). B1g has no score: its vLLM v0.24.0 engine stalled mid-decode and died in
+   both holds (hold 1: warmup request 3, no scored request; hold 2: N=1 request 4, 3/8 N=1 done,
+   0/50 GSM8K). R3 carries a stopped arm once, so B1g was not run again. H54a score-a.json:
+   INCONCLUSIVE, "B1g not delivered or not measured", chosen = none.
+2. H54d's arm B is B1g (H50's B1 config). It stalled in 2 of 2 H54a holds, so a pairs hold would
+   lose the B side.
+3. The pre-registration orders H54a, H54q, then H54b/H54c, then H54d. H54q has not run.
+Running H54d needs a dated amendment that defines A* without B1g's score (or a working B1g), plus
+H54d's runner amendment (live.sh pairs mode has no llama.cpp arm A) and a tool-call wiring smoke.

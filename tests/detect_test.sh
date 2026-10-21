@@ -10,6 +10,8 @@ K3D_GPU="$(cd "$(dirname "$0")/.." && pwd)/scripts/k3d-gpu"
 WORK=$(mktemp -d)
 # A measured autoquant pick on this dev box (EXPERIMENTS.md H27) must not leak into goldens.
 export K3D_GPU_AUTOQUANT_CACHE="${WORK}/no-autoquant.json"
+# The launcher keeps each cluster's kubeconfig in its state dir; keep that in WORK.
+export XDG_STATE_HOME="${WORK}/state"
 trap 'rm -rf "${WORK}"' EXIT
 PASS=0 FAILS=0
 
@@ -79,6 +81,7 @@ printf '#!/bin/sh\nexit 0\n' > "${STUB_BIN}/k3d"; chmod +x "${STUB_BIN}/k3d"
 #   STUB_NODE_RES      "<node> <resource> <capacity> <allocatable>" lines, \n separated
 cat > "${STUB_BIN}/kubectl" <<'EOF'
 #!/bin/bash
+while [ "${1:-}" = --context ]; do shift 2; done
 args=()
 for a in "$@"; do case "${a}" in --context=*|--request-timeout=*) ;; *) args+=("${a}") ;; esac; done
 set -- "${args[@]}"
@@ -932,6 +935,7 @@ FAV_BIN="${WORK}/favbin"
 mkdir -p "${FAV_BIN}"
 cat > "${FAV_BIN}/kubectl" <<'EOF'
 #!/bin/sh
+while [ "${1:-}" = --context ]; do shift 2; done
 echo "kubectl $*" >> "${STUB_LOG}"
 case "$*" in
     "get nodes -l "*" -o name") echo "node/k3d-gpu-server-0" ;;
@@ -1041,6 +1045,7 @@ UP_BIN="${WORK}/upbin"
 mkdir -p "${UP_BIN}"
 cat > "${UP_BIN}/kubectl" <<'EOF'
 #!/bin/sh
+while [ "${1:-}" = --context ]; do shift 2; done
 echo "kubectl $*" >> "${STUB_LOG}"
 case "$*" in "get nodes -l "*" -o name") echo "node/k3d-gpu-server-0" ;; esac
 exit 0
@@ -1480,6 +1485,7 @@ KSTUB="${WORK}/kbin"
 mkdir -p "${KSTUB}"
 cat > "${KSTUB}/kubectl" <<'EOF'
 #!/bin/sh
+while [ "${1:-}" = --context ]; do shift 2; done
 case "$1" in
     get)  case "$*" in *phase*) echo "${STUB_POD_PHASE}" ;; esac ;;
     # no final newline, like nvidia-smi stderr; STUB_POD_LOGS_<pod name, - as _> overrides per pod
@@ -2319,6 +2325,7 @@ ASTUB="${WORK}/abin"
 mkdir -p "${ASTUB}"
 cat > "${ASTUB}/kubectl" <<'EOF'
 #!/bin/sh
+while [ "${1:-}" = --context ]; do shift 2; done
 [ -z "${STUB_LOG:-}" ] || echo "kubectl $*" >> "${STUB_LOG}"
 case "$*" in
     *allocatable*) printf '%s\n' "${STUB_ALLOC:-}" ;;
@@ -2700,6 +2707,7 @@ RSTUB="${WORK}/rbin"
 mkdir -p "${RSTUB}"
 cat > "${RSTUB}/kubectl" <<'EOF'
 #!/bin/sh
+while [ "${1:-}" = --context ]; do shift 2; done
 [ -z "${STUB_KUBECTL_LOG:-}" ] || echo "$*" >> "${STUB_KUBECTL_LOG}"
 case "$*" in
     *get-contexts*) for c in ${STUB_CONTEXTS:-}; do echo "${c}"; done ;;
@@ -2905,7 +2913,7 @@ USTUB="${WORK}/ubin"
 mkdir -p "${USTUB}"
 cat > "${USTUB}/k3d" <<'EOF'
 #!/bin/sh
-printf '%s\n' "$@" > "${STUB_K3D_ARGS}"
+printf '%s\n' "$@" >> "${STUB_K3D_ARGS}"
 EOF
 cat > "${USTUB}/kubectl" <<'EOF'
 #!/bin/sh
@@ -3917,10 +3925,11 @@ mkdir -p "${USTUB}"
 cp "${STUB_BIN}/docker" "${USTUB}/docker"
 cat > "${USTUB}/k3d" <<'EOF'
 #!/bin/sh
-printf '%s\n' "$@" > "${STUB_K3D_ARGS}"
+printf '%s\n' "$@" >> "${STUB_K3D_ARGS}"
 EOF
 cat > "${USTUB}/kubectl" <<'EOF'
 #!/bin/sh
+while [ "${1:-}" = --context ]; do shift 2; done
 case "$*" in
     *allocatable*) echo "${STUB_ALLOC:-gpu.intel.com/dxg 1}" ;;
     "get nodes -l "*) echo node/k3d-gpu-server-0 ;;
@@ -4174,6 +4183,7 @@ exit 1
 EOF
 cat > "${USTUB}/kubectl" <<'EOF'
 #!/bin/sh
+while [ "${1:-}" = --context ]; do shift 2; done
 case "$*" in
     *"get nodes -o go-template"*) printf '%s\n' "${STUB_ALLOCATABLE}" ;;
     *"get daemonset intel-gpu-plugin -o jsonpath"*)
@@ -4313,6 +4323,7 @@ DSTUB="${WORK}/dbin"
 mkdir -p "${DSTUB}"
 cat > "${DSTUB}/kubectl" <<'EOF'
 #!/bin/sh
+while [ "${1:-}" = --context ]; do shift 2; done
 printf 'kubectl %s\n' "$*" >> "${STUB_LOG}"
 case "$*" in
     "get --raw /version") printf '{\n  "major": "1",\n  "gitVersion": "%s"\n}\n' "${STUB_K8S_VERSION}" ;;
@@ -4510,7 +4521,7 @@ if type -P kubectl >/dev/null; then
 EOF
     slice_got=$( # shellcheck source=scripts/k3d-gpu
         source "${K3D_GPU}" help >/dev/null
-        KUBECONFIG=/dev/null kubectl label --local -f "${WORK}/slices.json" k3d-gpu.io/t=1 \
+        KUBECONFIG=/dev/null command kubectl label --local -f "${WORK}/slices.json" k3d-gpu.io/t=1 \
             -o go-template="$(dra_slice_template)" 2>&1 | dra_count_devices
         # and `up` hands kubectl the same template inside the range over .items
         grep -F -x "kubectl get resourceslices -o go-template={{range .items}}$(dra_slice_template){{end}}" \
@@ -4533,6 +4544,7 @@ SSTUB="${WORK}/sbin"
 mkdir -p "${SSTUB}"
 cat > "${SSTUB}/kubectl" <<'EOF'
 #!/bin/sh
+while [ "${1:-}" = --context ]; do shift 2; done
 echo "$*" >> "${STUB_LOG}"
 if [ -n "${STUB_FAIL:-}" ] && echo "$*" | grep -Eq -- "${STUB_FAIL}"; then
     echo "error: stub failure" >&2
@@ -4783,7 +4795,7 @@ doctor_says "K3D_GPU_NPU_PLUGIN gets a note instead" "${r}" 'note: K3D_GPU_NPU_P
 # and a kubectl that accepts everything.
 cat > "${USTUB}/k3d" <<'EOF'
 #!/bin/sh
-printf '%s\n' "$@" > "${STUB_K3D_ARGS}"
+printf '%s\n' "$@" >> "${STUB_K3D_ARGS}"
 EOF
 cat > "${USTUB}/kubectl" <<'EOF'
 #!/bin/sh
@@ -4916,6 +4928,300 @@ says "share runs from the packaged copy under K3D_GPU_SHARE/oracle" 0 'There is 
     env K3D_GPU_SHARE="${SOLO}/share" bash "${SOLO}/bin/k3d-gpu" share --help
 says "packaged share finds no capacity run and says so" 2 'no finished capacity run' \
     env K3D_GPU_SHARE="${SOLO}/share" XDG_STATE_HOME="${SOLO}/state" K3D_GPU_SYSROOT="${SOLO}/root" bash "${SOLO}/bin/k3d-gpu" share --dry-run
+
+# ---- on-die gap list (docs/intel-on-die-accelerators.md section 4) --------------
+
+# cpuid_put <root> <leaf> <subleaf> <eax> <ebx> <ecx> <edx>: one CPUID record in a
+# sparse /dev/cpu/0/cpuid at offset leaf | subleaf << 32, the layout the cpuid driver
+# serves (arch/x86/kernel/cpuid.c).
+cpuid_put() {
+    mkdir -p "$1/dev/cpu/0"
+    python3 - "$1/dev/cpu/0/cpuid" "${@:2}" <<'EOF'
+import os, struct, sys
+p, leaf, sub, *regs = sys.argv[1:]
+with open(p, "ab"):
+    pass
+with open(p, "r+b") as f:
+    f.seek(int(leaf, 0) | int(sub, 0) << 32)
+    f.write(struct.pack("<4I", *(int(r, 0) for r in regs)))
+EOF
+}
+# gnr_cpuid <root> [max leaf]: Granite Rapids bits, as read on crescent (leaf 24H EBX
+# 0x70001 [L-crescent]): 7.1 EAX AVX-VNNI(4) AVX512_BF16(5) AMX-FP16(21), EDX AVX10(19).
+gnr_cpuid() {
+    cpuid_put "$1" 0 0 "${2:-0x24}" 0x756e6547 0x6c65746e 0x49656e69
+    cpuid_put "$1" 7 1 $(( 1 << 4 | 1 << 5 | 1 << 21 )) 0 0 $(( 1 << 19 ))
+    cpuid_put "$1" 0x24 0 0 0x70001 0 0
+}
+
+r=$(newroot cpuid-gnr); cpuinfo "${r}" 6 173 "fpu ${AMX3}"; gnr_cpuid "${r}"
+doctor_says "CPUID: AVX10 version and AMX-FP16 read from /dev/cpu/0/cpuid" "${r}" \
+    'ok: CPUID \(read through /dev/cpu/0/cpuid\): AVX10\.1 AMX-FP16 — '
+doctor_says "CPUID read: no model-table prediction" "${r}" 'ISA predicted by gcc' negate
+expect "CPUID AMX-FP16 bit gives AMXFP16" "${r}" \
+"amx ${AMXL}.AMXBF16=true ${AMXL}.AMXFP16=true ${AMXL}.AMXINT8=true ${AMXL}.AMXTILE=true"
+r=$(newroot cpuid-gnr-nofp16); cpuinfo "${r}" 6 173 "fpu ${AMX3}"
+cpuid_put "${r}" 0 0 0x24 0 0 0; cpuid_put "${r}" 7 1 0 0 0 0
+expect "CPUID without AMX-FP16 wins over the model table" "${r}" \
+"amx ${AMXL}.AMXBF16=true ${AMXL}.AMXINT8=true ${AMXL}.AMXTILE=true"
+doctor_says "CPUID with none of the hidden ISA says so" "${r}" 'ok: CPUID \(read through /dev/cpu/0/cpuid\): none of AVX10'
+r=$(newroot cpuid-emr-fp16); cpuinfo "${r}" 6 207 "fpu ${AMX3}"
+cpuid_put "${r}" 0 0 0x20 0 0 0; cpuid_put "${r}" 7 1 $(( 1 << 21 )) 0 0 $(( 1 << 8 ))
+expect "CPUID bits label a model the table does not know" "${r}" \
+"amx ${AMXL}.AMXBF16=true ${AMXL}.AMXCOMPLEX=true ${AMXL}.AMXFP16=true ${AMXL}.AMXINT8=true ${AMXL}.AMXTILE=true"
+r=$(newroot cpuid-srf); cpuinfo "${r}" 6 175 "fpu avx2"
+cpuid_put "${r}" 0 0 0x23 0 0 0
+cpuid_put "${r}" 7 1 $(( 1 << 23 )) 0 0 $(( 1 << 4 | 1 << 5 | 1 << 19 ))
+doctor_says "CPUID: AVX-VNNI-INT8, NE-CONVERT, IFMA; AVX10 with leaf 24H out of range has no version" "${r}" \
+    'ok: CPUID \(read through /dev/cpu/0/cpuid\): AVX10 AVX-VNNI-INT8 AVX-NE-CONVERT AVX-IFMA — '
+r=$(newroot cpuid-none); cpuinfo "${r}" 6 173 "fpu ${AMX3}"
+doctor_says "no CPUID: the model table is labelled as the fallback" "${r}" \
+    'ISA predicted by gcc PTA_GRANITERAPIDS, not read from CPUID: AVX10\.1, AMX-FP16 — fallback model table: CPUID is not readable here'
+r=$(newroot cpuid-amd); cpuinfo "${r}" 25 17 "fpu avx512f" AuthenticAMD; gnr_cpuid "${r}"
+doctor_says "CPUID decode is Intel-only" "${r}" 'ok: CPUID' negate
+
+# The CPUID-instruction path, on this machine: leaf 7.1 EAX[4] is AVX_VNNI, which
+# cpuinfo prints as avx_vnni, so both reads must agree.
+if [ "$(uname -m)" = x86_64 ] && grep -q GenuineIntel /proc/cpuinfo; then
+    regs=$(bash -c "$(sed -n '/^cpuid_regs() {/,/^}/p' "${K3D_GPU}"); SYSROOT=; cpuid_regs 7 1")
+    a=$(( 16#${regs%% *} >> 4 & 1 ))
+    c=$(grep -m1 '^flags' /proc/cpuinfo | grep -cw avx_vnni || true)
+    if [ -n "${regs}" ] && [ "${a}" = "${c}" ]; then
+        PASS=$((PASS + 1)); echo "ok   CPUID instruction agrees with cpuinfo on avx_vnni (${a})"
+    else
+        FAILS=$((FAILS + 1)); echo "FAIL CPUID instruction (7,1) '${regs}' vs cpuinfo avx_vnni ${c}"
+    fi
+else
+    echo "skip CPUID instruction check (not an Intel x86_64 host)"
+fi
+
+# Speed Select: SST-BF active shows as per-CPU cpufreq/base_frequency that differ
+# (intel/CommsPowerManagement sst_bf.py reads the same file); the HP CPUs then feed
+# the favored-cpus annotation when CPPC ranks no CPU higher.
+basefreq() { local c; for c in $(seq "$2" "$3"); do put "$1" "/sys/devices/system/cpu/cpu${c}/cpufreq/base_frequency" "$4"; done; }
+r=$(newroot sst-bf-on); kernel "${r}" 7.0.0; cpuinfo "${r}" 6 173 "fpu ${AMX3}"
+basefreq "${r}" 0 3 2600000; basefreq "${r}" 4 15 2100000
+doctor_says "SST-BF active: HP CPUs from base_frequency" "${r}" \
+    'ok: SST-BF active: high-priority CPUs 0-3 \(base_frequency 2600 MHz, others 2100 MHz\) — up annotates nodes k3d-gpu\.io/favored-cpus=0-3'
+fav_up "SST-BF HP CPUs become the favored-cpus annotation" "${r}" 'annotate nodes --all --overwrite k3d-gpu\.io/favored-cpus=0-3$'
+r=$(newroot sst-bf-off); kernel "${r}" 7.0.0; cpuinfo "${r}" 6 173 "fpu"; basefreq "${r}" 0 15 2500000
+doctor_says "uniform base_frequency: no SST-BF line" "${r}" 'SST-BF active' negate
+# On a NUMA (non-hybrid) Xeon the baked balloons policy runs, so its latency type
+# is pointed at the HP cores too.
+r=$(newroot sst-bf-numa); kernel "${r}" 7.0.0; cpuinfo "${r}" 6 173 "fpu"
+node "${r}" 0 0-7 0; node "${r}" 1 8-15 1; l3 "${r}" 0-7
+basefreq "${r}" 0 1 2600000; basefreq "${r}" 2 15 2100000
+for c in $(seq 0 15); do cpucache "${r}" "${c}" 2 "${c}"; done
+fav_up "SST-BF HP CPUs steer the latency balloon on a NUMA Xeon" "${r}" \
+    '"path":"/spec/balloonTypes/2/preferCloseToDevices","value":\["/sys/devices/system/cpu/cpu0/cache/index2","/sys/devices/system/cpu/cpu1/cache/index2"\]'
+
+# intel-speed-select (read-only base-freq / turbo-freq info), stubbed with the
+# tool's text format (tools/power/x86/intel-speed-select/isst-display.c).
+ISST_BIN="${WORK}/isstbin"
+mkdir -p "${ISST_BIN}"
+cat > "${ISST_BIN}/intel-speed-select" <<'EOF'
+#!/bin/sh
+echo "Intel(R) Speed Select Technology"
+echo "Executing on CPU model:173[0xad]"
+[ -n "${STUB_ISST_ROOT:-}" ] && { echo "Must run as root" >&2; exit 0; }
+case "$*" in
+    "base-freq info -l 0") cat >&2 <<'OUT'
+ package-0
+  die-0
+    powerdomain-0
+      cpu-0
+        speed-select-base-freq-properties
+          high-priority-base-frequency(MHz):2600
+          high-priority-cpu-mask:00000000,0000000f
+          high-priority-cpu-list:0,1,2,3
+          low-priority-base-frequency(MHz):2100
+          tjunction-temperature(C):93
+          thermal-design-power(W):300
+OUT
+    ;;
+    "turbo-freq info -l 0") cat >&2 <<'OUT'
+ package-0
+  die-0
+    powerdomain-0
+      cpu-0
+        speed-select-turbo-freq-properties
+          bucket-0
+            high-priority-cores-count:4
+            high-priority-max-sse-frequency(MHz):3800
+          speed-select-turbo-freq-clip-frequencies
+            low-priority-max-sse-frequency(MHz):3000
+OUT
+    ;;
+esac
+EOF
+chmod +x "${ISST_BIN}/intel-speed-select"
+r=$(newroot sst-tool); kernel "${r}" 7.0.0; cpuinfo "${r}" 6 173 "fpu"; touch "${r}/dev/isst_interface"
+basefreq "${r}" 0 15 2500000
+doctor_says "SST via intel-speed-select: base-freq and turbo-freq info" "${r}" \
+    'info: Speed Select \(/dev/isst_interface, intel-speed-select\): base-freq high-priority CPUs 0-3 at 2600 MHz, low-priority 2100 MHz; turbo-freq bucket-0: 4 high-priority cores at 3800 MHz, low-priority clipped to 3000 MHz' \
+    "" PATH="${ISST_BIN}:${STUB_BIN}:${PATH}"
+doctor_says "SST-BF off: enable is a suggestion" "${r}" '^        apply:  sudo intel-speed-select base-freq enable -a$' \
+    "" PATH="${ISST_BIN}:${STUB_BIN}:${PATH}"
+doctor_says "SST-BF off: the suggestion has its revert" "${r}" '^        revert: sudo intel-speed-select base-freq disable -a$' \
+    "" PATH="${ISST_BIN}:${STUB_BIN}:${PATH}"
+doctor_says "SST-TF: enable for the HP CPUs is a suggestion" "${r}" '^        apply:  sudo intel-speed-select -c 0-3 turbo-freq enable -a$' \
+    "" PATH="${ISST_BIN}:${STUB_BIN}:${PATH}"
+doctor_says "SST-TF: the suggestion has its revert" "${r}" '^        revert: sudo intel-speed-select turbo-freq disable -a$' \
+    "" PATH="${ISST_BIN}:${STUB_BIN}:${PATH}"
+doctor_says "intel-speed-select as non-root says it needs root" "${r}" \
+    'intel-speed-select needs root here: sudo k3d-gpu doctor' "" PATH="${ISST_BIN}:${STUB_BIN}:${PATH}" STUB_ISST_ROOT=1
+doctor_says "no intel-speed-select: names the node image copy" "${r}" \
+    'info: Speed Select interface present \(/dev/isst_interface\); intel-speed-select is not on PATH'
+
+# TPMI performance limit reasons (plr_tpmi.c debugfs status, root only).
+r=$(newroot plr); kernel "${r}" 7.0.0
+put "${r}" /sys/kernel/debug/tpmi-0000:00:03.1/plr/domain0/status "cpus none"
+printf 'cpus THERMAL\ncpu0 none\ncpu1 none\ncpu2 POWER POWER_PKG_PL1_MSR_TPMI\ncpu3 POWER POWER_PKG_PL1_MSR_TPMI\n' \
+    > "${r}/sys/kernel/debug/tpmi-0000:00:03.1/plr/domain0/status"
+perf_says "perf: TPMI PLR decoded per die and CPU" "${r}" \
+    'info: tpmi-0000:00:03\.1 domain0: die THERMAL; CPUs: none on 0-1; POWER POWER_PKG_PL1_MSR_TPMI on 2-3'
+perf_says "perf: TPMI PLR is read-only" "${r}" 'sticky until 0 is written .* doctor --perf only reads them'
+r=$(newroot plr-user); kernel "${r}" 7.0.0
+mkdir -p "${r}/sys/bus/auxiliary/devices/intel_vsec.tpmi-plr.0"
+perf_says "perf: TPMI PLR without debugfs access asks for root" "${r}" \
+    'info: TPMI performance limit reasons \(intel_vsec\.tpmi-plr\.0\): the status files are in debugfs, root only'
+
+# Uncore ELC: report only, with the current uncore clock when it is readable (root).
+r=$(newroot elc); kernel "${r}" 7.0.0
+for f in initial_min_freq_khz:800000 initial_max_freq_khz:2200000 min_freq_khz:800000 max_freq_khz:2200000 \
+         elc_floor_freq_khz:0 elc_low_threshold_percent:10 elc_high_threshold_percent:95 elc_high_threshold_enable:1 current_freq_khz:2200000; do
+    put "${r}" "/sys/devices/system/cpu/intel_uncore_frequency/uncore00/${f%%:*}" "${f#*:}"
+done
+perf_says "perf: ELC is reported with the current uncore clock" "${r}" \
+    'info: uncore00: ELC floor 0 kHz, thresholds low 10% high 95% \(enable 1\); current 2200000 kHz; reported only'
+
+# RDT: Skylake-SP (model 85) has L3 CAT in CPUID but the kernel turns it off
+# (resctrl core.c __check_quirks_intel, SKZ18); rdt=l3cat turns it back on.
+r=$(newroot rdt-skx); kernel "${r}" 6.18.1; cpuinfo "${r}" 6 85 "fpu rdt_a cat_l3 mba"
+doctor_says "SKX/CLX/CPX: L3 CAT hidden by the kernel, rdt=l3cat is a suggestion with revert" "${r}" \
+    'info: L3 CAT: CPUID has it \(cat_l3\) but the kernel turns it off on model 0x55 .*rdt=l3cat.*Revert: '
+put "${r}" /proc/cmdline "BOOT_IMAGE=/vmlinuz rdt=l3cat"
+doctor_says "SKX booted with rdt=l3cat: no suggestion" "${r}" 'rdt=l3cat' negate
+r=$(newroot rdt-mounted); kernel "${r}" 7.0.0; cpuinfo "${r}" 6 173 "fpu rdt_a cat_l3 cat_l2 cdp_l3 mba cqm_mbm_total"
+for f in L3/num_closids:15 L3/cbm_mask:7fff L2/num_closids:8 L2/cbm_mask:ff MB/num_closids:15 L3_MON/num_rmids:576; do
+    put "${r}" "/sys/fs/resctrl/info/${f%%:*}" "${f#*:}"
+done
+printf 'mbm_total_bytes\nmbm_local_bytes\nllc_occupancy\n' > "${r}/sys/fs/resctrl/info/L3_MON/mon_features"
+doctor_says "resctrl mounted: CAT, L2 CAT and MBM sizes are reported" "${r}" \
+    'info: resctrl mounted: L3 CAT 15 CLOS \(cbm_mask 7fff\), L2 CAT 8 CLOS \(cbm_mask ff\), MBA 15 CLOS; L3 monitoring 576 RMIDs \(mbm_total_bytes mbm_local_bytes llc_occupancy\)'
+hybrid "${r}" 0-1 2-3
+up_says "resctrl mounted: up binds it read-only into the nodes for MBM telemetry" 0 \
+    '^--volume=/sys/fs/resctrl:/sys/fs/resctrl:ro@server:\*;agent:\*$' "" K3D_GPU_SYSROOT="${r}"
+r=$(newroot rdt-unmounted); kernel "${r}" 7.0.0; cpuinfo "${r}" 6 173 "fpu rdt_a cat_l3"; hybrid "${r}" 0-1 2-3
+up_says "resctrl not mounted: up mounts nothing" 0 'resctrl' negate K3D_GPU_SYSROOT="${r}"
+
+# SNC: compute dies from the TPMI uncore domains that carry core agents
+# (intel_uncore_frequency agent_types); SNC off with two or three of them is a
+# BIOS owner action, and SNC3 needs Linux 6.19 (sched-domain fix 4d6dd05d07d).
+uncore_dom() { put "$1" "/sys/devices/system/cpu/intel_uncore_frequency/uncore$2/agent_types" "$3"; put "$1" "/sys/devices/system/cpu/intel_uncore_frequency/uncore$2/package_id" 0; }
+r=$(newroot snc-off-2die); kernel "${r}" 7.0.0; cpuinfo "${r}" 6 173 "fpu"
+node "${r}" 0 0-15 0; l3 "${r}" 0-15
+uncore_dom "${r}" 00 "core cache memory"; uncore_dom "${r}" 01 "core cache memory"; uncore_dom "${r}" 02 io; uncore_dom "${r}" 03 io
+doctor_says "SNC off on two compute dies: SNC2 is a BIOS owner action" "${r}" \
+    'info: SNC off \(1 NUMA node per socket\) on 2 compute dies'
+doctor_says "SNC2 suggestion: apply" "${r}" '^        apply:  BIOS \(owner action\): set Sub-NUMA Clustering to SNC2'
+doctor_says "SNC2 suggestion: revert" "${r}" '^        revert: BIOS: set Sub-NUMA Clustering back to Disabled'
+r=$(newroot snc-off-3die); kernel "${r}" 6.18.1; cpuinfo "${r}" 6 173 "fpu"
+node "${r}" 0 0-15 0; node "${r}" 1 16-31 1; l3 "${r}" 0-15
+for d in 00 01 02; do uncore_dom "${r}" "${d}" "core cache memory"; done; uncore_dom "${r}" 03 io
+doctor_says "SNC3 suggestion on a 2-socket GNR with Linux 6.18 names the 6.19 requirement" "${r}" 'SNC3 needs Linux 6\.19 or newer'
+r=$(newroot snc3-on-old); kernel "${r}" 6.18.1; cpuinfo "${r}" 6 173 "fpu"
+for n in 0 1 2 3 4 5; do node "${r}" "${n}" "$((n * 4))-$((n * 4 + 3))" "$((n / 3))"; done; l3 "${r}" 0-11
+doctor_says "SNC3 running on a 2-socket GNR with Linux 6.18 warns" "${r}" 'warn.*SNC3 is on but Linux 6\.18\.1 is older than 6\.19'
+r=$(newroot snc3-on-1s); kernel "${r}" 6.18.1; cpuinfo "${r}" 6 173 "fpu"
+for n in 0 1 2; do node "${r}" "${n}" "$((n * 4))-$((n * 4 + 3))" 0; done; l3 "${r}" 0-11
+doctor_says "SNC3 on one socket: the 6.19 fix does not apply" "${r}" 'older than 6\.19' negate
+r=$(newroot snc3-on-dmr); kernel "${r}" 6.18.1; cpuinfo "${r}" 19 1 "fpu"
+for n in 0 1 2 3 4 5; do node "${r}" "${n}" "$((n * 4))-$((n * 4 + 3))" "$((n / 3))"; done; l3 "${r}" 0-11
+doctor_says "SNC3 on Diamond Rapids: the GNR/CWF fix is not claimed" "${r}" 'older than 6\.19' negate
+
+# QAT: cfg_services and state per PF next to the VF run/revert lines.
+r=$(newroot qat-svc); kernel "${r}" 7.0.0
+pci "${r}" 0000:6b:00.0 0x8086 0x4944 4xxx 0x0b4000
+put "${r}" /sys/devices/pci0000:00/0000:6b:00.0/sriov_totalvfs 16
+put "${r}" /sys/devices/pci0000:00/0000:6b:00.0/qat/cfg_services "sym;asym"
+put "${r}" /sys/devices/pci0000:00/0000:6b:00.0/qat/state up
+doctor_says "QAT PF line reports cfg_services and state" "${r}" 'QAT 0000:6b:00\.0 \(4xxx, cfg_services sym;asym, state up\): no VFs'
+doctor_says "QAT VF creation keeps its exact revert" "${r}" 'revert: echo 0 \| sudo tee /sys/bus/pci/devices/0000:6b:00\.0/sriov_numvfs'
+
+# CXL tiering knobs: reported when a CXL memory device exists, suggestions with reverts.
+r=$(newroot cxl); kernel "${r}" 7.0.0
+node "${r}" 0 0-7 0; node "${r}" 1 ""; l3 "${r}" 0-7
+mkdir -p "${r}/sys/bus/cxl/devices/mem0"
+put "${r}" /sys/kernel/mm/numa/demotion_enabled false
+put "${r}" /proc/sys/kernel/numa_balancing 1
+put "${r}" /sys/kernel/mm/mempolicy/weighted_interleave/auto true
+doctor_says "CXL: tiering knobs reported" "${r}" \
+    'info: CXL memory device\(s\) mem0: demotion_enabled false, numa_balancing 1, weighted_interleave auto true'
+doctor_says "CXL: demotion is a suggestion" "${r}" '^        apply:  echo true \| sudo tee /sys/kernel/mm/numa/demotion_enabled$'
+doctor_says "CXL: demotion revert" "${r}" '^        revert: echo false \| sudo tee /sys/kernel/mm/numa/demotion_enabled$'
+doctor_says "CXL: NUMA-balancing tiering mode is a suggestion" "${r}" '^        apply:  sudo sysctl kernel\.numa_balancing=3$'
+doctor_says "CXL: NUMA-balancing revert" "${r}" '^        revert: sudo sysctl kernel\.numa_balancing=1$'
+r=$(newroot cxl-none); kernel "${r}" 7.0.0; node "${r}" 0 0-7 0; node "${r}" 1 ""
+doctor_says "no CXL device: no tiering suggestions" "${r}" 'demotion_enabled' negate
+
+# DLB, In-Field Scan, On Demand certificate, crescent's 6741P in the ARK table.
+r=$(newroot x6741p); kernel "${r}" 7.0.0
+model "${r}" "Intel(R) Xeon(R) 6741P"
+node "${r}" 0 0-95 0; l3 "${r}" 0-95
+for i in 0 1 2; do
+    idxd_dev "${r}" "0000:e${i}:01.0" 0x0b25 "dsa$((i * 2))" 0
+    idxd_dev "${r}" "0000:e${i}:02.0" 0x0cfe "iax$((i * 2 + 1))" 0
+    pci "${r}" "0000:6${i}:00.0" 0x8086 0x4944 4xxx 0x0b4000
+    pci "${r}" "0000:7${i}:00.0" 0x8086 0x2714 "" 0x0b4000
+done
+put "${r}" /sys/devices/virtual/misc/intel_ifs_0/status untested
+put "${r}" /sys/devices/virtual/misc/intel_ifs_0/image_version none
+put "${r}" /sys/devices/virtual/misc/intel_ifs_1/status untested
+mkdir -p "${r}/sys/bus/auxiliary/devices/intel_vsec.sdsi.0"
+head -c 32 /dev/zero > "${r}/sys/bus/auxiliary/devices/intel_vsec.sdsi.0/state_certificate"
+doctor_says "6741P: per-socket counts against its ARK row, DLB included" "${r}" \
+    'info: per socket: socket 0: DSA 3, IAA 3, QAT 3, DLB 3 \(ARK default for 6741P: DSA 3, IAA 3, QAT 3, DLB 3 per socket\)'
+doctor_says "DLB: present, no in-tree driver, K8s plugin removed" "${r}" \
+    'info: DLB: 3 device\(s\) \(8086:2714 DLB 2\.5\), no driver bound — mainline Linux has no DLB driver .*device plugin was removed upstream'
+doctor_says "IFS: status line, never run" "${r}" \
+    'info: In-Field Scan: intel_ifs_0 \(scan\) untested, image none; intel_ifs_1 \(array BIST\) untested — k3d-gpu never starts a test'
+doctor_says "On Demand: state_certificate size" "${r}" 'intel_vsec\.sdsi\.0 state_certificate 32 B'
+r=$(newroot x6741p-nodlb); kernel "${r}" 7.0.0; model "${r}" "Intel(R) Xeon(R) Platinum 8480+"
+node "${r}" 0 0-3 0; l3 "${r}" 0-3; idxd_dev "${r}" 0000:e7:01.0 0x0b25 dsa0 0
+doctor_says "no DLB device: the per-socket line has no DLB column" "${r}" 'DLB' negate
+
+# Xeon 6 memory POR: channels, DDR5 speed and MRDIMM per SKU (ARK).
+r=$(newroot por-6741p); kernel "${r}" 7.0.0
+printf 'cpu family\t: 6\nmodel\t\t: 173\nmodel name\t: Intel(R) Xeon(R) 6741P\n' > "${r}/proc/cpuinfo"
+node "${r}" 0 0-95 0
+for i in $(seq 0 15); do
+    if [ $((i % 2)) = 0 ]; then dimm "${r}" "${i}" 65536 34 9 6400 6400 80 64 2; else dimm "${r}" "${i}" 0 2 9 0 0 0 0 0; fi
+done
+perf_says "perf: 6741P POR from ARK: 8 channels, DDR5-6400, no MRDIMM" "${r}" \
+    'info: Xeon 6741P \(ARK\): 8 memory channels per socket, DDR5 6400 MT/s, MRDIMM not listed'
+perf_says "perf: 6741P all channels populated, peak from channels" "${r}" \
+    'ok: +8 modules on 8 channels \(1 socket\(s\) x 8\): peak DRAM bandwidth 409\.6 GB/s = 8 channels x 6400 MT/s x 8 B'
+r=$(newroot por-6980p); kernel "${r}" 7.0.0
+printf 'cpu family\t: 6\nmodel\t\t: 173\nmodel name\t: Intel(R) Xeon(R) 6980P\n' > "${r}/proc/cpuinfo"
+node "${r}" 0 0-255 0
+for i in $(seq 0 7); do dimm "${r}" "${i}" 65536 34 9 6400 6400 80 64 2; done
+perf_says "perf: 6980P lists MRDIMM 8800" "${r}" 'info: Xeon 6980P \(ARK\): 12 memory channels per socket, DDR5 6400 MT/s, MRDIMM 8800 MT/s'
+perf_says "perf: 6980P with 8 of 12 channels populated says so" "${r}" 'info: 8 modules on 12 channels'
+
+# AMX probe: `test` runs one oneDNN matmul with ONEDNN_VERBOSE=1 and fails unless
+# an AMX implementation ran (oneDNN names it avx512_core_amx or avx10_1_512_amx*).
+r=$(newroot amx-probe); cpuinfo "${r}" 6 173 "fpu ${AMX3}"
+AMXOK='amx-probe: ARCH_REQ_XCOMP_PERM: ok
+onednn_verbose,v1,primitive,exec,cpu,matmul,brg_matmul:avx10_1_512_amx,undef,src:bf16::blocked:ab::f0,,,512x512:512x512,0.1'
+test_says "AMX probe passes on an AMX matmul implementation" "${r}" 0 'AMX in use: oneDNN matmul ran brg_matmul:avx10_1_512_amx' \
+    STUB_POD_PHASE=Succeeded K3D_GPU_VENDORS=amx STUB_POD_LOGS_amx_test="${AMXOK}"
+test_says "AMX probe fails when oneDNN picks a non-AMX matmul" "${r}" fail 'oneDNN ran matmul with brg_matmul:avx512_core, not AMX' \
+    STUB_POD_PHASE=Succeeded K3D_GPU_VENDORS=amx \
+    STUB_POD_LOGS_amx_test='amx-probe: ARCH_REQ_XCOMP_PERM: ok
+onednn_verbose,v1,primitive,exec,cpu,matmul,brg_matmul:avx512_core,undef,src:bf16'
+test_says "AMX probe fails when no oneDNN matmul ran" "${r}" fail 'no oneDNN matmul ran' \
+    STUB_POD_PHASE=Succeeded K3D_GPU_VENDORS=amx STUB_POD_LOGS_amx_test='amx-probe: ARCH_REQ_XCOMP_PERM: Operation not supported'
 
 # The node image is published for linux/amd64 only (build-and-push.yml platforms), so
 # `up` on another CPU stops before docker runs unless K3D_GPU_IMAGE names an image for it.

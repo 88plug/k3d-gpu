@@ -167,8 +167,10 @@ What Intel has said in public, with the source for each line:
   says the toolkit's nodes can run as Intel TDX confidential VMs [provenance:P302].
 
 That split, orchestration and serving on fast cores with agent tools on many small ones,
-is the placement k3d-gpu sets with one pod label: sandboxes on E-cores behind
-default-deny egress is SUPPORTED on the i9-13900T [ledger:H18]. No Xeon run backs it yet.
+is the placement k3d-gpu sets with one pod label, not isolation: package power, LLC and
+DRAM bandwidth stay shared, so E-core load still slowed CPU-served prefill on the
+P-cores [ledger:H3]. Sandboxes on E-cores behind default-deny egress is SUPPORTED on the
+i9-13900T [ledger:H18]. No Xeon run backs it yet.
 
 ### EAT by default vs with k3d-gpu
 
@@ -189,11 +191,21 @@ run on hardware, the row says which host.
 Not covered by either column: EAT's 1.1.0 XPU path for Arc B60/B70 is in an open PR
 ([platforms.md](platforms.md#open-eat-pull-requests-checked-2026-10-20)).
 
-**In progress (no results yet).** A campaign on one Xeon 6741P (Granite Rapids, AMX) host
+**In progress.** A campaign on one Xeon 6741P (Granite Rapids, AMX) host
 with 4x Arc Pro B70 checks four things: that `detect` and `up` pick up the Xeon and the
 B70s with no flags; EAT stock against k3d-gpu on the Xeon CPU, with EAT's own OVMS chart
 as a third arm; EAT's #21 XPU path against k3d-gpu's `agent up` on the B70s; and agents
 per box. Rows land in [EXPERIMENTS.md](../EXPERIMENTS.md) before anything here quotes them.
+
+Gemma 4 26B-A4B (QAT weights) rows on that Xeon. None is SUPPORTED, so this table states
+direction only; the numbers, protocol and reproduce block are in the ledger.
+
+| Row | Measurement | Verdict |
+|----|-------------|--------|
+| [ledger:H54a] | Single-stream decode, engine by engine, against EAT's stock vLLM CPU (bf16 QAT weights). EAT's stock arm stalled mid-decode in both holds under this harness (cause open), so nothing was scored against it. Of the arms measured, llama.cpp CPU on Google's QAT Q4_0 GGUF decoded ahead of k3d-gpu's OVMS arms, and its QAT MTP drafter added a little on top | INCONCLUSIVE |
+| [ledger:H54d] | The best H54a arm inside EAT's banking flow: not run, since H54a chose no arm | INCONCLUSIVE |
+| [ledger:H54q] | Whether the QAT-matched int4 IR keeps the bf16 QAT quality and OpenVINO's base-model IR does not | PENDING |
+| [ledger:H54c] | Experts in the Xeon's DRAM and the rest on one B70, against a byte-split model | PENDING |
 
 Facts from `0ecf67a` that shape a k3d run:
 
@@ -401,7 +413,8 @@ hardware, a recorded run.
 
 - **Hardware coverage.** Move the `xe`, NPU, Gaudi, DSA, IAA, QAT and AMX rows to
   verified on real Core Ultra, Arc, Gaudi 3 and Xeon hosts. In progress: the campaign on
-  a Xeon 6741P with 4x Arc Pro B70 [above](#eat-by-default-vs-with-k3d-gpu) (no results yet).
+  a Xeon 6741P with 4x Arc Pro B70 [above](#eat-by-default-vs-with-k3d-gpu) (first Gemma 4 rows
+  recorded, none SUPPORTED yet).
 - **EAT 1.1.0.** Move `eat-up.sh` to a 1.1.0 tag once one is cut, after the
   checks listed in [platforms.md](platforms.md#intel-enterprise-agent-toolkit-eat).
 - **NPU telemetry.** No NPU exporter is shipped.
