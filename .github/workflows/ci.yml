@@ -203,6 +203,8 @@ jobs:
       - run: tests/claims_check.sh
       - run: python3 tests/ledger_drift_check_test.py
       - run: python3 tests/ledger_drift_check.py
+      - run: tests/pe_premise_check_test.sh
+      - run: tests/pe_premise_check.sh
 
   bench-tests:
     name: Bench harness tests
@@ -255,6 +257,9 @@ jobs:
       - run: python3 bench/h54/test_h54.py
       - run: python3 bench/h54gpu/test_h54gpu.py
       - run: python3 bench/h57d/test_h57d.py
+      - run: python3 bench/admission/test_ctl.py
+      - run: python3 bench/admission/test_analyze.py
+      - run: bash bench/admission/test_run.sh
 
   mcp-tests:
     name: MCP server tests
