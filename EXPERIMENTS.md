@@ -2794,6 +2794,55 @@ P-cores with their HT siblings (core n = CPUs 2n, 2n+1), 16-31 the E-cores; no `
 **Order and changes.** A protocol change is a dated amendment merged before the data it governs.
 A wiring smoke runs no scored request, is discarded and is disclosed in the run section.
 
+### H57d amendment R1: the H57d runner, the read-only Od render and the hold length (2026-10-21)
+
+Recorded 2026-10-21, before any scored H57d request. Two wiring smokes ran first under the
+host lock (discarded, disclosed in the run section). Nothing here changes a row's arms, model
+files, statistic, gate, threshold, hold count or prediction.
+
+**Files.** `bench/h57d/`: `hold.sh` (the host lock `flock -w 21600`, the `load1` <= 24 start
+rule, the 15 GB `/` floor, a MemAvailable >= 20 GiB start floor so a hold cannot push the shared
+host into swap, a disk watchdog, cluster deletion at the end, also on failure), `hold-run.sh`
+(cluster, sampler, arms), `arm.sh` (one arm: render, readiness, phases or quality, teardown),
+`h57d.py` (arm table and orders, renders, the read-only Od transform, the 5 s P-core load
+sampler, the load gate, `score`), `k3d-shim.sh`, `convert.sh`, `reproduce.sh`. GSM8K items, prompt,
+grader, the 1,000-token TTFT prompt and the bootstrap are H54's (`bench/h54`, PR #169), imported,
+not copied. Tests: `bench/h57d/test_h57d.py` (flags and CPU mask, renders, the read-only
+transform, the sampler arithmetic, the load gate, every H57da and H57dm branch, the spare hold),
+in CI.
+
+**Read-only models.** The campaign directory (`~/k3dgpu-h57d`, a link to the second disk) is
+bound into the node read-only at `/var/apb-models` by the k3d shim; nothing is copied into the
+node. Ld and Ld-mtp mount it read-only. Od: `k3d-gpu agent manifest` as written, `stage.py
+ovms` (PVC to that hostPath), then `h57d.py od-ro`: the `--pull` init container is removed (its
+only write is `graph.pbtxt`, which `convert.sh` made once with the same image and the same
+arguments; sha256 `c57ecf35...`, `max_num_seqs` 256, `enable_prefix_caching` true, `cache_size`
+0, device CPU), the models mount is read-only, and `--cache_dir` moves to an emptyDir. The
+serving container's image, other arguments, request (16 CPUs) and P-core label are unchanged.
+
+**Drafter.** `convert.sh` runs b11749's own `convert_hf_to_gguf.py` and `llama-quantize` (Q4_0)
+in `full-b11749`. The image's transformers 4.57.6 cannot read the QAT assistant's
+`tokenizer_config.json` (`AttributeError: 'list' object has no attribute 'keys'`, the
+transformers 5 `extra_special_tokens` list), so the converter runs with transformers 5.20.2 (the
+latest stable) on `PYTHONPATH`; a build with 5.5.4 gave byte-identical bf16 and Q4_0 files
+(Q4_0 sha256 `8eb21d5b...`, 321,145,696 bytes). Model files: sha256 of every LFS file equals the
+Hub's at the pinned revisions (`~/k3dgpu-h57d/weights.sha256`, in each Reproduce header).
+
+**Flags read at b11749** (`llama-server --help` of the pinned image): `-t`, `-C/--cpu-mask`
+(hex), `--cpu-strict`, `--jinja`, `-md`, `--spec-type draft-mtp`, `--spec-draft-n-max` (default
+3) exist. The server's defaults otherwise: 4 slots, context from the model (262,144, unified KV).
+
+**Hold length.** The registered 45 min cannot hold three arms: in the smoke one Ld arm's
+phases took 21 min (60 s idle, warmup 214 s, N=1 519 s, N=4 330 s, TTFT 85 s, at about 4 tok/s).
+Each hold's cap becomes 75 min (`timeout -k 30 4500`; arms start only with 900 s left, the
+quality hold's with 600 s). The number of holds (at most 5 for H57da and H57dm) is unchanged.
+
+**Disclosed from the smokes, not acted on.** Ld's 8 server threads were pinned one per physical
+P-core as registered (CPUs 0, 2, ..., 14, read from `/proc/1/task/*/status`) inside the pod's
+cpuset 0-15; Od's threads float over 0-15. With strict pinning a thread whose CPU is taken by a
+foreign process stalls the step, so the shared host may cost Ld more than Od. The registered flags
+are kept; any H57da verdict is scoped to them.
+
 ### H5 amendment A1: stage-1 harness and definitions (2026-10-19)
 
 Written 2026-10-19T22:30-07:00, before any H5 measurement. It fixes what the

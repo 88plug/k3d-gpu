@@ -239,6 +239,7 @@ jobs:
       - run: python3 bench/models/test_qat_grid.py
       - run: python3 bench/prefill-guard/test_analyze.py
       - run: python3 bench/h54/test_h54.py
+      - run: python3 bench/h57d/test_h57d.py
 
   mcp-tests:
     name: MCP server tests

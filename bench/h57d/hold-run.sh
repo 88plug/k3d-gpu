@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # hold-run.sh R ARM...: inside hold.sh's lock and timeout: create the hold's cluster, start the
-# P-core load sampler, run each arm (arm.sh) until 2670 s after the hold started. CLUSTER,
+# P-core load sampler, run each arm (arm.sh) until 4470 s after the hold started. CLUSTER,
 # KUBECONFIG, REPO, G, MODE come from hold.sh; hold.sh deletes the cluster.
 set -uo pipefail
 R=$1
@@ -20,7 +20,7 @@ docker exec "k3d-${CLUSTER}-server-0" ls /var/apb-models > /dev/null || { echo "
 python3 "${HERE}/h57d.py" sample "${R}/load.jsonl" "k3d-${CLUSTER}-server-0" &
 sp=$!
 trap 'kill "${sp}" 2>/dev/null' EXIT
-export DEADLINE=$(( t0 + 2670 ))
+export DEADLINE=$(( t0 + 4470 ))
 for arm in "$@"; do
     bash "${HERE}/arm.sh" "${arm}" "${R}/${arm}"
 done

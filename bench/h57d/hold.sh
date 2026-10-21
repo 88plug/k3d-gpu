@@ -5,7 +5,7 @@
 # / would have < 15 GB free or MemAvailable < 20 GiB, creates cluster k3dgpu-d-h57d-<hold>,
 # runs each ARM (default: the hold's registered order) with the load sampler beside it and a
 # disk watchdog, and deletes the cluster at the end, also on failure. Everything runs under
-# `timeout -k 30 2700`. MODE: perf | quality. Records: ${G}/results/H57d/hold<HOLD>/.
+# `timeout -k 30 4500`. MODE: perf | quality. Records: ${G}/results/H57d/hold<HOLD>/.
 #   G     campaign dir (default ~/k3dgpu-h57d), models under G/models
 #   LOCK  the host lock file;  SUDO_ASKPASS  for energy.sh's RAPL reader
 set -uo pipefail
@@ -54,7 +54,7 @@ left=$(mine)
 [ -z "${left}" ] || { log "leftover clusters ${left}: deleting first"; k3d cluster delete ${left} > /dev/null 2>&1; }
 bash "${HERE}/reproduce.sh" > "${R}/reproduce.txt" 2>&1
 log "start: ${ARMS_RUN[*]}"
-timeout -k 30 2700 bash "${HERE}/hold-run.sh" "${R}" "${ARMS_RUN[@]}" > "${R}/hold.log" 2>&1 &
+timeout -k 30 4500 bash "${HERE}/hold-run.sh" "${R}" "${ARMS_RUN[@]}" > "${R}/hold.log" 2>&1 &
 cp=$!
 # timeout(1) signals its whole process group; the watchdog stops that group below 15 GB free on /.
 ( while kill -0 "${cp}" 2>/dev/null; do
