@@ -283,6 +283,14 @@
       "tag": "v0.24.0"
     },
     {
+      "digest": "sha256:ffaba3989b9b96d95a576143c872a4110ce9800f5199b6a36eb27bdff1cbbe05",
+      "name": "docker.io/vllm/vllm-openai-cpu",
+      "sources": [
+        "scripts/k3d-gpu K3D_GPU_AMX_TEST_IMAGE"
+      ],
+      "tag": "v0.32.0"
+    },
+    {
       "digest": "sha256:95ac815038c4b3537b173798bfe3b89bdf525a52bd653cd14d4deb01f1062be7",
       "name": "docker.io/vllm/vllm-openai-xpu",
       "sources": [
@@ -299,18 +307,11 @@
       "tag": "v1.83.14-stable.patch.2"
     },
     {
-      "digest": "sha256:a8c8297c72744f25dbcf70fdb4a64bb787f428a3f9ab4dfabb0eb1377da0070f",
-      "name": "ghcr.io/containers/nri-plugins/nri-resource-policy-balloons",
-      "sources": [
-        "share/nri-balloons.yml"
-      ],
-      "tag": "v0.14.0"
-    },
-    {
       "digest": "sha256:bacbef6f002f432b9fbe61ff0c583536da7ae816300ca82921ee697d759a1e80",
       "name": "ghcr.io/containers/nri-plugins/nri-resource-policy-balloons",
       "sources": [
-        "share/nri-balloons-guard.yml"
+        "share/nri-balloons-guard.yml",
+        "share/nri-balloons.yml"
       ],
       "tag": "v0.15.0"
     },

@@ -87,6 +87,43 @@ check "empty atom list: no efficient" 0 "$(grep -c 'type="efficient"' <<< "${out
 # Non-hybrid CPU: neither PMU directory exists.
 check "non-hybrid: no file" "<none>" "$(core_type flat - -)"
 
+# resctrl MBM: one pass of the sidecar loop (ONCE=1) over a fake /sys/fs/resctrl with
+# the root group, a control group with a monitor group, and an unreadable counter.
+MBM="${WORK}/resctrl-mbm.sh"
+configmap_key "${ROOT}/share/telemetry/node-exporter.yml" resctrl-mbm.sh > "${MBM}"
+check "resctrl-mbm script extracted" "#!/bin/sh" "$(head -n1 "${MBM}")"
+# mbm <name> [setup]: run one pass on a fake tree; print the output file or "<none>".
+mbm() {
+    local root="${WORK}/$1" out f
+    mkdir -p "${root}/sys" "${root}/textfile"
+    out="${root}/textfile/k3d_gpu_resctrl_mbm.prom"
+    SYSFS="${root}/sys" OUT="${out}" ONCE=1 sh "${MBM}" || echo "<exit $?>"
+    if [ -e "${out}" ]; then cat "${out}"; else echo "<none>"; fi
+    for f in "${root}"/textfile/*; do
+        [ -e "${f}" ] && [ "${f}" != "${out}" ] && echo "<leftover> ${f##*/}"
+    done
+    return 0  # the loop's last test must not become the status under pipefail
+}
+check "resctrl not mounted: no file" "<none>" "$(mbm unmounted)"
+R="${WORK}/rdt/sys/fs/resctrl"
+mkdir -p "${R}/info/L3_MON" "${R}/mon_data/mon_L3_00" "${R}/mon_data/mon_L3_01" \
+    "${R}/BestEffort/mon_data/mon_L3_00" "${R}/BestEffort/mon_groups/pod1/mon_data/mon_L3_00"
+echo 1000 > "${R}/mon_data/mon_L3_00/mbm_total_bytes"; echo 400 > "${R}/mon_data/mon_L3_00/mbm_local_bytes"
+echo 2000 > "${R}/mon_data/mon_L3_01/mbm_total_bytes"; echo Unavailable > "${R}/mon_data/mon_L3_01/mbm_local_bytes"
+echo 30 > "${R}/BestEffort/mon_data/mon_L3_00/mbm_total_bytes"
+echo 7 > "${R}/BestEffort/mon_groups/pod1/mon_data/mon_L3_00/mbm_total_bytes"
+out=$(mbm rdt)
+check "mbm: root group total, domain 00" 1 "$(grep -c '^k3d_gpu_resctrl_mbm_bytes_total{group="/",domain="00",scope="total"} 1000$' <<< "${out}")"
+check "mbm: root group local, domain 00" 1 "$(grep -c '^k3d_gpu_resctrl_mbm_bytes_total{group="/",domain="00",scope="local"} 400$' <<< "${out}")"
+check "mbm: domain 01 total" 1 "$(grep -c '^k3d_gpu_resctrl_mbm_bytes_total{group="/",domain="01",scope="total"} 2000$' <<< "${out}")"
+check "mbm: an Unavailable counter is skipped" 0 "$(grep -c 'domain="01",scope="local"' <<< "${out}")"
+check "mbm: control group" 1 "$(grep -c '^k3d_gpu_resctrl_mbm_bytes_total{group="BestEffort",domain="00",scope="total"} 30$' <<< "${out}")"
+check "mbm: monitor group inside a control group" 1 "$(grep -c '^k3d_gpu_resctrl_mbm_bytes_total{group="BestEffort/pod1",domain="00",scope="total"} 7$' <<< "${out}")"
+check "mbm: TYPE counter" 1 "$(grep -c '^# TYPE k3d_gpu_resctrl_mbm_bytes_total counter$' <<< "${out}")"
+check "mbm: no temp file left" "" "$(grep '^<' <<< "${out}")"
+# The sidecar only reads: the script never mounts, mkdirs or writes under resctrl.
+check "mbm: script writes nothing under resctrl" 0 "$(grep -cE '^ *(mount|mkdir|umount) |> *"\$\{r[}/]' "${MBM}")"
+
 # The AUR package must ship every telemetry manifest under /usr/share/k3d-gpu/telemetry.
 # Runs the PKGBUILD package() function against this checkout into a scratch pkgdir,
 # under errexit as makepkg does (outside an `if`, where errexit would be ignored).
@@ -114,6 +151,13 @@ if command -v promtool >/dev/null 2>&1; then
     else
         FAILS=$((FAILS + 1)); echo "FAIL core-type output passes promtool check metrics"
         promtool check metrics < "${WORK}/lint.prom"
+    fi
+    mbm rdt | grep -v '^<' > "${WORK}/mbm.prom"
+    if promtool check metrics < "${WORK}/mbm.prom" >/dev/null 2>&1; then
+        PASS=$((PASS + 1)); echo "ok   resctrl-mbm output passes promtool check metrics"
+    else
+        FAILS=$((FAILS + 1)); echo "FAIL resctrl-mbm output passes promtool check metrics"
+        promtool check metrics < "${WORK}/mbm.prom"
     fi
     configmap_key "${ROOT}/share/telemetry/prometheus.yml" k3d-gpu.rules.yml > "${WORK}/k3d-gpu.rules.yml"
     cp "${ROOT}/tests/telemetry-rules.test.yml" "${WORK}/"

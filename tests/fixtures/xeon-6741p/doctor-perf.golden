@@ -1,0 +1,88 @@
+==> CPU frequency (driver intel_pstate, mode active)
+  good: cores ramp to full turbo the moment a request arrives: EPP performance or balance_performance, turbo on, no frequency caps — token generation is a latency-bound loop and every ramp-up shows in time-to-first-token
+  src:  https://docs.kernel.org/admin-guide/pm/intel_pstate.html#energy-vs-performance-hints, https://docs.kernel.org/admin-guide/pm/cpufreq.html
+  ok:   CPUs 0-95: governor performance (forces EPP 0)
+        from: /sys/devices/system/cpu/cpu{0..95}/cpufreq/scaling_governor
+  ok:   CPUs 0-95: no frequency cap (hardware max 3800 MHz), min 3800 MHz
+        from: /sys/devices/system/cpu/cpu{0..95}/cpufreq/{scaling,cpuinfo}_max_freq
+  ok:   turbo enabled (no_turbo=0)
+        from: /sys/devices/system/cpu/intel_pstate/no_turbo
+  ok:   max_perf_pct=100, min_perf_pct=100
+        from: /sys/devices/system/cpu/intel_pstate/max_perf_pct
+  note: hwp_dynamic_boost=0
+        from:   /sys/devices/system/cpu/intel_pstate/hwp_dynamic_boost
+        why:    when 1, a task waking from I/O wait gets a short min-P-state boost; it can help request handlers that block on the network or disk. Unmeasured for inference here — benchmark before keeping it
+        apply:  echo 1 | sudo tee /sys/devices/system/cpu/intel_pstate/hwp_dynamic_boost
+        revert: echo 0 | sudo tee /sys/devices/system/cpu/intel_pstate/hwp_dynamic_boost
+==> Uncore frequency (intel_uncore_frequency)
+  good: max_freq_khz at initial_max_freq_khz and min_freq_khz at initial_min_freq_khz: the hardware (UFS, or ELC on TPMI parts) picks the uncore clock inside the full range. A floor pinned high for decode is unproven (EXPERIMENTS.md H29, INCONCLUSIVE), so it is not suggested
+  src:  https://docs.kernel.org/admin-guide/pm/intel_uncore_frequency_scaling.html
+  ok:   uncore00: 800-2200 MHz, the full hardware range
+        from: /sys/devices/system/cpu/intel_uncore_frequency/uncore00/{min,max}_freq_khz
+  info: uncore00: ELC floor 0 kHz, thresholds low 10% high 95% (enable 1); reported only, no ELC change is suggested (EXPERIMENTS.md H29 INCONCLUSIVE)
+        from: /sys/devices/system/cpu/intel_uncore_frequency/uncore00/elc_*
+  ok:   uncore01: 800-2200 MHz, the full hardware range
+        from: /sys/devices/system/cpu/intel_uncore_frequency/uncore01/{min,max}_freq_khz
+  info: uncore01: ELC floor 0 kHz, thresholds low 10% high 95% (enable 1); reported only, no ELC change is suggested (EXPERIMENTS.md H29 INCONCLUSIVE)
+        from: /sys/devices/system/cpu/intel_uncore_frequency/uncore01/elc_*
+  ok:   uncore02: 800-2500 MHz, the full hardware range
+        from: /sys/devices/system/cpu/intel_uncore_frequency/uncore02/{min,max}_freq_khz
+  info: uncore02: ELC floor 0 kHz, thresholds low 10% high 95% (enable 1); reported only, no ELC change is suggested (EXPERIMENTS.md H29 INCONCLUSIVE)
+        from: /sys/devices/system/cpu/intel_uncore_frequency/uncore02/elc_*
+  ok:   uncore03: 800-2500 MHz, the full hardware range
+        from: /sys/devices/system/cpu/intel_uncore_frequency/uncore03/{min,max}_freq_khz
+  info: uncore03: ELC floor 0 kHz, thresholds low 10% high 95% (enable 1); reported only, no ELC change is suggested (EXPERIMENTS.md H29 INCONCLUSIVE)
+        from: /sys/devices/system/cpu/intel_uncore_frequency/uncore03/elc_*
+==> TPMI performance limit reasons
+  good: none while serving: a reason names what held the die or a CPU below its requested frequency
+  src:  https://github.com/torvalds/linux/blob/master/drivers/platform/x86/intel/plr_tpmi.c
+  info: TPMI performance limit reasons (intel_vsec.tpmi-plr.0): the status files are in debugfs, root only: sudo k3d-gpu doctor --perf
+        from: /sys/kernel/debug/tpmi-*/plr/domain*/status
+==> Reserved huge pages (hugetlbfs)
+  good: 0 unless a server is configured to use hugetlbfs — reserved pages cannot be used for anything else, and OpenVINO, PyTorch and llama.cpp do not use them by default
+  src:  https://docs.kernel.org/admin-guide/mm/hugetlbpage.html
+  ok:   HugePages_Total=0, free 0
+        from: /proc/meminfo
+==> Memory and swap
+  good: the model plus KV cache fits in MemAvailable with headroom and nothing is swapped; swapped-out buffers fault back in at random-I/O speed
+  src:  https://docs.kernel.org/admin-guide/sysctl/vm.html#swappiness, https://docs.openvino.ai/2026/openvino-workflow/running-inference/optimize-inference/optimizing-latency.html
+  info: MemTotal 503.3 GiB, MemAvailable 388.1 GiB, swap 8.0 GiB, vm.swappiness=60
+        from: /proc/meminfo
+  ok:   swap in use: 0.0 GiB
+        from: /proc/meminfo
+  info: pass --model-gb <size> (or K3D_GPU_MODEL_GB) to check a model against MemAvailable
+        from: /proc/meminfo
+==> DRAM speed, bandwidth and ECC
+  good: modules at the platform's plan-of-record (POR) speed for how the slots are populated; single-stream CPU and iGPU decode is bound by DRAM bandwidth. Memory errors counted by an EDAC driver
+  src:  SMBIOS DSP0134 7.18 (type 17, as dmidecode.c decodes it), Intel datasheet 743844 rev. 015 table 25 (13th/14th Gen Core DDR support matrix, https://cdrdv2.intel.com/v1/dl/getContent/743844), https://docs.kernel.org/driver-api/edac.html
+  info: 8x DDR5 DIMM 64 GiB 2R, ECC (80/64-bit): rated 6400 MT/s, configured 6400 MT/s; 8 of 16 slots populated
+        from: /sys/firmware/dmi/entries/17-*/raw (root)
+  info: Xeon 6741P (ARK): 8 memory channels per socket, DDR5 6400 MT/s, MRDIMM not listed
+        from: https://www.intel.com/content/www/us/en/products/sku/241828/intel-xeon-6741p-processor-288m-cache-2-50-ghz/specifications.html
+  ok:   8 modules on 8 channels (1 socket(s) x 8): peak DRAM bandwidth 409.6 GB/s = 8 channels x 6400 MT/s x 8 B (computed)
+        from: /sys/firmware/dmi/entries/17-*/raw (root), https://www.intel.com/content/www/us/en/products/sku/241828/intel-xeon-6741p-processor-288m-cache-2-50-ghz/specifications.html
+  note: ECC modules, but no EDAC memory controller is registered: corrected and uncorrected errors are not counted (dram.ecc=unmonitored)
+        from:   /sys/devices/system/edac/mc/ (no mc*), /sys/firmware/dmi/entries/17-*/raw
+        why:    without an EDAC driver a failing module shows up only as crashes or silent corruption; with one, ce_count/ue_count give early warning
+        apply:  load the EDAC driver for host bridge 8086: if this kernel has one (ls /lib/modules/$(uname -r)/kernel/drivers/edac)
+        revert: unload that driver again
+==> Isolation for sandboxed agents
+  good: /dev/kvm usable for microVM sandboxes, each GPU alone in its IOMMU group, split-lock detection on, CET known, GPU observation streams limited to CAP_PERFMON
+  src:  https://docs.kernel.org/driver-api/vfio.html (IOMMU groups), https://docs.kernel.org/admin-guide/kernel-parameters.html (split_lock_detect), https://docs.kernel.org/admin-guide/sysctl/kernel.html (split_lock_mitigate), kernel source drivers/gpu/drm/i915/i915_perf.c and drivers/gpu/drm/xe/xe_observation.c (paranoid sysctls), Intel SDM vol. 4 335592-093 (IA32_S_CET 6A2H, IA32_TME_ACTIVATE 982H)
+  note: the CPU has VT-x (vmx) but /dev/kvm is missing: no microVM sandboxes
+        from:   /proc/cpuinfo (vmx), /dev/kvm
+        why:    kvm_intel creates /dev/kvm; without it Kata or Firecracker cannot start a VM
+        apply:  sudo modprobe kvm_intel
+        revert: sudo modprobe -r kvm_intel
+  note: no IOMMU unit registered: no DMA isolation between devices, no GPU passthrough into a microVM
+        from:   /sys/class/iommu/
+        why:    VFIO hands a device to a VM only with its IOMMU group; without VT-d enabled there are no groups
+        apply:  BIOS: enable VT-d, then add intel_iommu=on to the kernel command line and reboot
+        revert: remove intel_iommu=on from the kernel command line and reboot
+  info: CET flags: user_shstk, ibt; user shadow stacks are opt-in per process (glibc.cpu.x86_shstk tunable)
+        from: /proc/cpuinfo
+  ok:   split-lock detection warn (default)
+        from: /proc/cpuinfo, /proc/cmdline, /proc/sys/kernel/split_lock_mitigate
+
+==> 4 suggestion(s). Read-only: nothing on this host was changed.
+exit=0
