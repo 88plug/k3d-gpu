@@ -110,9 +110,16 @@ if render gguf "${XEON_ENV[@]}" -- --model "${GEMMA_GGUF}" \
     && grep -A3 '^            limits:$' "${WORK}/gguf.yaml" | grep -q '^              gpu.intel.com/xe: 1$' \
     && has gguf 'name: ZES_ENABLE_SYSMAN' && has gguf 'k3d-gpu.io/agent-backend: llama.cpp' \
     && has gguf 'path: /health' && has gguf 'gpu.intel.com/xmx: "true"' \
-    && grep -q 'backend llama.cpp, the engine the fit picked' "${WORK}/gguf.err" && yaml_ok gguf; then
+    && grep -qE 'backend llama.cpp, the engine the fit picked|is GGUF, which llama.cpp serves' "${WORK}/gguf.err" && yaml_ok gguf; then
     ok "QAT GGUF on the Xeon + 4x B70 (2 busy): llama-server on one B70, flags from the fit, no flag given"
 else fail "QAT GGUF on the Xeon + 4x B70 (2 busy)" "$(show gguf)"; fi
+
+# A GGUF repo named with no backend set goes to llama.cpp before the optimizer runs, even
+# when the optimizer has metadata that would remap it to another engine's variant.
+if render ggopt "${XEON_ENV[@]}" -- --model "${GEMMA_GGUF}" && has ggopt '^  name: llamacpp$' \
+    && grep -q 'is GGUF, which llama.cpp serves' "${WORK}/ggopt.err" && ! grep -q 'OVMS' "${WORK}/ggopt.err"; then
+    ok "--model <GGUF repo>: optimized for llama.cpp, the only engine that loads it"
+else fail "GGUF repo goes to llama.cpp first" "$(show ggopt)"; fi
 
 # --- the desktop with no GPU: the CPU image on the P-core balloon ------------------------
 if render cpu STUB_ALLOC='cpu 32' K3D_GPU_FIT_HOST="${DESK}" -- --model "${GEMMA_GGUF}" \

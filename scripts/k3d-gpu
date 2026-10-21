@@ -10769,6 +10769,14 @@ engine_app() {
     esac
 }
 
+# agent_followed_image <engine>: K3D_GPU_AGENT_IMAGE names an image of the backend it was
+# set for (K3D_GPU_AGENT_BACKEND unset: the default one), not of the engine followed here.
+agent_followed_image() {
+    [ -n "${K3D_GPU_AGENT_IMAGE:-}" ] || return 0
+    warn "K3D_GPU_AGENT_IMAGE is not used: ${1} serves this model (set K3D_GPU_AGENT_BACKEND=${1} to give it an image)"
+    AGENT_IMAGE=${AGENT_DEFAULT_IMAGE}
+}
+
 # agent_follow_engine <engine> <summary> <flags>: serve the model with the engine its fit
 # picked. With K3D_GPU_AGENT_BACKEND unset the backend follows the fit (ovms, vllm or
 # llama.cpp), so no flag is needed; a backend the user set that cannot serve it is refused,
@@ -10798,11 +10806,7 @@ agent_follow_engine() {
                 AGENT_TOOL_PARSER=${K3D_GPU_AGENT_TOOL_PARSER-} AGENT_REASONING_PARSER=${K3D_GPU_AGENT_REASONING_PARSER-}
             fi
         fi
-        # K3D_GPU_AGENT_IMAGE names an image of the backend it was set for, not this one.
-        if [ -n "${K3D_GPU_AGENT_IMAGE:-}" ]; then
-            warn "K3D_GPU_AGENT_IMAGE is not used: the fit picked ${engine} (set K3D_GPU_AGENT_BACKEND=${engine} to give it an image)"
-            AGENT_IMAGE=${AGENT_DEFAULT_IMAGE}
-        fi
+        agent_followed_image "${engine}"
         return 0
     fi
     case "${engine}" in
@@ -11244,6 +11248,15 @@ agent_opt_items() {
     for a in ${AGENT_OPT_ARGS[@]+"${AGENT_OPT_ARGS[@]}"}; do printf "\n%s'%s'" "$1" "${a}"; done
 }
 
+# agent_model_format <id>: the weight format (safetensors, gguf, openvino) the fit's
+# metadata cache names for a model, or nothing when it cannot be read.
+agent_model_format() {
+    local d
+    command -v python3 >/dev/null 2>&1 || return 0
+    d=$(fit_model_dir "$1" "${K3D_GPU_AGENT_REVISION:-main}" 2>/dev/null) || return 0
+    python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("format") or "")' "${d}/weights.json" 2>/dev/null || true
+}
+
 # Applies the optimizer's choices for AGENT_OPT_MODEL to the agent settings.
 agent_optimize() {
     [ -n "${AGENT_OPT_MODEL}" ] || return 0
@@ -11264,6 +11277,17 @@ agent_optimize() {
         return 0
     fi
     [[ "${device}" != HETERO:* ]] || device=GPU
+    # A GGUF repo named with no backend set: only llama.cpp loads GGUF, so optimize for it
+    # (the fit's metadata names the format) rather than remap it to another engine's variant.
+    if agent_fit_picks_engine && [ "${engine}" != llama.cpp ] && { [ "${device}" = GPU ] || [ "${device}" = CPU ]; } \
+        && [ "$(agent_model_format "${AGENT_OPT_MODEL}")" = gguf ]; then
+        info "model optimizer: ${AGENT_OPT_MODEL} is GGUF, which llama.cpp serves (K3D_GPU_AGENT_BACKEND is unset)" >&2
+        AGENT_BACKEND=llama.cpp
+        agent_config
+        agent_followed_image llama.cpp
+        AGENT_MODEL=${AGENT_OPT_MODEL} AGENT_MODEL_NAME=${K3D_GPU_AGENT_MODEL_NAME:-${AGENT_OPT_MODEL##*/}}
+        engine=llama.cpp
+    fi
     case "${AGENT_BACKEND}" in llm-scaler) vver=0.26.0 ;; esac
     [ -z "${AGENT_HPU:-}" ] || vver=0.30.0
     # An explicit Fast Draft device (auto, CPU, GPU, NPU) is agent_draft's: the optimizer then adds none.
