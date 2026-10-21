@@ -1647,7 +1647,7 @@ say nothing about the graded result.
 
 ### H7x pre-registration: H7 to its full protocol on the Xeon 6741P (2026-10-20)
 
-Written 2026-10-20T23:10Z, revised 2026-10-21T04:00Z after four setup smokes, before any H7x
+Written 2026-10-20T23:10Z, revised 2026-10-21T21:10Z after six setup smokes, before any H7x
 measurement (the smokes started the engines and sent no request; see below). H7 keeps its
 INCONCLUSIVE verdict on the i9-13900T.
 
@@ -1731,8 +1731,10 @@ come up, the run continues without it and C/B is reported as not measured. Smoke
 04:12-04:47Z, order B C, 16 CPUs, the fit's 22Gi): B Ready in 141 s; C with
 `VLLM_CACHE_ROOT=/root/.cache/vllm` (the chart's cache volume) failed on
 `PermissionError: [Errno 13] Permission denied: '/root/.cache'` (read with `--previous`), so the
-cache root moved to `/tmp/vllm`. A sixth smoke (C only) runs before this row is merged and is
-reported in its run section. `H7X_READY_S=1800` is used for the run, because the first vLLM
+cache root moved to `/tmp/vllm`. Smoke 6 (2026-10-21 06:54-06:58Z, C only, 16 CPUs, the fit's
+22Gi, `VLLM_CACHE_ROOT=/tmp/vllm`): C Ready in 184 s on 0-7,48-55. All three arms have now come up
+on this host with the run's settings; no request was sent in any smoke. Smoke records:
+`bench/xhost/results/2026-10-21/H7x-smokes/` (smoke 6 is added with the run). `H7X_READY_S=1800` is used for the run, because the first vLLM
 start in a fresh cluster pulls its 7.4 GB image.
 
 **Hold.** One hold, cap 4200 s (11 blocks; a vLLM cold start is the slow step). If the cap ends
