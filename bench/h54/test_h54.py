@@ -244,7 +244,8 @@ class Renders(unittest.TestCase):
         self.assertEqual(docs[3]["spec"]["template"]["spec"]["containers"][0]["image"], h54.IMG["vllm024"])  # input untouched
         mtp = h54.derive_vllm("Vq-mtp", docs)[4]["spec"]["template"]["spec"]["containers"][0]["args"]
         spec = json.loads(mtp[mtp.index("--speculative-config") + 1])
-        self.assertEqual(spec, {"method": "gemma4_mtp", "model": f"/data/{h54.DRAFTER}"})   # vLLM's default length
+        self.assertEqual(spec, {"method": "gemma4_mtp", "model": f"/data/{h54.DRAFTER}",
+                               "num_speculative_tokens": 1})   # vLLM's n_predict default, named (R2)
         vi = h54.derive_vllm("Vi", docs)[4]["spec"]["template"]["spec"]["containers"][0]["args"]
         self.assertEqual(vi[vi.index("--model") + 1], f"/data/{h54.AUTOROUND}")
 

@@ -154,7 +154,11 @@ def derive_vllm(arm, docs):
                 a[a.index("--model") + 1] = f"/data/{AUTOROUND}"
             a += ["--attention-backend", "CPU_ATTN"]
             if arm == "Vq-mtp":
-                a += ["--speculative-config", json.dumps({"method": "gemma4_mtp", "model": f"/data/{DRAFTER}"})]
+                # num_speculative_tokens 1: the n_predict default config/speculative.py sets for a
+                # gemma4_assistant drafter, passed because v0.32.0 compares it with 1 before it
+                # sets it (TypeError on None; amendment R2).
+                a += ["--speculative-config", json.dumps({"method": "gemma4_mtp", "model": f"/data/{DRAFTER}",
+                                                          "num_speculative_tokens": 1})]
         out.append(d)
     return out
 

@@ -17,7 +17,7 @@ echo "cpuset: none (no node cpuset; the k3d node container sees every CPU; optim
 echo "docker: $(docker version --format '{{.Server.Version}}' 2>/dev/null)"
 for t in k3d.real kubectl helm uv; do echo "${t}: $("${G}/bin/${t}" version 2>/dev/null | head -1 || "${G}/bin/${t}" --version 2>/dev/null | head -1) sha256 $(sha256sum "${G}/bin/${t}" | cut -c1-16)"; done
 echo "repo: $(git -C "${REPO}" rev-parse HEAD) $(git -C "${REPO}" status --porcelain | wc -l) uncommitted"
-echo "eat: $(git -C "${G}/eat-src" rev-parse HEAD 2>/dev/null)"
+echo "eat: $(git -C "${EAT}" rev-parse HEAD 2>/dev/null)"
 echo "images:"
 python3 "${HERE}/h54.py" arms | python3 -c 'import json,sys; [print(f"  {k}: {v}") for k, v in json.load(sys.stdin)["images"].items()]'
 echo "  node: cryptoandcoffee/k3d-gpu:0.1.63@sha256:b6fc46f60a47948eb1c4e6c5e80059c7f581427429c35a2627c58fc2307e4b76"
