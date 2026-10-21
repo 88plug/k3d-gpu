@@ -89,9 +89,11 @@ for d in docs:
                 if c.get(key) and "--enforce-eager" in c[key]:
                     c[key] = [a for a in c[key] if a != "--enforce-eager"]; n += 1
             # With compilation on, vLLM writes its compile cache under VLLM_CACHE_ROOT, by default
-            # $HOME/.cache/vllm, on the chart's read-only root; point it at the chart's own
-            # writable /root/.cache/vllm volume.
-            c.setdefault("env", []).append({"name": "VLLM_CACHE_ROOT", "value": "/root/.cache/vllm"})
+            # $HOME/.cache/vllm, on the chart's read-only root. The chart's /root/.cache/vllm
+            # volume is not reachable for its non-root user (/root/.cache: permission denied, smoke
+            # 5), so point it into the chart's writable /tmp emptyDir, where the chart already
+            # puts the torch inductor and triton caches.
+            c.setdefault("env", []).append({"name": "VLLM_CACHE_ROOT", "value": "/tmp/vllm"})
         # C's own selector label, so the two Deployments never share pods.
         d["spec"]["selector"].setdefault("matchLabels", {})["h7x-arm"] = "c"
         d["spec"]["template"]["metadata"].setdefault("labels", {})["h7x-arm"] = "c"
