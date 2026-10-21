@@ -1,0 +1,14 @@
+{
+  "files": {
+    "Qwen3.8-Flash-Next-IQ4_NL-00001-of-00002.gguf": {
+      "header_bytes": 10945504,
+      "size": 10945504
+    },
+    "Qwen3.8-Flash-Next-IQ4_NL-00002-of-00002.gguf": {
+      "header_bytes": 77824,
+      "size": 102037973504
+    }
+  },
+  "repo": "ggml-org/Qwen3.8-Flash-Next-GGUF",
+  "revision": "91fb00353e766eb43944ed223665ea4fb87dad47"
+}
