@@ -4,7 +4,8 @@
 # qwen38-b-hr (cards 2 and 3) after saving its `docker inspect`, and starts it again at the end,
 # also on failure, checking that it answers a chat request. Each stop and restart is appended to
 # ~/k3dgpu-bench/gpu-state.txt. Usage: CARDS=2,3 [STOP_BHR=1] campaign.sh "HOLD:ARMS" ... where
-# HOLD:ARMS is e.g. "1:X1q X1q-mtp" for H54b or "c1:2" for H54c hold 1 on card 2.
+# HOLD:ARMS is e.g. "1:X1q X1q-mtp" for H54b, "c1:2" for H54c hold 1 on card 2, or
+# "f:REPO:REVISION:GB" for a download between holds.
 set -uo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 X=${HOME}/k3dgpu-gemma
@@ -62,6 +63,11 @@ fi
 for h in "$@"; do
     id=${h%%:*} arg=${h#*:}
     case "${id}" in
+        f)  # f:REPO:REVISION:GB, a download between holds (fetch.sh, same lock)
+            IFS=: read -r repo rev gb <<< "${arg}"
+            H54_LOCKED=1 bash "${HERE}/fetch.sh" "${repo}" "${rev}" "${gb}"
+            log "fetch ${repo} rc=$?"
+            continue ;;
         c*) H54_LOCKED=1 bash "${HERE}/hold.sh" "H54c-hold${id#c}" "${CAP}" bash "${HERE}/h54c.sh" "${id#c}" "${arg}" ;;
         *)  # shellcheck disable=SC2086
             H54_LOCKED=1 CARDS=${CARDS} bash "${HERE}/hold.sh" "H54b-hold${id}" "${CAP}" bash "${HERE}/h54b.sh" "${id}" ${arg} ;;

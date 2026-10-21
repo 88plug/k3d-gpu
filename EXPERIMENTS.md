@@ -2898,7 +2898,9 @@ tenants' growth) is not started, and its arm is recorded as not deliverable (dis
 Sq-mtp are expected to be not deliverable (disk), and with them H54b's statistic (INCONCLUSIVE
 by the pre-registration). A download is made only when the arm that reads it would then also pass its own guard
 (model plus its NEED in `h54b.sh`): Intel q4km for Lsq (18.7 + 6 GB) is fetched; RedHat INT4
-for Rq (19.5 + 45 GB) and Qwen bf16 (55.6 GB) are not, unless the headroom grows.
+for Rq (19.5 + 45 GB) and Qwen bf16 (55.6 GB) are not, unless the headroom grows. The 96% line
+left 30.8 GB at 04:00Z, room for X1q's 20 GB or the q4km fetch, not both, so `campaign.sh`
+fetches q4km between H54b's two holds, under the same lock, after X1q's volume is gone.
 
 **Order and holds.** H54b hold 1: X1q, X1q-mtp. Hold 2: Lsq, B2q, Sq, Sq-mtp, Rq (the last four
 only where their model was fetched and the disk guard passes). Arms not reached in the
