@@ -1582,16 +1582,20 @@ Per-machine install paths with time expectations: [docs/first-run.md](docs/first
 `k3d-gpu host-setup` checks the host userspace for each detected Intel GPU, Intel
 NPU and NVIDIA GPU, then prints the exact install commands for this distro
 (Ubuntu 24.04/26.04, Fedora, Arch, Manjaro; `--distro` prints another one's). It
-changes nothing unless you pass `--apply` and answer `y`.
+changes nothing unless you pass `--apply` and answer `y`. Each package set below is
+planned only when its own check fails, and only from the detected release's pinned
+set: a host whose checks all pass gets no install, and an Ubuntu release with no
+pinned set (anything but 24.04 and 26.04) is told so instead of getting another
+release's packages.
 
 | Component | Ubuntu 24.04 / 26.04 | Fedora | Arch / Manjaro |
 |-----------|----------------------|--------|----------------|
 | Compute runtime (OpenCL + Level Zero GPU) | GitHub .debs, sha256-checked: compute-runtime 26.35.39758.10, IGC 2.41.5 | `intel-opencl intel-level-zero` | `intel-compute-runtime` |
-| Level Zero loader | GitHub `libze1` 1.34.0 .deb, sha256-checked | `oneapi-level-zero` | `level-zero-loader` |
+| Level Zero loader | 24.04: GitHub `libze1` 1.34.0 .deb, sha256-checked. 26.04: none pinned (level-zero publishes 22.04/24.04 .debs only); `host-setup` says so and names the archive's `libze1` 1.28.2 | `oneapi-level-zero` | `level-zero-loader` |
 | Media driver + libva | `ppa:kobuk-team/intel-graphics`, pinned 26.3.2 / 2.24.1 | `libva-intel-media-driver` | `intel-media-driver libva` |
 | NPU driver + firmware | GitHub linux-npu-driver v1.38.0 archive, sha256-checked (includes `intel-fw-npu`) | `intel-npu-driver intel-npu-firmware` | `intel-npu-driver linux-firmware-intel` |
 | NVIDIA container toolkit | NVIDIA apt repo, pinned 1.20.1-1; CDI via `nvidia-cdi-refresh` | NVIDIA dnf repo, pinned 1.20.1-1 | `nvidia-container-toolkit`; CDI via `nvidia-cdi-refresh` (1.20.1-1+), else `nvidia-ctk cdi generate` |
-| DSA / IAA user work queues | `accel-config` (universe), then per disabled device: 1 engine, 1 group, 1 user WQ (shared with user PASID, else dedicated) | `accel-config`, same steps | no package: build intel/idxd-config accel-config-v4.1.9; the plan leaves DSA/IAA out until then |
+| DSA / IAA user work queues | `accel-config` from the release's universe (24.04: 4.1.6, 26.04: 4.1.9) when no `accel-config` binary is found, then per disabled device: 1 engine, 1 group, 1 user WQ (shared with user PASID, else dedicated) | `accel-config`, same steps | no package: build intel/idxd-config accel-config-v4.1.9; the plan leaves DSA/IAA out until then |
 | QAT VFs | `sriov_numvfs` = the PF's `sriov_totalvfs`, `modprobe vfio-pci` | same | same |
 
 Fedora, Arch and Manjaro repos serve only their current build, so those plans
@@ -1609,6 +1613,11 @@ the fix:
   `/var/lib/k3d-gpu/idxd-<dev>.conf`), writes the snapshot back, adds the user WQ
   beside the kernel ones, and re-enables them. Its revert loads the same snapshot.
   Under live zswap on `deflate-iaa` the IAA device is never touched.
+  When the kernel WQs claim every WQ entry (iaa_crypto taking 256 of 256), no user
+  WQ fits beside them. `host-setup` and `doctor` then print a suggestion, never run
+  by `--apply` (`--with-kernel-wqs` included): shrink the largest kernel WQ by 16
+  entries (it keeps at least 16) and add a 16-entry user WQ, through the same
+  snapshot path, with the same revert.
 
 Downloads go to `${XDG_CACHE_HOME:-~/.cache}/k3d-gpu/host-setup` (override: `K3D_GPU_SETUP_DIR`), which must be a directory you own; it is set to mode 0700. On Ubuntu an apt pin keeps the PPA's `intel-opencl-icd`/`libze*`/`libigc*` builds from replacing the GitHub .debs.
 
