@@ -131,7 +131,7 @@ says "  ...vLLM serves it as given" 0 '^            - acme/never-heard-of$' "" "
 says "Flash-Next on OVMS: refused with the reason, default kept" 0 'qwen4_exp is in no OpenVINO' "" "${GPU[@]}" -- --model Qwen/Qwen3.8-Flash-Next
 says "K3D_GPU_MODEL_OPT=off serves the id as given" 0 '--source_model=OpenVINO/Qwen3.8-27B-int4-ov' "" "${GPU[@]}" K3D_GPU_MODEL_OPT=off -- --model OpenVINO/Qwen3.8-27B-int4-ov
 says "--model and K3D_GPU_AGENT_MODEL together are refused" fail 'use one' "" K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3-4B-int4-ov -- --model Qwen/Qwen3.8-27B
-says "--model must be an org/name id" fail 'not a Hugging Face id' "" -- --model 'bad id'
+says "--model that is neither an org/name id nor a directory is refused" fail 'not a valid model id' "" -- --model 'bad id'
 says "an explicit Fast Draft device takes the place of MTP" 0 'draft_model_path' negate "${GPU[@]}" K3D_GPU_AGENT_DRAFT=GPU K3D_GPU_AGENT_PREFIX_CACHING=false -- --model Qwen/Qwen3.8-27B
 says "  ...and is rendered" 0 '--draft_source_model=OpenVINO/Qwen3-0.6B-int4-ov' "" "${GPU[@]}" K3D_GPU_AGENT_DRAFT=GPU K3D_GPU_AGENT_PREFIX_CACHING=false -- --model Qwen/Qwen3.8-27B
 says "K3D_GPU_AGENT_DRAFT=mtp with prefix caching forced on: no MTP" 0 'draft_model_path' negate "${GPU[@]}" K3D_GPU_AGENT_DRAFT=mtp K3D_GPU_AGENT_PREFIX_CACHING=true -- --model Qwen/Qwen3.8-27B

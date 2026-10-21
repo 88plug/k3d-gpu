@@ -798,6 +798,10 @@ def optimize(bundle, engine, device, opts=None):
                 promoted = c
                 break
     forced = o.get("variant")
+    requested = bundle.get("requested", target)
+    # A named variant needs only the engine's format (a named int4 on vLLM is served as int4).
+    named = next((c for c in models if c["id"] == requested and c["format"] == fmt and not c["nvidia_only"]),
+                 None) if requested != target else None
     if forced:
         hit = next((c for c in ranked if c["id"] == forced), None)
         if hit:
@@ -805,6 +809,12 @@ def optimize(bundle, engine, device, opts=None):
             pick = hit
         else:
             doc["notes"].append("K3D_GPU_AGENT_VARIANT=%s is not a candidate for %s on %s; keeping the ranked pick" % (forced, engine, device))
+    elif named:
+        # The user named this variant, not the base model: serve it as named.
+        choose("%s was named, a variant of %s" % (requested, target), "serve the named variant (the ranking is shown, not applied)", "--model")
+        pick = named
+    elif requested != target:
+        doc["notes"].append("%s is not a %s %s candidate on %s: serving the ranked pick" % (requested, precision, fmt, engine))
     elif promoted:
         choose("%s ranks below %s, but %s" % (promoted["id"], pick["id"], promoted["promotion"]), "promote it", promoted["promotion"])
         pick = promoted

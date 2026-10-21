@@ -261,6 +261,16 @@ class Decisions(unittest.TestCase):
         self.assertEqual(d["ranking"][0]["tier"], "official")
         self.assertTrue(d["model"].startswith("Intel/"))
 
+    def test_a_named_variant_is_served(self):
+        b = dict(bundle(QWEN), requested="RedHatAI/Qwen3.8-27B-INT4")
+        d = mo.optimize(b, "vllm", "GPU")
+        self.assertEqual(d["model"], "RedHatAI/Qwen3.8-27B-INT4")
+        self.assertEqual((d["speculative"] or {}).get("kind"), "mtp")
+        # Named but not servable by this engine: the ranked pick, with a note.
+        d = mo.optimize(b, "ovms", "GPU")
+        self.assertEqual(d["model"], "OpenVINO/Qwen3.8-27B-int4-ov")
+        self.assertTrue(any("is not a int4 openvino-ir candidate" in n for n in d["notes"]))
+
     def test_pure(self):
         b = bundle(GEMMA)
         before = copy.deepcopy(b)
