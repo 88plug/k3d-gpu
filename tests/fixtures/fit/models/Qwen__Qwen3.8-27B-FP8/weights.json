@@ -1,0 +1,294 @@
+{
+  "classes": {
+    "embed": {
+      "bytes": 2542796800,
+      "tensors": 1
+    },
+    "lm_head": {
+      "bytes": 2542796800,
+      "tensors": 1
+    },
+    "mtp": {
+      "bytes": 477199744,
+      "tensors": 22
+    },
+    "other": {
+      "bytes": 24382409728,
+      "tensors": 1249
+    },
+    "vision": {
+      "bytes": 921460192,
+      "tensors": 333
+    }
+  },
+  "files": [
+    {
+      "bytes": 383865448,
+      "name": "layers-0.safetensors"
+    },
+    {
+      "bytes": 383865448,
+      "name": "layers-1.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-10.safetensors"
+    },
+    {
+      "bytes": 372313760,
+      "name": "layers-11.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-12.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-13.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-14.safetensors"
+    },
+    {
+      "bytes": 372313760,
+      "name": "layers-15.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-16.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-17.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-18.safetensors"
+    },
+    {
+      "bytes": 372313760,
+      "name": "layers-19.safetensors"
+    },
+    {
+      "bytes": 383865448,
+      "name": "layers-2.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-20.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-21.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-22.safetensors"
+    },
+    {
+      "bytes": 372313760,
+      "name": "layers-23.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-24.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-25.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-26.safetensors"
+    },
+    {
+      "bytes": 372313760,
+      "name": "layers-27.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-28.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-29.safetensors"
+    },
+    {
+      "bytes": 372313744,
+      "name": "layers-3.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-30.safetensors"
+    },
+    {
+      "bytes": 372313760,
+      "name": "layers-31.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-32.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-33.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-34.safetensors"
+    },
+    {
+      "bytes": 372313760,
+      "name": "layers-35.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-36.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-37.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-38.safetensors"
+    },
+    {
+      "bytes": 372313760,
+      "name": "layers-39.safetensors"
+    },
+    {
+      "bytes": 383865448,
+      "name": "layers-4.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-40.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-41.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-42.safetensors"
+    },
+    {
+      "bytes": 372313760,
+      "name": "layers-43.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-44.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-45.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-46.safetensors"
+    },
+    {
+      "bytes": 372313760,
+      "name": "layers-47.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-48.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-49.safetensors"
+    },
+    {
+      "bytes": 383865448,
+      "name": "layers-5.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-50.safetensors"
+    },
+    {
+      "bytes": 372313760,
+      "name": "layers-51.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-52.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-53.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-54.safetensors"
+    },
+    {
+      "bytes": 372313760,
+      "name": "layers-55.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-56.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-57.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-58.safetensors"
+    },
+    {
+      "bytes": 372313760,
+      "name": "layers-59.safetensors"
+    },
+    {
+      "bytes": 383865448,
+      "name": "layers-6.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-60.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-61.safetensors"
+    },
+    {
+      "bytes": 383865472,
+      "name": "layers-62.safetensors"
+    },
+    {
+      "bytes": 372313760,
+      "name": "layers-63.safetensors"
+    },
+    {
+      "bytes": 372313744,
+      "name": "layers-7.safetensors"
+    },
+    {
+      "bytes": 383865448,
+      "name": "layers-8.safetensors"
+    },
+    {
+      "bytes": 383865448,
+      "name": "layers-9.safetensors"
+    },
+    {
+      "bytes": 477202224,
+      "name": "mtp.safetensors"
+    },
+    {
+      "bytes": 6007102112,
+      "name": "outside.safetensors"
+    }
+  ],
+  "format": "safetensors",
+  "schema": "k3d-gpu.weights/v1",
+  "source": "Qwen/Qwen3.8-27B-FP8@017b9c7af6b5689d5dd426a76e0bc077eb5ca20a",
+  "total_bytes": 30866663264
+}

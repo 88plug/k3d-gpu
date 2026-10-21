@@ -1,0 +1,31 @@
+{
+  "classes": {
+    "embed": {
+      "bytes": 715161600,
+      "tensors": 1
+    },
+    "lm_head": {
+      "bytes": 1042944000,
+      "tensors": 1
+    },
+    "mtp": {
+      "bytes": 29552640,
+      "tensors": 4
+    },
+    "other": {
+      "bytes": 15012061184,
+      "tensors": 860
+    }
+  },
+  "config_from": "Qwen/Qwen3.8-27B@1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+  "files": [
+    {
+      "bytes": 16810714432,
+      "name": "Qwen3.8-27B-Q4_K_M.gguf"
+    }
+  ],
+  "format": "gguf",
+  "schema": "k3d-gpu.weights/v1",
+  "source": "Intel/Qwen3.8-27B-q4km-AutoRound@4b30b30e0ac2cc54a2f50738cfccd6c608f94ad4",
+  "total_bytes": 16799719424
+}

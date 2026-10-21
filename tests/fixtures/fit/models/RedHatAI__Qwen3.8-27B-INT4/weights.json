@@ -1,0 +1,38 @@
+{
+  "classes": {
+    "embed": {
+      "bytes": 2542796800,
+      "tensors": 1
+    },
+    "lm_head": {
+      "bytes": 2542796800,
+      "tensors": 1
+    },
+    "mtp": {
+      "bytes": 849398784,
+      "tensors": 15
+    },
+    "other": {
+      "bytes": 12596073792,
+      "tensors": 1681
+    },
+    "vision": {
+      "bytes": 921460192,
+      "tensors": 333
+    }
+  },
+  "files": [
+    {
+      "bytes": 18603387656,
+      "name": "model.safetensors"
+    },
+    {
+      "bytes": 849400392,
+      "name": "model_mtp.safetensors"
+    }
+  ],
+  "format": "safetensors",
+  "schema": "k3d-gpu.weights/v1",
+  "source": "RedHatAI/Qwen3.8-27B-INT4@91bd022d5b49442a868bc35008f6c21e1860edfa",
+  "total_bytes": 19452526368
+}

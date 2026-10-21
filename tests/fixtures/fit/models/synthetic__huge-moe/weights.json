@@ -1,0 +1,30 @@
+{
+  "classes": {
+    "embed": {
+      "bytes": 2147483648,
+      "tensors": 1
+    },
+    "experts": {
+      "bytes": 1717986918400,
+      "tensors": 1
+    },
+    "ngram": {
+      "bytes": 429496729600,
+      "tensors": 1
+    },
+    "other": {
+      "bytes": 64424509440,
+      "tensors": 1
+    }
+  },
+  "files": [
+    {
+      "bytes": 2214055641088,
+      "name": "synthetic"
+    }
+  ],
+  "format": "safetensors",
+  "schema": "k3d-gpu.weights/v1",
+  "source": "synthetic/huge-moe",
+  "total_bytes": 2214055641088
+}

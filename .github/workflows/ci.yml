@@ -210,6 +210,15 @@ jobs:
       - run: tests/autoquant_test.sh
       - run: tests/bench_vs_test.sh
 
+  fit-tests:
+    name: k3d-gpu fit and guard tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      # tests/fit_test.py (the fit arithmetic on fixture hosts and models, the guard
+      # under simulated PSI) and the launcher's fit, agent manifest and agent guard.
+      - run: tests/fit_test.sh
+
   tune-tests:
     name: k3d-gpu tune tests
     runs-on: ubuntu-latest
@@ -230,6 +239,8 @@ jobs:
       - run: python3 bench/apb/test_apb.py
       - run: python3 bench/apb/test_stage.py
       - run: python3 bench/test_agent_trace.py
+      - run: python3 bench/eatflow/crescent/test_holds.py
+      - run: tests/hold_own_test.sh
       - run: python3 bench/load/test_load.py
       - run: python3 bench/eatflow/test_agentbench.py
       - run: python3 bench/eatflow/test_pairs.py
@@ -240,6 +251,7 @@ jobs:
       - run: python3 bench/prefill-guard/test_analyze.py
       - run: python3 bench/h54/test_h54.py
       - run: python3 bench/h54gpu/test_h54gpu.py
+      - run: python3 bench/h57d/test_h57d.py
 
   mcp-tests:
     name: MCP server tests

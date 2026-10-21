@@ -1,0 +1,66 @@
+{
+  "bandwidth": {
+    "gbs": 89.6,
+    "label": "theoretical (2 DIMMs x 5600 MT/s x their data width, one DIMM per channel assumed)",
+    "source": "/sys/firmware/dmi/entries/17-*/raw"
+  },
+  "cgroup": {
+    "current": null,
+    "limit": null,
+    "path": "/user.slice"
+  },
+  "cpu": {
+    "amx": false,
+    "avx2": true,
+    "avx512": false,
+    "cpus": 32,
+    "flags": [
+      "avx2",
+      "avx_vnni"
+    ],
+    "model": "13th Gen Intel(R) Core(TM) i9-13900K"
+  },
+  "gpus": [],
+  "hugepages": {
+    "pools": {
+      "1073741824": {
+        "free": 0,
+        "total": 0
+      },
+      "2097152": {
+        "free": 0,
+        "total": 0
+      }
+    },
+    "thp": "madvise"
+  },
+  "numa": [
+    {
+      "cpulist": "0-31",
+      "free": 42949672960,
+      "node": 0,
+      "total": 68719476736
+    }
+  ],
+  "psi": {
+    "full": {
+      "avg10": 0.0,
+      "avg300": 0.0,
+      "avg60": 0.0,
+      "total": 0
+    },
+    "some": {
+      "avg10": 0.0,
+      "avg300": 0.0,
+      "avg60": 0.0,
+      "total": 0
+    }
+  },
+  "ram": {
+    "available": 55834574848,
+    "swap_free": 8589934592,
+    "swap_total": 8589934592,
+    "total": 68719476736
+  },
+  "schema": "k3d-gpu.host/v1"
+}
