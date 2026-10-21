@@ -240,7 +240,7 @@ check "apb (H7x): h7x.py applies the H7x decision rule" \
     env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/apb/test_h7x.py"
 check "apb (H7x): h7x.sh parses" bash -n "${ROOT}/bench/apb/h7x.sh"
 check "apb (H7x): h7x.sh defaults are H7's (16 CPUs, ABBAABBAAB then C, no node cpuset)" \
-    sh -c 'test "$(env -u K3D_GPU_CLUSTER H7X_PRINT_CONFIG=1 bash "$1")" = "cluster=apb-h7x cpus=16 node_cpus= order=A B B A A B B A A B C"' _ "${ROOT}/bench/apb/h7x.sh"
+    sh -c 'test "$(env -u K3D_GPU_CLUSTER H7X_PRINT_CONFIG=1 bash "$1")" = "cluster=apb-h7x cpus=16 node_cpus= order=A B B A A B B A A B C vllm_mem="' _ "${ROOT}/bench/apb/h7x.sh"
 check "shared-prefix (H25): run.sh parses" bash -n "${ROOT}/bench/shared-prefix/run.sh"
 check "shared-prefix (H25): run.sh pins no node cpuset by default" \
     sh -c 'test "$(env -u CLUSTER -u NODE_CPUS SHARED_PREFIX_PRINT_CONFIG=1 bash "$1")" = "cluster=k3dgpu-i-shared-prefix node_cpus="' _ "${ROOT}/bench/shared-prefix/run.sh"
