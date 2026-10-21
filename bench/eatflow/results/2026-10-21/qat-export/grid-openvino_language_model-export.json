@@ -1,0 +1,1975 @@
+{
+ "ir": "/home/devcloud/k3dgpu-gemma/models/k3dgpu_gemma-4-26B-A4B-it-qat-int4-sym-g32-ov.partial/openvino_language_model.xml",
+ "qat": "/home/devcloud/k3dgpu-gemma/models/google_gemma-4-26B-A4B-it-qat-q4_0-unquantized",
+ "matched": 325,
+ "skipped": 0,
+ "summary": {
+  "attention": {
+   "n": 115,
+   "median": 0.05143,
+   "max": 0.05414
+  },
+  "experts": {
+   "n": 90,
+   "median": 0.07967,
+   "max": 0.07982
+  },
+  "other": {
+   "n": 120,
+   "median": 0.07837,
+   "max": 0.0796
+  }
+ },
+ "tensors": [
+  {
+   "ir": "self.model.language_model.layers.0.self_attn.q_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.0.self_attn.q_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05055
+  },
+  {
+   "ir": "self.model.language_model.layers.0.self_attn.k_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.0.self_attn.k_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05082
+  },
+  {
+   "ir": "self.model.language_model.layers.0.self_attn.v_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.0.self_attn.v_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05084
+  },
+  {
+   "ir": "self.model.language_model.layers.0.self_attn.o_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.0.self_attn.o_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05027
+  },
+  {
+   "ir": "self.model.language_model.layers.0.mlp.gate_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.0.mlp.gate_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07836
+  },
+  {
+   "ir": "self.model.language_model.layers.0.mlp.up_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.0.mlp.up_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07869
+  },
+  {
+   "ir": "self.model.language_model.layers.0.mlp.down_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.0.mlp.down_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07565
+  },
+  {
+   "ir": "__module.model.language_model.layers.0.experts/prim::ListUnpack/VariadicSplit.0",
+   "qat": "model.language_model.layers.0.experts.gate_up_proj[0]",
+   "kind": "experts",
+   "rel_rms": 0.07914
+  },
+  {
+   "ir": "__module.model.language_model.layers.0.experts/prim::ListUnpack/VariadicSplit.1",
+   "qat": "model.language_model.layers.0.experts.gate_up_proj[1]",
+   "kind": "experts",
+   "rel_rms": 0.07871
+  },
+  {
+   "ir": "self.model.language_model.layers.0.experts.down_proj",
+   "qat": "model.language_model.layers.0.experts.down_proj",
+   "kind": "experts",
+   "rel_rms": 0.07966
+  },
+  {
+   "ir": "self.model.language_model.layers.0.router.proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.0.router.proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07583
+  },
+  {
+   "ir": "self.model.language_model.layers.1.self_attn.q_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.1.self_attn.q_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05183
+  },
+  {
+   "ir": "self.model.language_model.layers.1.self_attn.k_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.1.self_attn.k_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05157
+  },
+  {
+   "ir": "self.model.language_model.layers.1.self_attn.v_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.1.self_attn.v_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05109
+  },
+  {
+   "ir": "self.model.language_model.layers.1.self_attn.o_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.1.self_attn.o_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05047
+  },
+  {
+   "ir": "self.model.language_model.layers.1.mlp.gate_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.1.mlp.gate_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07847
+  },
+  {
+   "ir": "self.model.language_model.layers.1.mlp.up_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.1.mlp.up_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07853
+  },
+  {
+   "ir": "self.model.language_model.layers.1.mlp.down_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.1.mlp.down_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07731
+  },
+  {
+   "ir": "__module.model.language_model.layers.1.experts/prim::ListUnpack/VariadicSplit.0",
+   "qat": "model.language_model.layers.1.experts.gate_up_proj[0]",
+   "kind": "experts",
+   "rel_rms": 0.07956
+  },
+  {
+   "ir": "__module.model.language_model.layers.1.experts/prim::ListUnpack/VariadicSplit.1",
+   "qat": "model.language_model.layers.1.experts.gate_up_proj[1]",
+   "kind": "experts",
+   "rel_rms": 0.07962
+  },
+  {
+   "ir": "self.model.language_model.layers.1.experts.down_proj",
+   "qat": "model.language_model.layers.1.experts.down_proj",
+   "kind": "experts",
+   "rel_rms": 0.07973
+  },
+  {
+   "ir": "self.model.language_model.layers.1.router.proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.1.router.proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07792
+  },
+  {
+   "ir": "self.model.language_model.layers.2.self_attn.q_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.2.self_attn.q_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05138
+  },
+  {
+   "ir": "self.model.language_model.layers.2.self_attn.k_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.2.self_attn.k_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05163
+  },
+  {
+   "ir": "self.model.language_model.layers.2.self_attn.v_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.2.self_attn.v_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05181
+  },
+  {
+   "ir": "self.model.language_model.layers.2.self_attn.o_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.2.self_attn.o_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05052
+  },
+  {
+   "ir": "self.model.language_model.layers.2.mlp.gate_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.2.mlp.gate_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07783
+  },
+  {
+   "ir": "self.model.language_model.layers.2.mlp.up_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.2.mlp.up_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07797
+  },
+  {
+   "ir": "self.model.language_model.layers.2.mlp.down_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.2.mlp.down_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07577
+  },
+  {
+   "ir": "__module.model.language_model.layers.2.experts/prim::ListUnpack/VariadicSplit.0",
+   "qat": "model.language_model.layers.2.experts.gate_up_proj[0]",
+   "kind": "experts",
+   "rel_rms": 0.07965
+  },
+  {
+   "ir": "__module.model.language_model.layers.2.experts/prim::ListUnpack/VariadicSplit.1",
+   "qat": "model.language_model.layers.2.experts.gate_up_proj[1]",
+   "kind": "experts",
+   "rel_rms": 0.07971
+  },
+  {
+   "ir": "self.model.language_model.layers.2.experts.down_proj",
+   "qat": "model.language_model.layers.2.experts.down_proj",
+   "kind": "experts",
+   "rel_rms": 0.07965
+  },
+  {
+   "ir": "self.model.language_model.layers.2.router.proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.2.router.proj.weight",
+   "kind": "other",
+   "rel_rms": 0.0787
+  },
+  {
+   "ir": "self.model.language_model.layers.3.self_attn.q_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.3.self_attn.q_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05155
+  },
+  {
+   "ir": "self.model.language_model.layers.3.self_attn.k_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.3.self_attn.k_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05181
+  },
+  {
+   "ir": "self.model.language_model.layers.3.self_attn.v_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.3.self_attn.v_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05117
+  },
+  {
+   "ir": "self.model.language_model.layers.3.self_attn.o_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.3.self_attn.o_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05026
+  },
+  {
+   "ir": "self.model.language_model.layers.3.mlp.gate_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.3.mlp.gate_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07793
+  },
+  {
+   "ir": "self.model.language_model.layers.3.mlp.up_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.3.mlp.up_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07743
+  },
+  {
+   "ir": "self.model.language_model.layers.3.mlp.down_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.3.mlp.down_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07599
+  },
+  {
+   "ir": "__module.model.language_model.layers.3.experts/prim::ListUnpack/VariadicSplit.0",
+   "qat": "model.language_model.layers.3.experts.gate_up_proj[0]",
+   "kind": "experts",
+   "rel_rms": 0.0796
+  },
+  {
+   "ir": "__module.model.language_model.layers.3.experts/prim::ListUnpack/VariadicSplit.1",
+   "qat": "model.language_model.layers.3.experts.gate_up_proj[1]",
+   "kind": "experts",
+   "rel_rms": 0.07964
+  },
+  {
+   "ir": "self.model.language_model.layers.3.experts.down_proj",
+   "qat": "model.language_model.layers.3.experts.down_proj",
+   "kind": "experts",
+   "rel_rms": 0.07964
+  },
+  {
+   "ir": "self.model.language_model.layers.3.router.proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.3.router.proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07575
+  },
+  {
+   "ir": "self.model.language_model.layers.4.self_attn.q_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.4.self_attn.q_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05169
+  },
+  {
+   "ir": "self.model.language_model.layers.4.self_attn.k_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.4.self_attn.k_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05126
+  },
+  {
+   "ir": "self.model.language_model.layers.4.self_attn.v_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.4.self_attn.v_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05215
+  },
+  {
+   "ir": "self.model.language_model.layers.4.self_attn.o_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.4.self_attn.o_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05056
+  },
+  {
+   "ir": "self.model.language_model.layers.4.mlp.gate_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.4.mlp.gate_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07831
+  },
+  {
+   "ir": "self.model.language_model.layers.4.mlp.up_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.4.mlp.up_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07812
+  },
+  {
+   "ir": "self.model.language_model.layers.4.mlp.down_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.4.mlp.down_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.0768
+  },
+  {
+   "ir": "__module.model.language_model.layers.4.experts/prim::ListUnpack/VariadicSplit.0",
+   "qat": "model.language_model.layers.4.experts.gate_up_proj[0]",
+   "kind": "experts",
+   "rel_rms": 0.07977
+  },
+  {
+   "ir": "__module.model.language_model.layers.4.experts/prim::ListUnpack/VariadicSplit.1",
+   "qat": "model.language_model.layers.4.experts.gate_up_proj[1]",
+   "kind": "experts",
+   "rel_rms": 0.07971
+  },
+  {
+   "ir": "self.model.language_model.layers.4.experts.down_proj",
+   "qat": "model.language_model.layers.4.experts.down_proj",
+   "kind": "experts",
+   "rel_rms": 0.07953
+  },
+  {
+   "ir": "self.model.language_model.layers.4.router.proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.4.router.proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07922
+  },
+  {
+   "ir": "self.model.language_model.layers.5.self_attn.q_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.5.self_attn.q_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05158
+  },
+  {
+   "ir": "self.model.language_model.layers.5.self_attn.k_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.5.self_attn.k_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05206
+  },
+  {
+   "ir": "self.model.language_model.layers.5.self_attn.o_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.5.self_attn.o_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05072
+  },
+  {
+   "ir": "self.model.language_model.layers.5.mlp.gate_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.5.mlp.gate_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07779
+  },
+  {
+   "ir": "self.model.language_model.layers.5.mlp.up_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.5.mlp.up_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07787
+  },
+  {
+   "ir": "self.model.language_model.layers.5.mlp.down_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.5.mlp.down_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07636
+  },
+  {
+   "ir": "__module.model.language_model.layers.5.experts/prim::ListUnpack/VariadicSplit.0",
+   "qat": "model.language_model.layers.5.experts.gate_up_proj[0]",
+   "kind": "experts",
+   "rel_rms": 0.07973
+  },
+  {
+   "ir": "__module.model.language_model.layers.5.experts/prim::ListUnpack/VariadicSplit.1",
+   "qat": "model.language_model.layers.5.experts.gate_up_proj[1]",
+   "kind": "experts",
+   "rel_rms": 0.07972
+  },
+  {
+   "ir": "self.model.language_model.layers.5.experts.down_proj",
+   "qat": "model.language_model.layers.5.experts.down_proj",
+   "kind": "experts",
+   "rel_rms": 0.07963
+  },
+  {
+   "ir": "self.model.language_model.layers.5.router.proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.5.router.proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07868
+  },
+  {
+   "ir": "self.model.language_model.layers.6.self_attn.q_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.6.self_attn.q_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05127
+  },
+  {
+   "ir": "self.model.language_model.layers.6.self_attn.k_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.6.self_attn.k_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05193
+  },
+  {
+   "ir": "self.model.language_model.layers.6.self_attn.v_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.6.self_attn.v_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05197
+  },
+  {
+   "ir": "self.model.language_model.layers.6.self_attn.o_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.6.self_attn.o_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05044
+  },
+  {
+   "ir": "self.model.language_model.layers.6.mlp.gate_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.6.mlp.gate_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07861
+  },
+  {
+   "ir": "self.model.language_model.layers.6.mlp.up_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.6.mlp.up_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07857
+  },
+  {
+   "ir": "self.model.language_model.layers.6.mlp.down_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.6.mlp.down_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.0772
+  },
+  {
+   "ir": "__module.model.language_model.layers.6.experts/prim::ListUnpack/VariadicSplit.0",
+   "qat": "model.language_model.layers.6.experts.gate_up_proj[0]",
+   "kind": "experts",
+   "rel_rms": 0.07977
+  },
+  {
+   "ir": "__module.model.language_model.layers.6.experts/prim::ListUnpack/VariadicSplit.1",
+   "qat": "model.language_model.layers.6.experts.gate_up_proj[1]",
+   "kind": "experts",
+   "rel_rms": 0.07975
+  },
+  {
+   "ir": "self.model.language_model.layers.6.experts.down_proj",
+   "qat": "model.language_model.layers.6.experts.down_proj",
+   "kind": "experts",
+   "rel_rms": 0.07952
+  },
+  {
+   "ir": "self.model.language_model.layers.6.router.proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.6.router.proj.weight",
+   "kind": "other",
+   "rel_rms": 0.0796
+  },
+  {
+   "ir": "self.model.language_model.layers.7.self_attn.q_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.7.self_attn.q_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05119
+  },
+  {
+   "ir": "self.model.language_model.layers.7.self_attn.k_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.7.self_attn.k_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05126
+  },
+  {
+   "ir": "self.model.language_model.layers.7.self_attn.v_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.7.self_attn.v_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05142
+  },
+  {
+   "ir": "self.model.language_model.layers.7.self_attn.o_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.7.self_attn.o_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.0504
+  },
+  {
+   "ir": "self.model.language_model.layers.7.mlp.gate_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.7.mlp.gate_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07806
+  },
+  {
+   "ir": "self.model.language_model.layers.7.mlp.up_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.7.mlp.up_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07812
+  },
+  {
+   "ir": "self.model.language_model.layers.7.mlp.down_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.7.mlp.down_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07649
+  },
+  {
+   "ir": "__module.model.language_model.layers.7.experts/prim::ListUnpack/VariadicSplit.0",
+   "qat": "model.language_model.layers.7.experts.gate_up_proj[0]",
+   "kind": "experts",
+   "rel_rms": 0.07965
+  },
+  {
+   "ir": "__module.model.language_model.layers.7.experts/prim::ListUnpack/VariadicSplit.1",
+   "qat": "model.language_model.layers.7.experts.gate_up_proj[1]",
+   "kind": "experts",
+   "rel_rms": 0.07968
+  },
+  {
+   "ir": "self.model.language_model.layers.7.experts.down_proj",
+   "qat": "model.language_model.layers.7.experts.down_proj",
+   "kind": "experts",
+   "rel_rms": 0.07951
+  },
+  {
+   "ir": "self.model.language_model.layers.7.router.proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.7.router.proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07912
+  },
+  {
+   "ir": "self.model.language_model.layers.8.self_attn.q_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.8.self_attn.q_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05135
+  },
+  {
+   "ir": "self.model.language_model.layers.8.self_attn.k_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.8.self_attn.k_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.0515
+  },
+  {
+   "ir": "self.model.language_model.layers.8.self_attn.v_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.8.self_attn.v_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.0518
+  },
+  {
+   "ir": "self.model.language_model.layers.8.self_attn.o_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.8.self_attn.o_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05074
+  },
+  {
+   "ir": "self.model.language_model.layers.8.mlp.gate_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.8.mlp.gate_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07849
+  },
+  {
+   "ir": "self.model.language_model.layers.8.mlp.up_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.8.mlp.up_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07859
+  },
+  {
+   "ir": "self.model.language_model.layers.8.mlp.down_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.8.mlp.down_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07719
+  },
+  {
+   "ir": "__module.model.language_model.layers.8.experts/prim::ListUnpack/VariadicSplit.0",
+   "qat": "model.language_model.layers.8.experts.gate_up_proj[0]",
+   "kind": "experts",
+   "rel_rms": 0.07968
+  },
+  {
+   "ir": "__module.model.language_model.layers.8.experts/prim::ListUnpack/VariadicSplit.1",
+   "qat": "model.language_model.layers.8.experts.gate_up_proj[1]",
+   "kind": "experts",
+   "rel_rms": 0.07971
+  },
+  {
+   "ir": "self.model.language_model.layers.8.experts.down_proj",
+   "qat": "model.language_model.layers.8.experts.down_proj",
+   "kind": "experts",
+   "rel_rms": 0.07948
+  },
+  {
+   "ir": "self.model.language_model.layers.8.router.proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.8.router.proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07924
+  },
+  {
+   "ir": "self.model.language_model.layers.9.self_attn.v_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.9.self_attn.v_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05198
+  },
+  {
+   "ir": "self.model.language_model.layers.9.self_attn.k_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.9.self_attn.k_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05155
+  },
+  {
+   "ir": "self.model.language_model.layers.9.self_attn.q_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.9.self_attn.q_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05142
+  },
+  {
+   "ir": "self.model.language_model.layers.9.self_attn.o_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.9.self_attn.o_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05065
+  },
+  {
+   "ir": "self.model.language_model.layers.9.mlp.gate_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.9.mlp.gate_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07868
+  },
+  {
+   "ir": "self.model.language_model.layers.9.mlp.up_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.9.mlp.up_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07859
+  },
+  {
+   "ir": "self.model.language_model.layers.9.mlp.down_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.9.mlp.down_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07692
+  },
+  {
+   "ir": "__module.model.language_model.layers.9.experts/prim::ListUnpack/VariadicSplit.0",
+   "qat": "model.language_model.layers.9.experts.gate_up_proj[0]",
+   "kind": "experts",
+   "rel_rms": 0.0797
+  },
+  {
+   "ir": "__module.model.language_model.layers.9.experts/prim::ListUnpack/VariadicSplit.1",
+   "qat": "model.language_model.layers.9.experts.gate_up_proj[1]",
+   "kind": "experts",
+   "rel_rms": 0.0797
+  },
+  {
+   "ir": "self.model.language_model.layers.9.experts.down_proj",
+   "qat": "model.language_model.layers.9.experts.down_proj",
+   "kind": "experts",
+   "rel_rms": 0.07958
+  },
+  {
+   "ir": "self.model.language_model.layers.9.router.proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.9.router.proj.weight",
+   "kind": "other",
+   "rel_rms": 0.0796
+  },
+  {
+   "ir": "self.model.language_model.layers.10.self_attn.q_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.10.self_attn.q_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05174
+  },
+  {
+   "ir": "self.model.language_model.layers.10.self_attn.k_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.10.self_attn.k_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05206
+  },
+  {
+   "ir": "self.model.language_model.layers.10.self_attn.v_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.10.self_attn.v_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05181
+  },
+  {
+   "ir": "self.model.language_model.layers.10.self_attn.o_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.10.self_attn.o_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05093
+  },
+  {
+   "ir": "self.model.language_model.layers.10.mlp.gate_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.10.mlp.gate_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.0785
+  },
+  {
+   "ir": "self.model.language_model.layers.10.mlp.up_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.10.mlp.up_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07844
+  },
+  {
+   "ir": "self.model.language_model.layers.10.mlp.down_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.10.mlp.down_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07769
+  },
+  {
+   "ir": "__module.model.language_model.layers.10.experts/prim::ListUnpack/VariadicSplit.0",
+   "qat": "model.language_model.layers.10.experts.gate_up_proj[0]",
+   "kind": "experts",
+   "rel_rms": 0.07971
+  },
+  {
+   "ir": "__module.model.language_model.layers.10.experts/prim::ListUnpack/VariadicSplit.1",
+   "qat": "model.language_model.layers.10.experts.gate_up_proj[1]",
+   "kind": "experts",
+   "rel_rms": 0.07973
+  },
+  {
+   "ir": "self.model.language_model.layers.10.experts.down_proj",
+   "qat": "model.language_model.layers.10.experts.down_proj",
+   "kind": "experts",
+   "rel_rms": 0.07953
+  },
+  {
+   "ir": "self.model.language_model.layers.10.router.proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.10.router.proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07956
+  },
+  {
+   "ir": "self.model.language_model.layers.11.self_attn.q_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.11.self_attn.q_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05185
+  },
+  {
+   "ir": "self.model.language_model.layers.11.self_attn.k_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.11.self_attn.k_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05253
+  },
+  {
+   "ir": "self.model.language_model.layers.11.self_attn.o_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.11.self_attn.o_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05123
+  },
+  {
+   "ir": "self.model.language_model.layers.11.mlp.gate_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.11.mlp.gate_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07854
+  },
+  {
+   "ir": "self.model.language_model.layers.11.mlp.up_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.11.mlp.up_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07875
+  },
+  {
+   "ir": "self.model.language_model.layers.11.mlp.down_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.11.mlp.down_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07758
+  },
+  {
+   "ir": "__module.model.language_model.layers.11.experts/prim::ListUnpack/VariadicSplit.0",
+   "qat": "model.language_model.layers.11.experts.gate_up_proj[0]",
+   "kind": "experts",
+   "rel_rms": 0.07954
+  },
+  {
+   "ir": "__module.model.language_model.layers.11.experts/prim::ListUnpack/VariadicSplit.1",
+   "qat": "model.language_model.layers.11.experts.gate_up_proj[1]",
+   "kind": "experts",
+   "rel_rms": 0.07963
+  },
+  {
+   "ir": "self.model.language_model.layers.11.experts.down_proj",
+   "qat": "model.language_model.layers.11.experts.down_proj",
+   "kind": "experts",
+   "rel_rms": 0.0796
+  },
+  {
+   "ir": "self.model.language_model.layers.11.router.proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.11.router.proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07875
+  },
+  {
+   "ir": "self.model.language_model.layers.12.self_attn.q_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.12.self_attn.q_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05131
+  },
+  {
+   "ir": "self.model.language_model.layers.12.self_attn.k_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.12.self_attn.k_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05172
+  },
+  {
+   "ir": "self.model.language_model.layers.12.self_attn.v_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.12.self_attn.v_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.0519
+  },
+  {
+   "ir": "self.model.language_model.layers.12.self_attn.o_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.12.self_attn.o_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05069
+  },
+  {
+   "ir": "self.model.language_model.layers.12.mlp.gate_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.12.mlp.gate_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.0786
+  },
+  {
+   "ir": "self.model.language_model.layers.12.mlp.up_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.12.mlp.up_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07887
+  },
+  {
+   "ir": "self.model.language_model.layers.12.mlp.down_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.12.mlp.down_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07812
+  },
+  {
+   "ir": "__module.model.language_model.layers.12.experts/prim::ListUnpack/VariadicSplit.0",
+   "qat": "model.language_model.layers.12.experts.gate_up_proj[0]",
+   "kind": "experts",
+   "rel_rms": 0.0796
+  },
+  {
+   "ir": "__module.model.language_model.layers.12.experts/prim::ListUnpack/VariadicSplit.1",
+   "qat": "model.language_model.layers.12.experts.gate_up_proj[1]",
+   "kind": "experts",
+   "rel_rms": 0.07966
+  },
+  {
+   "ir": "self.model.language_model.layers.12.experts.down_proj",
+   "qat": "model.language_model.layers.12.experts.down_proj",
+   "kind": "experts",
+   "rel_rms": 0.07964
+  },
+  {
+   "ir": "self.model.language_model.layers.12.router.proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.12.router.proj.weight",
+   "kind": "other",
+   "rel_rms": 0.0792
+  },
+  {
+   "ir": "self.model.language_model.layers.13.self_attn.q_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.13.self_attn.q_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05145
+  },
+  {
+   "ir": "self.model.language_model.layers.13.self_attn.k_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.13.self_attn.k_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05227
+  },
+  {
+   "ir": "self.model.language_model.layers.13.self_attn.v_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.13.self_attn.v_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05153
+  },
+  {
+   "ir": "self.model.language_model.layers.13.self_attn.o_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.13.self_attn.o_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05082
+  },
+  {
+   "ir": "self.model.language_model.layers.13.mlp.gate_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.13.mlp.gate_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07876
+  },
+  {
+   "ir": "self.model.language_model.layers.13.mlp.up_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.13.mlp.up_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.079
+  },
+  {
+   "ir": "self.model.language_model.layers.13.mlp.down_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.13.mlp.down_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07852
+  },
+  {
+   "ir": "__module.model.language_model.layers.13.experts/prim::ListUnpack/VariadicSplit.0",
+   "qat": "model.language_model.layers.13.experts.gate_up_proj[0]",
+   "kind": "experts",
+   "rel_rms": 0.07965
+  },
+  {
+   "ir": "__module.model.language_model.layers.13.experts/prim::ListUnpack/VariadicSplit.1",
+   "qat": "model.language_model.layers.13.experts.gate_up_proj[1]",
+   "kind": "experts",
+   "rel_rms": 0.07968
+  },
+  {
+   "ir": "self.model.language_model.layers.13.experts.down_proj",
+   "qat": "model.language_model.layers.13.experts.down_proj",
+   "kind": "experts",
+   "rel_rms": 0.07967
+  },
+  {
+   "ir": "self.model.language_model.layers.13.router.proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.13.router.proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07931
+  },
+  {
+   "ir": "self.model.language_model.layers.14.self_attn.q_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.14.self_attn.q_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05168
+  },
+  {
+   "ir": "self.model.language_model.layers.14.self_attn.k_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.14.self_attn.k_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05259
+  },
+  {
+   "ir": "self.model.language_model.layers.14.self_attn.v_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.14.self_attn.v_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.0519
+  },
+  {
+   "ir": "self.model.language_model.layers.14.self_attn.o_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.14.self_attn.o_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05089
+  },
+  {
+   "ir": "self.model.language_model.layers.14.mlp.gate_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.14.mlp.gate_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07844
+  },
+  {
+   "ir": "self.model.language_model.layers.14.mlp.up_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.14.mlp.up_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.0787
+  },
+  {
+   "ir": "self.model.language_model.layers.14.mlp.down_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.14.mlp.down_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07866
+  },
+  {
+   "ir": "__module.model.language_model.layers.14.experts/prim::ListUnpack/VariadicSplit.0",
+   "qat": "model.language_model.layers.14.experts.gate_up_proj[0]",
+   "kind": "experts",
+   "rel_rms": 0.07962
+  },
+  {
+   "ir": "__module.model.language_model.layers.14.experts/prim::ListUnpack/VariadicSplit.1",
+   "qat": "model.language_model.layers.14.experts.gate_up_proj[1]",
+   "kind": "experts",
+   "rel_rms": 0.07968
+  },
+  {
+   "ir": "self.model.language_model.layers.14.experts.down_proj",
+   "qat": "model.language_model.layers.14.experts.down_proj",
+   "kind": "experts",
+   "rel_rms": 0.07963
+  },
+  {
+   "ir": "self.model.language_model.layers.14.router.proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.14.router.proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07936
+  },
+  {
+   "ir": "self.model.language_model.layers.15.self_attn.q_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.15.self_attn.q_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05178
+  },
+  {
+   "ir": "self.model.language_model.layers.15.self_attn.k_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.15.self_attn.k_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05193
+  },
+  {
+   "ir": "self.model.language_model.layers.15.self_attn.v_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.15.self_attn.v_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05131
+  },
+  {
+   "ir": "self.model.language_model.layers.15.self_attn.o_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.15.self_attn.o_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05079
+  },
+  {
+   "ir": "self.model.language_model.layers.15.mlp.gate_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.15.mlp.gate_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07798
+  },
+  {
+   "ir": "self.model.language_model.layers.15.mlp.up_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.15.mlp.up_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07805
+  },
+  {
+   "ir": "self.model.language_model.layers.15.mlp.down_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.15.mlp.down_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07843
+  },
+  {
+   "ir": "__module.model.language_model.layers.15.experts/prim::ListUnpack/VariadicSplit.0",
+   "qat": "model.language_model.layers.15.experts.gate_up_proj[0]",
+   "kind": "experts",
+   "rel_rms": 0.07943
+  },
+  {
+   "ir": "__module.model.language_model.layers.15.experts/prim::ListUnpack/VariadicSplit.1",
+   "qat": "model.language_model.layers.15.experts.gate_up_proj[1]",
+   "kind": "experts",
+   "rel_rms": 0.07953
+  },
+  {
+   "ir": "self.model.language_model.layers.15.experts.down_proj",
+   "qat": "model.language_model.layers.15.experts.down_proj",
+   "kind": "experts",
+   "rel_rms": 0.07968
+  },
+  {
+   "ir": "self.model.language_model.layers.15.router.proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.15.router.proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07274
+  },
+  {
+   "ir": "self.model.language_model.layers.16.self_attn.q_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.16.self_attn.q_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05139
+  },
+  {
+   "ir": "self.model.language_model.layers.16.self_attn.k_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.16.self_attn.k_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05165
+  },
+  {
+   "ir": "self.model.language_model.layers.16.self_attn.v_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.16.self_attn.v_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05229
+  },
+  {
+   "ir": "self.model.language_model.layers.16.self_attn.o_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.16.self_attn.o_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05072
+  },
+  {
+   "ir": "self.model.language_model.layers.16.mlp.gate_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.16.mlp.gate_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.0785
+  },
+  {
+   "ir": "self.model.language_model.layers.16.mlp.up_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.16.mlp.up_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07819
+  },
+  {
+   "ir": "self.model.language_model.layers.16.mlp.down_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.16.mlp.down_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07814
+  },
+  {
+   "ir": "__module.model.language_model.layers.16.experts/prim::ListUnpack/VariadicSplit.0",
+   "qat": "model.language_model.layers.16.experts.gate_up_proj[0]",
+   "kind": "experts",
+   "rel_rms": 0.07936
+  },
+  {
+   "ir": "__module.model.language_model.layers.16.experts/prim::ListUnpack/VariadicSplit.1",
+   "qat": "model.language_model.layers.16.experts.gate_up_proj[1]",
+   "kind": "experts",
+   "rel_rms": 0.07952
+  },
+  {
+   "ir": "self.model.language_model.layers.16.experts.down_proj",
+   "qat": "model.language_model.layers.16.experts.down_proj",
+   "kind": "experts",
+   "rel_rms": 0.07963
+  },
+  {
+   "ir": "self.model.language_model.layers.16.router.proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.16.router.proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07431
+  },
+  {
+   "ir": "self.model.language_model.layers.17.self_attn.q_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.17.self_attn.q_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05175
+  },
+  {
+   "ir": "self.model.language_model.layers.17.self_attn.k_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.17.self_attn.k_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05317
+  },
+  {
+   "ir": "self.model.language_model.layers.17.self_attn.o_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.17.self_attn.o_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.0513
+  },
+  {
+   "ir": "self.model.language_model.layers.17.mlp.gate_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.17.mlp.gate_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07822
+  },
+  {
+   "ir": "self.model.language_model.layers.17.mlp.up_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.17.mlp.up_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07793
+  },
+  {
+   "ir": "self.model.language_model.layers.17.mlp.down_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.17.mlp.down_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07833
+  },
+  {
+   "ir": "__module.model.language_model.layers.17.experts/prim::ListUnpack/VariadicSplit.0",
+   "qat": "model.language_model.layers.17.experts.gate_up_proj[0]",
+   "kind": "experts",
+   "rel_rms": 0.07928
+  },
+  {
+   "ir": "__module.model.language_model.layers.17.experts/prim::ListUnpack/VariadicSplit.1",
+   "qat": "model.language_model.layers.17.experts.gate_up_proj[1]",
+   "kind": "experts",
+   "rel_rms": 0.07946
+  },
+  {
+   "ir": "self.model.language_model.layers.17.experts.down_proj",
+   "qat": "model.language_model.layers.17.experts.down_proj",
+   "kind": "experts",
+   "rel_rms": 0.07964
+  },
+  {
+   "ir": "self.model.language_model.layers.17.router.proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.17.router.proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07238
+  },
+  {
+   "ir": "self.model.language_model.layers.18.self_attn.q_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.18.self_attn.q_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05143
+  },
+  {
+   "ir": "self.model.language_model.layers.18.self_attn.k_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.18.self_attn.k_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05151
+  },
+  {
+   "ir": "self.model.language_model.layers.18.self_attn.v_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.18.self_attn.v_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05282
+  },
+  {
+   "ir": "self.model.language_model.layers.18.self_attn.o_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.18.self_attn.o_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05071
+  },
+  {
+   "ir": "self.model.language_model.layers.18.mlp.gate_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.18.mlp.gate_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07881
+  },
+  {
+   "ir": "self.model.language_model.layers.18.mlp.up_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.18.mlp.up_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07885
+  },
+  {
+   "ir": "self.model.language_model.layers.18.mlp.down_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.18.mlp.down_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07864
+  },
+  {
+   "ir": "__module.model.language_model.layers.18.experts/prim::ListUnpack/VariadicSplit.0",
+   "qat": "model.language_model.layers.18.experts.gate_up_proj[0]",
+   "kind": "experts",
+   "rel_rms": 0.07949
+  },
+  {
+   "ir": "__module.model.language_model.layers.18.experts/prim::ListUnpack/VariadicSplit.1",
+   "qat": "model.language_model.layers.18.experts.gate_up_proj[1]",
+   "kind": "experts",
+   "rel_rms": 0.07965
+  },
+  {
+   "ir": "self.model.language_model.layers.18.experts.down_proj",
+   "qat": "model.language_model.layers.18.experts.down_proj",
+   "kind": "experts",
+   "rel_rms": 0.07972
+  },
+  {
+   "ir": "self.model.language_model.layers.18.router.proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.18.router.proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07619
+  },
+  {
+   "ir": "self.model.language_model.layers.19.self_attn.q_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.19.self_attn.q_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05126
+  },
+  {
+   "ir": "self.model.language_model.layers.19.self_attn.k_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.19.self_attn.k_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05194
+  },
+  {
+   "ir": "self.model.language_model.layers.19.self_attn.v_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.19.self_attn.v_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05113
+  },
+  {
+   "ir": "self.model.language_model.layers.19.self_attn.o_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.19.self_attn.o_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05067
+  },
+  {
+   "ir": "self.model.language_model.layers.19.mlp.gate_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.19.mlp.gate_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07877
+  },
+  {
+   "ir": "self.model.language_model.layers.19.mlp.up_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.19.mlp.up_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07882
+  },
+  {
+   "ir": "self.model.language_model.layers.19.mlp.down_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.19.mlp.down_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07877
+  },
+  {
+   "ir": "__module.model.language_model.layers.19.experts/prim::ListUnpack/VariadicSplit.0",
+   "qat": "model.language_model.layers.19.experts.gate_up_proj[0]",
+   "kind": "experts",
+   "rel_rms": 0.07952
+  },
+  {
+   "ir": "__module.model.language_model.layers.19.experts/prim::ListUnpack/VariadicSplit.1",
+   "qat": "model.language_model.layers.19.experts.gate_up_proj[1]",
+   "kind": "experts",
+   "rel_rms": 0.07968
+  },
+  {
+   "ir": "self.model.language_model.layers.19.experts.down_proj",
+   "qat": "model.language_model.layers.19.experts.down_proj",
+   "kind": "experts",
+   "rel_rms": 0.07971
+  },
+  {
+   "ir": "self.model.language_model.layers.19.router.proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.19.router.proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07678
+  },
+  {
+   "ir": "self.model.language_model.layers.20.self_attn.q_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.20.self_attn.q_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05156
+  },
+  {
+   "ir": "self.model.language_model.layers.20.self_attn.k_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.20.self_attn.k_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.0514
+  },
+  {
+   "ir": "self.model.language_model.layers.20.self_attn.v_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.20.self_attn.v_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05203
+  },
+  {
+   "ir": "self.model.language_model.layers.20.self_attn.o_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.20.self_attn.o_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05064
+  },
+  {
+   "ir": "self.model.language_model.layers.20.mlp.gate_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.20.mlp.gate_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07846
+  },
+  {
+   "ir": "self.model.language_model.layers.20.mlp.up_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.20.mlp.up_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07858
+  },
+  {
+   "ir": "self.model.language_model.layers.20.mlp.down_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.20.mlp.down_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07856
+  },
+  {
+   "ir": "__module.model.language_model.layers.20.experts/prim::ListUnpack/VariadicSplit.0",
+   "qat": "model.language_model.layers.20.experts.gate_up_proj[0]",
+   "kind": "experts",
+   "rel_rms": 0.0795
+  },
+  {
+   "ir": "__module.model.language_model.layers.20.experts/prim::ListUnpack/VariadicSplit.1",
+   "qat": "model.language_model.layers.20.experts.gate_up_proj[1]",
+   "kind": "experts",
+   "rel_rms": 0.07966
+  },
+  {
+   "ir": "self.model.language_model.layers.20.experts.down_proj",
+   "qat": "model.language_model.layers.20.experts.down_proj",
+   "kind": "experts",
+   "rel_rms": 0.07971
+  },
+  {
+   "ir": "self.model.language_model.layers.20.router.proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.20.router.proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07644
+  },
+  {
+   "ir": "self.model.language_model.layers.21.self_attn.q_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.21.self_attn.q_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05113
+  },
+  {
+   "ir": "self.model.language_model.layers.21.self_attn.k_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.21.self_attn.k_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05147
+  },
+  {
+   "ir": "self.model.language_model.layers.21.self_attn.v_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.21.self_attn.v_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05251
+  },
+  {
+   "ir": "self.model.language_model.layers.21.self_attn.o_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.21.self_attn.o_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05082
+  },
+  {
+   "ir": "self.model.language_model.layers.21.mlp.gate_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.21.mlp.gate_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07783
+  },
+  {
+   "ir": "self.model.language_model.layers.21.mlp.up_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.21.mlp.up_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07822
+  },
+  {
+   "ir": "self.model.language_model.layers.21.mlp.down_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.21.mlp.down_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07811
+  },
+  {
+   "ir": "__module.model.language_model.layers.21.experts/prim::ListUnpack/VariadicSplit.0",
+   "qat": "model.language_model.layers.21.experts.gate_up_proj[0]",
+   "kind": "experts",
+   "rel_rms": 0.07948
+  },
+  {
+   "ir": "__module.model.language_model.layers.21.experts/prim::ListUnpack/VariadicSplit.1",
+   "qat": "model.language_model.layers.21.experts.gate_up_proj[1]",
+   "kind": "experts",
+   "rel_rms": 0.07966
+  },
+  {
+   "ir": "self.model.language_model.layers.21.experts.down_proj",
+   "qat": "model.language_model.layers.21.experts.down_proj",
+   "kind": "experts",
+   "rel_rms": 0.07967
+  },
+  {
+   "ir": "self.model.language_model.layers.21.router.proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.21.router.proj.weight",
+   "kind": "other",
+   "rel_rms": 0.0759
+  },
+  {
+   "ir": "self.model.language_model.layers.22.self_attn.q_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.22.self_attn.q_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05127
+  },
+  {
+   "ir": "self.model.language_model.layers.22.self_attn.k_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.22.self_attn.k_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05162
+  },
+  {
+   "ir": "self.model.language_model.layers.22.self_attn.v_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.22.self_attn.v_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05268
+  },
+  {
+   "ir": "self.model.language_model.layers.22.self_attn.o_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.22.self_attn.o_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05071
+  },
+  {
+   "ir": "self.model.language_model.layers.22.mlp.gate_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.22.mlp.gate_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07765
+  },
+  {
+   "ir": "self.model.language_model.layers.22.mlp.up_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.22.mlp.up_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07801
+  },
+  {
+   "ir": "self.model.language_model.layers.22.mlp.down_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.22.mlp.down_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07796
+  },
+  {
+   "ir": "__module.model.language_model.layers.22.experts/prim::ListUnpack/VariadicSplit.0",
+   "qat": "model.language_model.layers.22.experts.gate_up_proj[0]",
+   "kind": "experts",
+   "rel_rms": 0.07965
+  },
+  {
+   "ir": "__module.model.language_model.layers.22.experts/prim::ListUnpack/VariadicSplit.1",
+   "qat": "model.language_model.layers.22.experts.gate_up_proj[1]",
+   "kind": "experts",
+   "rel_rms": 0.07974
+  },
+  {
+   "ir": "self.model.language_model.layers.22.experts.down_proj",
+   "qat": "model.language_model.layers.22.experts.down_proj",
+   "kind": "experts",
+   "rel_rms": 0.07967
+  },
+  {
+   "ir": "self.model.language_model.layers.22.router.proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.22.router.proj.weight",
+   "kind": "other",
+   "rel_rms": 0.0766
+  },
+  {
+   "ir": "self.model.language_model.layers.23.self_attn.q_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.23.self_attn.q_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05139
+  },
+  {
+   "ir": "self.model.language_model.layers.23.self_attn.k_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.23.self_attn.k_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05414
+  },
+  {
+   "ir": "self.model.language_model.layers.23.self_attn.o_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.23.self_attn.o_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05107
+  },
+  {
+   "ir": "self.model.language_model.layers.23.mlp.gate_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.23.mlp.gate_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07832
+  },
+  {
+   "ir": "self.model.language_model.layers.23.mlp.up_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.23.mlp.up_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07884
+  },
+  {
+   "ir": "self.model.language_model.layers.23.mlp.down_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.23.mlp.down_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07792
+  },
+  {
+   "ir": "__module.model.language_model.layers.23.experts/prim::ListUnpack/VariadicSplit.0",
+   "qat": "model.language_model.layers.23.experts.gate_up_proj[0]",
+   "kind": "experts",
+   "rel_rms": 0.07975
+  },
+  {
+   "ir": "__module.model.language_model.layers.23.experts/prim::ListUnpack/VariadicSplit.1",
+   "qat": "model.language_model.layers.23.experts.gate_up_proj[1]",
+   "kind": "experts",
+   "rel_rms": 0.07976
+  },
+  {
+   "ir": "self.model.language_model.layers.23.experts.down_proj",
+   "qat": "model.language_model.layers.23.experts.down_proj",
+   "kind": "experts",
+   "rel_rms": 0.07973
+  },
+  {
+   "ir": "self.model.language_model.layers.23.router.proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.23.router.proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07709
+  },
+  {
+   "ir": "self.model.language_model.layers.24.self_attn.q_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.24.self_attn.q_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.0516
+  },
+  {
+   "ir": "self.model.language_model.layers.24.self_attn.k_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.24.self_attn.k_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05179
+  },
+  {
+   "ir": "self.model.language_model.layers.24.self_attn.v_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.24.self_attn.v_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05209
+  },
+  {
+   "ir": "self.model.language_model.layers.24.self_attn.o_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.24.self_attn.o_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05068
+  },
+  {
+   "ir": "self.model.language_model.layers.24.mlp.gate_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.24.mlp.gate_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07888
+  },
+  {
+   "ir": "self.model.language_model.layers.24.mlp.up_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.24.mlp.up_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07907
+  },
+  {
+   "ir": "self.model.language_model.layers.24.mlp.down_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.24.mlp.down_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07847
+  },
+  {
+   "ir": "__module.model.language_model.layers.24.experts/prim::ListUnpack/VariadicSplit.0",
+   "qat": "model.language_model.layers.24.experts.gate_up_proj[0]",
+   "kind": "experts",
+   "rel_rms": 0.07974
+  },
+  {
+   "ir": "__module.model.language_model.layers.24.experts/prim::ListUnpack/VariadicSplit.1",
+   "qat": "model.language_model.layers.24.experts.gate_up_proj[1]",
+   "kind": "experts",
+   "rel_rms": 0.07977
+  },
+  {
+   "ir": "self.model.language_model.layers.24.experts.down_proj",
+   "qat": "model.language_model.layers.24.experts.down_proj",
+   "kind": "experts",
+   "rel_rms": 0.07976
+  },
+  {
+   "ir": "self.model.language_model.layers.24.router.proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.24.router.proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07659
+  },
+  {
+   "ir": "self.model.language_model.layers.25.self_attn.q_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.25.self_attn.q_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.0512
+  },
+  {
+   "ir": "self.model.language_model.layers.25.self_attn.k_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.25.self_attn.k_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05171
+  },
+  {
+   "ir": "self.model.language_model.layers.25.self_attn.v_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.25.self_attn.v_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05297
+  },
+  {
+   "ir": "self.model.language_model.layers.25.self_attn.o_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.25.self_attn.o_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05043
+  },
+  {
+   "ir": "self.model.language_model.layers.25.mlp.gate_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.25.mlp.gate_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07875
+  },
+  {
+   "ir": "self.model.language_model.layers.25.mlp.up_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.25.mlp.up_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07918
+  },
+  {
+   "ir": "self.model.language_model.layers.25.mlp.down_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.25.mlp.down_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07835
+  },
+  {
+   "ir": "__module.model.language_model.layers.25.experts/prim::ListUnpack/VariadicSplit.0",
+   "qat": "model.language_model.layers.25.experts.gate_up_proj[0]",
+   "kind": "experts",
+   "rel_rms": 0.07978
+  },
+  {
+   "ir": "__module.model.language_model.layers.25.experts/prim::ListUnpack/VariadicSplit.1",
+   "qat": "model.language_model.layers.25.experts.gate_up_proj[1]",
+   "kind": "experts",
+   "rel_rms": 0.07981
+  },
+  {
+   "ir": "self.model.language_model.layers.25.experts.down_proj",
+   "qat": "model.language_model.layers.25.experts.down_proj",
+   "kind": "experts",
+   "rel_rms": 0.07974
+  },
+  {
+   "ir": "self.model.language_model.layers.25.router.proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.25.router.proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07709
+  },
+  {
+   "ir": "self.model.language_model.layers.26.self_attn.q_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.26.self_attn.q_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05116
+  },
+  {
+   "ir": "self.model.language_model.layers.26.self_attn.k_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.26.self_attn.k_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05196
+  },
+  {
+   "ir": "self.model.language_model.layers.26.self_attn.v_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.26.self_attn.v_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.0521
+  },
+  {
+   "ir": "self.model.language_model.layers.26.self_attn.o_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.26.self_attn.o_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.0505
+  },
+  {
+   "ir": "self.model.language_model.layers.26.mlp.gate_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.26.mlp.gate_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07872
+  },
+  {
+   "ir": "self.model.language_model.layers.26.mlp.up_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.26.mlp.up_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.0792
+  },
+  {
+   "ir": "self.model.language_model.layers.26.mlp.down_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.26.mlp.down_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07842
+  },
+  {
+   "ir": "__module.model.language_model.layers.26.experts/prim::ListUnpack/VariadicSplit.0",
+   "qat": "model.language_model.layers.26.experts.gate_up_proj[0]",
+   "kind": "experts",
+   "rel_rms": 0.07969
+  },
+  {
+   "ir": "__module.model.language_model.layers.26.experts/prim::ListUnpack/VariadicSplit.1",
+   "qat": "model.language_model.layers.26.experts.gate_up_proj[1]",
+   "kind": "experts",
+   "rel_rms": 0.07977
+  },
+  {
+   "ir": "self.model.language_model.layers.26.experts.down_proj",
+   "qat": "model.language_model.layers.26.experts.down_proj",
+   "kind": "experts",
+   "rel_rms": 0.07972
+  },
+  {
+   "ir": "self.model.language_model.layers.26.router.proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.26.router.proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07589
+  },
+  {
+   "ir": "self.model.language_model.layers.27.self_attn.q_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.27.self_attn.q_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05221
+  },
+  {
+   "ir": "self.model.language_model.layers.27.self_attn.k_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.27.self_attn.k_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05147
+  },
+  {
+   "ir": "self.model.language_model.layers.27.self_attn.v_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.27.self_attn.v_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05142
+  },
+  {
+   "ir": "self.model.language_model.layers.27.self_attn.o_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.27.self_attn.o_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05049
+  },
+  {
+   "ir": "self.model.language_model.layers.27.mlp.gate_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.27.mlp.gate_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07856
+  },
+  {
+   "ir": "self.model.language_model.layers.27.mlp.up_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.27.mlp.up_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07918
+  },
+  {
+   "ir": "self.model.language_model.layers.27.mlp.down_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.27.mlp.down_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.0783
+  },
+  {
+   "ir": "__module.model.language_model.layers.27.experts/prim::ListUnpack/VariadicSplit.0",
+   "qat": "model.language_model.layers.27.experts.gate_up_proj[0]",
+   "kind": "experts",
+   "rel_rms": 0.07971
+  },
+  {
+   "ir": "__module.model.language_model.layers.27.experts/prim::ListUnpack/VariadicSplit.1",
+   "qat": "model.language_model.layers.27.experts.gate_up_proj[1]",
+   "kind": "experts",
+   "rel_rms": 0.07978
+  },
+  {
+   "ir": "self.model.language_model.layers.27.experts.down_proj",
+   "qat": "model.language_model.layers.27.experts.down_proj",
+   "kind": "experts",
+   "rel_rms": 0.07975
+  },
+  {
+   "ir": "self.model.language_model.layers.27.router.proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.27.router.proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07567
+  },
+  {
+   "ir": "self.model.language_model.layers.28.self_attn.q_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.28.self_attn.q_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05143
+  },
+  {
+   "ir": "self.model.language_model.layers.28.self_attn.k_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.28.self_attn.k_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05271
+  },
+  {
+   "ir": "self.model.language_model.layers.28.self_attn.v_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.28.self_attn.v_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05118
+  },
+  {
+   "ir": "self.model.language_model.layers.28.self_attn.o_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.28.self_attn.o_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05058
+  },
+  {
+   "ir": "self.model.language_model.layers.28.mlp.gate_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.28.mlp.gate_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07859
+  },
+  {
+   "ir": "self.model.language_model.layers.28.mlp.up_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.28.mlp.up_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07923
+  },
+  {
+   "ir": "self.model.language_model.layers.28.mlp.down_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.28.mlp.down_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07837
+  },
+  {
+   "ir": "__module.model.language_model.layers.28.experts/prim::ListUnpack/VariadicSplit.0",
+   "qat": "model.language_model.layers.28.experts.gate_up_proj[0]",
+   "kind": "experts",
+   "rel_rms": 0.07976
+  },
+  {
+   "ir": "__module.model.language_model.layers.28.experts/prim::ListUnpack/VariadicSplit.1",
+   "qat": "model.language_model.layers.28.experts.gate_up_proj[1]",
+   "kind": "experts",
+   "rel_rms": 0.07981
+  },
+  {
+   "ir": "self.model.language_model.layers.28.experts.down_proj",
+   "qat": "model.language_model.layers.28.experts.down_proj",
+   "kind": "experts",
+   "rel_rms": 0.07974
+  },
+  {
+   "ir": "self.model.language_model.layers.28.router.proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.28.router.proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07581
+  },
+  {
+   "ir": "self.model.language_model.layers.29.self_attn.k_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.29.self_attn.k_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05243
+  },
+  {
+   "ir": "self.model.language_model.layers.29.self_attn.q_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.29.self_attn.q_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05103
+  },
+  {
+   "ir": "self.model.language_model.layers.29.self_attn.o_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.29.self_attn.o_proj.weight",
+   "kind": "attention",
+   "rel_rms": 0.05082
+  },
+  {
+   "ir": "self.model.language_model.layers.29.mlp.gate_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.29.mlp.gate_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07939
+  },
+  {
+   "ir": "self.model.language_model.layers.29.mlp.up_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.29.mlp.up_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07934
+  },
+  {
+   "ir": "self.model.language_model.layers.29.mlp.down_proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.29.mlp.down_proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07667
+  },
+  {
+   "ir": "__module.model.language_model.layers.29.experts/prim::ListUnpack/VariadicSplit.0",
+   "qat": "model.language_model.layers.29.experts.gate_up_proj[0]",
+   "kind": "experts",
+   "rel_rms": 0.07975
+  },
+  {
+   "ir": "__module.model.language_model.layers.29.experts/prim::ListUnpack/VariadicSplit.1",
+   "qat": "model.language_model.layers.29.experts.gate_up_proj[1]",
+   "kind": "experts",
+   "rel_rms": 0.07982
+  },
+  {
+   "ir": "self.model.language_model.layers.29.experts.down_proj",
+   "qat": "model.language_model.layers.29.experts.down_proj",
+   "kind": "experts",
+   "rel_rms": 0.07979
+  },
+  {
+   "ir": "self.model.language_model.layers.29.router.proj._openvino_orig_weight",
+   "qat": "model.language_model.layers.29.router.proj.weight",
+   "kind": "other",
+   "rel_rms": 0.07555
+  }
+ ]
+}

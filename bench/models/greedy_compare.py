@@ -46,11 +46,15 @@ def farm(ir_dir, swap_dir):
 
 
 def generate(model_dir, prompts, max_new, device):
-    from optimum.intel import OVModelForCausalLM
+    from optimum.intel import OVModelForCausalLM, OVModelForVisualCausalLM
     from transformers import AutoTokenizer
     tok = AutoTokenizer.from_pretrained(model_dir)
     t0 = time.time()
-    m = OVModelForCausalLM.from_pretrained(model_dir, device=device)
+    # An image-text-to-text export (Gemma 4) splits the LM into openvino_language_model.xml;
+    # text-only generate goes through the VLM class with input_ids alone.
+    cls = OVModelForVisualCausalLM if os.path.exists(os.path.join(model_dir, "openvino_language_model.xml")) \
+        else OVModelForCausalLM
+    m = cls.from_pretrained(model_dir, device=device)
     load_s = time.time() - t0
     out = []
     for p in prompts:

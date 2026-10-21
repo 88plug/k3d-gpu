@@ -1,0 +1,8 @@
+{
+ "ir": "/home/devcloud/k3dgpu-gemma/models/k3dgpu_gemma-4-26B-A4B-it-qat-int4-sym-g32-ov.partial/openvino_text_embeddings_per_layer_model.xml",
+ "qat": "/home/devcloud/k3dgpu-gemma/models/google_gemma-4-26B-A4B-it-qat-q4_0-unquantized",
+ "matched": 0,
+ "skipped": 0,
+ "summary": {},
+ "tensors": []
+}
