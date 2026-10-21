@@ -1,0 +1,80 @@
+Name:             ovms-54455df7d5-9lnnq
+Namespace:        k3d-gpu-agent
+Priority:         0
+Service Account:  default
+Node:             k3d-k3dgpu-d-h57d-2-server-0/172.20.0.2
+Start Time:       Tue, 20 Oct 2026 22:35:11 -0700
+Labels:           app=ovms
+                  k3d-gpu.io/cores=performance
+                  pod-template-hash=54455df7d5
+Annotations:      k3d-gpu.io/agent-device: CPU
+                  k3d-gpu.io/agent-fit: cpu 4x65536
+Status:           Running
+IP:               10.42.0.13
+IPs:
+  IP:           10.42.0.13
+Controlled By:  ReplicaSet/ovms-54455df7d5
+Containers:
+  ovms:
+    Container ID:  containerd://8a9f73acbe7e0e558cb2f473ada653b41f3fdc294705aa271f584cabf826ca1a
+    Image:         openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58
+    Image ID:      docker.io/openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58
+    Port:          8000/TCP (http)
+    Host Port:     0/TCP (http)
+    Args:
+      --rest_port=8000
+      --model_path=/models/OpenVINO/gemma-4-26b-a4b-it-int4-ov
+      --model_name=gemma
+      --cache_dir=/ov-cache
+      --log_level=INFO
+    State:          Running
+      Started:      Tue, 20 Oct 2026 22:35:30 -0700
+    Ready:          True
+    Restart Count:  0
+    Limits:
+      memory:  25Gi
+    Requests:
+      cpu:        16
+      memory:     25Gi
+    Readiness:    http-get http://:http/v2/health/ready delay=0s timeout=1s period=5s #success=1 #failure=3
+    Environment:  <none>
+    Mounts:
+      /models from models (ro)
+      /ov-cache from ov-cache (rw)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-rdthx (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       True 
+  ContainersReady             True 
+  PodScheduled                True 
+Volumes:
+  models:
+    Type:          HostPath (bare host directory volume)
+    Path:          /var/apb-models
+    HostPathType:  Directory
+  ov-cache:
+    Type:       EmptyDir (a temporary directory that shares a pod's lifetime)
+    Medium:     
+    SizeLimit:  <unset>
+  kube-api-access-rdthx:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   Burstable
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason     Age                 From               Message
+  ----     ------     ----                ----               -------
+  Normal   Scheduled  15m                 default-scheduler  Successfully assigned k3d-gpu-agent/ovms-54455df7d5-9lnnq to k3d-k3dgpu-d-h57d-2-server-0
+  Normal   Pulling    15m                 kubelet            spec.containers{ovms}: Pulling image "openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58"
+  Normal   Pulled     15m                 kubelet            spec.containers{ovms}: Successfully pulled image "openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58" in 18.716s (18.716s including waiting). Image size: 404902607 bytes.
+  Normal   Created    15m                 kubelet            spec.containers{ovms}: Container created
+  Normal   Started    15m                 kubelet            spec.containers{ovms}: Container started
+  Warning  Unhealthy  15m                 kubelet            spec.containers{ovms}: Readiness probe failed: Get "http://10.42.0.13:8000/v2/health/ready": dial tcp 10.42.0.13:8000: connect: connection refused
+  Warning  Unhealthy  14m (x12 over 15m)  kubelet            spec.containers{ovms}: Readiness probe failed: HTTP probe failed with statuscode: 503
