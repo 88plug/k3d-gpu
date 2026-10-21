@@ -36,7 +36,15 @@ setup() {
   git clone -q "file://$D/origin.git" "$D/seed" 2>/dev/null
   ( cd "$D/seed" || exit 1
     git checkout -q -b main
-    mkdir -p scripts packaging/aur Formula share
+    mkdir -p scripts packaging/aur Formula share console
+    # Stand-in for console/model_opt.py ledger-rules: the JSON names the ledger's line count.
+    cat > console/model_opt.py <<'PY'
+import sys
+a = sys.argv
+n = len(open(a[a.index("--ledger") + 1]).read().splitlines())
+open(a[a.index("--out") + 1], "w").write('{"rows": %d}\n' % n)
+PY
+    echo '{"rows": 0}' > console/ledger-rules.json
     printf '#!/bin/sh\nVERSION="0.1.5"  # kept in lockstep\n' > scripts/k3d-gpu
     printf 'pkgname=k3d-gpu\npkgver=0.1.5\npkgrel=1\n' > packaging/aur/PKGBUILD
     printf 'pkgbase = k3d-gpu\n\tpkgver = 0.1.5\n\tsource = git+https://example/k3d-gpu.git#tag=aur-v0.1.5\n' > packaging/aur/.SRCINFO
@@ -175,6 +183,7 @@ done
 # GitHub applied only in part) is tagged in place by the next push run.
 setup orphan_release_commit
 ( cd "$D/seed" && sed -i 's/0\.1\.5/0.1.6/' scripts/k3d-gpu packaging/aur/PKGBUILD packaging/aur/.SRCINFO \
+  && python3 console/model_opt.py ledger-rules --ledger EXPERIMENTS.md --out console/ledger-rules.json \
   && git commit -qam "release: aur-v0.1.6 [skip release]" && git push -q origin HEAD:main )
 orphan=$(main); runner r; release r push; rc=$?
 c=1; [ "$rc" -eq 0 ] && [ "$(main)" = "$orphan" ] && [ "$(tagsha aur-v0.1.6)" = "$orphan" ] && c=0
@@ -186,6 +195,15 @@ setup skip_marker_in_body
 before=$(main); runner r; release r push; rc=$?
 c=1; [ "$rc" -eq 0 ] && [ "$(main)" = "$before" ] && [ "$(tags)" = "aur-v0.1.5 " ] && c=0
 check skip_marker_in_body $c "rc=$rc tags=$(tags)"
+
+# ledger_rules_regenerated: the release commit carries console/ledger-rules.json
+# regenerated from the ledger at the released commit.
+setup ledger_rules_regenerated; write EXPERIMENTS.md "ledger(H1): result"; write scripts/k3d-gpu "fix: launcher"
+runner r; release r push; rc=$?; m=$(main)
+want="{\"rows\": $(o show "$m:EXPERIMENTS.md" | wc -l)}"
+got=$(o show "$m:console/ledger-rules.json" 2>&1)
+c=1; [ "$rc" -eq 0 ] && [ "$(tagsha aur-v0.1.6)" = "$m" ] && [ "$got" = "$want" ] && c=0
+check ledger_rules_regenerated $c "rc=$rc got=$got want=$want"
 
 # no_env_command_hook: the release script runs no command named by the environment.
 if grep -n 'BEFORE_PUSH' "$REL"; then fail "no_env_command_hook: env-named command in $REL"
