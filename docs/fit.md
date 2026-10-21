@@ -110,7 +110,10 @@ engine (OVMS: Gemma 4's OpenVINO IR, for example). When that engine has nothing 
 as with Qwen3.8-Flash-Next, the id is served as given, by the engine its fit picks. When
 the fit then picks another engine, the optimizer's choices are made again for that engine,
 pinned to the model the fit sized. A backend that is set and cannot serve the fit is
-refused, with the llama-server flags to run instead.
+refused, with the llama-server flags to run instead. `K3D_GPU_AGENT_BACKEND=llama.cpp
+--model google/gemma-4-26B-A4B-it` serves the optimizer's llama.cpp pick, Google's QAT
+Q4_0 GGUF, sized by the fit. Which engine a model gets when several can serve it is left
+to an engine-choice row of EXPERIMENTS.md (H59); until it is decided the default stays OVMS.
 
 ## The llama.cpp backend
 

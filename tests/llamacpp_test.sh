@@ -33,6 +33,7 @@ mkdir -p "${WORK}/root/sys/devices/system/cpu/cpu0/topology"
 echo 0,16 > "${WORK}/root/sys/devices/system/cpu/cpu0/topology/core_cpus_list"
 cat > "${WORK}/bin/kubectl" <<'EOF'
 #!/bin/sh
+while [ "${1:-}" = --context ]; do shift 2; done
 echo "kubectl $*" >> "${STUB_LOG:-/dev/null}"
 case "$*" in
     *allocatable*) printf '%s\n' "${STUB_ALLOC:-}" ;;
@@ -97,6 +98,7 @@ assert len(docs) == text.count("\nkind: ") + text.startswith("kind: "), len(docs
 # --- Gemma 4 QAT GGUF on one free B70 ------------------------------------------------
 GEMMA_GGUF=google/gemma-4-26B-A4B-it-qat-q4_0-gguf
 GREV=d1c082be9cf3c8a514acf63b8761f4b41935842e
+DRAFTER=google__gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant@9537141506fe8875b3ed45b264af13580cb29166
 if render gguf "${XEON_ENV[@]}" -- --model "${GEMMA_GGUF}" \
     && has gguf '^  name: llamacpp$' && has gguf "image: ghcr.io/ggml-org/llama.cpp:server-intel-b11669@${SYCL}" \
     && arg gguf "--model=/models/gguf/google__gemma-4-26B-A4B-it-qat-q4_0-gguf@${GREV}/gemma-4-26B_q4_0-it.gguf" \
@@ -229,6 +231,16 @@ if render h58 "${XEON_ENV[@]}" -- --model google/gemma-4-26B-A4B-it \
     && grep -A3 '^            limits:$' "${WORK}/h58.yaml" | grep -q '^              gpu.intel.com/xe: 1$'; then
     ok "agent up --model google/gemma-4-26B-A4B-it on the Xeon (2 B70s busy): OVMS, OpenVINO int4 IR, one free B70"
 else fail "H58's Gemma 4 command" "$(show h58)"; fi
+# K3D_GPU_AGENT_BACKEND=llama.cpp: the optimizer picks the QAT GGUF for llama.cpp and the
+# fit sizes it; with K3D_GPU_AGENT_DRAFT=mtp the QAT assistant is converted as its drafter.
+if render optl "${XEON_ENV[@]}" K3D_GPU_AGENT_BACKEND=llama.cpp K3D_GPU_AGENT_DRAFT=mtp -- --model google/gemma-4-26B-A4B-it \
+    && has optl '^  name: llamacpp$' && arg optl "--model-url=https://huggingface.co/${GEMMA_GGUF}/resolve/${GREV}/gemma-4-26B_q4_0-it.gguf" \
+    && arg optl '--alias=gemma-4-26B-A4B-it' && arg optl '--spec-type=draft-mtp' \
+    && arg optl "--spec-draft-model=/models/gguf/${DRAFTER}/model.gguf" && has optl 'k3d-gpu.io/agent-fit: "gpu ' \
+    && grep -q 'picked google/gemma-4-26B-A4B-it-qat-q4_0-gguf on llama.cpp' "${WORK}/optl.err"; then
+    ok "K3D_GPU_AGENT_BACKEND=llama.cpp --model google/gemma-4-26B-A4B-it: the optimizer's QAT GGUF, sized by the fit, with the QAT MTP drafter"
+else fail "optimizer pick into llama-server" "$(show optl)"; fi
+
 # The safetensors as given (no optimizer): the fit picks vLLM, tensor parallel over the two free B70s.
 if render st "${XEON_ENV[@]}" K3D_GPU_AGENT_MODEL=google/gemma-4-26B-A4B-it -- \
     && has st '^  name: vllm$' && has st '--tensor-parallel-size=2' \
@@ -252,7 +264,6 @@ if render setl "${XEON_ENV[@]}" K3D_GPU_AGENT_BACKEND=llama.cpp -- --model "${GE
 else fail "K3D_GPU_AGENT_BACKEND=llama.cpp" "$(show setl)"; fi
 
 # --- MTP on request ---------------------------------------------------------------------
-DRAFTER=google__gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant@9537141506fe8875b3ed45b264af13580cb29166
 if render mtp "${XEON_ENV[@]}" K3D_GPU_AGENT_DRAFT=mtp -- --model "${GEMMA_GGUF}" \
     && arg mtp '--spec-type=draft-mtp' && arg mtp "--spec-draft-model=/models/gguf/${DRAFTER}/model.gguf" \
     && has mtp '^            - "Q4_0"$' && has mtp '^            - "google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant"$' \
@@ -320,6 +331,7 @@ echo "k3d $*" >> "${STUB_LOG}"
 EOF
 cat > "${UP}/bin/kubectl" <<'EOF'
 #!/bin/bash
+while [ "${1:-}" = --context ]; do shift 2; done
 echo "kubectl $*" >> "${STUB_LOG}"
 mf="${STUB_LOG%/*}/intel-gpu-plugin.yaml"
 case "$*" in

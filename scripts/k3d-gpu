@@ -11247,7 +11247,7 @@ agent_opt_items() {
 # Applies the optimizer's choices for AGENT_OPT_MODEL to the agent settings.
 agent_optimize() {
     [ -n "${AGENT_OPT_MODEL}" ] || return 0
-    local dir bundle out errf engine=${AGENT_APP} device=${AGENT_SEL%% *} vver=0.31.0 draft=auto ledger meas
+    local dir bundle out errf engine=${AGENT_APP/#llamacpp/llama.cpp} device=${AGENT_SEL%% *} vver=0.31.0 draft=auto ledger meas
     local OPT_MODEL="" OPT_REVISION="" OPT_TOOL_PARSER="" OPT_REASONING_PARSER="" OPT_SPEC=""
     local OPT_CONVERSION="" OPT_ARGS_JSON="[]" OPT_SUMMARY="" OPT_FALLBACK_MODEL="" OPT_FALLBACK_REVISION="" OPT_WARNING=""
     AGENT_MODEL=${AGENT_OPT_MODEL}
