@@ -78,6 +78,18 @@ says()     { grep -F -- "$2" <<< "${OUT}" >/dev/null; check "$1" $? "missing: $2
 not_says() { ! grep -F -- "$2" <<< "${OUT}" >/dev/null; check "$1" $? "unexpected: $2"; }
 logged()   { grep -F -- "$2" "${STUB_LOG}" >/dev/null; check "$1" $? "not run: $2"; }
 rc_is()    { local rc=0; [ "${RC}" -eq "$2" ] || rc=1; check "$1" "${rc}" "rc=${RC}, want $2"; }
+
+# host-setup's toolkit pin follows the node image's (Dockerfile ARG), and the
+# nightly bump in build-and-push.yml moves both.
+ROOT="$(dirname "${K3D_GPU}")/.."
+CTK=$(sed -n 's/^ARG NVIDIA_CTK_VERSION="\(.*\)"$/\1/p' "${ROOT}/Dockerfile")
+HS=$(sed -n 's/^HS_NVCTK=//p' "${K3D_GPU}")
+OUT="HS_NVCTK=${HS} NVIDIA_CTK_VERSION=${CTK}"
+ok=1; [ -n "${CTK}" ] && [ "${HS}" = "${CTK}" ] && ok=0
+check "HS_NVCTK equals the Dockerfile NVIDIA_CTK_VERSION" "${ok}" "${OUT}"
+OUT=$(cat "${ROOT}/.github/workflows/build-and-push.yml")
+says "nightly bump moves HS_NVCTK" 'sed -i "s|^HS_NVCTK=.*|HS_NVCTK=${{ steps.nvctk.outputs.ctk }}|" scripts/k3d-gpu'
+
 ran_nothing() { local rc=0; [ ! -s "${STUB_LOG}" ] || rc=1; check "$1" "${rc}" "installer stubs were called"; }
 nth_call() {  # nth_call <name> <n> <expected n-th logged call>
     local rc=0 got
@@ -132,13 +144,13 @@ r=$(newroot ubuntu2604-nv)
 osrel "${r}" ubuntu 26.04
 pci "${r}" 0000:01:00.0 0x10de 0x27b0 0x030000
 run "${r}" ""
-says "ubuntu NVIDIA toolkit is pinned" "nvidia-container-toolkit=1.20.1-1 nvidia-container-toolkit-base=1.20.1-1 libnvidia-container-tools=1.20.1-1 libnvidia-container1=1.20.1-1"
+says "ubuntu NVIDIA toolkit is pinned" "nvidia-container-toolkit=${CTK} nvidia-container-toolkit-base=${CTK} libnvidia-container-tools=${CTK} libnvidia-container1=${CTK}"
 says "ubuntu uses nvidia-cdi-refresh for the CDI spec" "sudo systemctl restart nvidia-cdi-refresh.service"
 says "docker gets the nvidia runtime" "sudo nvidia-ctk runtime configure --runtime=docker"
 not_says "NVIDIA-only host has no Intel steps" "kobuk-team"
 
 run "${r}" "" --distro fedora
-says "--distro prints another distro's plan" "sudo dnf install -y nvidia-container-toolkit-1.20.1-1"
+says "--distro prints another distro's plan" "sudo dnf install -y nvidia-container-toolkit-${CTK}"
 
 run "${r}" "" --distro=debian-12
 rc_is "unsupported distro fails" 1

@@ -4,7 +4,7 @@
 # rule (load1 <= 12 and no aiperf process, polled every 2 min for at most 60 min, then the hold
 # runs flagged), refuses to start above 97% disk, runs CMD under `timeout -k 30 CAP_S` with the
 # serving sampler beside it and a disk watchdog that stops CMD above 97%, then deletes every
-# cluster of this campaign (not k3dgpu-x-*) and this tool's load containers. Records go to ~/k3dgpu-bench/runs/NAME/.
+# cluster and host container of this campaign (not k3dgpu-x-*/-g-*) and this tool's load containers. Records go to ~/k3dgpu-bench/runs/NAME/.
 # HOLD_SLOT=0|1 (H56, off by default): one hold per cpuset slice, see slots.sh; every
 # legacy line below runs unchanged in the else branches when HOLD_SLOT is unset.
 set -uo pipefail
@@ -24,10 +24,15 @@ snapshot() { date -u +%FT%TZ; uptime; ps -eo pcpu,pid,user,comm --sort=-pcpu | h
 if [ -n "${HOLD_SLOT:-}" ]; then slot_init || exit 2; fi
 # This campaign's clusters only: k3dgpu-e-* (pairs), k3dgpu-a-* (one arm), k3dgpu-h5* (H52, H53). Another
 # campaign on this host (k3dgpu-x-*, ~/k3dgpu-xhost) shares the lock and owns its clusters.
+# live.sh's host-side containers (rapl, litellm, redis, model servers) are named ${PFX}-*, PFX
+# k3dgpu-a or k3dgpu-e; a hold killed by its timeout can leave them running. Same two prefixes
+# only: k3dgpu-x-* and k3dgpu-g-* belong to the other campaigns.
 if [ -n "${HOLD_SLOT:-}" ]; then
 clusters() { slot_clusters; }
+ours() { slot_containers; }
 else
-clusters() { k3d cluster list -o json 2>/dev/null | python3 -c 'import json,sys,re; print(" ".join(c["name"] for c in json.load(sys.stdin) if re.match(r"k3dgpu-(e|a|h5[0-9]b?)-?", c["name"])))'; }
+ours() { docker ps -a --format '{{.Names}}' 2>/dev/null | grep -E '^k3dgpu-(e|a)-' | tr '\n' ' '; }
+clusters() { k3d cluster list -o json 2>/dev/null | python3 -c 'import json,sys,re; print(" ".join(c["name"] for c in json.load(sys.stdin) if re.match(r"k3dgpu-(e|a)-|k3dgpu-h5[0-9]b?$", c["name"])))'; }
 fi
 
 log "waiting for the lock"
@@ -60,8 +65,10 @@ done
 fi
 echo "${waited}" > "${R}/wait_s"
 snapshot > "${R}/pre.txt"
+sudo -n dmesg -T 2>/dev/null | grep -iE ' xe |drm|DEVICE_LOST|CAT error' | tail -200 > "${R}/dmesg-pre.txt"
 [ "$(disk)" -le 97 ] || { log "disk $(disk)% > 97%: no hold"; exit 5; }
 if [ -n "$(clusters)" ]; then read -r -a cl <<< "$(clusters)"; log "leftover clusters ${cl[*]}: deleting first"; k3d cluster delete "${cl[@]}" >/dev/null 2>&1; fi
+if [ -n "$(ours)" ]; then read -r -a oc <<< "$(ours)"; log "leftover containers ${oc[*]}: removing first"; docker rm -f "${oc[@]}" >/dev/null 2>&1; fi
 python3 "${HERE}/serving.py" "${R}/serving.jsonl" &
 sp=$!
 log "start: $*"
@@ -82,8 +89,11 @@ kill "${sp}" "${wd}" 2>/dev/null
 wait "${sp}" 2>/dev/null
 left=$(clusters)
 [ -z "${left}" ] || k3d cluster delete ${left} >/dev/null 2>&1
+lc=$(ours)
+[ -z "${lc}" ] || { read -r -a oc <<< "${lc}"; docker rm -f "${oc[@]}" >/dev/null 2>&1; }
 python3 "${HERE}/../../load/load.py" stop >/dev/null 2>&1
 snapshot > "${R}/post.txt"
+sudo -n dmesg -T 2>/dev/null | grep -iE ' xe |drm|DEVICE_LOST|CAT error' | tail -200 > "${R}/dmesg-post.txt"
 echo "${rc}" > "${R}/rc"
-log "rc=${rc}; clusters deleted: ${left:-none}; now: $(clusters)"
+log "rc=${rc}; clusters deleted: ${left:-none}; containers removed: ${lc:-none}; now: $(clusters) $(ours)"
 exit "${rc}"
