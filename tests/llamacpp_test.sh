@@ -55,7 +55,7 @@ DESK="${FIX}/hosts/desktop-i9-nogpu.json"
 # The Xeon's cluster after `up` pinned the free cards: two B70s advertised, XMX labelled.
 XEON_ENV=(STUB_XMX=1 STUB_ALLOC=$'cpu 64\ngpu.intel.com/xe 2' K3D_GPU_FIT_HOST="${XEON}")
 SYCL=sha256:632c96d3c52ddadcd4e53fd2835e6430814cf68dde06b39067c1e281bdc5bd90
-CPUIMG=sha256:8ffe0d28ff5261cc2f78ca1f67db1515bc2529b904a3c25f5b24f4cedfc3411d
+CPUSRV=sha256:8ffe0d28ff5261cc2f78ca1f67db1515bc2529b904a3c25f5b24f4cedfc3411d
 FULL=sha256:627dde1b97b1a42ba6fc20a13452650a988f199321a258ec1bec80196b9a02a8
 
 # render <name> [env...] -- [agent args...]: manifest in ${WORK}/<name>.yaml, stderr in .err
@@ -107,7 +107,7 @@ else fail "QAT GGUF on the Xeon + 4x B70 (2 busy)" "$(show gguf)"; fi
 
 # --- the desktop with no GPU: the CPU image on the P-core balloon ------------------------
 if render cpu STUB_ALLOC='cpu 32' K3D_GPU_FIT_HOST="${DESK}" -- --model "${GEMMA_GGUF}" \
-    && has cpu "image: ghcr.io/ggml-org/llama.cpp:server-b11669@${CPUIMG}" && arg cpu '-ngl' && arg cpu '0' \
+    && has cpu "image: ghcr.io/ggml-org/llama.cpp:server-b11669@${CPUSRV}" && arg cpu '-ngl' && arg cpu '0' \
     && arg cpu '--load-mode=mmap+mlock' && has cpu 'add: \[IPC_LOCK\]' && ! has cpu 'gpu.intel.com' \
     && ! has cpu 'ZES_ENABLE_SYSMAN' && grep -A1 '^            limits:$' "${WORK}/cpu.yaml" | grep -qE '^              memory: 45Gi$' \
     && server_args cpu | grep -qx -- '--threads-batch=16' && server_args cpu | grep -qx -- '--threads=8' \
@@ -178,12 +178,55 @@ if ! env CV_LOG="${CV}/log" PATH="${CV}/bin:${PATH}" bash "${CV}/convert.sh" Qwe
     ok "gguf_convert: stops before downloading when the volume has no room"
 else fail "gguf_convert disk check" "$(cat "${CV}/out3")"; fi
 
+# The Job's name covers its whole spec: a Job's pod template cannot change, so another proxy
+# (or image, pins, memory) is another Job, and the same render is the same Job.
+jobname() { grep -m1 -oE '^  name: gguf-convert-[0-9a-f]+$' "${WORK}/$1.yaml" | cut -d' ' -f4; }
+if render fn2 "${XEON_ENV[@]}" -- --model "${FN}" && render fnp "${XEON_ENV[@]}" HTTPS_PROXY=http://proxy.example:3128 -- --model "${FN}" \
+    && [ -n "$(jobname fn)" ] && [ "$(jobname fn)" = "$(jobname fn2)" ] && [ "$(jobname fn)" != "$(jobname fnp)" ] \
+    && has fnp 'value: "http://proxy.example:3128"'; then
+    ok "conversion Job: named for its whole spec, the same on a re-render, another with a proxy"
+else fail "conversion Job name" "$(jobname fn) $(jobname fn2) $(jobname fnp)"; fi
+
+# --- agent up: a render that fails after the fit stopped the running server restarts it ----
+rm -f "${WORK}/kubectl.log"
+out=$(env STUB_LOG="${WORK}/kubectl.log" STUB_REPLICAS=1 "${XEON_ENV[@]}" \
+    bash "${K3D_GPU}" agent up --model Intel/Qwen3.8-Flash-Next-W4A16-AutoRound 2>&1); rc=$?
+if [ "${rc}" -ne 0 ] && grep -q 'auto-round' <<< "${out}" \
+    && grep -q '^kubectl -n k3d-gpu-agent scale deployment/ovms --replicas=0' "${WORK}/kubectl.log" \
+    && grep -q '^kubectl -n k3d-gpu-agent scale deployment/ovms --replicas=1' "${WORK}/kubectl.log" \
+    && ! grep -q '^kubectl apply' "${WORK}/kubectl.log"; then
+    ok "agent up: a model refused after the fit's probe gets the stopped server back, and nothing is applied"
+else fail "agent up restores the stopped server (rc ${rc})" "${out}$(cat "${WORK}/kubectl.log")"; fi
+
+rm -f "${WORK}/kubectl.log"
+if STUB_LOG="${WORK}/kubectl.log" bash "${K3D_GPU}" agent down > /dev/null 2>&1 \
+    && grep -q '^kubectl -n k3d-gpu-agent delete deployment/llamacpp service/llamacpp' "${WORK}/kubectl.log" \
+    && grep -q '^kubectl -n k3d-gpu-agent delete job -l app=gguf-convert --field-selector status.successful=0' "${WORK}/kubectl.log"; then
+    ok "agent down: removes llamacpp and any unfinished conversion Job, keeps the GGUFs"
+else fail "agent down" "$(cat "${WORK}/kubectl.log")"; fi
+
+if render img "${XEON_ENV[@]}" K3D_GPU_AGENT_IMAGE=openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58 \
+        -- --model "${GEMMA_GGUF}" \
+    && has img "image: ghcr.io/ggml-org/llama.cpp:server-intel-b11669@${SYCL}" && grep -q 'K3D_GPU_AGENT_IMAGE is not used' "${WORK}/img.err"; then
+    ok "an image set for the default backend is not handed to the backend the fit picked"
+else fail "K3D_GPU_AGENT_IMAGE on a followed backend" "$(show img)"; fi
+if ! render auto "${XEON_ENV[@]}" K3D_GPU_AGENT_DRAFT=auto -- --model "${GEMMA_GGUF}" \
+    && grep -q 'does not apply to llama.cpp' "${WORK}/auto.err"; then
+    ok "K3D_GPU_AGENT_DRAFT=auto (an OVMS setting) does not turn MTP on"
+else fail "K3D_GPU_AGENT_DRAFT=auto on llama.cpp" "$(show auto)"; fi
+
 # --- Gemma 4 safetensors: the fit picks vLLM, tensor parallel over the two free B70s ------
 if render st "${XEON_ENV[@]}" -- --model google/gemma-4-26B-A4B-it \
     && has st '^  name: vllm$' && has st '--tensor-parallel-size=2' \
     && grep -A3 '^            limits:$' "${WORK}/st.yaml" | grep -q '^              gpu.intel.com/xe: 2$'; then
     ok "Gemma 4 safetensors on the Xeon: vLLM tensor parallel on the two free B70s, no flag given"
 else fail "Gemma 4 safetensors follows the fit to vLLM" "$(show st)"; fi
+
+# The fit sizes vLLM's CPU build only for EAT; the agent has no such backend.
+if ! render vcpu STUB_ALLOC='cpu 64' K3D_GPU_FIT_HOST="${XEON}" K3D_GPU_AGENT_DEVICE=CPU -- --model RedHatAI/Qwen3.8-27B-INT4 \
+    && grep -q 'vLLM on the CPU is not an agent backend' "${WORK}/vcpu.err"; then
+    ok "a fit that picks vLLM's CPU build is refused, naming the variants the agent serves"
+else fail "vLLM CPU fit refused" "$(show vcpu)"; fi
 
 # --- a backend the user set is kept ----------------------------------------------------
 if ! render set "${XEON_ENV[@]}" K3D_GPU_AGENT_BACKEND=ovms -- --model "${GEMMA_GGUF}" \

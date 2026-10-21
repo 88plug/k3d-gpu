@@ -4915,13 +4915,13 @@ node_image_check() {
 # kubectl patch, is what survives a node restart. The new file is written as a
 # dotfile first (k3s ignores those) and renamed over the old one.
 configure_intel_plugin() {
-    local args=$1 nodes=${2:-} node="k3d-${CLUSTER}-server-0" src out got want what
+    local args=$1 nodes=${2:-} node="k3d-${CLUSTER}-server-0" src out got want what noun=mounts
     local dir=/var/lib/rancher/k3s/server/manifests
     local file="${dir}/intel-gpu-plugin.yaml"
     # What the applied DaemonSet shows once k3s took the new file: the first arg, else the
     # narrowed mounts.
     if [ -n "${args}" ]; then
-        want="\"$(sed -n 1p <<< "${args}")\"" what="{.spec.template.spec.containers[0].args}"
+        want="\"$(sed -n 1p <<< "${args}")\"" what="{.spec.template.spec.containers[0].args}" noun=args
         info "Configuring intel GPU device plugin: $(paste -sd' ' <<< "${args}")"
     fi
     if [ -n "${nodes}" ]; then
@@ -4950,7 +4950,7 @@ configure_intel_plugin() {
             sleep 3
         done
         if [[ "${got}" != *"${want}"* ]]; then
-            warn "k3s has not applied the new intel-gpu-plugin manifest after ${INTEL_APPLY_TIMEOUT}s — inspect: kubectl -n kube-system get addon intel-gpu-plugin -o yaml"
+            warn "k3s has not applied the new intel-gpu-plugin ${noun} after ${INTEL_APPLY_TIMEOUT}s — inspect: kubectl -n kube-system get addon intel-gpu-plugin -o yaml"
             return 0
         fi
     else
@@ -7562,6 +7562,8 @@ llamacpp_threads() {
     if [ -n "${hybrid}" ] && [ "$(agent_cores)" = performance ]; then
         n=$(cpu_list_count "$(pcore_physical_cpus)")
         [ "${n}" -le "${cpus}" ] || n=${cpus}
+    elif [ -n "${hybrid}" ]; then
+        n=${cpus}  # E-cores have one thread per core
     else
         smt=$(cpu_list_count "$(cat "${SYSROOT}${CPU_SYS}/cpu0/topology/core_cpus_list" 2>/dev/null || true)")
         [ "${smt}" -ge 1 ] || smt=1
@@ -7585,9 +7587,9 @@ llamacpp_manifest() {
     meta=$(llamacpp_meta) || err "llama.cpp: no metadata for ${AGENT_MODEL} (offline, private or gated: set HF_TOKEN)"
     read -r source fmt file mtp total <<< "${meta}"
     [[ "${source}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9._-]+@[0-9a-f]{40}$ ]] \
-        || err "llama.cpp: ${AGENT_MODEL} has no pinned Hugging Face source (got '${source}')"
+        || err "llama.cpp: ${AGENT_MODEL}'s metadata names no commit (got '${source}'); remove $(fit_cache)/${AGENT_MODEL//\//__}@${AGENT_REVISION:-main} to fetch it again"
     local repo=${source%@*} rev=${source##*@} image=${AGENT_IMAGE} item="            - " args="" model jobs="" waits=""
-    [ "${device}" = GPU ] || [ -n "${K3D_GPU_AGENT_IMAGE:-}" ] || image=${LLAMA_CPU_IMAGE}
+    [ "${device}" = GPU ] || [ "${image}" != "${LLAMA_SYCL_IMAGE}" ] || image=${LLAMA_CPU_IMAGE}
     valid_image "${image}" || err "llama.cpp image '${image}' is not a valid image reference"
     # Without a fit (K3D_GPU_FIT=off): one slot of K3D_GPU_AGENT_MAX_LEN, every layer on the device.
     if [ -z "${flags}" ]; then
@@ -7635,7 +7637,7 @@ llamacpp_manifest() {
     local draft=${K3D_GPU_AGENT_DRAFT:-default} d target dsrc quant
     case "${draft,,}" in
         default|off|0|"") draft="" ;;
-        mtp|auto) draft=mtp ;;
+        mtp) draft=mtp ;;
         *) err "K3D_GPU_AGENT_DRAFT '${draft}' does not apply to llama.cpp (use off or mtp)" ;;
     esac
     if [ -n "${draft}" ]; then
@@ -7782,23 +7784,22 @@ EOF
 }
 
 # llamacpp_convert_job <repo@rev> <bytes needed> <quantize type or -> <convert args>: a Job
-# named for its inputs, so a re-render applies the same object and a finished Job is not
-# run again (its script also returns at once when the GGUF exists).
+# named for its whole spec (a Job's pod template cannot change), so a re-render applies the
+# same object, a finished Job is not run again (its script also returns at once when the
+# GGUF exists), and a changed spec (image, pins, proxy, memory) is a new Job.
 llamacpp_convert_job() {
-    local src=$1 need=$2 quant=$3 conv=$4 name out a cargs="" pe
-    name="gguf-convert-$(printf '%s %s %s %s' "${LLAMA_FULL_IMAGE}" "${src}" "${quant}" "${conv}" | sha256sum | cut -c1-12)"
+    local src=$1 need=$2 quant=$3 conv=$4 name out a cargs="" pe body
     out="/models/gguf/$(gguf_slug "${src}")"
     for a in ${conv}; do cargs+=$'\n'"            - \"${a}\""; done
     pe=$(proxy_yaml_env)
     [ -z "${pe}" ] || pe=$'\n'"${pe}"
     local q=""
     [ "${quant}" = - ] || q=", llama-quantize ${quant}"
-    info "agent: ${src} is converted to GGUF once (Job ${name}: convert_hf_to_gguf.py ${conv}${q})" >&2
-    cat <<EOF
+    body=$(cat <<EOF
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: ${name}
+  name: @NAME@
   namespace: ${AGENT_NS}
   labels:
     app: gguf-convert
@@ -7846,8 +7847,11 @@ spec:
         - name: scripts
           configMap:
             name: gguf-convert
----
 EOF
+)
+    name="gguf-convert-$(sha256sum <<< "${body}" | cut -c1-12)"
+    info "agent: ${src} is converted to GGUF once (Job ${name}: convert_hf_to_gguf.py ${conv}${q})" >&2
+    printf '%s\n---\n' "${body//@NAME@/${name}}"
 }
 
 # One short chat completion: runs the first generation, which is slower than the
@@ -8393,6 +8397,18 @@ agent_prune() {
     kubectl -n "${AGENT_NS}" delete ${objs} --ignore-not-found --cascade=foreground --wait=true
 }
 
+# agent_convert_reset <manifest>: delete the manifest's conversion Jobs that failed, so
+# applying it runs them again (a finished Job does not restart).
+agent_convert_reset() {
+    local job
+    for job in $(grep -oE '^  name: gguf-convert-[0-9a-f]+$' <<< "$1" | cut -d' ' -f4 || true); do
+        if [ "$(kubectl -n "${AGENT_NS}" get "job/${job}" -o 'jsonpath={.status.conditions[?(@.type=="Failed")].status}' 2>/dev/null)" = True ]; then
+            info "job/${job} failed before: running it again"
+            kubectl -n "${AGENT_NS}" delete "job/${job}" --wait=true >/dev/null
+        fi
+    done
+}
+
 # agent_convert_wait <manifest>: wait for the GGUF conversion Jobs the manifest holds (a
 # download and a conversion of the whole checkpoint: hours for a 360 GB model). A Job that
 # fails stops agent up with its log.
@@ -8402,10 +8418,13 @@ agent_convert_wait() {
     for job in ${jobs}; do
         info "Waiting for GGUF conversion job/${job} (up to ${AGENT_CONVERT_TIMEOUT}s; log: kubectl -n ${AGENT_NS} logs -f job/${job})..."
         while :; do
-            st=$(kubectl -n "${AGENT_NS}" get "job/${job}" -o 'jsonpath={.status.succeeded} {.status.failed}' 2>/dev/null || true)
+            # The Job's own conditions: Failed only once its retries (backoffLimit) are spent.
+            st=$(kubectl -n "${AGENT_NS}" get "job/${job}" \
+                -o 'jsonpath={.status.conditions[?(@.type=="Complete")].status} {.status.conditions[?(@.type=="Failed")].status}' \
+                2>/dev/null || true)
             case "${st}" in
-                1*) break ;;
-                *" "[1-9]*) err "GGUF conversion failed — kubectl -n ${AGENT_NS} logs job/${job}" ;;
+                True*) break ;;
+                *" True") err "GGUF conversion failed — kubectl -n ${AGENT_NS} logs job/${job}; the next agent up runs it again" ;;
             esac
             [ "${SECONDS}" -lt "${dl}" ] || err "GGUF conversion not done after ${AGENT_CONVERT_TIMEOUT}s — kubectl -n ${AGENT_NS} logs job/${job}"
             sleep 15
@@ -8426,11 +8445,13 @@ cmd_agent_up() {
     agent_optimize
     local logs="kubectl -n ${AGENT_NS} logs deploy/${AGENT_APP}"
     # agent_fit records the fit it renders (for the guard) only here, never on `agent manifest`.
+    # It stops the running server before its probe; a render that then fails starts it again.
+    rm -f "$(agent_stopped_file)"
     if [ -z "${addons}" ]; then
-        manifest=$(AGENT_FIT_RECORD=1 agent_manifest)
+        manifest=$(AGENT_FIT_RECORD=1 agent_manifest) || { agent_restore_stopped; exit 1; }
     else
         # shellcheck disable=SC2086 # word list of add-on names
-        manifest=$(AGENT_FIT_RECORD=1 agent_stack_manifest ${addons})
+        manifest=$(AGENT_FIT_RECORD=1 agent_stack_manifest ${addons}) || { agent_restore_stopped; exit 1; }
     fi
     # The fit may have switched the backend (agent_follow_engine ran in that subshell):
     # the manifest's server Deployment names it.
@@ -8452,7 +8473,9 @@ cmd_agent_up() {
     # shellcheck disable=SC2086 # word list of add-on names
     agent_prune ${addons}
     agent_guard_stop
+    agent_convert_reset "${manifest}"
     kubectl apply -f - <<< "${manifest}"
+    rm -f "$(agent_stopped_file)"
     agent_convert_wait "${manifest}"
     info "Waiting for the model to download and load (first run fetches it into the PVC; up to ${AGENT_TIMEOUT}s)..."
     [ "${AGENT_APP}" != ovms ] || logs="kubectl -n ${AGENT_NS} logs deploy/ovms -c pull; ${logs}"
@@ -8541,6 +8564,8 @@ cmd_agent_down() {
         kubectl -n "${AGENT_NS}" delete "deployment/${app}" "service/${app}" --ignore-not-found
     done
     kubectl -n "${AGENT_NS}" delete secret "${LLM_SECRET}" --ignore-not-found
+    # A GGUF conversion still running (or failed): its GGUF is not done, so nothing is lost.
+    kubectl -n "${AGENT_NS}" delete job -l app=gguf-convert --field-selector status.successful=0 --ignore-not-found
     agent_prune
     agent_guard_stop
     info "Model caches kept in the namespace's PVCs. Remove everything: kubectl delete namespace ${AGENT_NS}"
@@ -10089,6 +10114,23 @@ agent_fit_apply() {
     [ "${AGENT_APP}" != ovms ] || K3D_GPU_AGENT_MAX_NUM_SEQS=${AGENT_MAX_NUM_SEQS}
 }
 
+# Servers agent up's fit stopped before its probe, one name per line, until the new
+# manifest is applied.
+agent_stopped_file() { echo "$(fit_state)/agent-stopped"; }
+
+# Starts again the servers agent up's fit stopped, when nothing replaced them.
+agent_restore_stopped() {
+    local f app
+    f=$(agent_stopped_file)
+    [ -f "${f}" ] || return 0
+    while read -r app; do
+        [ -n "${app}" ] || continue
+        kubectl -n "${AGENT_NS}" scale "deployment/${app}" --replicas=1 >/dev/null \
+            && warn "fit: the previous ${app} is started again" || true
+    done < "${f}"
+    rm -f "${f}"
+}
+
 # The agent app (Deployment and Service name) that runs a fit engine.
 engine_app() {
     case "$1" in
@@ -10106,9 +10148,18 @@ agent_follow_engine() {
     local engine=$1 why=$2 flags=$3
     [ "$(engine_app "${engine}")" != "${AGENT_APP}" ] || return 0
     if [ -z "${AGENT_BACKEND_SET}" ]; then
+        # The fit sizes vLLM's CPU build for the EAT overlay; the agent's vLLM images are
+        # the XPU and Gaudi builds.
+        [ "${engine}" != vllm ] || [ "${AGENT_SEL%% *}" != CPU ] \
+            || err "${why}: vLLM on the CPU is not an agent backend; serve an OpenVINO IR or GGUF variant of ${AGENT_MODEL}"
         info "fit: backend ${engine}, the engine the fit picked for ${AGENT_MODEL} (K3D_GPU_AGENT_BACKEND is unset)" >&2
         AGENT_BACKEND=${engine}
         agent_config
+        # K3D_GPU_AGENT_IMAGE names an image of the backend it was set for, not this one.
+        if [ -n "${K3D_GPU_AGENT_IMAGE:-}" ]; then
+            warn "K3D_GPU_AGENT_IMAGE is not used: the fit picked ${engine} (set K3D_GPU_AGENT_BACKEND=${engine} to give it an image)"
+            AGENT_IMAGE=${AGENT_DEFAULT_IMAGE}
+        fi
         return 0
     fi
     case "${engine}" in
@@ -10127,7 +10178,7 @@ agent_follow_engine() {
 # guard step (K3D_GPU_FIT_RUNG=N) renders rung N of the recorded fit without fitting
 # again, since the running server already holds the memory a new probe would see.
 agent_fit() {
-    local device=$1 mode=${K3D_GPU_FIT:-auto} dir host doc rc=0 args=() dev engine rec restore="" app
+    local device=$1 mode=${K3D_GPU_FIT:-auto} dir host doc rc=0 args=() dev engine rec app
     rec="$(fit_state)/agent-fit.json"
     case "${mode}" in
         off|0) return 0 ;;
@@ -10156,9 +10207,11 @@ agent_fit() {
         for app in "${AGENT_APPS[@]}"; do
             [ "$(kubectl -n "${AGENT_NS}" get "deployment/${app}" -o 'jsonpath={.spec.replicas}' 2>/dev/null)" = 1 ] || continue
             info "fit: stopping the running ${app} so the probe sees the memory it holds as free" >&2
+            mkdir -p "$(fit_state)"
+            echo "${app}" >> "$(agent_stopped_file)"
             kubectl -n "${AGENT_NS}" scale "deployment/${app}" --replicas=0 >/dev/null \
                 && kubectl -n "${AGENT_NS}" wait --for=delete pod -l "app=${app}" --timeout=180s >/dev/null 2>&1 \
-                && restore+=" ${app}"
+                || true
         done
     fi
     host=$(mktemp)
@@ -10176,10 +10229,7 @@ agent_fit() {
         local why
         why=$(fit_field "$(<"${doc}")" summary)
         rm -f "${doc}"
-        for app in ${restore}; do
-            kubectl -n "${AGENT_NS}" scale "deployment/${app}" --replicas=1 >/dev/null \
-                && warn "fit: the previous ${app} is started again" || true
-        done
+        agent_restore_stopped
         err "${why}; not starting a server that cannot fit (k3d-gpu fit --model ${AGENT_MODEL} --explain shows the arithmetic)"
     fi
     engine=$(fit_field "$(<"${doc}")" engine)

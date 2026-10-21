@@ -46,7 +46,10 @@ card of one model shares. It does drop a card whose `/dev/dri` nodes it cannot s
 and `renderDN` of the free cards only into the plugin's pod, instead of all of `/dev/dri`,
 and says which cards it left out and who holds them. On a host whose SGLang fills two of
 four B70s, the cluster advertises the other two, and every placement the fit makes lands
-on them. The busy set is read once, at `up`. `K3D_GPU_INTEL_CARDS=all` advertises every card.
+on them. The busy set is read once, at `up`, and the plugin's mounts name each free card's
+nodes. A card removed or renumbered later (a reboot that reorders them) leaves a mount
+with no node, and the plugin pod does not start: recreate the cluster (`k3d-gpu down`,
+`k3d-gpu up`). `K3D_GPU_INTEL_CARDS=all` advertises every card.
 
 ## The arithmetic
 
@@ -127,9 +130,11 @@ huggingface-hub 2.2.0 on `PYTHONPATH`. The image's own transformers cannot read
 transformers-5 tokenizer configs. It downloads the pinned revision and writes
 `model.gguf` and `manifest.json` (sha256, size, pip freeze) under `/models/gguf`. Then it
 removes the download. Unquantized weights keep their 16-bit type. FP8 checkpoints are
-stored as Q8_0 (`--fp8-as-q8`), the 1 byte per weight the fit counted. Any other
-`quant_method` is refused before anything runs, because the converter cannot read it
-(`conversion/base.py:573`). That includes the AutoRound W4A16 Flash-Next. `agent up`
+stored as Q8_0 (`--fp8-as-q8`), the 1 byte per weight the fit counted. Other quantized
+checkpoints are refused before anything runs. The converter dequantizes GPTQ and packed
+int to 16 bits, a GGUF larger than the fit sized, and does not read the rest
+(`conversion/base.py:573`). That includes the AutoRound W4A16 Flash-Next. A conversion
+Job that failed runs again on the next `agent up`, and `agent down` deletes one still running. `agent up`
 waits for the Job (`K3D_GPU_AGENT_CONVERT_TIMEOUT`, 12 hours by default), and the server
 pod waits for `manifest.json`. A later `agent up` of the same model finds the GGUF and
 converts nothing. `K3D_GPU_FIT=off` skips the fit; `on` also sizes the default

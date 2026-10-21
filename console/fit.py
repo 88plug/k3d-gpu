@@ -614,6 +614,10 @@ def hf_fetch(repo, revision, out, file=None, token=None, endpoint="https://huggi
         return data if binary else data.decode("utf-8")
 
     rev = revision or "main"
+    # A branch or tag moves: record the commit it names, so what is served later (a GGUF
+    # download, a conversion) is the revision these headers were read from.
+    if not re.match(r"^[0-9a-f]{40}$", rev):
+        rev = json.loads(get("%s/api/models/%s/revision/%s" % (endpoint, repo, rev)))["sha"]
     tree = json.loads(get("%s/api/models/%s/tree/%s?recursive=true" % (endpoint, repo, rev)))
     sizes = {t["path"]: t.get("lfs", {}).get("size") or t.get("size") or 0 for t in tree if t.get("type") == "file"}
     os.makedirs(out, exist_ok=True)
@@ -821,21 +825,32 @@ def engines_for(fmt, arch):
 
 
 # GGUF conversion of safetensors weights for llama.cpp, as llama.cpp v0.7.0 (b11669)
-# convert_hf_to_gguf.py reads them (conversion/base.py dequant_model): unquantized weights
-# keep their 16-bit type; FP8 (quant_method fp8, base.py:469) is dequantized and stored
-# as Q8_0 with --fp8-as-q8 (base.py:908 tensor_force_quant), the 1 B per weight the fit
-# counts; any other quant_method raises "Quant method is not yet supported" (base.py:573).
+# convert_hf_to_gguf.py reads them (conversion/base.py dequant_model). Unquantized weights
+# keep their 16-bit type. FP8 (quant_method fp8, base.py:469; compressed-tensors
+# float-quantized 8-bit floats, base.py:526) is dequantized and stored as Q8_0 with
+# --fp8-as-q8 (base.py:908 tensor_force_quant): the 1 B per weight the fit counts. The
+# other methods it reads (bitnet, gptq, compressed-tensors int and packed, modelopt) are
+# dequantized to 16 bits, a GGUF two to four times the bytes the fit sized; any other
+# raises "Quant method is not yet supported" (base.py:573).
 def convert_plan(cfg, fmt):
     """{"args": convert_hf_to_gguf.py arguments, "error": why not}."""
     if fmt != "safetensors":
         return {"args": None, "error": "%s weights have no GGUF conversion (convert_hf_to_gguf.py reads safetensors)" % fmt}
-    method = (cfg.get("quantization_config") or {}).get("quant_method")
+    q = cfg.get("quantization_config") or {}
+    method = q.get("quant_method")
     if not method:
         tc = text_config(cfg)
         dt = tc.get("dtype") or tc.get("torch_dtype") or cfg.get("dtype") or cfg.get("torch_dtype") or "bfloat16"
         return {"args": ["--outtype", "f16" if dt in ("float16", "half") else "bf16"], "error": None}
-    if method == "fp8":
+    groups = list((q.get("config_groups") or {}).values())
+    w = (groups[0].get("weights") or {}) if len(groups) == 1 else {}
+    if method == "fp8" or (method == "compressed-tensors" and q.get("format") == "float-quantized"
+                           and w.get("type") == "float" and w.get("num_bits") == 8):
         return {"args": ["--outtype", "bf16", "--fp8-as-q8"], "error": None}
+    if method in ("bitnet", "gptq", "compressed-tensors", "modelopt", "modelopt_mixed"):
+        return {"args": None, "error": "llama.cpp v0.7.0's convert_hf_to_gguf.py dequantizes quant_method %s to 16 bits "
+                                       "(conversion/base.py dequant_model), a GGUF larger than the weights this fit "
+                                       "sized; a bf16 or FP8 checkpoint of this model converts" % method}
     return {"args": None, "error": "llama.cpp v0.7.0's convert_hf_to_gguf.py does not read quant_method %s "
                                    "(conversion/base.py:573); a bf16 or FP8 checkpoint of this model converts" % method}
 
