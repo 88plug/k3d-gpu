@@ -41,7 +41,7 @@ secs=$(( $(date +%s) - t0 ))
 # then the error again; all three reports stay beside the IR (grid-*.json, snap-*.json).
 # The export fails, and nothing is renamed into place, when no weight anywhere matched the
 # checkpoint, or when a file left more than QAT_MAX_SKIP of its compressed weights unsnapped.
-gate() { python3 "${HERE}/qat_grid.py" gate "$1" "$2" --max-skip "${QAT_MAX_SKIP:-0.02}"; }
+gate() { "${V}/bin/python" "${HERE}/qat_grid.py" gate "$1" "$2" --max-skip "${QAT_MAX_SKIP:-0.02}"; }
 matched_any=0
 for xml in "${OUT}.partial"/openvino*model.xml; do
     [ -e "${xml}" ] || continue
