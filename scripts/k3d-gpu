@@ -307,7 +307,8 @@ Usage: k3d-gpu <command>
 Environment:
   K3D_GPU_CLUSTER       cluster name         (default: gpu)
   K3D_GPU_IMAGE         k3s node image       (default: ${IMAGE_REPO}:${VERSION}; ${IMAGE_REPO}:latest floats)
-  K3D_GPU_VENDORS       auto | comma list of nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa,wsl (default: auto)
+  K3D_GPU_VENDORS       auto | comma list of nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa,wsl |
+                        auto,-<vendor>,...: auto detection minus those (default: auto)
   K3D_GPU_NODE_LABELS   extra node labels, comma list of key=value (default: none)
   K3D_GPU_K3S_ARGS      extra k3s server flags, space-separated, e.g. --disable=servicelb (default: none)
   K3D_GPU_VOLUMES       host dirs mounted into every node, comma list of HOST:NODE[:ro|rw] (ro by default)
@@ -1524,12 +1525,38 @@ node_feature_labels() {
 resolve_vendors() {
     case "${DRA}" in 0|1) ;; *) err "K3D_GPU_DRA must be 0 or 1 (got '${DRA}')" ;; esac
     ACTIVE=()
+    OPTED_OUT_DETECTED=() # detected vendors that K3D_GPU_VENDORS opted out ("-<vendor>")
+    VENDORS_AUTO=0        # 1: auto detection (plain auto, or auto minus opt-outs)
     VENDORS_REQUEST="${VENDORS_REQUEST//[[:space:]]/}" # any whitespace, newlines included, is ignored
     [ -n "${VENDORS_REQUEST}" ] || VENDORS_REQUEST=auto
     detect_intel
     detect_npu
-    local v req
-    if [ "${VENDORS_REQUEST}" = "auto" ]; then
+    local v req auto=0 listed=()
+    local known="nvidia|intel|npu|gaudi|dsa|iaa|qat|amx|hybrid|numa|wsl"
+    OPTED_OUT=()
+    # Entries, checked in order: "auto", vendor names, "none", or "-<vendor>" opt-outs. An
+    # opt-out applies to auto detection only ("-nvidia,-intel" alone means "auto,-nvidia,-intel").
+    IFS=',' read -r -a req <<< "${VENDORS_REQUEST}"
+    for v in ${req[@]+"${req[@]}"}; do
+        case "${v}" in
+            ""|none) ;; # none: a plain k3s cluster (a remote endpoint needs no accelerator)
+            auto) auto=1 ;;
+            -*)
+                [[ "${v#-}" =~ ^(${known})$ ]] || err "unknown vendor '${v}' in K3D_GPU_VENDORS (opt out with -<vendor>, one of ${known//|/,})"
+                [[ " ${OPTED_OUT[*]} " == *" ${v#-} "* ]] || OPTED_OUT+=("${v#-}") ;;
+            *)
+                [[ "${v}" =~ ^(${known})$ ]] || err "unknown vendor '${v}' in K3D_GPU_VENDORS (use ${known//|/,})"
+                listed+=("${v}") ;;
+        esac
+    done
+    [ "${#OPTED_OUT[@]}" -eq 0 ] || auto=1
+    # Only empty entries (",,") read as auto, as an empty K3D_GPU_VENDORS does.
+    [ "${#listed[@]}" -gt 0 ] || [[ ",${VENDORS_REQUEST}," == *,none,* ]] || auto=1
+    VENDORS_AUTO=${auto}
+    if [ "${auto}" = 1 ] && [ "${#listed[@]}" -gt 0 ]; then
+        err "K3D_GPU_VENDORS mixes a vendor list with auto or opt-outs (${VENDORS_REQUEST}): use auto, auto,-<vendor>,... or a plain list"
+    fi
+    if [ "${auto}" = 1 ]; then
         if has_nvidia; then ACTIVE+=(nvidia); fi
         if [ "${#INTEL_DRIVERS[@]}" -gt 0 ]; then ACTIVE+=(intel); fi
         if npu_usable; then
@@ -1550,15 +1577,21 @@ resolve_vendors() {
         if has_hybrid; then ACTIVE+=(hybrid); fi
         if has_numa; then ACTIVE+=(numa); fi
         if has_wsl_intel; then ACTIVE+=(wsl); fi
+        if [ "${#OPTED_OUT[@]}" -gt 0 ]; then
+            local kept=() o skip
+            for v in ${ACTIVE[@]+"${ACTIVE[@]}"}; do
+                skip=0
+                for o in "${OPTED_OUT[@]}"; do [ "${v}" = "${o}" ] && skip=1; done
+                if [ "${skip}" = 1 ]; then OPTED_OUT_DETECTED+=("${v}"); else kept+=("${v}"); fi
+            done
+            ACTIVE=(${kept[@]+"${kept[@]}"})
+            # Named only when something detected was left out; stderr, so detect's stdout
+            # stays the vendor table.
+            [ "${#OPTED_OUT_DETECTED[@]}" -eq 0 ] \
+                || echo "${GRN}==>${RST} opted out by K3D_GPU_VENDORS: ${OPTED_OUT[*]} (detected here: ${OPTED_OUT_DETECTED[*]}); not deployed, not advertised" >&2
+        fi
     else
-        IFS=',' read -r -a req <<< "${VENDORS_REQUEST}"
-        for v in "${req[@]}"; do
-            case "${v}" in
-                ""|none) ;; # none: a plain k3s cluster (a remote endpoint needs no accelerator)
-                nvidia|intel|npu|gaudi|dsa|iaa|qat|amx|hybrid|numa|wsl) is_active "${v}" || ACTIVE+=("${v}") ;;
-                *) err "unknown vendor '${v}' in K3D_GPU_VENDORS (use nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa,wsl)" ;;
-            esac
-        done
+        for v in ${listed[@]+"${listed[@]}"}; do is_active "${v}" || ACTIVE+=("${v}"); done
     fi
     case "${BALLOONS}" in
         k3s|external) ;;
@@ -2292,7 +2325,7 @@ accel_enable_steps() {
 # for (auto detection only), or nothing: "DSA dsa0 dsa2, IAA iax1(kernel WQ),
 # QAT 0000:01:00.0".
 accel_disabled_list() {
-    [ "${VENDORS_REQUEST}" = auto ] || return 0
+    [ "${VENDORS_AUTO:-0}" = 1 ] || return 0
     accel_enable_steps | awk -F'\t' '
         $3 == "skip" { next }
         $1 != k { if (out != "") out = out ", "; out = out $1; k = $1 }
@@ -2914,6 +2947,9 @@ doctor() {
     if [ "${#ACTIVE[@]}" -eq 0 ] && [ -n "${REMOTE}" ]; then
         echo ""
         echo "  ok: no accelerator detected; a remote endpoint (--remote) needs none (K3D_GPU_VENDORS=none k3d-gpu up)"
+    elif [ "${#ACTIVE[@]}" -eq 0 ] && [ "${#OPTED_OUT_DETECTED[@]}" -gt 0 ]; then
+        echo ""
+        echo "  ok: every detected accelerator is opted out (${OPTED_OUT_DETECTED[*]}); up makes a plain cluster"
     elif [ "${#ACTIVE[@]}" -eq 0 ]; then
         echo ""
         echo "  ${RED}fail${RST}: no supported accelerator detected (NVIDIA, Intel GPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX, hybrid P/E cores, NUMA, WSL2 Intel GPU)"
@@ -4450,8 +4486,13 @@ cmd_up() {
     resolve_vendors
     ACCEL_DISABLED=$(accel_disabled_note)
     [ -z "${ACCEL_DISABLED}" ] || warn "${ACCEL_DISABLED}"
-    [ "${#ACTIVE[@]}" -gt 0 ] || [ "${VENDORS_REQUEST}" = none ] || err "no supported accelerator detected (NVIDIA, Intel GPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX, hybrid P/E cores, NUMA, WSL2 Intel GPU) — run 'k3d-gpu doctor' or set K3D_GPU_VENDORS"
-    info "Accelerators: ${ACTIVE[*]:-none (K3D_GPU_VENDORS=none)}"
+    # Opting out every detected vendor leaves a plain cluster, as K3D_GPU_VENDORS=none does.
+    [ "${#ACTIVE[@]}" -gt 0 ] || [ "${VENDORS_REQUEST}" = none ] || [ "${#OPTED_OUT_DETECTED[@]}" -gt 0 ] || err "no supported accelerator detected (NVIDIA, Intel GPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX, hybrid P/E cores, NUMA, WSL2 Intel GPU) — run 'k3d-gpu doctor' or set K3D_GPU_VENDORS"
+    if [ "${#ACTIVE[@]}" -eq 0 ] && [ "${#OPTED_OUT_DETECTED[@]}" -gt 0 ]; then
+        info "Accelerators: none (every detected one opted out: ${OPTED_OUT_DETECTED[*]})"
+    else
+        info "Accelerators: ${ACTIVE[*]:-none (K3D_GPU_VENDORS=none)}"
+    fi
     local intel_args="" problems
     if intel_dra && ! is_active intel; then
         err "K3D_GPU_DRA=1 needs an Intel GPU and none is active (${ACTIVE[*]}) — run 'k3d-gpu doctor' or set K3D_GPU_VENDORS"
@@ -4482,7 +4523,13 @@ cmd_up() {
     # applies it, so the other stack's objects are never created.
     # The DRA kubelet plugin's nodeSelector needs INTEL_DRA_LABEL, so launchers and
     # manual `k3d cluster create` runs that never disable intel-gpu-dra do not start it.
-    if intel_dra; then
+    # With no active intel vendor (not detected, not listed or opted out) both stacks are
+    # disabled: the baked intel-gpu-plugin would otherwise open the host's /dev/dri
+    # (visible in the privileged node) and advertise every Intel GPU it finds.
+    if ! is_active intel; then
+        create_args+=(--k3s-arg="--disable=intel-gpu-plugin@server:0")
+        create_args+=(--k3s-arg="--disable=intel-gpu-dra@server:0")
+    elif intel_dra; then
         create_args+=(--k3s-arg="--disable=intel-gpu-plugin@server:0")
         create_args+=(--k3s-node-label="${INTEL_DRA_LABEL}@server:*;agent:*")
     else
@@ -4955,7 +5002,7 @@ verify_gpus() {
     # An explicit K3D_GPU_VENDORS request must fully succeed. In auto mode one
     # working accelerator is enough (e.g. a spare iGPU that never registers).
     [ -z "${ACCEL_DISABLED:-}" ] || warn "${ACCEL_DISABLED}"
-    if [ -n "${failed}" ] && { [ "${VENDORS_REQUEST}" != "auto" ] || [ -z "${summary}" ]; }; then
+    if [ -n "${failed}" ] && { [ "${VENDORS_AUTO:-0}" != 1 ] || [ -z "${summary}" ]; }; then
         err "accelerator(s) not schedulable:${failed}"
     fi
     info "Accelerators schedulable:${summary}. Try: k3d-gpu test"
@@ -5067,6 +5114,7 @@ cmd_test() {
     valid_image "${DEVICE_TEST_IMAGE}" || err "K3D_GPU_DEVICE_TEST_IMAGE '${DEVICE_TEST_IMAGE}' is not a valid image reference"
     require kubectl
     resolve_vendors
+    [ "${#OPTED_OUT_DETECTED[@]}" -eq 0 ] || [ "${#ACTIVE[@]}" -gt 0 ] || err "nothing to test: every detected accelerator is opted out (${OPTED_OUT_DETECTED[*]})"
     [ "${#ACTIVE[@]}" -gt 0 ] || err "no supported accelerator detected — run 'k3d-gpu doctor'"
     local res v path out got
     if is_active nvidia; then
@@ -5993,7 +6041,14 @@ hs_targets() {
         HS_RENDER="/dev/dri/${dev##*/}"
         break
     done
-    if [ "${VENDORS_REQUEST}" != "auto" ]; then
+    hs_vendor_mode
+    if [ "${VENDORS_AUTO}" = 1 ]; then
+        local kept=() t
+        for t in ${HS_TARGETS[@]+"${HS_TARGETS[@]}"}; do
+            [[ " ${OPTED_OUT[*]} " == *" ${t} "* ]] || kept+=("${t}")
+        done
+        HS_TARGETS=(${kept[@]+"${kept[@]}"})
+    else
         HS_TARGETS=()
         IFS=',' read -r -a req <<< "${VENDORS_REQUEST// /}"
         for v in "${req[@]}"; do
@@ -6182,13 +6237,26 @@ hs_add() { HS_PLAN+=("$1"); }
 # Fills HS_ACCEL with the accel_enable_steps host-setup runs, for the kinds it
 # handles (all under auto detection, else only dsa/iaa/qat in K3D_GPU_VENDORS):
 # class new, and class kernel only with --with-kernel-wqs. HS_HELD gets the rest.
+# hs_vendor_mode: VENDORS_AUTO and OPTED_OUT from K3D_GPU_VENDORS, parsed as resolve_vendors
+# parses it (errors included), for host-setup, which plans from PCI devices instead.
+hs_vendor_mode() {
+    local saved=("${ACTIVE[@]+"${ACTIVE[@]}"}")
+    resolve_vendors 2>/dev/null
+    ACTIVE=(${saved[@]+"${saved[@]}"})
+}
+
 hs_accel_targets() {
     local line kind cls want=",${VENDORS_REQUEST// /},"
     HS_ACCEL="" HS_HELD=""
     while IFS= read -r line; do
         [ -n "${line}" ] || continue
         kind=${line%%$'\t'*}
-        [ "${VENDORS_REQUEST}" = auto ] || [[ "${want}" == *",${kind,,},"* ]] || continue
+        hs_vendor_mode
+        if [ "${VENDORS_AUTO}" = 1 ]; then
+            [[ " ${OPTED_OUT[*]} " != *" ${kind,,} "* ]] || continue
+        else
+            [[ "${want}" == *",${kind,,},"* ]] || continue
+        fi
         IFS=$'\t' read -r _ _ cls _ <<< "${line}"
         if [ "${cls}" = new ] || { [ "${cls}" = kernel ] && [ "${HS_KERNEL_WQS}" -eq 1 ]; }; then
             HS_ACCEL+="${line}"$'\n'

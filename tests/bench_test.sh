@@ -156,8 +156,24 @@ assert all(g.startswith("[request ab12-") and g.endswith("] p") for g in got), g
 EOF
 }
 
+load_extra_body() {
+    python3 -B - "${ROOT}/bench" <<'EOF'
+import sys, types
+sys.path.insert(0, sys.argv[1])
+import llm_load as L
+a = types.SimpleNamespace(unique_prompts=False, prompt="p", run_id="r", model="m", max_tokens=4,
+                          temperature=0, ignore_eos=True,
+                          extra_body={"chat_template_kwargs": {"enable_thinking": False}})
+b = L.request_body(a)
+assert b["chat_template_kwargs"] == {"enable_thinking": False} and b["ignore_eos"] and b["max_tokens"] == 4, b
+a.extra_body = None
+assert "chat_template_kwargs" not in L.request_body(a)
+EOF
+}
+
 stub --tokens 16 --ttft 0.05 --itl 0.01
 check "llm_load: --unique-prompts gives every request its own prefix" load_unique_prompts
+check "llm_load: --extra-body keys reach the request body" load_extra_body
 check "llm_load: OVMS /v3 stream, usage tokens, TTFT after the delay" load_ovms_v3
 check "llm_load: concurrent phase overlaps requests" load_concurrent
 check "llm_load: max_tokens is sent" load_max_tokens

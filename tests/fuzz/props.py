@@ -100,19 +100,27 @@ def parse_cpulist(s):
 
 def oracle_vendors(req):
     """Intended K3D_GPU_VENDORS semantics: whitespace (any kind) is ignored, entries
-    are comma-separated, empty entries skipped, duplicates collapsed in first-seen
-    order, any unknown entry is an error naming it. Returns (ok, active|bad-entry)."""
+    are comma-separated, empty entries skipped, checked in order; an entry that is not
+    "auto", "none", a vendor or "-<vendor>" is an error naming it. "auto" or any
+    "-<vendor>" opt-out means auto detection minus the opt-outs, and is an error beside a
+    vendor name. Otherwise duplicates collapse in first-seen order.
+    Returns (ok, active|bad-entry); a mix error is (False, None)."""
     flat = re.sub(r"\s", "", req)
     if flat in ("", "auto"):
         return True, []  # auto mode; the test sysroot is empty, so nothing is detected
-    active = []
+    active, auto = [], False
     for v in flat.split(","):
-        if v == "":
+        if v in ("", "none"):
+            continue
+        if v == "auto" or (v.startswith("-") and v[1:] in VENDORS):
+            auto = True
             continue
         if v not in VENDORS:
             return False, v
         if v not in active:
             active.append(v)
+    if auto:
+        return (False, None) if active else (True, [])
     return True, active
 
 
@@ -214,7 +222,7 @@ def gen_vendor_request(r):
         if x < 0.7:
             t = r.choice(VENDORS)
         elif x < 0.8:
-            t = r.choice(["NVIDIA", "gpu", "auto", "nvidia2", "intel-gpu", "cpu"])
+            t = r.choice(["NVIDIA", "gpu", "auto", "nvidia2", "intel-gpu", "cpu", "-" + r.choice(VENDORS), "-gpu", "-"])
         else:
             t = ""
         pad = lambda: "".join(r.choice(" \t\n") if r.random() < 0.15 else " " * r.randint(0, 1)
@@ -405,8 +413,8 @@ def check_vendors(vals):
         ok, want = oracle_vendors(v)
         if ok and (rc != 0 or text.split(" ") != (want or [""])):
             out.append("rc=%d active=%r, oracle %r" % (rc, text[:120], want))
-        elif not ok and (rc == 0 or "unknown vendor '%s'" % want not in text):
-            out.append("rc=%d out=%r, oracle: error naming %r" % (rc, text[:120], want))
+        elif not ok and (rc == 0 or (want is not None and "unknown vendor '%s'" % want not in text)):
+            out.append("rc=%d out=%r, oracle: error naming %r" % (rc, text[:120], want or "the mix"))
         else:
             out.append(None)
     return out

@@ -12,6 +12,7 @@ k3d cluster create gpu
   --image=cryptoandcoffee/k3d-gpu:<version>
   --no-lb
   --k3s-arg=--disable=traefik@server:0
+  --k3s-arg=--disable=intel-gpu-plugin@server:0
   --k3s-arg=--disable=intel-gpu-dra@server:0
   --k3s-node-label=nvidia.com/gpu.present=false@server:*;agent:*
   --k3s-node-label=intel.feature.node.kubernetes.io/dsa=true@server:*;agent:*

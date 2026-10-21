@@ -136,7 +136,7 @@ Behaviour is tunable via environment variables:
 | `K3D_GPU_CLUSTER`    | `gpu`                                     | cluster name                         |
 | `K3D_GPU_IMAGE`      | `cryptoandcoffee/k3d-gpu:<launcher version>` | node image built from the same release (ubuntu26.04); see [Upgrading](#upgrading) |
 | `K3D_GPU_SHARE`      | `/usr/share/k3d-gpu`                      | dir of fallback plugin manifests     |
-| `K3D_GPU_VENDORS`    | `auto`                                    | `auto` detects; or a list of `nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa,wsl` |
+| `K3D_GPU_VENDORS`    | `auto`                                    | `auto` detects; `auto,-nvidia,-intel` detects all but those; or a list of `nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa,wsl` |
 | `K3D_GPU_NODE_LABELS` | none                                    | extra node labels, comma list of `key=value` (e.g. `ei-infra-eligible=true,ei-inference-eligible=true`) |
 | `K3D_GPU_K3S_ARGS`   | none                                      | extra k3s server flags, space-separated (e.g. `--disable=servicelb`) |
 | `K3D_GPU_PLUGIN`     | `/usr/share/k3d-gpu/nvidia-device-plugin.yml` | fallback manifest (only used if a custom image lacks the baked one) |
@@ -392,6 +392,11 @@ Tradeoffs when sharing is on:
   (`share/npu-embeddings.yml`) documents the rules.
 
 Force or limit vendors with `K3D_GPU_VENDORS=nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa,wsl`.
+To keep auto detection but leave some accelerators out of the cluster (GPUs that
+serve something else on a shared box, say), opt them out: `K3D_GPU_VENDORS=auto,-nvidia,-intel`
+(`-nvidia,-intel` alone means the same). An opted-out or unlisted vendor gets no
+device plugin: with no `intel` vendor, `up` disables both baked Intel GPU stacks,
+so nothing opens the host's `/dev/dri`.
 A loaded `nvidia` or `habanalabs` kernel module counts as present even before
 its device nodes appear; `doctor` then flags the missing nodes.
 
