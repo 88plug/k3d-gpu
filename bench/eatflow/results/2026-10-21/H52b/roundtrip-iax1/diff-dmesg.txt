@@ -1,0 +1,4 @@
+--- /home/devcloud/k3dgpu-bench/results/H52b/roundtrip-iax1/before-dmesg.txt	2026-10-21 21:04:35.141017450 +0000
++++ /home/devcloud/k3dgpu-bench/results/H52b/roundtrip-iax1/after-dmesg.txt	2026-10-21 21:04:36.300043100 +0000
+@@ -0,0 +1 @@
++[Wed Oct 21 21:04:06 2026] idxd iax1: Active wq 0 on disable wq1.0.
