@@ -1735,11 +1735,15 @@ B C, 16 CPUs, `H7X_VLLM_MEM=32Gi`): B Ready in 112 s on 0-7,48-55; C restarted 9
 and was not Ready in 1800 s. The likely cause, not confirmed (the failed container's log was not
 kept): with compilation on, vLLM writes its compile cache under `$HOME/.cache/vllm`, which is on
 the chart's read-only root for its non-root user. C therefore also gets
-`VLLM_CACHE_ROOT=/root/.cache/vllm`, the chart's own writable cache volume, its one change besides
-dropping `--enforce-eager` (in vLLM v0.24.0 `VLLM_CACHE_ROOT` defaults to
+`VLLM_CACHE_ROOT=/tmp/vllm`, in the chart's writable `/tmp` emptyDir (where the chart already puts
+the inductor and triton caches), its one change besides dropping `--enforce-eager` (in vLLM v0.24.0 `VLLM_CACHE_ROOT` defaults to
 `$XDG_CACHE_HOME` or `~/.cache`, plus `/vllm` (`vllm/envs.py`), and the compile cache is
 `VLLM_CACHE_ROOT/torch_compile_cache` (`vllm/compilation/backends.py`)); `h7x.sh` now keeps the failed container's log. If C still does not
-come up, the run continues without it and C/B is reported as not measured. A fifth smoke (B and C at the fit's limit) runs before this row is merged and is
+come up, the run continues without it and C/B is reported as not measured. Smoke 5 (2026-10-21
+04:12-04:47Z, order B C, 16 CPUs, the fit's 22Gi): B Ready in 141 s; C with
+`VLLM_CACHE_ROOT=/root/.cache/vllm` (the chart's cache volume) failed on
+`PermissionError: [Errno 13] Permission denied: '/root/.cache'` (read with `--previous`), so the
+cache root moved to `/tmp/vllm`. A sixth smoke (C only) runs before this row is merged and is
 reported in its run section. `H7X_READY_S=1800` is used for the run, because the first vLLM
 start in a fresh cluster pulls its 7.4 GB image.
 
