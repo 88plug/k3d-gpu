@@ -2891,8 +2891,9 @@ containerd. A download, or an arm, that would take `/` above 96% (the 97% line m
 tenants' growth) is not started, and its arm is recorded as not deliverable (disk). On
 2026-10-21 03:05Z the 96% line left 51 GB, less than `Qwen/Qwen3.8-27B` alone, so B2q, Sq and
 Sq-mtp are expected to be not deliverable (disk), and with them H54b's statistic (INCONCLUSIVE
-by the pre-registration). The downloads are attempted in the order Intel q4km, RedHat INT4,
-Qwen bf16, each only if it passes the guard at its start.
+by the pre-registration). A download is made only when the arm that reads it would then also pass its own guard
+(model plus its NEED in `h54b.sh`): Intel q4km for Lsq (18.7 + 6 GB) is fetched; RedHat INT4
+for Rq (19.5 + 45 GB) and Qwen bf16 (55.6 GB) are not, unless the headroom grows.
 
 **Order and holds.** H54b hold 1: X1q, X1q-mtp. Hold 2: Lsq, B2q, Sq, Sq-mtp, Rq (the last four
 only where their model was fetched and the disk guard passes). Arms not reached in the
