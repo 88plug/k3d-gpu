@@ -2904,6 +2904,33 @@ up_says "K3D_GPU_K3S_ARGS keeps a flag's own commas" 0 \
     K3D_GPU_K3S_ARGS="--disable=servicelb,metrics-server"
 up_says "K3D_GPU_K3S_ARGS rejects a word that is not a flag" fail 'servicelb' negate \
     K3D_GPU_K3S_ARGS="--disable servicelb"
+# K3D_GPU_VOLUMES: host directories (a model cache) mounted into every node, read-only unless
+# :rw is given, so pods can read them by hostPath without a copy into the node.
+mkdir -p "${WORK}/vol/models" "${WORK}/vol/cache"
+up_says "up without K3D_GPU_VOLUMES mounts no extra dir" 0 "${WORK}/vol" negate
+up_says "K3D_GPU_VOLUMES mounts a host dir read-only in every node" 0 \
+    "^--volume=${WORK}/vol/models:/var/models:ro@server:\*;agent:\*$" "" \
+    K3D_GPU_VOLUMES="${WORK}/vol/models:/var/models"
+up_says "K3D_GPU_VOLUMES takes a list and an explicit rw" 0 \
+    "^--volume=${WORK}/vol/cache:/var/cache-x:rw@server:\*;agent:\*$" "" \
+    K3D_GPU_VOLUMES="${WORK}/vol/models:/var/models,${WORK}/vol/cache:/var/cache-x:rw"
+up_says "K3D_GPU_VOLUMES rejects a relative host path" fail 'vol' negate \
+    K3D_GPU_VOLUMES="vol/models:/var/models"
+up_says "K3D_GPU_VOLUMES rejects a missing host dir" fail 'nope' negate \
+    K3D_GPU_VOLUMES="${WORK}/vol/nope:/var/models"
+up_says "K3D_GPU_VOLUMES rejects a mode other than ro or rw" fail 'vol' negate \
+    K3D_GPU_VOLUMES="${WORK}/vol/models:/var/models:z"
+# A path is mounted exactly as named: whitespace is refused (not stripped into another existing
+# directory), and so are k3d's filter characters and a fourth field.
+mkdir -p "${WORK}/vol/mymodels"
+up_says "K3D_GPU_VOLUMES refuses whitespace instead of stripping it" fail 'mymodels' negate \
+    K3D_GPU_VOLUMES="${WORK}/vol/my models:/var/models"
+up_says "K3D_GPU_VOLUMES refuses @ in a path" fail 'vol' negate \
+    K3D_GPU_VOLUMES="${WORK}/vol/models:/var/m@server:0"
+up_says "K3D_GPU_VOLUMES refuses ; and =" fail 'vol' negate \
+    K3D_GPU_VOLUMES="${WORK}/vol/models:/var/m;x=y"
+up_says "K3D_GPU_VOLUMES refuses a fourth field" fail 'vol' negate \
+    K3D_GPU_VOLUMES="${WORK}/vol/models:/var/models:ro:x"
 
 # Node Feature Discovery reads the host's kernel config, builtin modules and
 # os-release; the node image has its own /boot, /lib and /etc, so `up` mounts

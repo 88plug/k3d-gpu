@@ -17,6 +17,12 @@ where a mode below says otherwise.
                                             --model /data/DIR, --max-model-len MAXLEN,
                                             HF_HUB_OFFLINE=1, no HF token secret, readiness
                                             probe from 10 s (the chart waits 120 s)
+  stage.py xpu IN OUT DIR MAXLEN|- [ladder=STEPS] [FLAG...]
+                                            EAT PR #21 xpu-values.yaml render: as vllm, minus
+                                            the host Level Zero/OpenCL hostPath mounts and
+                                            their LD_LIBRARY_PATH prepend (a k3d node has no
+                                            host runtime there); FLAGs appended to the args;
+                                            ladder steps b, c, d as in EXPERIMENTS.md H53
   stage.py ovms2 IN OUT MODEL NAME1=G1 NAME2=G2
                                             `k3d-gpu agent manifest` as in ovms, then one pod
                                             serving two graph names (H47 A1 and A4): no pull
@@ -38,7 +44,9 @@ import sys
 
 import yaml
 
-HOST_DIR = "/var/apb-models"
+# The node directory hostPath volumes point at: models copied into the node, or STAGE_HOST_DIR
+# (live.sh LIVE_MOUNT_B: a read-only mount of the host's copy).
+HOST_DIR = os.environ.get("STAGE_HOST_DIR", "/var/apb-models")
 
 
 def host_path(volume, old):
@@ -105,11 +113,24 @@ def stage(mode, docs, *extra):
                 for v in d["spec"]["template"]["spec"]["volumes"]:
                     if v["name"] == "models":
                         host_path(v, "persistentVolumeClaim")
-        elif mode == "vllm":
-            mdir, maxlen = extra
+        elif mode in ("vllm", "xpu"):
+            mdir, maxlen, *flags = extra
+            if mode == "vllm" and flags:
+                raise SystemExit("stage.py vllm: IN OUT DIR MAXLEN")
+            # xpu: MAXLEN "-" leaves the chart's own (none for EAT's Qwen3.6-27B profile); an
+            # optional first flag ladder=<steps> (H53's boot ladder, EXPERIMENTS.md "H53
+            # pre-registration"): b drops the setvars.sh source, c drops --disable-log-requests,
+            # d adds --max-model-len 32768 (#21's declared max_model_len).
+            ladder = ""
+            if flags and flags[0].startswith("ladder="):
+                ladder = flags.pop(0)[len("ladder="):]
+                if not set(ladder) <= set("bcd"):
+                    raise SystemExit(f"stage.py xpu: ladder steps are b, c, d, got {ladder!r}")
             if kind in ("PersistentVolumeClaim", "Secret"):
                 continue
-            if kind == "ConfigMap":
+            # The env ConfigMap (envFrom) only; a chat-template ConfigMap (EAT's chatTemplateConfigMap,
+            # mounted over the examples dir) keeps its files.
+            if kind == "ConfigMap" and not any(k.endswith(".jinja") for k in d.get("data") or {}):
                 d["data"]["HF_HUB_OFFLINE"] = "1"
             if kind == "Deployment":
                 ps = d["spec"]["template"]["spec"]
@@ -120,8 +141,26 @@ def stage(mode, docs, *extra):
                 c["envFrom"] = [e for e in c["envFrom"] if "secretRef" not in e]
                 a = c["args"]
                 a[a.index("--model") + 1] = "/data/" + mdir
-                a += ["--max-model-len", str(maxlen)]
+                a += (["--max-model-len", str(maxlen)] if maxlen != "-" else []) + list(flags)
                 c["readinessProbe"].update(initialDelaySeconds=10, periodSeconds=5, failureThreshold=200)
+                if mode == "xpu":
+                    # EAT PR #21 mounts the host's Level Zero and OpenCL runtime by hostPath and
+                    # prepends it to LD_LIBRARY_PATH. In a k3d node container hostPath is the
+                    # node's own filesystem, which has no Intel GPU runtime; the image ships its
+                    # own, so those mounts and the prepend are dropped.
+                    host = {v["name"] for v in ps["volumes"] if v.get("hostPath", {}).get("path", "").startswith(
+                        ("/usr/lib/x86_64-linux-gnu", "/etc/OpenCL"))}
+                    ps["volumes"] = [v for v in ps["volumes"] if v["name"] not in host]
+                    c["volumeMounts"] = [m for m in c.get("volumeMounts", []) if m["name"] not in host]
+                    c["command"] = [x.replace("export LD_LIBRARY_PATH=/host-gpu-libs:${LD_LIBRARY_PATH} && ", "")
+                                    for x in c.get("command", [])]
+                    if "b" in ladder:
+                        c["command"] = [x.replace("source /opt/intel/oneapi/setvars.sh --force && ", "")
+                                        for x in c["command"]]
+                    if "c" in ladder:
+                        c["args"] = [x for x in c["args"] if x != "--disable-log-requests"]
+                    if "d" in ladder:
+                        c["args"] += ["--max-model-len", "32768"]
         elif mode == "cuda":
             (mdir,) = extra
             if kind == "Deployment":
