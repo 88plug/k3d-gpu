@@ -516,7 +516,8 @@
           }
         },
         "summary": {"$ref": "#/$defs/strings"},
-        "explain": {"$ref": "#/$defs/strings"}
+        "explain": {"$ref": "#/$defs/strings"},
+        "optimizer": {"type": "object", "description": "k3d-gpu.modelopt/v1 (console/model_opt.py): present only with plan --model and model metadata"}
       }
     },
     "images_lock": {

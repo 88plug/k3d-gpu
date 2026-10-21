@@ -37,6 +37,13 @@ fail() { FAILS=$((FAILS + 1)); echo "FAIL $*"; }
 
 if python3 "${DIR}/test_console.py"; then ok "console unit and property tests"; else fail "console unit and property tests"; fi
 if python3 "${DIR}/test_sku_model.py"; then ok "sku_model unit and property tests (H24)"; else fail "sku_model unit and property tests (H24)"; fi
+if python3 "${DIR}/test_moe_predict.py"; then ok "moe_predict (plan --predict --model) unit tests"; else fail "moe_predict (plan --predict --model) unit tests"; fi
+# console/ledger-rules.json is EXPERIMENTS.md's H27/H34 rows as packages ship them.
+if python3 "${CONSOLE}/model_opt.py" ledger-rules --ledger "${REPO}/EXPERIMENTS.md" | cmp -s - "${CONSOLE}/ledger-rules.json"; then
+    ok "console/ledger-rules.json matches EXPERIMENTS.md"
+else
+    fail "console/ledger-rules.json differs from EXPERIMENTS.md: python3 console/model_opt.py ledger-rules --ledger EXPERIMENTS.md --out console/ledger-rules.json"
+fi
 if python3 "${DIR}/test_shared_prefix.py"; then ok "shared-prefix detector (H25) unit and property tests"; else fail "shared-prefix detector (H25) unit and property tests"; fi
 
 # k3d-gpu agent prefix reads the fixtures without a cluster.
@@ -256,6 +263,76 @@ expect_fail "plan: --predict needs a SKU" plan --predict
 expect_fail "unknown SKU" plan --predict i9-99999
 expect_fail "unknown plan --predict option" plan --predict n100 --bogus
 expect_fail "--predict must be the first option" plan --json --predict n100
+
+# plan --predict --model (console/moe_predict.py) and doctor --perf --bandwidth on
+# the Xeon 6741P + 4x Arc Pro B70 sysroot (tests/console/moe/SOURCES). STREAM is a
+# stub that prints STREAM's result lines, so no compiler or benchmark runs here.
+MOE="${DIR}/moe"
+GEMMA_CFG="${MOE}/gemma-4-26B-A4B-it-qat-q4_0-unquantized@f1e06dc5.config.json"
+mkdir -p "${WORK}/stream"
+cat > "${WORK}/stream/ok" <<'EOF'
+#!/bin/sh
+echo "Function    Best Rate MB/s  Avg time     Min time     Max time"
+echo "Copy:          301234.5     0.1     0.1     0.1"
+echo "Triad:         305200.0     0.1     0.1     0.1"
+EOF
+printf '#!/bin/sh\necho "Solution Validates"\n' > "${WORK}/stream/notriad"
+chmod +x "${WORK}/stream/ok" "${WORK}/stream/notriad"
+mrun() { K3D_GPU_STATE_DIR="${WORK}/moe-state" K3D_GPU_SYSROOT="${MOE}/xeon6741p-4xb70" \
+    K3D_GPU_HF_ENDPOINT="file://${WORK}/hf" "${K3D_GPU}" "$@"; }
+if out=$(K3D_GPU_STREAM_BIN="${WORK}/stream/ok" mrun doctor --perf --bandwidth 2>&1) \
+    && python3 -c 'import json,sys; c=json.load(open(sys.argv[1])); assert c["schema"]=="k3d-gpu.bandwidth/v1" and c["triad_gbs"]==305.2 and c["copy_gbs"]==301.2 and c["threads"]==48 and c["cpu_model"]=="Intel(R) Xeon(R) 6741P" and c["mem_kib"]==527767144 and c["array_elems"]==150994944 and c["stream"]["commit"].startswith("6703f750"), c' "${WORK}/moe-state/bandwidth.json" \
+    && grep -q "STREAM triad 305.2 GB/s" <<< "${out}"; then
+    ok "doctor --perf --bandwidth caches the STREAM triad with the host it ran on"
+else
+    fail "doctor --perf --bandwidth"; sed 's/^/  | /' <<< "${out}"
+fi
+if out=$(mrun plan --predict --model "${GEMMA_CFG}" --format q4_0 --json) \
+    && python3 -c 'import json,sys; d=json.loads(sys.argv[1]); b=d["bandwidth"]["dram"]; r={x["placement"]: x for x in d["rows"]}; w=d["weights"]
+assert d["schema"]=="k3d-gpu.moe-predict/v1" and d["status"]=="prediction", d
+assert b["source"]=="measured" and b["gbs"]==305.2 and b["theoretical_gbs"]==409.6, b
+assert r["cpu"]["decode_tok_s"]==round(305.2e9/w["read_bytes"],1) and r["gpu"]["decode_tok_s"]==round(608e9/w["read_bytes"],1), r
+assert set(r)=={"cpu","gpu","hybrid"} and w["moe"] and w["num_experts"]==128, r' "${out}"; then
+    ok "plan --predict --model: measured DRAM bandwidth, CPU/GPU/hybrid ceilings"
+else
+    fail "plan --predict --model --json"; sed 's/^/  | /' <<< "${out}"
+fi
+if out=$(K3D_GPU_STATE_DIR="${WORK}/moe-none" K3D_GPU_SYSROOT="${MOE}/xeon6741p-4xb70" "${K3D_GPU}" plan --predict --model "${GEMMA_CFG}" --format q4_0 --placement cpu) \
+    && grep -q "409.6 GB/s theoretical" <<< "${out}" && grep -q "^    cpu " <<< "${out}" && ! grep -q "^    gpu " <<< "${out}"; then
+    ok "plan --predict --model without a cache: SMBIOS peak, labelled theoretical"
+else
+    fail "plan --predict --model theoretical"; sed 's/^/  | /' <<< "${out}"
+fi
+mkdir -p "${WORK}/hf/google/gemma-test/resolve/f1e06dc5"
+cp "${GEMMA_CFG}" "${WORK}/hf/google/gemma-test/resolve/f1e06dc5/config.json"
+if out=$(mrun plan --predict --model google/gemma-test@f1e06dc5 --json) \
+    && python3 -c 'import json,sys; d=json.loads(sys.argv[1]); m=d["model"]; assert m["id"]=="google/gemma-test" and m["revision"]=="f1e06dc5" and m["source_rank"]==1 and d["weights"]["format"]=="bf16", m' "${out}" \
+    && [ -s "${WORK}/moe-state/hf-config/google__gemma-test@f1e06dc5/config.json" ] \
+    && [ ! -e "${WORK}/moe-state/hf-config/google__gemma-test@f1e06dc5/openvino_config.json" ]; then
+    ok "plan --predict --model org/name@sha fetches and caches config.json"
+else
+    fail "plan --predict --model org/name@sha"; sed 's/^/  | /' <<< "${out}"
+fi
+# An OpenVINO IR repo: the format comes from its openvino_config.json.
+mkdir -p "${WORK}/hf/OpenVINO/gemma-ov/resolve/4e5885c3"
+cp "${GEMMA_CFG}" "${WORK}/hf/OpenVINO/gemma-ov/resolve/4e5885c3/config.json"
+echo '{"quantization_config": {"quantization_configs": {"lm_model": {"bits": 4, "group_size": 64, "sym": false}}}}' \
+    > "${WORK}/hf/OpenVINO/gemma-ov/resolve/4e5885c3/openvino_config.json"
+if out=$(mrun plan --predict --model OpenVINO/gemma-ov --revision 4e5885c3 --placement cpu --json) \
+    && python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["weights"]["format"]=="ov-int4-asym-g64" and d["rows"][0]["engine"]=="ovms", d["weights"]' "${out}"; then
+    ok "plan --predict --model OpenVINO repo: format from openvino_config.json, engine ovms"
+else
+    fail "plan --predict --model OpenVINO repo"; sed 's/^/  | /' <<< "${out}"
+fi
+expect_fail "--bandwidth goes with --perf" doctor --bandwidth
+expect_fail "--model needs a value" plan --predict --model
+expect_fail "unknown plan --predict --model option" plan --predict --model x/y --bogus
+expect_fail "neither a local path nor" plan --predict --model "not a model"
+expect_fail "unknown format" plan --predict --model "${GEMMA_CFG}" --format int3
+if out=$(K3D_GPU_STREAM_BIN="${WORK}/stream/notriad" mrun doctor --perf --bandwidth 2>&1); then
+    fail "doctor --perf --bandwidth with no Triad line succeeded"
+elif grep -q "no Triad line" <<< "${out}"; then ok "doctor --perf --bandwidth: no Triad line fails"
+else fail "doctor --perf --bandwidth no Triad: ${out}"; fi
 
 echo ""
 echo "${PASS} passed, ${FAILS} failed"

@@ -62,9 +62,8 @@ def prompt_for(args):
     return f"[request {args.run_id}-{next(PROMPT_SEQ)}] {args.prompt}"
 
 
-def one_request(args, idx):
-    """Run one streamed chat completion; return its sample dict (never raises)."""
-    scheme, host, port, path = chat_url(args.base_url)
+def request_body(args):
+    """The JSON body of the next request; --extra-body keys are added last."""
     body = {
         "model": args.model,
         "messages": [{"role": "user", "content": prompt_for(args)}],
@@ -75,6 +74,14 @@ def one_request(args, idx):
     }
     if args.ignore_eos:
         body["ignore_eos"] = True
+    body.update(getattr(args, "extra_body", None) or {})
+    return body
+
+
+def one_request(args, idx):
+    """Run one streamed chat completion; return its sample dict (never raises)."""
+    scheme, host, port, path = chat_url(args.base_url)
+    body = request_body(args)
     headers = {"Content-Type": "application/json", "Accept": "text/event-stream"}
     if args.api_key:
         headers["Authorization"] = f"Bearer {args.api_key}"
@@ -192,6 +199,8 @@ def main():
     p.add_argument("--max-tokens", type=int, default=128)
     p.add_argument("--temperature", type=float, default=0.0)
     p.add_argument("--ignore-eos", action="store_true", help="ask the server to always generate max_tokens (OVMS, vLLM)")
+    p.add_argument("--extra-body", type=json.loads, default=None,
+                   help='JSON object merged into every request body, e.g. {"chat_template_kwargs": {"enable_thinking": false}}')
     p.add_argument("--unique-prompts", action="store_true",
                    help="tag each prompt so no request is a prefix-cache hit (first-token latency then includes prefill)")
     p.add_argument("--requests", type=int, default=8, help="requests per phase")

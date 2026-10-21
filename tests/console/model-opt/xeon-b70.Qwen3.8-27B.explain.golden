@@ -1,0 +1,35 @@
+facts: sha256:c0f1825fc929670909fccf97d296c7752b2b24b51398211dd0636d967c16de83
+targets:
+  cpu: Intel(R) Xeon(R) 6960P, family:model 6:173, AMX, 6 NUMA nodes; usable
+  gpu:0000:03:00.0: intel Battlemage, 0xe223, on xe, XMX; usable
+matrix: 2 cells, 0 on a target of this host
+  no measured cell for these targets
+overrides: model=Qwen/Qwen3.8-27B
+decision:
+  unmeasured: no green cell for this box; quickstart and agent up still pick by device
+  bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)
+model optimizer: Qwen/Qwen3.8-27B on ovms (GPU), metadata from huggingface
+  dense qwen3_5, 27781427952 params -> no MoE adjustment [https://huggingface.co/Qwen/Qwen3.8-27B/blob/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/config.json]
+  context 262144 tokens -> kept at the agent's own --max-model-len / OVMS default [https://huggingface.co/Qwen/Qwen3.8-27B/blob/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/config.json]
+  1 openvino-ir candidate(s); top: OpenVINO/Qwen3.8-27B-int4-ov [official] (default, asym) -> serve OpenVINO/Qwen3.8-27B-int4-ov@7b20ea8c7df7 [https://huggingface.co/OpenVINO/Qwen3.8-27B-int4-ov/blob/7b20ea8c7df7223a85ff27bab5c473f0cb038943/openvino_config.json]
+  model family qwen3_5 -> tool parser qwen3coder, reasoning parser qwen3 [https://recipes.vllm.ai/Qwen/Qwen3.8-27B (--tool-call-parser qwen3_coder --reasoning-parser qwen3); https://github.com/openvinotoolkit/model_server/blob/main/docs/llm/reference.md (qwen3coder + qwen3)]
+  chat template thinks on by default -> OVMS has no server-side default: agents send chat_template_kwargs {"enable_thinking": false, "reasoning_effort": "medium"} per request (k3d-gpu's own warm-up request sends enable_thinking false) [https://github.com/openvinotoolkit/model_server/blob/v2026.4.1/docs/model_server_rest_api_chat.md (L223)]
+  card: non-thinking sampling min_p=0.0, presence_penalty=1.5, repetition_penalty=1.0, temperature=0.7, top_k=20, top_p=0.8 -> ovms reads generation_config.json (the thinking-mode values) and has no server override: clients send these with thinking off [https://huggingface.co/Qwen/Qwen3.8-27B/blob/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/README.md (L253)]
+  vision tower in the IR -> loaded as a VLM pipeline: OVMS refuses LM on a VLM directory [https://github.com/openvinotoolkit/model_server/blob/v2026.4.1/src/llm/servable_initializer.cpp (L588-641)]
+  OpenVINO/Qwen3.8-27B-int4-ov bundles openvino_mtp_model.xml; OVMS MTP needs prefix caching off and forces greedy -> MTP off: prefix caching stays on (EXPERIMENTS.md H25 SUPPORTED: added-agent TTFT 9.4x faster with it); MTP (1.78x at n=2 in OpenVINO's notebook, greedy only, max_tokens required) is unmeasured on agent turns here. K3D_GPU_AGENT_DRAFT=mtp turns it on [https://github.com/openvinotoolkit/model_server/blob/v2026.4.1/demos/continuous_batching/speculative_decoding/README.md (L30); EXPERIMENTS.md H25]
+  variant ranking (official > RedHatAI > community/self-built; a lower rank wins only when measured better):
+    1. OpenVINO/Qwen3.8-27B-int4-ov [official], MTP head
+    excluded: Intel/Qwen3.8-27B-bpw2.8-AutoRound (safetensors, ovms serves openvino-ir)
+    excluded: Intel/Qwen3.8-27B-q2ks-AutoRound (gguf, ovms serves openvino-ir)
+    excluded: Intel/Qwen3.8-27B-q4km-AutoRound (gguf, ovms serves openvino-ir)
+    excluded: OpenVINO/Qwen3.8-27B-int8-ov (int8, the ovms target is int4)
+    excluded: Qwen/Qwen3.8-27B (safetensors, ovms serves openvino-ir)
+    excluded: RedHatAI/Qwen3.8-27B (safetensors, ovms serves openvino-ir)
+    excluded: RedHatAI/Qwen3.8-27B-INT4 (safetensors, ovms serves openvino-ir)
+    excluded: RedHatAI/Qwen3.8-27B-MXFP4 (NVFP4/MXFP4: NVIDIA only, no Intel engine documents it)
+    excluded: RedHatAI/Qwen3.8-27B-NVFP4 (NVFP4/MXFP4: NVIDIA only, no Intel engine documents it)
+  note: OpenVINO/Qwen3.8-27B-int4-ov's tokenizer_config.json caps model_max_length at 131072, below the model's 262144-token context
+  note: thinking is on by default for this model and OVMS cannot change that server-side: agents send chat_template_kwargs {"enable_thinking": false, "reasoning_effort": "medium"}
+  note: thinking off: the card recommends min_p=0.0, presence_penalty=1.5, repetition_penalty=1.0, temperature=0.7, top_k=20, top_p=0.8; send them per request
+  engine args: (none)
+summary: Detected Intel(R) Xeon(R) 6960P (AMX) + 1x Battlemage 0xe223 (XMX); picked OpenVINO/Qwen3.8-27B-int4-ov on OVMS (GPU), no drafter; thinking off for agents; why -> plan --model Qwen/Qwen3.8-27B --explain

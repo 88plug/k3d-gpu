@@ -1,0 +1,105 @@
+#!/usr/bin/env python3
+"""Move console/convert-pins.json to the newest compatible releases on PyPI.
+
+optimum-intel, nncf, openvino and openvino-tokenizers go to their newest stable
+release. Every other pin goes to the newest stable release that optimum-intel's
+own requirements (requires_dist) allow, and torchvision to the newest release
+whose torch requirement the chosen torch meets. Prints one "pin old -> new"
+line per moved pin; exits 0 whether or not anything moved.
+
+  hack/bump-convert-pins [--pins console/convert-pins.json] [--dry-run]
+
+Needs the `packaging` module (the workflow installs it pinned).
+"""
+
+import argparse
+import datetime
+import json
+import os
+import sys
+import urllib.request
+
+from packaging.requirements import Requirement
+from packaging.version import InvalidVersion, Version
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+NEWEST = ("optimum-intel", "nncf", "openvino")
+
+
+def pypi(name, version=None):
+    url = "https://pypi.org/pypi/%s/%sjson" % (name, version + "/" if version else "")
+    with urllib.request.urlopen(url, timeout=30) as r:
+        return json.load(r)
+
+
+def stable(doc):
+    out = []
+    for v, files in doc["releases"].items():
+        try:
+            pv = Version(v)
+        except InvalidVersion:
+            continue
+        if not pv.is_prerelease and files and not all(f.get("yanked") for f in files):
+            out.append(pv)
+    return sorted(out)
+
+
+def newest_allowed(name, spec):
+    ok = [v for v in stable(pypi(name)) if spec.contains(v)]
+    if not ok:
+        raise SystemExit("no %s release satisfies %s" % (name, spec))
+    return ok[-1]
+
+
+def main(argv):
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--pins", default=os.path.join(ROOT, "console", "convert-pins.json"))
+    ap.add_argument("--dry-run", action="store_true")
+    a = ap.parse_args(argv[1:])
+    with open(a.pins, encoding="utf-8") as f:
+        doc = json.load(f)
+    pins = doc["pins"]
+    new = {n: str(stable(pypi(n))[-1]) for n in NEWEST if n in pins}
+    reqs = {}
+    # Requirements of optimum-intel with its "openvino" extra (what the conversion installs).
+    for r in pypi("optimum-intel", new["optimum-intel"])["info"]["requires_dist"] or []:
+        req = Requirement(r)
+        if req.marker is None or req.marker.evaluate({"extra": "openvino"}):
+            reqs.setdefault(req.name.lower(), req.specifier)
+            reqs[req.name.lower()] &= req.specifier
+    for n in ("openvino", "nncf"):
+        if n in reqs and not reqs[n].contains(Version(new[n])):
+            new[n] = str(newest_allowed(n, reqs[n]))
+    if "openvino-tokenizers" in pins:
+        # openvino-tokenizers X.Y.Z.N is built for openvino X.Y.Z.
+        ov = new["openvino"]
+        same = [v for v in stable(pypi("openvino-tokenizers")) if str(v).startswith(ov + ".") or str(v) == ov]
+        if not same:
+            raise SystemExit("no openvino-tokenizers release for openvino %s" % ov)
+        new["openvino-tokenizers"] = str(same[-1])
+    for n in pins:
+        if n in new or n == "torchvision":
+            continue
+        new[n] = str(newest_allowed(n, reqs.get(n.lower(), Requirement(n).specifier)))
+    if "torchvision" in pins:
+        torch = Version(new["torch"])
+        for v in reversed(stable(pypi("torchvision"))):
+            deps = [Requirement(r) for r in pypi("torchvision", str(v))["info"]["requires_dist"] or []]
+            if all(d.specifier.contains(torch) for d in deps if d.name == "torch" and d.marker is None):
+                new["torchvision"] = str(v)
+                break
+    moved = [n for n in sorted(pins) if new.get(n, pins[n]) != pins[n]]
+    for n in moved:
+        print("%s %s -> %s" % (n, pins[n], new[n]))
+    if moved and not a.dry_run:
+        doc["pins"] = {n: new.get(n, pins[n]) for n in sorted(pins)}
+        doc["checked"] = datetime.date.today().isoformat()
+        with open(a.pins + ".tmp", "w", encoding="utf-8") as f:
+            json.dump(doc, f, indent=2)
+            f.write("\n")
+        os.replace(a.pins + ".tmp", a.pins)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

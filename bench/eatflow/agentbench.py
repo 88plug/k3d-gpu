@@ -1518,6 +1518,10 @@ def cmd_solo_report(a):
     res = PR.analyze(at, ps, a.hyp, a.arm_a, a.arm_b, holds=len({r["hold"] for r in PR.read_jsonl(
         os.path.join(a.dir, "solo.jsonl"))}), registration=reg, solo=True)
     res["design"] = "solo holds in blocks (bench/eatflow/solo.py): pairs cross holds; no idle second server"
+    # The verdict is block-level (the pre-registered unit); the pair-level one is secondary.
+    res["block_level"] = SOLO.block_verdict(res, a.arm_a, a.arm_b)
+    res["pair_level_verdict"] = res["verdict"]
+    res["verdict"] = res["block_level"]["verdict"]
     with open(os.path.join(a.dir, "analysis.json"), "w") as f:
         json.dump(res, f, indent=1, default=lambda v: None)
     print(json.dumps({k: res[k] for k in res if k != "per_pair"}, indent=1, default=lambda v: None))

@@ -48,6 +48,8 @@ rapl() {
     if [ -z "${v}" ]; then
         if [ -n "${SUDO_ASKPASS:-}" ]; then v=$(sudo -A cat "${ZONE}/energy_uj" 2>/dev/null); else v=$(sudo -n cat "${ZONE}/energy_uj" 2>/dev/null); fi
     fi
+    # shellcheck disable=SC2086 # a command prefix, split on purpose (as load.py splits it)
+    [ -n "${v}" ] || [ -z "${K3D_GPU_RAPL_EXEC:-}" ] || v=$(${K3D_GPU_RAPL_EXEC} cat "${ZONE}/energy_uj" 2>/dev/null)
     echo "${v:-0}"
 }
 if [ "${H34_SELFTEST:-0}" = 1 ]; then

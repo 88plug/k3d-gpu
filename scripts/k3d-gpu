@@ -70,7 +70,7 @@
 
 set -euo pipefail
 
-VERSION="0.1.64"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.66"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 # The node image defaults to the tag built from this launcher's own release
 # (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
@@ -155,6 +155,10 @@ Usage: k3d-gpu <command>
   doctor --perf [--model-gb N]
             Read-only host tuning advisor for inference (CPU/GPU clocks, power
             limits, THP, swap, IRQs, persistence): evidence, why, apply + revert
+  doctor --perf --bandwidth
+            Measure DRAM bandwidth: build and run STREAM (jeffhammond/STREAM, pinned
+            commit and sha256) for about a minute, one thread per core, and cache
+            the triad in the state dir for plan --predict --model. Changes nothing
   report    Host + cluster inventory per engine; writes k3d-gpu-report.{json,html}
             (report DIR writes there; report --json prints the JSON only;
             --no-cluster skips the cluster query)
@@ -174,10 +178,14 @@ Usage: k3d-gpu <command>
             OpenAI-compatible LLM server in the current cluster: vLLM on its Gaudi
             if it has one, else OpenVINO Model Server on its Intel GPU if that GPU
             has XMX, else on the CPU (P-cores); or vLLM on an Arc GPU (K3D_GPU_AGENT_BACKEND).
-            --model M (or K3D_GPU_AGENT_MODEL) serves M sized by 'fit': context,
-            sequences, GPUs and the pod memory limit come from what this host has
-            free, and a model that cannot fit is refused with the reason; then
-            'agent guard' runs in the background
+            --model M: a Hugging Face id is optimized for that engine from its HF
+            metadata (the variant: official > RedHatAI > community, QAT for int4;
+            speculative decoding within the engine's limits; thinking off for agents;
+            parsers; text-only load; 'plan --model ID --explain' shows each choice and
+            its source; no network: a built-in map). The served model (or a local dir,
+            or K3D_GPU_AGENT_MODEL) is then sized by 'fit': context, sequences, GPUs and
+            the pod memory limit come from what this host has free, and a model that
+            cannot fit is refused with the reason; then 'agent guard' runs in the background
             --with adds a vision-language model, Whisper speech-to-text (NPU first)
             and DL Streamer video analytics (GPU media engines) on what the LLM leaves
   agent guard [--once] [--interval S]
@@ -206,7 +214,8 @@ Usage: k3d-gpu <command>
             Engine, model and placement for this box, picked only from measured
             (green) matrix cells; with none it says "unmeasured" (quickstart/agent up still serve)
             --hash prints the plan hash: sha256 of the --json output
-            --model M also prints the fit of M on this host (below)
+            --model M also prints the fit of M on this host (below); a Hugging Face id
+            also adds the model optimizer's choices ('agent up --model' applies them)
   fit [--model M] [--revision R] [--explain|--json] [--engine vllm|ovms|llama.cpp]
       [--device cpu|gpu] [--ctx N] [--seqs N] [--gpus N] [--kv-dtype T] [--host FILE]
             Size a model (Hugging Face id or local dir; default: the agent model) to
@@ -222,6 +231,16 @@ Usage: k3d-gpu <command>
             Roofline prediction (decode/prefill tok/s, derived agents per box) for
             an Intel SKU from its spec fields, fitted on one measured host row;
             labelled calibrated or extrapolated. A model output (H24 INCONCLUSIVE)
+  plan --predict --model ID[@REV]|DIR|FILE.gguf [--revision R] [--format F] [--model-id ID]
+       [--placement auto|cpu|gpu|hybrid] [--engine E] [--gpus N] [--dram-gbs N]
+       [--gpu-gbs N] [--hop-us N] [--json]
+            Decode ceiling for one model on this host: bandwidth / weight bytes
+            read per token, from config.json (or the GGUF tensor table); MoE experts
+            count top_k/num_experts. Placements: CPU, one Intel GPU, tensor parallel,
+            experts on CPU + rest on a GPU. DRAM bandwidth is the measured STREAM
+            cache (doctor --perf --bandwidth) when present, else SMBIOS channels x
+            MT/s x 8 B, labelled theoretical; GPU bandwidth is the spec value.
+            A predictor, not a measurement (H54c measures it)
   audit [--json|--observe] [--observed FILE] [--plan FILE] [--lock FILE]
             Posture checks of the running cluster: fails on an unauthenticated
             listener off loopback, an image not pinned in images.lock, a runtime
@@ -293,7 +312,8 @@ Usage: k3d-gpu <command>
 Environment:
   K3D_GPU_CLUSTER       cluster name         (default: gpu)
   K3D_GPU_IMAGE         k3s node image       (default: ${IMAGE_REPO}:${VERSION}; ${IMAGE_REPO}:latest floats)
-  K3D_GPU_VENDORS       auto | comma list of nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa,wsl (default: auto)
+  K3D_GPU_VENDORS       auto | comma list of nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa,wsl |
+                        auto,-<vendor>,...: auto detection minus those (default: auto)
   K3D_GPU_NODE_LABELS   extra node labels, comma list of key=value (default: none)
   K3D_GPU_K3S_ARGS      extra k3s server flags, space-separated, e.g. --disable=servicelb (default: none)
   K3D_GPU_VOLUMES       host dirs mounted into every node, comma list of HOST:NODE[:ro|rw] (ro by default)
@@ -332,9 +352,18 @@ Environment:
                         Qwen/Qwen3-4B on vllm/llm-scaler)
   K3D_GPU_AGENT_DRAFT   ovms Fast Draft speculative decoding: off | auto | CPU | GPU | NPU
                         (default: a CPU draft for a CPU target serving an OpenVINO Qwen3
-                        model, where H34 measured a win, none otherwise; off disables it;
+                        model on a CPU class an H34-family EXPERIMENTS.md row measured as a
+                        win (a refuting row or no row: none), none otherwise; off disables it;
                         auto = the target's device; GPU = an Intel GPU, the first advertised)
   K3D_GPU_AGENT_DRAFT_MODEL  draft model (default: OpenVINO/Qwen3-0.6B-int4-ov)
+  K3D_GPU_AGENT_VARIANT agent up/plan --model: serve this variant id (or qat-convert) instead
+                        of the ranked pick (default: the optimizer's pick)
+  K3D_GPU_AGENT_THINKING agent up/plan --model: off | on | model (the card's default)
+                        (default: off, for agent workloads)
+  K3D_GPU_AGENT_PRECISION agent up --model on vLLM: bf16 | int4 (default: bf16)
+  K3D_GPU_MODEL_OPT     auto | off: off serves --model exactly as given (default: auto)
+  K3D_GPU_HF_FIXTURES   directory of saved model metadata bundles to read instead of
+                        Hugging Face (tests, air-gapped hosts)
   K3D_GPU_AUTOQUANT     auto | off: on OVMS/CPU with no K3D_GPU_AGENT_MODEL, serve the
                         precision measured for this host fingerprint (default: auto)
   K3D_GPU_AUTOQUANT_CACHE  measured-pick cache (default: \$XDG_STATE_HOME/k3d-gpu/autoquant.json)
@@ -1510,12 +1539,38 @@ node_feature_labels() {
 resolve_vendors() {
     case "${DRA}" in 0|1) ;; *) err "K3D_GPU_DRA must be 0 or 1 (got '${DRA}')" ;; esac
     ACTIVE=()
+    OPTED_OUT_DETECTED=() # detected vendors that K3D_GPU_VENDORS opted out ("-<vendor>")
+    VENDORS_AUTO=0        # 1: auto detection (plain auto, or auto minus opt-outs)
     VENDORS_REQUEST="${VENDORS_REQUEST//[[:space:]]/}" # any whitespace, newlines included, is ignored
     [ -n "${VENDORS_REQUEST}" ] || VENDORS_REQUEST=auto
     detect_intel
     detect_npu
-    local v req
-    if [ "${VENDORS_REQUEST}" = "auto" ]; then
+    local v req auto=0 listed=()
+    local known="nvidia|intel|npu|gaudi|dsa|iaa|qat|amx|hybrid|numa|wsl"
+    OPTED_OUT=()
+    # Entries, checked in order: "auto", vendor names, "none", or "-<vendor>" opt-outs. An
+    # opt-out applies to auto detection only ("-nvidia,-intel" alone means "auto,-nvidia,-intel").
+    IFS=',' read -r -a req <<< "${VENDORS_REQUEST}"
+    for v in ${req[@]+"${req[@]}"}; do
+        case "${v}" in
+            ""|none) ;; # none: a plain k3s cluster (a remote endpoint needs no accelerator)
+            auto) auto=1 ;;
+            -*)
+                [[ "${v#-}" =~ ^(${known})$ ]] || err "unknown vendor '${v}' in K3D_GPU_VENDORS (opt out with -<vendor>, one of ${known//|/,})"
+                [[ " ${OPTED_OUT[*]} " == *" ${v#-} "* ]] || OPTED_OUT+=("${v#-}") ;;
+            *)
+                [[ "${v}" =~ ^(${known})$ ]] || err "unknown vendor '${v}' in K3D_GPU_VENDORS (use ${known//|/,})"
+                listed+=("${v}") ;;
+        esac
+    done
+    [ "${#OPTED_OUT[@]}" -eq 0 ] || auto=1
+    # Only empty entries (",,") read as auto, as an empty K3D_GPU_VENDORS does.
+    [ "${#listed[@]}" -gt 0 ] || [[ ",${VENDORS_REQUEST}," == *,none,* ]] || auto=1
+    VENDORS_AUTO=${auto}
+    if [ "${auto}" = 1 ] && [ "${#listed[@]}" -gt 0 ]; then
+        err "K3D_GPU_VENDORS mixes a vendor list with auto or opt-outs (${VENDORS_REQUEST}): use auto, auto,-<vendor>,... or a plain list"
+    fi
+    if [ "${auto}" = 1 ]; then
         if has_nvidia; then ACTIVE+=(nvidia); fi
         if [ "${#INTEL_DRIVERS[@]}" -gt 0 ]; then ACTIVE+=(intel); fi
         if npu_usable; then
@@ -1536,15 +1591,21 @@ resolve_vendors() {
         if has_hybrid; then ACTIVE+=(hybrid); fi
         if has_numa; then ACTIVE+=(numa); fi
         if has_wsl_intel; then ACTIVE+=(wsl); fi
+        if [ "${#OPTED_OUT[@]}" -gt 0 ]; then
+            local kept=() o skip
+            for v in ${ACTIVE[@]+"${ACTIVE[@]}"}; do
+                skip=0
+                for o in "${OPTED_OUT[@]}"; do [ "${v}" = "${o}" ] && skip=1; done
+                if [ "${skip}" = 1 ]; then OPTED_OUT_DETECTED+=("${v}"); else kept+=("${v}"); fi
+            done
+            ACTIVE=(${kept[@]+"${kept[@]}"})
+            # Named only when something detected was left out; stderr, so detect's stdout
+            # stays the vendor table.
+            [ "${#OPTED_OUT_DETECTED[@]}" -eq 0 ] \
+                || echo "${GRN}==>${RST} opted out by K3D_GPU_VENDORS: ${OPTED_OUT[*]} (detected here: ${OPTED_OUT_DETECTED[*]}); not deployed, not advertised" >&2
+        fi
     else
-        IFS=',' read -r -a req <<< "${VENDORS_REQUEST}"
-        for v in "${req[@]}"; do
-            case "${v}" in
-                ""|none) ;; # none: a plain k3s cluster (a remote endpoint needs no accelerator)
-                nvidia|intel|npu|gaudi|dsa|iaa|qat|amx|hybrid|numa|wsl) is_active "${v}" || ACTIVE+=("${v}") ;;
-                *) err "unknown vendor '${v}' in K3D_GPU_VENDORS (use nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa,wsl)" ;;
-            esac
-        done
+        for v in ${listed[@]+"${listed[@]}"}; do is_active "${v}" || ACTIVE+=("${v}"); done
     fi
     case "${BALLOONS}" in
         k3s|external) ;;
@@ -2278,7 +2339,7 @@ accel_enable_steps() {
 # for (auto detection only), or nothing: "DSA dsa0 dsa2, IAA iax1(kernel WQ),
 # QAT 0000:01:00.0".
 accel_disabled_list() {
-    [ "${VENDORS_REQUEST}" = auto ] || return 0
+    [ "${VENDORS_AUTO:-0}" = 1 ] || return 0
     accel_enable_steps | awk -F'\t' '
         $3 == "skip" { next }
         $1 != k { if (out != "") out = out ", "; out = out $1; k = $1 }
@@ -2900,6 +2961,9 @@ doctor() {
     if [ "${#ACTIVE[@]}" -eq 0 ] && [ -n "${REMOTE}" ]; then
         echo ""
         echo "  ok: no accelerator detected; a remote endpoint (--remote) needs none (K3D_GPU_VENDORS=none k3d-gpu up)"
+    elif [ "${#ACTIVE[@]}" -eq 0 ] && [ "${#OPTED_OUT_DETECTED[@]}" -gt 0 ]; then
+        echo ""
+        echo "  ok: every detected accelerator is opted out (${OPTED_OUT_DETECTED[*]}); up makes a plain cluster"
     elif [ "${#ACTIVE[@]}" -eq 0 ]; then
         echo ""
         echo "  ${RED}fail${RST}: no supported accelerator detected (NVIDIA, Intel GPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX, hybrid P/E cores, NUMA, WSL2 Intel GPU)"
@@ -4236,22 +4300,126 @@ doctor_perf() {
     info "${PERF_SUGGESTIONS} suggestion(s). Read-only: nothing on this host was changed."
 }
 
+# doctor --perf --bandwidth: measured DRAM bandwidth for plan --predict --model.
+# STREAM (McCalpin; jeffhammond/STREAM at a pinned commit, source checked by
+# sha256) built with -O3 -march=native -fopenmp, each array 4x the last-level
+# cache (STREAM's sizing rule, at least 10M doubles), one OpenMP thread per
+# physical core spread over the cores, best Triad of three runs. The result is
+# cached as ${STATE_DIR}/bandwidth.json with the CPU model and MemTotal it was
+# measured on; plan --predict ignores it on any other host. Runs a benchmark for
+# about a minute; changes no host setting.
+STREAM_COMMIT=6703f7504a38a8da96b353cadafa64d3c2d7a2d3
+STREAM_SHA256=c388924eb140fda95f534cdb808ae7f1f8ebb18da41d8aec1b512a3c8d303c9b
+
+# llc_bytes: total last-level cache in bytes, each shared L3 counted once (0 if unread).
+llc_bytes() {
+    local d size seen="" list total=0
+    for d in "${SYSROOT}"/sys/devices/system/cpu/cpu[0-9]*/cache/index3; do
+        [ -d "${d}" ] || continue
+        list=$(rf "${d}/shared_cpu_list"); size=$(rf "${d}/size")
+        [[ " ${seen} " == *" ${list} "* ]] && continue
+        seen+=" ${list}"
+        case "${size}" in
+            *K) total=$((total + ${size%K} * 1024)) ;;
+            *M) total=$((total + ${size%M} * 1048576)) ;;
+        esac
+    done
+    echo "${total}"
+}
+
+# physical_cores: distinct (physical id, core id) pairs in /proc/cpuinfo, or
+# "cpu cores" x packages when that is more (a cpuinfo that lists one CPU).
+physical_cores() {
+    awk -F': *' '/^physical id/ {p=$2; pk[p]=1} /^core id/ {c[p" "$2]=1} /^cpu cores/ {per=$2}
+        END {n=0; for (k in c) n++; m=0; for (k in pk) m++; if (per * m > n) n = per * m; print n}' \
+        "${SYSROOT}/proc/cpuinfo" 2>/dev/null
+}
+
+perf_bandwidth() {
+    local work src bin elems llc avail threads cc run out triad copy best=0 bestc=0 runs="" cache model mem
+    cache="${STATE_DIR}/bandwidth.json"
+    work="${STATE_DIR}/stream"
+    mkdir -p "${work}"
+    llc=$(llc_bytes)
+    elems=$(( llc * 4 / 8 ))
+    [ "${elems}" -ge 10000000 ] || elems=10000000
+    elems=${K3D_GPU_STREAM_ELEMS:-${elems}}
+    avail=$(meminfo_kb MemAvailable)
+    if lt "${avail}" $(( elems * 3 * 8 * 2 / 1024 )); then
+        err "doctor --perf --bandwidth: STREAM needs $(( elems * 3 * 8 / 1048576 )) MiB and MemAvailable is ${avail} kB"
+    fi
+    threads=$(physical_cores)
+    lt 0 "${threads}" || threads=$(nproc)
+    if [ -n "${K3D_GPU_STREAM_BIN:-}" ]; then
+        bin=${K3D_GPU_STREAM_BIN}
+    else
+        src="${work}/stream-${STREAM_COMMIT:0:12}.c"
+        if [ ! -f "${src}" ]; then
+            require curl
+            curl -fsSL --max-time 60 -o "${src}.tmp" \
+                "https://raw.githubusercontent.com/jeffhammond/STREAM/${STREAM_COMMIT}/stream.c" \
+                || err "doctor --perf --bandwidth: cannot fetch stream.c at ${STREAM_COMMIT}"
+            mv -f "${src}.tmp" "${src}"
+        fi
+        if [ "$(sha256sum "${src}" | cut -d' ' -f1)" != "${STREAM_SHA256}" ]; then
+            rm -f "${src}"
+            err "doctor --perf --bandwidth: stream.c does not match sha256 ${STREAM_SHA256}"
+        fi
+        cc=${CC:-cc}
+        require "${cc}"
+        bin="${work}/stream-${elems}"
+        [ -x "${bin}" ] || "${cc}" -O3 -march=native -fopenmp -mcmodel=large \
+            -DSTREAM_ARRAY_SIZE="${elems}" -DNTIMES=10 -o "${bin}" "${src}" \
+            || err "doctor --perf --bandwidth: ${cc} could not build STREAM (it needs OpenMP: gcc -fopenmp)"
+    fi
+    info "STREAM: ${elems} doubles per array ($(( elems * 8 / 1048576 )) MiB, last-level cache $(( llc / 1048576 )) MiB), ${threads} threads, 3 runs"
+    for run in 1 2 3; do
+        out=$(OMP_NUM_THREADS=${threads} OMP_PROC_BIND=spread OMP_PLACES=cores "${bin}") \
+            || err "doctor --perf --bandwidth: STREAM run ${run} failed"
+        triad=$(awk '$1 == "Triad:" {print $2}' <<< "${out}")
+        copy=$(awk '$1 == "Copy:" {print $2}' <<< "${out}")
+        [[ "${triad}" =~ ^[0-9]+([.][0-9]+)?$ ]] || err "doctor --perf --bandwidth: no Triad line in STREAM run ${run}"
+        runs+="${runs:+,}${triad}"
+        if awk -v a="${triad}" -v b="${best}" 'BEGIN {exit !(a > b)}'; then best=${triad}; bestc=${copy:-0}; fi
+    done
+    model=$(cpuinfo_field "model name")
+    mem=$(meminfo_kb MemTotal)
+    awk -v t="${best}" -v c="${bestc}" -v th="${threads}" -v n="${elems}" -v r="${runs}" \
+        -v m="${model}" -v k="${mem:-0}" -v sc="${STREAM_COMMIT}" -v ss="${STREAM_SHA256}" \
+        -v at="$(date -u +%Y-%m-%dT%H:%M:%SZ)" 'BEGIN {
+        gsub(/\\/, "\\\\", m); gsub(/"/, "\\\"", m)
+        printf "{\"schema\": \"k3d-gpu.bandwidth/v1\", \"triad_gbs\": %.1f, \"copy_gbs\": %.1f, ", t / 1000, c / 1000
+        printf "\"triad_runs_mbs\": [%s], \"threads\": %d, \"array_elems\": %d, ", r, th, n
+        printf "\"cpu_model\": \"%s\", \"mem_kib\": %d, \"measured_at\": \"%s\", ", m, k, at
+        printf "\"stream\": {\"repo\": \"jeffhammond/STREAM\", \"commit\": \"%s\", \"sha256\": \"%s\"}}\n", sc, ss
+    }' > "${cache}.tmp"
+    mv -f "${cache}.tmp" "${cache}"
+    info "DRAM bandwidth (measured): STREAM triad $(awk -v t="${best}" 'BEGIN {printf "%.1f", t / 1000}') GB/s, copy $(awk -v t="${bestc}" 'BEGIN {printf "%.1f", t / 1000}') GB/s (best of 3, MB/s per run: ${runs})"
+    info "Cached in ${cache} for 'k3d-gpu plan --predict --model'. No host setting was changed."
+}
+
 cmd_doctor() {
-    local perf=0 json=0
+    local perf=0 json=0 bandwidth=0
     remote_parse "$@"
     set -- ${REMOTE_REST[@]+"${REMOTE_REST[@]}"}
     [ -n "${REMOTE}" ] || [ "${#REMOTE_ARGS[@]}" -eq 0 ] || err "doctor: --model and --api-key-file go with --remote"
     while [ $# -gt 0 ]; do
         case "$1" in
             --perf) perf=1 ;;
+            --bandwidth) bandwidth=1 ;;
             --experimental) DOCTOR_EXP_ALL=1 ;;
             --json) json=1 ;;
             --model-gb) [ $# -ge 2 ] || err "--model-gb needs a size in GiB"; PERF_MODEL_GB=$2; shift ;;
             --model-gb=*) PERF_MODEL_GB=${1#*=} ;;
-            *) err "unknown doctor option: $1 (use --perf [--model-gb N], --experimental, --json or --remote [URL])" ;;
+            *) err "unknown doctor option: $1 (use --perf [--model-gb N], --perf --bandwidth, --experimental, --json or --remote [URL])" ;;
         esac
         shift
     done
+    if [ "${bandwidth}" -eq 1 ]; then
+        [ "${perf}" -eq 1 ] || err "doctor: --bandwidth goes with --perf (doctor --perf --bandwidth)"
+        perf_bandwidth
+        return
+    fi
     if [ -n "${PERF_MODEL_GB}" ] && ! [[ "${PERF_MODEL_GB}" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
         err "--model-gb must be a number of GiB, got '${PERF_MODEL_GB}'"
     fi
@@ -4332,8 +4500,13 @@ cmd_up() {
     resolve_vendors
     ACCEL_DISABLED=$(accel_disabled_note)
     [ -z "${ACCEL_DISABLED}" ] || warn "${ACCEL_DISABLED}"
-    [ "${#ACTIVE[@]}" -gt 0 ] || [ "${VENDORS_REQUEST}" = none ] || err "no supported accelerator detected (NVIDIA, Intel GPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX, hybrid P/E cores, NUMA, WSL2 Intel GPU) — run 'k3d-gpu doctor' or set K3D_GPU_VENDORS"
-    info "Accelerators: ${ACTIVE[*]:-none (K3D_GPU_VENDORS=none)}"
+    # Opting out every detected vendor leaves a plain cluster, as K3D_GPU_VENDORS=none does.
+    [ "${#ACTIVE[@]}" -gt 0 ] || [ "${VENDORS_REQUEST}" = none ] || [ "${#OPTED_OUT_DETECTED[@]}" -gt 0 ] || err "no supported accelerator detected (NVIDIA, Intel GPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX, hybrid P/E cores, NUMA, WSL2 Intel GPU) — run 'k3d-gpu doctor' or set K3D_GPU_VENDORS"
+    if [ "${#ACTIVE[@]}" -eq 0 ] && [ "${#OPTED_OUT_DETECTED[@]}" -gt 0 ]; then
+        info "Accelerators: none (every detected one opted out: ${OPTED_OUT_DETECTED[*]})"
+    else
+        info "Accelerators: ${ACTIVE[*]:-none (K3D_GPU_VENDORS=none)}"
+    fi
     local intel_args="" problems
     if intel_dra && ! is_active intel; then
         err "K3D_GPU_DRA=1 needs an Intel GPU and none is active (${ACTIVE[*]}) — run 'k3d-gpu doctor' or set K3D_GPU_VENDORS"
@@ -4364,7 +4537,13 @@ cmd_up() {
     # applies it, so the other stack's objects are never created.
     # The DRA kubelet plugin's nodeSelector needs INTEL_DRA_LABEL, so launchers and
     # manual `k3d cluster create` runs that never disable intel-gpu-dra do not start it.
-    if intel_dra; then
+    # With no active intel vendor (not detected, not listed or opted out) both stacks are
+    # disabled: the baked intel-gpu-plugin would otherwise open the host's /dev/dri
+    # (visible in the privileged node) and advertise every Intel GPU it finds.
+    if ! is_active intel; then
+        create_args+=(--k3s-arg="--disable=intel-gpu-plugin@server:0")
+        create_args+=(--k3s-arg="--disable=intel-gpu-dra@server:0")
+    elif intel_dra; then
         create_args+=(--k3s-arg="--disable=intel-gpu-plugin@server:0")
         create_args+=(--k3s-node-label="${INTEL_DRA_LABEL}@server:*;agent:*")
     else
@@ -4837,7 +5016,7 @@ verify_gpus() {
     # An explicit K3D_GPU_VENDORS request must fully succeed. In auto mode one
     # working accelerator is enough (e.g. a spare iGPU that never registers).
     [ -z "${ACCEL_DISABLED:-}" ] || warn "${ACCEL_DISABLED}"
-    if [ -n "${failed}" ] && { [ "${VENDORS_REQUEST}" != "auto" ] || [ -z "${summary}" ]; }; then
+    if [ -n "${failed}" ] && { [ "${VENDORS_AUTO:-0}" != 1 ] || [ -z "${summary}" ]; }; then
         err "accelerator(s) not schedulable:${failed}"
     fi
     info "Accelerators schedulable:${summary}. Try: k3d-gpu test"
@@ -4949,6 +5128,7 @@ cmd_test() {
     valid_image "${DEVICE_TEST_IMAGE}" || err "K3D_GPU_DEVICE_TEST_IMAGE '${DEVICE_TEST_IMAGE}' is not a valid image reference"
     require kubectl
     resolve_vendors
+    [ "${#OPTED_OUT_DETECTED[@]}" -eq 0 ] || [ "${#ACTIVE[@]}" -gt 0 ] || err "nothing to test: every detected accelerator is opted out (${OPTED_OUT_DETECTED[*]})"
     [ "${#ACTIVE[@]}" -gt 0 ] || err "no supported accelerator detected — run 'k3d-gpu doctor'"
     local res v path out got
     if is_active nvidia; then
@@ -5875,7 +6055,14 @@ hs_targets() {
         HS_RENDER="/dev/dri/${dev##*/}"
         break
     done
-    if [ "${VENDORS_REQUEST}" != "auto" ]; then
+    hs_vendor_mode
+    if [ "${VENDORS_AUTO}" = 1 ]; then
+        local kept=() t
+        for t in ${HS_TARGETS[@]+"${HS_TARGETS[@]}"}; do
+            [[ " ${OPTED_OUT[*]} " == *" ${t} "* ]] || kept+=("${t}")
+        done
+        HS_TARGETS=(${kept[@]+"${kept[@]}"})
+    else
         HS_TARGETS=()
         IFS=',' read -r -a req <<< "${VENDORS_REQUEST// /}"
         for v in "${req[@]}"; do
@@ -6064,13 +6251,26 @@ hs_add() { HS_PLAN+=("$1"); }
 # Fills HS_ACCEL with the accel_enable_steps host-setup runs, for the kinds it
 # handles (all under auto detection, else only dsa/iaa/qat in K3D_GPU_VENDORS):
 # class new, and class kernel only with --with-kernel-wqs. HS_HELD gets the rest.
+# hs_vendor_mode: VENDORS_AUTO and OPTED_OUT from K3D_GPU_VENDORS, parsed as resolve_vendors
+# parses it (errors included), for host-setup, which plans from PCI devices instead.
+hs_vendor_mode() {
+    local saved=("${ACTIVE[@]+"${ACTIVE[@]}"}")
+    resolve_vendors 2>/dev/null
+    ACTIVE=(${saved[@]+"${saved[@]}"})
+}
+
 hs_accel_targets() {
     local line kind cls want=",${VENDORS_REQUEST// /},"
     HS_ACCEL="" HS_HELD=""
     while IFS= read -r line; do
         [ -n "${line}" ] || continue
         kind=${line%%$'\t'*}
-        [ "${VENDORS_REQUEST}" = auto ] || [[ "${want}" == *",${kind,,},"* ]] || continue
+        hs_vendor_mode
+        if [ "${VENDORS_AUTO}" = 1 ]; then
+            [[ " ${OPTED_OUT[*]} " != *" ${kind,,} "* ]] || continue
+        else
+            [[ "${want}" == *",${kind,,},"* ]] || continue
+        fi
         IFS=$'\t' read -r _ _ cls _ <<< "${line}"
         if [ "${cls}" = new ] || { [ "${cls}" = kernel ] && [ "${HS_KERNEL_WQS}" -eq 1 ]; }; then
             HS_ACCEL+="${line}"$'\n'
@@ -6577,22 +6777,53 @@ agent_select() {
 # to the pod.
 AGENT_DRAFT_DEFAULT_MODEL=OpenVINO/Qwen3-0.6B-int4-ov
 AGENT_DRAFT_MODEL="${K3D_GPU_AGENT_DRAFT_MODEL:-${AGENT_DRAFT_DEFAULT_MODEL}}"
-# The measured pairing: CPU target, OpenVINO Qwen3 target model, default draft model.
-agent_draft_measured() {
+# The measured pairing: CPU target, OpenVINO Qwen3 target model, default draft model,
+# on a CPU class the ledger says it wins on (agent_ledger_rule H34).
+agent_draft_pairing() {
     [ "$1" = CPU ] && [ "${AGENT_DRAFT_MODEL}" = "${AGENT_DRAFT_DEFAULT_MODEL}" ] \
         && [[ "${AGENT_MODEL:-}" =~ ^OpenVINO/Qwen3-[0-9.]+B- ]] && [ "${AGENT_MODEL}" != "${AGENT_DRAFT_MODEL}" ]
+}
+agent_draft_measured() {
+    agent_draft_pairing "$1" && [ "$(agent_ledger_rule H34)" = on ]
+}
+
+# agent_ledger_rule <family> [-v]: on | off | unknown for this host's CPU class, from
+# the EXPERIMENTS.md rows of that family (H34 and its replications H34x...):
+# a REFUTED row naming the class wins, then a SUPPORTED one; no row, no ledger
+# or no python3 is unknown. -v prints "<rule> <row> <verdict>".
+agent_ledger_rule() {
+    local dir ledger out
+    out="unknown - -"
+    if dir=$(console_dir) && ledger=$(model_opt_ledger) && [ -n "${ledger}" ] && [ -f "${ledger}" ] \
+        && command -v python3 >/dev/null 2>&1; then
+        out=$(python3 "${dir}/model_opt.py" ledger-rule --family "$1" --ledger "${ledger}" \
+            --hw-class "cpu:$(cpuinfo_field "model name")" 2>/dev/null) || out="unknown - -"
+    fi
+    if [ "${2:-}" = -v ]; then echo "${out}"; else echo "${out%% *}"; fi
+}
+
+# One line on why a CPU target that could draft does not.
+agent_draft_note() {
+    local rule row verdict cpu
+    agent_draft_pairing "$1" && [ -z "${K3D_GPU_AGENT_DRAFT:-}" ] && [ -z "${AGENT_OPT_SPEC:-}" ] || return 0
+    read -r rule row verdict <<< "$(agent_ledger_rule H34 -v)"
+    cpu=$(cpuinfo_field "model name")
+    case "${rule}" in
+        off) info "agent: no CPU Fast Draft: EXPERIMENTS.md ${row} is ${verdict} on ${cpu:-this CPU} (K3D_GPU_AGENT_DRAFT=CPU forces it)" >&2 ;;
+        unknown) info "agent: no CPU Fast Draft: no EXPERIMENTS.md H34-family row measured ${cpu:-this CPU} (K3D_GPU_AGENT_DRAFT=CPU forces it)" >&2 ;;
+    esac
 }
 agent_draft() {
     local target=$1 want=${K3D_GPU_AGENT_DRAFT:-default} res
     if [ "${want}" = default ]; then
-        if agent_draft_measured "${target}"; then echo "CPU -"; else echo "- -"; fi
+        if [ -z "${AGENT_OPT_SPEC:-}" ] && agent_draft_measured "${target}"; then echo "CPU -"; else echo "- -"; fi
         return 0
     fi
     case "${want^^}" in
-        OFF|0|"") echo "- -"; return 0 ;;
+        OFF|0|""|MTP) echo "- -"; return 0 ;;
         AUTO) echo "${target} -"; return 0 ;;
         CPU|GPU|NPU) ;;
-        *) err "unknown K3D_GPU_AGENT_DRAFT '${want}' (use off, auto, CPU, GPU or NPU)" ;;
+        *) err "unknown K3D_GPU_AGENT_DRAFT '${want}' (use off, auto, CPU, GPU, NPU or mtp)" ;;
     esac
     want=${want^^}
     if [ "${want}" = "${target}" ] || [ "${want}" = CPU ]; then echo "${want} -"; return 0; fi
@@ -6715,6 +6946,7 @@ agent_manifest() {
     args="${item}--target_device=${device}"
     draft_sel=$(agent_draft "${device}") || exit 1
     read -r draft draft_res <<< "${draft_sel}"
+    [ "${draft}" != - ] || agent_draft_note "${device}"
     if [ "${draft}" != - ]; then
         info "agent: Fast Draft ${AGENT_DRAFT_MODEL} on ${draft}" >&2
         args+=$'\n'"${item}--draft_source_model=${AGENT_DRAFT_MODEL}"$'\n'"${item}--draft_device=${draft}"
@@ -6728,6 +6960,7 @@ agent_manifest() {
     fi
     [ -z "${AGENT_TOOL_PARSER}" ] || args+=$'\n'"${item}--tool_parser=${AGENT_TOOL_PARSER}"
     [ -z "${AGENT_REASONING_PARSER}" ] || args+=$'\n'"${item}--reasoning_parser=${AGENT_REASONING_PARSER}"
+    args+=$(agent_opt_items "${item}")
     # Serving knobs ('k3d-gpu tune' sets these; a user can too). --pull rewrites
     # graph.pbtxt on every start, so a change applies without a re-download.
     v=${K3D_GPU_AGENT_MAX_NUM_SEQS:-}
@@ -6994,6 +7227,7 @@ vllm_manifest() {
     [ -z "${AGENT_TOOL_PARSER}" ] \
         || args+=$'\n'"${item}--enable-auto-tool-choice"$'\n'"${item}--tool-call-parser=${AGENT_TOOL_PARSER}"
     [ -z "${AGENT_REASONING_PARSER}" ] || args+=$'\n'"${item}--reasoning-parser=${AGENT_REASONING_PARSER}"
+    args+=$(agent_opt_items "${item}")
     for e in "${envs[@]}"; do
         env+=$'\n'"            - name: ${e%%=*}"$'\n'"              value: \"${e#*=}\""
     done
@@ -7652,6 +7886,7 @@ cmd_agent_up() {
     kubectl get nodes >/dev/null 2>&1 || err "no cluster reachable — run 'k3d-gpu up' first"
     tune_apply_profile
     agent_select
+    agent_optimize
     local logs="kubectl -n ${AGENT_NS} logs deploy/${AGENT_APP}"
     # agent_fit records the fit it renders (for the guard) only here, never on `agent manifest`.
     if [ -z "${addons}" ]; then
@@ -7788,12 +8023,23 @@ cmd_agent() {
         cmd_agent_remote_up
         return
     fi
-    # Without --remote, --model names the local model (as K3D_GPU_AGENT_MODEL does).
+    # Without --remote, --model names the local model: a Hugging Face id goes through
+    # the model optimizer (agent_optimize, which picks the variant fit then sizes); a
+    # local directory is served as given, like K3D_GPU_AGENT_MODEL. K3D_GPU_AGENT_OPT_MODEL
+    # carries the id into the environment the guard re-renders with.
     if [ "${#REMOTE_ARGS[@]}" -eq 2 ] && [ "${REMOTE_ARGS[0]}" = --model ] && { [ "${sub}" = up ] || [ "${sub}" = manifest ]; }; then
-        export K3D_GPU_AGENT_MODEL="${REMOTE_ARGS[1]}"
+        if is_hf_id "${REMOTE_ARGS[1]}" && [ ! -d "${REMOTE_ARGS[1]}" ]; then
+            [ -z "${K3D_GPU_AGENT_MODEL:-}" ] || err "--model and K3D_GPU_AGENT_MODEL both name a model: use one"
+            export K3D_GPU_AGENT_OPT_MODEL="${REMOTE_ARGS[1]}"
+        else
+            export K3D_GPU_AGENT_MODEL="${REMOTE_ARGS[1]}"
+            agent_config
+        fi
         AGENT_MODEL_CHOSEN=1
         REMOTE_ARGS=()
-        agent_config
+    fi
+    if [ -n "${K3D_GPU_AGENT_OPT_MODEL:-}" ]; then
+        AGENT_OPT_MODEL=${K3D_GPU_AGENT_OPT_MODEL} AGENT_MODEL_CHOSEN=1
     fi
     [ "${#REMOTE_ARGS[@]}" -eq 0 ] && [ -z "${OWN_ENDPOINT}" ] || err "--api-key-file and --i-own-this-endpoint go with --remote (--model also names a local model for agent up)"
     case "${AGENT_BACKEND}" in
@@ -7808,6 +8054,7 @@ cmd_agent() {
             addons=$(agent_addons "$@")
             tune_apply_profile >&2
             agent_select
+            agent_optimize
             if [ -z "${addons}" ]; then agent_manifest; else
                 # shellcheck disable=SC2086 # word list of add-on names
                 agent_stack_manifest ${addons}
@@ -8993,15 +9240,84 @@ plan_predict() {
     fi
 }
 
+# hf_config <repo id> <revision>: a directory holding the repo's config.json at
+# that revision, fetched from Hugging Face, and its openvino_config.json when the
+# repo has one (an OpenVINO IR's weight format is there). A commit-sha revision
+# is immutable, so it is cached under the state dir; a branch or tag is fetched
+# again each time.
+hf_config() {
+    local id=$1 rev=$2 base out tmp
+    base="${K3D_GPU_HF_ENDPOINT:-https://huggingface.co}/${id}/resolve/${rev}"
+    out="${STATE_DIR}/hf-config/${id//\//__}@${rev}"
+    if [[ "${rev}" =~ ^[0-9a-f]{7,40}$ ]] && [ -s "${out}/config.json" ]; then echo "${out}"; return 0; fi
+    require curl
+    mkdir -p "${STATE_DIR}/hf-config"
+    tmp=$(mktemp -d "${STATE_DIR}/hf-config/.fetch.XXXXXX")
+    if ! curl -fsSL --max-time 60 -o "${tmp}/config.json" "${base}/config.json"; then
+        rm -rf "${tmp}"
+        err "plan: cannot fetch ${base}/config.json (for a gated repo pass --model DIR with a local copy)"
+    fi
+    curl -fsSL --max-time 60 -o "${tmp}/openvino_config.json" "${base}/openvino_config.json" 2>/dev/null \
+        || rm -f "${tmp}/openvino_config.json"
+    rm -rf "${out}"
+    mv -f "${tmp}" "${out}"
+    echo "${out}"
+}
+
+# plan --predict --model ID[@REV]|DIR|FILE [options]: decode ceiling from the
+# model's config.json (or GGUF tensor table) and this host's bandwidths
+# (console/moe_predict.py). The DRAM figure is the doctor --perf --bandwidth
+# cache when it is this host's, else the SMBIOS peak, labelled theoretical.
+plan_predict_model() {
+    local dir model="" rev="" id="" cfg args=() src=()
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --json) args+=(--json) ;;
+            --model|--revision|--model-id)
+                [ $# -ge 2 ] || err "plan: $1 needs a value"
+                case "$1" in --model) model=$2 ;; --revision) rev=$2 ;; *) id=$2 ;; esac
+                shift ;;
+            --format|--placement|--engine|--gpus|--dram-gbs|--gpu-gbs|--hop-us)
+                [ $# -ge 2 ] || err "plan: $1 needs a value"
+                args+=("$1" "$2")
+                shift ;;
+            *) err "unknown plan --predict --model option: $1 (use --model, --revision, --model-id, --format, --placement, --engine, --gpus, --dram-gbs, --gpu-gbs, --hop-us, --json)" ;;
+        esac
+        shift
+    done
+    [ -n "${model}" ] || err "plan: --predict --model needs a Hugging Face repo id, a model directory or a .gguf file"
+    dir=$(console_dir) || err "plan: console/ not found next to the launcher or in ${SHARE_DIR}/console (set K3D_GPU_CONSOLE)"
+    [ -f "${dir}/moe_predict.py" ] || err "plan: ${dir}/moe_predict.py not found"
+    require python3
+    if [ -f "${model}" ] && [[ "${model}" == *.gguf ]]; then
+        src=(--gguf "${model}")
+    elif [ -e "${model}" ]; then
+        src=(--config "${model}")
+    elif [[ "${model}" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9_.-]+(@[A-Za-z0-9_.-]+)?$ ]]; then
+        if [[ "${model}" == *@* ]]; then rev=${rev:-${model#*@}}; model=${model%@*}; fi
+        rev=${rev:-main}
+        id=${id:-${model}}
+        cfg=$(hf_config "${model}" "${rev}") || exit 1
+        src=(--config "${cfg}")
+    else
+        err "plan: --model ${model} is neither a local path nor a Hugging Face repo id (org/name[@revision])"
+    fi
+    [ -z "${id}" ] || src+=(--model-id "${id}")
+    [ -z "${rev}" ] || src+=(--revision "${rev}")
+    [ ! -f "${STATE_DIR}/bandwidth.json" ] || src+=(--bandwidth-cache "${STATE_DIR}/bandwidth.json")
+    python3 "${dir}/moe_predict.py" "${src[@]}" --sysroot "${SYSROOT}" ${args[@]+"${args[@]}"}
+}
+
 # plan [--explain|--json|--hash] [--facts FILE] [--matrix FILE] [--engine E]
 #      [--device D] [--model M] [--bind ADDR] [--port N]
 # plan --predict SKU|auto|list [--json] [--mts N] [--channels N]
+# plan --predict --model ID|DIR|FILE [...]
 cmd_plan() {
     local dir mode=text facts="" matrix="" args=() out
     if [ "${1:-}" = "--predict" ]; then
-        [ $# -ge 2 ] || err "plan: --predict needs a SKU, auto or list"
+        [ $# -ge 2 ] || err "plan: --predict needs a SKU, auto, list or --model"
         shift
-        plan_predict "$@"
+        if [ "$1" = "--model" ]; then plan_predict_model "$@"; else plan_predict "$@"; fi
         return
     fi
     while [ $# -gt 0 ]; do
@@ -9031,8 +9347,23 @@ cmd_plan() {
     else
         out=$(facts_json "${dir}") || err "plan: could not build facts/v1"
     fi
-    local rc=0 model="" i
+    local model="" i meta="" ledger rc=0
+    for ((i = 0; i < ${#args[@]}; i++)); do
+        [ "${args[i]}" != --model ] || model=${args[i + 1]}
+    done
+    if [ -n "${model}" ] && is_hf_id "${model}" && [ "${K3D_GPU_MODEL_OPT:-auto}" != off ]; then
+        meta=$(mktemp)
+        if model_opt_bundle "${model}" "${meta}" 2>/dev/null; then
+            ledger=$(model_opt_ledger)
+            args+=(--model-meta "${meta}" --measurements "$(model_opt_measurements)" --thinking "${K3D_GPU_AGENT_THINKING:-off}")
+            [ -z "${ledger}" ] || args+=(--ledger "${ledger}")
+            [ -z "${K3D_GPU_AGENT_VARIANT:-}" ] || args+=(--variant "${K3D_GPU_AGENT_VARIANT}")
+        else
+            warn "plan: no model metadata for ${model}; planning without the model optimizer"
+        fi
+    fi
     python3 "${dir}/plan.py" --mode "${mode}" --matrix "${matrix}" ${args[@]+"${args[@]}"} <<< "${out}" || rc=$?
+    [ -z "${meta}" ] || rm -f "${meta}"
     # --model also sizes that model to this host (text and --explain; --json and --hash
     # stay the plan/v1 bytes the apply hash covers). K3D_GPU_FIT=off leaves it out.
     for ((i = 0; i < ${#args[@]}; i += 2)); do [ "${args[i]}" != --model ] || model=${args[i + 1]}; done
@@ -9535,6 +9866,162 @@ autoquant_run() {
 
 autoquant_select() { autoquant_run "${1:-}" select; }
 
+# ---- model optimizer: agent up --model <hf-id> (console/model_opt.py) ---------
+# Reads the model's Hugging Face metadata (and every variant the trusted orgs
+# publish of it), then picks for the engine and device agent_select chose: the
+# variant, speculative decoding, thinking default, parsers and text-only load.
+# Env flags override single choices (K3D_GPU_AGENT_VARIANT, _THINKING, _DRAFT,
+# _PRECISION, _TOOL_PARSER, _REASONING_PARSER, _REVISION, _MODEL_NAME);
+# K3D_GPU_MODEL_OPT=off serves the id as given. Any failure (no network, an
+# unknown model) keeps the engine's defaults with one line saying so.
+AGENT_OPT_MODEL=""   # agent up --model
+AGENT_OPT_ARGS=()    # extra server arguments the optimizer chose
+AGENT_OPT_SPEC=""    # its speculative decoding kind, when it chose one
+
+model_opt_cache() { echo "${XDG_CACHE_HOME:-${HOME}/.cache}/k3d-gpu/hf"; }
+model_opt_measurements() { echo "${XDG_CACHE_HOME:-${HOME}/.cache}/k3d-gpu/variant-measurements.json"; }
+# The ledger: EXPERIMENTS.md next to the console directory (a repo checkout), else
+# the console's ledger-rules.json, generated from it and shipped in every package
+# (the H27/H34 rows that set agent defaults); K3D_GPU_MODEL_OPT_LEDGER names another file.
+model_opt_ledger() {
+    local d
+    if [ -n "${K3D_GPU_MODEL_OPT_LEDGER:-}" ]; then echo "${K3D_GPU_MODEL_OPT_LEDGER}"; return 0; fi
+    d=$(console_dir) || return 0
+    if [ -f "$(dirname "${d}")/EXPERIMENTS.md" ]; then
+        echo "$(dirname "${d}")/EXPERIMENTS.md"
+    elif [ -f "${d}/ledger-rules.json" ]; then
+        echo "${d}/ledger-rules.json"
+    fi
+}
+is_hf_id() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; }
+
+# model_opt_bundle <hf-id> <file>: the metadata bundle (HF, its cache, the
+# fixtures dir or the built-in map; model_opt.py never fails on a fetch).
+model_opt_bundle() {
+    local dir
+    dir=$(console_dir) || return 1
+    python3 "${dir}/model_opt.py" fetch --model "$1" --cache "$(model_opt_cache)" \
+        ${K3D_GPU_HF_FIXTURES:+--fixtures "${K3D_GPU_HF_FIXTURES}"} --out "$2"
+}
+
+# The hardware class a ledger row or a local measurement names (plan.py hw_class).
+agent_hw_class() {
+    local e id name
+    case "${AGENT_SEL%% *}" in
+        HPU) echo hpu ;;
+        GPU|HETERO:*)
+            resolve_vendors >/dev/null 2>&1 || true
+            for e in ${INTEL_DRIVERS[@]+"${INTEL_DRIVERS[@]}"}; do
+                id=${e#* }
+                IFS='|' read -r name _ <<< "$(intel_gpu_platform "${id}")"
+                [ -z "${name}" ] || { echo "gpu:${name}"; return 0; }
+            done
+            echo gpu ;;
+        *) echo "cpu:$(cpuinfo_field "model name")" ;;
+    esac
+}
+
+# "<CPU model> + <n>x <resource> (<platform>)" for the optimizer's one-line summary.
+agent_host_text() {
+    local res=${AGENT_SEL#* } cpu cls
+    cpu=$(cpuinfo_field "model name")
+    cpu=${cpu:-CPU}
+    if [ "${res}" = - ]; then echo "${cpu}"; return 0; fi
+    cls=$(agent_hw_class)
+    case "${cls}" in *:*) cls=" (${cls#*:})" ;; *) cls="" ;; esac
+    echo "${cpu} + $(resource_total "${res}")x ${res}${cls}"
+}
+
+# agent_opt_as_given <why>: no optimizer decision. vLLM serves the id as given;
+# OVMS pulls only OpenVINO IR (*-ov), so any other id keeps OVMS's default model.
+agent_opt_as_given() {
+    if [ "${AGENT_APP}" = ovms ] && [[ "${AGENT_OPT_MODEL,,}" != *-ov ]]; then
+        warn "$1: ${AGENT_OPT_MODEL} is not an OpenVINO IR, so OVMS keeps its default model"
+        agent_config
+    else
+        warn "$1: serving ${AGENT_OPT_MODEL} with the engine's defaults"
+    fi
+}
+
+# The optimizer's server arguments as YAML list items, one per line, each a
+# single-quoted scalar (model_opt.py refuses an argument with a quote or newline).
+# Prefixed with a newline so the caller appends them to its own list.
+agent_opt_items() {
+    local a
+    for a in ${AGENT_OPT_ARGS[@]+"${AGENT_OPT_ARGS[@]}"}; do printf "\n%s'%s'" "$1" "${a}"; done
+}
+
+# Applies the optimizer's choices for AGENT_OPT_MODEL to the agent settings.
+agent_optimize() {
+    [ -n "${AGENT_OPT_MODEL}" ] || return 0
+    local dir bundle out errf engine=${AGENT_APP} device=${AGENT_SEL%% *} vver=0.31.0 draft=auto ledger meas
+    local OPT_MODEL="" OPT_REVISION="" OPT_TOOL_PARSER="" OPT_REASONING_PARSER="" OPT_SPEC=""
+    local OPT_CONVERSION="" OPT_ARGS_JSON="[]" OPT_SUMMARY="" OPT_FALLBACK_MODEL="" OPT_FALLBACK_REVISION="" OPT_WARNING=""
+    AGENT_MODEL=${AGENT_OPT_MODEL}
+    AGENT_MODEL_NAME=${K3D_GPU_AGENT_MODEL_NAME:-${AGENT_OPT_MODEL##*/}}
+    AGENT_REVISION=${K3D_GPU_AGENT_REVISION:-}
+    AGENT_TOOL_PARSER=${K3D_GPU_AGENT_TOOL_PARSER-}
+    AGENT_REASONING_PARSER=${K3D_GPU_AGENT_REASONING_PARSER-}
+    if [ "${K3D_GPU_MODEL_OPT:-auto}" = off ]; then
+        info "model optimizer off (K3D_GPU_MODEL_OPT=off): serving ${AGENT_MODEL} as given" >&2
+        return 0
+    fi
+    if ! dir=$(console_dir) || ! command -v python3 >/dev/null 2>&1; then
+        agent_opt_as_given "model optimizer unavailable (needs python3 and console/model_opt.py)"
+        return 0
+    fi
+    [[ "${device}" != HETERO:* ]] || device=GPU
+    case "${AGENT_BACKEND}" in llm-scaler) vver=0.26.0 ;; esac
+    [ -z "${AGENT_HPU:-}" ] || vver=0.30.0
+    # An explicit Fast Draft device (auto, CPU, GPU, NPU) is agent_draft's: the optimizer then adds none.
+    case "${K3D_GPU_AGENT_DRAFT:-}" in "") ;; [Mm][Tt][Pp]) draft=mtp ;; *) draft=off ;; esac
+    bundle=$(mktemp)
+    info "model optimizer: reading the Hugging Face metadata of ${AGENT_OPT_MODEL} and its variants (cached for a day in $(model_opt_cache))" >&2
+    if ! model_opt_bundle "${AGENT_OPT_MODEL}" "${bundle}" 2>/dev/null; then
+        rm -f "${bundle}"
+        agent_opt_as_given "model optimizer: no metadata for ${AGENT_OPT_MODEL}"
+        return 0
+    fi
+    ledger=$(model_opt_ledger)
+    meas=$(model_opt_measurements)
+    errf=$(mktemp)
+    out=$(python3 "${dir}/model_opt.py" optimize --bundle "${bundle}" --engine "${engine}" --device "${device}" \
+        --vllm-version "${vver}" --thinking "${K3D_GPU_AGENT_THINKING:-off}" --draft "${draft}" \
+        --hw-class "$(agent_hw_class)" --host "$(agent_host_text)" ${K3D_GPU_AGENT_VARIANT:+--variant "${K3D_GPU_AGENT_VARIANT}"} \
+        ${K3D_GPU_AGENT_PRECISION:+--precision "${K3D_GPU_AGENT_PRECISION}"} \
+        ${K3D_GPU_AGENT_PREFIX_CACHING:+--prefix-caching "${K3D_GPU_AGENT_PREFIX_CACHING}"} \
+        ${ledger:+--ledger "${ledger}"} --measurements "${meas}" --format shell 2>"${errf}") || {
+        rm -f "${bundle}"
+        agent_opt_as_given "model optimizer failed ($(tr '\n' ' ' < "${errf}"))"
+        rm -f "${errf}"
+        return 0
+    }
+    [ ! -s "${errf}" ] || warn "model optimizer: $(tr '\n' ' ' < "${errf}")"
+    rm -f "${bundle}" "${errf}"
+    eval "${out}"
+    if [ -z "${OPT_MODEL}" ] && [ -z "${OPT_CONVERSION}" ]; then
+        # Nothing this engine can serve: the engine's own defaults, as without --model.
+        warn "model optimizer: ${OPT_WARNING}"
+        agent_config
+        return 0
+    fi
+    [ -z "${OPT_WARNING}" ] || warn "model optimizer: ${OPT_WARNING}"
+    if [ -n "${OPT_CONVERSION}" ]; then
+        warn "model optimizer chose the QAT-matched conversion, which is not built here yet: serving ${OPT_FALLBACK_MODEL} (the conversion commands: k3d-gpu plan --model ${AGENT_OPT_MODEL} --explain)"
+        OPT_MODEL=${OPT_FALLBACK_MODEL} OPT_REVISION=${OPT_FALLBACK_REVISION}
+    fi
+    [ -z "${OPT_MODEL}" ] || AGENT_MODEL=${OPT_MODEL}
+    [ -n "${K3D_GPU_AGENT_REVISION:-}" ] || AGENT_REVISION=${OPT_REVISION}
+    [ -n "${K3D_GPU_AGENT_TOOL_PARSER+x}" ] || AGENT_TOOL_PARSER=${OPT_TOOL_PARSER}
+    [ -n "${K3D_GPU_AGENT_REASONING_PARSER+x}" ] || AGENT_REASONING_PARSER=${OPT_REASONING_PARSER}
+    AGENT_OPT_SPEC=${OPT_SPEC}
+    AGENT_OPT_ARGS=()
+    if [ "${OPT_ARGS_JSON}" != "[]" ]; then
+        mapfile -t AGENT_OPT_ARGS < <(python3 -c 'import json, sys; [print(a) for a in json.loads(sys.argv[1])]' "${OPT_ARGS_JSON}")
+    fi
+    info "${OPT_SUMMARY}" >&2
+}
+
 # Swap AGENT_MODEL (and AGENT_MEMORY) to the measured winner for an OVMS agent on
 # the CPU, when nothing pins the model. Only a measured cache entry for this
 # host's fingerprint changes anything.
@@ -9546,8 +10033,16 @@ agent_autoquant() {
     [ -z "${K3D_GPU_AGENT_MODEL_TIER:-}" ] || [ "${pin}" != "${AGENT_DEFAULT_MODEL}" ] || pin=""
     [ -z "${K3D_GPU_AGENT_MEMORY_TIER:-}" ] || mem=""
     [ "${AGENT_APP}" = ovms ] && [ -z "${pin}" ] || return 0
+    # --model names the model: the optimizer picked its variant, autoquant's cache is for the default.
+    [ -z "${AGENT_OPT_MODEL}" ] || return 0
     [ "${K3D_GPU_AUTOQUANT:-auto}" != off ] || return 0
     [ -f "$(autoquant_cache)" ] || return 0
+    local rule row verdict
+    read -r rule row verdict <<< "$(agent_ledger_rule H27 -v)"
+    if [ "${rule}" = off ]; then
+        info "autoquant: EXPERIMENTS.md ${row} is ${verdict} on this CPU class, so the cached pick is not used: serving ${AGENT_MODEL}" >&2
+        return 0
+    fi
     doc=$(autoquant_select) || { warn "autoquant: cache present but select failed, keeping ${AGENT_MODEL}"; return 0; }
     fields=$(python3 -c 'import json, sys; d = json.load(sys.stdin); print(d["precision"], d["model"], d["memory"], d["source"])' <<< "${doc}") || return 0
     read -r precision model memory source <<< "${fields}"
