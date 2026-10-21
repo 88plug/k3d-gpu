@@ -249,11 +249,12 @@ check "zero-copy-models (H28): plain cluster create adds no k3s flag by default"
     sh -c 'test "$(env -u K3D_GPU_K3S_ARGS bash "$1" create-args)" = ""' _ "${ROOT}/bench/zero-copy-models/probe.sh"
 check "zero-copy-models (H28x): K3D_GPU_K3S_ARGS reaches the server as --k3s-arg (crescent C1)" \
     sh -c 'test "$(K3D_GPU_K3S_ARGS="--kubelet-arg=eviction-hard=nodefs.available<1% --disable=traefik" bash "$1" create-args)" = "--k3s-arg --kubelet-arg=eviction-hard=nodefs.available<1%@server:* --k3s-arg --disable=traefik@server:*"' _ "${ROOT}/bench/zero-copy-models/probe.sh"
-check "crescent (H56): hold.sh locks, slotted gate and scoped cleanup" "${ROOT}/tests/crescent_hold_test.sh"
+check "crescent (H56): hold.sh locks, slotted gate and scoped cleanup (no skips)" \
+    env CRESCENT_HOLD_STRICT=1 "${ROOT}/tests/crescent_hold_test.sh"
 check "crescent (H56): serving slot covariate, lockwait and the H56 scorer" \
     env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/eatflow/crescent/test_crescent.py"
-check "crescent (H56): h56.sh parses and prints its order and caps" \
-    sh -c 'bash -n "$1" && test "$(H56_PRINT_CONFIG=1 bash "$1" 1)" = "order=AWWAAWWA a=2400/2370/720 sibling=3000/2970/1800 sync_max=840"' _ "${ROOT}/bench/eatflow/crescent/h56.sh"
+check "crescent (H56): h56.sh parses and prints its order, caps, gate maxima and bounds" \
+    sh -c 'bash -n "$1" && test "$(H56_PRINT_CONFIG=1 bash "$1" 1)" = "order=AWWAAWWA a=2400/2370/720 sibling=3000/2970/1800 sync_max=840 gate_max=600/600/120 bound_s=A:3390,W:3990"' _ "${ROOT}/bench/eatflow/crescent/h56.sh"
 check "crescent (H56): live.sh without a slot keeps its names, ports and DevUI" \
     sh -c 'test "$(env -u LIVE_SLOT -u LIVE_NODE_CPUS LIVE_PRINT_SLOT=1 LIVE_BLUEPRINT=/nonexistent LIVE_PY=python3 bash "$1" A1 "$2/live-s")" = "cluster=k3dgpu-a-a1 ports=18630,18640,18620,18600,18650,18660 devui=127.0.0.1 node_cpus="' _ "${ROOT}/bench/eatflow/live.sh" "${WORK}"
 check "crescent (H56): live.sh slot 1 moves the cluster, ports and DevUI" \

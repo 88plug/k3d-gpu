@@ -9,6 +9,7 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HOLD=${ROOT}/bench/eatflow/crescent/hold.sh
+H56SH=${ROOT}/bench/eatflow/crescent/h56.sh
 LOADPY=${ROOT}/bench/load/load.py
 REAL_CUT=$(command -v cut)
 NPROC=$(nproc)
@@ -79,7 +80,8 @@ elif [ "$1 $2" = "cluster delete" ]; then
     for c in "$@"; do sed -i "/^${c}\$/d" "${SHIM_DIR}/clusters.reg"; done
 fi
 EOF
-    printf '#!/usr/bin/env bash\necho "Filesystem 1024-blocks Used Available Capacity Mounted on"\necho "/dev/x 100 50 50 50%% /"\n' > "${bin}/df"
+    # df: 50% full unless ${SHIM_DIR}/df_pct says otherwise.
+    printf '#!/usr/bin/env bash\np=$(cat "${SHIM_DIR}/df_pct" 2>/dev/null || echo 50)\necho "Filesystem 1024-blocks Used Available Capacity Mounted on"\necho "/dev/x 100 $p $((100 - p)) $p%% /"\n' > "${bin}/df"
     # The legacy gate reads load1 with `cut ... /proc/loadavg`; the test host's own load is not the subject.
     printf '#!/usr/bin/env bash\n[ "${!#}" = /proc/loadavg ] && { echo 0.00; exit 0; }\nexec %s "$@"\n' "${REAL_CUT}" > "${bin}/cut"
     chmod +x "${bin}"/*
@@ -245,6 +247,52 @@ inherited_locks_mode() {
     [ "${rc}" = 4 ] || { echo "rc ${rc}, want 4"; return 1; }
 }
 
+inherited_locks_unlocked_parent_refused() {
+    fresh
+    mkdir -p "${HOME}/k3dgpu-bench.lock.d"
+    local rc
+    # The parent opened fds 7, 8, 9 and locked none of them; no one else holds anything.
+    ( exec 7> "${HOME}/k3dgpu-bench.lock.d/slot-0" 8> "${HOME}/k3dgpu-bench.lock.d/slot-1" 9> "${HOME}/k3dgpu-bench.lock"
+      HOLD_LOCKS_HELD=1 HOLD_SLOT=0 timeout 10 "${HOLD}" U0 30 sh -c ': > "$SHIM_DIR/ran"' )
+    rc=$?
+    [ "${rc}" = 4 ] || { echo "rc ${rc}, want 4"; return 1; }
+    [ ! -e "${W}/ran" ] || { echo "CMD ran on locks the parent never took"; return 1; }
+    # The parent holds main shared (not the exclusive the mode needs): refused, and the
+    # parent's shared lock is left as it was (no conversion through the inherited fd).
+    ( exec 7> "${HOME}/k3dgpu-bench.lock.d/slot-0" 8> "${HOME}/k3dgpu-bench.lock.d/slot-1" 9> "${HOME}/k3dgpu-bench.lock"
+      flock 7 && flock 8 && flock -s 9 || exit 9
+      HOLD_LOCKS_HELD=1 HOLD_SLOT=0 timeout 10 "${HOLD}" U1 30 sh -c ': > "$SHIM_DIR/ran"'
+      echo "rc=$?" > "${W}/u1"
+      grep -E '^lock:.*FLOCK +ADVISORY +READ ' /proc/self/fdinfo/9 >> "${W}/u1" )
+    grep -q '^rc=4$' "${W}/u1" || { echo "shared-held parent: $(head -1 "${W}/u1"), want rc=4"; return 1; }
+    grep -q READ "${W}/u1" || { echo "the parent's shared lock on fd 9 was converted or dropped"; return 1; }
+    [ ! -e "${W}/ran" ] || { echo "CMD ran with main held shared"; return 1; }
+}
+
+writer_not_starved() {
+    fresh
+    HOLD_SLOT=0 timeout 60 "${HOLD}" A 30 sleep 3 &
+    BG+=($!)
+    wait_log "A start:" 20 || { echo "A did not start"; return 1; }
+    flock -x "${HOME}/k3dgpu-bench.lock" sh -c 'date +%s.%N > "$SHIM_DIR/mw"' &
+    BG+=($!)
+    sleep 0.5
+    HOLD_SLOT=1 timeout 60 "${HOLD}" B 30 sh -c 'date +%s.%N > "$SHIM_DIR/m1"'
+    local w b
+    w=$(cat "${W}/mw" 2>/dev/null || echo 1e12) b=$(cat "${W}/m1" 2>/dev/null || echo 0)
+    awk -v w="${w}" -v b="${b}" 'BEGIN {exit !(w < b)}' \
+        || { echo "slot-1 hold ran at ${b}, before the queued exclusive waiter (${w})"; return 1; }
+}
+
+locks_released_at_exit() {
+    fresh
+    timeout 60 "${HOLD}" L 30 true
+    flock -n -x "${HOME}/k3dgpu-bench.lock" true || { echo "main lock still held after a legacy hold exited"; return 1; }
+    HOLD_SLOT=1 timeout 60 "${HOLD}" S1 30 true
+    flock -n -x "${HOME}/k3dgpu-bench.lock.d/slot-1" true || { echo "slot-1 still held after the hold exited"; return 1; }
+    flock -n -x "${HOME}/k3dgpu-bench.lock" true || { echo "main lock still held after a slot hold exited"; return 1; }
+}
+
 slot_gate_own_slice() {
     fresh
     stat_writer "2 3"
@@ -257,11 +305,21 @@ slot_gate_own_slice() {
     [ "$(cat "${HOME}/k3dgpu-bench/runs/G1/wait_s")" -ge 1 ] || { echo "own slice busy, no wait"; return 1; }
 }
 
+# A fake 2-slice sysfs over the CPUs this test may run on (no SMT), so taskset runs on any host
+# with 2 or more allowed CPUs, hybrid or not.
+ALLOWED=$(python3 -c 'import os; print(" ".join(map(str, sorted(os.sched_getaffinity(0)))))')
+read -r -a ALLOWED_A <<< "${ALLOWED}"
 slot_taskset() {
     fresh
-    unset HOLD_SYSFS
-    local want
-    want=$(python3 "${LOADPY}" slice --slots 2 --slot 1 2>/dev/null | cut -d' ' -f1)
+    local c n=$(( ${#ALLOWED_A[@]} / 2 * 2 )) want
+    rm -rf "${W}/sys"
+    mkdir -p "${W}/sys/devices/system/cpu"
+    for c in "${ALLOWED_A[@]:0:${n}}"; do
+        mkdir -p "${W}/sys/devices/system/cpu/cpu${c}/topology"
+        echo "${c}" > "${W}/sys/devices/system/cpu/cpu${c}/topology/thread_siblings_list"
+    done
+    echo "${ALLOWED_A[*]:0:${n}}" | tr ' ' ',' > "${W}/sys/devices/system/cpu/online"
+    want=$(python3 "${LOADPY}" slice --slots 2 --slot 1 --sysfs "${W}/sys" 2>/dev/null | cut -d' ' -f1)
     HOLD_SLOT=1 timeout 60 "${HOLD}" TS 30 sh -c 'grep Cpus_allowed_list /proc/self/status > "$SHIM_DIR/m"'
     local got
     got=$(awk '{print $2}' "${W}/m" 2>/dev/null)
@@ -275,12 +333,64 @@ check "slots: a slot-1 hold stops only slot-1 load" slot_load_stop_scoped
 check "slots: an outside exclusive flock excludes slot holds, and the reverse" x_exclusive_excludes_slots
 check "slots: a queued slot hold does not hold the main lock" queued_slot_hold_does_not_hold_main
 check "slots: after kill -9, slot 0's leftover is cleaned by slot 0 only" kill9_epoch_recovery
-check "slots: HOLD_LOCKS_HELD runs on the parent's locks, refuses a foreign fd 9" inherited_locks_mode
+check "slots: HOLD_LOCKS_HELD runs on the parent's locks, refuses an fd 9 another holder has" inherited_locks_mode
+check "slots: HOLD_LOCKS_HELD refuses fds the parent opened but did not lock exclusive" inherited_locks_unlocked_parent_refused
+check "slots: a slot hold yields the main lock to a queued exclusive waiter" writer_not_starved
+check "locks: free as soon as the hold exits (the watchdog's sleep holds none)" locks_released_at_exit
 check "slots: the gate reads the own slice only" slot_gate_own_slice
-if [ "${NPROC}" -lt 2 ] || ! python3 "${LOADPY}" slice --slots 2 --slot 1 >/dev/null 2>&1; then
-    SKIPS=$((SKIPS + 1)); echo "skip slots: CMD runs under taskset on the slice (this host has no 2-slice split)"
+if [ "${#ALLOWED_A[@]}" -lt 2 ]; then
+    SKIPS=$((SKIPS + 1)); echo "skip slots: CMD runs under taskset on the slice (fewer than 2 allowed CPUs)"
 else
     check "slots: CMD runs under taskset on the slice" slot_taskset
 fi
+
+# h56.sh: refusals leave no condition-hold record behind.
+h56_env() { env PATH="${HOME}/k3dgpu-bench/bin:${PATH}" H56_LOCK_W=1 "$@"; }
+h56_ready() {  # stage 0 passed and a feasible smoke on record
+    local r=${HOME}/k3dgpu-bench/results/H56
+    mkdir -p "${r}/smoke-W/s0/run"
+    echo '{"stage1": true, "share": 0.2}' > "${r}/lockwait.json"
+    echo 1000 > "${r}/smoke-W/s0/t0"
+    python3 -c 'import json; [print(json.dumps({"task": f"B-T{i}", "cycle": 0, "censored": False, "passed": True, "duration_s": 20.0, "t_start": 1300.0 + 21 * i, "t_end": 1320.0 + 21 * i})) for i in range(3)]' \
+        > "${r}/smoke-W/s0/run/results.jsonl"
+}
+h56_stage0_enforced() {
+    fresh
+    local rc
+    h56_env bash "${H56SH}" 1 > "${T}/h56.out" 2>&1
+    rc=$?
+    [ "${rc}" = 7 ] || { echo "rc ${rc}, want 7"; cat "${T}/h56.out"; return 1; }
+    [ ! -e "${HOME}/k3dgpu-bench/results/H56/hold1" ] || { echo "hold1 written without stage 0"; return 1; }
+    h56_env H56_SMOKE=1 bash "${H56SH}" 1 > "${T}/h56.out" 2>&1
+    rc=$?
+    [ "${rc}" = 7 ] || { echo "smoke rc ${rc}, want 7"; return 1; }
+}
+h56_lock_timeout_no_record() {
+    fresh
+    h56_ready
+    mkdir -p "${HOME}/k3dgpu-bench.lock.d"
+    flock -x "${HOME}/k3dgpu-bench.lock.d/slot-0" sleep 6 &
+    BG+=($!)
+    sleep 0.3
+    local rc
+    h56_env bash "${H56SH}" 1 > "${T}/h56.out" 2>&1
+    rc=$?
+    [ "${rc}" = 4 ] || { echo "rc ${rc}, want 4"; cat "${T}/h56.out"; return 1; }
+    [ ! -e "${HOME}/k3dgpu-bench/results/H56/hold1" ] || { echo "hold1 left by a lock timeout"; return 1; }
+}
+h56_disk_refusal_no_record() {
+    fresh
+    h56_ready
+    echo 96 > "${W}/df_pct"
+    local rc
+    h56_env bash "${H56SH}" 2 > "${T}/h56.out" 2>&1
+    rc=$?
+    [ "${rc}" = 5 ] || { echo "rc ${rc}, want 5"; cat "${T}/h56.out"; return 1; }
+    [ ! -e "${HOME}/k3dgpu-bench/results/H56/hold2" ] || { echo "hold2 left by a disk refusal"; return 1; }
+}
+check "h56.sh: refuses without stage 0 (lockwait.json stage1), writes nothing" h56_stage0_enforced
+check "h56.sh: a lock timeout leaves no hold<N>" h56_lock_timeout_no_record
+check "h56.sh: a W disk refusal leaves no hold<N>" h56_disk_refusal_no_record
 echo "crescent_hold: ${PASS} passed, ${FAILS} failed, ${SKIPS} skipped"
-[ "${FAILS}" = 0 ]
+# CRESCENT_HOLD_STRICT=1 (tests/bench_test.sh): a skip is a failure, so CI cannot hide one.
+[ "${FAILS}" = 0 ] && { [ "${CRESCENT_HOLD_STRICT:-0}" != 1 ] || [ "${SKIPS}" = 0 ]; }

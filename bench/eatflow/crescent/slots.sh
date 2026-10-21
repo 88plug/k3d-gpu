@@ -5,16 +5,23 @@
 #
 # Locks, all flock(2), released by the kernel when the last holder of the file description
 # dies. Global order: slot-0 < slot-1 < main (~/k3dgpu-bench.lock), so no wait cycle exists.
-#   adoption mode: flock -w 7200 on ~/k3dgpu-bench.lock.d/slot-<i>, then flock -s -w 7200 on
-#                  main. A hold queued on its slot holds nothing on main. The k3dgpu-x-*
-#                  campaign's plain exclusive flock on main excludes every slot hold.
+#   adoption mode: flock -w 7200 on ~/k3dgpu-bench.lock.d/slot-<i>, then main shared. A hold
+#                  queued on its slot holds nothing on main. Before taking main shared it
+#                  waits while /proc/locks shows an exclusive request blocked on main (the
+#                  k3dgpu-x-* campaign, a legacy hold, h56.sh), so overlapping slot holds
+#                  cannot starve an exclusive waiter: one queued behind the slot holds already
+#                  running waits for those, plus any slot hold that read /proc/locks just
+#                  before the waiter blocked, at most one per slot. Slot holds may wait behind
+#                  a stream of exclusive holds; that is the intended priority.
 #   HOLD_LOCKS_HELD=1 (bench/eatflow/crescent/h56.sh): the parent holds fds 7 (slot-0),
-#                  8 (slot-1) and 9 (main, -x); each is checked to be that file and
-#                  held by this inherited file description (flock -n succeeds), else exit 4.
+#                  8 (slot-1) and 9 (main) exclusive. Each fd must be that file, and its
+#                  /proc/self/fdinfo must list an exclusive FLOCK: fdinfo lists only locks owned
+#                  by that open file description, so this reads ownership without re-locking
+#                  (a re-lock would take a lock the parent never took, or convert a shared one).
+#                  Else exit 4.
 # Owning slot-i proves no live hold owns the s<i> resources, so this hold deletes every
 # k3dgpu-(e|a)-s<i>-* cluster and slot-i load container it finds, and nothing else (the load
-# through LOAD_SLOT, which load.py reads as its default slot). hold.sh's disk watchdog sleeps
-# 30 s at a time, so a finished hold's lock descriptions can stay open up to 30 s.
+# through LOAD_SLOT, which load.py reads as its default slot).
 #
 # Test knobs: HOLD_SYSFS (slice lookup), HOLD_PROC (gate /proc/stat), HOLD_GATE_S (gate
 # sample, default 60), HOLD_POLL_S (default 120), HOLD_GATE_MAX_S (default 3600).
@@ -34,8 +41,21 @@ slot_init() {
     echo "slot=${HOLD_SLOT} slots=2 cpus=${SLOT_CPUS} load_cpus=${SLOT_LOAD_CPUS} locks_held=${HOLD_LOCKS_HELD:-0}" > "${R}/slot.txt"
 }
 
+# fd_holds_x FD: this shell's open file description on FD holds an exclusive flock.
+fd_holds_x() {
+    grep -qE '^lock:.*[[:space:]]FLOCK[[:space:]]+ADVISORY[[:space:]]+WRITE[[:space:]]' "/proc/self/fdinfo/$1" 2>/dev/null
+}
+
+# x_waiting FILE: an exclusive flock request is blocked on FILE ("->" lines of /proc/locks,
+# matched by inode; another file system's equal inode only makes a slot hold wait longer).
+x_waiting() {
+    local ino
+    ino=$(stat -c %i "$1") || return 1
+    grep -qE -- "->[[:space:]]+FLOCK[[:space:]]+ADVISORY[[:space:]]+WRITE[[:space:]]+[0-9-]+[[:space:]]+[0-9a-f]+:[0-9a-f]+:${ino}[[:space:]]" /proc/locks
+}
+
 slot_lock() {
-    local fd f
+    local fd f end
     if [ "${HOLD_LOCKS_HELD:-0}" = 1 ]; then
         for fd in 7 8 9; do
             case ${fd} in
@@ -43,8 +63,8 @@ slot_lock() {
                 8) f=${SLOT_LOCK_DIR}/slot-1 ;;
                 9) f=${HOME}/k3dgpu-bench.lock ;;
             esac
-            if ! { [ "/proc/self/fd/${fd}" -ef "${f}" ] && flock -n "${fd}"; }; then
-                log "inherited lock fd ${fd} (${f}) not held by this hold's parent"
+            if ! { [ "/proc/self/fd/${fd}" -ef "${f}" ] && fd_holds_x "${fd}"; }; then
+                log "inherited lock fd ${fd} (${f}) not held exclusive by this file description"
                 return 4
             fi
         done
@@ -54,7 +74,12 @@ slot_lock() {
     exec 8> "${SLOT_LOCK_DIR}/slot-${HOLD_SLOT}"
     flock -w 7200 8 || { log "slot-${HOLD_SLOT} not taken in 7200 s"; return 4; }
     exec 9> "${HOME}/k3dgpu-bench.lock"
-    flock -s -w 7200 9 || { log "lock not taken in 7200 s"; return 4; }
+    end=$(( SECONDS + 7200 ))
+    while x_waiting "${HOME}/k3dgpu-bench.lock"; do
+        [ "${SECONDS}" -lt "${end}" ] || { log "lock not taken in 7200 s (an exclusive waiter queued throughout)"; return 4; }
+        sleep 1
+    done
+    flock -s -w $(( end - SECONDS > 0 ? end - SECONDS : 0 )) 9 || { log "lock not taken in 7200 s"; return 4; }
 }
 
 # slot_busy: busy % of this slice's CPUs over HOLD_GATE_S, from /proc/stat ("" if unread).

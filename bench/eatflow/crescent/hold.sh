@@ -69,7 +69,9 @@ sudo -n dmesg -T 2>/dev/null | grep -iE ' xe |drm|DEVICE_LOST|CAT error' | tail 
 [ "$(disk)" -le 97 ] || { log "disk $(disk)% > 97%: no hold"; exit 5; }
 if [ -n "$(clusters)" ]; then read -r -a cl <<< "$(clusters)"; log "leftover clusters ${cl[*]}: deleting first"; k3d cluster delete "${cl[@]}" >/dev/null 2>&1; fi
 if [ -n "$(ours)" ]; then read -r -a oc <<< "$(ours)"; log "leftover containers ${oc[*]}: removing first"; docker rm -f "${oc[@]}" >/dev/null 2>&1; fi
-python3 "${HERE}/serving.py" "${R}/serving.jsonl" &
+# The sampler and the watchdog close the lock fds (7-9): a lock lives exactly as long as
+# hold.sh and CMD, not as long as a stray `sleep 30`.
+python3 "${HERE}/serving.py" "${R}/serving.jsonl" 7>&- 8>&- 9>&- &
 sp=$!
 log "start: $*"
 if [ -n "${HOLD_SLOT:-}" ]; then
@@ -81,7 +83,7 @@ cp=$!
 ( while kill -0 "${cp}" 2>/dev/null; do
       sleep 30
       if [ "$(disk)" -gt 97 ]; then echo "disk $(disk)% at $(date -u +%FT%TZ)" > "${R}/disk-abort"; kill -TERM "${cp}"; break; fi
-  done ) &
+  done ) 7>&- 8>&- 9>&- &
 wd=$!
 wait "${cp}"
 rc=$?
