@@ -252,6 +252,9 @@ check "bench: joule-pack (H21) unit tests" \
     env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/joule-pack/test_joulepack.py"
 check "shared-prefix (H25): prompt generator and scorer" \
     env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/shared-prefix/test_probe.py"
+check "flashnext (H60): h60.py byte classes and decision rule" \
+    env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/flashnext/test_h60.py"
+check "flashnext (H60): h60.sh parses" bash -n "${ROOT}/bench/flashnext/h60.sh"
 check "shared-prefix (H25): run.sh parses" bash -n "${ROOT}/bench/shared-prefix/run.sh"
 check "shared-prefix (H25): run.sh pins no node cpuset by default" \
     sh -c 'test "$(env -u CLUSTER -u NODE_CPUS SHARED_PREFIX_PRINT_CONFIG=1 bash "$1")" = "cluster=k3dgpu-i-shared-prefix node_cpus="' _ "${ROOT}/bench/shared-prefix/run.sh"
