@@ -307,17 +307,10 @@
       "tag": "v1.83.14-stable.patch.2"
     },
     {
-      "digest": "sha256:a8c8297c72744f25dbcf70fdb4a64bb787f428a3f9ab4dfabb0eb1377da0070f",
-      "name": "ghcr.io/containers/nri-plugins/nri-resource-policy-balloons",
-      "sources": [
-        "share/nri-balloons-guard.yml"
-      ],
-      "tag": "v0.14.0"
-    },
-    {
       "digest": "sha256:bacbef6f002f432b9fbe61ff0c583536da7ae816300ca82921ee697d759a1e80",
       "name": "ghcr.io/containers/nri-plugins/nri-resource-policy-balloons",
       "sources": [
+        "share/nri-balloons-guard.yml",
         "share/nri-balloons.yml"
       ],
       "tag": "v0.15.0"
@@ -329,6 +322,30 @@
         "scripts/k3d-gpu K3D_GPU_LLAMA_VULKAN_IMAGE"
       ],
       "tag": null
+    },
+    {
+      "digest": "sha256:627dde1b97b1a42ba6fc20a13452650a988f199321a258ec1bec80196b9a02a8",
+      "name": "ghcr.io/ggml-org/llama.cpp",
+      "sources": [
+        "scripts/k3d-gpu K3D_GPU_LLAMA_FULL_IMAGE"
+      ],
+      "tag": "full-b11669"
+    },
+    {
+      "digest": "sha256:8ffe0d28ff5261cc2f78ca1f67db1515bc2529b904a3c25f5b24f4cedfc3411d",
+      "name": "ghcr.io/ggml-org/llama.cpp",
+      "sources": [
+        "scripts/k3d-gpu K3D_GPU_LLAMA_CPU_IMAGE"
+      ],
+      "tag": "server-b11669"
+    },
+    {
+      "digest": "sha256:632c96d3c52ddadcd4e53fd2835e6430814cf68dde06b39067c1e281bdc5bd90",
+      "name": "ghcr.io/ggml-org/llama.cpp",
+      "sources": [
+        "scripts/k3d-gpu K3D_GPU_LLAMA_SYCL_IMAGE"
+      ],
+      "tag": "server-intel-b11669"
     },
     {
       "digest": "sha256:9b5424634b74f0c6905109fc46f90a7f569ab7bde1211d3ac5f9c32a17895e60",

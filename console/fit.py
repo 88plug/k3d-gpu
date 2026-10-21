@@ -7,6 +7,7 @@
   fit.py plan --host FILE --model DIR [--variants DIR...] [--engine E] [--ctx N] [--seqs N]
               [--gpus N] [--kv-dtype T] [--mode text|explain|json]
   fit.py guard-step --fit FILE --state FILE [--sysroot DIR]   one guard decision (JSON on stdout)
+  fit.py busy-cards --host FILE                         Intel cards others hold (the fit leaves them out)
 
 Three layers, each a plain function:
 
@@ -613,6 +614,10 @@ def hf_fetch(repo, revision, out, file=None, token=None, endpoint="https://huggi
         return data if binary else data.decode("utf-8")
 
     rev = revision or "main"
+    # A branch or tag moves: record the commit it names, so what is served later (a GGUF
+    # download, a conversion) is the revision these headers were read from.
+    if not re.match(r"^[0-9a-f]{40}$", rev):
+        rev = json.loads(get("%s/api/models/%s/revision/%s" % (endpoint, repo, rev)))["sha"]
     tree = json.loads(get("%s/api/models/%s/tree/%s?recursive=true" % (endpoint, repo, rev)))
     sizes = {t["path"]: t.get("lfs", {}).get("size") or t.get("size") or 0 for t in tree if t.get("type") == "file"}
     os.makedirs(out, exist_ok=True)
@@ -819,6 +824,37 @@ def engines_for(fmt, arch):
     return out
 
 
+# GGUF conversion of safetensors weights for llama.cpp, as llama.cpp v0.7.0 (b11669)
+# convert_hf_to_gguf.py reads them (conversion/base.py dequant_model). Unquantized weights
+# keep their 16-bit type. FP8 (quant_method fp8, base.py:469; compressed-tensors
+# float-quantized 8-bit floats, base.py:526) is dequantized and stored as Q8_0 with
+# --fp8-as-q8 (base.py:908 tensor_force_quant): the 1 B per weight the fit counts. The
+# other methods it reads (bitnet, gptq, compressed-tensors int and packed, modelopt) are
+# dequantized to 16 bits, a GGUF two to four times the bytes the fit sized; any other
+# raises "Quant method is not yet supported" (base.py:573).
+def convert_plan(cfg, fmt):
+    """{"args": convert_hf_to_gguf.py arguments, "error": why not}."""
+    if fmt != "safetensors":
+        return {"args": None, "error": "%s weights have no GGUF conversion (convert_hf_to_gguf.py reads safetensors)" % fmt}
+    q = cfg.get("quantization_config") or {}
+    method = q.get("quant_method")
+    if not method:
+        tc = text_config(cfg)
+        dt = tc.get("dtype") or tc.get("torch_dtype") or cfg.get("dtype") or cfg.get("torch_dtype") or "bfloat16"
+        return {"args": ["--outtype", "f16" if dt in ("float16", "half") else "bf16"], "error": None}
+    groups = list((q.get("config_groups") or {}).values())
+    w = (groups[0].get("weights") or {}) if len(groups) == 1 else {}
+    if method == "fp8" or (method == "compressed-tensors" and q.get("format") == "float-quantized"
+                           and w.get("type") == "float" and w.get("num_bits") == 8):
+        return {"args": ["--outtype", "bf16", "--fp8-as-q8"], "error": None}
+    if method in ("bitnet", "gptq", "compressed-tensors", "modelopt", "modelopt_mixed"):
+        return {"args": None, "error": "llama.cpp v0.7.0's convert_hf_to_gguf.py dequantizes quant_method %s to 16 bits "
+                                       "(conversion/base.py dequant_model), a GGUF larger than the weights this fit "
+                                       "sized; a bf16 or FP8 checkpoint of this model converts" % method}
+    return {"args": None, "error": "llama.cpp v0.7.0's convert_hf_to_gguf.py does not read quant_method %s "
+                                   "(conversion/base.py:573); a bf16 or FP8 checkpoint of this model converts" % method}
+
+
 # ---- fit ---------------------------------------------------------------------------
 def host_budget(host, reserve_pct=HOST_RESERVE_PCT, reserve_floor=HOST_RESERVE_FLOOR):
     ram = host["ram"]
@@ -843,12 +879,23 @@ def host_budget(host, reserve_pct=HOST_RESERVE_PCT, reserve_floor=HOST_RESERVE_F
     return free, reserve, lines
 
 
+def card_busy(g):
+    """A card whose other clients hold BUSY_CARD_PCT of its VRAM or more."""
+    return g["vram_used"] >= g["vram_total"] * BUSY_CARD_PCT
+
+
+def busy_cards(host):
+    """[(card, bdf, who)] of the busy cards in a host/v1 document."""
+    return [(g["card"], g["bdf"], ", ".join("%s[%d] %s" % (u["comm"], u["pid"], g1(u["bytes"])) for u in g["users"][:3])
+             or "%s in use" % g1(g["vram_used"])) for g in host.get("gpus") or [] if card_busy(g)]
+
+
 def gpu_budget(host, reserve_pct=GPU_RESERVE_PCT, reserve_floor=GPU_RESERVE_FLOOR):
     cards, lines = [], []
     for g in host.get("gpus") or []:
         reserve = max(int(g["vram_total"] * reserve_pct), reserve_floor)
         free = g["vram_total"] - g["vram_used"]
-        busy = g["vram_used"] >= g["vram_total"] * BUSY_CARD_PCT
+        busy = card_busy(g)
         who = ", ".join("%s[%d] %s" % (u["comm"], u["pid"], g1(u["bytes"])) for u in g["users"][:3])
         lines.append("%s (%s): VRAM %s, in use %s%s; reserve max(%d%%, %s) = %s; budget %s%s"
                      % (g["card"], g["bdf"], g1(g["vram_total"]), g1(g["vram_used"]), " by " + who if who else "",
@@ -999,6 +1046,14 @@ def fit(host, cfg, weights, engine=None, ctx=None, seqs=None, gpus=None, kv_dtyp
         rung_limit.append("%dGi" % int(math.ceil(hb * (1 + LIMIT_SLACK) / GIB)))
     doc.update({k: picked[k] for k in ("engine", "placement", "ctx", "seqs", "tp", "gpus", "gpu_bytes", "host_bytes",
                                        "flags", "dram_tok_s", "note", "kv_bytes")})
+    doc["source"] = weights.get("source")
+    doc["weight_bytes"] = weights.get("total_bytes") or m["serve_bytes"]
+    if m["format"] == "gguf":
+        doc["files"] = [f["name"] for f in weights.get("files") or []]
+    if picked["engine"] == "llama.cpp" and m["format"] != "gguf":
+        doc["convert"] = convert_plan(cfg, m["format"])
+        ex.append("GGUF conversion: " + (" ".join(doc["convert"]["args"]) if doc["convert"]["args"]
+                                         else "not possible: " + doc["convert"]["error"]))
     lim = int(math.ceil(picked["host_bytes"] * (1 + LIMIT_SLACK) / GIB))
     doc["k8s"] = {"memory_request": "%dGi" % lim, "memory_limit": "%dGi" % lim}
     doc["guard"] = {"rungs": rungs, "placement": picked["placement"], "some_avg10": GUARD_SOME_AVG10,
@@ -1332,8 +1387,20 @@ def knobs(doc, rung=0):
     seqs, ctx = g["rungs"][rung]
     kv = g["rung_kv_bytes"][rung]
     fl = {f.split("=", 1)[0]: f.split("=", 1)[1] for f in doc["flags"] if "=" in f}
+    # llama-server's flags at this rung: -c is the total context (context x slots), -np the slots.
+    lf = list(doc["flags"]) if doc["engine"] == "llama.cpp" else []
+    for i in range(len(lf) - 1):
+        if lf[i] == "-c":
+            lf[i + 1] = str(ctx * seqs)
+        elif lf[i] == "-np":
+            lf[i + 1] = str(seqs)
+    conv = doc.get("convert") or {}
     out = {"engine": doc["engine"], "placement": doc["placement"], "ctx": ctx, "seqs": seqs, "tp": doc["tp"],
-           "util": fl.get("--gpu-memory-utilization", ""), "kv_dtype": fl.get("--kv-cache-dtype", ""),
+           "gpus": doc.get("gpus") or 0, "util": fl.get("--gpu-memory-utilization", ""),
+           "kv_dtype": fl.get("--kv-cache-dtype", ""), "llama_flags": " ".join(lf),
+           "source": doc.get("source") or "", "files": ",".join(doc.get("files") or []),
+           "weight_bytes": doc.get("weight_bytes") or 0,
+           "convert": " ".join(conv.get("args") or []), "convert_error": conv.get("error") or "",
            "cache_gib": max(int(kv // GIB), 1), "memory": g["rung_memory_limit"][rung],
            "annotation": "%s %dx%d" % (doc["placement"], seqs, ctx), "summary": doc["summary"]}
     return "".join("%s=%s\n" % (k, out[k]) for k in sorted(out))
@@ -1416,6 +1483,8 @@ def main(argv):
     kn.add_argument("--fit", required=True)
     kn.add_argument("--rung", type=int, default=0)
     pl.add_argument("--mode", choices=("text", "explain", "json"), default="text")
+    bc = sub.add_parser("busy-cards")
+    bc.add_argument("--host", required=True)
     g = sub.add_parser("guard-step")
     g.add_argument("--fit", required=True)
     g.add_argument("--state", required=True)
@@ -1439,6 +1508,10 @@ def main(argv):
                 lines = doc["explain"] + [doc["summary"]] if a.mode == "explain" else [doc["summary"]]
                 sys.stdout.write("\n".join(lines) + "\n")
                 return 0 if doc["fits"] else 3
+        elif a.cmd == "busy-cards":
+            with open(a.host, encoding="utf-8") as fh:
+                sys.stdout.write("".join("%s\t%s\t%s\n" % b for b in busy_cards(json.load(fh))))
+            return 0
         elif a.cmd == "knobs":
             with open(a.fit, encoding="utf-8") as fh:
                 sys.stdout.write(knobs(json.load(fh), a.rung))

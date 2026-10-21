@@ -50,11 +50,11 @@
       "subject": "docker.io/rancher/mirrored-pause:3.10.2"
     },
     {
-      "detail": "sha256:a8c8297c7274 in images.lock (share/nri-balloons-guard.yml, share/nri-balloons.yml); on k3d-gpu-server-0",
+      "detail": "sha256:bacbef6f002f in images.lock (share/nri-balloons-guard.yml, share/nri-balloons.yml); on k3d-gpu-server-0",
       "fix": null,
       "rule": "image",
       "status": "pass",
-      "subject": "ghcr.io/containers/nri-plugins/nri-resource-policy-balloons:v0.14.0"
+      "subject": "ghcr.io/containers/nri-plugins/nri-resource-policy-balloons:v0.15.0"
     },
     {
       "detail": "sha256:2fa1c99ad09b in images.lock (share/node-feature-discovery.yml); on k3d-gpu-server-0",
@@ -73,12 +73,12 @@
   ],
   "cluster": "gpu",
   "lock": {
-    "images": 52,
+    "images": 55,
     "k3s_tag": "v1.37.1-k3s1"
   },
   "schema": "k3d-gpu.audit/v1",
   "summary": [
-    "audit PASS: 0 of 10 checks failed (images.lock: 52 images, k3s v1.37.1-k3s1)"
+    "audit PASS: 0 of 10 checks failed (images.lock: 55 images, k3s v1.37.1-k3s1)"
   ],
   "verdict": "pass"
 }

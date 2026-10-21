@@ -225,6 +225,9 @@ jobs:
       # tests/fit_test.py (the fit arithmetic on fixture hosts and models, the guard
       # under simulated PSI) and the launcher's fit, agent manifest and agent guard.
       - run: tests/fit_test.sh
+      # The llama.cpp agent backend the fit picks (GGUF download, one-time GGUF conversion,
+      # MTP on request) and `up` leaving busy Intel cards out of the device plugin.
+      - run: tests/llamacpp_test.sh
 
   tune-tests:
     name: k3d-gpu tune tests
