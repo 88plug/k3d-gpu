@@ -29,8 +29,12 @@ if [ ! -x "${P}/usr/bin/accel-config" ]; then
 fi
 sha256sum "${B}"/opt/debs/*.deb > "${OUT}/debs.sha256"
 AC=(sudo -n env "LD_LIBRARY_PATH=${P}/usr/lib/x86_64-linux-gnu" "${P}/usr/bin/accel-config")
+# The package version is the pin. Ubuntu's 4.1.9-2 build prints "4.1.8+" for --version (its
+# version string comes from the source tree's git describe), so that output is recorded, not checked.
 "${AC[@]}" --version > "${OUT}/accel-config-version.txt"
-grep -q '^4\.1\.9' "${OUT}/accel-config-version.txt" || { echo "accel-config is not 4.1.9"; exit 2; }
+for d in "${B}"/opt/debs/*accel-config*_"${VER}"_amd64.deb; do
+    [ "$(dpkg-deb -f "${d}" Version)" = "${VER}" ] || { echo "${d} is not ${VER}"; exit 2; }
+done
 
 # zswap holds the IAA device while its compressor is deflate-iaa (scripts/k3d-gpu refuses too).
 zs=$(cat /sys/module/zswap/parameters/compressor 2>/dev/null || true)
