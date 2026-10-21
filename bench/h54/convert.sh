@@ -6,7 +6,8 @@
 #        (bench/h54/ov-export-venv.txt: openvino 2026.4.1, nncf 3.4.0, optimum-intel 2.2.0).
 #   The QAT drafter as GGUF: b11749's convert_hf_to_gguf.py (bf16), then b11749's llama-quantize
 #        to Q4_0, the target's precision (the model card asks for a same-precision QAT drafter),
-#        both in ghcr.io/ggml-org/llama.cpp:full-b11749 pinned to its index digest.
+#        both in ghcr.io/ggml-org/llama.cpp:full-b11749 pinned to its index digest; the conversion
+#        with transformers 5.5.4 in that container (amendment R2).
 # Each build is written to OUT.partial and renamed when it and its manifest.json are complete.
 set -euo pipefail
 G=${HOME}/k3dgpu-gemma
@@ -17,6 +18,7 @@ DRAFT=google_gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant
 OVQ=${M}/k3dgpu/gemma-4-26b-a4b-it-qat-int4-sym-g32-ov
 DG=${M}/k3dgpu/gemma-4-26B-A4B-it-qat-assistant-gguf
 V=${G}/ovenv
+TRANSFORMERS=5.5.4
 sha_manifest() {  # sha_manifest DIR JSON_EXTRA: manifest.json with the sha256 of every file
     python3 - "$1" "$2" <<'EOF'
 import hashlib, json, os, sys
@@ -53,13 +55,17 @@ fi
 if [ ! -e "${DG}" ]; then
     rm -rf "${DG}.partial"
     mkdir -p "${DG}.partial"
-    docker run --rm -v "${M}:/models" "${FULL_IMAGE}" --convert --outtype bf16 "/models/${DRAFT}" \
-        --outfile "/models/k3dgpu/$(basename "${DG}").partial/gemma-4-26B-A4B-it-qat-assistant-bf16.gguf"
+    # The image's transformers 4.57.6 cannot read the checkpoint's tokenizer_config.json (v5 format,
+    # `extra_special_tokens: []`: "AttributeError: 'list' object has no attribute 'keys'"), so the
+    # same image's convert_hf_to_gguf.py runs with transformers 5.5.4, the OVQ export venv's pin,
+    # installed in the throwaway container (amendment R2).
+    docker run --rm -v "${M}:/models" --entrypoint sh "${FULL_IMAGE}" -c \
+        "pip install -q --break-system-packages transformers==${TRANSFORMERS} && python3 /app/convert_hf_to_gguf.py --outtype bf16 /models/${DRAFT} --outfile /models/k3dgpu/$(basename "${DG}").partial/gemma-4-26B-A4B-it-qat-assistant-bf16.gguf"
     docker run --rm -v "${M}:/models" "${FULL_IMAGE}" --quantize \
         "/models/k3dgpu/$(basename "${DG}").partial/gemma-4-26B-A4B-it-qat-assistant-bf16.gguf" \
         "/models/k3dgpu/$(basename "${DG}").partial/gemma-4-26B-A4B-it-qat-assistant-q4_0.gguf" Q4_0
     sudo chown -R "$(id -u):$(id -g)" "${DG}.partial"
-    sha_manifest "${DG}.partial" "$(python3 -c 'import json,sys; print(json.dumps({"source": {"repo": "google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant", "revision": open(sys.argv[1]).read().split()[-1]}, "image": sys.argv[2], "steps": ["--convert --outtype bf16", "--quantize Q4_0"]}))' "${M}/${DRAFT}/.pinned-revision" "${FULL_IMAGE}")"
+    sha_manifest "${DG}.partial" "$(python3 -c 'import json,sys; print(json.dumps({"source": {"repo": "google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant", "revision": open(sys.argv[1]).read().split()[-1]}, "image": sys.argv[2], "steps": ["convert_hf_to_gguf.py --outtype bf16 (transformers " + sys.argv[3] + ")", "--quantize Q4_0"]}))' "${M}/${DRAFT}/.pinned-revision" "${FULL_IMAGE}" "${TRANSFORMERS}")"
     mv -T "${DG}.partial" "${DG}"
     echo "drafter GGUF built"
 fi
