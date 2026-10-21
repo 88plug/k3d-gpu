@@ -114,7 +114,7 @@
         "level": "ok",
         "revert": null,
         "section": "Intel CPU built-in accelerators...",
-        "text": "QAT 0000:6b:00.0: 4 VF(s) — deployed by 'k3d-gpu up' (intel-qat-plugin binds them to vfio-pci)",
+        "text": "QAT 0000:6b:00.0 (4xxx): 4 VF(s) — deployed by 'k3d-gpu up' (intel-qat-plugin binds them to vfio-pci)",
         "why": null
       },
       {

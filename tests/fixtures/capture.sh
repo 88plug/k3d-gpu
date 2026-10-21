@@ -68,6 +68,8 @@ for dev in "${SRC}"/sys/bus/pci/devices/*; do
     attr "${dev}" vendor device class sriov_numvfs sriov_totalvfs sched_mode max_link_speed max_link_width \
          resource resource{0..5}_resize tcc_offset_degree_celsius
     if [ -L "${dev}/iommu_group" ]; then link "${dev}/iommu_group"; fi
+    # QAT PF configured services and state (sysfs-driver-qat).
+    if [ -d "${dev}/qat" ]; then dir "${dev}/qat"; attr "${dev}/qat" cfg_services state; fi
     if [ -L "${dev}/driver" ]; then
         link "${dev}/driver"
         if [ -d "${dev}/driver" ]; then dir "${dev}/driver"; fi
@@ -156,7 +158,8 @@ fi
 # Device nodes as empty files; /dev/char links only for DSA/IAA work queues.
 for node in "${SRC}"/dev/dri/card[0-9]* "${SRC}"/dev/dri/renderD* "${SRC}"/dev/accel/* \
             "${SRC}"/dev/dsa/wq* "${SRC}"/dev/iax/wq* "${SRC}"/dev/nvidia[0-9]* "${SRC}"/dev/nvidiactl \
-            "${SRC}"/dev/hl[0-9]* "${SRC}"/dev/kvm "${SRC}"/dev/vhost-vsock "${SRC}"/dev/tdx_guest; do
+            "${SRC}"/dev/hl[0-9]* "${SRC}"/dev/kvm "${SRC}"/dev/vhost-vsock "${SRC}"/dev/tdx_guest \
+            "${SRC}"/dev/isst_interface; do
     [ -e "${node}" ] || continue
     mkdir -p "$(dirname "${OUT}/${node#"${SRC}"/}")"
     : > "${OUT}/${node#"${SRC}"/}"
@@ -200,10 +203,40 @@ for dax in "${SRC}"/sys/bus/dax/devices/dax*; do
     dir "${dax}"
     if [ -L "${dax}/driver" ]; then link "${dax}/driver"; fi
 done
-for aux in "${SRC}"/sys/bus/auxiliary/devices/intel_vsec.sdsi.*; do
+# On Demand (SDSi) and TPMI PLR auxiliary devices. The On Demand state certificate
+# (admin read-only) is copied as zeros of the same length: its size is what doctor
+# reports, and its content is a license record.
+for aux in "${SRC}"/sys/bus/auxiliary/devices/intel_vsec.sdsi.* "${SRC}"/sys/bus/auxiliary/devices/intel_vsec.tpmi-plr.*; do
     [ -L "${aux}" ] || continue
     link "${aux}"
     dir "${aux}"
+    if [ -r "${aux}/state_certificate" ]; then
+        n=$(wc -c < "${aux}/state_certificate" 2>/dev/null) || continue
+        head -c "${n}" /dev/zero > "${OUT}/$(rel "${aux}")/state_certificate"
+    fi
+done
+# TPMI performance limit reasons (debugfs, root only): reason names per die and CPU.
+for f in "${SRC}"/sys/kernel/debug/tpmi-*/plr/domain[0-9]*/status; do
+    [ -r "${f}" ] || continue
+    mkdir -p "$(dirname "${OUT}/${f#"${SRC}"/}")"
+    cat "${f}" > "${OUT}/${f#"${SRC}"/}" 2>/dev/null || rm -f "${OUT}/${f#"${SRC}"/}"
+done
+# In-Field Scan devices: last result and loaded image (never run).
+for d in "${SRC}"/sys/devices/virtual/misc/intel_ifs_[0-9]*; do
+    [ -d "${d}" ] || continue
+    dir "${d}"
+    attr "${d}" status image_version
+done
+# CXL memory devices, mounted resctrl's info, and the kernel memory-tiering knobs.
+for m in "${SRC}"/sys/bus/cxl/devices/mem[0-9]*; do
+    [ -L "${m}" ] || continue
+    link "${m}"
+    dir "${m}"
+done
+for r in "${SRC}"/sys/fs/resctrl/info/*; do
+    [ -d "${r}" ] || continue
+    dir "${r}"
+    attr "${r}" num_closids cbm_mask num_rmids mon_features
 done
 for pmu in "${SRC}"/sys/bus/event_source/devices/uncore_imc_[0-9]*; do
     [ -r "${pmu}/events/cas_count_read" ] || continue
@@ -242,7 +275,7 @@ if [ -d "${C}" ]; then
         [ -d "${cpu}" ] || continue
         if [ -L "${cpu}/cpufreq" ]; then link "${cpu}/cpufreq"; fi
         attrs_at "${cpu}/cpufreq" scaling_driver scaling_governor energy_performance_preference \
-            scaling_max_freq scaling_min_freq cpuinfo_max_freq
+            scaling_max_freq scaling_min_freq cpuinfo_max_freq base_frequency
         attrs_at "${cpu}/thermal_throttle" core_throttle_count core_throttle_max_time_ms \
             core_throttle_total_time_ms package_throttle_count package_throttle_max_time_ms \
             package_throttle_total_time_ms
@@ -251,10 +284,12 @@ if [ -d "${C}" ]; then
 fi
 attrs_at "${SRC}/sys/module/intel_idle/parameters" max_cstate
 attrs_at "${SRC}/sys/module/kvm_intel/parameters" nested enable_apicv ept tdx
-# Uncore frequency limits and ELC (0644/0444; current_freq_khz is 0400 and is not read).
+# Uncore frequency limits, ELC and the TPMI domain's package and agent types
+# (0644/0444; current_freq_khz is 0400, so it is captured only as root).
 for u in "${C}"/intel_uncore_frequency/*; do
     attrs_at "${u}" initial_min_freq_khz initial_max_freq_khz min_freq_khz max_freq_khz \
-        elc_floor_freq_khz elc_low_threshold_percent elc_high_threshold_percent elc_high_threshold_enable
+        elc_floor_freq_khz elc_low_threshold_percent elc_high_threshold_percent elc_high_threshold_enable \
+        package_id agent_types current_freq_khz
 done
 
 # coretemp package sensors (TjMax is tempN_crit).
@@ -307,6 +342,8 @@ for mc in "${SRC}"/sys/devices/system/edac/mc/mc[0-9]*; do attrs_at "${mc}" mc_n
 # Memory, KSM, uptime, the root mount, and the boot options and sysctls doctor --perf reads.
 attrs_at "${SRC}/sys/kernel/mm/transparent_hugepage" enabled defrag
 attrs_at "${SRC}/sys/kernel/mm/ksm" run pages_sharing
+attrs_at "${SRC}/sys/kernel/mm/numa" demotion_enabled
+attrs_at "${SRC}/sys/kernel/mm/mempolicy/weighted_interleave" auto
 if [ -r "${SRC}/proc/meminfo" ]; then
     mkdir -p "${OUT}/proc"
     grep -E '^(MemTotal|MemAvailable|SwapTotal|SwapFree|HugePages_Total|HugePages_Free|Hugepagesize):' \
@@ -320,10 +357,10 @@ for m in "${SRC}/proc/1/mounts" "${SRC}/proc/mounts"; do
     break
 done
 if [ -r "${SRC}/proc/cmdline" ]; then
-    tr ' ' '\n' < "${SRC}/proc/cmdline" | grep -E '^(split_lock_detect|intel_iommu|iommu)=' \
+    tr ' ' '\n' < "${SRC}/proc/cmdline" | grep -E '^(split_lock_detect|intel_iommu|iommu|rdt)=' \
         | paste -sd' ' > "${OUT}/proc/cmdline" || true
 fi
-for f in proc/uptime proc/sys/vm/swappiness proc/sys/kernel/split_lock_mitigate \
+for f in proc/uptime proc/sys/vm/swappiness proc/sys/kernel/split_lock_mitigate proc/sys/kernel/numa_balancing \
          proc/sys/dev/i915/perf_stream_paranoid proc/sys/dev/xe/observation_paranoid; do
     [ -r "${SRC}/${f}" ] || continue
     mkdir -p "$(dirname "${OUT}/${f}")"

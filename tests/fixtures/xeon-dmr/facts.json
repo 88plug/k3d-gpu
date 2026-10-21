@@ -74,7 +74,7 @@
         "level": "info",
         "revert": null,
         "section": "Intel CPU built-in accelerators...",
-        "text": "Diamond Rapids-X (family 19, model 1): ISA predicted by gcc PTA_DIAMONDRAPIDS, not read from CPUID: AVX10.2, APX_F, AMX-FP8, AMX-FP16, AMX-COMPLEX, AMX-AVX512, AMX-MOVRS, MOVRS — /proc/cpuinfo may not show these (kernel-dependent); NFD labels what CPUID reports (cpu-cpuid.AVX10_VERSION, APX_F, AMXFP8) and oneDNN/OpenVINO pick them with no flag",
+        "text": "Diamond Rapids-X (family 19, model 1): ISA predicted by gcc PTA_DIAMONDRAPIDS, not read from CPUID: AVX10.2, APX_F, AMX-FP8, AMX-FP16, AMX-COMPLEX, AMX-AVX512, AMX-MOVRS, MOVRS — fallback model table: CPUID is not readable here (sudo k3d-gpu doctor reads /dev/cpu/0/cpuid; needs the cpuid module); /proc/cpuinfo may not show these (kernel-dependent); NFD labels what CPUID reports (cpu-cpuid.AVX10_VERSION, APX_F, AMXFP8) and oneDNN/OpenVINO pick them with no flag",
         "why": null
       },
       {

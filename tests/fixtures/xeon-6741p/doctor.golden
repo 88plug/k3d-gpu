@@ -1,0 +1,59 @@
+==> Checking docker...
+  ok: docker running
+==> Checking k3d...
+  ok: k3d version v0.0.0-stub
+==> Checking kubectl...
+  ok
+==> Detected accelerators: amx
+==> Intel CPU built-in accelerators...
+  info: Granite Rapids-X (family 6, model 173): ISA predicted by gcc PTA_GRANITERAPIDS, not read from CPUID: AVX10.1, AMX-FP16 — fallback model table: CPUID is not readable here (sudo k3d-gpu doctor reads /dev/cpu/0/cpuid; needs the cpuid module); /proc/cpuinfo may not show these (kernel-dependent); NFD labels what CPUID reports (cpu-cpuid.AVX10_VERSION, APX_F, AMXFP8) and oneDNN/OpenVINO pick them with no flag
+  ok: AMX (amx_bf16 amx_int8 amx_tile) — CPU instructions, usable in any pod; up labels nodes feature.node.kubernetes.io/cpu-cpuid.AMX*
+  ok: CPU ISA: AVX512BF16 AVX512F AVX512VNNI AVXVNNI CETIBT CETSS GFNI SHA VAES — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
+  warn: DSA: 3 device(s) but no user work queues, so not in the cluster — set them up with accel-config per device below (lasts until reboot); all at once: k3d-gpu host-setup --apply; then k3d-gpu down && k3d-gpu up
+  warn: accel-config is not installed and this distro has no package: build intel/idxd-config accel-config-v4.1.9 with --prefix=/usr (https://github.com/intel/idxd-config)
+  warn: DSA dsa0: disabled, nothing configured — 1 engine, 1 group, 1 dedicated user WQ (no user PASID: a shared WQ needs intel_iommu=on,sm_on), as intel-dsa-plugin's idxd initcontainer does
+        apply:  sudo accel-config config-engine dsa0/engine0.0 --group-id=0 && sudo accel-config config-wq dsa0/wq0.0 --group-id=0 --type=user --mode=dedicated --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && sudo accel-config enable-device dsa0 && sudo accel-config enable-wq dsa0/wq0.0
+        revert: sudo accel-config disable-wq dsa0/wq0.0 && sudo accel-config disable-device dsa0
+  warn: DSA dsa2: disabled, nothing configured — 1 engine, 1 group, 1 dedicated user WQ (no user PASID: a shared WQ needs intel_iommu=on,sm_on), as intel-dsa-plugin's idxd initcontainer does
+        apply:  sudo accel-config config-engine dsa2/engine2.0 --group-id=0 && sudo accel-config config-wq dsa2/wq2.0 --group-id=0 --type=user --mode=dedicated --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && sudo accel-config enable-device dsa2 && sudo accel-config enable-wq dsa2/wq2.0
+        revert: sudo accel-config disable-wq dsa2/wq2.0 && sudo accel-config disable-device dsa2
+  warn: DSA dsa4: disabled, nothing configured — 1 engine, 1 group, 1 dedicated user WQ (no user PASID: a shared WQ needs intel_iommu=on,sm_on), as intel-dsa-plugin's idxd initcontainer does
+        apply:  sudo accel-config config-engine dsa4/engine4.0 --group-id=0 && sudo accel-config config-wq dsa4/wq4.0 --group-id=0 --type=user --mode=dedicated --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && sudo accel-config enable-device dsa4 && sudo accel-config enable-wq dsa4/wq4.0
+        revert: sudo accel-config disable-wq dsa4/wq4.0 && sudo accel-config disable-device dsa4
+  warn: IAA: 3 device(s) but no user work queues, so not in the cluster — set them up with accel-config per device below (lasts until reboot); all at once: k3d-gpu host-setup --apply; then k3d-gpu down && k3d-gpu up
+  warn: IAA iax1: disabled, nothing configured — 1 engine, 1 group, 1 dedicated user WQ (no user PASID: a shared WQ needs intel_iommu=on,sm_on), as intel-iaa-plugin's idxd initcontainer does
+        apply:  sudo accel-config config-engine iax1/engine1.0 --group-id=0 && sudo accel-config config-wq iax1/wq1.0 --group-id=0 --type=user --mode=dedicated --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && sudo accel-config enable-device iax1 && sudo accel-config enable-wq iax1/wq1.0
+        revert: sudo accel-config disable-wq iax1/wq1.0 && sudo accel-config disable-device iax1
+  warn: IAA iax3: disabled, nothing configured — 1 engine, 1 group, 1 dedicated user WQ (no user PASID: a shared WQ needs intel_iommu=on,sm_on), as intel-iaa-plugin's idxd initcontainer does
+        apply:  sudo accel-config config-engine iax3/engine3.0 --group-id=0 && sudo accel-config config-wq iax3/wq3.0 --group-id=0 --type=user --mode=dedicated --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && sudo accel-config enable-device iax3 && sudo accel-config enable-wq iax3/wq3.0
+        revert: sudo accel-config disable-wq iax3/wq3.0 && sudo accel-config disable-device iax3
+  warn: IAA iax5: disabled, nothing configured — 1 engine, 1 group, 1 dedicated user WQ (no user PASID: a shared WQ needs intel_iommu=on,sm_on), as intel-iaa-plugin's idxd initcontainer does
+        apply:  sudo accel-config config-engine iax5/engine5.0 --group-id=0 && sudo accel-config config-wq iax5/wq5.0 --group-id=0 --type=user --mode=dedicated --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && sudo accel-config enable-device iax5 && sudo accel-config enable-wq iax5/wq5.0
+        revert: sudo accel-config disable-wq iax5/wq5.0 && sudo accel-config disable-device iax5
+  warn: QAT 0000:6a:00.1 (4xxx, cfg_services sym;asym, state up): no VFs (sriov_numvfs 0), so not in the cluster — create all 16 as intel-qat-plugin's qat initcontainer does; the plugin takes them as 4xxxvf and binds them to vfio-pci (lasts until reboot), or: k3d-gpu host-setup --apply; then k3d-gpu down && k3d-gpu up
+        apply:  echo 16 | sudo tee /sys/bus/pci/devices/0000:6a:00.1/sriov_numvfs
+        revert: echo 0 | sudo tee /sys/bus/pci/devices/0000:6a:00.1/sriov_numvfs
+  warn: QAT 0000:8a:00.1 (4xxx, cfg_services sym;asym, state up): no VFs (sriov_numvfs 0), so not in the cluster — create all 16 as intel-qat-plugin's qat initcontainer does; the plugin takes them as 4xxxvf and binds them to vfio-pci (lasts until reboot), or: k3d-gpu host-setup --apply; then k3d-gpu down && k3d-gpu up
+        apply:  echo 16 | sudo tee /sys/bus/pci/devices/0000:8a:00.1/sriov_numvfs
+        revert: echo 0 | sudo tee /sys/bus/pci/devices/0000:8a:00.1/sriov_numvfs
+  warn: QAT 0000:aa:00.1 (4xxx, cfg_services dc, state up): no VFs (sriov_numvfs 0), so not in the cluster — create all 16 as intel-qat-plugin's qat initcontainer does; the plugin takes them as 4xxxvf and binds them to vfio-pci (lasts until reboot), or: k3d-gpu host-setup --apply; then k3d-gpu down && k3d-gpu up
+        apply:  echo 16 | sudo tee /sys/bus/pci/devices/0000:aa:00.1/sriov_numvfs
+        revert: echo 0 | sudo tee /sys/bus/pci/devices/0000:aa:00.1/sriov_numvfs
+  info: Speed Select interface present (/dev/isst_interface); intel-speed-select is not on PATH — after up, doctor reads it through the node image's pinned copy (docker exec k3d-gpu-server-0 intel-speed-select); or install it from the kernel tree (tools/power/x86/intel-speed-select)
+  info: SNC off (1 NUMA node per socket) on 2 compute dies (TPMI uncore domains with core agents): SNC2 makes each compute die its own NUMA node with its local memory channels (Intel Xeon 6 SNC guide 845720); up then labels k3d-gpu.io/snc=2 and replica pods get one node each
+        apply:  BIOS (owner action): set Sub-NUMA Clustering to SNC2 (the menu name varies by board), reboot, then k3d-gpu down && k3d-gpu up
+        revert: BIOS: set Sub-NUMA Clustering back to Disabled, reboot
+  info: RDT allocation (rdt_a: cat_l2 cat_l3 cdp_l2 cdp_l3 mba) — resctrl classes are available but left off: the balloons policy ships control.rdt.enable: false because enabling it rewrites the host's /sys/fs/resctrl. To opt in, mount resctrl on the host (mount -t resctrl resctrl /sys/fs/resctrl) and set control.rdt.enable: true in nri-balloons.yml; usePodQoSAsDefaultClass then gives BestEffort/Burstable/Guaranteed pods 33%/66%/100% of the L3
+  info: noisy-neighbour isolation: rdt-mba — CAT + MBA can cap a neighbour's cache share and DRAM bandwidth through the RDT opt-in above (resctrl mounted: no); the shipped classes set cache shares only, so add mbAllocation: {all: ["50%"]} to the BestEffort class for bandwidth; the classes run inside the NRI balloons policy, which up deploys on hybrid or multi-NUMA hosts only
+  info: per socket: socket 0: DSA 3, IAA 3, QAT 3, DLB 3 (ARK default for 6741P: DSA 3, IAA 3, QAT 3, DLB 3 per socket)
+  info: DLB: 3 device(s) (8086:2714 DLB 2.5), no driver bound — mainline Linux has no DLB driver (Intel's out-of-tree driver or DPDK on vfio-pci) and the Kubernetes DLB device plugin was removed upstream (intel-device-plugins-for-kubernetes, 2026-09-01), so k3d-gpu exposes nothing for it
+  info: Intel On Demand interface present (intel_vsec.sdsi.0): on On Demand SKUs, instances above the ARK default are activated by a license (https://github.com/intel/intel-sdsi); ask the platform vendor whether activation is offered; intel_vsec.sdsi.0 state_certificate 32 B (crescent's 6741P reads 32 B with no license payload seen)
+  info: In-Field Scan: intel_ifs_0 (scan) untested, image none; intel_ifs_1 (array BIST) untested — k3d-gpu never starts a test (a scan holds the core while it runs; run one on a drained core: docs.kernel.org/arch/x86/ifs.html)
+==> Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...
+  ok: dra available (auto)
+  ok: image-volume available (auto)
+
+==> All checks passed.
+exit=0
+--- calls
+kubectl --context k3d-gpu --request-timeout=5s get nodes -o name
