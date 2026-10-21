@@ -34,7 +34,15 @@ that fits.
 
 A Hugging Face model's config, tokenizer config and weight headers are fetched once per
 revision into `~/.cache/k3d-gpu/models` (a few MB, not the weights). A GGUF repo has no
-`config.json`; the fit reads its model card's `base_model` for that. A card held by
+`config.json`; the fit reads its model card's `base_model` for that. A GGUF repo with several models
+(one per quant, each possibly a gguf-split model in `-0000N-of-0000M.gguf` shards) has
+every model's every shard header read; drafters (`mtp-*`, `dflash-*`) and the vision
+projector are left out. The fit then picks one with no flag: int4 first (the model
+optimizer's llama.cpp precision), then fewer bits, more bits last, taking the first
+that holds 4 sequences at the target context. `--file F` (or `K3D_GPU_FIT_FILE`) names
+one instead: a file, any of its shards, or the quant label (`IQ4_NL`). Weights that
+read as 0 bytes, a split model with shards missing, or a MoE with no expert tensors are
+refused, never planned. A card held by
 others at half its VRAM or more is busy and is left out. The Intel device plugin, not
 the fit, picks which cards the pod gets, and it knows only the cards other pods hold:
 a card a host process fills can still be handed out, and the fit's per-card budget
