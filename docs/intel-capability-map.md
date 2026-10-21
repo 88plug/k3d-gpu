@@ -10,6 +10,10 @@ and on the most widely deployed Intel families:
 - **Server:** Xeon 4th/5th gen (Sapphire Rapids, Emerald Rapids), Xeon 6 P-core
   (Granite Rapids, incl. the Xeon 6 SoC Granite Rapids-D) and Xeon 6 E-core (Sierra Forest).
 
+The Xeon generations before and after that window (E5 v2 to Diamond Rapids), and
+the more obscure on-die engines and platform features, are in the
+[on-die accelerator reference](intel-on-die-accelerators.md).
+
 Contents:
 
 1. [Evidence rules](#evidence-rules)

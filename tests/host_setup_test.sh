@@ -78,6 +78,18 @@ says()     { grep -F -- "$2" <<< "${OUT}" >/dev/null; check "$1" $? "missing: $2
 not_says() { ! grep -F -- "$2" <<< "${OUT}" >/dev/null; check "$1" $? "unexpected: $2"; }
 logged()   { grep -F -- "$2" "${STUB_LOG}" >/dev/null; check "$1" $? "not run: $2"; }
 rc_is()    { local rc=0; [ "${RC}" -eq "$2" ] || rc=1; check "$1" "${rc}" "rc=${RC}, want $2"; }
+
+# host-setup's toolkit pin follows the node image's (Dockerfile ARG), and the
+# nightly bump in build-and-push.yml moves both.
+ROOT="$(dirname "${K3D_GPU}")/.."
+CTK=$(sed -n 's/^ARG NVIDIA_CTK_VERSION="\(.*\)"$/\1/p' "${ROOT}/Dockerfile")
+HS=$(sed -n 's/^HS_NVCTK=//p' "${K3D_GPU}")
+OUT="HS_NVCTK=${HS} NVIDIA_CTK_VERSION=${CTK}"
+ok=1; [ -n "${CTK}" ] && [ "${HS}" = "${CTK}" ] && ok=0
+check "HS_NVCTK equals the Dockerfile NVIDIA_CTK_VERSION" "${ok}" "${OUT}"
+OUT=$(cat "${ROOT}/.github/workflows/build-and-push.yml")
+says "nightly bump moves HS_NVCTK" 'sed -i "s|^HS_NVCTK=.*|HS_NVCTK=${{ steps.nvctk.outputs.ctk }}|" scripts/k3d-gpu'
+
 ran_nothing() { local rc=0; [ ! -s "${STUB_LOG}" ] || rc=1; check "$1" "${rc}" "installer stubs were called"; }
 nth_call() {  # nth_call <name> <n> <expected n-th logged call>
     local rc=0 got
@@ -132,13 +144,13 @@ r=$(newroot ubuntu2604-nv)
 osrel "${r}" ubuntu 26.04
 pci "${r}" 0000:01:00.0 0x10de 0x27b0 0x030000
 run "${r}" ""
-says "ubuntu NVIDIA toolkit is pinned" "nvidia-container-toolkit=1.20.1-1 nvidia-container-toolkit-base=1.20.1-1 libnvidia-container-tools=1.20.1-1 libnvidia-container1=1.20.1-1"
+says "ubuntu NVIDIA toolkit is pinned" "nvidia-container-toolkit=${CTK} nvidia-container-toolkit-base=${CTK} libnvidia-container-tools=${CTK} libnvidia-container1=${CTK}"
 says "ubuntu uses nvidia-cdi-refresh for the CDI spec" "sudo systemctl restart nvidia-cdi-refresh.service"
 says "docker gets the nvidia runtime" "sudo nvidia-ctk runtime configure --runtime=docker"
 not_says "NVIDIA-only host has no Intel steps" "kobuk-team"
 
 run "${r}" "" --distro fedora
-says "--distro prints another distro's plan" "sudo dnf install -y nvidia-container-toolkit-1.20.1-1"
+says "--distro prints another distro's plan" "sudo dnf install -y nvidia-container-toolkit-${CTK}"
 
 run "${r}" "" --distro=debian-12
 rc_is "unsupported distro fails" 1
@@ -435,6 +447,48 @@ run "${r}" "" K3D_GPU_VENDORS=dsa
 says "K3D_GPU_VENDORS=dsa plans DSA" "${AC} config-engine dsa0/engine0.0"
 not_says "K3D_GPU_VENDORS=dsa leaves IAA out" "iax1"
 not_says "K3D_GPU_VENDORS=dsa leaves QAT out" "sriov_numvfs"
+
+# iax1 held by an enabled kernel WQ on iaa_crypto (crescent's state), dsa0 untouched.
+r=$(newroot xeon-kernel-wq)
+osrel "${r}" ubuntu 24.04
+mkdir -p "${r}/usr/bin"; printf '#!/bin/sh\n' > "${r}/usr/bin/accel-config"; chmod +x "${r}/usr/bin/accel-config"
+B="${r}/sys/bus/dsa/devices"
+mkdir -p "${B}/dsa0" "${B}/iax1" "${B}/wq1.0" "${B}/wq1.1" "${B}/engine1.0" "${B}/group1.0" "${r}/sys/bus/dsa/drivers/crypto"
+echo disabled > "${B}/dsa0/state"; echo enabled > "${B}/iax1/state"; echo 128 > "${B}/iax1/max_work_queues_size"
+printf 'enabled\n' > "${B}/wq1.0/state"; echo 32 > "${B}/wq1.0/size"; echo 0 > "${B}/wq1.0/group_id"
+ln -sfn "${r}/sys/bus/dsa/drivers/crypto" "${B}/wq1.0/driver"
+printf 'disabled\n' > "${B}/wq1.1/state"; echo 0 > "${B}/wq1.1/size"; echo -1 > "${B}/wq1.1/group_id"
+echo 0 > "${B}/engine1.0/group_id"
+KWQ_RUN="${AC} disable-device iax1 && ${AC} load-config -c /var/lib/k3d-gpu/idxd-iax1.conf && ${AC} config-wq iax1/wq1.1 --group-id=0 --type=user --mode=dedicated --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && ${AC} enable-device iax1 && ${AC} enable-wq iax1/wq1.0 && ${AC} enable-wq iax1/wq1.1"
+KWQ_REV="${AC} disable-device iax1 && ${AC} load-config -c /var/lib/k3d-gpu/idxd-iax1.conf && ${AC} enable-device iax1 && ${AC} enable-wq iax1/wq1.0"
+run "${r}" ""
+says "kernel-WQ device is noted, not planned, without the opt-in" "note: IAA iax1: enabled with kernel work queues only — left alone; add --with-kernel-wqs"
+not_says "no kernel-WQ commands without the opt-in" "disable-device iax1"
+says "the untouched DSA device is still planned" "${AC} config-engine dsa0/engine0.0 --group-id=0"
+run "${r}" "y" --apply
+! grep -q 'iax1' "${STUB_LOG}"; check "apply without the opt-in never touches the kernel-WQ device" $? "iax1 in the call log"
+run "${r}" "" --with-kernel-wqs
+says "--with-kernel-wqs plans the snapshot of every device" "sudo install -d -m 0700 /var/lib/k3d-gpu && ${AC} save-config -s /var/lib/k3d-gpu/idxd-all.conf && sudo python3 -c"
+says "--with-kernel-wqs keeps only this device's snapshot" "/var/lib/k3d-gpu/idxd-all.conf iax1 /var/lib/k3d-gpu/idxd-iax1.conf && ${KWQ_RUN}"
+says "--with-kernel-wqs prints the snapshot revert" "revert: ${KWQ_REV}"
+run "${r}" "y" --apply --with-kernel-wqs
+rc_is "opt-in apply exits 0" 0
+s=$(grep -n 'save-config -s /var/lib/k3d-gpu/idxd-all.conf' "${STUB_LOG}" | cut -d: -f1)
+d=$(grep -n 'disable-device iax1' "${STUB_LOG}" | cut -d: -f1)
+l=$(grep -n 'load-config -c /var/lib/k3d-gpu/idxd-iax1.conf' "${STUB_LOG}" | cut -d: -f1)
+ordered=1
+[ -n "${s}" ] && [ -n "${d}" ] && [ -n "${l}" ] && [ "${s}" -lt "${d}" ] && [ "${d}" -lt "${l}" ] && ordered=0
+check "opt-in apply snapshots, then disables, then writes the snapshot back" "${ordered}" "order save=${s} disable=${d} load=${l}"
+logged "opt-in apply disables the device" "sudo accel-config disable-device iax1"
+logged "opt-in apply writes the snapshot back" "sudo accel-config load-config -c /var/lib/k3d-gpu/idxd-iax1.conf"
+logged "opt-in apply re-enables the kernel WQ" "sudo accel-config enable-wq iax1/wq1.0"
+logged "opt-in apply enables the user WQ" "sudo accel-config enable-wq iax1/wq1.1"
+run "${r}" "" --bogus-flag
+rc_is "unknown host-setup flag still fails" 1
+rm -rf "${B}/dsa0"
+run "${r}" "y" --apply
+says "only a held kernel-WQ device: nothing to install, and the note says why" "note: IAA iax1: enabled with kernel work queues only — left alone"
+ran_nothing "only a held kernel-WQ device: nothing is called"
 
 r=$(newroot xeon-accels-fedora)
 osrel "${r}" fedora 44

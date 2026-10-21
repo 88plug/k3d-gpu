@@ -9,13 +9,13 @@ WARN: Gaudi PCI device found but the habanalabs driver is not loaded — skippin
 ==> Intel CPU built-in accelerators...
   ok: AMX (amx_bf16 amx_int8 amx_tile) — CPU instructions, usable in any pod; up labels nodes feature.node.kubernetes.io/cpu-cpuid.AMX*
   ok: CPU ISA: AVX512BF16 AVX512F AVX512VNNI — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
-  warn: DSA: 1 device(s) but no user work queues, so not in the cluster — configure them with accel-config as intel-dsa-plugin's idxd initcontainer does (per device below; lasts until reboot), or all at once: k3d-gpu host-setup --apply; then k3d-gpu down && k3d-gpu up
+  warn: DSA: 1 device(s) but no user work queues, so not in the cluster — set them up with accel-config per device below (lasts until reboot); all at once: k3d-gpu host-setup --apply; then k3d-gpu down && k3d-gpu up
   warn: accel-config is not installed and this distro has no package: build intel/idxd-config accel-config-v4.1.9 with --prefix=/usr (https://github.com/intel/idxd-config)
-  warn: DSA dsa0: disabled — 1 engine, 1 group, 1 dedicated user WQ (no user PASID: a shared WQ needs intel_iommu=on,sm_on)
+  warn: DSA dsa0: disabled, nothing configured — 1 engine, 1 group, 1 dedicated user WQ (no user PASID: a shared WQ needs intel_iommu=on,sm_on), as intel-dsa-plugin's idxd initcontainer does
         apply:  sudo accel-config config-engine dsa0/engine0.0 --group-id=0 && sudo accel-config config-wq dsa0/wq0.0 --group-id=0 --type=user --mode=dedicated --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && sudo accel-config enable-device dsa0 && sudo accel-config enable-wq dsa0/wq0.0
         revert: sudo accel-config disable-wq dsa0/wq0.0 && sudo accel-config disable-device dsa0
-  warn: IAA: 1 device(s) but no user work queues, so not in the cluster — configure them with accel-config as intel-iaa-plugin's idxd initcontainer does (per device below; lasts until reboot), or all at once: k3d-gpu host-setup --apply; then k3d-gpu down && k3d-gpu up
-  warn: IAA iax1: disabled — 1 engine, 1 group, 1 dedicated user WQ (no user PASID: a shared WQ needs intel_iommu=on,sm_on)
+  warn: IAA: 1 device(s) but no user work queues, so not in the cluster — set them up with accel-config per device below (lasts until reboot); all at once: k3d-gpu host-setup --apply; then k3d-gpu down && k3d-gpu up
+  warn: IAA iax1: disabled, nothing configured — 1 engine, 1 group, 1 dedicated user WQ (no user PASID: a shared WQ needs intel_iommu=on,sm_on), as intel-iaa-plugin's idxd initcontainer does
         apply:  sudo accel-config config-engine iax1/engine1.0 --group-id=0 && sudo accel-config config-wq iax1/wq1.0 --group-id=0 --type=user --mode=dedicated --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && sudo accel-config enable-device iax1 && sudo accel-config enable-wq iax1/wq1.0
         revert: sudo accel-config disable-wq iax1/wq1.0 && sudo accel-config disable-device iax1
   info: noisy-neighbour isolation: cpu-cap — no rdt_a flag and no E-cores; give a neighbour a CPU limit. Cache and DRAM bandwidth stay shared
