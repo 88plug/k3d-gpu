@@ -122,7 +122,7 @@ KV_DTYPES_OF = {"vllm": ("fp8", "fp16", "bf16"), "llama.cpp": ("f16", "fp16", "b
 CLASSES = (
     ("mtp", re.compile(r"(^|[._])mtp([._]|$)|nextn")),
     ("vision", re.compile(r"visual|vision|embed_vision|audio|mm_proj|mmproj|multi_modal")),
-    ("ngram", re.compile(r"ngram|\.ple(\.|_)|per_layer")),
+    ("ngram", re.compile(r"ngram|ple_embedding|per_layer_token_embd|embed_tokens_per_layer")),
     ("experts", re.compile(r"\.experts\.|_exps\.|\.experts$")),
     ("embed", re.compile(r"embed_tokens|token_embd|wte\.|tok_embeddings|text_embeddings")),
     ("lm_head", re.compile(r"lm_head|^output\.weight$")),
@@ -481,10 +481,21 @@ class _Buf:
         return self.buf[lo:lo + n]
 
 
+GGUF_KEYS = ("general.architecture", "general.alignment", "split.no", "split.count", "split.tensors.count")
+
+
 def gguf_tensors(read, size):
-    """[(name, bytes)] from a GGUF header: each tensor's bytes are the gap to the
-    next tensor's offset (the last one's to the end of the file), so no ggml type
-    table is needed. Layout per ggml/docs/gguf.md (v2/v3)."""
+    """[(name, bytes)] of one GGUF file (see gguf_header)."""
+    return gguf_header(read, size)["tensors"]
+
+
+def gguf_header(read, size):
+    """{"tensors": [(name, bytes)], "data_start", "kv": {GGUF_KEYS present}} from a GGUF
+    header: each tensor's bytes are the gap to the next tensor's offset (the last one's
+    to the end of the file), so no ggml type table is needed. Layout per
+    ggml/docs/gguf.md (v2/v3). A gguf-split shard is a whole GGUF holding its own share
+    of the tensors, with split.no / split.count / split.tensors.count in its keys
+    (llama.cpp tools/gguf-split)."""
     b = _Buf(read, size)
     if b.take(4) != b"GGUF":
         raise ValueError("not a GGUF file")
@@ -517,13 +528,14 @@ def gguf_tensors(read, size):
             return None
         return struct.unpack(fmt[t], b.take(struct.calcsize(fmt[t])))[0]
 
-    align = 32
+    kv = {}
     for _ in range(n_kv):
         key = string()
         (t,) = struct.unpack("<I", b.take(4))
         v = value(t)
-        if key == "general.alignment" and isinstance(v, int):
-            align = v
+        if key in GGUF_KEYS and v is not None:
+            kv[key] = v
+    align = kv.get("general.alignment") if isinstance(kv.get("general.alignment"), int) else 32
     infos = []
     for _ in range(n_t):
         name = string()
@@ -537,7 +549,7 @@ def gguf_tensors(read, size):
     for i, (name, off) in enumerate(infos):
         end = infos[i + 1][1] if i + 1 < len(infos) else size - data
         out.append((name, end - off))
-    return out
+    return {"tensors": out, "data_start": data, "kv": kv}
 
 
 def _file_reader(path):
@@ -558,13 +570,100 @@ def _http_reader(url, token=None):
     return read
 
 
+GGUF_SPLIT = re.compile(r"-(\d{5})-of-(\d{5})\.gguf$")
+# Files that are not the model itself: the vision projector and the drafters
+# (mtp-*, dflash-*, *-draft*, *-assistant*) a GGUF repo ships beside it.
+GGUF_AUX = re.compile(r"(^|/)(mmproj|mtp-|dflash-)|mmproj|[-_.]draft|assistant", re.I)
+GGUF_QUANT = re.compile(r"(?<![A-Za-z0-9])(IQ[1-4]_[A-Z]+|TQ[12]_0|Q[2-8]_K(?:_[SML]|_XL)?|Q[2-8]_[01]|MXFP4|NVFP4|BF16|F16|F32)"
+                        r"(?![A-Za-z0-9])", re.I)
+
+
+def gguf_groups(names):
+    """{label: [files]} of the GGUF models in a repo listing: one entry per quant, a
+    gguf-split model's shards together in shard order. The label is the quant in the
+    file name (IQ4_NL, Q8_0, ...), else the file stem."""
+    out = {}
+    for n in sorted(names):
+        base = n.rsplit("/", 1)[-1]
+        if not base.endswith(".gguf") or GGUF_AUX.search(base):
+            continue
+        stem = GGUF_SPLIT.sub("", base)
+        stem = stem[:-5] if stem.endswith(".gguf") else stem
+        q = GGUF_QUANT.findall(stem)
+        label = q[-1].upper() if q else stem
+        out.setdefault(label, []).append(n)
+    return {k: sorted(v) for k, v in out.items()}
+
+
+def pick_group(groups, want):
+    """The group --file names: a file of it, its label, or its file stem (any case)."""
+    w = want.rsplit("/", 1)[-1]
+    for label, files in groups.items():
+        stems = {GGUF_SPLIT.sub("", f.rsplit("/", 1)[-1]).replace(".gguf", "").lower() for f in files}
+        if w in (f.rsplit("/", 1)[-1] for f in files) or w.lower() == label.lower() or w.lower() in stems:
+            return label
+    raise ValueError("no GGUF group matches %r (groups: %s)" % (want, ", ".join(sorted(groups))))
+
+
+def quant_bits(label):
+    m = re.match(r"^(?:I?Q|TQ)(\d)", label, re.I)
+    if m:
+        return int(m.group(1))
+    return {"MXFP4": 4, "NVFP4": 4, "BF16": 16, "F16": 16, "F32": 32}.get(label.upper(), 99)
+
+
+def group_order(groups):
+    """Labels in the order the fit tries them: the optimizer's llama.cpp precision, int4
+    (console/model_opt.py want_precision), first; then fewer bits, most first; more bits
+    last, fewest first. NVFP4 runs on NVIDIA only and is left out."""
+    labels = [g for g in groups if g.upper() != "NVFP4"]
+    return sorted(labels, key=lambda g: ((0, 0) if quant_bits(g) == 4 else (1, -quant_bits(g)) if quant_bits(g) < 4
+                                         else (2, quant_bits(g)), g))
+
+
+def gguf_group_weights(files, opener, source):
+    """weights/v1 of one GGUF model: every shard's header read and its tensors summed.
+    opener(name) -> (read, size). A gguf-split model must list split.count shards and
+    split.tensors.count tensors in total, or this raises."""
+    tensors, flist, want, want_t = [], [], None, None
+    for n in files:
+        read, size = opener(n)
+        h = gguf_header(read, size)
+        tensors += h["tensors"]
+        flist.append({"name": n, "bytes": size})
+        if "split.count" in h["kv"]:
+            want = h["kv"]["split.count"]
+            want_t = h["kv"].get("split.tensors.count", want_t)
+    if want is not None and want != len(files):
+        raise ValueError("%s: split.count %d but %d of them listed (%s)" % (source, want, len(files), ", ".join(files)))
+    if want_t is not None and want_t != len(tensors):
+        raise ValueError("%s: split.tensors.count %d but the shards hold %d tensors" % (source, want_t, len(tensors)))
+    doc = weights_doc("gguf", flist, tensors, source)
+    doc["tensor_count"] = len(tensors)
+    return doc
+
+
+def gguf_weights_doc(groups, opener, source, file=None, config_from=None):
+    """weights/v1 of a GGUF repo: per group in "groups", the first in group_order (or the
+    one --file names) at the top level. file limits the headers read to that group."""
+    labels = [pick_group(groups, file)] if file else group_order(groups)
+    if not labels:
+        raise ValueError("%s lists no GGUF model files" % source)
+    docs = {g: gguf_group_weights(groups[g], opener, "%s:%s" % (source, g)) for g in labels}
+    top = dict(docs[labels[0]])
+    top.update(source=source, group=labels[0], groups=docs)
+    if config_from:
+        top["config_from"] = config_from
+    return top
+
+
 def weight_files(names):
-    """Serving weight files of a repo listing: safetensors shards, else one GGUF
-    (not the vision projector), else OpenVINO IR .bin files."""
+    """Serving weight files of a repo listing: safetensors shards, else the GGUF models
+    (not the vision projector or the drafters), else OpenVINO IR .bin files."""
     st = [n for n in names if n.endswith(".safetensors")]
     if st:
         return "safetensors", st
-    gg = [n for n in names if n.endswith(".gguf") and "mmproj" not in n]
+    gg = [f for fs in gguf_groups(names).values() for f in fs]
     if gg:
         return "gguf", gg
     ov = [n for n in names if n.endswith(".bin") and "openvino" in n]
@@ -589,6 +688,9 @@ def weights_local(d):
     fmt, files = weight_files(names)
     if not fmt:
         raise ValueError("%s holds no .safetensors, .gguf or OpenVINO .bin weights" % d)
+    if fmt == "gguf":
+        return gguf_weights_doc(gguf_groups(names), lambda n: (_file_reader(os.path.join(d, n)),
+                                                                os.path.getsize(os.path.join(d, n))), d)
     tensors, flist = [], []
     for n in files:
         p = os.path.join(d, n)
@@ -596,8 +698,6 @@ def weights_local(d):
         flist.append({"name": n, "bytes": size})
         if fmt == "safetensors":
             tensors += safetensors_tensors(_file_reader(p))
-        elif fmt == "gguf":
-            tensors += gguf_tensors(_file_reader(p), size)
     return weights_doc(fmt, flist, tensors, d)
 
 
@@ -636,21 +736,20 @@ def hf_fetch(repo, revision, out, file=None, token=None, endpoint="https://huggi
                 with open(os.path.join(out, meta), "w", encoding="utf-8") as f:
                     f.write(data)
     fmt, files = weight_files(sorted(sizes))
-    if file:
-        files = [f for f in files if f == file] or [file]
-    elif fmt == "gguf" and len(files) > 1:
-        raise ValueError("%s has %d GGUF files (%s): pick one with --file" % (repo, len(files), ", ".join(files)))
     if not fmt:
         raise ValueError("%s at %s lists no weight files" % (repo, rev))
-    tensors = []
-    for n in files:
-        url = "%s/%s/resolve/%s/%s" % (endpoint, repo, rev, n)
-        if fmt == "safetensors":
-            tensors += safetensors_tensors(_http_reader(url, token))
-        elif fmt == "gguf":
-            tensors += gguf_tensors(_http_reader(url, token), sizes[n])
-    doc = weights_doc(fmt, [{"name": n, "bytes": sizes[n]} for n in files], tensors,
-                      "%s@%s" % (repo, rev), config_from)
+    if fmt == "gguf":
+        # Every GGUF model in the repo (each split model's every shard): the fit picks one.
+        doc = gguf_weights_doc(gguf_groups(sorted(sizes)),
+                               lambda n: (_http_reader("%s/%s/resolve/%s/%s" % (endpoint, repo, rev, n), token), sizes[n]),
+                               "%s@%s" % (repo, rev), file, config_from)
+    else:
+        tensors = []
+        for n in files:
+            if fmt == "safetensors":
+                tensors += safetensors_tensors(_http_reader("%s/%s/resolve/%s/%s" % (endpoint, repo, rev, n), token))
+        doc = weights_doc(fmt, [{"name": n, "bytes": sizes[n]} for n in files], tensors,
+                          "%s@%s" % (repo, rev), config_from)
     with open(os.path.join(out, "weights.json"), "w", encoding="utf-8") as f:
         json.dump(doc, f, indent=2, sort_keys=True)
         f.write("\n")
@@ -905,6 +1004,17 @@ def fit(host, cfg, weights, engine=None, ctx=None, seqs=None, gpus=None, kv_dtyp
     """The fit/v1 document. Pure: reads its arguments only. device "cpu" or "gpu" limits
     the placements to that side (the device the cluster already chose)."""
     m = model_profile(cfg, weights, tokenizer_cfg)
+    bad = None
+    if m["serve_bytes"] <= 0:
+        bad = "weights read as 0 bytes (%s): the weight headers were not read, or a split model's shards are missing" \
+              % (weights.get("source") or "?")
+    elif m["format"] != "openvino" and m["experts"] and not m["bytes"]["experts"]:
+        bad = "no expert tensors in the weights of a %d-expert MoE (%s): incomplete or misread weight headers" \
+              % (m["experts"], weights.get("source") or "?")
+    if bad:
+        return {"schema": FIT_SCHEMA, "model": name, "format": m["format"], "arch": m["arch"], "fits": False,
+                "degraded": False, "host_reserve": 0, "explain": ["REFUSED: " + bad], "reason": bad,
+                "summary": "fit: %s REFUSED: %s" % (name, bad)}
     ex = ["model %s: %s (%s) weights, %s to serve" % (name or "?", m["format"], m["arch"] or "?", g1(m["serve_bytes"]))]
     for k, v in m["bytes"].items():
         if v:
@@ -1359,12 +1469,47 @@ def load_model_dir(d):
     return cfg, w, tok
 
 
-def plan_with_variants(host, model_dir, variants, **kw):
-    """fit() for one model directory; when it does not fit, also for each variant
-    directory, naming the smallest variant (by bytes to serve) that does."""
+def fit_groups(host, cfg, w, name, tok, file=None, **kw):
+    """fit() of a GGUF repo's models: the one --file names, else each in group_order until
+    one fits the target (4 seqs at the good context), else the first that fits at all."""
+    groups = w.get("groups") or {}
+    if not groups:
+        if file:
+            raise ValueError("--file %s: %s is not a GGUF repo with several models" % (file, name))
+        return fit(host, cfg, w, name=name, tokenizer_cfg=tok, **kw)
+    listing = {g: [f["name"] for f in doc["files"]] for g, doc in groups.items()}
+    order = [pick_group(listing, file)] if file else group_order(listing)
+    tried, first_fit = [], None
+    for g in order:
+        d = fit(host, cfg, groups[g], name="%s:%s" % (name, g), tokenizer_cfg=tok, **kw)
+        d["gguf_group"] = g
+        d["gguf_files"] = listing[g]
+        if d["fits"]:
+            # llama-server -hf <user>/<model>[:quant] fetches every shard of that quant (common/arg.cpp)
+            d["flags"] = ["-hf", "%s:%s" % (name.split("@")[0], g)] + d["flags"]
+            d["explain"] = [("engine flags: " + " ".join(d["flags"])) if x.startswith("engine flags:") else x
+                            for x in d["explain"]]
+        tried.append("GGUF %s (%s, %s): %s" % (g, g1(groups[g]["total_bytes"]), "--file" if file else "auto",
+                                              "fits" + (" below the target" if d.get("degraded") else "")
+                                              if d["fits"] else "no: " + d.get("reason", "")))
+        if d["fits"] and not d.get("degraded"):
+            d["explain"] = ["GGUF models in the repo, tried in order: " + ", ".join(order)] + tried + d["explain"]
+            return d
+        if d["fits"] and first_fit is None:
+            first_fit = d
+        last = d
+    best = first_fit or last
+    best["explain"] = ["GGUF models in the repo, tried in order: " + ", ".join(order)] + tried + best["explain"]
+    return best
+
+
+def plan_with_variants(host, model_dir, variants, file=None, **kw):
+    """fit() for one model directory (a GGUF repo: its best-fitting model, or the one
+    file names); when it does not fit, also for each variant directory, naming the
+    smallest variant (by bytes to serve) that does."""
     cfg, w, tok = load_model_dir(model_dir)
-    name = kw.pop("name", None) or w.get("source") or os.path.basename(model_dir.rstrip("/"))
-    doc = fit(host, cfg, w, name=name, tokenizer_cfg=tok, **kw)
+    name = kw.pop("name", None) or (w.get("source") or os.path.basename(model_dir.rstrip("/"))).split(":")[0]
+    doc = fit_groups(host, cfg, w, name, tok, file=file, **kw)
     if (doc["fits"] and not doc["degraded"]) or not variants:
         return doc
     ok = []
@@ -1373,7 +1518,7 @@ def plan_with_variants(host, model_dir, variants, **kw):
             continue
         vc, vw, vt = load_model_dir(v)
         vkw = dict(kw, engine=None)
-        d = fit(host, vc, vw, name=vw.get("source") or os.path.basename(v.rstrip("/")), tokenizer_cfg=vt, **vkw)
+        d = fit_groups(host, vc, vw, (vw.get("source") or os.path.basename(v.rstrip("/"))).split(":")[0], vt, **vkw)
         if d["fits"] and not d["degraded"]:
             ok.append((model_profile(vc, vw, vt)["serve_bytes"], d["model"], d))
     if ok:
@@ -1412,6 +1557,7 @@ def main(argv):
     pl.add_argument("--gpus", type=int)
     pl.add_argument("--kv-dtype", default="auto", choices=sorted(KV_DTYPE_BYTES))
     pl.add_argument("--device", choices=("cpu", "gpu"))
+    pl.add_argument("--file", help="the GGUF model (a file, shard or quant label) of a repo with several")
     kn = sub.add_parser("knobs")
     kn.add_argument("--fit", required=True)
     kn.add_argument("--rung", type=int, default=0)
@@ -1433,7 +1579,7 @@ def main(argv):
                 host = json.load(fh)
             ov = os.environ.get("K3D_GPU_FIT_OVERHEAD_GIB")
             doc = plan_with_variants(host, a.model, a.variants, name=a.name, engine=a.engine, ctx=a.ctx,
-                                     seqs=a.seqs, gpus=a.gpus, kv_dtype=a.kv_dtype, device=a.device,
+                                     seqs=a.seqs, gpus=a.gpus, kv_dtype=a.kv_dtype, device=a.device, file=a.file,
                                      overhead=float(ov) * GIB if ov else None)
             if a.mode != "json":
                 lines = doc["explain"] + [doc["summary"]] if a.mode == "explain" else [doc["summary"]]
