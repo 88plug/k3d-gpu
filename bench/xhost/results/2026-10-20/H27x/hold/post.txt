@@ -1,0 +1,16 @@
+2026-10-20T22:55:29Z
+ 22:55:29 up 35 days, 9 min, 11 users,  load average: 20.55, 20.70, 14.58
+%CPU     PID USER     COMMAND
+45.4 3900003 root     sglang::schedul
+43.5 3900352 root     sglang::schedul
+41.9 3899938 root     sglang::schedul
+39.6 3900351 root     sglang::schedul
+24.3 3898329 root     python
+17.6 3898661 root     python
+15.4  872705 65532    epp
+ 2.5    3911 nobody   node_exporter
+ 1.2    3934 root     python3
+ 1.0    2651 root     dockerd
+aiperf_procs: 0
+/dev/nvme0n1p1  3637102748 3401981124 235105240      94% /
+aiperf010 alloy drm-exporter dynamo-frontend grafana llmd-envoy llmd-epp loki node-exporter otel-collector prometheus qwen38-a-hr qwen38-b-hr tempo xe-exporter xpumd 
