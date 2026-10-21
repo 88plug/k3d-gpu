@@ -211,6 +211,7 @@ jobs:
           sed -i "s|^ARG K3S_TAG=.*|ARG K3S_TAG=\"${{ steps.k3s.outputs.latest }}\"|" Dockerfile
           sed -i "s|^ARG K3S_DIGEST=.*|ARG K3S_DIGEST=\"${{ steps.k3s.outputs.digest }}\"|" Dockerfile
           sed -i "s|^ARG NVIDIA_CTK_VERSION=.*|ARG NVIDIA_CTK_VERSION=\"${{ steps.nvctk.outputs.ctk }}\"|" Dockerfile
+          sed -i "s|^HS_NVCTK=.*|HS_NVCTK=${{ steps.nvctk.outputs.ctk }}|" scripts/k3d-gpu
           sed -i "s|^ARG NVIDIA_CONTAINER_RUNTIME_VERSION=.*|ARG NVIDIA_CONTAINER_RUNTIME_VERSION=\"${{ steps.nvctk.outputs.runtime }}\"|" Dockerfile
           sed -i "s|k8s-device-plugin:v[0-9]*\.[0-9]*\.[0-9]*|k8s-device-plugin:${{ steps.nvidia_plugin.outputs.latest }}|" share/nvidia-device-plugin.yml
           sed -i "s|intel-gpu-plugin:[0-9]*\.[0-9]*\.[0-9]*|intel-gpu-plugin:${{ steps.intel_plugin.outputs.latest }}|" share/intel-gpu-plugin.yml

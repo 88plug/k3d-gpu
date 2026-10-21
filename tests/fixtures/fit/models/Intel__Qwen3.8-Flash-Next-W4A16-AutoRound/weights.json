@@ -1,0 +1,106 @@
+{
+  "classes": {
+    "embed": {
+      "bytes": 1271398400,
+      "tensors": 1
+    },
+    "experts": {
+      "bytes": 62757273600,
+      "tensors": 221184
+    },
+    "lm_head": {
+      "bytes": 1271398400,
+      "tensors": 1
+    },
+    "mtp": {
+      "bytes": 5214301696,
+      "tensors": 1565
+    },
+    "ngram": {
+      "bytes": 102466171160,
+      "tensors": 137
+    },
+    "other": {
+      "bytes": 7286920960,
+      "tensors": 1059
+    },
+    "vision": {
+      "bytes": 897862112,
+      "tensors": 333
+    }
+  },
+  "files": [
+    {
+      "bytes": 2899311784,
+      "name": "model-00001-of-00017.safetensors"
+    },
+    {
+      "bytes": 5370548192,
+      "name": "model-00003-of-00017.safetensors"
+    },
+    {
+      "bytes": 5370910416,
+      "name": "model-00004-of-00017.safetensors"
+    },
+    {
+      "bytes": 5370140704,
+      "name": "model-00005-of-00017.safetensors"
+    },
+    {
+      "bytes": 5370205184,
+      "name": "model-00006-of-00017.safetensors"
+    },
+    {
+      "bytes": 5370927288,
+      "name": "model-00007-of-00017.safetensors"
+    },
+    {
+      "bytes": 5344445352,
+      "name": "model-00008-of-00017.safetensors"
+    },
+    {
+      "bytes": 5370355648,
+      "name": "model-00009-of-00017.safetensors"
+    },
+    {
+      "bytes": 5370927288,
+      "name": "model-00010-of-00017.safetensors"
+    },
+    {
+      "bytes": 5324173744,
+      "name": "model-00011-of-00017.safetensors"
+    },
+    {
+      "bytes": 5370438520,
+      "name": "model-00012-of-00017.safetensors"
+    },
+    {
+      "bytes": 5370927288,
+      "name": "model-00013-of-00017.safetensors"
+    },
+    {
+      "bytes": 5342689856,
+      "name": "model-00014-of-00017.safetensors"
+    },
+    {
+      "bytes": 5050474736,
+      "name": "model-00015-of-00017.safetensors"
+    },
+    {
+      "bytes": 102400512256,
+      "name": "model-00016-of-00017.safetensors"
+    },
+    {
+      "bytes": 1284526608,
+      "name": "model-00017-of-00017.safetensors"
+    },
+    {
+      "bytes": 5214492152,
+      "name": "model_extra_tensors.safetensors"
+    }
+  ],
+  "format": "safetensors",
+  "schema": "k3d-gpu.weights/v1",
+  "source": "Intel/Qwen3.8-Flash-Next-W4A16-AutoRound@4c67bf686b7f7fd386bae6b07ab59e8ff1d5b897",
+  "total_bytes": 181165326328
+}
