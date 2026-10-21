@@ -568,18 +568,58 @@ def ledger_rows(text):
     return out
 
 
+# CPU model numbers as ledger rows write them: "i9-13900T", "6741P", "285K".
+CPU_CLASS = re.compile(r"(?<![a-z0-9])(i[3579]-\d{4,5}[a-z]{0,2}|\d{3,5}[a-z]{1,2})(?![a-z0-9])")
+# The row families whose verdicts set agent defaults: H27 (autoquant), H34 (CPU Fast
+# Draft). console/ledger-rules.json carries them for installs without EXPERIMENTS.md.
+RULE_FAMILIES = ("H27", "H34")
+RULES_SCHEMA = "k3d-gpu.ledger-rules/v1"
+
+
+def row_classes(text):
+    """The CPU classes a ledger row names (lower case, exact tokens)."""
+    return sorted(set(m.group(1) for m in CPU_CLASS.finditer((text or "").lower())))
+
+
+def family_of(rid, family):
+    return re.match(r"^%s[a-z]*$" % re.escape(family), rid) is not None
+
+
+def ledger_rules_doc(rows):
+    """console/ledger-rules.json from EXPERIMENTS.md rows: id, verdict, CPU classes."""
+    out = [{"id": rid, "verdict": v, "classes": row_classes(text)}
+           for rid, (v, text) in sorted(rows.items()) if any(family_of(rid, f) for f in RULE_FAMILIES)]
+    return {"schema": RULES_SCHEMA, "source": "EXPERIMENTS.md, ## Hypotheses",
+            "families": list(RULE_FAMILIES), "rows": out}
+
+
+def read_ledger(path):
+    """{row id: (verdict, text)} from EXPERIMENTS.md or from a ledger-rules.json."""
+    text = read_text(path)
+    if text is None:
+        return {}
+    if text.lstrip().startswith("{"):
+        try:
+            doc = json.loads(text)
+        except ValueError:
+            return {}
+        if doc.get("schema") != RULES_SCHEMA:
+            return {}
+        return {r["id"]: (r["verdict"], " ".join(r["classes"])) for r in doc.get("rows") or []}
+    return ledger_rows(text)
+
+
 def ledger_rule(rows, family, hw_class):
     """("on" | "off" | "unknown", row id or None, verdict or None) for one hardware class.
 
     The family's rows are the row itself and its replications (H34, H34x, H34y...).
-    A row counts for the class when its text names the class (class_tokens). A
-    REFUTED row for the class turns the default off, else a SUPPORTED one turns it
-    on; PENDING and INCONCLUSIVE rows decide nothing, and a class no row names is
-    unknown."""
-    pat = re.compile(r"^%s[a-z]*$" % re.escape(family))
-    toks = [t.lower() for t in class_tokens(hw_class)]
+    A row counts for the class when it names the class's CPU model number exactly
+    (row_classes). A REFUTED row for the class turns the default off, else a
+    SUPPORTED one turns it on; PENDING and INCONCLUSIVE rows decide nothing, and a
+    class no row names is unknown."""
+    toks = {t.lower() for t in class_tokens(hw_class)}
     hits = sorted((rid, v) for rid, (v, text) in rows.items()
-                  if pat.match(rid) and toks and any(t in text.lower() for t in toks))
+                  if family_of(rid, family) and toks and toks & set(row_classes(text)))
     for want, out in (("REFUTED", "off"), ("SUPPORTED", "on")):
         for rid, v in hits:
             if v == want:
@@ -1125,6 +1165,9 @@ def main(argv):
     lr.add_argument("--family", required=True)
     lr.add_argument("--hw-class", required=True)
     lr.add_argument("--ledger")
+    lg = sub.add_parser("ledger-rules")
+    lg.add_argument("--ledger", required=True)
+    lg.add_argument("--out")
     p = sub.add_parser("optimize")
     p.add_argument("--bundle", required=True)
     p.add_argument("--engine", required=True, choices=("ovms", "vllm", "llama.cpp"))
@@ -1142,8 +1185,17 @@ def main(argv):
     p.add_argument("--format", default="json", choices=("json", "shell", "summary", "explain", "eat"))
     a = ap.parse_args(argv[1:])
     if a.cmd == "ledger-rule":
-        out, rid, verdict = ledger_rule(ledger_rows(read_text(a.ledger)), a.family, a.hw_class)
+        out, rid, verdict = ledger_rule(read_ledger(a.ledger), a.family, a.hw_class)
         sys.stdout.write("%s %s %s\n" % (out, rid or "-", verdict or "-"))
+        return 0
+    if a.cmd == "ledger-rules":
+        text = json.dumps(ledger_rules_doc(ledger_rows(read_text(a.ledger))), indent=1) + "\n"
+        if a.out:
+            with open(a.out + ".tmp", "w", encoding="utf-8") as fh:
+                fh.write(text)
+            os.replace(a.out + ".tmp", a.out)
+        else:
+            sys.stdout.write(text)
         return 0
     if a.cmd == "fetch":
         if a.fixtures or a.cache or not a.out:

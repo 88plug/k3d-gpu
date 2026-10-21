@@ -2433,6 +2433,17 @@ agent_says "... and says so" "${r_new}" 0 \
     'no EXPERIMENTS.md H34-family row measured' "" STUB_ALLOC='cpu 32' K3D_GPU_MODEL_OPT_LEDGER="${LEDGER}"
 agent_says "no default CPU draft without a ledger" "${r_i9}" 0 \
     'draft_source_model' negate STUB_ALLOC='cpu 32' K3D_GPU_MODEL_OPT_LEDGER="${WORK}/no-ledger.md"
+# A package's layout: console/ with no EXPERIMENTS.md beside it. The shipped
+# console/ledger-rules.json (generated from EXPERIMENTS.md) decides instead.
+PKG_CONSOLE="${WORK}/pkg/share/k3d-gpu/console"
+mkdir -p "${PKG_CONSOLE}"
+cp "$(dirname "${K3D_GPU}")"/../console/*.py "$(dirname "${K3D_GPU}")"/../console/*.json "${PKG_CONSOLE}/"
+agent_says "packaged install: the i9-13900T drafts by default (shipped ledger rules, H34)" "${r_i9}" 0 \
+    '--draft_device=CPU' "" STUB_ALLOC='cpu 32' K3D_GPU_CONSOLE="${PKG_CONSOLE}"
+agent_says "packaged install: no default CPU draft on the Xeon 6741P" "${r_gnr}" 0 \
+    'draft_source_model' negate STUB_ALLOC='cpu 32' K3D_GPU_CONSOLE="${PKG_CONSOLE}"
+agent_says "packaged install: no default CPU draft on an unmeasured CPU" "${r_new}" 0 \
+    'draft_source_model' negate STUB_ALLOC='cpu 32' K3D_GPU_CONSOLE="${PKG_CONSOLE}"
 agent_says "K3D_GPU_AGENT_DRAFT=off: no draft" "${r}" 0 \
     'draft' negate STUB_ALLOC='cpu 32' K3D_GPU_AGENT_DRAFT=off
 agent_says "K3D_GPU_AGENT_DRAFT=OFF: no draft (case-insensitive)" "${r}" 0 \

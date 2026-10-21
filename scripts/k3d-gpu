@@ -9880,13 +9880,18 @@ AGENT_OPT_SPEC=""    # its speculative decoding kind, when it chose one
 
 model_opt_cache() { echo "${XDG_CACHE_HOME:-${HOME}/.cache}/k3d-gpu/hf"; }
 model_opt_measurements() { echo "${XDG_CACHE_HOME:-${HOME}/.cache}/k3d-gpu/variant-measurements.json"; }
-# EXPERIMENTS.md next to the console directory (a repo checkout), for promotions;
-# K3D_GPU_MODEL_OPT_LEDGER names another file.
+# The ledger: EXPERIMENTS.md next to the console directory (a repo checkout), else
+# the console's ledger-rules.json, generated from it and shipped in every package
+# (the H27/H34 rows that set agent defaults); K3D_GPU_MODEL_OPT_LEDGER names another file.
 model_opt_ledger() {
     local d
     if [ -n "${K3D_GPU_MODEL_OPT_LEDGER:-}" ]; then echo "${K3D_GPU_MODEL_OPT_LEDGER}"; return 0; fi
     d=$(console_dir) || return 0
-    [ ! -f "$(dirname "${d}")/EXPERIMENTS.md" ] || echo "$(dirname "${d}")/EXPERIMENTS.md"
+    if [ -f "$(dirname "${d}")/EXPERIMENTS.md" ]; then
+        echo "$(dirname "${d}")/EXPERIMENTS.md"
+    elif [ -f "${d}/ledger-rules.json" ]; then
+        echo "${d}/ledger-rules.json"
+    fi
 }
 is_hf_id() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; }
 

@@ -317,6 +317,26 @@ class Ranking(unittest.TestCase):
         rows2 = mo.ledger_rows("## Hypotheses\n| H34y | on the Xeon 6960P | p | m | SUPPORTED |\n| H340 | on the Xeon 6960P | p | m | REFUTED |\n")
         self.assertEqual(mo.ledger_rule(rows2, "H34", "cpu:Intel(R) Xeon(R) 6960P"), ("on", "H34y", "SUPPORTED"))
 
+    def test_shipped_rules_decide_as_the_ledger(self):
+        with open(os.path.join(HERE, "model-opt", "ledger.md"), encoding="utf-8") as f:
+            rows = mo.ledger_rows(f.read())
+        doc = mo.ledger_rules_doc(rows)
+        self.assertEqual([r["id"] for r in doc["rows"]], ["H27", "H27x", "H34", "H34x"])
+        self.assertEqual(doc["rows"][2], {"id": "H34", "verdict": "SUPPORTED", "classes": ["i9-13900t"]})
+        shipped = {r["id"]: (r["verdict"], " ".join(r["classes"])) for r in doc["rows"]}
+        for cls in ("cpu:13th Gen Intel(R) Core(TM) i9-13900T", "cpu:Intel(R) Xeon(R) 6741P", "cpu:AMD Ryzen 9 9950X", "cpu:"):
+            for fam in ("H27", "H34"):
+                self.assertEqual(mo.ledger_rule(shipped, fam, cls), mo.ledger_rule(rows, fam, cls), (cls, fam))
+        # Exact classes: a model number inside another one is not a match.
+        self.assertEqual(mo.row_classes("on the Xeon 16741P and i9-13900TE"), ["16741p", "i9-13900te"])
+        self.assertEqual(mo.ledger_rule({"H34": ("SUPPORTED", "16741p")}, "H34", "cpu:Intel(R) Xeon(R) 6741P")[0], "unknown")
+
+    def test_shipped_rules_match_the_repo_ledger(self):
+        with open(os.path.join(REPO, "EXPERIMENTS.md"), encoding="utf-8") as f:
+            want = mo.ledger_rules_doc(mo.ledger_rows(f.read()))
+        with open(os.path.join(REPO, "console", "ledger-rules.json"), encoding="utf-8") as f:
+            self.assertEqual(json.load(f), want, "regenerate: python3 console/model_opt.py ledger-rules --ledger EXPERIMENTS.md --out console/ledger-rules.json")
+
     def test_measurement_promotes_only_faster_at_equal_or_better_quality(self):
         base = {"model": GEMMA, "variant": "qat-convert", "baseline": "OpenVINO/gemma-4-26b-a4b-it-int4-ov", "hw_class": "gpu:Battlemage"}
         for speedup, quality, promoted in ((1.2, "equal", True), (1.2, "better", True), (1.2, "worse", False), (0.9, "better", False)):
