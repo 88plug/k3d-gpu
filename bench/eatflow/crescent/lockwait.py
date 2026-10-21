@@ -11,8 +11,12 @@ slots cannot remove it, as x holds stay exclusive.
 
 Prints JSON. share = sum(lock wait - wait behind x) / sum(hold time); share_all counts every
 second of lock wait. Both over every hold and over the last N (default 20); by_row splits
-them by the name's first field. stage1 is share >= 0.10; adoption_share_met is share_last
->= 0.25."""
+them by the name's first field. adoption_share_met is share_last >= 0.25.
+
+Stage 0 as pre-registered: stage1 is share >= 0.10 (kept as original.stage1).
+Amendment S0 (2026-10-21, before any stage-1 hold): --pool LOG... pools the holds of every
+campaign log on the host (H56-* excepted), nothing netted out: amended_s0.share = sum(lock
+wait) / sum(hold time) over them, and stage1 is amended_s0.share >= 0.10."""
 import argparse
 import json
 import os
@@ -55,7 +59,7 @@ def parse(lines, skip=None):
         name, msg, t = m.group(1), m.group(2), _ts(m.group(3))
         if skip and skip.match(name):
             continue
-        if msg == "waiting for the lock":
+        if msg.startswith("waiting for the lock"):
             if name in open_:
                 close(open_[name], "unterminated")
             open_[name] = {"name": name, "t_wait": t, "t_taken": None, "t_end": None, "rc": None, "t_last": t}
@@ -91,7 +95,21 @@ def _sums(hs):
             "share_all": round(wait / hold, 4) if hold > 0 else None}
 
 
-def analyse(log, runs, last=20, xlog=None):
+def pooled(logs):
+    """Amendment S0: lock wait over hold time across every campaign log, nothing netted out."""
+    by_log, wait, hold, n = {}, 0, 0, 0
+    for path in logs:
+        with open(path) as f:
+            hs = [h for h in parse(f, skip=re.compile(r"^H56-"))]
+        w = sum(int((h["t_taken"] if h["t_taken"] is not None else h["t_end"]) - h["t_wait"]) for h in hs)
+        d = sum(int(h["t_end"] - h["t_taken"]) for h in hs if h["t_taken"] is not None)
+        by_log[path] = {"holds": len(hs), "sum_lock_wait_s": w, "sum_hold_s": d}
+        wait, hold, n = wait + w, hold + d, n + len(hs)
+    return {"logs": list(logs), "holds": n, "sum_lock_wait_s": wait, "sum_hold_s": hold,
+            "share": round(wait / hold, 4) if hold > 0 else None, "by_log": by_log}
+
+
+def analyse(log, runs, last=20, xlog=None, pool=None):
     with open(log) as f:
         raw = parse(f, skip=re.compile(r"^H56-"))
     xspans, xfound = [], False
@@ -113,7 +131,7 @@ def analyse(log, runs, last=20, xlog=None):
     rows = {}
     for h in holds:
         rows.setdefault(h["name"].split("-")[0], []).append(h)
-    return {"holds": holds, "xlog": xlog, "xlog_found": xfound,
+    out = {"holds": holds, "xlog": xlog, "xlog_found": xfound,
             "unterminated": sum(1 for h in holds if h["ended"] == "unterminated"),
             "sum_lock_wait_s": a["sum_lock_wait_s"],
             "sum_wait_behind_x_s": sum(h["wait_behind_x_s"] for h in holds),
@@ -123,6 +141,12 @@ def analyse(log, runs, last=20, xlog=None):
             "by_row": {k: _sums(v) for k, v in sorted(rows.items())},
             "stage1": a["share"] is not None and a["share"] >= STAGE1_SHARE,
             "adoption_share_met": t["share"] is not None and t["share"] >= ADOPT_SHARE}
+    out["original"] = {"share": a["share"], "share_all": a["share_all"], "stage1": out["stage1"]}
+    if pool:
+        out["amended_s0"] = pooled(pool)
+        s0 = out["amended_s0"]["share"]
+        out["stage1"] = s0 is not None and s0 >= STAGE1_SHARE
+    return out
 
 
 def main(argv=None):
@@ -131,8 +155,10 @@ def main(argv=None):
     ap.add_argument("--xlog", required=True, help="the k3dgpu-x-* campaign's campaign.log (absent: no x holds)")
     ap.add_argument("--runs", default=None, help="hold record dirs (default: the log's directory)")
     ap.add_argument("--last", type=int, default=20)
+    ap.add_argument("--pool", nargs="+", default=None, metavar="LOG",
+                    help="amendment S0: every campaign log on the host; stage1 then follows the pooled share")
     o = ap.parse_args(argv)
-    print(json.dumps(analyse(o.log, o.runs or os.path.dirname(os.path.abspath(o.log)), o.last, o.xlog), indent=1))
+    print(json.dumps(analyse(o.log, o.runs or os.path.dirname(os.path.abspath(o.log)), o.last, o.xlog, o.pool), indent=1))
     return 0
 
 

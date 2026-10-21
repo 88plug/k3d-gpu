@@ -10,9 +10,11 @@ t0=$(date +%s)
 # Amendment C1's eviction thresholds; the hybrid vendor only (NRI balloons; no GPU device plugin,
 # no card is used); the node image k3d-gpu 0.1.63 pinned to its digest. The k3d shim in ${G}/bin
 # adds the campaign's model directory at /var/apb-models in the node.
-K3D_GPU_VENDORS=hybrid \
-    K3D_GPU_IMAGE=cryptoandcoffee/k3d-gpu:0.1.63@sha256:b6fc46f60a47948eb1c4e6c5e80059c7f581427429c35a2627c58fc2307e4b76 \
-    K3D_GPU_K3S_ARGS="--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1%" \
+# H57D_VENDORS, H57D_IMAGE and H57D_K3S_ARGS replace those three on another host (wildct: the GPU
+# opt-out, the release image, absolute eviction thresholds; EXPERIMENTS.md "Wildct pre-registration").
+K3D_GPU_VENDORS=${H57D_VENDORS:-hybrid} \
+    K3D_GPU_IMAGE=${H57D_IMAGE:-cryptoandcoffee/k3d-gpu:0.1.63@sha256:b6fc46f60a47948eb1c4e6c5e80059c7f581427429c35a2627c58fc2307e4b76} \
+    K3D_GPU_K3S_ARGS=${H57D_K3S_ARGS:-"--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1%"} \
     K3D_GPU_CLUSTER=${CLUSTER:?} timeout 300 "${REPO:?}/scripts/k3d-gpu" up > "${R}/up.log" 2>&1 \
     || { echo "up failed"; tail -20 "${R}/up.log"; exit 1; }
 kubectl get node -o json > "${R}/node.json"

@@ -1,0 +1,38 @@
+{
+ "schema": "k3d-gpu.ledger-rules/v1",
+ "source": "EXPERIMENTS.md, ## Hypotheses",
+ "families": [
+  "H27",
+  "H34"
+ ],
+ "rows": [
+  {
+   "id": "H27",
+   "verdict": "REFUTED",
+   "classes": [
+    "i9-13900t"
+   ]
+  },
+  {
+   "id": "H27x",
+   "verdict": "REFUTED",
+   "classes": [
+    "6741p"
+   ]
+  },
+  {
+   "id": "H34",
+   "verdict": "SUPPORTED",
+   "classes": [
+    "i9-13900t"
+   ]
+  },
+  {
+   "id": "H34x",
+   "verdict": "REFUTED",
+   "classes": [
+    "6741p"
+   ]
+  }
+ ]
+}

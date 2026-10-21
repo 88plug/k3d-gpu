@@ -166,6 +166,47 @@ class LockwaitTest(unittest.TestCase):
         self.assertEqual(r["share"], 0.25)
         self.assertTrue(r["xlog_found"])
 
+    def test_amended_pool_counts_every_campaign_log(self):
+        # Amendment S0: the pooled share is lock wait over hold time across every campaign
+        # log, nothing netted out; stage1 follows it, the original statistic is kept beside it.
+        import lockwait
+        tmp = tempfile.mkdtemp()
+        try:
+            logs = [os.path.join(tmp, n) for n in ("bench.log", "x.log", "gemma.log")]
+            texts = ["== H50-hold1 waiting for the lock 2026-10-18T10:00:00Z\n"
+                     "== H50-hold1 lock taken 2026-10-18T10:40:00Z\n"
+                     "== H50-hold1 rc=0; x 2026-10-18T11:20:00Z\n",
+                     "== H27x waiting for the lock 2026-10-18T09:50:00Z\n"
+                     "== H27x lock taken 2026-10-18T10:00:00Z\n"
+                     "== H27x rc=0; x 2026-10-18T10:38:00Z\n",
+                     "== H54smoke1-hold1 waiting for the lock (arms: B1g Lg) 2026-10-18T11:00:00Z\n"
+                     "== H54smoke1-hold1 lock taken 2026-10-18T11:20:00Z\n"
+                     "== H54smoke1-hold1 rc=0; x 2026-10-18T11:50:00Z\n"
+                     "== H56-hold1 waiting for the lock 2026-10-18T12:00:00Z\n"
+                     "== H56-hold1 lock taken 2026-10-18T13:00:00Z\n"
+                     "== H56-hold1 rc=0 2026-10-18T13:10:00Z\n"]
+            for path, text in zip(logs, texts):
+                with open(path, "w") as f:
+                    f.write(text)
+            r = lockwait.analyse(logs[0], tmp, xlog=logs[1], pool=logs)
+        finally:
+            shutil.rmtree(tmp)
+        # original: 2400 s wait, 2280 s of it behind x, over 2400 s held: 0.05, below the bar.
+        # pooled: waits 2400 + 600 + 1200 s, holds 2400 + 2280 + 1800 s; H56-* not counted.
+        self.assertEqual(r["original"]["share"], 0.05)
+        self.assertFalse(r["original"]["stage1"])
+        a = r["amended_s0"]
+        self.assertEqual((a["holds"], a["sum_lock_wait_s"], a["sum_hold_s"]), (3, 4200, 6480))
+        self.assertEqual(a["share"], 0.6481)
+        self.assertTrue(r["stage1"])
+
+    def test_without_pool_stage1_is_the_original(self):
+        r = self.run_log("== H50-hold1 waiting for the lock 2026-10-18T10:00:00Z\n"
+                         "== H50-hold1 lock taken 2026-10-18T10:00:05Z\n"
+                         "== H50-hold1 rc=0; x 2026-10-18T11:00:00Z\n")
+        self.assertFalse(r["stage1"])
+        self.assertNotIn("amended_s0", r)
+
 
 def rows(times, passed=True, t0=1000.0, gap=1.0):
     out, t = [], t0

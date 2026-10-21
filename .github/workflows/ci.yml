@@ -140,6 +140,8 @@ jobs:
         run: tests/audit_test.sh
       - name: MCP equals the CLI --json; MCP writes need a confirmed plan hash
         run: tests/console_mcp_test.sh
+      - name: Model optimizer (plan --model, agent manifest --model), from saved HF metadata
+        run: tests/model_opt_test.sh
 
   # images.lock must list every image share/, the Dockerfile, the launcher and the
   # EAT integration reference, at the digests they pin (offline; `scripts/images-lock update`

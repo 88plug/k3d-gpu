@@ -54,7 +54,7 @@ snapshot() {    # snapshot TAG
             [ -f "${a}" ] && [ -r "${a}" ] || continue
             printf '%s/%s=%s\n' "${o##*/}" "${a##*/}" "$(tr '\n' ' ' < "${a}" 2>/dev/null || echo '<unreadable>')"
         done
-        [ -L "${o}/driver" ] && printf '%s/driver->%s\n' "${o##*/}" "$(basename "$(readlink "${o}/driver")")"
+        if [ -L "${o}/driver" ]; then printf '%s/driver->%s\n' "${o##*/}" "$(basename "$(readlink "${o}/driver")")"; fi
     done | LC_ALL=C sort > "${OUT}/$1-sysfs.txt"
     awk '/^name/ {p = 0} /^driver *: deflate-iaa/ {p = 1} p' /proc/crypto > "${OUT}/$1-crypto.txt"
     lsmod | awk '$1 == "iaa_crypto" || $1 == "idxd"' > "${OUT}/$1-lsmod.txt"

@@ -57,7 +57,11 @@ while :; do
     [ "${rc}" -eq 0 ] || [ "${rc}" -gt 128 ] || exit 0
 done'
 ELEVATE=()
-if [ ! -r "${ZDIR}/energy_uj" ]; then
+if [ ! -r "${ZDIR}/energy_uj" ] && [ -n "${K3D_GPU_RAPL_EXEC:-}" ]; then
+    # The prefix load.py also reads (e.g. `docker exec <privileged container>`, on a host where
+    # no password is kept); the reader needs bash there and its stdin, so docker exec gets -i.
+    read -r -a ELEVATE <<< "${K3D_GPU_RAPL_EXEC/#docker exec /docker exec -i }"
+elif [ ! -r "${ZDIR}/energy_uj" ]; then
     ELEVATE=(sudo)
     if [ -n "${SUDO_ASKPASS:-}" ]; then ELEVATE+=(-A); fi
 fi
