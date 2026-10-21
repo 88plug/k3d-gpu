@@ -75,6 +75,7 @@ ASTUB="${WORK}/bin"
 mkdir -p "${ASTUB}"
 cat > "${ASTUB}/kubectl" <<'EOF'
 #!/bin/sh
+while [ "${1:-}" = --context ]; do shift 2; done
 case "$*" in
     *allocatable*) printf '%s\n' "${STUB_ALLOC:-}" ;;
     "get pods -A "*) printf '%s\n' "${STUB_USED:-}" ;;
