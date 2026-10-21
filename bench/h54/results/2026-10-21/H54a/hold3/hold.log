@@ -1,0 +1,13 @@
+2026-10-21T09:40:00Z A1g start (2338 s of the hold left)
+2026-10-21T09:40:35Z A1g ready after 34 s
+2026-10-21T09:48:25Z A1g quality
+2026-10-21T09:55:55Z A1g status measured: phases and quality recorded
+2026-10-21T09:56:12Z A1o start (1366 s of the hold left)
+2026-10-21T09:56:48Z A1o ready after 34 s
+2026-10-21T10:05:08Z A1o quality
+2026-10-21T10:11:04Z A1o status measured: phases and quality recorded
+2026-10-21T10:11:21Z Vq status not_reached: 457 s of the hold left (< 900)
+2026-10-21T10:11:21Z Vq-mtp status not_reached: 457 s of the hold left (< 900)
+2026-10-21T10:11:21Z Vi status not_reached: 457 s of the hold left (< 900)
+2026-10-21T10:11:22Z Sg status not_reached: 456 s of the hold left (< 900)
+2026-10-21T10:11:22Z B3g status not_reached: 456 s of the hold left (< 900)
