@@ -1,0 +1,27 @@
+Fixtures for console/moe_predict.py (`k3d-gpu plan --predict --model`), read 2026-10-20.
+
+gemma-4-26B-A4B-it-qat-q4_0-unquantized@f1e06dc5.config.json
+  https://huggingface.co/google/gemma-4-26B-A4B-it-qat-q4_0-unquantized/resolve/f1e06dc520982d9b9edd76859fdb7ab209449949/config.json
+  The expected counts in tests/console/test_moe_predict.py are the sums of the
+  tensor shapes in the two safetensors headers of that revision (8-byte length
+  plus JSON header, read with HTTP Range requests): text embed 738197504,
+  experts 22837985280, rest 1656959006 (total 25233141790); vision 572794416.
+
+Qwen3.8-27B@1d4bf0f2.config.json
+  https://huggingface.co/Qwen/Qwen3.8-27B/resolve/1d4bf0f2/config.json
+  Dense control, counted the same way: embed 1271398400, lm_head 1271398400,
+  rest 24353201664; MTP head 424699392 and vision 460730096 not counted.
+
+xeon6741p-4xb70/
+  A sysroot read on a bare-metal Intel Xeon 6741P (1 socket, 48 cores) with 8x
+  64 GB DDR5-6400 RDIMMs and four Intel Arc Pro B70 (PCI 0x8086:0xe223, xe):
+    proc/cpuinfo       the first processor block of /proc/cpuinfo
+    proc/meminfo       the first three lines of /proc/meminfo
+    sys/bus/pci/devices/<bdf>/{vendor,device,class,resource}
+                       of the four GPUs (resource: the first three BAR lines;
+                       BAR2 spans 32 GiB, the whole VRAM with Resizable BAR)
+    sys/firmware/dmi/entries/17-*/raw
+                       the 16 SMBIOS type 17 records (read as root; 8 populated)
+    sys/devices/system/cpu/cpu0/cache/index3/{size,shared_cpu_list}
+  GPU bandwidth: https://www.intel.com/content/www/us/en/products/sku/245797/intel-arc-pro-b70-graphics/specifications.html
+  (608 GB/s, 256-bit GDDR6, 32 GB, device id 0xE223).
