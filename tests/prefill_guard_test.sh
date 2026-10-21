@@ -80,7 +80,9 @@ check "cpuClasses defines prefill-guard with the cap placeholder" \
 # cpufreq writer sets min/max/governor but never EPP: neither may appear.
 check "guard policy uses no symbolic frequency" bash -c '! grep -Eq "Freq: (turbo|base|min)$" <<< "$1"' _ "${gp}"
 check "guard policy sets no EPP (not written by nri-plugins v0.14.0)" bash -c '! grep -q energyPerformancePreference <<< "$1"' _ "${gp}"
-check "guard header names the chart version" grep -q 'nri-resource-policy-balloons v0.14.0' "${GUARD_YML}"
+# The version pinned in the component's conf (the nightly bump moves it).
+GUARD_CHART=$(sed -n 's/^CHART_VERSION=//p' "${REPO}/hack/components/nri-balloons-guard/component.conf")
+check "guard header names the pinned chart version (${GUARD_CHART})" grep -q "nri-resource-policy-balloons ${GUARD_CHART}" "${GUARD_YML}"
 
 # ---- stubs ---------------------------------------------------------------------
 
