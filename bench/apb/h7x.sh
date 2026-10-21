@@ -15,7 +15,8 @@
 #   H7X_CPUS       CPUs each engine is sized to (default 16, H7's P-core balloon)
 #   H7X_NODE_CPUS  cpuset for the node container after `up` (default none)
 #   H7X_ORDER      block order (default "A B B A A B B A A B C")
-#   H7X_VLLM_MEM   memory limit for B and C (default: the overlay's 16Gi)
+#   H7X_VLLM_MEM   memory limit for B and C (default: the overlay's 16Gi; `fit`: k3d-gpu fit's
+#                  weights + runtime for this checkpoint, plus the row's 6 GiB KV, x 1.1, rounded up)
 #   K3D_GPU_CLUSTER  cluster name (default apb-h7x); K3D_GPU_* pass through to `up`
 set -uo pipefail
 
@@ -28,7 +29,7 @@ CPUS=${H7X_CPUS:-16}
 NODE_CPUS=${H7X_NODE_CPUS:-}
 ORDER=${H7X_ORDER:-"A B B A A B B A A B C"}
 READY_S=${H7X_READY_S:-900}   # per engine start (the first vLLM start pulls its image)
-VLLM_MEM=${H7X_VLLM_MEM:-}    # B/C memory limit; empty keeps integrations/eat/vllm-values.yaml (16Gi)
+VLLM_MEM=${H7X_VLLM_MEM:-}    # B/C memory limit: empty keeps integrations/eat/vllm-values.yaml (16Gi); fit = from `k3d-gpu fit`
 export K3D_GPU_CLUSTER=${K3D_GPU_CLUSTER:-apb-h7x}
 if [ "${H7X_PRINT_CONFIG:-0}" = 1 ]; then echo "cluster=${K3D_GPU_CLUSTER} cpus=${CPUS} node_cpus=${NODE_CPUS} order=${ORDER} vllm_mem=${VLLM_MEM}"; exit 0; fi
 M=${APB_MODELS:?set APB_MODELS to the dir of local model copies}
@@ -59,6 +60,18 @@ stamp render
 K3D_GPU_AGENT_DEVICE=CPU K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3-4B-fp16-ov K3D_GPU_AGENT_CPUS=${CPUS} K3D_GPU_AGENT_DRAFT=off \
     "${K}" agent manifest > "${OUT}/agent.yaml" 2> "${OUT}/agent.err" || { cat "${OUT}/agent.err"; exit 1; }
 python3 "${HERE}/stage.py" ovms "${OUT}/agent.yaml" "${OUT}/ovms.yaml"
+if [ "${VLLM_MEM}" = fit ]; then
+    # The fit sizes KV to the host; the row keeps H7's 6 GiB, so the limit is the fit's host bytes
+    # without its KV, plus 6 GiB, times the fit's 1.1 slack.
+    "${K}" fit --model Qwen/Qwen3-4B --revision 1cfa9a7208912126459214e8b04321603b3df60c --engine vllm \
+        --device cpu --ctx 32768 --json > "${OUT}/fit.json" || { echo "k3d-gpu fit failed"; exit 1; }
+    VLLM_MEM=$(python3 -c 'import json, math, sys
+d = json.load(open(sys.argv[1]))
+assert d["fits"] and d["placement"] == "cpu", d["summary"]
+print("%dGi" % math.ceil((d["host_bytes"] - d["kv_bytes"] + 6 * 2**30) * 1.1 / 2**30))' "${OUT}/fit.json") \
+        || { echo "fit.json unusable"; exit 1; }
+    echo "vLLM memory limit ${VLLM_MEM} from k3d-gpu fit" | tee "${OUT}/vllm-mem.txt"
+fi
 python3 "${HERE}/stage.py" values "${CHART}/xeon-values.yaml" "${REPO}/integrations/eat/vllm-values.yaml" 6 "${OUT}/values.yaml"
 helm template vllm-qwen-3-4b-cpu "${CHART}" --values "${OUT}/values.yaml" --set LLM_MODEL_ID=Qwen/Qwen3-4B --set cpu="${CPUS}" ${VLLM_MEM:+--set memory="${VLLM_MEM}"} \
     --set global.monitoring=false --set svcmonitor.enabled=false --set ingress.enabled=false --set route.enabled=false > "${OUT}/eat.yaml"
