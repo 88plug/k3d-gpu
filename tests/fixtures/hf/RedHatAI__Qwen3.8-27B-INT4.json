@@ -1,0 +1,2229 @@
+{
+ "repos": {
+  "Intel/Qwen3.8-27B-bpw2.8-AutoRound": {
+   "card": {
+    "base_model": [
+     "Qwen/Qwen3.8-27B"
+    ]
+   },
+   "card_lines": [
+    {
+     "line": 28,
+     "text": "vllm serve Intel/Qwen3.8-27B-bpw2.8-AutoRound"
+    }
+   ],
+   "chat_template_sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+   "config": {
+    "architectures": [
+     "Qwen3_5ForConditionalGeneration"
+    ],
+    "dtype": "bfloat16",
+    "image_token_id": 248056,
+    "language_model_only": false,
+    "model_type": "qwen3_5",
+    "quantization_config": {
+     "autoround_version": "0.15.0",
+     "bits": 2,
+     "block_name_to_quantize": [
+      "model.language_model.layers",
+      "mtp.layers"
+     ],
+     "data_type": "int",
+     "group_size": 64,
+     "iters": 1000,
+     "lr": 0.002,
+     "minmax_lr": 0.002,
+     "packing_format": "auto_round:auto_gptq",
+     "quant_method": "auto-round",
+     "static_attention_granularity": "tensor",
+     "static_kv_granularity": "tensor",
+     "sym": true
+    },
+    "text_config": {
+     "attention_bias": false,
+     "attention_dropout": 0.0,
+     "attn_output_gate": true,
+     "bos_token_id": 248044,
+     "dtype": "bfloat16",
+     "eos_token_id": 248044,
+     "full_attention_interval": 4,
+     "head_dim": 256,
+     "hidden_act": "silu",
+     "hidden_size": 5120,
+     "initializer_range": 0.02,
+     "intermediate_size": 17408,
+     "linear_conv_kernel_dim": 4,
+     "linear_key_head_dim": 128,
+     "linear_num_key_heads": 16,
+     "linear_num_value_heads": 48,
+     "linear_value_head_dim": 128,
+     "mamba_ssm_dtype": "float32",
+     "max_position_embeddings": 262144,
+     "model_type": "qwen3_5_text",
+     "mtp_num_hidden_layers": 1,
+     "mtp_use_dedicated_embeddings": false,
+     "num_attention_heads": 24,
+     "num_hidden_layers": 64,
+     "num_key_value_heads": 4,
+     "output_gate_type": "swish",
+     "pad_token_id": null,
+     "partial_rotary_factor": 0.25,
+     "rms_norm_eps": 1e-06,
+     "rope_parameters": {
+      "mrope_interleaved": true,
+      "mrope_section": [
+       11,
+       11,
+       10
+      ],
+      "partial_rotary_factor": 0.25,
+      "rope_theta": 10000000,
+      "rope_type": "default"
+     },
+     "tie_word_embeddings": false,
+     "use_cache": true,
+     "vocab_size": 248320
+    },
+    "tie_word_embeddings": false,
+    "transformers_version": "5.14.1",
+    "video_token_id": 248057,
+    "vision_config": {
+     "deepstack_visual_indexes": [],
+     "depth": 27,
+     "dtype": "bfloat16",
+     "hidden_act": "gelu_pytorch_tanh",
+     "hidden_size": 1152,
+     "in_channels": 3,
+     "initializer_range": 0.02,
+     "intermediate_size": 4304,
+     "model_type": "qwen3_5_vision",
+     "num_heads": 16,
+     "num_position_embeddings": 2304,
+     "out_hidden_size": 5120,
+     "patch_size": 16,
+     "spatial_merge_size": 2,
+     "temporal_patch_size": 2
+    },
+    "vision_end_token_id": 248054,
+    "vision_start_token_id": 248053
+   },
+   "files": [
+    "README.md",
+    "chat_template.jinja",
+    "config.json",
+    "generation_config.json",
+    "model-00001-of-00005.safetensors",
+    "model.safetensors.index.json",
+    "preprocessor_config.json",
+    "processor_config.json",
+    "quantization_config.json",
+    "tokenizer.json",
+    "tokenizer_config.json"
+   ],
+   "generation_config": {
+    "bos_token_id": 248044,
+    "do_sample": true,
+    "eos_token_id": [
+     248046,
+     248044
+    ],
+    "pad_token_id": 248044,
+    "temperature": 1.0,
+    "top_k": 20,
+    "top_p": 0.95,
+    "transformers_version": "5.14.1"
+   },
+   "id": "Intel/Qwen3.8-27B-bpw2.8-AutoRound",
+   "library_name": null,
+   "params_total": 5283237360,
+   "pipeline_tag": null,
+   "sha": "9d2a47f9e63abe90a4bdbde592b79bcc7475f6f2",
+   "tags": [
+    "2-bit",
+    "arxiv:2512.04746",
+    "auto-round",
+    "base_model:Qwen/Qwen3.8-27B",
+    "base_model:quantized:Qwen/Qwen3.8-27B",
+    "qwen3_5",
+    "region:us",
+    "safetensors"
+   ],
+   "tokenizer_max_length": 262144,
+   "url": "https://huggingface.co/Intel/Qwen3.8-27B-bpw2.8-AutoRound/tree/9d2a47f9e63abe90a4bdbde592b79bcc7475f6f2"
+  },
+  "Intel/Qwen3.8-27B-q2ks-AutoRound": {
+   "card": {
+    "base_model": [
+     "Qwen/Qwen3.8-27B"
+    ],
+    "pipeline_tag": "image-text-to-text"
+   },
+   "card_lines": [],
+   "chat_template_sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+   "files": [
+    "Qwen3.8-27B-Q2_K_S.gguf",
+    "README.md",
+    "mmproj-model.gguf"
+   ],
+   "gguf_file": "Qwen3.8-27B-Q2_K_S.gguf",
+   "gguf_mtp_key": "qwen35.nextn_predict_layers",
+   "id": "Intel/Qwen3.8-27B-q2ks-AutoRound",
+   "library_name": null,
+   "params_total": null,
+   "pipeline_tag": "image-text-to-text",
+   "sha": "567c89d1186a05969515dc0c5d30da87929e6398",
+   "tags": [
+    "arxiv:2512.04746",
+    "base_model:Qwen/Qwen3.8-27B",
+    "base_model:quantized:Qwen/Qwen3.8-27B",
+    "conversational",
+    "endpoints_compatible",
+    "gguf",
+    "image-text-to-text",
+    "region:us"
+   ],
+   "url": "https://huggingface.co/Intel/Qwen3.8-27B-q2ks-AutoRound/tree/567c89d1186a05969515dc0c5d30da87929e6398"
+  },
+  "Intel/Qwen3.8-27B-q4km-AutoRound": {
+   "card": {
+    "base_model": [
+     "Qwen/Qwen3.8-27B"
+    ],
+    "pipeline_tag": "image-text-to-text"
+   },
+   "card_lines": [],
+   "chat_template_sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+   "files": [
+    "Qwen3.8-27B-Q4_K_M.gguf",
+    "README.md",
+    "mmproj-model.gguf"
+   ],
+   "gguf_file": "Qwen3.8-27B-Q4_K_M.gguf",
+   "gguf_mtp_key": "qwen35.nextn_predict_layers",
+   "id": "Intel/Qwen3.8-27B-q4km-AutoRound",
+   "library_name": null,
+   "params_total": null,
+   "pipeline_tag": "image-text-to-text",
+   "sha": "4b30b30e0ac2cc54a2f50738cfccd6c608f94ad4",
+   "tags": [
+    "arxiv:2512.04746",
+    "base_model:Qwen/Qwen3.8-27B",
+    "base_model:quantized:Qwen/Qwen3.8-27B",
+    "conversational",
+    "endpoints_compatible",
+    "gguf",
+    "image-text-to-text",
+    "region:us"
+   ],
+   "url": "https://huggingface.co/Intel/Qwen3.8-27B-q4km-AutoRound/tree/4b30b30e0ac2cc54a2f50738cfccd6c608f94ad4"
+  },
+  "Intel/qwen3.8-27B-int4-ov": {
+   "card": {
+    "library_name": "openvino",
+    "license": "mit",
+    "pipeline_tag": "image-text-to-text"
+   },
+   "card_lines": [],
+   "config": {
+    "base_model": "Qwen3.8-27B (Alibaba)",
+    "category": "Vision-Language Understanding (Image / Video Description)",
+    "description": "Vision-language understanding use case using the pre-quantized OpenVINO/Qwen3.8-27B-int4-ov IR run locally via OpenVINO GenAI, prompted to describe or answer questions about image and video content",
+    "detected_classes": "Free-form text description of image or video content (via natural-language prompt)",
+    "hardware": [
+     "CPU",
+     "GPU"
+    ],
+    "hf_repo_id": "Intel/qwen3.8-27B-int4-ov",
+    "inference_engine": "OpenVINO GenAI",
+    "library_name": "openvino",
+    "model_type": "qwen3.8-27B-int4-ov",
+    "pipeline_tag": "image-text-to-text",
+    "source_framework": "PyTorch (Transformers)",
+    "supported_precisions": [
+     "INT4"
+    ]
+   },
+   "files": [
+    "README.md",
+    "config.json"
+   ],
+   "id": "Intel/qwen3.8-27B-int4-ov",
+   "library_name": "openvino",
+   "params_total": null,
+   "pipeline_tag": "image-text-to-text",
+   "sha": "53292eeedaca5689e03980f847e4494300d00557",
+   "tags": [
+    "dlstreamer",
+    "edge-ai",
+    "en",
+    "image-description",
+    "image-text-to-text",
+    "intel",
+    "license:mit",
+    "metro",
+    "openvino",
+    "openvino-genai",
+    "qwen3",
+    "qwen3.8-27B-int4-ov",
+    "region:us",
+    "video-description",
+    "vision-language-model",
+    "vlm"
+   ],
+   "url": "https://huggingface.co/Intel/qwen3.8-27B-int4-ov/tree/53292eeedaca5689e03980f847e4494300d00557"
+  },
+  "OpenVINO/Qwen3.8-27B-int4-ov": {
+   "card": {
+    "base_model": [
+     "Qwen/Qwen3.8-27B"
+    ],
+    "base_model_relation": "quantized",
+    "library_name": "openvino",
+    "license": "apache-2.0",
+    "pipeline_tag": "image-text-to-text"
+   },
+   "card_lines": [
+    {
+     "line": 19,
+     "text": "The model includes `openvino_mtp_model.xml` for built-in Multi-Token Prediction (MTP) speculative decoding."
+    },
+    {
+     "line": 27,
+     "text": "- `mode`: **INT4_ASYM**"
+    },
+    {
+     "line": 28,
+     "text": "- `group_size`: **128**"
+    },
+    {
+     "line": 106,
+     "text": "Run model inference with MTP:"
+    },
+    {
+     "line": 118,
+     "text": "draft = ov_genai.draft_model(model_path, device)"
+    },
+    {
+     "line": 122,
+     "text": "draft_model=draft,"
+    },
+    {
+     "line": 139,
+     "text": "OpenVINO GenAI currently supports this MTP path with greedy decoding and prefix caching disabled, as demonstrated in the [Qwen3.8 MTP notebook](https://openvinotoolkit.github.io/openvino_notebooks/?search=qwen3.8-mtp)."
+    },
+    {
+     "line": 149,
+     "text": "For MTP deployment, see the [OVMS speculative decoding instructions](https://github.com/openvinotoolkit/model_server/tree/main/demos/continuous_batching/speculative_decoding)."
+    }
+   ],
+   "chat_template_sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+   "config": {
+    "architectures": [
+     "Qwen3_5ForConditionalGeneration"
+    ],
+    "dtype": "bfloat16",
+    "image_token_id": 248056,
+    "language_model_only": false,
+    "model_type": "qwen3_5",
+    "text_config": {
+     "attention_bias": false,
+     "attention_dropout": 0.0,
+     "attn_output_gate": true,
+     "bos_token_id": 248044,
+     "dtype": "bfloat16",
+     "eos_token_id": 248044,
+     "full_attention_interval": 4,
+     "head_dim": 256,
+     "hidden_act": "silu",
+     "hidden_size": 5120,
+     "initializer_range": 0.02,
+     "intermediate_size": 17408,
+     "linear_conv_kernel_dim": 4,
+     "linear_key_head_dim": 128,
+     "linear_num_key_heads": 16,
+     "linear_num_value_heads": 48,
+     "linear_value_head_dim": 128,
+     "mamba_ssm_dtype": "float32",
+     "max_position_embeddings": 262144,
+     "model_type": "qwen3_5_text",
+     "mtp_num_hidden_layers": 1,
+     "mtp_use_dedicated_embeddings": false,
+     "num_attention_heads": 24,
+     "num_hidden_layers": 64,
+     "num_key_value_heads": 4,
+     "output_gate_type": "swish",
+     "pad_token_id": null,
+     "partial_rotary_factor": 0.25,
+     "rms_norm_eps": 1e-06,
+     "rope_parameters": {
+      "mrope_interleaved": true,
+      "mrope_section": [
+       11,
+       11,
+       10
+      ],
+      "partial_rotary_factor": 0.25,
+      "rope_theta": 10000000,
+      "rope_type": "default"
+     },
+     "tie_word_embeddings": false,
+     "use_cache": true,
+     "vocab_size": 248320
+    },
+    "tie_word_embeddings": false,
+    "transformers_version": "5.2.0",
+    "video_token_id": 248057,
+    "vision_config": {
+     "deepstack_visual_indexes": [],
+     "depth": 27,
+     "dtype": "bfloat16",
+     "hidden_act": "gelu_pytorch_tanh",
+     "hidden_size": 1152,
+     "in_channels": 3,
+     "initializer_range": 0.02,
+     "intermediate_size": 4304,
+     "model_type": "qwen3_5",
+     "num_heads": 16,
+     "num_position_embeddings": 2304,
+     "out_hidden_size": 5120,
+     "patch_size": 16,
+     "spatial_merge_size": 2,
+     "temporal_patch_size": 2
+    },
+    "vision_end_token_id": 248054,
+    "vision_start_token_id": 248053
+   },
+   "files": [
+    "README.md",
+    "chat_template.jinja",
+    "config.json",
+    "generation_config.json",
+    "openvino_config.json",
+    "openvino_detokenizer.xml",
+    "openvino_language_model.xml",
+    "openvino_mtp_model.xml",
+    "openvino_text_embeddings_model.xml",
+    "openvino_tokenizer.xml",
+    "openvino_vision_embeddings_merger_model.xml",
+    "openvino_vision_embeddings_model.xml",
+    "openvino_vision_embeddings_pos_model.xml",
+    "preprocessor_config.json",
+    "processor_config.json",
+    "tokenizer.json",
+    "tokenizer_config.json"
+   ],
+   "generation_config": {
+    "bos_token_id": 248044,
+    "do_sample": true,
+    "eos_token_id": [
+     248046,
+     248044
+    ],
+    "pad_token_id": 248044,
+    "temperature": 1.0,
+    "top_k": 20,
+    "top_p": 0.95,
+    "transformers_version": "5.2.0"
+   },
+   "id": "OpenVINO/Qwen3.8-27B-int4-ov",
+   "library_name": "openvino",
+   "openvino_config": {
+    "dtype": "int4_int4",
+    "input_info": null,
+    "optimum_version": "2.4.0.dev0",
+    "output_attentions": false,
+    "quantization_config": {
+     "_dataset_kwargs": {},
+     "dataset": null,
+     "default_config": {
+      "quant_method": "default"
+     },
+     "ignored_scope": null,
+     "num_samples": null,
+     "processor": "Qwen3.8_27B",
+     "quantization_configs": {
+      "lm_model": {
+       "_dataset_kwargs": {},
+       "all_layers": null,
+       "backup_precision": null,
+       "bits": 4,
+       "dataset": null,
+       "dq_group_size": null,
+       "dtype": "int4",
+       "gptq": null,
+       "group_size": null,
+       "group_size_fallback": "ignore",
+       "ignored_scope": null,
+       "lora_correction": null,
+       "num_samples": null,
+       "processor": "Qwen3.8_27B",
+       "quant_method": "default",
+       "ratio": 1.0,
+       "scale_estimation": null,
+       "sensitivity_metric": null,
+       "statistics_path": null,
+       "sym": false,
+       "tokenizer": "Qwen3.8_27B"
+      },
+      "mtp_model": {
+       "_dataset_kwargs": {},
+       "all_layers": null,
+       "backup_precision": null,
+       "bits": 4,
+       "dataset": null,
+       "dq_group_size": null,
+       "dtype": "int4",
+       "gptq": null,
+       "group_size": null,
+       "group_size_fallback": "ignore",
+       "ignored_scope": null,
+       "lora_correction": null,
+       "num_samples": null,
+       "processor": "Qwen3.8_27B",
+       "quant_method": "default",
+       "ratio": 1.0,
+       "scale_estimation": null,
+       "sensitivity_metric": null,
+       "statistics_path": null,
+       "sym": false,
+       "tokenizer": "Qwen3.8_27B"
+      }
+     },
+     "tokenizer": "Qwen3.8_27B"
+    },
+    "save_onnx_model": false,
+    "transformers_version": "5.2.0"
+   },
+   "params_total": null,
+   "pipeline_tag": "image-text-to-text",
+   "sha": "7b20ea8c7df7223a85ff27bab5c473f0cb038943",
+   "tags": [
+    "base_model:Qwen/Qwen3.8-27B",
+    "base_model:quantized:Qwen/Qwen3.8-27B",
+    "conversational",
+    "image-text-to-text",
+    "license:apache-2.0",
+    "openvino",
+    "qwen3_5",
+    "region:us"
+   ],
+   "tokenizer_max_length": 131072,
+   "url": "https://huggingface.co/OpenVINO/Qwen3.8-27B-int4-ov/tree/7b20ea8c7df7223a85ff27bab5c473f0cb038943"
+  },
+  "OpenVINO/Qwen3.8-27B-int8-ov": {
+   "card": {
+    "base_model": [
+     "Qwen/Qwen3.8-27B"
+    ],
+    "base_model_relation": "quantized",
+    "library_name": "openvino",
+    "license": "apache-2.0",
+    "pipeline_tag": "image-text-to-text"
+   },
+   "card_lines": [
+    {
+     "line": 19,
+     "text": "The model includes `openvino_mtp_model.xml` for built-in Multi-Token Prediction (MTP) speculative decoding."
+    },
+    {
+     "line": 105,
+     "text": "Run model inference with MTP:"
+    },
+    {
+     "line": 117,
+     "text": "draft = ov_genai.draft_model(model_path, device)"
+    },
+    {
+     "line": 121,
+     "text": "draft_model=draft,"
+    },
+    {
+     "line": 138,
+     "text": "OpenVINO GenAI currently supports this MTP path with greedy decoding and prefix caching disabled, as demonstrated in the [Qwen3.8 MTP notebook](https://openvinotoolkit.github.io/openvino_notebooks/?search=qwen3.8-mtp)."
+    },
+    {
+     "line": 148,
+     "text": "For MTP deployment, see the [OVMS speculative decoding instructions](https://github.com/openvinotoolkit/model_server/tree/main/demos/continuous_batching/speculative_decoding)."
+    }
+   ],
+   "chat_template_sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+   "config": {
+    "architectures": [
+     "Qwen3_5ForConditionalGeneration"
+    ],
+    "dtype": "bfloat16",
+    "image_token_id": 248056,
+    "language_model_only": false,
+    "model_type": "qwen3_5",
+    "text_config": {
+     "attention_bias": false,
+     "attention_dropout": 0.0,
+     "attn_output_gate": true,
+     "bos_token_id": 248044,
+     "dtype": "bfloat16",
+     "eos_token_id": 248044,
+     "full_attention_interval": 4,
+     "head_dim": 256,
+     "hidden_act": "silu",
+     "hidden_size": 5120,
+     "initializer_range": 0.02,
+     "intermediate_size": 17408,
+     "linear_conv_kernel_dim": 4,
+     "linear_key_head_dim": 128,
+     "linear_num_key_heads": 16,
+     "linear_num_value_heads": 48,
+     "linear_value_head_dim": 128,
+     "mamba_ssm_dtype": "float32",
+     "max_position_embeddings": 262144,
+     "model_type": "qwen3_5_text",
+     "mtp_num_hidden_layers": 1,
+     "mtp_use_dedicated_embeddings": false,
+     "num_attention_heads": 24,
+     "num_hidden_layers": 64,
+     "num_key_value_heads": 4,
+     "output_gate_type": "swish",
+     "pad_token_id": null,
+     "partial_rotary_factor": 0.25,
+     "rms_norm_eps": 1e-06,
+     "rope_parameters": {
+      "mrope_interleaved": true,
+      "mrope_section": [
+       11,
+       11,
+       10
+      ],
+      "partial_rotary_factor": 0.25,
+      "rope_theta": 10000000,
+      "rope_type": "default"
+     },
+     "tie_word_embeddings": false,
+     "use_cache": true,
+     "vocab_size": 248320
+    },
+    "tie_word_embeddings": false,
+    "transformers_version": "5.2.0",
+    "video_token_id": 248057,
+    "vision_config": {
+     "deepstack_visual_indexes": [],
+     "depth": 27,
+     "dtype": "bfloat16",
+     "hidden_act": "gelu_pytorch_tanh",
+     "hidden_size": 1152,
+     "in_channels": 3,
+     "initializer_range": 0.02,
+     "intermediate_size": 4304,
+     "model_type": "qwen3_5",
+     "num_heads": 16,
+     "num_position_embeddings": 2304,
+     "out_hidden_size": 5120,
+     "patch_size": 16,
+     "spatial_merge_size": 2,
+     "temporal_patch_size": 2
+    },
+    "vision_end_token_id": 248054,
+    "vision_start_token_id": 248053
+   },
+   "files": [
+    "README.md",
+    "chat_template.jinja",
+    "config.json",
+    "generation_config.json",
+    "openvino_config.json",
+    "openvino_detokenizer.xml",
+    "openvino_language_model.xml",
+    "openvino_mtp_model.xml",
+    "openvino_text_embeddings_model.xml",
+    "openvino_tokenizer.xml",
+    "openvino_vision_embeddings_merger_model.xml",
+    "openvino_vision_embeddings_model.xml",
+    "openvino_vision_embeddings_pos_model.xml",
+    "preprocessor_config.json",
+    "processor_config.json",
+    "tokenizer.json",
+    "tokenizer_config.json"
+   ],
+   "generation_config": {
+    "bos_token_id": 248044,
+    "do_sample": true,
+    "eos_token_id": [
+     248046,
+     248044
+    ],
+    "pad_token_id": 248044,
+    "temperature": 1.0,
+    "top_k": 20,
+    "top_p": 0.95,
+    "transformers_version": "5.2.0"
+   },
+   "id": "OpenVINO/Qwen3.8-27B-int8-ov",
+   "library_name": "openvino",
+   "openvino_config": {
+    "dtype": "int8",
+    "input_info": null,
+    "optimum_version": "2.3.0",
+    "output_attentions": false,
+    "quantization_config": {
+     "_dataset_kwargs": {},
+     "dataset": null,
+     "default_config": {
+      "quant_method": "default"
+     },
+     "ignored_scope": null,
+     "num_samples": null,
+     "processor": "/home/maleksandr/.cache/modelscope/models/qwen--qwen3.8-27b/snapshots/master",
+     "quantization_configs": {
+      "lm_model": {
+       "_dataset_kwargs": {},
+       "all_layers": null,
+       "backup_precision": null,
+       "bits": 8,
+       "dataset": null,
+       "dq_group_size": null,
+       "dtype": "int8",
+       "gptq": null,
+       "group_size": -1,
+       "group_size_fallback": null,
+       "ignored_scope": null,
+       "lora_correction": null,
+       "num_samples": null,
+       "processor": "/home/maleksandr/.cache/modelscope/models/qwen--qwen3.8-27b/snapshots/master",
+       "quant_method": "default",
+       "ratio": 1.0,
+       "scale_estimation": null,
+       "sensitivity_metric": null,
+       "statistics_path": null,
+       "sym": false,
+       "tokenizer": "/home/maleksandr/.cache/modelscope/models/qwen--qwen3.8-27b/snapshots/master"
+      }
+     },
+     "tokenizer": "/home/maleksandr/.cache/modelscope/models/qwen--qwen3.8-27b/snapshots/master"
+    },
+    "save_onnx_model": false,
+    "transformers_version": "5.2.0"
+   },
+   "params_total": null,
+   "pipeline_tag": "image-text-to-text",
+   "sha": "c129bf97d5f26a19a5fabeff4c4248de1a0aad12",
+   "tags": [
+    "base_model:Qwen/Qwen3.8-27B",
+    "base_model:quantized:Qwen/Qwen3.8-27B",
+    "conversational",
+    "image-text-to-text",
+    "license:apache-2.0",
+    "openvino",
+    "qwen3_5",
+    "region:us"
+   ],
+   "tokenizer_max_length": 262144,
+   "url": "https://huggingface.co/OpenVINO/Qwen3.8-27B-int8-ov/tree/c129bf97d5f26a19a5fabeff4c4248de1a0aad12"
+  },
+  "Qwen/Qwen3.8-27B": {
+   "card": {
+    "library_name": "transformers",
+    "license": "apache-2.0",
+    "pipeline_tag": "image-text-to-text"
+   },
+   "card_lines": [
+    {
+     "line": 52,
+     "text": "- MTP (Multi-Token Prediction): trained with multiple steps"
+    },
+    {
+     "line": 180,
+     "text": "<li>QwenSWEBench: In-house coding benchmark for evaluating models' software engineering capabilities. Evaluated with the Claude Code harness. Reporting avg@3 with an 8-hour timeout, max_tokens=32,768, temperature=1.0, and a 256K context window.</li>"
+    },
+    {
+     "line": 252,
+     "text": "> - Thinking Mode: `temperature=1.0`, `top_p=0.95`, `top_k=20`, `min_p=0.0`, `presence_penalty=0.0`, `repetition_penalty=1.0`"
+    },
+    {
+     "line": 253,
+     "text": "> - Instruct (or non-thinking) mode: `temperature=0.7`, `top_p=0.80`, `top_k=20`, `min_p=0.0`, `presence_penalty=1.5`, `repetition_penalty=1.0`"
+    },
+    {
+     "line": 296,
+     "text": "\"enable_thinking\": True,  # on by default"
+    },
+    {
+     "line": 454,
+     "text": "temperature=0.7,"
+    },
+    {
+     "line": 459,
+     "text": "\"chat_template_kwargs\": {\"enable_thinking\": False},"
+    },
+    {
+     "line": 466,
+     "text": "> If you are using APIs from Qwen Cloud, in addition to changing `model`, please use `\"enable_thinking\": False` instead of `\"chat_template_kwargs\": {\"enable_thinking\": False}`."
+    },
+    {
+     "line": 502,
+     "text": "- Thinking Mode: `temperature=1.0`, `top_p=0.95`, `top_k=20`, `min_p=0.0`, `presence_penalty=0.0`, `repetition_penalty=1.0`"
+    },
+    {
+     "line": 503,
+     "text": "- Instruct (or non-thinking) mode: `temperature=0.7`, `top_p=0.80`, `top_k=20`, `min_p=0.0`, `presence_penalty=1.5`, `repetition_penalty=1.0`"
+    },
+    {
+     "line": 542,
+     "text": "VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 vllm serve ... --hf-overrides '{\"text_config\": {\"rope_parameters\": {\"mrope_interleaved\": true, \"mrope_section\": [11, 11, 10], \"rope_type\": \"yarn\", \"rope_theta\": 10000000, \"partial_rotary_factor\": 0.25, \"factor\": 4.0, \"original_max_position_embeddings\": 262144}}}' --ma"
+    }
+   ],
+   "chat_template_sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+   "chat_template_thinking": [
+    {
+     "line": 46,
+     "text": "{%- if enable_thinking is undefined or enable_thinking is true %}"
+    },
+    {
+     "line": 47,
+     "text": "{%- set resolved_reasoning_effort = reasoning_effort|default('xhigh') %}"
+    },
+    {
+     "line": 48,
+     "text": "{%- if resolved_reasoning_effort not in ('xhigh', 'medium', 'low') %}"
+    },
+    {
+     "line": 49,
+     "text": "{{- raise_exception('Unexpected reasoning effort ' ~ reasoning_effort ~ '. Supported types are xhigh (default), medium, and low.') }}"
+    },
+    {
+     "line": 51,
+     "text": "{%- if resolved_reasoning_effort == 'xhigh' %}"
+    },
+    {
+     "line": 53,
+     "text": "{%- elif resolved_reasoning_effort == 'low' %}"
+    }
+   ],
+   "config": {
+    "architectures": [
+     "Qwen3_5ForConditionalGeneration"
+    ],
+    "image_token_id": 248056,
+    "language_model_only": false,
+    "model_type": "qwen3_5",
+    "text_config": {
+     "attention_bias": false,
+     "attention_dropout": 0.0,
+     "attn_output_gate": true,
+     "bos_token_id": 248044,
+     "dtype": "bfloat16",
+     "eos_token_id": 248044,
+     "full_attention_interval": 4,
+     "head_dim": 256,
+     "hidden_act": "silu",
+     "hidden_size": 5120,
+     "initializer_range": 0.02,
+     "intermediate_size": 17408,
+     "linear_conv_kernel_dim": 4,
+     "linear_key_head_dim": 128,
+     "linear_num_key_heads": 16,
+     "linear_num_value_heads": 48,
+     "linear_value_head_dim": 128,
+     "mamba_ssm_dtype": "float32",
+     "max_position_embeddings": 262144,
+     "model_type": "qwen3_5_text",
+     "mtp_num_hidden_layers": 1,
+     "mtp_use_dedicated_embeddings": false,
+     "num_attention_heads": 24,
+     "num_hidden_layers": 64,
+     "num_key_value_heads": 4,
+     "output_gate_type": "swish",
+     "pad_token_id": null,
+     "partial_rotary_factor": 0.25,
+     "rms_norm_eps": 1e-06,
+     "rope_parameters": {
+      "mrope_interleaved": true,
+      "mrope_section": [
+       11,
+       11,
+       10
+      ],
+      "partial_rotary_factor": 0.25,
+      "rope_theta": 10000000,
+      "rope_type": "default"
+     },
+     "tie_word_embeddings": false,
+     "use_cache": true,
+     "vocab_size": 248320
+    },
+    "tie_word_embeddings": false,
+    "transformers_version": "5.8.0.dev0",
+    "video_token_id": 248057,
+    "vision_config": {
+     "deepstack_visual_indexes": [],
+     "depth": 27,
+     "hidden_act": "gelu_pytorch_tanh",
+     "hidden_size": 1152,
+     "in_channels": 3,
+     "initializer_range": 0.02,
+     "intermediate_size": 4304,
+     "model_type": "qwen3_5",
+     "num_heads": 16,
+     "num_position_embeddings": 2304,
+     "out_hidden_size": 5120,
+     "patch_size": 16,
+     "spatial_merge_size": 2,
+     "temporal_patch_size": 2
+    },
+    "vision_end_token_id": 248054,
+    "vision_start_token_id": 248053
+   },
+   "files": [
+    "README.md",
+    "chat_template.jinja",
+    "config.json",
+    "generation_config.json",
+    "model-00001-of-00018.safetensors",
+    "model.safetensors.index.json",
+    "preprocessor_config.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "video_preprocessor_config.json",
+    "vocab.json"
+   ],
+   "generation_config": {
+    "bos_token_id": 248044,
+    "do_sample": true,
+    "eos_token_id": [
+     248046,
+     248044
+    ],
+    "pad_token_id": 248044,
+    "temperature": 1.0,
+    "top_k": 20,
+    "top_p": 0.95
+   },
+   "id": "Qwen/Qwen3.8-27B",
+   "library_name": "transformers",
+   "params_total": 27781427952,
+   "pipeline_tag": "image-text-to-text",
+   "sha": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+   "tags": [
+    "conversational",
+    "deploy:azure",
+    "deploy:sagemaker",
+    "endpoints_compatible",
+    "eval-results",
+    "image-text-to-text",
+    "license:apache-2.0",
+    "qwen3_5",
+    "region:us",
+    "safetensors",
+    "transformers"
+   ],
+   "tokenizer_max_length": 262144,
+   "url": "https://huggingface.co/Qwen/Qwen3.8-27B/tree/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+  },
+  "Qwen/Qwen3.8-27B-FP8": {
+   "card": {
+    "base_model": [
+     "Qwen/Qwen3.8-27B"
+    ],
+    "library_name": "transformers",
+    "license": "apache-2.0",
+    "pipeline_tag": "image-text-to-text"
+   },
+   "card_lines": [
+    {
+     "line": 57,
+     "text": "- MTP (Multi-Token Prediction): trained with multiple steps"
+    },
+    {
+     "line": 185,
+     "text": "<li>QwenSWEBench: In-house coding benchmark for evaluating models' software engineering capabilities. Evaluated with the Claude Code harness. Reporting avg@3 with an 8-hour timeout, max_tokens=32,768, temperature=1.0, and a 256K context window.</li>"
+    },
+    {
+     "line": 256,
+     "text": "> - Thinking Mode: `temperature=1.0`, `top_p=0.95`, `top_k=20`, `min_p=0.0`, `presence_penalty=0.0`, `repetition_penalty=1.0`"
+    },
+    {
+     "line": 257,
+     "text": "> - Instruct (or non-thinking) mode: `temperature=0.7`, `top_p=0.80`, `top_k=20`, `min_p=0.0`, `presence_penalty=1.5`, `repetition_penalty=1.0`"
+    },
+    {
+     "line": 299,
+     "text": "\"enable_thinking\": True,  # on by default"
+    },
+    {
+     "line": 457,
+     "text": "temperature=0.7,"
+    },
+    {
+     "line": 462,
+     "text": "\"chat_template_kwargs\": {\"enable_thinking\": False},"
+    },
+    {
+     "line": 469,
+     "text": "> If you are using APIs from Qwen Cloud, in addition to changing `model`, please use `\"enable_thinking\": False` instead of `\"chat_template_kwargs\": {\"enable_thinking\": False}`."
+    },
+    {
+     "line": 504,
+     "text": "- Thinking Mode: `temperature=1.0`, `top_p=0.95`, `top_k=20`, `min_p=0.0`, `presence_penalty=0.0`, `repetition_penalty=1.0`"
+    },
+    {
+     "line": 505,
+     "text": "- Instruct (or non-thinking) mode: `temperature=0.7`, `top_p=0.80`, `top_k=20`, `min_p=0.0`, `presence_penalty=1.5`, `repetition_penalty=1.0`"
+    },
+    {
+     "line": 544,
+     "text": "VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 vllm serve ... --hf-overrides '{\"text_config\": {\"rope_parameters\": {\"mrope_interleaved\": true, \"mrope_section\": [11, 11, 10], \"rope_type\": \"yarn\", \"rope_theta\": 10000000, \"partial_rotary_factor\": 0.25, \"factor\": 4.0, \"original_max_position_embeddings\": 262144}}}' --ma"
+    }
+   ],
+   "chat_template_sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+   "config": {
+    "architectures": [
+     "Qwen3_5ForConditionalGeneration"
+    ],
+    "image_token_id": 248056,
+    "language_model_only": false,
+    "model_type": "qwen3_5",
+    "quantization_config": {
+     "activation_scheme": "dynamic",
+     "fmt": "e4m3",
+     "quant_method": "fp8",
+     "weight_block_size": [
+      128,
+      128
+     ]
+    },
+    "text_config": {
+     "attention_bias": false,
+     "attention_dropout": 0.0,
+     "attn_output_gate": true,
+     "bos_token_id": 248044,
+     "dtype": "bfloat16",
+     "eos_token_id": 248044,
+     "full_attention_interval": 4,
+     "head_dim": 256,
+     "hidden_act": "silu",
+     "hidden_size": 5120,
+     "initializer_range": 0.02,
+     "intermediate_size": 17408,
+     "linear_conv_kernel_dim": 4,
+     "linear_key_head_dim": 128,
+     "linear_num_key_heads": 16,
+     "linear_num_value_heads": 48,
+     "linear_value_head_dim": 128,
+     "mamba_ssm_dtype": "float32",
+     "max_position_embeddings": 262144,
+     "model_type": "qwen3_5_text",
+     "mtp_num_hidden_layers": 1,
+     "mtp_use_dedicated_embeddings": false,
+     "num_attention_heads": 24,
+     "num_hidden_layers": 64,
+     "num_key_value_heads": 4,
+     "output_gate_type": "swish",
+     "pad_token_id": null,
+     "partial_rotary_factor": 0.25,
+     "rms_norm_eps": 1e-06,
+     "rope_parameters": {
+      "mrope_interleaved": true,
+      "mrope_section": [
+       11,
+       11,
+       10
+      ],
+      "partial_rotary_factor": 0.25,
+      "rope_theta": 10000000,
+      "rope_type": "default"
+     },
+     "tie_word_embeddings": false,
+     "use_cache": true,
+     "vocab_size": 248320
+    },
+    "tie_word_embeddings": false,
+    "transformers_version": "5.8.0.dev0",
+    "video_token_id": 248057,
+    "vision_config": {
+     "deepstack_visual_indexes": [],
+     "depth": 27,
+     "hidden_act": "gelu_pytorch_tanh",
+     "hidden_size": 1152,
+     "in_channels": 3,
+     "initializer_range": 0.02,
+     "intermediate_size": 4304,
+     "model_type": "qwen3_5",
+     "num_heads": 16,
+     "num_position_embeddings": 2304,
+     "out_hidden_size": 5120,
+     "patch_size": 16,
+     "spatial_merge_size": 2,
+     "temporal_patch_size": 2
+    },
+    "vision_end_token_id": 248054,
+    "vision_start_token_id": 248053
+   },
+   "files": [
+    "README.md",
+    "chat_template.jinja",
+    "config.json",
+    "generation_config.json",
+    "model.safetensors.index.json",
+    "preprocessor_config.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "video_preprocessor_config.json",
+    "vocab.json"
+   ],
+   "generation_config": {
+    "bos_token_id": 248044,
+    "do_sample": true,
+    "eos_token_id": [
+     248046,
+     248044
+    ],
+    "pad_token_id": 248044,
+    "temperature": 1.0,
+    "top_k": 20,
+    "top_p": 0.95
+   },
+   "id": "Qwen/Qwen3.8-27B-FP8",
+   "library_name": "transformers",
+   "params_total": 27781427952,
+   "pipeline_tag": "image-text-to-text",
+   "sha": "017b9c7af6b5689d5dd426a76e0bc077eb5ca20a",
+   "tags": [
+    "base_model:Qwen/Qwen3.8-27B",
+    "base_model:quantized:Qwen/Qwen3.8-27B",
+    "conversational",
+    "endpoints_compatible",
+    "fp8",
+    "image-text-to-text",
+    "license:apache-2.0",
+    "qwen3_5",
+    "region:us",
+    "safetensors",
+    "transformers"
+   ],
+   "tokenizer_max_length": 262144,
+   "url": "https://huggingface.co/Qwen/Qwen3.8-27B-FP8/tree/017b9c7af6b5689d5dd426a76e0bc077eb5ca20a"
+  },
+  "RedHatAI/Qwen3.8-27B": {
+   "card": {
+    "library_name": "transformers",
+    "license": "apache-2.0",
+    "pipeline_tag": "image-text-to-text"
+   },
+   "card_lines": [
+    {
+     "line": 52,
+     "text": "- MTP (Multi-Token Prediction): trained with multiple steps"
+    },
+    {
+     "line": 180,
+     "text": "<li>QwenSWEBench: In-house coding benchmark for evaluating models' software engineering capabilities. Evaluated with the Claude Code harness. Reporting avg@3 with an 8-hour timeout, max_tokens=32,768, temperature=1.0, and a 256K context window.</li>"
+    },
+    {
+     "line": 252,
+     "text": "> - Thinking Mode: `temperature=1.0`, `top_p=0.95`, `top_k=20`, `min_p=0.0`, `presence_penalty=0.0`, `repetition_penalty=1.0`"
+    },
+    {
+     "line": 253,
+     "text": "> - Instruct (or non-thinking) mode: `temperature=0.7`, `top_p=0.80`, `top_k=20`, `min_p=0.0`, `presence_penalty=1.5`, `repetition_penalty=1.0`"
+    },
+    {
+     "line": 296,
+     "text": "\"enable_thinking\": True,  # on by default"
+    },
+    {
+     "line": 454,
+     "text": "temperature=0.7,"
+    },
+    {
+     "line": 459,
+     "text": "\"chat_template_kwargs\": {\"enable_thinking\": False},"
+    },
+    {
+     "line": 466,
+     "text": "> If you are using APIs from Qwen Cloud, in addition to changing `model`, please use `\"enable_thinking\": False` instead of `\"chat_template_kwargs\": {\"enable_thinking\": False}`."
+    },
+    {
+     "line": 502,
+     "text": "- Thinking Mode: `temperature=1.0`, `top_p=0.95`, `top_k=20`, `min_p=0.0`, `presence_penalty=0.0`, `repetition_penalty=1.0`"
+    },
+    {
+     "line": 503,
+     "text": "- Instruct (or non-thinking) mode: `temperature=0.7`, `top_p=0.80`, `top_k=20`, `min_p=0.0`, `presence_penalty=1.5`, `repetition_penalty=1.0`"
+    },
+    {
+     "line": 542,
+     "text": "VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 vllm serve ... --hf-overrides '{\"text_config\": {\"rope_parameters\": {\"mrope_interleaved\": true, \"mrope_section\": [11, 11, 10], \"rope_type\": \"yarn\", \"rope_theta\": 10000000, \"partial_rotary_factor\": 0.25, \"factor\": 4.0, \"original_max_position_embeddings\": 262144}}}' --ma"
+    }
+   ],
+   "chat_template_sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+   "config": {
+    "architectures": [
+     "Qwen3_5ForConditionalGeneration"
+    ],
+    "image_token_id": 248056,
+    "language_model_only": false,
+    "model_type": "qwen3_5",
+    "text_config": {
+     "attention_bias": false,
+     "attention_dropout": 0.0,
+     "attn_output_gate": true,
+     "bos_token_id": 248044,
+     "dtype": "bfloat16",
+     "eos_token_id": 248044,
+     "full_attention_interval": 4,
+     "head_dim": 256,
+     "hidden_act": "silu",
+     "hidden_size": 5120,
+     "initializer_range": 0.02,
+     "intermediate_size": 17408,
+     "linear_conv_kernel_dim": 4,
+     "linear_key_head_dim": 128,
+     "linear_num_key_heads": 16,
+     "linear_num_value_heads": 48,
+     "linear_value_head_dim": 128,
+     "mamba_ssm_dtype": "float32",
+     "max_position_embeddings": 262144,
+     "model_type": "qwen3_5_text",
+     "mtp_num_hidden_layers": 1,
+     "mtp_use_dedicated_embeddings": false,
+     "num_attention_heads": 24,
+     "num_hidden_layers": 64,
+     "num_key_value_heads": 4,
+     "output_gate_type": "swish",
+     "pad_token_id": null,
+     "partial_rotary_factor": 0.25,
+     "rms_norm_eps": 1e-06,
+     "rope_parameters": {
+      "mrope_interleaved": true,
+      "mrope_section": [
+       11,
+       11,
+       10
+      ],
+      "partial_rotary_factor": 0.25,
+      "rope_theta": 10000000,
+      "rope_type": "default"
+     },
+     "tie_word_embeddings": false,
+     "use_cache": true,
+     "vocab_size": 248320
+    },
+    "tie_word_embeddings": false,
+    "transformers_version": "5.8.0.dev0",
+    "video_token_id": 248057,
+    "vision_config": {
+     "deepstack_visual_indexes": [],
+     "depth": 27,
+     "hidden_act": "gelu_pytorch_tanh",
+     "hidden_size": 1152,
+     "in_channels": 3,
+     "initializer_range": 0.02,
+     "intermediate_size": 4304,
+     "model_type": "qwen3_5",
+     "num_heads": 16,
+     "num_position_embeddings": 2304,
+     "out_hidden_size": 5120,
+     "patch_size": 16,
+     "spatial_merge_size": 2,
+     "temporal_patch_size": 2
+    },
+    "vision_end_token_id": 248054,
+    "vision_start_token_id": 248053
+   },
+   "files": [
+    "README.md",
+    "chat_template.jinja",
+    "config.json",
+    "generation_config.json",
+    "model-00001-of-00018.safetensors",
+    "model.safetensors.index.json",
+    "preprocessor_config.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "video_preprocessor_config.json",
+    "vocab.json"
+   ],
+   "generation_config": {
+    "bos_token_id": 248044,
+    "do_sample": true,
+    "eos_token_id": [
+     248046,
+     248044
+    ],
+    "pad_token_id": 248044,
+    "temperature": 1.0,
+    "top_k": 20,
+    "top_p": 0.95
+   },
+   "id": "RedHatAI/Qwen3.8-27B",
+   "library_name": "transformers",
+   "params_total": 27781427952,
+   "pipeline_tag": "image-text-to-text",
+   "sha": "019ada84a62b381dc76e8d3a1e78c9265c79f66a",
+   "tags": [
+    "conversational",
+    "endpoints_compatible",
+    "image-text-to-text",
+    "license:apache-2.0",
+    "qwen3_5",
+    "region:us",
+    "safetensors",
+    "transformers"
+   ],
+   "tokenizer_max_length": 262144,
+   "url": "https://huggingface.co/RedHatAI/Qwen3.8-27B/tree/019ada84a62b381dc76e8d3a1e78c9265c79f66a"
+  },
+  "RedHatAI/Qwen3.8-27B-INT4": {
+   "card": {
+    "base_model": "Qwen/Qwen3.8-27B",
+    "library_name": "transformers",
+    "license": "apache-2.0",
+    "pipeline_tag": "image-text-to-text"
+   },
+   "card_lines": [
+    {
+     "line": 46,
+     "text": "vllm serve RedHatAI/Qwen3.8-27B-INT4 \\"
+    },
+    {
+     "line": 47,
+     "text": "--reasoning-parser qwen3 \\"
+    },
+    {
+     "line": 49,
+     "text": "--tool-call-parser qwen3_xml \\"
+    },
+    {
+     "line": 50,
+     "text": "--speculative-config '{\"method\":\"mtp\",\"num_speculative_tokens\":3}'"
+    },
+    {
+     "line": 56,
+     "text": "vllm serve RedHatAI/Qwen3.8-27B-INT4 \\"
+    },
+    {
+     "line": 58,
+     "text": "--tool-call-parser qwen3_xml \\"
+    },
+    {
+     "line": 59,
+     "text": "--reasoning-parser qwen3 \\"
+    },
+    {
+     "line": 60,
+     "text": "--speculative-config '{\"model\":\"RedHatAI/Qwen3.8-27B-speculator.dspark\",\"num_speculative_tokens\":7,\"method\":\"dspark\"}'"
+    }
+   ],
+   "chat_template_sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+   "chat_template_thinking": [
+    {
+     "line": 46,
+     "text": "{%- if enable_thinking is undefined or enable_thinking is true %}"
+    },
+    {
+     "line": 47,
+     "text": "{%- set resolved_reasoning_effort = reasoning_effort|default('xhigh') %}"
+    },
+    {
+     "line": 48,
+     "text": "{%- if resolved_reasoning_effort not in ('xhigh', 'medium', 'low') %}"
+    },
+    {
+     "line": 49,
+     "text": "{{- raise_exception('Unexpected reasoning effort ' ~ reasoning_effort ~ '. Supported types are xhigh (default), medium, and low.') }}"
+    },
+    {
+     "line": 51,
+     "text": "{%- if resolved_reasoning_effort == 'xhigh' %}"
+    },
+    {
+     "line": 53,
+     "text": "{%- elif resolved_reasoning_effort == 'low' %}"
+    }
+   ],
+   "config": {
+    "architectures": [
+     "Qwen3_5ForConditionalGeneration"
+    ],
+    "dtype": "bfloat16",
+    "image_token_id": 248056,
+    "language_model_only": false,
+    "model_type": "qwen3_5",
+    "quantization_config": {
+     "config_groups": {
+      "group_0": {
+       "format": "pack-quantized",
+       "input_activations": null,
+       "output_activations": null,
+       "targets": [
+        "Linear"
+       ],
+       "weights": {
+        "actorder": "static",
+        "block_structure": null,
+        "dynamic": false,
+        "group_size": 128,
+        "num_bits": 4,
+        "observer": "memoryless_minmax",
+        "observer_kwargs": {},
+        "scale_dtype": null,
+        "strategy": "group",
+        "symmetric": true,
+        "type": "int",
+        "zp_dtype": null
+       }
+      }
+     },
+     "format": "pack-quantized",
+     "global_compression_ratio": null,
+     "kv_cache_scheme": {
+      "actorder": null,
+      "block_structure": null,
+      "dynamic": false,
+      "group_size": null,
+      "num_bits": 8,
+      "observer": "static_minmax",
+      "observer_kwargs": {},
+      "scale_dtype": null,
+      "strategy": "tensor",
+      "symmetric": true,
+      "type": "float",
+      "zp_dtype": null
+     },
+     "quant_method": "compressed-tensors",
+     "quantization_status": "compressed",
+     "sparsity_config": {},
+     "transform_config": {},
+     "version": "0.18.1.a20260824"
+    },
+    "text_config": {
+     "attention_bias": false,
+     "attention_dropout": 0.0,
+     "attn_output_gate": true,
+     "bos_token_id": 248044,
+     "dtype": "bfloat16",
+     "eos_token_id": 248044,
+     "full_attention_interval": 4,
+     "head_dim": 256,
+     "hidden_act": "silu",
+     "hidden_size": 5120,
+     "initializer_range": 0.02,
+     "intermediate_size": 17408,
+     "linear_conv_kernel_dim": 4,
+     "linear_key_head_dim": 128,
+     "linear_num_key_heads": 16,
+     "linear_num_value_heads": 48,
+     "linear_value_head_dim": 128,
+     "mamba_ssm_dtype": "float32",
+     "max_position_embeddings": 262144,
+     "model_type": "qwen3_5_text",
+     "mtp_num_hidden_layers": 1,
+     "mtp_use_dedicated_embeddings": false,
+     "num_attention_heads": 24,
+     "num_hidden_layers": 64,
+     "num_key_value_heads": 4,
+     "output_gate_type": "swish",
+     "pad_token_id": null,
+     "partial_rotary_factor": 0.25,
+     "rms_norm_eps": 1e-06,
+     "rope_parameters": {
+      "mrope_interleaved": true,
+      "mrope_section": [
+       11,
+       11,
+       10
+      ],
+      "partial_rotary_factor": 0.25,
+      "rope_theta": 10000000,
+      "rope_type": "default"
+     },
+     "tie_word_embeddings": false,
+     "use_cache": true,
+     "vocab_size": 248320
+    },
+    "tie_word_embeddings": false,
+    "transformers_version": "5.16.1",
+    "video_token_id": 248057,
+    "vision_config": {
+     "deepstack_visual_indexes": [],
+     "depth": 27,
+     "dtype": "bfloat16",
+     "hidden_act": "gelu_pytorch_tanh",
+     "hidden_size": 1152,
+     "in_channels": 3,
+     "initializer_range": 0.02,
+     "intermediate_size": 4304,
+     "model_type": "qwen3_5_vision",
+     "num_heads": 16,
+     "num_position_embeddings": 2304,
+     "out_hidden_size": 5120,
+     "patch_size": 16,
+     "spatial_merge_size": 2,
+     "temporal_patch_size": 2
+    },
+    "vision_end_token_id": 248054,
+    "vision_start_token_id": 248053
+   },
+   "files": [
+    "README.md",
+    "chat_template.jinja",
+    "config.json",
+    "generation_config.json",
+    "model.safetensors",
+    "model.safetensors.index.json",
+    "processor_config.json",
+    "tokenizer.json",
+    "tokenizer_config.json"
+   ],
+   "generation_config": {
+    "bos_token_id": 248044,
+    "do_sample": true,
+    "eos_token_id": [
+     248046,
+     248044
+    ],
+    "pad_token_id": 248044,
+    "temperature": 1.0,
+    "top_k": 20,
+    "top_p": 0.95,
+    "transformers_version": "5.16.1"
+   },
+   "id": "RedHatAI/Qwen3.8-27B-INT4",
+   "library_name": "transformers",
+   "params_total": 27356728592,
+   "pipeline_tag": "image-text-to-text",
+   "sha": "91bd022d5b49442a868bc35008f6c21e1860edfa",
+   "tags": [
+    "base_model:Qwen/Qwen3.8-27B",
+    "base_model:quantized:Qwen/Qwen3.8-27B",
+    "compressed-tensors",
+    "conversational",
+    "en",
+    "endpoints_compatible",
+    "image-text-to-text",
+    "int4",
+    "license:apache-2.0",
+    "llm-compressor",
+    "qwen3_5",
+    "region:us",
+    "safetensors",
+    "transformers",
+    "vllm",
+    "zh"
+   ],
+   "tokenizer_max_length": 262144,
+   "url": "https://huggingface.co/RedHatAI/Qwen3.8-27B-INT4/tree/91bd022d5b49442a868bc35008f6c21e1860edfa"
+  },
+  "RedHatAI/Qwen3.8-27B-MXFP4": {
+   "card": {
+    "base_model": "Qwen/Qwen3.8-27B",
+    "library_name": "transformers",
+    "license": "apache-2.0",
+    "pipeline_tag": "image-text-to-text"
+   },
+   "card_lines": [
+    {
+     "line": 41,
+     "text": "vllm serve RedHatAI/Qwen3.8-27B-MXFP4 \\"
+    },
+    {
+     "line": 43,
+     "text": "--reasoning-parser qwen3 \\"
+    },
+    {
+     "line": 45,
+     "text": "--tool-call-parser qwen3_xml"
+    },
+    {
+     "line": 48,
+     "text": "Additional model-specific options (long-context scaling, speculative decoding via the built-in MTP head, etc.) are documented in the [vLLM recipe for Qwen3.8-27B](https://recipes.vllm.ai/Qwen/Qwen3.8-27B)."
+    },
+    {
+     "line": 182,
+     "text": "--gen_kwargs \"do_sample=True,temperature=1.0,top_p=0.95,top_k=20,seed=1234,max_gen_toks=32000\" \\"
+    }
+   ],
+   "chat_template_sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+   "config": {
+    "architectures": [
+     "Qwen3_5ForConditionalGeneration"
+    ],
+    "image_token_id": 248056,
+    "language_model_only": false,
+    "model_type": "qwen3_5",
+    "quantization_config": {
+     "config_groups": {
+      "group_0": {
+       "format": "mxfp4-pack-quantized",
+       "input_activations": {
+        "actorder": null,
+        "block_structure": null,
+        "dynamic": true,
+        "group_size": 32,
+        "num_bits": 4,
+        "observer": null,
+        "observer_kwargs": {},
+        "scale_dtype": "torch.uint8",
+        "strategy": "group",
+        "symmetric": true,
+        "type": "float",
+        "zp_dtype": null
+       },
+       "output_activations": null,
+       "targets": [
+        "Linear"
+       ],
+       "weights": {
+        "actorder": "static",
+        "block_structure": null,
+        "dynamic": false,
+        "group_size": 32,
+        "num_bits": 4,
+        "observer": "memoryless_minmax",
+        "observer_kwargs": {},
+        "scale_dtype": "torch.uint8",
+        "strategy": "group",
+        "symmetric": true,
+        "type": "float",
+        "zp_dtype": null
+       }
+      }
+     },
+     "format": "mxfp4-pack-quantized",
+     "global_compression_ratio": null,
+     "kv_cache_scheme": {
+      "actorder": null,
+      "block_structure": null,
+      "dynamic": false,
+      "group_size": null,
+      "num_bits": 8,
+      "observer": "static_minmax",
+      "observer_kwargs": {},
+      "scale_dtype": null,
+      "strategy": "tensor",
+      "symmetric": true,
+      "type": "float",
+      "zp_dtype": null
+     },
+     "quant_method": "compressed-tensors",
+     "quantization_status": "compressed",
+     "sparsity_config": {},
+     "transform_config": {},
+     "version": "0.18.1.a20260914"
+    },
+    "text_config": {
+     "attention_bias": false,
+     "attention_dropout": 0.0,
+     "attn_output_gate": true,
+     "bos_token_id": 248044,
+     "dtype": "bfloat16",
+     "eos_token_id": 248044,
+     "full_attention_interval": 4,
+     "head_dim": 256,
+     "hidden_act": "silu",
+     "hidden_size": 5120,
+     "initializer_range": 0.02,
+     "intermediate_size": 17408,
+     "linear_conv_kernel_dim": 4,
+     "linear_key_head_dim": 128,
+     "linear_num_key_heads": 16,
+     "linear_num_value_heads": 48,
+     "linear_value_head_dim": 128,
+     "mamba_ssm_dtype": "float32",
+     "max_position_embeddings": 262144,
+     "model_type": "qwen3_5_text",
+     "mtp_num_hidden_layers": 1,
+     "mtp_use_dedicated_embeddings": false,
+     "num_attention_heads": 24,
+     "num_hidden_layers": 64,
+     "num_key_value_heads": 4,
+     "output_gate_type": "swish",
+     "pad_token_id": null,
+     "partial_rotary_factor": 0.25,
+     "rms_norm_eps": 1e-06,
+     "rope_parameters": {
+      "mrope_interleaved": true,
+      "mrope_section": [
+       11,
+       11,
+       10
+      ],
+      "partial_rotary_factor": 0.25,
+      "rope_theta": 10000000,
+      "rope_type": "default"
+     },
+     "tie_word_embeddings": false,
+     "use_cache": true,
+     "vocab_size": 248320
+    },
+    "tie_word_embeddings": false,
+    "transformers_version": "5.8.0.dev0",
+    "video_token_id": 248057,
+    "vision_config": {
+     "deepstack_visual_indexes": [],
+     "depth": 27,
+     "hidden_act": "gelu_pytorch_tanh",
+     "hidden_size": 1152,
+     "in_channels": 3,
+     "initializer_range": 0.02,
+     "intermediate_size": 4304,
+     "model_type": "qwen3_5",
+     "num_heads": 16,
+     "num_position_embeddings": 2304,
+     "out_hidden_size": 5120,
+     "patch_size": 16,
+     "spatial_merge_size": 2,
+     "temporal_patch_size": 2
+    },
+    "vision_end_token_id": 248054,
+    "vision_start_token_id": 248053
+   },
+   "files": [
+    "README.md",
+    "chat_template.jinja",
+    "config.json",
+    "generation_config.json",
+    "model.safetensors",
+    "model.safetensors.index.json",
+    "processor_config.json",
+    "tokenizer.json",
+    "tokenizer_config.json"
+   ],
+   "generation_config": {
+    "bos_token_id": 248044,
+    "do_sample": true,
+    "eos_token_id": [
+     248046,
+     248044
+    ],
+    "pad_token_id": 248044,
+    "temperature": 1.0,
+    "top_k": 20,
+    "top_p": 0.95,
+    "transformers_version": "5.17.0"
+   },
+   "id": "RedHatAI/Qwen3.8-27B-MXFP4",
+   "library_name": "transformers",
+   "params_total": 27356728592,
+   "pipeline_tag": "image-text-to-text",
+   "sha": "16a86728c6e2a5023e7dd5e68100ceff24abe5d7",
+   "tags": [
+    "8-bit",
+    "base_model:Qwen/Qwen3.8-27B",
+    "base_model:quantized:Qwen/Qwen3.8-27B",
+    "compressed-tensors",
+    "conversational",
+    "endpoints_compatible",
+    "fp4",
+    "image-text-to-text",
+    "license:apache-2.0",
+    "llm-compressor",
+    "mxfp4",
+    "qwen3_5",
+    "region:us",
+    "safetensors",
+    "transformers",
+    "vllm"
+   ],
+   "tokenizer_max_length": 262144,
+   "url": "https://huggingface.co/RedHatAI/Qwen3.8-27B-MXFP4/tree/16a86728c6e2a5023e7dd5e68100ceff24abe5d7"
+  },
+  "RedHatAI/Qwen3.8-27B-NVFP4": {
+   "card": {
+    "base_model": "Qwen/Qwen3.8-27B",
+    "library_name": "transformers",
+    "license": "apache-2.0",
+    "pipeline_tag": "image-text-to-text"
+   },
+   "card_lines": [
+    {
+     "line": 40,
+     "text": "vllm serve RedHatAI/Qwen3.8-27B-NVFP4 \\"
+    },
+    {
+     "line": 41,
+     "text": "--reasoning-parser qwen3 \\"
+    },
+    {
+     "line": 43,
+     "text": "--tool-call-parser qwen3_xml \\"
+    },
+    {
+     "line": 44,
+     "text": "--speculative-config '{\"method\":\"mtp\",\"num_speculative_tokens\":3}' \\"
+    },
+    {
+     "line": 50,
+     "text": "vllm serve RedHatAI/Qwen3.8-27B-NVFP4 \\"
+    },
+    {
+     "line": 51,
+     "text": "--reasoning-parser qwen3 \\"
+    },
+    {
+     "line": 53,
+     "text": "--tool-call-parser qwen3_xml \\"
+    },
+    {
+     "line": 54,
+     "text": "--speculative-config '{\"model\":\"RedHatAI/Qwen3.8-27B-speculator.dspark\",\"num_speculative_tokens\":7,\"method\":\"dspark\"}'"
+    },
+    {
+     "line": 262,
+     "text": "--gen_kwargs \"do_sample=True,temperature=1.0,top_p=0.95,top_k=20,max_gen_toks=32000,seed=1234\""
+    },
+    {
+     "line": 272,
+     "text": "--gen_kwargs \"do_sample=True,temperature=1.0,top_p=0.95,top_k=20,max_gen_toks=32000,seed=1234\""
+    }
+   ],
+   "chat_template_sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+   "config": {
+    "architectures": [
+     "Qwen3_5ForConditionalGeneration"
+    ],
+    "image_token_id": 248056,
+    "language_model_only": false,
+    "model_type": "qwen3_5",
+    "quantization_config": {
+     "config_groups": {
+      "group_0": {
+       "format": "float-quantized",
+       "input_activations": {
+        "actorder": null,
+        "block_structure": null,
+        "dynamic": true,
+        "group_size": null,
+        "num_bits": 8,
+        "observer": null,
+        "observer_kwargs": {},
+        "scale_dtype": null,
+        "strategy": "token",
+        "symmetric": true,
+        "type": "float",
+        "zp_dtype": null
+       },
+       "output_activations": null,
+       "targets": [
+        "re:.*self_attn\\.(q|k|v|o)_proj$",
+        "re:.*linear_attn\\.(in_proj_qkv|in_proj_z|out_proj)$",
+        "re:.*layers\\.(56|57|58|59|60|61|62|63)\\.mlp\\..*(gate|up|down)_proj$"
+       ],
+       "weights": {
+        "actorder": "static",
+        "block_structure": null,
+        "dynamic": false,
+        "group_size": null,
+        "num_bits": 8,
+        "observer": "memoryless_minmax",
+        "observer_kwargs": {},
+        "scale_dtype": null,
+        "strategy": "channel",
+        "symmetric": true,
+        "type": "float",
+        "zp_dtype": null
+       }
+      },
+      "group_1": {
+       "format": "nvfp4-pack-quantized",
+       "input_activations": {
+        "actorder": null,
+        "block_structure": null,
+        "dynamic": "local",
+        "group_size": 16,
+        "num_bits": 4,
+        "observer": "static_minmax",
+        "observer_kwargs": {},
+        "scale_dtype": "torch.float8_e4m3fn",
+        "strategy": "tensor_group",
+        "symmetric": true,
+        "type": "float",
+        "zp_dtype": null
+       },
+       "output_activations": null,
+       "targets": [
+        "re:.*mlp\\..*(gate|up|down)_proj$"
+       ],
+       "weights": {
+        "actorder": "static",
+        "block_structure": null,
+        "dynamic": false,
+        "group_size": 16,
+        "num_bits": 4,
+        "observer": "memoryless_minmax",
+        "observer_kwargs": {},
+        "scale_dtype": "torch.float8_e4m3fn",
+        "strategy": "tensor_group",
+        "symmetric": true,
+        "type": "float",
+        "zp_dtype": null
+       }
+      }
+     },
+     "format": "mixed-precision",
+     "global_compression_ratio": null,
+     "kv_cache_scheme": {
+      "actorder": null,
+      "block_structure": null,
+      "dynamic": false,
+      "group_size": null,
+      "num_bits": 8,
+      "observer": "static_minmax",
+      "observer_kwargs": {},
+      "scale_dtype": null,
+      "strategy": "tensor",
+      "symmetric": true,
+      "type": "float",
+      "zp_dtype": null
+     },
+     "quant_method": "compressed-tensors",
+     "quantization_status": "compressed",
+     "sparsity_config": {},
+     "transform_config": {},
+     "version": "0.18.1.a20260914"
+    },
+    "text_config": {
+     "attention_bias": false,
+     "attention_dropout": 0.0,
+     "attn_output_gate": true,
+     "bos_token_id": 248044,
+     "dtype": "bfloat16",
+     "eos_token_id": 248044,
+     "full_attention_interval": 4,
+     "head_dim": 256,
+     "hidden_act": "silu",
+     "hidden_size": 5120,
+     "initializer_range": 0.02,
+     "intermediate_size": 17408,
+     "linear_conv_kernel_dim": 4,
+     "linear_key_head_dim": 128,
+     "linear_num_key_heads": 16,
+     "linear_num_value_heads": 48,
+     "linear_value_head_dim": 128,
+     "mamba_ssm_dtype": "float32",
+     "max_position_embeddings": 262144,
+     "model_type": "qwen3_5_text",
+     "mtp_num_hidden_layers": 1,
+     "mtp_use_dedicated_embeddings": false,
+     "num_attention_heads": 24,
+     "num_hidden_layers": 64,
+     "num_key_value_heads": 4,
+     "output_gate_type": "swish",
+     "pad_token_id": null,
+     "partial_rotary_factor": 0.25,
+     "rms_norm_eps": 1e-06,
+     "rope_parameters": {
+      "mrope_interleaved": true,
+      "mrope_section": [
+       11,
+       11,
+       10
+      ],
+      "partial_rotary_factor": 0.25,
+      "rope_theta": 10000000,
+      "rope_type": "default"
+     },
+     "tie_word_embeddings": false,
+     "use_cache": true,
+     "vocab_size": 248320
+    },
+    "tie_word_embeddings": false,
+    "transformers_version": "5.8.0.dev0",
+    "video_token_id": 248057,
+    "vision_config": {
+     "deepstack_visual_indexes": [],
+     "depth": 27,
+     "hidden_act": "gelu_pytorch_tanh",
+     "hidden_size": 1152,
+     "in_channels": 3,
+     "initializer_range": 0.02,
+     "intermediate_size": 4304,
+     "model_type": "qwen3_5",
+     "num_heads": 16,
+     "num_position_embeddings": 2304,
+     "out_hidden_size": 5120,
+     "patch_size": 16,
+     "spatial_merge_size": 2,
+     "temporal_patch_size": 2
+    },
+    "vision_end_token_id": 248054,
+    "vision_start_token_id": 248053
+   },
+   "files": [
+    "README.md",
+    "chat_template.jinja",
+    "config.json",
+    "generation_config.json",
+    "model-00001-of-00002.safetensors",
+    "model.safetensors.index.json",
+    "processor_config.json",
+    "tokenizer.json",
+    "tokenizer_config.json"
+   ],
+   "generation_config": {
+    "bos_token_id": 248044,
+    "do_sample": true,
+    "eos_token_id": [
+     248046,
+     248044
+    ],
+    "pad_token_id": 248044,
+    "temperature": 1.0,
+    "top_k": 20,
+    "top_p": 0.95,
+    "transformers_version": "5.17.0"
+   },
+   "id": "RedHatAI/Qwen3.8-27B-NVFP4",
+   "library_name": "transformers",
+   "params_total": 20294595344,
+   "pipeline_tag": "image-text-to-text",
+   "sha": "2889ddeeda282f17fc9e159a42125e535159a5e5",
+   "tags": [
+    "base_model:Qwen/Qwen3.8-27B",
+    "base_model:quantized:Qwen/Qwen3.8-27B",
+    "compressed-tensors",
+    "conversational",
+    "endpoints_compatible",
+    "fp4",
+    "fp8",
+    "image-text-to-text",
+    "license:apache-2.0",
+    "llm-compressor",
+    "qwen3_5",
+    "region:us",
+    "safetensors",
+    "transformers",
+    "vllm"
+   ],
+   "tokenizer_max_length": 262144,
+   "url": "https://huggingface.co/RedHatAI/Qwen3.8-27B-NVFP4/tree/2889ddeeda282f17fc9e159a42125e535159a5e5"
+  },
+  "RedHatAI/Qwen3.8-27B-speculator.dspark": {
+   "card": {
+    "base_model": [
+     "Qwen/Qwen3.8-27B"
+    ],
+    "library_name": "speculators",
+    "license": "apache-2.0"
+   },
+   "card_lines": [
+    {
+     "line": 97,
+     "text": "vllm serve Qwen/Qwen3.8-27B \\"
+    },
+    {
+     "line": 98,
+     "text": "--speculative-config '{\"model\":\"RedHatAI/Qwen3.8-27B-speculator.dspark\",\"num_speculative_tokens\":7,\"method\":\"dspark\"}'"
+    },
+    {
+     "line": 103,
+     "text": "vllm serve RedHatAI/Qwen3.8-27B-NVFP4 \\"
+    },
+    {
+     "line": 104,
+     "text": "--speculative-config '{\"model\":\"RedHatAI/Qwen3.8-27B-speculator.dspark\",\"num_speculative_tokens\":7,\"method\":\"dspark\"}'"
+    },
+    {
+     "line": 145,
+     "text": "## Performance Eval Against MTP"
+    },
+    {
+     "line": 146,
+     "text": "Across HumanEval, math reasoning, and RAG, DSpark consistently delivers higher throughput and better interactivity than MTP with the same eight speculative tokens. The advantage is strongest at low-to-medium concurrency\u2014particularly for math reasoning\u2014and remains positive at concurrency 128, though "
+    }
+   ],
+   "config": {
+    "architectures": [
+     "DSparkDraftModel"
+    ],
+    "auto_map": {
+     "": "config.DSparkSpeculatorConfig"
+    },
+    "aux_hidden_state_layer_ids": [
+     4,
+     12,
+     20,
+     28,
+     36,
+     44,
+     52,
+     60
+    ],
+    "block_size": 8,
+    "confidence_head_with_markov": true,
+    "draft_vocab_size": 248320,
+    "dtype": "bfloat16",
+    "enable_confidence_head": true,
+    "markov_head_type": "vanilla",
+    "markov_rank": 256,
+    "mask_token_id": 248077,
+    "sample_from_anchor": true,
+    "sliding_window_non_causal": false,
+    "speculators_config": {
+     "algorithm": "dspark",
+     "default_proposal_method": "greedy",
+     "proposal_methods": [
+      {
+       "accept_tolerance": 0.0,
+       "proposal_type": "greedy",
+       "speculative_tokens": 8,
+       "verifier_accept_k": 1
+      }
+     ],
+     "verifier": {
+      "architectures": [
+       "Qwen3_5ForConditionalGeneration"
+      ],
+      "name_or_path": "Qwen/Qwen3.8-27B"
+     }
+    },
+    "speculators_model_type": "dspark",
+    "speculators_version": "0.9.0.dev28",
+    "target_hidden_size": null,
+    "tie_word_embeddings": false,
+    "transformer_layer_config": {
+     "attention_bias": false,
+     "attention_dropout": 0.0,
+     "bos_token_id": null,
+     "eos_token_id": null,
+     "head_dim": 256,
+     "hidden_act": "silu",
+     "hidden_size": 5120,
+     "initializer_range": 0.02,
+     "intermediate_size": 17408,
+     "layer_types": [
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention"
+     ],
+     "max_position_embeddings": 262144,
+     "max_window_layers": 28,
+     "model_type": "qwen3",
+     "num_attention_heads": 20,
+     "num_hidden_layers": 5,
+     "num_key_value_heads": 4,
+     "pad_token_id": null,
+     "rms_norm_eps": 1e-06,
+     "rope_parameters": {
+      "mrope_section": [
+       44,
+       44,
+       40
+      ],
+      "partial_rotary_factor": 1.0,
+      "rope_theta": 10000000,
+      "rope_type": "default"
+     },
+     "sliding_window": 2048,
+     "tie_word_embeddings": false,
+     "use_cache": true,
+     "use_sliding_window": true,
+     "vocab_size": 248320
+    },
+    "transformers_version": "5.16.1"
+   },
+   "files": [
+    "README.md",
+    "config.json",
+    "model.safetensors",
+    "training_state.json",
+    "val_metrics.json"
+   ],
+   "id": "RedHatAI/Qwen3.8-27B-speculator.dspark",
+   "library_name": "speculators",
+   "params_total": 1988431617,
+   "pipeline_tag": null,
+   "sha": "87ca2fdc67f316f6c1f9ebc7ef7bbb0ad299a4ce",
+   "tags": [
+    "base_model:Qwen/Qwen3.8-27B",
+    "base_model:finetune:Qwen/Qwen3.8-27B",
+    "custom_code",
+    "dspark",
+    "license:apache-2.0",
+    "long-context",
+    "region:us",
+    "safetensors",
+    "speculative-decoding",
+    "speculators"
+   ],
+   "url": "https://huggingface.co/RedHatAI/Qwen3.8-27B-speculator.dspark/tree/87ca2fdc67f316f6c1f9ebc7ef7bbb0ad299a4ce"
+  }
+ },
+ "requested": "RedHatAI/Qwen3.8-27B-INT4",
+ "revision": "main",
+ "schema": "k3d-gpu.hfmeta/v1",
+ "searches": [
+  {
+   "ids": [
+    "Qwen/Qwen3.8-27B",
+    "Qwen/Qwen3.8-27B-FP8"
+   ],
+   "url": "https://huggingface.co/api/models?author=Qwen&search=Qwen3.8-27B&limit=100"
+  },
+  {
+   "ids": [
+    "Qwen/Qwen3.8-27B-FP8"
+   ],
+   "url": "https://huggingface.co/api/models?author=Qwen&filter=base_model%3AQwen%2FQwen3.8-27B&limit=100"
+  },
+  {
+   "ids": [
+    "Intel/Qwen3.8-27B-bpw2.8-AutoRound",
+    "Intel/Qwen3.8-27B-q2ks-AutoRound",
+    "Intel/Qwen3.8-27B-q4km-AutoRound",
+    "Intel/qwen3.8-27B-int4-ov"
+   ],
+   "url": "https://huggingface.co/api/models?author=Intel&search=Qwen3.8-27B&limit=100"
+  },
+  {
+   "ids": [
+    "Intel/Qwen3.8-27B-bpw2.8-AutoRound",
+    "Intel/Qwen3.8-27B-q2ks-AutoRound",
+    "Intel/Qwen3.8-27B-q4km-AutoRound"
+   ],
+   "url": "https://huggingface.co/api/models?author=Intel&filter=base_model%3AQwen%2FQwen3.8-27B&limit=100"
+  },
+  {
+   "ids": [
+    "OpenVINO/Qwen3.8-27B-int4-ov",
+    "OpenVINO/Qwen3.8-27B-int8-ov"
+   ],
+   "url": "https://huggingface.co/api/models?author=OpenVINO&search=Qwen3.8-27B&limit=100"
+  },
+  {
+   "ids": [
+    "OpenVINO/Qwen3.8-27B-int4-ov",
+    "OpenVINO/Qwen3.8-27B-int8-ov"
+   ],
+   "url": "https://huggingface.co/api/models?author=OpenVINO&filter=base_model%3AQwen%2FQwen3.8-27B&limit=100"
+  },
+  {
+   "ids": [
+    "RedHatAI/Qwen3.8-27B",
+    "RedHatAI/Qwen3.8-27B-INT4",
+    "RedHatAI/Qwen3.8-27B-MXFP4",
+    "RedHatAI/Qwen3.8-27B-NVFP4",
+    "RedHatAI/Qwen3.8-27B-speculator.dspark"
+   ],
+   "url": "https://huggingface.co/api/models?author=RedHatAI&search=Qwen3.8-27B&limit=100"
+  },
+  {
+   "ids": [
+    "RedHatAI/Qwen3.8-27B-INT4",
+    "RedHatAI/Qwen3.8-27B-MXFP4",
+    "RedHatAI/Qwen3.8-27B-NVFP4",
+    "RedHatAI/Qwen3.8-27B-speculator.dspark"
+   ],
+   "url": "https://huggingface.co/api/models?author=RedHatAI&filter=base_model%3AQwen%2FQwen3.8-27B&limit=100"
+  },
+  {
+   "ids": [],
+   "url": "https://huggingface.co/api/models?author=88plug&search=Qwen3.8-27B&limit=100"
+  },
+  {
+   "ids": [],
+   "url": "https://huggingface.co/api/models?author=88plug&filter=base_model%3AQwen%2FQwen3.8-27B&limit=100"
+  }
+ ],
+ "source": "huggingface",
+ "target": "Qwen/Qwen3.8-27B"
+}

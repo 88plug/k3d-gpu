@@ -38,7 +38,8 @@ for d in "${FIX}"/models/*/; do
     ln -s "${d%/}" "${WORK}/cache/${n}@main"
 done
 export K3D_GPU_SYSROOT="${WORK}/root" K3D_GPU_FIT_CACHE="${WORK}/cache" XDG_STATE_HOME="${WORK}/state" \
-    K3D_GPU_AUTOQUANT_CACHE="${WORK}/no-autoquant.json" PATH="${WORK}/bin:${PATH}"
+    K3D_GPU_AUTOQUANT_CACHE="${WORK}/no-autoquant.json" PATH="${WORK}/bin:${PATH}" \
+    K3D_GPU_HF_FIXTURES="${FIX%/*}/hf" XDG_CACHE_HOME="${WORK}/xdg"
 XEON="${FIX}/hosts/xeon6741p-4xb70.json"
 DESK="${FIX}/hosts/desktop-i9-nogpu.json"
 LAPTOP="${FIX}/hosts/laptop-16g.json"
@@ -89,11 +90,21 @@ if render vllm STUB_ALLOC=$'cpu 64\ngpu.intel.com/xe 4' K3D_GPU_AGENT_BACKEND=vl
     ok "agent manifest (vllm): context, seqs, GPU share and pod memory limit come from the fit"
 else fail "agent manifest (vllm) from the fit" "$(cat "${WORK}/vllm.err" "${WORK}/vllm.yaml" 2>/dev/null | head -80)"; fi
 
-if render vllm-flag STUB_ALLOC=$'cpu 64\ngpu.intel.com/xe 4' K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_FIT_HOST="${XEON}" -- \
-        --model RedHatAI/Qwen3.8-27B-INT4 \
+# --model M with the model optimizer off renders what K3D_GPU_AGENT_MODEL=M does; with it
+# on (the default) the named variant is served and fitted the same, plus the optimizer's
+# arguments (tests/model_opt_test.sh covers those).
+if render vllm-flag STUB_ALLOC=$'cpu 64\ngpu.intel.com/xe 4' K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_FIT_HOST="${XEON}" \
+        K3D_GPU_MODEL_OPT=off -- --model RedHatAI/Qwen3.8-27B-INT4 \
     && diff -q "${WORK}/vllm.yaml" "${WORK}/vllm-flag.yaml" >/dev/null; then
-    ok "agent manifest --model M renders what K3D_GPU_AGENT_MODEL=M does"
+    ok "agent manifest --model M (optimizer off) renders what K3D_GPU_AGENT_MODEL=M does"
 else fail "agent manifest --model M" "$(cat "${WORK}/vllm-flag.err"; diff "${WORK}/vllm.yaml" "${WORK}/vllm-flag.yaml")"; fi
+if render vllm-opt STUB_ALLOC=$'cpu 64\ngpu.intel.com/xe 4' K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_FIT_HOST="${XEON}" -- \
+        --model RedHatAI/Qwen3.8-27B-INT4 \
+    && has vllm-opt '^            - RedHatAI/Qwen3.8-27B-INT4$' \
+    && [ "$(grep 'agent-fit:' "${WORK}/vllm.yaml")" = "$(grep 'agent-fit:' "${WORK}/vllm-opt.yaml")" ] \
+    && has vllm-opt "'--speculative-config'"; then
+    ok "agent manifest --model M (optimizer on): the named variant, the same fit, plus the optimizer's arguments"
+else fail "agent manifest --model M (optimizer on)" "$(cat "${WORK}/vllm-opt.err"; diff "${WORK}/vllm.yaml" "${WORK}/vllm-opt.yaml")"; fi
 
 if render ovms STUB_ALLOC='cpu 32' K3D_GPU_FIT_HOST="${DESK}" K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3.8-27B-int4-ov -- \
     && has ovms '--max_num_seqs=' && has ovms '--cache_size=' && has ovms 'k3d-gpu.io/agent-fit: "cpu' \

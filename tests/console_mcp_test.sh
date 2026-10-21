@@ -10,6 +10,8 @@
 set -uo pipefail
 
 TESTS=$(cd "$(dirname "$0")" && pwd)
+# plan --model with a Hugging Face id reads model metadata: the saved bundles, never the network.
+export K3D_GPU_HF_FIXTURES="${TESTS}/fixtures/hf"
 if python3 "${TESTS}/console/test_console_mcp.py" "$@"; then
     echo "ok   console MCP equality (S6) and write gate (S7)"
 else

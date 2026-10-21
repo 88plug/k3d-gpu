@@ -12,7 +12,9 @@
 #   3. eat-up.sh refuses deploy_openshell=on, which the pinned EAT tag cannot deploy.
 #   5. The GenAI Gateway installs from copies of its charts with exact dependency
 #      versions and every image name:tag@sha256 (gateway-charts.py, brownfield.sh).
-# Needs bash, jq, python3.
+#   6. eat-opt.py puts the model optimizer's choices on EAT's own modelConfigs entry,
+#      additive only, and prints each change against EAT stock.
+# Needs bash, jq, python3 (with PyYAML).
 
 set -euo pipefail
 
@@ -537,6 +539,83 @@ out=$(env PATH="${BF}/bin:${PATH}" HOME="${BF}/home" STUB_LOG="${BF}/log" EAT_DI
 if [ "${rc}" -ne 0 ] && grep -q 'never ran through the pinning wrapper' <<< "${out}"; then
     ok "brownfield.sh stack: fails when the gateway playbook bypasses the pins"
 else fail "brownfield.sh stack: bypass not caught (rc=${rc}): ${out}"; fi
+
+# 6. eat-opt.py: the model optimizer as values on EAT's own entry, printed against
+#    stock. EAT's playbook and values are reduced to the lines eat-opt.py reads
+#    (deploy-inference-models.yml block for cpu-gemma4-26b-a4b, xeon-values.yaml
+#    entry for google/gemma-4-26B-A4B-it, both at 0d3438d); model metadata is the
+#    saved bundle in tests/fixtures/hf, through eat-opt.py's cache.
+OPT="${WORK}/opt"
+mkdir -p "${OPT}/cache"
+cp "${ROOT}/tests/fixtures/hf/google__gemma-4-26B-A4B-it.json" "${OPT}/cache/"
+cat > "${OPT}/playbook.yml" <<'EOF'
+- hosts: all
+  tasks:
+    - name: Check if CPU Gemma4 is installed
+      tags: install-cpu-gemma4-26b-a4b
+    - name: Deploy CPU Gemma4
+      block:
+        - name: Deploy CPU based LLM model Gemma4 Installation
+          ansible.builtin.command: >-
+            helm upgrade --install vllm-gemma4-26b-a4b-cpu "{{ remote_helm_charts_base }}/vllm"
+            --values "{{ xeon_values_file }}"
+            --set LLM_MODEL_ID="google/gemma-4-26B-A4B-it"
+      tags: install-cpu-gemma4-26b-a4b
+      when:
+        - "'cpu-gemma4-26b-a4b' in (model_name_list | regex_replace(',', ' ') | split())"
+    - name: Deploy CPU Qwen
+      block:
+        - name: Deploy CPU based LLM model Qwen-3-1-7B Installation
+          ansible.builtin.command: >-
+            helm upgrade --install vllm-qwen-3-1-7b-cpu "{{ remote_helm_charts_base }}/vllm"
+            --set LLM_MODEL_ID="Qwen/Qwen3-1.7B"
+      tags: install-cpu-qwen3-1-7b
+EOF
+cat > "${OPT}/values.yaml" <<'EOF'
+image:
+  repository: vllm/vllm-openai-cpu
+  tag: "v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1"
+modelConfigs:
+  "google/gemma-4-26B-A4B-it":
+    configMapValues:
+      VLLM_CPU_KVCACHE_SPACE: "6"
+    extraCmdArgs:
+      [
+        "--block-size", "128",
+        "--dtype", "bfloat16",
+        "--enable-prefix-caching",
+        "--enable-auto-tool-choice",
+        "--tool-call-parser", "gemma4",
+        "--chat-template", "/workspace/vllm/examples/tool_chat_template_gemma4.jinja",
+      ]
+defaultModelConfigs:
+  extraCmdArgs: ["--dtype", "bfloat16"]
+EOF
+cp "${OPT}/values.yaml" "${OPT}/stock.yaml"
+out=$(python3 "${EAT}/eat-opt.py" "${OPT}/playbook.yml" "${OPT}/values.yaml" cpu-gemma4-26b-a4b "${ROOT}/console" --cache "${OPT}/cache" 2>&1) && rc=0 || rc=$?
+args=$(python3 -c 'import sys, yaml; print(" ".join(yaml.safe_load(open(sys.argv[1]))["modelConfigs"]["google/gemma-4-26B-A4B-it"]["extraCmdArgs"]))' "${OPT}/values.yaml")
+want='--block-size 128 --dtype bfloat16 --enable-prefix-caching --enable-auto-tool-choice --tool-call-parser gemma4 --chat-template /workspace/vllm/examples/tool_chat_template_gemma4.jinja --reasoning-parser gemma4 --default-chat-template-kwargs {"enable_thinking": false} --language-model-only'
+if [ "${rc}" -eq 0 ] && [ "${args}" = "${want}" ]; then
+    ok "eat-opt.py: appends the optimizer's arguments after EAT's own, none removed"
+else
+    fail "eat-opt.py rc=${rc}: got '${args}'"; sed 's/^/  | /' <<< "${out}"
+fi
+if grep -qF '+ --reasoning-parser gemma4' <<< "${out}" && grep -qF "kept EAT's --tool-call-parser (optimizer: gemma4)" <<< "${out}" \
+   && grep -qF 'EAT overlay vs stock for cpu-gemma4-26b-a4b (modelConfigs[google/gemma-4-26B-A4B-it]):' <<< "${out}"; then
+    ok "eat-opt.py: prints each change against EAT stock"
+else fail "eat-opt.py: change report: ${out}"; fi
+if ! grep -q 'speculativeConfig' "${OPT}/values.yaml" && grep -q 'unsupported on CPU before v0.31.0' <<< "${out}"; then
+    ok "eat-opt.py: no speculative config on EAT's vLLM v0.24.0 CPU image, and says why"
+else fail "eat-opt.py: speculative config on v0.24.0 CPU: ${out}"; fi
+cp "${OPT}/stock.yaml" "${OPT}/values.yaml"
+out=$(EAT_MODEL_OPT=off python3 "${EAT}/eat-opt.py" "${OPT}/playbook.yml" "${OPT}/values.yaml" cpu-gemma4-26b-a4b "${ROOT}/console" --cache "${OPT}/cache" 2>&1)
+if cmp -s "${OPT}/stock.yaml" "${OPT}/values.yaml" && grep -q 'EAT_MODEL_OPT=off' <<< "${out}"; then
+    ok "eat-opt.py: EAT_MODEL_OPT=off leaves the values as merged"
+else fail "eat-opt.py: EAT_MODEL_OPT=off: ${out}"; fi
+out=$(python3 "${EAT}/eat-opt.py" "${OPT}/playbook.yml" "${OPT}/values.yaml" cpu-nope "${ROOT}/console" --cache "${OPT}/cache" 2>&1) && rc=0 || rc=$?
+if [ "${rc}" -eq 0 ] && cmp -s "${OPT}/stock.yaml" "${OPT}/values.yaml" && grep -q 'no LLM_MODEL_ID for cpu-nope' <<< "${out}"; then
+    ok "eat-opt.py: an unknown catalog id leaves the values as merged, with one line"
+else fail "eat-opt.py: unknown catalog id (rc=${rc}): ${out}"; fi
 
 echo ""
 echo "${PASS} passed, ${FAILS} failed"

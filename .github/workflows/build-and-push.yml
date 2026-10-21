@@ -579,3 +579,60 @@ jobs:
 
             Review what the upstream rebuild changed before merging. A change under
             `share/`, `scripts/` or the Dockerfile cuts a launcher release on merge.
+
+  # ─── QAT conversion toolchain (console/convert-pins.json) ──────────────────
+  # The model optimizer's one-time OpenVINO conversion pins its pip toolchain
+  # exactly. Daily: move each pin to the newest release optimum-intel's own
+  # requirements allow (hack/bump-convert-pins), run the console tests, and open
+  # or update one PR on branch autobump/convert-pins.
+  bump-convert-pins:
+    if: ${{ !inputs.release }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: main
+
+      - name: Move the pins to the newest compatible releases
+        id: bump
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --disable-pip-version-check packaging==26.3
+          "$RUNNER_TEMP/venv/bin/python" hack/bump-convert-pins | tee "$RUNNER_TEMP/bump.txt"
+          # The moved set must resolve together: pip's resolver, no install.
+          mapfile -t pins < <(jq -r '.pins | to_entries[] | "\(.key)==\(.value)"' console/convert-pins.json)
+          "$RUNNER_TEMP/venv/bin/pip" install --dry-run --disable-pip-version-check "${pins[@]}"
+          {
+            echo "changes<<BUMP_EOF"
+            cat "$RUNNER_TEMP/bump.txt"
+            echo "BUMP_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Console and model optimizer tests
+        run: |
+          tests/console_test.sh
+          tests/model_opt_test.sh
+
+      - name: Open or update the pins PR
+        if: steps.bump.outputs.changes != ''
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          branch: autobump/convert-pins
+          delete-branch: true
+          add-paths: console/convert-pins.json
+          commit-message: "chore(convert-pins): move the QAT conversion toolchain to its newest compatible releases"
+          title: "chore(convert-pins): move the QAT conversion toolchain to its newest compatible releases"
+          labels: dependencies
+          body: |
+            `hack/bump-convert-pins` moved these pins in `console/convert-pins.json`:
+
+            ```
+            ${{ steps.bump.outputs.changes }}
+            ```
+
+            `tests/console_test.sh` and `tests/model_opt_test.sh` passed in the workflow
+            run that opened this PR.

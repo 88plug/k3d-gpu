@@ -11,8 +11,12 @@
 #   EAT_KUBECONFIG   kubeconfig of the target cluster (default: /kube/config)
 #   EAT_VLLM_VALUES  values merged over EAT's vllm/xeon-values.yaml (default: /vllm-values.yaml)
 #   EAT_VLLM_KV_GIB  VLLM_CPU_KVCACHE_SPACE for every catalog model, in GiB (default: 6)
-#   K3D_GPU_EAT_DIR  integrations/eat of k3d-gpu (default: /k3d-gpu-eat): gateway-charts.py
-#                    and the gateway values overlays
+#   K3D_GPU_EAT_DIR  integrations/eat of k3d-gpu (default: /k3d-gpu-eat): gateway-charts.py,
+#                    eat-opt.py and the gateway values overlays
+#   K3D_GPU_CONSOLE_DIR  console/ of k3d-gpu (default: /k3d-gpu-console): the model optimizer
+#   EAT_MODEL_OPT    auto | off: apply the model optimizer to the model's values (default: auto)
+#   EAT_THINKING     off | on | model: thinking default for the model (default: off)
+#   EAT_HF_CACHE     model metadata cache (default: /hf-cache)
 #
 # Variables set below without a local use are read by EAT's sourced functions.
 # shellcheck disable=SC1091,SC2034,SC2153,SC2154
@@ -134,6 +138,12 @@ for cfg in [*(base.get("modelConfigs") or {}).values(), base.get("defaultModelCo
 yaml.safe_dump(base, open(out, "w"), sort_keys=False)
 EOF
 echo "vLLM values: ${merged} (EAT xeon-values.yaml + ${EAT_VLLM_VALUES}, KV cache ${EAT_VLLM_KV_GIB} GiB)"
+# The k3d-gpu model optimizer, as values on the model's own entry (eat-opt.py):
+# engine arguments EAT's entry lacks, a speculative config, the thinking default.
+# It prints each change against EAT stock; any failure leaves the merged values.
+python3 "${K3D_GPU_EAT_DIR}/eat-opt.py" "${EAT_DIR}/core/playbooks/deploy-inference-models.yml" "${merged}" \
+    "${model_id}" "${K3D_GPU_CONSOLE_DIR:-/k3d-gpu-console}" --cache "${EAT_HF_CACHE:-/hf-cache}" \
+    || echo "model optimizer failed: EAT's values as merged"
 xeon_values_file_path="${merged}"
 
 INVENTORY_PATH="${brownfield_deployment_host_file}"

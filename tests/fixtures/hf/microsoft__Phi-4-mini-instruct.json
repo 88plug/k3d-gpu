@@ -1,0 +1,1047 @@
+{
+ "repos": {
+  "OpenVINO/Phi-4-mini-instruct-fp16-ov": {
+   "card": {
+    "base_model": "microsoft/Phi-4-mini-instruct",
+    "license": "mit",
+    "pipeline_tag": "text-generation"
+   },
+   "card_lines": [],
+   "chat_template_sha256": "febf589225c9728ab791f52e8897d7607a823d45368f0a4c92fa68997b40cce9",
+   "config": {
+    "_attn_implementation_autoset": true,
+    "_name_or_path": "microsoft/Phi-4-mini-instruct",
+    "architectures": [
+     "Phi3ForCausalLM"
+    ],
+    "attention_bias": false,
+    "attention_dropout": 0.0,
+    "auto_map": {
+     "AutoConfig": "configuration_phi3.Phi3Config",
+     "AutoModelForCausalLM": "modeling_phi3.Phi3ForCausalLM",
+     "AutoTokenizer": "microsoft/Phi-4-mini-instruct--Xenova/gpt-4o"
+    },
+    "bos_token_id": 199999,
+    "embd_pdrop": 0.0,
+    "eos_token_id": 199999,
+    "full_attn_mod": 1,
+    "hidden_act": "silu",
+    "hidden_size": 3072,
+    "initializer_range": 0.02,
+    "intermediate_size": 8192,
+    "interpolate_factor": 1,
+    "lm_head_bias": false,
+    "max_position_embeddings": 131072,
+    "mlp_bias": false,
+    "model_type": "phi3",
+    "num_attention_heads": 24,
+    "num_hidden_layers": 32,
+    "num_key_value_heads": 8,
+    "original_max_position_embeddings": 4096,
+    "pad_token_id": 199999,
+    "partial_rotary_factor": 0.75,
+    "resid_pdrop": 0.0,
+    "rms_norm_eps": 1e-05,
+    "rope_scaling": {
+     "type": "longrope"
+    },
+    "rope_theta": 10000.0,
+    "sliding_window": 262144,
+    "tie_word_embeddings": true,
+    "torch_dtype": "float16",
+    "transformers_version": "4.49.0",
+    "use_cache": true,
+    "vocab_size": 200064
+   },
+   "files": [
+    "README.md",
+    "added_tokens.json",
+    "config.json",
+    "generation_config.json",
+    "openvino_detokenizer.xml",
+    "openvino_model.xml",
+    "openvino_tokenizer.xml",
+    "special_tokens_map.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "vocab.json"
+   ],
+   "generation_config": {
+    "_from_model_config": true,
+    "bos_token_id": 199999,
+    "eos_token_id": [
+     200020,
+     199999
+    ],
+    "pad_token_id": 199999,
+    "transformers_version": "4.49.0"
+   },
+   "id": "OpenVINO/Phi-4-mini-instruct-fp16-ov",
+   "library_name": null,
+   "params_total": null,
+   "pipeline_tag": "text-generation",
+   "sha": "2f66963901e9739051c16d8326a7b16d450ad2ed",
+   "tags": [
+    "ar",
+    "base_model:finetune:microsoft/Phi-4-mini-instruct",
+    "base_model:microsoft/Phi-4-mini-instruct",
+    "code",
+    "conversational",
+    "cs",
+    "custom_code",
+    "da",
+    "de",
+    "en",
+    "es",
+    "fi",
+    "fr",
+    "he",
+    "hu",
+    "it",
+    "ja",
+    "ko",
+    "license:mit",
+    "multilingual",
+    "nl",
+    "nlp",
+    "no",
+    "openvino",
+    "phi3",
+    "pl",
+    "pt",
+    "region:us",
+    "ru",
+    "sv",
+    "text-generation",
+    "th",
+    "tr",
+    "uk",
+    "zh"
+   ],
+   "tokenizer_max_length": 131072,
+   "url": "https://huggingface.co/OpenVINO/Phi-4-mini-instruct-fp16-ov/tree/2f66963901e9739051c16d8326a7b16d450ad2ed"
+  },
+  "OpenVINO/Phi-4-mini-instruct-int4-ov": {
+   "card": {
+    "base_model": "microsoft/Phi-4-mini-instruct",
+    "base_model_relation": "quantized",
+    "license": "mit",
+    "pipeline_tag": "text-generation"
+   },
+   "card_lines": [
+    {
+     "line": 49,
+     "text": "* mode: **INT4_ASYM**"
+    },
+    {
+     "line": 51,
+     "text": "* group_size: **64**"
+    }
+   ],
+   "chat_template_sha256": "7628aea652fab63214923a3820ae0a5590d6511bd5a918caa2729549d1fa7bdc",
+   "config": {
+    "_name_or_path": "microsoft/Phi-4-mini-instruct",
+    "architectures": [
+     "Phi3ForCausalLM"
+    ],
+    "attention_bias": false,
+    "attention_dropout": 0.0,
+    "auto_map": {
+     "AutoConfig": "configuration_phi3.Phi3Config",
+     "AutoModelForCausalLM": "modeling_phi3.Phi3ForCausalLM",
+     "AutoTokenizer": "microsoft/Phi-4-mini-instruct--Xenova/gpt-4o"
+    },
+    "bos_token_id": 199999,
+    "embd_pdrop": 0.0,
+    "eos_token_id": 199999,
+    "full_attn_mod": 1,
+    "hidden_act": "silu",
+    "hidden_size": 3072,
+    "initializer_range": 0.02,
+    "intermediate_size": 8192,
+    "interpolate_factor": 1,
+    "lm_head_bias": false,
+    "max_position_embeddings": 4096,
+    "mlp_bias": false,
+    "model_type": "phi3",
+    "num_attention_heads": 24,
+    "num_hidden_layers": 32,
+    "num_key_value_heads": 8,
+    "original_max_position_embeddings": 4096,
+    "pad_token_id": 199999,
+    "partial_rotary_factor": 0.75,
+    "resid_pdrop": 0.0,
+    "rms_norm_eps": 1e-05,
+    "rope_scaling": {
+     "type": "longrope"
+    },
+    "rope_theta": 10000.0,
+    "sliding_window": 262144,
+    "tie_word_embeddings": true,
+    "torch_dtype": "bfloat16",
+    "transformers_version": "4.49.0",
+    "use_cache": true,
+    "vocab_size": 200064
+   },
+   "files": [
+    "README.md",
+    "added_tokens.json",
+    "chat_template.jinja",
+    "chat_template_original.jinja",
+    "config.json",
+    "generation_config.json",
+    "openvino_config.json",
+    "openvino_detokenizer.xml",
+    "openvino_model.xml",
+    "openvino_tokenizer.xml",
+    "special_tokens_map.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "vocab.json"
+   ],
+   "generation_config": {
+    "_from_model_config": true,
+    "bos_token_id": 199999,
+    "eos_token_id": [
+     200020,
+     199999
+    ],
+    "pad_token_id": 199999,
+    "transformers_version": "4.49.0"
+   },
+   "id": "OpenVINO/Phi-4-mini-instruct-int4-ov",
+   "library_name": null,
+   "openvino_config": {
+    "dtype": "int4",
+    "input_info": null,
+    "optimum_version": "1.25.0.dev0",
+    "quantization_config": {
+     "all_layers": null,
+     "backup_precision": null,
+     "bits": 4,
+     "dataset": "wikitext2",
+     "dtype": "int4",
+     "gptq": null,
+     "group_size": 64,
+     "ignored_scope": null,
+     "lora_correction": null,
+     "num_samples": null,
+     "processor": null,
+     "quant_method": "awq",
+     "ratio": 1.0,
+     "scale_estimation": true,
+     "sensitivity_metric": null,
+     "sym": false,
+     "tokenizer": null,
+     "trust_remote_code": true
+    },
+    "save_onnx_model": false,
+    "transformers_version": "4.49.0"
+   },
+   "params_total": null,
+   "pipeline_tag": "text-generation",
+   "sha": "e5813af02e8560a9186c41f932f21cbb584a0907",
+   "tags": [
+    "ar",
+    "base_model:microsoft/Phi-4-mini-instruct",
+    "base_model:quantized:microsoft/Phi-4-mini-instruct",
+    "code",
+    "conversational",
+    "cs",
+    "custom_code",
+    "da",
+    "de",
+    "en",
+    "es",
+    "fi",
+    "fr",
+    "he",
+    "hu",
+    "it",
+    "ja",
+    "ko",
+    "license:mit",
+    "multilingual",
+    "nl",
+    "nlp",
+    "no",
+    "openvino",
+    "phi3",
+    "pl",
+    "pt",
+    "region:us",
+    "ru",
+    "sv",
+    "text-generation",
+    "th",
+    "tr",
+    "uk",
+    "zh"
+   ],
+   "tokenizer_max_length": 131072,
+   "url": "https://huggingface.co/OpenVINO/Phi-4-mini-instruct-int4-ov/tree/e5813af02e8560a9186c41f932f21cbb584a0907"
+  },
+  "OpenVINO/Phi-4-mini-instruct-int8-ov": {
+   "card": {
+    "base_model": "microsoft/Phi-4-mini-instruct",
+    "base_model_relation": "quantized",
+    "license": "mit",
+    "pipeline_tag": "text-generation"
+   },
+   "card_lines": [],
+   "chat_template_sha256": "febf589225c9728ab791f52e8897d7607a823d45368f0a4c92fa68997b40cce9",
+   "config": {
+    "_attn_implementation_autoset": true,
+    "_name_or_path": "microsoft/Phi-4-mini-instruct",
+    "architectures": [
+     "Phi3ForCausalLM"
+    ],
+    "attention_bias": false,
+    "attention_dropout": 0.0,
+    "auto_map": {
+     "AutoConfig": "configuration_phi3.Phi3Config",
+     "AutoModelForCausalLM": "modeling_phi3.Phi3ForCausalLM",
+     "AutoTokenizer": "microsoft/Phi-4-mini-instruct--Xenova/gpt-4o"
+    },
+    "bos_token_id": 199999,
+    "embd_pdrop": 0.0,
+    "eos_token_id": 199999,
+    "full_attn_mod": 1,
+    "hidden_act": "silu",
+    "hidden_size": 3072,
+    "initializer_range": 0.02,
+    "intermediate_size": 8192,
+    "interpolate_factor": 1,
+    "lm_head_bias": false,
+    "max_position_embeddings": 131072,
+    "mlp_bias": false,
+    "model_type": "phi3",
+    "num_attention_heads": 24,
+    "num_hidden_layers": 32,
+    "num_key_value_heads": 8,
+    "original_max_position_embeddings": 4096,
+    "pad_token_id": 199999,
+    "partial_rotary_factor": 0.75,
+    "resid_pdrop": 0.0,
+    "rms_norm_eps": 1e-05,
+    "rope_scaling": {
+     "type": "longrope"
+    },
+    "rope_theta": 10000.0,
+    "sliding_window": 262144,
+    "tie_word_embeddings": true,
+    "torch_dtype": "bfloat16",
+    "transformers_version": "4.49.0",
+    "use_cache": true,
+    "vocab_size": 200064
+   },
+   "files": [
+    "README.md",
+    "added_tokens.json",
+    "config.json",
+    "generation_config.json",
+    "openvino_detokenizer.xml",
+    "openvino_model.xml",
+    "openvino_tokenizer.xml",
+    "special_tokens_map.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "vocab.json"
+   ],
+   "generation_config": {
+    "_from_model_config": true,
+    "bos_token_id": 199999,
+    "eos_token_id": [
+     200020,
+     199999
+    ],
+    "pad_token_id": 199999,
+    "transformers_version": "4.49.0"
+   },
+   "id": "OpenVINO/Phi-4-mini-instruct-int8-ov",
+   "library_name": null,
+   "params_total": null,
+   "pipeline_tag": "text-generation",
+   "sha": "0ae971852874a923b9b074fa8cefbb5933a64152",
+   "tags": [
+    "ar",
+    "base_model:microsoft/Phi-4-mini-instruct",
+    "base_model:quantized:microsoft/Phi-4-mini-instruct",
+    "code",
+    "conversational",
+    "cs",
+    "custom_code",
+    "da",
+    "de",
+    "en",
+    "es",
+    "fi",
+    "fr",
+    "he",
+    "hu",
+    "it",
+    "ja",
+    "ko",
+    "license:mit",
+    "multilingual",
+    "nl",
+    "nlp",
+    "no",
+    "openvino",
+    "phi3",
+    "pl",
+    "pt",
+    "region:us",
+    "ru",
+    "sv",
+    "text-generation",
+    "th",
+    "tr",
+    "uk",
+    "zh"
+   ],
+   "tokenizer_max_length": 131072,
+   "url": "https://huggingface.co/OpenVINO/Phi-4-mini-instruct-int8-ov/tree/0ae971852874a923b9b074fa8cefbb5933a64152"
+  },
+  "RedHatAI/Phi-4-mini-instruct-FP8-dynamic": {
+   "card": {
+    "base_model": [
+     "microsoft/Phi-4-mini-instruct"
+    ],
+    "license": "mit",
+    "pipeline_tag": "text-generation"
+   },
+   "card_lines": [
+    {
+     "line": 93,
+     "text": "vllm serve RedHatAI/Phi-4-mini-instruct-FP8-dynamic --max_model_len 131072"
+    },
+    {
+     "line": 171,
+     "text": "### Start vLLM server"
+    },
+    {
+     "line": 173,
+     "text": "vllm serve RedHatAI/Phi-4-mini-instruct-FP8-dynamic --max_model_len 131072"
+    },
+    {
+     "line": 185,
+     "text": "--gen_kwargs \"do_sample=False,temperature=0.0,max_gen_toks=16000\""
+    },
+    {
+     "line": 194,
+     "text": "--gen_kwargs \"do_sample=False,temperature=0.0,max_gen_toks=16000\""
+    },
+    {
+     "line": 205,
+     "text": "--gen_kwargs \"do_sample=False,temperature=0.0,max_gen_toks=16000\""
+    },
+    {
+     "line": 214,
+     "text": "--gen_kwargs \"do_sample=False,temperature=0.0,max_gen_toks=16000\""
+    }
+   ],
+   "chat_template_sha256": "febf589225c9728ab791f52e8897d7607a823d45368f0a4c92fa68997b40cce9",
+   "config": {
+    "_name_or_path": "microsoft/Phi-4-mini-instruct",
+    "architectures": [
+     "Phi3ForCausalLM"
+    ],
+    "attention_bias": false,
+    "attention_dropout": 0.0,
+    "auto_map": {
+     "AutoConfig": "configuration_phi3.Phi3Config",
+     "AutoModelForCausalLM": "modeling_phi3.Phi3ForCausalLM"
+    },
+    "bos_token_id": 199999,
+    "embd_pdrop": 0.0,
+    "eos_token_id": 199999,
+    "full_attn_mod": 1,
+    "hidden_act": "silu",
+    "hidden_size": 3072,
+    "initializer_range": 0.02,
+    "intermediate_size": 8192,
+    "interpolate_factor": 1,
+    "lm_head_bias": false,
+    "max_position_embeddings": 131072,
+    "mlp_bias": false,
+    "model_type": "phi3",
+    "num_attention_heads": 24,
+    "num_hidden_layers": 32,
+    "num_key_value_heads": 8,
+    "original_max_position_embeddings": 4096,
+    "pad_token_id": 199999,
+    "partial_rotary_factor": 0.75,
+    "quantization_config": {
+     "config_groups": {
+      "group_0": {
+       "input_activations": {
+        "actorder": null,
+        "block_structure": null,
+        "dynamic": true,
+        "group_size": null,
+        "num_bits": 8,
+        "observer": null,
+        "observer_kwargs": {},
+        "strategy": "token",
+        "symmetric": true,
+        "type": "float"
+       },
+       "output_activations": null,
+       "targets": [
+        "Linear"
+       ],
+       "weights": {
+        "actorder": null,
+        "block_structure": null,
+        "dynamic": false,
+        "group_size": null,
+        "num_bits": 8,
+        "observer": "mse",
+        "observer_kwargs": {},
+        "strategy": "channel",
+        "symmetric": true,
+        "type": "float"
+       }
+      }
+     },
+     "format": "float-quantized",
+     "global_compression_ratio": 1.2806660341034313,
+     "ignore": [
+      "lm_head"
+     ],
+     "kv_cache_scheme": null,
+     "quant_method": "compressed-tensors",
+     "quantization_status": "compressed"
+    },
+    "resid_pdrop": 0.0,
+    "rms_norm_eps": 1e-05,
+    "rope_scaling": {
+     "type": "longrope"
+    },
+    "rope_theta": 10000.0,
+    "sliding_window": 262144,
+    "tie_word_embeddings": true,
+    "torch_dtype": "bfloat16",
+    "transformers_version": "4.49.0",
+    "use_cache": true,
+    "vocab_size": 200064
+   },
+   "files": [
+    "README.md",
+    "added_tokens.json",
+    "config.json",
+    "generation_config.json",
+    "model-00001-of-00002.safetensors",
+    "model.safetensors.index.json",
+    "special_tokens_map.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "vocab.json"
+   ],
+   "generation_config": {
+    "_from_model_config": true,
+    "bos_token_id": 199999,
+    "eos_token_id": [
+     200020,
+     199999
+    ],
+    "pad_token_id": 199999,
+    "transformers_version": "4.49.0"
+   },
+   "id": "RedHatAI/Phi-4-mini-instruct-FP8-dynamic",
+   "library_name": null,
+   "params_total": 4451503104,
+   "pipeline_tag": "text-generation",
+   "sha": "5450d52149bf44e81cbbd30b2f02762947845bb3",
+   "tags": [
+    "FP8",
+    "ar",
+    "base_model:microsoft/Phi-4-mini-instruct",
+    "base_model:quantized:microsoft/Phi-4-mini-instruct",
+    "code",
+    "compressed-tensors",
+    "conversational",
+    "cs",
+    "custom_code",
+    "da",
+    "de",
+    "en",
+    "es",
+    "fi",
+    "fr",
+    "he",
+    "hu",
+    "it",
+    "ja",
+    "ko",
+    "license:mit",
+    "llm-compressor",
+    "multilingual",
+    "nl",
+    "nlp",
+    "no",
+    "phi3",
+    "pl",
+    "pt",
+    "red hat",
+    "region:us",
+    "ru",
+    "safetensors",
+    "sv",
+    "text-generation",
+    "th",
+    "tr",
+    "uk",
+    "zh"
+   ],
+   "tokenizer_max_length": 131072,
+   "url": "https://huggingface.co/RedHatAI/Phi-4-mini-instruct-FP8-dynamic/tree/5450d52149bf44e81cbbd30b2f02762947845bb3"
+  },
+  "RedHatAI/Phi-4-mini-instruct-quantized.w8a8": {
+   "card": {},
+   "chat_template_sha256": "febf589225c9728ab791f52e8897d7607a823d45368f0a4c92fa68997b40cce9",
+   "config": {
+    "_name_or_path": "microsoft/Phi-4-mini-instruct",
+    "architectures": [
+     "Phi3ForCausalLM"
+    ],
+    "attention_bias": false,
+    "attention_dropout": 0.0,
+    "auto_map": {
+     "AutoConfig": "microsoft/Phi-4-mini-instruct--configuration_phi3.Phi3Config",
+     "AutoModelForCausalLM": "microsoft/Phi-4-mini-instruct--modeling_phi3.Phi3ForCausalLM",
+     "AutoTokenizer": "microsoft/Phi-4-mini-instruct--Xenova/gpt-4o"
+    },
+    "bos_token_id": 199999,
+    "embd_pdrop": 0.0,
+    "eos_token_id": 199999,
+    "full_attn_mod": 1,
+    "hidden_act": "silu",
+    "hidden_size": 3072,
+    "initializer_range": 0.02,
+    "intermediate_size": 8192,
+    "interpolate_factor": 1,
+    "lm_head_bias": false,
+    "max_position_embeddings": 131072,
+    "mlp_bias": false,
+    "model_type": "phi3",
+    "num_attention_heads": 24,
+    "num_hidden_layers": 32,
+    "num_key_value_heads": 8,
+    "original_max_position_embeddings": 4096,
+    "pad_token_id": 199999,
+    "partial_rotary_factor": 0.75,
+    "quantization_config": {
+     "config_groups": {
+      "group_0": {
+       "input_activations": {
+        "actorder": null,
+        "block_structure": null,
+        "dynamic": true,
+        "group_size": null,
+        "num_bits": 8,
+        "observer": null,
+        "observer_kwargs": {},
+        "strategy": "token",
+        "symmetric": true,
+        "type": "int"
+       },
+       "output_activations": null,
+       "targets": [
+        "Linear"
+       ],
+       "weights": {
+        "actorder": null,
+        "block_structure": null,
+        "dynamic": false,
+        "group_size": null,
+        "num_bits": 8,
+        "observer": "mse",
+        "observer_kwargs": {},
+        "strategy": "channel",
+        "symmetric": true,
+        "type": "int"
+       }
+      }
+     },
+     "format": "int-quantized",
+     "global_compression_ratio": 1.2806660341034313,
+     "ignore": [
+      "lm_head"
+     ],
+     "kv_cache_scheme": null,
+     "quant_method": "compressed-tensors",
+     "quantization_status": "compressed"
+    },
+    "resid_pdrop": 0.0,
+    "rms_norm_eps": 1e-05,
+    "rope_scaling": {
+     "type": "longrope"
+    },
+    "rope_theta": 10000.0,
+    "sliding_window": 262144,
+    "tie_word_embeddings": true,
+    "torch_dtype": "bfloat16",
+    "transformers_version": "4.49.0",
+    "use_cache": true,
+    "vocab_size": 200064
+   },
+   "files": [
+    "added_tokens.json",
+    "config.json",
+    "generation_config.json",
+    "model-00001-of-00002.safetensors",
+    "model.safetensors.index.json",
+    "special_tokens_map.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "vocab.json"
+   ],
+   "generation_config": {
+    "_from_model_config": true,
+    "bos_token_id": 199999,
+    "eos_token_id": [
+     200020,
+     199999
+    ],
+    "pad_token_id": 199999,
+    "transformers_version": "4.49.0"
+   },
+   "id": "RedHatAI/Phi-4-mini-instruct-quantized.w8a8",
+   "library_name": null,
+   "params_total": 4451503104,
+   "pipeline_tag": null,
+   "sha": "43f45b9b8f4b659d8eeefed784f210d812d932bb",
+   "tags": [
+    "8-bit",
+    "compressed-tensors",
+    "custom_code",
+    "phi3",
+    "region:us",
+    "safetensors"
+   ],
+   "tokenizer_max_length": 131072,
+   "url": "https://huggingface.co/RedHatAI/Phi-4-mini-instruct-quantized.w8a8/tree/43f45b9b8f4b659d8eeefed784f210d812d932bb"
+  },
+  "microsoft/Phi-4-mini-instruct": {
+   "card": {
+    "library_name": "transformers",
+    "license": "mit",
+    "pipeline_tag": "text-generation"
+   },
+   "card_lines": [
+    {
+     "line": 169,
+     "text": "temperature=0.0,"
+    }
+   ],
+   "chat_template_sha256": "febf589225c9728ab791f52e8897d7607a823d45368f0a4c92fa68997b40cce9",
+   "chat_template_thinking": [],
+   "config": {
+    "_name_or_path": "Phi-4-mini-instruct",
+    "architectures": [
+     "Phi3ForCausalLM"
+    ],
+    "attention_bias": false,
+    "attention_dropout": 0.0,
+    "auto_map": {
+     "AutoConfig": "configuration_phi3.Phi3Config",
+     "AutoModelForCausalLM": "modeling_phi3.Phi3ForCausalLM",
+     "AutoTokenizer": "Xenova/gpt-4o"
+    },
+    "bos_token_id": 199999,
+    "embd_pdrop": 0.0,
+    "eos_token_id": 199999,
+    "full_attn_mod": 1,
+    "hidden_act": "silu",
+    "hidden_size": 3072,
+    "initializer_range": 0.02,
+    "intermediate_size": 8192,
+    "interpolate_factor": 1,
+    "lm_head_bias": false,
+    "max_position_embeddings": 131072,
+    "mlp_bias": false,
+    "model_type": "phi3",
+    "num_attention_heads": 24,
+    "num_hidden_layers": 32,
+    "num_key_value_heads": 8,
+    "original_max_position_embeddings": 4096,
+    "pad_token_id": 199999,
+    "partial_rotary_factor": 0.75,
+    "resid_pdrop": 0.0,
+    "rms_norm_eps": 1e-05,
+    "rope_scaling": {
+     "type": "longrope"
+    },
+    "rope_theta": 10000.0,
+    "sliding_window": 262144,
+    "tie_word_embeddings": true,
+    "torch_dtype": "bfloat16",
+    "transformers_version": "4.45.0",
+    "use_cache": true,
+    "vocab_size": 200064
+   },
+   "files": [
+    "README.md",
+    "added_tokens.json",
+    "config.json",
+    "generation_config.json",
+    "model-00001-of-00002.safetensors",
+    "model.safetensors.index.json",
+    "special_tokens_map.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "vocab.json"
+   ],
+   "generation_config": {
+    "_from_model_config": true,
+    "bos_token_id": 199999,
+    "eos_token_id": [
+     200020,
+     199999
+    ],
+    "pad_token_id": 199999,
+    "transformers_version": "4.45.0"
+   },
+   "id": "microsoft/Phi-4-mini-instruct",
+   "library_name": "transformers",
+   "params_total": 3836021760,
+   "pipeline_tag": "text-generation",
+   "sha": "cfbefacb99257ffa30c83adab238a50856ac3083",
+   "tags": [
+    "ar",
+    "arxiv:2503.01743",
+    "code",
+    "conversational",
+    "cs",
+    "custom_code",
+    "da",
+    "de",
+    "deploy:sagemaker",
+    "en",
+    "endpoints_compatible",
+    "es",
+    "eval-results",
+    "fi",
+    "fr",
+    "he",
+    "hu",
+    "it",
+    "ja",
+    "ko",
+    "license:mit",
+    "multilingual",
+    "nl",
+    "nlp",
+    "no",
+    "phi3",
+    "pl",
+    "pt",
+    "region:us",
+    "ru",
+    "safetensors",
+    "sv",
+    "text-generation",
+    "text-generation-inference",
+    "th",
+    "tr",
+    "transformers",
+    "uk",
+    "zh"
+   ],
+   "tokenizer_max_length": 131072,
+   "url": "https://huggingface.co/microsoft/Phi-4-mini-instruct/tree/cfbefacb99257ffa30c83adab238a50856ac3083"
+  },
+  "microsoft/Phi-4-mini-instruct-onnx": {
+   "card": {
+    "license": "mit"
+   },
+   "card_lines": [],
+   "config": {
+    "_name_or_path": "Phi-4-mini-instruct",
+    "architectures": [
+     "Phi3ForCausalLM"
+    ],
+    "attention_bias": false,
+    "attention_dropout": 0.0,
+    "auto_map": {
+     "AutoConfig": "configuration_phi3.Phi3Config",
+     "AutoModelForCausalLM": "modeling_phi3.Phi3ForCausalLM",
+     "AutoTokenizer": "Xenova/gpt-4o"
+    },
+    "bos_token_id": 199999,
+    "embd_pdrop": 0.0,
+    "eos_token_id": 199999,
+    "full_attn_mod": 1,
+    "hidden_act": "silu",
+    "hidden_size": 3072,
+    "initializer_range": 0.02,
+    "intermediate_size": 8192,
+    "interpolate_factor": 1,
+    "lm_head_bias": false,
+    "max_position_embeddings": 131072,
+    "mlp_bias": false,
+    "model_type": "phi3",
+    "num_attention_heads": 24,
+    "num_hidden_layers": 32,
+    "num_key_value_heads": 8,
+    "original_max_position_embeddings": 4096,
+    "pad_token_id": 199999,
+    "partial_rotary_factor": 0.75,
+    "resid_pdrop": 0.0,
+    "rms_norm_eps": 1e-05,
+    "rope_scaling": {
+     "type": "longrope"
+    },
+    "rope_theta": 10000.0,
+    "sliding_window": 262144,
+    "tie_word_embeddings": true,
+    "torch_dtype": "bfloat16",
+    "transformers_version": "4.45.0",
+    "use_cache": true,
+    "vocab_size": 200064
+   },
+   "files": [
+    "README.md",
+    "config.json",
+    "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/added_tokens.json",
+    "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/config.json",
+    "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/genai_config.json",
+    "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/model.onnx",
+    "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/special_tokens_map.json",
+    "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/tokenizer.json",
+    "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/tokenizer_config.json",
+    "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/vocab.json",
+    "gpu/gpu-int4-rtn-block-32/added_tokens.json",
+    "gpu/gpu-int4-rtn-block-32/config.json",
+    "gpu/gpu-int4-rtn-block-32/genai_config.json",
+    "gpu/gpu-int4-rtn-block-32/model.onnx",
+    "gpu/gpu-int4-rtn-block-32/special_tokens_map.json",
+    "gpu/gpu-int4-rtn-block-32/tokenizer.json",
+    "gpu/gpu-int4-rtn-block-32/tokenizer_config.json",
+    "gpu/gpu-int4-rtn-block-32/vocab.json"
+   ],
+   "id": "microsoft/Phi-4-mini-instruct-onnx",
+   "library_name": null,
+   "params_total": null,
+   "pipeline_tag": null,
+   "sha": "fc04c8f93df696602fd9f300a30d1bf2e3081347",
+   "tags": [
+    "ONNX",
+    "ONNX Runtime",
+    "ar",
+    "code",
+    "cs",
+    "da",
+    "de",
+    "en",
+    "es",
+    "fi",
+    "fr",
+    "he",
+    "hu",
+    "it",
+    "ja",
+    "ko",
+    "license:mit",
+    "multilingual",
+    "nl",
+    "nlp",
+    "no",
+    "onnx",
+    "phi4",
+    "phi4 mini",
+    "pl",
+    "pt",
+    "region:us",
+    "ru",
+    "sv",
+    "th",
+    "tr",
+    "uk",
+    "zh"
+   ],
+   "url": "https://huggingface.co/microsoft/Phi-4-mini-instruct-onnx/tree/fc04c8f93df696602fd9f300a30d1bf2e3081347"
+  }
+ },
+ "requested": "microsoft/Phi-4-mini-instruct",
+ "revision": "main",
+ "schema": "k3d-gpu.hfmeta/v1",
+ "searches": [
+  {
+   "ids": [
+    "microsoft/Phi-3-mini-4k-instruct",
+    "microsoft/Phi-3-mini-4k-instruct-gguf",
+    "microsoft/Phi-3-mini-4k-instruct-onnx",
+    "microsoft/Phi-3-mini-4k-instruct-onnx-web",
+    "microsoft/Phi-4-mini-instruct",
+    "microsoft/Phi-4-mini-instruct-onnx"
+   ],
+   "url": "https://huggingface.co/api/models?author=microsoft&search=Phi-4-mini-instruct&limit=100"
+  },
+  {
+   "ids": [],
+   "url": "https://huggingface.co/api/models?author=microsoft&filter=base_model%3Amicrosoft%2FPhi-4-mini-instruct&limit=100"
+  },
+  {
+   "ids": [
+    "Intel/Phi-3-mini-128k-instruct-int4-inc-recipe",
+    "Intel/Phi-3-mini-4k-instruct-int4-inc"
+   ],
+   "url": "https://huggingface.co/api/models?author=Intel&search=Phi-4-mini-instruct&limit=100"
+  },
+  {
+   "ids": [],
+   "url": "https://huggingface.co/api/models?author=Intel&filter=base_model%3Amicrosoft%2FPhi-4-mini-instruct&limit=100"
+  },
+  {
+   "ids": [
+    "OpenVINO/Phi-3-mini-128k-instruct-int4-ov",
+    "OpenVINO/Phi-3-mini-4k-instruct-fp16-ov",
+    "OpenVINO/Phi-3-mini-4k-instruct-int4-cw-ov",
+    "OpenVINO/Phi-3-mini-4k-instruct-int4-gq-ov",
+    "OpenVINO/Phi-3-mini-4k-instruct-int4-ov",
+    "OpenVINO/Phi-3-mini-4k-instruct-int8-ov",
+    "OpenVINO/Phi-3.5-mini-instruct-int4-cw-ov",
+    "OpenVINO/Phi-3.5-mini-instruct-int4-gq-ov",
+    "OpenVINO/Phi-3.5-mini-instruct-int4-ov",
+    "OpenVINO/Phi-4-mini-instruct-fp16-ov",
+    "OpenVINO/Phi-4-mini-instruct-int4-ov",
+    "OpenVINO/Phi-4-mini-instruct-int8-ov"
+   ],
+   "url": "https://huggingface.co/api/models?author=OpenVINO&search=Phi-4-mini-instruct&limit=100"
+  },
+  {
+   "ids": [
+    "OpenVINO/Phi-4-mini-instruct-fp16-ov",
+    "OpenVINO/Phi-4-mini-instruct-int4-ov",
+    "OpenVINO/Phi-4-mini-instruct-int8-ov"
+   ],
+   "url": "https://huggingface.co/api/models?author=OpenVINO&filter=base_model%3Amicrosoft%2FPhi-4-mini-instruct&limit=100"
+  },
+  {
+   "ids": [
+    "RedHatAI/Phi-4-mini-instruct-FP8-dynamic",
+    "RedHatAI/Phi-4-mini-instruct-quantized.w8a8"
+   ],
+   "url": "https://huggingface.co/api/models?author=RedHatAI&search=Phi-4-mini-instruct&limit=100"
+  },
+  {
+   "ids": [
+    "RedHatAI/Phi-4-mini-instruct-FP8-dynamic"
+   ],
+   "url": "https://huggingface.co/api/models?author=RedHatAI&filter=base_model%3Amicrosoft%2FPhi-4-mini-instruct&limit=100"
+  },
+  {
+   "ids": [],
+   "url": "https://huggingface.co/api/models?author=88plug&search=Phi-4-mini-instruct&limit=100"
+  },
+  {
+   "ids": [],
+   "url": "https://huggingface.co/api/models?author=88plug&filter=base_model%3Amicrosoft%2FPhi-4-mini-instruct&limit=100"
+  }
+ ],
+ "source": "huggingface",
+ "target": "microsoft/Phi-4-mini-instruct"
+}
