@@ -28,3 +28,15 @@ hosts/*.json (host/v1, as `console/fit.py probe` prints it; written by hand):
   laptop-16g         Core Ultra 7 258V (Lunar Lake: AVX2, no AVX-512), 15.3 GiB,
                      9 GiB available, 1.5 GiB of swap in use, integrated GPU only
                      (no device-local memory), LPDDR5X-8533 on a 128-bit bus.
+
+models/ggml-org__Qwen3.8-Flash-Next-GGUF/
+  `console/fit.py fetch ggml-org/Qwen3.8-Flash-Next-GGUF --revision 91fb003...` output,
+  2026-10-21: weights.json holds one weights/v1 per GGUF model (IQ4_NL, Q2_K, Q8_0, each
+  two gguf-split shards, every shard's header read); config.json from the card's
+  base_model, Qwen/Qwen3.8-Flash-Next.
+
+gguf-heads/
+  The header bytes (up to the tensor data, gzip) of the IQ4_NL shards of
+  ggml-org/Qwen3.8-Flash-Next-GGUF@91fb00353e766eb43944ed223665ea4fb87dad47, with the
+  shard sizes in INDEX.json. Shard 1 is metadata only (0 tensors, split.count 2,
+  split.tensors.count 1224); shard 2 holds the 1224 tensors. No weight bytes are kept.

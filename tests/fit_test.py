@@ -12,6 +12,7 @@ Fixtures (tests/fixtures/fit/SOURCES says where each came from):
 Usage: python3 tests/fit_test.py
 """
 
+import gzip
 import json
 import os
 import struct
@@ -525,6 +526,119 @@ class Guard(unittest.TestCase):
         a, st, why = fit.guard_step(self.guard("cpu"), {"psi": p, "mem_available": 64 * GIB}, {})
         self.assertEqual((a, st["rung"]), ("down", 7))
         self.assertIn("PSI full avg10 6.0", why)
+
+
+HEADS = os.path.join(FIX, "gguf-heads")
+FLASH_GGUF = "ggml-org__Qwen3.8-Flash-Next-GGUF"
+
+
+def head_reader(name):
+    """A reader over a saved GGUF header (tests/fixtures/fit/gguf-heads): the bytes up to
+    the tensor data, which is all gguf_header reads; past them it fails loudly."""
+    with gzip.open(os.path.join(HEADS, name + ".head.gz"), "rb") as f:
+        blob = f.read()
+
+    def read(off, n):
+        if off >= len(blob):
+            raise AssertionError("read past the saved header of %s at %d" % (name, off))
+        return blob[off:off + n]
+    return read
+
+
+def head_size(name):
+    with open(os.path.join(HEADS, "INDEX.json"), encoding="utf-8") as f:
+        return json.load(f)["files"][name]["size"]
+
+
+class SplitGGUF(unittest.TestCase):
+    """ggml-org/Qwen3.8-Flash-Next-GGUF@91fb003: IQ4_NL in two gguf-split shards. Shard 1
+    holds only metadata (0 tensors); shard 2 holds all 1224 tensors."""
+
+    S1 = "Qwen3.8-Flash-Next-IQ4_NL-00001-of-00002.gguf"
+    S2 = "Qwen3.8-Flash-Next-IQ4_NL-00002-of-00002.gguf"
+
+    def test_each_shard_header(self):
+        h1 = fit.gguf_header(head_reader(self.S1), head_size(self.S1))
+        h2 = fit.gguf_header(head_reader(self.S2), head_size(self.S2))
+        self.assertEqual(h1["tensors"], [])
+        self.assertEqual((h1["kv"]["split.no"], h1["kv"]["split.count"], h1["kv"]["split.tensors.count"]), (0, 2, 1224))
+        self.assertEqual(h1["kv"]["general.architecture"], "qwen4exp")
+        self.assertEqual(len(h2["tensors"]), 1224)
+        self.assertEqual(h2["kv"]["split.no"], 1)
+
+    def test_split_sums_every_shard(self):
+        reads = {n: (head_reader(n), head_size(n)) for n in (self.S1, self.S2)}
+        w = fit.gguf_group_weights(sorted(reads), lambda n: reads[n], "test")
+        cls = {k: v["bytes"] for k, v in w["classes"].items()}
+        # qwen4exp: experts and the n-gram table (per_layer_token_embd) are counted and classed
+        self.assertGreater(cls["experts"], 60 * GIB)
+        self.assertGreater(cls["ngram"], 25 * GIB)
+        self.assertGreater(w["total_bytes"], 90 * GIB)
+        self.assertEqual(w["tensor_count"], 1224)
+        # the PLE projection matrices are matmuls, not the lookup table
+        self.assertEqual(fit.tensor_class("blk.1.ple_key.weight"), "other")
+        self.assertEqual(fit.tensor_class("per_layer_token_embd.weight"), "ngram")
+
+    def test_missing_shard_is_an_error(self):
+        reads = {self.S1: (head_reader(self.S1), head_size(self.S1))}
+        with self.assertRaisesRegex(ValueError, "split.count 2.*1 of them"):
+            fit.gguf_group_weights([self.S1], lambda n: reads[n], "test")
+
+    def test_groups_from_a_listing(self):
+        names = [self.S1, self.S2, "Qwen3.8-Flash-Next-Q2_K-00001-of-00002.gguf",
+                 "Qwen3.8-Flash-Next-Q2_K-00002-of-00002.gguf", "Qwen3.8-Flash-Next-Q8_0-00001-of-00002.gguf",
+                 "Qwen3.8-Flash-Next-Q8_0-00002-of-00002.gguf", "mmproj-Qwen3.8-Flash-Next-Q8_0.gguf",
+                 "mtp-Qwen3.8-Flash-Next-Q4_0.gguf", "dflash-Qwen3.8-Flash-Next-Q8_0.gguf", "README.md"]
+        g = fit.gguf_groups(names)
+        self.assertEqual(sorted(g), ["IQ4_NL", "Q2_K", "Q8_0"])
+        self.assertEqual(g["IQ4_NL"], [self.S1, self.S2])
+        # --file takes a shard name, a group label, or the group's file stem
+        self.assertEqual(fit.pick_group(g, self.S1), "IQ4_NL")
+        self.assertEqual(fit.pick_group(g, "q8_0"), "Q8_0")
+        with self.assertRaisesRegex(ValueError, "no GGUF group matches"):
+            fit.pick_group(g, "Q5_K_M")
+        # the optimizer's llama.cpp rule: int4 first, then fewer bits, more bits last
+        self.assertEqual(fit.group_order(g), ["IQ4_NL", "Q2_K", "Q8_0"])
+
+
+class ZeroWeights(unittest.TestCase):
+    def test_zero_bytes_refused(self):
+        cfg = config("Qwen__Qwen3.8-Flash-Next")
+        w = {"schema": fit.WEIGHTS_SCHEMA, "format": "gguf", "source": "x", "files": [], "classes": {}, "total_bytes": 0}
+        d = fit.fit(host("xeon6741p-4xb70"), cfg, w, name="x")
+        self.assertFalse(d["fits"])
+        self.assertIn("weights read as 0", d["reason"])
+
+    def test_moe_without_experts_refused(self):
+        cfg = config("Qwen__Qwen3.8-Flash-Next")
+        w = {"schema": fit.WEIGHTS_SCHEMA, "format": "gguf", "source": "x", "files": [],
+             "classes": {"other": {"bytes": 4 * GIB, "tensors": 10}}, "total_bytes": 4 * GIB}
+        d = fit.fit(host("xeon6741p-4xb70"), cfg, w, name="x")
+        self.assertFalse(d["fits"])
+        self.assertIn("no expert tensors", d["reason"])
+
+
+class FlashNextGGUF(unittest.TestCase):
+    """The ggml-org GGUF repo with three split groups, as `fetch` records it."""
+
+    def test_auto_pick_fits_without_a_flag(self):
+        d = plan("xeon6741p-4xb70", FLASH_GGUF)
+        self.assertTrue(d["fits"], d["summary"])
+        self.assertEqual(d["gguf_group"], "IQ4_NL")
+        self.assertEqual((d["engine"], d["placement"]), ("llama.cpp", "moe-offload"))
+        self.assertGreater(d["host_bytes"], 25 * GIB)  # the n-gram table stays in host RAM
+        self.assertIn("IQ4_NL", d["summary"])
+
+    def test_file_override(self):
+        d = plan("xeon6741p-4xb70", FLASH_GGUF, file="Qwen3.8-Flash-Next-Q8_0-00001-of-00002.gguf")
+        self.assertEqual(d["gguf_group"], "Q8_0")
+        d = plan("xeon6741p-4xb70", FLASH_GGUF, file="Q2_K")
+        self.assertEqual(d["gguf_group"], "Q2_K")
+
+    def test_falls_to_fewer_bits_when_int4_does_not_fit(self):
+        d = plan("desktop-i9-nogpu", FLASH_GGUF)
+        self.assertFalse(d["fits"])
+        self.assertTrue(any("IQ4_NL" in s for s in d["explain"]) and any("Q2_K" in s for s in d["explain"]))
 
 
 if __name__ == "__main__":
