@@ -1643,7 +1643,7 @@ say nothing about the graded result.
 
 ### H7x pre-registration: H7 to its full protocol on the Xeon 6741P (2026-10-20)
 
-Written 2026-10-20T23:10Z, revised 2026-10-21T01:30Z after three setup smokes, before any H7x
+Written 2026-10-20T23:10Z, revised 2026-10-21T04:00Z after four setup smokes, before any H7x
 measurement (the smokes started the engines and sent no request; see below). H7 keeps its
 INCONCLUSIVE verdict on the i9-13900T.
 
@@ -1657,8 +1657,8 @@ path is written for (Xeon with AMX), and fixes in advance how the 15% line is re
 (`K3D_GPU_AGENT_DRAFT=off`; H7 predates the CPU Fast Draft default); B = vLLM CPU v0.24.0
 (`vllm/vllm-openai-cpu:v0.24.0@sha256:b0e6f860...981a1`) with EAT's chart at `0d3438d`
 (`xeon-values.yaml` + `integrations/eat/vllm-values.yaml`, KV 6 GiB, `--max-model-len 32768`),
-`Qwen/Qwen3-4B` @ `1cfa9a72` in bf16; C = B with `--enforce-eager` removed and nothing else
-changed (its own Deployment and Service, selector label `h7x-arm: c`). The int4 second arm runs
+`Qwen/Qwen3-4B` @ `1cfa9a72` in bf16; C = B with `--enforce-eager` removed (and a writable
+`VLLM_CACHE_ROOT`, see the smokes) and nothing else changed (its own Deployment and Service, selector label `h7x-arm: c`). The int4 second arm runs
 only if vLLM v0.24.0 CPU is first shown to load an int4 build of the same checkpoint (H7); it is
 not run.
 
@@ -1709,8 +1709,14 @@ OOMKilled again at 16 GiB (vLLM bound 8 OpenMP threads to cores 48-55), last log
 allocation ("6.0/16.0 GiB for KV cache"). All three smokes also showed the node image's baked
 `intel-gpu-plugin` DaemonSet running despite `K3D_GPU_VENDORS=none` (a launcher bug, fixed
 separately); no pod requested a GPU, so no arm used one. This corrects X3 of the cross-host
-pre-registration, which said no GPU plugin is deployed. A fourth smoke with `H7X_VLLM_MEM=32Gi`
-runs before this row is merged and is reported in its run section. `H7X_READY_S=1800` is used for the run, because the first vLLM
+pre-registration, which said no GPU plugin is deployed. Smoke 4 (2026-10-21 03:14-03:47Z, order
+B C, 16 CPUs, `H7X_VLLM_MEM=32Gi`): B Ready in 112 s on 0-7,48-55; C restarted 9 times (exit 1)
+and was not Ready in 1800 s. The likely cause, not confirmed (the failed container's log was not
+kept): with compilation on, vLLM writes its compile cache under `$HOME/.cache/vllm`, which is on
+the chart's read-only root for its non-root user. C therefore also gets
+`VLLM_CACHE_ROOT=/root/.cache/vllm`, the chart's own writable cache volume, its one change besides
+dropping `--enforce-eager`; `h7x.sh` now keeps the failed container's log. If C still does not
+come up, the run continues without it and C/B is reported as not measured. `H7X_READY_S=1800` is used for the run, because the first vLLM
 start in a fresh cluster pulls its 7.4 GB image.
 
 **Hold.** One hold, cap 4200 s (11 blocks; a vLLM cold start is the slow step). If the cap ends

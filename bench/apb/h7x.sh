@@ -75,6 +75,10 @@ for d in docs:
             for key in ("args", "command"):
                 if c.get(key) and "--enforce-eager" in c[key]:
                     c[key] = [a for a in c[key] if a != "--enforce-eager"]; n += 1
+            # With compilation on, vLLM writes its compile cache under VLLM_CACHE_ROOT, by default
+            # $HOME/.cache/vllm, on the chart's read-only root; point it at the chart's own
+            # writable /root/.cache/vllm volume.
+            c.setdefault("env", []).append({"name": "VLLM_CACHE_ROOT", "value": "/root/.cache/vllm"})
         # C's own selector label, so the two Deployments never share pods.
         d["spec"]["selector"].setdefault("matchLabels", {})["h7x-arm"] = "c"
         d["spec"]["template"]["metadata"].setdefault("labels", {})["h7x-arm"] = "c"
@@ -153,8 +157,9 @@ for e in ${ORDER}; do
         echo "block ${i} engine ${e} did not come up" | tee -a "${OUT}/notes.txt"
         { kubectl get pods -A -o wide; kubectl describe pods -n default; kubectl describe pods -n k3d-gpu-agent
           for p in $(kubectl get pods -n default -o name; kubectl get pods -n k3d-gpu-agent -o name); do
-              echo "--- logs ${p}"; kubectl logs -n default "${p}" --all-containers --tail=60 2>/dev/null \
-                  || kubectl logs -n k3d-gpu-agent "${p}" --all-containers --tail=60; done
+              for prev in --previous ""; do
+                  echo "--- logs ${p} ${prev}"; kubectl logs -n default "${p}" --all-containers --tail=80 ${prev} 2>/dev/null \
+                      || kubectl logs -n k3d-gpu-agent "${p}" --all-containers --tail=80 ${prev}; done; done
         } >> "${OUT}/notes.txt" 2>&1
         [ "${e}" = C ] && continue
         exit 2
