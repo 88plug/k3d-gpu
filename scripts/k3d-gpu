@@ -9358,22 +9358,59 @@ cmd_plan() {
             args+=(--model-meta "${meta}" --measurements "$(model_opt_measurements)" --thinking "${K3D_GPU_AGENT_THINKING:-off}")
             [ -z "${ledger}" ] || args+=(--ledger "${ledger}")
             [ -z "${K3D_GPU_AGENT_VARIANT:-}" ] || args+=(--variant "${K3D_GPU_AGENT_VARIANT}")
+            [ -z "${K3D_GPU_AGENT_BACKEND:-}" ] || args+=(--agent-backend "${K3D_GPU_AGENT_BACKEND}")
         else
             warn "plan: no model metadata for ${model}; planning without the model optimizer"
         fi
     fi
     python3 "${dir}/plan.py" --mode "${mode}" --matrix "${matrix}" ${args[@]+"${args[@]}"} <<< "${out}" || rc=$?
-    [ -z "${meta}" ] || rm -f "${meta}"
     # --model also sizes that model to this host (text and --explain; --json and --hash
     # stay the plan/v1 bytes the apply hash covers). K3D_GPU_FIT=off leaves it out.
-    for ((i = 0; i < ${#args[@]}; i += 2)); do [ "${args[i]}" != --model ] || model=${args[i + 1]}; done
+    # With the model optimizer, the fit is of the variant it picked, at its revision and
+    # on its device: what `agent up --model` sizes and serves.
+    local fit_args=() opt fmodel frev fdev
     if [ -n "${model}" ] && [ "${rc}" -eq 0 ] && { [ "${mode}" = text ] || [ "${mode}" = explain ]; } \
         && [ "${K3D_GPU_FIT:-auto}" != off ]; then
+        fit_args=(--model "${model}")
+        if [ -n "${meta}" ]; then
+            opt=$(python3 "${dir}/plan.py" --mode json --matrix "${matrix}" ${args[@]+"${args[@]}"} <<< "${out}" 2>/dev/null \
+                | python3 -c 'import json, sys
+o = json.load(sys.stdin).get("optimizer") or {}
+m = o.get("fallback_model") if o.get("conversion") else o.get("model")
+r = o.get("fallback_revision") if o.get("conversion") else o.get("revision")
+print(m or "-", r or "-", o.get("device") or "-", o.get("engine") or "-")' 2>/dev/null) || opt="- - - -"
+            local feng
+            read -r fmodel frev fdev feng <<< "${opt}"
+            if [ "${fmodel}" = - ] && [ "${feng}" != - ]; then
+                # The optimizer keeps the engine's default model, and agent up sizes that.
+                local AGENT_BACKEND=ovms AGENT_HPU=""
+                [ "${feng}" != vllm ] || AGENT_BACKEND=${K3D_GPU_AGENT_BACKEND:-vllm}
+                [ "${fdev}" != HPU ] || AGENT_HPU=1
+                agent_config
+                fmodel=${AGENT_MODEL} frev=${AGENT_DEFAULT_REVISION:-}
+                [ -n "${frev}" ] || frev=-
+                info "fit: the optimizer keeps the engine's default model for ${model}: sizing ${fmodel}"
+            fi
+            if [ "${fmodel}" = - ]; then
+                fit_args=()
+            else
+                fit_args=(--model "${fmodel}")
+                [ "${frev}" = - ] || fit_args+=(--revision "${frev}")
+                case "${fdev}" in
+                    CPU) fit_args+=(--device cpu) ;;
+                    GPU) fit_args+=(--device gpu) ;;
+                    *) fit_args=(); info "fit: ${fdev} is not modelled by fit (agent up serves it unsized)" ;;
+                esac
+            fi
+        fi
+    fi
+    [ -z "${meta}" ] || rm -f "${meta}"
+    if [ "${#fit_args[@]}" -gt 0 ]; then
         if [ "${mode}" = explain ]; then
             echo "fit:"
-            ( cmd_fit --model "${model}" --explain ) 2>&1 | sed 's/^/  /' || true
+            ( cmd_fit "${fit_args[@]}" --explain ) 2>&1 | sed 's/^/  /' || true
         else
-            ( cmd_fit --model "${model}" ) || true
+            ( cmd_fit "${fit_args[@]}" ) || true
         fi
     fi
     return "${rc}"
