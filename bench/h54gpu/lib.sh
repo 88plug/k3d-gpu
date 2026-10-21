@@ -22,8 +22,7 @@ cluster_up() {
 
 # wait_sa: the default ServiceAccount exists (a pod is refused until the controller makes it).
 wait_sa() {
-    local i
-    for i in $(seq 1 60); do
+    for _ in $(seq 1 60); do
         kubectl get serviceaccount default >/dev/null 2>&1 && return 0
         sleep 2
     done
