@@ -268,6 +268,39 @@ openshell_case "=yes" refuse 'deploy_openshell=yes'
 openshell_case "trailing spaces" refuse 'deploy_openshell=on   '
 openshell_case "on then off, last wins" pass 'deploy_openshell=on' 'deploy_openshell=off'
 openshell_case "off then on, last wins" refuse 'deploy_openshell=off' 'deploy_openshell=on'
+
+# 3b. EAT_FIT_MODEL: the vLLM CPU KV cache comes from `k3d-gpu fit` (a stub printing
+#     a fit/v1 document), before the cluster is touched; a model that cannot fit stops.
+mkdir -p "${WORK}/fitbin"
+cat > "${WORK}/fitbin/k3d-gpu" <<'EOF'
+#!/bin/sh
+[ "$*" = "fit --model ${STUB_MODEL} --engine vllm --device cpu --json" ] || { echo "unexpected: $*" >&2; exit 2; }
+cat "${STUB_FIT}"
+[ "${STUB_FITS}" = true ] || exit 3
+EOF
+chmod +x "${WORK}/fitbin/k3d-gpu"
+printf '%s\n' '{"fits": true, "summary": "fit: org/m on CPU (AMX) via vllm", "flags": ["--max-model-len=32768", "--max-num-seqs=4", "VLLM_CPU_KVCACHE_SPACE=17"]}' > "${WORK}/fit-yes.json"
+printf '%s\n' '{"fits": false, "summary": "fit: org/m does not fit this host: too big", "flags": []}' > "${WORK}/fit-no.json"
+out=$(PATH="${WORK}/fitbin:${PATH}" STUB_MODEL=org/m STUB_FIT="${WORK}/fit-yes.json" STUB_FITS=true \
+    EAT_FIT_MODEL=org/m EAT_KUBECONFIG=/nonexistent "${EAT}/eat-up.sh" 2>&1) && rc=0 || rc=$?
+if [ "${rc}" -ne 0 ] && grep -qF 'KV cache 17 GiB from k3d-gpu fit' <<< "${out}" && grep -qF "${PASSED}" <<< "${out}"; then
+    ok "eat-up: EAT_FIT_MODEL sizes the vLLM KV cache from k3d-gpu fit"
+else
+    fail "eat-up: EAT_FIT_MODEL sizes the vLLM KV cache (rc=${rc}): ${out}"
+fi
+out=$(PATH="${WORK}/fitbin:${PATH}" STUB_MODEL=org/m STUB_FIT="${WORK}/fit-no.json" STUB_FITS=false \
+    EAT_FIT_MODEL=org/m EAT_KUBECONFIG=/nonexistent "${EAT}/eat-up.sh" 2>&1) && rc=0 || rc=$?
+if [ "${rc}" -ne 0 ] && grep -qF 'does not fit this host' <<< "${out}" && ! grep -qF "${PASSED}" <<< "${out}"; then
+    ok "eat-up: a model that cannot fit stops before the cluster is touched"
+else
+    fail "eat-up: a model that cannot fit stops (rc=${rc}): ${out}"
+fi
+out=$(PATH="${WORK}/fitbin:${PATH}" EAT_VLLM_KV_GIB=9 EAT_FIT_MODEL=org/m EAT_KUBECONFIG=/nonexistent "${EAT}/eat-up.sh" 2>&1) && rc=0 || rc=$?
+if [ "${rc}" -ne 0 ] && ! grep -qF 'from k3d-gpu fit' <<< "${out}" && grep -qF "${PASSED}" <<< "${out}"; then
+    ok "eat-up: EAT_VLLM_KV_GIB overrides the fit"
+else
+    fail "eat-up: EAT_VLLM_KV_GIB overrides the fit (rc=${rc}): ${out}"
+fi
 openshell_case "commented out" pass '# deploy_openshell=on'
 openshell_case "ON is not on to EAT" pass 'deploy_openshell=ON'
 openshell_case "other key mentioning it" pass 'note=deploy_openshell=on'

@@ -1,0 +1,58 @@
+{
+  "classes": {
+    "embed": {
+      "bytes": 1476395008,
+      "tensors": 1
+    },
+    "experts": {
+      "bytes": 11878563840,
+      "tensors": 34560
+    },
+    "other": {
+      "bytes": 861984572,
+      "tensors": 1066
+    },
+    "vision": {
+      "bytes": 1145588832,
+      "tensors": 356
+    }
+  },
+  "files": [
+    {
+      "bytes": 2146520500,
+      "name": "model-00001-of-00008.safetensors"
+    },
+    {
+      "bytes": 2148085850,
+      "name": "model-00002-of-00008.safetensors"
+    },
+    {
+      "bytes": 2148148186,
+      "name": "model-00003-of-00008.safetensors"
+    },
+    {
+      "bytes": 2148151698,
+      "name": "model-00004-of-00008.safetensors"
+    },
+    {
+      "bytes": 2148148178,
+      "name": "model-00005-of-00008.safetensors"
+    },
+    {
+      "bytes": 2006177808,
+      "name": "model-00006-of-00008.safetensors"
+    },
+    {
+      "bytes": 2141640496,
+      "name": "model-00007-of-00008.safetensors"
+    },
+    {
+      "bytes": 480398920,
+      "name": "model-00008-of-00008.safetensors"
+    }
+  ],
+  "format": "safetensors",
+  "schema": "k3d-gpu.weights/v1",
+  "source": "Intel/gemma-4-26B-A4B-it-int4-AutoRound@edff62728a3c79ec541983b86a21674500e0f05b",
+  "total_bytes": 15362532252
+}
