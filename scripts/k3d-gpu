@@ -185,7 +185,9 @@ Usage: k3d-gpu <command>
             its source; no network: a built-in map). The served model (or a local dir,
             or K3D_GPU_AGENT_MODEL) is then sized by 'fit': context, sequences, GPUs and
             the pod memory limit come from what this host has free, and a model that
-            cannot fit is refused with the reason; then 'agent guard' runs in the background
+            cannot fit is refused with the reason; the engine the fit picks serves it
+            (OVMS, vLLM, or llama-server for GGUF weights, converted once when a model
+            ships none); then 'agent guard' runs in the background
             --with adds a vision-language model, Whisper speech-to-text (NPU first)
             and DL Streamer video analytics (GPU media engines) on what the LLM leaves
   agent guard [--once] [--interval S]
@@ -346,8 +348,9 @@ Environment:
   K3D_GPU_MODEL_GB      model size checked by doctor --perf (same as --model-gb)
   K3D_GPU_AGENT_DEVICE  agent device: auto | CPU | GPU | NPU | HPU (default: auto; auto
                         takes a Gaudi first, served by vLLM)
-  K3D_GPU_AGENT_BACKEND agent server: ovms | vllm | llm-scaler (default: ovms, or vllm on
-                        a Gaudi; llm-scaler needs an Intel GPU, Arc B-series validated)
+  K3D_GPU_AGENT_BACKEND agent server: ovms | vllm | llm-scaler | llama.cpp (default: ovms,
+                        or vllm on a Gaudi, or the engine the fit picks for --model M;
+                        llm-scaler needs an Intel GPU, Arc B-series validated)
   K3D_GPU_AGENT_MODEL   agent Hugging Face model (default: OpenVINO/Qwen3-4B-int4-ov,
                         Qwen/Qwen3-4B on vllm/llm-scaler)
   K3D_GPU_AGENT_DRAFT   ovms Fast Draft speculative decoding: off | auto | CPU | GPU | NPU
@@ -356,6 +359,9 @@ Environment:
                         win (a refuting row or no row: none), none otherwise; off disables it;
                         auto = the target's device; GPU = an Intel GPU, the first advertised)
   K3D_GPU_AGENT_DRAFT_MODEL  draft model (default: OpenVINO/Qwen3-0.6B-int4-ov)
+                        On llama.cpp: off (default) | mtp: MTP speculative decoding from
+                        the model's own MTP head, or for Gemma 4's QAT GGUF its QAT
+                        assistant converted once to Q4_0
   K3D_GPU_AGENT_VARIANT agent up/plan --model: serve this variant id (or qat-convert) instead
                         of the ranked pick (default: the optimizer's pick)
   K3D_GPU_AGENT_THINKING agent up/plan --model: off | on | model (the card's default)
@@ -364,6 +370,9 @@ Environment:
   K3D_GPU_MODEL_OPT     auto | off: off serves --model exactly as given (default: auto)
   K3D_GPU_HF_FIXTURES   directory of saved model metadata bundles to read instead of
                         Hugging Face (tests, air-gapped hosts)
+  K3D_GPU_AGENT_CONVERT_TIMEOUT  seconds agent up waits for a GGUF conversion (default: 43200)
+  K3D_GPU_INTEL_CARDS   auto | all: auto leaves Intel GPUs that host processes already
+                        fill out of the device plugin, so no pod is handed one (default: auto)
   K3D_GPU_AUTOQUANT     auto | off: on OVMS/CPU with no K3D_GPU_AGENT_MODEL, serve the
                         precision measured for this host fingerprint (default: auto)
   K3D_GPU_AUTOQUANT_CACHE  measured-pick cache (default: \$XDG_STATE_HOME/k3d-gpu/autoquant.json)
@@ -538,6 +547,67 @@ intel_plugin_args() {
         echo "-allocation-policy=${INTEL_ALLOCATION}"
     fi
     if [ "${INTEL_MONITORING}" = 1 ]; then echo "-enable-monitoring"; fi
+}
+
+# ---- Intel GPU cards host processes already fill ------------------------------------
+# The Intel GPU plugin (intel-device-plugins v0.37.1, cmd/gpu_plugin/gpu_plugin.go)
+# advertises every Intel card it finds and may hand any of them to a pod. Its one device
+# filter, -allow-ids / -deny-ids (:864-865), matches the PCI device id
+# (filterOutInvalidCards, :553-588, via pciDeviceIDForCard :154), which every card of one
+# model shares; -allocation-policy only orders the cards kubelet already offers. It does
+# drop a card whose /dev/dri nodes it cannot stat: devPathForDrmFile os.Stat (:546), then
+# scan() skips a card with no device spec (:726-728). So `up` leaves a card that host
+# processes fill out of the plugin's view: its pod mounts /dev/dri/cardN and renderDN of
+# the other cards (and by-path) instead of all of /dev/dri, and those cards are never
+# advertised. A card is busy when others hold half its VRAM or more (fit.py busy-cards:
+# the driver's memory-region query, and DRM fdinfo to name who), as the fit counts it.
+# Read once at `up`: a card a host process takes later is not seen.
+# K3D_GPU_INTEL_CARDS=all advertises every card, as before.
+INTEL_CARDS="${K3D_GPU_INTEL_CARDS:-auto}"
+INTEL_HIDDEN=0  # cards left out of the plugin by `up`
+
+# "<card>\t<bdf>\t<who>" lines: Intel cards host processes fill now (none when the fit
+# cannot probe this host, or K3D_GPU_INTEL_CARDS=all).
+intel_busy_cards() {
+    [ "${INTEL_CARDS}" = auto ] || return 0
+    command -v python3 >/dev/null 2>&1 && console_dir >/dev/null || return 0
+    { fit_host /dev/stdout | fit_py busy-cards --host /dev/stdin; } 2>/dev/null || true
+}
+
+# intel_free_nodes <busy cards>: the DRM nodes (cardN, renderDN) of every Intel card not
+# named in the space-separated list, one per line.
+intel_free_nodes() {
+    local busy=" $1 " d c n
+    for d in "${SYSROOT}"/sys/class/drm/card[0-9]*; do
+        c=${d##*/}
+        [[ "${c}" =~ ^card[0-9]+$ ]] || continue
+        [ "$(cat "${d}/device/vendor" 2>/dev/null)" = 0x8086 ] || continue
+        [[ "${busy}" != *" ${c} "* ]] || continue
+        for n in "${d}"/device/drm/*; do
+            n=${n##*/}
+            [[ "${n}" =~ ^(card|renderD)[0-9]+$ ]] && echo "${n}"
+        done
+    done
+    return 0
+}
+
+# Intel GPU plugin manifest on stdin -> the same manifest whose pod mounts only the DRM
+# nodes in $1 (one per line) and /dev/dri/by-path, not all of /dev/dri.
+intel_manifest_pin() {
+    python3 -c 'import sys
+nodes = sys.argv[1].split()
+src = sys.stdin.read()
+mnt = "            - name: devfs\n              mountPath: /dev/dri\n              readOnly: true\n"
+vol = "        - name: devfs\n          hostPath:\n            path: /dev/dri\n            type: DirectoryOrCreate\n"
+if src.count(mnt) != 1 or src.count(vol) != 1:
+    sys.exit("intel-gpu-plugin manifest: no single /dev/dri mount to narrow")
+m = "".join("            - name: dri-%s\n              mountPath: /dev/dri/%s\n              readOnly: true\n" % (n.lower(), n)
+            for n in nodes)
+v = "".join("        - name: dri-%s\n          hostPath:\n            path: /dev/dri/%s\n            type: CharDevice\n"
+            % (n.lower(), n) for n in nodes)
+m += "            - name: dri-by-path\n              mountPath: /dev/dri/by-path\n              readOnly: true\n"
+v += "        - name: dri-by-path\n          hostPath:\n            path: /dev/dri/by-path\n            type: DirectoryOrCreate\n"
+sys.stdout.write(src.replace(mnt, m).replace(vol, v))' "$1"
 }
 
 # Intel GPU plugin manifest on stdin -> the same manifest with an args list (one
@@ -4507,7 +4577,7 @@ cmd_up() {
     else
         info "Accelerators: ${ACTIVE[*]:-none (K3D_GPU_VENDORS=none)}"
     fi
-    local intel_args="" problems
+    local intel_args="" problems busy="" free_nodes=""
     if intel_dra && ! is_active intel; then
         err "K3D_GPU_DRA=1 needs an Intel GPU and none is active (${ACTIVE[*]}) — run 'k3d-gpu doctor' or set K3D_GPU_VENDORS"
     fi
@@ -4519,6 +4589,22 @@ cmd_up() {
             [ -z "$(intel_dra_ignored)" ] || warn "$(intel_dra_ignored)"
         else
             intel_args=$(intel_plugin_args)
+            [[ "${INTEL_CARDS}" =~ ^(auto|all)$ ]] || err "K3D_GPU_INTEL_CARDS must be auto or all, got '${INTEL_CARDS}'"
+            busy=$(intel_busy_cards)
+        fi
+    fi
+    if [ -n "${busy}" ]; then
+        local c bdf who names=""
+        while IFS=$'\t' read -r c bdf who; do
+            names+="${c} "
+            warn "Intel GPU ${c} (${bdf}) is busy: ${who}; the device plugin will not advertise it, so no pod is handed it (K3D_GPU_INTEL_CARDS=all advertises it)"
+        done <<< "${busy}"
+        free_nodes=$(intel_free_nodes "${names}")
+        if [ -z "$(grep '^card' <<< "${free_nodes}")" ]; then
+            warn "every Intel GPU is busy: the device plugin advertises them all, and the fit leaves them out"
+            busy="" free_nodes=""
+        else
+            INTEL_HIDDEN=$(wc -w <<< "${names}")
         fi
     fi
     exp_collect
@@ -4735,7 +4821,7 @@ cmd_up() {
         [ -n "${ds}" ] || continue
         ensure_plugin "${v}" "${ns}" "${ds}" "${manifest}"
     done
-    if [ -n "${intel_args}" ]; then configure_intel_plugin "${intel_args}"; fi
+    if [ -n "${intel_args}" ] || [ -n "${free_nodes}" ]; then configure_intel_plugin "${intel_args}" "${free_nodes}"; fi
     # nri-plugins v0.14.0 reads two core kinds, cpu_core and cpu_atom, and will not
     # start while an online CPU is in neither (pkg/sysfs checkCoreKinds). Arrow
     # Lake-H lists its LP E-cores in cpu_lowpower, so hand them to the E-core kind
@@ -4822,37 +4908,52 @@ node_image_check() {
     return 1
 }
 
-# Give the Intel GPU plugin the args in $1 (one per line). The baked manifest is
+# Give the Intel GPU plugin the args in $1 (one per line), and when $2 names DRM nodes,
+# mount only those (intel_manifest_pin). The baked manifest is
 # rewritten in place inside the server node: k3s re-applies every file in its
 # manifests dir on each start and rescans it every 15 s, so the file, not a
 # kubectl patch, is what survives a node restart. The new file is written as a
 # dotfile first (k3s ignores those) and renamed over the old one.
 configure_intel_plugin() {
-    local args=$1 node="k3d-${CLUSTER}-server-0" src out got first
+    local args=$1 nodes=${2:-} node="k3d-${CLUSTER}-server-0" src out got want what
     local dir=/var/lib/rancher/k3s/server/manifests
     local file="${dir}/intel-gpu-plugin.yaml"
-    first=$(sed -n 1p <<< "${args}")
-    info "Configuring intel GPU device plugin: $(paste -sd' ' <<< "${args}")"
-    if src=$(docker exec "${node}" cat "${file}" 2>/dev/null); then
-        out=$(intel_manifest_with_args "${args}" <<< "${src}") \
-            || err "cannot add args to ${file} in ${node}"
+    # What the applied DaemonSet shows once k3s took the new file: the first arg, else the
+    # narrowed mounts.
+    if [ -n "${args}" ]; then
+        want="\"$(sed -n 1p <<< "${args}")\"" what="{.spec.template.spec.containers[0].args}"
+        info "Configuring intel GPU device plugin: $(paste -sd' ' <<< "${args}")"
+    fi
+    if [ -n "${nodes}" ]; then
+        [ -n "${args}" ] || want="dri-by-path" what="{.spec.template.spec.volumes[*].name}"
+        info "Intel GPU device plugin sees only $(paste -sd' ' <<< "${nodes}")"
+    fi
+    if ! src=$(docker exec "${node}" cat "${file}" 2>/dev/null); then
+        # A custom image without the baked manifest: ensure_plugin applied ours.
+        src=$(<"${INTEL_PLUGIN_MANIFEST}")
+        node=""
+    fi
+    out=${src}
+    if [ -n "${args}" ]; then
+        out=$(intel_manifest_with_args "${args}" <<< "${out}") || err "cannot add args to the intel-gpu-plugin manifest"
+    fi
+    if [ -n "${nodes}" ]; then
+        out=$(intel_manifest_pin "${nodes}" <<< "${out}") || err "cannot narrow the intel-gpu-plugin manifest's /dev/dri"
+    fi
+    if [ -n "${node}" ]; then
         docker exec -i "${node}" sh -c "cat > '${dir}/.intel-gpu-plugin.yaml.new' && mv '${dir}/.intel-gpu-plugin.yaml.new' '${file}'" \
             <<< "${out}" || err "cannot write ${file} in ${node}"
         local dl=$((SECONDS + INTEL_APPLY_TIMEOUT))
         while [ "${SECONDS}" -lt "${dl}" ]; do
-            got=$(kubectl -n kube-system get daemonset intel-gpu-plugin \
-                -o jsonpath='{.spec.template.spec.containers[0].args}' 2>/dev/null || true)
-            [[ "${got}" == *"\"${first}\""* ]] && break
+            got=$(kubectl -n kube-system get daemonset intel-gpu-plugin -o "jsonpath=${what}" 2>/dev/null || true)
+            [[ "${got}" == *"${want}"* ]] && break
             sleep 3
         done
-        if [[ "${got}" != *"\"${first}\""* ]]; then
-            warn "k3s has not applied the new intel-gpu-plugin args after ${INTEL_APPLY_TIMEOUT}s — inspect: kubectl -n kube-system get addon intel-gpu-plugin -o yaml"
+        if [[ "${got}" != *"${want}"* ]]; then
+            warn "k3s has not applied the new intel-gpu-plugin manifest after ${INTEL_APPLY_TIMEOUT}s — inspect: kubectl -n kube-system get addon intel-gpu-plugin -o yaml"
             return 0
         fi
     else
-        # A custom image without the baked manifest: ensure_plugin applied ours.
-        out=$(intel_manifest_with_args "${args}" < "${INTEL_PLUGIN_MANIFEST}") \
-            || err "cannot add args to ${INTEL_PLUGIN_MANIFEST}"
         kubectl apply -f - <<< "${out}"
     fi
     intel_wait_shared
@@ -4866,7 +4967,7 @@ intel_wait_shared() {
     local n want got=0 dl
     n=$(intel_shared)
     [ "${n}" != 1 ] && [ "${#INTEL_DRIVERS[@]}" -gt 0 ] || return 0
-    want=$((n * ${#INTEL_DRIVERS[@]}))
+    want=$((n * (${#INTEL_DRIVERS[@]} - INTEL_HIDDEN)))
     kubectl -n kube-system rollout status daemonset/intel-gpu-plugin --timeout="${INTEL_APPLY_TIMEOUT}s" >/dev/null 2>&1 || true
     dl=$((SECONDS + INTEL_APPLY_TIMEOUT))
     while :; do
@@ -6538,6 +6639,9 @@ cmd_host_setup() {
 #               uses for Arc), validated on Arc Pro B-series; on a Gaudi (HPU),
 #               Intel's vllm-gaudi build instead
 #   llm-scaler  Intel's own vLLM build for Arc B60/B70 (older vLLM baseline)
+# The llama.cpp backend (llama-server, /v1) serves GGUF weights on an Intel GPU (SYCL)
+# or the CPU. With K3D_GPU_AGENT_BACKEND unset, a model the fit sizes is served by the
+# engine the fit picks for it (agent_follow_engine).
 # The device is read from what the running cluster actually advertises, never from
 # the host alone: an Intel GPU the cluster cannot schedule is not a choice. A Gaudi
 # runs vLLM only, so picking one (auto prefers it) switches an unset backend to vllm.
@@ -6552,6 +6656,14 @@ AGENT_SEL=""    # "<device> <resource>", set by agent_select
 # than OVMS: ghcr.io/ggml-org/llama.cpp:server-vulkan-v0.5.0, the multi-arch
 # index built from release v0.5.0 (commit 7fe450e19305b828c199d602c23a8337aaa1f03b).
 LLAMA_VULKAN_IMAGE="${K3D_GPU_LLAMA_VULKAN_IMAGE:-ghcr.io/ggml-org/llama.cpp@sha256:be586c648cb79d2cd75d0c38a6541e1f16c47a7c6621d3e711470a467fc38744}"
+# The llama.cpp agent backend: release v0.7.0 (tag b11669, commit
+# 620d2225cc436ab0b001e3200e590e3b286ef9ab), the latest release on 2026-10-20; its image
+# tags are server-intel-b11669 (SYCL, Level Zero and compute-runtime 26.18 inside) for an
+# Intel GPU, server-b11669 (CPU) otherwise, and full-b11669 (convert_hf_to_gguf.py and
+# llama-quantize) for a one-time GGUF conversion. Multi-arch indexes, pinned by digest.
+LLAMA_SYCL_IMAGE="${K3D_GPU_LLAMA_SYCL_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-intel-b11669@sha256:632c96d3c52ddadcd4e53fd2835e6430814cf68dde06b39067c1e281bdc5bd90}"
+LLAMA_CPU_IMAGE="${K3D_GPU_LLAMA_CPU_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-b11669@sha256:8ffe0d28ff5261cc2f78ca1f67db1515bc2529b904a3c25f5b24f4cedfc3411d}"
+LLAMA_FULL_IMAGE="${K3D_GPU_LLAMA_FULL_IMAGE:-ghcr.io/ggml-org/llama.cpp:full-b11669@sha256:627dde1b97b1a42ba6fc20a13452650a988f199321a258ec1bec80196b9a02a8}"
 AGENT_STORAGE="${K3D_GPU_AGENT_STORAGE:-20Gi}"
 AGENT_TIMEOUT="${K3D_GPU_AGENT_TIMEOUT:-1800}" # seconds: first run downloads the model
 # openvino/model_server:2026.4.1-gpu (CPU, GPU and NPU plugins, compute-runtime inside).
@@ -6585,6 +6697,15 @@ agent_config() {
             else
                 AGENT_MEMORY="${K3D_GPU_AGENT_MEMORY:-8Gi}"
             fi
+            ;;
+        llama.cpp|llamacpp)
+            AGENT_BACKEND=llama.cpp AGENT_APP=llamacpp AGENT_API=/v1
+            # llamacpp_manifest swaps in the CPU image on a CPU placement.
+            AGENT_DEFAULT_IMAGE="${LLAMA_SYCL_IMAGE}"
+            # Google's Gemma 4 26B-A4B QAT Q4_0 GGUF, 14.4 GB.
+            AGENT_DEFAULT_MODEL="google/gemma-4-26B-A4B-it-qat-q4_0-gguf"
+            AGENT_DEFAULT_REVISION="d1c082be9cf3c8a514acf63b8761f4b41935842e"
+            AGENT_MEMORY="${K3D_GPU_AGENT_MEMORY:-4Gi}"
             ;;
         *)
             AGENT_APP=ovms AGENT_API=/v3
@@ -6935,6 +7056,7 @@ agent_manifest() {
     agent_fit "${device}"
     agent_check_values
     if [ "${AGENT_APP}" = vllm ]; then vllm_manifest; return 0; fi
+    if [ "${AGENT_APP}" = llamacpp ]; then llamacpp_manifest; return 0; fi
     local via=""
     [ "${res}" = - ] || via=" (${res})"
     local cores cname=P-cores
@@ -7333,15 +7455,410 @@ spec:
 EOF
 }
 
+# ---- agent backend: llama.cpp (llama-server) ----------------------------------
+# The fit picks llama.cpp for GGUF weights (one GPU, a layer split, MoE experts in
+# DRAM, or the CPU), and for safetensors whose architecture only llama.cpp runs here,
+# after a one-time GGUF conversion. llama-server serves the OpenAI API at /v1 on port
+# 8000, as vLLM does. Every flag is spelled as llama.cpp v0.7.0 common/arg.cpp defines it.
+#   -c, -np, -ngl, -ts, --n-cpu-moe / --cpu-moe, -ctk/-ctv  the fit's (fit.py _flags)
+#   -t / -tb       the pod's physical cores / CPUs: llama.cpp otherwise counts the host's
+#                  cores, not the pod's (the P-core balloon on a hybrid node)
+#   --load-mode mmap+mlock  CPU placement only: the lock grows to the end of the furthest
+#                  CPU tensor (src/llama-model-loader.cpp:1726-1728), which on a GPU or
+#                  experts-in-DRAM placement also covers GPU tensors in between and can
+#                  pass the fit's pod limit
+#   --jinja        the chat template inside the GGUF (Google's QAT GGUF carries the model
+#                  card's template; convert_hf_to_gguf.py copies the repo's); its tool-call
+#                  format is picked from the template (common/chat.cpp: Gemma 4
+#                  <|tool_call>call:, Qwen3-Coder XML <tool_call><function=...>)
+#   --reasoning off  thinking off for agent turns: it sets enable_thinking=false in the
+#                  template (common/arg.cpp -rea), which Gemma 4 and Qwen3.8 both read
+#   --spec-type draft-mtp  only with K3D_GPU_AGENT_DRAFT=mtp: no measurement in
+#                  EXPERIMENTS.md shows a draft winning here (H34x REFUTED the CPU draft on
+#                  the Xeon; H57dm, Gemma 4's MTP drafter, is pending), so it is off by
+#                  default. A GGUF with an MTP head (Qwen3.8's nextn, kept by the
+#                  conversion) drafts from it; Google's QAT GGUF ships none, so its QAT
+#                  assistant is converted once to Q4_0, the target's precision (the QAT
+#                  GGUF card asks for a drafter of the same precision). Default draft length.
+LLAMA_SERVE_PORT=8000
+# Gemma 4's QAT GGUF has no MTP head: its drafter, a repo converted to GGUF and quantized.
+LLAMA_MTP_DRAFTERS=(
+    "google/gemma-4-26B-A4B-it-qat-q4_0-gguf google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant@9537141506fe8875b3ed45b264af13580cb29166 Q4_0"
+)
+# pip pins the conversion adds on PYTHONPATH (bench/h57d/convert.sh's approach): the image's
+# transformers 4.57.6 cannot read transformers-5 tokenizer configs (extra_special_tokens as
+# a list); huggingface-hub fetches the pinned revision.
+GGUF_CONVERT_PIP="transformers==5.20.2 huggingface-hub==2.2.0 tokenizers==0.23.3 safetensors==0.8.0"
+AGENT_CONVERT_TIMEOUT="${K3D_GPU_AGENT_CONVERT_TIMEOUT:-43200}" # seconds: a 360 GB checkpoint downloads, then converts
+AGENT_CONVERT_MEMORY="${K3D_GPU_AGENT_CONVERT_MEMORY:-64Gi}"
+
+# gguf_convert <repo> <revision> <out dir> <bytes needed> <quantize type or -> <convert args...>:
+# the conversion Job's script (its ConfigMap holds this function). Downloads the pinned
+# revision, runs the image's convert_hf_to_gguf.py, optionally llama-quantize, writes
+# <out dir>/model.gguf and manifest.json (sha256, sizes, pip freeze), then removes the
+# download. An existing manifest.json means it is built: the Job exits at once.
+gguf_convert() {
+    set -euo pipefail
+    local repo=$1 rev=$2 out=$3 need=$4 quant=$5 src tmp have free
+    shift 5
+    if [ -f "${out}/manifest.json" ]; then
+        echo "gguf-convert: ${out} is already built"
+        return 0
+    fi
+    src="${out}.src" tmp="${out}.partial"
+    rm -rf "${tmp}"
+    mkdir -p "${src}" "${tmp}"
+    have=$(du -sb "${src}" | cut -f1)
+    free=$(df -P -B1 "${tmp}" | awk 'NR == 2 { print $4 }')
+    if [ "$((need - have))" -gt "${free}" ]; then
+        echo "gguf-convert: needs $(((need - have) >> 30)) GiB more under $(dirname "${out}"), $((free >> 30)) GiB free"
+        return 1
+    fi
+    # shellcheck disable=SC2086 # word list of pinned requirements
+    pip install -q --target /tmp/pydeps ${GGUF_CONVERT_PIP}
+    PYTHONPATH=/tmp/pydeps python3 -c 'import sys
+from huggingface_hub import snapshot_download
+snapshot_download(repo_id=sys.argv[1], revision=sys.argv[2], local_dir=sys.argv[3],
+                  allow_patterns=["*.json", "*.safetensors", "*.jinja", "*.txt", "*.model", "tokenizer*"])' \
+        "${repo}" "${rev}" "${src}"
+    PYTHONPATH=/tmp/pydeps python3 /app/convert_hf_to_gguf.py "$@" --outfile "${tmp}/model.gguf" "${src}"
+    if [ "${quant}" != - ]; then
+        /app/llama-quantize "${tmp}/model.gguf" "${tmp}/model-${quant}.gguf" "${quant}"
+        mv -f "${tmp}/model-${quant}.gguf" "${tmp}/model.gguf"
+    fi
+    pip freeze --path /tmp/pydeps > "${tmp}/pip-freeze.txt"
+    python3 -c 'import hashlib, json, os, sys
+d, f = sys.argv[1], os.path.join(sys.argv[1], "model.gguf")
+h = hashlib.sha256()
+with open(f, "rb") as fh:
+    for c in iter(lambda: fh.read(1 << 24), b""):
+        h.update(c)
+json.dump({"source": sys.argv[2] + "@" + sys.argv[3], "convert": sys.argv[4], "quantize": sys.argv[5],
+           "sha256": h.hexdigest(), "bytes": os.path.getsize(f)}, open(os.path.join(d, "manifest.json"), "w"), indent=1)' \
+        "${tmp}" "${repo}" "${rev}" "$*" "${quant}"
+    rm -rf "${out}"
+    mv -T "${tmp}" "${out}"
+    rm -rf "${src}"
+    echo "gguf-convert: built ${out}/model.gguf"
+}
+
+# "<source> <format> <first GGUF file> <mtp bytes> <total bytes>" of the agent model, from
+# the fit's metadata cache (fit_model_dir: config and weight headers, not the weights).
+llamacpp_meta() {
+    local dir
+    dir=$(fit_model_dir "${AGENT_MODEL}" "${AGENT_REVISION:-main}") || return 1
+    python3 -c 'import json, sys
+w = json.load(open(sys.argv[1]))
+files = sorted(f["name"] for f in w.get("files") or [] if f["name"].endswith(".gguf"))
+mtp = ((w.get("classes") or {}).get("mtp") or {}).get("bytes", 0)
+print(w.get("source") or "-", w.get("format") or "-", files[0] if files else "-", mtp, w.get("total_bytes") or 0)' \
+        "${dir}/weights.json"
+}
+
+# Threads for llama-server in a pod of <cpus> CPUs: its physical cores (the P-cores of the
+# balloon on a hybrid node, else the CPUs over the SMT width), and every CPU for batches.
+llamacpp_threads() {
+    local cpus=$1 hybrid=$2 n smt
+    if [ -n "${hybrid}" ] && [ "$(agent_cores)" = performance ]; then
+        n=$(cpu_list_count "$(pcore_physical_cpus)")
+        [ "${n}" -le "${cpus}" ] || n=${cpus}
+    else
+        smt=$(cpu_list_count "$(cat "${SYSROOT}${CPU_SYS}/cpu0/topology/core_cpus_list" 2>/dev/null || true)")
+        [ "${smt}" -ge 1 ] || smt=1
+        n=$((cpus / smt))
+    fi
+    [ "${n}" -ge 1 ] || n=1
+    echo "${n}"
+}
+
+# A model-cache directory name for repo@revision ("org__name@rev").
+gguf_slug() { local r=${1%@*}; echo "${r//\//__}@${1##*@}"; }
+
+# The llama.cpp ConfigMap, Jobs, PVC, Deployment and Service. Called from agent_manifest,
+# whose locals (device res gid hybrid cpus) it reads.
+llamacpp_manifest() {
+    case "${device}" in
+        GPU|CPU) ;;
+        *) err "K3D_GPU_AGENT_BACKEND=llama.cpp runs on an Intel GPU or the CPU, not ${device}" ;;
+    esac
+    local meta source fmt file mtp total place=${AGENT_PLACEMENT:-} n=${AGENT_FIT_GPUS:-} flags=${AGENT_LLAMA_FLAGS:-}
+    meta=$(llamacpp_meta) || err "llama.cpp: no metadata for ${AGENT_MODEL} (offline, private or gated: set HF_TOKEN)"
+    read -r source fmt file mtp total <<< "${meta}"
+    [[ "${source}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9._-]+@[0-9a-f]{40}$ ]] \
+        || err "llama.cpp: ${AGENT_MODEL} has no pinned Hugging Face source (got '${source}')"
+    local repo=${source%@*} rev=${source##*@} image=${AGENT_IMAGE} item="            - " args="" model jobs="" waits=""
+    [ "${device}" = GPU ] || [ -n "${K3D_GPU_AGENT_IMAGE:-}" ] || image=${LLAMA_CPU_IMAGE}
+    valid_image "${image}" || err "llama.cpp image '${image}' is not a valid image reference"
+    # Without a fit (K3D_GPU_FIT=off): one slot of K3D_GPU_AGENT_MAX_LEN, every layer on the device.
+    if [ -z "${flags}" ]; then
+        if [ "${device}" = CPU ]; then place=cpu flags="-c ${AGENT_MAX_LEN} -np 1 -ngl 0"
+        else place=gpu flags="-c ${AGENT_MAX_LEN} -np 1 -ngl 999" n=${AGENT_GPUS}; fi
+    fi
+    [ "${device}" = GPU ] || n=0
+    [[ "${n}" =~ ^[0-9]+$ ]] || err "llama.cpp: GPU count '${n}' is not a number"
+    if [ "${n}" -gt 0 ] && [ "$(resource_total "${res}")" -lt "${n}" ]; then
+        err "llama.cpp: the fit spreads ${AGENT_MODEL} over ${n} GPUs but the cluster advertises $(resource_total "${res}") ${res}"
+    fi
+    # Experts or the whole model in DRAM: the CPUs a CPU placement gets (the P-core balloon).
+    if [ "${place}" != gpu ] && [ "${place}" != gpu-split ] && [ -z "${K3D_GPU_AGENT_CPUS:-}" ]; then
+        cpus=$(agent_cpus CPU "${hybrid}")
+    fi
+    # The weights: a GGUF that llama-server downloads itself (-mu writes to -m, resuming and
+    # checking the ETag: common/download.cpp), or a GGUF the conversion Job builds once.
+    local cm="" convert=${AGENT_CONVERT:-}
+    if [ "${fmt}" = gguf ]; then
+        [ "${file}" != - ] || err "llama.cpp: ${source} lists no .gguf file (K3D_GPU_FIT_FILE picks one)"
+        model="/models/gguf/$(gguf_slug "${source}")/${file}"
+        args+="${item}--model=${model}"$'\n'"${item}--model-url=https://huggingface.co/${repo}/resolve/${rev}/${file}"
+    else
+        [ -z "${AGENT_CONVERT_ERROR:-}" ] || err "llama.cpp: ${AGENT_MODEL} needs a GGUF conversion: ${AGENT_CONVERT_ERROR}"
+        [ -n "${convert}" ] || err "llama.cpp: ${AGENT_MODEL} is ${fmt}: it needs the fit (K3D_GPU_FIT=auto or on) to plan its GGUF conversion"
+        model="/models/gguf/$(gguf_slug "${source}")/model.gguf"
+        args+="${item}--model=${model}"
+        jobs+=$(llamacpp_convert_job "${source}" "$((total * 21 / 10))" - "${convert}")$'\n'
+        waits+=" ${model%/*}"
+    fi
+    args+=$'\n'"${item}--alias=${AGENT_MODEL_NAME}"
+    args+=$'\n'"${item}--host=0.0.0.0"$'\n'"${item}--port=${LLAMA_SERVE_PORT}"
+    args+=$'\n'"${item}--jinja"$'\n'"${item}--reasoning=off"
+    local f
+    for f in ${flags}; do args+=$'\n'"${item}\"${f}\""; done
+    local threads
+    threads=$(llamacpp_threads "${cpus}" "${hybrid}")
+    args+=$'\n'"${item}--threads=${threads}"$'\n'"${item}--threads-batch=${cpus}"
+    local cap=""
+    if [ "${place}" = cpu ]; then
+        args+=$'\n'"${item}--load-mode=mmap+mlock"
+        cap=$'\n          securityContext:\n            capabilities:\n              add: [IPC_LOCK]'
+    fi
+    # MTP speculative decoding, on request only (see above).
+    local draft=${K3D_GPU_AGENT_DRAFT:-default} d target dsrc quant
+    case "${draft,,}" in
+        default|off|0|"") draft="" ;;
+        mtp|auto) draft=mtp ;;
+        *) err "K3D_GPU_AGENT_DRAFT '${draft}' does not apply to llama.cpp (use off or mtp)" ;;
+    esac
+    if [ -n "${draft}" ]; then
+        dsrc=""
+        for d in "${LLAMA_MTP_DRAFTERS[@]}"; do
+            read -r target f quant <<< "${d}"
+            [ "${target}" = "${repo}" ] && dsrc=${f} && break
+        done
+        if [ -n "${dsrc}" ]; then
+            args+=$'\n'"${item}--spec-draft-model=/models/gguf/$(gguf_slug "${dsrc}")/model.gguf"
+            jobs+=$(llamacpp_convert_job "${dsrc}" "$((4 << 30))" "${quant}" "--outtype bf16")$'\n'
+            waits+=" /models/gguf/$(gguf_slug "${dsrc}")"
+        elif [ "${mtp}" -eq 0 ]; then
+            err "K3D_GPU_AGENT_DRAFT=mtp: ${AGENT_MODEL} has no MTP head and no known drafter"
+        fi
+        args+=$'\n'"${item}--spec-type=draft-mtp"
+        info "agent: MTP speculative decoding (${dsrc:-its own MTP head})" >&2
+    fi
+    [ -z "${jobs}" ] || cm=$(llamacpp_convert_configmap)$'\n'
+    # The ConfigMap and the Jobs end in a document separator each.
+    local docs="${cm}${jobs}"
+    local init=""
+    if [ -n "${waits}" ]; then
+        init=$'\n      initContainers:\n        # The conversion Job writes manifest.json last.\n        - name: wait-gguf\n          image: '"${image}"$'\n          imagePullPolicy: IfNotPresent\n          command: [sh, -c]\n          args:\n            - |\n              for d in'"${waits}"$'; do\n                until [ -f "$d/manifest.json" ]; do echo "waiting for $d"; sleep 15; done\n              done\n          volumeMounts:\n            - name: models\n              mountPath: /models'
+    fi
+    local podlabels="" podspec="" env="" limits="" memlim=""
+    [ -z "${hybrid}" ] || podlabels=$'\n        k3d-gpu.io/cores: '"$(agent_cores)"
+    [ -z "${gid}" ] || podspec+=$'\n      securityContext:\n        supplementalGroups: ['"${gid}"']'
+    local want=${K3D_GPU_AGENT_DEVICE:-auto}
+    if [ "${device}" = GPU ] && [ "${want^^}" = AUTO ]; then
+        podspec+=$'\n      nodeSelector:\n        gpu.intel.com/xmx: "true"'
+    fi
+    # Level Zero's Sysman reports each card's free memory to the SYCL backend's layer split
+    # (llama.cpp docs/backend/SYCL.md runs with ZES_ENABLE_SYSMAN=1).
+    [ "${n}" -eq 0 ] || env+=$'\n            - name: ZES_ENABLE_SYSMAN\n              value: "1"'
+    local pe
+    pe=$(proxy_yaml_env)
+    [ -z "${pe}" ] || env+=$'\n'"${pe}"
+    [ -z "${env}" ] || env=$'\n          env:'"${env}"
+    [ -z "${AGENT_MEMORY_LIMIT}" ] || memlim=$'\n'"              memory: ${AGENT_MEMORY_LIMIT}"
+    [ "${n}" -eq 0 ] || limits=$'\n'"              ${res}: ${n}"
+    [ -z "${memlim}${limits}" ] || limits=$'\n            limits:'"${memlim}${limits}"
+    local on="CPU"
+    [ "${n}" -eq 0 ] || on="${n}x ${res}"
+    info "agent: llama.cpp serving ${AGENT_MODEL} as '${AGENT_MODEL_NAME}' on ${on}, placement ${place}, ${cpus} CPU(s), ${threads} threads" >&2
+
+    cat <<EOF
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${AGENT_NS}
+---
+# GGUF weights (downloaded or converted once), kept across restarts.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: llamacpp-models
+  namespace: ${AGENT_NS}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: ${AGENT_STORAGE}
+---
+${docs}apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llamacpp
+  namespace: ${AGENT_NS}
+  labels:
+    app: llamacpp
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: llamacpp
+  template:
+    metadata:
+      labels:
+        app: llamacpp${podlabels}
+      annotations:
+        k3d-gpu.io/agent-device: ${device}
+        k3d-gpu.io/agent-backend: llama.cpp$(agent_fit_annotation)
+    spec:${podspec}${init}
+      containers:
+        - name: llamacpp
+          image: ${image}
+          imagePullPolicy: IfNotPresent
+          args:
+${args}${env}${cap}
+          ports:
+            - name: http
+              containerPort: ${LLAMA_SERVE_PORT}
+          # No liveness probe: the first start downloads the weights. /health is 503
+          # until the model is loaded.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: "${cpus}"
+              memory: ${AGENT_MEMORY}${limits}
+          volumeMounts:
+            - name: models
+              mountPath: /models
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: llamacpp-models
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llamacpp
+  namespace: ${AGENT_NS}
+spec:
+  selector:
+    app: llamacpp
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+EOF
+}
+
+# The ConfigMap holding gguf_convert, run by every conversion Job.
+llamacpp_convert_configmap() {
+    cat <<EOF
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gguf-convert
+  namespace: ${AGENT_NS}
+data:
+  convert.sh: |
+$(declare -f gguf_convert | sed 's/^/    /')
+    gguf_convert "\$@"
+---
+EOF
+}
+
+# llamacpp_convert_job <repo@rev> <bytes needed> <quantize type or -> <convert args>: a Job
+# named for its inputs, so a re-render applies the same object and a finished Job is not
+# run again (its script also returns at once when the GGUF exists).
+llamacpp_convert_job() {
+    local src=$1 need=$2 quant=$3 conv=$4 name out a cargs="" pe
+    name="gguf-convert-$(printf '%s %s %s %s' "${LLAMA_FULL_IMAGE}" "${src}" "${quant}" "${conv}" | sha256sum | cut -c1-12)"
+    out="/models/gguf/$(gguf_slug "${src}")"
+    for a in ${conv}; do cargs+=$'\n'"            - \"${a}\""; done
+    pe=$(proxy_yaml_env)
+    [ -z "${pe}" ] || pe=$'\n'"${pe}"
+    local q=""
+    [ "${quant}" = - ] || q=", llama-quantize ${quant}"
+    info "agent: ${src} is converted to GGUF once (Job ${name}: convert_hf_to_gguf.py ${conv}${q})" >&2
+    cat <<EOF
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ${name}
+  namespace: ${AGENT_NS}
+  labels:
+    app: gguf-convert
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: gguf-convert
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: convert
+          image: ${LLAMA_FULL_IMAGE}
+          imagePullPolicy: IfNotPresent
+          command: [bash, /scripts/convert.sh]
+          args:
+            - "${src%@*}"
+            - "${src##*@}"
+            - "${out}"
+            - "${need}"
+            - "${quant}"${cargs}
+          env:
+            - name: GGUF_CONVERT_PIP
+              value: "${GGUF_CONVERT_PIP}"
+            - name: HOME
+              value: /tmp
+            - name: HF_HUB_DISABLE_XET
+              value: "1"${pe}
+          resources:
+            requests:
+              cpu: "2"
+              memory: 8Gi
+            limits:
+              memory: ${AGENT_CONVERT_MEMORY}
+          volumeMounts:
+            - name: models
+              mountPath: /models
+            - name: scripts
+              mountPath: /scripts
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: llamacpp-models
+        - name: scripts
+          configMap:
+            name: gguf-convert
+---
+EOF
+}
+
 # One short chat completion: runs the first generation, which is slower than the
 # rest, and proves generation end to end. OVMS is asked from inside its pod (the
 # image ships curl), not through the API server's service proxy: the proxy hands
 # OVMS a POST body it cannot route ("Mediapipe graph definition with requested
-# name is not found"). vLLM is asked through the service proxy.
+# name is not found"). vLLM and llama-server are asked through the service proxy.
 agent_warmup() {
     local body reply start=${SECONDS}
     body="{\"model\":\"${AGENT_MODEL_NAME}\",\"max_tokens\":32,\"chat_template_kwargs\":{\"enable_thinking\":false},\"messages\":[{\"role\":\"user\",\"content\":\"Reply with one short sentence: what are you?\"}]}"
-    if [ "${AGENT_APP}" = vllm ]; then
+    if [ "${AGENT_APP}" != ovms ]; then
         reply=$(kubectl create --raw "${AGENT_PROXY}${AGENT_API}/chat/completions" -f - <<< "${body}" 2>&1)
     else
         reply=$(kubectl -n "${AGENT_NS}" exec deployment/ovms -c ovms -- \
@@ -7876,8 +8393,28 @@ agent_prune() {
     kubectl -n "${AGENT_NS}" delete ${objs} --ignore-not-found --cascade=foreground --wait=true
 }
 
-# Both backends' Deployment/Service names: one GPU serves one of them at a time.
-AGENT_APPS=(ovms vllm)
+# agent_convert_wait <manifest>: wait for the GGUF conversion Jobs the manifest holds (a
+# download and a conversion of the whole checkpoint: hours for a 360 GB model). A Job that
+# fails stops agent up with its log.
+agent_convert_wait() {
+    local job jobs st dl=$((SECONDS + AGENT_CONVERT_TIMEOUT))
+    jobs=$(grep -oE '^  name: gguf-convert-[0-9a-f]+$' <<< "$1" | cut -d' ' -f4 || true)
+    for job in ${jobs}; do
+        info "Waiting for GGUF conversion job/${job} (up to ${AGENT_CONVERT_TIMEOUT}s; log: kubectl -n ${AGENT_NS} logs -f job/${job})..."
+        while :; do
+            st=$(kubectl -n "${AGENT_NS}" get "job/${job}" -o 'jsonpath={.status.succeeded} {.status.failed}' 2>/dev/null || true)
+            case "${st}" in
+                1*) break ;;
+                *" "[1-9]*) err "GGUF conversion failed — kubectl -n ${AGENT_NS} logs job/${job}" ;;
+            esac
+            [ "${SECONDS}" -lt "${dl}" ] || err "GGUF conversion not done after ${AGENT_CONVERT_TIMEOUT}s — kubectl -n ${AGENT_NS} logs job/${job}"
+            sleep 15
+        done
+    done
+}
+
+# The backends' Deployment/Service names: one GPU serves one of them at a time.
+AGENT_APPS=(ovms vllm llamacpp)
 
 cmd_agent_up() {
     require kubectl
@@ -7895,6 +8432,18 @@ cmd_agent_up() {
         # shellcheck disable=SC2086 # word list of add-on names
         manifest=$(AGENT_FIT_RECORD=1 agent_stack_manifest ${addons})
     fi
+    # The fit may have switched the backend (agent_follow_engine ran in that subshell):
+    # the manifest's server Deployment names it.
+    app=$(grep -m1 -oE '^  name: (ovms|vllm|llamacpp)$' <<< "${manifest}" | cut -d' ' -f4)
+    if [ -n "${app}" ] && [ "${app}" != "${AGENT_APP}" ]; then
+        case "${app}" in
+            llamacpp) AGENT_BACKEND=llama.cpp ;;
+            vllm) AGENT_BACKEND=vllm ;;
+            *) AGENT_BACKEND=ovms ;;
+        esac
+        agent_config
+        logs="kubectl -n ${AGENT_NS} logs deploy/${AGENT_APP}"
+    fi
     # Switching backends: stop the other one first so its GPU is free.
     for app in "${AGENT_APPS[@]}"; do
         [ "${app}" = "${AGENT_APP}" ] \
@@ -7904,8 +8453,9 @@ cmd_agent_up() {
     agent_prune ${addons}
     agent_guard_stop
     kubectl apply -f - <<< "${manifest}"
+    agent_convert_wait "${manifest}"
     info "Waiting for the model to download and load (first run fetches it into the PVC; up to ${AGENT_TIMEOUT}s)..."
-    [ "${AGENT_APP}" = vllm ] || logs="kubectl -n ${AGENT_NS} logs deploy/ovms -c pull; ${logs}"
+    [ "${AGENT_APP}" != ovms ] || logs="kubectl -n ${AGENT_NS} logs deploy/ovms -c pull; ${logs}"
     kubectl -n "${AGENT_NS}" rollout status "deployment/${AGENT_APP}" --timeout="${AGENT_TIMEOUT}s" \
         || err "server not ready — ${logs}"
     agent_warmup
@@ -7924,7 +8474,9 @@ cmd_agent_up() {
     local served
     served=$(grep -m1 -o -- '--source_model=[^[:space:]]*' <<< "${manifest}" | cut -d= -f2- || true)
     [ -z "${served}" ] || AGENT_MODEL=${served}
-    if [ "${AGENT_APP}" = vllm ]; then
+    if [ "${AGENT_APP}" = llamacpp ]; then
+        info "model ${AGENT_MODEL}: $(grep -m1 -oE -- '--model(-url)?=[^[:space:]]+' <<< "${manifest}" | tail -n1 | cut -d= -f2-)"
+    elif [ "${AGENT_APP}" = vllm ]; then
         info "model ${AGENT_MODEL} at revision ${AGENT_REVISION:-main (unpinned; set K3D_GPU_AGENT_REVISION)}"
     else
         info "model ${AGENT_MODEL} at commit $(agent_model_revision) (OVMS pulls the default branch; compare with 'k3d-gpu agent status' later)"
@@ -7958,7 +8510,7 @@ cmd_agent_status() {
         ann=$(kubectl -n "${AGENT_NS}" get deployment "${app}" -o jsonpath='{.spec.template.metadata.annotations.k3d-gpu\.io/agent-device} {.spec.template.metadata.annotations.k3d-gpu\.io/agent-backend}' 2>/dev/null) || continue
         read -r ann backend <<< "${ann}"
         proxy="/api/v1/namespaces/${AGENT_NS}/services/${app}:http/proxy"
-        if [ "${app}" = vllm ]; then path=/v1/models; else path=/v1/config; fi
+        if [ "${app}" = ovms ]; then path=/v1/config; else path=/v1/models; fi
         info "${backend:-${app}} on ${ann:-?}; models (${path}):"
         [ "${app}" != ovms ] || info "model revision: $(agent_model_revision)"
         kubectl get --raw "${proxy}${path}" 2>/dev/null || warn "server not answering yet"
@@ -8043,8 +8595,8 @@ cmd_agent() {
     fi
     [ "${#REMOTE_ARGS[@]}" -eq 0 ] && [ -z "${OWN_ENDPOINT}" ] || err "--api-key-file and --i-own-this-endpoint go with --remote (--model also names a local model for agent up)"
     case "${AGENT_BACKEND}" in
-        ovms|vllm|llm-scaler) ;;
-        *) err "unknown K3D_GPU_AGENT_BACKEND '${K3D_GPU_AGENT_BACKEND}' (use ovms, vllm or llm-scaler)" ;;
+        ovms|vllm|llm-scaler|llama.cpp) ;;
+        *) err "unknown K3D_GPU_AGENT_BACKEND '${K3D_GPU_AGENT_BACKEND}' (use ovms, vllm, llm-scaler or llama.cpp)" ;;
     esac
     case "${sub}" in
         up)       cmd_agent_up "$@" ;;
@@ -9493,6 +10045,11 @@ AGENT_GPU_UTIL=""
 AGENT_KV_DTYPE=""
 AGENT_MAX_NUM_SEQS=""
 AGENT_MEMORY_LIMIT=""
+AGENT_PLACEMENT=""
+AGENT_FIT_GPUS=""
+AGENT_LLAMA_FLAGS=""
+AGENT_CONVERT=""
+AGENT_CONVERT_ERROR=""
 # A model the user chose: K3D_GPU_AGENT_MODEL in the launch environment (not a
 # quickstart tier pick, K3D_GPU_AGENT_MODEL_TIER=1, nor a tune profile's, which
 # tune_apply_profile exports later), or agent up --model.
@@ -9520,11 +10077,45 @@ agent_fit_apply() {
             memory) AGENT_MEMORY=${v} AGENT_MEMORY_LIMIT=${v} ;;
             annotation) AGENT_FIT_ANN=${v} ;;
             cache_gib) [ "${AGENT_APP}" != ovms ] || K3D_GPU_AGENT_CACHE_SIZE=${v} ;;
+            placement) AGENT_PLACEMENT=${v} ;;
+            gpus) AGENT_FIT_GPUS=${v} ;;
+            llama_flags) AGENT_LLAMA_FLAGS=${v} ;;
+            convert) AGENT_CONVERT=${v} ;;
+            convert_error) AGENT_CONVERT_ERROR=${v} ;;
         esac
     done <<< "${knobs}"
     # OVMS reads these from the environment when it builds its args: a static KV pool of
     # the fitted size (its dynamic pool, cache_size 0, grows with the live requests).
     [ "${AGENT_APP}" != ovms ] || K3D_GPU_AGENT_MAX_NUM_SEQS=${AGENT_MAX_NUM_SEQS}
+}
+
+# The agent app (Deployment and Service name) that runs a fit engine.
+engine_app() {
+    case "$1" in
+        llama.cpp) echo llamacpp ;;
+        vllm) echo vllm ;;
+        *) echo ovms ;;
+    esac
+}
+
+# agent_follow_engine <engine> <summary> <flags>: serve the model with the engine its fit
+# picked. With K3D_GPU_AGENT_BACKEND unset the backend follows the fit (ovms, vllm or
+# llama.cpp), so no flag is needed; a backend the user set that cannot serve it is refused,
+# naming what would.
+agent_follow_engine() {
+    local engine=$1 why=$2 flags=$3
+    [ "$(engine_app "${engine}")" != "${AGENT_APP}" ] || return 0
+    if [ -z "${AGENT_BACKEND_SET}" ]; then
+        info "fit: backend ${engine}, the engine the fit picked for ${AGENT_MODEL} (K3D_GPU_AGENT_BACKEND is unset)" >&2
+        AGENT_BACKEND=${engine}
+        agent_config
+        return 0
+    fi
+    case "${engine}" in
+        llama.cpp) err "${why}; K3D_GPU_AGENT_BACKEND=${AGENT_BACKEND} cannot serve it: run llama-server with ${flags}, or unset K3D_GPU_AGENT_BACKEND (or set it to llama.cpp) to serve it here" ;;
+        vllm) err "${why}; set K3D_GPU_AGENT_BACKEND=vllm to serve it" ;;
+        *) err "${why}; K3D_GPU_AGENT_BACKEND=${AGENT_BACKEND} cannot serve it (unset K3D_GPU_AGENT_BACKEND for ovms)" ;;
+    esac
 }
 
 # agent_fit <device>: size the agent's model to this host before its manifest is
@@ -9536,7 +10127,7 @@ agent_fit_apply() {
 # guard step (K3D_GPU_FIT_RUNG=N) renders rung N of the recorded fit without fitting
 # again, since the running server already holds the memory a new probe would see.
 agent_fit() {
-    local device=$1 mode=${K3D_GPU_FIT:-auto} dir host doc rc=0 args=() dev engine rec restore=""
+    local device=$1 mode=${K3D_GPU_FIT:-auto} dir host doc rc=0 args=() dev engine rec restore="" app
     rec="$(fit_state)/agent-fit.json"
     case "${mode}" in
         off|0) return 0 ;;
@@ -9547,6 +10138,7 @@ agent_fit() {
     case "${device}" in CPU) dev=cpu ;; GPU) dev=gpu ;; *) return 0 ;; esac  # NPU, HPU and HETERO: not modelled
     if [ -n "${K3D_GPU_FIT_RUNG:-}" ]; then
         [[ "${K3D_GPU_FIT_RUNG}" =~ ^[0-9]+$ ]] && [ -f "${rec}" ] || err "fit: no recorded fit for rung ${K3D_GPU_FIT_RUNG}"
+        agent_follow_engine "$(fit_field "$(<"${rec}")" engine)" "$(fit_field "$(<"${rec}")" summary)" "$(fit_field "$(<"${rec}")" flags)"
         agent_fit_apply "${rec}" "${K3D_GPU_FIT_RUNG}"
         return 0
     fi
@@ -9556,15 +10148,18 @@ agent_fit() {
     [ -z "${K3D_GPU_AGENT_MAX_LEN:-}" ] || args+=(--ctx "${K3D_GPU_AGENT_MAX_LEN}")
     [ -z "${K3D_GPU_AGENT_MAX_NUM_SEQS:-}" ] || args+=(--seqs "${K3D_GPU_AGENT_MAX_NUM_SEQS}")
     [ -z "${K3D_GPU_AGENT_GPUS:-}" ] || args+=(--gpus "${K3D_GPU_AGENT_GPUS}")
-    # agent up replaces a running server of this backend (the Deployment is Recreate): it
-    # is stopped before the probe, so the memory it holds is measured as free, not as
-    # someone else's. A model that then does not fit gets the old server back.
-    if [ "${AGENT_FIT_RECORD:-}" = 1 ] \
-        && [ "$(kubectl -n "${AGENT_NS}" get "deployment/${AGENT_APP}" -o 'jsonpath={.spec.replicas}' 2>/dev/null)" = 1 ]; then
-        info "fit: stopping the running ${AGENT_APP} so the probe sees the memory it holds as free" >&2
-        kubectl -n "${AGENT_NS}" scale "deployment/${AGENT_APP}" --replicas=0 >/dev/null \
-            && kubectl -n "${AGENT_NS}" wait --for=delete pod -l "app=${AGENT_APP}" --timeout=180s >/dev/null 2>&1 \
-            && restore=${AGENT_APP}
+    # agent up replaces the running server (the Deployment is Recreate, and a backend
+    # switch deletes the other one): it is stopped before the probe, so the memory it holds
+    # is measured as free, not as someone else's. A model that then does not fit gets the
+    # old server back.
+    if [ "${AGENT_FIT_RECORD:-}" = 1 ]; then
+        for app in "${AGENT_APPS[@]}"; do
+            [ "$(kubectl -n "${AGENT_NS}" get "deployment/${app}" -o 'jsonpath={.spec.replicas}' 2>/dev/null)" = 1 ] || continue
+            info "fit: stopping the running ${app} so the probe sees the memory it holds as free" >&2
+            kubectl -n "${AGENT_NS}" scale "deployment/${app}" --replicas=0 >/dev/null \
+                && kubectl -n "${AGENT_NS}" wait --for=delete pod -l "app=${app}" --timeout=180s >/dev/null 2>&1 \
+                && restore+=" ${app}"
+        done
     fi
     host=$(mktemp)
     fit_host "${host}" || { rm -f "${host}"; fit_soft "${mode}" "fit: could not probe this host"; return 0; }
@@ -9581,22 +10176,18 @@ agent_fit() {
         local why
         why=$(fit_field "$(<"${doc}")" summary)
         rm -f "${doc}"
-        if [ -n "${restore}" ]; then
-            kubectl -n "${AGENT_NS}" scale "deployment/${restore}" --replicas=1 >/dev/null \
-                && warn "fit: the previous ${restore} is started again" || true
-        fi
+        for app in ${restore}; do
+            kubectl -n "${AGENT_NS}" scale "deployment/${app}" --replicas=1 >/dev/null \
+                && warn "fit: the previous ${app} is started again" || true
+        done
         err "${why}; not starting a server that cannot fit (k3d-gpu fit --model ${AGENT_MODEL} --explain shows the arithmetic)"
     fi
     engine=$(fit_field "$(<"${doc}")" engine)
-    if [ "${engine}" != "${AGENT_APP}" ]; then
+    if [ "$(engine_app "${engine}")" != "${AGENT_APP}" ]; then
         local why flags
         why=$(fit_field "$(<"${doc}")" summary); flags=$(fit_field "$(<"${doc}")" flags)
-        rm -f "${doc}"
-        case "${engine}" in
-            llama.cpp) err "${why}; K3D_GPU_AGENT_BACKEND=${AGENT_BACKEND} cannot serve it: run llama-server with ${flags}" ;;
-            vllm) err "${why}; set K3D_GPU_AGENT_BACKEND=vllm to serve it" ;;
-            *) err "${why}; K3D_GPU_AGENT_BACKEND=${AGENT_BACKEND} cannot serve it (unset K3D_GPU_AGENT_BACKEND for ovms)" ;;
-        esac
+        [ -z "${AGENT_BACKEND_SET}" ] || rm -f "${doc}"
+        agent_follow_engine "${engine}" "${why}" "${flags}"
     fi
     info "$(fit_field "$(<"${doc}")" summary)" >&2
     if [ "${AGENT_FIT_RECORD:-}" = 1 ]; then
@@ -9667,7 +10258,7 @@ cmd_agent_guard() {
     fitf="$(fit_state)/agent-fit.json"; st="$(fit_state)/agent-guard.json"; envf="$(fit_state)/agent-fit.env"
     [ -f "${fitf}" ] || err "agent guard: no fit recorded (${fitf}); 'k3d-gpu agent up --model M' records one"
     self=$(readlink -f "${BASH_SOURCE[0]}")
-    app=$(python3 -c 'import json, sys; print({"vllm": "vllm"}.get(json.load(open(sys.argv[1])).get("engine"), "ovms"))' "${fitf}")
+    app=$(engine_app "$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("engine") or "")' "${fitf}")")
     [ -n "${once}" ] || rm -f "${st}"
     info "agent guard: watching PSI memory pressure and MemAvailable every ${interval}s for deployment/${app}"
     while :; do
@@ -10152,7 +10743,7 @@ bench_k3d_arm() {
     pf=$!
     ktransport="kubectl port-forward (API-server stream)"
     local kapi=/v3 mpath=/v1/config
-    [ "${app}" != vllm ] || { kapi=/v1; mpath=/v1/models; }
+    [ "${app}" = ovms ] || { kapi=/v1; mpath=/v1/models; }
     kurl="http://127.0.0.1:${pfport}${kapi}"
     local mj=""
     for _ in $(seq 1 30); do

@@ -870,7 +870,7 @@ is deleted.
 | `K3D_GPU_AGENT_TIMEOUT` | `1800` | seconds `agent up` waits for download + load |
 | `K3D_GPU_AGENT_LOG_LEVEL` | `INFO` | `DEBUG` also logs the compiled model's execution device (and every request) |
 | `K3D_GPU_AGENT_IMAGE` | `openvino/model_server@sha256:a928…fc58` (2026.4.1-gpu) | server image |
-| `K3D_GPU_AGENT_BACKEND` | `ovms` (`vllm` on a Gaudi) | `ovms`, `vllm` or `llm-scaler` (see below) |
+| `K3D_GPU_AGENT_BACKEND` | `ovms` (`vllm` on a Gaudi; with `--model M`, the engine the fit picks) | `ovms`, `vllm`, `llm-scaler` or `llama.cpp` (see below and [docs/fit.md](docs/fit.md)) |
 
 #### Any Hugging Face model: `agent up --model`
 
