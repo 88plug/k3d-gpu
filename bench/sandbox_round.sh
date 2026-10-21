@@ -28,7 +28,10 @@ if [ -z "${TARGETS:-}" ]; then
     lan=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1); exit}')
     TARGETS="${ts:+${ts}:22 }${lan:+${lan}:22 }pypi.org:443"
 fi
-rapl() { sudo -n cat /sys/class/powercap/intel-rapl:0/energy_uj 2>/dev/null || echo -; }
+# K3D_GPU_RAPL_EXEC (as load.py reads it) when sudo cannot read it.
+# shellcheck disable=SC2086 # a command prefix, split on purpose
+rapl() { sudo -n cat /sys/class/powercap/intel-rapl:0/energy_uj 2>/dev/null \
+    || { [ -n "${K3D_GPU_RAPL_EXEC:-}" ] && ${K3D_GPU_RAPL_EXEC} cat /sys/class/powercap/intel-rapl:0/energy_uj 2>/dev/null; } || echo -; }
 throttles() { cat /sys/devices/system/cpu/cpu*/thermal_throttle/package_throttle_count 2>/dev/null | awk '{s += $1} END {print s + 0}'; }
 elapsed() { awk -v a="$1" -v b="$2" "BEGIN {printf \"%.${3:-2}f\", b - a}"; }
 node() { docker exec "k3d-${name}-server-0" "$@"; }

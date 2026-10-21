@@ -6,7 +6,7 @@
 set -euo pipefail
 REAL=${K3D_REAL:-/usr/bin/k3d}
 G=${H57D_G:-${HOME}/k3dgpu-h57d}
-if [ "${1:-}" = cluster ] && [ "${2:-}" = create ] && [[ "${3:-}" == k3dgpu-d-* ]]; then
+if [ "${1:-}" = cluster ] && [ "${2:-}" = create ] && [[ "${3:-}" == "${H57D_PREFIX:-k3dgpu-d-}"* ]]; then
     exec "${REAL}" "$@" --volume="${G}/models:/var/apb-models:ro@server:*"
 fi
 exec "${REAL}" "$@"
