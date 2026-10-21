@@ -2976,6 +2976,120 @@ P-cores with their HT siblings (core n = CPUs 2n, 2n+1), 16-31 the E-cores; no `
 **Order and changes.** A protocol change is a dated amendment merged before the data it governs.
 A wiring smoke runs no scored request, is discarded and is disclosed in the run section.
 
+### H54b-H54c amendment G1: the B70 runner (2026-10-20)
+
+Written 2026-10-20, before any H54b or H54c measurement. It adds the runner the
+[H54 pre-registration](#h54-pre-registration-gemma-4-26b-a4b-qat-and-qwen38-microbenches-on-crescent-2026-10-20)
+asks for, for its two card rows only, and changes no hypothesis, threshold or statistic. H54a,
+H54q and H54d get their own runner.
+
+**Files.** `bench/h54gpu/`: `hold.sh` (bench/xhost/hold.sh's rules for clusters `k3dgpu-g-*`
+and `~/k3dgpu-gemma`), `h54c.sh`, `h54b.sh`, `b2q.sh`, `ladder.py`, `lib.sh` (cluster, pod, phase and energy
+helpers), `k3d-wrap.sh`, `gguf_bytes.py` (H54c's byte split from the GGUF header), `predict.py`
+(H54c's prediction and verdict), `score.py` and `stats.py` (H54b's chosen arm, bootstrap and
+verdict), `gsm8k.py` (protocol step 4), `ttft_prompt.txt` (the fixed TTFT prompt, 803 words,
+sha256 `cf2a1da3...41fe4`) and `test_h54gpu.py` (CI). `bench/llm_load.py` gains `--extra-body`,
+which merges a JSON object into each request; the Qwen arms send
+`{"chat_template_kwargs": {"enable_thinking": false}}` with it. GSM8K items:
+`openai/gsm8k` `main/test-00000-of-00001.parquet` @ `740312ad` (sha256 `ee7b8da9...4e4f59`),
+converted in file order to `~/k3dgpu-gemma/data/gsm8k-test.jsonl` (1,319 items, sha256
+`3730d312...3c39d14`) with pyarrow 22.0.0.
+
+**Cards.** The pre-registration's rule stands: a card is used only when
+`~/k3dgpu-bench/gpu-state.txt` lists it free. Revised 2026-10-21, before any H54b or H54c
+measurement: the operator authorised this campaign to stop (never remove) `qwen38-b-hr`, the
+live SGLang server on cards 2 and 3 (`ZE_AFFINITY_MASK=2,3`, renderD130 and renderD131), when
+no card is free. Its `docker inspect` is saved to `~/k3dgpu-gemma/restore/` first, the stop and
+the restart are appended to `gpu-state.txt`, and after the last hold it is started again and
+must answer a chat request. `campaign.sh` does this: it takes the lock once, stops the server,
+runs the card holds back to back (`hold.sh` with `H54_LOCKED=1`, each still under its own cap,
+start rule and cleanup), and restarts the server on any exit, so it is down once.
+`qwen38-a-hr` (cards 0 and 1) is never touched. A card is checked at
+hold start to be free: no `xpu-smi ps` process on it, and no process holding its render node
+memory-mapped (`fuser` access flag `m`). `qwen38-a-hr`'s Level Zero processes hold an unmapped
+fd on all four render nodes (enumeration; `xpu-smi ps` lists them only on cards 0 and 1), which
+the check does not count. Two placements follow from how each arm gets its card:
+
+- Pinned pods (Cg, Gg, Hg, Lsq, Sq, Sq-mtp, Rq): a privileged pod whose `/dev/dri` is an
+  in-memory directory holding only the free card's render node, so the engine cannot open the
+  cards the live pair uses. The pod's `/dev/dri` listing and the host `fuser` table are saved
+  per arm.
+- Device-plugin arms (X1q, X1q-mtp through `k3d-gpu agent manifest`; B2q through EAT's chart):
+  the Intel GPU plugin chooses the card (one container per card on discrete GPUs). Unless all
+  four cards are free, four placeholder pods (busybox `sleep`, never opening the device) first
+  take every `gpu.intel.com/xe`; the ones that got a free card are deleted, so the plugin can
+  only hand out free cards. The arms run only when the cards left held are exactly the busy
+  ones (`gpu-hold.txt`); otherwise they are recorded as not run.
+
+**H54c.** One cluster from `k3d cluster create` with the k3d-gpu 0.1.61 node image
+(`@sha256:8cd264aa...`), C1's kubelet thresholds and `~/k3dgpu-gemma/models` read-only at
+`/models`. Every arm runs `server-intel-b11749` with the same base flags,
+`-t 48 -Cr 0-47 --cpu-strict 1 --jinja -c 8192`. The context is set because the default is
+the model's 262,144 tokens; it is the same for all four runs. Arm flags: Cg `-ngl 0`, Gg and
+Gg2 `-ngl 99`, Hg `-ngl 99 -ot exps=CPU` (b11749's `--override-tensor`, buffer type `CPU`;
+`--moe-cache-mib` stays at its default, off). The phase is H54a's N=1 phase: 60 s of idle, 3
+warmup requests, then 8 requests of 256 tokens, with RAPL package-0 and the card's `xe` hwmon
+energy counters read around it. t_Gg is the first Gg run; Gg2 is only the drift check. The
+expert byte count includes each layer's per-expert `ffn_*_exps.scale` tensors. Read from the
+GGUF header @ `d1c082be` with `gguf_bytes.py` (sizes cross-checked against the tensor offsets):
+B_exp = 0.803 GB, B_rest = 1.577 GB (of which 0.606 GB is the tied Q6_K `token_embd`), and
+B_tot = 2.380 GB per decoded token. The wiring smoke (`SMOKE=1`) runs Cg alone in the CPU image
+`server-b11749` with no card mounted. It is discarded and disclosed with the run.
+
+**H54b.** The cluster comes from `k3d-gpu up` with C1's `K3D_GPU_K3S_ARGS`, the node label
+`ei-inference-eligible=true` (EAT's chart selects it) and the 0.1.61 node image. `k3d-gpu up`
+has no volume option, so `k3d-wrap.sh`, installed as the hold's `k3d`, adds two volumes to
+`cluster create`: `~/k3dgpu-gemma/models` read-only at `/models`, and its `hf/` cache
+read-write at `/models/hf`. Arm flags, as each engine's docs at its pin give them:
+
+- X1q: `K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3.8-27B-int4-ov`, revision `7b20ea8c`, storage 40Gi,
+  image `2026.4.1-gpu@sha256:a928903f...`, served name `m`; the device stays auto. OVMS 2026.4.1 `--pull` clones the default branch (it takes no revision), so the
+  pulled commit is read from the model's `.git` after the boot and must be `7b20ea8c7df72...`
+  (the default branch on 2026-10-21); otherwise the arm is recorded as off-revision.
+- X1q-mtp: X1q, plus `--draft_model_path=.` on the pull container and
+  `K3D_GPU_AGENT_PREFIX_CACHING=false`, as OVMS v2026.4.1's speculative-decoding demo has it
+  (`num_assistant_tokens` defaults to 5).
+- Lsq: `-ngl 99 --jinja -c 8192`.
+- Sq: llm-scaler README section 3.5's Qwen 27B flags, at TP 1, with
+  `--max-model-len 8192 --max-num-batched-tokens 8192`.
+- Sq-mtp: Sq plus `--speculative-config '{"method":"qwen3_5_mtp","num_speculative_tokens":4}'`
+  (README "MTP").
+- Rq: Sq's flags without `--quantization` (the checkpoint is quantized), with the same MTP
+  config.
+- B2q: `helm template` of EAT's chart at `c86c42b` with `xpu-values.yaml`, plus an override that
+  copies the `Qwen/Qwen3.6-27B` `modelConfigs` entry verbatim under `Qwen/Qwen3.8-27B`, sets
+  `LLM_MODEL_ID` to that id, sets `tensor_parallel_size` to 2, and reads the model from the HF
+  cache (`global.modelUseHostPath`, PVC off) instead of downloading it.
+
+PR #157's H53 boot ladder is the `xpu` mode of `bench/apb/stage.py` at PR #157 head `23c024dd`
+(the H53 text itself is not yet registered). `ladder.py` applies the same four rungs to the
+chart render. Rung a drops the host Level Zero and OpenCL hostPath mounts and their
+`LD_LIBRARY_PATH` prepend. Rung b also drops `source /opt/intel/oneapi/setvars.sh --force`.
+Rung c also drops `--disable-log-requests`. Rung d also adds `--max-model-len 32768`. B2q boots
+at rung a and moves up one rung after each failed boot (1,200 s each) while the hold has time.
+The rung that booted is recorded. The chart's image is a tag (`v0.28.0`), so the pulled digest
+is recorded beside the run.
+
+**Disk.** Models are downloaded before a hold, under the lock: `Qwen/Qwen3.8-27B` @ `1d4bf0f2`
+(55.6 GB, into the HF cache layout), `Intel/Qwen3.8-27B-q4km-AutoRound` @ `4b30b30e` (18.7 GB)
+and `RedHatAI/Qwen3.8-27B-INT4` @ `91bd022d` (19.5 GB). X1q's model is pulled by its own
+manifest into its volume during the arm. A pod's image is pulled again into the node's
+containerd. A download, or an arm, that would take `/` above 96% (the 97% line minus other
+tenants' growth) is not started, and its arm is recorded as not deliverable (disk). On
+2026-10-21 03:05Z the 96% line left 51 GB, less than `Qwen/Qwen3.8-27B` alone, so B2q, Sq and
+Sq-mtp are expected to be not deliverable (disk), and with them H54b's statistic (INCONCLUSIVE
+by the pre-registration). A download is made only when the arm that reads it would then also pass its own guard
+(model plus its NEED in `h54b.sh`): Intel q4km for Lsq (18.7 + 6 GB) is fetched; RedHat INT4
+for Rq (19.5 + 45 GB) and Qwen bf16 (55.6 GB) are not, unless the headroom grows. The 96% line
+left 30.8 GB at 04:00Z, room for X1q's 20 GB or the q4km fetch, not both, so `campaign.sh`
+fetches q4km between H54b's two holds, under the same lock, after X1q's volume is gone.
+
+**Order and holds.** H54b hold 1: X1q, X1q-mtp. Hold 2: Lsq, B2q, Sq, Sq-mtp, Rq (the last four
+only where their model was fetched and the disk guard passes). Arms not reached in the
+40-minute cap are recorded as not run. H54c: its one hold, on any one free card, after H54b.
+Each hold's results directory starts with a `REPRODUCE` header (commit, command, images,
+models with revisions).
+
 ### H57d amendment R1: the H57d runner, the read-only Od render and the hold length (2026-10-21)
 
 Recorded 2026-10-21, before any scored H57d request. Two wiring smokes ran first under the
