@@ -75,7 +75,7 @@ cleanup() {
     k3d cluster delete "${K3D_GPU_CLUSTER}" >/dev/null 2>&1
     [ -z "${psi}" ] || kill "${psi}" 2>/dev/null
     echo "after $(probe after)" >> "${OUT}/probes.txt"
-    stamp done
+    stamp finished
 }
 trap cleanup EXIT
 trap 'exit 143' TERM INT HUP
