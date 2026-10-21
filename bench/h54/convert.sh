@@ -2,7 +2,7 @@
 # convert.sh: the two H54 builds made on crescent from official weights, inside the campaign lock
 # (EXPERIMENTS.md "H54 pre-registration", Models; "H54 amendment R1"). Conversions are not holds.
 #   OVQ: optimum-cli export openvino from google/gemma-4-26B-A4B-it-qat-q4_0-unquantized @ f1e06dc5,
-#        --weight-format int4 --sym --group-size 32 --ratio 1.0, with the pinned export venv
+#        --task image-text-to-text (OVB's pipeline; a local directory needs a named task), --weight-format int4 --sym --group-size 32 --ratio 1.0, with the pinned export venv
 #        (bench/h54/ov-export-venv.txt: openvino 2026.4.1, nncf 3.4.0, optimum-intel 2.2.0).
 #   The QAT drafter as GGUF: b11749's convert_hf_to_gguf.py (bf16), then b11749's llama-quantize
 #        to Q4_0, the target's precision (the model card asks for a same-precision QAT drafter),
@@ -41,7 +41,7 @@ echo "lock taken $(date -u +%FT%TZ); df $(df -P / | awk 'NR==2{print $5}')"
 mkdir -p "${M}/k3dgpu"
 if [ ! -e "${OVQ}" ]; then
     rm -rf "${OVQ}.partial"
-    cmd=("${V}/bin/optimum-cli" export openvino --model "${QAT}" --weight-format int4 --sym --group-size 32 --ratio 1.0 "${OVQ}.partial")
+    cmd=("${V}/bin/optimum-cli" export openvino --model "${QAT}" --task image-text-to-text --weight-format int4 --sym --group-size 32 --ratio 1.0 "${OVQ}.partial")
     t0=$(date +%s)
     "${cmd[@]}"
     secs=$(( $(date +%s) - t0 ))

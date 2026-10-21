@@ -2338,9 +2338,15 @@ This changes where the node reads files, not what any arm serves.
   `image.tag=2025.4@sha256:c3707200...`, ingress and APISIX route off; its init container pulls
   the model.
 
-**OVQ.** `convert.sh`: the pre-registration's command as written, `optimum-cli export openvino
---model <QAT bf16> --weight-format int4 --sym --group-size 32 --ratio 1.0`, with the venv in
-`ov-export-venv.txt`, so the task and backup precision are optimum-intel's defaults, as for OVB.
+**OVQ.** `convert.sh`: the pre-registration's command, `optimum-cli export openvino --model <QAT
+bf16> --weight-format int4 --sym --group-size 32 --ratio 1.0`, with the venv in
+`ov-export-venv.txt`, plus `--task image-text-to-text`: run as written under the lock it stopped
+with optimum's "Cannot infer the task from a local directory yet, please specify the task
+manually", and `image-text-to-text` is OVB's pipeline (its card's `pipeline_tag`), so A1o and
+A1g load the same IR layout. Backup precision is optimum-intel's default, as for OVB. Read from
+OVB's own `openvino_config.json` while checking this: its `lm_model` entry records `awq`, group
+size 64, asymmetric, the router layers ignored, where its card says INT4_ASYM group 128; recorded,
+not acted on (OVB is the published build as shipped).
 PR #157's A1 export (`--task text-generation-with-past --backup-precision none` and a grid snap)
 is a different build; it is not merged and is not used here. For H54d's rule, "H50's A1 config"
 stays as the pre-registration defines it (OVMS CPU, OVQ, `gemma4` parser, no draft).
