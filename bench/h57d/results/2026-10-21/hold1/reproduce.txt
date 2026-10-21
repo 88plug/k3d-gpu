@@ -1,0 +1,39 @@
+# H57d Reproduce header, 2026-10-21T03:34:47Z
+host: p360ultra
+cpu: 13th Gen Intel(R) Core(TM) i9-13900T; 32 CPUs; P = 0-15, E = 16-31
+isa: amx 0 avx512f 0 avx_vnni 32 (CPUs listing each)
+microcode: 0x133
+kernel: 6.6.128-1-MANJARO
+memory: MemTotal: 131521428 kB; MemAvailable: 42884936 kB; SwapTotal: 196607996 kB; SwapFree: 48762892 kB; 
+rapl: PL1 117000000 uW, PL2 117000000 uW
+governor: powersave; epp: performance
+docker: 29.3.0; k3d: k3d version v5.9.0; kubectl: Client Version: v1.35.2
+repo: 458bca0e2298264ad6c2c6cdfc06848413e4bb6f 0 uncommitted
+images:
+  llamacpp: ghcr.io/ggml-org/llama.cpp:server-b11749@sha256:9fbaa06d7f4449e2ae0d02b40e0431f7c212dcf231c9e3a7777a6afc2cc8f312
+  ovms: openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58 (k3d-gpu agent manifest's pin)
+  node: cryptoandcoffee/k3d-gpu:0.1.63@sha256:b6fc46f60a47948eb1c4e6c5e80059c7f581427429c35a2627c58fc2307e4b76
+models (revision, from .pinned-revision; built here, from manifest.json):
+  google_gemma-4-26B-A4B-it-qat-q4_0-gguf/ google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be9cf3c8a514acf63b8761f4b41935842e
+  google_gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant/ google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant 9537141506fe8875b3ed45b264af13580cb29166
+  k3dgpu/gemma-4-26B-A4B-it-qat-assistant-gguf/ built here: {'repo': 'google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant', 'revision': '9537141506fe8875b3ed45b264af13580cb29166'} {'convert-pip-freeze.txt': '43b135b26d06f355', 'gemma-4-26B-A4B-it-qat-assistant-bf16.gguf': '033e8562af6a218b', 'gemma-4-26B-A4B-it-qat-assistant-q4_0.gguf': '8eb21d5b7efad6e9'}
+  OpenVINO/gemma-4-26b-a4b-it-int4-ov/ OpenVINO/gemma-4-26b-a4b-it-int4-ov 4e5885c3f03844f5887982def09708bdc9f53f7a
+file sha256:
+  3eca3b8f6d7baf218a7dd6bba5fb59a56ee25fe2d567b6f5f589b4f697eca51d  google_gemma-4-26B-A4B-it-qat-q4_0-gguf/gemma-4-26B_q4_0-it.gguf  hub-lfs-match
+  c082cc581c3ec90d70285c1a41c81544ff56cbc96650f16c900a280940655801  google_gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant/model.safetensors  hub-lfs-match
+  75a6583c1a418e2bbd79c60d95d28e0f5bf549ad3f2990b5bdb5238c6c2bf70c  google_gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant/tokenizer.json  hub-lfs-match
+  461919bda7b546453e903052588c578e3e94e9e8215b7cec07cb00cb97459d13  OpenVINO/gemma-4-26b-a4b-it-int4-ov/openvino_detokenizer.bin  hub-lfs-match
+  0f887130aef63545d655ea2addab6168680efe9b6531cbc46c2e2fc599ac8abe  OpenVINO/gemma-4-26b-a4b-it-int4-ov/openvino_language_model.bin  hub-lfs-match
+  2d8dfbdcc2174aa6223621502dc566d9e881b7c3db3ff2e1e96a65cee7827edb  OpenVINO/gemma-4-26b-a4b-it-int4-ov/openvino_text_embeddings_model.bin  hub-lfs-match
+  57fda7ab0340cda71819a3ecd5f9e52e346260fe840fddcc9c87d3614b5a815b  OpenVINO/gemma-4-26b-a4b-it-int4-ov/openvino_text_embeddings_per_layer_model.bin  hub-lfs-match
+  72cc61385a142c29a1ea37125b9d7a4c5775fe8386a5f6db1dd1108ea5ec1361  OpenVINO/gemma-4-26b-a4b-it-int4-ov/openvino_tokenizer.bin  hub-lfs-match
+  13c9d8ff37be9592e06e8a9f65e2b047bdc6b24d5bc905c022e4d18996b3c382  OpenVINO/gemma-4-26b-a4b-it-int4-ov/openvino_vision_embeddings_model.bin  hub-lfs-match
+  cc8d3a0ce36466ccc1278bf987df5f71db1719b9ca6b4118264f45cb627bfe0f  OpenVINO/gemma-4-26b-a4b-it-int4-ov/tokenizer.json  hub-lfs-match
+data: gsm8k-test-0-199.jsonl 45e54be2df7426cb; ttft-prompt.txt b10cd3c79003d22e
+engine flags (Od in each arm's deploy.yaml):
+  File "<string>", line 1
+    import json,sys; [print(f"  {k}: {\" \".join(v)}") for k, v in json.load(sys.stdin)["args"].items()]
+                                       ^
+SyntaxError: unexpected character after line continuation character
+Exception ignored while flushing sys.stdout:
+BrokenPipeError: [Errno 32] Broken pipe
