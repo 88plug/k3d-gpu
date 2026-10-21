@@ -516,7 +516,7 @@ ORDER_SEEDS = {"H50": "H50-crescent-2026-10-20", "H50o": "H50o-crescent-2026-10-
 
 # Hypothesis id -> (design, load rule). H47b and H49b are H47 and H49 under rule L2; H50 is
 # H49b's design on the Xeon 6741P, H50o the same with arm B3 (EXPERIMENTS.md "H50-H52 pre-registration");
-# H53 the H49 statistic over solo-hold block pairs on the Arc Pro B70s (solo.py; refused until H53 is pre-registered).
+# H53 the H49 statistic over solo-hold block pairs on the Arc Pro B70s (solo.py; block-level verdict, "H53 pre-registration").
 DESIGNS = {"H47": ("H47", "L1"), "H49": ("H49", "L1"), "H47b": ("H47", "L2"), "H49b": ("H49", "L2"),
            "H50": ("H49", "L3"), "H50o": ("H49", "L3"), "H53": ("H49", "L3")}
 

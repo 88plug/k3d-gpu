@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # solo-hold.sh N ARM: one H53 solo hold on crescent under hold.sh (LIVE_CAP 2370 inside a 2400 s
 # timeout): ARM (AG or B2) alone on the Arc Pro B70s, Qwen3.8-27B (model set qwen38). Holds go
-# AG, B2, B2, AG, ... (pairs.ARM_SEQUENCE); refused until H53 is pre-registered. The caller sets LIVE_GPU_FREE (the
+# AG, B2, B2, AG, ... (pairs.ARM_SEQUENCE); see EXPERIMENTS.md "H53 pre-registration". The caller sets LIVE_GPU_FREE (the
 # cards the hold may use) and, after the wiring smoke, LIVE_B2_LADDER. Records:
 # ~/k3dgpu-bench/results/H53/hold<N>, the shared solo directory .../H53/pairs.
 set -uo pipefail

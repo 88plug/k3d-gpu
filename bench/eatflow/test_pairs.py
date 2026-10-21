@@ -822,7 +822,7 @@ class ModelSetTest(unittest.TestCase):
 
 
 class H53Test(unittest.TestCase):
-    """H53 (H53: not yet pre-registered; pairs.design refuses it until EXPERIMENTS.md has its row): Qwen3.8-27B on the Arc Pro B70s in solo holds,
+    """H53 (EXPERIMENTS.md "H53 pre-registration"): Qwen3.8-27B on the Arc Pro B70s in solo holds,
     AG (k3d-gpu auto device, one card) and B2 (EAT PR #21's xpu-qwen36-27b profile, TP 4), scored
     as block pairs under rule L3 (solo.py; test_solo.py covers the pairing)."""
 
@@ -835,9 +835,10 @@ class H53Test(unittest.TestCase):
         self.addCleanup(shutil.rmtree, tmp)
         saved = PR.LEDGER
         self.addCleanup(setattr, PR, "LEDGER", saved)
-        with self.assertRaisesRegex(ValueError, "pre-register it first"):
-            PR.design("H53")                                         # main has no H53 row yet
+        self.assertEqual(PR.design("H53"), ("H49", "L3"))           # the ledger's H53 row
         PR.LEDGER = os.path.join(tmp, "EXPERIMENTS.md")
+        with self.assertRaisesRegex(ValueError, "pre-register it first"):
+            PR.design("H53")                                         # a ledger without it
         with open(PR.LEDGER, "w") as f:
             f.write("| H53 | x | PENDING |\n")
         self.assertEqual(PR.design("H53"), ("H49", "L3"))
