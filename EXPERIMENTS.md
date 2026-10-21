@@ -1705,12 +1705,17 @@ their block medians. R_bw = R x (A weight bytes / B weight bytes) = R x 0.99999.
 `bench/xhost/hold.sh` on the shared lock; node container pinned to CPUs 0-7,48-55 (8 cores
 with their SMT siblings) and both engines sized to those 16 CPUs (`H7X_CPUS=16`), which is H7's
 sizing: there each engine got the whole 16-CPU P-core balloon (8 P-cores with SMT). An earlier
-draft of this row sized both engines to 48 CPUs. B's memory limit is raised from the 16Gi of
-`integrations/eat/vllm-values.yaml` (k3d-gpu's overlay, sized on the i9) to 32Gi
-(`H7X_VLLM_MEM=32Gi`), for B and C alike: on this host vLLM was OOMKilled at 16Gi right after
-it allocated its 6 GiB KV cache, at 48 and at 16 CPUs (smokes 2 and 3, below). The limit is a
-cgroup cap; it changes no engine setting (KV stays 6 GiB, `VLLM_CPU_SGL_KERNEL` 1 as EAT ships).
-The OOM's cause is not established (an AMX-path weight repack is one candidate). `K3D_GPU_VENDORS=none`; crescent C1 kubelet thresholds; node image
+draft of this row sized both engines to 48 CPUs. B's memory limit is not the 16Gi of
+`integrations/eat/vllm-values.yaml` (k3d-gpu's overlay, sized on the i9) but comes from
+`k3d-gpu fit` (#174; `H7X_VLLM_MEM=fit`): the fit's weights (7.5 GiB) and runtime (6.0 GiB) for
+this checkpoint on vLLM CPU, plus the row's 6 GiB KV, times the fit's 1.1 slack, rounded up:
+22Gi on this host (`fit.json` and `vllm-mem.txt` are kept in the run directory). B and C get the
+same limit. On this host vLLM was OOMKilled at 16Gi right after it allocated its 6 GiB KV cache,
+at 48 and at 16 CPUs (smokes 2 and 3, below), and came up at 32Gi (smoke 4); the fit's sum (19.5
+GiB before slack) also says 16Gi is short. That is a finding for the overlay and for EAT's chart
+default, recorded here and not fixed in this row. The limit is a cgroup cap; it changes no engine
+setting (KV stays 6 GiB, `VLLM_CPU_SGL_KERNEL` 1 as EAT ships). Why the same 16Gi sufficed on the
+i9 is not established. `K3D_GPU_VENDORS=none`; crescent C1 kubelet thresholds; node image
 `cryptoandcoffee/k3d-gpu:0.1.61`; models downloaded on the host at the pinned commits
 (`bench/xhost/fetch_models.py`). No background load, as H7 (it predates the matched-load
 design); the host's own serving stack is the background, recorded by `serving.py` and the
@@ -1731,8 +1736,11 @@ and was not Ready in 1800 s. The likely cause, not confirmed (the failed contain
 kept): with compilation on, vLLM writes its compile cache under `$HOME/.cache/vllm`, which is on
 the chart's read-only root for its non-root user. C therefore also gets
 `VLLM_CACHE_ROOT=/root/.cache/vllm`, the chart's own writable cache volume, its one change besides
-dropping `--enforce-eager`; `h7x.sh` now keeps the failed container's log. If C still does not
-come up, the run continues without it and C/B is reported as not measured. `H7X_READY_S=1800` is used for the run, because the first vLLM
+dropping `--enforce-eager` (in vLLM v0.24.0 `VLLM_CACHE_ROOT` defaults to
+`$XDG_CACHE_HOME` or `~/.cache`, plus `/vllm` (`vllm/envs.py`), and the compile cache is
+`VLLM_CACHE_ROOT/torch_compile_cache` (`vllm/compilation/backends.py`)); `h7x.sh` now keeps the failed container's log. If C still does not
+come up, the run continues without it and C/B is reported as not measured. A fifth smoke (B and C at the fit's limit) runs before this row is merged and is
+reported in its run section. `H7X_READY_S=1800` is used for the run, because the first vLLM
 start in a fresh cluster pulls its 7.4 GB image.
 
 **Hold.** One hold, cap 4200 s (11 blocks; a vLLM cold start is the slow step). If the cap ends
@@ -1748,7 +1756,7 @@ $X/hfvenv/bin/python bench/xhost/fetch_models.py $X/models \
   OpenVINO/Qwen3-4B-fp16-ov@00298f1c614ffdc000814d8cbe1b7613aa73cdca Qwen/Qwen3-4B@1cfa9a7208912126459214e8b04321603b3df60c
 git -C $X/eat-src checkout 0d3438d     # https://github.com/intel/enterprise-agent-toolkit
 bench/xhost/hold.sh H7x 4200 env K3D_GPU_IMAGE=cryptoandcoffee/k3d-gpu:0.1.61 K3D_GPU_VENDORS=none \
-  K3D_GPU_K3S_ARGS="$C1" K3D_GPU_CLUSTER=k3dgpu-x-h7 H7X_CPUS=16 H7X_NODE_CPUS=0-7,48-55 H7X_READY_S=1800 H7X_VLLM_MEM=32Gi \
+  K3D_GPU_K3S_ARGS="$C1" K3D_GPU_CLUSTER=k3dgpu-x-h7 H7X_CPUS=16 H7X_NODE_CPUS=0-7,48-55 H7X_READY_S=1800 H7X_VLLM_MEM=fit \
   APB_MODELS=$X/models APB_EAT_CHART=$X/eat-src/core/helm-charts/vllm APB_OUT=$X/runs/H7x \
   bench/apb/h7x.sh
 ```
