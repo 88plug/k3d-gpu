@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # gpu-serving.sh stop|start|check [CONTAINER]: free or restore the two B70 cards of one live
-# SGLang pair on crescent for H53 (H53: not yet pre-registered; pairs.design refuses it until EXPERIMENTS.md has its row). Default container
+# SGLang pair on crescent for H53 (EXPERIMENTS.md "H53 pre-registration"). Default container
 # qwen38-b-hr (ZE_AFFINITY_MASK=2,3: cards 0000:7c:00.0 and 0000:96:00.0, port 30001).
 #   stop   save `docker inspect` to ~/k3dgpu-bench/restore/, refuse while an aiperf process
 #          runs in aiperf010, then `docker stop` (never rm) and record the time

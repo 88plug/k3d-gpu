@@ -50,9 +50,10 @@ def solo_row(hold, j, arm, status="complete"):
     return {"hold": hold, "arm": arm, "j": j, "task": T.B24[j]["id"], "status": status, "void_reason": None}
 
 
-def two_blocks(n=24, b_pass=lambda j: j % 5 == 0):
+def two_blocks(n=24, b_pass=lambda j: j % 5 == 0, holds=4):
     at, rows = [], []
-    for hold, arm in ((1, "AG"), (2, "B2"), (3, "B2"), (4, "AG")):
+    for hold in range(1, holds + 1):
+        arm = PR.expected_arm("H53", hold)
         for j in range(n):
             ok = arm == "AG" or b_pass(j)
             at.append(att(hold, j, arm, "pass_budget" if ok else "over_turn", thr=[12, 300, 3342][(j + hold) % 3]))
@@ -164,7 +165,38 @@ class ReportTest(unittest.TestCase):
         self.assertEqual(AB.main(["solo-report", tmp, "--hyp", "H53", "--arm-a", "AG", "--arm-b", "B2"]), 0)
         with open(os.path.join(tmp, "analysis.json")) as f:
             res = json.load(f)
-        self.assertEqual((res["rule"], res["matched"], res["holds"], res["verdict"]), ("L3", 48, 4, "SUPPORTED"))
+        # Two blocks: the pair-level result is clear, the block-level verdict needs >= 3 blocks.
+        self.assertEqual((res["rule"], res["matched"], res["holds"]), ("L3", 48, 4))
+        self.assertEqual((res["pair_level_verdict"], res["verdict"]), ("SUPPORTED", "INCONCLUSIVE"))
+        self.assertEqual(res["block_level"]["n_blocks"], 2)
+
+
+class BlockVerdictTest(unittest.TestCase):
+    REG = {"hyp": "H53", "rule": "L3", "seed": SEED}
+
+    def score(self, holds, b_pass=lambda j: j % 5 == 0, rows_filter=None):
+        at, rows = two_blocks(holds=holds, b_pass=b_pass)
+        if rows_filter:
+            rows = [r for r in rows if rows_filter(r)]
+        a2, p2 = S.block_pairs(at, rows, "AG", "B2")
+        res = PR.analyze(a2, p2, "H53", "AG", "B2", registration=self.REG, solo=True)
+        return S.block_verdict(res, "AG", "B2")
+
+    def test_three_consistent_blocks_support(self):
+        bv = self.score(6)
+        self.assertEqual((bv["n_blocks"], bv["verdict"]), (3, "SUPPORTED"))
+        self.assertAlmostEqual(bv["mean_d"], 19 / 24, places=3)
+        self.assertEqual(bv["sign_flip_p"], 0.25)                      # 2 of 8 sign patterns
+
+    def test_no_effect_refutes(self):
+        bv = self.score(6, b_pass=lambda j: True)
+        self.assertEqual((bv["mean_d"], bv["verdict"]), (0.0, "REFUTED"))
+
+    def test_a_short_block_is_not_counted(self):
+        # Hold 6 (block 3's B2) ran 5 tasks: 5 pairs < 8, so only two blocks count.
+        bv = self.score(6, rows_filter=lambda r: not (r["hold"] == 6 and r["j"] >= 5))
+        self.assertEqual(bv["blocks"][3], {"pairs": 5, "d": 0.8, "counted": False})
+        self.assertEqual((bv["n_blocks"], bv["verdict"]), (2, "INCONCLUSIVE"))
 
 
 class RunSoloTest(unittest.TestCase):

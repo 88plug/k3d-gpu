@@ -155,6 +155,10 @@ Usage: k3d-gpu <command>
   doctor --perf [--model-gb N]
             Read-only host tuning advisor for inference (CPU/GPU clocks, power
             limits, THP, swap, IRQs, persistence): evidence, why, apply + revert
+  doctor --perf --bandwidth
+            Measure DRAM bandwidth: build and run STREAM (jeffhammond/STREAM, pinned
+            commit and sha256) for about a minute, one thread per core, and cache
+            the triad in the state dir for plan --predict --model. Changes nothing
   report    Host + cluster inventory per engine; writes k3d-gpu-report.{json,html}
             (report DIR writes there; report --json prints the JSON only;
             --no-cluster skips the cluster query)
@@ -222,6 +226,16 @@ Usage: k3d-gpu <command>
             Roofline prediction (decode/prefill tok/s, derived agents per box) for
             an Intel SKU from its spec fields, fitted on one measured host row;
             labelled calibrated or extrapolated. A model output (H24 INCONCLUSIVE)
+  plan --predict --model ID[@REV]|DIR|FILE.gguf [--revision R] [--format F] [--model-id ID]
+       [--placement auto|cpu|gpu|hybrid] [--engine E] [--gpus N] [--dram-gbs N]
+       [--gpu-gbs N] [--hop-us N] [--json]
+            Decode ceiling for one model on this host: bandwidth / weight bytes
+            read per token, from config.json (or the GGUF tensor table); MoE experts
+            count top_k/num_experts. Placements: CPU, one Intel GPU, tensor parallel,
+            experts on CPU + rest on a GPU. DRAM bandwidth is the measured STREAM
+            cache (doctor --perf --bandwidth) when present, else SMBIOS channels x
+            MT/s x 8 B, labelled theoretical; GPU bandwidth is the spec value.
+            A predictor, not a measurement (H54c measures it)
   audit [--json|--observe] [--observed FILE] [--plan FILE] [--lock FILE]
             Posture checks of the running cluster: fails on an unauthenticated
             listener off loopback, an image not pinned in images.lock, a runtime
@@ -4236,22 +4250,126 @@ doctor_perf() {
     info "${PERF_SUGGESTIONS} suggestion(s). Read-only: nothing on this host was changed."
 }
 
+# doctor --perf --bandwidth: measured DRAM bandwidth for plan --predict --model.
+# STREAM (McCalpin; jeffhammond/STREAM at a pinned commit, source checked by
+# sha256) built with -O3 -march=native -fopenmp, each array 4x the last-level
+# cache (STREAM's sizing rule, at least 10M doubles), one OpenMP thread per
+# physical core spread over the cores, best Triad of three runs. The result is
+# cached as ${STATE_DIR}/bandwidth.json with the CPU model and MemTotal it was
+# measured on; plan --predict ignores it on any other host. Runs a benchmark for
+# about a minute; changes no host setting.
+STREAM_COMMIT=6703f7504a38a8da96b353cadafa64d3c2d7a2d3
+STREAM_SHA256=c388924eb140fda95f534cdb808ae7f1f8ebb18da41d8aec1b512a3c8d303c9b
+
+# llc_bytes: total last-level cache in bytes, each shared L3 counted once (0 if unread).
+llc_bytes() {
+    local d size seen="" list total=0
+    for d in "${SYSROOT}"/sys/devices/system/cpu/cpu[0-9]*/cache/index3; do
+        [ -d "${d}" ] || continue
+        list=$(rf "${d}/shared_cpu_list"); size=$(rf "${d}/size")
+        [[ " ${seen} " == *" ${list} "* ]] && continue
+        seen+=" ${list}"
+        case "${size}" in
+            *K) total=$((total + ${size%K} * 1024)) ;;
+            *M) total=$((total + ${size%M} * 1048576)) ;;
+        esac
+    done
+    echo "${total}"
+}
+
+# physical_cores: distinct (physical id, core id) pairs in /proc/cpuinfo, or
+# "cpu cores" x packages when that is more (a cpuinfo that lists one CPU).
+physical_cores() {
+    awk -F': *' '/^physical id/ {p=$2; pk[p]=1} /^core id/ {c[p" "$2]=1} /^cpu cores/ {per=$2}
+        END {n=0; for (k in c) n++; m=0; for (k in pk) m++; if (per * m > n) n = per * m; print n}' \
+        "${SYSROOT}/proc/cpuinfo" 2>/dev/null
+}
+
+perf_bandwidth() {
+    local work src bin elems llc avail threads cc run out triad copy best=0 bestc=0 runs="" cache model mem
+    cache="${STATE_DIR}/bandwidth.json"
+    work="${STATE_DIR}/stream"
+    mkdir -p "${work}"
+    llc=$(llc_bytes)
+    elems=$(( llc * 4 / 8 ))
+    [ "${elems}" -ge 10000000 ] || elems=10000000
+    elems=${K3D_GPU_STREAM_ELEMS:-${elems}}
+    avail=$(meminfo_kb MemAvailable)
+    if lt "${avail}" $(( elems * 3 * 8 * 2 / 1024 )); then
+        err "doctor --perf --bandwidth: STREAM needs $(( elems * 3 * 8 / 1048576 )) MiB and MemAvailable is ${avail} kB"
+    fi
+    threads=$(physical_cores)
+    lt 0 "${threads}" || threads=$(nproc)
+    if [ -n "${K3D_GPU_STREAM_BIN:-}" ]; then
+        bin=${K3D_GPU_STREAM_BIN}
+    else
+        src="${work}/stream-${STREAM_COMMIT:0:12}.c"
+        if [ ! -f "${src}" ]; then
+            require curl
+            curl -fsSL --max-time 60 -o "${src}.tmp" \
+                "https://raw.githubusercontent.com/jeffhammond/STREAM/${STREAM_COMMIT}/stream.c" \
+                || err "doctor --perf --bandwidth: cannot fetch stream.c at ${STREAM_COMMIT}"
+            mv -f "${src}.tmp" "${src}"
+        fi
+        if [ "$(sha256sum "${src}" | cut -d' ' -f1)" != "${STREAM_SHA256}" ]; then
+            rm -f "${src}"
+            err "doctor --perf --bandwidth: stream.c does not match sha256 ${STREAM_SHA256}"
+        fi
+        cc=${CC:-cc}
+        require "${cc}"
+        bin="${work}/stream-${elems}"
+        [ -x "${bin}" ] || "${cc}" -O3 -march=native -fopenmp -mcmodel=large \
+            -DSTREAM_ARRAY_SIZE="${elems}" -DNTIMES=10 -o "${bin}" "${src}" \
+            || err "doctor --perf --bandwidth: ${cc} could not build STREAM (it needs OpenMP: gcc -fopenmp)"
+    fi
+    info "STREAM: ${elems} doubles per array ($(( elems * 8 / 1048576 )) MiB, last-level cache $(( llc / 1048576 )) MiB), ${threads} threads, 3 runs"
+    for run in 1 2 3; do
+        out=$(OMP_NUM_THREADS=${threads} OMP_PROC_BIND=spread OMP_PLACES=cores "${bin}") \
+            || err "doctor --perf --bandwidth: STREAM run ${run} failed"
+        triad=$(awk '$1 == "Triad:" {print $2}' <<< "${out}")
+        copy=$(awk '$1 == "Copy:" {print $2}' <<< "${out}")
+        [[ "${triad}" =~ ^[0-9]+([.][0-9]+)?$ ]] || err "doctor --perf --bandwidth: no Triad line in STREAM run ${run}"
+        runs+="${runs:+,}${triad}"
+        if awk -v a="${triad}" -v b="${best}" 'BEGIN {exit !(a > b)}'; then best=${triad}; bestc=${copy:-0}; fi
+    done
+    model=$(cpuinfo_field "model name")
+    mem=$(meminfo_kb MemTotal)
+    awk -v t="${best}" -v c="${bestc}" -v th="${threads}" -v n="${elems}" -v r="${runs}" \
+        -v m="${model}" -v k="${mem:-0}" -v sc="${STREAM_COMMIT}" -v ss="${STREAM_SHA256}" \
+        -v at="$(date -u +%Y-%m-%dT%H:%M:%SZ)" 'BEGIN {
+        gsub(/\\/, "\\\\", m); gsub(/"/, "\\\"", m)
+        printf "{\"schema\": \"k3d-gpu.bandwidth/v1\", \"triad_gbs\": %.1f, \"copy_gbs\": %.1f, ", t / 1000, c / 1000
+        printf "\"triad_runs_mbs\": [%s], \"threads\": %d, \"array_elems\": %d, ", r, th, n
+        printf "\"cpu_model\": \"%s\", \"mem_kib\": %d, \"measured_at\": \"%s\", ", m, k, at
+        printf "\"stream\": {\"repo\": \"jeffhammond/STREAM\", \"commit\": \"%s\", \"sha256\": \"%s\"}}\n", sc, ss
+    }' > "${cache}.tmp"
+    mv -f "${cache}.tmp" "${cache}"
+    info "DRAM bandwidth (measured): STREAM triad $(awk -v t="${best}" 'BEGIN {printf "%.1f", t / 1000}') GB/s, copy $(awk -v t="${bestc}" 'BEGIN {printf "%.1f", t / 1000}') GB/s (best of 3, MB/s per run: ${runs})"
+    info "Cached in ${cache} for 'k3d-gpu plan --predict --model'. No host setting was changed."
+}
+
 cmd_doctor() {
-    local perf=0 json=0
+    local perf=0 json=0 bandwidth=0
     remote_parse "$@"
     set -- ${REMOTE_REST[@]+"${REMOTE_REST[@]}"}
     [ -n "${REMOTE}" ] || [ "${#REMOTE_ARGS[@]}" -eq 0 ] || err "doctor: --model and --api-key-file go with --remote"
     while [ $# -gt 0 ]; do
         case "$1" in
             --perf) perf=1 ;;
+            --bandwidth) bandwidth=1 ;;
             --experimental) DOCTOR_EXP_ALL=1 ;;
             --json) json=1 ;;
             --model-gb) [ $# -ge 2 ] || err "--model-gb needs a size in GiB"; PERF_MODEL_GB=$2; shift ;;
             --model-gb=*) PERF_MODEL_GB=${1#*=} ;;
-            *) err "unknown doctor option: $1 (use --perf [--model-gb N], --experimental, --json or --remote [URL])" ;;
+            *) err "unknown doctor option: $1 (use --perf [--model-gb N], --perf --bandwidth, --experimental, --json or --remote [URL])" ;;
         esac
         shift
     done
+    if [ "${bandwidth}" -eq 1 ]; then
+        [ "${perf}" -eq 1 ] || err "doctor: --bandwidth goes with --perf (doctor --perf --bandwidth)"
+        perf_bandwidth
+        return
+    fi
     if [ -n "${PERF_MODEL_GB}" ] && ! [[ "${PERF_MODEL_GB}" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
         err "--model-gb must be a number of GiB, got '${PERF_MODEL_GB}'"
     fi
@@ -8993,15 +9111,84 @@ plan_predict() {
     fi
 }
 
+# hf_config <repo id> <revision>: a directory holding the repo's config.json at
+# that revision, fetched from Hugging Face, and its openvino_config.json when the
+# repo has one (an OpenVINO IR's weight format is there). A commit-sha revision
+# is immutable, so it is cached under the state dir; a branch or tag is fetched
+# again each time.
+hf_config() {
+    local id=$1 rev=$2 base out tmp
+    base="${K3D_GPU_HF_ENDPOINT:-https://huggingface.co}/${id}/resolve/${rev}"
+    out="${STATE_DIR}/hf-config/${id//\//__}@${rev}"
+    if [[ "${rev}" =~ ^[0-9a-f]{7,40}$ ]] && [ -s "${out}/config.json" ]; then echo "${out}"; return 0; fi
+    require curl
+    mkdir -p "${STATE_DIR}/hf-config"
+    tmp=$(mktemp -d "${STATE_DIR}/hf-config/.fetch.XXXXXX")
+    if ! curl -fsSL --max-time 60 -o "${tmp}/config.json" "${base}/config.json"; then
+        rm -rf "${tmp}"
+        err "plan: cannot fetch ${base}/config.json (for a gated repo pass --model DIR with a local copy)"
+    fi
+    curl -fsSL --max-time 60 -o "${tmp}/openvino_config.json" "${base}/openvino_config.json" 2>/dev/null \
+        || rm -f "${tmp}/openvino_config.json"
+    rm -rf "${out}"
+    mv -f "${tmp}" "${out}"
+    echo "${out}"
+}
+
+# plan --predict --model ID[@REV]|DIR|FILE [options]: decode ceiling from the
+# model's config.json (or GGUF tensor table) and this host's bandwidths
+# (console/moe_predict.py). The DRAM figure is the doctor --perf --bandwidth
+# cache when it is this host's, else the SMBIOS peak, labelled theoretical.
+plan_predict_model() {
+    local dir model="" rev="" id="" cfg args=() src=()
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --json) args+=(--json) ;;
+            --model|--revision|--model-id)
+                [ $# -ge 2 ] || err "plan: $1 needs a value"
+                case "$1" in --model) model=$2 ;; --revision) rev=$2 ;; *) id=$2 ;; esac
+                shift ;;
+            --format|--placement|--engine|--gpus|--dram-gbs|--gpu-gbs|--hop-us)
+                [ $# -ge 2 ] || err "plan: $1 needs a value"
+                args+=("$1" "$2")
+                shift ;;
+            *) err "unknown plan --predict --model option: $1 (use --model, --revision, --model-id, --format, --placement, --engine, --gpus, --dram-gbs, --gpu-gbs, --hop-us, --json)" ;;
+        esac
+        shift
+    done
+    [ -n "${model}" ] || err "plan: --predict --model needs a Hugging Face repo id, a model directory or a .gguf file"
+    dir=$(console_dir) || err "plan: console/ not found next to the launcher or in ${SHARE_DIR}/console (set K3D_GPU_CONSOLE)"
+    [ -f "${dir}/moe_predict.py" ] || err "plan: ${dir}/moe_predict.py not found"
+    require python3
+    if [ -f "${model}" ] && [[ "${model}" == *.gguf ]]; then
+        src=(--gguf "${model}")
+    elif [ -e "${model}" ]; then
+        src=(--config "${model}")
+    elif [[ "${model}" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9_.-]+(@[A-Za-z0-9_.-]+)?$ ]]; then
+        if [[ "${model}" == *@* ]]; then rev=${rev:-${model#*@}}; model=${model%@*}; fi
+        rev=${rev:-main}
+        id=${id:-${model}}
+        cfg=$(hf_config "${model}" "${rev}") || exit 1
+        src=(--config "${cfg}")
+    else
+        err "plan: --model ${model} is neither a local path nor a Hugging Face repo id (org/name[@revision])"
+    fi
+    [ -z "${id}" ] || src+=(--model-id "${id}")
+    [ -z "${rev}" ] || src+=(--revision "${rev}")
+    [ ! -f "${STATE_DIR}/bandwidth.json" ] || src+=(--bandwidth-cache "${STATE_DIR}/bandwidth.json")
+    python3 "${dir}/moe_predict.py" "${src[@]}" --sysroot "${SYSROOT}" ${args[@]+"${args[@]}"}
+}
+
 # plan [--explain|--json|--hash] [--facts FILE] [--matrix FILE] [--engine E]
 #      [--device D] [--model M] [--bind ADDR] [--port N]
 # plan --predict SKU|auto|list [--json] [--mts N] [--channels N]
+# plan --predict --model ID|DIR|FILE [...]
 cmd_plan() {
     local dir mode=text facts="" matrix="" args=() out
     if [ "${1:-}" = "--predict" ]; then
-        [ $# -ge 2 ] || err "plan: --predict needs a SKU, auto or list"
+        [ $# -ge 2 ] || err "plan: --predict needs a SKU, auto, list or --model"
         shift
-        plan_predict "$@"
+        if [ "$1" = "--model" ]; then plan_predict_model "$@"; else plan_predict "$@"; fi
         return
     fi
     while [ $# -gt 0 ]; do

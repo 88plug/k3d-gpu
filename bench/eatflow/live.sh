@@ -305,7 +305,7 @@ cluster_up() {
     fi
 }
 if [ "${MODE}" = solo ]; then
-    # H53 (refused until pre-registered, LIVE_MODEL_SET=qwen38): one arm per hold on the Arc Pro B70s,
+    # H53 ("H53 pre-registration", LIVE_MODEL_SET=qwen38): one arm per hold on the Arc Pro B70s,
     # holds in the order AG, B2, B2, AG, scored as block pairs (bench/eatflow/solo.py). LIVE_SOLO:
     # AG (k3d-gpu's auto device and draft: OVMS on one card) or B2 (EAT PR #21's vLLM XPU path,
     # its xpu-qwen36-27b profile on these weights, LIVE_B2_TP cards). LIVE_GPU_FREE: the PCI
