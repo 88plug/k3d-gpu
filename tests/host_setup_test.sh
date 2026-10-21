@@ -132,7 +132,8 @@ says "NPU archive sha256 is checked" "83685e6d92f4db1ca65e442846d487c7feb1335634
 says "NPU install pulls libtbb12 and the archive .debs by name" "libtbb12 '${WORK}/dl/npu-v1.38.0/intel-level-zero-npu_1.38.0.20260910-34487311128~ubuntu26.04_amd64.deb' '${WORK}/dl/npu-v1.38.0/intel-driver-compiler-npu_1.38.0.20260910-34487311128~ubuntu26.04_amd64.deb' '${WORK}/dl/npu-v1.38.0/intel-fw-npu_1.38.0.20260910-34487311128~ubuntu26.04_amd64.deb'"
 not_says "NPU install never globs the download dir" "*.deb"
 says "only the named .debs are unpacked from the checked archive" "-C '${WORK}/dl/npu-v1.38.0' './intel-level-zero-npu_1.38.0.20260910-34487311128~ubuntu26.04_amd64.deb'"
-says "NPU gets the level-zero loader too" "libze1_1.34.0+u24.04_amd64.deb"
+says "NPU needs the loader, and 26.04 has no pinned one: said, not guessed" "no pinned Level Zero loader for ubuntu-26.04"
+not_says "26.04 NPU never gets the 24.04 loader .deb" "libze1_1.34.0+u24.04_amd64.deb"
 not_says "NPU-only host skips the media PPA" "add-apt-repository"
 says "missing NPU firmware is reported" "intel/vpu/vpu_50xx_* firmware missing"
 
@@ -164,7 +165,9 @@ osrel "${r}" fedora 44
 pci "${r}" 0000:00:02.0 0x8086 0xe20b 0x030000 xe
 pci "${r}" 0000:00:0b.0 0x8086 0x643e 0x120000 intel_vpu
 run "${r}" ""
-says "fedora installs Intel GPU + NPU from its repos" "sudo dnf install -y --refresh intel-opencl intel-level-zero oneapi-level-zero libva-intel-media-driver libva-utils clinfo intel-gpu-firmware intel-npu-driver intel-npu-firmware"
+# vainfo and clinfo are stubs on PATH here, so their packages pass their checks.
+says "fedora installs what the Intel GPU + NPU checks miss from its repos" "sudo dnf install -y --refresh intel-opencl intel-level-zero oneapi-level-zero libva-intel-media-driver intel-gpu-firmware intel-npu-driver intel-npu-firmware"
+not_says "fedora: installed clinfo and vainfo are not planned" "libva-utils"
 run "${r}" "" K3D_GPU_VENDORS=-npu
 says "-npu keeps the auto-detected Intel GPU" "intel-opencl"
 not_says "-npu leaves the NPU packages out" "intel-npu-driver"
@@ -212,7 +215,8 @@ says "media driver ahead of libva is caught from the files" "exports __vaDriverI
 says "vainfo's __vaDriverInit_1_0 error is read" "vainfo: /usr/lib/dri/iHD_drv_video.so has no function __vaDriverInit_1_0"
 says "libva fix on manjaro is a full upgrade" "Fix: sudo pacman -Syu (a full upgrade; never pacman -Sy <pkg> alone)"
 says "failed checks are counted" "2 check(s) failed"
-says "manjaro plan installs with -Syu" "sudo pacman -Syu --needed intel-compute-runtime level-zero-loader intel-media-driver libva libva-utils clinfo linux-firmware-intel"
+says "manjaro plan installs only the media set, with -Syu" "    sudo pacman -Syu --needed intel-media-driver libva"
+not_says "manjaro: passing compute runtime is not planned" "intel-compute-runtime"
 says "manjaro gets the mixed-repo warning" "never Arch [extra] or AUR binaries"
 
 r=$(manjaro manjaro-cxx 2400 3.4.34 3.4.35)
@@ -240,7 +244,8 @@ not_says "healthy host gets no install plan" "Install plan"
 not_says "healthy host is not told to upgrade the system" "pacman -Syu"
 says "healthy host says there is nothing to install" "nothing to install"
 run "${r}" "" --plan STUB_VAINFO="vainfo: Driver version: Intel iHD driver - 26.2.4 ()" STUB_CLINFO="Platform #0: Intel(R) OpenCL Graphics"
-says "--plan prints the full plan even on a healthy host" "Install plan"
+says "--plan on a healthy host plans no install" "Every check passed: nothing to install"
+not_says "--plan on a healthy host proposes no upgrade" "pacman -Syu"
 
 r=$(manjaro ubuntu-libva 2000 3.4.35 3.4.35)
 osrel "${r}" ubuntu 24.04
@@ -519,6 +524,144 @@ mkdir -p "${r}/sys/devices/pci0000:00/0000:01:01.0"; ln -sfn "${r}/sys/devices/p
 run "${r}" ""
 says "configured accelerators: nothing to set up" "nothing to set up"
 not_says "configured accelerators get no accel-config steps" "accel-config"
+
+# ---- gated plans: crescent (Ubuntu 26.04, Xeon 6741P, 4x Arc Pro B70 on xe) ---
+# Every userspace check passes and iaa_crypto's kernel WQ claims all 256 WQ
+# entries of iax1. No accel-config on the host. A plan installs only what a
+# failing check names, from the detected release's own pinned set.
+
+# crescent <name>: the fake root; Intel userspace in place under the multiarch dir.
+crescent() {
+    local r i B
+    r=$(newroot "$1")
+    osrel "${r}" ubuntu 26.04
+    kernel "${r}" 7.0.0-31-generic
+    for i in 18 3a 5c 7e; do pci "${r}" "0000:${i}:00.0" 0x8086 0xe223 0x030000 xe; done
+    LIBDIR=usr/lib/x86_64-linux-gnu lib "${r}" libstdc++.so.6 "GLIBCXX_3.4.34"
+    LIBDIR=usr/lib/x86_64-linux-gnu lib "${r}" intel-opencl/libigdrcl.so "GLIBCXX_3.4.30"
+    LIBDIR=usr/lib/x86_64-linux-gnu lib "${r}" libze_intel_gpu.so.1 "GLIBCXX_3.4.30"
+    LIBDIR=usr/lib/x86_64-linux-gnu lib "${r}" libze_loader.so.1 "x"
+    LIBDIR=usr/lib/x86_64-linux-gnu lib "${r}" dri/iHD_drv_video.so "__vaDriverInit_1_22 GLIBCXX_3.4.30"
+    LIBDIR=usr/lib/x86_64-linux-gnu lib "${r}" libva.so.2.2200.0 "x"
+    mkdir -p "${r}/etc/OpenCL/vendors"
+    echo /usr/lib/x86_64-linux-gnu/intel-opencl/libigdrcl.so > "${r}/etc/OpenCL/vendors/intel.icd"
+    B="${r}/sys/bus/dsa/devices"
+    mkdir -p "${B}/iax1" "${r}/sys/bus/dsa/drivers/crypto"
+    echo enabled > "${B}/iax1/state"; echo 256 > "${B}/iax1/max_work_queues_size"; echo 0 > "${B}/iax1/pasid_enabled"
+    mkdir -p "${B}/wq1.0"; echo enabled > "${B}/wq1.0/state"; echo 256 > "${B}/wq1.0/size"; echo 0 > "${B}/wq1.0/group_id"
+    echo dedicated > "${B}/wq1.0/mode"
+    ln -sfn "${r}/sys/bus/dsa/drivers/crypto" "${B}/wq1.0/driver"
+    for i in 1 2 3 4 5 6 7; do
+        mkdir -p "${B}/wq1.${i}"; echo disabled > "${B}/wq1.${i}/state"; echo 0 > "${B}/wq1.${i}/size"; echo -1 > "${B}/wq1.${i}/group_id"
+    done
+    for i in 0 1 2 3 4 5 6 7; do mkdir -p "${B}/engine1.${i}"; echo 0 > "${B}/engine1.${i}/group_id"; done
+    for i in 0 1 2 3; do mkdir -p "${B}/group1.${i}"; done
+    echo "${r}"
+}
+CR_OK=(STUB_VAINFO="vainfo: Driver version: Intel iHD driver for Intel(R) Gen Graphics - 25.2.3 ()"
+       STUB_CLINFO="Platform #0: Intel(R) OpenCL Graphics")
+IAA_SHRINK="${AC} disable-device iax1 && ${AC} load-config -c /var/lib/k3d-gpu/idxd-iax1.conf && ${AC} config-wq iax1/wq1.0 --wq-size=240 && ${AC} config-wq iax1/wq1.1 --group-id=0 --type=user --mode=dedicated --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && ${AC} enable-device iax1 && ${AC} enable-wq iax1/wq1.0 && ${AC} enable-wq iax1/wq1.1"
+
+r=$(crescent crescent)
+run "${r}" "" --plan --with-kernel-wqs "${CR_OK[@]}"
+rc_is "crescent --plan exits 0" 0
+says "crescent: the release is read as 26.04" "Host setup for ubuntu-26.04"
+says "crescent: Level Zero loader ok" "ok: Level Zero loader: libze_loader.so.1"
+says "crescent: clinfo ok" "ok: clinfo: Intel(R) OpenCL Graphics"
+says "crescent: vainfo ok" "ok: vainfo: Intel iHD driver"
+not_says "crescent: no check failed" "fail"
+not_says "crescent: no install plan when every check passed" "Install plan"
+not_says "crescent: no apt install when every check passed" "    sudo apt-get"
+not_says "crescent: no PPA when the media checks passed" "add-apt-repository"
+not_says "crescent: no compute-runtime download when its checks passed" "compute-runtime/releases"
+not_says "crescent: no 24.04 .debs on 26.04" "u24.04"
+not_says "crescent: accel-config is not planned when nothing in the plan needs it" "    sudo apt-get update && sudo apt-get install -y accel-config"
+says "crescent: the plan says it installs nothing" "Every check passed: nothing to install"
+says "crescent: IAA full claim is named" "IAA iax1: kernel WQ(s) wq1.0 (crypto) hold it with 256 of 256 WQ entries claimed, so no user WQ fits beside them"
+says "crescent: IAA suggestion shrinks the kernel WQ and adds the user WQ" "apply:  sudo install -d -m 0700 /var/lib/k3d-gpu && ${AC} save-config -s /var/lib/k3d-gpu/idxd-all.conf && sudo python3 -c"
+says "crescent: IAA suggestion carries the shrink" "/var/lib/k3d-gpu/idxd-all.conf iax1 /var/lib/k3d-gpu/idxd-iax1.conf && ${IAA_SHRINK}"
+says "crescent: IAA suggestion has its revert" "revert: ${AC} disable-device iax1 && ${AC} load-config -c /var/lib/k3d-gpu/idxd-iax1.conf && ${AC} enable-device iax1 && ${AC} enable-wq iax1/wq1.0"
+says "crescent: IAA suggestion is never applied" "never applied by host-setup"
+says "crescent: IAA suggestion names what it needs" "needs accel-config: sudo apt-get update && sudo apt-get install -y accel-config"
+run "${r}" "y" --apply --with-kernel-wqs "${CR_OK[@]}"
+rc_is "crescent --apply exits 0" 0
+ran_nothing "crescent --apply runs nothing (the IAA shrink is a suggestion only)"
+run "${r}" "" "${CR_OK[@]}"
+says "crescent without --plan: nothing to install" "Every check passed: nothing to install"
+
+# One failing check: only its own package set.
+rm "${r}/usr/lib/x86_64-linux-gnu/libze_intel_gpu.so.1"
+run "${r}" "" "${CR_OK[@]}"
+says "missing Level Zero GPU driver plans the 26.35 compute runtime" "releases/download/26.35.39758.10/libze-intel-gpu1_26.35.39758.10-0_amd64.deb"
+not_says "missing Level Zero GPU driver: no media PPA" "add-apt-repository"
+not_says "missing Level Zero GPU driver: no loader .deb" "libze1_"
+not_says "missing Level Zero GPU driver: no NVIDIA" "nvidia"
+LIBDIR=usr/lib/x86_64-linux-gnu lib "${r}" libze_intel_gpu.so.1 "GLIBCXX_3.4.30"
+
+run "${r}" "" STUB_VAINFO="libva error: /usr/lib/x86_64-linux-gnu/dri/iHD_drv_video.so has no function __vaDriverInit_1_0" "${CR_OK[1]}"
+says "media failure on 26.04 plans the PPA's 26.04 build" "intel-media-va-driver-non-free=26.3.2-1~26.04~ppa1"
+says "media failure pins the 26.04 libva" "libva2=2.24.1-1~26.04~ppa2"
+not_says "media failure plans no compute runtime" "intel-opencl-icd_"
+not_says "media failure plans no 24.04 package" "24.04"
+
+rm "${r}/usr/lib/x86_64-linux-gnu/libze_loader.so.1"
+run "${r}" "" "${CR_OK[@]}"
+says "26.04 has no pinned loader .deb and says so" "no pinned Level Zero loader for ubuntu-26.04"
+not_says "26.04 never gets the u24.04 loader" "libze1_1.34.0+u24.04"
+
+# accel-config: planned only when a planned DSA/IAA step needs it and it is missing.
+r=$(crescent crescent-dsa)
+mkdir -p "${r}/sys/bus/dsa/devices/dsa0"; echo disabled > "${r}/sys/bus/dsa/devices/dsa0/state"; echo 0 > "${r}/sys/bus/dsa/devices/dsa0/pasid_enabled"
+run "${r}" "" "${CR_OK[@]}"
+says "missing accel-config is a failing check" "accel-config not installed"
+says "accel-config comes from the 26.04 archive" "sudo apt-get update && sudo apt-get install -y accel-config"
+mkdir -p "${r}/usr/local/bin"; printf '#!/bin/sh\n' > "${r}/usr/local/bin/accel-config"; chmod +x "${r}/usr/local/bin/accel-config"
+run "${r}" "" "${CR_OK[@]}"
+says "accel-config under /usr/local/bin counts" "ok: accel-config: /usr/local/bin/accel-config"
+not_says "installed accel-config is not planned" "install -y accel-config"
+
+# Release detection and releases without a pinned set.
+r=$(crescent codename)
+printf 'NAME="Ubuntu"\nID=ubuntu\nVERSION_CODENAME=resolute\n' > "${r}/etc/os-release"
+run "${r}" "" "${CR_OK[@]}"
+says "release from VERSION_CODENAME when VERSION_ID is missing" "Host setup for ubuntu-26.04"
+
+r=$(newroot ubuntu2510)
+osrel "${r}" ubuntu 25.10
+pci "${r}" 0000:03:00.0 0x8086 0xe20b 0x030000 xe
+run "${r}" ""
+rc_is "an Ubuntu release without a pinned set still exits 0" 0
+says "an Ubuntu release without a pinned set says so" "no pinned package set for ubuntu-25.10 (pinned: ubuntu-24.04, ubuntu-26.04)"
+not_says "no pinned set: no PPA" "add-apt-repository"
+not_says "no pinned set: no .debs" ".deb"
+not_says "no pinned set: no apt install" "apt-get install"
+
+# Toolkit installed, CDI spec missing: only the spec, guarded for a toolkit that
+# predates the nvidia-cdi-refresh units; no reinstall, no Docker restart.
+r=$(newroot ubuntu2404-cdi-only)
+osrel "${r}" ubuntu 24.04
+pci "${r}" 0000:01:00.0 0x10de 0x27b0 0x030000
+mkdir -p "${r}/usr/bin"; printf '#!/bin/sh\n' > "${r}/usr/bin/nvidia-ctk"; chmod +x "${r}/usr/bin/nvidia-ctk"
+run "${r}" ""
+says "CDI-only: the spec step falls back to cdi generate without the refresh units" "    if [ -e '${r}/usr/lib/systemd/system/nvidia-cdi-refresh.service' ]; then sudo systemctl enable --now nvidia-cdi-refresh.path"
+not_says "CDI-only: installed toolkit is not reinstalled" "nvidia-container-toolkit="
+not_says "CDI-only: docker is not restarted" "systemctl restart docker"
+says "CDI-only: one command" "Install plan (1 commands)"
+
+# No media driver and no vainfo: both planned in one run.
+r=$(newroot ubuntu2404-novainfo)
+osrel "${r}" ubuntu 24.04
+pci "${r}" 0000:00:02.0 0x8086 0x7d55 0x030000 xe
+# A PATH with every tool of this one except vainfo.
+NOVA="${WORK}/novainfo-bin"; mkdir -p "${NOVA}"
+IFS=: read -r -a dirs <<< "${STUB_BIN}:${PATH}"
+for d in "${dirs[@]}"; do
+    for f in "${d}"/*; do
+        [ -x "${f}" ] && [ "${f##*/}" != vainfo ] && [ ! -e "${NOVA}/${f##*/}" ] && ln -s "${f}" "${NOVA}/${f##*/}"
+    done
+done
+OUT=$(env K3D_GPU_SYSROOT="${r}" K3D_GPU_SETUP_DIR="${WORK}/dl" PATH="${NOVA}" bash "${K3D_GPU}" host-setup 2>&1)
+says "missing media driver and vainfo: vainfo is planned with the driver" "~24.04~ppa1 vainfo"
 
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
