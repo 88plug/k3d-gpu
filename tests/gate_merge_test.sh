@@ -78,6 +78,8 @@ case "$*" in
   *"diff --name-only mb000 origin/main"*) cat "$FIX/base_files"; exit 0;;
   *"diff --name-only mb000 "*) cat "$FIX/pr_files"; exit 0;;
   *"worktree add"*) for a; do last=$a; done; prev=; for a; do [ "$a" = "$last" ] && break; prev=$a; done; mkdir -p "$prev";;
+  *"merge-tree --write-tree"*) [ -f "$FIX/tree" ] && pop tree; exit 0;;
+  "show "*:*) p=${2#*:}; [ -f "$FIX/show/$p" ] || exit 128; cat "$FIX/show/$p"; exit 0;;
   *"rev-parse --show-toplevel"*) echo "$FIX";;
 esac
 exit 0
@@ -244,6 +246,31 @@ fixture base_moved_pr_ledger "[$SUCCESS]" "$CI_OK" abc123; echo 1 > "$FIX/ancest
 echo EXPERIMENTS.md > "$FIX/pr_files"; run_gate
 if [ "$RC" -eq 0 ] && [ "$(merges)" -eq 1 ] && [ "$(syncs)" -eq 0 ]; then ok "base_moved_pr_ledger: merged, no sync"
 else fail "base_moved_pr_ledger: rc=$RC merges=$(merges) syncs=$(syncs)"; fi
+
+# 17. the merged tree would carry a console/ledger-rules.json its EXPERIMENTS.md does
+#     not generate (a ledger row changed, the file did not): sync before merging.
+#     The stub tree is stale once, then the synced head is current.
+fixture rules_stale_sync "[$SUCCESS]" "$CI_OK" abc123
+mkdir -p "$FIX/show/console"
+cp "$ROOT/console/model_opt.py" "$ROOT/console/convert-pins.json" "$FIX/show/console/"
+printf '## Hypotheses\n\n| H34 | on the i9-13900T | p | m | SUPPORTED |\n' > "$FIX/show/EXPERIMENTS.md"
+echo '{"schema": "k3d-gpu.ledger-rules/v1", "rows": []}' > "$FIX/show/console/ledger-rules.json"
+printf 't1\n\n' > "$FIX/tree"; run_gate
+first_merge=$(grep -n '^gh pr merge 1 ' "$FIX/trace" | head -1 | cut -d: -f1)
+first_sync=$(grep -n 'worktree add' "$FIX/trace" | head -1 | cut -d: -f1)
+if [ "$RC" -eq 0 ] && [ "$(merges)" -eq 1 ] && [ -n "$first_sync" ] && [ "$first_sync" -lt "${first_merge:-0}" ] \
+   && grep -q 'ledger-rules.json would not match' <<<"$OUT"; then
+  ok "rules_stale_sync: synced (regenerating ledger-rules.json) before the merge"
+else fail "rules_stale_sync: rc=$RC merges=$(merges) sync_line=${first_sync:-none} merge_line=${first_merge:-none} out=$(tr '\n' ';' <<<"$OUT")"; fi
+# 17b. the merged tree's file matches: no sync.
+fixture rules_current "[$SUCCESS]" "$CI_OK" abc123
+mkdir -p "$FIX/show/console"
+cp "$ROOT/console/model_opt.py" "$ROOT/console/convert-pins.json" "$FIX/show/console/"
+printf '## Hypotheses\n\n| H34 | on the i9-13900T | p | m | SUPPORTED |\n' > "$FIX/show/EXPERIMENTS.md"
+python3 "$ROOT/console/model_opt.py" ledger-rules --ledger "$FIX/show/EXPERIMENTS.md" --out "$FIX/show/console/ledger-rules.json"
+echo t1 > "$FIX/tree"; run_gate
+if [ "$RC" -eq 0 ] && [ "$(merges)" -eq 1 ] && [ "$(syncs)" -eq 0 ]; then ok "rules_current: merged, no sync"
+else fail "rules_current: rc=$RC merges=$(merges) syncs=$(syncs)"; fi
 
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]
