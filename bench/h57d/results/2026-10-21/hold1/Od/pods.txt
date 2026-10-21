@@ -1,0 +1,11 @@
+NAMESPACE                NAME                                      READY   STATUS      RESTARTS   AGE   IP           NODE                           NOMINATED NODE   READINESS GATES
+k3d-gpu-agent            ovms-75474694bb-bqlrl                     1/1     Running     0          67s   10.42.0.11   k3d-k3dgpu-d-h57d-1-server-0   <none>           <none>
+kube-system              coredns-577d995dff-cd95v                  1/1     Running     0          93s   10.42.0.7    k3d-k3dgpu-d-h57d-1-server-0   <none>           <none>
+kube-system              helm-install-gateway-api-crd-8lsg4        0/1     Completed   0          93s   10.42.0.5    k3d-k3dgpu-d-h57d-1-server-0   <none>           <none>
+kube-system              intel-gpu-plugin-5r42c                    1/1     Running     0          93s   10.42.0.10   k3d-k3dgpu-d-h57d-1-server-0   <none>           <none>
+kube-system              local-path-provisioner-6858d854cf-2cxzv   1/1     Running     0          93s   10.42.0.2    k3d-k3dgpu-d-h57d-1-server-0   <none>           <none>
+kube-system              metrics-server-778c4649b4-qlh76           1/1     Running     0          93s   10.42.0.6    k3d-k3dgpu-d-h57d-1-server-0   <none>           <none>
+kube-system              nri-resource-policy-balloons-cj5c4        1/1     Running     0          91s   10.42.0.8    k3d-k3dgpu-d-h57d-1-server-0   <none>           <none>
+node-feature-discovery   nfd-gc-7d6955597d-89jn5                   1/1     Running     0          93s   10.42.0.4    k3d-k3dgpu-d-h57d-1-server-0   <none>           <none>
+node-feature-discovery   nfd-master-74b6cfb7df-t7wxs               1/1     Running     0          93s   10.42.0.9    k3d-k3dgpu-d-h57d-1-server-0   <none>           <none>
+node-feature-discovery   nfd-worker-q282p                          1/1     Running     0          93s   10.42.0.3    k3d-k3dgpu-d-h57d-1-server-0   <none>           <none>

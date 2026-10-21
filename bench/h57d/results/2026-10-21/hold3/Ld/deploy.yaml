@@ -1,0 +1,73 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: h57d
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ld
+  namespace: h57d
+  labels:
+    app: ld
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ld
+  template:
+    metadata:
+      labels:
+        app: ld
+        k3d-gpu.io/cores: performance
+    spec:
+      containers:
+      - name: server
+        image: ghcr.io/ggml-org/llama.cpp:server-b11749@sha256:9fbaa06d7f4449e2ae0d02b40e0431f7c212dcf231c9e3a7777a6afc2cc8f312
+        imagePullPolicy: IfNotPresent
+        args:
+        - -m
+        - /models/google_gemma-4-26B-A4B-it-qat-q4_0-gguf/gemma-4-26B_q4_0-it.gguf
+        - --host
+        - 0.0.0.0
+        - --port
+        - '8080'
+        - --alias
+        - gemma
+        - -t
+        - '8'
+        - -C
+        - '0x5555'
+        - --cpu-strict
+        - '1'
+        - --jinja
+        ports:
+        - name: http
+          containerPort: 8080
+        resources:
+          requests:
+            cpu: '16'
+            memory: 6Gi
+        volumeMounts:
+        - name: models
+          mountPath: /models
+          readOnly: true
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: models
+        hostPath:
+          path: /var/apb-models
+          type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ld
+  namespace: h57d
+spec:
+  selector:
+    app: ld
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
