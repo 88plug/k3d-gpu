@@ -75,6 +75,9 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H54b | On Arc Pro B70 with Qwen3.8-27B single-stream: the best optimized arm on ONE card (k3d-gpu auto OVMS int4, Intel's llm-scaler vLLM, or llama.cpp SYCL, with and without each one's documented MTP) decodes at N=1 at least 2x faster than EAT #21's XPU path B2q on TWO cards (vLLM XPU v0.28.0, the `xpu-qwen36-27b` profile's flags on the Qwen3.8-27B weights, TP 2). | Written 2026-10-20, before any measurement. N=1 median decode tok/s: X1q (OVMS GPU int4) in [15, 28] (0.5), X1q-mtp/X1q in [1.3, 2.2] (0.4); Sq (llm-scaler 1.5, online FP8, TP 1) deliverable (0.5), in [10, 18]; Sq-mtp/Sq in [1.4, 2.3] (0.5); Lsq (llama.cpp SYCL, Intel Q4_K_M) in [12, 24] (0.5); B2q deliverable at TP 2 (0.4), in [5, 12] (0.5). Chosen/B2q >= 2 (0.6). Cards free for a window (0.5). INCONCLUSIVE (0.6), SUPPORTED (0.3), REFUTED (0.1). | H54a's protocol on the B70s, cards only when `~/k3dgpu-bench/gpu-state.txt` lists them free; at most 2 holds of at most 40 min. Same statistic and quality gate (against B2q, or the official-weights arm Sq when B2q is not deliverable, for the gate only). SUPPORTED: CI lower bound of chosen one-card arm / B2q >= 2.0 and the gate passed. REFUTED: CI upper bound < 2.0. Otherwise INCONCLUSIVE (also: B2q not deliverable, or no free card before the campaign ends). Gemma 4 QAT on one B70 (X1g, X1o, B2g, Sgg) is described if hold time remains, never gated. | PENDING |
 | H54c | Hybrid placement ("use the fast DRAM"): llama.cpp with Gemma 4 26B-A4B QAT Q4_0, routed experts on the Xeon and everything else on one B70 (Hg, `-ngl 99 -ot exps=CPU`), decodes at N=1 within 25% of a pre-stated byte-split model built from the same image's full-CPU (Cg) and full-GPU (Gg) runs. Qwen3.8-Flash-Next falls back to Gemma 4 QAT (reasons in the pre-registration). | Written 2026-10-20, before any measurement. Model: t_Hg = t_Cg x (B_exp / B_tot) + t_Gg x (B_rest / B_tot) + 60 x 30 us, bytes from the GGUF tensor table. Within 25% (0.45). Hg < Gg (0.8). Hg / Cg in [0.8, 1.6] (0.5). Gg in [30, 90] tok/s (0.4). SUPPORTED (0.45), INCONCLUSIVE (0.3), REFUTED (0.25). | One hold of at most 40 min on one free card: Cg, Gg, Hg in that order, then Gg again (drift check), all in `ghcr.io/ggml-org/llama.cpp:server-intel-b11749`, H54a's N=1 phase only. SUPPORTED: abs(Hg measured / predicted - 1) <= 0.25. REFUTED: > 0.40. Otherwise INCONCLUSIVE (also: any of the three arms not delivered, or the two Gg runs differ by > 10%). | PENDING |
 | H54d | Inside EAT's banking flow with Gemma 4 26B-A4B (QAT), the best H54a CPU arm A* delivers far more B24 tasks within budget than EAT stock B1g, under H50's design, statistic, gates and thresholds (rule L2, amendment C1). Runs only when A* is not H50's A1 config. | Written 2026-10-20, before any measurement. A* within-budget success >= 0.60 (0.55). B1g >= 0.50 (0.6). Paired A* - B1g in [-0.10, +0.30] (0.6). A* serves B24's tool calls without a parser change (0.6). Fewer than 16 matched pairs in 3 holds (0.5). REFUTED (0.4), INCONCLUSIVE (0.5), SUPPORTED (0.1). | H50's procedure with arm A = A*, arm B = B1g; at most 3 holds of at most 40 min, until 24 pairs. SUPPORTED: paired difference CI lower bound >= +30 points and A* >= 0.6, L2, void and idle-arm checks passed. REFUTED: CI upper bound < +30 points. Otherwise INCONCLUSIVE. Not run (and so recorded) when A* is H50's A1 config: H50 answers it. | PENDING |
+| H57da | On an AMX-less client CPU (i9-13900T, the 16 P-core CPUs, AVX2 and VNNI, no AVX-512), with the Gemma 4 26B-A4B QAT family, k3d-gpu's own CPU pick Od (`agent manifest` auto on the P-cores: OVMS 2026.4.1, `OpenVINO/gemma-4-26b-a4b-it-int4-ov`) is the fastest single-stream arm: no other arm passing the quality gate (llama.cpp with Google's QAT Q4_0 GGUF, with or without the QAT MTP drafter) decodes at N=1 5% or more faster. A microbench, not an agent claim. | Written 2026-10-20, before any H57d measurement. N=1 median decode tok/s: Od in [8, 20] (0.5); Ld (llama.cpp Q4_0, 8 threads) in [12, 30] (0.5); Ld/Od in [1.1, 1.8] (0.5); every arm's GSM8K 0-49 score >= 0.80 (0.6). REFUTED (0.55), SUPPORTED (0.25), INCONCLUSIVE (0.2). Not gated: TTFT on a 1,000-token prompt, aggregate tok/s at N=4, package J/token gross and net of idle. | [H57d pre-registration](#h57d-pre-registration-gemma-4-26b-a4b-qat-on-the-amx-less-client-cpu-i9-13900t-2026-10-20): H54's measurement protocol per arm (`bench/llm_load.py`, 256 tokens, greedy, `ignore_eos`; RAPL per phase; GSM8K items 0-49 graded as H54), one arm serving at a time, arm order rotated over 3 performance holds, quality in a 4th, at most 5 holds of at most 45 min. Statistic: R = median N=1 decode of the fastest other gate-passing arm X / Od's, over the pooled requests of the 3 holds, 95% bootstrap CI (H54's). REFUTED: Od fails the quality gate, or CI lower bound >= 1.05 and X faster than Od in each of the 3 holds. SUPPORTED: Od passes the gate and CI upper bound < 1.05. INCONCLUSIVE otherwise, or when Od or every other arm is not delivered, or the load gate fails. | PENDING |
+| H57dm | On the same client and model, the CPU Fast Draft rule extends to Gemma 4's MTP drafter: llama.cpp Ld-mtp (Ld plus Google's QAT MTP assistant, converted to Q4_0 GGUF here, `--spec-type draft-mtp`, default draft length) decodes at N=1 at least 1.20x Ld (H34's bar) with the quality gate passed. | Written 2026-10-20, before any H57d measurement. Ld-mtp/Ld in [0.8, 1.3] (0.6): Google's MTP note says the 26B A4B drafter may not pay at batch 1, and llama.cpp's MTP PR saw no MoE gain. REFUTED (0.65), INCONCLUSIVE (0.15), SUPPORTED (0.2). Not gated: the N=4 ratio and the J/token ratio. | As H57da (same holds and records). Statistic: Rm = median N=1 decode Ld-mtp / Ld, pooled, H54's bootstrap CI. SUPPORTED: Rm >= 1.20, CI lower bound > 1.0, Ld-mtp faster in each of the 3 holds, and Ld-mtp passes the gate. REFUTED: CI upper bound < 1.20, or Ld-mtp fails the gate. INCONCLUSIVE otherwise, or when either arm is not delivered or the load gate fails. | PENDING |
+| H57db | Inside EAT's banking flow (B24) with Gemma 4 26B-A4B QAT on the i9-13900T, k3d-gpu auto on the P-cores delivers far more tasks within budget than EAT stock CPU (vLLM CPU bf16 on the QAT bf16 weights, `xeon-values.yaml` entry `cpu-gemma4-26b-a4b`), interleaved pairs under rule L3. | Written 2026-10-20: not runnable here as registered (memory), so INCONCLUSIVE (not run) is expected (0.9). | [H57d pre-registration](#h57d-pre-registration-gemma-4-26b-a4b-qat-on-the-amx-less-client-cpu-i9-13900t-2026-10-20), H57db: runs only if the memory gate passes at a hold's start (MemAvailable >= 100 GiB: 51.6 GB of bf16 weights resident plus `VLLM_CPU_KVCACHE_SPACE` 40 GiB), with H50's procedure, rule L3 (PR #157) and at most 1 hold, where fewer than 16 complete pairs read INCONCLUSIVE by L3; otherwise INCONCLUSIVE (not run), with the reading recorded. | PENDING |
 | F2a | Open WebUI in a k3d-gpu cluster reaches a public remote endpoint by name: `k3d-gpu quickstart --remote https://gaudi.farmgpu.net` (no hostAliases) gives a chat through Open WebUI's own API that returns. An earlier run saw `Temporary failure in name resolution` for gaudi.farmgpu.net from a pod. | Pre-registered 2026-10-17, before measuring: the in-cluster failure is a cluster DNS gap (CoreDNS forwarding to an upstream the node container cannot use), not the endpoint; once fixed, one `POST /api/chat/completions` returns `finish_reason=stop` with non-empty content (0.7). | Fresh cluster `k3dgpu-f2-*` (scratch KUBECONFIG, node CPUs 8-15), `nslookup` from a pod before any change, CoreDNS Corefile and node `/etc/resolv.conf` read; root cause fixed in the product if it is a k3d-gpu config gap (regression test first); then one chat through Open WebUI's API with the generated admin account, max_tokens <= 64, temperature 0.6. SUPPORTED: chat returns. REFUTED: no chat returns after the fix. Run (2026-10-17, i9-13900T, k3s v1.35.5, node CPUs 8-15): the prediction's mechanism was wrong. CoreDNS forwarding works (node resolv.conf is k3d's 192.168.32.1 DNAT to Docker's 127.0.0.11; busybox and glibc lookups from pods resolve). The failure is a startup race: `k3d-gpu up` returned on node Ready, when the CoreDNS Deployment was 1 s old (image still pulling); a glibc pod started then got `gaierror(-3, 'Temporary failure in name resolution')` for 11 s (4 tries), first success at 13 s. Fix: `up` waits for the CoreDNS rollout; after it, the same pod resolved on its first try (0.0 s). Then `quickstart --remote https://gaudi.farmgpu.net` with no hostAliases: Open WebUI listed `zai-org/GLM-5.3` and one `POST /api/chat/completions` returned finish_reason=stop, content 'OK', 0.41 s; 0 name resolution errors in its log. | SUPPORTED |
 | F2b | EAT's LiteLLM gateway serves the remote model registered by `integrations/eat/eat-remote.sh`, with the key only as an env reference. | Pre-registered 2026-10-17, before measuring: one completion through LiteLLM returns (0.7); the key string appears 0 times in the gateway DB dump, `kubectl describe` of the gateway Deployment/pods/Secret, and events (0.9). | `eat-remote.sh --remote https://gaudi.farmgpu.net --model zai-org/GLM-5.3` against EAT's genai-gateway in the same cluster, then one chat through LiteLLM (max_tokens <= 64, temperature 0.6), then `grep -c` of the key over `pg_dump`, `kubectl describe` and `kubectl get events -A`. SUPPORTED: completion returns and 0 key hits. REFUTED: any key hit, or no completion. Run (2026-10-17, same host, EAT release-1.0.3-hotfix, LiteLLM v1.83.14-stable.patch.2): first with eat-remote.sh as shipped, REFUTED: the chat came back 401 from the endpoint. LiteLLM resolves `os.environ/` only for config-file models; a `/model/new` model is loaded from its database with the reference string as the api_key (proxy_server.py `_add_deployment` decrypts only). Fixed eat-remote.sh to write a config-file `model_list` entry instead and delete the stale database entry; rerun: `eat-check.sh` passed (chat, tool call get_weather, sandbox printed 385), and the key (raw and base64) had 0 hits in `pg_dumpall` of the gateway's Postgres (169 KB), `kubectl describe` of the gateway namespace's Deployments, pods, Secrets and ConfigMaps, the Deployment YAML and `kubectl get events -A`. The verdict is for the fixed script. | SUPPORTED |
 | H27x | H27's hypothesis on an AMX host (H27's "re-open for an AMX host"): on the Xeon 6741P (Granite Rapids, AMX), the <=60 s on-box probe (`bench/amx-autoquant/probe.sh`) picks the weight precision for agents better than the static int4 default. Same weights (`OpenVINO/Qwen3-4B-{int4,int8,fp16}-ov` at H27's commits), same parts (a) fidelity, (b) value, (c) cost. A replication: the original model is kept. | Written 2026-10-20, before any H27x measurement. (a) holds (0.85). (b) REFUTED (0.65, outcomes O1 + O2): the quality gate is a property of the weights (NLL at `INFERENCE_PRECISION_HINT=f32`), so int4 fails it again and the pick is int8, and decode stays bandwidth-bound, so int8 stays slower than int4 on the turn (outcome O2 again). (c) holds (0.9). Numbers: decode int4 25-45, int8 18-35, fp16 (bf16 on AMX) 10-22 tok/s; TTFT on 396 tokens 0.15-1.0 s for every arm; turn int4 2-4.5 s, int8 2.5-6 s, fp16 4-9 s. Priors: O1 0.05, O2 0.6, O3 0.05, O4 (int8 beats int4) 0.15, O5 0.15. | H27's row, outcome table and amendments A1-A3, unchanged except as listed in [the cross-host pre-registration](#cross-host-pre-registration-h25x-h27x-h28x-h34x-on-the-xeon-6741p-2026-10-20): OVMS containers on CPUs 0-23,48-71 (the CPUs outside `load.py`'s load set), `typical` only, weights downloaded at H27's pinned commits. Scorer `bench/amx-autoquant/summarize.py`. Run 2026-10-20 ([H27x run](#h27x-run-xeon-6741p-2026-10-20)): load MATCHED, int4 failed the gate again (dNLL +0.072), the probe and the reference both picked fp16 (bf16 on AMX; 5/5 rounds over int8, 3/3 repeats, 4 s per probe), and fp16's 4.23 s median turn is 1.24 s slower than the int4 default's 2.99 s (int4 faster in 5/5 rounds): (a) and (c) hold, (b) fails. | REFUTED |
@@ -2392,6 +2395,109 @@ its listing is kept in `~/k3dgpu-gemma/deleted-bak-listing.txt.gz`.
 **Order and changes.** A protocol change is a dated amendment merged before the data it
 governs. A wiring smoke runs no scored request, is discarded and is disclosed in the run
 section.
+
+### H57d pre-registration: Gemma 4 26B-A4B QAT on the AMX-less client CPU (i9-13900T, 2026-10-20)
+
+Written 2026-10-20, before any H57da, H57dm or H57db measurement. Nothing here is a measurement
+except the host facts under "Read before this pre-registration". The runner lands in a dated
+amendment with regression tests, merged before the first H57d hold. H57d is the desktop lane of
+the Gemma 4 QAT work: H54 runs it on the Xeon 6741P (AMX, crescent); this row gives the
+AMX-less client the same engines, model files and quality set, so the two hosts compare.
+
+**Models (box owner's directive: only the Gemma 4 QAT family).** Downloaded on this host from
+the Hub at these revisions, each file's sha256 checked against the Hub's LFS sha256 and recorded:
+
+- `google/gemma-4-26B-A4B-it-qat-q4_0-gguf` @ `d1c082be` (`gemma-4-26B_q4_0-it.gguf`, 14.44 GB;
+  the 1.19 GB mmproj is not downloaded: text only).
+- `OpenVINO/gemma-4-26b-a4b-it-int4-ov` @ `4e5885c3` (OVB, 15.3 GB; INT4_ASYM g128 from the base,
+  non-QAT model per its README; its `openvino_config.json` says AWQ g64; whichever it is, OVB is
+  OpenVINO's own build and is labelled by its repo).
+- `google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant` @ `95371415` (0.84 GB bf16), the QAT
+  MTP drafter, converted here to a Q4_0 GGUF exactly as H54's runner does (`bench/h54/convert.sh`,
+  PR #169: `ghcr.io/ggml-org/llama.cpp:full-b11749` `--convert --outtype bf16`, then `--quantize
+  Q4_0`), with a manifest of every file's sha256.
+- Not run here: the QAT-matched IR (OVQ, `bench/models/export_qat_ov.sh`, PR #157). On 2026-10-20
+  at registration crescent had not built it (`~/k3dgpu-gemma/models/k3dgpu_gemma-4-26B-A4B-it-qat-int4-sym-g32-ov`
+  absent), weights are never copied between hosts, and a rebuild here loads the 51.6 GB bf16
+  checkpoint into memory with 50.4 GB available. If a later amendment rebuilds it here, it is a
+  separate arm Oq at source rank 2, never a replacement for Od.
+
+Storage: `/` has 59 GB free (97%). Model files and images go to the second disk (`/home/andrew/docker&models`,
+874 GB free, where Docker's data root already is), in this campaign's own directory, bound into
+the node read-write with k3d's `--volume` (H54's shim pattern), never copied in. Nothing is
+written to `/` beyond the run records. Everything this campaign creates is deleted at the end
+except the committed records.
+
+**Arms (all on the P-cores, one serving at a time).**
+
+| Arm | Stack | Model | Rank | Draft |
+|---|---|---|---|---|
+| Od | `k3d-gpu agent manifest`, `K3D_GPU_AGENT_DEVICE=CPU` (the hybrid node gives the pod the P-core balloon and requests its 16 CPUs), OVMS `a928903f...` (2026.4.1, k3d-gpu's pin), `K3D_GPU_AGENT_DRAFT=off`, as k3d-gpu writes it | OVB | official (OpenVINO) | none: OVMS documents no draft path for Gemma 4; the only Gemma 4 QAT drafter is the MTP assistant, which reads the target's KV, and no OpenVINO MTP IR exists for it (OV 2026.4's notes name Gemma 4 MTP; no export path or IR ships) |
+| Ld | `ghcr.io/ggml-org/llama.cpp:server-b11749@sha256:9fbaa06d...` (H54's pin), pod labelled `k3d-gpu.io/cores: performance` with `requests.cpu` 16 (the same balloon as Od), `-t 8 -C 0x5555 --cpu-strict 1 --jinja` (one thread per physical P-core: CPUs 0, 2, ..., 14), every other flag the server's default | Google QAT Q4_0 GGUF | official | off |
+| Ld-mtp | Ld plus `-md <drafter GGUF> --spec-type draft-mtp` at the default draft length (H54 amendment R1's reading of b11749) | plus the QAT drafter Q4_0 GGUF built here | self-built drafter (2) | on |
+
+The CPU Fast Draft rule ([H34](#h34-result-i9-13900t-2026-10-17), SUPPORTED on this CPU): the
+draft is on wherever the engine supports a Gemma 4 QAT drafter (Ld-mtp); the MTP drafter is its
+own factor (H57dm), so Ld runs too. Each flag is read against the engine's source at its pin in
+the runner amendment (H54 R1 already read b11749's); a flag missing there is dropped and recorded.
+The CPU set each arm's server actually got (`Cpus_allowed_list`) is recorded.
+
+**Measurement protocol (per arm, per hold).** H54's, with these desktop changes:
+
+1. Cluster `k3dgpu-d-h57d-<hold>`, one per hold, `k3d-gpu up` with `K3D_GPU_VENDORS=hybrid` (no
+   GPU device plugin; no card is used), node image `cryptoandcoffee/k3d-gpu:0.1.63` pinned to its
+   digest, amendment C1's `K3D_GPU_K3S_ARGS`. An arm not answering its model list and a 16-token
+   chat within 900 s is "not deliverable" for that hold, recorded with its log.
+2. Performance holds 1-3, each running all three arms, in the rotated orders (Od, Ld, Ld-mtp),
+   (Ld, Ld-mtp, Od), (Ld-mtp, Od, Ld). Per arm: 60 s idle (RAPL), 3 warmup requests, N=1: 8
+   requests, N=4: 16, TTFT: 4 at N=1 on H54's 1,000-token prompt (`bench/h54/ttft-prompt.txt`) with
+   `max_tokens` 16. Requests as H54: `bench/llm_load.py` default prompt with `--unique-prompts`,
+   `max_tokens` 256, `ignore_eos`, temperature 0. H54's N=16 phase is dropped: 8 physical cores,
+   and it would not fit three arms in a hold.
+3. Quality hold 4: GSM8K items 0-49, H54's file, prompt, grader and settings
+   (`bench/h54/gsm8k-test-0-199.jsonl`, temperature 0, `max_tokens` 1024, thinking off, 16 in
+   flight), each arm once, order (Ld, Od, Ld-mtp). Quality gate: an arm passes when its score is
+   at least the best arm's score minus 0.10 (5 of 50).
+4. Energy: `bench/energy.sh` on RAPL `package-0` per phase (through sudo), J/output token gross and
+   net of the arm's idle power. The package sits near its 117 W PL1 under the box's own background,
+   so J/token is reported, never gated.
+5. Load: about 50 production containers and other sessions share the host; nothing is stopped.
+   The hold starts when `load1` <= 24 (2-min polls, at most 60 min, then it runs flagged). During
+   every phase a sampler records, every 5 s, the busy CPU-s/s of CPUs 0-15 from `/proc/stat`, the
+   k3d node container's own CPU-s/s from its cgroup, `load1`, and package temperature; foreign
+   P-core load = the first minus the second. Load gate (H34's design law: busy is normal, unmatched
+   is not): over the N=1 phases, the per-arm means of foreign P-core load differ by at most
+   max(2.0 CPU-s/s, 25% of their mean); otherwise H57da and H57dm are INCONCLUSIVE (load
+   unmatched). No phase is voided on load.
+6. Statistics: per arm, the 24 pooled N=1 requests' `decode_tokens_per_s` (8 per hold); per-hold
+   medians; the ratio of medians with H54's bootstrap CI (`h54.py boot_ratio`: 10,000 resamples
+   of each arm on its own, seed 1, percentiles 2.5 and 97.5). X for H57da is the faster, by
+   pooled median, of Ld and Ld-mtp among gate-passing delivered arms.
+
+**H57db.** H50's banking-flow design (arm A: k3d-gpu auto on the P-cores, OVB, `gemma4` tool
+parser; arm B: EAT stock CPU, `cpu-gemma4-26b-a4b` on the QAT bf16 weights, `VLLM_CPU_KVCACHE_SPACE`
+40, as amendment M1's B1) under rule L3 (PR #157). Disk would allow it (the bf16 weights fit the
+second disk); memory does not at registration: B needs about 94 GB resident and the host has
+50.4 GB available with 127.7 of 187.5 GiB of swap in use. Memory gate: MemAvailable >= 100 GiB at
+the hold's start; otherwise INCONCLUSIVE (not run), with the reading recorded, and no bf16
+download. It never runs before PR #157 (`bench/eatflow/pairs.py` with L3) merges.
+
+**Holds and caps.** Lock: every hold, conversion and download that loads the CPU runs inside
+`flock -w 21600 <scratchpad>/live.lock` (this host's shared lock). Each hold at most 45 min
+(`timeout -k 30 2700`); the cluster is deleted at the end, also on failure. Disk: `df /` and the
+second disk are read before each hold; a hold does not start, and its watchdog stops it, when `/`
+would have less than 15 GB free. Caps: at most 6 holds in all: H57da and H57dm share at most 5
+(holds 1-3 performance, hold 4 quality, one spare that repeats a failed hold's arms in that
+hold's order), H57db at most 1. A failed hold counts.
+
+**Read before this pre-registration (2026-10-20, not scored).** `lscpu`: CPUs 0-15 are the 8
+P-cores with their HT siblings (core n = CPUs 2n, 2n+1), 16-31 the E-cores; no `amx_*`, no
+`avx512*` flags. 131.5 GB RAM, MemAvailable 50.4 GB; swap 187.5 GiB, 127.7 GiB used. `load1` read
+41-67 while writing this, with other sessions' builds running. A 3 s RAPL read through
+`energy.sh` gave 114.6 W package at that background.
+
+**Order and changes.** A protocol change is a dated amendment merged before the data it governs.
+A wiring smoke runs no scored request, is discarded and is disclosed in the run section.
 
 ### H5 amendment A1: stage-1 harness and definitions (2026-10-19)
 
