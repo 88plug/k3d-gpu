@@ -1,0 +1,193 @@
+block 2 engine B did not come up
+NAMESPACE                NAME                                      READY   STATUS             RESTARTS        AGE   IP           NODE                       NOMINATED NODE   READINESS GATES
+default                  vllm-qwen-3-4b-cpu-7bffcdcdf9-dps92       0/1     CrashLoopBackOff   8 (4m58s ago)   30m   10.42.0.11   k3d-k3dgpu-x-h7-server-0   <none>           <none>
+kube-system              coredns-577d995dff-tpp2h                  1/1     Running            0               31m   10.42.0.6    k3d-k3dgpu-x-h7-server-0   <none>           <none>
+kube-system              helm-install-gateway-api-crd-c2hk4        0/1     Completed          0               31m   10.42.0.4    k3d-k3dgpu-x-h7-server-0   <none>           <none>
+kube-system              intel-gpu-plugin-jth49                    1/1     Running            0               31m   10.42.0.8    k3d-k3dgpu-x-h7-server-0   <none>           <none>
+kube-system              local-path-provisioner-6858d854cf-g42f9   1/1     Running            0               31m   10.42.0.9    k3d-k3dgpu-x-h7-server-0   <none>           <none>
+kube-system              metrics-server-778c4649b4-49f9x           1/1     Running            0               31m   10.42.0.2    k3d-k3dgpu-x-h7-server-0   <none>           <none>
+node-feature-discovery   nfd-gc-7d6955597d-hx52v                   1/1     Running            0               31m   10.42.0.7    k3d-k3dgpu-x-h7-server-0   <none>           <none>
+node-feature-discovery   nfd-master-74b6cfb7df-zjgnk               1/1     Running            0               31m   10.42.0.5    k3d-k3dgpu-x-h7-server-0   <none>           <none>
+node-feature-discovery   nfd-worker-645dp                          1/1     Running            0               31m   10.42.0.3    k3d-k3dgpu-x-h7-server-0   <none>           <none>
+Name:             vllm-qwen-3-4b-cpu-7bffcdcdf9-dps92
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             k3d-k3dgpu-x-h7-server-0/172.19.0.2
+Start Time:       Wed, 21 Oct 2026 00:26:50 +0000
+Labels:           app.kubernetes.io/instance=vllm-qwen-3-4b-cpu
+                  app.kubernetes.io/name=vllm
+                  name=vllm
+                  pod-template-hash=7bffcdcdf9
+Annotations:      balloon.balloons.resource-policy.nri.io: performance
+Status:           Running
+IP:               10.42.0.11
+IPs:
+  IP:           10.42.0.11
+Controlled By:  ReplicaSet/vllm-qwen-3-4b-cpu-7bffcdcdf9
+Containers:
+  vllm:
+    Container ID:    containerd://bc608f1e89d82f79439d00869f42087cd4b7e9c9c7f5c5ef4b07ac2fa9b66999
+    Image:           vllm/vllm-openai-cpu:v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1
+    Image ID:        docker.io/vllm/vllm-openai-cpu@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1
+    Port:            2080/TCP (http)
+    Host Port:       0/TCP (http)
+    SeccompProfile:  RuntimeDefault
+    Args:
+      --block-size
+      128
+      --dtype
+      bfloat16
+      --distributed_executor_backend
+      mp
+      --enable_chunked_prefill
+      --enforce-eager
+      --max-num-batched-tokens
+      2048
+      --max-num-seqs
+      256
+      --enable-prefix-caching
+      --tensor-parallel-size
+      1
+      --pipeline-parallel-size
+      1
+      --model
+      /data/Qwen3-4B
+      --served-model-name
+      Qwen/Qwen3-4B
+      --port
+      2080
+      --max-model-len
+      32768
+    State:          Waiting
+      Reason:       CrashLoopBackOff
+    Last State:     Terminated
+      Reason:       OOMKilled
+      Exit Code:    137
+      Started:      Wed, 21 Oct 2026 00:50:57 +0000
+      Finished:     Wed, 21 Oct 2026 00:51:52 +0000
+    Ready:          False
+    Restart Count:  8
+    Limits:
+      cpu:     16
+      memory:  16Gi
+    Requests:
+      cpu:      16
+      memory:   16Gi
+    Readiness:  http-get http://:http/health delay=10s timeout=1s period=5s #success=1 #failure=200
+    Environment Variables from:
+      vllm-qwen-3-4b-cpu-config  ConfigMap  Optional: false
+    Environment:                 <none>
+    Mounts:
+      /data from model-volume (rw)
+      /dev/shm from shm (rw)
+      /root/.cache/vllm from vllm-cache (rw)
+      /tmp from tmp (rw)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-xvllw (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       False 
+  ContainersReady             False 
+  PodScheduled                True 
+Volumes:
+  model-volume:
+    Type:          HostPath (bare host directory volume)
+    Path:          /var/apb-models
+    HostPathType:  Directory
+  shm:
+    Type:       EmptyDir (a temporary directory that shares a pod's lifetime)
+    Medium:     Memory
+    SizeLimit:  1Gi
+  tmp:
+    Type:       EmptyDir (a temporary directory that shares a pod's lifetime)
+    Medium:     
+    SizeLimit:  <unset>
+  vllm-cache:
+    Type:       EmptyDir (a temporary directory that shares a pod's lifetime)
+    Medium:     
+    SizeLimit:  <unset>
+  kube-api-access-xvllw:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   Guaranteed
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason     Age                   From               Message
+  ----     ------     ----                  ----               -------
+  Normal   Scheduled  30m                   default-scheduler  Successfully assigned default/vllm-qwen-3-4b-cpu-7bffcdcdf9-dps92 to k3d-k3dgpu-x-h7-server-0
+  Normal   Pulling    30m                   kubelet            spec.containers{vllm}: Pulling image "vllm/vllm-openai-cpu:v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1"
+  Normal   Pulled     29m                   kubelet            spec.containers{vllm}: Successfully pulled image "vllm/vllm-openai-cpu:v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1" in 44.465s (44.465s including waiting). Image size: 1755702090 bytes.
+  Warning  Unhealthy  23m (x41 over 29m)    kubelet            spec.containers{vllm}: Readiness probe failed: Get "http://10.42.0.11:2080/health": dial tcp 10.42.0.11:2080: connect: connection refused
+  Normal   Created    5m53s (x9 over 29m)   kubelet            spec.containers{vllm}: Container created
+  Normal   Started    5m53s (x9 over 29m)   kubelet            spec.containers{vllm}: Container started
+  Normal   Pulled     5m53s (x8 over 28m)   kubelet            spec.containers{vllm}: Container image "vllm/vllm-openai-cpu:v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1" already present on machine and can be accessed by the pod
+  Warning  BackOff    3m45s (x19 over 27m)  kubelet            spec.containers{vllm}: Back-off restarting failed container vllm in pod vllm-qwen-3-4b-cpu-7bffcdcdf9-dps92_default(7760c517-3588-4a1a-93d0-774396aeb585)
+No resources found in k3d-gpu-agent namespace.
+--- logs pod/vllm-qwen-3-4b-cpu-7bffcdcdf9-dps92
+(APIServer pid=1) ERROR 10-21 00:51:21 [registry.py:896] Error saving model info cache.
+(APIServer pid=1) ERROR 10-21 00:51:21 [registry.py:896] Traceback (most recent call last):
+(APIServer pid=1) ERROR 10-21 00:51:21 [registry.py:896]   File "/opt/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 1311, in mkdir
+(APIServer pid=1) ERROR 10-21 00:51:21 [registry.py:896]     os.mkdir(self, mode)
+(APIServer pid=1) ERROR 10-21 00:51:21 [registry.py:896] FileNotFoundError: [Errno 2] No such file or directory: '/.cache/vllm/modelinfos'
+(APIServer pid=1) ERROR 10-21 00:51:21 [registry.py:896] 
+(APIServer pid=1) ERROR 10-21 00:51:21 [registry.py:896] During handling of the above exception, another exception occurred:
+(APIServer pid=1) ERROR 10-21 00:51:21 [registry.py:896] 
+(APIServer pid=1) ERROR 10-21 00:51:21 [registry.py:896] Traceback (most recent call last):
+(APIServer pid=1) ERROR 10-21 00:51:21 [registry.py:896]   File "/opt/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 1311, in mkdir
+(APIServer pid=1) ERROR 10-21 00:51:21 [registry.py:896]     os.mkdir(self, mode)
+(APIServer pid=1) ERROR 10-21 00:51:21 [registry.py:896] FileNotFoundError: [Errno 2] No such file or directory: '/.cache/vllm'
+(APIServer pid=1) ERROR 10-21 00:51:21 [registry.py:896] 
+(APIServer pid=1) ERROR 10-21 00:51:21 [registry.py:896] During handling of the above exception, another exception occurred:
+(APIServer pid=1) ERROR 10-21 00:51:21 [registry.py:896] 
+(APIServer pid=1) ERROR 10-21 00:51:21 [registry.py:896] Traceback (most recent call last):
+(APIServer pid=1) ERROR 10-21 00:51:21 [registry.py:896]   File "/opt/venv/lib/python3.12/site-packages/vllm/model_executor/models/registry.py", line 891, in _save_modelinfo_to_cache
+(APIServer pid=1) ERROR 10-21 00:51:21 [registry.py:896]     cache_dir.mkdir(parents=True, exist_ok=True)
+(APIServer pid=1) ERROR 10-21 00:51:21 [registry.py:896]   File "/opt/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 1315, in mkdir
+(APIServer pid=1) ERROR 10-21 00:51:21 [registry.py:896]     self.parent.mkdir(parents=True, exist_ok=True)
+(APIServer pid=1) ERROR 10-21 00:51:21 [registry.py:896]   File "/opt/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 1315, in mkdir
+(APIServer pid=1) ERROR 10-21 00:51:21 [registry.py:896]     self.parent.mkdir(parents=True, exist_ok=True)
+(APIServer pid=1) ERROR 10-21 00:51:21 [registry.py:896]   File "/opt/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 1311, in mkdir
+(APIServer pid=1) ERROR 10-21 00:51:21 [registry.py:896]     os.mkdir(self, mode)
+(APIServer pid=1) ERROR 10-21 00:51:21 [registry.py:896] OSError: [Errno 30] Read-only file system: '/.cache'
+(APIServer pid=1) INFO 10-21 00:51:21 [model.py:598] Resolved architecture: Qwen3ForCausalLM
+(APIServer pid=1) INFO 10-21 00:51:21 [model.py:1725] Using max model len 32768
+(APIServer pid=1) INFO 10-21 00:51:21 [vllm.py:1006] Asynchronous scheduling is enabled.
+(APIServer pid=1) WARNING 10-21 00:51:21 [vllm.py:1062] Enforce eager set, disabling torch.compile and CUDAGraphs. This is equivalent to setting -cc.mode=none -cc.cudagraph_mode=none
+(APIServer pid=1) WARNING 10-21 00:51:21 [vllm.py:1110] Inductor compilation was disabled by user settings, optimizations settings that are only active during inductor compilation will be ignored.
+(APIServer pid=1) INFO 10-21 00:51:21 [kernel.py:276] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+(APIServer pid=1) INFO 10-21 00:51:21 [compilation.py:310] Enabled custom fusions: norm_quant, act_quant
+(EngineCore pid=111) INFO 10-21 00:51:33 [core.py:114] Initializing a V1 LLM engine (v0.24.0) with config: model='/data/Qwen3-4B', speculative_config=None, tokenizer='/data/Qwen3-4B', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, tokenizer_revision=None, trust_remote_code=False, dtype=torch.bfloat16, max_seq_len=32768, download_dir=None, load_format=auto, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1, decode_context_parallel_size=1, dcp_comm_backend=ag_rs, disable_custom_all_reduce=True, quantization=None, quantization_config=None, enforce_eager=True, enable_return_routed_experts=False, kv_cache_dtype=auto, device_config=cpu, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser='', reasoning_parser_plugin='', enable_in_reasoning=False), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None, kv_cache_metrics=False, kv_cache_metrics_sample=0.01, cudagraph_metrics=False, enable_layerwise_nvtx_tracing=False, enable_mfu_metrics=False, enable_mm_processor_stats=False, enable_logging_iteration_details=False, jit_monitor_verbose=False), seed=0, served_model_name=Qwen/Qwen3-4B, enable_prefix_caching=True, enable_chunked_prefill=True, pooler_config=None, compilation_config={'mode': <CompilationMode.NONE: 0>, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': ['all'], 'ir_enable_torch_wrap': False, 'splitting_ops': [], 'compile_mm_encoder': False, 'cudagraph_mm_encoder': False, 'encoder_cudagraph_token_budgets': [], 'encoder_cudagraph_max_vision_items_per_batch': 0, 'encoder_cudagraph_max_frames_per_batch': None, 'compile_sizes': None, 'compile_ranges_endpoints': [2048], 'inductor_compile_config': {'enable_auto_functionalized_v2': False, 'size_asserts': False, 'alignment_asserts': False, 'scalar_asserts': False}, 'inductor_passes': {}, 'cudagraph_mode': <CUDAGraphMode.NONE: 0>, 'cudagraph_num_of_warmups': 0, 'cudagraph_capture_sizes': [], 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': False, 'pass_config': {'fuse_norm_quant': True, 'fuse_act_quant': True, 'fuse_attn_quant': False, 'enable_sp': False, 'fuse_gemm_comms': False, 'fuse_allreduce_rms': False, 'fuse_rope_kvcache_cat_mla': False, 'fuse_act_padding': False}, 'max_cudagraph_capture_size': None, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': False, 'static_all_moe_layers': []}, kernel_config=KernelConfig(ir_op_priority=IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native']), enable_flashinfer_autotune=True, moe_backend='auto', linear_backend='auto')
+(EngineCore pid=111) INFO 10-21 00:51:33 [multiproc_executor.py:140] DP group leader: node_rank=0, node_rank_within_dp=0, master_addr=127.0.0.1, mq_connect_ip=10.42.0.11 (local), world_size=1, local_world_size=1
+(EngineCore pid=111) WARNING 10-21 00:51:33 [ompmultiprocessing.py:63] VLLM_CPU_NUM_OF_RESERVED_CPU is less than the minimum requirement: 1 cores
+(EngineCore pid=111) INFO 10-21 00:51:33 [ompmultiprocessing.py:185] OpenMP thread binding info: 
+(EngineCore pid=111) INFO 10-21 00:51:33 [ompmultiprocessing.py:185] 	VLLM_CPU_OMP_THREADS_BIND='auto', auto_setup=True, skip_setup=False
+(EngineCore pid=111) INFO 10-21 00:51:33 [ompmultiprocessing.py:185] 	local_world_size=1, reserve_cpu_num=0
+(EngineCore pid=111) INFO 10-21 00:51:33 [ompmultiprocessing.py:185] 	local_rank=0, core ids=[48, 49, 50, 51, 52, 53, 54, 55]
+(EngineCore pid=111) INFO 10-21 00:51:33 [ompmultiprocessing.py:185] 	reserved_cpus=[]
+[W1021 00:51:45.770032002 utils.cpp:41] Warning: numa_migrate_pages failed. errno: 1 (function init_cpu_memory_env)
+[W1021 00:51:45.770056840 utils.cpp:68] Warning: NUMA binding: Using MEMBIND policy for memory allocation on the NUMA nodes (0). Memory allocations will be strictly bound to these NUMA nodes. (function init_cpu_memory_env)
+(Worker pid=167) INFO 10-21 00:51:45 [parallel_state.py:1588] world_size=1 rank=0 local_rank=0 distributed_init_method=tcp://127.0.0.1:45557 backend=gloo
+(Worker pid=167) INFO 10-21 00:51:45 [parallel_state.py:1923] rank 0 in world size 1 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank N/A, EPLB rank N/A
+(Worker pid=167) INFO 10-21 00:51:46 [model_runner.py:281] Loading model from scratch...
+(Worker pid=167) INFO 10-21 00:51:46 [selector.py:138] Using HND KV cache layout for CPU_ATTN backend.
+(Worker pid=167) INFO 10-21 00:51:46 [weight_utils.py:849] Filesystem type for checkpoints: OVERLAY. Checkpoint size: 7.49 GiB. Available RAM: 387.40 GiB.
+(Worker pid=167) INFO 10-21 00:51:46 [weight_utils.py:872] Auto-prefetch is disabled because the filesystem (OVERLAY) is not a recognized network FS (NFS/Lustre). If you want to force prefetching, start vLLM with --safetensors-load-strategy=prefetch.
+(Worker pid=167) Loading safetensors checkpoint shards:   0% Completed | 0/3 [00:00<?, ?it/s]
+(Worker pid=167) Loading safetensors checkpoint shards:  33% Completed | 1/3 [00:00<00:00,  4.31it/s]
+(Worker pid=167) Loading safetensors checkpoint shards:  67% Completed | 2/3 [00:00<00:00,  3.99it/s]
+(Worker pid=167) Loading safetensors checkpoint shards: 100% Completed | 3/3 [00:00<00:00,  5.59it/s]
+(Worker pid=167) 
+(Worker pid=167) INFO 10-21 00:51:46 [default_loader.py:430] Loading weights took 0.54 seconds
+(Worker pid=167) INFO 10-21 00:51:47 [model_runner.py:302] Model loading took 0.0 GiB and 1.525279 seconds
+(Worker pid=167) INFO 10-21 00:51:47 [model_runner.py:13] Warming up model for the compilation...
+(Worker pid=167) INFO 10-21 00:51:50 [model_runner.py:16] Warming up done.
+(Worker pid=167) INFO 10-21 00:51:50 [cpu_worker.py:235] Explicitly set (6.0/16.0) GiB for KV cache on node 0.
+(EngineCore pid=111) INFO 10-21 00:51:50 [kv_cache_utils.py:2146] GPU KV cache size: 43,648 tokens
+(EngineCore pid=111) INFO 10-21 00:51:50 [kv_cache_utils.py:2147] Maximum concurrency for 32,768 tokens per request: 1.33x

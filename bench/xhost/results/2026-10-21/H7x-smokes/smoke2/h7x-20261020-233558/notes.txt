@@ -1,0 +1,190 @@
+block 1 engine B did not come up
+NAMESPACE                NAME                                      READY   STATUS      RESTARTS        AGE   IP           NODE                       NOMINATED NODE   READINESS GATES
+default                  vllm-qwen-3-4b-cpu-8446c7b875-l9qgn       0/1     Running     9 (5m29s ago)   30m   10.42.0.10   k3d-k3dgpu-x-h7-server-0   <none>           <none>
+kube-system              coredns-577d995dff-bb2l7                  1/1     Running     0               30m   10.42.0.8    k3d-k3dgpu-x-h7-server-0   <none>           <none>
+kube-system              helm-install-gateway-api-crd-dn272        0/1     Completed   0               30m   10.42.0.9    k3d-k3dgpu-x-h7-server-0   <none>           <none>
+kube-system              intel-gpu-plugin-gcznx                    1/1     Running     0               30m   10.42.0.5    k3d-k3dgpu-x-h7-server-0   <none>           <none>
+kube-system              local-path-provisioner-6858d854cf-szgm8   1/1     Running     0               30m   10.42.0.2    k3d-k3dgpu-x-h7-server-0   <none>           <none>
+kube-system              metrics-server-778c4649b4-w6cxk           1/1     Running     0               30m   10.42.0.7    k3d-k3dgpu-x-h7-server-0   <none>           <none>
+node-feature-discovery   nfd-gc-7d6955597d-4v97t                   1/1     Running     0               30m   10.42.0.3    k3d-k3dgpu-x-h7-server-0   <none>           <none>
+node-feature-discovery   nfd-master-74b6cfb7df-vjxh7               1/1     Running     0               30m   10.42.0.6    k3d-k3dgpu-x-h7-server-0   <none>           <none>
+node-feature-discovery   nfd-worker-8gcqm                          1/1     Running     0               30m   10.42.0.4    k3d-k3dgpu-x-h7-server-0   <none>           <none>
+Name:             vllm-qwen-3-4b-cpu-8446c7b875-l9qgn
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             k3d-k3dgpu-x-h7-server-0/172.19.0.2
+Start Time:       Tue, 20 Oct 2026 23:36:54 +0000
+Labels:           app.kubernetes.io/instance=vllm-qwen-3-4b-cpu
+                  app.kubernetes.io/name=vllm
+                  name=vllm
+                  pod-template-hash=8446c7b875
+Annotations:      balloon.balloons.resource-policy.nri.io: performance
+Status:           Running
+IP:               10.42.0.10
+IPs:
+  IP:           10.42.0.10
+Controlled By:  ReplicaSet/vllm-qwen-3-4b-cpu-8446c7b875
+Containers:
+  vllm:
+    Container ID:    containerd://331d5a7189b6b18e1da076b60b46364f61edbc1363f62d5e3c95d25e65287c0f
+    Image:           vllm/vllm-openai-cpu:v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1
+    Image ID:        docker.io/vllm/vllm-openai-cpu@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1
+    Port:            2080/TCP (http)
+    Host Port:       0/TCP (http)
+    SeccompProfile:  RuntimeDefault
+    Args:
+      --block-size
+      128
+      --dtype
+      bfloat16
+      --distributed_executor_backend
+      mp
+      --enable_chunked_prefill
+      --enforce-eager
+      --max-num-batched-tokens
+      2048
+      --max-num-seqs
+      256
+      --enable-prefix-caching
+      --tensor-parallel-size
+      1
+      --pipeline-parallel-size
+      1
+      --model
+      /data/Qwen3-4B
+      --served-model-name
+      Qwen/Qwen3-4B
+      --port
+      2080
+      --max-model-len
+      32768
+    State:          Running
+      Started:      Wed, 21 Oct 2026 00:06:25 +0000
+    Last State:     Terminated
+      Reason:       OOMKilled
+      Exit Code:    137
+      Started:      Wed, 21 Oct 2026 00:00:32 +0000
+      Finished:     Wed, 21 Oct 2026 00:01:25 +0000
+    Ready:          False
+    Restart Count:  9
+    Limits:
+      cpu:     48
+      memory:  16Gi
+    Requests:
+      cpu:      48
+      memory:   16Gi
+    Readiness:  http-get http://:http/health delay=10s timeout=1s period=5s #success=1 #failure=200
+    Environment Variables from:
+      vllm-qwen-3-4b-cpu-config  ConfigMap  Optional: false
+    Environment:                 <none>
+    Mounts:
+      /data from model-volume (rw)
+      /dev/shm from shm (rw)
+      /root/.cache/vllm from vllm-cache (rw)
+      /tmp from tmp (rw)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-k7dz2 (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       False 
+  ContainersReady             False 
+  PodScheduled                True 
+Volumes:
+  model-volume:
+    Type:          HostPath (bare host directory volume)
+    Path:          /var/apb-models
+    HostPathType:  Directory
+  shm:
+    Type:       EmptyDir (a temporary directory that shares a pod's lifetime)
+    Medium:     Memory
+    SizeLimit:  1Gi
+  tmp:
+    Type:       EmptyDir (a temporary directory that shares a pod's lifetime)
+    Medium:     
+    SizeLimit:  <unset>
+  vllm-cache:
+    Type:       EmptyDir (a temporary directory that shares a pod's lifetime)
+    Medium:     
+    SizeLimit:  <unset>
+  kube-api-access-k7dz2:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   Guaranteed
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason     Age                  From               Message
+  ----     ------     ----                 ----               -------
+  Normal   Scheduled  30m                  default-scheduler  Successfully assigned default/vllm-qwen-3-4b-cpu-8446c7b875-l9qgn to k3d-k3dgpu-x-h7-server-0
+  Normal   Pulling    30m                  kubelet            spec.containers{vllm}: Pulling image "vllm/vllm-openai-cpu:v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1"
+  Normal   Pulled     29m                  kubelet            spec.containers{vllm}: Successfully pulled image "vllm/vllm-openai-cpu:v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1" in 55.638s (55.638s including waiting). Image size: 1755702090 bytes.
+  Warning  Unhealthy  23m (x40 over 28m)   kubelet            spec.containers{vllm}: Readiness probe failed: Get "http://10.42.0.10:2080/health": dial tcp 10.42.0.10:2080: connect: connection refused
+  Normal   Started    6m22s (x9 over 29m)  kubelet            spec.containers{vllm}: Container started
+  Warning  BackOff    3m (x21 over 27m)    kubelet            spec.containers{vllm}: Back-off restarting failed container vllm in pod vllm-qwen-3-4b-cpu-8446c7b875-l9qgn_default(0e4df37b-dc2d-4ca5-8ee2-5a2ea5506755)
+  Normal   Created    29s (x10 over 29m)   kubelet            spec.containers{vllm}: Container created
+  Normal   Pulled     29s (x9 over 28m)    kubelet            spec.containers{vllm}: Container image "vllm/vllm-openai-cpu:v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1" already present on machine and can be accessed by the pod
+No resources found in k3d-gpu-agent namespace.
+--- logs pod/vllm-qwen-3-4b-cpu-8446c7b875-l9qgn
+WARNING 10-21 00:06:37 [argparse_utils.py:257] With `vllm serve`, you should provide the model as a positional argument or in a config file instead of via the `--model` option. The `--model` option will be removed in a future version.
+(APIServer pid=1) INFO 10-21 00:06:37 [api_utils.py:339] 
+(APIServer pid=1) INFO 10-21 00:06:37 [api_utils.py:339]        █     █     █▄   ▄█
+(APIServer pid=1) INFO 10-21 00:06:37 [api_utils.py:339]  ▄▄ ▄█ █     █     █ ▀▄▀ █  version 0.24.0
+(APIServer pid=1) INFO 10-21 00:06:37 [api_utils.py:339]   █▄█▀ █     █     █     █  model   /data/Qwen3-4B
+(APIServer pid=1) INFO 10-21 00:06:37 [api_utils.py:339]    ▀▀  ▀▀▀▀▀ ▀▀▀▀▀ ▀     ▀
+(APIServer pid=1) INFO 10-21 00:06:37 [api_utils.py:339] 
+(APIServer pid=1) INFO 10-21 00:06:37 [api_utils.py:273] non-default args: {'model_tag': '/data/Qwen3-4B', 'port': 2080, 'model': '/data/Qwen3-4B', 'dtype': 'bfloat16', 'max_model_len': 32768, 'enforce_eager': True, 'served_model_name': ['Qwen/Qwen3-4B'], 'distributed_executor_backend': 'mp', 'block_size': 128, 'enable_prefix_caching': True, 'max_num_batched_tokens': 2048, 'max_num_seqs': 256, 'enable_chunked_prefill': True}
+(APIServer pid=1) WARNING 10-21 00:06:37 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_RPC_TIMEOUT
+(APIServer pid=1) WARNING 10-21 00:06:37 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_QWEN_3_4B_CPU_SERVICE_PORT_80_TCP_PORT
+(APIServer pid=1) WARNING 10-21 00:06:37 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_QWEN_3_4B_CPU_SERVICE_PORT_80_TCP_ADDR
+(APIServer pid=1) WARNING 10-21 00:06:37 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_QWEN_3_4B_CPU_SERVICE_PORT
+(APIServer pid=1) WARNING 10-21 00:06:37 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_QWEN_3_4B_CPU_SERVICE_PORT_80_TCP
+(APIServer pid=1) WARNING 10-21 00:06:37 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_C_SERVICE_SERVICE_PORT
+(APIServer pid=1) WARNING 10-21 00:06:37 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_C_SERVICE_PORT
+(APIServer pid=1) WARNING 10-21 00:06:37 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_QWEN_3_4B_CPU_SERVICE_PORT_80_TCP_PROTO
+(APIServer pid=1) WARNING 10-21 00:06:37 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_C_SERVICE_SERVICE_HOST
+(APIServer pid=1) WARNING 10-21 00:06:37 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_C_SERVICE_PORT_80_TCP
+(APIServer pid=1) WARNING 10-21 00:06:37 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_C_SERVICE_PORT_80_TCP_PROTO
+(APIServer pid=1) WARNING 10-21 00:06:37 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_QWEN_3_4B_CPU_SERVICE_SERVICE_PORT_VLLM
+(APIServer pid=1) WARNING 10-21 00:06:37 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_C_SERVICE_SERVICE_PORT_VLLM
+(APIServer pid=1) WARNING 10-21 00:06:37 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_C_SERVICE_PORT_80_TCP_PORT
+(APIServer pid=1) WARNING 10-21 00:06:37 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_C_SERVICE_PORT_80_TCP_ADDR
+(APIServer pid=1) WARNING 10-21 00:06:37 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_QWEN_3_4B_CPU_SERVICE_SERVICE_HOST
+(APIServer pid=1) WARNING 10-21 00:06:37 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_QWEN_3_4B_CPU_SERVICE_SERVICE_PORT
+(APIServer pid=1) ERROR 10-21 00:06:49 [registry.py:896] Error saving model info cache.
+(APIServer pid=1) ERROR 10-21 00:06:49 [registry.py:896] Traceback (most recent call last):
+(APIServer pid=1) ERROR 10-21 00:06:49 [registry.py:896]   File "/opt/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 1311, in mkdir
+(APIServer pid=1) ERROR 10-21 00:06:49 [registry.py:896]     os.mkdir(self, mode)
+(APIServer pid=1) ERROR 10-21 00:06:49 [registry.py:896] FileNotFoundError: [Errno 2] No such file or directory: '/.cache/vllm/modelinfos'
+(APIServer pid=1) ERROR 10-21 00:06:49 [registry.py:896] 
+(APIServer pid=1) ERROR 10-21 00:06:49 [registry.py:896] During handling of the above exception, another exception occurred:
+(APIServer pid=1) ERROR 10-21 00:06:49 [registry.py:896] 
+(APIServer pid=1) ERROR 10-21 00:06:49 [registry.py:896] Traceback (most recent call last):
+(APIServer pid=1) ERROR 10-21 00:06:49 [registry.py:896]   File "/opt/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 1311, in mkdir
+(APIServer pid=1) ERROR 10-21 00:06:49 [registry.py:896]     os.mkdir(self, mode)
+(APIServer pid=1) ERROR 10-21 00:06:49 [registry.py:896] FileNotFoundError: [Errno 2] No such file or directory: '/.cache/vllm'
+(APIServer pid=1) ERROR 10-21 00:06:49 [registry.py:896] 
+(APIServer pid=1) ERROR 10-21 00:06:49 [registry.py:896] During handling of the above exception, another exception occurred:
+(APIServer pid=1) ERROR 10-21 00:06:49 [registry.py:896] 
+(APIServer pid=1) ERROR 10-21 00:06:49 [registry.py:896] Traceback (most recent call last):
+(APIServer pid=1) ERROR 10-21 00:06:49 [registry.py:896]   File "/opt/venv/lib/python3.12/site-packages/vllm/model_executor/models/registry.py", line 891, in _save_modelinfo_to_cache
+(APIServer pid=1) ERROR 10-21 00:06:49 [registry.py:896]     cache_dir.mkdir(parents=True, exist_ok=True)
+(APIServer pid=1) ERROR 10-21 00:06:49 [registry.py:896]   File "/opt/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 1315, in mkdir
+(APIServer pid=1) ERROR 10-21 00:06:49 [registry.py:896]     self.parent.mkdir(parents=True, exist_ok=True)
+(APIServer pid=1) ERROR 10-21 00:06:49 [registry.py:896]   File "/opt/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 1315, in mkdir
+(APIServer pid=1) ERROR 10-21 00:06:49 [registry.py:896]     self.parent.mkdir(parents=True, exist_ok=True)
+(APIServer pid=1) ERROR 10-21 00:06:49 [registry.py:896]   File "/opt/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 1311, in mkdir
+(APIServer pid=1) ERROR 10-21 00:06:49 [registry.py:896]     os.mkdir(self, mode)
+(APIServer pid=1) ERROR 10-21 00:06:49 [registry.py:896] OSError: [Errno 30] Read-only file system: '/.cache'
+(APIServer pid=1) INFO 10-21 00:06:49 [model.py:598] Resolved architecture: Qwen3ForCausalLM
+(APIServer pid=1) INFO 10-21 00:06:49 [model.py:1725] Using max model len 32768
+(APIServer pid=1) INFO 10-21 00:06:49 [vllm.py:1006] Asynchronous scheduling is enabled.
+(APIServer pid=1) WARNING 10-21 00:06:49 [vllm.py:1062] Enforce eager set, disabling torch.compile and CUDAGraphs. This is equivalent to setting -cc.mode=none -cc.cudagraph_mode=none
+(APIServer pid=1) WARNING 10-21 00:06:49 [vllm.py:1110] Inductor compilation was disabled by user settings, optimizations settings that are only active during inductor compilation will be ignored.
+(APIServer pid=1) INFO 10-21 00:06:49 [kernel.py:276] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+(APIServer pid=1) INFO 10-21 00:06:49 [compilation.py:310] Enabled custom fusions: norm_quant, act_quant
