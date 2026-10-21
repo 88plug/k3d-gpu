@@ -3222,6 +3222,39 @@ threshold, cap or prediction.
   it runs nothing on them). No H54a pod requests a `gpu.intel.com` resource (checked in every
   smoke arm's `deploy.yaml`), so no card is allocated to or used by any arm. Recorded, no change.
 
+### H54 amendment R3: an arm whose server stops answering after readiness (2026-10-21)
+
+Recorded 2026-10-21 during H54a hold 1, before hold 2. It governs holds 2 and 3 and the status
+of hold-1 records. Nothing here changes a row's arms, models, statistic, gate, threshold, cap or
+prediction.
+
+**What prompted it.** In hold 1 (`k3dgpu-g-h54a-1`, started 08:17:35Z) B1g was ready after 219 s,
+answered 2 of its 3 warmup requests (256 tokens each), and stalled on the third after 166 output
+tokens. About 300 s later vLLM v0.24.0's engine stopped: `TimeoutError` in
+`shm_broadcast.dequeue`, then `EngineDeadError`, and the server exited at 08:28:20Z. Every scored
+request (N=1, N=4, N=16, TTFT) and all 50 GSM8K items got "Connection refused". No void sample
+(load1 fell to about 5 during the stall, no aiperf process). `arm.sh` still wrote `measured`,
+because it only checked that `quality.json` existed. When this was written, only B1g's records of
+hold 1 had been read; the hold's other arms were still running and none of their numbers had been
+looked at.
+
+**Rule.**
+
+- `arm.sh` writes `measured` only when `h54.py served` passes: the N=1 phase completed at least
+  one request with a decode rate, and not every quality item errored. Otherwise the arm is
+  `failed` with the reason "server stopped answering".
+- A hold carries to the next hold's front its not-reached arms (R1) and, once per arm, an arm
+  failed because its server stopped answering (`h54.py carry`). An arm that stops answering twice
+  is not carried again. A render, apply or readiness failure is never carried. The rule is the
+  same for every arm, stock or optimized.
+- Before each hold and at the end, `h54.py recheck` applies `served` to every record marked
+  `measured`, so hold 1's B1g record is rewritten as `failed` (the old status is kept in the record
+  as `was`). It reads only whether requests completed, not any decode rate or score.
+- `bench/h54/campaign.sh` runs R1's hold plan with this carry, so hold 2 starts with the arms hold 1
+  carries, then Vq and Vq-mtp. The cap stays 3 holds: an arm carried into hold 2 can push R1's
+  later arms to hold 3 or out of the cap, recorded as not run.
+- The stall itself is a result about the stock arm and is reported in the H54a run section.
+
 ### H57d pre-registration: Gemma 4 26B-A4B QAT on the AMX-less client CPU (i9-13900T, 2026-10-20)
 
 Written 2026-10-20, before any H57da, H57dm or H57db measurement. Nothing here is a measurement

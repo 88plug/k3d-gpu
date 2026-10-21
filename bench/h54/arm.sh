@@ -196,6 +196,7 @@ for name, p in ph.items():
         p["result"] = json.load(open(f))
 json.dump(ph, open(os.path.join(out, "phases.json"), "w"), indent=1)
 EOF
-if [ -s "${OUT}/quality.json" ]; then status measured "phases and quality recorded"; else status failed "quality not recorded"; fi
+# Amendment R3: a server that stopped answering after readiness is failed, not measured.
+if why=$(${PY} "${H}/h54.py" served "${OUT}"); then status measured "${why}"; else status failed "${why}"; fi
 teardown
 exit 0

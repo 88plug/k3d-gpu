@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """h54.py: the H54a runner's arm renders, quality grader, void check and scorer
-(EXPERIMENTS.md "H54 pre-registration" and "H54 amendment R1").
+(EXPERIMENTS.md "H54 pre-registration" and "H54 amendment R1"; R3 for served/carry).
 
   h54.py arms                                   the arm table as JSON
   h54.py render ARM OUT.yaml                     Deployment + Service for an arm that is not
@@ -11,6 +11,10 @@
   h54.py active-bytes FILE                       bytes read per decoded token from a GGUF or
                                                  safetensors tensor table
   h54.py score-a RESULTS_DIR                     the H54a verdict from the recorded arms
+  h54.py served OUT                              exit 1 when the arm's server stopped answering
+                                                 after readiness (amendment R3)
+  h54.py carry RESULTS_DIR HOLD ARM...           the arms HOLD carries to the next hold's front
+  h54.py recheck RESULTS_DIR                     apply `served` to every arm recorded measured
 
 Python 3 standard library only, except render/derive-vllm (PyYAML)."""
 
@@ -366,6 +370,66 @@ def load_arm(d):
     return out
 
 
+# ---- amendment R3: a server that stops answering after readiness --------------------------------
+
+STOPPED = "server stopped answering"
+
+
+def served(out):
+    """(ok, reason) for a measured arm directory: not ok when its N=1 phase completed no request
+    or every quality item errored, i.e. the server stopped answering after readiness."""
+    try:
+        n1 = jload(os.path.join(out, "load-n1.json"))
+        done = [s for s in n1["phases"][0]["samples"] if s.get("ok") and s.get("decode_tokens_per_s")]
+    except (OSError, ValueError, KeyError, IndexError):
+        done = []
+    if not done:
+        return False, f"{STOPPED}: the N=1 phase completed no request"
+    try:
+        q = jload(os.path.join(out, "quality.json"))
+    except (OSError, ValueError):
+        return False, f"{STOPPED}: no quality record"
+    if q.get("n") and q.get("errors", 0) >= q["n"]:
+        return False, f"{STOPPED}: every quality item errored"
+    return True, "phases and quality recorded"
+
+
+def carry(results, hold, arms):
+    """Arms hold HOLD passes to the next hold's front: not reached (or no record), and, once per
+    arm, failed because the server stopped answering after readiness."""
+    def st(h, a):
+        try:
+            return jload(os.path.join(results, f"hold{h}", a, "status.json"))
+        except (OSError, ValueError):
+            return {"status": "missing"}
+    out = []
+    for a in arms:
+        s = st(hold, a)
+        if s["status"] in ("not_reached", "missing"):
+            out.append(a)
+        elif s["status"] == "failed" and str(s.get("reason", "")).startswith(STOPPED):
+            if not any(str(st(h, a).get("reason", "")).startswith(STOPPED) for h in range(1, hold)):
+                out.append(a)
+    return out
+
+
+def recheck(results):
+    """Rewrite as failed every arm recorded measured whose server stopped answering (arm.sh
+    before R3 wrote measured whenever quality.json existed). Returns the arm dirs changed."""
+    changed = []
+    for st in sorted(glob.glob(os.path.join(results, "hold*", "*", "status.json"))):
+        s = jload(st)
+        if s.get("status") != "measured":
+            continue
+        ok, why = served(os.path.dirname(st))
+        if not ok:
+            s.update(status="failed", reason=why, was="measured", rechecked=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+            with open(st, "w") as f:
+                json.dump(s, f)
+            changed.append(os.path.dirname(st))
+    return changed
+
+
 def score_a(results):
     arms = {}
     for st in sorted(glob.glob(os.path.join(results, "hold*", "*", "status.json"))):
@@ -443,6 +507,15 @@ def main(argv):
         return 1 if v else 0
     elif cmd == "active-bytes":
         print(json.dumps(active_bytes(a[0])))
+    elif cmd == "served":
+        ok, why = served(a[0])
+        print(why)
+        return 0 if ok else 1
+    elif cmd == "recheck":
+        for d in recheck(a[0]):
+            print(f"failed (server stopped answering): {d}")
+    elif cmd == "carry":
+        print(" ".join(carry(a[0], int(a[1]), a[2:])))
     elif cmd == "score-a":
         print(json.dumps(score_a(a[0]), indent=1))
     else:
