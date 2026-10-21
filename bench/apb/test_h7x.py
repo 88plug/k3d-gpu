@@ -12,7 +12,7 @@ import h7x  # noqa: E402
 ORDER = "A B B A A B B A A B C".split()
 
 
-def write_run(d, tps, tokens=256, n=5, skip=()):
+def write_run(d, tps, tokens=256, n=5, skip=(), void_blocks=(), no_rate_blocks=(), restarts=()):
     """tps: {engine: tok/s or [per-block tok/s in run order]}"""
     seen = {}
     for i, e in enumerate(ORDER, start=1):
@@ -21,8 +21,12 @@ def write_run(d, tps, tokens=256, n=5, skip=()):
         k = seen.get(e, 0)
         seen[e] = k + 1
         v = tps[e][k] if isinstance(tps[e], list) else tps[e]
-        dec = {"phases": [{"samples": [{"ok": True, "output_tokens": tokens, "decode_tokens_per_s": v + j * 0.01}
-                                        for j in range(n)], "output_tokens_total": tokens * n}]}
+        tok = 200 if i in void_blocks else tokens
+        dec = {"phases": [{"samples": [{"ok": True, "output_tokens": tok,
+                                        "decode_tokens_per_s": None if i in no_rate_blocks else v + j * 0.01}
+                                       for j in range(n)], "output_tokens_total": tok * n}]}
+        with open(os.path.join(d, "restarts.txt"), "a") as rf:
+            rf.write(f"b{i} {e} 0 {1 if i in restarts else 0}\n")
         pre = {"phases": [{"samples": [{"ok": True, "ttft_s": 2.0}] * 5}]}
         c4 = {"phases": [{"samples": [], "aggregate_tokens_per_s": 3 * v}]}
         for w, obj in (("decode", dec), ("prefill", pre), ("conc4", c4)):
@@ -67,6 +71,25 @@ class Rule(unittest.TestCase):
     def test_cap_cut_run_with_three_a_blocks_is_inconclusive(self):
         v = run({"A": 20.0, "B": 18.5, "C": 18.5}, skip=(8, 9, 10, 11))
         self.assertEqual(v["verdict"], "INCONCLUSIVE")
+
+    def test_pairs_follow_run_order_with_a_void_block(self):
+        # Drifting rates, A about 1.10x B in every run-order pair. Voiding A's first block must
+        # drop that pair, not shift every A block onto the next B block.
+        a = [10.0, 10.4, 10.8, 11.2, 11.6]
+        b = [x / 1.10 for x in a]
+        v = run({"A": a, "B": b, "C": b}, void_blocks=(1,))
+        self.assertEqual(len(v["pair_ratios"]), 4)
+        self.assertTrue(all(abs(r - 1.10) < 0.01 for r in v["pair_ratios"]), v["pair_ratios"])
+        self.assertEqual(v["verdict"], "SUPPORTED")
+
+    def test_block_without_decode_rates_is_void(self):
+        v = run({"A": 20.0, "B": 18.5, "C": 18.5}, no_rate_blocks=(2,))
+        self.assertEqual(v["void"]["B"], 1)
+
+    def test_pod_restart_voids_the_block(self):
+        v = run({"A": 20.0, "B": 18.5, "C": 18.5}, restarts=(4,))
+        self.assertEqual(v["void"]["A"], 1)
+        self.assertEqual(v["verdict"], "SUPPORTED")
 
     def test_incremental_energy_per_token(self):
         v = run({"A": 20.0, "B": 18.5, "C": 18.5})
