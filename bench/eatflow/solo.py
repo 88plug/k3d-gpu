@@ -1,4 +1,4 @@
-"""Solo holds and block pairs (H53: not yet pre-registered; pairs.design refuses it until EXPERIMENTS.md has its row).
+"""Solo holds and block pairs (EXPERIMENTS.md "H53 pre-registration").
 
 When the two arms cannot be live at once (H53: AG takes one Arc Pro B70, B2 all four), each hold
 runs one arm alone over the task set, in a task order drawn from the row's registered seed, with
@@ -117,3 +117,52 @@ def block_pairs(attempts, solo_rows, a, b):
                 for h in (h1, h2):
                     out_at.append(dict(by[(h, j)], j=key, task=task, solo_hold=h))
     return out_at, out_pairs
+
+
+# Block-level inference (EXPERIMENTS.md "H53 pre-registration"): the unit is the block, not the
+# pair. Two-sided 95% t quantiles by degrees of freedom.
+T975 = {1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571, 6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262}
+MIN_BLOCK_PAIRS = 8         # a block with fewer complete pairs is reported, not counted
+MIN_BLOCKS = 3
+
+
+def block_verdict(res, a, b, threshold=0.30, min_rate=0.6):
+    """The H53 verdict from pairs.analyze's result over block pairs (key 1000 * k + j). Per block
+    k: d_k = mean over its matched pairs of ok(a) - ok(b). Over the n blocks with at least
+    MIN_BLOCK_PAIRS pairs: mean d, its t-interval (df n - 1), and the exact sign-flip p over
+    blocks. SUPPORTED: no gate, n >= MIN_BLOCKS, CI lower bound >= threshold and a's
+    within-budget rate >= min_rate. REFUTED: no gate, n >= MIN_BLOCKS and CI upper bound <
+    threshold. Else INCONCLUSIVE."""
+    import itertools
+    import math
+    by = {}
+    for r in res["per_pair"]:
+        if r["matched"]:
+            ok = int(r[a]["outcome"] == "pass_budget") - int(r[b]["outcome"] == "pass_budget")
+            by.setdefault(r["j"] // 1000, []).append(ok)
+    blocks = {k: {"pairs": len(v), "d": round(sum(v) / len(v), 4), "counted": len(v) >= MIN_BLOCK_PAIRS}
+              for k, v in sorted(by.items())}
+    d = [blocks[k]["d"] for k in blocks if blocks[k]["counted"]]
+    n = len(d)
+    out = {"unit": "block", "blocks": blocks, "n_blocks": n, "mean_d": None, "ci95": [None, None], "sign_flip_p": None,
+           "min_block_pairs": MIN_BLOCK_PAIRS, "min_blocks": MIN_BLOCKS, "threshold": threshold}
+    if n >= 2:
+        m = sum(d) / n
+        sd = math.sqrt(sum((x - m) ** 2 for x in d) / (n - 1))
+        h = T975.get(n - 1, 1.96) * sd / math.sqrt(n)
+        obs = abs(m)
+        flips = [abs(sum(s * x for s, x in zip(sg, d)) / n) for sg in itertools.product((1, -1), repeat=n)]
+        out.update(mean_d=round(m, 4), ci95=[round(m - h, 4), round(m + h, 4)],
+                   sign_flip_p=round(sum(f >= obs - 1e-12 for f in flips) / len(flips), 4))
+    rate = res["within_budget_success"][a]["rate"]
+    lo, hi = out["ci95"]
+    if res["gates"] or n < MIN_BLOCKS:
+        v = "INCONCLUSIVE"
+    elif lo >= threshold and rate is not None and rate >= min_rate:
+        v = "SUPPORTED"
+    elif hi < threshold:
+        v = "REFUTED"
+    else:
+        v = "INCONCLUSIVE"
+    out["verdict"] = v
+    return out
