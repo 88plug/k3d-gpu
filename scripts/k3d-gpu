@@ -70,7 +70,7 @@
 
 set -euo pipefail
 
-VERSION="0.1.72"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.73"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 # The node image defaults to the tag built from this launcher's own release
 # (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
@@ -407,7 +407,8 @@ Environment:
                         fit inputs that the fit checks
   K3D_GPU_FIT_HOST      host/v1 file 'fit' uses instead of probing this host
   K3D_GPU_FIT_CACHE     model metadata cache (default: \$XDG_CACHE_HOME/k3d-gpu/models)
-  K3D_GPU_FIT_FILE      the GGUF file to size in a repo that has several
+  K3D_GPU_FIT_FILE      the GGUF model to size in a repo that has several (a file, a shard
+                        or a quant label such as IQ4_NL; default: the fit picks, int4 first)
   K3D_GPU_FIT_OVERHEAD_GIB  measured per-GPU engine overhead, replacing the estimate
   K3D_GPU_AGENT_GUARD   on | off: start 'agent guard' after agent up of a fitted model (default: on)
   K3D_GPU_AGENT_VLM_DEVICE, K3D_GPU_AGENT_STT_DEVICE, K3D_GPU_AGENT_VIDEO_DEVICE
@@ -8609,6 +8610,19 @@ cmd_agent() {
     # the model optimizer (agent_optimize, which picks the variant fit then sizes); a
     # local directory is served as given, like K3D_GPU_AGENT_MODEL. K3D_GPU_AGENT_OPT_MODEL
     # carries the id into the environment the guard re-renders with.
+    # --file F: the GGUF model of a repo with several (K3D_GPU_FIT_FILE).
+    if [ "${sub}" = up ] || [ "${sub}" = manifest ]; then
+        local rest=()
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --file) [ $# -ge 2 ] || err "--file needs a GGUF file or quant label"; export K3D_GPU_FIT_FILE="$2"; shift ;;
+                --file=*) export K3D_GPU_FIT_FILE="${1#--file=}" ;;
+                *) rest+=("$1") ;;
+            esac
+            shift
+        done
+        set -- ${rest[@]+"${rest[@]}"}
+    fi
     if [ "${#REMOTE_ARGS[@]}" -eq 2 ] && [ "${REMOTE_ARGS[0]}" = --model ] && { [ "${sub}" = up ] || [ "${sub}" = manifest ]; }; then
         if is_hf_id "${REMOTE_ARGS[1]}" && [ ! -d "${REMOTE_ARGS[1]}" ]; then
             [ -z "${K3D_GPU_AGENT_MODEL:-}" ] || err "--model and K3D_GPU_AGENT_MODEL both name a model: use one"
@@ -9907,15 +9921,16 @@ cmd_plan() {
             --json) mode=json ;;
             --hash) mode="hash" ;;
             --predict) err "plan: --predict must be the first option" ;;
-            --facts|--matrix|--engine|--device|--model|--bind|--port)
+            --facts|--matrix|--engine|--device|--model|--bind|--port|--file)
                 [ $# -ge 2 ] || err "plan: $1 needs a value"
                 case "$1" in
                     --facts) facts=$2 ;;
                     --matrix) matrix=$2 ;;
+                    --file) export K3D_GPU_FIT_FILE="$2" ;;  # the GGUF model the fit of --model sizes
                     *) args+=("$1" "$2") ;;
                 esac
                 shift ;;
-            *) err "unknown plan option: $1 (use --explain, --json, --hash, --facts, --matrix, --engine, --device, --model, --bind, --port)" ;;
+            *) err "unknown plan option: $1 (use --explain, --json, --hash, --facts, --matrix, --engine, --device, --model, --file, --bind, --port)" ;;
         esac
         shift
     done
@@ -10018,7 +10033,9 @@ fit_cache() { echo "${K3D_GPU_FIT_CACHE:-${XDG_CACHE_HOME:-${HOME}/.cache}/k3d-g
 # fit_model_dir <model> [revision]: a directory holding config.json and weights.json
 # (or weight files fit.py reads in place). A local directory is used as it is; a
 # Hugging Face id is fetched once into the cache (config, tokenizer config and the
-# weight files' headers: a few MB, not the weights). K3D_GPU_FIT_FILE picks one
+# weight files' headers: a few MB, not the weights; every GGUF model of a repo with
+# several, each split model's every shard). The fit picks one; K3D_GPU_FIT_FILE (or
+# --file) names one
 # GGUF in a repo with several.
 fit_model_dir() {
     local m=$1 rev=${2:-main} d
@@ -10032,7 +10049,7 @@ fit_model_dir() {
         && [ -n "$(find "${d}/weights.json" -mtime +7 2>/dev/null)" ]; }; then
         mkdir -p "$(fit_cache)"
         rm -rf "${d}.tmp"
-        if fit_py fetch "${m}" --revision "${rev}" ${K3D_GPU_FIT_FILE:+--file "${K3D_GPU_FIT_FILE}"} --out "${d}.tmp" >/dev/null; then
+        if fit_py fetch "${m}" --revision "${rev}" --out "${d}.tmp" >/dev/null; then
             rm -rf "${d}" && mv "${d}.tmp" "${d}"
         else
             rm -rf "${d}.tmp"
@@ -10068,7 +10085,7 @@ for k in sys.argv[2].split("."):
 print("" if v is None else (" ".join(v) if isinstance(v, list) else str(v).lower() if isinstance(v, bool) else v))' "$1" "$2"
 }
 
-# fit [--model M] [--revision R] [--host FILE] [--engine E] [--device cpu|gpu]
+# fit [--model M] [--revision R] [--file F] [--host FILE] [--engine E] [--device cpu|gpu]
 #     [--ctx N] [--seqs N] [--gpus N] [--kv-dtype T] [--explain|--json]
 cmd_fit() {
     local mode=text model="${AGENT_MODEL}" rev="${AGENT_REVISION:-main}" host="" dir tmp args=() rc=0
@@ -10076,7 +10093,7 @@ cmd_fit() {
         case "$1" in
             --explain) mode=explain ;;
             --json) mode=json ;;
-            --model|--revision|--host|--engine|--device|--ctx|--seqs|--gpus|--kv-dtype)
+            --model|--revision|--host|--engine|--device|--ctx|--seqs|--gpus|--kv-dtype|--file)
                 [ $# -ge 2 ] || err "fit: $1 needs a value"
                 case "$1" in
                     --model) model=$2 ;;
@@ -10085,7 +10102,7 @@ cmd_fit() {
                     *) args+=("$1" "$2") ;;
                 esac
                 shift ;;
-            *) err "unknown fit option: $1 (use --model, --revision, --host, --engine, --device, --ctx, --seqs, --gpus, --kv-dtype, --explain, --json)" ;;
+            *) err "unknown fit option: $1 (use --model, --revision, --file, --host, --engine, --device, --ctx, --seqs, --gpus, --kv-dtype, --explain, --json)" ;;
         esac
         shift
     done
@@ -10100,6 +10117,10 @@ cmd_fit() {
         fit_host "${tmp}" || { rm -f "${tmp}"; err "fit: could not probe this host"; }
     fi
     [ -d "${model}" ] || args+=(--name "${model}")
+    # --file, else K3D_GPU_FIT_FILE: one GGUF model of a repo with several.
+    local i hasfile=""
+    for ((i = 0; i < ${#args[@]}; i++)); do [ "${args[i]}" != --file ] || hasfile=1; done
+    [ -n "${hasfile}" ] || [ -z "${K3D_GPU_FIT_FILE:-}" ] || args+=(--file "${K3D_GPU_FIT_FILE}")
     fit_py plan --host "${tmp}" --model "${dir}" --mode "${mode}" ${args[@]+"${args[@]}"} || rc=$?
     rm -f "${tmp}"
     return "${rc}"
@@ -10187,6 +10208,7 @@ agent_fit() {
     host=$(mktemp)
     fit_host "${host}" || { rm -f "${host}"; fit_soft "${mode}" "fit: could not probe this host"; return 0; }
     doc=$(mktemp)
+    [ -z "${K3D_GPU_FIT_FILE:-}" ] || args+=(--file "${K3D_GPU_FIT_FILE}")
     fit_py plan --host "${host}" --model "${dir}" --name "${AGENT_MODEL}" --device "${dev}" --mode json \
         ${args[@]+"${args[@]}"} > "${doc}" || rc=$?
     rm -f "${host}"
