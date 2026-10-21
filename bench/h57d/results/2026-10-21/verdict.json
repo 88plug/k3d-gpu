@@ -1,0 +1,92 @@
+{
+ "arms": {
+  "Od": {
+   "per_hold": {
+    "1": 6.390520468464473,
+    "2": 6.846534851389599,
+    "3": 8.546554687141656
+   },
+   "quality": {
+    "correct": 50,
+    "n": 50,
+    "score": 1.0
+   },
+   "holds_measured": 3,
+   "median": 6.898310885311793,
+   "foreign_mean": 4.11450812567714
+  },
+  "Ld": {
+   "per_hold": {
+    "1": 3.129545955497756,
+    "2": 3.424890480634979,
+    "3": 8.073600216184069
+   },
+   "quality": {
+    "correct": 50,
+    "n": 50,
+    "score": 1.0
+   },
+   "holds_measured": 3,
+   "median": 3.4964706794176497,
+   "foreign_mean": 5.617321576971145
+  },
+  "Ld-mtp": {
+   "per_hold": {
+    "1": 4.604416725299279,
+    "2": 5.412935816228911,
+    "3": 12.275709231563344
+   },
+   "quality": {
+    "correct": 50,
+    "n": 50,
+    "score": 1.0
+   },
+   "holds_measured": 3,
+   "median": 5.412935816228911,
+   "foreign_mean": 5.910619294066103
+  }
+ },
+ "gate": {
+  "Od": true,
+  "Ld": true,
+  "Ld-mtp": true
+ },
+ "best_score": 1.0,
+ "load_gate": {
+  "matched": true,
+  "spread": 1.796111168388963,
+  "tolerance": 2.0,
+  "reason": "matched"
+ },
+ "H57da": {
+  "x": "Ld-mtp",
+  "ratio": 0.7846755395954085,
+  "ci": [
+   0.6920818610792561,
+   1.5607427644134295
+  ],
+  "per_hold": {
+   "1": 0.7205073120445912,
+   "2": 0.7906095468323339,
+   "3": 1.4363342517461712
+  },
+  "all_holds_faster": false,
+  "verdict": "INCONCLUSIVE",
+  "reason": "CI not resolved against 1.05"
+ },
+ "H57dm": {
+  "ratio": 1.5481141735558486,
+  "ci": [
+   1.0571576262386422,
+   3.016891596022554
+  ],
+  "per_hold": {
+   "1": 1.4712730826689344,
+   "2": 1.5804697542402426,
+   "3": 1.5204752406436806
+  },
+  "all_holds_faster": true,
+  "verdict": "SUPPORTED",
+  "reason": "ratio >= 1.20, CI lower bound > 1.0, faster in each hold"
+ }
+}
