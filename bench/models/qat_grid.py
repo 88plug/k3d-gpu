@@ -119,6 +119,38 @@ def st_read(entry):
     return x.reshape(v["shape"])
 
 
+# The names optimum-intel 2.2.0 / NNCF 3.4.0 give the compressed weights of a Gemma 4 export
+# (read from the real export on crescent, 2026-10-20):
+#   self.model.language_model.layers.0.self_attn.q_proj._openvino_orig_weight  (a Linear weight)
+#   __module.model.language_model.layers.0.experts/prim::ListUnpack/VariadicSplit.<p>
+#       (the fused experts.gate_up_proj [E, 2I, H], split in two along dim -2: p 0 gate, p 1 up)
+#   self.model.language_model.layers.0.experts.down_proj                      (as stored)
+SPLIT = "/prim::ListUnpack/VariadicSplit."
+
+
+def resolve(ir_name, names):
+    """(checkpoint tensor name, split part or None) for an IR constant name, or (None, None)."""
+    if SPLIT in ir_name:
+        base, part = ir_name.split(SPLIT)
+        qn = match_name(base + ".gate_up_proj", names)
+        return (qn, int(part)) if qn and part in ("0", "1") else (None, None)
+    if ir_name.endswith("._openvino_orig_weight"):
+        ir_name = ir_name[: -len("._openvino_orig_weight")] + ".weight"
+    qn = match_name(ir_name, names)
+    return (qn, None) if qn else (None, None)
+
+
+def qat_tensor(ir_name, idx):
+    """(checkpoint name, the QAT array the IR constant holds) or (None, None)."""
+    qn, part = resolve(ir_name, idx)
+    if qn is None:
+        return None, None
+    a = st_read(idx[qn])
+    if part is not None:
+        a = np.split(a, 2, axis=-2)[part]
+    return qn if part is None else f"{qn}[{part}]", a
+
+
 def match_name(ir_name, names):
     """The checkpoint tensor whose name is the longest suffix match of an IR constant name."""
     s = ir_name
@@ -178,12 +210,11 @@ def cmd_check(a):
     idx = st_index(a.qat)
     rows, skipped = [], 0
     for name, _c, _s, op in compressed_weights(model)[: a.limit or None]:
-        qn = match_name(name, idx)
+        qn, qat = qat_tensor(name, idx)
         if not qn:
             skipped += 1
             continue
         w_ir = np.asarray(dequant(op), dtype=np.float32)
-        qat = st_read(idx[qn])
         cands = as_blocks_like(qat, w_ir.size)
         if not cands:
             skipped += 1
@@ -221,7 +252,7 @@ def cmd_snap(a):
     rows, skipped = [], {"no_match": 0, "not_i4": 0, "size": 0, "far": 0}
     weights = compressed_weights(model)
     for name, c, sc, op in weights:
-        qn = match_name(name, idx)
+        qn, qat = qat_tensor(name, idx)
         shape = list(c.get_output_shape(0))
         if not qn:
             skipped["no_match"] += 1
@@ -229,7 +260,7 @@ def cmd_snap(a):
         if c.get_element_type().get_type_name() != "i4":     # symmetric (i4, no zero point) only
             skipped["not_i4"] += 1
             continue
-        cands = as_blocks_like(st_read(idx[qn]), int(np.prod(shape)))
+        cands = as_blocks_like(qat, int(np.prod(shape)))
         if not cands:
             skipped["size"] += 1
             continue
