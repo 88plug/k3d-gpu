@@ -18,6 +18,7 @@ GGUF=google_gemma-4-26B-A4B-it-qat-q4_0-gguf/gemma-4-26B_q4_0-it.gguf
 CL=k3dgpu-g-h54c-${hold}
 COMMON="-t 48 -Cr 0-47 --cpu-strict 1 --jinja -c 8192 --host 0.0.0.0 --port 8080"
 
+reproduce "bash bench/h54gpu/h54c.sh ${hold} ${card}" "${LCPP_IMAGE}"
 [ -n "${SMOKE:-}" ] || card_free "${card}" || { say "card ${card} busy at hold start: no hold"; exit 6; }
 say "H54c hold ${hold} card ${card} image ${LCPP_IMAGE}"
 cluster_up "${CL}" || { say "cluster create failed"; exit 7; }

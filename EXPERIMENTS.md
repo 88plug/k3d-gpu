@@ -2814,17 +2814,27 @@ converted in file order to `~/k3dgpu-gemma/data/gsm8k-test.jsonl` (1,319 items, 
 `3730d312...3c39d14`) with pyarrow 22.0.0.
 
 **Cards.** The pre-registration's rule stands: a card is used only when
-`~/k3dgpu-bench/gpu-state.txt` lists it free, and this campaign never stops, starts or changes
-the live SGLang pair. A card is also checked at hold start to have no process holding its render
-node (`fuser`). Two placements follow from how each arm gets its card:
+`~/k3dgpu-bench/gpu-state.txt` lists it free. Revised 2026-10-21, before any H54b or H54c
+measurement: the operator authorised this campaign to stop (never remove) `qwen38-b-hr`, the
+live SGLang server on cards 2 and 3 (`ZE_AFFINITY_MASK=2,3`, renderD130 and renderD131), when
+no card is free. Its `docker inspect` is saved to `~/k3dgpu-gemma/restore/` first, the stop and
+the restart are appended to `gpu-state.txt`, and after the last hold it is started again and
+must answer a chat request. `qwen38-a-hr` (cards 0 and 1) is never touched. A card is checked at
+hold start to be free: no `xpu-smi ps` process on it, and no process holding its render node
+memory-mapped (`fuser` access flag `m`). `qwen38-a-hr`'s Level Zero processes hold an unmapped
+fd on all four render nodes (enumeration; `xpu-smi ps` lists them only on cards 0 and 1), which
+the check does not count. Two placements follow from how each arm gets its card:
 
 - Pinned pods (Cg, Gg, Hg, Lsq, Sq, Sq-mtp, Rq): a privileged pod whose `/dev/dri` is an
   in-memory directory holding only the free card's render node, so the engine cannot open the
   cards the live pair uses. The pod's `/dev/dri` listing and the host `fuser` table are saved
   per arm.
 - Device-plugin arms (X1q, X1q-mtp through `k3d-gpu agent manifest`; B2q through EAT's chart):
-  the Intel GPU plugin chooses the card, so these run only when all four cards are listed free.
-  Otherwise they are recorded as not run.
+  the Intel GPU plugin chooses the card (one container per card on discrete GPUs). Unless all
+  four cards are free, four placeholder pods (busybox `sleep`, never opening the device) first
+  take every `gpu.intel.com/xe`; the ones that got a free card are deleted, so the plugin can
+  only hand out free cards. The arms run only when the cards left held are exactly the busy
+  ones (`gpu-hold.txt`); otherwise they are recorded as not run.
 
 **H54c.** One cluster from `k3d cluster create` with the k3d-gpu 0.1.61 node image
 (`@sha256:8cd264aa...`), C1's kubelet thresholds and `~/k3dgpu-gemma/models` read-only at
@@ -2875,12 +2885,20 @@ is recorded beside the run.
 
 **Disk.** Models are downloaded before a hold, under the lock: `Qwen/Qwen3.8-27B` @ `1d4bf0f2`
 (55.6 GB, into the HF cache layout), `Intel/Qwen3.8-27B-q4km-AutoRound` @ `4b30b30e` (18.7 GB)
-and `RedHatAI/Qwen3.8-27B-INT4` @ `91bd022d` (19.5 GB). A pod's image is pulled again into the
-node's containerd. A download, or an arm, that would take `/` above 96% (the 97% line minus
-other tenants' growth) is not started, and its arm is recorded as not deliverable (disk).
+and `RedHatAI/Qwen3.8-27B-INT4` @ `91bd022d` (19.5 GB). X1q's model is pulled by its own
+manifest into its volume during the arm. A pod's image is pulled again into the node's
+containerd. A download, or an arm, that would take `/` above 96% (the 97% line minus other
+tenants' growth) is not started, and its arm is recorded as not deliverable (disk). On
+2026-10-21 03:05Z the 96% line left 51 GB, less than `Qwen/Qwen3.8-27B` alone, so B2q, Sq and
+Sq-mtp are expected to be not deliverable (disk), and with them H54b's statistic (INCONCLUSIVE
+by the pre-registration). The downloads are attempted in the order Intel q4km, RedHat INT4,
+Qwen bf16, each only if it passes the guard at its start.
 
-**Order and holds.** H54b hold 1: B2q, Sq, Sq-mtp. Hold 2: X1q, X1q-mtp, Lsq, Rq. Arms not
-reached in the 40-minute cap are recorded as not run. H54c: its one hold, on any one free card.
+**Order and holds.** H54b hold 1: X1q, X1q-mtp. Hold 2: Lsq, B2q, Sq, Sq-mtp, Rq (the last four
+only where their model was fetched and the disk guard passes). Arms not reached in the
+40-minute cap are recorded as not run. H54c: its one hold, on any one free card, after H54b.
+Each hold's results directory starts with a `REPRODUCE` header (commit, command, images,
+models with revisions).
 
 ### H5 amendment A1: stage-1 harness and definitions (2026-10-19)
 

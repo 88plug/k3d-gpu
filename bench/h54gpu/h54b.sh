@@ -3,9 +3,9 @@
 # H54b, and amendment G1). Cluster k3dgpu-g-h54b-HOLD made by `k3d-gpu up` (C1's kubelet
 # thresholds, the model tree mounted by bin/k3d's wrapper). Arms, one at a time, in the order
 # given: X1q X1q-mtp (k3d-gpu agent manifest, device plugin), Lsq (llama.cpp SYCL), Sq Sq-mtp Rq
-# (llm-scaler 1.5), B2q (EAT #21 vLLM chart, TP 2, device plugin). Device-plugin arms need all
-# four cards free (the plugin picks the card); the others run in pods whose /dev/dri holds only
-# a free card. CARDS: comma list of free card indices (renderD128+N). Thinking off for every arm.
+# (llm-scaler 1.5), B2q (EAT #21 vLLM chart, TP 2, device plugin). Device-plugin arms get the
+# free cards through placeholder pods on the busy ones (hold_busy); the others run in pods whose
+# /dev/dri holds only a free card. CARDS: comma list of free card indices (renderD128+N). Thinking off for every arm.
 set -uo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT=$(cd "${HERE}/../.." && pwd)
@@ -20,21 +20,57 @@ CL=k3dgpu-g-h54b-${hold}
 NOTHINK='{"chat_template_kwargs": {"enable_thinking": false}}'
 OVMS_GPU=${OVMS_GPU:-openvino/model_server:2026.4.1-gpu@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58}
 LCPP_INTEL=${LCPP_INTEL:-ghcr.io/ggml-org/llama.cpp:server-intel-b11749@sha256:ae2d41ba73574a1e12cd237c88b512c8bb39ba6f703e873912b76cb8988a81bd}
+BUSYBOX=${BUSYBOX:-busybox:1.37@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e}
 SCALER=${SCALER:-intel/llm-scaler-vllm:1.5@sha256:52218ad85513ab6686d4c090c83c2bd8c5b02423c63aa4dabd41837fe641fe3b}
 QWEN=hf/hub/models--Qwen--Qwen3.8-27B/snapshots/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
 REDHAT=RedHatAI_Qwen3.8-27B-INT4
 LSQ_GGUF=Intel_Qwen3.8-27B-q4km-AutoRound/Qwen3.8-27B-Q4_K_M.gguf
 
+reproduce "bash bench/h54gpu/h54b.sh ${hold} $*" "${OVMS_GPU}" "${LCPP_INTEL}" "${SCALER}" "${BUSYBOX}"
 IFS=, read -r -a free <<< "${CARDS:?CARDS=comma list of free card indices}"
 for c in "${free[@]}"; do card_free "${c}" || { say "card ${c} busy at hold start: no hold"; exit 6; }; done
-all4=""
-[ "${#free[@]}" -eq 4 ] && all4=1
 say "H54b hold ${hold} cards ${CARDS} arms $*"
 K3D_GPU_CLUSTER=${CL} K3D_GPU_IMAGE=${NODE_IMAGE} K3D_GPU_K3S_ARGS=${C1_ARGS} \
     K3D_GPU_NODE_LABELS=ei-inference-eligible=true H54_MODELS=${MODELS} \
     "${ROOT}/scripts/k3d-gpu" up >> "${OUT}/cluster.log" 2>&1 || { say "k3d-gpu up failed"; exit 7; }
 k3d kubeconfig get "${CL}" > "${KUBECONFIG}"
 wait_sa || { say "no default ServiceAccount"; exit 7; }
+
+# hold_busy: device-plugin arms get only the free cards. One placeholder pod per card claims
+# every gpu.intel.com/xe (the plugin hands each a whole card, -shared-dev-num 1); the ones
+# that got a free card are deleted, so the plugin has only the free cards left to give. The
+# placeholders run busybox `sleep` and never open the device. True when the cards still held
+# are exactly the busy ones (amendment G1).
+hold_busy() {
+    local i rd keep="" want="" c
+    for c in 0 1 2 3; do [[ ",${CARDS}," == *",${c},"* ]] || want+="renderD$((128 + c)) "; done
+    for i in 0 1 2 3; do
+        cat <<YAML
+apiVersion: v1
+kind: Pod
+metadata: {name: gpu-hold-${i}}
+spec:
+  restartPolicy: Never
+  containers:
+  - {name: hold, image: ${BUSYBOX}, command: [sleep, "86400"], resources: {limits: {gpu.intel.com/xe: 1}}}
+---
+YAML
+    done > "${OUT}/gpu-hold.yaml"
+    kubectl apply -f "${OUT}/gpu-hold.yaml" >> "${OUT}/arms.log" 2>&1 || return 1
+    kubectl wait --for=condition=Ready pod/gpu-hold-0 pod/gpu-hold-1 pod/gpu-hold-2 pod/gpu-hold-3 \
+        --timeout=300s >> "${OUT}/arms.log" 2>&1 || return 1
+    for i in 0 1 2 3; do
+        rd=$(kubectl exec "gpu-hold-${i}" -- ls /dev/dri 2>/dev/null | grep '^renderD' | tr '\n' ' ')
+        echo "gpu-hold-${i}: ${rd}" >> "${OUT}/gpu-hold.txt"
+        if [[ " ${want}" == *" ${rd% } "* ]]; then keep+="${rd% } "; else
+            kubectl delete pod "gpu-hold-${i}" --wait=true --timeout=120s >> "${OUT}/arms.log" 2>&1
+        fi
+    done
+    [ "$(tr ' ' '\n' <<< "${keep}" | sort | xargs)" = "$(tr ' ' '\n' <<< "${want}" | sort | xargs)" ]
+}
+dp_ok=""
+if [ "${#free[@]}" -eq 4 ]; then dp_ok=1; elif hold_busy; then dp_ok=1; fi
+say "device-plugin arms: ${dp_ok:+allowed}${dp_ok:-not run} ($(xargs < "${OUT}/gpu-hold.txt" 2>/dev/null))"
 
 # pinned_pod NAME CARD IMAGE COMMAND_JSON ARGS_JSON ENV_JSON: a privileged pod with the model tree
 # and only card CARD's render node under /dev/dri.
@@ -123,7 +159,7 @@ for arm in "$@"; do
     fi
     case "${arm}" in
         X1q|X1q-mtp)
-            if [ -z "${all4}" ]; then echo "needs all four cards free" > "${OUT}/${arm}.not-run"; continue; fi
+            if [ -z "${dp_ok}" ]; then echo "the plugin could not be held to the free cards" > "${OUT}/${arm}.not-run"; continue; fi
             run_agent "${arm}" "${arm#X1q}" ;;
         Lsq)
             pinned_pod lsq "${free[0]}" "${LCPP_INTEL}" '["/app/llama-server"]' \
@@ -141,7 +177,7 @@ for arm in "$@"; do
                 '[{"name":"VLLM_WORKER_MULTIPROC_METHOD","value":"spawn"},{"name":"VLLM_ALLOW_LONG_MAX_MODEL_LEN","value":"1"}]' > "${OUT}/${n}.yaml"
             BOOT_S=1500 run_pinned "${n}" "${OUT}/${n}.yaml" ;;
         B2q)
-            if [ -z "${all4}" ]; then echo "needs all four cards free" > "${OUT}/B2q.not-run"; continue; fi
+            if [ -z "${dp_ok}" ] || [ "${#free[@]}" -lt 2 ]; then echo "needs two free cards held for the plugin" > "${OUT}/B2q.not-run"; continue; fi
             "${HERE}/b2q.sh" "${OUT}" ;;
         *) say "unknown arm ${arm}" ;;
     esac

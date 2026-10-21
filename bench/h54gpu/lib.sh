@@ -29,11 +29,22 @@ wait_sa() {
     return 1
 }
 
-# card_free N: renderD(128+N) has no process open (fuser) and no xpu-smi process.
+# card_free N: card N (xpu-smi device N = renderD(128+N), both in PCI order) has no xpu-smi
+# process and no process holding its render node memory-mapped (fuser access flag m). A Level
+# Zero process masked to other cards (ZE_AFFINITY_MASK) still holds an unmapped enumeration fd
+# on every render node; that fd allocates nothing on the card and does not make it busy
+# (amendment G1).
 card_free() {
     local rd="/dev/dri/renderD$((128 + $1))"
     [ -e "${rd}" ] || return 1
-    ! sudo -n fuser "${rd}" >/dev/null 2>&1
+    sudo -n xpu-smi ps 2>/dev/null | awk -v d="$1" '$1 ~ /^[0-9]+$/ && $3 == d {found = 1} END {exit found}' || return 1
+    sudo -n fuser -v "${rd}" 2>&1 | fuser_mapped && return 1
+    return 0
+}
+
+# fuser_mapped: true when `fuser -v` output on stdin has an access field with m (mmap).
+fuser_mapped() {
+    awk '{for (i = 1; i <= NF; i++) if ($i ~ /^[Ffrcem.]{5}$/ && $i ~ /m$/) found = 1} END {exit !found}'
 }
 
 # gpu_energy N: the xe hwmon energy counters of card N (µJ, "label=value ..."), or "none".
@@ -132,4 +143,21 @@ full_phases() {
 # disk_ok GB: true when `/` stays at or below 96% used after GB more is written (amendment G1).
 disk_ok() {
     df -P -B1 / | awk -v need="$1" 'NR==2 {exit !((($3 + need * 1e9) / ($3 + $4)) <= 0.96)}'
+}
+
+# reproduce "COMMAND" IMAGE...: the REPRODUCE header of this hold's results directory
+# (amendment G1): commit, command, cards, images and the pinned model revisions.
+reproduce() {
+    local cmd=$1 i
+    shift
+    {
+        echo "# Reproduce (EXPERIMENTS.md, H54 pre-registration and amendment G1)"
+        echo "date: $(date -u +%FT%TZ)  host: $(hostname)"
+        echo "commit: $(git -C "${ROOT}" rev-parse HEAD 2>/dev/null)"
+        echo "command: cd ${ROOT} && CARDS=${CARDS:-} bash bench/h54gpu/hold.sh <run name> 2400 ${cmd}"
+        echo "node image: ${NODE_IMAGE}"
+        for i in "$@"; do echo "image: ${i}"; done
+        local f
+        for f in "${MODELS}"/*/.pinned-revision; do [ -e "${f}" ] && echo "model: $(cat "${f}")"; done
+    } > "${OUT}/REPRODUCE"
 }
