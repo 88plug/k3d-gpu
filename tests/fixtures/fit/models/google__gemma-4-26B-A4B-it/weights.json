@@ -1,0 +1,34 @@
+{
+  "classes": {
+    "embed": {
+      "bytes": 1476395008,
+      "tensors": 1
+    },
+    "experts": {
+      "bytes": 45675970560,
+      "tensors": 60
+    },
+    "other": {
+      "bytes": 3313918012,
+      "tensors": 596
+    },
+    "vision": {
+      "bytes": 1145588832,
+      "tensors": 356
+    }
+  },
+  "files": [
+    {
+      "bytes": 49907246508,
+      "name": "model-00001-of-00002.safetensors"
+    },
+    {
+      "bytes": 1704763408,
+      "name": "model-00002-of-00002.safetensors"
+    }
+  ],
+  "format": "safetensors",
+  "schema": "k3d-gpu.weights/v1",
+  "source": "google/gemma-4-26B-A4B-it@4d7ae4984b7db7de8f8457170b3f1a419ee76d52",
+  "total_bytes": 51611872412
+}

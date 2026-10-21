@@ -84,7 +84,7 @@ slot_lock() {
 
 # slot_busy: busy % of this slice's CPUs over HOLD_GATE_S, from /proc/stat ("" if unread).
 slot_busy() {
-    python3 - "${SLOT_LOAD_DIR}" "${SLOT_CPUS}" "${HOLD_PROC:-/proc}/stat" "${HOLD_GATE_S:-60}" <<'PY'
+    python3 - "${SLOT_LOAD_DIR}" "${SLOT_CPUS}" "${HOLD_PROC:-/proc}/stat" "${HOLD_GATE_S:-60}" 7>&- 8>&- 9>&- <<'PY'
 import sys, time
 sys.path.insert(0, sys.argv[1])
 import load
@@ -111,7 +111,11 @@ slot_gate() {
                 break
             fi
             log "busy (own-slice busy ${b:-unread}%, aiperf ${a}): waiting ${poll} s"
-            sleep "${poll}"
+            # As hold.sh's legacy gate: a signal ends the wait (stop_if_signalled), and the
+            # sleep holds no lock fd.
+            sleep "${poll}" 7>&- 8>&- 9>&- &
+            wait "$!"; kill "$!" 2>/dev/null
+            stop_if_signalled
             waited=$(( waited + poll ))
             continue
         fi

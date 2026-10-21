@@ -1,0 +1,30 @@
+Fixtures for tests/fit_test.py and tests/fit_test.sh.
+
+models/<org>__<name>/
+  config.json, tokenizer_config.json (and quantization_config.json where the repo has
+  one) are the repo's own files at the revision in weights.json "source".
+  weights.json is `console/fit.py fetch <repo> --revision <sha>` output, fetched
+  2026-10-20: the tensor-class byte totals come from each weight file's header
+  (safetensors data_offsets; GGUF tensor offsets), read with HTTP range requests.
+  The pinned revisions are the ones the model-card digest of 2026-10-20 recorded
+  (api.json "sha" of each repo). A GGUF repo has no config.json: its config.json and
+  tokenizer_config.json come from the model card's base_model, recorded in
+  weights.json "config_from".
+  Re-fetch one: python3 console/fit.py fetch <repo> --revision <sha> --out <dir>
+
+models/synthetic__huge-moe/
+  Not a real model. Qwen3.8-Flash-Next's config.json with weights.json byte totals
+  (1600 GiB of experts, 400 GiB n-gram table) that no fixture host can hold.
+
+hosts/*.json (host/v1, as `console/fit.py probe` prints it; written by hand):
+  desktop-i9-nogpu   Core i9-13900K, 64 GiB, 52 GiB available, no discrete GPU,
+                     AVX2 without AVX-512 or AMX (Raptor Lake), 2 DIMMs DDR5-5600:
+                     89.6 GB/s = 2 x 5600 MT/s x 8 B, theoretical.
+  xeon6741p-4xb70    Xeon 6741P (Granite Rapids, AMX), 512 GiB, 470 GiB available,
+                     2 NUMA nodes (SNC2), 8 DIMMs DDR5-6400: 409.6 GB/s theoretical.
+                     Four Arc Pro B70 32 GiB on xe: card0 holds 29 GiB (a vLLM pid)
+                     and card1 30 GiB (a llama-server pid), so both are busy; card2
+                     has 256 MiB in use, card3 none.
+  laptop-16g         Core Ultra 7 258V (Lunar Lake: AVX2, no AVX-512), 15.3 GiB,
+                     9 GiB available, 1.5 GiB of swap in use, integrated GPU only
+                     (no device-local memory), LPDDR5X-8533 on a 128-bit bus.
