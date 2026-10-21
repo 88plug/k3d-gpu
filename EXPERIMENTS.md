@@ -3188,6 +3188,39 @@ the row states. An arm measured in a later hold replaces its not-reached record.
 then Vq, Vq-mtp. Hold 3: arms not reached, then Vi, Sg, B3g. Arms not reached in hold 3 are not
 run.
 
+### H54 amendment R2: the drafter conversion, Vq-mtp's draft length, the OVQ directory and two record details (2026-10-21)
+
+Recorded 2026-10-21, before any H54a measurement, after the wiring smokes (no scored request,
+discarded; disclosed in the H54a run section). Three runner details the smokes showed R1 had
+wrong, and two record details. Nothing here changes a row's arms, models, statistic, gate,
+threshold, cap or prediction.
+
+- **Lg-mtp's drafter GGUF.** R1's conversion stopped in `ghcr.io/ggml-org/llama.cpp:full-b11749`:
+  the image's transformers 4.57.6 cannot read the drafter's `tokenizer_config.json`
+  (`extra_special_tokens: []`, the transformers 5 format): "AttributeError: 'list' object has no
+  attribute 'keys'". `convert.sh` now runs the same image's `convert_hf_to_gguf.py` with
+  transformers 5.5.4 (the OVQ export venv's pin) installed in the throwaway container, then the
+  image's `llama-quantize` to Q4_0 as before. The script, gguf-py and quantizer are b11749's;
+  only the tokenizer loader's library changes. The build's `manifest.json` records it.
+- **Vq-mtp's draft length.** vLLM v0.32.0's `config/speculative.py` rewrites a
+  `gemma4_assistant` drafter to `gemma4_mtp` with `n_predict` 1, then reaches the MTP branch's
+  `num_speculative_tokens > 1` check before the line that defaults `num_speculative_tokens` to
+  `n_predict`; with no length given the server exits with "TypeError: '>' not supported between
+  instances of 'NoneType' and 'int'". Vq-mtp therefore passes `"num_speculative_tokens": 1`, the
+  value that default line sets, so it is vLLM's default length, named.
+- **OVQ's directory mode.** OVMS's `--pull` init container runs as uid 5000 and writes
+  `graph.pbtxt` into the model directory; OVB's directory was mode 777, OVQ's (built by
+  `convert.sh` as the campaign user) 775, so A1g's init container failed ("Unable to open file
+  .../graph.pbtxt") and A1g was not deliverable in the smoke. OVQ's directory is now mode 777,
+  as OVB's. No file in the IR changed.
+- **The Reproduce header's EAT commit.** `reproduce.sh` read the EAT tree from `${G}/eat-src`, a
+  path that does not exist, so the smokes' headers have an empty `eat:` line. It now reads the
+  tree `hold.sh` exports as `EAT` (`~/k3dgpu-gemma/h54a/eat-src`, at `0d3438d7`).
+- **The GPU device plugin.** R1 says `K3D_GPU_VENDORS=amx` leaves no GPU device plugin. The
+  smokes' clusters still ran the `intel-gpu-plugin` DaemonSet (it advertises cards to the node;
+  it runs nothing on them). No H54a pod requests a `gpu.intel.com` resource (checked in every
+  smoke arm's `deploy.yaml`), so no card is allocated to or used by any arm. Recorded, no change.
+
 ### H57d pre-registration: Gemma 4 26B-A4B QAT on the AMX-less client CPU (i9-13900T, 2026-10-20)
 
 Written 2026-10-20, before any H57da, H57dm or H57db measurement. Nothing here is a measurement
