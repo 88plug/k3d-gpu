@@ -3470,7 +3470,7 @@ re-graded here.
 7. **Pins.** k3d v5.9.0, helm v4.3.1, kubectl v1.37.1 (each the newest release on 2026-10-20)
    in `~/k3dgpu-bench-wildct/bin`, checked against their upstream checksums
    (`bench/wildct/install.sh`); k3d-gpu: the newest release at the first hold (the first one
-   carrying PR #180), its `.deb` checked against the release's `SHA256SUMS` and unpacked in
+   carrying PR #180: 0.1.65 or later), its `.deb` checked against the release's `SHA256SUMS` and unpacked in
    `~/k3dgpu-bench-wildct/k3d-gpu`, and its node image `cryptoandcoffee/k3d-gpu:<that
    version>`, digest recorded. The bench scripts run from this repository at a merged commit,
    shipped to wildct as an archive and never edited there; their `scripts/k3d-gpu` must equal
