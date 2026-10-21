@@ -10,6 +10,8 @@ K3D_GPU="$(cd "$(dirname "$0")/.." && pwd)/scripts/k3d-gpu"
 WORK=$(mktemp -d)
 # A measured autoquant pick on this dev box (EXPERIMENTS.md H27) must not leak into goldens.
 export K3D_GPU_AUTOQUANT_CACHE="${WORK}/no-autoquant.json"
+# The launcher keeps each cluster's kubeconfig in its state dir; keep that in WORK.
+export XDG_STATE_HOME="${WORK}/state"
 trap 'rm -rf "${WORK}"' EXIT
 PASS=0 FAILS=0
 
@@ -79,6 +81,7 @@ printf '#!/bin/sh\nexit 0\n' > "${STUB_BIN}/k3d"; chmod +x "${STUB_BIN}/k3d"
 #   STUB_NODE_RES      "<node> <resource> <capacity> <allocatable>" lines, \n separated
 cat > "${STUB_BIN}/kubectl" <<'EOF'
 #!/bin/bash
+while [ "${1:-}" = --context ]; do shift 2; done
 args=()
 for a in "$@"; do case "${a}" in --context=*|--request-timeout=*) ;; *) args+=("${a}") ;; esac; done
 set -- "${args[@]}"
@@ -932,6 +935,7 @@ FAV_BIN="${WORK}/favbin"
 mkdir -p "${FAV_BIN}"
 cat > "${FAV_BIN}/kubectl" <<'EOF'
 #!/bin/sh
+while [ "${1:-}" = --context ]; do shift 2; done
 echo "kubectl $*" >> "${STUB_LOG}"
 case "$*" in
     "get nodes -l "*" -o name") echo "node/k3d-gpu-server-0" ;;
@@ -1041,6 +1045,7 @@ UP_BIN="${WORK}/upbin"
 mkdir -p "${UP_BIN}"
 cat > "${UP_BIN}/kubectl" <<'EOF'
 #!/bin/sh
+while [ "${1:-}" = --context ]; do shift 2; done
 echo "kubectl $*" >> "${STUB_LOG}"
 case "$*" in "get nodes -l "*" -o name") echo "node/k3d-gpu-server-0" ;; esac
 exit 0
@@ -1480,6 +1485,7 @@ KSTUB="${WORK}/kbin"
 mkdir -p "${KSTUB}"
 cat > "${KSTUB}/kubectl" <<'EOF'
 #!/bin/sh
+while [ "${1:-}" = --context ]; do shift 2; done
 case "$1" in
     get)  case "$*" in *phase*) echo "${STUB_POD_PHASE}" ;; esac ;;
     # no final newline, like nvidia-smi stderr; STUB_POD_LOGS_<pod name, - as _> overrides per pod
@@ -2319,6 +2325,7 @@ ASTUB="${WORK}/abin"
 mkdir -p "${ASTUB}"
 cat > "${ASTUB}/kubectl" <<'EOF'
 #!/bin/sh
+while [ "${1:-}" = --context ]; do shift 2; done
 [ -z "${STUB_LOG:-}" ] || echo "kubectl $*" >> "${STUB_LOG}"
 case "$*" in
     *allocatable*) printf '%s\n' "${STUB_ALLOC:-}" ;;
@@ -2700,6 +2707,7 @@ RSTUB="${WORK}/rbin"
 mkdir -p "${RSTUB}"
 cat > "${RSTUB}/kubectl" <<'EOF'
 #!/bin/sh
+while [ "${1:-}" = --context ]; do shift 2; done
 [ -z "${STUB_KUBECTL_LOG:-}" ] || echo "$*" >> "${STUB_KUBECTL_LOG}"
 case "$*" in
     *get-contexts*) for c in ${STUB_CONTEXTS:-}; do echo "${c}"; done ;;
@@ -2905,7 +2913,7 @@ USTUB="${WORK}/ubin"
 mkdir -p "${USTUB}"
 cat > "${USTUB}/k3d" <<'EOF'
 #!/bin/sh
-printf '%s\n' "$@" > "${STUB_K3D_ARGS}"
+printf '%s\n' "$@" >> "${STUB_K3D_ARGS}"
 EOF
 cat > "${USTUB}/kubectl" <<'EOF'
 #!/bin/sh
@@ -3917,10 +3925,11 @@ mkdir -p "${USTUB}"
 cp "${STUB_BIN}/docker" "${USTUB}/docker"
 cat > "${USTUB}/k3d" <<'EOF'
 #!/bin/sh
-printf '%s\n' "$@" > "${STUB_K3D_ARGS}"
+printf '%s\n' "$@" >> "${STUB_K3D_ARGS}"
 EOF
 cat > "${USTUB}/kubectl" <<'EOF'
 #!/bin/sh
+while [ "${1:-}" = --context ]; do shift 2; done
 case "$*" in
     *allocatable*) echo "${STUB_ALLOC:-gpu.intel.com/dxg 1}" ;;
     "get nodes -l "*) echo node/k3d-gpu-server-0 ;;
@@ -4174,6 +4183,7 @@ exit 1
 EOF
 cat > "${USTUB}/kubectl" <<'EOF'
 #!/bin/sh
+while [ "${1:-}" = --context ]; do shift 2; done
 case "$*" in
     *"get nodes -o go-template"*) printf '%s\n' "${STUB_ALLOCATABLE}" ;;
     *"get daemonset intel-gpu-plugin -o jsonpath"*)
@@ -4313,6 +4323,7 @@ DSTUB="${WORK}/dbin"
 mkdir -p "${DSTUB}"
 cat > "${DSTUB}/kubectl" <<'EOF'
 #!/bin/sh
+while [ "${1:-}" = --context ]; do shift 2; done
 printf 'kubectl %s\n' "$*" >> "${STUB_LOG}"
 case "$*" in
     "get --raw /version") printf '{\n  "major": "1",\n  "gitVersion": "%s"\n}\n' "${STUB_K8S_VERSION}" ;;
@@ -4510,7 +4521,7 @@ if type -P kubectl >/dev/null; then
 EOF
     slice_got=$( # shellcheck source=scripts/k3d-gpu
         source "${K3D_GPU}" help >/dev/null
-        KUBECONFIG=/dev/null kubectl label --local -f "${WORK}/slices.json" k3d-gpu.io/t=1 \
+        KUBECONFIG=/dev/null command kubectl label --local -f "${WORK}/slices.json" k3d-gpu.io/t=1 \
             -o go-template="$(dra_slice_template)" 2>&1 | dra_count_devices
         # and `up` hands kubectl the same template inside the range over .items
         grep -F -x "kubectl get resourceslices -o go-template={{range .items}}$(dra_slice_template){{end}}" \
@@ -4533,6 +4544,7 @@ SSTUB="${WORK}/sbin"
 mkdir -p "${SSTUB}"
 cat > "${SSTUB}/kubectl" <<'EOF'
 #!/bin/sh
+while [ "${1:-}" = --context ]; do shift 2; done
 echo "$*" >> "${STUB_LOG}"
 if [ -n "${STUB_FAIL:-}" ] && echo "$*" | grep -Eq -- "${STUB_FAIL}"; then
     echo "error: stub failure" >&2
@@ -4783,7 +4795,7 @@ doctor_says "K3D_GPU_NPU_PLUGIN gets a note instead" "${r}" 'note: K3D_GPU_NPU_P
 # and a kubectl that accepts everything.
 cat > "${USTUB}/k3d" <<'EOF'
 #!/bin/sh
-printf '%s\n' "$@" > "${STUB_K3D_ARGS}"
+printf '%s\n' "$@" >> "${STUB_K3D_ARGS}"
 EOF
 cat > "${USTUB}/kubectl" <<'EOF'
 #!/bin/sh

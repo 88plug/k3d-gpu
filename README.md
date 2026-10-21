@@ -69,6 +69,12 @@ k3d-gpu down            # delete the cluster
 k3d-gpu help            # every command: also remote, plan --predict, tune, capacity, bench, model-share
 ```
 
+Each cluster has its own kubeconfig, `${K3D_GPU_STATE_DIR}/kubeconfig-<cluster>` (default state dir
+`~/.local/state/k3d-gpu`), and the launcher names the cluster's context on every kubectl call, so concurrent `up`s of different
+clusters never reach each other's. `up` leaves `~/.kube/config` alone: bare `kubectl` after `up`
+needs the `export KUBECONFIG=…` line it prints, or `K3D_GPU_MERGE_KUBECONFIG=1` to merge the
+context into `~/.kube/config` (current-context unchanged).
+
 ### Install
 
 Every package installs the same payload: the launcher at `bin/k3d-gpu`, the MCP server at `bin/k3d-gpu-mcp`,
