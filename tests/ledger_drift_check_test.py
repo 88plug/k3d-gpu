@@ -65,6 +65,18 @@ class Ledger(unittest.TestCase):
         self.assertEqual(rows["H1b"], "PENDING")
         self.assertEqual(rows["H1"], "INCONCLUSIVE")
 
+    def test_a_two_letter_id_is_a_row_of_its_own(self):
+        with tempfile.TemporaryDirectory() as d:
+            (pathlib.Path(d) / "EXPERIMENTS.md").write_text(LEDGER.replace(
+                "| H2 | two", "| H1da | one, desktop | p | probe | PENDING |\n| H2 | two"))
+            rows = guard.ledger(pathlib.Path(d))
+        self.assertEqual(rows["H1da"], "PENDING")
+
+    def test_a_count_includes_two_letter_ids(self):
+        ledger = LEDGER.replace("| H2 | two", "| H1da | one, desktop | p | probe | PENDING |\n| H2 | two")
+        self.assertEqual(run("Two are PENDING: H4 and H1da.\n", ledger)[0], 0)
+        self.assertEqual(run("One is PENDING: H4.\n", ledger)[0], 1)
+
     def test_a_row_without_a_verdict_fails(self):
         rc, out = run("ok\n", LEDGER.replace("| PENDING |", "| maybe |"))
         self.assertEqual(rc, 1)

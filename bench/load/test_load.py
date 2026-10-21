@@ -492,5 +492,132 @@ class SettleTest(unittest.TestCase):
         self.assertEqual(r["unsettled"], {"B": 1})
 
 
+class SlotTest(FakeHost):
+    """Slot-tagged load (H56, crescent parallel slice holds): names, labels and every
+    cleanup and presence count are scoped to one slot; no slot is the legacy load."""
+
+    def setUp(self):
+        super().setUp()
+        self.env = mock.patch.dict(os.environ, {}, clear=False)
+        self.env.start()
+        os.environ.pop("LOAD_SLOT", None)
+        os.environ.pop("LOAD_CPUS", None)
+        self.containers = {}   # id -> (slot or None, level, expires)
+
+    def tearDown(self):
+        self.env.stop()
+        super().tearDown()
+
+    def fake_docker(self, *args, check=True):
+        if args[0] == "ps":
+            flt = [args[i + 1] for i, a in enumerate(args) if a == "--filter"]
+            rows = self.containers.items()
+            if f"label={load.LABEL}.slot=0" in flt:
+                rows = [(i, v) for i, v in rows if v[0] == 0]
+            elif f"label={load.LABEL}.slot=1" in flt:
+                rows = [(i, v) for i, v in rows if v[0] == 1]
+            else:
+                self.assertIn(f"label={load.LABEL}=1", flt)
+            return "".join(f"{i} {lv} {ex}\n" for i, (_, lv, ex) in rows)
+        if args[0] == "rm":
+            for i in args[2:]:
+                self.containers.pop(i, None)
+        return ""
+
+    def fake_run(self, argv, **kw):
+        lab = {a.split("=")[0]: a.split("=")[1] for a in argv if a.startswith(load.LABEL)}
+        slot = int(lab[f"{load.LABEL}.slot"]) if f"{load.LABEL}.slot" in lab else None
+        name = argv[argv.index("--name") + 1]
+        self.containers[name] = (slot, lab[f"{load.LABEL}.level"], int(lab[f"{load.LABEL}.expires"]))
+        return mock.Mock(returncode=0, stdout="", stderr="")
+
+    def test_plan_slot_names_and_label(self):
+        legacy = load.plan("typical", [4, 5], ttl=600, now=1000)
+        self.assertEqual(load.plan("typical", [4, 5], ttl=600, now=1000, slot=None), legacy)
+        self.assertEqual([a[a.index("--name") + 1] for a in legacy],
+                         ["k3d-gpu-bench-load-cpu", "k3d-gpu-bench-load-stream", "k3d-gpu-bench-load-churn"])
+        s1 = load.plan("typical", [4, 5], ttl=600, now=1000, slot=1)
+        self.assertEqual([a[a.index("--name") + 1] for a in s1],
+                         ["k3d-gpu-bench-load-s1-cpu", "k3d-gpu-bench-load-s1-stream",
+                          "k3d-gpu-bench-load-s1-churn"])
+        for a, b in zip(s1, legacy):
+            i = a.index(f"{load.LABEL}.slot=1")
+            self.assertEqual(a[i - 1], "--label")
+            stripped = [x.replace("bench-load-s1-", "bench-load-") for x in a[:i - 1] + a[i + 1:]]
+            self.assertEqual(stripped, b)
+        with self.assertRaises(ValueError):
+            load.plan("typical", [4], slot=-1)
+
+    def test_stop_slot_filters(self):
+        self.containers = {"a": (0, "typical", 9e9), "b": (1, "typical", 9e9), "c": (None, "typical", 9e9)}
+        with mock.patch.object(load, "_docker", self.fake_docker):
+            self.assertEqual(load.stop(slot=1), 1)
+            self.assertEqual(sorted(self.containers), ["a", "c"])
+            self.assertEqual(load.stop(), 2)          # legacy: every container of this tool
+        self.assertEqual(self.containers, {})
+
+    def test_start_slot_ignores_other_slot(self):
+        with mock.patch.object(load, "_docker", self.fake_docker), \
+             mock.patch.object(load.subprocess, "run", self.fake_run):
+            load.start("typical", [4, 5], slot=0)
+            self.containers["old1"] = (1, "typical", 1)        # an expired slot-1 leftover
+            self.assertEqual(load.start("typical", [6, 7], slot=1), "started typical on 6-7 (3 containers, ttl 1800s)")
+            self.assertNotIn("old1", self.containers)
+            self.assertEqual(sum(1 for v in self.containers.values() if v[0] == 0), 3)
+            self.assertEqual(load.start("typical", [4, 5], slot=0), "already running")
+            self.assertEqual(len(self.containers), 6)
+
+    def test_env_defaults(self):
+        os.environ.update(LOAD_SLOT="1", LOAD_CPUS="4-5")
+        self.assertEqual(load.load_cpus(self.sys), [4, 5])
+        out = io.StringIO()
+        with mock.patch.object(sys, "stdout", out):
+            load.main(["plan", "--level", "typical"])
+        self.assertIn("--name k3d-gpu-bench-load-s1-cpu", out.getvalue())
+        self.assertIn("--cpuset-cpus 4-5", out.getvalue())
+        self.containers = {"a": (0, "typical", 9e9), "b": (1, "typical", 9e9)}
+        with mock.patch.object(load, "_docker", self.fake_docker):
+            with mock.patch.object(sys, "stdout", io.StringIO()):
+                load.main(["stop"])
+        self.assertEqual(sorted(self.containers), ["a"])
+
+    def test_load_running_count_slot(self):
+        calls = []
+
+        def ps(argv, **kw):
+            calls.append(argv)
+            n = 0 if f"label={load.LABEL}.slot=1" in argv else 3
+            return mock.Mock(returncode=0, stdout="x\n" * n)
+        with mock.patch.object(load.subprocess, "run", ps):
+            self.assertEqual(load.load_running_count(), 3)
+            self.assertEqual(load.load_running_count(slot=1), 0)
+            os.environ["LOAD_SLOT"] = "1"
+            self.assertEqual(load.load_running_count(), 0)
+        w = {"tag": "A", "level": "typical", "phase": "pre", "load_expected": 3, "load_running": 0,
+             "busy_pct": 30.0}
+        r = load.matched([w, dict(w, tag="B")])
+        self.assertTrue(r["void"])
+
+    def test_slice_cpus(self):
+        write(self.sys, "devices/system/cpu/online", "0-15")
+        for c in range(16):
+            self.cpu(c, f"{c % 8},{c % 8 + 8}")
+        self.assertEqual(load.slice_cpus(2, 0, self.sys), ([0, 1, 2, 3, 8, 9, 10, 11], [2, 3, 10, 11]))
+        self.assertEqual(load.slice_cpus(2, 1, self.sys), ([4, 5, 6, 7, 12, 13, 14, 15], [6, 7, 14, 15]))
+        cpus, ld = load.slice_cpus(1, 0, self.sys)
+        self.assertEqual(cpus, list(range(16)))
+        self.assertEqual(ld, load.load_cpus(self.sys))
+        for k, i in ((2, 2), (2, -1), (0, 0), (3, 0)):     # 8 cores do not split in 3
+            with self.assertRaises(ValueError):
+                load.slice_cpus(k, i, self.sys)
+        out = io.StringIO()
+        with mock.patch.object(sys, "stdout", out):
+            load.main(["slice", "--slots", "2", "--slot", "1", "--sysfs", self.sys])
+        self.assertEqual(out.getvalue(), "4-7,12-15 6-7,14-15\n")
+        write(self.sys, "devices/cpu_atom/cpus", "8-15")
+        with self.assertRaises(ValueError):
+            load.slice_cpus(2, 0, self.sys)
+
+
 if __name__ == "__main__":
     unittest.main()
