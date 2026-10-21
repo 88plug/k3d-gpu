@@ -1,0 +1,86 @@
+apiVersion: v1
+kind: Namespace
+metadata: {name: spec-decode-cpu}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: graphs, namespace: spec-decode-cpu}
+data:
+  config.json: |
+    {"model_config_list": [
+      {"config": {"name": "a-4b-cpu", "base_path": "/graphs", "graph_path": "a-4b-cpu.pbtxt"}},
+      {"config": {"name": "b-spec-cpu", "base_path": "/graphs", "graph_path": "b-spec-cpu.pbtxt"}}
+    ]}
+  a-4b-cpu.pbtxt: |
+    input_stream: "HTTP_REQUEST_PAYLOAD:input"
+    output_stream: "HTTP_RESPONSE_PAYLOAD:output"
+    node: {
+      name: "LLMExecutor"
+      calculator: "HttpLLMCalculator"
+      input_stream: "LOOPBACK:loopback"
+      input_stream: "HTTP_REQUEST_PAYLOAD:input"
+      input_side_packet: "LLM_NODE_RESOURCES:llm"
+      output_stream: "LOOPBACK:loopback"
+      output_stream: "HTTP_RESPONSE_PAYLOAD:output"
+      input_stream_info: { tag_index: 'LOOPBACK:0', back_edge: true }
+      node_options: {
+          [type.googleapis.com / mediapipe.LLMCalculatorOptions]: {
+              models_path: "/models/OpenVINO/Qwen3-4B-int4-ov",
+              device: "CPU",
+              cache_size: 2,
+              enable_prefix_caching: false
+          }
+      }
+      input_stream_handler {
+        input_stream_handler: "SyncSetInputStreamHandler",
+        options { [mediapipe.SyncSetInputStreamHandlerOptions.ext] { sync_set { tag_index: "LOOPBACK:0" } } }
+      }
+    }
+  b-spec-cpu.pbtxt: |
+    input_stream: "HTTP_REQUEST_PAYLOAD:input"
+    output_stream: "HTTP_RESPONSE_PAYLOAD:output"
+    node: {
+      name: "LLMExecutor"
+      calculator: "HttpLLMCalculator"
+      input_stream: "LOOPBACK:loopback"
+      input_stream: "HTTP_REQUEST_PAYLOAD:input"
+      input_side_packet: "LLM_NODE_RESOURCES:llm"
+      output_stream: "LOOPBACK:loopback"
+      output_stream: "HTTP_RESPONSE_PAYLOAD:output"
+      input_stream_info: { tag_index: 'LOOPBACK:0', back_edge: true }
+      node_options: {
+          [type.googleapis.com / mediapipe.LLMCalculatorOptions]: {
+              models_path: "/models/OpenVINO/Qwen3-4B-int4-ov",
+              draft_models_path: "/models/OpenVINO/Qwen3-0.6B-int4-ov",
+              draft_device: "CPU",
+              device: "CPU",
+              cache_size: 2,
+              enable_prefix_caching: false
+          }
+      }
+      input_stream_handler {
+        input_stream_handler: "SyncSetInputStreamHandler",
+        options { [mediapipe.SyncSetInputStreamHandlerOptions.ext] { sync_set { tag_index: "LOOPBACK:0" } } }
+      }
+    }
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ovms
+  namespace: spec-decode-cpu
+  labels: {k3d-gpu.io/cores: performance}
+spec:
+  restartPolicy: Never
+  containers:
+    - name: ovms
+      image: openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58
+      args: [--rest_port=8000, --config_path=/graphs/config.json, --cache_dir=/cache, --log_level=INFO]
+      readinessProbe: {httpGet: {path: /v2/health/ready, port: 8000}, periodSeconds: 5}
+      resources:
+        requests: {cpu: "16", memory: 10Gi}
+      volumeMounts: [{name: models, mountPath: /models, readOnly: true}, {name: cache, mountPath: /cache}, {name: graphs, mountPath: /graphs}]
+  volumes:
+    - {name: models, hostPath: {path: /var/lib/h22-models, type: Directory}}
+    - {name: cache, emptyDir: {}}
+    - {name: graphs, configMap: {name: graphs}}
