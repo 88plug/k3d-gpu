@@ -88,6 +88,28 @@ class GridTest(unittest.TestCase):
             self.assertLess(G.rel_rms(G.st_read(idx[n]), w), 0.01)
             self.assertIsNone(G.match_name("self.lm_head.weight", idx))
 
+    def test_real_export_names(self):
+        # The names of a real optimum-intel 2.2.0 Gemma 4 export (crescent, 2026-10-20).
+        rng = np.random.default_rng(5)
+        gu = rng.standard_normal((2, 6, 4)).astype(np.float32)          # [E, 2I, H]
+        q = rng.standard_normal((3, 4)).astype(np.float32)
+        with tempfile.TemporaryDirectory() as d:
+            write_st(os.path.join(d, "w.safetensors"), {
+                "model.language_model.layers.0.experts.gate_up_proj": bf16(gu),
+                "model.language_model.layers.0.self_attn.q_proj.weight": bf16(q)})
+            idx = G.st_index(d)
+            n, a = G.qat_tensor("self.model.language_model.layers.0.self_attn.q_proj._openvino_orig_weight", idx)
+            self.assertEqual(n, "model.language_model.layers.0.self_attn.q_proj.weight")
+            self.assertEqual(a.shape, (3, 4))
+            for part in (0, 1):
+                n, a = G.qat_tensor("__module.model.language_model.layers.0.experts/prim::ListUnpack/VariadicSplit."
+                                    + str(part), idx)
+                self.assertEqual(n, f"model.language_model.layers.0.experts.gate_up_proj[{part}]")
+                self.assertEqual(a.shape, (2, 3, 4))
+                self.assertLess(G.rel_rms(a, gu[:, 3 * part:3 * part + 3]), 0.01)
+            self.assertEqual(G.qat_tensor("__module.model.language_model.layers.0.experts/prim::ListUnpack/"
+                                          "VariadicSplit.2", idx), (None, None))
+
 
 @unittest.skipIf(ov is None or np is None, "openvino not installed")
 class IRTest(unittest.TestCase):

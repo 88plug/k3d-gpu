@@ -54,7 +54,10 @@ pf=""
 [ -d "${MODELS}/OpenVINO/Qwen3-4B-int4-ov" ] || { echo "MODELS has no OpenVINO/Qwen3-4B-int4-ov"; exit 2; }
 mkdir -p "${OUT}"
 sudo_() { if [ -n "${SUDO_ASKPASS:-}" ]; then sudo -A "$@"; else sudo -n "$@"; fi; }
-rapl() { sudo_ cat /sys/class/powercap/intel-rapl:0/energy_uj 2>/dev/null || echo -; }
+# K3D_GPU_RAPL_EXEC (as load.py reads it) when sudo cannot read it.
+# shellcheck disable=SC2086 # a command prefix, split on purpose
+rapl() { sudo_ cat /sys/class/powercap/intel-rapl:0/energy_uj 2>/dev/null \
+    || { [ -n "${K3D_GPU_RAPL_EXEC:-}" ] && ${K3D_GPU_RAPL_EXEC} cat /sys/class/powercap/intel-rapl:0/energy_uj 2>/dev/null; } || echo -; }
 throttles() { cat /sys/devices/system/cpu/cpu*/thermal_throttle/package_throttle_count 2>/dev/null | awk '{s += $1} END {print s + 0}'; }
 left() {
     local l=$(( CAP - (SECONDS - START) )) h

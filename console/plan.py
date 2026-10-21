@@ -25,8 +25,14 @@ The plan hash is "sha256:" plus the hex SHA-256 of the --json output bytes. A
 write (`k3d-gpu apply`, the MCP apply tool) runs only when the hash it is given
 equals the hash of the plan recomputed at that moment.
 
+With --model-meta (a k3d-gpu.hfmeta/v1 bundle, console/model_opt.py fetch), the
+plan also carries the model optimizer's decision for the engine and device the
+plan picked, or, with no green cell, the ones `agent up` picks by device (a
+Gaudi: vLLM; an Intel GPU with XMX: OVMS on the GPU; else OVMS on the CPU).
+
   plan.py --mode text|explain|json|hash --matrix FILE [--engine E] [--device D]
-          [--model M] [--bind ADDR] [--port N] < facts.json
+          [--model M] [--bind ADDR] [--port N] [--model-meta FILE] [--ledger FILE]
+          [--measurements FILE] [--thinking off|on|model] [--variant ID] < facts.json
 
 Python standard library only.
 """
@@ -42,6 +48,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 import facts as factsmod  # noqa: E402  (stdlib-only sibling modules)
+import model_opt  # noqa: E402
 import schema_check  # noqa: E402
 
 PLAN_SCHEMA = "k3d-gpu.plan/v1"
@@ -248,6 +255,73 @@ def plan(facts, matrix, overrides=None):
     return doc
 
 
+AGENT_VLLM_VERSION = {"HPU": "0.30.0", "GPU": "0.31.0"}  # the agent's pinned vLLM images
+
+
+def agent_target(facts, doc, backend=None):
+    """(engine, device, target) the model optimizer works for: the green cell's,
+    else what `agent up` picks by device (scripts/k3d-gpu agent_device). backend is
+    K3D_GPU_AGENT_BACKEND: vllm or llm-scaler serve on an Intel GPU (or a Gaudi)."""
+    targets = {t["id"]: t for t in facts["targets"]}
+    if backend in ("vllm", "llm-scaler"):
+        usable = [t for t in facts["targets"] if t["usable"]]
+        for kind, dev in (("hpu", "HPU"), ("gpu", "GPU")):
+            for t in usable:
+                if t["kind"] == kind and (kind == "hpu" or t["vendor"] == "intel"):
+                    return "vllm", dev, t
+    if doc["decision"] == "green":
+        t = targets[doc["placement"]["target"]]
+        dev = {"cpu": "CPU", "gpu": "GPU", "npu": "NPU", "hpu": "HPU"}[t["kind"]]
+        return doc["engine"]["name"], dev, t
+    usable = [t for t in facts["targets"] if t["usable"]]
+    for t in usable:
+        if t["kind"] == "hpu":
+            return "vllm", "HPU", t
+    for t in usable:
+        if t["kind"] == "gpu" and t["vendor"] == "intel" and t["xmx"] is True:
+            return "ovms", "GPU", t
+    return "ovms", "CPU", next(t for t in facts["targets"] if t["kind"] == "cpu")
+
+
+def hw_class(t):
+    """The hardware class a ledger row or a local measurement names."""
+    if t["kind"] == "gpu":
+        return "gpu:%s" % (t["platform"] or t["device_id"])
+    if t["kind"] == "cpu":
+        cpu = t["cpu"] or {}
+        return "cpu:%s" % (cpu.get("model_name") or cpu.get("family_model") or "unknown")
+    return t["kind"]
+
+
+def host_text(facts):
+    """"Intel(R) Xeon(R) 6960P (AMX) + 1x Battlemage 0xe223 (XMX)" for the one-line summary."""
+    parts, accel = [], {}
+    for t in facts["targets"]:
+        if t["kind"] == "cpu":
+            cpu = t["cpu"] or {}
+            parts.append((cpu.get("model_name") or "CPU") + (" (AMX)" if cpu.get("amx") else ""))
+        else:
+            key = " ".join(x for x in (t["platform"] or t["vendor"] or t["kind"], t["device_id"], "(XMX)" if t["xmx"] else None) if x)
+            accel[key] = accel.get(key, 0) + 1
+    parts += ["%dx %s" % (n, k) for k, n in sorted(accel.items())]
+    return " + ".join(parts)
+
+
+def add_optimizer(doc, facts, meta, opts):
+    """doc with the model optimizer's decision for its engine and device."""
+    o = dict(opts or {})
+    backend = o.pop("backend", None)
+    engine, device, t = agent_target(facts, doc, backend)
+    o.setdefault("vllm_version", "0.26.0" if backend == "llm-scaler" else AGENT_VLLM_VERSION.get(device, "0.31.0"))
+    o["hw_class"] = hw_class(t)
+    opt = model_opt.optimize(meta, engine, device, o)
+    line = model_opt.summary_line(opt, host_text(facts))
+    doc["optimizer"] = opt
+    doc["summary"] = [line] + doc["summary"]
+    doc["explain"] = doc["explain"] + model_opt.explain_lines(opt) + ["summary: " + line]
+    return doc
+
+
 def plan_hash(doc):
     """"sha256:<hex>" of the canonical plan/v1 bytes, the exact `plan --json` output."""
     return "sha256:" + hashlib.sha256(factsmod.dumps(doc)).hexdigest()
@@ -262,6 +336,12 @@ def main(argv):
     ap.add_argument("--model")
     ap.add_argument("--bind")
     ap.add_argument("--port")
+    ap.add_argument("--model-meta")
+    ap.add_argument("--ledger")
+    ap.add_argument("--measurements")
+    ap.add_argument("--thinking", choices=("off", "on", "model"))
+    ap.add_argument("--variant")
+    ap.add_argument("--agent-backend")
     args = ap.parse_args(argv[1:])
     schema = factsmod.load_schema()
     try:
@@ -277,6 +357,28 @@ def main(argv):
         schema_check.check(matrix, schema, "#/$defs/matrix")
         doc = plan(facts, matrix, {"engine": args.engine, "device": args.device, "model": args.model,
                                    "bind": args.bind, "port": port})
+        if args.model_meta:
+            with open(args.model_meta, encoding="utf-8") as f:
+                meta = json.load(f)
+            ledger = None
+            if args.ledger and os.path.exists(args.ledger):
+                with open(args.ledger, encoding="utf-8") as f:
+                    ledger = f.read()
+            meas = {}
+            try:
+                if args.measurements and os.path.exists(args.measurements):
+                    with open(args.measurements, encoding="utf-8") as f:
+                        meas = json.load(f)
+            except ValueError as e:
+                sys.stderr.write("plan: ignoring %s: %s\n" % (args.measurements, e))
+            if not isinstance(meas, dict) or meas.get("schema") != model_opt.MEASURE_SCHEMA:
+                meas = {}
+            try:
+                doc = add_optimizer(doc, facts, meta, {"ledger": ledger, "measurements": meas,
+                                                       "thinking": args.thinking, "variant": args.variant,
+                                                       "backend": args.agent_backend})
+            except Exception as e:  # noqa: BLE001  the plan stands without the optimizer
+                sys.stderr.write("plan: model optimizer failed (%s: %s); planning without it\n" % (type(e).__name__, e))
         schema_check.check(doc, schema, "#/$defs/plan")
     except (ValueError, OSError) as e:
         sys.stderr.write("plan: %s\n" % e)

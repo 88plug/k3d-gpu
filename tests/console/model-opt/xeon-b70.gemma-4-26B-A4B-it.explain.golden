@@ -1,0 +1,36 @@
+facts: sha256:c0f1825fc929670909fccf97d296c7752b2b24b51398211dd0636d967c16de83
+targets:
+  cpu: Intel(R) Xeon(R) 6960P, family:model 6:173, AMX, 6 NUMA nodes; usable
+  gpu:0000:03:00.0: intel Battlemage, 0xe223, on xe, XMX; usable
+matrix: 2 cells, 0 on a target of this host
+  no measured cell for these targets
+overrides: model=google/gemma-4-26B-A4B-it
+decision:
+  unmeasured: no green cell for this box; quickstart and agent up still pick by device
+  bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)
+model optimizer: google/gemma-4-26B-A4B-it on ovms (GPU), metadata from huggingface
+  MoE: 128 experts, 8 per token, 25805936206 params, ~4.0B active -> recorded for the bandwidth model (decode moves the active experts' bytes) [https://huggingface.co/google/gemma-4-26B-A4B-it/blob/4d7ae4984b7db7de8f8457170b3f1a419ee76d52/config.json]
+  context 262144 tokens -> kept at the agent's own --max-model-len / OVMS default [https://huggingface.co/google/gemma-4-26B-A4B-it/blob/4d7ae4984b7db7de8f8457170b3f1a419ee76d52/config.json]
+  google/gemma-4-26B-A4B-it-qat-q4_0-unquantized is QAT for Q4_0 (symmetric int4, groups of 32) -> candidate: self-built OpenVINO IR, INT4_SYM group_size 32, from the QAT weights [https://github.com/ggml-org/llama.cpp/blob/master/ggml/src/ggml-common.h (QK4_0 32), ggml-quants.c quantize_row_q4_0_ref]
+  2 openvino-ir candidate(s); top: OpenVINO/gemma-4-26b-a4b-it-int4-ov [official] (awq, asym, group 64) -> serve OpenVINO/gemma-4-26b-a4b-it-int4-ov@4e5885c3f038 [https://huggingface.co/OpenVINO/gemma-4-26b-a4b-it-int4-ov/blob/4e5885c3f03844f5887982def09708bdc9f53f7a/openvino_config.json]
+  OpenVINO/gemma-4-26b-a4b-it-int4-ov card says group_size 128; its openvino_config.json says 64 (awq, sym=False) -> trust the config: it is what the runtime loads [https://huggingface.co/OpenVINO/gemma-4-26b-a4b-it-int4-ov/blob/4e5885c3f03844f5887982def09708bdc9f53f7a/openvino_config.json]
+  qat-convert ranks 2 (self-built) -> not picked until EXPERIMENTS.md H54q is SUPPORTED for gpu:Battlemage or a local measurement says it is faster at equal-or-better quality (K3D_GPU_AGENT_VARIANT=qat-convert forces it) [EXPERIMENTS.md H54q is PENDING]
+  model family gemma4 -> tool parser gemma4, reasoning parser gemma4 [https://recipes.vllm.ai/Google/gemma-4-26B-A4B-it (--tool-call-parser gemma4 --reasoning-parser gemma4); OVMS v2026.4.1 src/llm/io_processing/output_parser.cpp (gemma4 tool + reasoning)]
+  chat template thinks off by default -> OVMS has no server-side default: agents send chat_template_kwargs {"enable_thinking": false} per request (k3d-gpu's own warm-up request sends enable_thinking false) [https://github.com/openvinotoolkit/model_server/blob/v2026.4.1/docs/model_server_rest_api_chat.md (L223)]
+  generation_config.json: do_sample=True, temperature=1.0, top_k=64, top_p=0.95 -> the engine applies it as the request default [https://huggingface.co/google/gemma-4-26B-A4B-it/blob/4d7ae4984b7db7de8f8457170b3f1a419ee76d52/generation_config.json]
+  vision tower in the IR -> loaded as a VLM pipeline: OVMS refuses LM on a VLM directory [https://github.com/openvinotoolkit/model_server/blob/v2026.4.1/src/llm/servable_initializer.cpp (L588-641)]
+  VLM pipeline -> no Fast Draft: OVMS refuses it on VLM pipelines [https://github.com/openvinotoolkit/model_server/blob/v2026.4.1/src/llm/servable_initializer.cpp (L673-681)]
+  variant ranking (official > RedHatAI > community/self-built; a lower rank wins only when measured better):
+    1. OpenVINO/gemma-4-26b-a4b-it-int4-ov [official]
+    2. qat-convert [community/self-built], QAT
+    excluded: Intel/gemma-4-26B-A4B-it-int4-AutoRound (safetensors, ovms serves openvino-ir)
+    excluded: Intel/gemma-4-26B-A4B-it-int4-mixed-AutoRound (safetensors, ovms serves openvino-ir)
+    excluded: RedHatAI/gemma-4-26B-A4B-it (safetensors, ovms serves openvino-ir)
+    excluded: RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic (safetensors, ovms serves openvino-ir)
+    excluded: RedHatAI/gemma-4-26B-A4B-it-NVFP4 (NVFP4/MXFP4: NVIDIA only, no Intel engine documents it)
+    excluded: google/gemma-4-26B-A4B-it (safetensors, ovms serves openvino-ir)
+    excluded: google/gemma-4-26B-A4B-it-qat-q4_0-gguf (gguf, ovms serves openvino-ir)
+    excluded: google/gemma-4-26B-A4B-it-qat-q4_0-unquantized (safetensors, ovms serves openvino-ir)
+  note: drafter google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant skipped: QAT drafter, the target is not QAT
+  engine args: (none)
+summary: Detected Intel(R) Xeon(R) 6960P (AMX) + 1x Battlemage 0xe223 (XMX); picked OpenVINO/gemma-4-26b-a4b-it-int4-ov on OVMS (GPU), no drafter; thinking off for agents; why -> plan --model google/gemma-4-26B-A4B-it --explain

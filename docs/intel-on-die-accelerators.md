@@ -341,6 +341,17 @@ Confidence is a probability that the lever gives a measurable gain on a k3d-gpu 
 
 State read from `scripts/k3d-gpu` at `a32a9701`, `docs/intel-capability-map.md` (G1-G17), `docs/intel.md` and fixtures (`xeon-gnr`, `xeon-srf`, `xeon-gnrd`, `xeon-dmr`, `xeon-spr-accel`, `xeon-max-*`, `qat-420xx`).
 
+Since then (branch `claude/on-die-autodetect`, fixture `xeon-6741p`): `k3d-gpu test` runs an AMX probe pod
+(`ARCH_REQ_XCOMP_PERM` plus one oneDNN BF16 matmul with `ONEDNN_VERBOSE=1`, failing unless an AMX
+implementation ran); doctor reads AVX10/AMX-FP16/AVX-VNNI-INT8 from CPUID (`/dev/cpu/0/cpuid` as root, else the
+CPUID instruction through python3; the model table is the labelled fallback), runs read-only `intel-speed-select
+base-freq/turbo-freq info` (host copy, or the node image's pinned one), feeds SST-BF high-priority CPUs into
+`k3d-gpu.io/favored-cpus` and the latency balloon, and prints SST-BF/TF, SNC2/SNC3 (Linux 6.19 for multi-socket
+SNC3), `rdt=l3cat` on model 0x55 and CXL tiering as suggestions with reverts; it reports QAT `cfg_services`, DLB,
+In-Field Scan, the On Demand `state_certificate` size and the 6741P ARK row. `doctor --perf` decodes TPMI PLR,
+shows the uncore clock next to ELC (report only) and checks Xeon 6 channels and MRDIMM per SKU. IAA kernel WQs /
+zswap and DSA accel-config are #162's.
+
 Status values:
 - **A+E**: auto-detected and enabled (label, plugin or balloon).
 - **D**: detected and reported by `doctor`, no auto-adapt.

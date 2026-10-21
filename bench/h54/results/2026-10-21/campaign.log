@@ -1,0 +1,31 @@
+== H54smoke1-hold1 waiting for the lock (arms: B1g Lg Lg-mtp A1o A1g) 2026-10-21T03:48:54Z
+== H54smoke1-hold1 lock taken 2026-10-21T03:48:54Z
+== H54smoke1-hold1 start: B1g Lg Lg-mtp A1o A1g 2026-10-21T03:48:55Z
+== H54smoke1-hold1 rc=0; clusters deleted: k3dgpu-g-h54smoke1-1; now:  2026-10-21T04:12:02Z
+== H54smoke2-hold1 waiting for the lock (arms: Vq Vq-mtp Vi Sg B3g) 2026-10-21T04:12:02Z
+== H54smoke2-hold1 lock taken 2026-10-21T04:45:51Z
+== H54smoke2-hold1 start: Vq Vq-mtp Vi Sg B3g 2026-10-21T04:45:52Z
+== H54smoke2-hold1 rc=0; clusters deleted: k3dgpu-g-h54smoke2-1; now:  2026-10-21T05:14:10Z
+== H54smoke3-hold1 waiting for the lock (arms: A1g Vq-mtp Sg Vi B3g) 2026-10-21T05:14:43Z
+== H54smoke3-hold1 lock taken 2026-10-21T06:58:21Z
+== H54smoke3-hold1 start: A1g Vq-mtp Sg Vi B3g 2026-10-21T06:58:22Z
+== H54smoke3-hold1 rc=0; clusters deleted: k3dgpu-g-h54smoke3-1; now:  2026-10-21T07:28:11Z
+== H54a-hold1 waiting for the lock (arms: B1g Lg Lg-mtp A1g A1o) 2026-10-21T08:17:34Z
+== H54a-hold1 lock taken 2026-10-21T08:17:34Z
+== H54a-hold1 start: B1g Lg Lg-mtp A1g A1o 2026-10-21T08:17:35Z
+== H54a-hold1 rc=0; clusters deleted: k3dgpu-g-h54a-1; now:  2026-10-21T08:50:34Z
+failed (server stopped answering): /home/devcloud/k3dgpu-gemma/results/H54a/hold1/B1g
+== H54a-hold2 waiting for the lock (arms: B1g A1g A1o Vq Vq-mtp) 2026-10-21T08:50:49Z
+== H54a-hold2 lock taken 2026-10-21T08:50:50Z
+== H54a-hold2 busy (load1 29.48, aiperf 0): waiting 120 s 2026-10-21T08:50:50Z
+== H54a-hold2 stopped before start (no cluster, no request): the void rule voids every all-core arm; see amendment R4 2026-10-21T08:51:45Z
+== H54a-hold2 waiting for the lock (arms: B1g Lg Lg-mtp A1g A1o Vq Vq-mtp) 2026-10-21T09:07:56Z
+== H54a-hold2 lock taken 2026-10-21T09:07:56Z
+== H54a-hold2 start: B1g Lg Lg-mtp A1g A1o Vq Vq-mtp 2026-10-21T09:07:57Z
+== H54a-hold2 rc=0; clusters deleted: k3dgpu-g-h54a-2; now:  2026-10-21T09:37:25Z
+== H54a-hold3 waiting for the lock (arms: A1g A1o Vq Vq-mtp Vi Sg B3g) 2026-10-21T09:37:25Z
+== H54a-hold3 lock taken 2026-10-21T09:37:27Z
+== H54a-hold3 busy (load1 32.54, aiperf 0): waiting 120 s 2026-10-21T09:37:27Z
+== H54a-hold3 start: A1g A1o Vq Vq-mtp Vi Sg B3g 2026-10-21T09:39:28Z
+== H54a-hold3 rc=0; clusters deleted: k3dgpu-g-h54a-3; now:  2026-10-21T10:11:27Z
+== H54a campaign done 2026-10-21T10:11:27Z

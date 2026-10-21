@@ -1,0 +1,125 @@
+{
+ "assumptions": [
+  "ceiling = bandwidth / weight bytes read per token: no compute, KV-cache, activation or kernel-efficiency term",
+  "experts: top_k / num_experts of the expert bytes per token (uniform routing)",
+  "tensor parallel and hybrid add 2 hops per layer x the hop latency (default 30 us, assumed)",
+  "speculative decoding (MTP, EAGLE) is not modelled: these are per-forward ceilings",
+  "vision/audio towers and MTP heads are not on the decode path and are not counted",
+  "from config.json one bytes-per-parameter covers every tensor; an embedding or head kept at higher precision reads more (a .gguf gives exact bytes per tensor)"
+ ],
+ "bandwidth": {
+  "dram": {
+   "detail": "STREAM triad, 48 threads, 2026-10-21T00:13:12Z (doctor --perf --bandwidth)",
+   "gbs": 320.0,
+   "note": null,
+   "source": "measured",
+   "theoretical_gbs": null
+  },
+  "gpu": [
+   {
+    "gbs": 608.0,
+    "name": "Arc Pro B70",
+    "pci": "0000:12:00.0",
+    "source": "spec (ark.intel.com product 245797: Graphics Memory Bandwidth 608 GB/s)",
+    "vram_gib": 32.0,
+    "vram_source": "bar"
+   },
+   {
+    "gbs": 608.0,
+    "name": "Arc Pro B70",
+    "pci": "0000:48:00.0",
+    "source": "spec (ark.intel.com product 245797: Graphics Memory Bandwidth 608 GB/s)",
+    "vram_gib": 32.0,
+    "vram_source": "bar"
+   },
+   {
+    "gbs": 608.0,
+    "name": "Arc Pro B70",
+    "pci": "0000:7c:00.0",
+    "source": "spec (ark.intel.com product 245797: Graphics Memory Bandwidth 608 GB/s)",
+    "vram_gib": 32.0,
+    "vram_source": "bar"
+   },
+   {
+    "gbs": 608.0,
+    "name": "Arc Pro B70",
+    "pci": "0000:96:00.0",
+    "source": "spec (ark.intel.com product 245797: Graphics Memory Bandwidth 608 GB/s)",
+    "vram_gib": 32.0,
+    "vram_source": "bar"
+   }
+  ]
+ },
+ "host": {
+  "amx": true,
+  "cpu_model": "Intel(R) Xeon(R) 6741P",
+  "mem_gib": 503.3,
+  "physical_cores": 48
+ },
+ "model": {
+  "id": "OpenVINO/gemma-4-26b-a4b-it-int4-ov",
+  "path": "/home/devcloud/k3dgpu-gemma/models/OpenVINO/gemma-4-26b-a4b-it-int4-ov",
+  "revision": "4e5885c3",
+  "source_rank": 1,
+  "source_rank_text": "model author or Intel"
+ },
+ "options": {
+  "engine": null,
+  "gpus": null,
+  "hop_us": 30.0,
+  "placement": "cpu"
+ },
+ "pick": {
+  "decode_tok_s": 155.3,
+  "engine": "ovms",
+  "placement": "cpu"
+ },
+ "rows": [
+  {
+   "decode_tok_s": 155.3,
+   "devices": "CPU",
+   "engine": "ovms",
+   "engines": [
+    "ovms"
+   ],
+   "hop_us": 30.0,
+   "hops": 0,
+   "images": [
+    "openvino/model_server:2026.4.1@sha256:148e3fe802261ed0b5b634de3bbccdefe7176a218ec34a88e382b40704c34a1c",
+    "openvino/model_server:2026.4.1-gpu@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58"
+   ],
+   "placement": "cpu",
+   "terms": [
+    {
+     "bytes": 2060205312,
+     "gbs": 320.0,
+     "memory": "dram"
+    }
+   ]
+  }
+ ],
+ "schema": "k3d-gpu.moe-predict/v1",
+ "skipped": [],
+ "status": "prediction",
+ "status_note": "a bandwidth ceiling, not a measurement (EXPERIMENTS.md H54c measures it)",
+ "weights": {
+  "arch": "Gemma4ForConditionalGeneration",
+  "bpp": 0.539062,
+  "container": "ov",
+  "dense_bytes": 1290761472,
+  "experts_active_bytes": 769443840,
+  "experts_total_bytes": 12311101440,
+  "family": "ov",
+  "format": "ov-int4-asym-g64",
+  "format_source": "OpenVINO int4 asym group 64: fp16 scale and 4-bit zero point per 64",
+  "layers": 30,
+  "moe": true,
+  "num_experts": 128,
+  "params_active": 3821830144,
+  "params_total": 25232441344,
+  "read_bytes": 2060205312,
+  "source": "config.json shapes x bytes per parameter",
+  "top_k": 8,
+  "total_bytes": 13601862912
+ }
+}

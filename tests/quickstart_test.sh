@@ -165,7 +165,7 @@ EOF
 chmod +x "${B}"/*
 
 qs() {
-    (export PATH="${B}:${PATH}" STUB_STATE="${S}" K3D_GPU_QUICKSTART_DIR="${S}/qs" K3D_GPU_QUICKSTART_POLL=0 \
+    (export PATH="${B}:${PATH}" STUB_STATE="${S}" K3D_GPU_STATE_DIR="${S}/state" K3D_GPU_QUICKSTART_DIR="${S}/qs" K3D_GPU_QUICKSTART_POLL=0 \
         K3D_GPU_CHAT_UI="${ROOT}/share/agent-chat-ui.yml" K3D_GPU_VENDORS="${QS_VENDORS-hybrid}"
      source <(lib); SYSROOT="${TMP}/host"; qs_self() { echo "${B}/self"; }; resource_total() { echo 0; }; "$@") 2>&1
 }

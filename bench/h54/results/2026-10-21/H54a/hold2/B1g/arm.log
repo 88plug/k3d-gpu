@@ -1,0 +1,73 @@
+2026-10-21T09:08:27Z B1g start (2340 s of the hold left)
+2026-10-21T09:13:37Z B1g ready after 309 s
+energy: zone=intel-rapl:0 (package-0) joules=7896.650 seconds=60.018 avg_watts=131.571 command_seconds=60.002 samples=13 exit=0
+concurrency=1 ok=3/3 ttft_median=0.199s ttft_p90=0.220s latency_median=14.064s tok/s_median=18.2 aggregate_tok/s=18.2
+energy: zone=intel-rapl:0 (package-0) joules=11831.967 seconds=42.344 avg_watts=279.424 command_seconds=42.328 samples=10 exit=0
+concurrency=1 ok=3/8 ttft_median=0.203s ttft_p90=0.206s latency_median=14.435s tok/s_median=17.9 aggregate_tok/s=1.5
+  request 3: HTTP 500: {"error":{"message":"EngineCore encountered an issue. See stack trace (above) for the root cause.","type":"InternalServerError","param":null,"code":500}}
+  request 4: HTTP 500: {"error":{"message":"EngineCore encountered an issue. See stack trace (above) for the root cause.","type":"InternalServerError","param":null,"code":500}}
+  request 5: HTTP 500: {"error":{"message":"EngineCore encountered an issue. See stack trace (above) for the root cause.","type":"InternalServerError","param":null,"code":500}}
+  request 6: HTTP 500: {"error":{"message":"EngineCore encountered an issue. See stack trace (above) for the root cause.","type":"InternalServerError","param":null,"code":500}}
+  request 7: HTTP 500: {"error":{"message":"EngineCore encountered an issue. See stack trace (above) for the root cause.","type":"InternalServerError","param":null,"code":500}}
+energy: zone=intel-rapl:0 (package-0) joules=52203.889 seconds=342.759 avg_watts=152.305 command_seconds=342.743 samples=70 exit=1
+concurrency=4 ok=0/16 ttft_median=-s ttft_p90=-s latency_median=-s tok/s_median=- aggregate_tok/s=-
+  request 0: RemoteDisconnected: Remote end closed connection without response
+  request 1: RemoteDisconnected: Remote end closed connection without response
+  request 2: RemoteDisconnected: Remote end closed connection without response
+  request 3: RemoteDisconnected: Remote end closed connection without response
+  request 4: ConnectionRefusedError: [Errno 111] Connection refused
+  request 5: ConnectionRefusedError: [Errno 111] Connection refused
+  request 6: ConnectionRefusedError: [Errno 111] Connection refused
+  request 7: ConnectionRefusedError: [Errno 111] Connection refused
+  request 8: ConnectionRefusedError: [Errno 111] Connection refused
+  request 9: ConnectionRefusedError: [Errno 111] Connection refused
+  request 10: ConnectionRefusedError: [Errno 111] Connection refused
+  request 11: ConnectionRefusedError: [Errno 111] Connection refused
+  request 12: ConnectionRefusedError: [Errno 111] Connection refused
+  request 13: ConnectionRefusedError: [Errno 111] Connection refused
+  request 14: ConnectionRefusedError: [Errno 111] Connection refused
+  request 15: ConnectionRefusedError: [Errno 111] Connection refused
+energy: zone=intel-rapl:0 (package-0) joules=12.541 seconds=0.085 avg_watts=146.687 command_seconds=0.070 samples=2 exit=1
+concurrency=16 ok=0/32 ttft_median=-s ttft_p90=-s latency_median=-s tok/s_median=- aggregate_tok/s=-
+  request 0: ConnectionRefusedError: [Errno 111] Connection refused
+  request 1: ConnectionRefusedError: [Errno 111] Connection refused
+  request 2: ConnectionRefusedError: [Errno 111] Connection refused
+  request 3: ConnectionRefusedError: [Errno 111] Connection refused
+  request 4: ConnectionRefusedError: [Errno 111] Connection refused
+  request 5: ConnectionRefusedError: [Errno 111] Connection refused
+  request 6: ConnectionRefusedError: [Errno 111] Connection refused
+  request 7: ConnectionRefusedError: [Errno 111] Connection refused
+  request 8: ConnectionRefusedError: [Errno 111] Connection refused
+  request 9: ConnectionRefusedError: [Errno 111] Connection refused
+  request 10: ConnectionRefusedError: [Errno 111] Connection refused
+  request 11: ConnectionRefusedError: [Errno 111] Connection refused
+  request 12: ConnectionRefusedError: [Errno 111] Connection refused
+  request 13: ConnectionRefusedError: [Errno 111] Connection refused
+  request 14: ConnectionRefusedError: [Errno 111] Connection refused
+  request 15: ConnectionRefusedError: [Errno 111] Connection refused
+  request 16: ConnectionRefusedError: [Errno 111] Connection refused
+  request 17: ConnectionRefusedError: [Errno 111] Connection refused
+  request 18: ConnectionRefusedError: [Errno 111] Connection refused
+  request 19: ConnectionRefusedError: [Errno 111] Connection refused
+  request 20: ConnectionRefusedError: [Errno 111] Connection refused
+  request 21: ConnectionRefusedError: [Errno 111] Connection refused
+  request 22: ConnectionRefusedError: [Errno 111] Connection refused
+  request 23: ConnectionRefusedError: [Errno 111] Connection refused
+  request 24: ConnectionRefusedError: [Errno 111] Connection refused
+  request 25: ConnectionRefusedError: [Errno 111] Connection refused
+  request 26: ConnectionRefusedError: [Errno 111] Connection refused
+  request 27: ConnectionRefusedError: [Errno 111] Connection refused
+  request 28: ConnectionRefusedError: [Errno 111] Connection refused
+  request 29: ConnectionRefusedError: [Errno 111] Connection refused
+  request 30: ConnectionRefusedError: [Errno 111] Connection refused
+  request 31: ConnectionRefusedError: [Errno 111] Connection refused
+energy: zone=intel-rapl:0 (package-0) joules=11.915 seconds=0.084 avg_watts=141.232 command_seconds=0.070 samples=2 exit=1
+concurrency=1 ok=0/4 ttft_median=-s ttft_p90=-s latency_median=-s tok/s_median=- aggregate_tok/s=-
+  request 0: ConnectionRefusedError: [Errno 111] Connection refused
+  request 1: ConnectionRefusedError: [Errno 111] Connection refused
+  request 2: ConnectionRefusedError: [Errno 111] Connection refused
+  request 3: ConnectionRefusedError: [Errno 111] Connection refused
+energy: zone=intel-rapl:0 (package-0) joules=10.854 seconds=0.078 avg_watts=140.004 command_seconds=0.062 samples=2 exit=1
+2026-10-21T09:21:03Z B1g quality
+gsm8k 0/50 errors=50 wall=0.0s
+2026-10-21T09:21:03Z B1g status failed: server stopped answering: every quality item errored

@@ -115,6 +115,15 @@
       {
         "apply": null,
         "from": null,
+        "level": "warn",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "SNC3 is on but Linux 6.18.1-061801-generic is older than 6.19: on a multi-socket Granite Rapids/Clearwater Forest the scheduler fails to build its domains in SNC-3 (sched/topology fix 4d6dd05d07d, first in 6.19) — boot 6.19 or newer",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
         "level": "info",
         "revert": null,
         "section": "Intel CPU built-in accelerators...",

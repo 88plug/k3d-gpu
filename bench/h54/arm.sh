@@ -147,7 +147,13 @@ if [ -n "${SMOKE:-}" ]; then
 fi
 
 # ---- phases ----------------------------------------------------------------------------------
-idle() { bash "${ENERGY}" --zone intel-rapl:0 --interval 5 --json "${OUT}/energy-idle.json" -- sleep 60 2>> "${OUT}/arm.log"; }
+# Amendment R4: the 60 s idle window (no arm load) is the void rule's CPU window (W0, W1); a void
+# phase gets a fresh idle window (energy-idle-<phase>.json) before its one re-run.
+idle() {  # idle [SUFFIX]
+    W0=$(date +%s.%N)
+    bash "${ENERGY}" --zone intel-rapl:0 --interval 5 --json "${OUT}/energy-idle${1:+-$1}.json" -- sleep 60 2>> "${OUT}/arm.log"
+    W1=$(date +%s.%N)
+}
 load() {  # load NAME REQUESTS CONCURRENCY MAX_TOKENS [extra llm_load args]
     local name=$1 n=$2 c=$3 mt=$4
     shift 4
@@ -162,9 +168,9 @@ phase() {  # phase NAME REQUESTS CONCURRENCY MAX_TOKENS [extra]: run, void check
         t0=$(date +%s.%N)
         load "$@"
         t1=$(date +%s.%N)
-        v=$(${PY} "${H}/h54.py" void "${SERVING:?}" "${t0}" "${t1}")
-        echo "{\"phase\": \"${name}\", \"try\": ${try}, \"t0\": ${t0}, \"t1\": ${t1}, \"check\": ${v}}" >> "${OUT}/phases.jsonl"
-        case ${v} in *'"void": true'*) [ "${try}" = 1 ] && { mv "${OUT}/load-${name}.json" "${OUT}/load-${name}-void1.json"; continue; } ;; esac
+        v=$(${PY} "${H}/h54.py" void "${SERVING:?}" "${t0}" "${t1}" "${W0}" "${W1}")
+        echo "{\"phase\": \"${name}\", \"try\": ${try}, \"t0\": ${t0}, \"t1\": ${t1}, \"w0\": ${W0}, \"w1\": ${W1}, \"check\": ${v}}" >> "${OUT}/phases.jsonl"
+        case ${v} in *'"void": true'*) [ "${try}" = 1 ] && { mv "${OUT}/load-${name}.json" "${OUT}/load-${name}-void1.json"; idle "${name}"; continue; } ;; esac
         break
     done
 }
@@ -178,7 +184,7 @@ stamp "quality"
 t0=$(date +%s.%N)
 ${PY} "${H}/h54.py" gsm8k "${base}" "${MODEL}" "${H}/gsm8k-test-0-199.jsonl" "${OUT}/quality.json" 0-49 >> "${OUT}/arm.log" 2>&1
 t1=$(date +%s.%N)
-echo "{\"phase\": \"quality\", \"t0\": ${t0}, \"t1\": ${t1}, \"check\": $(${PY} "${H}/h54.py" void "${SERVING}" "${t0}" "${t1}")}" >> "${OUT}/phases.jsonl"
+echo "{\"phase\": \"quality\", \"t0\": ${t0}, \"t1\": ${t1}, \"check\": $(${PY} "${H}/h54.py" void "${SERVING}" "${t0}" "${t1}" "${W0}" "${W1}")}" >> "${OUT}/phases.jsonl"
 ${PY} - "${OUT}" <<'EOF'
 import json, os, sys
 out = sys.argv[1]
@@ -196,6 +202,7 @@ for name, p in ph.items():
         p["result"] = json.load(open(f))
 json.dump(ph, open(os.path.join(out, "phases.json"), "w"), indent=1)
 EOF
-if [ -s "${OUT}/quality.json" ]; then status measured "phases and quality recorded"; else status failed "quality not recorded"; fi
+# Amendment R3: a server that stopped answering after readiness is failed, not measured.
+if why=$(${PY} "${H}/h54.py" served "${OUT}"); then status measured "${why}"; else status failed "${why}"; fi
 teardown
 exit 0

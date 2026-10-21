@@ -47,6 +47,13 @@ them the same way to bump a version.
   requesting `gpu.intel.com/i915`, and dcgm-exporter uses the `nvidia` RuntimeClass with
   the image's `NVIDIA_VISIBLE_DEVICES=all` rather than requesting `nvidia.com/gpu`.
   Workloads keep every device.
+- **MBM per resctrl group, read-only.** When the host owner has mounted resctrl,
+  `k3d-gpu up` binds it read-only into the nodes, and a `resctrl-mbm` sidecar in the
+  node_exporter pod writes `k3d_gpu_resctrl_mbm_bytes_total{group,domain,scope}` every
+  15 s from each group's `mon_data/mon_L3_<domain>/mbm_{total,local}_bytes`: the root
+  group `/`, every control group (the balloons policy's RDT classes when
+  `control.rdt.enable` is on) and every monitor group inside them. Nothing mounts or
+  writes resctrl; without it the sidecar writes no series.
 - **Core types come from the kernel.** An init container in the node_exporter pod reads
   the hybrid PMU CPU lists (`/sys/devices/cpu_core/cpus` and `cpu_atom/cpus`, the same
   lists `k3d-gpu doctor` reads). It writes `k3d_gpu_cpu_core_type{cpu,type}` for the

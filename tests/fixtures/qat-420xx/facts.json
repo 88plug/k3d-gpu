@@ -77,7 +77,7 @@
         "level": "ok",
         "revert": null,
         "section": "Intel CPU built-in accelerators...",
-        "text": "QAT 0000:76:00.0: 4 VF(s) — deployed by 'k3d-gpu up' (intel-qat-plugin binds them to vfio-pci)",
+        "text": "QAT 0000:76:00.0 (420xx): 4 VF(s) — deployed by 'k3d-gpu up' (intel-qat-plugin binds them to vfio-pci)",
         "why": null
       },
       {
@@ -86,7 +86,7 @@
         "level": "ok",
         "revert": null,
         "section": "Intel CPU built-in accelerators...",
-        "text": "QAT 0000:f3:00.0: 4 VF(s) — deployed by 'k3d-gpu up' (intel-qat-plugin binds them to vfio-pci)",
+        "text": "QAT 0000:f3:00.0 (420xx): 4 VF(s) — deployed by 'k3d-gpu up' (intel-qat-plugin binds them to vfio-pci)",
         "why": null
       },
       {

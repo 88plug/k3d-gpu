@@ -15,6 +15,10 @@
 #   EAT_FIT_MODEL   Hugging Face id of the model 'eat-up.sh model' deploys: with EAT_VLLM_KV_GIB
 #                   unset, its KV cache size comes from 'k3d-gpu fit' (vLLM on the CPU, against what
 #                   this host has free), and a model that cannot fit stops here
+#   EAT_MODEL_OPT   auto | off: model <id> gets k3d-gpu's model optimizer as values (parsers,
+#                   thinking default, text-only load, speculative config; printed against
+#                   EAT stock) (default: auto)
+#   EAT_THINKING    off | on | model: the model's thinking default (default: off, for agents)
 #
 # The cluster must already carry EAT's node labels, e.g.:
 #   K3D_GPU_NODE_LABELS=ei-infra-eligible=true,ei-inference-eligible=true k3d-gpu up
@@ -29,6 +33,7 @@ EAT_WORK="${EAT_WORK:-${PWD}/eat-work}"
 EAT_KUBECONFIG="${EAT_KUBECONFIG:-${KUBECONFIG:-${HOME}/.kube/config}}"
 EAT_CONFIG="${EAT_CONFIG:-${HERE}/agentic-config.cfg}"
 EAT_VLLM_VALUES="${EAT_VLLM_VALUES:-${HERE}/vllm-values.yaml}"
+CONSOLE_DIR="$(cd "${HERE}/../../console" 2>/dev/null && pwd || true)"
 BASTION_IMAGE="k3d-gpu-eat-bastion:$(sha256sum "${HERE}/bastion.Dockerfile" | cut -c1-12)"
 
 err()  { echo "ERROR: $*" >&2; exit 1; }
@@ -90,11 +95,18 @@ docker build -q -t "${BASTION_IMAGE}" -f "${HERE}/bastion.Dockerfile" "${HERE}" 
 
 log="${EAT_WORK}/brownfield-${1:-stack}.log"
 info "Running EAT brownfield ${*:-stack} (log: ${log})..."
+mkdir -p "${EAT_WORK}/hf-cache"
+console_mount=()
+[ -z "${CONSOLE_DIR}" ] || console_mount=(-v "${CONSOLE_DIR}:/k3d-gpu-console:ro")
 docker run --rm --network host \
     -v "${EAT_WORK}/eat:/home/ubuntu/eat" \
     -v "${EAT_KUBECONFIG}:/kube/config:ro" \
     -v "${HERE}/brownfield.sh:/brownfield.sh:ro" \
     -v "${EAT_VLLM_VALUES}:/vllm-values.yaml:ro" \
     -v "${HERE}:/k3d-gpu-eat:ro" \
+    -v "${EAT_WORK}/hf-cache:/hf-cache" \
+    ${console_mount[@]+"${console_mount[@]}"} \
     -e EAT_VLLM_KV_GIB="${EAT_VLLM_KV_GIB}" \
+    -e EAT_MODEL_OPT="${EAT_MODEL_OPT:-auto}" \
+    -e EAT_THINKING="${EAT_THINKING:-off}" \
     "${BASTION_IMAGE}" bash /brownfield.sh "$@" 2>&1 | tee "${log}"

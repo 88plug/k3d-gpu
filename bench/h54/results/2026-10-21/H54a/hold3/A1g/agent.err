@@ -1,0 +1,3 @@
+fit: HTTPError: HTTP Error 401: Unauthorized
+[33mWARN:[0m fit: no metadata for k3dgpu/gemma-4-26b-a4b-it-qat-int4-sym-g32-ov (offline, private or gated: set HF_TOKEN); serving k3dgpu/gemma-4-26b-a4b-it-qat-int4-sym-g32-ov unsized (K3D_GPU_FIT=off silences this)
+[32m==>[0m agent: k3dgpu/gemma-4-26b-a4b-it-qat-int4-sym-g32-ov as 'gemma' on CPU, 1 CPU(s)

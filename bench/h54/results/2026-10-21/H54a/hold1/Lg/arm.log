@@ -1,0 +1,24 @@
+2026-10-21T08:28:32Z Lg start (1713 s of the hold left)
+2026-10-21T08:29:06Z Lg ready after 34 s
+energy: zone=intel-rapl:0 (package-0) joules=7874.749 seconds=60.018 avg_watts=131.207 command_seconds=60.002 samples=13 exit=0
+concurrency=1 ok=3/3 ttft_median=0.283s ttft_p90=0.284s latency_median=5.547s tok/s_median=46.1 aggregate_tok/s=46.2
+energy: zone=intel-rapl:0 (package-0) joules=4377.818 seconds=16.711 avg_watts=261.969 command_seconds=16.695 samples=5 exit=0
+concurrency=1 ok=8/8 ttft_median=0.287s ttft_p90=0.299s latency_median=5.579s tok/s_median=45.9 aggregate_tok/s=45.8
+energy: zone=intel-rapl:0 (package-0) joules=11971.087 seconds=44.766 avg_watts=267.418 command_seconds=44.749 samples=10 exit=0
+concurrency=1 ok=8/8 ttft_median=0.286s ttft_p90=0.288s latency_median=5.606s tok/s_median=45.7 aggregate_tok/s=45.6
+energy: zone=intel-rapl:0 (package-0) joules=12105.883 seconds=45.019 avg_watts=268.907 command_seconds=45.003 samples=10 exit=0
+concurrency=4 ok=16/16 ttft_median=0.754s ttft_p90=0.757s latency_median=12.132s tok/s_median=21.1 aggregate_tok/s=84.5
+energy: zone=intel-rapl:0 (package-0) joules=13445.094 seconds=48.548 avg_watts=276.944 command_seconds=48.532 samples=11 exit=0
+concurrency=4 ok=16/16 ttft_median=0.762s ttft_p90=0.766s latency_median=11.543s tok/s_median=22.2 aggregate_tok/s=89.6
+energy: zone=intel-rapl:0 (package-0) joules=12717.503 seconds=45.785 avg_watts=277.768 command_seconds=45.769 samples=11 exit=0
+concurrency=16 ok=32/32 ttft_median=35.592s ttft_p90=36.286s latency_median=46.673s tok/s_median=5.5 aggregate_tok/s=87.5
+energy: zone=intel-rapl:0 (package-0) joules=25975.570 seconds=93.674 avg_watts=277.299 command_seconds=93.658 samples=20 exit=0
+concurrency=16 ok=32/32 ttft_median=33.548s ttft_p90=36.047s latency_median=44.452s tok/s_median=5.8 aggregate_tok/s=90.1
+energy: zone=intel-rapl:0 (package-0) joules=25291.930 seconds=90.973 avg_watts=278.015 command_seconds=90.958 samples=20 exit=0
+concurrency=1 ok=4/4 ttft_median=2.738s ttft_p90=2.747s latency_median=3.007s tok/s_median=5.3 aggregate_tok/s=5.4
+energy: zone=intel-rapl:0 (package-0) joules=3393.044 seconds=11.994 avg_watts=282.903 command_seconds=11.977 samples=4 exit=0
+concurrency=1 ok=4/4 ttft_median=2.748s ttft_p90=2.785s latency_median=3.022s tok/s_median=5.3 aggregate_tok/s=5.3
+energy: zone=intel-rapl:0 (package-0) joules=3428.312 seconds=12.173 avg_watts=281.622 command_seconds=12.157 samples=4 exit=0
+2026-10-21T08:36:57Z Lg quality
+gsm8k 50/50 errors=0 wall=226.5s
+2026-10-21T08:40:43Z Lg status measured: phases and quality recorded

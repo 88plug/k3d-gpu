@@ -1,0 +1,71 @@
+{
+ "arms": {
+  "A1g": {
+   "status": "measured",
+   "dir": "/home/devcloud/k3dgpu-gemma/results/H54a/hold3/A1g",
+   "void_missing": false,
+   "decode": 23.25086249013187,
+   "correct": 49,
+   "n": 50,
+   "score": 0.98
+  },
+  "A1o": {
+   "status": "measured",
+   "dir": "/home/devcloud/k3dgpu-gemma/results/H54a/hold3/A1o",
+   "void_missing": false,
+   "decode": 21.73473828768965,
+   "correct": 49,
+   "n": 50,
+   "score": 0.98
+  },
+  "B1g": {
+   "status": "failed",
+   "dir": "/home/devcloud/k3dgpu-gemma/results/H54a/hold1/B1g",
+   "void_missing": false,
+   "decode": null,
+   "correct": 0,
+   "n": 50,
+   "score": 0.0
+  },
+  "Lg-mtp": {
+   "status": "measured",
+   "dir": "/home/devcloud/k3dgpu-gemma/results/H54a/hold2/Lg-mtp",
+   "void_missing": false,
+   "decode": 54.5176479639238,
+   "correct": 50,
+   "n": 50,
+   "score": 1.0
+  },
+  "Lg": {
+   "status": "measured",
+   "dir": "/home/devcloud/k3dgpu-gemma/results/H54a/hold2/Lg",
+   "void_missing": false,
+   "decode": 48.735074590123844,
+   "correct": 50,
+   "n": 50,
+   "score": 1.0
+  },
+  "Vq-mtp": {
+   "status": "not_reached",
+   "dir": "/home/devcloud/k3dgpu-gemma/results/H54a/hold2/Vq-mtp"
+  },
+  "Vq": {
+   "status": "not_reached",
+   "dir": "/home/devcloud/k3dgpu-gemma/results/H54a/hold2/Vq"
+  },
+  "B3g": {
+   "status": "not_reached",
+   "dir": "/home/devcloud/k3dgpu-gemma/results/H54a/hold3/B3g"
+  },
+  "Sg": {
+   "status": "not_reached",
+   "dir": "/home/devcloud/k3dgpu-gemma/results/H54a/hold3/Sg"
+  },
+  "Vi": {
+   "status": "not_reached",
+   "dir": "/home/devcloud/k3dgpu-gemma/results/H54a/hold3/Vi"
+  }
+ },
+ "verdict": "INCONCLUSIVE",
+ "reason": "B1g not delivered or not measured"
+}

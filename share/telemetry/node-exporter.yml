@@ -6,7 +6,15 @@
 #   rapl      node_rapl_joules_total{rapl_zone,index,path} from /sys/class/powercap
 #             (--collector.rapl.enable-zone-label puts the zone name in a label)
 #   hwmon     node_hwmon_* (CPU package temperature via coretemp)
-#   textfile  k3d_gpu_cpu_core_type{cpu,type} written by the core-type init container
+#   textfile  k3d_gpu_cpu_core_type{cpu,type} written by the core-type init container;
+#             k3d_gpu_resctrl_mbm_bytes_total{group,domain,scope} written every 15 s by
+#             the resctrl-mbm sidecar
+# resctrl MBM: when the host owner has mounted resctrl, `k3d-gpu up` binds that mount
+# read-only into the nodes, and the sidecar copies each group's memory-bandwidth
+# counters (mon_data/mon_L3_<domain>/mbm_{total,local}_bytes, cumulative bytes:
+# Documentation/filesystems/resctrl.rst) into the textfile collector: the root group
+# "/", every control group (the balloons policy's RDT classes when control.rdt is on)
+# and every monitor group inside them. Without resctrl it writes nothing. It only reads.
 # RAPL energy_uj is root-only (0400) since CVE-2020-8694, so the exporter runs as
 # root; without it the rapl collector logs at debug level and exports nothing.
 # Hybrid CPUs: the init container maps each CPU to its core type from the PMU cpu
@@ -52,6 +60,60 @@ data:
         } > "${out}"
     fi
     rm -f "${tmp}"
+  resctrl-mbm.sh: |
+    #!/bin/sh
+    # Writes k3d_gpu_resctrl_mbm_bytes_total{group,domain,scope} for every resctrl group
+    # every INTERVAL seconds (ONCE=1: one pass), in node_exporter textfile format.
+    # Writes nothing while resctrl is not mounted. Reads only.
+    set -eu
+    sys=${SYSFS:-/host/sys}
+    out=${OUT:-/textfile/k3d_gpu_resctrl_mbm.prom}
+    tmp="${out}.tmp"
+    # emit <group label> <group dir>: one line per readable numeric counter.
+    emit() {
+        for d in "$2"/mon_data/mon_L3_*; do
+            [ -d "${d}" ] || continue
+            dom=${d##*/mon_L3_}
+            for s in total local; do
+                v=$(cat "${d}/mbm_${s}_bytes" 2>/dev/null) || continue
+                case "${v}" in ''|*[!0-9]*) continue ;; esac
+                echo "k3d_gpu_resctrl_mbm_bytes_total{group=\"$1\",domain=\"${dom}\",scope=\"${s}\"} ${v}"
+            done
+        done
+    }
+    while :; do
+        r="${sys}/fs/resctrl"
+        : > "${tmp}"
+        if [ -d "${r}/info" ]; then
+            emit / "${r}" >> "${tmp}"
+            for m in "${r}"/mon_groups/*/; do
+                [ -d "${m}" ] || continue
+                m=${m%/}; emit "/${m##*/}" "${m}" >> "${tmp}"
+            done
+            for g in "${r}"/*/; do
+                g=${g%/}; n=${g##*/}
+                case "${n}" in info|mon_data|mon_groups) continue ;; esac
+                emit "${n}" "${g}" >> "${tmp}"
+                for m in "${g}"/mon_groups/*/; do
+                    [ -d "${m}" ] || continue
+                    m=${m%/}; emit "${n}/${m##*/}" "${m}" >> "${tmp}"
+                done
+            done
+        fi
+        if [ -s "${tmp}" ]; then
+            {
+                echo "# HELP k3d_gpu_resctrl_mbm_bytes_total Memory bandwidth (MBM) bytes counted for a resctrl group per L3 domain; scope total or local."
+                echo "# TYPE k3d_gpu_resctrl_mbm_bytes_total counter"
+                cat "${tmp}"
+            } > "${tmp}.prom"
+            mv "${tmp}.prom" "${out}"
+        else
+            rm -f "${out}"
+        fi
+        rm -f "${tmp}"
+        [ "${ONCE:-0}" = 1 ] && break
+        sleep "${INTERVAL:-15}"
+    done
 ---
 apiVersion: v1
 kind: Service
@@ -117,6 +179,30 @@ spec:
               mountPath: /host/sys
               readOnly: true
       containers:
+        - name: resctrl-mbm
+          image: quay.io/prometheus/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/scripts/resctrl-mbm.sh"]
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 5m
+              memory: 8Mi
+            limits:
+              memory: 32Mi
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+            - name: textfile
+              mountPath: /textfile
+            - name: sys
+              mountPath: /host/sys
+              readOnly: true
         - name: node-exporter
           image: quay.io/prometheus/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
           imagePullPolicy: IfNotPresent

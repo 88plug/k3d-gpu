@@ -8,6 +8,25 @@ ARG UBUNTU_IMAGE="ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a3
 
 FROM rancher/k3s:$K3S_TAG@$K3S_DIGEST AS k3s
 
+# intel-speed-select, built statically from a pinned kernel release's
+# tools/power/x86/intel-speed-select (the tool ships only in the kernel tree), so
+# `k3d-gpu doctor` can read Speed Select info (base-freq / turbo-freq info, read-only)
+# through the node on a host that lacks it. Version and sha256 from
+# https://www.kernel.org/releases.json and cdn.kernel.org/pub/linux/kernel/v7.x/sha256sums.asc.
+FROM ${UBUNTU_IMAGE} AS isst
+ARG LINUX_TOOLS_VERSION="7.3"
+ARG LINUX_TOOLS_SHA256="87363c24f10e06321eb362765521094e94471f6bff8bce2d6b3e40f39f004953"
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl xz-utils make gcc libc6-dev \
+      pkg-config libnl-3-dev libnl-genl-3-dev \
+    && curl -fsSLo /tmp/linux.tar.xz "https://cdn.kernel.org/pub/linux/kernel/v$(echo "${LINUX_TOOLS_VERSION}" | cut -d. -f1).x/linux-${LINUX_TOOLS_VERSION}.tar.xz" \
+    && echo "${LINUX_TOOLS_SHA256}  /tmp/linux.tar.xz" | sha256sum -c - \
+    && tar -xJf /tmp/linux.tar.xz -C /tmp "linux-${LINUX_TOOLS_VERSION}/tools" "linux-${LINUX_TOOLS_VERSION}/include/uapi" \
+    && make -C "/tmp/linux-${LINUX_TOOLS_VERSION}/tools/power/x86/intel-speed-select" LDFLAGS=-static \
+    && install -m 0755 "/tmp/linux-${LINUX_TOOLS_VERSION}/tools/power/x86/intel-speed-select/intel-speed-select" /usr/local/bin/ \
+    && /usr/local/bin/intel-speed-select --version \
+    && ! ldd /usr/local/bin/intel-speed-select \
+    && rm -rf /tmp/linux* /var/lib/apt/lists/*
+
 # A k3s NODE image does not need the CUDA toolkit. The node only runs containerd
 # + the NVIDIA container runtime; GPU pods get the driver libraries injected from
 # the host by nvidia-container-runtime and bring their own CUDA from their
@@ -46,6 +65,7 @@ RUN apt-get update && apt-get install -y curl gnupg ca-certificates \
 # apt-installed NVIDIA toolkit (k3s carries no glibc and no conflicting names).
 COPY --from=k3s /bin/ /usr/bin/
 COPY --from=k3s /usr/share/ /usr/share/
+COPY --from=isst /usr/local/bin/intel-speed-select /usr/local/bin/intel-speed-select
 
 # Bake the NVIDIA device plugin into k3s's auto-deploy manifests dir. k3s applies
 # everything here on startup, so the cluster comes up with GPUs already exposed —

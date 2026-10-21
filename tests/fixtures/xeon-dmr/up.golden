@@ -1,6 +1,7 @@
 ==> Accelerators: dsa iaa amx numa
 ==> Experimental features (auto): dra image-volume
 ==> Creating k3d cluster 'gpu' with image cryptoandcoffee/k3d-gpu:<version>...
+==> kubectl for this cluster: export KUBECONFIG=<run>/home/.local/state/k3d-gpu/kubeconfig-gpu
 ==> Waiting for nodes Ready...
 ==> Waiting for cluster DNS (CoreDNS)...
 ==> dsa device plugin auto-deployed by k3s.
@@ -14,6 +15,7 @@ k3d cluster create gpu
   --image=cryptoandcoffee/k3d-gpu:<version>
   --no-lb
   --k3s-arg=--disable=traefik@server:0
+  --k3s-arg=--disable=intel-gpu-plugin@server:0
   --k3s-arg=--disable=intel-gpu-dra@server:0
   --k3s-node-label=nvidia.com/gpu.present=false@server:*;agent:*
   --k3s-node-label=intel.feature.node.kubernetes.io/dsa=true@server:*;agent:*
@@ -32,21 +34,24 @@ k3d cluster create gpu
   --k3s-node-label=feature.node.kubernetes.io/cpu-cpuid.AVXVNNI=true@server:*;agent:*
   --k3s-node-label=experimental.k3d-gpu.io/dra=true@server:*;agent:*
   --k3s-node-label=experimental.k3d-gpu.io/image-volume=true@server:*;agent:*
-kubectl wait --for=condition=Ready nodes --all --timeout=120s
-kubectl -n kube-system get deployment/coredns
-kubectl -n kube-system rollout status deployment/coredns --timeout=180s
-kubectl -n kube-system get daemonset intel-dsa-plugin
-kubectl -n kube-system get daemonset intel-iaa-plugin
-kubectl -n kube-system get daemonset nri-resource-policy-balloons
-kubectl -n kube-system rollout status daemonset/intel-dsa-plugin --timeout=120s
-kubectl get nodes -o go-template={{range .items}}{{range $k, $v := .status.allocatable}}{{$k}} {{$v}}{{"\n"}}{{end}}{{end}}
-kubectl -n kube-system rollout status daemonset/intel-iaa-plugin --timeout=120s
-kubectl get nodes -o go-template={{range .items}}{{range $k, $v := .status.allocatable}}{{$k}} {{$v}}{{"\n"}}{{end}}{{end}}
-kubectl get nodes -l feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true -o name
-kubectl get nodes -l feature.node.kubernetes.io/cpu-cpuid.AMXCOMPLEX=true -o name
-kubectl get nodes -l feature.node.kubernetes.io/cpu-cpuid.AMXFP16=true -o name
-kubectl get nodes -l feature.node.kubernetes.io/cpu-cpuid.AMXINT8=true -o name
-kubectl get nodes -l feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true -o name
-kubectl -n kube-system rollout status daemonset/nri-resource-policy-balloons --timeout=120s
-kubectl get nodes -l k3d-gpu.io/numa-nodes=6 -o name
-kubectl get nodes -l k3d-gpu.io/snc=3 -o name
+  --kubeconfig-update-default=false
+k3d kubeconfig get gpu
+  
+kubectl --context k3d-gpu wait --for=condition=Ready nodes --all --timeout=120s
+kubectl --context k3d-gpu -n kube-system get deployment/coredns
+kubectl --context k3d-gpu -n kube-system rollout status deployment/coredns --timeout=180s
+kubectl --context k3d-gpu -n kube-system get daemonset intel-dsa-plugin
+kubectl --context k3d-gpu -n kube-system get daemonset intel-iaa-plugin
+kubectl --context k3d-gpu -n kube-system get daemonset nri-resource-policy-balloons
+kubectl --context k3d-gpu -n kube-system rollout status daemonset/intel-dsa-plugin --timeout=120s
+kubectl --context k3d-gpu get nodes -o go-template={{range .items}}{{range $k, $v := .status.allocatable}}{{$k}} {{$v}}{{"\n"}}{{end}}{{end}}
+kubectl --context k3d-gpu -n kube-system rollout status daemonset/intel-iaa-plugin --timeout=120s
+kubectl --context k3d-gpu get nodes -o go-template={{range .items}}{{range $k, $v := .status.allocatable}}{{$k}} {{$v}}{{"\n"}}{{end}}{{end}}
+kubectl --context k3d-gpu get nodes -l feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true -o name
+kubectl --context k3d-gpu get nodes -l feature.node.kubernetes.io/cpu-cpuid.AMXCOMPLEX=true -o name
+kubectl --context k3d-gpu get nodes -l feature.node.kubernetes.io/cpu-cpuid.AMXFP16=true -o name
+kubectl --context k3d-gpu get nodes -l feature.node.kubernetes.io/cpu-cpuid.AMXINT8=true -o name
+kubectl --context k3d-gpu get nodes -l feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true -o name
+kubectl --context k3d-gpu -n kube-system rollout status daemonset/nri-resource-policy-balloons --timeout=120s
+kubectl --context k3d-gpu get nodes -l k3d-gpu.io/numa-nodes=6 -o name
+kubectl --context k3d-gpu get nodes -l k3d-gpu.io/snc=3 -o name

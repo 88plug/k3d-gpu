@@ -43,7 +43,7 @@ class ExportArgsTest(unittest.TestCase):
     def test_grid_gates_fail_the_export_before_the_rename(self):
         with open(SCRIPT) as f:
             text = f.read()
-        self.assertIn('qat_grid.py" gate "$1" "$2" --max-skip "${QAT_MAX_SKIP:-0.02}"', text)
+        self.assertIn('"${V}/bin/python" "${HERE}/qat_grid.py" gate "$1" "$2" --max-skip "${QAT_MAX_SKIP:-0.02}"', text)
         self.assertIn('gate "${OUT}.partial/grid-${b}-export.json" matched || {', text)
         self.assertIn('gate "${OUT}.partial/snap-${b}.json" snapped || {', text)
         self.assertIn('[ "${matched_any}" = 1 ] || { echo "QAT grid: no model file matched the checkpoint"; exit 4; }', text)

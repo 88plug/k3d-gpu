@@ -8,6 +8,8 @@
 # `timeout -k 30 4500`. MODE: perf | quality. Records: ${G}/results/H57d/hold<HOLD>/.
 #   G     campaign dir (default ~/k3dgpu-h57d), models under G/models
 #   LOCK  the host lock file;  SUDO_ASKPASS  for energy.sh's RAPL reader
+#   H57D_PREFIX  cluster prefix (default k3dgpu-d-);  H57D_LOAD1_MAX  hold-start load1 (default 24);
+#   H57D_ROW  results row name (default H57d): another host's replication (H57w on wildct)
 set -uo pipefail
 HOLD=$1 MODE=$2
 shift 2
@@ -15,20 +17,21 @@ G=${G:-${HOME}/k3dgpu-h57d}
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO=$(cd "${HERE}/../.." && pwd)
 export REPO G MODE
-case ${HOLD} in smoke*) R=${G}/smoke/${HOLD} ;; *) R=${G}/results/H57d/hold${HOLD} ;; esac
+PREFIX=${H57D_PREFIX:-k3dgpu-d-} L1MAX=${H57D_LOAD1_MAX:-24}
+case ${HOLD} in smoke*) R=${G}/smoke/${HOLD} ;; *) R=${G}/results/${H57D_ROW:-H57d}/hold${HOLD} ;; esac
 mkdir -p "${R}" "${G}/results"
 if [ $# -eq 0 ]; then
     read -r -a ARMS_RUN <<< "$(python3 "${HERE}/h57d.py" arms | python3 -c 'import json,sys; o=json.load(sys.stdin)["orders"]; print(" ".join(o[sys.argv[1]]))' "${HOLD}")"
 else
     ARMS_RUN=("$@")
 fi
-export PATH=${G}/bin:${PATH} CLUSTER=k3dgpu-d-h57d-${HOLD//[^a-z0-9]/} KUBECONFIG=${R}/kubeconfig
+export H57D_PREFIX=${PREFIX} PATH=${G}/bin:${PATH} CLUSTER=${PREFIX}h57d-${HOLD//[^a-z0-9]/} KUBECONFIG=${R}/kubeconfig
 log() { echo "== H57d-hold${HOLD} $* $(date -u +%FT%TZ)" | tee -a "${G}/results/campaign.log"; }
 free_gb() { df -P -B1G / | awk 'NR==2 {print $4}'; }
 memavail_gib() { awk '/MemAvailable/{print int($2/1048576)}' /proc/meminfo; }
 snapshot() { date -u +%FT%TZ; uptime; free -m; ps -eo pcpu,pid,user,comm --sort=-pcpu | head -11; df -P / "$(readlink -f "${G}")" | tail -2; }
-# This campaign's clusters only (k3dgpu-d-*).
-mine() { k3d cluster list -o json 2>/dev/null | python3 -c 'import json,sys; print(" ".join(c["name"] for c in json.load(sys.stdin) if c["name"].startswith("k3dgpu-d-")))'; }
+# This campaign's clusters only (${PREFIX}*).
+mine() { k3d cluster list -o json 2>/dev/null | python3 -c 'import json,sys; print(" ".join(c["name"] for c in json.load(sys.stdin) if c["name"].startswith(sys.argv[1])))' "${PREFIX}"; }
 
 log "waiting for the lock (mode ${MODE}, arms: ${ARMS_RUN[*]})"
 exec 9> "${LOCK:?}"
@@ -37,7 +40,7 @@ log "lock taken"
 waited=0
 while :; do
     l1=$(cut -d' ' -f1 /proc/loadavg)
-    if awk -v l="${l1}" 'BEGIN {exit !(l > 24)}'; then
+    if awk -v l="${l1}" -v m="${L1MAX}" 'BEGIN {exit !(l > m)}'; then
         if [ "${waited}" -ge 3600 ]; then log "FLAGGED: load1 ${l1} after 60 min"; echo "load1 ${l1}" > "${R}/flagged"; break; fi
         log "busy (load1 ${l1}): waiting 120 s"
         sleep 120

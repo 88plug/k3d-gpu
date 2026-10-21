@@ -3,7 +3,8 @@
 #
 # Untrusted agent tool execution runs on E-cores: the pod label k3d-gpu.io/cores=efficient
 # puts every sandbox in the NRI balloons "efficient" balloon on hybrid hosts (k3d-gpu up
-# deploys it), so the P-cores stay free for inference. The CPU request sizes the balloon.
+# deploys it), apart from P-core inference. That is placement, not isolation: package
+# power, LLC and DRAM bandwidth stay shared (EXPERIMENTS.md H3). The CPU request sizes the balloon.
 # On a non-hybrid host the label does nothing and sandboxes use any CPU.
 #
 # Runtime: plain runc. agent-sandbox delegates isolation to a RuntimeClass (gVisor, Kata);

@@ -1,0 +1,14 @@
+2026-10-21T08:18:04Z B1g start (2341 s of the hold left)
+2026-10-21T08:21:43Z B1g ready after 219 s
+2026-10-21T08:28:21Z B1g quality
+2026-10-21T08:28:21Z B1g status measured: phases and quality recorded
+2026-10-21T08:28:32Z Lg start (1713 s of the hold left)
+2026-10-21T08:29:06Z Lg ready after 34 s
+2026-10-21T08:36:57Z Lg quality
+2026-10-21T08:40:43Z Lg status measured: phases and quality recorded
+2026-10-21T08:41:00Z Lg-mtp start (965 s of the hold left)
+2026-10-21T08:41:44Z Lg-mtp ready after 44 s
+2026-10-21T08:48:08Z Lg-mtp quality
+2026-10-21T08:50:14Z Lg-mtp status measured: phases and quality recorded
+2026-10-21T08:50:30Z A1g status not_reached: 395 s of the hold left (< 900)
+2026-10-21T08:50:30Z A1o status not_reached: 395 s of the hold left (< 900)

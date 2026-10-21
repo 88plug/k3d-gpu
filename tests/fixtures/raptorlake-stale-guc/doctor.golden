@@ -32,4 +32,8 @@
 ERROR: One or more checks failed.
 exit=1
 --- calls
+k3d cluster get gpu
+  
+k3d kubeconfig get gpu
+  
 kubectl --context k3d-gpu --request-timeout=5s get nodes -o name

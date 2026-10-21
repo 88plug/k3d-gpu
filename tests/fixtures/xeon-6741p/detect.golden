@@ -1,0 +1,3 @@
+WARN: present but disabled: DSA dsa0 dsa2 dsa4, IAA iax1 iax3 iax5, QAT 0000:6a:00.1 0000:8a:00.1 0000:aa:00.1 (no user work queues / VFs), so not in the cluster — enable them: k3d-gpu host-setup --apply, then k3d-gpu down && k3d-gpu up (exact commands: k3d-gpu doctor)
+amx feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true feature.node.kubernetes.io/cpu-cpuid.AMXFP16=true feature.node.kubernetes.io/cpu-cpuid.AMXINT8=true feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true
+exit=0

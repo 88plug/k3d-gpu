@@ -69,6 +69,12 @@ k3d-gpu down            # delete the cluster
 k3d-gpu help            # every command: also remote, plan --predict, tune, capacity, bench, model-share
 ```
 
+Each cluster has its own kubeconfig, `${K3D_GPU_STATE_DIR}/kubeconfig-<cluster>` (default state dir
+`~/.local/state/k3d-gpu`), and the launcher names the cluster's context on every kubectl call, so concurrent `up`s of different
+clusters never reach each other's. `up` leaves `~/.kube/config` alone: bare `kubectl` after `up`
+needs the `export KUBECONFIG=…` line it prints, or `K3D_GPU_MERGE_KUBECONFIG=1` to merge the
+context into `~/.kube/config` (current-context unchanged).
+
 ### Install
 
 Every package installs the same payload: the launcher at `bin/k3d-gpu`, the MCP server at `bin/k3d-gpu-mcp`,
@@ -136,7 +142,7 @@ Behaviour is tunable via environment variables:
 | `K3D_GPU_CLUSTER`    | `gpu`                                     | cluster name                         |
 | `K3D_GPU_IMAGE`      | `cryptoandcoffee/k3d-gpu:<launcher version>` | node image built from the same release (ubuntu26.04); see [Upgrading](#upgrading) |
 | `K3D_GPU_SHARE`      | `/usr/share/k3d-gpu`                      | dir of fallback plugin manifests     |
-| `K3D_GPU_VENDORS`    | `auto`                                    | `auto` detects; or a list of `nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa,wsl` |
+| `K3D_GPU_VENDORS`    | `auto`                                    | `auto` detects; `auto,-nvidia,-intel` detects all but those; or a list of `nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa,wsl` |
 | `K3D_GPU_NODE_LABELS` | none                                    | extra node labels, comma list of `key=value` (e.g. `ei-infra-eligible=true,ei-inference-eligible=true`) |
 | `K3D_GPU_K3S_ARGS`   | none                                      | extra k3s server flags, space-separated (e.g. `--disable=servicelb`) |
 | `K3D_GPU_PLUGIN`     | `/usr/share/k3d-gpu/nvidia-device-plugin.yml` | fallback manifest (only used if a custom image lacks the baked one) |
@@ -392,6 +398,11 @@ Tradeoffs when sharing is on:
   (`share/npu-embeddings.yml`) documents the rules.
 
 Force or limit vendors with `K3D_GPU_VENDORS=nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa,wsl`.
+To keep auto detection but leave some accelerators out of the cluster (GPUs that
+serve something else on a shared box, say), opt them out: `K3D_GPU_VENDORS=auto,-nvidia,-intel`
+(`-nvidia,-intel` alone means the same). An opted-out or unlisted vendor gets no
+device plugin: with no `intel` vendor, `up` disables both baked Intel GPU stacks,
+so nothing opens the host's `/dev/dri`.
 A loaded `nvidia` or `habanalabs` kernel module counts as present even before
 its device nodes appear; `doctor` then flags the missing nodes.
 
@@ -416,6 +427,43 @@ waitboost count. Each finding names the file it came from
 and cites its source; each suggestion prints a one-line apply command and the
 command that restores the value it found. It never writes to the host, and it
 exits 0 — the suggestions are advice, not failures.
+
+`k3d-gpu doctor --perf --bandwidth` is the one measuring step: it builds STREAM
+(`jeffhammond/STREAM` at a pinned commit, source checked by sha256) with
+`-O3 -march=native -fopenmp`, runs it with one thread per physical core and
+arrays four times the last-level cache, and caches the best Triad, with the CPU
+model and MemTotal it ran on, in `~/.local/state/k3d-gpu/bandwidth.json`. It
+takes about a minute and changes no host setting.
+
+### Bandwidth ceiling for a model (`plan --predict --model`)
+
+`k3d-gpu plan --predict --model ID[@REV]|DIR|FILE.gguf` predicts the batch-1
+decode ceiling of one model on this host: bandwidth divided by the weight bytes
+one token reads. Parameter counts come from the model's `config.json` (hidden
+sizes, heads, layer types, `num_experts` and `num_experts_per_tok` or their
+aliases); for a mixture of experts only `top_k / num_experts` of the expert
+weights count per token. A `.gguf` file is read from its tensor table instead,
+which gives exact bytes per tensor. `--format` sets the bytes per parameter
+(`bf16`, `fp8`, `w4a16-g128`, `ov-int4-asym-g128`, `ov-int4-sym-g32`, `q4_0`,
+`q4_k_m`, ...); without it the format comes from `openvino_config.json`, the
+config's `quantization_config`, or its dtype. A Hugging Face id is fetched as
+`config.json` only (cached when the revision is a commit sha).
+
+It prints one row per placement that fits: all on the CPU, all on one Intel GPU,
+tensor parallel over several, and, for a GGUF MoE, experts on the CPU with the
+rest on a GPU (`llama.cpp -ngl 99 -ot exps=CPU`), which adds both memory terms
+and a per-layer hop latency (`--hop-us`, assumed). Each row names the engine
+that serves that container on that device (OVMS for OpenVINO IR, llm-scaler-vLLM
+on Arc, vLLM or SGLang on the CPU, llama.cpp for GGUF). Every bandwidth is
+labelled: DRAM is `measured` when this host's `doctor --perf --bandwidth` cache
+exists, else `theoretical` from SMBIOS type 17 (populated channels times MT/s
+times 8 B, readable as root), or `given` with `--dram-gbs`; GPU VRAM size comes
+from the BAR and its bandwidth from the device's spec sheet. `--json` prints the
+same as `k3d-gpu.moe-predict/v1`.
+
+It is a predictor: it has no compute, KV-cache or kernel-efficiency term and does
+not model speculative decoding. How close a measurement comes to it is what
+EXPERIMENTS.md H54c tests.
 
 ### Xeon built-in accelerators
 
@@ -819,7 +867,7 @@ is deleted.
 | `K3D_GPU_AGENT_DEVICE` | `auto` | `auto`: a Gaudi, else the GPU only on an XMX node, else CPU. `CPU`, `GPU`, `NPU` or `HPU` (any case) to force one; forcing a device the cluster does not advertise, or an Intel GPU the firmware gatekeeper refuses, fails |
 | `K3D_GPU_AGENT_MODEL` | `OpenVINO/Qwen3-4B-int4-ov` | Hugging Face model in OpenVINO IR format |
 | `K3D_GPU_AGENT_MODEL_NAME` | last part of the model id | name clients send as `model` |
-| `K3D_GPU_AGENT_DRAFT` | unset | OVMS Fast Draft speculative decoding. Unset: a CPU target serving an OpenVINO Qwen3 model drafts with `OpenVINO/Qwen3-0.6B-int4-ov` on the CPU (1.39x decode tok/s, 0.75x package J/token on an i9-13900T under matched background load [ledger:H34]); any other target has no draft. `off` disables it; `auto` drafts on the target's device; `CPU`, `GPU` or `NPU` name the draft device |
+| `K3D_GPU_AGENT_DRAFT` | unset | OVMS Fast Draft speculative decoding. Unset: a CPU target serving an OpenVINO Qwen3 model drafts with `OpenVINO/Qwen3-0.6B-int4-ov` on the CPU when an `EXPERIMENTS.md` row of the H34 family measured a win on that CPU class, as on the i9-13900T (1.39x decode tok/s, 0.75x package J/token under matched background load [ledger:H34]). A class that a replication refutes (H34x, the Xeon 6741P), or that no row names, gets no draft, and `agent up` names the row that decided. Any other target has no draft. `off` disables it; `auto` drafts on the target's device; `CPU`, `GPU` or `NPU` name the draft device |
 | `K3D_GPU_AGENT_DRAFT_MODEL` | `OpenVINO/Qwen3-0.6B-int4-ov` | draft model; a non-default draft model is used only with an explicit `K3D_GPU_AGENT_DRAFT` |
 | `K3D_GPU_AGENT_TOOL_PARSER` / `_REASONING_PARSER` | `hermes3` / `qwen3` for the default model, unset otherwise | unset lets OVMS detect them from the chat template; empty turns one off |
 | `K3D_GPU_AGENT_CPUS` | see above | CPU request (balloon size on hybrid nodes) |
@@ -829,6 +877,65 @@ is deleted.
 | `K3D_GPU_AGENT_LOG_LEVEL` | `INFO` | `DEBUG` also logs the compiled model's execution device (and every request) |
 | `K3D_GPU_AGENT_IMAGE` | `openvino/model_server@sha256:a928…fc58` (2026.4.1-gpu) | server image |
 | `K3D_GPU_AGENT_BACKEND` | `ovms` (`vllm` on a Gaudi) | `ovms`, `vllm` or `llm-scaler` (see below) |
+
+#### Any Hugging Face model: `agent up --model`
+
+`k3d-gpu agent up --model <org/name>` serves any Hugging Face model with no other
+flag. The engine and device are picked as above. The model optimizer
+(`console/model_opt.py`) then reads the model's public Hugging Face metadata and
+that of every variant the trusted orgs publish of it, found by name and by
+`base_model` link, each at the commit Hugging Face resolved. It sets:
+
+- **Variant.** Official first: the model's author, `Intel/` (AutoRound included)
+  and `OpenVINO/`. Then `RedHatAI/`, then `88plug/` or a self-built conversion. For
+  an int4 target a QAT checkpoint wins within its tier. A lower-ranked variant is
+  served only when a measurement says it is faster at equal-or-better quality on
+  this hardware class: a SUPPORTED `EXPERIMENTS.md` row naming the class, or a row
+  in `~/.cache/k3d-gpu/variant-measurements.json`. NVFP4/MXFP4 are never served on
+  an Intel device. OVMS serves an OpenVINO IR and vLLM a safetensors checkpoint.
+  vLLM is pinned to the variant's commit.
+- **QAT.** A model with unquantized QAT weights (Gemma 4 `-qat-q4_0-unquantized`,
+  for Q4_0: symmetric int4, blocks of 32) also gets a self-built candidate: an
+  OpenVINO IR at INT4_SYM group 32, made by a pinned one-time conversion
+  (`console/convert-pins.json`, moved nightly to the newest compatible releases).
+  It ranks below the official IR until H54q measures it, and
+  `K3D_GPU_AGENT_VARIANT=qat-convert` forces it. `plan --explain` prints the
+  commands. A QAT target only takes a QAT drafter, as the model card requires.
+- **Speculative decoding.** It uses the engine's documented method and stays inside
+  that engine's limits. vLLM uses a built-in MTP head (`{"method":"mtp"}`) or an
+  official `-assistant` drafter. OVMS uses a bundled `openvino_mtp_model.xml`, but
+  OVMS MTP needs prefix caching off and greedy decoding. Prefix reuse is measured
+  ([ledger:H25]), so MTP stays off unless `K3D_GPU_AGENT_DRAFT=mtp`. A Gaudi has no
+  speculative decoding by default: vllm-gaudi marks it experimental with
+  torch.compile.
+- **Thinking.** It is off for agent workloads (`K3D_GPU_AGENT_THINKING=on|off|model`).
+  vLLM gets `--default-chat-template-kwargs`. A Qwen3.8-style template also gets the
+  `reasoning_effort` value that injects no system prompt. OVMS has no server-side
+  default, so clients send `chat_template_kwargs`. With thinking off, vLLM gets the
+  card's non-thinking sampling through `--override-generation-config`.
+- **Parsers and text-only load.** Tool and reasoning parsers are set by model
+  family. A vision model is served text-only on vLLM (`--language-model-only`).
+- **Unsupported models.** An architecture the engine does not run on Intel devices
+  is refused with the reason, for example Qwen3.8-Flash-Next (`qwen4_exp`) on vLLM
+  and OVMS. So is a model with no variant the engine can serve. Each keeps the
+  engine's default model with one line.
+
+`k3d-gpu plan --model <org/name> --explain` prints every choice as
+`fact -> choice [source]`, with the variant ranking. Its first line is a one-line
+summary. With no network the optimizer uses a small built-in map of known-good
+variants; `tests/console/test_model_opt.py` checks the map against the saved
+metadata. Metadata is cached for a day under `~/.cache/k3d-gpu/hf`. Without
+`--model` nothing changes.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `K3D_GPU_AGENT_VARIANT` | the ranked pick | serve this variant id, or `qat-convert` |
+| `K3D_GPU_AGENT_THINKING` | `off` | `on`, `off`, or `model` (the chat template's own default) |
+| `K3D_GPU_AGENT_PRECISION` | `bf16` | vLLM only: `int4` serves the best-ranked int4 checkpoint |
+| `K3D_GPU_AGENT_DRAFT` | the optimizer's choice | `off` disables speculative decoding, `mtp` forces an MTP head or drafter |
+| `K3D_GPU_MODEL_OPT` | `auto` | `off` serves `--model` exactly as given |
+| `K3D_GPU_HF_FIXTURES` | unset | directory of saved metadata bundles to read instead of Hugging Face |
+| `K3D_GPU_MODEL_OPT_LEDGER` | the checkout's `EXPERIMENTS.md`, else the packaged `console/ledger-rules.json` | ledger read for promotions and for the per-CPU-class Fast Draft and autoquant defaults; packages ship `console/ledger-rules.json`, the H27/H34 rows generated from `EXPERIMENTS.md` (CI fails when it drifts) |
 
 #### vLLM backends for discrete Arc (Battlemage)
 
@@ -978,7 +1085,7 @@ kubectl -n k3d-gpu-agent port-forward svc/open-webui 8080:8080   # open http://l
 | Setting | Value |
 |---------|-------|
 | Connection | `OPENAI_API_BASE_URL=http://ovms.k3d-gpu-agent.svc:8000/v3` — OVMS serves the OpenAI API under `/v3`, not `/v1`. Open WebUI lists the models from `/v3/models`; `DEFAULT_MODELS=Qwen3-4B-int4-ov`. Ollama is off. |
-| Placement | pod label `k3d-gpu.io/cores=efficient`, 1 CPU request: on a hybrid CPU the UI runs on E-cores and leaves the P-cores to inference. No effect on other hosts. |
+| Placement | pod label `k3d-gpu.io/cores=efficient`, 1 CPU request: on a hybrid CPU the UI runs on E-cores, apart from the P-cores that serve inference. That is placement, not isolation: package power, LLC and DRAM bandwidth stay shared [ledger:H3]. No effect on other hosts. |
 | Storage | PVC `open-webui-data` (2Gi, `local-path`) at `/data` (`DATA_DIR`): users, chats, settings, uploads and the session key. |
 
 Security:
@@ -1373,7 +1480,9 @@ not switch the Intel GPU path.
 v1.0.7 (controller image pinned by digest) and a `python-ecores` SandboxTemplate
 plus a one-replica warm pool in namespace `agent-sandbox`. Sandbox pods carry
 `k3d-gpu.io/cores: efficient` and request one CPU, so on a hybrid host untrusted
-agent tool execution runs on E-cores and the P-cores stay free for inference.
+agent tool execution runs on E-cores, apart from the P-cores that serve inference.
+That is placement, not isolation: package power, LLC and DRAM bandwidth stay shared,
+and E-core load still slowed CPU-served prefill on the P-cores [ledger:H3].
 `up` waits for a warm sandbox, then runs `status`, which reads each sandbox's
 `Cpus_allowed_list` and fails if it is not inside the host's E-cores.
 `k3d-gpu sandbox down` removes it all.

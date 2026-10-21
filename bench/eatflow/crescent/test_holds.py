@@ -49,6 +49,30 @@ class Check(unittest.TestCase):
         rep, rc = H.check(self.log)
         self.assertEqual((rep["void"], rc), ([], 0))
 
+    def test_distinct_slots_overlap_no_void(self):
+        # H56 W: one hold per cpuset slice at once; holds in different slots do not void each other.
+        a, b = self.ev("start", "a", 1), self.ev("start", "b", 2)
+        a["slot"], b["slot"] = "0", "1"
+        self.write(a, b, self.ev("end", "a", 3), self.ev("end", "b", 4))
+        rep, rc = H.check(self.log)
+        self.assertEqual((rep["void"], rc), ([], 0))
+
+    def test_same_slot_or_legacy_overlap_voids(self):
+        a, b, c = self.ev("start", "a", 1), self.ev("start", "b", 2), self.ev("start", "c", 5)
+        a["slot"], b["slot"] = "0", "0"
+        self.write(a, b, self.ev("end", "a", 3), self.ev("end", "b", 4), c, self.ev("start", "d", 6),
+                   self.ev("end", "c", 7), self.ev("end", "d", 8))
+        rep, rc = H.check(self.log)
+        self.assertEqual((rep["void"], rc), (["a", "b", "c", "d"], 1))
+
+    def test_slot_hold_overlapping_legacy_voids(self):
+        # A legacy hold owns the whole host, so any overlap with it voids.
+        a = self.ev("start", "a", 1)
+        a["slot"] = "1"
+        self.write(a, self.ev("start", "b", 2), self.ev("end", "a", 3), self.ev("end", "b", 4))
+        rep, rc = H.check(self.log)
+        self.assertEqual((rep["void"], rc), (["a", "b"], 1))
+
     def test_unterminated_voids_later_hold(self):
         self.write(self.ev("start", "a", 1), self.ev("start", "b", 5), self.ev("end", "b", 6),
                    self.ev("start", "c", 7), self.ev("end", "c", 8))

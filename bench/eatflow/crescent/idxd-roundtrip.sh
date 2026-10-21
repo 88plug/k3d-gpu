@@ -29,8 +29,12 @@ if [ ! -x "${P}/usr/bin/accel-config" ]; then
 fi
 sha256sum "${B}"/opt/debs/*.deb > "${OUT}/debs.sha256"
 AC=(sudo -n env "LD_LIBRARY_PATH=${P}/usr/lib/x86_64-linux-gnu" "${P}/usr/bin/accel-config")
+# The package version is the pin. Ubuntu's 4.1.9-2 build prints "4.1.8+" for --version (its
+# version string comes from the source tree's git describe), so that output is recorded, not checked.
 "${AC[@]}" --version > "${OUT}/accel-config-version.txt"
-grep -q '^4\.1\.9' "${OUT}/accel-config-version.txt" || { echo "accel-config is not 4.1.9"; exit 2; }
+for d in "${B}"/opt/debs/*accel-config*_"${VER}"_amd64.deb; do
+    [ "$(dpkg-deb -f "${d}" Version)" = "${VER}" ] || { echo "${d} is not ${VER}"; exit 2; }
+done
 
 # zswap holds the IAA device while its compressor is deflate-iaa (scripts/k3d-gpu refuses too).
 zs=$(cat /sys/module/zswap/parameters/compressor 2>/dev/null || true)
@@ -50,7 +54,7 @@ snapshot() {    # snapshot TAG
             [ -f "${a}" ] && [ -r "${a}" ] || continue
             printf '%s/%s=%s\n' "${o##*/}" "${a##*/}" "$(tr '\n' ' ' < "${a}" 2>/dev/null || echo '<unreadable>')"
         done
-        [ -L "${o}/driver" ] && printf '%s/driver->%s\n' "${o##*/}" "$(basename "$(readlink "${o}/driver")")"
+        if [ -L "${o}/driver" ]; then printf '%s/driver->%s\n' "${o##*/}" "$(basename "$(readlink "${o}/driver")")"; fi
     done | LC_ALL=C sort > "${OUT}/$1-sysfs.txt"
     awk '/^name/ {p = 0} /^driver *: deflate-iaa/ {p = 1} p' /proc/crypto > "${OUT}/$1-crypto.txt"
     lsmod | awk '$1 == "iaa_crypto" || $1 == "idxd"' > "${OUT}/$1-lsmod.txt"

@@ -1,0 +1,76 @@
+{
+ "holds": [
+  {
+   "name": "wrapper-selftest",
+   "rc": "0",
+   "ended": "rc",
+   "lock_wait_s": 0,
+   "wait_behind_x_s": 0,
+   "hold_s": 31,
+   "gate_wait_s": null
+  },
+  {
+   "name": "H52",
+   "rc": "0",
+   "ended": "rc",
+   "lock_wait_s": 0,
+   "wait_behind_x_s": 0,
+   "hold_s": 191,
+   "gate_wait_s": 0
+  },
+  {
+   "name": "H50-smoke1",
+   "rc": "3",
+   "ended": "rc",
+   "lock_wait_s": 0,
+   "wait_behind_x_s": 0,
+   "hold_s": 603,
+   "gate_wait_s": 0
+  },
+  {
+   "name": "H50-smoke2",
+   "rc": "0",
+   "ended": "rc",
+   "lock_wait_s": 655,
+   "wait_behind_x_s": 644,
+   "hold_s": 482,
+   "gate_wait_s": 0
+  }
+ ],
+ "xlog": "/home/devcloud/k3dgpu-xhost/runs/campaign.log",
+ "xlog_found": true,
+ "unterminated": 0,
+ "sum_lock_wait_s": 655,
+ "sum_wait_behind_x_s": 644,
+ "sum_gate_wait_s": 0,
+ "sum_hold_s": 1307,
+ "share": 0.0084,
+ "share_all": 0.5011,
+ "last": 4,
+ "share_last": 0.0084,
+ "by_row": {
+  "H50": {
+   "holds": 2,
+   "sum_lock_wait_s": 655,
+   "sum_hold_s": 1085,
+   "share": 0.0101,
+   "share_all": 0.6037
+  },
+  "H52": {
+   "holds": 1,
+   "sum_lock_wait_s": 0,
+   "sum_hold_s": 191,
+   "share": 0.0,
+   "share_all": 0.0
+  },
+  "wrapper": {
+   "holds": 1,
+   "sum_lock_wait_s": 0,
+   "sum_hold_s": 31,
+   "share": 0.0,
+   "share_all": 0.0
+  }
+ },
+ "stage1": false,
+ "adoption_share_met": false
+}

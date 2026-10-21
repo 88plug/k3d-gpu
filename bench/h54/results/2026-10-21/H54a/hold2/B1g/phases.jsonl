@@ -1,0 +1,5 @@
+{"phase": "n1", "try": 1, "t0": 1792574119.697781715, "t1": 1792574462.485884762, "w0": 1792574017.279248467, "w1": 1792574077.325206454, "check": {"void": false, "reason": "non-campaign CPU idle window 2.47 CPU-s/s; phase 2.66"}}
+{"phase": "n4", "try": 1, "t0": 1792574462.550715628, "t1": 1792574462.663222109, "w0": 1792574017.279248467, "w1": 1792574077.325206454, "check": {"void": false, "reason": "non-campaign CPU idle window 2.47 CPU-s/s"}}
+{"phase": "n16", "try": 1, "t0": 1792574462.726638520, "t1": 1792574462.839104833, "w0": 1792574017.279248467, "w1": 1792574077.325206454, "check": {"void": false, "reason": "non-campaign CPU idle window 2.47 CPU-s/s"}}
+{"phase": "ttft", "try": 1, "t0": 1792574462.905052659, "t1": 1792574463.009871936, "w0": 1792574017.279248467, "w1": 1792574077.325206454, "check": {"void": false, "reason": "non-campaign CPU idle window 2.47 CPU-s/s"}}
+{"phase": "quality", "t0": 1792574463.077219593, "t1": 1792574463.167779754, "check": {"void": false, "reason": "non-campaign CPU idle window 2.47 CPU-s/s"}}

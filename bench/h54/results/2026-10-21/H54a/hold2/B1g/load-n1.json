@@ -1,0 +1,197 @@
+{
+  "tool": "k3d-gpu/bench/llm_load.py",
+  "schema": 1,
+  "started_at": "2026-10-21T09:15:19Z",
+  "config": {
+    "base_url": "http://127.0.0.1:18382/v1",
+    "model": "google/gemma-4-26B-A4B-it",
+    "prompt": "Explain in three short paragraphs how a CPU cache hierarchy reduces memory latency, and what a cache miss costs.",
+    "max_tokens": 256,
+    "temperature": 0.0,
+    "ignore_eos": true,
+    "extra_body": null,
+    "unique_prompts": true,
+    "requests": 8,
+    "concurrency": "1",
+    "warmup": 0,
+    "timeout": 1800.0,
+    "label": "H54a B1g n1",
+    "out": "/home/devcloud/k3dgpu-gemma/results/H54a/hold2/B1g/load-n1.json",
+    "run_id": "9909290a"
+  },
+  "phases": [
+    {
+      "concurrency": 1,
+      "requests": 8,
+      "ok": 3,
+      "errors": 5,
+      "wall_s": 342.68140997504815,
+      "output_tokens_total": 512,
+      "aggregate_tokens_per_s": 1.4940991401817814,
+      "requests_per_s": 0.008754487149502626,
+      "stats": {
+        "first_chunk_s": {
+          "n": 3,
+          "median": 0.2033844469115138,
+          "p90": 0.20605790009722114,
+          "min": 0.18736421363428235,
+          "max": 0.20605790009722114
+        },
+        "ttft_s": {
+          "n": 3,
+          "median": 0.20344148762524128,
+          "p90": 0.20612448314204812,
+          "min": 0.1874278448522091,
+          "max": 0.20612448314204812
+        },
+        "latency_s": {
+          "n": 3,
+          "median": 14.435446164570749,
+          "p90": 314.0007076859474,
+          "min": 14.221372189000249,
+          "max": 314.0007076859474
+        },
+        "output_tokens": {
+          "n": 2,
+          "median": 256.0,
+          "p90": 256,
+          "min": 256,
+          "max": 256
+        },
+        "tokens_per_s": {
+          "n": 2,
+          "median": 17.86760021127287,
+          "p90": 18.00107588760017,
+          "min": 17.73412453494557,
+          "max": 18.00107588760017
+        },
+        "decode_tokens_per_s": {
+          "n": 2,
+          "median": 18.04379683354142,
+          "p90": 18.170230246518788,
+          "min": 17.917363420564055,
+          "max": 18.170230246518788
+        }
+      },
+      "samples": [
+        {
+          "index": 0,
+          "ok": true,
+          "error": null,
+          "chunks": 258,
+          "content_chunks": 256,
+          "text_chars": 1268,
+          "first_chunk_s": 0.2033844469115138,
+          "ttft_s": 0.20344148762524128,
+          "latency_s": 14.435446164570749,
+          "output_tokens": 256,
+          "tokens_per_s": 17.73412453494557,
+          "decode_tokens_per_s": 17.917363420564055,
+          "prompt_tokens": 48,
+          "finished": true
+        },
+        {
+          "index": 1,
+          "ok": true,
+          "error": null,
+          "chunks": 258,
+          "content_chunks": 256,
+          "text_chars": 1280,
+          "first_chunk_s": 0.18736421363428235,
+          "ttft_s": 0.1874278448522091,
+          "latency_s": 14.221372189000249,
+          "output_tokens": 256,
+          "tokens_per_s": 18.00107588760017,
+          "decode_tokens_per_s": 18.170230246518788,
+          "prompt_tokens": 48,
+          "finished": true
+        },
+        {
+          "index": 2,
+          "ok": true,
+          "error": null,
+          "chunks": 254,
+          "content_chunks": 252,
+          "text_chars": 1187,
+          "first_chunk_s": 0.20605790009722114,
+          "ttft_s": 0.20612448314204812,
+          "latency_s": 314.0007076859474,
+          "output_tokens": null,
+          "tokens_per_s": null,
+          "decode_tokens_per_s": null,
+          "finished": true
+        },
+        {
+          "index": 3,
+          "ok": false,
+          "error": "HTTP 500: {\"error\":{\"message\":\"EngineCore encountered an issue. See stack trace (above) for the root cause.\",\"type\":\"InternalServerError\",\"param\":null,\"code\":500}}",
+          "chunks": 0,
+          "content_chunks": 0,
+          "text_chars": 0,
+          "first_chunk_s": null,
+          "ttft_s": null,
+          "latency_s": null,
+          "output_tokens": null,
+          "tokens_per_s": null,
+          "decode_tokens_per_s": null
+        },
+        {
+          "index": 4,
+          "ok": false,
+          "error": "HTTP 500: {\"error\":{\"message\":\"EngineCore encountered an issue. See stack trace (above) for the root cause.\",\"type\":\"InternalServerError\",\"param\":null,\"code\":500}}",
+          "chunks": 0,
+          "content_chunks": 0,
+          "text_chars": 0,
+          "first_chunk_s": null,
+          "ttft_s": null,
+          "latency_s": null,
+          "output_tokens": null,
+          "tokens_per_s": null,
+          "decode_tokens_per_s": null
+        },
+        {
+          "index": 5,
+          "ok": false,
+          "error": "HTTP 500: {\"error\":{\"message\":\"EngineCore encountered an issue. See stack trace (above) for the root cause.\",\"type\":\"InternalServerError\",\"param\":null,\"code\":500}}",
+          "chunks": 0,
+          "content_chunks": 0,
+          "text_chars": 0,
+          "first_chunk_s": null,
+          "ttft_s": null,
+          "latency_s": null,
+          "output_tokens": null,
+          "tokens_per_s": null,
+          "decode_tokens_per_s": null
+        },
+        {
+          "index": 6,
+          "ok": false,
+          "error": "HTTP 500: {\"error\":{\"message\":\"EngineCore encountered an issue. See stack trace (above) for the root cause.\",\"type\":\"InternalServerError\",\"param\":null,\"code\":500}}",
+          "chunks": 0,
+          "content_chunks": 0,
+          "text_chars": 0,
+          "first_chunk_s": null,
+          "ttft_s": null,
+          "latency_s": null,
+          "output_tokens": null,
+          "tokens_per_s": null,
+          "decode_tokens_per_s": null
+        },
+        {
+          "index": 7,
+          "ok": false,
+          "error": "HTTP 500: {\"error\":{\"message\":\"EngineCore encountered an issue. See stack trace (above) for the root cause.\",\"type\":\"InternalServerError\",\"param\":null,\"code\":500}}",
+          "chunks": 0,
+          "content_chunks": 0,
+          "text_chars": 0,
+          "first_chunk_s": null,
+          "ttft_s": null,
+          "latency_s": null,
+          "output_tokens": null,
+          "tokens_per_s": null,
+          "decode_tokens_per_s": null
+        }
+      ]
+    }
+  ]
+}

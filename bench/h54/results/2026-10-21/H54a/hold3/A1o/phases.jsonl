@@ -1,0 +1,5 @@
+{"phase": "n1", "try": 1, "t0": 1792576706.298466334, "t1": 1792576804.808765685, "w0": 1792576608.869274862, "w1": 1792576668.916246176, "check": {"void": false, "reason": "non-campaign CPU idle window 2.58 CPU-s/s; phase 4.74"}}
+{"phase": "n4", "try": 1, "t0": 1792576804.873632366, "t1": 1792576953.047996372, "w0": 1792576608.869274862, "w1": 1792576668.916246176, "check": {"void": false, "reason": "non-campaign CPU idle window 2.58 CPU-s/s; phase 4.76"}}
+{"phase": "n16", "try": 1, "t0": 1792576953.111993087, "t1": 1792577086.242762831, "w0": 1792576608.869274862, "w1": 1792576668.916246176, "check": {"void": false, "reason": "non-campaign CPU idle window 2.58 CPU-s/s; phase 4.77"}}
+{"phase": "ttft", "try": 1, "t0": 1792577086.309227505, "t1": 1792577108.230752247, "w0": 1792576608.869274862, "w1": 1792576668.916246176, "check": {"void": false, "reason": "non-campaign CPU idle window 2.58 CPU-s/s; phase 4.83"}}
+{"phase": "quality", "t0": 1792577108.298499265, "t1": 1792577464.176901972, "check": {"void": false, "reason": "non-campaign CPU idle window 2.58 CPU-s/s; phase 4.78"}}

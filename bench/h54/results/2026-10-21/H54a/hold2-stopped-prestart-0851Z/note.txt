@@ -1,0 +1,1 @@
+Hold 2 started 2026-10-21T08:50:49Z and stopped by hand at 08:51:45Z while it waited on the hold-start rule (load1 29.48), before its cluster existed and before any request. Not counted as a hold (H54 amendment R4).

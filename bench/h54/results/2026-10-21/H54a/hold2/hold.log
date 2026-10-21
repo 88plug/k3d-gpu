@@ -1,0 +1,16 @@
+2026-10-21T09:08:27Z B1g start (2340 s of the hold left)
+2026-10-21T09:13:37Z B1g ready after 309 s
+2026-10-21T09:21:03Z B1g quality
+2026-10-21T09:21:03Z B1g status failed: server stopped answering: every quality item errored
+2026-10-21T09:21:14Z Lg start (1573 s of the hold left)
+2026-10-21T09:21:48Z Lg ready after 34 s
+2026-10-21T09:26:22Z Lg quality
+2026-10-21T09:30:06Z Lg status measured: phases and quality recorded
+2026-10-21T09:30:22Z Lg-mtp start (1025 s of the hold left)
+2026-10-21T09:31:06Z Lg-mtp ready after 44 s
+2026-10-21T09:34:56Z Lg-mtp quality
+2026-10-21T09:37:01Z Lg-mtp status measured: phases and quality recorded
+2026-10-21T09:37:17Z A1g status not_reached: 610 s of the hold left (< 900)
+2026-10-21T09:37:18Z A1o status not_reached: 609 s of the hold left (< 900)
+2026-10-21T09:37:18Z Vq status not_reached: 609 s of the hold left (< 900)
+2026-10-21T09:37:19Z Vq-mtp status not_reached: 608 s of the hold left (< 900)

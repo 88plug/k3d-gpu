@@ -38,5 +38,30 @@ else
     fail "share_kubeconform.sh does not cover every share/*.yml"
 fi
 
+# auto-release.yml: main and the tag move in one atomic push from a fresh main.
+AR="${ROOT}/.github/workflows/auto-release.yml" RC="${ROOT}/hack/release_cas.sh"
+if grep -qE '^\s*group: auto-release-' "${AR}" && grep -qE '^\s*cancel-in-progress: false' "${AR}"; then
+    ok "auto-release.yml has a concurrency group without cancel-in-progress"
+else
+    fail "auto-release.yml lacks concurrency group auto-release-* with cancel-in-progress: false"
+fi
+if grep -qE '^\s*ref: main' "${AR}"; then ok "auto-release.yml checks out main"; else fail "auto-release.yml does not check out ref: main"; fi
+if grep -qF 'hack/release_cas.sh' "${AR}" && ! grep -qE 'git push' "${AR}"; then
+    ok "auto-release.yml pushes only through hack/release_cas.sh"
+else
+    fail "auto-release.yml has an inline git push or does not run hack/release_cas.sh"
+fi
+if grep -E 'push --atomic' "${RC}" 2>/dev/null | grep -qF 'HEAD:refs/heads/main' \
+   && grep -E 'push --atomic' "${RC}" | grep -qF 'refs/tags/'; then
+    ok "release_cas.sh pushes main and the tag in one --atomic push"
+else
+    fail "release_cas.sh does not push HEAD:refs/heads/main and refs/tags/ in one --atomic push"
+fi
+if ! cat "${AR}" "${RC}" 2>/dev/null | grep -qF 'tracked files already at'; then
+    ok "no tag-HEAD fallback for a release commit without its tag"
+else
+    fail "the 'tracked files already at' tag-HEAD fallback is still present"
+fi
+
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]
