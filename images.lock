@@ -302,10 +302,17 @@
       "digest": "sha256:a8c8297c72744f25dbcf70fdb4a64bb787f428a3f9ab4dfabb0eb1377da0070f",
       "name": "ghcr.io/containers/nri-plugins/nri-resource-policy-balloons",
       "sources": [
-        "share/nri-balloons-guard.yml",
         "share/nri-balloons.yml"
       ],
       "tag": "v0.14.0"
+    },
+    {
+      "digest": "sha256:bacbef6f002f432b9fbe61ff0c583536da7ae816300ca82921ee697d759a1e80",
+      "name": "ghcr.io/containers/nri-plugins/nri-resource-policy-balloons",
+      "sources": [
+        "share/nri-balloons-guard.yml"
+      ],
+      "tag": "v0.15.0"
     },
     {
       "digest": "sha256:be586c648cb79d2cd75d0c38a6541e1f16c47a7c6621d3e711470a467fc38744",
