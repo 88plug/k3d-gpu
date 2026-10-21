@@ -39,14 +39,32 @@ class ActiveBytes(unittest.TestCase):
         self.assertEqual(a["bytes"], {"routed_experts": 51200, "lookup_tables": 6000, "rest": 1000})
         self.assertEqual(a["active_bytes"], 1000 + 1000)   # 51200 x 10 / 512 = 1000
 
+    def test_tied_output_reads_token_embd(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "g.gguf")
+            kv = {"general.architecture": "gemma4", "gemma4.expert_count": 128, "gemma4.expert_used_count": 8}
+            t = [("token_embd.weight", 0), ("blk.0.ffn_up_exps.weight", 1000), ("blk.0.attn_q.weight", 13800)]
+            write_gguf(p, kv, t, 14000)
+            a = h60.active_bytes([p])
+        self.assertTrue(a["tied_output"])
+        self.assertEqual(a["active_bytes"], 1000 + 200 + 12800 * 8 // 128)
 
-def run_dir(d, tps, gsm=40, void=False, psi=False, n=8):
-    json.dump({"active_bytes": 6_000_000_000}, open(os.path.join(d, "active-bytes.json"), "w"))
+
+def arm_dir(d, name, tps, void=False, n=8):
+    os.makedirs(os.path.join(d, name), exist_ok=True)
     s = [{"ok": True, "decode_tokens_per_s": t} for t in (tps * n)[:n]]
-    json.dump({"phases": [{"samples": s}]}, open(os.path.join(d, "load-n1.json"), "w"))
-    with open(os.path.join(d, "phases.jsonl"), "w") as f:
+    json.dump({"phases": [{"samples": s}]}, open(os.path.join(d, name, "load-n1.json"), "w"))
+    with open(os.path.join(d, name, "phases.jsonl"), "w") as f:
         f.write(json.dumps({"phase": "n1", "check": {"void": void, "reason": "x"}}) + "\n")
-    json.dump({"correct": gsm}, open(os.path.join(d, "quality.json"), "w"))
+
+
+def run_dir(d, tps, lg=None, gsm=40, void=False, psi=False, n=8, lg_n=8):
+    json.dump({"active_bytes": 6_000_000_000}, open(os.path.join(d, "active-bytes.json"), "w"))
+    arm_dir(d, "fn", tps, void, n)
+    json.dump({"correct": gsm}, open(os.path.join(d, "fn", "quality.json"), "w"))
+    if lg is not None:
+        json.dump({"active_bytes": 2_400_000_000}, open(os.path.join(d, "active-bytes-lg.json"), "w"))
+        arm_dir(d, "lg", lg, n=lg_n)
     if psi:
         open(os.path.join(d, "psi-abort"), "w").write("full avg10 9")
 
@@ -58,12 +76,28 @@ def score(**kw):
 
 
 class Rule(unittest.TestCase):
-    # ceiling = 305e9 / 6e9 = 50.83 tok/s; band 0.266-0.494 = 13.5-25.1 tok/s
-    def test_inside_band_supported(self):
-        self.assertEqual(score(tps=[17.0, 17.4, 16.8, 17.2])["verdict"], "SUPPORTED")
+    # fn ceiling 305e9 / 6e9 = 50.83 tok/s; lg ceiling 305e9 / 2.4e9 = 127.1 tok/s.
+    # Lg at 48 tok/s: e_lg 0.378; r band 0.7-1.3 -> fn 13.4-25.0 tok/s.
+    def test_control_ratio_inside_supported(self):
+        v = score(tps=[19.0, 19.2, 18.9, 19.1], lg=[48.0, 48.3, 47.9])
+        self.assertEqual((v["verdict"], v["stat"]), ("SUPPORTED", "e_fn / e_lg"))
 
-    def test_far_below_refuted(self):
-        self.assertEqual(score(tps=[6.0, 6.1, 5.9])["verdict"], "REFUTED")
+    def test_control_ratio_below_refuted(self):
+        self.assertEqual(score(tps=[8.0, 8.1, 7.9], lg=[48.0, 48.3])["verdict"], "REFUTED")
+
+    def test_control_moves_the_band(self):
+        # e_fn 0.22 is below H54's fixed band, but Lg ran slow in the same hold (e_lg 0.24): ratio 0.92
+        v = score(tps=[11.2, 11.3, 11.1], lg=[30.5, 30.6, 30.4])
+        self.assertEqual(v["verdict"], "SUPPORTED")
+
+    def test_without_control_fixed_band(self):
+        v = score(tps=[17.0, 17.4, 16.8, 17.2])
+        self.assertEqual((v["verdict"], v["stat"]), ("SUPPORTED", "e_fn"))
+        self.assertTrue(v["control"].startswith("H54 fixed"))
+
+    def test_short_control_falls_back(self):
+        v = score(tps=[17.0, 17.2], lg=[48.0], lg_n=5)
+        self.assertEqual(v["stat"], "e_fn")
 
     def test_far_above_refuted(self):
         self.assertEqual(score(tps=[30.0, 31.0])["verdict"], "REFUTED")
@@ -74,7 +108,7 @@ class Rule(unittest.TestCase):
     def test_quality_gate(self):
         v = score(tps=[17.0], gsm=20)
         self.assertEqual(v["verdict"], "INCONCLUSIVE")
-        self.assertIn("GSM8K", v["why"][0])
+        self.assertTrue(any("GSM8K" in w for w in v["why"]))
 
     def test_void_and_psi(self):
         self.assertEqual(score(tps=[17.0], void=True)["verdict"], "INCONCLUSIVE")

@@ -9,17 +9,20 @@ Bytes per token: every tensor is read once per token, except
   - lookup tables, of which a token reads a few rows (token_embd, per_layer_token_embd: the
     n-gram table; counted 0),
   - routed experts, of which a token reads expert_used_count / expert_count.
-The shared expert, attention, Gated DeltaNet, norms and the output head (output.weight) count in
-full. Bandwidth ceiling = STREAM triad / bytes per token. Efficiency = decode tok/s / ceiling.
+The shared expert, attention, Gated DeltaNet, norms and the output head count in full (with tied
+embeddings, no output.weight, token_embd is the output head and counts in full). Bandwidth ceiling = STREAM triad / bytes per token. Efficiency = decode tok/s / ceiling.
 
-Decision (pre-registered in H60): e = median N=1 decode tok/s / ceiling (STREAM 305 GB/s).
-H54's llama.cpp arm Lg read 38% of the 305 GB/s ceiling on this host; the band is 0.38 x [0.7, 1.3] =
-[0.266, 0.494]. 95% bootstrap CI of e's median over the N=1 requests (10,000 resamples, seed 60).
-  SUPPORTED     CI inside the band
-  REFUTED       CI wholly outside the band
-  INCONCLUSIVE  otherwise, or the N=1 phase void after its re-run, the PSI guard stopped the hold,
-                fewer than 8 ok N=1 requests, or GSM8K 0-49 below 25/50 (the model is not serving
-                sensibly, so its speed is not read)
+Decision (pre-registered in H60): e = median N=1 decode tok/s / ceiling (STREAM 305 GB/s), for
+Flash-Next (fn) and for the same-hold control Lg (Google's Gemma 4 QAT Q4_0 GGUF, H54's Lg, on the
+same llama.cpp build and arguments). r = e_fn / e_lg, 95% bootstrap CI (both arms' requests
+resampled, 10,000 resamples, seed 60).
+  SUPPORTED     CI inside [0.7, 1.3]
+  REFUTED       CI wholly outside [0.7, 1.3]
+  INCONCLUSIVE  otherwise, or fn's N=1 phase void after its re-run, the PSI guard stopped the
+                hold, fewer than 8 ok fn N=1 requests, or GSM8K 0-49 below 25/50
+Without a valid Lg control (not delivered, void, or < 8 ok requests), e_fn's CI is read against
+H54's fixed efficiency instead: 0.38 x [0.7, 1.3] = [0.266, 0.494] (H54a Lg, 48.74 tok/s x 2.380
+GB / 305 GB/s).
 Python 3 standard library only."""
 import glob
 import json
@@ -33,6 +36,7 @@ import sys
 STREAM_GBS = 305.0      # H54's pre-registered STREAM triad (48 threads, 2026-10-20)
 EFF_H54 = 0.38          # H54a Lg: 48.74 tok/s x 2.380 GB / 305 GB/s (EXPERIMENTS.md H54a run: 38%)
 BAND = (round(EFF_H54 * 0.7, 3), round(EFF_H54 * 1.3, 3))
+RATIO_BAND = (0.7, 1.3)
 EXP = re.compile(r"ffn_(gate|up|down|gate_up)_exps")
 LOOKUP = re.compile(r"^(token_embd|per_layer_token_embd)\.")
 
@@ -90,62 +94,98 @@ def active_bytes(paths):
     used, total = kv.get(f"{arch}.expert_used_count"), kv.get(f"{arch}.expert_count")
     if not (used and total):
         raise ValueError("no expert_used_count / expert_count in the GGUF metadata")
+    # With tied embeddings (no output.weight) token_embd is also the output head, read in full.
+    tied = not any(n.startswith("output.weight") for n, _ in rows)
     cls = {"routed_experts": 0, "lookup_tables": 0, "rest": 0}
     for n, b in rows:
-        cls["routed_experts" if EXP.search(n) else "lookup_tables" if LOOKUP.match(n) else "rest"] += b
+        lookup = LOOKUP.match(n) and not (tied and n.startswith("token_embd."))
+        cls["routed_experts" if EXP.search(n) else "lookup_tables" if lookup else "rest"] += b
     active = cls["rest"] + cls["routed_experts"] * used / total
-    return {"arch": arch, "expert_used_count": used, "expert_count": total, "bytes": cls,
+    return {"arch": arch, "expert_used_count": used, "expert_count": total, "tied_output": tied, "bytes": cls,
             "file_bytes": sum(cls.values()), "active_bytes": int(active)}
 
 
-def boot_ci(xs, n=10000, seed=60):
+def boot_ci(xs, n=10000, seed=60, ys=None):
+    """95% bootstrap CI of median(xs), or of median(xs) / median(ys) with both resampled."""
     rng = random.Random(seed)
-    meds = sorted(statistics.median(rng.choices(xs, k=len(xs))) for _ in range(n))
-    return meds[int(0.025 * n)], meds[int(0.975 * n) - 1]
+    vals = []
+    for _ in range(n):
+        m = statistics.median(rng.choices(xs, k=len(xs)))
+        vals.append(m / statistics.median(rng.choices(ys, k=len(ys))) if ys else m)
+    vals.sort()
+    return vals[int(0.025 * n)], vals[int(0.975 * n) - 1]
 
 
-def score(out, stream=STREAM_GBS):
-    ab = json.load(open(os.path.join(out, "active-bytes.json")))
-    ceiling = stream * 1e9 / ab["active_bytes"]
-    res = {"active_bytes": ab["active_bytes"], "stream_gbs": stream, "ceiling_tok_s": round(ceiling, 2),
-           "band": BAND, "why": []}
-    if os.path.exists(os.path.join(out, "psi-abort")):
-        res["why"].append("PSI guard stopped the hold: " + open(os.path.join(out, "psi-abort")).read().strip())
+def arm(out, name):
+    """(N=1 decode rates, why-not list) for one arm directory OUT/NAME."""
+    d, why = os.path.join(out, name), []
     phases = {}
-    if os.path.exists(os.path.join(out, "phases.jsonl")):
-        for line in open(os.path.join(out, "phases.jsonl")):
-            r = json.loads(line)
+    if os.path.exists(os.path.join(d, "phases.jsonl")):
+        for line in open(os.path.join(d, "phases.jsonl")):
+            try:
+                r = json.loads(line)
+            except ValueError:
+                why.append(f"{name}: unreadable phases.jsonl line")
+                continue
             phases[r["phase"]] = r   # the last try wins
     n1 = phases.get("n1")
     if not n1:
-        res["why"].append("no N=1 phase")
-    elif n1["check"]["void"]:
-        res["why"].append("N=1 phase void after its re-run: " + n1["check"]["reason"])
+        why.append(f"{name}: no N=1 phase")
+    elif n1["check"].get("void", True):
+        why.append(f"{name}: N=1 phase void after its re-run: " + str(n1["check"].get("reason")))
     tps = []
-    f = os.path.join(out, "load-n1.json")
+    f = os.path.join(d, "load-n1.json")
     if os.path.exists(f):
-        s = json.load(open(f))["phases"][0]["samples"]
-        tps = [x["decode_tokens_per_s"] for x in s if x.get("ok") and x.get("decode_tokens_per_s")]
+        smp = json.load(open(f))["phases"][0]["samples"]
+        tps = [x["decode_tokens_per_s"] for x in smp if x.get("ok") and x.get("decode_tokens_per_s")]
     if len(tps) < 8:
-        res["why"].append(f"{len(tps)} ok N=1 requests with a decode rate (< 8)")
-    q = os.path.join(out, "quality.json")
+        why.append(f"{name}: {len(tps)} ok N=1 requests with a decode rate (< 8)")
+    return tps, why, phases
+
+
+def score(out, stream=STREAM_GBS):
+    """Primary: r = e_fn / e_lg, Flash-Next's bandwidth efficiency over the same-hold Lg
+    control's, CI inside [0.7, 1.3] SUPPORTED, wholly outside REFUTED. Without a valid Lg control,
+    e_fn against H54's fixed 0.38 x [0.7, 1.3] (BAND) instead."""
+    ab = json.load(open(os.path.join(out, "active-bytes.json")))
+    c_fn = stream * 1e9 / ab["active_bytes"]
+    res = {"active_bytes": ab["active_bytes"], "stream_gbs": stream, "ceiling_tok_s": round(c_fn, 2), "why": []}
+    if os.path.exists(os.path.join(out, "psi-abort")):
+        res["why"].append("PSI guard stopped the hold: " + open(os.path.join(out, "psi-abort")).read().strip())
+    fn, why_fn, ph = arm(out, "fn")
+    res["why"] += why_fn
+    q = os.path.join(out, "fn", "quality.json")
     if os.path.exists(q):
         res["gsm8k_correct"] = json.load(open(q))["correct"]
         if res["gsm8k_correct"] < 25:
             res["why"].append(f"GSM8K 0-49 {res['gsm8k_correct']}/50 (< 25)")
     else:
         res["why"].append("no GSM8K record")
-    if tps:
-        eff = [t / ceiling for t in tps]
-        lo, hi = boot_ci(eff)
-        res.update(n1_decode_median=round(statistics.median(tps), 3), efficiency_median=round(statistics.median(eff), 4),
-                   efficiency_ci95=[round(lo, 4), round(hi, 4)])
-    if res["why"] or not tps:
+    lg, why_lg, _ = arm(out, "lg")
+    ab_lg = os.path.join(out, "active-bytes-lg.json")
+    control = not why_lg and os.path.exists(ab_lg)
+    res["control"] = "same-hold Lg" if control else "H54 fixed 0.38 (Lg control not valid: " + "; ".join(why_lg or ["no bytes"]) + ")"
+    if fn:
+        e_fn = [t / c_fn for t in fn]
+        res.update(fn_n1_decode_median=round(statistics.median(fn), 3), e_fn_median=round(statistics.median(e_fn), 4))
+    if control:
+        c_lg = stream * 1e9 / json.load(open(ab_lg))["active_bytes"]
+        e_lg = [t / c_lg for t in lg]
+        res.update(lg_n1_decode_median=round(statistics.median(lg), 3), e_lg_median=round(statistics.median(e_lg), 4))
+    if res["why"] or not fn:
         return dict(res, verdict="INCONCLUSIVE")
-    lo, hi = res["efficiency_ci95"]
-    if BAND[0] <= lo and hi <= BAND[1]:
+    if control:
+        lo, hi = boot_ci(e_fn, ys=e_lg)
+        band = RATIO_BAND
+        res.update(stat="e_fn / e_lg", ratio_median=round(res["e_fn_median"] / res["e_lg_median"], 4))
+    else:
+        lo, hi = boot_ci(e_fn)
+        band = BAND
+        res.update(stat="e_fn")
+    res.update(band=band, ci95=[round(lo, 4), round(hi, 4)])
+    if band[0] <= lo and hi <= band[1]:
         v = "SUPPORTED"
-    elif hi < BAND[0] or lo > BAND[1]:
+    elif hi < band[0] or lo > band[1]:
         v = "REFUTED"
     else:
         v = "INCONCLUSIVE"
