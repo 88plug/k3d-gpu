@@ -503,6 +503,29 @@ class PlanIntegration(unittest.TestCase):
         self.assertTrue(doc["summary"][0].startswith("Detected Intel(R) Xeon(R) 6960P (AMX) + 1x Battlemage 0xe223 (XMX); picked OpenVINO/gemma-4-26b-a4b-it-int4-ov"))
         self.assertEqual(doc["optimizer"]["choices"][0]["fact"][:4], "MoE:")
 
+    def test_h59_cpu_engine_rule_is_inert_until_supported(self):
+        cpu = facts_of("xeon-gnr")  # Intel(R) Xeon(R) 6960P, CPU only
+        row = "## Hypotheses\n| H59 | engine choice on the Xeon 6960P | p | m | %s |\n"
+        for verdict, engine in (("PENDING", "ovms"), ("INCONCLUSIVE", "ovms"), ("REFUTED", "ovms"), ("SUPPORTED", "llama.cpp")):
+            doc = planmod.plan(cpu, self.matrix, {"model": GEMMA})
+            d = planmod.add_optimizer(doc, cpu, bundle(GEMMA), {"ledger": row % verdict})["optimizer"]
+            self.assertEqual((d["engine"], d["device"]), (engine, "CPU"), verdict)
+        self.assertEqual(d["model"], "google/gemma-4-26B-A4B-it-qat-q4_0-gguf")
+        self.assertEqual(d["choices"][0]["source"], "EXPERIMENTS.md H59")
+        # Another class's SUPPORTED row, or a backend the user set, leaves OVMS.
+        doc = planmod.plan(cpu, self.matrix, {"model": GEMMA})
+        d = planmod.add_optimizer(doc, cpu, bundle(GEMMA), {"ledger": row.replace("6960P", "6741P") % "SUPPORTED"})["optimizer"]
+        self.assertEqual(d["engine"], "ovms")
+        doc = planmod.plan(cpu, self.matrix, {"model": GEMMA})
+        d = planmod.add_optimizer(doc, cpu, bundle(GEMMA), {"ledger": row % "SUPPORTED", "backend": "ovms"})["optimizer"]
+        self.assertEqual(d["engine"], "ovms")
+        # The shipped rules carry the H59 family, and the repo's rows decide nothing yet.
+        with open(os.path.join(REPO, "console", "ledger-rules.json"), encoding="utf-8") as f:
+            shipped = mo.ledger_from_text(f.read())
+        self.assertIn("H59", shipped)
+        for cls in ("cpu:Intel(R) Xeon(R) 6741P", "cpu:13th Gen Intel(R) Core(TM) i9-13900T", "cpu:13th Gen Intel(R) Core(TM) i7-13700"):
+            self.assertIsNone(mo.cpu_engine_rule(shipped, cls)[0], cls)
+
     def test_plan_without_meta_unchanged(self):
         doc = planmod.plan(self.xb, self.matrix, {"model": QWEN})
         self.assertNotIn("optimizer", doc)

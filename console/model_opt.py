@@ -571,8 +571,8 @@ def ledger_rows(text):
 # CPU model numbers as ledger rows write them: "i9-13900T", "6741P", "285K".
 CPU_CLASS = re.compile(r"(?<![a-z0-9])(i[3579]-\d{4,5}[a-z]{0,2}|\d{3,5}[a-z]{1,2})(?![a-z0-9])")
 # The row families whose verdicts set agent defaults: H27 (autoquant), H34 (CPU Fast
-# Draft). console/ledger-rules.json carries them for installs without EXPERIMENTS.md.
-RULE_FAMILIES = ("H27", "H34")
+# Draft), H59 (the CPU engine: llama.cpp where SUPPORTED for the class, else OVMS). console/ledger-rules.json carries them for installs without EXPERIMENTS.md.
+RULE_FAMILIES = ("H27", "H34", "H59")
 RULES_SCHEMA = "k3d-gpu.ledger-rules/v1"
 
 
@@ -595,7 +595,11 @@ def ledger_rules_doc(rows):
 
 def read_ledger(path):
     """{row id: (verdict, text)} from EXPERIMENTS.md or from a ledger-rules.json."""
-    text = read_text(path)
+    return ledger_from_text(read_text(path))
+
+
+def ledger_from_text(text):
+    """{row id: (verdict, text)} from EXPERIMENTS.md's text or a ledger-rules.json's."""
     if text is None:
         return {}
     if text.lstrip().startswith("{"):
@@ -625,6 +629,13 @@ def ledger_rule(rows, family, hw_class):
             if v == want:
                 return out, rid, v
     return "unknown", None, None
+
+
+def cpu_engine_rule(rows, hw_class):
+    """("llama.cpp", row, verdict) when an H59-family row is SUPPORTED for this CPU class
+    (and none REFUTED); else (None, row or None, verdict or None): the engine stays."""
+    out, rid, verdict = ledger_rule(rows, "H59", hw_class)
+    return ("llama.cpp" if out == "on" else None), rid, verdict
 
 
 def ledger_promotes(rows, variant_key, hw_class):
