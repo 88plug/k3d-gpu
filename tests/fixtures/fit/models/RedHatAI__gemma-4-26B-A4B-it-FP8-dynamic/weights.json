@@ -1,0 +1,34 @@
+{
+  "classes": {
+    "embed": {
+      "bytes": 1476395008,
+      "tensors": 1
+    },
+    "experts": {
+      "bytes": 22870425600,
+      "tensors": 23040
+    },
+    "lm_head": {
+      "bytes": 1476395008,
+      "tensors": 1
+    },
+    "other": {
+      "bytes": 1669566012,
+      "tensors": 801
+    },
+    "vision": {
+      "bytes": 1145588832,
+      "tensors": 356
+    }
+  },
+  "files": [
+    {
+      "bytes": 28641731036,
+      "name": "model.safetensors"
+    }
+  ],
+  "format": "safetensors",
+  "schema": "k3d-gpu.weights/v1",
+  "source": "RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic@ed35d7abe5d940da41b4ff06eb482feb0be8cb44",
+  "total_bytes": 28638370460
+}

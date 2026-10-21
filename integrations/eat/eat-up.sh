@@ -9,8 +9,12 @@
 #   EAT_KUBECONFIG  kubeconfig of the target cluster (default: $KUBECONFIG, else ~/.kube/config)
 #   EAT_CONFIG      agentic-config.cfg to deploy with (default: the one next to this script)
 #   EAT_VLLM_VALUES values merged over EAT's vllm/xeon-values.yaml (default: vllm-values.yaml here)
-#   EAT_VLLM_KV_GIB vLLM CPU KV cache per model in GiB (default: 6). EAT's catalog asks 10-60;
-#                   vLLM needs one full-length request to fit (Qwen3-1.7B at 40960 tokens: 4.38 GiB)
+#   EAT_VLLM_KV_GIB vLLM CPU KV cache per model in GiB (default: 6, or from EAT_FIT_MODEL). EAT's
+#                   catalog asks 10-60; vLLM needs one full-length request to fit (Qwen3-1.7B at
+#                   40960 tokens: 4.38 GiB)
+#   EAT_FIT_MODEL   Hugging Face id of the model 'eat-up.sh model' deploys: with EAT_VLLM_KV_GIB
+#                   unset, its KV cache size comes from 'k3d-gpu fit' (vLLM on the CPU, against what
+#                   this host has free), and a model that cannot fit stops here
 #
 # The cluster must already carry EAT's node labels, e.g.:
 #   K3D_GPU_NODE_LABELS=ei-infra-eligible=true,ei-inference-eligible=true k3d-gpu up
@@ -25,7 +29,6 @@ EAT_WORK="${EAT_WORK:-${PWD}/eat-work}"
 EAT_KUBECONFIG="${EAT_KUBECONFIG:-${KUBECONFIG:-${HOME}/.kube/config}}"
 EAT_CONFIG="${EAT_CONFIG:-${HERE}/agentic-config.cfg}"
 EAT_VLLM_VALUES="${EAT_VLLM_VALUES:-${HERE}/vllm-values.yaml}"
-EAT_VLLM_KV_GIB="${EAT_VLLM_KV_GIB:-6}"
 BASTION_IMAGE="k3d-gpu-eat-bastion:$(sha256sum "${HERE}/bastion.Dockerfile" | cut -c1-12)"
 
 err()  { echo "ERROR: $*" >&2; exit 1; }
@@ -52,6 +55,21 @@ openshell_setting() {
 case "$(openshell_setting "${EAT_CONFIG}")" in
     on|yes) err "deploy_openshell=on needs an EAT release newer than ${EAT_TAG}; set deploy_openshell=off" ;;
 esac
+# The KV cache from the fit of EAT_FIT_MODEL, unless EAT_VLLM_KV_GIB is set.
+if [ -z "${EAT_VLLM_KV_GIB:-}" ] && [ -n "${EAT_FIT_MODEL:-}" ]; then
+    command -v k3d-gpu >/dev/null 2>&1 || err "EAT_FIT_MODEL needs k3d-gpu on PATH (or set EAT_VLLM_KV_GIB)"
+    fit_rc=0
+    fit_doc=$(k3d-gpu fit --model "${EAT_FIT_MODEL}" --engine vllm --device cpu --json) || fit_rc=$?
+    [ "${fit_rc}" -ne 2 ] && [ -n "${fit_doc}" ] || err "k3d-gpu fit could not size ${EAT_FIT_MODEL}"
+    EAT_VLLM_KV_GIB=$(python3 -c 'import json, sys
+d = json.loads(sys.argv[1])
+if not d["fits"]:
+    sys.exit(d["summary"])
+print(next(f.split("=", 1)[1] for f in d["flags"] if f.startswith("VLLM_CPU_KVCACHE_SPACE=")))' "${fit_doc}") \
+        || err "not deploying ${EAT_FIT_MODEL}: it does not fit this host ('k3d-gpu fit --model ${EAT_FIT_MODEL} --engine vllm --device cpu --explain')"
+    info "KV cache ${EAT_VLLM_KV_GIB} GiB from k3d-gpu fit: $(python3 -c 'import json, sys; print(json.loads(sys.argv[1])["summary"])' "${fit_doc}")"
+fi
+EAT_VLLM_KV_GIB="${EAT_VLLM_KV_GIB:-6}"
 [ -f "${EAT_KUBECONFIG}" ] || err "kubeconfig ${EAT_KUBECONFIG} not found"
 for l in ei-infra-eligible ei-inference-eligible; do
     [ -n "$(KUBECONFIG="${EAT_KUBECONFIG}" kubectl get nodes -l "${l}=true" -o name)" ] \
