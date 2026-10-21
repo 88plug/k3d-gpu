@@ -73,7 +73,10 @@ Each cluster has its own kubeconfig, `${K3D_GPU_STATE_DIR}/kubeconfig-<cluster>`
 `~/.local/state/k3d-gpu`), and the launcher names the cluster's context on every kubectl call, so concurrent `up`s of different
 clusters never reach each other's. `up` leaves `~/.kube/config` alone: bare `kubectl` after `up`
 needs the `export KUBECONFIG=…` line it prints, or `K3D_GPU_MERGE_KUBECONFIG=1` to merge the
-context into `~/.kube/config` (current-context unchanged).
+context into `~/.kube/config` (current-context unchanged). The kubectl commands the launcher
+prints name the file, and `k3d-gpu-mcp` finds it the same way. An exported `KUBECONFIG` naming one
+other file (a hold's own) is used as is: `up` merges the context into it under a lock and keeps
+its current-context, if it has one.
 
 ### Install
 
@@ -267,7 +270,8 @@ From a git checkout use the absolute path to `scripts/k3d-gpu-mcp`; it finds the
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `K3D_GPU_CLUSTER` | `gpu` | cluster; kubectl always uses context `k3d-<name>` |
+| `K3D_GPU_CLUSTER` | `gpu` | cluster; kubectl uses context `k3d-<name>` |
+| `K3D_GPU_KUBECONFIG`, `K3D_GPU_CONTEXT`, `K3D_GPU_STATE_DIR` | as the launcher | kubeconfig and context, picked as the launcher picks them: the launcher's per-cluster file `<state dir>/kubeconfig-<name>` when it exists, else the kubeconfig the server inherited |
 | `K3D_GPU_BIN` | `k3d-gpu` next to the server, else `PATH` | launcher to run |
 | `K3D_GPU_MCP_TIMEOUT` | `60` | seconds per launcher or kubectl call |
 
