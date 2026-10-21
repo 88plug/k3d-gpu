@@ -1351,9 +1351,12 @@ doctor_says "IAA kernel WQ: opt-in apply snapshots, disables, restores, adds a u
 doctor_says "IAA kernel WQ: revert restores the snapshot, kernel WQ re-enabled" "${r}" \
     "^ {8}revert: ${ac} disable-device iax1 && ${ac} load-config -c ${snap}/idxd-iax1\.conf && ${ac} enable-device iax1 && ${ac} enable-wq iax1/wq1\.0$"
 doctor_says "IAA kernel WQ: load-config never enables other devices (no -e)" "${r}" 'load-config -c [^ ]+ -e' negate
-doctor_says "IAA whose kernel WQ claims every entry is left alone with the count" "${r}" \
-    'warn.*: IAA iax3: left alone — kernel WQ\(s\) wq3\.0 \(crypto\) hold it and leave no free WQ or WQ entries \(128 of 128 claimed\)'
-doctor_says "iax3 gets no commands" "${r}" 'idxd-iax3|iax3/wq3\.1' negate
+doctor_says "IAA whose kernel WQ claims every entry: no user WQ fits, said with the count" "${r}" \
+    'warn.*: IAA iax3: kernel WQ\(s\) wq3\.0 \(crypto\) hold it with 128 of 128 WQ entries claimed, so no user WQ fits beside them\. Suggestion, never applied by host-setup'
+doctor_says "full claim: the suggestion shrinks the kernel WQ by 16 and adds a 16-entry user WQ" "${r}" \
+    "^ {8}apply: +sudo install -d -m 0700 ${snap} && ${ac} save-config -s ${snap}/idxd-all\.conf && sudo python3 -c '[^']*' ${snap}/idxd-all\.conf iax3 ${snap}/idxd-iax3\.conf && ${ac} disable-device iax3 && ${ac} load-config -c ${snap}/idxd-iax3\.conf && ${ac} config-wq iax3/wq3\.0 --wq-size=112 && ${ac} config-wq iax3/wq3\.1 --group-id=0 --type=user --mode=dedicated --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && ${ac} enable-device iax3 && ${ac} enable-wq iax3/wq3\.0 && ${ac} enable-wq iax3/wq3\.1$"
+doctor_says "full claim: the revert loads the snapshot" "${r}" \
+    "^ {8}revert: ${ac} disable-device iax3 && ${ac} load-config -c ${snap}/idxd-iax3\.conf && ${ac} enable-device iax3 && ${ac} enable-wq iax3/wq3\.0$"
 doctor_says "DSA kernel WQ: a free engine and group give the user WQ its own group, shared with PASID" "${r}" \
     "^ {8}apply: +sudo install -d -m 0700 ${snap} && ${ac} save-config -s ${snap}/idxd-all\.conf && sudo python3 -c '[^']*' ${snap}/idxd-all\.conf dsa0 ${snap}/idxd-dsa0\.conf && ${ac} disable-device dsa0 && ${ac} load-config -c ${snap}/idxd-dsa0\.conf && ${ac} config-engine dsa0/engine0\.1 --group-id=1 && ${ac} config-wq dsa0/wq0\.1 --group-id=1 --type=user --mode=shared --threshold=15 --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && ${ac} enable-device dsa0 && ${ac} enable-wq dsa0/wq0\.0 && ${ac} enable-wq dsa0/wq0\.1$"
 doctor_says "DSA kernel WQ: revert" "${r}" \

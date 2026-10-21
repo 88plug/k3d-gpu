@@ -70,7 +70,7 @@
 
 set -euo pipefail
 
-VERSION="0.1.73"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.74"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 # The node image defaults to the tag built from this launcher's own release
 # (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
@@ -191,13 +191,17 @@ Usage: k3d-gpu <command>
             (report DIR writes there; report --json prints the JSON only;
             --no-cluster skips the cluster query)
   logs      Tail k3s server container logs
-  host-setup [--apply] [--with-kernel-wqs] [--distro D]
+  host-setup [--apply] [--plan] [--with-kernel-wqs] [--distro D]
             Check the host drivers/userspace (vainfo, clinfo, libva, libstdc++) and print
-            the pinned install commands for Intel GPU/NPU and the NVIDIA container
-            toolkit + CDI (Ubuntu 24.04/26.04, Fedora, Arch, Manjaro), plus Xeon
-            DSA/IAA user work queues and QAT VFs. --apply runs them after a y/N
-            prompt. --with-kernel-wqs also adds a user WQ to DSA/IAA devices that
-            kernel work queues hold (snapshot, brief disable, kernel WQs restored)
+            the pinned install commands for what a check found missing or broken, and
+            only that: Intel GPU/NPU and the NVIDIA container toolkit + CDI, from the
+            detected release's pinned set (Ubuntu 24.04/26.04, Fedora, Arch, Manjaro;
+            another Ubuntu release is told it has none), plus Xeon DSA/IAA user work
+            queues and QAT VFs. --apply runs them after a y/N prompt. --with-kernel-wqs
+            also adds a user WQ to DSA/IAA devices that kernel work queues hold
+            (snapshot, brief disable, kernel WQs restored). A device whose kernel WQs
+            claim every WQ entry gets a suggestion (shrink one, with its revert) that
+            nothing runs
   agent up --remote [URL] [--model M] [--api-key-file FILE]
             No local server: Secret k3d-gpu-llm (OPENAI_BASE_URL, OPENAI_API_KEY,
             OPENAI_MODEL) in the agent namespace for pods' envFrom; status checks
@@ -2597,6 +2601,11 @@ idxd_attr() { cat "$1/$2" 2>/dev/null || echo "$3"; }
 #           device, each WQ that was enabled, and the new one. The revert disables
 #           the device, loads the same snapshot and enables the device and the same
 #           kernel WQs: the state read, kernel WQs included.
+#   shrink  as kernel, but the kernel WQs claim every WQ entry, so no user WQ fits
+#           beside them: <run> also shrinks the largest kernel WQ by what a
+#           16-entry user WQ needs (it keeps at least 16). A suggestion only:
+#           doctor and host-setup print it, nothing runs it (--with-kernel-wqs
+#           included); its revert is the kernel class's.
 #   skip    left alone; <run> is "-" and <revert> says why.
 # Only a kind with no user work queue at all is considered. A WQ is shared when
 # the device has user PASID (device.c refuses a shared WQ without it, and one with
@@ -2606,6 +2615,7 @@ idxd_attr() { cat "$1/$2" 2>/dev/null || echo "$3"; }
 accel_enable_steps() {
     local kind name prefix devdir dev d id ac="sudo accel-config" total o g
     local state wq eng grp size room max claimed kwqs kdrv mode setup zs used reen k snap keep
+    local big bigsz shrink cls nsz
     for kind in "DSA dsa dsa" "IAA iax iax"; do
         read -r name prefix devdir <<< "${kind}"
         ! compgen -G "${SYSROOT}/dev/${devdir}/wq*" >/dev/null || continue
@@ -2616,7 +2626,7 @@ accel_enable_steps() {
             state=$(idxd_attr "${dev}" state disabled)
             # Free WQ (size 0, disabled), free engine (no group), claimed WQ entries,
             # kernel WQs that are enabled and the drivers they are bound to.
-            wq="" eng="" claimed=0 kwqs="" kdrv="" g="" used=""
+            wq="" eng="" claimed=0 kwqs="" kdrv="" g="" used="" big="" bigsz=0
             while read -r o; do
                 [ -n "${o}" ] || continue
                 size=$(idxd_attr "${o}" size 0)
@@ -2626,6 +2636,7 @@ accel_enable_steps() {
                 if [ "$(idxd_attr "${o}" state disabled)" = enabled ]; then
                     kwqs+=" ${o##*/}" kdrv+=" $(bound_driver "${o}")"
                     [ -n "${g}" ] || g=$(idxd_attr "${o}" group_id -1)
+                    [ "${size}" -le "${bigsz}" ] || { big=${o##*/} bigsz=${size}; }
                 elif [ -z "${wq}" ] && [ "${size}" -eq 0 ]; then
                     wq=${o##*/}
                 fi
@@ -2669,7 +2680,21 @@ accel_enable_steps() {
             [[ "${max}" =~ ^[0-9]+$ ]] || max=128
             room=$((max - claimed))
             [ "${room}" -le 16 ] || room=16
-            if [ -z "${wq}" ] || [ "${room}" -lt 1 ]; then
+            # No entries left: class shrink takes the missing ones from the largest
+            # kernel WQ (it keeps at least 16) for a 16-entry user WQ. A suggestion:
+            # host-setup never runs it, --with-kernel-wqs included.
+            cls=kernel shrink="" nsz=$((bigsz - (claimed + 16 - max)))
+            if [ -n "${wq}" ] && [ "${room}" -lt 1 ] && [ "${nsz}" -ge 16 ]; then
+                cls=shrink room=16
+                shrink="${ac} config-wq ${d}/${big} --wq-size=${nsz}"
+                # A shared kernel WQ needs its threshold below its new size.
+                k=$(idxd_attr "${SYSROOT}/sys/bus/dsa/devices/${big}" threshold 0)
+                if [ "$(idxd_attr "${SYSROOT}/sys/bus/dsa/devices/${big}" mode dedicated)" = shared ] \
+                    && [[ "${k}" =~ ^[0-9]+$ ]] && [ "${k}" -ge "${nsz}" ]; then
+                    shrink+=" --threshold=$((nsz - 1))"
+                fi
+                shrink+=" && "
+            elif [ -z "${wq}" ] || [ "${room}" -lt 1 ]; then
                 printf '%s\t%s\tskip\t-\t%s\n' "${name}" "${d}" "kernel WQ(s)${kwqs} (${kdrv# }) hold it and leave no free WQ or WQ entries (${claimed} of ${max} claimed)"
                 continue
             fi
@@ -2697,8 +2722,8 @@ accel_enable_steps() {
             fi
             reen=""
             for k in ${kwqs}; do reen+=" && ${ac} enable-wq ${d}/${k}"; done
-            printf '%s\t%s\tkernel\t%s\t%s\n' "${name}" "${d}" \
-                "sudo install -d -m 0700 ${IDXD_SNAPSHOT_DIR} && ${ac} save-config -s ${IDXD_SNAPSHOT_DIR}/idxd-all.conf && ${keep} && ${ac} disable-device ${d} && ${ac} load-config -c ${snap} && ${setup}${ac} config-wq ${d}/${wq} --group-id=${grp} --type=user --mode=${mode} --wq-size=${room} --priority=10 --driver-name=user --name=k3d-gpu && ${ac} enable-device ${d}${reen} && ${ac} enable-wq ${d}/${wq}" \
+            printf '%s\t%s\t%s\t%s\t%s\n' "${name}" "${d}" "${cls}" \
+                "sudo install -d -m 0700 ${IDXD_SNAPSHOT_DIR} && ${ac} save-config -s ${IDXD_SNAPSHOT_DIR}/idxd-all.conf && ${keep} && ${ac} disable-device ${d} && ${ac} load-config -c ${snap} && ${shrink}${setup}${ac} config-wq ${d}/${wq} --group-id=${grp} --type=user --mode=${mode} --wq-size=${room} --priority=10 --driver-name=user --name=k3d-gpu && ${ac} enable-device ${d}${reen} && ${ac} enable-wq ${d}/${wq}" \
                 "${ac} disable-device ${d} && ${ac} load-config -c ${snap} && ${ac} enable-device ${d}${reen}"
         done < <({ compgen -G "${SYSROOT}/sys/bus/dsa/devices/${prefix}[0-9]*" || true; } | sort -V)
     done
@@ -2720,7 +2745,7 @@ accel_enable_steps() {
 accel_disabled_list() {
     [ "${VENDORS_AUTO:-0}" = 1 ] || return 0
     accel_enable_steps | awk -F'\t' '
-        $3 == "skip" { next }
+        $3 == "skip" || $3 == "shrink" { next }
         $1 != k { if (out != "") out = out ", "; out = out $1; k = $1 }
         { out = out " " $2 ($3 == "kernel" ? "(kernel WQ)" : "") }
         END { if (out != "") print out }'
@@ -2734,15 +2759,42 @@ accel_disabled_note() {
     [ -z "${list}" ] || echo "present but disabled: ${list} (no user work queues / VFs), so not in the cluster — enable them: k3d-gpu host-setup --apply${opt}, then k3d-gpu down && k3d-gpu up (exact commands: k3d-gpu doctor)"
 }
 
-# accel-config (intel/idxd-config) where its packages and its README build
-# (--prefix=/usr) install it, which is on sudo's secure_path everywhere.
-has_accel_config() { [ -x "${SYSROOT}/usr/bin/accel-config" ]; }
+# The sentence for a shrink-class step (accel_enable_steps), read from the same
+# sysfs: accel_shrink_note <kind> <device>.
+accel_shrink_note() {
+    local o kw="" drv="" claimed=0 size max big="" bigsz=0
+    while read -r o; do
+        [ -n "${o}" ] || continue
+        size=$(idxd_attr "${o}" size 0)
+        [[ "${size}" =~ ^[0-9]+$ ]] || size=0
+        claimed=$((claimed + size))
+        [ "$(idxd_attr "${o}" state disabled)" = enabled ] || continue
+        kw+=" ${o##*/}" drv+=" $(bound_driver "${o}")"
+        [ "${size}" -le "${bigsz}" ] || { big=${o##*/} bigsz=${size}; }
+    done < <(idxd_objs wq "${2//[!0-9]/}")
+    max=$(idxd_attr "${SYSROOT}/sys/bus/dsa/devices/$2" max_work_queues_size 128)
+    echo "$1 $2: kernel WQ(s)${kw} (${drv# }) hold it with ${claimed} of ${max} WQ entries claimed, so no user WQ fits beside them. Suggestion, never applied by host-setup (--with-kernel-wqs included): shrink ${big} from ${bigsz} to $((bigsz - (claimed + 16 - max))) entries and add a 16-entry user WQ in the room it frees. It disables the device for a moment (its kernel users pause); the config is snapshotted first and written back, kernel WQs included; the revert loads the same snapshot"
+}
 
-# accel-config install command for the distro, or empty when there is no package.
+# accel-config (intel/idxd-config) where its packages and its README build
+# (--prefix=/usr) install it, or where a build without --prefix puts it. Only
+# directories on sudo's default secure_path count: the steps run sudo accel-config.
+accel_config_path() {
+    local p
+    for p in /usr/bin /usr/local/bin /usr/sbin /usr/local/sbin /bin /sbin; do
+        [ ! -x "${SYSROOT}${p}/accel-config" ] || { echo "${p}/accel-config"; return 0; }
+    done
+    return 1
+}
+has_accel_config() { accel_config_path >/dev/null; }
+
+# accel-config install command from the release's own package, or empty when no
+# package is known for it: Ubuntu universe carries it in 24.04 (4.1.6) and
+# 26.04 (4.1.9), Fedora in its repo.
 accel_config_install() {
     case "$1" in
-        ubuntu-*) echo "sudo apt-get update && sudo apt-get install -y accel-config" ;;
-        fedora)   echo "sudo dnf install -y accel-config" ;;
+        ubuntu-24.04|ubuntu-26.04) echo "sudo apt-get update && sudo apt-get install -y accel-config" ;;
+        fedora) echo "sudo dnf install -y accel-config" ;;
     esac
 }
 
@@ -2860,6 +2912,9 @@ doctor_cpu_accels() {
                         lines+="        apply:  ${run}"$'\n'"        revert: ${rev}"$'\n' ;;
                     kernel)
                         lines+="  ${YLW}warn${RST}: ${name} ${d}: enabled with kernel work queue(s) only ($(awk -F'enable-wq ' '{ for (i = 2; i < NF; i++) { split($i, a, " "); printf "%s%s", (i > 2 ? " " : ""), a[1] } }' <<< "${run}")) — left alone unless you opt in (k3d-gpu host-setup --apply --with-kernel-wqs, or the lines below): adds ${what} beside them. It disables the device for a moment, so its kernel users pause, and disabling clears the device's config: the config is snapshotted first (accel-config save-config, ${IDXD_SNAPSHOT_DIR}/idxd-${d}.conf) and written back, kernel WQs included; the revert loads the same snapshot"$'\n'
+                        lines+="        apply:  ${run}"$'\n'"        revert: ${rev}"$'\n' ;;
+                    shrink)
+                        lines+="  ${YLW}warn${RST}: $(accel_shrink_note "${name}" "${d}")"$'\n'
                         lines+="        apply:  ${run}"$'\n'"        revert: ${rev}"$'\n' ;;
                     *)
                         lines+="  ${YLW}warn${RST}: ${name} ${d}: left alone — ${rev}"$'\n' ;;
@@ -6542,13 +6597,16 @@ cmd_model_share() {
 
 # ---- host setup -----------------------------------------------------------------
 # `host-setup` checks the host userspace each detected accelerator needs, then
-# prints the commands that install it (Intel compute runtime, Level Zero, media
-# driver, NPU driver + firmware; NVIDIA container toolkit + CDI spec). --apply
-# runs them after a y/N prompt. Kernel boot options are printed, never applied.
+# prints the commands that install what a check found missing or broken (Intel
+# compute runtime, Level Zero, media driver, NPU driver + firmware; NVIDIA
+# container toolkit + CDI spec), each package set gated on its own failing check
+# and taken from the detected release's pinned set only. --apply runs them after
+# a y/N prompt. Kernel boot options are printed, never applied.
 #
 # Pins, taken from each upstream release page:
 #   intel/compute-runtime 26.35.39758.10 with intel-graphics-compiler v2.41.5
-#   oneapi-src/level-zero v1.34.0 (libze1, the Ubuntu 24.04 build; also used on 26.04)
+#   oneapi-src/level-zero v1.34.0 (libze1, the Ubuntu 24.04 build; it publishes no
+#     26.04 build, so 26.04 has no pinned loader and host-setup says so)
 #   intel/linux-npu-driver v1.38.0 (UMD, NPU compiler, intel-fw-npu firmware)
 #   ppa:kobuk-team/intel-graphics media driver 26.3.2, libva 2.24.1, gmmlib 22.10.1
 #     (Intel publishes no media-driver .debs; this is Intel's Ubuntu package source)
@@ -6587,17 +6645,30 @@ hs_npu_tarball() {
     esac
 }
 
-# ubuntu-24.04 | ubuntu-26.04 | fedora | arch | manjaro, or the raw os-release ID.
+# ubuntu-<VERSION_ID> | fedora | arch | manjaro, or the raw os-release ID. An
+# Ubuntu os-release without VERSION_ID falls back to VERSION_CODENAME for the
+# pinned releases (noble 24.04, resolute 26.04), else reads ubuntu-unknown.
 hs_distro() {
     local f="${SYSROOT}/etc/os-release" id ver
     [ -r "${f}" ] || f="${SYSROOT}/usr/lib/os-release"
     id=$(sed -n 's/^ID=//p' "${f}" 2>/dev/null | tr -d '"')
     ver=$(sed -n 's/^VERSION_ID=//p' "${f}" 2>/dev/null | tr -d '"')
+    if [ "${id}" = ubuntu ] && [ -z "${ver}" ]; then
+        case "$(sed -n 's/^VERSION_CODENAME=//p' "${f}" 2>/dev/null | tr -d '"')" in
+            noble) ver=24.04 ;;
+            resolute) ver=26.04 ;;
+            *) ver=unknown ;;
+        esac
+    fi
     case "${id}" in
         ubuntu) echo "ubuntu-${ver}" ;;
         *) echo "${id:-unknown}" ;;
     esac
 }
+
+# Ubuntu releases with a pinned package set (PPA builds, GitHub .debs, NPU archive).
+HS_UBUNTU_PINNED="24.04 26.04"
+hs_ubuntu_pinned() { [[ " ${HS_UBUNTU_PINNED} " == *" $1 "* ]]; }
 
 # First file matching <glob> under the library dirs (highest version wins).
 hs_find() {
@@ -6665,6 +6736,24 @@ hs_ok()   { echo "  ok: $*"; }
 hs_warn() { echo "  ${YLW}warn${RST}: $*"; HS_MISSING=$((HS_MISSING + 1)); }
 hs_fail() { echo "  ${RED}fail${RST}: $*"; HS_BROKEN=$((HS_BROKEN + 1)); }
 
+# HS_NEED: the package sets failing checks call for, the only ones a plan
+# installs: ze_loader compute media vainfo clinfo npu_umd npu_fw nvctk cdi, and
+# sync (a full upgrade, for a library older than what is installed needs).
+hs_need()  { [[ " ${HS_NEED} " == *" $1 "* ]] || HS_NEED+=" $1"; }
+hs_needs() { local t; for t in "$@"; do [[ " ${HS_NEED} " != *" ${t} "* ]] || return 0; done; return 1; }
+
+# The command that brings libva in step with the media driver on this distro.
+hs_media_fix() {
+    case "${HS_DISTRO}" in
+        ubuntu-*) if hs_ubuntu_pinned "${HS_DISTRO#ubuntu-}"; then
+                      echo "sudo add-apt-repository -y ppa:kobuk-team/intel-graphics && sudo apt-get install -y $(hs_libva_pkgs "${HS_DISTRO#ubuntu-}")"
+                  else
+                      echo "the release archive's libva and media driver, upgraded together (no pinned set for ${HS_DISTRO})"
+                  fi ;;
+        *) hs_sync_fix ;;
+    esac
+}
+
 # The one command that brings every package back in step on this distro.
 hs_sync_fix() {
     case "${HS_DISTRO}" in
@@ -6682,6 +6771,8 @@ hs_check_va() {
     local drv lib dmin="" lmin="" fix out line
     if ! drv=$(hs_find dri/iHD_drv_video.so); then
         hs_warn "intel-media-driver (iHD_drv_video.so) not installed — the plan below installs it"
+        hs_need media
+        command -v vainfo >/dev/null 2>&1 || { hs_warn "vainfo not installed (the plan below installs it)"; hs_need vainfo; }
         return 0
     fi
     dmin=$({ grep -ao '__vaDriverInit_1_[0-9]*' "${drv}" 2>/dev/null || true; } | sed 's/.*_//' | sort -n | tail -1)
@@ -6690,31 +6781,34 @@ hs_check_va() {
         lmin=${lmin%%.*}
         lmin=$((10#${lmin} / 100))
     fi
-    case "${HS_DISTRO}" in
-        ubuntu-*) fix="sudo add-apt-repository -y ppa:kobuk-team/intel-graphics && sudo apt-get install -y $(hs_libva_pkgs "${HS_DISTRO#ubuntu-}")" ;;
-        *) fix=$(hs_sync_fix) ;;
-    esac
+    fix=$(hs_media_fix)
     if [ -z "${lib}" ]; then
         hs_fail "libva.so.2 not found — install libva (the plan below does)"
+        hs_need media
     elif [ -n "${dmin}" ] && [ "${dmin}" -gt "${lmin}" ]; then
         hs_fail "${drv#"${SYSROOT}"} exports __vaDriverInit_1_${dmin} (built for libva 2.${dmin}) but libva is 2.${lmin} — vainfo fails with 'has no function __vaDriverInit_1_0'. Fix: ${fix}"
+        hs_need media
     elif [ -n "${dmin}" ]; then
         hs_ok "media driver exports __vaDriverInit_1_${dmin}, libva is 2.${lmin}"
     fi
-    command -v vainfo >/dev/null 2>&1 || { hs_warn "vainfo not installed — cannot run the media driver (the plan below installs it)"; return 0; }
+    command -v vainfo >/dev/null 2>&1 || { hs_warn "vainfo not installed — cannot run the media driver (the plan below installs it)"; hs_need vainfo; return 0; }
     out=$(timeout 30 vainfo --display drm --device "${HS_RENDER:-/dev/dri/renderD128}" 2>&1 || true)
     if line=$(grep -m1 'has no function __vaDriverInit' <<< "${out}"); then
         hs_fail "vainfo: ${line#libva error: } — the media driver is newer than libva. Fix: ${fix}"
+        hs_need media
     elif line=$(grep -m1 'dlopen of .* failed' <<< "${out}"); then
         if grep -q "GLIBCXX_" <<< "${line}"; then
             hs_fail "vainfo: ${line#libva error: } — libstdc++ is older than the media driver needs. Fix: $(hs_sync_fix)"
+            hs_need sync
         else
             hs_fail "vainfo: ${line#libva error: }"
+            hs_need media
         fi
     elif line=$(grep -m1 'Driver version:' <<< "${out}"); then
         hs_ok "vainfo: ${line#*Driver version: }"
     else
         hs_fail "vainfo did not initialise the driver: $(tail -n1 <<< "${out}")"
+        hs_need media
     fi
 }
 
@@ -6732,6 +6826,7 @@ hs_check_cxx() {
         [ -n "${need}" ] || continue
         if [ "${need##*.}" -gt "${have##*.}" ]; then
             hs_fail "${lib#"${SYSROOT}"} needs ${need} but libstdc++ provides up to ${have} — it was built by a newer GCC than the installed gcc-libs/libstdc++. Fix: $(hs_sync_fix)"
+            hs_need sync
             bad=1
         fi
     done
@@ -6740,18 +6835,28 @@ hs_check_cxx() {
 
 hs_check_opencl() {
     local out icd line
-    command -v clinfo >/dev/null 2>&1 || { hs_warn "clinfo not installed — cannot list OpenCL platforms (the plan below installs it)"; return 0; }
+    icd=$(head -n1 "${SYSROOT}/etc/OpenCL/vendors/intel.icd" 2>/dev/null || true)
+    if ! command -v clinfo >/dev/null 2>&1; then
+        hs_warn "clinfo not installed — cannot list OpenCL platforms (the plan below installs it)"
+        hs_need clinfo
+        if [ -z "${icd}" ]; then
+            hs_warn "/etc/OpenCL/vendors/intel.icd is missing — the compute runtime is not installed (the plan below installs it)"
+            hs_need compute
+        fi
+        return 0
+    fi
     out=$(timeout 60 clinfo -l 2>&1 || true)
     if line=$(grep -m1 -E 'Intel\(R\) OpenCL.*Graphics' <<< "${out}"); then
         hs_ok "clinfo: ${line#*: }"
         return 0
     fi
-    icd=$(head -n1 "${SYSROOT}/etc/OpenCL/vendors/intel.icd" 2>/dev/null || true)
     if [ -z "${icd}" ]; then
         hs_fail "clinfo lists no Intel OpenCL platform and /etc/OpenCL/vendors/intel.icd is missing — the compute runtime is not installed (the plan below installs it)"
+        hs_need compute
         return 0
     fi
     hs_fail "clinfo lists no Intel OpenCL platform although ${icd} is registered"
+    hs_need sync
     while read -r line; do
         [ -n "${line}" ] && echo "         ldd ${icd}: ${line}"
     done < <({ ldd "${icd}" 2>&1 || true; } | grep 'not found')
@@ -6763,27 +6868,34 @@ hs_checks() {
     if is_hs_target intel || is_hs_target npu; then
         info "Checking Intel userspace..."
         hs_check_cxx
-        if lz=$(hs_find libze_loader.so.1); then hs_ok "Level Zero loader: ${lz##*/}"; else hs_warn "Level Zero loader (libze_loader.so.1) not installed"; fi
+        if lz=$(hs_find libze_loader.so.1); then hs_ok "Level Zero loader: ${lz##*/}"; else hs_warn "Level Zero loader (libze_loader.so.1) not installed"; hs_need ze_loader; fi
     fi
     if is_hs_target intel; then
-        if hs_find libze_intel_gpu.so.1 >/dev/null; then hs_ok "Level Zero GPU driver (libze_intel_gpu.so.1) installed"; else hs_warn "Level Zero GPU driver (libze_intel_gpu.so.1) not installed"; fi
+        if hs_find libze_intel_gpu.so.1 >/dev/null; then hs_ok "Level Zero GPU driver (libze_intel_gpu.so.1) installed"; else hs_warn "Level Zero GPU driver (libze_intel_gpu.so.1) not installed"; hs_need compute; fi
         hs_check_opencl
         hs_check_va
     fi
     if is_hs_target npu; then
         info "Checking Intel NPU userspace..."
-        if hs_find libze_intel_npu.so.1 >/dev/null; then hs_ok "NPU Level Zero driver (libze_intel_npu.so.1) installed"; else hs_warn "NPU Level Zero driver (libze_intel_npu.so.1) not installed"; fi
+        if hs_find libze_intel_npu.so.1 >/dev/null; then hs_ok "NPU Level Zero driver (libze_intel_npu.so.1) installed"; else hs_warn "NPU Level Zero driver (libze_intel_npu.so.1) not installed"; hs_need npu_umd; fi
         for gen in $(printf '%s\n' ${HS_NPU_GENS[@]+"${HS_NPU_GENS[@]}"} | sort -u); do
-            if [ -n "$(npu_fw_file "${gen}")" ]; then hs_ok "intel/vpu/vpu_${gen}_* firmware present"; else hs_warn "intel/vpu/vpu_${gen}_* firmware missing"; fi
+            if [ -n "$(npu_fw_file "${gen}")" ]; then hs_ok "intel/vpu/vpu_${gen}_* firmware present"; else hs_warn "intel/vpu/vpu_${gen}_* firmware missing"; hs_need npu_fw; fi
         done
     fi
     if is_hs_target nvidia; then
         info "Checking NVIDIA container toolkit..."
-        if command -v nvidia-ctk >/dev/null 2>&1; then hs_ok "nvidia-ctk installed"; else hs_warn "nvidia-ctk not installed"; fi
+        # NVIDIA's packages install it to /usr/bin; PATH counts on the live host only.
+        if [ -x "${SYSROOT}/usr/bin/nvidia-ctk" ] || { [ -z "${SYSROOT}" ] && command -v nvidia-ctk >/dev/null 2>&1; }; then
+            hs_ok "nvidia-ctk installed"
+        else
+            hs_warn "nvidia-ctk not installed"
+            hs_need nvctk
+        fi
         if [ -e "${SYSROOT}/etc/cdi/nvidia.yaml" ] || [ -e "${SYSROOT}/var/run/cdi/nvidia.yaml" ]; then
             hs_ok "NVIDIA CDI spec present"
         else
             hs_warn "no NVIDIA CDI spec in /etc/cdi or /var/run/cdi"
+            hs_need cdi
         fi
     fi
     # Kernel side: parts newer than the kernel's default xe support.
@@ -6870,8 +6982,11 @@ hs_accel_config_missing() {
         && [ -z "$(accel_config_install "${HS_DISTRO}")" ]
 }
 
+# The accel-config build hint for a distro (or release) with no known package.
+HS_AC_BUILD="build intel/idxd-config accel-config-v4.1.9 with --prefix=/usr (https://github.com/intel/idxd-config)"
+
 hs_check_accels() {
-    local k d cls run rev
+    local k d cls run rev ac
     [ -n "${HS_ACCEL}${HS_HELD}" ] || return 0
     info "Checking Xeon DSA/IAA/QAT..."
     while IFS=$'\t' read -r k d cls run rev; do
@@ -6884,14 +6999,30 @@ hs_check_accels() {
     done <<< "${HS_ACCEL}"
     while IFS=$'\t' read -r k d cls run rev; do
         [ -n "${k}" ] || continue
-        if [ "${cls}" = kernel ]; then
-            echo "  note: ${k} ${d}: enabled with kernel work queues only — left alone; add --with-kernel-wqs to put a user WQ beside them (k3d-gpu doctor prints the exact commands)"
-        else
-            echo "  note: ${k} ${d}: left alone — ${rev}"
-        fi
+        case "${cls}" in
+            kernel)
+                echo "  note: ${k} ${d}: enabled with kernel work queues only — left alone; add --with-kernel-wqs to put a user WQ beside them (k3d-gpu doctor prints the exact commands)" ;;
+            shrink)
+                echo "  suggest: $(accel_shrink_note "${k}" "${d}")"
+                echo "        apply:  ${run}"
+                echo "        revert: ${rev}"
+                if ! has_accel_config; then
+                    ac=$(accel_config_install "${HS_DISTRO}")
+                    echo "        needs accel-config: ${ac:-${HS_AC_BUILD}}"
+                fi ;;
+            *)
+                echo "  note: ${k} ${d}: left alone — ${rev}" ;;
+        esac
     done <<< "${HS_HELD}"
-    if hs_accel_config_missing; then
-        hs_warn "accel-config is not packaged for ${HS_DISTRO}: build intel/idxd-config accel-config-v4.1.9 with --prefix=/usr (https://github.com/intel/idxd-config) and rerun; the plan leaves DSA/IAA out until then"
+    grep -qE '^(DSA|IAA)'$'\t' <<< "${HS_ACCEL}" || return 0
+    if ac=$(accel_config_path); then
+        hs_ok "accel-config: ${ac}"
+    elif [ -n "$(accel_config_install "${HS_DISTRO}")" ]; then
+        hs_warn "accel-config not installed — the plan below installs ${HS_DISTRO}'s own package"
+    elif [[ "${HS_DISTRO}" == ubuntu-* ]]; then
+        hs_warn "accel-config not installed and no package is pinned for ${HS_DISTRO} (pinned: ubuntu-24.04, ubuntu-26.04 universe): ${HS_AC_BUILD} and rerun; the plan leaves DSA/IAA out until then"
+    else
+        hs_warn "accel-config is not packaged for ${HS_DISTRO}: ${HS_AC_BUILD} and rerun; the plan leaves DSA/IAA out until then"
     fi
 }
 
@@ -6932,10 +7063,11 @@ hs_libva_pkgs() {
     echo "${out# }"
 }
 
-# The NPU .debs inside the release archive, each as " '<prefix><file>'".
+# The named NPU .debs inside the release archive, each as " '<prefix><file>'":
+# hs_npu_debs <release> <prefix> <package names>.
 hs_npu_debs() {
     local p
-    for p in intel-level-zero-npu intel-driver-compiler-npu intel-fw-npu; do
+    for p in $3; do
         printf " '%s'" "$2${p}_${HS_NPU_BUILD}~ubuntu$1_amd64.deb"
     done
 }
@@ -6948,80 +7080,133 @@ hs_fetch() {
 }
 
 hs_plan_ubuntu() {
-    local rel=$1 debs="" file sum url npu
-    hs_add "sudo apt-get update"
-    hs_add "sudo apt-get install -y ca-certificates curl gnupg software-properties-common"
-    if is_hs_target intel || is_hs_target npu; then
-        # A private download dir: the .debs in it are installed as root.
-        hs_add "mkdir -p '${HS_DIR}' && [ ! -L '${HS_DIR}' ] && [ -O '${HS_DIR}' ] && chmod 0700 '${HS_DIR}' || { echo 'refusing ${HS_DIR}: not a directory owned by this user' >&2; exit 1; }"
-        read -r file sum url <<< "${HS_ZE_DEB}"
-        hs_fetch "${file}" "${sum}" "${url}"
-        debs+=" '${HS_DIR}/${file}'"
+    local rel=$1 debs="" pkgs="" pre="" file sum url npu names="" steps=()
+    local saved=("${HS_PLAN[@]+"${HS_PLAN[@]}"}")
+    HS_PLAN=()
+    if ! hs_ubuntu_pinned "${rel}"; then
+        hs_needs ze_loader compute media vainfo clinfo npu_umd npu_fw \
+            && echo "  note: no pinned package set for ubuntu-${rel} (pinned: ubuntu-24.04, ubuntu-26.04): the plan installs no Intel GPU/NPU packages here; install them from your release's own archive"
+    else
+        if hs_needs compute npu_umd npu_fw || { hs_needs ze_loader && [ "${rel}" = 24.04 ]; }; then
+            # A private download dir: the .debs in it are installed as root.
+            hs_add "mkdir -p '${HS_DIR}' && [ ! -L '${HS_DIR}' ] && [ -O '${HS_DIR}' ] && chmod 0700 '${HS_DIR}' || { echo 'refusing ${HS_DIR}: not a directory owned by this user' >&2; exit 1; }"
+            pre+=" ca-certificates curl"
+        fi
+        if hs_needs ze_loader; then
+            if [ "${rel}" = 24.04 ]; then
+                read -r file sum url <<< "${HS_ZE_DEB}"
+                hs_fetch "${file}" "${sum}" "${url}"
+                debs+=" '${HS_DIR}/${file}'"
+            else
+                echo "  note: no pinned Level Zero loader for ubuntu-${rel}: level-zero v1.34.0 publishes libze1 .debs for Ubuntu 22.04 and 24.04 only; ubuntu-${rel}'s own is libze1 1.28.2 (sudo apt-get install -y libze1), older than the 1.32 the compute runtime is built against"
+            fi
+        fi
+        if hs_needs media; then
+            pre+=" software-properties-common"
+            hs_add "sudo add-apt-repository -y ppa:kobuk-team/intel-graphics"
+            # The PPA also builds intel-opencl-icd/libze*/libigc*; keep apt on the GitHub .debs.
+            hs_add "printf 'Package: intel-opencl-icd libze-intel-gpu1 libze1 libze-dev libze-intel-gpu-dev libigc2 libigc-dev libigc-tools\\nPin: release o=LP-PPA-kobuk-team-intel-graphics\\nPin-Priority: -1\\n' | sudo tee /etc/apt/preferences.d/k3d-gpu-intel-compute >/dev/null"
+            pkgs+=" intel-media-va-driver-non-free=26.3.2-1~${rel}~ppa1 $(hs_libva_pkgs "${rel}") libigdgmm12=22.10.1-1~${rel}~ppa1"
+        fi
+        hs_needs vainfo && pkgs+=" vainfo"
+        hs_needs clinfo && pkgs+=" clinfo"
+        if hs_needs compute; then
+            pkgs+=" ocl-icd-libopencl1"
+            while read -r file sum url; do
+                hs_fetch "${file}" "${sum}" "${url}"
+                debs+=" '${HS_DIR}/${file}'"
+            done < <(hs_intel_debs)
+        fi
+        if hs_needs npu_umd npu_fw; then
+            read -r file sum <<< "$(hs_npu_tarball "${rel}")"
+            hs_fetch "${file}" "${sum}" "https://github.com/intel/linux-npu-driver/releases/download/${HS_NPU_REL}"
+            npu="${HS_DIR}/npu-${HS_NPU_REL}"
+            hs_needs npu_umd && names+=" intel-level-zero-npu intel-driver-compiler-npu"
+            hs_needs npu_fw && names+=" intel-fw-npu"
+            hs_add "mkdir -p '${npu}' && tar -xzf '${HS_DIR}/${file}' -C '${npu}'$(hs_npu_debs "${rel}" ./ "${names}")"
+            hs_needs npu_umd && debs+=" libtbb12"
+            debs+="$(hs_npu_debs "${rel}" "${npu}/" "${names}")"
+        fi
+        [ -z "${pkgs}" ] || hs_add "sudo apt-get install -y${pkgs}"
+        [ -z "${debs}" ] || hs_add "sudo apt-get install -y${debs}"
     fi
-    if is_hs_target intel; then
-        hs_add "sudo add-apt-repository -y ppa:kobuk-team/intel-graphics"
-        # The PPA also builds intel-opencl-icd/libze*/libigc*; keep apt on the GitHub .debs.
-        hs_add "printf 'Package: intel-opencl-icd libze-intel-gpu1 libze1 libze-dev libze-intel-gpu-dev libigc2 libigc-dev libigc-tools\\nPin: release o=LP-PPA-kobuk-team-intel-graphics\\nPin-Priority: -1\\n' | sudo tee /etc/apt/preferences.d/k3d-gpu-intel-compute >/dev/null"
-        hs_add "sudo apt-get install -y intel-media-va-driver-non-free=26.3.2-1~${rel}~ppa1 $(hs_libva_pkgs "${rel}") libigdgmm12=22.10.1-1~${rel}~ppa1 vainfo clinfo ocl-icd-libopencl1"
-        while read -r file sum url; do
-            hs_fetch "${file}" "${sum}" "${url}"
-            debs+=" '${HS_DIR}/${file}'"
-        done < <(hs_intel_debs)
-    fi
-    if is_hs_target npu; then
-        read -r file sum <<< "$(hs_npu_tarball "${rel}")"
-        hs_fetch "${file}" "${sum}" "https://github.com/intel/linux-npu-driver/releases/download/${HS_NPU_REL}"
-        npu="${HS_DIR}/npu-${HS_NPU_REL}"
-        hs_add "mkdir -p '${npu}' && tar -xzf '${HS_DIR}/${file}' -C '${npu}'$(hs_npu_debs "${rel}" ./)"
-        debs+=" libtbb12$(hs_npu_debs "${rel}" "${npu}/")"
-    fi
-    [ -z "${debs}" ] || hs_add "sudo apt-get install -y${debs}"
-    if is_hs_target nvidia; then
+    if hs_needs nvctk; then
+        pre+=" ca-certificates curl gnupg"
         hs_add "curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --batch --yes --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg"
         hs_add "curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list >/dev/null"
         hs_add "sudo apt-get update"
         hs_add "sudo apt-get install -y nvidia-container-toolkit=${HS_NVCTK} nvidia-container-toolkit-base=${HS_NVCTK} libnvidia-container-tools=${HS_NVCTK} libnvidia-container1=${HS_NVCTK}"
-        hs_plan_nvidia_runtime refresh
     fi
+    hs_plan_nvidia_runtime refresh
+    # apt-get update and the prerequisites first, when any step above needs them.
+    steps=("${HS_PLAN[@]+"${HS_PLAN[@]}"}")
+    HS_PLAN=("${saved[@]+"${saved[@]}"}")
+    hs_needs sync && hs_add "sudo apt-get update && sudo apt-get full-upgrade -y"
+    if [ -n "${pre}" ] || [ -n "${pkgs}${debs}" ]; then
+        hs_needs sync || hs_add "sudo apt-get update"
+        [ -z "${pre}" ] || hs_add "sudo apt-get install -y $(tr ' ' '\n' <<< "${pre}" | awk 'NF && !seen[$0]++' | paste -sd' ')"
+    fi
+    HS_PLAN+=("${steps[@]+"${steps[@]}"}")
 }
 
 hs_plan_fedora() {
     local pkgs=""
-    is_hs_target intel && pkgs+=" intel-opencl intel-level-zero oneapi-level-zero libva-intel-media-driver libva-utils clinfo intel-gpu-firmware"
-    is_hs_target npu && pkgs+=" intel-npu-driver intel-npu-firmware"
-    is_hs_target intel || { is_hs_target npu && pkgs+=" oneapi-level-zero"; }
+    hs_needs compute && pkgs+=" intel-opencl intel-level-zero"
+    hs_needs ze_loader && pkgs+=" oneapi-level-zero"
+    hs_needs media && pkgs+=" libva-intel-media-driver"
+    hs_needs vainfo && pkgs+=" libva-utils"
+    hs_needs clinfo && pkgs+=" clinfo"
+    hs_needs compute && pkgs+=" intel-gpu-firmware"
+    hs_needs npu_umd && pkgs+=" intel-npu-driver"
+    hs_needs npu_fw && pkgs+=" intel-npu-firmware"
+    if hs_needs sync; then hs_add "sudo dnf upgrade -y --refresh"; fi
     [ -z "${pkgs}" ] || hs_add "sudo dnf install -y --refresh${pkgs}"
-    if is_hs_target nvidia; then
+    if hs_needs nvctk; then
         hs_add "curl -fsSL https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo | sudo tee /etc/yum.repos.d/nvidia-container-toolkit.repo >/dev/null"
         hs_add "sudo dnf install -y nvidia-container-toolkit-${HS_NVCTK} nvidia-container-toolkit-base-${HS_NVCTK} libnvidia-container-tools-${HS_NVCTK} libnvidia-container1-${HS_NVCTK}"
-        hs_plan_nvidia_runtime refresh
     fi
+    hs_plan_nvidia_runtime refresh
 }
 
 hs_plan_arch() {
     local pkgs=""
-    is_hs_target intel && pkgs+=" intel-compute-runtime level-zero-loader intel-media-driver libva libva-utils clinfo linux-firmware-intel"
-    is_hs_target npu && pkgs+=" intel-npu-driver"
-    is_hs_target npu && ! is_hs_target intel && pkgs+=" level-zero-loader linux-firmware-intel"
-    is_hs_target nvidia && pkgs+=" nvidia-container-toolkit"
-    [ -z "${pkgs}" ] || hs_add "sudo pacman -Syu --needed${pkgs}"
+    hs_needs compute && pkgs+=" intel-compute-runtime"
+    hs_needs ze_loader && pkgs+=" level-zero-loader"
+    hs_needs media && pkgs+=" intel-media-driver libva"
+    hs_needs vainfo && pkgs+=" libva-utils"
+    hs_needs clinfo && pkgs+=" clinfo"
+    hs_needs npu_umd && pkgs+=" intel-npu-driver"
+    hs_needs compute npu_fw && pkgs+=" linux-firmware-intel"
+    hs_needs nvctk && pkgs+=" nvidia-container-toolkit"
+    if [ -n "${pkgs}" ]; then
+        hs_add "sudo pacman -Syu --needed${pkgs}"
+    elif hs_needs sync; then
+        hs_add "sudo pacman -Syu"
+    fi
     # Arch's package ships the nvidia-cdi-refresh units from 1.20.1-1; older builds
     # (Manjaro lags) do not, so those get the spec written directly.
-    is_hs_target nvidia && hs_plan_nvidia_runtime "${SYSROOT}/usr/lib/systemd/system/nvidia-cdi-refresh.service"
+    hs_plan_nvidia_runtime "${SYSROOT}/usr/lib/systemd/system/nvidia-cdi-refresh.service"
     return 0
 }
 
-# CDI spec + Docker runtime registration. NVIDIA's own packages (1.18+) keep
+# CDI spec + Docker runtime registration, after a toolkit install (nvctk): the
+# spec, the Docker runtime and a Docker restart; with the toolkit in place and
+# only the spec missing (cdi): the spec alone. NVIDIA's own packages (1.18+) keep
 # /var/run/cdi/nvidia.yaml current through nvidia-cdi-refresh. Given a unit file
-# path instead of "refresh", the refresh runs when that file exists, else the
-# spec is generated.
+# path instead of "refresh" (and always for an already-installed toolkit), the
+# refresh runs when that file exists, else the spec is generated.
 hs_plan_nvidia_runtime() {
     local refresh="sudo systemctl enable --now nvidia-cdi-refresh.path && sudo systemctl restart nvidia-cdi-refresh.service"
-    if [ "$1" = refresh ]; then
+    local unit=$1
+    hs_needs nvctk cdi || return 0
+    # The installed toolkit may predate the refresh units (1.18): test for them.
+    hs_needs nvctk || [ "${unit}" != refresh ] || unit="${SYSROOT}/usr/lib/systemd/system/nvidia-cdi-refresh.service"
+    if [ "${unit}" = refresh ]; then
         hs_add "${refresh}"
     else
-        hs_add "if [ -e '$1' ]; then ${refresh}; else sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml; fi"
+        hs_add "if [ -e '${unit}' ]; then ${refresh}; else sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml; fi"
     fi
+    hs_needs nvctk || return 0
     hs_add "sudo nvidia-ctk runtime configure --runtime=docker"
     hs_add "sudo systemctl restart docker"
 }
@@ -7036,13 +7221,13 @@ cmd_host_setup() {
             --with-kernel-wqs) HS_KERNEL_WQS=1 ;;
             --distro) [ $# -ge 2 ] || err "--distro needs a value"; HS_DISTRO=$2; shift ;;
             --distro=*) HS_DISTRO=${1#--distro=} ;;
-            *) err "unknown host-setup option '$1' (use --apply, --plan, --with-kernel-wqs, --distro ubuntu-24.04|ubuntu-26.04|fedora|arch|manjaro)" ;;
+            *) err "unknown host-setup option '$1' (use --apply, --plan, --with-kernel-wqs, --distro ubuntu-<release>|fedora|arch|manjaro)" ;;
         esac
         shift
     done
     [ -n "${HS_DISTRO}" ] || HS_DISTRO=$(hs_distro)
     case "${HS_DISTRO}" in
-        ubuntu-24.04|ubuntu-26.04|fedora|arch|manjaro) ;;
+        ubuntu-*|fedora|arch|manjaro) ;;
         *) err "host-setup supports Ubuntu 24.04/26.04, Fedora, Arch and Manjaro (this host: ${HS_DISTRO}); pass --distro to print another distro's plan" ;;
     esac
 
@@ -7053,7 +7238,7 @@ cmd_host_setup() {
         return 0
     fi
     info "Host setup for ${HS_DISTRO}: $({ printf '%s\n' ${HS_TARGETS[@]+"${HS_TARGETS[@]}"}; cut -f1 <<< "${HS_ACCEL}${HS_HELD}" | tr '[:upper:]' '[:lower:]'; } | awk 'NF && !seen[$0]++' | paste -sd' ')"
-    HS_BROKEN=0 HS_MISSING=0
+    HS_BROKEN=0 HS_MISSING=0 HS_NEED=""
     hs_checks
     hs_check_accels
 
@@ -7061,7 +7246,7 @@ cmd_host_setup() {
     # upgrade and a docker restart there would only risk a working setup.
     if [ "${HS_BROKEN}" -eq 0 ] && [ "${HS_MISSING}" -eq 0 ] && [ "${plan}" -eq 0 ]; then
         echo ""
-        info "Every check passed: nothing to install. ('k3d-gpu host-setup --plan' prints the full install plan anyway.)"
+        info "Every check passed: nothing to install."
         return 0
     fi
 
@@ -7076,7 +7261,11 @@ cmd_host_setup() {
     hs_plan_accels
     echo ""
     if [ "${#HS_PLAN[@]}" -eq 0 ]; then
-        info "Nothing host-setup can run here: each warning above names its fix."
+        if [ "${HS_BROKEN}" -eq 0 ] && [ "${HS_MISSING}" -eq 0 ]; then
+            info "Every check passed: nothing to install."
+        else
+            info "Nothing host-setup can run here: each warning above names its fix."
+        fi
         return 0
     fi
     info "Install plan (${#HS_PLAN[@]} commands):"
