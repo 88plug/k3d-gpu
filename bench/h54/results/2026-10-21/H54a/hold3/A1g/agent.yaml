@@ -1,0 +1,102 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: k3d-gpu-agent
+---
+# Models and the compiled-model cache live here, so restarts never re-download.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ovms-models
+  namespace: k3d-gpu-agent
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ovms
+  namespace: k3d-gpu-agent
+  labels:
+    app: ovms
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ovms
+  template:
+    metadata:
+      labels:
+        app: ovms
+      annotations:
+        k3d-gpu.io/agent-device: CPU
+    spec:
+      securityContext:
+        runAsUser: 5000
+        runAsGroup: 5000
+        fsGroup: 5000
+      initContainers:
+        # --pull downloads the model once and writes its graph.pbtxt (device,
+        # parsers). On later starts the files are already there and only the
+        # graph is rewritten, so a device change takes effect with no download.
+        - name: pull
+          image: openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58
+          imagePullPolicy: IfNotPresent
+          args:
+            - --pull
+            - --source_model=k3dgpu/gemma-4-26b-a4b-it-qat-int4-sym-g32-ov
+            - --model_repository_path=/models
+            - --model_name=gemma
+            - --task=text_generation
+            - --target_device=CPU
+          volumeMounts:
+            - name: models
+              mountPath: /models
+      containers:
+        - name: ovms
+          image: openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58
+          imagePullPolicy: IfNotPresent
+          args:
+            - --rest_port=8000
+            - --model_path=/models/k3dgpu/gemma-4-26b-a4b-it-qat-int4-sym-g32-ov
+            - --model_name=gemma
+            - --cache_dir=/models/.ov_cache
+            - --log_level=INFO
+          ports:
+            - name: http
+              containerPort: 8000
+          # No liveness probe: compiling a model for a GPU takes minutes.
+          readinessProbe:
+            httpGet:
+              path: /v2/health/ready
+              port: http
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: "1"
+              memory: 6Gi
+          volumeMounts:
+            - name: models
+              mountPath: /models
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: ovms-models
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ovms
+  namespace: k3d-gpu-agent
+spec:
+  selector:
+    app: ovms
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http

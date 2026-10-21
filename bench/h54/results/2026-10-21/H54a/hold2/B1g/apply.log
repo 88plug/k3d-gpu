@@ -1,0 +1,4 @@
+configmap/vllm-gemma4-26b-a4b-cpu-chat-templates created
+configmap/vllm-gemma4-26b-a4b-cpu-config created
+service/vllm-gemma4-26b-a4b-cpu-service created
+deployment.apps/vllm-gemma4-26b-a4b-cpu created

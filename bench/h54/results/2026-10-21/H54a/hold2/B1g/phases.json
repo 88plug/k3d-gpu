@@ -1,0 +1,1254 @@
+{
+ "n1": {
+  "tries": [
+   {
+    "phase": "n1",
+    "try": 1,
+    "t0": 1792574119.6977818,
+    "t1": 1792574462.4858847,
+    "w0": 1792574017.2792485,
+    "w1": 1792574077.3252065,
+    "check": {
+     "void": false,
+     "reason": "non-campaign CPU idle window 2.47 CPU-s/s; phase 2.66"
+    }
+   }
+  ],
+  "void": false,
+  "rerun_void": false,
+  "result": {
+   "tool": "k3d-gpu/bench/llm_load.py",
+   "schema": 1,
+   "started_at": "2026-10-21T09:15:19Z",
+   "config": {
+    "base_url": "http://127.0.0.1:18382/v1",
+    "model": "google/gemma-4-26B-A4B-it",
+    "prompt": "Explain in three short paragraphs how a CPU cache hierarchy reduces memory latency, and what a cache miss costs.",
+    "max_tokens": 256,
+    "temperature": 0.0,
+    "ignore_eos": true,
+    "extra_body": null,
+    "unique_prompts": true,
+    "requests": 8,
+    "concurrency": "1",
+    "warmup": 0,
+    "timeout": 1800.0,
+    "label": "H54a B1g n1",
+    "out": "/home/devcloud/k3dgpu-gemma/results/H54a/hold2/B1g/load-n1.json",
+    "run_id": "9909290a"
+   },
+   "phases": [
+    {
+     "concurrency": 1,
+     "requests": 8,
+     "ok": 3,
+     "errors": 5,
+     "wall_s": 342.68140997504815,
+     "output_tokens_total": 512,
+     "aggregate_tokens_per_s": 1.4940991401817814,
+     "requests_per_s": 0.008754487149502626,
+     "stats": {
+      "first_chunk_s": {
+       "n": 3,
+       "median": 0.2033844469115138,
+       "p90": 0.20605790009722114,
+       "min": 0.18736421363428235,
+       "max": 0.20605790009722114
+      },
+      "ttft_s": {
+       "n": 3,
+       "median": 0.20344148762524128,
+       "p90": 0.20612448314204812,
+       "min": 0.1874278448522091,
+       "max": 0.20612448314204812
+      },
+      "latency_s": {
+       "n": 3,
+       "median": 14.435446164570749,
+       "p90": 314.0007076859474,
+       "min": 14.221372189000249,
+       "max": 314.0007076859474
+      },
+      "output_tokens": {
+       "n": 2,
+       "median": 256.0,
+       "p90": 256,
+       "min": 256,
+       "max": 256
+      },
+      "tokens_per_s": {
+       "n": 2,
+       "median": 17.86760021127287,
+       "p90": 18.00107588760017,
+       "min": 17.73412453494557,
+       "max": 18.00107588760017
+      },
+      "decode_tokens_per_s": {
+       "n": 2,
+       "median": 18.04379683354142,
+       "p90": 18.170230246518788,
+       "min": 17.917363420564055,
+       "max": 18.170230246518788
+      }
+     },
+     "samples": [
+      {
+       "index": 0,
+       "ok": true,
+       "error": null,
+       "chunks": 258,
+       "content_chunks": 256,
+       "text_chars": 1268,
+       "first_chunk_s": 0.2033844469115138,
+       "ttft_s": 0.20344148762524128,
+       "latency_s": 14.435446164570749,
+       "output_tokens": 256,
+       "tokens_per_s": 17.73412453494557,
+       "decode_tokens_per_s": 17.917363420564055,
+       "prompt_tokens": 48,
+       "finished": true
+      },
+      {
+       "index": 1,
+       "ok": true,
+       "error": null,
+       "chunks": 258,
+       "content_chunks": 256,
+       "text_chars": 1280,
+       "first_chunk_s": 0.18736421363428235,
+       "ttft_s": 0.1874278448522091,
+       "latency_s": 14.221372189000249,
+       "output_tokens": 256,
+       "tokens_per_s": 18.00107588760017,
+       "decode_tokens_per_s": 18.170230246518788,
+       "prompt_tokens": 48,
+       "finished": true
+      },
+      {
+       "index": 2,
+       "ok": true,
+       "error": null,
+       "chunks": 254,
+       "content_chunks": 252,
+       "text_chars": 1187,
+       "first_chunk_s": 0.20605790009722114,
+       "ttft_s": 0.20612448314204812,
+       "latency_s": 314.0007076859474,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null,
+       "finished": true
+      },
+      {
+       "index": 3,
+       "ok": false,
+       "error": "HTTP 500: {\"error\":{\"message\":\"EngineCore encountered an issue. See stack trace (above) for the root cause.\",\"type\":\"InternalServerError\",\"param\":null,\"code\":500}}",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": null,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 4,
+       "ok": false,
+       "error": "HTTP 500: {\"error\":{\"message\":\"EngineCore encountered an issue. See stack trace (above) for the root cause.\",\"type\":\"InternalServerError\",\"param\":null,\"code\":500}}",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": null,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 5,
+       "ok": false,
+       "error": "HTTP 500: {\"error\":{\"message\":\"EngineCore encountered an issue. See stack trace (above) for the root cause.\",\"type\":\"InternalServerError\",\"param\":null,\"code\":500}}",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": null,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 6,
+       "ok": false,
+       "error": "HTTP 500: {\"error\":{\"message\":\"EngineCore encountered an issue. See stack trace (above) for the root cause.\",\"type\":\"InternalServerError\",\"param\":null,\"code\":500}}",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": null,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 7,
+       "ok": false,
+       "error": "HTTP 500: {\"error\":{\"message\":\"EngineCore encountered an issue. See stack trace (above) for the root cause.\",\"type\":\"InternalServerError\",\"param\":null,\"code\":500}}",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": null,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "n4": {
+  "tries": [
+   {
+    "phase": "n4",
+    "try": 1,
+    "t0": 1792574462.5507157,
+    "t1": 1792574462.663222,
+    "w0": 1792574017.2792485,
+    "w1": 1792574077.3252065,
+    "check": {
+     "void": false,
+     "reason": "non-campaign CPU idle window 2.47 CPU-s/s"
+    }
+   }
+  ],
+  "void": false,
+  "rerun_void": false,
+  "result": {
+   "tool": "k3d-gpu/bench/llm_load.py",
+   "schema": 1,
+   "started_at": "2026-10-21T09:21:02Z",
+   "config": {
+    "base_url": "http://127.0.0.1:18382/v1",
+    "model": "google/gemma-4-26B-A4B-it",
+    "prompt": "Explain in three short paragraphs how a CPU cache hierarchy reduces memory latency, and what a cache miss costs.",
+    "max_tokens": 256,
+    "temperature": 0.0,
+    "ignore_eos": true,
+    "extra_body": null,
+    "unique_prompts": true,
+    "requests": 16,
+    "concurrency": "4",
+    "warmup": 0,
+    "timeout": 1800.0,
+    "label": "H54a B1g n4",
+    "out": "/home/devcloud/k3dgpu-gemma/results/H54a/hold2/B1g/load-n4.json",
+    "run_id": "4ea019b7"
+   },
+   "phases": [
+    {
+     "concurrency": 4,
+     "requests": 16,
+     "ok": 0,
+     "errors": 16,
+     "wall_s": 0.009236088022589684,
+     "output_tokens_total": null,
+     "aggregate_tokens_per_s": null,
+     "requests_per_s": 0.0,
+     "stats": {
+      "first_chunk_s": {
+       "n": 0,
+       "median": null,
+       "p90": null,
+       "min": null,
+       "max": null
+      },
+      "ttft_s": {
+       "n": 0,
+       "median": null,
+       "p90": null,
+       "min": null,
+       "max": null
+      },
+      "latency_s": {
+       "n": 0,
+       "median": null,
+       "p90": null,
+       "min": null,
+       "max": null
+      },
+      "output_tokens": {
+       "n": 0,
+       "median": null,
+       "p90": null,
+       "min": null,
+       "max": null
+      },
+      "tokens_per_s": {
+       "n": 0,
+       "median": null,
+       "p90": null,
+       "min": null,
+       "max": null
+      },
+      "decode_tokens_per_s": {
+       "n": 0,
+       "median": null,
+       "p90": null,
+       "min": null,
+       "max": null
+      }
+     },
+     "samples": [
+      {
+       "index": 0,
+       "ok": false,
+       "error": "RemoteDisconnected: Remote end closed connection without response",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.007907954975962639,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 1,
+       "ok": false,
+       "error": "RemoteDisconnected: Remote end closed connection without response",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.003290103282779455,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 2,
+       "ok": false,
+       "error": "RemoteDisconnected: Remote end closed connection without response",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.006041521206498146,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 3,
+       "ok": false,
+       "error": "RemoteDisconnected: Remote end closed connection without response",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.005608858074992895,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 4,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 9.302981197834015e-05,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 5,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 5.262112244963646e-05,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 6,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 4.106620326638222e-05,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 7,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 3.2827723771333694e-05,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 8,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 3.173016011714935e-05,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 9,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 3.2496172934770584e-05,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 10,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 3.119092434644699e-05,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 11,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 3.1400006264448166e-05,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 12,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 2.9589980840682983e-05,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 13,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 2.8988812118768692e-05,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 14,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 3.056507557630539e-05,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 15,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 2.9124785214662552e-05,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "n16": {
+  "tries": [
+   {
+    "phase": "n16",
+    "try": 1,
+    "t0": 1792574462.7266386,
+    "t1": 1792574462.839105,
+    "w0": 1792574017.2792485,
+    "w1": 1792574077.3252065,
+    "check": {
+     "void": false,
+     "reason": "non-campaign CPU idle window 2.47 CPU-s/s"
+    }
+   }
+  ],
+  "void": false,
+  "rerun_void": false,
+  "result": {
+   "tool": "k3d-gpu/bench/llm_load.py",
+   "schema": 1,
+   "started_at": "2026-10-21T09:21:02Z",
+   "config": {
+    "base_url": "http://127.0.0.1:18382/v1",
+    "model": "google/gemma-4-26B-A4B-it",
+    "prompt": "Explain in three short paragraphs how a CPU cache hierarchy reduces memory latency, and what a cache miss costs.",
+    "max_tokens": 256,
+    "temperature": 0.0,
+    "ignore_eos": true,
+    "extra_body": null,
+    "unique_prompts": true,
+    "requests": 32,
+    "concurrency": "16",
+    "warmup": 0,
+    "timeout": 1800.0,
+    "label": "H54a B1g n16",
+    "out": "/home/devcloud/k3dgpu-gemma/results/H54a/hold2/B1g/load-n16.json",
+    "run_id": "0679d914"
+   },
+   "phases": [
+    {
+     "concurrency": 16,
+     "requests": 32,
+     "ok": 0,
+     "errors": 32,
+     "wall_s": 0.010916275437921286,
+     "output_tokens_total": null,
+     "aggregate_tokens_per_s": null,
+     "requests_per_s": 0.0,
+     "stats": {
+      "first_chunk_s": {
+       "n": 0,
+       "median": null,
+       "p90": null,
+       "min": null,
+       "max": null
+      },
+      "ttft_s": {
+       "n": 0,
+       "median": null,
+       "p90": null,
+       "min": null,
+       "max": null
+      },
+      "latency_s": {
+       "n": 0,
+       "median": null,
+       "p90": null,
+       "min": null,
+       "max": null
+      },
+      "output_tokens": {
+       "n": 0,
+       "median": null,
+       "p90": null,
+       "min": null,
+       "max": null
+      },
+      "tokens_per_s": {
+       "n": 0,
+       "median": null,
+       "p90": null,
+       "min": null,
+       "max": null
+      },
+      "decode_tokens_per_s": {
+       "n": 0,
+       "median": null,
+       "p90": null,
+       "min": null,
+       "max": null
+      }
+     },
+     "samples": [
+      {
+       "index": 0,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.002929307986050844,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 1,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.0002606199122965336,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 2,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.00015174970030784607,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 3,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.0017909668385982513,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 4,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 6.416719406843185e-05,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 5,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 4.1950028389692307e-05,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 6,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.0005265157669782639,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 7,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.000887908972799778,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 8,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.001463556196540594,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 9,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.002424547914415598,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 10,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.004440214019268751,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 11,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.0005168160423636436,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 12,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.00014915410429239273,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 13,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.0005395757034420967,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 14,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.00022491393610835075,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 15,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.0007357061840593815,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 16,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.00022297026589512825,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 17,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.0008520586416125298,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 18,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.0010736980475485325,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 19,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.00021030521020293236,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 20,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.001429608091711998,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 21,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.000646715983748436,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 22,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.000172492116689682,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 23,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.0004934282042086124,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 24,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.0010184310376644135,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 25,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.0011011329479515553,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 26,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.0006705806590616703,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 27,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.0007031280547380447,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 28,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.0007645003497600555,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 29,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.0003444901667535305,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 30,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 8.20457935333252e-05,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 31,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.0002826675772666931,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "ttft": {
+  "tries": [
+   {
+    "phase": "ttft",
+    "try": 1,
+    "t0": 1792574462.9050527,
+    "t1": 1792574463.009872,
+    "w0": 1792574017.2792485,
+    "w1": 1792574077.3252065,
+    "check": {
+     "void": false,
+     "reason": "non-campaign CPU idle window 2.47 CPU-s/s"
+    }
+   }
+  ],
+  "void": false,
+  "rerun_void": false,
+  "result": {
+   "tool": "k3d-gpu/bench/llm_load.py",
+   "schema": 1,
+   "started_at": "2026-10-21T09:21:02Z",
+   "config": {
+    "base_url": "http://127.0.0.1:18382/v1",
+    "model": "google/gemma-4-26B-A4B-it",
+    "prompt": "Section 1. A processor core reads data through a hierarchy of caches. The level-one cache is small and close to the execution units, the level-two cache is larger and a little slower, and the last-level cache is shared by every core on the die. When a load misses in every level, the request goes to the memory controller, which opens a row in a DRAM bank, reads a burst of sixty-four bytes and returns it over the channel. Prefetchers watch the stream of addresses and fetch lines before they are needed, and the out-of-order engine keeps other instructions moving while a miss is pending. Section 2. A processor core reads data through a hierarchy of caches. The level-one cache is small and close to the execution units, the level-two cache is larger and a little slower, and the last-level cache is shared by every core on the die. When a load misses in every level, the request goes to the memory controller, which opens a row in a DRAM bank, reads a burst of sixty-four bytes and returns it over the channel. Prefetchers watch the stream of addresses and fetch lines before they are needed, and the out-of-order engine keeps other instructions moving while a miss is pending. Section 3. A processor core reads data through a hierarchy of caches. The level-one cache is small and close to the execution units, the level-two cache is larger and a little slower, and the last-level cache is shared by every core on the die. When a load misses in every level, the request goes to the memory controller, which opens a row in a DRAM bank, reads a burst of sixty-four bytes and returns it over the channel. Prefetchers watch the stream of addresses and fetch lines before they are needed, and the out-of-order engine keeps other instructions moving while a miss is pending. Section 4. A processor core reads data through a hierarchy of caches. The level-one cache is small and close to the execution units, the level-two cache is larger and a little slower, and the last-level cache is shared by every core on the die. When a load misses in every level, the request goes to the memory controller, which opens a row in a DRAM bank, reads a burst of sixty-four bytes and returns it over the channel. Prefetchers watch the stream of addresses and fetch lines before they are needed, and the out-of-order engine keeps other instructions moving while a miss is pending. Section 5. A processor core reads data through a hierarchy of caches. The level-one cache is small and close to the execution units, the level-two cache is larger and a little slower, and the last-level cache is shared by every core on the die. When a load misses in every level, the request goes to the memory controller, which opens a row in a DRAM bank, reads a burst of sixty-four bytes and returns it over the channel. Prefetchers watch the stream of addresses and fetch lines before they are needed, and the out-of-order engine keeps other instructions moving while a miss is pending. Section 6. A processor core reads data through a hierarchy of caches. The level-one cache is small and close to the execution units, the level-two cache is larger and a little slower, and the last-level cache is shared by every core on the die. When a load misses in every level, the request goes to the memory controller, which opens a row in a DRAM bank, reads a burst of sixty-four bytes and returns it over the channel. Prefetchers watch the stream of addresses and fetch lines before they are needed, and the out-of-order engine keeps other instructions moving while a miss is pending. Section 7. A processor core reads data through a hierarchy of caches. The level-one cache is small and close to the execution units, the level-two cache is larger and a little slower, and the last-level cache is shared by every core on the die. When a load misses in every level, the request goes to the memory controller, which opens a row in a DRAM bank, reads a burst of sixty-four bytes and returns it over the channel. Prefetchers watch the stream of addresses and fetch lines before they are needed, and the out-of-order engine keeps other instructions moving while a miss is pending. Section 8. A processor core reads data through a hierarchy of caches. The level-one cache is small and close to the execution units, the level-two cache is larger and a little slower, and the last-level cache is shared by every core on the die. When a load misses in every level, the request goes to the memory controller, which opens a row in a DRAM\n\nSummarize the passage above in one sentence.",
+    "max_tokens": 16,
+    "temperature": 0.0,
+    "ignore_eos": false,
+    "extra_body": null,
+    "unique_prompts": true,
+    "requests": 4,
+    "concurrency": "1",
+    "warmup": 0,
+    "timeout": 1800.0,
+    "label": "H54a B1g ttft",
+    "out": "/home/devcloud/k3dgpu-gemma/results/H54a/hold2/B1g/load-ttft.json",
+    "run_id": "43993978"
+   },
+   "phases": [
+    {
+     "concurrency": 1,
+     "requests": 4,
+     "ok": 0,
+     "errors": 4,
+     "wall_s": 0.0028777970001101494,
+     "output_tokens_total": null,
+     "aggregate_tokens_per_s": null,
+     "requests_per_s": 0.0,
+     "stats": {
+      "first_chunk_s": {
+       "n": 0,
+       "median": null,
+       "p90": null,
+       "min": null,
+       "max": null
+      },
+      "ttft_s": {
+       "n": 0,
+       "median": null,
+       "p90": null,
+       "min": null,
+       "max": null
+      },
+      "latency_s": {
+       "n": 0,
+       "median": null,
+       "p90": null,
+       "min": null,
+       "max": null
+      },
+      "output_tokens": {
+       "n": 0,
+       "median": null,
+       "p90": null,
+       "min": null,
+       "max": null
+      },
+      "tokens_per_s": {
+       "n": 0,
+       "median": null,
+       "p90": null,
+       "min": null,
+       "max": null
+      },
+      "decode_tokens_per_s": {
+       "n": 0,
+       "median": null,
+       "p90": null,
+       "min": null,
+       "max": null
+      }
+     },
+     "samples": [
+      {
+       "index": 0,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.0014266641810536385,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 1,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 9.730970486998558e-05,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 2,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 0.0001107887364923954,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      },
+      {
+       "index": 3,
+       "ok": false,
+       "error": "ConnectionRefusedError: [Errno 111] Connection refused",
+       "chunks": 0,
+       "content_chunks": 0,
+       "text_chars": 0,
+       "first_chunk_s": null,
+       "ttft_s": null,
+       "latency_s": 7.600802928209305e-05,
+       "output_tokens": null,
+       "tokens_per_s": null,
+       "decode_tokens_per_s": null
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "quality": {
+  "tries": [
+   {
+    "phase": "quality",
+    "t0": 1792574463.0772195,
+    "t1": 1792574463.1677797,
+    "check": {
+     "void": false,
+     "reason": "non-campaign CPU idle window 2.47 CPU-s/s"
+    }
+   }
+  ],
+  "void": false,
+  "rerun_void": false
+ }
+}

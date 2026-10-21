@@ -1,0 +1,80 @@
+Name:             lg-64c55654d8-gf84x
+Namespace:        h54
+Priority:         0
+Service Account:  default
+Node:             k3d-k3dgpu-g-h54a-2-server-0/172.19.0.2
+Start Time:       Wed, 21 Oct 2026 09:21:14 +0000
+Labels:           app=lg
+                  pod-template-hash=64c55654d8
+Annotations:      <none>
+Status:           Running
+IP:               10.42.0.10
+IPs:
+  IP:           10.42.0.10
+Controlled By:  ReplicaSet/lg-64c55654d8
+Containers:
+  server:
+    Container ID:  containerd://5392339dbf92ddab5b939728600b39ca31f81930a59dace79780a9628b3ea4a9
+    Image:         ghcr.io/ggml-org/llama.cpp:server-b11749@sha256:9fbaa06d7f4449e2ae0d02b40e0431f7c212dcf231c9e3a7777a6afc2cc8f312
+    Image ID:      ghcr.io/ggml-org/llama.cpp@sha256:9fbaa06d7f4449e2ae0d02b40e0431f7c212dcf231c9e3a7777a6afc2cc8f312
+    Port:          8080/TCP (http)
+    Host Port:     0/TCP (http)
+    Args:
+      -m
+      /models/google_gemma-4-26B-A4B-it-qat-q4_0-gguf/gemma-4-26B_q4_0-it.gguf
+      --host
+      0.0.0.0
+      --port
+      8080
+      --alias
+      gemma
+      -t
+      48
+      -Cr
+      0-47
+      --cpu-strict
+      1
+      --jinja
+    State:          Running
+      Started:      Wed, 21 Oct 2026 09:21:30 +0000
+    Ready:          True
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /dev/shm from shm (rw)
+      /models from models (ro)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-ckxj9 (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       True 
+  ContainersReady             True 
+  PodScheduled                True 
+Volumes:
+  models:
+    Type:          HostPath (bare host directory volume)
+    Path:          /var/apb-models
+    HostPathType:  Directory
+  shm:
+    Type:       EmptyDir (a temporary directory that shares a pod's lifetime)
+    Medium:     Memory
+    SizeLimit:  8Gi
+  kube-api-access-ckxj9:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type    Reason     Age    From               Message
+  ----    ------     ----   ----               -------
+  Normal  Scheduled  8m51s  default-scheduler  Successfully assigned h54/lg-64c55654d8-gf84x to k3d-k3dgpu-g-h54a-2-server-0
+  Normal  Pulling    8m50s  kubelet            spec.containers{server}: Pulling image "ghcr.io/ggml-org/llama.cpp:server-b11749@sha256:9fbaa06d7f4449e2ae0d02b40e0431f7c212dcf231c9e3a7777a6afc2cc8f312"
+  Normal  Pulled     8m36s  kubelet            spec.containers{server}: Successfully pulled image "ghcr.io/ggml-org/llama.cpp:server-b11749@sha256:9fbaa06d7f4449e2ae0d02b40e0431f7c212dcf231c9e3a7777a6afc2cc8f312" in 14.254s (14.254s including waiting). Image size: 309412002 bytes.
+  Normal  Created    8m36s  kubelet            spec.containers{server}: Container created
+  Normal  Started    8m36s  kubelet            spec.containers{server}: Container started

@@ -1,0 +1,16 @@
+2026-10-21T09:30:22Z Lg-mtp start (1025 s of the hold left)
+2026-10-21T09:31:06Z Lg-mtp ready after 44 s
+energy: zone=intel-rapl:0 (package-0) joules=7867.341 seconds=60.018 avg_watts=131.084 command_seconds=60.002 samples=13 exit=0
+concurrency=1 ok=3/3 ttft_median=0.264s ttft_p90=0.267s latency_median=5.039s tok/s_median=50.8 aggregate_tok/s=50.9
+energy: zone=intel-rapl:0 (package-0) joules=4047.545 seconds=15.172 avg_watts=266.785 command_seconds=15.156 samples=5 exit=0
+concurrency=1 ok=8/8 ttft_median=0.264s ttft_p90=0.268s latency_median=4.942s tok/s_median=51.8 aggregate_tok/s=51.1
+energy: zone=intel-rapl:0 (package-0) joules=10944.661 seconds=40.142 avg_watts=272.648 command_seconds=40.126 samples=10 exit=0
+concurrency=4 ok=16/16 ttft_median=0.609s ttft_p90=0.672s latency_median=8.408s tok/s_median=30.4 aggregate_tok/s=121.2
+energy: zone=intel-rapl:0 (package-0) joules=9818.966 seconds=33.868 avg_watts=289.915 command_seconds=33.853 samples=8 exit=0
+concurrency=16 ok=32/32 ttft_median=25.822s ttft_p90=26.293s latency_median=33.718s tok/s_median=7.6 aggregate_tok/s=120.0
+energy: zone=intel-rapl:0 (package-0) joules=19789.139 seconds=68.317 avg_watts=289.668 command_seconds=68.301 samples=15 exit=0
+concurrency=1 ok=4/4 ttft_median=2.712s ttft_p90=2.767s latency_median=2.939s tok/s_median=5.4 aggregate_tok/s=5.5
+energy: zone=intel-rapl:0 (package-0) joules=3313.025 seconds=11.704 avg_watts=283.059 command_seconds=11.688 samples=4 exit=0
+2026-10-21T09:34:56Z Lg-mtp quality
+gsm8k 50/50 errors=0 wall=125.2s
+2026-10-21T09:37:01Z Lg-mtp status measured: phases and quality recorded
