@@ -1,0 +1,2 @@
+[32m==>[0m fit: OpenVINO/Qwen3-4B-fp16-ov on CPU (AMX) via ovms, context 40960 x 53 seqs, host 307.7 GiB (pod limit 339Gi), host reserve 50.3 GiB
+[32m==>[0m agent: OpenVINO/Qwen3-4B-fp16-ov as 'Qwen3-4B-fp16-ov' on CPU, 16 CPU(s)

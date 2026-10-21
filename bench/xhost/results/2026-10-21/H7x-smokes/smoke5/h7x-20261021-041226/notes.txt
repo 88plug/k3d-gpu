@@ -1,0 +1,263 @@
+block 2 engine C did not come up
+NAMESPACE                NAME                                      READY   STATUS      RESTARTS        AGE   IP           NODE                       NOMINATED NODE   READINESS GATES
+default                  vllm-c-6f48b74bcd-7sp44                   0/1     Running     9 (5m42s ago)   30m   10.42.0.11   k3d-k3dgpu-x-h7-server-0   <none>           <none>
+kube-system              coredns-577d995dff-fgpkv                  1/1     Running     0               33m   10.42.0.8    k3d-k3dgpu-x-h7-server-0   <none>           <none>
+kube-system              helm-install-gateway-api-crd-k2fm6        0/1     Completed   0               33m   10.42.0.6    k3d-k3dgpu-x-h7-server-0   <none>           <none>
+kube-system              intel-gpu-plugin-shmct                    1/1     Running     0               33m   10.42.0.9    k3d-k3dgpu-x-h7-server-0   <none>           <none>
+kube-system              local-path-provisioner-6858d854cf-2jjpr   1/1     Running     0               33m   10.42.0.7    k3d-k3dgpu-x-h7-server-0   <none>           <none>
+kube-system              metrics-server-778c4649b4-ddzg4           1/1     Running     0               33m   10.42.0.2    k3d-k3dgpu-x-h7-server-0   <none>           <none>
+node-feature-discovery   nfd-gc-7d6955597d-b4mbh                   1/1     Running     0               33m   10.42.0.4    k3d-k3dgpu-x-h7-server-0   <none>           <none>
+node-feature-discovery   nfd-master-74b6cfb7df-5tgc2               1/1     Running     0               33m   10.42.0.5    k3d-k3dgpu-x-h7-server-0   <none>           <none>
+node-feature-discovery   nfd-worker-8729f                          1/1     Running     0               33m   10.42.0.3    k3d-k3dgpu-x-h7-server-0   <none>           <none>
+Name:             vllm-c-6f48b74bcd-7sp44
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             k3d-k3dgpu-x-h7-server-0/172.19.0.2
+Start Time:       Wed, 21 Oct 2026 04:15:47 +0000
+Labels:           app.kubernetes.io/instance=vllm-qwen-3-4b-cpu
+                  app.kubernetes.io/name=vllm
+                  h7x-arm=c
+                  name=vllm
+                  pod-template-hash=6f48b74bcd
+Annotations:      balloon.balloons.resource-policy.nri.io: performance
+Status:           Running
+IP:               10.42.0.11
+IPs:
+  IP:           10.42.0.11
+Controlled By:  ReplicaSet/vllm-c-6f48b74bcd
+Containers:
+  vllm:
+    Container ID:    containerd://885e6fb44f76669d28d4cff4ab14e1082fc0270c593fc44e2d2f7a7eccfd54e6
+    Image:           vllm/vllm-openai-cpu:v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1
+    Image ID:        docker.io/vllm/vllm-openai-cpu@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1
+    Port:            2080/TCP (http)
+    Host Port:       0/TCP (http)
+    SeccompProfile:  RuntimeDefault
+    Args:
+      --block-size
+      128
+      --dtype
+      bfloat16
+      --distributed_executor_backend
+      mp
+      --enable_chunked_prefill
+      --max-num-batched-tokens
+      2048
+      --max-num-seqs
+      256
+      --enable-prefix-caching
+      --tensor-parallel-size
+      1
+      --pipeline-parallel-size
+      1
+      --model
+      /data/Qwen3-4B
+      --served-model-name
+      Qwen/Qwen3-4B
+      --port
+      2080
+      --max-model-len
+      32768
+    State:          Running
+      Started:      Wed, 21 Oct 2026 04:45:13 +0000
+    Last State:     Terminated
+      Reason:       Error
+      Exit Code:    1
+      Started:      Wed, 21 Oct 2026 04:39:12 +0000
+      Finished:     Wed, 21 Oct 2026 04:40:05 +0000
+    Ready:          False
+    Restart Count:  9
+    Limits:
+      cpu:     16
+      memory:  22Gi
+    Requests:
+      cpu:      16
+      memory:   22Gi
+    Readiness:  http-get http://:http/health delay=10s timeout=1s period=5s #success=1 #failure=200
+    Environment Variables from:
+      vllm-qwen-3-4b-cpu-config  ConfigMap  Optional: false
+    Environment:
+      VLLM_CACHE_ROOT:  /root/.cache/vllm
+    Mounts:
+      /data from model-volume (rw)
+      /dev/shm from shm (rw)
+      /root/.cache/vllm from vllm-cache (rw)
+      /tmp from tmp (rw)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-94rt7 (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       False 
+  ContainersReady             False 
+  PodScheduled                True 
+Volumes:
+  model-volume:
+    Type:          HostPath (bare host directory volume)
+    Path:          /var/apb-models
+    HostPathType:  Directory
+  shm:
+    Type:       EmptyDir (a temporary directory that shares a pod's lifetime)
+    Medium:     Memory
+    SizeLimit:  1Gi
+  tmp:
+    Type:       EmptyDir (a temporary directory that shares a pod's lifetime)
+    Medium:     
+    SizeLimit:  <unset>
+  vllm-cache:
+    Type:       EmptyDir (a temporary directory that shares a pod's lifetime)
+    Medium:     
+    SizeLimit:  <unset>
+  kube-api-access-94rt7:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   Guaranteed
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason     Age                   From               Message
+  ----     ------     ----                  ----               -------
+  Normal   Scheduled  30m                   default-scheduler  Successfully assigned default/vllm-c-6f48b74bcd-7sp44 to k3d-k3dgpu-x-h7-server-0
+  Warning  Unhealthy  24m (x37 over 29m)    kubelet            spec.containers{vllm}: Readiness probe failed: Get "http://10.42.0.11:2080/health": dial tcp 10.42.0.11:2080: connect: connection refused
+  Warning  BackOff    4m34s (x17 over 28m)  kubelet            spec.containers{vllm}: Back-off restarting failed container vllm in pod vllm-c-6f48b74bcd-7sp44_default(42fa473c-cd62-4d90-9292-d8d252d4f6a1)
+  Normal   Pulled     34s (x10 over 29m)    kubelet            spec.containers{vllm}: Container image "vllm/vllm-openai-cpu:v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1" already present on machine and can be accessed by the pod
+  Normal   Created    34s (x10 over 29m)    kubelet            spec.containers{vllm}: Container created
+  Normal   Started    34s (x10 over 29m)    kubelet            spec.containers{vllm}: Container started
+No resources found in k3d-gpu-agent namespace.
+--- logs pod/vllm-c-6f48b74bcd-7sp44 --previous
+(EngineCore pid=110)   File "/opt/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/concurrent/futures/_base.py", line 449, in result
+(EngineCore pid=110)     return self.__get_result()
+(EngineCore pid=110)            ^^^^^^^^^^^^^^^^^^^
+(EngineCore pid=110)   File "/opt/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/concurrent/futures/_base.py", line 401, in __get_result
+(EngineCore pid=110)     raise self._exception
+(EngineCore pid=110)   File "/opt/venv/lib/python3.12/site-packages/vllm/v1/executor/multiproc_executor.py", line 95, in _wait_for_response
+(EngineCore pid=110)     response = self.aggregate(self.get_response())
+(EngineCore pid=110)                               ^^^^^^^^^^^^^^^^^^^
+(EngineCore pid=110)   File "/opt/venv/lib/python3.12/site-packages/vllm/v1/executor/multiproc_executor.py", line 391, in get_response
+(EngineCore pid=110)     raise RuntimeError(
+(EngineCore pid=110) RuntimeError: Worker failed with error '[Errno 13] Permission denied: '/root/.cache'', please check the stack trace above for the root cause
+(EngineCore pid=110) INFO 10-21 04:40:04 [multiproc_executor.py:426] [shutdown] Executor: waiting for worker exit count=0
+(EngineCore pid=110) INFO 10-21 04:40:04 [multiproc_executor.py:433] [shutdown] Executor: all workers exited gracefully
+(APIServer pid=1) Traceback (most recent call last):
+(APIServer pid=1)   File "/opt/venv/bin/vllm", line 10, in <module>
+(APIServer pid=1)     sys.exit(main())
+(APIServer pid=1)              ^^^^^^
+(APIServer pid=1)   File "/opt/venv/lib/python3.12/site-packages/vllm/entrypoints/cli/main.py", line 95, in main
+(APIServer pid=1)     args.dispatch_function(args)
+(APIServer pid=1)   File "/opt/venv/lib/python3.12/site-packages/vllm/entrypoints/cli/serve.py", line 148, in cmd
+(APIServer pid=1)     uvloop.run(run_server(args))
+(APIServer pid=1)   File "/opt/venv/lib/python3.12/site-packages/uvloop/__init__.py", line 96, in run
+(APIServer pid=1)     return __asyncio.run(
+(APIServer pid=1)            ^^^^^^^^^^^^^^
+(APIServer pid=1)   File "/opt/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py", line 195, in run
+(APIServer pid=1)     return runner.run(main)
+(APIServer pid=1)            ^^^^^^^^^^^^^^^^
+(APIServer pid=1)   File "/opt/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py", line 118, in run
+(APIServer pid=1)     return self._loop.run_until_complete(task)
+(APIServer pid=1)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=1)   File "uvloop/loop.pyx", line 1518, in uvloop.loop.Loop.run_until_complete
+(APIServer pid=1)   File "/opt/venv/lib/python3.12/site-packages/uvloop/__init__.py", line 48, in wrapper
+(APIServer pid=1)     return await main
+(APIServer pid=1)            ^^^^^^^^^^
+(APIServer pid=1)   File "/opt/venv/lib/python3.12/site-packages/vllm/entrypoints/openai/api_server.py", line 663, in run_server
+(APIServer pid=1)     await run_server_worker(listen_address, sock, args, **uvicorn_kwargs)
+(APIServer pid=1)   File "/opt/venv/lib/python3.12/site-packages/vllm/entrypoints/openai/api_server.py", line 677, in run_server_worker
+(APIServer pid=1)     async with build_async_engine_client(
+(APIServer pid=1)                ^^^^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=1)   File "/opt/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py", line 210, in __aenter__
+(APIServer pid=1)     return await anext(self.gen)
+(APIServer pid=1)            ^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=1)   File "/opt/venv/lib/python3.12/site-packages/vllm/entrypoints/openai/api_server.py", line 99, in build_async_engine_client
+(APIServer pid=1)     async with build_async_engine_client_from_engine_args(
+(APIServer pid=1)                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=1)   File "/opt/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py", line 210, in __aenter__
+(APIServer pid=1)     return await anext(self.gen)
+(APIServer pid=1)            ^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=1)   File "/opt/venv/lib/python3.12/site-packages/vllm/entrypoints/openai/api_server.py", line 135, in build_async_engine_client_from_engine_args
+(APIServer pid=1)     async_llm = AsyncLLM.from_vllm_config(
+(APIServer pid=1)                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=1)   File "/opt/venv/lib/python3.12/site-packages/vllm/v1/engine/async_llm.py", line 217, in from_vllm_config
+(APIServer pid=1)     return cls(
+(APIServer pid=1)            ^^^^
+(APIServer pid=1)   File "/opt/venv/lib/python3.12/site-packages/vllm/v1/engine/async_llm.py", line 146, in __init__
+(APIServer pid=1)     self.engine_core = EngineCoreClient.make_async_mp_client(
+(APIServer pid=1)                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=1)   File "/opt/venv/lib/python3.12/site-packages/vllm/tracing/otel.py", line 178, in sync_wrapper
+(APIServer pid=1)     return func(*args, **kwargs)
+(APIServer pid=1)            ^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=1)   File "/opt/venv/lib/python3.12/site-packages/vllm/v1/engine/core_client.py", line 132, in make_async_mp_client
+(APIServer pid=1)     return AsyncMPClient(*client_args)
+(APIServer pid=1)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=1)   File "/opt/venv/lib/python3.12/site-packages/vllm/tracing/otel.py", line 178, in sync_wrapper
+(APIServer pid=1)     return func(*args, **kwargs)
+(APIServer pid=1)            ^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=1)   File "/opt/venv/lib/python3.12/site-packages/vllm/v1/engine/core_client.py", line 963, in __init__
+(APIServer pid=1)     super().__init__(
+(APIServer pid=1)   File "/opt/venv/lib/python3.12/site-packages/vllm/v1/engine/core_client.py", line 573, in __init__
+(APIServer pid=1)     with launch_core_engines(
+(APIServer pid=1)          ^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=1)   File "/opt/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py", line 144, in __exit__
+(APIServer pid=1)     next(self.gen)
+(APIServer pid=1)   File "/opt/venv/lib/python3.12/site-packages/vllm/v1/engine/utils.py", line 1213, in launch_core_engines
+(APIServer pid=1)     wait_for_engine_startup(
+(APIServer pid=1)   File "/opt/venv/lib/python3.12/site-packages/vllm/v1/engine/utils.py", line 1272, in wait_for_engine_startup
+(APIServer pid=1)     raise RuntimeError(
+(APIServer pid=1) RuntimeError: Engine core initialization failed. See root cause above. Failed core proc(s): {'EngineCore': 1}
+/opt/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/multiprocessing/resource_tracker.py:279: UserWarning: resource_tracker: There appear to be 1 leaked shared_memory objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '
+--- logs pod/vllm-c-6f48b74bcd-7sp44 
+WARNING 10-21 04:45:25 [argparse_utils.py:257] With `vllm serve`, you should provide the model as a positional argument or in a config file instead of via the `--model` option. The `--model` option will be removed in a future version.
+(APIServer pid=1) INFO 10-21 04:45:25 [api_utils.py:339] 
+(APIServer pid=1) INFO 10-21 04:45:25 [api_utils.py:339]        █     █     █▄   ▄█
+(APIServer pid=1) INFO 10-21 04:45:25 [api_utils.py:339]  ▄▄ ▄█ █     █     █ ▀▄▀ █  version 0.24.0
+(APIServer pid=1) INFO 10-21 04:45:25 [api_utils.py:339]   █▄█▀ █     █     █     █  model   /data/Qwen3-4B
+(APIServer pid=1) INFO 10-21 04:45:25 [api_utils.py:339]    ▀▀  ▀▀▀▀▀ ▀▀▀▀▀ ▀     ▀
+(APIServer pid=1) INFO 10-21 04:45:25 [api_utils.py:339] 
+(APIServer pid=1) INFO 10-21 04:45:25 [api_utils.py:273] non-default args: {'model_tag': '/data/Qwen3-4B', 'port': 2080, 'model': '/data/Qwen3-4B', 'dtype': 'bfloat16', 'max_model_len': 32768, 'served_model_name': ['Qwen/Qwen3-4B'], 'distributed_executor_backend': 'mp', 'block_size': 128, 'enable_prefix_caching': True, 'max_num_batched_tokens': 2048, 'max_num_seqs': 256, 'enable_chunked_prefill': True}
+(APIServer pid=1) WARNING 10-21 04:45:25 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_RPC_TIMEOUT
+(APIServer pid=1) WARNING 10-21 04:45:25 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_QWEN_3_4B_CPU_SERVICE_PORT_80_TCP
+(APIServer pid=1) WARNING 10-21 04:45:25 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_C_SERVICE_SERVICE_PORT_VLLM
+(APIServer pid=1) WARNING 10-21 04:45:25 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_C_SERVICE_PORT_80_TCP_PROTO
+(APIServer pid=1) WARNING 10-21 04:45:25 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_QWEN_3_4B_CPU_SERVICE_SERVICE_HOST
+(APIServer pid=1) WARNING 10-21 04:45:25 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_QWEN_3_4B_CPU_SERVICE_PORT
+(APIServer pid=1) WARNING 10-21 04:45:25 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_QWEN_3_4B_CPU_SERVICE_PORT_80_TCP_ADDR
+(APIServer pid=1) WARNING 10-21 04:45:25 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_C_SERVICE_SERVICE_HOST
+(APIServer pid=1) WARNING 10-21 04:45:25 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_C_SERVICE_PORT
+(APIServer pid=1) WARNING 10-21 04:45:25 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_QWEN_3_4B_CPU_SERVICE_SERVICE_PORT_VLLM
+(APIServer pid=1) WARNING 10-21 04:45:25 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_QWEN_3_4B_CPU_SERVICE_PORT_80_TCP_PORT
+(APIServer pid=1) WARNING 10-21 04:45:25 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_C_SERVICE_PORT_80_TCP
+(APIServer pid=1) WARNING 10-21 04:45:25 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_C_SERVICE_PORT_80_TCP_PORT
+(APIServer pid=1) WARNING 10-21 04:45:25 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_QWEN_3_4B_CPU_SERVICE_SERVICE_PORT
+(APIServer pid=1) WARNING 10-21 04:45:25 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_QWEN_3_4B_CPU_SERVICE_PORT_80_TCP_PROTO
+(APIServer pid=1) WARNING 10-21 04:45:25 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_C_SERVICE_SERVICE_PORT
+(APIServer pid=1) WARNING 10-21 04:45:25 [envs.py:2004] Unknown vLLM environment variable detected: VLLM_C_SERVICE_PORT_80_TCP_ADDR
+(APIServer pid=1) ERROR 10-21 04:45:37 [registry.py:896] Error saving model info cache.
+(APIServer pid=1) ERROR 10-21 04:45:37 [registry.py:896] Traceback (most recent call last):
+(APIServer pid=1) ERROR 10-21 04:45:37 [registry.py:896]   File "/opt/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 1311, in mkdir
+(APIServer pid=1) ERROR 10-21 04:45:37 [registry.py:896]     os.mkdir(self, mode)
+(APIServer pid=1) ERROR 10-21 04:45:37 [registry.py:896] PermissionError: [Errno 13] Permission denied: '/root/.cache/vllm/modelinfos'
+(APIServer pid=1) ERROR 10-21 04:45:37 [registry.py:896] 
+(APIServer pid=1) ERROR 10-21 04:45:37 [registry.py:896] During handling of the above exception, another exception occurred:
+(APIServer pid=1) ERROR 10-21 04:45:37 [registry.py:896] 
+(APIServer pid=1) ERROR 10-21 04:45:37 [registry.py:896] Traceback (most recent call last):
+(APIServer pid=1) ERROR 10-21 04:45:37 [registry.py:896]   File "/opt/venv/lib/python3.12/site-packages/vllm/model_executor/models/registry.py", line 891, in _save_modelinfo_to_cache
+(APIServer pid=1) ERROR 10-21 04:45:37 [registry.py:896]     cache_dir.mkdir(parents=True, exist_ok=True)
+(APIServer pid=1) ERROR 10-21 04:45:37 [registry.py:896]   File "/opt/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 1320, in mkdir
+(APIServer pid=1) ERROR 10-21 04:45:37 [registry.py:896]     if not exist_ok or not self.is_dir():
+(APIServer pid=1) ERROR 10-21 04:45:37 [registry.py:896]                            ^^^^^^^^^^^^^
+(APIServer pid=1) ERROR 10-21 04:45:37 [registry.py:896]   File "/opt/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 875, in is_dir
+(APIServer pid=1) ERROR 10-21 04:45:37 [registry.py:896]     return S_ISDIR(self.stat().st_mode)
+(APIServer pid=1) ERROR 10-21 04:45:37 [registry.py:896]                    ^^^^^^^^^^^
+(APIServer pid=1) ERROR 10-21 04:45:37 [registry.py:896]   File "/opt/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 840, in stat
+(APIServer pid=1) ERROR 10-21 04:45:37 [registry.py:896]     return os.stat(self, follow_symlinks=follow_symlinks)
+(APIServer pid=1) ERROR 10-21 04:45:37 [registry.py:896]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=1) ERROR 10-21 04:45:37 [registry.py:896] PermissionError: [Errno 13] Permission denied: '/root/.cache/vllm/modelinfos'
+(APIServer pid=1) INFO 10-21 04:45:37 [model.py:598] Resolved architecture: Qwen3ForCausalLM
+(APIServer pid=1) INFO 10-21 04:45:37 [model.py:1725] Using max model len 32768
+(APIServer pid=1) INFO 10-21 04:45:37 [vllm.py:1006] Asynchronous scheduling is enabled.
+(APIServer pid=1) INFO 10-21 04:45:37 [kernel.py:276] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
