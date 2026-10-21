@@ -7,7 +7,7 @@
 # Usage: shim.sh expand               records: cpulist
 #        shim.sh within               records: list-a, list-b (two records per case)
 #        shim.sh vendors <sysroot>    records: K3D_GPU_VENDORS value
-#        shim.sh overrides <sysroot>  records: image reference
+#        shim.sh overrides <sysroot>  records: image reference (every test image)
 #        shim.sh amx_labels <sysroot> no records
 #        shim.sh cpu_isa_labels <sysroot> no records
 #        shim.sh progress_bar         records: done, total, width (three per case)
@@ -47,9 +47,14 @@ case "${mode}" in
         require() { :; }
         resource_total() { echo 1; }
         resource_counts() { echo "${1%\*}x 1"; }
-        run_pod() { printf '%s\n' "$3" >&3; printf 'Cpus_allowed_list:\t0\n'; }
+        # The output satisfies every test's own check: the hybrid CPU list and the AMX
+        # probe's oneDNN verbose line.
+        run_pod() {
+            printf '%s\n' "$3" >&3
+            printf 'Cpus_allowed_list:\t0\nonednn_verbose,v1,primitive,exec,cpu,matmul,brg_matmul:avx10_1_512_amx,undef\n'
+        }
         while IFS= read -r -d '' img; do
-            out=$( (TEST_IMAGE=${img} DEVICE_TEST_IMAGE=${img}
+            out=$( (TEST_IMAGE=${img} DEVICE_TEST_IMAGE=${img} AMX_TEST_IMAGE=${img}
                     VENDORS_REQUEST=nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa,wsl
                     cmd_test >/dev/null 2>&1) 3>&1 )
             emit "$?" "${out}"
