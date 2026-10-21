@@ -77,6 +77,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H54c | Hybrid placement ("use the fast DRAM"): llama.cpp with Gemma 4 26B-A4B QAT Q4_0, routed experts on the Xeon and everything else on one B70 (Hg, `-ngl 99 -ot exps=CPU`), decodes at N=1 within 25% of a pre-stated byte-split model built from the same image's full-CPU (Cg) and full-GPU (Gg) runs. Qwen3.8-Flash-Next falls back to Gemma 4 QAT (reasons in the pre-registration). | Written 2026-10-20, before any measurement. Model: t_Hg = t_Cg x (B_exp / B_tot) + t_Gg x (B_rest / B_tot) + 60 x 30 us, bytes from the GGUF tensor table. Within 25% (0.45). Hg < Gg (0.8). Hg / Cg in [0.8, 1.6] (0.5). Gg in [30, 90] tok/s (0.4). SUPPORTED (0.45), INCONCLUSIVE (0.3), REFUTED (0.25). | One hold of at most 40 min on one free card: Cg, Gg, Hg in that order, then Gg again (drift check), all in `ghcr.io/ggml-org/llama.cpp:server-intel-b11749`, H54a's N=1 phase only. SUPPORTED: abs(Hg measured / predicted - 1) <= 0.25. REFUTED: > 0.40. Otherwise INCONCLUSIVE (also: any of the three arms not delivered, or the two Gg runs differ by > 10%). | PENDING |
 | H54d | Inside EAT's banking flow with Gemma 4 26B-A4B (QAT), the best H54a CPU arm A* delivers far more B24 tasks within budget than EAT stock B1g, under H50's design, statistic, gates and thresholds (rule L2, amendment C1). Runs only when A* is not H50's A1 config. | Written 2026-10-20, before any measurement. A* within-budget success >= 0.60 (0.55). B1g >= 0.50 (0.6). Paired A* - B1g in [-0.10, +0.30] (0.6). A* serves B24's tool calls without a parser change (0.6). Fewer than 16 matched pairs in 3 holds (0.5). REFUTED (0.4), INCONCLUSIVE (0.5), SUPPORTED (0.1). | H50's procedure with arm A = A*, arm B = B1g; at most 3 holds of at most 40 min, until 24 pairs. SUPPORTED: paired difference CI lower bound >= +30 points and A* >= 0.6, L2, void and idle-arm checks passed. REFUTED: CI upper bound < +30 points. Otherwise INCONCLUSIVE. Not run (and so recorded) when A* is H50's A1 config: H50 answers it. Not run 2026-10-21, no hold used ([H54d: not run](#h54d-not-run-2026-10-21)): A* is undefined (H54a chose no arm), B1g stalled in both H54a holds, and H54q has not run; the caps rule makes a row with its stock or chosen arm missing INCONCLUSIVE. | INCONCLUSIVE |
 | H58 | The zero-touch thesis on the Xeon 6741P with four Arc Pro B70s. From a clean state, k3d-gpu brings up EAT's banking flow on Gemma 4 26B-A4B-it with no flag, no manual step and no edit. It detects and advertises every engine H52 and H52b found. It places each model by its own memory fit. Its result is within tolerance of the best hand-tuned arm on the same host. Under a controlled host memory squeeze, its guard backs off and nothing outside its own pods is OOM-killed. | Written 2026-10-20, before any H58 run and before the model optimizer (PR #163) and the fit-and-guard layer (branch `claude/fit-and-guard`) are on main. (a) Flags beyond the documented commands: 0 (0.8). (b) Manual steps or edits: 0 (0.6). (c) Decode tok/s >= 0.90x the best hand-tuned arm on this host (0.6), and within-budget B24 success within 5 points of it (0.7). (d) Every engine H52/H52b found is detected and advertised (0.75). (e) Qwen3.8-Flash-Next W4A16 (Intel AutoRound) lands on an experts-in-DRAM placement, and Gemma 4 and Qwen3.8-27B land on the GPU or the CPU, each as its fit decides, with no flag (0.5). (f) Under the squeeze: 0 OOM kills outside our pods (0.85), and the guard lowers admission (0.6). All six together: SUPPORTED (0.25), REFUTED (0.6), INCONCLUSIVE (0.15). | See [H58 pre-registration](#h58-pre-registration-the-zero-touch-thesis-on-crescent-2026-10-20). Runs last on crescent, after #163 and the fit-and-guard layer merge, with their commits recorded. SUPPORTED: (a) through (f) all hold. REFUTED: any clause fails on a valid run. A manual step found is a REFUTED run. It is fixed test-first, and the re-run is a new run with its own section. INCONCLUSIVE: no valid baseline for (c), or the run is not deliverable for reasons outside k3d-gpu. | PENDING |
+| H60 | On the Xeon 6741P, Qwen3.8-Flash-Next (125B MoE, 6B active, a 51B-parameter n-gram table) runs entirely from host DRAM through llama.cpp, and its single-stream decode is predicted by the bandwidth model with H54's llama.cpp efficiency: the N=1 median decode, over the ceiling STREAM triad 305 GB/s / bytes read per token (from the GGUF's tensor table), lies within 0.38 x [0.7, 1.3] = [0.266, 0.494], where 0.38 is what H54a's llama.cpp arm Lg read of the same ceiling on this host. A microbench of DRAM-resident serving, not an agent claim. | Written 2026-10-21, before any H60 measurement. Bytes per token 5.94 GB (all tensors but the lookup tables, 10/512 of the routed experts), ceiling 51.3 tok/s at 305 GB/s (53.9 at 320). Efficiency 0.30 (0.18-0.45), so N=1 decode 15 tok/s (9-23): the Gated DeltaNet and hyper-connection compute per token is heavier than Gemma's. GSM8K 0-49 >= 40/50 (0.7). SUPPORTED 0.45, REFUTED 0.35, INCONCLUSIVE 0.2. | [H60 pre-registration](#h60-pre-registration-qwen38-flash-next-from-host-dram-on-the-xeon-6741p-2026-10-21): `bench/flashnext/h60.sh` inside `bench/xhost/hold.sh`, H54's one-arm protocol (idle, 3 warm-ups, N=1 8 x 256, N=4 16 x 256, TTFT 4 x 16 on H54's 1,000-token prompt, GSM8K 0-49, RAPL per phase, H54's void rule and one re-run), scored by `bench/flashnext/h60.py score`: 95% bootstrap CI of the efficiency median inside the band SUPPORTED, wholly outside REFUTED, else INCONCLUSIVE (also when N=1 is void, the PSI guard stops the hold, or GSM8K is below 25/50). | PENDING |
 | H57da | On an AMX-less client CPU (i9-13900T, the 16 P-core CPUs, AVX2 and VNNI, no AVX-512), with the Gemma 4 26B-A4B QAT family, k3d-gpu's own CPU pick Od (`agent manifest` auto on the P-cores: OVMS 2026.4.1, `OpenVINO/gemma-4-26b-a4b-it-int4-ov`) is the fastest single-stream arm: no other arm passing the quality gate (llama.cpp with Google's QAT Q4_0 GGUF, with or without the QAT MTP drafter) decodes at N=1 5% or more faster. A microbench, not an agent claim. | Written 2026-10-20, before any H57d measurement. N=1 median decode tok/s: Od in [8, 20] (0.5); Ld (llama.cpp Q4_0, 8 threads) in [12, 30] (0.5); Ld/Od in [1.1, 1.8] (0.5); every arm's GSM8K 0-49 score >= 0.80 (0.6). REFUTED (0.55), SUPPORTED (0.25), INCONCLUSIVE (0.2). Not gated: TTFT on a 1,000-token prompt, aggregate tok/s at N=4, package J/token gross and net of idle. | [H57d pre-registration](#h57d-pre-registration-gemma-4-26b-a4b-qat-on-the-amx-less-client-cpu-i9-13900t-2026-10-20): H54's measurement protocol per arm (`bench/llm_load.py`, 256 tokens, greedy, `ignore_eos`; RAPL per phase; GSM8K items 0-49 graded as H54), one arm serving at a time, arm order rotated over 3 performance holds, quality in a 4th, at most 5 holds of at most 45 min. Statistic: R = median N=1 decode of the fastest other gate-passing arm X / Od's, over the pooled requests of the 3 holds, 95% bootstrap CI (H54's). REFUTED: Od fails the quality gate, or CI lower bound >= 1.05 and X faster than Od in each of the 3 holds. SUPPORTED: Od passes the gate and CI upper bound < 1.05. INCONCLUSIVE otherwise, or when Od or every other arm is not delivered, or the load gate fails. | PENDING |
 | H57dm | On the same client and model, the CPU Fast Draft rule extends to Gemma 4's MTP drafter: llama.cpp Ld-mtp (Ld plus Google's QAT MTP assistant, converted to Q4_0 GGUF here, `--spec-type draft-mtp`, default draft length) decodes at N=1 at least 1.20x Ld (H34's bar) with the quality gate passed. | Written 2026-10-20, before any H57d measurement. Ld-mtp/Ld in [0.8, 1.3] (0.6): Google's MTP note says the 26B A4B drafter may not pay at batch 1, and llama.cpp's MTP PR saw no MoE gain. REFUTED (0.65), INCONCLUSIVE (0.15), SUPPORTED (0.2). Not gated: the N=4 ratio and the J/token ratio. | As H57da (same holds and records). Statistic: Rm = median N=1 decode Ld-mtp / Ld, pooled, H54's bootstrap CI. SUPPORTED: Rm >= 1.20, CI lower bound > 1.0, Ld-mtp faster in each of the 3 holds, and Ld-mtp passes the gate. REFUTED: CI upper bound < 1.20, or Ld-mtp fails the gate. INCONCLUSIVE otherwise, or when either arm is not delivered or the load gate fails. | PENDING |
 | H57db | Inside EAT's banking flow (B24) with Gemma 4 26B-A4B QAT on the i9-13900T, k3d-gpu auto on the P-cores delivers far more tasks within budget than EAT stock CPU (vLLM CPU bf16 on the QAT bf16 weights, `xeon-values.yaml` entry `cpu-gemma4-26b-a4b`), interleaved pairs under rule L3. | Written 2026-10-20: not runnable here as registered (memory), so INCONCLUSIVE (not run) is expected (0.9). | [H57d pre-registration](#h57d-pre-registration-gemma-4-26b-a4b-qat-on-the-amx-less-client-cpu-i9-13900t-2026-10-20), H57db: runs only if the memory gate passes at a hold's start (MemAvailable >= 100 GiB: 51.6 GB of bf16 weights resident plus `VLLM_CPU_KVCACHE_SPACE` 40 GiB), with H50's procedure, rule L3 (PR #157) and at most 1 hold, where fewer than 16 complete pairs read INCONCLUSIVE by L3; otherwise INCONCLUSIVE (not run), with the reading recorded. | PENDING |
@@ -3483,6 +3484,91 @@ pre-registration's caps rule makes a row whose stock or chosen arm is missing IN
 H54d is recorded INCONCLUSIVE (not run). Running it would need a dated amendment that defines A*
 without B1g's score (or a working B1g), a runner amendment (the pairs runner has no llama.cpp arm
 A), and the tool-call wiring smoke. Record: `bench/h54/results/2026-10-21/H54d/not-run.txt`.
+
+### H60 pre-registration: Qwen3.8-Flash-Next from host DRAM on the Xeon 6741P (2026-10-21)
+
+Written 2026-10-21, before any H60 step (no download, no server). H54's pre-registration left a
+Flash-Next row for "if the disk frees" (its smallest 2-bit-plus quant would have taken `/` to the
+97% abort line); this row runs it from tmpfs instead, with `/`'s guard unchanged.
+
+**Model, by the source rule.** Official first: Qwen publishes BF16 (360 GB) and FP8 (185.5 GB);
+Intel publishes `Intel/Qwen3.8-Flash-Next-W4A16-AutoRound` (181.2 GB, its n-gram table kept BF16).
+llama.cpp, the one engine here that runs `qwen4exp` (#27742) on an Intel CPU (vLLM's Qwen4Exp is
+CUDA/ROCm only, OpenVINO lists no Flash-Next), reads GGUF, so Intel's checkpoint would need a
+GGUF conversion: about 280 GB of disk for both copies at once, which `/` (about 200 GB free of
+3.4 TB, 94-95% used) does not have. The row therefore uses a GGUF, and among GGUF publishers
+`ggml-org` (llama.cpp's own organisation) first, at the quant closest to W4A16:
+`ggml-org/Qwen3.8-Flash-Next-GGUF` @ `91fb00353e766eb43944ed223665ea4fb87dad47`, `IQ4_NL` (two
+shards, 102.0 GB; the main GGUF has no MTP head, which ships as a separate file and is not
+loaded). A deviation from the official-first rule, recorded as such: it is a community
+quantization of the official BF16 weights. Thinking off (`-rea off`, and H54's grader sends
+`enable_thinking: false`), greedy, as every H54 arm.
+
+**Placement.** The GGUF is downloaded into `/dev/shm/k3dgpu-h60` (tmpfs, 247 GB free) at the
+hold's start, mounted read-only into the k3d node (`K3D_GPU_VOLUMES`), and mmapped by llama.cpp,
+so the weights occupy DRAM once (about 102 GB, not reclaimable while the file exists). An exit
+trap removes it on every exit, failure included, and records the window (download start to
+removal, `shm-window.json`). Guards: `MemAvailable` >= 250 GiB before the download, else no
+hold; the host's own Qwen3.8 server (`localhost:30000`) must answer a 4-token chat before the
+download, and is probed again after removal (`probes.txt`); `/proc/pressure/memory` and
+`MemAvailable` are logged every 10 s (`psi.log`), and the hold stops (`psi-abort`, INCONCLUSIVE)
+at "full avg10" >= 5 or `MemAvailable` < 50 GiB. The hold runs only after H56's stage 1 has
+finished, so the pinned tmpfs cannot perturb H56.
+
+**Engine.** `ghcr.io/ggml-org/llama.cpp:server-b11783@sha256:c7b03e45cff9c4e984acd39032a6f3a82c811075b72bf176e329f84b8598c135`,
+the newest published server image on 2026-10-21 (it contains #27742 and the Flash-Next MTP
+#29761; the `v0.7.0` tag of 2026-10-15 is older than H54's b11749). H54 Lg's arguments: `-t 48
+-Cr 0-47 --cpu-strict 1 --jinja` (one thread per physical core; STREAM peaked at 48 threads),
+plus `-rea off`; context and slots at llama-server's defaults, as Lg. CPU only: the B70s carry
+other tenants' serving and are not used (`K3D_GPU_VENDORS=none`).
+
+**Bandwidth model.** Bytes per token from the GGUF headers (`h60.py active-bytes`): every tensor
+once, except the lookup tables (`token_embd`, `per_layer_token_embd`, the n-gram table: a token
+reads a few rows, counted 0) and the routed experts (10 of 512 read). From the headers read for
+this pre-registration: 3.67 GB of other dense tensors (attention, Gated DeltaNet, norms), 0.25 GB
+shared expert, 0.68 GB output head and 0.02 GB of PLE projections in full, plus 67.95 GB x 10/512 =
+1.33 GB of routed experts: 5.94 GB per token. The run recomputes this from the downloaded files.
+Ceiling = STREAM triad / bytes per token: 305 GB/s (H54's pre-registered figure) gives 51.3
+tok/s; the planner's 320 GB/s (H54a run section) gives 53.9 and is reported, not scored.
+H54a's llama.cpp arm Lg read 48.74 tok/s x 2.380 GB = 116 GB/s, 0.38 of 305 GB/s (the H54a run
+section's 38%; its predictor table's 36% is against 320 GB/s). This row uses 0.38 with the same
+305 GB/s denominator, fixed now.
+
+**Protocol** (H54's, one arm): one fresh cluster `k3dgpu-x-h60` with crescent C1's K3S args; the
+server must answer its model list and a 16-token chat within 1,800 s; 60 s idle (RAPL), 3 warm-up
+requests, N=1 8 x 256 tokens, N=4 16 x 256, TTFT 4 x 16 tokens on `bench/h54/ttft-prompt.txt`
+(N=16 left out: llama-server's default slots are fewer), each through `bench/llm_load.py`
+(unique prompts, `ignore_eos`, temperature 0) under `bench/energy.sh`; H54's void rule
+(`h54.py void` on the hold's `serving.jsonl`, amendment R4's idle window) with one re-run after a
+fresh idle; GSM8K items 0-49 through `h54.py gsm8k`.
+
+**Statistic and verdict** (`bench/flashnext/h60.py score`, unit tests in `test_h60.py`).
+e = N=1 decode tok/s / ceiling (305 GB/s); 95% bootstrap CI of e's median over the N=1
+requests (10,000 resamples, seed 60). SUPPORTED: CI inside [0.266, 0.494]. REFUTED: CI wholly
+outside it. INCONCLUSIVE: otherwise, or N=1 void after its re-run, the PSI guard stopped the
+hold, fewer than 8 ok N=1 requests, or GSM8K below 25/50 (a model that does not answer sensibly
+has no speed to read). Reported, not scored: e at 320 GB/s, N=4 aggregate tok/s, TTFT, J/token
+gross and net of idle, GSM8K, peak PSI and minimum `MemAvailable`.
+
+**Predictions** (before any step): e 0.30 (0.18-0.45), N=1 decode 15 tok/s (9-23); GSM8K >= 40/50
+(0.7). Verdict priors SUPPORTED 0.45, REFUTED 0.35 (most likely below the band: Gated DeltaNet's
+recurrent state update and the 4-branch hyper-connections add per-token compute that Gemma's
+dense attention does not), INCONCLUSIVE 0.2.
+
+**Hold.** One hold, cap 5400 s (102 GB download at the host's measured 300-900 MB/s is 2-6 min;
+boot from tmpfs; phases about 20 min; GSM8K at most 30 min), plus at most one wiring smoke
+(`H60_SMOKE=1`: model up and one 16-token request, discarded, disclosed).
+
+**Reproduce.**
+
+```bash
+# crescent, at the merge commit; after H56 stage 1 has finished
+X=~/k3dgpu-xhost
+C1="--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1%"
+bench/xhost/hold.sh H60 5400 env PATH=$X/bin:$PATH K3D_GPU_VENDORS=none K3D_GPU_K3S_ARGS="$C1" \
+  H60_HFPY=$X/hfvenv/bin/python SERVING=$X/runs/H60/serving.jsonl bench/flashnext/h60.sh $X/runs/H60/out
+python3 bench/flashnext/h60.py score $X/runs/H60/out
+```
 
 ### H57d pre-registration: Gemma 4 26B-A4B QAT on the AMX-less client CPU (i9-13900T, 2026-10-20)
 
