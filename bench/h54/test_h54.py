@@ -66,6 +66,31 @@ class Void(unittest.TestCase):
         self.assertFalse(h54.void(ai, 130, 190)[0])      # the aiperf sample is outside this phase
         self.assertEqual(h54.void([], 0, 10), (False, "no serving sample"))
 
+    def test_idle_window_r4(self):
+        # Amendment R4: the arm's own load raises the idle SGLang pair from ~2.4 to ~4.7 CPU-s/s
+        # (hold 1); with an idle window the CPU part is read there, the phase value only reported.
+        induced = [self.s(t, 2.4 if t <= 60 else 4.7) for t in range(10, 300, 10)]
+        self.assertTrue(h54.void(induced, 100, 200)[0])                  # R1's rule
+        v, why = h54.void(induced, 100, 200, w0=0, w1=60)
+        self.assertFalse(v)
+        self.assertIn("idle window 2.40", why)
+        self.assertIn("phase 4.70", why)
+        busy_idle = [self.s(t, 5.0) for t in range(10, 300, 10)]
+        self.assertTrue(h54.void(busy_idle, 100, 200, w0=0, w1=60)[0])
+        ai = [self.s(t, 1.0, 1 if t == 150 else 0) for t in range(10, 300, 10)]
+        self.assertEqual(h54.void(ai, 100, 200, w0=0, w1=60), (True, "aiperf ran"))
+        self.assertEqual(h54.void(induced, 100, 200, w0=1000, w1=1060)[1], "no serving sample in the idle window")
+
+    def test_cli_window(self):
+        with tempfile.TemporaryDirectory() as d:
+            f = os.path.join(d, "s.jsonl")
+            with open(f, "w") as fh:
+                for t in range(10, 300, 10):
+                    fh.write(json.dumps(self.s(t, 2.4 if t <= 60 else 4.7)) + "\n")
+            run = lambda *a: subprocess.run([sys.executable, os.path.join(HERE, "h54.py"), "void", f, *a], capture_output=True)  # noqa: E731
+            self.assertEqual(run("100", "200").returncode, 1)
+            self.assertEqual(run("100", "200", "0", "60").returncode, 0)
+
     def test_sample_covering_phase_end(self):
         # A sample at ts=125 covers (115, 125]; a phase ending at 120 includes it.
         self.assertTrue(h54.void([self.s(125, 9.0)], 100, 120)[0])
@@ -230,6 +255,16 @@ class ServedCarry(unittest.TestCase):
             self.arm(r, 2, "B1g", status="failed", reason=h54.STOPPED + ": the N=1 phase completed no request")
             self.arm(r, 2, "Vq", status="failed", reason="render failed")
             self.assertEqual(h54.carry(r, 2, ["B1g", "Vq", "Vq-mtp"]), ["Vq-mtp"])
+
+    def test_carry_n1_void_r4(self):
+        with tempfile.TemporaryDirectory() as r:
+            for h in (1, 2):
+                d = self.arm(r, h, "Lg")
+                json.dump({"n1": {"void": True, "rerun_void": True}}, open(os.path.join(d, "phases.json"), "w"))
+            d = self.arm(r, 1, "Lg-mtp")
+            json.dump({"n1": {"void": True, "rerun_void": False}}, open(os.path.join(d, "phases.json"), "w"))
+            self.assertEqual(h54.carry(r, 1, ["Lg", "Lg-mtp"]), ["Lg"])   # re-run not void: kept
+            self.assertEqual(h54.carry(r, 2, ["Lg"]), [])                 # once per arm
 
     def test_score_ignores_failed(self):
         with tempfile.TemporaryDirectory() as r:
