@@ -165,6 +165,9 @@ pci "${r}" 0000:00:02.0 0x8086 0xe20b 0x030000 xe
 pci "${r}" 0000:00:0b.0 0x8086 0x643e 0x120000 intel_vpu
 run "${r}" ""
 says "fedora installs Intel GPU + NPU from its repos" "sudo dnf install -y --refresh intel-opencl intel-level-zero oneapi-level-zero libva-intel-media-driver libva-utils clinfo intel-gpu-firmware intel-npu-driver intel-npu-firmware"
+run "${r}" "" K3D_GPU_VENDORS=-npu
+says "-npu keeps the auto-detected Intel GPU" "intel-opencl"
+not_says "-npu leaves the NPU packages out" "intel-npu-driver"
 
 r=$(newroot debian)
 osrel "${r}" debian 12
@@ -447,6 +450,10 @@ run "${r}" "" K3D_GPU_VENDORS=dsa
 says "K3D_GPU_VENDORS=dsa plans DSA" "${AC} config-engine dsa0/engine0.0"
 not_says "K3D_GPU_VENDORS=dsa leaves IAA out" "iax1"
 not_says "K3D_GPU_VENDORS=dsa leaves QAT out" "sriov_numvfs"
+# Opt-outs subtract from auto detection: the rest is still planned.
+run "${r}" "" K3D_GPU_VENDORS=auto,-qat
+says "auto,-qat still plans DSA" "${AC} config-engine dsa0/engine0.0"
+not_says "auto,-qat leaves QAT out" "sriov_numvfs"
 
 # iax1 held by an enabled kernel WQ on iaa_crypto (crescent's state), dsa0 untouched.
 r=$(newroot xeon-kernel-wq)

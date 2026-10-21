@@ -205,6 +205,28 @@ intel gpu.intel.com/i915 gpu.intel.com/xe" K3D_GPU_VENDORS=" npu, intel ,npu"
 
 expect_fail "unknown vendor in K3D_GPU_VENDORS is rejected" "${r}" K3D_GPU_VENDORS="intel,tpu"
 
+# -<vendor> opts a detected vendor out of auto detection; the rest is detected as usual.
+r=$(newroot optout)
+mkdir -p "${r}/sys/module/nvidia" "${r}/sys/devices/cpu_core" "${r}/sys/devices/cpu_atom"
+echo 0-15 > "${r}/sys/devices/cpu_core/cpus"; echo 16-23 > "${r}/sys/devices/cpu_atom/cpus"
+pci "${r}" 0000:00:02.0 0x8086 0xa780 i915; render "${r}" 0000:00:02.0 128
+expect "auto on the opt-out host finds nvidia, intel and hybrid" "${r}" \
+"nvidia nvidia.com/gpu
+intel gpu.intel.com/i915
+hybrid k3d-gpu.io/hybrid-cpu=true"
+expect "auto,-nvidia,-intel keeps only the detected non-GPU vendors" "${r}" \
+"hybrid k3d-gpu.io/hybrid-cpu=true" K3D_GPU_VENDORS="auto,-nvidia,-intel"
+expect "-nvidia,-intel alone means auto minus those" "${r}" \
+"hybrid k3d-gpu.io/hybrid-cpu=true" K3D_GPU_VENDORS=" -nvidia , -intel"
+expect "opting out a vendor that is not detected changes nothing" "${r}" \
+"nvidia nvidia.com/gpu
+intel gpu.intel.com/i915
+hybrid k3d-gpu.io/hybrid-cpu=true" K3D_GPU_VENDORS="auto,-gaudi"
+expect_fail "an opt-out beside an explicit vendor list is rejected" "${r}" K3D_GPU_VENDORS="hybrid,-intel"
+expect_fail "an opt-out of an unknown vendor is rejected" "${r}" K3D_GPU_VENDORS="auto,-tpu"
+doctor_says "doctor passes when every detected vendor is opted out" "${r}" 'ok: every detected accelerator is opted out' "" K3D_GPU_VENDORS="-nvidia,-intel,-hybrid"
+doctor_says "doctor does not fail when every detected vendor is opted out" "${r}" 'no supported accelerator detected' negate K3D_GPU_VENDORS="-nvidia,-intel,-hybrid"
+
 # xeon <root>: Sapphire Rapids-style host with AMX flags, a DSA and an IAA device
 # with one user work queue each, and a 4xxx QAT PF with one VF.
 xeon() {
@@ -4357,6 +4379,15 @@ file_has "non-DRA up disables the intel-gpu-dra addon" "${LOG}" '^k3d-arg --k3s-
 file_has "non-DRA up keeps intel-gpu-plugin" "${LOG}" 'disable=intel-gpu-plugin' negate
 file_has "non-DRA up never reads ResourceSlices" "${LOG}" 'resourceslices' negate
 file_has "non-DRA up never sets the DRA node label" "${LOG}" 'intel-gpu-dra=true' negate
+
+# A host whose Intel GPU is left out (opted out or not listed) runs neither Intel GPU
+# stack: the baked intel-gpu-plugin would otherwise open /dev/dri and advertise it.
+run_says up "up with the only detected vendor opted out makes a plain cluster" "${r}" 0 'opted out by K3D_GPU_VENDORS: intel \(detected here: intel\)' K3D_GPU_VENDORS="auto,-intel"
+file_has "opted-out Intel GPU: up disables intel-gpu-plugin" "${LOG}" '^k3d-arg --k3s-arg=--disable=intel-gpu-plugin@server:0$'
+file_has "opted-out Intel GPU: up disables intel-gpu-dra" "${LOG}" '^k3d-arg --k3s-arg=--disable=intel-gpu-dra@server:0$'
+run_says up "up with K3D_GPU_VENDORS=none on an Intel GPU host" "${r}" 0 '.' K3D_GPU_VENDORS=none
+file_has "K3D_GPU_VENDORS=none: up disables intel-gpu-plugin" "${LOG}" '^k3d-arg --k3s-arg=--disable=intel-gpu-plugin@server:0$'
+file_has "K3D_GPU_VENDORS=none: up disables intel-gpu-dra" "${LOG}" '^k3d-arg --k3s-arg=--disable=intel-gpu-dra@server:0$'
 
 run_says up "DRA on Kubernetes 1.34 fails: the driver is supported on 1.36+" "${r}" fail \
     'v1\.34\.1\+k3s1.*gpu-v0\.12\.1 needs Kubernetes 1\.36\+' K3D_GPU_DRA=1 STUB_SLICES="${DRA_SLICES}"
