@@ -93,6 +93,7 @@ cat > "${BIN}/k3d" <<'EOF'
 EOF
 cat > "${BIN}/kubectl" <<'EOF'
 #!/bin/bash
+while [ "${1:-}" = --context ]; do shift 2; done
 echo "kubectl $*" >> "${STUB_LOG}"
 case "$*" in
     "get nodes -o go-template="*) : ;;

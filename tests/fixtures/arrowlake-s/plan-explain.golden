@@ -10,5 +10,9 @@ decision:
   bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)
 exit=0
 --- calls
-kubectl config get-contexts -o name
+k3d cluster get gpu
+  
+k3d kubeconfig get gpu
+  
+kubectl --context k3d-gpu config get-contexts -o name
 kubectl --context k3d-gpu --request-timeout=5s get nodes -o name

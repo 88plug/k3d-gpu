@@ -41,6 +41,7 @@ ELICIT = {"elicitation": {"form": {}}}
 KUBECTL_WRITES = {"apply", "create", "delete", "patch", "replace", "label", "annotate", "scale", "edit"}
 
 KUBECTL = """#!/bin/sh
+while [ "${1:-}" = --context ]; do shift 2; done
 echo "$*" >> "$STUB_DIR/kubectl.calls"
 case "$*" in
     "apply -f -") cat > "$STUB_DIR/manifest" ;;

@@ -121,6 +121,32 @@ err()  { echo "${RED}ERROR:${RST} $*" >&2; exit 1; }
 info() { echo "${GRN}==>${RST} $*"; }
 warn() { echo "${YLW}WARN:${RST} $*" >&2; }
 
+# ---- kubeconfig: one file and one context per cluster -------------------------
+# Each run reaches its cluster through its own kubeconfig file and an explicit
+# --context, never through the current-context of ~/.kube/config, which every
+# concurrent `up` of another cluster would rewrite.
+#   K3D_GPU_KUBECONFIG  this file as is (a foreign cluster); kubectl uses its current-context
+#   KUBECONFIG          kept when it names one file that is not ~/.kube/config (a hold's own)
+#   otherwise           ${STATE_DIR}/kubeconfig-${CLUSTER}, written by `up` (or on first use)
+#   K3D_GPU_CONTEXT     the context (default k3d-${CLUSTER}; none with K3D_GPU_KUBECONFIG)
+KUBE_OWNED=0 KUBE_LAZY_TRIED=0
+if [ -n "${K3D_GPU_KUBECONFIG:-}" ]; then
+    KUBECONFIG="${K3D_GPU_KUBECONFIG}"
+elif [ -n "${KUBECONFIG:-}" ] && [[ "${KUBECONFIG}" != *:* && "${KUBECONFIG}" != "${STATE_DIR}/kubeconfig-"* ]] \
+     && [ "${KUBECONFIG}" != "${HOME:-}/.kube/config" ] && ! [ "${KUBECONFIG}" -ef "${HOME:-}/.kube/config" ]; then
+    :
+else
+    if [ -n "${KUBECONFIG:-}" ] && [ "${KUBECONFIG}" != "${STATE_DIR}/kubeconfig-${CLUSTER}" ]; then
+        echo "${GRN}==>${RST} KUBECONFIG ${KUBECONFIG} is not this cluster's own; using ${STATE_DIR}/kubeconfig-${CLUSTER} (K3D_GPU_KUBECONFIG names another file)" >&2
+    fi
+    KUBECONFIG="${STATE_DIR}/kubeconfig-${CLUSTER}" KUBE_OWNED=1
+fi
+export KUBECONFIG
+if [ -n "${K3D_GPU_CONTEXT:-}" ]; then KCTX=(--context "${K3D_GPU_CONTEXT}")
+elif [ -n "${K3D_GPU_KUBECONFIG:-}" ]; then KCTX=()
+else KCTX=(--context "k3d-${CLUSTER}")
+fi
+
 usage() {
     cat <<EOF
 k3d-gpu ${VERSION} — accelerator-ready k3d clusters (NVIDIA, Intel GPU/iGPU/NPU/Gaudi, Xeon DSA/IAA/QAT/AMX/NUMA, hybrid P/E cores, WSL2)
@@ -311,6 +337,10 @@ Usage: k3d-gpu <command>
 
 Environment:
   K3D_GPU_CLUSTER       cluster name         (default: gpu)
+  K3D_GPU_KUBECONFIG    kubeconfig to use as is (default: a single-file KUBECONFIG other than
+                        ~/.kube/config, else ${STATE_DIR}/kubeconfig-<cluster>)
+  K3D_GPU_CONTEXT       context every kubectl call names (default: k3d-<cluster>)
+  K3D_GPU_MERGE_KUBECONFIG  1: up also merges the context into ~/.kube/config, down removes it
   K3D_GPU_IMAGE         k3s node image       (default: ${IMAGE_REPO}:${VERSION}; ${IMAGE_REPO}:latest floats)
   K3D_GPU_VENDORS       auto | comma list of nvidia,intel,npu,gaudi,dsa,iaa,qat,amx,hybrid,numa,wsl |
                         auto,-<vendor>,...: auto detection minus those (default: auto)
@@ -342,7 +372,7 @@ Environment:
                         values recorded at 'up' back. With it set, doctor --perf shows the
                         package throttle counters
   K3D_GPU_HYBRID_GUARD_PLUGIN  guard manifest template (default: ${SHARE_DIR}/nri-balloons-guard.yml)
-  K3D_GPU_STATE_DIR     guard state per cluster (default: ${STATE_DIR})
+  K3D_GPU_STATE_DIR     guard state and kubeconfig per cluster (default: ${STATE_DIR})
   K3D_GPU_MODEL_GB      model size checked by doctor --perf (same as --model-gb)
   K3D_GPU_AGENT_DEVICE  agent device: auto | CPU | GPU | NPU | HPU (default: auto; auto
                         takes a Gaudi first, served by vLLM)
@@ -414,7 +444,78 @@ EOF
 }
 
 require() {
-    command -v "$1" >/dev/null 2>&1 || err "'$1' not found in PATH — see 'k3d-gpu doctor'"
+    type -P "$1" >/dev/null 2>&1 || err "'$1' not found in PATH — see 'k3d-gpu doctor'"
+}
+
+# kubectl: the binary, pinned to this cluster's context. A later --context in "$@"
+# still wins (kubectl takes the last one). nohup and the like run the binary, not
+# this function, so they pass ${KCTX[@]} themselves.
+kubectl() {
+    if [ "${KUBE_OWNED}" = 1 ] && [ ! -s "${KUBECONFIG}" ]; then kubeconfig_lazy; fi
+    command kubectl ${KCTX[@]+"${KCTX[@]}"} "$@"
+}
+
+# kubeconfig_materialize: write this cluster's own kubeconfig (mode 0600) from k3d.
+# Every writer of one file writes the same bytes; the rename publishes them whole.
+kubeconfig_materialize() {
+    local cfg tmp="${KUBECONFIG}.tmp.$$"
+    cfg=$(k3d kubeconfig get "${CLUSTER}" 2>/dev/null) && [ -n "${cfg}" ] || return 1
+    ( umask 077; mkdir -p "${KUBECONFIG%/*}" && printf '%s\n' "${cfg}" > "${tmp}" && mv -f "${tmp}" "${KUBECONFIG}" ) \
+        || { rm -f "${tmp}"; return 1; }
+}
+
+# kubeconfig_lazy: a cluster created before the launcher kept its own kubeconfig
+# gets it on first use; tried once per process.
+kubeconfig_lazy() {
+    [ "${KUBE_LAZY_TRIED}" = 0 ] || return 0
+    KUBE_LAZY_TRIED=1
+    if type -P k3d >/dev/null && k3d cluster get "${CLUSTER}" >/dev/null 2>&1; then kubeconfig_materialize || true; fi
+    return 0
+}
+
+# kubeconfig_default_locked <cmd...>: run <cmd> holding a lock on ~/.kube/config
+# (k3d's merge reads, merges and renames it with no lock of its own). The kernel
+# drops the fd lock when the subshell exits, so a crash leaves no stale lock.
+kubeconfig_default_locked() {
+    mkdir -p "${HOME}/.kube"
+    if type -P flock >/dev/null; then
+        ( exec 9>>"${HOME}/.kube/config.k3d-gpu.lock"; flock 9 && "$@" )
+    else
+        warn "flock not found: ~/.kube/config is changed without a lock (run again if a concurrent change drops it)"
+        "$@"
+    fi
+}
+
+kubeconfig_unmerge() {
+    local f="${HOME}/.kube/config"
+    command kubectl --kubeconfig "${f}" config delete-context "k3d-${CLUSTER}" >/dev/null 2>&1 || true
+    command kubectl --kubeconfig "${f}" config delete-cluster "k3d-${CLUSTER}" >/dev/null 2>&1 || true
+    command kubectl --kubeconfig "${f}" config delete-user "admin@k3d-${CLUSTER}" >/dev/null 2>&1 || true
+}
+
+# After `k3d cluster create`: fill the kubeconfig in use, and with
+# K3D_GPU_MERGE_KUBECONFIG=1 also merge the context into ~/.kube/config.
+kubeconfig_after_create() {
+    if [ "${KUBE_OWNED}" = 1 ]; then
+        kubeconfig_materialize || warn "could not write ${KUBECONFIG} from 'k3d kubeconfig get ${CLUSTER}'"
+    else
+        k3d kubeconfig merge "${CLUSTER}" --output "${KUBECONFIG}" >/dev/null
+    fi
+    if [ "${K3D_GPU_MERGE_KUBECONFIG:-0}" = 1 ]; then
+        kubeconfig_default_locked env KUBECONFIG="${HOME}/.kube/config" \
+            k3d kubeconfig merge "${CLUSTER}" --kubeconfig-merge-default --kubeconfig-switch-context=false >/dev/null
+        info "context k3d-${CLUSTER} merged into ~/.kube/config (its current-context is unchanged)"
+    else
+        info "kubectl for this cluster: export KUBECONFIG=${KUBECONFIG}"
+    fi
+}
+
+# After `k3d cluster delete`: drop the merged context and this cluster's own file.
+kubeconfig_after_delete() {
+    if [ "${K3D_GPU_MERGE_KUBECONFIG:-0}" = 1 ] && [ -f "${HOME}/.kube/config" ]; then
+        kubeconfig_default_locked kubeconfig_unmerge
+    fi
+    if [ "${KUBE_OWNED}" = 1 ]; then rm -f "${KUBECONFIG}"; fi
 }
 
 # ---- accelerator detection --------------------------------------------------
@@ -1728,7 +1829,7 @@ doctor_common() {
     fi
 
     info "Checking kubectl..."
-    command -v kubectl >/dev/null 2>&1 && echo "  ok" || { echo "  ${RED}fail${RST}: kubectl not installed ($(tool_hint kubectl))"; FAIL=1; }
+    type -P kubectl >/dev/null 2>&1 && echo "  ok" || { echo "  ${RED}fail${RST}: kubectl not installed ($(tool_hint kubectl))"; FAIL=1; }
 }
 
 doctor_nvidia() {
@@ -2510,7 +2611,7 @@ doctor_cpu_accels() {
 
 # kubectl against this launcher's cluster (k3d names the context k3d-<cluster>),
 # with a short timeout so doctor never hangs on a stopped cluster.
-kc() { kubectl --context "k3d-${CLUSTER}" --request-timeout=5s "$@"; }
+kc() { kubectl --request-timeout=5s "$@"; }
 
 # doctor_ds <label> <namespace> <daemonset>: one line on the DaemonSet's readiness.
 # Returns 1 (and sets FAIL) unless every scheduled pod is Ready.
@@ -2536,7 +2637,7 @@ doctor_ds() {
 # a failure mode described in docs/failure-modes.md.
 doctor_cluster() {
     local v ns ds manifest policies node
-    command -v kubectl >/dev/null 2>&1 || return 0
+    type -P kubectl >/dev/null 2>&1 || return 0
     [ -n "$(kc get nodes -o name 2>/dev/null || true)" ] || return 0
     info "Checking cluster k3d-${CLUSTER}..."
 
@@ -4710,7 +4811,8 @@ cmd_up() {
     fi
     ensure_image
     info "Creating k3d cluster '${CLUSTER}' with image ${IMAGE}..."
-    k3d cluster create "${CLUSTER}" "${create_args[@]}"
+    k3d cluster create "${CLUSTER}" "${create_args[@]}" --kubeconfig-update-default=false
+    kubeconfig_after_create
 
     info "Waiting for nodes Ready..."
     kubectl wait --for=condition=Ready nodes --all --timeout=120s
@@ -5027,6 +5129,7 @@ cmd_down() {
     guard_restore
     info "Deleting k3d cluster '${CLUSTER}'..."
     k3d cluster delete "${CLUSTER}"
+    kubeconfig_after_delete
 }
 
 # guard_restore: when a prefill guard ran on this cluster, write the recorded
@@ -5641,7 +5744,7 @@ report_cluster() {
     local ctx="k3d-${CLUSTER}" reason="" lines kind node key val nodes="" cur="" alloc="" labels="" summary=""
     if [ "${REPORT_NO_CLUSTER:-0}" = 1 ]; then
         reason="not queried (--no-cluster)"
-    elif ! command -v kubectl >/dev/null 2>&1; then
+    elif ! type -P kubectl >/dev/null 2>&1; then
         reason="kubectl not found"
     elif ! kubectl config get-contexts -o name 2>/dev/null | grep -x "${ctx}" >/dev/null; then
         reason="no kubeconfig context ${ctx} (cluster not created, or KUBECONFIG points elsewhere)"
@@ -8833,7 +8936,7 @@ qs_ui_up() {
         port=$(qs_port)
         [ -n "${K3D_GPU_CHAT_PORT:-}" ] || [ "${port}" = 8080 ] || info "port 8080 is taken; using ${port}"
         qs_step 5 "Port-forward on 127.0.0.1:${port}"
-        nohup kubectl -n "${AGENT_NS}" port-forward --address 127.0.0.1 svc/open-webui "${port}:8080" \
+        nohup kubectl ${KCTX[@]+"${KCTX[@]}"} -n "${AGENT_NS}" port-forward --address 127.0.0.1 svc/open-webui "${port}:8080" \
             > "${QS_DIR}/port-forward.log" 2>&1 < /dev/null &
         echo "$!" > "${QS_DIR}/port-forward.pid"
         echo "${port}" > "${QS_DIR}/port"
@@ -8851,7 +8954,7 @@ qs_ui_up() {
 cmd_quickstart_remote() {
     local ui=$1 exe=$2 t missing="" fields base model origin accel manifest rendered
     qs_step 1 "Checking this machine and the remote endpoint"
-    for t in docker k3d kubectl python3; do command -v "${t}" >/dev/null 2>&1 || missing+=" ${t}"; done
+    for t in docker k3d kubectl python3; do type -P "${t}" >/dev/null 2>&1 || missing+=" ${t}"; done
     [ -z "${missing}" ] || err "missing:${missing} — 'k3d-gpu doctor' prints how to install them"
     docker info >/dev/null 2>&1 || err "docker is installed but not reachable (is the daemon running, and is this user in the docker group?)"
     fields=$(remote_resolve)
@@ -8871,7 +8974,6 @@ cmd_quickstart_remote() {
         fi
         : > "${QS_DIR}/cluster-created"
     fi
-    kubectl config use-context "k3d-${CLUSTER}" >/dev/null 2>&1 || true
     kubectl get nodes >/dev/null 2>&1 || err "cluster '${CLUSTER}' is not reachable — run 'k3d-gpu doctor'"
 
     qs_step 3 "Remote endpoint (Secret ${AGENT_NS}/${LLM_SECRET})"
@@ -8911,7 +9013,7 @@ cmd_quickstart() {
 
     qs_step 1 "Checking this machine"
     qs_wsl_guidance
-    for t in docker k3d kubectl; do command -v "${t}" >/dev/null 2>&1 || missing+=" ${t}"; done
+    for t in docker k3d kubectl; do type -P "${t}" >/dev/null 2>&1 || missing+=" ${t}"; done
     [ -z "${missing}" ] || err "missing:${missing} — 'k3d-gpu doctor' prints how to install them"
     docker info >/dev/null 2>&1 || err "docker is installed but not reachable (is the daemon running, and is this user in the docker group?)"
     if [ -n "$(proxy_value HTTPS_PROXY)$(proxy_value HTTP_PROXY)" ]; then
@@ -8944,7 +9046,6 @@ cmd_quickstart() {
         "${exe}" up || err "'k3d-gpu up' failed; fix the error above and run quickstart again"
         : > "${QS_DIR}/cluster-created"
     fi
-    kubectl config use-context "k3d-${CLUSTER}" >/dev/null 2>&1 || true
     kubectl get nodes >/dev/null 2>&1 || err "cluster '${CLUSTER}' is not reachable — run 'k3d-gpu doctor'"
 
     # The environment of `agent up`: only what the user left unset is passed. A
@@ -9051,11 +9152,12 @@ cmd_uninstall() {
         info "no cluster '${CLUSTER}'"
     elif [ -n "${created}${force_cluster}" ]; then
         k3d cluster delete "${CLUSTER}"
+        kubeconfig_after_delete
     else
         info "cluster '${CLUSTER}' kept (quickstart did not create it; --cluster deletes it)"
         # The key stays nowhere quickstart --remote, agent up --remote or sandbox
         # up --remote wrote it.
-        if command -v kubectl >/dev/null 2>&1; then
+        if type -P kubectl >/dev/null 2>&1; then
             local ns
             for ns in "${AGENT_NS}" "${SANDBOX_NS}"; do
                 kubectl --context "k3d-${CLUSTER}" -n "${ns}" delete secret "${LLM_SECRET}" --ignore-not-found >/dev/null 2>&1 || true

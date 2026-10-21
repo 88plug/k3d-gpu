@@ -43,6 +43,7 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - run: tests/detect_test.sh
+      - run: tests/kube_context_test.sh
       - run: tests/image_test.sh
       - run: tests/host_setup_test.sh
       - run: tests/eat_test.sh

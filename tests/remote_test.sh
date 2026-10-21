@@ -43,6 +43,7 @@ lib() { sed '/^case "\${1:-help}" in$/,$d' "${LAUNCHER}"; }
 # "stdin-secret" when it carried the base64 key, and the server-side flag.
 cat > "${B}/kubectl" <<'EOF'
 #!/usr/bin/env bash
+while [ "${1:-}" = --context ]; do shift 2; done
 echo "kubectl $*" >> "${STUB_STATE}/kubectl.log"
 case "$*" in
     "get nodes") exit 0 ;;
@@ -90,7 +91,7 @@ chmod +x "${B}"/*
 # run <fn> ARGS...: the launcher's functions sourced in a subshell with the stubs;
 # output (both streams) is also appended to ${ALL_OUT} for the redaction check.
 run() {
-    (export PATH="${B}:${PATH}" STUB_STATE="${S}" STUB_KEY_B64="${KEY_B64}" K3D_GPU_CONSOLE="${ROOT}/console" \
+    (export PATH="${B}:${PATH}" STUB_STATE="${S}" K3D_GPU_STATE_DIR="${S}/state" STUB_KEY_B64="${KEY_B64}" K3D_GPU_CONSOLE="${ROOT}/console" \
         K3D_GPU_QUICKSTART_DIR="${S}/qs" K3D_GPU_CHAT_UI="${ROOT}/share/agent-chat-ui.yml" K3D_GPU_BENCH="${TMP}/bench" \
         K3D_GPU_SANDBOX="${ROOT}/share/agent-sandbox.yml" K3D_GPU_SANDBOX_PROFILE="${ROOT}/share/agent-sandbox-k3d.yml"
      source <(lib); SYSROOT="${TMP}/host"; qs_self() { echo "${B}/self"; }; "$@") 2>&1 | tee -a "${ALL_OUT}"

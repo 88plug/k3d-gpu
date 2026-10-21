@@ -24,6 +24,7 @@ trap 'rm -rf "${WORK}"' EXIT
 mkdir -p "${WORK}/bin" "${WORK}/cache" "${WORK}/state" "${WORK}/root/proc/pressure" "${WORK}/root/sys" "${WORK}/root/dev"
 cat > "${WORK}/bin/kubectl" <<'EOF'
 #!/bin/sh
+while [ "${1:-}" = --context ]; do shift 2; done
 echo "kubectl $*" >> "${STUB_LOG:-/dev/null}"
 case "$*" in
     *allocatable*) printf '%s\n' "${STUB_ALLOC:-}" ;;
