@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""verify_models.py DIR REPO@COMMIT...: check every downloaded file of each pinned snapshot
+"""verify_models.py DIR [--skip FILE]... REPO@COMMIT...: check every downloaded file of each pinned snapshot
 against the Hub (EXPERIMENTS.md "Wildct pre-registration", rule W6). For each file the Hub
 lists at that commit and that exists under DIR/REPO: the local sha256 must equal the Hub's LFS
 sha256 (LFS files), or the local size must equal the Hub's size (small git files, whose Hub
 id is a git blob id). Prints one line per file and a summary; exits 1 on any mismatch or on a
-listed LFS file that is missing locally. Needs huggingface_hub (hfvenv)."""
+listed LFS file that is missing locally, unless named by --skip (a file deliberately not
+downloaded, e.g. the GGUF repo's mmproj for a text-only arm). Needs huggingface_hub (hfvenv)."""
 import hashlib
 import os
 import sys
@@ -20,7 +21,7 @@ def sha256(path):
     return h.hexdigest()
 
 
-def main(d, specs):
+def main(d, specs, skip=()):
     api, bad = HfApi(), 0
     for spec in specs:
         repo, rev = spec.split("@")
@@ -29,7 +30,9 @@ def main(d, specs):
         for s in info.siblings:
             p = os.path.join(d, repo, s.rfilename)
             if not os.path.exists(p):
-                if s.lfs:
+                if s.rfilename in skip:
+                    print(f"skipped {repo}/{s.rfilename} (not downloaded on purpose)")
+                elif s.lfs:
                     print(f"MISSING {repo}/{s.rfilename}")
                     bad += 1
                 continue
@@ -47,4 +50,8 @@ def main(d, specs):
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1], sys.argv[2:]))
+    args, skip = sys.argv[2:], []
+    while args and args[0] == "--skip":
+        skip.append(args[1])
+        args = args[2:]
+    sys.exit(main(sys.argv[1], args, skip))
