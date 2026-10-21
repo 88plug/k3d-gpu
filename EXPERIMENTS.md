@@ -2226,9 +2226,10 @@ sampler, the watchdog and the gate's waits, so its locks live exactly as long as
 | ports, DevUI | 18600-18660, 127.0.0.1:8090 | 18700-18760, 127.0.0.3:8090 |
 
 - Locks (flock(2); `bench/eatflow/crescent/slots.sh`). The global order is slot-0 < slot-1 <
-  main, so no wait cycle exists; every wait is bounded by `-w`. Holding slot-i proves no live
-  hold owns `s<i>` resources (the kernel drops the lock when its last holder dies), so a
-  slotted hold deletes every `k3dgpu-(e|a)-s<i>-*` cluster, container and slot-i load container
+  main, so no wait cycle exists; every wait is bounded by `-w`. The slot-i lock plus the
+  hold's start-of-hold sweep make it the owner of `s<i>` resources: the kernel drops the lock
+  when hold.sh dies, and CMD holds no lock fd, so an orphaned CMD can outlive the lock until the
+  next hold's sweep kills it (`holds.py sweep`, campaign-wide). A slotted hold then deletes every `k3dgpu-(e|a)-s<i>-*` cluster, container and slot-i load container
   and nothing else.
   - Adoption mode (not used by H56): `slot-<i>`, then the main lock shared. A hold queued on its
     slot holds nothing on the main lock. Before taking main shared it waits while `/proc/locks`

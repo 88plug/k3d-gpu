@@ -208,20 +208,23 @@ queued_slot_hold_does_not_hold_main() {
 
 kill9_epoch_recovery() {
     fresh
-    HOLD_SLOT=0 setsid "${HOLD}" K0 60 sh -c 'echo k3dgpu-a-s0-a1 >> "$SHIM_DIR/clusters.reg"; sleep 30' &
+    local mark="sleep 41.${RANDOM}"
+    HOLD_SLOT=0 setsid "${HOLD}" K0 60 sh -c "echo k3dgpu-a-s0-a1 >> \"\$SHIM_DIR/clusters.reg\"; ${mark}" &
     local pid=$!
     BG+=("${pid}")
-    for _ in $(seq 100); do grep -q k3dgpu-a-s0-a1 "${W}/clusters.reg" && break; sleep 0.1; done
-    # The hold's group, then timeout's own group (timeout setpgid()s itself): while CMD lives
-    # it still owns slot 0, and so does its lock.
-    local tpid
-    tpid=$(pgrep -P "${pid}" -x timeout)
+    for _ in $(seq 100); do grep -q k3dgpu-a-s0-a1 "${W}/clusters.reg" && pgrep -f "${mark}" >/dev/null && break; sleep 0.1; done
+    # SIGKILL hold.sh's own group only (it, the sampler, the watchdog). CMD runs in its own
+    # setsid group with no lock fd, so it lives on as a tagged orphan and slot 0's lock drops.
     kill -9 -- "-${pid}" 2>/dev/null
-    [ -z "${tpid}" ] || kill -9 -- "-${tpid}" 2>/dev/null
     wait "${pid}" 2>/dev/null
-    sleep 0.5
+    pgrep -f "${mark}" >/dev/null || { echo "CMD did not outlive its hold"; return 1; }
+    flock -n -x "${HOME}/k3dgpu-bench.lock.d/slot-0" true || { echo "slot-0 lock still held after the kill"; return 1; }
+    # The next hold, in either slot, sweeps the dead owner's orphan (its start sweep is
+    # campaign-wide); only a slot-0 hold deletes slot 0's cluster.
     HOLD_SLOT=1 timeout 60 "${HOLD}" K1 30 true
     [ "$(regs)" = "k3dgpu-a-s0-a1" ] || { echo "a slot-1 hold touched slot 0's leftover: $(regs)"; return 1; }
+    pgrep -f "${mark}" >/dev/null && { echo "the orphan CMD survived the next hold's sweep"; return 1; }
+    [ "$(cat "${HOME}/k3dgpu-bench/runs/K1/stale_reaped")" -ge 1 ] || { echo "K1 stale_reaped: $(cat "${HOME}/k3dgpu-bench/runs/K1/stale_reaped")"; return 1; }
     HOLD_SLOT=0 timeout 60 "${HOLD}" K0b 30 true
     [ -z "$(regs)" ] || { echo "the next slot-0 hold left: $(regs)"; return 1; }
 }
@@ -236,15 +239,14 @@ inherited_locks_mode() {
       HOLD_LOCKS_HELD=1 HOLD_SLOT=0 timeout 20 "${HOLD}" I0 30 sh -c 'date +%s.%N > "$SHIM_DIR/m"' )
     t1=$(cat "${W}/m" 2>/dev/null || echo 1e12)
     elapsed_lt "${t0}" "${t1}" 3 || { echo "inherited-lock hold did not start at once"; return 1; }
-    # fd 9 opened by the child, not the parent's locked file description: refused.
-    flock -x "${HOME}/k3dgpu-bench.lock" sleep 6 &
-    BG+=($!)
-    sleep 0.3
-    ( exec 7> "${HOME}/k3dgpu-bench.lock.d/slot-0" 8> "${HOME}/k3dgpu-bench.lock.d/slot-1" 9> "${HOME}/k3dgpu-bench.lock"
-      flock 7 && flock 8 || exit 9
-      HOLD_LOCKS_HELD=1 HOLD_SLOT=0 timeout 5 "${HOLD}" I1 30 true )
+    # The parent holds main exclusive, but on fd 6; fd 9 is a second open of the same file, so
+    # it is not the parent's locked file description: refused.
+    ( exec 6> "${HOME}/k3dgpu-bench.lock" 7> "${HOME}/k3dgpu-bench.lock.d/slot-0" 8> "${HOME}/k3dgpu-bench.lock.d/slot-1" 9> "${HOME}/k3dgpu-bench.lock"
+      flock 7 && flock 8 && flock -x 6 || exit 9
+      HOLD_LOCKS_HELD=1 HOLD_SLOT=0 timeout 5 "${HOLD}" I1 30 sh -c ': > "$SHIM_DIR/ran1"' )
     rc=$?
     [ "${rc}" = 4 ] || { echo "rc ${rc}, want 4"; return 1; }
+    [ ! -e "${W}/ran1" ] || { echo "CMD ran on an fd 9 the parent did not lock"; return 1; }
 }
 
 inherited_locks_unlocked_parent_refused() {
@@ -293,6 +295,26 @@ locks_released_at_exit() {
     flock -n -x "${HOME}/k3dgpu-bench.lock" true || { echo "main lock still held after a slot hold exited"; return 1; }
 }
 
+slot_gate_term() {  # hold_own_test T12 in slot mode: TERM during the busy wait
+    fresh
+    stat_writer "0 1"
+    HOLD_SLOT=0 HOLD_GATE_MAX_S=600 HOLD_POLL_S=30 "${HOLD}" GT 30 sh -c ': > "$SHIM_DIR/ran"' &
+    local pid=$! rc t0
+    BG+=("${pid}")
+    wait_log "GT busy" 20 || { echo "the gate did not wait"; return 1; }
+    t0=${SECONDS}
+    kill -TERM "${pid}"
+    for _ in $(seq 100); do kill -0 "${pid}" 2>/dev/null || break; sleep 0.1; done
+    kill -0 "${pid}" 2>/dev/null && { echo "hold.sh still running 10 s after TERM"; kill -9 "${pid}"; return 1; }
+    wait "${pid}"
+    rc=$?
+    [ "${rc}" = 143 ] || { echo "rc ${rc}, want 143"; return 1; }
+    [ $(( SECONDS - t0 )) -le 5 ] || { echo "TERM took $(( SECONDS - t0 )) s"; return 1; }
+    [ ! -e "${W}/ran" ] || { echo "CMD started after TERM"; return 1; }
+    flock -n -x "${HOME}/k3dgpu-bench.lock.d/slot-0" true || { echo "slot-0 lock held after TERM"; return 1; }
+    flock -n -x "${HOME}/k3dgpu-bench.lock" true || { echo "main lock held after TERM"; return 1; }
+}
+
 slot_gate_own_slice() {
     fresh
     stat_writer "2 3"
@@ -333,11 +355,12 @@ check "slots: a slot-1 hold stops only slot-1 load" slot_load_stop_scoped
 check "slots: an outside exclusive flock excludes slot holds, and the reverse" x_exclusive_excludes_slots
 check "slots: a queued slot hold does not hold the main lock" queued_slot_hold_does_not_hold_main
 check "slots: after kill -9, slot 0's leftover is cleaned by slot 0 only" kill9_epoch_recovery
-check "slots: HOLD_LOCKS_HELD runs on the parent's locks, refuses an fd 9 another holder has" inherited_locks_mode
+check "slots: HOLD_LOCKS_HELD runs on the parent's locks, refuses an fd 9 that is not the parent's locked description" inherited_locks_mode
 check "slots: HOLD_LOCKS_HELD refuses fds the parent opened but did not lock exclusive" inherited_locks_unlocked_parent_refused
 check "slots: a slot hold yields the main lock to a queued exclusive waiter" writer_not_starved
 check "locks: free as soon as the hold exits (the watchdog's sleep holds none)" locks_released_at_exit
 check "slots: the gate reads the own slice only" slot_gate_own_slice
+check "slots: TERM during the slotted gate's busy wait stops the hold at once, locks free" slot_gate_term
 if [ "${#ALLOWED_A[@]}" -lt 2 ]; then
     SKIPS=$((SKIPS + 1)); echo "skip slots: CMD runs under taskset on the slice (fewer than 2 allowed CPUs)"
 else

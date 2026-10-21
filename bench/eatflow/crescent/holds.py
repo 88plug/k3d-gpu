@@ -3,7 +3,10 @@
 
   append LOG k=v...      one JSON line, one os.write on an O_APPEND fd (a record never tears)
   check LOG              pair start/end records by tag per host; report overlaps and
-                         unterminated holds. Exit 0 clean, 1 any void, 2 malformed log.
+                         unterminated holds. Two holds in different cpuset slots (start
+                         records with slot=0 and slot=1, H56) do not void each other; a hold
+                         without a slot owns the whole host. Exit 0 clean, 1 any void, 2
+                         malformed log.
   reap TAG               SIGKILL every process whose environment has K3DGPU_HOLD=TAG (exact
                          string), rescanning until a scan finds none (at most 50 rounds).
   sweep TAG RUNS         the same for processes of this campaign (K3DGPU_HOLD_RUNS=RUNS) whose
@@ -54,7 +57,7 @@ def check(log):
     """Returns (report, exit code). A start with no end is unterminated: its interval runs
     to the end of the next hold on that host, whose start sweep reaped its tagged orphans but
     whose window may still have shared the host with its untagged leftovers."""
-    holds, order = {}, []
+    holds, order, slot = {}, [], {}
     with open(log) as f:
         for n, line in enumerate(f, 1):
             if not line.strip():
@@ -69,6 +72,7 @@ def check(log):
                 if key in holds:
                     return {"error": f"line {n}: second start for {tag}"}, 2
                 holds[key] = [t, None]
+                slot[key] = r.get("slot") or None
                 order.append(key)
             elif ev == "end":
                 if key not in holds or holds[key][1] is not None:
@@ -89,6 +93,8 @@ def check(log):
             end[ks[i]] = e
         for i, a in enumerate(ks):
             for b in ks[i + 1:]:
+                if slot[a] and slot[b] and slot[a] != slot[b]:
+                    continue
                 if holds[b][0] < end[a] and holds[a][0] < end[b]:
                     void.update((a[1], b[1]))
     rep = {"holds": len(order), "void": sorted(void), "unterminated": sorted(unterminated)}

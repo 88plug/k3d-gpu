@@ -78,7 +78,7 @@ trap finish EXIT
 trap 'on_sig 15' TERM
 trap 'on_sig 2' INT
 trap 'on_sig 1' HUP
-holds append "${HL}" ev=start tag="${TAG}" name="${name}"
+holds append "${HL}" ev=start tag="${TAG}" name="${name}" ${HOLD_SLOT:+slot="${HOLD_SLOT}"}
 if [ -n "${HOLD_SLOT:-}" ]; then
 slot_gate
 else
