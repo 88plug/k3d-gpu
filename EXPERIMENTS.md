@@ -86,6 +86,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H34x | H34's hypothesis on the Xeon 6741P: same-engine CPU Fast Draft (OVMS 2026.4.1, `OpenVINO/Qwen3-0.6B-int4-ov` draft on the CPU) beats the `OpenVINO/Qwen3-4B-int4-ov` target alone on single-stream decode, under matched background load. A replication: the original models are kept. | Written 2026-10-20, before any H34x measurement. At `typical`: median paired B/A decode tok/s 1.40 (1.15-1.70) and median paired B/A package J/token 0.75 (0.60-0.95); SUPPORTED by H34's rule (tok/s >= 1.20 with its CI above 1.0, J/token <= 0.85 with its CI below 1.0) at 0.6, REFUTED 0.25 (the draft's share of a faster target step grows), INCONCLUSIVE 0.15. | H34's `bench/hetero-spec/h34.sh` and `h34.py`, n = 12 pairs A B / B A, 5 s load window per request, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h34`, `K3D_GPU_VENDORS=none`, node container on CPUs 0-23,48-71, crescent amendment C1, `typical` only. Run 2026-10-20 ([H34x run](#h34x-run-xeon-6741p-2026-10-20)): load MATCHED, 12/12 pairs; B/A decode tok/s 0.758 (CI 0.688-0.809) and package J/token 1.241 (CI 1.168-1.347), B slower and costlier in 12/12 pairs (A 37.2, B 28.0 tok/s): the draft slows decode on this Xeon. | REFUTED |
 | H25x | H25's hypothesis (T part) on the Xeon 6741P: agents that send a byte-identical system prompt and tools to one OVMS CPU server reuse one prefix KV, so an added agent's first chunk arrives at least 4x sooner with the shipping prefix caching on than with `--enable_prefix_caching=false`. A replication: the original model and prefix shape are kept. | Written 2026-10-20, before any H25x measurement. Added-agent median TTFT OFF 1.2 s (0.5-2.5), ON 0.15 s (0.06-0.4), ratio 8x (4.5-14), the ratio's 95% CI lower bound >= 4x; c/OFF >= 0.8. SUPPORTED 0.75; the risk is fixed per-request overhead, which a 5-10x faster prefill leaves as a larger share of the ON time. M (memory per agent) not measured, as in H25 run 4. | H25's `bench/shared-prefix/run.sh` and `probe.py score` (A3 first-chunk TTFT, A4 amendment-27 load rule), ON OFF interleaved 3+3 rounds, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h25`, `K3D_GPU_VENDORS=none`, node container on CPUs 0-23,48-71 (`NODE_CPUS`), crescent amendment C1, `typical` only. | PENDING |
 | H28x | H28's hypothesis on the Xeon 6741P: N = 8 agent pods that mmap one 1 GiB model through an image volume share one page-cache copy and become ready in at most half the time of pods that copy it into an emptyDir. A replication (H28 has no model; the 1 GiB blob is kept). | Written 2026-10-20, before any H28x measurement. Memory parts hold (0.95): T PSS <= 160 MiB per pod, model page cache about 1.0x size (T) vs about 9x (C). Time part uncertain: the copy runs at memory speed on this host, so the fixed pod-start cost is a larger share of both arms; T/C round-median ready 0.55 (0.35-0.8). SUPPORTED 0.35, REFUTED (time part) 0.5, other rows 0.15. | H28's `bench/zero-copy-models/probe.sh` (A1, A2), arms C T T C C T plus the unscored warm-up, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h28`, crescent amendment C1 passed to the plain `k3d cluster create`, `typical` only, scored by `bench/zero-copy-models/score.py` (H28's table, committed with this pre-registration). | PENDING |
+| H56 | Two measurement holds in disjoint cpuset slices of the Xeon 6741P do not perturb each other: an A1 B24 agent block in slice 0 (CPUs 0-23,48-71) behaves equivalently, in per-attempt time, within-budget success and tasks completed, alone and with a concurrent identical A1 hold in slice 1 (CPUs 24-47,72-95), without an all-core clock drop on slice 0 and with the package below its power limit. It decides whether crescent may run two A1-or-lighter holds at once ([adoption rule](#h56-pre-registration-parallel-slice-holds-on-crescent-2026-10-20)); it is not a k3d-gpu product claim. | Written 2026-10-20, before any run; predictions unchanged by the 2026-10-21 revision, priors updated to its narrower bands. Geometric-mean W/A time ratio 1.04 (0.99-1.09); paired success W - A -0.01 (-0.06 to +0.04); completion W/A 0.97 (0.90-1.00); own-slice MHz W/A 0.97; W package 0.75 PL1 (0.55-0.95), A package 0.5 PL1; time pairs 80 (50-96). Batch-1 int4 decode is DRAM-bound, and the sibling's decode and its stream load share DRAM, L3 and package power. Verdict priors: SUPPORTED 0.30, INCONCLUSIVE 0.45, REFUTED 0.25. | Stage 0 first, read-only: `bench/eatflow/crescent/lockwait.py` over both campaigns' `campaign.log`; if lock wait our slots could remove is under 0.10 of hold time, stage 1 is not run and the row stays PENDING (`h56.sh` refuses through `h56.py gate`). Then one W wiring smoke, which must show slice-0 setup <= 900 s and >= 3 tasks in 120 s. Stage 1: `bench/eatflow/crescent/h56.sh N` for N = 1..8, order A W W A A W W A, one condition-hold per exclusive campaign lock (slot locks first). A: slice 0 alone, slice 1 idle. W: the sibling in slice 1 first (cap 3000 s, budget 1800 s), slice 0 from the sibling's run budget on (cap 2400 s, budget 720 s, the same as A). Hold pairs (1,2) (4,3) (5,6) (8,7), tasks by id; 90% two-stage bootstrap CIs (hold pairs, then tasks; 10,000, seed 56; TOST at alpha 0.05). SUPPORTED: all 8 positions filled, time CI inside [1/1.05, 1.05], success CI inside [-1/24, +1/24], completion W/A >= 1/1.05, >= 60 time pairs, own-slice MHz W/A >= 0.95, W package < 0.95 PL1 and PL1 read. REFUTED: the time CI wholly outside its band, the success CI wholly outside its band, or the completion CI wholly below 1/1.05. Otherwise INCONCLUSIVE. VOID holds are replaced, at most 2. `bench/eatflow/crescent/h56.py score`. | PENDING |
 
 ## Falsification log
 
@@ -2189,6 +2190,239 @@ step. H52 keeps its verdict (REFUTED). The H52b row is unchanged except as liste
 5. Disk pressure (see amendment C1). H52b's `up` stays plain. If the node is tainted
    `node.kubernetes.io/disk-pressure` before its test pods schedule, H52b runs once more with
    C1's kubelet thresholds and records it; eviction thresholds do not enter detection.
+
+### H56 pre-registration: parallel slice holds on crescent (2026-10-20)
+
+Written 2026-10-20, before any H56 step, stage 0 included; revised 2026-10-21 after review, still
+before any step (the revision list closes this section). Every crescent hold today takes one
+exclusive flock on `~/k3dgpu-bench.lock` (`bench/eatflow/crescent/hold.sh`), shared with the
+k3dgpu-x-* campaign, so one hold runs on the 96-CPU box at a time. H56 tests whether two holds
+in disjoint cpuset slices can run at once without changing each other's result. No gain in
+wall time is claimed: stage 0 measures whether the lock wait is large enough to matter.
+
+**Why slices, against the C1 debate's unsliced design.** The C1 design review settled on K=2
+unsliced (both holds on all 96 CPUs, rule 2 unchanged) and dropped slicing, because slicing
+changes the treatment and, on one NUMA node, does not isolate DRAM. H56 tests slices anyway,
+for two reasons. Unsliced, two holds' threads share cores, so a W/A difference would mix the
+scheduler's placement of two 96-thread pools with resource interference, and a null result
+would not carry over to any other placement. Sliced, the CPUs are disjoint by construction and
+what is left is exactly the shared-uncore channel the debate worried about: DRAM bandwidth, L3
+and package power, measured by the time, completion and MHz statistics below. The treatment
+change is accepted openly: sliced holds are a new configuration, never pooled with the unsliced
+H50, H50o and H51 holds (adoption rule 3).
+
+**What ships with this section, off by default.** `HOLD_SLOT` unset leaves every crescent hold
+as it was (K=1): the legacy lock, gate and cleanup lines run unchanged in hold.sh's `else`
+branches, `load.py` without a slot builds byte-identical `docker run` argv, `live.sh` keeps its
+names, ports and DevUI addresses, and `serving.py` keeps `MINE`. As hold.sh already closes the
+lock fd 9 in every child (C3), a slotted hold also closes the slot fds 7 and 8 in CMD, the
+sampler, the watchdog and the gate's waits, so its locks live exactly as long as hold.sh. With
+`HOLD_SLOT=i` (`HOLD_SLOTS=2`, the only value accepted):
+
+| | slice 0 | slice 1 |
+|---|---|---|
+| CPUs (`load.py slice`, from sysfs; SMT siblings n and n+48) | 0-23,48-71 | 24-47,72-95 |
+| load CPUs (top half of the slice's cores, rule 2's ratio) | 12-23,60-71 | 36-47,84-95 |
+| cluster, host containers, load containers | `k3dgpu-a-s0-a1`, `k3dgpu-a-s0-{litellm,rapl}`, `k3d-gpu-bench-load-s0-*` | the same with `s1` |
+| ports, DevUI | 18600-18660, 127.0.0.1:8090 | 18700-18760, 127.0.0.3:8090 |
+
+- Locks (flock(2); `bench/eatflow/crescent/slots.sh`). The global order is slot-0 < slot-1 <
+  main, so no wait cycle exists; every wait is bounded by `-w`. The slot-i lock plus the
+  hold's start-of-hold sweep make it the owner of `s<i>` resources: the kernel drops the lock
+  when hold.sh dies, and CMD holds no lock fd, so an orphaned CMD can outlive the lock until the
+  next hold's sweep kills it (`holds.py sweep`, campaign-wide). A slotted hold then deletes every `k3dgpu-(e|a)-s<i>-*` cluster, container and slot-i load container
+  and nothing else.
+  - Adoption mode (not used by H56): `slot-<i>`, then the main lock shared. A hold queued on its
+    slot holds nothing on the main lock. Before taking main shared it waits while `/proc/locks`
+    lists an exclusive request blocked on main (the x-campaign, a legacy hold, `h56.sh`). An
+    exclusive waiter therefore waits only for the slot holds already running plus at most one
+    per slot that read `/proc/locks` just before it blocked: slot holds cannot starve it. Slot
+    holds can wait behind a stream of exclusive holds, which is the intended priority.
+  - Inherited mode (`HOLD_LOCKS_HELD=1`, used by `h56.sh`): the parent holds fds 7 (slot-0),
+    8 (slot-1) and 9 (main) exclusive. Each fd must be that file, and its
+    `/proc/self/fdinfo/<fd>` must list an exclusive FLOCK. fdinfo lists only locks owned by
+    that open file description, so this reads ownership without re-locking; a parent that
+    opened the fds without locking them, or holds main shared, is refused (exit 4).
+- Gate. Own-slice busy over 60 s <= 12.5% (12/96, rule 1's load1 <= 12 as a fraction of the box)
+  and no aiperf process, polled every 120 s for at most `HOLD_GATE_MAX_S` (default 3600 s; H56
+  sets 600 s for A and the sibling and 120 s for slice 0 in W), then the hold runs flagged.
+  Shared rule 1 is unchanged; this gate is used only by slotted holds.
+- Pinning. CMD runs under `taskset -c <slice>`; live.sh runs `docker update --cpuset-cpus
+  <slice>` on the server node right after `up`, starts LiteLLM and the RAPL container with the
+  same cpuset, and the load on the slice's load CPUs (`LOAD_CPUS`). `cpuset.txt` records the
+  node's docker cpuset and `cpuset.cpus.effective`, LiteLLM's, RAPL's and each load
+  container's cpuset, and the OVMS pod's `Cpus_allowed_list` and `nproc`.
+- Covariate. With `SERVING_SLOT=i`, `serving.py` counts the sibling's cluster and load as
+  foreign, and adds own-slice busy, other-slice busy and own-slice mean `scaling_cur_freq`.
+- Scope. `live.sh` refuses a slot (exit 2) outside `LIVE_MODE=agent` and arm A1. Pairs are out
+  until the pair-index claim of `pairs.py` (`next_pair`) runs under a per-HYP lock; A2 (the
+  B70s) is out, so the per-card GPU state is untouched.
+
+**Probe.** Crescent amendment C1's K3S args; A1 as live.sh's agent mode builds it at the merge
+commit (OVMS int4, `K3D_GPU_AGENT_DEVICE=CPU`); B24 at typical load; cluster `k3dgpu-a-s<i>-a1`.
+
+- A (alone): slice 0 runs the hold (cap 2400 s, `LIVE_CAP` 2370, `LIVE_BUDGET` 720); slice 1
+  runs nothing (its slot lock is held by the driver).
+- W (with sibling): the sibling starts first in slice 1 (cap 3000 s, `LIVE_CAP` 2970,
+  `LIVE_BUDGET` 1800). Slice 0 starts the A command once the sibling's `live.log` shows
+  `== run budget`, at most 840 s after the sibling started; past that the condition-hold stops
+  (`sync-failed`) and is VOID.
+- Order A W W A A W W A, four condition-holds per side. `bench/eatflow/crescent/h56.sh N` first
+  runs `h56.py gate` (below) and refuses with exit 7 if it fails. It then takes `flock -w
+  21600` on slot-0, slot-1 and the main lock exclusive, and runs both holds on those file
+  descriptions. A W condition-hold is refused above 95% disk; the 97% guard stays. The record
+  directory `hold<N>` is made only after the locks and the disk check, so a lock timeout or a
+  disk refusal leaves no record and is not a VOID.
+- One wiring smoke of W (`H56_SMOKE=1`, both `LIVE_BUDGET` 120, into `smoke-W`), after stage 0
+  passes. It is discarded from scoring and disclosed in the run section. It also gates stage 1:
+  `h56.py gate` refuses every condition-hold unless the smoke's slice 0 started its first task
+  at most 900 s after its hold began (W puts slice 0's setup and its 720 s budget inside the
+  sibling's 1800 s, so a setup near 1080 s would VOID every W hold) and completed at least 3
+  tasks in its 120 s (about 18 per 720 s, 72 time pairs over four hold pairs, against the 60
+  required).
+
+**Statistic.** All 8 positions must hold a non-VOID condition-hold, else INCONCLUSIVE ("position
+N missing"); a missing position is never skipped, since that would shift the A/W pairing and
+break the ABBA balance. Hold pairs are (1,2), (4,3), (5,6) and (8,7). Within a pair, tasks are
+matched by id over slice-0 cycle-0 rows:
+
+- Time: tasks uncensored in both holds; the geometric-mean W/A ratio of `duration_s`.
+- Success: every common task; ok = `passed`, not censored and `duration_s` <= 120; the mean
+  paired W - A difference.
+- Completion: completed (uncensored) slice-0 tasks, summed over the W holds over the A holds.
+  A sibling that slows slice 0 enough to finish fewer B24 tasks in the 720 s budget moves this,
+  even when the time pairs it leaves look unchanged.
+- CIs: 90% (TOST at alpha = 0.05), from 10,000 two-stage bootstrap resamples, seed 56: draw the
+  4 hold pairs with replacement, then each drawn pair's tasks with replacement. Interference is
+  a hold-level treatment (sibling phase, foreign load and thermal state vary per hold), so the
+  hold pair is the unit; a task-only resample would ignore that variance. With 4 clusters a
+  percentile CI is still optimistic; that limitation is accepted, not corrected.
+- Own-slice MHz: the mean `own_mhz` of slice 0's `serving.jsonl` rows inside its task window,
+  mean over W holds / mean over A holds. It is a gate: an all-core turbo-bin drop on slice 0
+  when the sibling runs is the interference channel the package cap does not show.
+- Power: package W = sum `energy_j` / sum `seconds` of slice 0's `blocks.jsonl`, mean over the W
+  holds, against PL1 (`intel-rapl:0/constraint_0_power_limit_uw`, read by h56.sh into
+  `pl1.txt`). Energy in W is a package total and is not split between the two holds.
+- Descriptive only, never gating: own-slice busy W - A; the A holds' package W; IMC CAS counts
+  (`sudo -n perf stat -a -I 5000` with the `uncore_imc*/cas_count_{read,write}/` names
+  crescent's own `perf list` reports, none recorded if it reports none). IMC is not a gate
+  because neither the event names nor a peak bandwidth have been read on crescent.
+
+**Bands.** Time [1/1.05, 1.05] and success [-1/24, +1/24] are the margins the C1 debate declared
+before any build (±5% time, ±1 task of a B24 block); the first draft of this section widened
+them to ±10% with no stated reason, and this revision restores them. ±1 task is the smallest
+success change one B24 block can show. ±5% time is the size of the effects the adopting rows
+must resolve: their arms are compared at a 120 s turn budget, and a slowdown s pushes every task
+whose solo time lies in [120/(1+s), 120] s over that budget, so a K=2 penalty must be small next
+to the differences those rows decide. Feasibility evidence, from another host: on the i9-13900T,
+two same-condition A1 blocks in one H44 hold had a per-task log time ratio s.d. of 0.03 (none)
+and 0.05 (heavy) and no success discordance
+(`bench/eatflow/results/2026-10-17/H44-A1/`); between holds on different days it was 0.20
+(14 common tasks of the H45 A1 hold against the 2026-10-17 A1 run, different days and setups). Crescent's between-hold spread is unknown, which is
+what the INCONCLUSIVE prior below carries.
+
+**VOID** (replaced at the end with `h56.sh N`, which writes `hold<N>-r<k>`; more than 2 VOID
+condition-holds make the row INCONCLUSIVE): rc != 0 or NOT DELIVERABLE in either slice;
+`cpuset.txt` not the slice (node, effective, LiteLLM, RAPL or pod `Cpus_allowed_list`), the
+OVMS pod's `nproc` not the slice's CPU count, load containers not on the slice's load CPUs, or
+fewer than the level's 3 slot-tagged load containers at the block's start or end; in W, slice
+0's block window (first `t_start` to last `t_end`) not inside the sibling's; the gate flagged
+the hold.
+
+**Verdict.** SUPPORTED when all 8 positions are filled with at most 2 VOID, the time CI lies
+inside [1/1.05, 1.05], the success CI inside [-1/24, +1/24], completion W/A >= 1/1.05, at least
+60 matched time pairs exist, own-slice MHz W/A >= 0.95, the W package mean is below 0.95 PL1 and
+PL1 was read. REFUTED when the time CI lies wholly outside its band, the success CI wholly
+outside its band, or the completion CI wholly below 1/1.05 (all 8 positions filled, at most 2
+VOID). INCONCLUSIVE otherwise.
+
+**Predictions** (written 2026-10-20, before any run, and kept): time ratio 1.04 (0.99-1.09);
+success difference -0.01 (-0.06 to +0.04); W package 0.75 PL1 (0.55-0.95), A package 0.5 PL1;
+own-slice MHz W/A 0.97. Added 2026-10-21: completion W/A 0.97 (0.90-1.00); time pairs 80
+(50-96). Verdict priors, updated to the narrower bands: SUPPORTED 0.30, INCONCLUSIVE 0.45,
+REFUTED 0.25 (they were 0.45, 0.35, 0.20 against the ±10% bands; the predicted time ratio now
+sits near the upper edge). Reasoning: batch-1 int4 decode is DRAM-bound, and the sibling's
+decode plus its stream load share DRAM, L3 and package power, which slicing does not separate.
+
+**Disclosures.** A1 requests 48 CPUs on a 48-CPU slice; the kubelet still reports the host's 96.
+The OVMS pod's `nproc` is checked against the slice on every hold (VOID otherwise); the thread
+pool OVMS sizes from it is not read. dockerd, the k3d serverlb and IRQs are not pinned. That
+`docker update --cpuset-cpus` on the node reaches the nested pod cgroups was measured twice: on
+crescent, in the [cross-host setup smoke 2](#cross-host-pre-registration-h25x-h27x-h28x-h34x-on-the-xeon-6741p-2026-10-20)
+(node pinned to 0-23,48-71, pod `Cpus_allowed_list` 0-23,48-71), and on the i9 in the
+[H28 run A2](#h28-run-a2-amendment-27-load-rule-i9-13900t-2026-10-18) (every pod read 0-15).
+`cpuset.txt` still checks it on every hold, so a hold where it does not hold is VOID, not
+scored. Both conditions run sliced, so slicing is the same in A and W. The IMC capture is stopped
+by SIGINT to perf itself, found as a descendant of the backgrounded `sudo` (sudo does not relay
+a signal sent from its own process group); neither that nor the event names has run on
+crescent, so IMC may be missing, which changes no verdict.
+
+**Hold caps.** At most 10 condition-holds (8 plus 2 replacements). Each piece of a
+condition-hold has an enforced bound: the gate maxima (600 s, 600 s and 120 s, each plus one
+60 s sample per round), hold.sh's `timeout -k 30` on the caps, and `SYNC_MAX` 840 s. Their sums,
+printed by `H56_PRINT_CONFIG=1 h56.sh 1`: A at most 3390 s, W at most 3990 s, cluster cleanup
+excluded. The first draft's "at most 3300 s including the sync wait" was not enforced and is
+withdrawn.
+
+**Stage 0.** `lockwait.py` first, read-only, over this campaign's `campaign.log` and the
+x-campaign's (`--xlog ~/k3dgpu-xhost/runs/campaign.log`). Per hold: lock wait, hold time (lock
+taken to rc), and the part of the lock wait that overlaps an x-campaign hold (`wait_behind_x`).
+Slot holds cannot remove that part, since x holds stay exclusive, so the stage-0 share is
+(lock wait - wait behind x) / hold time; the raw share is reported beside it. Holds with no end
+line (killed, timed out, exited after the lock) count up to their last line and are listed as
+unterminated. H56's own holds (`H56-*`) never count, so they cannot feed adoption rule 2. If
+share < 0.10, stage 1 is not run, the row stays PENDING, and the run section records the share;
+`h56.py gate` enforces this from `lockwait.json`. The population is every past hold, mostly
+H50/H50o/H51, which adoption rule 3 keeps unsliced; their queueing is the only evidence of
+whether lock wait costs this box anything, so the share is read as an upper bound on what slots
+could recover (also split by row in `by_row`).
+
+**F0 dropped.** The debate's zero-run F0 (regress H50/H51 per-attempt time and success on the
+foreign CPU covariate) is not pre-registered here. Its range is foreign load lighter than a
+sibling hold, so a flat slope could not clear concurrency and only a positive slope would stop
+the work; H56's W condition measures the sibling directly. F0 may be pre-registered separately
+before anyone looks at that slope.
+
+**Adoption rule** (a later amendment; H56's verdict alone does not switch anything on). K=2 for a
+crescent row needs all of: (1) H56 SUPPORTED; (2) share >= 0.25 over the last 20 holds (H56's
+own excluded); (3) the row slices its holds from its first hold, never pooling sliced with
+unsliced holds (so not the in-flight H50, H50o or H51); (4) pairs only after the per-HYP
+pair-claim lock lands; (5) both holds run A1, or an arm whose measured package power and memory
+traffic per hold are no higher than A1's; any heavier sibling (a vLLM bf16/AMX arm, say) needs
+its own H56-style test first; (6) the x-campaign's lock wait logged.
+
+**Tests** (no hardware): `tests/crescent_hold_test.sh` (legacy lock exclusive and sweep
+unchanged; a slot-1 hold starts while slot 0 runs; cleanup and load stop scoped to the slot; an
+outside exclusive flock excludes slot holds and the reverse; a queued slot hold holds nothing on
+the main lock; a slot hold yields to a queued exclusive waiter; locks free as soon as a hold
+exits; recovery after `kill -9`; inherited locks, refused when the parent did not lock them
+exclusive; the own-slice gate; taskset on the slice over a 2-slice fake sysfs of the CPUs the
+test may use; `h56.sh` refusals leave no record; run with `CRESCENT_HOLD_STRICT=1` from
+`tests/bench_test.sh`, so a skip fails), `bench/load/test_load.py` `SlotTest`,
+`bench/eatflow/crescent/test_crescent.py` (serving slot covariate, lockwait, the gate, the scorer
+on fixtures), and the `live.sh` slot checks in `tests/bench_test.sh`.
+
+**Revision 2026-10-21** (review, before any step): margins restored to the debate's; hold-pair
+bootstrap; completion and own-slice MHz added as gates; every position required; pod `nproc`
+checked; record directory made after the locks; stage 0 and the smoke enforced by `h56.py gate`;
+stage 0 net of x-campaign wait, H56 holds excluded, unterminated holds counted; writer
+preference in adoption mode; inherited locks read from fdinfo; lock fds closed in the sampler,
+watchdog and perf; hold bounds enforced; the cpuset precedent re-cited; F0 recorded as dropped;
+adoption limited to A1-or-lighter siblings.
+
+Reproduce (crescent, at the merge commit; record `git rev-parse HEAD`; results are committed to
+`bench/eatflow/results/<date>/H56/`):
+
+```
+mkdir -p ~/k3dgpu-bench/results/H56
+python3 bench/eatflow/crescent/lockwait.py ~/k3dgpu-bench/runs/campaign.log --xlog ~/k3dgpu-xhost/runs/campaign.log --runs ~/k3dgpu-bench/runs > ~/k3dgpu-bench/results/H56/lockwait.json
+# h56.sh refuses (exit 7) unless lockwait.json says stage1, and, for N, unless smoke-W passes h56.py gate
+H56_SMOKE=1 bench/eatflow/crescent/h56.sh 2
+python3 bench/eatflow/crescent/h56.py gate ~/k3dgpu-bench/results/H56
+for n in 1 2 3 4 5 6 7 8; do bench/eatflow/crescent/h56.sh "$n" || break; done
+python3 bench/eatflow/crescent/h56.py score ~/k3dgpu-bench/results/H56
+# VOID replacement (at most 2 in all): bench/eatflow/crescent/h56.sh <N>   -> writes hold<N>-r<k>
+```
 
 ### Crescent amendment C1: kubelet eviction thresholds on a 95%-full disk (2026-10-20)
 
