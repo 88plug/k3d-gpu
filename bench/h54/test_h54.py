@@ -191,6 +191,53 @@ class ScoreA(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_YAML, "PyYAML")
+class ServedCarry(unittest.TestCase):
+    """Amendment R3: an arm whose server stopped answering after readiness is failed, and is
+    carried to the next hold's front once."""
+    def arm(self, root, hold, name, status="measured", reason="", n1_ok=True, q_errors=0):
+        d = os.path.join(root, f"hold{hold}", name)
+        os.makedirs(d, exist_ok=True)
+        json.dump({"status": status, "reason": reason}, open(os.path.join(d, "status.json"), "w"))
+        if status == "measured":
+            s = [{"ok": True, "decode_tokens_per_s": 10.0}] if n1_ok else [{"ok": False, "decode_tokens_per_s": None}]
+            json.dump({"phases": [{"samples": s}]}, open(os.path.join(d, "load-n1.json"), "w"))
+            json.dump({"n": 50, "correct": 40, "score": 0.8, "errors": q_errors}, open(os.path.join(d, "quality.json"), "w"))
+        return d
+
+    def test_served(self):
+        with tempfile.TemporaryDirectory() as r:
+            self.assertTrue(h54.served(self.arm(r, 1, "Lg"))[0])
+            ok, why = h54.served(self.arm(r, 1, "B1g", n1_ok=False))
+            self.assertFalse(ok)
+            self.assertTrue(why.startswith(h54.STOPPED))
+            self.assertFalse(h54.served(self.arm(r, 1, "Vq", q_errors=50))[0])
+            self.assertTrue(h54.served(self.arm(r, 1, "Sg", q_errors=3))[0])
+            self.assertFalse(h54.served(os.path.join(r, "nothing"))[0])
+
+    def test_recheck_and_carry(self):
+        with tempfile.TemporaryDirectory() as r:
+            self.arm(r, 1, "B1g", n1_ok=False)                 # engine died after readiness
+            self.arm(r, 1, "Lg")
+            self.arm(r, 1, "A1g", status="not_reached", reason="680 s of the hold left (< 900)")
+            self.arm(r, 1, "A1o", status="not_deliverable", reason="no model list")
+            changed = h54.recheck(r)
+            self.assertEqual([os.path.basename(d) for d in changed], ["B1g"])
+            st = json.load(open(os.path.join(r, "hold1", "B1g", "status.json")))
+            self.assertEqual((st["status"], st["was"]), ("failed", "measured"))
+            self.assertEqual(h54.recheck(r), [])               # idempotent
+            self.assertEqual(h54.carry(r, 1, ["B1g", "Lg", "Lg-mtp", "A1g", "A1o"]), ["B1g", "Lg-mtp", "A1g"])
+            # a second stop in hold 2 is not carried again; a render failure is never carried
+            self.arm(r, 2, "B1g", status="failed", reason=h54.STOPPED + ": the N=1 phase completed no request")
+            self.arm(r, 2, "Vq", status="failed", reason="render failed")
+            self.assertEqual(h54.carry(r, 2, ["B1g", "Vq", "Vq-mtp"]), ["Vq-mtp"])
+
+    def test_score_ignores_failed(self):
+        with tempfile.TemporaryDirectory() as r:
+            self.arm(r, 1, "B1g", n1_ok=False)
+            h54.recheck(r)
+            self.assertEqual(h54.score_a(r)["verdict"], "INCONCLUSIVE")
+
+
 class Renders(unittest.TestCase):
     def test_llamacpp(self):
         dep = h54.render("Lg")[1]
