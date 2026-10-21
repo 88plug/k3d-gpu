@@ -60,6 +60,15 @@ render vlm-npu       7  STUB_ALLOC="${ALL}" K3D_GPU_AGENT_VLM_DEVICE=NPU K3D_GPU
 render video-rtsp    6  STUB_ALLOC="${ALL}" K3D_GPU_AGENT_VIDEO_SOURCE=rtsp://cam/stream -- --with video
 render stack-vllm    9  STUB_ALLOC=$'cpu 32\ngpu.intel.com/xe 3' K3D_GPU_AGENT_BACKEND=vllm -- --with vlm,video
 render stack-gaudi   6  STUB_ALLOC=$'cpu 32\nhabana.ai/gaudi 1\ngpu.intel.com/i915 1' -- --with video
+# Sized by fit (tests/fixtures/fit): vLLM memory flags and an OVMS static KV pool,
+# each with a pod memory limit.
+FIT="$(dirname "$0")/fixtures/fit"
+mkdir -p "${WORK}/fit-cache"
+for d in "${FIT}"/models/*/; do ln -s "$(cd "${d}" && pwd)" "${WORK}/fit-cache/$(basename "${d}")@main"; done
+render fit-vllm      4  STUB_ALLOC=$'cpu 32\ngpu.intel.com/xe 4' K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_FIT_CACHE="${WORK}/fit-cache" \
+    K3D_GPU_FIT_HOST="${FIT}/hosts/xeon6741p-4xb70.json" XDG_STATE_HOME="${WORK}" -- --model RedHatAI/Qwen3.8-27B-INT4
+render fit-ovms-cpu  4  STUB_ALLOC='cpu 32' K3D_GPU_FIT_CACHE="${WORK}/fit-cache" \
+    K3D_GPU_FIT_HOST="${FIT}/hosts/desktop-i9-nogpu.json" XDG_STATE_HOME="${WORK}" -- --model OpenVINO/Qwen3.8-27B-int4-ov
 
 args=(-strict -summary -kubernetes-version "${K8S_VERSION}")
 rc=0

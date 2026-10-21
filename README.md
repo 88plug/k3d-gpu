@@ -57,6 +57,7 @@ k3d-gpu doctor --perf   # read-only host tuning advisor for inference (add --mod
 k3d-gpu report          # what the host and the cluster have, per engine (text + JSON + HTML)
 k3d-gpu facts           # detect + doctor + doctor --perf + report as one facts/v1 JSON document
 k3d-gpu plan --explain  # engine, model and placement from measured cells, and why
+k3d-gpu fit --model M   # size a model to what this host has free now (docs/fit.md); --explain shows the arithmetic
 k3d-gpu audit           # posture: open listeners off loopback, images not pinned in images.lock
 k3d-gpu up              # create the cluster (device plugins auto-deploy), verify each accelerator > 0
 k3d-gpu test            # per accelerator: nvidia-smi pod / device-node listing pod
@@ -781,6 +782,7 @@ and reasoning (`qwen3` parser).
 k3d-gpu up                       # cluster first
 k3d-gpu agent up                 # download (once), load, warm up; prints a reply
 K3D_GPU_AGENT_DEVICE=CPU k3d-gpu agent up   # same model on the CPU instead
+k3d-gpu agent up --model M       # another model, sized to this host (docs/fit.md) and guarded
 kubectl -n k3d-gpu-agent port-forward svc/ovms 8000:8000 &
 curl http://localhost:8000/v3/chat/completions -H 'Content-Type: application/json' \
   -d '{"model":"Qwen3-4B-int4-ov","messages":[{"role":"user","content":"hi"}]}'
