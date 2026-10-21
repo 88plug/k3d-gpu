@@ -1444,16 +1444,18 @@ def cmd_pairs(a):
     probe = PR.Probe({arm: v["pod"] for arm, v in arms.items()}, lm.load_cpus() if lm else [], rapl=not a.no_rapl)
     ts = T.taskset(a.tasks)
     pre = None
-    if PR.design(a.hyp)[1] == "L2":
+    rule = PR.design(a.hyp)[1]
+    if rule in ("L2", "L3"):
         if not (lm and a.baseline and a.level):
-            raise SystemExit("agentbench pairs: rule L2 needs bench/load/load.py, --baseline and --level")
+            raise SystemExit(f"agentbench pairs: rule {rule} needs bench/load/load.py, --baseline and --level")
         pre = pre_window(lm, a.baseline, a.level, a.pre_s)
     rc = 0
     try:
+        reg = PR.register(a.out, a.hyp)          # L3: the registration, created once, then checked
         n = PR.run_hold(sys.modules[__name__], arms, a.arm_a, a.arm_b, ts, a.out, a.deadline, probe, a.mcp_url,
                         a.reset, a.hold, cap_s=a.cap_s, guard_s=a.guard_s, settle_s=a.settle_s, idle_s=a.idle_s,
                         warmup=None if a.no_warmup else WARMUP["bank"], log=log, quiesce_s=a.quiesce_s,
-                        warmup_timeout_s=a.warmup_timeout_s, pre=pre)
+                        warmup_timeout_s=a.warmup_timeout_s, pre=pre, seed=reg["seed"] if reg else None)
         log(f"hold {a.hold}: {n} complete pair(s); next pair {PR.next_pair(a.out)} of {len(ts)}")
     except PR.HoldAborted as e:
         log(f"hold {a.hold} ABORTED: {e}")
@@ -1464,10 +1466,74 @@ def cmd_pairs(a):
     return rc
 
 
+def cmd_solo(a):
+    """One solo hold (H53): one arm alone, in the row's seeded task order, under rule L3's
+    settle gap and pre-window (bench/eatflow/solo.py)."""
+    import solo as SOLO
+    try:
+        PR.design(a.hyp)                                   # refuses a row not yet pre-registered
+        want = PR.expected_arm(a.hyp, a.hold)
+    except (ValueError, KeyError) as e:
+        raise SystemExit(f"agentbench solo: {e!r}")
+    if a.arm != want:
+        raise SystemExit(f"agentbench solo: {a.hyp} hold {a.hold} runs {want}, not {a.arm}")
+    os.makedirs(a.out, exist_ok=True)
+    write_facts(a.out, a, {"hold": a.hold, "arm": a.arm})
+    os.rename(os.path.join(a.out, "facts.json"), os.path.join(a.out, f"facts-hold{a.hold}.json"))
+    plog = os.path.join(a.out, f"proxy-{a.arm}-hold{a.hold}.jsonl")
+    srv = proxy.serve(proxy.Proxy(a.upstream, plog, sampling=sampling_set(a.sampling)), "127.0.0.1", a.proxy_port)
+    arms = {a.arm: {"agent": Agent(a.agent, os.environ.get("DEVUI_AUTH_TOKEN"), a.entity), "proxy_log": plog,
+                    "restart": a.restart, "pod": a.pod, "entity": a.entity}}
+    log(f"{a.arm}: agent {a.agent}, proxy 127.0.0.1:{srv.server_address[1]} -> {a.upstream}, pod cgroup {a.pod}")
+    lm = _load_mod()
+    if not (lm and a.baseline and a.level):
+        raise SystemExit("agentbench solo: rule L3 needs bench/load/load.py, --baseline and --level")
+    probe = PR.Probe({a.arm: a.pod}, lm.load_cpus(), rapl=not a.no_rapl)
+    rc = 0
+    try:
+        reg = PR.register(a.out, a.hyp)
+        if not reg:
+            raise SystemExit(f"agentbench solo: {a.hyp} is not a rule-L3 row")
+        n = SOLO.run_solo(sys.modules[__name__], arms, a.arm, T.taskset(a.tasks), a.out, a.deadline, probe,
+                          a.mcp_url, a.reset, a.hold, reg["seed"], cap_s=a.cap_s, guard_s=a.guard_s,
+                          settle_s=a.settle_s, warmup=None if a.no_warmup else WARMUP["bank"], log=log,
+                          quiesce_s=a.quiesce_s, warmup_timeout_s=a.warmup_timeout_s,
+                          pre=pre_window(lm, a.baseline, a.level, a.pre_s))
+        log(f"solo hold {a.hold} ({a.arm}): {n} complete attempt(s)")
+    except PR.HoldAborted as e:
+        log(f"solo hold {a.hold} ABORTED: {e}")
+        rc = 1
+    finally:
+        srv.shutdown()
+    return rc
+
+
+def cmd_solo_report(a):
+    """H53: the block pairs of a solo-hold directory, scored by pairs.analyze under rule L3."""
+    import solo as SOLO
+    with open(os.path.join(a.dir, "registration.json")) as f:
+        reg = json.load(f)
+    at, ps = SOLO.block_pairs(PR.read_jsonl(os.path.join(a.dir, "attempts.jsonl")),
+                              PR.read_jsonl(os.path.join(a.dir, "solo.jsonl")), a.arm_a, a.arm_b)
+    res = PR.analyze(at, ps, a.hyp, a.arm_a, a.arm_b, holds=len({r["hold"] for r in PR.read_jsonl(
+        os.path.join(a.dir, "solo.jsonl"))}), registration=reg, solo=True)
+    res["design"] = "solo holds in blocks (bench/eatflow/solo.py): pairs cross holds; no idle second server"
+    with open(os.path.join(a.dir, "analysis.json"), "w") as f:
+        json.dump(res, f, indent=1, default=lambda v: None)
+    print(json.dumps({k: res[k] for k in res if k != "per_pair"}, indent=1, default=lambda v: None))
+    return 0
+
+
 def cmd_pairs_report(a):
+    reg = None
+    rp = os.path.join(a.dir, "registration.json")
+    if os.path.exists(rp):
+        with open(rp) as f:
+            reg = json.load(f)
     res = PR.analyze(PR.read_jsonl(os.path.join(a.dir, "attempts.jsonl")),
                      PR.read_jsonl(os.path.join(a.dir, "pairs.jsonl")), a.hyp, a.arm_a, a.arm_b,
-                     holds=len({p["hold"] for p in PR.read_jsonl(os.path.join(a.dir, "pairs.jsonl"))}))
+                     holds=len({p["hold"] for p in PR.read_jsonl(os.path.join(a.dir, "pairs.jsonl"))}),
+                     registration=reg)
     with open(os.path.join(a.dir, "analysis.json"), "w") as f:
         json.dump(res, f, indent=1, default=lambda v: None)
     print(json.dumps({k: res[k] for k in res if k != "per_pair"}, indent=1, default=lambda v: None))
@@ -1648,6 +1714,41 @@ def parse(argv):
     p.add_argument("--level", help="rule L2: the background load level")
     p.add_argument("--pre-s", type=float, default=PR.PRE_S, help="rule L2: pre-window length, s")
     p.set_defaults(func=cmd_pairs)
+
+    p = sub.add_parser("solo", help="one solo hold: one arm alone, seeded task order, rule L3 (H53)")
+    p.add_argument("--hyp", required=True, choices=PAIRS_HYPS)
+    p.add_argument("--hold", type=int, required=True)
+    p.add_argument("--arm", required=True)
+    p.add_argument("--out", required=True, help="solo directory, shared by every hold of the hypothesis")
+    p.add_argument("--deadline", type=float, required=True)
+    p.add_argument("--tasks", default="B24", choices=sorted(T.TASKSETS))
+    p.add_argument("--agent", required=True)
+    p.add_argument("--upstream", required=True)
+    p.add_argument("--proxy-port", type=int, required=True)
+    p.add_argument("--restart")
+    p.add_argument("--pod", required=True)
+    p.add_argument("--entity")
+    p.add_argument("--mcp-url", required=True)
+    p.add_argument("--reset", required=True)
+    p.add_argument("--sampling", default="agent_local")
+    p.add_argument("--cap-s", type=float, default=PR.TASK_CAP_S)
+    p.add_argument("--guard-s", type=float, default=PR.TASK_CAP_S + 120.0)
+    p.add_argument("--settle-s", type=float, default=30.0)
+    p.add_argument("--no-warmup", action="store_true")
+    p.add_argument("--no-rapl", action="store_true")
+    p.add_argument("--quiesce-s", type=float, default=300.0)
+    p.add_argument("--warmup-timeout-s", type=float, default=float(TASK_TIMEOUT_S))
+    p.add_argument("--baseline", required=True)
+    p.add_argument("--level", required=True)
+    p.add_argument("--pre-s", type=float, default=PR.PRE_S)
+    p.set_defaults(func=cmd_solo)
+
+    p = sub.add_parser("solo-report", help="H53: block pairs of a solo directory and the verdict")
+    p.add_argument("dir")
+    p.add_argument("--hyp", required=True, choices=PAIRS_HYPS)
+    p.add_argument("--arm-a", required=True)
+    p.add_argument("--arm-b", required=True)
+    p.set_defaults(func=cmd_solo_report)
 
     p = sub.add_parser("pairs-report", help="H47/H49 statistics and verdict of a pairs directory")
     p.add_argument("dir")

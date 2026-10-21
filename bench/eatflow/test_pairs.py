@@ -17,6 +17,7 @@ import agentbench as AB  # noqa: E402
 import pairs as PR  # noqa: E402
 import proxy  # noqa: E402
 import tasks as T  # noqa: E402
+import stats  # noqa: E402
 from test_agentbench import LLM, MCP, make_devui, reset_llm, serve  # noqa: E402
 
 
@@ -543,23 +544,25 @@ class L2Test(unittest.TestCase):
 
 
 class H50Test(unittest.TestCase):
-    """H50 (EXPERIMENTS.md "H50-H52 pre-registration"): H49b's design, statistic and gates on
-    the Xeon 6741P. The hypothesis id names the design and the load rule, not its suffix."""
+    """H50 (EXPERIMENTS.md "H50-H52 pre-registration", amendments M1 and A3): the H49 design on
+    the Xeon 6741P under rule L3. The hypothesis id names the design and the load rule."""
 
-    def test_h50_is_the_h49_design_under_l2(self):
-        self.assertEqual(PR.design("H50"), ("H49", "L2"))
+    REG = {"hyp": "H50", "rule": "L3", "seed": PR.ORDER_SEEDS["H50"]}
+
+    def test_h50_is_the_h49_design_under_l3(self):
+        self.assertEqual(PR.design("H50"), ("H49", "L3"))
         self.assertEqual(PR.design("H49b"), ("H49", "L2"))
         self.assertEqual(PR.design("H47"), ("H47", "L1"))
         with self.assertRaises(ValueError):
             PR.design("H51")
         at = L2Test.h49_like(L2Test())
-        res = PR.analyze(at, pairs_of(24), "H50", "A1", "B1")
+        res = PR.analyze(at, pairs_of(24), "H50", "A1", "B1", registration=self.REG)
         ref = PR.analyze(at, pairs_of(24), "H49b", "A1", "B1")
         self.assertEqual(res["hypothesis"], "H50")
-        self.assertEqual((res["rule"], res["verdict"]), ("L2", "SUPPORTED"))
-        for k in ("matched", "paired_diff", "within_budget_success", "gates", "confidence"):
+        self.assertEqual((res["rule"], res["verdict"]), ("L3", "SUPPORTED"))
+        for k in ("paired_diff", "within_budget_success"):             # all 24 pairs match there too
             self.assertEqual(res[k], ref[k], k)
-        res = PR.analyze(at, pairs_of(24, void=(21, 22, 23)), "H50", "A1", "B1")
+        res = PR.analyze(at, pairs_of(24, void=(21, 22, 23)), "H50", "A1", "B1", registration=self.REG)
         self.assertTrue(any("void" in g for g in res["gates"]))       # the H49 void gate applies
 
     def test_cli_pairs_and_report_accept_h50(self):
@@ -569,37 +572,41 @@ class H50Test(unittest.TestCase):
         for name, rows in (("attempts.jsonl", L2Test.h49_like(L2Test())), ("pairs.jsonl", pairs_of(24))):
             with open(os.path.join(tmp, name), "w") as f:
                 f.writelines(json.dumps(r) + "\n" for r in rows)
+        with self.assertRaises(ValueError):                           # an L3 directory needs its registration
+            AB.main(["pairs-report", tmp, "--hyp", "H50", "--arm-a", "A1", "--arm-b", "B1"])
+        PR.register(tmp, "H50")
         self.assertEqual(AB.main(["pairs-report", tmp, "--hyp", "H50", "--arm-a", "A1", "--arm-b", "B1"]), 0)
         with open(os.path.join(tmp, "analysis.json")) as f:
             res = json.load(f)
-        self.assertEqual((res["hypothesis"], res["rule"], res["verdict"]), ("H50", "L2", "SUPPORTED"))
+        self.assertEqual((res["hypothesis"], res["rule"], res["verdict"]), ("H50", "L3", "SUPPORTED"))
 
     def test_live_sh_maps_h50_and_sizes_the_eat_kv_cache(self):
         import re
         with open(os.path.join(HERE, "live.sh")) as f:
             live = f.read()
-        # H50 runs the H49 arms (A1 vs B1) under rule L2, in its own cluster.
-        self.assertIn("H50) DESIGN=H49 RULE=L2 KV_GIB=${LIVE_EAT_KV_GIB:-40} ;;", live)   # 40 GiB unless set
-        self.assertRegex(live, r"\n\s*H49b\) DESIGN=H49 RULE=L2 ;;")
-        self.assertIn('if [ "${RULE}" = L2 ]; then', live)
+        # H50 runs the H49 arms (A1 vs B1); the rule comes from pairs.py.
+        self.assertIn('[ "${ARM}" = H50 ] && KV_GIB=${LIVE_EAT_KV_GIB:-40}', live)   # 40 GiB unless set
+        self.assertIn('[ "${ARM}" = H50o ] && DESIGN=H50o', live)
+        self.assertIn('if [ "${RULE}" != L1 ]; then', live)
         # A1 is the CPU stack even where the auto device would pick an XMX Intel GPU (crescent).
-        self.assertIn("K3D_GPU_AGENT_DEVICE=CPU K3D_GPU_AGENT_MODEL=${TGT}", live)
+        self.assertIn("    draft=${A_DRAFT} dev=CPU\n", live)
+        self.assertIn("K3D_GPU_AGENT_DEVICE=${dev} K3D_GPU_AGENT_MODEL=${TGT}", live)
         # B1's KV cache: 6 GiB by default (H49, H49b on the 125 GiB desktop); H50 runs EAT's
-        # shipped Qwen3-4B value (40 GiB) through LIVE_EAT_KV_GIB.
+        # shipped value (40 GiB) through LIVE_EAT_KV_GIB.
         self.assertIn("KV_GIB=${LIVE_EAT_KV_GIB:-6}", live)
         self.assertEqual(len(re.findall(r'stage.py" values "\$\{chart\}/xeon-values.yaml" "\$\{OUT\}/pin.yaml" "\$\{KV_GIB\}"', live)), 2)
         self.assertNotRegex(live, r'pin.yaml" 6 ')
 
     def test_h50o_runs_eat_ovms_chart_as_arm_b3(self):
-        self.assertEqual(PR.design("H50o"), ("H49", "L2"))
+        self.assertEqual(PR.design("H50o"), ("H49", "L3"))
         self.assertIn("H50o", AB.PAIRS_HYPS)
         at = [dict(r, arm="B3") if r["arm"] == "B1" else r for r in L2Test.h49_like(L2Test())]
-        res = PR.analyze(at, pairs_of(24), "H50o", "A1", "B3")
-        self.assertEqual((res["rule"], res["arms"], res["verdict"]), ("L2", ["A1", "B3"], "SUPPORTED"))
+        res = PR.analyze(at, pairs_of(24), "H50o", "A1", "B3",
+                         registration={"hyp": "H50o", "rule": "L3", "seed": PR.ORDER_SEEDS["H50o"]})
+        self.assertEqual((res["rule"], res["arms"], res["verdict"]), ("L3", ["A1", "B3"], "SUPPORTED"))
         self.assertIn("paired_diff", res)
         with open(os.path.join(HERE, "live.sh")) as f:
             live = f.read()
-        self.assertRegex(live, r"\n\s*H50o\) DESIGN=H50o RULE=L2 ;;")
         self.assertRegex(live, r"\n\s*H50o\) A=A1 B=B3 ;;")
         # EAT's OVMS chart: its image tag pinned to a digest, the OpenVINO model it pulls,
         # OVMS's OpenAI path /v3 for LiteLLM and the model list.
@@ -609,6 +616,275 @@ class H50Test(unittest.TestCase):
         self.assertIn("B_DEP=ovms-model-server B_SVC=ovms-model-server B_SPORT=8080 B_API=/v3", live)
         self.assertIn('litellm b "${SERVED_B}" "${BPORT}" "$(( P_LLM + 1 ))" "${API_B}"', live)
         self.assertIn('wait_http "http://127.0.0.1:${BPORT}${API_B}/models" 300', live)
+
+
+class L3Test(unittest.TestCase):
+    """Rule L3 (EXPERIMENTS.md "Crescent amendment A3"): every complete pair enters the
+    statistic; a balance gate (arm must not predict a pre-window covariate) replaces the match
+    filter; a two-regressor adjustment and L2's matched subset are reported, never gated; the arm
+    order of pair j comes from a registered seed; one registration file per pairs directory."""
+
+    def noisy(self, n=24, b_busy=0.0, seed=7):
+        import random
+        rng = random.Random(seed)
+        at = []
+        for j in range(n):
+            # Idle-time throttle and busy noise that L2's tolerances reject most of the time,
+            # drawn independently of the arm (H49b: 12-3342 events/min between idle windows).
+            pa = pre(busy=48 + rng.uniform(-6, 6), thr=rng.choice([12, 155, 298, 1063, 3342]))
+            pb = pre(busy=48 + b_busy + rng.uniform(-6, 6), thr=rng.choice([12, 155, 298, 1063, 3342]))
+            at += [att2(j, "A1", 10.5, pa), att2(j, "B1", 10.5, pb, outcome="pass_budget" if j % 5 == 0 else "over_turn")]
+        return at
+
+    def reg(self):
+        return {"hyp": "H50", "rule": "L3", "seed": PR.ORDER_SEEDS["H50"]}
+
+    def test_arm_independent_pre_noise_keeps_every_pair(self):
+        at = self.noisy()
+        self.assertLess(len(PR.l2(PR.pair_table(at, pairs_of(24), "A1", "B1")[0], "A1", "B1")["matched"]), 16)
+        res = PR.analyze(at, pairs_of(24), "H50", "A1", "B1", registration=self.reg())
+        self.assertEqual((res["rule"], res["matched"]), ("L3", 24))
+        self.assertEqual(res["gates"], [])
+        self.assertTrue(res["load"]["balance_ok"], res["load"]["balance"])
+        self.assertEqual(res["verdict"], "SUPPORTED")
+        self.assertIn("adjusted", res["load"])                      # reported, never gated
+        self.assertIn("l2_secondary", res)
+        self.assertLess(res["load"]["sign_flip_p"], 0.01)
+
+    def test_covariate_tracking_arm_is_inconclusive(self):
+        res = PR.analyze(self.noisy(b_busy=8.0), pairs_of(24), "H50", "A1", "B1", registration=self.reg())
+        self.assertFalse(res["load"]["balance_ok"])
+        self.assertEqual(res["verdict"], "INCONCLUSIVE")
+        self.assertTrue(any("covariate tracks arm: busy_pct" in g for g in res["gates"]), res["gates"])
+
+    def test_too_few_pairs_and_voids_still_gate(self):
+        res = PR.analyze(self.noisy(n=15), pairs_of(15), "H50", "A1", "B1", registration=self.reg())
+        self.assertTrue(any("complete pairs < 16" in g for g in res["gates"]), res["gates"])
+        res = PR.analyze(self.noisy(), pairs_of(24, void=(21, 22, 23)), "H50", "A1", "B1", registration=self.reg())
+        self.assertTrue(any("void" in g for g in res["gates"]))
+
+    def test_registration_is_required_and_must_match(self):
+        with self.assertRaises(ValueError):
+            PR.analyze(self.noisy(), pairs_of(24), "H50", "A1", "B1")
+        with self.assertRaises(ValueError):
+            PR.analyze(self.noisy(), pairs_of(24), "H50", "A1", "B1", registration=dict(self.reg(), rule="L2"))
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        r = PR.register(tmp, "H50")
+        self.assertEqual(r, self.reg())
+        self.assertEqual(PR.register(tmp, "H50"), r)               # a later hold: same registration
+        with self.assertRaises(PR.HoldAborted):
+            PR.register(tmp, "H50o")                                 # another hypothesis in the same dir
+        self.assertIsNone(PR.register(tempfile.mkdtemp(dir=tmp), "H49b"))   # L1/L2 rows: none
+        self.assertFalse([n for n in os.listdir(tmp) if n.endswith(".tmp")])
+
+    def test_an_empty_registration_is_a_clear_abort(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        open(os.path.join(tmp, "registration.json"), "w").close()      # a crash mid-write (pre-S3 code)
+        with self.assertRaisesRegex(PR.HoldAborted, "is not a registration"):
+            PR.register(tmp, "H50")
+
+    def test_balance_tests_log1p_throttle(self):
+        # One huge throttle reading on arm B: raw differences hand it all the weight; log1p
+        # keeps it one pair among many.
+        at = self.noisy()
+        for r in at:
+            if r["arm"] == "B1" and r["j"] == 0:
+                r["pre"] = dict(r["pre"], throttle_per_min=1e9)
+        table = PR.pair_table(at, pairs_of(24), "A1", "B1")[0]
+        import math
+        raw = [table[j]["A1"]["pre"]["throttle_per_min"] - table[j]["B1"]["pre"]["throttle_per_min"] for j in table]
+        logd = [math.log1p(table[j]["A1"]["pre"]["throttle_per_min"]) - math.log1p(table[j]["B1"]["pre"]["throttle_per_min"])
+                for j in table]
+        got = PR.l3(table, "A1", "B1")["balance"]["throttle_per_min"]
+        self.assertAlmostEqual(got["mean_diff"], round(sum(logd) / len(logd), 4))
+        self.assertNotAlmostEqual(got["mean_diff"], sum(raw) / len(raw))
+
+    def test_period_balanced_estimate_is_reported_never_gated(self):
+        ps = [dict(p, order=["A1", "B1"] if p["j"] % 3 else ["B1", "A1"]) for p in pairs_of(24)]
+        res = PR.analyze(self.noisy(), ps, "H50", "A1", "B1", registration=self.reg())
+        pb = res["period_balanced"]
+        self.assertEqual((pb["A1_first"]["n"], pb["B1_first"]["n"]), (16, 8))
+        self.assertAlmostEqual(pb["estimate"], round((pb["A1_first"]["mean_d"] + pb["B1_first"]["mean_d"]) / 2, 4))
+        self.assertEqual(res["gates"], [])
+
+    def test_an_l3_row_needs_its_ledger_row(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        saved = PR.LEDGER
+        self.addCleanup(setattr, PR, "LEDGER", saved)
+        PR.LEDGER = os.path.join(tmp, "EXPERIMENTS.md")
+        with self.assertRaisesRegex(ValueError, "pre-register it first"):
+            PR.design("H50")
+        self.assertEqual(PR.design("H49b"), ("H49", "L2"))           # L1/L2 rows predate the rule
+        with open(PR.LEDGER, "w") as f:
+            f.write("| H50 | x | PENDING |\n| H50o-extra | x |\n")
+        self.assertEqual(PR.design("H50"), ("H49", "L3"))
+        with self.assertRaises(ValueError):
+            PR.design("H50o")                                        # "| H50o-extra |" is not "| H50o |"
+
+    def test_seeded_order_is_deterministic_and_balanced(self):
+        s = PR.ORDER_SEEDS["H50"]
+        self.assertEqual([PR.order(j, "A", "B", s) for j in range(50)], [PR.order(j, "A", "B", s) for j in range(50)])
+        first = sum(PR.order(j, "A", "B", s) == ("A", "B") for j in range(1000))
+        self.assertTrue(450 <= first <= 550, first)
+        self.assertEqual([PR.order(j, "A", "B") for j in range(4)], [("A", "B"), ("B", "A")] * 2)   # parity
+
+    def test_replay_committed_h49b(self):
+        d = os.path.join(HERE, "results", "2026-10-18", "H49b", "pairs")
+        table, void = PR.pair_table(PR.read_jsonl(os.path.join(d, "attempts.jsonl")),
+                                    PR.read_jsonl(os.path.join(d, "pairs.jsonl")), "A1", "B1")
+        r = PR.l3(table, "A1", "B1")
+        self.assertEqual(len(table), 23)
+        self.assertTrue(r["balance_ok"], r["balance"])
+        ok = {arm: {table[j]["task"]: int(table[j][arm]["outcome"] == "pass_budget") for j in table} for arm in ("A1", "B1")}
+        pd = stats.paired_diff(ok["A1"], ok["B1"])
+        self.assertAlmostEqual(pd["diff"], 0.609, places=3)
+        self.assertGreaterEqual(pd["ci95"][0], 0.30)
+
+    def test_live_sh_reads_the_rule_from_pairs_py(self):
+        with open(os.path.join(HERE, "live.sh")) as f:
+            live = f.read()
+        self.assertEqual(live.count("RULE=L"), 0)
+        self.assertIn('read -r FAMILY RULE <<< "$(python3 "${HERE}/pairs.py" design "${ARM}")"', live)
+        self.assertIn('if [ "${RULE}" != L1 ]; then', live)
+
+
+class ModelSetTest(unittest.TestCase):
+    """Crescent amendment M1: LIVE_MODEL_SET picks every arm's model; qwen3-4b (the default)
+    keeps the H47-H49b values, gemma4 is EAT's cpu-gemma4-26b-a4b with QAT weights."""
+
+    def sets(self):
+        import re
+        with open(os.path.join(HERE, "live.sh")) as f:
+            live = f.read()
+        block = live[live.index("case ${MODEL_SET} in"):live.index("SAMPLING=${LIVE_SAMPLING:-${SAMPLING}}")]
+        out = {}
+        for name, body in re.findall(r"\n    ([a-z0-9-]+)\)\n(.*?);;", block, re.S):
+            out[name] = dict(re.findall(r"([A-Z][A-Z0-9_]*)=(\S+)", body))
+        return live, out
+
+    def test_default_keeps_the_desktop_values(self):
+        live, sets = self.sets()
+        self.assertIn("MODEL_SET=${LIVE_MODEL_SET:-qwen3-4b}", live)
+        q = sets["qwen3-4b"]
+        self.assertEqual((q["ALIAS"], q["TGT"], q["A_TOOL"], q["A_DRAFT"], q["B_DIR"], q["B_REL"], q["B_CHAT"],
+                          q["SAMPLING"]),
+                         ("Qwen/Qwen3-4B-Instruct-2507", "k3dgpu/Qwen3-4B-Instruct-2507-int4-ov", "hermes3", "CPU",
+                          "Qwen3-4B-Instruct-2507", "vllm-qwen-3-4b-cpu", "false", "agent_local"))
+
+    def test_gemma4(self):
+        live, sets = self.sets()
+        g = sets["gemma4"]
+        self.assertEqual((g["ALIAS"], g["A_TOOL"], g["A_DRAFT"], g["B_DIR"], g["B_REL"], g["B_CHAT"], g["SAMPLING"]),
+                         ("google/gemma-4-26B-A4B-it", "gemma4", "off", "gemma-4-26B-A4B-it-qat-q4_0-unquantized",
+                          "vllm-gemma4-26b-a4b-cpu", "true", "agent_gemma4"))
+        self.assertIn('[ "${MODEL_SET}" = gemma4 ] && B3_MODEL=OpenVINO/gemma-4-26b-a4b-it-int4-ov', live)
+        self.assertIn("K3D_GPU_AGENT_TOOL_PARSER=${A_TOOL}", live)
+        self.assertNotIn("--sampling agent_local", live)
+        self.assertEqual(live.count('--sampling "${SAMPLING}"'), 6)
+        self.assertEqual(live.count("--set chatTemplateConfigMap.enabled=${B_CHAT}"), 2)
+        # LIVE_MOUNT_B: B's weights mounted read-only (k3d-gpu K3D_GPU_VOLUMES), not copied.
+        self.assertIn('K3D_GPU_VOLUMES="$(readlink -f "${LIVE_MODELS:?}/${B_DIR}"):${B_HOST}/${B_DIR}:ro"', live)
+        self.assertEqual(live.count("STAGE_HOST_DIR=${B_HOST} python3"), 3)
+        self.assertEqual(live.count('[ "${B_HOST}" = /var/apb-models ] && stage'), 3)
+        # ...and the mounted dir must match the listing models.sh wrote after its sha256 check.
+        self.assertIn('cmp -s "${OUT}/b-listing.txt" "${LIVE_MODELS}/${B_DIR}.listing"', live)
+        self.assertIn('-- touch "/cache/${B_DIR}/.k3dgpu-rw-probe"', live)
+        self.assertIn("grep -q 'Read-only file system' \"${OUT}/ro-probe.txt\"", live)
+        with open(os.path.join(HERE, "crescent", "models.sh")) as f:
+            models = f.read()
+        self.assertIn('"${HERE}/listing.sh" "${M}/gemma-4-26B-A4B-it-qat-q4_0-unquantized" > '
+                      '"${M}/gemma-4-26B-A4B-it-qat-q4_0-unquantized.listing"', models)
+        self.assertIn('"${HERE}/listing.sh" "${M}/Qwen3.8-27B" > "${M}/Qwen3.8-27B.listing"', models)
+
+    def test_listing_sees_a_changed_file(self):
+        import subprocess
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        for n, body in (("config.json", "{}"), ("model-00001.safetensors", "x" * 10)):
+            with open(os.path.join(tmp, n), "w") as f:
+                f.write(body)
+        ls = lambda: subprocess.run(["bash", os.path.join(HERE, "crescent", "listing.sh"), tmp],  # noqa: E731
+                                    capture_output=True, text=True, check=True).stdout
+        a = ls()
+        self.assertEqual(a, ls())
+        self.assertIn("model-00001.safetensors 10 ", a)
+        with open(os.path.join(tmp, "model-00001.safetensors"), "a") as f:
+            f.write("y")
+        self.assertNotEqual(a, ls())
+        # The card's sampling (README "Sampling Parameters", generation_config.json), pinned.
+        self.assertEqual(AB.sampling_set("agent_gemma4"),
+                         {"temperature": 1.0, "top_p": 0.95, "top_k": 64, "max_tokens": 1024,
+                          "chat_template_kwargs": {"enable_thinking": False}})
+        self.assertEqual(AB.sampling_set("agent_local"), {"temperature": 0, "top_p": 1, "max_tokens": 1024})
+
+
+class H53Test(unittest.TestCase):
+    """H53 (H53: not yet pre-registered; pairs.design refuses it until EXPERIMENTS.md has its row): Qwen3.8-27B on the Arc Pro B70s in solo holds,
+    AG (k3d-gpu auto device, one card) and B2 (EAT PR #21's xpu-qwen36-27b profile, TP 4), scored
+    as block pairs under rule L3 (solo.py; test_solo.py covers the pairing)."""
+
+    def live(self):
+        with open(os.path.join(HERE, "live.sh")) as f:
+            return f.read()
+
+    def test_h53_is_an_l3_row(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        saved = PR.LEDGER
+        self.addCleanup(setattr, PR, "LEDGER", saved)
+        with self.assertRaisesRegex(ValueError, "pre-register it first"):
+            PR.design("H53")                                         # main has no H53 row yet
+        PR.LEDGER = os.path.join(tmp, "EXPERIMENTS.md")
+        with open(PR.LEDGER, "w") as f:
+            f.write("| H53 | x | PENDING |\n")
+        self.assertEqual(PR.design("H53"), ("H49", "L3"))
+        self.assertIn("H53", AB.PAIRS_HYPS)
+        with self.assertRaises(ValueError):
+            PR.design("H53h")
+
+    def test_live_sh_solo_mode(self):
+        live = self.live()
+        blk = live[live.index('if [ "${MODE}" = solo ]; then'):live.index('if [ "${MODE}" = pairs ]; then')]
+        self.assertIn('[ "${ARM}" = H53 ] && [ "${RULE:-}" = L3 ]', blk)
+        self.assertIn("case ${SOLO} in AG) need=1 ;; B2) need=${TP} ;;", blk)
+        self.assertIn("TP=${LIVE_B2_TP:-4}", blk)
+        # AG: k3d-gpu's own choice (auto device, default draft), and it must be on the GPU.
+        self.assertIn("K3D_GPU_AGENT_DEVICE=auto K3D_GPU_AGENT_MODEL=${TGT}", blk)
+        self.assertIn("K3D_GPU_AGENT_DRAFT=default", blk)
+        self.assertIn("grep -q -- '--target_device=GPU' \"${OUT}/agent.yaml\" || { echo \"NOT DELIVERABLE: AG is not on the GPU\"", blk)
+        # B2: PR #21's values with its catalog profile for this size, the pinned tag, TP, the ladder.
+        self.assertIn("B2_TAG=v0.28.0@sha256:4756b66a077627133cee653b551f6f5eaa1b9a981b5eea13edd33fcd3b0d3ca3", live)
+        self.assertIn('--set LLM_MODEL_ID="${B2_PROFILE:?}" --set tensor_parallel_size="${TP}"', blk)
+        self.assertIn('"${B_DIR}" - "ladder=${LIVE_B2_LADDER:-}"', blk)
+        self.assertIn('${AB} solo --hyp "${ARM}" --hold "${HOLD}" --arm "${SOLO}"', blk)
+        _, sets = ModelSetTest.sets(ModelSetTest())
+        q = sets["qwen38"]
+        self.assertEqual((q["ALIAS"], q["TGT"], q["A_TOOL"], q["B_DIR"], q["SAMPLING"], q["B2_PROFILE"]),
+                         ("Qwen/Qwen3.8-27B", "OpenVINO/Qwen3.8-27B-int4-ov", "qwen3coder", "Qwen3.8-27B",
+                          "agent_qwen38", "Qwen/Qwen3.6-27B"))
+        # The card's instruct (non-thinking) sampling with thinking off, the same for every arm.
+        self.assertEqual(AB.sampling_set("agent_qwen38"),
+                         {"temperature": 0.7, "top_p": 0.8, "top_k": 20, "presence_penalty": 1.5, "max_tokens": 1024,
+                          "chat_template_kwargs": {"enable_thinking": False}})
+        body = {"temperature": 0, "top_p": 1, "messages": []}
+        proxy.pin_sampling(body, AB.sampling_set("agent_qwen38"))
+        self.assertEqual((body["chat_template_kwargs"], body["temperature"]), ({"enable_thinking": False}, 0.7))
+
+    def test_live_sh_keeps_the_arm_off_the_serving_cards(self):
+        live = self.live()
+        blk = live[live.index('if [ "${MODE}" = solo ]; then'):live.index('if [ "${MODE}" = pairs ]; then')]
+        self.assertIn("free=${LIVE_GPU_FREE:?", blk)
+        self.assertIn("resources: {limits: {gpu.intel.com/xe: 1}}", blk)
+        self.assertIn('if [[ " ${free} " == *" ${bdf} "* ]]; then kubectl -n default delete pod "gpu-hold-${i}"', blk)
+        self.assertIn('[[ " ${free} " == *" ${bdf} "* ]] || { echo "ABORTED: ${DEP} holds ${bdf}, not a free card"; exit 3; }', blk)
+        self.assertIn('[ "${got}" -eq "${need}" ] || { echo "ABORTED: ${DEP} holds ${got} card(s), not ${need}"; exit 3; }', blk)
+        i_hold, i_apply, i_check, i_run = (blk.index("gpu-hold-%s"), blk.index('kubectl apply -f "${OUT}/deploy.yaml"'),
+                                          blk.index("not a free card"), blk.index("${AB} solo --hyp"))
+        self.assertLess(i_hold, i_apply)
+        self.assertLess(i_check, i_run)
 
 
 if __name__ == "__main__":
