@@ -82,7 +82,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | F2b | EAT's LiteLLM gateway serves the remote model registered by `integrations/eat/eat-remote.sh`, with the key only as an env reference. | Pre-registered 2026-10-17, before measuring: one completion through LiteLLM returns (0.7); the key string appears 0 times in the gateway DB dump, `kubectl describe` of the gateway Deployment/pods/Secret, and events (0.9). | `eat-remote.sh --remote https://gaudi.farmgpu.net --model zai-org/GLM-5.3` against EAT's genai-gateway in the same cluster, then one chat through LiteLLM (max_tokens <= 64, temperature 0.6), then `grep -c` of the key over `pg_dump`, `kubectl describe` and `kubectl get events -A`. SUPPORTED: completion returns and 0 key hits. REFUTED: any key hit, or no completion. Run (2026-10-17, same host, EAT release-1.0.3-hotfix, LiteLLM v1.83.14-stable.patch.2): first with eat-remote.sh as shipped, REFUTED: the chat came back 401 from the endpoint. LiteLLM resolves `os.environ/` only for config-file models; a `/model/new` model is loaded from its database with the reference string as the api_key (proxy_server.py `_add_deployment` decrypts only). Fixed eat-remote.sh to write a config-file `model_list` entry instead and delete the stale database entry; rerun: `eat-check.sh` passed (chat, tool call get_weather, sandbox printed 385), and the key (raw and base64) had 0 hits in `pg_dumpall` of the gateway's Postgres (169 KB), `kubectl describe` of the gateway namespace's Deployments, pods, Secrets and ConfigMaps, the Deployment YAML and `kubectl get events -A`. The verdict is for the fixed script. | SUPPORTED |
 | H27x | H27's hypothesis on an AMX host (H27's "re-open for an AMX host"): on the Xeon 6741P (Granite Rapids, AMX), the <=60 s on-box probe (`bench/amx-autoquant/probe.sh`) picks the weight precision for agents better than the static int4 default. Same weights (`OpenVINO/Qwen3-4B-{int4,int8,fp16}-ov` at H27's commits), same parts (a) fidelity, (b) value, (c) cost. A replication: the original model is kept. | Written 2026-10-20, before any H27x measurement. (a) holds (0.85). (b) REFUTED (0.65, outcomes O1 + O2): the quality gate is a property of the weights (NLL at `INFERENCE_PRECISION_HINT=f32`), so int4 fails it again and the pick is int8, and decode stays bandwidth-bound, so int8 stays slower than int4 on the turn (outcome O2 again). (c) holds (0.9). Numbers: decode int4 25-45, int8 18-35, fp16 (bf16 on AMX) 10-22 tok/s; TTFT on 396 tokens 0.15-1.0 s for every arm; turn int4 2-4.5 s, int8 2.5-6 s, fp16 4-9 s. Priors: O1 0.05, O2 0.6, O3 0.05, O4 (int8 beats int4) 0.15, O5 0.15. | H27's row, outcome table and amendments A1-A3, unchanged except as listed in [the cross-host pre-registration](#cross-host-pre-registration-h25x-h27x-h28x-h34x-on-the-xeon-6741p-2026-10-20): OVMS containers on CPUs 0-23,48-71 (the CPUs outside `load.py`'s load set), `typical` only, weights downloaded at H27's pinned commits. Scorer `bench/amx-autoquant/summarize.py`. Run 2026-10-20 ([H27x run](#h27x-run-xeon-6741p-2026-10-20)): load MATCHED, int4 failed the gate again (dNLL +0.072), the probe and the reference both picked fp16 (bf16 on AMX; 5/5 rounds over int8, 3/3 repeats, 4 s per probe), and fp16's 4.23 s median turn is 1.24 s slower than the int4 default's 2.99 s (int4 faster in 5/5 rounds): (a) and (c) hold, (b) fails. | REFUTED |
 | H34x | H34's hypothesis on the Xeon 6741P: same-engine CPU Fast Draft (OVMS 2026.4.1, `OpenVINO/Qwen3-0.6B-int4-ov` draft on the CPU) beats the `OpenVINO/Qwen3-4B-int4-ov` target alone on single-stream decode, under matched background load. A replication: the original models are kept. | Written 2026-10-20, before any H34x measurement. At `typical`: median paired B/A decode tok/s 1.40 (1.15-1.70) and median paired B/A package J/token 0.75 (0.60-0.95); SUPPORTED by H34's rule (tok/s >= 1.20 with its CI above 1.0, J/token <= 0.85 with its CI below 1.0) at 0.6, REFUTED 0.25 (the draft's share of a faster target step grows), INCONCLUSIVE 0.15. | H34's `bench/hetero-spec/h34.sh` and `h34.py`, n = 12 pairs A B / B A, 5 s load window per request, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h34`, `K3D_GPU_VENDORS=none`, node container on CPUs 0-23,48-71, crescent amendment C1, `typical` only. Run 2026-10-20 ([H34x run](#h34x-run-xeon-6741p-2026-10-20)): load MATCHED, 12/12 pairs; B/A decode tok/s 0.758 (CI 0.688-0.809) and package J/token 1.241 (CI 1.168-1.347), B slower and costlier in 12/12 pairs (A 37.2, B 28.0 tok/s): the draft slows decode on this Xeon. | REFUTED |
-| H25x | H25's hypothesis (T part) on the Xeon 6741P: agents that send a byte-identical system prompt and tools to one OVMS CPU server reuse one prefix KV, so an added agent's first chunk arrives at least 4x sooner with the shipping prefix caching on than with `--enable_prefix_caching=false`. A replication: the original model and prefix shape are kept. | Written 2026-10-20, before any H25x measurement. Added-agent median TTFT OFF 1.2 s (0.5-2.5), ON 0.15 s (0.06-0.4), ratio 8x (4.5-14), the ratio's 95% CI lower bound >= 4x; c/OFF >= 0.8. SUPPORTED 0.75; the risk is fixed per-request overhead, which a 5-10x faster prefill leaves as a larger share of the ON time. M (memory per agent) not measured, as in H25 run 4. | H25's `bench/shared-prefix/run.sh` and `probe.py score` (A3 first-chunk TTFT, A4 amendment-27 load rule), ON OFF interleaved 3+3 rounds, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h25`, `K3D_GPU_VENDORS=none`, node container on CPUs 0-23,48-71 (`NODE_CPUS`), crescent amendment C1, `typical` only. | PENDING |
+| H25x | H25's hypothesis (T part) on the Xeon 6741P: agents that send a byte-identical system prompt and tools to one OVMS CPU server reuse one prefix KV, so an added agent's first chunk arrives at least 4x sooner with the shipping prefix caching on than with `--enable_prefix_caching=false`. A replication: the original model and prefix shape are kept. | Written 2026-10-20, before any H25x measurement. Added-agent median TTFT OFF 1.2 s (0.5-2.5), ON 0.15 s (0.06-0.4), ratio 8x (4.5-14), the ratio's 95% CI lower bound >= 4x; c/OFF >= 0.8. SUPPORTED 0.75; the risk is fixed per-request overhead, which a 5-10x faster prefill leaves as a larger share of the ON time. M (memory per agent) not measured, as in H25 run 4. | H25's `bench/shared-prefix/run.sh` and `probe.py score` (A3 first-chunk TTFT, A4 amendment-27 load rule), ON OFF interleaved 3+3 rounds, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h25`, `K3D_GPU_VENDORS=none`, node container on CPUs 0-23,48-71 (`NODE_CPUS`), crescent amendment C1, `typical` only. Run 2026-10-21 ([H25x run](#h25x-run-xeon-6741p-2026-10-21)): load MATCHED (amendment 27), no round void; added agent's first chunk 0.245 s ON vs 1.724 s OFF (7.05x, CI 6.94-7.13, n = 15 per arm), c/OFF 0.99, every round pair >= 4x: T SUPPORTED; M not measured (A3). | SUPPORTED |
 | H28x | H28's hypothesis on the Xeon 6741P: N = 8 agent pods that mmap one 1 GiB model through an image volume share one page-cache copy and become ready in at most half the time of pods that copy it into an emptyDir. A replication (H28 has no model; the 1 GiB blob is kept). | Written 2026-10-20, before any H28x measurement. Memory parts hold (0.95): T PSS <= 160 MiB per pod, model page cache about 1.0x size (T) vs about 9x (C). Time part uncertain: the copy runs at memory speed on this host, so the fixed pod-start cost is a larger share of both arms; T/C round-median ready 0.55 (0.35-0.8). SUPPORTED 0.35, REFUTED (time part) 0.5, other rows 0.15. | H28's `bench/zero-copy-models/probe.sh` (A1, A2), arms C T T C C T plus the unscored warm-up, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h28`, crescent amendment C1 passed to the plain `k3d cluster create`, `typical` only, scored by `bench/zero-copy-models/score.py` (H28's table, committed with this pre-registration). | PENDING |
 
 ## Falsification log
@@ -93,6 +93,7 @@ new evidence (new hardware, new driver, new model, changed method).
 
 | Date | Hypothesis | Attack | Result | DO-NOT-RE-ATTACK |
 |------|------------|--------|--------|------------------|
+| 2026-10-21 | H25x | Xeon 6741P: `bench/shared-prefix/run.sh`, OVMS agent pod on node CPUs 0-23,48-71 under matched `typical` load on 24-47,72-95, 3+3 rounds ([H25x run](#h25x-run-xeon-6741p-2026-10-21)) | SUPPORTED (T), load matched: 7.05x (CI 6.94-7.13), smaller than the i9's 10.61x because the Xeon's OFF prefill is faster | DO-NOT-RE-ATTACK T for this prompt shape on this host |
 | 2026-10-20 | H34x | Xeon 6741P: `bench/hetero-spec/h34.sh`, OVMS pod on node CPUs 0-23,48-71 under matched `typical` load on 24-47,72-95, 12 pairs A B / B A ([H34x run](#h34x-run-xeon-6741p-2026-10-20)) | REFUTED, load matched: B/A tok/s 0.758 (CI 0.688-0.809), J/token 1.241 (1.168-1.347), 12/12 pairs B worse; target alone 37.2 tok/s, with the draft 28.0 | DO-NOT-RE-ATTACK same-engine CPU Fast Draft (0.6B draft, gamma 5, OVMS 2026.4.1) for this target on a Xeon with this many cores. Re-open with another gamma, draft or OVMS release |
 | 2026-10-20 | H27x | Xeon 6741P (AMX): `bench/amx-autoquant/probe.sh` on CPUs 0-23,48-71 under matched `typical` load on 24-47,72-95, H27's weights, 5 rounds + 3 probe repeats ([H27x run](#h27x-run-xeon-6741p-2026-10-20)) | REFUTED, load matched. Pick fp16 (not H27's int8): bf16 on AMX decodes 24.7 tok/s vs int8's 19.4 and has the shortest TTFT; int4 (gate-rejected, dNLL +0.072) is fastest at 2.99 s per turn vs fp16 4.23 s, int8 5.50 s | DO-NOT-RE-ATTACK (b) with these three weights on an AMX Xeon either: the pick still costs latency. Re-open only with other weights or a revised gate |
 | 2026-10-18 | H40 | i9-13900T: A3ref (bf16 Qwen3-4B-Instruct-2507 on vLLM CUDA, RTX 4000) in a fresh `k3dgpu-a-a3ref`, BFCL v4 S100 in board mode through LiteLLM and the recording proxy, load none, 100 ids ([H40-H48 run](#h40-h48-run-i9-13900t-2026-10-17-and-18)) | SUPPORTED: 88.0% (board-weighted 84.9, band 77.9-91.9), all 7 categories inside their binomial 95% interval of the board value, 100 of 100 requests HTTP 200 | Yes for `bfcl-eval==2025.12.17` and this model; re-attack on a new BFCL release or model |
@@ -1788,6 +1789,53 @@ failure C1 fixes. Smoke 2 (22:14-22:20Z, with C1): `up` 48 s, the agent pod Read
 C1 as `--k3s-arg ...@server:*`) had no taint after 90 s. No inference request was sent in either.
 Smoke records: `bench/xhost/results/2026-10-20/smoke{1,2}/`.
 
+### H25x run (Xeon 6741P, 2026-10-21)
+
+```text
+# Reproduce
+date:            2026-10-21T00:07:36Z (lock taken) .. 00:13:08Z (cluster k3dgpu-x-h25 and load removed;
+                 lock released); pre-registration merged first (#156, ef87f86)
+hypothesis:      H25x (H25's T part, A3 first-chunk TTFT, A4 amendment-27 load rule; cross-host rules X1-X7)
+host cpu:        Intel(R) Xeon(R) 6741P (Granite Rapids), 48 cores / 96 threads, 1 NUMA node, AMX, no swap
+host kernel:     7.0.0-31-generic, Docker 29.8.0
+k3d-gpu commit:  ef87f86 (main), k3d v5.9.0, kubectl v1.35.2
+node image:      cryptoandcoffee/k3d-gpu:0.1.61, K3D_GPU_VENDORS=none, crescent C1 kubelet thresholds;
+                 node container pinned to CPUs 0-23,48-71 (pod Cpus_allowed_list 0-23,48-71 every round)
+runtime:         openvino/model_server@sha256:a928903f…6fc58 (2026.4.1), `agent manifest` CPU as shipped
+                 (cpu request 48, CPU Fast Draft OpenVINO/Qwen3-0.6B-int4-ov), graph prefix caching on/off
+models:          OpenVINO/Qwen3-4B-int4-ov b467368d; draft f864c610 staged at <target>/OpenVINO-Qwen3-0.6B-int4-ov
+                 (bench/xhost/fetch_models.py --draft; sha256 28613e99…)
+load:            bench/load/load.py `typical`, stress-ng 0.22.01 @sha256:2ea9a7c3…1cbe on 24-47,72-95 (3 containers)
+command:         bench/xhost/hold.sh H25x 1500 env IMAGE=cryptoandcoffee/k3d-gpu:0.1.61 MODELS=~/k3dgpu-xhost/models \
+                   OUT=<out> LEVELS=typical CLUSTER=k3dgpu-x-h25 NODE_CPUS=0-23,48-71 SEED_BASE=2540 HOLD=1440 \
+                   K3D_GPU_VENDORS=none K3D_GPU_K3S_ARGS="$C1" bench/shared-prefix/run.sh
+runs per arm:    3 rounds ON, 3 OFF (ON OFF ON OFF ON OFF, seeds 2541-2546), 5 added agents per round, n = 15 per arm
+raw results:     bench/xhost/results/2026-10-20/H25x/hold/ (out/typical/: round-*.json, score.json, load.jsonl,
+                 baseline.jsonl, cache-usage-*.log; out/on.yaml, off.yaml; pre/post snapshots, serving.jsonl)
+```
+
+The hold started at once (load1 2.5, no aiperf process). The whole run took 329 s; no round
+void. The prompt was 1634 tokens in every round (H25's shape). The launcher's baked
+`intel-gpu-plugin` was deployed despite `K3D_GPU_VENDORS=none` (a launcher bug, fixed
+separately); no pod requested a GPU, so the CPU result is not affected.
+
+**Load (amendment 27): MATCHED.** busy spread 0.27 pp before and 0.44 pp during the rounds
+(limit 5.0), throttle/min 0, swap 0; reported only: package W ON 244 / OFF 257, load1 27.3 / 28.9.
+
+| `typical` | ON (prefix caching, shipping) | OFF | OFF/ON |
+|---|---|---|---|
+| added agent's first-chunk TTFT, median (n = 15) | 0.245 s | 1.724 s | 7.05x (95% CI 6.94-7.13) |
+| per-round medians | 0.244, 0.246, 0.243 | 1.723, 1.730, 1.720 | |
+
+c/OFF 0.99 (>= 0.8), a1 ON/OFF 0.99; every ON/OFF round pair is >= 4x (derived confidence 1.0).
+
+**Verdict: T SUPPORTED** (`probe.py score`): the ratio 7.05x and its CI lower bound 6.94x are
+above 4x, c/OFF 0.99. M not measured (A3), stays INCONCLUSIVE. Row verdict SUPPORTED, as H25.
+Against the prediction: inside every range (OFF 1.72 s in 0.5-2.5, ON 0.245 s in 0.06-0.4,
+ratio 7.05x in 4.5-14). The ratio is lower than the i9's 10.61x because the OFF prefill is
+6.3x faster here (1.72 s vs 10.87 s) while ON only 4.2x (0.245 vs 1.02 s): per-request overhead
+is a larger share of the ON time, the risk the prediction named.
+
 ### H34x run (Xeon 6741P, 2026-10-20)
 
 ```text
@@ -1814,6 +1862,10 @@ runs per arm:    12 pairs, A B / B A, a 5 s load window before every request, n 
 raw results:     bench/xhost/results/2026-10-20/H34x/hold/ (out/: run.jsonl, load-typical.jsonl,
                  verdict.json, manifest.yaml, probe.log; pre/post snapshots, serving.jsonl)
 ```
+
+Disclosure (added 2026-10-21): the launcher's baked `intel-gpu-plugin` was deployed despite
+`K3D_GPU_VENDORS=none` (a launcher bug, fixed separately) and advertised the B70s; no pod
+requested a GPU, so the CPU result is not affected.
 
 The hold started at once (load1 2.3, no aiperf process). Server warm at 120 s, the typical
 load started at 122 s, 12 of 12 pairs in 424 s, no request dropped, every request returned
