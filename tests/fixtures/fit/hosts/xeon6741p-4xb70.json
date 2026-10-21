@@ -1,0 +1,128 @@
+{
+  "bandwidth": {
+    "gbs": 409.6,
+    "label": "theoretical (8 DIMMs x 6400 MT/s x their data width, one DIMM per channel assumed)",
+    "source": "/sys/firmware/dmi/entries/17-*/raw"
+  },
+  "cgroup": {
+    "current": null,
+    "limit": null,
+    "path": "/user.slice"
+  },
+  "cpu": {
+    "amx": true,
+    "avx2": true,
+    "avx512": true,
+    "cpus": 192,
+    "flags": [
+      "amx_bf16",
+      "amx_int8",
+      "amx_tile",
+      "avx2",
+      "avx512_bf16",
+      "avx512f",
+      "avx_vnni"
+    ],
+    "model": "Intel(R) Xeon(R) 6741P"
+  },
+  "gpus": [
+    {
+      "bdf": "0000:18:00.0",
+      "card": "card0",
+      "driver": "xe",
+      "users": [
+        {
+          "bytes": 31138512896,
+          "comm": "vllm",
+          "pid": 4101
+        }
+      ],
+      "vram_total": 34359738368,
+      "vram_used": 31138512896
+    },
+    {
+      "bdf": "0000:3a:00.0",
+      "card": "card1",
+      "driver": "xe",
+      "users": [
+        {
+          "bytes": 32212254720,
+          "comm": "llama-server",
+          "pid": 4377
+        }
+      ],
+      "vram_total": 34359738368,
+      "vram_used": 32212254720
+    },
+    {
+      "bdf": "0000:9a:00.0",
+      "card": "card2",
+      "driver": "xe",
+      "users": [
+        {
+          "bytes": 268435456,
+          "comm": "xpu-smi",
+          "pid": 2210
+        }
+      ],
+      "vram_total": 34359738368,
+      "vram_used": 268435456
+    },
+    {
+      "bdf": "0000:bc:00.0",
+      "card": "card3",
+      "driver": "xe",
+      "users": [],
+      "vram_total": 34359738368,
+      "vram_used": 0
+    }
+  ],
+  "hugepages": {
+    "pools": {
+      "1073741824": {
+        "free": 0,
+        "total": 0
+      },
+      "2097152": {
+        "free": 0,
+        "total": 0
+      }
+    },
+    "thp": "madvise"
+  },
+  "numa": [
+    {
+      "cpulist": "0-47,96-143",
+      "free": 246960619520,
+      "node": 0,
+      "total": 274877906944
+    },
+    {
+      "cpulist": "48-95,144-191",
+      "free": 249108103168,
+      "node": 1,
+      "total": 274877906944
+    }
+  ],
+  "psi": {
+    "full": {
+      "avg10": 0.0,
+      "avg300": 0.0,
+      "avg60": 0.0,
+      "total": 0
+    },
+    "some": {
+      "avg10": 0.0,
+      "avg300": 0.0,
+      "avg60": 0.0,
+      "total": 0
+    }
+  },
+  "ram": {
+    "available": 504658657280,
+    "swap_free": 0,
+    "swap_total": 0,
+    "total": 549755813888
+  },
+  "schema": "k3d-gpu.host/v1"
+}

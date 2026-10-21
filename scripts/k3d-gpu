@@ -55,6 +55,8 @@
 #   recipe  print a ready-to-apply workload manifest (npu-embeddings)
 #   facts   detect + doctor + doctor --perf + report as one facts/v1 JSON document (--html: report.html)
 #   plan    engine, model and placement from the measured (green) matrix cells, --explain prints why
+#   fit     size a model to what this host has free now: placement, context x seqs, engine
+#           memory flags, pod memory limit, or why it cannot fit; --explain prints the arithmetic
 #   audit   posture checks: unauthenticated listeners off loopback, images not in images.lock
 #   sandbox up|down|status
 #   model-share --image REF --agent-image REF [--replicas N] [--name NAME]
@@ -168,12 +170,22 @@ Usage: k3d-gpu <command>
             No local server: Secret k3d-gpu-llm (OPENAI_BASE_URL, OPENAI_API_KEY,
             OPENAI_MODEL) in the agent namespace for pods' envFrom; status checks
             it, down deletes it
-  agent up|down|status|manifest [--with vlm,stt,video]
+  agent up|down|status|manifest [--model M] [--with vlm,stt,video]
             OpenAI-compatible LLM server in the current cluster: vLLM on its Gaudi
             if it has one, else OpenVINO Model Server on its Intel GPU if that GPU
             has XMX, else on the CPU (P-cores); or vLLM on an Arc GPU (K3D_GPU_AGENT_BACKEND).
+            --model M (or K3D_GPU_AGENT_MODEL) serves M sized by 'fit': context,
+            sequences, GPUs and the pod memory limit come from what this host has
+            free, and a model that cannot fit is refused with the reason; then
+            'agent guard' runs in the background
             --with adds a vision-language model, Whisper speech-to-text (NPU first)
             and DL Streamer video analytics (GPU media engines) on what the LLM leaves
+  agent guard [--once] [--interval S]
+            Watch /proc/pressure/memory and MemAvailable every S seconds (default 5)
+            for a fitted agent: a server whose KV cache is in host RAM steps down to
+            fewer sequences, then less context, under pressure, and back up when
+            calm; any server is stopped (scaled to 0) when an emergency persists
+            with nothing left to shed. Each step re-renders the fit and restarts the server
   agent prefix [--json] [--device CPU|GPU] [--min-tokens N] [--kv-kib K] [--tokenizer FILE] FILE|DIR...
             Read agent manifests (JSON: name, system, tools) before deploy and report
             which agents share a prompt head the KV prefix cache can reuse, in whole
@@ -194,6 +206,18 @@ Usage: k3d-gpu <command>
             Engine, model and placement for this box, picked only from measured
             (green) matrix cells; with none it says "unmeasured" (quickstart/agent up still serve)
             --hash prints the plan hash: sha256 of the --json output
+            --model M also prints the fit of M on this host (below)
+  fit [--model M] [--revision R] [--explain|--json] [--engine vllm|ovms|llama.cpp]
+      [--device cpu|gpu] [--ctx N] [--seqs N] [--gpus N] [--kv-dtype T] [--host FILE]
+            Size a model (Hugging Face id or local dir; default: the agent model) to
+            what this host has free now: VRAM per Intel card and who holds it (busy
+            cards skipped), MemAvailable, cgroup limit, CPU ISA (AMX/AVX-512/AVX2) and
+            DRAM bandwidth, against the weights per tensor class (read from the
+            safetensors or GGUF headers), the KV cache per token (full, sliding-window
+            and linear-attention layers apart) and the engine overhead. Prints the
+            placement (one GPU, tensor parallel, MoE experts and lookup tables in DRAM,
+            or CPU), context x sequences, engine memory flags and pod memory limit; or
+            why it cannot fit and the smallest variant that does. Exit 3: no fit
   plan --predict SKU|auto|list [--json] [--mts N] [--channels N]
             Roofline prediction (decode/prefill tok/s, derived agents per box) for
             an Intel SKU from its spec fields, fitted on one measured host row;
@@ -316,6 +340,15 @@ Environment:
   K3D_GPU_AUTOQUANT_CACHE  measured-pick cache (default: \$XDG_STATE_HOME/k3d-gpu/autoquant.json)
   K3D_GPU_AGENT_GPUS    vllm/llm-scaler: GPUs (or Gaudis) to shard the model across (default: 1)
   K3D_GPU_AGENT_MAX_LEN vllm/llm-scaler: max context tokens (default: 8192)
+  K3D_GPU_FIT           auto | on | off: size the agent model with 'fit' before agent up
+                        renders it (default: auto = a model you chose; on also sizes the
+                        defaults). K3D_GPU_AGENT_MAX_LEN, _MAX_NUM_SEQS and _GPUS become
+                        fit inputs that the fit checks
+  K3D_GPU_FIT_HOST      host/v1 file 'fit' uses instead of probing this host
+  K3D_GPU_FIT_CACHE     model metadata cache (default: \$XDG_CACHE_HOME/k3d-gpu/models)
+  K3D_GPU_FIT_FILE      the GGUF file to size in a repo that has several
+  K3D_GPU_FIT_OVERHEAD_GIB  measured per-GPU engine overhead, replacing the estimate
+  K3D_GPU_AGENT_GUARD   on | off: start 'agent guard' after agent up of a fitted model (default: on)
   K3D_GPU_AGENT_VLM_DEVICE, K3D_GPU_AGENT_STT_DEVICE, K3D_GPU_AGENT_VIDEO_DEVICE
                         add-on device: auto | CPU | GPU | NPU (video: no NPU) (default: auto)
   K3D_GPU_AGENT_VLM_MODEL  vision model (default: OpenVINO/Qwen3-VL-4B-Instruct-int4-ov;
@@ -6668,6 +6701,7 @@ agent_manifest() {
     cpus=$(agent_cpus "${device}" "${hybrid}")
     [ "${device}" = CPU ] || gid=$(agent_device_gid "${device}")
     [ "${device}" != CPU ] || agent_autoquant
+    agent_fit "${device}"
     agent_check_values
     if [ "${AGENT_APP}" = vllm ]; then vllm_manifest; return 0; fi
     local via=""
@@ -6767,7 +6801,7 @@ spec:
       labels:
         app: ovms${podlabels}
       annotations:
-        k3d-gpu.io/agent-device: ${device}${AGENT_AUTOQUANT_ANN:-}
+        k3d-gpu.io/agent-device: ${device}${AGENT_AUTOQUANT_ANN:-}$(agent_fit_annotation)
     spec:
       securityContext:
         runAsUser: 5000
@@ -6814,8 +6848,9 @@ ${args}
               cpu: "${cpus}"
               memory: ${AGENT_MEMORY}
 EOF
-    if [ "${res}" != - ] || [ "${draft_res}" != - ]; then
+    if [ "${res}" != - ] || [ "${draft_res}" != - ] || [ -n "${AGENT_MEMORY_LIMIT}" ]; then
         printf '            limits:\n'
+        [ -z "${AGENT_MEMORY_LIMIT}" ] || printf '              memory: %s\n' "${AGENT_MEMORY_LIMIT}"
         [ "${res}" = - ] || printf '              %s: 1\n' "${res}"
         [ "${draft_res}" = - ] || printf '              %s: 1\n' "${draft_res}"
     fi
@@ -6949,10 +6984,12 @@ vllm_manifest() {
         args+=$'\n'"${item}--block-size=64"
         args+=$'\n'"${item}--max-model-len=${AGENT_MAX_LEN}"
         args+=$'\n'"${item}--max-num-batched-tokens=2048"
-        args+=$'\n'"${item}--gpu-memory-utilization=0.9"
+        args+=$'\n'"${item}--gpu-memory-utilization=${AGENT_GPU_UTIL:-0.9}"
         args+=$'\n'"${item}--enforce-eager"
         args+=$'\n'"${item}--no-enable-prefix-caching"
     fi
+    [ -z "${AGENT_MAX_NUM_SEQS}" ] || args+=$'\n'"${item}--max-num-seqs=${AGENT_MAX_NUM_SEQS}"
+    [ -z "${AGENT_KV_DTYPE}" ] || args+=$'\n'"${item}--kv-cache-dtype=${AGENT_KV_DTYPE}"
     args+=$'\n'"${item}--tensor-parallel-size=${AGENT_GPUS}"
     [ -z "${AGENT_TOOL_PARSER}" ] \
         || args+=$'\n'"${item}--enable-auto-tool-choice"$'\n'"${item}--tool-call-parser=${AGENT_TOOL_PARSER}"
@@ -6962,6 +6999,8 @@ vllm_manifest() {
     done
     [ -z "${hybrid}" ] || podlabels=$'\n        k3d-gpu.io/cores: performance'
     [ -z "${gid}" ] || podspec=$'\n      securityContext:\n        supplementalGroups: ['"${gid}"']'
+    local memlim=""
+    [ -z "${AGENT_MEMORY_LIMIT}" ] || memlim=$'\n'"              memory: ${AGENT_MEMORY_LIMIT}"
 
     cat <<EOF
 apiVersion: v1
@@ -7002,7 +7041,7 @@ spec:
         app: vllm${podlabels}
       annotations:
         k3d-gpu.io/agent-device: ${device}
-        k3d-gpu.io/agent-backend: ${AGENT_BACKEND}
+        k3d-gpu.io/agent-backend: ${AGENT_BACKEND}$(agent_fit_annotation)
     spec:${podspec}
       containers:
         # The Intel GPU images take 'vllm serve' arguments (their entrypoints run
@@ -7028,7 +7067,7 @@ ${args}
             requests:
               cpu: "${cpus}"
               memory: ${AGENT_MEMORY}
-            limits:
+            limits:${memlim}
               ${res}: ${AGENT_GPUS}
           volumeMounts:
             - name: models
@@ -7614,11 +7653,12 @@ cmd_agent_up() {
     tune_apply_profile
     agent_select
     local logs="kubectl -n ${AGENT_NS} logs deploy/${AGENT_APP}"
+    # agent_fit records the fit it renders (for the guard) only here, never on `agent manifest`.
     if [ -z "${addons}" ]; then
-        manifest=$(agent_manifest)
+        manifest=$(AGENT_FIT_RECORD=1 agent_manifest)
     else
         # shellcheck disable=SC2086 # word list of add-on names
-        manifest=$(agent_stack_manifest ${addons})
+        manifest=$(AGENT_FIT_RECORD=1 agent_stack_manifest ${addons})
     fi
     # Switching backends: stop the other one first so its GPU is free.
     for app in "${AGENT_APPS[@]}"; do
@@ -7627,6 +7667,7 @@ cmd_agent_up() {
     done
     # shellcheck disable=SC2086 # word list of add-on names
     agent_prune ${addons}
+    agent_guard_stop
     kubectl apply -f - <<< "${manifest}"
     info "Waiting for the model to download and load (first run fetches it into the PVC; up to ${AGENT_TIMEOUT}s)..."
     [ "${AGENT_APP}" = vllm ] || logs="kubectl -n ${AGENT_NS} logs deploy/ovms -c pull; ${logs}"
@@ -7659,6 +7700,19 @@ cmd_agent_up() {
          -d '{\"model\":\"${AGENT_MODEL_NAME}\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}'"
     # shellcheck disable=SC2086 # word list of add-on names
     agent_addon_endpoints ${addons}
+    # A fitted model gets the memory guard (K3D_GPU_AGENT_GUARD=off leaves it out).
+    if grep -q 'k3d-gpu.io/agent-fit:' <<< "${manifest}" && [ "${K3D_GPU_AGENT_GUARD:-on}" != off ]; then
+        agent_fit_env_save
+        # Its own process group (setsid, where there is one), so stopping it also stops a
+        # re-render it has in flight.
+        if command -v setsid >/dev/null 2>&1; then
+            setsid nohup "$(readlink -f "${BASH_SOURCE[0]}")" agent guard > "$(fit_state)/agent-guard.log" 2>&1 < /dev/null &
+        else
+            nohup "$(readlink -f "${BASH_SOURCE[0]}")" agent guard > "$(fit_state)/agent-guard.log" 2>&1 < /dev/null &
+        fi
+        echo "$!" > "$(agent_guard_pidfile)"
+        info "agent guard started (pid $!, log $(fit_state)/agent-guard.log): it steps the fit down under memory pressure"
+    fi
 }
 
 cmd_agent_status() {
@@ -7701,6 +7755,7 @@ cmd_agent_down() {
     done
     kubectl -n "${AGENT_NS}" delete secret "${LLM_SECRET}" --ignore-not-found
     agent_prune
+    agent_guard_stop
     info "Model caches kept in the namespace's PVCs. Remove everything: kubectl delete namespace ${AGENT_NS}"
 }
 
@@ -7733,7 +7788,14 @@ cmd_agent() {
         cmd_agent_remote_up
         return
     fi
-    [ "${#REMOTE_ARGS[@]}" -eq 0 ] && [ -z "${OWN_ENDPOINT}" ] || err "--model, --api-key-file and --i-own-this-endpoint go with --remote"
+    # Without --remote, --model names the local model (as K3D_GPU_AGENT_MODEL does).
+    if [ "${#REMOTE_ARGS[@]}" -eq 2 ] && [ "${REMOTE_ARGS[0]}" = --model ] && { [ "${sub}" = up ] || [ "${sub}" = manifest ]; }; then
+        export K3D_GPU_AGENT_MODEL="${REMOTE_ARGS[1]}"
+        AGENT_MODEL_CHOSEN=1
+        REMOTE_ARGS=()
+        agent_config
+    fi
+    [ "${#REMOTE_ARGS[@]}" -eq 0 ] && [ -z "${OWN_ENDPOINT}" ] || err "--api-key-file and --i-own-this-endpoint go with --remote (--model also names a local model for agent up)"
     case "${AGENT_BACKEND}" in
         ovms|vllm|llm-scaler) ;;
         *) err "unknown K3D_GPU_AGENT_BACKEND '${K3D_GPU_AGENT_BACKEND}' (use ovms, vllm or llm-scaler)" ;;
@@ -7751,7 +7813,8 @@ cmd_agent() {
                 agent_stack_manifest ${addons}
             fi ;;
         prefix)   cmd_agent_prefix "$@" ;;
-        *) err "usage: k3d-gpu agent up|down|status|manifest [--with vlm,stt,video] | up --remote [URL] [--model M] [--api-key-file F] | prefix FILE|DIR..." ;;
+        guard)    cmd_agent_guard "$@" ;;
+        *) err "usage: k3d-gpu agent up|manifest [--model M] [--with vlm,stt,video] | down|status | guard [--once] [--interval S] | up --remote [URL] [--model M] [--api-key-file F] | prefix FILE|DIR..." ;;
     esac
 }
 
@@ -8968,7 +9031,340 @@ cmd_plan() {
     else
         out=$(facts_json "${dir}") || err "plan: could not build facts/v1"
     fi
-    python3 "${dir}/plan.py" --mode "${mode}" --matrix "${matrix}" ${args[@]+"${args[@]}"} <<< "${out}"
+    local rc=0 model="" i
+    python3 "${dir}/plan.py" --mode "${mode}" --matrix "${matrix}" ${args[@]+"${args[@]}"} <<< "${out}" || rc=$?
+    # --model also sizes that model to this host (text and --explain; --json and --hash
+    # stay the plan/v1 bytes the apply hash covers). K3D_GPU_FIT=off leaves it out.
+    for ((i = 0; i < ${#args[@]}; i += 2)); do [ "${args[i]}" != --model ] || model=${args[i + 1]}; done
+    if [ -n "${model}" ] && [ "${rc}" -eq 0 ] && { [ "${mode}" = text ] || [ "${mode}" = explain ]; } \
+        && [ "${K3D_GPU_FIT:-auto}" != off ]; then
+        if [ "${mode}" = explain ]; then
+            echo "fit:"
+            ( cmd_fit --model "${model}" --explain ) 2>&1 | sed 's/^/  /' || true
+        else
+            ( cmd_fit --model "${model}" ) || true
+        fi
+    fi
+    return "${rc}"
+}
+
+# ---- fit and guard: size a model to this host (console/fit.py) -----------------
+# fit.py probe reads what this host has free now (VRAM per Intel card and who holds
+# it, MemAvailable, cgroup limit, NUMA, hugepages, PSI, CPU ISA, DRAM bandwidth);
+# fit.py plan turns that and a model's config.json and weight headers into a
+# placement, context, sequence count, engine memory flags and a pod memory
+# request/limit, or a refusal. `agent up --model M` and `plan --model M` call it;
+# `agent guard` watches PSI and MemAvailable and steps the served fit down under
+# pressure. Weight headers and configs are fetched once per model revision into
+# the cache below. Nothing on the host is changed.
+fit_py() {
+    local d
+    d=$(console_dir) || err "fit: console/fit.py not found next to the launcher or in ${SHARE_DIR}/console (set K3D_GPU_CONSOLE)"
+    [ -f "${d}/fit.py" ] || err "fit: ${d}/fit.py not found"
+    python3 "${d}/fit.py" "$@"
+}
+fit_state() { echo "${XDG_STATE_HOME:-${HOME}/.local/state}/k3d-gpu"; }
+fit_cache() { echo "${K3D_GPU_FIT_CACHE:-${XDG_CACHE_HOME:-${HOME}/.cache}/k3d-gpu/models}"; }
+
+# fit_model_dir <model> [revision]: a directory holding config.json and weights.json
+# (or weight files fit.py reads in place). A local directory is used as it is; a
+# Hugging Face id is fetched once into the cache (config, tokenizer config and the
+# weight files' headers: a few MB, not the weights). K3D_GPU_FIT_FILE picks one
+# GGUF in a repo with several.
+fit_model_dir() {
+    local m=$1 rev=${2:-main} d
+    if [ -d "${m}" ]; then echo "${m}"; return 0; fi
+    [[ "${m}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9._-]+$ ]] || return 1
+    [[ "${rev}" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+    d="$(fit_cache)/${m//\//__}@${rev}"
+    # A branch (not a commit) moves: its entry is fetched again after a week, and kept
+    # when that fetch fails. An entry that is a symlink is managed by hand and left alone.
+    if [ ! -f "${d}/weights.json" ] || { ! [[ "${rev}" =~ ^[0-9a-f]{40}$ ]] && [ ! -L "${d}" ] \
+        && [ -n "$(find "${d}/weights.json" -mtime +7 2>/dev/null)" ]; }; then
+        mkdir -p "$(fit_cache)"
+        rm -rf "${d}.tmp"
+        if fit_py fetch "${m}" --revision "${rev}" ${K3D_GPU_FIT_FILE:+--file "${K3D_GPU_FIT_FILE}"} --out "${d}.tmp" >/dev/null; then
+            rm -rf "${d}" && mv "${d}.tmp" "${d}"
+        else
+            rm -rf "${d}.tmp"
+            [ -f "${d}/weights.json" ] || return 1
+        fi
+    fi
+    echo "${d}"
+}
+
+# fit_host <file>: host/v1 of this machine, with the cached STREAM run when there is one;
+# K3D_GPU_FIT_HOST names a host/v1 file to use instead (another box, or a fixture).
+fit_host() {
+    local stream
+    local limit=""
+    if [ -n "${K3D_GPU_FIT_HOST:-}" ]; then cp "${K3D_GPU_FIT_HOST}" "$1"; return; fi
+    stream="$(fit_state)/stream.json"
+    [ -f "${stream}" ] || stream=""
+    # The k3d node is a container: its memory limit (docker HostConfig.Memory, 0 = none)
+    # caps every pod on it.
+    if command -v docker >/dev/null 2>&1; then
+        limit=$(docker inspect -f '{{.HostConfig.Memory}}' "k3d-${CLUSTER}-server-0" 2>/dev/null || true)
+        [[ "${limit}" =~ ^[1-9][0-9]*$ ]] || limit=""
+    fi
+    fit_py probe --sysroot "${SYSROOT:-/}" ${stream:+--stream "${stream}"} ${limit:+--node-limit "${limit}"} > "$1"
+}
+
+# fit_field <json> <key>: one top-level value of a fit/v1 document ("" for null).
+fit_field() {
+    python3 -c 'import json, sys
+d = json.loads(sys.argv[1]); v = d
+for k in sys.argv[2].split("."):
+    v = v.get(k) if isinstance(v, dict) else None
+print("" if v is None else (" ".join(v) if isinstance(v, list) else str(v).lower() if isinstance(v, bool) else v))' "$1" "$2"
+}
+
+# fit [--model M] [--revision R] [--host FILE] [--engine E] [--device cpu|gpu]
+#     [--ctx N] [--seqs N] [--gpus N] [--kv-dtype T] [--explain|--json]
+cmd_fit() {
+    local mode=text model="${AGENT_MODEL}" rev="${AGENT_REVISION:-main}" host="" dir tmp args=() rc=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --explain) mode=explain ;;
+            --json) mode=json ;;
+            --model|--revision|--host|--engine|--device|--ctx|--seqs|--gpus|--kv-dtype)
+                [ $# -ge 2 ] || err "fit: $1 needs a value"
+                case "$1" in
+                    --model) model=$2 ;;
+                    --revision) rev=$2 ;;
+                    --host) host=$2 ;;
+                    *) args+=("$1" "$2") ;;
+                esac
+                shift ;;
+            *) err "unknown fit option: $1 (use --model, --revision, --host, --engine, --device, --ctx, --seqs, --gpus, --kv-dtype, --explain, --json)" ;;
+        esac
+        shift
+    done
+    require python3
+    dir=$(fit_model_dir "${model}" "${rev}") \
+        || err "fit: no metadata for ${model}@${rev}: not a local directory and the Hugging Face fetch failed (offline, private or gated: set HF_TOKEN)"
+    tmp=$(mktemp)
+    if [ -n "${host}" ]; then
+        [ -f "${host}" ] || { rm -f "${tmp}"; err "fit: host file ${host} does not exist"; }
+        cp "${host}" "${tmp}"
+    else
+        fit_host "${tmp}" || { rm -f "${tmp}"; err "fit: could not probe this host"; }
+    fi
+    [ -d "${model}" ] || args+=(--name "${model}")
+    fit_py plan --host "${tmp}" --model "${dir}" --mode "${mode}" ${args[@]+"${args[@]}"} || rc=$?
+    rm -f "${tmp}"
+    return "${rc}"
+}
+
+# Set by agent_fit from the fit of the model agent_manifest renders.
+AGENT_FIT_ANN=""
+AGENT_GPU_UTIL=""
+AGENT_KV_DTYPE=""
+AGENT_MAX_NUM_SEQS=""
+AGENT_MEMORY_LIMIT=""
+# A model the user chose: K3D_GPU_AGENT_MODEL in the launch environment (not a
+# quickstart tier pick, K3D_GPU_AGENT_MODEL_TIER=1, nor a tune profile's, which
+# tune_apply_profile exports later), or agent up --model.
+AGENT_MODEL_CHOSEN="${K3D_GPU_AGENT_MODEL:+1}"
+[ "${K3D_GPU_AGENT_MODEL_TIER:-}" != 1 ] || AGENT_MODEL_CHOSEN=""
+
+# fit_soft <mode> <message>: in K3D_GPU_FIT=auto a fit that cannot run is a warning and
+# the model is served unsized, as before the fit existed; with on it stops.
+fit_soft() {
+    [ "$1" = auto ] || err "$2"
+    warn "$2; serving ${AGENT_MODEL} unsized (K3D_GPU_FIT=off silences this)"
+}
+
+# agent_fit_apply <fit file> <rung>: the agent knobs of one rung of a recorded fit.
+agent_fit_apply() {
+    local k v knobs
+    knobs=$(fit_py knobs --fit "$1" --rung "$2") || err "fit: could not read ${1}"
+    while IFS='=' read -r k v; do
+        case "${k}" in
+            ctx) AGENT_MAX_LEN=${v} ;;
+            seqs) AGENT_MAX_NUM_SEQS=${v} ;;
+            tp) [ "${AGENT_APP}" != vllm ] || AGENT_GPUS=${v} ;;
+            util) AGENT_GPU_UTIL=${v} ;;
+            kv_dtype) AGENT_KV_DTYPE=${v} ;;
+            memory) AGENT_MEMORY=${v} AGENT_MEMORY_LIMIT=${v} ;;
+            annotation) AGENT_FIT_ANN=${v} ;;
+            cache_gib) [ "${AGENT_APP}" != ovms ] || K3D_GPU_AGENT_CACHE_SIZE=${v} ;;
+        esac
+    done <<< "${knobs}"
+    # OVMS reads these from the environment when it builds its args: a static KV pool of
+    # the fitted size (its dynamic pool, cache_size 0, grows with the live requests).
+    [ "${AGENT_APP}" != ovms ] || K3D_GPU_AGENT_MAX_NUM_SEQS=${AGENT_MAX_NUM_SEQS}
+}
+
+# agent_fit <device>: size the agent's model to this host before its manifest is
+# rendered. K3D_GPU_FIT: auto (default) sizes a model the user chose (see
+# AGENT_MODEL_CHOSEN), whose fit is unknown; on also sizes the defaults; off skips it.
+# A model that does not fit stops here with the reason. K3D_GPU_AGENT_MAX_LEN,
+# _MAX_NUM_SEQS and _GPUS are fit arguments, so the fit checks them instead of being
+# replaced by them. `agent up` (AGENT_FIT_RECORD=1) records the fit for the guard; a
+# guard step (K3D_GPU_FIT_RUNG=N) renders rung N of the recorded fit without fitting
+# again, since the running server already holds the memory a new probe would see.
+agent_fit() {
+    local device=$1 mode=${K3D_GPU_FIT:-auto} dir host doc rc=0 args=() dev engine rec restore=""
+    rec="$(fit_state)/agent-fit.json"
+    case "${mode}" in
+        off|0) return 0 ;;
+        auto) [ -n "${AGENT_MODEL_CHOSEN}" ] || [ -n "${K3D_GPU_FIT_RUNG:-}" ] || return 0 ;;
+        on|1) mode=on ;;
+        *) err "K3D_GPU_FIT must be auto, on or off, got '${mode}'" ;;
+    esac
+    case "${device}" in CPU) dev=cpu ;; GPU) dev=gpu ;; *) return 0 ;; esac  # NPU, HPU and HETERO: not modelled
+    if [ -n "${K3D_GPU_FIT_RUNG:-}" ]; then
+        [[ "${K3D_GPU_FIT_RUNG}" =~ ^[0-9]+$ ]] && [ -f "${rec}" ] || err "fit: no recorded fit for rung ${K3D_GPU_FIT_RUNG}"
+        agent_fit_apply "${rec}" "${K3D_GPU_FIT_RUNG}"
+        return 0
+    fi
+    command -v python3 >/dev/null 2>&1 || { fit_soft "${mode}" "fit: python3 not found"; return 0; }
+    dir=$(fit_model_dir "${AGENT_MODEL}" "${AGENT_REVISION:-main}") \
+        || { fit_soft "${mode}" "fit: no metadata for ${AGENT_MODEL} (offline, private or gated: set HF_TOKEN)"; return 0; }
+    [ -z "${K3D_GPU_AGENT_MAX_LEN:-}" ] || args+=(--ctx "${K3D_GPU_AGENT_MAX_LEN}")
+    [ -z "${K3D_GPU_AGENT_MAX_NUM_SEQS:-}" ] || args+=(--seqs "${K3D_GPU_AGENT_MAX_NUM_SEQS}")
+    [ -z "${K3D_GPU_AGENT_GPUS:-}" ] || args+=(--gpus "${K3D_GPU_AGENT_GPUS}")
+    # agent up replaces a running server of this backend (the Deployment is Recreate): it
+    # is stopped before the probe, so the memory it holds is measured as free, not as
+    # someone else's. A model that then does not fit gets the old server back.
+    if [ "${AGENT_FIT_RECORD:-}" = 1 ] \
+        && [ "$(kubectl -n "${AGENT_NS}" get "deployment/${AGENT_APP}" -o 'jsonpath={.spec.replicas}' 2>/dev/null)" = 1 ]; then
+        info "fit: stopping the running ${AGENT_APP} so the probe sees the memory it holds as free" >&2
+        kubectl -n "${AGENT_NS}" scale "deployment/${AGENT_APP}" --replicas=0 >/dev/null \
+            && kubectl -n "${AGENT_NS}" wait --for=delete pod -l "app=${AGENT_APP}" --timeout=180s >/dev/null 2>&1 \
+            && restore=${AGENT_APP}
+    fi
+    host=$(mktemp)
+    fit_host "${host}" || { rm -f "${host}"; fit_soft "${mode}" "fit: could not probe this host"; return 0; }
+    doc=$(mktemp)
+    fit_py plan --host "${host}" --model "${dir}" --name "${AGENT_MODEL}" --device "${dev}" --mode json \
+        ${args[@]+"${args[@]}"} > "${doc}" || rc=$?
+    rm -f "${host}"
+    if [ "${rc}" -eq 2 ] || [ ! -s "${doc}" ]; then
+        rm -f "${doc}"
+        fit_soft "${mode}" "fit: could not size ${AGENT_MODEL}"
+        return 0
+    fi
+    if [ "$(fit_field "$(<"${doc}")" fits)" != true ]; then
+        local why
+        why=$(fit_field "$(<"${doc}")" summary)
+        rm -f "${doc}"
+        if [ -n "${restore}" ]; then
+            kubectl -n "${AGENT_NS}" scale "deployment/${restore}" --replicas=1 >/dev/null \
+                && warn "fit: the previous ${restore} is started again" || true
+        fi
+        err "${why}; not starting a server that cannot fit (k3d-gpu fit --model ${AGENT_MODEL} --explain shows the arithmetic)"
+    fi
+    engine=$(fit_field "$(<"${doc}")" engine)
+    if [ "${engine}" != "${AGENT_APP}" ]; then
+        local why flags
+        why=$(fit_field "$(<"${doc}")" summary); flags=$(fit_field "$(<"${doc}")" flags)
+        rm -f "${doc}"
+        case "${engine}" in
+            llama.cpp) err "${why}; K3D_GPU_AGENT_BACKEND=${AGENT_BACKEND} cannot serve it: run llama-server with ${flags}" ;;
+            vllm) err "${why}; set K3D_GPU_AGENT_BACKEND=vllm to serve it" ;;
+            *) err "${why}; K3D_GPU_AGENT_BACKEND=${AGENT_BACKEND} cannot serve it (unset K3D_GPU_AGENT_BACKEND for ovms)" ;;
+        esac
+    fi
+    info "$(fit_field "$(<"${doc}")" summary)" >&2
+    if [ "${AGENT_FIT_RECORD:-}" = 1 ]; then
+        mkdir -p "$(fit_state)"
+        mv -f "${doc}" "${rec}"
+        doc=${rec}
+    fi
+    agent_fit_apply "${doc}" 0
+    [ "${doc}" = "${rec}" ] || rm -f "${doc}"
+}
+
+# The pod annotation naming the fit, a YAML line (empty without a fit).
+agent_fit_annotation() {
+    [ -n "${AGENT_FIT_ANN}" ] || return 0
+    printf '\n        k3d-gpu.io/agent-fit: "%s"' "${AGENT_FIT_ANN}"
+}
+
+# The K3D_GPU_* environment agent up ran with, so the guard renders the same agent.
+agent_fit_env_save() {
+    local v f
+    f="$(fit_state)/agent-fit.env"
+    mkdir -p "$(fit_state)"
+    : > "${f}.tmp"
+    for v in ${!K3D_GPU_@}; do printf 'export %s=%q\n' "${v}" "${!v}" >> "${f}.tmp"; done
+    mv -f "${f}.tmp" "${f}"
+}
+
+agent_guard_pidfile() { echo "$(fit_state)/agent-guard.pid"; }
+
+# Stops a guard this launcher started, by its pid file (only a process whose command
+# line is `k3d-gpu agent guard`).
+agent_guard_stop() {
+    local pf pid
+    pf=$(agent_guard_pidfile)
+    [ -f "${pf}" ] || return 0
+    pid=$(<"${pf}")
+    if [[ "${pid}" =~ ^[0-9]+$ ]] && tr '\0' ' ' < "/proc/${pid}/cmdline" 2>/dev/null | grep -q 'agent guard'; then
+        # The whole group when the guard leads one (started with setsid), else it and its children.
+        if [ "$(ps -o pgid= -p "${pid}" 2>/dev/null | tr -d ' ')" = "${pid}" ]; then
+            kill -- "-${pid}" 2>/dev/null || true
+        else
+            pkill -P "${pid}" 2>/dev/null || true
+            kill "${pid}" 2>/dev/null || true
+        fi
+        info "agent guard (pid ${pid}) stopped"
+    fi
+    rm -f "${pf}"
+}
+
+# agent guard [--once] [--interval S]: every S seconds (default 5), one fit.py
+# guard-step on /proc/pressure/memory and MemAvailable. A step down or up renders the
+# agent again at that rung of the fit agent up recorded (K3D_GPU_FIT_RUNG: its
+# sequences and context, and a smaller KV pool and pod limit when the KV cache is in
+# host RAM) and applies it: the server restarts with the smaller fit, because none of
+# vLLM, OVMS or llama-server lowers admission on a live server. A stop scales the
+# server to zero and ends the guard. --once takes one step.
+cmd_agent_guard() {
+    local once="" interval=5 fitf st envf out action rung seqs ctx reason app self
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --once) once=1 ;;
+            --interval) [ $# -ge 2 ] && [[ "$2" =~ ^[1-9][0-9]*$ ]] || err "agent guard: --interval needs whole seconds"; interval=$2; shift ;;
+            *) err "unknown agent guard option: $1 (use --once, --interval S)" ;;
+        esac
+        shift
+    done
+    require kubectl
+    fitf="$(fit_state)/agent-fit.json"; st="$(fit_state)/agent-guard.json"; envf="$(fit_state)/agent-fit.env"
+    [ -f "${fitf}" ] || err "agent guard: no fit recorded (${fitf}); 'k3d-gpu agent up --model M' records one"
+    self=$(readlink -f "${BASH_SOURCE[0]}")
+    app=$(python3 -c 'import json, sys; print({"vllm": "vllm"}.get(json.load(open(sys.argv[1])).get("engine"), "ovms"))' "${fitf}")
+    [ -n "${once}" ] || rm -f "${st}"
+    info "agent guard: watching PSI memory pressure and MemAvailable every ${interval}s for deployment/${app}"
+    while :; do
+        out=$(fit_py guard-step --fit "${fitf}" --state "${st}" --sysroot "${SYSROOT:-/}") || err "agent guard: guard-step failed"
+        read -r action rung seqs ctx reason <<< "$(python3 -c 'import json, sys
+d = json.loads(sys.argv[1]); print(d["action"], d["rung"], d["seqs"], d["ctx"], d["reason"])' "${out}")"
+        case "${action}" in
+            down|up)
+                info "agent guard: ${reason}: ${seqs} seqs x ${ctx} tokens"
+                # shellcheck source=/dev/null # written by agent_fit_env_save
+                ( set -o pipefail
+                  if [ -f "${envf}" ]; then . "${envf}"; fi
+                  export K3D_GPU_FIT_RUNG="${rung}"
+                  "${self}" agent manifest | kubectl apply -f - >/dev/null ) \
+                    || warn "agent guard: could not apply the ${seqs} x ${ctx} fit"
+                ;;
+            stop)
+                warn "agent guard: ${reason}"
+                kubectl -n "${AGENT_NS}" scale "deployment/${app}" --replicas=0 >/dev/null \
+                    || warn "agent guard: could not scale deployment/${app} to zero"
+                info "agent guard: deployment/${app} scaled to 0; 'k3d-gpu agent up' starts it again"
+                return 0
+                ;;
+            *) [ -z "${once}" ] || info "agent guard: ${reason}" ;;
+        esac
+        [ -z "${once}" ] || return 0
+        sleep "${interval}"
+    done
 }
 
 # images.lock: next to the console directory (the repo root, or ${SHARE_DIR}).
@@ -9583,6 +9979,7 @@ case "${1:-help}" in
     recipe)  cmd_recipe "${2:-}" ;;
     facts)   shift; cmd_facts "$@" ;;
     plan)    shift; cmd_plan "$@" ;;
+    fit)     shift; cmd_fit "$@" ;;
     audit)   shift; cmd_audit "$@" ;;
     sandbox) shift; cmd_sandbox "$@" ;;
     remote)  shift; cmd_remote "$@" ;;
