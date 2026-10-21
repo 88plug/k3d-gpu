@@ -15,6 +15,7 @@
 #   H7X_CPUS       CPUs each engine is sized to (default 16, H7's P-core balloon)
 #   H7X_NODE_CPUS  cpuset for the node container after `up` (default none)
 #   H7X_ORDER      block order (default "A B B A A B B A A B C")
+#   H7X_VLLM_MEM   memory limit for B and C (default: the overlay's 16Gi)
 #   K3D_GPU_CLUSTER  cluster name (default apb-h7x); K3D_GPU_* pass through to `up`
 set -uo pipefail
 
@@ -27,8 +28,9 @@ CPUS=${H7X_CPUS:-16}
 NODE_CPUS=${H7X_NODE_CPUS:-}
 ORDER=${H7X_ORDER:-"A B B A A B B A A B C"}
 READY_S=${H7X_READY_S:-900}   # per engine start (the first vLLM start pulls its image)
+VLLM_MEM=${H7X_VLLM_MEM:-}    # B/C memory limit; empty keeps integrations/eat/vllm-values.yaml (16Gi)
 export K3D_GPU_CLUSTER=${K3D_GPU_CLUSTER:-apb-h7x}
-if [ "${H7X_PRINT_CONFIG:-0}" = 1 ]; then echo "cluster=${K3D_GPU_CLUSTER} cpus=${CPUS} node_cpus=${NODE_CPUS} order=${ORDER}"; exit 0; fi
+if [ "${H7X_PRINT_CONFIG:-0}" = 1 ]; then echo "cluster=${K3D_GPU_CLUSTER} cpus=${CPUS} node_cpus=${NODE_CPUS} order=${ORDER} vllm_mem=${VLLM_MEM}"; exit 0; fi
 M=${APB_MODELS:?set APB_MODELS to the dir of local model copies}
 CHART=${APB_EAT_CHART:?set APB_EAT_CHART to EAT core/helm-charts/vllm}
 OUT=${APB_OUT:-${PWD}/apb-runs}/h7x-$(date +%Y%m%d-%H%M%S)
@@ -58,7 +60,7 @@ K3D_GPU_AGENT_DEVICE=CPU K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3-4B-fp16-ov K3D_GPU_A
     "${K}" agent manifest > "${OUT}/agent.yaml" 2> "${OUT}/agent.err" || { cat "${OUT}/agent.err"; exit 1; }
 python3 "${HERE}/stage.py" ovms "${OUT}/agent.yaml" "${OUT}/ovms.yaml"
 python3 "${HERE}/stage.py" values "${CHART}/xeon-values.yaml" "${REPO}/integrations/eat/vllm-values.yaml" 6 "${OUT}/values.yaml"
-helm template vllm-qwen-3-4b-cpu "${CHART}" --values "${OUT}/values.yaml" --set LLM_MODEL_ID=Qwen/Qwen3-4B --set cpu="${CPUS}" \
+helm template vllm-qwen-3-4b-cpu "${CHART}" --values "${OUT}/values.yaml" --set LLM_MODEL_ID=Qwen/Qwen3-4B --set cpu="${CPUS}" ${VLLM_MEM:+--set memory="${VLLM_MEM}"} \
     --set global.monitoring=false --set svcmonitor.enabled=false --set ingress.enabled=false --set route.enabled=false > "${OUT}/eat.yaml"
 python3 "${HERE}/stage.py" vllm "${OUT}/eat.yaml" "${OUT}/vllm.yaml" Qwen3-4B 32768
 # C: the same Deployment and Service, renamed, with --enforce-eager removed (the only change).
