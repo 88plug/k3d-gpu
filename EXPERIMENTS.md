@@ -1643,8 +1643,9 @@ say nothing about the graded result.
 
 ### H7x pre-registration: H7 to its full protocol on the Xeon 6741P (2026-10-20)
 
-Written 2026-10-20T23:10Z, before any H7x measurement (a render-only check of the manifests
-ran on the host; no server was started). H7 keeps its INCONCLUSIVE verdict on the i9-13900T.
+Written 2026-10-20T23:10Z, revised 2026-10-21T00:20Z after two setup smokes, before any H7x
+measurement (the smokes started the engines and sent no request; see below). H7 keeps its
+INCONCLUSIVE verdict on the i9-13900T.
 
 **Why.** H7's i9 run was short of its own pre-registration (3 and 2 blocks instead of 5 ABBA
 rounds, no `--enforce-eager`-dropped arm, no energy) and its decode gap (15.6% of vLLM's rate,
@@ -1685,13 +1686,27 @@ their block medians. R_bw = R x (A weight bytes / B weight bytes) = R x 0.99999.
 
 **Host changes** (as the cross-host rows, X1-X5 of the
 [cross-host pre-registration](#cross-host-pre-registration-h25x-h27x-h28x-h34x-on-the-xeon-6741p-2026-10-20)):
-`bench/xhost/hold.sh` on the shared lock; node container pinned to CPUs 0-23,48-71 and both
-engines sized to those 48 CPUs (`H7X_CPUS=48`; H7 gave each engine the whole 16-CPU P-core
-balloon); `K3D_GPU_VENDORS=none`; crescent C1 kubelet thresholds; node image
+`bench/xhost/hold.sh` on the shared lock; node container pinned to CPUs 0-7,48-55 (8 cores
+with their SMT siblings) and both engines sized to those 16 CPUs (`H7X_CPUS=16`), which is H7's
+sizing: there each engine got the whole 16-CPU P-core balloon (8 P-cores with SMT). An earlier
+draft of this row sized both engines to 48 CPUs; setup smoke 2 showed vLLM OOMKilled 9 times at
+EAT's 16 GiB memory limit with 48 threads (below), so the row keeps H7's 16 CPUs instead of
+changing the chart's limit. `K3D_GPU_VENDORS=none`; crescent C1 kubelet thresholds; node image
 `cryptoandcoffee/k3d-gpu:0.1.61`; models downloaded on the host at the pinned commits
 (`bench/xhost/fetch_models.py`). No background load, as H7 (it predates the matched-load
 design); the host's own serving stack is the background, recorded by `serving.py` and the
 hold's pre/post snapshots.
+
+**Setup smokes (`H7X_SMOKE=1`: engines brought up, no request; not scored).** Smoke 1
+(22:57-23:14Z, order A B C, 48 CPUs): A (OVMS) ready in 31 s with `Cpus_allowed_list` 0-23,48-71;
+B not Ready in 900 s. Smoke 2 (23:36-00:07Z, order B C, `H7X_READY_S=1800`, 48 CPUs, failure
+diagnostics added to `h7x.sh`): B `OOMKilled` (exit 137) 9 times at its 16 GiB limit. Both
+smokes also showed the node image's baked `intel-gpu-plugin` DaemonSet running with
+`K3D_GPU_VENDORS=none` (the node container is privileged, so NFD's PCI labels gate it in); no
+pod requested a GPU, so no arm used one. This corrects X3 of the cross-host pre-registration,
+which said no GPU plugin is deployed. A third smoke at 16 CPUs runs before this row is merged and
+is reported in its run section. `H7X_READY_S=1800` is used for the run, because the first vLLM
+start in a fresh cluster pulls its 7.4 GB image.
 
 **Hold.** One hold, cap 4200 s (11 blocks; a vLLM cold start is the slow step). If the cap ends
 the run before all 10 A/B blocks, the blocks that ran are scored by the same rule, and fewer than
@@ -1706,7 +1721,7 @@ $X/hfvenv/bin/python bench/xhost/fetch_models.py $X/models \
   OpenVINO/Qwen3-4B-fp16-ov@00298f1c614ffdc000814d8cbe1b7613aa73cdca Qwen/Qwen3-4B@1cfa9a7208912126459214e8b04321603b3df60c
 git -C $X/eat-src checkout 0d3438d     # https://github.com/intel/enterprise-agent-toolkit
 bench/xhost/hold.sh H7x 4200 env K3D_GPU_IMAGE=cryptoandcoffee/k3d-gpu:0.1.61 K3D_GPU_VENDORS=none \
-  K3D_GPU_K3S_ARGS="$C1" K3D_GPU_CLUSTER=k3dgpu-x-h7 H7X_CPUS=48 H7X_NODE_CPUS=0-23,48-71 \
+  K3D_GPU_K3S_ARGS="$C1" K3D_GPU_CLUSTER=k3dgpu-x-h7 H7X_CPUS=16 H7X_NODE_CPUS=0-7,48-55 H7X_READY_S=1800 \
   APB_MODELS=$X/models APB_EAT_CHART=$X/eat-src/core/helm-charts/vllm APB_OUT=$X/runs/H7x \
   bench/apb/h7x.sh
 ```
