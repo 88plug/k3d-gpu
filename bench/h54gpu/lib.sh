@@ -17,6 +17,17 @@ cluster_up() {
         --volume="${MODELS}:/models:ro@server:0" >> "${OUT}/cluster.log" 2>&1 || return 1
     k3d kubeconfig get "$1" > "${KUBECONFIG}"
     kubectl wait --for=condition=Ready node --all --timeout=300s >> "${OUT}/cluster.log" 2>&1
+    wait_sa
+}
+
+# wait_sa: the default ServiceAccount exists (a pod is refused until the controller makes it).
+wait_sa() {
+    local i
+    for i in $(seq 1 60); do
+        kubectl get serviceaccount default >/dev/null 2>&1 && return 0
+        sleep 2
+    done
+    return 1
 }
 
 # card_free N: renderD(128+N) has no process open (fuser) and no xpu-smi process.

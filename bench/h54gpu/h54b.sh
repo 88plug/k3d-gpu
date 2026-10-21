@@ -34,6 +34,7 @@ K3D_GPU_CLUSTER=${CL} K3D_GPU_IMAGE=${NODE_IMAGE} K3D_GPU_K3S_ARGS=${C1_ARGS} \
     K3D_GPU_NODE_LABELS=ei-inference-eligible=true H54_MODELS=${MODELS} \
     "${ROOT}/scripts/k3d-gpu" up >> "${OUT}/cluster.log" 2>&1 || { say "k3d-gpu up failed"; exit 7; }
 k3d kubeconfig get "${CL}" > "${KUBECONFIG}"
+wait_sa || { say "no default ServiceAccount"; exit 7; }
 
 # pinned_pod NAME CARD IMAGE COMMAND_JSON ARGS_JSON ENV_JSON: a privileged pod with the model tree
 # and only card CARD's render node under /dev/dri.
