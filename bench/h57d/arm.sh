@@ -109,7 +109,7 @@ kubectl -n "${NSP}" get pod "${pod}" -o jsonpath='{.spec.containers[0].image} {.
 kubectl -n "${NSP}" get pod "${pod}" -o json > "${OUT}/pod.json"
 # The CPU set the server got (the P-core balloon) and the ISA it sees.
 kubectl -n "${NSP}" exec "${pod}" -c "${ctr}" -- sh -c \
-    'grep Cpus_allowed_list /proc/1/status; grep -c avx512f /proc/cpuinfo; grep -c amx_tile /proc/cpuinfo; nproc' > "${OUT}/cpus.txt" 2>&1
+    'echo "cpuset $(cat /sys/fs/cgroup/cpuset.cpus.effective)"; grep Cpus_allowed_list /proc/self/status; echo "avx512f $(grep -c avx512f /proc/cpuinfo) amx $(grep -c amx_tile /proc/cpuinfo) nproc $(nproc)"; echo "server threads by affinity:"; for t in /proc/1/task/*; do grep -s Cpus_allowed_list "${t}/status" | cut -f2; done | sort | uniq -c' > "${OUT}/cpus.txt" 2>&1
 
 if [ -n "${SMOKE:-}" ]; then
     # Wiring smoke (discarded, disclosed): one streamed 16-token request with ignore_eos and one
