@@ -6,7 +6,7 @@
   ok
 ==> Detected accelerators: dsa iaa amx numa
 ==> Intel CPU built-in accelerators...
-  info: Diamond Rapids-X (family 19, model 1): ISA predicted by gcc PTA_DIAMONDRAPIDS, not read from CPUID: AVX10.2, APX_F, AMX-FP8, AMX-FP16, AMX-COMPLEX, AMX-AVX512, AMX-MOVRS, MOVRS — /proc/cpuinfo may not show these (kernel-dependent); NFD labels what CPUID reports (cpu-cpuid.AVX10_VERSION, APX_F, AMXFP8) and oneDNN/OpenVINO pick them with no flag
+  info: Diamond Rapids-X (family 19, model 1): ISA predicted by gcc PTA_DIAMONDRAPIDS, not read from CPUID: AVX10.2, APX_F, AMX-FP8, AMX-FP16, AMX-COMPLEX, AMX-AVX512, AMX-MOVRS, MOVRS — fallback model table: CPUID is not readable here (sudo k3d-gpu doctor reads /dev/cpu/0/cpuid; needs the cpuid module); /proc/cpuinfo may not show these (kernel-dependent); NFD labels what CPUID reports (cpu-cpuid.AVX10_VERSION, APX_F, AMXFP8) and oneDNN/OpenVINO pick them with no flag
   ok: AMX (amx_bf16 amx_int8 amx_tile) — CPU instructions, usable in any pod; up labels nodes feature.node.kubernetes.io/cpu-cpuid.AMX*
   ok: CPU ISA: AVX512BF16 AVX512F AVX512VNNI AVXVNNI — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
   ok: DSA: 8 device(s), 2 user work queue(s) — deployed by 'k3d-gpu up' (intel-dsa-plugin)

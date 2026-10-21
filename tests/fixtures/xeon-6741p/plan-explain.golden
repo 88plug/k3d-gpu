@@ -1,0 +1,12 @@
+facts: sha256:fb331ec4470e1d09e74ab86aa24b2c180b64b1dc81e86d016e0af7218e8cd9b8
+targets:
+  cpu: Intel(R) Xeon(R) 6741P, family:model 6:173, 96 CPUs, AMX; usable
+matrix: 2 cells, 0 on a target of this host
+  no measured cell for these targets
+decision:
+  unmeasured: no green cell for this box; quickstart and agent up still pick by device
+  bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)
+exit=0
+--- calls
+kubectl config get-contexts -o name
+kubectl --context k3d-gpu --request-timeout=5s get nodes -o name

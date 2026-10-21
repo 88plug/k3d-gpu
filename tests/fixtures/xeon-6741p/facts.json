@@ -1,0 +1,737 @@
+{
+  "capacity": [],
+  "cluster": {
+    "context": "k3d-gpu",
+    "name": "gpu",
+    "nodes": [],
+    "present": false,
+    "reason": "no kubeconfig context k3d-gpu (cluster not created, or KUBECONFIG points elsewhere)"
+  },
+  "detected": [
+    {
+      "resources": [
+        "feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true",
+        "feature.node.kubernetes.io/cpu-cpuid.AMXFP16=true",
+        "feature.node.kubernetes.io/cpu-cpuid.AMXINT8=true",
+        "feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true"
+      ],
+      "vendor": "amx"
+    }
+  ],
+  "doctor": {
+    "exit": 0,
+    "findings": [
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking docker...",
+        "text": "docker running",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking k3d...",
+        "text": "k3d version v0.0.0-stub",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Checking kubectl...",
+        "text": "",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "info",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "Granite Rapids-X (family 6, model 173): ISA predicted by gcc PTA_GRANITERAPIDS, not read from CPUID: AVX10.1, AMX-FP16 — fallback model table: CPUID is not readable here (sudo k3d-gpu doctor reads /dev/cpu/0/cpuid; needs the cpuid module); /proc/cpuinfo may not show these (kernel-dependent); NFD labels what CPUID reports (cpu-cpuid.AVX10_VERSION, APX_F, AMXFP8) and oneDNN/OpenVINO pick them with no flag",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "AMX (amx_bf16 amx_int8 amx_tile) — CPU instructions, usable in any pod; up labels nodes feature.node.kubernetes.io/cpu-cpuid.AMX*",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "CPU ISA: AVX512BF16 AVX512F AVX512VNNI AVXVNNI CETIBT CETSS GFNI SHA VAES — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "warn",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "DSA: 3 device(s) but no user work queues, so not in the cluster — set them up with accel-config per device below (lasts until reboot); all at once: k3d-gpu host-setup --apply; then k3d-gpu down && k3d-gpu up",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "warn",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "accel-config is not installed and this distro has no package: build intel/idxd-config accel-config-v4.1.9 with --prefix=/usr (https://github.com/intel/idxd-config)",
+        "why": null
+      },
+      {
+        "apply": "sudo accel-config config-engine dsa0/engine0.0 --group-id=0 && sudo accel-config config-wq dsa0/wq0.0 --group-id=0 --type=user --mode=dedicated --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && sudo accel-config enable-device dsa0 && sudo accel-config enable-wq dsa0/wq0.0",
+        "from": null,
+        "level": "warn",
+        "revert": "sudo accel-config disable-wq dsa0/wq0.0 && sudo accel-config disable-device dsa0",
+        "section": "Intel CPU built-in accelerators...",
+        "text": "DSA dsa0: disabled, nothing configured — 1 engine, 1 group, 1 dedicated user WQ (no user PASID: a shared WQ needs intel_iommu=on,sm_on), as intel-dsa-plugin's idxd initcontainer does",
+        "why": null
+      },
+      {
+        "apply": "sudo accel-config config-engine dsa2/engine2.0 --group-id=0 && sudo accel-config config-wq dsa2/wq2.0 --group-id=0 --type=user --mode=dedicated --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && sudo accel-config enable-device dsa2 && sudo accel-config enable-wq dsa2/wq2.0",
+        "from": null,
+        "level": "warn",
+        "revert": "sudo accel-config disable-wq dsa2/wq2.0 && sudo accel-config disable-device dsa2",
+        "section": "Intel CPU built-in accelerators...",
+        "text": "DSA dsa2: disabled, nothing configured — 1 engine, 1 group, 1 dedicated user WQ (no user PASID: a shared WQ needs intel_iommu=on,sm_on), as intel-dsa-plugin's idxd initcontainer does",
+        "why": null
+      },
+      {
+        "apply": "sudo accel-config config-engine dsa4/engine4.0 --group-id=0 && sudo accel-config config-wq dsa4/wq4.0 --group-id=0 --type=user --mode=dedicated --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && sudo accel-config enable-device dsa4 && sudo accel-config enable-wq dsa4/wq4.0",
+        "from": null,
+        "level": "warn",
+        "revert": "sudo accel-config disable-wq dsa4/wq4.0 && sudo accel-config disable-device dsa4",
+        "section": "Intel CPU built-in accelerators...",
+        "text": "DSA dsa4: disabled, nothing configured — 1 engine, 1 group, 1 dedicated user WQ (no user PASID: a shared WQ needs intel_iommu=on,sm_on), as intel-dsa-plugin's idxd initcontainer does",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "warn",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "IAA: 3 device(s) but no user work queues, so not in the cluster — set them up with accel-config per device below (lasts until reboot); all at once: k3d-gpu host-setup --apply; then k3d-gpu down && k3d-gpu up",
+        "why": null
+      },
+      {
+        "apply": "sudo accel-config config-engine iax1/engine1.0 --group-id=0 && sudo accel-config config-wq iax1/wq1.0 --group-id=0 --type=user --mode=dedicated --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && sudo accel-config enable-device iax1 && sudo accel-config enable-wq iax1/wq1.0",
+        "from": null,
+        "level": "warn",
+        "revert": "sudo accel-config disable-wq iax1/wq1.0 && sudo accel-config disable-device iax1",
+        "section": "Intel CPU built-in accelerators...",
+        "text": "IAA iax1: disabled, nothing configured — 1 engine, 1 group, 1 dedicated user WQ (no user PASID: a shared WQ needs intel_iommu=on,sm_on), as intel-iaa-plugin's idxd initcontainer does",
+        "why": null
+      },
+      {
+        "apply": "sudo accel-config config-engine iax3/engine3.0 --group-id=0 && sudo accel-config config-wq iax3/wq3.0 --group-id=0 --type=user --mode=dedicated --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && sudo accel-config enable-device iax3 && sudo accel-config enable-wq iax3/wq3.0",
+        "from": null,
+        "level": "warn",
+        "revert": "sudo accel-config disable-wq iax3/wq3.0 && sudo accel-config disable-device iax3",
+        "section": "Intel CPU built-in accelerators...",
+        "text": "IAA iax3: disabled, nothing configured — 1 engine, 1 group, 1 dedicated user WQ (no user PASID: a shared WQ needs intel_iommu=on,sm_on), as intel-iaa-plugin's idxd initcontainer does",
+        "why": null
+      },
+      {
+        "apply": "sudo accel-config config-engine iax5/engine5.0 --group-id=0 && sudo accel-config config-wq iax5/wq5.0 --group-id=0 --type=user --mode=dedicated --wq-size=16 --priority=10 --driver-name=user --name=k3d-gpu && sudo accel-config enable-device iax5 && sudo accel-config enable-wq iax5/wq5.0",
+        "from": null,
+        "level": "warn",
+        "revert": "sudo accel-config disable-wq iax5/wq5.0 && sudo accel-config disable-device iax5",
+        "section": "Intel CPU built-in accelerators...",
+        "text": "IAA iax5: disabled, nothing configured — 1 engine, 1 group, 1 dedicated user WQ (no user PASID: a shared WQ needs intel_iommu=on,sm_on), as intel-iaa-plugin's idxd initcontainer does",
+        "why": null
+      },
+      {
+        "apply": "echo 16 | sudo tee /sys/bus/pci/devices/0000:6a:00.1/sriov_numvfs",
+        "from": null,
+        "level": "warn",
+        "revert": "echo 0 | sudo tee /sys/bus/pci/devices/0000:6a:00.1/sriov_numvfs",
+        "section": "Intel CPU built-in accelerators...",
+        "text": "QAT 0000:6a:00.1 (4xxx, cfg_services sym;asym, state up): no VFs (sriov_numvfs 0), so not in the cluster — create all 16 as intel-qat-plugin's qat initcontainer does; the plugin takes them as 4xxxvf and binds them to vfio-pci (lasts until reboot), or: k3d-gpu host-setup --apply; then k3d-gpu down && k3d-gpu up",
+        "why": null
+      },
+      {
+        "apply": "echo 16 | sudo tee /sys/bus/pci/devices/0000:8a:00.1/sriov_numvfs",
+        "from": null,
+        "level": "warn",
+        "revert": "echo 0 | sudo tee /sys/bus/pci/devices/0000:8a:00.1/sriov_numvfs",
+        "section": "Intel CPU built-in accelerators...",
+        "text": "QAT 0000:8a:00.1 (4xxx, cfg_services sym;asym, state up): no VFs (sriov_numvfs 0), so not in the cluster — create all 16 as intel-qat-plugin's qat initcontainer does; the plugin takes them as 4xxxvf and binds them to vfio-pci (lasts until reboot), or: k3d-gpu host-setup --apply; then k3d-gpu down && k3d-gpu up",
+        "why": null
+      },
+      {
+        "apply": "echo 16 | sudo tee /sys/bus/pci/devices/0000:aa:00.1/sriov_numvfs",
+        "from": null,
+        "level": "warn",
+        "revert": "echo 0 | sudo tee /sys/bus/pci/devices/0000:aa:00.1/sriov_numvfs",
+        "section": "Intel CPU built-in accelerators...",
+        "text": "QAT 0000:aa:00.1 (4xxx, cfg_services dc, state up): no VFs (sriov_numvfs 0), so not in the cluster — create all 16 as intel-qat-plugin's qat initcontainer does; the plugin takes them as 4xxxvf and binds them to vfio-pci (lasts until reboot), or: k3d-gpu host-setup --apply; then k3d-gpu down && k3d-gpu up",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "info",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "Speed Select interface present (/dev/isst_interface); intel-speed-select is not on PATH — after up, doctor reads it through the node image's pinned copy (docker exec k3d-gpu-server-0 intel-speed-select); or install it from the kernel tree (tools/power/x86/intel-speed-select)",
+        "why": null
+      },
+      {
+        "apply": "BIOS (owner action): set Sub-NUMA Clustering to SNC2 (the menu name varies by board), reboot, then k3d-gpu down && k3d-gpu up",
+        "from": null,
+        "level": "info",
+        "revert": "BIOS: set Sub-NUMA Clustering back to Disabled, reboot",
+        "section": "Intel CPU built-in accelerators...",
+        "text": "SNC off (1 NUMA node per socket) on 2 compute dies (TPMI uncore domains with core agents): SNC2 makes each compute die its own NUMA node with its local memory channels (Intel Xeon 6 SNC guide 845720); up then labels k3d-gpu.io/snc=2 and replica pods get one node each",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "info",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "RDT allocation (rdt_a: cat_l2 cat_l3 cdp_l2 cdp_l3 mba) — resctrl classes are available but left off: the balloons policy ships control.rdt.enable: false because enabling it rewrites the host's /sys/fs/resctrl. To opt in, mount resctrl on the host (mount -t resctrl resctrl /sys/fs/resctrl) and set control.rdt.enable: true in nri-balloons.yml; usePodQoSAsDefaultClass then gives BestEffort/Burstable/Guaranteed pods 33%/66%/100% of the L3",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "info",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "noisy-neighbour isolation: rdt-mba — CAT + MBA can cap a neighbour's cache share and DRAM bandwidth through the RDT opt-in above (resctrl mounted: no); the shipped classes set cache shares only, so add mbAllocation: {all: [\"50%\"]} to the BestEffort class for bandwidth; the classes run inside the NRI balloons policy, which up deploys on hybrid or multi-NUMA hosts only",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "info",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "per socket: socket 0: DSA 3, IAA 3, QAT 3, DLB 3 (ARK default for 6741P: DSA 3, IAA 3, QAT 3, DLB 3 per socket)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "info",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "DLB: 3 device(s) (8086:2714 DLB 2.5), no driver bound — mainline Linux has no DLB driver (Intel's out-of-tree driver or DPDK on vfio-pci) and the Kubernetes DLB device plugin was removed upstream (intel-device-plugins-for-kubernetes, 2026-09-01), so k3d-gpu exposes nothing for it",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "info",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "Intel On Demand interface present (intel_vsec.sdsi.0): on On Demand SKUs, instances above the ARK default are activated by a license (https://github.com/intel/intel-sdsi); ask the platform vendor whether activation is offered; intel_vsec.sdsi.0 state_certificate 32 B (crescent's 6741P reads 32 B with no license payload seen)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "info",
+        "revert": null,
+        "section": "Intel CPU built-in accelerators...",
+        "text": "In-Field Scan: intel_ifs_0 (scan) untested, image none; intel_ifs_1 (array BIST) untested — k3d-gpu never starts a test (a scan holds the core while it runs; run one on a drained core: docs.kernel.org/arch/x86/ifs.html)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...",
+        "text": "dra available (auto)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": null,
+        "level": "ok",
+        "revert": null,
+        "section": "Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...",
+        "text": "image-volume available (auto)",
+        "why": null
+      }
+    ],
+    "sections": [
+      {
+        "good": null,
+        "name": "Checking docker...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Checking k3d...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Checking kubectl...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Detected accelerators: amx",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Intel CPU built-in accelerators...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "Experimental features (auto unless K3D_GPU_EXPERIMENTAL=off or <name,...>)...",
+        "src": null
+      },
+      {
+        "good": null,
+        "name": "All checks passed.",
+        "src": null
+      }
+    ]
+  },
+  "fingerprint": "sha256:fb331ec4470e1d09e74ab86aa24b2c180b64b1dc81e86d016e0af7218e8cd9b8",
+  "host": {
+    "cpu": {
+      "amx": [
+        "amx_bf16",
+        "amx_int8",
+        "amx_tile"
+      ],
+      "avx512": true,
+      "avx_vnni": true,
+      "e_core_cpus": null,
+      "e_cores": null,
+      "hybrid": false,
+      "isa": [
+        "amx_bf16",
+        "amx_int8",
+        "amx_tile",
+        "avx",
+        "avx2",
+        "avx512_bf16",
+        "avx512_bitalg",
+        "avx512_fp16",
+        "avx512_vbmi2",
+        "avx512_vnni",
+        "avx512_vpopcntdq",
+        "avx512bw",
+        "avx512cd",
+        "avx512dq",
+        "avx512f",
+        "avx512ifma",
+        "avx512vbmi",
+        "avx512vl",
+        "avx_vnni",
+        "f16c",
+        "fma"
+      ],
+      "logical_cpus": 96,
+      "model": "Intel(R) Xeon(R) 6741P",
+      "online": "0-95",
+      "p_core_cpus": null,
+      "p_cores": null
+    },
+    "dsa": {
+      "devices": 3,
+      "work_queues": 0
+    },
+    "gaudi": {
+      "accel_nodes": 0,
+      "driver_loaded": false,
+      "pci_devices": 0
+    },
+    "iaa": {
+      "devices": 3,
+      "work_queues": 0
+    },
+    "intel_gpus": [],
+    "kernel": "7.0.0-31-generic",
+    "memory": {
+      "available_kib": 406958540,
+      "total_kib": 527767144
+    },
+    "npus": [],
+    "nvidia": {
+      "driver": null,
+      "gpus": []
+    },
+    "qat": [
+      {
+        "device_id": "0x4944",
+        "driver": "4xxx",
+        "pci": "0000:6a:00.1",
+        "vfs": 0
+      },
+      {
+        "device_id": "0x4944",
+        "driver": "4xxx",
+        "pci": "0000:8a:00.1",
+        "vfs": 0
+      },
+      {
+        "device_id": "0x4944",
+        "driver": "4xxx",
+        "pci": "0000:aa:00.1",
+        "vfs": 0
+      }
+    ],
+    "rapl": []
+  },
+  "hostname": "",
+  "labels": {
+    "feature.node.kubernetes.io/cpu-cpuid.AMXBF16": "true",
+    "feature.node.kubernetes.io/cpu-cpuid.AMXFP16": "true",
+    "feature.node.kubernetes.io/cpu-cpuid.AMXINT8": "true",
+    "feature.node.kubernetes.io/cpu-cpuid.AMXTILE": "true",
+    "feature.node.kubernetes.io/cpu-cpuid.AVX512BF16": "true",
+    "feature.node.kubernetes.io/cpu-cpuid.AVX512F": "true",
+    "feature.node.kubernetes.io/cpu-cpuid.AVX512VNNI": "true",
+    "feature.node.kubernetes.io/cpu-cpuid.AVXVNNI": "true",
+    "feature.node.kubernetes.io/cpu-cpuid.CETIBT": "true",
+    "feature.node.kubernetes.io/cpu-cpuid.CETSS": "true",
+    "feature.node.kubernetes.io/cpu-cpuid.GFNI": "true",
+    "feature.node.kubernetes.io/cpu-cpuid.SHA": "true",
+    "feature.node.kubernetes.io/cpu-cpuid.VAES": "true"
+  },
+  "perf": {
+    "exit": 0,
+    "findings": [
+      {
+        "apply": null,
+        "from": "/sys/devices/system/cpu/cpu{0..95}/cpufreq/scaling_governor",
+        "level": "ok",
+        "revert": null,
+        "section": "CPU frequency (driver intel_pstate, mode active)",
+        "text": "CPUs 0-95: governor performance (forces EPP 0)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/sys/devices/system/cpu/cpu{0..95}/cpufreq/{scaling,cpuinfo}_max_freq",
+        "level": "ok",
+        "revert": null,
+        "section": "CPU frequency (driver intel_pstate, mode active)",
+        "text": "CPUs 0-95: no frequency cap (hardware max 3800 MHz), min 3800 MHz",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/sys/devices/system/cpu/intel_pstate/no_turbo",
+        "level": "ok",
+        "revert": null,
+        "section": "CPU frequency (driver intel_pstate, mode active)",
+        "text": "turbo enabled (no_turbo=0)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/sys/devices/system/cpu/intel_pstate/max_perf_pct",
+        "level": "ok",
+        "revert": null,
+        "section": "CPU frequency (driver intel_pstate, mode active)",
+        "text": "max_perf_pct=100, min_perf_pct=100",
+        "why": null
+      },
+      {
+        "apply": "echo 1 | sudo tee /sys/devices/system/cpu/intel_pstate/hwp_dynamic_boost",
+        "from": "/sys/devices/system/cpu/intel_pstate/hwp_dynamic_boost",
+        "level": "note",
+        "revert": "echo 0 | sudo tee /sys/devices/system/cpu/intel_pstate/hwp_dynamic_boost",
+        "section": "CPU frequency (driver intel_pstate, mode active)",
+        "text": "hwp_dynamic_boost=0",
+        "why": "when 1, a task waking from I/O wait gets a short min-P-state boost; it can help request handlers that block on the network or disk. Unmeasured for inference here — benchmark before keeping it"
+      },
+      {
+        "apply": null,
+        "from": "/sys/devices/system/cpu/intel_uncore_frequency/uncore00/{min,max}_freq_khz",
+        "level": "ok",
+        "revert": null,
+        "section": "Uncore frequency (intel_uncore_frequency)",
+        "text": "uncore00: 800-2200 MHz, the full hardware range",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/sys/devices/system/cpu/intel_uncore_frequency/uncore00/elc_*",
+        "level": "info",
+        "revert": null,
+        "section": "Uncore frequency (intel_uncore_frequency)",
+        "text": "uncore00: ELC floor 0 kHz, thresholds low 10% high 95% (enable 1); reported only, no ELC change is suggested (EXPERIMENTS.md H29 INCONCLUSIVE)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/sys/devices/system/cpu/intel_uncore_frequency/uncore01/{min,max}_freq_khz",
+        "level": "ok",
+        "revert": null,
+        "section": "Uncore frequency (intel_uncore_frequency)",
+        "text": "uncore01: 800-2200 MHz, the full hardware range",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/sys/devices/system/cpu/intel_uncore_frequency/uncore01/elc_*",
+        "level": "info",
+        "revert": null,
+        "section": "Uncore frequency (intel_uncore_frequency)",
+        "text": "uncore01: ELC floor 0 kHz, thresholds low 10% high 95% (enable 1); reported only, no ELC change is suggested (EXPERIMENTS.md H29 INCONCLUSIVE)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/sys/devices/system/cpu/intel_uncore_frequency/uncore02/{min,max}_freq_khz",
+        "level": "ok",
+        "revert": null,
+        "section": "Uncore frequency (intel_uncore_frequency)",
+        "text": "uncore02: 800-2500 MHz, the full hardware range",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/sys/devices/system/cpu/intel_uncore_frequency/uncore02/elc_*",
+        "level": "info",
+        "revert": null,
+        "section": "Uncore frequency (intel_uncore_frequency)",
+        "text": "uncore02: ELC floor 0 kHz, thresholds low 10% high 95% (enable 1); reported only, no ELC change is suggested (EXPERIMENTS.md H29 INCONCLUSIVE)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/sys/devices/system/cpu/intel_uncore_frequency/uncore03/{min,max}_freq_khz",
+        "level": "ok",
+        "revert": null,
+        "section": "Uncore frequency (intel_uncore_frequency)",
+        "text": "uncore03: 800-2500 MHz, the full hardware range",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/sys/devices/system/cpu/intel_uncore_frequency/uncore03/elc_*",
+        "level": "info",
+        "revert": null,
+        "section": "Uncore frequency (intel_uncore_frequency)",
+        "text": "uncore03: ELC floor 0 kHz, thresholds low 10% high 95% (enable 1); reported only, no ELC change is suggested (EXPERIMENTS.md H29 INCONCLUSIVE)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/sys/kernel/debug/tpmi-*/plr/domain*/status",
+        "level": "info",
+        "revert": null,
+        "section": "TPMI performance limit reasons",
+        "text": "TPMI performance limit reasons (intel_vsec.tpmi-plr.0): the status files are in debugfs, root only: sudo k3d-gpu doctor --perf",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/proc/meminfo",
+        "level": "ok",
+        "revert": null,
+        "section": "Reserved huge pages (hugetlbfs)",
+        "text": "HugePages_Total=0, free 0",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/proc/meminfo",
+        "level": "info",
+        "revert": null,
+        "section": "Memory and swap",
+        "text": "MemTotal 503.3 GiB, MemAvailable 388.1 GiB, swap 8.0 GiB, vm.swappiness=60",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/proc/meminfo",
+        "level": "ok",
+        "revert": null,
+        "section": "Memory and swap",
+        "text": "swap in use: 0.0 GiB",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/proc/meminfo",
+        "level": "info",
+        "revert": null,
+        "section": "Memory and swap",
+        "text": "pass --model-gb <size> (or K3D_GPU_MODEL_GB) to check a model against MemAvailable",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/sys/firmware/dmi/entries/17-*/raw (root)",
+        "level": "info",
+        "revert": null,
+        "section": "DRAM speed, bandwidth and ECC",
+        "text": "8x DDR5 DIMM 64 GiB 2R, ECC (80/64-bit): rated 6400 MT/s, configured 6400 MT/s; 8 of 16 slots populated",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "https://www.intel.com/content/www/us/en/products/sku/241828/intel-xeon-6741p-processor-288m-cache-2-50-ghz/specifications.html",
+        "level": "info",
+        "revert": null,
+        "section": "DRAM speed, bandwidth and ECC",
+        "text": "Xeon 6741P (ARK): 8 memory channels per socket, DDR5 6400 MT/s, MRDIMM not listed",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/sys/firmware/dmi/entries/17-*/raw (root), https://www.intel.com/content/www/us/en/products/sku/241828/intel-xeon-6741p-processor-288m-cache-2-50-ghz/specifications.html",
+        "level": "ok",
+        "revert": null,
+        "section": "DRAM speed, bandwidth and ECC",
+        "text": "8 modules on 8 channels (1 socket(s) x 8): peak DRAM bandwidth 409.6 GB/s = 8 channels x 6400 MT/s x 8 B (computed)",
+        "why": null
+      },
+      {
+        "apply": "load the EDAC driver for host bridge 8086: if this kernel has one (ls /lib/modules/$(uname -r)/kernel/drivers/edac)",
+        "from": "/sys/devices/system/edac/mc/ (no mc*), /sys/firmware/dmi/entries/17-*/raw",
+        "level": "note",
+        "revert": "unload that driver again",
+        "section": "DRAM speed, bandwidth and ECC",
+        "text": "ECC modules, but no EDAC memory controller is registered: corrected and uncorrected errors are not counted (dram.ecc=unmonitored)",
+        "why": "without an EDAC driver a failing module shows up only as crashes or silent corruption; with one, ce_count/ue_count give early warning"
+      },
+      {
+        "apply": "sudo modprobe kvm_intel",
+        "from": "/proc/cpuinfo (vmx), /dev/kvm",
+        "level": "note",
+        "revert": "sudo modprobe -r kvm_intel",
+        "section": "Isolation for sandboxed agents",
+        "text": "the CPU has VT-x (vmx) but /dev/kvm is missing: no microVM sandboxes",
+        "why": "kvm_intel creates /dev/kvm; without it Kata or Firecracker cannot start a VM"
+      },
+      {
+        "apply": "BIOS: enable VT-d, then add intel_iommu=on to the kernel command line and reboot",
+        "from": "/sys/class/iommu/",
+        "level": "note",
+        "revert": "remove intel_iommu=on from the kernel command line and reboot",
+        "section": "Isolation for sandboxed agents",
+        "text": "no IOMMU unit registered: no DMA isolation between devices, no GPU passthrough into a microVM",
+        "why": "VFIO hands a device to a VM only with its IOMMU group; without VT-d enabled there are no groups"
+      },
+      {
+        "apply": null,
+        "from": "/proc/cpuinfo",
+        "level": "info",
+        "revert": null,
+        "section": "Isolation for sandboxed agents",
+        "text": "CET flags: user_shstk, ibt; user shadow stacks are opt-in per process (glibc.cpu.x86_shstk tunable)",
+        "why": null
+      },
+      {
+        "apply": null,
+        "from": "/proc/cpuinfo, /proc/cmdline, /proc/sys/kernel/split_lock_mitigate",
+        "level": "ok",
+        "revert": null,
+        "section": "Isolation for sandboxed agents",
+        "text": "split-lock detection warn (default)",
+        "why": null
+      }
+    ],
+    "sections": [
+      {
+        "good": "cores ramp to full turbo the moment a request arrives: EPP performance or balance_performance, turbo on, no frequency caps — token generation is a latency-bound loop and every ramp-up shows in time-to-first-token",
+        "name": "CPU frequency (driver intel_pstate, mode active)",
+        "src": "https://docs.kernel.org/admin-guide/pm/intel_pstate.html#energy-vs-performance-hints, https://docs.kernel.org/admin-guide/pm/cpufreq.html"
+      },
+      {
+        "good": "max_freq_khz at initial_max_freq_khz and min_freq_khz at initial_min_freq_khz: the hardware (UFS, or ELC on TPMI parts) picks the uncore clock inside the full range. A floor pinned high for decode is unproven (EXPERIMENTS.md H29, INCONCLUSIVE), so it is not suggested",
+        "name": "Uncore frequency (intel_uncore_frequency)",
+        "src": "https://docs.kernel.org/admin-guide/pm/intel_uncore_frequency_scaling.html"
+      },
+      {
+        "good": "none while serving: a reason names what held the die or a CPU below its requested frequency",
+        "name": "TPMI performance limit reasons",
+        "src": "https://github.com/torvalds/linux/blob/master/drivers/platform/x86/intel/plr_tpmi.c"
+      },
+      {
+        "good": "0 unless a server is configured to use hugetlbfs — reserved pages cannot be used for anything else, and OpenVINO, PyTorch and llama.cpp do not use them by default",
+        "name": "Reserved huge pages (hugetlbfs)",
+        "src": "https://docs.kernel.org/admin-guide/mm/hugetlbpage.html"
+      },
+      {
+        "good": "the model plus KV cache fits in MemAvailable with headroom and nothing is swapped; swapped-out buffers fault back in at random-I/O speed",
+        "name": "Memory and swap",
+        "src": "https://docs.kernel.org/admin-guide/sysctl/vm.html#swappiness, https://docs.openvino.ai/2026/openvino-workflow/running-inference/optimize-inference/optimizing-latency.html"
+      },
+      {
+        "good": "modules at the platform's plan-of-record (POR) speed for how the slots are populated; single-stream CPU and iGPU decode is bound by DRAM bandwidth. Memory errors counted by an EDAC driver",
+        "name": "DRAM speed, bandwidth and ECC",
+        "src": "SMBIOS DSP0134 7.18 (type 17, as dmidecode.c decodes it), Intel datasheet 743844 rev. 015 table 25 (13th/14th Gen Core DDR support matrix, https://cdrdv2.intel.com/v1/dl/getContent/743844), https://docs.kernel.org/driver-api/edac.html"
+      },
+      {
+        "good": "/dev/kvm usable for microVM sandboxes, each GPU alone in its IOMMU group, split-lock detection on, CET known, GPU observation streams limited to CAP_PERFMON",
+        "name": "Isolation for sandboxed agents",
+        "src": "https://docs.kernel.org/driver-api/vfio.html (IOMMU groups), https://docs.kernel.org/admin-guide/kernel-parameters.html (split_lock_detect), https://docs.kernel.org/admin-guide/sysctl/kernel.html (split_lock_mitigate), kernel source drivers/gpu/drm/i915/i915_perf.c and drivers/gpu/drm/xe/xe_observation.c (paranoid sysctls), Intel SDM vol. 4 335592-093 (IA32_S_CET 6A2H, IA32_TME_ACTIVATE 982H)"
+      },
+      {
+        "good": null,
+        "name": "4 suggestion(s). Read-only: nothing on this host was changed.",
+        "src": null
+      }
+    ]
+  },
+  "release": {
+    "k3d_gpu_version": "<version>",
+    "pins": {
+      "llama.cpp": "ghcr.io/ggml-org/llama.cpp@sha256:be586c648cb79d2cd75d0c38a6541e1f16c47a7c6621d3e711470a467fc38744",
+      "ovms": "openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58"
+    }
+  },
+  "schema": "k3d-gpu.facts/v1",
+  "targets": [
+    {
+      "cpu": {
+        "amx": true,
+        "e_count": null,
+        "e_cpus": null,
+        "family_model": "6:173",
+        "hybrid": false,
+        "logical_cpus": 96,
+        "model_name": "Intel(R) Xeon(R) 6741P",
+        "numa_nodes": 1,
+        "p_count": null,
+        "p_cpus": null
+      },
+      "device_id": null,
+      "driver": null,
+      "fix": null,
+      "generation": null,
+      "id": "cpu",
+      "kind": "cpu",
+      "pci": null,
+      "platform": null,
+      "reason": null,
+      "resource": null,
+      "usable": true,
+      "vendor": "intel",
+      "xmx": null
+    }
+  ]
+}
