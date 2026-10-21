@@ -2578,6 +2578,119 @@ its listing is kept in `~/k3dgpu-gemma/deleted-bak-listing.txt.gz`.
 governs. A wiring smoke runs no scored request, is discarded and is disclosed in the run
 section.
 
+### H54 amendment R1: the H54a runner and the flag checks (2026-10-20)
+
+Recorded 2026-10-20, before any H54a measurement. The pre-registration's runner amendment for
+H54a: what runs each arm, the flags read against each engine's source at its pin, and the
+details the pre-registration left to the runner. Wiring smokes ran first (disclosed in the H54a
+run section, discarded, no scored request). Nothing here changes a row's statistic, gate,
+threshold, cap or prediction.
+
+**Files.** `bench/h54/`: `hold.sh` (lock `flock -w 21600`, the H50 hold-start rule, the 97% disk
+line, `timeout -k 30 2400`, a disk watchdog, cluster deletion at the end, also on failure),
+`hold-run.sh` (cluster, then each arm), `arm.sh` (one arm: render, readiness, phases, quality,
+teardown), `h54.py` (renders, GSM8K grader, void rule, tensor-table bytes, `score-a`),
+`k3d-shim.sh`, `reproduce.sh` (the Reproduce header of every hold), `convert.sh` (the two builds,
+under the lock), `ov-export-venv.txt` (the export venv pins), `gsm8k-test-0-199.jsonl`
+(`openai/gsm8k` `main` test @ `740312ad`, items 0-199 in file order; sha256 `45e54be2...`) and
+`ttft-prompt.txt` (999 Gemma 4 tokens by the checkpoint's `tokenizer.json`; sha256 `b10cd3c7...`).
+Regression tests: `bench/h54/test_h54.py` (grader, void rule, byte counts, bootstrap, the source
+rule, every verdict branch, renders and flags, the shim), run in CI.
+
+**Cluster.** `k3d-gpu up` with `K3D_GPU_CLUSTER=k3dgpu-g-h54a-<hold>`, amendment C1's
+`K3D_GPU_K3S_ARGS`, `K3D_GPU_NODE_LABELS=ei-infra-eligible=true,ei-inference-eligible=true`
+(B1g's affinity, as H50), `K3D_GPU_VENDORS=amx` (no GPU device plugin: H54a touches no card; with
+the device named CPU, `agent manifest` writes the same pod under `auto`, since only the AMX label
+reaches it, as a node selector) and the node image k3d-gpu names, pinned:
+`cryptoandcoffee/k3d-gpu:0.1.63@sha256:b6fc46f6...`. k3d-gpu on main has no host-volume knob and
+copying the 51.6 GB bf16 weights into the node would cross the 97% line, so a k3d shim in front of
+the pinned k3d v5.9.0 adds one volume to `k3d cluster create k3dgpu-g-*`: `~/k3dgpu-gemma/models`
+at `/var/apb-models`, the hostPath `bench/apb/stage.py` already points every staged manifest at.
+This changes where the node reads files, not what any arm serves.
+
+**Flags read at each pin.**
+
+- llama.cpp b11749 (`common/arg.cpp`, `common/speculative.cpp`): `-t`, `-Cr`/`--cpu-range`,
+  `--cpu-strict` and `--jinja` exist. `--spec-type mtp` does not: b11749 names the type
+  `draft-mtp`, so Lg-mtp runs `--spec-type draft-mtp -md <drafter GGUF>` at the default draft
+  length (`--spec-draft-n-max` 3). The drafter GGUF is b11749's `convert_hf_to_gguf.py`
+  (`Gemma4AssistantForCausalLM` is registered in `conversion/gemma.py`) to bf16, then b11749's
+  `llama-quantize` to Q4_0, the target's precision (the card asks for a same-precision QAT
+  drafter), both in `ghcr.io/ggml-org/llama.cpp:full-b11749@sha256:aefb375a...`. Everything else
+  is the server's default (context from the model, its default slot count).
+- vLLM v0.32.0: `--attention-backend` exists; on CPU, `platforms/cpu.py` returns `CPU_ATTN`
+  whatever is selected, and `Gemma4Config` only sets `TRITON_ATTN` when the backend is unset, so
+  the named backend is `CPU_ATTN`. `VLLM_CPU_OMP_THREADS_BIND` exists (`envs.py`). For a
+  `gemma4_assistant` drafter `config/speculative.py` sets `n_predict` 1 and defaults
+  `num_speculative_tokens` to it, so Vq-mtp passes no length.
+- SGLang v0.5.22: `--device cpu`, `--attention-backend intel_amx` (the x86 default) and `--tp 1`
+  are fields of its argument groups; `SGLANG_CPU_OMP_THREADS_BIND` is documented
+  (`docs/docs/hardware-platforms/cpu_server.mdx`), which also says that with it set the memory
+  per rank cannot be determined and `--max-total-tokens` should be set. Sg adds
+  `--max-total-tokens 65536` so its KV pool cannot take the shared box's memory (B1g's bound is
+  `VLLM_CPU_KVCACHE_SPACE` 40 GiB).
+- OVMS (A1o, A1g): `agent manifest` writes `openvino/model_server@sha256:a928903f...`
+  (2026.4.1-gpu, which carries the CPU plugin) for every device. The pre-registration's table
+  names `148e3fe8...`, the CPU-only tag of the same release; its rule for these arms is
+  "k3d-gpu's own pick ... as it writes them", so they run `a928903f...` and `148e3fe8...` is not
+  used. Model ids: `OpenVINO/gemma-4-26b-a4b-it-int4-ov` (OVB, the download directory renamed to
+  that path) and `k3dgpu/gemma-4-26b-a4b-it-qat-int4-sym-g32-ov` (OVQ); `--pull` finds each
+  directory and downloads nothing. k3d-gpu sets no tool or reasoning parser for a model outside
+  its default family. Its `--cache_dir` compiled-model cache is deleted after each arm.
+- B1g as EAT's playbook installs `cpu-gemma4-26b-a4b` (`core/playbooks/deploy-inference-models.yml`
+  at 0d3438d): release `vllm-gemma4-26b-a4b-cpu`, `chatTemplateConfigMap.enabled=true` (the
+  v0.24.0 image does not contain `tool_chat_template_gemma4.jinja`; the chart mounts it) and
+  `hostIPC=true`, with monitoring and ingress off (they need EAT's operators), the tag pinned to
+  its digest, `--max-model-len 8192`, the QAT weights staged by `stage.py vllm`.
+- Vq, Vq-mtp, Vi: B1g's render with only the image (v0.32.0), `--attention-backend CPU_ATTN`,
+  `VLLM_CPU_OMP_THREADS_BIND=0-47`, the model (Vi) and the speculative config (Vq-mtp) changed;
+  its ConfigMaps, chat template and every other flag kept.
+- B3g: EAT's OVMS chart at 0d3438d, `modelSource=OpenVINO/gemma-4-26b-a4b-it-int4-ov`,
+  `image.tag=2025.4@sha256:c3707200...`, ingress and APISIX route off; its init container pulls
+  the model.
+
+**OVQ.** `convert.sh`: the pre-registration's command, `optimum-cli export openvino --model <QAT
+bf16> --weight-format int4 --sym --group-size 32 --ratio 1.0`, with the venv in
+`ov-export-venv.txt`, plus `--task image-text-to-text`: run as written under the lock it stopped
+with optimum's "Cannot infer the task from a local directory yet, please specify the task
+manually", and `image-text-to-text` is OVB's pipeline (its card's `pipeline_tag`), so A1o and
+A1g load the same IR layout. Backup precision is optimum-intel's default, as for OVB. Read from
+OVB's own `openvino_config.json` while checking this: its `lm_model` entry records `awq`, group
+size 64, asymmetric, the router layers ignored, where its card says INT4_ASYM group 128; recorded,
+not acted on (OVB is the published build as shipped).
+PR #157's A1 export (`--task text-generation-with-past --backup-precision none` and a grid snap)
+is a different build; it is not merged and is not used here. For H54d's rule, "H50's A1 config"
+stays as the pre-registration defines it (OVMS CPU, OVQ, `gemma4` parser, no draft).
+
+**Per arm (`arm.sh`).** An arm starts only with at least 900 s of the hold left, else it is
+"not reached" in that hold and moves to the next hold's front. Readiness is the model list and a
+16-token chat, polled every 10 s up to the arm's limit (1,500 s for B1g, Vq, Vq-mtp; 900 s
+otherwise), cut to the hold's time left minus 600 s; past the limit the arm is "not deliverable"
+(or "not reached" when the hold's time cut it). Then: 60 s idle (RAPL `package-0` through
+`energy.sh` and sudo), 3 warmup requests (discarded), N=1 8, N=4 16, N=16 32, TTFT 4 at N=1 on
+`ttft-prompt.txt` with `max_tokens` 16, each phase under `energy.sh` and checked against
+`serving.jsonl` (`h54.py void`: any aiperf process in a sample overlapping the phase, or mean
+non-campaign CPU above 4 CPU-s/s), a void phase re-run once. Every request has
+`--unique-prompts`, so no phase hits a prefix cache, the TTFT phase included. Then GSM8K items
+0-49: one non-streamed chat per item, the pre-registered prompt, temperature 0, `max_tokens`
+1024, `chat_template_kwargs: {"enable_thinking": false}` for every arm, 16 in flight; score: the
+last number in the reply equals the `####` answer, commas removed, compared as numbers. Teardown:
+the arm's objects and PVCs deleted, its image removed from the node, OVMS's cache cleared, and
+the node container's CPU under 1 CPU-s/s over 10 s (at most 180 s) before the next arm.
+
+**Scorer (`h54.py score-a`).** B1g's median N=1 decode and score are the base; the gate is
+score >= B1g's - 0.10. Candidates: optimized arms (not B1g, B3g) with a measured N=1 phase that
+pass the gate. Chosen: the fastest candidate of the best source rank present (0 author or Intel,
+1 RedHatAI, 2 built here); a lower-ranked candidate replaces it only at >= 5% higher median N=1
+decode and no more than 2 of 50 items fewer. Ranks: Lg, Vq, Vq-mtp, Vi, Sg, A1o 0; A1g and
+Lg-mtp 2 (self-built IR, self-converted drafter). The CI: 10,000 resamples (seed 1) of each arm's
+8 N=1 requests on its own, percentile 2.5 and 97.5 of the ratio of medians. Verdict branches as
+the row states. An arm measured in a later hold replaces its not-reached record.
+
+**Hold plan (cap 3).** Hold 1: B1g, Lg, Lg-mtp, A1g, A1o. Hold 2: arms not reached in hold 1,
+then Vq, Vq-mtp. Hold 3: arms not reached, then Vi, Sg, B3g. Arms not reached in hold 3 are not
+run.
+
 ### H57d pre-registration: Gemma 4 26B-A4B QAT on the AMX-less client CPU (i9-13900T, 2026-10-20)
 
 Written 2026-10-20, before any H57da, H57dm or H57db measurement. Nothing here is a measurement
