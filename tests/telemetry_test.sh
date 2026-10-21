@@ -102,6 +102,7 @@ mbm() {
     for f in "${root}"/textfile/*; do
         [ -e "${f}" ] && [ "${f}" != "${out}" ] && echo "<leftover> ${f##*/}"
     done
+    return 0  # the loop's last test must not become the status under pipefail
 }
 check "resctrl not mounted: no file" "<none>" "$(mbm unmounted)"
 R="${WORK}/rdt/sys/fs/resctrl"
@@ -151,10 +152,12 @@ if command -v promtool >/dev/null 2>&1; then
         FAILS=$((FAILS + 1)); echo "FAIL core-type output passes promtool check metrics"
         promtool check metrics < "${WORK}/lint.prom"
     fi
-    if mbm rdt | grep -v '^<' | promtool check metrics >/dev/null 2>&1; then
+    mbm rdt | grep -v '^<' > "${WORK}/mbm.prom"
+    if promtool check metrics < "${WORK}/mbm.prom" >/dev/null 2>&1; then
         PASS=$((PASS + 1)); echo "ok   resctrl-mbm output passes promtool check metrics"
     else
         FAILS=$((FAILS + 1)); echo "FAIL resctrl-mbm output passes promtool check metrics"
+        promtool check metrics < "${WORK}/mbm.prom"
     fi
     configmap_key "${ROOT}/share/telemetry/prometheus.yml" k3d-gpu.rules.yml > "${WORK}/k3d-gpu.rules.yml"
     cp "${ROOT}/tests/telemetry-rules.test.yml" "${WORK}/"
