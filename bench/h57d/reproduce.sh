@@ -14,12 +14,14 @@ echo "kernel: $(uname -r)"
 echo "memory: $(awk '/MemTotal|MemAvailable|SwapTotal|SwapFree/{printf "%s %s kB; ", $1, $2}' /proc/meminfo)"
 echo "rapl: PL1 $(cat /sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw) uW, PL2 $(cat /sys/class/powercap/intel-rapl:0/constraint_1_power_limit_uw) uW"
 echo "governor: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null); epp: $(cat /sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference 2>/dev/null)"
-echo "docker: $(docker version --format '{{.Server.Version}}' 2>/dev/null); k3d: $(/usr/bin/k3d version | head -1); kubectl: $(kubectl version --client 2>/dev/null | head -1)"
-echo "repo: $(git -C "${REPO}" rev-parse HEAD) $(git -C "${REPO}" status --porcelain | wc -l) uncommitted"
+echo "docker: $(docker version --format '{{.Server.Version}}' 2>/dev/null); k3d: $("${K3D_REAL:-/usr/bin/k3d}" version | head -1); kubectl: $(kubectl version --client 2>/dev/null | head -1)"
+# An archive of a commit (wildct) carries the commit in REPO/COMMIT instead of a .git.
+if [ -f "${REPO}/COMMIT" ]; then echo "repo: $(cat "${REPO}/COMMIT") (archive)"; else
+    echo "repo: $(git -C "${REPO}" rev-parse HEAD) $(git -C "${REPO}" status --porcelain | wc -l) uncommitted"; fi
 echo "images:"
 echo "  llamacpp: $(python3 "${HERE}/h57d.py" arms | python3 -c 'import json,sys; print(json.load(sys.stdin)["llamacpp"])')"
 echo "  ovms: openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58 (k3d-gpu agent manifest's pin)"
-echo "  node: cryptoandcoffee/k3d-gpu:0.1.63@sha256:b6fc46f60a47948eb1c4e6c5e80059c7f581427429c35a2627c58fc2307e4b76"
+echo "  node: ${H57D_IMAGE:-cryptoandcoffee/k3d-gpu:0.1.63@sha256:b6fc46f60a47948eb1c4e6c5e80059c7f581427429c35a2627c58fc2307e4b76}"
 echo "models (revision, from .pinned-revision; built here, from manifest.json):"
 for d in "${G}"/models/*/ "${G}"/models/*/*/; do
     [ -f "${d}.pinned-revision" ] && echo "  ${d#"${G}/models/"} $(head -1 "${d}.pinned-revision")"

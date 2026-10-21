@@ -24,6 +24,7 @@
 #   ORDER  arm per round ("C T T C C T": baseline first, interleaved; the
 #          warm-up round r0 is extra and never scored)
 #   WORK   results and scratch kubeconfig dir (default: a mktemp dir)
+#   NODE_CPUS  the node container's cpuset (default: the CPUs outside load.py's load set)
 # Eviction and the page-residency check run as root inside a helper container
 # that mounts the node's /var/lib/rancher/k3s volume read-only: fsync, then
 # posix_fadvise(DONTNEED) on this round's model file only, then mincore. No
@@ -59,8 +60,10 @@ SELF=$(readlink -f "$0")
 ROOT=$(cd "$(dirname "${SELF}")/../.." && pwd)
 LOAD=(python3 "${ROOT}/bench/load/load.py")
 LOADCPUS=$("${LOAD[@]}" cpus)
-# The CPUs the node (pods, copies, eviction) runs on: every online CPU not in the load set.
-NODECPUS=$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import load
+# The CPUs the node (pods, copies, eviction) runs on: NODE_CPUS when set (wildct rule W2),
+# else every online CPU not in the load set.
+NODECPUS=${NODE_CPUS:-}
+[ -n "${NODECPUS}" ] || NODECPUS=$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import load
 a = set(load.parse_cpulist(open("/sys/devices/system/cpu/online").read())) - set(load.parse_cpulist(sys.argv[2]))
 print(load.format_cpulist(a))' "${ROOT}/bench/load" "${LOADCPUS}")
 # K3D_GPU_K3S_ARGS (space-separated k3s server flags, as `k3d-gpu up` takes them) for the
