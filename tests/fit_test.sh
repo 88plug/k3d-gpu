@@ -85,6 +85,47 @@ render() {
 }
 has() { grep -q -- "$2" "${WORK}/$1.yaml"; }
 
+# A GGUF repo with several split models (ggml-org Flash-Next: IQ4_NL, Q2_K, Q8_0): the fit
+# picks one with no flag; --file (or K3D_GPU_FIT_FILE) picks another; plan takes --file too.
+FLASH=ggml-org/Qwen3.8-Flash-Next-GGUF
+out=$(bash "${K3D_GPU}" fit --host "${XEON}" --model "${FLASH}" 2>&1); rc=$?
+if [ "${rc}" -eq 0 ] && grep -q "^fit: ${FLASH}:IQ4_NL on 2 GPU(s) + experts and lookup tables in DRAM" <<< "${out}"; then
+    ok "fit: a multi-GGUF repo needs no flag (IQ4_NL picked, split shards summed)"
+else fail "fit: multi-GGUF repo auto-pick (rc ${rc})" "${out}"; fi
+out=$(bash "${K3D_GPU}" fit --host "${XEON}" --model "${FLASH}" --file Qwen3.8-Flash-Next-Q8_0-00002-of-00002.gguf --explain 2>&1); rc=$?
+if [ "${rc}" -eq 0 ] && grep -q ':Q8_0 on' <<< "${out}" && grep -q -- "-hf ${FLASH}:Q8_0" <<< "${out}"; then
+    ok "fit --file: a shard name picks its whole split model"
+else fail "fit --file shard (rc ${rc})" "${out}"; fi
+out=$(K3D_GPU_FIT_FILE=Q2_K bash "${K3D_GPU}" fit --host "${XEON}" --model "${FLASH}" 2>&1); rc=$?
+if [ "${rc}" -eq 0 ] && grep -q ':Q2_K on' <<< "${out}"; then
+    ok "fit: K3D_GPU_FIT_FILE names the quant"
+else fail "fit: K3D_GPU_FIT_FILE (rc ${rc})" "${out}"; fi
+out=$(bash "${K3D_GPU}" fit --host "${XEON}" --model "${FLASH}" --file Q5_K_M 2>&1); rc=$?
+if [ "${rc}" -eq 2 ] && grep -q 'no GGUF group matches' <<< "${out}"; then
+    ok "fit --file: a quant the repo does not have is an error"
+else fail "fit --file unknown quant (rc ${rc})" "${out}"; fi
+out=$(K3D_GPU_MODEL_OPT=off K3D_GPU_FIT_HOST="${XEON}" bash "${K3D_GPU}" plan \
+    --facts "${ROOT}/tests/fixtures/battlemage-pro-b70-k616/facts.json" --model "${FLASH}" --file Q2_K 2>&1); rc=$?
+if grep -q ':Q2_K on' <<< "${out}"; then
+    ok "plan --model M --file F: the fit sizes that GGUF model"
+else fail "plan --file (rc ${rc})" "${out}"; fi
+if ! render flashq2 STUB_ALLOC=$'cpu 64\ngpu.intel.com/xe 4' K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_FIT_HOST="${XEON}" \
+        K3D_GPU_AGENT_MODEL="${FLASH}" -- --file Q2_K \
+    && grep -q "run llama-server with -hf ${FLASH}:Q2_K" "${WORK}/flashq2.err"; then
+    ok "agent manifest --file: the picked GGUF model reaches the fit (llama-server flags name it)"
+else fail "agent manifest --file" "$(cat "${WORK}/flashq2.err")"; fi
+
+# Weights that read as 0 bytes are refused loudly, never planned.
+mkdir -p "${WORK}/zero"
+cp "${FIX}/models/Qwen__Qwen3.8-Flash-Next/config.json" "${WORK}/zero/"
+printf '{"schema": "k3d-gpu.weights/v1", "format": "gguf", "source": "zero", "files": [], "classes": {}, "total_bytes": 0}\n' \
+    > "${WORK}/zero/weights.json"
+out=$(bash "${K3D_GPU}" fit --host "${XEON}" --model "${WORK}/zero" 2>&1); rc=$?
+if [ "${rc}" -eq 3 ] && grep -q 'REFUSED: weights read as 0 bytes' <<< "${out}"; then
+    ok "fit: weights that read as 0 bytes are refused"
+else fail "fit: zero weights refused (rc ${rc})" "${out}"; fi
+
+
 if render vllm STUB_ALLOC=$'cpu 64\ngpu.intel.com/xe 4' K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_FIT_HOST="${XEON}" \
         K3D_GPU_AGENT_MODEL=RedHatAI/Qwen3.8-27B-INT4 -- \
     && has vllm '--max-num-seqs=' && has vllm '--gpu-memory-utilization=0\.[0-9]' && has vllm 'k3d-gpu.io/agent-fit: "gpu' \

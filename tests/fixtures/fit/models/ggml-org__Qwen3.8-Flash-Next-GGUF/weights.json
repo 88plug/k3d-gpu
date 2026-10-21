@@ -1,0 +1,160 @@
+{
+  "classes": {
+    "embed": {
+      "bytes": 675430400,
+      "tensors": 1
+    },
+    "experts": {
+      "bytes": 67947724800,
+      "tensors": 144
+    },
+    "lm_head": {
+      "bytes": 675430400,
+      "tensors": 1
+    },
+    "ngram": {
+      "bytes": 28800138240,
+      "tensors": 1
+    },
+    "other": {
+      "bytes": 3939171840,
+      "tensors": 1077
+    }
+  },
+  "config_from": "Qwen/Qwen3.8-Flash-Next@de4b8e4d43b917e7706784d8bb445c9af86a3540",
+  "files": [
+    {
+      "bytes": 10945504,
+      "name": "Qwen3.8-Flash-Next-IQ4_NL-00001-of-00002.gguf"
+    },
+    {
+      "bytes": 102037973504,
+      "name": "Qwen3.8-Flash-Next-IQ4_NL-00002-of-00002.gguf"
+    }
+  ],
+  "format": "gguf",
+  "group": "IQ4_NL",
+  "groups": {
+    "IQ4_NL": {
+      "classes": {
+        "embed": {
+          "bytes": 675430400,
+          "tensors": 1
+        },
+        "experts": {
+          "bytes": 67947724800,
+          "tensors": 144
+        },
+        "lm_head": {
+          "bytes": 675430400,
+          "tensors": 1
+        },
+        "ngram": {
+          "bytes": 28800138240,
+          "tensors": 1
+        },
+        "other": {
+          "bytes": 3939171840,
+          "tensors": 1077
+        }
+      },
+      "files": [
+        {
+          "bytes": 10945504,
+          "name": "Qwen3.8-Flash-Next-IQ4_NL-00001-of-00002.gguf"
+        },
+        {
+          "bytes": 102037973504,
+          "name": "Qwen3.8-Flash-Next-IQ4_NL-00002-of-00002.gguf"
+        }
+      ],
+      "format": "gguf",
+      "schema": "k3d-gpu.weights/v1",
+      "source": "ggml-org/Qwen3.8-Flash-Next-GGUF@91fb00353e766eb43944ed223665ea4fb87dad47:IQ4_NL",
+      "tensor_count": 1224,
+      "total_bytes": 102037895680
+    },
+    "Q2_K": {
+      "classes": {
+        "embed": {
+          "bytes": 675430400,
+          "tensors": 1
+        },
+        "experts": {
+          "bytes": 49073356800,
+          "tensors": 144
+        },
+        "lm_head": {
+          "bytes": 675430400,
+          "tensors": 1
+        },
+        "ngram": {
+          "bytes": 28800138240,
+          "tensors": 1
+        },
+        "other": {
+          "bytes": 3893399040,
+          "tensors": 1077
+        }
+      },
+      "files": [
+        {
+          "bytes": 10945760,
+          "name": "Qwen3.8-Flash-Next-Q2_K-00001-of-00002.gguf"
+        },
+        {
+          "bytes": 83117832704,
+          "name": "Qwen3.8-Flash-Next-Q2_K-00002-of-00002.gguf"
+        }
+      ],
+      "format": "gguf",
+      "schema": "k3d-gpu.weights/v1",
+      "source": "ggml-org/Qwen3.8-Flash-Next-GGUF@91fb00353e766eb43944ed223665ea4fb87dad47:Q2_K",
+      "tensor_count": 1224,
+      "total_bytes": 83117754880
+    },
+    "Q8_0": {
+      "classes": {
+        "embed": {
+          "bytes": 675430400,
+          "tensors": 1
+        },
+        "experts": {
+          "bytes": 128345702400,
+          "tensors": 144
+        },
+        "lm_head": {
+          "bytes": 675430400,
+          "tensors": 1
+        },
+        "ngram": {
+          "bytes": 28800138240,
+          "tensors": 1
+        },
+        "other": {
+          "bytes": 4117102080,
+          "tensors": 1077
+        }
+      },
+      "files": [
+        {
+          "bytes": 10945504,
+          "name": "Qwen3.8-Flash-Next-Q8_0-00001-of-00002.gguf"
+        },
+        {
+          "bytes": 162613881344,
+          "name": "Qwen3.8-Flash-Next-Q8_0-00002-of-00002.gguf"
+        }
+      ],
+      "format": "gguf",
+      "schema": "k3d-gpu.weights/v1",
+      "source": "ggml-org/Qwen3.8-Flash-Next-GGUF@91fb00353e766eb43944ed223665ea4fb87dad47:Q8_0",
+      "tensor_count": 1224,
+      "total_bytes": 162613803520
+    }
+  },
+  "schema": "k3d-gpu.weights/v1",
+  "source": "ggml-org/Qwen3.8-Flash-Next-GGUF@91fb00353e766eb43944ed223665ea4fb87dad47",
+  "tensor_count": 1224,
+  "total_bytes": 102037895680
+}
