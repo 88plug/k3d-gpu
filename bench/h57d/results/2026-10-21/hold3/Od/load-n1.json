@@ -1,0 +1,207 @@
+{
+  "tool": "k3d-gpu/bench/llm_load.py",
+  "schema": 1,
+  "started_at": "2026-10-21T06:06:14Z",
+  "config": {
+    "base_url": "http://127.0.0.1:19515/v3",
+    "model": "gemma",
+    "prompt": "Explain in three short paragraphs how a CPU cache hierarchy reduces memory latency, and what a cache miss costs.",
+    "max_tokens": 256,
+    "temperature": 0.0,
+    "ignore_eos": true,
+    "unique_prompts": true,
+    "requests": 8,
+    "concurrency": "1",
+    "warmup": 0,
+    "timeout": 1800.0,
+    "label": "H57d Od n1",
+    "out": "/home/andrew/k3dgpu-h57d/results/H57d/hold3/Od/load-n1.json",
+    "run_id": "1dc57959"
+  },
+  "phases": [
+    {
+      "concurrency": 1,
+      "requests": 8,
+      "ok": 8,
+      "errors": 0,
+      "wall_s": 254.12289061024785,
+      "output_tokens_total": 2048,
+      "aggregate_tokens_per_s": 8.059092965147515,
+      "requests_per_s": 0.03148083189510748,
+      "stats": {
+        "first_chunk_s": {
+          "n": 8,
+          "median": 1.4084395240060985,
+          "p90": 1.5956182810477912,
+          "min": 1.3059127293527126,
+          "max": 1.5956182810477912
+        },
+        "ttft_s": {
+          "n": 8,
+          "median": 1.6468459127936512,
+          "p90": 1.8361989450640976,
+          "min": 1.5225214827805758,
+          "max": 1.8361989450640976
+        },
+        "latency_s": {
+          "n": 8,
+          "median": 31.473442220594734,
+          "p90": 35.07805489515886,
+          "min": 30.59792841831222,
+          "max": 35.07805489515886
+        },
+        "output_tokens": {
+          "n": 8,
+          "median": 256.0,
+          "p90": 256,
+          "min": 256,
+          "max": 256
+        },
+        "tokens_per_s": {
+          "n": 8,
+          "median": 8.133844845515743,
+          "p90": 8.366579478850905,
+          "min": 7.298010130981655,
+          "max": 8.366579478850905
+        },
+        "decode_tokens_per_s": {
+          "n": 8,
+          "median": 8.546554687141656,
+          "p90": 8.865948073017679,
+          "min": 7.6466360932258395,
+          "max": 8.865948073017679
+        }
+      },
+      "samples": [
+        {
+          "index": 0,
+          "ok": true,
+          "error": null,
+          "chunks": 255,
+          "content_chunks": 252,
+          "text_chars": 1269,
+          "first_chunk_s": 1.3059127293527126,
+          "ttft_s": 1.5431850361637771,
+          "latency_s": 30.728534948080778,
+          "output_tokens": 256,
+          "tokens_per_s": 8.331018723559064,
+          "decode_tokens_per_s": 8.737260329912237,
+          "prompt_tokens": 47,
+          "finished": true
+        },
+        {
+          "index": 1,
+          "ok": true,
+          "error": null,
+          "chunks": 255,
+          "content_chunks": 252,
+          "text_chars": 1252,
+          "first_chunk_s": 1.5956182810477912,
+          "ttft_s": 1.8361989450640976,
+          "latency_s": 30.59792841831222,
+          "output_tokens": 256,
+          "tokens_per_s": 8.366579478850905,
+          "decode_tokens_per_s": 8.865948073017679,
+          "prompt_tokens": 47,
+          "finished": true
+        },
+        {
+          "index": 2,
+          "ok": true,
+          "error": null,
+          "chunks": 255,
+          "content_chunks": 252,
+          "text_chars": 1271,
+          "first_chunk_s": 1.3168123099021614,
+          "ttft_s": 1.5225214827805758,
+          "latency_s": 31.45419119205326,
+          "output_tokens": 256,
+          "tokens_per_s": 8.138819988627688,
+          "decode_tokens_per_s": 8.519404446087492,
+          "prompt_tokens": 47,
+          "finished": true
+        },
+        {
+          "index": 3,
+          "ok": true,
+          "error": null,
+          "chunks": 255,
+          "content_chunks": 252,
+          "text_chars": 1271,
+          "first_chunk_s": 1.4866117793135345,
+          "ttft_s": 1.7505920063704252,
+          "latency_s": 31.49269324913621,
+          "output_tokens": 256,
+          "tokens_per_s": 8.128869702403799,
+          "decode_tokens_per_s": 8.57370492819582,
+          "prompt_tokens": 47,
+          "finished": true
+        },
+        {
+          "index": 4,
+          "ok": true,
+          "error": null,
+          "chunks": 255,
+          "content_chunks": 252,
+          "text_chars": 1232,
+          "first_chunk_s": 1.3302672686986625,
+          "ttft_s": 1.5524015896953642,
+          "latency_s": 31.850057877600193,
+          "output_tokens": 256,
+          "tokens_per_s": 8.037662003121259,
+          "decode_tokens_per_s": 8.416492601832008,
+          "prompt_tokens": 47,
+          "finished": true
+        },
+        {
+          "index": 5,
+          "ok": true,
+          "error": null,
+          "chunks": 255,
+          "content_chunks": 252,
+          "text_chars": 1243,
+          "first_chunk_s": 1.3198539740405977,
+          "ttft_s": 1.5636342577636242,
+          "latency_s": 31.66345908585936,
+          "output_tokens": 256,
+          "tokens_per_s": 8.085029475327524,
+          "decode_tokens_per_s": 8.471810100435478,
+          "prompt_tokens": 47,
+          "finished": true
+        },
+        {
+          "index": 6,
+          "ok": true,
+          "error": null,
+          "chunks": 255,
+          "content_chunks": 252,
+          "text_chars": 1275,
+          "first_chunk_s": 1.4895313340239227,
+          "ttft_s": 1.7300575678236783,
+          "latency_s": 35.07805489515886,
+          "output_tokens": 256,
+          "tokens_per_s": 7.298010130981655,
+          "decode_tokens_per_s": 7.6466360932258395,
+          "prompt_tokens": 47,
+          "finished": true
+        },
+        {
+          "index": 7,
+          "ok": true,
+          "error": null,
+          "chunks": 255,
+          "content_chunks": 252,
+          "text_chars": 1270,
+          "first_chunk_s": 1.5214508417993784,
+          "ttft_s": 1.7568752709776163,
+          "latency_s": 31.2547341119498,
+          "output_tokens": 256,
+          "tokens_per_s": 8.190759168932493,
+          "decode_tokens_per_s": 8.64469524295804,
+          "prompt_tokens": 47,
+          "finished": true
+        }
+      ]
+    }
+  ]
+}
