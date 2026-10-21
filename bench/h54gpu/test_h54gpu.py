@@ -5,6 +5,7 @@ import os
 import struct
 import sys
 import tempfile
+import subprocess
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -181,6 +182,36 @@ class Ladder(unittest.TestCase):
     def test_bad_rung(self):
         with self.assertRaises(SystemExit):
             ladder.apply(self.doc(), "e")
+
+
+class CardParse(unittest.TestCase):
+    """lib.sh's card_free parsers on crescent's real `xpu-smi ps` and `fuser -v` output."""
+    XPU = """
+  PID         Command                   DeviceID     SHR          MEM
+  3900003     sglang::scheduler_TP0     0            15496768     17114748
+  3900352     sglang::scheduler_TP1     1            15496768     17097060
+"""
+    FUSER_MASKED = """                     USER        PID ACCESS COMMAND
+/dev/dri/renderD130: root      3899938 F.... sglang::schedul
+                     root      3900003 F.... sglang::schedul
+"""
+    FUSER_MAPPED = FUSER_MASKED + "                     root      3898661 F...m python\n"
+
+    def sh(self, fn, stdin):
+        lib = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib.sh")
+        r = subprocess.run(["bash", "-c", f'OUT=/tmp . "{lib}"; {fn}'], input=stdin, text=True)
+        return r.returncode == 0
+
+    def test_xpu_listed(self):
+        self.assertTrue(self.sh("xpu_listed 0", self.XPU))
+        self.assertTrue(self.sh("xpu_listed 1", self.XPU))
+        self.assertFalse(self.sh("xpu_listed 2", self.XPU))
+        self.assertFalse(self.sh("xpu_listed 3", "\n  No data\n"))
+
+    def test_fuser_mapped(self):
+        self.assertFalse(self.sh("fuser_mapped", self.FUSER_MASKED))
+        self.assertTrue(self.sh("fuser_mapped", self.FUSER_MAPPED))
+        self.assertFalse(self.sh("fuser_mapped", ""))
 
 
 if __name__ == "__main__":

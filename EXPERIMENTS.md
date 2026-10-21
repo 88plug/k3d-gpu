@@ -2819,7 +2819,10 @@ measurement: the operator authorised this campaign to stop (never remove) `qwen3
 live SGLang server on cards 2 and 3 (`ZE_AFFINITY_MASK=2,3`, renderD130 and renderD131), when
 no card is free. Its `docker inspect` is saved to `~/k3dgpu-gemma/restore/` first, the stop and
 the restart are appended to `gpu-state.txt`, and after the last hold it is started again and
-must answer a chat request. `qwen38-a-hr` (cards 0 and 1) is never touched. A card is checked at
+must answer a chat request. `campaign.sh` does this: it takes the lock once, stops the server,
+runs the card holds back to back (`hold.sh` with `H54_LOCKED=1`, each still under its own cap,
+start rule and cleanup), and restarts the server on any exit, so it is down once.
+`qwen38-a-hr` (cards 0 and 1) is never touched. A card is checked at
 hold start to be free: no `xpu-smi ps` process on it, and no process holding its render node
 memory-mapped (`fuser` access flag `m`). `qwen38-a-hr`'s Level Zero processes hold an unmapped
 fd on all four render nodes (enumeration; `xpu-smi ps` lists them only on cards 0 and 1), which

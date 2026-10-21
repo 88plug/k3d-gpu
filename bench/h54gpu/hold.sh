@@ -22,10 +22,16 @@ disk() { df -P / | awk 'NR==2 {gsub("%", "", $5); print $5}'; }
 snapshot() { date -u +%FT%TZ; uptime; ps -eo pcpu,pid,user,comm --sort=-pcpu | head -11; echo "aiperf_procs: $(aiperf_n)"; df -P / | tail -1; docker ps --format '{{.Names}}' | sort | tr '\n' ' '; echo; }
 clusters() { k3d cluster list -o json 2>/dev/null | python3 -c 'import json,re,sys; print(" ".join(c["name"] for c in json.load(sys.stdin) if re.match(r"k3dgpu-g-", c["name"])))'; }
 
-log "waiting for the lock"
-exec 9> "${HOME}/k3dgpu-bench.lock"
-flock -w 21600 9 || { log "lock not taken in 21600 s"; exit 4; }
-log "lock taken"
+# H54_LOCKED=1: the caller already holds the lock on an inherited fd (campaign.sh runs the
+# card holds back to back inside one lock, so the live server stopped for them is down once).
+if [ -z "${H54_LOCKED:-}" ]; then
+    log "waiting for the lock"
+    exec 9> "${HOME}/k3dgpu-bench.lock"
+    flock -w 21600 9 || { log "lock not taken in 21600 s"; exit 4; }
+    log "lock taken"
+else
+    log "lock held by the caller"
+fi
 waited=0
 while :; do
     l1=$(cut -d' ' -f1 /proc/loadavg) a=$(aiperf_n)

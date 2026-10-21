@@ -37,9 +37,14 @@ wait_sa() {
 card_free() {
     local rd="/dev/dri/renderD$((128 + $1))"
     [ -e "${rd}" ] || return 1
-    sudo -n xpu-smi ps 2>/dev/null | awk -v d="$1" '$1 ~ /^[0-9]+$/ && $3 == d {found = 1} END {exit found}' || return 1
+    sudo -n xpu-smi ps 2>/dev/null | xpu_listed "$1" && return 1
     sudo -n fuser -v "${rd}" 2>&1 | fuser_mapped && return 1
     return 0
+}
+
+# xpu_listed N: true when `xpu-smi ps` output on stdin lists a process on device N.
+xpu_listed() {
+    awk -v d="$1" '$1 ~ /^[0-9]+$/ && $3 == d {found = 1} END {exit !found}'
 }
 
 # fuser_mapped: true when `fuser -v` output on stdin has an access field with m (mmap).
