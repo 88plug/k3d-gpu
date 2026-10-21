@@ -105,8 +105,12 @@ The overhead is an estimate from the formula, not a measurement;
 annotates the pod `k3d-gpu.io/agent-fit`. `K3D_GPU_AGENT_MAX_LEN`, `K3D_GPU_AGENT_MAX_NUM_SEQS`
 and `K3D_GPU_AGENT_GPUS` are inputs the fit checks, not values that replace it. With
 `K3D_GPU_AGENT_BACKEND` unset, the engine the fit picks serves the model: OVMS, vLLM or
-llama-server. A backend that is set and cannot serve the fit is refused, with the
-llama-server flags to run instead.
+llama-server. With `--model`, the model optimizer first picks the variant for the default
+engine (OVMS: Gemma 4's OpenVINO IR, for example). When that engine has nothing to serve,
+as with Qwen3.8-Flash-Next, the id is served as given, by the engine its fit picks. When
+the fit then picks another engine, the optimizer's choices are made again for that engine,
+pinned to the model the fit sized. A backend that is set and cannot serve the fit is
+refused, with the llama-server flags to run instead.
 
 ## The llama.cpp backend
 
@@ -118,10 +122,10 @@ otherwise. Beyond the fit's flags it sets:
 | Flag | Why |
 | --- | --- |
 | `--model` + `--model-url` | the GGUF at the commit the fit read, downloaded once into the PVC (llama.cpp resumes it and checks its ETag) |
-| `--jinja`, `--reasoning=off` | the GGUF's own chat template; its tool-call format is picked from the template (Gemma 4 `<\|tool_call>call:`, Qwen3.8's XML `<tool_call><function=...>`); thinking off for agent turns |
+| `--jinja`, `--reasoning=off` | the GGUF's own chat template; its tool-call format is picked from the template (Gemma 4 `<\|tool_call>call:`, Qwen3.8's XML `<tool_call><function=...>`); thinking off for agent turns (`K3D_GPU_AGENT_THINKING=on` or `model` changes it) |
 | `--threads`, `--threads-batch` | the pod's physical cores and CPUs (the P-core balloon on a hybrid node); llama.cpp otherwise counts the host's cores |
 | `--load-mode=mmap+mlock` | CPU placement only, with `IPC_LOCK`. On a GPU or experts-in-DRAM placement the lock grows to the end of the furthest CPU tensor (`src/llama-model-loader.cpp:1726-1728`), so it would also hold GPU tensors and could pass the pod limit |
-| `--spec-type=draft-mtp` | only with `K3D_GPU_AGENT_DRAFT=mtp`: no measurement in EXPERIMENTS.md shows a draft winning on this hardware ([H34x](../EXPERIMENTS.md) refuted the CPU draft on the Xeon; H57dm is pending). A GGUF with an MTP head drafts from it; Google's QAT GGUF has none, so its QAT assistant is converted once to Q4_0, the target's precision |
+| `--spec-type=draft-mtp` | when the model optimizer picks a GGUF with an MTP head, or with `K3D_GPU_AGENT_DRAFT=mtp` (`off` disables it); otherwise off: no measurement in EXPERIMENTS.md shows a draft winning on this hardware ([H34x](../EXPERIMENTS.md) refuted the CPU draft on the Xeon; H57dm is pending). A GGUF with an MTP head drafts from it; Google's QAT GGUF has none, so its QAT assistant is converted once to Q4_0, the target's precision |
 
 Safetensors weights whose architecture only llama.cpp runs here, such as
 Qwen3.8-Flash-Next, are converted once. A Job (`gguf-convert-<hash of its inputs>`) runs

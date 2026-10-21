@@ -7471,12 +7471,15 @@ EOF
 #                  card's template; convert_hf_to_gguf.py copies the repo's); its tool-call
 #                  format is picked from the template (common/chat.cpp: Gemma 4
 #                  <|tool_call>call:, Qwen3-Coder XML <tool_call><function=...>)
-#   --reasoning off  thinking off for agent turns: it sets enable_thinking=false in the
-#                  template (common/arg.cpp -rea), which Gemma 4 and Qwen3.8 both read
-#   --spec-type draft-mtp  only with K3D_GPU_AGENT_DRAFT=mtp: no measurement in
-#                  EXPERIMENTS.md shows a draft winning here (H34x REFUTED the CPU draft on
-#                  the Xeon; H57dm, Gemma 4's MTP drafter, is pending), so it is off by
-#                  default. A GGUF with an MTP head (Qwen3.8's nextn, kept by the
+#   --reasoning off  thinking off for agent turns (K3D_GPU_AGENT_THINKING): it sets
+#                  enable_thinking=false in the template (common/arg.cpp -rea), which
+#                  Gemma 4 and Qwen3.8 both read
+#   --spec-type draft-mtp  when the model optimizer picks a GGUF with an MTP head, or with
+#                  K3D_GPU_AGENT_DRAFT=mtp; otherwise off: no measurement in EXPERIMENTS.md
+#                  shows a draft winning here (H34x REFUTED the CPU draft on the Xeon;
+#                  H57dm, Gemma 4's MTP drafter, is pending). The optimizer's own llama.cpp
+#                  arguments are not used: its GGUF drafter is a repo id, not a file.
+#                  A GGUF with an MTP head (Qwen3.8's nextn, kept by the
 #                  conversion) drafts from it; Google's QAT GGUF ships none, so its QAT
 #                  assistant is converted once to Q4_0, the target's precision (the QAT
 #                  GGUF card asks for a drafter of the same precision). Default draft length.
@@ -7622,7 +7625,14 @@ llamacpp_manifest() {
     fi
     args+=$'\n'"${item}--alias=${AGENT_MODEL_NAME}"
     args+=$'\n'"${item}--host=0.0.0.0"$'\n'"${item}--port=${LLAMA_SERVE_PORT}"
-    args+=$'\n'"${item}--jinja"$'\n'"${item}--reasoning=off"
+    args+=$'\n'"${item}--jinja"
+    # Thinking off for agent turns, server-side (K3D_GPU_AGENT_THINKING, as the optimizer reads it).
+    case "${K3D_GPU_AGENT_THINKING:-off}" in
+        off) args+=$'\n'"${item}--reasoning=off" ;;
+        on) args+=$'\n'"${item}--reasoning=on" ;;
+        model) ;;
+        *) err "K3D_GPU_AGENT_THINKING must be off, on or model, got '${K3D_GPU_AGENT_THINKING}'" ;;
+    esac
     local f
     for f in ${flags}; do args+=$'\n'"${item}\"${f}\""; done
     local threads
@@ -7636,7 +7646,8 @@ llamacpp_manifest() {
     # MTP speculative decoding, on request only (see above).
     local draft=${K3D_GPU_AGENT_DRAFT:-default} d target dsrc quant
     case "${draft,,}" in
-        default|off|0|"") draft="" ;;
+        default) draft=""; [ "${AGENT_OPT_SPEC:-}" != mtp ] || draft=mtp ;;  # the optimizer's pick: an MTP head
+        off|0|"") draft="" ;;
         mtp) draft=mtp ;;
         *) err "K3D_GPU_AGENT_DRAFT '${draft}' does not apply to llama.cpp (use off or mtp)" ;;
     esac
@@ -10153,8 +10164,22 @@ agent_follow_engine() {
         [ "${engine}" != vllm ] || [ "${AGENT_SEL%% *}" != CPU ] \
             || err "${why}: vLLM on the CPU is not an agent backend; serve an OpenVINO IR or GGUF variant of ${AGENT_MODEL}"
         info "fit: backend ${engine}, the engine the fit picked for ${AGENT_MODEL} (K3D_GPU_AGENT_BACKEND is unset)" >&2
+        local model=${AGENT_MODEL} name=${AGENT_MODEL_NAME} rev=${AGENT_REVISION}
         AGENT_BACKEND=${engine}
         agent_config
+        # The fit sized this model: keep it. The optimizer's choices were for the other
+        # engine; redo them for this one, pinned to the model the fit sized.
+        AGENT_MODEL=${model} AGENT_MODEL_NAME=${name} AGENT_REVISION=${rev}
+        AGENT_OPT_ARGS=() AGENT_OPT_SPEC=""
+        if [ -n "${AGENT_OPT_MODEL}" ] && [ "${K3D_GPU_MODEL_OPT:-auto}" != off ]; then
+            K3D_GPU_AGENT_VARIANT=${model} agent_optimize
+            if [ "${AGENT_MODEL}" != "${model}" ]; then
+                warn "model optimizer: for ${engine} it picked ${AGENT_MODEL}, not the ${model} the fit sized: serving ${model} with ${engine}'s defaults"
+                AGENT_MODEL=${model} AGENT_MODEL_NAME=${name} AGENT_REVISION=${rev}
+                AGENT_OPT_ARGS=() AGENT_OPT_SPEC=""
+                AGENT_TOOL_PARSER=${K3D_GPU_AGENT_TOOL_PARSER-} AGENT_REASONING_PARSER=${K3D_GPU_AGENT_REASONING_PARSER-}
+            fi
+        fi
         # K3D_GPU_AGENT_IMAGE names an image of the backend it was set for, not this one.
         if [ -n "${K3D_GPU_AGENT_IMAGE:-}" ]; then
             warn "K3D_GPU_AGENT_IMAGE is not used: the fit picked ${engine} (set K3D_GPU_AGENT_BACKEND=${engine} to give it an image)"
@@ -10573,10 +10598,19 @@ agent_host_text() {
     echo "${cpu} + $(resource_total "${res}")x ${res}${cls}"
 }
 
+# True when the fit will pick the engine: no K3D_GPU_AGENT_BACKEND, and the fit on.
+agent_fit_picks_engine() {
+    [ -z "${AGENT_BACKEND_SET}" ] && [ "${K3D_GPU_FIT:-auto}" != off ] && [ "${K3D_GPU_FIT:-auto}" != 0 ]
+}
+
 # agent_opt_as_given <why>: no optimizer decision. vLLM serves the id as given;
-# OVMS pulls only OpenVINO IR (*-ov), so any other id keeps OVMS's default model.
+# OVMS pulls only OpenVINO IR (*-ov), so any other id keeps OVMS's default model,
+# unless the fit picks the engine (agent_fit_picks_engine): then the id is served as
+# given, by the engine its fit picks (llama.cpp for a GGUF, or after a conversion).
 agent_opt_as_given() {
-    if [ "${AGENT_APP}" = ovms ] && [[ "${AGENT_OPT_MODEL,,}" != *-ov ]]; then
+    if agent_fit_picks_engine; then
+        warn "$1: serving ${AGENT_OPT_MODEL} as given, on the engine its fit picks"
+    elif [ "${AGENT_APP}" = ovms ] && [[ "${AGENT_OPT_MODEL,,}" != *-ov ]]; then
         warn "$1: ${AGENT_OPT_MODEL} is not an OpenVINO IR, so OVMS keeps its default model"
         agent_config
     else
@@ -10641,7 +10675,13 @@ agent_optimize() {
     rm -f "${bundle}" "${errf}"
     eval "${out}"
     if [ -z "${OPT_MODEL}" ] && [ -z "${OPT_CONVERSION}" ]; then
-        # Nothing this engine can serve: the engine's own defaults, as without --model.
+        # Nothing this engine can serve: the engine's own defaults, as without --model;
+        # or, when the fit picks the engine, the id as given (Qwen3.8-Flash-Next: only
+        # llama.cpp runs it here, after a GGUF conversion).
+        if agent_fit_picks_engine; then
+            warn "model optimizer: ${OPT_WARNING}; serving ${AGENT_OPT_MODEL} as given, on the engine its fit picks"
+            return 0
+        fi
         warn "model optimizer: ${OPT_WARNING}"
         agent_config
         return 0

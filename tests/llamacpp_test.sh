@@ -44,12 +44,19 @@ esac
 exit 0
 EOF
 chmod +x "${WORK}/bin/kubectl"
+# The fit metadata under main and under its pinned commit (the revision the optimizer names).
 for d in "${FIX}"/models/*/; do
     n=$(basename "${d}")
     ln -s "${d%/}" "${WORK}/cache/${n}@main"
+    rev=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("source", "@").split("@")[1])' "${d}/weights.json")
+    [ -z "${rev}" ] || ln -s "${d%/}" "${WORK}/cache/${n}@${rev}"
 done
+# The model optimizer (agent up --model) reads tests/fixtures/hf, never the network.
 export K3D_GPU_SYSROOT="${WORK}/root" K3D_GPU_FIT_CACHE="${WORK}/cache" XDG_STATE_HOME="${WORK}/state" \
+    XDG_CACHE_HOME="${WORK}/xdg" K3D_GPU_HF_FIXTURES="${ROOT}/tests/fixtures/hf" \
     K3D_GPU_AUTOQUANT_CACHE="${WORK}/no-autoquant.json" PATH="${WORK}/bin:${PATH}"
+unset K3D_GPU_AGENT_OPT_MODEL K3D_GPU_AGENT_MODEL K3D_GPU_AGENT_BACKEND K3D_GPU_AGENT_DEVICE K3D_GPU_AGENT_DRAFT \
+    K3D_GPU_AGENT_VARIANT K3D_GPU_AGENT_THINKING K3D_GPU_MODEL_OPT K3D_GPU_FIT
 XEON="${FIX}/hosts/xeon6741p-4xb70.json"
 DESK="${FIX}/hosts/desktop-i9-nogpu.json"
 # The Xeon's cluster after `up` pinned the free cards: two B70s advertised, XMX labelled.
@@ -215,21 +222,28 @@ if ! render auto "${XEON_ENV[@]}" K3D_GPU_AGENT_DRAFT=auto -- --model "${GEMMA_G
     ok "K3D_GPU_AGENT_DRAFT=auto (an OVMS setting) does not turn MTP on"
 else fail "K3D_GPU_AGENT_DRAFT=auto on llama.cpp" "$(show auto)"; fi
 
-# --- Gemma 4 safetensors: the fit picks vLLM, tensor parallel over the two free B70s ------
-if render st "${XEON_ENV[@]}" -- --model google/gemma-4-26B-A4B-it \
+# --- H58's command: the optimizer picks Gemma 4's OpenVINO IR, the fit one free B70 -------
+if render h58 "${XEON_ENV[@]}" -- --model google/gemma-4-26B-A4B-it \
+    && has h58 '^  name: ovms$' && has h58 '--source_model=OpenVINO/gemma-4-26b-a4b-it-int4-ov' \
+    && has h58 '--target_device=GPU' && has h58 'k3d-gpu.io/agent-fit: "gpu ' \
+    && grep -A3 '^            limits:$' "${WORK}/h58.yaml" | grep -q '^              gpu.intel.com/xe: 1$'; then
+    ok "agent up --model google/gemma-4-26B-A4B-it on the Xeon (2 B70s busy): OVMS, OpenVINO int4 IR, one free B70"
+else fail "H58's Gemma 4 command" "$(show h58)"; fi
+# The safetensors as given (no optimizer): the fit picks vLLM, tensor parallel over the two free B70s.
+if render st "${XEON_ENV[@]}" K3D_GPU_AGENT_MODEL=google/gemma-4-26B-A4B-it -- \
     && has st '^  name: vllm$' && has st '--tensor-parallel-size=2' \
     && grep -A3 '^            limits:$' "${WORK}/st.yaml" | grep -q '^              gpu.intel.com/xe: 2$'; then
-    ok "Gemma 4 safetensors on the Xeon: vLLM tensor parallel on the two free B70s, no flag given"
+    ok "Gemma 4 safetensors as given: the backend follows the fit to vLLM tensor parallel on the two free B70s"
 else fail "Gemma 4 safetensors follows the fit to vLLM" "$(show st)"; fi
 
 # The fit sizes vLLM's CPU build only for EAT; the agent has no such backend.
-if ! render vcpu STUB_ALLOC='cpu 64' K3D_GPU_FIT_HOST="${XEON}" K3D_GPU_AGENT_DEVICE=CPU -- --model RedHatAI/Qwen3.8-27B-INT4 \
+if ! render vcpu STUB_ALLOC='cpu 64' K3D_GPU_FIT_HOST="${XEON}" K3D_GPU_AGENT_DEVICE=CPU K3D_GPU_AGENT_MODEL=RedHatAI/Qwen3.8-27B-INT4 -- \
     && grep -q 'vLLM on the CPU is not an agent backend' "${WORK}/vcpu.err"; then
     ok "a fit that picks vLLM's CPU build is refused, naming the variants the agent serves"
 else fail "vLLM CPU fit refused" "$(show vcpu)"; fi
 
 # --- a backend the user set is kept ----------------------------------------------------
-if ! render set "${XEON_ENV[@]}" K3D_GPU_AGENT_BACKEND=ovms -- --model "${GEMMA_GGUF}" \
+if ! render set "${XEON_ENV[@]}" K3D_GPU_AGENT_BACKEND=ovms K3D_GPU_AGENT_MODEL="${GEMMA_GGUF}" -- \
     && grep -q 'K3D_GPU_AGENT_BACKEND=ovms cannot serve it: run llama-server with' "${WORK}/set.err"; then
     ok "K3D_GPU_AGENT_BACKEND=ovms is not overridden by the fit: refused with the llama-server flags"
 else fail "an explicit backend is kept" "$(show set)"; fi
