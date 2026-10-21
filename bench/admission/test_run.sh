@@ -42,7 +42,15 @@ esac
 [ "$1" = perf ] && exec sleep 3599.25
 exec "$@"
 EOF
+# df reports the use in ${WORK}/df.pct, so the cases do not depend on how full
+# the test host's / is.
+cat > "${WORK}/bin/df" << EOF
+#!/usr/bin/env bash
+echo Use%
+echo " \$(cat "${WORK}/df.pct")%"
+EOF
 chmod +x "${WORK}/bin/"*
+echo 10 > "${WORK}/df.pct"
 echo snap > "${WORK}/snap"
 
 if [ ! -f "${HERE}/run.sh" ]; then
@@ -87,6 +95,14 @@ assert len(s) == 20, len(s)
 assert abs(round(statistics.median(s), 4) - float(sys.argv[2])) < 1e-9
 PY
 then ok "preroll_20_median_reference"; else fail "preroll_20_median_reference"; fi
+
+# 3. The disk gate: with / above 97% the round aborts (exit 3) before the lock.
+echo 98 > "${WORK}/df.pct"
+PATH="${WORK}/bin:${PATH}" K3DGPU_LIVE_LOCK="${WORK}/disk.lock" AD_SNAPSHOT="${WORK}/snap" \
+    AD_MODEL_DIR="${WORK}/model" AD_PORT="${PORT}" timeout 30 bash "${HERE}/run.sh" "${WORK}/disk" 1 > /dev/null 2>&1
+rc=$?
+if [ "${rc}" = 3 ] && [ ! -e "${WORK}/disk.lock" ]; then ok "disk_gate_aborts"; else fail "disk_gate_aborts: rc ${rc}"; fi
+echo 10 > "${WORK}/df.pct"
 
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" = 0 ]
