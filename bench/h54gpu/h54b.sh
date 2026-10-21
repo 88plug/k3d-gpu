@@ -12,7 +12,7 @@ ROOT=$(cd "${HERE}/../.." && pwd)
 export ROOT
 hold=$1
 shift
-OUT=${HOME}/k3dgpu-gemma/results/H54b/hold${hold}
+OUT=${HOME}/k3dgpu-gemma/results/H54b/${SMOKE:+smoke-}hold${hold}
 mkdir -p "${OUT}"
 export KUBECONFIG=${OUT}/kubeconfig PATH=${HOME}/k3dgpu-gemma/bin:${PATH}
 . "${HERE}/lib.sh"
@@ -28,7 +28,7 @@ LSQ_GGUF=Intel_Qwen3.8-27B-q4km-AutoRound/Qwen3.8-27B-Q4_K_M.gguf
 
 reproduce "bash bench/h54gpu/h54b.sh ${hold} $*" "${OVMS_GPU}" "${LCPP_INTEL}" "${SCALER}" "${BUSYBOX}"
 IFS=, read -r -a free <<< "${CARDS:?CARDS=comma list of free card indices}"
-for c in "${free[@]}"; do card_free "${c}" || { say "card ${c} busy at hold start: no hold"; exit 6; }; done
+[ -n "${SMOKE:-}" ] || for c in "${free[@]}"; do card_free "${c}" || { say "card ${c} busy at hold start: no hold"; exit 6; }; done
 say "H54b hold ${hold} cards ${CARDS} arms $*"
 K3D_GPU_CLUSTER=${CL} K3D_GPU_IMAGE=${NODE_IMAGE} K3D_GPU_K3S_ARGS=${C1_ARGS} \
     K3D_GPU_NODE_LABELS=ei-inference-eligible=true H54_MODELS=${MODELS} \
@@ -71,6 +71,16 @@ YAML
 dp_ok=""
 if [ "${#free[@]}" -eq 4 ]; then dp_ok=1; elif hold_busy; then dp_ok=1; fi
 say "device-plugin arms: ${dp_ok:+allowed}${dp_ok:-not run} ($(xargs < "${OUT}/gpu-hold.txt" 2>/dev/null))"
+# SMOKE=1: the wiring smoke (amendment G1): cluster, placeholders and X1q's manifest render only;
+# no engine starts and no card is opened. Discarded.
+if [ -n "${SMOKE:-}" ]; then
+    K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3.8-27B-int4-ov K3D_GPU_AGENT_REVISION=7b20ea8c7c8ad1d81c2e6b1785ba7cd9ed80a26d \
+        K3D_GPU_AGENT_STORAGE=40Gi K3D_GPU_AGENT_IMAGE=${OVMS_GPU} K3D_GPU_AGENT_MODEL_NAME=m K3D_GPU_CLUSTER=${CL} \
+        "${ROOT}/scripts/k3d-gpu" agent manifest > "${OUT}/X1q.yaml" 2>> "${OUT}/arms.log"
+    kubectl get node -o jsonpath='{.items[0].status.allocatable}' > "${OUT}/allocatable.json"
+    say "smoke done: manifest rc=$? $(grep -c 'gpu.intel.com/xe' "${OUT}/X1q.yaml") xe lines"
+    exit 0
+fi
 
 # pinned_pod NAME CARD IMAGE COMMAND_JSON ARGS_JSON ENV_JSON: a privileged pod with the model tree
 # and only card CARD's render node under /dev/dri.
