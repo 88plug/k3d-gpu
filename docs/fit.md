@@ -163,9 +163,9 @@ The overhead is an estimate from the formula, not a measurement;
 
 `agent up` applies them, sets the pod's memory request and limit to the fit, and
 annotates the pod `k3d-gpu.io/agent-fit`. `K3D_GPU_AGENT_MAX_LEN`, `K3D_GPU_AGENT_MAX_NUM_SEQS`
-and `K3D_GPU_AGENT_GPUS` (vLLM only: an OVMS pod holds one GPU, and `fit --gpus 2` with
-OVMS is refused as "OVMS serves one GPU") are inputs the fit checks, not values that
-replace it. With
+and `K3D_GPU_AGENT_GPUS` are inputs the fit checks, not values that replace it.
+`K3D_GPU_AGENT_GPUS` reaches the fit for the vLLM and llama.cpp backends only: an OVMS pod
+holds one GPU, and `fit --gpus 2` with OVMS is refused as "OVMS serves one GPU". With
 `K3D_GPU_AGENT_BACKEND` unset, the engine the fit picks serves the model: OVMS, vLLM or
 llama-server. With `--model`, the model optimizer first picks the variant for the default
 engine (OVMS: Gemma 4's OpenVINO IR, for example). When that engine has nothing to serve,

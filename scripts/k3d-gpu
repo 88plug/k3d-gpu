@@ -423,7 +423,8 @@ Environment:
   K3D_GPU_AUTOQUANT     auto | off: on OVMS/CPU with no K3D_GPU_AGENT_MODEL, serve the
                         precision measured for this host fingerprint (default: auto)
   K3D_GPU_AUTOQUANT_CACHE  measured-pick cache (default: \$XDG_STATE_HOME/k3d-gpu/autoquant.json)
-  K3D_GPU_AGENT_GPUS    vllm/llm-scaler: GPUs (or Gaudis) to shard the model across (default: 1)
+  K3D_GPU_AGENT_GPUS    vllm/llm-scaler/llama.cpp: GPUs (or Gaudis) to shard or split the model
+                        across (default: 1; OVMS serves one GPU)
   K3D_GPU_AGENT_MAX_LEN vllm/llm-scaler: max context tokens (default: 8192)
   K3D_GPU_FIT           auto | on | off: size the agent model with 'fit' before agent up
                         renders it (default: auto = a model you chose; on also sizes the
@@ -7634,8 +7635,9 @@ agent_config
 # OVMS only: DEBUG also prints the compiled model's EXECUTION_DEVICES (e.g. GPU.0:
 # Intel(R) UHD Graphics 770), and every HTTP request, readiness probes included.
 AGENT_LOG_LEVEL="${K3D_GPU_AGENT_LOG_LEVEL:-INFO}"
-# vLLM only: GPUs (or Gaudis) the model is sharded across (--tensor-parallel-size),
-# and the longest context, sized so the default model's KV cache fits a 12 GB card.
+# vLLM: GPUs (or Gaudis) the model is sharded across (--tensor-parallel-size); llama.cpp:
+# the cards its layers are split over. And the longest context, sized so the default
+# model's KV cache fits a 12 GB card.
 AGENT_GPUS="${K3D_GPU_AGENT_GPUS:-1}"
 AGENT_MAX_LEN="${K3D_GPU_AGENT_MAX_LEN:-8192}"
 
@@ -11200,8 +11202,9 @@ agent_fit() {
         || { fit_soft "${mode}" "fit: no metadata for ${AGENT_MODEL} (offline, private or gated: set HF_TOKEN)"; return 0; }
     [ -z "${K3D_GPU_AGENT_MAX_LEN:-}" ] || args+=(--ctx "${K3D_GPU_AGENT_MAX_LEN}")
     [ -z "${K3D_GPU_AGENT_MAX_NUM_SEQS:-}" ] || args+=(--seqs "${K3D_GPU_AGENT_MAX_NUM_SEQS}")
-    # K3D_GPU_AGENT_GPUS shards a vLLM model; an OVMS pod holds one GPU whatever it says.
-    [ -z "${K3D_GPU_AGENT_GPUS:-}" ] || [ "${AGENT_APP}" != vllm ] || args+=(--gpus "${K3D_GPU_AGENT_GPUS}")
+    # K3D_GPU_AGENT_GPUS shards a vLLM model or splits a llama.cpp one; an OVMS pod holds
+    # one GPU whatever it says.
+    [ -z "${K3D_GPU_AGENT_GPUS:-}" ] || [ "${AGENT_APP}" = ovms ] || args+=(--gpus "${K3D_GPU_AGENT_GPUS}")
     # agent up replaces the running server (the Deployment is Recreate, and a backend
     # switch deletes the other one): it is stopped before the probe, so the memory it holds
     # is measured as free, not as someone else's. A model that then does not fit gets the

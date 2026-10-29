@@ -379,6 +379,14 @@ else fail "an explicit backend is kept" "$(show set)"; fi
 if render setl "${XEON_ENV[@]}" K3D_GPU_AGENT_BACKEND=llama.cpp -- --model "${GEMMA_GGUF}" && has setl '^  name: llamacpp$'; then
     ok "K3D_GPU_AGENT_BACKEND=llama.cpp serves the GGUF"
 else fail "K3D_GPU_AGENT_BACKEND=llama.cpp" "$(show setl)"; fi
+# K3D_GPU_AGENT_GPUS is the fit's --gpus for llama.cpp as for vLLM (an OVMS pod holds one
+# GPU): the QAT GGUF, one card's model, is split layer by layer over the two free B70s asked.
+if render setl2 "${XEON_ENV[@]}" K3D_GPU_AGENT_BACKEND=llama.cpp K3D_GPU_AGENT_GPUS=2 -- --model "${GEMMA_GGUF}" \
+    && grep -q "fit: ${GEMMA_GGUF}:Q4_0 on 2 GPUs, layer split via llama.cpp" "${WORK}/setl2.err" \
+    && server_args setl2 | grep -A1 -x -- '-ts' | tail -n1 | grep -qE '^[0-9]+,[0-9]+$' \
+    && grep -A3 '^            limits:$' "${WORK}/setl2.yaml" | grep -q '^              gpu.intel.com/xe: 2$'; then
+    ok "K3D_GPU_AGENT_BACKEND=llama.cpp K3D_GPU_AGENT_GPUS=2: the fit splits the GGUF over two B70s, -ts in layers"
+else fail "K3D_GPU_AGENT_GPUS=2 reaches the llama.cpp fit" "$(show setl2)"; fi
 
 # --- MTP on request ---------------------------------------------------------------------
 if render mtp "${XEON_ENV[@]}" K3D_GPU_AGENT_DRAFT=mtp -- --model "${GEMMA_GGUF}" \
