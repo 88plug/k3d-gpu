@@ -63,5 +63,28 @@ else
     fail "the 'tracked files already at' tag-HEAD fallback is still present"
 fi
 
+# build-and-push.yml repin-images: its GITHUB_TOKEN push cannot create or update
+# .github/workflows/ files (no `workflows` permission), so the job never writes
+# there, and it stops before the push when a workflow file changed anyway.
+BP="${ROOT}/.github/workflows/build-and-push.yml"
+if grep -qF "scripts/images-lock repin --exclude '.github/workflows/*'" "${BP}"; then
+    ok "repin-images runs repin with --exclude '.github/workflows/*'"
+else
+    fail "repin-images does not run scripts/images-lock repin --exclude '.github/workflows/*'"
+fi
+if grep -qF 'git status --porcelain -- .github/workflows/' "${BP}"; then
+    ok "repin-images checks that no workflow file changed before opening the PR"
+else
+    fail "repin-images has no 'git status --porcelain -- .github/workflows/' check"
+fi
+# The release job builds the 24.04 variant from the Dockerfile's pin, which the
+# nightly moves; a literal pin in the workflow would never move.
+if grep -qF "grep '^ARG UBUNTU_2404_IMAGE=' Dockerfile" "${BP}" \
+   && grep -qF 'UBUNTU_IMAGE=${{ steps.current.outputs.ubuntu2404 }}' "${BP}"; then
+    ok "release builds the 24.04 variant from the Dockerfile's UBUNTU_2404_IMAGE"
+else
+    fail "release does not read UBUNTU_2404_IMAGE from the Dockerfile for the 24.04 variant"
+fi
+
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

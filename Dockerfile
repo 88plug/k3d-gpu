@@ -5,6 +5,10 @@ ARG K3S_DIGEST="sha256:ca7f37d993d82ef0dcdcfecb2e0e2618ea541dbaffc620c8cedebe01a
 ARG UBUNTU_IMAGE="ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c"
 #https://hub.docker.com/_/ubuntu/tags  (26.04 = default/latest; 24.04 also built),
 # pinned by multi-arch index digest; scripts/images-lock repin moves it
+ARG UBUNTU_2404_IMAGE="ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852"
+# The 24.04 variant's base: the release job (build-and-push.yml) builds it with
+# UBUNTU_IMAGE set to this. It lives here, not in the workflow, so the nightly
+# repin moves it (its token cannot push .github/workflows/).
 
 FROM rancher/k3s:$K3S_TAG@$K3S_DIGEST AS k3s
 

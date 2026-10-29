@@ -34,14 +34,34 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The interpreter pin lives in docs-build/Dockerfile, where Dependabot and the
+  # nightly repin move it (the nightly's token cannot push this workflow) and
+  # docs-build/lock.sh reads it. A job's container image cannot come from a file
+  # in that job, so this job reads it for the build job.
+  image:
+    name: Docs interpreter pin
+    runs-on: ubuntu-latest
+    outputs:
+      ref: ${{ steps.pin.outputs.ref }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: docs-build
+          persist-credentials: false
+      - id: pin
+        run: |
+          ref=$(sed -n 's/^FROM \(python:[^ ]*\).*$/\1/p' docs-build/Dockerfile)
+          [[ "$ref" =~ ^python:[^@]+@sha256:[0-9a-f]{64}$ ]] || { echo "::error::docs-build/Dockerfile has no pinned FROM python (got '$ref')"; exit 1; }
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+
   build:
     name: Build (mkdocs --strict)
+    needs: image
     runs-on: ubuntu-latest
     outputs:
       pages: ${{ steps.pages.outputs.enabled }}
     container:
-      # docs-build/lock.sh reads this line to lock in the same interpreter.
-      image: python:3.14.8-slim@sha256:fbecd461fc72d21b2143c6eaba25143738079154a6d0ea3da3aec724f50eed4a
+      image: ${{ needs.image.outputs.ref }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install toolchain (hash-locked)

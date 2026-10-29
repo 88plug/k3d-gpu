@@ -165,6 +165,7 @@
       "digest": "sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852",
       "name": "docker.io/library/ubuntu",
       "sources": [
+        "Dockerfile",
         "integrations/eat/bastion.Dockerfile"
       ],
       "tag": "24.04"

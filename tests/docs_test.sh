@@ -53,10 +53,15 @@ done
 # Dependabot's docker ecosystem reads Dockerfiles, not a workflow's
 # `container: image:`. docs-build/Dockerfile holds the pin; the workflow and
 # docs-build/lock.sh must use the same image.
-from_image=$(sed -n 's/^FROM \(python:[^ ]*\).*$/\1/p' "${ROOT}/docs-build/Dockerfile" 2>/dev/null)
-wf_image=$(sed -n 's/^ *image: *\(python:[^ ]*\) *$/\1/p' "${ROOT}/.github/workflows/docs.yml")
+# The workflow reads it from there (the nightly repin moves docs-build/Dockerfile
+# but cannot push a workflow file), so the pin has one home.
 check "docs-build/Dockerfile pins python by digest" "" grep -qE '^FROM python:[^ ]+@sha256:[0-9a-f]{64}$' "${ROOT}/docs-build/Dockerfile"
-check "docs workflow container image matches docs-build/Dockerfile" "" test -n "${from_image}" -a "${from_image}" = "${wf_image}"
+check "docs workflow reads its container image from docs-build/Dockerfile" "" \
+    grep -qF "sed -n 's/^FROM \\(python:[^ ]*\\).*\$/\\1/p' docs-build/Dockerfile" "${ROOT}/.github/workflows/docs.yml"
+check "docs build job runs in that image" "" \
+    grep -qE '^ +image: \$\{\{ needs\.image\.outputs\.ref \}\}$' "${ROOT}/.github/workflows/docs.yml"
+check "docs workflow holds no python image pin of its own" "" \
+    bash -c '! grep -qE "python:[^ ]+@sha256:[0-9a-f]{64}" "$1"' _ "${ROOT}/.github/workflows/docs.yml"
 check "Dependabot docker ecosystem watches docs-build/" "" \
     python3 -c 'import sys,re; t=open(sys.argv[1]).read(); sys.exit(not re.search(r"package-ecosystem: docker\n\s+directory: /docs-build\n", t))' \
     "${ROOT}/.github/dependabot.yml"
