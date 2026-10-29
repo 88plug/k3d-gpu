@@ -1,0 +1,24 @@
+google/gemma-4-26B-A4B-it 4d7ae4984b7d api.json chat_template.jinja config.json generation_config.json README.md tokenizer_config.json 
+google/gemma-4-26B-A4B 24548b62aa02 api.json config.json generation_config.json README.md tokenizer_config.json 
+google/gemma-4-26B-A4B-it-assistant 6e5aaaf4c42b api.json config.json generation_config.json README.md tokenizer_config.json 
+google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be9cf3 api.json README.md 
+google/gemma-4-26B-A4B-it-qat-q4_0-unquantized f1e06dc52098 api.json chat_template.jinja config.json generation_config.json README.md tokenizer_config.json 
+google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant 9537141506fe api.json chat_template.jinja config.json generation_config.json README.md tokenizer_config.json 
+OpenVINO/gemma-4-26b-a4b-it-int4-ov 4e5885c3f038 api.json chat_template.jinja config.json generation_config.json openvino_config.json README.md tokenizer_config.json 
+Intel/gemma-4-26B-A4B-it-int4-AutoRound edff62728a3c api.json chat_template.jinja config.json generation_config.json quantization_config.json README.md tokenizer_config.json 
+Intel/gemma-4-26B-A4B-it-int4-mixed-AutoRound 81939a272123 api.json chat_template.jinja config.json generation_config.json quantization_config.json README.md tokenizer_config.json 
+RedHatAI/gemma-4-26B-A4B-it 34fc8922ace8 api.json chat_template.jinja config.json generation_config.json README.md tokenizer_config.json 
+RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic ed35d7abe5d9 api.json chat_template.jinja config.json generation_config.json README.md recipe.yaml tokenizer_config.json 
+RedHatAI/gemma-4-26B-A4B-it-speculator.eagle3 226b2692d480 api.json config.json README.md 
+Qwen/Qwen3.8-27B 1d4bf0f2ff60 api.json chat_template.jinja config.json generation_config.json README.md tokenizer_config.json 
+Qwen/Qwen3.8-27B-FP8 017b9c7af6b5 api.json chat_template.jinja config.json generation_config.json README.md tokenizer_config.json 
+OpenVINO/Qwen3.8-27B-int4-ov 7b20ea8c7df7 api.json chat_template.jinja config.json generation_config.json openvino_config.json README.md tokenizer_config.json 
+OpenVINO/Qwen3.8-27B-int8-ov c129bf97d5f2 api.json chat_template.jinja config.json generation_config.json openvino_config.json README.md tokenizer_config.json 
+Intel/qwen3.8-27B-int4-ov 53292eeedaca api.json config.json README.md 
+Intel/Qwen3.8-27B-q4km-AutoRound 4b30b30e0ac2 api.json README.md 
+RedHatAI/Qwen3.8-27B 019ada84a62b api.json chat_template.jinja config.json generation_config.json README.md tokenizer_config.json 
+RedHatAI/Qwen3.8-27B-INT4 91bd022d5b49 api.json chat_template.jinja config.json generation_config.json README.md recipe.yaml tokenizer_config.json 
+RedHatAI/Qwen3.8-27B-speculator.dspark 87ca2fdc67f3 api.json config.json README.md 
+Qwen/Qwen3.8-Flash-Next de4b8e4d43b9 api.json chat_template.jinja config.json generation_config.json README.md tokenizer_config.json 
+Qwen/Qwen3.8-Flash-Next-FP8 236dfdf28582 api.json chat_template.jinja config.json generation_config.json README.md tokenizer_config.json 
+Intel/Qwen3.8-Flash-Next-W4A16-AutoRound 4c67bf686b7f api.json chat_template.jinja config.json generation_config.json quantization_config.json README.md tokenizer_config.json 
