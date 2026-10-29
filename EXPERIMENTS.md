@@ -3846,6 +3846,113 @@ H54d is recorded INCONCLUSIVE (not run). Running it would need a dated amendment
 without B1g's score (or a working B1g), a runner amendment (the pairs runner has no llama.cpp arm
 A), and the tool-call wiring smoke. Record: `bench/h54/results/2026-10-21/H54d/not-run.txt`.
 
+### H54 note N2: why B1g stalled (unscored diagnostic, 2026-10-29)
+
+Recorded 2026-10-29. A diagnostic, not a hold. No arm, row, statistic, gate, threshold, cap or
+prediction changes, and no H54a number is re-scored. It answers the run section's "cause open".
+
+**What ran.** `bench/h54/diag/b1g-stall.sh` (PR #209), under the bench lock and the hold-start
+rule, outside k3d. B1g's container ran under plain `docker run`, rendered from the committed
+hold-2 record (`hold2/B1g/deploy.yaml`): the same image digest, args, env ConfigMap and chat
+template, user 1001, a read-only root, the same capabilities, and no CPU or memory request or
+limit. The QAT weights were mounted read-only. Three things differ from the pod: a private IPC
+namespace where the pod had `hostIPC: true` (both have a 1 GiB memory-backed `/dev/shm`), tmpfs
+for `/tmp` and the vLLM cache where the pod had emptyDirs, and the model directory mounted
+directly. The load was sequential 256-token greedy requests from `bench/llm_load.py` with the H54a
+N=1 settings. Run 1 (05:30-05:39Z) used the render as is. Run 2 (05:40-05:57Z) was a labelled
+control with one change, `VLLM_CPU_ATTN_SPLIT_KV=0`. Neither run used a GPU or touched a serving
+container. Records: `bench/h54/results/2026-10-29/B1g-stall-diag/`.
+
+Run 1 used the script at `9f795a86`, which had no perf step and dumped Python stacks with
+`py-spy --native`; those dumps failed (rc 1 in `stall.json`). Its perf sample (`perf-spin.*`) and
+its Python stacks (`pyspy-*-plain.txt`) were taken by hand during the stall, with the commands in
+`perf-cmd.txt`; `perf-spin-script.txt.gz` keeps the first 400 lines of `perf script`. `6cbc2632`
+then added both steps to the script, and run 2 used it.
+
+**Run 1: the stall reproduced without k3d.** The server was ready after 162 s. Five requests
+completed (median 18.7 tok/s); the sixth stopped at 248 of 256 tokens, at KV length 294. At the
+stall the container's CPU fell from 48.0 to 1.006 CPU-s/s and stayed there. Thread snapshots 30 s
+and 40 s after the stall agree: of the worker's 101 threads, one was runnable (CPU 53, 0.999
+CPU-s/s over the 10 s between them), and the worker's main thread and 78 others slept on futexes.
+perf took 5,003 samples of that thread over 5 s. 99.74% fell in
+`cpu_attention::AttentionMainLoop<AttentionImpl<AMX, BFloat16, 512, BFloat16>>::reduce_splits(...,
+bool volatile* flags, ...)`, inside an OpenMP region, spinning with `_mm_pause` on a
+split-completion flag. The worker's Python stack sat in `cpu_attention_with_kv_cache`
+(`cpu_attn.py:394`, called from `gemma4.py:536`). EngineCore's stack sat in
+`shm_broadcast.acquire_read`, waiting for the `execute_model` reply. 300 s after the stall,
+EngineCore raised "RPC call to execute_model timed out" and `EngineDeadError`, as in both H54a
+holds. 300 s is vLLM's `VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS` default. EAT's `VLLM_RPC_TIMEOUT` is
+not a v0.24.0 variable; the server logs it as unknown.
+
+**Cause: a vLLM CPU attention bug, fixed upstream after v0.24.0.** vllm-project/vllm#45844
+("Fix CPU split-KV scratchpad sizing", merged 2026-07-04 as `26eb8720`) was opened for a hang
+"seen with google/gemma-4-26B-A4B-it". In v0.24.0 the CPU attention metadata builder takes the
+KV-head count from the model config for every layer group: 8, from `num_key_value_heads`, with 16
+query heads. The scheduler then sizes the split-KV reduction scratchpad for 16/8 = 2 query heads
+per KV head times the split threshold. Gemma 4's global-attention layers have head dim 512 and 2
+KV heads, against the sliding layers' 256 and 8; 5 of the 30 layers are global (`config.json`).
+Their kernel handles 8 query heads per KV head, so split outputs overrun the scratchpad into the
+split-completion flags, and `reduce_splits` can wait forever. The stuck kernel's template
+arguments (AMX, head dim 512) are those layers'. v0.24.0 (tagged 2026-06-29) carries the old code:
+`cpu_attn.py` line 140 takes `model_config.get_num_kv_heads`, and `cpu_attn_impl.hpp` lines 420
+and 688 size the scratchpad from it. The merged fix takes the count from each group's KV-cache
+spec and sizes the scratchpads for the largest query-head tile any work item uses. The PR's
+description also names the split outputs' float element size; the merged diff does not change it,
+and on the AMX kernel v0.24.0 already sizes them as float (`partial_output_buffer_t`). GitHub's
+compare puts `26eb8720` in v0.25.0 and in every later tag checked (v0.26.0, v0.28.0, v0.32.0), and
+not in v0.24.0.
+
+**Deterministic?** Not in position, but recurrent. All three B1g engines stalled within their
+first 690-1,540 decode steps: H54a hold 1 at KV length 211 (third 256-token request), hold 2 at
+299 (sixth), run 1 at 294 (sixth). Earlier requests had passed those lengths without a stall.
+Split writers and the flag race, so where it bites varies.
+
+**H54a's two stalls are this bug: inferred, not observed.** No thread record exists for them.
+The image, render and weights are the same, and so is the log signature. Their host readings fit
+a single spinning thread. In hold 1, load1 sat at 5.2-5.5 during the stall and 3.8-3.9 after the
+engine died. Hold 2's N=1 phase used 52,204 J in 342.8 s; less 3 requests at the warmup phase's
+279.4 W, that leaves about 135 W for the ~300 s stall, against the arm's 131.6 W idle window.
+
+**Control (run 2): split-KV off, no stall.** Ready after 162 s. All 60 requests completed at
+256 tokens each: 15,370 tokens with the readiness chat, ten times the most any stalled engine
+reached. Median 18.4 tok/s (decode 18.5), against run 1's 18.7 (18.9) over its five. The
+container read 47.8-48.0 CPU-s/s whenever a request ran. The server logged no shared-memory wait
+and no `EngineDeadError`. At the rate the three stalled engines show (3 stalls in about 3,770
+decode steps), 15,360 steps pass without one with probability about e^-12. So the same image,
+render and weights do not stall with split-KV off, and N=1 decode is no slower. The control is a
+patch to the stock arm and is not a B1g measurement.
+
+**Not the cause.** The k3d harness: run 1 had no k3d, kubelet or port-forward. Memory: no OOM
+kill, and 40 GiB of KV on a 503 GiB host. Host contention: no aiperf process in any of the three,
+and the serving containers read 2.3-3.2 CPU-s/s during the stalls (4.8-5.1 while run 1 decoded,
+the rise amendment R4 describes). Prompt length: about 45-token prompts, stalls at different
+KV lengths. Thread placement: the OpenMP threads on CPUs 48-94 decoded normally for minutes first.
+
+**What EAT's stock config sets.** EAT `0d3438d` `xeon-values.yaml`, entry
+`google/gemma-4-26B-A4B-it`: image `vllm/vllm-openai-cpu:v0.24.0`. ConfigMap:
+`TRITON_CACHE_DIR`, `VLLM_CPU_KVCACHE_SPACE` 40, `VLLM_RPC_TIMEOUT` 100000,
+`VLLM_ALLOW_LONG_MAX_MODEL_LEN` 1, `VLLM_ENGINE_ITERATION_TIMEOUT_S` 120, `USER`. Args:
+`--block-size 128 --dtype bfloat16 --distributed_executor_backend mp --enable_chunked_prefill
+--enforce-eager --enable-prefix-caching --enable-auto-tool-choice --tool-call-parser gemma4
+--chat-template .../tool_chat_template_gemma4.jinja`. Unlike the file's other CPU entries it sets
+neither `VLLM_CPU_SGL_KERNEL` nor `VLLM_CPU_NUM_OF_RESERVED_CPU`. No entry sets
+`VLLM_CPU_ATTN_SPLIT_KV`, whose v0.24.0 default (1) turns split-KV on. EAT's playbook default
+also adds the `vllm-balloon` annotation with `cpu` 8 and `memory` 64Gi unless its sizing step
+says otherwise. EAT release-1.1.0 (2026-10-22, `0c726f57`) keeps this entry's args and env (it adds
+`HF_HOME` /data, which B1g's render already had) and moves the image to `v0.28.0`, which contains
+the fix.
+
+**What the pre-registrations do with it.** None of them lets the stock arm change: the image, the
+flags and the env are EAT's as pinned. `VLLM_CPU_ATTN_SPLIT_KV=0` is not in EAT's config, so it is
+a patch, used here only in the labelled control. H54a is closed (amendment R3 carried B1g once;
+the cap is spent). H54d's arm A is defined by H54a's chosen arm, so it stays INCONCLUSIVE (not
+run). H50 and H51 have not run; their B1 is this arm, and nothing in their rules avoids the bug.
+Under H50's P1 rules a stalled turn is `over_turn`, a B1 outcome, not a void. But a stalled B1
+pod spins one core for 300 s and then restarts and reloads. Both collide with the idle-arm check
+(the other arm's pod above 0.5 CPU) and the quiesce rule. H51 scores a failed step: errors over 1%
+end the arm's bracket. Changing B1 to EAT's current release is a new arm, and needs a dated
+amendment before any H50 or H51 hold.
+
 ### H57d pre-registration: Gemma 4 26B-A4B QAT on the AMX-less client CPU (i9-13900T, 2026-10-20)
 
 Written 2026-10-20, before any H57da, H57dm or H57db measurement. Nothing here is a measurement
