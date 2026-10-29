@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Runs inside the bastion container (bastion.Dockerfile). Drives EAT's own
 # brownfield path, brownfield_deployment() in core/lib/brownfield/, which no
-# EAT menu reaches in release-1.0.3-hotfix. Its interactive prompts get fixed
-# answers; every component toggle comes from core/inventory/agentic-config.cfg.
+# EAT menu reaches in release-1.1.0. Its interactive prompts get fixed answers;
+# every component toggle comes from core/inventory/agentic-config.cfg.
 #
 #   brownfield.sh               deploy the stack selected in agentic-config.cfg
 #   brownfield.sh model <id>    deploy one model from EAT's vLLM playbook and register it in LiteLLM
@@ -40,6 +40,20 @@ esac
 
 cluster_url=$(grep -E '^cluster_url=' "${EAT_DIR}/core/inventory/agentic-config.cfg" | cut -d= -f2-)
 
+# cfg_value <key>: the value EAT's read_config_file gives <key> in the checkout's
+# agentic-config.cfg (core/lib/system/precheck/read-config-file.sh at release-1.1.0):
+# split on the first '=', key and value trimmed by xargs (which also drops quotes),
+# comments skipped, the last assignment wins. Empty when the key is absent.
+cfg_value() {
+    local key value v=""
+    while IFS='=' read -r key value || [ -n "${key}" ]; do
+        key=$(echo "${key}" | xargs 2>/dev/null) || continue
+        [ "${key}" = "$1" ] || continue
+        v=$(echo "${value}" | xargs 2>/dev/null) || v="${value}"
+    done < "${EAT_DIR}/core/inventory/agentic-config.cfg"
+    echo "${v}"
+}
+
 # EAT's one-click script makes a self-signed cert and an /etc/hosts entry; the
 # brownfield path expects both to exist. This is the container's /etc/hosts.
 if [ ! -f "${CERT_DIR}/cert.pem" ]; then
@@ -57,6 +71,17 @@ fi
 sudo install -D -m 0600 "${EAT_KUBECONFIG}" /root/.kube/config
 
 cd "${EAT_DIR}"
+# The guardrail step (fresh-install.sh:419) deploys Qwen3Guard when DEPLOY_GUARDRAILS
+# is on. deploy-agentic-stack.sh sets it to on when sourced (line 195); only its main()
+# (line 1138), which a sourced run skips, reads deploy_guardrails from the config. The
+# config's value is handed over here, read as every other toggle; with none, EAT's
+# default stands.
+case "$(cfg_value deploy_guardrails)" in
+    "") ;;
+    on|yes) export DEPLOY_GUARDRAILS=on ;;
+    *) export DEPLOY_GUARDRAILS=off ;;
+esac
+echo "Guardrail: DEPLOY_GUARDRAILS=${DEPLOY_GUARDRAILS:-on (EAT default)}"
 # deploy-agentic-stack.sh parses "$@" at top level even when sourced, and rejects
 # "model" as an unknown argument, so it is sourced with no positional arguments.
 # DEPLOY_SOURCED=1 loads its functions without running its main().

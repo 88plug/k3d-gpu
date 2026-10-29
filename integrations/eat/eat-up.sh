@@ -27,8 +27,8 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EAT_REPO="https://github.com/intel/enterprise-agent-toolkit"
-EAT_TAG="release-1.0.3-hotfix"
-EAT_COMMIT="0d3438d7119de44cafc5903f66665c0b623e3333"
+EAT_TAG="release-1.1.0"
+EAT_COMMIT="0c726f576595971c53cc45b94e08ba969beb4a4a"
 EAT_WORK="${EAT_WORK:-${PWD}/eat-work}"
 EAT_KUBECONFIG="${EAT_KUBECONFIG:-${KUBECONFIG:-${HOME}/.kube/config}}"
 EAT_CONFIG="${EAT_CONFIG:-${HERE}/agentic-config.cfg}"
@@ -39,8 +39,8 @@ BASTION_IMAGE="k3d-gpu-eat-bastion:$(sha256sum "${HERE}/bastion.Dockerfile" | cu
 err()  { echo "ERROR: $*" >&2; exit 1; }
 info() { echo "==> $*"; }
 
-# openshell_setting <cfg>: the deploy_openshell value EAT main would use. Parsed the
-# way its read_config_file does (core/lib/system/precheck/read-config-file.sh @0ecf67a):
+# openshell_setting <cfg>: the deploy_openshell value EAT would use. Parsed the way its
+# read_config_file does (core/lib/system/precheck/read-config-file.sh at ${EAT_TAG}):
 # split on the first '=', trim key and value with xargs (which also drops quotes),
 # skip comments, and the last assignment wins because the result is sourced.
 openshell_setting() {
@@ -54,11 +54,11 @@ openshell_setting() {
 }
 
 [ -f "${EAT_CONFIG}" ] || err "config ${EAT_CONFIG} not found"
-# deploy_openshell arrived on EAT main after ${EAT_TAG} (PR #14); the pinned tag has no
-# OpenShell role and would skip the key without a word. EAT maps on to yes and
-# installs OpenShell when the value is yes (fresh-install.sh).
+# ${EAT_TAG} ships NVIDIA OpenShell (PR #14) and installs it when the value is yes, after
+# mapping on to yes (fresh-install.sh). It has never run on a k3d-gpu cluster: upstream
+# lists a CNI that enforces NetworkPolicy and best-effort Landlock (docs/openshell.md).
 case "$(openshell_setting "${EAT_CONFIG}")" in
-    on|yes) err "deploy_openshell=on needs an EAT release newer than ${EAT_TAG}; set deploy_openshell=off" ;;
+    on|yes) err "deploy_openshell=on is unverified on k3d-gpu (${EAT_TAG} ships OpenShell, but it has not run on a k3d-gpu cluster); set deploy_openshell=off" ;;
 esac
 # The KV cache from the fit of EAT_FIT_MODEL, unless EAT_VLLM_KV_GIB is set.
 if [ -z "${EAT_VLLM_KV_GIB:-}" ] && [ -n "${EAT_FIT_MODEL:-}" ]; then
