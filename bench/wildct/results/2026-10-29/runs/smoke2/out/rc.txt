@@ -1,0 +1,4 @@
+up rc=1 in 190 s
+pods ready: not waited (up rc=1)
+GPU-SCAN clean
+down rc=0

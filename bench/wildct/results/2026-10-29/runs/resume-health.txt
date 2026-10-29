@@ -1,0 +1,29 @@
+== resume-health 2026-10-29T18:27:43Z repo=12e765f0725c893d910c9ff9b8f791b3c85f9d9d
+-- H1
+active
+
+active
+H1 rc=0
+-- H2
+running
+H2 rc=0
+-- H3
+29.7.2 live-restore=false cgroup=systemd/2
+H3 rc=0
+-- H4
+probe rc=0
+-- H5
+H5 done
+-- H6
+/dev/nvme0n1p2             3667G 3271G      209G      94% /
+MemAvailable:   123912644 kB
+0.30 0.42 0.41 1/3094 38103
+-- H7
+
+H7 rc=0/0
+-- H8
+lock-free
+H8 done
+== step2 2026-10-29T18:28:00Z
+rm rc=0
+ps rc=0

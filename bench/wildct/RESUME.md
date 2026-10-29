@@ -1,40 +1,55 @@
 # wildct resume pack
 
 How to resume the wildct campaign ([EXPERIMENTS.md](../../EXPERIMENTS.md), "Wildct
-pre-registration", rules W1-W8, and "Wildct amendment R1") once the box owner has fixed wildct's
-systemd. This file changes no rule. Run it top to bottom. Nothing past step 1 runs until every
-step 1 check passes. Step 3b ships `origin/main` to wildct, so the PR that adds this pack (and
-`wait_hold.sh` and `row.sh`, which the steps call) is merged before step 3.
+pre-registration", rules W1-W8, and wildct amendments R1, P1 and R2) once the box owner has made
+the kernel modules k3s needs available on wildct (step 1, H9). This file changes no rule. Run it
+top to bottom. Nothing past step 1 runs until every step 1 check passes. Step 3b ships
+`origin/main` to wildct.
 
-## Where things stand (2026-10-28)
+## Where things stand (2026-10-29)
 
-- **Blocked.** On 2026-10-21 systemd stopped answering on D-Bus. With Docker's systemd cgroup
-  driver, no new container can start: the RAPL reader of `smoke1` hangs in `runc init`.
-  `systemctl show docker` gave "Failed to get properties: Connection timed out". Docker's
-  live-restore is off, so restarting dockerd would stop the box's ~18 production containers.
-  The fix (a `systemctl daemon-reexec` or a reboot) is the box owner's call.
-- **Left on wildct by this campaign.**
-  - Container `k3dgpu-w-rapl`, in Created. Its `runc init` was asleep in `containerd.service`'s
-    cgroup.
+- **Blocked: no k3d cluster can run on wildct.** systemd answers again (the box was rebooted;
+  step 1's H1-H8 passed on 2026-10-29). The wiring smoke `smoke2` then failed: `up rc=1`. k3s's
+  flannel could not create its VXLAN device ("failed to create vxlan device: operation not
+  supported"), so k3s shut down and the node container restarted every ~20 s (10 restarts in
+  3 min in `diag-smoke2`, which re-ran `smoke2`'s `up` and kept the node's log). The `vxlan`
+  and `br_netfilter` modules are on disk for the running kernel (6.6.156-2-MANJARO) but not
+  loaded, and `/proc/sys/kernel/modprobe` is empty, so the kernel cannot load them on demand.
+  The fix is the box owner's: load both (`modprobe -a vxlan br_netfilter`, kept across reboots
+  by a file in `/etc/modules-load.d/`), or restore `kernel.modprobe`. Then step 1 (H9 checks
+  it) and the smoke again, as `smoke3`.
+- **Left on wildct by this campaign** (no container, cluster, network or volume):
   - `~/k3dgpu-bench-wildct/`, which holds:
-    - `bin/`: k3d v5.9.0, helm v4.3.1, kubectl v1.37.1;
-    - `k3d-gpu/`: the 0.1.71 `.deb`, unpacked;
+    - `bin/`: k3d v5.9.0, helm v4.3.1, kubectl v1.37.2;
+    - `k3d-gpu/`: the 0.1.79 `.deb`, unpacked;
     - `hfvenv/`;
-    - `models/` and `h57/models/`: every file sha256-checked against the Hub, `VERIFY ok`;
-    - `repo` -> `repo-12e765f0725c`;
+    - `models/` and `h57/models/`: every file sha256-checked against the Hub, `VERIFY ok`
+      (`setup/dl.log` also holds the first H57 verify's `VERIFY 1 bad`: the mmproj file,
+      not downloaded on purpose; `setup/verify-h57.log` skips it and reads `VERIFY ok`);
+    - `h57/models/k3dgpu/gemma-4-26B-A4B-it-qat-assistant-gguf/` (step 4c, 2026-10-29: Q4_0
+      `8eb21d5b...`, 321,145,696 bytes, the i9's bytes) and Od's `graph.pbtxt` (`c57ecf35...`,
+      the i9's);
+    - `h57/bin/k3d` (the shim) and `h57/weights.sha256`;
+    - `repo` -> `repo-4a322ccca4b3` (and the older archives);
     - `setup/`: `images-before.txt`, `containers-before.txt`, `volumes-before.txt`,
       `networks-before.txt` and the verify logs;
-    - `runs/smoke1*` and `runs/campaign.log`.
-  - Images: `cryptoandcoffee/k3d-gpu:0.1.71`, plus the five refs of `setup-images.sh`.
-- **Never existed.** No k3d cluster. No inference request. No measurement.
+    - `runs/`: `smoke1*`, `smoke2*`, `diag-smoke2*`, `convert/`, `resume-health.txt`,
+      `install-0.1.79.log`, `setup-images-*.log`, `IMAGE` and `campaign.log`;
+    - `diag/diag-up.sh`, the command `diag-smoke2` ran.
+  - Images: `cryptoandcoffee/k3d-gpu:0.1.79`, `ghcr.io/k3d-io/k3d-tools:5.9.0`, the five refs of
+    `setup-images.sh`, and `python:3.13-slim@sha256:70729b46...` (the RAPL reader's image until
+    2026-10-29). `cryptoandcoffee/k3d-gpu:0.1.71` was removed in step 3c.
+- **Never existed.** No inference request. No measurement. `smoke1`, `smoke2` and `diag-smoke2`
+  are discarded and disclosed (amendments R1 and R2).
 - **Never touched.** No GPU, nor anything that was on the host before the campaign.
-- **Not done yet.**
-  - H57w's drafter GGUF and Od's `graph.pbtxt` (`convert.sh`).
-  - H57w's k3d shim.
-- **Newest release on 2026-10-29: k3d-gpu 0.1.75.** Step 3a picks the newest one again.
-  - `.deb` sha256: `a5c48149f795f995334447625590b11261166672e049b35ec6ee3afd71140a17`.
-  - Node image: `cryptoandcoffee/k3d-gpu:0.1.75@sha256:ecb1b17812ff3605633ab7a57cbf8843da468885f554c496cc804c22ee4b3924`.
-  - Its launcher and `share/` equal main's, apart from the version line.
+- **Newest release on 2026-10-29: k3d-gpu 0.1.79**, installed in step 3c. Step 3a picks the newest
+  one again.
+  - `.deb` sha256: `3c94881c20ddaca11b1422044f62e2a2b1f01e8b6bb698d4d99e1bb5763830fb`.
+  - Node image: `cryptoandcoffee/k3d-gpu:0.1.79@sha256:6e27ff9817bf9398edb20f479dceb5f08273a04a01971b37628a7b2791bdfcfe`.
+  - Its launcher and `share/` equal main's at `4a322ccc`, apart from the version line.
+- **H57wb's start gates were met on 2026-10-29** (`/` 208 GB available, MemAvailable 118 GiB),
+  not a reading of the row. If they still are at step 6's row 7, the pack stops there: H57wb has
+  no runner on this host.
 
 ## Ground rules (W1-W8; this pack adds none)
 
@@ -76,7 +91,7 @@ WSSH="ssh -F /dev/null -o ControlPath=<your control path> andrew@100.66.38.121"
 ```bash
 # [w] at the top of every wildct script below
 W=~/k3dgpu-bench-wildct; R=$W/repo; export PATH=$W/bin:$PATH
-PYIMG=python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f   # the RAPL reader's image
+PYIMG=python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb   # the RAPL reader's image (hold.sh's RAPL_IMAGE)
 ```
 
 ## 1. Health checks [w], read-only except the probe container
@@ -93,6 +108,7 @@ Run them as one script (`timeout 600 $WSSH bash -s <<'EOF' ... EOF`). Every chec
 | H6 | `df -P -BG / \| tail -1; grep MemAvailable /proc/meminfo; cat /proc/loadavg` | `/` available >= 55 GB (15 + H57w's 40) for the whole campaign, >= 18 GB for smoke, H52w and H18w; `load1` <= 12 | below 18 GB: no hold can start. Report |
 | H7 | `timeout 60 k3d cluster list -o json \| python3 $R/bench/wildct/clusters.py` | empty | a `k3dgpu-w-*` cluster exists: report (step 2 does not delete clusters) |
 | H8 | `flock -n $W/live.lock true && echo lock-free; ps -eo pid,args \| grep '[h]old.sh'` | `lock-free`, no `hold.sh` | a hold is still running |
+| H9 | `awk '$1 == "vxlan" \|\| $1 == "br_netfilter" {print $1}' /proc/modules \| sort \| paste -sd' '; echo "modprobe=[$(cat /proc/sys/kernel/modprobe)]"` | `br_netfilter vxlan` (both loaded; record `modprobe=`) | `vxlan` missing: k3s's flannel cannot create its VXLAN device and k3s exits (`smoke2`, 2026-10-29, with `modprobe=[]`: the kernel cannot load it on demand). `br_netfilter` missing: k3s cannot set `net.bridge.bridge-nf-call-iptables`, which Service traffic between pods on one node needs. Either: report to the box owner |
 
 Record the whole output in `$W/runs/resume-health.txt`. Also copy it back with the records.
 
@@ -253,10 +269,13 @@ setsid nohup bash -c 'echo $$ > '"$W"'/runs/convert/pid; bash '"$R"'/bench/wildc
   docker did not answer, not that none is running. Stop only those containers.
   Then stop the pack.
 
-## 5. Wiring smoke (`smoke2`)
+## 5. Wiring smoke (`smoke3`)
 
 This is W1's smoke: an `up` with the opt-out and W3, the pod wait, the GPU scan, then `down`.
 It sends no inference request. It is discarded and disclosed, and is not a hold of any row.
+`smoke2` (2026-10-29) failed at `up`: neither module of step 1's H9 was loaded. The next smoke
+is `smoke3`. A `GPU-SCAN` line is a verdict only on a non-empty pod list: `gpu_scan.py` exits 1
+with no `GPU-SCAN` line on an empty one (amendment R2).
 
 **[w] launch** (the same function serves every hold below):
 
@@ -272,12 +291,12 @@ launch() {
         bash "$R/bench/wildct/row.sh" "${@:4}" > "$W/runs/$1.out" 2>&1 < /dev/null &
     echo "launched $1"
 }
-launch smoke2 900 3 smoke
+launch smoke3 900 3 smoke
 ```
 
-**[c] wait:** `hold_wait smoke2 900` (step 6).
+**[c] wait:** `hold_wait smoke3 900` (step 6).
 
-- **Pass, in `runs/smoke2/out/rc.txt`, all of:**
+- **Pass, in `runs/smoke3/out/rc.txt`, all of:**
   - `up rc=0`;
   - `pods ready: yes ...`;
   - `GPU-SCAN clean`;
@@ -419,8 +438,8 @@ same 16 P-core CPUs as the i9, 8 E-cores rather than 16, and a 35 W PL1.
 
 | Hold | CAP (s) | Inner limit | Recorded on the original host | hold_wait ceiling (s) |
 |---|---|---|---|---|
-| smoke2 | 900 | `up` 600 s, pod wait 60 polls every 5 s (each poll at most 35 s), `down` 600 s | H52 (Xeon) `up`: 38 s | 8100 |
-| H52w | 1800 | `up` 600 s, pod wait as smoke2, `test` 900 s, `down` 600 s | H52 (Xeon) `up`: 38 s | 9000 |
+| smoke3 | 900 | `up` 600 s, pod wait 60 polls every 5 s (each poll at most 35 s), `down` 600 s | H52 (Xeon) `up`: 38 s | 8100 |
+| H52w | 1800 | `up` 600 s, pod wait as smoke3, `test` 900 s, `down` 600 s | H52 (Xeon) `up`: 38 s | 9000 |
 | H18w | 2100 | 3 runs | H18 (i9) runs 1-3: 230 s | 9300 |
 | H25w | 1500 | `HOLD=1440`, one level | H25 run 4 (i9): 608 s; H25x (Xeon): 329 s | 8700 |
 | H34w | 1500 | `H34_LEVEL_S` 1200, one level | H34x (Xeon): 549 s | 8700 |
@@ -443,6 +462,8 @@ Everything the campaign created is deleted (W6). Nothing else is touched.
   - `cryptoandcoffee/k3d-gpu:$V`;
   - `ghcr.io/k3d-io/k3d-tools:5.9.0` and `ghcr.io/k3d-io/k3d-proxy:5.9.0`;
   - the five refs of `setup-images.sh`;
+  - `python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f`,
+    the RAPL reader's image until 2026-10-29, pulled by the campaign's setup on 2026-10-20;
   - `h28-model:*`.
   - Use `timeout 300 docker rmi`, one image at a time.
   - The OVMS image was pulled seconds before the snapshot. If its ID is in the list, it cannot
