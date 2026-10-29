@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""h59.py: the H59, H59d and H59w scorer (EXPERIMENTS.md "H59 pre-registration" and
-"H59 amendment S1").
+"""h59.py: the H59, H59d and H59w scorer (EXPERIMENTS.md "H59 pre-registration", "H59
+amendment S1" and "H59 amendment S2").
 
   h59.py score RESULTS_DIR --load h57d [--arms L=NAME,O=NAME]
   h59.py score RESULTS_DIR --load GATE.json [--arms L=NAME,O=NAME]
 
 The row's verdict from the recorded holds: the ratio of L's to O's median per-request decode
 tok/s over the pooled N=4 requests of performance holds 1-3, its 95% bootstrap CI (H54's
-boot_ratio: 10,000 resamples of each arm, seed 1), the quality gate (L's GSM8K items correct
->= O's - 2) and the host's load rule. --load h57d applies H57d's load gate (H59d's rule, and
+boot_ratio: 10,000 resamples of each arm, seed 1), the per-hold N=4 ratios (SUPPORTED needs L
+faster than O in each performance hold, amendment S2), the quality gate (L's GSM8K items
+correct >= O's - 2) and the host's load rule. --load h57d applies H57d's load gate (H59d's rule, and
 H59w's through H57w) to the per-arm mean foreign P-core load over the N=4 phases, read from
 the H57d sampler's records; --load GATE.json reads {"matched": bool, "reason": str} that a
 host runner wrote under its own rule (H59 on the Xeon: H54's). --arms maps the arm names L and
@@ -127,7 +128,8 @@ def h57d_load(results, names):
 
 def decide(lc, ov, load):
     """lc, ov: arms L and O as collect() reads them. The registered rule, in H57d's order:
-    deliverability, quality record, quality gate, load, then the N=4 CI against 1.2."""
+    deliverability, quality record, quality gate, load, then the N=4 CI against 1.2, with
+    SUPPORTED also needing L faster than O in each performance hold (amendment S2)."""
     out = {}
     for a in (lc, ov):
         if a["not_deliverable"] >= 2:
@@ -147,12 +149,17 @@ def decide(lc, ov, load):
     if not load.get("matched"):
         return dict(out, verdict="INCONCLUSIVE", reason="load unmatched: " + str(load.get("reason", "no load verdict")))
     lo, hi = h54.boot_ratio(lc["pooled"]["n4"], ov["pooled"]["n4"])
-    out.update(ratio=lc["median"]["n4"] / ov["median"]["n4"], ci=[lo, hi],
-               per_hold={k: lc["n4_per_hold"][k] / ov["n4_per_hold"][k] for k in PERF_HOLDS})
-    if lo >= BAR:
-        return dict(out, verdict="SUPPORTED", reason="N=4 CI lower bound >= 1.2 and the quality gate passed")
+    per = {k: lc["n4_per_hold"][k] / ov["n4_per_hold"][k] for k in PERF_HOLDS}
+    out.update(ratio=lc["median"]["n4"] / ov["median"]["n4"], ci=[lo, hi], per_hold=per,
+               all_holds_faster=all(v > 1 for v in per.values()))
+    if lo >= BAR and out["all_holds_faster"]:
+        return dict(out, verdict="SUPPORTED",
+                    reason="N=4 CI lower bound >= 1.2, L faster in each performance hold, and the quality gate passed")
     if hi < BAR:
         return dict(out, verdict="REFUTED", reason="N=4 CI upper bound < 1.2")
+    if lo >= BAR:
+        return dict(out, verdict="INCONCLUSIVE",
+                    reason="N=4 CI lower bound >= 1.2, but L not faster than O in each performance hold")
     return dict(out, verdict="INCONCLUSIVE", reason="N=4 CI not resolved against 1.2")
 
 

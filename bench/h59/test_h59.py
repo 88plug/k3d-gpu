@@ -83,7 +83,17 @@ def n4_samples(root, arm):
 def set_n4(root, arm, samples):
     """Replace an arm's N=4 samples in performance holds 1-3 with the given sample dicts."""
     for k in (1, 2, 3):
-        dump({"phases": [{"samples": samples}]}, os.path.join(root, f"hold{k}", arm, "load-n4.json"))
+        set_n4_hold(root, arm, k, samples)
+
+
+def set_n4_hold(root, arm, k, samples):
+    """Replace an arm's N=4 samples in performance hold k."""
+    dump({"phases": [{"samples": samples}]}, os.path.join(root, f"hold{k}", arm, "load-n4.json"))
+
+
+def at(value, n=16):
+    """n completed requests, each decoding at value tok/s."""
+    return [{"ok": True, "decode_tokens_per_s": value}] * n
 
 
 class Statistic(unittest.TestCase):
@@ -122,6 +132,43 @@ class Verdict(unittest.TestCase):
     def test_refuted_ci_below_bar(self):
         r = self.run_score({"L": 11.0, "O": 10.0})
         self.assertLess(r["ci"][1], 1.2)
+        self.assertEqual(r["verdict"], "REFUTED")
+
+    def per_hold_score(self, hold3_l):
+        """L 20.0 and O 10.0 in holds 1-2, L at hold3_l in hold 3: the pooled CI clears 1.2."""
+        with tempfile.TemporaryDirectory() as d:
+            write_holds(d, {"L": 20.0, "O": 10.0}, self.Q, spread=0)
+            set_n4_hold(d, "L", 3, at(hold3_l))
+            return h59.score(d, MATCHED)
+
+    def test_supported_needs_l_faster_in_each_hold(self):
+        # Amendment S2: the pooled CI clears the bar, but L is slower than O in hold 3.
+        r = self.per_hold_score(9.0)
+        self.assertGreaterEqual(r["ci"][0], 1.2)
+        self.assertEqual(r["per_hold"], {1: 2.0, 2: 2.0, 3: 0.9})
+        self.assertFalse(r["all_holds_faster"])
+        self.assertEqual(r["verdict"], "INCONCLUSIVE")
+        self.assertIn("not faster than O in each performance hold", r["reason"])
+
+    def test_a_hold_at_par_is_not_faster(self):
+        # Faster means a per-hold ratio above 1, as in H57d: 1.0 is not, 1.05 is.
+        r = self.per_hold_score(10.0)
+        self.assertEqual(r["per_hold"][3], 1.0)
+        self.assertEqual(r["verdict"], "INCONCLUSIVE")
+        r = self.per_hold_score(10.5)
+        self.assertTrue(r["all_holds_faster"])
+        self.assertEqual(r["verdict"], "SUPPORTED")
+        self.assertIn("faster in each performance hold", r["reason"])
+
+    def test_refuted_needs_no_per_hold_condition(self):
+        # Amendment S2 adds the condition to SUPPORTED only: a hold where L is slower still
+        # leaves a CI below the bar REFUTED.
+        with tempfile.TemporaryDirectory() as d:
+            write_holds(d, {"L": 11.0, "O": 10.0}, self.Q, spread=0)
+            set_n4_hold(d, "L", 3, at(9.0))
+            r = h59.score(d, MATCHED)
+        self.assertLess(r["ci"][1], 1.2)
+        self.assertFalse(r["all_holds_faster"])
         self.assertEqual(r["verdict"], "REFUTED")
 
     def test_inconclusive_ci_straddles_bar(self):
@@ -210,10 +257,11 @@ class Verdict(unittest.TestCase):
 
     def test_failed_requests_are_dropped_and_counted(self):
         # A partly failed N=4 phase is scored on its completed requests, as H54's and H57d's
-        # scorers do; the report gives completed and sent requests per arm.
+        # scorers do; the report gives completed and sent requests per arm. A failed request
+        # is dropped on `ok` alone, even when it carries a decode rate.
         with tempfile.TemporaryDirectory() as d:
             write_holds(d, {"L": 15.0, "O": 10.0}, self.Q, spread=0)
-            set_n4(d, "O", [{"ok": True, "decode_tokens_per_s": 10.0}] * 15 + [{"ok": False, "error": "timeout"}])
+            set_n4(d, "O", at(10.0, 15) + [{"ok": False, "error": "timeout", "decode_tokens_per_s": 1.0}])
             r = h59.score(d, MATCHED)
         self.assertEqual((r["arms"]["O"]["n4_requests"], r["arms"]["O"]["n4_total"]), (45, 48))
         self.assertEqual((r["arms"]["L"]["n4_requests"], r["arms"]["L"]["n4_total"]), (48, 48))
@@ -276,6 +324,18 @@ class Cli(unittest.TestCase):
             r = self.run_cli("score", d, "--load", gate)
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(json.loads(r.stdout)["verdict"], "SUPPORTED")
+
+    def test_gate_without_matched_is_unmatched(self):
+        # A runner verdict that does not say matched is not a matched load.
+        with tempfile.TemporaryDirectory() as d:
+            write_holds(d, {"L": 15.0, "O": 10.0}, {"L": 45, "O": 45})
+            gate = os.path.join(d, "gate.json")
+            dump({"reason": "no verdict written"}, gate)
+            r = self.run_cli("score", d, "--load", gate)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        out = json.loads(r.stdout)
+        self.assertEqual(out["verdict"], "INCONCLUSIVE")
+        self.assertIn("load unmatched: no verdict written", out["reason"])
 
     def test_arms_names_l_and_o(self):
         r = self.run_cli("score", H57D_RECORDS, "--load", "h57d", "--arms", "L=Ld-mtp")
