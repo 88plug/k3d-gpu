@@ -4253,11 +4253,19 @@ prediction changes, and no H54a number is re-scored. It answers the run section'
 rule, outside k3d. B1g's container ran under plain `docker run`, rendered from the committed
 hold-2 record (`hold2/B1g/deploy.yaml`): the same image digest, args, env ConfigMap and chat
 template, user 1001, a read-only root, the same capabilities, and no CPU or memory request or
-limit. The QAT weights were mounted read-only. The load was sequential 256-token greedy requests
-from `bench/llm_load.py` with the H54a N=1 settings. Run 1 (05:30-05:39Z) used the render as is.
-Run 2 (05:40-05:57Z) was a labelled control with one change, `VLLM_CPU_ATTN_SPLIT_KV=0`. Neither run
-used a GPU or touched a serving container. Records:
-`bench/h54/results/2026-10-29/B1g-stall-diag/`.
+limit. The QAT weights were mounted read-only. Three things differ from the pod: a private IPC
+namespace where the pod had `hostIPC: true` (both have a 1 GiB memory-backed `/dev/shm`), tmpfs
+for `/tmp` and the vLLM cache where the pod had emptyDirs, and the model directory mounted
+directly. The load was sequential 256-token greedy requests from `bench/llm_load.py` with the H54a
+N=1 settings. Run 1 (05:30-05:39Z) used the render as is. Run 2 (05:40-05:57Z) was a labelled
+control with one change, `VLLM_CPU_ATTN_SPLIT_KV=0`. Neither run used a GPU or touched a serving
+container. Records: `bench/h54/results/2026-10-29/B1g-stall-diag/`.
+
+Run 1 used the script at `9f795a86`, which had no perf step and dumped Python stacks with
+`py-spy --native`; those dumps failed (rc 1 in `stall.json`). Its perf sample (`perf-spin.*`) and
+its Python stacks (`pyspy-*-plain.txt`) were taken by hand during the stall, with the commands in
+`perf-cmd.txt`; `perf-spin-script.txt.gz` keeps the first 400 lines of `perf script`. `6cbc2632`
+then added both steps to the script, and run 2 used it.
 
 **Run 1: the stall reproduced without k3d.** The server was ready after 162 s. Five requests
 completed (median 18.7 tok/s); the sixth stopped at 248 of 256 tokens, at KV length 294. At the
@@ -4276,16 +4284,21 @@ not a v0.24.0 variable; the server logs it as unknown.
 
 **Cause: a vLLM CPU attention bug, fixed upstream after v0.24.0.** vllm-project/vllm#45844
 ("Fix CPU split-KV scratchpad sizing", merged 2026-07-04 as `26eb8720`) was opened for a hang
-"seen with google/gemma-4-26B-A4B-it". The CPU attention metadata builder sized the split-KV
-reduction scratchpad from the model-wide KV-head count and the output element size. The kernel
-writes float split outputs, and on Gemma 4's global-attention layers it handles more query heads
-per split. Those layers have head dim 512 and 2 KV heads, against the sliding layers' 256 and 8;
-5 of the 30 layers are global (`config.json`). Split outputs then overlap the split-completion
-flags, and `reduce_splits` can wait forever. The stuck kernel's template arguments (AMX, head dim
-512) are those layers'. v0.24.0 (tagged 2026-06-29) carries the old code: `cpu_attn.py` line 140
-takes `model_config.get_num_kv_heads`, and `cpu_attn_impl.hpp` lines 420 and 688 size it the old
-way. GitHub's compare puts `26eb8720` in v0.25.0 and in every later tag checked (v0.26.0, v0.28.0,
-v0.32.0), and not in v0.24.0.
+"seen with google/gemma-4-26B-A4B-it". In v0.24.0 the CPU attention metadata builder takes the
+KV-head count from the model config for every layer group: 8, from `num_key_value_heads`, with 16
+query heads. The scheduler then sizes the split-KV reduction scratchpad for 16/8 = 2 query heads
+per KV head times the split threshold. Gemma 4's global-attention layers have head dim 512 and 2
+KV heads, against the sliding layers' 256 and 8; 5 of the 30 layers are global (`config.json`).
+Their kernel handles 8 query heads per KV head, so split outputs overrun the scratchpad into the
+split-completion flags, and `reduce_splits` can wait forever. The stuck kernel's template
+arguments (AMX, head dim 512) are those layers'. v0.24.0 (tagged 2026-06-29) carries the old code:
+`cpu_attn.py` line 140 takes `model_config.get_num_kv_heads`, and `cpu_attn_impl.hpp` lines 420
+and 688 size the scratchpad from it. The merged fix takes the count from each group's KV-cache
+spec and sizes the scratchpads for the largest query-head tile any work item uses. The PR's
+description also names the split outputs' float element size; the merged diff does not change it,
+and on the AMX kernel v0.24.0 already sizes them as float (`partial_output_buffer_t`). GitHub's
+compare puts `26eb8720` in v0.25.0 and in every later tag checked (v0.26.0, v0.28.0, v0.32.0), and
+not in v0.24.0.
 
 **Deterministic?** Not in position, but recurrent. All three B1g engines stalled within their
 first 690-1,540 decode steps: H54a hold 1 at KV length 211 (third 256-token request), hold 2 at

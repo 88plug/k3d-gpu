@@ -3,11 +3,14 @@
 # vLLM CPU v0.24.0 stopped mid-decode in both holds, EngineDeadError after the 300 s
 # execute_model RPC timeout). Not a hold, not an arm; no hypothesis is scored from it.
 #
-# It starts B1g's container exactly as rendered in the committed H54a record
+# It starts B1g's container from the committed H54a record
 # (bench/h54/results/2026-10-21/H54a/hold2/B1g/deploy.yaml: image digest, args, env ConfigMap,
 # chat-template ConfigMap, user 1001, read-only root, capabilities, no CPU or memory request or
-# limit) with plain `docker run` instead of k3d, sends sequential 256-token greedy requests with
-# the harness client (bench/llm_load.py, the H54a N=1 settings), and watches vLLM's /metrics.
+# limit) with plain `docker run` instead of k3d. Unlike the pod it has a private IPC namespace
+# (the pod: hostIPC), tmpfs for /tmp and the vLLM cache (the pod: emptyDirs) and the model
+# directory mounted directly; /dev/shm is 1 GiB of memory in both. It sends sequential 256-token
+# greedy requests with the harness client (bench/llm_load.py, the H54a N=1 settings), and watches
+# vLLM's /metrics.
 # On a stall it records each thread of the container's processes twice, 10 s apart, 5 s of perf
 # call graphs of each engine thread still running, and a py-spy dump of each process, then waits
 # for the engine to die or 400 s. DIAG_EXTRA_ENV adds env to B1g's for a labelled control run.
