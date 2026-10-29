@@ -1,0 +1,17 @@
+Forwarding from 127.0.0.1:18730 -> 8000
+Forwarding from [::1]:18730 -> 8000
+Handling connection for 18730
+Handling connection for 18730
+Handling connection for 18730
+E1021 22:55:14.511870  666869 portforward.go:404] "Unhandled Error" err="error copying from local connection to remote stream: writeto tcp4 127.0.0.1:18730->127.0.0.1:41446: read tcp4 127.0.0.1:18730->127.0.0.1:41446: read: connection reset by peer"
+Handling connection for 18730
+E1021 22:55:52.957034  666869 portforward.go:404] "Unhandled Error" err="error copying from local connection to remote stream: writeto tcp4 127.0.0.1:18730->127.0.0.1:33484: read tcp4 127.0.0.1:18730->127.0.0.1:33484: read: connection reset by peer"
+Handling connection for 18730
+E1021 22:55:57.632325  666869 portforward.go:404] "Unhandled Error" err="error copying from local connection to remote stream: writeto tcp4 127.0.0.1:18730->127.0.0.1:59326: read tcp4 127.0.0.1:18730->127.0.0.1:59326: read: connection reset by peer"
+Handling connection for 18730
+E1021 22:56:06.055528  666869 portforward.go:404] "Unhandled Error" err="error copying from local connection to remote stream: writeto tcp4 127.0.0.1:18730->127.0.0.1:39368: read tcp4 127.0.0.1:18730->127.0.0.1:39368: read: connection reset by peer"
+Handling connection for 18730
+E1021 22:56:22.190337  666869 portforward.go:404] "Unhandled Error" err="error copying from local connection to remote stream: writeto tcp4 127.0.0.1:18730->127.0.0.1:39378: read tcp4 127.0.0.1:18730->127.0.0.1:39378: read: connection reset by peer"
+Handling connection for 18730
+E1021 22:57:39.339107  666869 portforward.go:404] "Unhandled Error" err="error copying from local connection to remote stream: writeto tcp4 127.0.0.1:18730->127.0.0.1:53332: read tcp4 127.0.0.1:18730->127.0.0.1:53332: read: connection reset by peer"
+Handling connection for 18730

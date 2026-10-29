@@ -1,0 +1,19 @@
+Forwarding from 127.0.0.1:18630 -> 8000
+Forwarding from [::1]:18630 -> 8000
+Handling connection for 18630
+Handling connection for 18630
+Handling connection for 18630
+E1021 22:30:04.833518  612769 portforward.go:404] "Unhandled Error" err="error copying from local connection to remote stream: writeto tcp4 127.0.0.1:18630->127.0.0.1:50738: read tcp4 127.0.0.1:18630->127.0.0.1:50738: read: connection reset by peer"
+Handling connection for 18630
+E1021 22:30:55.530197  612769 portforward.go:404] "Unhandled Error" err="error copying from local connection to remote stream: writeto tcp4 127.0.0.1:18630->127.0.0.1:60764: read tcp4 127.0.0.1:18630->127.0.0.1:60764: read: connection reset by peer"
+Handling connection for 18630
+E1021 22:31:05.711218  612769 portforward.go:404] "Unhandled Error" err="error copying from local connection to remote stream: writeto tcp4 127.0.0.1:18630->127.0.0.1:47582: read tcp4 127.0.0.1:18630->127.0.0.1:47582: read: connection reset by peer"
+Handling connection for 18630
+E1021 22:31:24.398094  612769 portforward.go:404] "Unhandled Error" err="error copying from local connection to remote stream: writeto tcp4 127.0.0.1:18630->127.0.0.1:55728: read tcp4 127.0.0.1:18630->127.0.0.1:55728: read: connection reset by peer"
+Handling connection for 18630
+E1021 22:31:40.581806  612769 portforward.go:404] "Unhandled Error" err="error copying from local connection to remote stream: writeto tcp4 127.0.0.1:18630->127.0.0.1:40734: read tcp4 127.0.0.1:18630->127.0.0.1:40734: read: connection reset by peer"
+Handling connection for 18630
+E1021 22:31:48.712433  612769 portforward.go:404] "Unhandled Error" err="error copying from local connection to remote stream: writeto tcp4 127.0.0.1:18630->127.0.0.1:58456: read tcp4 127.0.0.1:18630->127.0.0.1:58456: read: connection reset by peer"
+Handling connection for 18630
+E1021 22:32:07.006571  612769 portforward.go:404] "Unhandled Error" err="error copying from local connection to remote stream: writeto tcp4 127.0.0.1:18630->127.0.0.1:49490: read tcp4 127.0.0.1:18630->127.0.0.1:49490: read: connection reset by peer"
+Handling connection for 18630
