@@ -42,7 +42,7 @@ PREFIX=k3dgpu-i-amx-autoquant
 OVMS_IMAGE="openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58"
 # python:3.14.10-slim by digest: the newest Python that openvino 2026.4.1 ships wheels for (cp310-cp314).
 PY_IMAGE="python:3.14.10-slim@sha256:3cabfd7d7aaf394e6040e79fa1eec6ca1c52b74ed9188650472695d9a9326999"
-# Checked on PyPI / download.pytorch.org 2026-10-17. openvino 2026.4.1 matches the
+# Checked on PyPI / download.pytorch.org 2026-10-29. openvino 2026.4.1 matches the
 # OVMS release. transformers and huggingface_hub are the newest inside optimum-intel
 # 2.2.0's bounds (transformers<5.6, huggingface-hub<1.22). torch/torchvision come
 # from the CPU wheel index so no CUDA wheels are pulled. --prepare still records
