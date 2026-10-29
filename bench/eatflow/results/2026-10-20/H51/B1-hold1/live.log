@@ -1,0 +1,17 @@
+== arm B1 start 09:55:52 (+0s)
+== k3d-gpu up 09:55:52 (+0s)
+== wait-ready 09:56:36 (+44s)
+== server-wait 09:59:18 (+206s)
+served model: google/gemma-4-26B-A4B-it
+== load typical 09:59:35 (+223s)
+== apb ramp 1,2,4,8,16 10:00:01 (+249s)
+agentbench: in-process proxy on 127.0.0.1:18620 -> http://127.0.0.1:18640
+agentbench: apb B1 N=1: FAIL {'n_requests': 58, 'p95_s': 11.516896, 'success': 0.9310344827586207, 'error_rate': 0.0, 'p95_ok': False, 'success_ok': True, 'errors_ok': True, 'n_ok': False}
+agents per box (B1, typical, ramp [1, 2, 4, 8, 16]): 0
+== capacity --slo 10, budget 3 min 10:05:24 (+572s)
+    - endpoint given by --url: engine and server not read from the cluster
+    - p95 pools requests as independent; turns of one session are correlated (per-rep p95 listed)
+  json: /home/devcloud/k3dgpu-bench/results/H51/B1-hold1/capacity/capacity.json
+== finished 10:06:45 (+653s)
+== cleanup 10:06:45 (+653s)
+== done 10:06:50 (+658s)

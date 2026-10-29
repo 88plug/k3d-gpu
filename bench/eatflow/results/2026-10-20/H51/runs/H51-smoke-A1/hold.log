@@ -1,0 +1,28 @@
+== arm A1 start 09:27:40 (+0s)
+== k3d-gpu up 09:27:41 (+1s)
+== wait-ready 09:28:43 (+63s)
+Waiting for deployment "ovms" rollout to finish: 0 of 1 updated replicas are available...
+deployment "ovms" successfully rolled out
+== server-wait 09:29:30 (+110s)
+curl: (7) Failed to connect to 127.0.0.1 port 18630 after 0 ms: Could not connect to server
+served model: gemma-4-26b-a4b-it
+curl: (7) Failed to connect to 127.0.0.1 port 18640 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18640 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18640 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18640 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18640 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18640 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8090 after 0 ms: Could not connect to server
+== load typical 09:29:54 (+134s)
+settle: settled after 5 s
+== apb ramp 1 09:30:21 (+161s)
+agentbench: in-process proxy on 127.0.0.1:18620 -> http://127.0.0.1:18640
+agentbench: apb A1 N=1: FAIL {'n_requests': 6, 'p95_s': 8.019397, 'success': 1.0, 'error_rate': 0.0, 'p95_ok': True, 'success_ok': True, 'errors_ok': True, 'n_ok': False}
+agents per box (A1, typical, ramp [1]): 0
+== capacity --slo 10, budget 3 min 09:31:36 (+236s)
+    - endpoint given by --url: engine and server not read from the cluster
+    - p95 pools requests as independent; turns of one session are correlated (per-rep p95 listed)
+  json: /home/devcloud/k3dgpu-bench/smoke/H51/A1/capacity/capacity.json
+== finished 09:32:48 (+308s)
+== cleanup 09:32:48 (+308s)
+== done 09:32:51 (+311s)

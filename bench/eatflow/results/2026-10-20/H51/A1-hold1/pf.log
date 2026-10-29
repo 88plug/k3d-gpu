@@ -1,0 +1,23 @@
+Forwarding from 127.0.0.1:18630 -> 8000
+Forwarding from [::1]:18630 -> 8000
+Handling connection for 18630
+Handling connection for 18630
+Handling connection for 18630
+E1029 09:47:24.416485 1331310 portforward.go:404] "Unhandled Error" err="error copying from local connection to remote stream: writeto tcp4 127.0.0.1:18630->127.0.0.1:42088: read tcp4 127.0.0.1:18630->127.0.0.1:42088: read: connection reset by peer"
+Handling connection for 18630
+E1029 09:47:37.394995 1331310 portforward.go:404] "Unhandled Error" err="error copying from local connection to remote stream: writeto tcp4 127.0.0.1:18630->127.0.0.1:38636: read tcp4 127.0.0.1:18630->127.0.0.1:38636: read: connection reset by peer"
+Handling connection for 18630
+E1029 09:50:00.895676 1331310 portforward.go:404] "Unhandled Error" err="error copying from local connection to remote stream: writeto tcp4 127.0.0.1:18630->127.0.0.1:57322: read tcp4 127.0.0.1:18630->127.0.0.1:57322: read: connection reset by peer"
+Handling connection for 18630
+E1029 09:52:18.964445 1331310 portforward.go:404] "Unhandled Error" err="error copying from local connection to remote stream: writeto tcp4 127.0.0.1:18630->127.0.0.1:38526: read tcp4 127.0.0.1:18630->127.0.0.1:38526: read: connection reset by peer"
+Handling connection for 18630
+E1029 09:52:25.373393 1331310 portforward.go:391] "Unhandled Error" err="error copying from remote stream to local connection: readfrom tcp4 127.0.0.1:18630->127.0.0.1:50194: write tcp4 127.0.0.1:18630->127.0.0.1:50194: write: broken pipe"
+Handling connection for 18630
+E1029 09:52:52.596850 1331310 portforward.go:404] "Unhandled Error" err="error copying from local connection to remote stream: writeto tcp4 127.0.0.1:18630->127.0.0.1:33746: read tcp4 127.0.0.1:18630->127.0.0.1:33746: read: connection reset by peer"
+Handling connection for 18630
+Handling connection for 18630
+Handling connection for 18630
+Handling connection for 18630
+E1029 09:53:22.481570 1331310 portforward.go:404] "Unhandled Error" err="error copying from local connection to remote stream: writeto tcp4 127.0.0.1:18630->127.0.0.1:38336: read tcp4 127.0.0.1:18630->127.0.0.1:38336: read: connection reset by peer"
+Handling connection for 18630
+Handling connection for 18630
