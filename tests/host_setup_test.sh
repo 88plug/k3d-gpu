@@ -103,7 +103,37 @@ for v in HS_PPA_MEDIA HS_PPA_GMM HS_PPA_LIBVA; do
     OUT=$(cat "${ROOT}/.github/workflows/build-and-push.yml")
     says "nightly check compares ${v} with the PPA's build" "[ \"\${{ steps.ppa.outputs.${v} }}\" != \"\${{ steps.current.outputs.${v} }}\" ]"
 done
-says "nightly check reads the PPA's current builds" "hack/ppa-pins | tee -a \"\$GITHUB_OUTPUT\""
+# The ppa step as the runner runs a step with no shell: key (bash -e, no pipefail),
+# from a checkout whose hack/ppa-pins is a stub. A hack/ppa-pins failure has to fail
+# the step: its empty outputs would otherwise read as moved pins and cut a release.
+ppastep=$(python3 -c 'import sys, yaml
+for s in yaml.safe_load(open(sys.argv[1]))["jobs"]["check"]["steps"]:
+    if s.get("id") == "ppa": print(s["run"])' "${ROOT}/.github/workflows/build-and-push.yml")
+OUT=${ppastep}
+ok=1; [ -n "${ppastep}" ] && ok=0
+check "build-and-push has the ppa step" "${ok}" "no step with id ppa"
+ppastep_run() {  # ppastep_run <stub exit code>: the step's GITHUB_OUTPUT into OUT, its exit code into RC
+    local d="${WORK}/ppastep"
+    rm -rf "${d}"; mkdir -p "${d}/hack"
+    printf '%s\n' "${ppastep}" > "${d}/step.sh"
+    if [ "$1" -eq 0 ]; then
+        printf '#!/bin/sh\nprintf "HS_PPA_MEDIA=1.0.0-1~ppa1\\nHS_PPA_GMM=2.0.0-1~ppa1\\nHS_PPA_LIBVA=3.0.0-1~ppa1\\n"\n' > "${d}/hack/ppa-pins"
+    else
+        printf '#!/bin/sh\necho "ppa-pins: cannot fetch the PPA'"'"'s noble index" >&2\nexit %s\n' "$1" > "${d}/hack/ppa-pins"
+    fi
+    chmod +x "${d}/hack/ppa-pins"
+    : > "${d}/out"
+    (cd "${d}" && GITHUB_OUTPUT="${d}/out" bash -e step.sh) >/dev/null 2>&1
+    RC=$?
+    OUT=$(cat "${d}/out")
+}
+ppastep_run 0
+rc_is "nightly ppa step: hack/ppa-pins succeeding exits 0" 0
+says "nightly ppa step: the pins land in its outputs" "HS_PPA_GMM=2.0.0-1~ppa1"
+ppastep_run 1
+ok=1; [ "${RC}" -ne 0 ] && ok=0
+check "nightly ppa step: hack/ppa-pins failing fails the step" "${ok}" "rc=${RC}, want non-zero"
+OUT=$(cat "${ROOT}/.github/workflows/build-and-push.yml")
 says "nightly check reads the launcher's PPA pins" "grep '^HS_PPA_' scripts/k3d-gpu"
 says "nightly bump writes the PPA pins into the launcher and README" "hack/ppa-pins --write scripts/k3d-gpu README.md"
 OUT=$(grep -F 'kobuk-team/intel-graphics' "${ROOT}/README.md")

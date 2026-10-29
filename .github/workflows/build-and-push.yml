@@ -173,8 +173,11 @@ jobs:
           # version, and the PPA serves only its current build of each: a pin it has
           # superseded no longer installs. hack/ppa-pins prints the HS_PPA_* lines for
           # its current noble and resolute builds, and fails when one pin cannot
-          # cover both releases.
-          hack/ppa-pins | tee -a "$GITHUB_OUTPUT"
+          # cover both releases. Its exit code ends the step (a step without a
+          # shell: key runs bash -e, without pipefail): empty outputs would read
+          # as moved pins.
+          pins=$(hack/ppa-pins)
+          printf '%s\n' "$pins" | tee -a "$GITHUB_OUTPUT"
 
       - name: Read current pinned versions
         id: current
