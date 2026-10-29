@@ -1,0 +1,11 @@
+# rc=1
+Process 1073661: VLLM::EngineCore
+Python v3.12.13 (/opt/uv/python/cpython-3.12.13-linux-x86_64-gnu/bin/python3.12)
+
+
+# stderr
+Error: Failed to get stack traces
+
+Caused by:
+    0: UNW_EBADREG: bad register number
+    1: UNW_EBADREG: bad register number
