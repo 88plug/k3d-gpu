@@ -903,7 +903,8 @@ that of every variant the trusted orgs publish of it, found by name and by
   for Q4_0: symmetric int4, blocks of 32) also gets a self-built candidate: an
   OpenVINO IR at INT4_SYM group 32, made by a pinned one-time conversion
   (`console/convert-pins.json`, moved nightly to the newest compatible releases).
-  It ranks below the official IR until H54q measures it, and
+  It ranks below the official IR until a quality row promotes it (H54q is that
+  row, and its run did not promote it), and
   `K3D_GPU_AGENT_VARIANT=qat-convert` forces it. `plan --explain` prints the
   commands. A QAT target only takes a QAT drafter, as the model card requires.
 - **Speculative decoding.** It uses the engine's documented method and stays inside
