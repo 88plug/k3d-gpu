@@ -10711,7 +10711,7 @@ model_opt_cache() { echo "${XDG_CACHE_HOME:-${HOME}/.cache}/k3d-gpu/hf"; }
 model_opt_measurements() { echo "${XDG_CACHE_HOME:-${HOME}/.cache}/k3d-gpu/variant-measurements.json"; }
 # The ledger: EXPERIMENTS.md next to the console directory (a repo checkout), else
 # the console's ledger-rules.json, generated from it and shipped in every package
-# (the H27/H34 rows that set agent defaults); K3D_GPU_MODEL_OPT_LEDGER names another file.
+# (the H27/H34/H59 rows that set agent defaults); K3D_GPU_MODEL_OPT_LEDGER names another file.
 model_opt_ledger() {
     local d
     if [ -n "${K3D_GPU_MODEL_OPT_LEDGER:-}" ]; then echo "${K3D_GPU_MODEL_OPT_LEDGER}"; return 0; fi

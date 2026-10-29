@@ -80,6 +80,12 @@ def n4_samples(root, arm):
     return out
 
 
+def set_n4(root, arm, samples):
+    """Replace an arm's N=4 samples in performance holds 1-3 with the given sample dicts."""
+    for k in (1, 2, 3):
+        dump({"phases": [{"samples": samples}]}, os.path.join(root, f"hold{k}", arm, "load-n4.json"))
+
+
 class Statistic(unittest.TestCase):
     def test_pooled_48_per_arm_and_h54_bootstrap(self):
         with tempfile.TemporaryDirectory() as d:
@@ -124,6 +130,29 @@ class Verdict(unittest.TestCase):
         self.assertGreaterEqual(r["ci"][1], 1.2)
         self.assertEqual(r["verdict"], "INCONCLUSIVE")
 
+    def test_ci_lower_bound_exactly_at_bar_is_supported(self):
+        # No spread: every resample's ratio is 12.0 / 10.0, so the CI is [1.2, 1.2].
+        r = self.run_score({"L": 12.0, "O": 10.0}, spread=0)
+        self.assertEqual(r["ci"], [1.2, 1.2])
+        self.assertEqual(r["verdict"], "SUPPORTED")
+
+    def test_ci_just_below_bar_is_refuted(self):
+        r = self.run_score({"L": 11.95, "O": 10.0}, spread=0)
+        self.assertEqual([round(x, 12) for x in r["ci"]], [1.195, 1.195])
+        self.assertEqual(r["verdict"], "REFUTED")
+
+    def test_ci_upper_bound_exactly_at_bar_is_inconclusive(self):
+        # L is 12.0 throughout; O is half 10.0, half 11.0. The largest resampled ratio is
+        # 12.0 / 10.0 = 1.2, so the CI's upper bound sits on the bar and its lower bound below.
+        with tempfile.TemporaryDirectory() as d:
+            write_holds(d, {"L": 12.0, "O": 10.0}, self.Q, spread=0)
+            set_n4(d, "O", [{"ok": True, "decode_tokens_per_s": v} for v in [10.0] * 8 + [11.0] * 8])
+            r = h59.score(d, MATCHED)
+        self.assertLess(r["ci"][0], 1.2)
+        self.assertEqual(r["ci"][1], 1.2)
+        self.assertEqual(r["verdict"], "INCONCLUSIVE")
+        self.assertIn("not resolved", r["reason"])
+
     def test_quality_gate_is_o_minus_two_items(self):
         r = self.run_score({"L": 15.0, "O": 10.0}, quality={"L": 43, "O": 45})
         self.assertTrue(r["quality_gate"]["passed"])
@@ -152,6 +181,44 @@ class Verdict(unittest.TestCase):
         self.assertEqual(r["arms"]["O"]["holds_measured"], 3)
         self.assertEqual(r["verdict"], "INCONCLUSIVE")
         self.assertIn("O not deliverable in two holds", r["reason"])
+
+    def test_quality_hold_failure_counts_toward_two(self):
+        # Not deliverable in the quality hold and in hold 2, which a spare fills: two holds.
+        with tempfile.TemporaryDirectory() as d:
+            write_holds(d, {"L": 15.0, "O": 10.0}, self.Q, missing={(2, "O"), (4, "O")})
+            shutil.copytree(os.path.join(d, "hold1"), os.path.join(d, "hold5"))
+            put(os.path.join(d, "hold5", "repeats"), "2\n")
+            r = h59.score(d, MATCHED)
+        self.assertEqual(r["arms"]["O"]["holds_measured"], 3)
+        self.assertEqual(r["arms"]["O"]["not_deliverable"], 2)
+        self.assertEqual(r["verdict"], "INCONCLUSIVE")
+        self.assertIn("O not deliverable in two holds", r["reason"])
+
+    def test_spare_hold_failure_counts_toward_two(self):
+        # Not deliverable in hold 2 and in its first spare (hold5); the second spare (hold6) fills it.
+        with tempfile.TemporaryDirectory() as d:
+            write_holds(d, {"L": 15.0, "O": 10.0}, self.Q, missing={(2, "O")})
+            shutil.copytree(os.path.join(d, "hold2"), os.path.join(d, "hold5"))
+            put(os.path.join(d, "hold5", "repeats"), "2\n")
+            shutil.copytree(os.path.join(d, "hold1"), os.path.join(d, "hold6"))
+            put(os.path.join(d, "hold6", "repeats"), "2\n")
+            r = h59.score(d, MATCHED)
+        self.assertEqual(r["arms"]["O"]["holds_measured"], 3)
+        self.assertEqual(r["arms"]["O"]["not_deliverable"], 2)
+        self.assertEqual(r["verdict"], "INCONCLUSIVE")
+        self.assertIn("O not deliverable in two holds", r["reason"])
+
+    def test_failed_requests_are_dropped_and_counted(self):
+        # A partly failed N=4 phase is scored on its completed requests, as H54's and H57d's
+        # scorers do; the report gives completed and sent requests per arm.
+        with tempfile.TemporaryDirectory() as d:
+            write_holds(d, {"L": 15.0, "O": 10.0}, self.Q, spread=0)
+            set_n4(d, "O", [{"ok": True, "decode_tokens_per_s": 10.0}] * 15 + [{"ok": False, "error": "timeout"}])
+            r = h59.score(d, MATCHED)
+        self.assertEqual((r["arms"]["O"]["n4_requests"], r["arms"]["O"]["n4_total"]), (45, 48))
+        self.assertEqual((r["arms"]["L"]["n4_requests"], r["arms"]["L"]["n4_total"]), (48, 48))
+        self.assertEqual(r["ci"], [1.5, 1.5])
+        self.assertEqual(r["verdict"], "SUPPORTED")
 
     def test_spare_replaces_one_failed_hold(self):
         with tempfile.TemporaryDirectory() as d:
@@ -222,6 +289,7 @@ class H57dRecords(unittest.TestCase):
     def test_h57d_n4_descriptive(self):
         r = h59.score(H57D_RECORDS, "h57d", {"L": "Ld-mtp", "O": "Od"})
         self.assertEqual((r["arms"]["L"]["n4_requests"], r["arms"]["O"]["n4_requests"]), (48, 48))
+        self.assertEqual((r["arms"]["L"]["n4_total"], r["arms"]["O"]["n4_total"]), (48, 48))
         self.assertEqual(r["quality_gate"], {"L": 50, "O": 50, "need": 48, "passed": True})
         self.assertFalse(r["load_gate"]["matched"])
         self.assertEqual(round(r["load_gate"]["means"]["Ld-mtp"], 2), 5.58)

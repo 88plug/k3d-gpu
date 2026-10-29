@@ -9543,16 +9543,20 @@ threshold, hold count or prediction. The predictions in the three rows stand as 
 **Scorer.** `bench/h59/h59.py score RESULTS --load h57d|GATE.json [--arms L=NAME,O=NAME]`
 computes the registered statistic and applies the registered rule:
 
-- Per arm it pools the N=4 requests of performance holds 1-3 (48 each). A spare hold (`hold5`,
-  `hold6`, file `repeats` = k) stands in for hold k.
+- Per arm it pools the N=4 requests of performance holds 1-3 (48 each when every request
+  completes). A spare hold (`hold5`, `hold6`, file `repeats` = k) stands in for hold k.
+- Failed requests (`ok` false) are dropped, as in H54's and H57d's scorers. A performance hold
+  counts as measured when its status is `measured` and its N=4 phase has at least one completed
+  request, so a partly failed N=4 phase is scored on its completed requests. Each arm's report
+  gives its completed and sent N=4 requests (`n4_requests`, `n4_total`) beside the verdict.
 - The statistic is the ratio of L's to O's median per-request `decode_tokens_per_s`, with H54's
   `boot_ratio` (10,000 resamples of each arm, seed 1), imported from `bench/h54`, not copied.
 - The quality gate counts GSM8K items correct: L >= O - 2.
-- The checks run in H57d's order. An arm not deliverable in two holds reads INCONCLUSIVE, and
-  so does an arm measured in fewer than 3 performance holds (no pooled 48) or with no quality
-  record. A failed quality gate reads REFUTED. Unmatched load reads INCONCLUSIVE. Then CI lower
-  bound >= 1.2 reads SUPPORTED, CI upper bound < 1.2 reads REFUTED, and anything else
-  INCONCLUSIVE.
+- The checks run in H57d's order. An arm not deliverable in two holds (any of holds 1-6, the
+  quality hold and spares included) reads INCONCLUSIVE, and so does an arm measured in fewer
+  than 3 performance holds or with no quality record. A failed quality gate reads REFUTED.
+  Unmatched load reads INCONCLUSIVE. Then CI lower bound >= 1.2 reads SUPPORTED, CI upper bound
+  < 1.2 reads REFUTED, and anything else INCONCLUSIVE.
 - `--load h57d` applies H57d's load gate (the spread of the arms' mean foreign P-core load
   within max(2.0, 25% of their mean) CPU-s/s, read from H57d's sampler records) to the N=4
   phases. That is H59d's rule, and H59w's through H57w, which runs H57d's runner. On the Xeon,
@@ -9563,13 +9567,20 @@ computes the registered statistic and applies the registered rule:
 The runner, in its own amendment, writes the records in H57d's layout that the scorer reads
 (`holdK/ARM/status.json`, `load-n4.json`, `phases.jsonl`, `holdK/load.jsonl`, `quality.json`).
 Tests: `bench/h59/test_h59.py` (the pooled statistic against `h54.boot_ratio`, every verdict
-branch, the gate's boundary at O - 2, both spare holds, both load modes, and the committed H57d
-records below), in CI.
+branch, the gate's boundary at O - 2, the 1.2 bar with each CI bound exactly on it and just
+below it, both spare holds, a not-deliverable count that takes in the quality and spare holds,
+a partly failed N=4 phase, both load modes, and the committed H57d records below), in CI.
 
-**What the H57d run says about H59d and H59w.** H57d's verdicts reached main (PR #194, merged
-2026-10-21 23:07Z) after the H59 rows were committed (21:12Z), which say H57d had no scored
-result yet: H57dm is SUPPORTED, H57da and H57db INCONCLUSIVE. H57d's records hold 48 N=4
-requests per arm, so the H59 statistic can be read on them, with H57d's Ld-mtp as L and Od as O
+**What the H57d run says about H59d and H59w.** H57d's scored verdicts (H57dm SUPPORTED, H57da
+and H57db INCONCLUSIVE) were on PR #194's branch about five minutes before the H59 rows were
+committed. Commit 7fa3ccd1 carried them, authored 2026-10-21 21:06:54Z, and PR #194 opened at
+21:07:05Z; the branch was rebased as 7ab9c207 at 21:59Z. The H59 rows were committed as
+fbb70bf6 at 21:12:34Z and pushed at 21:12:36Z. PR #194 merged to main at 23:07Z. So the H59d
+row's "H57d's desktop arms (Od, Ld, Ld-mtp) have no scored result yet" held for main only; it
+was false of PR #194's branch when written. The rows' predictions do not use H57d's result: the
+H59d row predicts N=1 L/O 1.4 where H57d's records read Ld-mtp/Od 0.785. No verdict depends on
+it, since no H59d measurement exists. H57d's records hold 48 N=4 requests per arm, so the H59
+statistic can be read on them, with H57d's Ld-mtp as L and Od as O
 (`h59.py score bench/h57d/results/2026-10-21 --load h57d --arms L=Ld-mtp,O=Od`). This is
 descriptive and is not an H59d measurement:
 
@@ -9597,7 +9608,11 @@ measured at N=1 only; H59 decides at N=4.
 - **H59w** (i7-13700): N=4 L/O 1.0 (0.75-1.35) (0.5). SUPPORTED (0.2), REFUTED (0.55),
   INCONCLUSIVE (0.25). wildct has the same P-core layout and ISA and less host load; even the
   desktop's quietest hold (hold 3) read N=4 L/O 1.104, below the 1.2 bar.
-- **H59** (Xeon 6741P): unchanged. H57d ran on the i9 only.
+- **H59** (Xeon 6741P): unchanged. H57d ran on the i9 only. The H59 row's prior cites A1g
+  (23.25 tok/s) as the OVMS reference. In H54a, A1g serves OVQ, the self-built QAT IR; H59's O
+  serves OVB (`OpenVINO/gemma-4-26b-a4b-it-int4-ov`), which is H54a's A1o at 21.73 tok/s. Against
+  A1o the N=1 L/O implied by H54a is 54.52 / 21.73 = 2.51, against A1g 2.35; both fall inside
+  the prior's 1.6-2.8, and the prior is unchanged.
 
 ## Scope corrections
 

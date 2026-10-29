@@ -17,7 +17,9 @@ O to the record directories' names (default L=L,O=O).
 Records, in H57d's layout: RESULTS_DIR/holdK/ARM/status.json for K = 1-4 (1-3 performance,
 4 quality) and spare holds hold5 and hold6, each with a file `repeats` naming the hold it
 replaces; ARM/load-n4.json (bench/llm_load.py), ARM/phases.jsonl and holdK/load.jsonl in a
-performance hold; ARM/quality.json in the quality hold.
+performance hold; ARM/quality.json in the quality hold. Failed requests (ok false) are dropped,
+as in H54's and H57d's scorers; each arm's report gives its completed (n4_requests) and sent
+(n4_total) N=4 requests.
 Python 3 standard library only."""
 
 import json
@@ -61,11 +63,15 @@ def hold_dirs(results):
     return d
 
 
-def decode_samples(arm_dir, phase):
+def phase_samples(arm_dir, phase):
+    """Every request of a phase as bench/llm_load.py recorded it, failed ones included."""
     p = os.path.join(arm_dir, f"load-{phase}.json")
-    if not os.path.exists(p):
-        return []
-    return [x["decode_tokens_per_s"] for x in jload(p)["phases"][0]["samples"]
+    return jload(p)["phases"][0]["samples"] if os.path.exists(p) else []
+
+
+def decode_samples(arm_dir, phase):
+    """The completed requests' decode tok/s; failed requests are dropped, as in H54 and H57d."""
+    return [x["decode_tokens_per_s"] for x in phase_samples(arm_dir, phase)
             if x.get("ok") and x.get("decode_tokens_per_s")]
 
 
@@ -73,7 +79,7 @@ def collect(results, name):
     """One arm's pooled performance samples, per-hold N=4 medians, quality and deliverability."""
     hd = hold_dirs(results)
     rec = {"name": name, "pooled": {p: [] for p in PHASES}, "n4_per_hold": {}, "holds_measured": 0,
-           "not_deliverable": 0, "quality": None}
+           "not_deliverable": 0, "quality": None, "n4_total": 0}
     for k in PERF_HOLDS + (QUALITY_HOLD,) + SPARES:
         if status(os.path.join(results, f"hold{k}", name)) == "not_deliverable":
             rec["not_deliverable"] += 1
@@ -83,6 +89,7 @@ def collect(results, name):
         if status(ad) != "measured" or not s:
             continue
         rec["holds_measured"] += 1
+        rec["n4_total"] += len(phase_samples(ad, "n4"))
         rec["n4_per_hold"][k] = h54.median(s)
         for p in PHASES:
             rec["pooled"][p] += decode_samples(ad, p)
