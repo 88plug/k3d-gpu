@@ -177,7 +177,7 @@
         "level": "ok",
         "revert": null,
         "section": "Intel CPU built-in accelerators...",
-        "text": "IAA: 1 device(s), 1 user work queue(s) — deployed by 'k3d-gpu up' (intel-iaa-plugin)",
+        "text": "IAA: 1 device(s), 1 user work queue(s) — deployed by 'k3d-gpu up' (intel-iaa-plugin); pods need CAP_SYS_RAWIO to mmap a WQ portal (INTEL-SA-01084)",
         "why": null
       },
       {

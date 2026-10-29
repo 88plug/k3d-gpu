@@ -774,7 +774,7 @@ def optimize(bundle, engine, device, opts=None):
                            quant=dict(Q4_0, method="Q4_0, scale = QAT grid step"), **{"from": qat_src["id"]}))
         choose("%s re-quantizes the QAT weights with llama.cpp's absmax/-8 scales" % gguf_qat["id"],
                "candidate: self-built Q4_0 with the QAT grid step as the block scale (no stock tool writes it)",
-               "llama.cpp ggml-quants.c quantize_row_q4_0_ref; research run REFERENCE.md 3.2 (weight-space probe)")
+               "llama.cpp ggml-quants.c quantize_row_q4_0_ref; research/model-cards/REFERENCE.md 3.2 (weight-space probe)")
 
     ranked, excluded = [], []
     for c in models:

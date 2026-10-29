@@ -10,7 +10,7 @@ Fixtures: tests/fixtures/hf/<org>__<name>.json, Hugging Face metadata saved by
 
 DECISIONS is the zero-flag decision table (no env, no options) per model and
 engine, written from the model cards and engine docs collected for this feature
-(model-cards/REFERENCE.md of the research run), not from model_opt.py.
+(research/model-cards/REFERENCE.md), not from model_opt.py.
 """
 
 import copy
@@ -43,7 +43,7 @@ def facts_of(name):
 
 
 # (model, engine, device) -> expected zero-flag decision, from section 4 of the
-# research run's REFERENCE.md (hardware: Xeon 6 + Arc Pro B70; client CPUs).
+# research/model-cards/REFERENCE.md (hardware: Xeon 6 + Arc Pro B70; client CPUs).
 #   model: variant served (None: the engine's default model stays, with a warning)
 #   spec:  speculative decoding kind (None: off)
 #   tool/reasoning: parsers
