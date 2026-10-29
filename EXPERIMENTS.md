@@ -1735,7 +1735,7 @@ entries that ask for another, Xeon/AMX, XMX, non-throttling or quiet host, and t
    below showed the cause: without C1 the agent pod stayed Pending. C1 changes when the kubelet
    evicts, nothing else, and applies to both arms alike. X1's 97% guard stays.
 5. **Pins.** k3d v5.9.0 and kubectl v1.35.2 in `~/k3dgpu-xhost/bin`, each checked against its
-   upstream checksum; node image `cryptoandcoffee/k3d-gpu:0.1.61` (the launcher's default at this pre-registration's base, set explicitly with `K3D_GPU_IMAGE` or `IMAGE` in every command,
+   upstream checksum (kubectl v1.37.2 for the rows [amendment K1](#cross-host-amendment-k1-kubectl-v1372-in-the-cross-host-workspace-2026-10-29) moves); node image `cryptoandcoffee/k3d-gpu:0.1.61` (the launcher's default at this pre-registration's base, set explicitly with `K3D_GPU_IMAGE` or `IMAGE` in every command,
    k3s v1.37.1; a change: the originals ran 0.1.28 (H25 run 4), 0.1.55 (H34) and 0.1.59 (H28),
    with the agent-manifest code unchanged since H25 run 4); OVMS `openvino/model_server@sha256:a928903f...76fc58` (2026.4.1, as every
    original row); `load.py`'s stress-ng pin. Models are downloaded on the host at the original
@@ -1800,6 +1800,36 @@ failure C1 fixes. Smoke 2 (22:14-22:20Z, with C1): `up` 48 s, the agent pod Read
 (`draft_device: "CPU"`), no node taint; then the H28 path (plain `k3d cluster create` with
 C1 as `--k3s-arg ...@server:*`) had no taint after 90 s. No inference request was sent in either.
 Smoke records: `bench/xhost/results/2026-10-20/smoke{1,2}/`.
+
+### Cross-host amendment K1: kubectl v1.37.2 in the cross-host workspace (2026-10-29)
+
+Recorded 2026-10-29, before any H7x hold and before H28x's run 2. Mechanics only. No hypothesis,
+arm, model, node image, prediction, outcome table, scorer, threshold, cap or order changes. It
+is pre-registered by its push time.
+
+1. **Why.** Rule 5 pins kubectl v1.35.2 in `~/k3dgpu-xhost/bin`, and `bench/xhost/hold.sh` puts
+   that directory first on `PATH`. The node image these rows run (0.1.61) serves Kubernetes
+   v1.37.1 (k3s v1.37.1+k3s1). Kubernetes' version skew policy supports kubectl within one minor
+   version of kube-apiserver, so v1.35 against v1.37 is outside it. No hold has failed from this.
+   Read on 2026-10-29: kubectl v1.37.2 (2026-10-28, `dl.k8s.io/release/stable.txt`) is the newest
+   release; k3d v5.9.0 is still its newest and stays. Crescent amendment E4 (PR #238) makes the
+   same move for shared rule 5's workspace, `~/k3dgpu-bench/bin`; this amendment covers the
+   cross-host workspace, which E4 does not touch.
+2. **Pins.** k3d v5.9.0 (unchanged) and kubectl v1.37.2 (linux/amd64 sha256 `c0448752...`).
+   `bench/xhost/tools.sh`, new, installs exactly these two into `~/k3dgpu-xhost/bin`, each checked
+   against its upstream checksum file (k3d's `checksums.txt`, kubectl's `.sha256`), and prints
+   both versions. It touches nothing else. Rule 5's tools had no script in this repo until now.
+3. **When.** `tools.sh` runs once on crescent from a clean checkout at or after this amendment's
+   merge, with the bench lock free and no cross-host row between holds. Its output goes into the
+   next cross-host row's records.
+4. **Rows.** A row runs all its holds on the kubectl in place at its first measuring hold. Rows
+   whose first measuring hold starts after `tools.sh` has run use v1.37.2: H28x's run 2, if PR
+   #208's amendment R1 allows it, and H7x (PRs #196 and #235), if its pre-registration merges
+   under these rules. H25x, H27x and H34x have run and keep what they ran; H25x and H34x record
+   kubectl v1.35.2. A smoke, or a hold that measured nothing (H28x run 1), does not fix a row's
+   tools.
+5. **Not changed.** The node image, the models, OVMS, `load.py`'s stress-ng pin and every other
+   item of rule 5.
 
 ### H25x run (Xeon 6741P, 2026-10-21)
 
