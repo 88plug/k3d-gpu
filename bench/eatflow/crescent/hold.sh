@@ -2,7 +2,7 @@
 # hold.sh NAME CAP_S CMD...: one measurement hold on crescent (EXPERIMENTS.md "H50-H52
 # pre-registration", shared rules 1-4). Waits for the campaign lock, applies the hold-start
 # rule (load1 <= 12 and no aiperf process, polled every 2 min for at most 60 min, then the hold
-# runs flagged), refuses to start above 97% disk, runs CMD under `timeout -k 30 CAP_S` with the
+# runs flagged), refuses to start above 97% disk, runs CMD under GNU `timeout -k 30 CAP_S` with the
 # serving sampler beside it and a disk watchdog that stops CMD above 97%, then kills what is left
 # of CMD's process tree, deletes every cluster and host container of this campaign
 # (not k3dgpu-x-*/-g-*) and this tool's load containers. A TERM, INT or HUP stops CMD with TERM
@@ -38,6 +38,14 @@ else
 ours() { docker ps -a --format '{{.Names}}' 2>/dev/null | grep -E '^k3dgpu-(e|a)-' | tr '\n' ' '; }
 clusters() { k3d cluster list -o json 2>/dev/null | python3 -c 'import json,sys,re; print(" ".join(c["name"] for c in json.load(sys.stdin) if re.match(r"k3dgpu-(e|a)-|k3dgpu-h5[0-9]b?$", c["name"])))'; }
 fi
+# CMD runs under GNU's timeout, which exits with CMD's own status when it passes a signal on.
+# uutils' timeout (the default on Ubuntu 25.10+, where GNU's is gnutimeout) exits 124 there
+# once -k is set, so a signalled hold would read as one that hit its cap.
+TO=$(command -v gnutimeout || command -v timeout)
+case "$("${TO:-timeout}" --version 2>/dev/null)" in
+    *"GNU coreutils"*) ;;
+    *) log "no GNU timeout (${TO:-none}): no hold"; exit 2 ;;
+esac
 
 log "waiting for the lock"
 if [ -n "${HOLD_SLOT:-}" ]; then

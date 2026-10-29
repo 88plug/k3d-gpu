@@ -4,7 +4,8 @@
 # own cleanup before anything is killed, the start sweep touches only this campaign's stale
 # processes, and every campaign cluster is deleted at the end (shared rule 4).
 #
-# Runs hold.sh for real under a temporary HOME with stub docker, k3d and df on its PATH.
+# Runs hold.sh for real under a temporary HOME with stub docker, k3d and df on its PATH
+# (T13, T14: and a timeout that is not GNU's).
 # Every process a test starts is named c3t<pid>-* (exec -a) and only those are killed.
 #
 # Usage: tests/hold_own_test.sh
@@ -16,6 +17,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HOLD=${ROOT}/bench/eatflow/crescent/hold.sh
 P=c3t$$
 CUT=$(command -v cut)
+# GNU's timeout, for T13's stubs (gnutimeout where uutils' is the default, Ubuntu 25.10+).
+GNUTO=$(command -v gnutimeout || command -v timeout)
 WORK=$(mktemp -d)
 PASS=0 FAILS=0
 ok()   { PASS=$((PASS + 1)); echo "ok   $1"; }
@@ -202,6 +205,48 @@ wait "${hp}"; v=$?
 if [ "${v}" = 143 ]; then ok "T12 rc = 143"; else fail "T12 rc = ${v}, want 143"; fi
 if [ ! -e "${h}/t12.ran" ]; then ok "T12 CMD never started"; else fail "T12 CMD started after SIGTERM"; fi
 if lockfree "${h}"; then ok "T12 lock free"; else fail "T12 lock held: $(lslocks -n -o PID,COMMAND,PATH | grep -F "${h}")"; fi
+
+# uutimeout FILE: a timeout that exits as uutils coreutils 0.10's does (the default timeout on
+# Ubuntu 26.04): signalled while -k is set, it passes the signal on, waits for CMD and exits
+# 124 whatever CMD's own status. Its other paths run GNU's.
+uutimeout() {
+    cat > "$1" <<EOF
+#!/usr/bin/env bash
+[ "\$1" = --version ] && { echo 'timeout (uutils coreutils) 0.10.0'; exit 0; }
+trap 'kill -TERM "\${c}" 2>/dev/null; wait "\${c}"; exit 124' TERM
+${GNUTO} "\$@" &
+c=\$!
+wait "\${c}"
+EOF
+    chmod +x "$1"
+}
+
+# T13: with uutils' timeout first on PATH and GNU's as gnutimeout (Ubuntu 26.04), a hold
+# signalled mid-CMD still records CMD's own status, not 124.
+h=$(newhome t13)
+uutimeout "${h}/k3dgpu-bench/bin/timeout"
+printf '#!/bin/sh\nexec %s "$@"\n' "${GNUTO}" > "${h}/k3dgpu-bench/bin/gnutimeout"
+chmod +x "${h}/k3dgpu-bench/bin/gnutimeout"
+HOME=${h} bash "${HOLD}" t13 600 bash -c "trap 'sleep 1' EXIT; touch '${h}/t13.started'; (exec -a ${P}-t13 sleep 300)" > "${h}/hold.out" 2>&1 &
+hp=$!
+for _ in $(seq 300); do [ -f "${h}/t13.started" ] && break; sleep 0.1; done
+sleep 0.5
+kill -TERM "${hp}"
+for _ in $(seq 450); do kill -0 "${hp}" 2>/dev/null || break; sleep 0.1; done
+if kill -0 "${hp}" 2>/dev/null; then fail "T13 hold.sh still running 45 s after SIGTERM"; kill -KILL "${hp}"; fi
+wait "${hp}" 2>/dev/null
+v=$(cat "${h}/k3dgpu-bench/runs/t13/rc" 2>/dev/null || echo missing)
+if [ "${v}" = 143 ]; then ok "T13 rc = 143 with uutils' timeout first on PATH"; else fail "T13 rc = ${v}, want 143"; fi
+if [ -z "$(pgrep -f "^${P}-t13")" ]; then ok "T13 no process of the hold left"; else fail "T13 survivors"; kill -KILL $(pgrep -f "^${P}-t13") 2>/dev/null; fi
+
+# T14: with no GNU timeout on PATH, hold.sh ends with rc 2 before the lock: no CMD, no record.
+h=$(newhome t14)
+uutimeout "${h}/k3dgpu-bench/bin/timeout"
+uutimeout "${h}/k3dgpu-bench/bin/gnutimeout"
+HOME=${h} bash "${HOLD}" t14 60 bash -c "touch '${h}/t14.ran'" > "${h}/hold.out" 2>&1; v=$?
+if [ "${v}" = 2 ]; then ok "T14 rc = 2 without a GNU timeout"; else fail "T14 rc = ${v}, want 2"; fi
+if [ ! -e "${h}/t14.ran" ]; then ok "T14 CMD never started"; else fail "T14 CMD ran under a timeout that is not GNU's"; fi
+if [ ! -s "${h}/k3dgpu-bench/runs/holds.log" ]; then ok "T14 no hold record"; else fail "T14 holds.log has records"; fi
 
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]
