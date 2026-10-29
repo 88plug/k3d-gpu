@@ -1,17 +1,17 @@
 # k3d-gpu on Intel hardware: technical report
 
-Status: working report, 2026-10-21. Ledger: [EXPERIMENTS.md](../../EXPERIMENTS.md), verdicts as of the H54a run (74 rows).
+Status: working report, 2026-10-21. Ledger: [EXPERIMENTS.md](../../EXPERIMENTS.md), verdicts as of H28x amendment R1, 2026-10-29 (74 rows).
 
 ## Abstract
 
 k3d-gpu turns one Linux host into a single-node k3s cluster (k3d) that detects the host's Intel hardware and configures it. It sets NRI balloons for hybrid P/E and NUMA CPUs, device plugins for iGPU, dGPU, NPU, DSA, IAA, QAT and Gaudi, and placement labels for agent and inference pods.
 
-This report covers what was measured, and how. Every result but H52, H25x, H27x, H34x, H54a and H54d (a Xeon 6741P host) comes from one host: an i9-13900T (Raptor Lake-S, 8 P-cores and 16 E-cores, UHD 770 iGPU with no XMX, AVX-VNNI, no AMX, no NPU). It is a T-SKU rated at 35 W base power, but its firmware runs PL1 = PL2 = 117 W, so it does not run the T-series 35 W envelope.
+This report covers what was measured, and how. Every result but H52, H25x, H27x, H28x, H34x, H54a and H54d (a Xeon 6741P host) comes from one host: an i9-13900T (Raptor Lake-S, 8 P-cores and 16 E-cores, UHD 770 iGPU with no XMX, AVX-VNNI, no AMX, no NPU). It is a T-SKU rated at 35 W base power, but its firmware runs PL1 = PL2 = 117 W, so it does not run the T-series 35 W envelope.
 
 - Seventeen hypotheses are SUPPORTED. Sixteen are scoped to that host; H25x is H25 replicated on the Xeon 6741P. H57dm (the Gemma 4 QAT MTP drafter speeds llama.cpp decode on the P-cores) is the newest.
 - Fourteen are REFUTED. Six of them changed shipped defaults.
-- 23 are INCONCLUSIVE, mostly because the shared host throttles or its load was unmatched. H54a and H54d (Gemma 4 26B-A4B QAT on the Xeon 6741P) are INCONCLUSIVE because EAT's stock arm, EAT 1.0.3's vLLM CPU v0.24.0, stalled in both of H54a's holds, so no arm could be scored against it. EAT 1.1.0 ships vLLM CPU v0.28.0, which has not been measured. H57da (k3d-gpu's OVMS pick vs llama.cpp for Gemma 4 QAT on the i9-13900T) did not resolve: the strictly pinned llama.cpp arms tracked host load; H57db did not run (memory).
-- 20 are PENDING: the Xeon 6741P rows H50, H50o, H51, H52b, H53, H54q, H54b, H54c and the zero-touch thesis row H58, the cross-host replication H28x, H55 (SLO-gated admission of an E-core neighbour on the i9-13900T), H56 (two holds at once in cpuset slices of the Xeon 6741P), and the second client host's (wildct, i7-13700) rows H52w, H18w, H25w, H28w, H34w, H57wa, H57wm and H57wb, pre-registered and not yet run. H52, the first row run on that host (a Xeon 6741P with four Arc Pro B70s), is REFUTED. H27x, H27 re-run on the Xeon (AMX), is REFUTED as on the i9. H34x, H34 re-run there, is REFUTED: the CPU Fast Draft that sped up the i9 slowed decode on the Xeon.
+- 24 are INCONCLUSIVE, mostly because the shared host throttles or its load was unmatched. H54a and H54d (Gemma 4 26B-A4B QAT on the Xeon 6741P) are INCONCLUSIVE because EAT's stock arm, EAT 1.0.3's vLLM CPU v0.24.0, stalled in both of H54a's holds, so no arm could be scored against it. EAT 1.1.0 ships vLLM CPU v0.28.0, which has not been measured. H57da (k3d-gpu's OVMS pick vs llama.cpp for Gemma 4 QAT on the i9-13900T) did not resolve: the strictly pinned llama.cpp arms tracked host load; H57db did not run (memory). H28x (H28 replicated on the Xeon 6741P) is INCONCLUSIVE: its one pre-registered hold failed in setup and measured nothing; one re-run is registered.
+- 19 are PENDING: the Xeon 6741P rows H50, H50o, H51, H52b, H53, H54q, H54b, H54c and the zero-touch thesis row H58, H55 (SLO-gated admission of an E-core neighbour on the i9-13900T), H56 (two holds at once in cpuset slices of the Xeon 6741P), and the second client host's (wildct, i7-13700) rows H52w, H18w, H25w, H28w, H34w, H57wa, H57wm and H57wb, pre-registered and not yet run. H52, the first row run on that host (a Xeon 6741P with four Arc Pro B70s), is REFUTED. H27x, H27 re-run on the Xeon (AMX), is REFUTED as on the i9. H34x, H34 re-run there, is REFUTED: the CPU Fast Draft that sped up the i9 slowed decode on the Xeon.
 - Every other Intel family is detected and configured in fixture tests only. None has a measurement.
 
 No world-first, superlative or priority claim is made; [docs/provenance.md](../provenance.md) supports none.

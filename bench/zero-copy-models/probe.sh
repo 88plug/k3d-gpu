@@ -23,7 +23,8 @@
 #   N      pods per round (8)   MIB  model size in MiB (1024)
 #   ORDER  arm per round ("C T T C C T": baseline first, interleaved; the
 #          warm-up round r0 is extra and never scored)
-#   WORK   results and scratch kubeconfig dir (default: a mktemp dir)
+#   WORK   results and scratch kubeconfig dir (default: a mktemp dir); `run` creates
+#          it and stops before the lock when it cannot write the CSV there
 #   NODE_CPUS  the node container's cpuset (default: the CPUs outside load.py's load set)
 # Eviction and the page-residency check run as root inside a helper container
 # that mounts the node's /var/lib/rancher/k3s volume read-only: fsync, then
@@ -307,6 +308,11 @@ locked() {
 run_locked() {
     local start=${SECONDS} r=0 arm snap imgs k3s free level lstart lneed=0 slow=300 rs D first=1 rc
     WORK=${WORK:-$(mktemp -d)}
+    # `run` creates WORK; stop here, before the load and the cluster, if it is not there.
+    if [ ! -d "${WORK}" ] || [ ! -w "${WORK}" ]; then
+        echo "ABORT,workdir,WORK=${WORK} is not a writable directory" >&2
+        exit 1
+    fi
     export KUBECONFIG="${WORK}/kubeconfig"
     trap 'exit 143' TERM INT
     free=$(df -Pk "$(docker info -f '{{.DockerRootDir}}' 2>/dev/null || echo /)" | awk 'NR == 2 { print $4 }')
@@ -374,6 +380,12 @@ case "${1:-}" in
         WORK=${WORK:-$(mktemp -d)}
         export WORK IMAGE PYIMG N MIB ORDER LEVELS HOLD CLUSTER=${CL}
         out="${WORK}/h28-$(date -u +%Y%m%dT%H%M%SZ).csv"
+        # WORK holds the CSV and the scratch kubeconfig: create it, and stop before the
+        # lock when the CSV cannot be written there (H28x amendment R1).
+        if ! mkdir -p "${WORK}" || ! : >> "${out}"; then
+            echo "ABORT,workdir,cannot write ${out}; nothing run" >&2
+            exit 1
+        fi
         while :; do
             while f_cluster; do sleep 30; done
             rc=0

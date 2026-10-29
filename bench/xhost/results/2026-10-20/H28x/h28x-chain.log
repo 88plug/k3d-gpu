@@ -1,0 +1,5 @@
+== H28x waiting for the lock 2026-10-21T21:38:45Z
+== H28x lock taken 2026-10-21T22:14:13Z
+== H28x busy (load1 14.71, aiperf 0): waiting 120 s 2026-10-21T22:14:13Z
+== H28x start: env PATH=/home/devcloud/k3dgpu-xhost/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin WORK=/home/devcloud/k3dgpu-xhost/runs/H28x/work IMAGE=cryptoandcoffee/k3d-gpu:0.1.61 CLUSTER=k3dgpu-x-h28 LEVELS=typical HOLD=1440 LOCK=/home/devcloud/k3dgpu-xhost/inner.lock K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% bash /home/devcloud/k3dgpu-xhost/k3d-gpu/bench/zero-copy-models/probe.sh run 2026-10-21T22:16:13Z
+== H28x rc=1; clusters deleted: none; now:  2026-10-21T22:16:29Z
