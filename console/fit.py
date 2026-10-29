@@ -1094,7 +1094,13 @@ def fit(host, cfg, weights, engine=None, ctx=None, seqs=None, gpus=None, kv_dtyp
     doc = {"schema": FIT_SCHEMA, "model": name, "format": m["format"], "arch": m["arch"], "fits": bool(picked),
            "degraded": degraded, "host_reserve": hres, "explain": ex}
     if not picked:
-        why = tried[-1]["why"] if tried else (cands[0][1] if cands else "no engine serves %s weights" % m["format"])
+        if tried:
+            why = tried[-1]["why"]
+        elif any(e for e, _ in cands):
+            # No placement was tried: no card left after the busy ones, and the CPU not allowed.
+            why = "no Intel GPU with device-local memory is free"
+        else:
+            why = cands[0][1] if cands else "no engine serves %s weights" % m["format"]
         doc.update(reason=why, summary="fit: %s does not fit this host: %s" % (name, why))
         return doc
     rungs = guard_rungs(picked["ctx"], picked["seqs"])
@@ -1172,7 +1178,11 @@ def _placements(eng, m, kv, ladder, relaxed, want_seqs, want_gpus, cards, hfree,
     compile_host = m["serve_bytes"] if eng == "ovms" else 0
     gpu_w_all = m["serve_bytes"] - on_host
     hostrt = HOST_RUNTIME[eng] + (VLLM_SHM if eng == "vllm" else 0)  # times the rank count for vLLM, below
-    if cards:
+    if cards and eng == "ovms" and want_gpus and want_gpus > 1:
+        # The agent's OVMS pod holds one gpu.intel.com/xe; multi-GPU tensor parallel on Arc
+        # is not documented (model_server docs/parameters.md).
+        yield _res(eng, "gpu", False, "OVMS serves one GPU: %d asked" % want_gpus, gpus=want_gpus)
+    elif cards:
         if eng == "vllm":
             counts = _tp_sizes(m, len(cards))
         elif eng == "llama.cpp":
