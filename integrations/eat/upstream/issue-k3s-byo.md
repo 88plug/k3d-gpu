@@ -96,7 +96,7 @@ The nri-plugins Helm release is installed with no `chart_version` ([roles/nri_cp
 
 This matters more on dev clusters: only one NRI resource policy can own a node, and a version drift between two installers is hard to diagnose.
 
-**Fix (patch 0003):** `nri_cpu_balloons_chart_version: "v0.14.0"`. That is the newest release in the repo index today (published 2026-08-21), so a fresh install does not change now. The role's `advanced-balloon-values.yaml.j2`, rendered with sample inputs, passes `helm template` for v0.14.0, and the resulting `BalloonsPolicy` validates against that chart's CRD.
+**Fix (patch 0003):** `nri_cpu_balloons_chart_version: "v0.15.0"`. That is the newest release in the repo index today (published 2026-10-21), so a fresh install does not change now. The role's `advanced-balloon-values.yaml.j2`, rendered with sample inputs, passes `helm template` for v0.15.0, and the resulting `BalloonsPolicy` validates against that chart's CRD.
 
 The same pattern exists in [EAT core/roles/nri_cpu_balloons/tasks/install_nri.yaml#L76-L104](https://github.com/intel/enterprise-agent-toolkit/blob/0ecf67a8331e8b502ef41e08bf6d2881416178c5/core/roles/nri_cpu_balloons/tasks/install_nri.yaml#L76-L104), which #19 removes.
 

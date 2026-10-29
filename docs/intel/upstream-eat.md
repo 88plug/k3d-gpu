@@ -78,7 +78,7 @@ EAS (main e8f3ebc; one concern per PR, in this order)
 ├── roles/kubernetes/tasks/apply_node_topology.yaml 0004
 ├── docs/customize/node_topology.md                 0004  "label by hand" text replaced
 ├── docs/deploy/topologies.md                       0004
-├── roles/nri_cpu_balloons/defaults/main.yaml       0003  nri_cpu_balloons_chart_version: "v0.14.0"
+├── roles/nri_cpu_balloons/defaults/main.yaml       0003  nri_cpu_balloons_chart_version: "v0.15.0"
 ├── roles/nri_cpu_balloons/tasks/install_advanced.yaml 0003
 ├── docs/deploy/k3d.md                              0005  new page "Single-Node Dev on k3d"
 └── docs/README.md                                  0005  +1 row under Deploy
