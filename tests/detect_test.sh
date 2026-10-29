@@ -751,6 +751,12 @@ r=$(newroot xeon-doc)
 kernel "${r}" 6.18.1
 xeon "${r}"
 doctor_says "ready DSA is reported as deployed by up" "${r}" 'ok: DSA: .*deployed by .k3d-gpu up.'
+# idxd refuses a WQ-portal mmap without CAP_SYS_RAWIO on every DSA/IAA
+# (user_submission_safe = false, INTEL-SA-01084; docs/accelerated-dataplane.md).
+doctor_says "ready DSA ok line says pods need CAP_SYS_RAWIO" "${r}" \
+    'ok: DSA: 1 device\(s\), 1 user work queue\(s\) — deployed by .k3d-gpu up. \(intel-dsa-plugin\); pods need CAP_SYS_RAWIO to mmap a WQ portal \(INTEL-SA-01084\)$'
+doctor_says "ready IAA ok line says pods need CAP_SYS_RAWIO" "${r}" \
+    'ok: IAA: 1 device\(s\), 1 user work queue\(s\) — deployed by .k3d-gpu up. \(intel-iaa-plugin\); pods need CAP_SYS_RAWIO to mmap a WQ portal \(INTEL-SA-01084\)$'
 doctor_says "ready QAT is reported as deployed by up" "${r}" 'ok: QAT .*1 VF.*deployed by .k3d-gpu up.'
 doctor_says "QAT without vfio-pci loaded warns" "${r}" 'warn.*vfio-pci'
 mkdir -p "${r}/sys/bus/pci/drivers/vfio-pci"
@@ -1074,6 +1080,8 @@ mkdir -p "${r}/proc"
 printf 'processor\t: 0\nflags\t\t: fpu cat_l3 cdp_l3 rdt_a mba\n' > "${r}/proc/cpuinfo"
 doctor_says "rdt_a gives resctrl class guidance" "${r}" \
     'info: RDT allocation \(rdt_a: cat_l3 cdp_l3 mba\) — .*control\.rdt\.enable'
+doctor_says "RDT opt-in line carries its revert" "${r}" \
+    'info: RDT allocation .*To revert, set control\.rdt\.enable: false in nri-balloons\.yml, then sudo umount /sys/fs/resctrl$'
 doctor_says "rdt_a + mba: rdt-mba isolation, resctrl unmounted" "${r}" \
     'isolation: rdt-mba — CAT \+ MBA .*resctrl mounted: no\).*add mbAllocation: \{all: \["50%"\]\} to the BestEffort class'
 doctor_says "rdt isolation adds no second apply line" "${r}" '^        apply:  sudo mount -t resctrl' negate
@@ -5193,6 +5201,37 @@ doctor_says "On Demand: state_certificate size" "${r}" 'intel_vsec\.sdsi\.0 stat
 r=$(newroot x6741p-nodlb); kernel "${r}" 7.0.0; model "${r}" "Intel(R) Xeon(R) Platinum 8480+"
 node "${r}" 0 0-3 0; l3 "${r}" 0-3; idxd_dev "${r}" 0000:e7:01.0 0x0b25 dsa0 0
 doctor_says "no DLB device: the per-socket line has no DLB column" "${r}" 'DLB' negate
+doctor_says "no vRAN Boost device: no vRAN line" "${r}" 'vRAN' negate
+
+# Xeon 6716P-B (Granite Rapids-D, 1S only): ARK lists DSA 1, IAA 0, QAT 1, DLB 1 and
+# Intel vRAN Boost: Yes (read 2026-10-28). Its QAT is Gen5 420xx (8086:4946) and its
+# vRAN Boost is VRB2: PF 8086:57c2, VF 8086:57c3 (DPDK drivers/baseband/acc/vrb_pmd.h).
+r=$(newroot x6716pb); kernel "${r}" 7.0.0
+model "${r}" "Intel(R) Xeon(R) 6716P-B"
+node "${r}" 0 0-79 0; l3 "${r}" 0-79
+idxd_dev "${r}" 0000:e0:01.0 0x11fb dsa0 0
+pci "${r}" 0000:60:00.0 0x8086 0x4946 "" 0x0b4000
+pci "${r}" 0000:70:00.0 0x8086 0x2714 "" 0x0b4000
+pci "${r}" 0000:f7:00.0 0x8086 0x57c2 "" 0x120000
+pci "${r}" 0000:f7:00.1 0x8086 0x57c3 "" 0x120000
+doctor_says "6716P-B: per-socket counts against its ARK row" "${r}" \
+    'info: per socket: socket 0: DSA 1, IAA 0, QAT 1, DLB 1 \(ARK default for 6716P-B: DSA 1, IAA 0, QAT 1, DLB 1 per socket\)'
+doctor_says "6716P-B: IAA 0 is its ARK default, not below it" "${r}" 'below the ARK default' negate
+doctor_says "vRAN Boost: VRB2 PF counted, detect-only" "${r}" \
+    'info: vRAN Boost: 1 device\(s\) \(8086:57c2 VRB2\), no driver bound — no kernel driver \(DPDK baseband/acc PMD on vfio-pci\); it offloads 4G/5G FEC, so k3d-gpu exposes nothing for it$'
+# vRAN Boost sits in PCI class 0x12 (DPDK dpdk-devbind.py finds baseband devices by
+# class 12), like NPUs and Gaudi; an unbound one is not a GPU waiting for force_probe.
+doctor_says "vRAN Boost: an unbound PF or VF gets no GPU force_probe advice" "${r}" '57c[0-3]\) has no driver|force_probe=57c' negate
+pci "${r}" 0000:f7:00.0 0x8086 0x57c2 vfio-pci 0x120000
+doctor_says "vRAN Boost: the bound driver is named" "${r}" \
+    'info: vRAN Boost: 1 device\(s\) \(8086:57c2 VRB2\), driver vfio-pci — '
+r=$(newroot vrb1); kernel "${r}" 7.0.0
+pci "${r}" 0000:f7:00.0 0x8086 0x57c0 "" 0x120000
+doctor_says "vRAN Boost: 8086:57c0 is VRB1" "${r}" 'info: vRAN Boost: 1 device\(s\) \(8086:57c0 VRB1\), no driver bound'
+r=$(newroot vrb-vfs); kernel "${r}" 7.0.0
+pci "${r}" 0000:f7:00.1 0x8086 0x57c1 vfio-pci 0x120000
+pci "${r}" 0000:f7:00.2 0x8086 0x57c3 vfio-pci 0x120000
+doctor_says "vRAN Boost: VFs 57c1/57c3 alone are not counted" "${r}" 'vRAN' negate
 
 # Xeon 6 memory POR: channels, DDR5 speed and MRDIMM per SKU (ARK).
 r=$(newroot por-6741p); kernel "${r}" 7.0.0
@@ -5211,6 +5250,18 @@ node "${r}" 0 0-255 0
 for i in $(seq 0 7); do dimm "${r}" "${i}" 65536 34 9 6400 6400 80 64 2; done
 perf_says "perf: 6980P lists MRDIMM 8800" "${r}" 'info: Xeon 6980P \(ARK\): 12 memory channels per socket, DDR5 6400 MT/s, MRDIMM 8800 MT/s'
 perf_says "perf: 6980P with 8 of 12 channels populated says so" "${r}" 'info: 8 modules on 12 channels'
+r=$(newroot por-6716pb); kernel "${r}" 7.0.0
+printf 'cpu family\t: 6\nmodel\t\t: 174\nmodel name\t: Intel(R) Xeon(R) 6716P-B\n' > "${r}/proc/cpuinfo"
+node "${r}" 0 0-79 0
+for i in $(seq 0 3); do dimm "${r}" "${i}" 65536 34 9 6400 6400 80 64 2; done
+perf_says "perf: 6716P-B POR from ARK: 4 channels, DDR5-6400, no MRDIMM" "${r}" \
+    'info: Xeon 6716P-B \(ARK\): 4 memory channels per socket, DDR5 6400 MT/s, MRDIMM not listed'
+r=$(newroot por-6300); kernel "${r}" 7.0.0
+printf 'cpu family\t: 6\nmodel name\t: Intel(R) Xeon(R) 6369P\n' > "${r}/proc/cpuinfo"
+node "${r}" 0 0-15 0
+for i in 0 1; do dimm "${r}" "${i}" 32768 34 9 4800 4800 72 64 2; done
+perf_says "perf: Xeon 6 6300 series from the product brief: 2 channels, DDR5-4800" "${r}" \
+    'info: Xeon 6369P \(ARK\): 2 memory channels per socket, DDR5 4800 MT/s, MRDIMM per SKU: check ARK'
 
 # AMX probe: `test` runs one oneDNN matmul with ONEDNN_VERBOSE=1 and fails unless
 # an AMX implementation ran (oneDNN names it avx512_core_amx or avx10_1_512_amx*).
