@@ -1,0 +1,80 @@
+{
+ "image": "vllm/vllm-openai-cpu:v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1",
+ "securityContext": {
+  "allowPrivilegeEscalation": false,
+  "capabilities": {
+   "add": [
+    "SYS_NICE"
+   ],
+   "drop": [
+    "ALL"
+   ]
+  },
+  "readOnlyRootFilesystem": true,
+  "runAsNonRoot": true,
+  "runAsUser": 1001,
+  "seccompProfile": {
+   "type": "RuntimeDefault"
+  }
+ },
+ "podSecurityContext": null,
+ "hostIPC": true,
+ "resources": null,
+ "volumeMounts": [
+  {
+   "mountPath": "/data",
+   "name": "model-volume"
+  },
+  {
+   "mountPath": "/dev/shm",
+   "name": "shm"
+  },
+  {
+   "mountPath": "/tmp",
+   "name": "tmp"
+  },
+  {
+   "mountPath": "/root/.cache/vllm",
+   "name": "vllm-cache"
+  },
+  {
+   "mountPath": "/workspace/vllm/examples",
+   "name": "chat-templates"
+  }
+ ],
+ "volumes": [
+  {
+   "name": "model-volume",
+   "hostPath": {
+    "path": "/var/apb-models",
+    "type": "Directory"
+   }
+  },
+  {
+   "name": "shm",
+   "emptyDir": {
+    "medium": "Memory",
+    "sizeLimit": "1Gi"
+   }
+  },
+  {
+   "name": "tmp",
+   "emptyDir": {}
+  },
+  {
+   "name": "vllm-cache",
+   "emptyDir": {}
+  },
+  {
+   "name": "chat-templates",
+   "configMap": {
+    "name": "vllm-gemma4-26b-a4b-cpu-chat-templates"
+   }
+  }
+ ],
+ "templates": [
+  "tool_chat_template_gemma4.jinja",
+  "tool_chat_template_hermes.jinja",
+  "tool_chat_template_qwen3coder.jinja"
+ ]
+}

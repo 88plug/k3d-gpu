@@ -1,0 +1,13 @@
+{
+ "onset_ts": 1793252066.4024045,
+ "detected_ts": 1793252096.4357796,
+ "gen_tokens_at_onset": 1538.0,
+ "snap_a_rc": 0,
+ "snap_b_rc": 0,
+ "pyspy_1072541": 1,
+ "pyspy_1073660": 1,
+ "pyspy_1073661": 1,
+ "pyspy_1074031": 1,
+ "end_ts": 1793252370.0864348,
+ "container_alive_at_end": false
+}
