@@ -54,7 +54,7 @@ jobs:
           echo "ver=${VER}" >> "$GITHUB_OUTPUT"
           echo "tag=aur-v${VER}" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.dry_run && github.sha || steps.ver.outputs.tag }}
 
@@ -93,7 +93,7 @@ jobs:
           [[ "${VER}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::bad version '${VER}'"; exit 1; }
           echo "ver=${VER}" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.dry_run && github.sha || 'main' }}
           fetch-depth: 0
@@ -155,7 +155,7 @@ jobs:
           [[ "${VER}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::bad version '${VER}'"; exit 1; }
           echo "ver=${VER}" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
           fetch-depth: 0

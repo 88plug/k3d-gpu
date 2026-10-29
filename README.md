@@ -776,7 +776,7 @@ not set.
 
 `examples/kserve/install.sh` adds [KServe](https://kserve.github.io/website/)
 v0.21.0 in Standard mode (plain Deployments and Services, no Knative or Istio)
-with cert-manager v1.21.2, both from their pinned OCI Helm charts. It then
+with cert-manager v1.21.3, both from their pinned OCI Helm charts. It then
 serves `OpenVINO/Qwen3-4B-int4-ov` on the Intel GPU through KServe's
 OpenVINO Model Server runtime (OVMS 2026.4.1), with tool calling:
 
