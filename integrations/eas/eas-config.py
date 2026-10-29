@@ -8,7 +8,9 @@ file and the flags, and writes, under --out:
   k3d-gpu-overrides.yaml   ansible extra vars, passed last to `install` so they win
   global_config.edit.yaml  keys for env/k3d-gpu/global_config.yaml (existing_kubernetes
                            is read from that file only)
-  models.edit.yaml         edits to env/k3d-gpu/models.yaml, which model-manager reads
+  models.edit.yaml         edits to env/k3d-gpu/models.yaml, which model-manager reads:
+                           defaults merge; each models entry matches a catalog entry by
+                           name, its env merges and its args_append goes after its args
   repos.<layer>.yaml       the layer manifest's revs, as commit SHAs
   choices.txt              one line per choice: <fact> -> <choice> [<source>]
 
@@ -65,6 +67,9 @@ STACK_GIB, GUARD_GIB, ROUTER_GIB = 17, 16, 2
 # The same at EI 3e8a244 and 170eb3a. The catalog's memory is the pod's request and its
 # limit (model_manager/templates/llm-inference-service.yaml), while k3d-gpu fit sizes the
 # KV cache against the host, so fit may lower the catalog's KV cache but never raise it.
+# fit sizes it for its own --max-model-len, and the catalog sets none (vLLM then serves
+# the model's own context, 131072 tokens for Llama 3.1), so a lowered KV cache carries
+# fit's --max-model-len: vLLM will not start when one request does not fit the cache.
 CANDIDATES = [
     ("qwen2-5-coder-14b", "Qwen/Qwen2.5-Coder-14B-Instruct", 96, 40, "kv_qwen14"),
     ("qwen2-5-coder-7b", "Qwen/Qwen2.5-Coder-7B-Instruct", 64, 40, "kv_qwen7"),
@@ -97,6 +102,8 @@ SOURCES = {
     "amx_no": _EI + "model_manager/core/renderer.py#L90-L95",
     "sgl_kernel": "https://github.com/vllm-project/vllm/blob/2cf0a6915ce544dc493a0990f2ea38d81601128a/"
                   "vllm/model_executor/layers/utils.py#L238-L244",
+    "kv_max_len": "https://github.com/vllm-project/vllm/blob/2cf0a6915ce544dc493a0990f2ea38d81601128a/"
+                  "vllm/v1/core/kv_cache_utils.py#L747-L767",
     "cluster_cidr": _K3S + "pkg/cli/cmds/server.go#L137-L141",
     "service_cidr": _K3S + "pkg/cli/cmds/server.go#L142-L146",
     "kata": _EAS + "roles/kata_containers/tasks/install.yaml#L9-L22",
@@ -248,6 +255,7 @@ class Plan:
         self.overrides = []  # (key, python value)
         self.require_amx = None
         self.model_env = []  # (model, env key, value)
+        self.model_args = []  # (model, [args appended to its catalog args])
 
     def choose(self, fact, choice, src):
         self.lines.append((fact, choice, src))
@@ -384,8 +392,9 @@ def plan(facts, layer, pins, model_flag):
         policy = "nri-balloons"
     p.set("kubernetes_cpu_policy", policy)
 
+    # EI's role skips the install only for a Helm release named node-feature-discovery.
     nfd = [d for d in daemonsets if d.get("namespace") == "node-feature-discovery"]
-    if nfd and not owner(nfd[0]).startswith("Helm release"):
+    if nfd and owner(nfd[0]) != "Helm release node-feature-discovery":
         d = nfd[0]
         p.choose(f"DaemonSet {d['namespace']}/{d['name']} from {owner(d)}",
                  "nfd_enabled: false (EI would install a second NFD)", "nfd")
@@ -440,25 +449,37 @@ def plan(facts, layer, pins, model_flag):
     fits = facts.get("fit") or {}
 
     def kv_of(hf):
+        """(KV cache GiB, the --max-model-len fit sized it for) from fit's flags, or None."""
         doc = fits.get(hf)
         if not doc or not doc.get("fits"):
             return None
-        for f in doc.get("flags") or []:
-            if f.startswith("VLLM_CPU_KVCACHE_SPACE="):
-                try:
-                    return int(f.split("=", 1)[1])
-                except ValueError:
-                    raise InputError(f"k3d-gpu fit for {hf}: {f} is not a whole number of GiB") from None
-        return None
+        flags = dict(f.split("=", 1) for f in doc.get("flags") or [] if "=" in f)
+        if "VLLM_CPU_KVCACHE_SPACE" not in flags:
+            return None
+        try:
+            kv = int(flags["VLLM_CPU_KVCACHE_SPACE"])
+        except ValueError:
+            raise InputError(f"k3d-gpu fit for {hf}: VLLM_CPU_KVCACHE_SPACE={flags['VLLM_CPU_KVCACHE_SPACE']} "
+                             "is not a whole number of GiB") from None
+        ctx = flags.get("--max-model-len", "")
+        if not ctx.isdigit():
+            raise InputError(f"k3d-gpu fit for {hf}: a KV cache with no --max-model-len, the context it was "
+                             "sized for")
+        return kv, int(ctx)
 
     def kv_choice(name, hf, mem, catalog_kv, src):
-        value = kv_of(hf)
-        if value is None:
+        got = kv_of(hf)
+        if got is None:
             return
+        value, ctx = got
         fact = f"k3d-gpu fit {hf} --engine vllm --device cpu sizes the KV cache at {value} GiB"
         if value < catalog_kv:
             p.choose(fact, f"{name} env.VLLM_CPU_KVCACHE_SPACE: {value} (catalog {catalog_kv})", src)
             p.model_env.append((name, "VLLM_CPU_KVCACHE_SPACE", str(value)))
+            p.choose(f"k3d-gpu fit sized {name}'s {value} GiB KV cache for --max-model-len {ctx}",
+                     f"{name} args_append: --max-model-len {ctx} (the catalog sets no --max-model-len, and vLLM "
+                     "will not start when one request at max_model_len does not fit the KV cache)", "kv_max_len")
+            p.model_args.append((name, ["--max-model-len", str(ctx)]))
         else:
             p.choose(fact, f"{name} env.VLLM_CPU_KVCACHE_SPACE: {catalog_kv} as shipped (fit only lowers it: the "
                      f"pod's memory limit is the catalog's {mem}Gi, not the host)", src)
@@ -556,6 +577,7 @@ def outputs(p, layer, profile, pins):
         for name in dict.fromkeys(m for m, _, _ in p.model_env):
             models += f"  - name: {yaml_scalar(name)}\n    env:\n"
             models += "".join(f"      {k}: {yaml_scalar(v)}\n" for m, k, v in p.model_env if m == name)
+            models += "".join(f"    args_append: {yaml_scalar(a)}\n" for m, a in p.model_args if m == name)
     else:
         models += "models: []\n"
     files["models.edit.yaml"] = models
