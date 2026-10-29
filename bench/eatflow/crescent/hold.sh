@@ -121,10 +121,6 @@ stop_if_signalled
 python3 "${HERE}/serving.py" "${R}/serving.jsonl" 7>&- 8>&- 9>&- &
 sp=$!
 log "start: $*"
-# GNU timeout: on a TERM it forwards, it exits with CMD's own status (143 when CMD dies of
-# it). Ubuntu 26.04's default timeout (uutils 0.10.0) exits 124 there once -k is given, so
-# the GNU build it ships as gnutimeout is used where present.
-TO=$(command -v gnutimeout || echo timeout)
 # setsid execs in place, so ${cp} leads CMD's own process group. No child keeps fd 9.
 # --foreground: a stop (signal, cap, disk) sends TERM to CMD alone, once, and KILL 30 s later;
 # reap() then kills the rest of the group. Without it timeout sends TERM to CMD and then to
