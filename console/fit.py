@@ -1498,7 +1498,13 @@ def knobs(doc, rung=0):
     kv = g["rung_kv_bytes"][rung]
     fl = {f.split("=", 1)[0]: f.split("=", 1)[1] for f in doc["flags"] if "=" in f}
     # llama-server's flags at this rung: -c is the total context (context x slots), -np the slots.
+    # Not -hf <repo>:<quant>, the fit's hint for running llama-server by hand: the agent
+    # downloads the GGUF itself, pinned to the fit's commit, from "files" (the picked model's
+    # shards). -hf beside that would fetch the repo's default branch as well and load it.
     lf = list(doc["flags"]) if doc["engine"] == "llama.cpp" else []
+    while "-hf" in lf:
+        i = lf.index("-hf")
+        del lf[i:i + 2]
     for i in range(len(lf) - 1):
         if lf[i] == "-c":
             lf[i + 1] = str(ctx * seqs)

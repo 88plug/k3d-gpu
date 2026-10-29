@@ -328,7 +328,9 @@ class Convert(unittest.TestCase):
         d = plan("xeon6741p-4xb70", "google__gemma-4-26B-A4B-it-qat-q4_0-gguf")
         self.assertNotIn("convert", d)
         self.assertEqual(d["files"], ["gemma-4-26B_q4_0-it.gguf"])
-        self.assertTrue(d["source"].endswith("@d1c082be9cf3c8a514acf63b8761f4b41935842e"))
+        # The GGUF model the fit sized, at the commit its headers were read from (fit.py fetch
+        # writes every GGUF model of a repo as a group, labelled by its quant).
+        self.assertEqual(d["source"], "google/gemma-4-26B-A4B-it-qat-q4_0-gguf@d1c082be9cf3c8a514acf63b8761f4b41935842e:Q4_0")
 
     def test_busy_cards(self):
         with open(os.path.join(FIX, "hosts", "xeon6741p-4xb70.json")) as f:
@@ -345,6 +347,19 @@ class Convert(unittest.TestCase):
         self.assertEqual(flags[flags.index("-np") + 1], str(seqs))
         self.assertIn("--n-cpu-moe", flags)
         self.assertEqual(k["convert"], "--outtype bf16")
+
+    def test_knobs_name_the_picked_gguf_and_leave_out_the_hf_hint(self):
+        # The fit's flags keep -hf <repo>:<quant> (llama-server by hand); the agent's knobs
+        # do not: the agent downloads "files", the picked model's shards, at the fit's commit.
+        d = plan("xeon6741p-4xb70", "google__gemma-4-26B-A4B-it-qat-q4_0-gguf")
+        self.assertEqual(d["flags"][:2], ["-hf", "google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0"])
+        k = dict(line.split("=", 1) for line in fit.knobs(d).splitlines())
+        self.assertNotIn("-hf", k["llama_flags"].split())
+        self.assertEqual(k["files"], "gemma-4-26B_q4_0-it.gguf")
+        d = plan("xeon6741p-4xb70", "ggml-org__Qwen3.8-Flash-Next-GGUF", file="Q2_K")
+        k = dict(line.split("=", 1) for line in fit.knobs(d).splitlines())
+        self.assertNotIn("-hf", k["llama_flags"].split())
+        self.assertEqual(k["files"], "Qwen3.8-Flash-Next-Q2_K-00001-of-00002.gguf,Qwen3.8-Flash-Next-Q2_K-00002-of-00002.gguf")
 
 
 QWEN27_VARIANTS = ("Qwen__Qwen3.8-27B-FP8", "RedHatAI__Qwen3.8-27B-INT4", "OpenVINO__Qwen3.8-27B-int4-ov",

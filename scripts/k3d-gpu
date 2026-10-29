@@ -8353,7 +8353,9 @@ json.dump({"source": sys.argv[2] + "@" + sys.argv[3], "convert": sys.argv[4], "q
 }
 
 # "<source> <format> <first GGUF file> <mtp bytes> <total bytes>" of the agent model, from
-# the fit's metadata cache (fit_model_dir: config and weight headers, not the weights).
+# the fit's metadata cache (fit_model_dir: config and weight headers, not the weights). The
+# GGUF file is that of the repo's first model in the fit's order (the top level of a repo
+# with several); llamacpp_manifest serves the fit's pick instead when there is a fit.
 llamacpp_meta() {
     local dir
     dir=$(fit_model_dir "${AGENT_MODEL}" "${AGENT_REVISION:-main}") || return 1
@@ -8429,8 +8431,12 @@ llamacpp_manifest() {
     fi
     # The weights: a GGUF that llama-server downloads itself (-mu writes to -m, resuming and
     # checking the ETag: common/download.cpp), or a GGUF the conversion Job builds once.
+    # The GGUF is the one the fit sized (a repo may hold several): its first shard, beside
+    # which llama-server fetches the others (common/arg.cpp build_url_tasks). Without a fit,
+    # the metadata's first.
     local cm="" convert=${AGENT_CONVERT:-}
     if [ "${fmt}" = gguf ]; then
+        [ -z "${AGENT_FIT_FILES:-}" ] || file=${AGENT_FIT_FILES%%,*}
         [ "${file}" != - ] || err "llama.cpp: ${source} lists no .gguf file (K3D_GPU_FIT_FILE picks one)"
         model="/models/gguf/$(gguf_slug "${source}")/${file}"
         args+=$(llama_items --model "${model}" --model-url "https://huggingface.co/${repo}/resolve/${rev}/${file}")
@@ -10964,6 +10970,7 @@ AGENT_MEMORY_LIMIT=""
 AGENT_PLACEMENT=""
 AGENT_FIT_GPUS=""
 AGENT_LLAMA_FLAGS=""
+AGENT_FIT_FILES=""  # the GGUF model the fit sized: its files, comma-separated, first shard first
 AGENT_CONVERT=""
 AGENT_CONVERT_ERROR=""
 # A model the user chose: K3D_GPU_AGENT_MODEL in the launch environment (not a
@@ -10996,6 +11003,7 @@ agent_fit_apply() {
             placement) AGENT_PLACEMENT=${v} ;;
             gpus) AGENT_FIT_GPUS=${v} ;;
             llama_flags) AGENT_LLAMA_FLAGS=${v} ;;
+            files) AGENT_FIT_FILES=${v} ;;
             convert) AGENT_CONVERT=${v} ;;
             convert_error) AGENT_CONVERT_ERROR=${v} ;;
         esac

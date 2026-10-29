@@ -4,13 +4,15 @@
 # metadata linked into a scratch K3D_GPU_FIT_CACHE) with a stubbed kubectl:
 #   - Xeon 6741P + 4x Arc Pro B70, card0 and card1 filled by host processes: the QAT GGUF
 #     on one free B70 (SYCL image, the fit's -c/-np/-ngl, --jinja, --reasoning off,
-#     download pinned to the GGUF's commit), Qwen3.8-Flash-Next with experts and n-gram
+#     download pinned to the GGUF's commit, no -hf), the split GGUF the fit picks in a repo
+#     with several (or --file names), Qwen3.8-Flash-Next with experts and n-gram
 #     table in DRAM (--n-cpu-moe, -ts, two B70s, a one-time conversion Job and the pod
 #     waiting for it), the FP8 checkpoint converted with --fp8-as-q8, the AutoRound W4A16
 #     checkpoint refused (the converter cannot read it), Gemma 4 safetensors on vLLM TP2;
 #   - a desktop with no GPU: the QAT GGUF on the CPU image, P-core threads, mlock;
 #   - MTP only on request: Gemma's QAT drafter converted to Q4_0, Flash-Next's own head;
-#   - a backend the user set is not overridden; the guard re-renders llama.cpp at a rung.
+#   - a backend the user set is not overridden; the guard re-renders llama.cpp at a rung;
+#   - agent up after the fit switched the backend warms up and names the served model.
 # Card pinning runs `up` with docker, k3d and kubectl stubbed on a sysroot with four
 # B70s: the plugin manifest written into the node mounts only card2/card3's nodes.
 #
@@ -133,7 +135,7 @@ if render gguf "${XEON_ENV[@]}" -- --model "${GEMMA_GGUF}" \
     && pair gguf --alias 'gemma-4-26B-A4B-it-qat-q4_0-gguf' && arg gguf '--jinja' && pair gguf --reasoning 'off' \
     && arg gguf '-c' && arg gguf '786432' && arg gguf '-np' && arg gguf '6' && arg gguf '-ngl' && arg gguf '999' \
     && pair gguf --port '8000' && server_args gguf | grep -A1 -x -- '--threads' | tail -n1 | grep -qE '^[0-9]+$' \
-    && ! arg gguf '-ts' && ! has gguf 'spec-type' && ! has gguf 'kind: Job' && ! has gguf 'load-mode' \
+    && ! arg gguf '-ts' && ! has gguf 'spec-type' && ! has gguf 'kind: Job' && ! has gguf 'load-mode' && ! arg gguf '-hf' \
     && grep -A3 '^            limits:$' "${WORK}/gguf.yaml" | grep -q '^              gpu.intel.com/xe: 1$' \
     && has gguf 'name: ZES_ENABLE_SYSMAN' && has gguf 'k3d-gpu.io/agent-backend: llama.cpp' \
     && has gguf 'path: /health' && has gguf 'gpu.intel.com/xmx: "true"' \
@@ -157,6 +159,30 @@ if render cpu STUB_ALLOC='cpu 32' K3D_GPU_FIT_HOST="${DESK}" -- --model "${GEMMA
     && yaml_ok cpu; then
     ok "QAT GGUF on the desktop with no GPU: CPU image, -ngl 0, mlock, pod limit and threads from the pod's CPUs"
 else fail "QAT GGUF on the CPU-only desktop" "$(show cpu)"; fi
+
+# --- a GGUF repo with several split models (IQ4_NL, Q2_K, Q8_0): the one the fit picked ----
+# llama-server downloads the first shard of the GGUF the fit sized, pinned to the commit the
+# fit read (--model-url; it fetches the other shards beside --model), and nothing else: no -hf,
+# which would fetch the repo's default branch into the container's cache on every start.
+FNG=ggml-org/Qwen3.8-Flash-Next-GGUF
+FNGREV=91fb00353e766eb43944ed223665ea4fb87dad47
+# fng_ok <name> <quant>: --model and --model-url name that quant's first shard, no other quant.
+fng_ok() {
+    local f="Qwen3.8-Flash-Next-$2-00001-of-00002.gguf"
+    pair "$1" --model "/models/gguf/ggml-org__Qwen3.8-Flash-Next-GGUF@${FNGREV}/${f}" \
+        && pair "$1" --model-url "https://huggingface.co/${FNG}/resolve/${FNGREV}/${f}" \
+        && ! arg "$1" '-hf' && [ "$(server_args "$1" | grep -c -- '-of-00002\.gguf')" -eq 2 ]
+}
+if render fngq2 "${XEON_ENV[@]}" -- --model "${FNG}" --file Q2_K && fng_ok fngq2 Q2_K \
+    && grep -q "fit: ${FNG}:Q2_K on " "${WORK}/fngq2.err" && yaml_ok fngq2; then
+    ok "--model ${FNG} --file Q2_K: llama-server downloads the Q2_K split the fit sized, at the fit's commit"
+else fail "--file Q2_K renders the Q2_K GGUF" "$(show fngq2)"; fi
+if render fng "${XEON_ENV[@]}" -- --model "${FNG}" && fng_ok fng IQ4_NL && grep -q "fit: ${FNG}:IQ4_NL on " "${WORK}/fng.err"; then
+    ok "--model ${FNG}: the IQ4_NL split the fit picks with no flag"
+else fail "the fit's GGUF pick reaches the render" "$(show fng)"; fi
+if render fngoff "${XEON_ENV[@]}" K3D_GPU_FIT=off K3D_GPU_AGENT_BACKEND=llama.cpp -- --model "${FNG}" && fng_ok fngoff IQ4_NL; then
+    ok "K3D_GPU_FIT=off: the metadata's first GGUF (the int4 IQ4_NL split) is served"
+else fail "GGUF without the fit" "$(show fngoff)"; fi
 
 # --- Qwen3.8-Flash-Next: experts and n-gram table in DRAM, converted once ----------------
 FN=Qwen/Qwen3.8-Flash-Next
@@ -471,7 +497,7 @@ rm -f "${WORK}/root/proc/cpuinfo"
 
 # Every llama-server render above: its args parse as llama-server's own parser reads them.
 bad=""
-for n in gguf ggopt cpu fn fn8 img optl setl mtp fnmtp rung l59 l59j l59doff l57 l57off l57g; do
+for n in gguf ggopt cpu fngq2 fng fngoff fn fn8 img optl setl mtp fnmtp rung l59 l59j l59doff l57 l57off l57g; do
     [ -s "${WORK}/${n}.yaml" ] || { bad+=" ${n}(not rendered)"; continue; }
     why=$(llama_argv_ok "${n}" 2>&1) || bad+=" ${n}: ${why}"
 done

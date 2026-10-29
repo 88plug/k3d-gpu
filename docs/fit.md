@@ -146,7 +146,7 @@ Beyond the fit's flags it sets:
 
 | Flag | Why |
 | --- | --- |
-| `--model` + `--model-url` | the GGUF at the commit the fit read, downloaded once into the PVC (llama.cpp resumes it and checks its ETag) |
+| `--model` + `--model-url` | the GGUF the fit sized (in a repo with several, the one it picked) at the commit the fit read, downloaded once into the PVC (llama.cpp resumes it and checks its ETag). A gguf-split model is named by its first shard; llama.cpp fetches the other shards beside it (`common/arg.cpp` `build_url_tasks`). The fit's `-hf <repo>:<quant>` is the flag for running llama-server by hand and is not passed: llama.cpp would also fetch the repo's default branch into the container's cache and load that copy |
 | `--jinja`, `--reasoning off` | the GGUF's own chat template; its tool-call format is picked from the template (Gemma 4 `<\|tool_call>call:`, Qwen3.8's XML `<tool_call><function=...>`); thinking off for agent turns (`K3D_GPU_AGENT_THINKING=on` or `model` changes it) |
 | `--threads`, `--threads-batch` | the pod's physical cores and CPUs (the P-core balloon on a hybrid node); llama.cpp otherwise counts the host's cores |
 | `--load-mode mmap+mlock` | CPU placement only, with `IPC_LOCK`. On a GPU or experts-in-DRAM placement the lock grows to the end of the furthest CPU tensor (`src/llama-model-loader.cpp:1735-1737`), so it would also hold GPU tensors and could pass the pod limit |
