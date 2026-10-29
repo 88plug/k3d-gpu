@@ -4149,10 +4149,10 @@ item 3 says takes a further amendment.
 4. **Rows.** H53 and H58, and every later crescent row that runs on these shared rules (H59 and
    H60 are pre-registered in open PRs). H52b only as item 2 says. Not the rows that have run.
 5. **H54q.** H54q runs from `~/k3dgpu-gemma/bin`, with H54a's kubectl v1.35.2 and helm v4.1.1,
-   which setup.sh does not touch. Its runner amendment
-   ([amendment Q1](#h54-amendment-q1-h54qs-reference-arm-hold-cap-and-order-2026-10-29)) names its
-   tools. The render check below covers H54's two EAT renders, so moving them there changes no
-   object.
+   which setup.sh does not touch. H54q has no runner yet: its runner amendment, which
+   [amendment Q1](#h54-amendment-q1-h54qs-reference-arm-hold-cap-and-order-2026-10-29) requires
+   before its first hold, names its tools. The render check below covers H54's two EAT renders,
+   so moving them there changes no object.
 
 **Render check, helm v4.1.1 against v4.3.1.** Done 2026-10-29, as
 [amendment E1](#crescent-amendment-e1-eat-stock-is-release-110-for-h50-h50o-and-h51-2026-10-29)
