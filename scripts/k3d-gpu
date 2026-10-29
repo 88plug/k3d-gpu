@@ -9338,7 +9338,7 @@ agent_convert_wait() {
     local job jobs st dl=$((SECONDS + AGENT_CONVERT_TIMEOUT))
     jobs=$(grep -oE '^  name: gguf-convert-[0-9a-f]+$' <<< "$1" | cut -d' ' -f4 || true)
     for job in ${jobs}; do
-        info "Waiting for GGUF conversion job/${job} (up to ${AGENT_CONVERT_TIMEOUT}s; log: kubectl -n ${AGENT_NS} logs -f job/${job})..."
+        info "Waiting for GGUF conversion job/${job} (up to ${AGENT_CONVERT_TIMEOUT}s; log: ${KHINT} -n ${AGENT_NS} logs -f job/${job})..."
         while :; do
             # The Job's own conditions: Failed only once its retries (backoffLimit) are spent.
             st=$(kubectl -n "${AGENT_NS}" get "job/${job}" \
@@ -9346,9 +9346,9 @@ agent_convert_wait() {
                 2>/dev/null || true)
             case "${st}" in
                 True*) break ;;
-                *" True") err "GGUF conversion failed — kubectl -n ${AGENT_NS} logs job/${job}; the next agent up runs it again" ;;
+                *" True") err "GGUF conversion failed — ${KHINT} -n ${AGENT_NS} logs job/${job}; the next agent up runs it again" ;;
             esac
-            [ "${SECONDS}" -lt "${dl}" ] || err "GGUF conversion not done after ${AGENT_CONVERT_TIMEOUT}s — kubectl -n ${AGENT_NS} logs job/${job}"
+            [ "${SECONDS}" -lt "${dl}" ] || err "GGUF conversion not done after ${AGENT_CONVERT_TIMEOUT}s — ${KHINT} -n ${AGENT_NS} logs job/${job}"
             sleep 15
         done
     done
