@@ -985,17 +985,42 @@ class LlamaSplit(unittest.TestCase):
         self.assertGreaterEqual(int(d["k8s"]["memory_limit"][:-2]) * GIB, d["host_bytes"])
 
     def test_layer_bytes_are_the_bytes_to_serve(self):
-        # Sized from safetensors for a GGUF conversion: the MTP head is not served
-        # (model_profile serve_bytes), and the vision projector loads on the first GPU
+        # Sized from safetensors for a GGUF conversion: vLLM and OVMS leave the MTP head out
+        # (model_profile serve_bytes), but the GGUF the agent converts keeps it
+        # (convert_hf_to_gguf.py without --no-mtp), so llama.cpp's profile serves it as one
+        # more block after the trunk. The vision projector loads on the first GPU
         # (tools/mtmd/clip.cpp takes the first GPU backend), not on the output layer's card.
         cfg = config("Qwen__Qwen3.8-Flash-Next")
         m = fit.model_profile(cfg, weights("Qwen__Qwen3.8-Flash-Next"))
         self.assertGreater(m["bytes"]["mtp"], GIB)
         self.assertGreater(m["bytes"]["vision"], GIB / 2)
-        wl, _ = fit.llama_layer_bytes(m, fit.kv_profile(cfg, 2), 4096, 1, 0)
-        self.assertAlmostEqual(sum(wl), m["serve_bytes"] - m["lookup_bytes"], delta=1)
+        lm = fit.llama_profile(m)
+        self.assertEqual((m["nextn"], lm["nextn"]), (0, 1))
+        self.assertEqual(lm["serve_bytes"], m["serve_bytes"] + m["bytes"]["mtp"])
+        wl, kl = fit.llama_layer_bytes(lm, fit.kv_profile(cfg, 2), 4096, 1, 0)
+        self.assertEqual(len(wl), 48 + 1 + 1)
+        self.assertAlmostEqual(sum(wl), lm["serve_bytes"] - lm["lookup_bytes"], delta=1)
+        self.assertAlmostEqual(wl[48], m["bytes"]["mtp"], delta=1)
+        self.assertEqual(kl[48], 0)
         self.assertAlmostEqual(wl[-1], m["bytes"]["lm_head"], delta=1)
         self.assertAlmostEqual(wl[0] - wl[1], m["bytes"]["vision"], delta=1)
+        # a GGUF is served as it is
+        g = fit.model_profile(config(FLASH_GGUF), weights(FLASH_GGUF)["groups"]["IQ4_NL"])
+        self.assertIs(fit.llama_profile(g), g)
+
+    def test_conversion_keeps_the_mtp_blocks(self):
+        # The agent converts safetensors only llama.cpp runs here (Qwen3.8-Flash-Next) with
+        # convert_hf_to_gguf.py and no --no-mtp, so the GGUF it serves holds the MTP block:
+        # llama.cpp v0.8.0 conversion/qwen.py (_QwenMtpMixin) extends block_count by
+        # mtp_num_hidden_layers. llama.cpp assigns devices over that block too, so -ts counts
+        # it as for a GGUF repo that holds one, and the card it lands on holds its tensors.
+        g = "Qwen__Qwen3.8-Flash-Next"
+        d = plan("xeon6741p-4xb70", g)
+        self.assertTrue(d["fits"], d["summary"])
+        self.assertEqual((d["engine"], d["placement"]), ("llama.cpp", "moe-offload"))
+        self.assertEqual(d["convert"]["args"], ["--outtype", "bf16"])
+        self.check(d, config(g), dict(weights(g), format="gguf"), flash_next_kv)  # the converted GGUF
+        self.assertTrue(any("layer 48 is the GGUF's MTP block" in s for s in d["explain"]), d["explain"])
 
     def test_moe_offload_takes_the_best_number_of_cards(self):
         # Every card is held to the smallest budget of the cards used, so two smaller cards

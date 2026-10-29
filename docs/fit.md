@@ -79,7 +79,8 @@ in this order, and the first that fits wins:
 Per placement:
 
 ```
-weights        = bytes of each tensor class to serve (MTP left out unless the GGUF holds it)
+weights        = bytes of each tensor class to serve (MTP left out unless the GGUF holds it,
+                 as llama.cpp's conversion of safetensors does)
 KV per token   = full layers x 2 x kv heads x head dim x bytes
                + indexer keys (sparse attention)
                + sliding layers x 2 x kv heads x head dim x bytes, for:
@@ -129,7 +130,9 @@ layers it gets, the way llama.cpp b11749 assigns them with `-ngl 999`
 (`src/llama-model.cpp`, `load_tensors`). Layer `il` goes to the device
 `upper_bound(cumsum(ts) / sum(ts), il / (layers + 1))`, where layers is the GGUF's block
 count (`n_layer_all`): the trunk, then the MTP (nextn) blocks a GGUF holds. Qwen3.8 27B's
-GGUF keeps one (`qwen35.block_count` 65 for 64 trunk layers); an MTP block counts its MTP
+GGUF keeps one (`qwen35.block_count` 65 for 64 trunk layers), and so does the GGUF the agent
+converts from safetensors: `convert_hf_to_gguf.py` runs without `--no-mtp`, so
+Qwen3.8-Flash-Next's has 49 blocks for 48 trunk layers. An MTP block counts its MTP
 tensors and no KV, since the cache covers the trunk only (`il < n_layer()`). The output
 layer (`il = layers`, holding `lm_head`) goes the same way, which is the last card. A
 model with tied embeddings (Gemma 4) has no `lm_head`: llama.cpp loads

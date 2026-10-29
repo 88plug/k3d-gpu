@@ -889,6 +889,7 @@ def model_profile(cfg, weights, tokenizer_cfg=None):
     b = {k: cls.get(k, {}).get("bytes", 0) for k in ("experts", "embed", "ngram", "lm_head", "vision", "mtp", "other")}
     # The MTP head loads only for speculative decoding; a GGUF loads every tensor it holds.
     serve = sum(v for k, v in b.items() if k != "mtp" or weights["format"] == "gguf")
+    mtp_blocks = (tc.get("mtp_num_hidden_layers") or tc.get("num_nextn_predict_layers") or 1) if b["mtp"] else 0
     ne = tc.get("num_experts") or tc.get("n_routed_experts") or tc.get("num_local_experts") or 0
     k = tc.get("num_experts_per_tok") or tc.get("top_k_experts") or tc.get("num_experts_per_token") or 0
     dtype = str(tc.get("dtype") or tc.get("torch_dtype") or cfg.get("torch_dtype") or "bfloat16")
@@ -905,13 +906,23 @@ def model_profile(cfg, weights, tokenizer_cfg=None):
         "experts": ne, "experts_per_tok": k, "moe": bool(ne and b["experts"]),
         # MTP (nextn) blocks a GGUF holds after its trunk (llama.cpp's converter keeps them all
         # or none): llama.cpp counts them in its layers (block_count = trunk + nextn_predict_layers).
-        "nextn": (tc.get("mtp_num_hidden_layers") or tc.get("num_nextn_predict_layers") or 1)
-                 if weights["format"] == "gguf" and b["mtp"] else 0,
+        # mtp_blocks: the MTP blocks the weights have, which a GGUF conversion keeps (llama_profile).
+        "nextn": mtp_blocks if weights["format"] == "gguf" else 0, "mtp_blocks": mtp_blocks,
         "bytes": b, "serve_bytes": serve, "lookup_bytes": b["embed"] + b["ngram"], "format": weights["format"],
         "dtype_bytes": 2 if dtype in ("bfloat16", "float16") else 4,
         # compressed-tensors kv_cache_scheme: vLLM switches its KV cache to that type (fp8) on its own.
         "kv_scheme_bits": (q.get("kv_cache_scheme") or {}).get("num_bits"),
     }
+
+
+def llama_profile(m):
+    """The model llama.cpp serves: a GGUF as it is; other weights as the GGUF the agent's
+    conversion writes from them. convert_hf_to_gguf.py runs without --no-mtp, so that GGUF
+    keeps the MTP blocks after the trunk (llama.cpp v0.8.0 conversion/qwen.py _QwenMtpMixin
+    adds mtp_num_hidden_layers to block_count) and is served like a GGUF that holds them."""
+    if m["format"] == "gguf" or not m["mtp_blocks"]:
+        return m
+    return dict(m, nextn=m["mtp_blocks"], serve_bytes=m["serve_bytes"] + m["bytes"]["mtp"])
 
 
 # ---- engines ---------------------------------------------------------------------------
@@ -1282,11 +1293,16 @@ def fit(host, cfg, weights, engine=None, ctx=None, seqs=None, gpus=None, kv_dtyp
                     "summary": "fit: %s does not fit this host: %s cannot serve these %s weights (%s)"
                                % (name, engine, m["format"], why)}
         cands = asked
-    kvs = {}
+    kvs, ms = {}, {}
     for eng, note in cands:
         ex.append("engine %s: %s" % (eng or FORMAT_ENGINE.get(m["format"], "?"), note))
         if not eng:
             continue
+        ms[eng] = llama_profile(m) if eng == "llama.cpp" else m
+        if ms[eng] is not m:
+            ex.append("  the GGUF conversion keeps the MTP head (convert_hf_to_gguf.py without --no-mtp): "
+                      "%d block(s) after the trunk, %s more to serve, %s"
+                      % (ms[eng]["nextn"], g1(m["bytes"]["mtp"]), g1(ms[eng]["serve_bytes"])))
         if kv_dtype != "auto" and kv_dtype not in KV_DTYPES_OF.get(eng, ()):
             raise ValueError("--kv-dtype %s is not a KV cache type of %s (%s)"
                              % (kv_dtype, eng, ", ".join(KV_DTYPES_OF.get(eng, ())) or "auto only"))
@@ -1310,7 +1326,7 @@ def fit(host, cfg, weights, engine=None, ctx=None, seqs=None, gpus=None, kv_dtyp
             # vLLM's CPU build is a placement only when asked for (--device cpu: the EAT
             # overlay); the agent's vLLM images are the XPU and Gaudi builds.
             cpu_ok = device == "cpu" if eng == "vllm" else device != "gpu"
-            for res in _placements(eng, m, kvs[eng], ladder, relaxed, seqs, gpus, cards, hfree, host, overhead,
+            for res in _placements(eng, ms[eng], kvs[eng], ladder, relaxed, seqs, gpus, cards, hfree, host, overhead,
                                    cpu_ok):
                 res["note"] = note
                 tried.append(res)
