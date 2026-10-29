@@ -377,6 +377,58 @@ class FitDesktop(unittest.TestCase):
         self.assertIn("exceed the host budget", d["reason"])
 
 
+class LlamaHostCaches(unittest.TestCase):
+    """llama-server b11749 keeps an 8192 MiB host prompt cache (--cache-ram) and up to 32
+    context checkpoints per slot (-ctxcp), each a slot's SWA cache or recurrent state, in
+    host RAM. The fit turns the prompt cache off, bounds the checkpoints, and counts them."""
+
+    def flag(self, d, name):
+        i = d["flags"].index(name)
+        return int(d["flags"][i + 1])
+
+    def test_gemma_qat_cpu_on_the_desktop(self):
+        d = plan("desktop-i9-nogpu", "google__gemma-4-26B-A4B-it-qat-q4_0-gguf")
+        self.assertTrue(d["fits"], d["summary"])
+        self.assertEqual((d["engine"], d["placement"]), ("llama.cpp", "cpu"))
+        self.assertEqual(self.flag(d, "--cache-ram"), 0)
+        k = self.flag(d, "-ctxcp")
+        self.assertGreaterEqual(k, 1)
+        # one checkpoint: 25 SWA layers x 2 x 8 kv heads x 256 x 2 B over the slot's SWA
+        # cache, GGML_PAD(1024 window + 512 ubatch, 256) = 1536 cells
+        ckpt = 25 * 2 * 8 * 256 * 2 * 1536
+        self.assertGreaterEqual(d["ckpt_bytes"], d["seqs"] * k * ckpt)
+        cfg = config("google__gemma-4-26B-A4B-it-qat-q4_0-gguf")
+        w = json.load(open(os.path.join(mdir("google__gemma-4-26B-A4B-it-qat-q4_0-gguf"), "weights.json")))
+        m = fit.model_profile(cfg, w)
+        self.assertGreaterEqual(d["host_bytes"], m["serve_bytes"] + fit.HOST_RUNTIME["llama.cpp"] + d["kv_bytes"]
+                                + d["seqs"] * k * ckpt)
+        # the pod limit holds the checkpoints and stays inside the host budget
+        budget, _, _ = fit.host_budget(host("desktop-i9-nogpu"))
+        self.assertGreaterEqual(int(d["k8s"]["memory_limit"][:-2]) * GIB, d["host_bytes"])
+        self.assertLessEqual(int(d["k8s"]["memory_limit"][:-2]) * GIB, budget)
+        # and on every guard rung
+        for r, (rs, rc) in enumerate(d["guard"]["rungs"]):
+            self.assertGreaterEqual(int(d["guard"]["rung_memory_limit"][r][:-2]) * GIB,
+                                    d["host_bytes"] - d["kv_bytes"] - d["ckpt_bytes"]
+                                    + d["guard"]["rung_kv_bytes"][r] + rs * k * ckpt, r)
+
+    def test_recurrent_state_checkpoints_on_the_host(self):
+        # Flash-Next: 36 gated-DeltaNet layers, each checkpoint the per-sequence state
+        d = plan("xeon6741p-4xb70", "ggml-org__Qwen3.8-Flash-Next-GGUF")
+        self.assertTrue(d["fits"], d["summary"])
+        k = self.flag(d, "-ctxcp")
+        state = 36 * (48 * 128 * 128 * 4 + 3 * (2 * 16 * 128 + 48 * 128) * 2)
+        self.assertEqual(d["ckpt_bytes"], d["seqs"] * k * state)
+        self.assertIn("--cache-ram", d["flags"])
+
+    def test_full_attention_makes_no_checkpoints(self):
+        cfg = config("Qwen__Qwen3.8-27B")
+        cfg = dict(cfg, text_config=dict(cfg.get("text_config") or cfg, layer_types=None))
+        kv = fit.kv_profile(cfg, 2)
+        kv["ckpts"] = 4
+        self.assertEqual(fit.ckpt_seq(kv, 65536), 0)
+
+
 class FitLaptop(unittest.TestCase):
     """Core Ultra 7 258V, 16 GB, 9 GB available, swap in use."""
 
