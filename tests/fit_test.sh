@@ -69,6 +69,23 @@ if [ "${rc}" -eq 0 ] && python3 -c 'import json, sys; d = json.loads(sys.argv[1]
     ok "fit --json: a fit/v1 document, from a local model directory"
 else fail "fit --json: a fit/v1 document" "${out}"; fi
 
+# llama-server keeps a host prompt cache (8192 MiB by default) and context checkpoints per
+# slot (32 by default, each the slot's SWA cache): the fit turns the first off, bounds the
+# second, and counts the checkpoints in the host bytes and the pod limit.
+out=$(bash "${K3D_GPU}" fit --host "${DESK}" --model google/gemma-4-26B-A4B-it-qat-q4_0-gguf --json 2>&1); rc=$?
+if [ "${rc}" -eq 0 ] && python3 -c '
+import json, sys
+d = json.loads(sys.argv[1])
+f = d["flags"]
+assert d["placement"] == "cpu" and f[f.index("--cache-ram") + 1] == "0", f
+k = int(f[f.index("-ctxcp") + 1])
+ckpt = 25 * 2 * 8 * 256 * 2 * 1536  # 25 SWA layers K and V at 2 B over 1536 cells
+assert d["ckpt_bytes"] >= d["seqs"] * k * ckpt > 0, (d["ckpt_bytes"], d["seqs"], k)
+assert int(d["k8s"]["memory_limit"][:-2]) * 2 ** 30 >= d["host_bytes"] >= d["kv_bytes"] + d["ckpt_bytes"]
+' "${out}"; then
+    ok "fit (llama.cpp, Gemma QAT on the desktop CPU): --cache-ram 0, -ctxcp K, checkpoints in the pod limit"
+else fail "fit (llama.cpp host caches) on the desktop (rc ${rc})" "${out}"; fi
+
 out=$(bash "${K3D_GPU}" fit --host "${XEON}" --model not/in-cache-offline 2>&1 </dev/null); rc=$?
 if [ "${rc}" -ne 0 ] && grep -q 'no metadata for not/in-cache-offline' <<< "${out}"; then
     ok "fit: a model with no metadata is an error, not a guess"

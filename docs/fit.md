@@ -85,6 +85,7 @@ KV per token   = full layers x 2 x kv heads x head dim x bytes
                    llama.cpp  at most GGML_PAD(window + 512 ubatch, 256) tokens per slot
                    OVMS       the whole context (OpenVINO GenAI has no sliding-window cache)
 state per seq  = linear layers x (v heads x k dim x v dim x 4 B + conv state)
+checkpoints    = llama.cpp: 4 per slot in host RAM, each the slot's SWA cache and state
 overhead (GPU) = runtime + activations (batch x widest matmul x 2 x 2 B) + logits (seqs x vocab x 4 B)
 host reserve   = max(10% of MemTotal, 4 GiB);   host budget = min(MemAvailable, cgroup room) - reserve
 GPU reserve    = max(5% of VRAM, 1 GiB);        GPU budget  = VRAM - in use by others - reserve
@@ -112,6 +113,15 @@ full-attention KV cache and a linear-attention state cache
 attention layer, so OVMS holds every token in the sliding-window layers too: Gemma 4
 costs 225280 B per token there (5 full and 25 sliding layers, K and V at 2 B).
 
+llama-server b11749 keeps two host caches beside the KV cache: a prompt cache of up to
+8192 MiB (`--cache-ram`) and up to 32 context checkpoints per slot (`-ctxcp`), each a
+host copy of the slot's SWA cache and recurrent state (`tools/server/server-context.cpp`,
+`create_checkpoint`). The fit turns the prompt cache off (`--cache-ram 0`), keeps 4
+checkpoints per slot (a request makes them at the last user message and just before its
+prompt's end, which is what the next turn restores from), and counts slots x 4 x one
+checkpoint in the host bytes and the pod limit. A model with no sliding-window and no
+linear-attention layers makes none.
+
 The overhead is an estimate from the formula, not a measurement;
 `K3D_GPU_FIT_OVERHEAD_GIB` replaces it with a measured value.
 
@@ -121,7 +131,7 @@ The overhead is an estimate from the formula, not a measurement;
 | --- | --- |
 | vLLM v0.32.0 | `--tensor-parallel-size`, `--max-model-len`, `--max-num-seqs`, `--gpu-memory-utilization` (vLLM still profiles activations inside that share), `--kv-cache-dtype fp8` when the checkpoint's `kv_cache_scheme` made the fit count one byte. CPU build (EAT): `VLLM_CPU_KVCACHE_SPACE` |
 | OVMS 2026.4.1 | `--max_num_seqs`, `--cache_size` (a static pool in whole GiB, rounded up to hold every sequence: the dynamic one grows past the fit) |
-| llama.cpp v0.8.0 | `-c` (context x slots), `-np`, `-ngl`, `-ts`, `--n-cpu-moe` or `--cpu-moe`, `-ctk`/`-ctv` |
+| llama.cpp v0.8.0 | `-c` (context x slots), `-np`, `-ngl`, `-ts`, `--n-cpu-moe` or `--cpu-moe`, `--cache-ram 0`, `-ctxcp 4`, `-ctk`/`-ctv` |
 
 `agent up` applies them, sets the pod's memory request and limit to the fit, and
 annotates the pod `k3d-gpu.io/agent-fit`. `K3D_GPU_AGENT_MAX_LEN`, `K3D_GPU_AGENT_MAX_NUM_SEQS`

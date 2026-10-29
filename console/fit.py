@@ -94,6 +94,13 @@ MIN_DRAM_TOK_S = 5.0
 # the agent stack sets it, llama.cpp's default -ub 512).
 VLLM_BATCHED_TOKENS = 2048
 LLAMA_UBATCH = 512
+# llama-server context checkpoints per slot (-ctxcp; b11749 default 32, common/common.h). Each
+# is a host-RAM copy of the slot's SWA cache and recurrent state (tools/server/server-context.cpp
+# create_checkpoint, LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY). A request makes them at the last user
+# message and 4 + n_ubatch and 4 tokens before its prompt's end; an appended turn restores from
+# those, so four keep the latest request's set. The host prompt cache (--cache-ram, default
+# 8192 MiB) is turned off with --cache-ram 0: a slot's KV stays in its own cache.
+LLAMA_CTX_CHECKPOINTS = 4
 # Fixed runtime per GPU process (device context, allocator pools, collective
 # buffers) and per pod on the host (Python, torch or the server binary). Estimates.
 GPU_RUNTIME = 1 * GIB
@@ -1050,6 +1057,15 @@ def per_seq(kv, ctx, scale=1.0):
                + kv["state_per_seq"] * scale)
 
 
+def ckpt_seq(kv, ctx):
+    """Host bytes of one llama-server slot's context checkpoints at context ctx: kv["ckpts"]
+    of them, each the slot's SWA cache (GGML_PAD(min(n_ctx_seq, n_swa + n_ubatch), 256)
+    cells, src/llama-kv-cache-iswa.cpp) and recurrent state. A model with neither makes none."""
+    w = kv["window"] or ctx
+    one = kv["swa_per_token"] * min(_pad(ctx, 256), _pad(w + LLAMA_UBATCH, 256)) + kv["state_per_seq"]
+    return kv.get("ckpts", 0) * one
+
+
 def ctx_ladder(max_ctx, want=None):
     if want:
         return [min(want, max_ctx)]
@@ -1060,13 +1076,14 @@ def ctx_ladder(max_ctx, want=None):
     return out or [max_ctx]
 
 
-def size_kv(kv, budget, ladder, want_seqs, scale=1.0, relaxed=False):
+def size_kv(kv, budget, ladder, want_seqs, scale=1.0, relaxed=False, host_ckpt=False):
     """(ctx, seqs): the most context at which TARGET_SEQS (or want_seqs) whole sequences fit
     in budget, then as many sequences as fit at that context (capped at MAX_SEQS).
-    relaxed: at the ladder's last rung one sequence is enough."""
+    relaxed: at the ladder's last rung one sequence is enough. host_ckpt: the budget also
+    holds each sequence's context checkpoints (KV in host RAM)."""
     need = want_seqs or TARGET_SEQS
     for ctx in ladder:
-        s = per_seq(kv, ctx, scale)
+        s = per_seq(kv, ctx, scale) + (ckpt_seq(kv, ctx) if host_ckpt else 0)
         n = int(budget // s) if s else MAX_SEQS
         if n >= need or (relaxed and ctx == ladder[-1] and n >= 1 and not want_seqs):
             return ctx, min(want_seqs or n, MAX_SEQS)
@@ -1144,9 +1161,14 @@ def fit(host, cfg, weights, engine=None, ctx=None, seqs=None, gpus=None, kv_dtyp
         kvb = KV_DTYPE_BYTES.get(kv_dtype) or (1 if eng == "vllm" and m["kv_scheme_bits"] == 8 else m["dtype_bytes"])
         kvs[eng] = kv_profile(cfg, kvb, eng)
         kvs[eng]["dtype"] = kv_dtype if kv_dtype != "auto" else ("fp8" if kvb == 1 else "auto")
+        kvs[eng]["ckpts"] = LLAMA_CTX_CHECKPOINTS if eng == "llama.cpp" else 0
         ex.append("  KV cache (%s B per element%s):" % (_num(kvb), ", the checkpoint's kv_cache_scheme"
                                                        if kvb == 1 and kv_dtype == "auto" else ""))
         ex += ["    " + s for s in kvs[eng]["lines"]]
+        if eng == "llama.cpp":
+            ex.append("    host prompt cache off (--cache-ram 0); context checkpoints (-ctxcp %d) in host RAM: "
+                      "%d x the slot's SWA cache and recurrent state = %s per slot at %d tokens"
+                      % (LLAMA_CTX_CHECKPOINTS, LLAMA_CTX_CHECKPOINTS, _mb(ckpt_seq(kvs[eng], full[0])), full[0]))
     tried, picked, degraded = [], None, False
     for i, (label, ladder, relaxed) in enumerate(passes):
         ex.append("placements, %s:" % label)
@@ -1189,11 +1211,12 @@ def fit(host, cfg, weights, engine=None, ctx=None, seqs=None, gpus=None, kv_dtyp
         kb = per_seq(kvp, rc, picked["kv_scale"]) * rs
         if _whole_gib_pool(picked["engine"], picked["placement"]):
             kb = int(math.ceil(kb / GIB)) * GIB
-        hb = picked["host_bytes"] - picked["kv_bytes"] + kb if picked["placement"] == "cpu" else picked["host_bytes"]
+        hb = (picked["host_bytes"] - picked["kv_bytes"] - picked["ckpt_bytes"] + kb + ckpt_seq(kvp, rc) * rs
+              if picked["placement"] == "cpu" else picked["host_bytes"])
         rung_kv.append(int(kb))
         rung_limit.append("%dGi" % int(math.ceil(hb * (1 + LIMIT_SLACK) / GIB)))
     doc.update({k: picked[k] for k in ("engine", "placement", "ctx", "seqs", "tp", "gpus", "gpu_bytes", "host_bytes",
-                                       "flags", "dram_tok_s", "note", "kv_bytes")})
+                                       "flags", "dram_tok_s", "note", "kv_bytes", "ckpt_bytes")})
     doc["source"] = weights.get("source")
     doc["weight_bytes"] = weights.get("total_bytes") or m["serve_bytes"]
     if m["format"] == "gguf":
@@ -1239,7 +1262,7 @@ def _overhead(eng, m, seqs, override):
 def _res(eng, place, fits, why="", math_lines=(), **kw):
     r = {"engine": eng, "placement": place, "fits": fits, "why": why, "math": list(math_lines),
          "ctx": None, "seqs": 0, "tp": 1, "gpus": 0, "gpu_bytes": 0, "host_bytes": 0, "flags": [], "dram_tok_s": None,
-         "kv_bytes": 0, "kv_scale": 1.0}
+         "kv_bytes": 0, "kv_scale": 1.0, "ckpt_bytes": 0}
     r.update(kw)
     return r
 
@@ -1333,13 +1356,16 @@ def _placements(eng, m, kv, ladder, relaxed, want_seqs, want_gpus, cards, hfree,
             lines.append("KV: %d seqs x %s at %d tokens = %s%s" % (n, _mb(per_seq(kv, c, scale)), c, g1(kvused),
                                                                  " per card" if eng == "vllm" else ""))
             # vLLM runs one worker process per tensor-parallel rank, each with its own runtime.
-            hb = int(hostrt + HOST_RUNTIME[eng] * (k - 1) * (eng == "vllm") + on_host + compile_host)
+            ck = ckpt_seq(kv, c) * n
+            if ck:
+                lines.append("context checkpoints: %d seqs x %s = %s in host RAM" % (n, _mb(ckpt_seq(kv, c)), g1(ck)))
+            hb = int(hostrt + HOST_RUNTIME[eng] * (k - 1) * (eng == "vllm") + on_host + compile_host + ck)
             if hb > hfree:
                 yield _res(eng, place, False, "host side %s exceeds the host budget %s" % (g1(hb), g1(hfree)), lines, gpus=k)
                 continue
             gpu_use = int(w + ov + kvused) if eng == "vllm" else int((w + ov * k + kvused) / k)
             yield _res(eng, place, True, "", lines, ctx=c, seqs=n, tp=k if eng == "vllm" else 1, gpus=k,
-                       gpu_bytes=gpu_use, host_bytes=hb, kv_bytes=int(kvused), kv_scale=scale,
+                       gpu_bytes=gpu_use, host_bytes=hb, kv_bytes=int(kvused), kv_scale=scale, ckpt_bytes=ck,
                        flags=_flags(eng, place, c, n, k, gpu_use, use, kvused, m, 0, kv))
     # MoE experts to DRAM (llama.cpp --n-cpu-moe): every free card, fewest CPU layers.
     if eng == "llama.cpp" and cards and m["moe"]:
@@ -1385,9 +1411,10 @@ def _placements(eng, m, kv, ladder, relaxed, want_seqs, want_gpus, cards, hfree,
                              % (bw, g1(dram_w), m["experts_per_tok"], m["experts"], toks, MIN_DRAM_TOK_S))
                 kvused = per_seq(kv, c) * n
                 lines.append("KV: %d seqs x %s at %d tokens = %s on GPU" % (n, _mb(per_seq(kv, c)), c, g1(kvused)))
-                hb = int(dram_w + on_host + HOST_RUNTIME[eng])
-                lines.append("host: experts %s + lookup tables %s + runtime %s = %s"
-                             % (g1(dram_w), g1(on_host), g1(HOST_RUNTIME[eng]), g1(hb)))
+                ck = ckpt_seq(kv, c) * n
+                hb = int(dram_w + on_host + HOST_RUNTIME[eng] + ck)
+                lines.append("host: experts %s + lookup tables %s + runtime %s + context checkpoints %d x %s = %s"
+                             % (g1(dram_w), g1(on_host), g1(HOST_RUNTIME[eng]), n, _mb(ckpt_seq(kv, c)), g1(hb)))
                 if toks < MIN_DRAM_TOK_S:
                     yield _res(eng, "moe-offload", False, "DRAM bandwidth gives %.1f tok/s, under the %g floor"
                                % (toks, MIN_DRAM_TOK_S), lines, gpus=k)
@@ -1397,7 +1424,7 @@ def _placements(eng, m, kv, ladder, relaxed, want_seqs, want_gpus, cards, hfree,
                 else:
                     gpu_use = int((gw + ov * k + kvused) / k)
                     yield _res(eng, "moe-offload", True, "", lines, ctx=c, seqs=n, gpus=k, gpu_bytes=gpu_use,
-                               host_bytes=hb, dram_tok_s=round(toks, 1), kv_bytes=int(kvused),
+                               host_bytes=hb, dram_tok_s=round(toks, 1), kv_bytes=int(kvused), ckpt_bytes=ck,
                                flags=_flags(eng, "moe-offload", c, n, k, gpu_use, use, kvused, m, n_cpu, kv))
     # CPU only: weights, KV and activations all in DRAM (vLLM: its CPU build, the KV
     # pool sized by VLLM_CPU_KVCACHE_SPACE, as EAT's vLLM chart sets it).
@@ -1408,8 +1435,9 @@ def _placements(eng, m, kv, ladder, relaxed, want_seqs, want_gpus, cards, hfree,
         if m["moe"]:
             active -= m["bytes"]["experts"] * (1 - m["experts_per_tok"] / m["experts"])
         toks = _dram_rate(bw, active)
-        lines = ["host budget / %.2f slack %s - weights %s - activations %s - runtime %s = %s for KV"
-                 % (1 + LIMIT_SLACK, g1(hfree), g1(m["serve_bytes"]), g1(act), g1(HOST_RUNTIME[eng]), g1(max(left, 0)))]
+        lines = ["host budget / %.2f slack %s - weights %s - activations %s - runtime %s = %s for KV%s"
+                 % (1 + LIMIT_SLACK, g1(hfree), g1(m["serve_bytes"]), g1(act), g1(HOST_RUNTIME[eng]), g1(max(left, 0)),
+                    " and context checkpoints" if kv.get("ckpts") else "")]
         if toks:
             lines.append("DRAM decode bound: %g GB/s / %s read per token = %.1f tok/s" % (bw, g1(active), toks))
         if left <= 0:
@@ -1420,14 +1448,17 @@ def _placements(eng, m, kv, ladder, relaxed, want_seqs, want_gpus, cards, hfree,
             yield _res(eng, "cpu", False, "DRAM bandwidth gives %.1f tok/s, under the %g floor" % (toks, MIN_DRAM_TOK_S),
                        lines)
             return
-        c, n = size_kv(kv, _kv_room(eng, "cpu", left), ladder, want_seqs, 1.0, relaxed)
+        c, n = size_kv(kv, _kv_room(eng, "cpu", left), ladder, want_seqs, 1.0, relaxed, host_ckpt=True)
         if not c:
             yield _res(eng, "cpu", False, "KV room %s holds no %d-token sequence" % (g1(left), ladder[-1]), lines)
             return
         kvused = _kv_pool(eng, "cpu", per_seq(kv, c) * n)
         lines.append("KV: %d seqs x %s at %d tokens = %s" % (n, _mb(per_seq(kv, c)), c, g1(kvused)))
-        hb = int(m["serve_bytes"] + act + HOST_RUNTIME[eng] + kvused)
-        yield _res(eng, "cpu", True, "", lines, ctx=c, seqs=n, host_bytes=hb, kv_bytes=int(kvused),
+        ck = ckpt_seq(kv, c) * n
+        if ck:
+            lines.append("context checkpoints: %d seqs x %s = %s" % (n, _mb(ckpt_seq(kv, c)), g1(ck)))
+        hb = int(m["serve_bytes"] + act + HOST_RUNTIME[eng] + kvused + ck)
+        yield _res(eng, "cpu", True, "", lines, ctx=c, seqs=n, host_bytes=hb, kv_bytes=int(kvused), ckpt_bytes=ck,
                    dram_tok_s=round(toks, 1) if toks else None,
                    flags=_flags(eng, "cpu", c, n, 1, 0, [], kvused, m, 0, kv))
 
@@ -1458,6 +1489,8 @@ def _flags(eng, place, ctx, seqs, k, gpu_use, cards, kvused, m, n_cpu_moe, kv=No
         out += ["-ts", ",".join(str(max(int(c["budget"] // GIB), 1)) for c in cards)]
     if place == "moe-offload":
         out += ["--cpu-moe"] if n_cpu_moe >= m["layers"] else ["--n-cpu-moe", str(n_cpu_moe)]
+    # -cram/--cache-ram, -ctxcp/--ctx-checkpoints: the host caches the fit counts (LLAMA_CTX_CHECKPOINTS)
+    out += ["--cache-ram", "0", "-ctxcp", str(LLAMA_CTX_CHECKPOINTS)]
     t = {"fp16": "f16"}.get(kv.get("dtype"), kv.get("dtype"))
     if t in ("f16", "bf16", "q8_0", "q4_0"):
         out += ["-ctk", t, "-ctv", t]  # -ctk/--cache-type-k, -ctv/--cache-type-v
