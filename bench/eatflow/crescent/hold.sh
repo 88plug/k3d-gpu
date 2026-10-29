@@ -2,11 +2,12 @@
 # hold.sh NAME CAP_S CMD...: one measurement hold on crescent (EXPERIMENTS.md "H50-H52
 # pre-registration", shared rules 1-4). Waits for the campaign lock, applies the hold-start
 # rule (load1 <= 12 and no aiperf process, polled every 2 min for at most 60 min, then the hold
-# runs flagged), refuses to start above 97% disk, runs CMD under GNU `timeout -k 30 CAP_S` with the
-# serving sampler beside it and a disk watchdog that stops CMD above 97%, then kills what is left
-# of CMD's process tree, deletes every cluster and host container of this campaign
-# (not k3dgpu-x-*/-g-*) and this tool's load containers. A TERM, INT or HUP stops CMD with TERM
-# and waits for it (timeout -k 30 bounds that), then cleans up the same way. Records go to
+# runs flagged), refuses to start above 97% disk, runs CMD under GNU
+# `timeout --foreground -k 30 CAP_S` with the serving sampler beside it and a disk watchdog that
+# stops CMD above 97%, then kills what is left of CMD's process tree, deletes every cluster and
+# host container of this campaign (not k3dgpu-x-*/-g-*) and this tool's load containers. A TERM,
+# INT or HUP stops CMD with one TERM and waits for it (timeout -k 30 bounds that), then cleans
+# up the same way. Records go to
 # ~/k3dgpu-bench/runs/NAME/; one start and one end record per hold go to
 # ~/k3dgpu-bench/runs/holds.log (holds.py).
 # HOLD_SLOT=0|1 (H56, off by default): one hold per cpuset slice, see slots.sh; every
@@ -78,8 +79,8 @@ finish() {
     holds append "${HL}" ev=end tag="${TAG}" rc="${x}" stale_reaped="$(cat "${R}/stale_reaped")" \
         orphans_killed="$(cat "${R}/orphans_killed" 2>/dev/null || echo 0)" reap_residue="$([ -f "${R}/reap_residue" ] && echo 1 || echo 0)"
 }
-# A signal only records itself and asks CMD to stop; the main line acts on it.
-on_sig() { sig=$1; [ -z "${cp:-}" ] || kill -TERM "${cp}" 2>/dev/null; }
+# A signal only records itself and asks CMD to stop, once; the main line acts on it.
+on_sig() { [ -z "${sig:-}" ] || return 0; sig=$1; [ -z "${cp:-}" ] || kill -TERM "${cp}" 2>/dev/null; }
 stop_if_signalled() { [ -z "${sig:-}" ] || exit $(( 128 + sig )); }
 my_child() { ps -o ppid= -p "$1" 2>/dev/null | grep -qx " *$$"; }
 trap finish EXIT
@@ -125,16 +126,22 @@ log "start: $*"
 # the GNU build it ships as gnutimeout is used where present.
 TO=$(command -v gnutimeout || echo timeout)
 # setsid execs in place, so ${cp} leads CMD's own process group. No child keeps fd 9.
+# --foreground: a stop (signal, cap, disk) sends TERM to CMD alone, once, and KILL 30 s later;
+# reap() then kills the rest of the group. Without it timeout sends TERM to CMD and then to
+# the group, CMD included, and a bash CMD exits at once on a second TERM that lands while its
+# EXIT trap runs (bash >= 5.2.14), which cut that cleanup short whenever timeout was
+# preempted between the two sends.
 if [ -n "${HOLD_SLOT:-}" ]; then
-setsid env K3DGPU_HOLD="${TAG}" K3DGPU_HOLD_RUNS="${B}/runs" "${TO}" -k 30 "${cap}" taskset -c "${SLOT_CPUS}" "$@" > "${R}/hold.log" 2>&1 7>&- 8>&- 9>&- &
+setsid env K3DGPU_HOLD="${TAG}" K3DGPU_HOLD_RUNS="${B}/runs" "${TO}" --foreground -k 30 "${cap}" taskset -c "${SLOT_CPUS}" "$@" > "${R}/hold.log" 2>&1 7>&- 8>&- 9>&- &
 else
-setsid env K3DGPU_HOLD="${TAG}" K3DGPU_HOLD_RUNS="${B}/runs" "${TO}" -k 30 "${cap}" "$@" > "${R}/hold.log" 2>&1 9>&- &
+setsid env K3DGPU_HOLD="${TAG}" K3DGPU_HOLD_RUNS="${B}/runs" "${TO}" --foreground -k 30 "${cap}" "$@" > "${R}/hold.log" 2>&1 9>&- &
 fi
 cp=$!
 [ -z "${sig:-}" ] || kill -TERM "${cp}"
+# The disk stop goes through on_sig, so a hold already stopping does not TERM CMD again.
 ( while kill -0 "${cp}" 2>/dev/null; do
       sleep 30
-      if [ "$(disk)" -gt 97 ]; then echo "disk $(disk)% at $(date -u +%FT%TZ)" > "${R}/disk-abort"; kill -TERM "${cp}"; break; fi
+      if [ "$(disk)" -gt 97 ]; then echo "disk $(disk)% at $(date -u +%FT%TZ)" > "${R}/disk-abort"; kill -TERM "$$"; break; fi
   done ) 7>&- 8>&- 9>&- &
 wd=$!
 # A trapped signal returns wait early; wait again until CMD is gone, then read its status.

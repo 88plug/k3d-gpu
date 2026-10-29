@@ -248,5 +248,48 @@ if [ "${v}" = 2 ]; then ok "T14 rc = 2 without a GNU timeout"; else fail "T14 rc
 if [ ! -e "${h}/t14.ran" ]; then ok "T14 CMD never started"; else fail "T14 CMD ran under a timeout that is not GNU's"; fi
 if [ ! -s "${h}/k3dgpu-bench/runs/holds.log" ]; then ok "T14 no hold record"; else fail "T14 holds.log has records"; fi
 
+# T15: a stop sends TERM to CMD alone, and once. A bash CMD exits at once on a TERM that lands
+# while its EXIT trap runs (bash >= 5.2.14); timeout's group send was such a second TERM
+# whenever timeout was preempted between its two sends. hold.sh gets TERM, then HUP while
+# CMD's EXIT trap runs: the trap still ends, and CMD's background child sees no TERM (the
+# reap kills it).
+h=$(newhome t15)
+printf 'trap "echo TERM >> %s/t15.child; exit 0" TERM\n(exec -a %s-t15s sleep 300) &\nwait\n' "${h}" "${P}" > "${h}/child.sh"
+HOME=${h} bash "${HOLD}" t15 600 bash -c "trap 'echo begin >> ${h}/t15.trace; sleep 2; echo done >> ${h}/t15.trace' EXIT; (exec -a ${P}-t15c bash '${h}/child.sh') & touch '${h}/t15.started'; (exec -a ${P}-t15 sleep 300)" > "${h}/hold.out" 2>&1 &
+hp=$!
+for _ in $(seq 300); do [ -f "${h}/t15.started" ] && break; sleep 0.1; done
+sleep 0.5
+kill -TERM "${hp}"
+for _ in $(seq 100); do grep -q begin "${h}/t15.trace" 2>/dev/null && break; sleep 0.1; done
+kill -HUP "${hp}"
+for _ in $(seq 450); do kill -0 "${hp}" 2>/dev/null || break; sleep 0.1; done
+if kill -0 "${hp}" 2>/dev/null; then fail "T15 hold.sh still running 45 s after SIGTERM"; kill -KILL "${hp}"; fi
+wait "${hp}" 2>/dev/null
+v=$(tr '\n' ' ' < "${h}/t15.trace" 2>/dev/null)
+if [ "${v}" = "begin done " ]; then ok "T15 CMD's EXIT trap ran to the end after TERM then HUP"; else fail "T15 CMD's EXIT trap trace = '${v}', want 'begin done '"; fi
+if [ ! -e "${h}/t15.child" ]; then ok "T15 CMD's background child got no TERM"; else fail "T15 CMD's background child got TERM"; fi
+v=$(cat "${h}/k3dgpu-bench/runs/t15/rc" 2>/dev/null || echo missing)
+if [ "${v}" = 143 ]; then ok "T15 rc = 143"; else fail "T15 rc = ${v}, want 143"; fi
+if [ -z "$(pgrep -f "^${P}-t15")" ]; then ok "T15 no process of the hold left"; else fail "T15 survivors: $(pgrep -af "^${P}-t15" | tr '\n' ' ')"; kill -KILL $(pgrep -f "^${P}-t15") 2>/dev/null; fi
+
+# T16: the disk watchdog (30 s polls) stops CMD through hold.sh's own signal path: disk-abort
+# is recorded, CMD's EXIT trap runs to the end and the hold records CMD's status.
+h=$(newhome t16)
+echo 10 > "${h}/disk"
+printf '#!/bin/sh\necho "Filesystem 1024-blocks Used Available Capacity Mounted"\necho "/dev/stub 100 10 90 $(cat "$HOME/disk")%% /"\n' > "${h}/k3dgpu-bench/bin/df"
+HOME=${h} bash "${HOLD}" t16 600 bash -c "trap 'echo begin >> ${h}/t16.trace; sleep 1; echo done >> ${h}/t16.trace' EXIT; touch '${h}/t16.started'; (exec -a ${P}-t16 sleep 300)" > "${h}/hold.out" 2>&1 &
+hp=$!
+for _ in $(seq 300); do [ -f "${h}/t16.started" ] && break; sleep 0.1; done
+echo 99 > "${h}/disk"
+for _ in $(seq 900); do kill -0 "${hp}" 2>/dev/null || break; sleep 0.1; done
+if kill -0 "${hp}" 2>/dev/null; then fail "T16 hold.sh still running 90 s after the disk filled"; kill -KILL "${hp}"; fi
+wait "${hp}" 2>/dev/null
+if [ -s "${h}/k3dgpu-bench/runs/t16/disk-abort" ]; then ok "T16 disk-abort recorded"; else fail "T16 no disk-abort"; fi
+v=$(tr '\n' ' ' < "${h}/t16.trace" 2>/dev/null)
+if [ "${v}" = "begin done " ]; then ok "T16 CMD's EXIT trap ran to the end"; else fail "T16 CMD's EXIT trap trace = '${v}', want 'begin done '"; fi
+v=$(cat "${h}/k3dgpu-bench/runs/t16/rc" 2>/dev/null || echo missing)
+if [ "${v}" = 143 ]; then ok "T16 rc = 143"; else fail "T16 rc = ${v}, want 143"; fi
+if [ -z "$(pgrep -f "^${P}-t16")" ]; then ok "T16 no process of the hold left"; else fail "T16 survivors"; kill -KILL $(pgrep -f "^${P}-t16") 2>/dev/null; fi
+
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]
