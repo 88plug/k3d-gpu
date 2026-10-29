@@ -8,7 +8,8 @@
 #       2. the patch overlay: overlay.py --apply, decisions in overlay.txt
 #       3. the layer manifest's revs as commit SHAs (repos.<layer>.yaml from eas-config.py)
 #       4. es_auto_installer.sh init <layer> --env k3d-gpu
-#       5. global_config.edit.yaml and models.edit.yaml (eas-config.py) into env/k3d-gpu/
+#       5. global_config.edit.yaml and models.edit.yaml (eas-config.py) into env/k3d-gpu/:
+#          keys merge; a model's env merges and its args_append follows its catalog args
 #       6. es_auto_installer.sh install <layer> --env k3d-gpu -- -e @k3d-gpu-images.yaml
 #          -e @k3d-gpu-overrides.yaml [args]: extra vars load last in es_auto_installer.sh
 #          main(), so the overrides win
@@ -88,12 +89,31 @@ pin_manifest() {
     done < <(yq -r '.repos[] | [.layer, .url, .rev] | @tsv' "${f}")
 }
 
+# args_merge <current args JSON> <args_append JSON>: the catalog entry's args with
+# args_append after them, each --flag of args_append (and its value) taken out of the
+# current args first, so a re-run (init never reseeds models.yaml) replaces rather than
+# repeats it. Prints JSON.
+args_merge() {
+    python3 -c 'import json, sys
+cur, add = json.loads(sys.argv[1]), json.loads(sys.argv[2])
+valued = {t: i + 1 < len(add) and not add[i + 1].startswith("--") for i, t in enumerate(add) if t.startswith("--")}
+out, skip = [], False
+for t in cur:
+    if skip:
+        skip = False
+    elif t.split("=", 1)[0] in valued:
+        skip = valued[t.split("=", 1)[0]] and "=" not in t
+    else:
+        out.append(t)
+print(json.dumps(out + add))' "$1" "$2"
+}
+
 # env_edits: global_config.edit.yaml merged into env/k3d-gpu/global_config.yaml (where
 # _resolve_kubeconfig reads existing_kubernetes, #L1342-L1358), and models.edit.yaml into
-# env/k3d-gpu/models.yaml: defaults merge, and each model merges into the catalog entry of
-# its name, which must exist once.
+# env/k3d-gpu/models.yaml: defaults merge; each model is the catalog entry of its name,
+# which must exist once: its env merges, and its args_append goes after its args.
 env_edits() {
-    local env="${CHECKOUT}/env/${ENV_NAME}" F N
+    local env="${CHECKOUT}/env/${ENV_NAME}" F N A cur add
     F="${EAS_STATE}/global_config.edit.yaml"
     [ -f "${F}" ] || err "${F} missing (eas-config.py writes it)"
     export F
@@ -106,8 +126,13 @@ env_edits() {
         export N
         yq -e '[.models[] | select(.name == strenv(N))] | length == 1' "${env}/models.yaml" >/dev/null \
             || err "env/${ENV_NAME}/models.yaml has no single catalog entry named ${N}"
-        yq -i '(.models[] | select(.name == strenv(N))) *= (load(strenv(F)).models[] | select(.name == strenv(N)))' \
+        yq -i '(.models[] | select(.name == strenv(N))).env *= ((load(strenv(F)).models[] | select(.name == strenv(N))).env // {})' \
             "${env}/models.yaml"
+        cur=$(yq -o=json -I=0 '(.models[] | select(.name == strenv(N))).args // []' "${env}/models.yaml")
+        add=$(yq -o=json -I=0 '(.models[] | select(.name == strenv(N))).args_append // []' "${F}")
+        A=$(args_merge "${cur}" "${add}")
+        export A
+        yq -i '(.models[] | select(.name == strenv(N))).args = (strenv(A) | from_yaml)' "${env}/models.yaml"
     done < <(yq -r '.models[].name' "${F}")
 }
 

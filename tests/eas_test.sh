@@ -824,10 +824,17 @@ EOF
 #!/usr/bin/env python3
 import os, re, sys
 a = sys.argv[1:]
-env = " ".join("%s=%s" % (k, os.environ[k]) for k in ("L", "U", "R", "F", "N") if k in os.environ and "strenv(%s)" % k in " ".join(a))
+env = " ".join("%s=%s" % (k, os.environ[k]) for k in ("L", "U", "R", "F", "N", "A") if k in os.environ and "strenv(%s)" % k in " ".join(a))
 with open(os.environ["STUB_LOG"], "a") as f:
     f.write("yq %s%s\n" % (" ".join(a), " [" + env + "]" if env else ""))
-if "-r" in a:
+if "-o=json" in a:
+    text = open(a[-1]).read()
+    if ".args_append" in a[-2]:
+        m = re.search(r"args_append: (\[.*\])", text)
+        print(m.group(1) if m else "[]")
+    else:   # the catalog entry's args: one the edit replaces, one it keeps
+        print('["--block-size","128","--max-model-len","131072","--tensor-parallel-size","1"]')
+elif "-r" in a:
     text = open(a[-1]).read()
     if "@tsv" in a[a.index("-r") + 1]:
         for m in re.finditer(r'- layer: "([^"]*)"\n\s+url: "([^"]*)"\n\s+rev: "([^"]*)"', text):
@@ -845,7 +852,7 @@ case "$1" in
         case "$3" in
             Qwen/Qwen2.5-Coder-14B-Instruct) echo '{"schema": "k3d-gpu.fit/v1", "fits": false, "summary": "fit: does not fit this host", "flags": []}'; exit 3 ;;
             meta-llama/Llama-3.1-8B-Instruct) exit 2 ;;
-            *) printf '{"schema": "k3d-gpu.fit/v1", "fits": true, "summary": "fit: %s on CPU via vllm", "flags": ["VLLM_CPU_KVCACHE_SPACE=12"]}\n' "$3" ;;
+            *) printf '{"schema": "k3d-gpu.fit/v1", "fits": true, "summary": "fit: %s on CPU via vllm", "flags": ["--max-model-len=32768", "--max-num-seqs=4", "VLLM_CPU_KVCACHE_SPACE=12"]}\n' "$3" ;;
         esac ;;
 esac
 EOF
@@ -1071,6 +1078,12 @@ print(sorted(f), f["nri_socket"], f["containerd_cni_bin_dirs"], f["agent_sandbox
     cli_before "cli: init, then models.edit.yaml defaults" "${log}" "installer init" \
         "yq -i .defaults *= load(strenv(F)).defaults ${ES}/eas/env/k3d-gpu/models.yaml [F=${ES}/models.edit.yaml]"
     cli_has    "cli: the picked model's catalog entry is edited by name" "${log}" "[F=${ES}/models.edit.yaml N=qwen2-5-coder-7b]"
+    cli_has    "cli: the model's env merges into its catalog entry" "${log}" \
+        ".env *= ((load(strenv(F)).models[] | select(.name == strenv(N))).env // {}) ${ES}/eas/env/k3d-gpu/models.yaml"
+    cli_has    "cli: args_append follows the catalog args, replacing the flag it names" "${log}" \
+        '.args = (strenv(A) | from_yaml) '"${ES}"'/eas/env/k3d-gpu/models.yaml [N=qwen2-5-coder-7b A=["--block-size", "128", "--tensor-parallel-size", "1", "--max-model-len", "32768"]]'
+    cli_lacks  "cli: args_append is not written into the catalog entry as a key" "${log}" \
+        ") *= (load(strenv(F)).models[]"
     cli_before "cli: the edits, then install" "${log}" "load(strenv(F)).defaults" "installer install"
     cli_has    "cli: install with the image pins, then the overrides, then the extra args" "${log}" \
         "installer install agent-toolkit --env k3d-gpu -- -e @${ES}/k3d-gpu-images.yaml -e @${ES}/k3d-gpu-overrides.yaml -e x=1"
