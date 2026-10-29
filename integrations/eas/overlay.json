@@ -1,0 +1,164 @@
+{
+  "schema": "k3d-gpu.eas-overlay/v1",
+  "checked": "2026-10-29",
+  "repo": "intel/enterprise-ai-solutions",
+  "patch_dirs": ["integrations/eas/patches", "integrations/eat/upstream/patches"],
+  "rules": {
+    "always": "every k3d-gpu cluster",
+    "eas_owns_nri": "only when kubernetes_cpu_policy is nri-balloons: EAS installs the nri-plugins balloons chart only then (configs/components.yaml, nri_cpu_balloons.enabled)",
+    "multi_node": "only on a cluster with more than one node; k3d-gpu runs one server",
+    "never": "documentation only; nothing at install time reads it"
+  },
+  "rows": [
+    {
+      "id": "0002",
+      "what": "istio: pass istio_platform to the Istio chart as global.platform, so istio-cni uses the k3s/k3d CNI paths",
+      "variants": [
+        {"name": "a", "files": ["0002-eas-istio-global-platform.patch"], "for": "main and release-1.2"}
+      ],
+      "needed_when": "always",
+      "fixed_probe": [
+        {
+          "glob": "roles/istio/**",
+          "regex": "(?m)global\\.platform\\s*=|['\"]platform['\"]\\s*:|global:\\s*\\{\\s*platform\\s*:|^\\s*global:[ \\t]*\\n\\s+platform:",
+          "knob": "istio_platform",
+          "what": "an Istio task or default sets global.platform from a variable"
+        }
+      ],
+      "moved": [
+        {
+          "glob": "configs/defaults/global_config.yaml",
+          "regex": "(?m)^headlamp_enabled:",
+          "upstream": "https://github.com/intel/enterprise-ai-solutions/pull/61",
+          "what": "headlamp_enabled now follows velero_enabled, the context of 0002's global_config.yaml hunk"
+        }
+      ],
+      "upstream": {
+        "filed": false,
+        "evidence": "https://istio.io/latest/docs/ambient/install/platform-prerequisites/"
+      }
+    },
+    {
+      "id": "0003",
+      "what": "nri_cpu_balloons: pin the nri-plugins balloons chart to v0.15.0",
+      "variants": [
+        {"name": "a", "files": ["0003-eas-pin-nri-balloons-chart.patch"], "for": "main and release-1.2"}
+      ],
+      "needed_when": "eas_owns_nri",
+      "fixed_probe": [
+        {
+          "glob": "roles/nri_cpu_balloons/tasks/install_advanced.yaml",
+          "regex": "(?m)^\\s*chart_version:",
+          "knob": null,
+          "what": "the balloons Helm task passes a chart_version"
+        }
+      ],
+      "moved": [],
+      "upstream": {
+        "filed": false,
+        "evidence": "https://github.com/containers/nri-plugins/releases/tag/v0.15.0"
+      }
+    },
+    {
+      "id": "0004",
+      "what": "kubernetes: apply the workload-class node labels on multi-node BYO clusters",
+      "variants": [
+        {"name": "a", "files": ["0004-eas-byo-node-topology-labels.patch"], "for": "main and release-1.2"}
+      ],
+      "needed_when": "multi_node",
+      "fixed_probe": [
+        {
+          "glob": "roles/kubernetes/tasks/install.yaml",
+          "regex": "apply_node_topology\\.yaml",
+          "knob": null,
+          "what": "the role's install entry point runs apply_node_topology.yaml itself"
+        }
+      ],
+      "moved": [],
+      "upstream": {
+        "filed": false,
+        "evidence": "https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/roles/kubernetes/tasks/install.yaml#L23-L25"
+      }
+    },
+    {
+      "id": "0005",
+      "what": "docs: Single-Node Dev on k3d",
+      "variants": [
+        {"name": "a", "files": ["0005-eas-docs-single-node-k3d.patch"], "for": "main"}
+      ],
+      "needed_when": "never",
+      "fixed_probe": [],
+      "moved": [],
+      "upstream": {
+        "filed": false,
+        "evidence": "https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/docs/deploy/topologies.md#L189"
+      }
+    },
+    {
+      "id": "0006",
+      "what": "envoy_gateway: select control-plane nodes by label presence (k3s stamps \"true\", kubeadm \"\")",
+      "variants": [
+        {"name": "a", "files": ["0006-eas-envoy-control-plane-affinity.patch"], "for": "main after EAS #42 (roles/envoy_gateway/tasks/controller.yaml)"},
+        {"name": "b", "files": ["0006-release-1.2-envoy-control-plane-affinity.patch"], "for": "release-1.2 (roles/envoy_gateway/tasks/install.yaml)"}
+      ],
+      "needed_when": "always",
+      "fixed_probe": [
+        {
+          "glob": "roles/envoy_gateway/**",
+          "regex": "(?s)\\A(?!.*node-role\\.kubernetes\\.io/control-plane:[ \\t]*(?:\"\"|''))(?=.*?(?P<at>matchExpressions:\\s*-[ \\t]*key:[ \\t]*[\"']?node-role\\.kubernetes\\.io/control-plane[\"']?\\s+operator:[ \\t]*[\"']?Exists))",
+          "knob": null,
+          "what": "a file selects control-plane nodes with a matchExpressions Exists term and has no exact \"\" selector"
+        },
+        {
+          "glob": "roles/envoy_gateway/vars/k3s.yaml",
+          "regex": "(?m)^_envoy_gateway_proxy_shape:",
+          "knob": null,
+          "what": "a k3s entry in the per-distribution vars layout of EAS #50"
+        }
+      ],
+      "moved": [
+        {
+          "glob": "roles/envoy_gateway/tasks/controller.yaml",
+          "regex": "_eg_k8s_provider:",
+          "upstream": "https://github.com/intel/enterprise-ai-solutions/pull/50",
+          "what": "the EnvoyProxy provider moved into the _eg_k8s_provider var, still an exact \"\" selector (#52 carries the same change)"
+        }
+      ],
+      "upstream": {
+        "filed": false,
+        "evidence": "https://github.com/k3s-io/k3s/blob/843c32de489c25ccc1bde53d21c5fd7df23c706e/pkg/server/server.go#L550"
+      }
+    }
+  ],
+  "verified": [
+    {
+      "profile": "main",
+      "rev": "97f6157d6a72f7173c698c474d4e51d2c79f1fd6",
+      "fixture": "tests/fixtures/eas/trees/97f6157",
+      "cases": [
+        {"policy": "best-effort", "nodes": 1,
+         "expect": {"0002": "apply:a", "0003": "skip", "0004": "skip", "0005": "skip", "0006": "apply:a"}},
+        {"policy": "nri-balloons", "nodes": 3,
+         "expect": {"0002": "apply:a", "0003": "apply:a", "0004": "apply:a", "0005": "skip", "0006": "apply:a"}}
+      ]
+    },
+    {
+      "profile": "v1.2.0-rc.1",
+      "rev": "5c27fb39a95eecec41aa4e29a1188984e9c726f3",
+      "fixture": "tests/fixtures/eas/trees/5c27fb3",
+      "cases": [
+        {"policy": "best-effort", "nodes": 1,
+         "expect": {"0002": "apply:a", "0003": "skip", "0004": "skip", "0005": "skip", "0006": "apply:b"}},
+        {"policy": "nri-balloons", "nodes": 3,
+         "expect": {"0002": "apply:a", "0003": "apply:a", "0004": "apply:a", "0005": "skip", "0006": "apply:b"}}
+      ]
+    }
+  ],
+  "watch": [
+    {"ref": "origin/main", "what": "EAS main tip"},
+    {"ref": "origin/release-1.2", "what": "EAS release-1.2 tip"},
+    {"ref": "pull/50/head", "what": "open: OpenShift platform layer, moves the EnvoyProxy provider into _eg_k8s_provider"},
+    {"ref": "pull/52/head", "what": "open: OpenShift ownership labels, stacked on #50"},
+    {"ref": "pull/61/head", "what": "open: Headlamp SSO, changes 0002's global_config.yaml context and 0004/0005"}
+  ]
+}

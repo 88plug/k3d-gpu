@@ -8,7 +8,7 @@ These are drafts for Intel's repos. **None of them has been filed, opened or pus
   - It deletes the toolkit's own installer: `deploy-agentic-stack.sh`, `core/lib/brownfield/`, `core/playbooks/setup-bastion.yml`, `core/playbooks/deploy-istio.yml`, `core/roles/nri_cpu_balloons/`.
   - It moves the toolkit onto `es_auto_installer.sh install agent-toolkit` in [intel/enterprise-ai-solutions](https://github.com/intel/enterprise-ai-solutions) (EAS) and intel/enterprise-inference.
   - It depends on intel/enterprise-inference#22 and goes in ahead of intel/enterprise-ai-solutions#40. Both are open.
-  - Re-read 2026-10-29: #19 merged on 2026-10-27 into the `release-2.0.0` branch, not `main`, and no tag carries it. intel/enterprise-inference#22 merged on 2026-10-22. intel/enterprise-ai-solutions#40 was closed unmerged on 2026-10-22, and intel/enterprise-ai-solutions#66 ("Integrate Agentic Toolkit"), opened a minute before, merged on 2026-10-29. Every patch here still passes `checks/apply-check.sh` on EAS `main` `5767995`.
+  - Re-read 2026-10-29: #19 merged on 2026-10-27 into the `release-2.0.0` branch, not `main`, and no tag carries it. intel/enterprise-inference#22 merged on 2026-10-22. intel/enterprise-ai-solutions#40 was closed unmerged on 2026-10-22, and intel/enterprise-ai-solutions#66 ("Integrate Agentic Toolkit"), opened a minute before, merged on 2026-10-29. Every patch here still passes `checks/apply-check.sh` on EAS `main` `5767995`, and on `97f6157` (#69), the `main` head later that day.
 - The platform roles that matter for k3s (istio, envoy_gateway, kubernetes, nri_cpu_balloons) already live in EAS `main`. **EAS is the target for every patch here.**
 - There is no toolkit (EAT) patch. Its k3s platform-detection gap sits in `brownfield_deployment()`, which no entry point calls: it is sourced at [deploy-agentic-stack.sh#L631](https://github.com/intel/enterprise-agent-toolkit/blob/0ecf67a8331e8b502ef41e08bf6d2881416178c5/deploy-agentic-stack.sh#L631) and called only from inside itself, and #19 deletes the file. The issue draft lists it as an observation only.
 
@@ -50,6 +50,18 @@ The patches carry no `Signed-off-by:`. EAS's CONTRIBUTING.md requires a DCO sign
 git am --signoff integrations/eat/upstream/patches/0002-eas-istio-global-platform.patch
 ```
 
+## The k3d-gpu overlay
+
+Until upstream carries them, k3d-gpu applies these drafts itself to the EAS checkout it installs from. [integrations/eas/overlay.json](../../eas/overlay.json) lists each patch with its variants, when it is needed (`always`, `eas_owns_nri`, `multi_node`, `never`), a probe for an upstream fix done another way, and the knob the generator writes. [integrations/eas/overlay.py](../../eas/overlay.py) decides per patch at the pinned EAS commit and prints `fact -> choice [source]`:
+
+- `skip`: not needed on this cluster.
+- `drop-merged`: the patch reverse-applies.
+- `drop-fixed`: the probe matches and the knob is still there.
+- `apply`: the first variant that applies.
+- `STOP`, before anything changes: it names the upstream change that moved the hunk and says to regenerate.
+
+The drafts here stay the only copy. The one overlay-only patch is the release-1.2 form of 0006, [integrations/eas/patches/0006-release-1.2-envoy-control-plane-affinity.patch](../../eas/patches/0006-release-1.2-envoy-control-plane-affinity.patch); on that branch the EnvoyProxy task is still in `install.yaml`.
+
 ## Static validation
 
 | Check | Result |
@@ -63,11 +75,14 @@ git am --signoff integrations/eat/upstream/patches/0002-eas-istio-global-platfor
 | 0004 behaviour, [checks/eas-byo-topology.sh](checks/eas-byo-topology.sh) (stub `kubernetes.core`) | upstream: BYO 3 nodes → no labels (FAIL); patched: server `platform`, agents `inference`. BYO with one node already labelled → that node untouched; BYO with node list or patch denied → install succeeds, no labels; managed with patch denied → still fails. BYO 1 node, topology off, managed single- and multi-node all unchanged |
 | 0006 behaviour | the patched `EnvoyProxy` validates against the v1alpha1 CRD in gateway-helm v1.7.1, which includes `pod.affinity` and does not mark `nodeSelector` nullable |
 | 0006 re-install, [checks/eas-envoy-reinstall.py](checks/eas-envoy-reinstall.py) | models kubernetes.core 6.3.0 updating a custom resource (JSON merge patch, RFC 7386) over the object the unpatched task created. Without `nodeSelector: null` the old selector survives next to the affinity (FAIL); with it, gone. Fresh install: the null is pruned on create |
+| 0006 release-1.2 variant, same script on EAS `release-1.2` `5c27fb3` before and after the variant | fresh install and re-install over the unpatched object both leave `nodeSelector: None` and the `Exists` affinity (2026-10-29). release-1.2 pins `envoy_gateway_version: "1.7.1"`, the gateway-helm the 0006 CRD check used |
+| Overlay decisions, `checks/apply-check.sh --overlay` on a fresh clone (2026-10-29) | EAS `main` `97f6157`: 0002 and 0006 apply (0006 variant a), 0003 skips unless the policy is nri-balloons, 0004 skips on one node, 0005 always skips. `release-1.2` `5c27fb3`: the same, with 0006 variant b. Open PRs: #50 and #52 STOP 0006 (the EnvoyProxy provider moves into `_eg_k8s_provider`), #61 STOPs 0002 (`headlamp_enabled` in its `global_config.yaml` context) |
 
 How to rerun the checks (an EAS clone; `ansible-core` and `jmespath` for the topology check; PyYAML for the envoy check):
 
 ```bash
 integrations/eat/upstream/checks/apply-check.sh ../enterprise-ai-solutions
+integrations/eat/upstream/checks/apply-check.sh --overlay              # clones EAS itself; needs the network
 integrations/eat/upstream/checks/eas-byo-topology.sh <EAS checkout with 0004 applied>
 integrations/eat/upstream/checks/eas-envoy-reinstall.py <unpatched EAS checkout> <EAS checkout with 0006 applied>
 ```
