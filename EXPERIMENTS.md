@@ -2515,8 +2515,9 @@ python3 bench/eatflow/crescent/h56.py score ~/k3dgpu-bench/results/H56
 date:            stage 0 lockwait.json 2026-10-21T05:51Z; smoke-W queued 05:51:30Z, locks 07:28:22Z,
                  rc 07:38:55Z; holds 1-8 from 21:04:37Z (hold 1 locks) to 23:10:37Z (hold 8 rc), one
                  exclusive slot-0 + slot-1 + main lock set per condition-hold (flock -w 21600)
-pre-registered:  H56 pre-registration (#168, merged 2026-10-20T23:31:48Z) and amendment S0 (#185,
-                 95665ef1, merged 2026-10-21T05:17:33Z), both before the smoke and stage 1
+pre-registered:  H56 pre-registration (#168, 38f6b302, merged 2026-10-21T05:16:54Z) and amendment S0
+                 (#185, 95665ef1, merged 2026-10-21T05:50:21Z), both before stage 0's lockwait.json
+                 (05:51:20Z), the smoke and stage 1
 hypothesis:      H56
 host:            crescent: Intel(R) Xeon(R) 6741P, 96 CPUs, 1 socket, 1 NUMA node, SMT on, kernel
                  7.0.0-31-generic; PL1 300 W (pl1.txt 300000000 uW in every hold); df / 94-95%
