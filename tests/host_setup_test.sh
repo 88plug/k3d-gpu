@@ -90,6 +90,137 @@ check "HS_NVCTK equals the Dockerfile NVIDIA_CTK_VERSION" "${ok}" "${OUT}"
 OUT=$(cat "${ROOT}/.github/workflows/build-and-push.yml")
 says "nightly bump moves HS_NVCTK" 'sed -i "s|^HS_NVCTK=.*|HS_NVCTK=${{ steps.nvctk.outputs.ctk }}|" scripts/k3d-gpu'
 
+# host-setup's ppa:kobuk-team/intel-graphics pins. The PPA serves only its
+# current builds, so the nightly check (hack/ppa-pins) moves them: the cases below
+# read each pin from the launcher. ppa <var> <release>: the PPA's name for that
+# release's build (26.3.5-1~ppa1 -> 26.3.5-1~24.04~ppa1).
+pin() { sed -n "s/^$1=//p" "${K3D_GPU}"; }
+ppa() { local v; v=$(pin "$1"); echo "${v%%~*}~$2~${v#*~}"; }
+for v in HS_PPA_MEDIA HS_PPA_GMM HS_PPA_LIBVA; do
+    OUT="${v}=$(pin "${v}")"
+    ok=1; [[ "$(pin "${v}")" =~ ^[0-9][0-9.]*-[0-9]+~ppa[0-9]+$ ]] && ok=0
+    check "${v} is a PPA build with the release taken out" "${ok}" "${OUT}"
+    OUT=$(cat "${ROOT}/.github/workflows/build-and-push.yml")
+    says "nightly check compares ${v} with the PPA's build" "[ \"\${{ steps.ppa.outputs.${v} }}\" != \"\${{ steps.current.outputs.${v} }}\" ]"
+done
+# The ppa step as the runner runs a step with no shell: key (bash -e, no pipefail),
+# from a checkout whose hack/ppa-pins is a stub. A hack/ppa-pins failure has to fail
+# the step: its empty outputs would otherwise read as moved pins and cut a release.
+ppastep=$(python3 -c 'import sys, yaml
+for s in yaml.safe_load(open(sys.argv[1]))["jobs"]["check"]["steps"]:
+    if s.get("id") == "ppa": print(s["run"])' "${ROOT}/.github/workflows/build-and-push.yml")
+OUT=${ppastep}
+ok=1; [ -n "${ppastep}" ] && ok=0
+check "build-and-push has the ppa step" "${ok}" "no step with id ppa"
+ppastep_run() {  # ppastep_run <stub exit code>: the step's GITHUB_OUTPUT into OUT, its exit code into RC
+    local d="${WORK}/ppastep"
+    rm -rf "${d}"; mkdir -p "${d}/hack"
+    printf '%s\n' "${ppastep}" > "${d}/step.sh"
+    if [ "$1" -eq 0 ]; then
+        printf '#!/bin/sh\nprintf "HS_PPA_MEDIA=1.0.0-1~ppa1\\nHS_PPA_GMM=2.0.0-1~ppa1\\nHS_PPA_LIBVA=3.0.0-1~ppa1\\n"\n' > "${d}/hack/ppa-pins"
+    else
+        printf '#!/bin/sh\necho "ppa-pins: cannot fetch the PPA'"'"'s noble index" >&2\nexit %s\n' "$1" > "${d}/hack/ppa-pins"
+    fi
+    chmod +x "${d}/hack/ppa-pins"
+    : > "${d}/out"
+    (cd "${d}" && GITHUB_OUTPUT="${d}/out" bash -e step.sh) >/dev/null 2>&1
+    RC=$?
+    OUT=$(cat "${d}/out")
+}
+ppastep_run 0
+rc_is "nightly ppa step: hack/ppa-pins succeeding exits 0" 0
+says "nightly ppa step: the pins land in its outputs" "HS_PPA_GMM=2.0.0-1~ppa1"
+ppastep_run 1
+ok=1; [ "${RC}" -ne 0 ] && ok=0
+check "nightly ppa step: hack/ppa-pins failing fails the step" "${ok}" "rc=${RC}, want non-zero"
+OUT=$(cat "${ROOT}/.github/workflows/build-and-push.yml")
+says "nightly check reads the launcher's PPA pins" "grep '^HS_PPA_' scripts/k3d-gpu"
+says "nightly bump writes the PPA pins into the launcher and README" "hack/ppa-pins --write scripts/k3d-gpu README.md"
+OUT=$(grep -F 'kobuk-team/intel-graphics' "${ROOT}/README.md")
+says "README names the pinned media driver" "media driver $(pin HS_PPA_MEDIA | cut -d- -f1)"
+says "README names the pinned libva" "libva $(pin HS_PPA_LIBVA | cut -d- -f1)"
+says "README names the pinned gmmlib" "gmmlib $(pin HS_PPA_GMM | cut -d- -f1)"
+
+# hack/ppa-pins against fake Packages indexes: pkgidx <dir> <codename> <release>
+# <media> <gmm> <libva> [<libva-x11-2>] writes <dir>/<codename> with each build
+# (release taken out) put back for <release>.
+pkgidx() {
+    local d=$1 rel=$3 x11=${7:-$6} p v
+    mkdir -p "${d}"
+    : > "${d}/$2"
+    for p in "intel-media-va-driver-non-free $4" "libigdgmm12 $5" "libva2 $6" "libva-drm2 $6" \
+             "libva-x11-2 ${x11}" "libva-wayland2 $6" "vainfo 2.24.0-1~ppa1"; do
+        v=${p#* }
+        [ "${v}" = - ] || printf 'Package: %s\nVersion: %s\n\n' "${p%% *}" "${v%%~*}~${rel}~${v#*~}" >> "${d}/$2"
+    done
+}
+ppapins() {  # ppapins <index dir> [args...]: hack/ppa-pins output into OUT, exit code into RC
+    local d=$1; shift
+    : > "${STUB_LOG}"
+    OUT=$(PPA_INDEX_DIR="${d}" "${ROOT}/hack/ppa-pins" "$@" 2>&1)
+    RC=$?
+}
+M=$(pin HS_PPA_MEDIA) G=$(pin HS_PPA_GMM) L=$(pin HS_PPA_LIBVA)
+pkgidx "${WORK}/ppa-same" noble 24.04 "${M}" "${G}" "${L}"
+pkgidx "${WORK}/ppa-same" resolute 26.04 "${M}" "${G}" "${L}"
+ppapins "${WORK}/ppa-same"
+rc_is "ppa-pins: the PPA serving the pins exits 0" 0
+ok=1; [ "${OUT}" = "$(grep '^HS_PPA_' "${K3D_GPU}")" ] && ok=0
+check "ppa-pins prints the launcher's own HS_PPA_* lines when nothing moved" "${ok}" "want the launcher's HS_PPA_* lines"
+pkgidx "${WORK}/ppa-moved" noble 24.04 26.9.1-1~ppa3 "${G}" 2.25.0-1~ppa1
+pkgidx "${WORK}/ppa-moved" resolute 26.04 26.9.1-1~ppa3 "${G}" 2.25.0-1~ppa1
+ppapins "${WORK}/ppa-moved"
+rc_is "ppa-pins: superseded builds exit 0" 0
+says "ppa-pins names the PPA's new media driver build" "HS_PPA_MEDIA=26.9.1-1~ppa3"
+says "ppa-pins names the PPA's new libva build" "HS_PPA_LIBVA=2.25.0-1~ppa1"
+says "ppa-pins keeps an unmoved pin" "HS_PPA_GMM=${G}"
+cp "${K3D_GPU}" "${WORK}/k3d-gpu-copy"; cp "${ROOT}/README.md" "${WORK}/README-copy.md"
+ppapins "${WORK}/ppa-moved" --write "${WORK}/k3d-gpu-copy" "${WORK}/README-copy.md"
+rc_is "ppa-pins --write exits 0" 0
+OUT=$(diff "${K3D_GPU}" "${WORK}/k3d-gpu-copy")
+says "--write moves HS_PPA_MEDIA in the launcher" "> HS_PPA_MEDIA=26.9.1-1~ppa3"
+says "--write moves HS_PPA_LIBVA in the launcher" "> HS_PPA_LIBVA=2.25.0-1~ppa1"
+ok=1; [ "$(grep -c '^[<>]' <<< "${OUT}")" -eq 4 ] && ok=0
+check "--write changes only the moved launcher pins" "${ok}" "diff has other lines"
+OUT=$(diff "${ROOT}/README.md" "${WORK}/README-copy.md")
+says "--write moves the README's media driver" "media driver 26.9.1"
+says "--write moves the README's libva" "libva 2.25.0"
+ok=1; [ "$(grep -c '^[<>]' <<< "${OUT}")" -eq 2 ] && ok=0
+check "--write changes only the README line naming the moved builds" "${ok}" "diff has other lines"
+r=$(newroot ppa-bumped)
+osrel "${r}" ubuntu 24.04
+pci "${r}" 0000:00:02.0 0x8086 0x7d55 0x030000 xe
+K3D_GPU_REPO=${K3D_GPU}; K3D_GPU="${WORK}/k3d-gpu-copy"
+run "${r}" ""
+K3D_GPU=${K3D_GPU_REPO}
+says "the bumped launcher plans the new media driver build" "intel-media-va-driver-non-free=26.9.1-1~24.04~ppa3"
+says "the bumped launcher plans the new libva build" "libva2=2.25.0-1~24.04~ppa1"
+pkgidx "${WORK}/ppa-split" noble 24.04 "${M}" "${G}" "${L}"
+pkgidx "${WORK}/ppa-split" resolute 26.04 26.9.1-1~ppa1 "${G}" "${L}"
+cp "${K3D_GPU}" "${WORK}/k3d-gpu-split"
+ppapins "${WORK}/ppa-split" --write "${WORK}/k3d-gpu-split" "${WORK}/README-copy.md"
+rc_is "ppa-pins: 24.04 and 26.04 builds that differ fail (one pin covers both)" 1
+says "ppa-pins names the package whose builds differ" "intel-media-va-driver-non-free"
+ok=1; cmp -s "${K3D_GPU}" "${WORK}/k3d-gpu-split" && ok=0
+check "ppa-pins --write changes nothing when it fails" "${ok}" "launcher copy was written"
+pkgidx "${WORK}/ppa-libva" noble 24.04 "${M}" "${G}" "${L}" 2.25.0-1~ppa1
+pkgidx "${WORK}/ppa-libva" resolute 26.04 "${M}" "${G}" "${L}" 2.25.0-1~ppa1
+ppapins "${WORK}/ppa-libva"
+rc_is "ppa-pins: libva packages at different builds fail" 1
+says "ppa-pins names the libva package that differs" "libva-x11-2"
+pkgidx "${WORK}/ppa-gone" noble 24.04 "${M}" - "${L}"
+pkgidx "${WORK}/ppa-gone" resolute 26.04 "${M}" "${G}" "${L}"
+ppapins "${WORK}/ppa-gone"
+rc_is "ppa-pins: a package missing from an index fails" 1
+says "ppa-pins names the missing package and release" "libigdgmm12: not in the PPA's noble index"
+# A build without the ~ppa<N> suffix (the PPA's libigc2 is named so) has no pin form.
+pkgidx "${WORK}/ppa-odd" noble 24.04 "${M}" - "${L}"
+printf 'Package: libigdgmm12\nVersion: 22.10.2-1~24.04\n\n' >> "${WORK}/ppa-odd/noble"
+cp "${WORK}/ppa-same/resolute" "${WORK}/ppa-odd/resolute"
+ppapins "${WORK}/ppa-odd"
+rc_is "ppa-pins: a build that is not <upstream>-<rev>~<release>~ppa<N> fails" 1
+says "ppa-pins names the build it cannot pin" "libigdgmm12 22.10.2-1~24.04"
+
 ran_nothing() { local rc=0; [ ! -s "${STUB_LOG}" ] || rc=1; check "$1" "${rc}" "installer stubs were called"; }
 nth_call() {  # nth_call <name> <n> <expected n-th logged call>
     local rc=0 got
@@ -105,9 +236,9 @@ osrel "${r}" ubuntu 24.04
 pci "${r}" 0000:00:02.0 0x8086 0x7d55 0x030000 xe
 run "${r}" ""
 rc_is "dry run exits 0" 0
-says "ubuntu 24.04 pins the PPA media driver for 24.04" "intel-media-va-driver-non-free=26.3.2-1~24.04~ppa1"
-says "ubuntu pins libva from the PPA" "libva2=2.24.1-1~24.04~ppa2"
-says "ubuntu pins libva-x11-2/libva-wayland2 with libva (vainfo needs both)" "libva-x11-2=2.24.1-1~24.04~ppa2 libva-wayland2=2.24.1-1~24.04~ppa2"
+says "ubuntu 24.04 pins the PPA media driver for 24.04" "intel-media-va-driver-non-free=$(ppa HS_PPA_MEDIA 24.04)"
+says "ubuntu pins libva from the PPA" "libva2=$(ppa HS_PPA_LIBVA 24.04)"
+says "ubuntu pins libva-x11-2/libva-wayland2 with libva (vainfo needs both)" "libva-x11-2=$(ppa HS_PPA_LIBVA 24.04) libva-wayland2=$(ppa HS_PPA_LIBVA 24.04)"
 says "ubuntu keeps apt from swapping the GitHub compute .debs for PPA builds" "Pin: release o=LP-PPA-kobuk-team-intel-graphics"
 says "the apt pin covers the runtime packages" "Package: intel-opencl-icd libze-intel-gpu1 libze1"
 says "downloads go to a private dir that must be the user's own" "mkdir -p '${WORK}/dl' && [ ! -L '${WORK}/dl' ] && [ -O '${WORK}/dl' ] && chmod 0700 '${WORK}/dl'"
@@ -186,6 +317,26 @@ run "${r}" "" K3D_GPU_VENDORS=nvidia
 says "K3D_GPU_VENDORS forces a plan" "sudo pacman -Syu --needed nvidia-container-toolkit"
 says "arch uses nvidia-cdi-refresh when the package ships it (1.20.1+)" "if [ -e '${r}/usr/lib/systemd/system/nvidia-cdi-refresh.service' ]; then sudo systemctl enable --now nvidia-cdi-refresh.path && sudo systemctl restart nvidia-cdi-refresh.service; else sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml; fi"
 
+# An invalid K3D_GPU_VENDORS ends host-setup with resolve_vendors' own error.
+run "${r}" "" K3D_GPU_VENDORS=bogus
+rc_is "invalid K3D_GPU_VENDORS fails" 1
+says "invalid K3D_GPU_VENDORS prints its error" "unknown vendor 'bogus' in K3D_GPU_VENDORS"
+run "${r}" "" K3D_GPU_VENDORS=auto,intel
+rc_is "K3D_GPU_VENDORS mixing auto and a list fails" 1
+says "K3D_GPU_VENDORS mixing auto and a list prints its error" "mixes a vendor list with auto or opt-outs"
+# resolve_vendors' warnings are about what `up` deploys: host-setup leaves them out,
+# here a Gaudi without its driver beside an Intel GPU and a DSA device.
+r=$(newroot gaudi-nodriver)
+osrel "${r}" ubuntu 24.04
+pci "${r}" 0000:00:02.0 0x8086 0x7d55 0x030000 xe
+pci "${r}" 0000:4d:00.0 0x1da3 0x1060 0x120000
+mkdir -p "${r}/sys/bus/dsa/devices/dsa0"; echo disabled > "${r}/sys/bus/dsa/devices/dsa0/state"
+run "${r}" ""
+rc_is "a Gaudi without its driver: host-setup still plans" 0
+says "a Gaudi without its driver: the Intel GPU is planned" "intel-opencl-icd_"
+not_says "host-setup leaves resolve_vendors' warnings out" "skipping Gaudi"
+r=$(newroot arch-empty)
+
 run "${r}" "" --distro=ubuntu-24.04 K3D_GPU_VENDORS=intel K3D_GPU_SETUP_DIR= HOME=/home/u XDG_CACHE_HOME=
 says "default download dir is the user's cache, not /tmp" "mkdir -p '/home/u/.cache/k3d-gpu/host-setup'"
 run "${r}" "" --distro=ubuntu-24.04 K3D_GPU_VENDORS=intel K3D_GPU_SETUP_DIR= XDG_CACHE_HOME=/xdg
@@ -250,7 +401,7 @@ not_says "--plan on a healthy host proposes no upgrade" "pacman -Syu"
 r=$(manjaro ubuntu-libva 2000 3.4.35 3.4.35)
 osrel "${r}" ubuntu 24.04
 run "${r}" "" STUB_CLINFO="Platform #0: Intel(R) OpenCL Graphics"
-says "ubuntu libva fix uses the pinned PPA libva" "Fix: sudo add-apt-repository -y ppa:kobuk-team/intel-graphics && sudo apt-get install -y libva2=2.24.1-1~24.04~ppa2"
+says "ubuntu libva fix uses the pinned PPA libva" "Fix: sudo add-apt-repository -y ppa:kobuk-team/intel-graphics && sudo apt-get install -y libva2=$(ppa HS_PPA_LIBVA 24.04)"
 
 # ---- kernel guidance --------------------------------------------------------
 
@@ -593,14 +744,28 @@ says "crescent without --plan: nothing to install" "Every check passed: nothing 
 rm "${r}/usr/lib/x86_64-linux-gnu/libze_intel_gpu.so.1"
 run "${r}" "" "${CR_OK[@]}"
 says "missing Level Zero GPU driver plans the 26.35 compute runtime" "releases/download/26.35.39758.10/libze-intel-gpu1_26.35.39758.10-0_amd64.deb"
-not_says "missing Level Zero GPU driver: no media PPA" "add-apt-repository"
+# The 26.35 .debs depend on libigdgmm12 (>= 22.10.0); the 24.04 and 26.04
+# archives carry 22.3.17 and 22.9.0, so the PPA's gmmlib comes first.
+says "missing Level Zero GPU driver adds the PPA for its gmmlib" "    sudo add-apt-repository -y ppa:kobuk-team/intel-graphics"
+says "missing Level Zero GPU driver: the PPA's tool is a prerequisite" "software-properties-common"
+says "missing Level Zero GPU driver keeps apt on the GitHub .debs" "Pin: release o=LP-PPA-kobuk-team-intel-graphics"
+says "missing Level Zero GPU driver pins the PPA's 26.04 gmmlib" "libigdgmm12=$(ppa HS_PPA_GMM 26.04)"
+not_says "missing Level Zero GPU driver: no media driver" "intel-media-va-driver-non-free"
+not_says "missing Level Zero GPU driver: no libva" "libva2="
+a=$(grep -n 'add-apt-repository -y ppa:kobuk-team' <<< "${OUT}" | head -1 | cut -d: -f1)
+g=$(grep -n "apt-get install -y.* libigdgmm12=" <<< "${OUT}" | head -1 | cut -d: -f1)
+d=$(grep -n "apt-get install -y.*libze-intel-gpu1_" <<< "${OUT}" | head -1 | cut -d: -f1)
+ordered=1
+[ -n "${a}" ] && [ -n "${g}" ] && [ -n "${d}" ] && [ "${a}" -lt "${g}" ] && [ "${g}" -lt "${d}" ] && ordered=0
+check "missing Level Zero GPU driver: PPA, then its gmmlib, then the GitHub .debs" "${ordered}" "order ppa=${a} gmmlib=${g} debs=${d}"
 not_says "missing Level Zero GPU driver: no loader .deb" "libze1_"
 not_says "missing Level Zero GPU driver: no NVIDIA" "nvidia"
 LIBDIR=usr/lib/x86_64-linux-gnu lib "${r}" libze_intel_gpu.so.1 "GLIBCXX_3.4.30"
 
 run "${r}" "" STUB_VAINFO="libva error: /usr/lib/x86_64-linux-gnu/dri/iHD_drv_video.so has no function __vaDriverInit_1_0" "${CR_OK[1]}"
-says "media failure on 26.04 plans the PPA's 26.04 build" "intel-media-va-driver-non-free=26.3.2-1~26.04~ppa1"
-says "media failure pins the 26.04 libva" "libva2=2.24.1-1~26.04~ppa2"
+says "media failure on 26.04 plans the PPA's 26.04 build" "intel-media-va-driver-non-free=$(ppa HS_PPA_MEDIA 26.04)"
+says "media failure pins the 26.04 libva" "libva2=$(ppa HS_PPA_LIBVA 26.04)"
+says "media failure pins the 26.04 gmmlib" "libigdgmm12=$(ppa HS_PPA_GMM 26.04)"
 not_says "media failure plans no compute runtime" "intel-opencl-icd_"
 not_says "media failure plans no 24.04 package" "24.04"
 
@@ -661,7 +826,7 @@ for d in "${dirs[@]}"; do
     done
 done
 OUT=$(env K3D_GPU_SYSROOT="${r}" K3D_GPU_SETUP_DIR="${WORK}/dl" PATH="${NOVA}" bash "${K3D_GPU}" host-setup 2>&1)
-says "missing media driver and vainfo: vainfo is planned with the driver" "~24.04~ppa1 vainfo"
+says "missing media driver and vainfo: vainfo is planned with the driver" "libigdgmm12=$(ppa HS_PPA_GMM 24.04) vainfo"
 
 echo ""
 echo "${PASS} passed, ${FAILS} failed"
