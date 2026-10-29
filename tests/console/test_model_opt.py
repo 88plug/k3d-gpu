@@ -503,6 +503,18 @@ class PlanIntegration(unittest.TestCase):
         self.assertTrue(doc["summary"][0].startswith("Detected Intel(R) Xeon(R) 6960P (AMX) + 1x Battlemage 0xe223 (XMX); picked OpenVINO/gemma-4-26b-a4b-it-int4-ov"))
         self.assertEqual(doc["optimizer"]["choices"][0]["fact"][:4], "MoE:")
 
+    def test_h59_row_keeps_ovms_without_a_gguf_or_with_a_named_variant(self):
+        # An H59-family row SUPPORTED for the CPU class never takes OVMS's pick away from a
+        # model that has no llama.cpp int4 GGUF (Phi-4-mini, LFM2), nor a variant the user named.
+        cpu = facts_of("xeon-6741p")
+        ledger = "## Hypotheses\n| H59 | engine choice on the Xeon 6741P | p | m | SUPPORTED |\n"
+        for model, opts, want in ((PHI, {}, "OpenVINO/Phi-4-mini-instruct-int4-ov"), (LFM, {}, None),
+                                  (GEMMA, {"variant": "qat-convert"}, "k3d-gpu/gemma-4-26B-A4B-it-int4-sym-g32-ov"),
+                                  (GEMMA, {"variant": "OpenVINO/gemma-4-26b-a4b-it-int4-ov"}, "OpenVINO/gemma-4-26b-a4b-it-int4-ov")):
+            doc = planmod.plan(cpu, self.matrix, {"model": model})
+            d = planmod.add_optimizer(doc, cpu, bundle(model), dict(opts, ledger=ledger))["optimizer"]
+            self.assertEqual((d["engine"], d["device"], d["model"]), ("ovms", "CPU", want), (model, opts))
+
     def test_plan_without_meta_unchanged(self):
         doc = planmod.plan(self.xb, self.matrix, {"model": QWEN})
         self.assertNotIn("optimizer", doc)

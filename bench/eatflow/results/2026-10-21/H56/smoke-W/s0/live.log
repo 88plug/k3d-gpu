@@ -1,0 +1,15 @@
+== arm A1 start 07:32:03 (+0s)
+== k3d-gpu up 07:32:03 (+0s)
+== nodes pinned to 0-23,48-71 07:33:25 (+82s)
+== wait-ready 07:33:33 (+90s)
+== server-wait 07:34:20 (+137s)
+served model: qwen3-4b-instruct-2507
+== load typical 07:34:38 (+155s)
+== run budget 120 07:34:39 (+156s)
+agentbench: in-process proxy on 127.0.0.1:18620 -> http://127.0.0.1:18640
+agentbench: A1 typical N=1: 15/15 passed; results in /home/devcloud/k3dgpu-bench/results/H56/smoke-W/s0/run/results.jsonl
+== control 120 s (server idle, same load) 07:36:49 (+286s)
+agentbench: control A1 typical: mean 168.179 W over 120.095 s
+== finished 07:38:49 (+406s)
+== cleanup 07:38:49 (+406s)
+== done 07:38:51 (+408s)

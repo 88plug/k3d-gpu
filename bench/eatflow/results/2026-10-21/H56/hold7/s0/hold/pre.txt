@@ -1,0 +1,15 @@
+2026-10-21T22:56:01Z
+ 22:56:01 up 36 days, 10 min,  9 users,  load average: 22.76, 20.32, 21.59
+%CPU     PID USER     COMMAND
+1500  666269 5000     ovms
+50.1  667616 root     stress-ng-strea
+50.0  667618 root     stress-ng-strea
+50.0  667617 root     stress-ng-strea
+47.7  662372 root     k3s
+46.4 3900003 root     sglang::schedul
+44.3  529626 root     sglang::schedul
+44.3 3900352 root     sglang::schedul
+41.5  529961 root     sglang::schedul
+30.0  667525 root     stress-ng-cpu
+aiperf_procs: 0
+/dev/nvme0n1p1  3637102748 3434315472 202770892      95% /

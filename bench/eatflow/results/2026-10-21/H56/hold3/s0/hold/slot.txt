@@ -1,0 +1,1 @@
+slot=0 slots=2 cpus=0-23,48-71 load_cpus=12-23,60-71 locks_held=1

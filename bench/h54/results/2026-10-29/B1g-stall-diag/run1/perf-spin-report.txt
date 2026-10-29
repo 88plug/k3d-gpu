@@ -1,0 +1,42 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 5K of event 'cpu/cycles/P'
+# Event count (approx.): 18973444946
+#
+# Overhead  Command       Shared Object      Symbol                                                                                                                                                                                             
+# ........  ............  .................  ...................................................................................................................................................................................................
+#
+    99.74%  VLLM::Worker  _C.abi3.so         [.] cpu_attention::AttentionMainLoop<cpu_attention::AttentionImpl<(cpu_attention::ISA)0, c10::BFloat16, 512l, c10::BFloat16> >::operator()(cpu_attention::AttentionInput const*) [clone ._omp_fn.0]
+            |          
+            |--97.74%--cpu_attention::AttentionMainLoop<cpu_attention::AttentionImpl<(cpu_attention::ISA)0, c10::BFloat16, 512l, c10::BFloat16> >::reduce_splits(float*, float*, float*, bool volatile*, int, int, int) (inlined)
+            |          cpu_attention::AttentionMainLoop<cpu_attention::AttentionImpl<(cpu_attention::ISA)0, c10::BFloat16, 512l, c10::BFloat16> >::operator()(cpu_attention::AttentionInput const*) [clone ._omp_fn.0]
+            |          __kmp_GOMP_microtask_wrapper(int*, int*, void (*)(void*), void*)
+            |          __kmp_invoke_microtask
+            |          __kmp_invoke_task_func
+            |          
+             --2.00%--_mm_pause() (inlined)
+                       cpu_attention::AttentionMainLoop<cpu_attention::AttentionImpl<(cpu_attention::ISA)0, c10::BFloat16, 512l, c10::BFloat16> >::reduce_splits(float*, float*, float*, bool volatile*, int, int, int) (inlined)
+                       cpu_attention::AttentionMainLoop<cpu_attention::AttentionImpl<(cpu_attention::ISA)0, c10::BFloat16, 512l, c10::BFloat16> >::operator()(cpu_attention::AttentionInput const*) [clone ._omp_fn.0]
+                       __kmp_GOMP_microtask_wrapper(int*, int*, void (*)(void*), void*)
+                       __kmp_invoke_microtask
+                       __kmp_invoke_task_func
+
+     0.04%  VLLM::Worker  [kernel.kallsyms]  [k] sync_regs
+     0.04%  VLLM::Worker  [kernel.kallsyms]  [k] __raw_spin_lock_irqsave
+     0.02%  VLLM::Worker  [kernel.kallsyms]  [k] timekeeping_adjust
+     0.02%  VLLM::Worker  [kernel.kallsyms]  [k] tick_nohz_handler
+     0.02%  VLLM::Worker  [kernel.kallsyms]  [k] arch_exit_to_user_mode_prepare.isra.0
+     0.02%  VLLM::Worker  [kernel.kallsyms]  [k] native_irq_return_iret
+     0.02%  VLLM::Worker  [kernel.kallsyms]  [k] __update_load_avg_se
+     0.02%  VLLM::Worker  [kernel.kallsyms]  [k] _find_first_bit
+     0.02%  VLLM::Worker  [kernel.kallsyms]  [k] _find_next_and_bit
+     0.02%  VLLM::Worker  [kernel.kallsyms]  [k] update_se
+     0.02%  VLLM::Worker  [kernel.kallsyms]  [k] kick_ilb
+
+
+#
+# (Cannot load tips.txt file, please install perf!)
+#
