@@ -11,7 +11,7 @@ set -uo pipefail
 
 EXAMPLES_DIR="$(cd "$(dirname "$0")/../examples/agents" && pwd)"
 # python:3.13.16-slim-trixie (multi-arch index digest)
-IMAGE="${K3D_GPU_EXAMPLES_IMAGE:-python:3.13.16-slim-trixie@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f}"
+IMAGE="${K3D_GPU_EXAMPLES_IMAGE:-python:3.13.16-slim-trixie@sha256:cf50a4f6ac4f026458b08d5222023d700ac806410dff5e9ca8728fa44f2b850f}"
 
 if [ "$#" -gt 0 ]; then
     examples=("$@")

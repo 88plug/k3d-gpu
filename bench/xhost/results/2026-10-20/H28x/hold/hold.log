@@ -1,0 +1,4 @@
+/home/devcloud/k3dgpu-xhost/runs/H28x/work/h28-20261021T221613Z.csv: No such file or directory (os error 2)
+# load typical: started typical on 24-47,72-95 (3 containers, ttl 1500s)
+/home/devcloud/k3dgpu-xhost/k3d-gpu/bench/zero-copy-models/probe.sh: line 324: /home/devcloud/k3dgpu-xhost/runs/H28x/work/kubeconfig: No such file or directory
+# locked part done at 2026-10-21T22:16:28Z: cluster deleted, load stopped

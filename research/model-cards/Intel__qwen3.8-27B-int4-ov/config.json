@@ -1,0 +1,19 @@
+{
+  "model_type": "qwen3.8-27B-int4-ov",
+  "library_name": "openvino",
+  "pipeline_tag": "image-text-to-text",
+  "category": "Vision-Language Understanding (Image / Video Description)",
+  "base_model": "Qwen3.8-27B (Alibaba)",
+  "source_framework": "PyTorch (Transformers)",
+  "supported_precisions": [
+    "INT4"
+  ],
+  "inference_engine": "OpenVINO GenAI",
+  "hardware": [
+    "CPU",
+    "GPU"
+  ],
+  "detected_classes": "Free-form text description of image or video content (via natural-language prompt)",
+  "hf_repo_id": "Intel/qwen3.8-27B-int4-ov",
+  "description": "Vision-language understanding use case using the pre-quantized OpenVINO/Qwen3.8-27B-int4-ov IR run locally via OpenVINO GenAI, prompted to describe or answer questions about image and video content"
+}

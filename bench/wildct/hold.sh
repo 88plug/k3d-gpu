@@ -20,7 +20,7 @@ mkdir -p "${R}"
 export PATH=${W}/bin:${PATH}
 FLOOR=15
 RAPL_C=k3dgpu-w-rapl
-RAPL_IMAGE=python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f  # probe.sh's PYIMG; energy.sh's reader needs bash
+RAPL_IMAGE=python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb  # probe.sh's PYIMG; energy.sh's reader needs bash
 log() { echo "== ${name} $* $(date -u +%FT%TZ)" | tee -a "${W}/runs/campaign.log"; }
 avail() { df -P -BG / | awk 'NR==2 {gsub("G", "", $4); print $4}'; }
 snapshot() { date -u +%FT%TZ; uptime; ps -eo pcpu,pid,user,comm --sort=-pcpu | head -11; free -g | head -2; df -P -BG / | tail -1; docker ps --format '{{.Names}}' | sort | tr '\n' ' '; echo; }
