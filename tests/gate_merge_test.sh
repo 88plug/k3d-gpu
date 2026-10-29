@@ -7,8 +7,13 @@
 # files changed on main and on the PR since the merge base). The stub gh answers
 # both `gh pr view --json statusCheckRollup` and `gh pr checks --json bucket`
 # from the same rollup (bucket mapping as in cli/cli pkg/cmd/pr/checks/aggregate.go).
-# Cases 18-19 run the gate's sync() with real git against a bare origin (gh and
+# `gh run list -e/-b` filter runs that carry event/headBranch (bare runs match
+# any). Alarms: `gh issue list` answers the next line of alarms_seq (default
+# none; issues_off makes it fail), and the PR's changed files are pr_paths
+# (pr_paths_fail makes that fail).
+# Cases 18-19 and 24-25 run the gate with real git against a bare origin (gh and
 # sleep still stubbed): the head the stub gh reports is the origin's feat ref.
+# The ci_status and rules_stale cases source hack/gate_lib.sh directly.
 #
 # Usage: tests/gate_merge_test.sh
 
@@ -65,11 +70,24 @@ case "$1 $2" in
     if [ -n "$q" ]; then jq -r "$q" <<<"$obj"; else jq "{$fields}" <<<"$obj" 2>/dev/null || echo "$obj"; fi
     exit 0;;
   "run list")
-    shift 2; sha= q= wf=
-    while [ $# -gt 0 ]; do case $1 in -c|--commit) sha=$2; shift 2;; -w|--workflow) wf=$2; shift 2;; -q) q=$2; shift 2;; *) shift;; esac; done
-    echo "run-list $sha ${wf:-all}" >> "$F/calls"
+    shift 2; sha= q= wf= ev= rb=
+    while [ $# -gt 0 ]; do case $1 in -c|--commit) sha=$2; shift 2;; -w|--workflow) wf=$2; shift 2;; -e|--event) ev=$2; shift 2;; -b|--branch) rb=$2; shift 2;; -q) q=$2; shift 2;; *) shift;; esac; done
+    echo "run-list $sha ${wf:-all} ${ev:-any}" >> "$F/calls"
     if [ -n "$wf" ] || [ ! -f "$F/allruns.json" ]; then out=$(cat "$F/runs.json"); else out=$(cat "$F/allruns.json"); fi
+    # -e and -b filter like the API on runs that carry event / headBranch; a bare run matches any.
+    out=$(jq --arg e "$ev" --arg b "$rb" \
+      'map(select(($e == "" or (.event // $e) == $e) and ($b == "" or (.headBranch // $b) == $b)))' <<<"$out")
     if [ -n "$q" ]; then jq -r "$q" <<<"$out"; else echo "$out"; fi
+    exit 0;;
+  "issue list")
+    # open ci-alarm issues: the next line of alarms_seq (one JSON array per call), default none
+    [ -f "$F/issues_off" ] && { echo "the 'o/r' repository has disabled issues" >&2; exit 1; }
+    if [ -f "$F/alarms_seq" ]; then pop alarms_seq; else echo '[]'; fi
+    exit 0;;
+  "api --paginate")
+    case $* in */pulls/*/files*)
+      [ -f "$F/pr_paths_fail" ] && { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
+      cat "$F/pr_paths"; exit 0;; esac
     exit 0;;
 esac
 exit 0
@@ -130,6 +148,7 @@ fixture() {
   echo 0 > "$FIX/ancestor"; echo scripts/k3d-gpu > "$FIX/base_files"; echo scripts/k3d-gpu > "$FIX/pr_files"
   printf '%s\n' ${6:-MERGEABLE} > "$FIX/mergeable"; echo "${7:-$GOOD_HELP}" > "$FIX/merge_help"
   echo OPEN > "$FIX/state"; : > "$FIX/calls"; : > "$FIX/git"; : > "$FIX/trace"
+  echo scripts/k3d-gpu > "$FIX/pr_paths"
 }
 run_gate() {
   OUT=$(PATH="$T/bin:$PATH" GATE_REPO="$FIX" GATE_WT_ROOT="$FIX/wt" GATE_POLLS=3 \
@@ -313,8 +332,12 @@ realgit_fixture() {
   printf '#!/bin/sh\nexit 0\n' > "$R/tests/claims_check.sh"
   printf '## Hypotheses\n\n| H34 | on the i9-13900T | p | m | SUPPORTED |\n' > "$R/EXPERIMENTS.md"
   echo base > "$R/docs/provenance.md"
+  mkdir -p "$R/scripts" "$R/packaging/aur" "$R/Formula"
+  printf '#!/usr/bin/env bash\nset -euo pipefail\n\nVERSION="0.1.0"  # kept in lockstep\nCLUSTER=gpu\n' > "$R/scripts/k3d-gpu"
+  echo 'pkgver=0.1.0' > "$R/packaging/aur/PKGBUILD"; echo 'pkgver = 0.1.0' > "$R/packaging/aur/.SRCINFO"
+  echo 'VERSION=0.1.0' > "$R/packaging/install.sh"; echo 'version "0.1.0"' > "$R/Formula/k3d-gpu.rb"
   "$REALPY" "$R/console/model_opt.py" ledger-rules --ledger "$R/EXPERIMENTS.md" --out "$R/console/ledger-rules.json"
-  repo_git add console tests docs EXPERIMENTS.md && repo_git commit -q -m base \
+  repo_git add console tests docs scripts packaging Formula EXPERIMENTS.md && repo_git commit -q -m base \
     && repo_git remote add origin "$FIX/origin.git" && repo_git push -q origin main && repo_git checkout -q -b feat
   echo "$FIX/origin.git" > "$FIX/origin_git"
 }
@@ -372,6 +395,214 @@ if [ "$RC" -eq 1 ] && ! grep -q 'synced' <<<"$OUT" && [ "$(syncs)" -eq 1 ] && [ 
    && ! grep -q ' push ' "$FIX/git" && [ "$before" = "$after" ]; then
   ok "sync_merge_commit_fails: exit 1 at once, no push"
 else fail "sync_merge_commit_fails: rc=$RC syncs=$(syncs) merges=$(merges) origin=$before->${after:-gone} out=$(tr '\n' ';' <<<"$OUT")"; fi
+
+# ─── CI on bot PRs: a ci.yml run dispatched on the PR branch is CI evidence ────
+# A PR that GITHUB_TOKEN opened gets pull_request runs held for approval
+# (conclusion action_required); hack/bot-ci-dispatch runs ci.yml on the branch
+# by workflow_dispatch instead. The stub PR's branch is feat.
+# run_json EVENT BRANCH STATUS CONCLUSION CREATED: one ci.yml run for the head SHA.
+run_json() { printf '{"workflowName":"CI","event":"%s","headBranch":"%s","status":"%s","conclusion":"%s","createdAt":"%s"}' "$@"; }
+HELD_PR=$(run_json pull_request feat completed action_required 2026-10-20T01:00:00Z)
+DISP_OK=$(run_json workflow_dispatch feat completed success 2026-10-20T01:05:00Z)
+HELD_CI_CHECK=$(concl ACTION_REQUIRED)
+HELD_DEP_CHECK='{"__typename":"CheckRun","name":"automerge","workflowName":"Auto-merge Dependabot PRs","status":"COMPLETED","conclusion":"ACTION_REQUIRED","startedAt":"2026-10-20T01:00:00Z"}'
+HELD_DEP_RUN='{"workflowName":"Auto-merge Dependabot PRs","event":"pull_request","headBranch":"feat","status":"completed","conclusion":"action_required","createdAt":"2026-10-20T01:00:00Z"}'
+
+# 20. no pull_request run at all, a green ci.yml run dispatched on the PR branch: merge.
+fixture dispatch_green "[$SUCCESS]" "[$DISP_OK]" abc123; run_gate
+if [ "$RC" -eq 0 ] && [ "$(merges)" -eq 1 ] && grep -q -- '--match-head-commit abc123' "$FIX/merges"; then
+  ok "dispatch_green: a dispatched run on the branch counts as CI"
+else fail "dispatch_green: rc=$RC merges=$(merges) out=$(tr '\n' ';' <<<"$OUT")"; fi
+
+# 21. held pull_request runs (CI and the dependabot workflow, in the rollup and the
+#     run list) plus a green dispatched run: the held entries do not block; merge.
+fixture held_plus_dispatch "[$SUCCESS,$HELD_CI_CHECK,$HELD_DEP_CHECK]" "[$HELD_PR,$DISP_OK]" abc123
+echo "[$HELD_PR,$HELD_DEP_RUN,$DISP_OK]" > "$FIX/allruns.json"; run_gate
+if [ "$RC" -eq 0 ] && [ "$(merges)" -eq 1 ]; then ok "held_plus_dispatch: held runs ignored once a dispatched run is green"
+else fail "held_plus_dispatch: rc=$RC merges=$(merges) out=$(tr '\n' ';' <<<"$OUT")"; fi
+
+# 22. held alone still fails at once, as before: a held CheckRun in the rollup, or
+#     (no check runs for a held run) only the held ci.yml run.
+fixture held_alone_rollup "[$SUCCESS,$HELD_CI_CHECK]" "[$HELD_PR]" abc123; run_gate
+if [ "$RC" -eq 1 ] && [ "$(merges)" -eq 0 ] && grep -q FAIL <<<"$OUT"; then ok "held_alone_rollup: exit 1"
+else fail "held_alone_rollup: rc=$RC merges=$(merges)"; fi
+fixture held_alone_run "[$SUCCESS]" "[$HELD_PR]" abc123; run_gate
+if [ "$RC" -eq 1 ] && [ "$(merges)" -eq 0 ] && grep -q FAIL <<<"$OUT"; then ok "held_alone_run: exit 1"
+else fail "held_alone_run: rc=$RC merges=$(merges)"; fi
+
+# 23. a green run dispatched on another branch is not this PR's CI: with nothing
+#     else no merge (wait), and it does not excuse a held run (exit 1).
+fixture dispatch_other_branch "[$SUCCESS]" "[$(run_json workflow_dispatch other completed success 2026-10-20T01:05:00Z)]" abc123; run_gate
+if [ "$(merges)" -eq 0 ] && grep -q 'GAVE UP' <<<"$OUT"; then ok "dispatch_other_branch: not accepted, waits"
+else fail "dispatch_other_branch: rc=$RC merges=$(merges)"; fi
+fixture dispatch_other_branch_held "[$SUCCESS,$HELD_CI_CHECK]" "[$HELD_PR,$(run_json workflow_dispatch other completed success 2026-10-20T01:05:00Z)]" abc123; run_gate
+if [ "$RC" -eq 1 ] && [ "$(merges)" -eq 0 ]; then ok "dispatch_other_branch_held: held run still fails"
+else fail "dispatch_other_branch_held: rc=$RC merges=$(merges)"; fi
+
+# 23b. the latest dispatched run failed after an earlier green one: exit 1.
+fixture dispatch_latest_failed "[$SUCCESS]" "[$DISP_OK,$(run_json workflow_dispatch feat completed failure 2026-10-20T02:00:00Z)]" abc123; run_gate
+if [ "$RC" -eq 1 ] && [ "$(merges)" -eq 0 ]; then ok "dispatch_latest_failed: exit 1"
+else fail "dispatch_latest_failed: rc=$RC merges=$(merges)"; fi
+
+# ─── ci_status and rules_stale, called from hack/gate_lib.sh directly ─────────
+lib_ci() {  # lib_ci NAME RUNS WANT: ci_status abc123 feat over the ci.yml runs RUNS
+  fixture "lib_$1" '[]' "$2" abc123
+  local got; got=$(PATH="$T/bin:$PATH" bash -c '. "$1"; ci_status abc123 feat' _ "$ROOT/hack/gate_lib.sh" 2>&1)
+  if [ "$got" = "$3" ]; then ok "ci_status $1: $got"; else fail "ci_status $1: got '$got', want $3"; fi
+}
+lib_ci none '[]' none
+lib_ci pr_green "[$(run_json pull_request feat completed success 2026-10-20T01:00:00Z)]" green
+lib_ci dispatch_green "[$DISP_OK]" green
+lib_ci held_only "[$HELD_PR]" failed
+lib_ci held_plus_dispatch "[$HELD_PR,$DISP_OK]" green
+lib_ci held_plus_running "[$HELD_PR,$(run_json workflow_dispatch feat in_progress '' 2026-10-20T01:05:00Z)]" pending
+lib_ci dispatch_queued "[$(run_json workflow_dispatch feat queued '' 2026-10-20T01:05:00Z)]" pending
+lib_ci other_branch "[$(run_json workflow_dispatch other completed success 2026-10-20T01:05:00Z)]" none
+lib_ci latest_failed "[$DISP_OK,$(run_json workflow_dispatch feat completed failure 2026-10-20T02:00:00Z)]" failed
+lib_ci failed_then_green "[$(run_json workflow_dispatch feat completed failure 2026-10-20T01:00:00Z),$DISP_OK]" green
+lib_ci failed_then_running "[$(run_json workflow_dispatch feat completed failure 2026-10-20T01:00:00Z),$(run_json workflow_dispatch feat in_progress '' 2026-10-20T01:05:00Z)]" pending
+
+# rules_stale keeps its behaviour: stale tree -> 0, matching tree -> 1, no tree -> 1.
+lib_rules() {  # lib_rules NAME WANT_RC [current]
+  fixture "librules_$1" '[]' '[]' abc123
+  mkdir -p "$FIX/show/console"; cp "$ROOT/console/model_opt.py" "$ROOT/console/convert-pins.json" "$FIX/show/console/"
+  printf '## Hypotheses\n\n| H34 | on the i9-13900T | p | m | SUPPORTED |\n' > "$FIX/show/EXPERIMENTS.md"
+  if [ "${3:-}" = current ]; then
+    python3 "$ROOT/console/model_opt.py" ledger-rules --ledger "$FIX/show/EXPERIMENTS.md" --out "$FIX/show/console/ledger-rules.json"
+  else echo '{"schema": "k3d-gpu.ledger-rules/v1", "rows": []}' > "$FIX/show/console/ledger-rules.json"; fi
+  [ "$1" = notree ] || echo t1 > "$FIX/tree"
+  PATH="$T/bin:$PATH" bash -c '. "$1"; rules_stale abc123' _ "$ROOT/hack/gate_lib.sh" >/dev/null 2>&1; local rc=$?
+  if [ "$rc" -eq "$2" ]; then ok "rules_stale $1: rc $rc"; else fail "rules_stale $1: rc $rc, want $2"; fi
+}
+lib_rules stale 0; lib_rules current 1 current; lib_rules notree 1
+
+# ─── base_ok: release-only bot commits on main do not count as a moved base ────
+# release_to_main AUTHOR SUBJECT [code]: one commit on main that moves the version
+# in scripts/k3d-gpu's VERSION line and the AUR, install.sh and Formula files;
+# with `code` it also changes another line of scripts/k3d-gpu.
+release_to_main() {
+  local R=$FIX/repo
+  repo_git checkout -q main
+  sed -i 's/^VERSION="0\.1\.0"/VERSION="0.1.1"/' "$R/scripts/k3d-gpu"
+  [ "${3:-}" = code ] && sed -i 's/^CLUSTER=gpu$/CLUSTER=cpu/' "$R/scripts/k3d-gpu"
+  echo 'pkgver=0.1.1' > "$R/packaging/aur/PKGBUILD"; echo 'pkgver = 0.1.1' > "$R/packaging/aur/.SRCINFO"
+  repo_git add scripts packaging/aur && GIT_AUTHOR_NAME=$1 "$REALGIT" -C "$R" commit -q -m "$2" && repo_git push -q origin main
+}
+# install_to_main AUTHOR: the install.sh and Homebrew release commits.
+install_to_main() {
+  local R=$FIX/repo
+  repo_git checkout -q main
+  echo 'VERSION=0.1.1' > "$R/packaging/install.sh"; repo_git add packaging/install.sh
+  GIT_AUTHOR_NAME=$1 "$REALGIT" -C "$R" commit -q -m "release: install.sh k3d-gpu 0.1.1 [skip release]"
+  echo 'version "0.1.1"' > "$R/Formula/k3d-gpu.rb"; repo_git add Formula/k3d-gpu.rb
+  GIT_AUTHOR_NAME=$1 "$REALGIT" -C "$R" commit -q -m "release: homebrew k3d-gpu 0.1.1 [skip release]"
+  repo_git push -q origin main
+}
+
+# 24. the PR changes code, and main moved only by release-only bot commits: merge, no sync.
+realgit_fixture release_only_base "[$SUCCESS]" "$CI_OK"
+commit_to feat scripts.txt $'pr\n'
+release_to_main 88plug-bot "release: aur-v0.1.1 [skip release]"; install_to_main 'github-actions[bot]'
+run_gate_real
+if [ "$RC" -eq 0 ] && [ "$(merges)" -eq 1 ] && [ "$(syncs)" -eq 0 ] && ! grep -q 'main moved under code' <<<"$OUT"; then
+  ok "release_only_base: merged, no sync"
+else fail "release_only_base: rc=$RC merges=$(merges) syncs=$(syncs) out=$(tr '\n' ';' <<<"$OUT")"; fi
+
+# 25. a release commit that also changes another launcher line is a code move: sync first.
+realgit_fixture release_with_code "[$SUCCESS]" "$CI_OK"
+commit_to feat scripts.txt $'pr\n'
+release_to_main 88plug-bot "release: aur-v0.1.1 [skip release]" code
+run_gate_real
+if [ "$RC" -eq 0 ] && [ "$(merges)" -eq 1 ] && [ "$(syncs)" -eq 1 ] && grep -q 'main moved under code' <<<"$OUT"; then
+  ok "release_with_code: synced before the merge"
+else fail "release_with_code: rc=$RC merges=$(merges) syncs=$(syncs) out=$(tr '\n' ';' <<<"$OUT")"; fi
+
+# 25b. the same release files under a release subject, but by a human: a code move.
+realgit_fixture release_by_human "[$SUCCESS]" "$CI_OK"
+commit_to feat scripts.txt $'pr\n'
+release_to_main gate-test "release: aur-v0.1.1 [skip release]"
+run_gate_real
+if [ "$RC" -eq 0 ] && [ "$(syncs)" -eq 1 ] && grep -q 'main moved under code' <<<"$OUT"; then
+  ok "release_by_human: synced before the merge"
+else fail "release_by_human: rc=$RC merges=$(merges) syncs=$(syncs) out=$(tr '\n' ';' <<<"$OUT")"; fi
+
+# 25c. a bot commit on release files without [skip release] in its subject: a code move.
+realgit_fixture release_no_skip "[$SUCCESS]" "$CI_OK"
+commit_to feat scripts.txt $'pr\n'
+release_to_main 88plug-bot "release: aur-v0.1.1"
+run_gate_real
+if [ "$RC" -eq 0 ] && [ "$(syncs)" -eq 1 ]; then ok "release_no_skip: synced before the merge"
+else fail "release_no_skip: rc=$RC merges=$(merges) syncs=$(syncs) out=$(tr '\n' ';' <<<"$OUT")"; fi
+
+# ─── alarms: open ci-alarm issues are printed, and refuse shipped changes ──────
+UNACKED='{"number":7,"title":"[ci-alarm] nightly: Auto-update red","url":"https://github.com/o/r/issues/7","labels":[{"name":"ci-alarm"}]}'
+ACKED='{"number":8,"title":"[ci-alarm] release: 0.1.79 missing on GHCR","url":"https://github.com/o/r/issues/8","labels":[{"name":"ci-alarm"},{"name":"alarm-ack"}]}'
+
+# 26. an un-acked alarm and a PR that changes the launcher: exit 4, URL and ack command shown.
+fixture alarm_unacked "[$SUCCESS]" "$CI_OK" abc123; echo "[$UNACKED]" > "$FIX/alarms_seq"; run_gate
+if [ "$RC" -eq 4 ] && [ "$(merges)" -eq 0 ] && grep -qF 'https://github.com/o/r/issues/7' <<<"$OUT" \
+   && grep -qF 'gh issue edit 7 --add-label alarm-ack' <<<"$OUT"; then
+  ok "alarm_unacked: refused with exit 4, URL and ack command printed"
+else fail "alarm_unacked: rc=$RC merges=$(merges) out=$(tr '\n' ';' <<<"$OUT")"; fi
+
+# 26b. a workflow-only PR is refused too; so is a PR whose files cannot be listed.
+fixture alarm_workflow "[$SUCCESS]" "$CI_OK" abc123; echo "[$UNACKED]" > "$FIX/alarms_seq"
+echo .github/workflows/ci.yml > "$FIX/pr_paths"; run_gate
+if [ "$RC" -eq 4 ] && [ "$(merges)" -eq 0 ]; then ok "alarm_workflow: refused"
+else fail "alarm_workflow: rc=$RC merges=$(merges)"; fi
+fixture alarm_files_unknown "[$SUCCESS]" "$CI_OK" abc123; echo "[$UNACKED]" > "$FIX/alarms_seq"; touch "$FIX/pr_paths_fail"; run_gate
+if [ "$RC" -eq 4 ] && [ "$(merges)" -eq 0 ]; then ok "alarm_files_unknown: refused"
+else fail "alarm_files_unknown: rc=$RC merges=$(merges)"; fi
+
+# 26c. GATE_RELEASE_PATHS adds shipped paths (hack/release-paths format: one
+#      pattern per line, # comments, dir/** for a tree).
+fixture alarm_release_paths "[$SUCCESS]" "$CI_OK" abc123; echo "[$UNACKED]" > "$FIX/alarms_seq"
+printf '# shipped by nfpm\noracle/**\n' > "$FIX/release-paths"; echo oracle/bundle.py > "$FIX/pr_paths"
+OUT=$(PATH="$T/bin:$PATH" GATE_REPO="$FIX" GATE_WT_ROOT="$FIX/wt" GATE_POLLS=3 GATE_RELEASE_PATHS="$FIX/release-paths" \
+      timeout 60 bash "$GATE" 1 subj body 2>&1); RC=$?
+if [ "$RC" -eq 4 ] && [ "$(merges)" -eq 0 ]; then ok "alarm_release_paths: a listed path is refused"
+else fail "alarm_release_paths: rc=$RC merges=$(merges) out=$(tr '\n' ';' <<<"$OUT")"; fi
+
+# 26d. no alarm at the start, an un-acked one by the merge: refused before merging.
+fixture alarm_opens_later "[$SUCCESS]" "$CI_OK" abc123; printf '[]\n[%s]\n' "$UNACKED" > "$FIX/alarms_seq"; run_gate
+if [ "$RC" -eq 4 ] && [ "$(merges)" -eq 0 ]; then ok "alarm_opens_later: re-checked and refused before the merge"
+else fail "alarm_opens_later: rc=$RC merges=$(merges) out=$(tr '\n' ';' <<<"$OUT")"; fi
+
+# 27. every open alarm acked: listed at the start, and the PR merges.
+fixture alarm_acked "[$SUCCESS]" "$CI_OK" abc123; echo "[$ACKED]" > "$FIX/alarms_seq"; run_gate
+if [ "$RC" -eq 0 ] && [ "$(merges)" -eq 1 ] && grep -F '#8' <<<"$OUT" | grep -qF 'https://github.com/o/r/issues/8'; then
+  ok "alarm_acked: listed, merged"
+else fail "alarm_acked: rc=$RC merges=$(merges) out=$(tr '\n' ';' <<<"$OUT")"; fi
+
+# 28. ledger, docs, bench and test changes are never refused; nor is a path outside
+#     the shipped set.
+fixture alarm_ledger_only "[$SUCCESS]" "$CI_OK" abc123; echo "[$UNACKED,$ACKED]" > "$FIX/alarms_seq"
+printf 'EXPERIMENTS.md\ndocs/provenance.md\nbench/h54/run.sh\ntests/bench_test.sh\n' > "$FIX/pr_paths"; run_gate
+if [ "$RC" -eq 0 ] && [ "$(merges)" -eq 1 ] && grep -qF 'issues/7' <<<"$OUT"; then ok "alarm_ledger_only: listed, merged"
+else fail "alarm_ledger_only: rc=$RC merges=$(merges) out=$(tr '\n' ';' <<<"$OUT")"; fi
+fixture alarm_unshipped "[$SUCCESS]" "$CI_OK" abc123; echo "[$UNACKED]" > "$FIX/alarms_seq"
+echo README.md > "$FIX/pr_paths"; run_gate
+if [ "$RC" -eq 0 ] && [ "$(merges)" -eq 1 ]; then ok "alarm_unshipped: merged"
+else fail "alarm_unshipped: rc=$RC merges=$(merges)"; fi
+
+# 30. the gate copied alone (a scratchpad shim) finds gate_lib.sh in the repository's
+#     hack/; with neither copy it stops before merging.
+fixture solo_gate "[$SUCCESS]" "$CI_OK" abc123; mkdir -p "$FIX/solo" "$FIX/hack"
+cp "$GATE" "$FIX/solo/gate_merge.sh"; cp "$ROOT/hack/gate_lib.sh" "$FIX/hack/"
+OUT=$(PATH="$T/bin:$PATH" GATE_REPO="$FIX" GATE_WT_ROOT="$FIX/wt" GATE_POLLS=3 timeout 60 bash "$FIX/solo/gate_merge.sh" 1 subj body 2>&1); RC=$?
+if [ "$RC" -eq 0 ] && [ "$(merges)" -eq 1 ]; then ok "solo_gate: gate_lib.sh read from the repository's hack/"
+else fail "solo_gate: rc=$RC merges=$(merges) out=$(tr '\n' ';' <<<"$OUT")"; fi
+rm "$FIX/hack/gate_lib.sh"; echo OPEN > "$FIX/state"; rm -f "$FIX/merges"
+OUT=$(PATH="$T/bin:$PATH" GATE_REPO="$FIX" GATE_WT_ROOT="$FIX/wt" GATE_POLLS=3 timeout 60 bash "$FIX/solo/gate_merge.sh" 1 subj body 2>&1); RC=$?
+if [ "$RC" -eq 1 ] && [ "$(merges)" -eq 0 ] && grep -q 'gate_lib.sh not found' <<<"$OUT"; then ok "solo_gate: no gate_lib.sh, exit 1"
+else fail "solo_gate missing lib: rc=$RC merges=$(merges) out=$(tr '\n' ';' <<<"$OUT")"; fi
+
+# 29. issues cannot be listed (the repository has them disabled): the gate says so,
+#     with gh's reason, and goes on.
+fixture alarm_issues_off "[$SUCCESS]" "$CI_OK" abc123; touch "$FIX/issues_off"; run_gate
+if [ "$RC" -eq 0 ] && [ "$(merges)" -eq 1 ] && grep -q 'WARNING: could not list the open ci-alarm issues.*disabled issues' <<<"$OUT"; then
+  ok "alarm_issues_off: warned with the reason, merged"
+else fail "alarm_issues_off: rc=$RC merges=$(merges) out=$(tr '\n' ';' <<<"$OUT")"; fi
 
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

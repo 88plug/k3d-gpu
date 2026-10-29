@@ -5,11 +5,14 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # hack/bot-ci-dispatch runs CI on a bot PR's branch this way: the PR's own
+  # pull_request runs wait for approval (GITHUB_TOKEN opened it), a dispatch does not.
+  workflow_dispatch:
 
 permissions:
   contents: read
 
-# A new push to a PR supersedes its older run; main runs always finish.
+# A new push to a PR supersedes its older run; main and dispatched runs always finish.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -54,6 +57,7 @@ jobs:
       - run: tests/prefill_guard_test.sh
       - run: tests/ci_wiring_test.sh
       - run: tests/gate_merge_test.sh
+      - run: tests/bot_ci_dispatch_test.sh
       - run: tests/auto_release_cas_test.sh
 
   quickstart-tests:
@@ -462,3 +466,55 @@ jobs:
           sudo tar -xzf kubeconform.tar.gz -C /usr/local/bin kubeconform
           sudo apt-get update && sudo apt-get install -y --no-install-recommends python3-yaml
       - run: tests/kserve_test.sh
+
+  # ─── Bot PR CI and alarm surfacing ───────────────────────────────────────
+  # The watchdog files a ci-alarm issue for a red or missing scheduled run or a
+  # broken release (email went unread for 9 nights). Every open alarm, and a
+  # Watchdog workflow that is missing, disabled or without a success in 3 h,
+  # shows as a warning on every CI run. It never fails CI: the script exits 0,
+  # and the job is continue-on-error.
+  alarms:
+    name: Open CI alarms
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    permissions:
+      issues: read
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Warn on open ci-alarm issues and a quiet Watchdog
+        run: |
+          set +e
+          err=$(mktemp)
+          # Workflow-command data escapes %, CR and LF.
+          oneline() { tr '\r\n' '  ' < "$err" | sed 's/ *$//; s/%/%25/g'; }
+          if alarms=$(gh issue list --label ci-alarm --state open --limit 100 --json number,title,url,labels 2>"$err"); then
+            jq -r '.[]
+              | "open ci-alarm #\(.number): \(.title) \(.url) (\(if any(.labels[]; .name == "alarm-ack") then "acked"
+                  else "NOT acked; after reading it: gh issue edit \(.number) --add-label alarm-ack" end))"
+              | "::warning::" + (gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A"))' <<<"$alarms"
+          else
+            echo "::warning::could not list the open ci-alarm issues: $(oneline)"
+          fi
+          if ! wd=$(gh workflow list --all --json name,path,state \
+                    -q '[.[] | select(.name == "Watchdog")][0] // empty | "\(.state) \(.path)"' 2>"$err"); then
+            echo "::warning::could not list the workflows to check the Watchdog: $(oneline)"
+          elif [ -z "$wd" ]; then
+            echo "::warning::there is no Watchdog workflow, so a red or missing scheduled run raises no ci-alarm"
+          else
+            read -r state path <<<"$wd"
+            if [ "$state" != active ]; then
+              echo "::warning::the Watchdog workflow is $state, so a red or missing scheduled run raises no ci-alarm"
+            else
+              last=$(gh run list -w "${path##*/}" -s success -L 1 --json updatedAt -q '.[0].updatedAt // empty' 2>"$err")
+              ts=$(date -u -d "${last:-@0}" +%s 2>/dev/null) || ts=0
+              if [ $(( $(date -u +%s) - ts )) -gt 10800 ]; then
+                echo "::warning::the Watchdog workflow has no successful run in the last 3 h (last: ${last:-none}); alarms may be missing"
+              fi
+            fi
+          fi
+          rm -f "$err"
+          exit 0

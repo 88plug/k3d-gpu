@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# hack/autobump-branch-reset <branch>: delete origin's autobump/<name> branch when its
+# .github/workflows/ differ from origin/main's. Run from a checkout whose origin
+# push credentials are the workflow's GITHUB_TOKEN, before create-pull-request.
+#
+# create-pull-request resets an existing bump branch (a PR still open, or a merged
+# one whose branch stayed) onto main and force-pushes it. GitHub refuses that push
+# from GITHUB_TOKEN (it has no `workflows` permission) when the branch's workflow
+# files differ from main's, though the bump commit touches none. Deleting the
+# branch closes its open PR; create-pull-request then cuts a fresh branch off main
+# and opens a new PR, whose dispatched CI runs main's current workflows.
+set -euo pipefail
+b=${1:-}
+case $b in
+  autobump/?*) ;;
+  *) echo "usage: hack/autobump-branch-reset autobump/<name> (refusing '${b}')" >&2; exit 2;;
+esac
+git ls-remote --exit-code --heads origin "refs/heads/$b" >/dev/null \
+  || { rc=$?; [ "$rc" -eq 2 ] && { echo "$b: not on origin; nothing to reset"; exit 0; }; exit "$rc"; }
+git fetch -q --depth=1 origin "+refs/heads/main:refs/remotes/origin/main" "+refs/heads/$b:refs/remotes/origin/$b"
+if git diff --quiet "origin/main" "origin/$b" -- .github/workflows; then
+  echo "$b: its workflows match main's; kept"
+else
+  echo "$b: its workflows differ from main's; deleting it (its open PR closes, and a fresh one opens)"
+  git push origin --delete "$b"
+fi
