@@ -1,0 +1,15 @@
+Forwarding from 127.0.0.1:18630 -> 8000
+Forwarding from [::1]:18630 -> 8000
+Handling connection for 18630
+Handling connection for 18630
+Handling connection for 18630
+E1029 09:31:13.485899 1302253 portforward.go:404] "Unhandled Error" err="error copying from local connection to remote stream: writeto tcp4 127.0.0.1:18630->127.0.0.1:56882: read tcp4 127.0.0.1:18630->127.0.0.1:56882: read: connection reset by peer"
+Handling connection for 18630
+E1029 09:31:36.096532 1302253 portforward.go:391] "Unhandled Error" err="error copying from remote stream to local connection: readfrom tcp4 127.0.0.1:18630->127.0.0.1:56608: write tcp4 127.0.0.1:18630->127.0.0.1:56608: write: broken pipe"
+Handling connection for 18630
+Handling connection for 18630
+Handling connection for 18630
+Handling connection for 18630
+Handling connection for 18630
+Handling connection for 18630
+Handling connection for 18630
