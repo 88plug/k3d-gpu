@@ -260,6 +260,7 @@ jobs:
       - run: python3 bench/h54/diag/test_b1g_diag.py
       - run: python3 bench/h54gpu/test_h54gpu.py
       - run: python3 bench/h57d/test_h57d.py
+      - run: python3 bench/h59/test_h59.py
       - run: python3 bench/admission/test_ctl.py
       - run: python3 bench/admission/test_analyze.py
       - run: bash bench/admission/test_run.sh
