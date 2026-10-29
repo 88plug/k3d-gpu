@@ -22,7 +22,7 @@ WARN: Intel NPU 0x1234 is not served by intel-npu-plugin 0.37.1 — skipping the
   note: workload images need the NPU user-space driver (github.com/intel/linux-npu-driver) and Level Zero
 ==> Intel CPU built-in accelerators...
   ok: CPU ISA: AVXVNNI — up labels nodes feature.node.kubernetes.io/cpu-cpuid.<name>=true (NFD names)
-  ok: IAA: 1 device(s), 1 user work queue(s) — deployed by 'k3d-gpu up' (intel-iaa-plugin)
+  ok: IAA: 1 device(s), 1 user work queue(s) — deployed by 'k3d-gpu up' (intel-iaa-plugin); pods need CAP_SYS_RAWIO to mmap a WQ portal (INTEL-SA-01084)
   ok: hybrid CPU: P-cores 0-3, E-cores 4-11, LP E-cores 12-15 — up deploys the NRI balloons policy; label pods k3d-gpu.io/cores=performance|efficient|lowpower|ecluster|pcore-physical|latency
   ok: E-core clusters (shared L2): 4-7 8-11 — k3d-gpu.io/cores=ecluster gives a pod 4 E-cores of one cluster
   ok: physical P-cores (one thread per core): 0-3 — k3d-gpu.io/cores=pcore-physical and latency show pods one thread per core
