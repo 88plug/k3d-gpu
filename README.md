@@ -1411,9 +1411,9 @@ EAT 2.0 installs through Intel's AI for Enterprise Solutions (EAS) installer ins
 `k3d-gpu eas up --agent-toolkit` runs it against the k3d-gpu cluster in EAS's
 bring-your-own-cluster mode, choosing each k3d setting from the cluster and applying the
 k3d patches EAS has not merged yet. It covers EAS's platform, inference and agent-toolkit
-layers on the Xeon CPU path, which is what EAS and EAT ship today; an Arc or Gaudi card
-stays with `k3d-gpu agent up`. It has not run end to end yet: F3 in
-[EXPERIMENTS.md](EXPERIMENTS.md#f3-pre-registration-i9-13900t-2026-10-29) is PENDING.
+layers on the Xeon CPU path, where EAS and EAT ship them today; EAS's Enterprise RAG
+layer is not wired in yet, and an Arc or Gaudi card stays with `k3d-gpu agent up`. It has
+not run end to end yet: F3 in [EXPERIMENTS.md](EXPERIMENTS.md#f3-pre-registration-i9-13900t-2026-10-29) is PENDING.
 See [docs/intel/eas.md](docs/intel/eas.md).
 
 ### Experimental features (auto-adapting)

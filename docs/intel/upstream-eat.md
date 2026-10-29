@@ -11,16 +11,17 @@ Re-read a second time on 2026-10-29, for [`k3d-gpu eas`](eas.md), with `git ls-r
 - EAS tag [`v1.2.0-rc.1`](https://github.com/intel/enterprise-ai-solutions/releases/tag/v1.2.0-rc.1) (`5c27fb3`, a pre-release published 2026-10-27) is Intel's vehicle for EAT 2.0. Its release notes pin enterprise-inference `release-1.1` at `170eb3a` and EAT `release-2.0.0` at `036b662`. On it, 0002, 0003 and 0004 apply, and 0005 and 0006 do not: the `release-1.2` branch does not contain EAS #42 (`88fd2ae`), so the EnvoyProxy task is still in `roles/envoy_gateway/tasks/install.yaml#L199-L219`. The overlay in `k3d-gpu eas` carries a second 0006 variant for that file; 0005 is docs and is never applied.
 - Open EAS PRs that conflict with the pack: #50 and #52 (OpenShift) move the EnvoyProxy selector into `_eg_k8s_provider`, still as `control-plane: ""`, so 0006 fails on both heads. #61 (Headlamp SSO) breaks 0002's `global_config.yaml` hunk context, 0004 and 0005; 0006 still applies on it.
 - What a k3d BYO install of EAT 2.0 needs, read from source at EAS `97f6157`, EI `3e8a244` and EAT `036b662`, not run:
+  - **LiteLLM**: EI installs LiteLLM and Langfuse only with `auth_type: litellm_vkey`; EI's default is `jwt` (Keycloak, as in Gate 2 probe 5), and EAT's layer config sets `litellm_vkey`. So LiteLLM, its guardrail and the hybrid router come with the agent-toolkit layer.
   - **agent-sandbox**: EAT installs agent-sandbox `v0.5.0` itself. A cluster where `k3d-gpu sandbox up` already installed v1.0.8 would get older CRDs and controller applied over it.
   - **NFD**: EI's `nfd` role skips only when a Helm release named `node-feature-discovery` exists. k3d-gpu's NFD is a k3s manifest, so EI would install a second one unless `nfd_enabled: false`.
   - **require_amx**: EI's catalog defaults to `require_amx: true`, an AMXBF16 node affinity, so on a host without AMX every model pod stays Pending (as in Gate 2 probe 5).
-  - **pod CIDR**: EI's LiteLLM falls back to `10.233.64.0/18` when `kubernetes_cluster_cidr` is unset, and EAT asks for the real pod CIDR on a BYO cluster. k3s defaults to `10.42.0.0/16`.
+  - **pod CIDR**: EI's LiteLLM falls back to `10.233.64.0/18` when `kubernetes_cluster_cidr` is unset, for the pod network it admits once `litellm_allow_pod_network` is on (EAT turns it on with OpenShell and then asks for the real pod CIDR on a BYO cluster). k3s defaults to `10.42.0.0/16`.
   - **Kata**: the `kata_containers` role fails on any BYO cluster; it has to stay off.
-  - **NRI owner**: on a default k3d-gpu cluster k3d-gpu owns the balloons policy, so EAS needs `kubernetes_cpu_policy: best-effort` (Gate 2 probe 6).
+  - **NRI owner**: on a default k3d-gpu cluster on a hybrid or multi-NUMA host k3d-gpu owns the balloons policy, so EAS needs `kubernetes_cpu_policy: best-effort` (Gate 2 probe 6).
   - **memory**: EAT's default install requests about 131 GiB, so a 128 GB node needs one of EAT's 64 GiB models.
   - **version skew**: EAS installs kubectl v1.34.3 and tests Kubernetes 1.34.3; a k3d-gpu node runs k3s v1.37.1, three minors away.
   - **teardown**: EAS issue #71 (open): `teardown platform` hangs on the Envoy AI Gateway CRD uninstall once a model was deployed.
-- ERAG (`intel/enterprise-rag`, `main` `319eb46`, tag `v3.0.0` `25812cb`) is a third EAS layer. Its Intel GPU flavour `chatqna_intel_gpu` is EXPERIMENTAL and needs `kubernetes_accelerator: intel-gpu` with an EI vLLM-XPU runtime; none of the 33 enterprise-inference branches has that runtime.
+- ERAG (`intel/enterprise-rag`, `main` `319eb46`, tag `v3.0.0` `25812cb`) is a further EAS layer. Its default flavour, `chatqna`, is a Xeon (CPU) deployment, the same path as the other layers; `k3d-gpu eas` does not install it yet. Its Intel GPU flavour `chatqna_intel_gpu` is EXPERIMENTAL and needs `kubernetes_accelerator: intel-gpu` with an EI vLLM-XPU runtime; none of the 33 enterprise-inference branches has that runtime.
 
 | Repo | Ref | SHA | Used for |
 |---|---|---|---|
