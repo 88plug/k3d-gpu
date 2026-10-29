@@ -1,0 +1,25 @@
+== H54b hold 1 cards 2,3 arms X1q 2026-10-21T21:12:54Z
+pod/gpu-hold-0 created
+pod/gpu-hold-1 created
+pod/gpu-hold-2 created
+pod/gpu-hold-3 created
+pod/gpu-hold-0 condition met
+pod/gpu-hold-1 condition met
+pod/gpu-hold-2 condition met
+pod/gpu-hold-3 condition met
+pod "gpu-hold-2" deleted from default namespace
+pod "gpu-hold-3" deleted from default namespace
+== device-plugin arms: allowed (gpu-hold-0: renderD128 gpu-hold-1: renderD129 gpu-hold-2: renderD130 gpu-hold-3: renderD131) 2026-10-21T21:14:41Z
+== arm X1q 2026-10-21T21:14:41Z
+[32m==>[0m fit: OpenVINO/Qwen3.8-27B-int4-ov on 1 GPU via ovms, context 32768 x 6 seqs, GPU 28.5 GiB/card, host 16.6 GiB (pod limit 19Gi), host reserve 50.3 GiB
+[32m==>[0m agent: OpenVINO/Qwen3.8-27B-int4-ov as 'm' on GPU (gpu.intel.com/xe), 2 CPU(s)
+namespace/k3d-gpu-agent created
+persistentvolumeclaim/ovms-models created
+deployment.apps/ovms created
+service/ovms created
+Error from server (NotFound): deployments.apps "ovms" not found
+== arm X1q not deliverable 2026-10-21T21:14:42Z
+namespace "k3d-gpu-agent" deleted
+persistentvolumeclaim "ovms-models" deleted from k3d-gpu-agent namespace
+deployment.apps "ovms" deleted from k3d-gpu-agent namespace
+service "ovms" deleted from k3d-gpu-agent namespace

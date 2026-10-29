@@ -1,0 +1,23 @@
+{
+ "medians": {
+  "B2q": null,
+  "Sq": null,
+  "Sq-mtp": null,
+  "Rq": null,
+  "X1q": null,
+  "X1q-mtp": null,
+  "Lsq": 27.294807009041357
+ },
+ "correct": {
+  "B2q": null,
+  "Sq": null,
+  "Sq-mtp": null,
+  "Rq": null,
+  "X1q": null,
+  "X1q-mtp": null,
+  "Lsq": 48
+ },
+ "gate_ref": "Sq",
+ "verdict": "INCONCLUSIVE",
+ "why": "no gate reference (B2q and Sq missing)"
+}

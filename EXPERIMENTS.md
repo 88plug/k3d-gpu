@@ -71,10 +71,10 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H52 | A plain `k3d-gpu up` (no flags, the auto-adapt default) on the Xeon 6741P host as found detects and enables every engine actually present and advertises each usable one to the scheduler, with nothing missing and nothing phantom; engines present but not configured on the host are named, not advertised. | Written 2026-10-20 from an inventory read from sysfs, lspci and CPUID, not from k3d-gpu. 4 x Arc Pro B70 (xe) as `gpu.intel.com/xe: 4`; AMX TILE, BF16, INT8, FP16 and 14 AVX-512/VNNI labels; no hybrid, NUMA, NVIDIA, Gaudi or NPU objects; DSA, IAA and QAT named as present but unconfigured (0.4: `up` may not name them). | The table in [H50-H52 pre-registration](#h50-h52-pre-registration-the-xeon-6741p-2026-10-20): `k3d-gpu doctor`, `K3D_GPU_CLUSTER=k3dgpu-h52 k3d-gpu up`, `kubectl get node -o json`, `k3d-gpu test`, and one enumeration pod per B70. SUPPORTED: every row matches. REFUTED: any row does not. Run 2026-10-20 ([H52 run](#h52-run-xeon-6741p-2026-10-20)): the four B70s (`gpu.intel.com/xe: 4`, `xmx=true`), AMX (TILE, BF16, INT8, FP16) and all 14 AVX-512/VNNI labels detected and reached pods, nothing phantom; but no media engine label on `xe`, and `up` does not name the unconfigured DSA, IAA and QAT (`doctor` does). | REFUTED |
 | H52b | After `k3d-gpu host-setup --apply` configures the host's DSA, IAA and QAT (the fix that adds that path, merged first), a plain `k3d-gpu up` also advertises them, and each one reaches a pod; the host is then restored exactly. | Written 2026-10-20, before the fix exists. DSA, IAA and QAT allocatable > 0, each at the count host-setup reports configuring; their test pods see `/dev/dsa`, `/dev/iax`, `/dev/vfio` (0.6). The other rows read as H52's expected table, media labels included ([amendment D1](#h52-amendment-d1-the-fixes-and-h52b-2026-10-20)). | Runs after H52, once the host-setup fix is merged; same procedure plus `host-setup --apply` before `up` and its printed revert after. SUPPORTED: the three engines advertised and reached, the H52 rows unchanged, and the host inventory read back equal to the one taken before. REFUTED: any of these fails. The host-setup command (`--apply --with-kernel-wqs`), the plan read first, the counts, the plain `up`'s node image and the revert per [amendment D2](#h52-amendment-d2-h52bs-host-setup-step-on-crescent-2026-10-29). | PENDING |
 | H53 | Inside EAT's banking flow on the Arc Pro B70s with Qwen3.8-27B (thinking off), k3d-gpu's own GPU choice AG (OVMS int4 on one card, `agent manifest`, auto device) delivers far more B24 tasks within the 120 s turn budget than B2, "EAT PR #21 nearest profile (Qwen3.6-27B) on Qwen3.8 weights, fp16" (vLLM XPU v0.28.0, TP 4). A stack-vs-stack claim. | Written 2026-10-20, before any H53 measurement. AG >= 0.70 (0.6); B2 boots by ladder rung (b) (0.6); B2 >= 0.50 (0.5); block mean AG - B2 in [-0.15, +0.30] (0.5). INCONCLUSIVE (0.6), REFUTED (0.3), SUPPORTED (0.1). | Solo holds in the order AG, B2, B2, AG, AG, B2 (up to 8), blocks = hold pairs (2k-1, 2k), block-level inference: mean of per-block d over >= 3 counted blocks, t-interval. SUPPORTED: lower bound >= +30 points and AG >= 0.6, L3 gates passed. REFUTED: upper bound < +30 points. Else INCONCLUSIVE. `bench/eatflow/crescent/solo-hold.sh N ARM`, `agentbench solo-report --hyp H53 --arm-a AG --arm-b B2`. See [H53 pre-registration](#h53-pre-registration-eats-banking-flow-on-arc-pro-b70-2026-10-20). | PENDING |
-| H54a | On the Xeon 6741P, Gemma 4 26B-A4B (QAT weights) single-stream: the best optimized CPU arm, chosen by the pre-registered source and speed rule, decodes at N=1 at least 3x faster than EAT stock B1g (vLLM CPU v0.24.0 bf16, `xeon-values.yaml`'s Gemma entry on the QAT bf16 weights), with a 50-item quality spot-check no more than 10 points below B1g's. A microbench, not an agent claim. | Written 2026-10-20, before any H54 measurement. N=1 median decode tok/s: B1g in [4, 15] (0.6); Lg (llama.cpp CPU, Google QAT Q4_0) in [25, 70] (0.6); A1g (k3d-gpu auto, OVMS CPU, QAT-matched IR) in [15, 60] (0.5), A1g/A1o in [0.85, 1.02] (0.6); Vq (vLLM CPU v0.32.0 bf16) in [6, 18] (0.5), Vq-mtp/Vq in [1.4, 2.5] (0.5); Lg-mtp/Lg in [1.2, 2.2] (0.4); Sg (SGLang CPU AMX) deliverable (0.6). The chosen arm is Lg or Lg-mtp (0.55). B3g not deliverable (0.8). SUPPORTED (0.65), INCONCLUSIVE (0.25), REFUTED (0.1). Not gated: TTFT on a 1,000-token prompt, aggregate tok/s at N=4 and 16 (A1g N=16/N=1 <= 1.5, 0.5), J/token. | [H54 pre-registration](#h54-pre-registration-gemma-4-26b-a4b-qat-and-qwen38-microbenches-on-crescent-2026-10-20): `bench/llm_load.py` per arm (N=1: 8 requests, N=4: 16, N=16: 32, 256 tokens, greedy, `ignore_eos`), `bench/energy.sh` RAPL per phase, GSM8K items 0-49 graded by exact match, one arm serving at a time, at most 3 holds of at most 40 min. Statistic: ratio of the chosen arm's median N=1 decode to B1g's, 95% bootstrap CI over requests. SUPPORTED: CI lower bound >= 3.0 and the quality gate passed. REFUTED: CI upper bound < 3.0, or every arm with a point ratio >= 3.0 fails the quality gate. Otherwise INCONCLUSIVE (also: B1g not deliverable, or a void phase not re-run). Run 2026-10-21, 3 holds ([H54a run](#h54a-run-xeon-6741p-2026-10-21)): stock B1g stalled in both its holds (vLLM v0.24.0 `EngineDeadError` mid-decode, cause open; no scored phase, 0/50 GSM8K, all errored), so `h54.py score-a` has no base and no chosen arm. Measured: Lg 48.74, Lg-mtp 54.52, A1g 23.25, A1o 21.73 tok/s N=1 median, GSM8K 50, 50, 49, 49 of 50; each scored phase exists only under amendment R4 (its own foreign CPU 4.4-4.8 CPU-s/s). Vq, Vq-mtp, Vi, Sg, B3g not run (cap). Descriptive, not scored: Lg-mtp over B1g's 2 hold-2 rates 3.02 (CI 2.90-3.06). | INCONCLUSIVE |
+| H54a | On the Xeon 6741P, Gemma 4 26B-A4B (QAT weights) single-stream: the best optimized CPU arm, chosen by the pre-registered source and speed rule, decodes at N=1 at least 3x faster than EAT stock B1g (vLLM CPU v0.24.0 bf16, `xeon-values.yaml`'s Gemma entry on the QAT bf16 weights), with a 50-item quality spot-check no more than 10 points below B1g's. A microbench, not an agent claim. | Written 2026-10-20, before any H54 measurement. N=1 median decode tok/s: B1g in [4, 15] (0.6); Lg (llama.cpp CPU, Google QAT Q4_0) in [25, 70] (0.6); A1g (k3d-gpu auto, OVMS CPU, QAT-matched IR) in [15, 60] (0.5), A1g/A1o in [0.85, 1.02] (0.6); Vq (vLLM CPU v0.32.0 bf16) in [6, 18] (0.5), Vq-mtp/Vq in [1.4, 2.5] (0.5); Lg-mtp/Lg in [1.2, 2.2] (0.4); Sg (SGLang CPU AMX) deliverable (0.6). The chosen arm is Lg or Lg-mtp (0.55). B3g not deliverable (0.8). SUPPORTED (0.65), INCONCLUSIVE (0.25), REFUTED (0.1). Not gated: TTFT on a 1,000-token prompt, aggregate tok/s at N=4 and 16 (A1g N=16/N=1 <= 1.5, 0.5), J/token. | [H54 pre-registration](#h54-pre-registration-gemma-4-26b-a4b-qat-and-qwen38-microbenches-on-crescent-2026-10-20): `bench/llm_load.py` per arm (N=1: 8 requests, N=4: 16, N=16: 32, 256 tokens, greedy, `ignore_eos`), `bench/energy.sh` RAPL per phase, GSM8K items 0-49 graded by exact match, one arm serving at a time, at most 3 holds of at most 40 min. Statistic: ratio of the chosen arm's median N=1 decode to B1g's, 95% bootstrap CI over requests. SUPPORTED: CI lower bound >= 3.0 and the quality gate passed. REFUTED: CI upper bound < 3.0, or every arm with a point ratio >= 3.0 fails the quality gate. Otherwise INCONCLUSIVE (also: B1g not deliverable, or a void phase not re-run). Run 2026-10-21, 3 holds ([H54a run](#h54a-run-xeon-6741p-2026-10-21)): stock B1g stalled in both its holds (vLLM v0.24.0 `EngineDeadError` mid-decode, cause open; no scored phase, 0/50 GSM8K, all errored), so `h54.py score-a` has no base and no chosen arm. Measured: Lg 48.74, Lg-mtp 54.52, A1g 23.25, A1o 21.73 tok/s N=1 median, GSM8K 50, 50, 49, 49 of 50; each scored phase exists only under amendment R4 (its own foreign CPU 4.4-4.8 CPU-s/s). Vq, Vq-mtp, Vi, Sg, B3g not run (cap). Descriptive, not scored: Lg-mtp over B1g's 2 hold-2 rates 3.02 ~~(CI 2.90-3.06)~~ (descriptive only: n=2 base rates from an engine that died minutes later, no CI; correction 2026-10-28, [H54a run](#h54a-run-xeon-6741p-2026-10-21)). | INCONCLUSIVE |
 | H54q | QAT matters at int4 on this model: on GSM8K items 0-199, the QAT-matched OpenVINO IR OVQ (INT4_SYM, group 32, built from Google's QAT bf16 weights) is non-inferior to the bf16 QAT reference R within 5 points, and the published base-model IR OVB (`OpenVINO/gemma-4-26b-a4b-it-int4-ov`; ~~INT4_ASYM group 128~~ AWQ INT4 asymmetric group 64, router layers unquantized, per its `openvino_config.json`: [note N1](#h54-note-n1-what-ovb-is-2026-10-21)) scores below OVQ. | Written 2026-10-20, before any measurement. R accuracy in [0.85, 0.96] (0.6). OVQ - R in [-0.03, +0.02] (0.6). GGUF Q4_0 (Lg) - R in [-0.03, +0.02] (0.6). OVB - R in [-0.07, 0] (0.5). The OVB < OVQ part resolves on 200 items (0.2). INCONCLUSIVE (0.65), SUPPORTED (0.2), REFUTED (0.15). | As H54a's quality protocol on items 0-199 of `openai/gsm8k` `main` test @ `740312ad`; items 0-49 come from H54a's runs of the same arm configs; ~~at most 1 hold of at most 40 min for the rest~~ the rest in at most 3 holds of at most 40 min, R answering all 200 items because H54a never ran its config ([amendment Q1](#h54-amendment-q1-h54qs-reference-arm-hold-cap-and-order-2026-10-29)). Paired bootstrap 95% CI over items (10,000 resamples, seed 1). SUPPORTED: CI lower bound of OVQ - R >= -0.05 and CI upper bound of OVB - OVQ < 0. REFUTED: CI upper bound of OVQ - R < -0.05, or CI lower bound of OVB - OVQ > 0. Otherwise INCONCLUSIVE. | PENDING |
-| H54b | On Arc Pro B70 with Qwen3.8-27B single-stream: the best optimized arm on ONE card (k3d-gpu auto OVMS int4, Intel's llm-scaler vLLM, or llama.cpp SYCL, with and without each one's documented MTP) decodes at N=1 at least 2x faster than EAT #21's XPU path B2q on TWO cards (vLLM XPU v0.28.0, the `xpu-qwen36-27b` profile's flags on the Qwen3.8-27B weights, TP 2). | Written 2026-10-20, before any measurement. N=1 median decode tok/s: X1q (OVMS GPU int4) in [15, 28] (0.5), X1q-mtp/X1q in [1.3, 2.2] (0.4); Sq (llm-scaler 1.5, online FP8, TP 1) deliverable (0.5), in [10, 18]; Sq-mtp/Sq in [1.4, 2.3] (0.5); Lsq (llama.cpp SYCL, Intel Q4_K_M) in [12, 24] (0.5); B2q deliverable at TP 2 (0.4), in [5, 12] (0.5). Chosen/B2q >= 2 (0.6). Cards free for a window (0.5). INCONCLUSIVE (0.6), SUPPORTED (0.3), REFUTED (0.1). | H54a's protocol on the B70s, cards only when `~/k3dgpu-bench/gpu-state.txt` lists them free; at most 2 holds of at most 40 min. Same statistic and quality gate (against B2q, or the official-weights arm Sq when B2q is not deliverable, for the gate only). SUPPORTED: CI lower bound of chosen one-card arm / B2q >= 2.0 and the gate passed. REFUTED: CI upper bound < 2.0. Otherwise INCONCLUSIVE (also: B2q not deliverable, or no free card before the campaign ends). Gemma 4 QAT on one B70 (X1g, X1o, B2g, Sgg) is described if hold time remains, never gated. | PENDING |
-| H54c | Hybrid placement ("use the fast DRAM"): llama.cpp with Gemma 4 26B-A4B QAT Q4_0, routed experts on the Xeon and everything else on one B70 (Hg, `-ngl 99 -ot exps=CPU`), decodes at N=1 within 25% of a pre-stated byte-split model built from the same image's full-CPU (Cg) and full-GPU (Gg) runs. Qwen3.8-Flash-Next falls back to Gemma 4 QAT (reasons in the pre-registration). | Written 2026-10-20, before any measurement. Model: t_Hg = t_Cg x (B_exp / B_tot) + t_Gg x (B_rest / B_tot) + 60 x 30 us, bytes from the GGUF tensor table. Within 25% (0.45). Hg < Gg (0.8). Hg / Cg in [0.8, 1.6] (0.5). Gg in [30, 90] tok/s (0.4). SUPPORTED (0.45), INCONCLUSIVE (0.3), REFUTED (0.25). | One hold of at most 40 min on one free card: Cg, Gg, Hg in that order, then Gg again (drift check), all in `ghcr.io/ggml-org/llama.cpp:server-intel-b11749`, H54a's N=1 phase only. SUPPORTED: abs(Hg measured / predicted - 1) <= 0.25. REFUTED: > 0.40. Otherwise INCONCLUSIVE (also: any of the three arms not delivered, or the two Gg runs differ by > 10%). | PENDING |
+| H54b | On Arc Pro B70 with Qwen3.8-27B single-stream: the best optimized arm on ONE card (k3d-gpu auto OVMS int4, Intel's llm-scaler vLLM, or llama.cpp SYCL, with and without each one's documented MTP) decodes at N=1 at least 2x faster than EAT #21's XPU path B2q on TWO cards (vLLM XPU v0.28.0, the `xpu-qwen36-27b` profile's flags on the Qwen3.8-27B weights, TP 2). | Written 2026-10-20, before any measurement. N=1 median decode tok/s: X1q (OVMS GPU int4) in [15, 28] (0.5), X1q-mtp/X1q in [1.3, 2.2] (0.4); Sq (llm-scaler 1.5, online FP8, TP 1) deliverable (0.5), in [10, 18]; Sq-mtp/Sq in [1.4, 2.3] (0.5); Lsq (llama.cpp SYCL, Intel Q4_K_M) in [12, 24] (0.5); B2q deliverable at TP 2 (0.4), in [5, 12] (0.5). Chosen/B2q >= 2 (0.6). Cards free for a window (0.5). INCONCLUSIVE (0.6), SUPPORTED (0.3), REFUTED (0.1). | H54a's protocol on the B70s, cards only when `~/k3dgpu-bench/gpu-state.txt` lists them free; at most 2 holds of at most 40 min. Same statistic and quality gate (against B2q, or the official-weights arm Sq when B2q is not deliverable, for the gate only). SUPPORTED: CI lower bound of chosen one-card arm / B2q >= 2.0 and the gate passed. REFUTED: CI upper bound < 2.0. Otherwise INCONCLUSIVE (also: B2q not deliverable, or no free card before the campaign ends). Gemma 4 QAT on one B70 (X1g, X1o, B2g, Sgg) is described if hold time remains, never gated. Run 2026-10-21, 2 holds ([H54b and H54c run](#h54b-and-h54c-run-arc-pro-b70-2026-10-21)): INCONCLUSIVE, not delivered as pre-registered: the pinned "one card" pods saw all 4 cards. B2q, Sq, Sq-mtp (Qwen bf16, 80.6 GB with its guard) and Rq were not deliverable (disk); X1q and X1q-mtp failed on two `h54b.sh` runner bugs before any engine started; Lsq ran, but its pod listed every render node and llama.cpp split the model over all four B70s, two of them serving the live `qwen38-a-hr`, so no one-card arm exists. Lsq-mtp was not run: its GGUF carries the MTP (`nextn`) tensors, but G1's runner has no such arm; nor were the described-only Gemma arms. `score.py`: "no gate reference (B2q and Sq missing)". Descriptive only, a 4-card run and not a one-card or B70 result: Lsq 27.3 tok/s N=1 median, GSM8K 48/50. | INCONCLUSIVE |
+| H54c | Hybrid placement ("use the fast DRAM"): llama.cpp with Gemma 4 26B-A4B QAT Q4_0, routed experts on the Xeon and everything else on one B70 (Hg, `-ngl 99 -ot exps=CPU`), decodes at N=1 within 25% of a pre-stated byte-split model built from the same image's full-CPU (Cg) and full-GPU (Gg) runs. Qwen3.8-Flash-Next falls back to Gemma 4 QAT (reasons in the pre-registration). | Written 2026-10-20, before any measurement. Model: t_Hg = t_Cg x (B_exp / B_tot) + t_Gg x (B_rest / B_tot) + 60 x 30 us, bytes from the GGUF tensor table. Within 25% (0.45). Hg < Gg (0.8). Hg / Cg in [0.8, 1.6] (0.5). Gg in [30, 90] tok/s (0.4). SUPPORTED (0.45), INCONCLUSIVE (0.3), REFUTED (0.25). | One hold of at most 40 min on one free card: Cg, Gg, Hg in that order, then Gg again (drift check), all in `ghcr.io/ggml-org/llama.cpp:server-intel-b11749`, H54a's N=1 phase only. SUPPORTED: abs(Hg measured / predicted - 1) <= 0.25. REFUTED: > 0.40. Otherwise INCONCLUSIVE (also: any of the three arms not delivered, or the two Gg runs differ by > 10%). Run 2026-10-21, 1 hold ([H54b and H54c run](#h54b-and-h54c-run-arc-pro-b70-2026-10-21)): INCONCLUSIVE, not delivered as pre-registered: the pinned "one card" pods saw all 4 cards. Gg, Hg and Gg2 split their GPU layers over four B70s (two serving the live `qwen38-a-hr`), and Cg (`-ngl 0`) also allocated about 0.5 GB on one of those cards, so t_Cg and the prediction are confounded. The verdict does not come from `predict.py`'s band test, whose inputs are these 4-card and confounded runs. Descriptive only, not one-card or hybrid results: Cg 36.8, Gg 58.0, Hg 56.3, Gg2 57.4 tok/s N=1 median. | INCONCLUSIVE |
 | H54d | Inside EAT's banking flow with Gemma 4 26B-A4B (QAT), the best H54a CPU arm A* delivers far more B24 tasks within budget than EAT stock B1g, under H50's design, statistic, gates and thresholds (rule L2, amendment C1). Runs only when A* is not H50's A1 config. | Written 2026-10-20, before any measurement. A* within-budget success >= 0.60 (0.55). B1g >= 0.50 (0.6). Paired A* - B1g in [-0.10, +0.30] (0.6). A* serves B24's tool calls without a parser change (0.6). Fewer than 16 matched pairs in 3 holds (0.5). REFUTED (0.4), INCONCLUSIVE (0.5), SUPPORTED (0.1). | H50's procedure with arm A = A*, arm B = B1g; at most 3 holds of at most 40 min, until 24 pairs. SUPPORTED: paired difference CI lower bound >= +30 points and A* >= 0.6, L2, void and idle-arm checks passed. REFUTED: CI upper bound < +30 points. Otherwise INCONCLUSIVE. Not run (and so recorded) when A* is H50's A1 config: H50 answers it. Not run 2026-10-21, no hold used ([H54d: not run](#h54d-not-run-2026-10-21)): A* is undefined (H54a chose no arm), B1g stalled in both H54a holds, and H54q has not run; the caps rule makes a row with its stock or chosen arm missing INCONCLUSIVE. | INCONCLUSIVE |
 | H58 | The zero-touch thesis on the Xeon 6741P with four Arc Pro B70s. From a clean state, k3d-gpu brings up EAT's banking flow on Gemma 4 26B-A4B-it with no flag, no manual step and no edit. It detects and advertises every engine H52 and H52b found. It places each model by its own memory fit. Its result is within tolerance of the best hand-tuned arm on the same host. Under a controlled host memory squeeze, its guard backs off and nothing outside its own pods is OOM-killed. | Written 2026-10-20, before any H58 run and before the model optimizer (PR #163) and the fit-and-guard layer (branch `claude/fit-and-guard`) are on main. (a) Flags beyond the documented commands: 0 (0.8). (b) Manual steps or edits: 0 (0.6). (c) Decode tok/s >= 0.90x the best hand-tuned arm on this host (0.6), and within-budget B24 success within 5 points of it (0.7). (d) Every engine H52/H52b found is detected and advertised (0.75). (e) Qwen3.8-Flash-Next W4A16 (Intel AutoRound) lands on an experts-in-DRAM placement, and Gemma 4 and Qwen3.8-27B land on the GPU or the CPU, each as its fit decides, with no flag (0.5). (f) Under the squeeze: 0 OOM kills outside our pods (0.85), and the guard lowers admission (0.6). All six together: SUPPORTED (0.25), REFUTED (0.6), INCONCLUSIVE (0.15). | See [H58 pre-registration](#h58-pre-registration-the-zero-touch-thesis-on-crescent-2026-10-20) and [amendment P1](#h58-amendment-p1-the-model-pins-2026-10-29) (the model pins). Runs last on crescent, after #163 and the fit-and-guard layer merge, with their commits recorded. SUPPORTED: (a) through (f) all hold. REFUTED: any clause fails on a valid run. A manual step found is a REFUTED run. It is fixed test-first, and the re-run is a new run with its own section. INCONCLUSIVE: no valid baseline for (c), or the run is not deliverable for reasons outside k3d-gpu. | PENDING |
 | H60 | On the Xeon 6741P, Qwen3.8-Flash-Next (125B MoE, 6B active, a 51B-parameter n-gram table) runs entirely from host DRAM through llama.cpp, and reads the same share of its DRAM bandwidth ceiling as the Gemma 4 QAT GGUF on the same llama.cpp build: with e = N=1 median decode / (STREAM triad 305 GB/s / bytes read per token from the GGUF's tensor table), Flash-Next's e over a same-hold Gemma control's e (H54's Lg) lies within [0.7, 1.3] (without a valid control, e within 0.38 x [0.7, 1.3], H54a Lg's). A microbench of DRAM-resident serving, not an agent claim. | Written 2026-10-21, before any H60 measurement. Bytes per token 5.94 GB (all tensors but the lookup tables, 10/512 of the routed experts), ceiling 51.3 tok/s at 305 GB/s (53.9 at 320). e_fn 0.30 (0.18-0.45), N=1 decode 15 tok/s (9-23), control e_lg 0.38, ratio 0.79 (0.5-1.15): the Gated DeltaNet and hyper-connection compute per token is heavier than Gemma's. GSM8K 0-49 >= 40/50 (0.7). SUPPORTED 0.45, REFUTED 0.35, INCONCLUSIVE 0.2. | [H60 pre-registration](#h60-pre-registration-qwen38-flash-next-from-host-dram-on-the-xeon-6741p-2026-10-21): `bench/flashnext/h60.sh` inside `bench/xhost/hold.sh`, H54's one-arm protocol (idle, 3 warm-ups, N=1 8 x 256, N=4 16 x 256, TTFT 4 x 16 on H54's 1,000-token prompt, GSM8K 0-49, RAPL per phase, H54's void rule and one re-run), after a same-hold control (Gemma 4 QAT Q4_0 GGUF, idle, warm-ups, N=1 8 x 256), scored by `bench/flashnext/h60.py score`: 95% bootstrap CI of the ratio inside the band SUPPORTED, wholly outside REFUTED, else INCONCLUSIVE (also when N=1 is void, the PSI guard stops the hold, or GSM8K is below 25/50). | PENDING |
@@ -4135,8 +4135,10 @@ after 219 s, answered 2 of 3 warmup requests and stalled on the third at 166 out
 v0.24.0 logged "No available shared memory broadcast block found in 60 seconds" from 08:24:21Z,
 then `TimeoutError` in `shm_broadcast` and `EngineDeadError`, and the server exited at 08:28:20Z.
 No scored request completed (R3 rewrote its record from `measured` to `failed` at 08:50:49Z). In
-hold 2 it completed 3 of 8 N=1 requests (2 with a decode rate: 17.92 and 18.17 tok/s), then died
-the same way ("RPC call to execute_model timed out", `EngineDeadError`, 09:21:02Z); N=4, N=16,
+hold 2 it completed ~~3 of 8 N=1 requests (2 with a decode rate: 17.92 and 18.17 tok/s)~~ 2 of 8
+N=1 requests (17.92 and 18.17 tok/s); the third stopped at 252 of 256 tokens (correction
+2026-10-28, below). The engine then died the same way ("RPC call to execute_model timed out",
+`EngineDeadError`, 09:21:02Z); N=4, N=16,
 TTFT and all 50 GSM8K items errored. R3 carries a stopped arm once, so B1g did not run a third
 time. Neither hold had an out-of-memory kill or an aiperf process; load1 fell to about 4-5 during
 the stall and the non-campaign CPU over hold 2's N=1 phase read 2.66 CPU-s/s, so neither box load
@@ -4156,7 +4158,7 @@ and net of the arm's own 60 s idle power; quality: GSM8K items 0-49, exact match
 | Arm | Hold | Status | N=1 decode tok/s (min-max) | N=4 / N=16 aggregate tok/s | TTFT s | J/token gross / net (idle W) | GSM8K 0-49 |
 |---|---|---|---|---|---|---|---|
 | B1g | 1 | failed (stopped answering) | none | none | none | none | 0/50, 50 errors |
-| B1g | 2 | failed (stopped answering) | 18.04 (17.92-18.17; 2 rates, descriptive) | none | none | none | 0/50, 50 errors |
+| B1g | 2 | failed (stopped answering) | 18.04 (17.92-18.17; n=2, then the engine died; descriptive) | none | none | none | 0/50, 50 errors |
 | Lg | 2 | measured | 48.74 (48.09-49.02) | 88.84 / 87.19 | 2.73 | 5.80 / 2.95 (131.4) | 50/50 |
 | Lg-mtp | 2 | measured | 54.52 (50.50-55.54) | 121.21 / 120.05 | 2.71 | 5.34 / 2.77 (131.1) | 50/50 |
 | A1g | 3 | measured | 23.25 (22.98-23.39) | 30.87 / 65.52 | 5.05 | 12.80 / 6.79 (132.1) | 49/50 |
@@ -4184,18 +4186,23 @@ score minus 0.10; B1g has neither a measured N=1 phase nor a score, so no arm ca
 no arm is chosen. The pre-registration's INCONCLUSIVE branch names this case ("B1g not
 deliverable").
 
-Read descriptively, and not as the verdict: with B1g's 2 hold-2 rates, Lg/B1g is 2.70 (bootstrap
-CI 2.67-2.73) and Lg-mtp/B1g 3.02 (CI 2.90-3.06). By the source rule Lg-mtp (rank 2, 1.119x Lg at
-50/50) would replace Lg (rank 0) as the chosen arm. Its CI lower bound is below 3.0, so even had
-those rates counted, the row would not have been SUPPORTED; the 3x bar most likely would not have
-cleared with a working B1g. No int4-vs-bf16 quality statement can be made: the bf16 arms have no
+Read descriptively, and not as the verdict: with B1g's 2 hold-2 rates, Lg/B1g is 2.70 ~~(bootstrap
+CI 2.67-2.73)~~ and Lg-mtp/B1g 3.02 ~~(CI 2.90-3.06)~~. Both are descriptive only: their base is n=2
+rates from an engine that died about 5 minutes later, and a bootstrap over 2 base rates (only 3
+possible resampled medians) gives no valid interval, so none is stated (correction 2026-10-28).
+By the source rule Lg-mtp (rank 2, 1.119x Lg at 50/50) would replace Lg (rank 0) as the chosen
+arm. ~~Its CI lower bound is below 3.0, so even
+had those rates counted, the row would not have been SUPPORTED; the 3x bar most likely would not
+have cleared with a working B1g.~~ The point ratio sits on the 3.0 bar, and an n=2 base from a
+failing engine cannot say whether a working B1g would have cleared it. No int4-vs-bf16 quality
+statement can be made: the bf16 arms have no
 score (B1g errored, Vq not run), and 49-50/50 on these items is near the ceiling.
 
 **Against the predictions.**
 
 | Prediction | Result |
 |---|---|
-| B1g in [4, 15] (0.6) | 18.04 from 2 rates, descriptive: above the range |
+| B1g in [4, 15] (0.6) | 18.04 from 2 rates (n=2, from an engine that then died), descriptive: above the range |
 | Lg in [25, 70] (0.6) | 48.74: held |
 | A1g in [15, 60] (0.5) | 23.25: held |
 | A1g/A1o in [0.85, 1.02] (0.6) | 1.07 (CI 1.06-1.08): missed, the QAT-matched IR decoded faster than OVB |
@@ -4224,6 +4231,37 @@ computed from a measured bandwidth, not measured decode rates:
 The predictor has no compute, KV or kernel term and no MTP, so Lg-mtp has no ceiling row. At
 batch 1 the OVMS arms run at about a sixth of their bandwidth ceiling and llama.cpp at about a
 third; the predictor is not a forecast for these engines on this host.
+
+**Corrections (2026-10-28, from a review of the raw records on 2026-10-21 after #191; verdict
+unchanged).**
+
+1. B1g's hold-2 N=1 phase completed 2 requests, not 3. Sample 2 of `hold2/B1g/load-n1.json`
+   stopped at 252 of 256 tokens after 314 s with no usage record (`content_chunks` 252, `chunks`
+   254). The engine dump in `server.log.gz` reads `num_output_tokens=[252]`, and the API server
+   logged "Error in chat completion stream generator", so vLLM ended the stream with an error
+   chunk and `[DONE]`. `bench/llm_load.py` counted any stream with content as ok. It now records
+   `finish_reason` and marks a stream that carries an error object, or ends without a
+   `finish_reason`, as an error; the regression tests (`tests/bench_test.sh`: `load_engine_death`,
+   `load_cut_stream`) failed before the fix. The raw record is kept as recorded, with
+   `hold2/B1g/ERRATUM.txt` beside it. B1g's status was already `failed`, and its median already
+   used only the 2 rates. Of all 607 samples recorded ok in the H54a, H54b and H54c load
+   records (smokes included), only two have fewer output tokens than requested: this one and
+   hold 1's unscored B1g warm-up that stalled at 166 tokens (above). No other recorded number
+   changes.
+2. The bootstrap intervals on Lg/B1g and Lg-mtp/B1g are struck above, and the ratios are
+   descriptive only: their base is 2 rates from an engine that died minutes later. No ratio
+   against B1g is carried to the docs.
+3. Reading aids for the raw `reproduce.txt`: its `ovms_eat: 2025.4@sha256:c3707200...` line is
+   `openvino/model_server:2025.4` (B3g, EAT's chart, not run), and its two `...-int4-sym-g32-ov`
+   lines are two different directories (`k3dgpu_...` is PR #157's export for H50, `k3dgpu/...` is
+   A1g's), as the header above says. Its 8 unlabelled `model-0000N-of-00008.safetensors` hashes
+   are `Intel/gemma-4-26B-A4B-it-int4-AutoRound` @ `edff6272` (Vi, not run); each equals the Hub's
+   LFS sha256 at that revision (checked 2026-10-28).
+4. What a B1g re-run needs (not pre-registered; a dated amendment merged before data): B1g once
+   through EAT's default balloon path (`balloon_policy_cpu=enabled`, with its CPU and memory
+   requests and limits), and Vq (vLLM v0.32.0, B1g's flags) as the harness control, so a stall
+   can be placed on the render, the engine version or the harness. Until then nothing here or in
+   the docs says EAT's stock vLLM stalls, or that k3d-gpu beats it.
 
 ### H54d: not run (2026-10-21)
 
@@ -4670,6 +4708,200 @@ plus B2q's 25 GB). B2q is the statistic's denominator, so it moves to the front:
 B2q, X1q. Hold 2: X1q-mtp, Lsq, Sq, Sq-mtp, Rq (each only where its model was fetched and the
 disk guard passes; the Intel q4km fetch runs between the holds). `ladder.py` now drops the
 chart render's empty documents (`--- null`, which kubectl rejects). Nothing else changes.
+
+### H54b and H54c run (Arc Pro B70, 2026-10-21)
+
+Both rows are INCONCLUSIVE because their arms were not delivered as pre-registered: every
+"one card" pod saw all four B70s. Recorded 2026-10-28 from the raw records of 2026-10-21; the
+holds' REPRODUCE headers, NOTES and the two runner-bug errata were written on 2026-10-21.
+
+```text
+# Reproduce
+date:            one lock for the campaign, 2026-10-21T21:12:26Z .. about 21:59Z (waited 5 min).
+                 H54b hold 1 21:12:53Z .. 21:15:08Z (k3dgpu-g-h54b-1 deleted); q4km fetch
+                 21:15:08Z .. 21:17:58Z; H54b hold 2 21:17:58Z .. 21:38:45Z (k3dgpu-g-h54b-2);
+                 H54c hold 1 21:38:45Z .. 21:57:40Z (k3dgpu-g-h54c-1). df / 94% at hold 1's
+                 start, 95% after H54c (runs/*/pre.txt, post.txt).
+pre-registered:  H54 pre-registration; G1 (#166) and G1 revision 2 (#186, 9f81e008), both merged
+                 before any H54b or H54c measurement
+hypotheses:      H54b, H54c
+host:            crescent: Intel(R) Xeon(R) 6741P, 96 CPUs, 1 socket, 1 NUMA node, microcode
+                 0xa000133; kernel 7.0.0-31-generic, in-tree xe; Docker 29.8.0; 4x Arc Pro B70
+                 (8086:e223; bdf 12:00.0, 48:00.0, 7c:00.0, 96:00.0), GuC 70.58.0 (compatibility
+                 1.30.1) on all four (REPRODUCE-supplement.txt, read 22:10Z)
+k3d-gpu commit:  9f81e008 (bench/h54gpu at G1 revision 2), 0 uncommitted; k3d v5.9.0, kubectl
+                 v1.35.2, helm v4.1.1; node image cryptoandcoffee/k3d-gpu:0.1.61@sha256:8cd264aa...e175c,
+                 C1's K3D_GPU_K3S_ARGS
+images:          ghcr.io/ggml-org/llama.cpp:server-intel-b11749@sha256:ae2d41ba...81bd (Lsq, Cg,
+                 Gg, Hg, Gg2); openvino/model_server:2026.4.1-gpu@sha256:a928903f...fc58 (X1q,
+                 never started); intel/llm-scaler-vllm:1.5@sha256:52218ad8...fe3b (Sq, Rq, not
+                 deliverable); busybox:1.37@sha256:bdf57e52...3f82e (placeholder pods). Discarded
+                 smoke only: ghcr.io/ggml-org/llama.cpp:server-b11749@sha256:9fbaa06d...f312
+models:          Intel/Qwen3.8-27B-q4km-AutoRound @ 4b30b30e: Qwen3.8-27B-Q4_K_M.gguf sha256
+                 766892f84f85c3d1b90704424f90a33344983fa2959860496940bbd41041aad9 (16810714432 B);
+                 google/gemma-4-26B-A4B-it-qat-q4_0-gguf @ d1c082be: gemma-4-26B_q4_0-it.gguf
+                 sha256 3eca3b8f6d7baf218a7dd6bba5fb59a56ee25fe2d567b6f5f589b4f697eca51d; both
+                 equal the Hub's LFS sha256 at those revisions (checked 2026-10-28). The bare
+                 "model: edff6272..." line in each REPRODUCE is Intel/gemma-4-26B-A4B-it-int4-
+                 AutoRound, which no H54b or H54c arm loads. Not fetched (disk): Qwen/Qwen3.8-27B
+                 1d4bf0f2, RedHatAI/Qwen3.8-27B-INT4 91bd022d
+cards:           CARDS=2,3, card 2 = renderD130 assigned to every pinned pod; qwen38-b-hr (cards
+                 2,3) stopped 21:12:32Z, started again 21:57:40Z, answered a chat 21:58:57Z. Every
+                 pinned pod mounted renderD130 but listed card0-4 and renderD128-131 (*.dri)
+command:         CARDS=2,3 STOP_BHR=1 bench/h54gpu/campaign.sh "1:X1q" "f:Intel/Qwen3.8-27B-q4km-
+                 AutoRound:4b30b30e...:24.7" "2:X1q-mtp Lsq" "c1:2"; python3 bench/h54gpu/score.py,
+                 bench/h54gpu/predict.py
+energy source:   RAPL intel-rapl:0 package-0 via bench/energy.sh, per phase, 60 s idle before each arm
+raw results:     bench/h54gpu/results/2026-10-21/: H54b/ (hold1, hold2, smoke-hold1; score.json,
+                 arms-score.json; Prometheus xe_vram_used_bytes and xe_clients exports 21:05-22:02Z;
+                 NOTES), H54c/ (hold1 with verdict.json and the same exports; smoke-hold1,
+                 smoke-hold1-failed-sa), runs/ (per hold pre.txt, post.txt, hold.log,
+                 serving.jsonl; campaign and smoke logs), REPRODUCE-supplement.txt. Logs over 20 kB
+                 are gzipped; kubeconfigs are not kept. Compared with crescent by sha256 on
+                 2026-10-28: all 115 files of ~/k3dgpu-gemma/results/H54b and H54c (kubeconfigs
+                 aside) equal these; of the 51 files in ~/k3dgpu-gemma/runs (re-listed
+                 2026-10-29), 19 were here and equal, the 25 H54b and H54c run and smoke logs
+                 missing here were copied then, and its 3 H54a files and a 4-file B2q chart-render
+                 check (runs/b2q-render.FSDx, 05:36Z, before G1 revision 2; renders only, no
+                 engine) were not.
+```
+
+**Wiring smokes (discarded, not holds).** H54c: 00:06:58Z (Cg not created: the pod's service
+account did not exist yet) and 00:15:13Z (Cg alone in the CPU image `server-b11749`, no card
+mounted: 47.66 tok/s N=1 median). H54b: 03:46:41Z (placeholder pods and X1q's manifest render).
+
+**The placement failed: every pinned pod saw every card.** G1's pinned pods are privileged and
+mount an in-memory `/dev/dri` holding only renderD130. Inside every one of them `/dev/dri`
+listed card0-4 and renderD128-131 (`lsq.dri`, `cg.dri`, `gg.dri`, `hg.dri`, `gg2.dri`): a
+privileged container gets the host's device nodes, and the empty directory hid none of them.
+llama.cpp's log at this verbosity does not print its device list, so the split is read from
+Prometheus `xe_vram_used_bytes` (GB; idle with `qwen38-b-hr` stopped -> peak in the window):
+
+| Window (UTC) | Arm | card1 (12:00.0, `qwen38-a-hr`) | card2 (48:00.0, `qwen38-a-hr`) | card3 (7c:00.0) | card4 (96:00.0) |
+|---|---|---|---|---|---|
+| 21:25-21:38 | Lsq (`-ngl 99`) | 17.27 -> 20.79 | 16.51 -> 19.99 | 0.00 -> 5.90 | 0.00 -> 6.42 |
+| 21:42-21:45 | Cg (`-ngl 0`) | 17.27 -> 17.79 | 16.51 -> 16.53 | 0.00 -> 0.02 | 0.00 -> 0.02 |
+| 21:46-21:49 | Gg (`-ngl 99`) | 17.27 -> 20.69 | 16.51 -> 19.29 | 0.00 -> 5.33 | 0.00 -> 5.44 |
+| 21:50-21:53 | Hg (`-ngl 99 -ot exps=CPU`) | 17.27 -> 18.24 | 16.51 -> 17.06 | 0.00 -> 0.98 | 0.00 -> 1.52 |
+| 21:54-21:57 | Gg2 (`-ngl 99`) | 17.27 -> 20.69 | 16.51 -> 19.29 | 0.00 -> 5.33 | 0.00 -> 5.44 |
+
+The hold-start card check missed this. It reads the host `fuser` table, and a device node inside
+the container is a separate file, so the host never sees the engine holding the card.
+
+**Disclosure: a live service's cards were used, and a live service was stopped.**
+
+- `qwen38-a-hr` (cards 0 and 1 in its own numbering, card1 and card2 above) is a live SGLang
+  server. G1 allowed this campaign to stop `qwen38-b-hr` only, and says `qwen38-a-hr` is never
+  touched. The H54b and H54c pods put VRAM and compute on its two cards from 21:23:30Z to
+  21:57:00Z (the first and last Prometheus samples above its baseline), about 34 minutes. That
+  was not authorised. It was serving in that window (its log shows 804 prefill batches), its log
+  has no error, exception or traceback line from 21:00Z to 22:05Z (read 2026-10-28), and its VRAM
+  read its baseline again at 21:59Z (17.27 and 16.51 GB). Its serving latency in that window was
+  not measured, so the impact on it is unknown, not zero.
+- `qwen38-b-hr` was stopped at 21:12:32Z and started again at 21:57:40Z by this campaign's
+  `campaign.sh`, under G1's revision (operator-authorised). The campaign brief gave the stop and
+  restore of that pair to the main H50-H53 campaign, which was not asked first. It answered a
+  chat at 21:58:57Z.
+
+**Deviations from the protocol (no amendment covers them).**
+
+- Order. The pre-registration's caps rule orders "H54a, H54q, then H54b and H54c when a card
+  window opens, then H54d". H54b and H54c ran from 21:12Z to 21:57Z on 2026-10-21 while H54q was
+  still PENDING (it has not run), and neither G1 nor G1 revision 2 changes that order. Nothing
+  either way depends on it: no H54q variant reads an H54b or H54c run, and no H54b or H54c arm
+  reads an H54q one (H54c's arms load the same Google QAT Q4_0 GGUF as H54q's Lg, but in the
+  Intel image and for N=1 speed only). Neither verdict changes.
+- Record. G1 says the pod's `/dev/dri` listing and the host `fuser` table are saved per pinned
+  arm. `h54c.sh` saves both (`cg`, `gg`, `hg`, `gg2` `.dri` and `.fuser`), but `h54b.sh`'s
+  `run_pinned` saves only the listing (`bench/h54gpu/h54b.sh:129`): H54b hold 2 has `lsq.dri` and
+  no `lsq.fuser`, here and on crescent (read 2026-10-28). This is a third `h54b.sh` gap beside
+  the two runner bugs below. No reading here rests on it: Lsq's placement is read from `lsq.dri`
+  and Prometheus, and H54c's four host tables list no llama.cpp process on any render node.
+
+**H54b: what ran.** Hold 1: X1q. Hold 2: X1q-mtp, Lsq.
+
+- B2q, Sq, Sq-mtp: not deliverable (disk). `Qwen/Qwen3.8-27B` needs 55.6 GB plus B2q's 25 GB
+  guard, 80.6 GB. The fetch refused at 07:28Z (`runs/fetch-qwen-bf16.out`), and at the
+  campaign's start the 96% line left 68.3 GB (`runs/h54bc-predisk.txt`; NOTES records 75.9 GB
+  from another `df` reading).
+- Rq: not deliverable (disk): 19.5 + 45 GB against about 57 GB left after the q4km fetch.
+- X1q: a runner bug, not an engine result. `h54b.sh`'s `run_agent` calls `kubectl rollout
+  status`, `port-forward`, `exec` and `logs` without `-n k3d-gpu-agent`, and `k3d-gpu agent
+  manifest` puts the deployment in that namespace. Rollout status failed after 1 s (`X1q.log`:
+  `deployments.apps "ovms" not found in namespace "default"`). The raw `X1q.not-deliverable`
+  says "not deliverable in 900 s"; that text is wrong, and `X1q.ERRATUM.txt` sits beside it.
+- X1q-mtp: a runner bug. `"${2:+K3D_GPU_AGENT_PREFIX_CACHING=false}"` at the start of a command
+  expands to a word, not an assignment ("command not found"), so the manifest never rendered
+  (`X1q-mtp.ERRATUM.txt`).
+- Lsq-mtp: not run. The pre-registration runs it "only if that GGUF carries the MTP tensors
+  (read at load)", and the condition held: Lsq's load log (`H54b/hold2/lsq.log.gz`) lists
+  `blk.64.nextn.eh_proj`, `enorm`, `hnorm` and `shared_head_norm`, with the other 11 block-64
+  tensors, as unused tensors that b11749's loader ignores. G1's arm list and its runner
+  (`h54b.sh`) have no Lsq-mtp arm, so it was not attempted; G1 did not record the omission.
+- X1g, X1o, B2g, Sgg (Gemma 4 QAT on one card, described only, never gated): not run. Hold 2
+  ended 20m47s into its 40-minute cap, so hold time remained, but G1's runner has no Gemma arm
+  and the campaign command named none.
+
+| Arm | Status | N=1 decode tok/s (min-max) | N=4 / N=16 aggregate tok/s | TTFT s (803-word prompt) | GSM8K 0-49 |
+|---|---|---|---|---|---|
+| Lsq | ran on 4 cards, not as registered | 27.29 (27.21-27.50) | 55.86 / 55.70 | 1.57 | 48/50 |
+| X1q, X1q-mtp | runner bug | none | none | none | none |
+| Lsq-mtp | not run (no arm in G1's runner) | none | none | none | none |
+| B2q, Sq, Sq-mtp, Rq | not deliverable (disk) | none | none | none | none |
+
+Lsq's N=16 figure is N=4 capacity (`n_slots = 4` in its log). Every number in this table is
+descriptive: a 4-card run, not a one-card or B70 result.
+
+**Verdict H54b: INCONCLUSIVE, not delivered as pre-registered.** `score.py`
+(`H54b/score.json`) gives "no gate reference (B2q and Sq missing)". Apart from the scorer, no
+arm ran on one card, so the statistic (one card against two) has no numerator either. The
+2-hold cap is used. Against the predictions: B2q deliverable (0.4), not delivered; Lsq in
+[12, 24] (0.5), 27.3 on four cards, not comparable; the others not run.
+
+**H54c: what ran.** One hold: Cg, Gg, Hg, Gg2, in `server-intel-b11749` with G1's base flags.
+
+| Arm | Flags | N=1 decode tok/s (min-max) | Package W during N=1 | Cards used |
+|---|---|---|---|---|
+| Cg | `-ngl 0` | 36.84 (36.56-36.98) | 264.7 | about 0.5 GB on card1, 0.02 GB on card3 and card4 |
+| Gg | `-ngl 99` | 57.97 (57.36-59.06) | 130.1 | all four |
+| Hg | `-ngl 99 -ot exps=CPU` | 56.33 (55.59-57.33) | 255.1 | all four (non-expert layers) |
+| Gg2 | `-ngl 99` | 57.38 (57.20-57.45) | 130.2 | all four |
+
+Hg's log warns that CPU tensor overrides are in use, and the package drew about 255 W, so the
+routed experts did run on the Xeon. Bytes per decoded token from the GGUF header: B_exp 0.803 GB,
+B_rest 1.577 GB, B_tot 2.380 GB.
+
+**Verdict H54c: INCONCLUSIVE, not delivered as pre-registered** (the pre-registration's "any of
+the three arms not delivered"). The model is a one-card byte split, and Gg, Hg and Gg2 were
+4-card runs. `predict.py` (`H54c/hold1/verdict.json`) wrote INCONCLUSIVE through its 25-40%
+band (measured/predicted 1.261), but that band reading is not the reason and is not a result:
+t_Gg is a 4-card rate, and t_Cg (36.84) sits 23% below the CPU-image smoke's 47.66. With 47.66
+the same formula gives 49.2 tok/s and a ratio of 1.14, inside the SUPPORTED band, so the band
+placement depends on one confounded input; the smoke ran another image, so 1.14 is a
+sensitivity, not a result either. Why Cg decodes slower in the Intel image is not known; the
+0.5 GB it placed on card1 is one candidate. The 1-hold cap is used. Against the predictions:
+Hg < Gg (0.8), Gg in [30, 90] (0.4) and Hg/Cg in [0.8, 1.6] (0.5; 1.53) held on four cards;
+none is a one-card reading.
+
+**What a re-run needs** (none is pre-registered; each needs a dated amendment merged before
+data, with new hold caps for H54b and H54c, and must disclose that the 4-card numbers above, the
+1.261 band reading and Lsq's rate have been seen):
+
+1. Pin the device inside the engine, not by hiding device nodes: `ONEAPI_DEVICE_SELECTOR` or
+   `ZE_AFFINITY_MASK`, or llama.cpp's `-sm none -mg`.
+2. Check isolation from inside the pod before the phase: the engine's own device list shows
+   exactly one device, and `/dev/dri` lists only the assigned render node; fail the hold
+   otherwise. After each arm, read the per-card `xe_vram_used_bytes` delta and fail the arm if
+   any card but the assigned one moved.
+3. Fix both `h54b.sh` bugs: the namespace on every kubectl call in `run_agent`, and
+   `K3D_GPU_AGENT_PREFIX_CACHING` set as an environment assignment. Save the host `fuser` table
+   per pinned arm in `h54b.sh`, as `h54c.sh` does.
+4. Free disk for B2q and Sq, or record them not deliverable again.
+5. Add Lsq-mtp, or record why b11749 cannot use the GGUF's `nextn` tensors (its loader lists
+   them as unused and ignores them).
+
+This is a result about this harness's placement, not about the B70, llama.cpp SYCL, OVMS or
+llm-scaler. No number in this section is quoted as a one-card, hybrid or B70 result.
 
 ### H57d amendment R1: the H57d runner, the read-only Od render and the hold length (2026-10-21)
 

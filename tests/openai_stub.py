@@ -10,6 +10,10 @@ choices (when stream_options.include_usage is set), then data: [DONE].
 
 Prints "listening <port>" once ready. --no-usage drops the usage chunk;
 --close sends the stream without chunked encoding and closes the connection.
+--die-at N sends N tokens, then an error chunk and [DONE] with no finish_reason,
+the way vLLM's server ends a stream when its engine dies mid-decode.
+--cut-at N sends N tokens and closes the connection: no finish_reason, no usage,
+no [DONE] (a server process that is killed mid-stream; use with --close).
 """
 
 import argparse
@@ -53,6 +57,19 @@ def make_handler(opts):
             base = {"object": "chat.completion.chunk", "created": int(time.time()), "model": req.get("model")}
             time.sleep(opts.ttft)
             self.send_chunk(json.dumps({**base, "choices": [{"index": 0, "delta": {"role": "assistant", "content": None}, "finish_reason": None}]}))
+            stop = opts.die_at or opts.cut_at
+            if stop:
+                for i in range(min(n, stop)):
+                    self.send_chunk(json.dumps({**base, "choices": [{"index": 0, "delta": {"content": f"tok{i} "}, "finish_reason": None}]}))
+                if opts.cut_at:
+                    self.close_connection = True
+                    return
+                # vLLM's create_streaming_error_response body, the same object its HTTP 500 carries
+                self.send_chunk(json.dumps({"error": {"message": "EngineCore encountered an issue.", "type": "InternalServerError", "param": None, "code": 500}}))
+                self.send_chunk("[DONE]")
+                if not opts.close:
+                    self.wfile.write(b"0\r\n\r\n")
+                return
             for i in range(n):
                 if i:
                     time.sleep(opts.itl)
@@ -78,6 +95,8 @@ def main():
     p.add_argument("--close", action="store_true")
     p.add_argument("--reasoning", type=int, default=0, help="first N tokens in delta.reasoning (Ollama v0.40.5 thinking)")
     p.add_argument("--eos-at", type=int, default=0, help="stop after N tokens whatever max_tokens/ignore_eos ask")
+    p.add_argument("--die-at", type=int, default=0, help="send N tokens, then an error chunk and [DONE] (engine death)")
+    p.add_argument("--cut-at", type=int, default=0, help="send N tokens, then close the connection (server killed)")
     p.add_argument("--prefix", default="/v1,/v3", help="API roots served, comma list")
     opts = p.parse_args()
     srv = http.server.ThreadingHTTPServer(("127.0.0.1", opts.port), make_handler(opts))

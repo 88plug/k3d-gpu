@@ -1,0 +1,6 @@
+== H54b hold 2 cards 2,3 arms X1q-mtp Lsq 2026-10-21T21:17:59Z
+== device-plugin arms: allowed (gpu-hold-0: renderD131 gpu-hold-1: renderD128 gpu-hold-2: renderD130 gpu-hold-3: renderD129) 2026-10-21T21:19:47Z
+== arm X1q-mtp 2026-10-21T21:19:47Z
+== arm X1q-mtp: manifest failed 2026-10-21T21:19:47Z
+== arm Lsq 2026-10-21T21:20:07Z
+== arm lsq done 2026-10-21T21:38:21Z

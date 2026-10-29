@@ -65,10 +65,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         def send(obj):
             self.wfile.write(b"data: " + json.dumps(obj).encode() + b"\n\n")
             self.wfile.flush()
-        send({"choices": [{"delta": {"role": "assistant"}}]})
-        for _ in range(n):
+        send({"choices": [{"delta": {"role": "assistant"}, "finish_reason": None}]})
+        for i in range(n):
             time.sleep(self.delay)
-            send({"choices": [{"delta": {"content": "tok "}}]})
+            # OVMS sets finish_reason ("length" at max_tokens) on the last token's chunk
+            send({"choices": [{"delta": {"content": "tok "}, "finish_reason": "length" if i == n - 1 else None}]})
         send({"choices": [], "usage": {"prompt_tokens": 5, "completion_tokens": n}})
         self.wfile.write(b"data: [DONE]\n\n")
 

@@ -141,6 +141,30 @@ s = j["phases"][0]["samples"][0]
 assert s["ok"] and s["output_tokens"] is None and s["tokens_per_s"] is None and s["ttft_s"] and s["chunks"] == 5, s
 EOF
 }
+# H54a hold 2, B1g sample 2: vLLM's engine died at 252 of 256 tokens; the stream carried an
+# error chunk and [DONE] but no finish_reason and no usage, and was recorded ok.
+load_engine_death() {
+    "${LOAD[@]}" --base-url "http://127.0.0.1:${STUB_PORT}/v1" --model stub --requests 1 --max-tokens 256 --warmup 0 --out "${LJ}"
+    [ $? -eq 1 ] || return 1
+    pyassert "${LJ}" <<'EOF'
+ph = j["phases"][0]
+s = ph["samples"][0]
+assert not s["ok"] and "error in stream" in s["error"] and s["content_chunks"] == 252 and s["chunks"] == 254, s
+assert s["finish_reason"] is None and s["output_tokens"] is None and s["decode_tokens_per_s"] is None, s
+assert ph["ok"] == 0 and ph["errors"] == 1 and ph["stats"]["latency_s"]["n"] == 0, ph
+EOF
+}
+# A server killed mid-stream: content, then the connection closes with no finish_reason or [DONE].
+load_cut_stream() {
+    "${LOAD[@]}" --base-url "http://127.0.0.1:${STUB_PORT}/v1" --model stub --requests 1 --max-tokens 256 --warmup 0 --out "${LJ}"
+    [ $? -eq 1 ] || return 1
+    pyassert "${LJ}" <<'EOF'
+ph = j["phases"][0]
+s = ph["samples"][0]
+assert not s["ok"] and "without a finish_reason" in s["error"] and s["content_chunks"] == 100, s
+assert ph["ok"] == 0 and ph["errors"] == 1, ph
+EOF
+}
 
 load_unique_prompts() {
     python3 -B - "${ROOT}/bench" <<'EOF'
@@ -180,6 +204,10 @@ check "llm_load: max_tokens is sent" load_max_tokens
 check "llm_load: wrong path is an error and a non-zero exit" load_wrong_path
 stub --tokens 4 --no-usage --close
 check "llm_load: no usage chunk leaves tokens null; non-chunked stream parses" load_no_usage
+stub --tokens 256 --itl 0 --die-at 252
+check "llm_load: a stream ended by engine death (error chunk, no finish_reason) is an error" load_engine_death
+stub --tokens 256 --itl 0 --cut-at 100 --close
+check "llm_load: a stream cut off without a finish_reason is an error" load_cut_stream
 
 # ---- noisy.sh -------------------------------------------------------------------
 

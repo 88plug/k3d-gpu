@@ -198,15 +198,19 @@ B70s with no flags; EAT stock against k3d-gpu on the Xeon CPU, with EAT's own OV
 as a third arm; EAT's #21 XPU path against k3d-gpu's `agent up` on the B70s; and agents
 per box. Rows land in [EXPERIMENTS.md](../EXPERIMENTS.md) before anything here quotes them.
 
-Gemma 4 26B-A4B (QAT weights) rows on that Xeon. None is SUPPORTED, so this table states
-direction only; the numbers, protocol and reproduce block are in the ledger.
+H54 rows on that host: Gemma 4 26B-A4B (QAT weights) on the Xeon CPU, and split with a B70
+in H54c; Qwen3.8-27B on the B70s in H54b. None is SUPPORTED, so this table states direction
+only; the numbers, protocol and reproduce block are in the ledger. H54b and H54c ran with a
+placement failure (their "one card" pods used all four B70s), so neither says anything about
+one B70.
 
 | Row | Measurement | Verdict |
 |----|-------------|--------|
-| [ledger:H54a] | Single-stream decode, engine by engine, against EAT's stock vLLM CPU (bf16 QAT weights). EAT's stock arm, EAT 1.0.3's vLLM CPU v0.24.0, stalled mid-decode in both holds, so nothing was scored against it. An unscored rerun outside k3d stalled the same way, in a vLLM v0.24.0 CPU attention hang fixed upstream in v0.25.0 ([vllm#45844](https://github.com/vllm-project/vllm/pull/45844)); that the holds hit the same hang is inferred (H54 note N2 in the ledger). EAT 1.1.0 ships vLLM CPU v0.28.0, which has not been measured. Of the arms measured, llama.cpp CPU on Google's QAT Q4_0 GGUF decoded ahead of k3d-gpu's OVMS arms, and its QAT MTP drafter added a little on top | INCONCLUSIVE |
+| [ledger:H54a] | Single-stream decode, engine by engine, against EAT's stock vLLM CPU (bf16 QAT weights). The stock arm, EAT 1.0.3's vLLM CPU v0.24.0, as this harness rendered it (no CPU balloon, requests or limits), stalled mid-decode in both holds, so nothing was scored against it. An unscored rerun outside k3d stalled the same way, in a vLLM v0.24.0 CPU attention hang fixed upstream in v0.25.0 ([vllm#45844](https://github.com/vllm-project/vllm/pull/45844)); that the holds hit the same hang is inferred (H54 note N2 in the ledger). EAT 1.1.0 ships vLLM CPU v0.28.0, which has not been measured. Of the arms measured, llama.cpp CPU on Google's QAT Q4_0 GGUF decoded ahead of k3d-gpu's OVMS arms, and its QAT MTP drafter added a little on top | INCONCLUSIVE |
 | [ledger:H54d] | The best H54a arm inside EAT's banking flow: not run, since H54a chose no arm | INCONCLUSIVE |
 | [ledger:H54q] | Whether the QAT-matched int4 IR keeps the bf16 QAT quality and OpenVINO's base-model IR does not | PENDING |
-| [ledger:H54c] | Experts in the Xeon's DRAM and the rest on one B70, against a byte-split model | PENDING |
+| [ledger:H54b] | Qwen3.8-27B on Arc Pro B70, the best one-card arm against EAT #21's two-card XPU path. No one-card arm was delivered: the arms on Qwen bf16 or RedHat int4 weights did not fit the shared disk, two OVMS arms hit runner bugs, and llama.cpp SYCL's "one card" pod saw and used all four cards | INCONCLUSIVE |
+| [ledger:H54c] | Experts in the Xeon's DRAM and the rest on one B70, against a byte-split model. The experts ran on the Xeon, but every GPU arm spread over all four cards (the same placement failure), so the one-card model was not tested | INCONCLUSIVE |
 
 Facts from `0ecf67a` that shape a k3d run:
 

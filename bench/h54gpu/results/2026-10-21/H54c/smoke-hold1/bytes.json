@@ -1,0 +1,12 @@
+{
+ "B_exp": 802898880.0,
+ "B_rest": 1577144440,
+ "B_tot": 2380043320.0,
+ "exps_all": 12846382080,
+ "output_tensor": "token_embd.weight",
+ "n_tensors": 658,
+ "arch": "gemma4",
+ "experts": 128,
+ "routed": 8,
+ "block_count": 30
+}
