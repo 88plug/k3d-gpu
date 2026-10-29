@@ -3599,9 +3599,9 @@ both arms run.
 
 **Why.** The pre-registration took the newest published server image on 2026-10-21,
 `server-b11783`. Since then llama.cpp has published a stable release, v0.8.0 (GitHub, 2026-10-28,
-not a prerelease), at commit `8642541b`, which is build tag `b11960`. The builds after it
-(b11961-b11981 on 2026-10-29) are prereleases. The repository pins its own arms to the newest
-stable release, so H60 moves to v0.8.0 before it runs.
+not a prerelease), at commit `8642541b`, which is build tag `b11960`. The builds published after
+it (b11962 to b11981, 2026-10-28 and 2026-10-29) are prereleases. The repository pins its own
+arms to the newest stable release, so H60 moves to v0.8.0 before it runs.
 
 **The change.**
 
