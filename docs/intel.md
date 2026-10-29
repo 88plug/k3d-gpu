@@ -463,9 +463,11 @@ hardware, a recorded run.
   runs gave the `xe`, DSA, IAA, QAT and AMX rows their first hardware results and the CPU
   ISA labels their first recorded live node, and both ledger rows are
   REFUTED [ledger:H52] [ledger:H52b]; the first Gemma 4 rows are recorded, none SUPPORTED yet.
-- **EAT 1.1.0.** The `release-1.1.0` tag is cut (2026-10-22). Moving `eat-up.sh` to it
-  waits until no pending ledger row pins `0d3438d`, then needs the checks listed in
-  [platforms.md](platforms.md#intel-enterprise-agent-toolkit-eat).
+- **EAT 1.1.0 by default.** `eat-up.sh` deploys `release-1.1.0` (2026-10-22) on request,
+  with `EAT_RELEASE=release-1.1.0` and the checks listed in
+  [platforms.md](platforms.md#intel-enterprise-agent-toolkit-eat); the default stays
+  `release-1.0.3-hotfix`. It moves after a fresh run on 1.1.0, EXPERIMENTS.md H1c
+  (pending), passes. Nothing has run against a 1.1.0 stack through `eat-up.sh` yet.
 - **NPU telemetry.** No NPU exporter is shipped.
 - **Upstream.** Small, separate fixes for running EAT and its successor
   installer on k3s: accept `+k3s` versions in platform detection, pass Istio's

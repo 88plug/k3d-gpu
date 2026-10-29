@@ -22,6 +22,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 |---|------------|------------|-------|---------|
 | H1 | EAT (Intel Enterprise Agent Toolkit) runs on a single non-Xeon machine. | On one host whose CPU is not a Xeon (Core or Core Ultra), `k3d-gpu up` followed by the EAT deploy from `claude/eat-on-k3d` reaches all EAT pods `Ready` and one inference request returns a completion. | Fresh host, Reproduce header filled in. `k3d-gpu up`, deploy EAT, `kubectl wait --for=condition=Ready pod --all -A --timeout=30m`, then one completion request against the EAT endpoint. Refuted by any pod not Ready at the timeout, a Xeon-only instruction or node-label requirement, or no completion. Wave 1 (2026-10-16, i9-13900T): a completion returned, but the probe was not run as written (see [H1 run](#h1-run-i9-13900t-2026-10-16)). Amended 2026-10-17T20:27Z, before run 2: matched load instead of a fresh host, one fresh cluster, every step timed and logged, grading of Job pods fixed in advance. Run 2 (2026-10-17): every step held in one pass except the `--all -A` wait, which no k3s v1.37 cluster can pass (k3s's Gateway API CRD Job leaves a Succeeded pod); see [H1 run 2](#h1-run-2-i9-13900t-2026-10-17). | INCONCLUSIVE |
 | H1b | EAT (Intel Enterprise Agent Toolkit) runs on a single non-Xeon machine (H1's hypothesis, re-run with a readiness probe that can pass on k3s v1.37). | On one host whose CPU is not a Xeon (Core or Core Ultra), `k3d-gpu up` followed by the EAT deploy reaches every pod that is not in phase Succeeded `Ready` within 30 min, and one inference request returns a completion. | Pre-registered 2026-10-17T21:13Z (093ba98), before any H1b step; H1 keeps its INCONCLUSIVE verdict. One fresh cluster `k3dgpu-h1b-eat`, scratch `KUBECONFIG`, empty `EAT_WORK`, under `bench/load/load.py` `typical` on the E-cores (16-31) with 60 s load samples; the documented user path run once, each step timed: `k3d-gpu up`, `eat-up.sh`, `eat-up.sh model cpu-qwen3-1-7b`, `kubectl wait --for=condition=Ready pod -A --field-selector=status.phase!=Succeeded --timeout=30m`, one completion through EAT's LiteLLM gateway, `eat-check.sh`, `k3d-gpu down`. Every Job's completion is recorded on its own line and not graded. Refuted by any step 1-3 failing, a wait that ends non-zero with a Deployment, StatefulSet, DaemonSet, ReplicaSet or Sandbox pod not Ready, a Xeon-only instruction or node-label requirement, or no completion. Grading, lock budget and outcome table in [H1b pre-registration](#h1b-pre-registration-i9-13900t-2026-10-17). Run (2026-10-17, i9-13900T, k3s v1.37.1): steps 1-3 rc 0, the wait exited 0 after 280.1 s with all 33 selected pods Ready, both Jobs `Complete`, completion HTTP 200; see [H1b run](#h1b-run-i9-13900t-2026-10-17). | SUPPORTED |
+| H1c | EAT (Intel Enterprise Agent Toolkit) runs on a single non-Xeon machine at EAT's current release, `release-1.1.0` (H1b's hypothesis, deployed through `eat-up.sh` with `EAT_RELEASE=release-1.1.0`). | H1b's prediction, plus three: the vLLM pod runs `vllm/vllm-openai-cpu@sha256:197354e6475e638eb5ccca09beb078488046a82de0e204e7429bf1a804df9647` (v0.28.0); no `vllm-guard` Helm release exists (shipped config, `deploy_guardrails=off`); exactly one `nri-resource-policy-balloons` DaemonSet exists, k3d-gpu's. | Pre-registered 2026-10-29, before any H1c step; H1b keeps its verdict. H1b's protocol, background load, steps, grading, lock budget and outcome table ([H1b pre-registration](#h1b-pre-registration-i9-13900t-2026-10-17)), with `EAT_RELEASE=release-1.1.0` (EAT `0c726f57`) and one fresh cluster `k3dgpu-h1c-eat`; the three added predictions are read as step 4p, after the Job lines and before the completion. Refuted by any of H1b's refuting conditions or by any added prediction failing. A SUPPORTED H1c is the gate for making `release-1.1.0` `eat-up.sh`'s default. See [H1c pre-registration](#h1c-pre-registration-i9-13900t-2026-10-29). | PENDING |
 | H2 | On an Intel hybrid host whose only Intel GPU is an iGPU (wave 1: i9-13900T, UHD 770), the iGPU serves a fixed model faster and with less energy per token than the CPU running the same model with a tuned thread count. | iGPU decode tok/s is higher than the best CPU tok/s, and iGPU J/token is lower than the CPU J/token at that best thread count. | Row restated 2026-10-16 to the pre-registration that ran (written ~10:20 PDT, before the 10:29-11:32 PDT campaign); the row first committed at 04:48 PDT named a Core Ultra host, which was not tested. OVMS 2026.4.1 with `OpenVINO/Qwen3-4B-int4-ov`, same digest and graph except the device. CPU baseline swept over 4 thread and core configs first, best kept. Energy from RAPL `package-0`, with a 20 s model-loaded idle before each block. Decode 30 x 256, prefill ~1936 x 16, 4-in-flight 30 x 128; 5 rounds, ABBA order. Refuted if the iGPU loses on either tok/s or J/token. | REFUTED |
 | H3 | P/E pinning isolates inference from noisy neighbours on a hybrid CPU. | With the inference pod labelled `k3d-gpu.io/cores: performance` and a CPU-saturating neighbour labelled `k3d-gpu.io/cores: efficient`, inference latency stays within 10% of the no-neighbour baseline on both decode and prefill. Without pinning, the same neighbour raises latency by more than 10% on at least one workload. | Pre-registered 2026-10-16 ~13:20 PDT, before any timed block (13:24-14:53 PDT). OVMS on CPU, Qwen3-4B int4, 15-CPU request; neighbour `bench/noisy.sh` (stress-ng `--cpu 15`, Guaranteed 15 CPU). Arms: Q pinned and quiet, P pinned with the neighbour on the E-cores, U both unlabelled, plus Qu, Qe, X (roles swapped) and PM (stream neighbour). `Cpus_allowed_list` read in every block. 5 rounds x 7 arms, 5 requests per workload per block. Refuted if P is more than 10% above Q on either workload. Run 2026-10-16 20:24Z..21:53Z, provenance header and Reproduce block in [H3 run](#h3-run-i9-13900t-2026-10-16). | REFUTED |
 | H4 | The automatic device choice equals the measured best device. | For a fixed model on a host with more than one usable device (CPU, iGPU, NPU, dGPU), the device the agent stack selects automatically (`claude/agent-stack`) is the one with the highest measured tok/s in a sweep over every usable device. | Record the auto-selected device. Then force each usable device in turn and measure tok/s with the H2 method. Refuted if any forced device beats the auto choice by more than the run-to-run spread. Wave 1 pre-registered 2026-10-16 15:30 PDT (H4b) and 16:22 PDT (H4c), each before its runs, against the `auto` rule of `claude/agent-stack` 8385dc2. Run 2026-10-16T22:27Z..2026-10-17T01:12Z, arms G = `auto` (UHD 770), C16, C8 and Ce; provenance header and Reproduce block in [H4 run](#h4-run-i9-13900t-2026-10-16). | REFUTED |
@@ -9442,6 +9443,82 @@ integrations/eat/eat-up.sh
 integrations/eat/eat-up.sh model cpu-qwen3-1-7b
 kubectl wait --for=condition=Ready pod -A --field-selector=status.phase!=Succeeded --timeout=30m
 kubectl get jobs -A                                              # every Job: COMPLETIONS 1/1
+integrations/eat/eat-check.sh                                    # expect: ==> EAT check passed.
+scripts/k3d-gpu down; bench/load/load.py stop
+```
+
+### H1c pre-registration (i9-13900T, 2026-10-29)
+
+Written 2026-10-29 (UTC) with the change that adds `EAT_RELEASE` to `eat-up.sh`, before
+any H1c step. H1b keeps its SUPPORTED verdict, which is for `release-1.0.3-hotfix`. H1c is
+a new row, run once, and graded only by what is written here and in
+[H1b's pre-registration](#h1b-pre-registration-i9-13900t-2026-10-17).
+
+Why a new row: EAT published `release-1.1.0` on 2026-10-22 (`0c726f576595971c53cc45b94e08ba969beb4a4a`,
+the merge of EAT #21,
+https://github.com/intel/enterprise-agent-toolkit/releases/tag/release-1.1.0), and GitHub
+now flags `release-1.0.3-hotfix` as a prerelease. `eat-up.sh` deploys `release-1.1.0` with
+`EAT_RELEASE=release-1.1.0`; its default stays `release-1.0.3-hotfix` until this row is
+SUPPORTED. On `release-1.1.0`, `eat-up.sh` and `brownfield.sh` add three things H1b never
+exercised: the vLLM CPU image `v0.28.0` from `vllm-image-release-1.1.0.yaml` with the tag
+check in `vllm-merge.py`, `DEPLOY_GUARDRAILS` taken from the config (shipped `off`, while
+1.1.0 itself defaults it on), and the refusal of EAT's balloons policy. The added
+predictions read those three on the live cluster.
+
+- **As H1b.** The hypothesis, the host, the background load (`bench/load/load.py` `typical`
+  on the E-cores 16-31, 60 s samples), one fresh cluster with a scratch `KUBECONFIG` and an
+  empty `EAT_WORK`, steps 0-7 each run once, timed and logged, the host lock with its
+  25 min budget and the stop of step 4 at 21 min, the grading and the outcome table.
+- **Changes.** Steps 0, 2 and 3 run with `EAT_RELEASE=release-1.1.0`, so the clone is at
+  `0c726f57` (`eat-up.sh` refuses any other HEAD). The cluster is `k3dgpu-h1c-eat`. The
+  config is `integrations/eat/agentic-config.cfg` as shipped at the run's commit, which
+  sets `deploy_guardrails=off` and `deploy_nri_balloon_policy=off`.
+- **Step 4p, after step 4j and before step 5.** Each command and its output recorded
+  verbatim:
+  - P1, the vLLM image. `kubectl get pod -n default -l app.kubernetes.io/instance=vllm-qwen-3-1-7b-cpu
+    -o jsonpath='{.items[*].spec.containers[*].image} {.items[*].status.containerStatuses[*].imageID}'`
+    shows the image `vllm/vllm-openai-cpu:v0.28.0@sha256:197354e6475e638eb5ccca09beb078488046a82de0e204e7429bf1a804df9647`
+    and an `imageID` that ends in `@sha256:197354e6475e638eb5ccca09beb078488046a82de0e204e7429bf1a804df9647`.
+  - P2, no guard. `kubectl get secrets -A -l owner=helm,name=vllm-guard -o name` prints
+    nothing, and `kubectl get namespace guardrails` exits non-zero.
+  - P3, one balloons policy. `kubectl get daemonsets -A -o json | jq '[.items[] |
+    select(.metadata.name | startswith("nri-resource-policy"))] | map(.metadata.namespace + "/" + .metadata.name)'`
+    prints exactly `["kube-system/nri-resource-policy-balloons"]`, and
+    `kubectl get secrets -n kube-system -l owner=helm,name=nri-resource-policy-balloons -o name`
+    prints nothing. EAT's role would install that DaemonSet as Helm release
+    `nri-resource-policy-balloons`; k3d-gpu's comes from k3s's auto-deploy manifest,
+    which leaves no Helm release.
+- **Grading, fixed now.** SUPPORTED only if every SUPPORTED condition of H1b holds and P1,
+  P2 and P3 hold. REFUTED by any of H1b's refuting conditions, or by any of P1-P3 failing,
+  whatever step 4 says. INCONCLUSIVE in H1b's INCONCLUSIVE cases, provided P1-P3 were read
+  and hold; P1-P3 not read because the lock ran out is INCONCLUSIVE.
+- **Prediction.** SUPPORTED, prior 0.55. The stubs in `tests/eat_test.sh` cover the
+  release check, the config checks, the vLLM merge and the guard switch, but not
+  `release-1.1.0`'s own brownfield path against a live cluster (its prerequisite checks
+  and bastion playbooks changed in #21). That, and the pull of a new vLLM image inside the
+  lock budget, are the main risks.
+
+```bash
+# Reproduce on one fresh cluster under the typical load. Host needs docker, k3d, kubectl, curl, jq.
+lscpu | grep 'Model name'; uname -r; git rev-parse HEAD
+export KUBECONFIG=$PWD/h1c.kubeconfig K3D_GPU_CLUSTER=k3dgpu-h1c-eat EAT_WORK=$PWD/eat-work EAT_RELEASE=release-1.1.0
+IMAGE=k3d-gpu:eat-$(git rev-parse --short HEAD)
+docker build -q -t "$IMAGE" . && docker image inspect --format '{{.Id}}' "$IMAGE"
+bench/load/load.py start --level typical --ttl 1800
+bench/load/load.py sample --seconds 60 --windows 26 --tag h1c --level typical --out load.jsonl &
+K3D_GPU_IMAGE="$IMAGE" \
+K3D_GPU_NODE_LABELS=ei-infra-eligible=true,ei-inference-eligible=true \
+K3D_GPU_K3S_ARGS=--disable=servicelb scripts/k3d-gpu up
+integrations/eat/eat-up.sh
+integrations/eat/eat-up.sh model cpu-qwen3-1-7b
+kubectl wait --for=condition=Ready pod -A --field-selector=status.phase!=Succeeded --timeout=30m
+kubectl get jobs -A
+kubectl get pod -n default -l app.kubernetes.io/instance=vllm-qwen-3-1-7b-cpu \
+  -o jsonpath='{.items[*].spec.containers[*].image} {.items[*].status.containerStatuses[*].imageID}'   # P1
+kubectl get secrets -A -l owner=helm,name=vllm-guard -o name; kubectl get namespace guardrails             # P2
+kubectl get daemonsets -A -o json \
+  | jq '[.items[] | select(.metadata.name | startswith("nri-resource-policy"))] | map(.metadata.namespace + "/" + .metadata.name)'
+kubectl get secrets -n kube-system -l owner=helm,name=nri-resource-policy-balloons -o name                  # P3
 integrations/eat/eat-check.sh                                    # expect: ==> EAT check passed.
 scripts/k3d-gpu down; bench/load/load.py stop
 ```

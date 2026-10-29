@@ -4,7 +4,9 @@ Runs Intel's [Enterprise Agent Toolkit](https://github.com/intel/enterprise-agen
 (EAT) `release-1.0.3-hotfix` (commit `0d3438d`) on one k3d-gpu node, on a client
 CPU with no AVX-512 and no AMX. EAT's docs target Xeon clusters built by
 Kubespray. Here it goes through EAT's own **brownfield** path ("Vanilla
-Kubernetes", an existing kubeconfig). No EAT file is edited.
+Kubernetes", an existing kubeconfig). No EAT file is edited. Intel's latest
+release, `release-1.1.0` (commit `0c726f5`), deploys with
+`EAT_RELEASE=release-1.1.0`: see [EAT releases](#eat-releases).
 
 Verified on a Lenovo P360 Ultra: i9-13900T (8 P-cores = CPUs 0-15, 16 E-cores =
 CPUs 16-31, AVX2 + AVX-VNNI only), 125 GB RAM, Docker 29.3, k3d 5.9.0, k3s
@@ -56,11 +58,13 @@ that off the host.
 
 | File | Role |
 |------|------|
-| `eat-up.sh` | clone + bastion build + run; `model <id>` deploys one catalog model |
+| `eat-up.sh` | release check (`EAT_RELEASE`) and config checks + clone + bastion build + run; `model <id>` deploys one catalog model |
 | `brownfield.sh` | runs in the bastion; answers EAT's prompts and calls its brownfield functions |
 | `bastion.Dockerfile` | Ubuntu 24.04 (digest-pinned) plus what EAT's one-click installer installs |
-| `agentic-config.cfg` | EAT's own component toggles: gateway, ingress, Redis, pgvector, agent sandbox on; Kubespray, observability, models, KubeRay, CPU balloons off |
+| `agentic-config.cfg` | EAT's own component toggles: gateway, ingress, Redis, pgvector, agent sandbox on; Kubespray, observability, models, KubeRay, CPU balloons, guardrail off |
 | `vllm-values.yaml` | k3d-gpu values merged over EAT's `vllm/xeon-values.yaml` (memory limit, P-core balloon, image digest) |
+| `vllm-image-release-1.1.0.yaml` | `release-1.1.0`'s vLLM CPU image, `v0.28.0` by digest; merged last, for catalog models and the guard |
+| `vllm-merge.py` | merges the overlays over EAT's vLLM values and refuses a vLLM tag other than the one EAT's file names |
 | `gateway-charts.py` | writes pinned copies of EAT's GenAI Gateway chart directories; `brownfield.sh` passes them to `deploy-genai-gateway.yml` |
 | `gateway-values.yaml` | the gateway chart's pins: postgresql and redis chart versions, LiteLLM, PostgreSQL, Redis and init images by digest |
 | `gateway-trace-values.yaml` | the Langfuse trace stack's pins: Langfuse web and worker, PostgreSQL, Valkey, ClickHouse, ZooKeeper, MinIO by digest |
@@ -72,6 +76,67 @@ that off the host.
 The gateway is reached on the host IP of the running ingress-nginx controller
 pod (the k3d node IP). ingress-nginx binds hostPort 80/443 there, with `Host: api.example.com` (`cluster_url` in `agentic-config.cfg`) over
 TLS with a self-signed cert. The host's own ports 80/443 are not used.
+
+## EAT releases
+
+`EAT_RELEASE` picks the release `eat-up.sh` clones. Each is pinned to its commit, and
+an `EAT_WORK` cloned for one release is refused for the other (use a fresh
+`EAT_WORK` per release). Any other value is refused before the config is read.
+
+| `EAT_RELEASE` | Commit | vLLM CPU image for catalog models |
+|---|---|---|
+| `release-1.0.3-hotfix` (default) | `0d3438d` | `v0.24.0` by digest, from `vllm-values.yaml` |
+| `release-1.1.0` | `0c726f5` | `v0.28.0` by digest, from `vllm-image-release-1.1.0.yaml` |
+
+```bash
+EAT_RELEASE=release-1.1.0 EAT_WORK=$PWD/eat-work-1.1.0 integrations/eat/eat-up.sh
+```
+
+`release-1.1.0` (2026-10-22) is Intel's latest release; GitHub now flags
+`release-1.0.3-hotfix` as a prerelease. The default stays `release-1.0.3-hotfix`
+until a fresh run on 1.1.0 passes: EXPERIMENTS.md H1c (pending) repeats H1b's run
+with `EAT_RELEASE=release-1.1.0`. Nothing has run against a 1.1.0 stack through
+`eat-up.sh` yet, so everything below about 1.1.0 is read from its source and
+checked with stubs in `tests/eat_test.sh`.
+
+`eat-up.sh` checks `agentic-config.cfg` against the release before it touches the
+cluster. It parses each key as EAT's `read_config_file` does (trimmed, quotes
+dropped, comments skipped, the last assignment wins):
+
+| Key | `release-1.0.3-hotfix` | `release-1.1.0` | Why |
+|---|---|---|---|
+| `deploy_nri_balloon_policy` anything but `off` or `no`, or absent | refused | refused | EAT's policy would be a second one beside k3d-gpu's (blocker 10). Both releases turn it on when the key is absent |
+| `deploy_openshell=on` | refused | passed to EAT | 1.0.3 has no OpenShell role |
+| `deploy_guardrails=on` | refused | passed to EAT, guard image by digest | 1.0.3 has no guardrail role |
+| `compute_platform=xpu` (or `x`) | not checked | refused | EAT applies intel-device-plugins' GPU plugin from `main`, unpinned, beside k3d-gpu's own. For vLLM on an Intel GPU: `K3D_GPU_AGENT_BACKEND=vllm k3d-gpu agent up` |
+| `deploy_kata_containers=on` | not checked | refused | Kata microVMs need `/dev/kvm`; k3d nodes have none |
+| `rack_scale_mode=on` | not checked | refused | builds its own cluster from `rack-profile.yaml` (netplan, BGP, the NVIDIA GPU operator) |
+
+**Guardrail.** `release-1.1.0`'s `deploy-agentic-stack.sh` sets
+`DEPLOY_GUARDRAILS="${DEPLOY_GUARDRAILS:-on}"` at top level (line 195). That line runs
+when `brownfield.sh` sources the script; the `deploy_guardrails` key is read only in
+its `main()` (lines 1136-1140), which a sourced run skips. So `brownfield.sh` exports
+`DEPLOY_GUARDRAILS` from the key before it sources the script: `on` for `on` or `yes`,
+else `off`. The shipped config sets `deploy_guardrails=off`. With `deploy_guardrails=on`,
+`deploy-guardrails.yml` installs the guard (`Qwen/Qwen3Guard-Gen-0.6B`, release
+`vllm-guard` in namespace `guardrails`) from `{{ remote_helm_charts_base }}/vllm`
+with `guardrail-values.yaml`, which names `vllm/vllm-openai-cpu:v0.28.0` by tag only.
+`brownfield.sh` copies EAT's `vllm` chart to `~/k3d-gpu-guard-charts` in the bastion,
+writes the overlay's digest into that copy's `guardrail-values.yaml`
+(`vllm-merge.py --require-digest`), and passes that one playbook
+`remote_helm_charts_base` as an extra var. In `deploy-guardrails.yml` the variable
+serves only the guard's chart and values (lines 115, 133, 135). Everything else in
+the guard's values stays EAT's: 2 CPUs, 16Gi, a 4 GiB KV cache, and no balloon
+annotation. A marker file fails the deploy if the playbook ran without the copy.
+
+**vLLM tag check.** `brownfield.sh model <id>` merges EAT's `xeon-values.yaml`, then
+`vllm-values.yaml`, then the release's image overlay (`vllm-merge.py`). The merge is
+refused when the merged tag, up to the `@`, is not the one EAT's own file names. EAT
+writes its model configs for the vLLM it ships. Gemma 4 on v0.24.0 stalls in vLLM's
+CPU split-KV attention (EXPERIMENTS.md, crescent amendment E1); v0.28.0 contains the
+fix, [vllm#45844](https://github.com/vllm-project/vllm/pull/45844) (`26eb8720`). For
+`release-1.0.3-hotfix` the merged values are byte for byte what `brownfield.sh` wrote
+before the check.
 
 ## Observed end state
 
@@ -140,14 +205,15 @@ the one behind `agent up --model`) to the catalog model, as values only.
 `eat-opt.py` runs in the bastion after the values merge. It reads the Hugging
 Face id from the `--set LLM_MODEL_ID="..."` line of EAT's playbook block for that
 catalog id. It asks the optimizer what that model wants on vLLM on the CPU, at the
-chart's vLLM version (the image tag, `v0.24.0`). Then it edits that model's
-`modelConfigs` entry in the merged values file:
+chart's vLLM version (the merged image tag: `v0.24.0`, or `v0.28.0` on
+`release-1.1.0`). Then it edits that model's `modelConfigs` entry in the merged
+values file:
 
 - engine arguments the entry lacks are appended. EAT's own arguments are never
   removed or changed: a flag EAT already sets is kept and reported.
 - a speculative config is set (with `speculative.enabled`) when the optimizer
-  chose one. vLLM v0.24.0 marks speculative decoding unsupported on the CPU, so
-  none is chosen today.
+  chose one. vLLM marks speculative decoding unsupported on the CPU before
+  v0.31.0, so none is chosen on either release's image.
 - the model id stays EAT's. The playbook passes it with `--set`, which wins over
   any values file, so a different variant is reported as not applied.
 
@@ -250,10 +316,11 @@ the balloon path, which is off here.
 
 ## Versions: pinned and floating
 
-Pinned here: EAT by tag and commit (`eat-up.sh` refuses any other HEAD), the
+Pinned here: EAT by release and commit (`eat-up.sh` refuses any other HEAD), the
 bastion base image by digest, Helm v3.14.0 baked into the bastion by sha256,
-the vLLM image by digest (`vllm-values.yaml`), and the GenAI Gateway's charts
-and images. EAT itself pins ingress-nginx 4.12.2 (`ingress_controller` in
+the vLLM image by digest (`vllm-values.yaml`; on `release-1.1.0`
+`vllm-image-release-1.1.0.yaml`, which also pins the guard), and the GenAI
+Gateway's charts and images. EAT itself pins ingress-nginx 4.12.2 (`ingress_controller` in
 `agentic-metadata.cfg`), kubectl v1.29.0, agent-sandbox v0.5.0 and the
 Langfuse chart 1.5.30. `images.lock` lists every image pinned here, and
 `scripts/images-lock pins` fails CI on any image in these files without a digest.
@@ -310,9 +377,11 @@ observed.
   (brownfield_deployment.sh:193). k3s's `local-path` class serves every PVC
   instead. The vLLM chart pins `storageClassName: local-path`.
 - **EAT's CPU balloons policy** (`deploy_nri_balloon_policy`), see blocker 10.
-  On a k3d-gpu node without `hybrid` it could install. That case is
-  UNVERIFIED (probe: `K3D_GPU_VENDORS=nvidia,intel k3d-gpu up`, then
-  `deploy_nri_balloon_policy=on`).
+  `eat-up.sh` refuses any value but `off` or `no`, on both releases. On a
+  k3d-gpu node without `hybrid` it could install; that case is UNVERIFIED and
+  needs EAT's own path, not `eat-up.sh`.
+- **On `release-1.1.0`: the XPU path, Kata and rack-scale mode.** `eat-up.sh`
+  refuses each (see [EAT releases](#eat-releases)).
 - **Catalog models above the host's RAM.** EAT's default
   `cpu-qwen2-5-coder-14b` needs about 28 GiB of bf16 weights plus KV cache.
   Not tried here.
