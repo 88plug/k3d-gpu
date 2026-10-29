@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 """h57d.py: the H57d runner's arm table and renders, P-core load sampler, load gate and
-scorer (EXPERIMENTS.md "H57d pre-registration" and "H57d amendment R1").
+scorers (EXPERIMENTS.md "H57d pre-registration", "H57d amendment R1", "H57dp pre-registration"
+and "H57dp amendment R1").
 
   h57d.py arms                          the arm table as JSON
   h57d.py field ARM KEY                 one field of an arm (for arm.sh)
-  h57d.py render ARM OUT.yaml           Namespace + Deployment + Service for Ld, Ld-mtp
+  h57d.py order ROW HOLD                a results row's registered arm order for one hold (for
+                                        hold.sh): H57dp's two holds, else H57d's (H57w too)
+  h57d.py render ARM OUT.yaml           Namespace + Deployment + Service for Ld, Ld-mtp, Ld-mtp-u
   h57d.py od-ro IN.yaml OUT.yaml        Od's staged render on a read-only model bind
   h57d.py sample OUT.jsonl NODE         every 5 s until killed: P-core (CPUs 0-15) busy CPU-s/s,
                                         the k3d node container's CPU-s/s, load1, package C
   h57d.py score RESULTS_DIR             the H57da and H57dm verdicts from the recorded holds
+  h57d.py score-p RESULTS_DIR           the H57dp and H57de verdicts from the two H57dp holds
 
 The GSM8K grader, the bootstrap and the 1,000-token TTFT prompt are H54's (bench/h54).
 Python 3 standard library only, except render (PyYAML)."""
@@ -33,32 +37,49 @@ OVB = "OpenVINO/gemma-4-26b-a4b-it-int4-ov"
 LLAMACPP = h54.IMG["llamacpp"]       # server-b11749, H54's pin
 PCORES = list(range(16))             # CPUs 0-15: the 8 P-cores and their HT siblings
 MASK = "0x5555"                      # CPUs 0, 2, ..., 14: one thread per physical P-core
+MASK_CPUS = [i for i in range(32) if int(MASK, 16) >> i & 1]
 
 # rank: 0 OpenVINO / Google, 2 built here. svc/ns/port/api: where the OpenAI API answers.
 ARMS = {
     "Od": dict(rank=0, deploy="k3d-gpu", model=OVB, svc="ovms", ns="k3d-gpu-agent", port=8000, api="/v3"),
     "Ld": dict(rank=0, deploy="render", svc="ld", ns=NS, port=8080, api="/v1"),
     "Ld-mtp": dict(rank=2, deploy="render", svc="ld-mtp", ns=NS, port=8080, api="/v1"),
+    # H57dp: Ld-mtp without -C and --cpu-strict, its 8 threads left to the kernel inside the
+    # pod's P-core cpuset.
+    "Ld-mtp-u": dict(rank=2, deploy="render", svc="ld-mtp-u", ns=NS, port=8080, api="/v1"),
 }
 SERVED = "gemma"
+H57D_ARMS = ("Od", "Ld", "Ld-mtp")   # the arms H57da and H57dm score (and H57w's replication)
 # Rotated arm orders of performance holds 1-3, and the quality hold's order.
 ORDERS = {1: ["Od", "Ld", "Ld-mtp"], 2: ["Ld", "Ld-mtp", "Od"], 3: ["Ld-mtp", "Od", "Ld"], 4: ["Ld", "Od", "Ld-mtp"]}
+# H57dp and H57de: two performance holds, no quality hold (EXPERIMENTS.md "H57dp pre-registration").
+P_ARMS = ("Ld-mtp", "Ld-mtp-u", "Od")
+P_ORDERS = {1: ["Ld-mtp-u", "Od", "Ld-mtp"], 2: ["Ld-mtp", "Ld-mtp-u", "Od"]}
+P_QUALITY = ("inherited, not re-measured (H57dp pre-registration): H57d's Ld-mtp record (50/50) "
+             "stands for Ld-mtp-u and Od's (50/50) for Od; neither row has a quality gate here")
 
 
-def llamacpp_args(mtp):
-    a = ["-m", f"/models/{GGUF}", "--host", "0.0.0.0", "--port", "8080", "--alias", SERVED,
-         "-t", "8", "-C", MASK, "--cpu-strict", "1", "--jinja"]
+def orders(row):
+    """A results row's registered arm orders: H57dp's two holds, else H57d's (H57w's too)."""
+    return P_ORDERS if row == "H57dp" else ORDERS
+
+
+def llamacpp_args(mtp, pinned=True):
+    a = ["-m", f"/models/{GGUF}", "--host", "0.0.0.0", "--port", "8080", "--alias", SERVED, "-t", "8"]
+    if pinned:
+        a += ["-C", MASK, "--cpu-strict", "1"]
+    a += ["--jinja"]
     if mtp:
         a += ["-md", f"/models/{DRAFTER_GGUF}", "--spec-type", "draft-mtp"]
     return a
 
 
 def render(arm):
-    if arm not in ("Ld", "Ld-mtp"):
+    if arm not in ("Ld", "Ld-mtp", "Ld-mtp-u"):
         raise SystemExit(f"h57d.py render: {arm} is not rendered here")
     name = ARMS[arm]["svc"]
     c = {"name": "server", "image": LLAMACPP, "imagePullPolicy": "IfNotPresent",
-         "args": llamacpp_args(arm == "Ld-mtp"),
+         "args": llamacpp_args(arm != "Ld", pinned=arm != "Ld-mtp-u"),
          "ports": [{"name": "http", "containerPort": 8080}],
          # Od's request and balloon (k3d-gpu agent_cpus on a hybrid node: every P-core CPU).
          "resources": {"requests": {"cpu": "16", "memory": "6Gi"}},
@@ -209,12 +230,14 @@ def measured(arm_dir):
     return os.path.exists(st) and jload(st).get("status") == "measured"
 
 
-def collect(results):
-    hd = hold_dirs(results)
+def collect(results, names=H57D_ARMS, holds=(1, 2, 3), hd=None, quality_hold=4):
+    """Per arm: pooled and per-hold N=1 decode, foreign P-core load over the N=1 phases, and the
+    quality record of quality_hold (None: no quality hold, H57dp)."""
+    hd = hd or hold_dirs(results)
     arms = {}
-    for a in ARMS:
+    for a in names:
         rec = {"decode": [], "per_hold": {}, "foreign": [], "quality": None, "holds_measured": 0}
-        for k in (1, 2, 3):
+        for k in holds:
             ad = os.path.join(hd[k], a)
             if not measured(ad):
                 continue
@@ -233,8 +256,8 @@ def collect(results):
                         f = foreign(samples, r["t0"], r["t1"])
                         if f is not None:
                             rec["foreign"].append(f)
-        q = os.path.join(hd[4], a, "quality.json")
-        if measured(os.path.join(hd[4], a)) and os.path.exists(q):
+        q = None if quality_hold is None else os.path.join(hd[quality_hold], a, "quality.json")
+        if q and measured(os.path.dirname(q)) and os.path.exists(q):
             qq = jload(q)
             rec["quality"] = {"correct": qq["correct"], "n": qq["n"], "score": qq["score"]}
         rec["median"] = h54.median(rec["decode"])
@@ -250,13 +273,13 @@ def gate(arms):
     return {k: bool(a["quality"]) and a["quality"]["score"] >= best - 0.10 - 1e-9 for k, a in arms.items()}, best
 
 
-def delivered(a):
-    return a["holds_measured"] == 3
+def delivered(a, holds=3):
+    return a["holds_measured"] == holds
 
 
-def ratio(num, den):
+def ratio(num, den, holds=(1, 2, 3)):
     lo, hi = h54.boot_ratio(num["decode"], den["decode"])
-    per = {k: num["per_hold"][k] / den["per_hold"][k] for k in (1, 2, 3)}
+    per = {k: num["per_hold"][k] / den["per_hold"][k] for k in holds}
     return {"ratio": num["median"] / den["median"], "ci": [lo, hi], "per_hold": per,
             "all_holds_faster": all(v > 1 for v in per.values())}
 
@@ -316,16 +339,102 @@ def score(results):
     return rep
 
 
+def single_cpu_threads(cpus_txt):
+    """{cpu: threads} for the server threads whose affinity is a single CPU, from the thread table
+    arm.sh writes to cpus.txt after readiness; None when the file or its table is missing."""
+    try:
+        with open(cpus_txt) as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return None
+    head = "server threads by affinity:"
+    if head not in lines:
+        return None
+    out = {}
+    for line in lines[lines.index(head) + 1:]:
+        f = line.split()
+        if len(f) == 2 and f[0].isdigit() and f[1].isdigit():
+            out[int(f[1])] = out.get(int(f[1]), 0) + int(f[0])
+    return out
+
+
+def score_p(results):
+    """H57dp (Ld-mtp-u vs Ld-mtp) and H57de (Ld-mtp-u vs Od) from results/hold1 and hold2. As
+    H57d: an arm is delivered when it was measured in every hold, and one load gate covers the
+    delivered arms. Quality is inherited (P_QUALITY), so neither row is gated on it. Affinity
+    check, per hold, from cpus.txt: Ld-mtp's single-CPU threads sit exactly on MASK's CPUs and
+    Ld-mtp-u has none; a row whose arm fails it, or has no table, is INCONCLUSIVE."""
+    holds = (1, 2)
+    hd = {k: os.path.join(results, f"hold{k}") for k in holds}
+    arms = collect(results, P_ARMS, holds, hd, quality_hold=None)
+    dl = {k: delivered(a, len(holds)) for k, a in arms.items()}
+    lg = load_gate({k: a["foreign_mean"] for k, a in arms.items() if dl[k]})
+    aff = {}
+    for a, want in (("Ld-mtp", set(MASK_CPUS)), ("Ld-mtp-u", set())):
+        got = {k: single_cpu_threads(os.path.join(hd[k], a, "cpus.txt")) for k in holds}
+        aff[a] = {"single_cpu_threads": got, "as_registered": all(g is not None and set(g) == want for g in got.values())}
+    rep = {"arms": {k: {x: v for x, v in a.items() if x not in ("decode", "foreign", "quality")} for k, a in arms.items()},
+           "delivered": dl, "quality": P_QUALITY, "affinity": aff, "load_gate": lg}
+    u = arms["Ld-mtp-u"]
+
+    def precheck(den):
+        """The INCONCLUSIVE reason that stops a row before its statistic, or None."""
+        if not (dl["Ld-mtp-u"] and dl[den]):
+            return f"Ld-mtp-u or {den} not delivered in both holds"
+        off = [a for a in ("Ld-mtp-u", den) if a in aff and not aff[a]["as_registered"]]
+        if off:
+            return "thread affinity not as registered: " + ", ".join(off)
+        if not lg["matched"]:
+            return "load unmatched: " + lg["reason"]
+        return None
+
+    # H57dp: Ld-mtp-u vs Ld-mtp, bar 1.10.
+    why = precheck("Ld-mtp")
+    if why:
+        dp = {"verdict": "INCONCLUSIVE", "reason": why}
+    else:
+        dp = ratio(u, arms["Ld-mtp"], holds)
+        if dp["ratio"] >= 1.10 and dp["ci"][0] > 1.0 and dp["all_holds_faster"]:
+            dp.update(verdict="SUPPORTED", reason="ratio >= 1.10, CI lower bound > 1.0, faster in both holds")
+        elif dp["ci"][1] < 1.10:
+            dp.update(verdict="REFUTED", reason="CI upper bound < 1.10")
+        else:
+            dp.update(verdict="INCONCLUSIVE", reason="not resolved against 1.10")
+    rep["H57dp"] = dp
+
+    # H57de: H57da's rule with X = Ld-mtp-u, bar 1.05.
+    why = precheck("Od")
+    if why:
+        de = {"x": "Ld-mtp-u", "verdict": "INCONCLUSIVE", "reason": why}
+    else:
+        de = {"x": "Ld-mtp-u", **ratio(u, arms["Od"], holds)}
+        if de["ci"][0] >= 1.05 and de["all_holds_faster"]:
+            de.update(verdict="REFUTED", reason="Ld-mtp-u/Od CI lower bound >= 1.05 and faster in both holds")
+        elif de["ci"][1] < 1.05:
+            de.update(verdict="SUPPORTED", reason="Ld-mtp-u/Od CI upper bound < 1.05")
+        else:
+            de.update(verdict="INCONCLUSIVE", reason="CI not resolved against 1.05")
+    rep["H57de"] = de
+    return rep
+
+
 def main(argv):
     if not argv:
         raise SystemExit(__doc__)
     cmd, a = argv[0], argv[1:]
     if cmd == "arms":
-        print(json.dumps({"arms": ARMS, "orders": ORDERS, "served": SERVED, "llamacpp": LLAMACPP,
-                          "args": {"Ld": llamacpp_args(False), "Ld-mtp": llamacpp_args(True)}}, indent=1))
+        print(json.dumps({"arms": ARMS, "orders": ORDERS, "orders_h57dp": P_ORDERS, "served": SERVED,
+                          "llamacpp": LLAMACPP,
+                          "args": {"Ld": llamacpp_args(False), "Ld-mtp": llamacpp_args(True),
+                                   "Ld-mtp-u": llamacpp_args(True, pinned=False)}}, indent=1))
     elif cmd == "field":
         v = ARMS[a[0]].get(a[1], "")
         print(v)
+    elif cmd == "order":
+        o = orders(a[0])
+        if not a[1].isdigit() or int(a[1]) not in o:
+            raise SystemExit(f"h57d.py order: {a[0]} registers no hold {a[1]}")
+        print(" ".join(o[int(a[1])]))
     elif cmd == "render":
         import yaml
         with open(a[1], "w") as f:
@@ -340,6 +449,8 @@ def main(argv):
         sample(a[0], a[1])
     elif cmd == "score":
         print(json.dumps(score(a[0]), indent=1))
+    elif cmd == "score-p":
+        print(json.dumps(score_p(a[0]), indent=1))
     else:
         raise SystemExit(f"h57d.py: unknown command {cmd}")
     return 0

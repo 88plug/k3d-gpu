@@ -3894,6 +3894,78 @@ spare), each at most 75 min under the host lock, orders (Ld-mtp-u, Od, Ld-mtp) a
 Ld-mtp-u, Od). A failed hold counts. The runner change (an `Ld-mtp-u` render and a two-hold
 scorer) lands in a dated amendment with tests before the first hold.
 
+### H57dp amendment R1: the Ld-mtp-u render, the two-hold scorer and an affinity check (2026-10-28)
+
+Recorded 2026-10-28, before any H57dp or H57de measurement: no H57dp hold, smoke or request has
+run, and the H57d campaign directory no longer exists on the host. It adds the runner the
+[H57dp pre-registration](#h57dp-pre-registration-llamacpp-thread-pinning-on-the-busy-client-i9-13900t-2026-10-21)
+asks for. Nothing here changes either row's arms, model files, statistic, thresholds, hold count,
+hold orders or prediction. It adds one INCONCLUSIVE condition, the affinity check below.
+
+**Files.** H57d's runner (`bench/h57d`, H57d amendment R1), extended:
+
+- `h57d.py`: arm `Ld-mtp-u`, Ld-mtp's render, rank, port and API under service `ld-mtp-u`.
+  `llamacpp_args(mtp, pinned=False)` drops `-C 0x5555 --cpu-strict 1` and keeps every other flag
+  in the same order (`-t 8 --jinja -md <drafter GGUF> --spec-type draft-mtp`, the default draft
+  length). The H57dp orders (hold 1: Ld-mtp-u, Od, Ld-mtp; hold 2: Ld-mtp, Ld-mtp-u, Od) come
+  from `h57d.py order ROW HOLD`. `h57d.py score-p` is the two-hold scorer. H57d's `score` path is
+  unchanged: re-scoring the committed H57d records reproduces `verdict.json` byte for byte, and a
+  test now compares the re-score with it.
+- `hold.sh`: the default arm order is `h57d.py order "${H57D_ROW}" <hold>`, which is H57d's for
+  every row except H57dp, so H57w is unchanged. With `H57D_ROW=H57dp` only performance holds 1
+  and 2 exist. An unregistered hold or mode exits 2 before the lock is taken or anything is
+  written.
+- `test_h57d.py` (in CI): the unpinned flags; the Ld-mtp-u render, which is Ld-mtp's with only
+  its name and the four pinning flags changed; the row orders; the `hold.sh` guards; every
+  H57dp and H57de branch on synthetic two-hold records; the affinity parser on the H57d records;
+  and the H57d re-score.
+
+`arm.sh`, `hold-run.sh`, `k3d-shim.sh`, `convert.sh` and `reproduce.sh` are unchanged.
+`reproduce.sh` prints Ld-mtp-u's flags with the other arms'.
+
+**Flags read at b11749** (the llama.cpp source at tag `b11749`). `common/common.h` defaults
+`mask_valid` to false ("Default: any CPU") and `strict_cpu` to false. `postprocess_cpu_params`
+(`common/arg.cpp`, lines 886-890) gives the batch and draft parameter sets the main set when
+their own thread count is unset. `ggml/src/ggml-cpu/ggml-cpu.c` sets a thread's affinity only
+for a valid mask (`ggml_thread_cpumask_is_valid`). So without `-C` and `--cpu-strict` no
+llama.cpp thread sets its affinity, and every thread may run on any CPU of the pod's cpuset
+(0-15, the P-core balloon).
+
+**Scorer (`score-p`).** It reads `results/H57dp/hold1` and `hold2`. Per arm it takes the 16
+pooled N=1 requests (8 per hold), the per-hold medians and the ratio of medians with H54's
+bootstrap CI, as H57d does. An arm is delivered when it was measured in both holds. One load
+gate, H57d's, covers the delivered arms. Each row checks, in order: both its arms delivered, the
+affinity check, the load gate, then the pre-registered outcome rules. There is no quality gate:
+quality is inherited as registered, and the report says so.
+
+**Affinity check (added).** `arm.sh` records each server's per-thread affinity table after
+readiness (`cpus.txt`). In H57d every Ld and Ld-mtp table had its single-CPU threads on exactly
+CPUs 0, 2, ..., 14 (9 threads, 2 on CPU 0), and no Od table had any. Per hold, Ld-mtp passes when
+its single-CPU threads sit on exactly those CPUs, and Ld-mtp-u passes when it has none. H57dp
+needs both arms to pass, H57de needs Ld-mtp-u. A failing arm, or one with no table, makes the row
+INCONCLUSIVE (affinity not as registered), so no verdict rests on a treatment that did not apply.
+
+**Models.** H57dp downloads H57d's revisions again and builds the drafter with `convert.sh`
+unchanged. Before the first hold, every LFS file's sha256 must equal the committed
+`bench/h57d/results/2026-10-21/weights.sha256`, and the drafter Q4_0 GGUF must equal H57d's
+(sha256 `8eb21d5b...`, 321,145,696 bytes). Otherwise no hold runs and the mismatch is recorded.
+
+**Smoke.** One wiring smoke of Ld-mtp-u alone may run under the lock before hold 1 (`SMOKE=1`:
+readiness, one 16-token request, the affinity table). It runs no scored request, is not one of
+the 2 holds, and is discarded and disclosed in the run section, as H57d's smokes were.
+
+**Commands** (`LOCK` = the host's `live.lock`, `SUDO_ASKPASS` for RAPL):
+
+```bash
+LOCK=<live.lock> G=~/k3dgpu-h57d bench/h57d/convert.sh               # drafter GGUF + Od's graph.pbtxt
+SMOKE=1 LOCK=<live.lock> bench/h57d/hold.sh smoke-p perf Ld-mtp-u    # wiring smoke, discarded
+for h in 1 2; do LOCK=<live.lock> H57D_ROW=H57dp bench/h57d/hold.sh $h perf; done
+python3 bench/h57d/h57d.py score-p ~/k3dgpu-h57d/results/H57dp > verdict.json
+```
+
+Holds as registered: 2, each at most 75 min (`timeout -k 30 4500`), with H57d's start rule,
+floors, watchdog and cluster deletion.
+
 ### Wildct pre-registration: client Raptor Lake (i7-13700, 2026-10-20)
 
 Written 2026-10-20, before any H52w, H18w, H25w, H28w, H34w or H57w measurement on this host.

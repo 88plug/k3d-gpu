@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 # hold.sh HOLD MODE [ARM...]: one H57d hold on the i9-13900T (EXPERIMENTS.md "H57d
-# pre-registration" and "H57d amendment R1"). Takes the host's live.lock (flock -w 21600),
-# waits while load1 > 24 (2-min polls, at most 60 min, then runs flagged), refuses to start when
-# / would have < 15 GB free or MemAvailable < 20 GiB, creates cluster k3dgpu-d-h57d-<hold>,
-# runs each ARM (default: the hold's registered order) with the load sampler beside it and a
-# disk watchdog, and deletes the cluster at the end, also on failure. Everything runs under
-# `timeout -k 30 4500`. MODE: perf | quality. Records: ${G}/results/H57d/hold<HOLD>/.
+# pre-registration", "H57d amendment R1" and "H57dp amendment R1"). Takes the host's live.lock
+# (flock -w 21600), waits while load1 > 24 (2-min polls, at most 60 min, then runs flagged),
+# refuses to start when / would have < 15 GB free or MemAvailable < 20 GiB, creates cluster
+# k3dgpu-d-h57d-<hold>, runs each ARM (default: the hold's registered order for H57D_ROW) with
+# the load sampler beside it and a disk watchdog, and deletes the cluster at the end, also on
+# failure. Everything runs under `timeout -k 30 4500`. MODE: perf | quality. Records:
+# ${G}/results/${H57D_ROW}/hold<HOLD>/.
 #   G     campaign dir (default ~/k3dgpu-h57d), models under G/models
 #   LOCK  the host lock file;  SUDO_ASKPASS  for energy.sh's RAPL reader
 #   H57D_PREFIX  cluster prefix (default k3dgpu-d-);  H57D_LOAD1_MAX  hold-start load1 (default 24);
-#   H57D_ROW  results row name (default H57d): another host's replication (H57w on wildct)
+#   H57D_ROW  results row name (default H57d): another host's replication (H57w on wildct), or
+#             H57dp (holds 1-2, perf only, the H57dp orders)
 set -uo pipefail
 HOLD=$1 MODE=$2
 shift 2
@@ -19,12 +21,14 @@ REPO=$(cd "${HERE}/../.." && pwd)
 export REPO G MODE
 PREFIX=${H57D_PREFIX:-k3dgpu-d-} L1MAX=${H57D_LOAD1_MAX:-24}
 case ${HOLD} in smoke*) R=${G}/smoke/${HOLD} ;; *) R=${G}/results/${H57D_ROW:-H57d}/hold${HOLD} ;; esac
-mkdir -p "${R}" "${G}/results"
+if [ "${H57D_ROW:-H57d}" = H57dp ] && [ "${MODE}" != perf ]; then echo "H57dp registers performance holds only"; exit 2; fi
 if [ $# -eq 0 ]; then
-    read -r -a ARMS_RUN <<< "$(python3 "${HERE}/h57d.py" arms | python3 -c 'import json,sys; o=json.load(sys.stdin)["orders"]; print(" ".join(o[sys.argv[1]]))' "${HOLD}")"
+    read -r -a ARMS_RUN <<< "$(python3 "${HERE}/h57d.py" order "${H57D_ROW:-H57d}" "${HOLD}")"
+    [ "${#ARMS_RUN[@]}" -gt 0 ] || exit 2
 else
     ARMS_RUN=("$@")
 fi
+mkdir -p "${R}" "${G}/results"
 export H57D_PREFIX=${PREFIX} PATH=${G}/bin:${PATH} CLUSTER=${PREFIX}h57d-${HOLD//[^a-z0-9]/} KUBECONFIG=${R}/kubeconfig
 log() { echo "== H57d-hold${HOLD} $* $(date -u +%FT%TZ)" | tee -a "${G}/results/campaign.log"; }
 free_gb() { df -P -B1G / | awk 'NR==2 {print $4}'; }
