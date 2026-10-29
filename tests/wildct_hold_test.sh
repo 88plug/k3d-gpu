@@ -35,8 +35,9 @@ trap cleanup EXIT
 #   rm_hang_noterm: docker rm hangs and ignores SIGTERM; systemd_fail_from N: systemctl fails
 #   from its Nth call on; load1 (the hold-start gate's load1, default 0.00)
 #   df_avail (GB available on /, default 100), clusters.reg (one name per line);
-#   info_fail, rm_fail, ps_fail, list_fail: docker info, docker rm, docker ps or k3d cluster list
-#   fails at once; images_hang: docker images hangs; images.reg (the host's images, name:tag per line)
+#   info_fail, rm_fail, ps_fail, image_rm_fail: docker info, rm, ps or image rm fails at once (rc 1);
+#   list_fail: k3d cluster list fails at once (rc 2); images_hang: docker images hangs;
+#   images.reg (the host's images, name:tag per line)
 fresh() {
     local c
     W=$(mktemp -d "${T}/w.XXXX")
@@ -65,6 +66,7 @@ case $1 in
     images) [ -e "${SHIM_DIR}/images_hang" ] && exec sleep 1000
         grep "^${!#}:" "${SHIM_DIR}/images.reg" ;;
     image) if [ "$2" = rm ]; then
+            [ -e "${SHIM_DIR}/image_rm_fail" ] && { echo "Error response from daemon: conflict" >&2; exit 1; }
             shift 2; [ "$1" = -f ] && shift
             for i in "$@"; do sed -i "\|^${i}\$|d" "${SHIM_DIR}/images.reg"; done
         fi ;;
@@ -86,7 +88,7 @@ EOF
 echo "k3d $*" >> "${SHIM_DIR}/calls.log"
 if [ "$1 $2" = "cluster list" ]; then
     [ -e "${SHIM_DIR}/list_hang" ] && exec sleep 1000
-    [ -e "${SHIM_DIR}/list_fail" ] && { echo "FATA[0000] docker: cannot list clusters" >&2; exit 1; }
+    [ -e "${SHIM_DIR}/list_fail" ] && { echo "FATA[0000] docker: cannot list clusters" >&2; exit 2; }
     python3 -c 'import json,sys; print(json.dumps([{"name": l.strip()} for l in open(sys.argv[1]) if l.strip()]))' \
         "${SHIM_DIR}/clusters.reg"
 elif [ "$1 $2" = "cluster delete" ]; then
@@ -651,6 +653,11 @@ failed_command_deletes_h28_model_images() {
     hold HD sh -c 'touch "$SHIM_DIR/images_hang"; exit 3'
     grep -q 'docker images h28-model' "$(R HD)/cleanup-incomplete" 2>/dev/null \
         || { echo "an image list that did not answer was read as no image left"; cat "$(R HD)/cleanup-incomplete" 2>/dev/null; return 1; }
+    fresh
+    printf 'h28-model:r0\n' > "${W}/images.reg"
+    hold HI sh -c 'touch "$SHIM_DIR/image_rm_fail"; exit 3'
+    grep -q 'docker image rm -f h28-model:r0: rc 1' "$(R HI)/cleanup-incomplete" 2>/dev/null \
+        || { echo "an image rm that failed was not named"; cat "$(R HI)/cleanup-incomplete" 2>/dev/null; return 1; }
 }
 
 # A cleanup step that ends with an error at once (not only one that hits its bound) is named.
@@ -678,8 +685,23 @@ unhealthy_names_an_error_as_an_error() {
     touch "${W}/list_fail"
     hold HH true
     [ "$(rcfile HH)" = 8 ] || { echo "rc file $(rcfile HH), exit ${RC}"; return 1; }
-    grep -q 'k3d cluster list: rc 1' "$(R HH)/unhealthy" && ! grep -q 'no answer' "$(R HH)/unhealthy" \
-        || { echo "k3d cluster list failing at once recorded as: $(cat "$(R HH)/unhealthy")"; return 1; }
+    grep -q 'k3d cluster list: rc 2' "$(R HH)/unhealthy" && ! grep -q 'no answer' "$(R HH)/unhealthy" \
+        || { echo "k3d cluster list failing at once (rc 2) recorded as: $(cat "$(R HH)/unhealthy")"; return 1; }
+    fresh
+    touch "${W}/list_hang"
+    hold HJ true
+    grep -q 'k3d cluster list: no answer in 2 s' "$(R HJ)/unhealthy" \
+        || { echo "k3d cluster list hanging recorded as: $(cat "$(R HJ)/unhealthy")"; return 1; }
+    fresh
+    touch "${W}/systemd_hang"
+    hold HK true
+    grep -q "systemd: docker ActiveState '', no answer in 2 s" "$(R HK)/unhealthy" \
+        || { echo "systemctl hanging recorded as: $(cat "$(R HK)/unhealthy")"; return 1; }
+    fresh
+    touch "${W}/systemd_fail"
+    hold HL true
+    grep -q "systemd: docker ActiveState 'Failed to get properties: Connection timed out', rc 1" "$(R HL)/unhealthy" \
+        || { echo "systemctl failing at once recorded as: $(cat "$(R HL)/unhealthy")"; return 1; }
 }
 
 # RESUME.md's container checks also look for the bench-load containers (k3d-gpu-bench-load-*, load.py).

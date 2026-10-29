@@ -44,8 +44,13 @@ RAPL_IMAGE=python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c
 log() { echo "== ${name} $* $(date -u +%FT%TZ)" | tee -a "${W}/runs/campaign.log"; }
 avail() { df -P -BG / | awk 'NR==2 {gsub("G", "", $4); print $4}'; }
 snapshot() { date -u +%FT%TZ; uptime; ps -eo pcpu,pid,user,comm --sort=-pcpu | head -11; free -g | head -2; df -P -BG / | tail -1; timeout -k 10 "${T}" docker ps --format '{{.Names}}' | sort | tr '\n' ' '; echo; }
-# clusters: this campaign's clusters; fails when `k3d cluster list` does not answer in T s.
-clusters() { timeout -k 10 "${T}" k3d cluster list -o json 2>/dev/null | python3 "${HERE}/clusters.py" 2>/dev/null; }
+# clusters: this campaign's clusters; fails with `k3d cluster list`'s own status (timeout's 124
+# when it does not answer in T s) when the list fails.
+clusters() {
+    local j
+    j=$(timeout -k 10 "${T}" k3d cluster list -o json 2>/dev/null) || return $?
+    python3 "${HERE}/clusters.py" <<< "${j}" 2>/dev/null
+}
 incomplete() { echo "$*" >> "${R}/cleanup-incomplete"; }
 # said ST BOUND: a bounded call's exit status in words (timeout's 124, or 137 after its SIGKILL:
 # no answer within BOUND s; anything else: the call's own rc).
