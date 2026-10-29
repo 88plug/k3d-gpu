@@ -70,7 +70,7 @@
 
 set -euo pipefail
 
-VERSION="0.1.75"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.76"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 # The node image defaults to the tag built from this launcher's own release
 # (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
@@ -128,10 +128,14 @@ warn() { echo "${YLW}WARN:${RST} $*" >&2; }
 # --context, never through the current-context of ~/.kube/config, which every
 # concurrent `up` of another cluster would rewrite.
 #   K3D_GPU_KUBECONFIG  this file as is (a foreign cluster); kubectl uses its current-context
+#                       (`up` without K3D_GPU_CONTEXT switches it to k3d-${CLUSTER})
 #   KUBECONFIG          kept when it names one file that is not ~/.kube/config (a hold's own)
+#                       (`up` merges into it under a lock, keeping its current-context)
 #   otherwise           ${STATE_DIR}/kubeconfig-${CLUSTER}, written by `up` (or on first use)
 #   K3D_GPU_CONTEXT     the context (default k3d-${CLUSTER}; none with K3D_GPU_KUBECONFIG)
-KUBE_OWNED=0 KUBE_LAZY_TRIED=0
+# Child tools (remote.py, capacity.py) get the context as K3D_GPU_KCTX; KHINT is
+# the kubectl a printed hint names.
+KUBE_OWNED=0 KUBE_LAZY_TRIED=0 KUBE_STALE_TRIED=0
 if [ -n "${K3D_GPU_KUBECONFIG:-}" ]; then
     KUBECONFIG="${K3D_GPU_KUBECONFIG}"
 elif [ -n "${KUBECONFIG:-}" ] && [[ "${KUBECONFIG}" != *:* && "${KUBECONFIG}" != "${STATE_DIR}/kubeconfig-"* ]] \
@@ -148,6 +152,9 @@ if [ -n "${K3D_GPU_CONTEXT:-}" ]; then KCTX=(--context "${K3D_GPU_CONTEXT}")
 elif [ -n "${K3D_GPU_KUBECONFIG:-}" ]; then KCTX=()
 else KCTX=(--context "k3d-${CLUSTER}")
 fi
+export K3D_GPU_KCTX="${KCTX[1]:-}"
+KHINT="KUBECONFIG=${KUBECONFIG} kubectl"
+if [ "${KUBE_OWNED}" = 0 ] || [ -n "${K3D_GPU_CONTEXT:-}" ]; then KHINT+="${KCTX[1]:+ --context ${KCTX[1]}}"; fi
 
 usage() {
     cat <<EOF
@@ -344,7 +351,8 @@ Usage: k3d-gpu <command>
 Environment:
   K3D_GPU_CLUSTER       cluster name         (default: gpu)
   K3D_GPU_KUBECONFIG    kubeconfig to use as is (default: a single-file KUBECONFIG other than
-                        ~/.kube/config, else ${STATE_DIR}/kubeconfig-<cluster>)
+                        ~/.kube/config, else ${STATE_DIR}/kubeconfig-<cluster>); up
+                        without K3D_GPU_CONTEXT switches its current-context to k3d-<cluster>
   K3D_GPU_CONTEXT       context every kubectl call names (default: k3d-<cluster>)
   K3D_GPU_MERGE_KUBECONFIG  1: up also merges the context into ~/.kube/config, down removes it
   K3D_GPU_IMAGE         k3s node image       (default: ${IMAGE_REPO}:${VERSION}; ${IMAGE_REPO}:latest floats)
@@ -455,40 +463,78 @@ require() {
 }
 
 # kubectl: the binary, pinned to this cluster's context. A later --context in "$@"
-# still wins (kubectl takes the last one). nohup and the like run the binary, not
-# this function, so they pass ${KCTX[@]} themselves.
+# still wins (kubectl takes the last one). Backgrounded and nohup calls run the
+# binary (`command kubectl "${KCTX[@]}"`): $! of a backgrounded function is a
+# subshell on bash <= 5.2, and killing it leaves kubectl running.
+# On this cluster's own file:
+# - a missing file is fetched from k3d (a cluster made before the launcher kept
+#   one). Tried once per shell: a $(kubectl ...) subshell cannot tell its parent,
+#   so while the cluster is absent each captured call repeats `k3d cluster get`.
+#   A marker file would remember it, but commands such as `facts` and `up` without
+#   a guard must write no state.
+# - a failed call in the launcher's main shell whose file differs from k3d's (the
+#   cluster was recreated outside the launcher) rewrites it and runs again, unless
+#   the call read stdin. Checked once per process.
 kubectl() {
-    if [ "${KUBE_OWNED}" = 1 ] && [ ! -s "${KUBECONFIG}" ]; then kubeconfig_lazy; fi
+    [ "${KUBE_OWNED}" = 1 ] || { command kubectl ${KCTX[@]+"${KCTX[@]}"} "$@"; return; }
+    if [ ! -s "${KUBECONFIG}" ] && [ "${KUBE_LAZY_TRIED}" = 0 ]; then KUBE_LAZY_TRIED=1; kubeconfig_lazy; fi
+    local rc=0 a
+    command kubectl ${KCTX[@]+"${KCTX[@]}"} "$@" || rc=$?
+    [ "${rc}" != 0 ] && [ "${KUBE_STALE_TRIED}" = 0 ] && [ "${BASHPID}" = "$$" ] || return "${rc}"
+    KUBE_STALE_TRIED=1
+    kubeconfig_refresh || return "${rc}"
+    for a in "$@"; do
+        case "${a}" in -|-i|--stdin|-f-|--filename=-) warn "${KUBECONFIG} was stale and is rewritten; run again"; return "${rc}" ;; esac
+    done
     command kubectl ${KCTX[@]+"${KCTX[@]}"} "$@"
 }
 
 # kubeconfig_materialize: write this cluster's own kubeconfig (mode 0600) from k3d.
 # Every writer of one file writes the same bytes; the rename publishes them whole.
 kubeconfig_materialize() {
-    local cfg tmp="${KUBECONFIG}.tmp.$$"
+    local cfg
     cfg=$(k3d kubeconfig get "${CLUSTER}" 2>/dev/null) && [ -n "${cfg}" ] || return 1
-    ( umask 077; mkdir -p "${KUBECONFIG%/*}" && printf '%s\n' "${cfg}" > "${tmp}" && mv -f "${tmp}" "${KUBECONFIG}" ) \
+    kubeconfig_write "${cfg}"
+}
+kubeconfig_write() {
+    local tmp="${KUBECONFIG}.tmp.$$"
+    ( umask 077; mkdir -p "$(dirname "${KUBECONFIG}")" && printf '%s\n' "$1" > "${tmp}" && mv -f "${tmp}" "${KUBECONFIG}" ) \
         || { rm -f "${tmp}"; return 1; }
 }
 
-# kubeconfig_lazy: a cluster created before the launcher kept its own kubeconfig
-# gets it on first use; tried once per process.
 kubeconfig_lazy() {
-    [ "${KUBE_LAZY_TRIED}" = 0 ] || return 0
-    KUBE_LAZY_TRIED=1
     if type -P k3d >/dev/null && k3d cluster get "${CLUSTER}" >/dev/null 2>&1; then kubeconfig_materialize || true; fi
     return 0
 }
 
-# kubeconfig_default_locked <cmd...>: run <cmd> holding a lock on ~/.kube/config
-# (k3d's merge reads, merges and renames it with no lock of its own). The kernel
-# drops the fd lock when the subshell exits, so a crash leaves no stale lock.
-kubeconfig_default_locked() {
-    mkdir -p "${HOME}/.kube"
+# kubeconfig_refresh: rewrite this cluster's file when k3d's kubeconfig differs
+# from it; fails when there is nothing newer.
+kubeconfig_refresh() {
+    local cfg
+    type -P k3d >/dev/null || return 1
+    cfg=$(k3d kubeconfig get "${CLUSTER}" 2>/dev/null) && [ -n "${cfg}" ] || return 1
+    [ "${cfg}" != "$(cat "${KUBECONFIG}" 2>/dev/null)" ] || return 1
+    kubeconfig_write "${cfg}"
+}
+
+# kube_ready: this cluster's own file exists before a child tool's first kubectl.
+kube_ready() {
+    [ "${KUBE_OWNED}" = 1 ] && [ ! -s "${KUBECONFIG}" ] || return 0
+    kubeconfig_lazy
+}
+
+# kubeconfig_locked <file> <cmd...>: run <cmd> holding a lock on <file>.k3d-gpu.lock.
+# k3d reads, merges and renames a kubeconfig with no lock of its own, so every
+# launcher writer of a shared file (~/.kube/config, an exported KUBECONFIG) takes
+# this one. The kernel drops the fd lock when the subshell exits: a crash leaves
+# no stale lock.
+kubeconfig_locked() {
+    local f=$1; shift
+    mkdir -p "$(dirname "${f}")"
     if type -P flock >/dev/null; then
-        ( exec 9>>"${HOME}/.kube/config.k3d-gpu.lock"; flock 9 && "$@" )
+        ( exec 9>>"${f}.k3d-gpu.lock"; flock 9 && "$@" )
     else
-        warn "flock not found: ~/.kube/config is changed without a lock (run again if a concurrent change drops it)"
+        warn "flock not found: ${f} is changed without a lock (run again if a concurrent change drops it)"
         "$@"
     fi
 }
@@ -501,15 +547,22 @@ kubeconfig_unmerge() {
 }
 
 # After `k3d cluster create`: fill the kubeconfig in use, and with
-# K3D_GPU_MERGE_KUBECONFIG=1 also merge the context into ~/.kube/config.
+# K3D_GPU_MERGE_KUBECONFIG=1 also merge the context into ~/.kube/config. A file
+# that is not this cluster's own keeps its current-context when every call names
+# a context (k3d still sets it in a file that has none, such as a hold's new one).
+# K3D_GPU_KUBECONFIG without K3D_GPU_CONTEXT names none, so `up` switches that
+# file's current-context to k3d-<cluster>, which every later call then reads.
 kubeconfig_after_create() {
+    local sw=()
     if [ "${KUBE_OWNED}" = 1 ]; then
         kubeconfig_materialize || warn "could not write ${KUBECONFIG} from 'k3d kubeconfig get ${CLUSTER}'"
     else
-        k3d kubeconfig merge "${CLUSTER}" --output "${KUBECONFIG}" >/dev/null
+        [ "${#KCTX[@]}" -eq 0 ] || sw=(--kubeconfig-switch-context=false)
+        kubeconfig_locked "${KUBECONFIG}" \
+            k3d kubeconfig merge "${CLUSTER}" --output "${KUBECONFIG}" ${sw[@]+"${sw[@]}"} >/dev/null
     fi
     if [ "${K3D_GPU_MERGE_KUBECONFIG:-0}" = 1 ]; then
-        kubeconfig_default_locked env KUBECONFIG="${HOME}/.kube/config" \
+        kubeconfig_locked "${HOME}/.kube/config" env KUBECONFIG="${HOME}/.kube/config" \
             k3d kubeconfig merge "${CLUSTER}" --kubeconfig-merge-default --kubeconfig-switch-context=false >/dev/null
         info "context k3d-${CLUSTER} merged into ~/.kube/config (its current-context is unchanged)"
     else
@@ -517,10 +570,17 @@ kubeconfig_after_create() {
     fi
 }
 
-# After `k3d cluster delete`: drop the merged context and this cluster's own file.
-kubeconfig_after_delete() {
-    if [ "${K3D_GPU_MERGE_KUBECONFIG:-0}" = 1 ] && [ -f "${HOME}/.kube/config" ]; then
-        kubeconfig_default_locked kubeconfig_unmerge
+# kube_cluster_delete: `k3d cluster delete`, which rewrites $KUBECONFIG (under the
+# lock when the file is not this cluster's own), then drop this cluster's context
+# from ~/.kube/config (k3d used to; an opt-in merge put it there) and its own file.
+kube_cluster_delete() {
+    if [ "${KUBE_OWNED}" = 1 ]; then
+        k3d cluster delete "${CLUSTER}"
+    else
+        kubeconfig_locked "${KUBECONFIG}" k3d cluster delete "${CLUSTER}"
+    fi
+    if [ -f "${HOME}/.kube/config" ] && grep -qE "^[[:space:]-]*name: (admin@)?k3d-${CLUSTER}\$" "${HOME}/.kube/config"; then
+        kubeconfig_locked "${HOME}/.kube/config" kubeconfig_unmerge
     fi
     if [ "${KUBE_OWNED}" = 1 ]; then rm -f "${KUBECONFIG}"; fi
 }
@@ -3053,9 +3113,9 @@ doctor_ds() {
     if [ -z "${st}" ]; then
         echo "  ${RED}fail${RST}: ${what}: DaemonSet ${ns}/${ds} not found"
     elif [ "${desired:-0}" -eq 0 ]; then
-        echo "  ${RED}fail${RST}: ${what}: scheduled on no node (node label missing?) — kubectl -n ${ns} describe ds/${ds}"
+        echo "  ${RED}fail${RST}: ${what}: scheduled on no node (node label missing?) — ${KHINT} -n ${ns} describe ds/${ds}"
     elif [ "${ready:-0}" -lt "${desired}" ]; then
-        echo "  ${RED}fail${RST}: ${what}: ${ready:-0}/${desired} Ready — kubectl -n ${ns} logs ds/${ds}"
+        echo "  ${RED}fail${RST}: ${what}: ${ready:-0}/${desired} Ready — ${KHINT} -n ${ns} logs ds/${ds}"
     else
         echo "  ok: ${what}: ${ready}/${desired} Ready"
         return 0
@@ -5393,7 +5453,7 @@ wait_cluster_dns() {
         return 0
     fi
     kubectl -n kube-system rollout status deployment/coredns --timeout=180s >/dev/null \
-        || warn "CoreDNS is not ready; pods may not resolve names yet (kubectl -n kube-system get pods -l k8s-app=kube-dns)"
+        || warn "CoreDNS is not ready; pods may not resolve names yet (${KHINT} -n kube-system get pods -l k8s-app=kube-dns)"
 }
 
 # k3d pulls the node image only when it is absent locally (k3d-io/k3d
@@ -5469,7 +5529,7 @@ configure_intel_plugin() {
             sleep 3
         done
         if [[ "${got}" != *"\"${first}\""* ]]; then
-            warn "k3s has not applied the new intel-gpu-plugin args after ${INTEL_APPLY_TIMEOUT}s — inspect: kubectl -n kube-system get addon intel-gpu-plugin -o yaml"
+            warn "k3s has not applied the new intel-gpu-plugin args after ${INTEL_APPLY_TIMEOUT}s — inspect: ${KHINT} -n kube-system get addon intel-gpu-plugin -o yaml"
             return 0
         fi
     else
@@ -5498,7 +5558,7 @@ intel_wait_shared() {
         [ "${SECONDS}" -lt "${dl}" ] || break
         sleep 3
     done
-    warn "cluster advertises ${got} Intel GPU slots, expected ${want} (${n} per GPU, ${#INTEL_DRIVERS[@]} GPU(s)) — inspect: kubectl -n kube-system logs ds/intel-gpu-plugin"
+    warn "cluster advertises ${got} Intel GPU slots, expected ${want} (${n} per GPU, ${#INTEL_DRIVERS[@]} GPU(s)) — inspect: ${KHINT} -n kube-system logs ds/intel-gpu-plugin"
 }
 
 # DRA mode needs the GA resource.k8s.io/v1 API (Kubernetes 1.34+), and the pinned
@@ -5649,8 +5709,7 @@ cmd_down() {
     require k3d
     guard_restore
     info "Deleting k3d cluster '${CLUSTER}'..."
-    k3d cluster delete "${CLUSTER}"
-    kubeconfig_after_delete
+    kube_cluster_delete
 }
 
 # guard_restore: when a prefill guard ran on this cluster, write the recorded
@@ -5693,7 +5752,7 @@ run_pod() {
     [ -z "${out}" ] || printf '%s\n' "${out}"
     case "${phase}" in
         Succeeded|Failed) ;;
-        *) warn "pod ${name} still ${phase:-not found} after 300s: kubectl describe pod ${name}" ;;
+        *) warn "pod ${name} still ${phase:-not found} after 300s: ${KHINT} describe pod ${name}" ;;
     esac
     kubectl delete pod "${name}" --wait=false >/dev/null 2>&1 || true
     [ "${phase}" = Succeeded ]
@@ -5728,12 +5787,12 @@ dra_test_overrides() {
 dra_test() {
     local rc=0
     [ "$(intel_dra_devices)" -gt 0 ] \
-        || err "no allocatable ${INTEL_DRA_DRIVER} device in any ResourceSlice (kubectl get resourceslices) — run 'k3d-gpu doctor'"
+        || err "no allocatable ${INTEL_DRA_DRIVER} device in any ResourceSlice (${KHINT} get resourceslices) — run 'k3d-gpu doctor'"
     info "Deploying ${DRA_TEST} test pod (${DEVICE_TEST_IMAGE}, ResourceClaimTemplate for DeviceClass ${INTEL_DRA_DRIVER})..."
     dra_claim_template | kubectl apply -f - >/dev/null || err "could not create ResourceClaimTemplate ${DRA_TEST}"
     run_pod "${DRA_TEST}" "${DEVICE_TEST_IMAGE}" "$(dra_test_overrides)" || rc=1
     kubectl delete resourceclaimtemplate "${DRA_TEST}" --ignore-not-found >/dev/null 2>&1 || true
-    [ "${rc}" -eq 0 ] || err "${DRA_TEST} pod failed — kubectl get resourceclaims; kubectl -n intel-gpu-resource-driver logs ds/intel-gpu-resource-driver-kubelet-plugin"
+    [ "${rc}" -eq 0 ] || err "${DRA_TEST} pod failed — ${KHINT} get resourceclaims; ${KHINT} -n intel-gpu-resource-driver logs ds/intel-gpu-resource-driver-kubelet-plugin"
 }
 
 device_test() {
@@ -5854,7 +5913,7 @@ cmd_test() {
             # The grep alone passes with NRI off; the CPU list must sit inside the core type.
             got=$(sed -n 's/^Cpus_allowed_list:[[:space:]]*//p' <<< "${out}")
             cpulist_within "${got}" "${path}" \
-                || err "${v}-core test pod ran on CPUs '${got}', not on the ${v} CPUs ${path} — check: kubectl -n kube-system logs ds/nri-resource-policy-balloons"
+                || err "${v}-core test pod ran on CPUs '${got}', not on the ${v} CPUs ${path} — check: ${KHINT} -n kube-system logs ds/nri-resource-policy-balloons"
         done
     fi
 }
@@ -6303,17 +6362,20 @@ REPORT_NODES_TMPL='{{range .items}}N{{"\t"}}{{.metadata.name}}{{"\n"}}{{$n := .m
 
 node_json() { printf '{"name":%s,"allocatable":{%s},"labels":{%s}}' "$(json_str "$1")" "$2" "$3"; }
 
-# Per node: every allocatable resource and the accelerator labels. Uses the
-# k3d-<cluster> context explicitly, never whatever context happens to be current.
+# Per node: every allocatable resource and the accelerator labels, through the
+# context every launcher kubectl call names (K3D_GPU_CONTEXT, else k3d-<cluster>,
+# else with K3D_GPU_KUBECONFIG that file's current-context).
 report_cluster() {
-    local ctx="k3d-${CLUSTER}" reason="" lines kind node key val nodes="" cur="" alloc="" labels="" summary=""
+    local ctx="${K3D_GPU_KCTX}" reason="" lines kind node key val nodes="" cur="" alloc="" labels="" summary=""
     if [ "${REPORT_NO_CLUSTER:-0}" = 1 ]; then
         reason="not queried (--no-cluster)"
     elif ! type -P kubectl >/dev/null 2>&1; then
         reason="kubectl not found"
+    elif [ -z "${ctx}" ] && ! ctx=$(kubectl config current-context 2>/dev/null); then
+        reason="no current-context in ${KUBECONFIG}"
     elif ! kubectl config get-contexts -o name 2>/dev/null | grep -x "${ctx}" >/dev/null; then
         reason="no kubeconfig context ${ctx} (cluster not created, or KUBECONFIG points elsewhere)"
-    elif ! lines=$(kubectl --context "${ctx}" --request-timeout=10s get nodes -o go-template="${REPORT_NODES_TMPL}" 2>/dev/null); then
+    elif ! lines=$(kubectl --request-timeout=10s get nodes -o go-template="${REPORT_NODES_TMPL}" 2>/dev/null); then
         reason="API server unreachable through context ${ctx}"
     fi
     if [ -n "${reason}" ]; then
@@ -6504,7 +6566,7 @@ sandbox_up() {
         [ "${ready:-0}" -gt 0 ] && break
         sleep 3
     done
-    [ "${ready:-0}" -gt 0 ] || err "warm pool ${SANDBOX_POOL} has no ready sandbox after ${SANDBOX_TIMEOUT}s: kubectl -n ${SANDBOX_NS} describe sandboxwarmpool ${SANDBOX_POOL}"
+    [ "${ready:-0}" -gt 0 ] || err "warm pool ${SANDBOX_POOL} has no ready sandbox after ${SANDBOX_TIMEOUT}s: ${KHINT} -n ${SANDBOX_NS} describe sandboxwarmpool ${SANDBOX_POOL}"
     sandbox_status
 }
 
@@ -6542,7 +6604,7 @@ sandbox_status() {
         elif cpulist_within "${got}" "${ecores}"; then
             echo "  ok: ${pod}: CPUs ${got} (E-cores ${ecores})"
         else
-            echo "  ${RED}fail${RST}: ${pod}: CPUs '${got}' are not within the E-cores ${ecores} — check: kubectl -n kube-system logs ds/nri-resource-policy-balloons"
+            echo "  ${RED}fail${RST}: ${pod}: CPUs '${got}' are not within the E-cores ${ecores} — check: ${KHINT} -n kube-system logs ds/nri-resource-policy-balloons"
             fail=1
         fi
     done <<< "${pods}"
@@ -7638,7 +7700,7 @@ agent_draft() {
             for res in gpu.intel.com/xe gpu.intel.com/i915; do
                 [ "$(resource_total "${res}")" -gt 0 ] || continue
                 if [ $(( $(resource_total "${res}") - $(resource_used_elsewhere "${res}") )) -gt 0 ]; then echo "GPU ${res}"; return 0; fi
-                err "K3D_GPU_AGENT_DRAFT=GPU but the cluster has no free Intel GPU (${res}) — see what holds it: kubectl get pods -A"
+                err "K3D_GPU_AGENT_DRAFT=GPU but the cluster has no free Intel GPU (${res}) — see what holds it: ${KHINT} get pods -A"
             done
             agent_dra_gpu && err "K3D_GPU_AGENT_DRAFT=GPU: $(agent_dra_note)"
             err "K3D_GPU_AGENT_DRAFT=GPU but the cluster advertises no Intel GPU (gpu.intel.com/xe or i915)"
@@ -7648,7 +7710,7 @@ agent_draft() {
             [ "$(resource_total "${res}")" -gt 0 ] \
                 || err "K3D_GPU_AGENT_DRAFT=NPU but the cluster advertises no Intel NPU (${res})"
             [ $(( $(resource_total "${res}") - $(resource_used_elsewhere "${res}") )) -gt 0 ] \
-                || err "K3D_GPU_AGENT_DRAFT=NPU but the cluster has no free Intel NPU (${res}) — see what holds it: kubectl get pods -A"
+                || err "K3D_GPU_AGENT_DRAFT=NPU but the cluster has no free Intel NPU (${res}) — see what holds it: ${KHINT} get pods -A"
             echo "NPU ${res}"
             ;;
     esac
@@ -8300,9 +8362,9 @@ agent_plan() {
         case "${kind}" in
             CPU) got[${svc}]="CPU -" ;;
             GPU) agent_plan_take "${svc}" GPU \
-                    || err "${svc} was asked to run on GPU, but the cluster has no free Intel GPU (gpu.intel.com/xe or i915) — see 'k3d-gpu detect' and what holds it: kubectl get pods -A" ;;
+                    || err "${svc} was asked to run on GPU, but the cluster has no free Intel GPU (gpu.intel.com/xe or i915) — see 'k3d-gpu detect' and what holds it: ${KHINT} get pods -A" ;;
             NPU) agent_plan_take "${svc}" NPU \
-                    || err "${svc} was asked to run on NPU, but the cluster has no free Intel NPU (npu.intel.com/accel) — see 'k3d-gpu detect' and what holds it: kubectl get pods -A" ;;
+                    || err "${svc} was asked to run on NPU, but the cluster has no free Intel NPU (npu.intel.com/accel) — see 'k3d-gpu detect' and what holds it: ${KHINT} get pods -A" ;;
         esac
     done
     for svc in video vlm stt; do
@@ -8636,23 +8698,23 @@ agent_video_check() {
         i=$((i + 1))
         out=$(kubectl -n "${AGENT_NS}" logs deployment/video-analytics -c dlstreamer --tail=200 2>/dev/null || true)
         if grep -q '"objects"' <<< "${out}"; then
-            info "video: detections flowing — kubectl -n ${AGENT_NS} logs -f deploy/video-analytics"
+            info "video: detections flowing — ${KHINT} -n ${AGENT_NS} logs -f deploy/video-analytics"
             return 0
         fi
         sleep 2
     done
-    err "video pipeline produced no detections in 120s — kubectl -n ${AGENT_NS} logs deploy/video-analytics"
+    err "video pipeline produced no detections in 120s — ${KHINT} -n ${AGENT_NS} logs deploy/video-analytics"
 }
 
 agent_addon_endpoints() {
     local svc
     for svc in "$@"; do
         case "${svc}" in
-            vlm) info "vision: kubectl -n ${AGENT_NS} port-forward svc/ovms-vlm 8001:8000
+            vlm) info "vision: ${KHINT} -n ${AGENT_NS} port-forward svc/ovms-vlm 8001:8000
        POST http://localhost:8001/v3/chat/completions with content parts {\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/jpeg;base64,...\"}}" ;;
-            stt) info "speech-to-text: kubectl -n ${AGENT_NS} port-forward svc/ovms-stt 8002:8000
+            stt) info "speech-to-text: ${KHINT} -n ${AGENT_NS} port-forward svc/ovms-stt 8002:8000
        curl http://localhost:8002/v3/audio/transcriptions -F file=@speech.wav -F model=${AGENT_STT_MODEL##*/}" ;;
-            video) info "video: kubectl -n ${AGENT_NS} logs -f deploy/video-analytics (JSON lines per frame)" ;;
+            video) info "video: ${KHINT} -n ${AGENT_NS} logs -f deploy/video-analytics (JSON lines per frame)" ;;
         esac
     done
 }
@@ -8716,7 +8778,7 @@ cmd_agent_up() {
         deploy=ovms-${svc}
         [ "${svc}" != video ] || deploy=video-analytics
         kubectl -n "${AGENT_NS}" rollout status "deployment/${deploy}" --timeout="${AGENT_TIMEOUT}s" \
-            || err "${svc} not ready — kubectl -n ${AGENT_NS} logs deploy/${deploy} --all-containers"
+            || err "${svc} not ready — ${KHINT} -n ${AGENT_NS} logs deploy/${deploy} --all-containers"
         case "${svc}" in
             vlm) agent_vlm_warmup ;;
             video) agent_video_check ;;
@@ -8733,7 +8795,7 @@ cmd_agent_up() {
         info "model ${AGENT_MODEL} at commit $(agent_model_revision) (OVMS pulls the default branch; compare with 'k3d-gpu agent status' later)"
     fi
     info "OpenAI API ready, model '${AGENT_MODEL_NAME}':
-       kubectl -n ${AGENT_NS} port-forward svc/${AGENT_APP} 8000:8000
+       ${KHINT} -n ${AGENT_NS} port-forward svc/${AGENT_APP} 8000:8000
        curl http://localhost:8000${AGENT_API}/chat/completions -H 'Content-Type: application/json' \\
          -d '{\"model\":\"${AGENT_MODEL_NAME}\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}'"
     # shellcheck disable=SC2086 # word list of add-on names
@@ -8794,7 +8856,7 @@ cmd_agent_down() {
     kubectl -n "${AGENT_NS}" delete secret "${LLM_SECRET}" --ignore-not-found
     agent_prune
     agent_guard_stop
-    info "Model caches kept in the namespace's PVCs. Remove everything: kubectl delete namespace ${AGENT_NS}"
+    info "Model caches kept in the namespace's PVCs. Remove everything: ${KHINT} delete namespace ${AGENT_NS}"
 }
 
 # Shared-prefix report of agent manifests (console/shared_prefix.py, H25). The
@@ -9251,7 +9313,7 @@ cmd_tune_trial() {
     done
     name=${K3D_GPU_AGENT_MODEL_NAME:-${name}}
     port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
-    kubectl -n "${AGENT_NS}" port-forward svc/ovms "${port}:8000" >"${dir}/port-forward.log" 2>&1 &
+    command kubectl ${KCTX[@]+"${KCTX[@]}"} -n "${AGENT_NS}" port-forward svc/ovms "${port}:8000" >"${dir}/port-forward.log" 2>&1 &
     TRIAL_PF=$!
     deadline=$((SECONDS + 60))
     until curl -fsS -o /dev/null "http://127.0.0.1:${port}/v2/health/ready" 2>/dev/null; do
@@ -9443,6 +9505,7 @@ cmd_capacity() {
         [ -n "${xbody}" ] || set -- "$@" --extra-body '{"chat_template_kwargs": {"enable_thinking": false}, "temperature": 0.6, "max_tokens": 64}'
         info "capacity: ${url} is remote: budgeted ramp ($*)"
     fi
+    [ -n "${url}" ] || kube_ready
     # remote.py runs it with the key from --api-key-file in its environment.
     [ -z "${REMOTE_KEYFILE}" ] || [ "${dry}" = 1 ] \
         || exec python3 "$(console_dir)/remote.py" exec --remote "${url}" --api-key-file "${REMOTE_KEYFILE}" -- python3 "${script}" "$@"
@@ -9639,7 +9702,7 @@ qs_ui_up() {
     qs_admin_secret
     kubectl apply -f - <<< "$1" >/dev/null
     kubectl -n "${AGENT_NS}" rollout status deployment/open-webui --timeout=600s \
-        || err "chat UI not ready — kubectl -n ${AGENT_NS} logs deploy/open-webui"
+        || err "chat UI not ready — ${KHINT} -n ${AGENT_NS} logs deploy/open-webui"
 
     if pid=$(qs_pf_pid); then
         port=$(cat "${QS_DIR}/port" 2>/dev/null || echo "${K3D_GPU_CHAT_PORT:-8080}")
@@ -9821,7 +9884,7 @@ cmd_quickstart() {
 
     if [ -z "${ui}" ]; then
         echo "${GRN}==>${RST} [${QS_STEPS}/${QS_STEPS}] $(progress_bar 1 1 10) Ready (no chat UI)"
-        info "OpenAI API: kubectl -n ${AGENT_NS} port-forward svc/${backend} 8000:8000"
+        info "OpenAI API: ${KHINT} -n ${AGENT_NS} port-forward svc/${backend} 8000:8000"
         return 0
     fi
     [ "${backend}" = ovms ] || err "the chat UI talks to OVMS (svc/ovms) only; with backend ${backend}, run quickstart --no-ui"
@@ -9864,8 +9927,7 @@ cmd_uninstall() {
     if ! command -v k3d >/dev/null 2>&1 || ! k3d cluster get "${CLUSTER}" >/dev/null 2>&1; then
         info "no cluster '${CLUSTER}'"
     elif [ -n "${created}${force_cluster}" ]; then
-        k3d cluster delete "${CLUSTER}"
-        kubeconfig_after_delete
+        kube_cluster_delete
     else
         info "cluster '${CLUSTER}' kept (quickstart did not create it; --cluster deletes it)"
         # The key stays nowhere quickstart --remote, agent up --remote or sandbox
@@ -9873,7 +9935,7 @@ cmd_uninstall() {
         if type -P kubectl >/dev/null 2>&1; then
             local ns
             for ns in "${AGENT_NS}" "${SANDBOX_NS}"; do
-                kubectl --context "k3d-${CLUSTER}" -n "${ns}" delete secret "${LLM_SECRET}" --ignore-not-found >/dev/null 2>&1 || true
+                kubectl -n "${ns}" delete secret "${LLM_SECRET}" --ignore-not-found >/dev/null 2>&1 || true
             done
         fi
     fi
@@ -11003,12 +11065,12 @@ bench_k3d_arm() {
     require curl
     for app in "${AGENT_APPS[@]}" ""; do
         [ -n "${app}" ] || err "bench: no agent service in ${AGENT_NS} on ${kctx}; run 'k3d-gpu agent up' first (or pass --k3d-url and --k3d-model)"
-        kubectl --context "${kctx}" -n "${AGENT_NS}" get "service/${app}" >/dev/null 2>&1 && break
+        kubectl -n "${AGENT_NS}" get "service/${app}" >/dev/null 2>&1 && break
     done
-    read -r kdevice kbackend <<< "$(kubectl --context "${kctx}" -n "${AGENT_NS}" get deployment "${app}" \
+    read -r kdevice kbackend <<< "$(kubectl -n "${AGENT_NS}" get deployment "${app}" \
         -o jsonpath='{.spec.template.metadata.annotations.k3d-gpu\.io/agent-device} {.spec.template.metadata.annotations.k3d-gpu\.io/agent-backend}' 2>/dev/null)"
     pfport=$(free_port)
-    kubectl --context "${kctx}" -n "${AGENT_NS}" port-forward "service/${app}" "${pfport}:8000" >/dev/null 2>&1 &
+    command kubectl ${KCTX[@]+"${KCTX[@]}"} -n "${AGENT_NS}" port-forward "service/${app}" "${pfport}:8000" >/dev/null 2>&1 &
     pf=$!
     ktransport="kubectl port-forward (API-server stream)"
     local kapi=/v3 mpath=/v1/config
@@ -11035,7 +11097,7 @@ print(ids[0] if ids else "")' "${mj}") || kmodel=""
 # always budgeted: one round, one warmup, at most 64 tokens, four prompts (vs.py
 # --remote-arm enforces the same). Uses cmd_bench's locals.
 bench_vs_remote() {
-    local fields base rmodel origin pf="" pfport app kctx="k3d-${CLUSTER}" kdevice="" kbackend="" ktransport="direct (--k3d-url)" ctx
+    local fields base rmodel origin pf="" pfport app kctx="${K3D_GPU_KCTX:-the current context of ${KUBECONFIG}}" kdevice="" kbackend="" ktransport="direct (--k3d-url)" ctx
     remote_guard "bench --vs remote" "${dry:-0}"
     rounds=1 warmup=1
     [ "${maxtok}" -le 64 ] || maxtok=64
@@ -11164,7 +11226,7 @@ for a in s["args"]:
 
     require docker
     require curl
-    local t0=${SECONDS} pf="" pfport kdevice="" kbackend="" ktransport="direct (--k3d-url)" app kctx="k3d-${CLUSTER}" got
+    local t0=${SECONDS} pf="" pfport kdevice="" kbackend="" ktransport="direct (--k3d-url)" app kctx="${K3D_GPU_KCTX:-the current context of ${KUBECONFIG}}" got
     if docker inspect "${name}" >/dev/null 2>&1; then err "bench: container ${name} already exists (docker rm -f ${name})"; fi
     [ -n "${kurl}" ] || bench_k3d_arm 4bit
     mkdir -p "${out}"
