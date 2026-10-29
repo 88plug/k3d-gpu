@@ -70,7 +70,7 @@
 
 set -euo pipefail
 
-VERSION="0.1.76"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.77"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 # The node image defaults to the tag built from this launcher's own release
 # (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
@@ -101,7 +101,7 @@ PREFILL_GUARD="${K3D_GPU_PREFILL_GUARD:-}"  # opt-in E-core cap: kHz or N% (guar
 STATE_DIR="${K3D_GPU_STATE_DIR:-${XDG_STATE_HOME:-${HOME:-}/.local/state}/k3d-gpu}"
 SYSROOT="${K3D_GPU_SYSROOT:-}" # prefix for /sys and /dev reads (tests point it at a fake tree)
 TEST_IMAGE="${K3D_GPU_TEST_IMAGE:-nvidia/cuda:13.4.3-base-ubuntu26.04@sha256:e2eb43e25d404e2c48716f80afdb8989a84c4da588f5509330322842084d97b0}"
-DEVICE_TEST_IMAGE="${K3D_GPU_DEVICE_TEST_IMAGE:-busybox:1.37@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e}"
+DEVICE_TEST_IMAGE="${K3D_GPU_DEVICE_TEST_IMAGE:-busybox:1.37@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec}"
 # AMX probe pod: an image with PyTorch's bundled oneDNN (vLLM's CPU release, torch 2.13.0+cpu, oneDNN 3.12).
 AMX_TEST_IMAGE="${K3D_GPU_AMX_TEST_IMAGE:-vllm/vllm-openai-cpu:v0.32.0@sha256:ffaba3989b9b96d95a576143c872a4110ce9800f5199b6a36eb27bdff1cbbe05}"
 VENDORS_REQUEST="${K3D_GPU_VENDORS:-auto}"

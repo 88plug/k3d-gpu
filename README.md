@@ -1402,9 +1402,10 @@ the in-process stub in `bench/test_agent_trace.py`.
 (LiteLLM gateway, Redis, pgvector, agent sandbox, CPU vLLM) on a single k3d-gpu
 node through EAT's own brownfield path, on a non-Xeon client CPU. Its vLLM pod
 joins the hybrid balloons policy's `performance` balloon through EAT's own chart
-annotation, so EAT's CPU balloons stay off and `hybrid` stays on. It deploys EAT's
-latest tag, `release-1.0.3-hotfix`; OpenShell (`deploy_openshell`) is on EAT `main`
-only, so `eat-up.sh` refuses it (see [docs/platforms.md](docs/platforms.md)).
+annotation, so EAT's CPU balloons stay off and `hybrid` stays on. It deploys the
+pinned tag `release-1.0.3-hotfix` (the latest, `release-1.1.0`, adds OpenShell;
+`eat-up.sh` refuses `deploy_openshell=on` because its pinned tag has no OpenShell
+role). See [docs/platforms.md](docs/platforms.md).
 
 ### Experimental features (auto-adapting)
 
@@ -1639,6 +1640,7 @@ These are Docker **build args** (not runtime env):
 | `K3S_TAG`    | `v1.37.1-k3s1`        | K3s image tag from `rancher/k3s` (auto-bumped) |
 | `K3S_DIGEST` | `sha256:ca7f37d9…`    | index digest of `K3S_TAG` (auto-bumped with it) |
 | `UBUNTU_IMAGE` | `ubuntu:26.04@sha256:…` | Ubuntu base image, pinned by digest (`26.04` default; `24.04` also published) |
+| `UBUNTU_2404_IMAGE` | `ubuntu:24.04@sha256:…` | the pinned 24.04 base; the release passes it as `UBUNTU_IMAGE` for the `ubuntu24.04` image |
 
 Build a specific Ubuntu base:
 

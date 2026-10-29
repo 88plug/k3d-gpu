@@ -220,43 +220,62 @@ Simulation fixture: `tests/fixtures/xeon-dmr` (topology borrowed from
 
 EAT is a software stack, not a hardware family, so it has no fixture. Its pins:
 
-- `integrations/eat/eat-up.sh` deploys tag `release-1.0.3-hotfix`
-  ([`0d3438d`](https://github.com/intel/enterprise-agent-toolkit/tree/0d3438d7119de44cafc5903f66665c0b623e3333)),
-  the latest tag as of 2026-10-17 ([tags](https://api.github.com/repos/intel/enterprise-agent-toolkit/tags)).
+- `integrations/eat/eat-up.sh` deploys the pinned tag `release-1.0.3-hotfix`
+  ([`0d3438d`](https://github.com/intel/enterprise-agent-toolkit/tree/0d3438d7119de44cafc5903f66665c0b623e3333)).
+  The latest tag is [`release-1.1.0`](https://github.com/intel/enterprise-agent-toolkit/releases/tag/release-1.1.0)
+  ([`0c726f5`](https://github.com/intel/enterprise-agent-toolkit/tree/0c726f576595971c53cc45b94e08ba969beb4a4a),
+  published 2026-10-22, [tags](https://api.github.com/repos/intel/enterprise-agent-toolkit/tags)),
+  the merge of [PR #21](https://github.com/intel/enterprise-agent-toolkit/pull/21). Its tree,
+  `04969afa`, is the same as that of #21's head `c86c42b`.
 - `docs/intel.md`, `contrib/eat/` and `integrations/eat/upstream/` read `main` at
   [`0ecf67a`](https://github.com/intel/enterprise-agent-toolkit/tree/0ecf67a8331e8b502ef41e08bf6d2881416178c5).
 
-`main` adds one opt-in component after the tag: NVIDIA OpenShell
+`eat-up.sh` and `brownfield.sh` stay on `release-1.0.3-hotfix` while pre-registered
+ledger rows pin EAT stock at `0d3438d` (H50, H50o and H51, and `bench/apb/PROTOCOL.md`
+through `eat-up.sh`). Moving them to `release-1.1.0` still needs the two checks
+described below: `brownfield.sh` has to export `DEPLOY_GUARDRAILS=off`, and the vLLM
+CPU image has to be re-pinned to `v0.28.0` by digest. A fresh run like H1b's then has
+to pass on it [ledger:H1b].
+
+`release-1.1.0` ships NVIDIA OpenShell as an opt-in component
 (`deploy_openshell=off` by default, [PR #14](https://github.com/intel/enterprise-agent-toolkit/pull/14)).
-The tag has no OpenShell role, so `eat-up.sh` stops on a config that sets
+The pinned tag has no OpenShell role, so `eat-up.sh` stops on a config that sets
 `deploy_openshell=on` instead of letting the tag skip the key. Upstream lists a CNI
 that enforces `NetworkPolicy` and best-effort Landlock as OpenShell requirements
 ([docs/openshell.md](https://github.com/intel/enterprise-agent-toolkit/blob/0ecf67a8331e8b502ef41e08bf6d2881416178c5/docs/openshell.md)).
-k3d-gpu adds no OpenShell checks until a tagged EAT release ships it.
+k3d-gpu adds no OpenShell checks while `eat-up.sh` stays on the pinned tag.
 
-Open upstream work that changes this integration:
+Upstream work that changes this integration:
 
 - [EAT PR #19](https://github.com/intel/enterprise-agent-toolkit/pull/19) replaces
-  `deploy-agentic-stack.sh` with `es_auto_installer.sh install agent-toolkit`.
-  `eat-up.sh` and `brownfield.sh` stay on `release-1.0.3-hotfix` until a tag after #19.
-  The status of every open EAT PR is in the table below.
+  `deploy-agentic-stack.sh` with `es_auto_installer.sh install agent-toolkit`. It merged
+  on 2026-10-27 into the `release-2.0.0` branch, not `main`, and no tag carries it yet.
+  The status of each EAT PR is in the table below.
 - [enterprise-inference PR #22](https://github.com/intel/enterprise-inference/pull/22)
-  adds a `vllm-xpu` runtime that requests `gpu.intel.com/xe` by default. The Intel GPU
+  merged on 2026-10-22 as "Integrate Agentic toolkit" (`4bc7fed`), the inference-layer
+  side of EAT: vLLM Semantic Router, a LiteLLM hybrid router, the Qwen3Guard guardrail
+  and CPU models on vLLM 0.28.0. The `vllm-xpu` runtime this bullet described when it was
+  written (2026-10-17) is not in the merged commit, and no intel/enterprise-inference
+  branch has it. Arc vLLM now ships in EAT `release-1.1.0` (`compute_platform=xpu`, below),
+  which requests `gpu.intel.com/xe` by default. The Intel GPU
   plugin defines both `xe` and `i915` resources
   ([gpu_plugin.go](https://github.com/intel/intel-device-plugins-for-kubernetes/blob/main/cmd/gpu_plugin/gpu_plugin.go)),
   and `k3d-gpu detect` already reports the one the bound driver gives.
 
-### Open EAT pull requests (checked 2026-10-20)
+### EAT pull requests (checked 2026-10-28)
 
-Read with `gh`, `git ls-remote` and a read-only clone only. EAT `main` is still `0ecf67a`,
-`release-1.0.3-hotfix` still points at `0d3438d`, and no newer tag exists.
+Read with `gh`, `git ls-remote` and a read-only clone only. EAT `main` is `4a2e930`:
+`release-1.1.0` plus the architecture diagram from
+[#27](https://github.com/intel/enterprise-agent-toolkit/pull/27).
+`release-1.0.3-hotfix` still points at `0d3438d`.
 
 | PR | Head | What it changes | Impact on k3d-gpu | Action |
 |---|---|---|---|---|
-| [#5](https://github.com/intel/enterprise-agent-toolkit/pull/5) Bitnami to SolDevelo images | `eba339a`, conflicts with `main` | `bitnami/kubectl:latest` in the GenAI Gateway restore job, and `bitnamilegacy/os-shell` in a Keycloak playbook | None today. Neither line runs on our path: `restoreJob.enabled` is `false`, and the pinned tag has no Keycloak playbook. Every Bitnami image our path renders pulled on 2026-10-18 (`docker manifest inspect`, amd64 and arm64). See the note below | None. Recheck if a `bitnamilegacy` pull fails |
-| [#19](https://github.com/intel/enterprise-agent-toolkit/pull/19) unified convention | `9d842f5`, unchanged; draft, CI green, no review | Deletes `deploy-agentic-stack.sh`, `core/lib`, `core/playbooks` and `core/roles`; installs through EAS `es_auto_installer.sh` | Ends the path `eat-up.sh` uses, once a tag ships it. The drafted EAT docs patch in [upstream-eat.md](intel/upstream-eat.md) still passes `git apply --check` on `9d842f5` | Keep `eat-up.sh` on the tag. Move to the EAS BYO path after a tag that includes #19 |
-| [#20](https://github.com/intel/enterprise-agent-toolkit/pull/20) OpenClaw operator | `200ae58`, based on #19's branch | Optional `openclaw_operator` role (`claw_enabled: false`): operator chart and image `0.38.3` pinned by digest, 3 CRDs (`openclaw.rocks/v1alpha1`) | Not reachable from the pinned tag. The operator itself fits one k3d-gpu node: CPU only (100m / 128Mi request), no GPU, no webhook, `kubeVersion >=1.28`, and both images publish amd64. Its example instance is the gap (see below) | None until #19 and #20 merge into a tag |
-| [#21](https://github.com/intel/enterprise-agent-toolkit/pull/21) Release 1.1.0 | `c86c42b`, opened 2026-10-19, based on `main`; 204 files against `release-1.0.3-hotfix`, CI green, no review | Keeps the old layout (`deploy-agentic-stack.sh`, `core/lib`); adds Qwen3Guard guardrails (on by default), Kata sandboxes (`kata-fc` Firecracker and `kata-qemu`), vLLM Semantic Router, rack-scale mode, an NVIDIA B300 profile, and an Arc B60/B70 XPU path (`compute_platform=xpu`); OVMS as a Docker engine; vLLM CPU image `v0.24.0` to `v0.28.0`; NRI balloons role reworked into NUMA-aware per-node policies | None on the pinned tag. On a tag cut from #21: `core/lib/brownfield/` and `deploy-genai-gateway.yml` are unchanged, every function `brownfield.sh` calls still exists, and `gateway-charts.py` runs clean on its charts. Two changes would bite, and the XPU path would overlap what k3d-gpu already installs; all read from source, not run (see below) | Before moving `eat-up.sh` to a 1.1.0 tag: turn the guardrail off and re-pin the vLLM image. Validation on 4x Arc Pro B70 is in progress, no results yet |
+| [#5](https://github.com/intel/enterprise-agent-toolkit/pull/5) Bitnami to SolDevelo images | `fcec7ef`, rebased onto `main` | `bitnami/kubectl:latest` becomes `soldevelo/kubectl:1.29` in the GenAI Gateway restore job, and `bitnamilegacy/minio:2024.12.18` becomes `soldevelo/minio:2024.12.18` in `docker/docker-compose.yml` | None. Neither line runs on our path: `restoreJob.enabled` is `false`, and `eat-up.sh` does not use EAT's Docker Compose mode. Every Bitnami image our path renders pulled on 2026-10-18 (`docker manifest inspect`, amd64 and arm64). See the note below | None. Recheck if a `bitnamilegacy` pull fails |
+| [#19](https://github.com/intel/enterprise-agent-toolkit/pull/19) unified convention | Merged 2026-10-27 into `release-2.0.0`, not `main`: final head `fb59459`, merge `036b662`, no tag | Deletes `deploy-agentic-stack.sh`, `core/lib` (the brownfield path with it), `core/playbooks` and `core/roles`; installs through EAS `es_auto_installer.sh`. `release-2.0.0`'s README says Intel Arc (XPU) deployment is not in that release | Ends the path `eat-up.sh` uses, once a tag ships it. The drafted EAT docs patch in [upstream-eat.md](intel/upstream-eat.md) passes `git apply --check` on the draft head `9d842f5` but not on `fb59459` or `036b662`, so it needs a re-base before it is sent | Keep `eat-up.sh` on the tag. Move to the EAS BYO path after a tag that includes #19 |
+| [#20](https://github.com/intel/enterprise-agent-toolkit/pull/20) OpenClaw operator | `10deb6d`, on #19's branch `agentic-toolkit-migration` (forked at `dab3a98`, before #19's final head) | Optional `openclaw_operator` role (`claw_enabled: false`): operator chart and image `0.38.3` pinned by digest, 3 CRDs (`openclaw.rocks/v1alpha1`). It also adds a `cosign verify` of the chart and the operator image when `cosign` is on the installer's `PATH` (`openclaw_operator_cosign_required: false` by default) | Not reachable from the pinned tag. The operator itself fits one k3d-gpu node: CPU only (100m / 128Mi request), no GPU, no webhook, `kubeVersion >=1.28`, and both images publish amd64. Its example instance is the gap (see below) | None until #19 and #20 reach a tag |
+| [#21](https://github.com/intel/enterprise-agent-toolkit/pull/21) Release 1.1.0 | Merged 2026-10-22 as `0c726f5` and released as `release-1.1.0`; head `c86c42b`, 204 files against `release-1.0.3-hotfix` | Keeps the old layout (`deploy-agentic-stack.sh`, `core/lib`); adds Qwen3Guard guardrails (on by default), Kata sandboxes (`kata-fc` Firecracker and `kata-qemu`), vLLM Semantic Router, rack-scale mode, an NVIDIA B300 profile, and an Arc B60/B70 XPU path (`compute_platform=xpu`); OVMS as a Docker engine; vLLM CPU image `v0.24.0` to `v0.28.0`; NRI balloons role reworked into NUMA-aware per-node policies | None on the pinned tag. On `release-1.1.0`: `core/lib/brownfield/` and `deploy-genai-gateway.yml` are unchanged, every function `brownfield.sh` calls still exists, and `gateway-charts.py` runs clean on its charts. Two changes would bite, and the XPU path would overlap what k3d-gpu already installs; all read from source, not run (see below) | Before moving `eat-up.sh` to `release-1.1.0`: turn the guardrail off and re-pin the vLLM image. Validation on 4x Arc Pro B70 is in progress, no results yet |
+| [#22](https://github.com/intel/enterprise-agent-toolkit/pull/22)-[#26](https://github.com/intel/enterprise-agent-toolkit/pull/26) agent toolkit stack | `a627fad`, `a32c5aa`, `9edf77d`, `6dfbcbc`, `7cc4344`, stacked on #20, base `agentic-toolkit-migration` | `Agent`, `AgentGrant` and `Tool` CRDs (`intel-stack.io`) with an agent operator (#22); per-agent memory (#23); sandbox, GitHub and web tools for agents (#24); an agent REST API (#25); a browser console and agent dashboards (#26). Its images are built into an in-cluster registry (`registry.kube-system.svc.cluster.local:5000`, the `kubernetes_registry_enabled` add-on) | Not reachable from the pinned tag. The stack claims sandboxes through `SandboxClaim` at `extensions.agents.x-k8s.io/v1beta1`, the version k3d-gpu's agent-sandbox v1.0.7 serves. Read from source, not run | None until the stack reaches a tag |
 
 Bitnami images on the pinned path. `deploy-genai-gateway.yml` runs `helm dependency update`
 on `genai-gateway`, whose `Chart.yaml` asks for `postgresql >=13.3.0` and `redis >=18.0.0`.
@@ -283,7 +302,8 @@ pins are in `gateway-values.yaml` and `gateway-trace-values.yaml`, and listed in
 Rendered with Helm v3.14.0, the pinned charts differ from EAT's only in the 11 `image:` lines.
 
 What #21 (`c86c42b`) changes for `eat-up.sh`, compared with `release-1.0.3-hotfix`.
-Read from a read-only clone; nothing here has run against a 1.1.0 stack.
+It applies verbatim to `release-1.1.0`, whose tree is `c86c42b`'s. Read from a read-only
+clone; nothing here has run against a 1.1.0 stack.
 
 - Unchanged: `core/lib/brownfield/` (so the `5 / 1 / yes` prompt answers),
   `core/playbooks/deploy-genai-gateway.yml` (so the `helm_charts_base_genai{,_trace}`

@@ -8,6 +8,7 @@ These are drafts for Intel's repos. **None of them has been filed, opened or pus
   - It deletes the toolkit's own installer: `deploy-agentic-stack.sh`, `core/lib/brownfield/`, `core/playbooks/setup-bastion.yml`, `core/playbooks/deploy-istio.yml`, `core/roles/nri_cpu_balloons/`.
   - It moves the toolkit onto `es_auto_installer.sh install agent-toolkit` in [intel/enterprise-ai-solutions](https://github.com/intel/enterprise-ai-solutions) (EAS) and intel/enterprise-inference.
   - It depends on intel/enterprise-inference#22 and goes in ahead of intel/enterprise-ai-solutions#40. Both are open.
+  - Re-read 2026-10-29: #19 merged on 2026-10-27 into the `release-2.0.0` branch, not `main`, and no tag carries it. intel/enterprise-inference#22 merged on 2026-10-22. intel/enterprise-ai-solutions#40 was closed unmerged on 2026-10-22, and intel/enterprise-ai-solutions#66 ("Integrate Agentic Toolkit"), opened a minute before, merged on 2026-10-29. Every patch here still passes `checks/apply-check.sh` on EAS `main` `5767995`.
 - The platform roles that matter for k3s (istio, envoy_gateway, kubernetes, nri_cpu_balloons) already live in EAS `main`. **EAS is the target for every patch here.**
 - There is no toolkit (EAT) patch. Its k3s platform-detection gap sits in `brownfield_deployment()`, which no entry point calls: it is sourced at [deploy-agentic-stack.sh#L631](https://github.com/intel/enterprise-agent-toolkit/blob/0ecf67a8331e8b502ef41e08bf6d2881416178c5/deploy-agentic-stack.sh#L631) and called only from inside itself, and #19 deletes the file. The issue draft lists it as an observation only.
 
@@ -100,4 +101,4 @@ All six ran on 2026-10-20 against EAS `main` `e8f3ebc` with the five patches, on
 
 ## Related upstream observation (no patch)
 
-intel/enterprise-ai-solutions#40 adds an `intel_gpu_plugin` role with `intel_gpu_plugin_ref: "main"`. It runs `kubectl apply -f` on the upstream manifest from that branch, and the manifest has no namespace. The issue draft raises this as a question, not a patch, because the PR is still open.
+intel/enterprise-ai-solutions#40 adds an `intel_gpu_plugin` role with `intel_gpu_plugin_ref: "main"`. It runs `kubectl apply -f` on the upstream manifest from that branch, and the manifest has no namespace. The issue draft raises this as a question, not a patch, because the PR was open when it was drafted. #40 was closed unmerged on 2026-10-22, and EAS `main` `5767995` has no `intel_gpu_plugin` role, so that question (question 2) is moot: drop it before the issue is filed.
