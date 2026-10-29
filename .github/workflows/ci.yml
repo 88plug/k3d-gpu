@@ -251,6 +251,8 @@ jobs:
       - run: python3 bench/test_agent_trace.py
       - run: python3 bench/eatflow/crescent/test_holds.py
       - run: tests/hold_own_test.sh
+      - run: tests/wildct_hold_test.sh
+      - run: python3 bench/wildct/test_wildct.py
       - run: python3 bench/load/test_load.py
       - run: python3 bench/eatflow/test_agentbench.py
       - run: python3 bench/eatflow/test_pairs.py

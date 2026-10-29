@@ -4935,6 +4935,75 @@ request, discarded and disclosed). Then H52w (1 hold), H18w (1), H25w (1), H34w 
 repeat a failed hold once. At most 12 holds in all. A protocol change is a dated amendment
 merged before the data it governs.
 
+### Wildct amendment R1: bounded host calls, a host health check and the resume (2026-10-28)
+
+Recorded 2026-10-28, before any wildct hold has measured anything. No row's hypothesis,
+prediction, arm, model, statistic, threshold, cap, disk need, hold count or order changes.
+
+**What happened (disclosed).** On 2026-10-21 the tools were installed on wildct as W7 lists them
+(k3d-gpu 0.1.71, `.deb` sha256 `580a6278...`, node image `sha256:6d715292...`; the shipped
+launcher matched the release), every model file matched the Hub's sha256 at its pinned revision,
+and the images of `setup-images.sh` were pulled. The wiring smoke (`smoke1`) took the lock at
+21:27:13Z. Its first step, the RAPL reader's `docker run`, never returned: the container stayed in
+Created, its `runc init` slept in `containerd.service`'s cgroup with no container scope created,
+and `systemctl show docker containerd` answered "Failed to get properties: Connection timed
+out". systemd was not answering on D-Bus, and with Docker's systemd cgroup driver no new
+container can start. Older hangs on the host that were not this campaign's (a `docker run` 26
+days, a root `docker inspect` 22 h) fit. No cluster was created, no request was sent and nothing
+was measured; `smoke1` is discarded. `hold.sh` waited in that `docker run` with no bound, so it
+never wrote its `rc`, and the wait on that `rc` had no ceiling. Docker's live-restore is off on
+wildct, so the fix (a systemd re-exec or a reboot) is the box owner's. `k3dgpu-w-rapl` was left
+in Created.
+
+**Runner changes (this amendment's PR).** `bench/wildct/hold.sh`: after the lock, and again just
+before the hold starts, a host health check (systemd answers `ActiveState` = `active` for docker
+and `docker info` answers), then `k3d cluster list` and the deletion of any leftover `k3dgpu-w-*`
+cluster must answer, or no hold (exit 8); every docker and k3d call it makes is bounded
+(`WILDCT_CALL_T`, default 120 s; cluster deletes `WILDCT_DELETE_T`, default 600 s; SIGKILL 10 s
+later); the RAPL reader must start and return a reading of `energy_uj` or no hold (exit 6); a
+cleanup step that fails or does not finish in its bound, or a cluster or image list or a scan for
+the command's leftover processes that does not answer, is named in `runs/NAME/cleanup-incomplete`;
+after a command that ran and did not end 0, the cleanup also deletes every `h28-model` image, as
+the H28w row registers ("by `hold.sh` if it fails"; W1's list of what `hold.sh` deletes left them
+out, and the runner did not delete them); a signal
+ends the lock and load waits at once, and further signals during the cleanup are ignored, so the
+cleanup always runs to its end; the cleanup first stops
+every process the command left behind, also one in a process group of its own (a `timeout` inside
+the command, which the command's own `timeout` does not reach), found by the `WILDCT_HOLD=NAME`
+that `hold.sh` exports (`bench/wildct/strays.py`); the command no longer inherits the lock's file
+descriptor; an earlier attempt's records under the same NAME are kept, renamed `NAME.<UTC time>`
+(or no hold, exit 9, when they cannot be moved); `runs/NAME/pid` at the start and `runs/NAME/rc`
+last on every exit, the early ones (lock, disk, launcher) included, each written whole. `bench/wildct/wait_hold.sh` waits on
+those with a ceiling and tells a finished hold from a dead one. `bench/wildct/h52w.sh`: the pod wait counted an
+empty pod list (no cluster) as every pod Running; it now needs at least one pod, is skipped when
+`up` failed, keeps its 60 polls every 5 s (knobs, defaults unchanged) and records its outcome in
+`rc.txt`; `detect`, `doctor`, `test`, `down` and the `kubectl` read-outs are bounded. `bench/wildct/sample.py`: `docker
+ps` is bounded (20 s) and keeps the last container list when docker does not answer.
+`bench/wildct/gpu_scan.py` is H52w's pod GPU scan moved out of `h52w.sh` unchanged, shared with
+the smoke. `bench/wildct/row.sh` holds each row's command as "Per row" (and H52w's procedure) lists
+it, so nothing is retyped on wildct, and checks H57w's holds as registered (1-3 perf and 4
+quality in their registered order, the spare 5 with a failed hold's mode and arms).
+`bench/zero-copy-models/probe.sh` replaced any
+`K3D_GPU_RAPL_EXEC` with a `docker exec` into its node when `sudo -n` fails, so H28w would have read
+RAPL inside the node (CPUs 0-15), not through W4's reader as W4 says; it now keeps a reader it is
+given (default unchanged, as H28 ran). H28w's cluster comes from `probe.sh`'s plain `k3d cluster
+create`, which never reads `K3D_GPU_VENDORS`, so W8's opt-out did not reach it: the node image
+bakes both Intel GPU stacks into k3s's auto-deploy manifests, and `intel-gpu-plugin`'s only
+nodeSelector is the architecture, so the registered H28w line would have mounted wildct's
+`/dev/dri` through the privileged node. `row.sh` gives H28w's `K3D_GPU_K3S_ARGS` W3 plus
+`--disable=intel-gpu-plugin --disable=intel-gpu-dra`, the two disables `up` passes when intel is not
+active; both arms alike, nothing else of H28w changes. Tests: `tests/wildct_hold_test.sh` and `bench/wildct/test_wildct.py`, in CI.
+
+**Clarifications.** H28w's prep runs with `LEVELS=typical`, as its run does, so it builds only the
+model images the run imports and deletes (r0-r6, 7 x 1 GiB); the registered prep line left
+`LEVELS` at its default and would have built r0-r12 and left r7-r12 behind. The wiring smoke is not
+a hold of any row and does not count toward the 12; the resumed smoke is `smoke2`. `convert.sh`
+(H57w's drafter GGUF and Od's `graph.pbtxt`) takes this host's lock itself, outside `hold.sh`, as
+H57d ran it, under `timeout -k 30 3600` (its lock wait included). Rule W7 still installs the newest k3d-gpu release at the first hold: 0.1.75 on
+2026-10-29 (`.deb` sha256 `a5c48149...`, node image `sha256:ecb1b178...`), whose launcher and
+`share/` equal main's apart from the version line. The tool pins stay as registered (kubectl v1.37.2 has since
+been released; v1.37.1 is kept). The resume procedure is `bench/wildct/RESUME.md`.
+
 ### H5 amendment A1: stage-1 harness and definitions (2026-10-19)
 
 Written 2026-10-19T22:30-07:00, before any H5 measurement. It fixes what the
