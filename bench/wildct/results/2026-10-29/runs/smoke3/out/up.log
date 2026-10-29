@@ -1,0 +1,44 @@
+[32m==>[0m opted out by K3D_GPU_VENDORS: nvidia intel (detected here: nvidia intel); not deployed, not advertised
+[32m==>[0m Accelerators: hybrid
+[32m==>[0m Experimental features (auto): dra image-volume
+[32m==>[0m Creating k3d cluster 'k3dgpu-w-smoke' with image cryptoandcoffee/k3d-gpu:0.1.79@sha256:6e27ff9817bf9398edb20f479dceb5f08273a04a01971b37628a7b2791bdfcfe...
+[36mINFO[0m[0000] Prep: Network                                
+[36mINFO[0m[0000] Created network 'k3d-k3dgpu-w-smoke'         
+[36mINFO[0m[0000] Created image volume k3d-k3dgpu-w-smoke-images 
+[36mINFO[0m[0000] Starting new tools node...                   
+[36mINFO[0m[0000] Starting node 'k3d-k3dgpu-w-smoke-tools'     
+[36mINFO[0m[0001] Creating node 'k3d-k3dgpu-w-smoke-server-0'  
+[36mINFO[0m[0001] Using the k3d-tools node to gather environment information 
+[36mINFO[0m[0001] HostIP: using network gateway 172.19.0.1 address 
+[36mINFO[0m[0001] Starting cluster 'k3dgpu-w-smoke'            
+[36mINFO[0m[0001] Starting servers...                          
+[36mINFO[0m[0001] Starting node 'k3d-k3dgpu-w-smoke-server-0'  
+[36mINFO[0m[0004] All agents already running.                  
+[36mINFO[0m[0004] All helpers already running.                 
+[36mINFO[0m[0004] Injecting records for hostAliases (incl. host.k3d.internal) and for 1 network members into CoreDNS configmap... 
+[36mINFO[0m[0006] Cluster 'k3dgpu-w-smoke' created successfully! 
+[36mINFO[0m[0006] --kubeconfig-update-default=false --> sets --kubeconfig-switch-context=false 
+[36mINFO[0m[0006] You can now use it like this:                
+export KUBECONFIG=$(k3d kubeconfig write k3dgpu-w-smoke)
+kubectl cluster-info
+[32m==>[0m kubectl for this cluster: export KUBECONFIG=/home/andrew/k3dgpu-bench-wildct/runs/smoke3/out/kubeconfig
+[32m==>[0m Waiting for nodes Ready...
+node/k3d-k3dgpu-w-smoke-server-0 condition met
+[32m==>[0m Waiting for cluster DNS (CoreDNS)...
+E1029 15:46:02.507466   64725 reflector.go:227] "Failed to watch" err="apiserver not ready - error from a previous attempt: EOF" reflector="k8s.io/client-go/tools/watch/informerwatcher.go:162" type="*unstructured.Unstructured"
+E1029 15:46:19.424771   64725 reflector.go:227] "Failed to watch" err="apiserver not ready - error from a previous attempt: EOF" reflector="k8s.io/client-go/tools/watch/informerwatcher.go:162" type="*unstructured.Unstructured"
+E1029 15:46:34.747397   64725 reflector.go:227] "Failed to watch" err="starting - error from a previous attempt: EOF" reflector="k8s.io/client-go/tools/watch/informerwatcher.go:162" type="*unstructured.Unstructured"
+E1029 15:46:51.921838   64725 reflector.go:227] "Failed to watch" err="apiserver not ready - error from a previous attempt: read tcp 127.0.0.1:48434->127.0.0.1:37267: read: connection reset by peer" reflector="k8s.io/client-go/tools/watch/informerwatcher.go:162" type="*unstructured.Unstructured"
+E1029 15:47:07.180916   64725 reflector.go:227] "Failed to watch" err="apiserver not ready - error from a previous attempt: EOF" reflector="k8s.io/client-go/tools/watch/informerwatcher.go:162" type="*unstructured.Unstructured"
+E1029 15:47:39.476653   64725 reflector.go:227] "Failed to watch" err="apiserver not ready - error from a previous attempt: EOF" reflector="k8s.io/client-go/tools/watch/informerwatcher.go:162" type="*unstructured.Unstructured"
+E1029 15:48:27.983681   64725 reflector.go:227] "Failed to watch" err="starting - error from a previous attempt: EOF" reflector="k8s.io/client-go/tools/watch/informerwatcher.go:162" type="*unstructured.Unstructured"
+E1029 15:48:28.931636   64725 reflector.go:227] "Failed to watch" err="failed to list *unstructured.Unstructured: apiserver not ready" reflector="k8s.io/client-go/tools/watch/informerwatcher.go:162" type="*unstructured.Unstructured"
+E1029 15:48:44.212875   64725 reflector.go:227] "Failed to watch" err="starting - error from a previous attempt: EOF" reflector="k8s.io/client-go/tools/watch/informerwatcher.go:162" type="*unstructured.Unstructured"
+error: timed out waiting for the condition
+[33mWARN:[0m CoreDNS is not ready; pods may not resolve names yet (KUBECONFIG=/home/andrew/k3dgpu-bench-wildct/runs/smoke3/out/kubeconfig kubectl --context k3d-k3dgpu-w-smoke -n kube-system get pods -l k8s-app=kube-dns)
+node/k3d-k3dgpu-w-smoke-server-0 annotated
+[32m==>[0m hybrid device plugin auto-deployed by k3s.
+balloonspolicy.config.nri/default patched
+[32m==>[0m Verifying accelerators are schedulable...
+daemon set "nri-resource-policy-balloons" successfully rolled out
+[32m==>[0m Accelerators schedulable: hybrid=1. Try: k3d-gpu test
