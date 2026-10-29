@@ -40,7 +40,8 @@ HF_REPO=ggml-org/Qwen3.8-Flash-Next-GGUF
 HF_REV=91fb00353e766eb43944ed223665ea4fb87dad47
 QUANT=IQ4_NL
 FN_GGUF=Qwen3.8-Flash-Next-${QUANT}-00001-of-00002.gguf
-IMG=ghcr.io/ggml-org/llama.cpp:server-b11783@sha256:c7b03e45cff9c4e984acd39032a6f3a82c811075b72bf176e329f84b8598c135
+# llama.cpp v0.8.0 (build b11960), both arms (EXPERIMENTS.md H60 amendment V1)
+IMG=ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220
 export K3D_GPU_CLUSTER=${K3D_GPU_CLUSTER:-k3dgpu-x-h60}
 NS=h60 PORT=18060
 mkdir -p "${OUT}"
