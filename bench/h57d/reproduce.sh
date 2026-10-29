@@ -31,4 +31,4 @@ echo "file sha256:"
 sed 's/^/  /' "${G}/weights.sha256" 2>/dev/null
 echo "data: gsm8k-test-0-199.jsonl $(sha256sum "${REPO}/bench/h54/gsm8k-test-0-199.jsonl" | cut -c1-16); ttft-prompt.txt $(sha256sum "${REPO}/bench/h54/ttft-prompt.txt" | cut -c1-16)"
 echo "engine flags (Od in each arm's deploy.yaml):"
-python3 "${HERE}/h57d.py" arms | python3 -c 'import json,sys; [print(f"  {k}: {\" \".join(v)}") for k, v in json.load(sys.stdin)["args"].items()]'
+python3 "${HERE}/h57d.py" arms | python3 -c 'import json,sys; [print("  " + k + ": " + " ".join(v)) for k, v in json.load(sys.stdin)["args"].items()]'
