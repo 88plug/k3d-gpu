@@ -32,8 +32,8 @@ with detection, enablement and what k3d-gpu does with each, see the
   manifests into k3s's auto-deploy directory:
   [intel-device-plugins-for-kubernetes](https://github.com/intel/intel-device-plugins-for-kubernetes)
   `0.37.1` (GPU, NPU, DSA, IAA, QAT), `intel/gaudi-device-plugin:1.24.2-481` and
-  [nri-plugins](https://github.com/containers/nri-plugins/releases/tag/v0.14.0)
-  balloons `v0.14.0`. With the default image nothing is `kubectl apply`'d at
+  [nri-plugins](https://github.com/containers/nri-plugins/releases/tag/v0.15.0)
+  balloons `v0.15.0`. With the default image nothing is `kubectl apply`'d at
   run time. If a custom `K3D_GPU_IMAGE` lacks a baked DaemonSet, `up` applies
   the manifest from `K3D_GPU_SHARE`; for NVIDIA with no local manifest it falls
   back to the upstream `main` branch manifest from GitHub, which is unpinned.

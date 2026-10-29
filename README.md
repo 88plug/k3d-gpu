@@ -573,7 +573,7 @@ name in place of `gpu`):
 ```bash
 docker exec k3d-gpu-server-0 touch /var/lib/rancher/k3s/server/manifests/nri-balloons.yaml.skip
 helm upgrade --install nri-resource-policy-balloons nri-resource-policy-balloons \
-  --repo https://containers.github.io/nri-plugins --version v0.14.0 \
+  --repo https://containers.github.io/nri-plugins --version v0.15.0 \
   --namespace kube-system -f values.yaml --force   # Helm 4: --force-conflicts
 ```
 
