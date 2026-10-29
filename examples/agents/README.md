@@ -7,7 +7,7 @@ endpoint: OpenVINO Model Server (OVMS) serving `OpenVINO/Qwen3-4B-int4-ov` as
 | Directory | Framework | Pinned packages |
 |---|---|---|
 | [`openai-agents/`](openai-agents/) | OpenAI Agents SDK, tool served over MCP (stdio) | `openai-agents==0.24.0`, `openai==3.41.0`, `mcp==2.3.0` |
-| [`langgraph/`](langgraph/) | LangGraph `StateGraph` + `ToolNode` | `langgraph==1.2.18`, `langchain-openai==1.7.3`, `langchain-core==1.7.1` |
+| [`langgraph/`](langgraph/) | LangGraph `StateGraph` + `ToolNode` | `langgraph==1.2.18`, `langchain-openai==1.7.3`, `langchain-core==1.7.2` |
 | [`crewai/`](crewai/) | CrewAI agent + task | `crewai==1.15.33` |
 | [`llamaindex/`](llamaindex/) | LlamaIndex `FunctionAgent` | `llama-index-core==0.14.25`, `llama-index-llms-openai-like==0.8.1` |
 | [`litellm-gateway/`](litellm-gateway/) | Intel Enterprise Agent Toolkit GenAI gateway (LiteLLM) | `litellm==1.83.14` (see [the gateway section](#enterprise-agent-toolkit-gateway)) |
