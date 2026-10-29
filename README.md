@@ -8,10 +8,16 @@ A Docker-based [rancher/k3s](https://hub.docker.com/r/rancher/k3s) node image on
 
 > **Intel platforms:** one `k3d-gpu up` detects and schedules `i915` Intel GPUs
 > and pins pods to P-cores or E-cores on hybrid CPUs; both have run on a real
-> i9-13900T host. It also detects and schedules `xe` Intel GPUs, the Core Ultra
-> NPU, Gaudi 3 and Xeon DSA / IAA / QAT / AMX, which so far are tested only
-> against a simulated sysfs. See **[docs/intel.md](docs/intel.md)** for the capability matrix, how
-> P/E pinning works, and how it compares with other local Kubernetes.
+> i9-13900T host. On a Xeon 6741P with 4x Arc Pro B70, a plain `up` found the
+> B70s (`xe`), AMX and AVX-512 [ledger:H52]. In a second run there, `xe` advertised
+> 2 of the 4 B70s: a serving workload held about half the VRAM of each card, and
+> `up`'s busy-card filter (a card is left out when host processes hold half its
+> VRAM or more) dropped the two just over half. After `k3d-gpu host-setup --apply`,
+> DSA reached a pod; IAA got no work queue, and the QAT plugin crash-looped and
+> advertised nothing [ledger:H52b]. The ledger scores H52 REFUTED and H52b REFUTED.
+> NPU and Gaudi 3 scheduling is still tested only against a simulated sysfs. See
+> **[docs/intel.md](docs/intel.md)** for the capability matrix, how P/E pinning
+> works, and how it compares with other local Kubernetes.
 
 ---
 
@@ -286,7 +292,7 @@ stubbed launcher and kubectl.
 - K3s + NVIDIA Container Toolkit on an Ubuntu base — **26.04** (default) and **24.04**  
 - NVIDIA, **Intel GPU** (Arc, Battlemage, Core Ultra integrated GPUs, Crescent Island — `xe` or `i915`), **Intel NPU** (Core Ultra) and **Intel Gaudi 3 (HPU)** device plugins **baked into k3s auto-deploy** — `up` exposes them with no `kubectl apply`. The launcher labels nodes so each plugin only runs where its hardware is  
 - Auto-detection on the host from sysfs: `/dev/nvidia*`, Intel DRM render nodes (`xe`/`i915`), and `/dev/accel/accel*` nodes told apart by PCI vendor (`8086` + `intel_vpu` = NPU, `1da3` = Gaudi). `k3d-gpu detect` prints what it found  
-- `k3d-gpu doctor` checks kernel and firmware per platform, names the `xe.force_probe=<id>` needed for parts newer than your kernel, and checks Xeon built-in accelerators (AMX, DSA, IAA, QAT) — deployed automatically once the host side is configured. With the cluster up it also checks the device plugin and NRI balloons DaemonSets, conflicting NRI policies and disconnected device plugins (see [docs/failure-modes.md](docs/failure-modes.md))  
+- `k3d-gpu doctor` checks kernel and firmware per platform, names the `xe.force_probe=<id>` needed for parts newer than your kernel, and checks Xeon built-in accelerators (AMX, DSA, IAA, QAT) — deployed automatically once the host side is configured ([what ran on a Xeon 6741P](#xeon-built-in-accelerators): DSA reached a pod, IAA got no work queue, the QAT plugin crash-looped). With the cluster up it also checks the device plugin and NRI balloons DaemonSets, conflicting NRI policies and disconnected device plugins (see [docs/failure-modes.md](docs/failure-modes.md))  
 - [Node Feature Discovery](#node-feature-discovery) with Intel's NodeFeatureRules on every node: CPU flags (`cpu-cpuid.*`), kernel, PCI and `intel.feature.node.kubernetes.io/gpu` labels read from the host, one owner per label  
 - CDI-ready: containerd 2.x scans `/etc/cdi` and `/var/run/cdi` (CDI on by default), so future vendors that emit CDI specs need no node changes  
 - Pre‑configured nvidia containerd runtime; `--default-runtime=nvidia` for zero-config GPU pods  
@@ -483,6 +489,13 @@ what is missing.
 | `iaa`  | **IAA** (`idxd`) | user work queues `/dev/iax/wq*` (`accel-config`) | `iaa.intel.com/wq-user-dedicated` / `wq-user-shared` |
 | `qat`  | **QAT** C62x, 4xxx, 420xx, 6xxx | PF bound to its QAT driver with SR-IOV VFs (`sriov_numvfs`), `vfio-pci` loaded, IOMMU on | `qat.intel.com/cy`, `dc`, … (per the PF's `cfg_services`) |
 
+On one Xeon 6741P after `k3d-gpu host-setup --apply`, DSA advertised its 3 user
+work queues and a test pod got `/dev/dsa`. IAA got no work queue: `iaa_crypto`
+held every work-queue entry of each device, and host-setup leaves those alone.
+QAT (4xxx) got 48 VFs and `vfio-pci`, and `doctor` read each PF's VFs as ready,
+but its plugin crash-looped and advertised no `qat.intel.com` resource
+[ledger:H52b]. The four AMX labels were set [ledger:H52].
+
 For DSA/IAA the launcher bind-mounts the host's `/dev/char` into the node: the
 plugin only accepts a work queue whose udev `/dev/char/<major>:<minor>` link
 exists, and a privileged container has none of its own. QAT userspace (qatlib)
@@ -512,13 +525,17 @@ turns them on; `k3d-gpu doctor` prints the labels this host gets.
 | `feature.node.kubernetes.io/cpu-cpuid.<NAME>=true` | always, for each of `avx_vnni`, `avx512f`, `avx512_vnni`, `avx512_bf16`, `vaes`, `gfni`, `sha_ni`, `ibt`, `user_shstk` in `/proc/cpuinfo` | NFD's names: `AVXVNNI`, `AVX512F`, `AVX512VNNI`, `AVX512BF16`, `VAES`, `GFNI`, `SHA`, `CETIBT`, `CETSS` |
 | `gpu.intel.com/xmx=true\|false` | `intel` is active; `true` if any Intel GPU has XMX matrix engines, `false` only when every one is known to lack them | per platform, from Mesa's `has_systolic` |
 | `k3d-gpu.io/xmx.i915=false`, `k3d-gpu.io/xmx.xe=false` | `gpu.intel.com/xmx=true`, and that driver also holds an Intel GPU without known XMX (its device plugin resource may hand that GPU out, so `agent up` auto and `recommend_placement` skip it) | per platform, from Mesa's `has_systolic` |
-| `gpu.intel.com/media-vcs=<n>`, `gpu.intel.com/media-vecs=<n>` | `intel` is active on `i915` | video decode/encode and video enhancement engines under `/sys/class/drm/card*/engine` |
+| `gpu.intel.com/media-vcs=<n>`, `gpu.intel.com/media-vecs=<n>` | `intel` is active | video decode/encode and video enhancement engines of the card with the most video engines: on `i915` under `/sys/class/drm/card*/engine`, on `xe` from a render node's DRM usage stats (fdinfo) |
 | `k3d-gpu.io/npu.gen=37xx\|40xx\|50xx\|60xx` | `npu` is active | the NPU's firmware generation |
 
 Kernels do not print `avx_ifma`, `amx_fp16`, `avx_vnni_int8`, `avx_vnni_int16` or
 `avx_ne_convert` in `/proc/cpuinfo`, so they get no label here. NFD has no `pku`
 feature, so `pku` gets none either. The `xe` driver has no per-engine sysfs
-directory, so `xe` GPUs get no media labels.
+directory, so for `xe` `up` opens each Intel render node read-only (no context,
+no work) and counts the engines from its DRM usage stats (`drm-cycles-<class>`,
+`drm-engine-capacity-<class>`); a render node the user cannot open gives no label.
+On the Xeon 6741P's Arc Pro B70s that set `media-vcs=2` and `media-vecs=2`
+[ledger:H52b]; the release H52 ran predates it and set none [ledger:H52].
 
 ### Hybrid P-core / E-core placement
 
@@ -1759,8 +1776,12 @@ k3d-gpu test            # runs a CUDA pod (runtimeClassName: nvidia) and prints 
 kubectl get nodes -o jsonpath='{.items[*].status.allocatable.nvidia\.com/gpu}{"\n"}'
 ```
 
-`k3d-gpu up` already asserts `nvidia.com/gpu > 0` and fails loudly if not, so a
-clean `up` means GPUs are schedulable.
+`k3d-gpu up` checks the same count. With a vendor list that names `nvidia`
+(`K3D_GPU_VENDORS=nvidia`) it fails when the count is 0. With the default
+`K3D_GPU_VENDORS=auto` it fails only when no detected accelerator is schedulable;
+when NVIDIA reads 0 but another one (an Intel iGPU, hybrid P/E cores) is
+schedulable, it warns and finishes. So check that `up`'s
+`Accelerators schedulable:` line names `nvidia`, or run `k3d-gpu test`.
 
 > **Note:** If `nvidia-smi` reports `Failed to initialize NVML` or a non-zero
 > `result=` while `docker exec … nvidia-smi` on the node works, the test pod's
