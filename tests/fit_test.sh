@@ -156,6 +156,18 @@ if render ovms STUB_ALLOC='cpu 32' K3D_GPU_FIT_HOST="${DESK}" K3D_GPU_AGENT_MODE
     ok "agent manifest (ovms, CPU): static KV pool, seqs and pod memory limit from the fit"
 else fail "agent manifest (ovms, CPU) from the fit" "$(cat "${WORK}/ovms.err" "${WORK}/ovms.yaml" 2>/dev/null | head -60)"; fi
 
+# OVMS serves one GPU: K3D_GPU_AGENT_GPUS=2 is a vLLM knob, so the OVMS pod (one
+# gpu.intel.com/xe) gets a KV pool that fits one card, not two cards' worth.
+one_card=$(python3 -c 'import json, sys; sys.path.insert(0, sys.argv[1]); import fit
+print(max(c["budget"] for c in fit.gpu_budget(json.load(open(sys.argv[2])))[0]) // fit.GIB)' "${ROOT}/console" "${XEON}")
+if render ovms2 STUB_ALLOC=$'cpu 64\ngpu.intel.com/xe 4' STUB_NODE_LABELS=gpu.intel.com/xmx=true K3D_GPU_FIT_HOST="${XEON}" \
+        K3D_GPU_AGENT_MODEL=OpenVINO/gemma-4-26b-a4b-it-int4-ov K3D_GPU_AGENT_GPUS=2 -- \
+    && cache=$(sed -n 's/^ *- --cache_size=\([0-9]*\)$/\1/p' "${WORK}/ovms2.yaml") && [ -n "${cache}" ] \
+    && [ "${cache}" -le "${one_card}" ] && has ovms2 '^              gpu.intel.com/xe: 1$' && ! has ovms2 'gpu-split'; then
+    ok "agent manifest (ovms, K3D_GPU_AGENT_GPUS=2): --cache_size=${cache} fits one card's ${one_card} GiB budget"
+else fail "agent manifest (ovms, K3D_GPU_AGENT_GPUS=2) sized for one card (cache ${cache:-?}, one card ${one_card})" \
+    "$(cat "${WORK}/ovms2.err"; grep -E 'cache_size|agent-fit|gpu.intel.com/xe' "${WORK}/ovms2.yaml")"; fi
+
 if render tier STUB_ALLOC='cpu 32' K3D_GPU_FIT_HOST="${LAPTOP}" K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3.8-27B-int8-ov \
         K3D_GPU_AGENT_MODEL_TIER=1 -- && ! has tier 'agent-fit'; then
     ok "a quickstart tier pick (K3D_GPU_AGENT_MODEL_TIER=1) is not sized: it is no user choice"

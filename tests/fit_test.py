@@ -501,6 +501,33 @@ class Overrides(unittest.TestCase):
         self.assertTrue(any("kv_cache_scheme" in s for s in d["explain"]))
 
 
+class OvmsOneGpu(unittest.TestCase):
+    """OVMS serves one GPU: --gpus 2 is refused, never sized as a layer split of two cards."""
+
+    def test_two_gpus_asked_is_refused(self):
+        for mname in ("OpenVINO__gemma-4-26b-a4b-it-int4-ov", "OpenVINO__Qwen3.8-27B-int4-ov"):
+            d = plan("xeon6741p-4xb70", mname, gpus=2, device="gpu")
+            self.assertFalse(d["fits"], (mname, d["summary"]))
+            self.assertIn("OVMS serves one GPU", d["reason"])
+
+    def test_cache_size_within_one_card(self):
+        one = max(c["budget"] for c in fit.gpu_budget(host("xeon6741p-4xb70"))[0])
+        for gpus in (None, 1, 2):
+            d = plan("xeon6741p-4xb70", "OpenVINO__gemma-4-26b-a4b-it-int4-ov", gpus=gpus, device="gpu")
+            if not d["fits"]:
+                continue
+            self.assertEqual((d["placement"], d["gpus"]), ("gpu", 1), gpus)
+            cache = [int(f.split("=")[1]) for f in d["flags"] if f.startswith("--cache_size=")]
+            self.assertLessEqual(cache[0] * GIB, one, (gpus, d["flags"]))
+
+    def test_no_free_gpu_says_so(self):
+        # device gpu on a host with no Intel GPU of its own memory: no placement is tried at all
+        d = plan("desktop-i9-nogpu", "OpenVINO__Qwen3.8-27B-int4-ov", device="gpu")
+        self.assertFalse(d["fits"])
+        self.assertIn("no Intel GPU with device-local memory is free", d["reason"])
+        self.assertNotIn("release notes", d["reason"])
+
+
 class Guard(unittest.TestCase):
     """guard_step under simulated PSI: a CPU-placed server sheds rungs; a VRAM one holds or stops."""
 

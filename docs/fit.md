@@ -68,7 +68,7 @@ in this order, and the first that fits wins:
 
 1. one GPU;
 2. several GPUs: vLLM tensor parallel (heads divisible by the size), or llama.cpp's
-   layer split;
+   layer split (OVMS serves one GPU);
 3. MoE experts in DRAM (llama.cpp `--n-cpu-moe N`): only when the GPU placements do not
    fit, the CPU has AMX or AVX-512, and the DRAM side's bandwidth bound per token stays
    above a floor. The fit takes the fewest layers whose experts leave the GPU;
@@ -92,6 +92,9 @@ Context first: the largest context, halving from the model's cap, at which 4 seq
 fit at once and that is at least 32768 tokens (or the cap). Only when no placement
 reaches that does the fit take less, down to one sequence of 4096 tokens, and the
 summary says it is below the target. Then as many sequences as fit at that context.
+When no placement can be tried at all (every card busy or none with device-local memory,
+and the CPU not allowed), the refusal says that no Intel GPU with device-local memory is
+free.
 
 llama.cpp keeps the token embeddings and the n-gram table on the CPU by design
 (`src/llama-model.cpp`, input layer "always keep it on the CPU"), so those count as host
@@ -111,7 +114,9 @@ The overhead is an estimate from the formula, not a measurement;
 
 `agent up` applies them, sets the pod's memory request and limit to the fit, and
 annotates the pod `k3d-gpu.io/agent-fit`. `K3D_GPU_AGENT_MAX_LEN`, `K3D_GPU_AGENT_MAX_NUM_SEQS`
-and `K3D_GPU_AGENT_GPUS` are inputs the fit checks, not values that replace it. With
+and `K3D_GPU_AGENT_GPUS` (vLLM only: an OVMS pod holds one GPU, and `fit --gpus 2` with
+OVMS is refused as "OVMS serves one GPU") are inputs the fit checks, not values that
+replace it. With
 `K3D_GPU_AGENT_BACKEND` unset, the engine the fit picks serves the model: OVMS, vLLM or
 llama-server. With `--model`, the model optimizer first picks the variant for the default
 engine (OVMS: Gemma 4's OpenVINO IR, for example). When that engine has nothing to serve,

@@ -11200,7 +11200,8 @@ agent_fit() {
         || { fit_soft "${mode}" "fit: no metadata for ${AGENT_MODEL} (offline, private or gated: set HF_TOKEN)"; return 0; }
     [ -z "${K3D_GPU_AGENT_MAX_LEN:-}" ] || args+=(--ctx "${K3D_GPU_AGENT_MAX_LEN}")
     [ -z "${K3D_GPU_AGENT_MAX_NUM_SEQS:-}" ] || args+=(--seqs "${K3D_GPU_AGENT_MAX_NUM_SEQS}")
-    [ -z "${K3D_GPU_AGENT_GPUS:-}" ] || args+=(--gpus "${K3D_GPU_AGENT_GPUS}")
+    # K3D_GPU_AGENT_GPUS shards a vLLM model; an OVMS pod holds one GPU whatever it says.
+    [ -z "${K3D_GPU_AGENT_GPUS:-}" ] || [ "${AGENT_APP}" != vllm ] || args+=(--gpus "${K3D_GPU_AGENT_GPUS}")
     # agent up replaces the running server (the Deployment is Recreate, and a backend
     # switch deletes the other one): it is stopped before the probe, so the memory it holds
     # is measured as free, not as someone else's. A model that then does not fit gets the
