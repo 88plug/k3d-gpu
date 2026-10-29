@@ -1,0 +1,19 @@
+{
+  "trace": "apb-support-n1-s1000",
+  "family": "support",
+  "agents": 1,
+  "sessions": 2,
+  "url": "http://127.0.0.1:18630/v1/chat/completions",
+  "model": "gemma-4-26b-a4b-it",
+  "extra_body": {
+    "chat_template_kwargs": {
+      "enable_thinking": false
+    }
+  },
+  "timeout_s": 120.0,
+  "time_scale": 1.0,
+  "epoch_start": 1793266306.49174,
+  "epoch_end": 1793266367.9519455,
+  "wall_s": 61.46012475993484,
+  "early_fail": false
+}

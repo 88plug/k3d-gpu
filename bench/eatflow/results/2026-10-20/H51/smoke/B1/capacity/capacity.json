@@ -1,0 +1,107 @@
+{
+  "schema": "k3d-gpu.capacity/1",
+  "status": "partial",
+  "started_at": 1793266846.1150014,
+  "finished_at": 1793266926.4579594,
+  "slo_s": 10.0,
+  "stop_slo_s": 10.0,
+  "trace": "support",
+  "max_agents": 32,
+  "reps": 3,
+  "search": "exponential-then-binary",
+  "budget_s": 180.0,
+  "step_cap_s": 180.0,
+  "state_path": "/home/devcloud/k3dgpu-bench/smoke/H51/B1/capacity-state/unspecified-google_gemma-4-26B-A4B-it-553cd6572ddc.json",
+  "bracket_start": {
+    "lo": 0,
+    "hi": null
+  },
+  "bracket": {
+    "lo": 0,
+    "hi": null
+  },
+  "search_status": "budget",
+  "timeout_s": 120.0,
+  "time_scale": 1.0,
+  "extra_body": {
+    "chat_template_kwargs": {
+      "enable_thinking": false
+    }
+  },
+  "endpoint": {
+    "namespace": null,
+    "service": null,
+    "workload": null,
+    "server": null,
+    "engine": "unspecified",
+    "model": "google/gemma-4-26B-A4B-it",
+    "url": "http://127.0.0.1:18630/v1/chat/completions"
+  },
+  "host": {
+    "cpu_model": "Intel(R) Xeon(R) 6741P",
+    "logical_cpus": 96,
+    "pl1_w": 300.0,
+    "kernel": "7.0.0-31-generic",
+    "loadavg": "50.58 24.22 14.48 29/6790 1319167"
+  },
+  "run_dir": "/home/devcloud/k3dgpu-bench/smoke/H51/B1/capacity",
+  "json_path": "/home/devcloud/k3dgpu-bench/smoke/H51/B1/capacity/capacity.json",
+  "agents_per_box": null,
+  "agents_per_box_interpolated": null,
+  "binding_limit": {
+    "kind": "budget",
+    "at_agents": null,
+    "detail": "--budget 3 min ran out: APB unknown (budget)",
+    "hardware": []
+  },
+  "steps": [],
+  "idle": {
+    "watts": 205.32208341194772,
+    "pkg_watts": 205.32208341194772,
+    "seconds": 10.016086101531982
+  },
+  "drift_check": null,
+  "confounds": [
+    "synthetic, teacher-forced agent trace: measures the serving path, not task quality",
+    "CPU package energy (RAPL) includes the iGPU and excludes DRAM and discrete GPUs",
+    "net J subtracts the quiet-window power and assumes the background stays constant",
+    "box not quiet at start (forced past: cpu_busy, pkg_power): other work shares the box",
+    "--budget ran out before the bracket closed: agents per box is the proven lower end (unknown when no step passed); a step the budget cut short is unmeasured, not a fail, and a rerun measures it (the bracket is stored)",
+    "endpoint given by --url: engine and server not read from the cluster",
+    "p95 pools requests as independent; turns of one session are correlated (per-rep p95 listed)"
+  ],
+  "quiet_check": {
+    "ok": false,
+    "forced": true,
+    "checks": [
+      {
+        "check": "cpu_busy",
+        "value": 0.21377835723598435,
+        "limit": 0.1,
+        "ok": false
+      },
+      {
+        "check": "pkg_power",
+        "value": 205.32208341194772,
+        "limit": 105.0,
+        "ok": false
+      }
+    ],
+    "sample": {
+      "cpu_busy": 0.21377835723598435,
+      "pkg_w": 205.32208341194772,
+      "pl1_w": 300.0,
+      "gpus": []
+    }
+  },
+  "next_rep_estimate": {
+    "agents": 1,
+    "seconds": 351.2
+  },
+  "apb_at_secondary_slo_p95_only": {
+    "5.0": {
+      "agents_per_box": 0,
+      "lower_bound": true
+    }
+  }
+}
