@@ -1,0 +1,29 @@
+== resume step 1 2026-10-29T19:44:37Z repo=4a322ccca4b3e212423a92e242ab1bcbad2f24b5
+-- H1
+active
+
+active
+H1 rc=0
+-- H2
+running
+H2 rc=0
+-- H3
+29.7.2 live-restore=false cgroup=systemd/2
+H3 rc=0
+-- H4
+probe rc=0
+-- H5
+H5 done
+-- H6
+/dev/nvme0n1p2             3667G 3273G      208G      95% /
+MemAvailable:   123779076 kB
+0.31 0.39 0.41 2/3102 55198
+-- H7
+
+H7 rc=0/0
+-- H8
+lock-free
+H8 done
+-- H9
+br_netfilter vxlan
+modprobe=[]

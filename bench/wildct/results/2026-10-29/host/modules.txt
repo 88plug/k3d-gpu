@@ -1,0 +1,57 @@
+# wildct kernel modules for k3s (wildct amendment R3). The box owner approved loading and persisting
+# vxlan and br_netfilter on 2026-10-29. kernel.modprobe was left empty. Read as root before and after
+# `modprobe -a vxlan br_netfilter` (2026-10-29T19:41:05Z, rc 0) and the modules-load.d file.
+# Production checks (every container's state, health, restart count and start time; the HTTP status of
+# eight published endpoints on the host and through its tailnet address; Prometheus's scrape targets)
+# read identical before, at once after, and 3 minutes after the load. The firewall rule counts did not change.
+
+== before
+## date 2026-10-29T15:40:34-04:00
+## modules (vxlan br_netfilter bridge)
+bridge 0 -
+lsmod lines: 202
+modprobe=[]
+## sysctl net.bridge
+(no /proc/sys/net/bridge)
+## iptables
+iptables-save lines: 180
+ip6tables-save lines: 53
+nft ruleset lines: 286
+## modules-load.d
+-rw-r--r--   1 root root    34 Oct 13  2025 modules.conf
+-rw-r--r--   1 root root    16 Jul 25 17:06 nfs-client.conf
+-rw-r--r--   1 root root     7 Jun  1 18:32 uinput.conf
+
+== after (with /etc/modules-load.d/k3dgpu-wildct.conf)
+## date 2026-10-29T15:44:29-04:00
+## modules (vxlan br_netfilter bridge)
+br_netfilter 0 -
+bridge 1 br_netfilter,
+ip6_udp_tunnel 1 vxlan,
+udp_tunnel 1 vxlan,
+vxlan 0 -
+lsmod lines: 206
+modprobe=[]
+## sysctl net.bridge
+net.bridge.bridge-nf-call-arptables = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+net.bridge.bridge-nf-filter-pppoe-tagged = 0
+net.bridge.bridge-nf-filter-vlan-tagged = 0
+net.bridge.bridge-nf-pass-vlan-input-dev = 0
+## iptables
+iptables-save lines: 180
+ip6tables-save lines: 53
+nft ruleset lines: 286
+## modules-load.d
+-rw-r--r--   1 root root   287 Oct 29 15:44 k3dgpu-wildct.conf
+-rw-r--r--   1 root root    34 Oct 13  2025 modules.conf
+-rw-r--r--   1 root root    16 Jul 25 17:06 nfs-client.conf
+-rw-r--r--   1 root root     7 Jun  1 18:32 uinput.conf
+
+== /etc/modules-load.d/k3dgpu-wildct.conf (root:root 0644)
+# k3d-gpu (github 88plug/k3d-gpu) wildct campaign, 2026-10-29: k3s's flannel needs vxlan and
+# k3s needs br_netfilter (net.bridge.bridge-nf-call-iptables). Loaded at boot by
+# systemd-modules-load. Approved by the box owner on 2026-10-29. Remove this file to stop it.
+vxlan
+br_netfilter
