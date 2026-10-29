@@ -50,7 +50,7 @@ bench/eatflow/crescent/hold.sh H52b 1800 bash bench/eatflow/crescent/h52b.sh ~/k
   reaped).
 - `serving-proof-pre.txt`, `serving-proof-post.txt`: a chat completion through the `:8100` front
   door counted on each pair (`:30000`, `:30001`) before and after the hold.
-- `cleanup-vfio.txt`, `lsmod-cleanup.txt`: after the hold, outside it (below).
+- `cleanup-vfio.txt`, `lsmod-cleanup.txt`, `xe-vram-hold.txt`: after the hold, outside it (below).
 
 ## Reading
 
@@ -78,10 +78,13 @@ bench/eatflow/crescent/hold.sh H52b 1800 bash bench/eatflow/crescent/h52b.sh ~/k
   `driver_override` first; k3d-gpu's manifest has no init container and host-setup's plan writes
   only `sriov_numvfs`.
 - GPU: the busy-card filter (`K3D_GPU_INTEL_CARDS=auto`, half the VRAM or more held by host
-  processes) is newer than H52's commit. It left out the first card of each serving pair and kept
-  the second (0000:48:00.0, 0000:96:00.0), which the pairs also use; the enumeration pods landed
-  there. `up` printed `Accelerators schedulable: intel=4` before the restarted GPU plugin
-  re-registered; the node then read 2.
+  processes) is newer than H52's commit. The serving pairs hold about half of every card: through
+  the hold the host's xe-exporter read 16.08, 15.38, 16.18 and 15.47 GiB used on card1 to card4
+  (`xe-vram-hold.txt`, read from its Prometheus after the hold). The filter left out the first
+  card of each serving pair, just over half, and kept the second (0000:48:00.0, 0000:96:00.0),
+  just under it, which the pairs also use; the enumeration pods landed there. `up` printed
+  `Accelerators schedulable: intel=4` before the restarted GPU plugin re-registered; the node
+  then read 2.
 - `--apply`'s package install: needrestart deferred every restart (`apply.txt`); its list is the
   same before and after.
 - `iaa_crypto`: no IAA step ran. `deflate-iaa`, the `crypto` driver's WQs (wq1.0, wq3.0, wq5.0)
@@ -96,5 +99,7 @@ bench/eatflow/crescent/hold.sh H52b 1800 bash bench/eatflow/crescent/h52b.sh ~/k
 - 18:43:45-18:44:07Z: both pairs answered through `:8100` (`serving-proof-post.txt`).
 - 18:47:49Z, under the bench lock: `modprobe -r vfio_iommu_type1`, `vfio`, `iommufd` (each rc 0).
   The loaded module set then equals `lsmod-before.txt`'s (`lsmod-cleanup.txt`).
+- 19:21:59Z, read-only: `xe_vram_used_bytes` per card over 18:32-18:44Z from the host's
+  Prometheus (the xe-exporter), 13 samples each, constant through the hold (`xe-vram-hold.txt`).
 - Before the hold, two read-only `host-setup --plan --with-kernel-wqs` dry runs (at 16cf9a53 and at
   607dcf23, XDG state in a temp dir) passed the gate with the same 8 commands; not saved.
