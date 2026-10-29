@@ -118,7 +118,7 @@ the plugins, and asserts the result, with no manual step.
 | DSA | `dsa.intel.com/wq-user-*` | yes | yes | no | user work queues, no-work-queue case with per-device `accel-config` apply/revert (dedicated, or shared with PASID), kernel-WQ device opt-in (snapshot, own group on a free engine), forced `dsa` fails `doctor` |
 | IAA | `iaa.intel.com/wq-user-*` | yes | yes | no | user work queues, no-work-queue case with per-device `accel-config` apply/revert, iaa_crypto kernel-WQ opt-in with a snapshot revert, no room left, live zswap `deflate-iaa` left alone |
 | QAT (C62x, 4xxx, 420xx, 6xxx) | `qat.intel.com/*` | yes | yes | no | 4xxx and C62x PF with VFs, no VFs (apply = `sriov_totalvfs`, plugin VF driver named), no SR-IOV, unbound PF, `vfio-pci` check |
-| AMX | `feature.node.kubernetes.io/cpu-cpuid.AMX*=true` (labels, no plugin) | yes | yes (labels) | no | AMX flags detected and reported; CPU without AMX |
+| AMX | `feature.node.kubernetes.io/cpu-cpuid.AMX*=true` (labels, no plugin) | yes | yes (labels) | no | AMX flags detected and reported; CPU without AMX; `test` AMX probe passes on an AMX oneDNN matmul, fails on a non-AMX matmul and when no matmul ran |
 | CPU ISA (AVX-VNNI, AVX-512, VAES, GFNI, SHA, CET) | `feature.node.kubernetes.io/cpu-cpuid.<NAME>=true` (NFD names, labels only) | yes | yes (labels) | labels read on the UHD 770 host by `doctor`; not applied to a live cluster | NFD name mapping, `pku` unlabelled, no-flag CPU |
 | Hybrid P/E cores | `k3d-gpu.io/hybrid-cpu=true`; pod label `k3d-gpu.io/cores` | yes | yes | **yes** at `109154d`: performance pod on CPU 0, efficient pod on CPU 20. The strict P/E placement check in `test` passed live on the merged tree (performance `0`, efficient `24`). The `ecluster`, `pcore-physical`, `latency` (on favored CPUs 8 and 10) and `lowpower` balloons verified live on the i9-13900T ([results](#how-hybrid-pe-pinning-works)); the Arrow Lake-H `cpu_lowpower` override is sim-only (UNVERIFIED live). | detection, no online E-cores, non-hybrid, forced, `doctor` lists, `test` placement pass and both failure modes; `cpu_lowpower` and no-L3 LP E-cores, E-core clusters, physical P-cores, favored CPUs from CPPC and MSR `0x771`, `latency` patched to the favored L2 dirs |
 
@@ -407,6 +407,32 @@ Shipped since this roadmap was first written:
   that write [EXPERIMENTS.md](../EXPERIMENTS.md).
 - **Telemetry.** Prometheus, node-exporter, the Intel GPU exporter and an optional
   xpumd manifest in `share/telemetry/` ([telemetry.md](telemetry.md)).
+- **On-die read-outs** ([#178](https://github.com/88plug/k3d-gpu/pull/178)), from the
+  [on-die accelerator reference](intel-on-die-accelerators.md#4-k3d-gpu-gap-list).
+  `k3d-gpu test` runs an AMX engagement probe: one oneDNN matmul with
+  `ONEDNN_VERBOSE=1` after `arch_prctl(ARCH_REQ_XCOMP_PERM)`, failing unless an AMX
+  implementation ran (oneDNN falls back to AVX-512 silently without the permission).
+  `doctor` runs read-only `intel-speed-select base-freq info` and `turbo-freq info`;
+  suggests `rdt=l3cat` with its revert where the kernel hides L3 CAT on Skylake-SP
+  family (model 0x55); reports DLB (8086:2710/2714, no in-tree driver) and each QAT
+  PF's `cfg_services` and state; and compares DSA, IAA, QAT and DLB per socket with the
+  ARK rows for the 6741P (3 of each) and the Xeon 6 SoC 6716P-B. With SST-BF on and no
+  CPPC ranking, `up` annotates the high-priority CPUs (the higher cpufreq
+  `base_frequency`) as `k3d-gpu.io/favored-cpus`. `doctor --perf` decodes TPMI
+  power-limit reasons (PLR). QAT 420xx (Gen5) and 6xxx (Gen6) were already in the QAT
+  row of the capability matrix.
+- **DSA/IAA host setup** ([#154](https://github.com/88plug/k3d-gpu/pull/154),
+  [#162](https://github.com/88plug/k3d-gpu/pull/162)). For `dsa*`/`iax*` devices with
+  no user work queue, `doctor` prints a per-device `accel-config` apply and revert (a
+  shared work queue when the device has PASID, else a dedicated one; #154), and
+  `host-setup --with-kernel-wqs` adds a user work queue beside the kernel ones held by
+  `iaa_crypto` or a dmaengine owner, with a snapshot revert (#162). The DSA/IAA `ok`
+  line says pods need `CAP_SYS_RAWIO` to mmap a work-queue portal (INTEL-SA-01084;
+  [#218](https://github.com/88plug/k3d-gpu/pull/218)).
+- **vRAN Boost, detect-only** ([#218](https://github.com/88plug/k3d-gpu/pull/218)).
+  `doctor` reports vRAN Boost physical functions (8086:57c0 VRB1, 8086:57c2 VRB2; VFs
+  not counted) and their driver. It has no kernel driver (DPDK `baseband/acc` on
+  vfio-pci), so k3d-gpu exposes nothing for it.
 
 Planned, not shipped. Each item lands with its own test and, where it touches
 hardware, a recorded run.
@@ -429,24 +455,10 @@ needs a pre-registered hypothesis in [EXPERIMENTS.md](../EXPERIMENTS.md) before 
 default changes. The launcher still never changes host configuration; host steps stay
 printed suggestions with an apply and a revert.
 
-- **AMX engagement check.** A `test` pod that requests AMX permission
-  (`arch_prctl(ARCH_REQ_XCOMP_PERM)`) and runs one oneDNN matmul with
-  `ONEDNN_VERBOSE=1`, failing when no `amx` kernel runs. oneDNN falls back to
-  AVX-512 silently when the permission is missing.
-- **DSA/IAA host-setup detail.** For disabled `dsa*`/`iax*` devices, print an exact
-  `accel-config load-config` with its revert, check `pasid_enabled` and scalable
-  mode, and warn that pods need `CAP_SYS_RAWIO` to mmap a work-queue portal
-  (INTEL-SA-01084). Report IAA work queues bound to `iaa_crypto`, which `detect`
-  does not see today, with zswap `deflate-iaa` as a suggestion and revert.
-- **Speed Select read-out.** Read `intel-speed-select turbo-freq info` and
-  `base-freq info` on TPMI Xeons and feed the high-priority cores into
-  `k3d-gpu.io/favored-cpus`, so the `latency` balloon picks them as it does on
-  client parts. Read-only.
-- **RDT on Skylake-SP family.** Detect the kernel quirk that hides L3 CAT on
-  SKX/CLX/CPX (model 0x55) and suggest `rdt=l3cat` with its revert; report L2 CAT
-  on Granite Rapids.
-- **TPMI power-limit reasons.** Read and decode `tpmi-*/plr` status when debugfs is
-  readable, so `tune` and `doctor` can name the limit behind a throughput dip.
-- **Detect-only rows.** Report DLB (8086:2710/2714, no in-tree driver), vRAN Boost
-  (8086:57c0/57c2), QAT 420xx (Gen5) and 6xxx (Gen6), and add the 6741P (3 each
-  of QAT/DLB/DSA/IAA) and Xeon 6 SoC defaults to the per-socket ARK comparison.
+- **IAA-backed zswap.** Report the zswap `enabled` and `compressor` parameters next to
+  IAA work queues bound to `iaa_crypto`, and print `deflate-iaa` as a suggestion with
+  an exact revert to the recorded compressor and `enabled`. zswap changes reclaim
+  host-wide, so it stays a printed suggestion.
+- **Priority Core Turbo high-priority CPUs.** Feed the PCT / SST-TF high-priority cores
+  (turbo-freq bucket 0) into `k3d-gpu.io/favored-cpus`, as the SST-BF high-priority CPUs
+  are fed today, so the `latency` balloon picks them on PCT SKUs. Read-only.
