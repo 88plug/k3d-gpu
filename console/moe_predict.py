@@ -55,6 +55,8 @@ GPU_SPECS = {
 
 # Engines per weight container, as the H54 engine scout verified them at the
 # pinned versions (EXPERIMENTS.md H54 pre-registration). Order is preference.
+# llama.cpp names the agent's own llama.cpp pins (release v0.8.0, tag b11960),
+# newer than the b11749 build the scout read.
 ENGINES = [
     {"name": "ovms", "container": "ov", "devices": ("cpu", "gpu"), "tp": False, "formats": None,
      "images": ("openvino/model_server:2026.4.1@sha256:148e3fe802261ed0b5b634de3bbccdefe7176a218ec34a88e382b40704c34a1c",
@@ -66,8 +68,8 @@ ENGINES = [
     {"name": "sglang-cpu", "container": "safetensors", "devices": ("cpu",), "tp": False,
      "formats": ("bf16", "fp8", "w4a16"), "images": ("lmsysorg/sglang:v0.5.22-xeon@sha256:4e5c413ed9a31f38f74e18aa9b645d65a0b0a023d42f63edb4e2b412ea1a230f",)},
     {"name": "llama.cpp", "container": "gguf", "devices": ("cpu", "gpu", "hybrid"), "tp": False,
-     "formats": None, "images": ("ghcr.io/ggml-org/llama.cpp:server-b11749@sha256:9fbaa06d7f4449e2ae0d02b40e0431f7c212dcf231c9e3a7777a6afc2cc8f312",
-                "ghcr.io/ggml-org/llama.cpp:server-intel-b11749@sha256:ae2d41ba73574a1e12cd237c88b512c8bb39ba6f703e873912b76cb8988a81bd")},
+     "formats": None, "images": ("ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220",
+                "ghcr.io/ggml-org/llama.cpp:server-intel-b11960@sha256:068cd41cdc292bed89b4a6b7740ea7a33df8ba26bf880d0e12ac75972dce1700")},
 ]
 # Architectures with a narrower engine set than their container suggests.
 ARCH_ENGINES = {"Qwen4ExpForConditionalGeneration": ("llama.cpp",), "qwen4exp": ("llama.cpp",)}
