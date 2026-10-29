@@ -30,6 +30,8 @@
 #   LIVE_SAMPLING   the proxy's pinned sampling profile (default: the model set's; agent.lock)
 #   LIVE_MOUNT_B    1: mount the B arm's weights read-only into the node instead of copying them
 #   LIVE_EAT_KV_GIB B1 VLLM_CPU_KVCACHE_SPACE, GiB (default 6, the 125 GiB desktop; H50: 40, as shipped)
+#   LIVE_EAT_B1_TAG B1's vLLM CPU image tag@digest (default EAT 0d3438d's v0.24.0; H50, H51: EAT
+#                   release-1.1.0's v0.28.0, crescent amendment E1)
 #   LIVE_KEY_FILE   0600 env file with OPENAI_BASE_URL and OPENAI_API_KEY             (R)
 #   LIVE_BFCL_PY    python of the hashed BFCL venv                                    (R)
 #   LIVE_LEVEL      background load level (default typical; R always none)
@@ -110,6 +112,10 @@ REDIS_IMAGE=redis:8.10.2-alpine@sha256:9f8d2d789b9a1d1e3f283f979aa9cbf3933738064
 # index digest read 2026-10-20, and the OpenVINO model its init container pulls (the closest
 # OpenVINO/ Qwen3 4B the chart accepts without an HF token; there is no OpenVINO/ Instruct-2507).
 B3_TAG=2025.4@sha256:c370720007564bbdcbca13b9b714e4537068542cda512e8095259e66b617962a
+# B1: the image tag of EAT's xeon-values.yaml pinned to its index digest. Default: EAT 0d3438d's
+# v0.24.0 (read 2026-10-17), which every desktop row and H54a ran. The crescent wrappers pass EAT
+# release-1.1.0's v0.28.0 (crescent amendment E1).
+B1_TAG=${LIVE_EAT_B1_TAG:-v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1}
 B3_MODEL=OpenVINO/Qwen3-4B-int4-ov
 [ "${MODEL_SET}" = gemma4 ] && B3_MODEL=OpenVINO/gemma-4-26b-a4b-it-int4-ov
 # H53 B2: EAT PR #21's xpu-values.yaml image tag (vllm/vllm-openai-xpu v0.28.0) pinned to the
@@ -496,8 +502,7 @@ if [ "${MODE}" = pairs ]; then
     else
         python3 "${REPO}/bench/apb/stage.py" ovms "${OUT}/agent.yaml" "${OUT}/deploy-a.yaml"
         chart=${LIVE_EAT_CHART:?}
-        printf 'image:\n  tag: "v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1"\n' \
-            > "${OUT}/pin.yaml"
+        printf 'image:\n  tag: "%s"\n' "${B1_TAG}" > "${OUT}/pin.yaml"
         python3 "${REPO}/bench/apb/stage.py" values "${chart}/xeon-values.yaml" "${OUT}/pin.yaml" "${KV_GIB}" "${OUT}/values.yaml"
         helm template "${B_REL}" "${chart}" --values "${OUT}/values.yaml" \
             --set LLM_MODEL_ID=${ALIAS} --set chatTemplateConfigMap.enabled=${B_CHAT} --set global.monitoring=false \
@@ -667,8 +672,7 @@ case ${ARM} in
         chart=${LIVE_EAT_CHART:?}
         # EAT stock: xeon-values.yaml as shipped, the tag pinned to its digest and the KV cache
         # sized by LIVE_EAT_KV_GIB (6 GiB by default, to fit the 125 GiB desktop); no k3d-gpu balloon overlay, stock max_model_len 8192.
-        printf 'image:\n  tag: "v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1"\n' \
-            > "${OUT}/pin.yaml"
+        printf 'image:\n  tag: "%s"\n' "${B1_TAG}" > "${OUT}/pin.yaml"
         python3 "${REPO}/bench/apb/stage.py" values "${chart}/xeon-values.yaml" "${OUT}/pin.yaml" "${KV_GIB}" "${OUT}/values.yaml"
         helm template "${B_REL}" "${chart}" --values "${OUT}/values.yaml" \
             --set LLM_MODEL_ID=${ALIAS} --set chatTemplateConfigMap.enabled=${B_CHAT} --set global.monitoring=false \
