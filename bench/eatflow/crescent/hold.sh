@@ -2,12 +2,12 @@
 # hold.sh NAME CAP_S CMD...: one measurement hold on crescent (EXPERIMENTS.md "H50-H52
 # pre-registration", shared rules 1-4). Waits for the campaign lock, applies the hold-start
 # rule (load1 <= 12 and no aiperf process, polled every 2 min for at most 60 min, then the hold
-# runs flagged), refuses to start above 97% disk, runs CMD under GNU
-# `timeout --foreground -k 30 CAP_S` with the serving sampler beside it and a disk watchdog that
-# stops CMD above 97%, then kills what is left of CMD's process tree, deletes every cluster and
-# host container of this campaign (not k3dgpu-x-*/-g-*) and this tool's load containers. A TERM,
-# INT or HUP stops CMD with one TERM and waits for it (timeout -k 30 bounds that), then cleans
-# up the same way. Records go to
+# runs flagged), refuses to start above 97% disk, runs CMD under GNU `timeout -k 30 CAP_S` with
+# the serving sampler beside it and a disk watchdog that stops CMD above 97%, then kills what is
+# left of CMD's process tree, deletes every cluster and host container of this campaign
+# (not k3dgpu-x-*/-g-*) and this tool's load containers. A TERM, INT or HUP stops CMD's process
+# group with one TERM (CMD gets it once) and waits for CMD (timeout -k 30 bounds that), then
+# cleans up the same way. Records go to
 # ~/k3dgpu-bench/runs/NAME/; one start and one end record per hold go to
 # ~/k3dgpu-bench/runs/holds.log (holds.py).
 # HOLD_SLOT=0|1 (H56, off by default): one hold per cpuset slice, see slots.sh; every
@@ -122,15 +122,17 @@ python3 "${HERE}/serving.py" "${R}/serving.jsonl" 7>&- 8>&- 9>&- &
 sp=$!
 log "start: $*"
 # setsid execs in place, so ${cp} leads CMD's own process group. No child keeps fd 9.
-# --foreground: a stop (signal, cap, disk) sends TERM to CMD alone, once, and KILL 30 s later;
-# reap() then kills the rest of the group. Without it timeout sends TERM to CMD and then to
-# the group, CMD included, and a bash CMD exits at once on a second TERM that lands while its
-# EXIT trap runs (bash >= 5.2.14), which cut that cleanup short whenever timeout was
-# preempted between the two sends.
+# A stop (a signal to hold.sh, the cap, the disk watchdog) is timeout's: TERM to its child and
+# then to the whole group, KILL 30 s later. After that group send timeout ignores TERM, so a
+# later stop sends nothing more. A bash CMD exits at once on a second TERM that lands while its
+# EXIT trap runs (bash >= 5.2.14), and CMD as timeout's child got two whenever timeout was
+# preempted between its sends. So timeout's child is hold_cmd, a shell that runs CMD and does
+# nothing on TERM: CMD and its descendants get the group's TERM only, CMD's status passes on.
+hold_cmd=(bash -c 'trap : TERM; "$@"; exit' hold-cmd)
 if [ -n "${HOLD_SLOT:-}" ]; then
-setsid env K3DGPU_HOLD="${TAG}" K3DGPU_HOLD_RUNS="${B}/runs" "${TO}" --foreground -k 30 "${cap}" taskset -c "${SLOT_CPUS}" "$@" > "${R}/hold.log" 2>&1 7>&- 8>&- 9>&- &
+setsid env K3DGPU_HOLD="${TAG}" K3DGPU_HOLD_RUNS="${B}/runs" "${TO}" -k 30 "${cap}" "${hold_cmd[@]}" taskset -c "${SLOT_CPUS}" "$@" > "${R}/hold.log" 2>&1 7>&- 8>&- 9>&- &
 else
-setsid env K3DGPU_HOLD="${TAG}" K3DGPU_HOLD_RUNS="${B}/runs" "${TO}" --foreground -k 30 "${cap}" "$@" > "${R}/hold.log" 2>&1 9>&- &
+setsid env K3DGPU_HOLD="${TAG}" K3DGPU_HOLD_RUNS="${B}/runs" "${TO}" -k 30 "${cap}" "${hold_cmd[@]}" "$@" > "${R}/hold.log" 2>&1 9>&- &
 fi
 cp=$!
 [ -z "${sig:-}" ] || kill -TERM "${cp}"

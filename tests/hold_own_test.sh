@@ -248,13 +248,14 @@ if [ "${v}" = 2 ]; then ok "T14 rc = 2 without a GNU timeout"; else fail "T14 rc
 if [ ! -e "${h}/t14.ran" ]; then ok "T14 CMD never started"; else fail "T14 CMD ran under a timeout that is not GNU's"; fi
 if [ ! -s "${h}/k3dgpu-bench/runs/holds.log" ]; then ok "T14 no hold record"; else fail "T14 holds.log has records"; fi
 
-# T15: a stop sends TERM to CMD alone, and once. A bash CMD exits at once on a TERM that lands
-# while its EXIT trap runs (bash >= 5.2.14); timeout's group send was such a second TERM
-# whenever timeout was preempted between its two sends. hold.sh gets TERM, then HUP while
-# CMD's EXIT trap runs: the trap still ends, and CMD's background child sees no TERM (the
-# reap kills it).
+# T15: a stop sends TERM to every process of CMD's group, CMD once. A bash CMD exits at once on
+# a TERM that lands while its EXIT trap runs (bash >= 5.2.14); timeout's group send was such a
+# second TERM whenever timeout was preempted between its send to its child (then CMD) and its
+# send to the group. hold.sh gets TERM, then HUP while CMD's EXIT trap runs: the trap still
+# ends, and CMD's background child gets the stop's TERM, once (it logs each TERM and keeps
+# running; the reap kills it).
 h=$(newhome t15)
-printf 'trap "echo TERM >> %s/t15.child; exit 0" TERM\n(exec -a %s-t15s sleep 300) &\nwait\n' "${h}" "${P}" > "${h}/child.sh"
+printf 'trap "echo TERM >> %s/t15.child" TERM\nwhile :; do sleep 0.2; done\n' "${h}" > "${h}/child.sh"
 HOME=${h} bash "${HOLD}" t15 600 bash -c "trap 'echo begin >> ${h}/t15.trace; sleep 2; echo done >> ${h}/t15.trace' EXIT; (exec -a ${P}-t15c bash '${h}/child.sh') & touch '${h}/t15.started'; (exec -a ${P}-t15 sleep 300)" > "${h}/hold.out" 2>&1 &
 hp=$!
 for _ in $(seq 300); do [ -f "${h}/t15.started" ] && break; sleep 0.1; done
@@ -267,7 +268,8 @@ if kill -0 "${hp}" 2>/dev/null; then fail "T15 hold.sh still running 45 s after 
 wait "${hp}" 2>/dev/null
 v=$(tr '\n' ' ' < "${h}/t15.trace" 2>/dev/null)
 if [ "${v}" = "begin done " ]; then ok "T15 CMD's EXIT trap ran to the end after TERM then HUP"; else fail "T15 CMD's EXIT trap trace = '${v}', want 'begin done '"; fi
-if [ ! -e "${h}/t15.child" ]; then ok "T15 CMD's background child got no TERM"; else fail "T15 CMD's background child got TERM"; fi
+v=$(tr '\n' ' ' < "${h}/t15.child" 2>/dev/null)
+if [ "${v}" = "TERM " ]; then ok "T15 CMD's background child got the stop's TERM once"; else fail "T15 CMD's background child's TERMs = '${v}', want 'TERM '"; fi
 v=$(cat "${h}/k3dgpu-bench/runs/t15/rc" 2>/dev/null || echo missing)
 if [ "${v}" = 143 ]; then ok "T15 rc = 143"; else fail "T15 rc = ${v}, want 143"; fi
 if [ -z "$(pgrep -f "^${P}-t15")" ]; then ok "T15 no process of the hold left"; else fail "T15 survivors: $(pgrep -af "^${P}-t15" | tr '\n' ' ')"; kill -KILL $(pgrep -f "^${P}-t15") 2>/dev/null; fi
@@ -290,6 +292,71 @@ if [ "${v}" = "begin done " ]; then ok "T16 CMD's EXIT trap ran to the end"; els
 v=$(cat "${h}/k3dgpu-bench/runs/t16/rc" 2>/dev/null || echo missing)
 if [ "${v}" = 143 ]; then ok "T16 rc = 143"; else fail "T16 rc = ${v}, want 143"; fi
 if [ -z "$(pgrep -f "^${P}-t16")" ]; then ok "T16 no process of the hold left"; else fail "T16 survivors"; kill -KILL $(pgrep -f "^${P}-t16") 2>/dev/null; fi
+
+# T17: a stop after the cap has fired sends CMD no second TERM: the cap's TERM was the stop.
+# Cap 3 s, CMD's EXIT trap takes 4 s, hold.sh gets TERM 1 s into that trap. The cap also ends
+# CMD's foreground child (a timestamped record every 0.1 s): none is written later than 0.5 s
+# after the trap began.
+h=$(newhome t17)
+printf 'while :; do date +%%s.%%N >> %s/t17.rec; sleep 0.1; done\n' "${h}" > "${h}/child.sh"
+HOME=${h} bash "${HOLD}" t17 3 bash -c "trap 'date +%s.%N > ${h}/t17.cap; echo begin >> ${h}/t17.trace; sleep 4; echo done >> ${h}/t17.trace' EXIT; (exec -a ${P}-t17 bash '${h}/child.sh')" > "${h}/hold.out" 2>&1 &
+hp=$!
+for _ in $(seq 300); do grep -q begin "${h}/t17.trace" 2>/dev/null && break; sleep 0.1; done
+sleep 1
+kill -TERM "${hp}"
+for _ in $(seq 450); do kill -0 "${hp}" 2>/dev/null || break; sleep 0.1; done
+if kill -0 "${hp}" 2>/dev/null; then fail "T17 hold.sh still running 45 s after SIGTERM"; kill -KILL "${hp}"; fi
+wait "${hp}" 2>/dev/null
+n=$(wc -l < "${h}/t17.rec")
+late=$(awk -v t="$(cat "${h}/t17.cap" 2>/dev/null || echo 0)" '$1 > t + 0.5' "${h}/t17.rec" | wc -l)
+if [ "${n}" -gt 0 ] && [ "${late}" = 0 ]; then ok "T17 CMD's foreground child wrote no record after the cap (${n} before)"; else fail "T17 CMD's foreground child wrote ${late} records after the cap (${n} in all)"; fi
+v=$(tr '\n' ' ' < "${h}/t17.trace" 2>/dev/null)
+if [ "${v}" = "begin done " ]; then ok "T17 CMD's EXIT trap ran to the end after the cap, then TERM"; else fail "T17 CMD's EXIT trap trace = '${v}', want 'begin done '"; fi
+v=$(cat "${h}/k3dgpu-bench/runs/t17/rc" 2>/dev/null || echo missing)
+if [ "${v}" = 124 ]; then ok "T17 rc = 124 (the cap)"; else fail "T17 rc = ${v}, want 124"; fi
+if [ -z "$(pgrep -f "^${P}-t17")" ]; then ok "T17 no process of the hold left"; else fail "T17 survivors"; kill -KILL $(pgrep -f "^${P}-t17") 2>/dev/null; fi
+
+# T18: T17 with the disk watchdog as the later stop. Cap 24 s, CMD's EXIT trap takes 10 s, the
+# disk fills once the trap has begun, so the watchdog's 30 s poll fires inside the trap.
+h=$(newhome t18)
+echo 10 > "${h}/disk"
+printf '#!/bin/sh\necho "Filesystem 1024-blocks Used Available Capacity Mounted"\necho "/dev/stub 100 10 90 $(cat "$HOME/disk")%% /"\n' > "${h}/k3dgpu-bench/bin/df"
+HOME=${h} bash "${HOLD}" t18 24 bash -c "trap 'echo begin >> ${h}/t18.trace; sleep 10; echo done >> ${h}/t18.trace' EXIT; (exec -a ${P}-t18 sleep 300)" > "${h}/hold.out" 2>&1 &
+hp=$!
+for _ in $(seq 400); do grep -q begin "${h}/t18.trace" 2>/dev/null && break; sleep 0.1; done
+echo 99 > "${h}/disk"
+for _ in $(seq 600); do kill -0 "${hp}" 2>/dev/null || break; sleep 0.1; done
+if kill -0 "${hp}" 2>/dev/null; then fail "T18 hold.sh still running 60 s after the cap"; kill -KILL "${hp}"; fi
+wait "${hp}" 2>/dev/null
+if [ -s "${h}/k3dgpu-bench/runs/t18/disk-abort" ]; then ok "T18 disk-abort recorded inside CMD's EXIT trap"; else fail "T18 no disk-abort (the watchdog did not fire inside the trap)"; fi
+v=$(tr '\n' ' ' < "${h}/t18.trace" 2>/dev/null)
+if [ "${v}" = "begin done " ]; then ok "T18 CMD's EXIT trap ran to the end after the cap, then the disk stop"; else fail "T18 CMD's EXIT trap trace = '${v}', want 'begin done '"; fi
+v=$(cat "${h}/k3dgpu-bench/runs/t18/rc" 2>/dev/null || echo missing)
+if [ "${v}" = 124 ]; then ok "T18 rc = 124 (the cap)"; else fail "T18 rc = ${v}, want 124"; fi
+if [ -z "$(pgrep -f "^${P}-t18")" ]; then ok "T18 no process of the hold left"; else fail "T18 survivors"; kill -KILL $(pgrep -f "^${P}-t18") 2>/dev/null; fi
+
+# T19: a stop ends CMD's foreground child at once, as it ended live.sh's scorer before CMD's
+# own cleanup stopped the load and the agents: the child appends a record every 0.1 s and
+# writes none after the stop, while CMD's EXIT trap still runs to the end.
+h=$(newhome t19)
+printf 'while :; do echo r >> %s/t19.rec; sleep 0.1; done\n' "${h}" > "${h}/child.sh"
+HOME=${h} bash "${HOLD}" t19 600 bash -c "trap 'echo begin >> ${h}/t19.trace; sleep 2; echo done >> ${h}/t19.trace' EXIT; touch '${h}/t19.started'; (exec -a ${P}-t19 bash '${h}/child.sh')" > "${h}/hold.out" 2>&1 &
+hp=$!
+for _ in $(seq 300); do [ -f "${h}/t19.started" ] && break; sleep 0.1; done
+sleep 0.5
+kill -TERM "${hp}"
+sleep 0.5
+n1=$(wc -l < "${h}/t19.rec")
+for _ in $(seq 450); do kill -0 "${hp}" 2>/dev/null || break; sleep 0.1; done
+if kill -0 "${hp}" 2>/dev/null; then fail "T19 hold.sh still running 45 s after SIGTERM"; kill -KILL "${hp}"; fi
+wait "${hp}" 2>/dev/null
+n2=$(wc -l < "${h}/t19.rec")
+if [ "${n1}" -gt 0 ] && [ "${n2}" = "${n1}" ]; then ok "T19 CMD's foreground child wrote no record after the stop (${n1})"; else fail "T19 CMD's foreground child wrote $(( n2 - n1 )) records after the stop (${n1} before)"; fi
+v=$(tr '\n' ' ' < "${h}/t19.trace" 2>/dev/null)
+if [ "${v}" = "begin done " ]; then ok "T19 CMD's EXIT trap ran to the end"; else fail "T19 CMD's EXIT trap trace = '${v}', want 'begin done '"; fi
+v=$(cat "${h}/k3dgpu-bench/runs/t19/rc" 2>/dev/null || echo missing)
+if [ "${v}" = 143 ]; then ok "T19 rc = 143"; else fail "T19 rc = ${v}, want 143"; fi
+if [ -z "$(pgrep -f "^${P}-t19")" ]; then ok "T19 no process of the hold left"; else fail "T19 survivors"; kill -KILL $(pgrep -f "^${P}-t19") 2>/dev/null; fi
 
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]
