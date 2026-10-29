@@ -994,16 +994,21 @@ def llama_layer_bytes(m, kv, ctx, seqs, n_cpu_moe):
     """([weights], [KV]) on the GPU per repeating layer, the output layer last: the class
     totals spread evenly over the layers, the experts of the first n_cpu_moe layers in host
     RAM (--n-cpu-moe), and each layer's own KV (its device holds it) for seqs sequences.
-    The output layer holds lm_head, and the MTP and vision tensors when the GGUF has them."""
+    The weights add up to the bytes to serve less the lookup tables (MTP only when the GGUF
+    holds it). The output layer holds lm_head and the MTP tensors; the vision projector
+    counts with layer 0, on the first card: tools/mtmd/clip.cpp loads it on the first GPU."""
     n = max(m["layers"], 1)
-    exp, other = m["bytes"]["experts"] / n, m["bytes"]["other"] / n
+    b = m["bytes"]
+    exp, other = b["experts"] / n, b["other"] / n
     f, w, st = kv_parts(kv, ctx)
     per = {"full": f / max(kv["full_layers"], 1), "swa": w / max(kv["swa_layers"], 1),
            "linear": st / max(kv["linear_layers"], 1)}
     kinds = kv.get("kinds") or []
     wl = [other + (exp if il >= n_cpu_moe else 0) for il in range(n)]
+    wl[0] += b["vision"]
     kl = [per[kinds[il]] * seqs if il < len(kinds) else 0 for il in range(n)]
-    return wl + [m["bytes"]["lm_head"] + m["bytes"]["mtp"] + m["bytes"]["vision"]], kl + [0]
+    out = m["serve_bytes"] - m["lookup_bytes"] - b["experts"] - b["other"] - b["vision"]
+    return wl + [out], kl + [0]
 
 
 def llama_split(layer_bytes, k, room):
@@ -1338,17 +1343,32 @@ def _placements(eng, m, kv, ladder, relaxed, want_seqs, want_gpus, cards, hfree,
             yield _res(eng, place, True, "", lines, ctx=c, seqs=n, tp=k if eng == "vllm" else 1, gpus=k,
                        gpu_bytes=gpu_use, host_bytes=hb, kv_bytes=int(kvused), kv_scale=scale, card_bytes=[gpu_use] * k,
                        flags=_flags(eng, place, c, n, k, gpu_use, use, kvused, m, 0, kv))
-    # MoE experts to DRAM (llama.cpp --n-cpu-moe): every free card, fewest CPU layers.
+    # MoE experts to DRAM (llama.cpp --n-cpu-moe). Every card is held to the smallest budget
+    # of the cards used, so one more card can leave less room per card: the free cards by
+    # budget, 1, 2, ... of them (or --gpus), and the plan with the most context, then the
+    # fewest CPU-expert layers, then the most sequences, then the fewest cards.
     if eng == "llama.cpp" and cards and m["moe"]:
-        use = cards[:want_gpus or len(cards)]
-        if not (cpu["amx"] or cpu["avx512"]):
-            yield _res(eng, "moe-offload", False, "the CPU has neither AMX nor AVX-512 for expert compute", gpus=len(use))
+        ks = [want_gpus] if want_gpus else list(range(1, len(cards) + 1))
+        if want_gpus and want_gpus > len(cards):
+            yield _res(eng, "moe-offload", False, "%d GPUs asked, %d not busy" % (want_gpus, len(cards)), gpus=want_gpus)
+        elif not (cpu["amx"] or cpu["avx512"]):
+            yield _res(eng, "moe-offload", False, "the CPU has neither AMX nor AVX-512 for expert compute", gpus=ks[-1])
         elif not bw:
             yield _res(eng, "moe-offload", False, "DRAM bandwidth unknown (no STREAM run cached, SMBIOS unreadable)",
-                       gpus=len(use))
+                       gpus=ks[-1])
         else:
-            yield _llama_multi(m, kv, ladder, relaxed, want_seqs, use, ov, ovl, range(1, m["layers"] + 1), on_host,
-                               hfree, bw)
+            tries = [_llama_multi(m, kv, ladder, relaxed, want_seqs, cards[:k], ov, ovl, range(1, m["layers"] + 1),
+                                  on_host, hfree, bw) for k in ks]
+            ok = [r for r in tries if r["fits"]]
+            if not ok:
+                yield tries[-1]
+            else:
+                best = max(ok, key=lambda r: (r["ctx"], -r["n_cpu_moe"], r["seqs"], -r["gpus"]))
+                if len(tries) > 1:
+                    best["math"].append("cards tried, by budget: " + "; ".join(
+                        "%d: %d x %d, experts of %d layers in DRAM" % (r["gpus"], r["ctx"], r["seqs"], r["n_cpu_moe"])
+                        if r["fits"] else "%d: no" % r["gpus"] for r in tries))
+                yield best
     # CPU only: weights, KV and activations all in DRAM (vLLM: its CPU build, the KV
     # pool sized by VLLM_CPU_KVCACHE_SPACE, as EAT's vLLM chart sets it).
     if cpu_ok:
@@ -1406,6 +1426,9 @@ def _llama_multi(m, kv, ladder, relaxed, want_seqs, use, ov, ovl, n_cpus, on_hos
     wl, kl = llama_layer_bytes(m, kv, c, n, n_cpu)
     cards_b = [int(b + ov) for b in llama_cards(ts, [a + b for a, b in zip(wl, kl)])]
     lines += _llama_card_lines(use, ts, wl, kl, ov)
+    if m["bytes"]["vision"]:
+        lines.append("  (%s holds the vision projector, %s: tools/mtmd/clip.cpp loads it on the first GPU)"
+                     % (use[0]["card"], g1(m["bytes"]["vision"])))
     kvused = per_seq(kv, c) * n
     lines.append("KV: %d seqs x %s at %d tokens = %s over the cards" % (n, _mb(per_seq(kv, c)), c, g1(kvused)))
     hb = int(HOST_RUNTIME["llama.cpp"] + on_host)
@@ -1427,7 +1450,7 @@ def _llama_multi(m, kv, ladder, relaxed, want_seqs, use, ov, ovl, n_cpus, on_hos
         return _res("llama.cpp", place, False, "host side %s exceeds the host budget %s" % (g1(hb), g1(hfree)),
                     lines, gpus=k)
     return _res("llama.cpp", place, True, "", lines, ctx=c, seqs=n, gpus=k, gpu_bytes=max(cards_b), card_bytes=cards_b,
-                host_bytes=hb, dram_tok_s=round(toks, 1) if toks else None, kv_bytes=int(kvused),
+                host_bytes=hb, dram_tok_s=round(toks, 1) if toks else None, kv_bytes=int(kvused), n_cpu_moe=n_cpu,
                 flags=_flags("llama.cpp", place, c, n, k, max(cards_b), use, kvused, m, n_cpu, kv, ts))
 
 
