@@ -6,6 +6,9 @@ short pointer to intel/enterprise-agent-toolkit only if #19 stalls.
 Every link below is a permalink to the default branch as of 2026-10-16:
   EAS intel/enterprise-ai-solutions@e8f3ebc927a7659081f6604d157591bddfca40a9
   EAT intel/enterprise-agent-toolkit@0ecf67a8331e8b502ef41e08bf6d2881416178c5
+Re-read 2026-10-29: #19 merged on 2026-10-27 into release-2.0.0, not main, and
+no tag carries it. enterprise-ai-solutions#40 was closed unmerged on 2026-10-22,
+so question 2 below is moot; drop it before filing.
 -->
 
 # Support k3s/k3d as a BYO single-node target

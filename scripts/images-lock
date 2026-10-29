@@ -12,15 +12,20 @@
                                installs is pinned pkg=version
   scripts/images-lock digest REF...
                                network: print the registry's digest of each name:tag
-  scripts/images-lock repin [FILE...]
+  scripts/images-lock repin [--exclude GLOB]... [FILE...]
                                network: re-resolve the tag of every name:tag@sha256
                                reference (and of every unpinned name:tag one) in the
-                               repo, or in FILEs, and write the registry's digest
+                               repo, or in FILEs, and write the registry's digest;
+                               files whose repo-relative path matches a GLOB are left
+                               alone (the nightly passes '.github/workflows/*': its
+                               token cannot push workflow files)
 
 Sources of image references (the lock holds all of them and nothing else):
   - share/**/*.yml             every `image:` line (the baked manifests and the
                                opt-in ones under share/telemetry/)
-  - Dockerfile                 every FROM, with its ARG defaults substituted
+  - Dockerfile                 every FROM, with its ARG defaults substituted, and
+                               every *_IMAGE ARG default (UBUNTU_2404_IMAGE: the base
+                               the release job builds the 24.04 variant from)
   - scripts/k3d-gpu            the K3D_GPU_*_IMAGE defaults (agent and test pods),
                                except K3D_GPU_IMAGE, the node image this repo builds,
                                and every literal *_IMAGE="ref" pin (the agent backends)
@@ -101,6 +106,9 @@ PINNED_RE = re.compile(r"(?<![A-Za-z0-9._/@])(?P<ref>" + NAME_TAG
 APT_INSTALL_RE = re.compile(r"\bapt(?:-get)?[ \t]+(?:-\S+[ \t]+)*install\b(?P<args>[^&|;\n]*)")
 APT_NVIDIA_RE = re.compile(r"^(?:lib)?nvidia-[A-Za-z0-9.+-]*(?:=|$)")
 SKIP_PREFIXES = ("docs/", "research/", "data/", "oracle/raw/")
+# A Dockerfile `ARG FOO_IMAGE="ref"` default: a FROM's base, or one the release job
+# passes as a build-arg (UBUNTU_2404_IMAGE, the 24.04 variant's base).
+ARG_IMAGE_RE = re.compile(r'^ARG[ \t]+[A-Z][A-Z0-9_]*_IMAGE="?([^"\s$]+)"?[ \t]*$', re.M)
 # One `key: value` line of a Helm values mapping; group 4 is the inline value, unquoted.
 VALUES_KEY_RE = re.compile(r"""^([ \t]*)(repository|registry|tag):[ \t]*(["']?)([^\s"'#]*)\3[ \t]*(?:#.*)?$""")
 EAT_DIR = "integrations/eat"
@@ -190,8 +198,9 @@ def collect(root):
                     for ref in SHARE_IMAGE_RE.findall(fh.read()):
                         add(ref, os.path.relpath(path, root).replace(os.sep, "/"))
     with open(os.path.join(root, "Dockerfile"), encoding="utf-8") as fh:
-        froms, args = dockerfile_froms(fh.read())
-    for ref in froms:
+        text = fh.read()
+    froms, args = dockerfile_froms(text)
+    for ref in froms + ARG_IMAGE_RE.findall(text):
         add(ref, "Dockerfile")
     with open(os.path.join(root, "scripts", "k3d-gpu"), encoding="utf-8") as fh:
         text = fh.read()
@@ -401,8 +410,9 @@ def pins(root):
     return problems
 
 
-def repin(root, paths):
-    """Rewrite each name:tag reference to name:tag@<the registry's digest>; returns the changes."""
+def repin(root, paths, exclude=()):
+    """Rewrite each name:tag reference to name:tag@<the registry's digest>, except in
+    files whose repo-relative path matches an exclude glob; returns the changes."""
     allow, digests, changes = read_allow(root), {}, []
 
     def resolved(ref):
@@ -412,6 +422,8 @@ def repin(root, paths):
         return digests[(name, tag)]
 
     for path in paths or scanned_files(root):
+        if any(fnmatch.fnmatchcase(path, g) for g in exclude):
+            continue
         text = read_text(root, path)
         if text is None:
             continue
@@ -513,9 +525,13 @@ def main(argv):
     ap.add_argument("command", choices=("check", "update", "pins", "repin", "digest"))
     ap.add_argument("files", nargs="*", help="repin: only these repo-relative files; digest: the references")
     ap.add_argument("--root", default=here)
+    ap.add_argument("--exclude", action="append", default=[], metavar="GLOB",
+                    help="repin: leave files whose repo-relative path matches GLOB alone")
     args = ap.parse_args(argv[1:])
     if args.files and args.command not in ("repin", "digest"):
         ap.error("only repin and digest take arguments")
+    if args.exclude and args.command != "repin":
+        ap.error("only repin takes --exclude")
     lock_path = os.path.join(args.root, "images.lock")
     try:
         if args.command == "update":
@@ -529,7 +545,7 @@ def main(argv):
                 print(registry_digest(name, tag))
             return 0
         if args.command == "repin":
-            for c in repin(args.root, args.files):
+            for c in repin(args.root, args.files, args.exclude):
                 print(c)
             return 0
         problems = pins(args.root) if args.command == "pins" else check(args.root, lock_path)

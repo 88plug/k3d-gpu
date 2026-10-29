@@ -12,10 +12,13 @@
 #     lines, in *.Dockerfile too
 #   - Helm values name an image as sibling `repository:` / `tag:` keys: pins fails
 #     on such a pair with no digest, with no tag, or tagged latest
-#   - images.lock collects the values pairs and Dockerfile FROMs under integrations/eat
+#   - images.lock collects the values pairs and Dockerfile FROMs under integrations/eat,
+#     and the Dockerfile's *_IMAGE ARG defaults (the 24.04 variant's base)
 #   - `repin` (registry stubbed) appends the digest to a name:tag, moves a stale
 #     digest, leaves allowed and digest-only refs alone, does the same for a values
-#     tag, and is idempotent
+#     tag, and is idempotent; `repin --exclude GLOB` leaves matching files alone
+#   - no workflow file pins name:tag@sha256: the nightly repins with
+#     --exclude '.github/workflows/*' (its token cannot push workflow files)
 #
 # Usage: tests/image_pins_test.sh
 
@@ -127,7 +130,7 @@ pins_case "a values repository whose value is on the next line or a variable" ok
 # ---- images.lock sources: integrations/eat values pairs and Dockerfile FROMs ----
 scratch
 mkdir -p "${WORK}/r/integrations/eat"
-printf 'ARG K3S_TAG=v1.37.1-k3s1\nFROM debian:trixie-slim@%s\n' "${D1}" > "${WORK}/r/Dockerfile"
+printf 'ARG K3S_TAG=v1.37.1-k3s1\nARG UBUNTU_2404_IMAGE="ubuntu:24.04@%s"\nFROM debian:trixie-slim@%s\n' "${D1}" "${D1}" > "${WORK}/r/Dockerfile"
 : > "${WORK}/r/scripts/k3d-gpu"
 printf 'FROM ubuntu:24.04@%s\n' "${D1}" > "${WORK}/r/integrations/eat/bastion.Dockerfile"
 printf 'image:\n  repository: bitnamilegacy/redis\n  tag: "8.0.3-debian-12-r2@%s"\n' "${D2}" > "${WORK}/r/integrations/eat/gw-values.yaml"
@@ -142,13 +145,14 @@ loader.exec_module(m)
 found, _ = m.collect(root)
 want = {
     ("docker.io/bitnamilegacy/redis", "8.0.3-debian-12-r2"): (d2, {"integrations/eat/gw-values.yaml"}),
-    ("docker.io/library/ubuntu", "24.04"): (d1, {"integrations/eat/bastion.Dockerfile"}),
+    ("docker.io/library/ubuntu", "24.04"): (d1, {"Dockerfile", "integrations/eat/bastion.Dockerfile"}),
+    ("docker.io/library/debian", "trixie-slim"): (d1, {"Dockerfile"}),
 }
 for key, (digest, sources) in want.items():
     got = found.get(key)
     assert got == {"digest": digest, "sources": sources}, (key, got)
 EOF
-); then ok "images.lock collects integrations/eat values pairs and Dockerfile FROMs"
+); then ok "images.lock collects integrations/eat values pairs, Dockerfile FROMs and the Dockerfile's *_IMAGE ARGs"
 else fail "images-lock collect integrations/eat"; sed 's/^/  | /' <<< "${out}"; fi
 
 # ---- repin, with the registry stubbed ----
@@ -201,6 +205,59 @@ if grep -qxF "    tag: \"8.0.3-debian-12-r2@${D2}\"" "${WORK}/r/integrations/eat
     ok "repin pins a values tag and moves a stale one"
 else fail "repin values pair"; sed 's/^/  | /' "${WORK}/r/integrations/eat/gw-values.yaml"; fi
 if out=$(repin 2>&1) && [ -z "${out}" ]; then ok "repin is idempotent"; else fail "repin changed a pinned tree again"; sed 's/^/  | /' <<< "${out}"; fi
+
+# ---- repin --exclude: the nightly's token cannot push .github/workflows/ ----
+scratch
+mkdir -p "${WORK}/r/.github/workflows"
+printf 'jobs:\n  a:\n    container: alpine:3.22@%s\n' "${D1}" > "${WORK}/r/.github/workflows/x.yml"
+printf -- '- image: alpine:3.22@%s\n' "${D1}" > "${WORK}/r/share/a.yml"
+cp "${WORK}/r/.github/workflows/x.yml" "${WORK}/x.yml.before"
+exclude_out=$(python3 - "${WORK}/r" "${D2}" 2>&1 <<'EOF'
+import importlib.machinery, importlib.util, sys
+root, digest = sys.argv[1], sys.argv[2]
+loader = importlib.machinery.SourceFileLoader("images_lock", root + "/scripts/images-lock")
+spec = importlib.util.spec_from_loader("images_lock", loader)
+m = importlib.util.module_from_spec(spec)
+loader.exec_module(m)
+m.registry_digest = lambda name, tag: digest
+sys.exit(m.main(["images-lock", "repin", "--exclude", ".github/workflows/*", "--root", root]))
+EOF
+); rc=$?
+if [ "${rc}" -eq 0 ] && cmp -s "${WORK}/x.yml.before" "${WORK}/r/.github/workflows/x.yml" \
+   && ! grep -qF '.github/' <<< "${exclude_out}"; then
+    ok "repin --exclude '.github/workflows/*' leaves a stale workflow pin alone"
+else fail "repin --exclude rewrote or reported an excluded file (exit ${rc})"; sed 's/^/  | /' "${WORK}/r/.github/workflows/x.yml" <<< "${exclude_out}"; fi
+if [ "$(cat "${WORK}/r/share/a.yml")" = "- image: alpine:3.22@${D2}" ] && grep -qF 'share/a.yml:1:' <<< "${exclude_out}"; then
+    ok "repin --exclude still moves the files it does not exclude"
+else fail "repin --exclude skipped share/a.yml"; sed 's/^/  | /' "${WORK}/r/share/a.yml" <<< "${exclude_out}"; fi
+if out=$("${WORK}/r/scripts/images-lock" check --exclude 'x' --root "${WORK}/r" 2>&1); then
+    fail "check accepted --exclude"; sed 's/^/  | /' <<< "${out}"
+elif grep -qF -- '--exclude' <<< "${out}"; then ok "--exclude is a repin option only"
+else fail "check --exclude failed for another reason"; sed 's/^/  | /' <<< "${out}"; fi
+
+# ---- the repo: no workflow file holds a pin the nightly would have to move ----
+# repin-images runs `repin --exclude '.github/workflows/*'`, so a name:tag@sha256
+# written in a workflow would never move again. Workflows read their image pins
+# from files outside .github/workflows/ (the Dockerfile, docs-build/Dockerfile,
+# hack/ci-images.env).
+if out=$(python3 - "${REPO}" 2>&1 <<'EOF'
+import fnmatch, importlib.machinery, importlib.util, sys
+root = sys.argv[1]
+loader = importlib.machinery.SourceFileLoader("images_lock", root + "/scripts/images-lock")
+spec = importlib.util.spec_from_loader("images_lock", loader)
+m = importlib.util.module_from_spec(spec)
+loader.exec_module(m)
+bad = []
+for path in m.scanned_files(root):
+    text = m.read_text(root, path) if fnmatch.fnmatchcase(path, ".github/workflows/*") else None
+    for p in m.PINNED_RE.finditer(text or ""):
+        if m.parse_ref(p.group("ref"))[1] is not None:
+            bad.append("%s:%d: %s" % (path, text.count("\n", 0, p.start()) + 1, p.group(0)))
+print("\n".join(bad))
+sys.exit(1 if bad else 0)
+EOF
+); then ok "no workflow file pins a name:tag@sha256 (the nightly repin cannot push .github/workflows/)"
+else fail "a workflow file pins name:tag@sha256; move it to a file outside .github/workflows/"; sed 's/^/  | /' <<< "${out}"; fi
 
 echo ""
 echo "${PASS} passed, ${FAILS} failed"

@@ -11,7 +11,7 @@ examples/dataplane/redis-dto.yaml     k3d-gpu/redis-dto:8.10.2-dto-fbf41a6  buil
 
 # A rolling distro: pacman needs a current keyring, so the tag stays `latest` and
 # `scripts/images-lock repin` moves the digest beside it.
-.github/workflows/ci.yml              archlinux:latest@sha256:*             Arch is rolling; the PKGBUILD lint runs makepkg/namcap against current Arch
+hack/ci-images.env                    archlinux:latest@sha256:*             Arch is rolling; the PKGBUILD lint runs makepkg/namcap against current Arch
 
 # The H16/H17 harness loads busybox:1.37 into the cluster with `k3d image import`
 # so the timed pods start from the node's store; a digest reference would make
