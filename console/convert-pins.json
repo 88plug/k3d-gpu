@@ -1,7 +1,7 @@
 {
   "schema": "k3d-gpu.convert-pins/v1",
   "comment": "Toolchain of the QAT-matched OpenVINO conversion (console/model_opt.py conversion_job). Each pin is the newest release optimum-intel's own requirements allow; hack/bump-convert-pins moves them nightly (build-and-push.yml bump-convert-pins).",
-  "checked": "2026-10-20",
+  "checked": "2026-10-29",
   "pins": {
     "huggingface-hub": "1.21.0",
     "nncf": "3.4.0",
@@ -9,8 +9,8 @@
     "openvino-tokenizers": "2026.4.1.0",
     "optimum": "2.3.0",
     "optimum-intel": "2.2.0",
-    "torch": "2.14.1",
-    "torchvision": "0.29.1",
+    "torch": "2.15.0",
+    "torchvision": "0.29.2",
     "transformers": "5.5.4"
   }
 }
