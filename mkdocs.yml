@@ -33,6 +33,7 @@ nav:
       - Experimental features: experimental.md
       - Prefill guard: prefill-guard.md
       - Fit and guard: fit.md
+      - Crescent removed models: hosts/crescent-removed-models.md
   - Integrations:
       - GPUStack: integrations/gpustack.md
   - Design:
