@@ -3988,12 +3988,15 @@ run. It follows
 Nothing here changes either row's arms, model files, statistic, thresholds, gates, hold count,
 hold orders or prediction.
 
-**Lock.** Every H57dp step that loads the CPU (`convert.sh`, the smoke, both holds) takes
-`LOCK=$HOME/k3dgpu-bench.lock`. It replaces the scratchpad `live.lock` that H57d's commands and
-R1's name. That file lived in one session's scratchpad directory. This host's H55 runner
-(`bench/admission/run.sh`) takes `~/k3dgpu-bench.lock` by default, as `bench/h54`,
-`bench/xhost` and the crescent holds do on their hosts, so a hold on any other lock would not
-exclude it. `hold.sh` and `convert.sh` are unchanged: both still require `LOCK` to be set.
+**Lock.** Every H57dp step that loads the CPU takes `$HOME/k3dgpu-bench.lock`: the model
+downloads and their sha256 check, `convert.sh`, the smoke and both holds, as H57d's rule put every
+hold, conversion and download inside the host lock. `convert.sh` and `hold.sh` take it as
+`LOCK=$HOME/k3dgpu-bench.lock`, the downloads and the check through `flock -w 21600`. It replaces
+the scratchpad `live.lock` that H57d's commands and R1's name. That file lived in one session's
+scratchpad directory. This host's H55 runner (`bench/admission/run.sh`) takes
+`~/k3dgpu-bench.lock` by default, as `bench/h54`, `bench/xhost` and the crescent holds do on their
+hosts, so a hold on any other lock would not exclude it. `hold.sh` and `convert.sh` are
+unchanged: both still require `LOCK` to be set.
 
 **Row.** Both H57dp holds run with `H57D_ROW=H57dp`. The records go to
 `${G}/results/H57dp/hold1` and `hold2`, the two holds left of H57d's 6-hold cap, numbered within
@@ -4021,7 +4024,11 @@ keep that 16-digit prefix) and 321,145,696 bytes. A mismatch stops the campaign 
 is recorded. When the check passes, the committed file is copied to
 `~/k3dgpu-h57d/weights.sha256`, the file `reproduce.sh` prints under `file sha256:`, so every
 H57dp Reproduce header lists the checked sha256 as H57d's did. The H57d campaign directory that
-held it no longer exists.
+held it no longer exists, so it is made again as H57d's was: `~/k3dgpu-h57d` links to a directory
+on the second disk; `bench/h57d/k3d-shim.sh` is installed as its `bin/k3d`, which binds the models
+into the node at `/var/apb-models` (without it `hold-run.sh` stops with "models volume missing");
+and each downloaded repository's directory gets a `.pinned-revision` file (repository and
+revision, the line H57d's Reproduce headers print), which `convert.sh` and `reproduce.sh` read.
 
 **Hybrid vendor.** H57d's holds ran from `458bca0e`, which predates PR #180 (`06aa321c`), and its
 confounds record that `K3D_GPU_VENDORS=hybrid` still deployed the node image's baked
@@ -4055,8 +4062,19 @@ number spelled `01`, an H57dp hold's records under `results/H57dp/hold1` with no
 **Commands** (`SUDO_ASKPASS` for RAPL):
 
 ```bash
-cd ~/k3dgpu-h57d/models && awk '{print $1 "  " $2}' <repo>/bench/h57d/results/2026-10-21/weights.sha256 | sha256sum -c \
-  && cp <repo>/bench/h57d/results/2026-10-21/weights.sha256 ~/k3dgpu-h57d/weights.sha256   # the Reproduce header's file sha256
+mkdir -p "/home/andrew/docker&models/k3dgpu-h57d/models" && ln -sfnT "/home/andrew/docker&models/k3dgpu-h57d" ~/k3dgpu-h57d
+install -D -m 0755 <repo>/bench/h57d/k3d-shim.sh ~/k3dgpu-h57d/bin/k3d      # the models bind at /var/apb-models
+# H57d's revisions (the GGUF repo's mmproj is not downloaded), their .pinned-revision files, the
+# check against the committed sha256, and the Reproduce header's file sha256, under the host lock:
+flock -w 21600 ~/k3dgpu-bench.lock sh -ec 'cd ~/k3dgpu-h57d/models
+  hf download google/gemma-4-26B-A4B-it-qat-q4_0-gguf gemma-4-26B_q4_0-it.gguf --revision d1c082be9cf3c8a514acf63b8761f4b41935842e --local-dir google_gemma-4-26B-A4B-it-qat-q4_0-gguf
+  hf download google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant --revision 9537141506fe8875b3ed45b264af13580cb29166 --local-dir google_gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant
+  hf download OpenVINO/gemma-4-26b-a4b-it-int4-ov --revision 4e5885c3f03844f5887982def09708bdc9f53f7a --local-dir OpenVINO/gemma-4-26b-a4b-it-int4-ov
+  echo "google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be9cf3c8a514acf63b8761f4b41935842e" > google_gemma-4-26B-A4B-it-qat-q4_0-gguf/.pinned-revision
+  echo "google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant 9537141506fe8875b3ed45b264af13580cb29166" > google_gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant/.pinned-revision
+  echo "OpenVINO/gemma-4-26b-a4b-it-int4-ov 4e5885c3f03844f5887982def09708bdc9f53f7a" > OpenVINO/gemma-4-26b-a4b-it-int4-ov/.pinned-revision
+  sed "s/  hub-lfs-match$//" <repo>/bench/h57d/results/2026-10-21/weights.sha256 | sha256sum -c
+  cp <repo>/bench/h57d/results/2026-10-21/weights.sha256 ~/k3dgpu-h57d/weights.sha256'
 LOCK=~/k3dgpu-bench.lock G=~/k3dgpu-h57d bench/h57d/convert.sh            # drafter GGUF + Od's graph.pbtxt
 sha256sum ~/k3dgpu-h57d/models/k3dgpu/gemma-4-26B-A4B-it-qat-assistant-gguf/gemma-4-26B-A4B-it-qat-assistant-q4_0.gguf   # 8eb21d5b7efad6e9...
 SMOKE=1 LOCK=~/k3dgpu-bench.lock bench/h57d/hold.sh smoke-p perf Ld-mtp-u  # wiring smoke, discarded
