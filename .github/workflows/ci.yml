@@ -207,6 +207,7 @@ jobs:
       - run: python3 tests/ledger_drift_check.py
       - run: tests/pe_premise_check_test.sh
       - run: tests/pe_premise_check.sh
+      - run: python3 tests/model_cards_license_test.py
 
   bench-tests:
     name: Bench harness tests
