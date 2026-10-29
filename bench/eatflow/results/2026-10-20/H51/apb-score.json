@@ -1,0 +1,203 @@
+{
+ "hypothesis": "H51",
+ "arms": {
+  "A1": {
+   "bracket": [
+    0,
+    0
+   ],
+   "range": [
+    1,
+    4
+   ],
+   "status": "refuted"
+  },
+  "B1": {
+   "bracket": [
+    0,
+    0
+   ],
+   "range": [
+    0,
+    4
+   ],
+   "status": "holds"
+  }
+ },
+ "b1_le_a1": {
+  "status": "holds"
+ },
+ "load": {
+  "matched": true,
+  "void": false,
+  "verdict": "MATCHED",
+  "rule": "amendment-27",
+  "checks": [
+   {
+    "metric": "busy_pct",
+    "arms": {
+     "A1": 37.26,
+     "B1": 37.0
+    },
+    "spread": 0.26,
+    "limit": 5.0,
+    "status": "ok",
+    "phase": "pre"
+   },
+   {
+    "metric": "throttle_per_min",
+    "arms": {
+     "A1": 0.0,
+     "B1": 0.0
+    },
+    "spread": 0.0,
+    "limit": 10.0,
+    "status": "ok",
+    "phase": "pre"
+   },
+   {
+    "metric": "swap_used_mib",
+    "arms": {
+     "A1": 0.0,
+     "B1": 0.0
+    },
+    "spread": 0.0,
+    "limit": 256.0,
+    "status": "ok",
+    "phase": "pre"
+   },
+   {
+    "metric": "swap_delta_mib",
+    "arms": {
+     "A1": 0.0,
+     "B1": 0.0
+    },
+    "spread": 0.0,
+    "limit": 64.0,
+    "status": "ok",
+    "phase": "pre"
+   },
+   {
+    "metric": "busy_pct",
+    "arms": {
+     "A1": 85.028,
+     "B1": 82.339
+    },
+    "spread": 2.689,
+    "limit": 5.0,
+    "status": "ok",
+    "phase": "during"
+   },
+   {
+    "metric": "swap_used_mib",
+    "arms": {
+     "A1": 0.0,
+     "B1": 0.0
+    },
+    "spread": 0.0,
+    "limit": 256.0,
+    "status": "ok",
+    "phase": "during"
+   },
+   {
+    "metric": "swap_delta_mib",
+    "arms": {
+     "A1": 0.0,
+     "B1": 0.0
+    },
+    "spread": 0.0,
+    "limit": 64.0,
+    "status": "ok",
+    "phase": "during"
+   }
+  ],
+  "outcomes": [
+   {
+    "metric": "pkg_w",
+    "arms": {
+     "A1": 299.163,
+     "B1": 299.479
+    },
+    "spread": 0.316
+   },
+   {
+    "metric": "throttle_per_min",
+    "arms": {
+     "A1": 0.0,
+     "B1": 0.0
+    },
+    "spread": 0.0
+   },
+   {
+    "metric": "load1",
+    "arms": {
+     "A1": 63.174,
+     "B1": 65.237
+    },
+    "spread": 2.062
+   }
+  ],
+  "unsettled": {}
+ },
+ "verdict": "REFUTED",
+ "per_arm": {
+  "A1": {
+   "apb": 0,
+   "bracket": [
+    0,
+    0
+   ],
+   "complete": true,
+   "steps": [
+    {
+     "n": 1,
+     "pass": false,
+     "checks": {
+      "n_requests": 65,
+      "p95_s": 10.410454,
+      "success": 0.9375,
+      "error_rate": 0.0,
+      "p95_ok": false,
+      "success_ok": true,
+      "errors_ok": true,
+      "n_ok": true
+     },
+     "window_from": 1793267274.4226775
+    }
+   ],
+   "void": null,
+   "holds": [
+    "bench/eatflow/results/2026-10-20/H51/A1-hold1/apb"
+   ]
+  },
+  "B1": {
+   "apb": 0,
+   "bracket": [
+    0,
+    0
+   ],
+   "complete": true,
+   "steps": [
+    {
+     "n": 1,
+     "pass": false,
+     "checks": {
+      "n_requests": 58,
+      "p95_s": 11.516896,
+      "success": 0.9310344827586207,
+      "error_rate": 0.0,
+      "p95_ok": false,
+      "success_ok": true,
+      "errors_ok": true,
+      "n_ok": false
+     },
+     "window_from": 1793268054.2331667
+    }
+   ],
+   "void": null,
+   "holds": [
+    "bench/eatflow/results/2026-10-20/H51/B1-hold1/apb"
+   ]
+  }
+ }
+}
