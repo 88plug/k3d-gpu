@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # install.sh K3D_GPU_VERSION: the wildct campaign's tools, pinned and checksum-checked, into
 # ~/k3dgpu-bench-wildct (EXPERIMENTS.md "Wildct pre-registration", rule W7); nothing
-# system-wide. k3d v5.9.0, helm v4.3.1 and kubectl v1.37.1 (each the newest release on
-# 2026-10-20) into bin/; the k3d-gpu release's .deb, checked against the release's
-# SHA256SUMS, unpacked into k3d-gpu/ (k3d-gpu/usr/bin/k3d-gpu with K3D_GPU_SHARE pointing at
-# k3d-gpu/usr/share/k3d-gpu); huggingface_hub 1.21.0 (crescent's pin) in hfvenv/. Prints
-# every version and checksum.
+# system-wide. k3d v5.9.0 and helm v4.3.1 (each the newest release on 2026-10-20) and kubectl
+# v1.37.2 (the newest on 2026-10-29, wildct amendment P1) into bin/; the k3d-gpu release's
+# .deb, checked against the release's SHA256SUMS, unpacked into k3d-gpu/
+# (k3d-gpu/usr/bin/k3d-gpu with K3D_GPU_SHARE pointing at k3d-gpu/usr/share/k3d-gpu);
+# huggingface_hub 1.21.0 (crescent's pin) in hfvenv/. Prints every version and checksum.
 set -euo pipefail
 V=${1:?usage: install.sh K3D_GPU_VERSION}
 W=${HOME}/k3dgpu-bench-wildct
@@ -23,8 +23,8 @@ check 0403a88ae20913d11b10a2467b50087721fea7581736da6b9d3992f5357fe54b helm.tgz
 tar -xzf helm.tgz linux-amd64/helm
 install -m 0755 linux-amd64/helm "${W}/bin/helm"
 
-get https://dl.k8s.io/release/v1.37.1/bin/linux/amd64/kubectl kubectl
-get https://dl.k8s.io/release/v1.37.1/bin/linux/amd64/kubectl.sha256 kubectl.sha256
+get https://dl.k8s.io/release/v1.37.2/bin/linux/amd64/kubectl kubectl
+get https://dl.k8s.io/release/v1.37.2/bin/linux/amd64/kubectl.sha256 kubectl.sha256
 check "$(cat kubectl.sha256)" kubectl
 install -m 0755 kubectl "${W}/bin/kubectl"
 

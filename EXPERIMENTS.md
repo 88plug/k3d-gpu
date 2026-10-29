@@ -4181,7 +4181,8 @@ re-graded here.
    whose need never fits before the campaign ends is INCONCLUSIVE (not run), with the
    readings recorded. Everything this campaign creates on wildct is deleted at the end
    except the run records, which are copied back into the repo first.
-7. **Pins.** k3d v5.9.0, helm v4.3.1, kubectl v1.37.1 (each the newest release on 2026-10-20)
+7. **Pins.** k3d v5.9.0, helm v4.3.1, kubectl v1.37.1 (each the newest release on 2026-10-20;
+   kubectl v1.37.2 from [amendment P1](#wildct-amendment-p1-kubectl-v1372-2026-10-29))
    in `~/k3dgpu-bench-wildct/bin`, checked against their upstream checksums
    (`bench/wildct/install.sh`); k3d-gpu: the newest release at the first hold (the first one
    carrying PR #180: 0.1.65 or later), its `.deb` checked against the release's `SHA256SUMS` and unpacked in
@@ -4281,6 +4282,24 @@ request, discarded and disclosed). Then H52w (1 hold), H18w (1), H25w (1), H34w 
 (prep + 1), H57wb's reading, H57wa and H57wm (at most 5). A failed hold counts; each row may
 repeat a failed hold once. At most 12 holds in all. A protocol change is a dated amendment
 merged before the data it governs.
+
+### Wildct amendment P1: kubectl v1.37.2 (2026-10-29)
+
+Recorded 2026-10-29, before any wildct hold (none has run; `smoke1` was discarded). Mechanics only.
+No row's hypothesis, prediction, arm, model, statistic, threshold, cap, disk need, hold count or
+order changes.
+
+Rule W7 pins kubectl v1.37.1, the newest release on 2026-10-20. Kubernetes v1.37.2 came out on
+2026-10-28 and is the newest now (`dl.k8s.io/release/stable.txt`, read 2026-10-29); k3d v5.9.0
+and helm v4.3.1 are still the newest of theirs. W7 now reads kubectl v1.37.2.
+`bench/wildct/install.sh` fetches it and checks it against its `.sha256` file (linux/amd64
+`c0448752...`), as before. The node images serve Kubernetes v1.37.1 (k3s v1.37.1+k3s1), so
+client and server share a minor version, as before. `install.sh` runs again before
+the first hold anyway, to install W7's newest k3d-gpu release (0.1.75 or later, not the 0.1.71
+installed on 2026-10-21), and that run installs kubectl v1.37.2. So every wildct row (H52w,
+H18w, H25w, H28w, H34w, H57wa, H57wm and H57wb, and H59w if it is pre-registered under W7) runs on
+it. If wildct amendment R1 (PR #226) merges, its sentence that keeps kubectl v1.37.1 is superseded
+by this amendment. Each row's Reproduce header names the kubectl that ran.
 
 ### H5 amendment A1: stage-1 harness and definitions (2026-10-19)
 
