@@ -85,7 +85,7 @@ lock_drift "a bumped plain image pin in the launcher" \
 lock_drift "a moved backend digest in the launcher" "vllm/vllm-openai-xpu: the repo pins sha256:$(printf 'e%.0s' {1..64})" \
     "sed -i 's|vllm/vllm-openai-xpu@sha256:[0-9a-f]*|vllm/vllm-openai-xpu@sha256:$(printf 'e%.0s' {1..64})|' scripts/k3d-gpu"
 lock_drift "a changed pinned digest" "the repo pins sha256:$(printf 'f%.0s' {1..64})" \
-    "sed -i 's/node-feature-discovery:v0.19.0@sha256:[0-9a-f]*/node-feature-discovery:v0.19.0@sha256:$(printf 'f%.0s' {1..64})/' share/node-feature-discovery.yml"
+    "sed -i 's/node-feature-discovery:v0.20.1@sha256:[0-9a-f]*/node-feature-discovery:v0.20.1@sha256:$(printf 'f%.0s' {1..64})/' share/node-feature-discovery.yml"
 lock_drift "a k3s bump" "images.lock is for k3s v1.37.1-k3s1, the Dockerfile pins v1.38.0-k3s1" \
     "sed -i 's/^ARG K3S_TAG=.*/ARG K3S_TAG=\"v1.38.0-k3s1\"/' Dockerfile"
 lock_drift "a bumped test image" "not in images.lock: docker.io/nvidia/cuda:13.5.0-base-ubuntu26.04" \

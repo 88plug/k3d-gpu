@@ -1741,7 +1741,7 @@ entries that ask for another, Xeon/AMX, XMX, non-throttling or quiet host, and t
    below showed the cause: without C1 the agent pod stayed Pending. C1 changes when the kubelet
    evicts, nothing else, and applies to both arms alike. X1's 97% guard stays.
 5. **Pins.** k3d v5.9.0 and kubectl v1.35.2 in `~/k3dgpu-xhost/bin`, each checked against its
-   upstream checksum; node image `cryptoandcoffee/k3d-gpu:0.1.61` (the launcher's default at this pre-registration's base, set explicitly with `K3D_GPU_IMAGE` or `IMAGE` in every command,
+   upstream checksum (kubectl v1.37.2 for the rows [amendment K1](#cross-host-amendment-k1-kubectl-v1372-in-the-cross-host-workspace-2026-10-29) moves); node image `cryptoandcoffee/k3d-gpu:0.1.61` (the launcher's default at this pre-registration's base, set explicitly with `K3D_GPU_IMAGE` or `IMAGE` in every command,
    k3s v1.37.1; a change: the originals ran 0.1.28 (H25 run 4), 0.1.55 (H34) and 0.1.59 (H28),
    with the agent-manifest code unchanged since H25 run 4); OVMS `openvino/model_server@sha256:a928903f...76fc58` (2026.4.1, as every
    original row); `load.py`'s stress-ng pin. Models are downloaded on the host at the original
@@ -1806,6 +1806,36 @@ failure C1 fixes. Smoke 2 (22:14-22:20Z, with C1): `up` 48 s, the agent pod Read
 (`draft_device: "CPU"`), no node taint; then the H28 path (plain `k3d cluster create` with
 C1 as `--k3s-arg ...@server:*`) had no taint after 90 s. No inference request was sent in either.
 Smoke records: `bench/xhost/results/2026-10-20/smoke{1,2}/`.
+
+### Cross-host amendment K1: kubectl v1.37.2 in the cross-host workspace (2026-10-29)
+
+Recorded 2026-10-29, before any H7x hold and before H28x's run 2. Mechanics only. No hypothesis,
+arm, model, node image, prediction, outcome table, scorer, threshold, cap or order changes. It
+is pre-registered by its push time.
+
+1. **Why.** Rule 5 pins kubectl v1.35.2 in `~/k3dgpu-xhost/bin`, and `bench/xhost/hold.sh` puts
+   that directory first on `PATH`. The node image these rows run (0.1.61) serves Kubernetes
+   v1.37.1 (k3s v1.37.1+k3s1). Kubernetes' version skew policy supports kubectl within one minor
+   version of kube-apiserver, so v1.35 against v1.37 is outside it. No hold has failed from this.
+   Read on 2026-10-29: kubectl v1.37.2 (2026-10-28, `dl.k8s.io/release/stable.txt`) is the newest
+   release; k3d v5.9.0 is still its newest and stays. Crescent amendment E4 (PR #238) makes the
+   same move for shared rule 5's workspace, `~/k3dgpu-bench/bin`; this amendment covers the
+   cross-host workspace, which E4 does not touch.
+2. **Pins.** k3d v5.9.0 (unchanged) and kubectl v1.37.2 (linux/amd64 sha256 `c0448752...`).
+   `bench/xhost/tools.sh`, new, installs exactly these two into `~/k3dgpu-xhost/bin`, each checked
+   against its upstream checksum file (k3d's `checksums.txt`, kubectl's `.sha256`), and prints
+   both versions. It touches nothing else. Rule 5's tools had no script in this repo until now.
+3. **When.** `tools.sh` runs once on crescent from a clean checkout at or after this amendment's
+   merge, with the bench lock free and no cross-host row between holds. Its output goes into the
+   next cross-host row's records.
+4. **Rows.** A row runs all its holds on the kubectl in place at its first measuring hold. Rows
+   whose first measuring hold starts after `tools.sh` has run use v1.37.2: H28x's run 2, if PR
+   #208's amendment R1 allows it, and H7x (PRs #196 and #235), if its pre-registration merges
+   under these rules. H25x, H27x and H34x have run and keep what they ran; H25x and H34x record
+   kubectl v1.35.2. A smoke, or a hold that measured nothing (H28x run 1), does not fix a row's
+   tools.
+5. **Not changed.** The node image, the models, OVMS, `load.py`'s stress-ng pin and every other
+   item of rule 5.
 
 ### H25x run (Xeon 6741P, 2026-10-21)
 
@@ -4834,7 +4864,8 @@ re-graded here.
    whose need never fits before the campaign ends is INCONCLUSIVE (not run), with the
    readings recorded. Everything this campaign creates on wildct is deleted at the end
    except the run records, which are copied back into the repo first.
-7. **Pins.** k3d v5.9.0, helm v4.3.1, kubectl v1.37.1 (each the newest release on 2026-10-20)
+7. **Pins.** k3d v5.9.0, helm v4.3.1, kubectl v1.37.1 (each the newest release on 2026-10-20;
+   kubectl v1.37.2 from [amendment P1](#wildct-amendment-p1-kubectl-v1372-2026-10-29))
    in `~/k3dgpu-bench-wildct/bin`, checked against their upstream checksums
    (`bench/wildct/install.sh`); k3d-gpu: the newest release at the first hold (the first one
    carrying PR #180: 0.1.65 or later), its `.deb` checked against the release's `SHA256SUMS` and unpacked in
@@ -5003,6 +5034,24 @@ H57d ran it, under `timeout -k 30 3600` (its lock wait included). Rule W7 still 
 2026-10-29 (`.deb` sha256 `a5c48149...`, node image `sha256:ecb1b178...`), whose launcher and
 `share/` equal main's apart from the version line. The tool pins stay as registered (kubectl v1.37.2 has since
 been released; v1.37.1 is kept). The resume procedure is `bench/wildct/RESUME.md`.
+
+### Wildct amendment P1: kubectl v1.37.2 (2026-10-29)
+
+Recorded 2026-10-29, before any wildct hold (none has run; `smoke1` was discarded). Mechanics only.
+No row's hypothesis, prediction, arm, model, statistic, threshold, cap, disk need, hold count or
+order changes.
+
+Rule W7 pins kubectl v1.37.1, the newest release on 2026-10-20. Kubernetes v1.37.2 came out on
+2026-10-28 and is the newest now (`dl.k8s.io/release/stable.txt`, read 2026-10-29); k3d v5.9.0
+and helm v4.3.1 are still the newest of theirs. W7 now reads kubectl v1.37.2.
+`bench/wildct/install.sh` fetches it and checks it against its `.sha256` file (linux/amd64
+`c0448752...`), as before. The node images serve Kubernetes v1.37.1 (k3s v1.37.1+k3s1), so
+client and server share a minor version, as before. `install.sh` runs again before
+the first hold anyway, to install W7's newest k3d-gpu release (0.1.75 or later, not the 0.1.71
+installed on 2026-10-21), and that run installs kubectl v1.37.2. So every wildct row (H52w,
+H18w, H25w, H28w, H34w, H57wa, H57wm and H57wb, and H59w if it is pre-registered under W7) runs on
+it. If wildct amendment R1 (PR #226) merges, its sentence that keeps kubectl v1.37.1 is superseded
+by this amendment. Each row's Reproduce header names the kubectl that ran.
 
 ### H5 amendment A1: stage-1 harness and definitions (2026-10-19)
 

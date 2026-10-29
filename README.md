@@ -573,7 +573,7 @@ name in place of `gpu`):
 ```bash
 docker exec k3d-gpu-server-0 touch /var/lib/rancher/k3s/server/manifests/nri-balloons.yaml.skip
 helm upgrade --install nri-resource-policy-balloons nri-resource-policy-balloons \
-  --repo https://containers.github.io/nri-plugins --version v0.14.0 \
+  --repo https://containers.github.io/nri-plugins --version v0.15.0 \
   --namespace kube-system -f values.yaml --force   # Helm 4: --force-conflicts
 ```
 
@@ -713,7 +713,7 @@ documents GPU support for NVIDIA only.
 ### Node Feature Discovery
 
 Every cluster also runs [Node Feature Discovery](https://github.com/kubernetes-sigs/node-feature-discovery)
-v0.19.0 with Intel's
+v0.20.1 with Intel's
 [NodeFeatureRules](https://github.com/intel/intel-device-plugins-for-kubernetes/tree/v0.37.1/deployments/nfd/overlays/node-feature-rules)
 v0.37.1, baked into the image (namespace `node-feature-discovery`). About 30 s
 after `up`, nodes carry the host's CPU, kernel and PCI features. On an
@@ -1485,7 +1485,7 @@ not switch the Intel GPU path.
 ### Agent sandboxes on E-cores
 
 `k3d-gpu sandbox up` installs [kubernetes-sigs/agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox)
-v1.0.7 (controller image pinned by digest) and a `python-ecores` SandboxTemplate
+v1.0.8 (controller image pinned by digest) and a `python-ecores` SandboxTemplate
 plus a one-replica warm pool in namespace `agent-sandbox`. Sandbox pods carry
 `k3d-gpu.io/cores: efficient` and request one CPU, so on a hybrid host untrusted
 agent tool execution runs on E-cores, apart from the P-cores that serve inference.
@@ -1506,7 +1506,7 @@ EOF
 ```
 
 The sandbox serves `POST /execute {"command": "..."}` on port 8888
-(`registry.k8s.io/agent-sandbox/python-runtime-sandbox:v1.0.7`, pinned by digest).
+(`registry.k8s.io/agent-sandbox/python-runtime-sandbox:v1.0.8`, pinned by digest).
 
 What works on k3d, and what does not:
 

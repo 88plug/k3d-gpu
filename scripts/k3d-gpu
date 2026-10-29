@@ -6622,7 +6622,7 @@ cmd_logs() {
 # The profile labels them k3d-gpu.io/cores=efficient, so on a hybrid CPU the balloons
 # policy keeps them on E-cores, apart from P-core inference. That is placement, not
 # isolation: package power, LLC and DRAM bandwidth stay shared (EXPERIMENTS.md H3, H5).
-SANDBOX_VERSION="v1.0.7"
+SANDBOX_VERSION="v1.0.8"
 SANDBOX_NS="agent-sandbox"
 SANDBOX_POOL="python-ecores"
 SANDBOX_CRDS=(

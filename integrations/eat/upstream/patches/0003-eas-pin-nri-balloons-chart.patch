@@ -1,6 +1,6 @@
-From 23e5ffca1e4ccf37beebb0222df6438f3f87f39f Mon Sep 17 00:00:00 2001
+From 836b2a7d26ee33f90ed21553c2136233b245648b Mon Sep 17 00:00:00 2001
 From: Andrew Mello <andrew@88plug.com>
-Date: Fri, 16 Oct 2026 04:43:09 -0700
+Date: Thu, 29 Oct 2026 03:41:08 -0700
 Subject: [PATCH] nri_cpu_balloons: pin the nri-plugins chart version
 
 The Helm release is installed from the nri-plugins repo with no
@@ -10,14 +10,14 @@ image tag to its appVersion). Two installs of the same commit can run
 different policy code, and a new upstream release can change behaviour
 under an existing deployment on re-run.
 
-Add nri_cpu_balloons_chart_version, set to v0.14.0 (the newest release
+Add nri_cpu_balloons_chart_version, set to v0.15.0 (the newest release
 in the repo index today, so this changes nothing for a fresh install
 now) and pass it as chart_version. Kept as a flat variable, like the
 other *_chart_version settings, so overriding the nri_cpu_balloons dict
 does not drop the pin.
 
 Checked statically: the role's advanced-balloon-values.yaml.j2, rendered
-with sample inputs, goes through helm template for chart v0.14.0, and
+with sample inputs, goes through helm template for chart v0.15.0, and
 the resulting BalloonsPolicy validates against that chart's CRD schema.
 ---
  roles/nri_cpu_balloons/defaults/main.yaml          | 5 +++++
@@ -25,7 +25,7 @@ the resulting BalloonsPolicy validates against that chart's CRD schema.
  2 files changed, 6 insertions(+)
 
 diff --git a/roles/nri_cpu_balloons/defaults/main.yaml b/roles/nri_cpu_balloons/defaults/main.yaml
-index d8641f9..1616f79 100644
+index d8641f9..6c19019 100644
 --- a/roles/nri_cpu_balloons/defaults/main.yaml
 +++ b/roles/nri_cpu_balloons/defaults/main.yaml
 @@ -24,6 +24,11 @@ nri_cpu_balloons:
@@ -35,7 +35,7 @@ index d8641f9..1616f79 100644
 +# nri-plugins chart version. Pinned so every install and re-run gets the same
 +# release instead of whatever the Helm repo serves as newest at the time. The
 +# plugin image tag follows the chart's appVersion. Bump deliberately.
-+nri_cpu_balloons_chart_version: "v0.14.0"
++nri_cpu_balloons_chart_version: "v0.15.0"
 +
  # Reserved-CPU sizing.
  #
