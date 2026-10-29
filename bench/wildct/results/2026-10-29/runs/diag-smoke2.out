@@ -1,0 +1,4 @@
+== diag-smoke2 waiting for the lock 2026-10-29T18:42:11Z
+== diag-smoke2 lock taken 2026-10-29T18:42:11Z
+== diag-smoke2 start: bash /home/andrew/k3dgpu-bench-wildct/diag/diag-up.sh 2026-10-29T18:42:12Z
+== diag-smoke2 rc=1; clusters deleted: none; now: ; / 208 GB available 2026-10-29T18:45:23Z

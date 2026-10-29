@@ -465,6 +465,10 @@ EOF
 echo "kubectl $*" >> "${SHIM_DIR}/calls.log"
 case "$*" in
     "get pods -A --no-headers") cat "${SHIM_DIR}/pods" 2>/dev/null ;;
+    "get pods -A -o json")
+        # no_apiserver: what kubectl prints when it reaches no API server (smoke2, 2026-10-29).
+        if [ -e "${SHIM_DIR}/no_apiserver" ]; then echo '{"apiVersion": "v1", "items": [], "kind": "List", "metadata": {"resourceVersion": ""}}'; exit 1; fi
+        echo '{"items": [{"metadata": {"namespace": "kube-system", "name": "coredns-1"}, "spec": {"containers": [{"name": "coredns"}]}}]}' ;;
     *"-o json"*) echo '{"items": []}' ;;
 esac
 exit 0
@@ -652,6 +656,11 @@ row_smoke_runs_up_scan_down() {
     for s in "60 kubectl get pods -A -o wide" "60 kubectl get pods -A -o json"; do
         grep -q -- "^timeout -k [0-9]* ${s}\$" "${W}/calls.log" || { echo "smoke: not bounded: ${s}"; return 1; }
     done
+    # The API server goes away after the pod wait: the scan reads no pods, which is no verdict.
+    touch "${W}/no_apiserver"
+    OUT=${W}/smoke-noapi IMAGE=${IMG} timeout -k 5 120 bash "${ROW}" smoke > /dev/null 2>&1 && { echo "an empty pod list passed the smoke"; return 1; }
+    ! grep -q '^GPU-SCAN' "${W}/smoke-noapi/rc.txt" || { echo "an empty pod list gave a GPU-SCAN verdict"; cat "${W}/smoke-noapi/rc.txt"; return 1; }
+    rm -f "${W}/no_apiserver"
     echo 1 > "${W}/up_rc"
     OUT=${W}/smoke2 IMAGE=${IMG} timeout -k 5 120 bash "${ROW}" smoke > /dev/null 2>&1 && { echo "failed up reported as success"; return 1; }
     grep -q '^pods ready: not waited (up rc=1)' "${W}/smoke2/rc.txt" || { cat "${W}/smoke2/rc.txt"; return 1; }
@@ -743,7 +752,18 @@ resume_container_checks_include_the_load() {
     [ "${n}" -ge 3 ] || { echo "only ${n} container checks found"; return 1; }
 }
 
-check "healthy hold: health check, RAPL reading, cleanup of only k3dgpu-w-*, pid and rc" healthy_hold_runs_and_cleans
+# RESUME.md's PYIMG (step 1's H4 probe: the RAPL reader's exact flags) is hold.sh's RAPL reader
+# image, and setup-images.sh pulls it.
+resume_pyimg_is_the_rapl_reader_image() {
+    local pyimg rapl
+    pyimg=$(sed -n 's/^PYIMG=\([^ ]*\).*/\1/p' "${ROOT}/bench/wildct/RESUME.md")
+    rapl=$(sed -n 's/^RAPL_IMAGE=\([^ ]*\).*/\1/p' "${HOLD}")
+    [[ "${rapl}" =~ ^python:[^@]+@sha256:[0-9a-f]{64}$ ]] || { echo "hold.sh RAPL_IMAGE not found: '${rapl}'"; return 1; }
+    [ "${pyimg}" = "${rapl}" ] || { echo "RESUME.md PYIMG '${pyimg}' is not hold.sh's RAPL_IMAGE '${rapl}'"; return 1; }
+    grep -qF "${rapl}" "${ROOT}/bench/wildct/setup-images.sh" || { echo "setup-images.sh does not pull ${rapl}"; return 1; }
+}
+
+check "healthy hold:health check, RAPL reading, cleanup of only k3dgpu-w-*, pid and rc" healthy_hold_runs_and_cleans
 check "systemd not answering: rc 8, no container started" wedged_systemd_stops_before_docker
 check "systemd answering with an error: rc 8, no container started" systemd_error_stops_before_docker
 check "docker info not answering: rc 8, no container started" docker_info_hang_stops_before_docker_run
@@ -780,6 +800,7 @@ check "a command that ran and failed: hold.sh deletes the h28-model images (H28w
 check "a cleanup step that fails at once is named in cleanup-incomplete" failed_cleanup_steps_are_named
 check "unhealthy: an error at once is recorded as its rc, not as no answer" unhealthy_names_an_error_as_an_error
 check "RESUME.md: container checks include the bench-load containers" resume_container_checks_include_the_load
+check "RESUME.md: PYIMG is hold.sh's RAPL reader image, pulled by setup-images.sh" resume_pyimg_is_the_rapl_reader_image
 
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

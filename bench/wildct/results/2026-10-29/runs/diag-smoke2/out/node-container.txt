@@ -1,0 +1,1 @@
+privileged=true devices=[] runtime=runc gpus=[] binds=[/lib/modules:/k3d-gpu/host/lib/modules:ro /etc/os-release:/k3d-gpu/host/etc/os-release:ro k3d-k3dgpu-w-diag-images:/k3d/images]

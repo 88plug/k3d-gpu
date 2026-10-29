@@ -5947,6 +5947,49 @@ H18w, H25w, H28w, H34w, H57wa, H57wm and H57wb, and H59w if it is pre-registered
 it. If wildct amendment R1 (PR #226) merges, its sentence that keeps kubectl v1.37.1 is superseded
 by this amendment. Each row's Reproduce header names the kubectl that ran.
 
+### Wildct amendment R2: smoke2, the host's kernel modules and an empty pod list (2026-10-29)
+
+Recorded 2026-10-29, before any wildct hold has measured anything. No row's hypothesis,
+prediction, arm, model, statistic, threshold, cap, disk need, hold count or order changes.
+
+**What happened (disclosed).** wildct's systemd answers again (the host has been rebooted since
+`smoke1`). The resume procedure (`bench/wildct/RESUME.md`) ran on 2026-10-29 from main at
+`4a322ccc`. Every step 1 check passed: Docker 29.7.2 (29.6.1 at registration), live-restore
+off, cgroup systemd/2, kernel 6.6.156-2-MANJARO (6.6.144 at registration), `/` 209 GB
+available, MemAvailable 118 GiB, `load1` 0.30, the probe container started. `k3dgpu-w-rapl` was
+removed. Rule W7's newest release, 0.1.79, was installed: `.deb` sha256 `3c94881c...`, node image
+`cryptoandcoffee/k3d-gpu:0.1.79@sha256:6e27ff98...`, launcher and `share/` equal to main's apart
+from the version line, kubectl v1.37.2 (amendment P1). The tag pull first timed out at the
+registry ("context deadline exceeded") and passed on one retry; the tag resolves to the digest.
+`cryptoandcoffee/k3d-gpu:0.1.71` was removed. The five refs of `setup-images.sh` were pulled
+(main moved the RAPL reader's `python:3.13-slim` to `2d44738e...`). The models still matched
+their verify logs. `convert.sh` built H57w's drafter GGUF (Q4_0 `8eb21d5b...`, 321,145,696 bytes)
+and Od's `graph.pbtxt` (`c57ecf35...`), both byte-identical to the i9's.
+
+The wiring smoke `smoke2` (18:36:12Z) then failed. `up` ended 1 after 190 s: the API server
+answered with resets, then refused connections. `diag-smoke2` (18:42:12Z, under `hold.sh`)
+re-ran `smoke2`'s `up` with the same environment on cluster `k3dgpu-w-diag` and kept the node's
+log (its command is recorded as `diag/diag-up.sh.txt`; the records of 2026-10-29 are in
+`bench/wildct/results/2026-10-29/`, without kubeconfigs or the node's `docker inspect`). k3s's flannel "failed to create vxlan device: operation not supported", k3s shut down, and
+the node container restarted 10 times in 3 minutes. The `vxlan` and `br_netfilter` modules are
+installed for the running kernel but not loaded, and `/proc/sys/kernel/modprobe` is empty, so
+the kernel does not load them on demand. Both runs deleted their cluster. No request was sent
+and nothing was measured; both runs are discarded. Loading the two modules (or restoring
+`kernel.modprobe`) is the box owner's call. The next smoke is `smoke3`.
+
+**Runner change.** Both runs printed `GPU-SCAN clean` on no pods: a `kubectl get pods -A -o
+json` that reaches no API server still prints an empty `List`. `bench/wildct/gpu_scan.py`, which
+H52w and the smoke read, now exits 1 with no `GPU-SCAN` line on an empty pod list, as it already
+did on a list without `items`; a running cluster always has pods. So rule W8's pod-level checks
+have not been observed on a running wildct cluster yet. What was observed: `up` named nvidia and
+intel as opted out ("not deployed, not advertised"), and the node container had `devices=[]`,
+`gpus=[]` and runtime `runc`. Test: `bench/wildct/test_wildct.py`, in CI.
+
+**Resume procedure.** `RESUME.md` gains step 1's H9 (`vxlan` and `br_netfilter` loaded) and
+names the next smoke `smoke3`. Its `PYIMG`, H4's probe image, now equals `hold.sh`'s RAPL reader
+image (`tests/wildct_hold_test.sh` checks it). Step 9 also removes the earlier RAPL reader image
+(`70729b46...`), which the campaign pulled on 2026-10-20.
+
 ### H5 amendment A1: stage-1 harness and definitions (2026-10-19)
 
 Written 2026-10-19T22:30-07:00, before any H5 measurement. It fixes what the
