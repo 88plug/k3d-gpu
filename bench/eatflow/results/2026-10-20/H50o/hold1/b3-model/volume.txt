@@ -1,0 +1,1 @@
+volume: /var/lib/rancher/k3s/storage/pvc-be9eb004-cfa1-48c4-a364-914dcfb9018a_default_ovms-model-server

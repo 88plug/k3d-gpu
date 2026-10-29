@@ -66,7 +66,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H47b | H47's hypothesis (CPU draft speculative decoding helps agent tasks: A4 cuts B24's median time per task by >= 10% vs A1 with delta success >= -5 points), re-run with pairs matched on idle pre-windows (load rule L2) instead of during-attempt `bg_cpu` (L1). | As H47: a 0-15% gain; SUPPORTED at 0.35. No prediction of the matched-pair count (see the pre-registration's null estimate). | Pre-registered 2026-10-18T14:35-07:00, before any H47b measurement; see [H47b and H49b pre-registration](#h47b-and-h49b-pre-registration-load-rule-l2-pairs-matched-on-pre-windows-2026-10-18). Arms, tasks, budgets, A B B A order, holds (at most 2 of 25 min), voids, outcome classes, statistic and thresholds as H47. Only change: rule L2. Before each attempt, with both arms idle, `load.py settle` then a 10 s pre-window; a pair is matched when both pre-windows show the full load and agree on load-CPU busy, throttle/min, swap used and swap growth within amendment 27's `TOLERANCE`; arm-level check `matched_a27` on the matched pairs' pre-windows; during-attempt `bg_cpu`, package W and throttle reported, never gated. INCONCLUSIVE below 16 matched pairs or 75% matched, or on the arm-level or idle check. `LIVE_MODE=pairs live.sh H47b`, `agentbench pairs-report --hyp H47b`. Result ([H47b run](#h47b-run-i9-13900t-2026-10-18)): 10 pairs in the 2 permitted 25-min holds (each stopped at the 600 s pair-start guard; settle gaps took a median 35 s, 5 of 20 hit the 60 s cap), none void or over budget, idle check 0.0006 CPU; L2 matched 4 of 10 pairs (6 unmatched: throttle/min 5, busy 1), under 16 and under 75%, so INCONCLUSIVE; the arm-level check on the 4 passes. On the 4 matched pairs: gain 18.1% (95% CI 5.0-19.2%), delta success 0 (4/4 both arms), J per attempt A1/A4 1.15 (1.00-1.18); derived confidence 0.95 of bootstrap resamples at a gain >= 10%, 0 below 0 (4 pairs: direction only). Reproduce: the run section. | INCONCLUSIVE |
 | H49b | H49's hypothesis (inside EAT's banking flow, A1 delivers far more B24 tasks within the 120 s turn budget than EAT stock B1, both arms in one hold, interleaved), re-run with pairs matched on idle pre-windows (load rule L2) instead of during-attempt `bg_cpu` (L1), which B1's unpinned vLLM depressed in 22 of 24 H49 pairs. A stack-vs-stack claim (amendment 16). | As H49: A1 within-budget success >= 0.70 (0.75), B1 <= 0.10 (0.8), paired A1 - B1 >= +60 points (0.7). No prediction of the matched-pair count. | Pre-registered 2026-10-18T14:35-07:00, before any H49b measurement; see [H47b and H49b pre-registration](#h47b-and-h49b-pre-registration-load-rule-l2-pairs-matched-on-pre-windows-2026-10-18). Arms, tasks, budgets, A B B A order, holds (40 min, until 24 pairs or 12 holds), voids (> 2 void pairs INCONCLUSIVE), outcome classes, statistic and thresholds as H49. Only change: rule L2, as in H47b. SUPPORTED: paired difference CI lower bound >= +30 points and A1 within-budget success >= 0.6, with L2 and the idle-arm check passed. REFUTED: CI upper bound < +30 points. Otherwise INCONCLUSIVE. `LIVE_MODE=pairs live.sh H49b`, `agentbench pairs-report --hyp H49b`. Result ([H49b run](#h49b-run-i9-13900t-2026-10-18-and-19)): 24 pairs over 10 of 12 holds; 1 void pair (pair 8: hold 4 killed from outside after both attempts, before the pair row), idle check 0.0008 CPU; L2 matched 3 of 23 complete pairs (20 unmatched: throttle/min 10, busy 8, swap used 2), under 16 and under 75%, so INCONCLUSIVE; the arm-level check on the 3 passes. On the 3 matched pairs: A1 3/3, B1 1/3, paired difference +0.67 (95% CI 0.00 to +1.00); derived confidence 0.97 of bootstrap resamples at >= +0.30 (3 pairs: direction only). Outcomes, not gated, all pairs: during-attempt E-core busy A1 67.5% / B1 89.9%, throttle 65 / 3749 per min, package 101.7 / 99.0 W. Not registered, all 23 complete pairs: within-budget success A1 19/23, B1 5/23, paired difference +0.61 (95% CI +0.35 to +0.83). Reproduce: the run section. | INCONCLUSIVE |
 | H50 | (Model, arms and sampling superseded by [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20): Gemma 4 26B-A4B QAT.) On EAT's own target CPU (Xeon 6741P, Granite Rapids, AMX), inside EAT's banking flow, the k3d-gpu CPU stack A1 (OVMS int4 ~~with the CPU Fast Draft~~, `agent manifest`; draft OFF per [amendment A4](#crescent-amendment-a4-a1-is-k3d-gpus-best-cpu-config-for-the-xeon-2026-10-20): H34x REFUTED it on this Xeon) still delivers far more B24 tasks within the 120 s turn budget than EAT stock B1 (vLLM CPU bf16, `xeon-values.yaml` as shipped, AMX on), both arms in one hold, interleaved. H49b's comparison moved to the hardware EAT is built for. A stack-vs-stack claim (amendment 16). | Superseded by [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20), which restates the predictions; as first written: Written 2026-10-20, before any measurement on the Xeon. A1 within-budget success >= 0.70 (0.8). B1 >= 0.60 (0.7): with AMX bf16 its turns should fit 120 s. Paired A1 - B1 in [-0.15, +0.20] (0.6). L2 matches >= 16 pairs and >= 75% (0.6), and the gates are read first, so the expected verdict is REFUTED (0.5), INCONCLUSIVE (0.45, mostly the L2 gates), SUPPORTED (0.05). Not gated: median attempt A1/B1 <= 0.7 (0.6). | H49b's design, statistic, outcome classes, grader, gates and thresholds on `crescent`; see [H50-H52 pre-registration](#h50-h52-pre-registration-the-xeon-6741p-2026-10-20). Holds of at most 40 min until 24 pairs or 8 holds. SUPPORTED: paired difference CI lower bound >= +30 points and A1 >= 0.6, with L2, the void and idle-arm checks passed. REFUTED: CI upper bound < +30 points. Otherwise INCONCLUSIVE. `bench/eatflow/crescent/pairs-hold.sh H50 <n>` (`LIVE_MODE=pairs LIVE_CAP=2370 live.sh H50`, KV 40 GiB), `agentbench pairs-report --hyp H50 --arm-a A1 --arm-b B1`. Model, arms, sampling and predictions from [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20) (Gemma 4 26B-A4B QAT; breaks direct replication of H49b). Analysis rule L3 (primary) from [amendment A3](#crescent-amendment-a3-analysis-rule-l3-for-the-crescent-pairs-rows-2026-10-20). B1 is EAT release-1.1.0's stock (vLLM CPU v0.28.0) and runs only after a stall check, per [amendment E1](#crescent-amendment-e1-eat-stock-is-release-110-for-h50-h50o-and-h51-2026-10-29); node image, deploy commit and order per [amendment E2](#crescent-amendment-e2-pins-deploy-commits-order-and-the-restore-check-for-the-pending-crescent-rows-2026-10-29); H50's deploy commit, wiring smoke and pre-hold records per [amendment E3](#crescent-amendment-e3-h50s-deploy-commit-wiring-smoke-and-pre-hold-records-2026-10-29). Result ([H50 run](#h50-run-xeon-6741p-2026-10-29)): E1's stall check passed (60 of 60 requests, no stall); 24 complete pairs in 1 of the 8 permitted holds, no void pair, idle check 0.0022 CPU, balance gate passed (smallest p 0.97). Within-budget success A1 19/24 (0.79), B1 21/24 (0.875); paired difference A1 - B1 -0.083 (95% CI -0.208 to 0.000), under +30 points, so REFUTED. Not gated: median attempt A1 8.0 s, B1 12.0 s; paired J per attempt A1/B1 0.81. | REFUTED |
-| H50o | (Model, arms and sampling superseded by [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20): Gemma 4 26B-A4B QAT.) H50's comparison with arm B3, EAT's own OVMS chart (`core/helm-charts/ovms` at release-1.0.3-hotfix, stock values, `openvino/model_server` 2025.4, the closest OpenVINO/ model it pulls, `OpenVINO/Qwen3-4B-int4-ov`) instead of B1: A1 delivers far more B24 tasks within budget than B3. With H50 it splits B1 -> A1 into EAT switching its own engine (B1 -> B3) and what k3d-gpu adds on top (B3 -> A1). | Superseded by [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20), which restates the predictions; as first written: Written 2026-10-20, before any measurement. B3's stock graph has no tool parser (the chart's `ovms --pull` writes none) and its model reasons by default, so its tool calls arrive as text: B3 within-budget success <= 0.10 (0.7), paired A1 - B3 >= +60 points (0.65). Pair yield: a B3 attempt should end within 30-90 s (a failed tool call or a reasoned text answer), so a 40-min hold should run 15-25 pairs and 24 pairs fit 2-3 holds; L2 passes (0.6), so SUPPORTED (0.5), INCONCLUSIVE (0.45). | As H50 with arm B = B3 (same pairs, gates, thresholds, statistic, cluster per hold `k3dgpu-e-h50o`); holds of at most 40 min until 24 pairs or 6 holds. The B1 -> B3 and B3 -> A1 splits are described from the two rows' matched pairs, never gated. `bench/eatflow/crescent/pairs-hold.sh H50o <n>`, `agentbench pairs-report --hyp H50o --arm-a A1 --arm-b B3`. Model and predictions from [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20). Analysis rule L3 from [amendment A3](#crescent-amendment-a3-analysis-rule-l3-for-the-crescent-pairs-rows-2026-10-20). B3 is unchanged under [amendment E1](#crescent-amendment-e1-eat-stock-is-release-110-for-h50-h50o-and-h51-2026-10-29) (EAT release-1.1.0's OVMS chart renders the same objects); node image, deploy commit and order per [amendment E2](#crescent-amendment-e2-pins-deploy-commits-order-and-the-restore-check-for-the-pending-crescent-rows-2026-10-29); H50o's deploy commit, B3's records and its wiring smoke per [H50o amendment O1](#h50o-amendment-o1-deploy-commit-b3s-records-and-a-b3-wiring-smoke-2026-10-29). | PENDING |
+| H50o | (Model, arms and sampling superseded by [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20): Gemma 4 26B-A4B QAT.) H50's comparison with arm B3, EAT's own OVMS chart (`core/helm-charts/ovms` at release-1.0.3-hotfix, stock values, `openvino/model_server` 2025.4, the closest OpenVINO/ model it pulls, `OpenVINO/Qwen3-4B-int4-ov`) instead of B1: A1 delivers far more B24 tasks within budget than B3. With H50 it splits B1 -> A1 into EAT switching its own engine (B1 -> B3) and what k3d-gpu adds on top (B3 -> A1). | Superseded by [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20), which restates the predictions; as first written: Written 2026-10-20, before any measurement. B3's stock graph has no tool parser (the chart's `ovms --pull` writes none) and its model reasons by default, so its tool calls arrive as text: B3 within-budget success <= 0.10 (0.7), paired A1 - B3 >= +60 points (0.65). Pair yield: a B3 attempt should end within 30-90 s (a failed tool call or a reasoned text answer), so a 40-min hold should run 15-25 pairs and 24 pairs fit 2-3 holds; L2 passes (0.6), so SUPPORTED (0.5), INCONCLUSIVE (0.45). | As H50 with arm B = B3 (same pairs, gates, thresholds, statistic, cluster per hold `k3dgpu-e-h50o`); holds of at most 40 min until 24 pairs or 6 holds. The B1 -> B3 and B3 -> A1 splits are described from the two rows' matched pairs, never gated. `bench/eatflow/crescent/pairs-hold.sh H50o <n>`, `agentbench pairs-report --hyp H50o --arm-a A1 --arm-b B3`. Model and predictions from [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20). Analysis rule L3 from [amendment A3](#crescent-amendment-a3-analysis-rule-l3-for-the-crescent-pairs-rows-2026-10-20). B3 is unchanged under [amendment E1](#crescent-amendment-e1-eat-stock-is-release-110-for-h50-h50o-and-h51-2026-10-29) (EAT release-1.1.0's OVMS chart renders the same objects); node image, deploy commit and order per [amendment E2](#crescent-amendment-e2-pins-deploy-commits-order-and-the-restore-check-for-the-pending-crescent-rows-2026-10-29); H50o's deploy commit, B3's records and its wiring smoke per [H50o amendment O1](#h50o-amendment-o1-deploy-commit-b3s-records-and-a-b3-wiring-smoke-2026-10-29). Result ([H50o run](#h50o-run-xeon-6741p-2026-10-29)): B3 was not ready in hold 1, so under M1's rule H50o runs no further hold and no pair ran (1 of the 6 permitted holds). On k3d, B3's PVC bound, its pod was scheduled and its init container pulled `OpenVINO/gemma-4-26b-a4b-it-int4-ov` at `4e5885c3` (every file equal to the Hub's), but OVMS 2025.4's server failed on each of its 7 starts, going into CrashLoopBackOff; the last start's recorded exit is 139 (SIGSEGV), a second into loading the model. The same server in a plain container, outside k3d, on the same revision, exited 139 the same way with and without the chart's limits. Not deliverable: EAT's OVMS chart as shipped does not serve this model. | INCONCLUSIVE |
 | H51 | (Model, arms and sampling superseded by [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20): Gemma 4 26B-A4B QAT.) Graded agents per box on the Xeon 6741P: H45's ramp, gates and scoring (B15-RO, typical load, 300 s steps, pooled p95 turn <= 10 s, success >= the arm's N=1 success - 10 points, errors <= 1%, >= 60 window requests), extended to N=16, for A1 and B1. | Superseded by [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20), which restates the predictions; as first written: Written 2026-10-20, before any measurement. A1 in [1, 8] (0.5). B1 in [0, 4] (0.5). B1 <= A1 (0.55). | H45's `apb` runner and scorer (`apb-score --hyp H51`, ramp 1, 2, 4, 8, 16), one fresh cluster per hold, at most 4 holds of at most 40 min. A prediction holds when the arm's bracket lies inside its range and is refuted when it lies outside; B1 <= A1 is decided only on matched load. REFUTED when any prediction is refuted, SUPPORTED when all three hold, else INCONCLUSIVE. Runs only if H50's holds end within their cap. Model and predictions from [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20). B1 as H50, from [amendment E1](#crescent-amendment-e1-eat-stock-is-release-110-for-h50-h50o-and-h51-2026-10-29); node image, deploy commit and order per [amendment E2](#crescent-amendment-e2-pins-deploy-commits-order-and-the-restore-check-for-the-pending-crescent-rows-2026-10-29). | PENDING |
 | H52 | A plain `k3d-gpu up` (no flags, the auto-adapt default) on the Xeon 6741P host as found detects and enables every engine actually present and advertises each usable one to the scheduler, with nothing missing and nothing phantom; engines present but not configured on the host are named, not advertised. | Written 2026-10-20 from an inventory read from sysfs, lspci and CPUID, not from k3d-gpu. 4 x Arc Pro B70 (xe) as `gpu.intel.com/xe: 4`; AMX TILE, BF16, INT8, FP16 and 14 AVX-512/VNNI labels; no hybrid, NUMA, NVIDIA, Gaudi or NPU objects; DSA, IAA and QAT named as present but unconfigured (0.4: `up` may not name them). | The table in [H50-H52 pre-registration](#h50-h52-pre-registration-the-xeon-6741p-2026-10-20): `k3d-gpu doctor`, `K3D_GPU_CLUSTER=k3dgpu-h52 k3d-gpu up`, `kubectl get node -o json`, `k3d-gpu test`, and one enumeration pod per B70. SUPPORTED: every row matches. REFUTED: any row does not. Run 2026-10-20 ([H52 run](#h52-run-xeon-6741p-2026-10-20)): the four B70s (`gpu.intel.com/xe: 4`, `xmx=true`), AMX (TILE, BF16, INT8, FP16) and all 14 AVX-512/VNNI labels detected and reached pods, nothing phantom; but no media engine label on `xe`, and `up` does not name the unconfigured DSA, IAA and QAT (`doctor` does). | REFUTED |
 | H52b | After `k3d-gpu host-setup --apply` configures the host's DSA, IAA and QAT (the fix that adds that path, merged first), a plain `k3d-gpu up` also advertises them, and each one reaches a pod; the host is then restored exactly. | Written 2026-10-20, before the fix exists. DSA, IAA and QAT allocatable > 0, each at the count host-setup reports configuring; their test pods see `/dev/dsa`, `/dev/iax`, `/dev/vfio` (0.6). The other rows read as H52's expected table, media labels included ([amendment D1](#h52-amendment-d1-the-fixes-and-h52b-2026-10-20)). | Runs after H52, once the host-setup fix is merged; same procedure plus `host-setup --apply` before `up` and its printed revert after. SUPPORTED: the three engines advertised and reached, the H52 rows unchanged, and the host inventory read back equal to the one taken before. REFUTED: any of these fails. The host-setup command (`--apply --with-kernel-wqs`), the plan read first, the counts, the plain `up`'s node image and the revert per [amendment D2](#h52-amendment-d2-h52bs-host-setup-step-on-crescent-2026-10-29). | PENDING |
@@ -105,6 +105,7 @@ new evidence (new hardware, new driver, new model, changed method).
 
 | Date | Hypothesis | Attack | Result | DO-NOT-RE-ATTACK |
 |------|------------|--------|--------|------------------|
+| 2026-10-29 | H50o | Xeon 6741P: `bench/eatflow/crescent/pairs-hold.sh H50o 1`, A1 against B3 (EAT's OVMS chart, OVMS 2025.4, `OpenVINO/gemma-4-26b-a4b-it-int4-ov` @ `4e5885c3`), after a discarded wiring smoke; then B3's server in a plain container as an unscored control ([H50o run](#h50o-run-xeon-6741p-2026-10-29)) | INCONCLUSIVE (not deliverable): A1 was ready; B3's pull matched the Hub, but its server failed on all 14 starts (5 in the smoke, 7 in hold 1, 2 outside k3d with and without the chart's limits); the 5 exits recorded are 139 (SIGSEGV), and the 5 logs recorded end at the same line, a second into loading the model. No pair ran | DO-NOT-RE-ATTACK with OVMS 2025.4. A re-attack needs an EAT OVMS chart whose pinned server loads Gemma 4 |
 | 2026-10-21 | H25x | Xeon 6741P: `bench/shared-prefix/run.sh`, OVMS agent pod on node CPUs 0-23,48-71 under matched `typical` load on 24-47,72-95, 3+3 rounds ([H25x run](#h25x-run-xeon-6741p-2026-10-21)) | SUPPORTED (T), load matched: 7.05x (CI 6.94-7.13), smaller than the i9's 10.61x because the Xeon's OFF prefill is faster | DO-NOT-RE-ATTACK T for this prompt shape on this host |
 | 2026-10-20 | H34x | Xeon 6741P: `bench/hetero-spec/h34.sh`, OVMS pod on node CPUs 0-23,48-71 under matched `typical` load on 24-47,72-95, 12 pairs A B / B A ([H34x run](#h34x-run-xeon-6741p-2026-10-20)) | REFUTED, load matched: B/A tok/s 0.758 (CI 0.688-0.809), J/token 1.241 (1.168-1.347), 12/12 pairs B worse; target alone 37.2 tok/s, with the draft 28.0 | DO-NOT-RE-ATTACK same-engine CPU Fast Draft (0.6B draft, gamma 5, OVMS 2026.4.1) for this target on a Xeon with this many cores. Re-open with another gamma, draft or OVMS release |
 | 2026-10-20 | H27x | Xeon 6741P (AMX): `bench/amx-autoquant/probe.sh` on CPUs 0-23,48-71 under matched `typical` load on 24-47,72-95, H27's weights, 5 rounds + 3 probe repeats ([H27x run](#h27x-run-xeon-6741p-2026-10-20)) | REFUTED, load matched. Pick fp16 (not H27's int8): bf16 on AMX decodes 24.7 tok/s vs int8's 19.4 and has the shortest TTFT; int4 (gate-rejected, dNLL +0.072) is fastest at 2.99 s per turn vs fp16 4.23 s, int8 5.50 s | DO-NOT-RE-ATTACK (b) with these three weights on an AMX Xeon either: the pick still costs latency. Re-open only with other weights or a revised gate |
@@ -3158,6 +3159,156 @@ pre-registered by its push time.
    pre-registered `bench/eatflow/results/2026-10-20/H50o/` as `pairs/`, `hold<n>/` and
    `runs/H50o-hold<n>/`, with `prehold/` (the steps of items 5 and 6, `prehold/prehold.sh`) and
    `smoke/H50o-o1/`.
+
+### H50o run (Xeon 6741P, 2026-10-29)
+
+**Reproduce:**
+
+```text
+# provenance
+date:            2026-10-29T08:07:20Z to 08:19:14Z (hold 1, the only hold; no wait: load1 1.69 at the
+                 start, no aiperf process, / at 29%); no pair ran
+hypothesis:      H50o
+host cpu:        Intel(R) Xeon(R) 6741P (Granite Rapids, family 6 model 173), 48 cores / 96 threads,
+                 1 socket, 1 NUMA node, microcode 0xa000133, 503 GiB RAM
+host kernel:     7.0.0-31-generic; Docker 29.8.0
+accelerators:    k3d-gpu up: intel amx (no arm uses a GPU; no pod requests gpu.intel.com)
+k3d-gpu commit:  789e9b9a (branch claude/h50o-run: H50's head 4442f679 + amendment O1), checked out clean
+                 and detached at ~/k3dgpu-bench/k3d-gpu-h50o; the post-hold steps ran at 028cb50c, which
+                 changes no runner file (prehold.sh gains the `plain` step; hubcheck.py)
+node image:      cryptoandcoffee/k3d-gpu:0.1.61@sha256:8cd264aa68c77681d7fa474693944de0db8d55de5881253e4029bf72a67e175c;
+                 k3d v5.9.0, kubectl v1.35.2, helm v4.1.1
+model:           A1 k3dgpu_gemma-4-26B-A4B-it-qat-int4-sym-g32-ov (26 files match its manifest.json);
+                 B3 OpenVINO/gemma-4-26b-a4b-it-int4-ov @ 4e5885c3, pulled by the chart's init container
+                 (22 Hub files, 7 of them LFS, every size and LFS sha256 equal to the Hub's)
+runtime:         A1 openvino/model_server@sha256:a928903f... (2026.4.1), `agent manifest`
+                 K3D_GPU_AGENT_DEVICE=CPU, no draft, tool_parser gemma4, 48 CPUs;
+                 B3 EAT core/helm-charts/ovms at 0d3438d (release-1.1.0 renders the same objects, E1 item 4),
+                 openvino/model_server:2025.4@sha256:c3707200..., modelSource OpenVINO/gemma-4-26b-a4b-it-int4-ov,
+                 ingress and APISIX route off, chart defaults otherwise (12 CPUs, memory request 16Gi and
+                 limit 24Gi, graph written by `ovms --pull`: cache_size 20, prefix caching on, no parsers)
+energy source:   not read: no pair ran
+load:            not started: no pair ran
+serving load:    serving.py: 2.54 CPU-s/s mean over the hold (2.44-3.08); aiperf active in 0 of 71 windows
+runs per arm:    0 attempts (hold 1 of the 6 permitted, NOT DELIVERABLE)
+```
+
+Commands, on crescent, from the H50o checkout: `bench/eatflow/results/2026-10-20/H50o/prehold/prehold.sh`
+(steps `frontdoor pre`, `verify`, `smoke`), then `bench/eatflow/crescent/pairs-hold.sh H50o 1`, then
+`prehold.sh plain` and `prehold.sh frontdoor post`. After the hold, on the desktop:
+`hubcheck.py hold1/b3-model hold1/b3-model/hub-tree.json` (O1 item 2) and the pre-registered scorer,
+`agentbench pairs-report bench/eatflow/results/2026-10-20/H50o/pairs --hyp H50o --arm-a A1 --arm-b B3`.
+Records: [bench/eatflow/results/2026-10-20/H50o/](bench/eatflow/results/2026-10-20/H50o/) (`hold1/` with
+`b3-model/`, `hold1-launch.log`, `runs/H50o-hold1/` with `serving.jsonl`, `pairs/scorer.txt`, `prehold/`,
+`smoke/H50o-o1/`, `runs/H50o-smoke-o1/`).
+
+**Before hold 1 (amendment O1), at `789e9b9a`:**
+
+- Front door (`prehold/frontdoor-pre.txt`, 07:59:49Z): through Dynamo `:8100`, each serving pair
+  answered "OK" and its `num_requests_total` rose by one (:30000 139 to 140, :30001 24 to 25).
+- A1's IR (`prehold/ir-verify.txt`, under the bench lock): 26 files, every sha256 and size equal to its
+  `manifest.json`, none extra.
+- Wiring smoke (`H50o-smoke-o1`, 08:00:20-08:06:32Z, discarded, not one of the 6 holds). B3 ran on k3d
+  for the first time. Its PVC bound, the pod was scheduled, the image reached the node, and the init
+  container pulled `4e5885c3` in 163 s. The OVMS server then started 5 times between the init
+  container's exit (08:04:28Z) and 08:05:51Z, in CrashLoopBackOff between starts. The pod's
+  description (`b3-records.sh`, run by hand at about 08:05:18Z) counts 4 starts (restart count 3) and
+  records the 3rd's and 4th's exits: 139 (SIGSEGV), each within a second. `ovms-previous-2.log`, saved
+  by hand before cleanup (08:06:20Z), is a 5th start, at 08:05:51Z. The 4th's and 5th's logs end right
+  after "Initializing Visual Language Model Continuous Batching servable"; the 3rd's could not be
+  retrieved. Under O1 item 3 that is a fault in OVMS 2025.4, not in k3d, so nothing changed and hold
+  1 ran as registered. The smoke was stopped as O1 item 3 allows (records by hand, then a TERM to
+  `hold.sh`; rc 124). Commit `028cb50c`'s message, written from the description, says four starts.
+
+**The hold.** Lock taken at once. `k3d-gpu up` at +1 s; both arms applied, readiness wait from +63 s.
+A1's server reached AVAILABLE at 08:09:01Z, about 100 s in, and its rollout finished. B3's PVC bound
+and its pod was scheduled; its init container pulled `4e5885c3` from 08:08:44 to 08:11:25Z and exited
+0. Its server then started 7 times between the pull's end and 08:17:00Z, going into CrashLoopBackOff
+after each (restart count 6). Kubernetes keeps only a container's last termination and `b3-records.sh`
+saves the current and previous logs, so only the 7th start's exit is recorded: 139 (SIGSEGV) within the
+second it started (08:17:00Z), with "Initializing Visual Language Model Continuous Batching servable"
+as its last log line (`ovms.log` and `ovms-previous.log` are that run). The first 6 are known from the
+kubelet's restart and back-off events, which follow any exit. At +706 s `kubectl rollout status`
+returned "exceeded its progress deadline", and `live.sh` stopped the hold: "NOT DELIVERABLE: not ready
+with 900 s of the hold left". It saved both servers' logs and B3's records; cleanup deleted the
+cluster; `hold.sh` exited 3 with no stale or orphan process. No load container started and no warm-up
+or pair was sent.
+
+**B3's records (O1 item 2,** `hold1/b3-model/`): the init log, the server's log and its last crashed
+run's log, the pod's description, the clone's refs (`refs/heads/main` `4e5885c3`), every pulled file's
+size and sha256, `graph.pbtxt` and `config.json`. `hubcheck.py` against the Hub's tree at `4e5885c3`
+(saved as `hub-tree.json`): 22 Hub files present, 7 LFS, 0 mismatched or missing; the pull added only
+`graph.pbtxt` and the server's `config.json`. The graph has no `tool_parser` and no `reasoning_parser`,
+with `enable_prefix_caching: true` and `cache_size: 20`, as the pre-registration expected of `ovms
+--pull`. The smoke's sha256 list, graph and config are identical to hold 1's.
+
+**Control outside k3d (unscored,** `prehold/plain/`, 09:05:41Z, under the bench lock, at `028cb50c`).
+B3's server in a plain container: the chart's image and server args (`--config_path=/models/config.json
+--rest_port=8081 --port=8080`), user 5000, all capabilities dropped, no network, on H54q's read-only
+copy of the same revision (`~/k3dgpu-gemma/models/OpenVINO/gemma-4-26b-a4b-it-int4-ov`; 21 of its 22 files
+carry an hf download etag, and each equals the Hub's sha256 or blob id: `ovb-vs-hub.txt`), with the
+`graph.pbtxt` and `config.json` the smoke's pull wrote. At the chart's limits (12 CPUs, 24 GiB) and with
+no limits, the server exited 139, not OOM-killed, about one second after its first log line, at the same
+log line. So the crash follows OVMS 2025.4 and this model, not k3d.
+
+**After the hold.** Front door (`prehold/frontdoor-post.txt`, 09:06:54Z): both pairs answered "OK"
+through `:8100` and their counters rose (:30000 140 to 141, :30001 28 to 29). H50o stopped no serving
+container and used no GPU. No k3d cluster, campaign container or held lock remained.
+
+**Scoring.** The pre-registered scorer refuses the row: hold 1 stopped before any pair, so no
+`registration.json` and no `pairs.jsonl` exist (`pairs/scorer.txt`). M1's rule decides the row: B3 was
+not ready with 900 s of its first hold left, so H50o runs no further hold and is INCONCLUSIVE (not
+deliverable). Holds used: 1 of 6, plus the discarded smoke. The B1 -> B3 and B3 -> A1 splits have no B3
+pair to describe.
+
+**Findings.**
+
+- k3d needed no change for B3. The PVC bound through k3d's local-path provisioner, the pod was
+  scheduled, the image reached the node, and the chart's `ovms --pull` fetched the model intact. Beyond
+  the two pre-registered routes (`/v3` and the ingress and APISIX route off), nothing was changed.
+- EAT's OVMS chart as shipped, at both `0d3438d` and release-1.1.0 (OVMS 2025.4), does not serve
+  `OpenVINO/gemma-4-26b-a4b-it-int4-ov`: its server failed on all 14 starts (5 in the smoke, 7 in hold
+  1, 2 in the control). Exit 139 (SIGSEGV) is recorded for 5 of them (the smoke's 3rd and 4th, hold
+  1's 7th and both control runs), and a log ending at "Initializing Visual
+  Language Model Continuous Batching servable" for 5 (the smoke's 4th and 5th, hold 1's 7th and both
+  control runs). The rest are known only from CrashLoopBackOff restarts, so that they exited the same
+  way is an inference. M1 recorded, from the 2025.4 image's source, that 2025.4 has no Gemma 4
+  parser and that Gemma 4 support arrived in OVMS 2026.2. In the same hold, A1's OVMS 2026.4.1 loaded
+  its QAT IR of Gemma 4 26B-A4B.
+
+**Predictions, read as written** ([amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20),
+restated by [A3](#crescent-amendment-a3-analysis-rule-l3-for-the-crescent-pairs-rows-2026-10-20)):
+
+- B3 not deliverable (0.6): held.
+- Otherwise B3 <= 0.10 (0.8): not reached.
+- As first written and superseded by M1 (never gated): B3 <= 0.10, A1 - B3 >= +60 points, 15-25 pairs per
+  hold, L2 passes, SUPPORTED (0.5): none reached.
+
+**Verdict: INCONCLUSIVE (not deliverable).** B3 was not ready in hold 1, so no A1-vs-B3 pair ran, and
+H50o says nothing about how A1 compares with EAT's OVMS path on this model. What it does show: EAT's OVMS
+chart, with the OVMS 2025.4 tag it ships, crashes on load with the Gemma 4 26B-A4B model that M1 assigns
+it, inside k3d and outside it.
+
+Disclosed:
+
+- The readiness wait ended at +706 s, not at the 900 s line (+1,470 s of the 2,370 s cap). `live.sh`'s
+  wait is `kubectl rollout status` with a timeout up to that line, and it returns early when Kubernetes
+  marks the Deployment ProgressDeadlineExceeded (default 600 s; EAT's chart sets none). This is the
+  registered runner's behaviour since the H47/H49 runner (#131); H50's hold used the same code. Under
+  CrashLoopBackOff, B3 would have started about twice more before +1,470 s. Given 14 failed starts,
+  with every recorded exit 139 at the same log line, that this would not have changed the outcome is a
+  judgement, not a measurement.
+- The deploy commit stacks unmerged PRs (amendment O1 item 1): #225 at `24e41deb`, #209 at `9a88e8c5`
+  and H50's #227 at `4442f679`. #227 has not moved (GitHub's activity log: its last push, 07:50:01Z, set
+  `4442f679`). #225's head moved to `a8bd70f4` (committed 09:01:57Z, pushed 09:08:05Z) by merging
+  `origin/main`. That merge also changes `bench/eatflow/crescent/hold.sh` to use GNU `timeout` where
+  present, which changes the exit status a TERMed hold reports, not what a hold runs. Hold 1 exited 3 on
+  its own; the smoke's 124 is the status the host's `timeout` gave the TERM that O1 item 3 allows.
+  #209's head moved from `9a88e8c5` to `7deeee5c` (pushed 09:13:46Z): one commit that changes
+  `bench/h54/diag/b1g-stall.sh`, the ledger and the docs, and no H50o runner file (H50o's `prehold.sh`
+  does not call the stall check).
+- The control's `plain` step (commit `028cb50c`, pushed 08:09:20Z) was added after the smoke and after
+  hold 1 started, before its outcome was known. It is unscored and decides nothing.
 
 ### H53 pre-registration: EAT's banking flow on Arc Pro B70 (2026-10-20)
 
