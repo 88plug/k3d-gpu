@@ -292,7 +292,7 @@
       "tag": "v0.32.0"
     },
     {
-      "digest": "sha256:95ac815038c4b3537b173798bfe3b89bdf525a52bd653cd14d4deb01f1062be7",
+      "digest": "sha256:20509fabe50dda62c09c0786d1a6effa299d3dbdddcc49331b93e65144652a8c",
       "name": "docker.io/vllm/vllm-openai-xpu",
       "sources": [
         "scripts/k3d-gpu AGENT_DEFAULT_IMAGE"
@@ -317,7 +317,7 @@
       "tag": "v0.15.0"
     },
     {
-      "digest": "sha256:be586c648cb79d2cd75d0c38a6541e1f16c47a7c6621d3e711470a467fc38744",
+      "digest": "sha256:c9aba1a673382ad356a72fb63e6cd73e8c021797e904b6c099bfe130217df62e",
       "name": "ghcr.io/ggml-org/llama.cpp",
       "sources": [
         "scripts/k3d-gpu K3D_GPU_LLAMA_VULKAN_IMAGE"

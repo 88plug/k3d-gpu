@@ -94,9 +94,9 @@ OVMS_DOC = "https://github.com/openvinotoolkit/model_server/blob/v2026.4.1/"
 OVMS_SPEC_DEMO = OVMS_DOC + "demos/continuous_batching/speculative_decoding/README.md"
 OVMS_TOOL_PARSERS = ("llama3", "hermes3", "phi4", "mistral", "gptoss", "qwen3coder", "devstral", "lfm2", "gemma4", "onyx", "minicpm5")
 OVMS_REASONING_PARSERS = ("qwen3", "gemma4", "gptoss", "minicpm5", "lfm2", "onyx")
-VLLM_SPEC_DOC = "https://github.com/vllm-project/vllm/blob/v0.31.0/vllm/config/speculative.py"
-VLLM_MTP_DOC = "https://github.com/vllm-project/vllm/blob/v0.31.0/docs/features/speculative_decoding/mtp.md"
-VLLM_HW_TABLE = "https://github.com/vllm-project/vllm/blob/v0.31.0/docs/features/README.md (hardware table, L67)"
+VLLM_SPEC_DOC = "https://github.com/vllm-project/vllm/blob/v0.32.0/vllm/config/speculative.py"
+VLLM_MTP_DOC = "https://github.com/vllm-project/vllm/blob/v0.32.0/docs/features/speculative_decoding/mtp.md"
+VLLM_HW_TABLE = "https://github.com/vllm-project/vllm/blob/v0.32.0/docs/features/README.md (hardware table, L67)"
 VLLM_GAUDI_SD = "https://github.com/vllm-project/vllm-gaudi/blob/v0.30.0/docs/features/supported_features.md (L25, L27)"
 LLAMACPP_ARGS = "https://github.com/ggml-org/llama.cpp/blob/v0.8.0/common/arg.cpp (L4322 -md)"
 LLAMACPP_SPEC = "https://github.com/ggml-org/llama.cpp/blob/v0.8.0/common/arg.cpp (L4322 --spec-draft-model, L4330 --spec-type)"
@@ -709,7 +709,7 @@ def optimize(bundle, engine, device, opts=None):
     o = dict(opts or {})
     thinking_want = o.get("thinking") or "off"
     draft_want = o.get("draft") or "auto"
-    vllm_version = tuple(int(x) for x in (o.get("vllm_version") or "0.31.0").split(".")[:3])
+    vllm_version = tuple(int(x) for x in (o.get("vllm_version") or "0.32.0").split(".")[:3])
     prefix_caching = o.get("prefix_caching")
     hw_class = o.get("hw_class")
     target = bundle["target"]
@@ -976,7 +976,7 @@ def optimize(bundle, engine, device, opts=None):
             doc["text_only"] = True
             doc["engine_args"].append("--language-model-only")
             choose("vision%s tower in config.json; agents send text" % ("/audio" if facts["audio"] else ""),
-                   "--language-model-only (no encoder memory, larger KV pool)", "https://github.com/vllm-project/vllm/blob/v0.31.0/vllm/engine/arg_utils.py (L1429, v0.17.0+)")
+                   "--language-model-only (no encoder memory, larger KV pool)", "https://github.com/vllm-project/vllm/blob/v0.32.0/vllm/engine/arg_utils.py (L1460, v0.17.0+)")
         elif engine == "ovms":
             choose("vision tower in the IR", "loaded as a VLM pipeline: OVMS refuses LM on a VLM directory",
                    OVMS_DOC + "src/llm/servable_initializer.cpp (L588-641)")

@@ -255,7 +255,7 @@ def plan(facts, matrix, overrides=None):
     return doc
 
 
-AGENT_VLLM_VERSION = {"HPU": "0.30.0", "GPU": "0.31.0"}  # the agent's pinned vLLM images
+AGENT_VLLM_VERSION = {"HPU": "0.30.0", "GPU": "0.32.0"}  # the agent's pinned vLLM images
 
 
 def agent_target(facts, doc, backend=None):
@@ -312,7 +312,7 @@ def add_optimizer(doc, facts, meta, opts):
     o = dict(opts or {})
     backend = o.pop("backend", None)
     engine, device, t = agent_target(facts, doc, backend)
-    o.setdefault("vllm_version", "0.26.0" if backend == "llm-scaler" else AGENT_VLLM_VERSION.get(device, "0.31.0"))
+    o.setdefault("vllm_version", "0.26.0" if backend == "llm-scaler" else AGENT_VLLM_VERSION.get(device, "0.32.0"))
     o["hw_class"] = hw_class(t)
     # No backend set: as `agent up`, the CPU engine follows the ledger (model_opt.py H59).
     o.setdefault("engine_from_ledger", backend is None)
