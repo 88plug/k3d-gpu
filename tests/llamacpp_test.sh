@@ -301,8 +301,8 @@ served_name() {
     grep -m1 -oE -- '--served-model-name=[^[:space:]"]+' "${WORK}/$1.yaml" | cut -d= -f2-
 }
 body_model() { python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["model"])' "${WORK}/$1.body" 2>/dev/null; }
-# served_ok <name> <app> <model id> <model line>: rc 0, the manifest's <app>, and the warm-up
-# body, the 'OpenAI API ready' line and the model line all name what the manifest serves.
+# served_ok <name> <app> <model id> <model line>: the manifest's server is <app>, and the
+# warm-up body, the 'OpenAI API ready' line and the model line all name what it serves.
 served_ok() {
     local n=$1 app=$2 id=$3 line=$4 name
     name=$(served_name "${n}")
