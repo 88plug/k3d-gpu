@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Unit tests for the crescent hold tools: serving.py's slot covariate, lockwait.py
-(H56 stage 0) and h56.py (the H56 scorer). No docker, no host state."""
+(H56 stage 0), h56.py (the H56 scorer) and h52b.sh with h52b.py (H52b's steps, run against
+stubs). No docker, no host state."""
 import json
 import os
 import shutil
+import signal
+import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -422,6 +426,198 @@ class H56GateTest(unittest.TestCase):
         self.lockwait(True)
         self.smoke(done=2, setup_s=300)
         self.assertFalse(self.gate()["ok"])
+
+
+ROOT = os.path.normpath(os.path.join(HERE, "..", "..", ".."))
+PLAN = os.path.join(ROOT, "bench/eatflow/results/2026-10-29/H52b-plan-precheck/plan.txt")
+H52B_REVERTS = [
+    "sudo accel-config disable-wq dsa0/wq0.0 && sudo accel-config disable-device dsa0",
+    "sudo accel-config disable-wq dsa2/wq2.0 && sudo accel-config disable-device dsa2",
+    "sudo accel-config disable-wq dsa4/wq4.0 && sudo accel-config disable-device dsa4",
+    "echo 0 | sudo tee /sys/bus/pci/devices/0000:01:00.0/sriov_numvfs",
+    "echo 0 | sudo tee /sys/bus/pci/devices/0000:06:00.0/sriov_numvfs",
+    "echo 0 | sudo tee /sys/bus/pci/devices/0000:0b:00.0/sriov_numvfs",
+    "sudo modprobe -r vfio-pci   # skip if VMs or other devices use vfio-pci",
+]
+# What the stub sudo logs for those reverts, in order.
+H52B_SUDO = [
+    "sudo accel-config disable-wq dsa0/wq0.0", "sudo accel-config disable-device dsa0",
+    "sudo accel-config disable-wq dsa2/wq2.0", "sudo accel-config disable-device dsa2",
+    "sudo accel-config disable-wq dsa4/wq4.0", "sudo accel-config disable-device dsa4",
+    "sudo tee /sys/bus/pci/devices/0000:01:00.0/sriov_numvfs",
+    "sudo tee /sys/bus/pci/devices/0000:06:00.0/sriov_numvfs",
+    "sudo tee /sys/bus/pci/devices/0000:0b:00.0/sriov_numvfs",
+    "sudo modprobe -r vfio-pci",
+]
+
+
+class H52bHelperTest(unittest.TestCase):
+    """h52b.py on the plan crescent printed on 2026-10-29 (amendment D2 item 2)."""
+
+    @classmethod
+    def setUpClass(cls):
+        import h52b
+        cls.h = h52b
+        cls.lines = h52b.read(PLAN)
+
+    def test_crescent_plan_passes(self):
+        ok, report = self.h.gate(self.lines)
+        self.assertTrue(ok, report)
+        self.assertEqual(report[-1], "gate: pass (8 commands)")
+        self.assertEqual(sum(r.startswith("ok: ") for r in report), 8)
+
+    def test_reverts_in_order(self):
+        self.assertEqual(self.h.reverts(self.lines), H52B_REVERTS)
+
+    def test_reverts_first_block_of_an_apply(self):
+        apply = self.lines + ["Run these 8 commands now? [y/N] ==> + sudo modprobe vfio-pci",
+                              "  DSA/IAA/QAT changes last until reboot. To undo them sooner:",
+                              "    revert: sudo something-else"]
+        self.assertEqual(self.h.reverts(apply), H52B_REVERTS)
+
+    def test_ansi_colour_ignored(self):
+        lines = ["\x1b[1;34m==>\x1b[0m Install plan (1 commands):", "    sudo modprobe vfio-pci", "  end"]
+        self.assertTrue(self.h.gate(self.h.clean(lines))[0])
+
+    def swap(self, old, new):
+        return [new if line.strip() == old else line for line in self.lines]
+
+    def test_other_commands_stop(self):
+        shrink = ("sudo accel-config disable-device iax1 && sudo accel-config load-config -c "
+                  "/var/lib/k3d-gpu/idxd-iax1.conf && sudo accel-config config-wq iax1/wq1.0 --wq-size=240")
+        for bad in ("    sudo apt-get update && sudo apt-get install -y accel-config intel-gpu-tools",
+                    "    sudo modprobe vfio-pci && sudo rm -rf /var/lib/x",
+                    "    " + shrink,
+                    "    sudo accel-config config-wq dsa0/wq0.0 --type=user; reboot",
+                    "    echo 16 | sudo tee /sys/bus/pci/devices/0000:01:00.0/remove"):
+            ok, report = self.h.gate(self.swap("sudo modprobe vfio-pci", bad))
+            self.assertFalse(ok, bad)
+            self.assertEqual(report[-1], "gate: STOP (8 commands)", bad)
+            self.assertIn("NOT ALLOWED: " + bad.strip(), report)
+
+    def test_count_mismatch_stops(self):
+        lines = [line.replace("(8 commands)", "(9 commands)") for line in self.lines]
+        ok, report = self.h.gate(lines)
+        self.assertFalse(ok)
+        self.assertIn("the header names 9 commands, 8 were read", report)
+
+    def test_no_plan_stops(self):
+        ok, report = self.h.gate(["==> Every check passed: nothing to install."])
+        self.assertFalse(ok)
+        self.assertEqual(report, ["no install plan in the output: nothing to apply"])
+
+
+STUB_K3DGPU = """#!/usr/bin/env bash
+echo "k3d-gpu $*" >> "${STUBLOG}"
+cat "${STUBPLAN}"
+case " $* " in *" --apply "*)
+    printf 'Run these 8 commands now? [y/N] '
+    read -r ans; echo "answer=${ans}" >> "${STUBLOG}" ;;
+esac
+"""
+STUB_H52 = """#!/usr/bin/env bash
+echo "h52 $*" >> "${STUBLOG}"
+sleep "${STUBSLEEP:-0}"
+"""
+STUB_INV = """#!/usr/bin/env bash
+echo "inventory" >> "${STUBLOG}"
+echo "# date $(date +%s%N)"; echo "dsa0 state=disabled"
+"""
+STUB_SUDO = """#!/usr/bin/env bash
+echo "sudo $*" >> "${STUBLOG}"
+[ "$1" != tee ] || cat > /dev/null
+"""
+STUB_K3D = """#!/usr/bin/env bash
+echo "k3d $*" >> "${STUBLOG}"
+[ "$1 $2" != "cluster list" ] || cat "${STUBCLUSTERS}"
+"""
+
+
+class H52bRunnerTest(unittest.TestCase):
+    """h52b.sh's order, its stop at the plan and its reverts on a signal, against stubs."""
+
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+        self.bin = os.path.join(self.d, "k3dgpu-bench", "bin")
+        os.makedirs(self.bin)
+        stubs = {"sudo": STUB_SUDO, "k3d": STUB_K3D, "dpkg-query": "#!/bin/sh\necho stub\n",
+                 "lsmod": "#!/bin/sh\necho stub\n", "k3d-gpu": STUB_K3DGPU, "h52.sh": STUB_H52,
+                 "inventory.sh": STUB_INV}
+        for name, text in stubs.items():
+            path = os.path.join(self.bin, name)
+            with open(path, "w") as f:
+                f.write(text)
+            os.chmod(path, 0o755)
+        self.log = os.path.join(self.d, "log")
+        self.out = os.path.join(self.d, "out")
+        self.plan = os.path.join(self.d, "plan.txt")
+        shutil.copy(PLAN, self.plan)
+        self.clusters = os.path.join(self.d, "clusters.json")
+        with open(self.clusters, "w") as f:
+            f.write("[]")
+        self.env = dict(os.environ, HOME=self.d, STUBLOG=self.log, STUBPLAN=self.plan,
+                        STUBCLUSTERS=self.clusters, H52B_K3DGPU=os.path.join(self.bin, "k3d-gpu"),
+                        H52B_H52=os.path.join(self.bin, "h52.sh"),
+                        H52B_INVENTORY=os.path.join(self.bin, "inventory.sh"))
+
+    def tearDown(self):
+        shutil.rmtree(self.d)
+
+    def start(self, **env):
+        return subprocess.Popen(["bash", os.path.join(HERE, "h52b.sh"), self.out], env=dict(self.env, **env),
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+
+    def logged(self):
+        if not os.path.exists(self.log):
+            return []
+        with open(self.log) as f:
+            return f.read().splitlines()
+
+    @staticmethod
+    def sudo_after_list(log):
+        return [x for x in log[log.index("k3d cluster list -o json"):] if x.startswith("sudo ")]
+
+    def test_order(self):
+        self.assertEqual(self.start().wait(60), 0)
+        log = self.logged()
+        self.assertEqual(log[:6], ["inventory", "k3d-gpu host-setup --plan --with-kernel-wqs",
+                                   "k3d-gpu host-setup --apply --with-kernel-wqs", "answer=y",
+                                   f"h52 {self.out}/h52b k3dgpu-h52b", "k3d cluster list -o json"])
+        self.assertEqual(self.sudo_after_list(log), H52B_SUDO)
+        self.assertEqual(log[-1], "inventory")
+        self.assertNotIn("k3d cluster delete k3dgpu-h52b", log)
+        with open(os.path.join(self.out, "inventory-diff.txt")) as f:
+            self.assertEqual(f.read(), "")
+        with open(os.path.join(self.out, "reverts.txt")) as f:
+            self.assertEqual(f.read().splitlines(), H52B_REVERTS)
+        with open(os.path.join(self.out, "plan-gate.txt")) as f:
+            self.assertEqual(f.read().splitlines()[-1], "gate: pass (8 commands)")
+
+    def test_plan_gate_stops_before_apply(self):
+        with open(self.plan) as f:
+            text = f.read().replace("    sudo modprobe vfio-pci\n", "    sudo modprobe vfio-pci && sudo reboot\n")
+        with open(self.plan, "w") as f:
+            f.write(text)
+        self.assertEqual(self.start().wait(60), 3)
+        self.assertEqual(self.logged(), ["inventory", "k3d-gpu host-setup --plan --with-kernel-wqs"])
+        self.assertFalse(os.path.exists(os.path.join(self.out, "reverts.txt")))
+
+    def test_signal_deletes_cluster_then_reverts(self):
+        with open(self.clusters, "w") as f:
+            f.write('[{"name": "k3dgpu-h52b"}]')
+        p = self.start(STUBSLEEP="30")
+        deadline = time.time() + 30
+        while time.time() < deadline and not any(x.startswith("h52 ") for x in self.logged()):
+            time.sleep(0.1)
+        time.sleep(0.3)
+        os.killpg(p.pid, signal.SIGTERM)
+        self.assertEqual(p.wait(60), 143)
+        log = self.logged()
+        self.assertLess(log.index("k3d cluster delete k3dgpu-h52b"), log.index(H52B_SUDO[0]))
+        self.assertEqual(self.sudo_after_list(log), H52B_SUDO)
+        self.assertEqual(log[-1], "inventory")
+        with open(os.path.join(self.out, "steps.txt")) as f:
+            self.assertIn("signal 15", f.read())
 
 
 if __name__ == "__main__":
