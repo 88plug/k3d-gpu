@@ -2716,6 +2716,18 @@ IR is copied as before (its OVMS `--pull` writes into the model directory). This
 node reads B1's files, not what B1 serves. Regression tests in `test_pairs.py` (`ModelSetTest`),
 `test_stage.py`, `tests/detect_test.sh` (`K3D_GPU_VOLUMES`) and `bench/models/test_*.py`.
 
+### Crescent note N1: where the model-card digest lives (2026-10-28)
+
+Recorded 2026-10-28. A citation fix, not a protocol change: no arm, model, sampling setting,
+rule or prediction changes. Amendment M1 above and the H53 pre-registration below cite
+`model-cards/REFERENCE.md` (sections 1.1, 1.2, 3.2 and 3.4), the coordinating session's
+model-card digest of 2026-10-20, which until this note existed only in that session's scratchpad.
+It is now committed unchanged at
+[`research/model-cards/REFERENCE.md`](research/model-cards/REFERENCE.md) (sha256
+`9704c3cbb2128bec676c4b56640a1463d9d7384f3e9d3f0b48dcb006d26691f2`), next to the files it
+cites (the 24 pinned Hub repos' cards and configs, `INDEX.txt` and the `probes/` behind its
+`[probe:*]` keys), so its section numbers and line citations read as they did when cited.
+
 ### Crescent amendment A3: analysis rule L3 for the crescent pairs rows (2026-10-20)
 
 Recorded 2026-10-20, before any H50 or H50o measurement (no `H50*` directory exists on
