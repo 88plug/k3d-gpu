@@ -33,10 +33,22 @@ dsa0 dsa2 dsa4   state=disabled  max_work_queues_size=256  pasid_enabled=1  (no 
 iax1 iax3 iax5   state=enabled   max_work_queues_size=256  pasid_enabled=1
   wq1.0 wq3.0 wq5.0  size=256 state=enabled type=kernel name=iaa_crypto driver=crypto
 zswap enabled=N compressor=lzo
-/proc/crypto deflate-iaa: refcnt 1, selftest passed
+/proc/crypto deflate-iaa: refcnt 1, selftest "passed" (no self-test ran, see below)
 /dev/iax, /dev/dsa: absent
 accel-config: not on PATH and not in /usr/bin, /usr/local/bin, /usr/sbin, /usr/local/sbin, /bin, /sbin
 ```
+
+The `selftest : passed` field in `/proc/crypto` is not evidence that `deflate-iaa`
+works. No self-test ran. crescent's kernel config reads
+`# CONFIG_CRYPTO_SELFTESTS is not set` (`/boot/config-7.0.0-31-generic`, read-only
+`ssh crescent`, 2026-10-29 05:39 UTC; the #198 pre-check records the same). In such a
+build, `crypto_alloc_test_larval` returns no test larval, and `__crypto_register_alg`
+then sets `CRYPTO_ALG_TESTED` on the algorithm without a test
+([crypto/algapi.c, v7.0](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/crypto/algapi.c?h=v7.0),
+lines 278-280 and 347). `c_show` prints `passed` for any algorithm that carries that
+flag ([crypto/proc.c, v7.0](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/crypto/proc.c?h=v7.0),
+lines 49-51). The line shows only that `deflate-iaa` is registered. Its compression
+is unverified (item 4 below).
 
 This matches the H52 inventory and the [#198 pre-check](../../bench/eatflow/results/2026-10-21/H52b/roundtrip-iax1/README.md).
 
