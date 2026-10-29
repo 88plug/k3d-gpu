@@ -1193,7 +1193,7 @@ and submits through execlists, so a GuC fault there warns instead. A failed HuC
 only warns: it runs media decode and encode, not inference. Without root the GuC is reported as not checked. The refused GPU's
 facts/v1 target reads `usable: false` with the `reason` and `fix`; `plan` then
 falls back to the next green cell on a usable target (OVMS on the CPU, or
-llama.cpp on Vulkan, pinned as `ghcr.io/ggml-org/llama.cpp:server-vulkan-v0.5.0`
+llama.cpp on Vulkan, pinned as `ghcr.io/ggml-org/llama.cpp:server-vulkan-b11960` (release v0.8.0)
 by digest) and lists the fix. With nothing left to pick the decision is `fix`,
 not an engine; a Gaudi without its driver plans the same way. `agent up` follows
 the same verdict: `auto` uses OVMS on the CPU and says why, and

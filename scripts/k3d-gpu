@@ -7459,9 +7459,9 @@ AGENT_BACKEND="${AGENT_BACKEND,,}"
 AGENT_HPU=""    # set by agent_select when the device is a Gaudi
 AGENT_SEL=""    # "<device> <resource>", set by agent_select
 # llama.cpp server on Vulkan, the engine plan() may pick for a GPU cell other
-# than OVMS: ghcr.io/ggml-org/llama.cpp:server-vulkan-v0.5.0, the multi-arch
-# index built from release v0.5.0 (commit 7fe450e19305b828c199d602c23a8337aaa1f03b).
-LLAMA_VULKAN_IMAGE="${K3D_GPU_LLAMA_VULKAN_IMAGE:-ghcr.io/ggml-org/llama.cpp@sha256:be586c648cb79d2cd75d0c38a6541e1f16c47a7c6621d3e711470a467fc38744}"
+# than OVMS: ghcr.io/ggml-org/llama.cpp:server-vulkan-b11960, the multi-arch
+# index built from release v0.8.0 (tag b11960, commit 8642541b255bfb5dc39cd351a178be09013a55d6).
+LLAMA_VULKAN_IMAGE="${K3D_GPU_LLAMA_VULKAN_IMAGE:-ghcr.io/ggml-org/llama.cpp@sha256:c9aba1a673382ad356a72fb63e6cd73e8c021797e904b6c099bfe130217df62e}"
 # The llama.cpp agent backend: release v0.8.0 (tag b11960, commit
 # 8642541b255bfb5dc39cd351a178be09013a55d6), the latest release on 2026-10-28; its image
 # tags are server-intel-b11960 (SYCL, Level Zero and compute-runtime 26.18 inside) for an
