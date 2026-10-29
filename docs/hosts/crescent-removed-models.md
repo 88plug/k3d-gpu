@@ -17,7 +17,10 @@ command that puts it back. The record is pushed before the files are deleted.
 | Size | 2,496,154,395,007 bytes (2.27 TiB). `du` showed 2.3T. |
 | Layout | `huggingface_hub` local-dir layout: plain files, no `blobs/` or `snapshots/`, no hard links, no symlinks in or out. |
 | Downloaded | 2026-08-13 22:10Z to 2026-08-14 03:36Z by `devcloud` with `snapshot_download` from `~/venvs/hf`, unauthenticated, for the openrouter-battlemage-b70 campaign (its SCORECARD-2026-08-13 lists it as a background download). Log: `~/logs/downloads/qwen3.8-max-fp8.log`. |
-| Removed | 2026-10-29, while holding `~/k3dgpu-bench.lock`, between ledger holds. |
+| Removed | 2026-10-29 06:05:41Z to 06:30:48Z, while holding `~/k3dgpu-bench.lock` (taken with no hold waiting or running). One shard at a time under `ionice -c3`, each only after IO PSI `full avg10` was at most 5 and both SGLang servers (`:30000`, `:30001`) answered `/health`. Peak `full avg10` was 0.79; no shard waited. Log: `~/disk-cleanup-20261029/delete.log`. |
+| `/` before | 3,539,792,310,272 bytes used, 184,584,126,464 available (`df` 96) |
+| `/` after | 1,043,805,319,168 bytes used, 2,680,571,117,568 available (`df` 29) |
+| Services | The same 16 containers ran before and after. `qwen38-a-hr` and `qwen38-b-hr` answered a chat completion (`finish_reason` stop) before and after. |
 
 Why it was removed:
 
