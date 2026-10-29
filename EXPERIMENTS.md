@@ -3115,8 +3115,12 @@ A1 and 11.3 s for B1, both near H51's 10 s SLO. H51 runs B15-RO, not B24.
    as H50 and H50o did, from one pushed commit on branch `claude/h51-run`. That commit is H50's
    branch head `4442f679` (main `6d5cab69` with #225's head `24e41deb` and #209's head `9a88e8c5`
    merged, amendment E3, and H50's results), plus this amendment and item 2's scorer change.
-   - Every file the holds run is byte-identical to H50's deploy commit `bb7c6a97`, so B1 is "as in
-     H50" in its render, image, weights and wrapper.
+   - ~~Every file the holds run is byte-identical to H50's deploy commit `bb7c6a97`, so B1 is "as in
+     H50" in its render, image, weights and wrapper.~~ (struck 2026-10-29, after the holds: not
+     literally true. Every file the holds run equals `bb7c6a97` except `bench/eatflow/agentbench.py`,
+     whose only change is item 2's `H51_RANGES` and its comment. Only `apb-score` reads
+     `H51_RANGES`; the `apb` ramp the holds run never does. So B1 is still "as in H50" in its render,
+     image, weights and wrapper, and the holds behave as at `bb7c6a97`.)
    - Two heads have moved since. #225's head is now `a8bd70f4`, a merge of later main; it changes
      only `hold.sh`'s timeout binary and `scripts/k3d-gpu`'s doctor, and neither is in this commit.
      #209's head is now `7deeee5c`, which edits `b1g-stall.sh`; H51 does not run that script.
@@ -3185,6 +3189,8 @@ accelerators:    k3d-gpu up: intel=4 amx=1 (neither arm uses a GPU; no pod reque
 k3d-gpu commit:  8da0316c (branch claude/h51-run: H50's head 4442f679, which is main 6d5cab69 + #225 24e41deb
                  + #209 9a88e8c5 + amendment E3 + H50's results, plus amendment S1), checked out clean and
                  detached at ~/k3dgpu-bench/k3d-gpu-h51; every file the holds run equals H50's bb7c6a97
+                 except bench/eatflow/agentbench.py, whose only change is H51_RANGES (S1 item 2), which
+                 only apb-score reads
 node image:      cryptoandcoffee/k3d-gpu:0.1.61@sha256:8cd264aa68c77681d7fa474693944de0db8d55de5881253e4029bf72a67e175c;
                  k3d v5.9.0, kubectl v1.35.2, helm v4.1.1 (workspace bin, shared rule 5)
 model:           A1 k3dgpu_gemma-4-26B-A4B-it-qat-int4-sym-g32-ov (snapped QAT IR; 26 files match its manifest.json);
@@ -3271,14 +3277,27 @@ this host at `typical` load with Gemma 4 26B-A4B QAT. A1 missed by 0.41 s on the
 requests. B1 missed the p95 by 1.52 s and the 60-request minimum by 2. Both arms passed the success and
 error checks.
 
+Scope: A1's miss is one request over the allowed count. Nearest-rank p95 at 65 requests allows 3 turns
+over 10 s, and A1 had 4 (15.36, 11.36, 10.90 and 10.41 s), from one hold with sampled decoding
+(temperature 1.0). Under the pre-registered rules one failed step ends the ramp and closes the bracket
+(W1 items 8 and 10), so the verdict stands; A1's 0 is one hold's outcome, not a measured ceiling.
+Exploratory, not pre-registered, deciding nothing: resampling each arm's window latencies (10,000
+draws with replacement, seed 40, ignoring correlation within a task) gives a p95 of at most 10 s in
+43% of draws for A1 and 23% for B1, so a rerun has a real chance of passing N=1.
+
 The synthetic APB, reported and never scored: `k3d-gpu capacity --slo 10 --budget 3` in each hold ran out
 of budget at N=1. A1 ran one rep (7 turns, window p95 6.88 s) and B1 one rep (7 turns, 9.72 s), so each
 reads "APB unknown (budget)", as in H45.
 
 Disclosed: B1 is EAT release-1.1.0's stock (amendment E1). The deploy commit merges #225 and #209 before they
 merged (amendments E3 and S1). The scorer reads M1's ranges (S1 item 2), and the verdict is the same under
-the first-written range. After the holds, both serving pairs answered through `:8100`
-(`prehold/frontdoor-post.txt`, 10:07Z): :30000 144 to 145, :30001 33 to 34.
+the first-written range. The H50-H52 pre-registration asks for a protocol change to be merged before the
+data it governs; S1, like E1 to E3, was pushed, not merged, before H51's data: branch `claude/h51-run`
+was created at `8da0316c` at 09:25:46Z (GitHub activity API), and the first H51 action, `frontdoor pre`,
+ran at 09:26:26Z. S1 changes nothing that decides the verdict: its ranges are M1's, on main since
+`a7b7b99d`, and its one-hold rule did not bind (servers ready at 109 s and 206 s, inside 570 s). After
+the holds, both serving pairs answered through `:8100` (`prehold/frontdoor-post.txt`, 10:07Z): :30000
+144 to 145, :30001 33 to 34.
 
 ### H53 pre-registration: EAT's banking flow on Arc Pro B70 (2026-10-20)
 
