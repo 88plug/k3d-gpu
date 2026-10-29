@@ -1,0 +1,27 @@
+== arm A1 start 07:29:23 (+0s)
+== k3d-gpu up 07:29:23 (+0s)
+== nodes pinned to 24-47,72-95 07:30:12 (+49s)
+== wait-ready 07:30:18 (+55s)
+Waiting for deployment "ovms" rollout to finish: 0 of 1 updated replicas are available...
+deployment "ovms" successfully rolled out
+== server-wait 07:30:40 (+77s)
+curl: (7) Failed to connect to 127.0.0.1 port 18730 after 0 ms: Could not connect to server
+served model: qwen3-4b-instruct-2507
+curl: (7) Failed to connect to 127.0.0.1 port 18740 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18740 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18740 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18740 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18740 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18740 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.3 port 8090 after 0 ms: Could not connect to server
+== load typical 07:30:58 (+95s)
+Defaulted container "ovms" out of: ovms, pull (init)
+Defaulted container "ovms" out of: ovms, pull (init)
+== run budget 120 07:30:59 (+96s)
+agentbench: in-process proxy on 127.0.0.1:18720 -> http://127.0.0.1:18740
+agentbench: A1 typical N=1: 15/15 passed; results in /home/devcloud/k3dgpu-bench/results/H56/smoke-W/s1/run/results.jsonl
+== control 120 s (server idle, same load) 07:33:08 (+225s)
+agentbench: control A1 typical: mean 196.136 W over 120.125 s
+== finished 07:35:08 (+345s)
+== cleanup 07:35:08 (+345s)
+== done 07:35:10 (+347s)

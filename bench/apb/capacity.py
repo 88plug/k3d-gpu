@@ -441,10 +441,17 @@ def choose(cands, engine="auto", endpoint=None):
     return c
 
 
+def kubectl_argv(*args):
+    """kubectl with the context the launcher's own calls name (K3D_GPU_KCTX, which
+    it exports); unset or empty: the kubeconfig's current-context."""
+    ctx = os.environ.get("K3D_GPU_KCTX")
+    return ["kubectl"] + (["--context", ctx] if ctx else []) + list(args)
+
+
 def kubectl_items():
     try:
-        p = subprocess.run(["kubectl", "get", "deployments,statefulsets,services", "-A", "-o", "json",
-                            "--request-timeout=10s"], capture_output=True, text=True, timeout=30)
+        p = subprocess.run(kubectl_argv("get", "deployments,statefulsets,services", "-A", "-o", "json",
+                                         "--request-timeout=10s"), capture_output=True, text=True, timeout=30)
     except FileNotFoundError:
         raise CapacityError("kubectl not found; pass --url and --model to skip discovery")
     except subprocess.TimeoutExpired:
@@ -458,7 +465,7 @@ class PortForward:
     """kubectl port-forward svc/NAME :PORT on a free local port."""
 
     def __init__(self, ns, svc, port, timeout=30.0):
-        self.proc = subprocess.Popen(["kubectl", "-n", ns, "port-forward", f"svc/{svc}", f":{port}"],
+        self.proc = subprocess.Popen(kubectl_argv("-n", ns, "port-forward", f"svc/{svc}", f":{port}"),
                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         self.local = None
         found = threading.Event()

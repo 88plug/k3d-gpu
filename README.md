@@ -73,7 +73,11 @@ Each cluster has its own kubeconfig, `${K3D_GPU_STATE_DIR}/kubeconfig-<cluster>`
 `~/.local/state/k3d-gpu`), and the launcher names the cluster's context on every kubectl call, so concurrent `up`s of different
 clusters never reach each other's. `up` leaves `~/.kube/config` alone: bare `kubectl` after `up`
 needs the `export KUBECONFIG=…` line it prints, or `K3D_GPU_MERGE_KUBECONFIG=1` to merge the
-context into `~/.kube/config` (current-context unchanged).
+context into `~/.kube/config` (current-context unchanged). The kubectl commands the launcher
+prints name the file, and `k3d-gpu-mcp` finds it the same way. An exported `KUBECONFIG` naming one
+other file (a hold's own) is used as is: `up` merges the context into it under a lock and keeps
+its current-context, if it has one. `K3D_GPU_KUBECONFIG` without `K3D_GPU_CONTEXT` names no
+context, so `up` switches that file's current-context to `k3d-<cluster>`.
 
 ### Install
 
@@ -267,7 +271,8 @@ From a git checkout use the absolute path to `scripts/k3d-gpu-mcp`; it finds the
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `K3D_GPU_CLUSTER` | `gpu` | cluster; kubectl always uses context `k3d-<name>` |
+| `K3D_GPU_CLUSTER` | `gpu` | cluster; kubectl uses context `k3d-<name>` |
+| `K3D_GPU_KUBECONFIG`, `K3D_GPU_CONTEXT`, `K3D_GPU_STATE_DIR` | as the launcher | kubeconfig and context, picked as the launcher picks them: the launcher's per-cluster file `<state dir>/kubeconfig-<name>` when it exists, else the kubeconfig the server inherited |
 | `K3D_GPU_BIN` | `k3d-gpu` next to the server, else `PATH` | launcher to run |
 | `K3D_GPU_MCP_TIMEOUT` | `60` | seconds per launcher or kubectl call |
 
@@ -1137,8 +1142,10 @@ and writes `k3d-gpu-report.json` and a self-contained `k3d-gpu-report.html`
 | `detected[]` | the accelerators `up` would enable and their resources | same detection as `k3d-gpu detect` |
 | `cluster` | `present`, or the `reason` it is not; per node: every allocatable resource and the accelerator labels (`k3d-gpu.io/*`, `nvidia.com/*`, `habana.ai/*`, NFD `*feature.node.kubernetes.io/*`) | `kubectl --context k3d-<K3D_GPU_CLUSTER> get nodes` |
 
-`cluster` always uses the `k3d-<K3D_GPU_CLUSTER>` context, never whatever
-context is current, so the report cannot describe the wrong cluster. GuC/HuC
+`cluster` uses the context every launcher kubectl call names (`K3D_GPU_CONTEXT`,
+else `k3d-<K3D_GPU_CLUSTER>`; with `K3D_GPU_KUBECONFIG` alone, that file's
+current-context), never whatever context ~/.kube/config has current, so the
+report cannot describe the wrong cluster. GuC/HuC
 state lives in debugfs, which only root can read: without root the report says
 `status: null` with a note rather than guessing. `energy_uj` is root-only too.
 The document carries `"schema": "k3d-gpu.report/v1"`.
@@ -1395,9 +1402,10 @@ the in-process stub in `bench/test_agent_trace.py`.
 (LiteLLM gateway, Redis, pgvector, agent sandbox, CPU vLLM) on a single k3d-gpu
 node through EAT's own brownfield path, on a non-Xeon client CPU. Its vLLM pod
 joins the hybrid balloons policy's `performance` balloon through EAT's own chart
-annotation, so EAT's CPU balloons stay off and `hybrid` stays on. It deploys EAT's
-latest tag, `release-1.0.3-hotfix`; OpenShell (`deploy_openshell`) is on EAT `main`
-only, so `eat-up.sh` refuses it (see [docs/platforms.md](docs/platforms.md)).
+annotation, so EAT's CPU balloons stay off and `hybrid` stays on. It deploys the
+pinned tag `release-1.0.3-hotfix` (the latest, `release-1.1.0`, adds OpenShell;
+`eat-up.sh` refuses `deploy_openshell=on` because its pinned tag has no OpenShell
+role). See [docs/platforms.md](docs/platforms.md).
 
 ### Experimental features (auto-adapting)
 
@@ -1632,6 +1640,7 @@ These are Docker **build args** (not runtime env):
 | `K3S_TAG`    | `v1.37.1-k3s1`        | K3s image tag from `rancher/k3s` (auto-bumped) |
 | `K3S_DIGEST` | `sha256:ca7f37d9…`    | index digest of `K3S_TAG` (auto-bumped with it) |
 | `UBUNTU_IMAGE` | `ubuntu:26.04@sha256:…` | Ubuntu base image, pinned by digest (`26.04` default; `24.04` also published) |
+| `UBUNTU_2404_IMAGE` | `ubuntu:24.04@sha256:…` | the pinned 24.04 base; the release passes it as `UBUNTU_IMAGE` for the `ubuntu24.04` image |
 
 Build a specific Ubuntu base:
 
