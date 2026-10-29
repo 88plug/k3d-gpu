@@ -21,7 +21,12 @@ REPO=$(cd "${HERE}/../.." && pwd)
 export REPO G MODE
 PREFIX=${H57D_PREFIX:-k3dgpu-d-} L1MAX=${H57D_LOAD1_MAX:-24}
 case ${HOLD} in smoke*) R=${G}/smoke/${HOLD} ;; *) R=${G}/results/${H57D_ROW:-H57d}/hold${HOLD} ;; esac
-if [ "${H57D_ROW:-H57d}" = H57dp ] && [ "${MODE}" != perf ]; then echo "H57dp registers performance holds only"; exit 2; fi
+if [ "${H57D_ROW:-H57d}" = H57dp ]; then
+    [ "${MODE}" = perf ] || { echo "H57dp registers performance holds only"; exit 2; }
+    # Holds 1 and 2 only, each in its registered order: explicit arms must repeat that order.
+    order=$(python3 "${HERE}/h57d.py" order H57dp "${HOLD}") || exit 2
+    [ $# -eq 0 ] || [ "$*" = "${order}" ] || { echo "H57dp hold ${HOLD} runs its registered order only: ${order}"; exit 2; }
+fi
 if [ $# -eq 0 ]; then
     read -r -a ARMS_RUN <<< "$(python3 "${HERE}/h57d.py" order "${H57D_ROW:-H57d}" "${HOLD}")"
     [ "${#ARMS_RUN[@]}" -gt 0 ] || exit 2
