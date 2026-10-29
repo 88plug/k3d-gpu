@@ -4118,7 +4118,10 @@ Recorded 2026-10-29, after H50, H50o and H51 ran and before any H52b, H53 or H58
 only. No hypothesis, arm, model, prediction, statistic, gate, threshold, seed or cap changes. It
 moves three of shared rule 5's tools, which
 [amendment E2](#crescent-amendment-e2-pins-deploy-commits-order-and-the-restore-check-for-the-pending-crescent-rows-2026-10-29)
-item 3 says takes a further amendment.
+item 3 says takes a further amendment. Revised 2026-10-29 at 19:50Z, after H52b's hold and before
+any H53 or H58 hold. Items 2, 4 and 5 now record what happened since: H52b ran first, H59 and H60
+merged, and H54q's runner amendment was pushed. Item 4 also names the workspace H60 runs from. No
+pin, checksum, check or render changes, and every pin was read again at the revision.
 
 **Why.**
 
@@ -4136,9 +4139,10 @@ item 3 says takes a further amendment.
    `c0448752...f8f4`, the helm tarball `0403a88a...e54b`, the uv tarball `f29c3e94...3645`.
 2. **When.** setup.sh runs once on crescent, from a deploy commit at or after this amendment's
    merge (E2 item 2), under the bench lock, before the first hold of any row this amendment
-   covers. It runs after H52b's hold if H52b comes first, as in the current order. If a covered
-   row comes first, H52b runs on these tools and its records name them. setup.sh's output (the
-   checksum lines and the four versions) goes into the next hold's records.
+   covers. H52b came first: its one hold ([H52b run](#h52b-run-xeon-6741p-2026-10-29), 18:32-18:43Z,
+   PR #232) ran before setup.sh, on shared rule 5's k3d v5.9.0, kubectl v1.35.2 and helm v4.1.1,
+   and its records name them.
+   setup.sh's output (the checksum lines and the four versions) goes into the next hold's records.
 3. **The banking venv.** uv 0.13 will not overwrite an existing venv: `uv venv` without `--clear`
    exits 2. So setup.sh now keeps an existing `mafvenv` and only re-checks its packages against
    `banking-venv.txt`. The venv on crescent, built with uv 0.8.0, stays as it is: over a venv built
@@ -4146,13 +4150,19 @@ item 3 says takes a further amendment.
    builds the venv on a later python-build-standalone build of Python 3.12.11 (2025-10-07 instead
    of 2025-07-11), with the same 71 packages: its `uv pip freeze` equals uv 0.8.0's and
    `banking-venv.txt`. Both were checked on 2026-10-29, as was a second setup.sh run over a first.
-4. **Rows.** H53 and H58, and every later crescent row that runs on these shared rules (H59 and
-   H60 are pre-registered in open PRs). H52b only as item 2 says. Not the rows that have run.
+4. **Rows.** H53 and H58, and every later crescent row that runs from `~/k3dgpu-bench/bin` on
+   these shared rules. Not H60: its Reproduce block runs it from the cross-host workspace,
+   `~/k3dgpu-xhost/bin`, which setup.sh does not touch and
+   [cross-host amendment K1](#cross-host-amendment-k1-kubectl-v1372-in-the-cross-host-workspace-2026-10-29)
+   covers. H59 has no runner yet; its runner amendment names its tools. H52b only as item 2 says.
+   Not the rows that have run.
 5. **H54q.** H54q runs from `~/k3dgpu-gemma/bin`, with H54a's kubectl v1.35.2 and helm v4.1.1,
-   which setup.sh does not touch. H54q has no runner yet: its runner amendment, which
+   which setup.sh does not touch. Its runner amendment Q2, which
    [amendment Q1](#h54-amendment-q1-h54qs-reference-arm-hold-cap-and-order-2026-10-29) requires
-   before its first hold, names its tools. The render check below covers H54's two EAT renders,
-   so moving them there changes no object.
+   before its first hold, was pushed 2026-10-29 at 19:34Z (PR #243). Q2 names those tools (H54a's
+   runner's `~/k3dgpu-gemma/h54a/bin` and `~/k3dgpu-gemma/bin`, k3d v5.9.0 behind the shim and
+   kubectl v1.35.2) and renders no arm with helm. The render check below also covers H54's two EAT
+   renders, so moving them there would change no object.
 
 **Render check, helm v4.1.1 against v4.3.1.** Done 2026-10-29, as
 [amendment E1](#crescent-amendment-e1-eat-stock-is-release-110-for-h50-h50o-and-h51-2026-10-29)
