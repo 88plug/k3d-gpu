@@ -125,6 +125,9 @@ if [ -n "${NODE_CPUS}" ]; then
     for n in $(nodes); do docker update --cpuset-cpus "${NODE_CPUS}" "${n}" >/dev/null || { echo "node cpuset not applied"; exit 1; }; done
     echo "node cpuset ${NODE_CPUS}" | tee "${OUT}/node-cpus.txt"
 fi
+# Recorded before any block, so a run that ends early (an engine not up, the hold's cap) keeps them.
+git -C "${REPO}" rev-parse HEAD > "${OUT}/commit.txt"
+docker inspect --format '{{.Config.Image}} {{.Image}}' "$(nodes | head -1)" > "${OUT}/node-image.txt"
 stamp stage
 stage OpenVINO/Qwen3-4B-fp16-ov OpenVINO/Qwen3-4B-fp16-ov
 stage Qwen/Qwen3-4B Qwen3-4B
@@ -215,7 +218,5 @@ for e in ${ORDER}; do
     echo "b${i} ${e} ${r0} $(restarts_now)" >> "${OUT}/restarts.txt"
     stamp "block ${i} engine ${e} done"
 done
-git -C "${REPO}" rev-parse HEAD > "${OUT}/commit.txt"
-docker inspect --format '{{.Config.Image}} {{.Image}}' "$(nodes | head -1)" > "${OUT}/node-image.txt"
 score
 stamp finished
