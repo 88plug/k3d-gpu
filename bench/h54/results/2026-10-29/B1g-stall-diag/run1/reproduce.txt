@@ -1,0 +1,10 @@
+repo: 9f795a863aeff6baaba92276a78c1fc223e6d5bc dirty=1
+image: vllm/vllm-openai-cpu@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1
+id=sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1 entrypoint=["vllm","serve"]
+model: /home/devcloud/k3dgpu-gemma/models/google_gemma-4-26B-A4B-it-qat-q4_0-unquantized
+ece3392c07744553f4e8bb2b5905bc68b0a7d7ab2927133bb621875b8e4a3289  config.json
+b69207f9be617e982d13cc273cce6fd88c98dda99a4bdc5e2d52ffe0a0d9f0a9  generation_config.json
+907826a6e46ff454272bd6db1fee629d5531a2303be22986d825a0871d7dc7a7  model.safetensors.index.json
+py-spy: py-spy 0.4.2
+7.0.0-31-generic
+96
