@@ -1,0 +1,366 @@
+#!/usr/bin/env bash
+# hack/bot-merge: one pass of the bot-PR merge (bot-sweep.yml, job merge). It merges
+# at most one PR, then decides whether to dispatch a batched release.
+#
+# Candidates are open PRs into main from this repository's own autobump/* branches
+# (never autobump/amend-*), opened by github-actions[bot], labelled autobump and not
+# ledger-amendment. Dependabot PRs, ledger amendments and forks are left to humans.
+# A candidate that changes anything under .github/ is never merged.
+#
+# A candidate merges only when all of these hold at its head SHA:
+#   a. `hack/pins policy origin/main SHA` says auto, or a human approved SHA: a
+#      review APPROVED with commit_id SHA by a User whose author_association is
+#      OWNER, MEMBER or COLLABORATOR. No such human's latest review may request
+#      changes. Labels never change the verdict.
+#   b. ci_status SHA BRANCH is green (ci.yml carries pin-guard and the pins checks).
+#   c. When the policy names canary engines (its canary list): the newest
+#      canary.yml run for SHA succeeded, and its canary-result artifact, made for
+#      SHA, shows verdict pass, hard and exact for every one of them. A hard pass
+#      with exact false is a review condition: the PR is labelled canary-drift and
+#      merges on a human approval at SHA. Any other verdict (fail, isa-skip,
+#      too-big, unparseable) never merges.
+#   d. base_ok SHA and not rules_stale SHA. Otherwise the pass dispatches
+#      freshness.yml -f group=<group> to regenerate the branch from main: at most 3
+#      per group per UTC day, counted from today's dispatched freshness runs whose
+#      title names the group (a title naming no group counts for every group), and
+#      never while such a freshness run is queued or running.
+#   e. Circuit breaker: the newest completed ci.yml run on main (push or dispatch)
+#      succeeded, and no open ci-alarm issue's key starts with ci-main, ci-missing,
+#      release: or red:canary.
+#   f. Fewer than MAX_BOT_MERGES_PER_DAY (default 6) bot merges on main today (UTC).
+#      A PR the policy marks urgent is exempt.
+# Urgent PRs merge first, then the oldest. The merge is a squash pinned with
+# --match-head-commit, and its body ends "Bot-merge: pr=N group=G urgent=B": later
+# passes count today's merges and find unreleased ones by that line. A GITHUB_TOKEN
+# merge starts no push workflow, so the pass then dispatches ci.yml on main. A
+# refused merge prints GitHub's reason and ends the pass. Every candidate keeps one
+# comment, starting <!-- bot-merge -->, edited in place: why it is not merged, or
+# the evidence it merged on.
+#
+# Release batching, after the merge step: dispatch auto-release.yml -f mode=changed
+# when main has Bot-merge commits that no aur-v* tag contains, the newest ci.yml run
+# for main's HEAD (push or dispatch) succeeded, no release workflow run is queued or
+# running, no auto-release run has succeeded since the newest of those merges, and
+# one of: one of them is urgent; no other open candidate has an allowed verdict and
+# green CI; the newest aur-v* tag is 6 h old or more.
+#
+# Reads only main's checkout: PR heads are fetched as objects, never checked out.
+# rules_stale runs the merged tree's console/model_opt.py, without the token.
+#
+# Env: GITHUB_REPOSITORY (owner/repo), GH_TOKEN, MAX_BOT_MERGES_PER_DAY,
+# BOT_MERGE_NOW (epoch seconds, for tests), GITHUB_SERVER_URL and GITHUB_RUN_ID
+# (the sweep run named in comments).
+# Exit: 0 pass done; 1 a read or dispatch failed; 2 gh cannot pin a merge.
+set -uo pipefail
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+cd "$(git -C "$HERE" rev-parse --show-toplevel)" || exit 1
+# shellcheck source=hack/gate_lib.sh
+. "$HERE/gate_lib.sh"
+
+R=${GITHUB_REPOSITORY:?set GITHUB_REPOSITORY to owner/repo}
+NOW=${BOT_MERGE_NOW:-$(date -u +%s)}
+DAY=$(date -u -d "@$NOW" +%Y-%m-%d)
+DAY0=$(date -u -d "$DAY" +%s)
+MAX=${MAX_BOT_MERGES_PER_DAY:-6}
+REGEN_CAP=3
+BOT='github-actions[bot]'
+MARK='<!-- bot-merge -->'
+SWEEP=${GITHUB_SERVER_URL:-https://github.com}/$R/actions/runs/${GITHUB_RUN_ID:-0}
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+RC=0
+
+gh pr merge --help 2>/dev/null | grep -q -- --match-head-commit \
+  || { echo "gh pr merge lacks --match-head-commit; refusing to merge unpinned"; exit 2; }
+
+# --- reads shared by every candidate ------------------------------------------
+gh api --paginate "repos/$R/pulls?state=open&base=main&per_page=100" --jq '.[]' > "$W/pulls" \
+  || { echo "cannot list open pull requests"; exit 1; }
+jq -s -c --arg bot "$BOT" '
+  .[] | select((.head.repo // {}).full_name == .base.repo.full_name
+          and (.head.ref | startswith("autobump/")) and (.head.ref | startswith("autobump/amend-") | not)
+          and .user.login == $bot
+          and any(.labels[]; .name == "autobump") and (any(.labels[]; .name == "ledger-amendment") | not))
+  | {n: .number, br: .head.ref, sha: .head.sha, at: .created_at, title, draft,
+     labels: [.labels[].name]}' "$W/pulls" > "$W/cands" || { echo "cannot read the pull request list"; exit 1; }
+git fetch -q --force origin '+refs/heads/*:refs/remotes/origin/*' '+refs/tags/aur-v*:refs/tags/aur-v*' \
+  || { echo "git fetch origin failed"; exit 1; }
+
+# breaker: why merging stops for every PR (empty when closed).
+breaker() {
+  local ci alarms
+  ci=$(gh run list -w ci.yml -b main -s completed -L 20 --json event,conclusion,url,createdAt \
+       | jq -r '[.[] | select(.event == "push" or .event == "workflow_dispatch")] | max_by(.createdAt) // empty
+                | "\(.conclusion) \(.url)"') || { echo "cannot read ci.yml runs on main"; return; }
+  case $ci in
+    "") echo "no completed ci.yml run on main"; return;;
+    success\ *) ;;
+    *) echo "the newest completed ci.yml run on main is ${ci%% *}: ${ci#* }"; return;;
+  esac
+  alarms=$(open_alarms) || { echo "cannot read ci-alarm issues"; return; }
+  jq -r '[.[] | (.title | capture("^\\[ci-alarm\\] (?<k>.+?): ") | .k) as $k
+          | select($k | test("^(ci-main|ci-missing|release:|red:canary)"; "i")) | "\($k) (#\(.number))"]
+         | if length > 0 then "open alarm " + join(", ") else empty end' <<<"$alarms"
+}
+BREAKER=$(breaker)
+[ -n "$BREAKER" ] && echo "circuit breaker open: $BREAKER"
+TODAY=$(git log origin/main --format=%ct --grep='^Bot-merge: ' | awk -v d="$DAY0" '$1 >= d' | wc -l)
+echo "bot merges today ($DAY UTC): $TODAY of $MAX"
+
+# freshness_runs GROUP JQ_FILTER [gh run list flags...]: how many freshness.yml runs,
+# among those the flags select, name GROUP (or no group) in their title and pass JQ_FILTER.
+freshness_runs() {
+  local g=$1 f=$2; shift 2
+  gh run list -w freshness.yml "$@" --json displayTitle,status \
+    | jq --arg g "group=$g" "[.[] | select(([(.displayTitle // \"\") | scan(\"group=[^ ,;)]+\")] as \$t
+                                            | (\$t | length) == 0 or any(\$t[]; . == \$g))) | select($f)] | length"
+}
+# regen GROUP WHY: dispatch freshness.yml for GROUP within the cap; prints what
+# happened, returns 1 when a read or the dispatch failed.
+regen() {
+  local g=$1 busy used
+  busy=$(freshness_runs "$g" '.status != "completed"' -L 30) || { echo "cannot read freshness runs"; return 1; }
+  if [ "$busy" -gt 0 ]; then echo "a freshness run that covers $g is queued or running"; return 0; fi
+  used=$(freshness_runs "$g" true -e workflow_dispatch --created ">=${DAY}T00:00:00Z" -L 200) \
+    || { echo "cannot read freshness runs"; return 1; }
+  if [ "$used" -ge "$REGEN_CAP" ]; then
+    echo "regeneration cap reached ($used of $REGEN_CAP for $g today); the scheduled freshness run regenerates it"
+  elif gh workflow run freshness.yml --ref main -f group="$g" -f reason="bot-merge:$2" >/dev/null; then
+    echo "regeneration dispatched ($((used + 1)) of $REGEN_CAP for $g today)"
+  else echo "the freshness.yml dispatch failed"; return 1; fi
+}
+# canary SHA ENGINES_JSON DIR: one line per finding: "ok E", "drift E", "block WHY",
+# then "url URL" when a run exists.
+canary() {
+  local runs id st concl url
+  runs=$(gh run list -w canary.yml -c "$1" -L 20 --json databaseId,status,conclusion,createdAt,url) \
+    || { echo "block cannot read canary.yml runs"; return; }
+  read -r id st concl url < <(jq -r 'max_by(.createdAt) // empty
+    | "\(.databaseId) \(.status) \(if (.conclusion // "") == "" then "-" else .conclusion end) \(.url)"' <<<"$runs")
+  [ -n "${id:-}" ] || { echo "block canary has not run at this head"; return; }
+  echo "url $url"
+  [ "$st" = completed ] || { echo "block canary is pending ($url)"; return; }
+  if gh run download "$id" -n canary-result -D "$3/artifact" >/dev/null 2>&1 && [ -f "$3/artifact/canary-result.json" ]; then
+    jq -r --arg sha "$1" --argjson want "$2" '
+      if .sha != $sha then "block canary result is for \(.sha), not this head"
+      else $want[] as $e | (.engines[$e] // null) as $r
+        | if $r == null then "block canary result lacks engine \($e)"
+          elif $r.verdict == "pass" and $r.hard == true and $r.exact == true then "ok \($e)"
+          elif $r.verdict == "pass" and $r.hard == true then "drift \($e)"
+          else "block canary \($e): \($r.verdict)" end
+      end' "$3/artifact/canary-result.json" 2>/dev/null || echo "block canary-result.json is unreadable ($url)"
+  else
+    echo "block canary run has no canary-result artifact ($url)"
+  fi
+  [ "$concl" = success ] || echo "block canary run concluded $concl ($url)"
+}
+# ci_url SHA BRANCH: the newest successful ci.yml run that ci_status counts.
+ci_url() {
+  gh run list -w ci.yml -c "$1" -L 100 --json event,conclusion,headBranch,createdAt,url \
+    | jq -r --arg b "$2" '[.[] | select(.conclusion == "success")
+        | select(.event == "pull_request" or (.event == "workflow_dispatch" and .headBranch == $b))]
+        | max_by(.createdAt) // empty | .url'
+}
+# comment N FILE: the PR's one bot-merge comment becomes FILE's text.
+comment() {
+  local body ex
+  body="$MARK"$'\n'"$(cat "$2")"
+  ex=$(gh api --paginate "repos/$R/issues/$1/comments?per_page=100" --jq '.[]' \
+       | jq -s -c --arg bot "$BOT" --arg m "$MARK" \
+           '[.[] | select(.user.login == $bot and (.body | startswith($m)))] | first // empty') \
+    || { echo "PR#$1: cannot read comments"; RC=1; return; }
+  if [ -z "$ex" ]; then
+    gh api -X POST "repos/$R/issues/$1/comments" -f body="$body" >/dev/null || { echo "PR#$1: comment failed"; RC=1; }
+  elif [ "$(jq -r .body <<<"$ex")" != "$body" ]; then
+    gh api -X PATCH "repos/$R/issues/comments/$(jq -r .id <<<"$ex")" -f body="$body" >/dev/null \
+      || { echo "PR#$1: comment edit failed"; RC=1; }
+  fi
+}
+
+# --- assess every candidate ---------------------------------------------------
+: > "$W/eligible"; : > "$W/queue"
+while read -r c <&3; do
+  n=$(jq -r .n <<<"$c"); br=$(jq -r .br <<<"$c"); sha=$(jq -r .sha <<<"$c")
+  D=$W/$n; mkdir -p "$D"; : > "$D/why"
+  why() { echo "- $*" >> "$D/why"; }
+  gh api --paginate "repos/$R/pulls/$n/files?per_page=100" --jq '.[] | .filename, (.previous_filename // empty)' > "$D/files" \
+    || { why "cannot read the changed files"; RC=1; continue; }
+  if grep -q '^\.github/' "$D/files"; then
+    why "changes files under .github/ ($(grep '^\.github/' "$D/files" | head -3 | paste -sd, -)): a bot never merges workflow changes; a human merges this"
+    continue
+  fi
+  [ "$(jq -r .draft <<<"$c")" = true ] && why "draft"
+  if [ "$(git rev-parse -q --verify "refs/remotes/origin/$br^{commit}")" != "$sha" ]; then
+    why "the branch no longer points at $sha; the next pass reads the new head"; continue
+  fi
+  if ! "$HERE/pins" policy origin/main "$sha" > "$D/policy" 2> "$D/policy.err"; then
+    why "hack/pins policy failed: $(tail -1 "$D/policy.err")"; continue
+  fi
+  if ! jq -e '.verdict == "auto" or .verdict == "review"' "$D/policy" >/dev/null 2>&1; then
+    why "hack/pins policy gave no auto or review verdict"; continue
+  fi
+  if ! jq -e '.canary | type == "array"' "$D/policy" >/dev/null; then
+    why "hack/pins policy output has no canary list, so the canary evidence is unknown"; continue
+  fi
+  verdict=$(jq -r .verdict "$D/policy"); group=$(jq -r '.group // "unknown"' "$D/policy")
+  upd=$(jq -r '.update_type // "unknown"' "$D/policy"); urgent=$(jq -r '.urgent == true' "$D/policy")
+  engines=$(jq -c .canary "$D/policy")
+  review=()
+  [ "$verdict" = review ] && review+=("policy: $(jq -r '.reasons // [] | join("; ") | if . == "" then "review" else . end' "$D/policy")")
+
+  # human reviews: each human's latest deciding review
+  gh api --paginate "repos/$R/pulls/$n/reviews?per_page=100" --jq '.[]' > "$D/reviews" \
+    || { why "cannot read reviews"; RC=1; continue; }
+  jq -s '[.[] | select(.user.type == "User" and (.author_association | IN("OWNER", "MEMBER", "COLLABORATOR"))
+                       and (.state | IN("APPROVED", "CHANGES_REQUESTED", "DISMISSED")))]
+         | group_by(.user.login) | map(max_by(.submitted_at))' "$D/reviews" > "$D/latest"
+  approver=$(jq -r --arg sha "$sha" '[.[] | select(.state == "APPROVED" and .commit_id == $sha) | .user.login] | first // empty' "$D/latest")
+  changes=$(jq -r '[.[] | select(.state == "CHANGES_REQUESTED") | "@" + .user.login] | join(", ")' "$D/latest")
+  [ -n "$changes" ] && why "changes requested by $changes"
+
+  # canary
+  curl_=
+  if [ "$engines" != "[]" ]; then
+    canary "$sha" "$engines" "$D" > "$D/canary"
+    curl_=$(sed -n 's/^url //p' "$D/canary")
+    while read -r w; do why "${w#block }"; done < <(grep '^block ' "$D/canary")
+    drift=$(sed -n 's/^drift //p' "$D/canary" | paste -sd, -)
+    if [ -n "$drift" ]; then
+      review+=("canary-drift: $drift passed the hard gate but its output differs from the golden")
+      if ! jq -e '.labels | index("canary-drift")' <<<"$c" >/dev/null; then
+        gh api -X POST "repos/$R/issues/$n/labels" -f 'labels[]=canary-drift' >/dev/null || { echo "PR#$n: label failed"; RC=1; }
+      fi
+    fi
+  fi
+
+  # CI
+  ci=$(ci_status "$sha" "$br")
+  case $ci in
+    green) ;;
+    pending) why "CI is pending at this head";;
+    failed) why "CI failed at this head";;
+    *) why "no ci.yml run at this head yet (bot-ci-dispatch starts one)";;
+  esac
+
+  allowed=y
+  if [ "${#review[@]}" -gt 0 ] && [ -z "$approver" ]; then
+    allowed=n
+    why "needs review: $(printf '%s; ' "${review[@]}" | sed 's/; $//'); an approval of $sha by a maintainer merges it"
+  fi
+  [ -n "$changes" ] && allowed=n
+  [ "$allowed" = y ] && [ "$ci" = green ] && echo "$n" >> "$W/queue"
+
+  [ -n "$BREAKER" ] && why "circuit breaker: $BREAKER"
+  if [ "$allowed" = y ] && [ -z "$BREAKER" ]; then
+    stale=
+    if ! base_ok "$sha"; then stale="main moved under code since $sha was tested"
+    elif ( unset GH_TOKEN GITHUB_TOKEN; rules_stale "$sha" ); then
+      stale="console/ledger-rules.json would not match EXPERIMENTS.md after the merge"
+    fi
+    if [ -n "$stale" ]; then
+      msg=$(regen "$group" "$([ "${stale#main}" != "$stale" ] && echo base-moved || echo rules-stale)") || RC=1
+      why "$stale; $msg"
+    fi
+  fi
+  if [ "$urgent" != true ] && [ "$TODAY" -ge "$MAX" ]; then
+    why "daily cap reached ($TODAY of $MAX bot merges today, UTC); it merges tomorrow"
+  fi
+
+  {
+    echo "verdict=$verdict"; echo "group=$group"; echo "upd=$upd"; echo "urgent=$urgent"
+    echo "approver=$approver"; echo "canary=$curl_"; echo "engines=$engines"
+  } > "$D/facts"
+  if [ ! -s "$D/why" ]; then
+    printf '%s %s %s\n' "$([ "$urgent" = true ] && echo 0 || echo 1)" "$(jq -r .at <<<"$c")" "$n" >> "$W/eligible"
+  fi
+done 3< "$W/cands"
+
+# --- merge one ------------------------------------------------------------------
+MERGED=; REFUSED=
+pick=$(sort -k1,1n -k2,2 "$W/eligible" | head -1 | cut -d' ' -f3)
+if [ -n "$pick" ]; then
+  c=$(jq -c --argjson n "$pick" 'select(.n == $n)' "$W/cands"); D=$W/$pick
+  sha=$(jq -r .sha <<<"$c"); br=$(jq -r .br <<<"$c"); title=$(jq -r .title <<<"$c")
+  get() { sed -n "s/^$1=//p" "$D/facts"; }
+  group=$(get group); upd=$(get upd); urgent=$(get urgent); approver=$(get approver); curl_=$(get canary)
+  if [[ $title =~ ^[a-z]+(\([^\)]*\))?!?:\  ]]; then subj="$title (#$pick)"; else subj="chore($group): $title (#$pick)"; fi
+  cu=$(ci_url "$sha" "$br")
+  policy_line="policy $(get verdict) ($upd update of $group$([ "$urgent" = true ] && echo ', urgent'))"
+  [ -n "$approver" ] && policy_line+=", approved at ${sha:0:7} by @$approver"
+  body="Merged by the bot sweep: $policy_line; CI ${cu:-green}$([ -n "$curl_" ] && echo "; canary $curl_")."
+  body+=$'\n\n'"Bot-merge: pr=$pick group=$group urgent=$urgent"
+  why=$(gh pr merge "$pick" --squash --match-head-commit "$sha" --subject "$subj" --body "$body" 2>&1 >/dev/null); mrc=$?
+  if [ "$mrc" -eq 0 ] || [ "$(gh pr view "$pick" --json state -q .state 2>/dev/null)" = MERGED ]; then
+    MERGED=$pick
+    echo "PR#$pick MERGED at $sha"
+    grep -vxF "$pick" "$W/queue" > "$W/queue.left"; mv "$W/queue.left" "$W/queue"
+    gh workflow run ci.yml --ref main >/dev/null || { echo "ci.yml dispatch on main failed"; RC=1; }
+    {
+      echo "**Merged by the bot sweep** at \`$sha\`."
+      echo
+      echo "- Policy: $policy_line"
+      echo "- CI: ${cu:-green}"
+      if [ -n "$curl_" ]; then echo "- Canary: $curl_ ($(jq -r '. | join(", ")' <<<"$(get engines)"): pass, hard, exact)"
+      else echo "- Canary: no engine mapped for this group"; fi
+      echo "- Base: current with main (base_ok, ledger-rules.json current)"
+      echo "- Sweep run: $SWEEP"
+    } > "$D/body"
+  else
+    REFUSED=$pick
+    echo "PR#$pick merge at $sha refused: $(tr '\n' ' ' <<<"${why:-no reason given}")"
+    echo "- GitHub refused the merge at \`$sha\`: $(tr '\n' ' ' <<<"${why:-no reason given}")" > "$D/why"
+  fi
+fi
+
+# --- one comment per candidate ------------------------------------------------
+while read -r c <&3; do
+  n=$(jq -r .n <<<"$c"); D=$W/$n
+  if [ "$n" != "$MERGED" ]; then
+    if [ ! -s "$D/why" ]; then
+      echo "- eligible; waiting for the next pass (one merge per pass; #${MERGED:-$REFUSED} went first)" > "$D/why"
+    fi
+    { echo "**Not merged by the bot sweep** at \`$(jq -r .sha <<<"$c")\`:"; echo; cat "$D/why"; } > "$D/body"
+    sed 's/^- /PR#'"$n"' blocked: /' "$D/why"
+  fi
+  comment "$n" "$D/body"
+done 3< "$W/cands"
+[ -n "$REFUSED" ] && exit "$RC"
+
+# --- release batching -----------------------------------------------------------
+release() {
+  git fetch -q --force origin '+refs/heads/main:refs/remotes/origin/main' '+refs/tags/aur-v*:refs/tags/aur-v*' \
+    || { echo "release: git fetch failed"; RC=1; return; }
+  local head tags unrel newest ci wf busy ok_at last last_ct why
+  head=$(git rev-parse origin/main)
+  mapfile -t tags < <(git tag -l 'aur-v*')
+  unrel=$(git log origin/main --format=%ct --grep='^Bot-merge: ' --not "${tags[@]}")
+  [ -n "$unrel" ] || { echo "release: no bot merge above the last aur-v* tag"; return; }
+  newest=$(sort -n <<<"$unrel" | tail -1)
+  ci=$(gh run list -w ci.yml -c "$head" -L 20 --json event,status,conclusion,createdAt \
+       | jq -r '[.[] | select(.event != "pull_request")] | max_by(.createdAt) // empty | "\(.status)/\(.conclusion)"') \
+    || { echo "release: cannot read ci.yml runs"; RC=1; return; }
+  [ "$ci" = completed/success ] || { echo "release: wait: ci.yml for main ${head:0:7} is ${ci:-not run yet}"; return; }
+  for wf in auto-release.yml build-and-push.yml aur-deploy.yml packages.yml; do
+    busy=$(gh run list -w "$wf" -L 20 --json status | jq '[.[] | select(.status != "completed")] | length') \
+      || { echo "release: cannot read $wf runs"; RC=1; return; }
+    [ "$busy" -eq 0 ] || { echo "release: wait: $wf has a run queued or in progress"; return; }
+  done
+  ok_at=$(gh run list -w auto-release.yml -s success -L 1 --json createdAt | jq -r '.[0].createdAt // empty') \
+    || { echo "release: cannot read auto-release runs"; RC=1; return; }
+  if [ -n "$ok_at" ] && [ "$(date -u -d "$ok_at" +%s)" -ge "$newest" ]; then
+    echo "release: auto-release succeeded at $ok_at, after the newest bot merge"; return
+  fi
+  last=$(git tag -l 'aur-v*' --sort=-v:refname | head -1)
+  last_ct=$(git log -1 --format=%ct "$last" 2>/dev/null || echo 0)
+  if [ -n "$(git log origin/main --format=%H --grep='^Bot-merge: .* urgent=true' --not "${tags[@]}")" ]; then
+    why="an urgent fix merged since ${last:-the first release}"
+  elif [ ! -s "$W/queue" ]; then why="no other bot PR is queued"
+  elif [ $((NOW - last_ct)) -ge 21600 ]; then why="$last is $(( (NOW - last_ct) / 3600 )) h old"
+  else
+    echo "release: wait: $(wc -l < "$W/queue") bot PR(s) still queued and $last is under 6 h old"; return
+  fi
+  if gh workflow run auto-release.yml --ref main -f mode=changed >/dev/null; then
+    echo "release: dispatched auto-release.yml mode=changed ($why)"
+  else echo "release: the auto-release.yml dispatch failed"; RC=1; fi
+}
+release
+exit "$RC"

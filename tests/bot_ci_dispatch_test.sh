@@ -39,8 +39,9 @@ case "$1 $2" in
     if [ -n "$q" ]; then jq -r "$q" <<<"$out"; else echo "$out"; fi
     exit 0;;
   "workflow run")
-    wf=$3; shift 3; ref=
-    while [ $# -gt 0 ]; do case $1 in -r|--ref) ref=$2; shift 2;; *) shift;; esac; done
+    wf=$3; shift 3; ref= fields=
+    while [ $# -gt 0 ]; do case $1 in -r|--ref) ref=$2; shift 2;; -f|-F|--raw-field|--field) fields="$fields $2"; shift 2;; *) shift;; esac; done
+    echo "$wf $ref$fields" >> "$F/fields"
     if grep -qxF "$ref" "$F/no_dispatch" 2>/dev/null; then
       echo "could not create workflow dispatch event: HTTP 422: Workflow does not have 'workflow_dispatch' trigger (https://api.github.com/repos/o/r/actions/workflows/1/dispatches)" >&2
       exit 1
@@ -162,15 +163,61 @@ bcd
 if [ "$RC" -eq 1 ] && grep -q 'HTTP 500' <<<"$OUT"; then ok "dispatch_error: exit 1"
 else fail "dispatch_error: rc=$RC out=$(tr '\n' ';' <<<"$OUT")"; fi
 
-# 7. --branch limits it to one PR; --workflow picks the workflow and its own runs.
+# 7. --branch limits it to one PR.
 fixture one_branch "[$(pr 1 autobump/a a111),$(pr 2 autobump/b b222)]" '[]'
 BOT_CI_MAX_INFLIGHT=10 bcd --branch autobump/b
 if [ "$RC" -eq 0 ] && [ "$(acts dispatch)" -eq 1 ] && dispatched autobump/b; then ok "one_branch: only autobump/b"
 else fail "one_branch: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions")"; fi
-fixture canary "[$(pr 1 autobump/a a111)]" "[$(run 5 ci.yml workflow_dispatch autobump/a a111 completed success)]"
-bcd --workflow canary.yml
-if [ "$RC" -eq 0 ] && [ "$(acts dispatch)" -eq 1 ] && dispatched autobump/a canary.yml; then ok "workflow: canary.yml dispatched beside a green ci.yml run"
-else fail "workflow: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions")"; fi
+
+# 8. --workflow canary.yml: a head gets canary.yml, with engines=auto, only when
+#    `hack/pins policy origin/main SHA` maps canary engines for it, read on the head
+#    fetched from origin. canary_repo NAME: a bare origin whose branches autobump/a,
+#    autobump/b and autobump/c each carry one commit off main, and a clone on main
+#    whose hack/ holds bot-ci-dispatch and a fixture pins that prints
+#    policy/<head>.json (no file: it fails) and a note on stderr (which must not
+#    read as the policy). Sets SHA_A, SHA_B, SHA_C.
+canary_repo() {
+  fixture "$1" '[]' '[]'; CR=$FIX/repo
+  ( set -e
+    export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t \
+      GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+    git init -q --bare -b main "$FIX/origin.git"; git init -q -b main "$CR"; cd "$CR"
+    echo base > f; git add f; git commit -qm base; git remote add origin "$FIX/origin.git"; git push -q origin main
+    for b in a b c; do git switch -qc "autobump/$b" main; echo "$b" > f; git commit -qam "$b"; git push -q origin "autobump/$b"; done
+    git switch -q main; git fetch -q origin
+    mkdir -p hack policy; cp "$BCD" hack/bot-ci-dispatch
+    printf '%s\n' '#!/usr/bin/env bash' \
+      '[ "$1" = policy ] && git rev-parse -q --verify "$2^{commit}" >/dev/null && git cat-file -e "$3^{commit}" || exit 1' \
+      'echo "pins: a note on stderr" >&2' \
+      'cat "$(dirname "$0")/../policy/$3.json"' > hack/pins
+    chmod +x hack/pins hack/bot-ci-dispatch )
+  SHA_A=$(git -C "$CR" rev-parse origin/autobump/a); SHA_B=$(git -C "$CR" rev-parse origin/autobump/b)
+  SHA_C=$(git -C "$CR" rev-parse origin/autobump/c)
+  echo '{"verdict":"auto","canary":["vllm-cpu"]}' > "$CR/policy/$SHA_A.json"
+  echo '{"verdict":"auto","canary":[]}' > "$CR/policy/$SHA_B.json"
+}
+bcd_repo() { OUT=$(cd "$CR" && PATH="$T/bin:$PATH" timeout 60 bash hack/bot-ci-dispatch "$@" 2>&1); RC=$?; }
+canary_repo canary_mapped
+echo "[$(pr 1 autobump/a "$SHA_A"),$(pr 2 autobump/b "$SHA_B"),$(pr 3 autobump/c "$SHA_C")]" > "$FIX/prs.json"
+echo "[$(run 5 ci.yml workflow_dispatch autobump/a "$SHA_A" completed success)]" > "$FIX/runs.json"
+BOT_CI_MAX_INFLIGHT=10 bcd_repo --workflow canary.yml
+if [ "$RC" -eq 1 ] && [ "$(acts dispatch)" -eq 1 ] && dispatched autobump/a canary.yml \
+   && grep -qxF 'canary.yml autobump/a engines=auto' "$FIX/fields" \
+   && grep -q '#2 autobump/b.*no canary engine' <<<"$OUT" && grep -q '#3 autobump/c.*policy' <<<"$OUT"; then
+  ok "canary: dispatched with engines=auto where the policy maps engines; none mapped: skipped; policy failed: exit 1"
+else fail "canary: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions") fields=$(tr '\n' ';' < "$FIX/fields" 2>/dev/null) out=$(tr '\n' ';' <<<"$OUT")"; fi
+# a head that moved on origin since the PR list was read: no canary for the stale SHA.
+canary_repo canary_moved; echo "[$(pr 1 autobump/a "$SHA_B")]" > "$FIX/prs.json"
+cp "$CR/policy/$SHA_A.json" "$CR/policy/$SHA_B.json"; bcd_repo --workflow canary.yml
+if [ "$(acts dispatch)" -eq 0 ] && grep -q '#1 autobump/a.*moved' <<<"$OUT"; then ok "canary_moved: no dispatch"
+else fail "canary_moved: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions") out=$(tr '\n' ';' <<<"$OUT")"; fi
+# ci.yml never consults the policy, and its dispatch carries no inputs.
+canary_repo ci_no_policy; rm "$CR/hack/pins"
+echo "[$(pr 1 autobump/a "$SHA_A"),$(pr 2 autobump/b "$SHA_B")]" > "$FIX/prs.json"
+BOT_CI_MAX_INFLIGHT=10 bcd_repo
+if [ "$RC" -eq 0 ] && [ "$(acts dispatch)" -eq 2 ] && grep -qxF 'ci.yml autobump/a' "$FIX/fields"; then ok "ci_no_policy: ci.yml dispatched for both, no inputs"
+else fail "ci_no_policy: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions") out=$(tr '\n' ';' <<<"$OUT")"; fi
+
 bcd --bogus
 if [ "$RC" -eq 2 ]; then ok "usage: unknown flag exits 2"; else fail "usage: rc=$RC"; fi
 

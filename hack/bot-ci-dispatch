@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# hack/bot-ci-dispatch [--branch B] [--workflow ci.yml]: give the bot's PRs real CI.
+# hack/bot-ci-dispatch [--branch B] [--workflow ci.yml|canary.yml]: give the bot's PRs real CI.
 #
 # A PR that GITHUB_TOKEN opened or pushed gets pull_request runs that wait for a
 # maintainer's approval (conclusion action_required); a workflow_dispatch run
@@ -18,13 +18,19 @@
 # and not at all while a ci.yml run of a human PR is queued. A deferred PR is
 # picked up by the next call (.github/workflows/bot-sweep.yml, hourly).
 #
+# --workflow canary.yml dispatches with -f engines=auto, and only for a head whose
+# `hack/pins policy origin/main SHA` maps canary engines (a non-empty
+# canary list); the head is fetched from origin for that, never checked out. A
+# head that moved on origin since the PR list was read waits for the next call; a
+# policy that fails is an error for that PR.
+#
 # A branch whose workflow file lacks the workflow_dispatch trigger (cut before
 # ci.yml had it) is skipped; the nightly's hack/autobump-branch-reset recreates it.
 # Prints one line per decision. Idempotent. Exit 0, or 1 when a gh call failed
 # (the rest still ran), 2 on bad usage.
 set -uo pipefail
 
-usage() { echo "usage: hack/bot-ci-dispatch [--branch autobump/<name>] [--workflow ci.yml]" >&2; exit 2; }
+usage() { echo "usage: hack/bot-ci-dispatch [--branch autobump/<name>] [--workflow ci.yml|canary.yml]" >&2; exit 2; }
 wf=ci.yml only=
 while [ $# -gt 0 ]; do
   case $1 in
@@ -38,6 +44,19 @@ cap=${BOT_CI_MAX_INFLIGHT:-1}
 [[ $cap =~ ^[0-9]+$ ]] || { echo "BOT_CI_MAX_INFLIGHT must be a whole number, got '$cap'" >&2; exit 2; }
 RUNF=databaseId,event,status,conclusion,headBranch,attempt,createdAt
 rc=0
+inputs=()
+if [ "$wf" = canary.yml ]; then
+  inputs=(-f engines=auto)
+  cd "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)" || exit 1
+  err=$(mktemp); trap 'rm -f "$err"' EXIT
+fi
+# canary_engines BRANCH SHA: the policy's canary list for SHA (a JSON array), or
+# "moved" when origin's BRANCH is no longer SHA; fails when the policy does.
+canary_engines() {
+  git fetch -q origin "+refs/heads/$1:refs/remotes/origin/$1" || return 1
+  [ "$(git rev-parse -q --verify "refs/remotes/origin/$1^{commit}")" = "$2" ] || { echo moved; return 0; }
+  hack/pins policy origin/main "$2" | jq -ce '.canary | arrays'
+}
 
 prs=$(gh pr list --state open --base main --limit 200 \
       --json number,headRefName,headRefOid,baseRefName,isCrossRepository,author) \
@@ -80,8 +99,17 @@ while read -r num br sha; do
     | "\($e | length) \(($at | length) - ($e | length)) \($l.databaseId | word) \($l.status | word) \($l.conclusion | word) \($l.attempt // 1) \(any($e[]; (.attempt // 1) > 1))"' <<<"$runs")"
   if [ "$count" -eq 0 ]; then
     why="no $wf run at the head"; [ "$held" -gt 0 ] && why="only held $wf runs at the head"
+    if [ "$wf" = canary.yml ]; then
+      if ! eng=$(canary_engines "$br" "$sha" 2>"$err"); then
+        echo "$tag: error: hack/pins policy failed: $(tr '\n' ' ' < "$err")"; rc=1; continue
+      fi
+      case $eng in
+        moved) echo "$tag: skipped, origin's $br moved since the PR list was read"; continue;;
+        '[]') echo "$tag: the policy maps no canary engine; no canary"; continue;;
+      esac
+    fi
     busy "$tag: $why" && continue
-    if out=$(gh workflow run "$wf" --ref "$br" 2>&1); then
+    if out=$(gh workflow run "$wf" --ref "$br" "${inputs[@]}" 2>&1); then
       inflight=$((inflight + 1))
       # Wait until the run shows, so that a call right after this one sees it.
       new=

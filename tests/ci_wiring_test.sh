@@ -308,5 +308,40 @@ alarm_case gh_down '[]' '[]' '[]' issues workflows runs
 if [ "$ARC" -eq 0 ] && [ "$(grep -c '^::warning::' <<<"$AOUT")" -eq 2 ]; then ok "alarms: gh failing warns and still exits 0"
 else fail "alarms gh_down: rc=$ARC out=$(tr '\n' ';' <<<"$AOUT")"; fi
 
+# bot-sweep.yml job merge runs hack/bot-merge after ci-fill. Its token can merge,
+# so it checks out main only (never a PR's code), and the script never checks out,
+# switches to or resets onto another ref.
+BS="${ROOT}/.github/workflows/bot-sweep.yml"
+if python3 - "${BS}" 2>/dev/null <<'PY'
+import sys, yaml
+jobs = yaml.safe_load(open(sys.argv[1]))["jobs"]
+needs = jobs["merge"].get("needs", [])
+sys.exit(0 if "ci-fill" in jobs and "ci-fill" in ([needs] if isinstance(needs, str) else needs) else 1)
+PY
+then
+    ok "bot-sweep.yml job merge needs ci-fill"
+else
+    fail "bot-sweep.yml has no job merge that needs ci-fill"
+fi
+if python3 - "${BS}" 2>/dev/null <<'PY'
+import sys, yaml
+steps = yaml.safe_load(open(sys.argv[1]))["jobs"]["merge"]["steps"]
+co = [s for s in steps if str(s.get("uses", "")).startswith("actions/checkout@")]
+text = yaml.safe_dump(steps)
+sys.exit(0 if co and all((s.get("with") or {}).get("ref") == "main" for s in co)
+         and not any(k in text for k in ("github.head_ref", "github.event", "refs/pull/", "pull_request"))
+         and any("hack/bot-merge" in s.get("run", "") for s in steps) else 1)
+PY
+then
+    ok "bot-sweep.yml job merge checks out main only and runs hack/bot-merge"
+else
+    fail "bot-sweep.yml job merge checks out a ref other than main, reads a PR ref, or does not run hack/bot-merge"
+fi
+if [ -f "${ROOT}/hack/bot-merge" ] && ! grep -qE 'git (checkout|switch|worktree|reset)|gh pr checkout' "${ROOT}/hack/bot-merge"; then
+    ok "hack/bot-merge never checks out a ref"
+else
+    fail "hack/bot-merge is missing or runs git checkout/switch/worktree/reset or gh pr checkout"
+fi
+
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]
