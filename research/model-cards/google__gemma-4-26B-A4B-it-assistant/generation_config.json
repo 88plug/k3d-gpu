@@ -1,0 +1,17 @@
+{
+  "bos_token_id": 2,
+  "do_sample": true,
+  "eos_token_id": [
+    1,
+    106,
+    50
+  ],
+  "is_assistant": true,
+  "num_assistant_tokens": 6,
+  "num_assistant_tokens_schedule": "constant",
+  "pad_token_id": 0,
+  "temperature": 1.0,
+  "top_k": 64,
+  "top_p": 0.95,
+  "transformers_version": "5.7.0.dev0"
+}
