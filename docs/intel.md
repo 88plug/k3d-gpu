@@ -56,8 +56,11 @@ with detection, enablement and what k3d-gpu does with each, see the
   host step for DSA/IAA work queues (`accel-config`) and QAT VFs
   (`sriov_numvfs`, `vfio-pci`), each as an exact per-device apply and revert
   command. `up` and `detect` name the engines left out for want of that step.
-  The launcher never changes host configuration itself; `host-setup --apply`
-  runs the same commands after a y/N prompt.
+  An IAA device whose kernel work queues hold every entry gets no such step, and
+  `up` does not name it; `doctor` does, with a shrink it never applies. All three
+  IAA devices on the Xeon 6741P were in that state [ledger:H52b]. The launcher
+  never changes host configuration itself; `host-setup --apply` runs the same
+  commands after a y/N prompt.
 - **A schedulability assertion.** `up` counts each detected engine's schedulable
   units. With the default `K3D_GPU_VENDORS=auto` it warns for an engine at zero and
   fails only when every engine is at zero; with an explicit vendor list it fails on
@@ -119,7 +122,7 @@ the plugins, and asserts the result, with no manual step.
 |--------|-----------------------------|----------|-----------|----------------------|------------------------------------------------|
 | NVIDIA GPU | `nvidia.com/gpu` | yes | yes | **yes**, 2 GPUs; `nvidia-smi` pod passed | loaded module; `/dev/nvidiactl`; runtime vs. CDI-only; `test` output and failure |
 | Intel GPU, `i915` | `gpu.intel.com/i915`; node labels `gpu.intel.com/xmx`, `media-vcs`, `media-vecs` | yes | yes | **yes**, UHD 770; device-listing pod passed | Alder / Raptor Lake names, kernels and GuC firmware, Meteor Lake, Arrow Lake-H/-S, mixed `i915` + `xe`, XMX and media-engine labels |
-| Intel GPU, `xe` (Battlemage, Lunar / Panther Lake, Crescent Island) | `gpu.intel.com/xe`; node labels `gpu.intel.com/xmx`, `media-vcs`, `media-vecs` | yes | yes | **partly**, 4x Arc Pro B70 on the Xeon 6741P: `up` advertised all four, `xmx=true`, and `test`'s GPU pod passed, but no media label was set [ledger:H52]. A second run set `media-vcs=2` and `media-vecs=2` but advertised 2 of the 4: a serving workload held about half the VRAM of each card, and the busy-card filter (half the VRAM or more in use) dropped the two just over half [ledger:H52b]. No Lunar or Panther Lake host has run | Lunar Lake, Battlemage dGPU, kernel/firmware checks, `xe.force_probe` hints, `vfio-pci` excluded |
+| Intel GPU, `xe` (Battlemage, Lunar / Panther Lake, Crescent Island) | `gpu.intel.com/xe`; node labels `gpu.intel.com/xmx`, `media-vcs`, `media-vecs` | yes | yes | **partly**, 4x Arc Pro B70 on the Xeon 6741P: `up` advertised all four, `xmx=true`, and `test`'s GPU pod passed, but no media label was set [ledger:H52]. A second run set `media-vcs=2` and `media-vecs=2` but advertised 2 of the 4: a serving workload held about half the VRAM of each card, and the busy-card filter (half the VRAM or more in use) dropped the two just over half [ledger:H52b]. No Lunar Lake, Panther Lake or Crescent Island host has run | Lunar Lake, Battlemage dGPU, kernel/firmware checks, `xe.force_probe` hints, `vfio-pci` excluded |
 | Intel NPU | `npu.intel.com/accel`; node label `k3d-gpu.io/npu.gen` | yes | yes | no | Lunar / Meteor Lake, `0x7d1d` named by CPU model (Meteor Lake vs. Arrow Lake-H), NPU vs. Gaudi, unbound NPU, firmware checks, forced `npu` fails `doctor` |
 | Gaudi 3 | `habana.ai/gaudi` | yes | yes (plain mode, no habana runtime) | no | `habanalabs` accel nodes, no-driver case, NPU + Gaudi on one host |
 | DSA | `dsa.intel.com/wq-user-*` | yes | yes | **yes** on the Xeon 6741P after `host-setup --apply --with-kernel-wqs`: `dsa.intel.com/wq-user-shared` 3, and the `test` pod got `/dev/dsa/wq2.0` [ledger:H52b] | user work queues, no-work-queue case with per-device `accel-config` apply/revert (dedicated, or shared with PASID), kernel-WQ device opt-in (snapshot, own group on a free engine), forced `dsa` fails `doctor` |
@@ -130,12 +133,13 @@ the plugins, and asserts the result, with no manual step.
 | Hybrid P/E cores | `k3d-gpu.io/hybrid-cpu=true`; pod label `k3d-gpu.io/cores` | yes | yes | **yes** at `109154d`: performance pod on CPU 0, efficient pod on CPU 20. The strict P/E placement check in `test` passed live on the merged tree (performance `0`, efficient `24`). The `ecluster`, `pcore-physical`, `latency` (on favored CPUs 8 and 10) and `lowpower` balloons verified live on the i9-13900T ([results](#how-hybrid-pe-pinning-works)); the Arrow Lake-H `cpu_lowpower` override is sim-only (UNVERIFIED live). | detection, no online E-cores, non-hybrid, forced, `doctor` lists, `test` placement pass and both failure modes; `cpu_lowpower` and no-L3 LP E-cores, E-core clusters, physical P-cores, favored CPUs from CPPC and MSR `0x771`, `latency` patched to the favored L2 dirs |
 
 The NPU and Gaudi rows have not run on hardware: their scheduling is tested only
-against a simulated sysfs. The `xe`, DSA, IAA, QAT, AMX and CPU ISA rows have run on
-one host, the Xeon 6741P, and both of its runs are REFUTED [ledger:H52] [ledger:H52b];
-each row above says what happened there. `xe` on a Lunar or Panther Lake iGPU, and
-QAT on any generation but 4xxx, have not run. If you have one of these platforms,
-`k3d-gpu doctor && k3d-gpu up && k3d-gpu test` is the probe that moves a row to
-verified. Please send its output.
+against a simulated sysfs. The `xe`, DSA, IAA, QAT and AMX rows have run on one
+host, the Xeon 6741P, which also gave the CPU ISA labels their first recorded live
+node; both of its runs are REFUTED [ledger:H52] [ledger:H52b], and each row above
+says what happened there. `xe` on a Lunar or Panther Lake iGPU or a Crescent
+Island card, and QAT on any generation but 4xxx, have not run. If you have one of
+these platforms, `k3d-gpu doctor && k3d-gpu up && k3d-gpu test` is the probe that
+moves a row to verified. Please send its output.
 
 ---
 
@@ -456,9 +460,9 @@ hardware, a recorded run.
 - **Hardware coverage.** Move the `xe`, NPU, Gaudi, DSA, IAA, QAT and AMX rows to
   verified on real Core Ultra, Arc, Gaudi 3 and Xeon hosts. In progress: the campaign on
   a Xeon 6741P with 4x Arc Pro B70 [above](#eat-by-default-vs-with-k3d-gpu). Its detection
-  runs gave the `xe`, DSA, IAA, QAT, AMX and CPU ISA rows their first hardware results, and
-  both ledger rows are REFUTED [ledger:H52] [ledger:H52b]; the first Gemma 4 rows are
-  recorded, none SUPPORTED yet.
+  runs gave the `xe`, DSA, IAA, QAT and AMX rows their first hardware results and the CPU
+  ISA labels their first recorded live node, and both ledger rows are
+  REFUTED [ledger:H52] [ledger:H52b]; the first Gemma 4 rows are recorded, none SUPPORTED yet.
 - **EAT 1.1.0.** The `release-1.1.0` tag is cut (2026-10-22). Moving `eat-up.sh` to it
   waits until no pending ledger row pins `0d3438d`, then needs the checks listed in
   [platforms.md](platforms.md#intel-enterprise-agent-toolkit-eat).

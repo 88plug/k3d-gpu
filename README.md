@@ -292,7 +292,7 @@ stubbed launcher and kubectl.
 - K3s + NVIDIA Container Toolkit on an Ubuntu base — **26.04** (default) and **24.04**  
 - NVIDIA, **Intel GPU** (Arc, Battlemage, Core Ultra integrated GPUs, Crescent Island — `xe` or `i915`), **Intel NPU** (Core Ultra) and **Intel Gaudi 3 (HPU)** device plugins **baked into k3s auto-deploy** — `up` exposes them with no `kubectl apply`. The launcher labels nodes so each plugin only runs where its hardware is  
 - Auto-detection on the host from sysfs: `/dev/nvidia*`, Intel DRM render nodes (`xe`/`i915`), and `/dev/accel/accel*` nodes told apart by PCI vendor (`8086` + `intel_vpu` = NPU, `1da3` = Gaudi). `k3d-gpu detect` prints what it found  
-- `k3d-gpu doctor` checks kernel and firmware per platform, names the `xe.force_probe=<id>` needed for parts newer than your kernel, and checks Xeon built-in accelerators (AMX, DSA, IAA, QAT) — deployed automatically once the host side is configured ([what ran on a Xeon 6741P](#xeon-built-in-accelerators): DSA reached a pod, the QAT plugin crash-looped). With the cluster up it also checks the device plugin and NRI balloons DaemonSets, conflicting NRI policies and disconnected device plugins (see [docs/failure-modes.md](docs/failure-modes.md))  
+- `k3d-gpu doctor` checks kernel and firmware per platform, names the `xe.force_probe=<id>` needed for parts newer than your kernel, and checks Xeon built-in accelerators (AMX, DSA, IAA, QAT) — deployed automatically once the host side is configured ([what ran on a Xeon 6741P](#xeon-built-in-accelerators): DSA reached a pod, IAA got no work queue, the QAT plugin crash-looped). With the cluster up it also checks the device plugin and NRI balloons DaemonSets, conflicting NRI policies and disconnected device plugins (see [docs/failure-modes.md](docs/failure-modes.md))  
 - [Node Feature Discovery](#node-feature-discovery) with Intel's NodeFeatureRules on every node: CPU flags (`cpu-cpuid.*`), kernel, PCI and `intel.feature.node.kubernetes.io/gpu` labels read from the host, one owner per label  
 - CDI-ready: containerd 2.x scans `/etc/cdi` and `/var/run/cdi` (CDI on by default), so future vendors that emit CDI specs need no node changes  
 - Pre‑configured nvidia containerd runtime; `--default-runtime=nvidia` for zero-config GPU pods  
@@ -492,8 +492,9 @@ what is missing.
 On one Xeon 6741P after `k3d-gpu host-setup --apply`, DSA advertised its 3 user
 work queues and a test pod got `/dev/dsa`. IAA got no work queue: `iaa_crypto`
 held every work-queue entry of each device, and host-setup leaves those alone.
-QAT (4xxx) got 48 VFs and `vfio-pci`, but its plugin crash-looped and advertised
-no `qat.intel.com` resource [ledger:H52b]. The four AMX labels were set [ledger:H52].
+QAT (4xxx) got 48 VFs and `vfio-pci`, and `doctor` read each PF's VFs as ready,
+but its plugin crash-looped and advertised no `qat.intel.com` resource
+[ledger:H52b]. The four AMX labels were set [ledger:H52].
 
 For DSA/IAA the launcher bind-mounts the host's `/dev/char` into the node: the
 plugin only accepts a work queue whose udev `/dev/char/<major>:<minor>` link
@@ -1775,8 +1776,12 @@ k3d-gpu test            # runs a CUDA pod (runtimeClassName: nvidia) and prints 
 kubectl get nodes -o jsonpath='{.items[*].status.allocatable.nvidia\.com/gpu}{"\n"}'
 ```
 
-`k3d-gpu up` already asserts `nvidia.com/gpu > 0` and fails loudly if not, so a
-clean `up` means GPUs are schedulable.
+`k3d-gpu up` checks the same count. With a vendor list that names `nvidia`
+(`K3D_GPU_VENDORS=nvidia`) it fails when the count is 0. With the default
+`K3D_GPU_VENDORS=auto` it fails only when no detected accelerator is schedulable;
+when NVIDIA reads 0 but another one (an Intel iGPU, hybrid P/E cores) is
+schedulable, it warns and finishes. So check that `up`'s
+`Accelerators schedulable:` line names `nvidia`, or run `k3d-gpu test`.
 
 > **Note:** If `nvidia-smi` reports `Failed to initialize NVML` or a non-zero
 > `result=` while `docker exec … nvidia-smi` on the node works, the test pod's
