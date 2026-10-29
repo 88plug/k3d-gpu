@@ -6075,7 +6075,7 @@ models:          H57d's revisions, downloaded again: google/gemma-4-26B-A4B-it-q
                  equal the committed weights.sha256 (sha256sum -c: 10 OK)
 lock:            ~/k3dgpu-bench.lock (amendment R2), for the downloads and check, convert.sh, the smoke and both holds
 energy source:   RAPL package-0 through energy.sh and sudo
-co-tenants:      qwen35-9b (vLLM v0.19.1, 13.5 GiB of GPU 1): running, 0 restarts, 0 requests during the campaign
+co-tenants:      qwen35-9b (vLLM v0.19.1, 13,530 MiB of GPU 1): running, 0 restarts, 0 requests during the campaign
                  (request_success_total stop = 1 and generation_tokens_total = 11 before and after);
                  gpustack-worker: running, crash-looping, RestartCount 4921 -> 4924 over hold 1 and 4924 -> 4927 over
                  hold 2; neither touched (cotenants-*.txt)
@@ -6162,18 +6162,19 @@ PR #183 (`a7f95676`, 2026-10-21, after H57d's holds) every kubectl call of `k3d-
 context `k3d-${K3D_GPU_CLUSTER:-gpu}`, that is `k3d-gpu`, and a hold's kubeconfig holds only
 `k3d-k3dgpu-d-h57d-<hold>` (`kubectl --context k3d-gpu` answers "context was not found"). The
 manifest's node queries failed silently, so it saw no hybrid node and no allocatable CPU: Od's
-`deploy.yaml` lacks the `k3d-gpu.io/cores: performance` label, requests 1 CPU (H57d: 16) and 36Gi
-(H57d: 30Gi), and its `agent-fit` reads `cpu 6x131072` (H57d: `4x131072`); `agent.err` reads "on
-CPU, 1 CPU(s)" where H57d's named the P-cores. Its serving arguments and the read-only
-`graph.pbtxt` are H57d's. The pod ran in the node's shared pool, cgroup cpuset 0-15,17-31 (31 CPUs),
-in both holds. Its node CPU over N=1 was 7.96 and 7.85 CPU-s/s and never exceeded the P-core busy
-time, which fits OVMS staying on the P-cores but does not show it. The two llama.cpp arms are
-rendered by `h57d.py` with the label and the 16-CPU request and got cpuset 0-15, as the affinity
-check confirms. The deviation was found while hold 2 ran; both holds kept the same Od so the pooled
-records are of one treatment, and no hold or arm was repeated (none was left). The amendments' tests
-render Od with stand-in tools and could not see it. Any later row that renders Od through `arm.sh`
-(the H57w rows on wildct use the same runner) needs `K3D_GPU_CLUSTER=${CLUSTER}` on that call, in a
-dated amendment before its holds.
+`deploy.yaml` lacks the `k3d-gpu.io/cores: performance` label and requests 1 CPU (H57d: 16);
+`agent.err` reads "on CPU, 1 CPU(s)" where H57d's named the P-cores. Its memory limit and
+`agent-fit` follow the host's free memory at render time: 36Gi and `cpu 6x131072` in hold 1, 39Gi
+and `cpu 7x131072` in hold 2 (H57d: 25-30Gi, 4 sequences). Its serving arguments and the read-only
+`graph.pbtxt` are H57d's in both holds. The pod ran in the node's shared pool, cgroup cpuset
+0-15,17-31 (31 CPUs), in both holds. Its node CPU over N=1 was 7.96 and 7.85 CPU-s/s and never
+exceeded the P-core busy time, which fits OVMS staying on the P-cores but does not show it. The two
+llama.cpp arms are rendered by `h57d.py` with the label and the 16-CPU request and got cpuset 0-15,
+as the affinity check confirms. The deviation was found while hold 2 ran; both holds kept the same
+Od placement, image and arguments, so the pooled records are of one treatment, and no hold or arm
+was repeated (none was left). The amendments' tests render Od with stand-in tools and could not see
+it. Any later row that renders Od through `arm.sh` (the H57w rows on wildct use the same runner)
+needs `K3D_GPU_CLUSTER=${CLUSTER}` on that call, in a dated amendment before its holds.
 
 Confounds:
 
