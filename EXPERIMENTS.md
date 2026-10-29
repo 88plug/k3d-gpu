@@ -4039,6 +4039,52 @@ request, discarded and disclosed). Then H52w (1 hold), H18w (1), H25w (1), H34w 
 repeat a failed hold once. At most 12 holds in all. A protocol change is a dated amendment
 merged before the data it governs.
 
+### Wildct amendment R1: bounded host calls, a host health check and the resume (2026-10-28)
+
+Recorded 2026-10-28, before any wildct hold has measured anything. No row's hypothesis,
+prediction, arm, model, statistic, threshold, cap, disk need, hold count or order changes.
+
+**What happened (disclosed).** On 2026-10-21 the tools were installed on wildct as W7 lists them
+(k3d-gpu 0.1.71, `.deb` sha256 `580a6278...`, node image `sha256:6d715292...`; the shipped
+launcher matched the release), every model file matched the Hub's sha256 at its pinned revision,
+and the images of `setup-images.sh` were pulled. The wiring smoke (`smoke1`) took the lock at
+21:27:13Z. Its first step, the RAPL reader's `docker run`, never returned: the container stayed in
+Created, its `runc init` slept in `containerd.service`'s cgroup with no container scope created,
+and `systemctl show docker containerd` answered "Failed to get properties: Connection timed
+out". systemd was not answering on D-Bus, and with Docker's systemd cgroup driver no new
+container can start. Older hangs on the host that were not this campaign's (a `docker run` 26
+days, a root `docker inspect` 22 h) fit. No cluster was created, no request was sent and nothing
+was measured; `smoke1` is discarded. `hold.sh` waited in that `docker run` with no bound, so it
+never wrote its `rc`, and the wait on that `rc` had no ceiling. Docker's live-restore is off on
+wildct, so the fix (a systemd re-exec or a reboot) is the box owner's. `k3dgpu-w-rapl` was left
+in Created.
+
+**Runner changes (this amendment's PR).** `bench/wildct/hold.sh`: after the lock, a host health
+check (systemd answers `ActiveState` = `active` for docker and `docker info` answers) or no hold
+(exit 8); every docker and k3d call it makes is bounded (`WILDCT_CALL_T`, default 120 s; cluster
+deletes `WILDCT_DELETE_T`, default 600 s; SIGKILL 10 s later); the RAPL reader must start and return a reading of
+`energy_uj` or no hold (exit 6); a cleanup step that does not finish in its bound is named in
+`runs/NAME/cleanup-incomplete`; `runs/NAME/pid` at the start and `runs/NAME/rc` last on every exit,
+the early ones (lock, disk, launcher) included. `bench/wildct/wait_hold.sh` waits on those with a
+ceiling and tells a finished hold from a dead one. `bench/wildct/h52w.sh`: the pod wait counted an
+empty pod list (no cluster) as every pod Running; it now needs at least one pod, is skipped when
+`up` failed, keeps its 60 polls every 5 s (knobs, defaults unchanged) and records its outcome in
+`rc.txt`; `detect`, `doctor`, `test` and `down` are bounded. `bench/wildct/sample.py`: `docker
+ps` is bounded (20 s) and keeps the last container list when docker does not answer.
+`bench/wildct/gpu_scan.py` is H52w's pod GPU scan moved out of `h52w.sh` unchanged, shared with
+the smoke. `bench/wildct/row.sh` holds each row's command as "Per row" lists it, so nothing is
+retyped on wildct. Tests: `tests/wildct_hold_test.sh` and `bench/wildct/test_wildct.py`, in CI.
+
+**Clarifications.** H28w's prep runs with `LEVELS=typical`, as its run does, so it builds only the
+model images the run imports and deletes (r0-r6, 7 x 1 GiB); the registered prep line left
+`LEVELS` at its default and would have built r0-r12 and left r7-r12 behind. The wiring smoke is not
+a hold of any row and does not count toward the 12; the resumed smoke is `smoke2`. `convert.sh`
+(H57w's drafter GGUF and Od's `graph.pbtxt`) takes this host's lock itself, outside `hold.sh`, as
+H57d ran it. Rule W7 still installs the newest k3d-gpu release at the first hold: 0.1.74 at this
+writing (`.deb` sha256 `74d1b218...`, node image `sha256:1d7513e6...`), whose launcher equals
+main's apart from the version line. The tool pins stay as registered (kubectl v1.37.2 has since
+been released; v1.37.1 is kept). The resume procedure is `bench/wildct/RESUME.md`.
+
 ### H5 amendment A1: stage-1 harness and definitions (2026-10-19)
 
 Written 2026-10-19T22:30-07:00, before any H5 measurement. It fixes what the
