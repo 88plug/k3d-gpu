@@ -73,6 +73,8 @@ case ${ARM} in
         NS=default DEP=vllm-qwen-3-4b-cpu EP=default/vllm-qwen-3-4b-cpu-service ;;
     vllm-cuda)
         gpu=$(nvidia-smi --query-gpu=name,uuid --format=csv,noheader | awk -F', ' '/RTX 4000/ {print $2}')
+        # vLLM CUDA v0.31.0 (agent.lock vllm_cuda), the image H8 ran as arm A4, kept so H8 reproduces.
+        # No pending row runs this arm; a new CUDA arm pins vLLM's newest release.
         image=vllm/vllm-openai@sha256:a4a4c0437bf7240089da5f08aa370c4aee17ae5290f7a3b468825ee26c4c3a6b
         sed -e "s|@VLLM_IMAGE@|${image}|" -e "s|@GPU_UUID@|${gpu}|" "${HERE}/vllm-cuda.yaml" > "${OUT}/cuda.yaml"
         python3 "${HERE}/stage.py" cuda "${OUT}/cuda.yaml" "${OUT}/deploy.yaml" Qwen3-4B-AWQ

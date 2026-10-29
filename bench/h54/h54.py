@@ -45,6 +45,9 @@ SERVED = "google/gemma-4-26B-A4B-it"   # B1g's served name (EAT's model id); eve
 IMG = {
     "vllm024": "vllm/vllm-openai-cpu:v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1",
     "vllm032": "vllm/vllm-openai-cpu:v0.32.0@sha256:ffaba3989b9b96d95a576143c872a4110ce9800f5199b6a36eb27bdff1cbbe05",
+    # Held at b11749 while rows depend on it: H54q pairs Lg with H54a's b11749 records (amendment
+    # Q1), H57dp/H57de reuse H57d's b11749 quality records, and H57wa/wm/wb replicate H57d. A newer
+    # llama.cpp (v0.8.0 is b11960) needs a dated amendment for each of those rows first.
     "llamacpp": "ghcr.io/ggml-org/llama.cpp:server-b11749@sha256:9fbaa06d7f4449e2ae0d02b40e0431f7c212dcf231c9e3a7777a6afc2cc8f312",
     "sglang": "lmsysorg/sglang:v0.5.22-xeon@sha256:4e5c413ed9a31f38f74e18aa9b645d65a0b0a023d42f63edb4e2b412ea1a230f",
     "ovms": "openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58",
