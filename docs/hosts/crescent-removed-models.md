@@ -24,18 +24,33 @@ command that puts it back. The record is pushed before the files are deleted.
 
 Why it was removed:
 
-- `/` was 95.04 percent full (`df` rounds this to 96), above the 95 start gate
-  of the cross-host holds. This directory was the largest single consumer.
+- `/` was 95.04 percent full (`df` rounds this up to 96), above the 95 percent
+  start gate of the H28x hold (`XHOST_DISK_START=95` in the
+  [cross-host pre-registration](https://github.com/88plug/k3d-gpu/blob/main/EXPERIMENTS.md#cross-host-pre-registration-h25x-h27x-h28x-h34x-on-the-xeon-6741p-2026-10-20)).
+  H56's W holds have the same 95 percent gate (`bench/eatflow/crescent/h56.sh`);
+  the other holds start at up to 97 percent (`bench/xhost/hold.sh`,
+  `bench/eatflow/crescent/hold.sh`). This directory was the largest single
+  consumer.
 - Nothing used it. No open file, process mount namespace, container mount or
   command, systemd unit, cron job, symlink, launcher config, or k3d-gpu branch
   named it. Every shard's atime predated its mtime, so no weight byte had been
   read since the download.
-- Crescent cannot serve it: 2.5 TB of FP8 weights against 503 GB of RAM and
+- Crescent cannot serve it: 2.5 TB of FP8 weights against 503 GiB of RAM and
   4 x 32 GB of Arc Pro B70 memory.
 - The 2026-10-20 cleanup kept it only because its name matched the `Qwen3.8-*`
   keep rule, not because of a reference. That decision is in
   `~/models-pruned-manifest-2026-10-20.json` on crescent; the removal is in
   `~/models-pruned-manifest-2026-10-29.json` next to it.
+
+The removal freed far more than the H28x gate needed. `df` rounds up, so a 95
+percent gate passes once used bytes are at most 95 percent of used plus
+available. At the `/ before` figures that meant freeing 1,634,695,373 bytes,
+about 1.6 GB (1.52 GiB). H28x's run writes about 30 GiB, which from 95 percent
+reaches about 95.9 percent, under its 97 percent watchdog, so the run needed no
+more. The removal freed 2,495,986,991,104 bytes, about 1,500 times that. The
+owner had authorized handling crescent's disk, and this directory was the
+largest copy nothing referenced, so all of it went rather than the minimum. The
+file list and the restore command below make that reversible.
 
 ### Restore
 
