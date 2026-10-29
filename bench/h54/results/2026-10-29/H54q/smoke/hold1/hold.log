@@ -1,0 +1,9 @@
+2026-10-29T19:41:25Z R start (2250 s before the item stop)
+2026-10-29T19:43:19Z R ready after 114 s
+2026-10-29T19:43:27Z R status smoke: ready; wiring check in smoke-items.jsonl (rc 0)
+2026-10-29T19:43:45Z OVQ start (2110 s before the item stop)
+2026-10-29T19:44:19Z OVQ ready after 34 s
+2026-10-29T19:44:29Z OVQ status smoke: ready; wiring check in smoke-items.jsonl (rc 0)
+2026-10-29T19:44:51Z Lg start (2044 s before the item stop)
+2026-10-29T19:45:25Z Lg ready after 34 s
+2026-10-29T19:45:29Z Lg status smoke: ready; wiring check in smoke-items.jsonl (rc 0)
