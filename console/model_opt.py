@@ -571,7 +571,8 @@ def ledger_rows(text):
 # CPU model numbers as ledger rows write them: "i9-13900T", "6741P", "285K".
 CPU_CLASS = re.compile(r"(?<![a-z0-9])(i[3579]-\d{4,5}[a-z]{0,2}|\d{3,5}[a-z]{1,2})(?![a-z0-9])")
 # The row families whose verdicts set agent defaults: H27 (autoquant), H34 (CPU Fast
-# Draft), H59 (the CPU engine: llama.cpp where SUPPORTED for the class, else OVMS). console/ledger-rules.json carries them for installs without EXPERIMENTS.md.
+# Draft) and H59 (the CPU engine, see cpu_engine_rule). console/ledger-rules.json carries
+# them for installs without EXPERIMENTS.md.
 RULE_FAMILIES = ("H27", "H34", "H59")
 RULES_SCHEMA = "k3d-gpu.ledger-rules/v1"
 

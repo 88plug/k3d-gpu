@@ -935,7 +935,7 @@ metadata. Metadata is cached for a day under `~/.cache/k3d-gpu/hf`. Without
 | `K3D_GPU_AGENT_DRAFT` | the optimizer's choice | `off` disables speculative decoding, `mtp` forces an MTP head or drafter |
 | `K3D_GPU_MODEL_OPT` | `auto` | `off` serves `--model` exactly as given |
 | `K3D_GPU_HF_FIXTURES` | unset | directory of saved metadata bundles to read instead of Hugging Face |
-| `K3D_GPU_MODEL_OPT_LEDGER` | the checkout's `EXPERIMENTS.md`, else the packaged `console/ledger-rules.json` | ledger read for promotions and for the per-CPU-class Fast Draft, autoquant and CPU engine (H59, inert until a row is SUPPORTED) defaults; packages ship `console/ledger-rules.json`, the H27/H34 rows generated from `EXPERIMENTS.md` (CI fails when it drifts) |
+| `K3D_GPU_MODEL_OPT_LEDGER` | the checkout's `EXPERIMENTS.md`, else the packaged `console/ledger-rules.json` | ledger read for promotions and for the per-CPU-class Fast Draft, autoquant and CPU engine defaults; the CPU engine moves to llama.cpp only for a CPU class that a SUPPORTED row of the H59 family names; packages ship `console/ledger-rules.json`, the H27/H34/H59 rows generated from `EXPERIMENTS.md` (CI fails when it drifts) |
 
 #### vLLM backends for discrete Arc (Battlemage)
 
