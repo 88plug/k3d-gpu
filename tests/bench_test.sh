@@ -265,6 +265,8 @@ check "zero-copy-models (H28): plain cluster create adds no k3s flag by default"
     sh -c 'test "$(env -u K3D_GPU_K3S_ARGS bash "$1" create-args)" = ""' _ "${ROOT}/bench/zero-copy-models/probe.sh"
 check "zero-copy-models (H28x): K3D_GPU_K3S_ARGS reaches the server as --k3s-arg (crescent C1)" \
     sh -c 'test "$(K3D_GPU_K3S_ARGS="--kubelet-arg=eviction-hard=nodefs.available<1% --disable=traefik" bash "$1" create-args)" = "--k3s-arg --kubelet-arg=eviction-hard=nodefs.available<1%@server:* --k3s-arg --disable=traefik@server:*"' _ "${ROOT}/bench/zero-copy-models/probe.sh"
+check "zero-copy-models (H28x R1): run creates WORK; a WORK it cannot write stops before the lock, load and cluster" \
+    "${ROOT}/tests/zero_copy_workdir_test.sh"
 check "crescent (H56): hold.sh locks, slotted gate and scoped cleanup (no skips)" \
     env CRESCENT_HOLD_STRICT=1 "${ROOT}/tests/crescent_hold_test.sh"
 check "crescent (H56): serving slot covariate, lockwait and the H56 scorer" \
