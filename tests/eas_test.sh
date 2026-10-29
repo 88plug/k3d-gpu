@@ -24,9 +24,11 @@
 #            and write no file. Also: the generator runs on the Python standard library
 #            alone (python3 -S), its outputs parse as YAML of the declared shape, a
 #            floating ref is refused, malformed facts exit 2, a refusal or a second run
-#            leaves no stale file of an earlier run, --explain prints permalinks, every
-#            source it can cite is a permalink at a full commit SHA, and pins.json has
-#            the k3d-gpu.eas-pins/v1 shape.
+#            leaves no stale file of an earlier run, a KV cache lowered to fit's carries
+#            fit's --max-model-len, NFD is left to EI only under the release name EI's
+#            role looks for, --explain prints permalinks, every source it can cite is
+#            a permalink at a full commit SHA, and pins.json has the k3d-gpu.eas-pins/v1
+#            shape.
 # Needs bash, git, python3 (with PyYAML, for the config section's shape checks only).
 
 set -uo pipefail
@@ -498,6 +500,12 @@ me = yaml.safe_load(open(os.path.join(out, "models.edit.yaml")))
 assert set(me) == {"defaults", "models"} and isinstance(me["defaults"]["require_amx"], bool), f"models edit: {me!r}"
 for m in me["models"]:
     assert isinstance(m["name"], str) and all(isinstance(v, str) for v in m["env"].values()), f"models edit entry: {m!r}"
+    assert set(m) <= {"name", "env", "args_append"}, f"models edit entry: {m!r}"
+    # fit's KV cache holds a request only up to fit's context: a lowered KV cache always
+    # comes with that --max-model-len, or vLLM takes the model's own context and stops.
+    if "VLLM_CPU_KVCACHE_SPACE" in m["env"]:
+        a = m.get("args_append") or []
+        assert len(a) == 2 and a[0] == "--max-model-len" and a[1].isdigit(), f"KV cache without --max-model-len: {m!r}"
 (rf,) = glob.glob(os.path.join(out, "repos.*.yaml"))
 rp = yaml.safe_load(open(rf))
 for r in rp["repos"]:
@@ -574,6 +582,52 @@ PY
     else
         fail "malformed k3s.io/node-args: rc=${rc}: $(cat "${WORK}/badargs.err")"
     fi
+    # fit sizes the KV cache for its own --max-model-len; a lowered KV cache carries that
+    # context (16384 here, not a constant), and a fit document without one is malformed.
+    python3 - "${FIXTURES}/desktop-i9-13900T/facts.json" "${WORK}/ctx16k.json" "${WORK}/noctx.json" <<'PY'
+import json, sys
+f = json.load(open(sys.argv[1]))
+doc = f["fit"]["Qwen/Qwen2.5-Coder-7B-Instruct"]
+doc["flags"] = ["--max-model-len=16384", "--max-num-seqs=1", "VLLM_CPU_KVCACHE_SPACE=1"]
+json.dump(f, open(sys.argv[2], "w"))
+doc["flags"] = ["--max-num-seqs=1", "VLLM_CPU_KVCACHE_SPACE=1"]
+json.dump(f, open(sys.argv[3], "w"))
+PY
+    gen --facts "${WORK}/ctx16k.json" --out "${WORK}/ctx16k" --layer agent-toolkit > /dev/null 2> "${WORK}/ctx16k.err" && rc=0 || rc=$?
+    if [ "${rc}" -eq 0 ] && shape=$(python3 - "${WORK}/ctx16k/models.edit.yaml" <<'PY' 2>&1
+import sys, yaml
+m = yaml.safe_load(open(sys.argv[1]))["models"]
+assert m == [{"name": "qwen2-5-coder-7b", "env": {"VLLM_CPU_KVCACHE_SPACE": "1"},
+              "args_append": ["--max-model-len", "16384"]}], m
+PY
+    ); then
+        ok "a lowered KV cache carries fit's own --max-model-len"
+    else
+        fail "fit at --max-model-len=16384 (rc=${rc}): ${shape:-} $(cat "${WORK}/ctx16k.err")"
+    fi
+    gen --facts "${WORK}/noctx.json" --out "${WORK}/noctx" --layer agent-toolkit > /dev/null 2> "${WORK}/noctx.err" && rc=0 || rc=$?
+    if [ "${rc}" -eq 2 ] && grep -q 'no --max-model-len' "${WORK}/noctx.err" && [ ! -e "${WORK}/noctx" ]; then
+        ok "a fit KV cache without --max-model-len exits 2 and writes nothing"
+    else
+        fail "a fit KV cache without --max-model-len: rc=${rc}: $(cat "${WORK}/noctx.err")"
+    fi
+    # EI's NFD role skips only a Helm release named node-feature-discovery. NFD installed
+    # the way NFD's own docs name it (release nfd) is not that, so EI would add a second.
+    python3 - "${FIXTURES}/desktop-i9-13900T/facts.json" "${WORK}/nfdhelm.json" <<'PY'
+import json, sys
+f = json.load(open(sys.argv[1]))
+(d,) = [d for d in f["daemonsets"] if d["namespace"] == "node-feature-discovery"]
+d["annotations"] = {"meta.helm.sh/release-name": "nfd", "meta.helm.sh/release-namespace": "node-feature-discovery"}
+json.dump(f, open(sys.argv[2], "w"))
+PY
+    gen --facts "${WORK}/nfdhelm.json" --out "${WORK}/nfdhelm" --layer inference > "${WORK}/nfdhelm.out" 2>&1 && rc=0 || rc=$?
+    if [ "${rc}" -eq 0 ] && grep -qx 'nfd_enabled: false' "${WORK}/nfdhelm/k3d-gpu-overrides.yaml" \
+       && grep -q '^DaemonSet node-feature-discovery/nfd-worker from Helm release nfd -> nfd_enabled: false' "${WORK}/nfdhelm.out"; then
+        ok "NFD from a Helm release other than node-feature-discovery: nfd_enabled false"
+    else
+        fail "NFD from Helm release nfd (rc=${rc}): $(grep -i nfd "${WORK}/nfdhelm.out")"
+    fi
+
     # Facts of another schema are an input error, not a refusal.
     printf '{"schema": "k3d-gpu.eas-facts/v0", "cluster": "x", "nodes": []}\n' > "${WORK}/old.json"
     gen --facts "${WORK}/old.json" --out "${WORK}/old" > /dev/null 2> "${WORK}/old.err" && rc=0 || rc=$?

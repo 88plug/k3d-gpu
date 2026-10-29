@@ -6,3 +6,4 @@ models:
   - name: "llama-3-1-8b"
     env:
       VLLM_CPU_KVCACHE_SPACE: "8"
+    args_append: ["--max-model-len", "32768"]

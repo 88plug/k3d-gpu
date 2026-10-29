@@ -17,6 +17,7 @@ gpu.intel.com/xe allocatable 1 -> kubernetes_accelerator: cpu (serve the device 
 no agent-sandbox CRD -> agent_sandbox_enabled: true (EAT installs agent-sandbox v0.5.0) [intel/enterprise-agent-toolkit@036b662 config.yaml:56]
 --model qwen2-5-coder-14b -> llm_services_autodeploy_models: [qwen2-5-coder-14b] [intel/enterprise-agent-toolkit@036b662 config.yaml:32-35]
 k3d-gpu fit Qwen/Qwen2.5-Coder-14B-Instruct --engine vllm --device cpu sizes the KV cache at 20 GiB -> qwen2-5-coder-14b env.VLLM_CPU_KVCACHE_SPACE: 20 (catalog 40) [intel/enterprise-inference@3e8a244 model_manager/models.yaml:302-311]
+k3d-gpu fit sized qwen2-5-coder-14b's 20 GiB KV cache for --max-model-len 32768 -> qwen2-5-coder-14b args_append: --max-model-len 32768 (the catalog sets no --max-model-len, and vLLM will not start when one request at max_model_len does not fit the KV cache) [vllm-project/vllm@2cf0a69 vllm/v1/core/kv_cache_utils.py:747-767]
 EAT default -> guardrails_enabled: on (Qwen3Guard, 16 GiB of the budget) [intel/enterprise-agent-toolkit@036b662 config.yaml:25-26]
 EAT default -> hybrid_router_enabled: on (2 GiB of the budget) [intel/enterprise-agent-toolkit@036b662 config.yaml:27-28]
 pin ei main (profile main) -> repos.agent-toolkit.yaml inference rev: 3e8a24486b6ee812adf2bf452f8ba5751c16c8bd [intel/enterprise-ai-solutions@97f6157 configs/repos/repos.agent-toolkit.yaml:12]

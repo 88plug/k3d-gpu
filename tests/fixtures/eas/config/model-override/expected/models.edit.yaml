@@ -6,3 +6,4 @@ models:
   - name: "qwen2-5-coder-14b"
     env:
       VLLM_CPU_KVCACHE_SPACE: "20"
+    args_append: ["--max-model-len", "32768"]
