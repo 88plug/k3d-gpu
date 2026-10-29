@@ -15,3 +15,13 @@ the full branch history is on its `archive/*` tag.
 | [`tseries-envelope/`](tseries-envelope/) | `archive/invent-tseries-envelope` | Power envelope of the i9-13900T host and a benchmark run-length rule | `python3 test_envelope_model.py` |
 
 `tests/bench_test.sh` runs all four test entry points in CI.
+
+## Research records
+
+Records a campaign cites, kept so its citations resolve. They are evidence, not models, and
+nothing in them runs in CI.
+
+| Directory | What it is | Cited from |
+|-----------|------------|------------|
+| [`model-cards/`](model-cards/) | The 2026-10-20 model-card digest (`REFERENCE.md`) of 24 Hub repos for Gemma-4-26B-A4B, Qwen3.8-27B and Qwen3.8-Flash-Next, with the files it read and its probes | `EXPERIMENTS.md` crescent amendment M1 and the H53 pre-registration, `bench/models/qat_grid.py`, `console/model_opt.py` |
+| [`dialectic/`](dialectic/) | The 2026-10-20 design records C1gate to D4 and the review of #157 | #157, #161, #164, #165, #168, #183 |

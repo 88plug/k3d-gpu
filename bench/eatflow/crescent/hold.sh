@@ -112,11 +112,15 @@ stop_if_signalled
 python3 "${HERE}/serving.py" "${R}/serving.jsonl" 7>&- 8>&- 9>&- &
 sp=$!
 log "start: $*"
+# GNU timeout: on a TERM it forwards, it exits with CMD's own status (143 when CMD dies of
+# it). Ubuntu 26.04's default timeout (uutils 0.10.0) exits 124 there once -k is given, so
+# the GNU build it ships as gnutimeout is used where present.
+TO=$(command -v gnutimeout || echo timeout)
 # setsid execs in place, so ${cp} leads CMD's own process group. No child keeps fd 9.
 if [ -n "${HOLD_SLOT:-}" ]; then
-setsid env K3DGPU_HOLD="${TAG}" K3DGPU_HOLD_RUNS="${B}/runs" timeout -k 30 "${cap}" taskset -c "${SLOT_CPUS}" "$@" > "${R}/hold.log" 2>&1 7>&- 8>&- 9>&- &
+setsid env K3DGPU_HOLD="${TAG}" K3DGPU_HOLD_RUNS="${B}/runs" "${TO}" -k 30 "${cap}" taskset -c "${SLOT_CPUS}" "$@" > "${R}/hold.log" 2>&1 7>&- 8>&- 9>&- &
 else
-setsid env K3DGPU_HOLD="${TAG}" K3DGPU_HOLD_RUNS="${B}/runs" timeout -k 30 "${cap}" "$@" > "${R}/hold.log" 2>&1 9>&- &
+setsid env K3DGPU_HOLD="${TAG}" K3DGPU_HOLD_RUNS="${B}/runs" "${TO}" -k 30 "${cap}" "$@" > "${R}/hold.log" 2>&1 9>&- &
 fi
 cp=$!
 [ -z "${sig:-}" ] || kill -TERM "${cp}"

@@ -1,0 +1,48 @@
+{
+  "dtype": "int4",
+  "input_info": null,
+  "optimum_version": "2.4.0.dev0",
+  "output_attentions": false,
+  "quantization_config": {
+    "_dataset_kwargs": {},
+    "dataset": null,
+    "default_config": {
+      "quant_method": "default"
+    },
+    "ignored_scope": null,
+    "num_samples": null,
+    "processor": "/nfs/ov-share-01/data/cv_bench_cache/NATIVE_GEN-AI_MODELS/gemma-4-26b-a4b-it/pytorch/NATIVE",
+    "quantization_configs": {
+      "lm_model": {
+        "_dataset_kwargs": {},
+        "all_layers": null,
+        "backup_precision": null,
+        "bits": 4,
+        "dataset": null,
+        "dq_group_size": 64,
+        "dtype": "int4",
+        "gptq": null,
+        "group_size": 64,
+        "group_size_fallback": "adjust",
+        "ignored_scope": {
+          "patterns": [
+            ".*router.*"
+          ]
+        },
+        "lora_correction": null,
+        "num_samples": null,
+        "processor": "/nfs/ov-share-01/data/cv_bench_cache/NATIVE_GEN-AI_MODELS/gemma-4-26b-a4b-it/pytorch/NATIVE",
+        "quant_method": "awq",
+        "ratio": 1.0,
+        "scale_estimation": null,
+        "sensitivity_metric": null,
+        "statistics_path": null,
+        "sym": false,
+        "tokenizer": "/nfs/ov-share-01/data/cv_bench_cache/NATIVE_GEN-AI_MODELS/gemma-4-26b-a4b-it/pytorch/NATIVE"
+      }
+    },
+    "tokenizer": "/nfs/ov-share-01/data/cv_bench_cache/NATIVE_GEN-AI_MODELS/gemma-4-26b-a4b-it/pytorch/NATIVE"
+  },
+  "save_onnx_model": false,
+  "transformers_version": "5.5.4"
+}
