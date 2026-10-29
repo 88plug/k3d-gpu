@@ -165,6 +165,17 @@ jobs:
           done
           { echo "ctk=$ctk"; echo "runtime=$rt"; } >> "$GITHUB_OUTPUT"
 
+      # ─── 4b. kobuk-team PPA builds (host-setup's Ubuntu media/gmmlib pins) ─
+      - name: Get current kobuk-team PPA builds
+        id: ppa
+        run: |
+          # host-setup installs the PPA's media driver, libva and gmmlib by exact
+          # version, and the PPA serves only its current build of each: a pin it has
+          # superseded no longer installs. hack/ppa-pins prints the HS_PPA_* lines for
+          # its current noble and resolute builds, and fails when one pin cannot
+          # cover both releases.
+          hack/ppa-pins | tee -a "$GITHUB_OUTPUT"
+
       - name: Read current pinned versions
         id: current
         run: |
@@ -180,6 +191,7 @@ jobs:
             echo "testcuda=$ti"
             echo "nvctk=$(grep '^ARG NVIDIA_CTK_VERSION' Dockerfile | cut -d= -f2 | tr -d '"')"
             echo "nvrt=$(grep '^ARG NVIDIA_CONTAINER_RUNTIME_VERSION' Dockerfile | cut -d= -f2 | tr -d '"')"
+            grep '^HS_PPA_' scripts/k3d-gpu
           } >> "$GITHUB_OUTPUT"
 
       - name: Determine if a release is needed
@@ -195,7 +207,10 @@ jobs:
              [ "${{ steps.gaudi_plugin.outputs.latest }}" != "${{ steps.current.outputs.gaudi }}" ] || \
              [ "${{ steps.cuda.outputs.latest }}" != "${{ steps.current.outputs.testcuda }}" ] || \
              [ "${{ steps.nvctk.outputs.ctk }}" != "${{ steps.current.outputs.nvctk }}" ] || \
-             [ "${{ steps.nvctk.outputs.runtime }}" != "${{ steps.current.outputs.nvrt }}" ]; then
+             [ "${{ steps.nvctk.outputs.runtime }}" != "${{ steps.current.outputs.nvrt }}" ] || \
+             [ "${{ steps.ppa.outputs.HS_PPA_MEDIA }}" != "${{ steps.current.outputs.HS_PPA_MEDIA }}" ] || \
+             [ "${{ steps.ppa.outputs.HS_PPA_GMM }}" != "${{ steps.current.outputs.HS_PPA_GMM }}" ] || \
+             [ "${{ steps.ppa.outputs.HS_PPA_LIBVA }}" != "${{ steps.current.outputs.HS_PPA_LIBVA }}" ]; then
             changed=true
           fi
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
@@ -212,6 +227,8 @@ jobs:
           sed -i "s|^ARG K3S_DIGEST=.*|ARG K3S_DIGEST=\"${{ steps.k3s.outputs.digest }}\"|" Dockerfile
           sed -i "s|^ARG NVIDIA_CTK_VERSION=.*|ARG NVIDIA_CTK_VERSION=\"${{ steps.nvctk.outputs.ctk }}\"|" Dockerfile
           sed -i "s|^HS_NVCTK=.*|HS_NVCTK=${{ steps.nvctk.outputs.ctk }}|" scripts/k3d-gpu
+          # The PPA pins in the launcher and the README host-setup table.
+          hack/ppa-pins --write scripts/k3d-gpu README.md
           sed -i "s|^ARG NVIDIA_CONTAINER_RUNTIME_VERSION=.*|ARG NVIDIA_CONTAINER_RUNTIME_VERSION=\"${{ steps.nvctk.outputs.runtime }}\"|" Dockerfile
           sed -i "s|k8s-device-plugin:v[0-9]*\.[0-9]*\.[0-9]*|k8s-device-plugin:${{ steps.nvidia_plugin.outputs.latest }}|" share/nvidia-device-plugin.yml
           sed -i "s|intel-gpu-plugin:[0-9]*\.[0-9]*\.[0-9]*|intel-gpu-plugin:${{ steps.intel_plugin.outputs.latest }}|" share/intel-gpu-plugin.yml
