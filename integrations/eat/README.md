@@ -64,7 +64,7 @@ that off the host.
 | `gateway-charts.py` | writes pinned copies of EAT's GenAI Gateway chart directories; `brownfield.sh` passes them to `deploy-genai-gateway.yml` |
 | `gateway-values.yaml` | the gateway chart's pins: postgresql and redis chart versions, LiteLLM, PostgreSQL, Redis and init images by digest |
 | `gateway-trace-values.yaml` | the Langfuse trace stack's pins: Langfuse web and worker, PostgreSQL, Valkey, ClickHouse, ZooKeeper, MinIO by digest |
-| `eat-check.sh` | the end-state check below |
+| `eat-check.sh` | the end-state check below; with `EAT_MODE=eas` it checks EAS's agent toolkit instead (`k3d-gpu eas check`, see `../eas/README.md`) |
 
 `tests/eat_test.sh` runs `eat-check.sh` against stub `kubectl` and `curl`
 (no cluster) and checks that every script here is committed executable.

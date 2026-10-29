@@ -35,6 +35,11 @@ done
 for f in vs.py llm_load.py competitors.lock; do
     test "$(sha256sum < "/src/bench/$f")" = "$(sha256sum < "/usr/share/k3d-gpu/bench/$f")"
 done
+for f in /src/integrations/eas/* /src/integrations/eas/patches/* /src/integrations/eat/upstream/patches/*.patch; do
+    [ -d "$f" ] || test "$(sha256sum < "$f")" = "$(sha256sum < "/usr/share/k3d-gpu/${f#/src/}")"
+done
+test -x /usr/share/k3d-gpu/integrations/eas/eas.sh
+test -x /usr/share/k3d-gpu/integrations/eat/eat-check.sh
 k3d-gpu help | grep -F "/usr/share/k3d-gpu/nvidia-device-plugin.yml" >/dev/null
 test -x /usr/bin/k3d-gpu
 test -x /usr/bin/k3d-gpu-mcp

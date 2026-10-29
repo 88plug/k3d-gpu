@@ -1,0 +1,53 @@
+{
+  "schema": "k3d-gpu.eas-known-issues/v1",
+  "issues": [
+    {
+      "id": "eas-teardown-aigatewayroute-finalizer",
+      "upstream": "https://github.com/intel/enterprise-ai-solutions/issues/71",
+      "symptom": "teardown platform hangs at 'envoy_ai_gateway | Uninstall CRDs Helm release' while a model's AIGatewayRoute still carries aigateway.envoyproxy.io/finalizer: the role strips finalizers only after the controller and the CRDs are gone",
+      "workaround": "k3d-gpu eas down sets the finalizers of every AIGatewayRoute to [] before it runs teardown platform --force (the issue's own workaround)",
+      "source": "https://github.com/intel/enterprise-ai-solutions/issues/71 (open); https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/roles/envoy_ai_gateway/tasks/teardown.yaml",
+      "checked": "2026-10-29"
+    },
+    {
+      "id": "ei-require-amx-pending",
+      "upstream": "https://github.com/intel/enterprise-inference",
+      "symptom": "model pods stay Pending on a node without feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true: models.yaml defaults.require_amx is true and the renderer turns it into a required node affinity on that label",
+      "workaround": "eas-config.py writes defaults.require_amx to env/k3d-gpu/models.yaml from the nodes' AMXBF16 label (false without it)",
+      "source": "https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/model_manager/models.yaml#L20; https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/model_manager/core/renderer.py#L90-L104",
+      "checked": "2026-10-29"
+    },
+    {
+      "id": "eas-kubectl-skew",
+      "upstream": "https://github.com/intel/enterprise-ai-solutions",
+      "symptom": "es_auto_installer.sh configure installs kubectl v1.34.3, three minors behind a k3d-gpu cluster's v1.37 API server, outside kubectl's supported skew of one minor",
+      "workaround": "the bastion bakes kubectl v1.37.2, the minor of the node image's K3S_TAG, and configure is never run",
+      "source": "https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/es_auto_installer.sh#L52; https://kubernetes.io/releases/version-skew-policy/#kubectl",
+      "checked": "2026-10-29"
+    },
+    {
+      "id": "eat-inotify-minimum",
+      "upstream": "https://github.com/intel/enterprise-agent-toolkit",
+      "symptom": "with fs.inotify.max_user_instances at the kernel default of 128, file watchers in the stack's pods fail with 'too many open files'",
+      "workaround": "eas up warns below 8192 instances or 1048576 watches and prints the sysctl lines; the host is never changed",
+      "source": "https://github.com/intel/enterprise-agent-toolkit/blob/036b66234801e9bd950afd90830821859780d668/docs/prerequisites.md#L20-L33",
+      "checked": "2026-10-29"
+    },
+    {
+      "id": "eat-48-core-minimum",
+      "upstream": "https://github.com/intel/enterprise-agent-toolkit",
+      "symptom": "the agent toolkit's documented minimum is 48 cores (96+ recommended); smaller nodes run it with less CPU for the model than the defaults assume",
+      "workaround": "eas up warns when the node has fewer than 48 allocatable CPUs",
+      "source": "https://github.com/intel/enterprise-agent-toolkit/blob/036b66234801e9bd950afd90830821859780d668/docs/prerequisites.md#L7",
+      "checked": "2026-10-29"
+    },
+    {
+      "id": "ei-skip-models-flag",
+      "upstream": "https://github.com/intel/enterprise-inference",
+      "symptom": "the inference docs say './es_auto_installer.sh install inference --skip-models', but es_auto_installer.sh rejects any option it does not know ('Unknown option: --skip-models')",
+      "workaround": "none needed on the inference layer: EI's seeded config.yaml already sets llm_services_deploy_models: false. On the agent toolkit, EAT's chat model deploys whatever that key says; 'k3d-gpu eas up --agent-toolkit -- -e '{\"llm_services_autodeploy_models\": []}'' skips it (the guard model stays while the guardrail is on)",
+      "source": "https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/config.yaml#L94-L98; https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/roles/llm_services/tasks/install.yaml#L143-L161; https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/es_auto_installer.sh#L1312",
+      "checked": "2026-10-29"
+    }
+  ]
+}

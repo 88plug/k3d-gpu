@@ -1,4 +1,4 @@
-audit FAIL: 1 of 10 checks failed (images.lock: 55 images, k3s v1.37.1-k3s1)
+audit FAIL: 1 of 10 checks failed (images.lock: 57 images, k3s v1.37.1-k3s1)
 ok   listener 0.0.0.0:39651 kube-apiserver: off loopback, auth client-cert (docker port 6443/tcp on k3d-gpu-server-0)
 FAIL image docker.io/intel/intel-gpu-plugin:0.37.1: docker.io/intel/intel-gpu-plugin is sha256:2222222222222222222222222222222222222222222222222222222222222222, images.lock pins sha256:004641b2547d58f1eadce58473fa160ad71377de1eb588cf1f82832387bf3e33 (tag 0.37.1); on k3d-gpu-server-0
      fix: redeploy from the pinned digest, or bump the pin with scripts/images-lock update
