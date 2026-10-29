@@ -4112,6 +4112,83 @@ ran at 09:26:26Z. S1 changes nothing that decides the verdict: its ranges are M1
 the holds, both serving pairs answered through `:8100` (`prehold/frontdoor-post.txt`, 10:07Z): :30000
 144 to 145, :30001 33 to 34.
 
+### Crescent amendment E4: kubectl v1.37.2, helm v4.3.1 and uv 0.13.6 in the crescent workspace (2026-10-29)
+
+Recorded 2026-10-29, after H50, H50o and H51 ran and before any H52b, H53 or H58 hold. Mechanics
+only. No hypothesis, arm, model, prediction, statistic, gate, threshold, seed or cap changes. It
+moves three of shared rule 5's tools, which
+[amendment E2](#crescent-amendment-e2-pins-deploy-commits-order-and-the-restore-check-for-the-pending-crescent-rows-2026-10-29)
+item 3 says takes a further amendment.
+
+**Why.**
+
+- Shared rule 5 pins kubectl v1.35.2, helm v4.1.1 and uv 0.8.0 in `~/k3dgpu-bench/bin`. The node
+  image these rows run (0.1.61, E2 item 1) carries k3s v1.37.1. kubectl supports one minor version
+  of skew against its API server, so v1.35 against v1.37 is outside it.
+- The newest releases on 2026-10-29: kubectl v1.37.2 (dl.k8s.io `stable.txt`, released
+  2026-10-28), helm v4.3.1 and uv 0.13.6 (released 2026-10-27). k3d v5.9.0 is still its newest
+  release and stays.
+
+**The change.**
+
+1. `bench/eatflow/crescent/setup.sh` installs kubectl v1.37.2, helm v4.3.1 and uv 0.13.6, each
+   checked against its upstream checksum as before. The sha256 values read on 2026-10-29: kubectl
+   `c0448752...f8f4`, the helm tarball `0403a88a...e54b`, the uv tarball `f29c3e94...3645`.
+2. **When.** setup.sh runs once on crescent, from a deploy commit at or after this amendment's
+   merge (E2 item 2), under the bench lock, before the first hold of any row this amendment
+   covers. It runs after H52b's hold if H52b comes first, as in the current order. If a covered
+   row comes first, H52b runs on these tools and its records name them. setup.sh's output (the
+   checksum lines and the four versions) goes into the next hold's records.
+3. **The banking venv.** uv 0.13 will not overwrite an existing venv: `uv venv` without `--clear`
+   exits 2. So setup.sh now keeps an existing `mafvenv` and only re-checks its packages against
+   `banking-venv.txt`. The venv on crescent, built with uv 0.8.0, stays as it is: over a venv built
+   the same way, uv 0.13.6 checks the 71 packages and installs nothing. On a fresh host, uv 0.13.6
+   builds the venv on a later python-build-standalone build of Python 3.12.11 (2025-10-07 instead
+   of 2025-07-11), with the same 71 packages: its `uv pip freeze` equals uv 0.8.0's and
+   `banking-venv.txt`. Both were checked on 2026-10-29, as was a second setup.sh run over a first.
+4. **Rows.** H53 and H58, and every later crescent row that runs on these shared rules (H59 and
+   H60 are pre-registered in open PRs). H52b only as item 2 says. Not the rows that have run.
+5. **H54q.** H54q runs from `~/k3dgpu-gemma/bin`, with H54a's kubectl v1.35.2 and helm v4.1.1,
+   which setup.sh does not touch. Its runner amendment
+   ([amendment Q1](#h54-amendment-q1-h54qs-reference-arm-hold-cap-and-order-2026-10-29)) names its
+   tools. The render check below covers H54's two EAT renders, so moving them there changes no
+   object.
+
+**Render check, helm v4.1.1 against v4.3.1.** Done 2026-10-29, as
+[amendment E1](#crescent-amendment-e1-eat-stock-is-release-110-for-h50-h50o-and-h51-2026-10-29)
+item 3 did for B1. Each chart was rendered with the runner's own command and values:
+
+- H53's B2: `live.sh`'s solo B2 render of release-1.1.0's `core/helm-charts/vllm` (the
+  `c86c42b` tree in `eat-pr21`), with `xpu-values.yaml`, B2's tag pin,
+  `LLM_MODEL_ID=Qwen/Qwen3.6-27B` and TP 4. 5 objects.
+- H54's `eat-vllm`, which B1g and the arms derived from it use: `0d3438d`'s vllm chart with B1g's
+  values. 6 objects.
+- H54's `eat-ovms`, and `live.sh`'s B3: `0d3438d`'s ovms chart. 4 objects.
+
+In each one the two helm versions render the same objects, parsed and compared. The texts differ
+only in blank lines and trailing whitespace that helm v4.3.1 keeps at the end of some templates.
+After `bench/apb/stage.py`, H53's staged B2 (`stage.py xpu`) and the staged B1g (`stage.py vllm`)
+are byte-identical across the two versions.
+
+**Not changed.**
+
+- `EAT_REV` in setup.sh stays `0d3438d` (release-1.0.3-hotfix). `~/k3dgpu-bench/eat-src` at that
+  commit serves one thing: the OVMS chart of H50o's B3 (`pairs-hold.sh`), a row that has run. No
+  pending row renders from it. The LiteLLM gateway that every arm shares is not rendered from
+  EAT's genai-gateway chart. `live.sh` runs the chart's image as a container with its own
+  one-model config. Release-1.1.0, EAT's latest release on 2026-10-29, pins the same image tag,
+  `docker.litellm.ai/berriai/litellm:v1.83.14-stable.patch.2`. The tag still serves the index
+  digest `live.sh` pins (`73cbb215...`, read 2026-10-29). So the gateway is already release-1.1.0's,
+  and the "0d3438d
+  genai-gateway pin" of E1 item 5 names that same image.
+- k3d v5.9.0, the node image, Python 3.12.11 and the banking venv's pins. Those pins are the
+  blueprint's own, and EAB v1.0.0 is still its latest release.
+
+**Predictions.** None is edited.
+
+**Disclosed.** Written with the predictions of the covered rows in view and before any of their
+data existed.
+
 ### H53 pre-registration: EAT's banking flow on Arc Pro B70 (2026-10-20)
 
 Written 2026-10-20, before any H53 measurement and before either H53 arm has run on a GPU. The
