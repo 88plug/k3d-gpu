@@ -48,6 +48,7 @@ Python standard library only.
 """
 
 import argparse
+import bisect
 import glob
 import json
 import math
@@ -812,10 +813,10 @@ def kv_profile(cfg, kv_bytes, engine=None):
     heads = tc.get("num_attention_heads")
     kvh = tc.get("num_key_value_heads") or heads
     hd = tc.get("head_dim") or tc["hidden_size"] // heads
-    full = sum(1 for t in types if t == "full_attention")
-    swa = sum(1 for t in types if t in ("sliding_attention", "sliding_window_attention", "local_attention"))
-    lin = sum(1 for t in types if t in ("linear_attention", "mamba", "gated_delta_net"))
-    full += len(types) - full - swa - lin  # an unknown layer type counts as full attention (upper bound)
+    # an unknown layer type counts as full attention (upper bound)
+    kinds = ["swa" if t in ("sliding_attention", "sliding_window_attention", "local_attention") else
+             "linear" if t in ("linear_attention", "mamba", "gated_delta_net") else "full" for t in types]
+    full, swa, lin = kinds.count("full"), kinds.count("swa"), kinds.count("linear")
     gkvh = tc.get("num_global_key_value_heads") or kvh
     ghd = tc.get("global_head_dim") or hd
     lines = []
@@ -855,7 +856,7 @@ def kv_profile(cfg, kv_bytes, engine=None):
                      " = %s per sequence, any length" % (lin, vh, kd, vd, ssm_b, ck, ch, _mb(state)))
     return {"full_layers": full, "full_per_token": full * (per_full + idx), "swa_layers": swa,
             "swa_per_token": swa * per_swa, "window": window, "swa_cache": swa_cache, "linear_layers": lin,
-            "state_per_seq": state, "kv_heads": gkvh, "lines": lines}
+            "state_per_seq": state, "kv_heads": gkvh, "kinds": kinds, "lines": lines}
 
 
 def _pad(n, to):
@@ -1057,6 +1058,113 @@ def per_seq(kv, ctx, scale=1.0):
                + kv["state_per_seq"] * scale)
 
 
+def kv_parts(kv, ctx):
+    """(full attention, sliding window, linear state) KV bytes of one sequence at context ctx."""
+    return kv["full_per_token"] * ctx, kv["swa_per_token"] * min(ctx, kv["window"] or ctx), kv["state_per_seq"]
+
+
+# ---- llama.cpp over several GPUs ----------------------------------------------------------
+def llama_layer_devices(ts, n_layer):
+    """Device of each repeating layer and of the output layer (the last entry), as llama.cpp
+    b11749 assigns them with -ngl past the layer count (src/llama-model.cpp load_tensors):
+    upper_bound(cumsum(ts) / sum(ts), il / (n_layer + 1)). Integer layer counts summing to
+    n_layer + 1 give each device exactly its count, the output layer on the last one."""
+    total, cum, splits = float(sum(ts)), 0.0, []
+    for t in ts:
+        cum += t
+        splits.append(cum / total)
+    return [bisect.bisect_right(splits, il / (n_layer + 1)) for il in range(n_layer + 1)]
+
+
+def llama_layer_bytes(m, kv, ctx, seqs, n_cpu_moe):
+    """([weights], [KV]) on the GPU per repeating layer, the output layer last: the class
+    totals spread evenly over the layers, the experts of the first n_cpu_moe layers in host
+    RAM (--n-cpu-moe), and each layer's own KV (its device holds it) for seqs sequences.
+    The output layer holds lm_head, and the MTP and vision tensors when the GGUF has them."""
+    n = max(m["layers"], 1)
+    exp, other = m["bytes"]["experts"] / n, m["bytes"]["other"] / n
+    f, w, st = kv_parts(kv, ctx)
+    per = {"full": f / max(kv["full_layers"], 1), "swa": w / max(kv["swa_layers"], 1),
+           "linear": st / max(kv["linear_layers"], 1)}
+    kinds = kv.get("kinds") or []
+    wl = [other + (exp if il >= n_cpu_moe else 0) for il in range(n)]
+    kl = [per[kinds[il]] * seqs if il < len(kinds) else 0 for il in range(n)]
+    return wl + [m["bytes"]["lm_head"] + m["bytes"]["mtp"] + m["bytes"]["vision"]], kl + [0]
+
+
+def llama_split(layer_bytes, k, room):
+    """-ts for k cards as integer layer counts (the last card's count includes the output
+    layer) that keep every card's layers within room bytes, its largest load as small as it
+    can be; None when no split does."""
+    last = len(layer_bytes) - 1
+
+    def fill(cap):
+        ts, i = [], 0
+        for _ in range(k - 1):
+            start, used = i, 0
+            while i < last and used + layer_bytes[i] <= cap:
+                used += layer_bytes[i]
+                i += 1
+            ts.append(i - start)
+        if sum(layer_bytes[i:]) > cap:
+            return None
+        return ts + [len(layer_bytes) - i]
+
+    if fill(room) is None:
+        return None
+    lo, hi = max(layer_bytes), room
+    while hi - lo > MIB:
+        mid = (lo + hi) / 2
+        lo, hi = (lo, mid) if fill(mid) else (mid, hi)
+    return fill(hi)
+
+
+def llama_cards(ts, layer_bytes):
+    """Each card's bytes for ts: the layers llama_layer_devices puts on it."""
+    out = [0] * len(ts)
+    for il, dev in enumerate(llama_layer_devices(ts, len(layer_bytes) - 1)):
+        out[dev] += layer_bytes[il]
+    return out
+
+
+def _llama_search(m, kv, ladder, relaxed, want_seqs, k, room, n_cpus):
+    """(ctx, seqs, n_cpu_moe, ts) for llama.cpp on k cards of room bytes each: the most
+    context at which TARGET_SEQS (or want_seqs) sequences fit, then the fewest layers whose
+    experts leave the GPU (from n_cpus), then as many sequences as fit (capped at MAX_SEQS).
+    relaxed: at the ladder's last rung one sequence is enough. None when nothing fits."""
+    for ctx in ladder:
+        need = want_seqs or (1 if relaxed and ctx == ladder[-1] else TARGET_SEQS)
+        for n_cpu in n_cpus:
+            def split(n):
+                wl, kl = llama_layer_bytes(m, kv, ctx, n, n_cpu)
+                return llama_split([a + b for a, b in zip(wl, kl)], k, room)
+            if not split(need):
+                continue
+            n = want_seqs
+            if not n:
+                lo, hi = need, MAX_SEQS
+                if split(hi):
+                    lo = hi
+                while hi - lo > 1:
+                    mid = (lo + hi) // 2
+                    lo, hi = (mid, hi) if split(mid) else (lo, mid)
+                n = lo
+            return ctx, n, n_cpu, split(n)
+    return None
+
+
+def _llama_card_lines(use, ts, wl, kl, ov):
+    """One explain line per card of a llama.cpp split."""
+    lines, first = [], 0
+    for c, t, w, kvb in zip(use, ts, llama_cards(ts, wl), llama_cards(ts, kl)):
+        lines.append("  %s (-ts %d): layers %s, weights %s + KV %s + overhead %s = %s, budget %s"
+                     % (c["card"], t, "%d-%d" % (first, first + t - 1) if t else "none", g1(w), g1(kvb), g1(ov),
+                        g1(w + kvb + ov), g1(c["budget"])))
+        first += t
+    lines.append("  (layer %d is the output layer: lm_head)" % (len(wl) - 1))
+    return lines
+
+
 def ckpt_seq(kv, ctx):
     """Host bytes of one llama-server slot's context checkpoints at context ctx: kv["ckpts"]
     of them, each the slot's SWA cache (GGML_PAD(min(n_ctx_seq, n_swa + n_ubatch), 256)
@@ -1216,7 +1324,7 @@ def fit(host, cfg, weights, engine=None, ctx=None, seqs=None, gpus=None, kv_dtyp
         rung_kv.append(int(kb))
         rung_limit.append("%dGi" % int(math.ceil(hb * (1 + LIMIT_SLACK) / GIB)))
     doc.update({k: picked[k] for k in ("engine", "placement", "ctx", "seqs", "tp", "gpus", "gpu_bytes", "host_bytes",
-                                       "flags", "dram_tok_s", "note", "kv_bytes", "ckpt_bytes")})
+                                       "flags", "dram_tok_s", "note", "kv_bytes", "ckpt_bytes", "card_bytes")})
     doc["source"] = weights.get("source")
     doc["weight_bytes"] = weights.get("total_bytes") or m["serve_bytes"]
     if m["format"] == "gguf":
@@ -1262,7 +1370,7 @@ def _overhead(eng, m, seqs, override):
 def _res(eng, place, fits, why="", math_lines=(), **kw):
     r = {"engine": eng, "placement": place, "fits": fits, "why": why, "math": list(math_lines),
          "ctx": None, "seqs": 0, "tp": 1, "gpus": 0, "gpu_bytes": 0, "host_bytes": 0, "flags": [], "dram_tok_s": None,
-         "kv_bytes": 0, "kv_scale": 1.0, "ckpt_bytes": 0}
+         "kv_bytes": 0, "kv_scale": 1.0, "ckpt_bytes": 0, "card_bytes": []}
     r.update(kw)
     return r
 
@@ -1323,6 +1431,9 @@ def _placements(eng, m, kv, ladder, relaxed, want_seqs, want_gpus, cards, hfree,
                 yield _res(eng, place, False, "%d GPUs asked, %d not busy" % (k, len(cards)), gpus=k)
                 continue
             use = cards[:k]
+            if eng == "llama.cpp" and k > 1:
+                yield _llama_multi(m, kv, ladder, relaxed, want_seqs, use, ov, ovl, [0], on_host, hfree, bw)
+                continue
             if eng == "vllm":
                 # Every rank holds 1/k of the weights; KV heads split across ranks, or one
                 # per rank (replicated) with fewer KV heads than ranks.
@@ -1333,8 +1444,7 @@ def _placements(eng, m, kv, ladder, relaxed, want_seqs, want_gpus, cards, hfree,
                 lines = ["per card: budget %s - weights %s / %d - overhead %s = %s for KV"
                          % (g1(budget), g1(gpu_w_all), k, ovl, g1(max(left, 0)))]
             else:
-                # One card, or llama.cpp's layer split (-sm layer, the default): weights and
-                # KV spread over the cards in proportion to -ts; each card runs its own buffers.
+                # One card (llama.cpp on several is sized card by card in _llama_multi).
                 budget = sum(c["budget"] for c in use)
                 w = gpu_w_all
                 left = budget - w - ov * k
@@ -1366,66 +1476,19 @@ def _placements(eng, m, kv, ladder, relaxed, want_seqs, want_gpus, cards, hfree,
             gpu_use = int(w + ov + kvused) if eng == "vllm" else int((w + ov * k + kvused) / k)
             yield _res(eng, place, True, "", lines, ctx=c, seqs=n, tp=k if eng == "vllm" else 1, gpus=k,
                        gpu_bytes=gpu_use, host_bytes=hb, kv_bytes=int(kvused), kv_scale=scale, ckpt_bytes=ck,
+                       card_bytes=[gpu_use] * k,
                        flags=_flags(eng, place, c, n, k, gpu_use, use, kvused, m, 0, kv))
     # MoE experts to DRAM (llama.cpp --n-cpu-moe): every free card, fewest CPU layers.
     if eng == "llama.cpp" and cards and m["moe"]:
-        k = want_gpus or len(cards)
-        use = cards[:k]
-        budget = sum(c["budget"] for c in use)
-        exp_layer = m["bytes"]["experts"] / max(m["layers"], 1)
-        base = gpu_w_all - m["bytes"]["experts"]
-        lines = ["GPU (%s, budget %s) keeps %s non-expert weights + overhead %d x %s"
-                 % ("+".join(c["card"] for c in use), g1(budget), g1(base), k, ovl),
-                 "lookup tables %s in host RAM" % g1(on_host)]
+        use = cards[:want_gpus or len(cards)]
         if not (cpu["amx"] or cpu["avx512"]):
-            yield _res(eng, "moe-offload", False, "the CPU has neither AMX nor AVX-512 for expert compute", lines, gpus=k)
+            yield _res(eng, "moe-offload", False, "the CPU has neither AMX nor AVX-512 for expert compute", gpus=len(use))
         elif not bw:
             yield _res(eng, "moe-offload", False, "DRAM bandwidth unknown (no STREAM run cached, SMBIOS unreadable)",
-                       lines, gpus=k)
+                       gpus=len(use))
         else:
-            # Most context first (as everywhere), then the fewest layers whose experts leave the GPU.
-            best = None
-            for rung in ladder:
-                for n_cpu in range(1, m["layers"] + 1):
-                    gw = base + exp_layer * (m["layers"] - n_cpu)
-                    left = budget - gw - ov * k
-                    if left <= 0:
-                        continue
-                    c, n = size_kv(kv, left, [rung], want_seqs, 1.0, relaxed and rung == ladder[-1])
-                    if c:
-                        best = (n_cpu, gw, c, n)
-                        break
-                if best:
-                    break
-            if not best:
-                yield _res(eng, "moe-offload", False, "non-expert weights + KV do not fit %s of VRAM" % g1(budget),
-                           lines, gpus=k)
-            else:
-                n_cpu, gw, c, n = best
-                dram_w = exp_layer * n_cpu
-                read = dram_w * m["experts_per_tok"] / m["experts"]
-                toks = _dram_rate(bw, read)
-                lines.append("experts of the first %d of %d layers in DRAM: %s; on GPU %s"
-                             % (n_cpu, m["layers"], g1(dram_w), g1(gw)))
-                lines.append("DRAM decode bound: %g GB/s / (%s x %d/%d read per token) = %.0f tok/s (floor %g)"
-                             % (bw, g1(dram_w), m["experts_per_tok"], m["experts"], toks, MIN_DRAM_TOK_S))
-                kvused = per_seq(kv, c) * n
-                lines.append("KV: %d seqs x %s at %d tokens = %s on GPU" % (n, _mb(per_seq(kv, c)), c, g1(kvused)))
-                ck = ckpt_seq(kv, c) * n
-                hb = int(dram_w + on_host + HOST_RUNTIME[eng] + ck)
-                lines.append("host: experts %s + lookup tables %s + runtime %s + context checkpoints %d x %s = %s"
-                             % (g1(dram_w), g1(on_host), g1(HOST_RUNTIME[eng]), n, _mb(ckpt_seq(kv, c)), g1(hb)))
-                if toks < MIN_DRAM_TOK_S:
-                    yield _res(eng, "moe-offload", False, "DRAM bandwidth gives %.1f tok/s, under the %g floor"
-                               % (toks, MIN_DRAM_TOK_S), lines, gpus=k)
-                elif hb > hfree:
-                    yield _res(eng, "moe-offload", False, "DRAM side needs %s, host budget %s" % (g1(hb), g1(hfree)),
-                               lines, gpus=k)
-                else:
-                    gpu_use = int((gw + ov * k + kvused) / k)
-                    yield _res(eng, "moe-offload", True, "", lines, ctx=c, seqs=n, gpus=k, gpu_bytes=gpu_use,
-                               host_bytes=hb, dram_tok_s=round(toks, 1), kv_bytes=int(kvused), ckpt_bytes=ck,
-                               flags=_flags(eng, "moe-offload", c, n, k, gpu_use, use, kvused, m, n_cpu, kv))
+            yield _llama_multi(m, kv, ladder, relaxed, want_seqs, use, ov, ovl, range(1, m["layers"] + 1), on_host,
+                               hfree, bw)
     # CPU only: weights, KV and activations all in DRAM (vLLM: its CPU build, the KV
     # pool sized by VLLM_CPU_KVCACHE_SPACE, as EAT's vLLM chart sets it).
     if cpu_ok:
@@ -1463,7 +1526,54 @@ def _placements(eng, m, kv, ladder, relaxed, want_seqs, want_gpus, cards, hfree,
                    flags=_flags(eng, "cpu", c, n, 1, 0, [], kvused, m, 0, kv))
 
 
-def _flags(eng, place, ctx, seqs, k, gpu_use, cards, kvused, m, n_cpu_moe, kv=None):
+def _llama_multi(m, kv, ladder, relaxed, want_seqs, use, ov, ovl, n_cpus, on_host, hfree, bw):
+    """llama.cpp on the cards in use, each holding its own layers, their KV and its own
+    overhead within the smallest budget among them (the device plugin, not the fit, orders
+    the cards inside the pod): a layer split (n_cpus [0]) or experts in DRAM (n_cpus 1..)."""
+    k = len(use)
+    place = "gpu-split" if list(n_cpus) == [0] else "moe-offload"
+    budget = min(c["budget"] for c in use)
+    room = budget - ov
+    lines = ["%s: layer il on card upper_bound(cumsum(-ts) / sum, il / (layers + 1)) (src/llama-model.cpp); "
+             "each card: budget %s (the smallest of them) - overhead %s = %s for its layers"
+             % ("+".join(c["card"] for c in use), g1(budget), ovl, g1(max(room, 0)))]
+    if on_host:
+        lines.append("lookup tables %s stay in host RAM" % g1(on_host))
+    found = _llama_search(m, kv, ladder, relaxed, want_seqs, k, room, n_cpus) if room > 0 else None
+    if not found:
+        why = ("weights + KV for %d-token sequences do not fit %d card(s) of %s each, layer by layer"
+               % (ladder[-1], k, g1(budget)))
+        return _res("llama.cpp", place, False, why, lines, gpus=k)
+    c, n, n_cpu, ts = found
+    wl, kl = llama_layer_bytes(m, kv, c, n, n_cpu)
+    cards_b = [int(b + ov) for b in llama_cards(ts, [a + b for a, b in zip(wl, kl)])]
+    lines += _llama_card_lines(use, ts, wl, kl, ov)
+    kvused = per_seq(kv, c) * n
+    lines.append("KV: %d seqs x %s at %d tokens = %s over the cards" % (n, _mb(per_seq(kv, c)), c, g1(kvused)))
+    hb = int(HOST_RUNTIME["llama.cpp"] + on_host)
+    toks = None
+    if n_cpu:
+        exp_layer = m["bytes"]["experts"] / max(m["layers"], 1)
+        dram_w = exp_layer * n_cpu
+        toks = _dram_rate(bw, dram_w * m["experts_per_tok"] / m["experts"])
+        lines.append("experts of the first %d of %d layers in DRAM: %s" % (n_cpu, m["layers"], g1(dram_w)))
+        lines.append("DRAM decode bound: %g GB/s / (%s x %d/%d read per token) = %.0f tok/s (floor %g)"
+                     % (bw, g1(dram_w), m["experts_per_tok"], m["experts"], toks, MIN_DRAM_TOK_S))
+        hb += int(dram_w)
+        lines.append("host: experts %s + lookup tables %s + runtime %s = %s"
+                     % (g1(dram_w), g1(on_host), g1(HOST_RUNTIME["llama.cpp"]), g1(hb)))
+        if toks < MIN_DRAM_TOK_S:
+            return _res("llama.cpp", place, False, "DRAM bandwidth gives %.1f tok/s, under the %g floor"
+                        % (toks, MIN_DRAM_TOK_S), lines, gpus=k)
+    if hb > hfree:
+        return _res("llama.cpp", place, False, "host side %s exceeds the host budget %s" % (g1(hb), g1(hfree)),
+                    lines, gpus=k)
+    return _res("llama.cpp", place, True, "", lines, ctx=c, seqs=n, gpus=k, gpu_bytes=max(cards_b), card_bytes=cards_b,
+                host_bytes=hb, dram_tok_s=round(toks, 1) if toks else None, kv_bytes=int(kvused),
+                flags=_flags("llama.cpp", place, c, n, k, max(cards_b), use, kvused, m, n_cpu, kv, ts))
+
+
+def _flags(eng, place, ctx, seqs, k, gpu_use, cards, kvused, m, n_cpu_moe, kv=None, ts=None):
     """Engine memory flags from the fit. Spellings from each engine's own argument parser:
     vLLM v0.32.0 vllm/engine/arg_utils.py, OVMS v2026.4.1 src/graph_export/graph_cli_parser.cpp,
     llama.cpp 1242be6 common/arg.cpp."""
@@ -1485,8 +1595,8 @@ def _flags(eng, place, ctx, seqs, k, gpu_use, cards, kvused, m, n_cpu_moe, kv=No
     # -c is the total context; with -np set explicitly each slot gets c/np (kv-unified is
     # on only when the slot count is auto).
     out = ["-c", str(ctx * seqs), "-np", str(seqs), "-ngl", "0" if place == "cpu" else "999"]
-    if k > 1:
-        out += ["-ts", ",".join(str(max(int(c["budget"] // GIB), 1)) for c in cards)]
+    if ts and k > 1:
+        out += ["-ts", ",".join(str(t) for t in ts)]  # layers per card (llama_layer_devices)
     if place == "moe-offload":
         out += ["--cpu-moe"] if n_cpu_moe >= m["layers"] else ["--n-cpu-moe", str(n_cpu_moe)]
     # -cram/--cache-ram, -ctxcp/--ctx-checkpoints: the host caches the fit counts (LLAMA_CTX_CHECKPOINTS)

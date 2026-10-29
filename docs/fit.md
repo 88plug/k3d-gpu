@@ -68,7 +68,7 @@ in this order, and the first that fits wins:
 
 1. one GPU;
 2. several GPUs: vLLM tensor parallel (heads divisible by the size), or llama.cpp's
-   layer split (OVMS serves one GPU);
+   layer split, sized card by card (below); OVMS serves one GPU;
 3. MoE experts in DRAM (llama.cpp `--n-cpu-moe N`): only when the GPU placements do not
    fit, the CPU has AMX or AVX-512, and the DRAM side's bandwidth bound per token stays
    above a floor. The fit takes the fewest layers whose experts leave the GPU;
@@ -122,6 +122,21 @@ prompt's end, which is what the next turn restores from), and counts slots x 4 x
 checkpoint in the host bytes and the pod limit. A model with no sliding-window and no
 linear-attention layers makes none.
 
+On several GPUs llama.cpp places whole layers, so the fit sizes each card from the
+layers it gets, the way llama.cpp b11749 assigns them with `-ngl 999`
+(`src/llama-model.cpp`, `load_tensors`). Layer `il` goes to the device
+`upper_bound(cumsum(ts) / sum(ts), il / (layers + 1))`, and the output layer
+(`il = layers`, holding `lm_head`) goes the same way, which is the last card. Each
+layer's weights are its share of the class totals, minus its experts when it is one of
+the first `--n-cpu-moe` layers. Each layer's KV and recurrent state sit on its card. Every
+card also carries its own overhead.
+The fit emits `-ts` as whole layer counts summing to layers + 1, so each card gets exactly
+the layers it was sized for. It keeps every card within the smallest budget of the cards
+used, because the device plugin, not the fit, decides which card is device 0 inside the
+pod, and it balances the largest card's load. When no split fits, the placement is refused.
+`--explain` lists each card's layers, weights, KV and total, and `card_bytes` in `--json`
+has the same numbers.
+
 The overhead is an estimate from the formula, not a measurement;
 `K3D_GPU_FIT_OVERHEAD_GIB` replaces it with a measured value.
 
@@ -131,7 +146,7 @@ The overhead is an estimate from the formula, not a measurement;
 | --- | --- |
 | vLLM v0.32.0 | `--tensor-parallel-size`, `--max-model-len`, `--max-num-seqs`, `--gpu-memory-utilization` (vLLM still profiles activations inside that share), `--kv-cache-dtype fp8` when the checkpoint's `kv_cache_scheme` made the fit count one byte. CPU build (EAT): `VLLM_CPU_KVCACHE_SPACE` |
 | OVMS 2026.4.1 | `--max_num_seqs`, `--cache_size` (a static pool in whole GiB, rounded up to hold every sequence: the dynamic one grows past the fit) |
-| llama.cpp v0.8.0 | `-c` (context x slots), `-np`, `-ngl`, `-ts`, `--n-cpu-moe` or `--cpu-moe`, `--cache-ram 0`, `-ctxcp 4`, `-ctk`/`-ctv` |
+| llama.cpp v0.8.0 | `-c` (context x slots), `-np`, `-ngl`, `-ts` (layers per card), `--n-cpu-moe` or `--cpu-moe`, `--cache-ram 0`, `-ctxcp 4`, `-ctk`/`-ctv` |
 
 `agent up` applies them, sets the pod's memory request and limit to the fit, and
 annotates the pod `k3d-gpu.io/agent-fit`. `K3D_GPU_AGENT_MAX_LEN`, `K3D_GPU_AGENT_MAX_NUM_SEQS`

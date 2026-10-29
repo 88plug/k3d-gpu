@@ -109,6 +109,25 @@ out=$(bash "${K3D_GPU}" fit --host "${XEON}" --model "${FLASH}" 2>&1); rc=$?
 if [ "${rc}" -eq 0 ] && grep -q "^fit: ${FLASH}:IQ4_NL on 2 GPU(s) + experts and lookup tables in DRAM" <<< "${out}"; then
     ok "fit: a multi-GGUF repo needs no flag (IQ4_NL picked, split shards summed)"
 else fail "fit: multi-GGUF repo auto-pick (rc ${rc})" "${out}"; fi
+# Its two-card plan sizes each card the way llama.cpp assigns layers: -ts is integer layer
+# counts (48 layers + the output layer), and no card's own bytes pass its budget. The plan
+# this replaces, -ts 30,30 --n-cpu-moe 28, put 43.5 GiB on the second 32 GiB card.
+out=$(bash "${K3D_GPU}" fit --host "${XEON}" --model "${FLASH}" --json 2>&1); rc=$?
+if [ "${rc}" -eq 0 ] && ts=$(python3 -c '
+import json, sys
+sys.path.insert(0, sys.argv[1])
+import fit
+d = json.loads(sys.argv[2])
+f = d["flags"]
+ts = [int(x) for x in f[f.index("-ts") + 1].split(",")]
+budget = min(c["budget"] for c in fit.gpu_budget(json.load(open(sys.argv[3])))[0][:d["gpus"]])
+assert d["placement"] == "moe-offload" and len(ts) == d["gpus"] == 2 and sum(ts) == 49, (ts, d["gpus"])
+assert ts != [30, 30] and "--n-cpu-moe" in f, f
+assert len(d["card_bytes"]) == 2 and max(d["card_bytes"]) <= budget, (d["card_bytes"], budget)
+print(f[f.index("-ts") + 1])
+' "${ROOT}/console" "${out}" "${XEON}"); then
+    ok "fit: Flash-Next IQ4_NL on two cards, -ts ${ts} layers, every card within its budget"
+else fail "fit: Flash-Next IQ4_NL per-card split (rc ${rc})" "$(grep -E '"-ts"|card_bytes' -A3 <<< "${out}")"; fi
 out=$(bash "${K3D_GPU}" fit --host "${XEON}" --model "${FLASH}" --file Qwen3.8-Flash-Next-Q8_0-00002-of-00002.gguf --explain 2>&1); rc=$?
 if [ "${rc}" -eq 0 ] && grep -q ':Q8_0 on' <<< "${out}" && grep -q -- "-hf ${FLASH}:Q8_0" <<< "${out}"; then
     ok "fit --file: a shard name picks its whole split model"

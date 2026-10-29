@@ -12,6 +12,7 @@ Fixtures (tests/fixtures/fit/SOURCES says where each came from):
 Usage: python3 tests/fit_test.py
 """
 
+import bisect
 import gzip
 import json
 import os
@@ -243,6 +244,11 @@ class Headers(unittest.TestCase):
 
 def config(model):
     with open(os.path.join(mdir(model), "config.json"), encoding="utf-8") as f:
+        return json.load(f)
+
+
+def weights(model):
+    with open(os.path.join(mdir(model), "weights.json"), encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -811,6 +817,101 @@ class FlashNextGGUF(unittest.TestCase):
         d = plan("desktop-i9-nogpu", FLASH_GGUF)
         self.assertFalse(d["fits"])
         self.assertTrue(any("IQ4_NL" in s for s in d["explain"]) and any("Q2_K" in s for s in d["explain"]))
+
+
+def llama_cards(d, cfg, w, kv_layer):
+    """Each card's GPU bytes for a llama.cpp plan, worked out here from its flags the way
+    llama.cpp b11749 assigns them (src/llama-model.cpp load_tensors, -ngl past the layer
+    count): layer il on device upper_bound(cumsum(ts) / sum(ts), il / (n_layer + 1)), the
+    output layer (il = n_layer) the same way, the experts of the first --n-cpu-moe layers in
+    host RAM, each layer's KV on its device, and each card's own overhead. Weights per layer
+    are the class totals over the layers. kv_layer(il, ctx) is one sequence's KV of layer il."""
+    tc = cfg.get("text_config") or cfg
+    n = tc["num_hidden_layers"]
+    f = d["flags"]
+    ts = [int(x) for x in f[f.index("-ts") + 1].split(",")]
+    ncpu = int(f[f.index("--n-cpu-moe") + 1]) if "--n-cpu-moe" in f else n if "--cpu-moe" in f else 0
+    cls = {k: v["bytes"] for k, v in w["classes"].items()}
+    cum, c = [], 0
+    for t in ts:
+        c += t
+        cum.append(c / sum(ts))
+    cards = [0] * len(ts)
+    for il in range(n + 1):
+        dev = bisect.bisect_right(cum, il / (n + 1))
+        if il == n:
+            cards[dev] += cls.get("lm_head", 0) + cls.get("mtp", 0) + cls.get("vision", 0)
+        else:
+            cards[dev] += (cls.get("other", 0) / n + (cls.get("experts", 0) / n if il >= ncpu else 0)
+                           + kv_layer(il, d["ctx"]) * d["seqs"])
+    m = fit.model_profile(cfg, w)
+    ov = fit._overhead("llama.cpp", m, fit.TARGET_SEQS, None)[0]
+    return ts, [int(b + ov) for b in cards]
+
+
+def flash_next_kv(il, ctx):
+    # every 4th layer full attention: 2 x 2 kv heads x 256 x 2 B + indexer 128 x 2 B per token;
+    # the rest gated DeltaNet: 48 x 128 x 128 x 4 B state + 3 x 10240 conv ch x 2 B per sequence
+    return (2 * 2 * 256 * 2 + 128 * 2) * ctx if il % 4 == 3 else 48 * 128 * 128 * 4 + 3 * 10240 * 2
+
+
+def gemma4_kv(il, ctx):
+    # every 6th layer global: 2 x 2 kv heads x 512 x 2 B per token; the rest a 1024-token window
+    return 2 * 2 * 512 * 2 * ctx if il % 6 == 5 else 2 * 8 * 256 * 2 * min(ctx, 1024)
+
+
+class LlamaSplit(unittest.TestCase):
+    """llama.cpp over several GPUs: each card's own layers, KV and overhead within its budget."""
+
+    def budget(self, k):
+        return min(c["budget"] for c in fit.gpu_budget(host("xeon6741p-4xb70"))[0][:k])
+
+    def test_layer_devices(self):
+        # upper_bound(cumsum(ts)/sum, il/(n_layer+1)): -ts 30,30 over 48 layers puts 25 on the first card
+        self.assertEqual(fit.llama_layer_devices([30, 30], 48), [0] * 25 + [1] * 24)
+        # integer layer counts that sum to n_layer + 1 give exactly those counts, the output last
+        self.assertEqual(fit.llama_layer_devices([28, 21], 48), [0] * 28 + [1] * 21)
+        self.assertEqual(fit.llama_layer_devices([10, 0, 21], 30), [0] * 10 + [2] * 21)
+
+    def test_old_split_overflows_the_second_card(self):
+        # The plan this replaces: -ts 30,30 --n-cpu-moe 28 at 262144 x 4 puts ~43.5 GiB on a 32 GiB card.
+        cfg = config(FLASH_GGUF)
+        w = weights(FLASH_GGUF)["groups"]["IQ4_NL"]
+        old = {"flags": ["-ts", "30,30", "--n-cpu-moe", "28"], "ctx": 262144, "seqs": 4}
+        _, cards = llama_cards(old, cfg, w, flash_next_kv)
+        self.assertGreater(cards[1], 32 * GIB)
+
+    def check(self, d, cfg, w, kv_layer):
+        n = (cfg.get("text_config") or cfg)["num_hidden_layers"]
+        ts, cards = llama_cards(d, cfg, w, kv_layer)
+        self.assertEqual(sum(ts), n + 1, ts)
+        self.assertEqual(len(ts), d["gpus"])
+        budget = self.budget(d["gpus"])
+        for i, b in enumerate(cards):
+            self.assertLessEqual(b, budget, (i, ts, d["flags"]))
+        # the fit's own per-card bytes agree with the ones worked out here
+        self.assertEqual(len(d["card_bytes"]), len(ts))
+        for got, want in zip(d["card_bytes"], cards):
+            self.assertAlmostEqual(got / GIB, want / GIB, delta=0.01)
+        self.assertEqual(d["gpu_bytes"], max(d["card_bytes"]))
+
+    def test_flash_next_iq4nl_cards_within_budget(self):
+        d = plan("xeon6741p-4xb70", FLASH_GGUF)
+        self.assertTrue(d["fits"], d["summary"])
+        self.assertEqual((d["placement"], d["gpus"]), ("moe-offload", 2))
+        w = weights(FLASH_GGUF)["groups"]["IQ4_NL"]
+        self.check(d, config(FLASH_GGUF), w, flash_next_kv)
+
+    def test_gemma_layer_split_cards_within_budget(self):
+        g = "google__gemma-4-26B-A4B-it-qat-q4_0-gguf"
+        d = plan("xeon6741p-4xb70", g, ctx=262144, seqs=6)
+        self.assertTrue(d["fits"], d["summary"])
+        self.assertEqual((d["placement"], d["gpus"]), ("gpu-split", 2))
+        self.check(d, config(g), weights(g), gemma4_kv)
+
+    def test_too_much_for_any_split_is_refused(self):
+        d = plan("xeon6741p-4xb70", "google__gemma-4-26B-A4B-it-qat-q4_0-gguf", ctx=262144, seqs=12, device="gpu")
+        self.assertFalse(d["fits"])
 
 
 if __name__ == "__main__":
