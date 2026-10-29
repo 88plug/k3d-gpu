@@ -3793,10 +3793,11 @@ raw results:     bench/h54gpu/results/2026-10-21/: H54b/ (hold1, hold2, smoke-ho
                  NOTES), H54c/ (hold1 with verdict.json and the same exports; smoke-hold1,
                  smoke-hold1-failed-sa), runs/ (per hold pre.txt, post.txt, hold.log,
                  serving.jsonl; campaign and smoke logs), REPRODUCE-supplement.txt. Logs over 20 kB
-                 are gzipped; kubeconfigs are not kept. On 2026-10-28 every file of
-                 ~/k3dgpu-gemma/results/H54b and H54c on crescent (kubeconfigs aside) was compared
-                 by sha256 with these: all 134 equal; the 25 run and smoke logs missing here were
-                 copied then.
+                 are gzipped; kubeconfigs are not kept. Compared with crescent by sha256 on
+                 2026-10-28: all 115 files of ~/k3dgpu-gemma/results/H54b and H54c (kubeconfigs
+                 aside) equal these; of ~/k3dgpu-gemma/runs, 19 files were here and equal, the 25
+                 H54b and H54c run and smoke logs missing here were copied then, and its 3 H54a
+                 files were not.
 ```
 
 **Wiring smokes (discarded, not holds).** H54c: 00:06:58Z (Cg not created: the pod's service
