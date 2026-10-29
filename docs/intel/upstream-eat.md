@@ -3,7 +3,7 @@
 > **DRAFT: not submitted; awaiting owner approval.**
 > Nothing here has been filed, opened, forked or pushed to any `intel/*` repository. A maintainer of this repo sends each piece by hand, in the order below, after approving it.
 
-Drafted 2026-10-17. Heads re-read on 2026-10-19 with `gh api` and `git ls-remote`: EAT is unchanged and #19 is still a draft PR; EAS `main` moved from `7c02ca2` to `e8f3ebc`. Re-read on 2026-10-20: no head in the table moved. EAT #21 (Release 1.1.0) opened on 2026-10-19; see [its impact](#release-110-pr-21-impact).
+Drafted 2026-10-17. Heads re-read on 2026-10-19 with `gh api` and `git ls-remote`: EAT is unchanged and #19 is still a draft PR; EAS `main` moved from `7c02ca2` to `e8f3ebc`. Re-read on 2026-10-20: no head in the table moved. EAT #21 (Release 1.1.0) opened on 2026-10-19; see [its impact](#release-110-pr-21-impact). Re-read on 2026-10-28: #21 merged on 2026-10-22 and shipped as `release-1.1.0` (`0c726f5`). #19 merged on 2026-10-27 into the `release-2.0.0` branch, not `main`, at final head `fb59459` (merge `036b662`); no tag carries it. The EAT docs patch below now needs a re-base ([see below](#eat-patch-full-content)).
 
 | Repo | Ref | SHA |
 |---|---|---|
@@ -16,7 +16,7 @@ Drafted 2026-10-17. Heads re-read on 2026-10-19 with `gh api` and `git ls-remote
 
 The deploy path belongs in EAS, not EAT. EAT receives a docs pointer only.
 
-- EAT PR #19 (open as a draft, mergeable, CI green, no review decision yet) deletes EAT's own installer and cluster layer: `deploy-agentic-stack.sh`, `core/lib/**`, `core/playbooks/**` and `core/roles/**`, 173 files in all.
+- EAT PR #19 deletes EAT's own installer and cluster layer: `deploy-agentic-stack.sh`, `core/lib/**`, `core/playbooks/**` and `core/roles/**`, 173 files in all (read at its draft head `9d842f5`). It merged on 2026-10-27 into `release-2.0.0`, not `main`; no tag carries it yet.
 - After #19, EAT ships only `components.yaml`, `config.yaml`, `roles/<component>/` and `charts/`. It installs through `es_auto_installer.sh install agent-toolkit` in EAS.
 - EAS already has a bring-your-own-cluster (BYO) path, `existing_kubernetes: <kubeconfig>`, which skips Kubespray. A k3d cluster is a BYO cluster. No new mode is needed, only five small fixes to that path.
 - An EAT code patch against today's `main` would edit files #19 deletes. That would waste review time, so this draft has none.
@@ -44,10 +44,11 @@ Which mode to use with EAS:
 
 ## Release 1.1.0 (PR #21) impact
 
-[EAT #21](https://github.com/intel/enterprise-agent-toolkit/pull/21) (head `c86c42b`, open,
-no review) is based on `main` and keeps the old layout, so it does not contain #19 and
-changes nothing above: the deploy path still belongs in EAS, and the EAT docs patch still
-targets #19. What it changes for a k3d or k3d-gpu cluster, read from source only:
+[EAT #21](https://github.com/intel/enterprise-agent-toolkit/pull/21) (head `c86c42b`) merged
+on 2026-10-22 and shipped as `release-1.1.0` (`0c726f5`, the same tree). It keeps the old
+layout, so it does not contain #19 and changes nothing above: the deploy path still belongs
+in EAS, and the EAT docs patch still targets #19. What it changes for a k3d or k3d-gpu
+cluster, read from source only:
 
 | #21 adds | Already covered by k3d-gpu | Expected on a k3d-gpu cluster |
 |---|---|---|
@@ -95,13 +96,13 @@ The EAS patch files, in full, are in this repo. Each was checked with `git apply
 | series 0002-0006 | all five in order | applies | n/a |
 | EAT docs patch | the diff below | n/a (EAS only) | n/a |
 
-The EAT docs patch below applies on EAT PR #19 head `9d842f5` and does not apply on EAT `main` `0ecf67a`, as intended: it edits the docs tables #19 adds.
+The EAT docs patch below applies on EAT PR #19's draft head `9d842f5` and does not apply on EAT `main` `0ecf67a`, as intended: it edits the docs tables #19 adds. It does not apply on #19's final head `fb59459` or on its merge into `release-2.0.0` (`036b662`) either, so it needs a re-base onto `release-2.0.0` before it is sent. It is still unsent.
 
 Gate 1 below has the static results on `e8f3ebc`, `ansible-lint` included.
 
 ## EAT patch (full content)
 
-Base: PR #19 head `9d842f5`. It was checked with `patch -p1 --dry-run` on copies of both files from that commit, and both hunks apply. `git apply --check` on the same two files passed again on 2026-10-18.
+Base: PR #19 head `9d842f5`. It was checked with `patch -p1 --dry-run` on copies of both files from that commit, and both hunks apply. `git apply --check` on the same two files passed again on 2026-10-18. On 2026-10-28, on a read-only clone, it still passes on `9d842f5` and fails on `fb59459` and `036b662` (`patch failed: README.md:144` and `patch failed: docs/README.md:37`).
 
 It links to the EAS page from 0005, the same way #19's docs index already links the EAS rack-scale guide. **Send it only after EAS merges 0005**; until then the link is a 404.
 

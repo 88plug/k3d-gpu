@@ -136,14 +136,14 @@ balloons policy) onto Kubernetes. It targets Xeon servers. We read it at
 [`0ecf67a`](https://github.com/intel/enterprise-agent-toolkit/tree/0ecf67a); a
 k3d-gpu cluster is a candidate bring-your-own target for a single developer
 machine. [`integrations/eat/eat-up.sh`](../integrations/eat/eat-up.sh) deploys the
-latest tag, `release-1.0.3-hotfix`
-([`0d3438d`](https://github.com/intel/enterprise-agent-toolkit/tree/0d3438d7119de44cafc5903f66665c0b623e3333),
+pinned tag `release-1.0.3-hotfix`
+([`0d3438d`](https://github.com/intel/enterprise-agent-toolkit/tree/0d3438d7119de44cafc5903f66665c0b623e3333);
 [tags](https://api.github.com/repos/intel/enterprise-agent-toolkit/tags), checked
-2026-10-20). `main` adds only opt-in NVIDIA OpenShell
+2026-10-28). The latest, `release-1.1.0`, adds OpenShell
 ([PR #14](https://github.com/intel/enterprise-agent-toolkit/pull/14),
-`deploy_openshell=off`), CI and docs after that tag; `eat-up.sh` stops on
-`deploy_openshell=on` because the tag cannot deploy it. Pins and open upstream
-changes, Release 1.1.0 ([PR #21](https://github.com/intel/enterprise-agent-toolkit/pull/21)) included:
+`deploy_openshell=off` by default); `eat-up.sh` refuses `deploy_openshell=on` because
+its pinned tag has no OpenShell role. Pins and upstream changes, Release 1.1.0
+([PR #21](https://github.com/intel/enterprise-agent-toolkit/pull/21)) included:
 [platforms.md](platforms.md#intel-enterprise-agent-toolkit-eat).
 
 ### How Intel positions EAT
@@ -188,8 +188,9 @@ run on hardware, the row says which host.
 | Accelerators | None requested: no `gpu.intel.com`, `habana.ai` or `/dev/dri` on the default path | Intel GPU, NPU, Gaudi, DSA, IAA and QAT plugins started per detected device, and `up` fails unless each is schedulable |
 | CPU placement | NRI balloons sized for Xeon NUMA; on a hybrid CPU EAT's reservation needs the patch in [`contrib/eat/`](../contrib/eat) | Balloons baked for hybrid P/E and multi-NUMA hosts; vLLM on P-cores and agent services on E-cores through `contrib/eat/` values |
 
-Not covered by either column: EAT's 1.1.0 XPU path for Arc B60/B70 is in an open PR
-([platforms.md](platforms.md#open-eat-pull-requests-checked-2026-10-20)).
+Not covered by either column: EAT's XPU path for Arc B60/B70, which shipped in
+`release-1.1.0`, not in the pinned tag
+([platforms.md](platforms.md#open-eat-pull-requests-checked-2026-10-28)).
 
 **In progress.** A campaign on one Xeon 6741P (Granite Rapids, AMX) host
 with 4x Arc Pro B70 checks four things: that `detect` and `up` pick up the Xeon and the
@@ -202,7 +203,7 @@ direction only; the numbers, protocol and reproduce block are in the ledger.
 
 | Row | Measurement | Verdict |
 |----|-------------|--------|
-| [ledger:H54a] | Single-stream decode, engine by engine, against EAT's stock vLLM CPU (bf16 QAT weights). EAT's stock arm stalled mid-decode in both holds under this harness (cause open), so nothing was scored against it. Of the arms measured, llama.cpp CPU on Google's QAT Q4_0 GGUF decoded ahead of k3d-gpu's OVMS arms, and its QAT MTP drafter added a little on top | INCONCLUSIVE |
+| [ledger:H54a] | Single-stream decode, engine by engine, against EAT's stock vLLM CPU (bf16 QAT weights). EAT's stock arm, EAT 1.0.3's vLLM CPU v0.24.0, stalled mid-decode in both holds under this harness (cause open), so nothing was scored against it. EAT 1.1.0 ships vLLM CPU v0.28.0, which has not been measured. Of the arms measured, llama.cpp CPU on Google's QAT Q4_0 GGUF decoded ahead of k3d-gpu's OVMS arms, and its QAT MTP drafter added a little on top | INCONCLUSIVE |
 | [ledger:H54d] | The best H54a arm inside EAT's banking flow: not run, since H54a chose no arm | INCONCLUSIVE |
 | [ledger:H54q] | Whether the QAT-matched int4 IR keeps the bf16 QAT quality and OpenVINO's base-model IR does not | PENDING |
 | [ledger:H54c] | Experts in the Xeon's DRAM and the rest on one B70, against a byte-split model | PENDING |
@@ -415,8 +416,9 @@ hardware, a recorded run.
   verified on real Core Ultra, Arc, Gaudi 3 and Xeon hosts. In progress: the campaign on
   a Xeon 6741P with 4x Arc Pro B70 [above](#eat-by-default-vs-with-k3d-gpu) (first Gemma 4 rows
   recorded, none SUPPORTED yet).
-- **EAT 1.1.0.** Move `eat-up.sh` to a 1.1.0 tag once one is cut, after the
-  checks listed in [platforms.md](platforms.md#intel-enterprise-agent-toolkit-eat).
+- **EAT 1.1.0.** The `release-1.1.0` tag is cut (2026-10-22). Moving `eat-up.sh` to it
+  waits until no pending ledger row pins `0d3438d`, then needs the checks listed in
+  [platforms.md](platforms.md#intel-enterprise-agent-toolkit-eat).
 - **NPU telemetry.** No NPU exporter is shipped.
 - **Upstream.** Small, separate fixes for running EAT and its successor
   installer on k3s: accept `+k3s` versions in platform detection, pass Istio's
