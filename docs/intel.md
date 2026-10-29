@@ -4,7 +4,7 @@ k3d-gpu turns one Linux machine into a single-node k3d cluster that schedules th
 Intel accelerators it finds: Arc / Core Ultra / Xe GPUs, the Core Ultra NPU,
 Gaudi 3, the Xeon DSA, IAA and QAT engines, AMX, and the P-cores and E-cores of
 hybrid client CPUs. One command (`k3d-gpu up`) detects them from sysfs, starts
-the matching Intel device plugins baked into the node image, and fails unless
+the matching Intel device plugins baked into the node image, and checks that
 each detected engine is advertised to the scheduler.
 
 This page is for Intel's open-source, AI PC and partner engineering teams. It
@@ -58,8 +58,11 @@ with detection, enablement and what k3d-gpu does with each, see the
   command. `up` and `detect` name the engines left out for want of that step.
   The launcher never changes host configuration itself; `host-setup --apply`
   runs the same commands after a y/N prompt.
-- **A schedulability assertion.** `up` fails unless every detected engine has
-  more than zero schedulable units. `test` runs one pod per engine: `nvidia-smi`
+- **A schedulability assertion.** `up` counts each detected engine's schedulable
+  units. With the default `K3D_GPU_VENDORS=auto` it warns for an engine at zero and
+  fails only when every engine is at zero; with an explicit vendor list it fails on
+  any listed engine at zero. On the Xeon 6741P, QAT advertised nothing and `up`
+  warned and finished [ledger:H52b]. `test` runs one pod per engine: `nvidia-smi`
   for NVIDIA, a pod that requests the Intel resource and lists the device nodes
   it received, and for hybrid CPUs a check of the pod's `Cpus_allowed_list`
   against the host's P-core or E-core list.
@@ -92,16 +95,20 @@ the plugins, and asserts the result, with no manual step.
 ## Capability matrix
 
 - **Detected**: `k3d-gpu detect` reports the engine from sysfs.
-- **Scheduled**: `k3d-gpu up` starts its plugin (or sets its labels) and fails
-  unless the cluster advertises more than zero units.
-- **Verified on hardware**: `up` and `test` passed on a real host. The only host
-  so far is an i9-13900T (P-cores 0-15, E-cores 16-31) with a UHD 770 iGPU
+- **Scheduled**: `k3d-gpu up` starts its plugin (or sets its labels) and counts
+  the units the cluster advertises (the schedulability assertion above).
+- **Verified on hardware**: `up` and `test` passed on a real host, or, where a cell
+  says so, what they did there. Two hosts so far. The first is an i9-13900T
+  (P-cores 0-15, E-cores 16-31) with a UHD 770 iGPU
   (`8086:a780`, `i915`) and 2 NVIDIA GPUs, recorded in the
   [PR #9 test plan](https://github.com/88plug/k3d-gpu/pull/9): `up` reported
   `nvidia=2, intel=1, hybrid=1`. That run used commit `109154d`. The hybrid
   `test` there only checked that each pod printed its `Cpus_allowed_list`; the
   stricter check that the list sits inside the P-core or E-core list landed
-  after it (`fb5c17d`) and has not yet run on hardware.
+  after it (`fb5c17d`) and has not yet run on hardware. The second is a Xeon 6741P
+  (Granite Rapids, 48 cores, AMX, AVX-512, 3 DSA, 3 IAA, 3 QAT 4xxx) with 4x Arc Pro
+  B70 on `xe`. A plain `up` ran there on 2026-10-20 [ledger:H52], and `up` after
+  `k3d-gpu host-setup --apply` on 2026-10-29 [ledger:H52b].
 - **Verified by sim**: `tests/detect_test.sh` builds a fake sysfs/devfs tree,
   sets `K3D_GPU_SYSROOT`, and runs `detect`, `doctor` or `test` against it, with
   `docker`, `k3d` and `kubectl` stubbed. 1028 cases pass (2026-10-20). Sim covers detection,
@@ -112,19 +119,23 @@ the plugins, and asserts the result, with no manual step.
 |--------|-----------------------------|----------|-----------|----------------------|------------------------------------------------|
 | NVIDIA GPU | `nvidia.com/gpu` | yes | yes | **yes**, 2 GPUs; `nvidia-smi` pod passed | loaded module; `/dev/nvidiactl`; runtime vs. CDI-only; `test` output and failure |
 | Intel GPU, `i915` | `gpu.intel.com/i915`; node labels `gpu.intel.com/xmx`, `media-vcs`, `media-vecs` | yes | yes | **yes**, UHD 770; device-listing pod passed | Alder / Raptor Lake names, kernels and GuC firmware, Meteor Lake, Arrow Lake-H/-S, mixed `i915` + `xe`, XMX and media-engine labels |
-| Intel GPU, `xe` (Battlemage, Lunar / Panther Lake, Crescent Island) | `gpu.intel.com/xe` | yes | yes | no | Lunar Lake, Battlemage dGPU, kernel/firmware checks, `xe.force_probe` hints, `vfio-pci` excluded |
+| Intel GPU, `xe` (Battlemage, Lunar / Panther Lake, Crescent Island) | `gpu.intel.com/xe`; node labels `gpu.intel.com/xmx`, `media-vcs`, `media-vecs` | yes | yes | **partly**, 4x Arc Pro B70 on the Xeon 6741P: `up` advertised all four, `xmx=true`, and `test`'s GPU pod passed, but no media label was set [ledger:H52]. A second run set `media-vcs=2` and `media-vecs=2` but advertised 2 of the 4: a serving workload held about half the VRAM of each card, and the busy-card filter (half the VRAM or more in use) dropped the two just over half [ledger:H52b]. No Lunar or Panther Lake host has run | Lunar Lake, Battlemage dGPU, kernel/firmware checks, `xe.force_probe` hints, `vfio-pci` excluded |
 | Intel NPU | `npu.intel.com/accel`; node label `k3d-gpu.io/npu.gen` | yes | yes | no | Lunar / Meteor Lake, `0x7d1d` named by CPU model (Meteor Lake vs. Arrow Lake-H), NPU vs. Gaudi, unbound NPU, firmware checks, forced `npu` fails `doctor` |
 | Gaudi 3 | `habana.ai/gaudi` | yes | yes (plain mode, no habana runtime) | no | `habanalabs` accel nodes, no-driver case, NPU + Gaudi on one host |
-| DSA | `dsa.intel.com/wq-user-*` | yes | yes | no | user work queues, no-work-queue case with per-device `accel-config` apply/revert (dedicated, or shared with PASID), kernel-WQ device opt-in (snapshot, own group on a free engine), forced `dsa` fails `doctor` |
-| IAA | `iaa.intel.com/wq-user-*` | yes | yes | no | user work queues, no-work-queue case with per-device `accel-config` apply/revert, iaa_crypto kernel-WQ opt-in with a snapshot revert, no room left, live zswap `deflate-iaa` left alone |
-| QAT (C62x, 4xxx, 420xx, 6xxx) | `qat.intel.com/*` | yes | yes | no | 4xxx and C62x PF with VFs, no VFs (apply = `sriov_totalvfs`, plugin VF driver named), no SR-IOV, unbound PF, `vfio-pci` check |
-| AMX | `feature.node.kubernetes.io/cpu-cpuid.AMX*=true` (labels, no plugin) | yes | yes (labels) | no | AMX flags detected and reported; CPU without AMX; `test` AMX probe passes on an AMX oneDNN matmul, fails on a non-AMX matmul and when no matmul ran |
-| CPU ISA (AVX-VNNI, AVX-512, VAES, GFNI, SHA, CET) | `feature.node.kubernetes.io/cpu-cpuid.<NAME>=true` (NFD names, labels only) | yes | yes (labels) | labels read on the UHD 770 host by `doctor`; not applied to a live cluster | NFD name mapping, `pku` unlabelled, no-flag CPU |
+| DSA | `dsa.intel.com/wq-user-*` | yes | yes | **yes** on the Xeon 6741P after `host-setup --apply --with-kernel-wqs`: `dsa.intel.com/wq-user-shared` 3, and the `test` pod got `/dev/dsa/wq2.0` [ledger:H52b] | user work queues, no-work-queue case with per-device `accel-config` apply/revert (dedicated, or shared with PASID), kernel-WQ device opt-in (snapshot, own group on a free engine), forced `dsa` fails `doctor` |
+| IAA | `iaa.intel.com/wq-user-*` | yes | yes | no. On the Xeon 6741P `iaa_crypto` held all 256 entries of each device, so `host-setup` configured no IAA work queue and no `iaa.intel.com` resource appeared [ledger:H52b] | user work queues, no-work-queue case with per-device `accel-config` apply/revert, iaa_crypto kernel-WQ opt-in with a snapshot revert, no room left, live zswap `deflate-iaa` left alone |
+| QAT (C62x, 4xxx, 420xx, 6xxx) | `qat.intel.com/*` | yes | yes | no. On the Xeon 6741P (4xxx) `host-setup --apply` created 48 VFs, but the QAT plugin crash-looped and advertised none; `up` warned and `test` failed [ledger:H52b] | 4xxx and C62x PF with VFs, no VFs (apply = `sriov_totalvfs`, plugin VF driver named), no SR-IOV, unbound PF, `vfio-pci` check |
+| AMX | `feature.node.kubernetes.io/cpu-cpuid.AMX*=true` (labels, no plugin) | yes | yes (labels) | labels **yes** on the Xeon 6741P: AMXTILE, AMXBF16, AMXINT8, AMXFP16, and `test`'s AMX pod read the `amx_tile` flag [ledger:H52]. That `test` predates the oneDNN matmul probe, which no recorded hardware run has reached: the second run's `test` stopped at QAT before it [ledger:H52b] | AMX flags detected and reported; CPU without AMX; `test` AMX probe passes on an AMX oneDNN matmul, fails on a non-AMX matmul and when no matmul ran |
+| CPU ISA (AVX-VNNI, AVX-512, VAES, GFNI, SHA, CET) | `feature.node.kubernetes.io/cpu-cpuid.<NAME>=true` (NFD names, labels only) | yes | yes (labels) | labels read on the UHD 770 host by `doctor`; on the Xeon 6741P a live node carried all 14 pre-registered AVX-512 and VNNI labels [ledger:H52] [ledger:H52b] | NFD name mapping, `pku` unlabelled, no-flag CPU |
 | Hybrid P/E cores | `k3d-gpu.io/hybrid-cpu=true`; pod label `k3d-gpu.io/cores` | yes | yes | **yes** at `109154d`: performance pod on CPU 0, efficient pod on CPU 20. The strict P/E placement check in `test` passed live on the merged tree (performance `0`, efficient `24`). The `ecluster`, `pcore-physical`, `latency` (on favored CPUs 8 and 10) and `lowpower` balloons verified live on the i9-13900T ([results](#how-hybrid-pe-pinning-works)); the Arrow Lake-H `cpu_lowpower` override is sim-only (UNVERIFIED live). | detection, no online E-cores, non-hybrid, forced, `doctor` lists, `test` placement pass and both failure modes; `cpu_lowpower` and no-L3 LP E-cores, E-core clusters, physical P-cores, favored CPUs from CPPC and MSR `0x771`, `latency` patched to the favored L2 dirs |
 
-The `xe`, NPU, Gaudi and Xeon rows have not run on hardware. If you have one of
-these platforms, `k3d-gpu doctor && k3d-gpu up && k3d-gpu test` is the probe that
-moves a row to verified. Please send its output.
+The NPU and Gaudi rows have not run on hardware: their scheduling is tested only
+against a simulated sysfs. The `xe`, DSA, IAA, QAT, AMX and CPU ISA rows have run on
+one host, the Xeon 6741P, and both of its runs are REFUTED [ledger:H52] [ledger:H52b];
+each row above says what happened there. `xe` on a Lunar or Panther Lake iGPU, and
+QAT on any generation but 4xxx, have not run. If you have one of these platforms,
+`k3d-gpu doctor && k3d-gpu up && k3d-gpu test` is the probe that moves a row to
+verified. Please send its output.
 
 ---
 
@@ -185,7 +196,7 @@ run on hardware, the row says which host.
 | OS | Ubuntu 22.04 / 24.04, x86_64 | Any Linux with Docker that runs k3d; `host-setup` prints pinned driver steps for Ubuntu 24.04/26.04, Fedora, Arch and Manjaro |
 | Cluster setup | Kubespray onto the host, or brownfield on an existing cluster; the `ei-*-eligible` labels come only from the Kubespray path | One `k3d-gpu up`; `K3D_GPU_NODE_LABELS` sets EAT's labels, `K3D_GPU_BALLOONS=external` hands the NRI policy to EAT [ledger:H14] |
 | Engines | vLLM CPU (`vllm/vllm-openai-cpu:v0.24.0`, bf16), 9 model profiles in the single-node table (7 chat, 1 embedding, 1 reranker). An OVMS Helm chart ships but no default path deploys it: `openvino/model_server:2025.4`, plus an unpinned `latest-py` tag for its model-export containers | `agent up` picks per host: vLLM on a Gaudi, OVMS 2026.4.1 on an XMX GPU, else OVMS on the P-cores; vLLM XPU (`v0.31.0`) or llm-scaler on Arc by flag. Its images are pinned by digest in `images.lock` |
-| Accelerators | None requested: no `gpu.intel.com`, `habana.ai` or `/dev/dri` on the default path | Intel GPU, NPU, Gaudi, DSA, IAA and QAT plugins started per detected device, and `up` fails unless each is schedulable |
+| Accelerators | None requested: no `gpu.intel.com`, `habana.ai` or `/dev/dri` on the default path | Intel GPU, NPU, Gaudi, DSA, IAA and QAT plugins started per detected device, and `up` checks that each is schedulable (on the Xeon 6741P it warned when QAT advertised none [ledger:H52b]) |
 | CPU placement | NRI balloons sized for Xeon NUMA; on a hybrid CPU EAT's reservation needs the patch in [`contrib/eat/`](../contrib/eat) | Balloons baked for hybrid P/E and multi-NUMA hosts; vLLM on P-cores and agent services on E-cores through `contrib/eat/` values |
 
 Not covered by either column: EAT's XPU path for Arc B60/B70, which shipped in
@@ -194,7 +205,7 @@ Not covered by either column: EAT's XPU path for Arc B60/B70, which shipped in
 
 **In progress.** A campaign on one Xeon 6741P (Granite Rapids, AMX) host
 with 4x Arc Pro B70 checks four things: that `detect` and `up` pick up the Xeon and the
-B70s with no flags; EAT stock against k3d-gpu on the Xeon CPU, with EAT's own OVMS chart
+B70s with no flags (H52 REFUTED, H52b REFUTED; see the [capability matrix](#capability-matrix)); EAT stock against k3d-gpu on the Xeon CPU, with EAT's own OVMS chart
 as a third arm; EAT's #21 XPU path against k3d-gpu's `agent up` on the B70s; and agents
 per box. Rows land in [EXPERIMENTS.md](../EXPERIMENTS.md) before anything here quotes them.
 
@@ -444,8 +455,10 @@ hardware, a recorded run.
 
 - **Hardware coverage.** Move the `xe`, NPU, Gaudi, DSA, IAA, QAT and AMX rows to
   verified on real Core Ultra, Arc, Gaudi 3 and Xeon hosts. In progress: the campaign on
-  a Xeon 6741P with 4x Arc Pro B70 [above](#eat-by-default-vs-with-k3d-gpu) (first Gemma 4 rows
-  recorded, none SUPPORTED yet).
+  a Xeon 6741P with 4x Arc Pro B70 [above](#eat-by-default-vs-with-k3d-gpu). Its detection
+  runs gave the `xe`, DSA, IAA, QAT, AMX and CPU ISA rows their first hardware results, and
+  both ledger rows are REFUTED [ledger:H52] [ledger:H52b]; the first Gemma 4 rows are
+  recorded, none SUPPORTED yet.
 - **EAT 1.1.0.** The `release-1.1.0` tag is cut (2026-10-22). Moving `eat-up.sh` to it
   waits until no pending ledger row pins `0d3438d`, then needs the checks listed in
   [platforms.md](platforms.md#intel-enterprise-agent-toolkit-eat).
