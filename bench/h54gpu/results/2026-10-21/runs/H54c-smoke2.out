@@ -1,0 +1,5 @@
+== H54c-smoke2 waiting for the lock 2026-10-21T00:08:18Z
+== H54c-smoke2 lock taken 2026-10-21T00:13:12Z
+== H54c-smoke2 busy (load1 28.11, aiperf 0): waiting 120 s 2026-10-21T00:13:12Z
+== H54c-smoke2 start: bash k3d-gpu/bench/h54gpu/h54c.sh 1 2 2026-10-21T00:15:13Z
+== H54c-smoke2 rc=0; clusters deleted: k3dgpu-g-h54c-1; now:  2026-10-21T00:18:40Z

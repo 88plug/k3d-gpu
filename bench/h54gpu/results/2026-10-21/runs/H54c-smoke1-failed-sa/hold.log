@@ -1,0 +1,4 @@
+== H54c hold 1 card 2 image ghcr.io/ggml-org/llama.cpp:server-b11749@sha256:9fbaa06d7f4449e2ae0d02b40e0431f7c212dcf231c9e3a7777a6afc2cc8f312 2026-10-21T00:06:58Z
+== arm cg: -ngl 0 2026-10-21T00:07:05Z
+== arm cg not deliverable 2026-10-21T00:07:07Z
+== verdict INCONCLUSIVE None 2026-10-21T00:07:27Z

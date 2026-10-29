@@ -1,0 +1,148 @@
+{
+  "tool": "k3d-gpu/bench/llm_load.py",
+  "schema": 1,
+  "started_at": "2026-10-21T21:32:04Z",
+  "config": {
+    "base_url": "http://127.0.0.1:18080/v1",
+    "model": "m",
+    "prompt": "Note 1: engineers who study cache hierarchies measure how often the common case is fast, how expensive the rare case is, and how the two combine under a realistic workload, and they write down every assumption before the first measurement.\nNote 2: engineers who study branch prediction measure how often the common case is fast, how expensive the rare case is, and how the two combine under a realistic workload, and they write down every assumption before the first measurement.\nNote 3: engineers who study memory controllers measure how often the common case is fast, how expensive the rare case is, and how the two combine under a realistic workload, and they write down every assumption before the first measurement.\nNote 4: engineers who study vector units measure how often the common case is fast, how expensive the rare case is, and how the two combine under a realistic workload, and they write down every assumption before the first measurement.\nNote 5: engineers who study page tables measure how often the common case is fast, how expensive the rare case is, and how the two combine under a realistic workload, and they write down every assumption before the first measurement.\nNote 6: engineers who study interconnects measure how often the common case is fast, how expensive the rare case is, and how the two combine under a realistic workload, and they write down every assumption before the first measurement.\nNote 7: engineers who study power states measure how often the common case is fast, how expensive the rare case is, and how the two combine under a realistic workload, and they write down every assumption before the first measurement.\nNote 8: engineers who study prefetchers measure how often the common case is fast, how expensive the rare case is, and how the two combine under a realistic workload, and they write down every assumption before the first measurement.\nNote 9: engineers who study cache hierarchies measure how often the common case is fast, how expensive the rare case is, and how the two combine under a realistic workload, and they write down every assumption before the first measurement.\nNote 10: engineers who study branch prediction measure how often the common case is fast, how expensive the rare case is, and how the two combine under a realistic workload, and they write down every assumption before the first measurement.\nNote 11: engineers who study memory controllers measure how often the common case is fast, how expensive the rare case is, and how the two combine under a realistic workload, and they write down every assumption before the first measurement.\nNote 12: engineers who study vector units measure how often the common case is fast, how expensive the rare case is, and how the two combine under a realistic workload, and they write down every assumption before the first measurement.\nNote 13: engineers who study page tables measure how often the common case is fast, how expensive the rare case is, and how the two combine under a realistic workload, and they write down every assumption before the first measurement.\nNote 14: engineers who study interconnects measure how often the common case is fast, how expensive the rare case is, and how the two combine under a realistic workload, and they write down every assumption before the first measurement.\nNote 15: engineers who study power states measure how often the common case is fast, how expensive the rare case is, and how the two combine under a realistic workload, and they write down every assumption before the first measurement.\nNote 16: engineers who study prefetchers measure how often the common case is fast, how expensive the rare case is, and how the two combine under a realistic workload, and they write down every assumption before the first measurement.\nNote 17: engineers who study cache hierarchies measure how often the common case is fast, how expensive the rare case is, and how the two combine under a realistic workload, and they write down every assumption before the first measurement.\nNote 18: engineers who study branch prediction measure how often the common case is fast, how expensive the rare case is, and how the two combine under a realistic workload, and they write down every assumption before the first measurement.\nNote 19: engineers who study memory controllers measure how often the common case is fast, how expensive the rare case is, and how the two combine under a realistic workload, and they write down every assumption before the first measurement.\nNote 20: engineers who study vector units measure how often the common case is fast, how expensive the rare case is, and how the two combine under a realistic workload, and they write down every assumption before the first measurement.\nSummarize the notes above in one sentence.",
+    "max_tokens": 16,
+    "temperature": 0.0,
+    "ignore_eos": false,
+    "extra_body": {
+      "chat_template_kwargs": {
+        "enable_thinking": false
+      }
+    },
+    "unique_prompts": true,
+    "requests": 4,
+    "concurrency": "1",
+    "warmup": 0,
+    "timeout": 900.0,
+    "label": "lsq",
+    "out": "/home/devcloud/k3dgpu-gemma/results/H54b/hold2/lsq.ttft.json",
+    "run_id": "2a879009"
+  },
+  "phases": [
+    {
+      "concurrency": 1,
+      "requests": 4,
+      "ok": 4,
+      "errors": 0,
+      "wall_s": 9.874711315147579,
+      "output_tokens_total": 64,
+      "aggregate_tokens_per_s": 6.481202129101788,
+      "requests_per_s": 0.4050751330688617,
+      "stats": {
+        "first_chunk_s": {
+          "n": 4,
+          "median": 1.5736631960608065,
+          "p90": 2.9404181060381234,
+          "min": 1.5393584971316159,
+          "max": 2.9404181060381234
+        },
+        "ttft_s": {
+          "n": 4,
+          "median": 1.5737130101770163,
+          "p90": 2.9404796520248055,
+          "min": 1.5394041580148041,
+          "max": 2.9404796520248055
+        },
+        "latency_s": {
+          "n": 4,
+          "median": 2.1565404783468693,
+          "p90": 3.4745005602017045,
+          "min": 2.085265518166125,
+          "max": 3.4745005602017045
+        },
+        "output_tokens": {
+          "n": 4,
+          "median": 16.0,
+          "p90": 16,
+          "min": 16,
+          "max": 16
+        },
+        "tokens_per_s": {
+          "n": 4,
+          "median": 7.419391303537353,
+          "p90": 7.672883793748775,
+          "min": 4.60497839121694,
+          "max": 7.672883793748775
+        },
+        "decode_tokens_per_s": {
+          "n": 4,
+          "median": 27.226155616420346,
+          "p90": 28.123267539507612,
+          "min": 24.62317703935303,
+          "max": 28.123267539507612
+        }
+      },
+      "samples": [
+        {
+          "index": 0,
+          "ok": true,
+          "error": null,
+          "chunks": 19,
+          "content_chunks": 16,
+          "text_chars": 107,
+          "first_chunk_s": 2.9404181060381234,
+          "ttft_s": 2.9404796520248055,
+          "latency_s": 3.4745005602017045,
+          "output_tokens": 16,
+          "tokens_per_s": 4.60497839121694,
+          "decode_tokens_per_s": 28.088787855158515,
+          "prompt_tokens": 995,
+          "finished": true
+        },
+        {
+          "index": 1,
+          "ok": true,
+          "error": null,
+          "chunks": 19,
+          "content_chunks": 16,
+          "text_chars": 107,
+          "first_chunk_s": 1.5393584971316159,
+          "ttft_s": 1.5394041580148041,
+          "latency_s": 2.1485863109119236,
+          "output_tokens": 16,
+          "tokens_per_s": 7.446756929773571,
+          "decode_tokens_per_s": 24.62317703935303,
+          "prompt_tokens": 995,
+          "finished": true
+        },
+        {
+          "index": 2,
+          "ok": true,
+          "error": null,
+          "chunks": 19,
+          "content_chunks": 16,
+          "text_chars": 107,
+          "first_chunk_s": 1.551846357062459,
+          "ttft_s": 1.5518993302248418,
+          "latency_s": 2.085265518166125,
+          "output_tokens": 16,
+          "tokens_per_s": 7.672883793748775,
+          "decode_tokens_per_s": 28.123267539507612,
+          "prompt_tokens": 995,
+          "finished": true
+        },
+        {
+          "index": 3,
+          "ok": true,
+          "error": null,
+          "chunks": 19,
+          "content_chunks": 16,
+          "text_chars": 107,
+          "first_chunk_s": 1.595480035059154,
+          "ttft_s": 1.5955266901291907,
+          "latency_s": 2.164494645781815,
+          "output_tokens": 16,
+          "tokens_per_s": 7.392025677301135,
+          "decode_tokens_per_s": 26.363523377682178,
+          "prompt_tokens": 995,
+          "finished": true
+        }
+      ]
+    }
+  ]
+}

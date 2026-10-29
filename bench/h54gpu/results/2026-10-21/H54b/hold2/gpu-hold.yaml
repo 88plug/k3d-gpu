@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Pod
+metadata: {name: gpu-hold-0}
+spec:
+  restartPolicy: Never
+  containers:
+  - {name: hold, image: busybox:1.37@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e, command: [sleep, "86400"], resources: {limits: {gpu.intel.com/xe: 1}}}
+---
+apiVersion: v1
+kind: Pod
+metadata: {name: gpu-hold-1}
+spec:
+  restartPolicy: Never
+  containers:
+  - {name: hold, image: busybox:1.37@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e, command: [sleep, "86400"], resources: {limits: {gpu.intel.com/xe: 1}}}
+---
+apiVersion: v1
+kind: Pod
+metadata: {name: gpu-hold-2}
+spec:
+  restartPolicy: Never
+  containers:
+  - {name: hold, image: busybox:1.37@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e, command: [sleep, "86400"], resources: {limits: {gpu.intel.com/xe: 1}}}
+---
+apiVersion: v1
+kind: Pod
+metadata: {name: gpu-hold-3}
+spec:
+  restartPolicy: Never
+  containers:
+  - {name: hold, image: busybox:1.37@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e, command: [sleep, "86400"], resources: {limits: {gpu.intel.com/xe: 1}}}
+---

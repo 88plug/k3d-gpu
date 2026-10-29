@@ -1,0 +1,14 @@
+== H54b hold 1 cards 2,3 arms  2026-10-21T03:46:41Z
+pod/gpu-hold-0 created
+pod/gpu-hold-1 created
+pod/gpu-hold-2 created
+pod/gpu-hold-3 created
+pod/gpu-hold-0 condition met
+pod/gpu-hold-1 condition met
+pod/gpu-hold-2 condition met
+pod/gpu-hold-3 condition met
+pod "gpu-hold-2" deleted from default namespace
+pod "gpu-hold-3" deleted from default namespace
+== device-plugin arms: allowed1 (gpu-hold-0: renderD128 gpu-hold-1: renderD129 gpu-hold-2: renderD130 gpu-hold-3: renderD131) 2026-10-21T03:48:31Z
+[32m==>[0m agent: OpenVINO/Qwen3.8-27B-int4-ov as 'm' on GPU (gpu.intel.com/xe), 2 CPU(s)
+== smoke done: manifest rc=0 1 xe lines 2026-10-21T03:48:31Z

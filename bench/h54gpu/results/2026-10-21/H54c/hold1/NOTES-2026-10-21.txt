@@ -1,0 +1,7 @@
+H54c hold 1 notes (written after the hold). Placement violation: pods for Gg, Hg, Gg2 (and Cg) were privileged and saw
+all four render nodes (gg.dri lists renderD128-131), so -ngl 99 split layers across four B70s, two of them serving
+qwen38-a-hr. Evidence: xe_vram_used_bytes saved here; Gg/Hg/Gg2 windows show +2.5-3.5 GB on each of card1-card4.
+The prediction model assumes one card; Gg, Hg, Gg2 are therefore not delivered as registered. predict.py on the
+records gives measured/predicted 1.261 (verdict.json), which would be INCONCLUSIVE anyway (0.25 < 0.261 <= 0.40).
+Recorded verdict: INCONCLUSIVE. H54c cap (1 hold) is used up.
+Cg ran in server-intel-b11749 with -ngl 0: 36.8 tok/s vs 47.7 in the CPU image server-b11749 (smoke, discarded).

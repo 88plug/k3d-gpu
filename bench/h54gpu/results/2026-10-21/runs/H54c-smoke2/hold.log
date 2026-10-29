@@ -1,0 +1,4 @@
+== H54c hold 1 card 2 image ghcr.io/ggml-org/llama.cpp:server-b11749@sha256:9fbaa06d7f4449e2ae0d02b40e0431f7c212dcf231c9e3a7777a6afc2cc8f312 2026-10-21T00:15:13Z
+== arm cg: -ngl 0 2026-10-21T00:15:24Z
+== arm cg done: {'n': 8, 'median': 47.65790466879267, 'p90': 47.834098319272414, 'min': 46.814164925850164, 'max': 47.834098319272414} 2026-10-21T00:18:17Z
+== verdict INCONCLUSIVE None 2026-10-21T00:18:39Z

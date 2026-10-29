@@ -1,0 +1,28 @@
+== H54b hold 2 cards 2,3 arms X1q-mtp Lsq 2026-10-21T21:17:59Z
+pod/gpu-hold-0 created
+pod/gpu-hold-1 created
+pod/gpu-hold-2 created
+pod/gpu-hold-3 created
+pod/gpu-hold-0 condition met
+pod/gpu-hold-1 condition met
+pod/gpu-hold-2 condition met
+pod/gpu-hold-3 condition met
+pod "gpu-hold-0" deleted from default namespace
+pod "gpu-hold-2" deleted from default namespace
+== device-plugin arms: allowed (gpu-hold-0: renderD131 gpu-hold-1: renderD128 gpu-hold-2: renderD130 gpu-hold-3: renderD129) 2026-10-21T21:19:47Z
+== arm X1q-mtp 2026-10-21T21:19:47Z
+/home/devcloud/k3dgpu-gemma/k3d-gpu/bench/h54gpu/h54b.sh: line 140: K3D_GPU_AGENT_PREFIX_CACHING=false: command not found
+== arm X1q-mtp: manifest failed 2026-10-21T21:19:47Z
+== arm Lsq 2026-10-21T21:20:07Z
+pod/lsq created
+energy: zone=intel-rapl:0 (package-0) joules=7572.788 seconds=60.018 avg_watts=126.176 command_seconds=60.002 samples=13 exit=0
+concurrency=1 ok=8/8 ttft_median=0.644s ttft_p90=0.699s latency_median=9.986s tok/s_median=25.6 aggregate_tok/s=25.6
+energy: zone=intel-rapl:0 (package-0) joules=14231.752 seconds=109.857 avg_watts=129.549 command_seconds=109.841 samples=23 exit=0
+concurrency=4 ok=16/16 ttft_median=1.964s ttft_p90=2.098s latency_median=18.448s tok/s_median=13.9 aggregate_tok/s=55.9
+energy: zone=intel-rapl:0 (package-0) joules=13420.889 seconds=103.407 avg_watts=129.787 command_seconds=103.392 samples=22 exit=0
+concurrency=16 ok=32/32 ttft_median=56.857s ttft_p90=57.544s latency_median=73.348s tok/s_median=3.5 aggregate_tok/s=55.7
+energy: zone=intel-rapl:0 (package-0) joules=23136.138 seconds=177.939 avg_watts=130.023 command_seconds=177.922 samples=37 exit=0
+concurrency=1 ok=4/4 ttft_median=1.574s ttft_p90=2.940s latency_median=2.157s tok/s_median=7.4 aggregate_tok/s=6.5
+gsm8k 48/50
+== arm lsq done 2026-10-21T21:38:21Z
+pod "lsq" deleted from default namespace
