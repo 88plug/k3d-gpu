@@ -1,9 +1,9 @@
-# kubernetes-sigs/agent-sandbox v1.0.7: controller + extensions (Sandbox, SandboxTemplate,
+# kubernetes-sigs/agent-sandbox v1.0.8: controller + extensions (Sandbox, SandboxTemplate,
 # SandboxClaim, SandboxWarmPool), installed by `k3d-gpu sandbox up`. Not baked into the node image.
-# Source: https://github.com/kubernetes-sigs/agent-sandbox/releases/download/v1.0.7/sandbox-with-extensions.yaml
-#   sha256 136c10c9347cb5a6740b351444cae82f404e883c3f520272257ba785f2af0da8 (as released)
+# Source: https://github.com/kubernetes-sigs/agent-sandbox/releases/download/v1.0.8/sandbox-with-extensions.yaml
+#   sha256 e68bfae0bd9b6ff717745a4be04bcc909594ba32011b6a0891b77c4d7b5bf58a (as released)
 # One change from the release file: the controller image is pinned by digest
-# (registry.k8s.io multi-arch index for :v1.0.7). Re-download and re-pin to bump.
+# (registry.k8s.io multi-arch index for :v1.0.8). Re-download and re-pin to bump.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -310,6 +310,12 @@ spec:
             type: object
           spec:
             properties:
+              failedPodPolicy:
+                default: Retain
+                enum:
+                - Retain
+                - Recreate
+                type: string
               operatingMode:
                 default: Running
                 enum:
@@ -4460,6 +4466,12 @@ spec:
                 - Allowed
                 - Overrides
                 - Disallowed
+                type: string
+              failedPodPolicy:
+                default: Retain
+                enum:
+                - Retain
+                - Recreate
                 type: string
               networkPolicy:
                 properties:
@@ -9008,7 +9020,7 @@ spec:
       - args:
         - --leader-elect=true
         - --extensions
-        image: registry.k8s.io/agent-sandbox/agent-sandbox-controller:v1.0.7@sha256:f254384c24605436ce35d7077427559e24bda8f5691cff5a54a4c2e030d81083
+        image: registry.k8s.io/agent-sandbox/agent-sandbox-controller:v1.0.8@sha256:e1d96312487eba7d8f001e848a9d4e644b7deea8c2a4564ccc318abb729be731
         name: agent-sandbox-controller
         ports:
         - containerPort: 8080

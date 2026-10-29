@@ -1,4 +1,4 @@
-# k3d-gpu sandbox profile for kubernetes-sigs/agent-sandbox v1.0.7 (share/agent-sandbox.yml).
+# k3d-gpu sandbox profile for kubernetes-sigs/agent-sandbox v1.0.8 (share/agent-sandbox.yml).
 # Applied by `k3d-gpu sandbox up` once the controller and its CRDs are ready.
 #
 # Untrusted agent tool execution runs on E-cores: the pod label k3d-gpu.io/cores=efficient
@@ -104,7 +104,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: python
-        image: registry.k8s.io/agent-sandbox/python-runtime-sandbox:v1.0.7@sha256:fc92654c97fe5dff2a7935a845820981026c075d0c1014e5c2c569f5e58204f1
+        image: registry.k8s.io/agent-sandbox/python-runtime-sandbox:v1.0.8@sha256:41da84809426098cb04cdafbb41855f15e3604f7455ef53816bad666e532e787
         env:
         - name: HOME
           value: /tmp

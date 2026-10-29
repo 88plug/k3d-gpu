@@ -388,28 +388,28 @@
       "tag": "v3.15.0"
     },
     {
-      "digest": "sha256:f254384c24605436ce35d7077427559e24bda8f5691cff5a54a4c2e030d81083",
+      "digest": "sha256:e1d96312487eba7d8f001e848a9d4e644b7deea8c2a4564ccc318abb729be731",
       "name": "registry.k8s.io/agent-sandbox/agent-sandbox-controller",
       "sources": [
         "share/agent-sandbox.yml"
       ],
-      "tag": "v1.0.7"
+      "tag": "v1.0.8"
     },
     {
-      "digest": "sha256:fc92654c97fe5dff2a7935a845820981026c075d0c1014e5c2c569f5e58204f1",
+      "digest": "sha256:41da84809426098cb04cdafbb41855f15e3604f7455ef53816bad666e532e787",
       "name": "registry.k8s.io/agent-sandbox/python-runtime-sandbox",
       "sources": [
         "share/agent-sandbox-k3d.yml"
       ],
-      "tag": "v1.0.7"
+      "tag": "v1.0.8"
     },
     {
-      "digest": "sha256:2fa1c99ad09bdf2c8ad97706a4ad2fd548c84d5ecd70ba32a6152c667b96c4d2",
+      "digest": "sha256:6fc5c9af9176e1acb5ce57a4a1d0c0d3eb25cd34f5bdd0efefebf0efe45a8379",
       "name": "registry.k8s.io/nfd/node-feature-discovery",
       "sources": [
         "share/node-feature-discovery.yml"
       ],
-      "tag": "v0.19.0"
+      "tag": "v0.20.1"
     },
     {
       "digest": "sha256:5d064465d751a73a729e7ecdc32c0ba5de0df1d305debb60a3d9a85b4fd3a967",
