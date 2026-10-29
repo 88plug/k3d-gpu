@@ -825,8 +825,9 @@ def llama_cards(d, cfg, w, kv_layer):
     count): layer il on device upper_bound(cumsum(ts) / sum(ts), il / (n_layer + 1)), the
     output layer (il = n_layer) the same way, the experts of the first --n-cpu-moe layers in
     host RAM, each layer's KV on its device, and each card's own overhead. Weights per layer
-    are the class totals over the layers; the output layer holds lm_head and the MTP tensors
-    (a GGUF's), and the vision projector is on the first GPU (tools/mtmd/clip.cpp).
+    are the class totals over the layers; the output layer holds lm_head (with tied embeddings
+    a copy of token_embd) and the MTP tensors (a GGUF's), and the vision projector is on the
+    first GPU (tools/mtmd/clip.cpp).
     kv_layer(il, ctx) is one sequence's KV of layer il."""
     tc = cfg.get("text_config") or cfg
     n = tc["num_hidden_layers"]
@@ -843,7 +844,9 @@ def llama_cards(d, cfg, w, kv_layer):
     for il in range(n + 1):
         dev = bisect.bisect_right(cum, il / (n + 1))
         if il == n:
-            cards[dev] += cls.get("lm_head", 0) + (cls.get("mtp", 0) if w["format"] == "gguf" else 0)
+            # the output weight: lm_head, or with tied embeddings (no output.weight) a copy of
+            # token_embd that llama.cpp loads as the output tensor (src/llama-model-loader.cpp)
+            cards[dev] += (cls.get("lm_head", 0) or cls.get("embed", 0)) + (cls.get("mtp", 0) if w["format"] == "gguf" else 0)
         else:
             cards[dev] += (cls.get("other", 0) / n + (cls.get("experts", 0) / n if il >= ncpu else 0)
                            + kv_layer(il, d["ctx"]) * d["seqs"])
@@ -918,6 +921,20 @@ class LlamaSplit(unittest.TestCase):
         self.assertTrue(d["fits"], d["summary"])
         self.assertEqual((d["placement"], d["gpus"]), ("gpu-split", 2))
         self.check(d, config(g), weights(g), gemma4_kv)
+
+    def test_tied_output_copy_on_one_card(self):
+        # Gemma 4 ties its embeddings: no output.weight, so llama.cpp loads token_embd a second
+        # time as the output tensor, on the output layer's device (src/llama-model-loader.cpp,
+        # TENSOR_DUPLICATED). On one card that copy is GPU bytes; the input copy stays on the host.
+        g = "google__gemma-4-26B-A4B-it-qat-q4_0-gguf"
+        d = plan("xeon6741p-4xb70", g)
+        self.assertEqual((d["engine"], d["placement"], d["gpus"]), ("llama.cpp", "gpu", 1))
+        m = fit.model_profile(config(g), weights(g))
+        self.assertEqual(m["bytes"]["lm_head"], 0)
+        ov = fit._overhead("llama.cpp", m, fit.TARGET_SEQS, None)[0]
+        want = m["serve_bytes"] - m["lookup_bytes"] + m["bytes"]["embed"] + ov + d["kv_bytes"]
+        self.assertAlmostEqual(d["gpu_bytes"] / GIB, want / GIB, delta=0.01)
+        self.assertLessEqual(d["gpu_bytes"], max(c["budget"] for c in fit.gpu_budget(host("xeon6741p-4xb70"))[0]))
 
     def test_split_counts_the_context_checkpoints_on_the_host(self):
         # llama-server keeps -ctxcp checkpoints of each slot's SWA cache in host RAM whatever

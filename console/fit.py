@@ -1076,13 +1076,22 @@ def llama_layer_devices(ts, n_layer):
     return [bisect.bisect_right(splits, il / (n_layer + 1)) for il in range(n_layer + 1)]
 
 
+def llama_output_copy(m):
+    """Bytes of the token embedding llama.cpp loads a second time as the output tensor when
+    the model ties its embeddings (no output.weight / lm_head): TENSOR_DUPLICATED, placed on
+    the output layer's device (src/llama-model-loader.cpp). On the CPU it maps the same file
+    pages; on a GPU it is a copy."""
+    return m["bytes"]["embed"] if not m["bytes"]["lm_head"] else 0
+
+
 def llama_layer_bytes(m, kv, ctx, seqs, n_cpu_moe):
     """([weights], [KV]) on the GPU per repeating layer, the output layer last: the class
     totals spread evenly over the layers, the experts of the first n_cpu_moe layers in host
     RAM (--n-cpu-moe), and each layer's own KV (its device holds it) for seqs sequences.
     The weights add up to the bytes to serve less the lookup tables (MTP only when the GGUF
-    holds it). The output layer holds lm_head and the MTP tensors; the vision projector
-    counts with layer 0, on the first card: tools/mtmd/clip.cpp loads it on the first GPU."""
+    holds it), plus the output copy of tied embeddings. The output layer holds lm_head (or
+    that copy) and the MTP tensors; the vision projector counts with layer 0, on the first
+    card: tools/mtmd/clip.cpp loads it on the first GPU."""
     n = max(m["layers"], 1)
     b = m["bytes"]
     exp, other = b["experts"] / n, b["other"] / n
@@ -1093,7 +1102,7 @@ def llama_layer_bytes(m, kv, ctx, seqs, n_cpu_moe):
     wl = [other + (exp if il >= n_cpu_moe else 0) for il in range(n)]
     wl[0] += b["vision"]
     kl = [per[kinds[il]] * seqs if il < len(kinds) else 0 for il in range(n)]
-    out = m["serve_bytes"] - m["lookup_bytes"] - b["experts"] - b["other"] - b["vision"]
+    out = m["serve_bytes"] - m["lookup_bytes"] - b["experts"] - b["other"] - b["vision"] + llama_output_copy(m)
     return wl + [out], kl + [0]
 
 
@@ -1158,7 +1167,7 @@ def _llama_search(m, kv, ladder, relaxed, want_seqs, k, room, n_cpus):
     return None
 
 
-def _llama_card_lines(use, ts, wl, kl, ov):
+def _llama_card_lines(use, ts, wl, kl, ov, m):
     """One explain line per card of a llama.cpp split."""
     lines, first = [], 0
     for c, t, w, kvb in zip(use, ts, llama_cards(ts, wl), llama_cards(ts, kl)):
@@ -1166,7 +1175,8 @@ def _llama_card_lines(use, ts, wl, kl, ov):
                      % (c["card"], t, "%d-%d" % (first, first + t - 1) if t else "none", g1(w), g1(kvb), g1(ov),
                         g1(w + kvb + ov), g1(c["budget"])))
         first += t
-    lines.append("  (layer %d is the output layer: lm_head)" % (len(wl) - 1))
+    lines.append("  (layer %d is the output layer: %s)" % (len(wl) - 1, "lm_head" if not llama_output_copy(m) else
+                                                            "a %s copy of the tied token embedding" % g1(llama_output_copy(m))))
     return lines
 
 
@@ -1449,11 +1459,14 @@ def _placements(eng, m, kv, ladder, relaxed, want_seqs, want_gpus, cards, hfree,
             else:
                 # One card (llama.cpp on several is sized card by card in _llama_multi).
                 budget = sum(c["budget"] for c in use)
-                w = gpu_w_all
+                w = gpu_w_all + (llama_output_copy(m) if eng == "llama.cpp" else 0)
                 left = budget - w - ov * k
                 scale = 1.0
                 lines = ["%s: budget %s - weights %s - overhead %d x %s = %s for KV"
                          % ("+".join(c["card"] for c in use), g1(budget), g1(w), k, ovl, g1(max(left, 0)))]
+                if eng == "llama.cpp" and llama_output_copy(m):
+                    lines.append("weights include the output tensor: a %s copy of the tied token embedding"
+                                 % g1(llama_output_copy(m)))
             if on_host:
                 lines.append("lookup tables %s stay in host RAM" % g1(on_host))
             if left <= 0:
@@ -1565,7 +1578,7 @@ def _llama_multi(m, kv, ladder, relaxed, want_seqs, use, ov, ovl, n_cpus, on_hos
     c, n, n_cpu, ts = found
     wl, kl = llama_layer_bytes(m, kv, c, n, n_cpu)
     cards_b = [int(b + ov) for b in llama_cards(ts, [a + b for a, b in zip(wl, kl)])]
-    lines += _llama_card_lines(use, ts, wl, kl, ov)
+    lines += _llama_card_lines(use, ts, wl, kl, ov, m)
     if m["bytes"]["vision"]:
         lines.append("  (%s holds the vision projector, %s: tools/mtmd/clip.cpp loads it on the first GPU)"
                      % (use[0]["card"], g1(m["bytes"]["vision"])))

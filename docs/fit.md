@@ -129,7 +129,10 @@ layers it gets, the way llama.cpp b11749 assigns them with `-ngl 999`
 (`src/llama-model.cpp`, `load_tensors`). Layer `il` goes to the device
 `upper_bound(cumsum(ts) / sum(ts), il / (layers + 1))`, and the output layer
 (`il = layers`, holding `lm_head` and a GGUF's MTP tensors) goes the same way, which is
-the last card. Each layer's weights are its share of the class totals, minus its experts
+the last card. A model with tied embeddings (Gemma 4) has no `lm_head`: llama.cpp loads
+`token_embd` a second time as the output tensor on that device
+(`src/llama-model-loader.cpp`, `TENSOR_DUPLICATED`), so the output layer counts that copy,
+on one card as on several. Each layer's weights are its share of the class totals, minus its experts
 when it is one of the first `--n-cpu-moe` layers. The vision projector counts on the first
 card: `tools/mtmd/clip.cpp` loads it on the first GPU. Each layer's KV and recurrent state
 sit on its card, a sliding-window layer's at its padded cell count (above); the context

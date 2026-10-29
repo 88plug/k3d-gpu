@@ -86,6 +86,14 @@ assert int(d["k8s"]["memory_limit"][:-2]) * 2 ** 30 >= d["host_bytes"] >= d["kv_
     ok "fit (llama.cpp, Gemma QAT on the desktop CPU): --cache-ram 0, -ctxcp K, checkpoints in the pod limit"
 else fail "fit (llama.cpp host caches) on the desktop (rc ${rc})" "${out}"; fi
 
+# Gemma 4 ties its embeddings: llama.cpp loads token_embd again as the output tensor, on the
+# output layer's device, so one card holds that copy beside the layers.
+out=$(bash "${K3D_GPU}" fit --host "${XEON}" --model google/gemma-4-26B-A4B-it-qat-q4_0-gguf --explain 2>&1); rc=$?
+if [ "${rc}" -eq 0 ] && grep -q 'llama.cpp/gpu: FITS' <<< "${out}" \
+    && grep -q 'weights include the output tensor: a 0.6 GiB copy of the tied token embedding' <<< "${out}"; then
+    ok "fit (llama.cpp, Gemma 4 on one card): the tied embedding's output copy counts as GPU bytes"
+else fail "fit (llama.cpp, tied output copy) on the Xeon (rc ${rc})" "$(grep -E 'llama.cpp/|weights' <<< "${out}")"; fi
+
 out=$(bash "${K3D_GPU}" fit --host "${XEON}" --model not/in-cache-offline 2>&1 </dev/null); rc=$?
 if [ "${rc}" -ne 0 ] && grep -q 'no metadata for not/in-cache-offline' <<< "${out}"; then
     ok "fit: a model with no metadata is an error, not a guess"
