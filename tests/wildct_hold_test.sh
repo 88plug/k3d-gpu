@@ -221,8 +221,15 @@ cluster_list_hang_in_cleanup_is_named() {
     fresh
     hold H10 sh -c 'echo k3dgpu-w-h10 >> "$SHIM_DIR/clusters.reg"; touch "$SHIM_DIR/list_hang"'
     [ "$(rcfile H10)" = 0 ] || { echo "rc file $(rcfile H10), exit ${RC} after ${SECS} s"; return 1; }
-    grep -q 'k3d cluster list' "$(R H10)/cleanup-incomplete" 2>/dev/null \
+    grep -q 'k3d cluster list: no answer in 2 s' "$(R H10)/cleanup-incomplete" 2>/dev/null \
         || { echo "a cluster list that did not answer was read as no cluster left"; cat "$(R H10)/cleanup-incomplete" 2>/dev/null; return 1; }
+    # A list that fails at once is named with k3d's rc, here and in the campaign log's "now".
+    fresh
+    hold H10b sh -c 'echo k3dgpu-w-h10 >> "$SHIM_DIR/clusters.reg"; touch "$SHIM_DIR/list_fail"'
+    grep -q 'k3d cluster list: rc 2' "$(R H10b)/cleanup-incomplete" 2>/dev/null \
+        || { echo "a cluster list that failed at once named as: $(cat "$(R H10b)/cleanup-incomplete" 2>/dev/null)"; return 1; }
+    grep 'H10b rc=0' "${WB}/runs/campaign.log" | grep -q 'now: unknown (k3d cluster list: rc 2)' \
+        || { echo "campaign log: $(grep 'H10b rc=' "${WB}/runs/campaign.log")"; return 1; }
 }
 
 # A second signal while the cleanup runs (an operator's repeated kill) must not cut the cleanup

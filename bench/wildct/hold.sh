@@ -111,13 +111,14 @@ finish() {
         [ -z "${cp}" ] || { kill -TERM "${cp}" 2>/dev/null; wait "${cp}" 2>/dev/null; }
         [ -z "${sp}${wd}" ] || kill ${sp} ${wd} 2>/dev/null
         reap
-        if left=$(clusters); then
+        left=$(clusters); st=$?
+        if [ "${st}" = 0 ]; then
             if [ -n "${left}" ]; then
                 # shellcheck disable=SC2086 # cluster names, split on purpose
-                timeout -k 10 "${TD}" k3d cluster delete ${left} > /dev/null 2>&1 || incomplete "k3d cluster delete ${left}"
+                timeout -k 10 "${TD}" k3d cluster delete ${left} > /dev/null 2>&1 || incomplete "k3d cluster delete ${left}: $(said $? "${TD}")"
             fi
         else
-            incomplete "k3d cluster list"
+            incomplete "k3d cluster list: $(said "${st}" "${T}")"
         fi
         timeout -k 10 "${T}" python3 "${ROOT}/bench/load/load.py" stop > /dev/null 2>&1; st=$?
         [ "${st}" = 0 ] || incomplete "load.py stop: $(said "${st}" "${T}")"
@@ -125,7 +126,7 @@ finish() {
         [ "${st}" = 0 ] || incomplete "docker rm -f ${RAPL_C}: $(said "${st}" "${T}")"
         [ "${ran}" = 0 ] || [ "${rc}" = 0 ] || h28_images
         snapshot > "${R}/post.txt"
-        now=$(clusters) || now="unknown (k3d cluster list did not answer)"
+        now=$(clusters) || now="unknown (k3d cluster list: $(said $? "${T}"))"
         log "rc=${rc}; clusters deleted: ${left:-none}; now: ${now}; / $(avail) GB available$([ -e "${R}/cleanup-incomplete" ] && echo "; CLEANUP INCOMPLETE: $(paste -sd';' "${R}/cleanup-incomplete")")"
     else
         log "rc=${rc} (no hold)"
