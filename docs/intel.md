@@ -151,13 +151,15 @@ balloons policy) onto Kubernetes. It targets Xeon servers. We read it at
 [`0ecf67a`](https://github.com/intel/enterprise-agent-toolkit/tree/0ecf67a); a
 k3d-gpu cluster is a candidate bring-your-own target for a single developer
 machine. [`integrations/eat/eat-up.sh`](../integrations/eat/eat-up.sh) deploys the
-pinned tag `release-1.0.3-hotfix`
-([`0d3438d`](https://github.com/intel/enterprise-agent-toolkit/tree/0d3438d7119de44cafc5903f66665c0b623e3333);
+pinned tag `release-1.1.0`, the latest
+([`0c726f5`](https://github.com/intel/enterprise-agent-toolkit/tree/0c726f576595971c53cc45b94e08ba969beb4a4a);
 [tags](https://api.github.com/repos/intel/enterprise-agent-toolkit/tags), checked
-2026-10-28). The latest, `release-1.1.0`, adds OpenShell
+2026-10-29), with its guardrail, vLLM Semantic Router, OpenShell, Kata and rack-scale
+mode off. `release-1.1.0` adds OpenShell
 ([PR #14](https://github.com/intel/enterprise-agent-toolkit/pull/14),
 `deploy_openshell=off` by default); `eat-up.sh` refuses `deploy_openshell=on` because
-its pinned tag has no OpenShell role. Pins and upstream changes, Release 1.1.0
+OpenShell has not run on a k3d-gpu cluster. The `release-1.1.0` path is pre-registered
+as F4 and has not run yet. Pins and upstream changes, Release 1.1.0
 ([PR #21](https://github.com/intel/enterprise-agent-toolkit/pull/21)) included:
 [platforms.md](platforms.md#intel-enterprise-agent-toolkit-eat).
 
@@ -422,7 +424,8 @@ Shipped since this roadmap was first written:
   advertises; vLLM XPU or llm-scaler on Arc by flag ([README](../README.md)).
 - **EAT on one node.** `K3D_GPU_NODE_LABELS` sets the `ei-*-eligible` labels and
   `K3D_GPU_BALLOONS=external` leaves the balloons policy to EAT [ledger:H14];
-  [`integrations/eat/eat-up.sh`](../integrations/eat/eat-up.sh) runs EAT's brownfield path [ledger:H1b].
+  [`integrations/eat/eat-up.sh`](../integrations/eat/eat-up.sh) runs EAT's brownfield path
+  (`release-1.0.3-hotfix` [ledger:H1b]; `release-1.1.0`, now pinned, is F4 and not run yet).
 - **Report and bench.** `k3d-gpu report`, `facts`, `plan`, and the `bench/` harnesses
   that write [EXPERIMENTS.md](../EXPERIMENTS.md).
 - **Telemetry.** Prometheus, node-exporter, the Intel GPU exporter and an optional
@@ -463,9 +466,11 @@ hardware, a recorded run.
   runs gave the `xe`, DSA, IAA, QAT and AMX rows their first hardware results and the CPU
   ISA labels their first recorded live node, and both ledger rows are
   REFUTED [ledger:H52] [ledger:H52b]; the first Gemma 4 rows are recorded, none SUPPORTED yet.
-- **EAT 1.1.0.** The `release-1.1.0` tag is cut (2026-10-22). Moving `eat-up.sh` to it
-  waits until no pending ledger row pins `0d3438d`, then needs the checks listed in
-  [platforms.md](platforms.md#intel-enterprise-agent-toolkit-eat).
+- **EAT 1.1.0 run.** `eat-up.sh` deploys `release-1.1.0` since 2026-10-29, with the
+  guardrail off and the vLLM CPU image re-pinned to `v0.28.0`
+  ([platforms.md](platforms.md#intel-enterprise-agent-toolkit-eat)). The recorded
+  end-to-end run is pre-registered as F4 in [EXPERIMENTS.md](../EXPERIMENTS.md) and has
+  not run yet.
 - **NPU telemetry.** No NPU exporter is shipped.
 - **Upstream.** Small, separate fixes for running EAT and its successor
   installer on k3s: accept `+k3s` versions in platform detection, pass Istio's
