@@ -3,9 +3,9 @@
 
 A Q4_0 QAT checkpoint (e.g. google/gemma-4-26B-A4B-it-qat-q4_0-unquantized) stores bf16 weights
 that already lie on a symmetric 4-bit grid: every 32-weight block along the input dimension holds
-integer multiples k * d of one step d, k in [-8, 7] (model-cards/REFERENCE.md 3.2). An INT4_SYM
-group-32 export keeps that benefit only if each block's scale is that step; an absmax-based scale
-(absmax / 8) re-rounds every value. Crescent amendment M1.
+integer multiples k * d of one step d, k in [-8, 7] (research/model-cards/REFERENCE.md 3.2). An
+INT4_SYM group-32 export keeps that benefit only if each block's scale is that step; an
+absmax-based scale (absmax / 8) re-rounds every value. Crescent amendment M1.
 
   qat_grid.py check IR.xml QAT_DIR [--out JSON] [--limit N]
       for every INT4 weight in the IR whose name matches a QAT tensor of the same size, the
@@ -236,7 +236,7 @@ def cmd_check(a):
 
 # snap: a weight whose export already sits this far from the checkpoint tensor it was matched to
 # is not that tensor in that layout (a scaled, permuted or mis-named match); it is left alone.
-# Absmax-based INT4 export error on this checkpoint is 6-9% (model-cards/REFERENCE.md 3.2).
+# Absmax-based INT4 export error on this checkpoint is 6-9% (research/model-cards/REFERENCE.md 3.2).
 SNAP_MAX_PRE = 0.15
 
 
