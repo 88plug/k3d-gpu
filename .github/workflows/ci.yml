@@ -398,7 +398,7 @@ jobs:
   pkgbuild-lint:
     name: Lint PKGBUILD in Arch container
     runs-on: ubuntu-latest
-    container: archlinux:latest@sha256:3c64b538588416593f69a1aebd2f2ec0f2541b29159f32556fa7def2167147a0
+    container: archlinux:latest@sha256:e82623936fa1a69700b48e98b058df6eaab18b737c27473a7234a40fdecb9413
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - name: Install tools

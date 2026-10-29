@@ -154,7 +154,7 @@
       "tag": "1.36"
     },
     {
-      "digest": "sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e",
+      "digest": "sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec",
       "name": "docker.io/library/busybox",
       "sources": [
         "scripts/k3d-gpu K3D_GPU_DEVICE_TEST_IMAGE"
@@ -162,7 +162,7 @@
       "tag": "1.37"
     },
     {
-      "digest": "sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac",
+      "digest": "sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852",
       "name": "docker.io/library/ubuntu",
       "sources": [
         "integrations/eat/bastion.Dockerfile"
@@ -170,7 +170,7 @@
       "tag": "24.04"
     },
     {
-      "digest": "sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944",
+      "digest": "sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c",
       "name": "docker.io/library/ubuntu",
       "sources": [
         "Dockerfile"
