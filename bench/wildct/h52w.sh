@@ -4,8 +4,9 @@
 # owner's GPU opt-out (K3D_GPU_VENDORS=auto,-nvidia,-intel) and rule W3's kubelet thresholds,
 # nothing else: inventory, `detect` as found (sysfs reads only), doctor, up, the node object,
 # a scan of every pod for GPU device mounts and GPU resources, `k3d-gpu test`, down, inventory
-# again. Opens no GPU device node. The pod wait (wildct amendment R1) needs at least one pod
-# listed and every pod Running or Completed, polls every H52W_POLL_S s (default 5) at most
+# again. Opens no GPU device node. The pod wait (wildct amendments R1 and R3, bench/wildct/ready.sh)
+# needs every node Ready and at least one pod listed, each Completed or Running with every
+# container ready, polls every H52W_POLL_S s (default 5) at most
 # H52W_POLLS times (default 60), is skipped when `up` failed, and records its outcome in rc.txt;
 # detect, doctor, test and down are bounded by timeout, and so is every kubectl read-out (60 s).
 set -uo pipefail
@@ -29,7 +30,7 @@ timeout -k 10 300 "${K}" doctor > "${OUT}/doctor.txt" 2>&1; echo "doctor rc=$?" 
 t0=$(date +%s)
 timeout -k 10 600 "${K}" up > "${OUT}/up.txt" 2>&1; up_rc=$?
 echo "up rc=${up_rc} in $(( $(date +%s) - t0 )) s" >> "${OUT}/rc.txt"
-timeout -k 10 60 docker inspect --format '{{.Image}} {{.Config.Image}} privileged={{.HostConfig.Privileged}} devices={{.HostConfig.Devices}} runtime={{.HostConfig.Runtime}} gpus={{.HostConfig.DeviceRequests}}' \
+timeout -k 10 60 docker inspect --format '{{.Image}} {{.Config.Image}} privileged={{.HostConfig.Privileged}} devices={{.HostConfig.Devices}} runtime={{.HostConfig.Runtime}} gpus={{.HostConfig.DeviceRequests}} restarts={{.RestartCount}}' \
     "k3d-${K3D_GPU_CLUSTER}-server-0" > "${OUT}/node-container.txt" 2>&1
 if [ "${up_rc}" != 0 ]; then
     ready="not waited (up rc=${up_rc})"
@@ -37,8 +38,7 @@ else
     ready="no (${POLLS} polls, every ${POLL_S} s)"
     t0=$(date +%s)
     for _ in $(seq "${POLLS}"); do
-        if timeout -k 5 30 kubectl get pods -A --no-headers 2>/dev/null \
-            | awk '$4 != "Running" && $4 != "Completed" {bad++} END {exit !(NR > 0 && bad == 0)}'; then
+        if bash "${HERE}/ready.sh"; then
             ready="yes after $(( $(date +%s) - t0 )) s"
             break
         fi

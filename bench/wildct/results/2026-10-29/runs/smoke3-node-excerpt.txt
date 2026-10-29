@@ -1,0 +1,109 @@
+# grep -nE "Starting k3s|vxlan device|failed to create vxlan|Extension [a-z]+ revision|panic: |level=fatal" runs/smoke3-node.log (docker logs k3d-k3dgpu-w-smoke-server-0 at 19:48Z, 8862 lines)
+5:time="2026-10-29T19:45:46Z" level=info msg="Starting k3s v1.37.1+k3s1 (356c0254)"
+454:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+507:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+512:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+516:time="2026-10-29T19:45:49Z" level=info msg="Starting k3s.cattle.io/v1, Kind=Addon controller"
+555:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+680:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+884:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+987:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+1021:I1029 19:45:58.355441      87 vxlan_network.go:115] starting vxlan device watcher
+1022:E1029 19:45:58.383853      87 iptables.go:380] Failed to bootstrap IPTables: failed to apply partial iptables-restore unable to run iptables-restore (, Warning: Extension comment revision 0 not supported, missing kernel module?
+1028:E1029 19:45:58.417267      87 iptables.go:380] Failed to bootstrap IPTables: failed to apply partial iptables-restore unable to run iptables-restore (, Warning: Extension comment revision 0 not supported, missing kernel module?
+1050:F1029 19:46:01.377326      87 network_policy_controller.go:412] Failed to run iptables command to insert in INPUT chain running [/bin/aux/iptables -t filter -I INPUT 1 -m comment --comment kube-router netpol - 4IA2OSFRMVNDXBVV -j KUBE-ROUTER-INPUT --wait]: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+1052:panic: F1029 19:46:01.377326      87 network_policy_controller.go:412] Failed to run iptables command to insert in INPUT chain running [/bin/aux/iptables -t filter -I INPUT 1 -m comment --comment kube-router netpol - 4IA2OSFRMVNDXBVV -j KUBE-ROUTER-INPUT --wait]: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+1074:time="2026-10-29T19:46:02Z" level=info msg="Starting k3s v1.37.1+k3s1 (356c0254)"
+1544:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+1618:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+1623:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+1688:I1029 19:46:06.229614      39 vxlan_network.go:115] starting vxlan device watcher
+1689:E1029 19:46:06.263878      39 iptables.go:380] Failed to bootstrap IPTables: failed to apply partial iptables-restore unable to run iptables-restore (, Warning: Extension comment revision 0 not supported, missing kernel module?
+1695:E1029 19:46:06.300441      39 iptables.go:380] Failed to bootstrap IPTables: failed to apply partial iptables-restore unable to run iptables-restore (, Warning: Extension comment revision 0 not supported, missing kernel module?
+1705:time="2026-10-29T19:46:06Z" level=info msg="Starting k3s.cattle.io/v1, Kind=Addon controller"
+1969:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+1978:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+1989:F1029 19:46:17.267227      39 network_policy_controller.go:412] Failed to run iptables command to insert in INPUT chain running [/bin/aux/iptables -t filter -I INPUT 1 -m comment --comment kube-router netpol - 4IA2OSFRMVNDXBVV -j KUBE-ROUTER-INPUT --wait]: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+1991:panic: F1029 19:46:17.267227      39 network_policy_controller.go:412] Failed to run iptables command to insert in INPUT chain running [/bin/aux/iptables -t filter -I INPUT 1 -m comment --comment kube-router netpol - 4IA2OSFRMVNDXBVV -j KUBE-ROUTER-INPUT --wait]: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+2013:time="2026-10-29T19:46:18Z" level=info msg="Starting k3s v1.37.1+k3s1 (356c0254)"
+2488:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+2554:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+2560:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+2608:I1029 19:46:22.601868      39 vxlan_network.go:115] starting vxlan device watcher
+2623:E1029 19:46:22.633655      39 iptables.go:380] Failed to bootstrap IPTables: failed to apply partial iptables-restore unable to run iptables-restore (, Warning: Extension comment revision 0 not supported, missing kernel module?
+2629:E1029 19:46:22.677138      39 iptables.go:380] Failed to bootstrap IPTables: failed to apply partial iptables-restore unable to run iptables-restore (, Warning: Extension comment revision 0 not supported, missing kernel module?
+2639:time="2026-10-29T19:46:22Z" level=info msg="Starting k3s.cattle.io/v1, Kind=Addon controller"
+2893:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+2940:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+2957:F1029 19:46:33.630369      39 network_policy_controller.go:412] Failed to run iptables command to insert in INPUT chain running [/bin/aux/iptables -t filter -I INPUT 1 -m comment --comment kube-router netpol - 4IA2OSFRMVNDXBVV -j KUBE-ROUTER-INPUT --wait]: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+2959:panic: F1029 19:46:33.630369      39 network_policy_controller.go:412] Failed to run iptables command to insert in INPUT chain running [/bin/aux/iptables -t filter -I INPUT 1 -m comment --comment kube-router netpol - 4IA2OSFRMVNDXBVV -j KUBE-ROUTER-INPUT --wait]: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+2980:time="2026-10-29T19:46:34Z" level=info msg="Starting k3s v1.37.1+k3s1 (356c0254)"
+3493:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+3568:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+3574:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+3635:I1029 19:46:38.737682      39 vxlan_network.go:115] starting vxlan device watcher
+3637:E1029 19:46:38.787209      39 iptables.go:380] Failed to bootstrap IPTables: failed to apply partial iptables-restore unable to run iptables-restore (, Warning: Extension comment revision 0 not supported, missing kernel module?
+3643:E1029 19:46:38.817031      39 iptables.go:380] Failed to bootstrap IPTables: failed to apply partial iptables-restore unable to run iptables-restore (, Warning: Extension comment revision 0 not supported, missing kernel module?
+3653:time="2026-10-29T19:46:38Z" level=info msg="Starting k3s.cattle.io/v1, Kind=Addon controller"
+3872:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+3923:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+3940:F1029 19:46:49.773716      39 network_policy_controller.go:412] Failed to run iptables command to insert in INPUT chain running [/bin/aux/iptables -t filter -I INPUT 1 -m comment --comment kube-router netpol - 4IA2OSFRMVNDXBVV -j KUBE-ROUTER-INPUT --wait]: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+3942:panic: F1029 19:46:49.773716      39 network_policy_controller.go:412] Failed to run iptables command to insert in INPUT chain running [/bin/aux/iptables -t filter -I INPUT 1 -m comment --comment kube-router netpol - 4IA2OSFRMVNDXBVV -j KUBE-ROUTER-INPUT --wait]: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+3964:time="2026-10-29T19:46:50Z" level=info msg="Starting k3s v1.37.1+k3s1 (356c0254)"
+4448:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+4536:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+4544:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+4618:I1029 19:46:54.987566      39 vxlan_network.go:115] starting vxlan device watcher
+4619:E1029 19:46:55.020327      39 iptables.go:380] Failed to bootstrap IPTables: failed to apply partial iptables-restore unable to run iptables-restore (, Warning: Extension comment revision 0 not supported, missing kernel module?
+4626:E1029 19:46:55.060428      39 iptables.go:380] Failed to bootstrap IPTables: failed to apply partial iptables-restore unable to run iptables-restore (, Warning: Extension comment revision 0 not supported, missing kernel module?
+4636:time="2026-10-29T19:46:55Z" level=info msg="Starting k3s.cattle.io/v1, Kind=Addon controller"
+4876:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+4919:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+4928:F1029 19:47:06.043872      39 network_policy_controller.go:412] Failed to run iptables command to insert in FORWARD chain running [/bin/aux/iptables -t filter -I FORWARD 1 -m comment --comment kube-router netpol - TEMCG2JMHZYE7H7T -j KUBE-ROUTER-FORWARD --wait]: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+4930:panic: F1029 19:47:06.043872      39 network_policy_controller.go:412] Failed to run iptables command to insert in FORWARD chain running [/bin/aux/iptables -t filter -I FORWARD 1 -m comment --comment kube-router netpol - TEMCG2JMHZYE7H7T -j KUBE-ROUTER-FORWARD --wait]: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+4951:time="2026-10-29T19:47:07Z" level=info msg="Starting k3s v1.37.1+k3s1 (356c0254)"
+5439:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+5541:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+5546:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+5593:I1029 19:47:11.124435      38 vxlan_network.go:115] starting vxlan device watcher
+5608:E1029 19:47:11.167072      38 iptables.go:380] Failed to bootstrap IPTables: failed to apply partial iptables-restore unable to run iptables-restore (, Warning: Extension comment revision 0 not supported, missing kernel module?
+5614:E1029 19:47:11.193893      38 iptables.go:380] Failed to bootstrap IPTables: failed to apply partial iptables-restore unable to run iptables-restore (, Warning: Extension comment revision 0 not supported, missing kernel module?
+5624:time="2026-10-29T19:47:11Z" level=info msg="Starting k3s.cattle.io/v1, Kind=Addon controller"
+5845:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+5902:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+5913:F1029 19:47:22.186908      38 network_policy_controller.go:412] Failed to run iptables command to insert in INPUT chain running [/bin/aux/iptables -t filter -I INPUT 1 -m comment --comment kube-router netpol - 4IA2OSFRMVNDXBVV -j KUBE-ROUTER-INPUT --wait]: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+5915:panic: F1029 19:47:22.186908      38 network_policy_controller.go:412] Failed to run iptables command to insert in INPUT chain running [/bin/aux/iptables -t filter -I INPUT 1 -m comment --comment kube-router netpol - 4IA2OSFRMVNDXBVV -j KUBE-ROUTER-INPUT --wait]: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+5937:time="2026-10-29T19:47:23Z" level=info msg="Starting k3s v1.37.1+k3s1 (356c0254)"
+6417:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+6475:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+6483:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+6553:I1029 19:47:27.252433      38 vxlan_network.go:115] starting vxlan device watcher
+6562:E1029 19:47:27.283780      38 iptables.go:380] Failed to bootstrap IPTables: failed to apply partial iptables-restore unable to run iptables-restore (, Warning: Extension comment revision 0 not supported, missing kernel module?
+6568:E1029 19:47:27.317209      38 iptables.go:380] Failed to bootstrap IPTables: failed to apply partial iptables-restore unable to run iptables-restore (, Warning: Extension comment revision 0 not supported, missing kernel module?
+6578:time="2026-10-29T19:47:27Z" level=info msg="Starting k3s.cattle.io/v1, Kind=Addon controller"
+6822:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+6878:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+6896:F1029 19:47:38.330598      38 network_policy_controller.go:412] Failed to run iptables command to insert in INPUT chain running [/bin/aux/iptables -t filter -I INPUT 1 -m comment --comment kube-router netpol - 4IA2OSFRMVNDXBVV -j KUBE-ROUTER-INPUT --wait]: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+6898:panic: F1029 19:47:38.330598      38 network_policy_controller.go:412] Failed to run iptables command to insert in INPUT chain running [/bin/aux/iptables -t filter -I INPUT 1 -m comment --comment kube-router netpol - 4IA2OSFRMVNDXBVV -j KUBE-ROUTER-INPUT --wait]: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+6919:time="2026-10-29T19:47:39Z" level=info msg="Starting k3s v1.37.1+k3s1 (356c0254)"
+7408:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+7469:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+7474:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+7545:I1029 19:47:43.371253      39 vxlan_network.go:115] starting vxlan device watcher
+7576:E1029 19:47:43.413781      39 iptables.go:380] Failed to bootstrap IPTables: failed to apply partial iptables-restore unable to run iptables-restore (, Warning: Extension comment revision 0 not supported, missing kernel module?
+7582:E1029 19:47:43.450334      39 iptables.go:380] Failed to bootstrap IPTables: failed to apply partial iptables-restore unable to run iptables-restore (, Warning: Extension comment revision 0 not supported, missing kernel module?
+7592:time="2026-10-29T19:47:43Z" level=info msg="Starting k3s.cattle.io/v1, Kind=Addon controller"
+7828:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+7873:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+7882:F1029 19:47:54.397045      39 network_policy_controller.go:412] Failed to run iptables command to insert in INPUT chain running [/bin/aux/iptables -t filter -I INPUT 1 -m comment --comment kube-router netpol - 4IA2OSFRMVNDXBVV -j KUBE-ROUTER-INPUT --wait]: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+7884:panic: F1029 19:47:54.397045      39 network_policy_controller.go:412] Failed to run iptables command to insert in INPUT chain running [/bin/aux/iptables -t filter -I INPUT 1 -m comment --comment kube-router netpol - 4IA2OSFRMVNDXBVV -j KUBE-ROUTER-INPUT --wait]: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+7905:time="2026-10-29T19:47:55Z" level=info msg="Starting k3s v1.37.1+k3s1 (356c0254)"
+8389:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+8466:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+8471:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+8561:I1029 19:47:59.543419      39 vxlan_network.go:115] starting vxlan device watcher
+8562:E1029 19:47:59.583633      39 iptables.go:380] Failed to bootstrap IPTables: failed to apply partial iptables-restore unable to run iptables-restore (, Warning: Extension comment revision 0 not supported, missing kernel module?
+8568:E1029 19:47:59.630452      39 iptables.go:380] Failed to bootstrap IPTables: failed to apply partial iptables-restore unable to run iptables-restore (, Warning: Extension comment revision 0 not supported, missing kernel module?
+8578:time="2026-10-29T19:47:59Z" level=info msg="Starting k3s.cattle.io/v1, Kind=Addon controller"
+8797:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?
+8859:	error appending rule: exit status 4: Warning: Extension comment revision 0 not supported, missing kernel module?

@@ -6369,6 +6369,65 @@ names the next smoke `smoke3`. Its `PYIMG`, H4's probe image, now equals `hold.s
 image (`tests/wildct_hold_test.sh` checks it). Step 9 also removes the earlier RAPL reader image
 (`70729b46...`), which the campaign pulled on 2026-10-20.
 
+### Wildct amendment R3: smoke3, a pod wait that reads readiness, and the kernel's netfilter extensions (2026-10-29)
+
+Recorded 2026-10-29, before any wildct hold has measured anything. No row's hypothesis,
+prediction, arm, model, statistic, threshold, cap, disk need, hold count or order changes.
+
+**What happened (disclosed).** The box owner approved loading `vxlan` and `br_netfilter`
+(amendment R2) and keeping them across reboots. Both were loaded at 19:41:05Z (`modprobe -a`,
+rc 0) and listed in `/etc/modules-load.d/k3dgpu-wildct.conf`; `kernel.modprobe` stays empty.
+`br_netfilter` sends bridged traffic through iptables, so the host's own services were read
+before the load, at once after it and 3 minutes later: every container's state, health, restart
+count and start time, the HTTP status of eight published endpoints (from the host and through its
+tailnet address) and Prometheus's two scrape targets read the same each time, and the firewall's
+rule counts did not change (`bench/wildct/results/2026-10-29/host/modules.txt`). Step 1 then
+passed again (19:44:37Z; H9 `br_netfilter vxlan`; Docker 29.7.2), main at `c4407a2c` was shipped
+(it carries R2's `gpu_scan.py`; its launcher and `share/` equal 0.1.79's), and the wiring smoke
+`smoke3` ran (19:45:43Z, under `hold.sh`, rc 0). It printed every pass marker of the resume
+procedure: `up rc=0 in 189 s`, `pods ready: yes after 0 s`, `GPU-SCAN clean`, `down rc=0`, nvidia
+and intel named as opted out, and `gpus=[]`. The cluster was not working:
+
+- k3s's network policy controller stopped every ~16 s on "Extension comment revision 0 not
+  supported, missing kernel module?" (8 panics in the node's log; `runs/smoke3-node-excerpt.txt`);
+- the node container restarted (docker's restart count, read live: 3 at 19:46:35Z, 7 at 19:47:53Z);
+- the node carried the `node.kubernetes.io/not-ready` taint;
+- coredns, metrics-server and the three NFD pods stayed 0/1, with 10 restarts each (`pods.txt`).
+
+Flannel started its VXLAN backend (no "failed to create vxlan device"). The pod wait read only the
+STATUS column, which says Running for a pod whose containers are not ready. `smoke3` is discarded;
+it is not a pass.
+
+GPU isolation on that restarting cluster, the first wildct cluster with pods: 8 pods, none a GPU
+plugin; no pod mounts a hostPath under `/dev`; no container asks for an nvidia.com/ or
+gpu.intel.com/ resource; the node's allocatable lists cpu, ephemeral-storage, hugepages, memory and
+pods only; the node container had `devices=[]`, `gpus=[]` and runtime `runc`. Read live during it,
+`kubectl get ds -A` listed the GPU plugin DaemonSets the node image ships
+(`nvidia-device-plugin-daemonset`, `intel-gpu-plugin-wsl`, `habanalabs-device-plugin-daemonset`)
+and Intel's DSA, IAA, NPU and QAT plugins, each with 0 pods desired.
+
+**Diagnosis.** A throwaway container from the release node image (`--network none`, NET_ADMIN and
+NET_RAW only, CPUs 20-23) added, in its own network namespace, one rule per iptables extension with
+the image's iptables-nft, and one set per ipset type (`bench/wildct/nfprobe.sh`, 20:00Z; record
+`runs/nfprobe.txt`). It is a diagnostic: it ran from this amendment's branch before the merge, after
+two ad-hoc forms. The kernel serves recent, conntrack, addrtype, mark, MARK, tcp, udp, MASQUERADE,
+DNAT and SNAT. It does not serve comment, statistic, REJECT, multiport, limit, NFLOG, physdev or
+pkttype, nor the ipset types hash:ip, hash:net, hash:ip,port, hash:ip,port,ip and
+hash:ip,port,net. Every module behind them is on disk for 6.6.156-2-MANJARO; with
+`kernel.modprobe` empty the kernel does not load them on demand. Restoring `kernel.modprobe`, or
+loading those modules, is the box owner's call. The next smoke is `smoke4`.
+
+**Runner change.** The pod wait of `row.sh smoke` and `h52w.sh` (amendment R1) now runs
+`bench/wildct/ready.sh`: at least one node, every node Ready; at least one pod, each Completed, or
+Running with every container ready (READY n/n). Both node-container records add docker's restart
+count. The poll count and interval do not change; a poll now makes two bounded reads (30 s each).
+H52w's procedure, prediction and table are unchanged; its `pods ready` line now means what it
+says. Tests: `tests/wildct_hold_test.sh` (smoke3's pods and node; `nfprobe.sh`'s verdicts), in CI.
+
+**Resume procedure.** `RESUME.md` gains step 1's H10 (`nfprobe.sh` must read `NFPROBE clean`),
+names the next smoke `smoke4`, adds `restarts=0` and every pod ready to its pass, and leaves
+`/etc/modules-load.d/k3dgpu-wildct.conf` to the box owner at the end of the campaign.
+
 ### H5 amendment A1: stage-1 harness and definitions (2026-10-19)
 
 Written 2026-10-19T22:30-07:00, before any H5 measurement. It fixes what the

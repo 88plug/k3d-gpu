@@ -1,0 +1,4 @@
+== smoke3 waiting for the lock 2026-10-29T19:45:43Z
+== smoke3 lock taken 2026-10-29T19:45:43Z
+== smoke3 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh smoke 2026-10-29T19:45:43Z
+== smoke3 rc=0; clusters deleted: none; now: ; / 208 GB available 2026-10-29T19:48:59Z

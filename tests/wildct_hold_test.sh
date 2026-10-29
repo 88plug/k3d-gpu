@@ -4,7 +4,8 @@
 # docker and k3d call hold.sh makes is bounded, a wedged host stops a hold before it starts
 # anything, the RAPL reader must give a reading, cleanup that cannot finish is named, and
 # runs/NAME/rc is written on every exit so a waiter never polls forever. h52w.sh's pod wait
-# does not count an empty pod list as ready and records its outcome.
+# (bench/wildct/ready.sh) does not count an empty pod list, a NotReady node or a Running pod with a
+# container not ready as ready, and records its outcome.
 #
 # Runs the scripts for real under a temporary HOME with stub docker, k3d, systemctl, df,
 # cut (load1 only), kubectl and k3d-gpu on PATH. No root, no docker daemon, no cluster.
@@ -37,7 +38,8 @@ trap cleanup EXIT
 #   df_avail (GB available on /, default 100), clusters.reg (one name per line);
 #   info_fail, rm_fail, ps_fail, image_rm_fail: docker info, rm, ps or image rm fails at once (rc 1);
 #   list_fail: k3d cluster list fails at once (rc 2); images_hang: docker images hangs;
-#   images.reg (the host's images, name:tag per line)
+#   images.reg (the host's images, name:tag per line); run_out, run_rc: docker run's output and
+#   exit status (nfprobe.sh's container)
 fresh() {
     local c
     W=$(mktemp -d "${T}/w.XXXX")
@@ -57,7 +59,10 @@ case $1 in
     info) [ -e "${SHIM_DIR}/info_hang" ] && exec sleep 1000
         [ -e "${SHIM_DIR}/info_fail" ] && { echo "permission denied while trying to connect to the docker API" >&2; exit 1; }
         echo 29.6.1 ;;
-    run) [ -e "${SHIM_DIR}/run_hang" ] && exec sleep 1000; echo 2677961bea6f ;;
+    run) [ -e "${SHIM_DIR}/run_hang" ] && exec sleep 1000
+        # run_out: what the container prints (nfprobe.sh), run_rc its exit status
+        [ -e "${SHIM_DIR}/run_out" ] && { cat "${SHIM_DIR}/run_out"; exit "$(cat "${SHIM_DIR}/run_rc" 2>/dev/null || echo 0)"; }
+        echo 2677961bea6f ;;
     exec) [ -e "${SHIM_DIR}/exec_empty" ] && exit 1; echo 123456789012 ;;
     rm) [ -e "${SHIM_DIR}/rm_hang_noterm" ] && { trap '' TERM; exec sleep 1000; }
         [ -e "${SHIM_DIR}/rm_hang" ] && exec sleep 1000
@@ -464,6 +469,8 @@ EOF
 #!/usr/bin/env bash
 echo "kubectl $*" >> "${SHIM_DIR}/calls.log"
 case "$*" in
+    "get nodes --no-headers")
+        if [ -e "${SHIM_DIR}/nodes" ]; then cat "${SHIM_DIR}/nodes"; else echo "k3d-k3dgpu-w-h52-server-0 Ready control-plane,master 1m v1.37.1+k3s1"; fi ;;
     "get pods -A --no-headers") cat "${SHIM_DIR}/pods" 2>/dev/null ;;
     "get pods -A -o json")
         # no_apiserver: what kubectl prints when it reaches no API server (smoke2, 2026-10-29).
@@ -493,12 +500,66 @@ h52w_running_pods_are_ready() {
     grep -q '^pods ready: yes' "${W}/out/rc.txt" || { echo "rc.txt:"; cat "${W}/out/rc.txt"; return 1; }
 }
 
+# ready.sh, one poll of the pod wait, against smoke3's cluster (2026-10-29): k3s restarted every
+# ~16 s, the node read NotReady and coredns 0/1, and every pod still read Running.
+ready_needs_ready_nodes_and_containers() {
+    h52w_fresh
+    local ok='kube-system coredns-1 1/1 Running 0 1m
+kube-system helm-1 0/1 Completed 0 1m'
+    rdy() { PATH=${WB}/bin:${PATH} bash "${ROOT}/bench/wildct/ready.sh"; }
+    printf '%s\n' "${ok}" > "${W}/pods"
+    rdy || { echo "a Ready node with ready and Completed pods is not ready"; return 1; }
+    printf 'kube-system coredns-1 0/1 Running 10 (7s ago) 2m57s\nkube-system nri-1 1/1 Running 10 (7s ago) 2m57s\n' > "${W}/pods"
+    rdy && { echo "a Running pod with a container not ready (coredns 0/1) counted as ready"; return 1; }
+    printf '%s\n' "${ok}" > "${W}/pods"
+    echo "k3d-k3dgpu-w-smoke-server-0 NotReady control-plane,master 3m v1.37.1+k3s1" > "${W}/nodes"
+    rdy && { echo "a NotReady node counted as ready"; return 1; }
+    : > "${W}/nodes"
+    rdy && { echo "no node listed counted as ready"; return 1; }
+    rm -f "${W}/nodes"
+    printf 'kube-system coredns-1 1/1 Running 0 1m\nkube-system x-1 0/1 ContainerCreating 0 1m\n' > "${W}/pods"
+    rdy && { echo "a ContainerCreating pod counted as ready"; return 1; }
+    grep -q -- '^timeout -k [0-9]* 30 kubectl get nodes --no-headers$' "${W}/calls.log" || { echo "node read not bounded"; return 1; }
+    grep -q -- '^timeout -k [0-9]* 30 kubectl get pods -A --no-headers$' "${W}/calls.log" || { echo "pod read not bounded"; return 1; }
+}
+
+h52w_unready_pods_are_not_ready() {
+    h52w_fresh
+    printf 'kube-system coredns-1 0/1 Running 10 (7s ago) 2m57s\n' > "${W}/pods"
+    h52w
+    grep -q '^pods ready: no' "${W}/out/rc.txt" || { echo "rc.txt:"; cat "${W}/out/rc.txt"; return 1; }
+    [ "$(calls '^kubectl get pods -A --no-headers')" = 3 ] || { echo "polls: $(calls '^kubectl get pods -A --no-headers')"; return 1; }
+}
+
+# nfprobe.sh: the verdict line from the container's ok/FAIL lines (smoke3's host, 2026-10-29).
+nfprobe_names_what_is_missing() {
+    fresh
+    local np=${ROOT}/bench/wildct/nfprobe.sh out rc
+    nfp() { out=$(PATH=${WB}/bin:${PATH} bash "${np}" "${IMG}" 2>&1); rc=$?; }
+    printf 'ok iptables-nft filter comment\nok ipset hash:ip\niptables: iptables v1.8.11 (nf_tables)\n' > "${W}/run_out"
+    nfp
+    [ "${rc}" = 0 ] && grep -qx 'NFPROBE clean' <<< "${out}" || { echo "all ok: rc ${rc}: ${out}"; return 1; }
+    grep -q -- '^docker run --rm -i --name k3dgpu-w-nfprobe --network none --cap-drop ALL --cap-add NET_ADMIN --cap-add NET_RAW --cpuset-cpus 20-23 ' "${W}/calls.log" \
+        || { echo "not the registered container flags: $(grep '^docker run' "${W}/calls.log")"; return 1; }
+    ! grep -qE -- '--privileged|--gpus|/dev/' "${W}/calls.log" || { echo "a GPU or device flag"; return 1; }
+    printf 'FAIL ipset hash:net :: set type not supported\nFAIL iptables-nft filter comment :: Warning: Extension comment revision 0 not supported\nFAIL ip6tables-nft nat comment :: x\nok iptables-nft filter mark\niptables: iptables v1.8.11 (nf_tables)\n' > "${W}/run_out"
+    nfp
+    [ "${rc}" = 1 ] && grep -qx 'NFPROBE missing: comment hash:net' <<< "${out}" || { echo "missing: rc ${rc}: ${out}"; return 1; }
+    printf 'ok iptables-legacy filter comment\niptables: iptables v1.8.11 (legacy)\n' > "${W}/run_out"
+    nfp
+    [ "${rc}" = 2 ] && ! grep -q '^NFPROBE' <<< "${out}" || { echo "legacy iptables gave a verdict: rc ${rc}: ${out}"; return 1; }
+    echo 125 > "${W}/run_rc"
+    printf 'ok iptables-nft filter comment\niptables: iptables v1.8.11 (nf_tables)\n' > "${W}/run_out"
+    nfp
+    [ "${rc}" = 2 ] && ! grep -q '^NFPROBE' <<< "${out}" || { echo "a failed docker run gave a verdict: rc ${rc}: ${out}"; return 1; }
+}
+
 h52w_steps_are_bounded() {
     h52w_fresh
     printf 'kube-system coredns-1 1/1 Running 0 1m\n' > "${W}/pods"
     h52w
     local k=${WB}/k3d-gpu/usr/bin/k3d-gpu s
-    for s in "300 ${k} detect" "300 ${k} doctor" "600 ${k} up" "900 ${k} test" "600 ${k} down" "30 kubectl get pods -A --no-headers" \
+    for s in "300 ${k} detect" "300 ${k} doctor" "600 ${k} up" "900 ${k} test" "600 ${k} down" "30 kubectl get nodes --no-headers" "30 kubectl get pods -A --no-headers" \
         "60 kubectl get pods -A -o wide" "60 kubectl get ds -A" "60 kubectl get addons.k3s.cattle.io -A" "60 kubectl get node -o json" \
         "60 kubectl get pods -A -o json"; do
         grep -q -- "^timeout -k [0-9]* ${s}\$" "${W}/calls.log" || { echo "not bounded: ${s}"; grep '^timeout' "${W}/calls.log"; return 1; }
@@ -787,6 +848,9 @@ check "wait_hold.sh: an empty rc file is not an rc" wait_hold_empty_rc_is_not_an
 check "wait_hold.sh follows a real hold to its rc" wait_hold_follows_a_real_hold
 check "h52w.sh: an empty pod list is not ready, at most H52W_POLLS polls" h52w_empty_pod_list_is_not_ready
 check "h52w.sh: Running and Completed pods are ready" h52w_running_pods_are_ready
+check "ready.sh: a NotReady node or a Running pod with a container not ready is not ready (smoke3)" ready_needs_ready_nodes_and_containers
+check "h52w.sh: Running pods with a container not ready are not ready, at most H52W_POLLS polls" h52w_unready_pods_are_not_ready
+check "nfprobe.sh: clean, the missing extensions and set types, or no verdict" nfprobe_names_what_is_missing
 check "h52w.sh: no pod wait when up failed" h52w_failed_up_is_not_waited_on
 check "h52w.sh: detect, doctor, up, each pod poll, test and down are bounded" h52w_steps_are_bounded
 check "row.sh: every row's environment matches the wildct pre-registration" row_envs_match_the_registration
