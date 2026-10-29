@@ -825,7 +825,9 @@ def llama_cards(d, cfg, w, kv_layer):
     count): layer il on device upper_bound(cumsum(ts) / sum(ts), il / (n_layer + 1)), the
     output layer (il = n_layer) the same way, the experts of the first --n-cpu-moe layers in
     host RAM, each layer's KV on its device, and each card's own overhead. Weights per layer
-    are the class totals over the layers. kv_layer(il, ctx) is one sequence's KV of layer il."""
+    are the class totals over the layers; the output layer holds lm_head and the MTP tensors
+    (a GGUF's), and the vision projector is on the first GPU (tools/mtmd/clip.cpp).
+    kv_layer(il, ctx) is one sequence's KV of layer il."""
     tc = cfg.get("text_config") or cfg
     n = tc["num_hidden_layers"]
     f = d["flags"]
@@ -837,10 +839,11 @@ def llama_cards(d, cfg, w, kv_layer):
         c += t
         cum.append(c / sum(ts))
     cards = [0] * len(ts)
+    cards[0] += cls.get("vision", 0)
     for il in range(n + 1):
         dev = bisect.bisect_right(cum, il / (n + 1))
         if il == n:
-            cards[dev] += cls.get("lm_head", 0) + cls.get("mtp", 0) + cls.get("vision", 0)
+            cards[dev] += cls.get("lm_head", 0) + (cls.get("mtp", 0) if w["format"] == "gguf" else 0)
         else:
             cards[dev] += (cls.get("other", 0) / n + (cls.get("experts", 0) / n if il >= ncpu else 0)
                            + kv_layer(il, d["ctx"]) * d["seqs"])
@@ -908,6 +911,51 @@ class LlamaSplit(unittest.TestCase):
         self.assertTrue(d["fits"], d["summary"])
         self.assertEqual((d["placement"], d["gpus"]), ("gpu-split", 2))
         self.check(d, config(g), weights(g), gemma4_kv)
+
+    def test_layer_bytes_are_the_bytes_to_serve(self):
+        # Sized from safetensors for a GGUF conversion: the MTP head is not served
+        # (model_profile serve_bytes), and the vision projector loads on the first GPU
+        # (tools/mtmd/clip.cpp takes the first GPU backend), not on the output layer's card.
+        cfg = config("Qwen__Qwen3.8-Flash-Next")
+        m = fit.model_profile(cfg, weights("Qwen__Qwen3.8-Flash-Next"))
+        self.assertGreater(m["bytes"]["mtp"], GIB)
+        self.assertGreater(m["bytes"]["vision"], GIB / 2)
+        wl, _ = fit.llama_layer_bytes(m, fit.kv_profile(cfg, 2), 4096, 1, 0)
+        self.assertAlmostEqual(sum(wl), m["serve_bytes"] - m["lookup_bytes"], delta=1)
+        self.assertAlmostEqual(wl[-1], m["bytes"]["lm_head"], delta=1)
+        self.assertAlmostEqual(wl[0] - wl[1], m["bytes"]["vision"], delta=1)
+
+    def test_moe_offload_takes_the_best_number_of_cards(self):
+        # Every card is held to the smallest budget of the cards used, so two smaller cards
+        # beside two large ones can leave less room than the two large ones alone. The fit
+        # tries 1, 2, ... of the free cards by budget and keeps the plan with the fewest
+        # CPU-expert layers, not every free card.
+        h = host("xeon6741p-4xb70")
+        for g, used in zip(h["gpus"], (0, 0, 12, 14)):
+            g["vram_used"], g["users"] = used * GIB, []
+        model = mdir("Intel__Qwen3.8-Flash-Next-W4A16-AutoRound")
+        cfg = config("Intel__Qwen3.8-Flash-Next-W4A16-AutoRound")
+        n = (cfg.get("text_config") or cfg)["num_hidden_layers"]
+
+        def ncpu(d):
+            f = d["flags"]
+            return int(f[f.index("--n-cpu-moe") + 1]) if "--n-cpu-moe" in f else n
+
+        kw = dict(ctx=262144, seqs=6, device="gpu")
+        auto = fit.plan_with_variants(h, model, [], **kw)
+        self.assertTrue(auto["fits"], auto["summary"])
+        self.assertEqual(auto["placement"], "moe-offload")
+        each = [fit.plan_with_variants(h, model, [], gpus=k, **kw) for k in range(1, 5)]
+        self.assertEqual(ncpu(auto), min(ncpu(d) for d in each if d["fits"]))
+        self.assertLess(auto["gpus"], 4)
+        budget = min(c["budget"] for c in fit.gpu_budget(h)[0][:auto["gpus"]])
+        self.assertLessEqual(max(auto["card_bytes"]), budget)
+
+    def test_moe_offload_takes_the_cards_asked_for(self):
+        # --gpus 3 on the Xeon, where two cards are free: refused, not two cards.
+        d = plan("xeon6741p-4xb70", FLASH_GGUF, gpus=3, device="gpu")
+        self.assertFalse(d["fits"])
+        self.assertIn("3 GPUs asked, 2 not busy", d["reason"])
 
     def test_too_much_for_any_split_is_refused(self):
         d = plan("xeon6741p-4xb70", "google__gemma-4-26B-A4B-it-qat-q4_0-gguf", ctx=262144, seqs=12, device="gpu")
