@@ -39,15 +39,15 @@ BASTION_IMAGE="k3d-gpu-eat-bastion:$(sha256sum "${HERE}/bastion.Dockerfile" | cu
 err()  { echo "ERROR: $*" >&2; exit 1; }
 info() { echo "==> $*"; }
 
-# openshell_setting <cfg>: the deploy_openshell value EAT would use. Parsed the way its
+# cfg_value <cfg> <key>: the value EAT would use for <key>. Parsed the way its
 # read_config_file does (core/lib/system/precheck/read-config-file.sh at ${EAT_TAG}):
 # split on the first '=', trim key and value with xargs (which also drops quotes),
 # skip comments, and the last assignment wins because the result is sourced.
-openshell_setting() {
+cfg_value() {
     local key value v=""
     while IFS='=' read -r key value || [ -n "${key}" ]; do
         key=$(echo "${key}" | xargs 2>/dev/null) || continue
-        [ "${key}" = deploy_openshell ] || continue
+        [ "${key}" = "$2" ] || continue
         v=$(echo "${value}" | xargs 2>/dev/null) || v="${value}"
     done < "$1"
     echo "${v}"
@@ -57,9 +57,15 @@ openshell_setting() {
 # ${EAT_TAG} ships NVIDIA OpenShell (PR #14) and installs it when the value is yes, after
 # mapping on to yes (fresh-install.sh). It has never run on a k3d-gpu cluster: upstream
 # lists a CNI that enforces NetworkPolicy and best-effort Landlock (docs/openshell.md).
-case "$(openshell_setting "${EAT_CONFIG}")" in
+case "$(cfg_value "${EAT_CONFIG}" deploy_openshell)" in
     on|yes) err "deploy_openshell=on is unverified on k3d-gpu (${EAT_TAG} ships OpenShell, but it has not run on a k3d-gpu cluster); set deploy_openshell=off" ;;
 esac
+# With no deploy_guardrails value, ${EAT_TAG} deploys its Qwen3Guard guardrail:
+# deploy-agentic-stack.sh:195 defaults DEPLOY_GUARDRAILS to on and brownfield.sh keeps
+# that default. A config written for release-1.0.3-hotfix has no such key, so the
+# choice is asked for here rather than made for the user.
+[ -n "$(cfg_value "${EAT_CONFIG}" deploy_guardrails)" ] \
+    || err "${EAT_CONFIG} does not set deploy_guardrails, so ${EAT_TAG} would deploy its Qwen3Guard guardrail, which has not run on a k3d-gpu cluster; set deploy_guardrails=off (as the shipped agentic-config.cfg does) or deploy_guardrails=on"
 # The KV cache from the fit of EAT_FIT_MODEL, unless EAT_VLLM_KV_GIB is set.
 if [ -z "${EAT_VLLM_KV_GIB:-}" ] && [ -n "${EAT_FIT_MODEL:-}" ]; then
     command -v k3d-gpu >/dev/null 2>&1 || err "EAT_FIT_MODEL needs k3d-gpu on PATH (or set EAT_VLLM_KV_GIB)"

@@ -266,7 +266,10 @@ except where an item says otherwise, and item 11 is new there. In
     stop it. *Fix:* `brownfield.sh` reads `deploy_guardrails` the way
     `read_config_file` reads every other toggle (last assignment wins) and
     exports `DEPLOY_GUARDRAILS` before sourcing; `agentic-config.cfg` sets it
-    `off`. With no value in the config, EAT's default (`on`) stands.
+    `off`. With no value in the config, EAT's default (`on`) stands, so
+    `eat-up.sh` stops before touching the cluster when the config gives
+    `deploy_guardrails` no value (a config written for `release-1.0.3-hotfix`
+    has none) and asks for `off` or `on`.
 
 Not a blocker on the previous pin: **AMX/AVX-512 are not required.** The CPU
 vLLM image (`v0.24.0`) with EAT's exact Qwen3 settings (`VLLM_CPU_SGL_KERNEL=1`,

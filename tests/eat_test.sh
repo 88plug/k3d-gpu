@@ -9,7 +9,8 @@
 #        both for a router that shlex.splits the command (agent-sandbox v0.5.0
 #        python-runtime-sandbox) and for one that runs it under /bin/sh -c
 #      - the check fails when the sandbox prints anything but 385
-#   3. eat-up.sh refuses deploy_openshell=on, unverified on k3d-gpu.
+#   3. eat-up.sh refuses deploy_openshell=on, unverified on k3d-gpu, and a config with no
+#      deploy_guardrails value, on which release-1.1.0 deploys its guardrail.
 #   5. The GenAI Gateway installs from copies of its charts with exact dependency
 #      versions and every image name:tag@sha256 (gateway-charts.py, brownfield.sh).
 #   6. eat-opt.py puts the model optimizer's choices on EAT's own modelConfigs entry,
@@ -309,6 +310,37 @@ fi
 openshell_case "commented out" pass '# deploy_openshell=on'
 openshell_case "ON is not on to EAT" pass 'deploy_openshell=ON'
 openshell_case "other key mentioning it" pass 'note=deploy_openshell=on'
+
+# 3c. eat-up.sh stops before the cluster when the config gives deploy_guardrails no value.
+#     release-1.1.0 then deploys its Qwen3Guard guardrail (deploy-agentic-stack.sh:195
+#     defaults DEPLOY_GUARDRAILS to on, and brownfield.sh keeps that default), and a config
+#     written for release-1.0.3-hotfix has no such key. Each case starts from the shipped
+#     config without its deploy_guardrails line; the key is read as read_config_file reads it.
+GUARD_REFUSED='does not set deploy_guardrails'
+# guard_case <name> <expect: refuse|pass> <lines appended to the shipped config minus deploy_guardrails...>
+guard_case() {
+    local name=$1 want=$2 out rc msg cfg
+    shift 2
+    N=$((N + 1))
+    cfg="${WORK}/guard-${N}.cfg"
+    grep -v '^deploy_guardrails=' "${EAT}/agentic-config.cfg" > "${cfg}"
+    [ "$#" -eq 0 ] || printf '%s\n' "$@" >> "${cfg}"
+    out=$(EAT_CONFIG="${cfg}" EAT_KUBECONFIG=/nonexistent "${EAT}/eat-up.sh" 2>&1) && rc=0 || rc=$?
+    if [ "${want}" = refuse ]; then msg=${GUARD_REFUSED}; else msg=${PASSED}; fi
+    if [ "${rc}" -ne 0 ] && grep -qF "${msg}" <<< "${out}"; then
+        ok "eat-up guardrail ${want}: ${name}"
+    else
+        fail "eat-up guardrail ${want}: ${name} (rc=${rc}): ${out}"
+    fi
+}
+guard_case "no deploy_guardrails key (a release-1.0.3-hotfix config)" refuse
+guard_case "empty value" refuse 'deploy_guardrails='
+guard_case "commented out" refuse '# deploy_guardrails=off'
+guard_case "other key mentioning it" refuse 'note=deploy_guardrails=off'
+guard_case "deploy_guardrails=off" pass 'deploy_guardrails=off'
+guard_case "deploy_guardrails=on is the user's choice" pass 'deploy_guardrails=on'
+guard_case "spaces and quotes" pass ' deploy_guardrails = "off" '
+guard_case "set, then emptied: last wins" refuse 'deploy_guardrails=off' 'deploy_guardrails='
 
 # 5. The GenAI Gateway path installs pinned charts and images. EAT's
 #    deploy-genai-gateway.yml syncs helm_charts_base_genai{,_trace} to the node, runs
