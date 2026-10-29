@@ -26,6 +26,13 @@ FAILS=()
 for ex in "${examples[@]}"; do
     [ -f "${EXAMPLES_DIR}/${ex}/requirements.txt" ] || { echo "no such example: ${ex}" >&2; FAILS+=("${ex}"); continue; }
     [ -f "${EXAMPLES_DIR}/${ex}/constraints.txt" ] || { echo "FAIL ${ex}: no constraints.txt" >&2; FAILS+=("${ex}"); continue; }
+    # README.md's table row names the example's direct pins: they must equal requirements.txt.
+    want=$(grep -v '^#' "${EXAMPLES_DIR}/${ex}/requirements.txt" | sed '/^[[:space:]]*$/d' | sort)
+    got=$(grep -F "| [\`${ex}/\`]" "${EXAMPLES_DIR}/README.md" | grep -o "\`[A-Za-z0-9._-]*==[^\`]*\`" | tr -d "\`" | sort)
+    if [ "${got}" != "${want}" ]; then
+        echo "FAIL ${ex}: README.md table names '${got//$'\n'/ }', requirements.txt pins '${want//$'\n'/ }'" >&2
+        FAILS+=("${ex}"); continue
+    fi
     echo "=== ${ex}"
     if docker run --rm \
         -v "${EXAMPLES_DIR}:/examples:ro" \
