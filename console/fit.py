@@ -117,6 +117,12 @@ KV_DTYPE_BYTES = {"auto": None, "bf16": 2, "fp16": 2, "f16": 2, "fp8": 1, "q8_0"
 # KV cache types each engine takes and the fit sets a flag for (vLLM --kv-cache-dtype,
 # llama.cpp -ctk/-ctv; OVMS's KV_CACHE_PRECISION is not set by the fit).
 KV_DTYPES_OF = {"vllm": ("fp8", "fp16", "bf16"), "llama.cpp": ("f16", "fp16", "bf16", "q8_0", "q4_0")}
+# Tokens a sliding-window layer's cache holds per sequence (swa_tokens). vLLM: the window.
+# llama.cpp b11749: GGML_PAD(n_swa + n_ubatch, 256) cells per stream (src/llama-kv-cache-iswa.cpp).
+# OVMS: OpenVINO GenAI 2026.4 has only KV_CACHE and LINEAR_ATTENTION_CACHE types
+# (src/cpp/src/continuous_batching/cache/cache_type.hpp), and a KV block spans every
+# attention layer (kv_cache_manager.hpp), so sliding-window layers hold the whole context.
+SWA_CACHE = {"vllm": "window", "llama.cpp": "llama.cpp", "ovms": "full"}
 
 # Tensor classes by name: the parts a placement moves separately.
 CLASSES = (
@@ -784,9 +790,10 @@ def model_type(cfg):
     return str(text_config(cfg).get("model_type") or cfg.get("model_type") or "").replace("_text", "")
 
 
-def kv_profile(cfg, kv_bytes):
+def kv_profile(cfg, kv_bytes, engine=None):
     """Per-token KV bytes for full-attention layers, per-token-within-window bytes for
-    sliding-window layers, and per-sequence state bytes for linear-attention layers."""
+    sliding-window layers, and per-sequence state bytes for linear-attention layers.
+    engine sets how many tokens a sliding-window layer holds (swa_tokens)."""
     tc = text_config(cfg)
     n = tc.get("num_hidden_layers")
     types = tc.get("layer_types") or ["full_attention"] * n
@@ -812,9 +819,16 @@ def kv_profile(cfg, kv_bytes):
                      % (full, tc["indexer_kv_heads"], tc["indexer_head_dim"], _num(kv_bytes), full * idx))
     window = tc.get("sliding_window") or 0
     per_swa = 2 * kvh * hd * kv_bytes
+    swa_cache = SWA_CACHE.get(engine, "window")
     if swa:
-        lines.append("sliding window: %d layers x 2 x %d kv heads x %d head dim x %s B = %d B/token, at most %d tokens"
-                     % (swa, kvh, hd, _num(kv_bytes), swa * per_swa, window))
+        lines.append("sliding window: %d layers x 2 x %d kv heads x %d head dim x %s B = %d B/token, %s"
+                     % (swa, kvh, hd, _num(kv_bytes), swa * per_swa, {
+                         "full": "for the whole context: OpenVINO GenAI 2026.4 has no sliding-window cache type"
+                                 " (continuous_batching/cache/cache_type.hpp), every attention layer gets every token",
+                         "llama.cpp": "for GGML_PAD(%d window + %d ubatch, 256) = %d tokens per sequence at most"
+                                      " (src/llama-kv-cache-iswa.cpp)" % (window, LLAMA_UBATCH,
+                                                                          _pad(window + LLAMA_UBATCH, 256)),
+                         "window": "at most %d tokens" % window}[swa_cache]))
     state = 0
     if lin:
         vh, kd = tc.get("linear_num_value_heads", 0), tc.get("linear_key_head_dim", 0)
@@ -828,8 +842,13 @@ def kv_profile(cfg, kv_bytes):
         lines.append("linear attention state: %d layers x (%d v heads x %d x %d x %d B + conv (%d-1) x %d ch x 2 B)"
                      " = %s per sequence, any length" % (lin, vh, kd, vd, ssm_b, ck, ch, _mb(state)))
     return {"full_layers": full, "full_per_token": full * (per_full + idx), "swa_layers": swa,
-            "swa_per_token": swa * per_swa, "window": window, "linear_layers": lin,
+            "swa_per_token": swa * per_swa, "window": window, "swa_cache": swa_cache, "linear_layers": lin,
             "state_per_seq": state, "kv_heads": gkvh, "lines": lines}
+
+
+def _pad(n, to):
+    """GGML_PAD: n rounded up to a multiple of to."""
+    return (n + to - 1) // to * to
 
 
 def _num(x):
@@ -966,8 +985,21 @@ def act_bytes(m, tokens, seqs):
     return tokens * width * 2 * 2 + seqs * m["vocab"] * 4
 
 
+def swa_tokens(kv, ctx):
+    """Tokens one sequence's sliding-window layers hold at context ctx. vLLM: the window.
+    llama.cpp: its SWA cache of GGML_PAD(min(n_ctx_seq, n_swa + n_ubatch), 256) cells per
+    stream (one stream per slot with -np set). OVMS: the whole context."""
+    w = kv["window"] or ctx
+    mode = kv.get("swa_cache", "window")
+    if mode == "full":
+        return ctx
+    if mode == "llama.cpp":
+        return min(_pad(ctx, 256), _pad(w + LLAMA_UBATCH, 256))
+    return min(ctx, w)
+
+
 def per_seq(kv, ctx, scale=1.0):
-    return int((kv["full_per_token"] * ctx + kv["swa_per_token"] * min(ctx, kv["window"] or ctx)) * scale
+    return int((kv["full_per_token"] * ctx + kv["swa_per_token"] * swa_tokens(kv, ctx)) * scale
                + kv["state_per_seq"] * scale)
 
 
@@ -1063,7 +1095,7 @@ def fit(host, cfg, weights, engine=None, ctx=None, seqs=None, gpus=None, kv_dtyp
             raise ValueError("--kv-dtype %s is not a KV cache type of %s (%s)"
                              % (kv_dtype, eng, ", ".join(KV_DTYPES_OF.get(eng, ())) or "auto only"))
         kvb = KV_DTYPE_BYTES.get(kv_dtype) or (1 if eng == "vllm" and m["kv_scheme_bits"] == 8 else m["dtype_bytes"])
-        kvs[eng] = kv_profile(cfg, kvb)
+        kvs[eng] = kv_profile(cfg, kvb, eng)
         kvs[eng]["dtype"] = kv_dtype if kv_dtype != "auto" else ("fp8" if kvb == 1 else "auto")
         ex.append("  KV cache (%s B per element%s):" % (_num(kvb), ", the checkpoint's kv_cache_scheme"
                                                        if kvb == 1 and kv_dtype == "auto" else ""))
@@ -1102,7 +1134,7 @@ def fit(host, cfg, weights, engine=None, ctx=None, seqs=None, gpus=None, kv_dtyp
     rung_kv, rung_limit = [], []
     for rs, rc in rungs:
         kb = per_seq(kvp, rc, picked["kv_scale"]) * rs
-        if picked["engine"] == "vllm" and picked["placement"] == "cpu":
+        if _whole_gib_pool(picked["engine"], picked["placement"]):
             kb = int(math.ceil(kb / GIB)) * GIB
         hb = picked["host_bytes"] - picked["kv_bytes"] + kb if picked["placement"] == "cpu" else picked["host_bytes"]
         rung_kv.append(int(kb))
@@ -1149,6 +1181,22 @@ def _res(eng, place, fits, why="", math_lines=(), **kw):
          "kv_bytes": 0, "kv_scale": 1.0}
     r.update(kw)
     return r
+
+
+def _whole_gib_pool(eng, place):
+    """KV pools set in whole GiB: OVMS --cache_size, vLLM's CPU VLLM_CPU_KVCACHE_SPACE."""
+    return eng == "ovms" or (eng == "vllm" and place == "cpu")
+
+
+def _kv_room(eng, place, left):
+    """The KV room sequences are sized in: whole GiB for a whole-GiB pool, so the pool
+    rounded up to hold them stays inside left."""
+    return left // GIB * GIB if _whole_gib_pool(eng, place) else left
+
+
+def _kv_pool(eng, place, kvbytes):
+    """The KV bytes the engine sets aside for kvbytes of sequences."""
+    return int(math.ceil(kvbytes / GIB)) * GIB if _whole_gib_pool(eng, place) else kvbytes
 
 
 def _dram_rate(bw, nbytes):
@@ -1211,12 +1259,12 @@ def _placements(eng, m, kv, ladder, relaxed, want_seqs, want_gpus, cards, hfree,
                 yield _res(eng, place, False, "weights + overhead %s exceed the GPU budget %s"
                            % (g1(w + ov * (1 if eng == "vllm" else k)), g1(budget)), lines, gpus=k, tp=k if eng == "vllm" else 1)
                 continue
-            c, n = size_kv(kv, left, ladder, want_seqs, scale, relaxed)
+            c, n = size_kv(kv, _kv_room(eng, place, left), ladder, want_seqs, scale, relaxed)
             if not c:
                 yield _res(eng, place, False, "KV room %s holds no %d-token sequence" % (g1(left), ladder[-1]),
                            lines, gpus=k)
                 continue
-            kvused = per_seq(kv, c, scale) * n
+            kvused = _kv_pool(eng, place, per_seq(kv, c, scale) * n)
             lines.append("KV: %d seqs x %s at %d tokens = %s%s" % (n, _mb(per_seq(kv, c, scale)), c, g1(kvused),
                                                                  " per card" if eng == "vllm" else ""))
             # vLLM runs one worker process per tensor-parallel rank, each with its own runtime.
@@ -1307,13 +1355,11 @@ def _placements(eng, m, kv, ladder, relaxed, want_seqs, want_gpus, cards, hfree,
             yield _res(eng, "cpu", False, "DRAM bandwidth gives %.1f tok/s, under the %g floor" % (toks, MIN_DRAM_TOK_S),
                        lines)
             return
-        c, n = size_kv(kv, left, ladder, want_seqs, 1.0, relaxed)
+        c, n = size_kv(kv, _kv_room(eng, "cpu", left), ladder, want_seqs, 1.0, relaxed)
         if not c:
             yield _res(eng, "cpu", False, "KV room %s holds no %d-token sequence" % (g1(left), ladder[-1]), lines)
             return
-        kvused = per_seq(kv, c) * n
-        if eng == "vllm":
-            kvused = int(math.ceil(kvused / GIB)) * GIB  # VLLM_CPU_KVCACHE_SPACE is whole GiB
+        kvused = _kv_pool(eng, "cpu", per_seq(kv, c) * n)
         lines.append("KV: %d seqs x %s at %d tokens = %s" % (n, _mb(per_seq(kv, c)), c, g1(kvused)))
         hb = int(m["serve_bytes"] + act + HOST_RUNTIME[eng] + kvused)
         yield _res(eng, "cpu", True, "", lines, ctx=c, seqs=n, host_bytes=hb, kv_bytes=int(kvused),

@@ -69,7 +69,10 @@ Per placement:
 weights        = bytes of each tensor class to serve (MTP left out unless the GGUF holds it)
 KV per token   = full layers x 2 x kv heads x head dim x bytes
                + indexer keys (sparse attention)
-               + sliding layers x 2 x kv heads x head dim x bytes, for at most the window
+               + sliding layers x 2 x kv heads x head dim x bytes, for:
+                   vLLM       at most the window
+                   llama.cpp  at most GGML_PAD(window + 512 ubatch, 256) tokens per slot
+                   OVMS       the whole context (OpenVINO GenAI has no sliding-window cache)
 state per seq  = linear layers x (v heads x k dim x v dim x 4 B + conv state)
 overhead (GPU) = runtime + activations (batch x widest matmul x 2 x 2 B) + logits (seqs x vocab x 4 B)
 host reserve   = max(10% of MemTotal, 4 GiB);   host budget = min(MemAvailable, cgroup room) - reserve
@@ -87,6 +90,14 @@ llama.cpp keeps the token embeddings and the n-gram table on the CPU by design
 bytes on every llama.cpp placement. OpenVINO's GPU plugin compiles from a host copy, so
 an OVMS GPU placement counts the weights as host bytes too.
 
+A sliding-window layer's cache is engine-specific. llama.cpp b11749 gives each slot
+`GGML_PAD(min(n_ctx_seq, n_swa + n_ubatch), 256)` cells (`src/llama-kv-cache-iswa.cpp`),
+so Gemma 4's 1024-token window holds 1536 cells. OpenVINO GenAI 2026.4 has only a
+full-attention KV cache and a linear-attention state cache
+(`src/cpp/src/continuous_batching/cache/cache_type.hpp`), and one KV block spans every
+attention layer, so OVMS holds every token in the sliding-window layers too: Gemma 4
+costs 225280 B per token there (5 full and 25 sliding layers, K and V at 2 B).
+
 The overhead is an estimate from the formula, not a measurement;
 `K3D_GPU_FIT_OVERHEAD_GIB` replaces it with a measured value.
 
@@ -95,7 +106,7 @@ The overhead is an estimate from the formula, not a measurement;
 | Engine | Flags (spellings from each engine's own argument parser) |
 | --- | --- |
 | vLLM v0.32.0 | `--tensor-parallel-size`, `--max-model-len`, `--max-num-seqs`, `--gpu-memory-utilization` (vLLM still profiles activations inside that share), `--kv-cache-dtype fp8` when the checkpoint's `kv_cache_scheme` made the fit count one byte. CPU build (EAT): `VLLM_CPU_KVCACHE_SPACE` |
-| OVMS 2026.4.1 | `--max_num_seqs`, `--cache_size` (a static pool: the dynamic one grows past the fit) |
+| OVMS 2026.4.1 | `--max_num_seqs`, `--cache_size` (a static pool in whole GiB, rounded up to hold every sequence: the dynamic one grows past the fit) |
 | llama.cpp | `-c` (context x slots), `-np`, `-ngl`, `-ts`, `--n-cpu-moe` or `--cpu-moe` |
 
 `agent up` applies them, sets the pod's memory request and limit to the fit, and

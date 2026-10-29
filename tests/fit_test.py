@@ -258,6 +258,19 @@ class KV(unittest.TestCase):
         self.assertEqual(kv["state_per_seq"], 0)
         self.assertEqual(fit.per_seq(kv, 131072), 5 * 2 * 2 * 512 * 2 * 131072 + 25 * 2 * 8 * 256 * 2 * 1024)
 
+    def test_swa_cache_per_engine(self):
+        cfg = config("google__gemma-4-26B-A4B-it")
+        full, swa = 5 * 2 * 2 * 512 * 2, 25 * 2 * 8 * 256 * 2
+        self.assertEqual(full + swa, 225280)
+        # vLLM: the window
+        self.assertEqual(fit.per_seq(fit.kv_profile(cfg, 2, "vllm"), 131072), full * 131072 + swa * 1024)
+        # llama.cpp b11749: GGML_PAD(min(n_ctx_seq, n_swa + n_ubatch 512), 256) cells per stream
+        kv = fit.kv_profile(cfg, 2, "llama.cpp")
+        self.assertEqual(fit.per_seq(kv, 131072), full * 131072 + swa * 1536)
+        self.assertEqual(fit.per_seq(kv, 1024), (full + swa) * 1024)
+        # OVMS (OpenVINO GenAI 2026.4): no sliding-window cache type, every layer at full context
+        self.assertEqual(fit.per_seq(fit.kv_profile(cfg, 2, "ovms"), 131072), 225280 * 131072)
+
     def test_qwen38_gated_deltanet(self):
         kv = fit.kv_profile(config("Qwen__Qwen3.8-27B"), 2)
         self.assertEqual(kv["full_per_token"], 16 * 2 * 4 * 256 * 2)
@@ -316,9 +329,27 @@ class FitXeon(unittest.TestCase):
         d = plan("xeon6741p-4xb70", "google__gemma-4-26B-A4B-it-qat-q4_0-gguf")
         self.assertTrue(d["fits"], d["summary"])
         self.assertEqual((d["engine"], d["placement"], d["gpus"]), ("llama.cpp", "gpu", 1))
-        self.assertEqual((d["ctx"], d["seqs"]), (131072, 6))
+        # each slot's SWA cache is GGML_PAD(1024 + 512, 256) = 1536 cells, not the 1024 window
+        self.assertEqual((d["ctx"], d["seqs"]), (131072, 5))
         self.assertFalse(d["degraded"])
         self.assertIn("-ngl", d["flags"])
+
+    def test_gemma_ovms_cache_holds_every_token(self):
+        # OVMS gives Gemma 4's 25 sliding-window layers the whole context: 225280 B per token,
+        # and --cache_size (whole GiB) holds context x sequences at that, on every guard rung.
+        one = max(c["budget"] for c in fit.gpu_budget(host("xeon6741p-4xb70"))[0])
+        for hname, dev in (("xeon6741p-4xb70", "gpu"), ("xeon6741p-4xb70", "cpu"), ("desktop-i9-nogpu", None)):
+            d = plan(hname, "OpenVINO__gemma-4-26b-a4b-it-int4-ov", device=dev)
+            self.assertTrue(d["fits"], (hname, d["summary"]))
+            self.assertEqual(d["engine"], "ovms")
+            cache = [int(f.split("=")[1]) for f in d["flags"] if f.startswith("--cache_size=")][0]
+            self.assertGreaterEqual(cache * GIB, d["ctx"] * d["seqs"] * 225280, (hname, d["flags"]))
+            self.assertEqual(cache * GIB, d["kv_bytes"], hname)
+            if d["placement"] == "gpu":
+                self.assertLessEqual(d["gpu_bytes"], one)
+            for r, (s, c) in enumerate(d["guard"]["rungs"]):
+                k = dict(line.split("=", 1) for line in fit.knobs(d, r).splitlines())
+                self.assertGreaterEqual(int(k["cache_gib"]) * GIB, s * c * 225280, (hname, r))
 
     def test_vllm_host_side_per_rank(self):
         d = plan("xeon6741p-4xb70", "Qwen__Qwen3.8-27B")

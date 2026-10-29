@@ -156,6 +156,17 @@ if render ovms STUB_ALLOC='cpu 32' K3D_GPU_FIT_HOST="${DESK}" K3D_GPU_AGENT_MODE
     ok "agent manifest (ovms, CPU): static KV pool, seqs and pod memory limit from the fit"
 else fail "agent manifest (ovms, CPU) from the fit" "$(cat "${WORK}/ovms.err" "${WORK}/ovms.yaml" 2>/dev/null | head -60)"; fi
 
+# OVMS has no sliding-window cache: Gemma 4's 25 SWA layers hold the whole context, so the
+# static pool holds seqs x context x 225280 B (5 full + 25 SWA layers' K and V at 2 B).
+if render ovms-swa STUB_ALLOC=$'cpu 64\ngpu.intel.com/xe 4' STUB_NODE_LABELS=gpu.intel.com/xmx=true K3D_GPU_FIT_HOST="${XEON}" \
+        K3D_GPU_AGENT_MODEL=OpenVINO/gemma-4-26b-a4b-it-int4-ov -- \
+    && cache=$(sed -n 's/^ *- --cache_size=\([0-9]*\)$/\1/p' "${WORK}/ovms-swa.yaml") \
+    && sc=$(sed -n 's/^ *k3d-gpu.io\/agent-fit: "gpu \([0-9]*x[0-9]*\)"$/\1/p' "${WORK}/ovms-swa.yaml") \
+    && [ -n "${cache}" ] && [ -n "${sc}" ] && [ $(( cache * 1073741824 )) -ge $(( ${sc%x*} * ${sc#*x} * 225280 )) ]; then
+    ok "agent manifest (ovms, Gemma 4 on a GPU): --cache_size=${cache} holds ${sc} tokens at 225280 B each"
+else fail "agent manifest (ovms, Gemma 4): --cache_size holds seqs x context at 225280 B/token (cache ${cache:-?}, ${sc:-?})" \
+    "$(cat "${WORK}/ovms-swa.err"; grep -E 'cache_size|agent-fit' "${WORK}/ovms-swa.yaml")"; fi
+
 if render tier STUB_ALLOC='cpu 32' K3D_GPU_FIT_HOST="${LAPTOP}" K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3.8-27B-int8-ov \
         K3D_GPU_AGENT_MODEL_TIER=1 -- && ! has tier 'agent-fit'; then
     ok "a quickstart tier pick (K3D_GPU_AGENT_MODEL_TIER=1) is not sized: it is no user choice"
