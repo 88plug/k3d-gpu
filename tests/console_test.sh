@@ -38,7 +38,7 @@ fail() { FAILS=$((FAILS + 1)); echo "FAIL $*"; }
 if python3 "${DIR}/test_console.py"; then ok "console unit and property tests"; else fail "console unit and property tests"; fi
 if python3 "${DIR}/test_sku_model.py"; then ok "sku_model unit and property tests (H24)"; else fail "sku_model unit and property tests (H24)"; fi
 if python3 "${DIR}/test_moe_predict.py"; then ok "moe_predict (plan --predict --model) unit tests"; else fail "moe_predict (plan --predict --model) unit tests"; fi
-# console/ledger-rules.json is EXPERIMENTS.md's H27/H34/H59 rows as packages ship them.
+# console/ledger-rules.json is EXPERIMENTS.md's H27/H34 rows as packages ship them.
 if python3 "${CONSOLE}/model_opt.py" ledger-rules --ledger "${REPO}/EXPERIMENTS.md" | cmp -s - "${CONSOLE}/ledger-rules.json"; then
     ok "console/ledger-rules.json matches EXPERIMENTS.md"
 else

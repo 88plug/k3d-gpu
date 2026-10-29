@@ -312,19 +312,9 @@ def add_optimizer(doc, facts, meta, opts):
     o = dict(opts or {})
     backend = o.pop("backend", None)
     engine, device, t = agent_target(facts, doc, backend)
-    rule = None
-    if device == "CPU" and not backend and doc["decision"] != "green":
-        cpu_engine, rid, verdict = model_opt.cpu_engine_rule(model_opt.ledger_from_text(o.get("ledger")), hw_class(t))
-        if cpu_engine:
-            engine = cpu_engine
-            rule = (rid, verdict)
     o.setdefault("vllm_version", "0.26.0" if backend == "llm-scaler" else AGENT_VLLM_VERSION.get(device, "0.31.0"))
     o["hw_class"] = hw_class(t)
     opt = model_opt.optimize(meta, engine, device, o)
-    if rule:
-        opt["choices"].insert(0, {"fact": "EXPERIMENTS.md %s is %s for %s" % (rule[0], rule[1], hw_class(t)),
-                                  "choice": "CPU engine llama.cpp (H59 rule; K3D_GPU_AGENT_BACKEND overrides)",
-                                  "source": "EXPERIMENTS.md %s" % rule[0]})
     line = model_opt.summary_line(opt, host_text(facts))
     doc["optimizer"] = opt
     doc["summary"] = [line] + doc["summary"]

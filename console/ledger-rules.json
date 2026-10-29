@@ -3,8 +3,7 @@
  "source": "EXPERIMENTS.md, ## Hypotheses",
  "families": [
   "H27",
-  "H34",
-  "H59"
+  "H34"
  ],
  "rows": [
   {
@@ -38,27 +37,6 @@
    "verdict": "REFUTED",
    "classes": [
     "6741p"
-   ]
-  },
-  {
-   "id": "H59",
-   "verdict": "PENDING",
-   "classes": [
-    "6741p"
-   ]
-  },
-  {
-   "id": "H59d",
-   "verdict": "PENDING",
-   "classes": [
-    "i9-13900t"
-   ]
-  },
-  {
-   "id": "H59w",
-   "verdict": "PENDING",
-   "classes": [
-    "i7-13700"
    ]
   }
  ]
