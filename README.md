@@ -1141,8 +1141,10 @@ and writes `k3d-gpu-report.json` and a self-contained `k3d-gpu-report.html`
 | `detected[]` | the accelerators `up` would enable and their resources | same detection as `k3d-gpu detect` |
 | `cluster` | `present`, or the `reason` it is not; per node: every allocatable resource and the accelerator labels (`k3d-gpu.io/*`, `nvidia.com/*`, `habana.ai/*`, NFD `*feature.node.kubernetes.io/*`) | `kubectl --context k3d-<K3D_GPU_CLUSTER> get nodes` |
 
-`cluster` always uses the `k3d-<K3D_GPU_CLUSTER>` context, never whatever
-context is current, so the report cannot describe the wrong cluster. GuC/HuC
+`cluster` uses the context every launcher kubectl call names (`K3D_GPU_CONTEXT`,
+else `k3d-<K3D_GPU_CLUSTER>`; with `K3D_GPU_KUBECONFIG` alone, that file's
+current-context), never whatever context ~/.kube/config has current, so the
+report cannot describe the wrong cluster. GuC/HuC
 state lives in debugfs, which only root can read: without root the report says
 `status: null` with a note rather than guessing. `energy_uj` is root-only too.
 The document carries `"schema": "k3d-gpu.report/v1"`.
