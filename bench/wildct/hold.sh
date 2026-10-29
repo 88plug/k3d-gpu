@@ -17,9 +17,10 @@
 # signals are ignored (every cleanup step is bounded). On every exit after the start it stops the
 # processes the command left behind (WILDCT_HOLD=NAME in their environment, bench/wildct/strays.py;
 # TERM, then KILL 10 s later), then deletes every k3dgpu-w-* cluster, the bench-load containers
-# and the RAPL reader, and nothing else; a cleanup step that does not finish in its bound (or a
-# cluster list or a scan for those processes that does not answer, or a process that outlives
-# KILL) is named in runs/NAME/cleanup-incomplete. Records go to ~/k3dgpu-bench-wildct/runs/NAME/
+# and the RAPL reader and, after a command that ran and did not end 0, the h28-model images (the
+# H28w row: deleted "by hold.sh if it fails"), and nothing else; a cleanup step that fails or does
+# not finish in its bound (or a cluster or image list or a scan for those processes that does not
+# answer, or a process that outlives KILL) is named in runs/NAME/cleanup-incomplete. Records go to ~/k3dgpu-bench-wildct/runs/NAME/
 # (an earlier attempt's directory under the same NAME is kept, renamed NAME.<UTC time>; when it
 # cannot be moved, exit 9 and nothing is written): pid (this script's PID) at the start, rc last,
 # on every exit, each written whole (bench/wildct/wait_hold.sh waits on them).
@@ -46,13 +47,17 @@ snapshot() { date -u +%FT%TZ; uptime; ps -eo pcpu,pid,user,comm --sort=-pcpu | h
 # clusters: this campaign's clusters; fails when `k3d cluster list` does not answer in T s.
 clusters() { timeout -k 10 "${T}" k3d cluster list -o json 2>/dev/null | python3 "${HERE}/clusters.py" 2>/dev/null; }
 incomplete() { echo "$*" >> "${R}/cleanup-incomplete"; }
+# said ST BOUND: a bounded call's exit status in words (timeout's 124, or 137 after its SIGKILL:
+# no answer within BOUND s; anything else: the call's own rc).
+said() { case $1 in 124 | 137) echo "no answer in $2 s (rc $1)" ;; *) echo "rc $1" ;; esac; }
 # health: systemd answers for docker (runc's systemd cgroup driver asks it for every container's
 # scope) and dockerd answers; prints what did not.
 health() {
-    local s
-    s=$(timeout -k 10 "${T}" systemctl show -p ActiveState --value docker 2>&1)
-    [ "${s}" = active ] || { echo "systemd: docker ActiveState '${s:-no answer in ${T} s}'"; return 1; }
-    timeout -k 10 "${T}" docker info --format '{{.ServerVersion}}' > /dev/null 2>&1 || { echo "docker info: no answer in ${T} s"; return 1; }
+    local s st
+    s=$(timeout -k 10 "${T}" systemctl show -p ActiveState --value docker 2>&1); st=$?
+    [ "${s}" = active ] || { echo "systemd: docker ActiveState '${s}', $(said "${st}" "${T}")"; return 1; }
+    timeout -k 10 "${T}" docker info --format '{{.ServerVersion}}' > /dev/null 2>&1; st=$?
+    [ "${st}" = 0 ] || { echo "docker info: $(said "${st}" "${T}")"; return 1; }
 }
 unhealthy() { echo "$1" > "${R}/unhealthy"; log "host not healthy ($1): no hold"; exit 8; }
 # scan: reap's p = the processes left from this hold's command; a scan that does not answer is
@@ -81,7 +86,18 @@ reap() {
     [ -z "${p}" ] || incomplete "processes left from the command: ${p}"
 }
 
-started=0 sp="" cp="" wd="" bp=""
+# h28_images: the H28w row's model images are deleted "by hold.sh if it fails" (a command that ran
+# and did not end 0); a list that does not answer is named.
+h28_images() {
+    local imgs i
+    imgs=$(timeout -k 10 "${T}" docker images --format '{{.Repository}}:{{.Tag}}' h28-model 2>/dev/null) \
+        || { incomplete "docker images h28-model: $(said $? "${T}")"; return 0; }
+    for i in ${imgs}; do
+        timeout -k 10 "${T}" docker image rm -f "${i}" > /dev/null 2>&1 || incomplete "docker image rm -f ${i}: $(said $? "${T}")"
+    done
+}
+
+started=0 ran=0 sp="" cp="" wd="" bp=""
 finish() {
     local rc=$? left="" now st
     trap '' TERM HUP INT
@@ -99,9 +115,10 @@ finish() {
             incomplete "k3d cluster list"
         fi
         timeout -k 10 "${T}" python3 "${ROOT}/bench/load/load.py" stop > /dev/null 2>&1; st=$?
-        [ "${st}" -ne 124 ] && [ "${st}" -ne 137 ] || incomplete "load.py stop"
+        [ "${st}" = 0 ] || incomplete "load.py stop: $(said "${st}" "${T}")"
         timeout -k 10 "${T}" docker rm -f "${RAPL_C}" > /dev/null 2>&1; st=$?
-        [ "${st}" -ne 124 ] && [ "${st}" -ne 137 ] || incomplete "docker rm -f ${RAPL_C}"
+        [ "${st}" = 0 ] || incomplete "docker rm -f ${RAPL_C}: $(said "${st}" "${T}")"
+        [ "${ran}" = 0 ] || [ "${rc}" = 0 ] || h28_images
         snapshot > "${R}/post.txt"
         now=$(clusters) || now="unknown (k3d cluster list did not answer)"
         log "rc=${rc}; clusters deleted: ${left:-none}; now: ${now}; / $(avail) GB available$([ -e "${R}/cleanup-incomplete" ] && echo "; CLEANUP INCOMPLETE: $(paste -sd';' "${R}/cleanup-incomplete")")"
@@ -149,11 +166,11 @@ fi
 [ "$(avail)" -ge $(( FLOOR + need )) ] || { log "disk: $(avail) GB available < ${FLOOR} + ${need}: no hold"; exit 5; }
 why=$(health) || unhealthy "${why}"
 started=1
-pre=$(clusters) || unhealthy "k3d cluster list: no answer in ${T} s"
+pre=$(clusters) || unhealthy "k3d cluster list: $(said $? "${T}")"
 if [ -n "${pre}" ]; then
     read -r -a cl <<< "${pre}"
     log "leftover clusters ${cl[*]}: deleting first"
-    timeout -k 10 "${TD}" k3d cluster delete "${cl[@]}" > /dev/null 2>&1 || unhealthy "k3d cluster delete ${cl[*]}: rc $? (bound ${TD} s)"
+    timeout -k 10 "${TD}" k3d cluster delete "${cl[@]}" > /dev/null 2>&1 || unhealthy "k3d cluster delete ${cl[*]}: $(said $? "${TD}")"
 fi
 timeout -k 10 "${T}" docker rm -f "${RAPL_C}" > /dev/null 2>&1
 timeout -k 10 "${T}" docker run -d --rm --name "${RAPL_C}" --privileged --network none --cpuset-cpus 20-23 "${RAPL_IMAGE}" sleep "$(( cap + 120 ))" > /dev/null 2>&1
@@ -167,7 +184,7 @@ python3 "${HERE}/sample.py" "${R}/sample.jsonl" 9>&- &
 sp=$!
 log "start: $*"
 timeout -k 30 "${cap}" "$@" > "${R}/hold.log" 2>&1 9>&- &
-cp=$!
+cp=$! ran=1
 ( while kill -0 "${cp}" 2>/dev/null; do
       sleep 30
       if [ "$(avail)" -lt "${FLOOR}" ]; then echo "disk $(avail) GB at $(date -u +%FT%TZ)" > "${R}/disk-abort"; kill -TERM "${cp}"; break; fi

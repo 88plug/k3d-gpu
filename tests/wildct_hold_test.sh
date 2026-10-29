@@ -34,7 +34,9 @@ trap cleanup EXIT
 #   (present = on; k3d_hang: cluster delete hangs, list_hang: cluster list hangs);
 #   rm_hang_noterm: docker rm hangs and ignores SIGTERM; systemd_fail_from N: systemctl fails
 #   from its Nth call on; load1 (the hold-start gate's load1, default 0.00)
-#   df_avail (GB available on /, default 100), clusters.reg (one name per line)
+#   df_avail (GB available on /, default 100), clusters.reg (one name per line);
+#   info_fail, rm_fail, ps_fail, list_fail: docker info, docker rm, docker ps or k3d cluster list
+#   fails at once; images_hang: docker images hangs; images.reg (the host's images, name:tag per line)
 fresh() {
     local c
     W=$(mktemp -d "${T}/w.XXXX")
@@ -44,17 +46,28 @@ fresh() {
     cp "${ROOT}/scripts/k3d-gpu" "${WB}/k3d-gpu/usr/bin/k3d-gpu"
     : > "${W}/clusters.reg"
     : > "${W}/calls.log"
+    : > "${W}/images.reg"
     for c in ${1:-}; do echo "${c}" >> "${W}/clusters.reg"; done
     local b=${WB}/bin
     cat > "${b}/docker" <<'EOF'
 #!/usr/bin/env bash
 echo "docker $*" >> "${SHIM_DIR}/calls.log"
 case $1 in
-    info) [ -e "${SHIM_DIR}/info_hang" ] && exec sleep 1000; echo 29.6.1 ;;
+    info) [ -e "${SHIM_DIR}/info_hang" ] && exec sleep 1000
+        [ -e "${SHIM_DIR}/info_fail" ] && { echo "permission denied while trying to connect to the docker API" >&2; exit 1; }
+        echo 29.6.1 ;;
     run) [ -e "${SHIM_DIR}/run_hang" ] && exec sleep 1000; echo 2677961bea6f ;;
     exec) [ -e "${SHIM_DIR}/exec_empty" ] && exit 1; echo 123456789012 ;;
     rm) [ -e "${SHIM_DIR}/rm_hang_noterm" ] && { trap '' TERM; exec sleep 1000; }
-        [ -e "${SHIM_DIR}/rm_hang" ] && exec sleep 1000 ;;
+        [ -e "${SHIM_DIR}/rm_hang" ] && exec sleep 1000
+        [ -e "${SHIM_DIR}/rm_fail" ] && { echo "Error response from daemon: cannot remove container" >&2; exit 1; } ;;
+    ps) [ -e "${SHIM_DIR}/ps_fail" ] && { echo "Error response from daemon: ps failed" >&2; exit 1; } ;;
+    images) [ -e "${SHIM_DIR}/images_hang" ] && exec sleep 1000
+        grep "^${!#}:" "${SHIM_DIR}/images.reg" ;;
+    image) if [ "$2" = rm ]; then
+            shift 2; [ "$1" = -f ] && shift
+            for i in "$@"; do sed -i "\|^${i}\$|d" "${SHIM_DIR}/images.reg"; done
+        fi ;;
 esac
 exit 0
 EOF
@@ -73,6 +86,7 @@ EOF
 echo "k3d $*" >> "${SHIM_DIR}/calls.log"
 if [ "$1 $2" = "cluster list" ]; then
     [ -e "${SHIM_DIR}/list_hang" ] && exec sleep 1000
+    [ -e "${SHIM_DIR}/list_fail" ] && { echo "FATA[0000] docker: cannot list clusters" >&2; exit 1; }
     python3 -c 'import json,sys; print(json.dumps([{"name": l.strip()} for l in open(sys.argv[1]) if l.strip()]))' \
         "${SHIM_DIR}/clusters.reg"
 elif [ "$1 $2" = "cluster delete" ]; then
@@ -613,6 +627,72 @@ row_smoke_runs_up_scan_down() {
     grep -q '^pods ready: not waited (up rc=1)' "${W}/smoke2/rc.txt" || { cat "${W}/smoke2/rc.txt"; return 1; }
 }
 
+# The H28w row: its model images are deleted "by hold.sh if it fails". After a command that ran and
+# failed, every h28-model image goes; after one that ended 0 (H28w-prep's images are H28w's input),
+# or a hold whose command never ran, they stay; no other image is touched.
+failed_command_deletes_h28_model_images() {
+    fresh
+    printf 'h28-model:r0\nh28-model:r1\npython:3.13-slim\n' > "${W}/images.reg"
+    hold HA sh -c 'exit 3'
+    [ "$(rcfile HA)" = 3 ] || { echo "rc file $(rcfile HA), exit ${RC}"; return 1; }
+    [ "$(tr '\n' ' ' < "${W}/images.reg")" = "python:3.13-slim " ] || { echo "images after a failed command: $(tr '\n' ' ' < "${W}/images.reg")"; return 1; }
+    [ ! -e "$(R HA)/cleanup-incomplete" ] || { echo "cleanup-incomplete: $(cat "$(R HA)/cleanup-incomplete")"; return 1; }
+    fresh
+    printf 'h28-model:r0\nh28-model:r1\n' > "${W}/images.reg"
+    hold HB true
+    [ "$(rcfile HB)" = 0 ] && [ "$(wc -l < "${W}/images.reg")" = 2 ] || { echo "a command that ended 0 lost the h28-model images"; return 1; }
+    fresh
+    printf 'h28-model:r0\n' > "${W}/images.reg"
+    touch "${W}/exec_empty"
+    hold HC sh -c 'exit 3'
+    [ "$(rcfile HC)" = 6 ] && [ "$(wc -l < "${W}/images.reg")" = 1 ] || { echo "a hold whose command never ran lost the h28-model images (rc $(rcfile HC))"; return 1; }
+    fresh
+    printf 'h28-model:r0\n' > "${W}/images.reg"
+    hold HD sh -c 'touch "$SHIM_DIR/images_hang"; exit 3'
+    grep -q 'docker images h28-model' "$(R HD)/cleanup-incomplete" 2>/dev/null \
+        || { echo "an image list that did not answer was read as no image left"; cat "$(R HD)/cleanup-incomplete" 2>/dev/null; return 1; }
+}
+
+# A cleanup step that ends with an error at once (not only one that hits its bound) is named.
+failed_cleanup_steps_are_named() {
+    fresh
+    hold HE sh -c 'touch "$SHIM_DIR/rm_fail" "$SHIM_DIR/ps_fail"'
+    [ "$(rcfile HE)" = 0 ] || { echo "rc file $(rcfile HE), exit ${RC}"; return 1; }
+    grep -q 'docker rm -f k3dgpu-w-rapl' "$(R HE)/cleanup-incomplete" 2>/dev/null || { echo "a failed RAPL reader rm not named"; cat "$(R HE)/cleanup-incomplete" 2>/dev/null; return 1; }
+    grep -q 'load.py stop' "$(R HE)/cleanup-incomplete" || { echo "a failed load.py stop not named"; return 1; }
+}
+
+# The unhealthy record says what the call did: an error at once is not "no answer".
+unhealthy_names_an_error_as_an_error() {
+    fresh
+    touch "${W}/info_fail"
+    hold HF true
+    [ "$(rcfile HF)" = 8 ] || { echo "rc file $(rcfile HF), exit ${RC}"; return 1; }
+    grep -q 'docker info: rc 1' "$(R HF)/unhealthy" && ! grep -q 'no answer' "$(R HF)/unhealthy" \
+        || { echo "docker info failing at once recorded as: $(cat "$(R HF)/unhealthy")"; return 1; }
+    fresh
+    touch "${W}/info_hang"
+    hold HG true
+    grep -q 'docker info: no answer in 2 s' "$(R HG)/unhealthy" || { echo "docker info hanging recorded as: $(cat "$(R HG)/unhealthy")"; return 1; }
+    fresh
+    touch "${W}/list_fail"
+    hold HH true
+    [ "$(rcfile HH)" = 8 ] || { echo "rc file $(rcfile HH), exit ${RC}"; return 1; }
+    grep -q 'k3d cluster list: rc 1' "$(R HH)/unhealthy" && ! grep -q 'no answer' "$(R HH)/unhealthy" \
+        || { echo "k3d cluster list failing at once recorded as: $(cat "$(R HH)/unhealthy")"; return 1; }
+}
+
+# RESUME.md's container checks also look for the bench-load containers (k3d-gpu-bench-load-*, load.py).
+resume_container_checks_include_the_load() {
+    local line n=0
+    while IFS= read -r line; do
+        n=$((n + 1))
+        [[ "${line}" == *'--filter name=k3dgpu-w-'* && "${line}" == *'--filter name=k3d-gpu-bench-load'* ]] \
+            || { echo "RESUME.md: container check without the bench-load containers: ${line}"; return 1; }
+    done < <(grep -E 'docker ps -a --filter name=' "${ROOT}/bench/wildct/RESUME.md" | grep -v 'k3dgpu-w-probe')
+    [ "${n}" -ge 3 ] || { echo "only ${n} container checks found"; return 1; }
+}
+
 check "healthy hold: health check, RAPL reading, cleanup of only k3dgpu-w-*, pid and rc" healthy_hold_runs_and_cleans
 check "systemd not answering: rc 8, no container started" wedged_systemd_stops_before_docker
 check "systemd answering with an error: rc 8, no container started" systemd_error_stops_before_docker
@@ -645,6 +725,10 @@ check "RESUME.md: docker ps and strays.py checks read as empty print their rc" r
 check "row.sh: digest-pinned IMAGE, the H57 k3d shim, convert outside a hold, unknown rows" row_guards
 check "H28w's probe.sh keeps hold.sh's RAPL reader (W4); its default is unchanged" probe_keeps_the_given_rapl_reader
 check "row.sh smoke: up, pod wait, GPU scan, down; a failed up fails the smoke" row_smoke_runs_up_scan_down
+check "a command that ran and failed: hold.sh deletes the h28-model images (H28w row), nothing else" failed_command_deletes_h28_model_images
+check "a cleanup step that fails at once is named in cleanup-incomplete" failed_cleanup_steps_are_named
+check "unhealthy: an error at once is recorded as its rc, not as no answer" unhealthy_names_an_error_as_an_error
+check "RESUME.md: container checks include the bench-load containers" resume_container_checks_include_the_load
 
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

@@ -54,7 +54,8 @@ step 1 check passes. Step 3b ships `origin/main` to wildct, so the PR that adds 
   - checks host health;
   - applies the load and disk gates;
   - runs the command under the RAPL reader, the sampler and the disk watchdog;
-  - cleans up and writes `runs/NAME/rc`.
+  - cleans up (after a command that ran and did not end 0, also the `h28-model` images, as the
+    H28w row registers) and writes `runs/NAME/rc`.
 - **Every wait has a ceiling and a failure marker.** A step that hits either stops the pack:
   record what you saw and report it. Do not retry blindly. A failed hold counts. Each row may
   repeat a failed hold once, under a new NAME.
@@ -97,7 +98,7 @@ Record the whole output in `$W/runs/resume-health.txt`. Also copy it back with t
 
 ```bash
 timeout 60 docker rm -f k3dgpu-w-rapl; echo "rm rc=$?"
-timeout 30 docker ps -a --filter name=k3dgpu-w- --format '{{.Names}} {{.Status}}'; echo "ps rc=$?"
+timeout 30 docker ps -a --filter name=k3dgpu-w- --filter name=k3d-gpu-bench-load --format '{{.Names}} {{.Status}}'; echo "ps rc=$?"
 ```
 
 - **Pass:** `rm rc=0`, `ps rc=0`, and the listing is empty.
@@ -319,7 +320,7 @@ N=<hold NAME>
 cat $W/runs/$N/rc; ls $W/runs/$N/{flagged,disk-abort,cleanup-incomplete,unhealthy} 2>/dev/null; tail -3 $W/runs/campaign.log
 ls $W/h57/results/H57w/hold*/{no-hold,flagged,disk-abort} 2>/dev/null                 # H57w holds: the inner hold's markers
 timeout 60 k3d cluster list -o json | python3 $R/bench/wildct/clusters.py; echo "list rc=$?"   # pass: empty, list rc=0
-timeout 30 docker ps -a --filter name=k3dgpu-w- --format '{{.Names}}'; echo "ps rc=$?"  # pass: empty, ps rc=0 (k3dgpu-w-* and k3d-k3dgpu-w-*)
+timeout 30 docker ps -a --filter name=k3dgpu-w- --filter name=k3d-gpu-bench-load --format '{{.Names}}'; echo "ps rc=$?"  # pass: empty, ps rc=0 (k3dgpu-w-*, k3d-k3dgpu-w-* and load.py's k3d-gpu-bench-load-*)
 timeout 30 python3 $R/bench/wildct/strays.py $N; echo "strays rc=$?"                 # pass: empty, strays rc=0 (no process left from the hold)
 df -P -BG / | tail -1
 ```
@@ -366,6 +367,9 @@ Notes on the holds:
   the release's default node image (the tag checked in 3c).
 - **Arm orders.** The registration fixes them: `bench/h57d/h57d.py arms` gives hold 1 Od Ld
   Ld-mtp, hold 2 Ld Ld-mtp Od, hold 3 Ld-mtp Od Ld, hold 4 Ld Od Ld-mtp.
+- **H28w's model images.** `hold.sh` deletes every `h28-model` image after a command that ran and
+  did not end 0, as the H28w row registers. A failed `H28w-prep` or `H28w` therefore leaves none,
+  so a repeat of `H28w` needs `H28w-prep` again first (a hold, counted toward the 12).
 - **H57w's inner gate.** H57d's own `hold.sh` re-checks `load1` <= 12, `/` >= 15 GB and
   MemAvailable >= 20 GiB. A busy inner wait eats the outer 4600 s cap. A hold the cap cuts
   counts as failed.
@@ -446,5 +450,5 @@ Everything the campaign created is deleted (W6). Nothing else is touched.
   record IDs. Remove nothing without their OK: no `prune`.
 - **Files:** `rm -rf ~/k3dgpu-bench-wildct`, once the records are in the repository and the
   copied `rc` files and logs have been compared.
-- **Last check:** `df -P -BG /` and `timeout 30 docker ps -a --filter name=k3dgpu-w-; echo "ps rc=$?"`.
+- **Last check:** `df -P -BG /` and `timeout 30 docker ps -a --filter name=k3dgpu-w- --filter name=k3d-gpu-bench-load; echo "ps rc=$?"`.
   Report both (a `ps rc` that is not 0 means docker did not answer, not that nothing is left).
