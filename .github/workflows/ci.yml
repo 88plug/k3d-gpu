@@ -239,7 +239,10 @@ jobs:
 
   capacity-tests:
     name: k3d-gpu capacity tests (stub server)
-    runs-on: ubuntu-latest
+    # ubuntu-24.04, not ubuntu-latest: ubuntu-latest is now 26.04, whose timeout is uutils
+    # coreutils 0.10.0. It exits 124 when it is sent TERM, where GNU timeout exits with
+    # CMD's own status (143), so tests/hold_own_test.sh T6 fails there on every run.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - run: python3 bench/apb/test_capacity.py
