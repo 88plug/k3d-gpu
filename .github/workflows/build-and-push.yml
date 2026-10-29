@@ -296,6 +296,10 @@ jobs:
             echo "intel=$(grep -oE 'intel-gpu-plugin:[0-9]+\.[0-9]+\.[0-9]+' share/intel-gpu-plugin.yml | cut -d: -f2)"
             echo "gaudi=$(grep -oE 'gaudi-device-plugin:[0-9]+\.[0-9]+\.[0-9]+-[0-9]+' share/gaudi-device-plugin.yml | cut -d: -f2)"
           } >> "$GITHUB_OUTPUT"
+          # The 24.04 variant's base, pinned in the Dockerfile where the nightly repin moves it.
+          u=$(grep '^ARG UBUNTU_2404_IMAGE=' Dockerfile | cut -d= -f2 | tr -d '"')
+          [[ "$u" =~ ^ubuntu:24\.04@sha256:[0-9a-f]{64}$ ]] || { echo "::error::Dockerfile at aur-v$RELEASE pins no ubuntu:24.04 UBUNTU_2404_IMAGE (got '$u')"; exit 1; }
+          echo "ubuntu2404=$u" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
@@ -353,7 +357,7 @@ jobs:
           push: true
           platforms: linux/amd64
           build-args: |
-            UBUNTU_IMAGE=ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
+            UBUNTU_IMAGE=${{ steps.current.outputs.ubuntu2404 }}
           labels: |
             org.opencontainers.image.version=${{ inputs.release }}
             org.opencontainers.image.revision=aur-v${{ inputs.release }}
@@ -509,7 +513,10 @@ jobs:
   # tag of every pinned reference, write the registry's digest where it moved,
   # re-pin images.lock, run the image tests, and open or update one PR on branch
   # autobump/image-digests. A PR opened with GITHUB_TOKEN starts no CI workflows,
-  # so the tests run here before it opens.
+  # so the tests run here before it opens. GITHUB_TOKEN cannot push a change to
+  # .github/workflows/ (no `workflows` permission), so repin leaves those files
+  # alone; a workflow reads its image pins from a file outside them (the
+  # Dockerfile, docs-build/Dockerfile, hack/ci-images.env), which repin moves.
   repin-images:
     if: ${{ !inputs.release }}
     runs-on: ubuntu-latest
@@ -530,7 +537,7 @@ jobs:
       - name: Move every digest a registry re-pointed
         id: repin
         run: |
-          scripts/images-lock repin | tee "$RUNNER_TEMP/repin.txt"
+          scripts/images-lock repin --exclude '.github/workflows/*' | tee "$RUNNER_TEMP/repin.txt"
           scripts/images-lock update
           scripts/images-lock check
           scripts/images-lock pins
@@ -554,6 +561,25 @@ jobs:
           tests/audit_test.sh
           tests/detect_test.sh
           tests/render_test.sh
+
+      - name: The digest PR changes no workflow file
+        run: |
+          changed=$(git status --porcelain -- .github/workflows/)
+          [ -z "$changed" ] || { echo "::error::GITHUB_TOKEN cannot push .github/workflows/; this job changed:"; echo "$changed"; exit 1; }
+
+      # create-pull-request resets an existing digest branch (a PR still open, or a
+      # merged one whose branch stayed) onto main and force-pushes it. GitHub refuses
+      # that push from GITHUB_TOKEN when the branch's workflow files differ from
+      # main's, though the digest commit touches none. Deleting such a branch closes
+      # its open PR; the action then cuts a fresh branch off main and opens a new one.
+      - name: Delete a digest branch whose workflows differ from main's
+        if: steps.repin.outputs.changes != ''
+        run: |
+          if git fetch -q --depth=1 origin autobump/image-digests 2>/dev/null \
+             && ! git diff --quiet FETCH_HEAD HEAD -- .github/workflows/; then
+            echo "autobump/image-digests was cut from a main with other workflow files; deleting it"
+            git push origin --delete autobump/image-digests
+          fi
 
       - name: Open or update the digest PR
         if: steps.repin.outputs.changes != ''

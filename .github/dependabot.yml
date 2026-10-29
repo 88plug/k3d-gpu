@@ -16,9 +16,8 @@ updates:
     commit-message:
       prefix: "deps"
 
-  # Docs interpreter pin (docs-build/Dockerfile). The Docs workflow's
-  # `container: image:` must be moved to the same digest in the bump PR;
-  # tests/docs_test.sh fails until it is.
+  # Docs interpreter pin (docs-build/Dockerfile). The Docs workflow reads its
+  # container image from that file, so the bump PR needs nothing else.
   - package-ecosystem: docker
     directory: /docs-build
     schedule:

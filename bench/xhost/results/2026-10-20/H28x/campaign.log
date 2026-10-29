@@ -1,0 +1,51 @@
+== smoke waiting for the lock 2026-10-20T21:45:47Z
+== smoke lock taken 2026-10-20T21:54:44Z
+== smoke start: bash k3d-gpu/bench/xhost/smoke.sh /home/devcloud/k3dgpu-xhost/models 2026-10-20T21:54:45Z
+== smoke rc=1; clusters deleted: none; now:  2026-10-20T22:05:28Z
+== smoke2 waiting for the lock 2026-10-20T22:07:00Z
+== smoke2 lock taken 2026-10-20T22:13:30Z
+== smoke2 busy (load1 17.57, aiperf 0): waiting 120 s 2026-10-20T22:13:30Z
+== smoke2 start: env K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% bash k3d-gpu/bench/xhost/smoke.sh /home/devcloud/k3dgpu-xhost/models 2026-10-20T22:15:30Z
+== smoke2 rc=0; clusters deleted: none; now:  2026-10-20T22:18:52Z
+== H27x waiting for the lock 2026-10-20T22:46:24Z
+== H27x lock taken 2026-10-20T22:46:24Z
+== H27x start: env AUTOQUANT_DIR=/home/devcloud/k3dgpu-xhost/amx-autoquant AUTOQUANT_CPUS=0-23,48-71 LOAD_LEVEL=typical bash /home/devcloud/k3dgpu-xhost/k3d-gpu/bench/amx-autoquant/probe.sh 2026-10-20T22:46:24Z
+== H7x-smoke waiting for the lock 2026-10-20T22:53:41Z
+== H27x rc=0; clusters deleted: none; now:  2026-10-20T22:55:29Z
+== H34x waiting for the lock 2026-10-20T22:55:29Z
+== H7x-smoke lock taken 2026-10-20T22:55:30Z
+== H7x-smoke busy (load1 20.55, aiperf 0): waiting 120 s 2026-10-20T22:55:30Z
+== H7x-smoke start: env H7X_SMOKE=1 H7X_ORDER=A B C K3D_GPU_IMAGE=cryptoandcoffee/k3d-gpu:0.1.61 K3D_GPU_VENDORS=none K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% K3D_GPU_CLUSTER=k3dgpu-x-h7 H7X_CPUS=48 H7X_NODE_CPUS=0-23,48-71 APB_MODELS=/home/devcloud/k3dgpu-xhost/models APB_EAT_CHART=/home/devcloud/k3dgpu-xhost/eat-src/core/helm-charts/vllm APB_OUT=/home/devcloud/k3dgpu-xhost/runs/H7x-smoke bash /home/devcloud/k3dgpu-xhost/k3d-gpu-h7x/bench/apb/h7x.sh 2026-10-20T22:57:30Z
+== H7x-smoke rc=2; clusters deleted: none; now:  2026-10-20T23:13:58Z
+== H34x lock taken 2026-10-20T23:13:58Z
+== H34x start: env K3D_GPU_IMAGE=cryptoandcoffee/k3d-gpu:0.1.61 H34_CLUSTER=k3dgpu-x-h34 H34_VENDORS=none H34_NODE_CPUS=0-23,48-71 H34_LEVELS=typical H22_MODELS=/home/devcloud/k3dgpu-xhost/models K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% bash /home/devcloud/k3dgpu-xhost/k3d-gpu/bench/hetero-spec/h34.sh /home/devcloud/k3dgpu-xhost/runs/H34x/out 2026-10-20T23:13:58Z
+== H7x-smoke2 waiting for the lock 2026-10-20T23:15:08Z
+== H34x rc=0; clusters deleted: none; now:  2026-10-20T23:23:07Z
+== H25x waiting for the lock 2026-10-20T23:23:07Z
+== H7x-smoke2 lock taken 2026-10-20T23:35:58Z
+== H7x-smoke2 start: env H7X_SMOKE=1 H7X_ORDER=B C H7X_READY_S=1800 K3D_GPU_IMAGE=cryptoandcoffee/k3d-gpu:0.1.61 K3D_GPU_VENDORS=none K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% K3D_GPU_CLUSTER=k3dgpu-x-h7 H7X_CPUS=48 H7X_NODE_CPUS=0-23,48-71 APB_MODELS=/home/devcloud/k3dgpu-xhost/models APB_EAT_CHART=/home/devcloud/k3dgpu-xhost/eat-src/core/helm-charts/vllm APB_OUT=/home/devcloud/k3dgpu-xhost/runs/H7x-smoke2 bash /home/devcloud/k3dgpu-xhost/k3d-gpu-h7x/bench/apb/h7x.sh 2026-10-20T23:35:58Z
+== H7x-smoke2 rc=2; clusters deleted: none; now:  2026-10-21T00:06:57Z
+== H25x lock taken 2026-10-21T00:07:36Z
+== H25x start: env IMAGE=cryptoandcoffee/k3d-gpu:0.1.61 MODELS=/home/devcloud/k3dgpu-xhost/models OUT=/home/devcloud/k3dgpu-xhost/runs/H25x/out LEVELS=typical CLUSTER=k3dgpu-x-h25 NODE_CPUS=0-23,48-71 SEED_BASE=2540 HOLD=1440 K3D_GPU_VENDORS=none K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% bash /home/devcloud/k3dgpu-xhost/k3d-gpu/bench/shared-prefix/run.sh 2026-10-21T00:07:36Z
+== H7x-smoke3 waiting for the lock 2026-10-21T00:09:17Z
+== H25x rc=0; clusters deleted: none; now:  2026-10-21T00:13:08Z
+== H7x-smoke3 lock taken 2026-10-21T00:25:04Z
+== H7x-smoke3 start: env H7X_SMOKE=1 H7X_ORDER=A B C H7X_READY_S=1800 K3D_GPU_IMAGE=cryptoandcoffee/k3d-gpu:0.1.61 K3D_GPU_VENDORS=none K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% K3D_GPU_CLUSTER=k3dgpu-x-h7 H7X_CPUS=16 H7X_NODE_CPUS=0-7,48-55 APB_MODELS=/home/devcloud/k3dgpu-xhost/models APB_EAT_CHART=/home/devcloud/k3dgpu-xhost/eat-src/core/helm-charts/vllm APB_OUT=/home/devcloud/k3dgpu-xhost/runs/H7x-smoke3 bash /home/devcloud/k3dgpu-xhost/k3d-gpu-h7x/bench/apb/h7x.sh 2026-10-21T00:25:04Z
+== H7x-smoke3 rc=2; clusters deleted: none; now:  2026-10-21T00:56:53Z
+== H7x-smoke4 waiting for the lock 2026-10-21T03:09:28Z
+== H7x-smoke4 lock taken 2026-10-21T03:13:57Z
+== H7x-smoke4 start: env H7X_SMOKE=1 H7X_ORDER=B C H7X_READY_S=1800 H7X_VLLM_MEM=32Gi K3D_GPU_IMAGE=cryptoandcoffee/k3d-gpu:0.1.61 K3D_GPU_VENDORS=none K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% K3D_GPU_CLUSTER=k3dgpu-x-h7 H7X_CPUS=16 H7X_NODE_CPUS=0-7,48-55 APB_MODELS=/home/devcloud/k3dgpu-xhost/models APB_EAT_CHART=/home/devcloud/k3dgpu-xhost/eat-src/core/helm-charts/vllm APB_OUT=/home/devcloud/k3dgpu-xhost/runs/H7x-smoke4 bash /home/devcloud/k3dgpu-xhost/k3d-gpu-h7x/bench/apb/h7x.sh 2026-10-21T03:13:57Z
+== H7x-smoke4 rc=0; clusters deleted: none; now:  2026-10-21T03:46:41Z
+== H7x-smoke5 waiting for the lock 2026-10-21T03:59:16Z
+== H7x-smoke5 lock taken 2026-10-21T04:12:25Z
+== H7x-smoke5 start: env PATH=/home/devcloud/k3dgpu-xhost/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin H7X_SMOKE=1 H7X_ORDER=B C H7X_READY_S=1800 H7X_VLLM_MEM=fit K3D_GPU_IMAGE=cryptoandcoffee/k3d-gpu:0.1.61 K3D_GPU_VENDORS=none K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% K3D_GPU_CLUSTER=k3dgpu-x-h7 H7X_CPUS=16 H7X_NODE_CPUS=0-7,48-55 APB_MODELS=/home/devcloud/k3dgpu-xhost/models APB_EAT_CHART=/home/devcloud/k3dgpu-xhost/eat-src/core/helm-charts/vllm APB_OUT=/home/devcloud/k3dgpu-xhost/runs/H7x-smoke5 bash /home/devcloud/k3dgpu-xhost/k3d-gpu-h7x/bench/apb/h7x.sh 2026-10-21T04:12:26Z
+== H7x-smoke5 rc=0; clusters deleted: none; now:  2026-10-21T04:45:51Z
+== H7x-smoke6 waiting for the lock 2026-10-21T05:13:49Z
+== H7x-smoke6 lock taken 2026-10-21T06:54:24Z
+== H7x-smoke6 start: env PATH=/home/devcloud/k3dgpu-xhost/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin H7X_SMOKE=1 H7X_ORDER=C H7X_READY_S=1800 H7X_VLLM_MEM=fit K3D_GPU_IMAGE=cryptoandcoffee/k3d-gpu:0.1.61 K3D_GPU_VENDORS=none K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% K3D_GPU_CLUSTER=k3dgpu-x-h7 H7X_CPUS=16 H7X_NODE_CPUS=0-7,48-55 APB_MODELS=/home/devcloud/k3dgpu-xhost/models APB_EAT_CHART=/home/devcloud/k3dgpu-xhost/eat-src/core/helm-charts/vllm APB_OUT=/home/devcloud/k3dgpu-xhost/runs/H7x-smoke6 bash /home/devcloud/k3dgpu-xhost/k3d-gpu-h7x/bench/apb/h7x.sh 2026-10-21T06:54:24Z
+== H7x-smoke6 rc=0; clusters deleted: none; now:  2026-10-21T06:58:21Z
+== H28x waiting for the lock 2026-10-21T21:38:45Z
+== H28x lock taken 2026-10-21T22:14:13Z
+== H28x busy (load1 14.71, aiperf 0): waiting 120 s 2026-10-21T22:14:13Z
+== H28x start: env PATH=/home/devcloud/k3dgpu-xhost/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin WORK=/home/devcloud/k3dgpu-xhost/runs/H28x/work IMAGE=cryptoandcoffee/k3d-gpu:0.1.61 CLUSTER=k3dgpu-x-h28 LEVELS=typical HOLD=1440 LOCK=/home/devcloud/k3dgpu-xhost/inner.lock K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% bash /home/devcloud/k3dgpu-xhost/k3d-gpu/bench/zero-copy-models/probe.sh run 2026-10-21T22:16:13Z
+== H28x rc=1; clusters deleted: none; now:  2026-10-21T22:16:29Z
