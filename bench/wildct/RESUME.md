@@ -1,40 +1,41 @@
 # wildct resume pack
 
 How to resume the wildct campaign ([EXPERIMENTS.md](../../EXPERIMENTS.md), "Wildct
-pre-registration", rules W1-W8, and wildct amendments R1, P1, R2 and R3) once the box owner has
+pre-registration", rules W1-W8, and wildct amendments R1, P1, R2, R3 and R4) once the box owner has
 made the kernel modules k3s needs available on wildct (step 1, H9 and H10). This file changes no
 rule. Run it top to bottom, except that step 3b (ship `origin/main` to wildct) runs first when the
 `repo` on wildct predates `bench/wildct/nfprobe.sh` (H10 runs it). Nothing past step 1 runs until
 every step 1 check passes.
 
-## Where things stand (2026-10-29, after `smoke3`)
+## Where things stand (2026-10-29, after the second module load)
 
 - **Blocked: k3s still cannot run on wildct.** The box owner loaded `vxlan` and `br_netfilter`
-  on 2026-10-29 and kept them across reboots with `/etc/modules-load.d/k3dgpu-wildct.conf`
-  (`kernel.modprobe` left empty; the production checks read the same before and after:
-  `results/2026-10-29/host/modules.txt`). Step 1 then passed (H9 included), main at `c4407a2c`
-  was shipped (step 3b), and the wiring smoke `smoke3` printed every pass marker of step 5. The
-  cluster was not working: k3s's network policy controller stopped every ~16 s on "Extension
-  comment revision 0 not supported, missing kernel module?", the node container restarted, the
-  node carried the `not-ready` taint, and coredns, metrics-server and the NFD pods stayed 0/1
-  (`pods.txt`: 10 restarts each). The old pod wait read STATUS only, so it said `yes`. `smoke3`
-  is discarded (amendment R3); the pod wait now runs `bench/wildct/ready.sh` (every node Ready,
-  every container ready).
-- **What the kernel still lacks.** `bench/wildct/nfprobe.sh` (step 1's H10) adds, in a throwaway
-  container, one rule per iptables extension and one set per ipset type in its list, with the node
-  image's own iptables-nft and ipset. On 2026-10-29 it read
-  `NFPROBE missing: NFLOG REJECT comment hash:ip hash:ip,port hash:ip,port,ip hash:ip,port,net
-  hash:net limit multiport physdev pkttype statistic` (`results/2026-10-29/runs/nfprobe.txt`).
-  Every module behind them is on disk for 6.6.156-2-MANJARO and not loaded. The fix is the box
-  owner's, either of:
+  on 2026-10-29 (amendment R3; `results/2026-10-29/host/modules.txt`). `smoke3` then ran on a
+  cluster whose k3s restarted every ~16 s (H10's `comment`) and is discarded (amendment R3); the
+  pod wait now runs `bench/wildct/ready.sh` (every node Ready, every container ready). The box
+  owner then approved a second list, loaded at 21:16:54Z (`modprobe -a`, rc 0) and appended to
+  `/etc/modules-load.d/k3dgpu-wildct.conf`: `xt_comment xt_statistic xt_multiport xt_limit
+  xt_NFLOG xt_physdev xt_pkttype ipt_REJECT ip6t_REJECT ip_set_hash_ip ip_set_hash_net
+  ip_set_hash_ipport ip_set_hash_ipportip ip_set_hash_ipportnet`, with three hard dependencies
+  (`nfnetlink_log`, `nf_reject_ipv4`, `nf_reject_ipv6`). `kernel.modprobe` stays empty. The
+  production checks read the same before, at once after and 3 minutes after
+  (`results/2026-10-29/host/modules-netfilter.txt`; amendment R4). Main at `e5748cd1` was
+  shipped (step 3b) and step 1 re-ran (21:21:50Z, `runs/resume-health-r4.txt`): H1-H9 pass, and
+  H10 reads `NFPROBE missing: NFLOG limit`. `smoke4` was not run.
+- **What the kernel still lacks.** iptables-nft writes `-m limit` as nftables' native `limit`
+  expression and `-j NFLOG` as its `log` expression, not through the `xt_` modules. Both rules now
+  pass the extension check and fail with `RULE_APPEND failed (No such file or directory)`: the
+  kernel has no `limit` or `log` expression (`nft_limit` and `nft_log`, on disk for
+  6.6.156-2-MANJARO, not loaded; `runs/nftexpr.txt` reads the same with the host's `nft`).
+  k3s's network policy controller (kube-router) writes its drop-logging rule in each pod's
+  firewall chain with both (`-j NFLOG --nflog-group 100 -m limit --limit 10/minute`). The fix is
+  the box owner's, either of:
   - restore `kernel.modprobe` (`/sbin/modprobe`; the kernel then loads what a rule asks for);
-  - load the modules and add them to `/etc/modules-load.d/k3dgpu-wildct.conf`:
-    `modprobe -a xt_comment xt_statistic xt_multiport xt_limit xt_NFLOG xt_physdev xt_pkttype
-    ipt_REJECT ip6t_REJECT ip_set_hash_ip ip_set_hash_net ip_set_hash_ipport ip_set_hash_ipportip
-    ip_set_hash_ipportnet`.
+  - load the two modules and add them to `/etc/modules-load.d/k3dgpu-wildct.conf`:
+    `modprobe -a nft_limit nft_log`.
 
-  Then step 3b (the `repo` on wildct is `c4407a2c`, without `nfprobe.sh` and `ready.sh`), step 1
-  (H10 must read `NFPROBE clean`), and the smoke again, as `smoke4`.
+  Then step 1 (H10 must read `NFPROBE clean`; the `repo` on wildct is `e5748cd1`, which has
+  `nfprobe.sh` and `ready.sh`, so step 3b is not needed), and the smoke as `smoke4`.
 - **Left on wildct by this campaign** (no container, cluster, network or volume):
   - `~/k3dgpu-bench-wildct/`, which holds:
     - `bin/`: k3d v5.9.0, helm v4.3.1, kubectl v1.37.2;
@@ -47,24 +48,29 @@ every step 1 check passes.
       `8eb21d5b...`, 321,145,696 bytes, the i9's bytes) and Od's `graph.pbtxt` (`c57ecf35...`,
       the i9's);
     - `h57/bin/k3d` (the shim) and `h57/weights.sha256`;
-    - `repo` -> `repo-c4407a2c2ba8` (and the older archives);
+    - `repo` -> `repo-e5748cd112f2` (and the older archives);
     - `setup/`: `images-before.txt`, `containers-before.txt`, `volumes-before.txt`,
       `networks-before.txt` and the verify logs;
     - `runs/`: `smoke1*`, `smoke2*`, `diag-smoke2*`, `smoke3*` (with `smoke3-node.log`, the
-      node's log, and `smoke3-node-excerpt.txt`), `convert/`, `resume-health.txt` (and the
-      earlier one, renamed `resume-health.txt.<UTC time>`), `install-0.1.79.log`,
+      node's log, and `smoke3-node-excerpt.txt`), `convert/`, `resume-health.txt` (21:21:50Z;
+      the earlier ones renamed `resume-health.txt.<UTC time>`), `install-0.1.79.log`,
       `setup-images-*.log`, `IMAGE` and `campaign.log`;
-    - `diag/diag-up.sh`, the command `diag-smoke2` ran, and `diag/iptprobe-in.sh`, an ad-hoc
-      form of `nfprobe.sh`.
-  - `/etc/modules-load.d/k3dgpu-wildct.conf` (root, 0644), written with the box owner's approval
-    on 2026-10-29. It is the owner's: step 9 does not remove it.
+    - `diag/diag-up.sh`, the command `diag-smoke2` ran; `diag/iptprobe-in.sh`, an ad-hoc
+      form of `nfprobe.sh`; and the second load's read-only checks: `diag/modsnap.sh` (modules
+      and firewall, as root), `diag/prodcheck.sh` (the host's services), `diag/health.sh` (step 1)
+      and `diag/nftexpr.sh` (`runs/nftexpr.txt`), with `diag/modules-append.conf`, the lines
+      appended to the `modules-load.d` file.
+  - `/etc/modules-load.d/k3dgpu-wildct.conf` (root, 0644; 16 modules), written with the box
+    owner's approval on 2026-10-29 and extended with the second list. It is the owner's: step 9
+    does not remove it.
   - Images: `cryptoandcoffee/k3d-gpu:0.1.79`, `ghcr.io/k3d-io/k3d-tools:5.9.0`, the five refs of
     `setup-images.sh`, and `python:3.13-slim@sha256:70729b46...` (the RAPL reader's image until
     2026-10-29). `cryptoandcoffee/k3d-gpu:0.1.71` was removed in step 3c.
 - **Never existed.** No inference request. No measurement. `smoke1`, `smoke2`, `diag-smoke2`
   and `smoke3` are discarded and disclosed (amendments R1, R2 and R3).
 - **Never touched.** No GPU, nor anything that was on the host before the campaign, apart from
-  the two kernel modules and their `modules-load.d` file, which the box owner approved.
+  the 16 kernel modules (and their three dependencies) and their `modules-load.d` file, which the
+  box owner approved.
 - **Newest release on 2026-10-29: k3d-gpu 0.1.79**, installed in step 3c. Step 3a picks the newest
   one again.
   - `.deb` sha256: `3c94881c20ddaca11b1422044f62e2a2b1f01e8b6bb698d4d99e1bb5763830fb`.
@@ -133,7 +139,7 @@ Run them as one script (`timeout 600 $WSSH bash -s <<'EOF' ... EOF`). Every chec
 | H7 | `timeout 60 k3d cluster list -o json \| python3 $R/bench/wildct/clusters.py` | empty | a `k3dgpu-w-*` cluster exists: report (step 2 does not delete clusters) |
 | H8 | `flock -n $W/live.lock true && echo lock-free; ps -eo pid,args \| grep '[h]old.sh'` | `lock-free`, no `hold.sh` | a hold is still running |
 | H9 | `awk '$1 == "vxlan" \|\| $1 == "br_netfilter" {print $1}' /proc/modules \| sort \| paste -sd' '; echo "modprobe=[$(cat /proc/sys/kernel/modprobe)]"` | `br_netfilter vxlan` (both loaded; record `modprobe=`) | `vxlan` missing: k3s's flannel cannot create its VXLAN device and k3s exits (`smoke2`, 2026-10-29, with `modprobe=[]`: the kernel cannot load it on demand). `br_netfilter` missing: k3s cannot set `net.bridge.bridge-nf-call-iptables`, which Service traffic between pods on one node needs. Either: report to the box owner |
-| H10 | `timeout 300 bash $R/bench/wildct/nfprobe.sh "$(cat $W/runs/IMAGE)"; echo "nfprobe rc=$?"` (a throwaway container from the release node image: `--network none`, NET_ADMIN and NET_RAW only, CPUs 20-23; adds one rule per iptables extension in its list, in its own network namespace, and one ipset per set type in its list) | `NFPROBE clean`, `nfprobe rc=0` | `NFPROBE missing: ...`: k3s's iptables rules fail (`smoke3`, 2026-10-29: the network policy controller stopped on `comment` and k3s restarted every ~16 s). Report to the box owner with the modules: `comment` xt_comment, `statistic` xt_statistic, `multiport` xt_multiport, `limit` xt_limit, `NFLOG` xt_NFLOG, `physdev` xt_physdev, `pkttype` xt_pkttype, `REJECT` ipt_REJECT and ip6t_REJECT, `hash:ip` ip_set_hash_ip, `hash:net` ip_set_hash_net, `hash:ip,port` ip_set_hash_ipport, `hash:ip,port,ip` ip_set_hash_ipportip, `hash:ip,port,net` ip_set_hash_ipportnet. `nfprobe rc=2`: no verdict (docker did not answer, or no nf_tables iptables in the image); stop |
+| H10 | `timeout 300 bash $R/bench/wildct/nfprobe.sh "$(cat $W/runs/IMAGE)"; echo "nfprobe rc=$?"` (a throwaway container from the release node image: `--network none`, NET_ADMIN and NET_RAW only, CPUs 20-23; adds one rule per iptables extension in its list, in its own network namespace, and one ipset per set type in its list) | `NFPROBE clean`, `nfprobe rc=0` | `NFPROBE missing: ...`: k3s's iptables rules fail (`smoke3`, 2026-10-29: the network policy controller stopped on `comment` and k3s restarted every ~16 s). Report to the box owner with the modules: `comment` xt_comment, `statistic` xt_statistic, `multiport` xt_multiport, `limit` xt_limit and nft_limit, `NFLOG` xt_NFLOG and nft_log (iptables-nft writes these two as native nftables expressions: with the `xt_` module loaded and the `nft_` one not, the line reads `RULE_APPEND failed (No such file or directory)`, 2026-10-29), `physdev` xt_physdev, `pkttype` xt_pkttype, `REJECT` ipt_REJECT and ip6t_REJECT, `hash:ip` ip_set_hash_ip, `hash:net` ip_set_hash_net, `hash:ip,port` ip_set_hash_ipport, `hash:ip,port,ip` ip_set_hash_ipportip, `hash:ip,port,net` ip_set_hash_ipportnet. `nfprobe rc=2`: no verdict (docker did not answer, or no nf_tables iptables in the image); stop |
 
 Record the whole output in `$W/runs/resume-health.txt` (move an earlier one aside first). Also
 copy it back with the records. `runs/IMAGE` is step 3c's; in a campaign that has not reached 3c,

@@ -1,0 +1,18 @@
+#!/bin/bash
+# nftexpr.sh: which native nftables expressions this kernel serves, in a throwaway network
+# namespace (unshare --net; its table goes with it), with the host's nft. Run as root. The
+# expressions are the ones iptables-nft emits for `-m limit` (limit) and `-j NFLOG` (log group),
+# against two it already serves (counter, meta mark). Loads nothing: kernel.modprobe is empty.
+before=$(awk '{print $1}' /proc/modules | sort | sha256sum)
+unshare --net bash -c '
+nft add table ip k3dgpuprobe && nft add chain ip k3dgpuprobe c || { echo "nftexpr: no table"; exit 2; }
+r() { n=$1; shift; if o=$(nft add rule ip k3dgpuprobe c "$@" 2>&1); then echo "ok nft $n"; else echo "FAIL nft $n :: $(echo "$o" | head -1)"; fi; }
+r counter counter accept
+r meta-mark meta mark 0x4000 accept
+r limit limit rate 10/minute burst 10 packets accept
+r log-group log prefix probe group 100
+'
+echo "unshare rc=$?"
+after=$(awk '{print $1}' /proc/modules | sort | sha256sum)
+[ "$before" = "$after" ] && echo "modules unchanged" || echo "MODULES CHANGED"
+echo "modprobe=[$(cat /proc/sys/kernel/modprobe)]"

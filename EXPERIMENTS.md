@@ -6428,6 +6428,46 @@ says. Tests: `tests/wildct_hold_test.sh` (smoke3's pods and node; `nfprobe.sh`'s
 names the next smoke `smoke4`, adds `restarts=0` and every pod ready to its pass, and leaves
 `/etc/modules-load.d/k3dgpu-wildct.conf` to the box owner at the end of the campaign.
 
+### Wildct amendment R4: the second module load, and H10's native nftables expressions (2026-10-29)
+
+Recorded 2026-10-29, before any wildct hold has measured anything. No row's hypothesis,
+prediction, arm, model, statistic, threshold, cap, disk need, hold count or order changes. No
+smoke ran.
+
+**What happened (disclosed).** The box owner approved loading and persisting the modules behind
+H10's missing extensions and set types (amendment R3): `xt_comment`, `xt_statistic`,
+`xt_multiport`, `xt_limit`, `xt_NFLOG`, `xt_physdev`, `xt_pkttype`, `ipt_REJECT`, `ip6t_REJECT`,
+`ip_set_hash_ip`, `ip_set_hash_net`, `ip_set_hash_ipport`, `ip_set_hash_ipportip` and
+`ip_set_hash_ipportnet`. They were loaded at 21:16:54Z (`modprobe -a`, rc 0), with three hard
+dependencies (`nfnetlink_log`, `nf_reject_ipv4`, `nf_reject_ipv6`), and appended to
+`/etc/modules-load.d/k3dgpu-wildct.conf`; `kernel.modprobe` stays empty. As in R3, the host's own
+services were read before the load, at once after it, 3 minutes later, and again after the probes
+below: every container's state, health, restart count and start time, the HTTP status of eight
+published endpoints on the host (seven of them also through its tailnet address) and Prometheus's
+two scrape targets read the same each time, and the firewall's rule counts and rule hashes did
+not change (`bench/wildct/results/2026-10-29/host/modules-netfilter.txt`). Main at `e5748cd1` was
+shipped (its launcher and `share/` equal 0.1.79's) and step 1 of the resume procedure ran again
+(21:21:50Z; `runs/resume-health-r4.txt`). H1-H9 passed (Docker 29.7.2, `/` 208 GB available,
+MemAvailable 118 GiB, H9 `br_netfilter vxlan`). H10 read `NFPROBE missing: NFLOG limit` (rc 1):
+every other extension and set type now works, and the `limit` and `NFLOG` rules pass
+iptables-nft's extension check, then fail with "RULE_APPEND failed (No such file or directory)".
+So `smoke4` did not run, and no cluster was created.
+
+**Diagnosis.** iptables-nft writes `-m limit` and `-j NFLOG` as nftables' native `limit` and `log`
+expressions, so those two rules need `nft_limit` and `nft_log` as well as the `xt_` modules.
+nf_tables answers ENOENT for an expression type it does not have and cannot load. Both modules
+are on disk for 6.6.156-2-MANJARO and not loaded. A diagnostic in a throwaway network namespace,
+with the host's `nft` (`diag/nftexpr.sh.txt`; record `runs/nftexpr.txt`), added a counter rule
+and a meta mark rule, and failed the limit and log rules the same way; `/proc/modules` read the
+same before and after. k3s's network policy controller (kube-router) writes its drop-logging rule
+in each pod's firewall chain with both (`-j NFLOG --nflog-group 100 -m limit --limit 10/minute`).
+Restoring `kernel.modprobe`, or loading `nft_limit` and `nft_log`, is the box owner's call. The
+next smoke is still `smoke4`.
+
+**Resume procedure.** `RESUME.md` records the second load, names `nft_limit` and `nft_log` next to
+`xt_limit` and `xt_NFLOG` in H10's fail column, and lists the read-only check scripts left in
+`diag/`. No runner changes.
+
 ### H5 amendment A1: stage-1 harness and definitions (2026-10-19)
 
 Written 2026-10-19T22:30-07:00, before any H5 measurement. It fixes what the
