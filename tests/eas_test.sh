@@ -29,6 +29,24 @@
 #            role looks for, --explain prints permalinks, every source it can cite is
 #            a permalink at a full commit SHA, and pins.json has the k3d-gpu.eas-pins/v1
 #            shape.
+#   cli      `k3d-gpu eas up|down|status|check`, eas.sh (the in-bastion driver) and the
+#            bastion, against stub docker, kubectl, k3d, git, yq and `k3d-gpu fit`, with the
+#            real eas-config.py (so the facts it gathers are the facts the generator reads)
+#            and a recording overlay.py:
+#            - up --dry-run prints the choices and the overlay decisions and makes no
+#              docker or kubectl change
+#            - up creates the cluster with `k3d-gpu up` when it is absent
+#            - the bastion run: host network, root with the state handed back to this
+#              uid:gid, state dir rw, kubeconfig ro, secrets by name only
+#            - eas.sh order: clone at the SHA, overlay, manifest pins, init, the edits,
+#              install with the overrides last; never configure
+#            - refs: a profile and a SHA go as given, any other ref through git ls-remote
+#            - no secret value in an argument list, a log, choices.txt or a state file
+#            - refusals stop before any change
+#            - down clears AIGatewayRoute finalizers before teardown platform --force
+#            - status prints the layer, pins, overlay, EAS status, gateway, pods not Ready
+#            - sandbox up refuses when EAS's sandbox-router-deployment exists
+#            - the bastion pins what pins.json's bastion profile names
 # Needs bash, git, python3 (with PyYAML, for the config section's shape checks only).
 
 set -uo pipefail
@@ -688,7 +706,506 @@ PY
     fi
 }
 
-SECTIONS=(overlay config)
+section_cli() {
+    local B="${WORK}/cli/bin" K="${WORK}/cli/k" S="${WORK}/cli/s" LOG="${WORK}/cli/log"
+    local EAS_DIR="${ROOT}/integrations/eas" LAUNCHER="${ROOT}/scripts/k3d-gpu"
+    local SECRET="hf_SECRET_7f3a9c" EAS_SHA="97f6157d6a72f7173c698c474d4e51d2c79f1fd6"
+    local EI_SHA="3e8a24486b6ee812adf2bf452f8ba5751c16c8bd" EAT_SHA="036b66234801e9bd950afd90830821859780d668"
+    local STATE="${S}/k3d-gpu-state/eas-easc"
+    mkdir -p "${B}" "${K}/eas" "${K}/eat" "${S}/fx" "${S}/home" "${S}/host/proc/sys/fs/inotify"
+
+    # Helpers named apart from the other sections' (has there takes the needle first).
+    cli_eq()    { if [ "$2" = "$3" ]; then ok "$1"; else fail "$1: got '$2', want '$3'"; fi; }
+    cli_has()   { if grep -Fq -- "$3" <<< "$2"; then ok "$1"; else fail "$1: missing '$3' in: $(head -c 700 <<< "$2")"; fi; }
+    cli_lacks() { if grep -Fq -- "$3" <<< "$2"; then fail "$1: unexpected '$3'"; else ok "$1"; fi; }
+    # cli_before <name> <haystack> <first> <second>: <first> occurs, and before <second>.
+    cli_before() {
+        local a b
+        a=$(grep -nF -- "$3" <<< "$2" | head -1 | cut -d: -f1)
+        b=$(grep -nF -- "$4" <<< "$2" | head -1 | cut -d: -f1)
+        if [ -n "${a}" ] && [ -n "${b}" ] && [ "${a}" -lt "${b}" ]; then ok "$1"; else fail "$1: '$3' (line ${a:-none}) not before '$4' (line ${b:-none})"; fi
+    }
+
+    # The integration dir: the real files, eas-config.py included (the facts this section
+    # gathers must be what it reads), with overlay.py replaced by a recorder (the overlay
+    # section tests it on real EAS trees).
+    cp "${EAS_DIR}"/eas.sh "${EAS_DIR}"/eas-config.py "${EAS_DIR}"/pins.json "${EAS_DIR}"/overlay.json \
+       "${EAS_DIR}"/bastion.Dockerfile "${EAS_DIR}"/requirements.lock "${EAS_DIR}"/images.yaml "${K}/eas/"
+    cat > "${K}/eas/overlay.py" <<'EOF'
+import os, sys
+a = sys.argv[1:]
+with open(os.environ["STUB_LOG"], "a") as f:
+    f.write("overlay %s\n" % " ".join(a))
+if os.environ.get("STUB_OVERLAY_STOP"):
+    print("STOP: the overlay does not fit eas@97f6157; regenerate the rows above that say STOP. Nothing was applied.", file=sys.stderr)
+    sys.exit(3)
+print("# overlay at eas@97f6157 (HEAD), kubernetes_cpu_policy=%s, nodes=%s" % (a[a.index("--policy") + 1], a[a.index("--nodes") + 1]))
+print("0002 istio global.platform -> apply [stub]\n0006 envoy control-plane affinity -> apply (variant a) [stub]")
+EOF
+    cat > "${K}/eat/eat-check.sh" <<'EOF'
+echo "eat-check mode=${EAT_MODE} kubeconfig=${EAT_KUBECONFIG} domain=${EAT_EAS_DOMAIN} model=${EAT_MODEL}" >> "${STUB_LOG}"
+echo "EAT check passed (${EAT_MODE})."
+EOF
+
+    # ---- stubs: every call is one line in ${STUB_LOG} -------------------------------------
+    cat > "${B}/docker" <<'EOF'
+#!/usr/bin/env bash
+echo "docker $*" >> "${STUB_LOG}"
+case "$*" in
+    "info "*) echo '["name=seccomp,profile=builtin","name=cgroupns"]' ;;
+    "exec k3d-easc-server-0 test -S /var/run/nri/nri.sock") exit 0 ;;
+    "exec k3d-easc-server-0 crictl info") echo '{"config": {"cni": {"binDirs": ["/usr/bin"], "confDir": "/var/lib/rancher/k3s/agent/etc/cni/net.d"}}}' ;;
+    "image inspect "*) [ -e "${STUB_STATE}/image-present" ] ;;
+    "build "*) touch "${STUB_STATE}/image-present" ;;
+    "run "*) echo "bastion: ran" ;;
+    *) echo "docker stub: unexpected: $*" >&2; exit 1 ;;
+esac
+EOF
+    cat > "${B}/k3d" <<'EOF'
+#!/usr/bin/env bash
+echo "k3d $*" >> "${STUB_LOG}"
+case "$*" in
+    "cluster get "*) [ -e "${STUB_STATE}/cluster" ] ;;
+    "kubeconfig get "*) cat "${STUB_STATE}/kubeconfig-src" ;;
+esac
+EOF
+    cat > "${B}/kubectl" <<'EOF'
+#!/usr/bin/env bash
+echo "kubectl $*" >> "${STUB_LOG}"
+F="${STUB_STATE}/fx"
+case "$*" in
+    *"config view --minify --flatten"*) echo "apiVersion: v1 # minified for ${STUB_CLUSTER}" ;;
+    *"get nodes -o json"*) cat "${F}/nodes.json" ;;
+    *"get nodes"*) echo "node/k3d-easc-server-0" ;;
+    *"get daemonsets -A -o json"*) cat "${F}/daemonsets.json" ;;
+    *"get namespaces -o json"*) cat "${F}/namespaces.json" ;;
+    *"get crd sandboxes.agents.x-k8s.io -o name"*) echo 'Error from server (NotFound)' >&2; exit 1 ;;
+    *"version -o json"*) echo '{"serverVersion": {"gitVersion": "v1.37.1+k3s1"}}' ;;
+    *"get aigatewayroutes.aigateway.envoyproxy.io -A"*) printf 'llm-inference aigw-qwen2-5-coder-7b\nllm-inference aigw-qwen3guard\n' ;;
+    *"-n agent-sandbox-system get deployment sandbox-router-deployment -o name"*)
+        [ -n "${STUB_EAS_SANDBOX:-}" ] || { echo 'Error from server (NotFound)' >&2; exit 1; }
+        echo deployment.apps/sandbox-router-deployment ;;
+    *"-n envoy-gateway-system get svc -l gateway.envoyproxy.io/owning-gateway-name=eg-gateway"*) echo 172.18.0.2 ;;
+    *"get pods -A -o json"*) cat "${F}/pods.json" ;;
+    *" patch "*|*" apply "*|*" delete "*) ;;
+    *) echo "kubectl stub: unexpected: $*" >&2; exit 1 ;;
+esac
+EOF
+    cat > "${B}/git" <<'EOF'
+#!/usr/bin/env bash
+echo "git $*" >> "${STUB_LOG}"
+if [ "$1" = ls-remote ]; then
+    case "$4" in
+        release-1.1) printf '170eb3abb1956de0787727f21e356aef2b13ff24\trefs/heads/release-1.1\n' ;;
+        v9.9.9)      printf '1111111111111111111111111111111111111111\trefs/tags/v9.9.9\n2222222222222222222222222222222222222222\trefs/tags/v9.9.9^{}\n' ;;
+    esac
+    exit 0
+fi
+if [ "$1" = clone ]; then
+    # A checkout whose installer records its argv; init seeds env/<env> as the real one does.
+    d=$4
+    mkdir -p "${d}/.git" "${d}/configs/repos"
+    : > "${d}/configs/repos/repos.agent-toolkit.yaml"
+    : > "${d}/configs/repos/repos.inference.yaml"
+    cat > "${d}/es_auto_installer.sh" <<'EOS'
+#!/usr/bin/env bash
+echo "installer $*" >> "${STUB_LOG}"
+if [ "$1" = init ]; then
+    mkdir -p env/k3d-gpu && : > env/k3d-gpu/global_config.yaml && : > env/k3d-gpu/models.yaml && : > env/k3d-gpu/.solutions.yaml
+fi
+EOS
+    chmod +x "${d}/es_auto_installer.sh"
+fi
+exit 0
+EOF
+    # yq: records its argv and the strenv() values; answers the row listings eas.sh reads
+    # from eas-config.py's files (one `key: "value"` per line, as it writes them).
+    cat > "${B}/yq" <<'EOF'
+#!/usr/bin/env python3
+import os, re, sys
+a = sys.argv[1:]
+env = " ".join("%s=%s" % (k, os.environ[k]) for k in ("L", "U", "R", "F", "N") if k in os.environ and "strenv(%s)" % k in " ".join(a))
+with open(os.environ["STUB_LOG"], "a") as f:
+    f.write("yq %s%s\n" % (" ".join(a), " [" + env + "]" if env else ""))
+if "-r" in a:
+    text = open(a[-1]).read()
+    if "@tsv" in a[a.index("-r") + 1]:
+        for m in re.finditer(r'- layer: "([^"]*)"\n\s+url: "([^"]*)"\n\s+rev: "([^"]*)"', text):
+            print("\t".join(m.groups()))
+    elif ".models[].name" in a:
+        for m in re.finditer(r'^  - name: "([^"]*)"', text, re.M):
+            print(m.group(1))
+EOF
+    cat > "${B}/self" <<'EOF'
+#!/usr/bin/env bash
+echo "self $*" >> "${STUB_LOG}"
+case "$1" in
+    up) touch "${STUB_STATE}/cluster" ;;
+    fit)
+        case "$3" in
+            Qwen/Qwen2.5-Coder-14B-Instruct) echo '{"schema": "k3d-gpu.fit/v1", "fits": false, "summary": "fit: does not fit this host", "flags": []}'; exit 3 ;;
+            meta-llama/Llama-3.1-8B-Instruct) exit 2 ;;
+            *) printf '{"schema": "k3d-gpu.fit/v1", "fits": true, "summary": "fit: %s on CPU via vllm", "flags": ["VLLM_CPU_KVCACHE_SPACE=12"]}\n' "$3" ;;
+        esac ;;
+esac
+EOF
+    chmod +x "${B}"/*
+
+    # ---- fixtures: a k3d-gpu cluster on a 32-CPU, 125 GiB hybrid desktop --------------------
+    cat > "${S}/fx/nodes.json" <<'EOF'
+{"items": [{"metadata": {"name": "k3d-easc-server-0",
+  "labels": {"feature.node.kubernetes.io/cpu-cpuid.AVXVNNI": "true", "k3d-gpu.io/hybrid-cpu": "true",
+             "node-role.kubernetes.io/control-plane": "true"},
+  "annotations": {"k3s.io/node-args": "[\"server\", \"--disable\", \"traefik\", \"--tls-san\", \"0.0.0.0\"]"}},
+  "status": {"allocatable": {"cpu": "32", "memory": "131419028Ki", "gpu.intel.com/xe": "1", "pods": "110"}}}]}
+EOF
+    cat > "${S}/fx/daemonsets.json" <<'EOF'
+{"items": [
+ {"metadata": {"namespace": "kube-system", "name": "nri-resource-policy-balloons",
+   "labels": {"app.kubernetes.io/managed-by": "Helm"},
+   "annotations": {"meta.helm.sh/release-name": "nri-resource-policy-balloons",
+                   "objectset.rio.cattle.io/owner-gvk": "k3s.cattle.io/v1, Kind=Addon", "objectset.rio.cattle.io/owner-name": "nri-balloons"}}},
+ {"metadata": {"namespace": "node-feature-discovery", "name": "nfd-worker", "labels": {"app": "nfd"},
+   "annotations": {"objectset.rio.cattle.io/owner-gvk": "k3s.cattle.io/v1, Kind=Addon", "objectset.rio.cattle.io/owner-name": "node-feature-discovery"}}}]}
+EOF
+    echo '{"items": [{"metadata": {"name": "default"}}, {"metadata": {"name": "kube-system"}}, {"metadata": {"name": "node-feature-discovery"}}]}' > "${S}/fx/namespaces.json"
+    cp "${S}/fx/namespaces.json" "${S}/fx/namespaces.ok"
+    cat > "${S}/fx/pods.json" <<'EOF'
+{"items": [
+ {"metadata": {"namespace": "litellm", "name": "litellm-0"}, "status": {"phase": "Running", "containerStatuses": [{"ready": true}]}},
+ {"metadata": {"namespace": "llm-inference", "name": "vllm-qwen-0"}, "status": {"phase": "Pending", "containerStatuses": [{"ready": false, "state": {"waiting": {"reason": "ContainerCreating"}}}]}},
+ {"metadata": {"namespace": "kube-system", "name": "helm-install-x"}, "status": {"phase": "Succeeded"}}]}
+EOF
+    echo "apiVersion: v1 # easc" > "${S}/kubeconfig-src"
+    mkdir -p "${S}/k3d-gpu-state"
+    cp "${S}/kubeconfig-src" "${S}/k3d-gpu-state/kubeconfig-easc"
+    touch "${S}/cluster"
+    printf 'MemTotal: 131500000 kB\nMemAvailable: 120000000 kB\n' > "${S}/host/proc/meminfo"
+    echo 128 > "${S}/host/proc/sys/fs/inotify/max_user_instances"
+    echo 1048576 > "${S}/host/proc/sys/fs/inotify/max_user_watches"
+
+    # cli <fn> [args...]: a launcher function in a subshell, the stubs first on PATH, the
+    # launcher's own `up` and `fit` replaced by the self stub.
+    cli() {
+        (export PATH="${B}:${PATH}" STUB_LOG="${LOG}" STUB_STATE="${S}" STUB_CLUSTER=easc HOME="${S}/home" \
+            K3D_GPU_STATE_DIR="${S}/k3d-gpu-state" K3D_GPU_CLUSTER=easc K3D_GPU_EAS_DIR="${K}/eas" \
+            K3D_GPU_SHARE="${ROOT}/share"
+         unset KUBECONFIG K3D_GPU_KUBECONFIG K3D_GPU_CONTEXT
+         # shellcheck disable=SC1090
+         source <(sed '/^case "\${1:-help}" in$/,$d' "${LAUNCHER}")
+         # shellcheck disable=SC2034
+         SYSROOT="${S}/host"
+         qs_self() { echo "${B}/self"; }
+         "$@") 2>&1
+    }
+    local out rc log
+
+    # ---- up --dry-run -------------------------------------------------------------------------
+    : > "${LOG}"
+    out=$(cli cmd_eas up --agent-toolkit --dry-run); rc=$?
+    log=$(cat "${LOG}")
+    cli_eq    "cli: dry run exits 0" "${rc}" 0
+    cli_has   "cli: dry run prints eas-config's choices" "${out}" "ServiceLB on (no --disable servicelb in k3s.io/node-args) -> metallb_enabled: false"
+    cli_has   "cli: the facts carry the baked balloons policy to eas-config" "${out}" "-> kubernetes_cpu_policy: best-effort (one NRI policy per node)"
+    cli_has   "cli: the facts carry the node's CNI bin_dirs to eas-config" "${out}" 'containerd CNI bin_dirs ["/usr/bin"] -> istio_platform: k3d'
+    cli_has   "cli: the facts carry the fit documents to eas-config" "${out}" "qwen2-5-coder-7b needs 99 GiB and k3d-gpu fit says it fits -> llm_services_autodeploy_models: [qwen2-5-coder-7b]"
+    cli_has   "cli: the inotify warning reaches the user" "${out}" "WARN: fs.inotify.max_user_instances 128 < 8192"
+    cli_has   "cli: dry run prints the overlay decisions" "${out}" "0006 envoy control-plane affinity -> apply (variant a)"
+    cli_has   "cli: the overlay gets eas-config's cpu policy and the node count" "${log}" \
+        "overlay --eas ${STATE}/eas --policy best-effort --nodes 1 --json ${STATE}/overlay-decisions.json"
+    cli_lacks "cli: dry run: the overlay is not applied" "${log}" "--apply"
+    cli_has   "cli: dry run says nothing was applied" "${out}" "Dry run: nothing applied"
+    if grep -E '^docker ' <<< "${log}" | grep -Ev '^docker (info --format|exec k3d-easc-server-0 (test -S /var/run/nri/nri.sock|crictl info)$)' | grep -q .; then
+        fail "cli: dry run: a docker call that is not a read: $(grep -E '^docker ' <<< "${log}" | grep -Ev '^docker (info|exec)' | head -1)"
+    else
+        ok "cli: dry run: every docker call is a read (info, exec test, exec crictl info)"
+    fi
+    if grep -E '^kubectl ' <<< "${log}" | grep -Eqv ' (get|version|config view) '; then
+        fail "cli: dry run: a kubectl call that is not a read: $(grep -E '^kubectl ' <<< "${log}" | grep -Ev ' (get|version|config view) ' | head -1)"
+    else
+        ok "cli: dry run: every kubectl call is a read"
+    fi
+    cli_lacks "cli: dry run: no installer call" "${log}" "installer "
+    cli_eq    "cli: state dir is 0700" "$(stat -c %a "${STATE}")" 700
+    cli_eq    "cli: the bastion's kubeconfig is 0600" "$(stat -c %a "${STATE}/kubeconfig")" 600
+    cli_has   "cli: the bastion's kubeconfig is this cluster's context alone" "${log}" "kubectl --context k3d-easc config view --minify --flatten"
+    cli_has   "cli: eas-config writes its five files" "$(ls "${STATE}")" "repos.agent-toolkit.yaml"
+    local facts
+    facts=$(python3 -c 'import json, sys
+f = json.load(open(sys.argv[1]))
+print(sorted(f), f["nri_socket"], f["containerd_cni_bin_dirs"], f["agent_sandbox"], f["docker_rootless"], sorted(f["host"]),
+      sorted(f["nodes"][0]), sorted(f["daemonsets"][0]), f["namespaces"], f["fit"]["meta-llama/Llama-3.1-8B-Instruct"],
+      f["fit"]["Qwen/Qwen2.5-Coder-14B-Instruct"]["fits"])' "${STATE}/facts.json" 2>&1)
+    cli_eq    "cli: facts.json has the k3d-gpu.eas-facts/v1 shape eas-config.py documents" "${facts}" \
+        "['agent_sandbox', 'cluster', 'containerd_cni_bin_dirs', 'daemonsets', 'docker_rootless', 'fit', 'host', 'namespaces', 'nodes', 'nri_socket', 'schema', 'server_version'] True ['/usr/bin'] None False ['inotify_max_user_instances', 'inotify_max_user_watches', 'mem_available_kib'] ['allocatable', 'annotations', 'labels', 'name'] ['annotations', 'labels', 'name', 'namespace'] ['default', 'kube-system', 'node-feature-discovery'] None False"
+    cli_has   "cli: fit runs per eas-config candidate, vLLM on the CPU" "${log}" "self fit --model Qwen/Qwen2.5-Coder-7B-Instruct --engine vllm --device cpu --json"
+    cli_has   "cli: pins.resolved.json records eas-config's commits" "$(cat "${STATE}/pins.resolved.json")" "\"sha\": \"${EAS_SHA}\""
+
+    # ---- refs -----------------------------------------------------------------------------------
+    : > "${LOG}"
+    out=$(cli cmd_eas up --dry-run --eas-ref v1.2.0-rc.1); rc=$?
+    cli_eq    "cli: --eas-ref v1.2.0-rc.1 (a profile) runs" "${rc}" 0
+    cli_has   "cli: a profile goes to eas-config as given" "${out}" "# k3d-gpu eas-config: profile v1.2.0-rc.1, layer inference"
+    cli_has   "cli: the rc profile's EAS commit drives the overlay" "${out}" "enterprise-ai-solutions@5c27fb3"
+    cli_lacks "cli: a profile needs no ls-remote" "$(cat "${LOG}")" "git ls-remote"
+    : > "${LOG}"
+    out=$(cli cmd_eas up --dry-run --agent-toolkit --ei-ref release-1.1 --eat-ref v9.9.9); rc=$?
+    cli_eq    "cli: refs resolve" "${rc}" 0
+    cli_has   "cli: a branch resolves through git ls-remote" "$(cat "${LOG}")" "git ls-remote -- https://github.com/intel/enterprise-inference release-1.1 release-1.1^{}"
+    cli_has   "cli: the resolved commit is printed with its ref" "${out}" "ei: intel/enterprise-inference@170eb3a (release-1.1, git ls-remote"
+    cli_has   "cli: eas-config gets the commit, not the ref" "${out}" "# ei intel/enterprise-inference 170eb3abb1956de0787727f21e356aef2b13ff24"
+    cli_has   "cli: an annotated tag resolves to its commit" "$(cat "${STATE}/repos.agent-toolkit.yaml")" 'rev: "2222222222222222222222222222222222222222"'
+    : > "${LOG}"
+    out=$(cli cmd_eas up --dry-run --eas-ref 0123456789abcdef0123456789abcdef01234567); rc=$?
+    cli_has   "cli: a full SHA is taken as given" "${out}" "eas: intel/enterprise-ai-solutions@0123456 (as given)"
+    cli_lacks "cli: a full SHA needs no ls-remote" "$(cat "${LOG}")" "git ls-remote"
+    out=$(cli cmd_eas up --dry-run --ei-ref no-such-branch); rc=$?
+    if [ "${rc}" -ne 0 ] && grep -q 'has no branch or tag no-such-branch' <<< "${out}"; then ok "cli: an unknown ref stops"; else fail "cli: an unknown ref: rc=${rc} ${out}"; fi
+
+    # ---- refusals ---------------------------------------------------------------------------------
+    # cli_refused <name> <message> <cmd_eas args...>: non-zero, the message, and no change.
+    cli_refused() {
+        local name=$1 msg=$2 o r
+        shift 2
+        : > "${LOG}"
+        o=$(cli cmd_eas "$@"); r=$?
+        if [ "${r}" -ne 0 ] && grep -qF -- "${msg}" <<< "${o}" \
+           && ! grep -Eq '^docker (run|build)|^kubectl .* (patch|apply|delete|create) |^installer ' "${LOG}"; then
+            ok "cli: refused before any change: ${name}"
+        else
+            fail "cli: refused before any change: ${name} (rc=${r}): $(head -c 600 <<< "${o}") | $(grep -E '^docker (run|build)|^installer' "${LOG}" | head -2)"
+        fi
+    }
+    cli_refused "--layer erag (eas-config's reason)" "chatqna_intel_gpu is EXPERIMENTAL" up --layer erag
+    cli_refused "--layer erag reads as a refusal" "refused (above); nothing was changed" up --layer erag
+    cli_refused "an unknown layer" "--layer must be inference, agent-toolkit or erag" up --layer platform
+    cli_refused "an unknown option" "unknown eas up option: --nope" up --nope
+    cli_refused "a ref that is an option" "not a ref or model name: '-x'" up --eas-ref -x
+    cli_refused "a ref with shell characters" "not a ref or model name" up --ei-ref 'main;id'
+    cli_refused "no subcommand" "usage: k3d-gpu eas up" ""
+    cli_refused "down with an option" "eas down takes no options" down --force
+    echo '{"items": [{"metadata": {"name": "genai-gateway"}}, {"metadata": {"name": "ingress-nginx"}}]}' > "${S}/fx/namespaces.json"
+    cli_refused "EAT 1.x present (eas-config refuses)" "both stacks would own LiteLLM" up --agent-toolkit
+    cp "${S}/fx/namespaces.ok" "${S}/fx/namespaces.json"
+    STUB_OVERLAY_STOP=1 cli_refused "an overlay STOP" "the overlay stops at this EAS commit" up --dry-run
+    rm "${S}/cluster"
+    cli_refused "a dry run on an absent cluster" "a dry run reads a running cluster" up --dry-run
+    touch "${S}/cluster"
+    mv "${K}/eas/overlay.py" "${K}/eas/overlay.py.off"
+    cli_refused "an incomplete integration dir" "overlay.py missing" up
+    mv "${K}/eas/overlay.py.off" "${K}/eas/overlay.py"
+
+    # ---- up: the cluster, the bastion and its run ------------------------------------------------
+    rm -f "${S}/cluster" "${S}/image-present"
+    : > "${LOG}"
+    out=$(HF_TOKEN="${SECRET}" HTTPS_PROXY=http://proxy.test:3128 cli cmd_eas up --agent-toolkit -- -e '{"llm_services_autodeploy_models": []}'); rc=$?
+    log=$(cat "${LOG}")
+    cli_eq     "cli: up exits 0" "${rc}" 0
+    cli_has    "cli: up creates the absent cluster with 'k3d-gpu up'" "${log}" "self up"
+    cli_before "cli: the cluster comes before the facts" "${log}" "self up" "get nodes -o json"
+    local tag runline
+    tag=$(cat "${EAS_DIR}/bastion.Dockerfile" "${EAS_DIR}/requirements.lock" | sha256sum | cut -c1-16)
+    cli_has    "cli: the bastion is built when absent, tagged by Dockerfile + lock" "${log}" \
+        "docker build -q -t k3d-gpu-eas-bastion:${tag} -f ${K}/eas/bastion.Dockerfile ${K}/eas"
+    runline=$(grep '^docker run' <<< "${log}")
+    cli_has    "cli: bastion: host network" "${runline}" "--network host"
+    cli_has    "cli: bastion: root (ensure_sudo), the state handed back to this uid:gid" "${runline}" "--user 0:0"
+    cli_has    "cli: bastion: EAS_OWNER is this uid:gid" "${runline}" "-e EAS_OWNER=$(id -u):$(id -g)"
+    cli_has    "cli: bastion: state dir rw" "${runline}" "-v ${STATE}:/eas-state "
+    cli_has    "cli: bastion: kubeconfig ro" "${runline}" "-v ${STATE}/kubeconfig:/kube/config:ro"
+    cli_has    "cli: bastion: integrations/ ro, as overlay.py's patch lookup needs" "${runline}" "-v ${K}:/k3d-gpu/integrations:ro"
+    cli_has    "cli: bastion: the EAS commit eas-config resolved" "${runline}" "-e EAS_SHA=${EAS_SHA}"
+    cli_has    "cli: bastion: eas-config's cpu policy and the node count for the overlay" "${runline}" "-e EAS_CPU_POLICY=best-effort -e EAS_NODES=1"
+    cli_has    "cli: bastion: HF_TOKEN by name only" "${runline}" "-e HF_TOKEN "
+    cli_has    "cli: bastion: a proxy by name only" "${runline}" "-e HTTPS_PROXY "
+    cli_has    "cli: bastion: eas.sh up with the layer and the extra args" "${runline}" \
+        "k3d-gpu-eas-bastion:${tag} bash /k3d-gpu/integrations/eas/eas.sh up agent-toolkit -- -e {\"llm_services_autodeploy_models\": []}"
+    cli_has    "cli: up prints the gateway with its --resolve line" "${out}" "curl -k --resolve litellm.solutions.ai:443:172.18.0.2 https://litellm.solutions.ai/v1/models"
+    local leak
+    leak=$(grep -rlF -- "${SECRET}" "${S}" "${LOG}" 2>/dev/null; grep -F -- "${SECRET}" <<< "${out}")
+    cli_eq     "cli: no secret value in argv, logs, choices, state files or output" "${leak}" ""
+    cli_has    "cli: the image pins go to the state dir" "$(cat "${STATE}/k3d-gpu-images.yaml" 2>/dev/null)" "agent_sandbox_router_image:"
+    cli_eq     "cli: the installed layer is recorded" "$(cat "${STATE}/layer" 2>/dev/null)" agent-toolkit
+    : > "${LOG}"
+    out=$(cli cmd_eas up --agent-toolkit); rc=$?
+    cli_lacks  "cli: a present cluster is not recreated" "$(cat "${LOG}")" "self up"
+    cli_lacks  "cli: a present bastion is reused, not rebuilt" "$(cat "${LOG}")" "docker build"
+    : > "${LOG}"
+    out=$(cli cmd_eas up); rc=$?
+    cli_eq     "cli: up of the inference layer exits 0" "${rc}" 0
+    cli_lacks  "cli: the inference layer has no LiteLLM line" "${out}" "litellm."
+    cli_has    "cli: the inference layer prints the gateway" "${out}" "gateway: eg-gateway at 172.18.0.2"
+    mkdir -p "${STATE}/eas/env/k3d-gpu"
+    out=$(cli cmd_eas check); rc=$?
+    if [ "${rc}" -ne 0 ] && grep -q 'run .k3d-gpu eas up --agent-toolkit. first' <<< "${out}"; then
+        ok "cli: check refuses without the agent toolkit (no LiteLLM)"
+    else
+        fail "cli: check without the agent toolkit: rc=${rc} ${out}"
+    fi
+    cli cmd_eas up --agent-toolkit >/dev/null
+
+    # ---- eas.sh in the bastion: its steps, in order ------------------------------------------------
+    local ES="${WORK}/cli/es"
+    mkdir -p "${ES}"
+    command cp -f "${STATE}"/k3d-gpu-overrides.yaml "${STATE}"/global_config.edit.yaml "${STATE}"/models.edit.yaml \
+        "${STATE}"/repos.agent-toolkit.yaml "${ES}/"
+    : > "${LOG}"
+    out=$(PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_SHA="${EAS_SHA}" EAS_CPU_POLICY=best-effort EAS_NODES=1 \
+        EAS_VENV="${WORK}/cli/venv" bash "${K}/eas/eas.sh" up agent-toolkit -- -e x=1 2>&1); rc=$?
+    log=$(cat "${LOG}")
+    cli_eq     "cli: eas.sh up exits 0" "${rc}" 0
+    cli_has    "cli: eas.sh clones EAS" "${log}" "git clone -q https://github.com/intel/enterprise-ai-solutions ${ES}/eas"
+    cli_has    "cli: eas.sh checks out the SHA, clean" "${log}" "git -C ${ES}/eas checkout -q --force --detach ${EAS_SHA}"
+    cli_before "cli: clone, then checkout" "${log}" "git clone" "checkout -q --force --detach"
+    cli_before "cli: checkout, then clean" "${log}" "checkout -q --force --detach" "git -C ${ES}/eas clean -q -fd"
+    cli_before "cli: checkout, then the overlay, applied" "${log}" "checkout -q --force --detach" \
+        "overlay --eas ${ES}/eas --policy best-effort --nodes 1 --json ${ES}/overlay-decisions.json --apply"
+    cli_has    "cli: overlay.txt holds the decisions" "$(cat "${ES}/overlay.txt")" "0002 istio global.platform -> apply"
+    cli_before "cli: the overlay, then the manifest pins" "${log}" "overlay --eas" \
+        "yq -i (.repos[] | select(.layer == strenv(L) and .url == strenv(U)) | .rev) = strenv(R) ${ES}/eas/configs/repos/repos.agent-toolkit.yaml [L=inference U=https://github.com/intel/enterprise-inference R=${EI_SHA}]"
+    cli_has    "cli: the EAT repo is pinned too" "${log}" "[L=agent-toolkit U=https://github.com/intel/enterprise-agent-toolkit R=${EAT_SHA}]"
+    cli_before "cli: the manifest pins, then init" "${log}" "strenv(R) ${ES}/eas/configs/repos" "installer init"
+    cli_has    "cli: init <layer> --env k3d-gpu" "${log}" "installer init agent-toolkit --env k3d-gpu"
+    cli_before "cli: init, then global_config.edit.yaml" "${log}" "installer init" \
+        "yq -i . *= load(strenv(F)) ${ES}/eas/env/k3d-gpu/global_config.yaml [F=${ES}/global_config.edit.yaml]"
+    cli_before "cli: init, then models.edit.yaml defaults" "${log}" "installer init" \
+        "yq -i .defaults *= load(strenv(F)).defaults ${ES}/eas/env/k3d-gpu/models.yaml [F=${ES}/models.edit.yaml]"
+    cli_has    "cli: the picked model's catalog entry is edited by name" "${log}" "[F=${ES}/models.edit.yaml N=qwen2-5-coder-7b]"
+    cli_before "cli: the edits, then install" "${log}" "load(strenv(F)).defaults" "installer install"
+    cli_has    "cli: install with the image pins, then the overrides, then the extra args" "${log}" \
+        "installer install agent-toolkit --env k3d-gpu -- -e @${ES}/k3d-gpu-images.yaml -e @${ES}/k3d-gpu-overrides.yaml -e x=1"
+    cli_lacks  "cli: configure is never called" "${log}" "installer configure"
+    cli_eq     "cli: .venv links to the baked venv" "$(readlink "${ES}/eas/.venv")" "${WORK}/cli/venv"
+    : > "${LOG}"
+    PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_SHA="${EAS_SHA}" EAS_CPU_POLICY=best-effort EAS_NODES=1 \
+        EAS_VENV="${WORK}/cli/venv" bash "${K}/eas/eas.sh" up agent-toolkit >/dev/null 2>&1
+    cli_has    "cli: a second up re-inits with --upgrade (moved pins)" "$(cat "${LOG}")" "installer init agent-toolkit --env k3d-gpu --upgrade"
+    cli_lacks  "cli: a second up does not clone again" "$(cat "${LOG}")" "git clone"
+    out=$(PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_SHA=main bash "${K}/eas/eas.sh" up agent-toolkit 2>&1); rc=$?
+    if [ "${rc}" -ne 0 ] && grep -q 'EAS_SHA must be a full commit SHA' <<< "${out}"; then ok "cli: eas.sh refuses a floating EAS ref"; else fail "cli: eas.sh floating ref: rc=${rc} ${out}"; fi
+    sed -i 's/rev: "3e8a/rev: "main-3e8a/' "${ES}/repos.agent-toolkit.yaml"
+    out=$(PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_SHA="${EAS_SHA}" EAS_CPU_POLICY=best-effort EAS_NODES=1 \
+        EAS_VENV="${WORK}/cli/venv" bash "${K}/eas/eas.sh" up agent-toolkit 2>&1); rc=$?
+    if [ "${rc}" -ne 0 ] && grep -q 'is not a commit SHA' <<< "${out}"; then ok "cli: eas.sh refuses a manifest rev that is not a SHA"; else fail "cli: eas.sh manifest rev: rc=${rc} ${out}"; fi
+    : > "${LOG}"
+    PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_VENV="${WORK}/cli/venv" bash "${K}/eas/eas.sh" down >/dev/null 2>&1
+    cli_has    "cli: eas.sh down: teardown platform, forced (no terminal)" "$(cat "${LOG}")" "installer teardown platform --env k3d-gpu --force"
+    : > "${LOG}"
+    PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_VENV="${WORK}/cli/venv" bash "${K}/eas/eas.sh" status >/dev/null 2>&1
+    cli_has    "cli: eas.sh status" "$(cat "${LOG}")" "installer status --env k3d-gpu"
+
+    # ---- down ----------------------------------------------------------------------------------------
+    mkdir -p "${STATE}/eas/env/k3d-gpu"
+    : > "${LOG}"
+    out=$(cli cmd_eas down); rc=$?
+    log=$(cat "${LOG}")
+    cli_eq     "cli: down exits 0" "${rc}" 0
+    cli_has    "cli: down clears each AIGatewayRoute's finalizers (EAS #71)" "${log}" \
+        'kubectl --context k3d-easc -n llm-inference patch aigatewayroute aigw-qwen2-5-coder-7b --type=merge -p {"metadata":{"finalizers":[]}}'
+    cli_has    "cli: down clears the guard model's route too" "${log}" "patch aigatewayroute aigw-qwen3guard"
+    cli_before "cli: finalizers cleared before teardown" "${log}" "patch aigatewayroute aigw-qwen3guard" "eas.sh down"
+    cli_has    "cli: down keeps the cluster" "${out}" "the cluster stays"
+    cli_lacks  "cli: down does not delete the cluster" "${log}" "cluster delete"
+
+    # ---- status --------------------------------------------------------------------------------------
+    echo agent-toolkit > "${STATE}/layer"
+    command cp -f "${ES}/overlay.txt" "${STATE}/overlay.txt"   # what eas.sh up writes in the bastion
+    : > "${LOG}"
+    out=$(cli cmd_eas status); rc=$?
+    cli_eq    "cli: status exits 0" "${rc}" 0
+    cli_has   "cli: status: the layer" "${out}" "Layer: agent-toolkit"
+    cli_has   "cli: status: pins" "${out}" "eas: intel/enterprise-ai-solutions@97f6157 (profile main)"
+    cli_has   "cli: status: overlay decisions" "${out}" "0006 envoy control-plane affinity -> apply (variant a)"
+    cli_has   "cli: status: EAS's own status" "$(cat "${LOG}")" "eas.sh status"
+    cli_has   "cli: status: the gateway with its --resolve line" "${out}" "--resolve litellm.solutions.ai:443:172.18.0.2"
+    cli_has   "cli: status: a pod not Ready" "${out}" "llm-inference/vllm-qwen-0: ContainerCreating"
+    cli_lacks "cli: status: a Ready pod is not listed" "${out}" "litellm/litellm-0"
+    cli_lacks "cli: status: a finished pod is not listed" "${out}" "helm-install-x"
+
+    # ---- check ---------------------------------------------------------------------------------------
+    : > "${LOG}"
+    out=$(cli cmd_eas check --model qwen2-5-coder-7b); rc=$?
+    cli_eq  "cli: check exits 0" "${rc}" 0
+    cli_has "cli: check runs eat-check.sh in eas mode on this cluster's kubeconfig and domain" "$(cat "${LOG}")" \
+        "eat-check mode=eas kubeconfig=${STATE}/kubeconfig domain=solutions.ai model=qwen2-5-coder-7b"
+
+    # ---- nothing installed ---------------------------------------------------------------------------
+    rm -rf "${STATE}/eas"
+    cli_refused "down with nothing installed" "nothing installed by 'k3d-gpu eas up'" down
+    cli_refused "status with nothing installed" "nothing installed by 'k3d-gpu eas up'" status
+
+    # ---- sandbox up next to EAS's agent sandbox --------------------------------------------------------
+    : > "${LOG}"
+    out=$(STUB_EAS_SANDBOX=1 cli sandbox_up); rc=$?
+    if [ "${rc}" -ne 0 ] && grep -q "belongs to EAS's agent toolkit" <<< "${out}" && ! grep -q ' apply ' "${LOG}"; then
+        ok "cli: sandbox up refuses when sandbox-router-deployment exists, before any apply"
+    else
+        fail "cli: sandbox up next to EAS: rc=${rc} ${out}"
+    fi
+
+    # ---- the launcher's dispatcher and help ------------------------------------------------------------
+    out=$(K3D_GPU_STATE_DIR="${S}/k3d-gpu-state" HOME="${S}/home" "${LAUNCHER}" eas 2>&1); rc=$?
+    if [ "${rc}" -ne 0 ] && grep -q 'usage: k3d-gpu eas up' <<< "${out}"; then ok "cli: dispatcher: 'eas' reaches cmd_eas"; else fail "cli: dispatcher: rc=${rc} ${out}"; fi
+    cli_has "cli: help documents eas up" "$("${LAUNCHER}" help)" "eas up [--agent-toolkit] [--model NAME]"
+
+    # ---- the bastion: its pins are pins.json's bastion profile -----------------------------------------
+    local k3s kc want got
+    k3s=$(sed -n 's/^ARG K3S_TAG="\{0,1\}v\([0-9]*\.[0-9]*\)\..*/\1/p' "${ROOT}/Dockerfile")
+    kc=$(sed -n 's/^ARG KUBECTL_VERSION=v\([0-9]*\.[0-9]*\)\..*/\1/p' "${EAS_DIR}/bastion.Dockerfile")
+    if [ -n "${k3s}" ] && [ "${kc}" = "${k3s}" ]; then ok "cli: bastion kubectl minor ${kc} is the K3S_TAG minor"; else fail "cli: bastion kubectl minor '${kc}' vs K3S_TAG minor '${k3s}'"; fi
+    want=$(python3 - "${EAS_DIR}/pins.json" <<'PY'
+import json, sys
+rows = {r["name"]: r for r in json.load(open(sys.argv[1]))["pins"] if r["profile"] == "bastion"}
+print("FROM ubuntu:%s@sha256:%s kubectl %s helm %s yq %s kubernetes.core %s"
+      % (rows["ubuntu"]["ref"], rows["ubuntu"]["sha"], rows["kubectl"]["ref"], rows["helm"]["ref"], rows["yq"]["ref"],
+         rows["kubernetes.core"]["ref"]))
+PY
+)
+    got="$(grep -m1 '^FROM ' "${EAS_DIR}/bastion.Dockerfile") kubectl $(sed -n 's/^ARG KUBECTL_VERSION=//p' "${EAS_DIR}/bastion.Dockerfile") helm $(sed -n 's/^ARG HELM_VERSION=//p' "${EAS_DIR}/bastion.Dockerfile") yq $(sed -n 's/^ARG YQ_VERSION=//p' "${EAS_DIR}/bastion.Dockerfile") kubernetes.core $(sed -n 's/^ARG KUBERNETES_CORE_VERSION=//p' "${EAS_DIR}/bastion.Dockerfile")"
+    cli_eq "cli: bastion.Dockerfile pins what pins.json's bastion profile names" "${got}" "${want}"
+    cli_eq "cli: bastion FROM is the EAT bastion's digest" \
+        "$(grep -m1 '^FROM ' "${EAS_DIR}/bastion.Dockerfile")" "$(grep -m1 '^FROM ' "${ROOT}/integrations/eat/bastion.Dockerfile")"
+    want=$(python3 -c 'import json, sys
+print(next(r["sha"] for r in json.load(open(sys.argv[1]))["pins"] if r["profile"] == "main" and r["name"] == "eas"))' "${EAS_DIR}/pins.json")
+    cli_eq "cli: requirements.lock is for the pinned EAS commit" "$(head -1 "${EAS_DIR}/requirements.lock")" "# enterprise-ai-solutions@${want} requirements.txt"
+    cli_eq "cli: requirements.in names the same commit" "$(head -1 "${EAS_DIR}/requirements.in")" "$(head -1 "${EAS_DIR}/requirements.lock")"
+    if python3 - "${EAS_DIR}/pins.json" "${EAS_DIR}/requirements.lock" <<'PY'
+import json, re, sys
+lock = open(sys.argv[2]).read()
+for r in json.load(open(sys.argv[1]))["pins"]:
+    if r["profile"] == "bastion" and r["repo"].startswith("pypi.org/project/"):
+        name = r["repo"].rsplit("/", 1)[1]
+        block = re.search(r"(?ms)^%s==%s \\\n(.*?)(?=^\S)" % (re.escape(name), re.escape(r["ref"])), lock + "\nEND")
+        assert block and "--hash=sha256:" + r["sha"] in block.group(1), (name, r["ref"])
+PY
+    then ok "cli: requirements.lock pins each pins.json Python package at its version, with its wheel's sha256"
+    else fail "cli: requirements.lock and pins.json's bastion Python rows disagree"; fi
+    if grep -E '^[A-Za-z0-9_.-]+==' "${EAS_DIR}/requirements.lock" | grep -qv -- ' \\$'; then
+        fail "cli: requirements.lock has a pin without hashes"
+    else
+        ok "cli: every pin in requirements.lock carries hashes"
+    fi
+    if grep -E '^ARG [A-Z_]*_(SHA256|VERSION)=' "${EAS_DIR}/bastion.Dockerfile" | grep -Eqv '=(v?[0-9.]+|[0-9a-f]{64})$'; then
+        fail "cli: bastion.Dockerfile has a version or sha256 ARG that is not exact"
+    else
+        ok "cli: bastion.Dockerfile pins every download by version and sha256"
+    fi
+    cli_eq "cli: every bastion download is checked" "$(grep -c 'sha256sum -c -' "${EAS_DIR}/bastion.Dockerfile")" 4
+    while read -r mode _ _ path; do
+        if [ "${mode}" = 100755 ]; then ok "cli: executable in git: ${path}"; else fail "cli: not executable in git (${mode}): ${path}"; fi
+    done < <(git -C "${ROOT}" ls-files -s -- 'integrations/eas/*.sh')
+    if python3 - "${EAS_DIR}/known-issues.json" <<'PY'
+import json, sys
+rows = json.load(open(sys.argv[1]))["issues"]
+keys = {"id", "upstream", "symptom", "workaround", "source", "checked"}
+assert rows and all(set(r) == keys and all(isinstance(v, str) and v for v in r.values()) for r in rows), rows
+assert len({r["id"] for r in rows}) == len(rows)
+PY
+    then ok "cli: known-issues.json rows are flat {id, upstream, symptom, workaround, source, checked}"
+    else fail "cli: known-issues.json shape"; fi
+}
+
+SECTIONS=(overlay config cli)
 [ "$#" -gt 0 ] && SECTIONS=("$@")
 for s in "${SECTIONS[@]}"; do
     if declare -F "section_${s}" > /dev/null; then

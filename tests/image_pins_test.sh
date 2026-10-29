@@ -155,6 +155,28 @@ EOF
 ); then ok "images.lock collects integrations/eat values pairs, Dockerfile FROMs and the Dockerfile's *_IMAGE ARGs"
 else fail "images-lock collect integrations/eat"; sed 's/^/  | /' <<< "${out}"; fi
 
+# ---- images.lock sources: integrations/eas bastion FROM and <name>_image extra vars ----
+mkdir -p "${WORK}/r/integrations/eas"
+printf 'FROM ubuntu:24.04@%s\n' "${D1}" > "${WORK}/r/integrations/eas/bastion.Dockerfile"
+printf '# a comment naming x_image: nothing\nagent_sandbox_router_image: "us-central1-docker.pkg.dev/k8s-staging-images/agent-sandbox/sandbox-router:latest-main@%s"\nnot_an_image_key: "busybox:1"\n' "${D2}" \
+    > "${WORK}/r/integrations/eas/images.yaml"
+printf '{"image": "ignored:1"}\n' > "${WORK}/r/integrations/eas/pins.json"
+if out=$(python3 - "${WORK}/r" "${D1}" "${D2}" 2>&1 <<'EOF'
+import importlib.machinery, importlib.util, sys
+root, d1, d2 = sys.argv[1:]
+loader = importlib.machinery.SourceFileLoader("images_lock", root + "/scripts/images-lock")
+spec = importlib.util.spec_from_loader("images_lock", loader)
+m = importlib.util.module_from_spec(spec)
+loader.exec_module(m)
+found, _ = m.collect(root)
+router = ("us-central1-docker.pkg.dev/k8s-staging-images/agent-sandbox/sandbox-router", "latest-main")
+assert found.get(router) == {"digest": d2, "sources": {"integrations/eas/images.yaml"}}, found.get(router)
+assert found[("docker.io/library/ubuntu", "24.04")]["sources"] >= {"integrations/eas/bastion.Dockerfile"}, found
+assert not any(k[0].endswith("/busybox") or k[0].endswith("/ignored") for k in found), sorted(found)
+EOF
+); then ok "images.lock collects integrations/eas: the bastion's FROM and each <name>_image extra var"
+else fail "images-lock collect integrations/eas"; sed 's/^/  | /' <<< "${out}"; fi
+
 # ---- repin, with the registry stubbed ----
 scratch
 cat > "${WORK}/r/share/a.yml" <<EOF
