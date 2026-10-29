@@ -3997,9 +3997,10 @@ exclude it. `hold.sh` and `convert.sh` are unchanged: both still require `LOCK` 
 
 **Row.** Both H57dp holds run with `H57D_ROW=H57dp`. The records go to
 `${G}/results/H57dp/hold1` and `hold2`, the two holds left of H57d's 6-hold cap, numbered within
-their own row. The smoke names its arm and writes `${G}/smoke/smoke-p` under any row;
-`convert.sh` and `score-p` do not read `H57D_ROW`. H57d's `hold_dirs`, and with it the spare-hold
-rule (`hold5/repeats`), reads only `results/H57d`, so it never sees an H57dp hold.
+their own row. The smoke runs with no `H57D_ROW` (the H57dp row has holds 1 and 2 only and
+refuses it), names its arm and writes `${G}/smoke/smoke-p`; `convert.sh` and `score-p` do not
+read `H57D_ROW`. H57d's `hold_dirs`, and with it the spare-hold rule (`hold5/repeats`), reads
+only `results/H57d`, so it never sees an H57dp hold.
 
 **Spare-hold guard.** H57d's hold 5 is its spare: it repeats a failed hold's arms, which must be
 named. Before R1, `hold.sh 5 perf` with no arms read an empty order (H57d registers orders 1-4),
@@ -4008,7 +4009,10 @@ order` exits non-zero for a hold the row does not register, and `hold.sh` exits 
 lock with nothing written. R2 adds the tests: a bare hold 5 under H57d, H57w and H57dp, and a
 bare smoke, are refused; with arms named, hold 5 and the smoke go on to the lock. Run against
 main's `hold.sh` the refusal test fails, because the bare hold 5 reached the lock with an empty
-arm list.
+arm list. `h57d.py order` also takes a hold only by its own number: before R2, `01` read hold 1's
+order, so `hold.sh 01 perf` would have taken the lock, run hold 1's arms into `hold01/` (a
+directory neither scorer reads) and used up a counted hold. It now exits 2 before the lock under
+H57d and H57dp; its test failed before the change.
 
 **Models.** As R1. H57d's revisions are downloaded again, and every LFS file is checked against
 the committed `bench/h57d/results/2026-10-21/weights.sha256` (10 files). The drafter is rebuilt
@@ -4040,10 +4044,12 @@ block belongs. R1's statement that `reproduce.sh` prints Ld-mtp-u's flags held o
 fix. The flags H57d ran are in each arm's `deploy.yaml`. The line now prints one line per
 rendered arm (Ld, Ld-mtp, Ld-mtp-u).
 
-**Files and tests.** `bench/h57d/h57d.py` (`inherited_quality`, `score-p`'s `quality_records`),
-`bench/h57d/reproduce.sh` (the flags line) and `bench/h57d/test_h57d.py`, in CI: the records
-against the committed hold 4 files, a missing record, verdicts unchanged under a low inherited
-score, the spare-hold and smoke guards, and the Reproduce header run with stand-in
+**Files and tests.** `bench/h57d/h57d.py` (`inherited_quality`, `score-p`'s `quality_records`,
+`order` taking a hold by its own number only), `bench/h57d/reproduce.sh` (the flags line) and
+`bench/h57d/test_h57d.py`, in CI: the records against the committed hold 4 files, a missing
+record, verdicts unchanged under a low inherited score, the spare-hold and smoke guards, a hold
+number spelled `01`, an H57dp hold's records under `results/H57dp/hold1` with nothing under
+`results/H57d`, and the Reproduce header run with stand-in
 `docker`/`kubectl`/`k3d` (it failed before the fix with the same `SyntaxError`).
 
 **Commands** (`SUDO_ASKPASS` for RAPL):

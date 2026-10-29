@@ -453,10 +453,10 @@ def main(argv):
         v = ARMS[a[0]].get(a[1], "")
         print(v)
     elif cmd == "order":
-        o = orders(a[0])
-        if not a[1].isdigit() or int(a[1]) not in o:
+        o = {str(k): v for k, v in orders(a[0]).items()}
+        if a[1] not in o:   # the hold's own number only: "01" would record into hold01/
             raise SystemExit(f"h57d.py order: {a[0]} registers no hold {a[1]}")
-        print(" ".join(o[int(a[1])]))
+        print(" ".join(o[a[1]]))
     elif cmd == "render":
         import yaml
         with open(a[1], "w") as f:

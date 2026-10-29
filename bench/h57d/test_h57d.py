@@ -298,48 +298,76 @@ class RowOrders(unittest.TestCase):
         self.assertEqual(self.run_order("H57dp", "2").stdout.strip(), "Ld-mtp Ld-mtp-u Od")
         self.assertEqual(self.run_order("H57d", "3").stdout.strip(), "Ld-mtp Od Ld")
         self.assertEqual(self.run_order("H57w", "4").stdout.strip(), "Ld Od Ld-mtp")
-        for row, hold in (("H57dp", "3"), ("H57d", "smoke1")):
+        for row, hold in (("H57dp", "3"), ("H57d", "smoke1"), ("H57dp", "01"), ("H57d", "01")):
             r = self.run_order(row, hold)
             self.assertNotEqual(r.returncode, 0)
             self.assertEqual(r.stdout, "")
 
 
-class HoldGuards(unittest.TestCase):
-    """hold.sh refuses an unregistered hold before it takes the lock or writes anything. LOCK
-    points into a missing directory, so a hold.sh that got past the guards fails fast (exit 4)
-    instead of waiting on a real lock."""
+def run_hold(row, hold, mode, *arms):
+    """bash hold.sh HOLD MODE ARMS with H57D_ROW=row, G a fresh directory and LOCK a path in a
+    missing directory, so a hold.sh that got past the guards fails fast (exit 4) instead of
+    waiting on a real lock. Returns the result, every path it left under G (relative to G) and
+    the campaign log's text."""
+    with tempfile.TemporaryDirectory() as g:
+        env = dict(os.environ, G=g, LOCK=os.path.join(g, "missing", "live.lock"), H57D_ROW=row)
+        r = subprocess.run(["bash", os.path.join(HERE, "hold.sh"), hold, mode, *arms], env=env,
+                           capture_output=True, text=True, timeout=60)
+        made = sorted(os.path.relpath(os.path.join(d, n), g) for d, ds, fs in os.walk(g) for n in ds + fs)
+        log = ""
+        if os.path.exists(os.path.join(g, "results", "campaign.log")):
+            with open(os.path.join(g, "results", "campaign.log")) as f:
+                log = f.read()
+        return r, made, log
 
-    def run_hold(self, row, hold, mode, *arms):
-        with tempfile.TemporaryDirectory() as g:
-            env = dict(os.environ, G=g, LOCK=os.path.join(g, "missing", "live.lock"), H57D_ROW=row)
-            r = subprocess.run(["bash", os.path.join(HERE, "hold.sh"), hold, mode, *arms], env=env,
-                               capture_output=True, text=True, timeout=60)
-            return r, os.listdir(g)
+
+class HoldGuards(unittest.TestCase):
+    """hold.sh refuses an unregistered hold before it takes the lock or writes anything."""
 
     def test_h57dp_refuses_quality_and_third_hold(self):
         for hold, mode in (("1", "quality"), ("3", "perf")):
-            r, made = self.run_hold("H57dp", hold, mode)
+            r, made, _ = run_hold("H57dp", hold, mode)
             self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
             self.assertEqual(made, [])
 
     def test_h57d_unregistered_hold(self):
-        r, made = self.run_hold("H57d", "9", "perf")
+        r, made, _ = run_hold("H57d", "9", "perf")
         self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
         self.assertEqual(made, [])
+
+    def test_hold_number_spelled_otherwise_refused(self):
+        # "01" would run hold 1's order into hold01/, a directory no scorer reads, and use up a
+        # counted hold.
+        for row in ("H57dp", "H57d"):
+            with self.subTest(row=row):
+                r, made, _ = run_hold(row, "01", "perf")
+                self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+                self.assertEqual(made, [])
 
     def test_h57dp_explicit_arms_cannot_override(self):
         # Explicit arms neither add a third H57dp hold nor change a registered hold's order or arms.
         for hold, arms in (("3", ("Ld-mtp-u",)), ("1", ("Od", "Ld-mtp"))):
             with self.subTest(hold=hold, arms=arms):
-                r, made = self.run_hold("H57dp", hold, "perf", *arms)
+                r, made, _ = run_hold("H57dp", hold, "perf", *arms)
                 self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
                 self.assertEqual(made, [])
 
+    def test_h57dp_row_refuses_the_smoke(self):
+        # The smoke runs with no H57D_ROW (H57dp amendment R2's commands); the H57dp row has
+        # holds 1 and 2 only.
+        r, made, _ = run_hold("H57dp", "smoke-p", "perf", "Ld-mtp-u")
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertEqual(made, [])
+
     def test_h57dp_registered_order_passes_guards(self):
-        # The registered order, given explicitly, gets past the guards and stops at the missing lock.
-        r, made = self.run_hold("H57dp", "1", "perf", "Ld-mtp-u", "Od", "Ld-mtp")
-        self.assertEqual(r.returncode, 4, r.stdout + r.stderr)
-        self.assertEqual(made, ["results"])
+        # The registered order, given explicitly or by default, gets past the guards and stops at
+        # the missing lock. Its records go to results/H57dp, which H57d's hold_dirs never reads.
+        for arms in (("Ld-mtp-u", "Od", "Ld-mtp"), ()):
+            with self.subTest(arms=arms):
+                r, made, log = run_hold("H57dp", "1", "perf", *arms)
+                self.assertEqual(r.returncode, 4, r.stdout + r.stderr)
+                self.assertEqual(made, ["results", "results/H57dp", "results/H57dp/hold1", "results/campaign.log"])
+                self.assertIn("arms: Ld-mtp-u Od Ld-mtp)", log)
 
 
 PINNED_CPUS = """cpuset 0-15
@@ -569,17 +597,9 @@ class SpareHoldGuard(unittest.TestCase):
     """H57d's hold 5 is the spare: it repeats a failed hold's arms, which must be named. Before
     H57dp amendment R1 a bare `hold.sh 5 perf` took the lock and ran a hold with no arms."""
 
-    def run_hold(self, row, hold, mode, *arms):
-        with tempfile.TemporaryDirectory() as g:
-            env = dict(os.environ, G=g, LOCK=os.path.join(g, "missing", "live.lock"), H57D_ROW=row)
-            r = subprocess.run(["bash", os.path.join(HERE, "hold.sh"), hold, mode, *arms], env=env,
-                               capture_output=True, text=True, timeout=60)
-            log = os.path.join(g, "results", "campaign.log")
-            return r, os.listdir(g), open(log).read() if os.path.exists(log) else ""
-
     def test_bare_spare_and_smoke_holds_refused(self):
         for row, hold in (("H57d", "5"), ("H57w", "5"), ("H57dp", "5"), ("H57d", "smoke-p")):
-            r, made, log = self.run_hold(row, hold, "perf")
+            r, made, log = run_hold(row, hold, "perf")
             self.assertEqual(r.returncode, 2, f"{row} {hold}: {r.stdout}{r.stderr}")
             self.assertEqual(made, [], f"{row} {hold}")
             self.assertIn(f"registers no hold {hold}", r.stderr)
@@ -587,7 +607,7 @@ class SpareHoldGuard(unittest.TestCase):
     def test_named_arms_pass_the_guard(self):
         # With arms named, hold.sh goes on to the lock (here a path that cannot be opened).
         for row, hold, arms in (("H57d", "5", ("Od", "Ld")), ("H57d", "smoke-p", ("Ld-mtp-u",))):
-            r, made, log = self.run_hold(row, hold, "perf", *arms)
+            r, made, log = run_hold(row, hold, "perf", *arms)
             self.assertNotEqual(r.returncode, 2, f"{row} {hold}: {r.stdout}{r.stderr}")
             self.assertIn(f"waiting for the lock (mode perf, arms: {' '.join(arms)})", log)
             self.assertNotIn("lock taken", log)
