@@ -385,8 +385,10 @@ Environment:
   K3D_GPU_AGENT_DEVICE  agent device: auto | CPU | GPU | NPU | HPU (default: auto; auto
                         takes a Gaudi first, served by vLLM)
   K3D_GPU_AGENT_BACKEND agent server: ovms | vllm | llm-scaler | llama.cpp (default: ovms,
-                        or vllm on a Gaudi, or the engine the fit picks for --model M;
-                        llm-scaler needs an Intel GPU, Arc B-series validated)
+                        or vllm on a Gaudi, or the engine the fit picks for --model M, which
+                        on the CPU is llama.cpp where an EXPERIMENTS.md H59-family row is
+                        SUPPORTED for this CPU class; llm-scaler needs an Intel GPU, Arc
+                        B-series validated)
   K3D_GPU_AGENT_MODEL   agent Hugging Face model (default: OpenVINO/Qwen3-4B-int4-ov,
                         Qwen/Qwen3-4B on vllm/llm-scaler)
   K3D_GPU_AGENT_DRAFT   ovms Fast Draft speculative decoding: off | auto | CPU | GPU | NPU
@@ -395,9 +397,10 @@ Environment:
                         win (a refuting row or no row: none), none otherwise; off disables it;
                         auto = the target's device; GPU = an Intel GPU, the first advertised)
   K3D_GPU_AGENT_DRAFT_MODEL  draft model (default: OpenVINO/Qwen3-0.6B-int4-ov)
-                        On llama.cpp: off (default) | mtp: MTP speculative decoding from
-                        the model's own MTP head, or for Gemma 4's QAT GGUF its QAT
-                        assistant converted once to Q4_0
+                        On llama.cpp: off | mtp: MTP speculative decoding from the model's
+                        own MTP head, or for Gemma 4's QAT GGUF its QAT assistant converted
+                        once to Q4_0 (default: the model optimizer's pick, which on the CPU
+                        drafts only where an EXPERIMENTS.md row measured it winning)
   K3D_GPU_AGENT_VARIANT agent up/plan --model: serve this variant id (or qat-convert) instead
                         of the ranked pick (default: the optimizer's pick)
   K3D_GPU_AGENT_THINKING agent up/plan --model: off | on | model (the card's default)
@@ -7459,14 +7462,14 @@ AGENT_SEL=""    # "<device> <resource>", set by agent_select
 # than OVMS: ghcr.io/ggml-org/llama.cpp:server-vulkan-v0.5.0, the multi-arch
 # index built from release v0.5.0 (commit 7fe450e19305b828c199d602c23a8337aaa1f03b).
 LLAMA_VULKAN_IMAGE="${K3D_GPU_LLAMA_VULKAN_IMAGE:-ghcr.io/ggml-org/llama.cpp@sha256:be586c648cb79d2cd75d0c38a6541e1f16c47a7c6621d3e711470a467fc38744}"
-# The llama.cpp agent backend: release v0.7.0 (tag b11669, commit
-# 620d2225cc436ab0b001e3200e590e3b286ef9ab), the latest release on 2026-10-20; its image
-# tags are server-intel-b11669 (SYCL, Level Zero and compute-runtime 26.18 inside) for an
-# Intel GPU, server-b11669 (CPU) otherwise, and full-b11669 (convert_hf_to_gguf.py and
+# The llama.cpp agent backend: release v0.8.0 (tag b11960, commit
+# 8642541b255bfb5dc39cd351a178be09013a55d6), the latest release on 2026-10-28; its image
+# tags are server-intel-b11960 (SYCL, Level Zero and compute-runtime 26.18 inside) for an
+# Intel GPU, server-b11960 (CPU) otherwise, and full-b11960 (convert_hf_to_gguf.py and
 # llama-quantize) for a one-time GGUF conversion. Multi-arch indexes, pinned by digest.
-LLAMA_SYCL_IMAGE="${K3D_GPU_LLAMA_SYCL_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-intel-b11669@sha256:632c96d3c52ddadcd4e53fd2835e6430814cf68dde06b39067c1e281bdc5bd90}"
-LLAMA_CPU_IMAGE="${K3D_GPU_LLAMA_CPU_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-b11669@sha256:8ffe0d28ff5261cc2f78ca1f67db1515bc2529b904a3c25f5b24f4cedfc3411d}"
-LLAMA_FULL_IMAGE="${K3D_GPU_LLAMA_FULL_IMAGE:-ghcr.io/ggml-org/llama.cpp:full-b11669@sha256:627dde1b97b1a42ba6fc20a13452650a988f199321a258ec1bec80196b9a02a8}"
+LLAMA_SYCL_IMAGE="${K3D_GPU_LLAMA_SYCL_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-intel-b11960@sha256:068cd41cdc292bed89b4a6b7740ea7a33df8ba26bf880d0e12ac75972dce1700}"
+LLAMA_CPU_IMAGE="${K3D_GPU_LLAMA_CPU_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220}"
+LLAMA_FULL_IMAGE="${K3D_GPU_LLAMA_FULL_IMAGE:-ghcr.io/ggml-org/llama.cpp:full-b11960@sha256:7afc81bfe7a93de287324044fe86ccc70b1b7ac8832ed8e6ea658e11fb448ddf}"
 AGENT_STORAGE="${K3D_GPU_AGENT_STORAGE:-20Gi}"
 AGENT_TIMEOUT="${K3D_GPU_AGENT_TIMEOUT:-1800}" # seconds: first run downloads the model
 # openvino/model_server:2026.4.1-gpu (CPU, GPU and NPU plugins, compute-runtime inside).
@@ -8262,12 +8265,12 @@ EOF
 # The fit picks llama.cpp for GGUF weights (one GPU, a layer split, MoE experts in
 # DRAM, or the CPU), and for safetensors whose architecture only llama.cpp runs here,
 # after a one-time GGUF conversion. llama-server serves the OpenAI API at /v1 on port
-# 8000, as vLLM does. Every flag is spelled as llama.cpp v0.7.0 common/arg.cpp defines it.
+# 8000, as vLLM does. Every flag is spelled as llama.cpp v0.8.0 common/arg.cpp defines it.
 #   -c, -np, -ngl, -ts, --n-cpu-moe / --cpu-moe, -ctk/-ctv  the fit's (fit.py _flags)
 #   -t / -tb       the pod's physical cores / CPUs: llama.cpp otherwise counts the host's
 #                  cores, not the pod's (the P-core balloon on a hybrid node)
 #   --load-mode mmap+mlock  CPU placement only: the lock grows to the end of the furthest
-#                  CPU tensor (src/llama-model-loader.cpp:1726-1728), which on a GPU or
+#                  CPU tensor (src/llama-model-loader.cpp:1735-1737), which on a GPU or
 #                  experts-in-DRAM placement also covers GPU tensors in between and can
 #                  pass the fit's pod limit
 #   --jinja        the chat template inside the GGUF (Google's QAT GGUF carries the model
@@ -8277,13 +8280,14 @@ EOF
 #   --reasoning off  thinking off for agent turns (K3D_GPU_AGENT_THINKING): it sets
 #                  enable_thinking=false in the template (common/arg.cpp -rea), which
 #                  Gemma 4 and Qwen3.8 both read
-#   --spec-type draft-mtp  when the model optimizer picks a GGUF with an MTP head, or with
-#                  K3D_GPU_AGENT_DRAFT=mtp; otherwise off: no measurement in EXPERIMENTS.md
-#                  shows a draft winning here (H34x REFUTED the CPU draft on the Xeon;
-#                  H57dm, Gemma 4's MTP drafter, is pending). The optimizer's own llama.cpp
-#                  arguments are not used: its GGUF drafter is a repo id, not a file.
-#                  A GGUF with an MTP head (Qwen3.8's nextn, kept by the
-#                  conversion) drafts from it; Google's QAT GGUF ships none, so its QAT
+#   --spec-type draft-mtp  when the model optimizer picks it, or with K3D_GPU_AGENT_DRAFT=mtp
+#                  (off turns it off). The optimizer picks a GGUF's own MTP head, and on
+#                  the CPU the QAT MTP assistant where the ledger measured it winning for
+#                  this CPU class: an H57m-family row SUPPORTED (H57dm: the i9-13900T), or
+#                  the H59-family row that made llama.cpp the CPU engine (its arm drafts).
+#                  The optimizer's own llama.cpp arguments are not used: its drafter is a
+#                  repo id, not a file. A GGUF with an MTP head (Qwen3.8's nextn, kept by
+#                  the conversion) drafts from it; Google's QAT GGUF ships none, so its QAT
 #                  assistant is converted once to Q4_0, the target's precision (the QAT
 #                  GGUF card asks for a drafter of the same precision). Default draft length.
 LLAMA_SERVE_PORT=8000
@@ -8294,7 +8298,7 @@ LLAMA_MTP_DRAFTERS=(
 # pip pins the conversion adds on PYTHONPATH (bench/h57d/convert.sh's approach): the image's
 # transformers 4.57.6 cannot read transformers-5 tokenizer configs (extra_special_tokens as
 # a list); huggingface-hub fetches the pinned revision.
-GGUF_CONVERT_PIP="transformers==5.20.2 huggingface-hub==2.2.0 tokenizers==0.23.3 safetensors==0.8.0"
+GGUF_CONVERT_PIP="transformers==5.21.0 huggingface-hub==2.3.0 tokenizers==0.23.3 safetensors==0.8.0"
 AGENT_CONVERT_TIMEOUT="${K3D_GPU_AGENT_CONVERT_TIMEOUT:-43200}" # seconds: a 360 GB checkpoint downloads, then converts
 AGENT_CONVERT_MEMORY="${K3D_GPU_AGENT_CONVERT_MEMORY:-64Gi}"
 
@@ -8361,6 +8365,18 @@ print(w.get("source") or "-", w.get("format") or "-", files[0] if files else "-"
         "${dir}/weights.json"
 }
 
+# llama_items <arg>...: each argument as a double-quoted YAML list item of the server's args,
+# each after a newline. An option and its value are two items: llama-server reads the value
+# from the next argument and refuses "--opt=value" (llama.cpp v0.8.0 common/arg.cpp
+# parse_cli_args, :827-865).
+llama_items() {
+    local a
+    for a; do
+        a=${a//\\/\\\\}
+        printf '\n            - "%s"' "${a//\"/\\\"}"
+    done
+}
+
 # Threads for llama-server in a pod of <cpus> CPUs: its physical cores (the P-cores of the
 # balloon on a hybrid node, else the CPUs over the SMT width), and every CPU for batches.
 llamacpp_threads() {
@@ -8394,7 +8410,7 @@ llamacpp_manifest() {
     read -r source fmt file mtp total <<< "${meta}"
     [[ "${source}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9._-]+@[0-9a-f]{40}$ ]] \
         || err "llama.cpp: ${AGENT_MODEL}'s metadata names no commit (got '${source}'); remove $(fit_cache)/${AGENT_MODEL//\//__}@${AGENT_REVISION:-main} to fetch it again"
-    local repo=${source%@*} rev=${source##*@} image=${AGENT_IMAGE} item="            - " args="" model jobs="" waits=""
+    local repo=${source%@*} rev=${source##*@} image=${AGENT_IMAGE} args="" model jobs="" waits=""
     [ "${device}" = GPU ] || [ "${image}" != "${LLAMA_SYCL_IMAGE}" ] || image=${LLAMA_CPU_IMAGE}
     valid_image "${image}" || err "llama.cpp image '${image}' is not a valid image reference"
     # Without a fit (K3D_GPU_FIT=off): one slot of K3D_GPU_AGENT_MAX_LEN, every layer on the device.
@@ -8417,57 +8433,59 @@ llamacpp_manifest() {
     if [ "${fmt}" = gguf ]; then
         [ "${file}" != - ] || err "llama.cpp: ${source} lists no .gguf file (K3D_GPU_FIT_FILE picks one)"
         model="/models/gguf/$(gguf_slug "${source}")/${file}"
-        args+="${item}--model=${model}"$'\n'"${item}--model-url=https://huggingface.co/${repo}/resolve/${rev}/${file}"
+        args+=$(llama_items --model "${model}" --model-url "https://huggingface.co/${repo}/resolve/${rev}/${file}")
     else
         [ -z "${AGENT_CONVERT_ERROR:-}" ] || err "llama.cpp: ${AGENT_MODEL} needs a GGUF conversion: ${AGENT_CONVERT_ERROR}"
         [ -n "${convert}" ] || err "llama.cpp: ${AGENT_MODEL} is ${fmt}: it needs the fit (K3D_GPU_FIT=auto or on) to plan its GGUF conversion"
         model="/models/gguf/$(gguf_slug "${source}")/model.gguf"
-        args+="${item}--model=${model}"
+        args+=$(llama_items --model "${model}")
         jobs+=$(llamacpp_convert_job "${source}" "$((total * 21 / 10))" - "${convert}")$'\n'
         waits+=" ${model%/*}"
     fi
-    args+=$'\n'"${item}--alias=${AGENT_MODEL_NAME}"
-    args+=$'\n'"${item}--host=0.0.0.0"$'\n'"${item}--port=${LLAMA_SERVE_PORT}"
-    args+=$'\n'"${item}--jinja"
+    args+=$(llama_items --alias "${AGENT_MODEL_NAME}" --host 0.0.0.0 --port "${LLAMA_SERVE_PORT}" --jinja)
     # Thinking off for agent turns, server-side (K3D_GPU_AGENT_THINKING, as the optimizer reads it).
     case "${K3D_GPU_AGENT_THINKING:-off}" in
-        off) args+=$'\n'"${item}--reasoning=off" ;;
-        on) args+=$'\n'"${item}--reasoning=on" ;;
+        off|on) args+=$(llama_items --reasoning "${K3D_GPU_AGENT_THINKING:-off}") ;;
         model) ;;
         *) err "K3D_GPU_AGENT_THINKING must be off, on or model, got '${K3D_GPU_AGENT_THINKING}'" ;;
     esac
     local f
-    for f in ${flags}; do args+=$'\n'"${item}\"${f}\""; done
+    # shellcheck disable=SC2086 # the fit's flags, one word each
+    args+=$(llama_items ${flags})
     local threads
     threads=$(llamacpp_threads "${cpus}" "${hybrid}")
-    args+=$'\n'"${item}--threads=${threads}"$'\n'"${item}--threads-batch=${cpus}"
+    args+=$(llama_items --threads "${threads}" --threads-batch "${cpus}")
     local cap=""
     if [ "${place}" = cpu ]; then
-        args+=$'\n'"${item}--load-mode=mmap+mlock"
+        args+=$(llama_items --load-mode mmap+mlock)
         cap=$'\n          securityContext:\n            capabilities:\n              add: [IPC_LOCK]'
     fi
-    # MTP speculative decoding, on request only (see above).
-    local draft=${K3D_GPU_AGENT_DRAFT:-default} d target dsrc quant
+    # MTP speculative decoding: the optimizer's pick or K3D_GPU_AGENT_DRAFT=mtp (see above).
+    local draft=${K3D_GPU_AGENT_DRAFT:-default} d target dsrc="" quant
     case "${draft,,}" in
-        default) draft=""; [ "${AGENT_OPT_SPEC:-}" != mtp ] || draft=mtp ;;  # the optimizer's pick: an MTP head
+        default) draft=""; [ "${AGENT_OPT_SPEC:-}" != mtp ] || draft=optimizer ;;  # an MTP head, or the ledger's QAT drafter
         off|0|"") draft="" ;;
         mtp) draft=mtp ;;
         *) err "K3D_GPU_AGENT_DRAFT '${draft}' does not apply to llama.cpp (use off or mtp)" ;;
     esac
     if [ -n "${draft}" ]; then
-        dsrc=""
         for d in "${LLAMA_MTP_DRAFTERS[@]}"; do
             read -r target f quant <<< "${d}"
             [ "${target}" = "${repo}" ] && dsrc=${f} && break
         done
+        if [ -z "${dsrc}" ] && [ "${mtp}" -eq 0 ]; then
+            [ "${draft}" = optimizer ] || err "K3D_GPU_AGENT_DRAFT=mtp: ${AGENT_MODEL} has no MTP head and no known drafter"
+            warn "agent: the model optimizer picked an MTP drafter for ${AGENT_MODEL}, but no GGUF of it is known here: no draft"
+            draft=""
+        fi
+    fi
+    if [ -n "${draft}" ]; then
         if [ -n "${dsrc}" ]; then
-            args+=$'\n'"${item}--spec-draft-model=/models/gguf/$(gguf_slug "${dsrc}")/model.gguf"
+            args+=$(llama_items --spec-draft-model "/models/gguf/$(gguf_slug "${dsrc}")/model.gguf")
             jobs+=$(llamacpp_convert_job "${dsrc}" "$((4 << 30))" "${quant}" "--outtype bf16")$'\n'
             waits+=" /models/gguf/$(gguf_slug "${dsrc}")"
-        elif [ "${mtp}" -eq 0 ]; then
-            err "K3D_GPU_AGENT_DRAFT=mtp: ${AGENT_MODEL} has no MTP head and no known drafter"
         fi
-        args+=$'\n'"${item}--spec-type=draft-mtp"
+        args+=$(llama_items --spec-type draft-mtp)
         info "agent: MTP speculative decoding (${dsrc:-its own MTP head})" >&2
     fi
     [ -z "${jobs}" ] || cm=$(llamacpp_convert_configmap)$'\n'
@@ -8542,8 +8560,7 @@ spec:
         - name: llamacpp
           image: ${image}
           imagePullPolicy: IfNotPresent
-          args:
-${args}${env}${cap}
+          args:${args}${env}${cap}
           ports:
             - name: http
               containerPort: ${LLAMA_SERVE_PORT}
@@ -9312,7 +9329,8 @@ cmd_agent_up() {
     served=$(grep -m1 -o -- '--source_model=[^[:space:]]*' <<< "${manifest}" | cut -d= -f2- || true)
     [ -z "${served}" ] || AGENT_MODEL=${served}
     if [ "${AGENT_APP}" = llamacpp ]; then
-        info "model ${AGENT_MODEL}: $(grep -m1 -oE -- '--model(-url)?=[^[:space:]]+' <<< "${manifest}" | tail -n1 | cut -d= -f2-)"
+        # The GGUF llama-server downloads (--model-url), else the converted one (--model).
+        info "model ${AGENT_MODEL}: $(awk '/^            - "--model(-url)?"$/ { getline; gsub(/^ *- "|"$/, ""); u = $0 } END { print u }' <<< "${manifest}")"
     elif [ "${AGENT_APP}" = vllm ]; then
         info "model ${AGENT_MODEL} at revision ${AGENT_REVISION:-main (unpinned; set K3D_GPU_AGENT_REVISION)}"
     else
@@ -11412,7 +11430,7 @@ model_opt_cache() { echo "${XDG_CACHE_HOME:-${HOME}/.cache}/k3d-gpu/hf"; }
 model_opt_measurements() { echo "${XDG_CACHE_HOME:-${HOME}/.cache}/k3d-gpu/variant-measurements.json"; }
 # The ledger: EXPERIMENTS.md next to the console directory (a repo checkout), else
 # the console's ledger-rules.json, generated from it and shipped in every package
-# (the H27/H34 rows that set agent defaults); K3D_GPU_MODEL_OPT_LEDGER names another file.
+# (the H27, H34, H57m and H59 rows that set agent defaults); K3D_GPU_MODEL_OPT_LEDGER names another file.
 model_opt_ledger() {
     local d
     if [ -n "${K3D_GPU_MODEL_OPT_LEDGER:-}" ]; then echo "${K3D_GPU_MODEL_OPT_LEDGER}"; return 0; fi
@@ -11503,7 +11521,7 @@ agent_model_format() {
 agent_optimize() {
     [ -n "${AGENT_OPT_MODEL}" ] || return 0
     local dir bundle out errf engine=${AGENT_APP/#llamacpp/llama.cpp} device=${AGENT_SEL%% *} vver=0.31.0 draft=auto ledger meas
-    local OPT_MODEL="" OPT_REVISION="" OPT_TOOL_PARSER="" OPT_REASONING_PARSER="" OPT_SPEC=""
+    local follow=() OPT_ENGINE="" OPT_MODEL="" OPT_REVISION="" OPT_TOOL_PARSER="" OPT_REASONING_PARSER="" OPT_SPEC=""
     local OPT_CONVERSION="" OPT_ARGS_JSON="[]" OPT_SUMMARY="" OPT_FALLBACK_MODEL="" OPT_FALLBACK_REVISION="" OPT_WARNING=""
     AGENT_MODEL=${AGENT_OPT_MODEL}
     AGENT_MODEL_NAME=${K3D_GPU_AGENT_MODEL_NAME:-${AGENT_OPT_MODEL##*/}}
@@ -11543,8 +11561,11 @@ agent_optimize() {
     fi
     ledger=$(model_opt_ledger)
     meas=$(model_opt_measurements)
+    # No backend set: on the CPU the ledger may pick the engine (an H59-family row SUPPORTED
+    # for this CPU class makes it llama.cpp; model_opt.py --engine-from-ledger).
+    if agent_fit_picks_engine && [ "${engine}" = ovms ] && [ "${device}" = CPU ]; then follow=(--engine-from-ledger); fi
     errf=$(mktemp)
-    out=$(python3 "${dir}/model_opt.py" optimize --bundle "${bundle}" --engine "${engine}" --device "${device}" \
+    out=$(python3 "${dir}/model_opt.py" optimize --bundle "${bundle}" --engine "${engine}" --device "${device}" ${follow[@]+"${follow[@]}"} \
         --vllm-version "${vver}" --thinking "${K3D_GPU_AGENT_THINKING:-off}" --draft "${draft}" \
         --hw-class "$(agent_hw_class)" --host "$(agent_host_text)" ${K3D_GPU_AGENT_VARIANT:+--variant "${K3D_GPU_AGENT_VARIANT}"} \
         ${K3D_GPU_AGENT_PRECISION:+--precision "${K3D_GPU_AGENT_PRECISION}"} \
@@ -11558,6 +11579,16 @@ agent_optimize() {
     [ ! -s "${errf}" ] || warn "model optimizer: $(tr '\n' ' ' < "${errf}")"
     rm -f "${bundle}" "${errf}"
     eval "${out}"
+    # The ledger's CPU engine (llama.cpp) serves the optimizer's pick for it.
+    if [ -n "${OPT_ENGINE}" ] && [ "$(engine_app "${OPT_ENGINE}")" != "${AGENT_APP}" ]; then
+        info "model optimizer: ${OPT_ENGINE} is this CPU class's engine in EXPERIMENTS.md (K3D_GPU_AGENT_BACKEND=ovms keeps OVMS)" >&2
+        AGENT_BACKEND=${OPT_ENGINE}
+        agent_config
+        agent_followed_image "${OPT_ENGINE}"
+        AGENT_MODEL=${AGENT_OPT_MODEL} AGENT_MODEL_NAME=${K3D_GPU_AGENT_MODEL_NAME:-${AGENT_OPT_MODEL##*/}}
+        AGENT_REVISION=${K3D_GPU_AGENT_REVISION:-}
+        AGENT_TOOL_PARSER=${K3D_GPU_AGENT_TOOL_PARSER-} AGENT_REASONING_PARSER=${K3D_GPU_AGENT_REASONING_PARSER-}
+    fi
     if [ -z "${OPT_MODEL}" ] && [ -z "${OPT_CONVERSION}" ]; then
         # Nothing this engine can serve: the engine's own defaults, as without --model;
         # or, when the fit picks the engine, the id as given (Qwen3.8-Flash-Next: only

@@ -301,7 +301,7 @@ class Engines(unittest.TestCase):
 
 
 class Convert(unittest.TestCase):
-    """convert_plan: the GGUF conversion llama.cpp v0.7.0's convert_hf_to_gguf.py makes of
+    """convert_plan: the GGUF conversion llama.cpp v0.8.0's convert_hf_to_gguf.py makes of
     each checkpoint, sized as the fit sized it, or why it cannot."""
 
     def test_bf16_keeps_its_type(self):
@@ -315,7 +315,7 @@ class Convert(unittest.TestCase):
     def test_quantized_it_cannot_keep_is_refused(self):
         d = fit.convert_plan(config("Intel__Qwen3.8-Flash-Next-W4A16-AutoRound"), "safetensors")
         self.assertIsNone(d["args"])
-        self.assertIn("quant_method auto-round (conversion/base.py:573)", d["error"])
+        self.assertIn("quant_method auto-round (conversion/base.py:575)", d["error"])
         d = fit.convert_plan(config("RedHatAI__Qwen3.8-27B-INT4"), "safetensors")
         self.assertIsNone(d["args"])
         self.assertIn("dequantizes quant_method compressed-tensors to 16 bits", d["error"])

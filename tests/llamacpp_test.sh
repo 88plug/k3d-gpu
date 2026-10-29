@@ -41,6 +41,7 @@ case "$*" in
     "get nodes -l gpu.intel.com/xmx=true -o name") [ -z "${STUB_XMX:-}" ] || echo node/k3d-gpu-server-0 ;;
     "get nodes -l k3d-gpu.io/cores-hybrid=true -o name") [ -z "${STUB_HYBRID:-}" ] || echo node/k3d-gpu-server-0 ;;
     "apply -f -") cat > "${STUB_APPLIED:-/dev/null}" ;;
+    *chat/completions*) printf '%s' "${STUB_REPLY:-}" ;;
 esac
 exit 0
 EOF
@@ -49,7 +50,7 @@ chmod +x "${WORK}/bin/kubectl"
 for d in "${FIX}"/models/*/; do
     n=$(basename "${d}")
     ln -s "${d%/}" "${WORK}/cache/${n}@main"
-    rev=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("source", "@").split("@")[1])' "${d}/weights.json")
+    rev=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("source", "").partition("@")[2])' "${d}/weights.json")
     [ -z "${rev}" ] || ln -s "${d%/}" "${WORK}/cache/${n}@${rev}"
 done
 # The model optimizer (agent up --model) reads tests/fixtures/hf, never the network.
@@ -62,9 +63,9 @@ XEON="${FIX}/hosts/xeon6741p-4xb70.json"
 DESK="${FIX}/hosts/desktop-i9-nogpu.json"
 # The Xeon's cluster after `up` pinned the free cards: two B70s advertised, XMX labelled.
 XEON_ENV=(STUB_XMX=1 STUB_ALLOC=$'cpu 64\ngpu.intel.com/xe 2' K3D_GPU_FIT_HOST="${XEON}")
-SYCL=sha256:632c96d3c52ddadcd4e53fd2835e6430814cf68dde06b39067c1e281bdc5bd90
-CPUSRV=sha256:8ffe0d28ff5261cc2f78ca1f67db1515bc2529b904a3c25f5b24f4cedfc3411d
-FULL=sha256:627dde1b97b1a42ba6fc20a13452650a988f199321a258ec1bec80196b9a02a8
+SYCL=sha256:068cd41cdc292bed89b4a6b7740ea7a33df8ba26bf880d0e12ac75972dce1700
+CPUSRV=sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220
+FULL=sha256:7afc81bfe7a93de287324044fe86ccc70b1b7ac8832ed8e6ea658e11fb448ddf
 
 # render <name> [env...] -- [agent args...]: manifest in ${WORK}/<name>.yaml, stderr in .err
 render() {
@@ -82,6 +83,30 @@ server_args() {
          a && /^            - / { sub(/^            - /, ""); gsub(/^"|"$/, ""); print; next } a { exit }' "${WORK}/$1.yaml"
 }
 arg() { server_args "$1" | grep -qx -- "$2"; }
+# pair <name> <option> <value>: <value> is the server argument right after <option>.
+pair() { server_args "$1" | awk -v o="$2" -v v="$3" 'p && $0 == v { f = 1 } { p = ($0 == o) } END { exit !f }'; }
+# llama-server's parser (llama.cpp v0.8.0 common/arg.cpp parse_cli_args, :827-865) takes an
+# option's value from the next argument, never from "--opt=value", and refuses a name it does
+# not define. llama_argv_ok <name>: the server args parse so, with the names and arities the
+# renderer uses (common/arg.cpp v0.8.0: -t :1528, -tb :1538, -c :1650, -ctk :2449, -ctv :2462,
+# -np :2556, --load-mode :2703, --cpu-moe :2772, --n-cpu-moe :2779, -ngl :2811, -ts :2853,
+# --alias :3033, --model-url :3066, --host :3343, --port :3359, --jinja :3727,
+# --reasoning :3746, --spec-draft-model :4322, --spec-type :4330, --model :3057).
+llama_argv_ok() {
+    server_args "$1" | python3 -c 'import sys
+arity = {"--model": 1, "--model-url": 1, "--alias": 1, "--host": 1, "--port": 1, "--jinja": 0,
+         "--reasoning": 1, "-c": 1, "-np": 1, "-ngl": 1, "-ts": 1, "--n-cpu-moe": 1, "--cpu-moe": 0,
+         "-ctk": 1, "-ctv": 1, "--threads": 1, "--threads-batch": 1, "--load-mode": 1,
+         "--spec-type": 1, "--spec-draft-model": 1}
+argv = sys.stdin.read().split("\n")[:-1]
+i = 0
+while i < len(argv):
+    if argv[i] not in arity:
+        sys.exit("invalid argument: %s" % argv[i])
+    if arity[argv[i]] and i + 1 >= len(argv):
+        sys.exit("expected value for argument %s" % argv[i])
+    i += 1 + arity[argv[i]]'
+}
 # The manifest parses into one document per object (python yaml, when present).
 yaml_ok() {
     python3 -c 'import sys
@@ -100,12 +125,12 @@ GEMMA_GGUF=google/gemma-4-26B-A4B-it-qat-q4_0-gguf
 GREV=d1c082be9cf3c8a514acf63b8761f4b41935842e
 DRAFTER=google__gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant@9537141506fe8875b3ed45b264af13580cb29166
 if render gguf "${XEON_ENV[@]}" -- --model "${GEMMA_GGUF}" \
-    && has gguf '^  name: llamacpp$' && has gguf "image: ghcr.io/ggml-org/llama.cpp:server-intel-b11669@${SYCL}" \
-    && arg gguf "--model=/models/gguf/google__gemma-4-26B-A4B-it-qat-q4_0-gguf@${GREV}/gemma-4-26B_q4_0-it.gguf" \
-    && arg gguf "--model-url=https://huggingface.co/${GEMMA_GGUF}/resolve/${GREV}/gemma-4-26B_q4_0-it.gguf" \
-    && arg gguf '--alias=gemma-4-26B-A4B-it-qat-q4_0-gguf' && arg gguf '--jinja' && arg gguf '--reasoning=off' \
+    && has gguf '^  name: llamacpp$' && has gguf "image: ghcr.io/ggml-org/llama.cpp:server-intel-b11960@${SYCL}" \
+    && pair gguf --model "/models/gguf/google__gemma-4-26B-A4B-it-qat-q4_0-gguf@${GREV}/gemma-4-26B_q4_0-it.gguf" \
+    && pair gguf --model-url "https://huggingface.co/${GEMMA_GGUF}/resolve/${GREV}/gemma-4-26B_q4_0-it.gguf" \
+    && pair gguf --alias 'gemma-4-26B-A4B-it-qat-q4_0-gguf' && arg gguf '--jinja' && pair gguf --reasoning 'off' \
     && arg gguf '-c' && arg gguf '786432' && arg gguf '-np' && arg gguf '6' && arg gguf '-ngl' && arg gguf '999' \
-    && arg gguf '--port=8000' && server_args gguf | grep -qE '^--threads=[0-9]+$' \
+    && pair gguf --port '8000' && server_args gguf | grep -A1 -x -- '--threads' | tail -n1 | grep -qE '^[0-9]+$' \
     && ! arg gguf '-ts' && ! has gguf 'spec-type' && ! has gguf 'kind: Job' && ! has gguf 'load-mode' \
     && grep -A3 '^            limits:$' "${WORK}/gguf.yaml" | grep -q '^              gpu.intel.com/xe: 1$' \
     && has gguf 'name: ZES_ENABLE_SYSMAN' && has gguf 'k3d-gpu.io/agent-backend: llama.cpp' \
@@ -123,10 +148,10 @@ else fail "GGUF repo goes to llama.cpp first" "$(show ggopt)"; fi
 
 # --- the desktop with no GPU: the CPU image on the P-core balloon ------------------------
 if render cpu STUB_ALLOC='cpu 32' K3D_GPU_FIT_HOST="${DESK}" -- --model "${GEMMA_GGUF}" \
-    && has cpu "image: ghcr.io/ggml-org/llama.cpp:server-b11669@${CPUSRV}" && arg cpu '-ngl' && arg cpu '0' \
-    && arg cpu '--load-mode=mmap+mlock' && has cpu 'add: \[IPC_LOCK\]' && ! has cpu 'gpu.intel.com' \
+    && has cpu "image: ghcr.io/ggml-org/llama.cpp:server-b11960@${CPUSRV}" && arg cpu '-ngl' && arg cpu '0' \
+    && pair cpu --load-mode 'mmap+mlock' && has cpu 'add: \[IPC_LOCK\]' && ! has cpu 'gpu.intel.com' \
     && ! has cpu 'ZES_ENABLE_SYSMAN' && grep -A1 '^            limits:$' "${WORK}/cpu.yaml" | grep -qE '^              memory: 45Gi$' \
-    && server_args cpu | grep -qx -- '--threads-batch=16' && server_args cpu | grep -qx -- '--threads=8' \
+    && pair cpu --threads-batch 16 && pair cpu --threads 8 \
     && yaml_ok cpu; then
     ok "QAT GGUF on the desktop with no GPU: CPU image, -ngl 0, mlock, pod limit and threads from the pod's CPUs"
 else fail "QAT GGUF on the CPU-only desktop" "$(show cpu)"; fi
@@ -135,13 +160,13 @@ else fail "QAT GGUF on the CPU-only desktop" "$(show cpu)"; fi
 FN=Qwen/Qwen3.8-Flash-Next
 FNREV=de4b8e4d43b917e7706784d8bb445c9af86a3540
 if render fn "${XEON_ENV[@]}" -- --model "${FN}" \
-    && arg fn "--model=/models/gguf/Qwen__Qwen3.8-Flash-Next@${FNREV}/model.gguf" && ! has fn 'model-url' \
+    && pair fn --model "/models/gguf/Qwen__Qwen3.8-Flash-Next@${FNREV}/model.gguf" && ! has fn 'model-url' \
     && arg fn '--n-cpu-moe' && arg fn '44' && arg fn '-ts' && arg fn '30,30' && arg fn '-np' && arg fn '4' \
     && grep -A3 '^            limits:$' "${WORK}/fn.yaml" | grep -q '^              gpu.intel.com/xe: 2$' \
-    && has fn 'kind: Job' && has fn "image: ghcr.io/ggml-org/llama.cpp:full-b11669@${FULL}" \
+    && has fn 'kind: Job' && has fn "image: ghcr.io/ggml-org/llama.cpp:full-b11960@${FULL}" \
     && has fn '^            - "Qwen/Qwen3.8-Flash-Next"$' && has fn "^            - \"${FNREV}\"\$" \
     && has fn '^            - "--outtype"$' && has fn '^            - "bf16"$' && ! has fn 'fp8-as-q8' \
-    && has fn 'value: "transformers==5.20.2 ' && has fn 'name: wait-gguf' \
+    && has fn 'value: "transformers==5.21.0 ' && has fn 'name: wait-gguf' \
     && has fn "for d in /models/gguf/Qwen__Qwen3.8-Flash-Next@${FNREV}; do" \
     && has fn 'kind: ConfigMap' && has fn '^    gguf_convert () $' && ! has fn 'load-mode' \
     && grep -q 'requests:' "${WORK}/fn.yaml" && ! grep -q '^              cpu: "2"$' <(sed -n '/name: llamacpp$/,$p' "${WORK}/fn.yaml") \
@@ -155,7 +180,7 @@ if render fn8 "${XEON_ENV[@]}" -- --model Qwen/Qwen3.8-Flash-Next-FP8 \
 else fail "Flash-Next FP8 conversion" "$(show fn8)"; fi
 
 if ! render w4 "${XEON_ENV[@]}" -- --model Intel/Qwen3.8-Flash-Next-W4A16-AutoRound \
-    && grep -q 'does not read quant_method auto-round (conversion/base.py:573)' "${WORK}/w4.err"; then
+    && grep -q 'does not read quant_method auto-round (conversion/base.py:575)' "${WORK}/w4.err"; then
     ok "Flash-Next AutoRound W4A16: refused before anything runs, the converter cannot read it"
 else fail "Flash-Next W4A16 refusal" "$(show w4)"; fi
 
@@ -178,7 +203,7 @@ EOF
 chmod +x "${CV}/bin/pip" "${CV}/bin/python3"
 sed -n '/^    gguf_convert () $/,$p' "${WORK}/fn.yaml" | sed -n '1,/^    gguf_convert "\$@"$/p' | sed 's/^    //' > "${CV}/convert.sh"
 cv() {
-    env CV_LOG="${CV}/log" REAL_PY="$(command -v python3)" GGUF_CONVERT_PIP="transformers==5.20.2" PATH="${CV}/bin:${PATH}" \
+    env CV_LOG="${CV}/log" REAL_PY="$(command -v python3)" GGUF_CONVERT_PIP="transformers==5.21.0" PATH="${CV}/bin:${PATH}" \
         bash "${CV}/convert.sh" Qwen/Qwen3.8-Flash-Next "${FNREV}" "${CV}/models/gguf/fn" 1000 - --outtype bf16
 }
 if cv > "${CV}/out1" 2>&1 && [ -s "${CV}/models/gguf/fn/model.gguf" ] && [ -f "${CV}/models/gguf/fn/manifest.json" ] \
@@ -214,6 +239,18 @@ if [ "${rc}" -ne 0 ] && grep -q 'auto-round' <<< "${out}" \
     ok "agent up: a model refused after the fit's probe gets the stopped server back, and nothing is applied"
 else fail "agent up restores the stopped server (rc ${rc})" "${out}$(cat "${WORK}/kubectl.log")"; fi
 
+# --- agent up on llama.cpp: applied, warmed up, and the GGUF it serves named -----------------
+rm -f "${WORK}/kubectl.log"
+out=$(env STUB_LOG="${WORK}/kubectl.log" STUB_APPLIED="${WORK}/up.yaml" K3D_GPU_AGENT_GUARD=off "${XEON_ENV[@]}" \
+    STUB_REPLY='{"choices":[{"message":{"role":"assistant","content":"A language model."}}]}' \
+    bash "${K3D_GPU}" agent up --model "${GEMMA_GGUF}" 2>&1); rc=$?
+if [ "${rc}" -eq 0 ] && grep -q '^kubectl apply -f -' "${WORK}/kubectl.log" && grep -q '^  name: llamacpp$' "${WORK}/up.yaml" \
+    && grep -q '^kubectl -n k3d-gpu-agent rollout status deployment/llamacpp' "${WORK}/kubectl.log" \
+    && grep -q 'warm-up reply ([0-9]*s): A language model.' <<< "${out}" \
+    && grep -qF "model ${GEMMA_GGUF}: https://huggingface.co/${GEMMA_GGUF}/resolve/${GREV}/gemma-4-26B_q4_0-it.gguf" <<< "${out}"; then
+    ok "agent up --model <QAT GGUF>: llama-server applied and warmed up, the GGUF it downloads named"
+else fail "agent up on llama.cpp (rc ${rc})" "${out}"; fi
+
 rm -f "${WORK}/kubectl.log"
 if STUB_LOG="${WORK}/kubectl.log" bash "${K3D_GPU}" agent down > /dev/null 2>&1 \
     && grep -q '^kubectl -n k3d-gpu-agent delete deployment/llamacpp service/llamacpp' "${WORK}/kubectl.log" \
@@ -223,7 +260,7 @@ else fail "agent down" "$(cat "${WORK}/kubectl.log")"; fi
 
 if render img "${XEON_ENV[@]}" K3D_GPU_AGENT_IMAGE=openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58 \
         -- --model "${GEMMA_GGUF}" \
-    && has img "image: ghcr.io/ggml-org/llama.cpp:server-intel-b11669@${SYCL}" && grep -q 'K3D_GPU_AGENT_IMAGE is not used' "${WORK}/img.err"; then
+    && has img "image: ghcr.io/ggml-org/llama.cpp:server-intel-b11960@${SYCL}" && grep -q 'K3D_GPU_AGENT_IMAGE is not used' "${WORK}/img.err"; then
     ok "an image set for the default backend is not handed to the backend the fit picked"
 else fail "K3D_GPU_AGENT_IMAGE on a followed backend" "$(show img)"; fi
 if ! render auto "${XEON_ENV[@]}" K3D_GPU_AGENT_DRAFT=auto -- --model "${GEMMA_GGUF}" \
@@ -241,9 +278,9 @@ else fail "H58's Gemma 4 command" "$(show h58)"; fi
 # K3D_GPU_AGENT_BACKEND=llama.cpp: the optimizer picks the QAT GGUF for llama.cpp and the
 # fit sizes it; with K3D_GPU_AGENT_DRAFT=mtp the QAT assistant is converted as its drafter.
 if render optl "${XEON_ENV[@]}" K3D_GPU_AGENT_BACKEND=llama.cpp K3D_GPU_AGENT_DRAFT=mtp -- --model google/gemma-4-26B-A4B-it \
-    && has optl '^  name: llamacpp$' && arg optl "--model-url=https://huggingface.co/${GEMMA_GGUF}/resolve/${GREV}/gemma-4-26B_q4_0-it.gguf" \
-    && arg optl '--alias=gemma-4-26B-A4B-it' && arg optl '--spec-type=draft-mtp' \
-    && arg optl "--spec-draft-model=/models/gguf/${DRAFTER}/model.gguf" && has optl 'k3d-gpu.io/agent-fit: "gpu ' \
+    && has optl '^  name: llamacpp$' && pair optl --model-url "https://huggingface.co/${GEMMA_GGUF}/resolve/${GREV}/gemma-4-26B_q4_0-it.gguf" \
+    && pair optl --alias 'gemma-4-26B-A4B-it' && pair optl --spec-type 'draft-mtp' \
+    && pair optl --spec-draft-model "/models/gguf/${DRAFTER}/model.gguf" && has optl 'k3d-gpu.io/agent-fit: "gpu ' \
     && grep -q 'picked google/gemma-4-26B-A4B-it-qat-q4_0-gguf on llama.cpp' "${WORK}/optl.err"; then
     ok "K3D_GPU_AGENT_BACKEND=llama.cpp --model google/gemma-4-26B-A4B-it: the optimizer's QAT GGUF, sized by the fit, with the QAT MTP drafter"
 else fail "optimizer pick into llama-server" "$(show optl)"; fi
@@ -272,13 +309,13 @@ else fail "K3D_GPU_AGENT_BACKEND=llama.cpp" "$(show setl)"; fi
 
 # --- MTP on request ---------------------------------------------------------------------
 if render mtp "${XEON_ENV[@]}" K3D_GPU_AGENT_DRAFT=mtp -- --model "${GEMMA_GGUF}" \
-    && arg mtp '--spec-type=draft-mtp' && arg mtp "--spec-draft-model=/models/gguf/${DRAFTER}/model.gguf" \
+    && pair mtp --spec-type 'draft-mtp' && pair mtp --spec-draft-model "/models/gguf/${DRAFTER}/model.gguf" \
     && has mtp '^            - "Q4_0"$' && has mtp '^            - "google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant"$' \
     && has mtp "for d in /models/gguf/${DRAFTER}; do" && ! has mtp 'spec-draft-n-max'; then
     ok "K3D_GPU_AGENT_DRAFT=mtp on the QAT GGUF: its QAT assistant converted once to Q4_0, default draft length"
 else fail "MTP drafter for the QAT GGUF" "$(show mtp 200)"; fi
 if render fnmtp "${XEON_ENV[@]}" K3D_GPU_AGENT_DRAFT=mtp -- --model "${FN}" \
-    && arg fnmtp '--spec-type=draft-mtp' && ! has fnmtp 'spec-draft-model'; then
+    && pair fnmtp --spec-type 'draft-mtp' && ! has fnmtp 'spec-draft-model'; then
     ok "K3D_GPU_AGENT_DRAFT=mtp on Flash-Next: drafts from its own MTP head, kept by the conversion"
 else fail "MTP from Flash-Next's own head" "$(show fnmtp)"; fi
 if ! render badd "${XEON_ENV[@]}" K3D_GPU_AGENT_DRAFT=NPU -- --model "${GEMMA_GGUF}" \
@@ -310,6 +347,68 @@ EOF
         ok "agent guard: an emergency stops deployment/llamacpp, the server the fit recorded"
     else fail "agent guard targets llamacpp" "${out}"; fi
 else fail "agent up's fit records the llama.cpp fit" "$(show rec)"; fi
+
+# --- the ledger picks llama.cpp on the CPU (model_opt.py H59 and H57m families) ----------
+# The CPU class is the model name in the sysroot's /proc/cpuinfo; the ledger a stub.
+LG="${WORK}/ledger"
+mkdir -p "${LG}"
+h59() { printf '## Hypotheses\n\n| H59 | Engine choice on the Xeon 6741P: llama.cpp vs OVMS int4 | p | m | %s |\n' "$1" > "${LG}/h59-$1.md"; }
+h59 SUPPORTED; h59 INCONCLUSIVE; h59 PENDING; h59 REFUTED
+printf '## Hypotheses\n\n| H57da | On the i9-13900T OVMS is the fastest arm | p | m | INCONCLUSIVE |\n| H57dm | On the i9-13900T Ld-mtp beats Ld | p | m | %s |\n' \
+    SUPPORTED > "${LG}/h57-SUPPORTED.md"
+python3 "${ROOT}/console/model_opt.py" ledger-rules --ledger "${LG}/h59-SUPPORTED.md" --out "${LG}/rules.json"
+printf 'processor\t: 0\nmodel name\t: Intel(R) Xeon(R) 6741P\n' > "${WORK}/root/proc/cpuinfo"
+XCPU=(STUB_ALLOC='cpu 64' K3D_GPU_FIT_HOST="${XEON}")
+if render l59 "${XCPU[@]}" K3D_GPU_MODEL_OPT_LEDGER="${LG}/h59-SUPPORTED.md" -- --model google/gemma-4-26B-A4B-it \
+    && has l59 '^  name: llamacpp$' && has l59 "image: ghcr.io/ggml-org/llama.cpp:server-b11960@${CPUSRV}" \
+    && pair l59 --model-url "https://huggingface.co/${GEMMA_GGUF}/resolve/${GREV}/gemma-4-26B_q4_0-it.gguf" \
+    && pair l59 --alias 'gemma-4-26B-A4B-it' && pair l59 --spec-type 'draft-mtp' \
+    && pair l59 --spec-draft-model "/models/gguf/${DRAFTER}/model.gguf" && has l59 'kind: Job' \
+    && pair l59 --load-mode 'mmap+mlock' && has l59 'k3d-gpu.io/agent-fit: "cpu ' \
+    && grep -q "llama.cpp is this CPU class's engine in EXPERIMENTS.md" "${WORK}/l59.err" \
+    && grep -q 'with the google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant drafter' "${WORK}/l59.err" && yaml_ok l59; then
+    ok "H59 SUPPORTED for this CPU class: --model google/gemma-4-26B-A4B-it on the CPU is llama.cpp, the QAT GGUF with the QAT MTP drafter"
+else fail "the ledger's CPU engine (H59 SUPPORTED)" "$(show l59)"; fi
+if render l59j "${XCPU[@]}" K3D_GPU_MODEL_OPT_LEDGER="${LG}/rules.json" -- --model google/gemma-4-26B-A4B-it \
+    && has l59j '^  name: llamacpp$' && pair l59j --spec-type 'draft-mtp'; then
+    ok "packaged install: console/ledger-rules.json's H59 rows pick the CPU engine as EXPERIMENTS.md does"
+else fail "the ledger's CPU engine from ledger-rules.json" "$(show l59j)"; fi
+for v in INCONCLUSIVE PENDING REFUTED; do
+    if render "l59${v}" "${XCPU[@]}" K3D_GPU_MODEL_OPT_LEDGER="${LG}/h59-${v}.md" -- --model google/gemma-4-26B-A4B-it \
+        && has "l59${v}" '^  name: ovms$' && has "l59${v}" '--source_model=OpenVINO/gemma-4-26b-a4b-it-int4-ov' \
+        && ! has "l59${v}" 'llamacpp'; then
+        ok "H59 ${v}: OVMS stays the CPU engine"
+    else fail "H59 ${v} keeps OVMS" "$(show "l59${v}")"; fi
+done
+if render l59o "${XCPU[@]}" K3D_GPU_MODEL_OPT_LEDGER="${LG}/h59-SUPPORTED.md" K3D_GPU_AGENT_BACKEND=ovms -- --model google/gemma-4-26B-A4B-it \
+    && has l59o '^  name: ovms$' && has l59o '--source_model=OpenVINO/gemma-4-26b-a4b-it-int4-ov'; then
+    ok "H59 SUPPORTED but K3D_GPU_AGENT_BACKEND=ovms: the backend set is kept"
+else fail "an explicit backend over the ledger's CPU engine" "$(show l59o)"; fi
+if render l59g "${XEON_ENV[@]}" K3D_GPU_MODEL_OPT_LEDGER="${LG}/h59-SUPPORTED.md" -- --model google/gemma-4-26B-A4B-it \
+    && has l59g '^  name: ovms$' && has l59g '--target_device=GPU'; then
+    ok "H59 SUPPORTED is a CPU row: on the free B70s the engine stays OVMS"
+else fail "H59 on a GPU placement" "$(show l59g)"; fi
+printf 'processor\t: 0\nmodel name\t: 13th Gen Intel(R) Core(TM) i9-13900T\n' > "${WORK}/root/proc/cpuinfo"
+DCPU=(STUB_ALLOC='cpu 32' K3D_GPU_FIT_HOST="${DESK}" K3D_GPU_AGENT_BACKEND=llama.cpp K3D_GPU_MODEL_OPT_LEDGER="${LG}/h57-SUPPORTED.md")
+if render l57 "${DCPU[@]}" -- --model google/gemma-4-26B-A4B-it && has l57 '^  name: llamacpp$' \
+    && pair l57 --model-url "https://huggingface.co/${GEMMA_GGUF}/resolve/${GREV}/gemma-4-26B_q4_0-it.gguf" \
+    && pair l57 --spec-type 'draft-mtp' && pair l57 --spec-draft-model "/models/gguf/${DRAFTER}/model.gguf" \
+    && render l57off "${DCPU[@]}" K3D_GPU_AGENT_DRAFT=off -- --model google/gemma-4-26B-A4B-it && ! has l57off 'spec-type' \
+    && render l57g "${DCPU[@]}" K3D_GPU_MODEL_OPT_LEDGER="${LG}/h59-SUPPORTED.md" -- --model google/gemma-4-26B-A4B-it \
+    && has l57g '^  name: llamacpp$' && ! has l57g 'spec-type'; then
+    ok "H57dm SUPPORTED for the i9-13900T: llama.cpp on its CPU drafts with the QAT MTP assistant (off without the row, or with K3D_GPU_AGENT_DRAFT=off)"
+else fail "the ledger's MTP drafter (H57dm)" "$(show l57)$(show l57off)$(show l57g)"; fi
+rm -f "${WORK}/root/proc/cpuinfo"
+
+# Every llama-server render above: its args parse as llama-server's own parser reads them.
+bad=""
+for n in gguf ggopt cpu fn fn8 img optl setl mtp fnmtp rung l59 l59j l57 l57off l57g; do
+    [ -s "${WORK}/${n}.yaml" ] || { bad+=" ${n}(not rendered)"; continue; }
+    why=$(llama_argv_ok "${n}" 2>&1) || bad+=" ${n}: ${why}"
+done
+if [ -z "${bad}" ]; then
+    ok "llama-server args: each option, then its value as the next argument, all defined by llama.cpp v0.8.0"
+else fail "llama-server args llama.cpp would refuse" "${bad}"; fi
 
 # --- free-card pinning: `up` on four B70s, card0 and card1 filled by host processes --------
 UP="${WORK}/up"

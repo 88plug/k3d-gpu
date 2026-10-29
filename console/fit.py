@@ -923,14 +923,14 @@ def engines_for(fmt, arch):
     return out
 
 
-# GGUF conversion of safetensors weights for llama.cpp, as llama.cpp v0.7.0 (b11669)
+# GGUF conversion of safetensors weights for llama.cpp, as llama.cpp v0.8.0 (b11960)
 # convert_hf_to_gguf.py reads them (conversion/base.py dequant_model). Unquantized weights
-# keep their 16-bit type. FP8 (quant_method fp8, base.py:469; compressed-tensors
-# float-quantized 8-bit floats, base.py:526) is dequantized and stored as Q8_0 with
-# --fp8-as-q8 (base.py:908 tensor_force_quant): the 1 B per weight the fit counts. The
+# keep their 16-bit type. FP8 (quant_method fp8, base.py:470; compressed-tensors
+# float-quantized 8-bit floats, base.py:527) is dequantized and stored as Q8_0 with
+# --fp8-as-q8 (base.py:909 tensor_force_quant): the 1 B per weight the fit counts. The
 # other methods it reads (bitnet, gptq, compressed-tensors int and packed, modelopt) are
 # dequantized to 16 bits, a GGUF two to four times the bytes the fit sized; any other
-# raises "Quant method is not yet supported" (base.py:573).
+# raises "Quant method is not yet supported" (base.py:575).
 def convert_plan(cfg, fmt):
     """{"args": convert_hf_to_gguf.py arguments, "error": why not}."""
     if fmt != "safetensors":
@@ -947,11 +947,11 @@ def convert_plan(cfg, fmt):
                            and w.get("type") == "float" and w.get("num_bits") == 8):
         return {"args": ["--outtype", "bf16", "--fp8-as-q8"], "error": None}
     if method in ("bitnet", "gptq", "compressed-tensors", "modelopt", "modelopt_mixed"):
-        return {"args": None, "error": "llama.cpp v0.7.0's convert_hf_to_gguf.py dequantizes quant_method %s to 16 bits "
+        return {"args": None, "error": "llama.cpp v0.8.0's convert_hf_to_gguf.py dequantizes quant_method %s to 16 bits "
                                        "(conversion/base.py dequant_model), a GGUF larger than the weights this fit "
                                        "sized; a bf16 or FP8 checkpoint of this model converts" % method}
-    return {"args": None, "error": "llama.cpp v0.7.0's convert_hf_to_gguf.py does not read quant_method %s "
-                                   "(conversion/base.py:573); a bf16 or FP8 checkpoint of this model converts" % method}
+    return {"args": None, "error": "llama.cpp v0.8.0's convert_hf_to_gguf.py does not read quant_method %s "
+                                   "(conversion/base.py:575); a bf16 or FP8 checkpoint of this model converts" % method}
 
 
 # ---- fit ---------------------------------------------------------------------------

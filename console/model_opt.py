@@ -24,12 +24,20 @@ equal-or-better quality on this hardware class: an EXPERIMENTS.md row marked
 SUPPORTED that names the class (PROMOTION_ROWS), or a cached local measurement.
 NVFP4/MXFP4 run on NVIDIA only and are never picked on an Intel device.
 
+With --engine-from-ledger (no backend was set), OVMS on the CPU gives way to llama.cpp
+where an H59-family row of the ledger is SUPPORTED for the CPU class and llama.cpp has
+an int4 GGUF of the model; llama.cpp on the CPU drafts with the QAT MTP assistant where
+an H57m-family row is SUPPORTED, or with the H59 row's arm. Only SUPPORTED rows pick:
+REFUTED, INCONCLUSIVE and PENDING rows pick nothing (ledger_rule).
+
   model_opt.py fetch --model ID [--revision REV] [--out FILE] [--cache DIR] [--fixtures DIR]
   model_opt.py optimize --bundle FILE --engine ovms|vllm|llama.cpp --device CPU|GPU|HPU
                         [--vllm-version X.Y.Z] [--thinking off|on|model] [--variant ID|qat-convert]
                         [--draft auto|off|mtp] [--prefix-caching true|false] [--hw-class C]
-                        [--ledger FILE] [--measurements FILE]
+                        [--engine-from-ledger] [--ledger FILE] [--measurements FILE]
                         [--format json|shell|summary|explain|eat]
+  model_opt.py ledger-rule --family F --hw-class C [--ledger FILE]
+  model_opt.py ledger-rules --ledger EXPERIMENTS.md [--out FILE]
 
 Python standard library only.
 """
@@ -89,7 +97,8 @@ VLLM_SPEC_DOC = "https://github.com/vllm-project/vllm/blob/v0.31.0/vllm/config/s
 VLLM_MTP_DOC = "https://github.com/vllm-project/vllm/blob/v0.31.0/docs/features/speculative_decoding/mtp.md"
 VLLM_HW_TABLE = "https://github.com/vllm-project/vllm/blob/v0.31.0/docs/features/README.md (hardware table, L67)"
 VLLM_GAUDI_SD = "https://github.com/vllm-project/vllm-gaudi/blob/v0.30.0/docs/features/supported_features.md (L25, L27)"
-LLAMACPP_ARGS = "https://github.com/ggml-org/llama.cpp/blob/v0.7.0/common/arg.cpp (L4287 -md)"
+LLAMACPP_ARGS = "https://github.com/ggml-org/llama.cpp/blob/v0.8.0/common/arg.cpp (L4322 -md)"
+LLAMACPP_SPEC = "https://github.com/ggml-org/llama.cpp/blob/v0.8.0/common/arg.cpp (L4322 --spec-draft-model, L4330 --spec-type)"
 
 # Tool and reasoning parsers by model family (config model_type), per engine.
 # OVMS detects both from the chat template when unset (docs/parameters.md
@@ -570,9 +579,13 @@ def ledger_rows(text):
 
 # CPU model numbers as ledger rows write them: "i9-13900T", "6741P", "285K".
 CPU_CLASS = re.compile(r"(?<![a-z0-9])(i[3579]-\d{4,5}[a-z]{0,2}|\d{3,5}[a-z]{1,2})(?![a-z0-9])")
-# The row families whose verdicts set agent defaults: H27 (autoquant), H34 (CPU Fast
-# Draft). console/ledger-rules.json carries them for installs without EXPERIMENTS.md.
-RULE_FAMILIES = ("H27", "H34")
+# The row families whose verdicts set agent defaults: H27 (autoquant), H34 (OVMS CPU Fast
+# Draft), H57m (llama.cpp's QAT MTP drafter on the CPU: H57dm, H57wm), H59 (llama.cpp as
+# the CPU engine: H59, H59d, H59w). console/ledger-rules.json carries them for installs
+# without EXPERIMENTS.md.
+RULE_FAMILIES = ("H27", "H34", "H57m", "H59")
+# A family's row ids: the row and its replications (H34, H34x, H34w), unless listed here.
+FAMILY_ROWS = {"H57m": r"H57[a-z]m[a-z]*"}
 RULES_SCHEMA = "k3d-gpu.ledger-rules/v1"
 
 
@@ -582,7 +595,7 @@ def row_classes(text):
 
 
 def family_of(rid, family):
-    return re.match(r"^%s[a-z]*$" % re.escape(family), rid) is not None
+    return re.match(r"^(?:%s)$" % FAMILY_ROWS.get(family, re.escape(family) + "[a-z]*"), rid) is not None
 
 
 def ledger_rules_doc(rows):
@@ -595,7 +608,11 @@ def ledger_rules_doc(rows):
 
 def read_ledger(path):
     """{row id: (verdict, text)} from EXPERIMENTS.md or from a ledger-rules.json."""
-    text = read_text(path)
+    return ledger_from_text(read_text(path))
+
+
+def ledger_from_text(text):
+    """{row id: (verdict, text)} from EXPERIMENTS.md's text or a ledger-rules.json's."""
     if text is None:
         return {}
     if text.lstrip().startswith("{"):
@@ -696,9 +713,34 @@ def optimize(bundle, engine, device, opts=None):
     hw_class = o.get("hw_class")
     target = bundle["target"]
     choices = []
+    rows = ledger_from_text(o.get("ledger"))
+    cls = " ".join(class_tokens(hw_class)) or "this"
 
     def choose(fact, choice, source):
         choices.append({"fact": fact, "choice": choice, "source": source})
+
+    # The CPU engine, when no backend was set (engine_from_ledger): llama.cpp where an
+    # H59-family row is SUPPORTED for this CPU class and llama.cpp has an int4 GGUF of the
+    # model; OVMS otherwise, and for a variant the user named. REFUTED, INCONCLUSIVE and
+    # PENDING rows pick nothing.
+    engine_fact, engine_note = None, None
+    if o.get("engine_from_ledger") and engine == "ovms" and device == "CPU" and bundle.get("requested", target) == target:
+        rule, rid, _ = ledger_rule(rows, "H59", hw_class)
+        if rule == "on":
+            alt = optimize(bundle, "llama.cpp", device, dict(o, engine_from_ledger=False, engine_row=rid))
+            if alt["model"] and any(r["id"] == alt["model"] for r in alt["ranking"]):
+                alt["choices"].insert(0, {"fact": "EXPERIMENTS.md %s is SUPPORTED for the %s CPU class" % (rid, cls),
+                                          "choice": "llama.cpp is the CPU engine (K3D_GPU_AGENT_BACKEND=ovms keeps OVMS)",
+                                          "source": "EXPERIMENTS.md %s" % rid})
+                return alt
+            engine_fact = ("EXPERIMENTS.md %s is SUPPORTED for the %s CPU class" % (rid, cls),
+                           "OVMS stays the CPU engine: llama.cpp has no int4 GGUF variant of %s" % target, "EXPERIMENTS.md %s" % rid)
+            engine_note = "EXPERIMENTS.md %s makes llama.cpp the CPU engine here, but llama.cpp has no int4 GGUF variant of %s: OVMS serves it" % (rid, target)
+        elif rule == "off":
+            engine_fact = ("EXPERIMENTS.md %s is REFUTED for the %s CPU class" % (rid, cls), "OVMS stays the CPU engine", "EXPERIMENTS.md %s" % rid)
+        else:
+            engine_fact = ("no EXPERIMENTS.md H59-family row is SUPPORTED or REFUTED for the %s CPU class" % cls,
+                           "OVMS stays the CPU engine (PENDING and INCONCLUSIVE rows pick nothing)", "EXPERIMENTS.md H59")
 
     doc = {"schema": OPT_SCHEMA, "requested": bundle.get("requested", target), "target": target,
            "engine": engine, "device": device, "metadata": bundle.get("source"), "choices": choices,
@@ -706,6 +748,10 @@ def optimize(bundle, engine, device, opts=None):
            "speculative": None, "thinking": None, "tool_parser": None, "reasoning_parser": None,
            "text_only": False, "engine_args": [], "prefix_caching": prefix_caching, "notes": [], "facts": None, "moe": None,
            "fallback_model": None, "fallback_revision": None, "warning": None}
+    if engine_fact:
+        choose(*engine_fact)
+    if engine_note:
+        doc["notes"].append(engine_note)
     if bundle.get("source") == "fallback":
         choose("Hugging Face unreachable (%s)" % bundle.get("error"), "the built-in map of known-good variants", "console/model_opt.py FALLBACK")
     if target not in bundle["repos"]:
@@ -786,7 +832,6 @@ def optimize(bundle, engine, device, opts=None):
     pick = ranked[0] if ranked else None
     promoted = None
     if pick:
-        rows = ledger_rows(o.get("ledger"))
         for c in ranked[1:]:
             key = c["id"]
             ok, why = ledger_promotes(rows, key, hw_class)
@@ -934,7 +979,17 @@ def optimize(bundle, engine, device, opts=None):
             choose("vision tower in the IR", "loaded as a VLM pipeline: OVMS refuses LM on a VLM directory",
                    OVMS_DOC + "src/llm/servable_initializer.cpp (L588-641)")
 
-    # Speculative decoding.
+    # Speculative decoding. llama.cpp on the CPU drafts with the QAT MTP assistant where the
+    # ledger measured it winning for this CPU class: an H57m-family row SUPPORTED, or, when
+    # an H59-family row picked llama.cpp, that row's arm (it drafts). REFUTED wins.
+    if engine == "llama.cpp" and device == "CPU":
+        rule, rid, _ = ledger_rule(rows, "H57m", hw_class)
+        if rule == "on":
+            o["llama_mtp"] = "EXPERIMENTS.md %s SUPPORTED for the %s CPU class" % (rid, cls)
+        elif rule == "off":
+            o["llama_mtp_off"] = "EXPERIMENTS.md %s REFUTED for the %s CPU class" % (rid, cls)
+        elif o.get("engine_row"):
+            o["llama_mtp"] = "EXPERIMENTS.md %s SUPPORTED for the %s CPU class: its llama.cpp arm drafts with the QAT MTP assistant" % (o["engine_row"], cls)
     spec_decide(doc, choose, engine, device, pick, drafters, target, facts, draft_want, prefix_caching, vllm_version, o)
     return doc
 
@@ -1008,14 +1063,25 @@ def spec_decide(doc, choose, engine, device, pick, drafters, target, facts, draf
         if chosen.get("mtp"):
             doc["speculative"] = {"kind": "mtp", "args": ["--spec-type", "draft-mtp", "--spec-draft-n-max", "3"]}
             choose("%s carries an MTP head (%s)" % (chosen["id"], chosen.get("mtp_source")),
-                   "--spec-type draft-mtp --spec-draft-n-max 3", "https://github.com/ggml-org/llama.cpp/blob/v0.7.0/common/arg.cpp (L4161, L4295); llama.cpp PR 22673")
+                   "--spec-type draft-mtp --spec-draft-n-max 3", "https://github.com/ggml-org/llama.cpp/blob/v0.8.0/common/arg.cpp (L4196, L4330); llama.cpp PR 22673")
         elif gg:
             doc["speculative"] = {"kind": "draft", "model": gg[0]["id"], "args": ["-md", gg[0]["id"]]}
             choose("GGUF drafter %s" % gg[0]["id"], "-md (draft model)", LLAMACPP_ARGS)
         else:
+            qa = next((d for d in fit if d["drafter"] == "assistant" and d["qat"]), None) if chosen.get("qat") else None
+            if qa and o.get("llama_mtp"):
+                doc["speculative"] = {"kind": "mtp", "model": qa["id"], "args": ["--spec-type", "draft-mtp"]}
+                choose("%s, the QAT MTP assistant (safetensors)" % qa["id"],
+                       "MTP on: converted once to a Q4_0 GGUF, --spec-type draft-mtp, default draft length (K3D_GPU_AGENT_DRAFT=off turns it off)",
+                       o["llama_mtp"] + "; " + LLAMACPP_SPEC)
+                return
             choose("no GGUF drafter for %s" % target, "no draft", LLAMACPP_ARGS)
-            if chosen.get("qat") and any(d["qat"] for d in drafters):
-                doc["notes"].append("the QAT assistant exists only as safetensors: a GGUF of it (convert_hf_to_gguf.py, then Q4_0) would be the matching drafter; adopt only if measured faster (llama.cpp saw no MoE gain)")
+            if qa and o.get("llama_mtp_off"):
+                choose("%s, the QAT MTP assistant" % qa["id"], "no draft", o["llama_mtp_off"])
+            elif chosen.get("qat") and any(d["qat"] for d in drafters):
+                doc["notes"].append("the QAT assistant exists only as safetensors: a GGUF of it (convert_hf_to_gguf.py, then Q4_0) is the matching drafter, "
+                                    "on by default on the CPU only where an EXPERIMENTS.md H57m- or H59-family row is SUPPORTED for this CPU class "
+                                    "(K3D_GPU_AGENT_DRAFT=mtp turns it on)")
         return
     # vLLM
     if device == "CPU" and vllm_version < (0, 31, 0):
@@ -1127,6 +1193,7 @@ def shell_lines(doc, host=None):
     """KEY=value lines the launcher reads (values quoted for `eval`)."""
     args = engine_args(doc)
     kv = {
+        "OPT_ENGINE": doc["engine"],
         "OPT_MODEL": doc["model"] or "",
         "OPT_REVISION": doc["revision"] or "",
         "OPT_TOOL_PARSER": doc["tool_parser"] or "",
@@ -1189,6 +1256,8 @@ def main(argv):
     p.add_argument("--draft", choices=("auto", "off", "mtp"))
     p.add_argument("--prefix-caching", choices=("true", "false"))
     p.add_argument("--hw-class")
+    # No backend was set: on the CPU, the ledger's H59 family may pick llama.cpp over OVMS.
+    p.add_argument("--engine-from-ledger", action="store_true")
     p.add_argument("--host")
     p.add_argument("--ledger")
     p.add_argument("--measurements")
@@ -1239,7 +1308,8 @@ def main(argv):
     doc = optimize(bundle, a.engine, a.device, {
         "vllm_version": a.vllm_version, "thinking": a.thinking, "variant": a.variant, "precision": a.precision,
         "draft": a.draft, "prefix_caching": None if a.prefix_caching is None else a.prefix_caching == "true",
-        "hw_class": a.hw_class, "ledger": read_text(a.ledger), "measurements": meas})
+        "hw_class": a.hw_class, "ledger": read_text(a.ledger), "measurements": meas,
+        "engine_from_ledger": a.engine_from_ledger})
     if a.format == "json":
         sys.stdout.write(json.dumps(doc, indent=1, sort_keys=True) + "\n")
     elif a.format == "shell":

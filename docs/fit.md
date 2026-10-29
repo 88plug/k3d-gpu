@@ -107,7 +107,7 @@ The overhead is an estimate from the formula, not a measurement;
 | --- | --- |
 | vLLM v0.32.0 | `--tensor-parallel-size`, `--max-model-len`, `--max-num-seqs`, `--gpu-memory-utilization` (vLLM still profiles activations inside that share), `--kv-cache-dtype fp8` when the checkpoint's `kv_cache_scheme` made the fit count one byte. CPU build (EAT): `VLLM_CPU_KVCACHE_SPACE` |
 | OVMS 2026.4.1 | `--max_num_seqs`, `--cache_size` (a static pool: the dynamic one grows past the fit) |
-| llama.cpp v0.7.0 | `-c` (context x slots), `-np`, `-ngl`, `-ts`, `--n-cpu-moe` or `--cpu-moe`, `-ctk`/`-ctv` |
+| llama.cpp v0.8.0 | `-c` (context x slots), `-np`, `-ngl`, `-ts`, `--n-cpu-moe` or `--cpu-moe`, `-ctk`/`-ctv` |
 
 `agent up` applies them, sets the pod's memory request and limit to the fit, and
 annotates the pod `k3d-gpu.io/agent-fit`. `K3D_GPU_AGENT_MAX_LEN`, `K3D_GPU_AGENT_MAX_NUM_SEQS`
@@ -120,35 +120,47 @@ the fit then picks another engine, the optimizer's choices are made again for th
 pinned to the model the fit sized. A backend that is set and cannot serve the fit is
 refused, with the llama-server flags to run instead. `K3D_GPU_AGENT_BACKEND=llama.cpp
 --model google/gemma-4-26B-A4B-it` serves the optimizer's llama.cpp pick, Google's QAT
-Q4_0 GGUF, sized by the fit. Which engine a model gets when several can serve it is left
-to an engine-choice row of EXPERIMENTS.md (H59); until it is decided the default stays OVMS.
+Q4_0 GGUF, sized by the fit.
+
+Which engine serves a model on the CPU when several can is the ledger's call, read the way
+the CPU Fast Draft default is (H34): the engine-choice rows of EXPERIMENTS.md, H59 and its
+replications per CPU class (H59d, H59w). With `K3D_GPU_AGENT_BACKEND` unset, a row of that
+family SUPPORTED for this host's CPU class makes llama.cpp the CPU engine: the model
+optimizer then picks the model's int4 GGUF (Google's QAT Q4_0 GGUF for Gemma 4) with the QAT
+MTP drafter, the arm the row measured. A REFUTED, INCONCLUSIVE or PENDING row, a row for
+another CPU class, or no row keeps OVMS, as does a model with no int4 GGUF. The rows ship in
+`console/ledger-rules.json` for installs without EXPERIMENTS.md, and
+`k3d-gpu plan --model M --explain` names the row that decided. A GPU placement is not
+affected: these are CPU rows.
 
 ## The llama.cpp backend
 
-llama-server (ggml-org/llama.cpp v0.7.0, image tags `*-b11669`, pinned by digest) runs in
+llama-server (ggml-org/llama.cpp v0.8.0, image tags `*-b11960`, pinned by digest) runs in
 deployment `llamacpp` of the agent namespace and serves the OpenAI API at `/v1`, port 8000.
 It uses the `server-intel` (SYCL) image on an Intel GPU and the `server` (CPU) image
-otherwise. Beyond the fit's flags it sets:
+otherwise. Each option and its value are two arguments: llama-server reads a value from the
+next argument and refuses `--option=value` (`common/arg.cpp` `parse_cli_args`, `:827-865`).
+Beyond the fit's flags it sets:
 
 | Flag | Why |
 | --- | --- |
 | `--model` + `--model-url` | the GGUF at the commit the fit read, downloaded once into the PVC (llama.cpp resumes it and checks its ETag) |
-| `--jinja`, `--reasoning=off` | the GGUF's own chat template; its tool-call format is picked from the template (Gemma 4 `<\|tool_call>call:`, Qwen3.8's XML `<tool_call><function=...>`); thinking off for agent turns (`K3D_GPU_AGENT_THINKING=on` or `model` changes it) |
+| `--jinja`, `--reasoning off` | the GGUF's own chat template; its tool-call format is picked from the template (Gemma 4 `<\|tool_call>call:`, Qwen3.8's XML `<tool_call><function=...>`); thinking off for agent turns (`K3D_GPU_AGENT_THINKING=on` or `model` changes it) |
 | `--threads`, `--threads-batch` | the pod's physical cores and CPUs (the P-core balloon on a hybrid node); llama.cpp otherwise counts the host's cores |
-| `--load-mode=mmap+mlock` | CPU placement only, with `IPC_LOCK`. On a GPU or experts-in-DRAM placement the lock grows to the end of the furthest CPU tensor (`src/llama-model-loader.cpp:1726-1728`), so it would also hold GPU tensors and could pass the pod limit |
-| `--spec-type=draft-mtp` | when the model optimizer picks a GGUF with an MTP head, or with `K3D_GPU_AGENT_DRAFT=mtp` (`off` disables it); otherwise off: no measurement in EXPERIMENTS.md shows a draft winning on this hardware ([H34x](../EXPERIMENTS.md) refuted the CPU draft on the Xeon; H57dm is pending). A GGUF with an MTP head drafts from it; Google's QAT GGUF has none, so its QAT assistant is converted once to Q4_0, the target's precision |
+| `--load-mode mmap+mlock` | CPU placement only, with `IPC_LOCK`. On a GPU or experts-in-DRAM placement the lock grows to the end of the furthest CPU tensor (`src/llama-model-loader.cpp:1735-1737`), so it would also hold GPU tensors and could pass the pod limit |
+| `--spec-type draft-mtp` | when the model optimizer picks it, or with `K3D_GPU_AGENT_DRAFT=mtp` (`off` disables it). The optimizer picks a GGUF's own MTP head, and on the CPU the QAT MTP assistant only where the ledger measured it winning for this CPU class: a SUPPORTED row of the H57m family (H57dm, the i9-13900T; its replication H57wm), or the H59-family row that made llama.cpp the CPU engine. A REFUTED row turns it off; [H34x](../EXPERIMENTS.md) refuted OVMS's CPU draft on the Xeon. A GGUF with an MTP head drafts from it; Google's QAT GGUF has none, so its QAT assistant is converted once to Q4_0, the target's precision |
 
 Safetensors weights whose architecture only llama.cpp runs here, such as
 Qwen3.8-Flash-Next, are converted once. A Job (`gguf-convert-<hash of its inputs>`) runs
-the `full-b11669` image's `convert_hf_to_gguf.py`, with transformers 5.20.2 and
-huggingface-hub 2.2.0 on `PYTHONPATH`. The image's own transformers cannot read
+the `full-b11960` image's `convert_hf_to_gguf.py`, with transformers 5.21.0 and
+huggingface-hub 2.3.0 on `PYTHONPATH`. The image's own transformers cannot read
 transformers-5 tokenizer configs. It downloads the pinned revision and writes
 `model.gguf` and `manifest.json` (sha256, size, pip freeze) under `/models/gguf`. Then it
 removes the download. Unquantized weights keep their 16-bit type. FP8 checkpoints are
 stored as Q8_0 (`--fp8-as-q8`), the 1 byte per weight the fit counted. Other quantized
 checkpoints are refused before anything runs. The converter dequantizes GPTQ and packed
 int to 16 bits, a GGUF larger than the fit sized, and does not read the rest
-(`conversion/base.py:573`). That includes the AutoRound W4A16 Flash-Next. A conversion
+(`conversion/base.py:575`). That includes the AutoRound W4A16 Flash-Next. A conversion
 Job that failed runs again on the next `agent up`, and `agent down` deletes one still running. `agent up`
 waits for the Job (`K3D_GPU_AGENT_CONVERT_TIMEOUT`, 12 hours by default), and the server
 pod waits for `manifest.json`. A later `agent up` of the same model finds the GGUF and

@@ -876,7 +876,7 @@ is deleted.
 | `K3D_GPU_AGENT_TIMEOUT` | `1800` | seconds `agent up` waits for download + load |
 | `K3D_GPU_AGENT_LOG_LEVEL` | `INFO` | `DEBUG` also logs the compiled model's execution device (and every request) |
 | `K3D_GPU_AGENT_IMAGE` | `openvino/model_server@sha256:a928…fc58` (2026.4.1-gpu) | server image |
-| `K3D_GPU_AGENT_BACKEND` | `ovms` (`vllm` on a Gaudi; with `--model M`, the engine the fit picks) | `ovms`, `vllm`, `llm-scaler` or `llama.cpp` (see below and [docs/fit.md](docs/fit.md)) |
+| `K3D_GPU_AGENT_BACKEND` | `ovms` (`vllm` on a Gaudi; with `--model M`, the engine the fit picks, and on the CPU llama.cpp where an EXPERIMENTS.md H59-family row is SUPPORTED for the CPU class) | `ovms`, `vllm`, `llm-scaler` or `llama.cpp` (see below and [docs/fit.md](docs/fit.md)) |
 
 #### Any Hugging Face model: `agent up --model`
 
@@ -935,7 +935,7 @@ metadata. Metadata is cached for a day under `~/.cache/k3d-gpu/hf`. Without
 | `K3D_GPU_AGENT_DRAFT` | the optimizer's choice | `off` disables speculative decoding, `mtp` forces an MTP head or drafter |
 | `K3D_GPU_MODEL_OPT` | `auto` | `off` serves `--model` exactly as given |
 | `K3D_GPU_HF_FIXTURES` | unset | directory of saved metadata bundles to read instead of Hugging Face |
-| `K3D_GPU_MODEL_OPT_LEDGER` | the checkout's `EXPERIMENTS.md`, else the packaged `console/ledger-rules.json` | ledger read for promotions and for the per-CPU-class Fast Draft and autoquant defaults; packages ship `console/ledger-rules.json`, the H27/H34 rows generated from `EXPERIMENTS.md` (CI fails when it drifts) |
+| `K3D_GPU_MODEL_OPT_LEDGER` | the checkout's `EXPERIMENTS.md`, else the packaged `console/ledger-rules.json` | ledger read for promotions and for the per-CPU-class defaults: OVMS Fast Draft (H34), autoquant (H27), llama.cpp as the CPU engine (H59) and its QAT MTP drafter (H57dm, H57wm); packages ship `console/ledger-rules.json`, those rows generated from `EXPERIMENTS.md` (CI fails when it drifts) |
 
 #### vLLM backends for discrete Arc (Battlemage)
 
