@@ -532,7 +532,13 @@ if [ "${MODE}" = pairs ]; then
     # (/cache in its pod), so a write there must fail with EROFS; record the host disk.
     df -P / > "${OUT}/df.txt"
     if [ "${B_HOST}" = /var/apb-ro ] && [ "${DESIGN}" != H47 ] && [ "${DESIGN}" != H50o ]; then
-        if kubectl -n "${B_NS}" exec "deploy/${B_DEP}" -- touch "/cache/${B_DIR}/.k3dgpu-rw-probe" \
+        # Where the pod sees the bind: the mountPath of the volume EAT's chart calls model-volume
+        # (/data in core/helm-charts/vllm), read from the deployment as it runs.
+        mnt=$(kubectl -n "${B_NS}" get "deploy/${B_DEP}" \
+            -o jsonpath='{.spec.template.spec.containers[0].volumeMounts[?(@.name=="model-volume")].mountPath}')
+        echo "model-volume mountPath: ${mnt:-none}" > "${OUT}/ro-mount.txt"
+        [ -n "${mnt}" ] || { echo "NOT DELIVERABLE: no model-volume mount in the B pod" | tee -a "${OUT}/live.log"; exit 3; }
+        if kubectl -n "${B_NS}" exec "deploy/${B_DEP}" -- touch "${mnt}/${B_DIR}/.k3dgpu-rw-probe" \
             > "${OUT}/ro-probe.txt" 2>&1; then
             echo "NOT DELIVERABLE: ${B_DIR} is writable in the B pod" | tee -a "${OUT}/live.log"
             exit 3
