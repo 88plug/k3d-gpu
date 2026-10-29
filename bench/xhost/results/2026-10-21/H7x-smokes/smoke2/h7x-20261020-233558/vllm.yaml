@@ -1,0 +1,173 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vllm-qwen-3-4b-cpu-config
+  labels:
+    helm.sh/chart: vllm-0-latest
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/instance: vllm-qwen-3-4b-cpu
+    app.kubernetes.io/version: '0.5'
+    app.kubernetes.io/managed-by: Helm
+data:
+  http_proxy: ''
+  https_proxy: ''
+  no_proxy: ''
+  TORCHINDUCTOR_CACHE_DIR: /tmp
+  NUMBA_CACHE_DIR: /tmp
+  HF_HOME: /data
+  OUTLINES_CACHE_DIR: /tmp/.cache/outlines
+  VLLM_NO_USAGE_STATS: '1'
+  DO_NOT_TRACK: '1'
+  HF_HUB_DISABLE_XET: '1'
+  TORCH_INDUCTOR_CACHE_DIR: /tmp/torchinductor_cache
+  TRITON_CACHE_DIR: /tmp/.triton
+  USER: vllm
+  VLLM_ALLOW_LONG_MAX_MODEL_LEN: '1'
+  VLLM_CPU_KVCACHE_SPACE: '6'
+  VLLM_CPU_NUM_OF_RESERVED_CPU: '0'
+  VLLM_CPU_SGL_KERNEL: '1'
+  VLLM_ENGINE_ITERATION_TIMEOUT_S: '120'
+  VLLM_RPC_TIMEOUT: '100000'
+  HF_HUB_OFFLINE: '1'
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-qwen-3-4b-cpu-service
+  labels:
+    helm.sh/chart: vllm-0-latest
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/instance: vllm-qwen-3-4b-cpu
+    app.kubernetes.io/version: '0.5'
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 2080
+    protocol: TCP
+    name: vllm
+  selector:
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/instance: vllm-qwen-3-4b-cpu
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-qwen-3-4b-cpu
+  labels:
+    helm.sh/chart: vllm-0-latest
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/instance: vllm-qwen-3-4b-cpu
+    app.kubernetes.io/version: '0.5'
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vllm
+      app.kubernetes.io/instance: vllm-qwen-3-4b-cpu
+  template:
+    metadata:
+      annotations:
+        balloon.balloons.resource-policy.nri.io: performance
+      labels:
+        app.kubernetes.io/name: vllm
+        app.kubernetes.io/instance: vllm-qwen-3-4b-cpu
+        name: vllm
+    spec:
+      securityContext: null
+      containers:
+      - name: vllm
+        envFrom:
+        - configMapRef:
+            name: vllm-qwen-3-4b-cpu-config
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            add:
+            - SYS_NICE
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+          seccompProfile:
+            type: RuntimeDefault
+        image: vllm/vllm-openai-cpu:v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1
+        imagePullPolicy: IfNotPresent
+        args:
+        - --block-size
+        - '128'
+        - --dtype
+        - bfloat16
+        - --distributed_executor_backend
+        - mp
+        - --enable_chunked_prefill
+        - --enforce-eager
+        - --max-num-batched-tokens
+        - '2048'
+        - --max-num-seqs
+        - '256'
+        - --enable-prefix-caching
+        - --tensor-parallel-size
+        - '1'
+        - --pipeline-parallel-size
+        - '1'
+        - --model
+        - /data/Qwen3-4B
+        - --served-model-name
+        - Qwen/Qwen3-4B
+        - --port
+        - '2080'
+        - --max-model-len
+        - '32768'
+        volumeMounts:
+        - mountPath: /data
+          name: model-volume
+        - mountPath: /dev/shm
+          name: shm
+        - mountPath: /tmp
+          name: tmp
+        - mountPath: /root/.cache/vllm
+          name: vllm-cache
+        ports:
+        - name: http
+          containerPort: 2080
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 200
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        resources:
+          requests:
+            cpu: '48'
+            memory: 16Gi
+          limits:
+            cpu: '48'
+            memory: 16Gi
+      volumes:
+      - name: model-volume
+        hostPath:
+          path: /var/apb-models
+          type: Directory
+      - name: shm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 1Gi
+      - name: tmp
+        emptyDir: {}
+      - name: vllm-cache
+        emptyDir: {}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: ei-inference-eligible
+                operator: In
+                values:
+                - 'true'
+      terminationGracePeriodSeconds: 120

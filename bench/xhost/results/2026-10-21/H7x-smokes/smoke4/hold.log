@@ -1,0 +1,12 @@
+== render 2026-10-21T03:13:57Z (+0s)
+== up 2026-10-21T03:13:57Z (+0s)
+node cpuset 0-7,48-55
+== stage 2026-10-21T03:14:28Z (+31s)
+== block 1 engine B start 2026-10-21T03:14:44Z (+47s)
+== block 1 engine B ready 2026-10-21T03:16:36Z (+159s)
+== block 2 engine C start 2026-10-21T03:16:36Z (+159s)
+error: timed out waiting for the condition
+block 2 engine C did not come up
+== finished 2026-10-21T03:46:38Z (+1961s)
+== cleanup 2026-10-21T03:46:38Z (+1961s)
+== deleted 2026-10-21T03:46:41Z (+1964s)

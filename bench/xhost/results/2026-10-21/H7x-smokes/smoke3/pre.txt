@@ -1,0 +1,16 @@
+2026-10-21T00:25:04Z
+ 00:25:04 up 35 days,  1:39,  9 users,  load average: 3.78, 8.19, 9.29
+%CPU     PID USER     COMMAND
+ 100    9996 devcloud ps
+45.4 3900003 root     sglang::schedul
+43.5 3900352 root     sglang::schedul
+42.0 3899938 root     sglang::schedul
+39.7 3900351 root     sglang::schedul
+24.4 3898329 root     python
+17.6 3898661 root     python
+15.4  872705 65532    epp
+ 2.5    3911 nobody   node_exporter
+ 2.5    9878 root     cloudflared
+aiperf_procs: 0
+/dev/nvme0n1p1  3637102748 3437642100 199444264      95% /
+aiperf010 alloy drm-exporter dynamo-frontend grafana llmd-envoy llmd-epp loki node-exporter otel-collector prometheus qwen38-a-hr qwen38-b-hr tempo xe-exporter xpumd 
