@@ -57,14 +57,15 @@ sync() {
           *) echo "MANUAL conflict $f"; git merge --abort; exit 1;; esac
       done
       bash tests/claims_check.sh >/dev/null 2>&1 || { echo "claims_check failed after merge"; exit 1; }
-      git commit -q --no-edit
+      git commit -q --no-edit || { echo "merge commit failed"; git merge --abort; exit 1; }
     fi
     if [ -f console/model_opt.py ] && [ -f console/ledger-rules.json ]; then
       python3 console/model_opt.py ledger-rules --ledger EXPERIMENTS.md --out console/ledger-rules.json \
         || { echo "ledger-rules regeneration failed"; exit 1; }
       if ! git diff --quiet -- console/ledger-rules.json; then
         git add console/ledger-rules.json
-        git commit -q -m "console/ledger-rules.json: regenerate from EXPERIMENTS.md"
+        git commit -q -m "console/ledger-rules.json: regenerate from EXPERIMENTS.md" \
+          || { echo "ledger-rules commit failed"; exit 1; }
       fi
     fi ) || return 1
   git -C "$W" push -q origin "HEAD:refs/heads/$br" && echo "synced $br"

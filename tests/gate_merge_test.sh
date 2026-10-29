@@ -7,6 +7,8 @@
 # files changed on main and on the PR since the merge base). The stub gh answers
 # both `gh pr view --json statusCheckRollup` and `gh pr checks --json bucket`
 # from the same rollup (bucket mapping as in cli/cli pkg/cmd/pr/checks/aggregate.go).
+# Cases 18-19 run the gate's sync() with real git against a bare origin (gh and
+# sleep still stubbed): the head the stub gh reports is the origin's feat ref.
 #
 # Usage: tests/gate_merge_test.sh
 
@@ -51,7 +53,12 @@ case "$1 $2" in
   "pr view")
     shift 3; fields= q=
     while [ $# -gt 0 ]; do case $1 in --json) fields=$2; shift 2;; -q) q=$2; shift 2;; *) shift;; esac; done
-    head=deadbeef; case $fields in *headRefOid*) head=$(pop heads);; esac
+    head=deadbeef
+    case $fields in *headRefOid*)
+      # real-git cases: the head is whatever the bare origin's feat points at now
+      if [ -f "$F/origin_git" ]; then head=$("$REALGIT" --git-dir="$(cat "$F/origin_git")" rev-parse -q --verify refs/heads/feat || echo gone)
+      else head=$(pop heads); fi;;
+    esac
     mg=MERGEABLE; case $fields in *mergeable*) mg=$(pop mergeable);; esac
     obj=$(jq -n --arg h "$head" --arg m "$mg" --arg s "$(cat "$F/state")" --slurpfile r "$F/rollup.json" \
       '{headRefName:"feat", isDraft:false, state:$s, mergeable:$m, headRefOid:$h, statusCheckRollup:$r[0]}')
@@ -86,6 +93,26 @@ exit 0
 STUB
 printf '#!/bin/sh\necho "sleep $*" >> "$FIX/trace"\nexit 0\n' > "$T/bin/sleep"
 chmod +x "$T/bin/"*
+
+# Real-git cases run the gate's own git against a bare origin and a clone ($FIX/repo):
+# gh and sleep stay stubbed, git only logs and passes through, and python3 passes
+# through except that the keep-both resolver fails when the fixture holds kb_fail.
+REALGIT=$(command -v git) REALPY=$(command -v python3); export REALGIT REALPY
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 \
+  GIT_AUTHOR_NAME=gate-test GIT_AUTHOR_EMAIL=gate-test@example.invalid \
+  GIT_COMMITTER_NAME=gate-test GIT_COMMITTER_EMAIL=gate-test@example.invalid
+mkdir -p "$T/rbin"; cp "$T/bin/gh" "$T/bin/sleep" "$T/rbin/"
+cat > "$T/rbin/git" <<'STUB'
+#!/usr/bin/env bash
+echo "git $*" >> "$FIX/git"; echo "git $*" >> "$FIX/trace"
+exec "$REALGIT" "$@"
+STUB
+cat > "$T/rbin/python3" <<'STUB'
+#!/usr/bin/env bash
+case ${1:-} in */merge_keep_both.py) [ -f "$FIX/kb_fail" ] && { echo "keep-both resolver failed on $2" >&2; exit 1; };; esac
+exec "$REALPY" "$@"
+STUB
+chmod +x "$T/rbin/"*
 
 GOOD_HELP='      --match-head-commit SHA   Commit SHA that the pull request head must match to allow merge'
 SUCCESS='{"__typename":"CheckRun","name":"Shellcheck","workflowName":"CI","status":"COMPLETED","conclusion":"SUCCESS","startedAt":"2026-10-20T01:00:00Z"}'
@@ -271,6 +298,80 @@ python3 "$ROOT/console/model_opt.py" ledger-rules --ledger "$FIX/show/EXPERIMENT
 echo t1 > "$FIX/tree"; run_gate
 if [ "$RC" -eq 0 ] && [ "$(merges)" -eq 1 ] && [ "$(syncs)" -eq 0 ]; then ok "rules_current: merged, no sync"
 else fail "rules_current: rc=$RC merges=$(merges) syncs=$(syncs)"; fi
+
+# Real-git fixtures. realgit_fixture NAME ROLLUP RUNS [MERGE_RC_SEQ] [MERGEABLE_SEQ]:
+# fixture NAME plus a bare origin and a clone on branch feat, where main holds
+# model_opt.py, convert-pins.json, a one-row EXPERIMENTS.md, the ledger-rules.json it
+# generates, docs/provenance.md and a passing tests/claims_check.sh.
+repo_git() { "$REALGIT" -C "$FIX/repo" "$@"; }
+realgit_fixture() {
+  fixture "$1" "$2" "$3" unused "${4:-0}" "${5:-MERGEABLE}"
+  local R=$FIX/repo
+  "$REALGIT" init -q --bare -b main "$FIX/origin.git"; "$REALGIT" init -q -b main "$R"
+  mkdir -p "$R/console" "$R/tests" "$R/docs"
+  cp "$ROOT/console/model_opt.py" "$ROOT/console/convert-pins.json" "$R/console/"
+  printf '#!/bin/sh\nexit 0\n' > "$R/tests/claims_check.sh"
+  printf '## Hypotheses\n\n| H34 | on the i9-13900T | p | m | SUPPORTED |\n' > "$R/EXPERIMENTS.md"
+  echo base > "$R/docs/provenance.md"
+  "$REALPY" "$R/console/model_opt.py" ledger-rules --ledger "$R/EXPERIMENTS.md" --out "$R/console/ledger-rules.json"
+  repo_git add console tests docs EXPERIMENTS.md && repo_git commit -q -m base \
+    && repo_git remote add origin "$FIX/origin.git" && repo_git push -q origin main && repo_git checkout -q -b feat
+  echo "$FIX/origin.git" > "$FIX/origin_git"
+}
+# commit_to BRANCH FILE CONTENT: commit FILE=CONTENT on BRANCH in the clone and push it.
+commit_to() {
+  repo_git checkout -q "$1" && printf '%s' "$3" > "$FIX/repo/$2" && repo_git add "$2" \
+    && repo_git commit -q -m "edit $2 on $1" && repo_git push -q origin "$1"
+}
+run_gate_real() {
+  OUT=$(PATH="$T/rbin:$PATH" GATE_REPO="$FIX/repo" GATE_WT_ROOT="$FIX/wt" GATE_POLLS=3 \
+        timeout 60 bash "$GATE" 1 subj body 2>&1); RC=$?
+}
+pinned() { grep -oE -- '--match-head-commit [0-9a-f]+' "$FIX/merges" 2>/dev/null | head -1 | cut -d' ' -f2; }
+REGEN='console/ledger-rules.json: regenerate from EXPERIMENTS.md'
+
+# 18. the PR adds a rule row and leaves console/ledger-rules.json stale: the gate syncs,
+#     the sync commits the regenerated file (model_opt.py's output) on top of the head
+#     and pushes it, and the gate merges that commit without another sync.
+realgit_fixture sync_regenerates_rules "[$SUCCESS]" "$CI_OK"
+commit_to feat EXPERIMENTS.md $'## Hypotheses\n\n| H34 | on the i9-13900T | p | m | SUPPORTED |\n| H34b | on the i5-12500T | q | n | SUPPORTED |\n'
+stale_head=$(repo_git rev-parse feat); run_gate_real; pin=$(pinned); regen_ok=n
+if [ -n "$pin" ]; then
+  repo_git show "$pin:EXPERIMENTS.md" > "$FIX/merged-EXPERIMENTS.md"
+  "$REALPY" "$ROOT/console/model_opt.py" ledger-rules --ledger "$FIX/merged-EXPERIMENTS.md" --out "$FIX/want.json"
+  [ "$(repo_git log -1 --format=%s "$pin")" = "$REGEN" ] && [ "$(repo_git rev-parse "$pin^")" = "$stale_head" ] \
+    && repo_git show "$pin:console/ledger-rules.json" | cmp -s - "$FIX/want.json" && ! cmp -s "$FIX/want.json" "$FIX/repo/console/ledger-rules.json" \
+    && regen_ok=y
+fi
+regen_line=$(grep -nxF "git commit -q -m $REGEN" "$FIX/trace" | head -1 | cut -d: -f1)
+push_line=$(grep -nE ' push -q origin HEAD:refs/heads/feat$' "$FIX/trace" | head -1 | cut -d: -f1)
+if [ "$RC" -eq 0 ] && [ "$(merges)" -eq 1 ] && [ "$(syncs)" -eq 1 ] && [ "$regen_ok" = y ] \
+   && [ -n "$regen_line" ] && [ "$regen_line" -lt "${push_line:-0}" ] \
+   && [ "$(grep -c 'ledger-rules.json would not match' <<<"$OUT")" -eq 1 ]; then
+  ok "sync_regenerates_rules: regen commit pushed before the merge, file equals model_opt.py output"
+else fail "sync_regenerates_rules: rc=$RC merges=$(merges) syncs=$(syncs) regen_ok=$regen_ok regen_line=${regen_line:-none} push_line=${push_line:-none} out=$(tr '\n' ';' <<<"$OUT")"; fi
+
+# 18b. main moved under code and the PR changes code, with the rules file current on
+#      both sides: the sync merges main and adds no regen commit.
+realgit_fixture sync_rules_current "[$SUCCESS]" "$CI_OK"
+commit_to feat scripts.txt $'pr\n'; commit_to main README.txt $'main\n'
+run_gate_real; pin=$(pinned)
+if [ "$RC" -eq 0 ] && [ "$(merges)" -eq 1 ] && [ "$(syncs)" -eq 1 ] && grep -q 'main moved under code' <<<"$OUT" \
+   && [ -n "$pin" ] && [ "$(repo_git rev-list --parents -n 1 "$pin" | wc -w)" -eq 3 ] \
+   && ! repo_git log --format=%s "$pin" | grep -qxF "$REGEN" && ! grep -qF "commit -q -m $REGEN" "$FIX/git"; then
+  ok "sync_rules_current: merged main, no regen commit"
+else fail "sync_rules_current: rc=$RC merges=$(merges) syncs=$(syncs) pin=${pin:-none} out=$(tr '\n' ';' <<<"$OUT")"; fi
+
+# 19. a conflicted ledger file the keep-both resolver cannot settle: the merge commit
+#     fails, so the sync fails at once (exit 1), never prints "synced" and pushes nothing.
+realgit_fixture sync_merge_commit_fails "[$SUCCESS]" "$CI_OK" 1 CONFLICTING
+commit_to main docs/provenance.md $'from main\n'; commit_to feat docs/provenance.md $'from feat\n'
+touch "$FIX/kb_fail"; before=$(repo_git rev-parse feat); run_gate_real
+after=$("$REALGIT" --git-dir="$FIX/origin.git" rev-parse -q --verify refs/heads/feat)
+if [ "$RC" -eq 1 ] && ! grep -q 'synced' <<<"$OUT" && [ "$(syncs)" -eq 1 ] && [ "$(merges)" -eq 0 ] \
+   && ! grep -q ' push ' "$FIX/git" && [ "$before" = "$after" ]; then
+  ok "sync_merge_commit_fails: exit 1 at once, no push"
+else fail "sync_merge_commit_fails: rc=$RC syncs=$(syncs) merges=$(merges) origin=$before->${after:-gone} out=$(tr '\n' ';' <<<"$OUT")"; fi
 
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]
