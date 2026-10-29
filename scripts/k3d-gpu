@@ -128,6 +128,7 @@ warn() { echo "${YLW}WARN:${RST} $*" >&2; }
 # --context, never through the current-context of ~/.kube/config, which every
 # concurrent `up` of another cluster would rewrite.
 #   K3D_GPU_KUBECONFIG  this file as is (a foreign cluster); kubectl uses its current-context
+#                       (`up` without K3D_GPU_CONTEXT switches it to k3d-${CLUSTER})
 #   KUBECONFIG          kept when it names one file that is not ~/.kube/config (a hold's own)
 #                       (`up` merges into it under a lock, keeping its current-context)
 #   otherwise           ${STATE_DIR}/kubeconfig-${CLUSTER}, written by `up` (or on first use)
@@ -350,7 +351,8 @@ Usage: k3d-gpu <command>
 Environment:
   K3D_GPU_CLUSTER       cluster name         (default: gpu)
   K3D_GPU_KUBECONFIG    kubeconfig to use as is (default: a single-file KUBECONFIG other than
-                        ~/.kube/config, else ${STATE_DIR}/kubeconfig-<cluster>)
+                        ~/.kube/config, else ${STATE_DIR}/kubeconfig-<cluster>); up
+                        without K3D_GPU_CONTEXT switches its current-context to k3d-<cluster>
   K3D_GPU_CONTEXT       context every kubectl call names (default: k3d-<cluster>)
   K3D_GPU_MERGE_KUBECONFIG  1: up also merges the context into ~/.kube/config, down removes it
   K3D_GPU_IMAGE         k3s node image       (default: ${IMAGE_REPO}:${VERSION}; ${IMAGE_REPO}:latest floats)
@@ -546,14 +548,18 @@ kubeconfig_unmerge() {
 
 # After `k3d cluster create`: fill the kubeconfig in use, and with
 # K3D_GPU_MERGE_KUBECONFIG=1 also merge the context into ~/.kube/config. A file
-# that is not this cluster's own keeps its current-context (k3d still sets it in
-# a file that has none, such as a hold's new one).
+# that is not this cluster's own keeps its current-context when every call names
+# a context (k3d still sets it in a file that has none, such as a hold's new one).
+# K3D_GPU_KUBECONFIG without K3D_GPU_CONTEXT names none, so `up` switches that
+# file's current-context to k3d-<cluster>, which every later call then reads.
 kubeconfig_after_create() {
+    local sw=()
     if [ "${KUBE_OWNED}" = 1 ]; then
         kubeconfig_materialize || warn "could not write ${KUBECONFIG} from 'k3d kubeconfig get ${CLUSTER}'"
     else
+        [ "${#KCTX[@]}" -eq 0 ] || sw=(--kubeconfig-switch-context=false)
         kubeconfig_locked "${KUBECONFIG}" \
-            k3d kubeconfig merge "${CLUSTER}" --output "${KUBECONFIG}" --kubeconfig-switch-context=false >/dev/null
+            k3d kubeconfig merge "${CLUSTER}" --output "${KUBECONFIG}" ${sw[@]+"${sw[@]}"} >/dev/null
     fi
     if [ "${K3D_GPU_MERGE_KUBECONFIG:-0}" = 1 ]; then
         kubeconfig_locked "${HOME}/.kube/config" env KUBECONFIG="${HOME}/.kube/config" \

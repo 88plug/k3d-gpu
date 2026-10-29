@@ -76,7 +76,8 @@ needs the `export KUBECONFIG=…` line it prints, or `K3D_GPU_MERGE_KUBECONFIG=1
 context into `~/.kube/config` (current-context unchanged). The kubectl commands the launcher
 prints name the file, and `k3d-gpu-mcp` finds it the same way. An exported `KUBECONFIG` naming one
 other file (a hold's own) is used as is: `up` merges the context into it under a lock and keeps
-its current-context, if it has one.
+its current-context, if it has one. `K3D_GPU_KUBECONFIG` without `K3D_GPU_CONTEXT` names no
+context, so `up` switches that file's current-context to `k3d-<cluster>`.
 
 ### Install
 

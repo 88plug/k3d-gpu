@@ -337,6 +337,26 @@ run KUBECONFIG="${h0}" K3D_GPU_CLUSTER=h0 bash "${LAUNCHER}" up >/dev/null 2>&1
 if [ "$(sed -n 's/^current-context: *//p' "${h0}")" = k3d-h0 ]; then ok "kube-context: an empty exported hold kubeconfig gets current-context k3d-<cluster>"
 else fail "kube-context: an empty exported hold kubeconfig gets current-context k3d-<cluster>: $(cat "${h0}")"; fi
 
+# ---- KC17: up with K3D_GPU_KUBECONFIG alone switches that file to the new cluster ---
+# (no context is named, so every call after create reads the file's current-context)
+fresh kgk
+gk="${T}/kgk/other.yaml"; mkdir -p "${gk%/*}"
+printf 'apiVersion: v1\nclusters: []\ncontexts:\n- context: {}\n  name: other\ncurrent-context: other\nkind: Config\nusers: []\n' > "${gk}"
+run K3D_GPU_KUBECONFIG="${gk}" K3D_GPU_CLUSTER=nu bash "${LAUNCHER}" up >/dev/null 2>&1
+all_target "kube-context: up with K3D_GPU_KUBECONFIG alone — every call reaches k3d-nu" "${SD}/kubectl.log" k3d-nu
+if [ "$(sed -n 's/^current-context: *//p' "${gk}")" = k3d-nu ] && grep -qx '  name: other' "${gk}"; then
+    ok "kube-context: up with K3D_GPU_KUBECONFIG alone switches the file's current-context to k3d-<cluster>"
+else fail "kube-context: up with K3D_GPU_KUBECONFIG alone switches the file's current-context to k3d-<cluster>: current $(sed -n 's/^current-context: *//p' "${gk}")"; fi
+# A named context needs no switch: the file keeps its current-context.
+fresh kgkc
+gk="${T}/kgkc/other.yaml"; mkdir -p "${gk%/*}"
+printf 'apiVersion: v1\nclusters: []\ncontexts:\n- context: {}\n  name: other\ncurrent-context: other\nkind: Config\nusers: []\n' > "${gk}"
+run K3D_GPU_KUBECONFIG="${gk}" K3D_GPU_CONTEXT=k3d-nc K3D_GPU_CLUSTER=nc bash "${LAUNCHER}" up >/dev/null 2>&1
+all_target "kube-context: up with K3D_GPU_KUBECONFIG and K3D_GPU_CONTEXT — every call reaches the named context" "${SD}/kubectl.log" k3d-nc
+if [ "$(sed -n 's/^current-context: *//p' "${gk}")" = other ]; then
+    ok "kube-context: up with K3D_GPU_KUBECONFIG and K3D_GPU_CONTEXT keeps the file's current-context"
+else fail "kube-context: up with K3D_GPU_KUBECONFIG and K3D_GPU_CONTEXT keeps the file's current-context: current $(sed -n 's/^current-context: *//p' "${gk}")"; fi
+
 # ---- KC15: a stale per-cluster file is refreshed and the call retried ------------
 # (the stub logs, then fails a call on a STALE file: two logged calls = the call and its retry)
 fresh stale; touch "${SD}/created-cs"; mkdir -p "${ST}"
