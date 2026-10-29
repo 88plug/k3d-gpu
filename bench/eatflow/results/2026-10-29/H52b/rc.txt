@@ -1,0 +1,11 @@
+plan rc=0
+apply rc=0
+h52 rc=0
+revert 1 rc=0
+revert 2 rc=0
+revert 3 rc=0
+revert 4 rc=0
+revert 5 rc=0
+revert 6 rc=0
+revert 7 rc=0
+inventory diff rc=0 (0 lines)

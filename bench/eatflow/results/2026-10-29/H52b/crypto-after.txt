@@ -1,0 +1,8 @@
+driver       : deflate-iaa
+module       : iaa_crypto
+priority     : 300
+refcnt       : 1
+selftest     : passed
+internal     : no
+type         : acomp
+

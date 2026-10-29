@@ -1,0 +1,8 @@
+[32m==>[0m Deploying intel-gpu-test test pod (busybox:1.37@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec, gpu.intel.com/xe)...
+total 0
+crw-rw----    1 root     root      226,   4 Oct 29 18:41 card4
+crw-rw----    1 root     root      226, 131 Oct 29 18:41 renderD131
+[32m==>[0m Deploying dsa-test test pod (busybox:1.37@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec, dsa.intel.com/wq-user-shared)...
+total 0
+crw-------    1 root     root      240,   1 Oct 29 18:41 wq2.0
+[31mERROR:[0m cluster advertises no qat resources — run 'k3d-gpu doctor'

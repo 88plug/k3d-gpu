@@ -1,0 +1,2 @@
+dpkg-query: no packages found matching accel-config
+dpkg-query: no packages found matching libaccel-config1
