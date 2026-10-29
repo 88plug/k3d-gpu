@@ -1,0 +1,4 @@
+== H54b-smoke1 waiting for the lock 2026-10-21T03:14:11Z
+== H54b-smoke1 lock taken 2026-10-21T03:46:41Z
+== H54b-smoke1 start: bash k3d-gpu/bench/h54gpu/h54b.sh 1 2026-10-21T03:46:41Z
+== H54b-smoke1 rc=0; clusters deleted: k3dgpu-g-h54b-1; now:  2026-10-21T03:48:32Z

@@ -52,7 +52,7 @@ cluster, read from source only:
 
 | #21 adds | Already covered by k3d-gpu | Expected on a k3d-gpu cluster |
 |---|---|---|
-| Arc B60/B70 XPU path (`compute_platform=xpu`, `vllm-openai-xpu:v0.28.0`, TP4 `gemma-4-31B-it`) | B70 detection, `gpu.intel.com/xe` asserted by `up`, vLLM XPU `v0.31.0` by digest through `agent up` | Host Level Zero and OpenCL libraries mounted by `hostPath` resolve inside the k3d node container, not on the host |
+| Arc B60/B70 XPU path (`compute_platform=xpu`, `vllm-openai-xpu:v0.28.0`, TP4 `gemma-4-31B-it`) | B70 detection, `gpu.intel.com/xe` asserted by `up`, vLLM XPU `v0.32.0` by digest through `agent up` | Host Level Zero and OpenCL libraries mounted by `hostPath` resolve inside the k3d node container, not on the host |
 | Intel GPU plugin from intel-device-plugins `main` (`intel_gpu_plugin_ref`, unpinned) | Plugin `0.37.1` baked into the node image | Two GPU plugin DaemonSets on one node |
 | NUMA-aware NRI balloons, one `BalloonsPolicy` per node | Baked balloons for hybrid P/E and multi-NUMA hosts; `K3D_GPU_BALLOONS=external` [ledger:H14] | Two policies if `deploy_nri_balloon_policy=yes`; `eat-up.sh` sets `off` |
 | Kata sandboxes (`kata-fc`, `kata-qemu`) | `doctor --perf` reports `/dev/kvm` on the host | Kata needs `/dev/kvm` inside the k3d node, which `up` does not pass through |
@@ -78,7 +78,7 @@ EAS (main e8f3ebc; one concern per PR, in this order)
 ├── roles/kubernetes/tasks/apply_node_topology.yaml 0004
 ├── docs/customize/node_topology.md                 0004  "label by hand" text replaced
 ├── docs/deploy/topologies.md                       0004
-├── roles/nri_cpu_balloons/defaults/main.yaml       0003  nri_cpu_balloons_chart_version: "v0.14.0"
+├── roles/nri_cpu_balloons/defaults/main.yaml       0003  nri_cpu_balloons_chart_version: "v0.15.0"
 ├── roles/nri_cpu_balloons/tasks/install_advanced.yaml 0003
 ├── docs/deploy/k3d.md                              0005  new page "Single-Node Dev on k3d"
 └── docs/README.md                                  0005  +1 row under Deploy

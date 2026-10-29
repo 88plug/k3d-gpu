@@ -1,0 +1,25 @@
+H54b run notes (written after the holds, 2026-10-21 ~22:05Z). Raw records untouched.
+Campaign: CARDS=2,3 STOP_BHR=1 bench/h54gpu/campaign.sh "1:X1q" "f:Intel/Qwen3.8-27B-q4km-AutoRound:4b30b30e0ac2cc54a2f50738cfccd6c608f94ad4:24.7" "2:X1q-mtp Lsq" "c1:2"
+at k3d-gpu 9f81e008 (origin/main bench/h54gpu head). Lock taken 21:12:26Z, released ~21:59Z.
+qwen38-b-hr stopped 21:12:32Z, restarted, chat answered 21:58:57Z (77 s after start).
+
+Not deliverable (disk), never started: B2q, Sq, Sq-mtp need Qwen/Qwen3.8-27B @1d4bf0f2 (55.6 GB + 25 GB guard = 80.6 GB);
+headroom under the 96% line at 21:07Z was 75.9 GB (df -B1: used 3499624255488 of 3724393213952). Rq: RedHat INT4 19.5 + 45 GB
+guard = 64.5 GB > 57 GB headroom left after the q4km fetch. Not fetched.
+
+X1q (hold 1): runner bug. bench/h54gpu/h54b.sh run_agent calls kubectl rollout status / port-forward / exec / logs
+without -n k3d-gpu-agent; k3d-gpu agent manifest now puts the deployment in namespace k3d-gpu-agent.
+rollout status failed in 1 s ("deployments.apps ovms not found in namespace default"). X1q.not-deliverable says
+"not deliverable in 900 s": wrong text, the engine was never waited on.
+X1q-mtp (hold 2): second runner bug. "${2:+K3D_GPU_AGENT_PREFIX_CACHING=false}" expands to a word, not an
+assignment: "K3D_GPU_AGENT_PREFIX_CACHING=false: command not found"; manifest not rendered.
+
+Lsq (hold 2): ran, but NOT on one card. The privileged pinned pod saw every render node (lsq.dri lists card0-4,
+renderD128-131: the emptyDir over /dev/dri did not hide them). llama.cpp SYCL split the Q4_K_M model across all four
+B70s: xe_vram_used_bytes (prometheus, saved here) rose 21:25-21:38Z by ~3.5 GB on card1 and card2 (bdf 12:00.0,
+48:00.0 = qwen38-a-hr cards) and ~5.9/6.4 GB on card3/card4. So Lsq is a 4-card layer-split run sharing two
+cards with live qwen38-a-hr: descriptive only, not a one-card arm. lsq.gpu-energy reads card 2 only.
+qwen38-a-hr logged no errors and its VRAM returned to baseline afterwards.
+
+Score (score.py on arms-score.json): INCONCLUSIVE, no gate reference (B2q and Sq not deliverable).
+H54b cap (2 holds) is used up.

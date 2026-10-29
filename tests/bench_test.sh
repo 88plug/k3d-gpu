@@ -141,6 +141,30 @@ s = j["phases"][0]["samples"][0]
 assert s["ok"] and s["output_tokens"] is None and s["tokens_per_s"] is None and s["ttft_s"] and s["chunks"] == 5, s
 EOF
 }
+# H54a hold 2, B1g sample 2: vLLM's engine died at 252 of 256 tokens; the stream carried an
+# error chunk and [DONE] but no finish_reason and no usage, and was recorded ok.
+load_engine_death() {
+    "${LOAD[@]}" --base-url "http://127.0.0.1:${STUB_PORT}/v1" --model stub --requests 1 --max-tokens 256 --warmup 0 --out "${LJ}"
+    [ $? -eq 1 ] || return 1
+    pyassert "${LJ}" <<'EOF'
+ph = j["phases"][0]
+s = ph["samples"][0]
+assert not s["ok"] and "error in stream" in s["error"] and s["content_chunks"] == 252 and s["chunks"] == 254, s
+assert s["finish_reason"] is None and s["output_tokens"] is None and s["decode_tokens_per_s"] is None, s
+assert ph["ok"] == 0 and ph["errors"] == 1 and ph["stats"]["latency_s"]["n"] == 0, ph
+EOF
+}
+# A server killed mid-stream: content, then the connection closes with no finish_reason or [DONE].
+load_cut_stream() {
+    "${LOAD[@]}" --base-url "http://127.0.0.1:${STUB_PORT}/v1" --model stub --requests 1 --max-tokens 256 --warmup 0 --out "${LJ}"
+    [ $? -eq 1 ] || return 1
+    pyassert "${LJ}" <<'EOF'
+ph = j["phases"][0]
+s = ph["samples"][0]
+assert not s["ok"] and "without a finish_reason" in s["error"] and s["content_chunks"] == 100, s
+assert ph["ok"] == 0 and ph["errors"] == 1, ph
+EOF
+}
 
 load_unique_prompts() {
     python3 -B - "${ROOT}/bench" <<'EOF'
@@ -180,6 +204,10 @@ check "llm_load: max_tokens is sent" load_max_tokens
 check "llm_load: wrong path is an error and a non-zero exit" load_wrong_path
 stub --tokens 4 --no-usage --close
 check "llm_load: no usage chunk leaves tokens null; non-chunked stream parses" load_no_usage
+stub --tokens 256 --itl 0 --die-at 252
+check "llm_load: a stream ended by engine death (error chunk, no finish_reason) is an error" load_engine_death
+stub --tokens 256 --itl 0 --cut-at 100 --close
+check "llm_load: a stream cut off without a finish_reason is an error" load_cut_stream
 
 # ---- noisy.sh -------------------------------------------------------------------
 
@@ -252,6 +280,131 @@ check "bench: joule-pack (H21) unit tests" \
     env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/joule-pack/test_joulepack.py"
 check "shared-prefix (H25): prompt generator and scorer" \
     env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/shared-prefix/test_probe.py"
+check "flashnext (H60): h60.py byte classes and decision rule" \
+    env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/flashnext/test_h60.py"
+check "flashnext (H60): h60.sh parses" bash -n "${ROOT}/bench/flashnext/h60.sh"
+
+# h60_void_rerun: h60.sh's own check() and phase() (lifted from the script) against a serving
+# sampler with aiperf in the try-1 window of each arm's N=1 phase only. h54.py void exits 1 on a
+# void window; the record must still be one JSON line, the re-run's record must win, and the
+# score must use the same-hold Lg control.
+h60_void_rerun() {
+    local d="${WORK}/h60-void"
+    rm -rf "${d}"
+    mkdir -p "${d}/fn" "${d}/lg"
+    : > "${d}/serving.jsonl"
+    (
+        set -uo pipefail
+        # shellcheck disable=SC2034  # read by the check() eval'd from h60.sh
+        PY=python3 H54="${ROOT}/bench/h54" SERVING="${d}/serving.jsonl" OUT="${d}"
+        eval "$(sed -n '/^check() {/,/^}/p; /^phase() {/,/^}/p' "${ROOT}/bench/flashnext/h60.sh")"
+        declare -F check phase >/dev/null || { echo "check()/phase() not found in h60.sh"; exit 1; }
+        sample() { echo "{\"ts\": $1, \"seconds\": $2, \"aiperf_procs\": $3, \"serving_cpu\": 0.5}" >> "${SERVING}"; }
+        idle() {  # a clean idle window holding one serving sample
+            W0=$(date +%s.%N); sleep 0.3
+            sample "$(date +%s.%N)" 0.2 0; sleep 0.1
+            W1=$(date +%s.%N)
+        }
+        load() {  # load ARM NAME ...: try 1 overlaps an aiperf sample and decodes far off the band
+            local f="${OUT}/$1/load-$2.json" tps
+            if [ -e "${OUT}/$1/tried-$2" ]; then
+                tps=$([ "$1" = fn ] && echo 19.0 || echo 48.0)
+            else
+                touch "${OUT}/$1/tried-$2"
+                tps=1.0
+                sample "$(python3 -c 'import time; print(time.time() + 0.4)')" 0.3 1
+            fi
+            sleep 0.8
+            python3 -c 'import json, sys; json.dump({"phases": [{"samples": [{"ok": True, "decode_tokens_per_s": float(sys.argv[2])}] * 8}]}, open(sys.argv[1], "w"))' "${f}" "${tps}"
+        }
+        for a in lg fn; do
+            idle "${a}"
+            phase "${a}" n1 8 1 256 --ignore-eos
+        done
+        # check() on a void window prints exactly one JSON line (the GSM8K record embeds it)
+        q0=$(date +%s.%N); sample "$(python3 -c 'import time; print(time.time() + 0.2)')" 0.1 1; sleep 0.4; q1=$(date +%s.%N)
+        echo "{\"phase\": \"quality\", \"t0\": ${q0}, \"t1\": ${q1}, \"w0\": ${W0}, \"w1\": ${W1}, \"check\": $(check "${q0}" "${q1}")}" >> "${OUT}/fn/phases.jsonl"
+        # a check that cannot run reads void, still one JSON line
+        SERVING="${d}/missing.jsonl"
+        check 1 2 > "${d}/check-missing.txt"
+    ) || return 1
+    echo '{"correct": 40}' > "${d}/fn/quality.json"
+    echo '{"active_bytes": 6000000000}' > "${d}/active-bytes.json"
+    echo '{"active_bytes": 2400000000}' > "${d}/active-bytes-lg.json"
+    python3 "${ROOT}/bench/flashnext/h60.py" score "${d}" > "${d}/verdict.json" || return 1
+    python3 - "${d}" <<'PY'
+import json, os, sys
+d = sys.argv[1]
+for a in ("fn", "lg"):
+    recs = [json.loads(x) for x in open(os.path.join(d, a, "phases.jsonl"))]
+    n1 = [r for r in recs if r["phase"] == "n1"]
+    assert [(r["try"], r["check"]["void"]) for r in n1] == [(1, True), (2, False)], (a, n1)
+    assert n1[0]["check"]["reason"] == "aiperf ran", n1[0]
+    assert os.path.exists(os.path.join(d, a, "load-n1-void1.json")), a
+q = [json.loads(x) for x in open(os.path.join(d, "fn", "phases.jsonl"))][-1]
+assert q["phase"] == "quality" and q["check"]["void"] is True, q
+miss = open(os.path.join(d, "check-missing.txt")).read().splitlines()
+assert [json.loads(x) for x in miss] == [{"void": True, "reason": "void check failed"}], miss
+v = json.load(open(os.path.join(d, "verdict.json")))
+assert v["why"] == [], v
+assert (v["verdict"], v["stat"], v["control"]) == ("SUPPORTED", "e_fn / e_lg", "same-hold Lg"), v
+assert v["fn_n1_decode_median"] == 19.0 and v["lg_n1_decode_median"] == 48.0, v
+PY
+}
+check "flashnext (H60): a void try 1 then a clean re-run scores the re-run against the same-hold Lg" h60_void_rerun
+
+check "apb (H7x): h7x.py applies the H7x decision rule" \
+    env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/apb/test_h7x.py"
+check "apb (H7x): h7x.sh parses" bash -n "${ROOT}/bench/apb/h7x.sh"
+check "apb (H7x): h7x.sh defaults are H7's (16 CPUs, ABBAABBAAB then C, no node cpuset)" \
+    sh -c 'test "$(env -u K3D_GPU_CLUSTER H7X_PRINT_CONFIG=1 bash "$1")" = "cluster=apb-h7x cpus=16 node_cpus= order=A B B A A B B A A B C vllm_mem="' _ "${ROOT}/bench/apb/h7x.sh"
+# h7x_records_on_early_exit: a run whose first engine never comes up (exit 2, as smokes 1-3)
+# still records the k3d-gpu commit and the node image. h7x.sh runs from a copy of the repo
+# layout with scripts/k3d-gpu, helm, kubectl, docker, k3d and git as shims; the rendered
+# manifests are smoke 6's records.
+h7x_records_on_early_exit() {
+    local w=${WORK}/h7x rec=${ROOT}/bench/xhost/results/2026-10-21/H7x-smokes/smoke6/h7x-20261021-065424 out rc
+    mkdir -p "${w}/bench/apb" "${w}/scripts" "${w}/integrations/eat" "${w}/bin" "${w}/chart" "${w}/models" "${w}/out"
+    cp "${ROOT}/bench/apb/h7x.sh" "${ROOT}/bench/apb/stage.py" "${ROOT}/bench/apb/h7x.py" "${w}/bench/apb/"
+    cp "${ROOT}/integrations/eat/vllm-values.yaml" "${w}/integrations/eat/"
+    cp "${rec}/values.yaml" "${w}/chart/xeon-values.yaml"
+    printf '#!/bin/sh\ncase $1 in agent) cat "%s" ;; up) exit 0 ;; *) exit 1 ;; esac\n' "${rec}/agent.yaml" > "${w}/scripts/k3d-gpu"
+    printf '#!/bin/sh\ncat "%s"\n' "${rec}/eat.yaml" > "${w}/bin/helm"
+    printf '#!/bin/sh\ncase "$*" in *"rollout status"*) exit 1 ;; esac\nexit 0\n' > "${w}/bin/kubectl"
+    printf '#!/bin/sh\ncase $1 in ps) echo k3d-t-server-0 ;; inspect) echo "node:img sha256:feed" ;; esac\nexit 0\n' > "${w}/bin/docker"
+    printf '#!/bin/sh\nexit 0\n' > "${w}/bin/k3d"
+    printf '#!/bin/sh\ncase "$*" in *"rev-parse HEAD"*) echo c0ffee ;; *) exit 1 ;; esac\n' > "${w}/bin/git"
+    chmod +x "${w}/scripts/k3d-gpu" "${w}/bin/"*
+    PATH="${w}/bin:${PATH}" H7X_SMOKE=1 H7X_ORDER=A H7X_READY_S=1 H7X_NODE_CPUS=0-1 K3D_GPU_CLUSTER=t H7X_CHART_CHECK=0 \
+        APB_MODELS="${w}/models" APB_EAT_CHART="${w}/chart" APB_OUT="${w}/out" bash "${w}/bench/apb/h7x.sh"
+    rc=$?
+    out=$(echo "${w}"/out/h7x-*)
+    [ "${rc}" = 2 ] || { echo "exit ${rc}, want 2 (engine not up)"; return 1; }
+    grep -qx c0ffee "${out}/commit.txt" || { echo "commit.txt missing or wrong"; return 1; }
+    grep -qx "node:img sha256:feed" "${out}/node-image.txt" || { echo "node-image.txt missing or wrong"; return 1; }
+}
+if python3 -c 'import yaml' 2>/dev/null; then
+    check "apb (H7x): a run cut before its blocks still records the commit and node image" h7x_records_on_early_exit
+fi
+# h7x_refuses_other_chart: B and C are EAT release-1.1.0's stock (H7x amendment V1), so h7x.sh
+# stops before rendering when the chart's files do not have that release's sha256.
+h7x_refuses_other_chart() {
+    local w=${WORK}/h7x-chart out rc
+    mkdir -p "${w}/bench/apb" "${w}/chart/templates" "${w}/out"
+    cp "${ROOT}/bench/apb/h7x.sh" "${w}/bench/apb/"
+    printf 'image:\n  tag: "v0.24.0"\n' > "${w}/chart/xeon-values.yaml"
+    : > "${w}/chart/values.yaml"
+    : > "${w}/chart/templates/deployment.yaml"
+    out=$(H7X_RENDER_ONLY=1 K3D_GPU_CLUSTER=t APB_MODELS="${w}" APB_EAT_CHART="${w}/chart" APB_OUT="${w}/out" \
+        bash "${w}/bench/apb/h7x.sh" 2>&1)
+    rc=$?
+    [ "${rc}" = 1 ] || { echo "exit ${rc}, want 1"; return 1; }
+    echo "${out}" | grep -q "is not EAT release-1.1.0's chart" || { echo "no chart message: ${out}"; return 1; }
+    [ ! -e "$(echo "${w}"/out/h7x-*)/eat.yaml" ] || { echo "rendered B from the wrong chart"; return 1; }
+}
+check "apb (H7x): h7x.sh refuses a chart that is not EAT release-1.1.0's" h7x_refuses_other_chart
+check "apb (H7x): B and C run EAT release-1.1.0's v0.28.0, pinned by digest in h7x.sh" \
+    sh -c 'grep -qx "B_TAG=v0.28.0@sha256:197354e6475e638eb5ccca09beb078488046a82de0e204e7429bf1a804df9647" "$1" && grep -q -- "--set image.tag=\"\${B_TAG}\"" "$1"' _ "${ROOT}/bench/apb/h7x.sh"
 check "shared-prefix (H25): run.sh parses" bash -n "${ROOT}/bench/shared-prefix/run.sh"
 check "shared-prefix (H25): run.sh pins no node cpuset by default" \
     sh -c 'test "$(env -u CLUSTER -u NODE_CPUS SHARED_PREFIX_PRINT_CONFIG=1 bash "$1")" = "cluster=k3dgpu-i-shared-prefix node_cpus="' _ "${ROOT}/bench/shared-prefix/run.sh"
@@ -361,6 +514,12 @@ PY
 if python3 -c 'import yaml' 2>/dev/null; then
     check "thermal-resource probe: arms B/T/C request what H23 pre-registered" h23_arms
 fi
+# H7 and H8 ran EAT's vLLM CPU arm on v0.24.0 (their run headers). Their scripts pin that image
+# themselves, so a newer tag in the shared overlay integrations/eat/vllm-values.yaml does not
+# change what they reproduce.
+check "apb (H7, H8): h7.sh and arm.sh eat-vllm-cpu pin the vLLM CPU image those rows ran" \
+    sh -c 'for f in "$@"; do grep -q -- "--set image.tag=\"v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1\"" "$f" || { echo "$f"; exit 1; }; done' \
+    _ "${ROOT}/bench/apb/h7.sh" "${ROOT}/bench/apb/arm.sh"
 if command -v cc >/dev/null; then
     check "research: stream_probe.c compiles" \
         cc -fsyntax-only -fopenmp "${ROOT}/research/agents-per-box-ceiling/stream_probe.c"

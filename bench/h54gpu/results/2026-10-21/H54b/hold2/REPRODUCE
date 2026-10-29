@@ -1,0 +1,14 @@
+# Reproduce (EXPERIMENTS.md, H54 pre-registration and amendment G1)
+date: 2026-10-21T21:17:58Z  host: 905a08313800
+commit: 9f81e00853c9676b6787ba333a675c69a2a7d890
+command: cd /home/devcloud/k3dgpu-gemma/k3d-gpu && CARDS=2,3 bash bench/h54gpu/hold.sh <run name> 2400 bash bench/h54gpu/h54b.sh 2 X1q-mtp Lsq
+node image: cryptoandcoffee/k3d-gpu:0.1.61@sha256:8cd264aa68c77681d7fa474693944de0db8d55de5881253e4029bf72a67e175c
+image: openvino/model_server:2026.4.1-gpu@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58
+image: ghcr.io/ggml-org/llama.cpp:server-intel-b11749@sha256:ae2d41ba73574a1e12cd237c88b512c8bb39ba6f703e873912b76cb8988a81bd
+image: intel/llm-scaler-vllm:1.5@sha256:52218ad85513ab6686d4c090c83c2bd8c5b02423c63aa4dabd41837fe641fe3b
+image: busybox:1.37@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+model: Intel/Qwen3.8-27B-q4km-AutoRound 4b30b30e0ac2cc54a2f50738cfccd6c608f94ad4
+model: edff62728a3c79ec541983b86a21674500e0f05b
+model: google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be9cf3c8a514acf63b8761f4b41935842e
+model: google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant 9537141506fe8875b3ed45b264af13580cb29166
+model: google/gemma-4-26B-A4B-it-qat-q4_0-unquantized f1e06dc520982d9b9edd76859fdb7ab209449949

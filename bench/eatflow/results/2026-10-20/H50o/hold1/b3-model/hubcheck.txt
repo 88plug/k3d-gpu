@@ -1,0 +1,25 @@
+revision 4e5885c3f03844f5887982def09708bdc9f53f7a (OpenVINO/gemma-4-26b-a4b-it-int4-ov, git.txt)
+ok  .gitattributes 1570
+ok  README.md 3647
+ok  chat_template.jinja 18683
+ok  config.json 3809
+ok  generation_config.json 203
+ok  openvino_config.json 1505
+ok  openvino_detokenizer.bin 4413547 lfs 461919bda7b546453e903052588c578e3e94e9e8215b7cec07cb00cb97459d13
+ok  openvino_detokenizer.xml 30008
+ok  openvino_language_model.bin 13961486336 lfs 0f887130aef63545d655ea2addab6168680efe9b6531cbc46c2e2fc599ac8abe
+ok  openvino_language_model.xml 5420103
+ok  openvino_text_embeddings_model.bin 738721800 lfs 2d8dfbdcc2174aa6223621502dc566d9e881b7c3db3ff2e1e96a65cee7827edb
+ok  openvino_text_embeddings_model.xml 7119
+ok  openvino_text_embeddings_per_layer_model.bin 20 lfs 57fda7ab0340cda71819a3ecd5f9e52e346260fe840fddcc9c87d3614b5a815b
+ok  openvino_text_embeddings_per_layer_model.xml 4808
+ok  openvino_tokenizer.bin 17270350 lfs 72cc61385a142c29a1ea37125b9d7a4c5775fe8386a5f6db1dd1108ea5ec1361
+ok  openvino_tokenizer.xml 46977
+ok  openvino_vision_embeddings_model.bin 573967772 lfs 13c9d8ff37be9592e06e8a9f65e2b047bdc6b24d5bc905c022e4d18996b3c382
+ok  openvino_vision_embeddings_model.xml 3053620
+ok  preprocessor_config.json 403
+ok  processor_config.json 1689
+ok  tokenizer.json 32169626 lfs cc8d3a0ce36466ccc1278bf987df5f71db1719b9ca6b4118264f45cb627bfe0f
+ok  tokenizer_config.json 3699
+not on the Hub (written by the pull or the chart): ./OpenVINO/gemma-4-26b-a4b-it-int4-ov/graph.pbtxt, ./config.json
+22 Hub files, 7 LFS, 0 mismatched or missing

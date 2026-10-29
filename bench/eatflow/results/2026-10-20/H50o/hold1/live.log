@@ -1,0 +1,6 @@
+== arm H50o start 08:07:20 (+0s)
+== k3d-gpu up 08:07:21 (+1s)
+== wait-ready 08:08:23 (+63s)
+NOT DELIVERABLE: not ready with 900 s of the hold left
+== cleanup 08:19:06 (+706s)
+== done 08:19:10 (+710s)

@@ -1,0 +1,7 @@
+Erratum, written 2026-10-21 after the hold. Raw records are left as recorded.
+
+X1q-mtp never rendered (X1q-mtp.yaml is empty). Cause: a runner bug. In bench/h54gpu/h54b.sh,
+"${2:+K3D_GPU_AGENT_PREFIX_CACHING=false}" at the start of a command line expands to a word, not an
+environment assignment, so bash ran it as a command (arms.log: "line 140:
+K3D_GPU_AGENT_PREFIX_CACHING=false: command not found", then "manifest failed").
+This is not an OVMS or B70 result.

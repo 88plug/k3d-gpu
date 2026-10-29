@@ -1,0 +1,13 @@
+{
+ "B_exp": 802898880.0,
+ "B_rest": 1577144440,
+ "B_tot": 2380043320.0,
+ "median_tps": {
+  "Cg": null,
+  "Gg": null,
+  "Hg": null,
+  "Gg2": null
+ },
+ "verdict": "INCONCLUSIVE",
+ "why": "an arm was not delivered"
+}

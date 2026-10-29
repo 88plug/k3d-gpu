@@ -35,6 +35,13 @@ models/ggml-org__Qwen3.8-Flash-Next-GGUF/
   two gguf-split shards, every shard's header read); config.json from the card's
   base_model, Qwen/Qwen3.8-Flash-Next.
 
+models/google__gemma-4-26B-A4B-it-qat-q4_0-gguf/
+  weights.json re-fetched 2026-10-29 (`console/fit.py fetch
+  google/gemma-4-26B-A4B-it-qat-q4_0-gguf --revision d1c082b...`) in the shape fetch now
+  writes for every GGUF repo: "group" Q4_0 and "groups" (its one model) beside the
+  top-level weights/v1, and "tensor_count" 658. The byte totals and classes are those of
+  the 2026-10-20 fetch; config.json and tokenizer_config.json are byte-identical to it.
+
 gguf-heads/
   The header bytes (up to the tensor data, gzip) of the IQ4_NL shards of
   ggml-org/Qwen3.8-Flash-Next-GGUF@91fb00353e766eb43944ed223665ea4fb87dad47, with the

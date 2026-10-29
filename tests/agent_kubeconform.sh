@@ -69,6 +69,16 @@ render fit-vllm      4  STUB_ALLOC=$'cpu 32\ngpu.intel.com/xe 4' K3D_GPU_AGENT_B
     K3D_GPU_FIT_HOST="${FIT}/hosts/xeon6741p-4xb70.json" XDG_STATE_HOME="${WORK}" -- --model RedHatAI/Qwen3.8-27B-INT4
 render fit-ovms-cpu  4  STUB_ALLOC='cpu 32' K3D_GPU_FIT_CACHE="${WORK}/fit-cache" \
     K3D_GPU_FIT_HOST="${FIT}/hosts/desktop-i9-nogpu.json" XDG_STATE_HOME="${WORK}" -- --model OpenVINO/Qwen3.8-27B-int4-ov
+# llama.cpp, the engine the fit picks for GGUF weights and for Flash-Next (no backend set):
+# on a B70, on the CPU, converted once (ConfigMap and Job) and with the MTP drafter.
+HFX=(K3D_GPU_HF_FIXTURES="$(dirname "$0")/fixtures/hf" XDG_CACHE_HOME="${WORK}/xdg")
+XEON_FIT=("${HFX[@]}" K3D_GPU_FIT_CACHE="${WORK}/fit-cache" K3D_GPU_FIT_HOST="${FIT}/hosts/xeon6741p-4xb70.json" XDG_STATE_HOME="${WORK}"
+    K3D_GPU_AGENT_DEVICE=GPU STUB_ALLOC=$'cpu 64\ngpu.intel.com/xe 2')
+render fit-llama-gpu 4 "${XEON_FIT[@]}" -- --model google/gemma-4-26B-A4B-it-qat-q4_0-gguf
+render fit-llama-cpu 4 STUB_ALLOC='cpu 32' "${HFX[@]}" K3D_GPU_FIT_CACHE="${WORK}/fit-cache" \
+    K3D_GPU_FIT_HOST="${FIT}/hosts/desktop-i9-nogpu.json" XDG_STATE_HOME="${WORK}" -- --model google/gemma-4-26B-A4B-it-qat-q4_0-gguf
+render fit-llama-convert 6 "${XEON_FIT[@]}" -- --model Qwen/Qwen3.8-Flash-Next
+render fit-llama-mtp 6 "${XEON_FIT[@]}" K3D_GPU_AGENT_DRAFT=mtp -- --model google/gemma-4-26B-A4B-it-qat-q4_0-gguf
 
 args=(-strict -summary -kubernetes-version "${K8S_VERSION}")
 rc=0

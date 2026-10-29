@@ -1,0 +1,25 @@
+# Supplement to the per-hold REPRODUCE headers (H54b hold1, hold2; H54c hold1)
+# Read on crescent 2026-10-21T22:10Z, about 12 min after the last hold. Nothing on the host
+# changed in between (no reboot, no driver or firmware change); kernel, microcode, Docker and
+# tool versions match the H54a header of the same day.
+cpu:        Intel(R) Xeon(R) 6741P, 96 CPUs, 1 socket, 1 NUMA node, microcode 0xa000133
+kernel:     7.0.0-31-generic, in-tree xe (xe.ko.zst); Docker 29.8.0
+cards:      4x Arc Pro B70 (8086:e223), bdf 0000:12:00.0, 0000:48:00.0, 0000:7c:00.0, 0000:96:00.0;
+            GuC found 70.58.0 (wanted 70.54.0), compatibility 1.30.1, all four (debugfs guc_info)
+cards used: the runner assigned card 2 = renderD130 (CARDS=2,3; qwen38-b-hr stopped). The pinned
+            pods nonetheless listed card0-4 and renderD128-131 (lsq.dri, cg/gg/hg/gg2.dri), and
+            llama.cpp's -ngl 99 used all four cards (xe_vram_used_bytes-2105-2202Z.json).
+tools:      k3d v5.9.0, kubectl v1.35.2, helm v4.1.1+g5caf004 (~/k3dgpu-gemma/bin)
+models:     Intel/Qwen3.8-27B-q4km-AutoRound 4b30b30e0ac2cc54a2f50738cfccd6c608f94ad4,
+            Qwen3.8-27B-Q4_K_M.gguf sha256 766892f84f85c3d1b90704424f90a33344983fa2959860496940bbd41041aad9
+            (16810714432 B; the HF LFS etag, checked by huggingface_hub on download)
+            google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be9cf3c8a514acf63b8761f4b41935842e,
+            gemma-4-26B_q4_0-it.gguf sha256 3eca3b8f... (as the H54a header)
+            The bare "model: edff6272..." line in each REPRODUCE is
+            Intel/gemma-4-26B-A4B-it-int4-AutoRound @ edff6272 (no H54b or H54c arm loads it).
+            The other Gemma lines are listed because the models directory holds them; only the
+            Q4_0 GGUF is loaded by H54c, only the q4km GGUF by H54b (Lsq).
+smokes:     H54c smoke-hold1-failed-sa (00:06:58Z, the pod's service account did not exist yet)
+            and smoke-hold1 (00:15:13Z, Cg alone in the CPU image server-b11749@sha256:9fbaa06d...,
+            no card mounted, 47.66 tok/s); H54b smoke-hold1 (03:46:41Z, manifest render only).
+            Wiring smokes under the lock, discarded, not holds.

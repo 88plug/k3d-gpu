@@ -17,9 +17,9 @@
 #                  __K3D_GPU_HOST_MAX__, the highest cpuinfo_max_freq on the host. The
 #                  kernel clamps it to each CPU's own maximum, so a CPU leaving the
 #                  efficient balloon is uncapped again.
-# Numbers, not "turbo": v0.14.0 resolves min/base/turbo from the first online CPU
+# Numbers, not "turbo": v0.15.0 resolves min/base/turbo from the first online CPU
 # only (pkg/resmgr/cpuclass/internal/cpufreq/platform.go), which on a hybrid part
-# with favoured cores is below their maximum. EPP is not set: v0.14.0 accepts
+# with favoured cores is below their maximum. EPP is not set: v0.15.0 accepts
 # energyPerformancePreference but its cpufreq writer only writes scaling_min_freq,
 # scaling_max_freq and scaling_governor (internal/cpufreq/sysfs.go).
 # This writes host cpufreq (through the node's /sys); `k3d-gpu down` writes the

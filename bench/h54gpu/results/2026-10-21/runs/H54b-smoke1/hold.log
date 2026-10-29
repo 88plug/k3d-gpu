@@ -1,0 +1,3 @@
+== H54b hold 1 cards 2,3 arms  2026-10-21T03:46:41Z
+== device-plugin arms: allowed1 (gpu-hold-0: renderD128 gpu-hold-1: renderD129 gpu-hold-2: renderD130 gpu-hold-3: renderD131) 2026-10-21T03:48:31Z
+== smoke done: manifest rc=0 1 xe lines 2026-10-21T03:48:31Z

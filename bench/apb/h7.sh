@@ -54,7 +54,10 @@ K3D_GPU_AGENT_DEVICE=CPU K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3-4B-fp16-ov K3D_GPU_A
     "${K}" agent manifest > "${OUT}/agent.yaml" 2> "${OUT}/agent.err" || { cat "${OUT}/agent.err"; exit 1; }
 python3 "${HERE}/stage.py" ovms "${OUT}/agent.yaml" "${OUT}/ovms.yaml"
 python3 "${HERE}/stage.py" values "${CHART}/xeon-values.yaml" "${REPO}/integrations/eat/vllm-values.yaml" 6 "${OUT}/values.yaml"
+# B's image is the one H7 ran, pinned here so that a later tag in integrations/eat/vllm-values.yaml
+# does not change what this script reproduces.
 helm template vllm-qwen-3-4b-cpu "${CHART}" --values "${OUT}/values.yaml" --set LLM_MODEL_ID=Qwen/Qwen3-4B --set cpu=16 \
+    --set image.tag="v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1" \
     --set global.monitoring=false --set svcmonitor.enabled=false --set ingress.enabled=false --set route.enabled=false > "${OUT}/eat.yaml"
 python3 "${HERE}/stage.py" vllm "${OUT}/eat.yaml" "${OUT}/vllm.yaml" Qwen3-4B 32768
 stage Qwen3-4B-fp16-ov OpenVINO/Qwen3-4B-fp16-ov

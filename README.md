@@ -573,7 +573,7 @@ name in place of `gpu`):
 ```bash
 docker exec k3d-gpu-server-0 touch /var/lib/rancher/k3s/server/manifests/nri-balloons.yaml.skip
 helm upgrade --install nri-resource-policy-balloons nri-resource-policy-balloons \
-  --repo https://containers.github.io/nri-plugins --version v0.14.0 \
+  --repo https://containers.github.io/nri-plugins --version v0.15.0 \
   --namespace kube-system -f values.yaml --force   # Helm 4: --force-conflicts
 ```
 
@@ -713,7 +713,7 @@ documents GPU support for NVIDIA only.
 ### Node Feature Discovery
 
 Every cluster also runs [Node Feature Discovery](https://github.com/kubernetes-sigs/node-feature-discovery)
-v0.19.0 with Intel's
+v0.20.1 with Intel's
 [NodeFeatureRules](https://github.com/intel/intel-device-plugins-for-kubernetes/tree/v0.37.1/deployments/nfd/overlays/node-feature-rules)
 v0.37.1, baked into the image (namespace `node-feature-discovery`). About 30 s
 after `up`, nodes carry the host's CPU, kernel and PCI features. On an
@@ -881,7 +881,7 @@ is deleted.
 | `K3D_GPU_AGENT_TIMEOUT` | `1800` | seconds `agent up` waits for download + load |
 | `K3D_GPU_AGENT_LOG_LEVEL` | `INFO` | `DEBUG` also logs the compiled model's execution device (and every request) |
 | `K3D_GPU_AGENT_IMAGE` | `openvino/model_server@sha256:a928…fc58` (2026.4.1-gpu) | server image |
-| `K3D_GPU_AGENT_BACKEND` | `ovms` (`vllm` on a Gaudi) | `ovms`, `vllm` or `llm-scaler` (see below) |
+| `K3D_GPU_AGENT_BACKEND` | `ovms` (`vllm` on a Gaudi; with `--model M`, the engine the fit picks, and on the CPU llama.cpp where an EXPERIMENTS.md H59-family row is SUPPORTED for the CPU class) | `ovms`, `vllm`, `llm-scaler` or `llama.cpp` (see below and [docs/fit.md](docs/fit.md)) |
 
 #### Any Hugging Face model: `agent up --model`
 
@@ -940,7 +940,7 @@ metadata. Metadata is cached for a day under `~/.cache/k3d-gpu/hf`. Without
 | `K3D_GPU_AGENT_DRAFT` | the optimizer's choice | `off` disables speculative decoding, `mtp` forces an MTP head or drafter |
 | `K3D_GPU_MODEL_OPT` | `auto` | `off` serves `--model` exactly as given |
 | `K3D_GPU_HF_FIXTURES` | unset | directory of saved metadata bundles to read instead of Hugging Face |
-| `K3D_GPU_MODEL_OPT_LEDGER` | the checkout's `EXPERIMENTS.md`, else the packaged `console/ledger-rules.json` | ledger read for promotions and for the per-CPU-class Fast Draft and autoquant defaults; packages ship `console/ledger-rules.json`, the H27/H34 rows generated from `EXPERIMENTS.md` (CI fails when it drifts) |
+| `K3D_GPU_MODEL_OPT_LEDGER` | the checkout's `EXPERIMENTS.md`, else the packaged `console/ledger-rules.json` | ledger read for promotions and for the per-CPU-class defaults: OVMS Fast Draft (H34), autoquant (H27), llama.cpp as the CPU engine (H59) and its QAT MTP drafter (H57dm, H57wm); packages ship `console/ledger-rules.json`, those rows generated from `EXPERIMENTS.md` (CI fails when it drifts) |
 
 #### vLLM backends for discrete Arc (Battlemage)
 
@@ -949,7 +949,7 @@ OpenAI API at `/v1` from `svc/vllm`:
 
 | Backend | Image (pinned by digest) | Notes |
 |---------|--------------------------|-------|
-| `vllm` | `vllm/vllm-openai-xpu:v0.31.0` | upstream vLLM for Intel GPUs; validated on Arc Pro B-series |
+| `vllm` | `vllm/vllm-openai-xpu:v0.32.0` | upstream vLLM for Intel GPUs (Data Center GPU and Arc, per [vLLM's XPU guide](https://github.com/vllm-project/vllm/blob/v0.32.0/docs/getting_started/installation/gpu.xpu.inc.md)); v0.32.0 not yet run here on an Arc B-series card |
 | `llm-scaler` | `intel/llm-scaler-vllm:1.5` (vLLM 0.26.0-b2) | Intel's build for Arc B60/B70 |
 
 ```bash
@@ -1200,7 +1200,7 @@ and submits through execlists, so a GuC fault there warns instead. A failed HuC
 only warns: it runs media decode and encode, not inference. Without root the GuC is reported as not checked. The refused GPU's
 facts/v1 target reads `usable: false` with the `reason` and `fix`; `plan` then
 falls back to the next green cell on a usable target (OVMS on the CPU, or
-llama.cpp on Vulkan, pinned as `ghcr.io/ggml-org/llama.cpp:server-vulkan-v0.5.0`
+llama.cpp on Vulkan, pinned as `ghcr.io/ggml-org/llama.cpp:server-vulkan-b11960` (release v0.8.0)
 by digest) and lists the fix. With nothing left to pick the decision is `fix`,
 not an engine; a Gaudi without its driver plans the same way. `agent up` follows
 the same verdict: `auto` uses OVMS on the CPU and says why, and
@@ -1485,7 +1485,7 @@ not switch the Intel GPU path.
 ### Agent sandboxes on E-cores
 
 `k3d-gpu sandbox up` installs [kubernetes-sigs/agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox)
-v1.0.7 (controller image pinned by digest) and a `python-ecores` SandboxTemplate
+v1.0.8 (controller image pinned by digest) and a `python-ecores` SandboxTemplate
 plus a one-replica warm pool in namespace `agent-sandbox`. Sandbox pods carry
 `k3d-gpu.io/cores: efficient` and request one CPU, so on a hybrid host untrusted
 agent tool execution runs on E-cores, apart from the P-cores that serve inference.
@@ -1506,7 +1506,7 @@ EOF
 ```
 
 The sandbox serves `POST /execute {"command": "..."}` on port 8888
-(`registry.k8s.io/agent-sandbox/python-runtime-sandbox:v1.0.7`, pinned by digest).
+(`registry.k8s.io/agent-sandbox/python-runtime-sandbox:v1.0.8`, pinned by digest).
 
 What works on k3d, and what does not:
 

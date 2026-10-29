@@ -49,7 +49,7 @@ LAPTOP="${FIX}/hosts/laptop-16g.json"
 
 # --- k3d-gpu fit -------------------------------------------------------------------
 out=$(bash "${K3D_GPU}" fit --host "${XEON}" --model google/gemma-4-26B-A4B-it-qat-q4_0-gguf 2>&1); rc=$?
-if [ "${rc}" -eq 0 ] && grep -q '^fit: google/gemma-4-26B-A4B-it-qat-q4_0-gguf on 1 GPU via llama.cpp, context' <<< "${out}"; then
+if [ "${rc}" -eq 0 ] && grep -q '^fit: google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0 on 1 GPU via llama.cpp, context' <<< "${out}"; then
     ok "fit: one summary line for a model id, from the cache"
 else fail "fit: one summary line for a model id, from the cache (rc ${rc})" "${out}"; fi
 

@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Pod
+metadata: {name: lsq}
+spec:
+  restartPolicy: Never
+  containers:
+  - name: server
+    image: ghcr.io/ggml-org/llama.cpp:server-intel-b11749@sha256:ae2d41ba73574a1e12cd237c88b512c8bb39ba6f703e873912b76cb8988a81bd
+    command: ["/app/llama-server"]
+    args: ["-m","/models/Intel_Qwen3.8-27B-q4km-AutoRound/Qwen3.8-27B-Q4_K_M.gguf","-ngl","99","--jinja","-c","8192","--host","0.0.0.0","--port","8080"]
+    env: []
+    securityContext: {privileged: true}
+    ports: [{containerPort: 8080}]
+    volumeMounts: [{name: models, mountPath: /models}, {name: dri, mountPath: /dev/dri}, {name: card, mountPath: /dev/dri/renderD130}, {name: shm, mountPath: /dev/shm}]
+  volumes:
+  - {name: models, hostPath: {path: /models}}
+  - {name: dri, emptyDir: {medium: Memory}}
+  - {name: card, hostPath: {path: /dev/dri/renderD130, type: CharDevice}}
+  - {name: shm, emptyDir: {medium: Memory, sizeLimit: 16Gi}}

@@ -1,0 +1,5 @@
+NAME                                      STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE   VOLUMEMODE
+persistentvolumeclaim/ovms-model-server   Bound    pvc-be9eb004-cfa1-48c4-a364-914dcfb9018a   20Gi       RWO            local-path     <unset>                 10m   Filesystem
+
+NAME                                     READY   STATUS             RESTARTS      AGE   IP           NODE                         NOMINATED NODE   READINESS GATES
+pod/ovms-model-server-58cb86c4d5-g8s9x   0/1     CrashLoopBackOff   6 (84s ago)   10m   10.42.0.12   k3d-k3dgpu-e-h50o-server-0   <none>           <none>

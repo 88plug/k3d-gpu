@@ -5,7 +5,9 @@ pre-registration", rule W5). Every 5 s, read-only: load1; busy CPU-s/s of the P-
 CPU-s/s of this campaign's containers (names starting k3d-k3dgpu-w-, k3dgpu-w- or
 k3d-gpu-bench-load) and of every other running container, from their cgroup cpu.stat;
 "foreign" CPU-s/s = all busy CPU-s/s minus this campaign's; MemAvailable; package temperature
-(x86_pkg_temp); / available GB. Stops on SIGTERM. Python 3 standard library only."""
+(x86_pkg_temp); / available GB. Stops on SIGTERM. Python 3 standard library only. `docker ps`
+is bounded by DOCKER_T s; when it does not answer, the last container list is kept (wildct
+amendment R1)."""
 import json
 import os
 import signal
@@ -14,6 +16,7 @@ import sys
 import time
 
 STEP = 5.0
+DOCKER_T = 20
 SETS = {"p": range(0, 16), "e_free": range(16, 20), "e_load": range(20, 24)}
 MINE = ("k3d-k3dgpu-w-", "k3dgpu-w-", "k3d-gpu-bench-load")
 stop = False
@@ -43,9 +46,16 @@ def busy(prev, cur, cpus, hz=100.0, dt=STEP):
     return round(j / hz / dt, 3)
 
 
-def containers():
-    p = subprocess.run(["docker", "ps", "--no-trunc", "--format", "{{.ID}} {{.Names}}"],
-                       capture_output=True, text=True)
+def containers(last=None):
+    """{name: cgroup cpu.stat path} of the running containers; `last` (or {}) when docker does
+    not answer within DOCKER_T s or fails."""
+    try:
+        p = subprocess.run(["docker", "ps", "--no-trunc", "--format", "{{.ID}} {{.Names}}"],
+                           capture_output=True, text=True, timeout=DOCKER_T)
+    except subprocess.TimeoutExpired:
+        return dict(last or {})
+    if p.returncode != 0:
+        return dict(last or {})
     rows = {}
     for line in p.stdout.splitlines():
         cid, name = line.split(" ", 1)
@@ -114,7 +124,7 @@ def main(out):
             f.flush()
             prev_s, prev_c, t0 = cur_s, cur_c, t1
             if t1 - t_list > 30:
-                cs, t_list = containers(), t1
+                cs, t_list = containers(cs), t1
                 prev_c = {n: (prev_c.get(n) if n in prev_c else usage(p)) for n, p in cs.items()}
 
 

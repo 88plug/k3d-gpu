@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Tests for bench/h57d (EXPERIMENTS.md "H57d amendment R1"): the arm table and renders, Od's
-read-only transform, the P-core sampler's arithmetic, the load gate, and every H57da and H57dm
-verdict branch on synthetic hold records. No cluster, no network."""
+"""Tests for bench/h57d (EXPERIMENTS.md "H57d amendment R1", "H57dp amendment R1" and "R2"): the
+arm table and renders, Od's read-only transform, the P-core sampler's arithmetic, the load gate,
+every H57da, H57dm, H57dp and H57de verdict branch on synthetic hold records, the hold.sh guards
+and the Reproduce header. No cluster, no network."""
 import json
 import os
 import random
@@ -41,9 +42,9 @@ class Arms(unittest.TestCase):
     def test_orders_rotate(self):
         o = h57d.ORDERS
         for k in (1, 2, 3, 4):
-            self.assertEqual(sorted(o[k]), sorted(h57d.ARMS))
-        self.assertEqual({o[k][0] for k in (1, 2, 3)}, set(h57d.ARMS))   # each arm first once
-        self.assertEqual({o[k][2] for k in (1, 2, 3)}, set(h57d.ARMS))   # and last once
+            self.assertEqual(sorted(o[k]), sorted(h57d.H57D_ARMS))
+        self.assertEqual({o[k][0] for k in (1, 2, 3)}, set(h57d.H57D_ARMS))   # each arm first once
+        self.assertEqual({o[k][2] for k in (1, 2, 3)}, set(h57d.H57D_ARMS))   # and last once
 
     @unittest.skipUnless(HAVE_YAML, "PyYAML")
     def test_render_pcores(self):
@@ -224,6 +225,423 @@ class Score(unittest.TestCase):
             r = h57d.score(d)
         self.assertFalse(r["H57da"]["all_holds_faster"])
         self.assertNotEqual(r["H57da"]["verdict"], "REFUTED")
+
+    def test_committed_h57d_verdict_unchanged(self):
+        # The scorer's H57d path must still give the committed H57d run's verdict.json, as
+        # `h57d.py score` writes it (JSON, so the per-hold keys are strings).
+        res = os.path.join(HERE, "results", "2026-10-21")
+        self.assertEqual(json.loads(json.dumps(h57d.score(res))), json.load(open(os.path.join(res, "verdict.json"))))
+
+
+# ---- H57dp amendment R1: the unpinned arm, the row's orders, the two-hold scorer -------------
+
+PIN = ["-C", "0x5555", "--cpu-strict", "1"]
+
+
+class Unpinned(unittest.TestCase):
+    def test_unpinned_drops_only_the_pinning_flags(self):
+        pinned = h57d.llamacpp_args(True)
+        u = h57d.llamacpp_args(True, pinned=False)
+        for f in ("-C", "--cpu-strict", "--cpu-range", "-Cr"):
+            self.assertNotIn(f, u)
+        i = pinned.index("-C")
+        self.assertEqual(pinned[i:i + 4], PIN)
+        self.assertEqual(u, pinned[:i] + pinned[i + 4:])   # every other flag identical, same order
+        self.assertEqual(u[u.index("-t") + 1], "8")
+        self.assertEqual(u[u.index("--spec-type") + 1], "draft-mtp")
+        self.assertEqual(h57d.llamacpp_args(True, pinned=True), pinned)
+
+    def test_arm_table(self):
+        a = h57d.ARMS["Ld-mtp-u"]
+        self.assertEqual(a["svc"], "ld-mtp-u")
+        self.assertEqual({k: v for k, v in a.items() if k != "svc"},
+                         {k: v for k, v in h57d.ARMS["Ld-mtp"].items() if k != "svc"})
+        self.assertNotIn("Ld-mtp-u", h57d.H57D_ARMS)   # H57d's rows never see it
+        r = subprocess.run([sys.executable, os.path.join(HERE, "h57d.py"), "field", "Ld-mtp-u", "svc"],
+                           capture_output=True, text=True)
+        self.assertEqual(r.stdout.strip(), "ld-mtp-u")
+
+    @unittest.skipUnless(HAVE_YAML, "PyYAML")
+    def test_render_matches_ld_mtp_but_affinity(self):
+        u, m = h57d.render("Ld-mtp-u"), h57d.render("Ld-mtp")
+        cu = u[1]["spec"]["template"]["spec"]["containers"][0]
+        self.assertEqual(cu["args"], h57d.llamacpp_args(True, pinned=False))
+        # Ld-mtp's render with its name and the four pinning flags swapped is Ld-mtp-u's render.
+        s = json.dumps(m).replace('"ld-mtp"', '"ld-mtp-u"').replace(', "-C", "0x5555", "--cpu-strict", "1"', "")
+        self.assertEqual(json.loads(s), u)
+
+    def test_cli_arms_lists_unpinned_flags(self):
+        r = subprocess.run([sys.executable, os.path.join(HERE, "h57d.py"), "arms"], capture_output=True, text=True)
+        j = json.loads(r.stdout)
+        self.assertEqual(j["args"]["Ld-mtp-u"], h57d.llamacpp_args(True, pinned=False))
+        self.assertEqual(j["orders"], {str(k): v for k, v in h57d.ORDERS.items()})
+
+
+class RowOrders(unittest.TestCase):
+    def test_h57dp_orders_as_registered(self):
+        self.assertEqual(h57d.P_ORDERS, {1: ["Ld-mtp-u", "Od", "Ld-mtp"], 2: ["Ld-mtp", "Ld-mtp-u", "Od"]})
+        self.assertEqual(sorted(h57d.P_ARMS), ["Ld-mtp", "Ld-mtp-u", "Od"])
+        for k in (1, 2):
+            self.assertEqual(sorted(h57d.P_ORDERS[k]), sorted(h57d.P_ARMS))
+
+    def test_orders_by_row(self):
+        self.assertIs(h57d.orders("H57dp"), h57d.P_ORDERS)
+        self.assertIs(h57d.orders("H57d"), h57d.ORDERS)
+        self.assertIs(h57d.orders("H57w"), h57d.ORDERS)   # wildct's replication keeps H57d's
+
+    def run_order(self, row, hold):
+        return subprocess.run([sys.executable, os.path.join(HERE, "h57d.py"), "order", row, hold],
+                              capture_output=True, text=True)
+
+    def test_cli_order(self):
+        self.assertEqual(self.run_order("H57dp", "1").stdout.strip(), "Ld-mtp-u Od Ld-mtp")
+        self.assertEqual(self.run_order("H57dp", "2").stdout.strip(), "Ld-mtp Ld-mtp-u Od")
+        self.assertEqual(self.run_order("H57d", "3").stdout.strip(), "Ld-mtp Od Ld")
+        self.assertEqual(self.run_order("H57w", "4").stdout.strip(), "Ld Od Ld-mtp")
+        for row, hold in (("H57dp", "3"), ("H57d", "smoke1"), ("H57dp", "01"), ("H57d", "01")):
+            r = self.run_order(row, hold)
+            self.assertNotEqual(r.returncode, 0)
+            self.assertEqual(r.stdout, "")
+
+
+def run_hold(row, hold, mode, *arms):
+    """bash hold.sh HOLD MODE ARMS with H57D_ROW=row, G a fresh directory and LOCK a path in a
+    missing directory, so a hold.sh that got past the guards fails fast (exit 4) instead of
+    waiting on a real lock. Returns the result, every path it left under G (relative to G) and
+    the campaign log's text."""
+    with tempfile.TemporaryDirectory() as g:
+        env = dict(os.environ, G=g, LOCK=os.path.join(g, "missing", "live.lock"), H57D_ROW=row)
+        r = subprocess.run(["bash", os.path.join(HERE, "hold.sh"), hold, mode, *arms], env=env,
+                           capture_output=True, text=True, timeout=60)
+        made = sorted(os.path.relpath(os.path.join(d, n), g) for d, ds, fs in os.walk(g) for n in ds + fs)
+        log = ""
+        if os.path.exists(os.path.join(g, "results", "campaign.log")):
+            with open(os.path.join(g, "results", "campaign.log")) as f:
+                log = f.read()
+        return r, made, log
+
+
+class HoldGuards(unittest.TestCase):
+    """hold.sh refuses an unregistered hold before it takes the lock or writes anything."""
+
+    def test_h57dp_refuses_quality_and_third_hold(self):
+        for hold, mode in (("1", "quality"), ("3", "perf")):
+            r, made, _ = run_hold("H57dp", hold, mode)
+            self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+            self.assertEqual(made, [])
+
+    def test_h57d_unregistered_hold(self):
+        r, made, _ = run_hold("H57d", "9", "perf")
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertEqual(made, [])
+
+    def test_hold_number_spelled_otherwise_refused(self):
+        # "01" would run hold 1's order into hold01/, a directory no scorer reads, and use up a
+        # counted hold.
+        for row in ("H57dp", "H57d"):
+            with self.subTest(row=row):
+                r, made, _ = run_hold(row, "01", "perf")
+                self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+                self.assertEqual(made, [])
+
+    def test_h57dp_explicit_arms_cannot_override(self):
+        # Explicit arms neither add a third H57dp hold nor change a registered hold's order or arms.
+        for hold, arms in (("3", ("Ld-mtp-u",)), ("1", ("Od", "Ld-mtp"))):
+            with self.subTest(hold=hold, arms=arms):
+                r, made, _ = run_hold("H57dp", hold, "perf", *arms)
+                self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+                self.assertEqual(made, [])
+
+    def test_h57dp_row_refuses_the_smoke(self):
+        # The smoke runs with no H57D_ROW (H57dp amendment R2's commands); the H57dp row has
+        # holds 1 and 2 only.
+        r, made, _ = run_hold("H57dp", "smoke-p", "perf", "Ld-mtp-u")
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertEqual(made, [])
+
+    def test_h57dp_registered_order_passes_guards(self):
+        # The registered order, given explicitly or by default, gets past the guards and stops at
+        # the missing lock. Its records go to results/H57dp, which H57d's hold_dirs never reads.
+        for arms in (("Ld-mtp-u", "Od", "Ld-mtp"), ()):
+            with self.subTest(arms=arms):
+                r, made, log = run_hold("H57dp", "1", "perf", *arms)
+                self.assertEqual(r.returncode, 4, r.stdout + r.stderr)
+                self.assertEqual(made, ["results", "results/H57dp", "results/H57dp/hold1", "results/campaign.log"])
+                self.assertIn("arms: Ld-mtp-u Od Ld-mtp)", log)
+
+
+PINNED_CPUS = """cpuset 0-15
+Cpus_allowed_list:\t0-15
+avx512f 0 amx 0 nproc 16
+server threads by affinity:
+      2 0
+     34 0-15
+      1 10
+      1 12
+      1 14
+      1 2
+      1 4
+      1 6
+      1 8
+"""
+FLOATING_CPUS = """cpuset 0-15
+Cpus_allowed_list:\t0-15
+avx512f 0 amx 0 nproc 16
+server threads by affinity:
+     42 0-15
+"""
+
+
+def write_p_holds(root, decode, foreign=None, missing=(), cpus=None):
+    """The two H57dp holds. decode: {arm: tok/s centre, or (hold 1, hold 2)}; foreign: {arm: CPU-s/s};
+    cpus: {(hold, arm): cpus.txt text, or None for no file} over the default (Ld-mtp pinned as
+    recorded in H57d, the others floating)."""
+    rng = random.Random(11)
+    cpus = cpus or {}
+    foreign = foreign or {a: 3.0 for a in h57d.P_ARMS}
+    for k in (1, 2):
+        hd = os.path.join(root, f"hold{k}")
+        os.makedirs(hd)
+        t = 1000.0 * k
+        samples = []
+        for arm in h57d.P_ORDERS[k]:
+            ad = os.path.join(hd, arm)
+            os.makedirs(ad)
+            if (k, arm) in missing:
+                json.dump({"status": "not_deliverable"}, open(os.path.join(ad, "status.json"), "w"))
+                continue
+            json.dump({"status": "measured"}, open(os.path.join(ad, "status.json"), "w"))
+            ct = cpus.get((k, arm), PINNED_CPUS if arm == "Ld-mtp" else FLOATING_CPUS)
+            if ct is not None:
+                open(os.path.join(ad, "cpus.txt"), "w").write(ct)
+            c = decode[arm][k - 1] if isinstance(decode[arm], tuple) else decode[arm]
+            s = [{"ok": True, "decode_tokens_per_s": c * (1 + rng.uniform(-0.03, 0.03))} for _ in range(8)]
+            json.dump({"phases": [{"samples": s}]}, open(os.path.join(ad, "load-n1.json"), "w"))
+            with open(os.path.join(ad, "phases.jsonl"), "w") as f:
+                f.write(json.dumps({"phase": "n1", "t0": t, "t1": t + 100}) + "\n")
+            for ts in range(int(t) + 5, int(t) + 101, 5):
+                samples.append({"ts": ts, "seconds": 5, "pcore_busy": 8.0 + foreign[arm], "node_cpu": 8.0})
+            t += 200
+        with open(os.path.join(hd, "load.jsonl"), "w") as f:
+            for s in samples:
+                f.write(json.dumps(s) + "\n")
+
+
+class ScoreP(unittest.TestCase):
+    def run_score(self, decode, **kw):
+        with tempfile.TemporaryDirectory() as d:
+            write_p_holds(d, decode, **kw)
+            return h57d.score_p(d)
+
+    def test_unpinned_faster_than_both(self):
+        r = self.run_score({"Ld-mtp": 5.0, "Ld-mtp-u": 8.0, "Od": 6.0})
+        self.assertEqual(r["H57dp"]["verdict"], "SUPPORTED")
+        self.assertAlmostEqual(r["H57dp"]["ratio"], 1.6, delta=0.1)
+        self.assertEqual(sorted(r["H57dp"]["per_hold"]), [1, 2])
+        self.assertEqual(r["H57de"]["verdict"], "REFUTED")
+        self.assertEqual(r["H57de"]["x"], "Ld-mtp-u")
+        self.assertTrue(r["load_gate"]["matched"])
+
+    def test_pinning_does_not_matter_od_fastest(self):
+        r = self.run_score({"Ld-mtp": 5.0, "Ld-mtp-u": 5.0, "Od": 7.0})
+        self.assertEqual(r["H57dp"]["verdict"], "REFUTED")     # CI upper bound < 1.10
+        self.assertLess(r["H57dp"]["ci"][1], 1.10)
+        self.assertEqual(r["H57de"]["verdict"], "SUPPORTED")   # CI upper bound < 1.05
+        self.assertLess(r["H57de"]["ci"][1], 1.05)
+
+    def test_near_thresholds_inconclusive(self):
+        r = self.run_score({"Ld-mtp": 5.0, "Ld-mtp-u": 5.4, "Od": 5.2})
+        dp, de = r["H57dp"], r["H57de"]
+        self.assertLess(dp["ratio"], 1.10)          # not SUPPORTED
+        self.assertGreaterEqual(dp["ci"][1], 1.10)  # not REFUTED
+        self.assertEqual(dp["verdict"], "INCONCLUSIVE")
+        self.assertLess(de["ci"][0], 1.05)          # not REFUTED
+        self.assertGreaterEqual(de["ci"][1], 1.05)  # not SUPPORTED
+        self.assertEqual(de["verdict"], "INCONCLUSIVE")
+
+    def test_not_faster_in_both_holds(self):
+        # Ld-mtp-u 2x faster in hold 1, 3% slower in hold 2: the pooled ratio clears 1.10, the
+        # per-hold rule does not.
+        r = self.run_score({"Ld-mtp": 5.0, "Ld-mtp-u": (10.0, 4.85), "Od": (4.0, 4.0)})
+        self.assertFalse(r["H57dp"]["all_holds_faster"])
+        self.assertNotEqual(r["H57dp"]["verdict"], "SUPPORTED")
+        self.assertTrue(r["H57de"]["all_holds_faster"])
+
+    def test_od_slower_in_one_hold_blocks_refuted(self):
+        r = self.run_score({"Ld-mtp": 4.0, "Ld-mtp-u": (9.0, 6.0), "Od": (6.0, 6.5)})
+        self.assertFalse(r["H57de"]["all_holds_faster"])
+        self.assertEqual(r["H57de"]["verdict"], "INCONCLUSIVE")
+
+    def test_load_unmatched(self):
+        r = self.run_score({"Ld-mtp": 5.0, "Ld-mtp-u": 8.0, "Od": 6.0}, foreign={"Ld-mtp": 1.0, "Ld-mtp-u": 5.0, "Od": 1.0})
+        self.assertFalse(r["load_gate"]["matched"])
+        for row in ("H57dp", "H57de"):
+            self.assertEqual(r[row]["verdict"], "INCONCLUSIVE")
+            self.assertIn("load unmatched", r[row]["reason"])
+
+    def test_arm_missing_a_hold(self):
+        r = self.run_score({"Ld-mtp": 5.0, "Ld-mtp-u": 8.0, "Od": 6.0}, missing={(2, "Od")})
+        self.assertFalse(r["delivered"]["Od"])
+        self.assertEqual(r["H57de"]["verdict"], "INCONCLUSIVE")
+        self.assertIn("not delivered", r["H57de"]["reason"])
+        self.assertEqual(r["H57dp"]["verdict"], "SUPPORTED")   # its own two arms were delivered
+        r = self.run_score({"Ld-mtp": 5.0, "Ld-mtp-u": 8.0, "Od": 6.0}, missing={(1, "Ld-mtp-u")})
+        for row in ("H57dp", "H57de"):
+            self.assertEqual(r[row]["verdict"], "INCONCLUSIVE")
+
+    def test_no_quality_gate_and_no_third_hold(self):
+        with tempfile.TemporaryDirectory() as d:
+            write_p_holds(d, {"Ld-mtp": 5.0, "Ld-mtp-u": 8.0, "Od": 6.0})
+            # A stray hold3 (a third hold is not registered) is never read.
+            write_holds(os.path.join(d, "stray"), {"Od": 1.0, "Ld": 1.0, "Ld-mtp": 1.0}, Score.Q)
+            os.rename(os.path.join(d, "stray", "hold3"), os.path.join(d, "hold3"))
+            r = h57d.score_p(d)
+        self.assertEqual({a["holds_measured"] for a in r["arms"].values()}, {2})
+        self.assertNotIn("gate", r)
+        self.assertIn("inherited", r["quality"])
+
+    def test_affinity_read_from_cpus_txt(self):
+        r = self.run_score({"Ld-mtp": 5.0, "Ld-mtp-u": 8.0, "Od": 6.0})
+        self.assertTrue(r["affinity"]["Ld-mtp"]["as_registered"])
+        self.assertTrue(r["affinity"]["Ld-mtp-u"]["as_registered"])
+        self.assertEqual(r["affinity"]["Ld-mtp"]["single_cpu_threads"][1], {c: 2 if c == 0 else 1 for c in range(0, 16, 2)})
+        self.assertEqual(r["affinity"]["Ld-mtp-u"]["single_cpu_threads"][2], {})
+
+    def test_unpinned_arm_found_pinned(self):
+        # Ld-mtp-u's server shows threads bound to one CPU in hold 2: the treatment did not apply.
+        r = self.run_score({"Ld-mtp": 5.0, "Ld-mtp-u": 8.0, "Od": 6.0}, cpus={(2, "Ld-mtp-u"): PINNED_CPUS})
+        self.assertFalse(r["affinity"]["Ld-mtp-u"]["as_registered"])
+        for row in ("H57dp", "H57de"):
+            self.assertEqual(r[row]["verdict"], "INCONCLUSIVE")
+            self.assertIn("affinity", r[row]["reason"])
+
+    def test_pinned_arm_found_floating(self):
+        r = self.run_score({"Ld-mtp": 5.0, "Ld-mtp-u": 8.0, "Od": 6.0}, cpus={(1, "Ld-mtp"): FLOATING_CPUS})
+        self.assertEqual(r["H57dp"]["verdict"], "INCONCLUSIVE")
+        self.assertIn("affinity", r["H57dp"]["reason"])
+        self.assertEqual(r["H57de"]["verdict"], "REFUTED")   # H57de reads only Ld-mtp-u's affinity
+
+    def test_affinity_not_recorded(self):
+        r = self.run_score({"Ld-mtp": 5.0, "Ld-mtp-u": 8.0, "Od": 6.0}, cpus={(1, "Ld-mtp-u"): None})
+        self.assertIsNone(r["affinity"]["Ld-mtp-u"]["single_cpu_threads"][1])
+        for row in ("H57dp", "H57de"):
+            self.assertEqual(r[row]["verdict"], "INCONCLUSIVE")
+
+    def test_single_cpu_threads_on_the_h57d_records(self):
+        res = os.path.join(HERE, "results", "2026-10-21")
+        for k in (1, 2, 3, 4):
+            for arm in ("Ld", "Ld-mtp"):
+                got = h57d.single_cpu_threads(os.path.join(res, f"hold{k}", arm, "cpus.txt"))
+                self.assertEqual(sorted(got), h57d.MASK_CPUS)
+            self.assertEqual(h57d.single_cpu_threads(os.path.join(res, f"hold{k}", "Od", "cpus.txt")), {})
+        self.assertIsNone(h57d.single_cpu_threads(os.path.join(res, "missing.txt")))
+
+    def test_cli_score_p(self):
+        with tempfile.TemporaryDirectory() as d:
+            write_p_holds(d, {"Ld-mtp": 5.0, "Ld-mtp-u": 8.0, "Od": 6.0})
+            out = subprocess.run([sys.executable, os.path.join(HERE, "h57d.py"), "score-p", d],
+                                 capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertEqual(json.loads(out.stdout)["H57dp"]["verdict"], "SUPPORTED")
+
+
+# ---- H57dp amendment R2: the inherited quality records, the spare-hold guard, the Reproduce
+# header's engine flags -------------------------------------------------------------------------
+
+H57D_HOLD4 = os.path.join(HERE, "results", "2026-10-21", "hold4")
+
+
+def write_quality(root, correct):
+    """A stand-in for H57d's quality hold: root/hold4/<arm>/quality.json, correct of 50."""
+    for arm, c in correct.items():
+        ad = os.path.join(root, "hold4", arm)
+        os.makedirs(ad)
+        json.dump({"status": "measured"}, open(os.path.join(ad, "status.json"), "w"))
+        json.dump({"correct": c, "n": 50, "score": c / 50}, open(os.path.join(ad, "quality.json"), "w"))
+
+
+class InheritedQuality(unittest.TestCase):
+    def test_read_from_the_committed_h57d_quality_hold(self):
+        q = h57d.inherited_quality()
+        self.assertEqual(sorted(q), sorted(h57d.P_ARMS))
+        for arm, src in (("Ld-mtp-u", "Ld-mtp"), ("Ld-mtp", "Ld-mtp"), ("Od", "Od")):
+            rec = json.load(open(os.path.join(H57D_HOLD4, src, "quality.json")))
+            self.assertEqual(q[arm], {"from": f"H57d hold 4, {src}", "correct": rec["correct"],
+                                      "n": rec["n"], "score": rec["score"]})
+        self.assertEqual((q["Ld-mtp-u"]["correct"], q["Od"]["correct"]), (50, 50))
+
+    def test_missing_record_reads_none(self):
+        with tempfile.TemporaryDirectory() as d:
+            write_quality(d, {"Ld-mtp": 49})
+            q = h57d.inherited_quality(d)
+        self.assertEqual(q["Ld-mtp-u"]["correct"], 49)   # Ld-mtp's record stands for Ld-mtp-u
+        self.assertIsNone(q["Od"])
+
+    def test_score_p_reports_the_records_with_no_gate(self):
+        decode = {"Ld-mtp": 5.0, "Ld-mtp-u": 8.0, "Od": 6.0}
+        with tempfile.TemporaryDirectory() as d:
+            write_p_holds(d, decode)
+            r = h57d.score_p(d)
+            self.assertEqual(r["quality_records"], h57d.inherited_quality())
+            # A low inherited score changes no verdict: neither row has a quality gate.
+            qd = os.path.join(d, "q")
+            write_quality(qd, {"Ld-mtp": 20, "Od": 20})
+            low = h57d.score_p(d, quality_from=qd)
+        self.assertEqual(low["quality_records"]["Ld-mtp-u"]["correct"], 20)
+        for row in ("H57dp", "H57de"):
+            self.assertEqual(low[row]["verdict"], r[row]["verdict"])
+        self.assertEqual((r["H57dp"]["verdict"], r["H57de"]["verdict"]), ("SUPPORTED", "REFUTED"))
+
+
+class SpareHoldGuard(unittest.TestCase):
+    """H57d's hold 5 is the spare: it repeats a failed hold's arms, which must be named. Before
+    H57dp amendment R1 a bare `hold.sh 5 perf` took the lock and ran a hold with no arms."""
+
+    def test_bare_spare_and_smoke_holds_refused(self):
+        for row, hold in (("H57d", "5"), ("H57w", "5"), ("H57dp", "5"), ("H57d", "smoke-p")):
+            r, made, log = run_hold(row, hold, "perf")
+            self.assertEqual(r.returncode, 2, f"{row} {hold}: {r.stdout}{r.stderr}")
+            self.assertEqual(made, [], f"{row} {hold}")
+            self.assertIn(f"registers no hold {hold}", r.stderr)
+
+    def test_named_arms_pass_the_guard(self):
+        # With arms named, hold.sh goes on to the lock (here a path that cannot be opened).
+        for row, hold, arms in (("H57d", "5", ("Od", "Ld")), ("H57d", "smoke-p", ("Ld-mtp-u",))):
+            r, made, log = run_hold(row, hold, "perf", *arms)
+            self.assertNotEqual(r.returncode, 2, f"{row} {hold}: {r.stdout}{r.stderr}")
+            self.assertIn(f"waiting for the lock (mode perf, arms: {' '.join(arms)})", log)
+            self.assertNotIn("lock taken", log)
+
+
+def stub_tools(d):
+    """docker, kubectl and k3d stand-ins, so reproduce.sh runs with no container runtime."""
+    for name, out in (("docker", "29.0.0"), ("kubectl", "Client Version: v1.37.1"), ("k3d", "k3d version v5.8.3")):
+        p = os.path.join(d, name)
+        with open(p, "w") as f:
+            f.write(f"#!/bin/sh\necho '{out}'\n")
+        os.chmod(p, 0o755)
+
+
+class ReproduceHeader(unittest.TestCase):
+    def test_engine_flags_block(self):
+        # Every H57d reproduce.txt shows a SyntaxError where this block belongs.
+        with tempfile.TemporaryDirectory() as d:
+            b = os.path.join(d, "bin")
+            os.makedirs(b)
+            stub_tools(b)
+            env = dict(os.environ, G=os.path.join(d, "g"), PATH=b + os.pathsep + os.environ["PATH"],
+                       K3D_REAL=os.path.join(b, "k3d"))
+            r = subprocess.run(["bash", os.path.join(HERE, "reproduce.sh")], env=env,
+                               capture_output=True, text=True, timeout=120)
+        for bad in ("SyntaxError", "Traceback"):
+            self.assertNotIn(bad, r.stdout + r.stderr)
+        lines = r.stdout.splitlines()
+        i = lines.index("engine flags (Od in each arm's deploy.yaml):")
+        want = [f"  {a}: {' '.join(v)}" for a, v in (("Ld", h57d.llamacpp_args(False)),
+                                                      ("Ld-mtp", h57d.llamacpp_args(True)),
+                                                      ("Ld-mtp-u", h57d.llamacpp_args(True, pinned=False)))]
+        self.assertEqual(lines[i + 1:], want)
+        self.assertIn("  llamacpp: " + h57d.LLAMACPP, lines)
 
 
 if __name__ == "__main__":

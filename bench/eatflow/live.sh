@@ -522,9 +522,17 @@ if [ "${MODE}" = pairs ]; then
         kubectl get pods -A > "${OUT}/pods.txt" 2>&1
         kubectl -n k3d-gpu-agent logs deploy/ovms --all-containers > "${OUT}/server-a.log" 2>&1
         [ "${DESIGN}" != H47 ] && kubectl -n "${B_NS}" logs "deploy/${B_DEP}" --all-containers > "${OUT}/server-b.log" 2>&1
+        # H50o amendment O1: B3's pull, its files' sha256 and its graph, also when it is not ready.
+        [ "${DESIGN}" = H50o ] && bash "${HERE}/crescent/b3-records.sh" "${OUT}/b3-model" "$(nodes | head -1)" "${B3_MODEL}"
         exit 3
     fi
     stamp ready
+    if [ "${DESIGN}" = H50o ]; then
+        # H50o (pre-registration): the revision B3's init container pulled, every pulled file's
+        # sha256 and the graph this hold serves (H50o amendment O1 item 2), before the load starts.
+        bash "${HERE}/crescent/b3-records.sh" "${OUT}/b3-model" "$(nodes | head -1)" "${B3_MODEL}"
+        stamp "b3 records"
+    fi
     # The CPU ISA each server sees (amx_tile lines in its /proc/cpuinfo) and the B server's
     # log lines naming its CPU backend (H50: B1 is meant to run with AMX).
     kubectl -n k3d-gpu-agent exec deploy/ovms -c ovms -- grep -c amx_tile /proc/cpuinfo > "${OUT}/isa-a.txt" 2>&1
@@ -658,6 +666,8 @@ case ${ARM} in
         [ "${ARM}" = A3ref ] && w=Qwen3-4B-Instruct-2507
         cluster_up
         gpu=$(nvidia-smi --query-gpu=name,uuid --format=csv,noheader | awk -F', ' '/RTX 4000/ {print $2}')
+        # vLLM CUDA v0.31.0 (agent.lock vllm_cuda), the image the done desktop rows' A3 and A3ref
+        # ran, kept so they reproduce. No pending row runs A3; a new CUDA arm pins vLLM's newest.
         image=vllm/vllm-openai@sha256:a4a4c0437bf7240089da5f08aa370c4aee17ae5290f7a3b468825ee26c4c3a6b
         sed -e "s|@VLLM_IMAGE@|${image}|" -e "s|@GPU_UUID@|${gpu}|" \
             -e "s|--served-model-name=Qwen/Qwen3-4B-AWQ|--served-model-name=${SERVED}|" \

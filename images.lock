@@ -292,7 +292,7 @@
       "tag": "v0.32.0"
     },
     {
-      "digest": "sha256:95ac815038c4b3537b173798bfe3b89bdf525a52bd653cd14d4deb01f1062be7",
+      "digest": "sha256:20509fabe50dda62c09c0786d1a6effa299d3dbdddcc49331b93e65144652a8c",
       "name": "docker.io/vllm/vllm-openai-xpu",
       "sources": [
         "scripts/k3d-gpu AGENT_DEFAULT_IMAGE"
@@ -317,12 +317,36 @@
       "tag": "v0.15.0"
     },
     {
-      "digest": "sha256:be586c648cb79d2cd75d0c38a6541e1f16c47a7c6621d3e711470a467fc38744",
+      "digest": "sha256:c9aba1a673382ad356a72fb63e6cd73e8c021797e904b6c099bfe130217df62e",
       "name": "ghcr.io/ggml-org/llama.cpp",
       "sources": [
         "scripts/k3d-gpu K3D_GPU_LLAMA_VULKAN_IMAGE"
       ],
       "tag": null
+    },
+    {
+      "digest": "sha256:7afc81bfe7a93de287324044fe86ccc70b1b7ac8832ed8e6ea658e11fb448ddf",
+      "name": "ghcr.io/ggml-org/llama.cpp",
+      "sources": [
+        "scripts/k3d-gpu K3D_GPU_LLAMA_FULL_IMAGE"
+      ],
+      "tag": "full-b11960"
+    },
+    {
+      "digest": "sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220",
+      "name": "ghcr.io/ggml-org/llama.cpp",
+      "sources": [
+        "scripts/k3d-gpu K3D_GPU_LLAMA_CPU_IMAGE"
+      ],
+      "tag": "server-b11960"
+    },
+    {
+      "digest": "sha256:068cd41cdc292bed89b4a6b7740ea7a33df8ba26bf880d0e12ac75972dce1700",
+      "name": "ghcr.io/ggml-org/llama.cpp",
+      "sources": [
+        "scripts/k3d-gpu K3D_GPU_LLAMA_SYCL_IMAGE"
+      ],
+      "tag": "server-intel-b11960"
     },
     {
       "digest": "sha256:9b5424634b74f0c6905109fc46f90a7f569ab7bde1211d3ac5f9c32a17895e60",
@@ -389,28 +413,28 @@
       "tag": "v3.15.0"
     },
     {
-      "digest": "sha256:f254384c24605436ce35d7077427559e24bda8f5691cff5a54a4c2e030d81083",
+      "digest": "sha256:e1d96312487eba7d8f001e848a9d4e644b7deea8c2a4564ccc318abb729be731",
       "name": "registry.k8s.io/agent-sandbox/agent-sandbox-controller",
       "sources": [
         "share/agent-sandbox.yml"
       ],
-      "tag": "v1.0.7"
+      "tag": "v1.0.8"
     },
     {
-      "digest": "sha256:fc92654c97fe5dff2a7935a845820981026c075d0c1014e5c2c569f5e58204f1",
+      "digest": "sha256:41da84809426098cb04cdafbb41855f15e3604f7455ef53816bad666e532e787",
       "name": "registry.k8s.io/agent-sandbox/python-runtime-sandbox",
       "sources": [
         "share/agent-sandbox-k3d.yml"
       ],
-      "tag": "v1.0.7"
+      "tag": "v1.0.8"
     },
     {
-      "digest": "sha256:2fa1c99ad09bdf2c8ad97706a4ad2fd548c84d5ecd70ba32a6152c667b96c4d2",
+      "digest": "sha256:6fc5c9af9176e1acb5ce57a4a1d0c0d3eb25cd34f5bdd0efefebf0efe45a8379",
       "name": "registry.k8s.io/nfd/node-feature-discovery",
       "sources": [
         "share/node-feature-discovery.yml"
       ],
-      "tag": "v0.19.0"
+      "tag": "v0.20.1"
     },
     {
       "digest": "sha256:5d064465d751a73a729e7ecdc32c0ba5de0df1d305debb60a3d9a85b4fd3a967",

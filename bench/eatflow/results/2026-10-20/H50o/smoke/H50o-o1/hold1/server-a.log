@@ -1,0 +1,40 @@
+[INFO] LFS resume: attempts=5 interval=10 s
+[2026-10-29 08:01:37.705][1][serving][info][libgit2.cpp:1342] Path "/models/k3dgpu/gemma-4-26B-A4B-it-qat-int4-ov" exists but is not a git repository. Skipping download and using existing files.
+Model: k3dgpu/gemma-4-26B-A4B-it-qat-int4-ov downloaded to: /models/k3dgpu/gemma-4-26B-A4B-it-qat-int4-ov
+Graph: graph.pbtxt created in: /models/k3dgpu/gemma-4-26B-A4B-it-qat-int4-ov
+[2026-10-29 08:01:38.635][1][serving][info][server.cpp:115] OpenVINO Model Server 2026.4.1.cfc9ac721
+[2026-10-29 08:01:38.635][1][serving][info][server.cpp:116] OpenVINO backend 2026.4.1-22982-e213a147257-releases/2026/4
+[2026-10-29 08:01:38.635][1][serving][info][server.cpp:119] OpenVINO GenAI backend 2026.4.1.0-3408-ab01d1771e4
+[2026-10-29 08:01:38.635][1][serving][info][pythoninterpretermodule.cpp:37] PythonInterpreterModule starting
+[2026-10-29 08:01:38.635][1][serving][info][pythoninterpretermodule.cpp:40] Initializing python interpreter
+[2026-10-29 08:01:38.690][1][serving][info][pythoninterpretermodule.cpp:59] PythonInterpreterModule started
+[2026-10-29 08:01:38.691][1][modelmanager][info][modelmanager.cpp:206] Model cache is enabled: /models/.ov_cache
+[2026-10-29 08:01:38.692][8][modelmanager][info][servable_loading_queue.cpp:89] Started servable loading queue thread
+[2026-10-29 08:01:38.732][1][modelmanager][info][modelmanager.cpp:252] Available devices for Open VINO: CPU
+[2026-10-29 08:01:38.732][1][serving][info][capimodule.cpp:40] C-APIModule starting
+[2026-10-29 08:01:38.732][1][serving][info][capimodule.cpp:42] C-APIModule started
+[2026-10-29 08:01:38.732][1][serving][info][grpcservermodule.cpp:106] GRPCServerModule starting
+[2026-10-29 08:01:38.732][1][serving][info][grpcservermodule.cpp:110] GRPCServerModule started
+[2026-10-29 08:01:38.732][1][serving][info][grpcservermodule.cpp:111] Port was not set. GRPC server will not be started.
+[2026-10-29 08:01:38.732][1][serving][info][httpservermodule.cpp:35] HTTPServerModule starting
+[2026-10-29 08:01:38.732][1][serving][info][httpservermodule.cpp:39] Will start 96 REST workers
+[2026-10-29 08:01:38.743][105][serving][info][drogon_http_server.cpp:157] Binding REST server to address: 0.0.0.0:8000
+[2026-10-29 08:01:38.843][1][serving][info][drogon_http_server.cpp:184] REST server listening on port 8000 with 96 unary threads and 96 streaming threads
+[2026-10-29 08:01:38.843][1][serving][info][http_server.cpp:242] API key not provided via --api_key_file or API_KEY environment variable. Authentication will be disabled.
+[2026-10-29 08:01:38.843][1][serving][info][httpservermodule.cpp:52] HTTPServerModule started
+[2026-10-29 08:01:38.843][1][serving][info][httpservermodule.cpp:53] Started REST server at 0.0.0.0:8000
+[2026-10-29 08:01:38.843][1][serving][info][servablemanagermodule.cpp:51] ServableManagerModule starting
+[2026-10-29 08:01:38.845][8][serving][info][mediapipegraphdefinition.cpp:643] MediapipeGraphDefinition initializing graph nodes
+[2026-10-29 08:01:38.845][8][modelmanager][info][servable_initializer.cpp:688] Initializing Visual Language Model Continuous Batching servable
+[2026-10-29 08:02:01.629][8][llm_calculator][info][servable_initializer.cpp:228] Using manually configured tool_parser: gemma4
+[2026-10-29 08:02:01.629][8][llm_calculator][info][servable_initializer.cpp:241] Auto-detected reasoning_parser: gemma4
+[2026-10-29 08:02:01.631][606][llm_executor][info][llm_executor.hpp:128] All requests: 0; Scheduled requests: 0;
+[2026-10-29 08:02:01.640][8][modelmanager][info][mediapipegraphdefinition.cpp:300] Mediapipe: gemma-4-26b-a4b-it inputs: 
+name: input; mapping: ; shape: (); precision: UNDEFINED; layout: ...
+[2026-10-29 08:02:01.640][8][modelmanager][info][mediapipegraphdefinition.cpp:301] Mediapipe: gemma-4-26b-a4b-it outputs: 
+name: output; mapping: ; shape: (); precision: UNDEFINED; layout: ...
+[2026-10-29 08:02:01.640][8][modelmanager][info][mediapipegraphdefinition.cpp:302] Mediapipe: gemma-4-26b-a4b-it kfs pass through: false
+[2026-10-29 08:02:01.640][8][modelmanager][info][pipelinedefinitionstatus.hpp:60] Mediapipe: gemma-4-26b-a4b-it state changed to: AVAILABLE after handling: ValidationPassedEvent: 
+[2026-10-29 08:02:01.641][1][serving][info][servablemanagermodule.cpp:55] ServableManagerModule started
+[2026-10-29 08:02:01.641][703][modelmanager][info][modelmanager.cpp:1184] Started model manager thread
+[2026-10-29 08:02:01.641][704][modelmanager][info][modelmanager.cpp:1213] Started cleaner thread

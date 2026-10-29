@@ -1,0 +1,1 @@
+error: error from server (NotFound): deployments.apps "ovms" not found in namespace "default"

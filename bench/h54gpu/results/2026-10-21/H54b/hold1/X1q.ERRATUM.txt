@@ -1,0 +1,8 @@
+Erratum, written 2026-10-21 after the hold. X1q.not-deliverable is left as recorded.
+
+X1q.not-deliverable says "not deliverable in 900 s". That text is wrong. OVMS was never waited on.
+Cause: a runner bug. bench/h54gpu/h54b.sh run_agent calls kubectl rollout status, port-forward,
+exec and logs without -n k3d-gpu-agent. `k3d-gpu agent manifest` puts the deployment in namespace
+k3d-gpu-agent, so rollout status failed after 1 s (X1q.log: deployments.apps "ovms" not found in
+namespace "default"; arms.log: arm started 21:14:41Z, recorded not deliverable 21:14:42Z).
+This is not an OVMS or B70 result.

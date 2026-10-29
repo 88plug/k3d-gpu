@@ -1,0 +1,21 @@
+[2026-10-29 08:17:00.328][1][serving][info][server.cpp:88] OpenVINO Model Server 2025.4.0.8db21b815
+[2026-10-29 08:17:00.328][1][serving][info][server.cpp:89] OpenVINO backend 2025.4.0.0rc3
+[2026-10-29 08:17:00.328][1][serving][info][pythoninterpretermodule.cpp:37] PythonInterpreterModule starting
+[2026-10-29 08:17:00.383][1][serving][info][pythoninterpretermodule.cpp:50] PythonInterpreterModule started
+[2026-10-29 08:17:00.395][1][modelmanager][info][modelmanager.cpp:156] Available devices for Open VINO: CPU
+[2026-10-29 08:17:00.396][1][serving][info][capimodule.cpp:40] C-APIModule starting
+[2026-10-29 08:17:00.396][1][serving][info][capimodule.cpp:42] C-APIModule started
+[2026-10-29 08:17:00.396][1][serving][info][grpcservermodule.cpp:110] GRPCServerModule starting
+[2026-10-29 08:17:00.396][1][serving][info][grpcservermodule.cpp:137] Binding gRPC server to address: 0.0.0.0:8080
+[2026-10-29 08:17:00.396][1][serving][info][grpcservermodule.cpp:192] GRPCServerModule started
+[2026-10-29 08:17:00.396][1][serving][info][grpcservermodule.cpp:193] Started gRPC server on port 8080
+[2026-10-29 08:17:00.396][1][serving][info][httpservermodule.cpp:35] HTTPServerModule starting
+[2026-10-29 08:17:00.396][1][serving][info][httpservermodule.cpp:39] Will start 96 REST workers
+[2026-10-29 08:17:00.406][58][serving][info][drogon_http_server.cpp:137] Binding REST server to address: 0.0.0.0:8081
+[2026-10-29 08:17:00.506][1][serving][info][drogon_http_server.cpp:164] REST server listening on port 8081 with 96 unary threads and 96 streaming threads
+[2026-10-29 08:17:00.506][1][serving][info][http_server.cpp:248] API key not provided via --api_key_file or API_KEY environment variable. Authentication will be disabled.
+[2026-10-29 08:17:00.506][1][serving][info][httpservermodule.cpp:52] HTTPServerModule started
+[2026-10-29 08:17:00.506][1][serving][info][httpservermodule.cpp:53] Started REST server at 0.0.0.0:8081
+[2026-10-29 08:17:00.506][1][serving][info][servablemanagermodule.cpp:51] ServableManagerModule starting
+[2026-10-29 08:17:00.507][1][serving][info][mediapipegraphdefinition.cpp:423] MediapipeGraphDefinition initializing graph nodes
+[2026-10-29 08:17:00.507][1][modelmanager][info][servable_initializer.cpp:443] Initializing Visual Language Model Continuous Batching servable

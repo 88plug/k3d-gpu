@@ -1,0 +1,15 @@
+Erratum, found in review on 2026-10-21 after #191, landed 2026-10-28. load-n1.json is left as recorded.
+
+Sample index 2 of load-n1.json reads ok=true, finished=true, but it did not complete. It stopped at
+252 of 256 content chunks after 314.0 s with output_tokens=null (chunks 254: the role chunk, 252
+content chunks and one more with no content and no usage). The engine dump in server.log.gz agrees
+(num_output_tokens=[252]), and the API server logged "Error in chat completion stream generator":
+vLLM ended the stream with an error chunk and [DONE] when its engine died. bench/llm_load.py then
+counted any stream with content as ok. So B1g completed 2 of 8 N=1 requests in hold 2 (decode 17.92
+and 18.17 tok/s), not 3.
+
+bench/llm_load.py now records finish_reason and marks a stream that carries an error object, or ends
+without a finish_reason, as an error (tests/bench_test.sh: load_engine_death, load_cut_stream). The
+verdict does not change: B1g's status is failed under amendment R3, and its N=1 median already used
+only the 2 rates. Any ratio over these 2 rates is descriptive only, with no interval (EXPERIMENTS.md,
+H54a run, corrections).

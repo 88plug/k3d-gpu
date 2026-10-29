@@ -3,7 +3,9 @@
  "source": "EXPERIMENTS.md, ## Hypotheses",
  "families": [
   "H27",
-  "H34"
+  "H34",
+  "H57m",
+  "H59"
  ],
  "rows": [
   {
@@ -37,6 +39,39 @@
    "verdict": "REFUTED",
    "classes": [
     "6741p"
+   ]
+  },
+  {
+   "id": "H57dm",
+   "verdict": "SUPPORTED",
+   "classes": [
+    "i9-13900t"
+   ]
+  },
+  {
+   "id": "H57wm",
+   "verdict": "PENDING",
+   "classes": []
+  },
+  {
+   "id": "H59",
+   "verdict": "PENDING",
+   "classes": [
+    "6741p"
+   ]
+  },
+  {
+   "id": "H59d",
+   "verdict": "PENDING",
+   "classes": [
+    "i9-13900t"
+   ]
+  },
+  {
+   "id": "H59w",
+   "verdict": "PENDING",
+   "classes": [
+    "i7-13700"
    ]
   }
  ]
