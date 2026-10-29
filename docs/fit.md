@@ -128,7 +128,9 @@ replications per CPU class (H59d, H59w). With `K3D_GPU_AGENT_BACKEND` unset, a r
 family SUPPORTED for this host's CPU class makes llama.cpp the CPU engine: the model
 optimizer then picks the model's int4 GGUF (Google's QAT Q4_0 GGUF for Gemma 4) with the QAT
 MTP drafter, the arm the row measured. A REFUTED, INCONCLUSIVE or PENDING row, a row for
-another CPU class, or no row keeps OVMS, as does a model with no int4 GGUF. The rows ship in
+another CPU class, or no row keeps OVMS, as does a model with no int4 GGUF, a variant named
+(`K3D_GPU_AGENT_VARIANT`, or a variant's id as `--model`) or an OVMS Fast Draft device
+(`K3D_GPU_AGENT_DRAFT` `auto`, `CPU`, `GPU` or `NPU`). The rows ship in
 `console/ledger-rules.json` for installs without EXPERIMENTS.md, and
 `k3d-gpu plan --model M --explain` names the row that decided. A GPU placement is not
 affected: these are CPU rows.

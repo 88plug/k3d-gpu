@@ -443,6 +443,12 @@ class LedgerEngine(unittest.TestCase):
         named = dict(bundle(GEMMA), requested="OpenVINO/gemma-4-26b-a4b-it-int4-ov")
         d = mo.optimize(named, "ovms", "CPU", {"hw_class": self.XEON, "ledger": ledger, "engine_from_ledger": True})
         self.assertEqual((d["engine"], d["model"]), ("ovms", "OpenVINO/gemma-4-26b-a4b-it-int4-ov"))
+        # So is a variant named with K3D_GPU_AGENT_VARIANT (an OVMS IR, or the QAT conversion).
+        d = self.cpu(ledger, self.XEON, variant="OpenVINO/gemma-4-26b-a4b-it-int4-ov")
+        self.assertEqual((d["engine"], d["model"]), ("ovms", "OpenVINO/gemma-4-26b-a4b-it-int4-ov"))
+        d = self.cpu(ledger, self.XEON, variant="qat-convert")
+        self.assertEqual((d["engine"], d["model"]), ("ovms", "k3d-gpu/gemma-4-26B-A4B-it-int4-sym-g32-ov"))
+        self.assertIsNotNone(d["conversion"])
         # K3D_GPU_AGENT_DRAFT=off keeps the engine, drops the drafter.
         d = self.cpu(ledger, self.XEON, draft="off")
         self.assertEqual((d["engine"], d["speculative"]), ("llama.cpp", None))

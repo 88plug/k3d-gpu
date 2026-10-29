@@ -384,6 +384,29 @@ if render l59o "${XCPU[@]}" K3D_GPU_MODEL_OPT_LEDGER="${LG}/h59-SUPPORTED.md" K3
     && has l59o '^  name: ovms$' && has l59o '--source_model=OpenVINO/gemma-4-26b-a4b-it-int4-ov'; then
     ok "H59 SUPPORTED but K3D_GPU_AGENT_BACKEND=ovms: the backend set is kept"
 else fail "an explicit backend over the ledger's CPU engine" "$(show l59o)"; fi
+# A variant named with K3D_GPU_AGENT_VARIANT (an OVMS IR, or the QAT conversion, which
+# serves its fallback IR until it is built) is served by OVMS as without the row.
+if render l59v "${XCPU[@]}" K3D_GPU_MODEL_OPT_LEDGER="${LG}/h59-SUPPORTED.md" K3D_GPU_AGENT_VARIANT=OpenVINO/gemma-4-26b-a4b-it-int4-ov \
+        -- --model google/gemma-4-26B-A4B-it \
+    && has l59v '^  name: ovms$' && has l59v '--source_model=OpenVINO/gemma-4-26b-a4b-it-int4-ov' && ! has l59v 'llamacpp' \
+    && render l59q "${XCPU[@]}" K3D_GPU_MODEL_OPT_LEDGER="${LG}/h59-SUPPORTED.md" K3D_GPU_AGENT_VARIANT=qat-convert \
+        -- --model google/gemma-4-26B-A4B-it \
+    && has l59q '^  name: ovms$' && ! has l59q 'llamacpp' && grep -q 'QAT-matched conversion' "${WORK}/l59q.err"; then
+    ok "H59 SUPPORTED but K3D_GPU_AGENT_VARIANT names a variant: OVMS serves it"
+else fail "a named variant over the ledger's CPU engine" "$(show l59v)$(show l59q)"; fi
+# An OVMS Fast Draft device (auto, CPU) asks for OVMS; off and mtp apply to llama.cpp too.
+for v in auto CPU; do
+    if render "l59d${v}" "${XCPU[@]}" K3D_GPU_MODEL_OPT_LEDGER="${LG}/h59-SUPPORTED.md" K3D_GPU_AGENT_DRAFT="${v}" \
+            -- --model google/gemma-4-26B-A4B-it \
+        && has "l59d${v}" '^  name: ovms$' && has "l59d${v}" '--draft_source_model=' && ! has "l59d${v}" 'llamacpp'; then
+        ok "H59 SUPPORTED but K3D_GPU_AGENT_DRAFT=${v} (an OVMS Fast Draft device): OVMS drafts, rc 0"
+    else fail "K3D_GPU_AGENT_DRAFT=${v} over the ledger's CPU engine" "$(show "l59d${v}")"; fi
+done
+if render l59doff "${XCPU[@]}" K3D_GPU_MODEL_OPT_LEDGER="${LG}/h59-SUPPORTED.md" K3D_GPU_AGENT_DRAFT=off \
+        -- --model google/gemma-4-26B-A4B-it \
+    && has l59doff '^  name: llamacpp$' && ! has l59doff 'spec-type'; then
+    ok "H59 SUPPORTED and K3D_GPU_AGENT_DRAFT=off: llama.cpp, no drafter"
+else fail "K3D_GPU_AGENT_DRAFT=off keeps the ledger's CPU engine" "$(show l59doff)"; fi
 if render l59g "${XEON_ENV[@]}" K3D_GPU_MODEL_OPT_LEDGER="${LG}/h59-SUPPORTED.md" -- --model google/gemma-4-26B-A4B-it \
     && has l59g '^  name: ovms$' && has l59g '--target_device=GPU'; then
     ok "H59 SUPPORTED is a CPU row: on the free B70s the engine stays OVMS"
@@ -402,7 +425,7 @@ rm -f "${WORK}/root/proc/cpuinfo"
 
 # Every llama-server render above: its args parse as llama-server's own parser reads them.
 bad=""
-for n in gguf ggopt cpu fn fn8 img optl setl mtp fnmtp rung l59 l59j l57 l57off l57g; do
+for n in gguf ggopt cpu fn fn8 img optl setl mtp fnmtp rung l59 l59j l59doff l57 l57off l57g; do
     [ -s "${WORK}/${n}.yaml" ] || { bad+=" ${n}(not rendered)"; continue; }
     why=$(llama_argv_ok "${n}" 2>&1) || bad+=" ${n}: ${why}"
 done

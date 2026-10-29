@@ -24,11 +24,12 @@ equal-or-better quality on this hardware class: an EXPERIMENTS.md row marked
 SUPPORTED that names the class (PROMOTION_ROWS), or a cached local measurement.
 NVFP4/MXFP4 run on NVIDIA only and are never picked on an Intel device.
 
-With --engine-from-ledger (no backend was set), OVMS on the CPU gives way to llama.cpp
-where an H59-family row of the ledger is SUPPORTED for the CPU class and llama.cpp has
-an int4 GGUF of the model; llama.cpp on the CPU drafts with the QAT MTP assistant where
-an H57m-family row is SUPPORTED, or with the H59 row's arm. Only SUPPORTED rows pick:
-REFUTED, INCONCLUSIVE and PENDING rows pick nothing (ledger_rule).
+With --engine-from-ledger (no backend was set) and no variant named (--variant, or a
+variant's id as the model), OVMS on the CPU gives way to llama.cpp where an H59-family
+row of the ledger is SUPPORTED for the CPU class and llama.cpp has an int4 GGUF of the
+model; llama.cpp on the CPU drafts with the QAT MTP assistant where an H57m-family row
+is SUPPORTED, or with the H59 row's arm. Only SUPPORTED rows pick: REFUTED,
+INCONCLUSIVE and PENDING rows pick nothing (ledger_rule).
 
   model_opt.py fetch --model ID [--revision REV] [--out FILE] [--cache DIR] [--fixtures DIR]
   model_opt.py optimize --bundle FILE --engine ovms|vllm|llama.cpp --device CPU|GPU|HPU
@@ -721,10 +722,11 @@ def optimize(bundle, engine, device, opts=None):
 
     # The CPU engine, when no backend was set (engine_from_ledger): llama.cpp where an
     # H59-family row is SUPPORTED for this CPU class and llama.cpp has an int4 GGUF of the
-    # model; OVMS otherwise, and for a variant the user named. REFUTED, INCONCLUSIVE and
-    # PENDING rows pick nothing.
+    # model; OVMS otherwise, and for a variant the user named (--model or
+    # K3D_GPU_AGENT_VARIANT). REFUTED, INCONCLUSIVE and PENDING rows pick nothing.
     engine_fact, engine_note = None, None
-    if o.get("engine_from_ledger") and engine == "ovms" and device == "CPU" and bundle.get("requested", target) == target:
+    if o.get("engine_from_ledger") and engine == "ovms" and device == "CPU" and bundle.get("requested", target) == target \
+            and not o.get("variant"):
         rule, rid, _ = ledger_rule(rows, "H59", hw_class)
         if rule == "on":
             alt = optimize(bundle, "llama.cpp", device, dict(o, engine_from_ledger=False, engine_row=rid))

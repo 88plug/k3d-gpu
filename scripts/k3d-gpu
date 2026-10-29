@@ -387,8 +387,8 @@ Environment:
   K3D_GPU_AGENT_BACKEND agent server: ovms | vllm | llm-scaler | llama.cpp (default: ovms,
                         or vllm on a Gaudi, or the engine the fit picks for --model M, which
                         on the CPU is llama.cpp where an EXPERIMENTS.md H59-family row is
-                        SUPPORTED for this CPU class; llm-scaler needs an Intel GPU, Arc
-                        B-series validated)
+                        SUPPORTED for this CPU class and no variant or OVMS draft device
+                        is named; llm-scaler needs an Intel GPU, Arc B-series validated)
   K3D_GPU_AGENT_MODEL   agent Hugging Face model (default: OpenVINO/Qwen3-4B-int4-ov,
                         Qwen/Qwen3-4B on vllm/llm-scaler)
   K3D_GPU_AGENT_DRAFT   ovms Fast Draft speculative decoding: off | auto | CPU | GPU | NPU
@@ -11562,8 +11562,12 @@ agent_optimize() {
     ledger=$(model_opt_ledger)
     meas=$(model_opt_measurements)
     # No backend set: on the CPU the ledger may pick the engine (an H59-family row SUPPORTED
-    # for this CPU class makes it llama.cpp; model_opt.py --engine-from-ledger).
-    if agent_fit_picks_engine && [ "${engine}" = ovms ] && [ "${device}" = CPU ]; then follow=(--engine-from-ledger); fi
+    # for this CPU class makes it llama.cpp; model_opt.py --engine-from-ledger). An OVMS
+    # Fast Draft device (K3D_GPU_AGENT_DRAFT auto, CPU, GPU or NPU) asks for OVMS; a variant
+    # (K3D_GPU_AGENT_VARIANT) keeps OVMS in model_opt.py.
+    case "${K3D_GPU_AGENT_DRAFT:-}" in ""|[Oo][Ff][Ff]|0|[Mm][Tt][Pp])
+        if agent_fit_picks_engine && [ "${engine}" = ovms ] && [ "${device}" = CPU ]; then follow=(--engine-from-ledger); fi ;;
+    esac
     errf=$(mktemp)
     out=$(python3 "${dir}/model_opt.py" optimize --bundle "${bundle}" --engine "${engine}" --device "${device}" ${follow[@]+"${follow[@]}"} \
         --vllm-version "${vver}" --thinking "${K3D_GPU_AGENT_THINKING:-off}" --draft "${draft}" \
