@@ -3,7 +3,7 @@
 Model weights removed from crescent's root filesystem (`/`, ext4 on the 3.8 TB
 Micron 7450 at `/dev/nvme0n1p1`) to free space. Each entry names the exact
 Hugging Face revision, lists every file with its size and hash, and gives the
-command that puts it back. The record is merged before the files are deleted.
+command that puts it back. The record is pushed before the files are deleted.
 
 ## Qwen/Qwen3.8-2.4T-A95B-FP8
 
