@@ -9551,6 +9551,13 @@ JSON it came from recorded. Predicted: `qwen2-5-coder-7b`.
   error (HTTP 429 or 5xx, recorded verbatim); step 3 is stopped at 100 min while every pod
   not Ready is still pulling an image or downloading a model; step 4 ends non-zero and
   every pod not Ready is a Job pod; or the lock runs out before step 8.
+- **Precedence** (written 2026-10-29 in review, before any F3 step). A REFUTED condition
+  that follows only from an INCONCLUSIVE one grades INCONCLUSIVE: step 3's non-zero exit
+  when it was stopped at 100 min while every pod not Ready was still pulling an image or
+  downloading a model; a failure of any step caused only by the recorded registry or
+  Hugging Face error; and step 5's failure when the rule picked no model. Every other
+  REFUTED condition, a choice or decision that differs from the table above included,
+  grades REFUTED whatever else happened.
 
 **Prediction.** SUPPORTED. Prior P(SUPPORTED) = 0.35. The open risks, none observed yet:
 agent-sandbox v0.5.0 on Kubernetes 1.37 (EAS tests 1.34.3); the CPU requests of the
