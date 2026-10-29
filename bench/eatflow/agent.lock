@@ -59,8 +59,8 @@
   "ollama": {"ref": "ollama/ollama:0.40.5@sha256:5d3a2f25f9825628daba94dc0b1d421c7d57d6c03ae5faa9ba050e058bab8241", "source": "bench/competitors.lock; Docker Hub tag 0.40.5 digest"},
   "llamacpp": {"ref": "ghcr.io/ggml-org/llama.cpp:server-b11706@sha256:f41d47eee678c02656eefc9ed8cce76cab584aa7032805eeef0e6639fcfda485", "source": "bench/competitors.lock"},
   "stress_ng": {"ref": "ghcr.io/colinianking/stress-ng:72a9d0cae0f420a887991d4024d3101c4af7a4fc@sha256:2ea9a7c3828eda1b1ca3d0b0c5a669ec252f9caf97a6a33aedcea6b2a66d1cbe", "source": "bench/load/load.py"},
-  "proxy_python": {"ref": "python:3.14.8-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170", "source": "docs-build/Dockerfile"},
-  "redis": {"ref": "redis:8.10.2-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0", "source": "H43 (amendment W1): the coding agent's memory store; Docker Hub tag 8.10.2-alpine index digest, read 2026-10-19; bench/eatflow/live.sh REDIS_IMAGE"}
+  "proxy_python": {"ref": "python:3.14.8-slim@sha256:fbecd461fc72d21b2143c6eaba25143738079154a6d0ea3da3aec724f50eed4a", "source": "docs-build/Dockerfile"},
+  "redis": {"ref": "redis:8.10.2-alpine@sha256:9f8d2d789b9a1d1e3f283f979aa9cbf393373806472e1ccd460e2f9c869b833b", "source": "H43 (amendment W1): the coding agent's memory store; Docker Hub tag 8.10.2-alpine index digest, read 2026-10-28; bench/eatflow/live.sh REDIS_IMAGE"}
  },
  "sampling": {
   "_note": "Pinned by the recording proxy into every agent LLM request (it replaces every sampling key the agent sent), so no engine default applies. agent_local: greedy, every local arm. agent_remote: arm R through harvest, which forbids temperature 0 and logprobs; top_k 1 is greedy there; GLM-5.3 always reasons, so reasoning_effort low (the operator's known-good harvest client setting) keeps the 256-token cap for the answer. BFCL keeps its own temperature 0.001 (the board's setting).",

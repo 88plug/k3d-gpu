@@ -894,6 +894,37 @@ class EndToEndTest(unittest.TestCase):
         self.assertEqual(rc, cap.EXIT_ENDPOINT)
         self.assertLess(stub.count, 30)
 
+    def test_discovery_names_the_launchers_context(self):
+        # Run from the launcher, capacity's kubectl names the context the launcher's
+        # own calls do (K3D_GPU_KCTX), not the kubeconfig's current-context.
+        fake_host(self.root)
+        stub = LoadStub(base=0.001)
+        self.stubs.append(stub)
+        write(os.path.join(self.tmp, "list.json"), json.dumps({"kind": "List", "items": ovms_items()}))
+        stub_bin(self.bin, "kubectl",
+                 f'printf "%s\\n" "$*" >> "{self.tmp}/kubectl.log"\n'
+                 f'case "$*" in\n'
+                 f'  *port-forward*) echo "Forwarding from 127.0.0.1:{stub.port} -> 8000"; exec sleep 30 ;;\n'
+                 f'  *get*) cat "{self.tmp}/list.json" ;;\n'
+                 f'esac\n')
+        stub_bin(self.bin, "nvidia-smi", "echo '0, 12.5, 70.00, 0, 40, Not Active, Not Active, Not Active, Not Active'\n")
+        old = os.environ.get("K3D_GPU_KCTX")
+        os.environ["K3D_GPU_KCTX"] = "k3d-x"
+        try:
+            rc, _out, err = self.run_main(["--slo", "5", "--max", "1", "--reps", "2", "--time-scale", "0",
+                                           "--quiet-s", "0.3", "--interval", "0.1",
+                                           "--out", os.path.join(self.tmp, "run")])
+        finally:
+            if old is None:
+                os.environ.pop("K3D_GPU_KCTX", None)
+            else:
+                os.environ["K3D_GPU_KCTX"] = old
+        self.assertEqual(rc, 0, err)
+        with open(os.path.join(self.tmp, "kubectl.log")) as f:
+            calls = f.read().splitlines()
+        self.assertTrue(calls)
+        self.assertTrue(all(c.startswith("--context k3d-x ") for c in calls), calls)
+
     def test_auto_discovers_and_port_forwards(self):
         fake_host(self.root)
         stub = LoadStub(base=0.001)

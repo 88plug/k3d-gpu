@@ -30,6 +30,8 @@
 #   LIVE_SAMPLING   the proxy's pinned sampling profile (default: the model set's; agent.lock)
 #   LIVE_MOUNT_B    1: mount the B arm's weights read-only into the node instead of copying them
 #   LIVE_EAT_KV_GIB B1 VLLM_CPU_KVCACHE_SPACE, GiB (default 6, the 125 GiB desktop; H50: 40, as shipped)
+#   LIVE_EAT_B1_TAG B1's vLLM CPU image tag@digest (default EAT 0d3438d's v0.24.0; H50, H51: EAT
+#                   release-1.1.0's v0.28.0, crescent amendment E1)
 #   LIVE_KEY_FILE   0600 env file with OPENAI_BASE_URL and OPENAI_API_KEY             (R)
 #   LIVE_BFCL_PY    python of the hashed BFCL venv                                    (R)
 #   LIVE_LEVEL      background load level (default typical; R always none)
@@ -102,21 +104,25 @@ if [ "${LIVE_MOUNT_B:-}" = 1 ]; then
 fi
 P_SRV=18630 P_LLM=18640 P_PROXY=18620 P_MCP=18600 P_ROUTER=18650 P_REDIS=18660
 LITELLM_IMAGE=docker.litellm.ai/berriai/litellm:v1.83.14-stable.patch.2@sha256:73cbb215d3d43ae5b42816217b200386eb08d567767fcb36cba163152c5f3c79  # EAT 0d3438d genai-gateway; the index digest the 2026-10-17/18 holds pulled
-RAPL_IMAGE=python:3.14.8-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170
+RAPL_IMAGE=python:3.14.8-slim@sha256:fbecd461fc72d21b2143c6eaba25143738079154a6d0ea3da3aec724f50eed4a
 # H43: the coding agent's Redis memory. Redis 8 bundles the query engine the blueprint's
-# RedisContextProvider needs (FT.CREATE); the 8.10.2-alpine index digest, read 2026-10-19.
-REDIS_IMAGE=redis:8.10.2-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
+# RedisContextProvider needs (FT.CREATE); the 8.10.2-alpine index digest, read 2026-10-28.
+REDIS_IMAGE=redis:8.10.2-alpine@sha256:9f8d2d789b9a1d1e3f283f979aa9cbf393373806472e1ccd460e2f9c869b833b
 # H50o B3: EAT's OVMS chart image tag (core/helm-charts/ovms values.yaml "2025.4") pinned to the
 # index digest read 2026-10-20, and the OpenVINO model its init container pulls (the closest
 # OpenVINO/ Qwen3 4B the chart accepts without an HF token; there is no OpenVINO/ Instruct-2507).
 B3_TAG=2025.4@sha256:c370720007564bbdcbca13b9b714e4537068542cda512e8095259e66b617962a
+# B1: the image tag of EAT's xeon-values.yaml pinned to its index digest. Default: EAT 0d3438d's
+# v0.24.0 (read 2026-10-17), which every desktop row and H54a ran. The crescent wrappers pass EAT
+# release-1.1.0's v0.28.0 (crescent amendment E1).
+B1_TAG=${LIVE_EAT_B1_TAG:-v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1}
 B3_MODEL=OpenVINO/Qwen3-4B-int4-ov
 [ "${MODEL_SET}" = gemma4 ] && B3_MODEL=OpenVINO/gemma-4-26b-a4b-it-int4-ov
 # H53 B2: EAT PR #21's xpu-values.yaml image tag (vllm/vllm-openai-xpu v0.28.0) pinned to the
 # index digest read 2026-10-20, and the placeholder that holds the cards the arms may not use
 # (k3d-gpu's DEVICE_TEST_IMAGE).
 B2_TAG=v0.28.0@sha256:4756b66a077627133cee653b551f6f5eaa1b9a981b5eea13edd33fcd3b0d3ca3
-HOLD_IMAGE=busybox:1.37@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+HOLD_IMAGE=busybox:1.37@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec
 # Time a mode needs after the server answers: rollout and server-wait give up past it.
 # code: per block 120 s (the least budget) + 110 s (restart, 30 s gap, warm-up), 60 s of
 # teardown, ~90 s of sandbox, router, Redis and agent setup (H43 amendment W2).
@@ -496,8 +502,7 @@ if [ "${MODE}" = pairs ]; then
     else
         python3 "${REPO}/bench/apb/stage.py" ovms "${OUT}/agent.yaml" "${OUT}/deploy-a.yaml"
         chart=${LIVE_EAT_CHART:?}
-        printf 'image:\n  tag: "v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1"\n' \
-            > "${OUT}/pin.yaml"
+        printf 'image:\n  tag: "%s"\n' "${B1_TAG}" > "${OUT}/pin.yaml"
         python3 "${REPO}/bench/apb/stage.py" values "${chart}/xeon-values.yaml" "${OUT}/pin.yaml" "${KV_GIB}" "${OUT}/values.yaml"
         helm template "${B_REL}" "${chart}" --values "${OUT}/values.yaml" \
             --set LLM_MODEL_ID=${ALIAS} --set chatTemplateConfigMap.enabled=${B_CHAT} --set global.monitoring=false \
@@ -667,8 +672,7 @@ case ${ARM} in
         chart=${LIVE_EAT_CHART:?}
         # EAT stock: xeon-values.yaml as shipped, the tag pinned to its digest and the KV cache
         # sized by LIVE_EAT_KV_GIB (6 GiB by default, to fit the 125 GiB desktop); no k3d-gpu balloon overlay, stock max_model_len 8192.
-        printf 'image:\n  tag: "v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1"\n' \
-            > "${OUT}/pin.yaml"
+        printf 'image:\n  tag: "%s"\n' "${B1_TAG}" > "${OUT}/pin.yaml"
         python3 "${REPO}/bench/apb/stage.py" values "${chart}/xeon-values.yaml" "${OUT}/pin.yaml" "${KV_GIB}" "${OUT}/values.yaml"
         helm template "${B_REL}" "${chart}" --values "${OUT}/values.yaml" \
             --set LLM_MODEL_ID=${ALIAS} --set chatTemplateConfigMap.enabled=${B_CHAT} --set global.monitoring=false \
