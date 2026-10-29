@@ -4308,9 +4308,10 @@ and `docker info` answers), then `k3d cluster list` and the deletion of any left
 cluster must answer, or no hold (exit 8); every docker and k3d call it makes is bounded
 (`WILDCT_CALL_T`, default 120 s; cluster deletes `WILDCT_DELETE_T`, default 600 s; SIGKILL 10 s
 later); the RAPL reader must start and return a reading of `energy_uj` or no hold (exit 6); a
-cleanup step that does not finish in its bound, or a cluster list that does not answer, is named in
-`runs/NAME/cleanup-incomplete`; a signal ends the lock and load waits at once, and further signals
-during the cleanup are ignored, so the cleanup always runs to its end; the cleanup first stops
+cleanup step that does not finish in its bound, or a cluster list or a scan for the command's
+leftover processes that does not answer, is named in `runs/NAME/cleanup-incomplete`; a signal
+ends the lock and load waits at once, and further signals during the cleanup are ignored, so the
+cleanup always runs to its end; the cleanup first stops
 every process the command left behind, also one in a process group of its own (a `timeout` inside
 the command, which the command's own `timeout` does not reach), found by the `WILDCT_HOLD=NAME`
 that `hold.sh` exports (`bench/wildct/strays.py`); the command no longer inherits the lock's file

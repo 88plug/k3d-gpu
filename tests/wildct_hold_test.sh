@@ -303,6 +303,41 @@ leftover_processes_are_stopped() {
     [ ! -e "$(R H19)/cleanup-incomplete" ] || { echo "cleanup-incomplete: $(cat "$(R H19)/cleanup-incomplete")"; return 1; }
 }
 
+# A scan for the command's leftovers that fails after the first one is named, never read as "none
+# left", and what the last scan that answered found is still stopped.
+failed_stray_scan_is_named() {
+    fresh
+    local s py
+    py=$(command -v python3)
+    # python3: strays.py answers its first call only; every other script runs unchanged.
+    printf '#!/usr/bin/env bash\ncase "$1" in */strays.py)\n    n=$(( $(cat "${SHIM_DIR}/strays_n" 2>/dev/null || echo 0) + 1 )); echo "${n}" > "${SHIM_DIR}/strays_n"\n    [ "${n}" -le 1 ] || exit 1 ;;\nesac\nexec %s "$@"\n' "${py}" \
+        > "${WB}/bin/python3"
+    chmod +x "${WB}/bin/python3"
+    hold H21 sh -c '(trap "" TERM; exec sleep 299) & echo $! > "$SHIM_DIR/stray"; sleep 0.3'
+    s=$(cat "${W}/stray" 2>/dev/null)
+    [ -n "${s}" ] || { echo "the command's stray was not recorded"; return 1; }
+    BG+=("${s}")
+    [ "$(rcfile H21)" = 0 ] || { echo "rc file $(rcfile H21), exit ${RC}"; return 1; }
+    [ "$(cat "${W}/strays_n" 2>/dev/null)" -ge 2 ] || { echo "strays.py called $(cat "${W}/strays_n" 2>/dev/null) times"; return 1; }
+    grep -q 'scan for processes left from the command' "$(R H21)/cleanup-incomplete" 2>/dev/null \
+        || { echo "a scan that failed was read as no process left"; cat "$(R H21)/cleanup-incomplete" 2>/dev/null; return 1; }
+    sleep 0.2
+    ! kill -0 "${s}" 2>/dev/null || { echo "the stray ${s} (ignores TERM) left running after a failed scan"; return 1; }
+}
+
+# RESUME.md: a bounded check that passes on empty output also prints its rc, so a check that did
+# not answer is never read as "nothing left".
+resume_empty_checks_print_their_rc() {
+    local line bad=0
+    while IFS= read -r line; do
+        [[ "${line}" == *'rc=$?'* ]] || { echo "RESUME.md: no rc on: ${line}"; bad=1; }
+    done < <(grep -E '^[^#|]*timeout [0-9]+ (docker ps|python3 [^ ]*strays\.py)' "${ROOT}/bench/wildct/RESUME.md")
+    [ "$(grep -cE '^[^#|]*timeout [0-9]+ (docker ps|python3 [^ ]*strays\.py)' "${ROOT}/bench/wildct/RESUME.md")" -ge 3 ] \
+        || { echo "the after-hold docker ps and strays.py checks were not found"; return 1; }
+    grep -q 'Last check:.*rc=\$?' "${ROOT}/bench/wildct/RESUME.md" || { echo "RESUME.md: the last docker ps check prints no rc"; bad=1; }
+    return "${bad}"
+}
+
 # An earlier attempt's directory that cannot be moved aside: hold.sh stops (9) and writes nothing in it.
 unmovable_earlier_attempt_stops() {
     [ "$(id -u)" != 0 ] || { echo "skipped as root"; return 0; }
@@ -595,6 +630,7 @@ check "k3d not answering or a leftover not deleted before the hold: rc 8, nothin
 check "CMD does not inherit the host lock's fd" cmd_does_not_hold_the_lock_fd
 check "a TERM during the load wait ends hold.sh at once; no sleep left" term_during_load_wait_is_prompt
 check "processes the command leaves (any process group) are stopped; others are not" leftover_processes_are_stopped
+check "a scan for leftovers that fails is named, and the last ones found are stopped" failed_stray_scan_is_named
 check "an earlier attempt that cannot be moved aside: exit 9, nothing written in it" unmovable_earlier_attempt_stops
 check "wait_hold.sh: rc 0, rc != 0, dead without rc, ceiling" wait_hold_reports_each_end
 check "wait_hold.sh: an empty rc file is not an rc" wait_hold_empty_rc_is_not_an_rc
@@ -605,6 +641,7 @@ check "h52w.sh: no pod wait when up failed" h52w_failed_up_is_not_waited_on
 check "h52w.sh: detect, doctor, up, each pod poll, test and down are bounded" h52w_steps_are_bounded
 check "row.sh: every row's environment matches the wildct pre-registration" row_envs_match_the_registration
 check "RESUME.md: every launch line names a row row.sh runs, with the registered CAP and NEED" resume_launch_lines_match_the_registration
+check "RESUME.md: docker ps and strays.py checks read as empty print their rc" resume_empty_checks_print_their_rc
 check "row.sh: digest-pinned IMAGE, the H57 k3d shim, convert outside a hold, unknown rows" row_guards
 check "H28w's probe.sh keeps hold.sh's RAPL reader (W4); its default is unchanged" probe_keeps_the_given_rapl_reader
 check "row.sh smoke: up, pod wait, GPU scan, down; a failed up fails the smoke" row_smoke_runs_up_scan_down

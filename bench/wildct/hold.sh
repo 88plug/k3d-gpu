@@ -18,11 +18,11 @@
 # processes the command left behind (WILDCT_HOLD=NAME in their environment, bench/wildct/strays.py;
 # TERM, then KILL 10 s later), then deletes every k3dgpu-w-* cluster, the bench-load containers
 # and the RAPL reader, and nothing else; a cleanup step that does not finish in its bound (or a
-# cluster list that does not answer, or a process that outlives KILL) is named in
-# runs/NAME/cleanup-incomplete. Records go to ~/k3dgpu-bench-wildct/runs/NAME/ (an earlier
-# attempt's directory under the same NAME is kept, renamed NAME.<UTC time>; when it cannot be
-# moved, exit 9 and nothing is written): pid (this script's PID) at the start, rc last, on every
-# exit, each written whole (bench/wildct/wait_hold.sh waits on them).
+# cluster list or a scan for those processes that does not answer, or a process that outlives
+# KILL) is named in runs/NAME/cleanup-incomplete. Records go to ~/k3dgpu-bench-wildct/runs/NAME/
+# (an earlier attempt's directory under the same NAME is kept, renamed NAME.<UTC time>; when it
+# cannot be moved, exit 9 and nothing is written): pid (this script's PID) at the start, rc last,
+# on every exit, each written whole (bench/wildct/wait_hold.sh waits on them).
 set -uo pipefail
 W=${HOME}/k3dgpu-bench-wildct
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -55,22 +55,29 @@ health() {
     timeout -k 10 "${T}" docker info --format '{{.ServerVersion}}' > /dev/null 2>&1 || { echo "docker info: no answer in ${T} s"; return 1; }
 }
 unhealthy() { echo "$1" > "${R}/unhealthy"; log "host not healthy ($1): no hold"; exit 8; }
+# scan: reap's p = the processes left from this hold's command; a scan that does not answer is
+# named and leaves p as the last scan found it.
+scan() {
+    local s
+    s=$(timeout -k 5 10 python3 "${HERE}/strays.py" "${name}" $$) || { incomplete "scan for processes left from the command"; return 1; }
+    p=${s}
+}
 # reap: TERM, then KILL 10 s later, every process left from this hold's command (any process group).
 reap() {
-    local p
-    p=$(timeout -k 5 10 python3 "${HERE}/strays.py" "${name}" $$) || { incomplete "scan for processes left from the command"; return 0; }
+    local p=""
+    scan || return 0
     [ -n "${p}" ] || return 0
     # shellcheck disable=SC2086 # PIDs, split on purpose
     kill -TERM ${p} 2>/dev/null
     for _ in 1 2 3 4 5 6 7 8 9 10; do
         sleep 1
-        p=$(timeout -k 5 10 python3 "${HERE}/strays.py" "${name}" $$)
+        scan || break
         [ -n "${p}" ] || return 0
     done
     # shellcheck disable=SC2086 # PIDs, split on purpose
     kill -KILL ${p} 2>/dev/null
     sleep 1
-    p=$(timeout -k 5 10 python3 "${HERE}/strays.py" "${name}" $$)
+    scan || return 0
     [ -z "${p}" ] || incomplete "processes left from the command: ${p}"
 }
 

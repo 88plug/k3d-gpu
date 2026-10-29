@@ -97,11 +97,11 @@ Record the whole output in `$W/runs/resume-health.txt`. Also copy it back with t
 
 ```bash
 timeout 60 docker rm -f k3dgpu-w-rapl; echo "rm rc=$?"
-timeout 30 docker ps -a --filter name=k3dgpu-w- --format '{{.Names}} {{.Status}}'
+timeout 30 docker ps -a --filter name=k3dgpu-w- --format '{{.Names}} {{.Status}}'; echo "ps rc=$?"
 ```
 
-- **Pass:** `rm rc=0`, and the listing is empty.
-- **Fail** (rc 124 or the container still listed): stop. The host is not fixed.
+- **Pass:** `rm rc=0`, `ps rc=0`, and the listing is empty.
+- **Fail** (an rc not 0, 124 included, or the container still listed): stop. The host is not fixed.
 - Keep `runs/smoke1*`. They are the disclosed record of the attempt.
 
 ## 3. Upgrade to the newest release
@@ -245,8 +245,9 @@ setsid nohup bash -c 'echo $$ > '"$W"'/runs/convert/pid; bash '"$R"'/bench/wildc
   - Record `graph.pbtxt`'s sha256. On the i9 it was `c57ecf35...`.
 - **Fail** (rc not 0, or 124 at the cap): the `docker run --rm` it started may still be
   running. Check
-  `timeout 30 docker ps --filter ancestor=ghcr.io/ggml-org/llama.cpp:full-b11749@sha256:aefb375acf22d45551b0650af7e96361ad1a3abc65ad2bde215f23488da2711e`
-  and the OVMS image (`openvino/model_server@sha256:a928903f...`). Stop only those containers.
+  `timeout 30 docker ps --filter ancestor=ghcr.io/ggml-org/llama.cpp:full-b11749@sha256:aefb375acf22d45551b0650af7e96361ad1a3abc65ad2bde215f23488da2711e; echo "ps rc=$?"`
+  and the OVMS image (`openvino/model_server@sha256:a928903f...`); a `ps rc` that is not 0 means
+  docker did not answer, not that none is running. Stop only those containers.
   Then stop the pack.
 
 ## 5. Wiring smoke (`smoke2`)
@@ -318,13 +319,14 @@ N=<hold NAME>
 cat $W/runs/$N/rc; ls $W/runs/$N/{flagged,disk-abort,cleanup-incomplete,unhealthy} 2>/dev/null; tail -3 $W/runs/campaign.log
 ls $W/h57/results/H57w/hold*/{no-hold,flagged,disk-abort} 2>/dev/null                 # H57w holds: the inner hold's markers
 timeout 60 k3d cluster list -o json | python3 $R/bench/wildct/clusters.py; echo "list rc=$?"   # pass: empty, list rc=0
-timeout 30 docker ps -a --filter name=k3dgpu-w- --format '{{.Names}}'                  # pass: empty (k3dgpu-w-* and k3d-k3dgpu-w-*)
-timeout 30 python3 $R/bench/wildct/strays.py $N                                        # pass: empty (no process left from the hold)
+timeout 30 docker ps -a --filter name=k3dgpu-w- --format '{{.Names}}'; echo "ps rc=$?"  # pass: empty, ps rc=0 (k3dgpu-w-* and k3d-k3dgpu-w-*)
+timeout 30 python3 $R/bench/wildct/strays.py $N; echo "strays rc=$?"                 # pass: empty, strays rc=0 (no process left from the hold)
 df -P -BG / | tail -1
 ```
 
-- **Stop** when `cleanup-incomplete` or `unhealthy` exists, `list rc` is not 0, a `k3dgpu-w-*`
-  cluster or container or a process of the hold is left, or `/` has less than 18 GB available.
+- **Stop** when `cleanup-incomplete` or `unhealthy` exists, `list rc`, `ps rc` or `strays rc` is
+  not 0, a `k3dgpu-w-*` cluster or container or a process of the hold is left, or `/` has less
+  than 18 GB available.
 - A `flagged` hold is kept and reported as flagged (W1).
 
 **[c] copy the records back** after every hold:
@@ -444,5 +446,5 @@ Everything the campaign created is deleted (W6). Nothing else is touched.
   record IDs. Remove nothing without their OK: no `prune`.
 - **Files:** `rm -rf ~/k3dgpu-bench-wildct`, once the records are in the repository and the
   copied `rc` files and logs have been compared.
-- **Last check:** `df -P -BG /` and `timeout 30 docker ps -a --filter name=k3dgpu-w-`.
-  Report both.
+- **Last check:** `df -P -BG /` and `timeout 30 docker ps -a --filter name=k3dgpu-w-; echo "ps rc=$?"`.
+  Report both (a `ps rc` that is not 0 means docker did not answer, not that nothing is left).
