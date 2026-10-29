@@ -3437,9 +3437,10 @@ deliverable").
 
 Read descriptively, and not as the verdict: with B1g's 2 hold-2 rates, Lg/B1g is 2.70 ~~(bootstrap
 CI 2.67-2.73)~~ and Lg-mtp/B1g 3.02 ~~(CI 2.90-3.06)~~. Both are descriptive only: their base is n=2
-rates from an engine that died about 5 minutes later, and a bootstrap over 2 values gives no
-interval, so none is stated (correction 2026-10-28). By the source rule Lg-mtp (rank 2, 1.119x Lg
-at 50/50) would replace Lg (rank 0) as the chosen arm. ~~Its CI lower bound is below 3.0, so even
+rates from an engine that died about 5 minutes later, and a bootstrap over 2 base rates (only 3
+possible resampled medians) gives no valid interval, so none is stated (correction 2026-10-28).
+By the source rule Lg-mtp (rank 2, 1.119x Lg at 50/50) would replace Lg (rank 0) as the chosen
+arm. ~~Its CI lower bound is below 3.0, so even
 had those rates counted, the row would not have been SUPPORTED; the 3x bar most likely would not
 have cleared with a working B1g.~~ The point ratio sits on the 3.0 bar, and an n=2 base from a
 failing engine cannot say whether a working B1g would have cleared it. No int4-vs-bf16 quality
@@ -3837,6 +3838,21 @@ the container is a separate file, so the host never sees the engine holding the 
   restore of that pair to the main H50-H53 campaign, which was not asked first. It answered a
   chat at 21:58:57Z.
 
+**Deviations from the protocol (no amendment covers them).**
+
+- Order. The pre-registration's caps rule orders "H54a, H54q, then H54b and H54c when a card
+  window opens, then H54d". H54b and H54c ran from 21:12Z to 21:57Z on 2026-10-21 while H54q was
+  still PENDING (it has not run), and neither G1 nor G1 revision 2 changes that order. Nothing
+  either way depends on it: no H54q variant reads an H54b or H54c run, and no H54b or H54c arm
+  reads an H54q one (H54c's arms load the same Google QAT Q4_0 GGUF as H54q's Lg, but in the
+  Intel image and for N=1 speed only). Neither verdict changes.
+- Record. G1 says the pod's `/dev/dri` listing and the host `fuser` table are saved per pinned
+  arm. `h54c.sh` saves both (`cg`, `gg`, `hg`, `gg2` `.dri` and `.fuser`), but `h54b.sh`'s
+  `run_pinned` saves only the listing (`bench/h54gpu/h54b.sh:129`): H54b hold 2 has `lsq.dri` and
+  no `lsq.fuser`, here and on crescent (read 2026-10-28). This is a third `h54b.sh` gap beside
+  the two runner bugs below. No reading here rests on it: Lsq's placement is read from `lsq.dri`
+  and Prometheus, and H54c's four host tables list no llama.cpp process on any render node.
+
 **H54b: what ran.** Hold 1: X1q. Hold 2: X1q-mtp, Lsq.
 
 - B2q, Sq, Sq-mtp: not deliverable (disk). `Qwen/Qwen3.8-27B` needs 55.6 GB plus B2q's 25 GB
@@ -3904,7 +3920,8 @@ data, with new hold caps for H54b and H54c, and must disclose that the 4-card nu
    otherwise. After each arm, read the per-card `xe_vram_used_bytes` delta and fail the arm if
    any card but the assigned one moved.
 3. Fix both `h54b.sh` bugs: the namespace on every kubectl call in `run_agent`, and
-   `K3D_GPU_AGENT_PREFIX_CACHING` set as an environment assignment.
+   `K3D_GPU_AGENT_PREFIX_CACHING` set as an environment assignment. Save the host `fuser` table
+   per pinned arm in `h54b.sh`, as `h54c.sh` does.
 4. Free disk for B2q and Sq, or record them not deliverable again.
 
 This is a result about this harness's placement, not about the B70, llama.cpp SYCL, OVMS or
