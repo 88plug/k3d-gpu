@@ -308,10 +308,10 @@ class HoldGuards(unittest.TestCase):
     points into a missing directory, so a hold.sh that got past the guards fails fast (exit 4)
     instead of waiting on a real lock."""
 
-    def run_hold(self, row, hold, mode):
+    def run_hold(self, row, hold, mode, *arms):
         with tempfile.TemporaryDirectory() as g:
             env = dict(os.environ, G=g, LOCK=os.path.join(g, "missing", "live.lock"), H57D_ROW=row)
-            r = subprocess.run(["bash", os.path.join(HERE, "hold.sh"), hold, mode], env=env,
+            r = subprocess.run(["bash", os.path.join(HERE, "hold.sh"), hold, mode, *arms], env=env,
                                capture_output=True, text=True, timeout=60)
             return r, os.listdir(g)
 
@@ -325,6 +325,20 @@ class HoldGuards(unittest.TestCase):
         r, made = self.run_hold("H57d", "9", "perf")
         self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
         self.assertEqual(made, [])
+
+    def test_h57dp_explicit_arms_cannot_override(self):
+        # Explicit arms neither add a third H57dp hold nor change a registered hold's order or arms.
+        for hold, arms in (("3", ("Ld-mtp-u",)), ("1", ("Od", "Ld-mtp"))):
+            with self.subTest(hold=hold, arms=arms):
+                r, made = self.run_hold("H57dp", hold, "perf", *arms)
+                self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+                self.assertEqual(made, [])
+
+    def test_h57dp_registered_order_passes_guards(self):
+        # The registered order, given explicitly, gets past the guards and stops at the missing lock.
+        r, made = self.run_hold("H57dp", "1", "perf", "Ld-mtp-u", "Od", "Ld-mtp")
+        self.assertEqual(r.returncode, 4, r.stdout + r.stderr)
+        self.assertEqual(made, ["results"])
 
 
 PINNED_CPUS = """cpuset 0-15

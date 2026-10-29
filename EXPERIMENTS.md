@@ -3913,12 +3913,13 @@ hold orders or prediction. It adds one INCONCLUSIVE condition, the affinity chec
   test now compares the re-score with it.
 - `hold.sh`: the default arm order is `h57d.py order "${H57D_ROW}" <hold>`, which is H57d's for
   every row except H57dp, so H57w is unchanged. With `H57D_ROW=H57dp` only performance holds 1
-  and 2 exist. An unregistered hold or mode exits 2 before the lock is taken or anything is
-  written.
+  and 2 exist, each in its registered order: arms given on the command line must repeat that
+  order exactly. An unregistered hold, mode or arm order exits 2 before the lock is taken or
+  anything is written.
 - `test_h57d.py` (in CI): the unpinned flags; the Ld-mtp-u render, which is Ld-mtp's with only
-  its name and the four pinning flags changed; the row orders; the `hold.sh` guards; every
-  H57dp and H57de branch on synthetic two-hold records; the affinity parser on the H57d records;
-  and the H57d re-score.
+  its name and the four pinning flags changed; the row orders; the `hold.sh` guards, with and
+  without explicit arms; every H57dp and H57de branch on synthetic two-hold records; the
+  affinity parser on the H57d records; and the H57d re-score.
 
 `arm.sh`, `hold-run.sh`, `k3d-shim.sh`, `convert.sh` and `reproduce.sh` are unchanged.
 `reproduce.sh` prints Ld-mtp-u's flags with the other arms'.
@@ -3951,8 +3952,9 @@ unchanged. Before the first hold, every LFS file's sha256 must equal the committ
 (sha256 `8eb21d5b...`, 321,145,696 bytes). Otherwise no hold runs and the mismatch is recorded.
 
 **Smoke.** One wiring smoke of Ld-mtp-u alone may run under the lock before hold 1 (`SMOKE=1`:
-readiness, one 16-token request, the affinity table). It runs no scored request, is not one of
-the 2 holds, and is discarded and disclosed in the run section, as H57d's smokes were.
+readiness, a 16-token streamed request and a 16-token `chat_template_kwargs` chat, the affinity
+table). It runs no scored request, is not one of the 2 holds, and is discarded and disclosed
+in the run section, as H57d's smokes were.
 
 **Commands** (`LOCK` = the host's `live.lock`, `SUDO_ASKPASS` for RAPL):
 
