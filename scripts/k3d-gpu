@@ -7488,8 +7488,8 @@ agent_config() {
                 # vllm-0.30.0-ptupstream-2.13.0, pulled anonymously.
                 AGENT_DEFAULT_IMAGE="vault.habana.ai/gaudi-docker/1.24.2/ubuntu24.04/habanalabs/vllm-0.30.0-ptupstream-2.13.0@sha256:5d064465d751a73a729e7ecdc32c0ba5de0df1d305debb60a3d9a85b4fd3a967"
             elif [ "${AGENT_BACKEND}" = vllm ]; then
-                # vllm/vllm-openai-xpu:v0.31.0 (Level Zero 1.32 and compute-runtime 26.27 inside).
-                AGENT_DEFAULT_IMAGE="vllm/vllm-openai-xpu@sha256:95ac815038c4b3537b173798bfe3b89bdf525a52bd653cd14d4deb01f1062be7"
+                # vllm/vllm-openai-xpu:v0.32.0 (Level Zero 1.32 and compute-runtime 26.27 inside).
+                AGENT_DEFAULT_IMAGE="vllm/vllm-openai-xpu@sha256:20509fabe50dda62c09c0786d1a6effa299d3dbdddcc49331b93e65144652a8c"
             else
                 # intel/llm-scaler-vllm:1.5 = 0.26.0-b2 (vLLM 0.26 baseline, compute-runtime 26.14).
                 AGENT_DEFAULT_IMAGE="intel/llm-scaler-vllm@sha256:52218ad85513ab6686d4c090c83c2bd8c5b02423c63aa4dabd41837fe641fe3b"
@@ -11531,7 +11531,7 @@ agent_model_format() {
 # Applies the optimizer's choices for AGENT_OPT_MODEL to the agent settings.
 agent_optimize() {
     [ -n "${AGENT_OPT_MODEL}" ] || return 0
-    local dir bundle out errf engine=${AGENT_APP/#llamacpp/llama.cpp} device=${AGENT_SEL%% *} vver=0.31.0 draft=auto ledger meas
+    local dir bundle out errf engine=${AGENT_APP/#llamacpp/llama.cpp} device=${AGENT_SEL%% *} vver=0.32.0 draft=auto ledger meas
     local follow=() OPT_ENGINE="" OPT_MODEL="" OPT_REVISION="" OPT_TOOL_PARSER="" OPT_REASONING_PARSER="" OPT_SPEC=""
     local OPT_CONVERSION="" OPT_ARGS_JSON="[]" OPT_SUMMARY="" OPT_FALLBACK_MODEL="" OPT_FALLBACK_REVISION="" OPT_WARNING=""
     AGENT_MODEL=${AGENT_OPT_MODEL}

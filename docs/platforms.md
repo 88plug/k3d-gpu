@@ -323,7 +323,7 @@ B70 runs land:
   `/usr/lib/x86_64-linux-gnu/intel-opencl`).
 - What k3d-gpu already covers: B70 detection and the Intel GPU plugin `0.37.1`, baked
   and pinned; `gpu.intel.com/xe` advertised and asserted by `up`; the label through
-  `K3D_GPU_NODE_LABELS`; vLLM XPU through `K3D_GPU_AGENT_BACKEND=vllm` (`v0.31.0`, by digest).
+  `K3D_GPU_NODE_LABELS`; vLLM XPU through `K3D_GPU_AGENT_BACKEND=vllm` (`v0.32.0`, by digest).
 - Expected collision: a second GPU plugin. `deploy-intel-gpu-plugin.yml` applies
   `deployments/gpu_plugin/base/intel-gpu-plugin.yaml` from intel-device-plugins `main`
   (`intel_gpu_plugin_ref` defaults to `main`, unpinned) beside the baked DaemonSet.

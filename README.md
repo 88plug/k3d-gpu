@@ -944,7 +944,7 @@ OpenAI API at `/v1` from `svc/vllm`:
 
 | Backend | Image (pinned by digest) | Notes |
 |---------|--------------------------|-------|
-| `vllm` | `vllm/vllm-openai-xpu:v0.31.0` | upstream vLLM for Intel GPUs; validated on Arc Pro B-series |
+| `vllm` | `vllm/vllm-openai-xpu:v0.32.0` | upstream vLLM for Intel GPUs (Data Center GPU and Arc, per [vLLM's XPU guide](https://github.com/vllm-project/vllm/blob/v0.32.0/docs/getting_started/installation/gpu.xpu.inc.md)); v0.32.0 not yet run here on an Arc B-series card |
 | `llm-scaler` | `intel/llm-scaler-vllm:1.5` (vLLM 0.26.0-b2) | Intel's build for Arc B60/B70 |
 
 ```bash

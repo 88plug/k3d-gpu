@@ -291,7 +291,7 @@
       "tag": "v0.32.0"
     },
     {
-      "digest": "sha256:95ac815038c4b3537b173798bfe3b89bdf525a52bd653cd14d4deb01f1062be7",
+      "digest": "sha256:20509fabe50dda62c09c0786d1a6effa299d3dbdddcc49331b93e65144652a8c",
       "name": "docker.io/vllm/vllm-openai-xpu",
       "sources": [
         "scripts/k3d-gpu AGENT_DEFAULT_IMAGE"
