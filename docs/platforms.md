@@ -252,7 +252,12 @@ Upstream work that changes this integration:
   on 2026-10-27 into the `release-2.0.0` branch, not `main`, and no tag carries it yet.
   The status of each EAT PR is in the table below.
 - [enterprise-inference PR #22](https://github.com/intel/enterprise-inference/pull/22)
-  adds a `vllm-xpu` runtime that requests `gpu.intel.com/xe` by default. The Intel GPU
+  merged on 2026-10-22 as "Integrate Agentic toolkit" (`4bc7fed`), the inference-layer
+  side of EAT: vLLM Semantic Router, a LiteLLM hybrid router, the Qwen3Guard guardrail
+  and CPU models on vLLM 0.28.0. The `vllm-xpu` runtime this bullet described when it was
+  written (2026-10-17) is not in the merged commit, and no intel/enterprise-inference
+  branch has it. Arc vLLM now ships in EAT `release-1.1.0` (`compute_platform=xpu`, below),
+  which requests `gpu.intel.com/xe` by default. The Intel GPU
   plugin defines both `xe` and `i915` resources
   ([gpu_plugin.go](https://github.com/intel/intel-device-plugins-for-kubernetes/blob/main/cmd/gpu_plugin/gpu_plugin.go)),
   and `k3d-gpu detect` already reports the one the bound driver gives.
