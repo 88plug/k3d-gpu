@@ -1,0 +1,5 @@
+doctor rc=0
+up rc=0 in 140 s
+test rc=1
+gpu.intel.com/xe allocatable: 2
+down rc=0

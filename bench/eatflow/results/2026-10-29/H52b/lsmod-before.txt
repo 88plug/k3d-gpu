@@ -1,0 +1,169 @@
+Module                  Size  Used by
+nft_log                12288  0
+nft_limit              16384  0
+br_netfilter           32768  0
+xt_limit               12288  0
+xt_NFLOG               12288  0
+nfnetlink_log          24576  0
+xt_physdev             12288  0
+xt_multiport           16384  0
+vxlan                 151552  0
+ip6_udp_tunnel         16384  1 vxlan
+udp_tunnel             36864  1 vxlan
+ipt_REJECT             12288  0
+nf_reject_ipv4         12288  1 ipt_REJECT
+xt_mark                12288  0
+xt_nfacct              12288  0
+nfnetlink_acct         16384  1 xt_nfacct
+xt_comment             12288  0
+cpuid                  12288  0
+tls                   163840  0
+ib_core               552960  0
+tcp_diag               20480  0
+inet_diag              24576  1 tcp_diag
+algif_hash             20480  0
+af_alg                 32768  1 algif_hash
+veth                   45056  0
+nf_conntrack_netlink    61440  0
+xt_nat                 12288  57
+xt_tcpudp              16384  0
+xt_conntrack           12288  2
+xt_MASQUERADE          16384  2
+bridge                425984  1 br_netfilter
+stp                    12288  1 bridge
+llc                    16384  2 bridge,stp
+xfrm_user              69632  1
+xt_set                 20480  0
+ip_set                 61440  1 xt_set
+nft_chain_nat          12288  25
+nf_nat                 65536  3 xt_nat,nft_chain_nat,xt_MASQUERADE
+nf_conntrack          196608  5 xt_conntrack,nf_nat,xt_nat,nf_conntrack_netlink,xt_MASQUERADE
+nf_defrag_ipv6         24576  1 nf_conntrack
+nf_defrag_ipv4         12288  1 nf_conntrack
+xt_addrtype            12288  4
+nft_compat             20480  65
+x_tables               65536  15 xt_conntrack,nft_compat,xt_multiport,xt_NFLOG,xt_tcpudp,xt_addrtype,xt_physdev,xt_nat,xt_comment,xt_set,ipt_REJECT,xt_nfacct,xt_limit,xt_MASQUERADE,xt_mark
+nf_tables             409600  837 nft_compat,nft_log,nft_chain_nat,nft_limit
+overlay               233472  16
+nfnetlink              20480  8 nft_compat,nfnetlink_acct,nf_conntrack_netlink,nf_tables,ip_set,nfnetlink_log
+cfg80211             1548288  0
+mei_lb                 16384  0
+mei_gsc_proxy          16384  0
+mei_gsc                12288  8
+mei_me                 61440  1 mei_gsc
+mei                   184320  12 mei_gsc_proxy,mei_gsc,mei_lb,mei_me
+mtd_intel_dg           28672  0
+qrtr                   53248  2
+binfmt_misc            24576  1
+snd_hda_codec_intelhdmi    24576  4
+snd_hda_codec_hdmi     65536  1 snd_hda_codec_intelhdmi
+nls_iso8859_1          12288  1
+intel_ifs              40960  0
+intel_uncore_frequency_tpmi    12288  0
+i10nm_edac             20480  0
+intel_plr_tpmi         16384  0
+skx_edac_common        28672  1 i10nm_edac
+intel_rapl_tpmi        16384  0
+nfit                   81920  1 skx_edac_common
+isst_tpmi              12288  0
+intel_rapl_common      57344  1 intel_rapl_tpmi
+cmdlinepart            16384  0
+intel_tpmi_power_domains    16384  2 intel_plr_tpmi,intel_uncore_frequency_tpmi
+intel_uncore_frequency_common    20480  1 intel_uncore_frequency_tpmi
+isst_tpmi_core         32768  1 isst_tpmi
+pmt_telemetry          16384  0
+spi_nor               180224  1
+x86_pkg_temp_thermal    20480  0
+pmt_discovery          24576  1 pmt_telemetry
+intel_powerclamp       28672  0
+mtd                   106496  22 spi_nor,cmdlinepart,mtd_intel_dg
+intel_vsec_tpmi        20480  4 intel_plr_tpmi,intel_rapl_tpmi,isst_tpmi_core,intel_uncore_frequency_tpmi
+pmt_class              20480  2 pmt_telemetry,pmt_discovery
+intel_sdsi             20480  0
+xe                   4415488  2507
+coretemp               24576  0
+drm_gpusvm_helper      57344  1 xe
+gpu_sched              69632  1 xe
+drm_gpuvm              57344  1 xe
+snd_hda_intel          65536  0
+drm_buddy              28672  1 xe
+drm_ttm_helper         20480  1 xe
+snd_hda_codec         212992  3 snd_hda_codec_hdmi,snd_hda_intel,snd_hda_codec_intelhdmi
+ttm                   135168  2 drm_ttm_helper,xe
+snd_hda_core          151552  4 snd_hda_codec_hdmi,snd_hda_intel,snd_hda_codec,snd_hda_codec_intelhdmi
+drm_exec               12288  2 drm_gpuvm,xe
+drm_suballoc_helper    24576  1 xe
+snd_intel_dspcfg       45056  1 snd_hda_intel
+kvm_intel             552960  0
+drm_display_helper    303104  1 xe
+snd_intel_sdw_acpi     16384  1 snd_intel_dspcfg
+snd_hwdep              24576  1 snd_hda_codec
+snd_pcm               208896  4 snd_hda_codec_hdmi,snd_hda_intel,snd_hda_codec,snd_hda_core
+cec                   106496  2 drm_display_helper,xe
+kvm                  1527808  1 kvm_intel
+snd_timer              53248  1 snd_pcm
+rc_core                81920  1 cec
+snd                   147456  6 snd_hda_codec_hdmi,snd_hwdep,snd_hda_intel,snd_hda_codec,snd_timer,snd_pcm
+irqbypass              16384  1 kvm
+video                  77824  1 xe
+soundcore              16384  1 snd
+ast                   106496  0
+dax_hmem               16384  0
+intel_cstate           20480  0
+i2c_algo_bit           16384  2 ast,xe
+isst_if_mmio           12288  0
+ipmi_ssif              45056  0
+isst_if_common         28672  2 isst_if_mmio,isst_tpmi_core
+cxl_acpi               24576  0
+cxl_port               20480  0
+acpi_ipmi              24576  0
+cxl_pmem               24576  1 cxl_acpi
+ipmi_si                94208  1
+cxl_core              417792  3 cxl_pmem,cxl_port,cxl_acpi
+ipmi_devintf           20480  0
+fwctl                  20480  1 cxl_core
+input_leds             12288  0
+joydev                 32768  0
+einj                   36864  1 cxl_core
+ipmi_msghandler        98304  4 ipmi_devintf,ipmi_si,acpi_ipmi,ipmi_ssif
+mac_hid                12288  0
+pfr_telemetry          20480  0
+i2c_i801               36864  0
+pfr_update             24576  0
+spi_intel_pci          12288  1
+i2c_smbus              20480  1 i2c_i801
+i2c_mux                20480  1 i2c_i801
+spi_intel              36864  1 spi_intel_pci
+intel_vsec             24576  3 intel_vsec_tpmi,pmt_telemetry,xe
+sch_fq_codel           28672  1
+nvme_fabrics           36864  0
+efi_pstore             12288  0
+dm_multipath           45056  0
+hid_generic            12288  0
+usbhid                 86016  0
+hid                   282624  2 usbhid,hid_generic
+iaa_crypto             61440  1
+ixgbe                 598016  0
+libie_fwlog            28672  1 ixgbe
+xfrm_algo              16384  2 xfrm_user,ixgbe
+dca                    20480  1 ixgbe
+ghash_clmulni_intel    12288  0
+mdio                   12288  1 ixgbe
+pinctrl_intel_platform    12288  0
+nvme                   69632  3
+nvme_core             241664  5 nvme,nvme_fabrics
+qat_4xxx               20480  0
+nvme_keyring           20480  2 nvme_core,nvme_fabrics
+nvme_auth              28672  1 nvme_core
+intel_qat             466944  1 qat_4xxx
+hkdf                   12288  1 nvme_auth
+wmi                    36864  1 video
+idxd                  159744  1 iaa_crypto
+xhci_pci_renesas       24576  0
+crc8                   12288  1 intel_qat
+authenc                12288  1 intel_qat
+idxd_bus               16384  2 idxd,iaa_crypto
+msr                    12288  0
+dmi_sysfs              28672  0
+autofs4                61440  2
+aesni_intel            98304  0

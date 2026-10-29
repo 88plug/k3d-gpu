@@ -422,7 +422,7 @@ check "zero-copy-models (H28x R1): run creates WORK; a WORK it cannot write stop
     "${ROOT}/tests/zero_copy_workdir_test.sh"
 check "crescent (H56): hold.sh locks, slotted gate and scoped cleanup (no skips)" \
     env CRESCENT_HOLD_STRICT=1 "${ROOT}/tests/crescent_hold_test.sh"
-check "crescent (H56): serving slot covariate, lockwait and the H56 scorer" \
+check "crescent (H56, H52b): serving slot covariate, lockwait, the H56 scorer and H52b's runner" \
     env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/eatflow/crescent/test_crescent.py"
 check "crescent (H56): h56.sh parses and prints its order, caps, gate maxima and bounds" \
     sh -c 'bash -n "$1" && test "$(H56_PRINT_CONFIG=1 bash "$1" 1)" = "order=AWWAAWWA a=2400/2370/720 sibling=3000/2970/1800 sync_max=840 gate_max=600/600/120 bound_s=A:3390,W:3990"' _ "${ROOT}/bench/eatflow/crescent/h56.sh"

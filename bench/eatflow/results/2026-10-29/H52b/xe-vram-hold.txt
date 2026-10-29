@@ -1,0 +1,7 @@
+# xe_vram_used_bytes per card over the H52b hold (18:32:44Z to 18:43:38Z), from crescent's
+# Prometheus (job xe-gpu, the xe-exporter), read-only query_range at 2026-10-29T19:21:59Z, 18:32-18:44Z, step 60 s.
+# Columns: card, bdf, samples, min bytes, max bytes, min GiB, max GiB (GiB = 2^30 bytes).
+card1 0000:12:00.0 13 17270644736 17270644736 16.08 16.08
+card2 0000:48:00.0 13 16513126400 16513126400 15.38 15.38
+card3 0000:7c:00.0 13 17367887872 17367887872 16.18 16.18
+card4 0000:96:00.0 13 16610258944 16610258944 15.47 15.47
