@@ -14,13 +14,15 @@
 # available; CMD does not inherit the lock's fd. Every docker and k3d call made here is bounded:
 # WILDCT_CALL_T s (default 120), cluster deletes WILDCT_DELETE_T s (default 600), then SIGKILL
 # 10 s later. A signal ends the lock wait and the load wait at once; during the cleanup further
-# signals are ignored (every cleanup step is bounded). On every exit after the start it deletes every k3dgpu-w-*
-# cluster, the bench-load containers and the RAPL reader, and nothing else; a cleanup step that
-# does not finish in its bound (or a cluster list that does not answer) is named in
+# signals are ignored (every cleanup step is bounded). On every exit after the start it stops the
+# processes the command left behind (WILDCT_HOLD=NAME in their environment, bench/wildct/strays.py;
+# TERM, then KILL 10 s later), then deletes every k3dgpu-w-* cluster, the bench-load containers
+# and the RAPL reader, and nothing else; a cleanup step that does not finish in its bound (or a
+# cluster list that does not answer, or a process that outlives KILL) is named in
 # runs/NAME/cleanup-incomplete. Records go to ~/k3dgpu-bench-wildct/runs/NAME/ (an earlier
-# attempt's directory under the same NAME is kept, renamed NAME.<UTC time>): pid (this script's
-# PID) at the start, rc last, on every exit, each written whole (bench/wildct/wait_hold.sh waits
-# on them).
+# attempt's directory under the same NAME is kept, renamed NAME.<UTC time>; when it cannot be
+# moved, exit 9 and nothing is written): pid (this script's PID) at the start, rc last, on every
+# exit, each written whole (bench/wildct/wait_hold.sh waits on them).
 set -uo pipefail
 W=${HOME}/k3dgpu-bench-wildct
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -28,7 +30,7 @@ ROOT=$(cd "${HERE}/../.." && pwd)
 name=$1 cap=$2 need=$3
 shift 3
 R=${W}/runs/${name}
-[ ! -e "${R}" ] || mv "${R}" "${R}.$(date -u +%Y%m%dT%H%M%SZ)"
+[ ! -e "${R}" ] || mv "${R}" "${R}.$(date -u +%Y%m%dT%H%M%SZ)" || { echo "hold.sh: ${R} cannot be moved aside" >&2; exit 9; }
 mkdir -p "${R}"
 # put FILE VALUE: a reader sees the old file or the whole new one, never a half-written one.
 put() { echo "$2" > "${R}/$1.tmp" && mv -f "${R}/$1.tmp" "${R}/$1"; }
@@ -53,6 +55,24 @@ health() {
     timeout -k 10 "${T}" docker info --format '{{.ServerVersion}}' > /dev/null 2>&1 || { echo "docker info: no answer in ${T} s"; return 1; }
 }
 unhealthy() { echo "$1" > "${R}/unhealthy"; log "host not healthy ($1): no hold"; exit 8; }
+# reap: TERM, then KILL 10 s later, every process left from this hold's command (any process group).
+reap() {
+    local p
+    p=$(timeout -k 5 10 python3 "${HERE}/strays.py" "${name}" $$) || { incomplete "scan for processes left from the command"; return 0; }
+    [ -n "${p}" ] || return 0
+    # shellcheck disable=SC2086 # PIDs, split on purpose
+    kill -TERM ${p} 2>/dev/null
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        sleep 1
+        p=$(timeout -k 5 10 python3 "${HERE}/strays.py" "${name}" $$)
+        [ -n "${p}" ] || return 0
+    done
+    # shellcheck disable=SC2086 # PIDs, split on purpose
+    kill -KILL ${p} 2>/dev/null
+    sleep 1
+    p=$(timeout -k 5 10 python3 "${HERE}/strays.py" "${name}" $$)
+    [ -z "${p}" ] || incomplete "processes left from the command: ${p}"
+}
 
 started=0 sp="" cp="" wd="" bp=""
 finish() {
@@ -62,6 +82,7 @@ finish() {
     if [ "${started}" = 1 ]; then
         [ -z "${cp}" ] || { kill -TERM "${cp}" 2>/dev/null; wait "${cp}" 2>/dev/null; }
         [ -z "${sp}${wd}" ] || kill ${sp} ${wd} 2>/dev/null
+        reap
         if left=$(clusters); then
             if [ -n "${left}" ]; then
                 # shellcheck disable=SC2086 # cluster names, split on purpose
@@ -83,7 +104,7 @@ finish() {
     put rc "${rc}"
 }
 trap finish EXIT
-trap 'exit 143' TERM HUP INT
+trap 'trap "" TERM HUP INT; exit 143' TERM HUP INT
 
 log "waiting for the lock"
 exec 9> "${W}/live.lock"

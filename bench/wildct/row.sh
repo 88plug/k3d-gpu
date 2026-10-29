@@ -12,14 +12,17 @@
 #   h34w         H34's bench/hetero-spec/h34.sh
 #   h28w-prep    bench/zero-copy-models/probe.sh prep (typical's model images only, r0-r6)
 #   h28w         bench/zero-copy-models/probe.sh run
-#   h57w HOLD MODE [ARM...]  H57d's bench/h57d/hold.sh with the wildct knobs (inner lock); the
-#                spare hold is HOLD 5 with the failed hold's arms in its order (H57d's rule)
+#   h57w HOLD MODE [ARM...]  H57d's bench/h57d/hold.sh with the wildct knobs (inner lock): holds
+#                1-3 perf and 4 quality, in their registered arm order (no ARM); the spare hold is
+#                HOLD 5 with the failed hold's mode and its arms in its order (H57d's rule)
 #   h57w-convert H57d's bench/h57d/convert.sh (drafter GGUF, Od's graph.pbtxt) under the host
 #                lock, not in a hold; at most 3600 s
 #   h57wb        H57wb's start reading (/ available, MemAvailable) and its decision; not a hold
 # Env: IMAGE  the release node image as name:tag@sha256:digest (every row but h52w and h57wb)
 #      OUT    output directory (default ~/k3dgpu-bench-wildct/runs/${WILDCT_HOLD:-ROW}/out)
 #      WILDCT_ROW_PRINT=1  print the environment (one NAME=value per line) and the command, run nothing
+#      WILDCT_ROW_CHECK=1  run every check (the k3d shim's included), print and run nothing: exit 0 when
+#                          the row would run (bench/wildct/RESUME.md's launch checks before a hold)
 set -uo pipefail
 W=${HOME}/k3dgpu-bench-wildct
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -66,6 +69,14 @@ case ${row} in
     h57w)
         need_image
         hold=${2:?usage: row.sh h57w HOLD MODE [ARM...]} mode=${3:?usage: row.sh h57w HOLD MODE [ARM...]}
+        case ${hold}:${mode}:$# in
+            [123]:perf:3 | 4:quality:3 | 5:perf:[456] | 5:quality:[456]) ;;
+            *) echo "row.sh: h57w ${*:2}: holds 1-3 are perf and 4 quality, with no ARM; the spare 5 takes the failed hold's mode and its arms" >&2; exit 2 ;;
+        esac
+        for a in "${@:4}"; do
+            case ${a} in Od | Ld | Ld-mtp) ;; *) echo "row.sh: h57w: unknown arm ${a} (Od, Ld, Ld-mtp)" >&2; exit 2 ;; esac
+        done
+        [ "$(printf '%s\n' "${@:4}" | sort | uniq -d)" = "" ] || { echo "row.sh: h57w: an arm is repeated" >&2; exit 2; }
         E=(G="${G}" H57D_G="${G}" LOCK="${W}/inner.lock" K3D_REAL="${W}/bin/k3d" H57D_ROW=H57w H57D_PREFIX=k3dgpu-w-
            H57D_LOAD1_MAX=12 H57D_VENDORS="${OPTOUT}" H57D_IMAGE="${IMAGE}" H57D_K3S_ARGS="${W3}")
         ARGV=(bash "${REPO}/bench/h57d/hold.sh" "${hold}" "${mode}" "${@:4}")
@@ -80,6 +91,7 @@ case ${row} in
         ARGV=(h57wb) ;;
     *) echo "row.sh: unknown row ${row}" >&2; exit 2 ;;
 esac
+[ "${WILDCT_ROW_CHECK:-0}" != 1 ] || exit 0
 if [ "${WILDCT_ROW_PRINT:-0}" = 1 ]; then
     [ "${#E[@]}" -eq 0 ] || printf '%s\n' "${E[@]}"
     echo "${ARGV[*]}$([ "${RUNS}" = 1 ] || echo " (runs 1-${RUNS})")"
@@ -110,9 +122,9 @@ smoke() {
         done
     fi
     echo "pods ready: ${ready}" | tee -a "${OUT}/rc.txt"
-    kubectl get pods -A -o wide > "${OUT}/pods.txt" 2>&1
-    kubectl get node -o jsonpath='{.items[0].spec.taints}{"\n"}{.items[0].status.allocatable}{"\n"}' > "${OUT}/node.txt" 2>&1
-    kubectl get pods -A -o json 2>/dev/null | python3 "${HERE}/gpu_scan.py" > "${OUT}/gpu-scan.txt" 2>&1
+    timeout -k 5 60 kubectl get pods -A -o wide > "${OUT}/pods.txt" 2>&1
+    timeout -k 5 60 kubectl get node -o jsonpath='{.items[0].spec.taints}{"\n"}{.items[0].status.allocatable}{"\n"}' > "${OUT}/node.txt" 2>&1
+    timeout -k 5 60 kubectl get pods -A -o json 2>/dev/null | python3 "${HERE}/gpu_scan.py" > "${OUT}/gpu-scan.txt" 2>&1
     tail -1 "${OUT}/gpu-scan.txt" | tee -a "${OUT}/rc.txt"
     timeout -k 10 600 "${K}" down > "${OUT}/down.log" 2>&1
     echo "down rc=$?" | tee -a "${OUT}/rc.txt"

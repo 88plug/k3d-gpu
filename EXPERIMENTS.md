@@ -4310,18 +4310,23 @@ cluster must answer, or no hold (exit 8); every docker and k3d call it makes is 
 later); the RAPL reader must start and return a reading of `energy_uj` or no hold (exit 6); a
 cleanup step that does not finish in its bound, or a cluster list that does not answer, is named in
 `runs/NAME/cleanup-incomplete`; a signal ends the lock and load waits at once, and further signals
-during the cleanup are ignored, so the cleanup always runs to its end; the command no longer
-inherits the lock's file descriptor; an earlier attempt's records under the same NAME are kept,
-renamed `NAME.<UTC time>`; `runs/NAME/pid` at the start and `runs/NAME/rc` last on every exit, the
-early ones (lock, disk, launcher) included, each written whole. `bench/wildct/wait_hold.sh` waits on
+during the cleanup are ignored, so the cleanup always runs to its end; the cleanup first stops
+every process the command left behind, also one in a process group of its own (a `timeout` inside
+the command, which the command's own `timeout` does not reach), found by the `WILDCT_HOLD=NAME`
+that `hold.sh` exports (`bench/wildct/strays.py`); the command no longer inherits the lock's file
+descriptor; an earlier attempt's records under the same NAME are kept, renamed `NAME.<UTC time>`
+(or no hold, exit 9, when they cannot be moved); `runs/NAME/pid` at the start and `runs/NAME/rc`
+last on every exit, the early ones (lock, disk, launcher) included, each written whole. `bench/wildct/wait_hold.sh` waits on
 those with a ceiling and tells a finished hold from a dead one. `bench/wildct/h52w.sh`: the pod wait counted an
 empty pod list (no cluster) as every pod Running; it now needs at least one pod, is skipped when
 `up` failed, keeps its 60 polls every 5 s (knobs, defaults unchanged) and records its outcome in
-`rc.txt`; `detect`, `doctor`, `test` and `down` are bounded. `bench/wildct/sample.py`: `docker
+`rc.txt`; `detect`, `doctor`, `test`, `down` and the `kubectl` read-outs are bounded. `bench/wildct/sample.py`: `docker
 ps` is bounded (20 s) and keeps the last container list when docker does not answer.
 `bench/wildct/gpu_scan.py` is H52w's pod GPU scan moved out of `h52w.sh` unchanged, shared with
 the smoke. `bench/wildct/row.sh` holds each row's command as "Per row" (and H52w's procedure) lists
-it, so nothing is retyped on wildct. `bench/zero-copy-models/probe.sh` replaced any
+it, so nothing is retyped on wildct, and checks H57w's holds as registered (1-3 perf and 4
+quality in their registered order, the spare 5 with a failed hold's mode and arms).
+`bench/zero-copy-models/probe.sh` replaced any
 `K3D_GPU_RAPL_EXEC` with a `docker exec` into its node when `sudo -n` fails, so H28w would have read
 RAPL inside the node (CPUs 0-15), not through W4's reader as W4 says; it now keeps a reader it is
 given (default unchanged, as H28 ran). Tests: `tests/wildct_hold_test.sh` and `bench/wildct/test_wildct.py`, in CI.

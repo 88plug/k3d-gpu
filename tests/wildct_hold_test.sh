@@ -33,7 +33,7 @@ trap cleanup EXIT
 #   systemd_hang systemd_fail info_hang run_hang exec_empty rm_hang k3d_hang list_hang
 #   (present = on; k3d_hang: cluster delete hangs, list_hang: cluster list hangs);
 #   rm_hang_noterm: docker rm hangs and ignores SIGTERM; systemd_fail_from N: systemctl fails
-#   from its Nth call on
+#   from its Nth call on; load1 (the hold-start gate's load1, default 0.00)
 #   df_avail (GB available on /, default 100), clusters.reg (one name per line)
 fresh() {
     local c
@@ -83,11 +83,19 @@ fi
 EOF
     printf '#!/usr/bin/env bash\na=$(cat "${SHIM_DIR}/df_avail" 2>/dev/null || echo 100)\necho "Filesystem 1G-blocks Used Available Capacity Mounted on"\necho "/dev/x 3667G 100G ${a}G 50%% /"\n' > "${b}/df"
     # The hold-start gate reads load1 with `cut ... /proc/loadavg`; the test host's own load is not the subject.
-    printf '#!/usr/bin/env bash\n[ "${!#}" = /proc/loadavg ] && { echo 0.00; exit 0; }\nexec %s "$@"\n' "${REAL_CUT}" > "${b}/cut"
+    printf '#!/usr/bin/env bash\n[ "${!#}" = /proc/loadavg ] && { cat "${SHIM_DIR}/load1" 2>/dev/null || echo 0.00; exit 0; }\nexec %s "$@"\n' "${REAL_CUT}" > "${b}/cut"
     chmod +x "${b}"/*
 }
 
 R() { echo "${HOME}/k3dgpu-bench-wildct/runs/$1"; }
+# child PID COMM: the pids of PID's children named COMM (from /proc, no pgrep).
+child() {
+    local f pid c st ppid
+    for f in /proc/[0-9]*/stat; do
+        read -r pid c st ppid _ < "${f}" 2>/dev/null || continue
+        [ "${ppid}" = "$1" ] && [ "${c}" = "($2)" ] && echo "${pid}"
+    done
+}
 calls() { grep -c -- "$1" "${W}/calls.log"; }
 # hold NAME CMD...: hold.sh NAME 30 3 CMD under a 60 s bound; sets RC and SECS.
 hold() {
@@ -249,10 +257,63 @@ term_during_lock_wait_is_prompt() {
     p=$!; BG+=("${p}")
     for _ in $(seq 50); do grep -q 'H13 waiting for the lock' "${WB}/runs/campaign.log" 2>/dev/null && break; sleep 0.1; done
     sleep 0.3
+    f=$(child "${p}" flock)
     kill -TERM "${p}"
     for _ in $(seq 50); do kill -0 "${p}" 2>/dev/null || break; sleep 0.1; done
     kill -0 "${p}" 2>/dev/null && { echo "hold.sh still waiting for the lock 5 s after TERM"; return 1; }
     [ "$(rcfile H13)" = 143 ] || { echo "rc file $(rcfile H13)"; return 1; }
+    [ -n "${f}" ] || { echo "no flock child seen while waiting"; return 1; }
+    sleep 0.2
+    ! kill -0 "${f}" 2>/dev/null || { kill "${f}"; echo "flock ${f} left waiting on the lock after hold.sh ended"; return 1; }
+}
+
+# A TERM during the load gate's 120 s wait ends hold.sh at once, and its sleep is not left behind.
+term_during_load_wait_is_prompt() {
+    fresh
+    local p s
+    echo 20.00 > "${W}/load1"
+    bash "${HOLD}" H18 30 3 true > "${W}/hold.out" 2>&1 &
+    p=$!; BG+=("${p}")
+    for _ in $(seq 50); do grep -q 'H18 busy (load1 20.00)' "${WB}/runs/campaign.log" 2>/dev/null && break; sleep 0.1; done
+    sleep 0.3
+    s=$(child "${p}" sleep)
+    kill -TERM "${p}"
+    for _ in $(seq 20); do kill -0 "${p}" 2>/dev/null || break; sleep 0.1; done
+    kill -0 "${p}" 2>/dev/null && { echo "hold.sh still in the load wait 2 s after TERM"; return 1; }
+    [ "$(rcfile H18)" = 143 ] || { echo "rc file $(rcfile H18)"; return 1; }
+    [ -n "${s}" ] || { echo "no sleep child seen in the load wait"; return 1; }
+    sleep 0.2
+    ! kill -0 "${s}" 2>/dev/null || { kill "${s}"; echo "the load wait's sleep ${s} left behind"; return 1; }
+}
+
+# Processes the command leaves behind, also in a process group of their own (a timeout inside the
+# command), are stopped at the end; processes that are not the hold's are not touched.
+leftover_processes_are_stopped() {
+    fresh
+    local other a b
+    sleep 300 & other=$!; BG+=("${other}")
+    hold H19 sh -c 'timeout -k 1 300 sh -c '"'"'echo $$ > "$SHIM_DIR/stray_sh"; exec sleep 299'"'"' & echo $! > "$SHIM_DIR/stray_timeout"; sleep 0.3'
+    [ "$(rcfile H19)" = 0 ] || { echo "rc file $(rcfile H19), exit ${RC}"; return 1; }
+    a=$(cat "${W}/stray_timeout" 2>/dev/null) b=$(cat "${W}/stray_sh" 2>/dev/null)
+    [ -n "${a}" ] && [ -n "${b}" ] || { echo "the command's strays were not recorded"; return 1; }
+    BG+=("${a}" "${b}")
+    ! kill -0 "${a}" 2>/dev/null || { echo "the command's timeout ${a} (its own process group) left running"; return 1; }
+    ! kill -0 "${b}" 2>/dev/null || { echo "the command's sleep ${b} left running"; return 1; }
+    kill -0 "${other}" 2>/dev/null || { echo "a process that is not the hold's was stopped"; return 1; }
+    [ ! -e "$(R H19)/cleanup-incomplete" ] || { echo "cleanup-incomplete: $(cat "$(R H19)/cleanup-incomplete")"; return 1; }
+}
+
+# An earlier attempt's directory that cannot be moved aside: hold.sh stops (9) and writes nothing in it.
+unmovable_earlier_attempt_stops() {
+    [ "$(id -u)" != 0 ] || { echo "skipped as root"; return 0; }
+    fresh
+    local r st
+    r=$(R H20); mkdir -p "${r}"; echo old > "${r}/rc"
+    chmod a-w "${r%/*}"
+    timeout -k 5 60 bash "${HOLD}" H20 30 3 true > "${W}/hold.out" 2>&1; st=$?
+    chmod u+w "${r%/*}"
+    [ "${st}" = 9 ] || { echo "exit ${st}"; cat "${W}/hold.out"; return 1; }
+    [ "$(cat "${r}/rc")" = old ] && [ ! -e "${r}/pid" ] || { echo "the earlier attempt's directory was written to"; return 1; }
 }
 
 # The health check is repeated just before the hold starts (the load gate can last 60 min).
@@ -375,7 +436,9 @@ h52w_steps_are_bounded() {
     printf 'kube-system coredns-1 1/1 Running 0 1m\n' > "${W}/pods"
     h52w
     local k=${WB}/k3d-gpu/usr/bin/k3d-gpu s
-    for s in "300 ${k} detect" "300 ${k} doctor" "600 ${k} up" "900 ${k} test" "600 ${k} down" "30 kubectl get pods -A --no-headers"; do
+    for s in "300 ${k} detect" "300 ${k} doctor" "600 ${k} up" "900 ${k} test" "600 ${k} down" "30 kubectl get pods -A --no-headers" \
+        "60 kubectl get pods -A -o wide" "60 kubectl get ds -A" "60 kubectl get addons.k3s.cattle.io -A" "60 kubectl get node -o json" \
+        "60 kubectl get pods -A -o json"; do
         grep -q -- "^timeout -k [0-9]* ${s}\$" "${W}/calls.log" || { echo "not bounded: ${s}"; grep '^timeout' "${W}/calls.log"; return 1; }
     done
     [ "$(grep -c "^timeout -k [0-9]* 300 ${k} detect\$" "${W}/calls.log")" = 2 ] || { echo "detect (as found and with the opt-out) not both bounded"; return 1; }
@@ -432,7 +495,7 @@ row_envs_match_the_registration() {
 # RESUME.md's `launch NAME CAP NEED ROW [ARGS]` lines: the row is one row.sh runs, and CAP and
 # NEED are the pre-registration's `hold.sh NAME CAP NEED` (H57w-<n> for H57w-1..5).
 resume_launch_lines_match_the_registration() {
-    local reg line name cap need rest base want
+    local reg line name cap need rest base want row n=0 tcap tneed
     reg=$(awk '/^### Wildct pre-registration/ {f = 1; next} f && /^### / {exit} f' "${ROOT}/EXPERIMENTS.md" \
         | tr '\n' ' ' | grep -oE 'hold\.sh H[0-9A-Za-z<>-]+ [0-9]+ [0-9]+' | sort -u)
     [ -n "${reg}" ] || { echo "no hold.sh lines in the pre-registration"; return 1; }
@@ -444,11 +507,22 @@ resume_launch_lines_match_the_registration() {
         if [ -n "${want}" ] && ! grep -qxF "${want}" <<< "${reg}"; then
             echo "RESUME.md '${line}': CAP/NEED not registered (registered: $(tr '\n' ';' <<< "${reg}"))"; return 1
         fi
+        n=$((n + 1))
+        case ${name} in smoke*) row=smoke ;; H57w-*) row="h57w ${name#H57w-}" ;; *) row=${name,,} ;; esac
+        [[ "${rest} " == "${row} "* ]] || { echo "RESUME.md '${line}': NAME ${name} runs row '${rest}', not its own '${row}'"; return 1; }
         [[ "${rest}" == *"<"* ]] && continue            # H57w-5: the failed hold's mode and arms
         # shellcheck disable=SC2086 # the row and its arguments, split on purpose
         [ -n "${rest}" ] && WILDCT_HOLD=${name} WILDCT_ROW_PRINT=1 IMAGE=${IMG} bash "${ROW}" ${rest} > /dev/null 2>&1 \
             || { echo "RESUME.md '${line}': row.sh does not run '${rest}'"; return 1; }
     done < <(grep -oE '`launch [^`]+`' "${ROOT}/bench/wildct/RESUME.md" | tr -d '`' | sort -u)
+    [ "${n}" -ge 10 ] || { echo "only ${n} launch lines found in RESUME.md"; return 1; }
+    # The hold table's CAP and NEED columns (hold_wait reads CAP) agree with its launch line.
+    while IFS='|' read -r _ _ name tcap tneed line; do
+        name=$(tr -d ' `' <<< "${name}") tcap=${tcap// /} tneed=${tneed// /}
+        line=$(grep -oE '`launch [^`]+`' <<< "${line}" | head -1 | tr -d '`')
+        read -r _ _ cap need _ <<< "${line}"
+        [ "${tcap} ${tneed}" = "${cap} ${need}" ] || { echo "RESUME.md table row ${name}: CAP/NEED ${tcap}/${tneed}, launch line ${cap}/${need}"; return 1; }
+    done < <(grep -E '^\| [0-9(]+ \| `H[^`]+` \| [0-9]+ \| [0-9]+ \|' "${ROOT}/bench/wildct/RESUME.md")
 }
 
 # Rule W4: H28w's probe.sh reads RAPL through hold.sh's reader (K3D_GPU_RAPL_EXEC), not through its
@@ -469,6 +543,22 @@ row_guards() {
     IMAGE=cryptoandcoffee/k3d-gpu:0.1.74 bash "${ROW}" h25w 2> /dev/null; [ $? = 2 ] || { echo "IMAGE without a digest accepted"; return 1; }
     IMAGE=${IMG} bash "${ROW}" h57w 1 perf 2> /dev/null; [ $? = 2 ] || { echo "h57w ran without the k3d shim"; return 1; }
     WILDCT_HOLD=X bash "${ROW}" h57w-convert 2> /dev/null; [ $? = 2 ] || { echo "h57w-convert ran inside a hold"; return 1; }
+    # WILDCT_ROW_CHECK=1 (launch's pre-check): every check, the k3d shim included; runs nothing.
+    local a
+    chk() { WILDCT_ROW_CHECK=1 IMAGE=${IMG} bash "${ROW}" "$@" > "${W}/chk.out" 2>&1; }
+    chk h57w 1 perf; [ $? = 2 ] || { echo "check mode passed h57w without the k3d shim"; return 1; }
+    install -D -m 0755 "${ROOT}/bench/h57d/k3d-shim.sh" "${HOME}/k3dgpu-bench-wildct/h57/bin/k3d"
+    for a in "1 perf" "2 perf" "3 perf" "4 quality" "5 perf Ld Ld-mtp Od" "5 quality Ld Od Ld-mtp"; do
+        # shellcheck disable=SC2086 # the row's arguments, split on purpose
+        chk h57w ${a} || { echo "check mode refused h57w ${a}: $(cat "${W}/chk.out")"; return 1; }
+        [ ! -s "${W}/chk.out" ] || { echo "check mode printed or ran something for h57w ${a}"; return 1; }
+    done
+    for a in "1 quality" "4 perf" "5 Perf Ld" "5 perf Xx" "1 perf Ld" "6 perf" "5 perf" "0 perf" "5 perf Ld Ld"; do
+        # shellcheck disable=SC2086 # the row's arguments, split on purpose
+        chk h57w ${a}; [ $? = 2 ] || { echo "check mode passed h57w ${a}"; return 1; }
+    done
+    chk h25w || { echo "check mode refused h25w: $(cat "${W}/chk.out")"; return 1; }
+    [ "$(calls '')" = 0 ] || { echo "check mode ran a command: $(cat "${W}/calls.log")"; return 1; }
     bash "${ROW}" nope 2> /dev/null; [ $? = 2 ] || { echo "unknown row accepted"; return 1; }
 }
 
@@ -479,6 +569,10 @@ row_smoke_runs_up_scan_down() {
     grep -q '^pods ready: yes' "${W}/smoke/rc.txt" && grep -qx 'GPU-SCAN clean' "${W}/smoke/rc.txt" \
         || { cat "${W}/smoke/rc.txt"; return 1; }
     [ "$(calls '^k3d-gpu up')" = 1 ] && [ "$(calls '^k3d-gpu down')" = 1 ] || { echo "up/down calls"; return 1; }
+    local s
+    for s in "60 kubectl get pods -A -o wide" "60 kubectl get pods -A -o json"; do
+        grep -q -- "^timeout -k [0-9]* ${s}\$" "${W}/calls.log" || { echo "smoke: not bounded: ${s}"; return 1; }
+    done
     echo 1 > "${W}/up_rc"
     OUT=${W}/smoke2 IMAGE=${IMG} timeout -k 5 120 bash "${ROW}" smoke > /dev/null 2>&1 && { echo "failed up reported as success"; return 1; }
     grep -q '^pods ready: not waited (up rc=1)' "${W}/smoke2/rc.txt" || { cat "${W}/smoke2/rc.txt"; return 1; }
@@ -499,6 +593,9 @@ check "a TERM during the lock wait ends hold.sh at once with rc 143" term_during
 check "health is checked again just before the hold starts" health_is_rechecked_before_start
 check "k3d not answering or a leftover not deleted before the hold: rc 8, nothing started" k3d_not_answering_before_start_is_no_hold
 check "CMD does not inherit the host lock's fd" cmd_does_not_hold_the_lock_fd
+check "a TERM during the load wait ends hold.sh at once; no sleep left" term_during_load_wait_is_prompt
+check "processes the command leaves (any process group) are stopped; others are not" leftover_processes_are_stopped
+check "an earlier attempt that cannot be moved aside: exit 9, nothing written in it" unmovable_earlier_attempt_stops
 check "wait_hold.sh: rc 0, rc != 0, dead without rc, ceiling" wait_hold_reports_each_end
 check "wait_hold.sh: an empty rc file is not an rc" wait_hold_empty_rc_is_not_an_rc
 check "wait_hold.sh follows a real hold to its rc" wait_hold_follows_a_real_hold

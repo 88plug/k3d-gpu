@@ -7,7 +7,7 @@
 # again. Opens no GPU device node. The pod wait (wildct amendment R1) needs at least one pod
 # listed and every pod Running or Completed, polls every H52W_POLL_S s (default 5) at most
 # H52W_POLLS times (default 60), is skipped when `up` failed, and records its outcome in rc.txt;
-# detect, doctor, test and down are bounded by timeout.
+# detect, doctor, test and down are bounded by timeout, and so is every kubectl read-out (60 s).
 set -uo pipefail
 OUT=$1
 W=${HOME}/k3dgpu-bench-wildct
@@ -46,13 +46,13 @@ else
     done
 fi
 echo "pods ready: ${ready}" >> "${OUT}/rc.txt"
-kubectl get pods -A -o wide > "${OUT}/pods.txt" 2>&1
-kubectl get ds -A > "${OUT}/daemonsets.txt" 2>&1
-kubectl get addons.k3s.cattle.io -A > "${OUT}/addons.txt" 2>&1
-kubectl get node -o json > "${OUT}/node.json"
-kubectl get node -o jsonpath='{.items[0].status.allocatable}' > "${OUT}/allocatable.json"
+timeout -k 5 60 kubectl get pods -A -o wide > "${OUT}/pods.txt" 2>&1
+timeout -k 5 60 kubectl get ds -A > "${OUT}/daemonsets.txt" 2>&1
+timeout -k 5 60 kubectl get addons.k3s.cattle.io -A > "${OUT}/addons.txt" 2>&1
+timeout -k 5 60 kubectl get node -o json > "${OUT}/node.json"
+timeout -k 5 60 kubectl get node -o jsonpath='{.items[0].status.allocatable}' > "${OUT}/allocatable.json"
 # Every pod's hostPath volumes and resource requests: no GPU device directory, no GPU resource.
-kubectl get pods -A -o json | python3 "${HERE}/gpu_scan.py" > "${OUT}/gpu-scan.txt" 2>&1
+timeout -k 5 60 kubectl get pods -A -o json | python3 "${HERE}/gpu_scan.py" > "${OUT}/gpu-scan.txt" 2>&1
 tail -1 "${OUT}/gpu-scan.txt" >> "${OUT}/rc.txt"
 timeout -k 10 900 "${K}" test > "${OUT}/test.txt" 2>&1; echo "test rc=$?" >> "${OUT}/rc.txt"
 timeout -k 10 600 "${K}" down > "${OUT}/down.txt" 2>&1; echo "down rc=$?" >> "${OUT}/rc.txt"

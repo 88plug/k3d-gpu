@@ -12,6 +12,7 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gpu_scan  # noqa: E402
 import sample  # noqa: E402
+import strays  # noqa: E402
 
 
 class ContainersTest(unittest.TestCase):
@@ -109,6 +110,25 @@ class GpuScanTest(unittest.TestCase):
         p["spec"]["volumes"] = [{"name": "tmp", "emptyDir": {}}]
         lines, bad = gpu_scan.scan({"items": [p]})
         self.assertEqual((lines, bad), (["ns/x hostPath "], []))
+
+
+class StraysTest(unittest.TestCase):
+    def test_only_processes_carrying_the_hold_name(self):
+        env = dict(os.environ)
+        env.pop("WILDCT_HOLD", None)
+        mine = subprocess.Popen(["sleep", "30"], env={**env, "WILDCT_HOLD": "H52w"})
+        other_name = subprocess.Popen(["sleep", "30"], env={**env, "WILDCT_HOLD": "H52w-2"})
+        none = subprocess.Popen(["sleep", "30"], env=env)
+        try:
+            found = strays.strays("H52w", {os.getpid()})
+            self.assertIn(mine.pid, found)
+            self.assertNotIn(other_name.pid, found)
+            self.assertNotIn(none.pid, found)
+            self.assertNotIn(mine.pid, strays.strays("H52w", {mine.pid}))
+        finally:
+            for p in (mine, other_name, none):
+                p.kill()
+                p.wait()
 
 
 if __name__ == "__main__":

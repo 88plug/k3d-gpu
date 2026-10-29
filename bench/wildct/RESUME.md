@@ -133,9 +133,9 @@ release_wait() {
     done
 }
 V=$(release_wait "$SHA") || { V=; echo "STOP: no release matching $SHA"; }   # 0.1.74 on 2026-10-28
-# The node image is pushed after the release: wait for its digest, ceiling 1800 s.
+# The node image is pushed after the release: wait for its digest, ceiling 1800 s (15 x 120 s).
 DIGEST=
-for _ in $(seq 30); do
+for _ in $(seq 15); do
     [ -n "$V" ] || break
     DIGEST=$(timeout 60 docker buildx imagetools inspect "cryptoandcoffee/k3d-gpu:$V" | awk '/^Digest:/ {print $2; exit}')
     [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] && break
@@ -189,14 +189,20 @@ diff -r $R/share $W/k3d-gpu/usr/share/k3d-gpu | grep -v "^Only in $W/k3d-gpu/usr
   `hold.sh` would refuse every hold anyway (exit 7).
 
 Remove the old node images this campaign pulled. Only remove an image whose ID is not in
-`setup/images-before.txt`:
+`setup/images-before.txt`. The file's format was not recorded, so an ID counts as listed when its
+first 12 hex digits appear anywhere in it, and nothing is removed when the file holds no ID at all:
 
 ```bash
-for t in 0.1.71 0.1.65; do
-    id=$(timeout 30 docker image inspect -f '{{.Id}}' cryptoandcoffee/k3d-gpu:$t 2>/dev/null) || continue
-    grep -q "^$id " $W/setup/images-before.txt && { echo "keep $t (pre-existing)"; continue; }
-    timeout 300 docker rmi cryptoandcoffee/k3d-gpu:$t > /dev/null; echo "rmi $t rc=$?"
-done
+if grep -qE '[0-9a-f]{12}' $W/setup/images-before.txt; then
+    for t in 0.1.71 0.1.65; do
+        id=$(timeout 30 docker image inspect -f '{{.Id}}' cryptoandcoffee/k3d-gpu:$t 2>/dev/null) || continue
+        s=${id#sha256:}
+        grep -qF "${s:0:12}" $W/setup/images-before.txt && { echo "keep $t (pre-existing)"; continue; }
+        timeout 300 docker rmi cryptoandcoffee/k3d-gpu:$t > /dev/null; echo "rmi $t rc=$?"
+    done
+else
+    echo "setup/images-before.txt holds no image ID: remove nothing, report it"
+fi
 ```
 
 ## 4. Setup left before the first hold [w]
@@ -251,11 +257,12 @@ It sends no inference request. It is discarded and disclosed, and is not a hold 
 **[w] launch** (the same function serves every hold below):
 
 ```bash
-# launch NAME CAP NEED ROW [ARGS]: one hold, detached from the ssh session. row.sh checks the row
-# and its arguments first (a usage error inside the hold would be a failed hold, which counts).
+# launch NAME CAP NEED ROW [ARGS]: one hold, detached from the ssh session. row.sh runs every check
+# of the row first (IMAGE, the row's arguments, H57w's mode and arms, the k3d shim): a usage error
+# inside the hold would be a failed hold, which counts.
 launch() {
     [ ! -e "$W/runs/$1" ] || { echo "runs/$1 exists: use a new NAME"; return 1; }
-    IMAGE=$(cat $W/runs/IMAGE) WILDCT_HOLD=$1 WILDCT_ROW_PRINT=1 bash "$R/bench/wildct/row.sh" "${@:4}" > /dev/null \
+    IMAGE=$(cat $W/runs/IMAGE) WILDCT_HOLD=$1 WILDCT_ROW_CHECK=1 bash "$R/bench/wildct/row.sh" "${@:4}" \
         || { echo "row.sh ${*:4}: not a row it runs; nothing launched"; return 1; }
     IMAGE=$(cat $W/runs/IMAGE) setsid nohup bash "$R/bench/wildct/hold.sh" "$1" "$2" "$3" \
         bash "$R/bench/wildct/row.sh" "${@:4}" > "$W/runs/$1.out" 2>&1 < /dev/null &
@@ -280,9 +287,10 @@ launch smoke2 900 3 smoke
 **[c] hold_wait.** Every wait goes through this function. Its ceiling is CAP + 7200 s:
 
 - up to 3600 s of `load1` gate;
-- up to about 3100 s of bounded steps in `hold.sh`, each bound plus its 10 s SIGKILL (two health
-  checks, the cluster list and leftover delete, the RAPL reader, the cleanup), and `-k 30` on CMD;
-- about 500 s of slack (polls, ssh).
+- up to about 3300 s of bounded steps in `hold.sh`, each bound plus its SIGKILL grace (two health
+  checks, the cluster list and leftover delete, the RAPL reader, stopping the command's leftover
+  processes, the cleanup), and `-k 30` on CMD;
+- about 300 s of slack (polls, ssh).
 
 The lock wait is not included: the lock is free (H8) and holds run one at a time.
 
@@ -311,11 +319,12 @@ cat $W/runs/$N/rc; ls $W/runs/$N/{flagged,disk-abort,cleanup-incomplete,unhealth
 ls $W/h57/results/H57w/hold*/{no-hold,flagged,disk-abort} 2>/dev/null                 # H57w holds: the inner hold's markers
 timeout 60 k3d cluster list -o json | python3 $R/bench/wildct/clusters.py; echo "list rc=$?"   # pass: empty, list rc=0
 timeout 30 docker ps -a --filter name=k3dgpu-w- --format '{{.Names}}'                  # pass: empty (k3dgpu-w-* and k3d-k3dgpu-w-*)
+timeout 30 python3 $R/bench/wildct/strays.py $N                                        # pass: empty (no process left from the hold)
 df -P -BG / | tail -1
 ```
 
 - **Stop** when `cleanup-incomplete` or `unhealthy` exists, `list rc` is not 0, a `k3dgpu-w-*`
-  cluster or container is left, or `/` has less than 18 GB available.
+  cluster or container or a process of the hold is left, or `/` has less than 18 GB available.
 - A `flagged` hold is kept and reported as flagged (W1).
 
 **[c] copy the records back** after every hold:
@@ -420,8 +429,9 @@ Everything the campaign created is deleted (W6). Nothing else is touched.
 - **Clusters and containers:** none left (after-hold checks).
 - **Volumes and networks:** compare the current lists against `setup/volumes-before.txt` and
   `setup/networks-before.txt`. Remove only `k3d-k3dgpu-w-*` names.
-- **Images:** remove an image only when its ID is not in `setup/images-before.txt` and it is
-  one of the campaign's refs:
+- **Images:** remove an image only when its ID is not in `setup/images-before.txt` (its first 12
+  hex digits, as in step 3c; nothing when the file holds no ID) and it is one of the campaign's
+  refs:
   - `cryptoandcoffee/k3d-gpu:$V`;
   - `ghcr.io/k3d-io/k3d-tools:5.9.0` and `ghcr.io/k3d-io/k3d-proxy:5.9.0`;
   - the five refs of `setup-images.sh`;
