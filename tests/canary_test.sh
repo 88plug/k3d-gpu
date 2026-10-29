@@ -189,6 +189,12 @@ expect never verdict fail
 [ "${ELAPSED}" -le 30 ] && ok "never: gave up within the timeout (${ELAPSED}s)" || fail "never: took ${ELAPSED}s"
 grep -qi 'ready' <(field detail) && ok "never: detail says it never became ready" || fail "never: detail is '$(field detail)'"
 
+# 6b. A probe that writes no result (here: it cannot parse its timeout) is a failure, never a pass.
+run_case noprobe llama-cpu STUB_HELP="${LLAMA_HELP}" CANARY_READY_TIMEOUT=soon \
+    STUB_SERVER="python3 ${STUB} --port {port} --text '${GOLD}' --build-info b11960-8642541b2"
+expect noprobe verdict fail
+expect noprobe hard false
+
 # 7. OVMS: the pull step, then /v3 on fake_ovms.py (its digest-only pin has no tag to compare).
 run_case ovms ovms-cpu FAKE_OVMS_TEXT="${GOLD}" STUB_SERVER="python3 ${ROOT}/tests/fake_ovms.py {port}"
 expect ovms verdict pass

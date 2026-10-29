@@ -76,6 +76,9 @@ if probe:
 if verdict == "pass":
     if surface and surface["verdict"] != "pass":
         verdict = surface["verdict"]
+    elif env.get("R_SERVED") and probe is None:
+        verdict = "fail"
+        detail.append("canary/probe.py wrote no result")
     elif probe is not None and not probe["hard"]:
         verdict = "fail"
     else:
@@ -176,7 +179,8 @@ if [ -n "${E_SURFACE}" ]; then
 fi
 [ -z "${surface_only}" ] || finish pass ""
 
-# (6) serve and probe
+# (6) serve and probe: from here a pass needs the probe's result
+export R_SERVED=1
 vols=() envs=() caps=()
 if [ -n "${E_WRITABLE}" ]; then
     # The engine writes next to the model (OVMS: graph.pbtxt): a copy, never the cache.
