@@ -19,7 +19,7 @@ jobs:
     name: Shellcheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
         with:
           scandir: .
@@ -30,7 +30,7 @@ jobs:
     name: Workflow lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # rhysd/actionlint, pinned by digest in hack/ci-images.env (the nightly repin moves it).
       - name: actionlint
         run: |
@@ -41,7 +41,7 @@ jobs:
     name: Detection tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: tests/detect_test.sh
       - run: tests/kube_context_test.sh
       - run: tests/image_test.sh
@@ -60,7 +60,7 @@ jobs:
     name: Quickstart, uninstall and installer
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: tests/quickstart_test.sh
       - run: tests/quickstart_adversarial_test.sh
 
@@ -68,7 +68,7 @@ jobs:
     name: Launcher input properties (fuzz)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # A fresh seed each run; a failure prints its FUZZ_SEED replay line.
       - run: python3 tests/fuzz/props.py
 
@@ -76,7 +76,7 @@ jobs:
     name: Remote OpenAI endpoints (resolver, Secret, sandbox egress, redaction)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: python3 tests/remote_test.py
       - run: tests/remote_test.sh
 
@@ -84,12 +84,12 @@ jobs:
     name: Telemetry manifests
     runs-on: ubuntu-latest
     env:
-      PROMETHEUS_VERSION: 3.15.0
-      PROMETHEUS_SHA256: 2a542df32eac02ee17b9d844fb2aa1de00dafa5476579ba8a3ba862e9d572ea0
+      PROMETHEUS_VERSION: 3.15.1
+      PROMETHEUS_SHA256: 6a726885328ad9efebbf36e876ce2fb6225468a71fd1e7ce3ba666d5f4d97a84
       # ghcr.io/yannh/kubeconform:v0.8.0
       KUBECONFORM_IMAGE: ghcr.io/yannh/kubeconform@sha256:faffaf43f95aa6425306e1ab8d6fcad72acb9049158f38e574c085ea1ec0f64e
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install promtool
         run: |
           tgz="prometheus-${PROMETHEUS_VERSION}.linux-amd64.tar.gz"
@@ -108,21 +108,21 @@ jobs:
     name: Agent manifests (kubeconform)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: tests/agent_kubeconform.sh
 
   intel-gpu-dra-manifests:
     name: Intel GPU DRA manifests (kubeconform)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: tests/kubeconform.sh
 
   share-manifests:
     name: share/ manifests (kubeconform, CRD schemas)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends python3-yaml
       - run: tests/share_kubeconform.sh
 
@@ -130,7 +130,7 @@ jobs:
     name: Console spine (facts/v1, plan, audit)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install jsonschema for the schema cross-check (pinned)
         run: python3 -m venv /tmp/jsonschema && /tmp/jsonschema/bin/pip install --disable-pip-version-check jsonschema==4.26.0
       - env:
@@ -152,7 +152,7 @@ jobs:
     name: images.lock complete, every image pinned by digest
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: scripts/images-lock check
       - run: tests/image_pins_test.sh
 
@@ -160,11 +160,11 @@ jobs:
     name: report.html (goldens, offline load in headless Chrome)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: chrome
         uses: browser-actions/setup-chrome@48ad923757ca74d66703209fe939badbdf80f2f4 # v2.2.0
         with:
-          chrome-version: 155.0.8059.84
+          chrome-version: 156.0.8078.73
       # The headless load runs Chrome in a network namespace (unshare -rn);
       # Ubuntu's AppArmor blocks unprivileged user namespaces by default.
       - run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
@@ -177,7 +177,7 @@ jobs:
     name: Capacity oracle (schema, privacy, validator, fuzz, matrix, leaderboard, share)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # V4 reads the server image each release tag pins
       - run: python3 oracle/test_oracle.py
@@ -200,7 +200,7 @@ jobs:
     name: Docs claims guard
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: tests/claims_check_test.sh
       - run: tests/claims_check.sh
       - run: python3 tests/ledger_drift_check_test.py
@@ -213,7 +213,7 @@ jobs:
     name: Bench harness tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: tests/bench_test.sh
       - run: tests/autoquant_test.sh
       - run: tests/bench_vs_test.sh
@@ -222,7 +222,7 @@ jobs:
     name: k3d-gpu fit and guard tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # tests/fit_test.py (the fit arithmetic on fixture hosts and models, the guard
       # under simulated PSI) and the launcher's fit, agent manifest and agent guard.
       - run: tests/fit_test.sh
@@ -234,7 +234,7 @@ jobs:
     name: k3d-gpu tune tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # TUNE_E2E_FULL: two whole tunes against tests/fake_ovms.py, one where no
       # config changes the speed (must keep the default) and one with a real winner.
       - run: tests/tune_test.sh
@@ -245,7 +245,7 @@ jobs:
     name: k3d-gpu capacity tests (stub server)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: python3 bench/apb/test_capacity.py
       - run: python3 bench/apb/test_apb.py
       - run: python3 bench/apb/test_stage.py
@@ -276,14 +276,14 @@ jobs:
     name: MCP server tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: tests/mcp_test.sh
 
   kuberay-example:
     name: KubeRay example (static)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: sudo apt-get update && sudo apt-get install -y python3-yaml
       - run: tests/kuberay_test.sh
 
@@ -294,7 +294,7 @@ jobs:
       KUBECONFORM_VERSION: v0.8.0
       KUBECONFORM_SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install kubeconform
         run: |
           curl -fsSL -o kubeconform.tar.gz \
@@ -312,7 +312,7 @@ jobs:
     outputs:
       platforms: ${{ steps.list.outputs.platforms }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: list
         run: echo "platforms=$(tests/sim_matrix_test.sh --list-json)" >> "$GITHUB_OUTPUT"
 
@@ -325,7 +325,7 @@ jobs:
       matrix:
         platform: ${{ fromJSON(needs.sim-fixtures.outputs.platforms) }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - env:
           PLATFORM: ${{ matrix.platform }}
         run: tests/sim_matrix_test.sh "$PLATFORM"
@@ -338,21 +338,21 @@ jobs:
       matrix:
         example: [openai-agents, langgraph, crewai, llamaindex, litellm-gateway]
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: tests/agent_examples_test.sh "${{ matrix.example }}"
 
   register-model-test:
     name: LiteLLM register-model.sh
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: tests/register_model_test.sh
 
   render:
     name: Rendered components
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install pinned helm
         run: |
           hack/install-helm "$RUNNER_TEMP/bin"
@@ -370,36 +370,36 @@ jobs:
     name: Packaging consistency tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: tests/packaging_test.sh
 
   deb-rpm:
     name: Build and test .deb + .rpm (nfpm)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: packaging/check.sh nfpm
 
   homebrew:
     name: Homebrew formula style, audit, install, test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: packaging/check.sh brew
 
   nix-flake:
     name: Nix flake check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: packaging/check.sh nix
 
   hadolint:
     name: Dockerfile lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-      - uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
         with:
           dockerfile: Dockerfile
           failure-threshold: error
@@ -412,7 +412,7 @@ jobs:
     outputs:
       ref: ${{ steps.pin.outputs.ref }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           sparse-checkout: hack
           persist-credentials: false
@@ -428,7 +428,7 @@ jobs:
     runs-on: ubuntu-latest
     container: ${{ needs.arch-image.outputs.ref }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install tools
         run: pacman -Sy --noconfirm namcap base-devel
       - name: Create builder user
@@ -450,7 +450,7 @@ jobs:
       KUBECONFORM_VERSION: v0.8.0
       KUBECONFORM_SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
           version: v4.3.1
