@@ -15,7 +15,7 @@ idna==3.20
 jiter==0.18.0
 jsonpatch==1.38
 jsonpointer==3.6
-langchain-core==1.7.2
+langchain-core==1.7.3
 langchain-openai==1.7.3
 langchain-protocol==0.0.20
 langgraph-checkpoint==4.3.1
