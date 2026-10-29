@@ -252,6 +252,78 @@ check "bench: joule-pack (H21) unit tests" \
     env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/joule-pack/test_joulepack.py"
 check "shared-prefix (H25): prompt generator and scorer" \
     env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/shared-prefix/test_probe.py"
+check "flashnext (H60): h60.py byte classes and decision rule" \
+    env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/flashnext/test_h60.py"
+check "flashnext (H60): h60.sh parses" bash -n "${ROOT}/bench/flashnext/h60.sh"
+
+# h60_void_rerun: h60.sh's own check() and phase() (lifted from the script) against a serving
+# sampler with aiperf in the try-1 window of each arm's N=1 phase only. h54.py void exits 1 on a
+# void window; the record must still be one JSON line, the re-run's record must win, and the
+# score must use the same-hold Lg control.
+h60_void_rerun() {
+    local d="${WORK}/h60-void"
+    rm -rf "${d}"
+    mkdir -p "${d}/fn" "${d}/lg"
+    : > "${d}/serving.jsonl"
+    (
+        set -uo pipefail
+        # shellcheck disable=SC2034  # read by the check() eval'd from h60.sh
+        PY=python3 H54="${ROOT}/bench/h54" SERVING="${d}/serving.jsonl" OUT="${d}"
+        eval "$(sed -n '/^check() {/,/^}/p; /^phase() {/,/^}/p' "${ROOT}/bench/flashnext/h60.sh")"
+        declare -F check phase >/dev/null || { echo "check()/phase() not found in h60.sh"; exit 1; }
+        sample() { echo "{\"ts\": $1, \"seconds\": $2, \"aiperf_procs\": $3, \"serving_cpu\": 0.5}" >> "${SERVING}"; }
+        idle() {  # a clean idle window holding one serving sample
+            W0=$(date +%s.%N); sleep 0.3
+            sample "$(date +%s.%N)" 0.2 0; sleep 0.1
+            W1=$(date +%s.%N)
+        }
+        load() {  # load ARM NAME ...: try 1 overlaps an aiperf sample and decodes far off the band
+            local f="${OUT}/$1/load-$2.json" tps
+            if [ -e "${OUT}/$1/tried-$2" ]; then
+                tps=$([ "$1" = fn ] && echo 19.0 || echo 48.0)
+            else
+                touch "${OUT}/$1/tried-$2"
+                tps=1.0
+                sample "$(python3 -c 'import time; print(time.time() + 0.4)')" 0.3 1
+            fi
+            sleep 0.8
+            python3 -c 'import json, sys; json.dump({"phases": [{"samples": [{"ok": True, "decode_tokens_per_s": float(sys.argv[2])}] * 8}]}, open(sys.argv[1], "w"))' "${f}" "${tps}"
+        }
+        for a in lg fn; do
+            idle "${a}"
+            phase "${a}" n1 8 1 256 --ignore-eos
+        done
+        # check() on a void window prints exactly one JSON line (the GSM8K record embeds it)
+        q0=$(date +%s.%N); sample "$(python3 -c 'import time; print(time.time() + 0.2)')" 0.1 1; sleep 0.4; q1=$(date +%s.%N)
+        echo "{\"phase\": \"quality\", \"t0\": ${q0}, \"t1\": ${q1}, \"w0\": ${W0}, \"w1\": ${W1}, \"check\": $(check "${q0}" "${q1}")}" >> "${OUT}/fn/phases.jsonl"
+        # a check that cannot run reads void, still one JSON line
+        SERVING="${d}/missing.jsonl"
+        check 1 2 > "${d}/check-missing.txt"
+    ) || return 1
+    echo '{"correct": 40}' > "${d}/fn/quality.json"
+    echo '{"active_bytes": 6000000000}' > "${d}/active-bytes.json"
+    echo '{"active_bytes": 2400000000}' > "${d}/active-bytes-lg.json"
+    python3 "${ROOT}/bench/flashnext/h60.py" score "${d}" > "${d}/verdict.json" || return 1
+    python3 - "${d}" <<'PY'
+import json, os, sys
+d = sys.argv[1]
+for a in ("fn", "lg"):
+    recs = [json.loads(x) for x in open(os.path.join(d, a, "phases.jsonl"))]
+    n1 = [r for r in recs if r["phase"] == "n1"]
+    assert [(r["try"], r["check"]["void"]) for r in n1] == [(1, True), (2, False)], (a, n1)
+    assert n1[0]["check"]["reason"] == "aiperf ran", n1[0]
+    assert os.path.exists(os.path.join(d, a, "load-n1-void1.json")), a
+q = [json.loads(x) for x in open(os.path.join(d, "fn", "phases.jsonl"))][-1]
+assert q["phase"] == "quality" and q["check"]["void"] is True, q
+miss = open(os.path.join(d, "check-missing.txt")).read().splitlines()
+assert [json.loads(x) for x in miss] == [{"void": True, "reason": "void check failed"}], miss
+v = json.load(open(os.path.join(d, "verdict.json")))
+assert v["why"] == [], v
+assert (v["verdict"], v["stat"], v["control"]) == ("SUPPORTED", "e_fn / e_lg", "same-hold Lg"), v
+assert v["fn_n1_decode_median"] == 19.0 and v["lg_n1_decode_median"] == 48.0, v
+PY
+}
+check "flashnext (H60): a void try 1 then a clean re-run scores the re-run against the same-hold Lg" h60_void_rerun
 check "shared-prefix (H25): run.sh parses" bash -n "${ROOT}/bench/shared-prefix/run.sh"
 check "shared-prefix (H25): run.sh pins no node cpuset by default" \
     sh -c 'test "$(env -u CLUSTER -u NODE_CPUS SHARED_PREFIX_PRINT_CONFIG=1 bash "$1")" = "cluster=k3dgpu-i-shared-prefix node_cpus="' _ "${ROOT}/bench/shared-prefix/run.sh"
