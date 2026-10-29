@@ -4337,9 +4337,9 @@ model images the run imports and deletes (r0-r6, 7 x 1 GiB); the registered prep
 `LEVELS` at its default and would have built r0-r12 and left r7-r12 behind. The wiring smoke is not
 a hold of any row and does not count toward the 12; the resumed smoke is `smoke2`. `convert.sh`
 (H57w's drafter GGUF and Od's `graph.pbtxt`) takes this host's lock itself, outside `hold.sh`, as
-H57d ran it, under `timeout -k 30 3600` (its lock wait included). Rule W7 still installs the newest k3d-gpu release at the first hold: 0.1.74 at this
-writing (`.deb` sha256 `74d1b218...`, node image `sha256:1d7513e6...`), whose launcher equals
-main's apart from the version line. The tool pins stay as registered (kubectl v1.37.2 has since
+H57d ran it, under `timeout -k 30 3600` (its lock wait included). Rule W7 still installs the newest k3d-gpu release at the first hold: 0.1.75 on
+2026-10-29 (`.deb` sha256 `a5c48149...`, node image `sha256:ecb1b178...`), whose launcher and
+`share/` equal main's apart from the version line. The tool pins stay as registered (kubectl v1.37.2 has since
 been released; v1.37.1 is kept). The resume procedure is `bench/wildct/RESUME.md`.
 
 ### H5 amendment A1: stage-1 harness and definitions (2026-10-19)

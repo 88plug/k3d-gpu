@@ -31,9 +31,9 @@ step 1 check passes. Step 3b ships `origin/main` to wildct, so the PR that adds 
 - **Not done yet.**
   - H57w's drafter GGUF and Od's `graph.pbtxt` (`convert.sh`).
   - H57w's k3d shim.
-- **Newest release at this writing: k3d-gpu 0.1.74.**
-  - `.deb` sha256: `74d1b218579c02634d92dddc4ef465079971539fe7b4cb321a0305b0f4c9ce20`.
-  - Node image: `cryptoandcoffee/k3d-gpu:0.1.74@sha256:1d7513e65064b36a7d62eac56ddb4b6d7b904d53f482a984a39ed8590bd527a4`.
+- **Newest release on 2026-10-29: k3d-gpu 0.1.75.** Step 3a picks the newest one again.
+  - `.deb` sha256: `a5c48149f795f995334447625590b11261166672e049b35ec6ee3afd71140a17`.
+  - Node image: `cryptoandcoffee/k3d-gpu:0.1.75@sha256:ecb1b17812ff3605633ab7a57cbf8843da468885f554c496cc804c22ee4b3924`.
   - Its launcher and `share/` equal main's, apart from the version line.
 
 ## Ground rules (W1-W8; this pack adds none)
@@ -132,7 +132,7 @@ release_wait() {
         sleep 60; git fetch -q origin --tags
     done
 }
-V=$(release_wait "$SHA") || { V=; echo "STOP: no release matching $SHA"; }   # 0.1.74 on 2026-10-28
+V=$(release_wait "$SHA") || { V=; echo "STOP: no release matching $SHA"; }   # 0.1.75 on 2026-10-29
 # The node image is pushed after the release: wait for its digest, ceiling 1800 s (15 x 120 s).
 DIGEST=
 for _ in $(seq 15); do
