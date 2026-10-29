@@ -587,7 +587,15 @@ def need_model(ep, a):
     return ep.model
 
 
-KUBECTL_APPLY = ["kubectl", "apply", "--server-side", "--force-conflicts", "--field-manager=k3d-gpu", "-f", "-"]
+KUBECTL_APPLY = ["apply", "--server-side", "--force-conflicts", "--field-manager=k3d-gpu", "-f", "-"]
+
+
+def kubectl_argv(args):
+    """kubectl with the context the launcher's own calls name (K3D_GPU_KCTX, which
+    it exports), so this write reaches the same cluster; unset or empty: the
+    kubeconfig's current-context."""
+    ctx = os.environ.get("K3D_GPU_KCTX")
+    return ["kubectl"] + (["--context", ctx] if ctx else []) + list(args)
 
 
 def cmd_secret(ep, a):
@@ -598,7 +606,7 @@ def cmd_secret(ep, a):
         raise RemoteError(f"--namespace {a.namespace!r} is not a namespace name")
     manifest = secret_manifest(ep, a.namespace, need_model(ep, a))
     try:
-        p = subprocess.run(KUBECTL_APPLY, input=manifest, text=True, stdout=subprocess.DEVNULL)
+        p = subprocess.run(kubectl_argv(KUBECTL_APPLY), input=manifest, text=True, stdout=subprocess.DEVNULL)
     except OSError as e:
         raise RemoteError(f"kubectl: {e.strerror}")
     if p.returncode != 0:

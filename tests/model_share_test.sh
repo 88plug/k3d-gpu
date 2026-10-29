@@ -38,7 +38,7 @@ chmod +x "${WORK}/bin/docker"
 
 DIGEST="sha256:$(printf '%064d' 7)"
 MODEL="registry.example/models/qwen3-0.6b@${DIGEST}"
-AGENT="python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f"
+AGENT="python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb"
 
 # ms <FAKE_SNAP> <args...>: stdout and stderr of the launcher, then "rc=<code>".
 ms() {

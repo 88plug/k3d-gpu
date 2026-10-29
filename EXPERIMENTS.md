@@ -93,7 +93,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H27x | H27's hypothesis on an AMX host (H27's "re-open for an AMX host"): on the Xeon 6741P (Granite Rapids, AMX), the <=60 s on-box probe (`bench/amx-autoquant/probe.sh`) picks the weight precision for agents better than the static int4 default. Same weights (`OpenVINO/Qwen3-4B-{int4,int8,fp16}-ov` at H27's commits), same parts (a) fidelity, (b) value, (c) cost. A replication: the original model is kept. | Written 2026-10-20, before any H27x measurement. (a) holds (0.85). (b) REFUTED (0.65, outcomes O1 + O2): the quality gate is a property of the weights (NLL at `INFERENCE_PRECISION_HINT=f32`), so int4 fails it again and the pick is int8, and decode stays bandwidth-bound, so int8 stays slower than int4 on the turn (outcome O2 again). (c) holds (0.9). Numbers: decode int4 25-45, int8 18-35, fp16 (bf16 on AMX) 10-22 tok/s; TTFT on 396 tokens 0.15-1.0 s for every arm; turn int4 2-4.5 s, int8 2.5-6 s, fp16 4-9 s. Priors: O1 0.05, O2 0.6, O3 0.05, O4 (int8 beats int4) 0.15, O5 0.15. | H27's row, outcome table and amendments A1-A3, unchanged except as listed in [the cross-host pre-registration](#cross-host-pre-registration-h25x-h27x-h28x-h34x-on-the-xeon-6741p-2026-10-20): OVMS containers on CPUs 0-23,48-71 (the CPUs outside `load.py`'s load set), `typical` only, weights downloaded at H27's pinned commits. Scorer `bench/amx-autoquant/summarize.py`. Run 2026-10-20 ([H27x run](#h27x-run-xeon-6741p-2026-10-20)): load MATCHED, int4 failed the gate again (dNLL +0.072), the probe and the reference both picked fp16 (bf16 on AMX; 5/5 rounds over int8, 3/3 repeats, 4 s per probe), and fp16's 4.23 s median turn is 1.24 s slower than the int4 default's 2.99 s (int4 faster in 5/5 rounds): (a) and (c) hold, (b) fails. | REFUTED |
 | H34x | H34's hypothesis on the Xeon 6741P: same-engine CPU Fast Draft (OVMS 2026.4.1, `OpenVINO/Qwen3-0.6B-int4-ov` draft on the CPU) beats the `OpenVINO/Qwen3-4B-int4-ov` target alone on single-stream decode, under matched background load. A replication: the original models are kept. | Written 2026-10-20, before any H34x measurement. At `typical`: median paired B/A decode tok/s 1.40 (1.15-1.70) and median paired B/A package J/token 0.75 (0.60-0.95); SUPPORTED by H34's rule (tok/s >= 1.20 with its CI above 1.0, J/token <= 0.85 with its CI below 1.0) at 0.6, REFUTED 0.25 (the draft's share of a faster target step grows), INCONCLUSIVE 0.15. | H34's `bench/hetero-spec/h34.sh` and `h34.py`, n = 12 pairs A B / B A, 5 s load window per request, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h34`, `K3D_GPU_VENDORS=none`, node container on CPUs 0-23,48-71, crescent amendment C1, `typical` only. Run 2026-10-20 ([H34x run](#h34x-run-xeon-6741p-2026-10-20)): load MATCHED, 12/12 pairs; B/A decode tok/s 0.758 (CI 0.688-0.809) and package J/token 1.241 (CI 1.168-1.347), B slower and costlier in 12/12 pairs (A 37.2, B 28.0 tok/s): the draft slows decode on this Xeon. | REFUTED |
 | H25x | H25's hypothesis (T part) on the Xeon 6741P: agents that send a byte-identical system prompt and tools to one OVMS CPU server reuse one prefix KV, so an added agent's first chunk arrives at least 4x sooner with the shipping prefix caching on than with `--enable_prefix_caching=false`. A replication: the original model and prefix shape are kept. | Written 2026-10-20, before any H25x measurement. Added-agent median TTFT OFF 1.2 s (0.5-2.5), ON 0.15 s (0.06-0.4), ratio 8x (4.5-14), the ratio's 95% CI lower bound >= 4x; c/OFF >= 0.8. SUPPORTED 0.75; the risk is fixed per-request overhead, which a 5-10x faster prefill leaves as a larger share of the ON time. M (memory per agent) not measured, as in H25 run 4. | H25's `bench/shared-prefix/run.sh` and `probe.py score` (A3 first-chunk TTFT, A4 amendment-27 load rule), ON OFF interleaved 3+3 rounds, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h25`, `K3D_GPU_VENDORS=none`, node container on CPUs 0-23,48-71 (`NODE_CPUS`), crescent amendment C1, `typical` only. Run 2026-10-21 ([H25x run](#h25x-run-xeon-6741p-2026-10-21)): load MATCHED (amendment 27), no round void; added agent's first chunk 0.245 s ON vs 1.724 s OFF (7.05x, CI 6.94-7.13, n = 15 per arm), c/OFF 0.99, every round pair >= 4x: T SUPPORTED; M not measured (A3). | SUPPORTED |
-| H28x | H28's hypothesis on the Xeon 6741P: N = 8 agent pods that mmap one 1 GiB model through an image volume share one page-cache copy and become ready in at most half the time of pods that copy it into an emptyDir. A replication (H28 has no model; the 1 GiB blob is kept). | Written 2026-10-20, before any H28x measurement. Memory parts hold (0.95): T PSS <= 160 MiB per pod, model page cache about 1.0x size (T) vs about 9x (C). Time part uncertain: the copy runs at memory speed on this host, so the fixed pod-start cost is a larger share of both arms; T/C round-median ready 0.55 (0.35-0.8). SUPPORTED 0.35, REFUTED (time part) 0.5, other rows 0.15. | H28's `bench/zero-copy-models/probe.sh` (A1, A2), arms C T T C C T plus the unscored warm-up, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h28`, crescent amendment C1 passed to the plain `k3d cluster create`, `typical` only, scored by `bench/zero-copy-models/score.py` (H28's table, committed with this pre-registration). | PENDING |
+| H28x | H28's hypothesis on the Xeon 6741P: N = 8 agent pods that mmap one 1 GiB model through an image volume share one page-cache copy and become ready in at most half the time of pods that copy it into an emptyDir. A replication (H28 has no model; the 1 GiB blob is kept). | Written 2026-10-20, before any H28x measurement. Memory parts hold (0.95): T PSS <= 160 MiB per pod, model page cache about 1.0x size (T) vs about 9x (C). Time part uncertain: the copy runs at memory speed on this host, so the fixed pod-start cost is a larger share of both arms; T/C round-median ready 0.55 (0.35-0.8). SUPPORTED 0.35, REFUTED (time part) 0.5, other rows 0.15. | H28's `bench/zero-copy-models/probe.sh` (A1, A2), arms C T T C C T plus the unscored warm-up, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h28`, crescent amendment C1 passed to the plain `k3d cluster create`, `typical` only, scored by `bench/zero-copy-models/score.py` (H28's table, committed with this pre-registration). Run 1 2026-10-21 ([H28x run 1](#h28x-run-1-xeon-6741p-2026-10-21)): failed in setup 16 s after the hold started (`WORK` did not exist, so the CSV and the scratch kubeconfig could not be written) and measured nothing; [amendment R1](#h28x-amendment-r1-a-setup-failure-spends-the-hold-2026-10-29) counts it as the one pre-registered hold and registers one re-run (run 2), protocol unchanged. | INCONCLUSIVE |
 | H55 | On the i9-13900T, an SLO gate on the E-core neighbour's `cpu.max`, set from the P-core inference server's own median TTFT, keeps CPU-served prefill within +10% of quiet while the neighbour keeps more throughput than H5's frequency-cap frontier (CMIN: +23.3% at 72.4% neighbour loss) and than the best static quota at the same penalty. | Written 2026-10-20, before any H55 measurement; control rule revised the same day, still before any measurement (see the section). Pre-registered prior, not a result: N0 about +40% (H5 replicate), K50 +20 to +30% at about 50% loss, K25 +8 to +15% at about 75% loss. A_slo climbs only while the penalty at its level is at most +5%, so it is expected to stay at the 25-37.5% levels, close to K25: +8 to +15% at 70-78% loss, failing (b) or (c). Expected verdict REFUTED: package power is the coupling, duty-cycling the neighbour is less power-efficient per op than H5's frequency cap, and a closed-loop c = 1 prefill load leaves no idle gap to admit it into. If H55 holds, A_slo settles at 50% or above at +10% or less. | H5 amendment A1's host-level harness (OVMS 2026.4.1, `OpenVINO/Qwen3-4B-int4-ov`, `bench/prefill-guard/prompt.txt` with a unique tag per request, CPUs 0-14; `stress-ng --cpu 15 --cpu-method matrixprod` on CPUs 17-31; tool proxy on CPU 16), with a 900 s closed-loop prefill window per run (16 tokens, concurrency 1). Arms Q, N0 (`cpu.max max`), K50 (`750000 100000`), K25 (`375000 100000`) and A_slo (`bench/admission/ctl.py` steps 25-100% of 15 CPUs on windows of 20 requests: down if the window median > 1.10 x the round's quiet reference, the median of 20 pre-roll requests; up if it is at most 1.05 x that), 5x5 Latin square, one round per lock hold. Supported only if A_slo's median penalty is at most +10%, its neighbour loss is below 72.4%, and no static arm reaches +10% at a loss no higher than A_slo's plus the neighbour's own N0 run-to-run spread; inconclusive gates and the hold cap in [H55 pre-registration](#h55-pre-registration-slo-gated-admission-of-an-e-core-neighbour-2026-10-20). Not run. A SUPPORTED H55 does not ship a controller by itself: kubelet owns the sandbox pod's `cpu.max` (`limits cpu "1"`). | PENDING |
 | H56 | Two measurement holds in disjoint cpuset slices of the Xeon 6741P do not perturb each other: an A1 B24 agent block in slice 0 (CPUs 0-23,48-71) behaves equivalently, in per-attempt time, within-budget success and tasks completed, alone and with a concurrent identical A1 hold in slice 1 (CPUs 24-47,72-95), without an all-core clock drop on slice 0 and with the package below its power limit. It decides whether crescent may run two A1-or-lighter holds at once ([adoption rule](#h56-pre-registration-parallel-slice-holds-on-crescent-2026-10-20)); it is not a k3d-gpu product claim. | Written 2026-10-20, before any run; predictions unchanged by the 2026-10-21 revision, priors updated to its narrower bands. Geometric-mean W/A time ratio 1.04 (0.99-1.09); paired success W - A -0.01 (-0.06 to +0.04); completion W/A 0.97 (0.90-1.00); own-slice MHz W/A 0.97; W package 0.75 PL1 (0.55-0.95), A package 0.5 PL1; time pairs 80 (50-96). Batch-1 int4 decode is DRAM-bound, and the sibling's decode and its stream load share DRAM, L3 and package power. Verdict priors: SUPPORTED 0.30, INCONCLUSIVE 0.45, REFUTED 0.25. | Stage 0 first, read-only: `bench/eatflow/crescent/lockwait.py` over both campaigns' `campaign.log`; if lock wait our slots could remove is under 0.10 of hold time, stage 1 is not run and the row stays PENDING (`h56.sh` refuses through `h56.py gate`). [Amendment S0](#h56-pre-registration-parallel-slice-holds-on-crescent-2026-10-20) (2026-10-21, before any stage-1 hold, stage-0 reading disclosed): the share is pooled lock wait over hold time across every campaign log on crescent, nothing netted out; bar 0.10 unchanged. Then one W wiring smoke, which must show slice-0 setup <= 900 s and >= 3 tasks in 120 s. Stage 1: `bench/eatflow/crescent/h56.sh N` for N = 1..8, order A W W A A W W A, one condition-hold per exclusive campaign lock (slot locks first). A: slice 0 alone, slice 1 idle. W: the sibling in slice 1 first (cap 3000 s, budget 1800 s), slice 0 from the sibling's run budget on (cap 2400 s, budget 720 s, the same as A). Hold pairs (1,2) (4,3) (5,6) (8,7), tasks by id; 90% two-stage bootstrap CIs (hold pairs, then tasks; 10,000, seed 56; TOST at alpha 0.05). SUPPORTED: all 8 positions filled, time CI inside [1/1.05, 1.05], success CI inside [-1/24, +1/24], completion W/A >= 1/1.05, >= 60 time pairs, own-slice MHz W/A >= 0.95, W package < 0.95 PL1 and PL1 read. REFUTED: the time CI wholly outside its band, the success CI wholly outside its band, or the completion CI wholly below 1/1.05. Otherwise INCONCLUSIVE. VOID holds are replaced, at most 2. `bench/eatflow/crescent/h56.py score`. | PENDING |
 
@@ -1975,6 +1975,125 @@ where int8 beat fp16. fp16 decode beat its 10-22 tok/s prediction range. So on t
 probe's pick moves (fp16, not int8) but still costs latency against int4, as on the i9; int4
 stays the static default, and `autoquant` remains a quality gate, not a speed win, on an AMX
 Xeon too.
+
+### H28x run 1 (Xeon 6741P, 2026-10-21)
+
+```text
+# Reproduce
+date:            2026-10-21T21:38:45Z waiting for the lock; 22:14:13Z lock taken; one 120 s busy wait
+                 (load1 14.71 > 12); 22:16:13Z start; 22:16:29Z rc=1, no k3dgpu-x-* cluster left
+hypothesis:      H28x (H28 + A1 + A2; cross-host rules X1-X7)
+host cpu:        Intel(R) Xeon(R) 6741P (Granite Rapids), 48 cores / 96 threads, 1 NUMA node, no swap
+host kernel:     7.0.0-31-generic, Docker 29.8.0
+k3d-gpu commit:  ef87f86 (#156), the host checkout; its probe.sh and hold.sh are byte-identical to ef87f86's
+node image:      cryptoandcoffee/k3d-gpu:0.1.61, crescent C1 kubelet thresholds
+command:         bench/xhost/hold.sh H28x <cap> env WORK=~/k3dgpu-xhost/runs/H28x/work \
+                   IMAGE=cryptoandcoffee/k3d-gpu:0.1.61 CLUSTER=k3dgpu-x-h28 LEVELS=typical HOLD=1440 \
+                   LOCK=~/k3dgpu-xhost/inner.lock K3D_GPU_K3S_ARGS="$C1" bash bench/zero-copy-models/probe.sh run
+                 (hold.sh records neither its cap nor XHOST_DISK_START; the pre-registration sets 1500 s and 95%)
+disk:            / at 95% at the start and at the end (df -P; 200,682,612 1K-blocks free at the start)
+measured:        nothing: no load window, no round, no pod, no meta row, no CSV
+raw results:     bench/xhost/results/2026-10-20/H28x/: hold/ (hold.log, pre.txt, post.txt, rc, wait_s,
+                 serving.jsonl), h28x-chain.log, campaign.log (the campaign's lock log, last written
+                 22:16:29Z); copied from crescent ~/k3dgpu-xhost/runs/ on 2026-10-29, sha256-identical
+```
+
+What happened, from `hold.log` and from `probe.sh` at ef87f86 (which runs under `set -e`):
+
+1. `run` put the CSV inside `WORK`, but nothing created `WORK`. `tee` could not open the CSV
+   ("No such file or directory") and passed the stream on to `hold.log`, so the run had no
+   CSV from its first line.
+2. Under the inner lock, `_rounds` started the `typical` load on CPUs 24-47,72-95 (3
+   containers), then created cluster `k3dgpu-x-h28` and pinned its node. Both returned 0;
+   otherwise `set -e` would have stopped the script there.
+3. Line 324, `k3d kubeconfig get ... > "${WORK}/kubeconfig"`, failed ("No such file or
+   directory"), and `_rounds` exited 1. No baseline window had been taken.
+4. `locked` deleted the cluster, stopped the load and removed the model images (22:16:28Z).
+   `hold.sh` found no cluster left and wrote `rc` 1.
+
+No measurement exists. The serving sampler wrote two 10 s windows (load1 8.7 and 9.9), a
+covariate record only. Verdict: **INCONCLUSIVE** under X7, because the run missed its protocol
+(no round ran) and measured nothing. [Amendment R1](#h28x-amendment-r1-a-setup-failure-spends-the-hold-2026-10-29)
+says what that means for the hold.
+
+### H28x amendment R1: a setup failure spends the hold (2026-10-29)
+
+Written 2026-10-29T05:24Z, after H28x run 1 and before any H28x measurement (none exists).
+H28x's row, prediction, priors, outcome table, scorer, H28's A1 and A2, and rules X1-X7 are
+unchanged.
+
+**Question.** The pre-registration gives H28x "one hold". Run 1 took that hold and failed in
+setup with no measurement. Does it count?
+
+**Decision: it counts. The pre-registered hold is spent.** This is the conservative reading
+of the wording:
+
+- X1 defines a hold by its wrapper: `hold.sh` takes the shared lock, applies the hold-start
+  rule and the disk gate, then runs the command. Run 1 did each of these. No sentence exempts
+  a hold that fails in setup.
+- X7 says "A row whose run misses its protocol is INCONCLUSIVE." Run 1 ran no round.
+- The only re-run the H28x text names is for "a VOID load level (A2)". Run 1 recorded no
+  load window, so no level was scored VOID. Reading that rule as a general retry would add an
+  exception the text does not have.
+- Precedent is mixed. Two rulings count a run that left no scored data. H49 hold 1 was void
+  by a harness fault and still counts toward H49's limit of 12 holds
+  ([amendment P2](#h47-and-h49-amendment-p2-h49-hold-1-is-void-2026-10-18)). That spends one
+  hold of a cap, not a row's single registered hold. H20 run 1 measured no turn, was recorded
+  INCONCLUSIVE, and was re-run only under an amendment written first. H54 amendment R3 is only
+  related: it governs arms, not holds, and never carries an arm that failed in render, apply or
+  readiness into a later hold. The closest case ruled the other way.
+  [H43 amendment W2](#h43-amendment-w2-the-code-mode-reserve-2026-10-19) found A1's first hold
+  void: a runner bug (a time reserve too large) ended it 62 s in, before any task, warm-up or
+  load window. W2 then ran A1's hold again as W1 item 6's "one hold". Amendment 22 of the
+  [H40-H48 pre-registration](#h40-h48-pre-registration-agent-benchmark-2026-10-17) did the same
+  for H48: run 1 was void by a harness fault, and run 2 was scored as pre-registered. H48
+  registered no hold count.
+- R1 departs from W2 because of X7, which the `x` rows have and H43 did not. H43's verdict rules
+  (its row and W1 item 7) are applied to a scored hold's tasks, so W2 could set the failed hold
+  aside as void and leave the row ungraded. X7 grades the run itself: a run that misses its
+  protocol makes the row INCONCLUSIVE. Setting run 1 aside would need an exception X7 does not
+  have. In effect the two rulings differ little: each allows one more run after a runner fix,
+  with nothing measured changed. Under R1 the row reads INCONCLUSIVE until run 2 is scored, and
+  if run 2 also ends before its first scored round, H28x gets no further run under this
+  pre-registration (below).
+- The other reading (no data, so no hold) would keep the row PENDING after a hold ran, and
+  would let setup failures repeat without limit. The strict reading costs only bookkeeping,
+  because no outcome was seen.
+
+**Consequences.**
+
+- H28x is INCONCLUSIVE (run 1). It says nothing about page-cache sharing or ready time, in
+  either direction. H28 (i9-13900T) stays SUPPORTED, and no doc cites H28x.
+- One re-run is registered here, before it runs, as H20 amendment A2 and H32 amendment A3 did:
+  **H28x run 2**. It uses H28x's pre-registered command, scorer, outcome table, thresholds and
+  prediction, with three changes, none to what is measured:
+  1. the runner fix below (the run's Reproduce header records the k3d-gpu commit);
+  2. hold name `H28x-run2` and `WORK=~/k3dgpu-xhost/runs/H28x-run2/work`, so run 1's records
+     on the host are not overwritten;
+  3. `probe.sh prep` runs again first, outside the lock: run 1's cleanup removed the model
+     images, and on 2026-10-29 the host lists no `h28-model` image.
+
+  Run 2 is never pooled with run 1, which has nothing to pool. Its verdict replaces
+  INCONCLUSIVE in the row.
+- A hold counts once `hold.sh` logs `start:`. Waiting for the lock, the busy wait, and the disk
+  gate refusing to start (exit 5) are not holds. If run 2 ends before its first scored round,
+  H28x stays INCONCLUSIVE and is not re-run under this pre-registration; a further try needs a
+  new row.
+- Disk. Run 2 starts only at <= 95% disk (`XHOST_DISK_START=95`), as pre-registered. On
+  2026-10-29T05:22Z crescent's `/` read 96% (`df -P`: 3,456,545,692 of 3,637,102,748 1K-blocks
+  used, 180,540,672 free), above the gate. Run 2 cannot start until the other tenants' use
+  falls; `hold.sh` would refuse with exit 5, which is not a hold. Nothing on the host is
+  deleted for this campaign.
+
+**Runner fix** (`bench/zero-copy-models/probe.sh`; the test came first:
+`tests/zero_copy_workdir_test.sh`, run by `tests/bench_test.sh`). `run` now creates `WORK`
+with its parents, and creates the CSV, before it takes the inner lock. If it cannot, it prints
+`ABORT,workdir` and exits 1 with no lock taken, no load, no cluster and no image removed.
+`_rounds` checks that `WORK` is a writable directory before it starts the load or creates the
+cluster. Against the old `probe.sh` the test reproduced run 1: `tee` could not open the CSV,
+and `_rounds` started the load and created the cluster, then failed at the kubeconfig write.
+With the fix all three cases pass. H28w (wildct, not yet run) passes `WORK=<out>` the same way
+and gets the same fix; its protocol does not change.
 
 ### H50-H52 pre-registration: the Xeon 6741P (2026-10-20)
 
