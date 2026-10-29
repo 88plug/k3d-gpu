@@ -2035,10 +2035,27 @@ of the wording:
 - The only re-run the H28x text names is for "a VOID load level (A2)". Run 1 recorded no
   load window, so no level was scored VOID. Reading that rule as a general retry would add an
   exception the text does not have.
-- The ledger has ruled this way before. H49 hold 1 was void by a harness fault and still
-  counts toward its 12-hold limit ([amendment P2](#h47-and-h49-amendment-p2-h49-hold-1-is-void-2026-10-18)).
-  H54 amendment R3 never carries a render, apply or readiness failure. H20 run 1 measured no
-  turn, was recorded INCONCLUSIVE, and was re-run only under an amendment written first.
+- Precedent is mixed. Two rulings count a run that left no scored data. H49 hold 1 was void
+  by a harness fault and still counts toward H49's limit of 12 holds
+  ([amendment P2](#h47-and-h49-amendment-p2-h49-hold-1-is-void-2026-10-18)). That spends one
+  hold of a cap, not a row's single registered hold. H20 run 1 measured no turn, was recorded
+  INCONCLUSIVE, and was re-run only under an amendment written first. H54 amendment R3 is only
+  related: it governs arms, not holds, and never carries an arm that failed in render, apply or
+  readiness into a later hold. The closest case ruled the other way.
+  [H43 amendment W2](#h43-amendment-w2-the-code-mode-reserve-2026-10-19) found A1's first hold
+  void: a runner bug (a time reserve too large) ended it 62 s in, before any task, warm-up or
+  load window. W2 then ran A1's hold again as W1 item 6's "one hold". Amendment 22 of the
+  [H40-H48 pre-registration](#h40-h48-pre-registration-agent-benchmark-2026-10-17) did the same
+  for H48: run 1 was void by a harness fault, and run 2 was scored as pre-registered. H48
+  registered no hold count.
+- R1 departs from W2 because of X7, which the `x` rows have and H43 did not. H43's verdict rules
+  (its row and W1 item 7) are applied to a scored hold's tasks, so W2 could set the failed hold
+  aside as void and leave the row ungraded. X7 grades the run itself: a run that misses its
+  protocol makes the row INCONCLUSIVE. Setting run 1 aside would need an exception X7 does not
+  have. In effect the two rulings differ little: each allows one more run after a runner fix,
+  with nothing measured changed. Under R1 the row reads INCONCLUSIVE until run 2 is scored, and
+  if run 2 also ends before its first scored round, H28x gets no further run under this
+  pre-registration (below).
 - The other reading (no data, so no hold) would keep the row PENDING after a hold ran, and
   would let setup failures repeat without limit. The strict reading costs only bookkeeping,
   because no outcome was seen.

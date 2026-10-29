@@ -6,7 +6,7 @@ Status: working report, 2026-10-21. Ledger: [EXPERIMENTS.md](../../EXPERIMENTS.m
 
 k3d-gpu turns one Linux host into a single-node k3s cluster (k3d) that detects the host's Intel hardware and configures it. It sets NRI balloons for hybrid P/E and NUMA CPUs, device plugins for iGPU, dGPU, NPU, DSA, IAA, QAT and Gaudi, and placement labels for agent and inference pods.
 
-This report covers what was measured, and how. Every result but H52, H25x, H27x, H34x, H54a and H54d (a Xeon 6741P host) comes from one host: an i9-13900T (Raptor Lake-S, 8 P-cores and 16 E-cores, UHD 770 iGPU with no XMX, AVX-VNNI, no AMX, no NPU). It is a T-SKU rated at 35 W base power, but its firmware runs PL1 = PL2 = 117 W, so it does not run the T-series 35 W envelope.
+This report covers what was measured, and how. Every result but H52, H25x, H27x, H28x, H34x, H54a and H54d (a Xeon 6741P host) comes from one host: an i9-13900T (Raptor Lake-S, 8 P-cores and 16 E-cores, UHD 770 iGPU with no XMX, AVX-VNNI, no AMX, no NPU). It is a T-SKU rated at 35 W base power, but its firmware runs PL1 = PL2 = 117 W, so it does not run the T-series 35 W envelope.
 
 - Seventeen hypotheses are SUPPORTED. Sixteen are scoped to that host; H25x is H25 replicated on the Xeon 6741P. H57dm (the Gemma 4 QAT MTP drafter speeds llama.cpp decode on the P-cores) is the newest.
 - Fourteen are REFUTED. Six of them changed shipped defaults.
