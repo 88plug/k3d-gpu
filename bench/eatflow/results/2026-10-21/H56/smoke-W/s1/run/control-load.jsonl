@@ -1,0 +1,3 @@
+{"ts": 1792568018.271424, "tag": "A1-control", "level": "typical", "seconds": 30.053, "cpus": "36-47,84-95", "busy_pct": 37.57, "load1": 21.65, "pkg_w": 172.02, "throttle_per_min": 0.0, "swap_used_mib": 0.0, "swap_delta_mib": 0.0}
+{"ts": 1792568048.372592, "tag": "A1-control", "level": "typical", "seconds": 30.052, "cpus": "36-47,84-95", "busy_pct": 37.61, "load1": 17.36, "pkg_w": 172.62, "throttle_per_min": 0.0, "swap_used_mib": 0.0, "swap_delta_mib": 0.0}
+{"ts": 1792568078.4720442, "tag": "A1-control", "level": "typical", "seconds": 30.051, "cpus": "36-47,84-95", "busy_pct": 37.59, "load1": 15.4, "pkg_w": 173.89, "throttle_per_min": 0.0, "swap_used_mib": 0.0, "swap_delta_mib": 0.0}

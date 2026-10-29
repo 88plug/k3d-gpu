@@ -1,0 +1,12 @@
+expect_node 0-23,48-71
+expect_load 12-23,60-71
+node k3d-k3dgpu-a-s0-a1-server-0 0-23,48-71
+node_effective k3d-k3dgpu-a-s0-a1-server-0 0-23,48-71
+litellm k3dgpu-a-s0-litellm 0-23,48-71
+rapl k3dgpu-a-s0-rapl 0-23,48-71
+load k3d-gpu-bench-load-s0-churn 12-23,60-71
+load k3d-gpu-bench-load-s0-stream 12-23,60-71
+load k3d-gpu-bench-load-s0-cpu 12-23,60-71
+pod_allowed ovms 0-23,48-71
+pod_nproc ovms 48
+load_end - 3
