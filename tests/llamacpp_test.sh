@@ -41,6 +41,8 @@ case "$*" in
     "get nodes -l gpu.intel.com/xmx=true -o name") [ -z "${STUB_XMX:-}" ] || echo node/k3d-gpu-server-0 ;;
     "get nodes -l k3d-gpu.io/cores-hybrid=true -o name") [ -z "${STUB_HYBRID:-}" ] || echo node/k3d-gpu-server-0 ;;
     "apply -f -") cat > "${STUB_APPLIED:-/dev/null}" ;;
+    *'@.type=="Complete"'*) printf '%s' "${STUB_JOB:-}" ;;
+    "create --raw "*chat/completions*) cat > "${STUB_BODY:-/dev/null}"; printf '%s' "${STUB_REPLY:-}" ;;
     *chat/completions*) printf '%s' "${STUB_REPLY:-}" ;;
 esac
 exit 0
@@ -250,6 +252,50 @@ if [ "${rc}" -eq 0 ] && grep -q '^kubectl apply -f -' "${WORK}/kubectl.log" && g
     && grep -qF "model ${GEMMA_GGUF}: https://huggingface.co/${GEMMA_GGUF}/resolve/${GREV}/gemma-4-26B_q4_0-it.gguf" <<< "${out}"; then
     ok "agent up --model <QAT GGUF>: llama-server applied and warmed up, the GGUF it downloads named"
 else fail "agent up on llama.cpp (rc ${rc})" "${out}"; fi
+
+# --- agent up where the fit switches the backend inside the render's subshell --------------
+# The parent then names, and warms up, the model the manifest serves under its own name, not
+# the default model of the backend the fit switched to.
+# up_served <name> [env...] -- [agent args...]: agent up with any conversion Job Complete; the
+# manifest in <name>.yaml, the warm-up request body in <name>.body, the output in <name>.out.
+up_served() {
+    local name=$1; shift
+    local -a envs=()
+    while [ "$1" != -- ]; do envs+=("$1"); shift; done
+    shift
+    rm -f "${WORK}/${name}.body"
+    env STUB_APPLIED="${WORK}/${name}.yaml" STUB_BODY="${WORK}/${name}.body" STUB_JOB=True K3D_GPU_AGENT_GUARD=off \
+        STUB_REPLY='{"choices":[{"message":{"role":"assistant","content":"A language model."}}]}' \
+        ${envs[@]+"${envs[@]}"} bash "${K3D_GPU}" agent up "$@" > "${WORK}/${name}.out" 2>&1
+}
+# served_name <name>: the name the manifest's server answers to (llama-server --alias, vLLM
+# --served-model-name).
+served_name() {
+    server_args "$1" | awk 'p { print; exit } { p = ($0 == "--alias") }'
+    grep -m1 -oE -- '--served-model-name=[^[:space:]"]+' "${WORK}/$1.yaml" | cut -d= -f2-
+}
+body_model() { python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["model"])' "${WORK}/$1.body" 2>/dev/null; }
+# served_ok <name> <app> <model id> <model line>: rc 0, the manifest's <app>, and the warm-up
+# body, the 'OpenAI API ready' line and the model line all name what the manifest serves.
+served_ok() {
+    local n=$1 app=$2 id=$3 line=$4 name
+    name=$(served_name "${n}")
+    [ -n "${name}" ] && grep -q "^  name: ${app}\$" "${WORK}/${n}.yaml" \
+        && [ "$(body_model "${n}")" = "${name}" ] \
+        && grep -qF "OpenAI API ready, model '${name}':" "${WORK}/${n}.out" \
+        && grep -qF "\"model\":\"${name}\"" "${WORK}/${n}.out" \
+        && grep -qF "model ${id}${line}" "${WORK}/${n}.out"
+}
+if up_served upfn "${XEON_ENV[@]}" -- --model "${FN}" \
+    && served_ok upfn llamacpp "${FN}" ": /models/gguf/Qwen__Qwen3.8-Flash-Next@${FNREV}/model.gguf" \
+    && [ "$(served_name upfn)" = Qwen3.8-Flash-Next ]; then
+    ok "agent up --model ${FN} (OVMS -> llama.cpp in the fit): warmed up and named as the manifest's --alias"
+else fail "agent up --model ${FN} names the served model" "$(cat "${WORK}/upfn.out"; echo "body: $(cat "${WORK}/upfn.body" 2>/dev/null)")"; fi
+if up_served upst "${XEON_ENV[@]}" K3D_GPU_MODEL_OPT=off -- --model google/gemma-4-26B-A4B-it \
+    && served_ok upst vllm google/gemma-4-26B-A4B-it " at revision " \
+    && [ "$(served_name upst)" = gemma-4-26B-A4B-it ]; then
+    ok "K3D_GPU_MODEL_OPT=off agent up --model google/gemma-4-26B-A4B-it (OVMS -> vLLM TP2 in the fit): warmed up and named as --served-model-name"
+else fail "K3D_GPU_MODEL_OPT=off agent up names the served model" "$(cat "${WORK}/upst.out"; echo "body: $(cat "${WORK}/upst.body" 2>/dev/null)")"; fi
 
 rm -f "${WORK}/kubectl.log"
 if STUB_LOG="${WORK}/kubectl.log" bash "${K3D_GPU}" agent down > /dev/null 2>&1 \

@@ -9285,15 +9285,18 @@ cmd_agent_up() {
         manifest=$(AGENT_FIT_RECORD=1 agent_stack_manifest ${addons}) || { agent_restore_stopped; exit 1; }
     fi
     # The fit may have switched the backend (agent_follow_engine ran in that subshell):
-    # the manifest's server Deployment names it.
+    # the manifest's server Deployment names it. That backend serves the model the fit
+    # sized, under its name, as agent_follow_engine keeps them, not its own default model.
     app=$(grep -m1 -oE '^  name: (ovms|vllm|llamacpp)$' <<< "${manifest}" | cut -d' ' -f4)
     if [ -n "${app}" ] && [ "${app}" != "${AGENT_APP}" ]; then
+        local model=${AGENT_MODEL} name=${AGENT_MODEL_NAME} rev=${AGENT_REVISION}
         case "${app}" in
             llamacpp) AGENT_BACKEND=llama.cpp ;;
             vllm) AGENT_BACKEND=vllm ;;
             *) AGENT_BACKEND=ovms ;;
         esac
         agent_config
+        AGENT_MODEL=${model} AGENT_MODEL_NAME=${name} AGENT_REVISION=${rev}
         logs="kubectl -n ${AGENT_NS} logs deploy/${AGENT_APP}"
     fi
     # Switching backends: stop the other one first so its GPU is free.
