@@ -4991,7 +4991,8 @@ Recorded 2026-10-29, before any H60 step (no download, no server, no smoke). It 
 proposed in PR #234 while H60's pre-registration (PR #199) was unmerged. #234 closed unmerged
 when #199 landed and its base branch was deleted; this section is its content, carried to main
 before H60 runs. Mechanics only. No hypothesis, prediction, statistic, band, guard, protocol
-step or cap changes. What changes is the llama.cpp build that both arms run.
+step or cap changes. What changes is the llama.cpp build that both arms run, and so the
+commit H60 runs from.
 
 **Why.** The pre-registration took the newest published server image on 2026-10-21,
 `server-b11783`. Since then llama.cpp has published a stable release, v0.8.0 (GitHub, 2026-10-28,
@@ -5026,6 +5027,13 @@ arms to the newest stable release (`images.lock` and `bench/competitors.lock` al
    on b11749. That reading now spans b11749 to b11960 instead of b11749 to b11783. The band and
    its use are unchanged, and the same-hold control stays the primary statistic.
 6. The one wiring smoke the pre-registration allows (`H60_SMOKE=1`) runs on this build.
+7. The commit. H60 runs from `origin/main` at or after this amendment's merge, and the
+   pre-registration's "at the merge commit" now means that commit: at #199's merge (`a4e7ca2c`),
+   `h60.sh` still pins `server-b11783`. The H60 checkout already on crescent
+   (`~/k3dgpu-xhost/k3d-gpu-h60`, read 19:47Z on 2026-10-29) is an earlier head of #199's branch
+   (`8beba20`). It pins `server-b11783`, and its `h60.sh` differs from the merged one, so it is
+   updated to this amendment's merge or later before the hold. Each arm's `deploy.yaml` in the
+   run's output records the image it ran.
 
 **Predictions.** None is edited. They were written for the newest llama.cpp build of 2026-10-21.
 This amendment moves both arms to the newest stable release, and each prediction is read as
