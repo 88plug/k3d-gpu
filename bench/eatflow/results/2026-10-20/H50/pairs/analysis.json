@@ -1,0 +1,1220 @@
+{
+ "hypothesis": "H50",
+ "rule": "L3",
+ "arms": [
+  "A1",
+  "B1"
+ ],
+ "holds": 1,
+ "pairs_run": 24,
+ "void_pairs": 0,
+ "matched": 24,
+ "unmatched": 0,
+ "unmatched_ids": [],
+ "load": {
+  "balance": {
+   "busy_pct": {
+    "n": 24,
+    "mean_diff": 0.0021,
+    "p": 0.9749025097490251
+   },
+   "throttle_per_min": {
+    "n": 24,
+    "mean_diff": 0.0,
+    "p": 1.0
+   },
+   "swap_used_mib": {
+    "n": 24,
+    "mean_diff": 0.0,
+    "p": 1.0
+   },
+   "swap_delta_mib": {
+    "n": 24,
+    "mean_diff": 0.0,
+    "p": 1.0
+   }
+  },
+  "balance_ok": true,
+  "balance_failed": [],
+  "adjusted": {
+   "model": "d(pass) ~ 1 + d(log1p throttle/min) + d(busy_pct), pre-windows",
+   "n": 24,
+   "intercept": null,
+   "ci95": [
+    null,
+    null
+   ]
+  },
+  "sign_flip_p": 0.49735026497350265
+ },
+ "load_per_arm": {
+  "A1": {
+   "bg_cpu": 22.711,
+   "host_cpu": 68.473,
+   "swap_used_mib": 0.0,
+   "swap_growth_mib_per_min": 0.0,
+   "load1": 42.749,
+   "pkg_w": 299.687,
+   "throttle_per_min": 0.0,
+   "ecore_busy_pct": 84.821,
+   "busy_pct": null,
+   "swap_delta_mib": null,
+   "settle_s": null
+  },
+  "B1": {
+   "bg_cpu": 22.615,
+   "host_cpu": 67.993,
+   "swap_used_mib": 0.0,
+   "swap_growth_mib_per_min": 0.0,
+   "load1": 43.938,
+   "pkg_w": 301.058,
+   "throttle_per_min": 0.0,
+   "ecore_busy_pct": 81.917,
+   "busy_pct": null,
+   "swap_delta_mib": null,
+   "settle_s": null
+  }
+ },
+ "idle_cpu_median": 0.0022,
+ "outcomes_all_run_pairs": {
+  "A1": {
+   "pass_budget": 19,
+   "fail_graded": 5,
+   "over_turn": 0,
+   "over_task": 0,
+   "void": 0
+  },
+  "B1": {
+   "pass_budget": 21,
+   "fail_graded": 3,
+   "over_turn": 0,
+   "over_task": 0,
+   "void": 0
+  }
+ },
+ "gates": [],
+ "per_pair": [
+  {
+   "j": 0,
+   "task": "B-T1-U1001",
+   "matched": true,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 7.852,
+    "idle_cpu": 0.0095,
+    "bg_cpu": 22.6579,
+    "pkg_j": 2363.272,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.35,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   },
+   "B1": {
+    "outcome": "pass_budget",
+    "duration_s": 11.122,
+    "idle_cpu": 0.0018,
+    "bg_cpu": 22.7084,
+    "pkg_j": 3363.305,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.31,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   }
+  },
+  {
+   "j": 1,
+   "task": "B-T2-U1001",
+   "matched": true,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 5.744,
+    "idle_cpu": 0.0104,
+    "bg_cpu": 22.7339,
+    "pkg_j": 1737.527,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.52,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   },
+   "B1": {
+    "outcome": "pass_budget",
+    "duration_s": 7.077,
+    "idle_cpu": 0.0018,
+    "bg_cpu": 22.5825,
+    "pkg_j": 2152.162,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.47,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   }
+  },
+  {
+   "j": 2,
+   "task": "B-T3-U1001",
+   "matched": true,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 17.835,
+    "idle_cpu": 0.01,
+    "bg_cpu": 22.6723,
+    "pkg_j": 5344.358,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.37,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   },
+   "B1": {
+    "outcome": "pass_budget",
+    "duration_s": 21.899,
+    "idle_cpu": 0.002,
+    "bg_cpu": 22.6095,
+    "pkg_j": 6590.273,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.17,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   }
+  },
+  {
+   "j": 3,
+   "task": "B-T4-U1001",
+   "matched": true,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 6.479,
+    "idle_cpu": 0.0112,
+    "bg_cpu": 22.692,
+    "pkg_j": 1958.951,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.15,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   },
+   "B1": {
+    "outcome": "pass_budget",
+    "duration_s": 8.227,
+    "idle_cpu": 0.0018,
+    "bg_cpu": 22.6031,
+    "pkg_j": 2491.736,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.23,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   }
+  },
+  {
+   "j": 4,
+   "task": "B-T5-U1001",
+   "matched": true,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 12.173,
+    "idle_cpu": 0.0099,
+    "bg_cpu": 22.7159,
+    "pkg_j": 3658.294,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.2,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   },
+   "B1": {
+    "outcome": "pass_budget",
+    "duration_s": 13.603,
+    "idle_cpu": 0.0021,
+    "bg_cpu": 22.6027,
+    "pkg_j": 4106.754,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.09,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   }
+  },
+  {
+   "j": 5,
+   "task": "B-T6-U1001",
+   "matched": true,
+   "A1": {
+    "outcome": "fail_graded",
+    "duration_s": 8.687,
+    "idle_cpu": 0.0108,
+    "bg_cpu": 22.678,
+    "pkg_j": 2622.939,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.25,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   },
+   "B1": {
+    "outcome": "pass_budget",
+    "duration_s": 15.809,
+    "idle_cpu": 0.0019,
+    "bg_cpu": 22.5813,
+    "pkg_j": 4763.283,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.38,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   }
+  },
+  {
+   "j": 6,
+   "task": "B-T7-U1001",
+   "matched": true,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 17.626,
+    "idle_cpu": 0.0098,
+    "bg_cpu": 22.7842,
+    "pkg_j": 5280.123,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.05,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   },
+   "B1": {
+    "outcome": "pass_budget",
+    "duration_s": 11.381,
+    "idle_cpu": 0.0017,
+    "bg_cpu": 22.5973,
+    "pkg_j": 3441.362,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.27,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   }
+  },
+  {
+   "j": 7,
+   "task": "B-T8-U1001",
+   "matched": true,
+   "A1": {
+    "outcome": "fail_graded",
+    "duration_s": 8.033,
+    "idle_cpu": 0.0103,
+    "bg_cpu": 22.6693,
+    "pkg_j": 2424.067,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.15,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   },
+   "B1": {
+    "outcome": "pass_budget",
+    "duration_s": 15.405,
+    "idle_cpu": 0.0018,
+    "bg_cpu": 22.5857,
+    "pkg_j": 4642.831,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.4,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   }
+  },
+  {
+   "j": 8,
+   "task": "B-T1-U1002",
+   "matched": true,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 12.072,
+    "idle_cpu": 0.0093,
+    "bg_cpu": 22.7165,
+    "pkg_j": 3628.581,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.64,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   },
+   "B1": {
+    "outcome": "pass_budget",
+    "duration_s": 13.864,
+    "idle_cpu": 0.0021,
+    "bg_cpu": 22.5495,
+    "pkg_j": 4181.615,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.02,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   }
+  },
+  {
+   "j": 9,
+   "task": "B-T2-U1002",
+   "matched": true,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 5.386,
+    "idle_cpu": 0.0094,
+    "bg_cpu": 22.6223,
+    "pkg_j": 1629.678,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.04,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   },
+   "B1": {
+    "outcome": "pass_budget",
+    "duration_s": 6.526,
+    "idle_cpu": 0.0019,
+    "bg_cpu": 22.6587,
+    "pkg_j": 1986.947,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.5,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   }
+  },
+  {
+   "j": 10,
+   "task": "B-T3-U1002",
+   "matched": true,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 12.943,
+    "idle_cpu": 0.0094,
+    "bg_cpu": 22.7346,
+    "pkg_j": 3886.982,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.19,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   },
+   "B1": {
+    "outcome": "pass_budget",
+    "duration_s": 13.643,
+    "idle_cpu": 0.0019,
+    "bg_cpu": 22.7057,
+    "pkg_j": 4116.794,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.01,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   }
+  },
+  {
+   "j": 11,
+   "task": "B-T4-U1002",
+   "matched": true,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 7.365,
+    "idle_cpu": 0.01,
+    "bg_cpu": 22.8363,
+    "pkg_j": 2219.657,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.28,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   },
+   "B1": {
+    "outcome": "pass_budget",
+    "duration_s": 6.266,
+    "idle_cpu": 0.0022,
+    "bg_cpu": 22.6485,
+    "pkg_j": 1907.71,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.24,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   }
+  },
+  {
+   "j": 12,
+   "task": "B-T5-U1002",
+   "matched": true,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 11.094,
+    "idle_cpu": 0.01,
+    "bg_cpu": 22.7842,
+    "pkg_j": 3336.607,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.16,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   },
+   "B1": {
+    "outcome": "pass_budget",
+    "duration_s": 12.253,
+    "idle_cpu": 0.0019,
+    "bg_cpu": 22.5445,
+    "pkg_j": 3694.253,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.2,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   }
+  },
+  {
+   "j": 13,
+   "task": "B-T6-U1002",
+   "matched": true,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 11.04,
+    "idle_cpu": 0.0096,
+    "bg_cpu": 22.6992,
+    "pkg_j": 3325.292,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.55,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   },
+   "B1": {
+    "outcome": "pass_budget",
+    "duration_s": 12.751,
+    "idle_cpu": 0.0018,
+    "bg_cpu": 22.5718,
+    "pkg_j": 3853.123,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.08,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   }
+  },
+  {
+   "j": 14,
+   "task": "B-T7-U1002",
+   "matched": true,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 10.148,
+    "idle_cpu": 0.0095,
+    "bg_cpu": 22.7082,
+    "pkg_j": 3059.911,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.14,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   },
+   "B1": {
+    "outcome": "pass_budget",
+    "duration_s": 14.506,
+    "idle_cpu": 0.002,
+    "bg_cpu": 22.5842,
+    "pkg_j": 4376.842,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.49,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   }
+  },
+  {
+   "j": 15,
+   "task": "B-T8-U1002",
+   "matched": true,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 12.712,
+    "idle_cpu": 0.0102,
+    "bg_cpu": 22.6806,
+    "pkg_j": 3823.475,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.17,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   },
+   "B1": {
+    "outcome": "pass_budget",
+    "duration_s": 11.981,
+    "idle_cpu": 0.002,
+    "bg_cpu": 22.6719,
+    "pkg_j": 3619.905,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.16,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   }
+  },
+  {
+   "j": 16,
+   "task": "B-T1-U1003",
+   "matched": true,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 7.194,
+    "idle_cpu": 0.0095,
+    "bg_cpu": 22.7652,
+    "pkg_j": 2174.277,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.1,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   },
+   "B1": {
+    "outcome": "pass_budget",
+    "duration_s": 12.597,
+    "idle_cpu": 0.002,
+    "bg_cpu": 22.614,
+    "pkg_j": 3804.58,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.08,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   }
+  },
+  {
+   "j": 17,
+   "task": "B-T2-U1003",
+   "matched": true,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 5.615,
+    "idle_cpu": 0.0102,
+    "bg_cpu": 22.6133,
+    "pkg_j": 1697.853,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.3,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   },
+   "B1": {
+    "outcome": "pass_budget",
+    "duration_s": 7.351,
+    "idle_cpu": 0.0021,
+    "bg_cpu": 22.4369,
+    "pkg_j": 2231.445,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.12,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   }
+  },
+  {
+   "j": 18,
+   "task": "B-T3-U1003",
+   "matched": true,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 9.464,
+    "idle_cpu": 0.0108,
+    "bg_cpu": 22.8329,
+    "pkg_j": 2853.52,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.07,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   },
+   "B1": {
+    "outcome": "pass_budget",
+    "duration_s": 12.321,
+    "idle_cpu": 0.0021,
+    "bg_cpu": 22.7127,
+    "pkg_j": 3722.986,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.15,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   }
+  },
+  {
+   "j": 19,
+   "task": "B-T4-U1003",
+   "matched": true,
+   "A1": {
+    "outcome": "fail_graded",
+    "duration_s": 4.732,
+    "idle_cpu": 0.01,
+    "bg_cpu": 22.741,
+    "pkg_j": 1435.301,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.16,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   },
+   "B1": {
+    "outcome": "fail_graded",
+    "duration_s": 5.153,
+    "idle_cpu": 0.002,
+    "bg_cpu": 22.5071,
+    "pkg_j": 1576.162,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.14,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   }
+  },
+  {
+   "j": 20,
+   "task": "B-T5-U1003",
+   "matched": true,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 8.013,
+    "idle_cpu": 0.0098,
+    "bg_cpu": 22.7417,
+    "pkg_j": 2415.202,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.17,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   },
+   "B1": {
+    "outcome": "pass_budget",
+    "duration_s": 8.439,
+    "idle_cpu": 0.0021,
+    "bg_cpu": 22.6966,
+    "pkg_j": 2559.395,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.4,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   }
+  },
+  {
+   "j": 21,
+   "task": "B-T6-U1003",
+   "matched": true,
+   "A1": {
+    "outcome": "fail_graded",
+    "duration_s": 3.872,
+    "idle_cpu": 0.0093,
+    "bg_cpu": 22.6335,
+    "pkg_j": 1184.074,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.18,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   },
+   "B1": {
+    "outcome": "fail_graded",
+    "duration_s": 9.953,
+    "idle_cpu": 0.0021,
+    "bg_cpu": 22.823,
+    "pkg_j": 3008.993,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.43,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   }
+  },
+  {
+   "j": 22,
+   "task": "B-T7-U1003",
+   "matched": true,
+   "A1": {
+    "outcome": "fail_graded",
+    "duration_s": 5.256,
+    "idle_cpu": 0.0094,
+    "bg_cpu": 22.693,
+    "pkg_j": 1591.876,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.04,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   },
+   "B1": {
+    "outcome": "fail_graded",
+    "duration_s": 8.197,
+    "idle_cpu": 0.002,
+    "bg_cpu": 22.6589,
+    "pkg_j": 2488.593,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.25,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   }
+  },
+  {
+   "j": 23,
+   "task": "B-T8-U1003",
+   "matched": true,
+   "A1": {
+    "outcome": "pass_budget",
+    "duration_s": 12.602,
+    "idle_cpu": 0.0101,
+    "bg_cpu": 22.6643,
+    "pkg_j": 3787.304,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.54,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   },
+   "B1": {
+    "outcome": "pass_budget",
+    "duration_s": 12.177,
+    "idle_cpu": 0.0021,
+    "bg_cpu": 22.5155,
+    "pkg_j": 3674.201,
+    "swap_used_mib": 0.0,
+    "pre": {
+     "busy_pct": 37.13,
+     "throttle_per_min": 0.0,
+     "swap_used_mib": 0.0,
+     "swap_delta_mib": 0.0,
+     "settled": true,
+     "settle_s": 5,
+     "load_running": 3
+    }
+   }
+  }
+ ],
+ "l2_secondary": {
+  "matched": 24,
+  "unmatched_by": {},
+  "paired_diff": {
+   "n": 24,
+   "diff": -0.08333333333333333,
+   "ci95": [
+    -0.20833333333333334,
+    0.0
+   ],
+   "lb95_one_sided": -0.16666666666666666,
+   "ub95_one_sided": 0.0
+  }
+ },
+ "period_balanced": {
+  "A1_first": {
+   "n": 13,
+   "mean_d": -0.1538
+  },
+  "B1_first": {
+   "n": 11,
+   "mean_d": 0.0
+  },
+  "estimate": -0.0769
+ },
+ "load_during_per_arm": {
+  "A1": {
+   "bg_cpu": 22.711,
+   "host_cpu": 68.473,
+   "swap_used_mib": 0.0,
+   "swap_growth_mib_per_min": 0.0,
+   "load1": 42.749,
+   "pkg_w": 299.687,
+   "throttle_per_min": 0.0,
+   "ecore_busy_pct": 84.821,
+   "busy_pct": null,
+   "swap_delta_mib": null,
+   "settle_s": null
+  },
+  "B1": {
+   "bg_cpu": 22.615,
+   "host_cpu": 67.993,
+   "swap_used_mib": 0.0,
+   "swap_growth_mib_per_min": 0.0,
+   "load1": 43.938,
+   "pkg_w": 301.058,
+   "throttle_per_min": 0.0,
+   "ecore_busy_pct": 81.917,
+   "busy_pct": null,
+   "swap_delta_mib": null,
+   "settle_s": null
+  }
+ },
+ "load_during_all_pairs_per_arm": {
+  "A1": {
+   "bg_cpu": 22.711,
+   "host_cpu": 68.473,
+   "swap_used_mib": 0.0,
+   "swap_growth_mib_per_min": 0.0,
+   "load1": 42.749,
+   "pkg_w": 299.687,
+   "throttle_per_min": 0.0,
+   "ecore_busy_pct": 84.821,
+   "busy_pct": null,
+   "swap_delta_mib": null,
+   "settle_s": null
+  },
+  "B1": {
+   "bg_cpu": 22.615,
+   "host_cpu": 67.993,
+   "swap_used_mib": 0.0,
+   "swap_growth_mib_per_min": 0.0,
+   "load1": 43.938,
+   "pkg_w": 301.058,
+   "throttle_per_min": 0.0,
+   "ecore_busy_pct": 81.917,
+   "busy_pct": null,
+   "swap_delta_mib": null,
+   "settle_s": null
+  }
+ },
+ "load_pre_per_arm": {
+  "A1": {
+   "bg_cpu": null,
+   "host_cpu": null,
+   "swap_used_mib": 0.0,
+   "swap_growth_mib_per_min": null,
+   "load1": 38.537,
+   "pkg_w": 203.702,
+   "throttle_per_min": 0.0,
+   "ecore_busy_pct": null,
+   "busy_pct": 37.24,
+   "swap_delta_mib": 0.0,
+   "settle_s": 5.0
+  },
+  "B1": {
+   "bg_cpu": null,
+   "host_cpu": null,
+   "swap_used_mib": 0.0,
+   "swap_growth_mib_per_min": null,
+   "load1": 37.811,
+   "pkg_w": 203.649,
+   "throttle_per_min": 0.0,
+   "ecore_busy_pct": null,
+   "busy_pct": 37.238,
+   "swap_delta_mib": 0.0,
+   "settle_s": 5.0
+  }
+ },
+ "within_budget_success": {
+  "A1": {
+   "k": 19,
+   "n": 24,
+   "rate": 0.7916666666666666,
+   "wilson95": [
+    0.5952954674681133,
+    0.9075517464714814
+   ]
+  },
+  "B1": {
+   "k": 21,
+   "n": 24,
+   "rate": 0.875,
+   "wilson95": [
+    0.6899611872949993,
+    0.9565566591987655
+   ]
+  }
+ },
+ "outcomes_matched": {
+  "A1": {
+   "pass_budget": 19,
+   "fail_graded": 5,
+   "over_turn": 0,
+   "over_task": 0,
+   "void": 0
+  },
+  "B1": {
+   "pass_budget": 21,
+   "fail_graded": 3,
+   "over_turn": 0,
+   "over_task": 0,
+   "void": 0
+  }
+ },
+ "turn_p95_s": {
+  "A1": 10.295174,
+  "B1": 11.296102
+ },
+ "attempt_median_s": {
+  "A1": 8.033,
+  "B1": 11.981
+ },
+ "j_per_completed_task": {
+  "A1": {
+   "n": 24,
+   "j_per_completed_task": 2810.0
+  },
+  "B1": {
+   "n": 24,
+   "j_per_completed_task": 3431.5
+  }
+ },
+ "j_per_attempt_ratio": {
+  "n": 24,
+  "ratio": 0.8109463750591213,
+  "ci95": [
+   0.702663600238456,
+   0.9031885471839638
+  ]
+ },
+ "paired_diff": {
+  "n": 24,
+  "diff": -0.08333333333333333,
+  "ci95": [
+   -0.20833333333333334,
+   0.0
+  ],
+  "lb95_one_sided": -0.16666666666666666,
+  "ub95_one_sided": 0.0
+ },
+ "confidence": {
+  "support_share": 0.0,
+  "method": "share of 2000 paired bootstrap resamples (seed 40) with A1 - B1 >= +0.30"
+ },
+ "verdict": "REFUTED"
+}

@@ -1,0 +1,2033 @@
+Langfuse not configured: set LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY to enable tracing
+Resolved MCP client class: agent_framework.MCPStreamableHTTPTool
+Banking MCP client configured for http://127.0.0.1:18600/mcp
+============================================================
+Banking Assistant with DevUI
+============================================================
+Starting web interface at http://localhost:8090
+
+Features:
+  • Natural-language banking queries
+  • Banking tools via MCP server: http://127.0.0.1:18600/mcp
+  • Persistent memory via Redis (text-only)
+  • OpenAI-compatible API (GenAI Gateway / LiteLLM)
+
+Prerequisites:
+  1. Banking MCP server reachable at MCP_SERVER_URL
+  2. Redis: docker run -d -p 6379:6379 redis/redis-stack-server
+  3. Configure .env with your LLM endpoint
+
+============================================================
+Registering 1 in-memory entities
+Authentication middleware enabled
+Starting Agent Framework DevUI on 127.0.0.2:8090
+INFO:     Started server process [1212391]
+INFO:     Waiting for application startup.
+Starting Agent Framework Server
+Initializing Agent Framework executor...
+Set up TracerProvider for instrumentation
+Enabled Agent Framework observability
+No Agent Framework entities directory configured
+Discovered 0 entities from directory
+Registered in-memory entity: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+Total entities available: 1
+OpenAI proxy mode available (OPENAI_API_KEY configured)
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.2:8090 (Press CTRL+C to quit)
+INFO:     127.0.0.1:34000 - "GET /v1/entities HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36186 - "GET /v1/entities HTTP/1.1" 200 OK
+Extracted entity_id: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+Found entity: banking-assistant (agent)
+Executing agent: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+Negotiated protocol version: 2025-11-25
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Function name: get_accounts
+Function get_accounts succeeded.
+Function duration: 0.005882s
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:36198 - "POST /v1/responses HTTP/1.1" 200 OK
+Extracted entity_id: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+Found entity: banking-assistant (agent)
+Executing agent: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Function name: get_balances
+Processor is already shutdown, ignoring call
+Function get_balances succeeded.
+Function duration: 0.004395s
+Processor is already shutdown, ignoring call
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+INFO:     127.0.0.1:54368 - "POST /v1/responses HTTP/1.1" 200 OK
+Extracted entity_id: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+Found entity: banking-assistant (agent)
+Executing agent: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function name: get_account_balance
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function get_account_balance succeeded.
+Function duration: 0.003747s
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+INFO:     127.0.0.1:34506 - "POST /v1/responses HTTP/1.1" 200 OK
+Extracted entity_id: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+Found entity: banking-assistant (agent)
+Executing agent: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function name: get_transactions
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function get_transactions succeeded.
+Function duration: 0.004199s
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+INFO:     127.0.0.1:48618 - "POST /v1/responses HTTP/1.1" 200 OK
+Extracted entity_id: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+Found entity: banking-assistant (agent)
+Executing agent: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function name: get_loans
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function get_loans succeeded.
+Function duration: 0.003942s
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+INFO:     127.0.0.1:48036 - "POST /v1/responses HTTP/1.1" 200 OK
+Extracted entity_id: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+Found entity: banking-assistant (agent)
+Executing agent: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function name: find_user
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function find_user succeeded.
+Function duration: 0.004098s
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function name: get_balances
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function get_balances succeeded.
+Function duration: 0.005745s
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+INFO:     127.0.0.1:37410 - "POST /v1/responses HTTP/1.1" 200 OK
+Extracted entity_id: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+Found entity: banking-assistant (agent)
+Executing agent: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function name: transfer_funds
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function transfer_funds succeeded.
+Function duration: 0.004668s
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+INFO:     127.0.0.1:51784 - "POST /v1/responses HTTP/1.1" 200 OK
+Extracted entity_id: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+Found entity: banking-assistant (agent)
+Executing agent: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function name: pay_loan
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function pay_loan succeeded.
+Function duration: 0.004037s
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+INFO:     127.0.0.1:58068 - "POST /v1/responses HTTP/1.1" 200 OK
+Extracted entity_id: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+Found entity: banking-assistant (agent)
+Executing agent: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function name: get_user
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function get_user succeeded.
+Function duration: 0.004142s
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function name: transfer_funds
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function transfer_funds succeeded.
+Function duration: 0.003757s
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+INFO:     127.0.0.1:50540 - "POST /v1/responses HTTP/1.1" 200 OK
+Extracted entity_id: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+Found entity: banking-assistant (agent)
+Executing agent: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function name: get_balances
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function get_balances succeeded.
+Function duration: 0.004216s
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+INFO:     127.0.0.1:41290 - "POST /v1/responses HTTP/1.1" 200 OK
+Extracted entity_id: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+Found entity: banking-assistant (agent)
+Executing agent: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function name: get_account_balance
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function get_account_balance succeeded.
+Function duration: 0.004242s
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+INFO:     127.0.0.1:46166 - "POST /v1/responses HTTP/1.1" 200 OK
+Extracted entity_id: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+Found entity: banking-assistant (agent)
+Executing agent: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function name: get_transactions
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function get_transactions succeeded.
+Function duration: 0.004329s
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+INFO:     127.0.0.1:52396 - "POST /v1/responses HTTP/1.1" 200 OK
+Extracted entity_id: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+Found entity: banking-assistant (agent)
+Executing agent: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function name: get_loans
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function get_loans succeeded.
+Function duration: 0.004305s
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+INFO:     127.0.0.1:57594 - "POST /v1/responses HTTP/1.1" 200 OK
+Extracted entity_id: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+Found entity: banking-assistant (agent)
+Executing agent: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function name: find_user
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function find_user succeeded.
+Function duration: 0.004340s
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function name: get_balances
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function get_balances succeeded.
+Function duration: 0.005395s
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+INFO:     127.0.0.1:52742 - "POST /v1/responses HTTP/1.1" 200 OK
+Extracted entity_id: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+Found entity: banking-assistant (agent)
+Executing agent: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function name: transfer_funds
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function transfer_funds succeeded.
+Function duration: 0.004152s
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+INFO:     127.0.0.1:34880 - "POST /v1/responses HTTP/1.1" 200 OK
+Extracted entity_id: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+Found entity: banking-assistant (agent)
+Executing agent: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function name: pay_loan
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function pay_loan succeeded.
+Function duration: 0.004058s
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+INFO:     127.0.0.1:50074 - "POST /v1/responses HTTP/1.1" 200 OK
+Extracted entity_id: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+Found entity: banking-assistant (agent)
+Executing agent: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function name: transfer_funds
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function transfer_funds succeeded.
+Function duration: 0.004106s
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+INFO:     127.0.0.1:55516 - "POST /v1/responses HTTP/1.1" 200 OK
+Extracted entity_id: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+Found entity: banking-assistant (agent)
+Executing agent: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function name: get_balances
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function get_balances succeeded.
+Function duration: 0.004205s
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function name: get_accounts
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function get_accounts succeeded.
+Function duration: 0.004542s
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+INFO:     127.0.0.1:47020 - "POST /v1/responses HTTP/1.1" 200 OK
+Extracted entity_id: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+Found entity: banking-assistant (agent)
+Executing agent: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function name: get_account_balance
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function get_account_balance succeeded.
+Function duration: 0.003865s
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+INFO:     127.0.0.1:49358 - "POST /v1/responses HTTP/1.1" 200 OK
+Extracted entity_id: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+Found entity: banking-assistant (agent)
+Executing agent: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function name: get_transactions
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function get_transactions succeeded.
+Function duration: 0.004197s
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+INFO:     127.0.0.1:55696 - "POST /v1/responses HTTP/1.1" 200 OK
+Extracted entity_id: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+Found entity: banking-assistant (agent)
+Executing agent: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function name: get_loans
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function get_loans succeeded.
+Function duration: 0.003869s
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+INFO:     127.0.0.1:44870 - "POST /v1/responses HTTP/1.1" 200 OK
+Extracted entity_id: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+Found entity: banking-assistant (agent)
+Executing agent: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function name: find_user
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function find_user succeeded.
+Function duration: 0.004623s
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function name: get_balances
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function get_balances succeeded.
+Function duration: 0.004226s
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+INFO:     127.0.0.1:58868 - "POST /v1/responses HTTP/1.1" 200 OK
+Extracted entity_id: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+Found entity: banking-assistant (agent)
+Executing agent: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function name: get_user
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function get_user succeeded.
+Function duration: 0.004189s
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+INFO:     127.0.0.1:56774 - "POST /v1/responses HTTP/1.1" 200 OK
+Extracted entity_id: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+Found entity: banking-assistant (agent)
+Executing agent: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function name: get_user
+Function name: get_loans
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function get_user succeeded.
+Function duration: 0.006530s
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function get_loans succeeded.
+Function duration: 0.006789s
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+INFO:     127.0.0.1:32956 - "POST /v1/responses HTTP/1.1" 200 OK
+Extracted entity_id: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+Found entity: banking-assistant (agent)
+Executing agent: agent_in_memory_banking-assistant_8b04083d16c546cda397a06d944688a7
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function name: transfer_funds
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Function transfer_funds succeeded.
+Function duration: 0.003984s
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+Processor is already shutdown, ignoring call
+INFO:     127.0.0.1:41372 - "POST /v1/responses HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+Shutting down Agent Framework Server
+Cleaning up entity resources...
+✓ Closed 1 MCP tool(s)
+Closed OpenAI executor
+INFO:     Application shutdown complete.
+INFO:     Finished server process [1212391]

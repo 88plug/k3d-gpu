@@ -1,0 +1,56 @@
+Langfuse not configured: set LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY to enable tracing
+Resolved MCP client class: agent_framework.MCPStreamableHTTPTool
+Banking MCP client configured for http://127.0.0.1:18600/mcp
+============================================================
+Banking Assistant with DevUI
+============================================================
+Starting web interface at http://localhost:8090
+
+Features:
+  • Natural-language banking queries
+  • Banking tools via MCP server: http://127.0.0.1:18600/mcp
+  • Persistent memory via Redis (text-only)
+  • OpenAI-compatible API (GenAI Gateway / LiteLLM)
+
+Prerequisites:
+  1. Banking MCP server reachable at MCP_SERVER_URL
+  2. Redis: docker run -d -p 6379:6379 redis/redis-stack-server
+  3. Configure .env with your LLM endpoint
+
+============================================================
+Registering 1 in-memory entities
+Authentication middleware enabled
+Starting Agent Framework DevUI on 127.0.0.2:8090
+INFO:     Started server process [1166099]
+INFO:     Waiting for application startup.
+Starting Agent Framework Server
+Initializing Agent Framework executor...
+Set up TracerProvider for instrumentation
+Enabled Agent Framework observability
+No Agent Framework entities directory configured
+Discovered 0 entities from directory
+Registered in-memory entity: agent_in_memory_banking-assistant_0e69d51f1c5b475a831d76a628e7c2e5
+Total entities available: 1
+OpenAI proxy mode available (OPENAI_API_KEY configured)
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.2:8090 (Press CTRL+C to quit)
+INFO:     127.0.0.1:44166 - "GET /v1/entities HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51972 - "GET /v1/entities HTTP/1.1" 200 OK
+Extracted entity_id: agent_in_memory_banking-assistant_0e69d51f1c5b475a831d76a628e7c2e5
+Found entity: banking-assistant (agent)
+Executing agent: agent_in_memory_banking-assistant_0e69d51f1c5b475a831d76a628e7c2e5
+Negotiated protocol version: 2025-11-25
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+Function name: get_accounts
+Function get_accounts succeeded.
+Function duration: 0.005917s
+HTTP Request: POST http://127.0.0.1:18621/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:51988 - "POST /v1/responses HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+Shutting down Agent Framework Server
+Cleaning up entity resources...
+✓ Closed 1 MCP tool(s)
+Closed OpenAI executor
+INFO:     Application shutdown complete.
+INFO:     Finished server process [1166099]
