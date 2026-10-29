@@ -567,6 +567,20 @@ jobs:
           changed=$(git status --porcelain -- .github/workflows/)
           [ -z "$changed" ] || { echo "::error::GITHUB_TOKEN cannot push .github/workflows/; this job changed:"; echo "$changed"; exit 1; }
 
+      # create-pull-request resets an existing digest branch (a PR still open, or a
+      # merged one whose branch stayed) onto main and force-pushes it. GitHub refuses
+      # that push from GITHUB_TOKEN when the branch's workflow files differ from
+      # main's, though the digest commit touches none. Deleting such a branch closes
+      # its open PR; the action then cuts a fresh branch off main and opens a new one.
+      - name: Delete a digest branch whose workflows differ from main's
+        if: steps.repin.outputs.changes != ''
+        run: |
+          if git fetch -q --depth=1 origin autobump/image-digests 2>/dev/null \
+             && ! git diff --quiet FETCH_HEAD HEAD -- .github/workflows/; then
+            echo "autobump/image-digests was cut from a main with other workflow files; deleting it"
+            git push origin --delete autobump/image-digests
+          fi
+
       - name: Open or update the digest PR
         if: steps.repin.outputs.changes != ''
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
