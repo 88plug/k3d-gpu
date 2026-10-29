@@ -122,7 +122,11 @@ Include relevant details:
   tag-only or `:latest` reference that `images.unpinned` does not list with a
   reason. A rendered component's image pins live in its `component.conf`
   (`IMAGE_PINS`). The nightly `repin-images` job opens a PR when a registry moves
-  a digest under an unchanged tag.
+  a digest under an unchanged tag. Its token cannot push `.github/workflows/`, so
+  it runs `repin --exclude '.github/workflows/*'` and a workflow keeps no
+  `name:tag@sha256` of its own: it reads the pin from the Dockerfile,
+  `docs-build/Dockerfile` or `hack/ci-images.env` (`tests/image_pins_test.sh`
+  fails on a pin written in a workflow).
 - `tests/console_mcp_test.sh` checks that the MCP tools `hardware` and
   `plan_launch` return the CLI `facts --json` and `plan --json` bytes on every
   fixture, and that the MCP `apply` tool writes nothing without a plan hash the

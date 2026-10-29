@@ -6,6 +6,9 @@
 # ~/k3dgpu-bench/results/H53/hold<N>, the shared solo directory .../H53/pairs.
 set -uo pipefail
 # Crescent amendment C1: kubelet eviction thresholds for a 95%-full disk (K3D_GPU_K3S_ARGS below).
+# Crescent amendment E2: the pre-registered 0.1.61 node image (shared rule 5), named here because
+# k3d-gpu's own default moves with each release.
+NODE_IMAGE=cryptoandcoffee/k3d-gpu:0.1.61@sha256:8cd264aa68c77681d7fa474693944de0db8d55de5881253e4029bf72a67e175c
 N=$1 ARM=$2
 B=${HOME}/k3dgpu-bench
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -15,7 +18,7 @@ case ${ARM} in AG|B2) ;; *) echo "solo-hold.sh: ARM must be AG or B2"; exit 2 ;;
 # No hold before H53's row is in EXPERIMENTS.md, and hold N runs the registered arm (pairs.py).
 want=$(python3 "${HERE}/../pairs.py" arm H53 "${N}") || exit 2
 [ "${want}" = "${ARM}" ] || { echo "solo-hold.sh: H53 hold ${N} runs ${want}, not ${ARM}"; exit 2; }
-exec "${HERE}/hold.sh" "H53-hold${N}-${ARM}" 2400 env K3D_GPU_K3S_ARGS="--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1%" \
+exec "${HERE}/hold.sh" "H53-hold${N}-${ARM}" 2400 env K3D_GPU_IMAGE="${NODE_IMAGE}" K3D_GPU_K3S_ARGS="--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1%" \
     LIVE_MODE=solo LIVE_SOLO="${ARM}" LIVE_CAP=2370 LIVE_HOLD="${N}" LIVE_PAIRS_DIR="${R}/pairs" \
     LIVE_MODEL_SET=qwen38 LIVE_MOUNT_B=1 LIVE_GPU_FREE="${LIVE_GPU_FREE:?set LIVE_GPU_FREE}" \
     LIVE_B2_TP="${LIVE_B2_TP:-4}" LIVE_B2_LADDER="${LIVE_B2_LADDER:-}" \

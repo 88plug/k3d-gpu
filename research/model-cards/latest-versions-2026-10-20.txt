@@ -1,0 +1,6 @@
+Latest stable, checked 2026-10-20 15:28 PDT (use-latest-version MCP + gh releases + Docker Hub):
+openvino 2026.4.1 | openvino-genai 2026.4.1.0 | OVMS openvino/model_server 2026.4.1 (-gpu) | optimum-intel 2.2.0 | nncf 3.4.0
+transformers 5.20.2 | huggingface_hub 2.2.0 | auto-round 0.16.1
+vllm 0.32.0 | vllm/vllm-openai-xpu v0.32.0 | vllm/vllm-openai-cpu v0.32.0
+llama.cpp v0.7.0 (2026-10-15) | ktransformers v0.7.2 | sglang v0.5.22
+intel-device-plugins-for-kubernetes v0.37.1 | k3d v5.9.0

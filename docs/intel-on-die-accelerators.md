@@ -350,7 +350,10 @@ base-freq/turbo-freq info` (host copy, or the node image's pinned one), feeds SS
 SNC3), `rdt=l3cat` on model 0x55 and CXL tiering as suggestions with reverts; it reports QAT `cfg_services`, DLB,
 In-Field Scan, the On Demand `state_certificate` size and the 6741P ARK row. `doctor --perf` decodes TPMI PLR,
 shows the uncore clock next to ELC (report only) and checks Xeon 6 channels and MRDIMM per SKU. IAA kernel WQs /
-zswap and DSA accel-config are #162's.
+zswap and DSA accel-config are #162's. Later (branch `claude/ondie-followups`): doctor reports vRAN Boost
+detect-only (PFs 8086:57c0 VRB1 and 8086:57c2 VRB2 with their driver, VFs not counted; no kernel driver, so
+nothing is exposed) and keeps those ids out of the unbound-GPU `force_probe` hint; the DSA/IAA `ok` line names
+the `CAP_SYS_RAWIO` gate (INTEL-SA-01084) and the RDT opt-in line carries its revert.
 
 Status values:
 - **A+E**: auto-detected and enabled (label, plugin or balloon).
