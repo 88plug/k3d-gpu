@@ -40,6 +40,8 @@ step 1 check passes. Step 3b ships `origin/main` to wildct, so the PR that adds 
 
 - **GPUs.** No GPU on wildct is used, the iGPU included. Every cluster runs with
   `K3D_GPU_VENDORS=auto,-nvidia,-intel`. No `--gpus`, no `/dev/dri`, no `/dev/nvidia*`.
+  H28w's plain `k3d cluster create` does not read that variable, so `row.sh h28w` passes the two
+  disables `up` would (`--disable=intel-gpu-plugin --disable=intel-gpu-dra`) with W3.
 - **Production box.**
   - Never stop, start, change or remove anything this campaign did not create.
   - That includes the `feed-my-algorithm-*` containers, `know-my-neighbor-db-1`,

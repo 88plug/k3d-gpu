@@ -534,8 +534,9 @@ row_envs_match_the_registration() {
     has h34w -- H34_CLUSTER=k3dgpu-w-h34 H34_VENDORS=auto,-nvidia,-intel H34_LEVELS=typical LOAD_CPUS=20-23 \
         "K3D_GPU_IMAGE=${IMG}" "H22_MODELS=${HOME}/k3dgpu-bench-wildct/models" "${w3}" || return 1
     has h28w-prep -- LEVELS=typical "IMAGE=${IMG}" || return 1
-    has h28w -- CLUSTER=k3dgpu-w-h28 LEVELS=typical HOLD=1440 NODE_CPUS=0-15 LOAD_CPUS=20-23 "${w3}" \
-        "LOCK=${HOME}/k3dgpu-bench-wildct/inner.lock" || return 1
+    # H28w: W3 plus the two Intel GPU disables `up` passes with intel not active (amendment R1, W8).
+    has h28w -- CLUSTER=k3dgpu-w-h28 LEVELS=typical HOLD=1440 NODE_CPUS=0-15 LOAD_CPUS=20-23 \
+        "${w3} --disable=intel-gpu-plugin --disable=intel-gpu-dra" "LOCK=${HOME}/k3dgpu-bench-wildct/inner.lock" || return 1
     has h57w 2 perf -- H57D_ROW=H57w H57D_PREFIX=k3dgpu-w- H57D_LOAD1_MAX=12 H57D_VENDORS=auto,-nvidia,-intel \
         "H57D_IMAGE=${IMG}" "H57D_K3S_ARGS=${W3_LEDGER}" "LOCK=${HOME}/k3dgpu-bench-wildct/inner.lock" \
         "G=${HOME}/k3dgpu-bench-wildct/h57" "H57D_G=${HOME}/k3dgpu-bench-wildct/h57" "K3D_REAL=${HOME}/k3dgpu-bench-wildct/bin/k3d" \
@@ -594,6 +595,26 @@ probe_keeps_the_given_rapl_reader() {
     [ "${out}" = "docker exec k3dgpu-w-rapl" ] || { echo "given reader replaced by '${out}'"; return 1; }
     out=$(PATH=${nosudo}:${PATH} CLUSTER=k3dgpu-w-h28 env -u K3D_GPU_RAPL_EXEC bash "${probe}" rapl-exec)
     [ "${out}" = "docker exec k3d-k3dgpu-w-h28-server-0" ] || { echo "default without sudo: '${out}'"; return 1; }
+}
+
+# Rule W8 for H28w: probe.sh makes its cluster with a plain `k3d cluster create`, which never reads
+# K3D_GPU_VENDORS. The node image bakes intel-gpu-plugin (nodeSelector: the architecture only) into
+# k3s's auto-deploy manifests, so without `up`'s --disable it would mount wildct's /dev/dri through
+# the privileged node. The args row.sh's H28w environment gives that create carry both disables,
+# the two `up` passes when intel is not active, and W3.
+h28w_cluster_disables_the_intel_gpu_stacks() {
+    local env=() args a
+    mapfile -t env < <(rowprint h28w | sed '$d')
+    [ "${#env[@]}" -gt 0 ] || { echo "row.sh h28w printed no environment"; return 1; }
+    args=$(env "${env[@]}" bash "${ROOT}/bench/zero-copy-models/probe.sh" create-args) || { echo "probe.sh create-args failed"; return 1; }
+    for a in "--disable=intel-gpu-plugin@server:*" "--disable=intel-gpu-dra@server:*" "${W3_LEDGER}@server:*"; do
+        [[ " ${args} " == *" --k3s-arg ${a} "* ]] || { echo "H28w's k3d cluster create has no --k3s-arg ${a}: ${args}"; return 1; }
+    done
+    for a in intel-gpu-plugin intel-gpu-dra; do
+        grep -q -- "--k3s-arg=\"--disable=${a}@server:0\"" "${ROOT}/scripts/k3d-gpu" || { echo "the launcher no longer disables ${a}"; return 1; }
+        grep -q "share/${a}.yml /var/lib/rancher/k3s/server/manifests/${a}.yaml" "${ROOT}/Dockerfile" \
+            || { echo "the node image no longer bakes ${a}.yaml (the disable names its manifest)"; return 1; }
+    done
 }
 
 row_guards() {
@@ -753,6 +774,7 @@ check "RESUME.md: every launch line names a row row.sh runs, with the registered
 check "RESUME.md: docker ps and strays.py checks read as empty print their rc" resume_empty_checks_print_their_rc
 check "row.sh: digest-pinned IMAGE, the H57 k3d shim, convert outside a hold, unknown rows" row_guards
 check "H28w's probe.sh keeps hold.sh's RAPL reader (W4); its default is unchanged" probe_keeps_the_given_rapl_reader
+check "H28w's plain k3d cluster create disables both baked Intel GPU stacks (W8), keeps W3" h28w_cluster_disables_the_intel_gpu_stacks
 check "row.sh smoke: up, pod wait, GPU scan, down; a failed up fails the smoke" row_smoke_runs_up_scan_down
 check "a command that ran and failed: hold.sh deletes the h28-model images (H28w row), nothing else" failed_command_deletes_h28_model_images
 check "a cleanup step that fails at once is named in cleanup-incomplete" failed_cleanup_steps_are_named

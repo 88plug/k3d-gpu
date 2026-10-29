@@ -11,7 +11,8 @@
 #   h25w         H25's bench/shared-prefix/run.sh
 #   h34w         H34's bench/hetero-spec/h34.sh
 #   h28w-prep    bench/zero-copy-models/probe.sh prep (typical's model images only, r0-r6)
-#   h28w         bench/zero-copy-models/probe.sh run
+#   h28w         bench/zero-copy-models/probe.sh run (its plain k3d cluster create gets W3 and the
+#                two Intel GPU disables `up` passes with intel not active: W8, amendment R1)
 #   h57w HOLD MODE [ARM...]  H57d's bench/h57d/hold.sh with the wildct knobs (inner lock): holds
 #                1-3 perf and 4 quality, in their registered arm order (no ARM); the spare hold is
 #                HOLD 5 with the failed hold's mode and its arms in its order (H57d's rule)
@@ -31,6 +32,11 @@ row=${1:?usage: row.sh ROW [HOLD MODE [ARM...]]}
 export PATH=${W}/bin:${PATH}
 W3='--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<2Gi,imagefs.available<2Gi,nodefs.inodesFree<1%'
 OPTOUT=auto,-nvidia,-intel
+# W8 for a plain `k3d cluster create` (H28w's probe.sh), which never reads K3D_GPU_VENDORS: the
+# node image bakes both Intel GPU stacks into k3s's auto-deploy manifests, and intel-gpu-plugin's
+# only nodeSelector is the architecture. These are the two disables `up` passes when intel is not
+# active (wildct amendment R1).
+NOINTEL='--disable=intel-gpu-plugin --disable=intel-gpu-dra'
 G=${W}/h57
 OUT=${OUT:-${W}/runs/${WILDCT_HOLD:-${row}}/out}
 need_image() { [[ "${IMAGE:-}" =~ ^[^@]+:[^@]+@sha256:[0-9a-f]{64}$ ]] || { echo "row.sh: set IMAGE to the release node image as name:tag@sha256:<digest>" >&2; exit 2; }; }
@@ -64,7 +70,7 @@ case ${row} in
     h28w)
         need_image
         E=(WORK="${OUT}" IMAGE="${IMAGE}" CLUSTER=k3dgpu-w-h28 LEVELS=typical HOLD=1440 LOCK="${W}/inner.lock" NODE_CPUS=0-15
-           LOAD_CPUS=20-23 K3D_GPU_K3S_ARGS="${W3}")
+           LOAD_CPUS=20-23 K3D_GPU_K3S_ARGS="${W3} ${NOINTEL}")
         ARGV=(bash "${REPO}/bench/zero-copy-models/probe.sh" run) ;;
     h57w)
         need_image

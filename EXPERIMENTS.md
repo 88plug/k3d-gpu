@@ -4333,7 +4333,13 @@ quality in their registered order, the spare 5 with a failed hold's mode and arm
 `bench/zero-copy-models/probe.sh` replaced any
 `K3D_GPU_RAPL_EXEC` with a `docker exec` into its node when `sudo -n` fails, so H28w would have read
 RAPL inside the node (CPUs 0-15), not through W4's reader as W4 says; it now keeps a reader it is
-given (default unchanged, as H28 ran). Tests: `tests/wildct_hold_test.sh` and `bench/wildct/test_wildct.py`, in CI.
+given (default unchanged, as H28 ran). H28w's cluster comes from `probe.sh`'s plain `k3d cluster
+create`, which never reads `K3D_GPU_VENDORS`, so W8's opt-out did not reach it: the node image
+bakes both Intel GPU stacks into k3s's auto-deploy manifests, and `intel-gpu-plugin`'s only
+nodeSelector is the architecture, so the registered H28w line would have mounted wildct's
+`/dev/dri` through the privileged node. `row.sh` gives H28w's `K3D_GPU_K3S_ARGS` W3 plus
+`--disable=intel-gpu-plugin --disable=intel-gpu-dra`, the two disables `up` passes when intel is not
+active; both arms alike, nothing else of H28w changes. Tests: `tests/wildct_hold_test.sh` and `bench/wildct/test_wildct.py`, in CI.
 
 **Clarifications.** H28w's prep runs with `LEVELS=typical`, as its run does, so it builds only the
 model images the run imports and deletes (r0-r6, 7 x 1 GiB); the registered prep line left
