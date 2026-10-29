@@ -70,7 +70,7 @@
 
 set -euo pipefail
 
-VERSION="0.1.74"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.75"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 # The node image defaults to the tag built from this launcher's own release
 # (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
@@ -1407,6 +1407,12 @@ IAA_PCI_IDS="0x0cfe 0x1216 0xb02d 0xfd2d"
 # DLB physical functions: 2710 (DLB 2.0, Sapphire Rapids), 2714 (DLB 2.5, Xeon 6),
 # per DPDK's dlb2 event driver (doc.dpdk.org/guides/eventdevs/dlb2.html).
 DLB_PCI_IDS="0x2710 0x2714"
+# vRAN Boost physical functions: 57c0 (VRB1, Sapphire Rapids-EE), 57c2 (VRB2, Xeon 6
+# SoC / Granite Rapids-D); their VFs are 57c1 and 57c3. DPDK
+# drivers/baseband/acc/vrb_pmd.h: RTE_VRB1_PF_DEVICE_ID 0x57C0, RTE_VRB1_VF_DEVICE_ID
+# 0x57C1, RTE_VRB2_PF_DEVICE_ID 0x57C2, RTE_VRB2_VF_DEVICE_ID 0x57C3.
+VRB_PCI_IDS="0x57c0 0x57c2"
+VRB_VF_IDS="0x57c1 0x57c3"
 
 # "<socket> <DSA|IAA|QAT>" per DSA/IAA PCI function and QAT physical function, by
 # PCI id, so a device counts whether or not its driver is loaded.
@@ -1457,6 +1463,7 @@ doctor_accel_sockets() {
         lines+="  info: per socket: ${line}"$'\n'"${extra}"
     fi
     doctor_dlb
+    doctor_vrb
     sdsi=$({ compgen -G "${SYSROOT}/sys/bus/auxiliary/devices/intel_vsec.sdsi.*" || true; } | sed 's#.*/##' | sort -V | paste -sd, | sed 's/,/, /g')
     [ -z "${sdsi}" ] || lines+="  info: Intel On Demand interface present (${sdsi}): on On Demand SKUs, instances above the ARK default are activated by a license (https://github.com/intel/intel-sdsi); ask the platform vendor whether activation is offered$(sdsi_certs)"$'\n'
     doctor_ifs
@@ -1498,6 +1505,27 @@ doctor_dlb() {
     ids=$(for id in ${ids}; do case "${id}" in 0x2710) echo "8086:2710 DLB 2.0" ;; *) echo "8086:2714 DLB 2.5" ;; esac; done | paste -sd, | sed 's/,/, /g')
     drv=$(tr ' ' '\n' <<< "${drv}" | sort -u | paste -sd' ')
     lines+="  info: DLB: ${n} device(s) (${ids}), $( [ -n "${drv# }" ] && echo "driver ${drv# }" || echo "no driver bound") — mainline Linux has no DLB driver (Intel's out-of-tree driver or DPDK on vfio-pci) and the Kubernetes DLB device plugin was removed upstream (intel-device-plugins-for-kubernetes, 2026-09-01), so k3d-gpu exposes nothing for it"$'\n'
+}
+
+# vRAN Boost, appended to ${lines}: the PFs present and their driver, detect-only
+# (VFs are not counted). It offloads 4G/5G FEC (LDPC, Turbo, FFT; MLD-TS on VRB2),
+# driven from user space by the DPDK bbdev baseband/acc PMD on vfio-pci, and has no
+# kernel driver (docs/intel-on-die-accelerators.md, vRAN Boost rows in 1b and 2.6),
+# so k3d-gpu exposes nothing for it.
+doctor_vrb() {
+    local dev id n=0 ids="" drv=""
+    for dev in "${SYSROOT}"/sys/bus/pci/devices/*; do
+        [ "$(rf "${dev}/vendor")" = 0x8086 ] || continue
+        id=$(rf "${dev}/device")
+        [[ " ${VRB_PCI_IDS} " == *" ${id} "* ]] || continue
+        n=$((n + 1))
+        [[ " ${ids} " == *" ${id} "* ]] || ids+=" ${id}"
+        [ -z "$(bound_driver "${dev}")" ] || drv+=" $(bound_driver "${dev}")"
+    done
+    [ "${n}" -gt 0 ] || return 0
+    ids=$(for id in ${ids}; do case "${id}" in 0x57c0) echo "8086:57c0 VRB1" ;; *) echo "8086:57c2 VRB2" ;; esac; done | paste -sd, | sed 's/,/, /g')
+    drv=$(tr ' ' '\n' <<< "${drv}" | sort -u | paste -sd' ')
+    lines+="  info: vRAN Boost: ${n} device(s) (${ids}), $( [ -n "${drv# }" ] && echo "driver ${drv# }" || echo "no driver bound") — no kernel driver (DPDK baseband/acc PMD on vfio-pci); it offloads 4G/5G FEC, so k3d-gpu exposes nothing for it"$'\n'
 }
 
 # In-Field Scan status, appended to ${lines}: each intel_ifs_<n> device's last result
@@ -2370,6 +2398,9 @@ doctor_intel_unbound() {
         case "${class}" in 0x03*|0x12*) ;; *) continue ;; esac
         [ -z "$(bound_driver "${dev}")" ] || continue
         id=$(cat "${dev}/device" 2>/dev/null) || continue
+        # vRAN Boost sits in class 0x12 too (DPDK usertools/dpdk-devbind.py finds
+        # baseband devices by class 12); doctor_vrb reports it.
+        [[ " ${VRB_PCI_IDS} ${VRB_VF_IDS} " != *" ${id} "* ]] || continue
         if [ -n "$(npu_platform "${id}")" ]; then
             IFS='|' read -r name mink gen <<< "$(npu_platform "${id}")"
             # First cause that holds: kernel too old for the id, module not loaded,
@@ -2437,7 +2468,7 @@ doctor_numa() {
         for n in cat_l2 cat_l3 cdp_l2 cdp_l3 mba; do
             [[ " ${flags#*:} " == *" ${n} "* ]] && rdt+=" ${n}"
         done
-        lines+="  info: RDT allocation (rdt_a:${rdt}) — resctrl classes are available but left off: the balloons policy ships control.rdt.enable: false because enabling it rewrites the host's /sys/fs/resctrl. To opt in, mount resctrl on the host (mount -t resctrl resctrl /sys/fs/resctrl) and set control.rdt.enable: true in nri-balloons.yml; usePodQoSAsDefaultClass then gives BestEffort/Burstable/Guaranteed pods 33%/66%/100% of the L3"$'\n'
+        lines+="  info: RDT allocation (rdt_a:${rdt}) — resctrl classes are available but left off: the balloons policy ships control.rdt.enable: false because enabling it rewrites the host's /sys/fs/resctrl. To opt in, mount resctrl on the host (mount -t resctrl resctrl /sys/fs/resctrl) and set control.rdt.enable: true in nri-balloons.yml; usePodQoSAsDefaultClass then gives BestEffort/Burstable/Guaranteed pods 33%/66%/100% of the L3. To revert, set control.rdt.enable: false in nri-balloons.yml, then sudo umount /sys/fs/resctrl"$'\n'
     fi
     doctor_rdt "${flags#*:}"
     doctor_isolation "${flags#*:}"
@@ -2946,7 +2977,7 @@ doctor_cpu_accels() {
         n=$({ compgen -G "${SYSROOT}/sys/bus/dsa/devices/${prefix}[0-9]*" || true; } | wc -l)
         wqs=$({ compgen -G "${SYSROOT}/dev/${devdir}/wq*" || true; } | wc -l)
         if [ "${wqs}" -gt 0 ]; then
-            lines+="  ok: ${name}: ${n} device(s), ${wqs} user work queue(s) — deployed by 'k3d-gpu up' (intel-${name,,}-plugin)"$'\n'
+            lines+="  ok: ${name}: ${n} device(s), ${wqs} user work queue(s) — deployed by 'k3d-gpu up' (intel-${name,,}-plugin); pods need CAP_SYS_RAWIO to mmap a WQ portal (INTEL-SA-01084)"$'\n'
         elif [ "${n}" -gt 0 ]; then
             if grep -qE "^${name}"$'\t''[^[:space:]]*'$'\t''(new|kernel)'$'\t' <<< "${steps}"; then
                 what=""
