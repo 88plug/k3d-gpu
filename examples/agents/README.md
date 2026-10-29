@@ -106,7 +106,7 @@ model name, a `multiply` tool call, then an answer from the tool's result,
 streaming or not. `check.py <example>` runs an example against it and checks
 the requests it sent (for `litellm-gateway`, also that `model.json` targets the
 in-cluster agent Service, which `agent.py` swaps for the stub).
-`tests/agent_examples_test.sh` does that for every example in a pinned `python:3.13.16-slim-trixie` container, which is where the
+`tests/agent_examples_test.sh` does that for every example in a pinned `python:3.13.18-slim-trixie` container, which is where the
 packages get installed from `requirements.txt` under `constraints.txt`; the
 installed set must equal `constraints.txt`. It takes example names, so a CI matrix can run one
 example per job.

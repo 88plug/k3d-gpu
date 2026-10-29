@@ -10,8 +10,8 @@
 set -uo pipefail
 
 EXAMPLES_DIR="$(cd "$(dirname "$0")/../examples/agents" && pwd)"
-# python:3.13.16-slim-trixie (multi-arch index digest)
-IMAGE="${K3D_GPU_EXAMPLES_IMAGE:-python:3.13.16-slim-trixie@sha256:cf50a4f6ac4f026458b08d5222023d700ac806410dff5e9ca8728fa44f2b850f}"
+# python:3.13.18-slim-trixie (multi-arch index digest)
+IMAGE="${K3D_GPU_EXAMPLES_IMAGE:-python:3.13.18-slim-trixie@sha256:76baad6037690d6e8c4397fbcaef17bca6f19eecef822b708fe8fa3417d30bb5}"
 
 if [ "$#" -gt 0 ]; then
     examples=("$@")
