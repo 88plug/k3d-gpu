@@ -3966,6 +3966,79 @@ python3 bench/h57d/h57d.py score-p ~/k3dgpu-h57d/results/H57dp > verdict.json
 Holds as registered: 2, each at most 75 min (`timeout -k 30 4500`), with H57d's start rule,
 floors, watchdog and cluster deletion.
 
+### H57dp amendment R2: the bench lock, the hybrid vendor, the quality records and the Reproduce header (2026-10-28)
+
+Recorded 2026-10-28, before any H57dp or H57de measurement: no H57dp hold, smoke or request has
+run. It follows
+[H57dp amendment R1](#h57dp-amendment-r1-the-ld-mtp-u-render-the-two-hold-scorer-and-an-affinity-check-2026-10-28).
+Nothing here changes either row's arms, model files, statistic, thresholds, gates, hold count,
+hold orders or prediction.
+
+**Lock.** Every H57dp step that loads the CPU (`convert.sh`, the smoke, both holds) takes
+`LOCK=$HOME/k3dgpu-bench.lock`. It replaces the scratchpad `live.lock` that H57d's commands and
+R1's name. That file lived in one session's scratchpad directory. This host's H55 runner
+(`bench/admission/run.sh`) takes `~/k3dgpu-bench.lock` by default, as `bench/h54`,
+`bench/xhost` and the crescent holds do on their hosts, so a hold on any other lock would not
+exclude it. `hold.sh` and `convert.sh` are unchanged: both still require `LOCK` to be set.
+
+**Row.** Every H57dp command runs with `H57D_ROW=H57dp`. The records go to
+`${G}/results/H57dp/hold1` and `hold2`, the two holds left of H57d's 6-hold cap, numbered within
+their own row. H57d's `hold_dirs`, and with it the spare-hold rule (`hold5/repeats`), reads only
+`results/H57d`, so it never sees an H57dp hold.
+
+**Spare-hold guard.** H57d's hold 5 is its spare: it repeats a failed hold's arms, which must be
+named. Before R1, `hold.sh 5 perf` with no arms read an empty order (H57d registers orders 1-4),
+took the lock and ran a hold with no arms, which would use up a counted hold. Since R1 `h57d.py
+order` exits non-zero for a hold the row does not register, and `hold.sh` exits 2 before the
+lock with nothing written. R2 adds the tests: a bare hold 5 under H57d, H57w and H57dp, and a
+bare smoke, are refused; with arms named, hold 5 and the smoke go on to the lock. Run against
+main's `hold.sh` the refusal test fails, because the bare hold 5 reached the lock with an empty
+arm list.
+
+**Models.** As R1. H57d's revisions are downloaded again, and every LFS file is checked against
+the committed `bench/h57d/results/2026-10-21/weights.sha256` (10 files). The drafter is rebuilt
+by `convert.sh` and must equal H57d's Q4_0: sha256 beginning `8eb21d5b7efad6e9` (H57d's records
+keep that 16-digit prefix) and 321,145,696 bytes. A mismatch stops the campaign before hold 1 and
+is recorded.
+
+**Hybrid vendor.** H57d ran at `458bca0e`, before PR #180, and its confounds record that
+`K3D_GPU_VENDORS=hybrid` still deployed the node image's baked intel-gpu-plugin. The runner calls
+this repository's `scripts/k3d-gpu up`, which includes #180 (`06aa321c`) from this commit on.
+`hybrid` alone does not make intel active, so `up` creates the cluster with
+`--disable=intel-gpu-plugin@server:0` and `--disable=intel-gpu-dra@server:0` (the branch #180's
+tests cover with `K3D_GPU_VENDORS=none` and `auto,-intel`), and no intel-gpu-plugin runs on an
+H57dp node. No arm requests a `gpu.intel.com` resource either way. The change applies to all
+three H57dp arms alike; the run section discloses it beside any comparison with H57d's numbers.
+
+**Quality records.** `score-p` now reads the inherited records from the committed H57d quality
+hold instead of quoting them: `results/2026-10-21/hold4/Ld-mtp/quality.json` for Ld-mtp-u and
+Ld-mtp, and `hold4/Od/quality.json` for Od (50/50 each). They are reported under
+`quality_records`. As registered and as in R1, neither row has a quality gate, so the records
+change no verdict.
+
+**Reproduce header.** The engine-flags line of `reproduce.sh` was not valid Python (a backslash
+inside an f-string expression), so every H57d `reproduce.txt` shows a `SyntaxError` where the
+block belongs. R1's statement that `reproduce.sh` prints Ld-mtp-u's flags held only after this
+fix. The flags H57d ran are in each arm's `deploy.yaml`. The line now prints one line per
+rendered arm (Ld, Ld-mtp, Ld-mtp-u).
+
+**Files and tests.** `bench/h57d/h57d.py` (`inherited_quality`, `score-p`'s `quality_records`),
+`bench/h57d/reproduce.sh` (the flags line) and `bench/h57d/test_h57d.py`, in CI: the records
+against the committed hold 4 files, a missing record, verdicts unchanged under a low inherited
+score, the spare-hold and smoke guards, and the Reproduce header run with stand-in
+`docker`/`kubectl`/`k3d` (it failed before the fix with the same `SyntaxError`).
+
+**Commands** (`SUDO_ASKPASS` for RAPL):
+
+```bash
+cd ~/k3dgpu-h57d/models && awk '{print $1 "  " $2}' <repo>/bench/h57d/results/2026-10-21/weights.sha256 | sha256sum -c
+LOCK=~/k3dgpu-bench.lock G=~/k3dgpu-h57d bench/h57d/convert.sh            # drafter GGUF + Od's graph.pbtxt
+sha256sum ~/k3dgpu-h57d/models/k3dgpu/gemma-4-26B-A4B-it-qat-assistant-gguf/gemma-4-26B-A4B-it-qat-assistant-q4_0.gguf   # 8eb21d5b7efad6e9...
+SMOKE=1 LOCK=~/k3dgpu-bench.lock bench/h57d/hold.sh smoke-p perf Ld-mtp-u  # wiring smoke, discarded
+for h in 1 2; do LOCK=~/k3dgpu-bench.lock H57D_ROW=H57dp bench/h57d/hold.sh $h perf; done
+python3 bench/h57d/h57d.py score-p ~/k3dgpu-h57d/results/H57dp > verdict.json
+```
+
 ### Wildct pre-registration: client Raptor Lake (i7-13700, 2026-10-20)
 
 Written 2026-10-20, before any H52w, H18w, H25w, H28w, H34w or H57w measurement on this host.

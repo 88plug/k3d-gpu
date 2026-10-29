@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """h57d.py: the H57d runner's arm table and renders, P-core load sampler, load gate and
-scorers (EXPERIMENTS.md "H57d pre-registration", "H57d amendment R1", "H57dp pre-registration"
-and "H57dp amendment R1").
+scorers (EXPERIMENTS.md "H57d pre-registration", "H57d amendment R1", "H57dp pre-registration",
+"H57dp amendment R1" and "H57dp amendment R2").
 
   h57d.py arms                          the arm table as JSON
   h57d.py field ARM KEY                 one field of an arm (for arm.sh)
@@ -12,7 +12,8 @@ and "H57dp amendment R1").
   h57d.py sample OUT.jsonl NODE         every 5 s until killed: P-core (CPUs 0-15) busy CPU-s/s,
                                         the k3d node container's CPU-s/s, load1, package C
   h57d.py score RESULTS_DIR             the H57da and H57dm verdicts from the recorded holds
-  h57d.py score-p RESULTS_DIR           the H57dp and H57de verdicts from the two H57dp holds
+  h57d.py score-p RESULTS_DIR           the H57dp and H57de verdicts from the two H57dp holds, with
+                                        the quality records they inherit from H57d hold 4
 
 The GSM8K grader, the bootstrap and the 1,000-token TTFT prompt are H54's (bench/h54).
 Python 3 standard library only, except render (PyYAML)."""
@@ -57,6 +58,10 @@ P_ARMS = ("Ld-mtp", "Ld-mtp-u", "Od")
 P_ORDERS = {1: ["Ld-mtp-u", "Od", "Ld-mtp"], 2: ["Ld-mtp", "Ld-mtp-u", "Od"]}
 P_QUALITY = ("inherited, not re-measured (H57dp pre-registration): H57d's Ld-mtp record (50/50) "
              "stands for Ld-mtp-u and Od's (50/50) for Od; neither row has a quality gate here")
+# Where each H57dp arm's inherited quality record is: H57d's committed quality hold (H57dp
+# amendment R2). Ld-mtp-u runs Ld-mtp's binary, model files and greedy settings.
+H57D_RESULTS = os.path.join(HERE, "results", "2026-10-21")
+P_QUALITY_FROM = {"Ld-mtp-u": "Ld-mtp", "Ld-mtp": "Ld-mtp", "Od": "Od"}
 
 
 def orders(row):
@@ -358,12 +363,28 @@ def single_cpu_threads(cpus_txt):
     return out
 
 
-def score_p(results):
+def inherited_quality(res=H57D_RESULTS):
+    """{arm: the quality record H57dp inherits}, read from res/hold4/<P_QUALITY_FROM[arm]>/
+    quality.json (None when that arm was not measured there)."""
+    out = {}
+    for arm, src in P_QUALITY_FROM.items():
+        ad = os.path.join(res, "hold4", src)
+        q = os.path.join(ad, "quality.json")
+        if not (measured(ad) and os.path.exists(q)):
+            out[arm] = None
+            continue
+        qq = jload(q)
+        out[arm] = {"from": f"H57d hold 4, {src}", "correct": qq["correct"], "n": qq["n"], "score": qq["score"]}
+    return out
+
+
+def score_p(results, quality_from=H57D_RESULTS):
     """H57dp (Ld-mtp-u vs Ld-mtp) and H57de (Ld-mtp-u vs Od) from results/hold1 and hold2. As
     H57d: an arm is delivered when it was measured in every hold, and one load gate covers the
-    delivered arms. Quality is inherited (P_QUALITY), so neither row is gated on it. Affinity
-    check, per hold, from cpus.txt: Ld-mtp's single-CPU threads sit exactly on MASK's CPUs and
-    Ld-mtp-u has none; a row whose arm fails it, or has no table, is INCONCLUSIVE."""
+    delivered arms. Quality is inherited (P_QUALITY; the records, from quality_from, are
+    reported), so neither row is gated on it. Affinity check, per hold, from cpus.txt: Ld-mtp's
+    single-CPU threads sit exactly on MASK's CPUs and Ld-mtp-u has none; a row whose arm fails
+    it, or has no table, is INCONCLUSIVE."""
     holds = (1, 2)
     hd = {k: os.path.join(results, f"hold{k}") for k in holds}
     arms = collect(results, P_ARMS, holds, hd, quality_hold=None)
@@ -374,7 +395,8 @@ def score_p(results):
         got = {k: single_cpu_threads(os.path.join(hd[k], a, "cpus.txt")) for k in holds}
         aff[a] = {"single_cpu_threads": got, "as_registered": all(g is not None and set(g) == want for g in got.values())}
     rep = {"arms": {k: {x: v for x, v in a.items() if x not in ("decode", "foreign", "quality")} for k, a in arms.items()},
-           "delivered": dl, "quality": P_QUALITY, "affinity": aff, "load_gate": lg}
+           "delivered": dl, "quality": P_QUALITY, "quality_records": inherited_quality(quality_from),
+           "affinity": aff, "load_gate": lg}
     u = arms["Ld-mtp-u"]
 
     def precheck(den):

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Tests for bench/h57d (EXPERIMENTS.md "H57d amendment R1"): the arm table and renders, Od's
-read-only transform, the P-core sampler's arithmetic, the load gate, and every H57da and H57dm
-verdict branch on synthetic hold records. No cluster, no network."""
+"""Tests for bench/h57d (EXPERIMENTS.md "H57d amendment R1", "H57dp amendment R1" and "R2"): the
+arm table and renders, Od's read-only transform, the P-core sampler's arithmetic, the load gate,
+every H57da, H57dm, H57dp and H57de verdict branch on synthetic hold records, the hold.sh guards
+and the Reproduce header. No cluster, no network."""
 import json
 import os
 import random
@@ -500,6 +501,113 @@ class ScoreP(unittest.TestCase):
                                  capture_output=True, text=True)
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertEqual(json.loads(out.stdout)["H57dp"]["verdict"], "SUPPORTED")
+
+
+# ---- H57dp amendment R2: the inherited quality records, the spare-hold guard, the Reproduce
+# header's engine flags -------------------------------------------------------------------------
+
+H57D_HOLD4 = os.path.join(HERE, "results", "2026-10-21", "hold4")
+
+
+def write_quality(root, correct):
+    """A stand-in for H57d's quality hold: root/hold4/<arm>/quality.json, correct of 50."""
+    for arm, c in correct.items():
+        ad = os.path.join(root, "hold4", arm)
+        os.makedirs(ad)
+        json.dump({"status": "measured"}, open(os.path.join(ad, "status.json"), "w"))
+        json.dump({"correct": c, "n": 50, "score": c / 50}, open(os.path.join(ad, "quality.json"), "w"))
+
+
+class InheritedQuality(unittest.TestCase):
+    def test_read_from_the_committed_h57d_quality_hold(self):
+        q = h57d.inherited_quality()
+        self.assertEqual(sorted(q), sorted(h57d.P_ARMS))
+        for arm, src in (("Ld-mtp-u", "Ld-mtp"), ("Ld-mtp", "Ld-mtp"), ("Od", "Od")):
+            rec = json.load(open(os.path.join(H57D_HOLD4, src, "quality.json")))
+            self.assertEqual(q[arm], {"from": f"H57d hold 4, {src}", "correct": rec["correct"],
+                                      "n": rec["n"], "score": rec["score"]})
+        self.assertEqual((q["Ld-mtp-u"]["correct"], q["Od"]["correct"]), (50, 50))
+
+    def test_missing_record_reads_none(self):
+        with tempfile.TemporaryDirectory() as d:
+            write_quality(d, {"Ld-mtp": 49})
+            q = h57d.inherited_quality(d)
+        self.assertEqual(q["Ld-mtp-u"]["correct"], 49)   # Ld-mtp's record stands for Ld-mtp-u
+        self.assertIsNone(q["Od"])
+
+    def test_score_p_reports_the_records_with_no_gate(self):
+        decode = {"Ld-mtp": 5.0, "Ld-mtp-u": 8.0, "Od": 6.0}
+        with tempfile.TemporaryDirectory() as d:
+            write_p_holds(d, decode)
+            r = h57d.score_p(d)
+            self.assertEqual(r["quality_records"], h57d.inherited_quality())
+            # A low inherited score changes no verdict: neither row has a quality gate.
+            qd = os.path.join(d, "q")
+            write_quality(qd, {"Ld-mtp": 20, "Od": 20})
+            low = h57d.score_p(d, quality_from=qd)
+        self.assertEqual(low["quality_records"]["Ld-mtp-u"]["correct"], 20)
+        for row in ("H57dp", "H57de"):
+            self.assertEqual(low[row]["verdict"], r[row]["verdict"])
+        self.assertEqual((r["H57dp"]["verdict"], r["H57de"]["verdict"]), ("SUPPORTED", "REFUTED"))
+
+
+class SpareHoldGuard(unittest.TestCase):
+    """H57d's hold 5 is the spare: it repeats a failed hold's arms, which must be named. Before
+    H57dp amendment R1 a bare `hold.sh 5 perf` took the lock and ran a hold with no arms."""
+
+    def run_hold(self, row, hold, mode, *arms):
+        with tempfile.TemporaryDirectory() as g:
+            env = dict(os.environ, G=g, LOCK=os.path.join(g, "missing", "live.lock"), H57D_ROW=row)
+            r = subprocess.run(["bash", os.path.join(HERE, "hold.sh"), hold, mode, *arms], env=env,
+                               capture_output=True, text=True, timeout=60)
+            log = os.path.join(g, "results", "campaign.log")
+            return r, os.listdir(g), open(log).read() if os.path.exists(log) else ""
+
+    def test_bare_spare_and_smoke_holds_refused(self):
+        for row, hold in (("H57d", "5"), ("H57w", "5"), ("H57dp", "5"), ("H57d", "smoke-p")):
+            r, made, log = self.run_hold(row, hold, "perf")
+            self.assertEqual(r.returncode, 2, f"{row} {hold}: {r.stdout}{r.stderr}")
+            self.assertEqual(made, [], f"{row} {hold}")
+            self.assertIn(f"registers no hold {hold}", r.stderr)
+
+    def test_named_arms_pass_the_guard(self):
+        # With arms named, hold.sh goes on to the lock (here a path that cannot be opened).
+        for row, hold, arms in (("H57d", "5", ("Od", "Ld")), ("H57d", "smoke-p", ("Ld-mtp-u",))):
+            r, made, log = self.run_hold(row, hold, "perf", *arms)
+            self.assertNotEqual(r.returncode, 2, f"{row} {hold}: {r.stdout}{r.stderr}")
+            self.assertIn(f"waiting for the lock (mode perf, arms: {' '.join(arms)})", log)
+            self.assertNotIn("lock taken", log)
+
+
+def stub_tools(d):
+    """docker, kubectl and k3d stand-ins, so reproduce.sh runs with no container runtime."""
+    for name, out in (("docker", "29.0.0"), ("kubectl", "Client Version: v1.37.1"), ("k3d", "k3d version v5.8.3")):
+        p = os.path.join(d, name)
+        with open(p, "w") as f:
+            f.write(f"#!/bin/sh\necho '{out}'\n")
+        os.chmod(p, 0o755)
+
+
+class ReproduceHeader(unittest.TestCase):
+    def test_engine_flags_block(self):
+        # Every H57d reproduce.txt shows a SyntaxError where this block belongs.
+        with tempfile.TemporaryDirectory() as d:
+            b = os.path.join(d, "bin")
+            os.makedirs(b)
+            stub_tools(b)
+            env = dict(os.environ, G=os.path.join(d, "g"), PATH=b + os.pathsep + os.environ["PATH"],
+                       K3D_REAL=os.path.join(b, "k3d"))
+            r = subprocess.run(["bash", os.path.join(HERE, "reproduce.sh")], env=env,
+                               capture_output=True, text=True, timeout=120)
+        for bad in ("SyntaxError", "Traceback"):
+            self.assertNotIn(bad, r.stdout + r.stderr)
+        lines = r.stdout.splitlines()
+        i = lines.index("engine flags (Od in each arm's deploy.yaml):")
+        want = [f"  {a}: {' '.join(v)}" for a, v in (("Ld", h57d.llamacpp_args(False)),
+                                                      ("Ld-mtp", h57d.llamacpp_args(True)),
+                                                      ("Ld-mtp-u", h57d.llamacpp_args(True, pinned=False)))]
+        self.assertEqual(lines[i + 1:], want)
+        self.assertIn("  llamacpp: " + h57d.LLAMACPP, lines)
 
 
 if __name__ == "__main__":
