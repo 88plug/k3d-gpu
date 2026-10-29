@@ -6,6 +6,10 @@
 #   verify     A1's IR against its manifest.json, under the bench lock
 #   frontdoor  E2 item 7: a 16-token chat through Dynamo :8100 per serving pair, passing when it
 #              answers with content and that pair's SGLang num_requests_total rises (180 s each)
+#   plain      unscored control after hold 1: B3's server outside k3d. The chart's image and
+#              server args, user 5000, no capabilities, on the same revision's files (H54q's OVB
+#              copy, read-only) with the graph.pbtxt and config.json B3's pull wrote in the smoke;
+#              once at the chart's limits (12 CPUs, 24 GiB) and once with no limits
 set -uo pipefail
 B=${HOME}/k3dgpu-bench
 REPO=${B}/k3d-gpu-h50o
@@ -64,5 +68,30 @@ frontdoor)
         done
         echo "$(date -u +%FT%TZ) :${P} pass=${ok} before=${b} after=$(n "${P}") content=${c:-none}" | tee -a "${f}"
     done ;;
-*) echo "usage: prehold.sh smoke|verify|frontdoor"; exit 2 ;;
+plain)
+    exec 9> "${HOME}/k3dgpu-bench.lock"
+    flock -w 7200 9 || { echo "lock not taken in 7200 s"; exit 4; }
+    IMAGE=openvino/model_server:2025.4@sha256:c370720007564bbdcbca13b9b714e4537068542cda512e8095259e66b617962a
+    MODEL=OpenVINO/gemma-4-26b-a4b-it-int4-ov
+    OVB=${HOME}/k3dgpu-gemma/models/${MODEL}
+    R=${B}/smoke/H50o-o1/hold1/b3-model
+    P=${O}/plain
+    mkdir -p "${P}"
+    { date -u +%FT%TZ; head_of; head -1 "${OVB}/.cache/huggingface/download/config.json.metadata"; } > "${P}/provenance.txt"
+    for lim in chart none; do
+        args=()
+        [ "${lim}" = chart ] && args=(--cpus 12 --memory 24g)
+        docker rm -f k3dgpu-e-h50o-plain > /dev/null 2>&1
+        timeout 300 docker run --name k3dgpu-e-h50o-plain --network none --user 5000 --cap-drop ALL \
+            --security-opt no-new-privileges "${args[@]}" \
+            -v "${OVB}:/models/${MODEL}:ro" -v "${R}/graph.pbtxt:/models/${MODEL}/graph.pbtxt:ro" \
+            -v "${R}/config.json:/models/config.json:ro" \
+            "${IMAGE}" --config_path=/models/config.json --rest_port=8081 --port=8080 --log_level=INFO \
+            > "${P}/ovms-${lim}.log" 2>&1
+        echo "limits=${lim} rc=$?" | tee -a "${P}/provenance.txt"
+        docker inspect --format '{{.State.ExitCode}} {{.State.OOMKilled}} {{.State.Error}}' k3dgpu-e-h50o-plain \
+            >> "${P}/provenance.txt" 2>&1
+        docker rm -f k3dgpu-e-h50o-plain > /dev/null 2>&1
+    done ;;
+*) echo "usage: prehold.sh smoke|verify|frontdoor|plain"; exit 2 ;;
 esac
