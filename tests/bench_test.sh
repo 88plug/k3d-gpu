@@ -433,6 +433,12 @@ PY
 if python3 -c 'import yaml' 2>/dev/null; then
     check "thermal-resource probe: arms B/T/C request what H23 pre-registered" h23_arms
 fi
+# H7 and H8 ran EAT's vLLM CPU arm on v0.24.0 (their run headers). Their scripts pin that image
+# themselves, so a newer tag in the shared overlay integrations/eat/vllm-values.yaml does not
+# change what they reproduce.
+check "apb (H7, H8): h7.sh and arm.sh eat-vllm-cpu pin the vLLM CPU image those rows ran" \
+    sh -c 'for f in "$@"; do grep -q -- "--set image.tag=\"v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1\"" "$f" || { echo "$f"; exit 1; }; done' \
+    _ "${ROOT}/bench/apb/h7.sh" "${ROOT}/bench/apb/arm.sh"
 if command -v cc >/dev/null; then
     check "research: stream_probe.c compiles" \
         cc -fsyntax-only -fopenmp "${ROOT}/research/agents-per-box-ceiling/stream_probe.c"

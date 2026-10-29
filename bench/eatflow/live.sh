@@ -658,6 +658,8 @@ case ${ARM} in
         [ "${ARM}" = A3ref ] && w=Qwen3-4B-Instruct-2507
         cluster_up
         gpu=$(nvidia-smi --query-gpu=name,uuid --format=csv,noheader | awk -F', ' '/RTX 4000/ {print $2}')
+        # vLLM CUDA v0.31.0 (agent.lock vllm_cuda), the image the done desktop rows' A3 and A3ref
+        # ran, kept so they reproduce. No pending row runs A3; a new CUDA arm pins vLLM's newest.
         image=vllm/vllm-openai@sha256:a4a4c0437bf7240089da5f08aa370c4aee17ae5290f7a3b468825ee26c4c3a6b
         sed -e "s|@VLLM_IMAGE@|${image}|" -e "s|@GPU_UUID@|${gpu}|" \
             -e "s|--served-model-name=Qwen/Qwen3-4B-AWQ|--served-model-name=${SERVED}|" \
