@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# Prints ppa:kobuk-team/intel-graphics's current builds of the packages
+# `k3d-gpu host-setup` pins for Ubuntu, as the launcher's HS_PPA_* lines:
+#
+#   HS_PPA_MEDIA=26.3.5-1~ppa1   intel-media-va-driver-non-free
+#   HS_PPA_GMM=22.10.2-1~ppa1    libigdgmm12
+#   HS_PPA_LIBVA=2.24.1-1~ppa2   libva2 libva-drm2 libva-x11-2 libva-wayland2
+#
+# each with its Ubuntu release taken out (26.3.5-1~24.04~ppa1 -> 26.3.5-1~ppa1);
+# host-setup puts it back per release. The PPA serves only its current build of a
+# package, so a pin it has superseded no longer installs: the nightly check in
+# build-and-push.yml runs this and, when a build moved, --write.
+#
+# Exits 1, naming the package, when an index lacks one, its noble (24.04) and
+# resolute (26.04) builds differ, the four libva packages differ (one pin covers
+# them all), or a build is not <upstream>-<rev>~<release>~ppa<N>.
+#
+# Usage: hack/ppa-pins [--write <launcher> <README>]
+#   --write: also set the HS_PPA_* lines in <launcher> (scripts/k3d-gpu) and the
+#            media driver / libva / gmmlib versions on <README>'s lines naming the
+#            PPA (README.md's host-setup table); nothing is written on a failure.
+# PPA_INDEX_DIR=<dir> reads <dir>/noble and <dir>/resolute (uncompressed Packages
+# indexes) instead of downloading them.
+set -euo pipefail
+
+PPA=https://ppa.launchpadcontent.net/kobuk-team/intel-graphics/ubuntu/dists
+RELEASES="noble:24.04 resolute:26.04"
+
+die() { echo "ppa-pins: $*" >&2; exit 1; }
+
+write=0
+case "${1:-}" in
+    "") ;;
+    --write) [ $# -eq 3 ] || die "usage: hack/ppa-pins [--write <launcher> <README>]"
+             write=1 launcher=$2 readme=$3 ;;
+    *) die "usage: hack/ppa-pins [--write <launcher> <README>]" ;;
+esac
+
+declare -A IDX
+for r in ${RELEASES}; do
+    c=${r%%:*}
+    if [ -n "${PPA_INDEX_DIR:-}" ]; then
+        IDX[${c}]=$(cat "${PPA_INDEX_DIR}/${c}") || die "cannot read ${PPA_INDEX_DIR}/${c}"
+    else
+        IDX[${c}]=$(curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 --max-time 120 \
+            "${PPA}/${c}/main/binary-amd64/Packages.gz" | gzip -dc) || die "cannot fetch the PPA's ${c} index"
+    fi
+done
+
+# pin <var> <package>...: sets <var> to the one build of every package on every
+# release, with the release taken out.
+pin() {
+    local var=$1 p r c rel v want=""
+    shift
+    for p in "$@"; do
+        for r in ${RELEASES}; do
+            c=${r%%:*} rel=${r#*:}
+            v=$(awk -v p="${p}" '/^Package: /{n=$2} /^Version: /{if (n == p) print $2}' <<< "${IDX[${c}]}" \
+                | sort -V | tail -n1)
+            [ -n "${v}" ] || die "${p}: not in the PPA's ${c} index"
+            [[ "${v}" =~ ^[0-9][0-9.]*-[0-9]+~${rel//./\\.}~ppa[0-9]+$ ]] \
+                || die "${p} ${v}: not <upstream>-<rev>~${rel}~ppa<N>, which an HS_PPA_* pin needs"
+            v=${v/"~${rel}~"/"~"}
+            [ -z "${want}" ] || [ "${v}" = "${want}" ] \
+                || die "${p}: ${c}'s build ${v} differs from ${want}; one HS_PPA_* pin covers $* on both 24.04 and 26.04"
+            want=${v}
+        done
+    done
+    printf -v "${var}" '%s' "${want}"
+}
+
+pin HS_PPA_MEDIA intel-media-va-driver-non-free
+pin HS_PPA_GMM libigdgmm12
+pin HS_PPA_LIBVA libva2 libva-drm2 libva-x11-2 libva-wayland2
+printf 'HS_PPA_MEDIA=%s\nHS_PPA_GMM=%s\nHS_PPA_LIBVA=%s\n' "${HS_PPA_MEDIA}" "${HS_PPA_GMM}" "${HS_PPA_LIBVA}"
+
+[ "${write}" -eq 1 ] || exit 0
+# The versions match ^[0-9][0-9.]*-[0-9]+~ppa[0-9]+$ (checked above): safe in sed.
+sed -i -e "s|^HS_PPA_MEDIA=.*|HS_PPA_MEDIA=${HS_PPA_MEDIA}|" \
+       -e "s|^HS_PPA_GMM=.*|HS_PPA_GMM=${HS_PPA_GMM}|" \
+       -e "s|^HS_PPA_LIBVA=.*|HS_PPA_LIBVA=${HS_PPA_LIBVA}|" "${launcher}"
+sed -i -E "/kobuk-team\/intel-graphics/{
+    s/media driver [0-9][0-9.]*/media driver ${HS_PPA_MEDIA%%-*}/g
+    s/libva [0-9][0-9.]*/libva ${HS_PPA_LIBVA%%-*}/g
+    s/gmmlib [0-9][0-9.]*/gmmlib ${HS_PPA_GMM%%-*}/g
+}" "${readme}"

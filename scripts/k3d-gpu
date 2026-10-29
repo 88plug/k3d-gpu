@@ -6701,8 +6701,12 @@ cmd_model_share() {
 #   oneapi-src/level-zero v1.34.0 (libze1, the Ubuntu 24.04 build; it publishes no
 #     26.04 build, so 26.04 has no pinned loader and host-setup says so)
 #   intel/linux-npu-driver v1.38.0 (UMD, NPU compiler, intel-fw-npu firmware)
-#   ppa:kobuk-team/intel-graphics media driver 26.3.2, libva 2.24.1, gmmlib 22.10.1
-#     (Intel publishes no media-driver .debs; this is Intel's Ubuntu package source)
+#   ppa:kobuk-team/intel-graphics media driver, libva and gmmlib (HS_PPA_*; Intel
+#     publishes no media-driver .debs, and this is Intel's Ubuntu package source).
+#     The compute .debs need gmmlib 22.10 or later, newer than either release
+#     archive's (24.04: 22.3.17, 26.04: 22.9.0), so compute takes the PPA's too.
+#     The PPA serves only its current build of each package: the nightly check in
+#     build-and-push.yml moves HS_PPA_* to it (hack/ppa-pins).
 #   nvidia-container-toolkit 1.20.1-1 (NVIDIA's apt and dnf repos)
 # Ubuntu archive tools (vainfo, clinfo, libtbb12) come from the release itself.
 # Arch, Manjaro and Fedora install their own repo builds: those repos serve only
@@ -6713,6 +6717,10 @@ HS_CR=26.35.39758.10
 HS_NPU_REL=v1.38.0
 HS_NPU_BUILD=1.38.0.20260910-34487311128
 HS_NVCTK=1.20.1-1
+# PPA builds with the Ubuntu release taken out (hs_ppa puts it back).
+HS_PPA_MEDIA=26.3.5-1~ppa1
+HS_PPA_GMM=22.10.2-1~ppa1
+HS_PPA_LIBVA=2.24.1-1~ppa2
 HS_DIR="${K3D_GPU_SETUP_DIR:-${XDG_CACHE_HOME:-${HOME:-}/.cache}/k3d-gpu/host-setup}"
 HS_LIBDIRS="usr/lib/x86_64-linux-gnu usr/lib64 usr/lib"
 
@@ -7040,9 +7048,15 @@ hs_add() { HS_PLAN+=("$1"); }
 # handles (all under auto detection, else only dsa/iaa/qat in K3D_GPU_VENDORS):
 # class new, and class kernel only with --with-kernel-wqs. HS_HELD gets the rest.
 # hs_vendor_mode: VENDORS_AUTO and OPTED_OUT from K3D_GPU_VENDORS, parsed as resolve_vendors
-# parses it (errors included), for host-setup, which plans from PCI devices instead.
+# parses it, for host-setup, which plans from PCI devices instead. An invalid
+# K3D_GPU_VENDORS ends host-setup with resolve_vendors' error (its last line, from
+# a first run in a subshell); its warnings, about what `up` deploys, are left out.
 hs_vendor_mode() {
-    local saved=("${ACTIVE[@]+"${ACTIVE[@]}"}")
+    local saved=("${ACTIVE[@]+"${ACTIVE[@]}"}") msg
+    if ! msg=$(resolve_vendors 2>&1 >/dev/null); then
+        printf '%s\n' "${msg##*$'\n'}" >&2
+        exit 1
+    fi
     resolve_vendors 2>/dev/null
     ACTIVE=(${saved[@]+"${saved[@]}"})
 }
@@ -7050,10 +7064,10 @@ hs_vendor_mode() {
 hs_accel_targets() {
     local line kind cls want=",${VENDORS_REQUEST// /},"
     HS_ACCEL="" HS_HELD=""
+    hs_vendor_mode
     while IFS= read -r line; do
         [ -n "${line}" ] || continue
         kind=${line%%$'\t'*}
-        hs_vendor_mode
         if [ "${VENDORS_AUTO}" = 1 ]; then
             [[ " ${OPTED_OUT[*]} " != *" ${kind,,} "* ]] || continue
         else
@@ -7148,10 +7162,15 @@ hs_print_reverts() {
     printf '    revert: %s\n' "${HS_REVERT[@]}"
 }
 
+# The PPA's build of an HS_PPA_* pin for an Ubuntu release:
+# hs_ppa 26.3.5-1~ppa1 24.04 -> 26.3.5-1~24.04~ppa1.
+hs_ppa() { echo "${1%%~*}~$2~${1#*~}"; }
+
 # libva and every libva-* that vainfo depends on, pinned to the PPA build together:
 # the release's libva-x11-2/libva-wayland2 depend on libva2 << 2.20.0.1.
 hs_libva_pkgs() {
-    local p v="2.24.1-1~$1~ppa2" out=""
+    local p v out=""
+    v=$(hs_ppa "${HS_PPA_LIBVA}" "$1")
     for p in libva2 libva-drm2 libva-x11-2 libva-wayland2; do out+=" ${p}=${v}"; done
     echo "${out# }"
 }
@@ -7194,13 +7213,17 @@ hs_plan_ubuntu() {
                 echo "  note: no pinned Level Zero loader for ubuntu-${rel}: level-zero v1.34.0 publishes libze1 .debs for Ubuntu 22.04 and 24.04 only; ubuntu-${rel}'s own is libze1 1.28.2 (sudo apt-get install -y libze1), older than the 1.32 the compute runtime is built against"
             fi
         fi
-        if hs_needs media; then
+        # The PPA for the media driver, and for compute too: the compute .debs
+        # depend on libigdgmm12 (>= 22.10.0), newer than the release archive's.
+        if hs_needs media compute; then
             pre+=" software-properties-common"
             hs_add "sudo add-apt-repository -y ppa:kobuk-team/intel-graphics"
             # The PPA also builds intel-opencl-icd/libze*/libigc*; keep apt on the GitHub .debs.
             hs_add "printf 'Package: intel-opencl-icd libze-intel-gpu1 libze1 libze-dev libze-intel-gpu-dev libigc2 libigc-dev libigc-tools\\nPin: release o=LP-PPA-kobuk-team-intel-graphics\\nPin-Priority: -1\\n' | sudo tee /etc/apt/preferences.d/k3d-gpu-intel-compute >/dev/null"
-            pkgs+=" intel-media-va-driver-non-free=26.3.2-1~${rel}~ppa1 $(hs_libva_pkgs "${rel}") libigdgmm12=22.10.1-1~${rel}~ppa1"
         fi
+        hs_needs media && pkgs+=" intel-media-va-driver-non-free=$(hs_ppa "${HS_PPA_MEDIA}" "${rel}") $(hs_libva_pkgs "${rel}")"
+        # In the apt install that runs before the .debs' own.
+        hs_needs media compute && pkgs+=" libigdgmm12=$(hs_ppa "${HS_PPA_GMM}" "${rel}")"
         hs_needs vainfo && pkgs+=" vainfo"
         hs_needs clinfo && pkgs+=" clinfo"
         if hs_needs compute; then
