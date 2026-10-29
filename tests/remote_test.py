@@ -31,7 +31,7 @@ import remote  # noqa: E402
 GOLDEN = os.path.join(ROOT, "tests", "remote")
 KEY = "sk-test-0123456789abcdef"
 KEY_B64 = base64.b64encode(KEY.encode()).decode()
-CLEAN_ENV = {k: v for k, v in os.environ.items() if not k.startswith("OPENAI_")}
+CLEAN_ENV = {k: v for k, v in os.environ.items() if not k.startswith("OPENAI_") and k != "K3D_GPU_KCTX"}
 
 
 def golden(name, text):
@@ -366,6 +366,23 @@ class Manifests(unittest.TestCase):
             self.assertEqual(argv, "argv apply --server-side --force-conflicts --field-manager=k3d-gpu -f -")
             self.assertNotIn(KEY_B64, argv)
             self.assertIn(f"OPENAI_API_KEY: {KEY_B64}", got)
+
+    def test_secret_kubectl_names_the_launchers_context(self):
+        # The launcher exports the context its own kubectl calls name (K3D_GPU_KCTX);
+        # the Secret must land in that cluster, not the kubeconfig's current-context.
+        with tempfile.TemporaryDirectory() as d:
+            log = os.path.join(d, "kubectl.log")
+            with open(os.path.join(d, "kubectl"), "w") as f:
+                f.write(f"#!/bin/sh\necho \"argv $*\" >> {log}\ncat > /dev/null\n")
+            os.chmod(os.path.join(d, "kubectl"), 0o755)
+            env = dict(CLEAN_ENV, PATH=d + os.pathsep + os.environ["PATH"], K3D_GPU_KCTX="k3d-x",
+                       OPENAI_BASE_URL="https://gaudi.example.net/v1", OPENAI_API_KEY=KEY)
+            p = subprocess.run([sys.executable, os.path.join(ROOT, "console", "remote.py"), "secret",
+                                "--namespace", "ns1", "--model", "m"], env=env, capture_output=True, text=True)
+            self.assertEqual(p.returncode, 0, p.stderr)
+            with open(log) as f:
+                argv = f.read().splitlines()[0]
+            self.assertEqual(argv, "argv --context k3d-x apply --server-side --force-conflicts --field-manager=k3d-gpu -f -")
 
     def test_exec_hands_the_key_in_the_environment(self):
         with tempfile.TemporaryDirectory() as d:

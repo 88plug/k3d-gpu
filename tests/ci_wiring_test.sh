@@ -63,5 +63,98 @@ else
     fail "the 'tracked files already at' tag-HEAD fallback is still present"
 fi
 
+# build-and-push.yml repin-images: its GITHUB_TOKEN push cannot create or update
+# .github/workflows/ files (no `workflows` permission), so the job never writes
+# there, and it stops before the push when a workflow file changed anyway.
+BP="${ROOT}/.github/workflows/build-and-push.yml"
+if grep -qF "scripts/images-lock repin --exclude '.github/workflows/*'" "${BP}"; then
+    ok "repin-images runs repin with --exclude '.github/workflows/*'"
+else
+    fail "repin-images does not run scripts/images-lock repin --exclude '.github/workflows/*'"
+fi
+if grep -qF 'git status --porcelain -- .github/workflows/' "${BP}"; then
+    ok "repin-images checks that no workflow file changed before opening the PR"
+else
+    fail "repin-images has no 'git status --porcelain -- .github/workflows/' check"
+fi
+# create-pull-request resets an existing digest branch onto main and force-pushes
+# it; GitHub refuses that GITHUB_TOKEN push when the branch's workflow files differ
+# from main's, though the digest commit touches none. A step before the action,
+# under the same if:, deletes such a branch so the action cuts a fresh one off main.
+# Its script then runs against a local origin over file:// (no network).
+T=$(mktemp -d "${TMPDIR:-/tmp}/ci_wiring.XXXXXX")
+trap 'rm -rf "$T"' EXIT
+if python3 - "${BP}" "${T}/drop.sh" <<'PY'
+import sys, yaml
+steps = yaml.safe_load(open(sys.argv[1]))["jobs"]["repin-images"]["steps"]
+cpr = next(i for i, s in enumerate(steps)
+           if str(s.get("uses", "")).startswith("peter-evans/create-pull-request@"))
+branch = steps[cpr]["with"]["branch"]
+drop = [s for s in steps[:cpr] if f"git push origin --delete {branch}" in s.get("run", "")]
+if len(drop) != 1 or drop[0].get("if") != steps[cpr].get("if"):
+    sys.exit(1)
+open(sys.argv[2], "w").write(drop[0]["run"])
+PY
+then
+    ok "repin-images deletes a stale digest branch before create-pull-request, under its if:"
+else
+    fail "repin-images has no step before create-pull-request, under its if:, that runs 'git push origin --delete autobump/image-digests'"
+fi
+# $1: absent (no digest branch), same (main moved, no workflow change), differ
+# (main changed a workflow after the branch was cut). Prints the branch's state
+# on origin after the step's script ran in a depth-1 checkout of main.
+drop_case() {
+    local d="${T}/$1" b=autobump/image-digests
+    (
+        set -e
+        export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+        export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+        git init -q --bare -b main "$d/origin.git"
+        git init -q -b main "$d/seed"
+        cd "$d/seed"
+        mkdir -p .github/workflows
+        echo v1 > .github/workflows/ci.yml
+        echo 1 > images.lock
+        git add .github/workflows/ci.yml images.lock
+        git commit -qm base
+        git push -q "$d/origin.git" main
+        if [ "$1" != absent ]; then
+            git switch -qc "$b"
+            echo 2 > images.lock
+            git commit -qam digests
+            git push -q "$d/origin.git" "$b"
+            git switch -q main
+        fi
+        echo docs > README
+        git add README
+        git commit -qm docs
+        if [ "$1" = differ ]; then
+            echo v2 > .github/workflows/ci.yml
+            git commit -qam workflow
+        fi
+        git push -q "$d/origin.git" main
+        git clone -q --depth=1 --branch main "file://$d/origin.git" "$d/work"
+        cd "$d/work"
+        bash --noprofile --norc -eo pipefail "${T}/drop.sh" >"$d/log" 2>&1
+    ) || { echo "script-failed"; return; }
+    if [ -n "$(git ls-remote --heads "$d/origin.git" "refs/heads/$b")" ]; then echo present; else echo gone; fi
+}
+for c in absent:gone same:present differ:gone; do
+    got=$(drop_case "${c%%:*}")
+    if [ "${got}" = "${c#*:}" ]; then
+        ok "stale-branch step, ${c%%:*}: digest branch ${got}"
+    else
+        fail "stale-branch step, ${c%%:*}: digest branch ${got}, want ${c#*:}"
+    fi
+done
+# The release job builds the 24.04 variant from the Dockerfile's pin, which the
+# nightly moves; a literal pin in the workflow would never move.
+if grep -qF "grep '^ARG UBUNTU_2404_IMAGE=' Dockerfile" "${BP}" \
+   && grep -qF 'UBUNTU_IMAGE=${{ steps.current.outputs.ubuntu2404 }}' "${BP}"; then
+    ok "release builds the 24.04 variant from the Dockerfile's UBUNTU_2404_IMAGE"
+else
+    fail "release does not read UBUNTU_2404_IMAGE from the Dockerfile for the 24.04 variant"
+fi
+
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

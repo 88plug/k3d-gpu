@@ -19,12 +19,19 @@ PASS=0 FAILS=0
 STUB_BIN="${WORK}/bin"
 mkdir -p "${STUB_BIN}"
 
-# kubectl stub: logs its argv to ${STUB_KUBE}/calls, drops the --context and
-# --request-timeout flags, and prints ${STUB_KUBE}/<args with non-alphanumerics
-# as _>; a missing fixture is a NotFound error.
+# kubectl stub: logs its argv to ${STUB_KUBE}/calls and its KUBECONFIG to
+# ${STUB_KUBE}/kubeconfigs, drops the --context and --request-timeout flags, and
+# prints ${STUB_KUBE}/<args with non-alphanumerics as _>; a missing fixture is a
+# NotFound error. With STUB_KC_CONTEXTS=1, `config get-contexts -o name` lists the
+# contexts of the file KUBECONFIG names (none when unset), as kubectl does.
 cat > "${STUB_BIN}/kubectl" <<'EOF'
 #!/usr/bin/env bash
 echo "$*" >> "${STUB_KUBE}/calls"
+echo "${KUBECONFIG:-unset}" >> "${STUB_KUBE}/kubeconfigs"
+if [ "${STUB_KC_CONTEXTS:-}" = 1 ] && [ "$*" = "config get-contexts -o name" ]; then
+    [ -n "${KUBECONFIG:-}" ] && sed -n 's/^  name: //p' "${KUBECONFIG}"
+    exit 0
+fi
 args=()
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -84,7 +91,8 @@ call() {
 session() {
     local d=$1 input=$2
     shift 2
-    env PATH="${STUB_BIN}:${PATH}" K3D_GPU_BIN="${STUB_BIN}/k3d-gpu" STUB_KUBE="${d}" "$@" \
+    env -u KUBECONFIG -u K3D_GPU_KUBECONFIG -u K3D_GPU_CONTEXT PATH="${STUB_BIN}:${PATH}" K3D_GPU_BIN="${STUB_BIN}/k3d-gpu" \
+        STUB_KUBE="${d}" HOME="${d}/home" K3D_GPU_STATE_DIR="${d}/state" "$@" \
         python3 "${MCP}" <<< "${input}" 2>"${d}/stderr"
 }
 
@@ -333,6 +341,38 @@ rm "${d}/$(fixture_key get --raw /api/v1/namespaces/k3d-gpu-agent/services/ovms:
 out=$(session "${d}" "$(call 1 agent_endpoint)" K3D_GPU_CLUSTER=dev)
 check "agent: deployed but not answering is not ready" "${out}" \
     'sc(1)["deployed"] and not sc(1)["ready"] and "/v3/models" in sc(1)["reason"]'
+
+# After a default `up` the context is only in the launcher's per-cluster kubeconfig
+# (${K3D_GPU_STATE_DIR}/kubeconfig-<cluster>), not in ~/.kube/config: the server
+# reads that file, as the launcher does.
+d=$(fixtures agent-own-kubeconfig)
+mkdir -p "${d}/state" "${d}/home/.kube"
+printf 'apiVersion: v1\ncontexts:\n- context: {}\n  name: work\ncurrent-context: work\n' > "${d}/home/.kube/config"
+printf 'apiVersion: v1\ncontexts:\n- context:\n    cluster: k3d-gpu\n  name: k3d-gpu\ncurrent-context: k3d-gpu\n' > "${d}/state/kubeconfig-gpu"
+fixture "${d}" -n k3d-gpu-agent get service ovms -o json <<'EOF'
+{"spec":{"ports":[{"name":"http","port":8000,"targetPort":"http"}]}}
+EOF
+out=$(session "${d}" "$(call 1 agent_endpoint)
+$(call 2 cluster_health)" STUB_KC_CONTEXTS=1)
+check "agent: finds the context in the launcher's per-cluster kubeconfig after a default up" "${out}" \
+    'sc(1)["deployed"] and "no kubeconfig context" not in (sc(1)["reason"] or "") and not any("no kubeconfig context" in p for p in sc(2)["problems"])'
+check "agent: port-forward hint names the per-cluster kubeconfig" "${out}" \
+    'sc(1)["hostAccess"]["command"].startswith("KUBECONFIG=") and "/agent-own-kubeconfig/state/kubeconfig-gpu kubectl --context k3d-gpu -n k3d-gpu-agent port-forward" in sc(1)["hostAccess"]["command"]'
+if [ -s "${d}/kubeconfigs" ] && ! grep -vqx "${d}/state/kubeconfig-gpu" "${d}/kubeconfigs"; then
+    PASS=$((PASS + 1)); echo "ok   agent: every kubectl call reads the per-cluster kubeconfig"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL agent: every kubectl call reads the per-cluster kubeconfig: $(sort -u "${d}/kubeconfigs" 2>/dev/null | tr '\n' ' ')"
+fi
+# No per-cluster file (a cluster from before it, merged into ~/.kube/config): the
+# server keeps the kubeconfig it inherited.
+d=$(fixtures agent-inherited-kubeconfig)
+context "${d}"
+out=$(session "${d}" "$(call 1 agent_endpoint)")
+if ! grep -vqx unset "${d}/kubeconfigs"; then
+    PASS=$((PASS + 1)); echo "ok   agent: without a per-cluster file the inherited kubeconfig is used"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL agent: without a per-cluster file the inherited kubeconfig is used: $(sort -u "${d}/kubeconfigs" | tr '\n' ' ')"
+fi
 
 # Remote mode: `agent up --remote` wrote Secret k3d-gpu-llm. The tool reports the
 # endpoint from its annotations and only whether a key is there; the go-template
