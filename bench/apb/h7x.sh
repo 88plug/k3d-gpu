@@ -5,8 +5,8 @@
 # (B with --enforce-eager dropped). One server runs at a time. Per block, after 1 decode and
 # 1 prefill warm-up (excluded): bench/energy.sh over a 20 s model-loaded idle, then over each
 # workload through bench/llm_load.py: decode 5 x (default ~30-token prompt, 256 out),
-# prefill 5 x (unique ~1936-token prompt, 16 out), conc4 8 x 128 out at 4 in flight; all
-# greedy, ignore_eos, unique prompts. bench/apb/h7x.py scores the run.
+# prefill 5 x (a unique prompt of 56 copies of one sentence, ~1850 tokens, 16 out), conc4 8 x 128
+# out at 4 in flight; all greedy, ignore_eos, unique prompts. bench/apb/h7x.py scores the run.
 #
 # Environment:
 #   APB_MODELS     dir with OpenVINO/Qwen3-4B-fp16-ov and Qwen/Qwen3-4B (bench/xhost/fetch_models.py) (required)

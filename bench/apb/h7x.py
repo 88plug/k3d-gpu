@@ -5,10 +5,12 @@ Reads b<i>-<E>-{decode,prefill,conc4}.json (bench/llm_load.py) and the matching
 b<i>-<E>-<w>-energy.json and b<i>-<E>-idle-energy.json (bench/energy.sh). E is A (OVMS fp16),
 B (vLLM CPU bf16, EAT chart defaults) or C (B without --enforce-eager).
 
-A block is void when its decode phase has fewer than 5 ok requests, any request stopped short
-of 256 output tokens or has no decode rate, or the engine's pod restarted during the block
-(restarts.txt: "b<i> <E> <restarts before> <restarts after>"). With >= 2 void blocks, or fewer than 4 valid blocks (a hold cut
-short by its cap), in arm A or B the run is INCONCLUSIVE.
+The blocks are those listed in restarts.txt ("b<i> <E> <restarts before> <restarts after>", one
+line per block whose workloads ran) plus any with a decode record. A block is void when its decode
+phase has fewer than 5 ok requests (none when it left no decode record), any request stopped short
+of 256 output tokens or has no decode rate, or the engine's pod restarted during the block. With
+>= 2 void blocks, or fewer than 4 valid blocks (a hold cut short by its cap), in arm A or B the
+run is INCONCLUSIVE.
 
 Decision (pre-registered in H7x): R = median A decode tok/s / median B decode tok/s over every
 request of the valid blocks; gap(x) = max(x, 1/x) - 1. Blocks pair in run order: the k-th A
@@ -44,26 +46,31 @@ def load(path):
 
 
 def restarts(run):
-    """{block: True} for blocks whose pod restarted (restarts.txt from h7x.sh)."""
+    """{block: (engine, restarted)} for every block whose workloads ran: h7x.sh writes
+    "b<i> <E> <restarts before> <restarts after>" to restarts.txt after each block's workloads."""
     out = {}
     try:
         with open(os.path.join(run, "restarts.txt")) as f:
             for line in f:
                 p = line.split()
-                if len(p) == 4 and p[0].startswith("b"):
-                    out[int(p[0][1:])] = p[2] != p[3]
+                if len(p) >= 2 and re.fullmatch(r"b\d+", p[0]) and p[1] in ("A", "B", "C"):
+                    out[int(p[0][1:])] = (p[1], len(p) == 4 and p[2] != p[3])
     except OSError:
         pass
     return out
 
 
 def blocks(run):
+    """Blocks in run order: every block in restarts.txt or with a decode record. A block that ran
+    but left no decode record (its energy.sh failed before llm_load) is void, and keeps its place
+    in the run order."""
     out, rs = [], restarts(run)
+    ran = {i: e for i, (e, _) in rs.items()}
     for p in glob.glob(os.path.join(run, "b*-*-decode.json")):
         m = re.match(r"b(\d+)-([ABC])-decode\.json$", os.path.basename(p))
-        if not m:
-            continue
-        i, e = int(m.group(1)), m.group(2)
+        if m:
+            ran[int(m.group(1))] = m.group(2)
+    for i, e in ran.items():
         rec = {"block": i, "engine": e}
         for w in ("decode", "prefill", "conc4"):
             d = load(os.path.join(run, f"b{i}-{e}-{w}.json"))
@@ -73,7 +80,7 @@ def blocks(run):
         rec["idle"] = load(os.path.join(run, f"b{i}-{e}-idle-energy.json"))
         dec = [s for s in (rec["decode"] or {}).get("samples", []) if s.get("ok")]
         rec["decode_tps"] = [s["decode_tokens_per_s"] for s in dec if s.get("decode_tokens_per_s")]
-        rec["restarted"] = rs.get(i, False)
+        rec["restarted"] = rs.get(i, (e, False))[1]
         rec["void"] = (len(dec) < 5 or len(rec["decode_tps"]) < len(dec) or rec["restarted"]
                        or any(s.get("output_tokens") != 256 for s in dec))
         out.append(rec)

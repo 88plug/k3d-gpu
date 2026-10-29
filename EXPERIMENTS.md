@@ -1659,9 +1659,11 @@ say nothing about the graded result.
 
 ### H7x pre-registration: H7 to its full protocol on the Xeon 6741P (2026-10-20)
 
-Written 2026-10-20T23:10Z, revised 2026-10-21T21:10Z after six setup smokes and 2026-10-21T22:30Z after a review, before
-any H7x measurement (the smokes started the engines and sent no request; see below). H7 keeps its
-INCONCLUSIVE verdict on the i9-13900T.
+Written 2026-10-20T23:10Z, revised 2026-10-21T21:10Z after six setup smokes, 2026-10-21T22:30Z
+after a review and 2026-10-29T05:40Z after a second review (a block that left no decode record is
+void and keeps its place in the run order; the plugin sentence cites only the smokes whose records
+show it; no prediction changed), before any H7x measurement (the smokes started the engines and
+sent no request; see below). H7 keeps its INCONCLUSIVE verdict on the i9-13900T.
 
 **Why.** H7's i9 run was short of its own pre-registration (3 and 2 blocks instead of 5 ABBA
 rounds, no `--enforce-eager`-dropped arm, no energy) and its decode gap (15.6% of vLLM's rate,
@@ -1706,7 +1708,9 @@ pairs. r_k = ratio of their block medians. R_bw = R x (A weight bytes / B weight
   (either engine faster by 15% or more, consistently).
 - INCONCLUSIVE: anything else, or >= 2 void blocks or fewer than 4 valid blocks in A or B (a
   block is void when its decode phase has fewer than 5 ok requests, a request stops short of 256
-  tokens or has no decode rate, or the serving pod restarted during the block, `restarts.txt`).
+  tokens or has no decode rate, or the serving pod restarted during the block, `restarts.txt`; a
+  block listed in `restarts.txt` with no decode record, as when its `bench/energy.sh` fails, has
+  no ok request and is void).
 - Reported, never gating: C/B decode, prefill TTFT and conc4 per arm, decode incremental
   J/token per arm. `bench/apb/h7x.py` applies this mechanically (unit tests in
   `bench/apb/test_h7x.py`).
@@ -1738,9 +1742,10 @@ B not Ready in 900 s. Smoke 2 (23:36-00:07Z, order B C, `H7X_READY_S=1800`, 48 C
 diagnostics added to `h7x.sh`): B `OOMKilled` (exit 137) 9 times at its 16 GiB limit. Smoke 3
 (2026-10-21 00:25-00:57Z, order A B C, 16 CPUs on 0-7,48-55): A ready in 28 s on 0-7,48-55; B
 OOMKilled again at 16 GiB (vLLM bound 8 OpenMP threads to cores 48-55), last log line the KV
-allocation ("6.0/16.0 GiB for KV cache"). All three smokes also showed the node image's baked
-`intel-gpu-plugin` DaemonSet running despite `K3D_GPU_VENDORS=none` (a launcher bug, fixed
-separately); no pod requested a GPU, so no arm used one. This corrects X3 of the cross-host
+allocation ("6.0/16.0 GiB for KV cache"). Smokes 2 and 3 (the first with pod diagnostics; smoke
+1's record has no pod listing) also showed the node image's baked `intel-gpu-plugin` DaemonSet
+running despite `K3D_GPU_VENDORS=none` (a launcher bug, fixed separately; smokes 4 and 5 show it
+too); no pod requested a GPU, so no arm used one. This corrects X3 of the cross-host
 pre-registration, which said no GPU plugin is deployed. Smoke 4 (2026-10-21 03:14-03:47Z, order
 B C, 16 CPUs, `H7X_VLLM_MEM=32Gi`): B Ready in 112 s on 0-7,48-55; C restarted 9 times (exit 1)
 and was not Ready in 1800 s. The likely cause, not confirmed (the failed container's log was not

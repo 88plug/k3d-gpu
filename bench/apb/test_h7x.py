@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Unit tests for bench/apb/h7x.py (the H7x decision rule). Stdlib only."""
+import glob
 import json
 import os
 import sys
@@ -35,9 +36,14 @@ def write_run(d, tps, tokens=256, n=5, skip=(), void_blocks=(), no_rate_blocks=(
         json.dump({"joules": 9000.0, "seconds": 60.0}, open(os.path.join(d, f"b{i}-{e}-decode-energy.json"), "w"))
 
 
-def run(tps, **kw):
+def run(tps, unrecorded=(), **kw):
+    """unrecorded: blocks that ran (listed in restarts.txt) but left no workload records, as when
+    bench/energy.sh exits before starting llm_load."""
     with tempfile.TemporaryDirectory() as d:
         write_run(d, tps, **kw)
+        for i in unrecorded:
+            for f in glob.glob(os.path.join(d, f"b{i}-*.json")):
+                os.remove(f)
         return h7x.score(h7x.blocks(d))
 
 
@@ -81,6 +87,21 @@ class Rule(unittest.TestCase):
         self.assertEqual(len(v["pair_ratios"]), 4)
         self.assertTrue(all(abs(r - 1.10) < 0.01 for r in v["pair_ratios"]), v["pair_ratios"])
         self.assertEqual(v["verdict"], "SUPPORTED")
+
+    def test_block_that_left_no_records_is_void_and_keeps_its_place(self):
+        # Rates drift 4% per A block and A is 1.12x B in every run-order pair. Block 4 (A) ran
+        # (restarts.txt lists it) but its energy.sh failed, so it left no decode record. It must
+        # count as a void A block and drop pair (4,3), not vanish and shift A onto later B blocks.
+        a = [10.0, 10.4, 10.8, 11.2, 11.6]
+        b = [x / 1.12 for x in a]
+        gone = run({"A": a, "B": b, "C": b}, unrecorded=(4,))
+        kept = run({"A": a, "B": b, "C": b}, void_blocks=(4,))
+        self.assertEqual(gone["void"]["A"], 1)
+        self.assertIn({"block": 4, "engine": "A", "void": True, "decode_tps": []}, gone["blocks"])
+        self.assertEqual(len(gone["pair_ratios"]), 4)
+        self.assertTrue(all(abs(r - 1.12) < 0.01 for r in gone["pair_ratios"]), gone["pair_ratios"])
+        self.assertEqual(gone["pair_ratios"], kept["pair_ratios"])
+        self.assertEqual((gone["verdict"], kept["verdict"]), ("SUPPORTED", "SUPPORTED"))
 
     def test_block_without_decode_rates_is_void(self):
         v = run({"A": 20.0, "B": 18.5, "C": 18.5}, no_rate_blocks=(2,))
