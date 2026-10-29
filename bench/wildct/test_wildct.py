@@ -5,6 +5,7 @@ amendment R1"), its /proc/stat arithmetic, and gpu_scan.py's pod GPU scan (rule 
 import os
 import subprocess
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -42,6 +43,34 @@ class ContainersTest(unittest.TestCase):
         with mock.patch.object(sample.subprocess, "run", return_value=out):
             self.assertEqual(sample.containers(last), last)
 
+    def test_main_refresh_passes_the_last_list(self):
+        """main's 30 s list refresh hands the current list to containers(), so a docker that
+        does not answer keeps it."""
+        first = {"k3dgpu-w-rapl": "/x"}
+        calls = []
+
+        def fake_containers(*args):
+            calls.append(args)
+            if len(calls) > 1:
+                sample.stop = True
+                return {}
+            return dict(first)
+
+        clock = iter(float(t) for t in range(0, 4000, 40))
+        with tempfile.TemporaryDirectory() as d, \
+                mock.patch.object(sample, "containers", side_effect=fake_containers), \
+                mock.patch.object(sample, "usage", return_value=0), \
+                mock.patch.object(sample, "pkg_temp", return_value=None), \
+                mock.patch.object(sample.signal, "signal"), \
+                mock.patch.object(sample.time, "sleep"), \
+                mock.patch.object(sample.time, "time", side_effect=lambda: next(clock)):
+            try:
+                sample.main(os.path.join(d, "s.jsonl"))
+            finally:
+                sample.stop = False
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[1], (first,))
+
 
 class CpuTest(unittest.TestCase):
     def test_busy_cpu_seconds(self):
@@ -69,6 +98,11 @@ class GpuScanTest(unittest.TestCase):
         _, bad = gpu_scan.scan({"items": items})
         self.assertEqual(bad, ["ns/a mounts /dev/dri", "ns/b mounts /dev/nvidia0", "ns/c mounts /dev",
                                "ns/d asks nvidia.com/gpu", "ns/e asks gpu.intel.com/i915"])
+
+    def test_a_list_without_items_is_not_clean(self):
+        """As the inline scan did: no `items` is an error, never `GPU-SCAN clean`."""
+        with self.assertRaises(KeyError):
+            gpu_scan.scan({})
 
     def test_empty_dir_volumes_are_not_host_paths(self):
         p = pod("x")

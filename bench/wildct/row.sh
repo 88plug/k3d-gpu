@@ -5,6 +5,8 @@
 # archive. The release's node image and the models are staged first (bench/wildct/RESUME.md).
 #   smoke        the wiring smoke: `up` with the GPU opt-out and W3 (cluster k3dgpu-w-smoke), the
 #                pod wait, the pod GPU scan, `down`; no inference request (discarded, disclosed)
+#   h52w         H52w's procedure: bench/wildct/h52w.sh OUT (it sets its own cluster, opt-out
+#                and W3, and runs the installed release's default node image; no IMAGE)
 #   h18w         H18's bench/sandbox_round.sh, runs 1-3
 #   h25w         H25's bench/shared-prefix/run.sh
 #   h34w         H34's bench/hetero-spec/h34.sh
@@ -15,7 +17,7 @@
 #   h57w-convert H57d's bench/h57d/convert.sh (drafter GGUF, Od's graph.pbtxt) under the host
 #                lock, not in a hold; at most 3600 s
 #   h57wb        H57wb's start reading (/ available, MemAvailable) and its decision; not a hold
-# Env: IMAGE  the release node image as name:tag@sha256:digest (every row but h57wb)
+# Env: IMAGE  the release node image as name:tag@sha256:digest (every row but h52w and h57wb)
 #      OUT    output directory (default ~/k3dgpu-bench-wildct/runs/${WILDCT_HOLD:-ROW}/out)
 #      WILDCT_ROW_PRINT=1  print the environment (one NAME=value per line) and the command, run nothing
 set -uo pipefail
@@ -36,6 +38,8 @@ case ${row} in
         E=(KUBECONFIG="${OUT}/kubeconfig" K3D_GPU_SHARE="${W}/k3d-gpu/usr/share/k3d-gpu" K3D_GPU_CLUSTER=k3dgpu-w-smoke
            K3D_GPU_IMAGE="${IMAGE}" K3D_GPU_VENDORS="${OPTOUT}" K3D_GPU_K3S_ARGS="${W3}")
         ARGV=(smoke) ;;
+    h52w)
+        ARGV=(bash "${REPO}/bench/wildct/h52w.sh" "${OUT}") ;;
     h18w)
         need_image
         E=(IMAGE="${IMAGE}" OUT="${OUT}" K3D_GPU_CLUSTER=k3dgpu-w-sbx K3D_GPU_VENDORS="${OPTOUT}" K3D_GPU_K3S_ARGS="${W3}")

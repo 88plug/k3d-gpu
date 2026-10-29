@@ -4302,28 +4302,36 @@ never wrote its `rc`, and the wait on that `rc` had no ceiling. Docker's live-re
 wildct, so the fix (a systemd re-exec or a reboot) is the box owner's. `k3dgpu-w-rapl` was left
 in Created.
 
-**Runner changes (this amendment's PR).** `bench/wildct/hold.sh`: after the lock, a host health
-check (systemd answers `ActiveState` = `active` for docker and `docker info` answers) or no hold
-(exit 8); every docker and k3d call it makes is bounded (`WILDCT_CALL_T`, default 120 s; cluster
-deletes `WILDCT_DELETE_T`, default 600 s; SIGKILL 10 s later); the RAPL reader must start and return a reading of
-`energy_uj` or no hold (exit 6); a cleanup step that does not finish in its bound is named in
-`runs/NAME/cleanup-incomplete`; `runs/NAME/pid` at the start and `runs/NAME/rc` last on every exit,
-the early ones (lock, disk, launcher) included. `bench/wildct/wait_hold.sh` waits on those with a
-ceiling and tells a finished hold from a dead one. `bench/wildct/h52w.sh`: the pod wait counted an
+**Runner changes (this amendment's PR).** `bench/wildct/hold.sh`: after the lock, and again just
+before the hold starts, a host health check (systemd answers `ActiveState` = `active` for docker
+and `docker info` answers), then `k3d cluster list` and the deletion of any leftover `k3dgpu-w-*`
+cluster must answer, or no hold (exit 8); every docker and k3d call it makes is bounded
+(`WILDCT_CALL_T`, default 120 s; cluster deletes `WILDCT_DELETE_T`, default 600 s; SIGKILL 10 s
+later); the RAPL reader must start and return a reading of `energy_uj` or no hold (exit 6); a
+cleanup step that does not finish in its bound, or a cluster list that does not answer, is named in
+`runs/NAME/cleanup-incomplete`; a signal ends the lock and load waits at once, and further signals
+during the cleanup are ignored, so the cleanup always runs to its end; the command no longer
+inherits the lock's file descriptor; an earlier attempt's records under the same NAME are kept,
+renamed `NAME.<UTC time>`; `runs/NAME/pid` at the start and `runs/NAME/rc` last on every exit, the
+early ones (lock, disk, launcher) included, each written whole. `bench/wildct/wait_hold.sh` waits on
+those with a ceiling and tells a finished hold from a dead one. `bench/wildct/h52w.sh`: the pod wait counted an
 empty pod list (no cluster) as every pod Running; it now needs at least one pod, is skipped when
 `up` failed, keeps its 60 polls every 5 s (knobs, defaults unchanged) and records its outcome in
 `rc.txt`; `detect`, `doctor`, `test` and `down` are bounded. `bench/wildct/sample.py`: `docker
 ps` is bounded (20 s) and keeps the last container list when docker does not answer.
 `bench/wildct/gpu_scan.py` is H52w's pod GPU scan moved out of `h52w.sh` unchanged, shared with
-the smoke. `bench/wildct/row.sh` holds each row's command as "Per row" lists it, so nothing is
-retyped on wildct. Tests: `tests/wildct_hold_test.sh` and `bench/wildct/test_wildct.py`, in CI.
+the smoke. `bench/wildct/row.sh` holds each row's command as "Per row" (and H52w's procedure) lists
+it, so nothing is retyped on wildct. `bench/zero-copy-models/probe.sh` replaced any
+`K3D_GPU_RAPL_EXEC` with a `docker exec` into its node when `sudo -n` fails, so H28w would have read
+RAPL inside the node (CPUs 0-15), not through W4's reader as W4 says; it now keeps a reader it is
+given (default unchanged, as H28 ran). Tests: `tests/wildct_hold_test.sh` and `bench/wildct/test_wildct.py`, in CI.
 
 **Clarifications.** H28w's prep runs with `LEVELS=typical`, as its run does, so it builds only the
 model images the run imports and deletes (r0-r6, 7 x 1 GiB); the registered prep line left
 `LEVELS` at its default and would have built r0-r12 and left r7-r12 behind. The wiring smoke is not
 a hold of any row and does not count toward the 12; the resumed smoke is `smoke2`. `convert.sh`
 (H57w's drafter GGUF and Od's `graph.pbtxt`) takes this host's lock itself, outside `hold.sh`, as
-H57d ran it. Rule W7 still installs the newest k3d-gpu release at the first hold: 0.1.74 at this
+H57d ran it, under `timeout -k 30 3600` (its lock wait included). Rule W7 still installs the newest k3d-gpu release at the first hold: 0.1.74 at this
 writing (`.deb` sha256 `74d1b218...`, node image `sha256:1d7513e6...`), whose launcher equals
 main's apart from the version line. The tool pins stay as registered (kubectl v1.37.2 has since
 been released; v1.37.1 is kept). The resume procedure is `bench/wildct/RESUME.md`.

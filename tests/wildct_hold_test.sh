@@ -30,8 +30,10 @@ cleanup() {
 trap cleanup EXIT
 
 # fresh [CLUSTERS]: a new HOME with the stubs; SHIM_DIR files switch stub behaviour:
-#   systemd_hang systemd_fail info_hang run_hang exec_empty rm_hang k3d_hang  (present = on);
-#   rm_hang_noterm: docker rm hangs and ignores SIGTERM
+#   systemd_hang systemd_fail info_hang run_hang exec_empty rm_hang k3d_hang list_hang
+#   (present = on; k3d_hang: cluster delete hangs, list_hang: cluster list hangs);
+#   rm_hang_noterm: docker rm hangs and ignores SIGTERM; systemd_fail_from N: systemctl fails
+#   from its Nth call on
 #   df_avail (GB available on /, default 100), clusters.reg (one name per line)
 fresh() {
     local c
@@ -59,14 +61,18 @@ EOF
     cat > "${b}/systemctl" <<'EOF'
 #!/usr/bin/env bash
 echo "systemctl $*" >> "${SHIM_DIR}/calls.log"
+n=$(grep -c '^systemctl ' "${SHIM_DIR}/calls.log")
 [ -e "${SHIM_DIR}/systemd_hang" ] && exec sleep 1000
 [ -e "${SHIM_DIR}/systemd_fail" ] && { echo "Failed to get properties: Connection timed out" >&2; exit 1; }
+[ -e "${SHIM_DIR}/systemd_fail_from" ] && [ "${n}" -ge "$(cat "${SHIM_DIR}/systemd_fail_from")" ] \
+    && { echo "Failed to get properties: Connection timed out" >&2; exit 1; }
 echo active
 EOF
     cat > "${b}/k3d" <<'EOF'
 #!/usr/bin/env bash
 echo "k3d $*" >> "${SHIM_DIR}/calls.log"
 if [ "$1 $2" = "cluster list" ]; then
+    [ -e "${SHIM_DIR}/list_hang" ] && exec sleep 1000
     python3 -c 'import json,sys; print(json.dumps([{"name": l.strip()} for l in open(sys.argv[1]) if l.strip()]))' \
         "${SHIM_DIR}/clusters.reg"
 elif [ "$1 $2" = "cluster delete" ]; then
@@ -105,11 +111,13 @@ check() {
 
 healthy_hold_runs_and_cleans() {
     fresh "k3d-wtm-owner k3dgpu-w-old"
-    hold H1 sh -c 'cp "$HOME/k3dgpu-bench-wildct/runs/H1/pid" "$SHIM_DIR/pid_seen"; echo ran > "$SHIM_DIR/ran"'
+    hold H1 sh -c 'cp "$HOME/k3dgpu-bench-wildct/runs/H1/pid" "$SHIM_DIR/pid_seen"; echo ran > "$SHIM_DIR/ran"
+        if flock -n "$HOME/k3dgpu-bench-wildct/live.lock" true; then echo free; else echo held; fi > "$SHIM_DIR/lock_seen"'
     [ "${RC}" = 0 ] || { echo "rc ${RC}"; cat "${W}/hold.out"; return 1; }
     [ "$(rcfile H1)" = 0 ] || { echo "rc file: $(rcfile H1)"; return 1; }
     [ -s "${W}/ran" ] || { echo "CMD did not run"; return 1; }
     [ -s "${W}/pid_seen" ] || { echo "no runs/H1/pid while CMD ran"; return 1; }
+    [ "$(cat "${W}/lock_seen")" = held ] || { echo "live.lock not held while CMD ran"; return 1; }
     [ "$(calls 'systemctl show -p ActiveState --value docker')" -ge 1 ] || { echo "no systemd check"; return 1; }
     [ "$(calls 'docker exec k3dgpu-w-rapl cat /sys/class/powercap/intel-rapl:0/energy_uj')" -ge 1 ] || { echo "no RAPL reading check"; return 1; }
     [ "$(calls 'docker rm -f k3dgpu-w-rapl')" -ge 1 ] || { echo "RAPL reader not removed"; return 1; }
@@ -152,7 +160,8 @@ rapl_run_hang_is_bounded() {
     [ "$(rcfile H5)" = 6 ] || { echo "rc file $(rcfile H5), exit ${RC} after ${SECS} s"; return 1; }
     [ "${SECS}" -lt 30 ] || { echo "took ${SECS} s"; return 1; }
     [ ! -e "${W}/ran" ] || { echo "CMD ran without a RAPL reader"; return 1; }
-    grep -q 'H5 RAPL reader did not start' "${HOME}/k3dgpu-bench-wildct/runs/campaign.log" || { echo "no log line"; return 1; }
+    grep -q 'H5 RAPL reader did not start (docker run rc=124;' "${HOME}/k3dgpu-bench-wildct/runs/campaign.log" \
+        || { echo "no log line with docker run's rc"; grep H5 "${HOME}/k3dgpu-bench-wildct/runs/campaign.log"; return 1; }
 }
 
 rapl_unreadable_stops_hold() {
@@ -184,6 +193,100 @@ early_exits_write_rc() {
     [ "$(rcfile H9)" = 7 ] || { echo "launcher diff: rc file $(rcfile H9), exit ${RC}"; return 1; }
 }
 
+cluster_list_hang_in_cleanup_is_named() {
+    fresh
+    hold H10 sh -c 'echo k3dgpu-w-h10 >> "$SHIM_DIR/clusters.reg"; touch "$SHIM_DIR/list_hang"'
+    [ "$(rcfile H10)" = 0 ] || { echo "rc file $(rcfile H10), exit ${RC} after ${SECS} s"; return 1; }
+    grep -q 'k3d cluster list' "$(R H10)/cleanup-incomplete" 2>/dev/null \
+        || { echo "a cluster list that did not answer was read as no cluster left"; cat "$(R H10)/cleanup-incomplete" 2>/dev/null; return 1; }
+}
+
+# A second signal while the cleanup runs (an operator's repeated kill) must not cut the cleanup
+# short: the clusters are still deleted and rc is still written.
+second_signal_during_cleanup_still_writes_rc() {
+    fresh
+    local p
+    bash "${HOLD}" H11 30 3 sh -c 'echo k3dgpu-w-h11 >> "$SHIM_DIR/clusters.reg"; touch "$SHIM_DIR/k3d_hang" "$SHIM_DIR/started"; sleep 20' \
+        > "${W}/hold.out" 2>&1 &
+    p=$!
+    BG+=("${p}")
+    for _ in $(seq 100); do [ -e "${W}/started" ] && break; sleep 0.1; done
+    [ -e "${W}/started" ] || { echo "CMD never started"; cat "${W}/hold.out"; return 1; }
+    kill -TERM "${p}"
+    sleep 1
+    kill -TERM "${p}" 2>/dev/null
+    for _ in $(seq 300); do kill -0 "${p}" 2>/dev/null || break; sleep 0.1; done
+    [ "$(rcfile H11)" = 143 ] || { echo "rc file $(rcfile H11) after a second TERM during cleanup"; return 1; }
+    grep -q 'k3d cluster delete k3dgpu-w-h11' "$(R H11)/cleanup-incomplete" 2>/dev/null || { echo "cluster delete not named"; return 1; }
+    [ "$(calls 'docker rm -f k3dgpu-w-rapl')" -ge 2 ] || { echo "cleanup cut short: RAPL reader not removed"; return 1; }
+}
+
+# An earlier attempt's records under the same NAME are kept, moved aside, never mixed in.
+earlier_attempt_is_moved_aside() {
+    fresh
+    local r m old
+    r=$(R H12); mkdir -p "${r}"
+    for m in rc cleanup-incomplete unhealthy flagged disk-abort sample.jsonl; do echo old > "${r}/${m}"; done
+    hold H12 true
+    [ "$(rcfile H12)" = 0 ] || { echo "rc file $(rcfile H12), exit ${RC}"; return 1; }
+    for m in cleanup-incomplete unhealthy flagged disk-abort; do
+        [ ! -e "${r}/${m}" ] || { echo "stale ${m} from an earlier attempt kept in runs/H12"; return 1; }
+    done
+    ! grep -qx old "${r}/sample.jsonl" 2>/dev/null || { echo "the earlier attempt's samples are mixed into this one's"; return 1; }
+    old=$(find "${r%/*}" -maxdepth 1 -name 'H12.*' -type d | head -1)
+    [ -n "${old}" ] && [ "$(cat "${old}/flagged")" = old ] || { echo "the earlier attempt's records were not kept"; ls "${r%/*}"; return 1; }
+}
+
+# A TERM while hold.sh waits for the lock ends it at once, with rc 143.
+term_during_lock_wait_is_prompt() {
+    fresh
+    local p q
+    mkdir -p "${WB}/runs"
+    ( exec 8> "${WB}/live.lock"; flock 8; exec sleep 60 ) &
+    q=$!; BG+=("${q}")
+    sleep 0.3
+    bash "${HOLD}" H13 30 3 true > "${W}/hold.out" 2>&1 &
+    p=$!; BG+=("${p}")
+    for _ in $(seq 50); do grep -q 'H13 waiting for the lock' "${WB}/runs/campaign.log" 2>/dev/null && break; sleep 0.1; done
+    sleep 0.3
+    kill -TERM "${p}"
+    for _ in $(seq 50); do kill -0 "${p}" 2>/dev/null || break; sleep 0.1; done
+    kill -0 "${p}" 2>/dev/null && { echo "hold.sh still waiting for the lock 5 s after TERM"; return 1; }
+    [ "$(rcfile H13)" = 143 ] || { echo "rc file $(rcfile H13)"; return 1; }
+}
+
+# The health check is repeated just before the hold starts (the load gate can last 60 min).
+health_is_rechecked_before_start() {
+    fresh
+    echo 2 > "${W}/systemd_fail_from"
+    hold H14 sh -c 'echo ran > "$SHIM_DIR/ran"'
+    [ "$(rcfile H14)" = 8 ] || { echo "rc file $(rcfile H14), exit ${RC}"; return 1; }
+    [ "$(calls 'systemctl show')" = 2 ] || { echo "systemctl calls: $(calls 'systemctl show')"; return 1; }
+    [ "$(calls 'docker run')" = 0 ] && [ ! -e "${W}/ran" ] || { echo "the hold started on a host that stopped answering"; return 1; }
+}
+
+# k3d not answering before the hold: no hold (rc 8), nothing started.
+k3d_not_answering_before_start_is_no_hold() {
+    fresh
+    touch "${W}/list_hang"
+    hold H15 sh -c 'echo ran > "$SHIM_DIR/ran"'
+    [ "$(rcfile H15)" = 8 ] || { echo "list hang: rc file $(rcfile H15), exit ${RC}"; return 1; }
+    [ "$(calls 'docker run')" = 0 ] && [ ! -e "${W}/ran" ] || { echo "list hang: the hold started"; return 1; }
+    fresh k3dgpu-w-old
+    touch "${W}/k3d_hang"
+    hold H16 sh -c 'echo ran > "$SHIM_DIR/ran"'
+    [ "$(rcfile H16)" = 8 ] || { echo "leftover delete hang: rc file $(rcfile H16), exit ${RC}"; return 1; }
+    [ "$(calls 'docker run')" = 0 ] && [ ! -e "${W}/ran" ] || { echo "leftover delete hang: the hold started beside a leftover cluster"; return 1; }
+    grep -q 'k3d cluster delete k3dgpu-w-old' "$(R H16)/cleanup-incomplete" 2>/dev/null || { echo "leftover cluster not named"; return 1; }
+}
+
+# CMD does not inherit the host lock's fd (a process it leaves behind would keep the lock).
+cmd_does_not_hold_the_lock_fd() {
+    fresh
+    hold H17 sh -c 'if [ -e /proc/$$/fd/9 ]; then echo open; else echo closed; fi > "$SHIM_DIR/fd9"'
+    [ "$(cat "${W}/fd9" 2>/dev/null)" = closed ] || { echo "fd 9 in CMD: $(cat "${W}/fd9" 2>/dev/null)"; return 1; }
+}
+
 wait_hold_reports_each_end() {
     fresh
     local r out rc
@@ -199,6 +302,25 @@ wait_hold_reports_each_end() {
     r=$(R W4); mkdir -p "${r}"; sleep 100 & BG+=($!); echo $! > "${r}/pid"
     out=$(timeout 20 bash "${WAIT}" W4 1 0.2); rc=$?
     [ "${rc}" = 4 ] || { echo "live pid past the ceiling: exit ${rc} '${out}'"; return 1; }
+}
+
+# An rc file caught between its creation and its write (empty) is not an rc.
+wait_hold_empty_rc_is_not_an_rc() {
+    fresh
+    local r out rc
+    r=$(R W6); mkdir -p "${r}"; : > "${r}/rc"; sleep 100 & BG+=($!); echo $! > "${r}/pid"
+    out=$(timeout 20 bash "${WAIT}" W6 1 0.2); rc=$?
+    [ "${rc}" = 4 ] || { echo "empty rc, live pid: exit ${rc} '${out}' (want 4, still running)"; return 1; }
+    r=$(R W7); mkdir -p "${r}"; : > "${r}/rc"; sleep 0 & wait $!; echo $! > "${r}/pid"
+    out=$(timeout 20 bash "${WAIT}" W7 10 0.2); rc=$?
+    [ "${rc}" = 2 ] || { echo "empty rc, dead pid: exit ${rc} '${out}' (want 2, gone without rc)"; return 1; }
+    r=$(R W8); mkdir -p "${r}"; : > "${r}/rc"; sleep 100 & BG+=($!); echo $! > "${r}/pid"
+    ( sleep 0.5; echo 0 > "${r}/rc" ) &
+    out=$(timeout 20 bash "${WAIT}" W8 10 0.2); rc=$?
+    [ "${rc}" = 0 ] && [ "${out}" = "W8 rc=0" ] || { echo "rc written after an empty read: exit ${rc} '${out}'"; return 1; }
+    r=$(R W9); mkdir -p "${r}"; : > "${r}/pid"
+    out=$(timeout 20 bash "${WAIT}" W9 1 0.2); rc=$?
+    [ "${rc}" = 4 ] || { echo "empty pid: exit ${rc} '${out}' (want 4, not 2: an empty pid is not a dead hold)"; return 1; }
 }
 
 wait_hold_follows_a_real_hold() {
@@ -228,7 +350,9 @@ case "$*" in
 esac
 exit 0
 EOF
-    chmod +x "${WB}/k3d-gpu/usr/bin/k3d-gpu" "${WB}/bin/kubectl"
+    # timeout: records its arguments, then the real one runs.
+    printf '#!/usr/bin/env bash\necho "timeout $*" >> "${SHIM_DIR}/calls.log"\nexec %s "$@"\n' "$(command -v timeout)" > "${WB}/bin/timeout"
+    chmod +x "${WB}/k3d-gpu/usr/bin/k3d-gpu" "${WB}/bin/kubectl" "${WB}/bin/timeout"
 }
 h52w() { H52W_POLLS=3 H52W_POLL_S=0 timeout -k 5 120 bash "${H52W}" "${W}/out" > /dev/null 2>&1; }
 
@@ -236,7 +360,7 @@ h52w_empty_pod_list_is_not_ready() {
     h52w_fresh
     h52w
     grep -q '^pods ready: no' "${W}/out/rc.txt" || { echo "rc.txt:"; cat "${W}/out/rc.txt"; return 1; }
-    [ "$(calls 'kubectl get pods -A --no-headers')" = 3 ] || { echo "polls: $(calls 'kubectl get pods -A --no-headers')"; return 1; }
+    [ "$(calls '^kubectl get pods -A --no-headers')" = 3 ] || { echo "polls: $(calls '^kubectl get pods -A --no-headers')"; return 1; }
 }
 
 h52w_running_pods_are_ready() {
@@ -246,12 +370,23 @@ h52w_running_pods_are_ready() {
     grep -q '^pods ready: yes' "${W}/out/rc.txt" || { echo "rc.txt:"; cat "${W}/out/rc.txt"; return 1; }
 }
 
+h52w_steps_are_bounded() {
+    h52w_fresh
+    printf 'kube-system coredns-1 1/1 Running 0 1m\n' > "${W}/pods"
+    h52w
+    local k=${WB}/k3d-gpu/usr/bin/k3d-gpu s
+    for s in "300 ${k} detect" "300 ${k} doctor" "600 ${k} up" "900 ${k} test" "600 ${k} down" "30 kubectl get pods -A --no-headers"; do
+        grep -q -- "^timeout -k [0-9]* ${s}\$" "${W}/calls.log" || { echo "not bounded: ${s}"; grep '^timeout' "${W}/calls.log"; return 1; }
+    done
+    [ "$(grep -c "^timeout -k [0-9]* 300 ${k} detect\$" "${W}/calls.log")" = 2 ] || { echo "detect (as found and with the opt-out) not both bounded"; return 1; }
+}
+
 h52w_failed_up_is_not_waited_on() {
     h52w_fresh
     echo 1 > "${W}/up_rc"
     h52w
     grep -q '^pods ready: not waited (up rc=1)' "${W}/out/rc.txt" || { echo "rc.txt:"; cat "${W}/out/rc.txt"; return 1; }
-    [ "$(calls 'kubectl get pods -A --no-headers')" = 0 ] || { echo "polled a cluster that did not come up"; return 1; }
+    [ "$(calls '^kubectl get pods -A --no-headers')" = 0 ] || { echo "polled a cluster that did not come up"; return 1; }
 }
 
 # row.sh: each row's environment as the wildct pre-registration lists it.
@@ -287,6 +422,46 @@ row_envs_match_the_registration() {
     has h57w 5 perf Ld Ld-mtp Od -- "bash ${ROOT}/bench/h57d/hold.sh 5 perf Ld Ld-mtp Od" || return 1
     has h57w-convert -- "G=${HOME}/k3dgpu-bench-wildct/h57" "LOCK=${HOME}/k3dgpu-bench-wildct/live.lock" || return 1
     has h18w -- "bash ${ROOT}/bench/sandbox_round.sh (runs 1-3)" || return 1
+    # H52w's procedure: `hold.sh H52w 1800 3 bench/wildct/h52w.sh <out>`; h52w.sh sets its own
+    # cluster, opt-out and W3, and runs the installed release's default node image (no IMAGE).
+    local out
+    out=$(WILDCT_HOLD=H52w WILDCT_ROW_PRINT=1 IMAGE='' bash "${ROW}" h52w) || { echo "row.sh h52w failed"; return 1; }
+    [ "${out}" = "bash ${ROOT}/bench/wildct/h52w.sh ${HOME}/k3dgpu-bench-wildct/runs/H52w/out" ] || { echo "row.sh h52w: ${out}"; return 1; }
+}
+
+# RESUME.md's `launch NAME CAP NEED ROW [ARGS]` lines: the row is one row.sh runs, and CAP and
+# NEED are the pre-registration's `hold.sh NAME CAP NEED` (H57w-<n> for H57w-1..5).
+resume_launch_lines_match_the_registration() {
+    local reg line name cap need rest base want
+    reg=$(awk '/^### Wildct pre-registration/ {f = 1; next} f && /^### / {exit} f' "${ROOT}/EXPERIMENTS.md" \
+        | tr '\n' ' ' | grep -oE 'hold\.sh H[0-9A-Za-z<>-]+ [0-9]+ [0-9]+' | sort -u)
+    [ -n "${reg}" ] || { echo "no hold.sh lines in the pre-registration"; return 1; }
+    while IFS= read -r line; do
+        read -r name cap need rest <<< "${line#launch }"
+        [[ "${cap}" =~ ^[0-9]+$ ]] || continue          # the usage line
+        base=${name}; [[ "${name}" =~ ^H57w-[0-9]+$ ]] && base='H57w-<n>'
+        case ${name} in smoke*) want="" ;; *) want="hold.sh ${base} ${cap} ${need}" ;; esac
+        if [ -n "${want}" ] && ! grep -qxF "${want}" <<< "${reg}"; then
+            echo "RESUME.md '${line}': CAP/NEED not registered (registered: $(tr '\n' ';' <<< "${reg}"))"; return 1
+        fi
+        [[ "${rest}" == *"<"* ]] && continue            # H57w-5: the failed hold's mode and arms
+        # shellcheck disable=SC2086 # the row and its arguments, split on purpose
+        [ -n "${rest}" ] && WILDCT_HOLD=${name} WILDCT_ROW_PRINT=1 IMAGE=${IMG} bash "${ROW}" ${rest} > /dev/null 2>&1 \
+            || { echo "RESUME.md '${line}': row.sh does not run '${rest}'"; return 1; }
+    done < <(grep -oE '`launch [^`]+`' "${ROOT}/bench/wildct/RESUME.md" | tr -d '`' | sort -u)
+}
+
+# Rule W4: H28w's probe.sh reads RAPL through hold.sh's reader (K3D_GPU_RAPL_EXEC), not through its
+# own docker exec into the node (CPUs 0-15); without a reader given, its default is unchanged.
+probe_keeps_the_given_rapl_reader() {
+    local probe=${ROOT}/bench/zero-copy-models/probe.sh nosudo=${T}/nosudo out
+    mkdir -p "${nosudo}"
+    printf '#!/bin/sh\nexit 1\n' > "${nosudo}/sudo"; chmod +x "${nosudo}/sudo"
+    out=$(PATH=${nosudo}:${PATH} K3D_GPU_RAPL_EXEC="docker exec k3dgpu-w-rapl" CLUSTER=k3dgpu-w-h28 bash "${probe}" rapl-exec) \
+        || { echo "probe.sh rapl-exec failed"; return 1; }
+    [ "${out}" = "docker exec k3dgpu-w-rapl" ] || { echo "given reader replaced by '${out}'"; return 1; }
+    out=$(PATH=${nosudo}:${PATH} CLUSTER=k3dgpu-w-h28 env -u K3D_GPU_RAPL_EXEC bash "${probe}" rapl-exec)
+    [ "${out}" = "docker exec k3d-k3dgpu-w-h28-server-0" ] || { echo "default without sudo: '${out}'"; return 1; }
 }
 
 row_guards() {
@@ -303,7 +478,7 @@ row_smoke_runs_up_scan_down() {
     OUT=${W}/smoke IMAGE=${IMG} timeout -k 5 120 bash "${ROW}" smoke > /dev/null 2>&1 || { echo "smoke exit $?"; cat "${W}/smoke/rc.txt"; return 1; }
     grep -q '^pods ready: yes' "${W}/smoke/rc.txt" && grep -qx 'GPU-SCAN clean' "${W}/smoke/rc.txt" \
         || { cat "${W}/smoke/rc.txt"; return 1; }
-    [ "$(calls 'k3d-gpu up')" = 1 ] && [ "$(calls 'k3d-gpu down')" = 1 ] || { echo "up/down calls"; return 1; }
+    [ "$(calls '^k3d-gpu up')" = 1 ] && [ "$(calls '^k3d-gpu down')" = 1 ] || { echo "up/down calls"; return 1; }
     echo 1 > "${W}/up_rc"
     OUT=${W}/smoke2 IMAGE=${IMG} timeout -k 5 120 bash "${ROW}" smoke > /dev/null 2>&1 && { echo "failed up reported as success"; return 1; }
     grep -q '^pods ready: not waited (up rc=1)' "${W}/smoke2/rc.txt" || { cat "${W}/smoke2/rc.txt"; return 1; }
@@ -317,13 +492,24 @@ check "RAPL reader stuck in docker run: bounded, rc 6, CMD not run" rapl_run_han
 check "RAPL reader without a reading: rc 6, CMD not run" rapl_unreadable_stops_hold
 check "cleanup calls that hang (one ignoring SIGTERM) are bounded and named in cleanup-incomplete" cleanup_hang_is_bounded_and_named
 check "disk floor and launcher exits write runs/NAME/rc" early_exits_write_rc
+check "k3d cluster list not answering in cleanup is named in cleanup-incomplete" cluster_list_hang_in_cleanup_is_named
+check "a second TERM during cleanup: cleanup finishes, rc 143 written" second_signal_during_cleanup_still_writes_rc
+check "an earlier attempt under the same NAME is moved aside, not mixed in" earlier_attempt_is_moved_aside
+check "a TERM during the lock wait ends hold.sh at once with rc 143" term_during_lock_wait_is_prompt
+check "health is checked again just before the hold starts" health_is_rechecked_before_start
+check "k3d not answering or a leftover not deleted before the hold: rc 8, nothing started" k3d_not_answering_before_start_is_no_hold
+check "CMD does not inherit the host lock's fd" cmd_does_not_hold_the_lock_fd
 check "wait_hold.sh: rc 0, rc != 0, dead without rc, ceiling" wait_hold_reports_each_end
+check "wait_hold.sh: an empty rc file is not an rc" wait_hold_empty_rc_is_not_an_rc
 check "wait_hold.sh follows a real hold to its rc" wait_hold_follows_a_real_hold
 check "h52w.sh: an empty pod list is not ready, at most H52W_POLLS polls" h52w_empty_pod_list_is_not_ready
 check "h52w.sh: Running and Completed pods are ready" h52w_running_pods_are_ready
 check "h52w.sh: no pod wait when up failed" h52w_failed_up_is_not_waited_on
+check "h52w.sh: detect, doctor, up, each pod poll, test and down are bounded" h52w_steps_are_bounded
 check "row.sh: every row's environment matches the wildct pre-registration" row_envs_match_the_registration
+check "RESUME.md: every launch line names a row row.sh runs, with the registered CAP and NEED" resume_launch_lines_match_the_registration
 check "row.sh: digest-pinned IMAGE, the H57 k3d shim, convert outside a hold, unknown rows" row_guards
+check "H28w's probe.sh keeps hold.sh's RAPL reader (W4); its default is unchanged" probe_keeps_the_given_rapl_reader
 check "row.sh smoke: up, pod wait, GPU scan, down; a failed up fails the smoke" row_smoke_runs_up_scan_down
 
 echo "${PASS} passed, ${FAILS} failed"
