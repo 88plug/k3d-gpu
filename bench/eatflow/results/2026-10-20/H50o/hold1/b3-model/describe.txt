@@ -1,0 +1,171 @@
+Name:             ovms-model-server-58cb86c4d5-g8s9x
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             k3d-k3dgpu-e-h50o-server-0/172.19.0.2
+Start Time:       Thu, 29 Oct 2026 08:08:37 +0000
+Labels:           app=ovms-model-server
+                  app.kubernetes.io/instance=ovms-model-server
+                  app.kubernetes.io/name=ovms-model-server
+                  pod-template-hash=58cb86c4d5
+Annotations:      <none>
+Status:           Running
+SeccompProfile:   RuntimeDefault
+IP:               10.42.0.12
+IPs:
+  IP:           10.42.0.12
+Controlled By:  ReplicaSet/ovms-model-server-58cb86c4d5
+Init Containers:
+  model-downloader:
+    Container ID:  containerd://04172310b303f9421cb0e08f5a6234b492636c1796c5ba8749404359f9c7381e
+    Image:         openvino/model_server:2025.4@sha256:c370720007564bbdcbca13b9b714e4537068542cda512e8095259e66b617962a
+    Image ID:      docker.io/openvino/model_server@sha256:c370720007564bbdcbca13b9b714e4537068542cda512e8095259e66b617962a
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      /bin/sh
+      -c
+    Args:
+      MODEL_PATH="/models/OpenVINO/gemma-4-26b-a4b-it-int4-ov"
+      
+      # Check if model already exists (for persistent storage)
+      if [ -d "$MODEL_PATH" ] && [ "$(ls -A $MODEL_PATH 2>/dev/null)" ]; then
+        echo "======================================"
+        echo "✅ Model already exists, skipping download"
+        echo "Model path: $MODEL_PATH"
+        echo "======================================"
+        echo "Existing files:"
+        ls -lah "$MODEL_PATH/"
+        # Ensure config.json exists for OpenVINO models
+        if [ ! -f "/models/config.json" ]; then
+          echo "Creating /models/config.json..."
+          printf '{"model_config_list":[{"config":{"name":"OpenVINO/gemma-4-26b-a4b-it-int4-ov","base_path":"/models/OpenVINO/gemma-4-26b-a4b-it-int4-ov"}}]}' > /models/config.json
+        fi
+        echo "config.json:"
+        cat /models/config.json
+        exit 0
+      fi
+      
+      echo "======================================"
+      echo "Downloading model from HuggingFace"
+      echo "Source: OpenVINO/gemma-4-26b-a4b-it-int4-ov"
+      echo "======================================"
+      # OpenVINO models are public, no token needed
+      # ovms --pull downloads model and creates graph.pbtxt inside model dir
+      /ovms/bin/ovms \
+        --pull \
+        --source_model=OpenVINO/gemma-4-26b-a4b-it-int4-ov \
+        --model_repository_path=/models \
+        --target_device=CPU \
+        --task=text_generation \
+        --cache_size=20
+      
+      # Create config.json at /models/config.json for OVMS to use
+      # This points to the graph.pbtxt created by ovms --pull
+      echo "Creating /models/config.json for model serving..."
+      cat > /models/config.json << 'CONFIGEOF'
+      {
+        "model_config_list": [
+          {
+            "config": {
+              "name": "OpenVINO/gemma-4-26b-a4b-it-int4-ov",
+              "base_path": "/models/OpenVINO/gemma-4-26b-a4b-it-int4-ov"
+            }
+          }
+        ]
+      }
+      CONFIGEOF
+      echo "Generated config.json:"
+      cat /models/config.json
+      
+      echo ""
+      echo "✅ Model downloaded successfully!"
+      echo "Downloaded files:"
+      ls -lah /models/OpenVINO/gemma-4-26b-a4b-it-int4-ov/
+      
+    State:          Terminated
+      Reason:       Completed
+      Exit Code:    0
+      Started:      Thu, 29 Oct 2026 08:08:44 +0000
+      Finished:     Thu, 29 Oct 2026 08:11:25 +0000
+    Ready:          True
+    Restart Count:  0
+    Limits:
+      cpu:     8
+      memory:  50Gi
+    Requests:
+      cpu:        4
+      memory:     50Gi
+    Environment:  <none>
+    Mounts:
+      /models from model-storage (rw)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-9jksw (ro)
+Containers:
+  ovms:
+    Container ID:  containerd://c08c02f67f0a906d5b41045cfdd744680314eac6034a9a43b69f331377e55473
+    Image:         openvino/model_server:2025.4@sha256:c370720007564bbdcbca13b9b714e4537068542cda512e8095259e66b617962a
+    Image ID:      docker.io/openvino/model_server@sha256:c370720007564bbdcbca13b9b714e4537068542cda512e8095259e66b617962a
+    Ports:         8080/TCP (grpc), 8081/TCP (rest)
+    Host Ports:    0/TCP (grpc), 0/TCP (rest)
+    Args:
+      --config_path=/models/config.json
+      --rest_port=8081
+      --port=8080
+      --log_level=INFO
+    State:          Waiting
+      Reason:       CrashLoopBackOff
+    Last State:     Terminated
+      Reason:       Error
+      Exit Code:    139
+      Started:      Thu, 29 Oct 2026 08:17:00 +0000
+      Finished:     Thu, 29 Oct 2026 08:17:00 +0000
+    Ready:          False
+    Restart Count:  6
+    Limits:
+      cpu:     12
+      memory:  24Gi
+    Requests:
+      cpu:        12
+      memory:     16Gi
+    Liveness:     http-get http://:8081/v2/health/live delay=120s timeout=10s period=30s #success=1 #failure=3
+    Readiness:    http-get http://:8081/v2/health/ready delay=60s timeout=5s period=10s #success=1 #failure=5
+    Environment:  <none>
+    Mounts:
+      /models from model-storage (rw)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-9jksw (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       False 
+  ContainersReady             False 
+  PodScheduled                True 
+Volumes:
+  model-storage:
+    Type:       PersistentVolumeClaim (a reference to a PersistentVolumeClaim in the same namespace)
+    ClaimName:  ovms-model-server
+    ReadOnly:   false
+  kube-api-access-9jksw:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   Burstable
+Node-Selectors:              <none>
+Tolerations:                 node-role.kubernetes.io/control-plane:NoSchedule op=Exists
+                             node-role.kubernetes.io/master:NoSchedule op=Exists
+                             node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason     Age                   From               Message
+  ----     ------     ----                  ----               -------
+  Normal   Scheduled  9m46s                 default-scheduler  Successfully assigned default/ovms-model-server-58cb86c4d5-g8s9x to k3d-k3dgpu-e-h50o-server-0
+  Normal   Pulling    9m46s                 kubelet            spec.initContainers{model-downloader}: Pulling image "openvino/model_server:2025.4@sha256:c370720007564bbdcbca13b9b714e4537068542cda512e8095259e66b617962a"
+  Normal   Pulled     9m40s                 kubelet            spec.initContainers{model-downloader}: Successfully pulled image "openvino/model_server:2025.4@sha256:c370720007564bbdcbca13b9b714e4537068542cda512e8095259e66b617962a" in 6.31s (6.31s including waiting). Image size: 179432828 bytes.
+  Normal   Created    9m40s                 kubelet            spec.initContainers{model-downloader}: Container created
+  Normal   Started    9m40s                 kubelet            spec.initContainers{model-downloader}: Container started
+  Normal   Pulled     84s (x7 over 6m57s)   kubelet            spec.containers{ovms}: Container image "openvino/model_server:2025.4@sha256:c370720007564bbdcbca13b9b714e4537068542cda512e8095259e66b617962a" already present on machine and can be accessed by the pod
+  Normal   Created    84s (x7 over 6m57s)   kubelet            spec.containers{ovms}: Container created
+  Normal   Started    84s (x7 over 6m57s)   kubelet            spec.containers{ovms}: Container started
+  Warning  BackOff    76s (x18 over 6m55s)  kubelet            spec.containers{ovms}: Back-off restarting failed container ovms in pod ovms-model-server-58cb86c4d5-g8s9x_default(29e0d1a0-d403-43fd-bdf6-750da69ae5bb)

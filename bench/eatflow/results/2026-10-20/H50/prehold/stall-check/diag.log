@@ -1,0 +1,8 @@
+2026-10-29T06:51:50Z waiting for the bench lock
+2026-10-29T06:51:50Z lock taken
+2026-10-29T06:51:51Z busy (load1 16.49, aiperf 0): waiting 120 s
+2026-10-29T06:53:51Z start k3dgpu-diag-b1g-065150 (vllm/vllm-openai-cpu@sha256:197354e6475e638eb5ccca09beb078488046a82de0e204e7429bf1a804df9647)
+2026-10-29T06:55:45Z ready after 113 s; 60 sequential requests
+concurrency=1 ok=60/60 ttft_median=0.183s ttft_p90=0.201s latency_median=13.648s tok/s_median=18.8 aggregate_tok/s=18.7
+2026-10-29T07:09:31Z no stall in 60 requests
+2026-10-29T07:09:34Z cleaned up k3dgpu-diag-b1g-065150

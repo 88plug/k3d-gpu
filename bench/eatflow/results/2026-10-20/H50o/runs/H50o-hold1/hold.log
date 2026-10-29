@@ -1,0 +1,10 @@
+== arm H50o start 08:07:20 (+0s)
+== k3d-gpu up 08:07:21 (+1s)
+== wait-ready 08:08:23 (+63s)
+Waiting for deployment "ovms" rollout to finish: 0 of 1 updated replicas are available...
+deployment "ovms" successfully rolled out
+Waiting for deployment "ovms-model-server" rollout to finish: 0 of 1 updated replicas are available...
+error: deployment "ovms-model-server" exceeded its progress deadline
+NOT DELIVERABLE: not ready with 900 s of the hold left
+== cleanup 08:19:06 (+706s)
+== done 08:19:10 (+710s)

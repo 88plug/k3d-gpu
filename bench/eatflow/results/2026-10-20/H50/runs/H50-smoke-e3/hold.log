@@ -1,0 +1,35 @@
+== arm H50 start 06:46:05 (+0s)
+== k3d-gpu up 06:46:07 (+2s)
+== wait-ready 06:47:07 (+62s)
+Waiting for deployment "ovms" rollout to finish: 0 out of 1 new replicas have been updated...
+Waiting for deployment "ovms" rollout to finish: 0 of 1 updated replicas are available...
+deployment "ovms" successfully rolled out
+Waiting for deployment "vllm-gemma4-26b-a4b-cpu" rollout to finish: 0 of 1 updated replicas are available...
+deployment "vllm-gemma4-26b-a4b-cpu" successfully rolled out
+== ready 06:49:53 (+228s)
+pod cgroups: A1 /sys/fs/cgroup/system.slice/docker-611f4a5c1beda23ac9a07f35a2038f5c482a475da931f89422ec43cb785b11a9.scope/kubepods/burstable/pod83633001-53f7-4f0b-b8c9-2ffe89136055; B1 /sys/fs/cgroup/system.slice/docker-611f4a5c1beda23ac9a07f35a2038f5c482a475da931f89422ec43cb785b11a9.scope/kubepods/besteffort/pod21e2d5a2-0f84-4848-9663-bfa37efeeafd
+curl: (7) Failed to connect to 127.0.0.1 port 18640 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18640 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18640 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18640 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18640 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18640 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18641 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18641 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18641 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18641 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18641 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18641 after 0 ms: Could not connect to server
+served: A1=gemma-4-26b-a4b-it B1=google/gemma-4-26B-A4B-it
+curl: (7) Failed to connect to 127.0.0.1 port 8090 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.2 port 8090 after 0 ms: Could not connect to server
+== load typical 06:50:23 (+258s)
+== baseline typical 06:50:23 (+258s)
+== pairs hold 1, deadline +2250s 06:50:44 (+279s)
+agentbench: A1: agent http://127.0.0.1:8090, proxy 127.0.0.1:18620 -> http://127.0.0.1:18640, pod cgroup /sys/fs/cgroup/system.slice/docker-611f4a5c1beda23ac9a07f35a2038f5c482a475da931f89422ec43cb785b11a9.scope/kubepods/burstable/pod83633001-53f7-4f0b-b8c9-2ffe89136055
+agentbench: B1: agent http://127.0.0.2:8090, proxy 127.0.0.1:18621 -> http://127.0.0.1:18641, pod cgroup /sys/fs/cgroup/system.slice/docker-611f4a5c1beda23ac9a07f35a2038f5c482a475da931f89422ec43cb785b11a9.scope/kubepods/besteffort/pod21e2d5a2-0f84-4848-9663-bfa37efeeafd
+agentbench: pair 0: 1934 s left < 99999 s, hold ends
+agentbench: hold 1: 0 complete pair(s); next pair 0 of 24
+== finished 06:51:21 (+316s)
+== cleanup 06:51:21 (+316s)
+== done 06:51:29 (+324s)

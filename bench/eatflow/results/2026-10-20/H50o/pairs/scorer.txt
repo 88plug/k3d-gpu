@@ -1,0 +1,8 @@
+# H50o's pre-registered scorer, run 2026-10-29 on the copy of ~/k3dgpu-bench/results/H50o/pairs.
+# That directory is empty on crescent: hold 1 stopped NOT DELIVERABLE before any pair, so the
+# first hold never wrote registration.json (amendment A3 item 7) and no pairs.jsonl exists.
+# The scorer refuses an L3 row without its registration, as designed. The verdict comes from
+# amendment M1's rule (B3 not ready with 900 s of its first hold left), not from this scorer.
+$ python3 bench/eatflow/agentbench.py pairs-report bench/eatflow/results/2026-10-20/H50o/pairs --hyp H50o --arm-a A1 --arm-b B3
+ValueError: H50o: registration None is not {'hyp': 'H50o', 'rule': 'L3', 'seed': 'H50o-crescent-2026-10-20'}
+rc=1
