@@ -53,6 +53,7 @@ nav:
       - Capacity oracle design: moat-design.md
       - Security audit: security-audit.md
       - Intel technical report: intel/technical-report.md
+      - H52b IAA finding: intel/h52b-iaa.md
       - Upstream draft (EAT/EAS): intel/upstream-eat.md
   - Development:
       - Branch consolidation: dev/consolidation.md

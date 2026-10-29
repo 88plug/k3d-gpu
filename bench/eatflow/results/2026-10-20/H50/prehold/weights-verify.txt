@@ -1,0 +1,16 @@
+2026-10-29T07:10:07Z
+bb7c6a97bfa1785b026f8bdae0e545be0494683c
+ok  size 1570 .gitattributes
+ok  size 29379 README.md
+ok  size 18683 chat_template.jinja
+ok  size 3810 config.json
+ok  size 203 generation_config.json
+ok  d57e8bde0feda8b0ebf51a81d04b5d988f82fead7f9242d9231625929421453e model-00001-of-00002.safetensors
+ok  e5e6e258f562a77be81b0f5136eb2ca71e0d973cf30c4291e4d2c7b1fd712f99 model-00002-of-00002.safetensors
+ok  size 103196 model.safetensors.index.json
+ok  size 1689 processor_config.json
+ok  cc8d3a0ce36466ccc1278bf987df5f71db1719b9ca6b4118264f45cb627bfe0f tokenizer.json
+ok  size 3729 tokenizer_config.json
+rc=0
+2026-10-29T07:10:40Z
+listing: same as setup

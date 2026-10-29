@@ -207,6 +207,7 @@ jobs:
       - run: python3 tests/ledger_drift_check.py
       - run: tests/pe_premise_check_test.sh
       - run: tests/pe_premise_check.sh
+      - run: python3 tests/model_cards_license_test.py
 
   bench-tests:
     name: Bench harness tests
@@ -225,6 +226,9 @@ jobs:
       # tests/fit_test.py (the fit arithmetic on fixture hosts and models, the guard
       # under simulated PSI) and the launcher's fit, agent manifest and agent guard.
       - run: tests/fit_test.sh
+      # The llama.cpp agent backend the fit picks (GGUF download, one-time GGUF conversion,
+      # MTP on request) and `up` leaving busy Intel cards out of the device plugin.
+      - run: tests/llamacpp_test.sh
 
   tune-tests:
     name: k3d-gpu tune tests
@@ -248,10 +252,13 @@ jobs:
       - run: python3 bench/test_agent_trace.py
       - run: python3 bench/eatflow/crescent/test_holds.py
       - run: tests/hold_own_test.sh
+      - run: tests/wildct_hold_test.sh
+      - run: python3 bench/wildct/test_wildct.py
       - run: python3 bench/load/test_load.py
       - run: python3 bench/eatflow/test_agentbench.py
       - run: python3 bench/eatflow/test_pairs.py
       - run: python3 bench/eatflow/test_solo.py
+      - run: tests/xhost_tools_test.sh
       - run: python3 bench/eatflow/test_h4345.py
       - run: python3 bench/models/test_export_qat_ov.py
       - run: python3 bench/models/test_qat_grid.py

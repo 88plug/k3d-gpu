@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata: {name: cg}
+spec:
+  restartPolicy: Never
+  containers:
+  - name: server
+    image: ghcr.io/ggml-org/llama.cpp:server-b11749@sha256:9fbaa06d7f4449e2ae0d02b40e0431f7c212dcf231c9e3a7777a6afc2cc8f312
+    args: ["-m","/models/google_gemma-4-26B-A4B-it-qat-q4_0-gguf/gemma-4-26B_q4_0-it.gguf","-t","48","-Cr","0-47","--cpu-strict","1","--jinja","-c","8192","--host","0.0.0.0","--port","8080","-ngl","0"]
+    securityContext: {privileged: true}
+    volumeMounts: [{name: models, mountPath: /models, readOnly: true}]
+  volumes:
+  - {name: models, hostPath: {path: /models}}
+  - {name: dri, emptyDir: {medium: Memory}}
+  - {name: card, hostPath: {path: /dev/dri/renderD130, type: CharDevice}}

@@ -1,0 +1,57 @@
+== arm H50 start 07:11:14 (+0s)
+== k3d-gpu up 07:11:14 (+0s)
+== wait-ready 07:12:05 (+51s)
+Waiting for deployment "ovms" rollout to finish: 0 of 1 updated replicas are available...
+deployment "ovms" successfully rolled out
+Waiting for deployment "vllm-gemma4-26b-a4b-cpu" rollout to finish: 0 of 1 updated replicas are available...
+deployment "vllm-gemma4-26b-a4b-cpu" successfully rolled out
+== ready 07:14:49 (+215s)
+pod cgroups: A1 /sys/fs/cgroup/system.slice/docker-68440a6809cbb37da16fa145d38c6ef323b2d080141fed5ab463c4c9f8bf1dc2.scope/kubepods/burstable/podb0a6c579-9b33-49d3-9016-1be7e564a96d; B1 /sys/fs/cgroup/system.slice/docker-68440a6809cbb37da16fa145d38c6ef323b2d080141fed5ab463c4c9f8bf1dc2.scope/kubepods/besteffort/pod82882269-b7ed-4d20-ace5-2274c818ec8b
+curl: (7) Failed to connect to 127.0.0.1 port 18640 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18640 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18640 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18640 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18640 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18640 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18641 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18641 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18641 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18641 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18641 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18641 after 0 ms: Could not connect to server
+served: A1=gemma-4-26b-a4b-it B1=google/gemma-4-26B-A4B-it
+curl: (7) Failed to connect to 127.0.0.1 port 8090 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.2 port 8090 after 0 ms: Could not connect to server
+== load typical 07:15:19 (+245s)
+== baseline typical 07:15:20 (+246s)
+== pairs hold 1, deadline +2250s 07:15:40 (+266s)
+agentbench: A1: agent http://127.0.0.1:8090, proxy 127.0.0.1:18620 -> http://127.0.0.1:18640, pod cgroup /sys/fs/cgroup/system.slice/docker-68440a6809cbb37da16fa145d38c6ef323b2d080141fed5ab463c4c9f8bf1dc2.scope/kubepods/burstable/podb0a6c579-9b33-49d3-9016-1be7e564a96d
+agentbench: B1: agent http://127.0.0.2:8090, proxy 127.0.0.1:18621 -> http://127.0.0.1:18641, pod cgroup /sys/fs/cgroup/system.slice/docker-68440a6809cbb37da16fa145d38c6ef323b2d080141fed5ab463c4c9f8bf1dc2.scope/kubepods/besteffort/pod82882269-b7ed-4d20-ace5-2274c818ec8b
+agentbench: pair 0 B-T1-U1001: B1 pass_budget 11.1s, A1 pass_budget 7.9s
+agentbench: pair 1 B-T2-U1001: A1 pass_budget 5.7s, B1 pass_budget 7.1s
+agentbench: pair 2 B-T3-U1001: B1 pass_budget 21.9s, A1 pass_budget 17.8s
+agentbench: pair 3 B-T4-U1001: B1 pass_budget 8.2s, A1 pass_budget 6.5s
+agentbench: pair 4 B-T5-U1001: A1 pass_budget 12.2s, B1 pass_budget 13.6s
+agentbench: pair 5 B-T6-U1001: A1 fail_graded 8.7s, B1 pass_budget 15.8s
+agentbench: pair 6 B-T7-U1001: A1 pass_budget 17.6s, B1 pass_budget 11.4s
+agentbench: pair 7 B-T8-U1001: A1 fail_graded 8.0s, B1 pass_budget 15.4s
+agentbench: pair 8 B-T1-U1002: B1 pass_budget 13.9s, A1 pass_budget 12.1s
+agentbench: pair 9 B-T2-U1002: B1 pass_budget 6.5s, A1 pass_budget 5.4s
+agentbench: pair 10 B-T3-U1002: B1 pass_budget 13.6s, A1 pass_budget 12.9s
+agentbench: pair 11 B-T4-U1002: A1 pass_budget 7.4s, B1 pass_budget 6.3s
+agentbench: pair 12 B-T5-U1002: B1 pass_budget 12.3s, A1 pass_budget 11.1s
+agentbench: pair 13 B-T6-U1002: A1 pass_budget 11.0s, B1 pass_budget 12.8s
+agentbench: pair 14 B-T7-U1002: A1 pass_budget 10.1s, B1 pass_budget 14.5s
+agentbench: pair 15 B-T8-U1002: A1 pass_budget 12.7s, B1 pass_budget 12.0s
+agentbench: pair 16 B-T1-U1003: A1 pass_budget 7.2s, B1 pass_budget 12.6s
+agentbench: pair 17 B-T2-U1003: A1 pass_budget 5.6s, B1 pass_budget 7.4s
+agentbench: pair 18 B-T3-U1003: B1 pass_budget 12.3s, A1 pass_budget 9.5s
+agentbench: pair 19 B-T4-U1003: B1 fail_graded 5.2s, A1 fail_graded 4.7s
+agentbench: pair 20 B-T5-U1003: B1 pass_budget 8.4s, A1 pass_budget 8.0s
+agentbench: pair 21 B-T6-U1003: A1 fail_graded 3.9s, B1 fail_graded 10.0s
+agentbench: pair 22 B-T7-U1003: B1 fail_graded 8.2s, A1 fail_graded 5.3s
+agentbench: pair 23 B-T8-U1003: A1 pass_budget 12.6s, B1 pass_budget 12.2s
+agentbench: hold 1: 24 complete pair(s); next pair 24 of 24
+== finished 07:37:08 (+1554s)
+== cleanup 07:37:08 (+1554s)
+== done 07:37:15 (+1561s)

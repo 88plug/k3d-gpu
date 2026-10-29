@@ -335,7 +335,7 @@ class Ranking(unittest.TestCase):
         self.assertEqual(doc["rows"][2], {"id": "H34", "verdict": "SUPPORTED", "classes": ["i9-13900t"]})
         shipped = {r["id"]: (r["verdict"], " ".join(r["classes"])) for r in doc["rows"]}
         for cls in ("cpu:13th Gen Intel(R) Core(TM) i9-13900T", "cpu:Intel(R) Xeon(R) 6741P", "cpu:AMD Ryzen 9 9950X", "cpu:"):
-            for fam in ("H27", "H34"):
+            for fam in mo.RULE_FAMILIES:
                 self.assertEqual(mo.ledger_rule(shipped, fam, cls), mo.ledger_rule(rows, fam, cls), (cls, fam))
         # Exact classes: a model number inside another one is not a match.
         self.assertEqual(mo.row_classes("on the Xeon 16741P and i9-13900TE"), ["16741p", "i9-13900te"])
@@ -374,6 +374,106 @@ class Ranking(unittest.TestCase):
         d = mo.optimize(b, "ovms", "CPU")
         self.assertEqual([r["id"] for r in d["ranking"]],
                          ["acme/M-qat-int4-ov", "OpenVINO/M-int4-ov", "RedHatAI/M-int4-ov", "88plug/M-qat-int4-ov"])
+
+
+class LedgerEngine(unittest.TestCase):
+    """The CPU engine and llama.cpp's MTP drafter from the ledger. H59 (and its
+    replications H59d, H59w): SUPPORTED for this CPU class makes llama.cpp the CPU
+    engine (its arm: the QAT GGUF with the QAT MTP drafter); H57dm/H57wm: SUPPORTED for
+    this CPU class turns the QAT MTP drafter on for llama.cpp on the CPU. REFUTED,
+    INCONCLUSIVE and PENDING rows, and rows for another class, pick nothing."""
+    XEON = "cpu:Intel(R) Xeon(R) 6741P"
+    I9 = "cpu:13th Gen Intel(R) Core(TM) i9-13900T"
+    QAT_GGUF = "google/gemma-4-26B-A4B-it-qat-q4_0-gguf"
+    QAT_ASSISTANT = "google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant"
+    H59 = "## Hypotheses\n\n| H59 | Engine choice on the Xeon 6741P: llama.cpp beats OVMS int4 | p | m | %s |\n"
+    H57 = ("## Hypotheses\n\n| H57da | On the i9-13900T, OVMS is the fastest arm (llama.cpp loses) | p | m | %s |\n"
+           "| H57dm | On the i9-13900T, llama.cpp Ld-mtp beats Ld | p | m | %s |\n")
+
+    def cpu(self, ledger, hw_class, model=GEMMA, engine="ovms", device="CPU", **kw):
+        return mo.optimize(bundle(model), engine, device, dict({"hw_class": hw_class, "ledger": ledger, "engine_from_ledger": True}, **kw))
+
+    def test_supported_row_picks_llamacpp_with_its_arm(self):
+        d = self.cpu(self.H59 % "SUPPORTED", self.XEON)
+        self.assertEqual((d["engine"], d["device"], d["model"]), ("llama.cpp", "CPU", self.QAT_GGUF))
+        self.assertEqual(d["speculative"]["kind"], "mtp")
+        self.assertEqual(d["speculative"]["model"], self.QAT_ASSISTANT)
+        self.assertIn("--spec-type", d["speculative"]["args"])
+        self.assertTrue(any("EXPERIMENTS.md H59 is SUPPORTED" in c["fact"] for c in d["choices"]), d["choices"])
+        self.assertIn("picked %s on llama.cpp (CPU) with the %s drafter" % (self.QAT_GGUF, self.QAT_ASSISTANT), mo.summary_line(d))
+        self.assertIn("OPT_ENGINE='llama.cpp'", mo.shell_lines(d))
+        # The same rows shipped as console/ledger-rules.json decide the same.
+        shipped = json.dumps(mo.ledger_rules_doc(mo.ledger_rows(self.H59 % "SUPPORTED")))
+        self.assertEqual(self.cpu(shipped, self.XEON)["model"], self.QAT_GGUF)
+
+    def test_no_supported_row_keeps_ovms(self):
+        for verdict in ("INCONCLUSIVE", "PENDING", "REFUTED", "**INCONCLUSIVE**"):
+            d = self.cpu(self.H59 % verdict, self.XEON)
+            self.assertEqual((d["engine"], d["model"]), ("ovms", "OpenVINO/gemma-4-26b-a4b-it-int4-ov"), verdict)
+            self.assertIsNone(d["speculative"], verdict)
+            self.assertIn("OPT_ENGINE='ovms'", mo.shell_lines(d))
+        # SUPPORTED for another class, no ledger, or no class: OVMS.
+        for ledger, cls in ((self.H59 % "SUPPORTED", self.I9), (None, self.XEON), (self.H59 % "SUPPORTED", None),
+                            (self.H59 % "SUPPORTED", "cpu:")):
+            self.assertEqual(self.cpu(ledger, cls)["engine"], "ovms", (ledger, cls))
+
+    def test_inconclusive_rows_that_name_llamacpp_pick_nothing(self):
+        # The repo's ledger: H57da (OVMS vs llama.cpp on the i9-13900T) and H54a (llama.cpp
+        # arms on the Xeon 6741P) are INCONCLUSIVE; no H59-family row is SUPPORTED.
+        with open(os.path.join(REPO, "EXPERIMENTS.md"), encoding="utf-8") as f:
+            ledger = f.read()
+        rows = mo.ledger_rows(ledger)
+        for cls in (self.XEON, self.I9):
+            rule = mo.ledger_rule(rows, "H59", cls)
+            if rule[0] != "on":
+                self.assertEqual(self.cpu(ledger, cls)["engine"], "ovms", cls)
+        d = self.cpu(self.H57 % ("INCONCLUSIVE", "INCONCLUSIVE"), self.I9)
+        self.assertEqual(d["engine"], "ovms")
+
+    def test_only_an_unset_backend_on_the_cpu_follows_the_ledger(self):
+        ledger = self.H59 % "SUPPORTED"
+        self.assertEqual(self.cpu(ledger, self.XEON, engine_from_ledger=False)["engine"], "ovms")
+        self.assertEqual(self.cpu(ledger, self.XEON, device="GPU")["engine"], "ovms")
+        self.assertEqual(self.cpu(ledger, self.XEON, engine="vllm", device="GPU")["engine"], "vllm")
+        # A model with no int4 GGUF variant stays on OVMS, with a note.
+        d = self.cpu(ledger, self.XEON, model=PHI)
+        self.assertEqual((d["engine"], d["model"]), ("ovms", "OpenVINO/Phi-4-mini-instruct-int4-ov"))
+        self.assertTrue(any("H59" in n and "llama.cpp has no" in n for n in d["notes"]), d["notes"])
+        # A variant the user named (OVMS's IR) is served as named.
+        named = dict(bundle(GEMMA), requested="OpenVINO/gemma-4-26b-a4b-it-int4-ov")
+        d = mo.optimize(named, "ovms", "CPU", {"hw_class": self.XEON, "ledger": ledger, "engine_from_ledger": True})
+        self.assertEqual((d["engine"], d["model"]), ("ovms", "OpenVINO/gemma-4-26b-a4b-it-int4-ov"))
+        # So is a variant named with K3D_GPU_AGENT_VARIANT (an OVMS IR, or the QAT conversion).
+        d = self.cpu(ledger, self.XEON, variant="OpenVINO/gemma-4-26b-a4b-it-int4-ov")
+        self.assertEqual((d["engine"], d["model"]), ("ovms", "OpenVINO/gemma-4-26b-a4b-it-int4-ov"))
+        d = self.cpu(ledger, self.XEON, variant="qat-convert")
+        self.assertEqual((d["engine"], d["model"]), ("ovms", "k3d-gpu/gemma-4-26B-A4B-it-int4-sym-g32-ov"))
+        self.assertIsNotNone(d["conversion"])
+        # K3D_GPU_AGENT_DRAFT=off keeps the engine, drops the drafter.
+        d = self.cpu(ledger, self.XEON, draft="off")
+        self.assertEqual((d["engine"], d["speculative"]), ("llama.cpp", None))
+
+    def test_mtp_drafter_follows_its_rows(self):
+        for verdict, cls, on in (("SUPPORTED", self.I9, True), ("INCONCLUSIVE", self.I9, False),
+                                 ("PENDING", self.I9, False), ("REFUTED", self.I9, False), ("SUPPORTED", self.XEON, False)):
+            d = mo.optimize(bundle(GEMMA), "llama.cpp", "CPU", {"hw_class": cls, "ledger": self.H57 % ("INCONCLUSIVE", verdict)})
+            self.assertEqual(d["model"], self.QAT_GGUF)
+            self.assertEqual((d["speculative"] or {}).get("model"), self.QAT_ASSISTANT if on else None, (verdict, cls))
+        # A CPU row: the drafter stays off on a GPU placement.
+        d = mo.optimize(bundle(GEMMA), "llama.cpp", "GPU", {"hw_class": self.I9, "ledger": self.H57 % ("INCONCLUSIVE", "SUPPORTED")})
+        self.assertIsNone(d["speculative"])
+        # The repo's ledger: H57dm is SUPPORTED on the i9-13900T.
+        with open(os.path.join(REPO, "EXPERIMENTS.md"), encoding="utf-8") as f:
+            ledger = f.read()
+        if mo.ledger_rule(mo.ledger_rows(ledger), "H57m", self.I9)[0] == "on":
+            d = mo.optimize(bundle(GEMMA), "llama.cpp", "CPU", {"hw_class": self.I9, "ledger": ledger})
+            self.assertEqual(d["speculative"]["model"], self.QAT_ASSISTANT)
+
+    def test_families(self):
+        self.assertTrue(all(mo.family_of(r, "H57m") for r in ("H57dm", "H57wm")))
+        self.assertFalse(any(mo.family_of(r, "H57m") for r in ("H57da", "H57db", "H57wa", "H57", "H57dmx2")))
+        self.assertTrue(all(mo.family_of(r, "H59") for r in ("H59", "H59d", "H59w")))
+        self.assertFalse(mo.family_of("H590", "H59"))
 
 
 class Fallback(unittest.TestCase):
@@ -497,6 +597,16 @@ class PlanIntegration(unittest.TestCase):
                                       (facts_of("xeon-gnr"), "ovms", "CPU"), (facts_of("raptorlake-nvidia"), "ovms", "CPU")):
             d = self.run_plan(facts, QWEN)["optimizer"]
             self.assertEqual((d["engine"], d["device"]), (engine, device), facts["fingerprint"])
+
+    def test_cpu_engine_follows_the_ledger_unless_a_backend_is_set(self):
+        h59 = "## Hypotheses\n\n| H59 | Engine choice on the Xeon 6741P | p | m | %s |\n"
+        xc = facts_of("xeon-6741p")
+        for verdict, backend, engine in (("SUPPORTED", None, "llama.cpp"), ("SUPPORTED", "ovms", "ovms"),
+                                         ("INCONCLUSIVE", None, "ovms"), ("PENDING", None, "ovms")):
+            doc = planmod.plan(xc, self.matrix, {"model": GEMMA})
+            doc = planmod.add_optimizer(doc, xc, bundle(GEMMA), {"ledger": h59 % verdict, "backend": backend})
+            schema_check.check(doc, self.schema, "#/$defs/plan")
+            self.assertEqual((doc["optimizer"]["engine"], doc["optimizer"]["device"]), (engine, "CPU"), (verdict, backend))
 
     def test_summary_first(self):
         doc = self.run_plan(self.xb, GEMMA)

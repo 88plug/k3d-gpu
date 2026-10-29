@@ -141,6 +141,30 @@ s = j["phases"][0]["samples"][0]
 assert s["ok"] and s["output_tokens"] is None and s["tokens_per_s"] is None and s["ttft_s"] and s["chunks"] == 5, s
 EOF
 }
+# H54a hold 2, B1g sample 2: vLLM's engine died at 252 of 256 tokens; the stream carried an
+# error chunk and [DONE] but no finish_reason and no usage, and was recorded ok.
+load_engine_death() {
+    "${LOAD[@]}" --base-url "http://127.0.0.1:${STUB_PORT}/v1" --model stub --requests 1 --max-tokens 256 --warmup 0 --out "${LJ}"
+    [ $? -eq 1 ] || return 1
+    pyassert "${LJ}" <<'EOF'
+ph = j["phases"][0]
+s = ph["samples"][0]
+assert not s["ok"] and "error in stream" in s["error"] and s["content_chunks"] == 252 and s["chunks"] == 254, s
+assert s["finish_reason"] is None and s["output_tokens"] is None and s["decode_tokens_per_s"] is None, s
+assert ph["ok"] == 0 and ph["errors"] == 1 and ph["stats"]["latency_s"]["n"] == 0, ph
+EOF
+}
+# A server killed mid-stream: content, then the connection closes with no finish_reason or [DONE].
+load_cut_stream() {
+    "${LOAD[@]}" --base-url "http://127.0.0.1:${STUB_PORT}/v1" --model stub --requests 1 --max-tokens 256 --warmup 0 --out "${LJ}"
+    [ $? -eq 1 ] || return 1
+    pyassert "${LJ}" <<'EOF'
+ph = j["phases"][0]
+s = ph["samples"][0]
+assert not s["ok"] and "without a finish_reason" in s["error"] and s["content_chunks"] == 100, s
+assert ph["ok"] == 0 and ph["errors"] == 1, ph
+EOF
+}
 
 load_unique_prompts() {
     python3 -B - "${ROOT}/bench" <<'EOF'
@@ -180,6 +204,10 @@ check "llm_load: max_tokens is sent" load_max_tokens
 check "llm_load: wrong path is an error and a non-zero exit" load_wrong_path
 stub --tokens 4 --no-usage --close
 check "llm_load: no usage chunk leaves tokens null; non-chunked stream parses" load_no_usage
+stub --tokens 256 --itl 0 --die-at 252
+check "llm_load: a stream ended by engine death (error chunk, no finish_reason) is an error" load_engine_death
+stub --tokens 256 --itl 0 --cut-at 100 --close
+check "llm_load: a stream cut off without a finish_reason is an error" load_cut_stream
 
 # ---- noisy.sh -------------------------------------------------------------------
 
@@ -324,6 +352,59 @@ assert v["fn_n1_decode_median"] == 19.0 and v["lg_n1_decode_median"] == 48.0, v
 PY
 }
 check "flashnext (H60): a void try 1 then a clean re-run scores the re-run against the same-hold Lg" h60_void_rerun
+
+check "apb (H7x): h7x.py applies the H7x decision rule" \
+    env PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT}/bench/apb/test_h7x.py"
+check "apb (H7x): h7x.sh parses" bash -n "${ROOT}/bench/apb/h7x.sh"
+check "apb (H7x): h7x.sh defaults are H7's (16 CPUs, ABBAABBAAB then C, no node cpuset)" \
+    sh -c 'test "$(env -u K3D_GPU_CLUSTER H7X_PRINT_CONFIG=1 bash "$1")" = "cluster=apb-h7x cpus=16 node_cpus= order=A B B A A B B A A B C vllm_mem="' _ "${ROOT}/bench/apb/h7x.sh"
+# h7x_records_on_early_exit: a run whose first engine never comes up (exit 2, as smokes 1-3)
+# still records the k3d-gpu commit and the node image. h7x.sh runs from a copy of the repo
+# layout with scripts/k3d-gpu, helm, kubectl, docker, k3d and git as shims; the rendered
+# manifests are smoke 6's records.
+h7x_records_on_early_exit() {
+    local w=${WORK}/h7x rec=${ROOT}/bench/xhost/results/2026-10-21/H7x-smokes/smoke6/h7x-20261021-065424 out rc
+    mkdir -p "${w}/bench/apb" "${w}/scripts" "${w}/integrations/eat" "${w}/bin" "${w}/chart" "${w}/models" "${w}/out"
+    cp "${ROOT}/bench/apb/h7x.sh" "${ROOT}/bench/apb/stage.py" "${ROOT}/bench/apb/h7x.py" "${w}/bench/apb/"
+    cp "${ROOT}/integrations/eat/vllm-values.yaml" "${w}/integrations/eat/"
+    cp "${rec}/values.yaml" "${w}/chart/xeon-values.yaml"
+    printf '#!/bin/sh\ncase $1 in agent) cat "%s" ;; up) exit 0 ;; *) exit 1 ;; esac\n' "${rec}/agent.yaml" > "${w}/scripts/k3d-gpu"
+    printf '#!/bin/sh\ncat "%s"\n' "${rec}/eat.yaml" > "${w}/bin/helm"
+    printf '#!/bin/sh\ncase "$*" in *"rollout status"*) exit 1 ;; esac\nexit 0\n' > "${w}/bin/kubectl"
+    printf '#!/bin/sh\ncase $1 in ps) echo k3d-t-server-0 ;; inspect) echo "node:img sha256:feed" ;; esac\nexit 0\n' > "${w}/bin/docker"
+    printf '#!/bin/sh\nexit 0\n' > "${w}/bin/k3d"
+    printf '#!/bin/sh\ncase "$*" in *"rev-parse HEAD"*) echo c0ffee ;; *) exit 1 ;; esac\n' > "${w}/bin/git"
+    chmod +x "${w}/scripts/k3d-gpu" "${w}/bin/"*
+    PATH="${w}/bin:${PATH}" H7X_SMOKE=1 H7X_ORDER=A H7X_READY_S=1 H7X_NODE_CPUS=0-1 K3D_GPU_CLUSTER=t H7X_CHART_CHECK=0 \
+        APB_MODELS="${w}/models" APB_EAT_CHART="${w}/chart" APB_OUT="${w}/out" bash "${w}/bench/apb/h7x.sh"
+    rc=$?
+    out=$(echo "${w}"/out/h7x-*)
+    [ "${rc}" = 2 ] || { echo "exit ${rc}, want 2 (engine not up)"; return 1; }
+    grep -qx c0ffee "${out}/commit.txt" || { echo "commit.txt missing or wrong"; return 1; }
+    grep -qx "node:img sha256:feed" "${out}/node-image.txt" || { echo "node-image.txt missing or wrong"; return 1; }
+}
+if python3 -c 'import yaml' 2>/dev/null; then
+    check "apb (H7x): a run cut before its blocks still records the commit and node image" h7x_records_on_early_exit
+fi
+# h7x_refuses_other_chart: B and C are EAT release-1.1.0's stock (H7x amendment V1), so h7x.sh
+# stops before rendering when the chart's files do not have that release's sha256.
+h7x_refuses_other_chart() {
+    local w=${WORK}/h7x-chart out rc
+    mkdir -p "${w}/bench/apb" "${w}/chart/templates" "${w}/out"
+    cp "${ROOT}/bench/apb/h7x.sh" "${w}/bench/apb/"
+    printf 'image:\n  tag: "v0.24.0"\n' > "${w}/chart/xeon-values.yaml"
+    : > "${w}/chart/values.yaml"
+    : > "${w}/chart/templates/deployment.yaml"
+    out=$(H7X_RENDER_ONLY=1 K3D_GPU_CLUSTER=t APB_MODELS="${w}" APB_EAT_CHART="${w}/chart" APB_OUT="${w}/out" \
+        bash "${w}/bench/apb/h7x.sh" 2>&1)
+    rc=$?
+    [ "${rc}" = 1 ] || { echo "exit ${rc}, want 1"; return 1; }
+    echo "${out}" | grep -q "is not EAT release-1.1.0's chart" || { echo "no chart message: ${out}"; return 1; }
+    [ ! -e "$(echo "${w}"/out/h7x-*)/eat.yaml" ] || { echo "rendered B from the wrong chart"; return 1; }
+}
+check "apb (H7x): h7x.sh refuses a chart that is not EAT release-1.1.0's" h7x_refuses_other_chart
+check "apb (H7x): B and C run EAT release-1.1.0's v0.28.0, pinned by digest in h7x.sh" \
+    sh -c 'grep -qx "B_TAG=v0.28.0@sha256:197354e6475e638eb5ccca09beb078488046a82de0e204e7429bf1a804df9647" "$1" && grep -q -- "--set image.tag=\"\${B_TAG}\"" "$1"' _ "${ROOT}/bench/apb/h7x.sh"
 check "shared-prefix (H25): run.sh parses" bash -n "${ROOT}/bench/shared-prefix/run.sh"
 check "shared-prefix (H25): run.sh pins no node cpuset by default" \
     sh -c 'test "$(env -u CLUSTER -u NODE_CPUS SHARED_PREFIX_PRINT_CONFIG=1 bash "$1")" = "cluster=k3dgpu-i-shared-prefix node_cpus="' _ "${ROOT}/bench/shared-prefix/run.sh"
@@ -433,6 +514,12 @@ PY
 if python3 -c 'import yaml' 2>/dev/null; then
     check "thermal-resource probe: arms B/T/C request what H23 pre-registered" h23_arms
 fi
+# H7 and H8 ran EAT's vLLM CPU arm on v0.24.0 (their run headers). Their scripts pin that image
+# themselves, so a newer tag in the shared overlay integrations/eat/vllm-values.yaml does not
+# change what they reproduce.
+check "apb (H7, H8): h7.sh and arm.sh eat-vllm-cpu pin the vLLM CPU image those rows ran" \
+    sh -c 'for f in "$@"; do grep -q -- "--set image.tag=\"v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1\"" "$f" || { echo "$f"; exit 1; }; done' \
+    _ "${ROOT}/bench/apb/h7.sh" "${ROOT}/bench/apb/arm.sh"
 if command -v cc >/dev/null; then
     check "research: stream_probe.c compiles" \
         cc -fsyntax-only -fopenmp "${ROOT}/research/agents-per-box-ceiling/stream_probe.c"

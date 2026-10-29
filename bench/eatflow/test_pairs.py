@@ -931,5 +931,97 @@ class PrerunPinsTest(unittest.TestCase):
         self.assertIn("EAT_PR21=c86c42b073ee533e9fb9e9b9330b9d1478e4bf47", self.read("crescent", "setup.sh"))
 
 
+class B3RecordsTest(unittest.TestCase):
+    """H50o amendment O1 item 2: the records of B3's pulled model that the pre-registration names
+    (the init container's log, every file's sha256, the graph each hold serves), read from the
+    node's local-path volume by crescent/b3-records.sh, with docker and kubectl stubbed."""
+    MODEL = "OpenVINO/gemma-4-26b-a4b-it-int4-ov"
+
+    def setUp(self):
+        import hashlib
+        import subprocess
+        self.sp, self.hashlib = subprocess, hashlib
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp)
+        self.store = os.path.join(self.tmp, "storage")
+        self.bin = os.path.join(self.tmp, "bin")
+        os.makedirs(self.bin)
+        # docker exec NODE CMD...: run CMD here (the node is the test's own filesystem).
+        self.stub("docker", '[ "$1" = exec ] || exit 9\nshift 2\nexec "$@"\n')
+        # kubectl: echo its arguments, so each record shows which call wrote it.
+        self.stub("kubectl", 'echo "kubectl $*"\n')
+
+    def stub(self, name, body):
+        p = os.path.join(self.bin, name)
+        with open(p, "w") as f:
+            f.write("#!/usr/bin/env bash\n" + body)
+        os.chmod(p, 0o755)
+
+    def run_records(self):
+        out = os.path.join(self.tmp, "b3-model")
+        env = dict(os.environ, PATH=self.bin + os.pathsep + os.environ["PATH"], B3_STORAGE=self.store)
+        r = self.sp.run(["bash", os.path.join(HERE, "crescent", "b3-records.sh"), out, "k3d-node-0", self.MODEL],
+                        env=env, capture_output=True, text=True, timeout=60)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return out
+
+    def read(self, d, name):
+        with open(os.path.join(d, name)) as f:
+            return f.read()
+
+    def test_pulled_model_is_hashed_and_its_graph_kept(self):
+        vol = os.path.join(self.store, "pvc-1234_default_ovms-model-server")
+        mdir = os.path.join(vol, self.MODEL)
+        os.makedirs(os.path.join(mdir, ".git", "refs", "heads"))
+        files = {"openvino_model.bin": b"\x00weights" * 100, "graph.pbtxt": b"node: { calculator: \"HttpLLMCalculator\" }\n",
+                 "openvino_tokenizer.xml": b"<net/>"}
+        for n, b in files.items():
+            with open(os.path.join(mdir, n), "wb") as f:
+                f.write(b)
+        with open(os.path.join(vol, "config.json"), "w") as f:
+            f.write('{"model_config_list": []}')
+        with open(os.path.join(mdir, ".git", "HEAD"), "w") as f:
+            f.write("ref: refs/heads/main\n")
+        with open(os.path.join(mdir, ".git", "refs", "heads", "main"), "w") as f:
+            f.write("4e5885c3" + "0" * 32 + "\n")
+        d = self.run_records()
+        self.assertIn("pvc-1234_default_ovms-model-server", self.read(d, "volume.txt"))
+        sha = self.read(d, "sha256.txt")
+        for n, b in files.items():
+            self.assertIn("%s  ./%s/%s" % (self.hashlib.sha256(b).hexdigest(), self.MODEL, n), sha)
+        self.assertNotIn(".git", sha)                                   # the clone's metadata is not a model file
+        self.assertNotIn(".git", self.read(d, "files.txt"))
+        self.assertIn("%d ./%s/openvino_model.bin" % (len(files["openvino_model.bin"]), self.MODEL), self.read(d, "files.txt"))
+        git = self.read(d, "git.txt")
+        self.assertIn("HEAD ref: refs/heads/main", git)
+        self.assertIn("refs/heads/main 4e5885c3", git)
+        self.assertEqual(self.read(d, "graph.pbtxt"), files["graph.pbtxt"].decode())
+        self.assertEqual(self.read(d, "config.json"), '{"model_config_list": []}')
+        # The init container's log (what ovms --pull reported), the server's current and crashed runs.
+        self.assertIn("logs deploy/ovms-model-server -c model-downloader", self.read(d, "init.log"))
+        self.assertIn("logs deploy/ovms-model-server -c ovms --previous", self.read(d, "ovms-previous.log"))
+        self.assertIn("describe pod -l app.kubernetes.io/name=ovms-model-server", self.read(d, "describe.txt"))
+
+    def test_no_volume_records_the_objects_only(self):
+        os.makedirs(self.store)
+        d = self.run_records()
+        self.assertEqual(self.read(d, "volume.txt"), "volume: none\n")
+        self.assertFalse(os.path.exists(os.path.join(d, "sha256.txt")))
+        self.assertIn("get pvc,pod", self.read(d, "objects.txt"))
+
+    def test_live_sh_records_b3_when_ready_and_when_not(self):
+        with open(os.path.join(HERE, "live.sh")) as f:
+            live = f.read()
+        call = 'bash "${HERE}/crescent/b3-records.sh" "${OUT}/b3-model" "$(nodes | head -1)" "${B3_MODEL}"'
+        self.assertEqual(live.count(call), 2)
+        pairs = live.index('if [ "${MODE}" = pairs ]; then')
+        not_ready = live.index('echo "NOT DELIVERABLE: not ready with 900 s of the hold left" | tee -a "${OUT}/live.log"\n'
+                               '        kubectl get pods -A', pairs)
+        self.assertLess(not_ready, live.index(call), "recorded in the not-ready branch, before its exit 3")
+        self.assertLess(live.index(call), live.index("        exit 3\n    fi\n    stamp ready", not_ready))
+        self.assertLess(live.index("    stamp ready\n", not_ready), live.rindex(call))
+        self.assertLess(live.rindex(call), live.index('stamp "load ${LEVEL}"', not_ready))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

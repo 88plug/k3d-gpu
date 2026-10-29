@@ -1,0 +1,30 @@
+== H54c hold 1 card 2 image ghcr.io/ggml-org/llama.cpp:server-intel-b11749@sha256:ae2d41ba73574a1e12cd237c88b512c8bb39ba6f703e873912b76cb8988a81bd 2026-10-21T21:38:46Z
+== arm cg: -ngl 0 2026-10-21T21:38:59Z
+pod/cg created
+energy: zone=intel-rapl:0 (package-0) joules=7594.234 seconds=60.017 avg_watts=126.535 command_seconds=60.002 samples=13 exit=0
+concurrency=1 ok=8/8 ttft_median=1.131s ttft_p90=1.189s latency_median=8.059s tok/s_median=31.8 aggregate_tok/s=31.7
+energy: zone=intel-rapl:0 (package-0) joules=28210.068 seconds=106.587 avg_watts=264.668 command_seconds=106.571 samples=23 exit=0
+== arm cg done: {'n': 8, 'median': 36.84118741427883, 'p90': 36.97683194030288, 'min': 36.556750429710775, 'max': 36.97683194030288} 2026-10-21T21:45:18Z
+pod "cg" deleted from default namespace
+== arm gg: -ngl 99 2026-10-21T21:45:39Z
+pod/gg created
+energy: zone=intel-rapl:0 (package-0) joules=7548.230 seconds=60.018 avg_watts=125.766 command_seconds=60.002 samples=13 exit=0
+concurrency=1 ok=8/8 ttft_median=0.260s ttft_p90=0.356s latency_median=4.694s tok/s_median=54.5 aggregate_tok/s=54.8
+energy: zone=intel-rapl:0 (package-0) joules=6894.548 seconds=53.007 avg_watts=130.070 command_seconds=52.990 samples=12 exit=0
+== arm gg done: {'n': 8, 'median': 57.96706402151845, 'p90': 59.06204721313891, 'min': 57.36315493317884, 'max': 59.06204721313891} 2026-10-21T21:49:13Z
+pod "gg" deleted from default namespace
+== arm hg: -ngl 99 -ot exps=CPU 2026-10-21T21:49:34Z
+pod/hg created
+energy: zone=intel-rapl:0 (package-0) joules=7600.300 seconds=60.017 avg_watts=126.636 command_seconds=60.002 samples=13 exit=0
+concurrency=1 ok=8/8 ttft_median=0.958s ttft_p90=1.025s latency_median=5.466s tok/s_median=46.8 aggregate_tok/s=46.7
+energy: zone=intel-rapl:0 (package-0) joules=16520.610 seconds=64.762 avg_watts=255.099 command_seconds=64.746 samples=14 exit=0
+== arm hg done: {'n': 8, 'median': 56.3337991611167, 'p90': 57.32881973372036, 'min': 55.59073585692495, 'max': 57.32881973372036} 2026-10-21T21:53:20Z
+pod "hg" deleted from default namespace
+== arm gg2: -ngl 99 2026-10-21T21:53:41Z
+pod/gg2 created
+energy: zone=intel-rapl:0 (package-0) joules=7558.064 seconds=60.018 avg_watts=125.929 command_seconds=60.002 samples=13 exit=0
+concurrency=1 ok=8/8 ttft_median=0.261s ttft_p90=0.274s latency_median=4.707s tok/s_median=54.4 aggregate_tok/s=54.4
+energy: zone=intel-rapl:0 (package-0) joules=6924.788 seconds=53.205 avg_watts=130.154 command_seconds=53.188 samples=12 exit=0
+== arm gg2 done: {'n': 8, 'median': 57.38314863583636, 'p90': 57.450303048482, 'min': 57.196770789092085, 'max': 57.450303048482} 2026-10-21T21:57:16Z
+pod "gg2" deleted from default namespace
+== verdict INCONCLUSIVE 1.2612194709728874 2026-10-21T21:57:37Z

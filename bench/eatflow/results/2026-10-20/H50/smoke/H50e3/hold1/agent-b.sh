@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# (Re)start the b arm's banking agent and wait for its DevUI.
+[ -f '/home/devcloud/k3dgpu-bench/smoke/H50e3/hold1/agent-b.pid' ] && kill "$(cat '/home/devcloud/k3dgpu-bench/smoke/H50e3/hold1/agent-b.pid')" 2>/dev/null
+for _ in $(seq 100); do (exec 3<>/dev/tcp/127.0.0.2/8090) 2>/dev/null || break; sleep 0.1; done
+cd '/home/devcloud/k3dgpu-bench/eab/usecases/banking-assistant/src' && (OPENAI_BASE_URL=http://127.0.0.1:18621/v1 OPENAI_API_KEY=not-needed MODEL_NAME='google/gemma-4-26B-A4B-it' \
+    MCP_SERVER_URL=http://127.0.0.1:18600/mcp ENABLE_MEMORY=false AUTO_OPEN_BROWSER=false \
+    DEVUI_HOST=127.0.0.2 exec '/home/devcloud/k3dgpu-bench/mafvenv/bin/python' main.py >> '/home/devcloud/k3dgpu-bench/smoke/H50e3/hold1/agent-b.log' 2>&1 &
+    echo $! > '/home/devcloud/k3dgpu-bench/smoke/H50e3/hold1/agent-b.pid')
+for _ in $(seq 45); do
+    curl -fsS -o /dev/null --max-time 5 -H "Authorization: Bearer ${DEVUI_AUTH_TOKEN}" http://127.0.0.2:8090/v1/entities && exit 0
+    sleep 2
+done
+exit 1

@@ -1,0 +1,2 @@
+touch: cannot touch '/data/gemma-4-26B-A4B-it-qat-q4_0-unquantized/.k3dgpu-rw-probe': Read-only file system
+command terminated with exit code 1

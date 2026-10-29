@@ -19,6 +19,10 @@ Per request it records:
                    when the server sends no usage
   tokens_per_s     output_tokens / latency_s
   decode_tokens_per_s  (output_tokens - 1) / (latency_s - ttft_s)
+  finish_reason    the last non-null choices[].finish_reason
+A request is ok only when its stream carried content, no error object and a
+finish_reason: a stream the server ends early (vLLM sends an error chunk and
+[DONE] when its engine dies mid-decode) is an error, not a short completion.
 Each concurrency level is one phase: --requests requests, at most --concurrency
 in flight. The JSON has every sample plus median/p90/min/max per metric.
 """
@@ -86,7 +90,8 @@ def one_request(args, idx):
     if args.api_key:
         headers["Authorization"] = f"Bearer {args.api_key}"
     conn_cls = http.client.HTTPSConnection if scheme == "https" else http.client.HTTPConnection
-    sample = {"index": idx, "ok": False, "error": None, "chunks": 0, "content_chunks": 0, "text_chars": 0}
+    sample = {"index": idx, "ok": False, "error": None, "chunks": 0, "content_chunks": 0, "text_chars": 0,
+              "finish_reason": None}
     for m in METRICS:
         sample[m] = None
     t0 = time.perf_counter()
@@ -98,6 +103,8 @@ def one_request(args, idx):
             sample["error"] = f"HTTP {resp.status}: {resp.read(500).decode('utf-8', 'replace')}"
             return sample
         usage = None
+        finish = None
+        stream_error = None
         done = False
         while not done:
             raw = resp.readline()
@@ -117,7 +124,13 @@ def one_request(args, idx):
             sample["chunks"] += 1
             if chunk.get("usage"):
                 usage = chunk["usage"]
+            if "error" in chunk or chunk.get("object") == "error":
+                err = chunk.get("error", chunk)
+                msg = err.get("message") if isinstance(err, dict) else err
+                stream_error = str(msg or err)[:500]
             for choice in chunk.get("choices") or []:
+                if choice.get("finish_reason"):
+                    finish = choice["finish_reason"]
                 delta = choice.get("delta") or {}
                 # reasoning_content: vLLM/OVMS; reasoning: Ollama's OpenAI layer
                 # (openai/openai.go, v0.40.5), which streams Qwen3 thinking there.
@@ -131,8 +144,15 @@ def one_request(args, idx):
         sample["latency_s"] = time.perf_counter() - t0
         resp.read()  # the rest of the body (chunked terminator), so close() is clean
         conn.close()
+        sample["finish_reason"] = finish
+        if stream_error is not None:
+            sample["error"] = f"error in stream: {stream_error}"
+            return sample
         if sample["ttft_s"] is None:
             sample["error"] = "stream ended without any content"
+            return sample
+        if finish is None:
+            sample["error"] = "stream ended without a finish_reason"
             return sample
         if usage and isinstance(usage.get("completion_tokens"), int):
             n = usage["completion_tokens"]

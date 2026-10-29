@@ -44,7 +44,7 @@
       "device": "NVIDIA GPU, Vulkan",
       "engine": {
         "device": "Vulkan",
-        "image": "ghcr.io/ggml-org/llama.cpp@sha256:be586c648cb79d2cd75d0c38a6541e1f16c47a7c6621d3e711470a467fc38744",
+        "image": "ghcr.io/ggml-org/llama.cpp@sha256:c9aba1a673382ad356a72fb63e6cd73e8c021797e904b6c099bfe130217df62e",
         "name": "llama.cpp"
       },
       "evidence": {
@@ -83,7 +83,7 @@
       "device": "UHD 770, Vulkan",
       "engine": {
         "device": "Vulkan",
-        "image": "ghcr.io/ggml-org/llama.cpp@sha256:be586c648cb79d2cd75d0c38a6541e1f16c47a7c6621d3e711470a467fc38744",
+        "image": "ghcr.io/ggml-org/llama.cpp@sha256:c9aba1a673382ad356a72fb63e6cd73e8c021797e904b6c099bfe130217df62e",
         "name": "llama.cpp"
       },
       "evidence": {

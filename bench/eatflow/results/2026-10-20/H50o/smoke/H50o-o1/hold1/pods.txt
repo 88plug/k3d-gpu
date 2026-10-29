@@ -1,0 +1,11 @@
+NAMESPACE                NAME                                      READY   STATUS             RESTARTS     AGE
+default                  ovms-model-server-58cb86c4d5-j7rb8        0/1     CrashLoopBackOff   4 (9s ago)   4m37s
+k3d-gpu-agent            ovms-6bf6fd95f6-d4992                     1/1     Running            0            4m37s
+kube-system              coredns-577d995dff-tgth7                  1/1     Running            0            5m24s
+kube-system              helm-install-gateway-api-crd-5mqpm        0/1     Completed          0            5m24s
+kube-system              intel-gpu-plugin-4vlml                    1/1     Running            0            5m24s
+kube-system              local-path-provisioner-6858d854cf-wx6cn   1/1     Running            0            5m24s
+kube-system              metrics-server-778c4649b4-2cp4s           1/1     Running            0            5m24s
+node-feature-discovery   nfd-gc-7d6955597d-76vf5                   1/1     Running            0            5m24s
+node-feature-discovery   nfd-master-74b6cfb7df-qgtk5               1/1     Running            0            5m24s
+node-feature-discovery   nfd-worker-jcxl5                          1/1     Running            0            5m24s

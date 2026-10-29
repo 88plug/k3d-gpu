@@ -1,0 +1,7 @@
+{"B2q": {"run": null, "correct": null, "rank": 1, "cards": 2},
+ "Sq": {"run": null, "correct": null, "rank": 1, "cards": 1},
+ "Sq-mtp": {"run": null, "correct": null, "rank": 1, "cards": 1},
+ "Rq": {"run": null, "correct": null, "rank": 2, "cards": 1},
+ "X1q": {"run": null, "correct": null, "rank": 1, "cards": 1},
+ "X1q-mtp": {"run": null, "correct": null, "rank": 1, "cards": 1},
+ "Lsq": {"run": "hold2/lsq.n1.json", "correct": 48, "rank": 1, "cards": 4}}

@@ -1,0 +1,20 @@
+== campaign waiting for the lock 2026-10-21T21:07:09Z
+== campaign lock taken 2026-10-21T21:12:26Z
+== campaign qwen38-b-hr stopped 2026-10-21T21:12:32Z
+== H54b-hold1 lock held by the caller 2026-10-21T21:12:53Z
+== H54b-hold1 start: bash /home/devcloud/k3dgpu-gemma/k3d-gpu/bench/h54gpu/h54b.sh 1 X1q 2026-10-21T21:12:53Z
+== H54b-hold1 rc=0; clusters deleted: k3dgpu-g-h54b-1; now:  2026-10-21T21:15:08Z
+== campaign hold 1 rc=0 2026-10-21T21:15:08Z
+== fetch Intel/Qwen3.8-27B-q4km-AutoRound@4b30b30e0ac2cc54a2f50738cfccd6c608f94ad4 (24.7 GB, dir) 2026-10-21T21:15:08Z
+Fetching 4 files:   0%|          | 0/4 [00:00<?, ?it/s]Fetching 4 files:  25%|██▌       | 1/4 [00:00<00:00,  3.33it/s]Fetching 4 files:  75%|███████▌  | 3/4 [00:42<00:14, 14.07s/it]Fetching 4 files: 100%|██████████| 4/4 [02:48<00:00, 42.21s/it]Fetching 4 files: 100%|██████████| 4/4 [02:48<00:00, 42.21s/it]
+== fetch Intel/Qwen3.8-27B-q4km-AutoRound rc=0 df 95% 2026-10-21T21:17:58Z
+== campaign fetch Intel/Qwen3.8-27B-q4km-AutoRound rc=0 2026-10-21T21:17:58Z
+== H54b-hold2 lock held by the caller 2026-10-21T21:17:58Z
+== H54b-hold2 start: bash /home/devcloud/k3dgpu-gemma/k3d-gpu/bench/h54gpu/h54b.sh 2 X1q-mtp Lsq 2026-10-21T21:17:58Z
+== H54b-hold2 rc=0; clusters deleted: k3dgpu-g-h54b-2; now:  2026-10-21T21:38:45Z
+== campaign hold 2 rc=0 2026-10-21T21:38:45Z
+== H54c-hold1 lock held by the caller 2026-10-21T21:38:45Z
+== H54c-hold1 start: bash /home/devcloud/k3dgpu-gemma/k3d-gpu/bench/h54gpu/h54c.sh 1 2 2026-10-21T21:38:45Z
+== H54c-hold1 rc=0; clusters deleted: k3dgpu-g-h54c-1; now:  2026-10-21T21:57:40Z
+== campaign hold c1 rc=0 2026-10-21T21:57:40Z
+== campaign qwen38-b-hr restored, chat ok 2026-10-21T21:58:57Z

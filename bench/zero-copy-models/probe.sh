@@ -185,6 +185,9 @@ mi() { awk -v k="$1:" '$1 == k { print $2 }' /proc/meminfo; }  # kB
 
 # RAPL package energy (root-only): sudo -n, else K3D_GPU_RAPL_EXEC (set to a
 # docker exec into the privileged node once the cluster exists; load.py reads it too).
+# rapl_exec: a K3D_GPU_RAPL_EXEC given by the caller (wildct rule W4: hold.sh's reader on the
+# load CPUs) is kept; otherwise, without sudo -n, the docker exec into the node.
+rapl_exec() { [ -n "${K3D_GPU_RAPL_EXEC:-}" ] || sudo -n true 2>/dev/null || export K3D_GPU_RAPL_EXEC="docker exec k3d-${CL}-server-0"; }
 rapl_uj() {
     sudo -n cat /sys/class/powercap/intel-rapl:0/energy_uj 2>/dev/null && return 0
     # shellcheck disable=SC2086 # a command prefix, split on purpose
@@ -329,7 +332,7 @@ run_locked() {
     k3d cluster create "${CL}" --image "${IMAGE}" --wait --kubeconfig-update-default=false \
         --kubeconfig-switch-context=false "${CREATE_ARGS[@]}" >/dev/null
     docker update --cpuset-cpus "${NODECPUS}" "k3d-${CL}-server-0" >/dev/null
-    sudo -n true 2>/dev/null || export K3D_GPU_RAPL_EXEC="docker exec k3d-${CL}-server-0"
+    rapl_exec
     k3d kubeconfig get "${CL}" > "${KUBECONFIG}"
     imgs=("${PYIMG}")
     for _ in $(seq 0 "${NR}"); do imgs+=("h28-model:r${r}"); r=$((r + 1)); done
@@ -397,5 +400,6 @@ case "${1:-}" in
     _rounds) run_locked ;;
     render) pod "${2:?arm T|C}" "${3:?round}" "${4:?index}" ;;
     create-args) echo "${CREATE_ARGS[*]}" ;;
+    rapl-exec) rapl_exec; echo "${K3D_GPU_RAPL_EXEC:-sudo -n}" ;;
     *) echo "usage: $0 prep|run|render ARM ROUND I" >&2; exit 2 ;;
 esac

@@ -1,0 +1,13 @@
+== render 2026-10-21T04:12:26Z (+0s)
+vLLM memory limit 22Gi from k3d-gpu fit
+== up 2026-10-21T04:12:27Z (+1s)
+node cpuset 0-7,48-55
+== stage 2026-10-21T04:13:08Z (+42s)
+== block 1 engine B start 2026-10-21T04:13:25Z (+59s)
+== block 1 engine B ready 2026-10-21T04:15:46Z (+200s)
+== block 2 engine C start 2026-10-21T04:15:46Z (+200s)
+error: timed out waiting for the condition
+block 2 engine C did not come up
+== finished 2026-10-21T04:45:48Z (+2002s)
+== cleanup 2026-10-21T04:45:48Z (+2002s)
+== deleted 2026-10-21T04:45:51Z (+2005s)

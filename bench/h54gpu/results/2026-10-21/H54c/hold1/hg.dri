@@ -1,0 +1,10 @@
+total 0
+crw-rw---- 1 root video 226,   0 Oct 21 21:49 card0
+crw-rw---- 1 root video 226,   1 Oct 21 21:49 card1
+crw-rw---- 1 root video 226,   2 Oct 21 21:49 card2
+crw-rw---- 1 root video 226,   3 Oct 21 21:49 card3
+crw-rw---- 1 root video 226,   4 Oct 21 21:49 card4
+crw-rw---- 1 root   990 226, 128 Oct 21 21:49 renderD128
+crw-rw---- 1 root   990 226, 129 Oct 21 21:49 renderD129
+crw-rw---- 1 root   990 226, 130 Oct 21 21:38 renderD130
+crw-rw---- 1 root   990 226, 131 Oct 21 21:49 renderD131

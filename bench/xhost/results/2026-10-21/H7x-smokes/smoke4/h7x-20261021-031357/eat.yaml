@@ -1,0 +1,253 @@
+---
+# Source: vllm/templates/secret.yaml
+# Copyright (C) 2025-2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vllm-qwen-3-4b-cpu-secret
+  labels:
+    app:
+    helm.sh/chart: vllm-0-latest
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/instance: vllm-qwen-3-4b-cpu
+    app.kubernetes.io/version: "0.5"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+---
+# Source: vllm/templates/configmap.yaml
+# Copyright (C) 2025-2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vllm-qwen-3-4b-cpu-config
+  labels:
+    helm.sh/chart: vllm-0-latest
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/instance: vllm-qwen-3-4b-cpu
+    app.kubernetes.io/version: "0.5"
+    app.kubernetes.io/managed-by: Helm
+data:
+  http_proxy: ""
+  https_proxy: ""
+  no_proxy: ""
+  TORCHINDUCTOR_CACHE_DIR: "/tmp"
+  NUMBA_CACHE_DIR: "/tmp"
+  HF_HOME: "/data"
+  OUTLINES_CACHE_DIR: "/tmp/.cache/outlines"
+  VLLM_NO_USAGE_STATS: "1"
+  DO_NOT_TRACK: "1"
+  HF_HUB_DISABLE_XET: "1"
+  TORCH_INDUCTOR_CACHE_DIR: "/tmp/torchinductor_cache"
+  TRITON_CACHE_DIR: "/tmp/.triton"
+  USER: "vllm"
+  VLLM_ALLOW_LONG_MAX_MODEL_LEN: "1"
+  VLLM_CPU_KVCACHE_SPACE: "6"
+  VLLM_CPU_NUM_OF_RESERVED_CPU: "0"
+  VLLM_CPU_SGL_KERNEL: "1"
+  VLLM_ENGINE_ITERATION_TIMEOUT_S: "120"
+  VLLM_RPC_TIMEOUT: "100000"
+---
+# Source: vllm/templates/pvc.yaml
+# Copyright (C) 2025-2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vllm-qwen-3-4b-cpu-pvc
+  namespace: default
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 250Gi # Adjust this according to model storage size
+---
+# Source: vllm/templates/service.yaml
+# Copyright (C) 2025-2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-qwen-3-4b-cpu-service
+  labels:
+    helm.sh/chart: vllm-0-latest
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/instance: vllm-qwen-3-4b-cpu
+    app.kubernetes.io/version: "0.5"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 2080
+      protocol: TCP
+      name: vllm
+  selector:
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/instance: vllm-qwen-3-4b-cpu
+---
+# Source: vllm/templates/deployment.yaml
+# Copyright (C) 2025-2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-qwen-3-4b-cpu
+  labels:
+    helm.sh/chart: vllm-0-latest
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/instance: vllm-qwen-3-4b-cpu
+    app.kubernetes.io/version: "0.5"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vllm
+      app.kubernetes.io/instance: vllm-qwen-3-4b-cpu
+  template:
+    metadata:
+      annotations:
+        balloon.balloons.resource-policy.nri.io: "performance"
+      labels:
+        app.kubernetes.io/name: vllm
+        app.kubernetes.io/instance: vllm-qwen-3-4b-cpu
+        name: vllm
+    spec:
+      #
+      # serviceAccountName: default
+      securityContext:
+        null
+      containers:
+        - name: vllm
+          envFrom:
+            - configMapRef:
+                name: vllm-qwen-3-4b-cpu-config
+            - secretRef:
+                name: vllm-qwen-3-4b-cpu-secret
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              add:
+              - SYS_NICE
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1001
+            seccompProfile:
+              type: RuntimeDefault
+          image: "vllm/vllm-openai-cpu:v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1"
+          imagePullPolicy: IfNotPresent
+          # command:
+          #   - /bin/bash
+          #   - -c
+          #   - |
+          #     python3 -m vllm.entrypoints.openai.api_server --dtype bfloat16  --model Qwen/Qwen3-4B --port 2080 --tensor-parallel-size 1 --block-size 128 --max-model-len 8192 --disable-log-requests
+          args:
+            - "--block-size"
+            - "128"
+            - "--dtype"
+            - "bfloat16"
+            - "--distributed_executor_backend"
+            - "mp"
+            - "--enable_chunked_prefill"
+            - "--enforce-eager"
+            - "--max-num-batched-tokens"
+            - "2048"
+            - "--max-num-seqs"
+            - "256"
+            - "--enable-prefix-caching"
+            # CPU deployment - add parallelism settings
+            - "--tensor-parallel-size"
+            - "1"
+            - "--pipeline-parallel-size"
+            - "1"
+            - "--model"
+            - "Qwen/Qwen3-4B"
+            - --served-model-name
+            - "Qwen/Qwen3-4B"
+            - "--port"
+            - "2080"
+          volumeMounts:
+            - mountPath: /data
+              name: model-volume
+            - mountPath: /dev/shm
+              name: shm
+            - mountPath: /tmp
+              name: tmp
+            - mountPath: /root/.cache/vllm
+              name: vllm-cache
+          ports:
+            - name: http
+              containerPort: 2080
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 98
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 120
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: "16"
+              memory: "32Gi"
+            limits:
+              cpu: "16"
+              memory: "32Gi"
+            
+      volumes:
+        - name: model-volume
+          persistentVolumeClaim:
+            claimName: vllm-qwen-3-4b-cpu-pvc
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+        - name: tmp
+          emptyDir: {}
+        - name: vllm-cache
+          emptyDir: {}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: ei-inference-eligible
+                operator: In
+                values:
+                - "true"
+      # extra time to finish processing buffered requests on CPU before pod is forcibly terminated
+      terminationGracePeriodSeconds: 120
+---
+# Source: vllm/templates/apisixroutes.yaml
+# Copyright (C) 2025-2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+---
+# Source: vllm/templates/chat-template-configmap.yaml
+# Copyright (C) 2025-2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+---
+# Source: vllm/templates/ingress.yaml
+# Copyright (C) 2025-2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+# Please edit the object below. Lines beginning with a '#' will be ignored,
+# and an empty file will abort the edit. If an error occurs while saving this file will be
+# reopened with the relevant failures.
+---
+# Source: vllm/templates/ingress_eks.yaml
+# Copyright (C) 2025-2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+---
+# Source: vllm/templates/route.yaml
+# Copyright (C) 2025-2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+---
+# Source: vllm/templates/servicemonitor.yaml
+# Copyright (C) 2025-2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
