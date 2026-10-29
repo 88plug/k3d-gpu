@@ -889,5 +889,47 @@ class H53Test(unittest.TestCase):
         self.assertLess(i_check, i_run)
 
 
+class PrerunPinsTest(unittest.TestCase):
+    """Crescent amendments E1 and E2 (EXPERIMENTS.md, 2026-10-29): every crescent agent-row
+    wrapper names the pre-registered 0.1.61 node image; H50 and H51 render B1 from EAT
+    release-1.1.0's vllm chart with its v0.28.0 image; live.sh keeps v0.24.0 as its default."""
+
+    NODE = ("cryptoandcoffee/k3d-gpu:0.1.61@sha256:"
+            "8cd264aa68c77681d7fa474693944de0db8d55de5881253e4029bf72a67e175c")
+    V024 = "v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1"
+    V028 = "v0.28.0@sha256:197354e6475e638eb5ccca09beb078488046a82de0e204e7429bf1a804df9647"
+
+    def read(self, *path):
+        with open(os.path.join(HERE, *path)) as f:
+            return f.read()
+
+    def test_live_sh_b1_tag_is_a_parameter_with_the_old_default(self):
+        live = self.read("live.sh")
+        self.assertIn("B1_TAG=${LIVE_EAT_B1_TAG:-%s}" % self.V024, live)
+        self.assertEqual(live.count("printf 'image:\\n  tag: \"%s\"\\n' \"${B1_TAG}\" > \"${OUT}/pin.yaml\""), 2)
+        self.assertNotIn("tag: \"v0.24.0@", live)                   # no hard-coded B1 pin left
+
+    def test_wrappers_pin_the_node_image(self):
+        for name in ("pairs-hold.sh", "apb-hold.sh", "solo-hold.sh"):
+            sh = self.read("crescent", name)
+            self.assertIn("NODE_IMAGE=%s\n" % self.NODE, sh, name)
+            self.assertIn('env K3D_GPU_IMAGE="${NODE_IMAGE}" K3D_GPU_K3S_ARGS=', sh, name)
+        # The same pin the H54b/H54c runner and the H52 run used.
+        self.assertIn(self.NODE, self.read("..", "h54gpu", "lib.sh"))
+        with open(os.path.join(HERE, "..", "..", "EXPERIMENTS.md")) as f:
+            self.assertIn(self.NODE.split("@")[1], f.read())
+
+    def test_h50_and_h51_run_eat_release_110_b1(self):
+        for name in ("pairs-hold.sh", "apb-hold.sh"):
+            sh = self.read("crescent", name)
+            self.assertIn("B1_TAG=%s\n" % self.V028, sh, name)
+            self.assertIn('LIVE_EAT_CHART="${B}/eat-pr21/core/helm-charts/vllm" LIVE_EAT_B1_TAG="${B1_TAG}"', sh, name)
+            self.assertNotIn("eat-src/core/helm-charts/vllm", sh, name)
+        # B3 (H50o) keeps the 0d3438d OVMS chart copy: release-1.1.0's renders the same objects.
+        self.assertIn('LIVE_EAT_OVMS_CHART="${B}/eat-src/core/helm-charts/ovms"', self.read("crescent", "pairs-hold.sh"))
+        # eat-pr21 is EAT PR #21's head, whose tree is release-1.1.0's (0c726f57).
+        self.assertIn("EAT_PR21=c86c42b073ee533e9fb9e9b9330b9d1478e4bf47", self.read("crescent", "setup.sh"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)
