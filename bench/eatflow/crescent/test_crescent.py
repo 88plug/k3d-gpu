@@ -567,7 +567,13 @@ class H52bRunnerTest(unittest.TestCase):
         return subprocess.Popen(["bash", os.path.join(HERE, "h52b.sh"), self.out], env=dict(self.env, **env),
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
+    NEEDRESTART = "sudo -n timeout 120 needrestart -b -r l"
+
     def logged(self):
+        """The stub log without the needrestart reads (test_needrestart_read_twice counts them)."""
+        return [x for x in self.raw() if x != self.NEEDRESTART]
+
+    def raw(self):
         if not os.path.exists(self.log):
             return []
         with open(self.log) as f:
@@ -592,6 +598,13 @@ class H52bRunnerTest(unittest.TestCase):
             self.assertEqual(f.read().splitlines(), H52B_REVERTS)
         with open(os.path.join(self.out, "plan-gate.txt")) as f:
             self.assertEqual(f.read().splitlines()[-1], "gate: pass (8 commands)")
+
+    def test_needrestart_read_twice(self):
+        self.assertEqual(self.start().wait(60), 0)
+        raw = self.raw()
+        self.assertEqual(raw.count(self.NEEDRESTART), 2)
+        self.assertLess(raw.index(self.NEEDRESTART), raw.index("k3d-gpu host-setup --plan --with-kernel-wqs"))
+        self.assertEqual(raw[-1], self.NEEDRESTART)
 
     def test_plan_gate_stops_before_apply(self):
         with open(self.plan) as f:

@@ -12,8 +12,9 @@
 #   6. inventory.sh, the third read (inventory-3.txt), and the diff of the first and third
 #      reads without their first lines (inventory-diff.txt; empty when equal)
 # Also saved before and after, read-only and not scored: dpkg-query for the accel-config
-# package (D2 item 6: it stays installed), lsmod, /proc/crypto's deflate-iaa entry and the
-# iaa_crypto driver's work queues and settings. Once --apply has started, an exit for any
+# package (D2 item 6: it stays installed), lsmod, needrestart's list of pending service restarts
+# (batch, list mode: on Ubuntu its APT hook restarts those services itself after an install),
+# /proc/crypto's deflate-iaa entry and the iaa_crypto driver's work queues and settings. Once --apply has started, an exit for any
 # reason (TERM or INT included) still deletes the cluster, runs the reverts and takes the third
 # read before it returns. Exit 0: every step ran (the records carry the outcome); 3: stopped at
 # the plan; 128+N: stopped by signal N after the reverts.
@@ -34,6 +35,8 @@ reads() {    # reads TAG
     local w q
     dpkg-query -W -f='${Package} ${Version} ${db:Status-Status}\n' accel-config libaccel-config1 > "${OUT}/dpkg-$1.txt" 2>&1
     lsmod > "${OUT}/lsmod-$1.txt" 2>&1
+    # shellcheck disable=SC2024  # the record is ours; only needrestart's scan needs root
+    sudo -n timeout 120 needrestart -b -r l > "${OUT}/needrestart-$1.txt" 2>&1
     awk '/^name/ {p = 0} /^driver *: deflate-iaa/ {p = 1} p' /proc/crypto > "${OUT}/crypto-$1.txt" 2>&1
     { for a in sync_mode verify_compress; do echo "${a}=$(cat "/sys/bus/dsa/drivers/crypto/${a}" 2>/dev/null)"; done
       w=""; for q in /sys/bus/dsa/drivers/crypto/wq*; do [ -e "${q}" ] && w+=" ${q##*/}"; done; echo "wqs=${w# }"; } > "${OUT}/iaa-crypto-$1.txt"

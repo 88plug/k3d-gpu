@@ -2689,7 +2689,12 @@ SUPPORTED and REFUTED rule are unchanged.
    exit, the hold's own TERM included, first deletes `k3dgpu-h52b` if it is still there, then
    runs the reverts and the third read. Saved beside the scored records and not scored: the
    `dpkg-query` lines for `accel-config` and `libaccel-config1`, `lsmod`, the `deflate-iaa` entry
-   of `/proc/crypto`, and the `iaa_crypto` driver's work queues and settings, before and after.
+   of `/proc/crypto`, the `iaa_crypto` driver's work queues and settings, and `needrestart -b -r l`
+   (list only), before and after. Disclosed: on Ubuntu 26.04, needrestart's APT hook restarts
+   services whose libraries changed after any package install, so the plan's `accel-config`
+   install may restart some. On 2026-10-29 at 10:30Z it listed `dbus` (which it never restarts),
+   `networkd-dispatcher`, `systemd-logind` and `unattended-upgrades`; `docker` is excluded by its
+   configuration. `--apply`'s output records what it restarted.
    Tests: `H52bHelperTest` and `H52bRunnerTest` in `bench/eatflow/crescent/test_crescent.py`.
 2. **Deploy commit.** Crescent amendment E2 item 2 runs each hold from a clean checkout of
    `origin/main`. The runner is not on main yet, so H52b's hold runs from this amendment's
