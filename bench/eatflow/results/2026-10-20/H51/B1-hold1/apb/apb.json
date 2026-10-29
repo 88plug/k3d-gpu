@@ -1,0 +1,32 @@
+{
+ "arm": "B1",
+ "level": "typical",
+ "slo_s": 10.0,
+ "step_s": 300.0,
+ "ramp": [
+  1,
+  2,
+  4,
+  8,
+  16
+ ],
+ "base_success": 0.9310344827586207,
+ "apb": 0,
+ "steps": [
+  {
+   "n": 1,
+   "pass": false,
+   "checks": {
+    "n_requests": 58,
+    "p95_s": 11.516896,
+    "success": 0.9310344827586207,
+    "error_rate": 0.0,
+    "p95_ok": false,
+    "success_ok": true,
+    "errors_ok": true,
+    "n_ok": false
+   },
+   "window_from": 1793268054.2331667
+  }
+ ]
+}

@@ -1,0 +1,15 @@
+2026-10-29T09:55:52Z
+ 09:55:52 up 43 days, 11:10, 10 users,  load average: 8.13, 35.01, 28.95
+%CPU     PID USER     COMMAND
+ 100 1338518 devcloud ps
+46.0 3900003 root     sglang::schedul
+43.9 3900352 root     sglang::schedul
+41.9  529626 root     sglang::schedul
+39.6  529961 root     sglang::schedul
+24.6 3898329 root     python
+17.5  528967 root     python
+15.7  872705 65532    epp
+ 2.6    3911 nobody   node_exporter
+ 1.2    3934 root     python3
+aiperf_procs: 0
+/dev/nvme0n1p1  3637102748 1027001036 2610085328      29% /

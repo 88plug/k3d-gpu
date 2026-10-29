@@ -574,7 +574,17 @@ class H45ScoreTest(unittest.TestCase):
 
 class H51ScoreTest(RampBase, unittest.TestCase):
     """H51 (EXPERIMENTS.md "H50-H52 pre-registration"): H45's graded ramp extended to N=16 on
-    the Xeon 6741P, arms A1 and B1; predictions A1 in [1, 8], B1 in [0, 4], and B1 <= A1."""
+    the Xeon 6741P, arms A1 and B1; predictions as restated by crescent amendment M1 (H51
+    amendment S1): A1 in [1, 4], B1 in [0, 4], and B1 <= A1."""
+
+    def test_ranges_are_m1s(self):
+        self.assertEqual(AB.H51_RANGES, {"A1": (1, 4), "B1": (0, 4)})
+        r = AB.h51_score({"A1": br(8), "B1": br(2)}, MATCHED)       # inside the first-written [1, 8], not M1's
+        self.assertEqual((r["arms"]["A1"]["status"], r["verdict"]), ("refuted", "REFUTED"))
+        r = AB.h51_score({"A1": br(4, 8), "B1": br(2)}, MATCHED)    # straddles M1's upper edge
+        self.assertEqual((r["arms"]["A1"]["status"], r["verdict"]), ("undecided", "INCONCLUSIVE"))
+        r = AB.h51_score({"A1": br(1), "B1": br(0)}, MATCHED)
+        self.assertEqual((r["arms"]["A1"]["range"], r["verdict"]), ([1, 4], "SUPPORTED"))
 
     def test_the_ramp_runs_to_sixteen(self):
         self.assertEqual(AB.H51_RAMP, (1, 2, 4, 8, 16))

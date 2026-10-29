@@ -1,0 +1,25 @@
+{
+  "schema": "k3d-gpu.capacity-state/1",
+  "inputs": {
+    "node": "905a08313800",
+    "cpu_model": "Intel(R) Xeon(R) 6741P",
+    "engine": "unspecified",
+    "model": "gemma-4-26b-a4b-it",
+    "endpoint": "http://127.0.0.1:18630/v1/chat/completions",
+    "image": null,
+    "slo_s": 10.0,
+    "trace": "support",
+    "time_scale": 1.0,
+    "extra": {
+      "chat_template_kwargs": {
+        "enable_thinking": false
+      }
+    }
+  },
+  "lo": 0,
+  "hi": null,
+  "base_tool": null,
+  "steps": [],
+  "runs": 1,
+  "updated_at": 1793267618.1849017
+}

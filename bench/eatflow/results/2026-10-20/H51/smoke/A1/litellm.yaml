@@ -1,0 +1,7 @@
+model_list:
+  - model_name: google/gemma-4-26B-A4B-it
+    litellm_params:
+      model: openai/gemma-4-26b-a4b-it
+      api_base: http://127.0.0.1:18630/v1
+      api_key: not-needed
+      timeout: 600

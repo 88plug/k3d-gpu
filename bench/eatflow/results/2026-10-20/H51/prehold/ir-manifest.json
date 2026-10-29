@@ -1,0 +1,234 @@
+{
+ "source": {
+  "repo": "google/gemma-4-26B-A4B-it-qat-q4_0-unquantized",
+  "revision": "f1e06dc520982d9b9edd76859fdb7ab209449949"
+ },
+ "task": "image-text-to-text",
+ "weights": "int4 sym, group 32, ratio 1.0",
+ "command": [
+  "/home/devcloud/k3dgpu-gemma/ovenv/bin/optimum-cli",
+  "export",
+  "openvino",
+  "--model",
+  "/home/devcloud/k3dgpu-gemma/models/google_gemma-4-26B-A4B-it-qat-q4_0-unquantized",
+  "--task",
+  "image-text-to-text",
+  "--weight-format",
+  "int4",
+  "--sym",
+  "--group-size",
+  "32",
+  "--ratio",
+  "1.0",
+  "--backup-precision",
+  "none",
+  "/home/devcloud/k3dgpu-gemma/models/k3dgpu_gemma-4-26B-A4B-it-qat-int4-sym-g32-ov"
+ ],
+ "qat_grid": {
+  "openvino_language_model-export": {
+   "matched": 325,
+   "skipped": 0,
+   "summary": {
+    "attention": {
+     "n": 115,
+     "median": 0.05143,
+     "max": 0.05414
+    },
+    "experts": {
+     "n": 90,
+     "median": 0.07967,
+     "max": 0.07982
+    },
+    "other": {
+     "n": 120,
+     "median": 0.07837,
+     "max": 0.0796
+    }
+   }
+  },
+  "openvino_language_model-snapped": {
+   "matched": 325,
+   "skipped": 0,
+   "summary": {
+    "attention": {
+     "n": 115,
+     "median": 0.00186,
+     "max": 0.0019
+    },
+    "experts": {
+     "n": 90,
+     "median": 0.00188,
+     "max": 0.00189
+    },
+    "other": {
+     "n": 120,
+     "median": 0.00188,
+     "max": 0.00192
+    }
+   }
+  },
+  "openvino_text_embeddings_model-export": {
+   "matched": 0,
+   "skipped": 0,
+   "summary": {}
+  },
+  "openvino_text_embeddings_per_layer_model-export": {
+   "matched": 0,
+   "skipped": 0,
+   "summary": {}
+  },
+  "openvino_vision_embeddings_model-export": {
+   "matched": 0,
+   "skipped": 0,
+   "summary": {}
+  },
+  "snap-openvino_language_model": {
+   "weights": 325,
+   "snapped": 325,
+   "skipped": {
+    "no_match": 0,
+    "not_i4": 0,
+    "size": 0,
+    "far": 0
+   },
+   "max_pre": 0.15,
+   "summary": {
+    "attention": {
+     "n": 115,
+     "pre_median": 0.05143,
+     "pre_max": 0.05414,
+     "snapped_vs_export_max": 0.05457
+    },
+    "experts": {
+     "n": 90,
+     "pre_median": 0.07967,
+     "pre_max": 0.07982,
+     "snapped_vs_export_max": 0.08048
+    },
+    "other": {
+     "n": 120,
+     "pre_median": 0.07837,
+     "pre_max": 0.0796,
+     "snapped_vs_export_max": 0.08034
+    }
+   }
+  }
+ },
+ "export_seconds": 339,
+ "pins": [
+  "nncf==3.4.0",
+  "openvino==2026.4.1",
+  "openvino-tokenizers==2026.4.1.0",
+  "optimum==2.3.0",
+  "optimum-intel==2.2.0",
+  "torch==2.14.1+cpu",
+  "transformers==5.5.4"
+ ],
+ "note": "transformers 5.5.4: the newest optimum-intel 2.2.0 accepts (latest 5.20.2). Task image-text-to-text: optimum-intel registers gemma4 for that task only.",
+ "files": {
+  "chat_template.jinja": {
+   "sha256": "ae53464bf3be25802b3a5b37def7fd89667067d7577049b3b2d74c4d8de4c6d4",
+   "bytes": 18683
+  },
+  "config.json": {
+   "sha256": "0bdc021081e0b6f4eaca6f0a4ccb50fd4a6b803f0385a2656a4d7f3f57c41ef4",
+   "bytes": 3810
+  },
+  "generation_config.json": {
+   "sha256": "4c2d18c072dc54cc2ee8f4a29e63525f56bc97a14a0e93c9a30755ba7b6b9014",
+   "bytes": 203
+  },
+  "grid-openvino_language_model-export.json": {
+   "sha256": "f73ebed7658c5fa1cbab9e20abd18b53876f6b60a4ddc13423e697d6e30fc412",
+   "bytes": 66434
+  },
+  "grid-openvino_language_model-snapped.json": {
+   "sha256": "8f1b81415388c9cecf5dce45795b243be81cfbb42a0b562610e7347f235a5e6f",
+   "bytes": 66445
+  },
+  "grid-openvino_text_embeddings_model-export.json": {
+   "sha256": "1b0c3a11133045f12b6e61d92568811b947601ce8cf2d0967a1f1ee67550cd1a",
+   "bytes": 291
+  },
+  "grid-openvino_text_embeddings_per_layer_model-export.json": {
+   "sha256": "6eb783102d85e635ed0b906d19d4cdf0d0013875a7aa4d8274451504cb7979fe",
+   "bytes": 301
+  },
+  "grid-openvino_vision_embeddings_model-export.json": {
+   "sha256": "6061ec996f419ba3c938238cf57ee2c0f1b8371e7189128a63273bc6046791fe",
+   "bytes": 293
+  },
+  "openvino_config.json": {
+   "sha256": "d8827df6d59b630b9fd85ca2b0cea38b40533a503459d20f3076b74d20ae4f32",
+   "bytes": 1395
+  },
+  "openvino_detokenizer.bin": {
+   "sha256": "461919bda7b546453e903052588c578e3e94e9e8215b7cec07cb00cb97459d13",
+   "bytes": 4413547
+  },
+  "openvino_detokenizer.xml": {
+   "sha256": "21dd767e165935ba365bcf5575b054ec119d625dae2798b0f7d8471637f9abfb",
+   "bytes": 29928
+  },
+  "openvino_language_model.bin": {
+   "sha256": "05a5cd0ffa07c2bff85f8eb1a4177042b753fc06fd1c132b8087586903279b79",
+   "bytes": 16733443348
+  },
+  "openvino_language_model.xml": {
+   "sha256": "bf957de9ef0f27a35249f5ba22168eb0da323b06d74a53ce6a589eb85e73ab19",
+   "bytes": 5023979
+  },
+  "openvino_text_embeddings_model.bin": {
+   "sha256": "1808d6e3fbe2ae1179c22e20a8e5d2e2e68c74230b57a62ed9720932c0b1e7b0",
+   "bytes": 738721800
+  },
+  "openvino_text_embeddings_model.xml": {
+   "sha256": "881c6699d86ebed39b5b42b63e301709657b984ae8bd65110884ad9e5269a36d",
+   "bytes": 7075
+  },
+  "openvino_text_embeddings_per_layer_model.bin": {
+   "sha256": "57fda7ab0340cda71819a3ecd5f9e52e346260fe840fddcc9c87d3614b5a815b",
+   "bytes": 20
+  },
+  "openvino_text_embeddings_per_layer_model.xml": {
+   "sha256": "22795a6cac6c8eadeef2a7b2f71884616055420ef3b68a626bf73c6176abb873",
+   "bytes": 4764
+  },
+  "openvino_tokenizer.bin": {
+   "sha256": "72cc61385a142c29a1ea37125b9d7a4c5775fe8386a5f6db1dd1108ea5ec1361",
+   "bytes": 17270350
+  },
+  "openvino_tokenizer.xml": {
+   "sha256": "2b4c6c46990ec715547077efcc0267e1a8c29b997c028a15280269a77e89f43a",
+   "bytes": 46897
+  },
+  "openvino_vision_embeddings_model.bin": {
+   "sha256": "87a4b947fe95ae9148c53990cb7e417f1963c9149a2fc8107e38a2e1a8b1443f",
+   "bytes": 573967772
+  },
+  "openvino_vision_embeddings_model.xml": {
+   "sha256": "1edbe121834f6e8bb5252c15893b7f751720f1ec5f1601adc130652dfacf4e82",
+   "bytes": 3053576
+  },
+  "preprocessor_config.json": {
+   "sha256": "12476d626b89e273a9b2c6a493a6319ab02427ebfcd3635d92b29584b27c7249",
+   "bytes": 403
+  },
+  "processor_config.json": {
+   "sha256": "32bdf45d2ad4cc29a0822ddd157a182de76644f0419a6228d151495256e9813c",
+   "bytes": 1689
+  },
+  "snap-openvino_language_model.json": {
+   "sha256": "b6f7435848e0a95dea58533d8757b7eada0c6b0df80a6a6b331affb4610c8b62",
+   "bytes": 99858
+  },
+  "tokenizer.json": {
+   "sha256": "cc8d3a0ce36466ccc1278bf987df5f71db1719b9ca6b4118264f45cb627bfe0f",
+   "bytes": 32169626
+  },
+  "tokenizer_config.json": {
+   "sha256": "b8045a4576903e86903291d5cbdd4adfc8859e9ce3c98621bdbd957f73ed394b",
+   "bytes": 3728
+  }
+ }
+}
