@@ -10,11 +10,13 @@
 #
 # Environment:
 #   APB_MODELS     dir with OpenVINO/Qwen3-4B-fp16-ov and Qwen/Qwen3-4B (bench/xhost/fetch_models.py) (required)
-#   APB_EAT_CHART  EAT checkout's core/helm-charts/vllm at 0d3438d (required)
+#   APB_EAT_CHART  EAT checkout's core/helm-charts/vllm at release-1.1.0, 0c726f57 (required;
+#                  checked by sha256, EXPERIMENTS.md H7x amendment V1)
 #   APB_OUT        run directory parent (default ./apb-runs)
 #   H7X_CPUS       CPUs each engine is sized to (default 16, H7's P-core balloon)
 #   H7X_NODE_CPUS  cpuset for the node container after `up` (default none)
 #   H7X_ORDER      block order (default "A B B A A B B A A B C")
+#   H7X_CHART_CHECK  0 skips the release-1.1.0 chart check (tests only; default 1)
 #   H7X_VLLM_MEM   memory limit for B and C (default: the overlay's 16Gi; `fit`: k3d-gpu fit's
 #                  weights + runtime for this checkpoint, plus the row's 6 GiB KV, x 1.1, rounded up)
 #   K3D_GPU_CLUSTER  cluster name (default apb-h7x); K3D_GPU_* pass through to `up`
@@ -62,6 +64,19 @@ stage() {  # stage <local dir> <path under /var/apb-models>
 }
 
 stamp render
+# B and C are EAT release-1.1.0's stock (H7x amendment V1): its chart, checked here by the sha256
+# of the files that shape them, and its xeon-values.yaml image tag pinned to the tag's index
+# digest. The tag is set here, not by integrations/eat/vllm-values.yaml, whose own tag is not used.
+B_TAG=v0.28.0@sha256:197354e6475e638eb5ccca09beb078488046a82de0e204e7429bf1a804df9647
+if [ "${H7X_CHART_CHECK:-1}" != 0 ]; then
+    printf '%s  %s\n' \
+        05c1e55b0864e6b576cc84e7ba330f45021f855e84f677f4e68add24d15a4da0 xeon-values.yaml \
+        636ff3968e4983cdd9cfbb9372220674921a4c725483a7744527842370e9182e values.yaml \
+        93ef991af65dc4f448b504b9934131ee9acb59135962bab6103faf35ab1a226d templates/deployment.yaml \
+        > "${OUT}/chart.sha256"
+    (cd "${CHART}" && sha256sum -c "${OUT}/chart.sha256") > "${OUT}/chart-check.txt" 2>&1 \
+        || { echo "${CHART} is not EAT release-1.1.0's chart:"; cat "${OUT}/chart-check.txt"; exit 1; }
+fi
 # H7's OVMS arm has no draft (it predates the CPU Fast Draft default of #116).
 # H7 also predates the host fit (#174), which would size A's KV pool to this host; K3D_GPU_FIT=off
 # keeps the manifest as H7 rendered it.
@@ -82,6 +97,7 @@ print("%dGi" % math.ceil((d["host_bytes"] - d["kv_bytes"] + 6 * 2**30) * 1.1 / 2
 fi
 python3 "${HERE}/stage.py" values "${CHART}/xeon-values.yaml" "${REPO}/integrations/eat/vllm-values.yaml" 6 "${OUT}/values.yaml"
 helm template vllm-qwen-3-4b-cpu "${CHART}" --values "${OUT}/values.yaml" --set LLM_MODEL_ID=Qwen/Qwen3-4B --set cpu="${CPUS}" ${VLLM_MEM:+--set memory="${VLLM_MEM}"} \
+    --set image.tag="${B_TAG}" \
     --set global.monitoring=false --set svcmonitor.enabled=false --set ingress.enabled=false --set route.enabled=false > "${OUT}/eat.yaml"
 python3 "${HERE}/stage.py" vllm "${OUT}/eat.yaml" "${OUT}/vllm.yaml" Qwen3-4B 32768
 # C: the same Deployment and Service, renamed, with --enforce-eager removed (the only change).
