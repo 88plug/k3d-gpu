@@ -117,6 +117,13 @@ fixture human_queued "[$(pr 1 autobump/a a111)]" "[$(run 5 ci.yml pull_request c
 BOT_CI_MAX_INFLIGHT=10 bcd
 if [ "$RC" -eq 0 ] && [ "$(acts dispatch)" -eq 0 ] && grep -q 'human' <<<"$OUT"; then ok "human_queued: deferred"
 else fail "human_queued: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions") out=$(tr '\n' ';' <<<"$OUT")"; fi
+# a queued run whose head branch is gone (headBranch null) counts as a human run.
+fixture human_null_branch "[$(pr 1 autobump/a a111)]" \
+  "[{\"databaseId\":5,\"workflow\":\"ci.yml\",\"event\":\"pull_request\",\"headBranch\":null,\"headSha\":\"c333\",\"status\":\"queued\",\"conclusion\":\"\",\"attempt\":1,\"createdAt\":\"2026-10-29T20:00:00Z\"}]"
+BOT_CI_MAX_INFLIGHT=10 bcd
+if [ "$RC" -eq 0 ] && [ "$(acts dispatch)" -eq 0 ] && grep -q 'deferred, 1 ci.yml run(s) of human PRs queued' <<<"$OUT"; then
+  ok "human_null_branch: deferred"
+else fail "human_null_branch: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions") out=$(tr '\n' ';' <<<"$OUT")"; fi
 fixture human_running "[$(pr 1 autobump/a a111)]" "[$(run 5 ci.yml pull_request claude/x c333 in_progress '')]"
 bcd
 if [ "$RC" -eq 0 ] && [ "$(acts dispatch)" -eq 1 ]; then ok "human_running: dispatched"

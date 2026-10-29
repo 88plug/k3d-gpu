@@ -53,12 +53,13 @@ cands=$(jq -r --arg only "$only" '
 
 # The pool: bot runs of the workflow in flight, and queued ci.yml runs of human PRs.
 recent=$(gh run list -w "$wf" -L 100 --json status,event,headBranch) || { echo "error: cannot list $wf runs"; exit 1; }
-inflight=$(jq '[.[] | select(.status != "completed" and (.headBranch | startswith("autobump/")))] | length' <<<"$recent")
+inflight=$(jq '[.[] | select(.status != "completed" and ((.headBranch // "") | startswith("autobump/")))] | length' <<<"$recent")
 if [ "$wf" != ci.yml ]; then
   recent=$(gh run list -w ci.yml -L 100 --json status,event,headBranch) || { echo "error: cannot list ci.yml runs"; exit 1; }
 fi
 human=$(jq '[.[] | select(.event == "pull_request" and (.status | IN("queued", "requested", "pending", "waiting"))
-                          and (.headBranch | startswith("autobump/") | not))] | length' <<<"$recent")
+                          and ((.headBranch // "") | startswith("autobump/") | not))] | length' <<<"$recent")
+[[ $inflight =~ ^[0-9]+$ && $human =~ ^[0-9]+$ ]] || { echo "error: cannot read the run pool from gh run list"; exit 1; }
 # busy LINE: print LINE with the reason and succeed when the pool has no room.
 busy() {
   if [ "$human" -gt 0 ]; then echo "$1: deferred, $human ci.yml run(s) of human PRs queued"; return 0; fi
