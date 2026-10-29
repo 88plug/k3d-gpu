@@ -65,7 +65,10 @@ case ${ARM} in
         chart=${APB_EAT_CHART:?set APB_EAT_CHART to EAT core/helm-charts/vllm}
         python3 "${HERE}/stage.py" values "${chart}/xeon-values.yaml" "${REPO}/integrations/eat/vllm-values.yaml" 6 "${OUT}/values.yaml"
         # EAT's catalog entry cpu-qwen3-4b (core/playbooks/deploy-inference-models.yml), ingress off.
+        # The image is the one H8 ran as arm A3, pinned here so that a later tag in
+        # integrations/eat/vllm-values.yaml does not change what this arm reproduces.
         helm template vllm-qwen-3-4b-cpu "${chart}" --values "${OUT}/values.yaml" \
+            --set image.tag="v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1" \
             --set LLM_MODEL_ID=Qwen/Qwen3-4B-Instruct-2507 --set global.monitoring=false \
             --set svcmonitor.enabled=false --set ingress.enabled=false --set route.enabled=false > "${OUT}/eat.yaml"
         python3 "${HERE}/stage.py" vllm "${OUT}/eat.yaml" "${OUT}/deploy.yaml" Qwen3-4B-Instruct-2507 32768
