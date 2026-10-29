@@ -31,11 +31,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-      # rhysd/actionlint 1.7.12 (bundles shellcheck for run: blocks), pinned by digest.
+      # rhysd/actionlint, pinned by digest in hack/ci-images.env (the nightly repin moves it).
       - name: actionlint
-        env:
-          IMAGE: rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
-        run: docker run --rm -v "$PWD:/repo" -w /repo "$IMAGE" -color
+        run: |
+          image=$(sed -n 's/^ACTIONLINT_IMAGE=//p' hack/ci-images.env)
+          docker run --rm -v "$PWD:/repo" -w /repo "${image:?hack/ci-images.env has no ACTIONLINT_IMAGE}" -color
 
   detect-tests:
     name: Detection tests
@@ -395,10 +395,29 @@ jobs:
           dockerfile: Dockerfile
           failure-threshold: error
 
+  # A job's container image cannot be read from a file in that job, so this job
+  # reads the Arch pin from hack/ci-images.env (where the nightly repin moves it).
+  arch-image:
+    name: Arch image pin
+    runs-on: ubuntu-latest
+    outputs:
+      ref: ${{ steps.pin.outputs.ref }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          sparse-checkout: hack
+          persist-credentials: false
+      - id: pin
+        run: |
+          ref=$(sed -n 's/^ARCHLINUX_IMAGE=//p' hack/ci-images.env)
+          [[ "$ref" =~ ^archlinux:latest@sha256:[0-9a-f]{64}$ ]] || { echo "::error::hack/ci-images.env has no pinned ARCHLINUX_IMAGE (got '$ref')"; exit 1; }
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+
   pkgbuild-lint:
     name: Lint PKGBUILD in Arch container
+    needs: arch-image
     runs-on: ubuntu-latest
-    container: archlinux:latest@sha256:3c64b538588416593f69a1aebd2f2ec0f2541b29159f32556fa7def2167147a0
+    container: ${{ needs.arch-image.outputs.ref }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - name: Install tools

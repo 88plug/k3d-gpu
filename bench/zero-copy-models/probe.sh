@@ -49,7 +49,7 @@
 # locked part (default 1440 s); a round starts only if the slowest round so far
 # (300 s before the first) still fits.
 set -euo pipefail
-PYIMG=${PYIMG:-python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f}
+PYIMG=${PYIMG:-python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb}
 CL=${CLUSTER:-k3dgpu-r-zero-copy-models}
 N=${N:-8}
 MIB=${MIB:-1024}
