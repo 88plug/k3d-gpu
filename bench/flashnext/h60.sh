@@ -64,13 +64,17 @@ bg() {  # bg CMD...: run CMD in the background and wait, so a TERM interrupts th
 }
 cleanup() {
     # The tmpfs copy first: an unlinked file is freed as soon as the server's mapping goes.
+    [ -z "${dl_t0}" ] || rm -rf "${SHM}"
+    [ -z "${child}" ] || { pkill -TERM -P "${child}" 2>/dev/null; kill -TERM "${child}" 2>/dev/null; }
+    [ -z "${pf}" ] || kill "${pf}" 2>/dev/null
+    # Again once the step has exited (up to 5 s): a download still running can write a shard
+    # after the first rm. removed_ok reads this second removal.
     if [ -n "${dl_t0}" ]; then
+        for _ in $(seq 50); do [ -n "${child}" ] && kill -0 "${child}" 2>/dev/null || break; sleep 0.1; done
         rm -rf "${SHM}"
         printf '{"download_start": %s, "removed": %s, "removed_ok": %s}\n' "${dl_t0}" "$(date +%s)" \
             "$([ -e "${SHM}" ] && echo false || echo true)" > "${OUT}/shm-window.json"
     fi
-    [ -z "${child}" ] || { pkill -TERM -P "${child}" 2>/dev/null; kill -TERM "${child}" 2>/dev/null; }
-    [ -z "${pf}" ] || kill "${pf}" 2>/dev/null
     stamp cleanup
     k3d cluster delete "${K3D_GPU_CLUSTER}" >/dev/null 2>&1
     [ -z "${psi}" ] || kill "${psi}" 2>/dev/null
@@ -169,9 +173,15 @@ load() {  # load ARM NAME REQUESTS CONCURRENCY MAX_TOKENS [extra]
         --max-tokens "${mt}" --temperature 0 --unique-prompts --timeout 1800 --label "H60 ${arm} ${name}" \
         --out "${OUT}/${arm}/load-${name}.json" "$@" 2>> "${OUT}/h60.log"
 }
-check() {  # check T0 T1: h54.py void as JSON; an error in the check itself reads void
-    ${PY} "${H54}/h54.py" void "${SERVING:?}" "$1" "$2" "${W0}" "${W1}" 2>/dev/null \
-        || echo '{"void": true, "reason": "void check failed"}'
+check() {  # check T0 T1: h54.py void as one JSON line; an error in the check itself reads void
+    # h54.py void exits 1 on a void window, so its output decides, not its exit status.
+    local o
+    o=$(${PY} "${H54}/h54.py" void "${SERVING:?}" "$1" "$2" "${W0}" "${W1}" 2>/dev/null)
+    case ${o} in
+        *$'\n'*) echo '{"void": true, "reason": "void check failed"}' ;;
+        '{"void": '*'}') echo "${o}" ;;
+        *) echo '{"void": true, "reason": "void check failed"}' ;;
+    esac
 }
 phase() {  # phase ARM NAME ...: run, H54's void check, one re-run after a fresh idle if void
     local arm=$1 name=$2 a b v

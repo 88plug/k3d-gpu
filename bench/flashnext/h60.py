@@ -24,7 +24,6 @@ Without a valid Lg control (not delivered, void, or < 8 ok requests), e_fn's CI 
 H54's fixed efficiency instead: 0.38 x [0.7, 1.3] = [0.266, 0.494] (H54a Lg, 48.74 tok/s x 2.380
 GB / 305 GB/s).
 Python 3 standard library only."""
-import glob
 import json
 import os
 import random
