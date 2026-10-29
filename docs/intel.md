@@ -202,7 +202,7 @@ direction only; the numbers, protocol and reproduce block are in the ledger.
 
 | Row | Measurement | Verdict |
 |----|-------------|--------|
-| [ledger:H54a] | Single-stream decode, engine by engine, against EAT's stock vLLM CPU (bf16 QAT weights). EAT's stock arm stalled mid-decode in both holds, on a vLLM v0.24.0 CPU attention hang fixed upstream in v0.25.0 ([vllm#45844](https://github.com/vllm-project/vllm/pull/45844); H54 note N2 in the ledger), so nothing was scored against it. Of the arms measured, llama.cpp CPU on Google's QAT Q4_0 GGUF decoded ahead of k3d-gpu's OVMS arms, and its QAT MTP drafter added a little on top | INCONCLUSIVE |
+| [ledger:H54a] | Single-stream decode, engine by engine, against EAT's stock vLLM CPU (bf16 QAT weights). EAT's stock arm stalled mid-decode in both holds, so nothing was scored against it. An unscored rerun outside k3d stalled the same way, in a vLLM v0.24.0 CPU attention hang fixed upstream in v0.25.0 ([vllm#45844](https://github.com/vllm-project/vllm/pull/45844)); that the holds hit the same hang is inferred (H54 note N2 in the ledger). Of the arms measured, llama.cpp CPU on Google's QAT Q4_0 GGUF decoded ahead of k3d-gpu's OVMS arms, and its QAT MTP drafter added a little on top | INCONCLUSIVE |
 | [ledger:H54d] | The best H54a arm inside EAT's banking flow: not run, since H54a chose no arm | INCONCLUSIVE |
 | [ledger:H54q] | Whether the QAT-matched int4 IR keeps the bf16 QAT quality and OpenVINO's base-model IR does not | PENDING |
 | [ledger:H54c] | Experts in the Xeon's DRAM and the rest on one B70, against a byte-split model | PENDING |
