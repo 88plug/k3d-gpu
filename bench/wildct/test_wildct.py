@@ -105,6 +105,22 @@ class GpuScanTest(unittest.TestCase):
         with self.assertRaises(KeyError):
             gpu_scan.scan({})
 
+    def test_an_empty_pod_list_is_not_clean(self):
+        """kubectl that reaches no apiserver still prints an empty List on stdout (smoke2 on
+        2026-10-29): that is no scan, never `GPU-SCAN clean`."""
+        failed = '{"apiVersion": "v1", "items": [], "kind": "List", "metadata": {"resourceVersion": ""}}'
+        out = subprocess.run([sys.executable, gpu_scan.__file__], input=failed, capture_output=True, text=True)
+        self.assertNotEqual(out.returncode, 0)
+        self.assertNotIn("GPU-SCAN", out.stdout)
+        self.assertIn("empty pod list", out.stderr)
+        with self.assertRaises(ValueError):
+            gpu_scan.scan({"items": []})
+
+    def test_a_verdict_exits_0(self):
+        out = subprocess.run([sys.executable, gpu_scan.__file__], input='{"items": [{"metadata": {"namespace": "kube-system", '
+                             '"name": "coredns"}, "spec": {"containers": [{"name": "c"}]}}]}', capture_output=True, text=True)
+        self.assertEqual((out.returncode, out.stdout), (0, "GPU-SCAN clean\n"))
+
     def test_empty_dir_volumes_are_not_host_paths(self):
         p = pod("x")
         p["spec"]["volumes"] = [{"name": "tmp", "emptyDir": {}}]

@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# diag-up.sh: smoke2's `up` again (row.sh smoke's environment, cluster k3dgpu-w-diag), run as
+# hold.sh's CMD, keeping the server node's own log and state, then the GPU isolation read-outs
+# and `down`. Diagnostic only: discarded, not a hold of any row.
+set -u
+W=${HOME}/k3dgpu-bench-wildct
+OUT=${W}/runs/${WILDCT_HOLD:?}/out
+mkdir -p "${OUT}"
+export PATH=${W}/bin:${PATH}
+export KUBECONFIG=${OUT}/kubeconfig K3D_GPU_SHARE=${W}/k3d-gpu/usr/share/k3d-gpu K3D_GPU_CLUSTER=k3dgpu-w-diag \
+    K3D_GPU_IMAGE="$(cat "${W}/runs/IMAGE")" K3D_GPU_VENDORS=auto,-nvidia,-intel \
+    K3D_GPU_K3S_ARGS='--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<2Gi,imagefs.available<2Gi,nodefs.inodesFree<1%'
+K=${W}/k3d-gpu/usr/bin/k3d-gpu
+N=k3d-${K3D_GPU_CLUSTER}-server-0
+# The node's own log, from its creation until it is removed.
+( for _ in $(seq 120); do timeout 10 docker inspect "${N}" > /dev/null 2>&1 && break; sleep 1; done
+  timeout -k 5 840 docker logs -f --timestamps "${N}" > "${OUT}/node.log" 2>&1 ) &
+lp=$!
+# The node container's state every 5 s.
+( for _ in $(seq 170); do
+      echo "$(date -u +%T) $(timeout 10 docker inspect -f '{{.State.Status}} pid={{.State.Pid}} restarts={{.RestartCount}} started={{.State.StartedAt}} oom={{.State.OOMKilled}}' "${N}" 2>&1)"
+      sleep 5
+  done ) > "${OUT}/state.log" 2>&1 &
+sp=$!
+t0=$(date +%s)
+timeout -k 10 480 "${K}" up > "${OUT}/up.log" 2>&1; up_rc=$?
+echo "up rc=${up_rc} in $(( $(date +%s) - t0 )) s" | tee -a "${OUT}/rc.txt"
+timeout -k 5 30 docker exec "${N}" sh -c 'ps -eo pid,etime,stat,args | cut -c1-200' > "${OUT}/node-ps.txt" 2>&1
+timeout -k 5 30 docker exec "${N}" sh -c 'tail -150 /var/lib/rancher/k3s/agent/containerd/containerd.log' > "${OUT}/containerd.log" 2>&1
+timeout -k 5 30 docker inspect "${N}" > "${OUT}/node-inspect.json" 2>&1
+timeout -k 5 30 docker inspect -f 'privileged={{.HostConfig.Privileged}} devices={{.HostConfig.Devices}} runtime={{.HostConfig.Runtime}} gpus={{.HostConfig.DeviceRequests}} binds={{.HostConfig.Binds}}' "${N}" > "${OUT}/node-container.txt" 2>&1
+timeout -k 5 60 kubectl get --raw '/readyz?verbose' > "${OUT}/readyz.txt" 2>&1; echo "readyz rc=$?" >> "${OUT}/rc.txt"
+timeout -k 5 60 kubectl get pods -A -o wide > "${OUT}/pods.txt" 2>&1; echo "pods rc=$?" >> "${OUT}/rc.txt"
+timeout -k 5 60 kubectl get node -o jsonpath='{.items[0].spec.taints}{"\n"}{.items[0].status.allocatable}{"\n"}' > "${OUT}/node.txt" 2>&1
+j=$(timeout -k 5 60 kubectl get pods -A -o json 2>/dev/null); jrc=$?
+echo "pods json rc=${jrc}" >> "${OUT}/rc.txt"
+printf '%s' "${j}" | python3 "${W}/repo/bench/wildct/gpu_scan.py" > "${OUT}/gpu-scan.txt" 2>&1
+tail -1 "${OUT}/gpu-scan.txt" | tee -a "${OUT}/rc.txt"
+kill "${sp}" 2>/dev/null
+timeout -k 10 300 "${K}" down > "${OUT}/down.log" 2>&1
+echo "down rc=$?" | tee -a "${OUT}/rc.txt"
+wait "${lp}" 2>/dev/null
+exit "${up_rc}"

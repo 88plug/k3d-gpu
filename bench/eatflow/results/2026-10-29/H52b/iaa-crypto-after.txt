@@ -1,0 +1,3 @@
+sync_mode=sync
+verify_compress=1
+wqs=wq1.0 wq3.0 wq5.0

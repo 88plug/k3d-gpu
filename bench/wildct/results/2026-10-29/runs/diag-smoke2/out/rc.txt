@@ -1,0 +1,6 @@
+up rc=1 in 189 s
+readyz rc=1
+pods rc=1
+pods json rc=1
+GPU-SCAN clean
+down rc=0

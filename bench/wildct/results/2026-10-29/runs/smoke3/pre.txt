@@ -1,0 +1,17 @@
+2026-10-29T19:45:43Z
+ 15:45:43 up 10:34,  2 users,  load average: 1.08, 0.59, 0.48
+%CPU   PID USER     COMMAND
+ 3.3  6759 911      archivebox
+ 2.6  1157 root     tailscaled
+ 1.4     1 root     systemd
+ 1.0  9906 911      python3
+ 0.8  1184 root     gdm
+ 0.4 27341 andrew   rustdesk
+ 0.4  2738 andrew   localsearch-3
+ 0.3  3313 root     dockerd
+ 0.3  5486 root     nxrunner.bin
+ 0.2  1180 root     containerd
+               total        used        free      shared  buff/cache   available
+Mem:             125           7         104           0          15         118
+/dev/nvme0n1p2             3667G 3273G      208G      95% /
+bmd-telemetry-jaeger-1 bmd-telemetry-prometheus-1 feed-my-algorithm-app-1 feed-my-algorithm-controller-1 feed-my-algorithm-db-1 feed-my-algorithm-redroid-1 feed-my-algorithm-worker-1 know-my-neighbor-db-1 proxmox-dc-manager searxng-core searxng-valkey state-of-my-town-app state-of-my-town-archivebox state-of-my-town-postgres tos-rate-calculator webapp-adminer-1 webapp-db-1 webapp-web-1 

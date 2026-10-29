@@ -1,0 +1,15 @@
+NEEDRESTART-VER: 3.11
+NEEDRESTART-KCUR: 7.0.0-31-generic
+NEEDRESTART-KEXP: 7.0.0-38-generic
+NEEDRESTART-KSTA: 3
+NEEDRESTART-UCSTA: 1
+NEEDRESTART-UCCUR: 0xa000133
+NEEDRESTART-UCEXP: 0xa000133
+NEEDRESTART-SVC: dbus.service
+NEEDRESTART-SVC: networkd-dispatcher.service
+NEEDRESTART-SVC: systemd-logind.service
+NEEDRESTART-SVC: unattended-upgrades.service
+NEEDRESTART-SESS: devcloud @ session #1624
+NEEDRESTART-SESS: devcloud @ session #4446
+NEEDRESTART-SESS: devcloud @ session #9941
+NEEDRESTART-SESS: devcloud @ user manager

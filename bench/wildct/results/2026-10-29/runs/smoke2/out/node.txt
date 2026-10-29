@@ -1,0 +1,9 @@
+The connection to the server 0.0.0.0:43653 was refused - did you specify the right host or port?
+error executing jsonpath "{.items[0].spec.taints}{\"\\n\"}{.items[0].status.allocatable}{\"\\n\"}": Error executing template: array index out of bounds: index 0, length 0. Printing more information for debugging the template:
+	template was:
+		{.items[0].spec.taints}{"\n"}{.items[0].status.allocatable}{"\n"}
+	object given to jsonpath engine was:
+		map[string]interface {}{"apiVersion":"v1", "items":[]interface {}{}, "kind":"List", "metadata":map[string]interface {}{"resourceVersion":""}}
+
+
+
