@@ -1,0 +1,12 @@
+{
+ "prompt": "The capital of France is",
+ "regex": "Paris",
+ "exact": " Paris. The capital of Italy is Rome",
+ "recorded_with": {
+  "engine": "openvino/model_server:2026.4.1-gpu (2026.4.1.cfc9ac721), CPU plugin",
+  "model": "OpenVINO/Qwen3-0.6B-int8-ov@ac8e917fb8350f528ada41b02c60ea3a2853955f",
+  "request": "POST /v3/completions temperature 0, top_k 1, seed 0, max_tokens 8",
+  "cpu": "Intel Core i9-13900T (avx2, no avx512f), 2 CPUs",
+  "date": "2026-10-29"
+ }
+}

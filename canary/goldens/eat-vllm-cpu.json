@@ -1,0 +1,8 @@
+{
+ "prompt": "The capital of France is",
+ "regex": "Paris",
+ "exact": null,
+ "recorded_with": {
+  "note": "no exact text recorded yet: the first hosted-runner run records it"
+ }
+}

@@ -14,6 +14,11 @@ Prints "listening <port>" once ready. --no-usage drops the usage chunk;
 the way vLLM's server ends a stream when its engine dies mid-decode.
 --cut-at N sends N tokens and closes the connection: no finish_reason, no usage,
 no [DONE] (a server process that is killed mid-stream; use with --close).
+
+For canary/run.sh it also serves the text completions API (POST <prefix>/completions,
+plain and streamed, one chunk per word of --text) and GET <prefix>/models (503 with
+--never-ready), /version (vLLM, --version) and /props (llama-server, --build-info).
+--no-done ends a streamed completion without data: [DONE].
 """
 
 import argparse
@@ -38,7 +43,55 @@ def make_handler(opts):
                 self.wfile.write(f"{len(raw):x}\r\n".encode() + raw + b"\r\n")
             self.wfile.flush()
 
+        def send_json(self, code, obj):
+            raw = json.dumps(obj).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def do_GET(self):
+            if self.path in [f"{x}/models" for x in opts.prefix.split(",")]:
+                if opts.never_ready:
+                    self.send_json(503, {"error": "loading"})
+                else:
+                    self.send_json(200, {"object": "list", "data": [{"id": opts.model_name, "object": "model"}]})
+            elif self.path == "/version" and opts.version:
+                self.send_json(200, {"version": opts.version})
+            elif self.path == "/props" and opts.build_info:
+                self.send_json(200, {"build_info": opts.build_info, "total_slots": 1})
+            else:
+                self.send_error(404)
+
+        def completions(self, req):
+            words = opts.text.split(" ")
+            pieces = [w if i == 0 else " " + w for i, w in enumerate(words)] if opts.text else []
+            pieces = pieces[:req.get("max_tokens") or len(pieces)]
+            usage = {"prompt_tokens": 5, "completion_tokens": len(pieces), "total_tokens": 5 + len(pieces)}
+            base = {"object": "text_completion", "created": int(time.time()), "model": req.get("model")}
+            if not req.get("stream"):
+                self.send_json(200, {**base, "choices": [{"index": 0, "text": "".join(pieces), "finish_reason": "length"}],
+                                     "usage": usage})
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            if not opts.close:
+                self.send_header("Transfer-Encoding", "chunked")
+            self.end_headers()
+            for p in pieces:
+                self.send_chunk(json.dumps({**base, "choices": [{"index": 0, "text": p, "finish_reason": None}]}))
+            self.send_chunk(json.dumps({**base, "choices": [{"index": 0, "text": "", "finish_reason": "length"}],
+                                        "usage": usage}))
+            if not opts.no_done:
+                self.send_chunk("[DONE]")
+            if not opts.close:
+                self.wfile.write(b"0\r\n\r\n")
+
         def do_POST(self):
+            if self.path in [f"{x}/completions" for x in opts.prefix.split(",")]:
+                self.completions(json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0)))))
+                return
             if self.path not in [f"{x}/chat/completions" for x in opts.prefix.split(",")]:
                 self.send_error(404)
                 return
@@ -98,6 +151,12 @@ def main():
     p.add_argument("--die-at", type=int, default=0, help="send N tokens, then an error chunk and [DONE] (engine death)")
     p.add_argument("--cut-at", type=int, default=0, help="send N tokens, then close the connection (server killed)")
     p.add_argument("--prefix", default="/v1,/v3", help="API roots served, comma list")
+    p.add_argument("--text", default="tok0 tok1", help="text completions: the completion, one chunk per word")
+    p.add_argument("--model-name", default="canary", help="the id GET <prefix>/models lists")
+    p.add_argument("--version", default="", help="GET /version answers {version} (vLLM)")
+    p.add_argument("--build-info", default="", help="GET /props answers {build_info} (llama-server)")
+    p.add_argument("--never-ready", action="store_true", help="GET <prefix>/models answers 503 forever")
+    p.add_argument("--no-done", action="store_true", help="a streamed text completion ends without [DONE]")
     opts = p.parse_args()
     srv = http.server.ThreadingHTTPServer(("127.0.0.1", opts.port), make_handler(opts))
     print(f"listening {srv.server_address[1]}", flush=True)
