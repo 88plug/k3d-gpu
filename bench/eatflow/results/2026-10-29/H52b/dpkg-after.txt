@@ -1,0 +1,2 @@
+accel-config 4.1.9-2 installed
+libaccel-config1 4.1.9-2 installed

@@ -1,0 +1,10 @@
+NAMESPACE                NAME                                 DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR                                                        AGE
+habana-system            habanalabs-device-plugin-daemonset   0         0         0       0            0           habana.ai/gaudi.present=true                                         7m10s
+kube-system              intel-dsa-plugin                     1         1         1       1            1           intel.feature.node.kubernetes.io/dsa=true,kubernetes.io/arch=amd64   7m10s
+kube-system              intel-gpu-plugin                     1         1         1       1            1           kubernetes.io/arch=amd64                                             7m10s
+kube-system              intel-gpu-plugin-wsl                 0         0         0       0            0           k3d-gpu.io/wsl-gpu=true,kubernetes.io/arch=amd64                     7m10s
+kube-system              intel-iaa-plugin                     0         0         0       0            0           intel.feature.node.kubernetes.io/iaa=true,kubernetes.io/arch=amd64   7m10s
+kube-system              intel-npu-plugin                     0         0         0       0            0           intel.feature.node.kubernetes.io/npu=true,kubernetes.io/arch=amd64   7m10s
+kube-system              intel-qat-plugin                     1         1         0       1            0           intel.feature.node.kubernetes.io/qat=true,kubernetes.io/arch=amd64   7m10s
+kube-system              nvidia-device-plugin-daemonset       0         0         0       0            0           <none>                                                               7m6s
+node-feature-discovery   nfd-worker                           1         1         1       1            1           <none>                                                               7m9s

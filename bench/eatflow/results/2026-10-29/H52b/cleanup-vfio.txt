@@ -1,0 +1,9 @@
+2026-10-29T18:47:49Z
+vfio_iommu_type1       49152  0
+vfio                   77824  1 vfio_iommu_type1
+iommufd               135168  1 vfio
+modprobe -r vfio_iommu_type1 rc=0
+modprobe -r vfio rc=0
+modprobe -r iommufd rc=0
+0
+168
