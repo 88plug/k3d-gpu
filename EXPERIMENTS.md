@@ -4987,16 +4987,19 @@ python3 bench/flashnext/h60.py score $X/runs/H60/out
 
 ### H60 amendment V1: llama.cpp v0.8.0 for both arms (2026-10-29)
 
-Recorded 2026-10-29, before any H60 step (no download, no server, no smoke), while H60's
-pre-registration was still unmerged (PR #199). Mechanics only. No hypothesis, prediction,
-statistic, band, guard, protocol step or cap changes. What changes is the llama.cpp build that
-both arms run.
+Recorded 2026-10-29, before any H60 step (no download, no server, no smoke). It was first
+proposed in PR #234 while H60's pre-registration (PR #199) was unmerged. #234 closed unmerged
+when #199 landed and its base branch was deleted; this section is its content, carried to main
+before H60 runs. Mechanics only. No hypothesis, prediction, statistic, band, guard, protocol
+step or cap changes. What changes is the llama.cpp build that both arms run.
 
 **Why.** The pre-registration took the newest published server image on 2026-10-21,
 `server-b11783`. Since then llama.cpp has published a stable release, v0.8.0 (GitHub, 2026-10-28,
 not a prerelease), at commit `8642541b`, which is build tag `b11960`. The builds published after
-it (b11962 to b11981, 2026-10-28 and 2026-10-29) are prereleases. The repository pins its own
-arms to the newest stable release, so H60 moves to v0.8.0 before it runs.
+it (b11962 to b11985, 2026-10-28 and 2026-10-29, read at 19:40Z on 2026-10-29) are
+prereleases, and v0.8.0 was still GitHub's latest release then. The repository pins its own
+arms to the newest stable release (`images.lock` and `bench/competitors.lock` already pin
+`server-b11960` at the digest below), so H60 moves to v0.8.0 before it runs.
 
 **The change.**
 
@@ -5029,7 +5032,9 @@ This amendment moves both arms to the newest stable release, and each prediction
 written.
 
 **Disclosed.** Written before any H60 data. It rests on the two images' help text, the two
-builds' sources and the pinned GGUF's headers; no H60 server was started.
+builds' sources and the pinned GGUF's headers; no H60 server was started. Checked on crescent
+at 19:40Z on 2026-10-29, read only: no `~/k3dgpu-xhost/runs/H60` (the hold wrapper creates it
+before it waits for the lock), no `/dev/shm/k3dgpu-h60`, and no H60 line in the campaign log.
 
 ### H54 note N2: why B1g stalled (unscored diagnostic, 2026-10-29)
 
