@@ -1204,9 +1204,11 @@ def h45_score(arms, load=None):
 
 
 # H51 (EXPERIMENTS.md "H50-H52 pre-registration"): H45's graded ramp to N=16 on the Xeon
-# 6741P, arms A1 and B1, each with a predicted range, plus the comparison B1 <= A1.
+# 6741P, arms A1 and B1, each with a predicted range, plus the comparison B1 <= A1. The ranges
+# are crescent amendment M1's restated predictions (A1 in [1, 4], B1 in [0, 4]), which replaced
+# the first-written A1 in [1, 8] before any H51 data (H51 amendment S1).
 H51_RAMP = (1, 2, 4, 8, 16)
-H51_RANGES = {"A1": (1, 8), "B1": (0, 4)}
+H51_RANGES = {"A1": (1, 4), "B1": (0, 4)}
 
 
 def h51_score(arms, load=None):
