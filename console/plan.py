@@ -314,6 +314,8 @@ def add_optimizer(doc, facts, meta, opts):
     engine, device, t = agent_target(facts, doc, backend)
     o.setdefault("vllm_version", "0.26.0" if backend == "llm-scaler" else AGENT_VLLM_VERSION.get(device, "0.31.0"))
     o["hw_class"] = hw_class(t)
+    # No backend set: as `agent up`, the CPU engine follows the ledger (model_opt.py H59).
+    o.setdefault("engine_from_ledger", backend is None)
     opt = model_opt.optimize(meta, engine, device, o)
     line = model_opt.summary_line(opt, host_text(facts))
     doc["optimizer"] = opt

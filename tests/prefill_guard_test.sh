@@ -76,10 +76,10 @@ check "cpuClasses defines default with the host-max placeholder" \
     grep -Pzq '  - maxFreq: __K3D_GPU_HOST_MAX__\n    name: default\n' <<< "${gp}"
 check "cpuClasses defines prefill-guard with the cap placeholder" \
     grep -Pzq '  - maxFreq: __K3D_GPU_GUARD_MAX__\n    name: prefill-guard\n' <<< "${gp}"
-# v0.14.0 resolves "turbo"/"base"/"min" from the first online CPU only, and its
+# v0.15.0 resolves "turbo"/"base"/"min" from the first online CPU only, and its
 # cpufreq writer sets min/max/governor but never EPP: neither may appear.
 check "guard policy uses no symbolic frequency" bash -c '! grep -Eq "Freq: (turbo|base|min)$" <<< "$1"' _ "${gp}"
-check "guard policy sets no EPP (not written by nri-plugins v0.14.0)" bash -c '! grep -q energyPerformancePreference <<< "$1"' _ "${gp}"
+check "guard policy sets no EPP (not written by nri-plugins v0.15.0)" bash -c '! grep -q energyPerformancePreference <<< "$1"' _ "${gp}"
 check "guard header names the chart version" grep -q 'nri-resource-policy-balloons v0.15.0' "${GUARD_YML}"
 
 # ---- stubs ---------------------------------------------------------------------

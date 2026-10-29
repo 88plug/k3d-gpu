@@ -42,11 +42,22 @@ optimizer's llama.cpp precision), then fewer bits, more bits last, taking the fi
 that holds 4 sequences at the target context. `--file F` (or `K3D_GPU_FIT_FILE`) names
 one instead: a file, any of its shards, or the quant label (`IQ4_NL`). Weights that
 read as 0 bytes, a split model with shards missing, or a MoE with no expert tensors are
-refused, never planned. A card held by
-others at half its VRAM or more is busy and is left out. The Intel device plugin, not
-the fit, picks which cards the pod gets, and it knows only the cards other pods hold:
-a card a host process fills can still be handed out, and the fit's per-card budget
-then does not hold for it.
+refused, never planned. A card held by others at half its VRAM or more is busy and is
+left out.
+
+The Intel device plugin, not the fit, picks which cards a pod gets, and on its own it
+knows only the cards other pods hold. So `k3d-gpu up` keeps the busy cards out of its
+view. The plugin (intel-device-plugins v0.37.1) has no per-card filter: `-allow-ids` and
+`-deny-ids` (`cmd/gpu_plugin/gpu_plugin.go:864-865`) match the PCI device id, which every
+card of one model shares. It does drop a card whose `/dev/dri` nodes it cannot stat
+(`devPathForDrmFile`, `:546`; `scan`, `:726-728`). `up` therefore mounts `/dev/dri/cardN`
+and `renderDN` of the free cards only into the plugin's pod, instead of all of `/dev/dri`,
+and says which cards it left out and who holds them. On a host whose SGLang fills two of
+four B70s, the cluster advertises the other two, and every placement the fit makes lands
+on them. The busy set is read once, at `up`, and the plugin's mounts name each free card's
+nodes. A card removed or renumbered later (a reboot that reorders them) leaves a mount
+with no node, and the plugin pod does not start: recreate the cluster (`k3d-gpu down`,
+`k3d-gpu up`). `K3D_GPU_INTEL_CARDS=all` advertises every card.
 
 ## The arithmetic
 
@@ -96,13 +107,66 @@ The overhead is an estimate from the formula, not a measurement;
 | --- | --- |
 | vLLM v0.32.0 | `--tensor-parallel-size`, `--max-model-len`, `--max-num-seqs`, `--gpu-memory-utilization` (vLLM still profiles activations inside that share), `--kv-cache-dtype fp8` when the checkpoint's `kv_cache_scheme` made the fit count one byte. CPU build (EAT): `VLLM_CPU_KVCACHE_SPACE` |
 | OVMS 2026.4.1 | `--max_num_seqs`, `--cache_size` (a static pool: the dynamic one grows past the fit) |
-| llama.cpp | `-c` (context x slots), `-np`, `-ngl`, `-ts`, `--n-cpu-moe` or `--cpu-moe` |
+| llama.cpp v0.8.0 | `-c` (context x slots), `-np`, `-ngl`, `-ts`, `--n-cpu-moe` or `--cpu-moe`, `-ctk`/`-ctv` |
 
 `agent up` applies them, sets the pod's memory request and limit to the fit, and
 annotates the pod `k3d-gpu.io/agent-fit`. `K3D_GPU_AGENT_MAX_LEN`, `K3D_GPU_AGENT_MAX_NUM_SEQS`
-and `K3D_GPU_AGENT_GPUS` are inputs the fit checks, not values that replace it. A fit
-that picks llama.cpp is refused by the OVMS and vLLM backends with the llama-server
-flags to run instead. `K3D_GPU_FIT=off` skips the fit; `on` also sizes the default
+and `K3D_GPU_AGENT_GPUS` are inputs the fit checks, not values that replace it. With
+`K3D_GPU_AGENT_BACKEND` unset, the engine the fit picks serves the model: OVMS, vLLM or
+llama-server. With `--model`, the model optimizer first picks the variant for the default
+engine (OVMS: Gemma 4's OpenVINO IR, for example). When that engine has nothing to serve,
+as with Qwen3.8-Flash-Next, the id is served as given, by the engine its fit picks. When
+the fit then picks another engine, the optimizer's choices are made again for that engine,
+pinned to the model the fit sized. A backend that is set and cannot serve the fit is
+refused, with the llama-server flags to run instead. `K3D_GPU_AGENT_BACKEND=llama.cpp
+--model google/gemma-4-26B-A4B-it` serves the optimizer's llama.cpp pick, Google's QAT
+Q4_0 GGUF, sized by the fit.
+
+Which engine serves a model on the CPU when several can is the ledger's call, read the way
+the CPU Fast Draft default is (H34): the engine-choice rows of EXPERIMENTS.md, H59 and its
+replications per CPU class (H59d, H59w). With `K3D_GPU_AGENT_BACKEND` unset, a row of that
+family SUPPORTED for this host's CPU class makes llama.cpp the CPU engine: the model
+optimizer then picks the model's int4 GGUF (Google's QAT Q4_0 GGUF for Gemma 4) with the QAT
+MTP drafter, the arm the row measured. A REFUTED, INCONCLUSIVE or PENDING row, a row for
+another CPU class, or no row keeps OVMS, as does a model with no int4 GGUF, a variant named
+(`K3D_GPU_AGENT_VARIANT`, or a variant's id as `--model`) or an OVMS Fast Draft device
+(`K3D_GPU_AGENT_DRAFT` `auto`, `CPU`, `GPU` or `NPU`). The rows ship in
+`console/ledger-rules.json` for installs without EXPERIMENTS.md, and
+`k3d-gpu plan --model M --explain` names the row that decided. A GPU placement is not
+affected: these are CPU rows.
+
+## The llama.cpp backend
+
+llama-server (ggml-org/llama.cpp v0.8.0, image tags `*-b11960`, pinned by digest) runs in
+deployment `llamacpp` of the agent namespace and serves the OpenAI API at `/v1`, port 8000.
+It uses the `server-intel` (SYCL) image on an Intel GPU and the `server` (CPU) image
+otherwise. Each option and its value are two arguments: llama-server reads a value from the
+next argument and refuses `--option=value` (`common/arg.cpp` `parse_cli_args`, `:827-865`).
+Beyond the fit's flags it sets:
+
+| Flag | Why |
+| --- | --- |
+| `--model` + `--model-url` | the GGUF the fit sized (in a repo with several, the one it picked) at the commit the fit read, downloaded once into the PVC (llama.cpp resumes it and checks its ETag). A gguf-split model is named by its first shard; llama.cpp fetches the other shards beside it (`common/arg.cpp` `build_url_tasks`). The fit's `-hf <repo>:<quant>` is the flag for running llama-server by hand and is not passed: llama.cpp would also fetch the repo's default branch into the container's cache and load that copy |
+| `--jinja`, `--reasoning off` | the GGUF's own chat template; its tool-call format is picked from the template (Gemma 4 `<\|tool_call>call:`, Qwen3.8's XML `<tool_call><function=...>`); thinking off for agent turns (`K3D_GPU_AGENT_THINKING=on` or `model` changes it) |
+| `--threads`, `--threads-batch` | the pod's physical cores and CPUs (the P-core balloon on a hybrid node); llama.cpp otherwise counts the host's cores |
+| `--load-mode mmap+mlock` | CPU placement only, with `IPC_LOCK`. On a GPU or experts-in-DRAM placement the lock grows to the end of the furthest CPU tensor (`src/llama-model-loader.cpp:1735-1737`), so it would also hold GPU tensors and could pass the pod limit |
+| `--spec-type draft-mtp` | when the model optimizer picks it, or with `K3D_GPU_AGENT_DRAFT=mtp` (`off` disables it). The optimizer picks a GGUF's own MTP head, and on the CPU the QAT MTP assistant only where the ledger measured it winning for this CPU class: a SUPPORTED row of the H57m family (H57dm, the i9-13900T; its replication H57wm), or the H59-family row that made llama.cpp the CPU engine. A REFUTED row turns it off; [H34x](../EXPERIMENTS.md) refuted OVMS's CPU draft on the Xeon. A GGUF with an MTP head drafts from it; Google's QAT GGUF has none, so its QAT assistant is converted once to Q4_0, the target's precision |
+
+Safetensors weights whose architecture only llama.cpp runs here, such as
+Qwen3.8-Flash-Next, are converted once. A Job (`gguf-convert-<hash of its inputs>`) runs
+the `full-b11960` image's `convert_hf_to_gguf.py`, with transformers 5.21.0 and
+huggingface-hub 2.3.0 on `PYTHONPATH`. The image's own transformers cannot read
+transformers-5 tokenizer configs. It downloads the pinned revision and writes
+`model.gguf` and `manifest.json` (sha256, size, pip freeze) under `/models/gguf`. Then it
+removes the download. Unquantized weights keep their 16-bit type. FP8 checkpoints are
+stored as Q8_0 (`--fp8-as-q8`), the 1 byte per weight the fit counted. Other quantized
+checkpoints are refused before anything runs. The converter dequantizes GPTQ and packed
+int to 16 bits, a GGUF larger than the fit sized, and does not read the rest
+(`conversion/base.py:575`). That includes the AutoRound W4A16 Flash-Next. A conversion
+Job that failed runs again on the next `agent up`, and `agent down` deletes one still running. `agent up`
+waits for the Job (`K3D_GPU_AGENT_CONVERT_TIMEOUT`, 12 hours by default), and the server
+pod waits for `manifest.json`. A later `agent up` of the same model finds the GGUF and
+converts nothing. `K3D_GPU_FIT=off` skips the fit; `on` also sizes the default
 models, which `auto` (the default) leaves as they are, as it leaves a quickstart RAM-tier
 pick and a `tune` profile's model. In `auto`, a fit that cannot run (offline, no
 metadata, an unreadable host) is a warning and the model is served unsized; a fit that

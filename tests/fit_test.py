@@ -300,6 +300,68 @@ class Engines(unittest.TestCase):
         self.assertEqual([x[0] for x in fit.engines_for("openvino", "qwen3")], ["ovms"])
 
 
+class Convert(unittest.TestCase):
+    """convert_plan: the GGUF conversion llama.cpp v0.8.0's convert_hf_to_gguf.py makes of
+    each checkpoint, sized as the fit sized it, or why it cannot."""
+
+    def test_bf16_keeps_its_type(self):
+        self.assertEqual(fit.convert_plan(config("Qwen__Qwen3.8-Flash-Next"), "safetensors"),
+                         {"args": ["--outtype", "bf16"], "error": None})
+
+    def test_fp8_is_stored_as_q8_0(self):
+        for m in ("Qwen__Qwen3.8-Flash-Next-FP8", "RedHatAI__gemma-4-26B-A4B-it-FP8-dynamic"):
+            self.assertEqual(fit.convert_plan(config(m), "safetensors")["args"], ["--outtype", "bf16", "--fp8-as-q8"], m)
+
+    def test_quantized_it_cannot_keep_is_refused(self):
+        d = fit.convert_plan(config("Intel__Qwen3.8-Flash-Next-W4A16-AutoRound"), "safetensors")
+        self.assertIsNone(d["args"])
+        self.assertIn("quant_method auto-round (conversion/base.py:575)", d["error"])
+        d = fit.convert_plan(config("RedHatAI__Qwen3.8-27B-INT4"), "safetensors")
+        self.assertIsNone(d["args"])
+        self.assertIn("dequantizes quant_method compressed-tensors to 16 bits", d["error"])
+        self.assertIn("no GGUF conversion", fit.convert_plan({}, "openvino")["error"])
+
+    def test_fit_names_the_conversion_and_the_gguf_source(self):
+        d = plan("xeon6741p-4xb70", "Qwen__Qwen3.8-Flash-Next")
+        self.assertEqual(d["convert"]["args"], ["--outtype", "bf16"])
+        self.assertNotIn("files", d)
+        d = plan("xeon6741p-4xb70", "google__gemma-4-26B-A4B-it-qat-q4_0-gguf")
+        self.assertNotIn("convert", d)
+        self.assertEqual(d["files"], ["gemma-4-26B_q4_0-it.gguf"])
+        # The GGUF model the fit sized, at the commit its headers were read from (fit.py fetch
+        # writes every GGUF model of a repo as a group, labelled by its quant).
+        self.assertEqual(d["source"], "google/gemma-4-26B-A4B-it-qat-q4_0-gguf@d1c082be9cf3c8a514acf63b8761f4b41935842e:Q4_0")
+
+    def test_busy_cards(self):
+        with open(os.path.join(FIX, "hosts", "xeon6741p-4xb70.json")) as f:
+            host = json.load(f)
+        self.assertEqual([b[0] for b in fit.busy_cards(host)], ["card0", "card1"])
+        self.assertIn("vllm[4101]", fit.busy_cards(host)[0][2])
+
+    def test_knobs_rewrite_llama_slots_per_rung(self):
+        d = plan("xeon6741p-4xb70", "Qwen__Qwen3.8-Flash-Next")
+        k = dict(line.split("=", 1) for line in fit.knobs(d, 1).splitlines())
+        seqs, ctx = d["guard"]["rungs"][1]
+        flags = k["llama_flags"].split()
+        self.assertEqual(flags[flags.index("-c") + 1], str(seqs * ctx))
+        self.assertEqual(flags[flags.index("-np") + 1], str(seqs))
+        self.assertIn("--n-cpu-moe", flags)
+        self.assertEqual(k["convert"], "--outtype bf16")
+
+    def test_knobs_name_the_picked_gguf_and_leave_out_the_hf_hint(self):
+        # The fit's flags keep -hf <repo>:<quant> (llama-server by hand); the agent's knobs
+        # do not: the agent downloads "files", the picked model's shards, at the fit's commit.
+        d = plan("xeon6741p-4xb70", "google__gemma-4-26B-A4B-it-qat-q4_0-gguf")
+        self.assertEqual(d["flags"][:2], ["-hf", "google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0"])
+        k = dict(line.split("=", 1) for line in fit.knobs(d).splitlines())
+        self.assertNotIn("-hf", k["llama_flags"].split())
+        self.assertEqual(k["files"], "gemma-4-26B_q4_0-it.gguf")
+        d = plan("xeon6741p-4xb70", "ggml-org__Qwen3.8-Flash-Next-GGUF", file="Q2_K")
+        k = dict(line.split("=", 1) for line in fit.knobs(d).splitlines())
+        self.assertNotIn("-hf", k["llama_flags"].split())
+        self.assertEqual(k["files"], "Qwen3.8-Flash-Next-Q2_K-00001-of-00002.gguf,Qwen3.8-Flash-Next-Q2_K-00002-of-00002.gguf")
+
+
 QWEN27_VARIANTS = ("Qwen__Qwen3.8-27B-FP8", "RedHatAI__Qwen3.8-27B-INT4", "OpenVINO__Qwen3.8-27B-int4-ov",
                    "OpenVINO__Qwen3.8-27B-int8-ov")
 

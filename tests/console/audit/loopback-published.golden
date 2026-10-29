@@ -1,4 +1,4 @@
-audit PASS: 0 of 11 checks failed (images.lock: 52 images, k3s v1.37.1-k3s1)
+audit PASS: 0 of 11 checks failed (images.lock: 55 images, k3s v1.37.1-k3s1)
 ok   listener 0.0.0.0:39651 kube-apiserver: off loopback, auth client-cert (docker port 6443/tcp on k3d-gpu-server-0)
 ok   listener 127.0.0.1:8000 published node port 30080/tcp: loopback, auth unknown (docker port 30080/tcp on k3d-gpu-server-0)
 ok   image docker.io/intel/intel-gpu-plugin:0.37.1: sha256:004641b2547d in images.lock (share/intel-gpu-plugin.yml, share/intel-gpu-wsl-plugin.yml); on k3d-gpu-server-0
