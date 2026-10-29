@@ -1,0 +1,30 @@
+{"ev": "start", "host": "905a08313800", "name": "H56-smoke-W-s1", "slot": "1", "t": 1792567702.887, "tag": "H56-smoke-W-s1:279345:305537068"}
+{"ev": "start", "host": "905a08313800", "name": "H56-smoke-W-s0", "slot": "0", "t": 1792567863.018, "tag": "H56-smoke-W-s0:289600:305553080"}
+{"ev": "end", "host": "905a08313800", "orphans_killed": "0", "rc": "0", "reap_residue": "0", "stale_reaped": "0", "t": 1792568115.41, "tag": "H56-smoke-W-s1:279345:305537068"}
+{"ev": "end", "host": "905a08313800", "orphans_killed": "0", "rc": "0", "reap_residue": "0", "stale_reaped": "0", "t": 1792568335.749, "tag": "H56-smoke-W-s0:289600:305553080"}
+{"ev": "start", "host": "905a08313800", "name": "H56-hold1-s0", "slot": "0", "t": 1792616677.677, "tag": "H56-hold1-s0:447774:310434547"}
+{"ev": "end", "host": "905a08313800", "orphans_killed": "0", "rc": "0", "reap_residue": "0", "stale_reaped": "0", "t": 1792617140.381, "tag": "H56-hold1-s0:447774:310434547"}
+{"ev": "start", "host": "905a08313800", "name": "H50-smoke-mountB", "t": 1792619937.863, "tag": "H50-smoke-mountB:476412:310464637"}
+{"ev": "end", "host": "905a08313800", "orphans_killed": "0", "rc": "3", "reap_residue": "0", "stale_reaped": "0", "t": 1792620229.979, "tag": "H50-smoke-mountB:476412:310464637"}
+{"ev": "start", "host": "905a08313800", "name": "H56-hold2-s1", "slot": "1", "t": 1792620230.22, "tag": "H56-hold2-s1:545103:310789801"}
+{"ev": "start", "host": "905a08313800", "name": "H56-hold2-s0", "slot": "0", "t": 1792620380.343, "tag": "H56-hold2-s0:555562:310804813"}
+{"ev": "end", "host": "905a08313800", "orphans_killed": "0", "rc": "0", "reap_residue": "0", "stale_reaped": "0", "t": 1792620692.948, "tag": "H56-hold2-s1:545103:310789801"}
+{"ev": "end", "host": "905a08313800", "orphans_killed": "0", "rc": "0", "reap_residue": "0", "stale_reaped": "0", "t": 1792620853.091, "tag": "H56-hold2-s0:555562:310804813"}
+{"ev": "start", "host": "905a08313800", "name": "H56-hold3-s1", "slot": "1", "t": 1792620989.489, "tag": "H56-hold3-s1:576765:310865728"}
+{"ev": "start", "host": "905a08313800", "name": "H56-hold3-s0", "slot": "0", "t": 1792621139.61, "tag": "H56-hold3-s0:586865:310880739"}
+{"ev": "end", "host": "905a08313800", "orphans_killed": "0", "rc": "0", "reap_residue": "0", "stale_reaped": "0", "t": 1792621452.187, "tag": "H56-hold3-s1:576765:310865728"}
+{"ev": "end", "host": "905a08313800", "orphans_killed": "0", "rc": "0", "reap_residue": "0", "stale_reaped": "0", "t": 1792621602.304, "tag": "H56-hold3-s0:586865:310880739"}
+{"ev": "start", "host": "905a08313800", "name": "H56-hold4-s0", "slot": "0", "t": 1792621602.615, "tag": "H56-hold4-s0:603763:310927040"}
+{"ev": "end", "host": "905a08313800", "orphans_killed": "0", "rc": "0", "reap_residue": "0", "stale_reaped": "0", "t": 1792622065.288, "tag": "H56-hold4-s0:603763:310927040"}
+{"ev": "start", "host": "905a08313800", "name": "H56-hold5-s0", "slot": "0", "t": 1792622065.599, "tag": "H56-hold5-s0:617257:310973339"}
+{"ev": "end", "host": "905a08313800", "orphans_killed": "0", "rc": "0", "reap_residue": "0", "stale_reaped": "0", "t": 1792622528.288, "tag": "H56-hold5-s0:617257:310973339"}
+{"ev": "start", "host": "905a08313800", "name": "H56-hold6-s1", "slot": "1", "t": 1792622528.601, "tag": "H56-hold6-s1:630740:311019639"}
+{"ev": "start", "host": "905a08313800", "name": "H56-hold6-s0", "slot": "0", "t": 1792622678.725, "tag": "H56-hold6-s0:640833:311034651"}
+{"ev": "end", "host": "905a08313800", "orphans_killed": "0", "rc": "0", "reap_residue": "0", "stale_reaped": "0", "t": 1792622991.332, "tag": "H56-hold6-s1:630740:311019639"}
+{"ev": "end", "host": "905a08313800", "orphans_killed": "0", "rc": "0", "reap_residue": "0", "stale_reaped": "0", "t": 1792623151.481, "tag": "H56-hold6-s0:640833:311034651"}
+{"ev": "start", "host": "905a08313800", "name": "H56-hold7-s1", "slot": "1", "t": 1792623151.789, "tag": "H56-hold7-s1:657829:311081958"}
+{"ev": "start", "host": "905a08313800", "name": "H56-hold7-s0", "slot": "0", "t": 1792623301.916, "tag": "H56-hold7-s0:667925:311096970"}
+{"ev": "end", "host": "905a08313800", "orphans_killed": "0", "rc": "0", "reap_residue": "0", "stale_reaped": "0", "t": 1792623614.534, "tag": "H56-hold7-s1:657829:311081958"}
+{"ev": "end", "host": "905a08313800", "orphans_killed": "0", "rc": "0", "reap_residue": "0", "stale_reaped": "0", "t": 1792623774.652, "tag": "H56-hold7-s0:667925:311096970"}
+{"ev": "start", "host": "905a08313800", "name": "H56-hold8-s0", "slot": "0", "t": 1792623774.967, "tag": "H56-hold8-s0:684976:311144276"}
+{"ev": "end", "host": "905a08313800", "orphans_killed": "0", "rc": "0", "reap_residue": "0", "stale_reaped": "0", "t": 1792624237.589, "tag": "H56-hold8-s0:684976:311144276"}

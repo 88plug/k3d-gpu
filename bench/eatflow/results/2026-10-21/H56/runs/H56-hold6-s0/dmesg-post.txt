@@ -1,0 +1,200 @@
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: 
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Tile0: GT0: Fault response: Unsuccessful -EINVAL
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Xe device coredump has been created
+[Sun Sep 27 03:57:29 2026] xe 0000:48:00.0: [drm] Check your /sys/class/drm/card2/device/devcoredump/data
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Xe device coredump has been created
+[Sun Sep 27 03:57:29 2026] xe 0000:12:00.0: [drm] Check your /sys/class/drm/card1/device/devcoredump/data
+[Sun Sep 27 04:38:15 2026] xe 0000:96:00.0: [drm] Xe device coredump has been deleted.
+[Sun Sep 27 04:38:15 2026] xe 0000:7c:00.0: [drm] Xe device coredump has been deleted.
+[Sun Sep 27 05:00:05 2026] xe 0000:12:00.0: [drm] Xe device coredump has been deleted.
+[Sun Sep 27 05:00:05 2026] xe 0000:48:00.0: [drm] Xe device coredump has been deleted.
