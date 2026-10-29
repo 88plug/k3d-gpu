@@ -859,8 +859,12 @@ def flash_next_kv(il, ctx):
 
 
 def gemma4_kv(il, ctx):
-    # every 6th layer global: 2 x 2 kv heads x 512 x 2 B per token; the rest a 1024-token window
-    return 2 * 2 * 512 * 2 * ctx if il % 6 == 5 else 2 * 8 * 256 * 2 * min(ctx, 1024)
+    # every 6th layer global: 2 x 2 kv heads x 512 x 2 B per token; the rest a 1024-token window,
+    # whose llama.cpp b11749 cache is GGML_PAD(min(n_ctx_seq, 1024 + 512 ubatch), 256) cells per
+    # slot (src/llama-kv-cache-iswa.cpp), n_ctx_seq itself padded to 256 (src/llama-context.cpp)
+    if il % 6 == 5:
+        return 2 * 2 * 512 * 2 * ctx
+    return 2 * 8 * 256 * 2 * min((ctx + 255) // 256 * 256, 1536)
 
 
 class LlamaSplit(unittest.TestCase):
@@ -897,6 +901,9 @@ class LlamaSplit(unittest.TestCase):
         for got, want in zip(d["card_bytes"], cards):
             self.assertAlmostEqual(got / GIB, want / GIB, delta=0.01)
         self.assertEqual(d["gpu_bytes"], max(d["card_bytes"]))
+        # the KV over the cards is the plan's KV
+        self.assertAlmostEqual(sum(kv_layer(il, d["ctx"]) for il in range(n)) * d["seqs"] / GIB, d["kv_bytes"] / GIB,
+                               delta=0.01)
 
     def test_flash_next_iq4nl_cards_within_budget(self):
         d = plan("xeon6741p-4xb70", FLASH_GGUF)
@@ -911,6 +918,21 @@ class LlamaSplit(unittest.TestCase):
         self.assertTrue(d["fits"], d["summary"])
         self.assertEqual((d["placement"], d["gpus"]), ("gpu-split", 2))
         self.check(d, config(g), weights(g), gemma4_kv)
+
+    def test_split_counts_the_context_checkpoints_on_the_host(self):
+        # llama-server keeps -ctxcp checkpoints of each slot's SWA cache in host RAM whatever
+        # card holds the layers: a split plan counts them in its host bytes, as one card does.
+        g = "google__gemma-4-26B-A4B-it-qat-q4_0-gguf"
+        d = plan("xeon6741p-4xb70", g, ctx=262144, seqs=6)
+        self.assertEqual(d["placement"], "gpu-split")
+        f = d["flags"]
+        self.assertEqual(f[f.index("--cache-ram") + 1], "0")
+        k = int(f[f.index("-ctxcp") + 1])
+        ckpt = 25 * 2 * 8 * 256 * 2 * 1536  # 25 SWA layers, K and V at 2 B, over 1536 cells
+        self.assertEqual(d["ckpt_bytes"], d["seqs"] * k * ckpt)
+        m = fit.model_profile(config(g), weights(g))
+        self.assertEqual(d["host_bytes"], int(fit.HOST_RUNTIME["llama.cpp"] + m["lookup_bytes"] + d["ckpt_bytes"]))
+        self.assertGreaterEqual(int(d["k8s"]["memory_limit"][:-2]) * GIB, d["host_bytes"])
 
     def test_layer_bytes_are_the_bytes_to_serve(self):
         # Sized from safetensors for a GGUF conversion: the MTP head is not served

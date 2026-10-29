@@ -1053,14 +1053,14 @@ def swa_tokens(kv, ctx):
     return min(ctx, w)
 
 
-def per_seq(kv, ctx, scale=1.0):
-    return int((kv["full_per_token"] * ctx + kv["swa_per_token"] * swa_tokens(kv, ctx)) * scale
-               + kv["state_per_seq"] * scale)
-
-
 def kv_parts(kv, ctx):
     """(full attention, sliding window, linear state) KV bytes of one sequence at context ctx."""
-    return kv["full_per_token"] * ctx, kv["swa_per_token"] * min(ctx, kv["window"] or ctx), kv["state_per_seq"]
+    return kv["full_per_token"] * ctx, kv["swa_per_token"] * swa_tokens(kv, ctx), kv["state_per_seq"]
+
+
+def per_seq(kv, ctx, scale=1.0):
+    f, w, st = kv_parts(kv, ctx)
+    return int((f + w) * scale + st * scale)
 
 
 # ---- llama.cpp over several GPUs ----------------------------------------------------------
@@ -1174,9 +1174,7 @@ def ckpt_seq(kv, ctx):
     """Host bytes of one llama-server slot's context checkpoints at context ctx: kv["ckpts"]
     of them, each the slot's SWA cache (GGML_PAD(min(n_ctx_seq, n_swa + n_ubatch), 256)
     cells, src/llama-kv-cache-iswa.cpp) and recurrent state. A model with neither makes none."""
-    w = kv["window"] or ctx
-    one = kv["swa_per_token"] * min(_pad(ctx, 256), _pad(w + LLAMA_UBATCH, 256)) + kv["state_per_seq"]
-    return kv.get("ckpts", 0) * one
+    return kv.get("ckpts", 0) * (kv["swa_per_token"] * swa_tokens(kv, ctx) + kv["state_per_seq"])
 
 
 def ctx_ladder(max_ctx, want=None):
@@ -1573,7 +1571,9 @@ def _llama_multi(m, kv, ladder, relaxed, want_seqs, use, ov, ovl, n_cpus, on_hos
                      % (use[0]["card"], g1(m["bytes"]["vision"])))
     kvused = per_seq(kv, c) * n
     lines.append("KV: %d seqs x %s at %d tokens = %s over the cards" % (n, _mb(per_seq(kv, c)), c, g1(kvused)))
-    hb = int(HOST_RUNTIME["llama.cpp"] + on_host)
+    # llama-server's context checkpoints stay in host RAM whichever card holds the layers.
+    ck = ckpt_seq(kv, c) * n
+    hb = int(HOST_RUNTIME["llama.cpp"] + on_host + ck)
     toks = None
     if n_cpu:
         exp_layer = m["bytes"]["experts"] / max(m["layers"], 1)
@@ -1583,17 +1583,19 @@ def _llama_multi(m, kv, ladder, relaxed, want_seqs, use, ov, ovl, n_cpus, on_hos
         lines.append("DRAM decode bound: %g GB/s / (%s x %d/%d read per token) = %.0f tok/s (floor %g)"
                      % (bw, g1(dram_w), m["experts_per_tok"], m["experts"], toks, MIN_DRAM_TOK_S))
         hb += int(dram_w)
-        lines.append("host: experts %s + lookup tables %s + runtime %s = %s"
-                     % (g1(dram_w), g1(on_host), g1(HOST_RUNTIME["llama.cpp"]), g1(hb)))
+        lines.append("host: experts %s + lookup tables %s + runtime %s + context checkpoints %d x %s = %s"
+                     % (g1(dram_w), g1(on_host), g1(HOST_RUNTIME["llama.cpp"]), n, _mb(ckpt_seq(kv, c)), g1(hb)))
         if toks < MIN_DRAM_TOK_S:
             return _res("llama.cpp", place, False, "DRAM bandwidth gives %.1f tok/s, under the %g floor"
                         % (toks, MIN_DRAM_TOK_S), lines, gpus=k)
+    elif ck:
+        lines.append("context checkpoints: %d seqs x %s = %s in host RAM" % (n, _mb(ckpt_seq(kv, c)), g1(ck)))
     if hb > hfree:
         return _res("llama.cpp", place, False, "host side %s exceeds the host budget %s" % (g1(hb), g1(hfree)),
                     lines, gpus=k)
     return _res("llama.cpp", place, True, "", lines, ctx=c, seqs=n, gpus=k, gpu_bytes=max(cards_b), card_bytes=cards_b,
-                host_bytes=hb, dram_tok_s=round(toks, 1) if toks else None, kv_bytes=int(kvused), n_cpu_moe=n_cpu,
-                flags=_flags("llama.cpp", place, c, n, k, max(cards_b), use, kvused, m, n_cpu, kv, ts))
+                host_bytes=hb, dram_tok_s=round(toks, 1) if toks else None, kv_bytes=int(kvused), ckpt_bytes=ck,
+                n_cpu_moe=n_cpu, flags=_flags("llama.cpp", place, c, n, k, max(cards_b), use, kvused, m, n_cpu, kv, ts))
 
 
 def _flags(eng, place, ctx, seqs, k, gpu_use, cards, kvused, m, n_cpu_moe, kv=None, ts=None):

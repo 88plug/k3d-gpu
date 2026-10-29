@@ -124,9 +124,12 @@ budget = min(c["budget"] for c in fit.gpu_budget(json.load(open(sys.argv[3])))[0
 assert d["placement"] == "moe-offload" and len(ts) == d["gpus"] == 2 and sum(ts) == 49, (ts, d["gpus"])
 assert ts != [30, 30] and "--n-cpu-moe" in f, f
 assert len(d["card_bytes"]) == 2 and max(d["card_bytes"]) <= budget, (d["card_bytes"], budget)
+# context checkpoints (here the recurrent state) stay in host RAM on a split too
+k = int(f[f.index("-ctxcp") + 1])
+assert f[f.index("--cache-ram") + 1] == "0" and 0 < d["seqs"] * k <= d["ckpt_bytes"] < d["host_bytes"], (k, d["ckpt_bytes"])
 print(f[f.index("-ts") + 1])
 ' "${ROOT}/console" "${out}" "${XEON}"); then
-    ok "fit: Flash-Next IQ4_NL on two cards, -ts ${ts} layers, every card within its budget"
+    ok "fit: Flash-Next IQ4_NL on two cards, -ts ${ts} layers, every card within its budget, checkpoints on the host"
 else fail "fit: Flash-Next IQ4_NL per-card split (rc ${rc})" "$(grep -E '"-ts"|card_bytes' -A3 <<< "${out}")"; fi
 out=$(bash "${K3D_GPU}" fit --host "${XEON}" --model "${FLASH}" --file Qwen3.8-Flash-Next-Q8_0-00002-of-00002.gguf --explain 2>&1); rc=$?
 if [ "${rc}" -eq 0 ] && grep -q ':Q8_0 on' <<< "${out}" && grep -q -- "-hf ${FLASH}:Q8_0" <<< "${out}"; then

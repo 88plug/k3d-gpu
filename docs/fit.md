@@ -132,7 +132,8 @@ layers it gets, the way llama.cpp b11749 assigns them with `-ngl 999`
 the last card. Each layer's weights are its share of the class totals, minus its experts
 when it is one of the first `--n-cpu-moe` layers. The vision projector counts on the first
 card: `tools/mtmd/clip.cpp` loads it on the first GPU. Each layer's KV and recurrent state
-sit on its card. Every card also carries its own overhead.
+sit on its card, a sliding-window layer's at its padded cell count (above); the context
+checkpoints stay in host RAM. Every card also carries its own overhead.
 The fit emits `-ts` as whole layer counts summing to layers + 1, so each card gets exactly
 the layers it was sized for. It keeps every card within the smallest budget of the cards
 used, because the device plugin, not the fit, decides which card is device 0 inside the
