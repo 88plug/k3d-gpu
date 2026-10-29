@@ -1,0 +1,61 @@
+name: Watchdog
+
+# hack/watchdog checks, hourly and after each listed workflow completes on main:
+# scheduled workflows that went red or stopped succeeding, disabled workflows,
+# main without CI or with red CI, release tags without their images, packages or
+# AUR update, and autobump PRs stuck without green CI. Each finding is one issue
+# labelled ci-alarm (hack/ci_alarm), assigned to the owner with an @mention; it
+# closes itself once the finding clears. Dispatch with simulate_red=true to file
+# the `simulate` alarm; the next run without it closes it.
+#
+# It reads main, never the triggering run's code. workflow_run passes only runs on
+# main (branches: and the job's if:); the hourly cron covers a missed event.
+
+on:
+  schedule:
+    - cron: '47 * * * *'
+  workflow_run:
+    workflows:
+      - 'CI'
+      - 'Auto-update, Build & Release'
+      - 'Auto-release AUR'
+      - 'Release packages (deb, rpm, Homebrew)'
+      - 'AUR Deploy'
+      - 'Docs'
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      simulate_red:
+        description: 'File the `simulate` alarm, to check that alarms reach the owner'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+  actions: write
+  pull-requests: read
+
+concurrency:
+  group: watchdog
+  cancel-in-progress: false
+
+jobs:
+  watchdog:
+    name: Watchdog
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0 # the aur-v* tags and their dates
+          persist-credentials: false
+      - name: Check and alarm
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SIMULATE_RED: ${{ inputs.simulate_red }}
+        run: hack/watchdog

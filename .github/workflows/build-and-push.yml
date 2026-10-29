@@ -5,19 +5,23 @@ name: Auto-update, Build & Release
 #   check   (nightly, or manual without `release`): resolve upstream versions; when
 #           one moved (or `force`), commit the bumped pins to main and dispatch
 #           auto-release.yml, which cuts a launcher release for them.
-#   release (dispatched by auto-release.yml with `release=X.Y.Z`): build the image
-#           from tag aur-vX.Y.Z, publish <repo>:X.Y.Z (the launcher's default
-#           image) next to the floating tags, then dispatch aur-deploy.yml and
-#           packages.yml (deb, rpm, Homebrew) so the launcher reaches every package
-#           channel only once its image exists.
+#   release (dispatched by auto-release.yml with `release=X.Y.Z`, or by
+#           hack/watchdog when a release tag has no image): build the image from
+#           tag aur-vX.Y.Z, publish <repo>:X.Y.Z (the launcher's default image),
+#           move the floating tags when X.Y.Z is the newest release, then dispatch
+#           aur-deploy.yml and packages.yml (deb, rpm, Homebrew) so the launcher
+#           reaches every package channel only once its image exists.
 #
 # Every image is built from a release tag, so every published image has a
 # launcher version. Pushes made with GITHUB_TOKEN start no workflow runs, but
 # workflow_dispatch does, hence the explicit dispatches.
+#
+# Each release version queues on its own (one release never replaces another
+# pending release); the nightly check queues in `nightly`.
 
 on:
   schedule:
-    - cron: '0 6 * * *'
+    - cron: '17 6 * * *'
   workflow_dispatch:
     inputs:
       force:
@@ -30,7 +34,7 @@ on:
         default: ''
 
 concurrency:
-  group: build-and-push
+  group: build-and-push-${{ inputs.release && format('release-{0}', inputs.release) || 'nightly' }}
   cancel-in-progress: false
 
 permissions:
@@ -42,6 +46,7 @@ jobs:
   check:
     if: ${{ !inputs.release }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout main
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -292,6 +297,7 @@ jobs:
   release:
     if: ${{ inputs.release }}
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     env:
       RELEASE: ${{ inputs.release }}
     steps:
@@ -347,9 +353,41 @@ jobs:
             exit 1
           fi
 
+      # hack/release-tags comes from main: the release tag checked out above can
+      # predate it (the watchdog re-dispatches an old release whose image is missing).
+      - name: Checkout main's release tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          path: .ci-main
+          sparse-checkout: hack
+          persist-credentials: false
+
+      # The builds push the versioned tags (<repo>:X.Y.Z, -ubuntu26.04, -ubuntu24.04)
+      # only; the floating tags move after both builds, below.
+      - name: Tags to push
+        id: tags
+        env:
+          K3S: ${{ steps.current.outputs.k3s }}
+          RELEASE_REPOS: cryptoandcoffee/k3d-gpu ghcr.io/${{ github.repository_owner }}/k3d-gpu
+        run: |
+          tags=$(.ci-main/hack/release-tags "$RELEASE" "$K3S")
+          printf '%s\n' "$tags"
+          for v in 26.04 24.04; do
+            echo "v${v/./}<<TAGS_EOF"
+            awk -v v="$v" '$1 == v && $2 == "versioned" { print $3 }' <<< "$tags"
+            echo TAGS_EOF
+          done >> "$GITHUB_OUTPUT"
+
       # Ubuntu 26.04 is the default (:latest and :X.Y.Z); 24.04 is also published.
       # Each carries the baked device plugins, so clusters expose GPUs with no apply.
-      - name: Build & push — Ubuntu 26.04 (default / latest)
+      # Each variant builds in up to 3 attempts with the same inputs (a Docker Hub
+      # 429 stopped release 0.1.76 with its tag cut and no image): attempts 1 and 2
+      # continue on error and are followed by a 2 and a 4 min wait; attempt 3 fails
+      # the job.
+      - name: Build & push — Ubuntu 26.04 (attempt 1)
+        id: b2604_1
+        continue-on-error: true
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
@@ -358,19 +396,46 @@ jobs:
           labels: |
             org.opencontainers.image.version=${{ inputs.release }}
             org.opencontainers.image.revision=aur-v${{ inputs.release }}
-          tags: |
-            cryptoandcoffee/k3d-gpu:${{ inputs.release }}
-            cryptoandcoffee/k3d-gpu:${{ inputs.release }}-ubuntu26.04
-            cryptoandcoffee/k3d-gpu:latest
-            cryptoandcoffee/k3d-gpu:ubuntu26.04
-            cryptoandcoffee/k3d-gpu:${{ steps.current.outputs.k3s }}-ubuntu26.04
-            ghcr.io/${{ github.repository_owner }}/k3d-gpu:${{ inputs.release }}
-            ghcr.io/${{ github.repository_owner }}/k3d-gpu:${{ inputs.release }}-ubuntu26.04
-            ghcr.io/${{ github.repository_owner }}/k3d-gpu:latest
-            ghcr.io/${{ github.repository_owner }}/k3d-gpu:ubuntu26.04
-            ghcr.io/${{ github.repository_owner }}/k3d-gpu:${{ steps.current.outputs.k3s }}-ubuntu26.04
+          tags: ${{ steps.tags.outputs.v2604 }}
 
-      - name: Build & push — Ubuntu 24.04 (variant)
+      - name: Wait 2 min before Ubuntu 26.04 attempt 2
+        if: steps.b2604_1.outcome == 'failure'
+        run: sleep 120
+
+      - name: Build & push — Ubuntu 26.04 (attempt 2)
+        id: b2604_2
+        if: steps.b2604_1.outcome == 'failure'
+        continue-on-error: true
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          labels: |
+            org.opencontainers.image.version=${{ inputs.release }}
+            org.opencontainers.image.revision=aur-v${{ inputs.release }}
+          tags: ${{ steps.tags.outputs.v2604 }}
+
+      - name: Wait 4 min before Ubuntu 26.04 attempt 3
+        if: steps.b2604_2.outcome == 'failure'
+        run: sleep 240
+
+      - name: Build & push — Ubuntu 26.04 (attempt 3)
+        id: b2604_3
+        if: steps.b2604_2.outcome == 'failure'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          labels: |
+            org.opencontainers.image.version=${{ inputs.release }}
+            org.opencontainers.image.revision=aur-v${{ inputs.release }}
+          tags: ${{ steps.tags.outputs.v2604 }}
+
+      - name: Build & push — Ubuntu 24.04 (attempt 1)
+        id: b2404_1
+        continue-on-error: true
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
@@ -381,13 +446,65 @@ jobs:
           labels: |
             org.opencontainers.image.version=${{ inputs.release }}
             org.opencontainers.image.revision=aur-v${{ inputs.release }}
-          tags: |
-            cryptoandcoffee/k3d-gpu:${{ inputs.release }}-ubuntu24.04
-            cryptoandcoffee/k3d-gpu:ubuntu24.04
-            cryptoandcoffee/k3d-gpu:${{ steps.current.outputs.k3s }}-ubuntu24.04
-            ghcr.io/${{ github.repository_owner }}/k3d-gpu:${{ inputs.release }}-ubuntu24.04
-            ghcr.io/${{ github.repository_owner }}/k3d-gpu:ubuntu24.04
-            ghcr.io/${{ github.repository_owner }}/k3d-gpu:${{ steps.current.outputs.k3s }}-ubuntu24.04
+          tags: ${{ steps.tags.outputs.v2404 }}
+
+      - name: Wait 2 min before Ubuntu 24.04 attempt 2
+        if: steps.b2404_1.outcome == 'failure'
+        run: sleep 120
+
+      - name: Build & push — Ubuntu 24.04 (attempt 2)
+        id: b2404_2
+        if: steps.b2404_1.outcome == 'failure'
+        continue-on-error: true
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          build-args: |
+            UBUNTU_IMAGE=${{ steps.current.outputs.ubuntu2404 }}
+          labels: |
+            org.opencontainers.image.version=${{ inputs.release }}
+            org.opencontainers.image.revision=aur-v${{ inputs.release }}
+          tags: ${{ steps.tags.outputs.v2404 }}
+
+      - name: Wait 4 min before Ubuntu 24.04 attempt 3
+        if: steps.b2404_2.outcome == 'failure'
+        run: sleep 240
+
+      - name: Build & push — Ubuntu 24.04 (attempt 3)
+        id: b2404_3
+        if: steps.b2404_2.outcome == 'failure'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          build-args: |
+            UBUNTU_IMAGE=${{ steps.current.outputs.ubuntu2404 }}
+          labels: |
+            org.opencontainers.image.version=${{ inputs.release }}
+            org.opencontainers.image.revision=aur-v${{ inputs.release }}
+          tags: ${{ steps.tags.outputs.v2404 }}
+
+      # The floating tags (latest, ubuntu26.04, ubuntu24.04, <k3s>-ubuntu26.04,
+      # <k3s>-ubuntu24.04) move only when this release is the highest aur-v* tag on
+      # origin now, after both variants pushed: releases build in parallel (one
+      # queue per version), so an older one that finishes late leaves them alone.
+      # Each is a registry-side copy of the versioned tag pushed above.
+      - name: Move the floating tags (newest release only)
+        env:
+          K3S: ${{ steps.current.outputs.k3s }}
+          RELEASE_REPOS: cryptoandcoffee/k3d-gpu ghcr.io/${{ github.repository_owner }}/k3d-gpu
+        run: |
+          tags=$(.ci-main/hack/release-tags "$RELEASE" "$K3S")
+          n=0
+          while read -r _ kind ref src; do
+            [ "$kind" = floating ] || continue
+            docker buildx imagetools create --tag "$ref" "$src"
+            n=$((n + 1))
+          done <<< "$tags"
+          echo "moved $n floating tags"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
@@ -445,6 +562,7 @@ jobs:
   list-components:
     if: ${{ !inputs.release }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     outputs:
@@ -463,6 +581,7 @@ jobs:
     needs: list-components
     if: needs.list-components.outputs.names != '[]'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
       pull-requests: write
@@ -540,6 +659,7 @@ jobs:
   repin-images:
     if: ${{ !inputs.release }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
       pull-requests: write
@@ -634,6 +754,7 @@ jobs:
   bump-convert-pins:
     if: ${{ !inputs.release }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
       pull-requests: write

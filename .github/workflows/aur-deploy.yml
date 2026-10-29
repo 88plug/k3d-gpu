@@ -11,10 +11,14 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
     name: Publish k3d-gpu to AUR
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -30,12 +34,29 @@ jobs:
             echo "version=$REF" >> "$GITHUB_OUTPUT"
           fi
 
+      # Releases build in parallel (one build-and-push queue per version), so an
+      # older release can reach this deploy after a newer one: AUR never moves back.
+      # When the AUR RPC cannot be read the deploy goes ahead.
+      - name: AUR already newer?
+        id: aur
+        env:
+          VER: ${{ steps.ver.outputs.version }}
+        run: |
+          cur=$(curl -fsSg --retry 3 --max-time 30 'https://aur.archlinux.org/rpc/v5/info?arg[]=k3d-gpu' \
+            | jq -r '.results[0].Version // empty' | cut -d- -f1)
+          if [ -n "$cur" ] && [ "$cur" != "$VER" ] && [ "$(printf '%s\n%s\n' "$cur" "$VER" | sort -V | tail -1)" = "$cur" ]; then
+            echo "AUR has k3d-gpu $cur, newer than $VER; leaving it"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Update PKGBUILD
+        if: steps.aur.outputs.skip != 'true'
         run: |
           sed -i "s/^pkgver=.*/pkgver=${{ steps.ver.outputs.version }}/" packaging/aur/PKGBUILD
           sed -i "s/^pkgrel=.*/pkgrel=1/" packaging/aur/PKGBUILD
 
       - name: Publish to AUR
+        if: steps.aur.outputs.skip != 'true'
         uses: KSXGitHub/github-actions-deploy-aur@084b0d9b15415bf9cdb65d44dad1efe37a354050 # v4.2.0
         with:
           pkgname: k3d-gpu
