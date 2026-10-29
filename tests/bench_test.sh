@@ -347,7 +347,7 @@ h7x_records_on_early_exit() {
     printf '#!/bin/sh\nexit 0\n' > "${w}/bin/k3d"
     printf '#!/bin/sh\ncase "$*" in *"rev-parse HEAD"*) echo c0ffee ;; *) exit 1 ;; esac\n' > "${w}/bin/git"
     chmod +x "${w}/scripts/k3d-gpu" "${w}/bin/"*
-    PATH="${w}/bin:${PATH}" H7X_SMOKE=1 H7X_ORDER=A H7X_READY_S=1 H7X_NODE_CPUS=0-1 K3D_GPU_CLUSTER=t \
+    PATH="${w}/bin:${PATH}" H7X_SMOKE=1 H7X_ORDER=A H7X_READY_S=1 H7X_NODE_CPUS=0-1 K3D_GPU_CLUSTER=t H7X_CHART_CHECK=0 \
         APB_MODELS="${w}/models" APB_EAT_CHART="${w}/chart" APB_OUT="${w}/out" bash "${w}/bench/apb/h7x.sh"
     rc=$?
     out=$(echo "${w}"/out/h7x-*)
@@ -358,6 +358,25 @@ h7x_records_on_early_exit() {
 if python3 -c 'import yaml' 2>/dev/null; then
     check "apb (H7x): a run cut before its blocks still records the commit and node image" h7x_records_on_early_exit
 fi
+# h7x_refuses_other_chart: B and C are EAT release-1.1.0's stock (H7x amendment V1), so h7x.sh
+# stops before rendering when the chart's files do not have that release's sha256.
+h7x_refuses_other_chart() {
+    local w=${WORK}/h7x-chart out rc
+    mkdir -p "${w}/bench/apb" "${w}/chart/templates" "${w}/out"
+    cp "${ROOT}/bench/apb/h7x.sh" "${w}/bench/apb/"
+    printf 'image:\n  tag: "v0.24.0"\n' > "${w}/chart/xeon-values.yaml"
+    : > "${w}/chart/values.yaml"
+    : > "${w}/chart/templates/deployment.yaml"
+    out=$(H7X_RENDER_ONLY=1 K3D_GPU_CLUSTER=t APB_MODELS="${w}" APB_EAT_CHART="${w}/chart" APB_OUT="${w}/out" \
+        bash "${w}/bench/apb/h7x.sh" 2>&1)
+    rc=$?
+    [ "${rc}" = 1 ] || { echo "exit ${rc}, want 1"; return 1; }
+    echo "${out}" | grep -q "is not EAT release-1.1.0's chart" || { echo "no chart message: ${out}"; return 1; }
+    [ ! -e "$(echo "${w}"/out/h7x-*)/eat.yaml" ] || { echo "rendered B from the wrong chart"; return 1; }
+}
+check "apb (H7x): h7x.sh refuses a chart that is not EAT release-1.1.0's" h7x_refuses_other_chart
+check "apb (H7x): B and C run EAT release-1.1.0's v0.28.0, pinned by digest in h7x.sh" \
+    sh -c 'grep -qx "B_TAG=v0.28.0@sha256:197354e6475e638eb5ccca09beb078488046a82de0e204e7429bf1a804df9647" "$1" && grep -q -- "--set image.tag=\"\${B_TAG}\"" "$1"' _ "${ROOT}/bench/apb/h7x.sh"
 check "shared-prefix (H25): run.sh parses" bash -n "${ROOT}/bench/shared-prefix/run.sh"
 check "shared-prefix (H25): run.sh pins no node cpuset by default" \
     sh -c 'test "$(env -u CLUSTER -u NODE_CPUS SHARED_PREFIX_PRINT_CONFIG=1 bash "$1")" = "cluster=k3dgpu-i-shared-prefix node_cpus="' _ "${ROOT}/bench/shared-prefix/run.sh"
