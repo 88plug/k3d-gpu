@@ -78,6 +78,19 @@ class Snap(unittest.TestCase):
             child.wait()
 
 
+class RunningThreads(unittest.TestCase):
+    def test_only_engine_threads_in_state_r(self):
+        rec = {"procs": [
+            {"comm": "VLLM::Worker", "threads": [{"tid": 1, "state": "R"}, {"tid": 2, "state": "S"}]},
+            {"comm": "VLLM::EngineCor", "threads": [{"tid": 3, "state": "S"}]},
+            {"comm": "python3", "threads": [{"tid": 4, "state": "R"}]}]}
+        with tempfile.TemporaryDirectory() as t:
+            f = os.path.join(t, "threads-b.json")
+            json.dump(rec, open(f, "w"))
+            self.assertEqual(b1g_diag.running_threads(f), [(1, "VLLM::Worker")])
+            self.assertEqual(b1g_diag.running_threads(os.path.join(t, "missing.json")), [])
+
+
 class Stub(http.server.BaseHTTPRequestHandler):
     gen = [0.0]
     frozen = [False]

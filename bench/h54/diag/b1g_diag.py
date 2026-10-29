@@ -184,11 +184,34 @@ def _sudo_self(*args):
 def pyspy(pid, outfile):
     if not PYSPY:
         return "DIAG_PYSPY unset"
-    p = subprocess.run(["sudo", "-n", PYSPY, "dump", "--pid", str(pid), "--native", "--locals"],
+    # No --native: on this image py-spy 0.4.2's unwinder stops with UNW_EBADREG (run1, 2026-10-29).
+    p = subprocess.run(["sudo", "-n", PYSPY, "dump", "--pid", str(pid)],
                        capture_output=True, text=True, timeout=180)
     with open(outfile, "w") as f:
         f.write(f"# rc={p.returncode}\n{p.stdout}\n# stderr\n{p.stderr}")
     return p.returncode
+
+
+def running_threads(snapfile):
+    """(tid, comm) of every engine thread in state R in a snapshot file; [] when it is missing."""
+    try:
+        rec = json.load(open(snapfile))
+    except (OSError, ValueError):
+        return []
+    return [(t["tid"], p["comm"]) for p in rec["procs"] if p["comm"].startswith("VLLM::")
+            for t in p["threads"] if t["state"] == "R"]
+
+
+def perf_thread(tid, outdir):
+    """5 s of perf samples (call graphs) of one running thread, and its report."""
+    data = os.path.join(outdir, f"perf-{tid}.data")
+    rec = subprocess.run(["sudo", "-n", "perf", "record", "-t", str(tid), "-g", "-F", "999", "-o", data,
+                          "--", "sleep", "5"], capture_output=True, text=True, timeout=60)
+    rep = subprocess.run(["sudo", "-n", "perf", "report", "-i", data, "--stdio", "--no-children"],
+                         capture_output=True, text=True, timeout=120)
+    with open(os.path.join(outdir, f"perf-{tid}-report.txt"), "w") as f:
+        f.write(f"# perf record rc={rec.returncode}: {rec.stderr.strip()}\n{rep.stdout}")
+    return rec.returncode
 
 
 def watch(url, cgroup, outdir, client_pid, root_pid):
@@ -206,7 +229,7 @@ def _watch(log, url, cgroup, outdir, client_pid, root_pid):
         except Exception as e:   # the server going away is itself a record
             m = {"gen": None, "running": None, "error": f"{e.__class__.__name__}: {e}"}
         cg = cg_usage(cgroup)
-        cpu = None if (cg is None or last_cg is None) else (cg - last_cg) / 1e6 / max(now - last_t, 1e-6)
+        cpu = None if (cg is None or last_cg is None or now - last_t < 1) else (cg - last_cg) / 1e6 / (now - last_t)
         last_cg, last_t = cg, now
         if m.get("gen") is not None and m["gen"] != last_gen:
             last_gen, last_change = m["gen"], now
@@ -219,6 +242,8 @@ def _watch(log, url, cgroup, outdir, client_pid, root_pid):
                 time.sleep(gap)
                 p = _sudo_self("snap", str(root_pid), os.path.join(outdir, f"threads-{i}.json"))
                 stall[f"snap_{i}_rc"] = p.returncode
+            for tid, _ in running_threads(os.path.join(outdir, "threads-b.json"))[:4]:
+                stall[f"perf_{tid}"] = perf_thread(tid, outdir)
             for pid in tree(root_pid):
                 stall[f"pyspy_{pid}"] = pyspy(pid, os.path.join(outdir, f"pyspy-{pid}.txt"))
             with open(os.path.join(outdir, "stall.json"), "w") as f:

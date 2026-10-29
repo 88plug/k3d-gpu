@@ -8,8 +8,9 @@
 # chat-template ConfigMap, user 1001, read-only root, capabilities, no CPU or memory request or
 # limit) with plain `docker run` instead of k3d, sends sequential 256-token greedy requests with
 # the harness client (bench/llm_load.py, the H54a N=1 settings), and watches vLLM's /metrics.
-# On a stall it records each thread of the container's processes twice, 10 s apart, and a
-# py-spy dump of each process, then waits for the engine to die or 400 s.
+# On a stall it records each thread of the container's processes twice, 10 s apart, 5 s of perf
+# call graphs of each engine thread still running, and a py-spy dump of each process, then waits
+# for the engine to die or 400 s. DIAG_EXTRA_ENV adds env to B1g's for a labelled control run.
 #
 # Box rules: the exclusive bench lock (~/k3dgpu-bench.lock, the K=1 hold lock), the hold-start
 # rule (load1 <= 12 and no aiperf process, else wait up to 30 min, then refuse), the 97% disk
@@ -67,6 +68,9 @@ snapshot > "${OUT}/pre.txt"
   echo "py-spy: $(${DIAG_PYSPY} --version 2>&1)"; uname -r; nproc; } > "${OUT}/reproduce.txt" 2>&1
 
 ${PY} "${D}/b1g_diag.py" render "${DEPLOY}" "${OUT}/render" || { log "render failed"; exit 2; }
+# DIAG_EXTRA_ENV: space-separated KEY=VALUE pairs added to B1g's env (a control run, never stock).
+for kv in ${DIAG_EXTRA_ENV:-}; do echo "${kv}" >> "${OUT}/render/env.list"; done
+echo "extra env: ${DIAG_EXTRA_ENV:-none}" >> "${OUT}/reproduce.txt"
 mapfile -t ARGS < <(${PY} -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1]))))' "${OUT}/render/args.json")
 cleanup() {
     docker logs "${NAME}" > "${OUT}/server.log" 2>&1
