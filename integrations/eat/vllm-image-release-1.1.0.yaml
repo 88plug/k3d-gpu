@@ -1,0 +1,13 @@
+# The vLLM CPU image of EAT release-1.1.0, pinned by digest. eat-up.sh mounts this
+# file for EAT_RELEASE=release-1.1.0 only. brownfield.sh merges it last: over EAT's
+# vllm/xeon-values.yaml and vllm-values.yaml for catalog models, and over EAT's
+# vllm/guardrail-values.yaml for the Qwen3Guard guard (deploy_guardrails=on).
+#
+# The tag is the one EAT names, by tag only, in core/helm-charts/vllm/xeon-values.yaml
+# line 34 and guardrail-values.yaml line 30 at 0c726f576595971c53cc45b94e08ba969beb4a4a
+# (release-1.1.0). The digest is the tag's multi-arch index on Docker Hub, read
+# 2026-10-29 (EXPERIMENTS.md, crescent amendment E1). vllm-merge.py refuses a merge
+# whose tag differs from the one in EAT's file.
+image:
+  repository: vllm/vllm-openai-cpu
+  tag: "v0.28.0@sha256:197354e6475e638eb5ccca09beb078488046a82de0e204e7429bf1a804df9647"
