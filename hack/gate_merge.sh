@@ -11,6 +11,11 @@
 # CANCELLED, TIMED_OUT, STARTUP_FAILURE, ACTION_REQUIRED, STALE) or a failed
 # workflow run exits 1.
 #
+# Derived file: console/ledger-rules.json is EXPERIMENTS.md's rule rows as packages
+# ship them. A ledger-only PR (or base) merges without a CI re-run, so the gate
+# itself checks the merged tree: when the file there is not what EXPERIMENTS.md
+# generates, it syncs, and every sync regenerates the file and commits it.
+#
 # Moved base: if main is no longer an ancestor of the head, and both main
 # (since the merge base) and the PR change files other than EXPERIMENTS.md and
 # docs/provenance.md, the gate syncs the branch so CI re-runs on the merged
@@ -44,15 +49,25 @@ sync() {
   git fetch -q origin
   git worktree remove --force "$W" 2>/dev/null; git worktree add -q -B "gm/$pr" "$W" "origin/$br" || return 1
   ( cd "$W" || exit 1
-    git merge -q --no-edit origin/main >/dev/null 2>&1 && exit 0
-    for f in $(git diff --name-only --diff-filter=U); do
-      case $f in
-        EXPERIMENTS.md|docs/provenance.md) python3 "${KB}" "$f" >/dev/null && git add "$f";;
-        tests/bench_test.sh) python3 "${KB}" "$f" >/dev/null && bash -n "$f" && git add "$f" || { echo "bench_test resolve failed"; git merge --abort; exit 1; };;
-        *) echo "MANUAL conflict $f"; git merge --abort; exit 1;; esac
-    done
-    bash tests/claims_check.sh >/dev/null 2>&1 || { echo "claims_check failed after merge"; exit 1; }
-    git commit -q --no-edit ) || return 1
+    if ! git merge -q --no-edit origin/main >/dev/null 2>&1; then
+      for f in $(git diff --name-only --diff-filter=U); do
+        case $f in
+          EXPERIMENTS.md|docs/provenance.md) python3 "${KB}" "$f" >/dev/null && git add "$f";;
+          tests/bench_test.sh) python3 "${KB}" "$f" >/dev/null && bash -n "$f" && git add "$f" || { echo "bench_test resolve failed"; git merge --abort; exit 1; };;
+          *) echo "MANUAL conflict $f"; git merge --abort; exit 1;; esac
+      done
+      bash tests/claims_check.sh >/dev/null 2>&1 || { echo "claims_check failed after merge"; exit 1; }
+      git commit -q --no-edit || { echo "merge commit failed"; git merge --abort; exit 1; }
+    fi
+    if [ -f console/model_opt.py ] && [ -f console/ledger-rules.json ]; then
+      python3 console/model_opt.py ledger-rules --ledger EXPERIMENTS.md --out console/ledger-rules.json \
+        || { echo "ledger-rules regeneration failed"; exit 1; }
+      if ! git diff --quiet -- console/ledger-rules.json; then
+        git add console/ledger-rules.json
+        git commit -q -m "console/ledger-rules.json: regenerate from EXPERIMENTS.md" \
+          || { echo "ledger-rules commit failed"; exit 1; }
+      fi
+    fi ) || return 1
   git -C "$W" push -q origin "HEAD:refs/heads/$br" && echo "synced $br"
 }
 # One snapshot: "<sha> <green> <terminal> <total> <non-green names>", latest run per check.
@@ -82,6 +97,26 @@ base_ok() {
   local mb; mb=$(git merge-base origin/main "$1") || return 1
   ! { code "$mb" origin/main && code "$mb" "$1"; }
 }
+# rules_stale SHA: the tree main + SHA would merge to carries a console/ledger-rules.json
+# that EXPERIMENTS.md there does not generate (read with that tree's own model_opt.py).
+# Unknown (a conflict, no such files) is not stale: a conflict syncs anyway.
+rules_stale() {
+  local tree d rc=1
+  tree=$(git merge-tree --write-tree origin/main "$1" 2>/dev/null | head -1)
+  [ -n "$tree" ] || return 1
+  d=$(mktemp -d)
+  if git show "$tree:console/model_opt.py" > "$d/model_opt.py" 2>/dev/null \
+     && git show "$tree:console/convert-pins.json" > "$d/convert-pins.json" 2>/dev/null \
+     && git show "$tree:console/ledger-rules.json" > "$d/have.json" 2>/dev/null \
+     && git show "$tree:EXPERIMENTS.md" > "$d/EXPERIMENTS.md" 2>/dev/null \
+     && [ -s "$d/model_opt.py" ] && [ -s "$d/have.json" ] \
+     && python3 "$d/model_opt.py" ledger-rules --ledger "$d/EXPERIMENTS.md" --out "$d/want.json" >/dev/null 2>&1 \
+     && ! cmp -s "$d/have.json" "$d/want.json"; then
+    rc=0
+  fi
+  rm -rf "$d"
+  return "$rc"
+}
 [ "$(gh pr view "$pr" --json isDraft -q .isDraft)" = true ] && gh pr ready "$pr" >/dev/null
 merged() { [ "$(gh pr view "$pr" --json state -q .state)" = MERGED ]; }
 for round in 1 2 3 4 5; do
@@ -105,6 +140,10 @@ for round in 1 2 3 4 5; do
           esac
           if ! base_ok "$sha"; then
             echo "PR$pr round $round: main moved under code since $sha was tested: sync to re-run CI"
+            sync || exit 1; sleep 60; break
+          fi
+          if rules_stale "$sha"; then
+            echo "PR$pr round $round: console/ledger-rules.json would not match EXPERIMENTS.md after the merge: sync regenerates it"
             sync || exit 1; sleep 60; break
           fi
           why=$(gh pr merge "$pr" --squash --match-head-commit "$sha" --subject "$subj" --body "$body" 2>&1 >/dev/null)
