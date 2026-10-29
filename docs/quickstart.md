@@ -152,7 +152,7 @@ the LLM server does not request it yet.
   ([Docker docs](https://docs.docker.com/desktop/features/gpu/)). The Intel
   path does not use that flag.
 - **The Intel NPU does not work under WSL2.** Intel's Linux NPU driver has no
-  WSL2 support ([intel/linux-npu-driver#56](https://github.com/intel/linux-npu-driver/issues/56)).
+  WSL2 support ([intel/linux-npu-driver#56](https://github.com/intel/linux-npu-driver/issues/56)). <!-- known-issue: linux-npu-driver-56 -->
 
 ## Remove everything
 

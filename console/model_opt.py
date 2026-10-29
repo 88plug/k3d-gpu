@@ -1104,8 +1104,10 @@ def spec_decide(doc, choose, engine, device, pick, drafters, target, facts, draf
         for d in fit:
             if d["drafter"] == "assistant":
                 if facts and facts["moe"]:
+                    # known-issue-begin: vllm-pr-51493
                     doc["notes"].append("MoE target: Google says the 26B A4B drafter may not speed up at batch 1 without good parallelism (https://ai.google.dev/gemma/docs/mtp/overview); "
                                         "if vLLM's V1 runner fails on it, VLLM_USE_V2_MODEL_RUNNER=1 (https://github.com/vllm-project/vllm/pull/51493); K3D_GPU_AGENT_DRAFT=off turns the drafter off")
+                    # known-issue-end: vllm-pr-51493
                 cfg = {"method": "mtp", "model": d["id"], "num_speculative_tokens": 4}
                 src = VLLM_MTP_DOC + " (L12-36: gemma4 assistant drafters, method mtp); https://github.com/vllm-project/recipes/blob/main/Google/Gemma4.md (num_speculative_tokens 4)"
             elif d["drafter"] in ("eagle3", "dspark") and not (d["drafter"] == "dspark" and vllm_version < (0, 26, 0)):
