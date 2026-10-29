@@ -34,6 +34,12 @@ unchanged as their text content, and its parsed JSON as structuredContent.
 Environment:
   K3D_GPU_BIN          k3d-gpu launcher (default: next to this file, else PATH)
   K3D_GPU_CLUSTER      cluster name; kubectl uses context k3d-<name> (default: gpu)
+  K3D_GPU_KUBECONFIG, K3D_GPU_CONTEXT, K3D_GPU_STATE_DIR
+                       the kubeconfig and context, chosen as the launcher chooses
+                       them: K3D_GPU_KUBECONFIG, else an exported KUBECONFIG that
+                       names one file other than ~/.kube/config, else the
+                       launcher's per-cluster file <state dir>/kubeconfig-<name>
+                       when it exists, else the inherited kubeconfig
   K3D_GPU_MCP_TIMEOUT  seconds per kubectl/launcher call (default: 60)
 """
 
@@ -79,7 +85,7 @@ INSTRUCTIONS = (
 )
 
 CLUSTER = os.environ.get("K3D_GPU_CLUSTER", "gpu")
-CONTEXT = "k3d-" + CLUSTER
+CONTEXT = os.environ.get("K3D_GPU_CONTEXT") or "k3d-" + CLUSTER
 TIMEOUT = float(os.environ.get("K3D_GPU_MCP_TIMEOUT", "60"))
 # apply runs `agent up`, which waits for the model to download and load.
 APPLY_TIMEOUT = float(os.environ.get("K3D_GPU_MCP_APPLY_TIMEOUT", "1900"))
@@ -273,12 +279,12 @@ def launcher_version():
     return parts[1] if rc == 0 and len(parts) == 2 and parts[0] == "k3d-gpu" else "unknown"
 
 
-def run(argv, timeout=None):
+def run(argv, timeout=None, env=None):
     """(returncode, stdout, stderr); returncode 127 when the program is missing."""
     timeout = timeout or TIMEOUT
     try:
         p = subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True, text=True,
-                           timeout=timeout)
+                           timeout=timeout, env=env)
     except FileNotFoundError:
         return 127, "", argv[0] + ": not found"
     except subprocess.TimeoutExpired:
@@ -286,8 +292,49 @@ def run(argv, timeout=None):
     return p.returncode, p.stdout, p.stderr.strip()
 
 
+def kubeconfig():
+    """The kubeconfig file the launcher uses for CLUSTER, or None for the inherited
+    one. Read per call: `k3d-gpu up` writes the per-cluster file after this server
+    starts. The launcher no longer writes ~/.kube/config on `up`."""
+    if os.environ.get("K3D_GPU_KUBECONFIG"):
+        return os.environ["K3D_GPU_KUBECONFIG"]
+    home = os.environ.get("HOME", "")
+    state = os.environ.get("K3D_GPU_STATE_DIR") or os.path.join(
+        os.environ.get("XDG_STATE_HOME") or os.path.join(home, ".local", "state"), "k3d-gpu")
+    own_prefix = os.path.join(state, "kubeconfig-")
+    default = os.path.join(home, ".kube", "config")
+    kc = os.environ.get("KUBECONFIG", "")
+    if kc and ":" not in kc and not kc.startswith(own_prefix) and kc != default \
+            and not (os.path.exists(kc) and os.path.exists(default) and os.path.samefile(kc, default)):
+        return kc
+    own = own_prefix + CLUSTER
+    return own if os.path.isfile(own) and os.path.getsize(own) > 0 else None
+
+
+def kube_context():
+    """The --context every call names; None: the file's current-context
+    (K3D_GPU_KUBECONFIG without K3D_GPU_CONTEXT, as in the launcher)."""
+    if os.environ.get("K3D_GPU_CONTEXT"):
+        return os.environ["K3D_GPU_CONTEXT"]
+    return None if os.environ.get("K3D_GPU_KUBECONFIG") else CONTEXT
+
+
+def kube_run(args):
+    kc = kubeconfig()
+    env = dict(os.environ, KUBECONFIG=kc) if kc else None
+    ctx = kube_context()
+    return run(["kubectl"] + (["--context", ctx] if ctx else []) + list(args), env=env)
+
+
+def kube_hint():
+    """The kubectl a printed command names."""
+    kc = kubeconfig()
+    ctx = kube_context()
+    return (f"KUBECONFIG={kc} " if kc else "") + "kubectl" + (f" --context {ctx}" if ctx else "")
+
+
 def kubectl(*args):
-    return run(["kubectl", "--context", CONTEXT, "--request-timeout=10s"] + list(args))
+    return kube_run(["--request-timeout=10s"] + list(args))
 
 
 def kubectl_json(*args):
@@ -302,8 +349,13 @@ def kubectl_json(*args):
 
 
 def context_present():
-    rc, out, _ = run(["kubectl", "config", "get-contexts", "-o", "name"])
-    return rc == 0 and CONTEXT in out.split()
+    kc = kubeconfig()
+    env = dict(os.environ, KUBECONFIG=kc) if kc else None
+    if kube_context() is None:
+        rc, out, _ = run(["kubectl", "config", "current-context"], env=env)
+        return rc == 0 and bool(out.strip())
+    rc, out, _ = run(["kubectl", "config", "get-contexts", "-o", "name"], env=env)
+    return rc == 0 and kube_context() in out.split()
 
 
 # ---- accelerators ---------------------------------------------------------------
@@ -553,7 +605,7 @@ def local_endpoint(result, proxy):
     if port:
         result["baseUrl"] = f"http://{AGENT_SVC}.{AGENT_NS}.svc.cluster.local:{port}/v3"
         result["hostAccess"] = {
-            "command": f"kubectl --context {CONTEXT} -n {AGENT_NS} port-forward svc/{AGENT_SVC} {port}:{port}",
+            "command": f"{kube_hint()} -n {AGENT_NS} port-forward svc/{AGENT_SVC} {port}:{port}",
             "baseUrl": f"http://localhost:{port}/v3",
         }
     deploy, _ = kubectl_json("-n", AGENT_NS, "get", "deployment", AGENT_SVC)
