@@ -262,7 +262,7 @@ Upstream work that changes this integration:
   ([gpu_plugin.go](https://github.com/intel/intel-device-plugins-for-kubernetes/blob/main/cmd/gpu_plugin/gpu_plugin.go)),
   and `k3d-gpu detect` already reports the one the bound driver gives.
 
-### Open EAT pull requests (checked 2026-10-28)
+### EAT pull requests (checked 2026-10-28)
 
 Read with `gh`, `git ls-remote` and a read-only clone only. EAT `main` is `4a2e930`:
 `release-1.1.0` plus the architecture diagram from

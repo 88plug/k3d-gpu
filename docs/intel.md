@@ -190,7 +190,7 @@ run on hardware, the row says which host.
 
 Not covered by either column: EAT's XPU path for Arc B60/B70, which shipped in
 `release-1.1.0`, not in the pinned tag
-([platforms.md](platforms.md#open-eat-pull-requests-checked-2026-10-28)).
+([platforms.md](platforms.md#eat-pull-requests-checked-2026-10-28)).
 
 **In progress.** A campaign on one Xeon 6741P (Granite Rapids, AMX) host
 with 4x Arc Pro B70 checks four things: that `detect` and `up` pick up the Xeon and the
