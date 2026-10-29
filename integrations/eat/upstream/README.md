@@ -56,9 +56,9 @@ Until upstream carries them, k3d-gpu applies these drafts itself to the EAS chec
 
 - `skip`: not needed on this cluster.
 - `drop-merged`: the patch reverse-applies.
-- `drop-fixed`: the probe matches and the knob is still there.
+- `drop-fixed`: the probe matches, no file it reads keeps what the probe rules out (for 0006, the exact `""` selector anywhere in the role), and the knob is still there.
 - `apply`: the first variant that applies.
-- `STOP`, before anything changes: it names the upstream change that moved the hunk and says to regenerate.
+- `STOP`, before anything changes: it names the upstream change that moved the hunk (a row's `moved` hint when the hint watches a file whose hunks fail, otherwise the last commit on those files) and says to regenerate.
 
 The drafts here stay the only copy. The one overlay-only patch is the release-1.2 form of 0006, [integrations/eas/patches/0006-release-1.2-envoy-control-plane-affinity.patch](../../eas/patches/0006-release-1.2-envoy-control-plane-affinity.patch); on that branch the EnvoyProxy task is still in `install.yaml`.
 

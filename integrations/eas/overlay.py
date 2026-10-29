@@ -6,14 +6,17 @@ decision as `fact -> choice [source]`:
 
   skip         the row's needed_when rule is false for these facts
   drop-merged  a variant reverse-applies (git apply -R --check): upstream has it
-  drop-fixed   a fixed_probe regex matches a file its glob selects, and the knob
-               the generator writes appears in that file (no knob: the match
-               alone). A match whose knob is gone is a STOP: upstream fixed it
-               under another name, and the generator's knob would do nothing.
+  drop-fixed   a fixed_probe regex matches a file its glob selects, no file the
+               glob selects matches the probe's `absent` regex (when it has one),
+               and the knob the generator writes appears in the matched file (no
+               knob: the match alone). A match whose knob is gone is a STOP:
+               upstream fixed it under another name, and the generator's knob
+               would do nothing.
   apply        the first variant, in order, that applies (git apply --check)
   STOP         none of the above: the patch has to be regenerated. The line
                names the upstream change that moved the hunk: a `moved` hint of
-               the row when one matches, else the last commit on the patch's files.
+               the row when one matches and watches a file whose hunks no variant
+               applies, else the last commit on those files.
 
 Decisions read the commit (--rev, default HEAD) through a scratch index, never
 the working tree, so they do not change once the overlay is applied. --apply
@@ -177,9 +180,10 @@ class Eas:
             self._text[path] = r.stdout if r.returncode == 0 else ""
         return self._text[path]
 
-    def check(self, patches, reverse=False):
-        """git apply --check at the commit, through the scratch index."""
-        args = ["apply", "--cached", "--check", "--whitespace=nowarn"] + (["-R"] if reverse else []) + patches
+    def check(self, patches, reverse=False, include=None):
+        """git apply --check at the commit, through the scratch index (only `include`'s hunks when given)."""
+        args = (["apply", "--cached", "--check", "--whitespace=nowarn"] + (["-R"] if reverse else [])
+                + (["--include=" + include] if include else []) + patches)
         return self.git(*args, env={"GIT_INDEX_FILE": self.index}, check=False).returncode == 0
 
     def last_commit(self, paths):
@@ -207,8 +211,9 @@ def load_spec(path):
         for p in row["fixed_probe"] + row["moved"]:
             try:
                 p["re"], p["glob_re"] = re.compile(p["regex"]), glob_re(p["glob"])
+                p["absent_re"] = re.compile(p["absent"]) if p.get("absent") else None
             except re.error as e:
-                raise Bad("row %s: regex %r: %s" % (row["id"], p["regex"], e)) from None
+                raise Bad("row %s: regex %r: %s" % (row["id"], e.pattern, e)) from None
     return spec
 
 
@@ -232,9 +237,10 @@ def probe(eas, row):
     """(state, file, line, knob): state "fixed", "knob-missing" or None."""
     missing = None
     for p in row["fixed_probe"]:
-        for path in eas.files():
-            if not p["glob_re"].match(path):
-                continue
+        selected = [path for path in eas.files() if p["glob_re"].match(path)]
+        if p["absent_re"] and any(p["absent_re"].search(eas.text(path)) for path in selected):
+            continue
+        for path in selected:
             text = eas.text(path)
             m = p["re"].search(text)
             if not m:
@@ -247,9 +253,21 @@ def probe(eas, row):
     return missing or (None, None, None, None)
 
 
-def moved_by(eas, row):
-    """The `moved` hint whose regex matches at this commit, or None."""
+def failing(eas, row):
+    """The files of a row's patches whose hunks no variant touching them applies at this commit."""
+    out = []
+    for path in touched([p for v in row["variants"] for p in v["paths"]]):
+        tries = [v["paths"] for v in row["variants"] if path in touched(v["paths"])]
+        if not any(eas.check(t, include=path) for t in tries):
+            out.append(path)
+    return out
+
+
+def moved_by(eas, row, bad):
+    """The `moved` hint that watches one of the files `bad` and whose regex matches at this commit, or None."""
     for h in row["moved"]:
+        if not any(h["glob_re"].match(b) for b in bad):
+            continue
         for path in eas.files():
             if h["glob_re"].match(path) and h["re"].search(eas.text(path)):
                 return h
@@ -310,15 +328,15 @@ def decide(spec, eas, facts):
             d.update(decision="apply", variant=applies["name"], files=applies["files"], fact=fact,
                      choice="apply " + " ".join(os.path.basename(f) for f in applies["files"]), source=src, permalink=link)
         else:
-            hint = moved_by(eas, row)
-            paths = touched([p for v in row["variants"] for p in v["paths"]])
+            paths = failing(eas, row) or touched([p for v in row["variants"] for p in v["paths"]])
+            hint = moved_by(eas, row, paths)
             if hint:
                 why, src = "the hunk moved in %s (%s)" % (hint["upstream"], hint["what"]), hint["upstream"]
                 d["moved_by"] = hint["upstream"]
                 link = src
             else:
                 last = eas.last_commit(paths)
-                why = "the files it changes were last changed by %s" % last
+                why = "the files where its hunks fail (%s) were last changed by %s" % (", ".join(paths), last)
                 src, link = "eas@%s %s" % (sha7, paths[0]), "https://github.com/%s/commits/%s/%s" % (repo, eas.sha, paths[0])
                 d["moved_by"] = last
             d.update(decision="STOP", fact="%s no variant applies or reverses and no fix probe matches; %s" % (rid, why),

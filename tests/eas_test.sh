@@ -12,7 +12,12 @@
 #            - patches already in the tree: drop-merged (git apply -R --check)
 #            - the fix done another way with the knob present: drop-fixed
 #            - the fix done another way with the knob renamed: STOP
+#            - 0006: an Exists term counts only when no file of the role keeps the
+#              exact "" selector (any quoting), and a #50-layout vars/k3s.yaml only
+#              when it selects a shape other than controlplane_daemonset
 #            - the hunk moved as open EAS #50/#52 move it: STOP naming #50
+#            - a STOP names a `moved` hint only when the hint watches a file whose
+#              hunks fail, else the last commit on the failing files
 #            - release-1.2: 0006 variant b applies, 0006a and 0005 do not
 #            - --apply changes the checkout only when no row STOPs, and a re-run is a no-op
 #            - every decision prints as `fact -> choice [source]`; --explain gives permalinks
@@ -79,7 +84,10 @@ EOF
     }
     # brief <repo> <policy> <nodes> [overlay args]: "0002=apply:a 0003=skip ...". The exit
     # status goes to ${WORK}/rc (brief runs in a command substitution), text to d.txt.
+    # d.json is removed first, so a run that writes none prints nothing instead of the
+    # previous run's decisions.
     brief() {
+        rm -f "${WORK}/d.json"
         python3 "${OVERLAY}" --eas "$1" --policy "$2" --nodes "$3" --json "${WORK}/d.json" "${@:4}" > "${WORK}/d.txt" 2>&1
         echo "$?" > "${WORK}/rc"
         python3 -c 'import json,sys; print(" ".join("%s=%s" % (d["id"], d["brief"]) for d in json.load(open(sys.argv[1]))["decisions"]))' \
@@ -122,6 +130,7 @@ for r in spec["rows"]:
             assert len(hits) == 1, (f, hits)
     for p in r["fixed_probe"] + r["moved"]:
         re.compile(p["regex"])
+        re.compile(p.get("absent") or "")
 names = [n for d in dirs for n in os.listdir(os.path.join(root, d)) if n.endswith(".patch")]
 assert len(names) == len(set(names)), "a patch is in both dirs"
 for v in spec["verified"]:
@@ -251,6 +260,23 @@ for v in json.load(open(sys.argv[1]))["verified"]:
     commit "${WORK}/both" "envoy: add affinity, keep the selector"
     got=$(brief "${WORK}/both" best-effort 1)
     check "affinity next to the exact \"\" selector is not a fix: STOP" "0006=STOP" "$(tr ' ' '\n' <<< "${got}" | grep '^0006=')"
+    # The same with the selector in flow style, its key quoted: still not a fix.
+    cp -R "${WORK}/main" "${WORK}/flow"
+    replace "${WORK}/flow/roles/envoy_gateway/tasks/controller.yaml" \
+        $'                nodeSelector:\n                  node-role.kubernetes.io/control-plane: ""\n' \
+        $'                nodeSelector: {"node-role.kubernetes.io/control-plane": ""}\n                affinity:\n                  nodeAffinity:\n                    requiredDuringSchedulingIgnoredDuringExecution:\n                      nodeSelectorTerms:\n                        - matchExpressions:\n                            - key: node-role.kubernetes.io/control-plane\n                              operator: Exists\n'
+    commit "${WORK}/flow" "envoy: flow-style selector next to the affinity"
+    got=$(brief "${WORK}/flow" best-effort 1)
+    check "affinity next to a quoted-key \"\" selector is not a fix: STOP" "0006=STOP" "$(tr ' ' '\n' <<< "${got}" | grep '^0006=')"
+    # An Exists term in another file of the role does not fix the EnvoyProxy, whose
+    # exact "" selector is still in controller.yaml: 0006 still applies.
+    cp -R "${WORK}/main" "${WORK}/elsewhere"
+    printf -- '---\n- name: "envoy_gateway | some other control-plane workload"\n  vars:\n    _affinity:\n      nodeAffinity:\n        requiredDuringSchedulingIgnoredDuringExecution:\n          nodeSelectorTerms:\n            - matchExpressions:\n                - key: node-role.kubernetes.io/control-plane\n                  operator: Exists\n' \
+        > "${WORK}/elsewhere/roles/envoy_gateway/tasks/other.yaml"
+    commit "${WORK}/elsewhere" "envoy: another workload with an Exists term"
+    got=$(brief "${WORK}/elsewhere" best-effort 1)
+    check "an Exists term in another file, the \"\" selector kept: 0006 still applies" "0006=apply:a" \
+        "$(tr ' ' '\n' <<< "${got}" | grep '^0006=')"
 
     # 8. The fix done differently, knob renamed: STOP, nothing to write the old knob to.
     cp -R "${WORK}/main" "${WORK}/renamed"
@@ -290,8 +316,15 @@ for v in json.load(open(sys.argv[1]))["verified"]:
     python3 "${OVERLAY}" --eas "${WORK}/pr50" --policy best-effort --nodes 1 --apply > /dev/null 2>&1
     check "#50 layout --apply: exit 3" 3 "$?"
     check "#50 layout --apply: nothing applied, 0002 included" "" "$(git -C "${WORK}/pr50" status --porcelain)"
-    # Once a k3s entry lands in #50's vars layout: drop-fixed.
+    # A k3s entry in #50's vars layout that keeps controlplane_daemonset, the shape
+    # with the exact "" selector, is not a fix: still the STOP naming #50.
     mkdir -p "${WORK}/pr50/roles/envoy_gateway/vars"
+    printf -- '---\n_envoy_gateway_proxy_shape: controlplane_daemonset\n' > "${WORK}/pr50/roles/envoy_gateway/vars/k3s.yaml"
+    commit "${WORK}/pr50" "envoy_gateway: k3s vars, kubeadm shape"
+    got=$(brief "${WORK}/pr50" best-effort 1)
+    check "#50 layout plus vars/k3s.yaml on controlplane_daemonset: 0006 STOP" "0006=STOP" "$(tr ' ' '\n' <<< "${got}" | grep '^0006=')"
+    has "#50 layout plus vars/k3s.yaml on controlplane_daemonset: names #50" "${GH}/pull/50" "$(cat "${WORK}/d.txt")"
+    # Once a k3s entry selects another shape: drop-fixed.
     printf -- '---\n_envoy_gateway_proxy_shape: controlplane_affinity\n' > "${WORK}/pr50/roles/envoy_gateway/vars/k3s.yaml"
     commit "${WORK}/pr50" "envoy_gateway: k3s vars"
     check "#50 layout plus vars/k3s.yaml: drop-fixed" "0006=drop-fixed" "$(brief "${WORK}/pr50" best-effort 1 | tr ' ' '\n' | grep '^0006=')"
@@ -314,6 +347,23 @@ for v in json.load(open(sys.argv[1]))["verified"]:
     check "unknown move: 0002 STOP" "0002=STOP" "${got%% *}"
     has "unknown move: names the last upstream commit on the patch's files" \
         "$(git -C "${WORK}/moved" rev-parse --short=7 HEAD) istio: extra values files (#123)" "$(cat "${WORK}/d.txt")"
+    # A `moved` hint names its PR only when the file it watches is one whose hunk
+    # fails: here headlamp_enabled exists away from 0002's context (the hunk still
+    # applies) and the hunk that fails is in install.yaml, changed after it.
+    cp -R "${WORK}/main" "${WORK}/blame"
+    printf 'headlamp_enabled: false\n' >> "${WORK}/blame/configs/defaults/global_config.yaml"
+    commit "${WORK}/blame" "headlamp, away from 0002's context"
+    replace "${WORK}/blame/roles/istio/tasks/install.yaml" \
+        $'        values_files: "{{ [istio_helm_default_values_file] }}"\n        dependency_update: true' \
+        $'        values_files: "{{ [istio_helm_default_values_file] + istio_extra_values_files }}"\n        dependency_update: true'
+    commit "${WORK}/blame" "istio: extra values files (#124)"
+    replace "${WORK}/blame/configs/defaults/global_config.yaml" $'headlamp_enabled: false\n' $'headlamp_enabled: true\n'
+    commit "${WORK}/blame" "headlamp on"
+    got=$(brief "${WORK}/blame" best-effort 1)
+    check "hint off the failing file: 0002 STOP" "0002=STOP" "${got%% *}"
+    has "hint off the failing file: names the commit that changed the failing file" \
+        "$(git -C "${WORK}/blame" rev-parse --short=7 HEAD~1) istio: extra values files (#124)" "$(cat "${WORK}/d.txt")"
+    check "hint off the failing file: does not name #61" 0 "$(grep -c "pull/61" "${WORK}/d.txt")"
 
     # 11. --apply: only at HEAD, all or nothing, idempotent.
     cp -R "${WORK}/main" "${WORK}/app"
@@ -345,6 +395,7 @@ for v in json.load(open(sys.argv[1]))["verified"]:
     check "--apply on a conflicting local edit: no other file touched" roles/istio/tasks/install.yaml "$(git -C "${WORK}/dirty" diff --name-only)"
     python3 "${OVERLAY}" --eas "${WORK}/merged" --rev HEAD~1 --policy best-effort --nodes 1 --apply > /dev/null 2>&1
     check "--apply with --rev other than HEAD: exit 2" 2 "$?"
+    rm -f "${WORK}/d.json"
     python3 "${OVERLAY}" --eas "${WORK}/merged" --rev HEAD~1 --policy best-effort --nodes 1 --json "${WORK}/d.json" > /dev/null 2>&1
     check "--rev reads that commit without a checkout" "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:a" \
         "$(python3 -c 'import json,sys; print(" ".join("%s=%s" % (d["id"], d["brief"]) for d in json.load(open(sys.argv[1]))["decisions"]))' "${WORK}/d.json")"
@@ -366,6 +417,15 @@ EOF
     python3 "${OVERLAY}" --spec "${WORK}/bad.json" --eas "${WORK}/main" --policy best-effort --nodes 1 > "${WORK}/a.txt" 2>&1
     check "a patch file that is in no patch dir: exit 2" 2 "$?"
     has "a missing patch is named" "0099-missing.patch" "$(cat "${WORK}/a.txt")"
+    python3 - "${SPEC}" "${WORK}/bad.json" <<'EOF'
+import json, sys
+s = json.load(open(sys.argv[1]))
+s["rows"][4]["fixed_probe"][0]["absent"] = "(unclosed"
+json.dump(s, open(sys.argv[2], "w"))
+EOF
+    python3 "${OVERLAY}" --spec "${WORK}/bad.json" --eas "${WORK}/main" --policy best-effort --nodes 1 > "${WORK}/a.txt" 2>&1
+    check "an absent regex that does not compile: exit 2" 2 "$?"
+    has "the bad absent regex is named" "'(unclosed'" "$(cat "${WORK}/a.txt")"
 
     # 13. --check-verified and --watch (what apply-check.sh --overlay runs on real clones).
     sha=$(git -C "${WORK}/main" rev-parse HEAD)
