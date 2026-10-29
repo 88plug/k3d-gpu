@@ -3098,7 +3098,7 @@ say which of them closed the gap.
 
 Disclosed: B1 is EAT release-1.1.0's stock, not the `0d3438d` pre-registered first (amendment E1);
 the deploy commit merges #225 and #209 before they merged (amendment E3). Neither PR's head moved
-between E3's push and the scoring (24e41deb and 9a88e8c5, read 07:45Z). H50's holds ended within
+between E3's push and the scoring (24e41deb and 9a88e8c5, read at 07:48Z). H50's holds ended within
 their cap (1 of 8), so H51 may run (E2 item 4).
 
 ### H53 pre-registration: EAT's banking flow on Arc Pro B70 (2026-10-20)
