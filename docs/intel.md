@@ -412,23 +412,27 @@ Shipped since this roadmap was first written:
   `k3d-gpu test` runs an AMX engagement probe: one oneDNN matmul with
   `ONEDNN_VERBOSE=1` after `arch_prctl(ARCH_REQ_XCOMP_PERM)`, failing unless an AMX
   implementation ran (oneDNN falls back to AVX-512 silently without the permission).
-  `doctor` runs read-only `intel-speed-select base-freq info` and `turbo-freq info` and
-  feeds SST-BF high-priority CPUs into `k3d-gpu.io/favored-cpus`; suggests `rdt=l3cat`
-  with its revert where the kernel hides L3 CAT on Skylake-SP family (model 0x55);
-  reports DLB (8086:2710/2714, no in-tree driver); and compares DSA, IAA, QAT and DLB
-  per socket with the ARK rows for the 6741P (3 of each) and the Xeon 6 SoC 6716P-B.
-  `doctor --perf` decodes TPMI power-limit reasons (PLR). QAT 420xx (Gen5) and 6xxx
-  (Gen6) are in the QAT row of the capability matrix.
-- **DSA/IAA host setup** ([#162](https://github.com/88plug/k3d-gpu/pull/162)). For
-  `dsa*`/`iax*` devices with no user work queue, `doctor` prints a per-device
-  `accel-config` apply and revert (a shared work queue when the device has PASID, else
-  a dedicated one), and
+  `doctor` runs read-only `intel-speed-select base-freq info` and `turbo-freq info`;
+  suggests `rdt=l3cat` with its revert where the kernel hides L3 CAT on Skylake-SP
+  family (model 0x55); reports DLB (8086:2710/2714, no in-tree driver) and each QAT
+  PF's `cfg_services` and state; and compares DSA, IAA, QAT and DLB per socket with the
+  ARK rows for the 6741P (3 of each) and the Xeon 6 SoC 6716P-B. With SST-BF on and no
+  CPPC ranking, `up` annotates the high-priority CPUs (the higher cpufreq
+  `base_frequency`) as `k3d-gpu.io/favored-cpus`. `doctor --perf` decodes TPMI
+  power-limit reasons (PLR). QAT 420xx (Gen5) and 6xxx (Gen6) were already in the QAT
+  row of the capability matrix.
+- **DSA/IAA host setup** ([#154](https://github.com/88plug/k3d-gpu/pull/154),
+  [#162](https://github.com/88plug/k3d-gpu/pull/162)). For `dsa*`/`iax*` devices with
+  no user work queue, `doctor` prints a per-device `accel-config` apply and revert (a
+  shared work queue when the device has PASID, else a dedicated one; #154), and
   `host-setup --with-kernel-wqs` adds a user work queue beside the kernel ones held by
-  `iaa_crypto` or a dmaengine owner, with a snapshot revert. The DSA/IAA `ok` line says
-  pods need `CAP_SYS_RAWIO` to mmap a work-queue portal (INTEL-SA-01084).
-- **vRAN Boost, detect-only.** `doctor` reports vRAN Boost physical functions
-  (8086:57c0 VRB1, 8086:57c2 VRB2; VFs not counted) and their driver. It has no kernel
-  driver (DPDK `baseband/acc` on vfio-pci), so k3d-gpu exposes nothing for it.
+  `iaa_crypto` or a dmaengine owner, with a snapshot revert (#162). The DSA/IAA `ok`
+  line says pods need `CAP_SYS_RAWIO` to mmap a work-queue portal (INTEL-SA-01084;
+  [#218](https://github.com/88plug/k3d-gpu/pull/218)).
+- **vRAN Boost, detect-only** ([#218](https://github.com/88plug/k3d-gpu/pull/218)).
+  `doctor` reports vRAN Boost physical functions (8086:57c0 VRB1, 8086:57c2 VRB2; VFs
+  not counted) and their driver. It has no kernel driver (DPDK `baseband/acc` on
+  vfio-pci), so k3d-gpu exposes nothing for it.
 
 Planned, not shipped. Each item lands with its own test and, where it touches
 hardware, a recorded run.
