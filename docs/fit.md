@@ -127,9 +127,12 @@ linear-attention layers makes none.
 On several GPUs llama.cpp places whole layers, so the fit sizes each card from the
 layers it gets, the way llama.cpp b11749 assigns them with `-ngl 999`
 (`src/llama-model.cpp`, `load_tensors`). Layer `il` goes to the device
-`upper_bound(cumsum(ts) / sum(ts), il / (layers + 1))`, and the output layer
-(`il = layers`, holding `lm_head` and a GGUF's MTP tensors) goes the same way, which is
-the last card. A model with tied embeddings (Gemma 4) has no `lm_head`: llama.cpp loads
+`upper_bound(cumsum(ts) / sum(ts), il / (layers + 1))`, where layers is the GGUF's block
+count (`n_layer_all`): the trunk, then the MTP (nextn) blocks a GGUF holds. Qwen3.8 27B's
+GGUF keeps one (`qwen35.block_count` 65 for 64 trunk layers); an MTP block counts its MTP
+tensors and no KV, since the cache covers the trunk only (`il < n_layer()`). The output
+layer (`il = layers`, holding `lm_head`) goes the same way, which is the last card. A
+model with tied embeddings (Gemma 4) has no `lm_head`: llama.cpp loads
 `token_embd` a second time as the output tensor on that device
 (`src/llama-model-loader.cpp`, `TENSOR_DUPLICATED`), so the output layer counts that copy,
 on one card as on several. Each layer's weights are its share of the class totals, minus its experts

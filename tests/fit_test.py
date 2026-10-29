@@ -819,18 +819,29 @@ class FlashNextGGUF(unittest.TestCase):
         self.assertTrue(any("IQ4_NL" in s for s in d["explain"]) and any("Q2_K" in s for s in d["explain"]))
 
 
+def gguf_nextn(cfg, w):
+    """MTP (nextn) blocks a GGUF holds after its trunk: the config's count when the GGUF has
+    MTP tensors (llama.cpp's converter keeps or drops them all)."""
+    tc = cfg.get("text_config") or cfg
+    if w["format"] != "gguf" or not w["classes"].get("mtp", {}).get("bytes"):
+        return 0
+    return tc.get("mtp_num_hidden_layers") or tc.get("num_nextn_predict_layers") or 1
+
+
 def llama_cards(d, cfg, w, kv_layer):
     """Each card's GPU bytes for a llama.cpp plan, worked out here from its flags the way
     llama.cpp b11749 assigns them (src/llama-model.cpp load_tensors, -ngl past the layer
-    count): layer il on device upper_bound(cumsum(ts) / sum(ts), il / (n_layer + 1)), the
-    output layer (il = n_layer) the same way, the experts of the first --n-cpu-moe layers in
-    host RAM, each layer's KV on its device, and each card's own overhead. Weights per layer
-    are the class totals over the layers; the output layer holds lm_head (with tied embeddings
-    a copy of token_embd) and the MTP tensors (a GGUF's), and the vision projector is on the
-    first GPU (tools/mtmd/clip.cpp).
+    count): layer il on device upper_bound(cumsum(ts) / sum(ts), il / (n_layer_all + 1)), the
+    output layer (il = n_layer_all) the same way, the experts of the first --n-cpu-moe layers
+    in host RAM, each layer's KV on its device, and each card's own overhead. n_layer_all is
+    the GGUF's block count: the trunk, then the MTP blocks a GGUF holds (gguf_nextn). Weights
+    per trunk layer are the class totals over the trunk; an MTP block holds its share of the
+    MTP tensors and no KV; the output layer holds lm_head (with tied embeddings a copy of
+    token_embd), and the vision projector is on the first GPU (tools/mtmd/clip.cpp).
     kv_layer(il, ctx) is one sequence's KV of layer il."""
     tc = cfg.get("text_config") or cfg
     n = tc["num_hidden_layers"]
+    nx = gguf_nextn(cfg, w)
     f = d["flags"]
     ts = [int(x) for x in f[f.index("-ts") + 1].split(",")]
     ncpu = int(f[f.index("--n-cpu-moe") + 1]) if "--n-cpu-moe" in f else n if "--cpu-moe" in f else 0
@@ -841,12 +852,14 @@ def llama_cards(d, cfg, w, kv_layer):
         cum.append(c / sum(ts))
     cards = [0] * len(ts)
     cards[0] += cls.get("vision", 0)
-    for il in range(n + 1):
-        dev = bisect.bisect_right(cum, il / (n + 1))
-        if il == n:
+    for il in range(n + nx + 1):
+        dev = bisect.bisect_right(cum, il / (n + nx + 1))
+        if il == n + nx:
             # the output weight: lm_head, or with tied embeddings (no output.weight) a copy of
             # token_embd that llama.cpp loads as the output tensor (src/llama-model-loader.cpp)
-            cards[dev] += (cls.get("lm_head", 0) or cls.get("embed", 0)) + (cls.get("mtp", 0) if w["format"] == "gguf" else 0)
+            cards[dev] += cls.get("lm_head", 0) or cls.get("embed", 0)
+        elif il >= n:
+            cards[dev] += cls["mtp"] / nx
         else:
             cards[dev] += (cls.get("other", 0) / n + (cls.get("experts", 0) / n if il >= ncpu else 0)
                            + kv_layer(il, d["ctx"]) * d["seqs"])
@@ -859,6 +872,12 @@ def flash_next_kv(il, ctx):
     # every 4th layer full attention: 2 x 2 kv heads x 256 x 2 B + indexer 128 x 2 B per token;
     # the rest gated DeltaNet: 48 x 128 x 128 x 4 B state + 3 x 10240 conv ch x 2 B per sequence
     return (2 * 2 * 256 * 2 + 128 * 2) * ctx if il % 4 == 3 else 48 * 128 * 128 * 4 + 3 * 10240 * 2
+
+
+def qwen38_27b_kv(il, ctx):
+    # every 4th layer full attention: 2 x 4 kv heads x 256 x 2 B per token; the rest gated
+    # DeltaNet: 48 x 128 x 128 x 4 B state + 3 x (2 x 16 x 128 + 48 x 128) conv ch x 2 B per sequence
+    return 2 * 4 * 256 * 2 * ctx if il % 4 == 3 else 48 * 128 * 128 * 4 + 3 * (2 * 16 * 128 + 48 * 128) * 2
 
 
 def gemma4_kv(il, ctx):
@@ -894,7 +913,7 @@ class LlamaSplit(unittest.TestCase):
     def check(self, d, cfg, w, kv_layer):
         n = (cfg.get("text_config") or cfg)["num_hidden_layers"]
         ts, cards = llama_cards(d, cfg, w, kv_layer)
-        self.assertEqual(sum(ts), n + 1, ts)
+        self.assertEqual(sum(ts), n + gguf_nextn(cfg, w) + 1, ts)
         self.assertEqual(len(ts), d["gpus"])
         budget = self.budget(d["gpus"])
         for i, b in enumerate(cards):
@@ -921,6 +940,20 @@ class LlamaSplit(unittest.TestCase):
         self.assertTrue(d["fits"], d["summary"])
         self.assertEqual((d["placement"], d["gpus"]), ("gpu-split", 2))
         self.check(d, config(g), weights(g), gemma4_kv)
+
+    def test_mtp_blocks_take_layer_slots(self):
+        # Intel/Qwen3.8-27B-q4km-AutoRound's GGUF holds Qwen3.8's MTP block after its 64-layer
+        # trunk (its header at 4b30b30e: qwen35.block_count 65, qwen35.nextn_predict_layers 1,
+        # blk.64.nextn.*). llama.cpp b11749 assigns devices over all 65 blocks plus the output
+        # layer (src/llama-model.cpp, n_layer_all) and gives the MTP block no KV (the cache
+        # covers il < n_layer()), so -ts counts 66 layers: counts summing to 65 put one more
+        # trunk layer on the first card than the fit sized it for.
+        g = "Intel__Qwen3.8-27B-q4km-AutoRound"
+        d = plan("xeon6741p-4xb70", g, gpus=2, device="gpu")
+        self.assertTrue(d["fits"], d["summary"])
+        self.assertEqual((d["engine"], d["placement"], d["gpus"]), ("llama.cpp", "gpu-split", 2))
+        self.check(d, config(g), weights(g), qwen38_27b_kv)
+        self.assertTrue(any("layer 64" in s and "MTP" in s for s in d["explain"]), d["explain"])
 
     def test_tied_output_copy_on_one_card(self):
         # Gemma 4 ties its embeddings: no output.weight, so llama.cpp loads token_embd a second

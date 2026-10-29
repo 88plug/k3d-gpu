@@ -903,6 +903,10 @@ def model_profile(cfg, weights, tokenizer_cfg=None):
         "intermediate": max(tc.get("intermediate_size") or 0, (tc.get("moe_intermediate_size") or 0) * max(k, 1)),
         "max_ctx": cap, "ctx_why": capwhy,
         "experts": ne, "experts_per_tok": k, "moe": bool(ne and b["experts"]),
+        # MTP (nextn) blocks a GGUF holds after its trunk (llama.cpp's converter keeps them all
+        # or none): llama.cpp counts them in its layers (block_count = trunk + nextn_predict_layers).
+        "nextn": (tc.get("mtp_num_hidden_layers") or tc.get("num_nextn_predict_layers") or 1)
+                 if weights["format"] == "gguf" and b["mtp"] else 0,
         "bytes": b, "serve_bytes": serve, "lookup_bytes": b["embed"] + b["ngram"], "format": weights["format"],
         "dtype_bytes": 2 if dtype in ("bfloat16", "float16") else 4,
         # compressed-tensors kv_cache_scheme: vLLM switches its KV cache to that type (fp8) on its own.
@@ -1086,23 +1090,26 @@ def llama_output_copy(m):
 
 def llama_layer_bytes(m, kv, ctx, seqs, n_cpu_moe):
     """([weights], [KV]) on the GPU per repeating layer, the output layer last: the class
-    totals spread evenly over the layers, the experts of the first n_cpu_moe layers in host
-    RAM (--n-cpu-moe), and each layer's own KV (its device holds it) for seqs sequences.
-    The weights add up to the bytes to serve less the lookup tables (MTP only when the GGUF
-    holds it), plus the output copy of tied embeddings. The output layer holds lm_head (or
-    that copy) and the MTP tensors; the vision projector counts with layer 0, on the first
-    card: tools/mtmd/clip.cpp loads it on the first GPU."""
-    n = max(m["layers"], 1)
+    totals spread evenly over the trunk's layers, the experts of the first n_cpu_moe layers in
+    host RAM (--n-cpu-moe), and each layer's own KV (its device holds it) for seqs sequences.
+    A GGUF's MTP (nextn) blocks follow the trunk as repeating layers (llama.cpp b11749 counts
+    them in n_layer_all, src/llama-model.cpp) with their share of the MTP tensors and no KV:
+    the cache covers il < n_layer(), the trunk. The weights add up to the bytes to serve less
+    the lookup tables, plus the output copy of tied embeddings. The output layer holds lm_head
+    (or that copy); the vision projector counts with layer 0, on the first card:
+    tools/mtmd/clip.cpp loads it on the first GPU."""
+    n, nx = max(m["layers"], 1), m["nextn"]
     b = m["bytes"]
     exp, other = b["experts"] / n, b["other"] / n
     f, w, st = kv_parts(kv, ctx)
     per = {"full": f / max(kv["full_layers"], 1), "swa": w / max(kv["swa_layers"], 1),
            "linear": st / max(kv["linear_layers"], 1)}
     kinds = kv.get("kinds") or []
-    wl = [other + (exp if il >= n_cpu_moe else 0) for il in range(n)]
+    wl = [other + (exp if il >= n_cpu_moe else 0) for il in range(n)] + [b["mtp"] / max(nx, 1)] * nx
     wl[0] += b["vision"]
-    kl = [per[kinds[il]] * seqs if il < len(kinds) else 0 for il in range(n)]
-    out = m["serve_bytes"] - m["lookup_bytes"] - b["experts"] - b["other"] - b["vision"] + llama_output_copy(m)
+    kl = [per[kinds[il]] * seqs if il < len(kinds) else 0 for il in range(n)] + [0] * nx
+    out = (m["serve_bytes"] - m["lookup_bytes"] - b["experts"] - b["other"] - b["vision"] - (b["mtp"] if nx else 0)
+           + llama_output_copy(m))
     return wl + [out], kl + [0]
 
 
@@ -1175,6 +1182,10 @@ def _llama_card_lines(use, ts, wl, kl, ov, m):
                      % (c["card"], t, "%d-%d" % (first, first + t - 1) if t else "none", g1(w), g1(kvb), g1(ov),
                         g1(w + kvb + ov), g1(c["budget"])))
         first += t
+    if m["nextn"]:
+        a, z = m["layers"], m["layers"] + m["nextn"] - 1
+        lines.append("  (%s the GGUF's MTP %s: nextn tensors, no KV)"
+                     % ("layer %d is" % a if a == z else "layers %d-%d are" % (a, z), "block" if a == z else "blocks"))
     lines.append("  (layer %d is the output layer: %s)" % (len(wl) - 1, "lm_head" if not llama_output_copy(m) else
                                                             "a %s copy of the tied token embedding" % g1(llama_output_copy(m))))
     return lines
