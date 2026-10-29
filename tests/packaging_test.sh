@@ -165,7 +165,8 @@ check "formula installs integrations/eas" grep -qF '(pkgshare/"integrations/eas"
 check "formula installs the overlay's patch drafts" \
     grep -qF '(pkgshare/"integrations/eat/upstream/patches").install Dir["integrations/eat/upstream/patches/*.patch"]' "${FORMULA}"
 check "formula installs eat-check.sh" grep -qF '(pkgshare/"integrations/eat").install "integrations/eat/eat-check.sh"' "${FORMULA}"
-check "formula test asserts integrations/eas/eas.sh" grep -qF 'assert_path_exists pkgshare/"integrations/eas/eas.sh"' "${FORMULA}"
+# No formula test for integrations/eas: packaging/check.sh brew installs the formula's url,
+# the last release tarball, which has no integrations/eas until the next release.
 for f in integrations/eas integrations/eat/upstream/patches integrations/eat/eat-check.sh; do
     check "nix source includes ${f}" grep -qF "(root + \"/${f}\")" "${NIXPKG}"
 done

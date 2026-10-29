@@ -37,7 +37,6 @@ class K3dGpu < Formula
     assert_match "/x/nvidia-device-plugin.yml", shell_output("K3D_GPU_SHARE=/x #{bin}/k3d-gpu help")
     assert_path_exists pkgshare/"nvidia-device-plugin.yml"
     assert_path_exists pkgshare/"console/plan.py"
-    assert_path_exists pkgshare/"integrations/eas/eas.sh"
     assert_path_exists bin/"k3d-gpu-mcp"
   end
 end
