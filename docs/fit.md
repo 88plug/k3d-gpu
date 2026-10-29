@@ -108,7 +108,7 @@ llama.cpp keeps the token embeddings and the n-gram table on the CPU by design
 bytes on every llama.cpp placement. OpenVINO's GPU plugin compiles from a host copy, so
 an OVMS GPU placement counts the weights as host bytes too.
 
-A sliding-window layer's cache is engine-specific. llama.cpp b11749 gives each slot
+A sliding-window layer's cache is engine-specific. llama.cpp v0.8.0 gives each slot
 `GGML_PAD(min(n_ctx_seq, n_swa + n_ubatch), 256)` cells (`src/llama-kv-cache-iswa.cpp`),
 so Gemma 4's 1024-token window holds 1536 cells. OpenVINO GenAI 2026.4 has only a
 full-attention KV cache and a linear-attention state cache
@@ -116,7 +116,7 @@ full-attention KV cache and a linear-attention state cache
 attention layer, so OVMS holds every token in the sliding-window layers too: Gemma 4
 costs 225280 B per token there (5 full and 25 sliding layers, K and V at 2 B).
 
-llama-server b11749 keeps two host caches beside the KV cache: a prompt cache of up to
+llama-server v0.8.0 keeps two host caches beside the KV cache: a prompt cache of up to
 8192 MiB (`--cache-ram`) and up to 32 context checkpoints per slot (`-ctxcp`), each a
 host copy of the slot's SWA cache and recurrent state (`tools/server/server-context.cpp`,
 `create_checkpoint`). The fit turns the prompt cache off (`--cache-ram 0`), keeps 4
@@ -126,7 +126,7 @@ checkpoint in the host bytes and the pod limit. A model with no sliding-window a
 linear-attention layers makes none.
 
 On several GPUs llama.cpp places whole layers, so the fit sizes each card from the
-layers it gets, the way llama.cpp b11749 assigns them with `-ngl 999`
+layers it gets, the way llama.cpp v0.8.0 assigns them with `-ngl 999`
 (`src/llama-model.cpp`, `load_tensors`). Layer `il` goes to the device
 `upper_bound(cumsum(ts) / sum(ts), il / (layers + 1))`, where layers is the GGUF's block
 count (`n_layer_all`): the trunk, then the MTP (nextn) blocks a GGUF holds. Qwen3.8 27B's

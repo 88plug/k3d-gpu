@@ -95,7 +95,7 @@ MIN_DRAM_TOK_S = 5.0
 # the agent stack sets it, llama.cpp's default -ub 512).
 VLLM_BATCHED_TOKENS = 2048
 LLAMA_UBATCH = 512
-# llama-server context checkpoints per slot (-ctxcp; b11749 default 32, common/common.h). Each
+# llama-server context checkpoints per slot (-ctxcp; v0.8.0 default 32, common/common.h). Each
 # is a host-RAM copy of the slot's SWA cache and recurrent state (tools/server/server-context.cpp
 # create_checkpoint, LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY). A request makes them at the last user
 # message and 4 + n_ubatch and 4 tokens before its prompt's end; an appended turn restores from
@@ -127,7 +127,7 @@ KV_DTYPE_BYTES = {"auto": None, "bf16": 2, "fp16": 2, "f16": 2, "fp8": 1, "q8_0"
 # llama.cpp -ctk/-ctv; OVMS's KV_CACHE_PRECISION is not set by the fit).
 KV_DTYPES_OF = {"vllm": ("fp8", "fp16", "bf16"), "llama.cpp": ("f16", "fp16", "bf16", "q8_0", "q4_0")}
 # Tokens a sliding-window layer's cache holds per sequence (swa_tokens). vLLM: the window.
-# llama.cpp b11749: GGML_PAD(n_swa + n_ubatch, 256) cells per stream (src/llama-kv-cache-iswa.cpp).
+# llama.cpp v0.8.0: GGML_PAD(n_swa + n_ubatch, 256) cells per stream (src/llama-kv-cache-iswa.cpp).
 # OVMS: OpenVINO GenAI 2026.4 has only KV_CACHE and LINEAR_ATTENTION_CACHE types
 # (src/cpp/src/continuous_batching/cache/cache_type.hpp), and a KV block spans every
 # attention layer (kv_cache_manager.hpp), so sliding-window layers hold the whole context.
@@ -1081,7 +1081,7 @@ def per_seq(kv, ctx, scale=1.0):
 # ---- llama.cpp over several GPUs ----------------------------------------------------------
 def llama_layer_devices(ts, n_layer):
     """Device of each repeating layer and of the output layer (the last entry), as llama.cpp
-    b11749 assigns them with -ngl past the layer count (src/llama-model.cpp load_tensors):
+    v0.8.0 assigns them with -ngl past the layer count (src/llama-model.cpp load_tensors):
     upper_bound(cumsum(ts) / sum(ts), il / (n_layer + 1)). Integer layer counts summing to
     n_layer + 1 give each device exactly its count, the output layer on the last one."""
     total, cum, splits = float(sum(ts)), 0.0, []
@@ -1103,7 +1103,7 @@ def llama_layer_bytes(m, kv, ctx, seqs, n_cpu_moe):
     """([weights], [KV]) on the GPU per repeating layer, the output layer last: the class
     totals spread evenly over the trunk's layers, the experts of the first n_cpu_moe layers in
     host RAM (--n-cpu-moe), and each layer's own KV (its device holds it) for seqs sequences.
-    A GGUF's MTP (nextn) blocks follow the trunk as repeating layers (llama.cpp b11749 counts
+    A GGUF's MTP (nextn) blocks follow the trunk as repeating layers (llama.cpp v0.8.0 counts
     them in n_layer_all, src/llama-model.cpp) with their share of the MTP tensors and no KV:
     the cache covers il < n_layer(), the trunk. The weights add up to the bytes to serve less
     the lookup tables, plus the output copy of tied embeddings. The output layer holds lm_head
@@ -1641,7 +1641,7 @@ def _llama_multi(m, kv, ladder, relaxed, want_seqs, use, ov, ovl, n_cpus, on_hos
 def _flags(eng, place, ctx, seqs, k, gpu_use, cards, kvused, m, n_cpu_moe, kv=None, ts=None):
     """Engine memory flags from the fit. Spellings from each engine's own argument parser:
     vLLM v0.32.0 vllm/engine/arg_utils.py, OVMS v2026.4.1 src/graph_export/graph_cli_parser.cpp,
-    llama.cpp 1242be6 common/arg.cpp."""
+    llama.cpp v0.8.0 (b11960) common/arg.cpp."""
     kv = kv or {}
     if eng == "vllm" and place == "cpu":
         return ["--max-model-len=%d" % ctx, "--max-num-seqs=%d" % seqs,

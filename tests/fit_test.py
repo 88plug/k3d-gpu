@@ -270,7 +270,7 @@ class KV(unittest.TestCase):
         self.assertEqual(full + swa, 225280)
         # vLLM: the window
         self.assertEqual(fit.per_seq(fit.kv_profile(cfg, 2, "vllm"), 131072), full * 131072 + swa * 1024)
-        # llama.cpp b11749: GGML_PAD(min(n_ctx_seq, n_swa + n_ubatch 512), 256) cells per stream
+        # llama.cpp v0.8.0: GGML_PAD(min(n_ctx_seq, n_swa + n_ubatch 512), 256) cells per stream
         kv = fit.kv_profile(cfg, 2, "llama.cpp")
         self.assertEqual(fit.per_seq(kv, 131072), full * 131072 + swa * 1536)
         self.assertEqual(fit.per_seq(kv, 1024), (full + swa) * 1024)
@@ -477,7 +477,7 @@ class FitDesktop(unittest.TestCase):
 
 
 class LlamaHostCaches(unittest.TestCase):
-    """llama-server b11749 keeps an 8192 MiB host prompt cache (--cache-ram) and up to 32
+    """llama-server v0.8.0 keeps an 8192 MiB host prompt cache (--cache-ram) and up to 32
     context checkpoints per slot (-ctxcp), each a slot's SWA cache or recurrent state, in
     host RAM. The fit turns the prompt cache off, bounds the checkpoints, and counts them."""
 
@@ -830,7 +830,7 @@ def gguf_nextn(cfg, w):
 
 def llama_cards(d, cfg, w, kv_layer):
     """Each card's GPU bytes for a llama.cpp plan, worked out here from its flags the way
-    llama.cpp b11749 assigns them (src/llama-model.cpp load_tensors, -ngl past the layer
+    llama.cpp v0.8.0 assigns them (src/llama-model.cpp load_tensors, -ngl past the layer
     count): layer il on device upper_bound(cumsum(ts) / sum(ts), il / (n_layer_all + 1)), the
     output layer (il = n_layer_all) the same way, the experts of the first --n-cpu-moe layers
     in host RAM, each layer's KV on its device, and each card's own overhead. n_layer_all is
@@ -882,7 +882,7 @@ def qwen38_27b_kv(il, ctx):
 
 def gemma4_kv(il, ctx):
     # every 6th layer global: 2 x 2 kv heads x 512 x 2 B per token; the rest a 1024-token window,
-    # whose llama.cpp b11749 cache is GGML_PAD(min(n_ctx_seq, 1024 + 512 ubatch), 256) cells per
+    # whose llama.cpp v0.8.0 cache is GGML_PAD(min(n_ctx_seq, 1024 + 512 ubatch), 256) cells per
     # slot (src/llama-kv-cache-iswa.cpp), n_ctx_seq itself padded to 256 (src/llama-context.cpp)
     if il % 6 == 5:
         return 2 * 2 * 512 * 2 * ctx
@@ -944,7 +944,7 @@ class LlamaSplit(unittest.TestCase):
     def test_mtp_blocks_take_layer_slots(self):
         # Intel/Qwen3.8-27B-q4km-AutoRound's GGUF holds Qwen3.8's MTP block after its 64-layer
         # trunk (its header at 4b30b30e: qwen35.block_count 65, qwen35.nextn_predict_layers 1,
-        # blk.64.nextn.*). llama.cpp b11749 assigns devices over all 65 blocks plus the output
+        # blk.64.nextn.*). llama.cpp v0.8.0 assigns devices over all 65 blocks plus the output
         # layer (src/llama-model.cpp, n_layer_all) and gives the MTP block no KV (the cache
         # covers il < n_layer()), so -ts counts 66 layers: counts summing to 65 put one more
         # trunk layer on the first card than the fit sized it for.
