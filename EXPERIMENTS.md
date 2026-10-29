@@ -4001,10 +4001,10 @@ by `convert.sh` and must equal H57d's Q4_0: sha256 beginning `8eb21d5b7efad6e9` 
 keep that 16-digit prefix) and 321,145,696 bytes. A mismatch stops the campaign before hold 1 and
 is recorded.
 
-**Hybrid vendor.** H57d ran at `458bca0e`, before PR #180, and its confounds record that
-`K3D_GPU_VENDORS=hybrid` still deployed the node image's baked intel-gpu-plugin. The runner calls
-this repository's `scripts/k3d-gpu up`, which includes #180 (`06aa321c`) from this commit on.
-`hybrid` alone does not make intel active, so `up` creates the cluster with
+**Hybrid vendor.** H57d's holds ran from `458bca0e`, which predates PR #180 (`06aa321c`), and its
+confounds record that `K3D_GPU_VENDORS=hybrid` still deployed the node image's baked
+intel-gpu-plugin. The runner calls this repository's `scripts/k3d-gpu up`, and every commit that
+carries this amendment includes #180. `hybrid` alone does not make intel active, so `up` creates the cluster with
 `--disable=intel-gpu-plugin@server:0` and `--disable=intel-gpu-dra@server:0` (the branch #180's
 tests cover with `K3D_GPU_VENDORS=none` and `auto,-intel`), and no intel-gpu-plugin runs on an
 H57dp node. No arm requests a `gpu.intel.com` resource either way. The change applies to all
