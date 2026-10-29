@@ -3981,10 +3981,11 @@ R1's name. That file lived in one session's scratchpad directory. This host's H5
 `bench/xhost` and the crescent holds do on their hosts, so a hold on any other lock would not
 exclude it. `hold.sh` and `convert.sh` are unchanged: both still require `LOCK` to be set.
 
-**Row.** Every H57dp command runs with `H57D_ROW=H57dp`. The records go to
+**Row.** Both H57dp holds run with `H57D_ROW=H57dp`. The records go to
 `${G}/results/H57dp/hold1` and `hold2`, the two holds left of H57d's 6-hold cap, numbered within
-their own row. H57d's `hold_dirs`, and with it the spare-hold rule (`hold5/repeats`), reads only
-`results/H57d`, so it never sees an H57dp hold.
+their own row. The smoke names its arm and writes `${G}/smoke/smoke-p` under any row;
+`convert.sh` and `score-p` do not read `H57D_ROW`. H57d's `hold_dirs`, and with it the spare-hold
+rule (`hold5/repeats`), reads only `results/H57d`, so it never sees an H57dp hold.
 
 **Spare-hold guard.** H57d's hold 5 is its spare: it repeats a failed hold's arms, which must be
 named. Before R1, `hold.sh 5 perf` with no arms read an empty order (H57d registers orders 1-4),
@@ -3999,7 +4000,10 @@ arm list.
 the committed `bench/h57d/results/2026-10-21/weights.sha256` (10 files). The drafter is rebuilt
 by `convert.sh` and must equal H57d's Q4_0: sha256 beginning `8eb21d5b7efad6e9` (H57d's records
 keep that 16-digit prefix) and 321,145,696 bytes. A mismatch stops the campaign before hold 1 and
-is recorded.
+is recorded. When the check passes, the committed file is copied to
+`~/k3dgpu-h57d/weights.sha256`, the file `reproduce.sh` prints under `file sha256:`, so every
+H57dp Reproduce header lists the checked sha256 as H57d's did. The H57d campaign directory that
+held it no longer exists.
 
 **Hybrid vendor.** H57d's holds ran from `458bca0e`, which predates PR #180 (`06aa321c`), and its
 confounds record that `K3D_GPU_VENDORS=hybrid` still deployed the node image's baked
@@ -4031,7 +4035,8 @@ score, the spare-hold and smoke guards, and the Reproduce header run with stand-
 **Commands** (`SUDO_ASKPASS` for RAPL):
 
 ```bash
-cd ~/k3dgpu-h57d/models && awk '{print $1 "  " $2}' <repo>/bench/h57d/results/2026-10-21/weights.sha256 | sha256sum -c
+cd ~/k3dgpu-h57d/models && awk '{print $1 "  " $2}' <repo>/bench/h57d/results/2026-10-21/weights.sha256 | sha256sum -c \
+  && cp <repo>/bench/h57d/results/2026-10-21/weights.sha256 ~/k3dgpu-h57d/weights.sha256   # the Reproduce header's file sha256
 LOCK=~/k3dgpu-bench.lock G=~/k3dgpu-h57d bench/h57d/convert.sh            # drafter GGUF + Od's graph.pbtxt
 sha256sum ~/k3dgpu-h57d/models/k3dgpu/gemma-4-26B-A4B-it-qat-assistant-gguf/gemma-4-26B-A4B-it-qat-assistant-q4_0.gguf   # 8eb21d5b7efad6e9...
 SMOKE=1 LOCK=~/k3dgpu-bench.lock bench/h57d/hold.sh smoke-p perf Ld-mtp-u  # wiring smoke, discarded
