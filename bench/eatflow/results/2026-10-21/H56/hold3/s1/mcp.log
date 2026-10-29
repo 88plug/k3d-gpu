@@ -1,0 +1,297 @@
+Starting Banking MCP server on 127.0.0.1:18700 (path /mcp)
+INFO:     Started server process [586018]
+INFO:     Waiting for application startup.
+StreamableHTTP session manager started
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:18700 (Press CTRL+C to quit)
+INFO:     127.0.0.1:55658 - "POST /mcp HTTP/1.1" 200 OK
+Terminating session: None
+INFO:     127.0.0.1:55666 - "POST /mcp HTTP/1.1" 202 Accepted
+Terminating session: None
+INFO:     127.0.0.1:55670 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type PingRequest
+Terminating session: None
+INFO:     127.0.0.1:55684 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+Terminating session: None
+INFO:     127.0.0.1:55688 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type PingRequest
+Terminating session: None
+INFO:     127.0.0.1:55696 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListPromptsRequest
+Terminating session: None
+INFO:     127.0.0.1:55706 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:55716 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:38324 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:43446 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:57564 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:57566 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:57572 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:46712 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:47276 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:47292 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+StreamableHTTP session manager shutting down
+INFO:     Application shutdown complete.
+INFO:     Finished server process [586018]
+Starting Banking MCP server on 127.0.0.1:18700 (path /mcp)
+INFO:     Started server process [587361]
+INFO:     Waiting for application startup.
+StreamableHTTP session manager started
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:18700 (Press CTRL+C to quit)
+INFO:     127.0.0.1:47324 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:47332 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:47342 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:47352 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:53468 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:53470 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+StreamableHTTP session manager shutting down
+INFO:     Application shutdown complete.
+INFO:     Finished server process [587361]
+Starting Banking MCP server on 127.0.0.1:18700 (path /mcp)
+INFO:     Started server process [587646]
+INFO:     Waiting for application startup.
+StreamableHTTP session manager started
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:18700 (Press CTRL+C to quit)
+INFO:     127.0.0.1:53528 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:53542 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:53548 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:53562 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:35754 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:35760 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:35770 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:53776 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:53792 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:52950 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:52954 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:50804 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:50820 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:42806 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:42816 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+StreamableHTTP session manager shutting down
+INFO:     Application shutdown complete.
+INFO:     Finished server process [587646]
+Starting Banking MCP server on 127.0.0.1:18700 (path /mcp)
+INFO:     Started server process [596044]
+INFO:     Waiting for application startup.
+StreamableHTTP session manager started
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:18700 (Press CTRL+C to quit)
+INFO:     127.0.0.1:42860 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:42874 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:42876 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:42878 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:55818 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:55834 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+StreamableHTTP session manager shutting down
+INFO:     Application shutdown complete.
+INFO:     Finished server process [596044]
+Starting Banking MCP server on 127.0.0.1:18700 (path /mcp)
+INFO:     Started server process [596638]
+INFO:     Waiting for application startup.
+StreamableHTTP session manager started
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:18700 (Press CTRL+C to quit)
+INFO:     127.0.0.1:55872 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:55880 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:55890 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:55906 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:50990 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:51000 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:51014 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:51018 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:53460 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:53474 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:33538 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:33552 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:55384 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:55400 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:55406 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+StreamableHTTP session manager shutting down
+INFO:     Application shutdown complete.
+INFO:     Finished server process [596638]
+Starting Banking MCP server on 127.0.0.1:18700 (path /mcp)
+INFO:     Started server process [598572]
+INFO:     Waiting for application startup.
+StreamableHTTP session manager started
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:18700 (Press CTRL+C to quit)
+INFO:     127.0.0.1:54164 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:54176 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:54188 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:54192 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:54202 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:54214 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:54216 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:54228 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+StreamableHTTP session manager shutting down
+INFO:     Application shutdown complete.
+INFO:     Finished server process [598572]
+Starting Banking MCP server on 127.0.0.1:18700 (path /mcp)
+INFO:     Started server process [598679]
+INFO:     Waiting for application startup.
+StreamableHTTP session manager started
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:18700 (Press CTRL+C to quit)
+INFO:     127.0.0.1:54272 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:54288 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:54302 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:54310 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:48862 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:48872 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:48884 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     127.0.0.1:48888 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: None
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+StreamableHTTP session manager shutting down
+INFO:     Application shutdown complete.
+INFO:     Finished server process [598679]

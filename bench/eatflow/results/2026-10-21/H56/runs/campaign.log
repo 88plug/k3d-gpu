@@ -1,0 +1,103 @@
+== wrapper-selftest waiting for the lock 2026-10-20T21:07:28Z
+== wrapper-selftest lock taken 2026-10-20T21:07:28Z
+== wrapper-selftest start: sleep 25 2026-10-20T21:07:28Z
+== wrapper-selftest rc=0; clusters deleted: none; now:  2026-10-20T21:07:59Z
+== H52 waiting for the lock 2026-10-20T21:31:15Z
+== H52 lock taken 2026-10-20T21:31:15Z
+== H52 start: bash /home/devcloud/k3dgpu-bench/k3d-gpu/bench/eatflow/crescent/h52.sh /home/devcloud/k3dgpu-bench/results/H52 2026-10-20T21:31:15Z
+== H52 rc=0; clusters deleted: none; now:  2026-10-20T21:34:26Z
+== H50-smoke1 waiting for the lock 2026-10-20T21:44:14Z
+== H50-smoke1 lock taken 2026-10-20T21:44:14Z
+== H50-smoke1 start: env LIVE_MODE=pairs LIVE_CAP=1500 LIVE_HOLD=1 LIVE_PAIRS_GUARD=99999 LIVE_PAIRS_DIR=/home/devcloud/k3dgpu-bench/smoke/H50/pairs LIVE_MODELS=/home/devcloud/k3dgpu-bench/models LIVE_BLUEPRINT=/home/devcloud/k3dgpu-bench/eab LIVE_PY=/home/devcloud/k3dgpu-bench/mafvenv/bin/python LIVE_EAT_CHART=/home/devcloud/k3dgpu-bench/eat-src/core/helm-charts/vllm PATH=/home/devcloud/k3dgpu-bench/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin bash /home/devcloud/k3dgpu-bench/k3d-gpu/bench/eatflow/live.sh H50 /home/devcloud/k3dgpu-bench/smoke/H50/hold1 2026-10-20T21:44:14Z
+== H50-smoke1 rc=3; clusters deleted: none; now:  2026-10-20T21:54:17Z
+== H50-smoke2 waiting for the lock 2026-10-20T21:54:33Z
+== H50-smoke2 lock taken 2026-10-20T22:05:28Z
+== H50-smoke2 start: env K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% LIVE_MODE=pairs LIVE_CAP=1500 LIVE_HOLD=1 LIVE_PAIRS_GUARD=99999 LIVE_PAIRS_DIR=/home/devcloud/k3dgpu-bench/smoke/H50b/pairs LIVE_MODELS=/home/devcloud/k3dgpu-bench/models LIVE_BLUEPRINT=/home/devcloud/k3dgpu-bench/eab LIVE_PY=/home/devcloud/k3dgpu-bench/mafvenv/bin/python LIVE_EAT_CHART=/home/devcloud/k3dgpu-bench/eat-src/core/helm-charts/vllm PATH=/home/devcloud/k3dgpu-bench/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin bash /home/devcloud/k3dgpu-bench/k3d-gpu/bench/eatflow/live.sh H50 /home/devcloud/k3dgpu-bench/smoke/H50b/hold1 2026-10-20T22:05:28Z
+== H50-smoke2 rc=0; clusters deleted: none; now:  2026-10-20T22:13:30Z
+== H56-smoke-W waiting for slot-0, slot-1, main 2026-10-21T05:51:30Z
+== H56-smoke-W locks taken: condition W 2026-10-21T07:28:22Z
+== H56-smoke-W-s1 waiting for the lock 2026-10-21T07:28:22Z
+== H56-smoke-W-s1 lock taken 2026-10-21T07:28:22Z
+== H56-smoke-W-s1 start: env K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% LIVE_MODE=agent LIVE_LEVEL=typical LIVE_CAP=2970 LIVE_BUDGET=120 LIVE_MODELS=/home/devcloud/k3dgpu-bench/models LIVE_BLUEPRINT=/home/devcloud/k3dgpu-bench/eab LIVE_PY=/home/devcloud/k3dgpu-bench/mafvenv/bin/python PATH=/home/devcloud/k3dgpu-bench/bin:/home/devcloud/k3dgpu-bench/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin bash /home/devcloud/k3dgpu-xhost/k3d-gpu-h56/bench/eatflow/crescent/../live.sh A1 /home/devcloud/k3dgpu-bench/results/H56/smoke-W/s1 2026-10-21T07:29:23Z
+== H56-smoke-W-s0 waiting for the lock 2026-10-21T07:31:02Z
+== H56-smoke-W-s0 lock taken 2026-10-21T07:31:02Z
+== H56-smoke-W-s0 start: env K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% LIVE_MODE=agent LIVE_LEVEL=typical LIVE_CAP=2370 LIVE_BUDGET=120 LIVE_MODELS=/home/devcloud/k3dgpu-bench/models LIVE_BLUEPRINT=/home/devcloud/k3dgpu-bench/eab LIVE_PY=/home/devcloud/k3dgpu-bench/mafvenv/bin/python PATH=/home/devcloud/k3dgpu-bench/bin:/home/devcloud/k3dgpu-bench/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin bash /home/devcloud/k3dgpu-xhost/k3d-gpu-h56/bench/eatflow/crescent/../live.sh A1 /home/devcloud/k3dgpu-bench/results/H56/smoke-W/s0 2026-10-21T07:32:03Z
+== H56-smoke-W-s1 rc=0; clusters deleted: none; containers removed: none; now:   2026-10-21T07:35:15Z
+== H56-smoke-W-s0 rc=0; clusters deleted: none; containers removed: none; now:   2026-10-21T07:38:55Z
+== H56-smoke-W rc=0 2026-10-21T07:38:55Z
+== H56-hold1 waiting for slot-0, slot-1, main 2026-10-21T21:04:37Z
+== H56-hold1 locks taken: condition A 2026-10-21T21:04:37Z
+== H56-hold1-s0 waiting for the lock 2026-10-21T21:04:37Z
+== H56-hold1-s0 lock taken 2026-10-21T21:04:37Z
+== H56-hold1-s0 start: env K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% LIVE_MODE=agent LIVE_LEVEL=typical LIVE_CAP=2370 LIVE_BUDGET=720 LIVE_MODELS=/home/devcloud/k3dgpu-bench/models LIVE_BLUEPRINT=/home/devcloud/k3dgpu-bench/eab LIVE_PY=/home/devcloud/k3dgpu-bench/mafvenv/bin/python PATH=/home/devcloud/k3dgpu-bench/bin:/home/devcloud/k3dgpu-bench/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin bash /home/devcloud/k3dgpu-xhost/k3d-gpu-h56/bench/eatflow/crescent/../live.sh A1 /home/devcloud/k3dgpu-bench/results/H56/hold1/s0 2026-10-21T21:05:37Z
+== H50-smoke-mountB waiting for the lock 2026-10-21T21:09:38Z
+== H56-hold1-s0 rc=0; clusters deleted: none; containers removed: none; now:   2026-10-21T21:12:20Z
+== H56-hold1 rc=0 2026-10-21T21:12:20Z
+== H56-hold2 waiting for slot-0, slot-1, main 2026-10-21T21:12:20Z
+== H50-smoke-mountB lock taken 2026-10-21T21:58:57Z
+== H50-smoke-mountB start: env K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% LIVE_MODE=pairs LIVE_CAP=1500 LIVE_HOLD=1 LIVE_PAIRS_GUARD=99999 LIVE_PAIRS_DIR=/home/devcloud/k3dgpu-bench/smoke/H50m/pairs LIVE_MODEL_SET=gemma4 LIVE_EAT_KV_GIB=40 LIVE_MOUNT_B=1 LIVE_MODELS=/home/devcloud/k3dgpu-bench/models LIVE_BLUEPRINT=/home/devcloud/k3dgpu-bench/eab LIVE_PY=/home/devcloud/k3dgpu-bench/mafvenv/bin/python LIVE_EAT_CHART=/home/devcloud/k3dgpu-bench/eat-src/core/helm-charts/vllm LIVE_EAT_OVMS_CHART=/home/devcloud/k3dgpu-bench/eat-src/core/helm-charts/ovms PATH=/home/devcloud/k3dgpu-bench/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin bash /home/devcloud/k3dgpu-bench/k3d-gpu/bench/eatflow/live.sh H50 /home/devcloud/k3dgpu-bench/smoke/H50m/hold1 2026-10-21T21:58:58Z
+== H50-smoke-mountB rc=3; clusters deleted: none; containers removed: none; now:   2026-10-21T22:03:49Z
+== H56-hold2 locks taken: condition W 2026-10-21T22:03:49Z
+== H56-hold2-s1 waiting for the lock 2026-10-21T22:03:50Z
+== H56-hold2-s1 lock taken 2026-10-21T22:03:50Z
+== H56-hold2-s1 start: env K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% LIVE_MODE=agent LIVE_LEVEL=typical LIVE_CAP=2970 LIVE_BUDGET=1800 LIVE_MODELS=/home/devcloud/k3dgpu-bench/models LIVE_BLUEPRINT=/home/devcloud/k3dgpu-bench/eab LIVE_PY=/home/devcloud/k3dgpu-bench/mafvenv/bin/python PATH=/home/devcloud/k3dgpu-bench/bin:/home/devcloud/k3dgpu-bench/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin bash /home/devcloud/k3dgpu-xhost/k3d-gpu-h56/bench/eatflow/crescent/../live.sh A1 /home/devcloud/k3dgpu-bench/results/H56/hold2/s1 2026-10-21T22:04:50Z
+== H56-hold2-s0 waiting for the lock 2026-10-21T22:06:20Z
+== H56-hold2-s0 lock taken 2026-10-21T22:06:20Z
+== H56-hold2-s0 start: env K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% LIVE_MODE=agent LIVE_LEVEL=typical LIVE_CAP=2370 LIVE_BUDGET=720 LIVE_MODELS=/home/devcloud/k3dgpu-bench/models LIVE_BLUEPRINT=/home/devcloud/k3dgpu-bench/eab LIVE_PY=/home/devcloud/k3dgpu-bench/mafvenv/bin/python PATH=/home/devcloud/k3dgpu-bench/bin:/home/devcloud/k3dgpu-bench/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin bash /home/devcloud/k3dgpu-xhost/k3d-gpu-h56/bench/eatflow/crescent/../live.sh A1 /home/devcloud/k3dgpu-bench/results/H56/hold2/s0 2026-10-21T22:07:20Z
+== H56-hold2-s1 rc=0; clusters deleted: none; containers removed: none; now:   2026-10-21T22:11:32Z
+== H56-hold2-s0 rc=0; clusters deleted: none; containers removed: none; now:   2026-10-21T22:14:13Z
+== H56-hold2 rc=0 2026-10-21T22:14:13Z
+== H56-hold3 waiting for slot-0, slot-1, main 2026-10-21T22:14:13Z
+== H56-hold3 locks taken: condition W 2026-10-21T22:16:29Z
+== H56-hold3-s1 waiting for the lock 2026-10-21T22:16:29Z
+== H56-hold3-s1 lock taken 2026-10-21T22:16:29Z
+== H56-hold3-s1 start: env K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% LIVE_MODE=agent LIVE_LEVEL=typical LIVE_CAP=2970 LIVE_BUDGET=1800 LIVE_MODELS=/home/devcloud/k3dgpu-bench/models LIVE_BLUEPRINT=/home/devcloud/k3dgpu-bench/eab LIVE_PY=/home/devcloud/k3dgpu-bench/mafvenv/bin/python PATH=/home/devcloud/k3dgpu-bench/bin:/home/devcloud/k3dgpu-bench/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin bash /home/devcloud/k3dgpu-xhost/k3d-gpu-h56/bench/eatflow/crescent/../live.sh A1 /home/devcloud/k3dgpu-bench/results/H56/hold3/s1 2026-10-21T22:17:29Z
+== H56-hold3-s0 waiting for the lock 2026-10-21T22:18:59Z
+== H56-hold3-s0 lock taken 2026-10-21T22:18:59Z
+== H56-hold3-s0 start: env K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% LIVE_MODE=agent LIVE_LEVEL=typical LIVE_CAP=2370 LIVE_BUDGET=720 LIVE_MODELS=/home/devcloud/k3dgpu-bench/models LIVE_BLUEPRINT=/home/devcloud/k3dgpu-bench/eab LIVE_PY=/home/devcloud/k3dgpu-bench/mafvenv/bin/python PATH=/home/devcloud/k3dgpu-bench/bin:/home/devcloud/k3dgpu-bench/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin bash /home/devcloud/k3dgpu-xhost/k3d-gpu-h56/bench/eatflow/crescent/../live.sh A1 /home/devcloud/k3dgpu-bench/results/H56/hold3/s0 2026-10-21T22:19:59Z
+== H56-hold3-s1 rc=0; clusters deleted: none; containers removed: none; now:   2026-10-21T22:24:12Z
+== H56-hold3-s0 rc=0; clusters deleted: none; containers removed: none; now:   2026-10-21T22:26:42Z
+== H56-hold3 rc=0 2026-10-21T22:26:42Z
+== H56-hold4 waiting for slot-0, slot-1, main 2026-10-21T22:26:42Z
+== H56-hold4 locks taken: condition A 2026-10-21T22:26:42Z
+== H56-hold4-s0 waiting for the lock 2026-10-21T22:26:42Z
+== H56-hold4-s0 lock taken 2026-10-21T22:26:42Z
+== H56-hold4-s0 start: env K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% LIVE_MODE=agent LIVE_LEVEL=typical LIVE_CAP=2370 LIVE_BUDGET=720 LIVE_MODELS=/home/devcloud/k3dgpu-bench/models LIVE_BLUEPRINT=/home/devcloud/k3dgpu-bench/eab LIVE_PY=/home/devcloud/k3dgpu-bench/mafvenv/bin/python PATH=/home/devcloud/k3dgpu-bench/bin:/home/devcloud/k3dgpu-bench/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin bash /home/devcloud/k3dgpu-xhost/k3d-gpu-h56/bench/eatflow/crescent/../live.sh A1 /home/devcloud/k3dgpu-bench/results/H56/hold4/s0 2026-10-21T22:27:42Z
+== H56-hold4-s0 rc=0; clusters deleted: none; containers removed: none; now:   2026-10-21T22:34:25Z
+== H56-hold4 rc=0 2026-10-21T22:34:25Z
+== H56-hold5 waiting for slot-0, slot-1, main 2026-10-21T22:34:25Z
+== H56-hold5 locks taken: condition A 2026-10-21T22:34:25Z
+== H56-hold5-s0 waiting for the lock 2026-10-21T22:34:25Z
+== H56-hold5-s0 lock taken 2026-10-21T22:34:25Z
+== H56-hold5-s0 start: env K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% LIVE_MODE=agent LIVE_LEVEL=typical LIVE_CAP=2370 LIVE_BUDGET=720 LIVE_MODELS=/home/devcloud/k3dgpu-bench/models LIVE_BLUEPRINT=/home/devcloud/k3dgpu-bench/eab LIVE_PY=/home/devcloud/k3dgpu-bench/mafvenv/bin/python PATH=/home/devcloud/k3dgpu-bench/bin:/home/devcloud/k3dgpu-bench/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin bash /home/devcloud/k3dgpu-xhost/k3d-gpu-h56/bench/eatflow/crescent/../live.sh A1 /home/devcloud/k3dgpu-bench/results/H56/hold5/s0 2026-10-21T22:35:25Z
+== H56-hold5-s0 rc=0; clusters deleted: none; containers removed: none; now:   2026-10-21T22:42:08Z
+== H56-hold5 rc=0 2026-10-21T22:42:08Z
+== H56-hold6 waiting for slot-0, slot-1, main 2026-10-21T22:42:08Z
+== H56-hold6 locks taken: condition W 2026-10-21T22:42:08Z
+== H56-hold6-s1 waiting for the lock 2026-10-21T22:42:08Z
+== H56-hold6-s1 lock taken 2026-10-21T22:42:08Z
+== H56-hold6-s1 start: env K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% LIVE_MODE=agent LIVE_LEVEL=typical LIVE_CAP=2970 LIVE_BUDGET=1800 LIVE_MODELS=/home/devcloud/k3dgpu-bench/models LIVE_BLUEPRINT=/home/devcloud/k3dgpu-bench/eab LIVE_PY=/home/devcloud/k3dgpu-bench/mafvenv/bin/python PATH=/home/devcloud/k3dgpu-bench/bin:/home/devcloud/k3dgpu-bench/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin bash /home/devcloud/k3dgpu-xhost/k3d-gpu-h56/bench/eatflow/crescent/../live.sh A1 /home/devcloud/k3dgpu-bench/results/H56/hold6/s1 2026-10-21T22:43:08Z
+== H56-hold6-s0 waiting for the lock 2026-10-21T22:44:38Z
+== H56-hold6-s0 lock taken 2026-10-21T22:44:38Z
+== H56-hold6-s0 start: env K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% LIVE_MODE=agent LIVE_LEVEL=typical LIVE_CAP=2370 LIVE_BUDGET=720 LIVE_MODELS=/home/devcloud/k3dgpu-bench/models LIVE_BLUEPRINT=/home/devcloud/k3dgpu-bench/eab LIVE_PY=/home/devcloud/k3dgpu-bench/mafvenv/bin/python PATH=/home/devcloud/k3dgpu-bench/bin:/home/devcloud/k3dgpu-bench/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin bash /home/devcloud/k3dgpu-xhost/k3d-gpu-h56/bench/eatflow/crescent/../live.sh A1 /home/devcloud/k3dgpu-bench/results/H56/hold6/s0 2026-10-21T22:45:39Z
+== H56-hold6-s1 rc=0; clusters deleted: none; containers removed: none; now:   2026-10-21T22:49:51Z
+== H56-hold6-s0 rc=0; clusters deleted: none; containers removed: none; now:   2026-10-21T22:52:31Z
+== H56-hold6 rc=0 2026-10-21T22:52:31Z
+== H56-hold7 waiting for slot-0, slot-1, main 2026-10-21T22:52:31Z
+== H56-hold7 locks taken: condition W 2026-10-21T22:52:31Z
+== H56-hold7-s1 waiting for the lock 2026-10-21T22:52:31Z
+== H56-hold7-s1 lock taken 2026-10-21T22:52:31Z
+== H56-hold7-s1 start: env K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% LIVE_MODE=agent LIVE_LEVEL=typical LIVE_CAP=2970 LIVE_BUDGET=1800 LIVE_MODELS=/home/devcloud/k3dgpu-bench/models LIVE_BLUEPRINT=/home/devcloud/k3dgpu-bench/eab LIVE_PY=/home/devcloud/k3dgpu-bench/mafvenv/bin/python PATH=/home/devcloud/k3dgpu-bench/bin:/home/devcloud/k3dgpu-bench/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin bash /home/devcloud/k3dgpu-xhost/k3d-gpu-h56/bench/eatflow/crescent/../live.sh A1 /home/devcloud/k3dgpu-bench/results/H56/hold7/s1 2026-10-21T22:53:32Z
+== H56-hold7-s0 waiting for the lock 2026-10-21T22:55:01Z
+== H56-hold7-s0 lock taken 2026-10-21T22:55:01Z
+== H56-hold7-s0 start: env K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% LIVE_MODE=agent LIVE_LEVEL=typical LIVE_CAP=2370 LIVE_BUDGET=720 LIVE_MODELS=/home/devcloud/k3dgpu-bench/models LIVE_BLUEPRINT=/home/devcloud/k3dgpu-bench/eab LIVE_PY=/home/devcloud/k3dgpu-bench/mafvenv/bin/python PATH=/home/devcloud/k3dgpu-bench/bin:/home/devcloud/k3dgpu-bench/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin bash /home/devcloud/k3dgpu-xhost/k3d-gpu-h56/bench/eatflow/crescent/../live.sh A1 /home/devcloud/k3dgpu-bench/results/H56/hold7/s0 2026-10-21T22:56:02Z
+== H56-hold7-s1 rc=0; clusters deleted: none; containers removed: none; now:   2026-10-21T23:00:14Z
+== H56-hold7-s0 rc=0; clusters deleted: none; containers removed: none; now:   2026-10-21T23:02:54Z
+== H56-hold7 rc=0 2026-10-21T23:02:54Z
+== H56-hold8 waiting for slot-0, slot-1, main 2026-10-21T23:02:54Z
+== H56-hold8 locks taken: condition A 2026-10-21T23:02:54Z
+== H56-hold8-s0 waiting for the lock 2026-10-21T23:02:54Z
+== H56-hold8-s0 lock taken 2026-10-21T23:02:54Z
+== H56-hold8-s0 start: env K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% LIVE_MODE=agent LIVE_LEVEL=typical LIVE_CAP=2370 LIVE_BUDGET=720 LIVE_MODELS=/home/devcloud/k3dgpu-bench/models LIVE_BLUEPRINT=/home/devcloud/k3dgpu-bench/eab LIVE_PY=/home/devcloud/k3dgpu-bench/mafvenv/bin/python PATH=/home/devcloud/k3dgpu-bench/bin:/home/devcloud/k3dgpu-bench/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin bash /home/devcloud/k3dgpu-xhost/k3d-gpu-h56/bench/eatflow/crescent/../live.sh A1 /home/devcloud/k3dgpu-bench/results/H56/hold8/s0 2026-10-21T23:03:55Z
+== H56-hold8-s0 rc=0; clusters deleted: none; containers removed: none; now:   2026-10-21T23:10:37Z
+== H56-hold8 rc=0 2026-10-21T23:10:37Z
