@@ -40,14 +40,14 @@ BUDGET=1200 ABORT_AT=1140
 PREFIX=k3dgpu-i-amx-autoquant
 # openvino/model_server:2026.4.1-gpu, the agent's pin (scripts/k3d-gpu AGENT_OVMS_IMAGE).
 OVMS_IMAGE="openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58"
-# python:3.12-slim (PYTHON_VERSION=3.12.15) by digest.
-PY_IMAGE="python@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1"
+# python:3.14.10-slim by digest: the newest Python that openvino 2026.4.1 ships wheels for (cp310-cp314).
+PY_IMAGE="python:3.14.10-slim@sha256:3cabfd7d7aaf394e6040e79fa1eec6ca1c52b74ed9188650472695d9a9326999"
 # Checked on PyPI / download.pytorch.org 2026-10-17. openvino 2026.4.1 matches the
 # OVMS release. transformers and huggingface_hub are the newest inside optimum-intel
 # 2.2.0's bounds (transformers<5.6, huggingface-hub<1.22). torch/torchvision come
 # from the CPU wheel index so no CUDA wheels are pulled. --prepare still records
 # the full resolved set in pip-freeze.txt.
-PIP_PINS="openvino==2026.4.1 openvino-tokenizers==2026.4.1 optimum-intel==2.2.0 optimum==2.3.0 transformers==5.5.4 huggingface-hub==1.21.0 torch==2.14.1+cpu torchvision==0.29.1+cpu pyarrow==26.0.0"
+PIP_PINS="openvino==2026.4.1 openvino-tokenizers==2026.4.1 optimum-intel==2.2.0 optimum==2.3.0 transformers==5.5.4 huggingface-hub==1.21.0 torch==2.15.0+cpu torchvision==0.29.2+cpu pyarrow==26.0.0"
 PIP_INDEX="--extra-index-url https://download.pytorch.org/whl/cpu"
 # Containers run as the invoking user so the cache stays user-owned.
 UIDGID="$(id -u):$(id -g)"
