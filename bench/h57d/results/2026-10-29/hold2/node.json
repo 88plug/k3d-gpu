@@ -1,0 +1,261 @@
+{
+    "apiVersion": "v1",
+    "items": [
+        {
+            "apiVersion": "v1",
+            "kind": "Node",
+            "metadata": {
+                "annotations": {
+                    "alpha.kubernetes.io/provided-node-ip": "172.20.0.2",
+                    "flannel.alpha.coreos.com/backend-data": "{\"VNI\":1,\"VtepMAC\":\"92:c4:00:1c:c8:34\"}",
+                    "flannel.alpha.coreos.com/backend-type": "vxlan",
+                    "flannel.alpha.coreos.com/kube-subnet-manager": "true",
+                    "flannel.alpha.coreos.com/public-ip": "172.20.0.2",
+                    "k3d-gpu.io/favored-cpus": "8-11",
+                    "k3s.io/hostname": "k3d-k3dgpu-d-h57d-2-server-0",
+                    "k3s.io/internal-ip": "172.20.0.2",
+                    "k3s.io/node-args": "[\"server\",\"--kubelet-arg\",\"eviction-hard=memory.available\\u003c100Mi,nodefs.available\\u003c1%,imagefs.available\\u003c1%,nodefs.inodesFree\\u003c1%\",\"--disable\",\"traefik\",\"--disable\",\"intel-gpu-plugin\",\"--disable\",\"intel-gpu-dra\",\"--node-label\",\"k3d-gpu.io/hybrid-cpu=true\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.CETIBT=true\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.CETSS=true\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.GFNI=true\",\"--node-label\",\"nvidia.com/gpu.present=false\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.AVXVNNI=true\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.SHA=true\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.VAES=true\",\"--node-label\",\"experimental.k3d-gpu.io/dra=true\",\"--node-label\",\"experimental.k3d-gpu.io/image-volume=true\",\"--tls-san\",\"0.0.0.0\"]",
+                    "k3s.io/node-config-hash": "XLQBAA3VW2FHYG4EBDNLYZYFR5HH3HKHWLJIE4XRBBNZHEZ2565A====",
+                    "k3s.io/node-env": "{\"K3S_KUBECONFIG_OUTPUT\":\"/output/kubeconfig.yaml\",\"K3S_TOKEN\":\"********\"}",
+                    "nfd.node.kubernetes.io/feature-labels": "cpu-cpuid.ADX,cpu-cpuid.AESNI,cpu-cpuid.AVX,cpu-cpuid.AVX2,cpu-cpuid.BHI_CTRL,cpu-cpuid.CMPXCHG8,cpu-cpuid.FLUSH_L1D,cpu-cpuid.FMA3,cpu-cpuid.FSRM,cpu-cpuid.FXSR,cpu-cpuid.FXSROPT,cpu-cpuid.HRESET,cpu-cpuid.HYBRID_CPU,cpu-cpuid.IA32_ARCH_CAP,cpu-cpuid.IA32_CORE_CAP,cpu-cpuid.IBPB,cpu-cpuid.IDPRED_CTRL,cpu-cpuid.KEYLOCKER,cpu-cpuid.LAHF,cpu-cpuid.MD_CLEAR,cpu-cpuid.MOVBE,cpu-cpuid.MOVDIR64B,cpu-cpuid.MOVDIRI,cpu-cpuid.OSXSAVE,cpu-cpuid.PCONFIG,cpu-cpuid.PMU_FIXEDCOUNTER_CYCLES,cpu-cpuid.PMU_FIXEDCOUNTER_INSTRUCTIONS,cpu-cpuid.PMU_FIXEDCOUNTER_REFCYCLES,cpu-cpuid.PSFD,cpu-cpuid.RRSBA_CTRL,cpu-cpuid.SERIALIZE,cpu-cpuid.SPEC_CTRL_SSBD,cpu-cpuid.STIBP,cpu-cpuid.STOSB_SHORT,cpu-cpuid.SYSCALL,cpu-cpuid.SYSEE,cpu-cpuid.TME,cpu-cpuid.VMX,cpu-cpuid.VPCLMULQDQ,cpu-cpuid.WAITPKG,cpu-cpuid.X86_64_V1,cpu-cpuid.X86_64_V2,cpu-cpuid.X86_64_V3,cpu-cpuid.X87,cpu-cpuid.XGETBV1,cpu-cpuid.XSAVE,cpu-cpuid.XSAVEC,cpu-cpuid.XSAVEOPT,cpu-cpuid.XSAVES,cpu-cstate.enabled,cpu-hardware_multithreading,cpu-model.family,cpu-model.hypervisor,cpu-model.id,cpu-model.vendor_id,cpu-pstate.scaling_governor,cpu-pstate.status,cpu-pstate.turbo,gpu.intel.com/device-id.0380-a780.count,gpu.intel.com/device-id.0380-a780.present,intel.feature.node.kubernetes.io/gpu,kernel-config.NO_HZ,kernel-config.NO_HZ_FULL,kernel-config.PREEMPT,kernel-version.full,kernel-version.major,kernel-version.minor,kernel-version.revision,memory-swap,pci-0300_10de.present,pci-0380_8086.present,pci-0380_8086.sriov.capable,storage-nonrotationaldisk,system-os_release.ID",
+                    "node.alpha.kubernetes.io/ttl": "0",
+                    "volumes.kubernetes.io/controller-managed-attach-detach": "true"
+                },
+                "creationTimestamp": "2026-10-29T20:07:27Z",
+                "finalizers": [
+                    "wrangler.cattle.io/node"
+                ],
+                "labels": {
+                    "beta.kubernetes.io/arch": "amd64",
+                    "beta.kubernetes.io/instance-type": "k3s",
+                    "beta.kubernetes.io/os": "linux",
+                    "experimental.k3d-gpu.io/dra": "true",
+                    "experimental.k3d-gpu.io/image-volume": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.ADX": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.AESNI": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.AVX": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.AVX2": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.AVXVNNI": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.BHI_CTRL": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.CETIBT": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.CETSS": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.CMPXCHG8": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.FLUSH_L1D": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.FMA3": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.FSRM": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.FXSR": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.FXSROPT": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.GFNI": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.HRESET": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.HYBRID_CPU": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.IA32_ARCH_CAP": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.IA32_CORE_CAP": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.IBPB": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.IDPRED_CTRL": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.KEYLOCKER": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.LAHF": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.MD_CLEAR": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.MOVBE": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.MOVDIR64B": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.MOVDIRI": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.OSXSAVE": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.PCONFIG": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.PMU_FIXEDCOUNTER_CYCLES": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.PMU_FIXEDCOUNTER_INSTRUCTIONS": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.PMU_FIXEDCOUNTER_REFCYCLES": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.PSFD": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.RRSBA_CTRL": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.SERIALIZE": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.SHA": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.SPEC_CTRL_SSBD": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.STIBP": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.STOSB_SHORT": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.SYSCALL": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.SYSEE": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.TME": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.VAES": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.VMX": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.VPCLMULQDQ": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.WAITPKG": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.X86_64_V1": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.X86_64_V2": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.X86_64_V3": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.X87": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.XGETBV1": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.XSAVE": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.XSAVEC": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.XSAVEOPT": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.XSAVES": "true",
+                    "feature.node.kubernetes.io/cpu-cstate.enabled": "true",
+                    "feature.node.kubernetes.io/cpu-hardware_multithreading": "true",
+                    "feature.node.kubernetes.io/cpu-model.family": "6",
+                    "feature.node.kubernetes.io/cpu-model.hypervisor": "none",
+                    "feature.node.kubernetes.io/cpu-model.id": "183",
+                    "feature.node.kubernetes.io/cpu-model.vendor_id": "Intel",
+                    "feature.node.kubernetes.io/cpu-pstate.scaling_governor": "powersave",
+                    "feature.node.kubernetes.io/cpu-pstate.status": "active",
+                    "feature.node.kubernetes.io/cpu-pstate.turbo": "true",
+                    "feature.node.kubernetes.io/kernel-config.NO_HZ": "true",
+                    "feature.node.kubernetes.io/kernel-config.NO_HZ_FULL": "true",
+                    "feature.node.kubernetes.io/kernel-config.PREEMPT": "true",
+                    "feature.node.kubernetes.io/kernel-version.full": "6.6.128-1-MANJARO",
+                    "feature.node.kubernetes.io/kernel-version.major": "6",
+                    "feature.node.kubernetes.io/kernel-version.minor": "6",
+                    "feature.node.kubernetes.io/kernel-version.revision": "128",
+                    "feature.node.kubernetes.io/memory-swap": "true",
+                    "feature.node.kubernetes.io/pci-0300_10de.present": "true",
+                    "feature.node.kubernetes.io/pci-0380_8086.present": "true",
+                    "feature.node.kubernetes.io/pci-0380_8086.sriov.capable": "true",
+                    "feature.node.kubernetes.io/storage-nonrotationaldisk": "true",
+                    "feature.node.kubernetes.io/system-os_release.ID": "manjaro",
+                    "gpu.intel.com/device-id.0380-a780.count": "1",
+                    "gpu.intel.com/device-id.0380-a780.present": "true",
+                    "intel.feature.node.kubernetes.io/gpu": "true",
+                    "k3d-gpu.io/hybrid-cpu": "true",
+                    "kubernetes.io/arch": "amd64",
+                    "kubernetes.io/hostname": "k3d-k3dgpu-d-h57d-2-server-0",
+                    "kubernetes.io/os": "linux",
+                    "node-role.kubernetes.io/control-plane": "true",
+                    "node.kubernetes.io/instance-type": "k3s",
+                    "nvidia.com/gpu.present": "false"
+                },
+                "name": "k3d-k3dgpu-d-h57d-2-server-0",
+                "resourceVersion": "701",
+                "uid": "f4972520-a045-46b7-a7c8-fd31659920e3"
+            },
+            "spec": {
+                "podCIDR": "10.42.0.0/24",
+                "podCIDRs": [
+                    "10.42.0.0/24"
+                ],
+                "providerID": "k3s://k3d-k3dgpu-d-h57d-2-server-0"
+            },
+            "status": {
+                "addresses": [
+                    {
+                        "address": "172.20.0.2",
+                        "type": "InternalIP"
+                    },
+                    {
+                        "address": "k3d-k3dgpu-d-h57d-2-server-0",
+                        "type": "Hostname"
+                    }
+                ],
+                "allocatable": {
+                    "cpu": "32",
+                    "ephemeral-storage": "1751985579691",
+                    "hugepages-1Gi": "0",
+                    "hugepages-2Mi": "0",
+                    "memory": "131419028Ki",
+                    "pods": "110"
+                },
+                "capacity": {
+                    "cpu": "32",
+                    "ephemeral-storage": "1769682403328",
+                    "hugepages-1Gi": "0",
+                    "hugepages-2Mi": "0",
+                    "memory": "131521428Ki",
+                    "pods": "110"
+                },
+                "conditions": [
+                    {
+                        "lastHeartbeatTime": "2026-10-29T20:07:37Z",
+                        "lastTransitionTime": "2026-10-29T20:07:27Z",
+                        "message": "kubelet has sufficient memory available",
+                        "reason": "KubeletHasSufficientMemory",
+                        "status": "False",
+                        "type": "MemoryPressure"
+                    },
+                    {
+                        "lastHeartbeatTime": "2026-10-29T20:07:37Z",
+                        "lastTransitionTime": "2026-10-29T20:07:27Z",
+                        "message": "kubelet has no disk pressure",
+                        "reason": "KubeletHasNoDiskPressure",
+                        "status": "False",
+                        "type": "DiskPressure"
+                    },
+                    {
+                        "lastHeartbeatTime": "2026-10-29T20:07:37Z",
+                        "lastTransitionTime": "2026-10-29T20:07:27Z",
+                        "message": "kubelet has sufficient PID available",
+                        "reason": "KubeletHasSufficientPID",
+                        "status": "False",
+                        "type": "PIDPressure"
+                    },
+                    {
+                        "lastHeartbeatTime": "2026-10-29T20:07:37Z",
+                        "lastTransitionTime": "2026-10-29T20:07:27Z",
+                        "message": "kubelet is posting ready status",
+                        "reason": "KubeletReady",
+                        "status": "True",
+                        "type": "Ready"
+                    }
+                ],
+                "daemonEndpoints": {
+                    "kubeletEndpoint": {
+                        "Port": 10250
+                    }
+                },
+                "declaredFeatures": [
+                    "ExtendWebSocketsToKubelet",
+                    "InPlacePodLevelResourcesVerticalScaling",
+                    "InPlacePodVerticalScalingInitContainers",
+                    "RestartAllContainersOnContainerExits"
+                ],
+                "features": {
+                    "supplementalGroupsPolicy": true
+                },
+                "nodeInfo": {
+                    "architecture": "amd64",
+                    "bootID": "16de0253-9425-4d16-aa00-edc795a2c2e8",
+                    "containerRuntimeVersion": "containerd://2.3.4-k3s1",
+                    "kernelVersion": "6.6.128-1-MANJARO",
+                    "kubeProxyVersion": "",
+                    "kubeletVersion": "v1.37.1+k3s1",
+                    "machineID": "",
+                    "operatingSystem": "linux",
+                    "osImage": "Ubuntu 26.04.1 LTS",
+                    "runningInUserNamespace": false,
+                    "swap": {
+                        "capacity": 201326587904
+                    },
+                    "systemUUID": "a1505b00-cbd3-11ee-b3a0-04d42b2c1900"
+                },
+                "runtimeHandlers": [
+                    {
+                        "features": {
+                            "recursiveReadOnlyMounts": true,
+                            "userNamespaces": true
+                        },
+                        "name": ""
+                    },
+                    {
+                        "features": {
+                            "recursiveReadOnlyMounts": true,
+                            "userNamespaces": true
+                        },
+                        "name": "nvidia"
+                    },
+                    {
+                        "features": {
+                            "recursiveReadOnlyMounts": true,
+                            "userNamespaces": true
+                        },
+                        "name": "runc"
+                    },
+                    {
+                        "features": {
+                            "recursiveReadOnlyMounts": false,
+                            "userNamespaces": false
+                        },
+                        "name": "runhcs-wcow-process"
+                    }
+                ]
+            }
+        }
+    ],
+    "kind": "List",
+    "metadata": {
+        "resourceVersion": ""
+    }
+}

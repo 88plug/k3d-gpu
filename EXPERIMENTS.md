@@ -81,8 +81,8 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H57da | On an AMX-less client CPU (i9-13900T, the 16 P-core CPUs, AVX2 and VNNI, no AVX-512), with the Gemma 4 26B-A4B QAT family, k3d-gpu's own CPU pick Od (`agent manifest` auto on the P-cores: OVMS 2026.4.1, `OpenVINO/gemma-4-26b-a4b-it-int4-ov`) is the fastest single-stream arm: no other arm passing the quality gate (llama.cpp with Google's QAT Q4_0 GGUF, with or without the QAT MTP drafter) decodes at N=1 5% or more faster. A microbench, not an agent claim. | Written 2026-10-20, before any H57d measurement. N=1 median decode tok/s: Od in [8, 20] (0.5); Ld (llama.cpp Q4_0, 8 threads) in [12, 30] (0.5); Ld/Od in [1.1, 1.8] (0.5); every arm's GSM8K 0-49 score >= 0.80 (0.6). REFUTED (0.55), SUPPORTED (0.25), INCONCLUSIVE (0.2). Not gated: TTFT on a 1,000-token prompt, aggregate tok/s at N=4, package J/token gross and net of idle. | [H57d pre-registration](#h57d-pre-registration-gemma-4-26b-a4b-qat-on-the-amx-less-client-cpu-i9-13900t-2026-10-20): H54's measurement protocol per arm (`bench/llm_load.py`, 256 tokens, greedy, `ignore_eos`; RAPL per phase; GSM8K items 0-49 graded as H54), one arm serving at a time, arm order rotated over 3 performance holds, quality in a 4th, at most 5 holds of at most 45 min. Statistic: R = median N=1 decode of the fastest other gate-passing arm X / Od's, over the pooled requests of the 3 holds, 95% bootstrap CI (H54's). REFUTED: Od fails the quality gate, or CI lower bound >= 1.05 and X faster than Od in each of the 3 holds. SUPPORTED: Od passes the gate and CI upper bound < 1.05. INCONCLUSIVE otherwise, or when Od or every other arm is not delivered, or the load gate fails. Run 2026-10-21 ([H57d run](#h57d-run-i9-13900t-2026-10-21)): Ld-mtp/Od 0.785 (95% CI 0.692-1.561), per hold 0.72, 0.79, 1.44; Od 6.90, Ld 3.50, Ld-mtp 5.41 tok/s pooled N=1; all 50/50 on GSM8K; load matched (1.80 <= 2.0). The strict-pinned llama.cpp arms tracked host load 2.3-2.7x, Od 1.3x. | INCONCLUSIVE |
 | H57dm | On the same client and model, the CPU Fast Draft rule extends to Gemma 4's MTP drafter: llama.cpp Ld-mtp (Ld plus Google's QAT MTP assistant, converted to Q4_0 GGUF here, `--spec-type draft-mtp`, default draft length) decodes at N=1 at least 1.20x Ld (H34's bar) with the quality gate passed. | Written 2026-10-20, before any H57d measurement. Ld-mtp/Ld in [0.8, 1.3] (0.6): Google's MTP note says the 26B A4B drafter may not pay at batch 1, and llama.cpp's MTP PR saw no MoE gain. REFUTED (0.65), INCONCLUSIVE (0.15), SUPPORTED (0.2). Not gated: the N=4 ratio and the J/token ratio. | As H57da (same holds and records). Statistic: Rm = median N=1 decode Ld-mtp / Ld, pooled, H54's bootstrap CI. SUPPORTED: Rm >= 1.20, CI lower bound > 1.0, Ld-mtp faster in each of the 3 holds, and Ld-mtp passes the gate. REFUTED: CI upper bound < 1.20, or Ld-mtp fails the gate. INCONCLUSIVE otherwise, or when either arm is not delivered or the load gate fails. Run 2026-10-21 ([H57d run](#h57d-run-i9-13900t-2026-10-21)): Ld-mtp/Ld 1.548 (95% CI 1.057-3.017), faster in each hold (1.47, 1.58, 1.52), 50/50 quality. Scope: llama.cpp b11749, default draft length 3, i9-13900T P-cores, single stream, busy shared host. | SUPPORTED |
 | H57db | Inside EAT's banking flow (B24) with Gemma 4 26B-A4B QAT on the i9-13900T, k3d-gpu auto on the P-cores delivers far more tasks within budget than EAT stock CPU (vLLM CPU bf16 on the QAT bf16 weights, `xeon-values.yaml` entry `cpu-gemma4-26b-a4b`), interleaved pairs under rule L3. | Written 2026-10-20: not runnable here as registered (memory), so INCONCLUSIVE (not run) is expected (0.9). | [H57d pre-registration](#h57d-pre-registration-gemma-4-26b-a4b-qat-on-the-amx-less-client-cpu-i9-13900t-2026-10-20), H57db: runs only if the memory gate passes at a hold's start (MemAvailable >= 100 GiB: 51.6 GB of bf16 weights resident plus `VLLM_CPU_KVCACHE_SPACE` 40 GiB), with H50's procedure, rule L3 (PR #157) and at most 1 hold, where fewer than 16 complete pairs read INCONCLUSIVE by L3; otherwise INCONCLUSIVE (not run), with the reading recorded. Not run ([H57d run](#h57d-run-i9-13900t-2026-10-21)): memory gate failed, MemAvailable 42.9 GB at the campaign's start (< 100 GiB). | INCONCLUSIVE |
-| H57dp | On the i9-13900T P-cores under the shared host's own load, llama.cpp with Gemma 4 QAT Q4_0 and the QAT MTP drafter decodes faster unpinned (8 threads, no `-C`/`--cpu-strict`) than strictly pinned one thread per physical P-core: N=1 ratio >= 1.10. | Written 2026-10-21, after H57d, before any H57dp measurement. SUPPORTED (0.5); Ld-mtp-u/Ld-mtp in [1.0, 1.8] (0.6). | [H57dp pre-registration](#h57dp-pre-registration-llamacpp-thread-pinning-on-the-busy-client-i9-13900t-2026-10-21): 2 holds of at most 75 min, H57d's protocol. SUPPORTED: pooled median ratio >= 1.10, CI lower bound > 1.0, faster in both holds. REFUTED: CI upper bound < 1.10. Else INCONCLUSIVE, or when the load gate fails. | PENDING |
-| H57de | H57da with the unpinned llama.cpp arm: no arm decodes Gemma 4 QAT at N=1 5% or more faster than k3d-gpu's OVMS pick Od on the i9-13900T P-cores. | Written 2026-10-21, before any H57de measurement. REFUTED (0.5); Ld-mtp-u/Od in [1.0, 1.6] (0.5). | [H57dp pre-registration](#h57dp-pre-registration-llamacpp-thread-pinning-on-the-busy-client-i9-13900t-2026-10-21): same holds as H57dp. REFUTED: Ld-mtp-u/Od CI lower bound >= 1.05 and faster in both holds. SUPPORTED: CI upper bound < 1.05. Else INCONCLUSIVE, or when the load gate fails. | PENDING |
+| H57dp | On the i9-13900T P-cores under the shared host's own load, llama.cpp with Gemma 4 QAT Q4_0 and the QAT MTP drafter decodes faster unpinned (8 threads, no `-C`/`--cpu-strict`) than strictly pinned one thread per physical P-core: N=1 ratio >= 1.10. | Written 2026-10-21, after H57d, before any H57dp measurement. SUPPORTED (0.5); Ld-mtp-u/Ld-mtp in [1.0, 1.8] (0.6). | [H57dp pre-registration](#h57dp-pre-registration-llamacpp-thread-pinning-on-the-busy-client-i9-13900t-2026-10-21): 2 holds of at most 75 min, H57d's protocol. SUPPORTED: pooled median ratio >= 1.10, CI lower bound > 1.0, faster in both holds. REFUTED: CI upper bound < 1.10. Else INCONCLUSIVE, or when the load gate fails. Run 2026-10-29 ([H57dp run](#h57dp-run-i9-13900t-2026-10-29)): load unmatched, foreign P-core load spread 2.97 > 2.0 CPU-s/s (Od 0.45, Ld-mtp 3.42, Ld-mtp-u 3.11), so the scorer stops before the statistic. Not gated: Ld-mtp-u/Ld-mtp 1.108 (95% CI 1.072-1.142), faster in both holds (1.108, 1.100); Ld-mtp-u 13.39, Ld-mtp 12.09 tok/s pooled N=1; affinity as registered. | INCONCLUSIVE |
+| H57de | H57da with the unpinned llama.cpp arm: no arm decodes Gemma 4 QAT at N=1 5% or more faster than k3d-gpu's OVMS pick Od on the i9-13900T P-cores. | Written 2026-10-21, before any H57de measurement. REFUTED (0.5); Ld-mtp-u/Od in [1.0, 1.6] (0.5). | [H57dp pre-registration](#h57dp-pre-registration-llamacpp-thread-pinning-on-the-busy-client-i9-13900t-2026-10-21): same holds as H57dp. REFUTED: Ld-mtp-u/Od CI lower bound >= 1.05 and faster in both holds. SUPPORTED: CI upper bound < 1.05. Else INCONCLUSIVE, or when the load gate fails. Run 2026-10-29 ([H57dp run](#h57dp-run-i9-13900t-2026-10-29)): load unmatched (the same gate, spread 2.97 > 2.0). Od also ran without the P-core balloon (cpuset 0-15,17-31: the runner's `agent manifest` call named no cluster, so after #183 it missed the hold's kube context), so it was not the registered Od. Not gated: Ld-mtp-u/Od 1.369 (1.345-1.396), Od 9.78 tok/s pooled N=1. | INCONCLUSIVE |
 | H52w | A plain `k3d-gpu up` on wildct, a client Raptor Lake host (i7-13700, 8 P-cores + 8 E-cores, AVX2 and AVX-VNNI, no AVX-512, no AMX, one NUMA node), with only the box owner's GPU opt-out (`K3D_GPU_VENDORS=auto,-nvidia,-intel`), detects every CPU engine actually present and advertises each usable one, with nothing missing and nothing phantom; the two NVIDIA cards and the Intel iGPU are named as detected and opted out, and nothing in the cluster mounts or advertises a GPU. | Written 2026-10-20 from an inventory read from sysfs, /proc and PCI sysfs, not from k3d-gpu. Hybrid active, balloons policy running, the P-core test pod inside CPUs 0-15 and the E-core one inside 16-23 (0.8); launcher ISA labels exactly AVXVNNI, VAES, GFNI, SHA, CETIBT, CETSS, and no AVX512 or AMX label from any source (0.85); no NUMA, DSA, IAA, QAT, NPU or Gaudi object (0.9); `up` names nvidia and intel as opted out, no GPU resource, no GPU plugin pod, no pod mounting `/dev/dri` or `/dev/nvidia*` (0.85, given the opt-out fix). SUPPORTED (0.6), REFUTED (0.4). | The table in [the wildct pre-registration](#wildct-pre-registration-client-raptor-lake-i7-13700-2026-10-20): `bench/wildct/h52w.sh` under `bench/wildct/hold.sh` (inventory, `detect` as found, `doctor`, `up`, node object, pod GPU scan, `k3d-gpu test`, `down`, inventory again), the installed release. SUPPORTED: every row matches. REFUTED: any row does not. | PENDING |
 | H18w | H18's hypothesis on wildct: `k3d-gpu sandbox up` keeps agent sandboxes on the E-cores and inside a default-deny egress policy on k3d (kube-router), while public egress (PyPI) still works. A replication: H18's runner, image source (the release node image) and parts (a), (b), (c). | Written 2026-10-20, before any H18w measurement. Every run meets (a), (b) and (c) (0.8): sandbox `Cpus_allowed_list` inside 16-23; TCP to `100.66.38.121:22` (tailscale CGNAT) and `192.168.8.238:22` (host LAN) refused from the sandbox with the drop-log counter > 0, connected from the control pod; `pip install --user tomli_w==1.2.0` exits 0. | H18's `bench/sandbox_round.sh`, n = 3 runs in one hold, unchanged except as listed in [the wildct pre-registration](#wildct-pre-registration-client-raptor-lake-i7-13700-2026-10-20): cluster `k3dgpu-w-sbx`, the GPU opt-out, rule W3, the release node image, RAPL through rule W4. Outcome table: H18's. | PENDING |
 | H25w | H25's hypothesis (T part) on wildct: agents that send a byte-identical system prompt and tools to one OVMS CPU server reuse one prefix KV, so an added agent's first chunk arrives at least 4x sooner with the shipping prefix caching on than with `--enable_prefix_caching=false`. A replication: original model, prefix shape, probe, scorer and thresholds. | Written 2026-10-20, before any H25w measurement. Added-agent median TTFT OFF 10 s (7-15), ON 1.0 s (0.6-1.6), ratio 10x (6-14), CI lower bound >= 4x; c/OFF >= 0.8. SUPPORTED 0.8. | H25's `bench/shared-prefix/run.sh` and `probe.py score` (A3 first-chunk TTFT, A4 amendment-27 load rule), ON OFF interleaved 3+3 rounds at `typical`, unchanged except as listed in the wildct pre-registration: cluster `k3dgpu-w-h25`, the GPU opt-out, rule W2 (load on E-cores 20-23 only), W3, W4, new seeds (`SEED_BASE=2560`). | PENDING |
@@ -6050,6 +6050,146 @@ SMOKE=1 LOCK=~/k3dgpu-bench.lock bench/h57d/hold.sh smoke-p perf Ld-mtp-u  # wir
 for h in 1 2; do LOCK=~/k3dgpu-bench.lock H57D_ROW=H57dp bench/h57d/hold.sh $h perf; done
 python3 bench/h57d/h57d.py score-p ~/k3dgpu-h57d/results/H57dp > verdict.json
 ```
+
+### H57dp run (i9-13900T, 2026-10-29)
+
+**Reproduce:**
+
+```text
+# provenance
+date:            2026-10-29T19:33:20Z (hold 1 start) to 2026-10-29T20:41:54Z (hold 2 end), 2 lock holds
+hypothesis:      H57dp, H57de
+host cpu:        13th Gen Intel(R) Core(TM) i9-13900T (P = CPUs 0-15, E = 16-31), no amx_*, no avx512*,
+                 avx_vnni; microcode 0x133; PL1 = PL2 = 117 W; governor powersave, EPP performance
+host kernel:     6.6.128-1-MANJARO
+host memory:     MemAvailable 58,117,164 kB of 131,521,428 kB at hold 1's start; SwapFree 73,689,528 of
+                 196,607,996 kB
+k3d-gpu commit:  c4407a2c (origin/main, carries #207, #215 (amendments R1 and R2), #180 and #183), node image
+                 cryptoandcoffee/k3d-gpu:0.1.63@sha256:b6fc46f60a47948eb1c4e6c5e80059c7f581427429c35a2627c58fc2307e4b76
+runtimes:        ghcr.io/ggml-org/llama.cpp:server-b11749@sha256:9fbaa06d7f4449e2ae0d02b40e0431f7c212dcf231c9e3a7777a6afc2cc8f312;
+                 openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58 (2026.4.1)
+models:          H57d's revisions, downloaded again: google/gemma-4-26B-A4B-it-qat-q4_0-gguf @ d1c082be;
+                 OpenVINO/gemma-4-26b-a4b-it-int4-ov @ 4e5885c3; QAT drafter @ 95371415 -> Q4_0 GGUF rebuilt by
+                 convert.sh, sha256 8eb21d5b7efad6e9761b81066e0b094b73623c60e46ba4c0925cdbbf49c93ca9,
+                 321,145,696 bytes (H57d's); Od's graph.pbtxt sha256 c57ecf35... (H57d's); all 10 LFS files
+                 equal the committed weights.sha256 (sha256sum -c: 10 OK)
+lock:            ~/k3dgpu-bench.lock (amendment R2), for the downloads and check, convert.sh, the smoke and both holds
+energy source:   RAPL package-0 through energy.sh and sudo
+co-tenants:      qwen35-9b (vLLM v0.19.1, 13.5 GiB of GPU 1): running, 0 restarts, 0 requests during the campaign
+                 (request_success_total stop = 1 and generation_tokens_total = 11 before and after);
+                 gpustack-worker: running, crash-looping, RestartCount 4921 -> 4924 over hold 1 and 4924 -> 4927 over
+                 hold 2; neither touched (cotenants-*.txt)
+records:         bench/h57d/results/2026-10-29/ (per hold reproduce.txt, load.jsonl, node.json, pre.txt, post.txt, per
+                 arm deploy.yaml, cpus.txt, load-*.json, energy-*.json, phases.jsonl, pod.json), verdict.json,
+                 weights.sha256, drafter-check.txt, cotenants-*.txt; SHA256SUMS also covers the logs not committed
+```
+
+Commands (from this commit, as amendment R2 lists them, `SUDO_ASKPASS` for RAPL):
+
+```bash
+mkdir -p "/home/andrew/docker&models/k3dgpu-h57d/models" && ln -sfnT "/home/andrew/docker&models/k3dgpu-h57d" ~/k3dgpu-h57d
+install -D -m 0755 bench/h57d/k3d-shim.sh ~/k3dgpu-h57d/bin/k3d
+# under flock ~/k3dgpu-bench.lock: the three hf downloads at H57d's revisions, the .pinned-revision
+# files, sha256sum -c against bench/h57d/results/2026-10-21/weights.sha256, the copy to ~/k3dgpu-h57d
+LOCK=~/k3dgpu-bench.lock G=~/k3dgpu-h57d bench/h57d/convert.sh
+SMOKE=1 LOCK=~/k3dgpu-bench.lock bench/h57d/hold.sh smoke-p perf Ld-mtp-u      # discarded
+for h in 1 2; do LOCK=~/k3dgpu-bench.lock H57D_ROW=H57dp bench/h57d/hold.sh $h perf; done
+python3 bench/h57d/h57d.py score-p ~/k3dgpu-h57d/results/H57dp > verdict.json
+```
+
+The model step took the lock from 19:24:59Z to 19:30:34Z; the four pinned images (the two llama.cpp
+images, OVMS and the node image) were pulled inside the same lock hold. `convert.sh` ran 19:30:41Z
+to 19:31:18Z under the lock. Re-scoring the committed records (`score-p
+bench/h57d/results/2026-10-29`) reproduces `verdict.json` byte for byte.
+
+One wiring smoke ran first under the lock and is discarded (19:31:19Z to 19:33:13Z, R1's `SMOKE=1`):
+Ld-mtp-u ready after 55 s, one streamed 16-token request and one `chat_template_kwargs` chat
+answered, and its affinity table had 43 threads on 0-15 and none on a single CPU. Both holds were
+measured in their registered orders (hold 1: Ld-mtp-u, Od, Ld-mtp; hold 2: Ld-mtp, Ld-mtp-u, Od);
+all 6 arm runs read `measured`, 8/8 N=1 requests each. Neither hold waited or was flagged (`load1`
+<= 24 at both starts). Hold 1 took 34 min, hold 2 35 min. The P-core load sampler read `load1`
+5.3-21.0 (mean 15.3) in hold 1 and 6.4-37.3 (mean 16.3) in hold 2; package temperature peaked at
+95 C and 100 C. These are the last 2 holds of H57d's 6-hold cap.
+
+N=1 decode tok/s (8 requests per hold, 256 tokens, greedy, `ignore_eos`):
+
+| Arm | Hold 1 | Hold 2 | Pooled median (16) | Foreign P-core load, N=1 mean CPU-s/s | Server cgroup cpuset |
+|---|---|---|---|---|---|
+| Ld-mtp-u (unpinned, 8 threads) | 13.57 | 13.23 | 13.39 | 3.11 | 0-15 |
+| Ld-mtp (as H57d, `-C 0x5555 --cpu-strict 1`) | 12.25 | 12.03 | 12.09 | 3.42 | 0-15 |
+| Od (OVMS int4 OVB) | 9.69 | 9.94 | 9.78 | 0.45 | 0-15,17-31 (not as registered, below) |
+
+Affinity check (amendment R1): passed in both holds. Ld-mtp's single-CPU threads sat on exactly
+CPUs 0, 2, ..., 14 (9 threads, 2 on CPU 0), and Ld-mtp-u had none (43 threads on 0-15).
+
+Load gate (H57d's, over the three delivered arms): spread of the arms' foreign P-core load 2.97
+CPU-s/s > max(2.0, 25% of the mean), **unmatched**. Od's foreign load was 0.44 and 0.46 in the two
+holds, the llama.cpp arms' 2.74-3.79. Quality: inherited as registered, not gated (`quality_records`:
+H57d hold 4, Ld-mtp 50/50 for Ld-mtp-u and Ld-mtp, Od 50/50 for Od).
+
+**H57dp: INCONCLUSIVE** (`h57d.py score-p`): load unmatched, foreign P-core load spread 2.97 > 2.00
+CPU-s/s. The scorer stops before the statistic.
+
+**H57de: INCONCLUSIVE** (`h57d.py score-p`): the same load gate, unmatched. Separately, Od was not
+the registered Od (below), so H57de would not have been read against the registered arm in any case.
+
+Reported, not gated (the statistics the rows would have read, from the same records): Ld-mtp-u/Ld-mtp
+1.108, 95% bootstrap CI 1.072-1.142, per hold 1.108 and 1.100, the two arms' foreign load 0.30
+CPU-s/s apart (their pair alone would pass the gate). Ld-mtp-u/Od 1.369 (1.345-1.396), per hold
+1.400 and 1.331; Ld-mtp/Od 1.236 (1.203-1.275). Predictions: H57dp's verdict (SUPPORTED, 0.5) did
+not come true; its ratio range [1.0, 1.8] held. H57de's verdict (REFUTED, 0.5) did not come true;
+its range for Ld-mtp-u/Od [1.0, 1.6] held for the number, with Od as run.
+TTFT on the 1,000-token prompt (holds 1/2): Ld-mtp-u 19.9/20.3 s, Ld-mtp 15.8/16.5 s, Od 26.3/25.4 s.
+N=4 aggregate tok/s: Ld-mtp-u 20.7/20.0, Ld-mtp 21.4/20.5, Od 18.4/18.2. Package J/output token over
+N=1, gross: Ld-mtp-u 7.1/7.7, Ld-mtp 8.2/8.5, Od 10.0/9.8 at 91-95 W; net of the arm's idle power
+0.58-0.83 J/token, which, as in H57d, the shared host's idle draw (84-88 W) leaves unresolved.
+
+What the numbers show, beside the verdicts. The load gate failed on Od's foreign load, not on the
+H57dp pair: during Od's phases the P-core busy time minus the node's CPU fell to about 0.45 CPU-s/s,
+against 2.7-3.8 during the llama.cpp arms' and 3.0-3.9 during every arm's 60 s idle phase. H57d's
+quietest hold showed the same gap with Od on the P-core balloon (Od 0.92, Ld 3.68, Ld-mtp 3.31 in
+hold 3); its busier holds 1-2 did not (Od 6.28 and 5.14, Ld 6.89 and 6.28), so H57d's pooled gate
+passed at 1.80. In the
+pair the row asks about, the unpinned arm was faster in both holds, by 10.8% and 10.0%, at matched
+load; the 1.10 bar sits inside that range, so even a matched gate would have read SUPPORTED only
+narrowly. Unpinned Ld-mtp-u used more node CPU than pinned Ld-mtp over N=1 (6.8 against 5.8 CPU-s/s).
+Ld-mtp in H57d's quiet hold 3 (mean `load1` 15.5) read 12.28 tok/s; here, at mean `load1` 15.3 and
+16.3, it read 12.25 and 12.03.
+
+**Deviation: Od did not get the P-core balloon.** `arm.sh` renders Od by running
+`scripts/k3d-gpu agent manifest` against the hold's own kubeconfig without `K3D_GPU_CLUSTER`. Since
+PR #183 (`a7f95676`, 2026-10-21, after H57d's holds) every kubectl call of `k3d-gpu` names the
+context `k3d-${K3D_GPU_CLUSTER:-gpu}`, that is `k3d-gpu`, and a hold's kubeconfig holds only
+`k3d-k3dgpu-d-h57d-<hold>` (`kubectl --context k3d-gpu` answers "context was not found"). The
+manifest's node queries failed silently, so it saw no hybrid node and no allocatable CPU: Od's
+`deploy.yaml` lacks the `k3d-gpu.io/cores: performance` label, requests 1 CPU (H57d: 16) and 36Gi
+(H57d: 30Gi), and its `agent-fit` reads `cpu 6x131072` (H57d: `4x131072`); `agent.err` reads "on
+CPU, 1 CPU(s)" where H57d's named the P-cores. Its serving arguments and the read-only
+`graph.pbtxt` are H57d's. The pod ran in the node's shared pool, cgroup cpuset 0-15,17-31 (31 CPUs),
+in both holds. Its node CPU over N=1 was 7.96 and 7.85 CPU-s/s and never exceeded the P-core busy
+time, which fits OVMS staying on the P-cores but does not show it. The two llama.cpp arms are
+rendered by `h57d.py` with the label and the 16-CPU request and got cpuset 0-15, as the affinity
+check confirms. The deviation was found while hold 2 ran; both holds kept the same Od so the pooled
+records are of one treatment, and no hold or arm was repeated (none was left). The amendments' tests
+render Od with stand-in tools and could not see it. Any later row that renders Od through `arm.sh`
+(the H57w rows on wildct use the same runner) needs `K3D_GPU_CLUSTER=${CLUSTER}` on that call, in a
+dated amendment before its holds.
+
+Confounds:
+
+- Shared host: other sessions and about 50 containers ran throughout; arms were rotated over the two
+  holds, not interleaved per request. The two GPU co-tenants were left running (no row uses a GPU);
+  qwen35-9b served no request, and gpustack-worker restarted 3 times in each hold (about 24 CPU-s per
+  restart, read on 2026-10-29 before the campaign), which the sampler counts as foreign load.
+- Hybrid vendor: from `c4407a2c` (with #180) the node ran no intel-gpu-plugin (amendment R2), unlike
+  H57d's nodes; no arm requested a `gpu.intel.com` resource either way.
+- Od placement, above. Ld-mtp-u's quality is inherited from Ld-mtp's H57d record, as registered.
+
+Cleanup: both holds' clusters (`k3dgpu-d-h57d-1`, `-2`) and the smoke's were deleted at each hold's
+end; no `k3dgpu-d-*` cluster or container remains. The campaign directory on the second disk (models,
+drafter, records, 30 GB) and the four images it pulled are removed. cpufreq was not changed: the
+`bench/prefill-guard/cpufreq.sh snapshot` before the downloads and after hold 2 are byte-identical
+(and equal H5's campaign snapshot).
 
 ### Wildct pre-registration: client Raptor Lake (i7-13700, 2026-10-20)
 
