@@ -111,6 +111,25 @@ GOLD=" Paris. The capital of Italy is Rome"
 LLAMA_HELP=${FIX}/help/llama-server-b11960-help.txt
 VLLM_HELP=${FIX}/help/vllm-0.32.0-cpu-serve-help-all.txt
 
+# The versions the stubs report are the ones the tree's pins name (canary/plan.py show),
+# so a bump of any of these pins leaves the cases below as they are. pinned <id> <key>
+# prints the engine's expected_version (key v) or its first derived constant (key d).
+pinned() {
+    python3 "${ROOT}/canary/plan.py" show "$1" | python3 -c 'import json, sys
+d = json.load(sys.stdin)
+print(d["expected_version"] if sys.argv[1] == "v" else d["derived"][0]["value"])' "$2"
+}
+LLAMA_V=$(pinned llama-cpu v)     # llama.cpp build number, from server-b<N>
+VLLM_V=$(pinned vllm-cpu v)       # X.Y.Z, from vX.Y.Z
+EAT_V=$(pinned eat-vllm-cpu v)
+OVMS_V=$(pinned ovms-cpu v)       # empty while the pin has no tag: nothing is compared
+SGLANG_V=$(pinned sglang-xeon v)
+SCALER_V=$(pinned llm-scaler d)   # console/plan.py's llm-scaler vLLM version
+for v in LLAMA_V VLLM_V EAT_V SGLANG_V SCALER_V; do
+    [ -n "${!v}" ] || fail "${v}: the tree's pin names no version; the cases below need one"
+done
+LLAMA_OK="--build-info b${LLAMA_V}-8642541b2"
+
 # run_case <label> <engine> [VAR=value...]: canary/run.sh <engine> in a fresh state and
 # output directory; leaves the result in RESULT and run.sh's exit status in RC.
 run_case() {
@@ -137,7 +156,7 @@ expect() { # expect <label> <field> <value>
 
 # 1. A good server: hard, exact, version, stream; the surface check reads the help output.
 run_case good llama-cpu STUB_HELP="${LLAMA_HELP}" \
-    STUB_SERVER="python3 ${STUB} --port {port} --text '${GOLD}' --build-info b11960-8642541b2"
+    STUB_SERVER="python3 ${STUB} --port {port} --text '${GOLD}' ${LLAMA_OK}"
 expect good verdict pass
 expect good hard true
 expect good exact true
@@ -158,26 +177,26 @@ grep -q '^docker rm -f canary-llama-cpu' "${STUB_STATE}/calls" && ok "good: the 
 
 # 2. Empty content: no text and no tokens is a failure.
 run_case empty llama-cpu STUB_HELP="${LLAMA_HELP}" \
-    STUB_SERVER="python3 ${STUB} --port {port} --text '' --build-info b11960-8642541b2"
+    STUB_SERVER="python3 ${STUB} --port {port} --text '' ${LLAMA_OK}"
 expect empty verdict fail
 expect empty hard false
 [ "${RC}" -ne 0 ] && ok "empty: run.sh exits non-zero" || fail "empty: run.sh exited 0"
 
 # 3. A stream that never sends [DONE].
 run_case nodone llama-cpu STUB_HELP="${LLAMA_HELP}" \
-    STUB_SERVER="python3 ${STUB} --port {port} --text '${GOLD}' --build-info b11960-8642541b2 --no-done"
+    STUB_SERVER="python3 ${STUB} --port {port} --text '${GOLD}' ${LLAMA_OK} --no-done"
 expect nodone verdict fail
 grep -q 'DONE' <(field detail) && ok "nodone: detail names [DONE]" || fail "nodone: detail is '$(field detail)'"
 
 # 4. The server reports another build than the pinned tag.
 run_case version llama-cpu STUB_HELP="${LLAMA_HELP}" \
-    STUB_SERVER="python3 ${STUB} --port {port} --text '${GOLD}' --build-info b11000-0000000"
+    STUB_SERVER="python3 ${STUB} --port {port} --text '${GOLD}' --build-info b$((LLAMA_V - 1))-0000000"
 expect version verdict fail
-grep -q '11000' <(field detail) && ok "version: detail names the server's version" || fail "version: detail is '$(field detail)'"
+grep -q "b$((LLAMA_V - 1))-" <(field detail) && ok "version: detail names the server's version" || fail "version: detail is '$(field detail)'"
 
 # 5. A golden mismatch keeps hard and clears exact.
 run_case golden llama-cpu STUB_HELP="${LLAMA_HELP}" \
-    STUB_SERVER="python3 ${STUB} --port {port} --text ' Paris, of course, is' --build-info b11960-8642541b2"
+    STUB_SERVER="python3 ${STUB} --port {port} --text ' Paris, of course, is' ${LLAMA_OK}"
 expect golden verdict pass
 expect golden hard true
 expect golden exact false
@@ -191,12 +210,14 @@ grep -qi 'ready' <(field detail) && ok "never: detail says it never became ready
 
 # 6b. A probe that writes no result (here: it cannot parse its timeout) is a failure, never a pass.
 run_case noprobe llama-cpu STUB_HELP="${LLAMA_HELP}" CANARY_READY_TIMEOUT=soon \
-    STUB_SERVER="python3 ${STUB} --port {port} --text '${GOLD}' --build-info b11960-8642541b2"
+    STUB_SERVER="python3 ${STUB} --port {port} --text '${GOLD}' ${LLAMA_OK}"
 expect noprobe verdict fail
 expect noprobe hard false
 
-# 7. OVMS: the pull step, then /v3 on fake_ovms.py (its digest-only pin has no tag to compare).
-run_case ovms ovms-cpu FAKE_OVMS_TEXT="${GOLD}" STUB_SERVER="python3 ${ROOT}/tests/fake_ovms.py {port}"
+# 7. OVMS: the pull step, then /v3 on fake_ovms.py, reporting the version its pin's tag
+# names (a pin with no tag is not compared).
+run_case ovms ovms-cpu FAKE_OVMS_TEXT="${GOLD}" FAKE_OVMS_VERSION="${OVMS_V:-2026.4.1}.cfc9ac721" \
+    STUB_SERVER="python3 ${ROOT}/tests/fake_ovms.py {port}"
 expect ovms verdict pass
 expect ovms exact true
 grep -q -- '--pull --source_model=OpenVINO/Qwen3-0.6B-int8-ov' "${STUB_STATE}/calls" \
@@ -206,7 +227,7 @@ grep -q 'HF_ENDPOINT=http://127.0.0.1:9' "${STUB_STATE}/calls" && ok "ovms: the 
 
 # 8. vLLM: help output and the static parse of v0.32.0's sources both pass.
 VLLM_OK=(STUB_HELP="${VLLM_HELP}" STUB_SITE="${FIX}/vllm-0.32.0"
-         STUB_SERVER="python3 ${STUB} --port {port} --text '${GOLD}' --version 0.32.0+cpu")
+         STUB_SERVER="python3 ${STUB} --port {port} --text '${GOLD}' --version ${VLLM_V}+cpu")
 run_case vllm vllm-cpu "${VLLM_OK[@]}"
 expect vllm verdict pass
 expect vllm hard true
@@ -235,22 +256,22 @@ expect isa512 verdict fail
 
 # 12. An image larger than the free disk is too-big, and is never pulled.
 run_case big llama-cpu STUB_HELP="${LLAMA_HELP}" STUB_IMAGE_BYTES=900000000000 CANARY_FREE_BYTES=1000000000 \
-    STUB_SERVER="python3 ${STUB} --port {port} --text '${GOLD}' --build-info b11960-8642541b2"
+    STUB_SERVER="python3 ${STUB} --port {port} --text '${GOLD}' ${LLAMA_OK}"
 expect big verdict too-big
 ! grep -q '^docker pull' "${STUB_STATE}/calls" && ok "big: no pull" || fail "big: pulled anyway"
 
 # 13. Pulls retry: two failures then success passes; three failures fail.
 run_case pull2 llama-cpu STUB_HELP="${LLAMA_HELP}" STUB_PULL_FAILS=2 \
-    STUB_SERVER="python3 ${STUB} --port {port} --text '${GOLD}' --build-info b11960-8642541b2"
+    STUB_SERVER="python3 ${STUB} --port {port} --text '${GOLD}' ${LLAMA_OK}"
 expect pull2 verdict pass
 [ "$(grep -c '^docker pull' "${STUB_STATE}/calls")" -eq 3 ] && ok "pull2: three attempts" || fail "pull2: $(grep -c '^docker pull' "${STUB_STATE}/calls") attempts"
 run_case pull3 llama-cpu STUB_HELP="${LLAMA_HELP}" STUB_PULL_FAILS=3 \
-    STUB_SERVER="python3 ${STUB} --port {port} --text '${GOLD}' --build-info b11960-8642541b2"
+    STUB_SERVER="python3 ${STUB} --port {port} --text '${GOLD}' ${LLAMA_OK}"
 expect pull3 verdict fail
 grep -qi 'pull' <(field detail) && ok "pull3: detail names the pull" || fail "pull3: detail is '$(field detail)'"
 
 # 14. An informational engine's failure does not fail run.sh.
-run_case eat eat-vllm-cpu "${VLLM_OK[@]}" STUB_SERVER="python3 ${STUB} --port {port} --text '' --version 0.24.0"
+run_case eat eat-vllm-cpu "${VLLM_OK[@]}" STUB_SERVER="python3 ${STUB} --port {port} --text '' --version ${EAT_V}"
 expect eat verdict fail
 [ "${RC}" -eq 0 ] && ok "eat: informational, run.sh exits 0" || fail "eat: run.sh exited ${RC}"
 
@@ -264,7 +285,7 @@ HF_PID=$!
 for _ in $(seq 50); do grep -q 'Serving HTTP' "${T}/hf.log" && break; sleep 0.1; done
 HF_PORT=$(sed -n 's/.*port \([0-9]*\).*/\1/p' "${T}/hf.log" | head -1)
 run_case fetch llama-cpu CANARY_MODELS="${T}/fresh" HF_ENDPOINT="http://127.0.0.1:${HF_PORT}" STUB_HELP="${LLAMA_HELP}" \
-    STUB_SERVER="python3 ${STUB} --port {port} --text '${GOLD}' --build-info b11960-8642541b2"
+    STUB_SERVER="python3 ${STUB} --port {port} --text '${GOLD}' ${LLAMA_OK}"
 expect fetch verdict pass
 d=$(CANARY_MODELS="${T}/fresh" python3 "${ROOT}/canary/plan.py" model-dir "${id}")
 [ "$(cat "${d}/Qwen3-0.6B-Q8_0.gguf" 2>/dev/null)" = gguf-bytes ] && ok "fetch: the file came from <model>/resolve/<revision>" \
@@ -274,7 +295,7 @@ kill "${HF_PID}" 2>/dev/null
 wait "${HF_PID}" 2>/dev/null
 HF_PID=""
 run_case cached llama-cpu CANARY_MODELS="${T}/fresh" HF_ENDPOINT="http://127.0.0.1:${HF_PORT}" STUB_HELP="${LLAMA_HELP}" \
-    STUB_SERVER="python3 ${STUB} --port {port} --text '${GOLD}' --build-info b11960-8642541b2"
+    STUB_SERVER="python3 ${STUB} --port {port} --text '${GOLD}' ${LLAMA_OK}"
 expect cached verdict pass
 
 # run_surface <label> <engine> [VAR=value...]: canary/run.sh --surface <engine>, as run_case.
@@ -290,35 +311,40 @@ run_surface() {
 }
 
 # 16. sglang: bench/h54's --tp is argparse's abbreviation of --tp-size, the only option
-# it begins; once a second option begins with it, argparse calls it ambiguous.
+# it begins; once a second option begins with it, argparse calls it ambiguous. The
+# v0.5.22 site reports the version the tree's pin names.
 SGLANG_HELP=${FIX}/help/sglang-0.5.22-xeon-help.txt
-run_surface sglang sglang-xeon STUB_HELP="${SGLANG_HELP}" STUB_SITE="${FIX}/sglang-0.5.22"
+cp -r "${FIX}/sglang-0.5.22" "${T}/sglang-site"
+sed -i -E "s/^(__version__ = version = )'[^']*'/\1'${SGLANG_V}'/" "${T}/sglang-site/sglang/_version.py"
+run_surface sglang sglang-xeon STUB_HELP="${SGLANG_HELP}" STUB_SITE="${T}/sglang-site"
 expect sglang verdict pass
 expect sglang kind surface
 grep -q -- "--tp is argparse's abbreviation of --tp-size" <(field detail) && ok "sglang: detail names the abbreviation" \
     || fail "sglang: detail is '$(field detail)'"
-grep -q 'version 0.5.22' <(field detail) && ok "sglang: version 0.5.22 from sglang/_version.py" || fail "sglang: detail is '$(field detail)'"
+grep -qF "version ${SGLANG_V}" <(field detail) && ok "sglang: version ${SGLANG_V} from sglang/_version.py" \
+    || fail "sglang: detail is '$(field detail)'"
 { cat "${SGLANG_HELP}"; echo "  --tp-rank TP_RANK     a new option"; } > "${T}/sglang-help-ambiguous.txt"
-run_surface sglang-ambiguous sglang-xeon STUB_HELP="${T}/sglang-help-ambiguous.txt" STUB_SITE="${FIX}/sglang-0.5.22"
+run_surface sglang-ambiguous sglang-xeon STUB_HELP="${T}/sglang-help-ambiguous.txt" STUB_SITE="${T}/sglang-site"
 expect sglang-ambiguous verdict fail
 grep -q -- '--tp (bench/h54/h54.py:sglang_args)' <(field detail) && ok "sglang-ambiguous: detail names --tp" \
     || fail "sglang-ambiguous: detail is '$(field detail)'"
 
-# 17. llm-scaler: its vLLM reports the setuptools-scm version of v0.26.0 with patches
-# (0.26.1.dev0+g568afb3a1.d<date>), which the 0.26.0 the tree derives matches; a build
-# commits after a tag does not.
+# 17. llm-scaler: its vLLM reports the setuptools-scm version of a tag with patches
+# (intel/llm-scaler-vllm 1.5: 0.26.1.dev0+g568afb3a1.d<date>, vLLM v0.26.0's commit),
+# which the X.Y.Z the tree derives (SCALER_V) matches; a build commits after a tag does not.
 scaler_site() { # scaler_site <version>: the v0.32.0 tree, reporting <version>
     rm -rf "${T}/scaler-site"
     cp -r "${FIX}/vllm-0.32.0" "${T}/scaler-site"
     sed -i "s/^Version: .*/Version: $1/" "${T}/scaler-site/vllm-0.32.0+cpu.dist-info/METADATA"
 }
-scaler_site 0.26.1.dev0+g568afb3a1.d20260907.xpu
+SCALER_NEXT=${SCALER_V%.*}.$((${SCALER_V##*.} + 1))  # setuptools-scm's next version of the tag
+scaler_site "${SCALER_NEXT}.dev0+g568afb3a1.d20260907.xpu"
 run_surface scaler llm-scaler STUB_HELP="${VLLM_HELP}" STUB_SITE="${T}/scaler-site"
 expect scaler verdict pass
-scaler_site 0.26.1.dev4+g1a2b3c4d.d20260907.xpu
+scaler_site "${SCALER_NEXT}.dev4+g1a2b3c4d.d20260907.xpu"
 run_surface scaler-ahead llm-scaler STUB_HELP="${VLLM_HELP}" STUB_SITE="${T}/scaler-site"
 expect scaler-ahead verdict fail
-grep -q 'console/plan.py says 0.26.0' <(field detail) && ok "scaler-ahead: detail names console/plan.py" \
+grep -qF "console/plan.py says ${SCALER_V}," <(field detail) && ok "scaler-ahead: detail names console/plan.py" \
     || fail "scaler-ahead: detail is '$(field detail)'"
 
 echo "${PASS} passed, ${FAILS} failed"

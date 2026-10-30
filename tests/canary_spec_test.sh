@@ -73,23 +73,29 @@ grep -m1 '^LLAMA_CPU_IMAGE=' "${ROOT}/scripts/k3d-gpu" > "${T}/dup/scripts/k3d-g
 grep -m1 '^LLAMA_CPU_IMAGE=' "${ROOT}/scripts/k3d-gpu" >> "${T}/dup/scripts/k3d-gpu"
 if python3 "${PLAN}" ref llama-cpu --root "${T}/dup" > /dev/null 2>&1; then fail "a locator matching twice resolved"
 else ok "a locator matching twice is an error"; fi
-# Both reference forms: digest-only today, name:tag@sha256 after the pin conversion.
+# Both reference forms, whichever the tree holds today: the OVMS pin rewritten to
+# name@sha256 and to name:tag@sha256. The pins themselves move with every bump, so no
+# test here names their current values.
 tree "${T}/form"
-sed -i 's#AGENT_OVMS_IMAGE="openvino/model_server@#AGENT_OVMS_IMAGE="openvino/model_server:2026.4.1-gpu@#' \
-    "${T}/form/scripts/k3d-gpu"
+sed -i -E 's#^(AGENT_OVMS_IMAGE="openvino/model_server)(:[^@"]+)?@#\1@#' "${T}/form/scripts/k3d-gpu"
 ref=$(python3 "${PLAN}" ref ovms-cpu --root "${T}/form")
-[[ "${ref}" == openvino/model_server:2026.4.1-gpu@sha256:* ]] && ok "a locator reads the name:tag@sha256 form" \
+tag=$(python3 "${PLAN}" show ovms-cpu --root "${T}/form" | jget tag)
+[[ "${ref}" == openvino/model_server@sha256:* && -z "${tag}" ]] && ok "a locator reads the name@sha256 form, with no tag" \
+    || fail "name@sha256 form resolved to '${ref}', tag '${tag}'"
+sed -i -E 's#^(AGENT_OVMS_IMAGE="openvino/model_server)@#\1:9.9.9-gpu@#' "${T}/form/scripts/k3d-gpu"
+ref=$(python3 "${PLAN}" ref ovms-cpu --root "${T}/form")
+[[ "${ref}" == openvino/model_server:9.9.9-gpu@sha256:* ]] && ok "a locator reads the name:tag@sha256 form" \
     || fail "name:tag form resolved to '${ref}'"
 tag=$(python3 "${PLAN}" show ovms-cpu --root "${T}/form" | jget tag)
-[ "${tag}" = 2026.4.1-gpu ] && ok "the tag is split from a name:tag@sha256 ref" || fail "tag is '${tag}'"
+[ "${tag}" = 9.9.9-gpu ] && ok "the tag is split from a name:tag@sha256 ref" || fail "tag is '${tag}'"
 
 # Every derived constant resolves to exactly one value.
 for id in vllm-xpu llm-scaler gaudi-vllm npu-umd; do
     vals=$(python3 "${PLAN}" show "${id}" | jget derived | python3 -c 'import json, sys; print(" ".join(d["value"] for d in json.load(sys.stdin)))')
     [ -n "${vals}" ] && ok "${id}: derived constants ${vals}" || fail "${id}: no derived constants"
 done
-v=$(python3 "${PLAN}" show vllm-xpu | jget derived | python3 -c 'import json, sys; print(sorted({d["value"] for d in json.load(sys.stdin)}))')
-[ "${v}" = "['0.32.0']" ] && ok "vllm-xpu: plan.py, model_opt.py and the launcher agree (0.32.0)" || fail "vllm-xpu derived ${v}"
+v=$(python3 "${PLAN}" show vllm-xpu | jget derived | python3 -c 'import json, sys; print(" ".join(sorted({d["value"] for d in json.load(sys.stdin)})))')
+[[ "${v}" =~ ^[0-9.]+$ ]] && ok "vllm-xpu: plan.py, model_opt.py and the launcher agree (${v})" || fail "vllm-xpu derived '${v}'"
 
 # --- flags.sh -------------------------------------------------------------------------
 has() { grep -qP "^$1\t[^\t]+\t$2\t$3$" <<< "${FLAGS}"; }
@@ -122,6 +128,11 @@ plan_auto() {
     rm -rf "${T}/head"
     cp -r "${T}/base" "${T}/head"
     (cd "${T}/head" && "$@") || { fail "${label}: edit failed"; return; }
+    # An edit whose pattern no longer matches the tree would read as "selected nothing".
+    if [ "$1" != true ] && diff -rq "${T}/base" "${T}/head" > /dev/null; then
+        fail "${label}: the edit changed nothing in the tree"
+        return
+    fi
     got=$(python3 "${PLAN}" matrix --mode auto --base-root "${T}/base" --root "${T}/head" | jget selected \
         | python3 -c 'import json, sys; print(" ".join(sorted(e["id"] for e in json.load(sys.stdin))))')
     [ "${got}" = "${want}" ] && ok "auto, ${label}: ${want:-nothing}" || fail "auto, ${label}: selected '${got}', want '${want}'"
@@ -145,12 +156,12 @@ plan_auto "OVMS digest (two engines locate it)" "ovms ovms-cpu" \
 plan_auto "NPU user space pin" "npu-umd" \
     sed -i -E "s/(NPU_UMD_IMAGE=.*@sha256:)[0-9a-f]{64}/\1$(digest 3)/" scripts/k3d-gpu
 plan_auto "EAT's vLLM tag" "eat-vllm-cpu" \
-    sed -i 's/tag: "v0.24.0@/tag: "v0.25.0@/' integrations/eat/vllm-values.yaml
+    sed -i -E 's/^(  tag: ")[^"@]+@/\1v9.9.9@/' integrations/eat/vllm-values.yaml
 plan_auto "sglang in moe_predict" "sglang-xeon" \
-    sed -i -E "s/(lmsysorg\\/sglang:v0.5.22-xeon@sha256:)[0-9a-f]{64}/\1$(digest 4)/" console/moe_predict.py
+    sed -i -E "s/(lmsysorg\\/sglang(:[^@\"]+)?@sha256:)[0-9a-f]{64}/\1$(digest 4)/" console/moe_predict.py
 plan_auto "k3s pin" "node" sed -i 's/^ARG K3S_TAG="v[^"]*"/ARG K3S_TAG="v9.9.9-k3s1"/' Dockerfile
 plan_auto "a baked manifest" "node" sed -i '1i # touched' share/intel-gpu-plugin.yml
-plan_auto "a derived constant" "vllm-xpu" sed -i 's/"GPU": "0.32.0"/"GPU": "0.33.0"/' console/plan.py
+plan_auto "a derived constant" "vllm-xpu" sed -i -E 's/"GPU": "[0-9.]+"/"GPU": "9.9.9"/' console/plan.py
 plan_auto "a vllm_manifest flag" "gaudi-vllm llm-scaler vllm-cpu vllm-xpu" \
     edit scripts/k3d-gpu '"${item}--port=8000"' '"${item}--port=8000"'$'\n''    args+="${item}--enable-chunked-prefill"'
 plan_auto "an OVMS manifest flag" "npu-umd ovms ovms-cpu" \
@@ -189,14 +200,17 @@ python3 "${PLAN}" matrix --engines llama-cpu,nope > /dev/null 2>&1 && fail "an u
 all=$(python3 "${PLAN}" matrix --mode all)
 n=$(jget selected <<< "${all}" | python3 -c 'import json, sys; print(len(json.load(sys.stdin)))')
 [ "${n}" -eq 15 ] && ok "the schedule selects all 15 engines" || fail "--mode all selected ${n}"
-python3 - <<'PY' "${all}" && ok "matrix: runtime rows carry the model cache key, surface rows the id, node a flag" || fail "matrix shape"
+python3 - <<'PY' "${all}" "$(python3 "${PLAN}" show llama-cpu)" && ok "matrix: runtime rows carry the model cache key, surface rows the id, node a flag" || fail "matrix shape"
 import json, sys
 m = json.loads(sys.argv[1])
+eng = json.loads(sys.argv[2])
 rt = {r["id"]: r for r in m["runtime"]}
 assert sorted(rt) == ["eat-vllm-cpu", "llama-cpu", "ovms-cpu", "vllm-cpu"], sorted(rt)
 r = rt["llama-cpu"]
-assert r["cache_key"].startswith("canary-model-ggml-org__Qwen3-0.6B-GGUF@13ac06624948"), r
-assert r["cache_path"].endswith("ggml-org__Qwen3-0.6B-GGUF@13ac06624948e4d8589cb4b6f90100837342fcb8"), r
+# The key holds the model and its revision, so a revision bump misses the old cache.
+slug = "%s@%s" % (eng["model"].replace("/", "__"), eng["revision"])
+assert r["cache_key"] == "canary-model-" + slug, (r, slug)
+assert r["cache_path"] == "~/.cache/k3d-gpu-canary/" + slug, (r, slug)
 assert len(m["surface"]) == 10 and all(set(s) == {"id"} for s in m["surface"]), m["surface"]
 assert m["node"] is True
 assert {e["id"]: e["informational"] for e in m["selected"]}["eat-vllm-cpu"] is True
