@@ -1,0 +1,15 @@
+2026-10-29T20:59:42Z
+ 20:59:42 up 43 days, 22:14, 10 users,  load average: 5.66, 19.24, 35.07
+%CPU     PID USER     COMMAND
+46.3 3900003 root     sglang::schedul
+44.1 3900352 root     sglang::schedul
+42.3  529626 root     sglang::schedul
+40.0  529961 root     sglang::schedul
+24.7 3898329 root     python
+17.9  528967 root     python
+15.7  872705 65532    epp
+ 2.6    3911 nobody   node_exporter
+ 1.2    3934 root     python3
+ 1.0    2651 root     dockerd
+aiperf_procs: 0
+/dev/nvme0n1p1  3637102748 1028388100 2608698264      29% /

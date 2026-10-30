@@ -1,0 +1,82 @@
+Name:             ld-mtp-6d49f9f4d4-k6mtn
+Namespace:        h57d
+Priority:         0
+Service Account:  default
+Node:             k3d-k3dgpu-d-h57d-1-server-0/172.20.0.2
+Start Time:       Thu, 29 Oct 2026 12:56:57 -0700
+Labels:           app=ld-mtp
+                  k3d-gpu.io/cores=performance
+                  pod-template-hash=6d49f9f4d4
+Annotations:      <none>
+Status:           Running
+IP:               10.42.0.12
+IPs:
+  IP:           10.42.0.12
+Controlled By:  ReplicaSet/ld-mtp-6d49f9f4d4
+Containers:
+  server:
+    Container ID:  containerd://3c8e8ed1fc5fcb93c8e88302a5488dc5139d0e82f32a997a877cd57f84dc3e30
+    Image:         ghcr.io/ggml-org/llama.cpp:server-b11749@sha256:9fbaa06d7f4449e2ae0d02b40e0431f7c212dcf231c9e3a7777a6afc2cc8f312
+    Image ID:      ghcr.io/ggml-org/llama.cpp@sha256:9fbaa06d7f4449e2ae0d02b40e0431f7c212dcf231c9e3a7777a6afc2cc8f312
+    Port:          8080/TCP (http)
+    Host Port:     0/TCP (http)
+    Args:
+      -m
+      /models/google_gemma-4-26B-A4B-it-qat-q4_0-gguf/gemma-4-26B_q4_0-it.gguf
+      --host
+      0.0.0.0
+      --port
+      8080
+      --alias
+      gemma
+      -t
+      8
+      -C
+      0x5555
+      --cpu-strict
+      1
+      --jinja
+      -md
+      /models/k3dgpu/gemma-4-26B-A4B-it-qat-assistant-gguf/gemma-4-26B-A4B-it-qat-assistant-q4_0.gguf
+      --spec-type
+      draft-mtp
+    State:          Running
+      Started:      Thu, 29 Oct 2026 12:56:57 -0700
+    Ready:          True
+    Restart Count:  0
+    Requests:
+      cpu:        16
+      memory:     6Gi
+    Environment:  <none>
+    Mounts:
+      /models from models (ro)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-pn8xp (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       True 
+  ContainersReady             True 
+  PodScheduled                True 
+Volumes:
+  models:
+    Type:          HostPath (bare host directory volume)
+    Path:          /var/apb-models
+    HostPathType:  Directory
+  kube-api-access-pn8xp:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   Burstable
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type    Reason     Age   From               Message
+  ----    ------     ----  ----               -------
+  Normal  Scheduled  10m   default-scheduler  Successfully assigned h57d/ld-mtp-6d49f9f4d4-k6mtn to k3d-k3dgpu-d-h57d-1-server-0
+  Normal  Pulled     10m   kubelet            spec.containers{server}: Container image "ghcr.io/ggml-org/llama.cpp:server-b11749@sha256:9fbaa06d7f4449e2ae0d02b40e0431f7c212dcf231c9e3a7777a6afc2cc8f312" already present on machine and can be accessed by the pod
+  Normal  Created    10m   kubelet            spec.containers{server}: Container created
+  Normal  Started    10m   kubelet            spec.containers{server}: Container started

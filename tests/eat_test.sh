@@ -9,11 +9,15 @@
 #        both for a router that shlex.splits the command (agent-sandbox v0.5.0
 #        python-runtime-sandbox) and for one that runs it under /bin/sh -c
 #      - the check fails when the sandbox prints anything but 385
-#   3. eat-up.sh refuses deploy_openshell=on, which the pinned EAT tag cannot deploy.
+#   3. eat-up.sh refuses deploy_openshell=on, unverified on k3d-gpu, and a config with no
+#      deploy_guardrails value, on which release-1.1.0 deploys its guardrail.
 #   5. The GenAI Gateway installs from copies of its charts with exact dependency
 #      versions and every image name:tag@sha256 (gateway-charts.py, brownfield.sh).
 #   6. eat-opt.py puts the model optimizer's choices on EAT's own modelConfigs entry,
 #      additive only, and prints each change against EAT stock.
+#   7. The pins for EAT release-1.1.0: the tag and commit eat-up.sh clones, the
+#      components agentic-config.cfg turns off, brownfield.sh handing the config's
+#      deploy_guardrails to EAT's DEPLOY_GUARDRAILS, and the vLLM CPU image by digest.
 # Needs bash, jq, python3 (with PyYAML).
 
 set -euo pipefail
@@ -237,11 +241,11 @@ else
 fi
 kill "${ESTUB_PID}" 2>/dev/null || true
 
-# 3. eat-up.sh refuses deploy_openshell=on before it touches the cluster: the pinned
-#    release-1.0.3-hotfix has no OpenShell role. No kubectl stub: it must stop first.
-#    The spellings follow EAT main's read_config_file: trimmed key and value, quotes
-#    dropped, on mapped to yes, last assignment wins.
-REFUSED='deploy_openshell=on needs an EAT release newer than release-1.0.3-hotfix'
+# 3. eat-up.sh refuses deploy_openshell=on before it touches the cluster: release-1.1.0
+#    ships OpenShell, but it has never run on a k3d-gpu cluster. No kubectl stub: it
+#    must stop first. The spellings follow release-1.1.0's read_config_file: trimmed key
+#    and value, quotes dropped, on mapped to yes, last assignment wins.
+REFUSED='deploy_openshell=on is unverified on k3d-gpu'
 PASSED='kubeconfig /nonexistent not found'
 N=0
 # openshell_case <name> <expect: refuse|pass> <lines appended to the shipped config...>
@@ -307,6 +311,37 @@ openshell_case "commented out" pass '# deploy_openshell=on'
 openshell_case "ON is not on to EAT" pass 'deploy_openshell=ON'
 openshell_case "other key mentioning it" pass 'note=deploy_openshell=on'
 
+# 3c. eat-up.sh stops before the cluster when the config gives deploy_guardrails no value.
+#     release-1.1.0 then deploys its Qwen3Guard guardrail (deploy-agentic-stack.sh:195
+#     defaults DEPLOY_GUARDRAILS to on, and brownfield.sh keeps that default), and a config
+#     written for release-1.0.3-hotfix has no such key. Each case starts from the shipped
+#     config without its deploy_guardrails line; the key is read as read_config_file reads it.
+GUARD_REFUSED='does not set deploy_guardrails'
+# guard_case <name> <expect: refuse|pass> <lines appended to the shipped config minus deploy_guardrails...>
+guard_case() {
+    local name=$1 want=$2 out rc msg cfg
+    shift 2
+    N=$((N + 1))
+    cfg="${WORK}/guard-${N}.cfg"
+    grep -v '^deploy_guardrails=' "${EAT}/agentic-config.cfg" > "${cfg}"
+    [ "$#" -eq 0 ] || printf '%s\n' "$@" >> "${cfg}"
+    out=$(EAT_CONFIG="${cfg}" EAT_KUBECONFIG=/nonexistent "${EAT}/eat-up.sh" 2>&1) && rc=0 || rc=$?
+    if [ "${want}" = refuse ]; then msg=${GUARD_REFUSED}; else msg=${PASSED}; fi
+    if [ "${rc}" -ne 0 ] && grep -qF "${msg}" <<< "${out}"; then
+        ok "eat-up guardrail ${want}: ${name}"
+    else
+        fail "eat-up guardrail ${want}: ${name} (rc=${rc}): ${out}"
+    fi
+}
+guard_case "no deploy_guardrails key (a release-1.0.3-hotfix config)" refuse
+guard_case "empty value" refuse 'deploy_guardrails='
+guard_case "commented out" refuse '# deploy_guardrails=off'
+guard_case "other key mentioning it" refuse 'note=deploy_guardrails=off'
+guard_case "deploy_guardrails=off" pass 'deploy_guardrails=off'
+guard_case "deploy_guardrails=on is the user's choice" pass 'deploy_guardrails=on'
+guard_case "spaces and quotes" pass ' deploy_guardrails = "off" '
+guard_case "set, then emptied: last wins" refuse 'deploy_guardrails=off' 'deploy_guardrails='
+
 # 5. The GenAI Gateway path installs pinned charts and images. EAT's
 #    deploy-genai-gateway.yml syncs helm_charts_base_genai{,_trace} to the node, runs
 #    `helm dependency update` on genai-gateway (Chart.yaml ranges postgresql >=13.3.0,
@@ -319,7 +354,7 @@ FIX="${WORK}/eat-fixture"
 GW="${FIX}/core/helm-charts/genai-gateway"
 LF="${FIX}/core/helm-charts/genai-gateway-trace/charts/langfuse"
 mkdir -p "${GW}/templates" "${GW}/charts" "${LF}" "${FIX}/core/inventory"
-# The shapes of EAT 0d3438d's files, cut to the keys that matter here.
+# The shapes of EAT release-1.1.0's files (0c726f5), cut to the keys that matter here.
 cat > "${GW}/Chart.yaml" <<'EOF'
 apiVersion: v2
 name: genaigateway
@@ -341,10 +376,14 @@ image:
   pullPolicy: Always
 env:
   REDIS_PORT: "6379"
+customRouter:
+  enabled: true
 config:
   proxy_config_yaml: |
     router_settings:
       routing_strategy: usage-based-routing-v2
+    litellm_settings:
+      callbacks: ["langfuse_otel", "custom_hybrid_router.proxy_handler_instance"]
 postgresql:
   enabled: true
   image:
@@ -440,6 +479,9 @@ for what, (img, repo, tag) in want.items():
 assert gw["image"]["pullPolicy"] == "Always" and gw["env"]["REDIS_PORT"] == "6379", gw
 assert gw["postgresql"]["auth"]["database"] == "litellm" and gw["redis"]["auth"]["enabled"] is True, gw
 assert gw["config"]["proxy_config_yaml"].startswith("router_settings:\n  routing_strategy: usage-based-routing-v2"), gw["config"]
+# release-1.1.0's hybrid router: its callback and its ConfigMap switch reach the copy as EAT wrote them.
+assert gw["customRouter"]["enabled"] is True, gw.get("customRouter")
+assert 'callbacks: ["langfuse_otel", "custom_hybrid_router.proxy_handler_instance"]' in gw["config"]["proxy_config_yaml"], gw["config"]
 assert lf["global"]["security"]["allowInsecureImages"] is True and lf["langfuse"]["image"]["tag"] is None, lf
 assert "k3d-gpu" not in gw and "k3d-gpu" not in lf
 EOF
@@ -486,11 +528,15 @@ mkdir -p "${BF}/bin" "${BF}/home"
 cp -r "${FIX}" "${BF}/eat"
 echo 'cluster_url=api.example.com' > "${BF}/eat/core/inventory/agentic-config.cfg"
 cat > "${BF}/eat/deploy-agentic-stack.sh" <<'EOF'
+# EAT 0c726f5 deploy-agentic-stack.sh:195 runs this at source time; only its main()
+# reads deploy_guardrails from the config, and fresh-install.sh:419 gates on this one.
+DEPLOY_GUARDRAILS="${DEPLOY_GUARDRAILS:-on}"
 _source_core_libs() { CORE_DIR="${EAT_DIR}/core"; }
 brownfield_deployment() {
     local a b c
     read -r a; read -r b; read -r c
     echo "answers ${a} ${b} ${c}" >> "${STUB_LOG}"
+    echo "guardrails ${DEPLOY_GUARDRAILS}" >> "${STUB_LOG}"
     cd "${CORE_DIR}"
     ansible-playbook -i hosts playbooks/deploy-ingress-controller.yml --extra-vars "secret_name=api.example.com"
     ansible-playbook -i hosts playbooks/deploy-genai-gateway.yml --extra-vars "secret_name=api.example.com" --vault-password-file v
@@ -531,6 +577,32 @@ ingress_call=$(grep '^ansible-playbook .*deploy-ingress-controller.yml' <<< "${l
 if [ "${ingress_call}" = 'ansible-playbook -i hosts playbooks/deploy-ingress-controller.yml --extra-vars secret_name=api.example.com' ]; then
     ok "brownfield.sh stack: other playbooks run as EAT calls them"
 else fail "brownfield.sh stack: ingress call: ${ingress_call}"; fi
+
+# 7b. The guardrail follows the config's deploy_guardrails, read as release-1.1.0's
+#     read_config_file reads every other toggle (trimmed, quotes dropped, last
+#     assignment wins); with no value EAT's own default (on) stands.
+# bf_guardrails <name> <want: on|off> <config lines after cluster_url...>
+bf_guardrails() {
+    local name=$1 want=$2 out rc got
+    shift 2
+    printf '%s\n' 'cluster_url=api.example.com' "$@" > "${BF}/eat/core/inventory/agentic-config.cfg"
+    : > "${BF}/log"
+    out=$(env PATH="${BF}/bin:${PATH}" HOME="${BF}/home" STUB_LOG="${BF}/log" EAT_DIR="${BF}/eat" \
+        EAT_KUBECONFIG="${WORK}/kubeconfig" K3D_GPU_EAT_DIR="${EAT}" bash "${EAT}/brownfield.sh" 2>&1) && rc=0 || rc=$?
+    got=$(sed -n 's/^guardrails //p' "${BF}/log")
+    if [ "${rc}" -eq 0 ] && [ "${got}" = "${want}" ]; then ok "brownfield.sh guardrail ${want}: ${name}"
+    else fail "brownfield.sh guardrail ${name}: rc=${rc}, DEPLOY_GUARDRAILS='${got}', want ${want}: ${out}"; fi
+}
+bf_guardrails "no deploy_guardrails key (EAT's default)" on
+bf_guardrails "deploy_guardrails=off" off 'deploy_guardrails=off'
+bf_guardrails "deploy_guardrails=on" on 'deploy_guardrails=on'
+bf_guardrails "spaces and quotes" off ' deploy_guardrails = "off" '
+bf_guardrails "on then off, last wins" off 'deploy_guardrails=on' 'deploy_guardrails=off'
+bf_guardrails "off then on, last wins" on 'deploy_guardrails=off' 'deploy_guardrails=on'
+bf_guardrails "commented out" on '# deploy_guardrails=off'
+mapfile -t shipped < "${EAT}/agentic-config.cfg"
+bf_guardrails "the shipped agentic-config.cfg" off "${shipped[@]}"
+echo 'cluster_url=api.example.com' > "${BF}/eat/core/inventory/agentic-config.cfg"
 # A gateway playbook the wrapper never sees (enabled in the config) fails the deploy.
 echo 'deploy_genai_gateway=on' >> "${BF}/eat/core/inventory/agentic-config.cfg"
 sed -i 's#playbooks/deploy-genai-gateway.yml#playbooks/deploy-genai-gateway-renamed.yaml#' "${BF}/eat/deploy-agentic-stack.sh"
@@ -543,8 +615,9 @@ else fail "brownfield.sh stack: bypass not caught (rc=${rc}): ${out}"; fi
 # 6. eat-opt.py: the model optimizer as values on EAT's own entry, printed against
 #    stock. EAT's playbook and values are reduced to the lines eat-opt.py reads
 #    (deploy-inference-models.yml block for cpu-gemma4-26b-a4b, xeon-values.yaml
-#    entry for google/gemma-4-26B-A4B-it, both at 0d3438d); model metadata is the
-#    saved bundle in tests/fixtures/hf, through eat-opt.py's cache.
+#    entry for google/gemma-4-26B-A4B-it, both at 0d3438d; release-1.1.0 keeps these
+#    lines and the image tag is its v0.28.0); model metadata is the saved bundle in
+#    tests/fixtures/hf, through eat-opt.py's cache.
 OPT="${WORK}/opt"
 mkdir -p "${OPT}/cache"
 cp "${ROOT}/tests/fixtures/hf/google__gemma-4-26B-A4B-it.json" "${OPT}/cache/"
@@ -574,7 +647,7 @@ EOF
 cat > "${OPT}/values.yaml" <<'EOF'
 image:
   repository: vllm/vllm-openai-cpu
-  tag: "v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1"
+  tag: "v0.28.0@sha256:197354e6475e638eb5ccca09beb078488046a82de0e204e7429bf1a804df9647"
 modelConfigs:
   "google/gemma-4-26B-A4B-it":
     configMapValues:
@@ -605,8 +678,8 @@ if grep -qF '+ --reasoning-parser gemma4' <<< "${out}" && grep -qF "kept EAT's -
     ok "eat-opt.py: prints each change against EAT stock"
 else fail "eat-opt.py: change report: ${out}"; fi
 if ! grep -q 'speculativeConfig' "${OPT}/values.yaml" && grep -q 'unsupported on CPU before v0.31.0' <<< "${out}"; then
-    ok "eat-opt.py: no speculative config on EAT's vLLM v0.24.0 CPU image, and says why"
-else fail "eat-opt.py: speculative config on v0.24.0 CPU: ${out}"; fi
+    ok "eat-opt.py: no speculative config on EAT's vLLM v0.28.0 CPU image, and says why"
+else fail "eat-opt.py: speculative config on v0.28.0 CPU: ${out}"; fi
 cp "${OPT}/stock.yaml" "${OPT}/values.yaml"
 out=$(EAT_MODEL_OPT=off python3 "${EAT}/eat-opt.py" "${OPT}/playbook.yml" "${OPT}/values.yaml" cpu-gemma4-26b-a4b "${ROOT}/console" --cache "${OPT}/cache" 2>&1)
 if cmp -s "${OPT}/stock.yaml" "${OPT}/values.yaml" && grep -q 'EAT_MODEL_OPT=off' <<< "${out}"; then
@@ -616,6 +689,48 @@ out=$(python3 "${EAT}/eat-opt.py" "${OPT}/playbook.yml" "${OPT}/values.yaml" cpu
 if [ "${rc}" -eq 0 ] && cmp -s "${OPT}/stock.yaml" "${OPT}/values.yaml" && grep -q 'no LLM_MODEL_ID for cpu-nope' <<< "${out}"; then
     ok "eat-opt.py: an unknown catalog id leaves the values as merged, with one line"
 else fail "eat-opt.py: unknown catalog id (rc=${rc}): ${out}"; fi
+
+# 7. EAT release-1.1.0 (https://github.com/intel/enterprise-agent-toolkit/releases/tag/release-1.1.0).
+tag=$(sed -n 's/^EAT_TAG="\(.*\)"$/\1/p' "${EAT}/eat-up.sh")
+commit=$(sed -n 's/^EAT_COMMIT="\(.*\)"$/\1/p' "${EAT}/eat-up.sh")
+if [ "${tag}" = release-1.1.0 ] && [ "${commit}" = 0c726f576595971c53cc45b94e08ba969beb4a4a ]; then
+    ok "eat-up.sh clones EAT release-1.1.0 at 0c726f5"
+else fail "eat-up.sh pins EAT ${tag} ${commit}"; fi
+# release-1.1.0 adds these toggles; its own agentic-config.cfg turns deploy_guardrails on.
+# Each is written out off, so the stack does not hang on a default, and read the way its
+# read_config_file reads them (core/lib/system/precheck/read-config-file.sh at 0c726f5).
+if out=$(python3 - "${EAT}/agentic-config.cfg" 2>&1 <<'EOF'
+import sys
+seen = {}
+for line in open(sys.argv[1]):
+    key, _, value = line.rstrip("\n").partition("=")
+    key, value = key.strip(), value.strip().strip("\"'")
+    if not key or key.startswith("#"):
+        continue
+    seen[key] = {"on": "yes", "off": "no"}.get(value, value)
+for k in ("deploy_guardrails", "deploy_vllm_sr", "deploy_openshell", "deploy_kata_containers",
+          "deploy_ceph", "rack_scale_mode", "deploy_nri_balloon_policy"):
+    assert seen.get(k) == "no", (k, seen.get(k))
+EOF
+); then ok "agentic-config.cfg turns guardrail, vLLM SR, OpenShell, Kata, Ceph, rack-scale and EAT's balloons off"
+else fail "agentic-config.cfg toggles: ${out}"; fi
+# release-1.1.0's xeon-values.yaml names vllm/vllm-openai-cpu:v0.28.0; the overlay pins that
+# tag to its multi-arch index digest (Docker Hub, read 2026-10-29; crescent amendment E1).
+if out=$(python3 - "${EAT}/vllm-values.yaml" 2>&1 <<'EOF'
+import sys, yaml
+img = yaml.safe_load(open(sys.argv[1]))["image"]
+assert img["repository"] == "vllm/vllm-openai-cpu", img
+assert img["tag"] == "v0.28.0@sha256:197354e6475e638eb5ccca09beb078488046a82de0e204e7429bf1a804df9647", img
+EOF
+); then ok "vllm-values.yaml pins vllm/vllm-openai-cpu v0.28.0 by digest"
+else fail "vllm-values.yaml image: ${out}"; fi
+cfg="${WORK}/openshell-reason.cfg"
+cp "${EAT}/agentic-config.cfg" "${cfg}"
+echo 'deploy_openshell=on' >> "${cfg}"
+out=$(EAT_CONFIG="${cfg}" EAT_KUBECONFIG=/nonexistent "${EAT}/eat-up.sh" 2>&1) && rc=0 || rc=$?
+if [ "${rc}" -ne 0 ] && grep -qF 'set deploy_openshell=off' <<< "${out}" && ! grep -qiE 'newer than|no OpenShell role' <<< "${out}"; then
+    ok "eat-up: the OpenShell refusal names the real reason, not a missing role"
+else fail "eat-up: OpenShell refusal (rc=${rc}): ${out}"; fi
 
 echo ""
 echo "${PASS} passed, ${FAILS} failed"

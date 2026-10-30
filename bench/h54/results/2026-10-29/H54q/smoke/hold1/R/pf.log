@@ -1,0 +1,30 @@
+Forwarding from 127.0.0.1:18978 -> 2080
+Forwarding from [::1]:18978 -> 2080
+Handling connection for 18978
+E1029 19:42:29.065627 1463016 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 18978 -> 2080: error forwarding port 2080 to pod a7dc4260e15d4fcb10ef2b0c55471043194da2a5c3e8de0bcb7e67f74bc0b14d, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-f3417022-15d4-7629-44e4-c8e2609932ba\": failed to connect to localhost:2080 inside namespace \"a7dc4260e15d4fcb10ef2b0c55471043194da2a5c3e8de0bcb7e67f74bc0b14d\", IPv4: dial tcp4 127.0.0.1:2080: connect: connection refused IPv6 dial tcp6 [::1]:2080: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-10-29T19:42:29Z
+Forwarding from 127.0.0.1:18978 -> 2080
+Forwarding from [::1]:18978 -> 2080
+Handling connection for 18978
+E1029 19:42:39.082215 1463289 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 18978 -> 2080: error forwarding port 2080 to pod a7dc4260e15d4fcb10ef2b0c55471043194da2a5c3e8de0bcb7e67f74bc0b14d, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-f3417022-15d4-7629-44e4-c8e2609932ba\": failed to connect to localhost:2080 inside namespace \"a7dc4260e15d4fcb10ef2b0c55471043194da2a5c3e8de0bcb7e67f74bc0b14d\", IPv4: dial tcp4 127.0.0.1:2080: connect: connection refused IPv6 dial tcp6 [::1]:2080: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-10-29T19:42:39Z
+Forwarding from 127.0.0.1:18978 -> 2080
+Forwarding from [::1]:18978 -> 2080
+Handling connection for 18978
+E1029 19:42:49.097680 1463642 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 18978 -> 2080: error forwarding port 2080 to pod a7dc4260e15d4fcb10ef2b0c55471043194da2a5c3e8de0bcb7e67f74bc0b14d, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-f3417022-15d4-7629-44e4-c8e2609932ba\": failed to connect to localhost:2080 inside namespace \"a7dc4260e15d4fcb10ef2b0c55471043194da2a5c3e8de0bcb7e67f74bc0b14d\", IPv4: dial tcp4 127.0.0.1:2080: connect: connection refused IPv6 dial tcp6 [::1]:2080: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-10-29T19:42:49Z
+Forwarding from 127.0.0.1:18978 -> 2080
+Forwarding from [::1]:18978 -> 2080
+Handling connection for 18978
+E1029 19:42:59.113457 1463851 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 18978 -> 2080: error forwarding port 2080 to pod a7dc4260e15d4fcb10ef2b0c55471043194da2a5c3e8de0bcb7e67f74bc0b14d, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-f3417022-15d4-7629-44e4-c8e2609932ba\": failed to connect to localhost:2080 inside namespace \"a7dc4260e15d4fcb10ef2b0c55471043194da2a5c3e8de0bcb7e67f74bc0b14d\", IPv4: dial tcp4 127.0.0.1:2080: connect: connection refused IPv6 dial tcp6 [::1]:2080: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-10-29T19:42:59Z
+Forwarding from 127.0.0.1:18978 -> 2080
+Forwarding from [::1]:18978 -> 2080
+Handling connection for 18978
+Handling connection for 18978
+Handling connection for 18978
+Handling connection for 18978

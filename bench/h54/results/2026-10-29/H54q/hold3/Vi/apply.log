@@ -1,0 +1,5 @@
+namespace/h54 created
+configmap/vi-chat-templates created
+configmap/vi-config created
+service/vi created
+deployment.apps/vi created
