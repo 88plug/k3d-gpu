@@ -2576,7 +2576,7 @@ agent_says "default model gets the qwen3 reasoning parser" "${r}" 0 '--reasoning
 agent_says "an empty K3D_GPU_AGENT_TOOL_PARSER turns the parser off" "${r}" 0 'tool_parser' negate \
     STUB_ALLOC='cpu 8' K3D_GPU_AGENT_TOOL_PARSER=
 agent_says "the model cache lives on the models volume" "${r}" 0 '--cache_dir=/models/\.ov_cache' "" STUB_ALLOC='cpu 8'
-agent_says "the server image is pinned by digest" "${r}" 0 'image: openvino/model_server@sha256:[0-9a-f]{64}' "" STUB_ALLOC='cpu 8'
+agent_says "the server image is pinned by digest" "${r}" 0 'image: openvino/model_server:[^@ ]+@sha256:[0-9a-f]{64}' "" STUB_ALLOC='cpu 8'
 agent_says "server logs at INFO by default" "${r}" 0 '--log_level=INFO$' "" STUB_ALLOC='cpu 8'
 agent_says "K3D_GPU_AGENT_LOG_LEVEL=DEBUG reaches the server" "${r}" 0 '--log_level=DEBUG$' "" \
     STUB_ALLOC='cpu 8' K3D_GPU_AGENT_LOG_LEVEL=DEBUG
@@ -3267,11 +3267,11 @@ pci "${r}" 0000:03:00.0 0x8086 0xe20b xe; render "${r}" 0000:03:00.0 128
 gid=$(stat -c %g "${r}/dev/dri/renderD128")
 XE1=$'cpu 16\ngpu.intel.com/xe 1'
 agent_says "vllm backend serves from the upstream vLLM XPU image, pinned by digest" "${r}" 0 \
-    'image: vllm/vllm-openai-xpu@sha256:[0-9a-f]{64}$' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm
+    'image: vllm/vllm-openai-xpu:[^@ ]+@sha256:[0-9a-f]{64}$' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm
 agent_says "llm-scaler backend serves from Intel's llm-scaler image, pinned by digest" "${r}" 0 \
-    'image: intel/llm-scaler-vllm@sha256:[0-9a-f]{64}$' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=llm-scaler
+    'image: intel/llm-scaler-vllm:[^@ ]+@sha256:[0-9a-f]{64}$' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=llm-scaler
 agent_says "the backend name is case-insensitive" "${r}" 0 \
-    'vllm/vllm-openai-xpu@' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vLLM
+    'vllm/vllm-openai-xpu:[^@ ]+@' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vLLM
 agent_says "an unknown K3D_GPU_AGENT_BACKEND is rejected" "${r}" fail \
     "unknown K3D_GPU_AGENT_BACKEND 'tgi'" "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=tgi
 agent_says "vllm pod requests one gpu.intel.com/xe" "${r}" 0 \
@@ -3356,7 +3356,7 @@ agent_says "vllm on a Battlemage host prints no hardware warning" "${r}" 0 \
 agent_says "vllm on a hybrid node sits on P-cores" "${r}" 0 \
     'k3d-gpu.io/cores: performance' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm STUB_NODE_LABELS=k3d-gpu.io/hybrid-cpu=true
 agent_says "the OVMS default still owns the agent when no backend is set" "${r}" 0 \
-    'image: openvino/model_server@' "" STUB_ALLOC="${XE1}"
+    'image: openvino/model_server:[^@ ]+@' "" STUB_ALLOC="${XE1}"
 agent_says "the agent line names the GPU resource it requests" "${r}" 0 \
     'on GPU \(gpu\.intel\.com/xe\)' "" STUB_ALLOC="${XE1}" STUB_NODE_LABELS=gpu.intel.com/xmx=true
 agent_says "vllm auto runs on the Intel GPU even where OVMS would pick the CPU (no XMX)" "${r}" 0 \
@@ -3455,7 +3455,7 @@ agent_says "llm-scaler auto skips the Gaudi for the Intel GPU" "${r}" 0 \
 agent_says "an explicit vllm backend runs on the Gaudi" "${r}" 0 \
     '^ +habana\.ai/gaudi: 1$' "" STUB_ALLOC="${HPU_ALLOC}" K3D_GPU_AGENT_BACKEND=vllm
 agent_says "the vLLM image is Intel's vllm-gaudi 0.30.0 build pinned by digest" "${r}" 0 \
-    'image: vault\.habana\.ai/gaudi-docker/1\.24\.2/ubuntu24\.04/habanalabs/vllm-0\.30\.0-ptupstream-2\.13\.0@sha256:[0-9a-f]{64}$' "" \
+    'image: vault\.habana\.ai/gaudi-docker/1\.24\.2/ubuntu24\.04/habanalabs/vllm-0\.30\.0-ptupstream-2\.13\.0:[^@ ]+@sha256:[0-9a-f]{64}$' "" \
     STUB_ALLOC="${HPU_ALLOC}"
 agent_says "K3D_GPU_AGENT_IMAGE overrides the Gaudi image" "${r}" 0 \
     'image: example/vllm-gaudi:dev$' "" STUB_ALLOC="${HPU_ALLOC}" K3D_GPU_AGENT_IMAGE=example/vllm-gaudi:dev
@@ -3567,7 +3567,7 @@ addon_says "stt NPU pod joins the accel node's group" "${r}" 0 ovms-stt \
 addon_says "video GPU pod joins the render group" "${r}" 0 video-analytics \
     "supplementalGroups: \[${rgid}\]" "" STUB_ALLOC="${SHARED}"
 addon_says "add-ons run the OVMS image" "${r}" 0 ovms-stt \
-    'image: openvino/model_server@sha256:[0-9a-f]{64}' "" STUB_ALLOC="${SHARED}"
+    'image: openvino/model_server:[^@ ]+@sha256:[0-9a-f]{64}' "" STUB_ALLOC="${SHARED}"
 addon_says "one unshared iGPU, no XMX: the LLM is on CPU and video gets the iGPU" "${r}" 0 video-analytics \
     'k3d-gpu.io/agent-device: GPU' "" STUB_ALLOC="${ONE}"
 addon_says "one unshared iGPU, no XMX: vlm falls back to CPU" "${r}" 0 ovms-vlm \
@@ -3658,7 +3658,7 @@ addon_says "vllm on 2 of 3 GPU units leaves video the third" "${r}" 0 video-anal
 addon_says "... and vlm none" "${r}" 0 ovms-vlm \
     '--target_device=CPU$' "" STUB_ALLOC="${XE3}" K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_AGENT_GPUS=2
 addon_says "an add-on next to vllm runs the OVMS image, not vLLM's" "${r}" 0 ovms-vlm \
-    'image: openvino/model_server@sha256:[0-9a-f]{64}' "" STUB_ALLOC="${XE3}" K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_AGENT_GPUS=2
+    'image: openvino/model_server:[^@ ]+@sha256:[0-9a-f]{64}' "" STUB_ALLOC="${XE3}" K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_AGENT_GPUS=2
 addon_says "a Gaudi LLM leaves the Intel GPU to video" "${r}" 0 video-analytics \
     'k3d-gpu.io/agent-device: GPU' "" STUB_ALLOC=$'cpu 32\nhabana.ai/gaudi 1\ngpu.intel.com/i915 1'
 
@@ -3708,7 +3708,7 @@ addon_says "CPU video leaves decoder ranks alone" "${r}" 0 video-analytics \
 addon_says "CPU video requests no GPU" "${r}" 0 video-analytics \
     'gpu\.intel\.com' negate STUB_ALLOC='cpu 32'
 addon_says "the DL Streamer image is pinned by digest" "${r}" 0 video-analytics \
-    'image: intel/dlstreamer@sha256:[0-9a-f]{64}' "" STUB_ALLOC="${SHARED}"
+    'image: intel/dlstreamer:[^@ ]+@sha256:[0-9a-f]{64}' "" STUB_ALLOC="${SHARED}"
 addon_says "the model is checked against its sha256" "${r}" 0 video-analytics \
     'sha256sum -c' "" STUB_ALLOC="${SHARED}"
 addon_says "the sample clip is fetched by default" "${r}" 0 video-analytics \

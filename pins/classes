@@ -1,0 +1,108 @@
+# Pin classes: who may move the pins (image refs, pkg==version, commits, *_TAG/
+# *_VERSION/*_IMAGE/... assignments) in each path. hack/pin-classes reads this file,
+# hack/pin-guard enforces it on every PR and push to main, and `scripts/images-lock
+# repin` leaves ledger and historical paths alone.
+#
+#   <glob> ours|eat-stock|historical [reason]
+#   <glob> ledger <rows csv> amend=<aliases csv> [reason]
+#   historical-ref <path> <exact string>
+#
+# First match wins; * also matches /. A path no line matches is ours, except a file
+# under bench/ or oracle/ that holds a pin: hack/pin-classes coverage fails on it.
+#
+# ours        k3d-gpu's own pins: always the latest stable release.
+# eat-stock   tracks Intel EAT's latest release (intel/enterprise-agent-toolkit); reviewed.
+# ledger      a ledger row's runner or records. While any listed row is PENDING in the
+#             EXPERIMENTS.md Hypotheses table the path is an arm: a pin changes only
+#             with a dated amendment in the same diff whose heading names a PENDING
+#             listed row or an alias ("### <alias> amendment <ID>: <title> (YYYY-MM-DD)").
+#             Once a listed row has a verdict and none is PENDING it is historical.
+# historical  a finished run's record: never modified, deleted or renamed.
+# historical-ref  a finished run's pin inside a live runner: it keeps occurring as
+#             often as it does.
+
+# --- EAT stock: what Intel's Enterprise Agent Toolkit ships --------------------------
+integrations/eat/**                     eat-stock   EAT's Helm values, gateway charts and bastion, tracked to EAT's latest release
+examples/kuberay/**                     eat-stock   the RayCluster EAT's KubeRay path deploys
+examples/agents/litellm-gateway/**      eat-stock   EAT's genai-gateway (LiteLLM) agent example
+contrib/eat/**                          eat-stock   the patch and values contributed to EAT
+integrations/eas/**                     eat-stock   EAS, the stack EAT 2.0 deploys through: pins.json freezes what EAS's own configs resolve to
+
+# --- Finished records ------------------------------------------------------------------
+console/matrix.v1.json                  historical  the measured cells of H6 and H8 the planner reads
+oracle/seed/**                          historical  the maintainer bundles of the H6 and H8 runs
+oracle/raw/**                           historical  the raw H6 and H8 records the seed bundles were built from
+
+# --- Runners of finished rows. Ledger lines, so the class follows the ledger: every row
+# listed has a verdict, so each resolves to historical (hack/pin-classes effective).
+bench/amx-autoquant/**                  ledger H27,H27x amend=Cross-host  H27 REFUTED; owner decision pending (H27x REFUTED too)
+bench/apb/arm.sh                        ledger H8 amend=  H8's arms
+bench/apb/vllm-cuda.yaml                ledger H8 amend=  H8's vLLM CUDA arm (A3)
+bench/apb/h7.sh                         ledger H7 amend=  H7's runner
+bench/dra_round.sh                      ledger H16,H17 amend=  the H16/H17 harness
+bench/noisy.sh                          ledger H3,H26 amend=  H3 and H26's noisy neighbour
+bench/rdt-isolate/**                    ledger H26 amend=  H26's runner
+bench/thermal-resource/**               ledger H23 amend=  H23's runner and records
+bench/prefill-guard/**                  ledger H5 amend=  H5's stage-1 harness and records
+bench/h54gpu/**                         ledger H54b,H54c amend=  H54b and H54c's runner and records
+bench/h54/diag/**                       ledger H54a amend=H54  H54 note N2, the B1g stall diagnostic of H54a
+bench/eatflow/*constraints.txt          ledger H40,H41,H42,H43,H44,H45,H46,H47,H48 amend=  the H40-H48 BFCL and coding-agent pip sets
+
+# --- Records of finished rows inside live runner trees -------------------------------
+bench/eatflow/results/2026-10-17/**     ledger H40,H41,H42,H43,H44,H45,H46,H47,H48 amend=Crescent  the H40-H48 desktop run
+bench/eatflow/results/2026-10-18/**     ledger H47,H49,H47b,H49b amend=Crescent  the H47, H49, H47b and H49b runs
+bench/eatflow/results/2026-10-19/**     ledger H43,H45 amend=Crescent  the H43 and H45 runs
+bench/eatflow/results/2026-10-20/**     ledger H50,H50o,H51,H52 amend=Crescent,H52  the first crescent runs
+bench/eatflow/results/2026-10-21/**     ledger H50,H50o,H52b,H56 amend=Crescent,H52  H52b's pre-check, H56 stage 1, the QAT export
+bench/eatflow/results/*/H52b*/**        ledger H52b amend=Crescent,H52  H52b's run
+bench/h54/results/2026-10-21/**         ledger H54a,H54d amend=H54  H54a's run and H54d's not-run record
+bench/h54/results/*/B1g-stall-diag/**   ledger H54a amend=H54  H54 note N2's records
+bench/h57d/results/2026-10-21/**        ledger H57da,H57dm,H57db amend=H57d  the H57d run
+bench/hetero-spec/results/**            ledger H22,H34 amend=H34  the H22 and H34 runs
+bench/xhost/results/2026-10-20/**       ledger H25x,H27x,H28x,H34x amend=Cross-host  the first cross-host runs
+
+# Pins of finished rows that live runners keep so those rows reproduce.
+historical-ref bench/eatflow/live.sh ${LIVE_EAT_B1_TAG:-v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1}
+historical-ref bench/eatflow/live.sh image=vllm/vllm-openai@sha256:a4a4c0437bf7240089da5f08aa370c4aee17ae5290f7a3b468825ee26c4c3a6b
+historical-ref bench/eatflow/live.sh ollama/ollama:0.40.5@sha256:5d3a2f25f9825628daba94dc0b1d421c7d57d6c03ae5faa9ba050e058bab8241
+historical-ref bench/eatflow/live.sh ghcr.io/ggml-org/llama.cpp:server-b11706@sha256:f41d47eee678c02656eefc9ed8cce76cab584aa7032805eeef0e6639fcfda485
+historical-ref bench/h54/h54.py "vllm024": "vllm/vllm-openai-cpu:v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1"
+historical-ref bench/h54/h54.py "ovms_eat": "2025.4@sha256:c370720007564bbdcbca13b9b714e4537068542cda512e8095259e66b617962a"
+
+# --- Ledger rows: runners of PENDING rows and their finished siblings ----------------
+bench/eatflow/agent.lock                ledger H40,H41,H42,H43,H44,H45,H46,H47,H48,H50,H50o,H53,H56 amend=Crescent  the agent lock: H40-H48, then crescent M1's Gemma 4 and H53's Qwen3.8 sampling
+bench/eatflow/live.sh                   ledger H40,H41,H42,H43,H44,H45,H46,H47,H48,H47b,H49,H49b,H50,H50o,H51,H52,H52b,H53,H56,H58 amend=Crescent,H52  the agent-flow runner (desktop rows, then crescent)
+bench/eatflow/crescent/**               ledger H50,H50o,H51,H52,H52b,H53,H56,H58 amend=Crescent,H52  the crescent wrappers, setup and holds
+bench/eatflow/**                        ledger H40,H41,H42,H43,H44,H45,H46,H47,H48,H47b,H49,H49b,H50,H50o,H51,H52,H52b,H53,H56,H58 amend=Crescent,H52  the agent-flow harness (pairs, solo, BFCL, tasks)
+bench/apb/h7x*                          ledger H7x amend=Cross-host  H7x's runner
+bench/apb/test_h7x.py                   ledger H7x amend=Cross-host  H7x's runner tests
+bench/xhost/**                          ledger H7x,H25x,H27x,H28x,H34x,H60 amend=Cross-host  the cross-host workspace, lock and holds
+bench/h54/**                            ledger H54a,H54q amend=H54  the H54 runner; H54q is PENDING
+bench/h57d/**                           ledger H57da,H57dm,H57db,H57dp,H57de amend=H57d  the H57d runner; H57dp and H57de are PENDING
+bench/h59/**                            ledger H59,H59d,H59w amend=H59  H59's scorer
+bench/flashnext/**                      ledger H60 amend=H60  H60's runner
+bench/admission/**                      ledger H55 amend=H55  H55's SLO-gated admission harness
+bench/models/**                         ledger H50,H50o,H57da,H57dm,H57db,H57dp,H57de amend=Crescent,H57d  the Gemma 4 QAT export and grid (crescent amendment M1, H57d)
+bench/wildct/**                         ledger H18w,H25w,H28w,H34w,H52w,H57wa,H57wm,H57wb,H59w amend=Wildct  the wildct client host's runner
+bench/load/**                           ledger H1b,H20,H21,H28,H30,H31,H32,H49b,H56,H18w,H25w,H28w,H34w,H52w,H57wa,H57wm,H57wb amend=Wildct  the matched background-load harness (amendment 27)
+bench/sandbox_round.sh                  ledger H18,H18w amend=Wildct  H18's sandbox round, replicated on wildct
+bench/zero-copy-models/**               ledger H28,H28x,H28w amend=Wildct,Cross-host  H28's probe, replicated cross-host and on wildct
+bench/shared-prefix/**                  ledger H25,H25x,H25w amend=Wildct,Cross-host  H25's probe, replicated cross-host and on wildct
+bench/hetero-spec/**                    ledger H22,H34,H34x,H34w amend=Wildct,Cross-host  H22 and H34's probes; h34.sh replicated cross-host and on wildct
+bench/joule-pack/**                     ledger H21 amend=H21  H21's probe
+bench/phase-steer/**                    ledger H20 amend=H20  H20's probe
+bench/sku-model/**                      ledger H24 amend=H24  H24's probe and records
+bench/tune-noise/**                     ledger H19 amend=H19  H19's runner
+bench/uncore-phase/**                   ledger H29 amend=H29  H29's probe
+bench/vs_matched.py                     ledger H30,H31,H32 amend=  the H30-H32 matched-load comparison
+
+# --- k3d-gpu's own bench tooling (shipped by nfpm, or tests of what ships) -------------
+bench/vs.py                             ours  k3d-gpu vs (nfpm ships it)
+bench/llm_load.py                       ours  k3d-gpu tune's load generator (nfpm ships it)
+bench/energy.sh                         ours  k3d-gpu tune's energy reader (nfpm ships it)
+bench/agent_trace.py                    ours  k3d-gpu capacity's trace replayer (nfpm ships it)
+bench/agent_trace_gen.py                ours  k3d-gpu capacity's trace generator (nfpm ships it)
+bench/test_agent_trace.py               ours  tests of the shipped trace replayer
+bench/competitors.lock                  ours  the competitor engines k3d-gpu vs runs (nfpm ships it)
+bench/apb/**                            ours  k3d-gpu capacity's apb.py and capacity.py (nfpm ships them), stage.py and their tests
+oracle/**                               ours  the capacity oracle's code, schema and tests (bundle.py, project.py, validate.py and share.py ship)

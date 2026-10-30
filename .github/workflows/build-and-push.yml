@@ -643,11 +643,14 @@ jobs:
         with:
           ref: main
 
+      - name: Tool versions (hack/ci-tools.env)
+        run: grep -E '^[A-Z0-9_]+=' hack/ci-tools.env >> "$GITHUB_ENV"
+
       - name: Move the pins to the newest compatible releases
         id: bump
         run: |
           python3 -m venv "$RUNNER_TEMP/venv"
-          "$RUNNER_TEMP/venv/bin/pip" install --disable-pip-version-check packaging==26.3
+          "$RUNNER_TEMP/venv/bin/pip" install --disable-pip-version-check "packaging==${PACKAGING_VERSION}"
           "$RUNNER_TEMP/venv/bin/python" hack/bump-convert-pins | tee "$RUNNER_TEMP/bump.txt"
           # The moved set must resolve together: pip's resolver, no install.
           mapfile -t pins < <(jq -r '.pins | to_entries[] | "\(.key)==\(.value)"' console/convert-pins.json)

@@ -1,7 +1,7 @@
-audit FAIL: 1 of 11 checks failed (images.lock: 55 images, k3s v1.37.1-k3s1)
+audit FAIL: 1 of 11 checks failed (images.lock: 54 images, k3s v1.37.1-k3s1)
 ok   listener 0.0.0.0:39651 kube-apiserver: off loopback, auth client-cert (docker port 6443/tcp on k3d-gpu-server-0)
 ok   image docker.io/intel/intel-gpu-plugin:0.37.1: sha256:004641b2547d in images.lock (share/intel-gpu-plugin.yml, share/intel-gpu-wsl-plugin.yml); on k3d-gpu-server-0
-ok   image docker.io/openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58: sha256:a928903fe429 in images.lock (scripts/k3d-gpu AGENT_OVMS_IMAGE); on k3d-gpu-server-0
+ok   image docker.io/openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58: sha256:a928903fe429 in images.lock (scripts/k3d-gpu AGENT_OVMS_IMAGE, scripts/k3d-gpu NPU_UMD_IMAGE, share/npu-embeddings.yml); on k3d-gpu-server-0
 ok   image docker.io/rancher/local-path-provisioner:v0.0.37: sha256:e757967a5ec3 in images.lock (k3s-images.txt v1.37.1-k3s1); on k3d-gpu-server-0
 ok   image docker.io/rancher/mirrored-coredns-coredns:1.14.7: sha256:7efd3c635b03 in images.lock (k3s-images.txt v1.37.1-k3s1); on k3d-gpu-server-0
 ok   image docker.io/rancher/mirrored-metrics-server:v0.9.0: sha256:d9862115e7c7 in images.lock (k3s-images.txt v1.37.1-k3s1); on k3d-gpu-server-0

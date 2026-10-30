@@ -114,19 +114,32 @@ Include relevant details:
   (`tests/console/audit/default`), diffed against `tests/console/audit/*.golden`
   (`tests/audit_test.sh --update` rewrites those).
 - Changed an image in `share/`, the Dockerfile or an image pin in `scripts/k3d-gpu`?
-  Run `scripts/images-lock update` (it reads the registries) and commit
-  `images.lock`; CI's `scripts/images-lock check` fails until you do.
-- Every image reference in the repo is pinned `name:tag@sha256:<digest>`. Write
-  the tag, run `scripts/images-lock repin <file>` (it reads the registries) to add
-  the digest; `tests/image_pins_test.sh` (`scripts/images-lock pins`) fails on a
-  tag-only or `:latest` reference that `images.unpinned` does not list with a
-  reason. A rendered component's image pins live in its `component.conf`
-  (`IMAGE_PINS`). The nightly `repin-images` job opens a PR when a registry moves
-  a digest under an unchanged tag. Its token cannot push `.github/workflows/`, so
-  it runs `repin --exclude '.github/workflows/*'` and a workflow keeps no
-  `name:tag@sha256` of its own: it reads the pin from the Dockerfile,
-  `docs-build/Dockerfile` or `hack/ci-images.env` (`tests/image_pins_test.sh`
-  fails on a pin written in a workflow).
+  Run `scripts/images-lock update --only <the files you changed>` (it reads the
+  registries; without `--only` it checks every pinned digest and a digest a registry
+  moved elsewhere fails it) and commit `images.lock`; CI's `scripts/images-lock
+  check` fails until you do. `scripts/images-lock drift` lists the pins whose tag a
+  registry has moved, and writes nothing.
+- Every image reference in the repo is pinned `name:tag@sha256:<digest>`, the tag
+  naming the version. Write the tag, run `scripts/images-lock repin <file>` (it
+  reads the registries) to add the digest; `tests/image_pins_test.sh`
+  (`scripts/images-lock pins`) fails on a tag-only, `:latest` or digest-only
+  reference that `images.unpinned` does not list with a reason. A rendered
+  component's image pins live in its `component.conf` (`IMAGE_PINS`). The nightly
+  `repin-images` job opens a PR when a registry moves a digest under an unchanged
+  tag. Its token cannot push `.github/workflows/`, so it runs `repin --exclude
+  '.github/workflows/*'` and a workflow keeps no version of its own: it reads image
+  pins from the Dockerfile, `docs-build/Dockerfile` or `hack/ci-images.env`, and
+  tool versions from `hack/ci-tools.env` (`tests/image_pins_test.sh` and
+  `tests/ci_wiring_test.sh` fail on a pin or version written in a workflow).
+- `pins/classes` says who may move each pin. `ours` (the default) is k3d-gpu's own
+  and tracks the newest stable release; `eat-stock` tracks Intel EAT's newest
+  release; a `ledger` path is a ledger row's runner: while a listed row is PENDING
+  its pins move only with a dated amendment in the same PR, and once every listed
+  row has a verdict it is `historical`, a finished run's record that is never edited.
+  `repin` never touches ledger or historical paths. CI's `pin-guard` job runs
+  `hack/pin-guard` on every PR (`tests/pin_guard_test.sh` shows each rule) and
+  `hack/pin-classes coverage`, which fails on a pin-bearing file under `bench/` or
+  `oracle/` that no line classifies: add one for a new bench directory.
 - `tests/console_mcp_test.sh` checks that the MCP tools `hardware` and
   `plan_launch` return the CLI `facts --json` and `plan --json` bytes on every
   fixture, and that the MCP `apply` tool writes nothing without a plan hash the

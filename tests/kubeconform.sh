@@ -11,7 +11,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-KUBECONFORM_IMAGE="ghcr.io/yannh/kubeconform:v0.8.0@sha256:faffaf43f95aa6425306e1ab8d6fcad72acb9049158f38e574c085ea1ec0f64e"
+# The pinned kubeconform image, where the CI jobs read it too.
+KUBECONFORM_IMAGE=$(sed -n 's/^KUBECONFORM_IMAGE=//p' "${ROOT}/hack/ci-tools.env")
+: "${KUBECONFORM_IMAGE:?hack/ci-tools.env has no KUBECONFORM_IMAGE}"
 WORK=$(mktemp -d)
 trap 'rm -rf "${WORK}"' EXIT
 

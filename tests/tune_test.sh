@@ -91,6 +91,11 @@ a=$(fp "${h1}") b=$(fp "${h2}") c=$(fp "${h3}") d=$(fp "${h1}" K3D_GPU_AGENT_MOD
 [ "${a}" = "${b}" ] && ok "same hardware, same fingerprint" || bad "same hardware, same fingerprint" "${a} vs ${b}"
 [ "${a}" != "${c}" ] && ok "different E-core set, different fingerprint" || bad "E-core set ignored"
 [ "${a}" != "${d}" ] && ok "different model, different fingerprint" || bad "model ignored"
+# The OVMS pin is written name:tag@sha256:...; the fingerprint names it by digest
+# alone, as when the pin carried no tag, so saved profiles still apply.
+in=$(run env K3D_GPU_SYSROOT="${h1}" "${K3D_GPU}" tune fingerprint | sed -n 's/^  agent_image=//p')
+if [[ "${in}" =~ ^openvino/model_server@sha256:[0-9a-f]{64}$ ]]; then ok "fingerprint names the OVMS pin by digest alone"
+else bad "fingerprint agent_image" "${in}"; fi
 
 echo "== profile application (what 'agent up' exports)"
 mkdir -p "${WORK}/profiles"

@@ -15,7 +15,7 @@
       "subject": "docker.io/intel/intel-gpu-plugin:0.37.1"
     },
     {
-      "detail": "sha256:a928903fe429 in images.lock (scripts/k3d-gpu AGENT_OVMS_IMAGE); on k3d-gpu-server-0",
+      "detail": "sha256:a928903fe429 in images.lock (scripts/k3d-gpu AGENT_OVMS_IMAGE, scripts/k3d-gpu NPU_UMD_IMAGE, share/npu-embeddings.yml); on k3d-gpu-server-0",
       "fix": null,
       "rule": "image",
       "status": "pass",
@@ -73,12 +73,12 @@
   ],
   "cluster": "gpu",
   "lock": {
-    "images": 55,
+    "images": 54,
     "k3s_tag": "v1.37.1-k3s1"
   },
   "schema": "k3d-gpu.audit/v1",
   "summary": [
-    "audit PASS: 0 of 10 checks failed (images.lock: 55 images, k3s v1.37.1-k3s1)"
+    "audit PASS: 0 of 10 checks failed (images.lock: 54 images, k3s v1.37.1-k3s1)"
   ],
   "verdict": "pass"
 }

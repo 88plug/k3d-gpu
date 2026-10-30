@@ -267,6 +267,17 @@ class PlanCases(unittest.TestCase):
         self.assertEqual(got["decision"], "unmeasured")
         self.assertTrue(all("engine pin moved" in " ".join(c["reasons"]) for c in got["considered"]))
 
+    def test_tag_beside_the_pinned_digest_keeps_cells(self):
+        # The release pins name:tag@sha256:X; a cell measured on name@sha256:X ran that image.
+        name, digest = self.matrix["rows"][0]["engine"]["image"].split("@")
+        facts = copy.deepcopy(self.facts)
+        facts["release"]["pins"]["ovms"] = "%s:2026.4.1-gpu@%s" % (name, digest)
+        self.assertEqual(planmod.plan(facts, self.green())["cell"], "raptorlake-s.cpu-pcores.ovms.qwen3-4b-int4")
+        facts["release"]["pins"]["ovms"] = "%s:2026.4.1-gpu@sha256:%s" % (name, "0" * 64)
+        self.assertEqual(planmod.plan(facts, self.green())["decision"], "unmeasured")
+        self.assertEqual(planmod.image_id("localhost:5000/a/b:1@sha256:" + "1" * 64), "localhost:5000/a/b@sha256:" + "1" * 64)
+        self.assertEqual(planmod.image_id("localhost:5000/a/b:1"), "localhost:5000/a/b:1")
+
     def test_community_cell_is_amber_and_never_picked(self):
         m = self.green()
         for r in m["rows"]:
