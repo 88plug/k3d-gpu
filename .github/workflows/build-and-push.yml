@@ -440,8 +440,11 @@ jobs:
   # component on branch autobump/<name>. Merging it changes share/** on main,
   # which auto-release.yml turns into a launcher release, and that release
   # dispatches the `release` job above to build the image. A PR opened with
-  # GITHUB_TOKEN starts no CI workflows, so the tests run here before it opens.
-  # A new component is a new hack/components/<name>/ dir; the matrix picks it up.
+  # GITHUB_TOKEN gets pull_request CI runs that wait for a maintainer's approval,
+  # so the tests run here before it opens, and hack/bot-ci-dispatch then runs
+  # ci.yml on the branch by workflow_dispatch (no approval): that run is the PR's
+  # CI evidence. A new component is a new hack/components/<name>/ dir; the matrix
+  # picks it up.
   list-components:
     if: ${{ !inputs.release }}
     runs-on: ubuntu-latest
@@ -466,6 +469,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      actions: write
     strategy:
       fail-fast: false
       matrix:
@@ -503,6 +507,12 @@ jobs:
       - name: Render tests
         run: tests/render_test.sh
 
+      # create-pull-request force-pushes an existing bump branch, which GitHub
+      # refuses from GITHUB_TOKEN once main's workflow files differ from the
+      # branch's: delete such a branch first (its PR closes; a fresh one opens).
+      - name: Delete a bump branch whose workflows differ from main's
+        run: hack/autobump-branch-reset "autobump/${COMPONENT}"
+
       - name: Open or update the bump PR
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
@@ -522,9 +532,17 @@ jobs:
             - Pins (version, chart sha256, image digests) moved in `hack/components/${{ matrix.component }}/component.conf`.
             - `tests/detect_test.sh` and `tests/render_test.sh` passed in the workflow run
               that opened this PR.
+            - CI: this PR's own pull_request runs wait for approval (a GITHUB_TOKEN PR).
+              The evidence is the ci.yml run dispatched on `autobump/${{ matrix.component }}`
+              at the head SHA: `gh run list -w ci.yml -e workflow_dispatch -b autobump/${{ matrix.component }}`.
             - Merging rebuilds the node image with the new manifest baked in.
 
             Review the manifest diff for new CRDs, RBAC, images and flags before merging.
+
+      - name: Dispatch CI on the bump PR's branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: hack/bot-ci-dispatch --branch "autobump/${COMPONENT}"
 
   # ─── Image digests ───────────────────────────────────────────────────────
   # Every image reference is pinned name:tag@sha256 (scripts/images-lock pins).
@@ -532,17 +550,20 @@ jobs:
   # no new tag, which the version checks above never see. Daily: re-resolve the
   # tag of every pinned reference, write the registry's digest where it moved,
   # re-pin images.lock, run the image tests, and open or update one PR on branch
-  # autobump/image-digests. A PR opened with GITHUB_TOKEN starts no CI workflows,
-  # so the tests run here before it opens. GITHUB_TOKEN cannot push a change to
-  # .github/workflows/ (no `workflows` permission), so repin leaves those files
-  # alone; a workflow reads its image pins from a file outside them (the
-  # Dockerfile, docs-build/Dockerfile, hack/ci-images.env), which repin moves.
+  # autobump/image-digests. A PR opened with GITHUB_TOKEN gets pull_request CI
+  # runs that wait for a maintainer's approval, so the tests run here before it
+  # opens, and hack/bot-ci-dispatch then runs ci.yml on the branch by
+  # workflow_dispatch: that run is the PR's CI evidence. GITHUB_TOKEN cannot push
+  # a change to .github/workflows/ (no `workflows` permission), so repin leaves
+  # those files alone; a workflow reads its image pins from a file outside them
+  # (the Dockerfile, docs-build/Dockerfile, hack/ci-images.env), which repin moves.
   repin-images:
     if: ${{ !inputs.release }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
+      actions: write
     steps:
       - name: Checkout main
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -594,12 +615,7 @@ jobs:
       # its open PR; the action then cuts a fresh branch off main and opens a new one.
       - name: Delete a digest branch whose workflows differ from main's
         if: steps.repin.outputs.changes != ''
-        run: |
-          if git fetch -q --depth=1 origin autobump/image-digests 2>/dev/null \
-             && ! git diff --quiet FETCH_HEAD HEAD -- .github/workflows/; then
-            echo "autobump/image-digests was cut from a main with other workflow files; deleting it"
-            git push origin --delete autobump/image-digests
-          fi
+        run: hack/autobump-branch-reset autobump/image-digests
 
       - name: Open or update the digest PR
         if: steps.repin.outputs.changes != ''
@@ -622,21 +638,32 @@ jobs:
             - `tests/image_pins_test.sh`, `tests/audit_test.sh`, `tests/detect_test.sh`,
               `tests/render_test.sh` and the render check passed in the workflow run that
               opened this PR.
+            - CI: this PR's own pull_request runs wait for approval (a GITHUB_TOKEN PR).
+              The evidence is the ci.yml run dispatched on `autobump/image-digests` at the
+              head SHA: `gh run list -w ci.yml -e workflow_dispatch -b autobump/image-digests`.
 
             Review what the upstream rebuild changed before merging. A change under
             `share/`, `scripts/` or the Dockerfile cuts a launcher release on merge.
+
+      - name: Dispatch CI on the digest PR's branch
+        if: steps.repin.outputs.changes != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: hack/bot-ci-dispatch --branch autobump/image-digests
 
   # ─── QAT conversion toolchain (console/convert-pins.json) ──────────────────
   # The model optimizer's one-time OpenVINO conversion pins its pip toolchain
   # exactly. Daily: move each pin to the newest release optimum-intel's own
   # requirements allow (hack/bump-convert-pins), run the console tests, and open
-  # or update one PR on branch autobump/convert-pins.
+  # or update one PR on branch autobump/convert-pins, whose CI evidence is the
+  # ci.yml run hack/bot-ci-dispatch runs on the branch.
   bump-convert-pins:
     if: ${{ !inputs.release }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
+      actions: write
     steps:
       - name: Checkout main
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -663,6 +690,12 @@ jobs:
           tests/console_test.sh
           tests/model_opt_test.sh
 
+      # As in repin-images: GitHub refuses create-pull-request's force-push from
+      # GITHUB_TOKEN once main's workflow files differ from the branch's.
+      - name: Delete a pins branch whose workflows differ from main's
+        if: steps.bump.outputs.changes != ''
+        run: hack/autobump-branch-reset autobump/convert-pins
+
       - name: Open or update the pins PR
         if: steps.bump.outputs.changes != ''
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
@@ -682,3 +715,13 @@ jobs:
 
             `tests/console_test.sh` and `tests/model_opt_test.sh` passed in the workflow
             run that opened this PR.
+
+            CI: this PR's own pull_request runs wait for approval (a GITHUB_TOKEN PR).
+            The evidence is the ci.yml run dispatched on `autobump/convert-pins` at the
+            head SHA: `gh run list -w ci.yml -e workflow_dispatch -b autobump/convert-pins`.
+
+      - name: Dispatch CI on the pins PR's branch
+        if: steps.bump.outputs.changes != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: hack/bot-ci-dispatch --branch autobump/convert-pins

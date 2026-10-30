@@ -1,0 +1,139 @@
+#!/usr/bin/env bash
+# hack/bot-ci-dispatch [--branch B] [--workflow ci.yml|canary.yml]: give the bot's PRs real CI.
+#
+# A PR that GITHUB_TOKEN opened or pushed gets pull_request runs that wait for a
+# maintainer's approval (conclusion action_required); a workflow_dispatch run
+# needs none. For each open PR into main from a same-repo autobump/* branch opened
+# by github-actions[bot] (never a fork, never a human's branch), oldest first:
+#   - no run of the workflow at the head SHA except held ones: dispatch the
+#     workflow on the branch (gh workflow run --ref);
+#   - the latest run at the head failed or timed out on its first attempt, and no
+#     run there was re-run yet: re-run its failed jobs, once per SHA;
+#   - otherwise: leave it.
+# A run at the head is a pull_request run, or a workflow_dispatch run on the branch.
+#
+# Runner pool: one ci.yml run is ~39 jobs and a public repo gets 20-40 concurrent
+# jobs, so it dispatches or re-runs only while fewer than BOT_CI_MAX_INFLIGHT
+# (default 1) runs of the workflow on autobump/* branches are queued or running,
+# and not at all while a ci.yml run of a human PR is queued. A deferred PR is
+# picked up by the next call (.github/workflows/bot-sweep.yml, hourly).
+#
+# --workflow canary.yml dispatches with -f engines=auto, and only for a head whose
+# `hack/pins policy origin/main SHA` maps canary engines (a non-empty
+# canary list); the head is fetched from origin for that, never checked out. A
+# head that moved on origin since the PR list was read waits for the next call; a
+# policy that fails is an error for that PR.
+#
+# A branch whose workflow file lacks the workflow_dispatch trigger (cut before
+# ci.yml had it) is skipped; the nightly's hack/autobump-branch-reset recreates it.
+# Prints one line per decision. Idempotent. Exit 0, or 1 when a gh call failed
+# (the rest still ran), 2 on bad usage.
+set -uo pipefail
+
+usage() { echo "usage: hack/bot-ci-dispatch [--branch autobump/<name>] [--workflow ci.yml|canary.yml]" >&2; exit 2; }
+wf=ci.yml only=
+while [ $# -gt 0 ]; do
+  case $1 in
+    --branch) [ $# -ge 2 ] || usage; only=$2; shift 2;;
+    --workflow) [ $# -ge 2 ] || usage; wf=$2; shift 2;;
+    -h|--help) sed -n '2,/^set /{/^set /d;s/^# \{0,1\}//;p}' "$0"; exit 0;;
+    *) usage;;
+  esac
+done
+cap=${BOT_CI_MAX_INFLIGHT:-1}
+[[ $cap =~ ^[0-9]+$ ]] || { echo "BOT_CI_MAX_INFLIGHT must be a whole number, got '$cap'" >&2; exit 2; }
+RUNF=databaseId,event,status,conclusion,headBranch,attempt,createdAt
+rc=0
+inputs=()
+if [ "$wf" = canary.yml ]; then
+  inputs=(-f engines=auto)
+  cd "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)" || exit 1
+  err=$(mktemp); trap 'rm -f "$err"' EXIT
+fi
+# canary_engines BRANCH SHA: the policy's canary list for SHA (a JSON array), or
+# "moved" when origin's BRANCH is no longer SHA; fails when the policy does.
+canary_engines() {
+  git fetch -q origin "+refs/heads/$1:refs/remotes/origin/$1" || return 1
+  [ "$(git rev-parse -q --verify "refs/remotes/origin/$1^{commit}")" = "$2" ] || { echo moved; return 0; }
+  hack/pins policy origin/main "$2" | jq -ce '.canary | arrays'
+}
+
+prs=$(gh pr list --state open --base main --limit 200 \
+      --json number,headRefName,headRefOid,baseRefName,isCrossRepository,author) \
+  || { echo "error: cannot list open PRs"; exit 1; }
+cands=$(jq -r --arg only "$only" '
+  .[] | select(.isCrossRepository == false and .baseRefName == "main"
+               and (.headRefName | startswith("autobump/"))
+               and (.author.login | IN("app/github-actions", "github-actions[bot]", "github-actions"))
+               and (.author.is_bot != false)
+               and ($only == "" or .headRefName == $only))
+  | "\(.number) \(.headRefName) \(.headRefOid)"' <<<"$prs" | sort -n)
+[ -n "$cands" ] || { echo "no open github-actions[bot] PR from ${only:-an autobump/ branch}"; exit 0; }
+
+# The pool: bot runs of the workflow in flight, and queued ci.yml runs of human PRs.
+recent=$(gh run list -w "$wf" -L 100 --json status,event,headBranch) || { echo "error: cannot list $wf runs"; exit 1; }
+inflight=$(jq '[.[] | select(.status != "completed" and ((.headBranch // "") | startswith("autobump/")))] | length' <<<"$recent")
+if [ "$wf" != ci.yml ]; then
+  recent=$(gh run list -w ci.yml -L 100 --json status,event,headBranch) || { echo "error: cannot list ci.yml runs"; exit 1; }
+fi
+human=$(jq '[.[] | select(.event == "pull_request" and (.status | IN("queued", "requested", "pending", "waiting"))
+                          and ((.headBranch // "") | startswith("autobump/") | not))] | length' <<<"$recent")
+[[ $inflight =~ ^[0-9]+$ && $human =~ ^[0-9]+$ ]] || { echo "error: cannot read the run pool from gh run list"; exit 1; }
+# busy LINE: print LINE with the reason and succeed when the pool has no room.
+busy() {
+  if [ "$human" -gt 0 ]; then echo "$1: deferred, $human ci.yml run(s) of human PRs queued"; return 0; fi
+  if [ "$inflight" -ge "$cap" ]; then echo "$1: deferred, $inflight bot $wf run(s) in flight (cap $cap)"; return 0; fi
+  return 1
+}
+
+while read -r num br sha; do
+  tag="#$num $br ${sha:0:7}"
+  runs=$(gh run list -w "$wf" -c "$sha" -L 100 --json "$RUNF") \
+    || { echo "$tag: error: cannot list its $wf runs"; rc=1; continue; }
+  # "<count> <held> <latest id> <status> <conclusion> <attempt> <re-run already>"
+  read -r count held id st co att reran <<<"$(jq -r --arg b "$br" '
+    def word: if . == null or . == "" then "-" else tostring end;
+    [.[] | select(.event == "pull_request" or (.event == "workflow_dispatch" and .headBranch == $b))] as $at
+    | ($at | map(select(.conclusion != "action_required"))) as $e
+    | ($e | max_by(.createdAt // "")) as $l
+    | "\($e | length) \(($at | length) - ($e | length)) \($l.databaseId | word) \($l.status | word) \($l.conclusion | word) \($l.attempt // 1) \(any($e[]; (.attempt // 1) > 1))"' <<<"$runs")"
+  if [ "$count" -eq 0 ]; then
+    why="no $wf run at the head"; [ "$held" -gt 0 ] && why="only held $wf runs at the head"
+    if [ "$wf" = canary.yml ]; then
+      if ! eng=$(canary_engines "$br" "$sha" 2>"$err"); then
+        echo "$tag: error: hack/pins policy failed: $(tr '\n' ' ' < "$err")"; rc=1; continue
+      fi
+      case $eng in
+        moved) echo "$tag: skipped, origin's $br moved since the PR list was read"; continue;;
+        '[]') echo "$tag: the policy maps no canary engine; no canary"; continue;;
+      esac
+    fi
+    busy "$tag: $why" && continue
+    if out=$(gh workflow run "$wf" --ref "$br" "${inputs[@]}" 2>&1); then
+      inflight=$((inflight + 1))
+      # Wait until the run shows, so that a call right after this one sees it.
+      new=
+      for _ in 1 2 3 4 5 6 7 8 9 10; do
+        new=$(gh run list -w "$wf" -b "$br" -e workflow_dispatch -c "$sha" -L 1 --json databaseId -q '.[0].databaseId // empty' 2>/dev/null)
+        [ -n "$new" ] && break; sleep 3
+      done
+      echo "$tag: $why; dispatched $wf${new:+ (run $new)}"
+    elif grep -qi 'workflow_dispatch' <<<"$out"; then
+      echo "$tag: skipped, $wf on $br has no workflow_dispatch trigger (the nightly recreates the branch from main)"
+    else
+      echo "$tag: error: dispatching $wf failed: $(tr '\n' ' ' <<<"$out")"; rc=1
+    fi
+  elif [ "$st" = completed ] && [[ $co =~ ^(failure|timed_out)$ ]] && [ "$att" = 1 ] && [ "$reran" = false ]; then
+    busy "$tag: $wf run $id $co on attempt 1" && continue
+    if out=$(gh run rerun "$id" --failed 2>&1); then
+      inflight=$((inflight + 1)); echo "$tag: $wf run $id $co on attempt 1; re-ran its failed jobs"
+    else
+      echo "$tag: error: re-running run $id failed: $(tr '\n' ' ' <<<"$out")"; rc=1
+    fi
+  elif [ "$st" = completed ] && [ "$co" != success ]; then
+    echo "$tag: $wf run $id is $co (attempt $att); left for review"
+  else
+    echo "$tag: $wf run $id at the head is $st/$co; nothing to do"
+  fi
+done <<<"$cands"
+exit "$rc"
