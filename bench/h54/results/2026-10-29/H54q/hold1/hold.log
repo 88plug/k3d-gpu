@@ -1,0 +1,11 @@
+2026-10-29T19:46:41Z R start (2249 s before the item stop)
+2026-10-29T19:48:46Z R ready after 125 s
+2026-10-29T19:48:46Z R items: 200 to ask
+2026-10-29T19:57:48Z R status measured: 200 answered, 0 errored, 0 cut, 0 not asked (queue empty)
+2026-10-29T19:58:06Z OVQ start (1564 s before the item stop)
+2026-10-29T19:58:40Z OVQ ready after 34 s
+2026-10-29T19:58:40Z OVQ items: 150 to ask
+2026-10-29T20:19:34Z OVQ status measured: 150 answered, 0 errored, 0 cut, 0 not asked (queue empty)
+2026-10-29T20:19:51Z OVB status not_reached: 259 s before the item stop (< 300)
+2026-10-29T20:19:51Z Lg status not_reached: 259 s before the item stop (< 300)
+2026-10-29T20:19:52Z Vi status not_reached: 258 s before the item stop (< 300)

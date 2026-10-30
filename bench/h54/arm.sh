@@ -7,6 +7,9 @@
 #   CLUSTER   the hold's cluster; KUBECONFIG its scratch kubeconfig
 #   DEADLINE  epoch second the hold's arms must end by
 #   SERVING   the hold's serving.jsonl (bench/eatflow/crescent/serving.py)
+#   H54Q      set: an H54q arm (amendment Q2): ARM is R, OVQ, OVB, Lg or Vi, its manifest comes
+#             from H54a's records (h54.py q-render), and after readiness it answers its GSM8K
+#             items (h54.py q-items) until the item stop, 90 s before DEADLINE; no phases
 # status.json: measured | not_deliverable | not_reached | failed, with the reason.
 set -uo pipefail
 ARM=$1 OUT=$2
@@ -19,8 +22,10 @@ now() { date +%s; }
 stamp() { echo "$(date -u +%FT%TZ) ${ARM} $*" | tee -a "${OUT}/arm.log"; }
 status() { ${PY} -c 'import json,sys; json.dump({"status": sys.argv[1], "reason": sys.argv[2], "at": sys.argv[3]}, open(sys.argv[4], "w"))' \
     "$1" "$2" "$(date -u +%FT%TZ)" "${OUT}/status.json"; stamp "status $1: $2"; }
-field() { ${PY} "${H}/h54.py" arms | ${PY} -c 'import json,sys; a=json.load(sys.stdin); print(a["arms"][sys.argv[1]].get(sys.argv[2], ""))' "${ARM}" "$1"; }
-served() { ${PY} "${H}/h54.py" arms | ${PY} -c 'import json,sys; print(json.load(sys.stdin)["served"][sys.argv[1]])' "${ARM}"; }
+B=${ARM}   # the H54a arm whose server this is
+[ -z "${H54Q:-}" ] || B=$(${PY} "${H}/h54.py" q-base "${ARM}") || exit 1
+field() { ${PY} "${H}/h54.py" arms | ${PY} -c 'import json,sys; a=json.load(sys.stdin); print(a["arms"][sys.argv[1]].get(sys.argv[2], ""))' "${B}" "$1"; }
+served() { ${PY} "${H}/h54.py" arms | ${PY} -c 'import json,sys; print(json.load(sys.stdin)["served"][sys.argv[1]])' "${B}"; }
 NODE=k3d-${CLUSTER:?}-server-0
 NSP=$(field ns) SVC=$(field svc) SPORT=$(field port) API=$(field api) BOOT=$(field boot) DEPLOY=$(field deploy)
 MODEL=$(served)
@@ -40,9 +45,18 @@ pf_loop() {
 cleanup_pf() { [ -z "${pf}" ] || kill "${pf}" 2>/dev/null; pf=""; }
 trap cleanup_pf EXIT
 
-left=$(( DEADLINE - $(now) ))
-if [ "${left}" -lt 900 ]; then status not_reached "${left} s of the hold left (< 900)"; exit 0; fi
-stamp "start (${left} s of the hold left)"
+# H54a: an arm starts with at least 900 s of the hold left, and readiness ends 600 s before the
+# hold does. H54q (Q2): no item is asked after STOP; an arm starts with at least 300 s before
+# STOP, and readiness ends 60 s before it.
+if [ -n "${H54Q:-}" ]; then
+    STOP=$(( DEADLINE - 90 ))
+    END=${STOP} NEED=300 EDGE=$(( STOP - 60 )) WHAT="before the item stop"
+else
+    END=${DEADLINE} NEED=900 EDGE=$(( DEADLINE - 600 )) WHAT="of the hold left"
+fi
+left=$(( END - $(now) ))
+if [ "${left}" -lt "${NEED}" ]; then status not_reached "${left} s ${WHAT} (< ${NEED})"; exit 0; fi
+stamp "start (${left} s ${WHAT})"
 
 # ---- render --------------------------------------------------------------------------------
 M=${OUT}/deploy.yaml
@@ -57,7 +71,9 @@ eat_vllm() {  # B1g: EAT's chart at 0d3438d as its playbook installs cpu-gemma4-
         --set ingress.enabled=false --set route.enabled=false > "${OUT}/eat.yaml" || return 1
     ${PY} "${REPO}/bench/apb/stage.py" vllm "${OUT}/eat.yaml" "$1" google_gemma-4-26B-A4B-it-qat-q4_0-unquantized 8192
 }
+[ -z "${H54Q:-}" ] || DEPLOY=q
 case ${DEPLOY} in
+    q) ${PY} "${H}/h54.py" q-render "${ARM}" "${M}" ;;
     eat-vllm) eat_vllm "${M}" ;;
     derive-vllm) eat_vllm "${OUT}/b1g.yaml" && ${PY} "${H}/h54.py" derive-vllm "${ARM}" "${OUT}/b1g.yaml" "${M}" ;;
     eat-ovms)
@@ -75,7 +91,7 @@ kubectl apply -f "${M}" > "${OUT}/apply.log" 2>&1 || { status failed "apply fail
 
 # ---- readiness: the model list and a 16-token chat ------------------------------------------
 t_apply=$(now)
-limit=$(( BOOT < DEADLINE - t_apply - 600 ? BOOT : DEADLINE - t_apply - 600 ))
+limit=$(( BOOT < EDGE - t_apply ? BOOT : EDGE - t_apply ))
 base="http://127.0.0.1:${PORT}${API}"
 ready=""
 while [ $(( $(now) - t_apply )) -lt "${limit}" ]; do
@@ -132,6 +148,30 @@ kubectl -n "${NSP}" get pod "${pod}" -o jsonpath='{.spec.containers[0].image} {.
 kubectl -n "${NSP}" get pod "${pod}" -o json > "${OUT}/pod.json"
 kubectl -n "${NSP}" exec "${pod}" -c "$(kubectl -n "${NSP}" get pod "${pod}" -o jsonpath='{.spec.containers[0].name}')" -- \
     sh -c 'grep -c amx_tile /proc/cpuinfo; nproc' > "${OUT}/isa.txt" 2>&1
+
+if [ -n "${H54Q:-}" ]; then
+    # H54q (Q2): the arm's GSM8K items, or in a wiring smoke two non-GSM8K questions; no phases.
+    # The item window's void check is recorded, not gated (H54a never voided its quality items).
+    t0=$(date +%s.%N)
+    if [ -n "${SMOKE:-}" ]; then
+        ${PY} "${H}/h54.py" q-smoke "${base}" "${MODEL}" "${OUT}" "${STOP}" >> "${OUT}/arm.log" 2>&1
+        status smoke "ready; wiring check in smoke-items.jsonl (rc $?)"
+    else
+        stamp "items: $(${PY} "${H}/h54.py" q-todo "$(dirname "$(dirname "${OUT}")")" "${ARM}" | wc -w) to ask"
+        ${PY} "${H}/h54.py" q-items "${base}" "${MODEL}" "$(dirname "$(dirname "${OUT}")")" "${ARM}" "${OUT}" "${STOP}" >> "${OUT}/arm.log" 2>&1
+        rc=$?
+        if [ -s "${OUT}/q.json" ]; then
+            status "$(${PY} -c 'import json,sys; print(json.load(open(sys.argv[1]))["status"])' "${OUT}/q.json")" \
+                "$(${PY} -c 'import json,sys; print(json.load(open(sys.argv[1]))["reason"])' "${OUT}/q.json")"
+        else
+            status failed "q-items exited ${rc} without a record"
+        fi
+    fi
+    t1=$(date +%s.%N)
+    echo "{\"phase\": \"items\", \"t0\": ${t0}, \"t1\": ${t1}, \"check\": $(${PY} "${H}/h54.py" void "${SERVING:?}" "${t0}" "${t1}")}" >> "${OUT}/phases.jsonl"
+    teardown
+    exit 0
+fi
 
 if [ -n "${SMOKE:-}" ]; then
     # A wiring smoke (discarded, disclosed): one streamed 16-token request with ignore_eos, and one
