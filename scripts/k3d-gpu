@@ -7553,7 +7553,7 @@ LLAMA_VULKAN_IMAGE="${K3D_GPU_LLAMA_VULKAN_IMAGE:-ghcr.io/ggml-org/llama.cpp@sha
 # Intel GPU, server-b11960 (CPU) otherwise, and full-b11960 (convert_hf_to_gguf.py and
 # llama-quantize) for a one-time GGUF conversion. Multi-arch indexes, pinned by digest.
 LLAMA_SYCL_IMAGE="${K3D_GPU_LLAMA_SYCL_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-intel-b11960@sha256:068cd41cdc292bed89b4a6b7740ea7a33df8ba26bf880d0e12ac75972dce1700}"
-LLAMA_CPU_IMAGE="${K3D_GPU_LLAMA_CPU_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220}"
+LLAMA_CPU_IMAGE="${K3D_GPU_LLAMA_CPU_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-b99999@sha256:0000000000000000000000000000000000000000000000000000000000000001}"
 LLAMA_FULL_IMAGE="${K3D_GPU_LLAMA_FULL_IMAGE:-ghcr.io/ggml-org/llama.cpp:full-b11960@sha256:7afc81bfe7a93de287324044fe86ccc70b1b7ac8832ed8e6ea658e11fb448ddf}"
 AGENT_STORAGE="${K3D_GPU_AGENT_STORAGE:-20Gi}"
 AGENT_TIMEOUT="${K3D_GPU_AGENT_TIMEOUT:-1800}" # seconds: first run downloads the model
