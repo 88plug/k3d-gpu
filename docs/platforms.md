@@ -343,7 +343,10 @@ the two the move of `eat-up.sh` to `release-1.1.0` had to handle.
   skips. `fresh-install.sh` (line 419) then deploys the `Qwen/Qwen3Guard-Gen-0.6B` guard.
   `brownfield.sh` now reads `deploy_guardrails` from the config, as `read_config_file` reads
   every other toggle, and exports `DEPLOY_GUARDRAILS` before it sources the script;
-  `agentic-config.cfg` sets it `off`.
+  `agentic-config.cfg` sets it `off`. With `deploy_guardrails=on`, `deploy-guardrails.yml`
+  gets a copy of EAT's charts in which the guard's `guardrail-values.yaml` (line 30, `v0.28.0`
+  by tag only) carries the digest `vllm-values.yaml` pins (`guard-values.py`); the guard has
+  not run on a k3d-gpu cluster.
 - vLLM image. #21's `xeon-values.yaml` (line 34) moves `vllm/vllm-openai-cpu` from
   `v0.24.0` to `v0.28.0`. `vllm-values.yaml` merges over it with no tag check, so it now
   pins `v0.28.0` by digest (`sha256:197354e6...df9647`, Docker Hub, read 2026-10-29).

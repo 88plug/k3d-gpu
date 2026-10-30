@@ -790,6 +790,13 @@ bf_stack 'deploy_guardrails=off'
 if [ "${rc}" -eq 0 ] && ! grep -q 'deploy-guardrails' <<< "${log}"; then
     ok "brownfield.sh stack: the guard pin check stays quiet with the guard off"
 else fail "brownfield.sh stack: guard off (rc=${rc}): ${out}"; fi
+# EAT calling the guard playbook although the guard was off when the copy was due.
+sed -i 's#if \[\[ "${DEPLOY_GUARDRAILS:-off}" == "on" \]\]; then#if true; then#' "${BF}/eat/deploy-agentic-stack.sh"
+bf_stack 'deploy_guardrails=off'
+if [ "${rc}" -ne 0 ] && grep -qF 'no pinned chart copy' <<< "${out}" && ! grep -q '^ansible-playbook .*deploy-guardrails.yml' <<< "${log}"; then
+    ok "brownfield.sh stack: a guard playbook call without the chart copy does not run"
+else fail "brownfield.sh stack: unexpected guard call (rc=${rc}): ${out}"; sed 's/^/  | /' <<< "${log}"; fi
+sed -i 's#if true; then#if [[ "${DEPLOY_GUARDRAILS:-off}" == "on" ]]; then#' "${BF}/eat/deploy-agentic-stack.sh"
 
 # 6. eat-opt.py: the model optimizer as values on EAT's own entry, printed against
 #    stock. EAT's playbook and values are reduced to the lines eat-opt.py reads
