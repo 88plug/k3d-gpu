@@ -1,4 +1,4 @@
-audit FAIL: 1 of 11 checks failed (images.lock: 55 images, k3s v1.37.1-k3s1)
+audit FAIL: 1 of 11 checks failed (images.lock: 57 images, k3s v1.37.1-k3s1)
 ok   listener 0.0.0.0:39651 kube-apiserver: off loopback, auth client-cert (docker port 6443/tcp on k3d-gpu-server-0)
 FAIL image docker.io/bitnami/redis:7.4: not in images.lock: docker.io/bitnami/redis; on k3d-gpu-server-0
      fix: remove the workload that runs it, or pin it in the repo and run scripts/images-lock update

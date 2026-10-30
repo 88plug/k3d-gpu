@@ -88,7 +88,7 @@ context, so `up` switches that file's current-context to `k3d-<cluster>`.
 ### Install
 
 Every package installs the same payload: the launcher at `bin/k3d-gpu`, the MCP server at `bin/k3d-gpu-mcp`,
-and in `share/k3d-gpu/` the plugin manifests, `console/`, `bench/`, `oracle/` and `images.lock`
+and in `share/k3d-gpu/` the plugin manifests, `console/`, `bench/`, `oracle/`, `integrations/` (for `k3d-gpu eas`) and `images.lock`
 (`facts`, `plan`, `audit`, `tune`, `capacity` and `k3d-gpu-mcp` also need `python3`).
 The node image `cryptoandcoffee/k3d-gpu` is published for linux/amd64 only, so on arm64 the
 packages install but `k3d-gpu up` stops unless `K3D_GPU_IMAGE` names a k3s node image built for

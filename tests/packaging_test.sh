@@ -148,6 +148,53 @@ check "nix installs share/telemetry/*.yml" \
 check "nix installs share/telemetry/optional/*.yml" \
     grep -qF 'install -Dm644 -t "$out/share/k3d-gpu/telemetry/optional" share/telemetry/optional/*.yml' "${NIXPKG}"
 check "nix points K3D_GPU_SHARE at the store" grep -qF -- '--set-default K3D_GPU_SHARE "$out/share/k3d-gpu"' "${NIXPKG}"
+# 'k3d-gpu eas' reads ${SHARE_DIR}/integrations/eas: the repo's integrations/ layout, since
+# overlay.py finds its patch drafts (integrations/eat/upstream/patches) relative to the dir
+# above integrations/, and eat-check.sh is ../eat/eat-check.sh from eas/.
+check "nfpm ships integrations/eas as a tree to /usr/share/k3d-gpu/integrations/eas" \
+    grep -Pzq 'src: integrations/eas/\n +dst: /usr/share/k3d-gpu/integrations/eas\n +type: tree\n' "${NFPM}"
+check "nfpm ships the overlay's patch drafts to integrations/eat/upstream/patches/" \
+    grep -Pzq 'src: integrations/eat/upstream/patches/\*\.patch\n +dst: /usr/share/k3d-gpu/integrations/eat/upstream/patches/\n' "${NFPM}"
+check "nfpm ships eat-check.sh executable" \
+    grep -Pzq 'src: integrations/eat/eat-check\.sh\n +dst: /usr/share/k3d-gpu/integrations/eat/eat-check\.sh\n +file_info:\n +mode: 0755' "${NFPM}"
+for d in integrations integrations/eat integrations/eat/upstream integrations/eat/upstream/patches; do
+    check "nfpm rpm owns /usr/share/k3d-gpu/${d}" \
+        grep -Pzq -- "- dst: /usr/share/k3d-gpu/${d//\//\\/}\n +type: dir\n +packager: rpm\n" "${NFPM}"
+done
+check "formula installs integrations/eas" grep -qF '(pkgshare/"integrations/eas").install Dir["integrations/eas/*"]' "${FORMULA}"
+check "formula installs the overlay's patch drafts" \
+    grep -qF '(pkgshare/"integrations/eat/upstream/patches").install Dir["integrations/eat/upstream/patches/*.patch"]' "${FORMULA}"
+check "formula installs eat-check.sh" grep -qF '(pkgshare/"integrations/eat").install "integrations/eat/eat-check.sh"' "${FORMULA}"
+# No formula test for integrations/eas: packaging/check.sh brew installs the formula's url,
+# the last release tarball, which has no integrations/eas until the next release.
+for f in integrations/eas integrations/eat/upstream/patches integrations/eat/eat-check.sh; do
+    check "nix source includes ${f}" grep -qF "(root + \"/${f}\")" "${NIXPKG}"
+done
+check "nix installs integrations/eas" grep -qF 'cp -r integrations/eas "$out/share/k3d-gpu/integrations/eas"' "${NIXPKG}"
+check "nix installs the overlay's patch drafts" \
+    grep -qF 'install -Dm644 -t "$out/share/k3d-gpu/integrations/eat/upstream/patches" integrations/eat/upstream/patches/*.patch' "${NIXPKG}"
+check "nix installs eat-check.sh" grep -qF 'install -Dm755 integrations/eat/eat-check.sh "$out/share/k3d-gpu/integrations/eat/eat-check.sh"' "${NIXPKG}"
+check "PKGBUILD installs integrations/eas" grep -qF 'cp -r integrations/eas "$pkgdir/usr/share/k3d-gpu/integrations/eas"' "${PKGBUILD}"
+check "PKGBUILD installs the overlay's patch drafts" \
+    grep -qF 'install -Dm644 -t "$pkgdir/usr/share/k3d-gpu/integrations/eat/upstream/patches" integrations/eat/upstream/patches/*.patch' "${PKGBUILD}"
+check "PKGBUILD installs eat-check.sh" grep -qF 'install -Dm755 integrations/eat/eat-check.sh "$pkgdir/usr/share/k3d-gpu/integrations/eat/eat-check.sh"' "${PKGBUILD}"
+check "packaging/check.sh compares the installed integrations/ with the source" \
+    grep -qF 'for f in /src/integrations/eas/* /src/integrations/eas/patches/* /src/integrations/eat/upstream/patches/*.patch; do' "${ROOT}/packaging/check.sh"
+check "README Install names integrations/ in the shared payload" \
+    grep -qF '`console/`, `bench/`, `oracle/`, `integrations/` (for `k3d-gpu eas`) and `images.lock`' "${ROOT}/README.md"
+# The launcher finds the packaged copy: with no checkout next to it, eas_dir is
+# ${SHARE_DIR}/integrations/eas, and overlay.json's patch_dirs resolve under ${SHARE_DIR}.
+eas_pkg=$(mktemp -d)
+mkdir -p "${eas_pkg}/bin" "${eas_pkg}/share/integrations/eas"
+cp "${ROOT}/scripts/k3d-gpu" "${eas_pkg}/bin/k3d-gpu"
+: > "${eas_pkg}/share/integrations/eas/eas.sh"
+check "a packaged launcher finds K3D_GPU_SHARE/integrations/eas" test "$(K3D_GPU_SHARE="${eas_pkg}/share" HOME="${eas_pkg}" bash -c \
+    'source <(sed "/^case \"\\\${1:-help}\" in\$/,\$d" "$1"); eas_dir' _ "${eas_pkg}/bin/k3d-gpu")" = "${eas_pkg}/share/integrations/eas"
+rm -rf "${eas_pkg}"
+check "overlay.json's patch_dirs are under integrations/, which the packages keep" python3 -c '
+import json, sys
+dirs = json.load(open(sys.argv[1]))["patch_dirs"]
+sys.exit(not dirs or not all(d.startswith("integrations/") for d in dirs))' "${ROOT}/integrations/eas/overlay.json"
 check "flake.lock pins nixpkgs to a rev" \
     grep -Eq '"rev": "[0-9a-f]{40}"' "${ROOT}/flake.lock"
 

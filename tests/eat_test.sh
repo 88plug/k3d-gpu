@@ -9,6 +9,12 @@
 #        both for a router that shlex.splits the command (agent-sandbox v0.5.0
 #        python-runtime-sandbox) and for one that runs it under /bin/sh -c
 #      - the check fails when the sandbox prints anything but 385
+#      - no key reaches curl's argument list (headers and bodies go as files / stdin)
+#   2b. eat-check.sh EAT_MODE=eas (k3d-gpu eas check) against stubs: the gateway is
+#      eg-gateway's LoadBalancer IP with Host litellm.<domain>; the requests carry a
+#      LiteLLM virtual key minted from Secret litellm/litellm-master-key and deleted at
+#      exit (pass or fail); the model defaults to the first chat model /v1/models lists;
+#      the sandbox step is the same as in eat mode.
 #   3. eat-up.sh refuses deploy_openshell=on, unverified on k3d-gpu, and a config with no
 #      deploy_guardrails value, on which release-1.1.0 deploys its guardrail. It also
 #      refuses a deploy_nri_balloon_policy other than off (a second balloons policy),
@@ -52,6 +58,9 @@ cat > "${BIN}/kubectl" <<'EOF'
 case "$*" in
     *"get nodes"*) echo 172.20.0.2 ;;      # first labelled node: not where ingress runs
     *"-n ingress-nginx get pods"*"app.kubernetes.io/component=controller"*"status.phase=Running"*) echo 172.20.0.3 ;;
+    *"-n envoy-gateway-system get svc -l gateway.envoyproxy.io/owning-gateway-name=eg-gateway"*"loadBalancer.ingress[0].ip"*)
+        [ -n "${STUB_NO_LB:-}" ] || echo 172.20.0.9 ;;
+    *"-n litellm get secret litellm-master-key"*"master_key"*) printf 'sk-master-stub' | base64 ;;
     *"get pods -o name"*) printf 'pod/sandbox-router-1\npod/python-pool-abcde\n' ;;
     *"get secret sandbox-router-auth"*) printf 'tok' | base64 ;;
     *port-forward*) exec sleep 60 ;;
@@ -61,23 +70,35 @@ EOF
 
 cat > "${BIN}/curl" <<'EOF'
 #!/usr/bin/env python3
-"""curl stub: answers the LiteLLM gateway and the sandbox router."""
+"""curl stub: answers the LiteLLM gateway (chat, /key/generate, /key/delete, /v1/models)
+and the sandbox router. Logs every argv and the bearer token each request carries."""
 import json, os, shlex, subprocess, sys
 
 args = sys.argv[1:]
-body, url, resolve = None, None, None
+body, url, resolve, auth = None, None, None, None
+with open(os.environ["STUB_LOG"], "a") as f:
+    f.write("argv %s\n" % json.dumps(args))
 i = 0
 while i < len(args):
     a = args[i]
-    if a in ("-d", "--data"):
-        body = args[i + 1]; i += 2; continue
+    if a in ("-d", "--data", "--data-binary"):
+        body = sys.stdin.read() if args[i + 1] == "@-" else args[i + 1]; i += 2; continue
     if a == "--resolve":
         resolve = args[i + 1]; i += 2; continue
-    if a in ("-H", "-o", "--max-time"):
+    if a == "-H":
+        h = args[i + 1]
+        lines = open(h[1:]).read().splitlines() if h.startswith("@") else [h]
+        for line in lines:
+            if line.lower().startswith("authorization: bearer "):
+                auth = line.split(" ", 2)[2]
+        i += 2; continue
+    if a in ("-o", "--max-time"):
         i += 2; continue
     if not a.startswith("-"):
         url = a
     i += 1
+with open(os.environ["STUB_LOG"], "a") as f:
+    f.write("auth %s %s\n" % (url.split("/", 3)[-1] if url else "-", auth))
 
 def msg(content=None, tool_calls=None, finish="stop"):
     m = {"role": "assistant", "content": content}
@@ -85,12 +106,24 @@ def msg(content=None, tool_calls=None, finish="stop"):
         m["tool_calls"] = tool_calls
     print(json.dumps({"choices": [{"finish_reason": finish, "message": m}]}))
 
-if url.endswith("/v1/chat/completions"):
+if url.endswith("/key/generate"):
+    req = json.loads(body)
+    with open(os.environ["STUB_LOG"], "a") as f:
+        f.write("keygen alias=%s\n" % req.get("key_alias"))
+    if not os.environ.get("STUB_NO_KEY"):
+        print(json.dumps({"key": "sk-virtual-stub", "key_alias": req.get("key_alias")}))
+elif url.endswith("/key/delete"):
+    with open(os.environ["STUB_LOG"], "a") as f:
+        f.write("keydel %s\n" % json.dumps(json.loads(body)["keys"]))
+elif url.endswith("/v1/models"):
+    print(json.dumps({"data": [{"id": i} for i in os.environ.get("STUB_MODELS", "").split(",") if i]}))
+elif url.endswith("/v1/chat/completions"):
     with open(os.environ["STUB_LOG"], "a") as f:
         f.write(f"resolve {resolve}\n")
     req = json.loads(body)
     with open(os.environ["STUB_LOG"], "a") as f:
         f.write(f"request max_tokens={req.get('max_tokens')} temperature={req.get('temperature')}\n")
+        f.write(f"model {req.get('model')}\n")
     prompt = req["messages"][-1]["content"]
     if req.get("tools"):
         if os.environ.get("STUB_NO_TOOL"):
@@ -109,7 +142,14 @@ elif url.endswith("/execute"):
     print(json.dumps({"stdout": p.stdout, "stderr": p.stderr, "exit_code": p.returncode}))
 # anything else (the router readiness probe) succeeds with no output
 EOF
-chmod +x "${BIN}/kubectl" "${BIN}/curl"
+# jq: the real one, with each argv logged (a key must not reach any argument list).
+REAL_JQ=$(command -v jq)
+cat > "${BIN}/jq" <<EOF
+#!/usr/bin/env bash
+printf 'jqargv %s\n' "\$*" >> "\${STUB_LOG:-/dev/null}"
+exec "${REAL_JQ}" "\$@"
+EOF
+chmod +x "${BIN}/kubectl" "${BIN}/curl" "${BIN}/jq"
 
 # check_says <name> <want rc: 0|fail> <ERE on the output> [env assignments...]
 check_says() {
@@ -145,6 +185,57 @@ check_says "eat-check defaults: 200 tokens, temperature 0" 0 'request max_tokens
 check_says "eat-check for a shared remote endpoint: sampled and short" 0 'request max_tokens=64 temperature=0.6$' \
     EAT_TEMPERATURE=0.6 EAT_MAX_TOKENS=64
 check_says "eat-check refuses a non-numeric temperature" fail 'EAT_TEMPERATURE must be a number' EAT_TEMPERATURE=hot
+check_says "eat mode: the master key from vault.yml authorizes the chat" 0 'auth v1/chat/completions sk-stub$'
+check_says "eat mode: the router token authorizes /execute" 0 'auth execute tok$'
+check_says "eat mode: no key on any curl argv" 0 'EAT check passed'
+if grep '^argv ' "${WORK}/log" | grep -Eq 'sk-stub|Bearer tok'; then
+    fail "eat mode: a key reached curl's argv: $(grep '^argv ' "${WORK}/log" | grep -E 'sk-stub|Bearer tok' | head -1)"
+else
+    ok "eat mode: no key in any curl argv"
+fi
+
+# 2b. EAT_MODE=eas: EAS's agent toolkit from `k3d-gpu eas up --agent-toolkit`.
+EAS_MODELS="hybrid-router,Qwen3Guard-Gen-0.6B,qwen2-5-coder-7b,bge-embed"
+check_says "eas mode passes on a working stack" 0 'EAT check passed \(eas\)' EAT_MODE=eas STUB_MODELS="${EAS_MODELS}"
+check_says "eas mode: eg-gateway's LoadBalancer IP with Host litellm.<default domain>" 0 \
+    'resolve litellm.solutions.ai:443:172.20.0.9' EAT_MODE=eas STUB_MODELS="${EAS_MODELS}"
+check_says "eas mode: the domain from EAT_EAS_DOMAIN" 0 'resolve litellm.example.org:443:172.20.0.9' \
+    EAT_MODE=eas EAT_EAS_DOMAIN=example.org STUB_MODELS="${EAS_MODELS}"
+check_says "eas mode: the virtual key is minted with the master key" 0 'auth key/generate sk-master-stub$' \
+    EAT_MODE=eas STUB_MODELS="${EAS_MODELS}"
+check_says "eas mode: chat goes with the virtual key, not the master key" 0 'auth v1/chat/completions sk-virtual-stub$' \
+    EAT_MODE=eas STUB_MODELS="${EAS_MODELS}"
+check_says "eas mode: the virtual key is deleted after" 0 'keydel \["sk-virtual-stub"\]' EAT_MODE=eas STUB_MODELS="${EAS_MODELS}"
+check_says "eas mode: the key alias is this run's" 0 'keygen alias=k3d-gpu-eas-check-[0-9]+-[0-9]+$' \
+    EAT_MODE=eas STUB_MODELS="${EAS_MODELS}"
+if grep -q '^auth v1/chat/completions sk-master-stub' "${WORK}/log"; then
+    fail "eas mode: a chat request carried the master key"
+else
+    ok "eas mode: no chat request carries the master key"
+fi
+if grep '^argv ' "${WORK}/log" | grep -Eq 'sk-master-stub|sk-virtual-stub|Bearer tok'; then
+    fail "eas mode: a key reached curl's argv"
+else
+    ok "eas mode: no key in any curl argv"
+fi
+if ! grep -q '^jqargv ' "${WORK}/log"; then
+    fail "eas mode: the jq argv log is empty (the jq wrapper did not run)"
+elif grep '^jqargv ' "${WORK}/log" | grep -Eq 'sk-master-stub|sk-virtual-stub|Bearer tok'; then
+    fail "eas mode: a key reached jq's argv: $(grep '^jqargv ' "${WORK}/log" | grep -Eo 'sk-(master|virtual)-stub' | sort -u | tr '\n' ' ')"
+else
+    ok "eas mode: no key in any jq argv"
+fi
+check_says "eas mode: the model is the first chat model the gateway lists" 0 '^model qwen2-5-coder-7b$' \
+    EAT_MODE=eas STUB_MODELS="${EAS_MODELS}"
+check_says "eas mode: EAT_MODEL wins" 0 '^model my-model$' EAT_MODE=eas STUB_MODELS="${EAS_MODELS}" EAT_MODEL=my-model
+check_says "eas mode: the sandbox step is unchanged" 0 '"stdout":"385\\n"' EAT_MODE=eas STUB_MODELS="${EAS_MODELS}"
+check_says "eas mode: a failed check still deletes the key" fail 'keydel \["sk-virtual-stub"\]' \
+    EAT_MODE=eas STUB_MODELS="${EAS_MODELS}" STUB_CODE='print(sum(range(1, 11)))'
+check_says "eas mode: no chat model listed stops the check" fail 'lists no chat model' EAT_MODE=eas STUB_MODELS="hybrid-router"
+check_says "eas mode: no LoadBalancer IP stops the check" fail 'no LoadBalancer IP' EAT_MODE=eas STUB_NO_LB=1
+check_says "eas mode: no key from /key/generate stops the check" fail 'without a key' EAT_MODE=eas STUB_NO_KEY=1
+check_says "eas mode refuses a domain with shell characters" fail 'must be a domain name' EAT_MODE=eas 'EAT_EAS_DOMAIN=x;id'
+check_says "an unknown EAT_MODE is refused" fail 'EAT_MODE must be eat or eas' EAT_MODE=other
 
 # 4. eat-remote.sh: a remote endpoint as a LiteLLM model. The key reaches the
 #    cluster only as the Secret on kubectl's stdin, the gateway gets it as a

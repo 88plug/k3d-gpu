@@ -166,6 +166,7 @@
       "name": "docker.io/library/ubuntu",
       "sources": [
         "Dockerfile",
+        "integrations/eas/bastion.Dockerfile",
         "integrations/eat/bastion.Dockerfile"
       ],
       "tag": "24.04"
@@ -421,6 +422,14 @@
       "tag": "v1.0.8"
     },
     {
+      "digest": "sha256:bbacb1409a2ec436ee8cecdfb50f626fe66eae35adbf2886df255cbf5a2b10df",
+      "name": "registry.k8s.io/agent-sandbox/python-runtime-sandbox",
+      "sources": [
+        "integrations/eas/images.yaml"
+      ],
+      "tag": "v0.5.0"
+    },
+    {
       "digest": "sha256:41da84809426098cb04cdafbb41855f15e3604f7455ef53816bad666e532e787",
       "name": "registry.k8s.io/agent-sandbox/python-runtime-sandbox",
       "sources": [
@@ -435,6 +444,14 @@
         "share/node-feature-discovery.yml"
       ],
       "tag": "v0.20.1"
+    },
+    {
+      "digest": "sha256:9cebf7d97f98c0ce008aec8524f23637e60b61485db18ad426897eefac156968",
+      "name": "us-central1-docker.pkg.dev/k8s-staging-images/agent-sandbox/sandbox-router",
+      "sources": [
+        "integrations/eas/images.yaml"
+      ],
+      "tag": "latest-main"
     },
     {
       "digest": "sha256:5d064465d751a73a729e7ecdc32c0ba5de0df1d305debb60a3d9a85b4fd3a967",

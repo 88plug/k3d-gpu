@@ -32,6 +32,9 @@ Sources of image references (the lock holds all of them and nothing else):
   - integrations/eat/          the Helm values overlays (*.yaml, *.yml: each repository:/tag:
                                pair) and the bastion's FROM (*.Dockerfile): the images
                                the EAT deploy path pulls
+  - integrations/eas/          the bastion's FROM (*.Dockerfile) and each `<name>_image:`
+                               extra var (*.yaml): the images `k3d-gpu eas` pins for the
+                               EAS installer
   - k3s's system images        k3s-images.txt of the Dockerfile's K3S_TAG release
                                (coredns, local-path-provisioner, metrics-server,
                                pause, ...): k3s itself starts them in the cluster
@@ -112,6 +115,9 @@ ARG_IMAGE_RE = re.compile(r'^ARG[ \t]+[A-Z][A-Z0-9_]*_IMAGE="?([^"\s$]+)"?[ \t]*
 # One `key: value` line of a Helm values mapping; group 4 is the inline value, unquoted.
 VALUES_KEY_RE = re.compile(r"""^([ \t]*)(repository|registry|tag):[ \t]*(["']?)([^\s"'#]*)\3[ \t]*(?:#.*)?$""")
 EAT_DIR = "integrations/eat"
+EAS_DIR = "integrations/eas"
+# An Ansible extra var naming an image: `agent_sandbox_router_image: "ref"`.
+VAR_IMAGE_RE = re.compile(r"""^[a-z][a-z0-9_]*_image:[ \t]*["']?([^"'\s#]+)""", re.M)
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "console"))
 from audit import parse_ref  # noqa: E402  (one image-reference parser for the lock and the audit)
@@ -215,6 +221,17 @@ def collect(root):
         if f.endswith((".yml", ".yaml")):
             with open(path, encoding="utf-8") as fh:
                 for _, ref, _ in values_refs(fh.read()):
+                    add(ref, source)
+        elif f.endswith(".Dockerfile"):
+            with open(path, encoding="utf-8") as fh:
+                for ref in dockerfile_froms(fh.read())[0]:
+                    add(ref, source)
+    eas = os.path.join(root, EAS_DIR)
+    for f in sorted(os.listdir(eas)) if os.path.isdir(eas) else []:
+        path, source = os.path.join(eas, f), EAS_DIR + "/" + f
+        if f.endswith((".yml", ".yaml")):
+            with open(path, encoding="utf-8") as fh:
+                for ref in VAR_IMAGE_RE.findall(fh.read()):
                     add(ref, source)
         elif f.endswith(".Dockerfile"):
             with open(path, encoding="utf-8") as fh:
@@ -559,7 +576,7 @@ def main(argv):
     if args.command == "pins":
         print("ok   every image reference is pinned by digest or allowed in %s" % ALLOW_FILE)
     else:
-        print("ok   images.lock matches share/, the Dockerfile, scripts/k3d-gpu, integrations/eat and k3s %s"
+        print("ok   images.lock matches share/, the Dockerfile, scripts/k3d-gpu, integrations/eat, integrations/eas and k3s %s"
               % collect(args.root)[1])
     return 0
 

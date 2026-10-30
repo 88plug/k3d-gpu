@@ -108,6 +108,20 @@ contents:
     dst: /usr/share/k3d-gpu/bench/competitors.lock
     file_info:
       mode: 0644
+  # k3d-gpu eas: integrations/eas, plus the patch drafts its overlay applies and the
+  # end-state check it runs, in the repo's integrations/ layout: overlay.py finds its
+  # patches relative to the dir above integrations/.
+  - src: integrations/eas/
+    dst: /usr/share/k3d-gpu/integrations/eas
+    type: tree
+  - src: integrations/eat/upstream/patches/*.patch
+    dst: /usr/share/k3d-gpu/integrations/eat/upstream/patches/
+    file_info:
+      mode: 0644
+  - src: integrations/eat/eat-check.sh
+    dst: /usr/share/k3d-gpu/integrations/eat/eat-check.sh
+    file_info:
+      mode: 0755
   - src: README.md
     dst: /usr/share/doc/k3d-gpu/README.md
     file_info:
@@ -159,6 +173,26 @@ contents:
     file_info:
       mode: 0755
   - dst: /usr/share/k3d-gpu/console
+    type: dir
+    packager: rpm
+    file_info:
+      mode: 0755
+  - dst: /usr/share/k3d-gpu/integrations
+    type: dir
+    packager: rpm
+    file_info:
+      mode: 0755
+  - dst: /usr/share/k3d-gpu/integrations/eat
+    type: dir
+    packager: rpm
+    file_info:
+      mode: 0755
+  - dst: /usr/share/k3d-gpu/integrations/eat/upstream
+    type: dir
+    packager: rpm
+    file_info:
+      mode: 0755
+  - dst: /usr/share/k3d-gpu/integrations/eat/upstream/patches
     type: dir
     packager: rpm
     file_info:
