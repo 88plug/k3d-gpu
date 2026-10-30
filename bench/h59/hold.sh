@@ -3,12 +3,15 @@
 # amendment R1") on HOST = crescent (H59, Xeon 6741P), desktop (H59d, i9-13900T) or wildct (H59w,
 # i7-13700, run as bench/wildct/hold.sh's command: bench/wildct/row.sh h59w). HOLD: 1-3 perf in
 # the orders (O, L), (L, O), (O, L); 4 quality in (L, O); a spare 5 or 6 repeats hold REPEATS
-# (one that ran and left an arm not measured) in its order; smoke runs hold 1's arms with no
-# scored request (discarded, disclosed). Each hold runs once: a failed hold counts.
+# in its order, when the record standing for it (the hold, or spare 5's repeat of it) left an
+# arm not measured; spare 6 runs only after spare 5. Smoke runs hold 1's arms with no scored
+# request (discarded, disclosed). Each hold runs once: a hold that started (its `started` file,
+# written once the floors pass) counts, failed or interrupted.
 #
-# Before the lock it refuses (exit 2) a host whose CPU is not the profile's, a node image not
-# pinned by digest or not the one the row's first hold ran, a ${G}/bin/k3d that is not
-# bench/h59/k3d-shim.sh, and models prep.sh has not left in ${G}/models. Then the host's own rules
+# Before the lock it refuses (exit 2) a host whose CPU class is not the profile's (the model
+# number the optimizer matches, exactly: run.py cpu), a node image not pinned by digest or not
+# the one the row's first hold ran, a ${G}/bin/k3d that is not bench/h59/k3d-shim.sh, and models
+# prep.sh has not left in ${G}/models. Then the host's own rules
 # (run.py profile): its lock (flock -w 21600; crescent ~/k3dgpu-bench.lock, else LOCK); the
 # hold-start rule (load1 <= load1_max, and on crescent no aiperf process; 2-min polls, at most 60
 # min, then the hold runs flagged); the floors (crescent: / at most 97% used; desktop and wildct:
@@ -34,17 +37,18 @@ G=${G/#\~/${HOME}}
 order=$(python3 "${RUN}" hold "${HOLD}" ${REPEATS:+"${REPEATS}"}) || exit 2
 read -r MODE ARMS_RUN <<< "${order}"
 read -r -a ARMS_RUN <<< "${ARMS_RUN}"
-grep -m1 '^model name' "${H59_CPUINFO:-/proc/cpuinfo}" | grep -qF -- "${CPU}" \
-    || { echo "hold.sh: this host's CPU is not the ${CPU} that ${ROW} registers" >&2; exit 2; }
+got=$(python3 "${RUN}" cpu "${HOST}" "${H59_CPUINFO:-/proc/cpuinfo}") \
+    || { echo "hold.sh: this host's CPU class is ${got:-unknown}, not the ${CPU} that ${ROW} registers" >&2; exit 2; }
 [[ "${H59_IMAGE:-}" =~ ^[^@]+:[^@]+@sha256:[0-9a-f]{64}$ ]] \
     || { echo "hold.sh: set H59_IMAGE to the k3d-gpu node image as name:tag@sha256:<digest>" >&2; exit 2; }
 cmp -s "${HERE}/k3d-shim.sh" "${G}/bin/k3d" || { echo "hold.sh: ${G}/bin/k3d is not bench/h59/k3d-shim.sh (install it first)" >&2; exit 2; }
 python3 "${RUN}" models "${G}" >&2 || { echo "hold.sh: run bench/h59/prep.sh ${HOST} first" >&2; exit 2; }
 RES=${G}/results/${ROW}
 case ${HOLD} in smoke) R=${G}/smoke/${ROW}-$(date -u +%Y%m%dT%H%M%SZ) ;; *) R=${RES}/hold${HOLD} ;; esac
-[ ! -e "${R}/rc" ] || { echo "hold.sh: hold ${HOLD} has run (${R}/rc); a failed hold counts, a spare repeats it" >&2; exit 2; }
+[ ! -e "${R}/rc" ] && [ ! -e "${R}/started" ] \
+    || { echo "hold.sh: hold ${HOLD} has run (${R}); a failed hold counts, interrupted or not, and a spare repeats it" >&2; exit 2; }
 if [ -n "${REPEATS}" ]; then
-    why=$(python3 "${RUN}" spare-ok "${RES}" "${REPEATS}") || { echo "hold.sh: spare ${HOLD} cannot repeat hold ${REPEATS}: ${why}" >&2; exit 2; }
+    why=$(python3 "${RUN}" spare-ok "${RES}" "${REPEATS}" "${HOLD}") || { echo "hold.sh: spare ${HOLD} cannot repeat hold ${REPEATS}: ${why}" >&2; exit 2; }
 fi
 if [ "${HOLD}" != smoke ] && [ -f "${RES}/node-image" ] && [ "$(cat "${RES}/node-image")" != "${H59_IMAGE}" ]; then
     echo "hold.sh: ${ROW}'s holds run node image $(cat "${RES}/node-image"), not ${H59_IMAGE}" >&2
@@ -89,6 +93,8 @@ if [ "${MEMMIN}" -gt 0 ] && [ "$(memavail_gib)" -lt "${MEMMIN}" ]; then
     log "MemAvailable $(memavail_gib) GiB (< ${MEMMIN}): no hold"; echo "memavail $(memavail_gib) GiB" > "${R}/no-hold"; exit 5
 fi
 [ "${HOLD}" = smoke ] || [ -f "${RES}/node-image" ] || echo "${H59_IMAGE}" > "${RES}/node-image"
+# From here the hold counts, also if it is interrupted before it records its rc.
+date -u +%FT%TZ > "${R}/started"
 # A spare names the hold it stands in for only once it runs (h59.py reads `repeats`).
 [ -z "${REPEATS}" ] || echo "${REPEATS}" > "${R}/repeats"
 left=$(mine)

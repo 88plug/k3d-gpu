@@ -7,7 +7,11 @@ runner (hold.sh, hold-run.sh, arm.sh, prep.sh).
   run.py hold HOLD [REPEATS]          "MODE ARM ARM" of a registered hold: 1-3 perf, 4 quality,
                                       the spares 5 and 6 repeating hold REPEATS in its order,
                                       smoke as hold 1
-  run.py spare-ok RESULTS K           exit 0 when hold K ran and one of its arms was not measured
+  run.py spare-ok RESULTS K [SPARE]   exit 0 when hold K ran and the record standing for it (hold K,
+                                      or spare 5 once it repeated K) has an arm not measured; spare 6
+                                      only after spare 5
+  run.py cpu HOST CPUINFO             exit 0 when the CPU class (the model number the optimizer
+                                      matches a ledger row by) is the profile's, exactly
   run.py models G                     exit 0 when prep.sh left every file the arms read in G/models
   run.py render ARM OUTDIR            `k3d-gpu agent manifest --model` for the arm in the hold's
                                       cluster (REPO, CLUSTER, KUBECONFIG, H59_PROFILE, G from the
@@ -137,16 +141,47 @@ def hold(n, repeats=None):
                      "(1-3 perf, 4 quality, a spare 5 or 6 names the hold it repeats)")
 
 
-def spare_ok(results, k):
-    """A spare repeats hold k only when hold k ran (its rc is recorded) and one of its arms was
-    not measured."""
-    d = os.path.join(results, f"hold{k}")
-    if not os.path.exists(os.path.join(d, "rc")):
-        return False, f"hold {k} has not run"
+def ran(d):
+    """A hold ran once it started (hold.sh writes `started` when the floors pass, before anything
+    runs) or recorded its rc."""
+    return any(os.path.exists(os.path.join(d, f)) for f in ("started", "rc"))
+
+
+def spare_ok(results, k, spare=None):
+    """A spare repeats hold k only when hold k ran and the record that stands for hold k now
+    (hold k, or spare 5 once it repeated hold k: h59.hold_dirs) has an arm not measured. Spare 6
+    runs only after spare 5: h59.py reads spare 6 over spare 5 for the same hold, so the later
+    spare is the one it scores."""
     mode, arms = hold(str(k))
-    if all(h59.status(os.path.join(d, a)) == "measured" for a in arms):
-        return False, f"every arm of hold {k} was measured"
-    return True, f"hold {k} has an arm not measured"
+    d = os.path.join(results, f"hold{k}")
+    if not ran(d):
+        return False, f"hold {k} has not run"
+    if str(spare) == str(SPARES[1]) and not ran(os.path.join(results, f"hold{SPARES[0]}")):
+        return False, f"spare {SPARES[1]} runs only after spare {SPARES[0]}"
+    cur = h59.hold_dirs(results)[int(k)]
+    where = f"hold {k}" if cur == d else f"spare {os.path.basename(cur)[4:]}, which repeated hold {k},"
+    if all(h59.status(os.path.join(cur, a)) == "measured" for a in arms):
+        return False, f"every arm of {where} was measured"
+    return True, f"{where} has an arm not measured"
+
+
+def _model_opt():
+    spec = importlib.util.spec_from_file_location("model_opt", os.path.join(REPO, "console", "model_opt.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def cpu_class(cpuinfo):
+    """The CPU class the optimizer matches a ledger row by: console/model_opt.py class_tokens of
+    the first `model name` line, as `k3d-gpu` reads it ("6741P", "i9-13900T", "i7-13700")."""
+    name = ""
+    with open(cpuinfo) as f:
+        for line in f:
+            if line.startswith("model name"):
+                name = line.partition(":")[2].strip()
+                break
+    return " ".join(_model_opt().class_tokens(f"cpu:{name}")) if name else ""
 
 
 def models_ready(g):
@@ -526,9 +561,13 @@ def main(argv):
         mode, arms = hold(a[0], a[1] if len(a) > 1 else None)
         print(mode, *arms)
     elif cmd == "spare-ok":
-        ok, why = spare_ok(a[0], a[1])
+        ok, why = spare_ok(a[0], a[1], a[2] if len(a) > 2 else None)
         print(why)
         return 0 if ok else 1
+    elif cmd == "cpu":
+        got = cpu_class(a[1])
+        print(got)
+        return 0 if got.lower() == profile(a[0])["cpu"].lower() else 1
     elif cmd == "models":
         missing = models_ready(os.path.expanduser(a[0]))
         for m in missing:

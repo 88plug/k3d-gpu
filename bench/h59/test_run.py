@@ -297,7 +297,7 @@ class Tables(unittest.TestCase):
         self.assertIn("/g/models:/models", a)
         self.assertEqual(a[-8:], ["/scripts/convert.sh"] + spec["args"])
         with self.assertRaises(SystemExit):
-            run.docker_argv(dict(spec, image="ghcr.io/ggml-org/llama.cpp:full-b11749"), "/m", "/s")
+            run.docker_argv(dict(spec, image=run.LLAMA_FULL_IMAGE.split("@")[0].replace("b11960", "b11749")), "/m", "/s")
 
 
 class Render(unittest.TestCase):
@@ -407,7 +407,7 @@ class Render(unittest.TestCase):
             return t["spec"]["containers"][0]
         self.assertEqual(run.check("O", "desktop", base["O"]), [])
         self.assertEqual(run.check("L", "desktop", base["L"]), [])
-        self.assertTrue(bad("L", lambda t: c(t).update(image="ghcr.io/ggml-org/llama.cpp:server-b11749")))
+        self.assertTrue(bad("L", lambda t: c(t).update(image=run.LLAMA_CPU_IMAGE.split("@")[0].replace("b11960", "b11749"))))
         self.assertTrue(bad("L", lambda t: c(t)["args"].remove("--spec-type")))
         self.assertTrue(bad("L", lambda t: c(t)["args"].extend(["--model-url", "https://x"])))
         self.assertTrue(bad("L", lambda t: c(t)["args"].__setitem__(c(t)["args"].index("--threads") + 1, "16")))
@@ -568,6 +568,7 @@ class EndToEnd(unittest.TestCase):
                                  ["idle", "n1", "n4", "ttft", "prefix"])
             q = jl(os.path.join(res, "hold4", "O", "quality.json"))
             self.assertEqual((q["n"], q["errors"]), (50, 0))
+            self.registered_requests(res, srv.bodies)
             rep = h59.score(res, "h57d")
             self.assertEqual(rep["verdict"], "SUPPORTED", json.dumps({k: v for k, v in rep.items() if k != "arms"}))
             self.assertEqual([rep["arms"][a]["n4_requests"] for a in ("L", "O")], [48, 48])
@@ -582,6 +583,37 @@ class EndToEnd(unittest.TestCase):
             srv.shutdown()
             srv.server_close()
             box.close()
+
+    def registered_requests(self, res, bodies):
+        """The requests as registered (H59 pre-registration, Measurement 1-3), per arm: in each
+        performance hold 3 warmup, 8 N=1 and 16 N=4 requests streamed at max_tokens 256 with
+        ignore_eos and temperature 0, 4 TTFT requests on H54's prompt at max_tokens 16, 6 prefix
+        agents at max_tokens 8; GSM8K items 0-49 at max_tokens 1024, temperature 0, thinking off.
+        Every load prompt is unique; each arm's boot limit is 900 s."""
+        ttft = rd(os.path.join(ROOT, "bench", "h54", "ttft-prompt.txt")).rstrip("\n")
+        for k in (1, 2, 3):
+            for arm in ("L", "O"):
+                ad = os.path.join(res, f"hold{k}", arm)
+                for ph, n, c in (("warmup", 3, 1), ("n1", 8, 1), ("n4", 16, 4), ("ttft", 4, 1)):
+                    rec = jl(os.path.join(ad, f"load-{ph}.json"))["phases"][0]
+                    self.assertEqual((rec["concurrency"], len(rec["samples"])), (c, n), f"hold {k} {arm} {ph}")
+                self.assertEqual(jl(os.path.join(ad, "boot.json"))["limit_s"], 900)
+        for api, arm in (("v1", "L"), ("v3", "O")):
+            b = [x for p, x in bodies if p.split("/")[1] == api]
+            load = [x for x in b if x.get("stream") and "tools" not in x]
+            gen = [x for x in load if x["max_tokens"] == 256]
+            tt = [x for x in load if x["max_tokens"] == 16]
+            self.assertEqual((len(gen), len(tt), len(load)), (3 * 27, 3 * 4, 3 * 31), arm)
+            self.assertTrue(all(x.get("ignore_eos") is True and x["temperature"] == 0 for x in gen), arm)
+            self.assertTrue(all(x["temperature"] == 0 and x["messages"][0]["content"].endswith(ttft) for x in tt), arm)
+            prompts = [x["messages"][0]["content"] for x in load]
+            self.assertEqual(len(set(prompts)), len(prompts), arm)
+            pre = [x for x in b if "tools" in x]
+            self.assertEqual((len(pre), {x["max_tokens"] for x in pre}), (3 * 6, {8}), arm)
+            gsm = [x for x in b if not x.get("stream") and x.get("max_tokens") == 1024]
+            self.assertEqual(len(gsm), 50, arm)
+            self.assertTrue(all(x["temperature"] == 0 and x["chat_template_kwargs"] == {"enable_thinking": False}
+                                for x in gsm), arm)
 
     def test_crescent_n16_and_the_void_rerun(self):
         box = Box("crescent", cluster="k3dgpu-g-h59-1")
@@ -672,12 +704,25 @@ class HoldGuards(unittest.TestCase):
         self.assertEqual(r.returncode, 2)
         self.assertIn("not the i7-13700", r.stderr)
 
+    def test_cpu_class_is_the_exact_model_number(self):
+        # The optimizer matches a row's CPU class as an exact token (console/model_opt.py
+        # class_tokens), so a sibling SKU whose name only contains the row's number is another class.
+        for name, host, ok in (("13th Gen Intel(R) Core(TM) i7-13700K", "wildct", False),
+                               ("13th Gen Intel(R) Core(TM) i7-13700", "wildct", True),
+                               ("13th Gen Intel(R) Core(TM) i9-13900TE", "desktop", False),
+                               ("13th Gen Intel(R) Core(TM) i9-13900T", "desktop", True),
+                               ("Intel(R) Xeon(R) 6741P", "crescent", True),
+                               ("Intel(R) Xeon(R) 6741P-B", "crescent", False)):
+            put(os.path.join(self.d, "cpuinfo"), f"processor\t: 0\nmodel name\t: {name}\n")
+            r = self.hold(host, "1")
+            self.assertEqual(r.returncode, 4 if ok else 2, (name, r.stderr))
+
     def test_unregistered_holds(self):
         for args in (("desktop", "7"), ("desktop", "5"), ("desktop", "01"), ("desktop", "1", "2"), ("nowhere", "1")):
             self.assertEqual(self.hold(*args).returncode, 2, args)
 
     def test_image_pinned_by_digest(self):
-        self.assertEqual(self.hold("desktop", "1", H59_IMAGE="cryptoandcoffee/k3d-gpu:0.1.80").returncode, 2)
+        self.assertEqual(self.hold("desktop", "1", H59_IMAGE=NODE_IMAGE.split("@")[0]).returncode, 2)
 
     def test_shim_and_models(self):
         os.remove(os.path.join(self.g, "bin", "k3d"))
@@ -701,6 +746,32 @@ class HoldGuards(unittest.TestCase):
         self.ran(3, {"O": "measured", "L": "not_deliverable"})
         self.assertEqual(self.hold("desktop", "5", "3").returncode, 4)          # passes to the lock
         self.assertFalse(os.path.exists(os.path.join(self.res, "hold5", "repeats")))
+
+    def test_spare_six_follows_spare_five_and_reads_its_record(self):
+        # h59.py reads spare 6 over spare 5 for the same hold, so spare 6 runs only after spare 5,
+        # and a spare repeats a hold only while the record standing for it has an arm not measured.
+        self.ran(1, {"O": "measured", "L": "failed"})
+        self.assertEqual(self.hold("desktop", "6", "1").returncode, 2)          # spare 5 has not run
+        self.ran(5, {"O": "measured", "L": "measured"})
+        put(os.path.join(self.res, "hold5", "repeats"), "1\n")
+        r = self.hold("desktop", "6", "1")
+        self.assertEqual(r.returncode, 2, r.stderr)                              # spare 5 measured hold 1
+        self.assertIn("spare 5", r.stderr)
+        self.ran(5, {"O": "measured", "L": "failed"})
+        self.assertEqual(self.hold("desktop", "6", "1").returncode, 4)          # spare 5 failed too
+        self.ran(2, {"O": "not_deliverable", "L": "measured"})
+        self.assertEqual(self.hold("desktop", "6", "2").returncode, 4)          # spare 5 repeated hold 1
+
+    def test_an_interrupted_hold_counts(self):
+        # A hold killed after it started records no rc; it still ran, so it is not run again and a
+        # spare may repeat it.
+        hd = os.path.join(self.res, "hold3")
+        put(os.path.join(hd, "started"), "2026-10-29T00:00:00Z\n")
+        put(os.path.join(hd, "O", "status.json"), json.dumps({"status": "measured"}))
+        r = self.hold("desktop", "3")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("interrupted or not", r.stderr)
+        self.assertEqual(self.hold("desktop", "5", "3").returncode, 4)
 
     def test_node_image_is_the_rows(self):
         put(os.path.join(self.res, "node-image"), "cryptoandcoffee/k3d-gpu:0.1.79@sha256:" + "b" * 64 + "\n")

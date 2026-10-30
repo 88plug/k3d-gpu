@@ -12799,8 +12799,9 @@ Tests: `bench/h59/test_run.py` and the `h59w` rows of `tests/wildct_hold_test.sh
 render both arms through the real `k3d-gpu agent manifest` against the fit fixtures, with a
 kubectl stand-in that answers only for the hold's own context. They run `arm.sh` against a local
 OpenAI-compatible server and score its records with `h59.py`. Four holds of a desktop row feed
-the bootstrap-ratio scorer end to end. A crescent arm runs its N=16 phase and re-runs a void N=4
-phase.
+the bootstrap-ratio scorer end to end, and the server's request log is checked against the
+registered counts and settings (warmup, N=1, N=4, TTFT, prefix, GSM8K, the 900 s boot limit). A
+crescent arm runs its N=16 phase and re-runs a void N=4 phase.
 
 **Arms as rendered.** Each arm is `scripts/k3d-gpu agent manifest --model <id>` at the runner's
 commit, run in the hold's cluster. O is `--model google/gemma-4-26B-A4B-it`. L is `--model
@@ -12856,7 +12857,7 @@ none is dropped.
   `--spec-type` :4330. `draft-mtp` is a type in `common/speculative.cpp` :78.
 - Defaults L relies on: the prompt cache is on (`common/common.h` :639, `cache_prompt = true`),
   and the draft length is 3 (:331).
-- OVMS `v2026.4.1`, `src/cli_parser.cpp`: `--task` :62, `--rest_port` :93, `--log_level` :117,
+- OVMS `v2026.4.1`, `src/cli_parser.cpp`: `--task` :324, `--rest_port` :93, `--log_level` :117,
   `--cache_dir` :152, `--pull` :236, `--source_model` :240, `--model_repository_path` :256,
   `--model_name` :270, `--model_path` :274 and `--target_device` :314.
 - OVMS `src/graph_export/graph_cli_parser.cpp`: `--max_num_seqs` :44, `--enable_prefix_caching`
@@ -12906,12 +12907,17 @@ writes `graph.pbtxt`. Weights are never copied into the node.
 
 - Holds 1-3 are performance holds in the orders (O, L), (L, O), (O, L). Hold 4 is the quality
   hold, in (L, O).
-- A spare 5 or 6 repeats hold REPEATS in its order. It may only repeat a hold that ran and left
-  an arm not measured. It writes the file `repeats`, which `h59.py` reads, only once it runs.
-- A hold runs once. A hold that recorded its `rc` is refused, so a failed hold counts and only a
-  spare repeats it. There is no hold number above 6.
-- Before the lock, `hold.sh` refuses a host whose CPU model is not the row's, a node image not
-  pinned by digest, a `${G}/bin/k3d` that is not the shim, and missing model files.
+- A spare 5 or 6 repeats hold REPEATS in its order. It may only repeat a hold that ran and whose
+  standing record (the hold, or spare 5 once spare 5 repeated it) left an arm not measured.
+  Spare 6 runs only after spare 5, since `h59.py` reads spare 6 over spare 5 for the same hold.
+  A spare writes the file `repeats`, which `h59.py` reads, only once it runs.
+- A hold runs once. Once the floors pass, `hold.sh` writes the hold's `started` file, before
+  anything runs. A hold with a `started` file or an `rc` is refused, so a failed or interrupted
+  hold counts and only a spare repeats it. There is no hold number above 6.
+- Before the lock, `hold.sh` refuses a host whose CPU class is not the row's, a node image not
+  pinned by digest, a `${G}/bin/k3d` that is not the shim, and missing model files. The CPU
+  class is the model number the optimizer matches a row by (`console/model_opt.py`
+  `class_tokens` of the first `model name`), compared exactly: an i7-13700K is not an i7-13700.
 - The node image (`H59_IMAGE`) is the k3d-gpu release whose launcher is this commit's or later,
   by digest. The row's first hold records it, and later holds must run the same image.
 - A wiring smoke (`hold.sh HOST smoke`) runs hold 1's arms with one 16-token request and one
