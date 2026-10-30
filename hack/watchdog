@@ -34,9 +34,17 @@ issue per finding:
                           last 14 days with gaps as information. Other release:*
                           alarms close as superseded. Skipped while a release
                           workflow is queued or running.
-  e. stuck bot PRs        Open autobump/* PRs older than 72 h whose head SHA has no
-                          successful ci.yml run: bot-pr-stuck.
+  e. stuck bot PRs        Open autobump/* PRs from this repository (not a fork's)
+                          older than 72 h whose head SHA has no successful ci.yml
+                          run: bot-pr-stuck.
   f. simulate_red         SIMULATE_RED=true opens simulate; a run without it closes it.
+
+A re-dispatch (a and d) is recorded in its alarm before it runs, and the record is
+what stops the next one. A run that cannot read or file the alarm (issues
+disabled, the open alarms could not be listed, the alarm write failed) therefore
+dispatches nothing; a dispatch that fails is not recorded, and the next run tries
+again. Recording after dispatching let every watchdog run that could not file
+alarms re-dispatch the red workflows, watchdog.yml among them, without end.
 
 A failed gh, git, registry or AUR call is collected and filed as watchdog-error
 with its text (the other checks still run); a run with no error closes it. Exit 0
@@ -260,12 +268,15 @@ class Alarms:
         finally:
             os.unlink(f.name)
         if p.returncode == 3:
-            self.undelivered.append(key)
-            return
+            if key not in self.undelivered:
+                self.undelivered.append(key)
+            return False
         if p.returncode != 0:
             raise ToolError("ci_alarm open %s: exit %d: %s" % (key, p.returncode, p.stderr.strip()[-400:]))
         print("::warning title=ci-alarm %s::%s" % (key, title))
-        self.opened.append((key, title))
+        if (key, title) not in self.opened:
+            self.opened.append((key, title))
+        return True
 
     def clear(self, key, comment):
         if self.disabled or (self.open is not None and key not in self.open):
@@ -301,6 +312,37 @@ class Watchdog:
         except Exception:  # a bug in a check must not silence the others
             self.errors.append("%s: %s" % (name, traceback.format_exc(limit=3).strip()))
         return None
+
+    # ── one dispatch per token ───────────────────────────────────────────
+
+    def raise_dispatching(self, key, title, body, token, argv, done_text):
+        """Raise alarm KEY and run `gh ARGV` once per TOKEN. The record of the
+        dispatch (<!-- watchdog:dispatched=TOKEN -->) is written into the alarm
+        before the dispatch runs, so a run that cannot read or write the alarm
+        dispatches nothing:
+          - issues disabled: the alarm is annotated only, nothing is dispatched;
+          - the open alarms could not be listed: the alarm is left as it is (its
+            record stays), nothing is dispatched; watchdog-error says why;
+          - the alarm write fails: nothing is dispatched (the error is collected);
+          - the dispatch fails: the alarm is rewritten without the record and
+            says so, and the next run tries again."""
+        claimed = "\n".join(body + ["", done_text, "<!-- watchdog:dispatched=%s -->" % token])
+        if self.alarms.disabled:
+            self.alarms.raise_(key, title, "\n".join(body))
+            return
+        if self.alarms.open is None:
+            return
+        if marker(self.alarms.body(key), "dispatched") == token:
+            self.alarms.raise_(key, title, claimed)
+            return
+        if not self.alarms.raise_(key, title, claimed):
+            return
+        try:
+            self.gh.run(*argv)
+            print("dispatched: gh %s" % " ".join(argv))
+        except ToolError as e:
+            self.errors.append("dispatching for %s: %s" % (key, e))
+            self.alarms.raise_(key, title, "\n".join(body + ["", "Re-dispatch failed: %s" % e]))
 
     # ── failed-run description ───────────────────────────────────────────
 
@@ -384,21 +426,13 @@ class Watchdog:
             return
         rid = str(latest["databaseId"])
         body = ["The latest scheduled run of `%s` failed." % f, ""] + self.describe_failed_run(latest)
-        done = marker(self.alarms.body(key), "dispatched")
-        if wf["dispatch"]:
-            if done != rid:
-                try:
-                    self.gh.run("workflow", "run", f, "-R", self.repo, "--ref", "main")
-                    done = rid
-                    print("re-dispatched %s on main after run %s" % (f, rid))
-                except ToolError as e:
-                    self.errors.append("re-dispatching %s: %s" % (f, e))
-                    body.append("\nRe-dispatch failed: %s" % e)
-            if done == rid:
-                body += ["", "Re-dispatched `%s` on main once after this run; a further re-dispatch "
-                             "happens only after a new failed scheduled run." % f,
-                         "<!-- watchdog:dispatched=%s -->" % rid]
-        self.alarms.raise_(key, "scheduled run %s" % latest["conclusion"], "\n".join(body))
+        title = "scheduled run %s" % latest["conclusion"]
+        if not wf["dispatch"]:
+            self.alarms.raise_(key, title, "\n".join(body))
+            return
+        self.raise_dispatching(key, title, body, rid, ("workflow", "run", f, "-R", self.repo, "--ref", "main"),
+                               "Re-dispatched `%s` on main once after this run; a further re-dispatch "
+                               "happens only after a new failed scheduled run." % f)
 
     # ── c ────────────────────────────────────────────────────────────────
 
@@ -523,22 +557,7 @@ class Watchdog:
             self.alarms.clear(key, "Release %s is complete: images, packages and AUR." % ver)
             return
         body = ["Release %s (tag aur-v%s) is incomplete:" % (ver, ver), ""] + ["- " + g for g in gaps]
-        done = marker(self.alarms.body(key), "dispatched")
-        if hub_missing:
-            if done != ver:
-                try:
-                    self.gh.run("workflow", "run", "build-and-push.yml", "-R", self.repo, "--ref", "main",
-                                "-f", "release=" + ver)
-                    done = ver
-                    print("dispatched build-and-push.yml release=%s (no Docker Hub image)" % ver)
-                except ToolError as e:
-                    self.errors.append("re-dispatching release %s: %s" % (ver, e))
-                    body += ["", "Re-dispatch failed: %s" % e]
-            if done == ver:
-                body += ["", "Dispatched `build-and-push.yml -f release=%s` once; it builds the image from the tag "
-                             "and then dispatches the AUR and package releases. It is not dispatched again." % ver,
-                         "<!-- watchdog:dispatched=%s -->" % ver]
-        elif any(g.startswith(("Docker Hub", "GHCR")) for g in gaps):
+        if not hub_missing and any(g.startswith(("Docker Hub", "GHCR")) for g in gaps):
             body += ["", "Docker Hub has %s:%s, so a release build would stop at its overwrite guard; "
                          "push the GHCR tag by hand or cut a new release." % (HUB_REPO, ver)]
         info = []
@@ -554,16 +573,27 @@ class Watchdog:
         if info:
             body += ["", "Older releases from the last 14 days with gaps (information only; a newer release "
                          "supersedes them):", ""] + info
-        self.alarms.raise_(key, "release %s is incomplete" % ver, "\n".join(body))
+        title = "release %s is incomplete" % ver
+        if not hub_missing:
+            self.alarms.raise_(key, title, "\n".join(body))
+            return
+        self.raise_dispatching(key, title, body, ver,
+                               ("workflow", "run", "build-and-push.yml", "-R", self.repo, "--ref", "main",
+                                "-f", "release=" + ver),
+                               "Dispatched `build-and-push.yml -f release=%s` once; it builds the image from the "
+                               "tag and then dispatches the AUR and package releases. It is not dispatched again."
+                               % ver)
 
     # ── e + f ────────────────────────────────────────────────────────────
 
     def check_bot_prs(self):
         prs = self.gh.json("pr", "list", "-R", self.repo, "--state", "open", "--limit", "100",
-                           "--json", "number,headRefName,headRefOid,createdAt,url,title") or []
+                           "--json", "number,headRefName,headRefOid,createdAt,url,title,isCrossRepository") or []
         stuck = []
         for pr in sorted(prs, key=lambda p: p["number"]):
-            if not pr["headRefName"].startswith("autobump/") or self.now - ts(pr["createdAt"]) <= 72 * HOUR:
+            # A fork can name its branch autobump/* too; only this repository's branches are bot PRs.
+            if (pr.get("isCrossRepository") or not pr["headRefName"].startswith("autobump/")
+                    or self.now - ts(pr["createdAt"]) <= 72 * HOUR):
                 continue
             runs = self.gh.json("run", "list", "-R", self.repo, "--workflow", "ci.yml", "--commit", pr["headRefOid"],
                                 "--limit", "20", "--json", "databaseId,event,status,conclusion") or []

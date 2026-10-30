@@ -9,7 +9,9 @@ name: Watchdog
 # the `simulate` alarm; the next run without it closes it.
 #
 # It reads main, never the triggering run's code. workflow_run passes only runs on
-# main (branches: and the job's if:); the hourly cron covers a missed event.
+# this repository's main: branches: matches the triggering run's head branch name,
+# which a fork's pull request can also call main, so the job's if: also requires
+# the run to come from this repository. The hourly cron covers a missed event.
 
 on:
   schedule:
@@ -44,7 +46,10 @@ concurrency:
 jobs:
   watchdog:
     name: Watchdog
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.head_branch == 'main'
+    if: >-
+      github.event_name != 'workflow_run'
+      || (github.event.workflow_run.head_branch == 'main'
+          && github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

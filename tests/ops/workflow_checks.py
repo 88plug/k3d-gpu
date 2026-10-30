@@ -13,6 +13,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 
 import yaml
 
@@ -46,6 +47,31 @@ say(guard and "sort -V" in guard[0].get("run", "") and "rpc/v5/info" in guard[0]
     and pub and pub[0].get("if") == "steps.aur.outputs.skip != 'true'"
     and ad.index(guard[0]) < ad.index(pub[0]),
     "aur-deploy.yml never moves AUR back to an older version")
+
+
+def aur_guard(answer, ver):
+    """Run the guard step as Actions does (bash -eo pipefail) against a fake curl:
+    answer is the AUR version (a JSON reply) or None (curl fails). Returns
+    (exit code, GITHUB_OUTPUT text)."""
+    with tempfile.TemporaryDirectory() as d:
+        reply = '{"resultcount":1,"results":[{"Version":"%s"}]}' % answer if answer else ""
+        with open(os.path.join(d, "curl"), "w") as f:
+            f.write("#!/bin/sh\n" + ("printf '%%s\\n' '%s'\n" % reply if answer else "exit 22\n"))
+        os.chmod(os.path.join(d, "curl"), 0o755)
+        out = os.path.join(d, "out")
+        open(out, "w").close()
+        env = dict(os.environ, PATH=d + os.pathsep + os.environ["PATH"], VER=ver, GITHUB_OUTPUT=out)
+        p = subprocess.run(["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", guard[0]["run"]],
+                           env=env, capture_output=True, text=True)
+        return p.returncode, open(out).read()
+
+
+if guard:
+    got = {k: aur_guard(a, "0.1.80") for k, a in
+           (("newer", "0.1.81-1"), ("same", "0.1.80-1"), ("older", "0.1.79-1"), ("unreadable", None))}
+    say(got["newer"] == (0, "skip=true\n") and got["same"] == (0, "") and got["older"] == (0, "")
+        and got["unreadable"] == (0, ""),
+        "aur-deploy.yml AUR guard: skips only for a newer AUR version; an unreadable RPC deploys", got)
 
 # No cron fires at minute 0 or 30.
 scheduled = {}
@@ -83,6 +109,10 @@ say(perms.get("issues") == "write" and perms.get("actions") == "write" and perms
     and on(wd).get("schedule") == [{"cron": "47 * * * *"}]
     and ((on(wd).get("workflow_dispatch") or {}).get("inputs") or {}).get("simulate_red", {}).get("type") == "boolean",
     "watchdog.yml: hourly at :47, simulate_red, issues+actions write, one queue, workflow_run on main only")
+# workflow_run's branches: filter matches a fork's branch named main too (a fork PR
+# from <fork>:main), so the job also requires the run to come from this repository.
+say("github.event.workflow_run.head_repository.full_name == github.repository" in str(job.get("if", "")),
+    "watchdog.yml: a workflow_run from a fork's main does not start the watchdog", job.get("if"))
 co = [s for s in job.get("steps", []) if str(s.get("uses", "")).startswith("actions/checkout@")]
 say(co and co[0].get("with", {}).get("ref") == "main" and co[0]["with"].get("fetch-depth") == 0
     and any(str(s.get("run", "")).strip() == "hack/watchdog" for s in job.get("steps", [])),

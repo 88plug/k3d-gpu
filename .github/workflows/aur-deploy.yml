@@ -43,7 +43,7 @@ jobs:
           VER: ${{ steps.ver.outputs.version }}
         run: |
           cur=$(curl -fsSg --retry 3 --max-time 30 'https://aur.archlinux.org/rpc/v5/info?arg[]=k3d-gpu' \
-            | jq -r '.results[0].Version // empty' | cut -d- -f1)
+            | jq -r '.results[0].Version // empty' | cut -d- -f1) || cur=
           if [ -n "$cur" ] && [ "$cur" != "$VER" ] && [ "$(printf '%s\n%s\n' "$cur" "$VER" | sort -V | tail -1)" = "$cur" ]; then
             echo "AUR has k3d-gpu $cur, newer than $VER; leaving it"
             echo "skip=true" >> "$GITHUB_OUTPUT"

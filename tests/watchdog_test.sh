@@ -409,6 +409,99 @@ else
     fail "issues disabled: rc=$rc out=$(tail -3 "$C/out" | tr '\n' ' ') err=$(tail -3 "$C/err" | tr '\n' ' ')"
 fi
 
+# 13b. Re-dispatches happen only once the alarm records them. Two runs in a row
+# (the second stands for the run a re-dispatch of watchdog.yml starts) with red
+# scheduled runs of watchdog.yml and build-and-push.yml and a newest release
+# without its Docker Hub image: with issues disabled (this repository today) and
+# with alarm writes failing, nothing is dispatched. Dispatching first and
+# recording after let every red watchdog run re-dispatch watchdog.yml, and each
+# dispatched run do the same, without end.
+redsetup() {
+    setup "$1"
+    jq '[.[] | select(.databaseId <= 40686436167)]' "$FIX/build-and-push_schedule_runs.json" > "$C/bp_sched.json"
+    jq -n --arg t "$(iso '-13 minutes')" '[{databaseId: 4201, conclusion: "failure", status: "completed",
+        createdAt: $t, url: "https://github.com/88plug/k3d-gpu/actions/runs/4201", headSha: "x",
+        workflowName: "Watchdog", event: "schedule"}]' > "$C/wd_sched.json"
+    tags "aur-v0.1.79@-3hours aur-v0.1.80@-1hours"
+}
+redsetup noissues_red
+route '^(issue|label) ' - 1 "the '88plug/k3d-gpu' repository has disabled issues"
+watch; rc1=$?
+watch; rc2=$?
+if [ "$rc1" -eq 1 ] && [ "$rc2" -eq 1 ] && [ "$(ndispatch)" = 0 ] && grep -q '^::error title=ci-alarm red:watchdog.yml::' "$C/out"; then
+    ok "issues disabled, red scheduled runs and a release gap: ::error, and no re-dispatch it cannot record"
+else
+    rc=$rc2; fail "issues disabled, red: $(why) dispatched=$(tr '\n' ',' < "$C/dispatches.log" 2>/dev/null)"
+fi
+redsetup alarmwrite_red
+route '^(issue (create|edit|comment)|label create) ' - 1 'HTTP 502: Bad Gateway (https://api.github.com/graphql)'
+watch; rc1=$?
+watch; rc2=$?
+if [ "$(ndispatch)" = 0 ] && [ "$rc2" -eq 1 ] && grep -q 'HTTP 502' "$C/err"; then
+    ok "alarm writes failing: no re-dispatch, the error is reported"
+else
+    rc=$rc2; fail "alarm writes failing: rc1=$rc1 $(why) dispatched=$(tr '\n' ',' < "$C/dispatches.log" 2>/dev/null)"
+fi
+# Issues on: the same state re-dispatches watchdog.yml, build-and-push.yml and
+# the release once each, and the second run adds no dispatch.
+redsetup issues_red
+watch; rc1=$?
+watch; rc2=$?
+if [ "$rc1" -eq 0 ] && [ "$rc2" -eq 0 ] && [ "$(ndispatch)" = 3 ] && [ "$(dispatched 'watchdog.yml ref=main')" = 1 ] \
+   && [ "$(dispatched 'build-and-push.yml ref=main')" = 1 ] && [ "$(dispatched 'build-and-push.yml ref=main release=0.1.80')" = 1 ] \
+   && jq -r .body <<< "$(issue red:watchdog.yml)" | grep -q 'watchdog:dispatched=4201' \
+   && jq -r .body <<< "$(issue release:0.1.80)" | grep -q 'watchdog:dispatched=0.1.80'; then
+    ok "issues on: one re-dispatch each for the red workflows and the release, none on the next run"
+else
+    rc=$rc2; fail "issues on, red: rc1=$rc1 $(why) dispatched=$(tr '\n' ',' < "$C/dispatches.log" 2>/dev/null)"
+fi
+# A re-dispatch that fails leaves no record: the alarm says so, the next run tries again.
+redsetup dispatchfail
+route '^workflow run watchdog\.yml ' - 1 'HTTP 422: Workflow does not have workflow_dispatch trigger'
+watch; rc1=$?
+b1=$(jq -r .body <<< "$(issue red:watchdog.yml)"); e1=$(state watchdog-error)
+route '^workflow run watchdog\.yml ' - 0
+watch; rc2=$?
+if [ "$rc1" -eq 0 ] && grep -q 'Re-dispatch failed: .*HTTP 422' <<< "$b1" && ! grep -q 'watchdog:dispatched' <<< "$b1" \
+   && [ "$e1" = OPEN ] && [ "$(state watchdog-error)" = CLOSED ] \
+   && jq -r .body <<< "$(issue red:watchdog.yml)" | grep -q 'watchdog:dispatched=4201'; then
+    ok "a failed re-dispatch is not recorded: the alarm says so and the next run dispatches"
+else
+    rc=$rc2; fail "dispatch failure: rc1=$rc1 $(why) body1=$(head -c 300 <<< "$b1")"
+fi
+# A run that cannot list the open alarms (a transient 502 on the watchdog's own
+# listing; ci_alarm still works) leaves the dispatching alarms as they are: their
+# records survive, so the run after it dispatches nothing new.
+redsetup listfail
+watch; rc1=$?
+route '^issue list .*--json number,title,body$' - 1 'HTTP 502: Bad Gateway (https://api.github.com/graphql)'
+watch; rc2=$?
+b2=$(jq -r .body <<< "$(issue red:watchdog.yml)")
+sed -i '1d' "$C/routes.tsv"
+watch; rc3=$?
+if [ "$rc1" -eq 0 ] && [ "$rc2" -eq 0 ] && [ "$rc3" -eq 0 ] && [ "$(ndispatch)" = 3 ] \
+   && grep -q 'watchdog:dispatched=4201' <<< "$b2" \
+   && jq -r .body <<< "$(issue release:0.1.80)" | grep -q 'watchdog:dispatched=0.1.80'; then
+    ok "a run that cannot list the alarms keeps their dispatch records: no second dispatch"
+else
+    rc=$rc3; fail "listing failure: rc1=$rc1 rc2=$rc2 $(why) dispatched=$(tr '\n' ',' < "$C/dispatches.log" 2>/dev/null)"
+fi
+
+# 13c. An autobump/* branch on a fork is not a bot PR: a fork could otherwise hold
+# bot-pr-stuck open for as long as it liked.
+setup forkpr
+jq -n --arg old "$(iso '-73 hours')" '[
+  {number: 244, headRefName: "autobump/convert-pins", headRefOid: "f0f0", createdAt: $old, isCrossRepository: true,
+   url: "https://github.com/88plug/k3d-gpu/pull/244", title: "fork", author: {login: "someone"}}]' > "$C/prs.json"
+route '^run list .*--workflow ci\.yml .*--commit f0f0' - 1 'must not be asked'
+watch; rc=$?
+if [ "$rc" -eq 0 ] && [ "$(state bot-pr-stuck)" = none ] && ! grep -q 'must not be asked' "$C/err" \
+   && grep -q '^pr list .*--json [^ ]*isCrossRepository' "$C/calls.log"; then
+    ok "a fork's autobump/* PR is not a stuck bot PR"
+else
+    fail "fork PR: $(why) prlist=$(grep '^pr list' "$C/calls.log" | head -1)"
+fi
+
 # 14. --list-scheduled: every workflow with on.schedule, with its cron period in hours.
 setup listsched
 watch --list-scheduled; rc=$?
