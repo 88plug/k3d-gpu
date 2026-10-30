@@ -4,6 +4,7 @@
 # release charts, so it ships here. Changes from upstream: the Helm ownership
 # annotation and label are dropped (Helm does not install it here), and the
 # placeholder image openvino/model_server:replace is pinned to the GPU build.
+# known-issue: kserve-4592 (this file goes once a KServe release's runtimes chart ships kserve-openvino)
 apiVersion: serving.kserve.io/v1alpha1
 kind: ClusterServingRuntime
 metadata:

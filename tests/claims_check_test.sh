@@ -228,6 +228,32 @@ mkdir -p "${intel}/docs/intel"
 printf '%s\n' 'The iGPU serves 42 tok/s.' > "${intel}/docs/intel/report.md"
 check "an unbacked claim in docs/intel/ fails" "${intel}" fail 'docs/intel/report.md:1'
 
+# --- --cited: the ledger rows docs claims cite (hack/ledger-freshness reads it) ----
+# A row counts when its [ledger:Hn] reference sits on a claim line, or on the
+# previous line of a claim split over two lines; a reference without a claim, one
+# in a fenced block or one in an HTML comment does not.
+cited=$(repo 'The CPU serves 42 tok/s [ledger:H2].
+See [ledger:H3] for context.
+<!-- 9 tok/s [ledger:H1] -->' 'Measured in [ledger:H1]: the iGPU decodes 42
+tok/s on this host.
+
+```text
+50 tok/s [ledger:H3]
+```')
+out=$("${GUARD}" --cited "${cited}" 2>&1); rc=$?
+if [ "${rc}" -eq 0 ] && [ "${out}" = $'H1\nH2' ]; then
+    PASS=$((PASS + 1)); echo "ok   --cited lists the rows claim lines cite, sorted, once each"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL --cited lists the rows claim lines cite, sorted, once each"
+    echo "  | rc=${rc} output: ${out//$'\n'/ | }"
+fi
+out=$("${GUARD}" --cited "$(repo 'An unbacked 42 tok/s claim.')" 2>&1); rc=$?
+if [ "${rc}" -eq 0 ] && [ -z "${out}" ]; then
+    PASS=$((PASS + 1)); echo "ok   --cited prints nothing and exits 0 when no claim cites a row"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL --cited prints nothing and exits 0 when no claim cites a row (rc=${rc}: ${out})"
+fi
+
 # --- the real repo -----------------------------------------------------------
 check "this repo's own docs pass" "$(cd "$(dirname "$0")/.." && pwd)" 0
 

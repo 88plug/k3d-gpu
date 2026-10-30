@@ -10208,7 +10208,8 @@ qs_step() { echo "${GRN}==>${RST} [$1/${QS_STEPS}] $(progress_bar "$(($1 - 1))" 
 # paravirtualization for NVIDIA only (https://docs.docker.com/desktop/features/gpu/);
 # the Intel path is /dev/dxg plus /usr/lib/wsl, as in OpenVINO's container recipe
 # (https://github.com/openvinotoolkit/docker_ci/blob/master/docs/accelerators.md).
-# The Intel NPU has no WSL2 driver (https://github.com/intel/linux-npu-driver/issues/56).
+# The Intel NPU has no WSL2 driver (https://github.com/intel/linux-npu-driver/issues/56;
+# known-issue: linux-npu-driver-56).
 # agent_device requests gpu.intel.com/xe, i915, a Gaudi or the CPU, never
 # gpu.intel.com/dxg, so under WSL2 quickstart's LLM runs on the CPU.
 # Host changes are printed as suggestions, never run.
@@ -10229,7 +10230,9 @@ qs_wsl_guidance() {
     fi
     echo "  Docker: Docker Desktop with WSL integration enabled for this distro, or Docker Engine inside it."
     echo "  Docker Desktop's --gpus flag is NVIDIA-only; the Intel GPU goes through /dev/dxg instead."
+    # known-issue-begin: linux-npu-driver-56
     echo "  The Intel NPU is not reachable from WSL2 (intel/linux-npu-driver#56)."
+    # known-issue-end: linux-npu-driver-56
 }
 
 # Pid of the port-forward quickstart started, while it runs. A pid whose
