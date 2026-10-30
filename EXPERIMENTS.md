@@ -10166,6 +10166,22 @@ where its files go. It changes no step, ceiling or grade.
   waits for it, as the section says. #260's unscored wiring smoke runs first, on cluster
   `k3dgpu-eas-smoke` inside the same two locks, and is recorded in #260.
 
+### F3 amendment R2: what the secret scan counts (2026-10-29)
+
+Written 2026-10-29, before any F3 step, after #260's second wiring smoke. It changes only
+which values step 7 counts. No step, ceiling or other grade changes, and the prediction
+stands.
+
+- **keycloak-admin-secret: the password key only.** The Secret has two keys, `username`
+  (5 bytes) and `password` (24 bytes). The username is an account name, not a secret. In
+  the smoke, a fixed-string count of it found 717 lines in the step logs, the ps samples
+  and the EAS logs, so counting it would grade any run REFUTED with no secret shown. Step
+  7 counts the `password` key of `keycloak-admin-secret`, records that `username` was not
+  counted, and counts the other values as the section says.
+- **Step 7's own log is not counted.** It is written while the scan runs and names the
+  Secrets only. Every other step log, the ps samples and every file under the EAS state
+  dir's `logs/` are counted as before.
+
 ### H2 run (i9-13900T, 2026-10-16)
 
 ```text
