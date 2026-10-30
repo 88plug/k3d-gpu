@@ -1,0 +1,75 @@
+== resume step 1 2026-10-30T05:09:52Z repo=cf49f0e6555edc3836faa12f4a05bb4cbd07d17d
+-- H1
+active
+
+active
+H1 rc=0
+-- H2
+running
+H2 rc=0
+-- H3
+29.7.2 live-restore=false cgroup=systemd/2
+H3 rc=0
+-- H4
+probe rc=0
+-- H5
+H5 done
+-- H6
+/dev/nvme0n1p2             3667G 3273G      208G      95% /
+MemAvailable:   123798776 kB
+0.79 0.53 0.42 1/3107 41441
+-- H7
+
+H7 rc=0/0
+-- H8
+lock-free
+H8 done
+-- H9
+br_netfilter vxlan
+modprobe=[]
+-- H10
+ok ipset hash:ip
+ok ipset hash:net
+ok ipset hash:ip,port
+ok ipset hash:ip,port,ip
+ok ipset hash:ip,port,net
+ok iptables-nft filter comment
+ok iptables-nft filter statistic
+ok iptables-nft filter recent
+ok iptables-nft filter conntrack
+ok iptables-nft filter addrtype
+ok iptables-nft filter mark
+ok iptables-nft filter MARK
+ok iptables-nft filter REJECT
+ok iptables-nft filter tcp
+ok iptables-nft filter udp
+ok iptables-nft filter multiport
+ok iptables-nft filter limit
+ok iptables-nft filter NFLOG
+ok iptables-nft filter physdev
+ok iptables-nft filter pkttype
+ok iptables-nft nat MASQUERADE
+ok iptables-nft nat comment
+ok ip6tables-nft filter comment
+ok ip6tables-nft filter statistic
+ok ip6tables-nft filter recent
+ok ip6tables-nft filter conntrack
+ok ip6tables-nft filter addrtype
+ok ip6tables-nft filter mark
+ok ip6tables-nft filter MARK
+ok ip6tables-nft filter REJECT
+ok ip6tables-nft filter tcp
+ok ip6tables-nft filter udp
+ok ip6tables-nft filter multiport
+ok ip6tables-nft filter limit
+ok ip6tables-nft filter NFLOG
+ok ip6tables-nft filter physdev
+ok ip6tables-nft filter pkttype
+ok ip6tables-nft nat MASQUERADE
+ok ip6tables-nft nat comment
+ok iptables-nft nat DNAT
+ok iptables-nft nat SNAT
+ok ip6tables-nft nat DNAT
+iptables: iptables v1.8.11 (nf_tables)
+NFPROBE clean
+nfprobe rc=0

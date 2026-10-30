@@ -1,0 +1,6 @@
+2026-10-30T05:11:03Z node-container running restarts=0 started=2026-10-30T05:10:55.565798113Z
+2026-10-30T05:11:13Z node-container running restarts=0 started=2026-10-30T05:10:55.565798113Z
+2026-10-30T05:11:23Z node-container running restarts=0 started=2026-10-30T05:10:55.565798113Z
+2026-10-30T05:11:33Z node-container running restarts=0 started=2026-10-30T05:10:55.565798113Z
+2026-10-30T05:11:43Z node container gone
+2026-10-30T05:11:43Z live view done (seen=1 full=0)
