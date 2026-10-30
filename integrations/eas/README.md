@@ -75,7 +75,9 @@ its `env/k3d-gpu/` and `ext/`, `facts.json`, `pins.resolved.json`, `eas-config.p
    matches no node (EAS's EnvoyProxy on k3s, overlay 0006), an `istio-system` pod waiting
    (istio-cni and ztunnel chain into the node's CNI paths, `istio_platform`). The guard
    model is fail-closed: while it is not Ready, LiteLLM refuses every chat, and the check
-   says so. No key is minted for a stack that is not ready.
+   says so. No key is minted for a stack that is not ready. `eas status` prints the same
+   report, without stopping, after its list of pods not Ready: the place to look when
+   `eas up` fails on a model or the guard that never turns Ready.
 2. A LiteLLM virtual key, minted with the master key and deleted at exit.
 3. A chat completion and a `get_weather` tool call through eg-gateway. Any status but 200
    fails with LiteLLM's `error.message`.
