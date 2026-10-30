@@ -1,0 +1,2 @@
+
+{"cpu":"24","ephemeral-storage":"3934360281088","hugepages-1Gi":"0","hugepages-2Mi":"0","memory":"131421688Ki","pods":"110"}

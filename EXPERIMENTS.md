@@ -6917,6 +6917,101 @@ says. Tests: `tests/wildct_hold_test.sh` (smoke3's pods and node; `nfprobe.sh`'s
 names the next smoke `smoke4`, adds `restarts=0` and every pod ready to its pass, and leaves
 `/etc/modules-load.d/k3dgpu-wildct.conf` to the box owner at the end of the campaign.
 
+### Wildct amendment R4: the second module load, and H10's native nftables expressions (2026-10-29)
+
+Recorded 2026-10-29, before any wildct hold has measured anything. No row's hypothesis,
+prediction, arm, model, statistic, threshold, cap, disk need, hold count or order changes. No
+smoke ran.
+
+**What happened (disclosed).** The box owner approved loading and persisting the modules behind
+H10's missing extensions and set types (amendment R3): `xt_comment`, `xt_statistic`,
+`xt_multiport`, `xt_limit`, `xt_NFLOG`, `xt_physdev`, `xt_pkttype`, `ipt_REJECT`, `ip6t_REJECT`,
+`ip_set_hash_ip`, `ip_set_hash_net`, `ip_set_hash_ipport`, `ip_set_hash_ipportip` and
+`ip_set_hash_ipportnet`. They were loaded at 21:16:54Z (`modprobe -a`, rc 0), with three hard
+dependencies (`nfnetlink_log`, `nf_reject_ipv4`, `nf_reject_ipv6`), and appended to
+`/etc/modules-load.d/k3dgpu-wildct.conf`; `kernel.modprobe` stays empty. As in R3, the host's own
+services were read before the load, at once after it, 3 minutes later, and again after the probes
+below: every container's state, health, restart count and start time, the HTTP status of eight
+published endpoints on the host (seven of them also through its tailnet address) and Prometheus's
+two scrape targets read the same each time, and the firewall's rule counts and rule hashes did
+not change (`bench/wildct/results/2026-10-29/host/modules-netfilter.txt`). Main at `e5748cd1` was
+shipped (its launcher and `share/` equal 0.1.79's) and step 1 of the resume procedure ran again
+(21:21:50Z; `runs/resume-health-r4.txt`). H1-H9 passed (Docker 29.7.2, `/` 208 GB available,
+MemAvailable 118 GiB, H9 `br_netfilter vxlan`). H10 read `NFPROBE missing: NFLOG limit` (rc 1):
+every other extension and set type now works, and the `limit` and `NFLOG` rules pass
+iptables-nft's extension check, then fail with "RULE_APPEND failed (No such file or directory)".
+So `smoke4` did not run, and no cluster was created.
+
+**Diagnosis.** iptables-nft writes `-m limit` and `-j NFLOG` as nftables' native `limit` and `log`
+expressions, so those two rules need `nft_limit` and `nft_log` as well as the `xt_` modules.
+nf_tables answers ENOENT for an expression type it does not have and cannot load. Both modules
+are on disk for 6.6.156-2-MANJARO and not loaded. A diagnostic in a throwaway network namespace,
+with the host's `nft` (`diag/nftexpr.sh.txt`; record `runs/nftexpr.txt`), added a counter rule
+and a meta mark rule, and failed the limit and log rules the same way; `/proc/modules` read the
+same before and after. k3s's network policy controller (kube-router) writes its drop-logging rule
+in each pod's firewall chain with both (`-j NFLOG --nflog-group 100 -m limit --limit 10/minute`).
+Restoring `kernel.modprobe`, or loading `nft_limit` and `nft_log`, is the box owner's call. The
+next smoke is still `smoke4`.
+
+**Resume procedure.** `RESUME.md` records the second load, names `nft_limit` and `nft_log` next to
+`xt_limit` and `xt_NFLOG` in H10's fail column, and lists the read-only check scripts left in
+`diag/`. No runner changes.
+
+### Wildct amendment R5: the third module load, release 0.1.81 and smoke4 (2026-10-30)
+
+Recorded 2026-10-30 (UTC; 2026-10-29 in the box owner's time zone), before any wildct hold has
+measured anything. No row's hypothesis, prediction, arm, model, statistic, threshold, cap, disk
+need, hold count or order changes. No runner changes.
+
+**What happened (disclosed).** After amendment R4, the box owner approved loading and persisting
+netfilter modules for this campaign as a class (`nf_`, `nft_`, `xt_`, `ipt_`, `ip6t_`, `ip_set`),
+each load under the same snapshot, check and rollback procedure, with `kernel.modprobe` left
+empty. `nft_limit` and `nft_log` were loaded at 05:02:48Z (`modprobe -a`, rc 0; each depends only
+on `nf_tables`, already loaded) and appended to `/etc/modules-load.d/k3dgpu-wildct.conf`, which
+now lists 18 modules, every one loaded. The host's 18 running containers (state, health, start
+time, restart count), the HTTP status of its 15 published ports and the line counts of
+`iptables-save` and `nft list ruleset` read the same before the load, at once after it and 2 min
+18 s later; this snapshot did not read Prometheus's targets or the tailnet address, which R3 and
+R4 also read (`bench/wildct/results/2026-10-30/host/modules-nft.txt`). `nfprobe.sh` with the
+0.1.79 node image then read `NFPROBE clean`.
+
+The resume procedure then ran from main at `cf49f0e6`. Step 3a: rule W7's newest release is
+0.1.81; its launcher (apart from the version line) and `share/` equal main's. Step 3b shipped
+main. Step 3c: `.deb` sha256 `beac5c26...`, node image
+`cryptoandcoffee/k3d-gpu:0.1.81@sha256:b68387c9...`, k3d v5.9.0, helm v4.3.1, kubectl v1.37.2; the
+tag resolves to the digest, and the installed launcher and `share/` match main's.
+`cryptoandcoffee/k3d-gpu:0.1.79`, pulled by the campaign, was removed. Steps 2 and 4 were done on
+2026-10-29 and did not run again. Step 1 (05:09:52Z; `runs/resume-health-r5.txt`): H1-H10 pass:
+Docker 29.7.2, live-restore off, cgroup systemd/2, `/` 208 GB available, MemAvailable 118 GiB,
+`load1` 0.79, H9 `br_netfilter vxlan` with `modprobe=[]`, and H10 `NFPROBE clean` (rc 0) with the
+0.1.81 node image.
+
+The wiring smoke `smoke4` (05:10:53Z, under `hold.sh`, rc 0) passed every marker of the resume
+procedure: `up rc=0 in 30 s`, `pods ready: yes after 16 s` (`ready.sh`: the node Ready, every pod
+n/n Running or Completed), `GPU-SCAN clean` and `down rc=0`; nvidia and intel named as opted out;
+the node container had `devices=[]`, `gpus=[]`, runtime `runc` and `restarts=0`. Seven pods were
+1/1 Running with 0 restarts and the gateway API CRD job Completed; the node had no taint. A
+read-only live view (`diag/smoke4-live.sh.txt`, record `runs/smoke4-live.txt`) read the node
+container every 10 s: running with `restarts=0` from 05:11:03Z to 05:11:33Z, then gone (the
+`down`). Its one full read waited for `ready.sh`, which first passed between two of its polls, so
+it made none. In `smoke3` the node restarted every ~16 s. The smoke sent no request and measured
+nothing: as rule W1's smoke it is discarded and disclosed, and is not a hold of any row. After it,
+no `k3dgpu-w-*` cluster or container and no process of the hold was left, the host's containers,
+start times, restart counts and port codes read as before it, and the firewall's line counts read
+as before the third load.
+
+**GPU isolation on smoke4's running cluster** (rule W8; `out/pods.txt`, `out/gpu-scan.txt` and
+`out/node.txt`, read before `down`): none of the eight pods is a GPU plugin (coredns,
+local-path-provisioner, metrics-server, the gateway API CRD job, the NRI balloons policy of the
+P/E-core `hybrid` accelerator, and the three NFD pods); no pod mounts a hostPath under `/dev`, and
+none asks for an nvidia.com/ or gpu.intel.com/ resource; the node's allocatable lists cpu,
+ephemeral-storage, hugepages-1Gi, hugepages-2Mi, memory and pods only.
+
+**Resume procedure.** `RESUME.md` records the third load, 0.1.81 and `smoke4`. Step 1 and the
+smoke pass, so the next step is step 6's first hold, `H52w`. H57wb's start gates (`/` >= 85 GB,
+MemAvailable >= 100 GiB) were met at step 1; if they still are at step 6's row 7, the pack stops
+there, as it says.
+
 ### H5 amendment A1: stage-1 harness and definitions (2026-10-19)
 
 Written 2026-10-19T22:30-07:00, before any H5 measurement. It fixes what the

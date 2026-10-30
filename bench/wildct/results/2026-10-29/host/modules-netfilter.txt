@@ -1,0 +1,239 @@
+# wildct kernel modules for k3s, second load (wildct amendment R4). The box owner approved loading and
+# persisting xt_comment xt_statistic xt_multiport xt_limit xt_NFLOG xt_physdev xt_pkttype ipt_REJECT
+# ip6t_REJECT ip_set_hash_ip ip_set_hash_net ip_set_hash_ipport ip_set_hash_ipportip ip_set_hash_ipportnet
+# on 2026-10-29, with kernel.modprobe left empty. `modprobe -a` of those 14 (2026-10-29T21:16:54Z, rc 0)
+# also loaded three hard dependencies: nfnetlink_log (of xt_NFLOG), nf_reject_ipv4 (of ipt_REJECT) and
+# nf_reject_ipv6 (of ip6t_REJECT); x_tables, nfnetlink and ip_set were already loaded. Read as root.
+# Production checks (every container's state, health, restart count and start time; the HTTP status of
+# eight published endpoints on the host and seven through its tailnet address; Prometheus's scrape
+# targets) read identical before, at once after, 3 minutes after the load, and after H10 and nftexpr.sh.
+# The firewall's rule counts and rule hashes (counters stripped) did not change. Then the 14 modules were
+# appended to /etc/modules-load.d/k3dgpu-wildct.conf; every line of it resolves (modprobe -n) and is loaded.
+
+== before
+## date 2026-10-29T17:16:40-04:00
+## modules (name refcount users) of: x_tables nfnetlink nfnetlink_log ip_set nf_reject_ipv4 nf_reject_ipv6 xt_comment xt_statistic xt_multiport xt_limit xt_NFLOG xt_physdev xt_pkttype ipt_REJECT ip6t_REJECT ip_set_hash_ip ip_set_hash_net ip_set_hash_ipport ip_set_hash_ipportip ip_set_hash_ipportnet vxlan br_netfilter bridge
+x_tables 10 xt_set,xt_addrtype,xt_connmark,xt_mark,xt_MASQUERADE,xt_nat,xt_tcpudp,xt_recent,xt_conntrack,nft_compat,
+nfnetlink 7 nf_conntrack_netlink,ip_set,nft_compat,nf_tables,
+ip_set 1 xt_set,
+vxlan 0 -
+br_netfilter 0 -
+bridge 1 br_netfilter,
+lsmod lines: 205
+modprobe=[]
+## sysctl net.bridge
+net.bridge.bridge-nf-call-arptables = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+net.bridge.bridge-nf-filter-pppoe-tagged = 0
+net.bridge.bridge-nf-filter-vlan-tagged = 0
+net.bridge.bridge-nf-pass-vlan-input-dev = 0
+## firewall
+iptables-save lines: 180
+iptables-save rules sha256 (counters stripped): e6d595562115c7dd
+ip6tables-save lines: 53
+ip6tables-save rules sha256 (counters stripped): 15148e6b37881989
+nft ruleset lines: 286
+nft ruleset sha256 (counters stripped): 85443258b0a2a13d
+## iptables -S FORWARD
+-P FORWARD DROP
+-A FORWARD -j DOCKER-USER
+-A FORWARD -j DOCKER-FORWARD
+-A FORWARD -j ts-forward
+## modules-load.d
+total 16
+-rw-r--r-- 1 root root 287 Oct 29 15:44 k3dgpu-wildct.conf
+-rw-r--r-- 1 root root  34 Oct 13  2025 modules.conf
+-rw-r--r-- 1 root root  16 Jul 25 17:06 nfs-client.conf
+-rw-r--r-- 1 root root   7 Jun  1 18:32 uinput.conf
+
+== modprobe -a (as root)
+2026-10-29T21:16:54Z
+modprobe rc=0
+2026-10-29T21:16:54Z
+
+== at once after
+## date 2026-10-29T17:16:58-04:00
+## modules (name refcount users) of: x_tables nfnetlink nfnetlink_log ip_set nf_reject_ipv4 nf_reject_ipv6 xt_comment xt_statistic xt_multiport xt_limit xt_NFLOG xt_physdev xt_pkttype ipt_REJECT ip6t_REJECT ip_set_hash_ip ip_set_hash_net ip_set_hash_ipport ip_set_hash_ipportip ip_set_hash_ipportnet vxlan br_netfilter bridge
+x_tables 19 ip6t_REJECT,ipt_REJECT,xt_pkttype,xt_physdev,xt_NFLOG,xt_limit,xt_multiport,xt_statistic,xt_comment,xt_set,xt_addrtype,xt_connmark,xt_mark,xt_MASQUERADE,xt_nat,xt_tcpudp,xt_recent,xt_conntrack,nft_compat,
+nfnetlink 8 nfnetlink_log,nf_conntrack_netlink,ip_set,nft_compat,nf_tables,
+nfnetlink_log 0 -
+ip_set 6 ip_set_hash_ipportnet,ip_set_hash_ipportip,ip_set_hash_ipport,ip_set_hash_net,ip_set_hash_ip,xt_set,
+nf_reject_ipv4 1 ipt_REJECT,
+nf_reject_ipv6 1 ip6t_REJECT,
+xt_comment 0 -
+xt_statistic 0 -
+xt_multiport 0 -
+xt_limit 0 -
+xt_NFLOG 0 -
+xt_physdev 0 -
+xt_pkttype 0 -
+ipt_REJECT 0 -
+ip6t_REJECT 0 -
+ip_set_hash_ip 0 -
+ip_set_hash_net 0 -
+ip_set_hash_ipport 0 -
+ip_set_hash_ipportip 0 -
+ip_set_hash_ipportnet 0 -
+vxlan 0 -
+br_netfilter 0 -
+bridge 1 br_netfilter,
+lsmod lines: 222
+modprobe=[]
+## sysctl net.bridge
+net.bridge.bridge-nf-call-arptables = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+net.bridge.bridge-nf-filter-pppoe-tagged = 0
+net.bridge.bridge-nf-filter-vlan-tagged = 0
+net.bridge.bridge-nf-pass-vlan-input-dev = 0
+## firewall
+iptables-save lines: 180
+iptables-save rules sha256 (counters stripped): e6d595562115c7dd
+ip6tables-save lines: 53
+ip6tables-save rules sha256 (counters stripped): 15148e6b37881989
+nft ruleset lines: 286
+nft ruleset sha256 (counters stripped): 85443258b0a2a13d
+## iptables -S FORWARD
+-P FORWARD DROP
+-A FORWARD -j DOCKER-USER
+-A FORWARD -j DOCKER-FORWARD
+-A FORWARD -j ts-forward
+## modules-load.d
+total 16
+-rw-r--r-- 1 root root 287 Oct 29 15:44 k3dgpu-wildct.conf
+-rw-r--r-- 1 root root  34 Oct 13  2025 modules.conf
+-rw-r--r-- 1 root root  16 Jul 25 17:06 nfs-client.conf
+-rw-r--r-- 1 root root   7 Jun  1 18:32 uinput.conf
+
+== 3 minutes after
+## date 2026-10-29T17:20:21-04:00
+## modules (name refcount users) of: x_tables nfnetlink nfnetlink_log ip_set nf_reject_ipv4 nf_reject_ipv6 xt_comment xt_statistic xt_multiport xt_limit xt_NFLOG xt_physdev xt_pkttype ipt_REJECT ip6t_REJECT ip_set_hash_ip ip_set_hash_net ip_set_hash_ipport ip_set_hash_ipportip ip_set_hash_ipportnet vxlan br_netfilter bridge
+x_tables 19 ip6t_REJECT,ipt_REJECT,xt_pkttype,xt_physdev,xt_NFLOG,xt_limit,xt_multiport,xt_statistic,xt_comment,xt_set,xt_addrtype,xt_connmark,xt_mark,xt_MASQUERADE,xt_nat,xt_tcpudp,xt_recent,xt_conntrack,nft_compat,
+nfnetlink 8 nfnetlink_log,nf_conntrack_netlink,ip_set,nft_compat,nf_tables,
+nfnetlink_log 0 -
+ip_set 6 ip_set_hash_ipportnet,ip_set_hash_ipportip,ip_set_hash_ipport,ip_set_hash_net,ip_set_hash_ip,xt_set,
+nf_reject_ipv4 1 ipt_REJECT,
+nf_reject_ipv6 1 ip6t_REJECT,
+xt_comment 0 -
+xt_statistic 0 -
+xt_multiport 0 -
+xt_limit 0 -
+xt_NFLOG 0 -
+xt_physdev 0 -
+xt_pkttype 0 -
+ipt_REJECT 0 -
+ip6t_REJECT 0 -
+ip_set_hash_ip 0 -
+ip_set_hash_net 0 -
+ip_set_hash_ipport 0 -
+ip_set_hash_ipportip 0 -
+ip_set_hash_ipportnet 0 -
+vxlan 0 -
+br_netfilter 0 -
+bridge 1 br_netfilter,
+lsmod lines: 222
+modprobe=[]
+## sysctl net.bridge
+net.bridge.bridge-nf-call-arptables = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+net.bridge.bridge-nf-filter-pppoe-tagged = 0
+net.bridge.bridge-nf-filter-vlan-tagged = 0
+net.bridge.bridge-nf-pass-vlan-input-dev = 0
+## firewall
+iptables-save lines: 180
+iptables-save rules sha256 (counters stripped): e6d595562115c7dd
+ip6tables-save lines: 53
+ip6tables-save rules sha256 (counters stripped): 15148e6b37881989
+nft ruleset lines: 286
+nft ruleset sha256 (counters stripped): 85443258b0a2a13d
+## iptables -S FORWARD
+-P FORWARD DROP
+-A FORWARD -j DOCKER-USER
+-A FORWARD -j DOCKER-FORWARD
+-A FORWARD -j ts-forward
+## modules-load.d
+total 16
+-rw-r--r-- 1 root root 287 Oct 29 15:44 k3dgpu-wildct.conf
+-rw-r--r-- 1 root root  34 Oct 13  2025 modules.conf
+-rw-r--r-- 1 root root  16 Jul 25 17:06 nfs-client.conf
+-rw-r--r-- 1 root root   7 Jun  1 18:32 uinput.conf
+
+== after the modules-load.d append, step 1 (H10) and nftexpr.sh
+## date 2026-10-29T17:23:20-04:00
+## modules (name refcount users) of: x_tables nfnetlink nfnetlink_log ip_set nf_reject_ipv4 nf_reject_ipv6 xt_comment xt_statistic xt_multiport xt_limit xt_NFLOG xt_physdev xt_pkttype ipt_REJECT ip6t_REJECT ip_set_hash_ip ip_set_hash_net ip_set_hash_ipport ip_set_hash_ipportip ip_set_hash_ipportnet vxlan br_netfilter bridge
+x_tables 19 ip6t_REJECT,ipt_REJECT,xt_pkttype,xt_physdev,xt_NFLOG,xt_limit,xt_multiport,xt_statistic,xt_comment,xt_set,xt_addrtype,xt_connmark,xt_mark,xt_MASQUERADE,xt_nat,xt_tcpudp,xt_recent,xt_conntrack,nft_compat,
+nfnetlink 8 nfnetlink_log,nf_conntrack_netlink,ip_set,nft_compat,nf_tables,
+nfnetlink_log 0 -
+ip_set 6 ip_set_hash_ipportnet,ip_set_hash_ipportip,ip_set_hash_ipport,ip_set_hash_net,ip_set_hash_ip,xt_set,
+nf_reject_ipv4 1 ipt_REJECT,
+nf_reject_ipv6 1 ip6t_REJECT,
+xt_comment 0 -
+xt_statistic 0 -
+xt_multiport 0 -
+xt_limit 0 -
+xt_NFLOG 0 -
+xt_physdev 0 -
+xt_pkttype 0 -
+ipt_REJECT 0 -
+ip6t_REJECT 0 -
+ip_set_hash_ip 0 -
+ip_set_hash_net 0 -
+ip_set_hash_ipport 0 -
+ip_set_hash_ipportip 0 -
+ip_set_hash_ipportnet 0 -
+vxlan 0 -
+br_netfilter 0 -
+bridge 1 br_netfilter,
+lsmod lines: 222
+modprobe=[]
+## sysctl net.bridge
+net.bridge.bridge-nf-call-arptables = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+net.bridge.bridge-nf-filter-pppoe-tagged = 0
+net.bridge.bridge-nf-filter-vlan-tagged = 0
+net.bridge.bridge-nf-pass-vlan-input-dev = 0
+## firewall
+iptables-save lines: 180
+iptables-save rules sha256 (counters stripped): e6d595562115c7dd
+ip6tables-save lines: 53
+ip6tables-save rules sha256 (counters stripped): 15148e6b37881989
+nft ruleset lines: 286
+nft ruleset sha256 (counters stripped): 85443258b0a2a13d
+## iptables -S FORWARD
+-P FORWARD DROP
+-A FORWARD -j DOCKER-USER
+-A FORWARD -j DOCKER-FORWARD
+-A FORWARD -j ts-forward
+## modules-load.d
+total 16
+-rw-r--r-- 1 root root 841 Oct 29 17:20 k3dgpu-wildct.conf
+-rw-r--r-- 1 root root  34 Oct 13  2025 modules.conf
+-rw-r--r-- 1 root root  16 Jul 25 17:06 nfs-client.conf
+-rw-r--r-- 1 root root   7 Jun  1 18:32 uinput.conf
+## /etc/modules-load.d/k3dgpu-wildct.conf (root:root 644)
+# k3d-gpu (github 88plug/k3d-gpu) wildct campaign, 2026-10-29: k3s's flannel needs vxlan and
+# k3s needs br_netfilter (net.bridge.bridge-nf-call-iptables). Loaded at boot by
+# systemd-modules-load. Approved by the box owner on 2026-10-29. Remove this file to stop it.
+vxlan
+br_netfilter
+# k3d-gpu (github 88plug/k3d-gpu) wildct campaign, 2026-10-29, second approval: the iptables
+# extensions and ipset set types k3s's rules use, which bench/wildct/nfprobe.sh checks
+# (smoke3: k3s's network policy controller stopped on the comment extension). kernel.modprobe
+# stays empty. Approved by the box owner on 2026-10-29. Remove these lines to stop it.
+xt_comment
+xt_statistic
+xt_multiport
+xt_limit
+xt_NFLOG
+xt_physdev
+xt_pkttype
+ipt_REJECT
+ip6t_REJECT
+ip_set_hash_ip
+ip_set_hash_net
+ip_set_hash_ipport
+ip_set_hash_ipportip
+ip_set_hash_ipportnet

@@ -1,0 +1,11 @@
+# modstate.sh: read-only, as root. The third load's modules, their dependencies, and the firewall's line counts.
+echo "date $(date -u +%FT%TZ) kernel $(uname -r) modprobe=[$(cat /proc/sys/kernel/modprobe)]"
+lsmod | awk '$1 == "nft_limit" || $1 == "nft_log" || $1 == "nf_tables" {print "lsmod", $1, $3, $4}'
+echo "depends nft_limit: [$(modinfo -F depends nft_limit)]"
+echo "depends nft_log: [$(modinfo -F depends nft_log)]"
+echo "iptables-save lines: $(iptables-save 2>/dev/null | wc -l)"
+echo "nft ruleset lines: $(nft list ruleset 2>/dev/null | wc -l)"
+echo "netfilter module count: $(lsmod | grep -cE '^(nf|nft|xt|ip_set|ipt|ip6t)_')"
+echo "modules-load.d lines: $(grep -vc '^#' /etc/modules-load.d/k3dgpu-wildct.conf)"
+for m in $(grep -v '^#' /etc/modules-load.d/k3dgpu-wildct.conf); do awk -v m="$m" '$1 == m {f=1} END {if (!f) print "NOT LOADED", m}' /proc/modules; done
+echo "every listed module loaded check done"
