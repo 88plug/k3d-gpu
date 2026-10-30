@@ -1,0 +1,63 @@
+# H54 Reproduce header, 2026-10-29T20:59:42Z
+host: 905a08313800
+cpu: Intel(R) Xeon(R) 6741P; 96 CPUs; sockets 1; NUMA nodes 1
+microcode: 0xa000133
+kernel: 7.0.0-31-generic; cmdline: BOOT_IMAGE=/vmlinuz-7.0.0-31-generic root=UUID=abbc5069-acd3-4ada-977a-807bb52ff382 ro console=tty1 console=ttyS0
+memory: 527767144 kB; swap: 0 kB
+governor: performance; smt: 1
+amx: amx_bf16 amx_int8 amx_tile 
+cpuset: none (no node cpuset; the k3d node container sees every CPU; optimized arms bind threads to 0-47 with the engine's own knob)
+docker: 29.8.0
+k3d.real: k3d version v5.9.0 sha256 06d8f25bc3a971c4
+kubectl: Client Version: v1.35.2 sha256 924eb50779153f20
+helm: version.BuildInfo{Version:"v4.1.1", GitCommit:"5caf0044d4ef3d62a955440272999e139aafbbed", GitTreeState:"clean", GoVersion:"go1.25.7", KubeClientVersion:"v1.35"} sha256 c72e64e5fff65d48
+uv: uv 0.8.0 sha256 19af10f031be0587
+repo: 85e77267a059578d412461cf69ebf5680170802b 0 uncommitted
+eat: 0d3438d7119de44cafc5903f66665c0b623e3333
+images:
+  vllm024: vllm/vllm-openai-cpu:v0.24.0@sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1
+  vllm032: vllm/vllm-openai-cpu:v0.32.0@sha256:ffaba3989b9b96d95a576143c872a4110ce9800f5199b6a36eb27bdff1cbbe05
+  llamacpp: ghcr.io/ggml-org/llama.cpp:server-b11749@sha256:9fbaa06d7f4449e2ae0d02b40e0431f7c212dcf231c9e3a7777a6afc2cc8f312
+  sglang: lmsysorg/sglang:v0.5.22-xeon@sha256:4e5c413ed9a31f38f74e18aa9b645d65a0b0a023d42f63edb4e2b412ea1a230f
+  ovms: openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58
+  ovms_eat: 2025.4@sha256:c370720007564bbdcbca13b9b714e4537068542cda512e8095259e66b617962a
+  node: cryptoandcoffee/k3d-gpu:0.1.63@sha256:b6fc46f60a47948eb1c4e6c5e80059c7f581427429c35a2627c58fc2307e4b76
+models (revision, from .pinned-revision):
+  Intel_Qwen3.8-27B-q4km-AutoRound/ Intel/Qwen3.8-27B-q4km-AutoRound 4b30b30e0ac2cc54a2f50738cfccd6c608f94ad4
+  Intel_gemma-4-26B-A4B-it-int4-AutoRound/ edff62728a3c79ec541983b86a21674500e0f05b
+  google_gemma-4-26B-A4B-it-qat-q4_0-gguf/ google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be9cf3c8a514acf63b8761f4b41935842e
+  google_gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant/ google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant 9537141506fe8875b3ed45b264af13580cb29166
+  google_gemma-4-26B-A4B-it-qat-q4_0-unquantized/ google/gemma-4-26B-A4B-it-qat-q4_0-unquantized f1e06dc520982d9b9edd76859fdb7ab209449949
+  k3dgpu_gemma-4-26B-A4B-it-qat-int4-sym-g32-ov/ built here: {'repo': 'google/gemma-4-26B-A4B-it-qat-q4_0-unquantized', 'revision': 'f1e06dc520982d9b9edd76859fdb7ab209449949'} int4 sym, group 32, ratio 1.0
+  OpenVINO/gemma-4-26b-a4b-it-int4-ov/ OpenVINO/gemma-4-26b-a4b-it-int4-ov 4e5885c3f03844f5887982def09708bdc9f53f7a
+  k3dgpu/gemma-4-26B-A4B-it-qat-assistant-gguf/ built here: {'repo': 'google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant', 'revision': '9537141506fe8875b3ed45b264af13580cb29166'} None
+  k3dgpu/gemma-4-26b-a4b-it-qat-int4-sym-g32-ov/ built here: {'repo': 'google/gemma-4-26B-A4B-it-qat-q4_0-unquantized', 'revision': 'f1e06dc520982d9b9edd76859fdb7ab209449949'} int4 sym, group 32, ratio 1.0
+weights sha256:
+  3e737281ffb4ba3feae0a7c818a8d56070e97877b4f1a87a4fe89c005b5372ee  model-00001-of-00008.safetensors
+  5690ee1b23fa4715f90a4f7449176b21539e6f8389d10681931eb12c62633404  model-00002-of-00008.safetensors
+  19dc834bdecd207848674ef11b8f149732c9e8d851a8bfa01488dfaf5e11ca20  model-00003-of-00008.safetensors
+  ed49f933fbfc917ef003a1767bd0fef151255835743a495c67853f38d74eaec1  model-00004-of-00008.safetensors
+  6a7e8bd71dc0456368b4b473b283d8e5fcfc563b9386fca4813a216168ada212  model-00005-of-00008.safetensors
+  7a9c2d79cd2a2466e34fdf36a51746c6a67547ed27ca70203200e3c4bd1956a9  model-00006-of-00008.safetensors
+  f25ffc75beeb6f0db75d6d671030598f318a03a87794119d81dfd28382d5e9ce  model-00007-of-00008.safetensors
+  f2333fbf6106311ab5e6e3b7b09046f9792f999e15de75d752ca588e3663ca09  model-00008-of-00008.safetensors
+  0f887130aef63545d655ea2addab6168680efe9b6531cbc46c2e2fc599ac8abe  OpenVINO_gemma-4-26b-a4b-it-int4-ov/openvino_language_model.bin
+  2d8dfbdcc2174aa6223621502dc566d9e881b7c3db3ff2e1e96a65cee7827edb  OpenVINO_gemma-4-26b-a4b-it-int4-ov/openvino_text_embeddings_model.bin
+  57fda7ab0340cda71819a3ecd5f9e52e346260fe840fddcc9c87d3614b5a815b  OpenVINO_gemma-4-26b-a4b-it-int4-ov/openvino_text_embeddings_per_layer_model.bin
+  13c9d8ff37be9592e06e8a9f65e2b047bdc6b24d5bc905c022e4d18996b3c382  OpenVINO_gemma-4-26b-a4b-it-int4-ov/openvino_vision_embeddings_model.bin
+  a359953a076b877db30c31dbbb4c6d93b4a6e017ee5db5784247e4d4c0dd4f3b  google_gemma-4-26B-A4B-it-qat-q4_0-gguf/gemma-4-26B-it-mmproj.gguf
+  3eca3b8f6d7baf218a7dd6bba5fb59a56ee25fe2d567b6f5f589b4f697eca51d  google_gemma-4-26B-A4B-it-qat-q4_0-gguf/gemma-4-26B_q4_0-it.gguf
+  c082cc581c3ec90d70285c1a41c81544ff56cbc96650f16c900a280940655801  google_gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant/model.safetensors
+  d57e8bde0feda8b0ebf51a81d04b5d988f82fead7f9242d9231625929421453e  google_gemma-4-26B-A4B-it-qat-q4_0-unquantized/model-00001-of-00002.safetensors
+  e5e6e258f562a77be81b0f5136eb2ca71e0d973cf30c4291e4d2c7b1fd712f99  google_gemma-4-26B-A4B-it-qat-q4_0-unquantized/model-00002-of-00002.safetensors
+data: gsm8k-test-0-199.jsonl 45e54be2df7426cb (openai/gsm8k main test @ 740312ad); ttft-prompt.txt b10cd3c79003d22e
+H54q manifests (h54.py q-render, amendment Q2), sha256:
+  R: 15b0996db0f3e393
+  OVQ: 453c8d628025fc6d
+  OVB: b7840780b78c5c1e
+  Lg: 720eaf9c5fc252ed
+  Vi: 95bc51d6588de0af
+engine flags (Lg, Lg-mtp, Sg as rendered; B1g/Vq/Vi/A1o/A1g/B3g in each arm's deploy.yaml):
+  Lg: -m /models/google_gemma-4-26B-A4B-it-qat-q4_0-gguf/gemma-4-26B_q4_0-it.gguf --host 0.0.0.0 --port 8080 --alias gemma -t 48 -Cr 0-47 --cpu-strict 1 --jinja
+  Lg-mtp: -m /models/google_gemma-4-26B-A4B-it-qat-q4_0-gguf/gemma-4-26B_q4_0-it.gguf --host 0.0.0.0 --port 8080 --alias gemma -t 48 -Cr 0-47 --cpu-strict 1 --jinja -md /models/k3dgpu/gemma-4-26B-A4B-it-qat-assistant-gguf/gemma-4-26B-A4B-it-qat-assistant-q4_0.gguf --spec-type draft-mtp
+  Sg: python3 -m sglang.launch_server --model-path /models/google_gemma-4-26B-A4B-it-qat-q4_0-unquantized --device cpu --attention-backend intel_amx --tp 1 --host 0.0.0.0 --port 30000 --served-model-name gemma --max-total-tokens 65536 SGLANG_CPU_OMP_THREADS_BIND=0-47

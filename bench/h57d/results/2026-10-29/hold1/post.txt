@@ -1,0 +1,18 @@
+2026-10-29T20:07:19Z
+ 13:07:19 up 37 days, 55 min,  1 user,  load average: 19.23, 17.24, 15.36
+               total        used        free      shared  buff/cache   available
+Mem:          128438       75170       24541        6665       36440       53268
+Swap:         191999      121999       70000
+%CPU     PID USER     COMMAND
+ 266 3659471 andrew   gh
+52.4   30220 andrew   Isolated Web Co
+27.4    2465 andrew   gnome-shell
+21.9  984768 andrew   python
+20.1 1277607 andrew   rustdesk
+19.9 2709183 andrew   python
+11.8 1310572 andrew   python
+11.7  802234 andrew   python
+11.6  271068 andrew   python
+ 9.2  678843 andrew   claude
+/dev/nvme1n1p2  1912336612 1567830040 247291424      87% /
+/dev/nvme0n1p2  1728205472  758914700 881429120      47% /home/andrew/docker&models

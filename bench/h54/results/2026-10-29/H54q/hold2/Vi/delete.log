@@ -1,0 +1,9 @@
+namespace "h54" deleted
+configmap "vi-chat-templates" deleted from h54 namespace
+configmap "vi-config" deleted from h54 namespace
+service "vi" deleted from h54 namespace
+deployment.apps "vi" deleted from h54 namespace
+No resources found
+time="2026-10-29T20:59:27Z" level=warning msg="Config \"/etc/crictl.yaml\" does not exist, trying next: \"/usr/bin/crictl.yaml\""
+time="2026-10-29T20:59:27Z" level=warning msg="Image connect using default endpoints: [unix:///run/k3s/containerd/containerd.sock unix:///var/run/dockershim.sock unix:///run/containerd/containerd.sock unix:///run/crio/crio.sock unix:///var/run/cri-dockerd.sock]. As the default settings are now deprecated, you should set the endpoint instead."
+Deleted: docker.io/vllm/vllm-openai-cpu@sha256:ffaba3989b9b96d95a576143c872a4110ce9800f5199b6a36eb27bdff1cbbe05

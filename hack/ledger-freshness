@@ -1,0 +1,425 @@
+#!/usr/bin/env python3
+"""ledger-freshness: which SUPPORTED ledger rows were measured on component
+versions older than today's pins. Read-only: it never writes EXPERIMENTS.md,
+console/ledger-rules.json or any other file.
+
+  hack/ledger-freshness [--root DIR] --json | --md
+
+For each SUPPORTED row of the Hypotheses table (parsed by ledger() from
+tests/ledger_drift_check.py), it follows the run anchors of the Probe and
+Verdict cells (links to a heading that says run or result; else a heading
+"<row> run|result ...") to the run sections, and reads their records: fenced
+blocks that open with "# Reproduce" or "# provenance", and "**Reproduce:**"
+paragraphs. From those it extracts the measured versions of vllm-openai-cpu/xpu,
+openvino/model_server (a version, or a digest that images.lock maps to a tag),
+llama.cpp (bNNNNN), rancher/k3s, the cryptoandcoffee/k3d-gpu node image, and
+the Hugging Face revisions on the `models:` line.
+
+Current versions are today's "ours" pins: images.lock entries with an "ours"
+source (pins/classes, as hack/known-issues reads it) and scripts/k3d-gpu's
+VERSION for the node image. A row is stale when a measured version is a minor
+or major behind the current one (hack/pinver.py update types; a llama.cpp build
+change counts as a minor); priority-stale when a measured version is inside a
+known issue's affected range (pins/known-issues.toml).
+
+The queue lists rows in console/ledger-rules.json with non-empty classes first
+(they drive optimizer defaults), then rows docs claims cite
+(tests/claims_check.sh --cited), then the rest; priority-stale rows first within
+each tier. A re-measure is a new pre-registered ledger row; the suggested id is
+only a free one. Rows whose records the parser cannot read are listed under
+"not machine-readable".
+
+--json: {schema, measured: {row: {component: version}}, current: {component:
+version}, queue: [{row, tier, priority, measured, current, reason, known_issues,
+suggested_followup_id}], not_machine_readable: [{row, reason}]}
+--md: the same as a Markdown section for the freshness dashboard.
+
+Python standard library only.
+"""
+
+import argparse
+import functools
+import importlib.machinery
+import importlib.util
+import json
+import pathlib
+import re
+import subprocess
+import sys
+
+HERE = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import pinver  # noqa: E402
+
+SCHEMA = "k3d-gpu.ledger-freshness/v1"
+VERSION_RE = re.compile(r'^VERSION="(\d+\.\d+\.\d+)"', re.M)
+RUN_RE = re.compile(r"\b(runs?|results?)\b", re.I)
+FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
+HEADING_RE = re.compile(r"^(#{2,6})\s+(.*?)\s*#*\s*$")
+ANCHOR_RE = re.compile(r"\]\(#([^)\s]+)\)")
+FIELD_RE = re.compile(r"^([a-z][a-z0-9 /()-]*?):\s+(.*)$")
+HF_RE = re.compile(r"(?<![\w./-])(?P<repo>[A-Za-z0-9][\w.-]*/[\w.-]+)\s+@?\s*(?P<v>[0-9a-f]{7,40})\b")
+OVMS_DIGEST_RE = re.compile(r"openvino/model_server@sha256:(?P<d>[0-9a-f]{8,64})")
+CAL = r"\d{4}\.\d+(?:\.\d+)?"
+
+# component: (scheme, images.lock names, tag -> version regex, record regexes with group v)
+COMPONENTS = {
+    "vllm-openai-cpu": ("zerover", ("docker.io/vllm/vllm-openai-cpu",), r"^v?(\d+\.\d+\.\d+)$",
+                        (r"vllm/vllm-openai-cpu:v(?P<v>\d+\.\d+\.\d+)",)),
+    "vllm-openai-xpu": ("zerover", ("docker.io/vllm/vllm-openai-xpu",), r"^v?(\d+\.\d+\.\d+)$",
+                        (r"vllm/vllm-openai-xpu:v(?P<v>\d+\.\d+\.\d+)",)),
+    "openvino/model_server": ("calver", ("docker.io/openvino/model_server",), r"^(" + CAL + r")",
+                              (r"openvino/model_server:(?P<v>" + CAL + r")",
+                               r"openvino/model_server@sha256:[0-9a-f.…]+`?\s*\((?P<v>" + CAL + r")\)",
+                               r"\bOVMS\s+(?P<v>" + CAL + r")\b")),
+    "llama.cpp": ("llama", ("ghcr.io/ggml-org/llama.cpp",), r"(?:^|-)(b\d+)$",
+                  (r"llama\.cpp:(?:[a-z]+-)*(?P<v>b\d{3,})\b", r"\bllama\.cpp\s+(?:server-)?(?P<v>b\d{3,})\b")),
+    "rancher/k3s": ("k8s", ("docker.io/rancher/k3s",), r"^(v\d+\.\d+\.\d+[-+]k3s\d+)$",
+                    (r"rancher/k3s:(?P<v>v\d+\.\d+\.\d+[-+]k3s\d+)", r"\bk3s (?P<v>v\d+\.\d+\.\d+\+k3s\d+)")),
+    "cryptoandcoffee/k3d-gpu": ("semver", (), None, (r"cryptoandcoffee/k3d-gpu:(?P<v>\d+\.\d+\.\d+)\b",)),
+}
+
+
+def load_path(name, path):
+    loader = importlib.machinery.SourceFileLoader(name, str(path))
+    spec = importlib.util.spec_from_loader(name, loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod
+
+
+drift = load_path("ledger_drift_check", HERE.parent / "tests" / "ledger_drift_check.py")
+known = load_path("known_issues", HERE / "known-issues")
+
+
+def row_key(row):
+    m = re.match(r"^H(\d+)([a-z]*)$", row)
+    return (int(m.group(1)), m.group(2)) if m else (1 << 30, row)
+
+
+def cmp_key(scheme):
+    return functools.cmp_to_key(lambda a, b: pinver.compare(scheme, a, b))
+
+
+# --- the ledger ----------------------------------------------------------------
+
+def table_cells(text):
+    """{row: (probe cell, verdict cell)} of the Hypotheses table."""
+    out, inside, header = {}, False, None
+    for line in text.splitlines():
+        if line.startswith("## "):
+            inside = line.startswith("## Hypotheses")
+            continue
+        if not (inside and line.startswith("|")):
+            continue
+        cells = [c.strip() for c in re.sub(r"\\\|", "", line).strip().strip("|").split("|")]
+        if header is None and cells and cells[0] == "#":
+            header = [c.lower() for c in cells]
+            continue
+        m = re.match(r"^(H\d+[a-z]{0,2})$", cells[0]) if cells else None
+        if m and header:
+            probe = cells[header.index("probe")] if "probe" in header and header.index("probe") < len(cells) else ""
+            out[m.group(1)] = (probe, cells[-1])
+    return out
+
+
+def slugify(text, seen):
+    s = re.sub(r"[^\w\- ]", "", text.strip().lower()).replace(" ", "-")
+    n = seen.get(s, 0)
+    seen[s] = n + 1
+    return s if n == 0 else "%s-%d" % (s, n)
+
+
+def closes(line, fence):
+    """A closing fence (CommonMark): the opening character, at least as many, nothing after."""
+    t = line.strip()
+    return t.startswith(fence) and not t[len(fence):].strip(fence[0]).strip()
+
+
+def sections(lines):
+    """[(level, title, slug, first body line, end line)] of the headings outside fences."""
+    heads, seen, fence = [], {}, None
+    for i, line in enumerate(lines):
+        if fence:
+            if closes(line, fence):
+                fence = None
+            continue
+        f = FENCE_RE.match(line)
+        if f:
+            fence = f.group(1)
+            continue
+        h = HEADING_RE.match(line)
+        if h:
+            heads.append([len(h.group(1)), h.group(2), slugify(h.group(2), seen), i + 1, len(lines)])
+    for j, h in enumerate(heads):
+        for k in heads[j + 1:]:
+            if k[0] <= h[0]:
+                h[4] = k[3] - 1
+                break
+    return heads
+
+
+def records(body):
+    """(text of the Reproduce/provenance records, models field text, problem) of a section body.
+    problem: a record block that holds a Markdown heading, the sign of a fence left open above it."""
+    texts, models, problem, i = [], [], None, 0
+    while i < len(body):
+        f = FENCE_RE.match(body[i])
+        if f:
+            j = i + 1
+            while j < len(body) and not closes(body[j], f.group(1)):
+                j += 1
+            block = body[i + 1:j]
+            first = next((b.strip() for b in block if b.strip()), "")
+            if first.startswith(("# Reproduce", "# provenance")):
+                swallowed = next((b for b in block if HEADING_RE.match(b)), None)
+                if swallowed:
+                    problem = "a record block runs into the heading %r (a fence left open?)" % swallowed.strip()[:80]
+                texts.append("\n".join(block))
+                field = None
+                for b in block:
+                    m = FIELD_RE.match(b)
+                    if m:
+                        field = m.group(1)
+                        if field == "models":
+                            models.append(m.group(2))
+                    elif field == "models" and b.startswith((" ", "\t")):
+                        models.append(b.strip())
+            i = j + 1
+            continue
+        if "**Reproduce:**" in body[i]:
+            j = i
+            while j < len(body) and body[j].strip() and not FENCE_RE.match(body[j]):
+                j += 1
+            texts.append("\n".join(body[i:j]))
+            i = j
+            continue
+        i += 1
+    return "\n".join(texts), "\n".join(models), problem
+
+
+def lock_tags(lock):
+    """{(name, digest): tag} of the tagged images.lock entries."""
+    return {(e["name"], e["digest"]): e["tag"] for e in lock.get("images", []) if e.get("tag")}
+
+
+def extract(text, models, lock):
+    found = {}
+    for comp, (scheme, names, _, regexes) in COMPONENTS.items():
+        vals = [m.group("v") for rx in regexes for m in re.finditer(rx, text)]
+        if comp == "openvino/model_server" and not vals:
+            tags = lock_tags(lock)
+            for m in OVMS_DIGEST_RE.finditer(text):
+                for (name, digest), tag in tags.items():
+                    if name in names and digest.startswith("sha256:" + m.group("d")):
+                        t = re.match(COMPONENTS[comp][2], tag)
+                        if t:
+                            vals.append(t.group(1))
+        good = []
+        for v in vals:
+            try:
+                pinver.parse(scheme, v)
+                good.append(v)
+            except ValueError:
+                pass
+        if good:
+            group = [v for v in good if pinver.comparable(scheme, v, good[0])]
+            found[comp] = min(group, key=cmp_key(scheme))
+    for m in HF_RE.finditer(models):
+        found.setdefault("hf:" + m.group("repo"), m.group("v"))
+    return found
+
+
+def measured_rows(root, lock):
+    text = (root / "EXPERIMENTS.md").read_text()
+    lines = text.splitlines()
+    verdicts = drift.ledger(root)
+    cells = table_cells(text)
+    heads = sections(lines)
+    by_slug = {h[2]: h for h in heads}
+    measured, unreadable = {}, []
+    for row in sorted((r for r, v in verdicts.items() if v == "SUPPORTED"), key=row_key):
+        probe, verdict = cells.get(row, ("", ""))
+        runs = [by_slug[a] for a in ANCHOR_RE.findall(probe + " " + verdict)
+                if a in by_slug and RUN_RE.search(by_slug[a][1])]
+        if not runs:
+            pat = re.compile(r"^%s (run|result)s?\b" % re.escape(row))
+            runs = [h for h in heads if pat.match(h[1])]
+        if not runs:
+            unreadable.append({"row": row, "reason": "no run section linked from the Probe column"})
+            continue
+        got, saw_record, problem = {}, False, None
+        for h in runs:
+            rec, models, bad = records(lines[h[3]:h[4]])
+            saw_record, problem = saw_record or bool(rec), problem or bad
+            for comp, v in extract(rec, models, lock).items():
+                got.setdefault(comp, v)
+        if problem:
+            unreadable.append({"row": row, "reason": problem})
+        elif not saw_record:
+            unreadable.append({"row": row, "reason": "run section has no '# Reproduce' or '# provenance' block "
+                                                     "and no **Reproduce:** paragraph"})
+        elif not got:
+            unreadable.append({"row": row, "reason": "records name no component version this parser reads"})
+        else:
+            measured[row] = got
+    return measured, unreadable
+
+
+# --- current pins --------------------------------------------------------------
+
+def current_versions(root, lock):
+    classes = known.load_classes(root)
+    tags = lock_tags(lock)
+    found = {}
+    for e in lock.get("images", []):
+        srcs = [s.split()[0] for s in e.get("sources", []) if s.split()]
+        if not any(known.forbidden(classes, s) is None and known.path_class(classes, s) == "ours" for s in srcs):
+            continue
+        tag = e.get("tag") or tags.get((e["name"], e["digest"]))
+        for comp, (scheme, names, tag_rx, _) in COMPONENTS.items():
+            if e["name"] in names and tag and tag_rx:
+                m = re.search(tag_rx, tag)
+                if m:
+                    found.setdefault(comp, []).append(m.group(1))
+    script = root / "scripts" / "k3d-gpu"
+    if script.is_file():
+        m = VERSION_RE.search(script.read_text(errors="replace"))
+        if m:
+            found["cryptoandcoffee/k3d-gpu"] = [m.group(1)]
+    out = {}
+    for comp, vals in found.items():
+        scheme = COMPONENTS[comp][0]
+        group = [v for v in vals if pinver.comparable(scheme, v, vals[0])]
+        out[comp] = max(group, key=cmp_key(scheme))
+    return out
+
+
+# --- the queue -----------------------------------------------------------------
+
+def cited_rows(root):
+    p = subprocess.run(["bash", str(HERE.parent / "tests" / "claims_check.sh"), "--cited", str(root)],
+                       capture_output=True, text=True)
+    if p.returncode != 0:
+        print("ledger-freshness: claims_check.sh --cited failed; tier 2 is empty: %s" % p.stdout.strip()[-300:],
+              file=sys.stderr)
+        return set()
+    return set(p.stdout.split())
+
+
+def rule_rows(root):
+    p = root / "console" / "ledger-rules.json"
+    if not p.is_file():
+        return set()
+    return {r["id"] for r in json.loads(p.read_text()).get("rows", []) if r.get("classes")}
+
+
+def followup_id(row, taken):
+    m = re.match(r"^H(\d+)([a-z]*)$", row)
+    cands = [row + "r"] if len(m.group(2)) < 2 else []
+    cands += ["H%sr" % m.group(1)] + ["H%sr%s" % (m.group(1), c) for c in "abcdefghijklmnopqstuvwxyz"]
+    return next(c for c in cands if c not in taken)
+
+
+def queue(root, measured, current, issues):
+    rules, cited, taken = rule_rows(root), cited_rows(root), set(drift.ledger(root))
+    items = []
+    for row, comps in measured.items():
+        reasons, prio, ids, m_out, c_out = [], [], [], {}, {}
+        for comp, mv in comps.items():
+            if comp.startswith("hf:"):
+                continue
+            scheme, cur = COMPONENTS[comp][0], current.get(comp)
+            if cur and pinver.comparable(scheme, mv, cur) and pinver.compare(scheme, mv, cur) < 0:
+                t = pinver.update_type(scheme, mv, cur)
+                if t in ("minor", "major"):
+                    reasons.append("%s %s -> %s (%s)" % (comp, mv, cur, t))
+                    m_out[comp], c_out[comp] = mv, cur
+            for e in issues:
+                if not isinstance(e, dict) or e.get("component") != comp:
+                    continue
+                try:
+                    inside = pinver.in_range(e["scheme"], mv, e["affected"])
+                except (KeyError, ValueError):
+                    continue
+                if inside:
+                    since = ""
+                    if e.get("fixed_in"):
+                        since = ", %s in %s" % ("changed" if e.get("kind") == "change" else "fixed", e["fixed_in"])
+                    prio.append("priority-stale: %s %s is inside %s (%s%s)" % (comp, mv, e["id"], e["affected"], since))
+                    ids.append(e["id"])
+                    m_out[comp] = mv
+                    if cur:
+                        c_out[comp] = cur
+        if not (reasons or prio):
+            continue
+        tier = 1 if row in rules else 2 if row in cited else 3
+        follow = followup_id(row, taken)
+        taken.add(follow)
+        items.append({"row": row, "tier": tier, "priority": bool(prio), "measured": m_out, "current": c_out,
+                      "reason": "; ".join(prio + reasons), "known_issues": sorted(set(ids)),
+                      "suggested_followup_id": follow})
+    items.sort(key=lambda q: (q["tier"], not q["priority"], row_key(q["row"])))
+    return items
+
+
+def build(root):
+    root = pathlib.Path(root)
+    lock_path = root / "images.lock"
+    lock = json.loads(lock_path.read_text()) if lock_path.is_file() else {"images": []}
+    reg = root / known.REGISTRY
+    issues = known.load(root) if reg.is_file() else []
+    measured, unreadable = measured_rows(root, lock)
+    current = current_versions(root, lock)
+    return {"schema": SCHEMA, "measured": measured, "current": current,
+            "queue": queue(root, measured, current, issues), "not_machine_readable": unreadable}
+
+
+TIERS = {1: "ledger-rules (drives optimizer defaults)", 2: "cited by a docs claim", 3: "other"}
+
+
+def cell(text):
+    return str(text).replace("|", "\\|")
+
+
+def markdown(data):
+    out = ["## Ledger re-measure queue", "",
+           "Read-only. SUPPORTED rows of EXPERIMENTS.md whose recorded versions are a minor or major behind "
+           "today's pins, or inside a known issue's affected range. A re-measure is a new pre-registered row; "
+           "nothing here edits the ledger.", ""]
+    if data["queue"]:
+        out += ["| # | Row | Why first | Reason | Suggested row |", "|---|-----|-----------|--------|---------------|"]
+        for n, q in enumerate(data["queue"], 1):
+            out.append("| %d | %s | %s | %s | %s |" % (n, q["row"], TIERS[q["tier"]], cell(q["reason"]),
+                                                       q["suggested_followup_id"]))
+    else:
+        out.append("No SUPPORTED row is behind today's pins.")
+    out += ["", "### Measured versions (SUPPORTED rows)", "", "| Row | Measured | In the queue |", "|---|---|---|"]
+    queued = {q["row"] for q in data["queue"]}
+    for row in sorted(data["measured"], key=row_key):
+        comps = "; ".join("%s %s" % kv for kv in sorted(data["measured"][row].items()))
+        out.append("| %s | %s | %s |" % (row, cell(comps), "yes" if row in queued else "no"))
+    out += ["", "Current pins: " + "; ".join("%s %s" % kv for kv in sorted(data["current"].items())), ""]
+    if data["not_machine_readable"]:
+        out += ["### Not machine-readable", ""]
+        out += ["- %s: %s" % (r["row"], r["reason"]) for r in data["not_machine_readable"]]
+    return "\n".join(out).rstrip() + "\n"
+
+
+def main(argv):
+    ap = argparse.ArgumentParser(prog="ledger-freshness", description="Read-only ledger re-measure queue.")
+    ap.add_argument("--root", default=str(HERE.parent), help="repo root (default: this repo)")
+    mode = ap.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--json", action="store_true")
+    mode.add_argument("--md", action="store_true")
+    args = ap.parse_args(argv)
+    data = build(args.root)
+    if args.json:
+        print(json.dumps(data, indent=1, sort_keys=True))
+    else:
+        sys.stdout.write(markdown(data))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

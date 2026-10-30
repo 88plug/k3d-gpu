@@ -6,9 +6,9 @@ endpoint: OpenVINO Model Server (OVMS) serving `OpenVINO/Qwen3-4B-int4-ov` as
 
 | Directory | Framework | Pinned packages |
 |---|---|---|
-| [`openai-agents/`](openai-agents/) | OpenAI Agents SDK, tool served over MCP (stdio) | `openai-agents==0.24.0`, `openai==3.31.0`, `mcp==2.3.0` |
-| [`langgraph/`](langgraph/) | LangGraph `StateGraph` + `ToolNode` | `langgraph==1.2.15`, `langchain-openai==1.7.2`, `langchain-core==1.6.11` |
-| [`crewai/`](crewai/) | CrewAI agent + task | `crewai==1.15.28` |
+| [`openai-agents/`](openai-agents/) | OpenAI Agents SDK, tool served over MCP (stdio) | `openai-agents==0.24.0`, `openai==3.41.0`, `mcp==2.3.0` |
+| [`langgraph/`](langgraph/) | LangGraph `StateGraph` + `ToolNode` | `langgraph==1.2.18`, `langchain-openai==1.7.3`, `langchain-core==1.7.3` |
+| [`crewai/`](crewai/) | CrewAI agent + task | `crewai==1.15.33` |
 | [`llamaindex/`](llamaindex/) | LlamaIndex `FunctionAgent` | `llama-index-core==0.14.25`, `llama-index-llms-openai-like==0.8.1` |
 | [`litellm-gateway/`](litellm-gateway/) | Intel Enterprise Agent Toolkit GenAI gateway (LiteLLM) | `litellm==1.83.14` (see [the gateway section](#enterprise-agent-toolkit-gateway)) |
 
@@ -106,7 +106,7 @@ model name, a `multiply` tool call, then an answer from the tool's result,
 streaming or not. `check.py <example>` runs an example against it and checks
 the requests it sent (for `litellm-gateway`, also that `model.json` targets the
 in-cluster agent Service, which `agent.py` swaps for the stub).
-`tests/agent_examples_test.sh` does that for every example in a pinned `python:3.13.16-slim-trixie` container, which is where the
+`tests/agent_examples_test.sh` does that for every example in a pinned `python:3.13.18-slim-trixie` container, which is where the
 packages get installed from `requirements.txt` under `constraints.txt`; the
 installed set must equal `constraints.txt`. It takes example names, so a CI matrix can run one
 example per job.

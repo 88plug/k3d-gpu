@@ -1,0 +1,98 @@
+{
+ "arms": {
+  "R": {
+   "answered": 200,
+   "correct": 194,
+   "accuracy": 0.97,
+   "not_answered": 0,
+   "from_h54a": 0,
+   "wrong_by_error": 0,
+   "lost_holds": 0
+  },
+  "OVQ": {
+   "answered": 200,
+   "correct": 191,
+   "accuracy": 0.955,
+   "not_answered": 0,
+   "from_h54a": 50,
+   "wrong_by_error": 0,
+   "lost_holds": 0
+  },
+  "OVB": {
+   "answered": 200,
+   "correct": 192,
+   "accuracy": 0.96,
+   "not_answered": 0,
+   "from_h54a": 50,
+   "wrong_by_error": 0,
+   "lost_holds": 0
+  },
+  "Lg": {
+   "answered": 200,
+   "correct": 193,
+   "accuracy": 0.965,
+   "not_answered": 0,
+   "from_h54a": 50,
+   "wrong_by_error": 0,
+   "lost_holds": 0
+  },
+  "Vi": {
+   "answered": 0,
+   "correct": 0,
+   "accuracy": null,
+   "not_answered": 200,
+   "from_h54a": 0,
+   "wrong_by_error": 0,
+   "lost_holds": 1
+  }
+ },
+ "tests": {
+  "OVQ-R": {
+   "n": 200,
+   "diff": -0.015,
+   "ci95": [
+    -0.035,
+    0.0
+   ],
+   "a_only": 0,
+   "b_only": 3
+  },
+  "OVB-OVQ": {
+   "n": 200,
+   "diff": 0.005,
+   "ci95": [
+    -0.015,
+    0.025
+   ],
+   "a_only": 3,
+   "b_only": 2
+  }
+ },
+ "descriptive": {
+  "Lg-R": {
+   "n": 200,
+   "diff": -0.005,
+   "ci95": [
+    -0.025,
+    0.015
+   ],
+   "a_only": 2,
+   "b_only": 3
+  },
+  "OVB-R": {
+   "n": 200,
+   "diff": -0.01,
+   "ci95": [
+    -0.035,
+    0.015
+   ],
+   "a_only": 2,
+   "b_only": 4
+  },
+  "Vi-R": {
+   "missing": "Vi did not answer all 200 items"
+  }
+ },
+ "verdict": "INCONCLUSIVE",
+ "reason": "neither the SUPPORTED bounds nor a REFUTED bound hold"
+}

@@ -68,20 +68,27 @@ in this order, and the first that fits wins:
 
 1. one GPU;
 2. several GPUs: vLLM tensor parallel (heads divisible by the size), or llama.cpp's
-   layer split;
+   layer split, sized card by card (below); OVMS serves one GPU;
 3. MoE experts in DRAM (llama.cpp `--n-cpu-moe N`): only when the GPU placements do not
    fit, the CPU has AMX or AVX-512, and the DRAM side's bandwidth bound per token stays
-   above a floor. The fit takes the fewest layers whose experts leave the GPU;
+   above a floor. The fit takes the fewest layers whose experts leave the GPU, trying
+   1, 2, ... of the free cards (largest budget first) and keeping the plan with the most
+   context, then the fewest such layers, then the most sequences, then the fewest cards;
 4. CPU only.
 
 Per placement:
 
 ```
-weights        = bytes of each tensor class to serve (MTP left out unless the GGUF holds it)
+weights        = bytes of each tensor class to serve (MTP left out unless the GGUF holds it,
+                 as llama.cpp's conversion of safetensors does)
 KV per token   = full layers x 2 x kv heads x head dim x bytes
                + indexer keys (sparse attention)
-               + sliding layers x 2 x kv heads x head dim x bytes, for at most the window
+               + sliding layers x 2 x kv heads x head dim x bytes, for:
+                   vLLM       at most the window
+                   llama.cpp  at most GGML_PAD(window + 512 ubatch, 256) tokens per slot
+                   OVMS       the whole context (OpenVINO GenAI has no sliding-window cache)
 state per seq  = linear layers x (v heads x k dim x v dim x 4 B + conv state)
+checkpoints    = llama.cpp: 4 per slot in host RAM, each the slot's SWA cache and state
 overhead (GPU) = runtime + activations (batch x widest matmul x 2 x 2 B) + logits (seqs x vocab x 4 B)
 host reserve   = max(10% of MemTotal, 4 GiB);   host budget = min(MemAvailable, cgroup room) - reserve
 GPU reserve    = max(5% of VRAM, 1 GiB);        GPU budget  = VRAM - in use by others - reserve
@@ -92,11 +99,56 @@ Context first: the largest context, halving from the model's cap, at which 4 seq
 fit at once and that is at least 32768 tokens (or the cap). Only when no placement
 reaches that does the fit take less, down to one sequence of 4096 tokens, and the
 summary says it is below the target. Then as many sequences as fit at that context.
+When no placement can be tried at all (every card busy or none with device-local memory,
+and the CPU not allowed), the refusal says that no Intel GPU with device-local memory is
+free.
 
 llama.cpp keeps the token embeddings and the n-gram table on the CPU by design
 (`src/llama-model.cpp`, input layer "always keep it on the CPU"), so those count as host
 bytes on every llama.cpp placement. OpenVINO's GPU plugin compiles from a host copy, so
 an OVMS GPU placement counts the weights as host bytes too.
+
+A sliding-window layer's cache is engine-specific. llama.cpp v0.8.0 gives each slot
+`GGML_PAD(min(n_ctx_seq, n_swa + n_ubatch), 256)` cells (`src/llama-kv-cache-iswa.cpp`),
+so Gemma 4's 1024-token window holds 1536 cells. OpenVINO GenAI 2026.4 has only a
+full-attention KV cache and a linear-attention state cache
+(`src/cpp/src/continuous_batching/cache/cache_type.hpp`), and one KV block spans every
+attention layer, so OVMS holds every token in the sliding-window layers too: Gemma 4
+costs 225280 B per token there (5 full and 25 sliding layers, K and V at 2 B).
+
+llama-server v0.8.0 keeps two host caches beside the KV cache: a prompt cache of up to
+8192 MiB (`--cache-ram`) and up to 32 context checkpoints per slot (`-ctxcp`), each a
+host copy of the slot's SWA cache and recurrent state (`tools/server/server-context.cpp`,
+`create_checkpoint`). The fit turns the prompt cache off (`--cache-ram 0`), keeps 4
+checkpoints per slot (a request makes them at the last user message and just before its
+prompt's end, which is what the next turn restores from), and counts slots x 4 x one
+checkpoint in the host bytes and the pod limit. A model with no sliding-window and no
+linear-attention layers makes none.
+
+On several GPUs llama.cpp places whole layers, so the fit sizes each card from the
+layers it gets, the way llama.cpp v0.8.0 assigns them with `-ngl 999`
+(`src/llama-model.cpp`, `load_tensors`). Layer `il` goes to the device
+`upper_bound(cumsum(ts) / sum(ts), il / (layers + 1))`, where layers is the GGUF's block
+count (`n_layer_all`): the trunk, then the MTP (nextn) blocks a GGUF holds. Qwen3.8 27B's
+GGUF keeps one (`qwen35.block_count` 65 for 64 trunk layers), and so does the GGUF the agent
+converts from safetensors: `convert_hf_to_gguf.py` runs without `--no-mtp`, so
+Qwen3.8-Flash-Next's has 49 blocks for 48 trunk layers. An MTP block counts its MTP
+tensors and no KV, since the cache covers the trunk only (`il < n_layer()`). The output
+layer (`il = layers`, holding `lm_head`) goes the same way, which is the last card. A
+model with tied embeddings (Gemma 4) has no `lm_head`: llama.cpp loads
+`token_embd` a second time as the output tensor on that device
+(`src/llama-model-loader.cpp`, `TENSOR_DUPLICATED`), so the output layer counts that copy,
+on one card as on several. Each layer's weights are its share of the class totals, minus its experts
+when it is one of the first `--n-cpu-moe` layers. The vision projector counts on the first
+card: `tools/mtmd/clip.cpp` loads it on the first GPU. Each layer's KV and recurrent state
+sit on its card, a sliding-window layer's at its padded cell count (above); the context
+checkpoints stay in host RAM. Every card also carries its own overhead.
+The fit emits `-ts` as whole layer counts summing to layers + 1, so each card gets exactly
+the layers it was sized for. It keeps every card within the smallest budget of the cards
+used, because the device plugin, not the fit, decides which card is device 0 inside the
+pod, and it balances the largest card's load. When no split fits, the placement is refused.
+`--explain` lists each card's layers, weights, KV and total, and `card_bytes` in `--json`
+has the same numbers.
 
 The overhead is an estimate from the formula, not a measurement;
 `K3D_GPU_FIT_OVERHEAD_GIB` replaces it with a measured value.
@@ -106,12 +158,15 @@ The overhead is an estimate from the formula, not a measurement;
 | Engine | Flags (spellings from each engine's own argument parser) |
 | --- | --- |
 | vLLM v0.32.0 | `--tensor-parallel-size`, `--max-model-len`, `--max-num-seqs`, `--gpu-memory-utilization` (vLLM still profiles activations inside that share), `--kv-cache-dtype fp8` when the checkpoint's `kv_cache_scheme` made the fit count one byte. CPU build (EAT): `VLLM_CPU_KVCACHE_SPACE` |
-| OVMS 2026.4.1 | `--max_num_seqs`, `--cache_size` (a static pool: the dynamic one grows past the fit) |
-| llama.cpp v0.8.0 | `-c` (context x slots), `-np`, `-ngl`, `-ts`, `--n-cpu-moe` or `--cpu-moe`, `-ctk`/`-ctv` |
+| OVMS 2026.4.1 | `--max_num_seqs`, `--cache_size` (a static pool in whole GiB, rounded up to hold every sequence: the dynamic one grows past the fit) |
+| llama.cpp v0.8.0 | `-c` (context x slots), `-np`, `-ngl`, `-ts` (layers per card), `--n-cpu-moe` or `--cpu-moe`, `--cache-ram 0`, `-ctxcp 4`, `-ctk`/`-ctv` |
 
 `agent up` applies them, sets the pod's memory request and limit to the fit, and
 annotates the pod `k3d-gpu.io/agent-fit`. `K3D_GPU_AGENT_MAX_LEN`, `K3D_GPU_AGENT_MAX_NUM_SEQS`
-and `K3D_GPU_AGENT_GPUS` are inputs the fit checks, not values that replace it. With
+and `K3D_GPU_AGENT_GPUS` are inputs the fit checks, not values that replace it.
+`K3D_GPU_AGENT_GPUS` reaches the fit unless OVMS serves the model (the backend set to OVMS
+or, with it unset, an OpenVINO IR): an OVMS pod holds one GPU, and `fit --gpus 2` with OVMS
+is refused as "OVMS serves one GPU". With
 `K3D_GPU_AGENT_BACKEND` unset, the engine the fit picks serves the model: OVMS, vLLM or
 llama-server. With `--model`, the model optimizer first picks the variant for the default
 engine (OVMS: Gemma 4's OpenVINO IR, for example). When that engine has nothing to serve,

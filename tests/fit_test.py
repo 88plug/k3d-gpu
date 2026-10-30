@@ -12,6 +12,7 @@ Fixtures (tests/fixtures/fit/SOURCES says where each came from):
 Usage: python3 tests/fit_test.py
 """
 
+import bisect
 import gzip
 import json
 import os
@@ -246,6 +247,11 @@ def config(model):
         return json.load(f)
 
 
+def weights(model):
+    with open(os.path.join(mdir(model), "weights.json"), encoding="utf-8") as f:
+        return json.load(f)
+
+
 class KV(unittest.TestCase):
     """KV bytes from config.json, worked out by hand from each config's fields."""
 
@@ -257,6 +263,19 @@ class KV(unittest.TestCase):
         self.assertEqual((kv["swa_per_token"], kv["window"]), (25 * 2 * 8 * 256 * 2, 1024))
         self.assertEqual(kv["state_per_seq"], 0)
         self.assertEqual(fit.per_seq(kv, 131072), 5 * 2 * 2 * 512 * 2 * 131072 + 25 * 2 * 8 * 256 * 2 * 1024)
+
+    def test_swa_cache_per_engine(self):
+        cfg = config("google__gemma-4-26B-A4B-it")
+        full, swa = 5 * 2 * 2 * 512 * 2, 25 * 2 * 8 * 256 * 2
+        self.assertEqual(full + swa, 225280)
+        # vLLM: the window
+        self.assertEqual(fit.per_seq(fit.kv_profile(cfg, 2, "vllm"), 131072), full * 131072 + swa * 1024)
+        # llama.cpp v0.8.0: GGML_PAD(min(n_ctx_seq, n_swa + n_ubatch 512), 256) cells per stream
+        kv = fit.kv_profile(cfg, 2, "llama.cpp")
+        self.assertEqual(fit.per_seq(kv, 131072), full * 131072 + swa * 1536)
+        self.assertEqual(fit.per_seq(kv, 1024), (full + swa) * 1024)
+        # OVMS (OpenVINO GenAI 2026.4): no sliding-window cache type, every layer at full context
+        self.assertEqual(fit.per_seq(fit.kv_profile(cfg, 2, "ovms"), 131072), 225280 * 131072)
 
     def test_qwen38_gated_deltanet(self):
         kv = fit.kv_profile(config("Qwen__Qwen3.8-27B"), 2)
@@ -378,9 +397,27 @@ class FitXeon(unittest.TestCase):
         d = plan("xeon6741p-4xb70", "google__gemma-4-26B-A4B-it-qat-q4_0-gguf")
         self.assertTrue(d["fits"], d["summary"])
         self.assertEqual((d["engine"], d["placement"], d["gpus"]), ("llama.cpp", "gpu", 1))
-        self.assertEqual((d["ctx"], d["seqs"]), (131072, 6))
+        # each slot's SWA cache is GGML_PAD(1024 + 512, 256) = 1536 cells, not the 1024 window
+        self.assertEqual((d["ctx"], d["seqs"]), (131072, 5))
         self.assertFalse(d["degraded"])
         self.assertIn("-ngl", d["flags"])
+
+    def test_gemma_ovms_cache_holds_every_token(self):
+        # OVMS gives Gemma 4's 25 sliding-window layers the whole context: 225280 B per token,
+        # and --cache_size (whole GiB) holds context x sequences at that, on every guard rung.
+        one = max(c["budget"] for c in fit.gpu_budget(host("xeon6741p-4xb70"))[0])
+        for hname, dev in (("xeon6741p-4xb70", "gpu"), ("xeon6741p-4xb70", "cpu"), ("desktop-i9-nogpu", None)):
+            d = plan(hname, "OpenVINO__gemma-4-26b-a4b-it-int4-ov", device=dev)
+            self.assertTrue(d["fits"], (hname, d["summary"]))
+            self.assertEqual(d["engine"], "ovms")
+            cache = [int(f.split("=")[1]) for f in d["flags"] if f.startswith("--cache_size=")][0]
+            self.assertGreaterEqual(cache * GIB, d["ctx"] * d["seqs"] * 225280, (hname, d["flags"]))
+            self.assertEqual(cache * GIB, d["kv_bytes"], hname)
+            if d["placement"] == "gpu":
+                self.assertLessEqual(d["gpu_bytes"], one)
+            for r, (s, c) in enumerate(d["guard"]["rungs"]):
+                k = dict(line.split("=", 1) for line in fit.knobs(d, r).splitlines())
+                self.assertGreaterEqual(int(k["cache_gib"]) * GIB, s * c * 225280, (hname, r))
 
     def test_vllm_host_side_per_rank(self):
         d = plan("xeon6741p-4xb70", "Qwen__Qwen3.8-27B")
@@ -437,6 +474,58 @@ class FitDesktop(unittest.TestCase):
         d = plan("desktop-i9-nogpu", "Intel__Qwen3.8-Flash-Next-W4A16-AutoRound")
         self.assertFalse(d["fits"])
         self.assertIn("exceed the host budget", d["reason"])
+
+
+class LlamaHostCaches(unittest.TestCase):
+    """llama-server v0.8.0 keeps an 8192 MiB host prompt cache (--cache-ram) and up to 32
+    context checkpoints per slot (-ctxcp), each a slot's SWA cache or recurrent state, in
+    host RAM. The fit turns the prompt cache off, bounds the checkpoints, and counts them."""
+
+    def flag(self, d, name):
+        i = d["flags"].index(name)
+        return int(d["flags"][i + 1])
+
+    def test_gemma_qat_cpu_on_the_desktop(self):
+        d = plan("desktop-i9-nogpu", "google__gemma-4-26B-A4B-it-qat-q4_0-gguf")
+        self.assertTrue(d["fits"], d["summary"])
+        self.assertEqual((d["engine"], d["placement"]), ("llama.cpp", "cpu"))
+        self.assertEqual(self.flag(d, "--cache-ram"), 0)
+        k = self.flag(d, "-ctxcp")
+        self.assertGreaterEqual(k, 1)
+        # one checkpoint: 25 SWA layers x 2 x 8 kv heads x 256 x 2 B over the slot's SWA
+        # cache, GGML_PAD(1024 window + 512 ubatch, 256) = 1536 cells
+        ckpt = 25 * 2 * 8 * 256 * 2 * 1536
+        self.assertGreaterEqual(d["ckpt_bytes"], d["seqs"] * k * ckpt)
+        cfg = config("google__gemma-4-26B-A4B-it-qat-q4_0-gguf")
+        w = json.load(open(os.path.join(mdir("google__gemma-4-26B-A4B-it-qat-q4_0-gguf"), "weights.json")))
+        m = fit.model_profile(cfg, w)
+        self.assertGreaterEqual(d["host_bytes"], m["serve_bytes"] + fit.HOST_RUNTIME["llama.cpp"] + d["kv_bytes"]
+                                + d["seqs"] * k * ckpt)
+        # the pod limit holds the checkpoints and stays inside the host budget
+        budget, _, _ = fit.host_budget(host("desktop-i9-nogpu"))
+        self.assertGreaterEqual(int(d["k8s"]["memory_limit"][:-2]) * GIB, d["host_bytes"])
+        self.assertLessEqual(int(d["k8s"]["memory_limit"][:-2]) * GIB, budget)
+        # and on every guard rung
+        for r, (rs, rc) in enumerate(d["guard"]["rungs"]):
+            self.assertGreaterEqual(int(d["guard"]["rung_memory_limit"][r][:-2]) * GIB,
+                                    d["host_bytes"] - d["kv_bytes"] - d["ckpt_bytes"]
+                                    + d["guard"]["rung_kv_bytes"][r] + rs * k * ckpt, r)
+
+    def test_recurrent_state_checkpoints_on_the_host(self):
+        # Flash-Next: 36 gated-DeltaNet layers, each checkpoint the per-sequence state
+        d = plan("xeon6741p-4xb70", "ggml-org__Qwen3.8-Flash-Next-GGUF")
+        self.assertTrue(d["fits"], d["summary"])
+        k = self.flag(d, "-ctxcp")
+        state = 36 * (48 * 128 * 128 * 4 + 3 * (2 * 16 * 128 + 48 * 128) * 2)
+        self.assertEqual(d["ckpt_bytes"], d["seqs"] * k * state)
+        self.assertIn("--cache-ram", d["flags"])
+
+    def test_full_attention_makes_no_checkpoints(self):
+        cfg = config("Qwen__Qwen3.8-27B")
+        cfg = dict(cfg, text_config=dict(cfg.get("text_config") or cfg, layer_types=None))
+        kv = fit.kv_profile(cfg, 2)
+        kv["ckpts"] = 4
+        self.assertEqual(fit.ckpt_seq(kv, 65536), 0)
 
 
 class FitLaptop(unittest.TestCase):
@@ -499,6 +588,33 @@ class Overrides(unittest.TestCase):
         # RedHat INT4 carries a kv_cache_scheme: vLLM serves an fp8 KV cache.
         d = plan("xeon6741p-4xb70", "RedHatAI__Qwen3.8-27B-INT4")
         self.assertTrue(any("kv_cache_scheme" in s for s in d["explain"]))
+
+
+class OvmsOneGpu(unittest.TestCase):
+    """OVMS serves one GPU: --gpus 2 is refused, never sized as a layer split of two cards."""
+
+    def test_two_gpus_asked_is_refused(self):
+        for mname in ("OpenVINO__gemma-4-26b-a4b-it-int4-ov", "OpenVINO__Qwen3.8-27B-int4-ov"):
+            d = plan("xeon6741p-4xb70", mname, gpus=2, device="gpu")
+            self.assertFalse(d["fits"], (mname, d["summary"]))
+            self.assertIn("OVMS serves one GPU", d["reason"])
+
+    def test_cache_size_within_one_card(self):
+        one = max(c["budget"] for c in fit.gpu_budget(host("xeon6741p-4xb70"))[0])
+        for gpus in (None, 1, 2):
+            d = plan("xeon6741p-4xb70", "OpenVINO__gemma-4-26b-a4b-it-int4-ov", gpus=gpus, device="gpu")
+            if not d["fits"]:
+                continue
+            self.assertEqual((d["placement"], d["gpus"]), ("gpu", 1), gpus)
+            cache = [int(f.split("=")[1]) for f in d["flags"] if f.startswith("--cache_size=")]
+            self.assertLessEqual(cache[0] * GIB, one, (gpus, d["flags"]))
+
+    def test_no_free_gpu_says_so(self):
+        # device gpu on a host with no Intel GPU of its own memory: no placement is tried at all
+        d = plan("desktop-i9-nogpu", "OpenVINO__Qwen3.8-27B-int4-ov", device="gpu")
+        self.assertFalse(d["fits"])
+        self.assertIn("no Intel GPU with device-local memory is free", d["reason"])
+        self.assertNotIn("release notes", d["reason"])
 
 
 class Guard(unittest.TestCase):
@@ -701,6 +817,246 @@ class FlashNextGGUF(unittest.TestCase):
         d = plan("desktop-i9-nogpu", FLASH_GGUF)
         self.assertFalse(d["fits"])
         self.assertTrue(any("IQ4_NL" in s for s in d["explain"]) and any("Q2_K" in s for s in d["explain"]))
+
+
+def gguf_nextn(cfg, w):
+    """MTP (nextn) blocks a GGUF holds after its trunk: the config's count when the GGUF has
+    MTP tensors (llama.cpp's converter keeps or drops them all)."""
+    tc = cfg.get("text_config") or cfg
+    if w["format"] != "gguf" or not w["classes"].get("mtp", {}).get("bytes"):
+        return 0
+    return tc.get("mtp_num_hidden_layers") or tc.get("num_nextn_predict_layers") or 1
+
+
+def llama_cards(d, cfg, w, kv_layer):
+    """Each card's GPU bytes for a llama.cpp plan, worked out here from its flags the way
+    llama.cpp v0.8.0 assigns them (src/llama-model.cpp load_tensors, -ngl past the layer
+    count): layer il on device upper_bound(cumsum(ts) / sum(ts), il / (n_layer_all + 1)), the
+    output layer (il = n_layer_all) the same way, the experts of the first --n-cpu-moe layers
+    in host RAM, each layer's KV on its device, and each card's own overhead. n_layer_all is
+    the GGUF's block count: the trunk, then the MTP blocks a GGUF holds (gguf_nextn). Weights
+    per trunk layer are the class totals over the trunk; an MTP block holds its share of the
+    MTP tensors and no KV; the output layer holds lm_head (with tied embeddings a copy of
+    token_embd), and the vision projector is on the first GPU (tools/mtmd/clip.cpp).
+    kv_layer(il, ctx) is one sequence's KV of layer il."""
+    tc = cfg.get("text_config") or cfg
+    n = tc["num_hidden_layers"]
+    nx = gguf_nextn(cfg, w)
+    f = d["flags"]
+    ts = [int(x) for x in f[f.index("-ts") + 1].split(",")]
+    ncpu = int(f[f.index("--n-cpu-moe") + 1]) if "--n-cpu-moe" in f else n if "--cpu-moe" in f else 0
+    cls = {k: v["bytes"] for k, v in w["classes"].items()}
+    cum, c = [], 0
+    for t in ts:
+        c += t
+        cum.append(c / sum(ts))
+    cards = [0] * len(ts)
+    cards[0] += cls.get("vision", 0)
+    for il in range(n + nx + 1):
+        dev = bisect.bisect_right(cum, il / (n + nx + 1))
+        if il == n + nx:
+            # the output weight: lm_head, or with tied embeddings (no output.weight) a copy of
+            # token_embd that llama.cpp loads as the output tensor (src/llama-model-loader.cpp)
+            cards[dev] += cls.get("lm_head", 0) or cls.get("embed", 0)
+        elif il >= n:
+            cards[dev] += cls["mtp"] / nx
+        else:
+            cards[dev] += (cls.get("other", 0) / n + (cls.get("experts", 0) / n if il >= ncpu else 0)
+                           + kv_layer(il, d["ctx"]) * d["seqs"])
+    m = fit.model_profile(cfg, w)
+    ov = fit._overhead("llama.cpp", m, fit.TARGET_SEQS, None)[0]
+    return ts, [int(b + ov) for b in cards]
+
+
+def flash_next_kv(il, ctx):
+    # every 4th layer full attention: 2 x 2 kv heads x 256 x 2 B + indexer 128 x 2 B per token;
+    # the rest gated DeltaNet: 48 x 128 x 128 x 4 B state + 3 x 10240 conv ch x 2 B per sequence
+    return (2 * 2 * 256 * 2 + 128 * 2) * ctx if il % 4 == 3 else 48 * 128 * 128 * 4 + 3 * 10240 * 2
+
+
+def qwen38_27b_kv(il, ctx):
+    # every 4th layer full attention: 2 x 4 kv heads x 256 x 2 B per token; the rest gated
+    # DeltaNet: 48 x 128 x 128 x 4 B state + 3 x (2 x 16 x 128 + 48 x 128) conv ch x 2 B per sequence
+    return 2 * 4 * 256 * 2 * ctx if il % 4 == 3 else 48 * 128 * 128 * 4 + 3 * (2 * 16 * 128 + 48 * 128) * 2
+
+
+def gemma4_kv(il, ctx):
+    # every 6th layer global: 2 x 2 kv heads x 512 x 2 B per token; the rest a 1024-token window,
+    # whose llama.cpp v0.8.0 cache is GGML_PAD(min(n_ctx_seq, 1024 + 512 ubatch), 256) cells per
+    # slot (src/llama-kv-cache-iswa.cpp), n_ctx_seq itself padded to 256 (src/llama-context.cpp)
+    if il % 6 == 5:
+        return 2 * 2 * 512 * 2 * ctx
+    return 2 * 8 * 256 * 2 * min((ctx + 255) // 256 * 256, 1536)
+
+
+class LlamaSplit(unittest.TestCase):
+    """llama.cpp over several GPUs: each card's own layers, KV and overhead within its budget."""
+
+    def budget(self, k):
+        return min(c["budget"] for c in fit.gpu_budget(host("xeon6741p-4xb70"))[0][:k])
+
+    def test_layer_devices(self):
+        # upper_bound(cumsum(ts)/sum, il/(n_layer+1)): -ts 30,30 over 48 layers puts 25 on the first card
+        self.assertEqual(fit.llama_layer_devices([30, 30], 48), [0] * 25 + [1] * 24)
+        # integer layer counts that sum to n_layer + 1 give exactly those counts, the output last
+        self.assertEqual(fit.llama_layer_devices([28, 21], 48), [0] * 28 + [1] * 21)
+        self.assertEqual(fit.llama_layer_devices([10, 0, 21], 30), [0] * 10 + [2] * 21)
+
+    def test_old_split_overflows_the_second_card(self):
+        # The plan this replaces: -ts 30,30 --n-cpu-moe 28 at 262144 x 4 puts ~43.5 GiB on a 32 GiB card.
+        cfg = config(FLASH_GGUF)
+        w = weights(FLASH_GGUF)["groups"]["IQ4_NL"]
+        old = {"flags": ["-ts", "30,30", "--n-cpu-moe", "28"], "ctx": 262144, "seqs": 4}
+        _, cards = llama_cards(old, cfg, w, flash_next_kv)
+        self.assertGreater(cards[1], 32 * GIB)
+
+    def check(self, d, cfg, w, kv_layer):
+        n = (cfg.get("text_config") or cfg)["num_hidden_layers"]
+        ts, cards = llama_cards(d, cfg, w, kv_layer)
+        self.assertEqual(sum(ts), n + gguf_nextn(cfg, w) + 1, ts)
+        self.assertEqual(len(ts), d["gpus"])
+        budget = self.budget(d["gpus"])
+        for i, b in enumerate(cards):
+            self.assertLessEqual(b, budget, (i, ts, d["flags"]))
+        # the fit's own per-card bytes agree with the ones worked out here
+        self.assertEqual(len(d["card_bytes"]), len(ts))
+        for got, want in zip(d["card_bytes"], cards):
+            self.assertAlmostEqual(got / GIB, want / GIB, delta=0.01)
+        self.assertEqual(d["gpu_bytes"], max(d["card_bytes"]))
+        # the KV over the cards is the plan's KV
+        self.assertAlmostEqual(sum(kv_layer(il, d["ctx"]) for il in range(n)) * d["seqs"] / GIB, d["kv_bytes"] / GIB,
+                               delta=0.01)
+
+    def test_flash_next_iq4nl_cards_within_budget(self):
+        d = plan("xeon6741p-4xb70", FLASH_GGUF)
+        self.assertTrue(d["fits"], d["summary"])
+        self.assertEqual((d["placement"], d["gpus"]), ("moe-offload", 2))
+        w = weights(FLASH_GGUF)["groups"]["IQ4_NL"]
+        self.check(d, config(FLASH_GGUF), w, flash_next_kv)
+
+    def test_gemma_layer_split_cards_within_budget(self):
+        g = "google__gemma-4-26B-A4B-it-qat-q4_0-gguf"
+        d = plan("xeon6741p-4xb70", g, ctx=262144, seqs=6)
+        self.assertTrue(d["fits"], d["summary"])
+        self.assertEqual((d["placement"], d["gpus"]), ("gpu-split", 2))
+        self.check(d, config(g), weights(g), gemma4_kv)
+
+    def test_mtp_blocks_take_layer_slots(self):
+        # Intel/Qwen3.8-27B-q4km-AutoRound's GGUF holds Qwen3.8's MTP block after its 64-layer
+        # trunk (its header at 4b30b30e: qwen35.block_count 65, qwen35.nextn_predict_layers 1,
+        # blk.64.nextn.*). llama.cpp v0.8.0 assigns devices over all 65 blocks plus the output
+        # layer (src/llama-model.cpp, n_layer_all) and gives the MTP block no KV (the cache
+        # covers il < n_layer()), so -ts counts 66 layers: counts summing to 65 put one more
+        # trunk layer on the first card than the fit sized it for.
+        g = "Intel__Qwen3.8-27B-q4km-AutoRound"
+        d = plan("xeon6741p-4xb70", g, gpus=2, device="gpu")
+        self.assertTrue(d["fits"], d["summary"])
+        self.assertEqual((d["engine"], d["placement"], d["gpus"]), ("llama.cpp", "gpu-split", 2))
+        self.check(d, config(g), weights(g), qwen38_27b_kv)
+        self.assertTrue(any("layer 64" in s and "MTP" in s for s in d["explain"]), d["explain"])
+
+    def test_tied_output_copy_on_one_card(self):
+        # Gemma 4 ties its embeddings: no output.weight, so llama.cpp loads token_embd a second
+        # time as the output tensor, on the output layer's device (src/llama-model-loader.cpp,
+        # TENSOR_DUPLICATED). On one card that copy is GPU bytes; the input copy stays on the host.
+        g = "google__gemma-4-26B-A4B-it-qat-q4_0-gguf"
+        d = plan("xeon6741p-4xb70", g)
+        self.assertEqual((d["engine"], d["placement"], d["gpus"]), ("llama.cpp", "gpu", 1))
+        m = fit.model_profile(config(g), weights(g))
+        self.assertEqual(m["bytes"]["lm_head"], 0)
+        ov = fit._overhead("llama.cpp", m, fit.TARGET_SEQS, None)[0]
+        want = m["serve_bytes"] - m["lookup_bytes"] + m["bytes"]["embed"] + ov + d["kv_bytes"]
+        self.assertAlmostEqual(d["gpu_bytes"] / GIB, want / GIB, delta=0.01)
+        self.assertLessEqual(d["gpu_bytes"], max(c["budget"] for c in fit.gpu_budget(host("xeon6741p-4xb70"))[0]))
+
+    def test_split_counts_the_context_checkpoints_on_the_host(self):
+        # llama-server keeps -ctxcp checkpoints of each slot's SWA cache in host RAM whatever
+        # card holds the layers: a split plan counts them in its host bytes, as one card does.
+        g = "google__gemma-4-26B-A4B-it-qat-q4_0-gguf"
+        d = plan("xeon6741p-4xb70", g, ctx=262144, seqs=6)
+        self.assertEqual(d["placement"], "gpu-split")
+        f = d["flags"]
+        self.assertEqual(f[f.index("--cache-ram") + 1], "0")
+        k = int(f[f.index("-ctxcp") + 1])
+        ckpt = 25 * 2 * 8 * 256 * 2 * 1536  # 25 SWA layers, K and V at 2 B, over 1536 cells
+        self.assertEqual(d["ckpt_bytes"], d["seqs"] * k * ckpt)
+        m = fit.model_profile(config(g), weights(g))
+        self.assertEqual(d["host_bytes"], int(fit.HOST_RUNTIME["llama.cpp"] + m["lookup_bytes"] + d["ckpt_bytes"]))
+        self.assertGreaterEqual(int(d["k8s"]["memory_limit"][:-2]) * GIB, d["host_bytes"])
+
+    def test_layer_bytes_are_the_bytes_to_serve(self):
+        # Sized from safetensors for a GGUF conversion: vLLM and OVMS leave the MTP head out
+        # (model_profile serve_bytes), but the GGUF the agent converts keeps it
+        # (convert_hf_to_gguf.py without --no-mtp), so llama.cpp's profile serves it as one
+        # more block after the trunk. The vision projector loads on the first GPU
+        # (tools/mtmd/clip.cpp takes the first GPU backend), not on the output layer's card.
+        cfg = config("Qwen__Qwen3.8-Flash-Next")
+        m = fit.model_profile(cfg, weights("Qwen__Qwen3.8-Flash-Next"))
+        self.assertGreater(m["bytes"]["mtp"], GIB)
+        self.assertGreater(m["bytes"]["vision"], GIB / 2)
+        lm = fit.llama_profile(m)
+        self.assertEqual((m["nextn"], lm["nextn"]), (0, 1))
+        self.assertEqual(lm["serve_bytes"], m["serve_bytes"] + m["bytes"]["mtp"])
+        wl, kl = fit.llama_layer_bytes(lm, fit.kv_profile(cfg, 2), 4096, 1, 0)
+        self.assertEqual(len(wl), 48 + 1 + 1)
+        self.assertAlmostEqual(sum(wl), lm["serve_bytes"] - lm["lookup_bytes"], delta=1)
+        self.assertAlmostEqual(wl[48], m["bytes"]["mtp"], delta=1)
+        self.assertEqual(kl[48], 0)
+        self.assertAlmostEqual(wl[-1], m["bytes"]["lm_head"], delta=1)
+        self.assertAlmostEqual(wl[0] - wl[1], m["bytes"]["vision"], delta=1)
+        # a GGUF is served as it is
+        g = fit.model_profile(config(FLASH_GGUF), weights(FLASH_GGUF)["groups"]["IQ4_NL"])
+        self.assertIs(fit.llama_profile(g), g)
+
+    def test_conversion_keeps_the_mtp_blocks(self):
+        # The agent converts safetensors only llama.cpp runs here (Qwen3.8-Flash-Next) with
+        # convert_hf_to_gguf.py and no --no-mtp, so the GGUF it serves holds the MTP block:
+        # llama.cpp v0.8.0 conversion/qwen.py (_QwenMtpMixin) extends block_count by
+        # mtp_num_hidden_layers. llama.cpp assigns devices over that block too, so -ts counts
+        # it as for a GGUF repo that holds one, and the card it lands on holds its tensors.
+        g = "Qwen__Qwen3.8-Flash-Next"
+        d = plan("xeon6741p-4xb70", g)
+        self.assertTrue(d["fits"], d["summary"])
+        self.assertEqual((d["engine"], d["placement"]), ("llama.cpp", "moe-offload"))
+        self.assertEqual(d["convert"]["args"], ["--outtype", "bf16"])
+        self.check(d, config(g), dict(weights(g), format="gguf"), flash_next_kv)  # the converted GGUF
+        self.assertTrue(any("layer 48 is the GGUF's MTP block" in s for s in d["explain"]), d["explain"])
+
+    def test_moe_offload_takes_the_best_number_of_cards(self):
+        # Every card is held to the smallest budget of the cards used, so two smaller cards
+        # beside two large ones can leave less room than the two large ones alone. The fit
+        # tries 1, 2, ... of the free cards by budget and keeps the plan with the fewest
+        # CPU-expert layers, not every free card.
+        h = host("xeon6741p-4xb70")
+        for g, used in zip(h["gpus"], (0, 0, 12, 14)):
+            g["vram_used"], g["users"] = used * GIB, []
+        model = mdir("Intel__Qwen3.8-Flash-Next-W4A16-AutoRound")
+        cfg = config("Intel__Qwen3.8-Flash-Next-W4A16-AutoRound")
+        n = (cfg.get("text_config") or cfg)["num_hidden_layers"]
+
+        def ncpu(d):
+            f = d["flags"]
+            return int(f[f.index("--n-cpu-moe") + 1]) if "--n-cpu-moe" in f else n
+
+        kw = dict(ctx=262144, seqs=6, device="gpu")
+        auto = fit.plan_with_variants(h, model, [], **kw)
+        self.assertTrue(auto["fits"], auto["summary"])
+        self.assertEqual(auto["placement"], "moe-offload")
+        each = [fit.plan_with_variants(h, model, [], gpus=k, **kw) for k in range(1, 5)]
+        self.assertEqual(ncpu(auto), min(ncpu(d) for d in each if d["fits"]))
+        self.assertLess(auto["gpus"], 4)
+        budget = min(c["budget"] for c in fit.gpu_budget(h)[0][:auto["gpus"]])
+        self.assertLessEqual(max(auto["card_bytes"]), budget)
+
+    def test_moe_offload_takes_the_cards_asked_for(self):
+        # --gpus 3 on the Xeon, where two cards are free: refused, not two cards.
+        d = plan("xeon6741p-4xb70", FLASH_GGUF, gpus=3, device="gpu")
+        self.assertFalse(d["fits"])
+        self.assertIn("3 GPUs asked, 2 not busy", d["reason"])
+
+    def test_too_much_for_any_split_is_refused(self):
+        d = plan("xeon6741p-4xb70", "google__gemma-4-26B-A4B-it-qat-q4_0-gguf", ctx=262144, seqs=12, device="gpu")
+        self.assertFalse(d["fits"])
 
 
 if __name__ == "__main__":

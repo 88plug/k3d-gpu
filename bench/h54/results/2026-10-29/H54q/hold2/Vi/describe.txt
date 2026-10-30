@@ -1,0 +1,123 @@
+Name:             vi-647f5f8cf5-d8hzl
+Namespace:        h54
+Priority:         0
+Service Account:  default
+Node:             k3d-k3dgpu-g-h54q-2-server-0/172.19.0.2
+Start Time:       Thu, 29 Oct 2026 20:53:57 +0000
+Labels:           app=vi
+                  pod-template-hash=647f5f8cf5
+Annotations:      <none>
+Status:           Running
+IP:               10.42.0.11
+IPs:
+  IP:           10.42.0.11
+Controlled By:  ReplicaSet/vi-647f5f8cf5
+Containers:
+  vllm:
+    Container ID:    containerd://bf1ef7aaef5ba7ac24e3dfbe80acb08a89e9dc52946405d9d04a414383cca740
+    Image:           vllm/vllm-openai-cpu:v0.32.0@sha256:ffaba3989b9b96d95a576143c872a4110ce9800f5199b6a36eb27bdff1cbbe05
+    Image ID:        docker.io/vllm/vllm-openai-cpu@sha256:ffaba3989b9b96d95a576143c872a4110ce9800f5199b6a36eb27bdff1cbbe05
+    Port:            2080/TCP (http)
+    Host Port:       0/TCP (http)
+    SeccompProfile:  RuntimeDefault
+    Args:
+      --block-size
+      128
+      --dtype
+      bfloat16
+      --distributed_executor_backend
+      mp
+      --enable_chunked_prefill
+      --enforce-eager
+      --enable-prefix-caching
+      --enable-auto-tool-choice
+      --tool-call-parser
+      gemma4
+      --chat-template
+      /workspace/vllm/examples/tool_chat_template_gemma4.jinja
+      --tensor-parallel-size
+      1
+      --pipeline-parallel-size
+      1
+      --model
+      /data/Intel_gemma-4-26B-A4B-it-int4-AutoRound
+      --served-model-name
+      google/gemma-4-26B-A4B-it
+      --port
+      2080
+      --max-model-len
+      8192
+      --attention-backend
+      CPU_ATTN
+    State:          Terminated
+      Reason:       Error
+      Exit Code:    1
+      Started:      Thu, 29 Oct 2026 20:57:58 +0000
+      Finished:     Thu, 29 Oct 2026 20:58:50 +0000
+    Last State:     Terminated
+      Reason:       Error
+      Exit Code:    1
+      Started:      Thu, 29 Oct 2026 20:56:44 +0000
+      Finished:     Thu, 29 Oct 2026 20:57:35 +0000
+    Ready:          False
+    Restart Count:  3
+    Readiness:      http-get http://:http/health delay=10s timeout=1s period=5s #success=1 #failure=200
+    Environment Variables from:
+      vi-config   ConfigMap  Optional: false
+    Environment:  <none>
+    Mounts:
+      /data from model-volume (rw)
+      /dev/shm from shm (rw)
+      /root/.cache/vllm from vllm-cache (rw)
+      /tmp from tmp (rw)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-n5pkk (ro)
+      /workspace/vllm/examples from chat-templates (rw)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       False 
+  ContainersReady             False 
+  PodScheduled                True 
+Volumes:
+  model-volume:
+    Type:          HostPath (bare host directory volume)
+    Path:          /var/apb-models
+    HostPathType:  Directory
+  shm:
+    Type:       EmptyDir (a temporary directory that shares a pod's lifetime)
+    Medium:     Memory
+    SizeLimit:  1Gi
+  tmp:
+    Type:       EmptyDir (a temporary directory that shares a pod's lifetime)
+    Medium:     
+    SizeLimit:  <unset>
+  vllm-cache:
+    Type:       EmptyDir (a temporary directory that shares a pod's lifetime)
+    Medium:     
+    SizeLimit:  <unset>
+  chat-templates:
+    Type:      ConfigMap (a volume populated by a ConfigMap)
+    Name:      vi-chat-templates
+    Optional:  false
+  kube-api-access-n5pkk:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason     Age                    From               Message
+  ----     ------     ----                   ----               -------
+  Normal   Scheduled  5m24s                  default-scheduler  Successfully assigned h54/vi-647f5f8cf5-d8hzl to k3d-k3dgpu-g-h54q-2-server-0
+  Normal   Pulling    5m24s                  kubelet            spec.containers{vllm}: Pulling image "vllm/vllm-openai-cpu:v0.32.0@sha256:ffaba3989b9b96d95a576143c872a4110ce9800f5199b6a36eb27bdff1cbbe05"
+  Normal   Pulled     4m33s                  kubelet            spec.containers{vllm}: Successfully pulled image "vllm/vllm-openai-cpu:v0.32.0@sha256:ffaba3989b9b96d95a576143c872a4110ce9800f5199b6a36eb27bdff1cbbe05" in 50.11s (50.11s including waiting). Image size: 1719072416 bytes.
+  Warning  BackOff    2m50s                  kubelet            spec.containers{vllm}: Back-off restarting failed container vllm in pod vi-647f5f8cf5-d8hzl_h54(2b652500-ab52-4f9c-8303-803d3d2287e2)
+  Warning  Unhealthy  2m2s (x24 over 4m22s)  kubelet            spec.containers{vllm}: Readiness probe failed: Get "http://10.42.0.11:2080/health": dial tcp 10.42.0.11:2080: connect: connection refused
+  Normal   Created    83s (x4 over 4m33s)    kubelet            spec.containers{vllm}: Container created
+  Normal   Started    83s (x4 over 4m33s)    kubelet            spec.containers{vllm}: Container started
+  Normal   Pulled     83s (x3 over 3m42s)    kubelet            spec.containers{vllm}: Container image "vllm/vllm-openai-cpu:v0.32.0@sha256:ffaba3989b9b96d95a576143c872a4110ce9800f5199b6a36eb27bdff1cbbe05" already present on machine and can be accessed by the pod

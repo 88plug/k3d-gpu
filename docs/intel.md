@@ -4,7 +4,7 @@ k3d-gpu turns one Linux machine into a single-node k3d cluster that schedules th
 Intel accelerators it finds: Arc / Core Ultra / Xe GPUs, the Core Ultra NPU,
 Gaudi 3, the Xeon DSA, IAA and QAT engines, AMX, and the P-cores and E-cores of
 hybrid client CPUs. One command (`k3d-gpu up`) detects them from sysfs, starts
-the matching Intel device plugins baked into the node image, and fails unless
+the matching Intel device plugins baked into the node image, and checks that
 each detected engine is advertised to the scheduler.
 
 This page is for Intel's open-source, AI PC and partner engineering teams. It
@@ -56,10 +56,16 @@ with detection, enablement and what k3d-gpu does with each, see the
   host step for DSA/IAA work queues (`accel-config`) and QAT VFs
   (`sriov_numvfs`, `vfio-pci`), each as an exact per-device apply and revert
   command. `up` and `detect` name the engines left out for want of that step.
-  The launcher never changes host configuration itself; `host-setup --apply`
-  runs the same commands after a y/N prompt.
-- **A schedulability assertion.** `up` fails unless every detected engine has
-  more than zero schedulable units. `test` runs one pod per engine: `nvidia-smi`
+  An IAA device whose kernel work queues hold every entry gets no such step, and
+  `up` does not name it; `doctor` does, with a shrink it never applies. All three
+  IAA devices on the Xeon 6741P were in that state [ledger:H52b]. The launcher
+  never changes host configuration itself; `host-setup --apply` runs the same
+  commands after a y/N prompt.
+- **A schedulability assertion.** `up` counts each detected engine's schedulable
+  units. With the default `K3D_GPU_VENDORS=auto` it warns for an engine at zero and
+  fails only when every engine is at zero; with an explicit vendor list it fails on
+  any listed engine at zero. On the Xeon 6741P, QAT advertised nothing and `up`
+  warned and finished [ledger:H52b]. `test` runs one pod per engine: `nvidia-smi`
   for NVIDIA, a pod that requests the Intel resource and lists the device nodes
   it received, and for hybrid CPUs a check of the pod's `Cpus_allowed_list`
   against the host's P-core or E-core list.
@@ -92,16 +98,20 @@ the plugins, and asserts the result, with no manual step.
 ## Capability matrix
 
 - **Detected**: `k3d-gpu detect` reports the engine from sysfs.
-- **Scheduled**: `k3d-gpu up` starts its plugin (or sets its labels) and fails
-  unless the cluster advertises more than zero units.
-- **Verified on hardware**: `up` and `test` passed on a real host. The only host
-  so far is an i9-13900T (P-cores 0-15, E-cores 16-31) with a UHD 770 iGPU
+- **Scheduled**: `k3d-gpu up` starts its plugin (or sets its labels) and counts
+  the units the cluster advertises (the schedulability assertion above).
+- **Verified on hardware**: `up` and `test` passed on a real host, or, where a cell
+  says so, what they did there. Two hosts so far. The first is an i9-13900T
+  (P-cores 0-15, E-cores 16-31) with a UHD 770 iGPU
   (`8086:a780`, `i915`) and 2 NVIDIA GPUs, recorded in the
   [PR #9 test plan](https://github.com/88plug/k3d-gpu/pull/9): `up` reported
   `nvidia=2, intel=1, hybrid=1`. That run used commit `109154d`. The hybrid
   `test` there only checked that each pod printed its `Cpus_allowed_list`; the
   stricter check that the list sits inside the P-core or E-core list landed
-  after it (`fb5c17d`) and has not yet run on hardware.
+  after it (`fb5c17d`) and has not yet run on hardware. The second is a Xeon 6741P
+  (Granite Rapids, 48 cores, AMX, AVX-512, 3 DSA, 3 IAA, 3 QAT 4xxx) with 4x Arc Pro
+  B70 on `xe`. A plain `up` ran there on 2026-10-20 [ledger:H52], and `up` after
+  `k3d-gpu host-setup --apply` on 2026-10-29 [ledger:H52b].
 - **Verified by sim**: `tests/detect_test.sh` builds a fake sysfs/devfs tree,
   sets `K3D_GPU_SYSROOT`, and runs `detect`, `doctor` or `test` against it, with
   `docker`, `k3d` and `kubectl` stubbed. 1028 cases pass (2026-10-20). Sim covers detection,
@@ -112,17 +122,22 @@ the plugins, and asserts the result, with no manual step.
 |--------|-----------------------------|----------|-----------|----------------------|------------------------------------------------|
 | NVIDIA GPU | `nvidia.com/gpu` | yes | yes | **yes**, 2 GPUs; `nvidia-smi` pod passed | loaded module; `/dev/nvidiactl`; runtime vs. CDI-only; `test` output and failure |
 | Intel GPU, `i915` | `gpu.intel.com/i915`; node labels `gpu.intel.com/xmx`, `media-vcs`, `media-vecs` | yes | yes | **yes**, UHD 770; device-listing pod passed | Alder / Raptor Lake names, kernels and GuC firmware, Meteor Lake, Arrow Lake-H/-S, mixed `i915` + `xe`, XMX and media-engine labels |
-| Intel GPU, `xe` (Battlemage, Lunar / Panther Lake, Crescent Island) | `gpu.intel.com/xe` | yes | yes | no | Lunar Lake, Battlemage dGPU, kernel/firmware checks, `xe.force_probe` hints, `vfio-pci` excluded |
+| Intel GPU, `xe` (Battlemage, Lunar / Panther Lake, Crescent Island) | `gpu.intel.com/xe`; node labels `gpu.intel.com/xmx`, `media-vcs`, `media-vecs` | yes | yes | **partly**, 4x Arc Pro B70 on the Xeon 6741P: `up` advertised all four, `xmx=true`, and `test`'s GPU pod passed, but no media label was set [ledger:H52]. A second run set `media-vcs=2` and `media-vecs=2` but advertised 2 of the 4: a serving workload held about half the VRAM of each card, and the busy-card filter (half the VRAM or more in use) dropped the two just over half [ledger:H52b]. No Lunar Lake, Panther Lake or Crescent Island host has run | Lunar Lake, Battlemage dGPU, kernel/firmware checks, `xe.force_probe` hints, `vfio-pci` excluded |
 | Intel NPU | `npu.intel.com/accel`; node label `k3d-gpu.io/npu.gen` | yes | yes | no | Lunar / Meteor Lake, `0x7d1d` named by CPU model (Meteor Lake vs. Arrow Lake-H), NPU vs. Gaudi, unbound NPU, firmware checks, forced `npu` fails `doctor` |
 | Gaudi 3 | `habana.ai/gaudi` | yes | yes (plain mode, no habana runtime) | no | `habanalabs` accel nodes, no-driver case, NPU + Gaudi on one host |
-| DSA | `dsa.intel.com/wq-user-*` | yes | yes | no | user work queues, no-work-queue case with per-device `accel-config` apply/revert (dedicated, or shared with PASID), kernel-WQ device opt-in (snapshot, own group on a free engine), forced `dsa` fails `doctor` |
-| IAA | `iaa.intel.com/wq-user-*` | yes | yes | no | user work queues, no-work-queue case with per-device `accel-config` apply/revert, iaa_crypto kernel-WQ opt-in with a snapshot revert, no room left, live zswap `deflate-iaa` left alone |
-| QAT (C62x, 4xxx, 420xx, 6xxx) | `qat.intel.com/*` | yes | yes | no | 4xxx and C62x PF with VFs, no VFs (apply = `sriov_totalvfs`, plugin VF driver named), no SR-IOV, unbound PF, `vfio-pci` check |
-| AMX | `feature.node.kubernetes.io/cpu-cpuid.AMX*=true` (labels, no plugin) | yes | yes (labels) | no | AMX flags detected and reported; CPU without AMX; `test` AMX probe passes on an AMX oneDNN matmul, fails on a non-AMX matmul and when no matmul ran |
-| CPU ISA (AVX-VNNI, AVX-512, VAES, GFNI, SHA, CET) | `feature.node.kubernetes.io/cpu-cpuid.<NAME>=true` (NFD names, labels only) | yes | yes (labels) | labels read on the UHD 770 host by `doctor`; not applied to a live cluster | NFD name mapping, `pku` unlabelled, no-flag CPU |
+| DSA | `dsa.intel.com/wq-user-*` | yes | yes | **yes** on the Xeon 6741P after `host-setup --apply --with-kernel-wqs`: `dsa.intel.com/wq-user-shared` 3, and the `test` pod got `/dev/dsa/wq2.0` [ledger:H52b] | user work queues, no-work-queue case with per-device `accel-config` apply/revert (dedicated, or shared with PASID), kernel-WQ device opt-in (snapshot, own group on a free engine), forced `dsa` fails `doctor` |
+| IAA | `iaa.intel.com/wq-user-*` | yes | yes | no. On the Xeon 6741P `iaa_crypto` held all 256 entries of each device, so `host-setup` configured no IAA work queue and no `iaa.intel.com` resource appeared [ledger:H52b] | user work queues, no-work-queue case with per-device `accel-config` apply/revert, iaa_crypto kernel-WQ opt-in with a snapshot revert, no room left, live zswap `deflate-iaa` left alone |
+| QAT (C62x, 4xxx, 420xx, 6xxx) | `qat.intel.com/*` | yes | yes | no. On the Xeon 6741P (4xxx) `host-setup --apply` created 48 VFs, but the QAT plugin crash-looped and advertised none; `up` warned and `test` failed [ledger:H52b] | 4xxx and C62x PF with VFs, no VFs (apply = `sriov_totalvfs`, plugin VF driver named), no SR-IOV, unbound PF, `vfio-pci` check |
+| AMX | `feature.node.kubernetes.io/cpu-cpuid.AMX*=true` (labels, no plugin) | yes | yes (labels) | labels **yes** on the Xeon 6741P: AMXTILE, AMXBF16, AMXINT8, AMXFP16, and `test`'s AMX pod read the `amx_tile` flag [ledger:H52]. That `test` predates the oneDNN matmul probe, which no recorded hardware run has reached: the second run's `test` stopped at QAT before it [ledger:H52b] | AMX flags detected and reported; CPU without AMX; `test` AMX probe passes on an AMX oneDNN matmul, fails on a non-AMX matmul and when no matmul ran |
+| CPU ISA (AVX-VNNI, AVX-512, VAES, GFNI, SHA, CET) | `feature.node.kubernetes.io/cpu-cpuid.<NAME>=true` (NFD names, labels only) | yes | yes (labels) | labels read on the UHD 770 host by `doctor`; on the Xeon 6741P a live node carried all 14 pre-registered AVX-512 and VNNI labels [ledger:H52] [ledger:H52b] | NFD name mapping, `pku` unlabelled, no-flag CPU |
 | Hybrid P/E cores | `k3d-gpu.io/hybrid-cpu=true`; pod label `k3d-gpu.io/cores` | yes | yes | **yes** at `109154d`: performance pod on CPU 0, efficient pod on CPU 20. The strict P/E placement check in `test` passed live on the merged tree (performance `0`, efficient `24`). The `ecluster`, `pcore-physical`, `latency` (on favored CPUs 8 and 10) and `lowpower` balloons verified live on the i9-13900T ([results](#how-hybrid-pe-pinning-works)); the Arrow Lake-H `cpu_lowpower` override is sim-only (UNVERIFIED live). | detection, no online E-cores, non-hybrid, forced, `doctor` lists, `test` placement pass and both failure modes; `cpu_lowpower` and no-L3 LP E-cores, E-core clusters, physical P-cores, favored CPUs from CPPC and MSR `0x771`, `latency` patched to the favored L2 dirs |
 
-The `xe`, NPU, Gaudi and Xeon rows have not run on hardware. If you have one of
+The NPU and Gaudi rows have not run on hardware: their scheduling is tested only
+against a simulated sysfs. The `xe`, DSA, IAA, QAT and AMX rows have run on one
+host, the Xeon 6741P, which also gave the CPU ISA labels their first recorded live
+node; both of its runs are REFUTED [ledger:H52] [ledger:H52b], and each row above
+says what happened there. `xe` on a Lunar or Panther Lake iGPU or a Crescent
+Island card, and QAT on any generation but 4xxx, have not run. If you have one of
 these platforms, `k3d-gpu doctor && k3d-gpu up && k3d-gpu test` is the probe that
 moves a row to verified. Please send its output.
 
@@ -135,14 +150,27 @@ moves a row to verified. Please send its output.
 balloons policy) onto Kubernetes. It targets Xeon servers. We read it at
 [`0ecf67a`](https://github.com/intel/enterprise-agent-toolkit/tree/0ecf67a); a
 k3d-gpu cluster is a candidate bring-your-own target for a single developer
-machine. [`integrations/eat/eat-up.sh`](../integrations/eat/eat-up.sh) deploys the
-pinned tag `release-1.0.3-hotfix`
-([`0d3438d`](https://github.com/intel/enterprise-agent-toolkit/tree/0d3438d7119de44cafc5903f66665c0b623e3333);
-[tags](https://api.github.com/repos/intel/enterprise-agent-toolkit/tags), checked
-2026-10-28). The latest, `release-1.1.0`, adds OpenShell
-([PR #14](https://github.com/intel/enterprise-agent-toolkit/pull/14),
-`deploy_openshell=off` by default); `eat-up.sh` refuses `deploy_openshell=on` because
-its pinned tag has no OpenShell role. Pins and upstream changes, Release 1.1.0
+machine. There are two paths, one per EAT generation:
+
+- **EAT 1.x.** [`integrations/eat/eat-up.sh`](../integrations/eat/eat-up.sh) deploys the
+  pinned tag `release-1.1.0`, the latest
+  ([`0c726f5`](https://github.com/intel/enterprise-agent-toolkit/tree/0c726f576595971c53cc45b94e08ba969beb4a4a);
+  [tags](https://api.github.com/repos/intel/enterprise-agent-toolkit/tags), checked
+  2026-10-29), through EAT's own brownfield path, with its guardrail, vLLM Semantic
+  Router, OpenShell, Kata and rack-scale mode off and the vLLM CPU image pinned by digest.
+  `release-1.1.0` adds OpenShell
+  ([PR #14](https://github.com/intel/enterprise-agent-toolkit/pull/14),
+  `deploy_openshell=off` by default); `eat-up.sh` refuses `deploy_openshell=on` because
+  OpenShell has not run on a k3d-gpu cluster. The `release-1.1.0` path is pre-registered
+  as F4 and has not run yet.
+- **EAT 2.0.** EAT [PR #19](https://github.com/intel/enterprise-agent-toolkit/pull/19)
+  moved the toolkit into Intel's EAS installer (`es_auto_installer.sh install
+  agent-toolkit`). `k3d-gpu eas up --agent-toolkit` runs that installer against the
+  cluster, with every k3d choice made from what it reads there:
+  [intel/eas.md](intel/eas.md). It has not run end to end yet; F3 in
+  [EXPERIMENTS.md](../EXPERIMENTS.md#f3-pre-registration-i9-13900t-2026-10-29) is PENDING.
+
+Pins and upstream changes, Release 1.1.0
 ([PR #21](https://github.com/intel/enterprise-agent-toolkit/pull/21)) included:
 [platforms.md](platforms.md#intel-enterprise-agent-toolkit-eat).
 
@@ -177,24 +205,33 @@ i9-13900T [ledger:H18]. No Xeon run backs it yet.
 EAT's defaults are read from `release-1.0.3-hotfix`: `docs/prerequisites.md`,
 `docs/single-node-deployment.md`, `docker/README.md` and `core/helm-charts/`
 [provenance:P303]. The k3d-gpu column is what the launcher does today; where it has
-run on hardware, the row says which host.
+run on hardware, the row says which host. `release-1.1.0`, which `eat-up.sh` deploys now,
+moves the vLLM CPU image to `v0.28.0` and turns the Qwen3Guard guardrail on by default
+([platforms.md](platforms.md#intel-enterprise-agent-toolkit-eat)). EAT 2.0 keeps the same
+hardware minimums
+([prerequisites.md#L5-L9](https://github.com/intel/enterprise-agent-toolkit/blob/036b66234801e9bd950afd90830821859780d668/docs/prerequisites.md#L5-L9))
+and installs through EAS.
 
 | | EAT by default | With k3d-gpu |
 |---|---|---|
 | Hosts | Xeon. Minimum 48 cores and 32 GB RAM, recommended 96+ cores and 64 GB; Docker mode asks for 96+ cores and 128 GB | Any Intel host it detects: client Core and Core Ultra, Xeon, Arc, Gaudi (detection and config fixture-tested per family, [platforms.md](platforms.md)). EAT ran end to end on one i9-13900T with no AMX and no AVX-512, n=1 [ledger:H1b] |
 | OS | Ubuntu 22.04 / 24.04, x86_64 | Any Linux with Docker that runs k3d; `host-setup` prints pinned driver steps for Ubuntu 24.04/26.04, Fedora, Arch and Manjaro |
 | Cluster setup | Kubespray onto the host, or brownfield on an existing cluster; the `ei-*-eligible` labels come only from the Kubespray path | One `k3d-gpu up`; `K3D_GPU_NODE_LABELS` sets EAT's labels, `K3D_GPU_BALLOONS=external` hands the NRI policy to EAT [ledger:H14] |
+| EAT 2.0 install | EAS `es_auto_installer.sh install agent-toolkit`, onto Kubespray or an existing cluster (`existing_kubernetes`) | `k3d-gpu eas up --agent-toolkit`: the existing-cluster mode, with the k3d settings and patches chosen from the cluster ([intel/eas.md](intel/eas.md)). Not run yet; F3 is PENDING |
 | Engines | vLLM CPU (`vllm/vllm-openai-cpu:v0.24.0`, bf16), 9 model profiles in the single-node table (7 chat, 1 embedding, 1 reranker). An OVMS Helm chart ships but no default path deploys it: `openvino/model_server:2025.4`, plus an unpinned `latest-py` tag for its model-export containers | `agent up` picks per host: vLLM on a Gaudi, OVMS 2026.4.1 on an XMX GPU, else OVMS on the P-cores; vLLM XPU (`v0.31.0`) or llm-scaler on Arc by flag. Its images are pinned by digest in `images.lock` |
-| Accelerators | None requested: no `gpu.intel.com`, `habana.ai` or `/dev/dri` on the default path | Intel GPU, NPU, Gaudi, DSA, IAA and QAT plugins started per detected device, and `up` fails unless each is schedulable |
+| Accelerators | None requested: no `gpu.intel.com`, `habana.ai` or `/dev/dri` on the default path | Intel GPU, NPU, Gaudi, DSA, IAA and QAT plugins started per detected device, and `up` checks that each is schedulable (on the Xeon 6741P it warned when QAT advertised none [ledger:H52b]) |
 | CPU placement | NRI balloons sized for Xeon NUMA; on a hybrid CPU EAT's reservation needs the patch in [`contrib/eat/`](../contrib/eat) | Balloons baked for hybrid P/E and multi-NUMA hosts; vLLM on P-cores and agent services on E-cores through `contrib/eat/` values |
 
-Not covered by either column: EAT's XPU path for Arc B60/B70, which shipped in
-`release-1.1.0`, not in the pinned tag
-([platforms.md](platforms.md#eat-pull-requests-checked-2026-10-28)).
+Not covered by either column: EAT's XPU path for Arc B60/B70. It ships in
+`release-1.1.0`, but `eat-up.sh` deploys the CPU path
+([platforms.md](platforms.md#eat-pull-requests-checked-2026-10-28)), and EAT 2.0 leaves
+Arc out ("Not in this release: ... Intel® Arc™ (XPU) deployment",
+[README.md#L36](https://github.com/intel/enterprise-agent-toolkit/blob/036b66234801e9bd950afd90830821859780d668/README.md#L36)).
+On k3d-gpu an Arc card is served by `k3d-gpu agent up`.
 
 **In progress.** A campaign on one Xeon 6741P (Granite Rapids, AMX) host
 with 4x Arc Pro B70 checks four things: that `detect` and `up` pick up the Xeon and the
-B70s with no flags; EAT stock against k3d-gpu on the Xeon CPU, with EAT's own OVMS chart
+B70s with no flags (H52 REFUTED, H52b REFUTED; see the [capability matrix](#capability-matrix)); EAT stock against k3d-gpu on the Xeon CPU, with EAT's own OVMS chart
 as a third arm; EAT's #21 XPU path against k3d-gpu's `agent up` on the B70s; and agents
 per box. Rows land in [EXPERIMENTS.md](../EXPERIMENTS.md) before anything here quotes them.
 
@@ -208,7 +245,7 @@ one B70.
 |----|-------------|--------|
 | [ledger:H54a] | Single-stream decode, engine by engine, against EAT's stock vLLM CPU (bf16 QAT weights). The stock arm, EAT 1.0.3's vLLM CPU v0.24.0, as this harness rendered it (no CPU balloon, requests or limits), stalled mid-decode in both holds, so nothing was scored against it. An unscored rerun outside k3d stalled the same way, in a vLLM v0.24.0 CPU attention hang fixed upstream in v0.25.0 ([vllm#45844](https://github.com/vllm-project/vllm/pull/45844)); that the holds hit the same hang is inferred (H54 note N2 in the ledger). EAT 1.1.0's vLLM CPU v0.28.0 was not measured in this row; H50 ran it in EAT's banking flow. Of the arms measured, llama.cpp CPU on Google's QAT Q4_0 GGUF decoded ahead of k3d-gpu's OVMS arms, and its QAT MTP drafter added a little on top | INCONCLUSIVE |
 | [ledger:H54d] | The best H54a arm inside EAT's banking flow: not run, since H54a chose no arm | INCONCLUSIVE |
-| [ledger:H54q] | Whether the QAT-matched int4 IR keeps the bf16 QAT quality and OpenVINO's base-model IR does not | PENDING |
+| [ledger:H54q] | Whether the QAT-matched int4 IR keeps the bf16 QAT quality and OpenVINO's base-model IR does not. On GSM8K items 0-199 the QAT-matched IR stayed inside the pre-registered margin of the bf16 reference, but the base-model IR scored no lower than it, and every build sat near the item set's ceiling | INCONCLUSIVE |
 | [ledger:H54b] | Qwen3.8-27B on Arc Pro B70, the best one-card arm against EAT #21's two-card XPU path. No one-card arm was delivered: the arms on Qwen bf16 or RedHat int4 weights did not fit the shared disk, two OVMS arms hit runner bugs, and llama.cpp SYCL's "one card" pod saw and used all four cards | INCONCLUSIVE |
 | [ledger:H54c] | Experts in the Xeon's DRAM and the rest on one B70, against a byte-split model. The experts ran on the Xeon, but every GPU arm spread over all four cards (the same placement failure), so the one-card model was not tested | INCONCLUSIVE |
 
@@ -407,7 +444,8 @@ Shipped since this roadmap was first written:
   advertises; vLLM XPU or llm-scaler on Arc by flag ([README](../README.md)).
 - **EAT on one node.** `K3D_GPU_NODE_LABELS` sets the `ei-*-eligible` labels and
   `K3D_GPU_BALLOONS=external` leaves the balloons policy to EAT [ledger:H14];
-  [`integrations/eat/eat-up.sh`](../integrations/eat/eat-up.sh) runs EAT's brownfield path [ledger:H1b].
+  [`integrations/eat/eat-up.sh`](../integrations/eat/eat-up.sh) runs EAT's brownfield path
+  (`release-1.0.3-hotfix` [ledger:H1b]; `release-1.1.0`, now pinned, is F4 and not run yet).
 - **Report and bench.** `k3d-gpu report`, `facts`, `plan`, and the `bench/` harnesses
   that write [EXPERIMENTS.md](../EXPERIMENTS.md).
 - **Telemetry.** Prometheus, node-exporter, the Intel GPU exporter and an optional
@@ -444,11 +482,15 @@ hardware, a recorded run.
 
 - **Hardware coverage.** Move the `xe`, NPU, Gaudi, DSA, IAA, QAT and AMX rows to
   verified on real Core Ultra, Arc, Gaudi 3 and Xeon hosts. In progress: the campaign on
-  a Xeon 6741P with 4x Arc Pro B70 [above](#eat-by-default-vs-with-k3d-gpu) (first Gemma 4 rows
-  recorded, none SUPPORTED yet).
-- **EAT 1.1.0.** The `release-1.1.0` tag is cut (2026-10-22). Moving `eat-up.sh` to it
-  waits until no pending ledger row pins `0d3438d`, then needs the checks listed in
-  [platforms.md](platforms.md#intel-enterprise-agent-toolkit-eat).
+  a Xeon 6741P with 4x Arc Pro B70 [above](#eat-by-default-vs-with-k3d-gpu). Its detection
+  runs gave the `xe`, DSA, IAA, QAT and AMX rows their first hardware results and the CPU
+  ISA labels their first recorded live node, and both ledger rows are
+  REFUTED [ledger:H52] [ledger:H52b]; the first Gemma 4 rows are recorded, none SUPPORTED yet.
+- **EAT 1.1.0 run.** `eat-up.sh` deploys `release-1.1.0` since 2026-10-29, with the
+  guardrail off and the vLLM CPU image re-pinned to `v0.28.0`
+  ([platforms.md](platforms.md#intel-enterprise-agent-toolkit-eat)). The recorded
+  end-to-end run is pre-registered as F4 in [EXPERIMENTS.md](../EXPERIMENTS.md) and has
+  not run yet.
 - **NPU telemetry.** No NPU exporter is shipped.
 - **Upstream.** Small, separate fixes for running EAT and its successor
   installer on k3s: accept `+k3s` versions in platform detection, pass Istio's

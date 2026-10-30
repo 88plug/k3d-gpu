@@ -112,15 +112,14 @@ smoke() {
     timeout -k 10 600 "${K}" up > "${OUT}/up.log" 2>&1; up_rc=$?
     echo "up rc=${up_rc} in $(( $(date +%s) - t0 )) s" | tee -a "${OUT}/rc.txt"
     grep -E 'opted out|Accelerators' "${OUT}/up.log"
-    timeout -k 10 60 docker inspect -f 'privileged={{.HostConfig.Privileged}} devices={{.HostConfig.Devices}} runtime={{.HostConfig.Runtime}} gpus={{.HostConfig.DeviceRequests}}' \
+    timeout -k 10 60 docker inspect -f 'privileged={{.HostConfig.Privileged}} devices={{.HostConfig.Devices}} runtime={{.HostConfig.Runtime}} gpus={{.HostConfig.DeviceRequests}} restarts={{.RestartCount}}' \
         "k3d-${K3D_GPU_CLUSTER}-server-0" > "${OUT}/node-container.txt" 2>&1
     ready="not waited (up rc=${up_rc})"
     if [ "${up_rc}" = 0 ]; then
         ready="no (60 polls, every 5 s)"
         t0=$(date +%s)
         for _ in $(seq 60); do
-            if timeout -k 5 30 kubectl get pods -A --no-headers 2>/dev/null \
-                | awk '$4 != "Running" && $4 != "Completed" {bad++} END {exit !(NR > 0 && bad == 0)}'; then
+            if bash "${HERE}/ready.sh"; then
                 ready="yes after $(( $(date +%s) - t0 )) s"
                 break
             fi

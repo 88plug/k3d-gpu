@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # setup.sh: the crescent campaign's tools, venvs and checkouts under ~/k3dgpu-bench (nothing
-# system-wide; EXPERIMENTS.md "H50-H52 pre-registration", shared rule 5). Each binary is checked
-# against its upstream checksum. Run from a checkout of this repo on the host.
+# system-wide; EXPERIMENTS.md "H50-H52 pre-registration", shared rule 5, and crescent amendment E4
+# for the tool versions). Each binary is checked against its upstream checksum. Run from a checkout
+# of this repo on the host, under the bench lock with no hold running. A second run replaces the
+# binaries and keeps the venv and checkouts that exist.
 set -euo pipefail
 B=${HOME}/k3dgpu-bench
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-K3D_V=v5.9.0 KUBECTL_V=v1.35.2 HELM_V=v4.1.1 UV_V=0.8.0
+K3D_V=v5.9.0 KUBECTL_V=v1.37.2 HELM_V=v4.3.1 UV_V=0.13.6
 EAB_REV=758d4845520ca5456bf732264ef02d92a26d25a6       # enterprise-ai-blueprints (banking agent)
 EAT_REV=0d3438d7119de44cafc5903f66665c0b623e3333       # EAT release-1.0.3-hotfix
 EAT_PR21=c86c42b073ee533e9fb9e9b9330b9d1478e4bf47      # EAT PR #21 head (release 1.1.0 XPU path)
@@ -28,8 +30,9 @@ tar xzf helm.tgz && install -m755 linux-amd64/helm "${B}/bin/"
 tar xzf uv.tgz && install -m755 uv-x86_64-unknown-linux-gnu/uv "${B}/bin/"
 cd "${B}" && rm -rf dl
 export PATH=${B}/bin:${PATH}
-# The banking agent's venv: the desktop venv's `uv pip freeze`, rebuilt (Python 3.12.11).
-uv venv -q --python 3.12.11 mafvenv
+# The banking agent's venv: the desktop venv's `uv pip freeze`, rebuilt (Python 3.12.11). uv 0.13
+# refuses to overwrite an existing venv, and an existing one is kept (amendment E4).
+[ -d mafvenv ] || uv venv -q --python 3.12.11 mafvenv
 uv pip install -q --python mafvenv/bin/python -r "${HERE}/banking-venv.txt"
 [ -d eab ] || git clone -q https://github.com/intel/enterprise-ai-blueprints eab
 git -C eab checkout -q "${EAB_REV}"

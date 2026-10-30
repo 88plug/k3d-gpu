@@ -1,0 +1,5 @@
+namespace/h54 created
+configmap/vq-chat-templates created
+configmap/vq-config created
+service/vq created
+deployment.apps/vq created

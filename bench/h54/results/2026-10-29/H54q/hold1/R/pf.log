@@ -1,0 +1,234 @@
+Forwarding from 127.0.0.1:18213 -> 2080
+Forwarding from [::1]:18213 -> 2080
+Handling connection for 18213
+E1029 19:47:45.624531 1474800 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 18213 -> 2080: error forwarding port 2080 to pod 6637a0ac40526464a6b6af3c255dabeec74102a0289b784126f63555a70d39cf, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-34fa21cd-5735-7429-0fda-a8c891473b8c\": failed to connect to localhost:2080 inside namespace \"6637a0ac40526464a6b6af3c255dabeec74102a0289b784126f63555a70d39cf\", IPv4: dial tcp4 127.0.0.1:2080: connect: connection refused IPv6 dial tcp6 [::1]:2080: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-10-29T19:47:45Z
+Forwarding from 127.0.0.1:18213 -> 2080
+Forwarding from [::1]:18213 -> 2080
+Handling connection for 18213
+E1029 19:47:55.640144 1474979 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 18213 -> 2080: error forwarding port 2080 to pod 6637a0ac40526464a6b6af3c255dabeec74102a0289b784126f63555a70d39cf, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-34fa21cd-5735-7429-0fda-a8c891473b8c\": failed to connect to localhost:2080 inside namespace \"6637a0ac40526464a6b6af3c255dabeec74102a0289b784126f63555a70d39cf\", IPv4: dial tcp4 127.0.0.1:2080: connect: connection refused IPv6 dial tcp6 [::1]:2080: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-10-29T19:47:55Z
+Forwarding from 127.0.0.1:18213 -> 2080
+Forwarding from [::1]:18213 -> 2080
+Handling connection for 18213
+E1029 19:48:05.656698 1475267 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 18213 -> 2080: error forwarding port 2080 to pod 6637a0ac40526464a6b6af3c255dabeec74102a0289b784126f63555a70d39cf, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-34fa21cd-5735-7429-0fda-a8c891473b8c\": failed to connect to localhost:2080 inside namespace \"6637a0ac40526464a6b6af3c255dabeec74102a0289b784126f63555a70d39cf\", IPv4: dial tcp4 127.0.0.1:2080: connect: connection refused IPv6 dial tcp6 [::1]:2080: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-10-29T19:48:05Z
+Forwarding from 127.0.0.1:18213 -> 2080
+Forwarding from [::1]:18213 -> 2080
+Handling connection for 18213
+E1029 19:48:15.671726 1475550 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 18213 -> 2080: error forwarding port 2080 to pod 6637a0ac40526464a6b6af3c255dabeec74102a0289b784126f63555a70d39cf, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-34fa21cd-5735-7429-0fda-a8c891473b8c\": failed to connect to localhost:2080 inside namespace \"6637a0ac40526464a6b6af3c255dabeec74102a0289b784126f63555a70d39cf\", IPv4: dial tcp4 127.0.0.1:2080: connect: connection refused IPv6 dial tcp6 [::1]:2080: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-10-29T19:48:15Z
+Forwarding from 127.0.0.1:18213 -> 2080
+Forwarding from [::1]:18213 -> 2080
+Handling connection for 18213
+E1029 19:48:25.688014 1475829 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 18213 -> 2080: error forwarding port 2080 to pod 6637a0ac40526464a6b6af3c255dabeec74102a0289b784126f63555a70d39cf, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-34fa21cd-5735-7429-0fda-a8c891473b8c\": failed to connect to localhost:2080 inside namespace \"6637a0ac40526464a6b6af3c255dabeec74102a0289b784126f63555a70d39cf\", IPv4: dial tcp4 127.0.0.1:2080: connect: connection refused IPv6 dial tcp6 [::1]:2080: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-10-29T19:48:25Z
+Forwarding from 127.0.0.1:18213 -> 2080
+Forwarding from [::1]:18213 -> 2080
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213
+Handling connection for 18213

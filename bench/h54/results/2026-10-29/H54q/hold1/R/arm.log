@@ -1,0 +1,5 @@
+2026-10-29T19:46:41Z R start (2249 s before the item stop)
+2026-10-29T19:48:46Z R ready after 125 s
+2026-10-29T19:48:46Z R items: 200 to ask
+q-items R: 200 answered, 0 errored, 0 cut, 0 not asked (queue empty)
+2026-10-29T19:57:48Z R status measured: 200 answered, 0 errored, 0 cut, 0 not asked (queue empty)

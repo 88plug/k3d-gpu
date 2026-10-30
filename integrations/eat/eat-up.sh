@@ -27,8 +27,8 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EAT_REPO="https://github.com/intel/enterprise-agent-toolkit"
-EAT_TAG="release-1.0.3-hotfix"
-EAT_COMMIT="0d3438d7119de44cafc5903f66665c0b623e3333"
+EAT_TAG="release-1.1.0"
+EAT_COMMIT="0c726f576595971c53cc45b94e08ba969beb4a4a"
 EAT_WORK="${EAT_WORK:-${PWD}/eat-work}"
 EAT_KUBECONFIG="${EAT_KUBECONFIG:-${KUBECONFIG:-${HOME}/.kube/config}}"
 EAT_CONFIG="${EAT_CONFIG:-${HERE}/agentic-config.cfg}"
@@ -39,26 +39,56 @@ BASTION_IMAGE="k3d-gpu-eat-bastion:$(sha256sum "${HERE}/bastion.Dockerfile" | cu
 err()  { echo "ERROR: $*" >&2; exit 1; }
 info() { echo "==> $*"; }
 
-# openshell_setting <cfg>: the deploy_openshell value EAT main would use. Parsed the
-# way its read_config_file does (core/lib/system/precheck/read-config-file.sh @0ecf67a):
+# cfg_value <cfg> <key>: the value EAT would use for <key>. Parsed the way its
+# read_config_file does (core/lib/system/precheck/read-config-file.sh at ${EAT_TAG}):
 # split on the first '=', trim key and value with xargs (which also drops quotes),
 # skip comments, and the last assignment wins because the result is sourced.
-openshell_setting() {
+cfg_value() {
     local key value v=""
     while IFS='=' read -r key value || [ -n "${key}" ]; do
         key=$(echo "${key}" | xargs 2>/dev/null) || continue
-        [ "${key}" = deploy_openshell ] || continue
+        [ "${key}" = "$2" ] || continue
         v=$(echo "${value}" | xargs 2>/dev/null) || v="${value}"
     done < "$1"
     echo "${v}"
 }
 
 [ -f "${EAT_CONFIG}" ] || err "config ${EAT_CONFIG} not found"
-# deploy_openshell arrived on EAT main after ${EAT_TAG} (PR #14); the pinned tag has no
-# OpenShell role and would skip the key without a word. EAT maps on to yes and
-# installs OpenShell when the value is yes (fresh-install.sh).
-case "$(openshell_setting "${EAT_CONFIG}")" in
-    on|yes) err "deploy_openshell=on needs an EAT release newer than ${EAT_TAG}; set deploy_openshell=off" ;;
+# ${EAT_TAG} ships NVIDIA OpenShell (PR #14) and installs it when the value is yes, after
+# mapping on to yes (fresh-install.sh). It has never run on a k3d-gpu cluster: upstream
+# lists a CNI that enforces NetworkPolicy and best-effort Landlock (docs/openshell.md).
+case "$(cfg_value "${EAT_CONFIG}" deploy_openshell)" in
+    on|yes) err "deploy_openshell=on is unverified on k3d-gpu (${EAT_TAG} ships OpenShell, but it has not run on a k3d-gpu cluster); set deploy_openshell=off" ;;
+esac
+# With no deploy_guardrails value, ${EAT_TAG} deploys its Qwen3Guard guardrail:
+# deploy-agentic-stack.sh:195 defaults DEPLOY_GUARDRAILS to on and brownfield.sh keeps
+# that default. A config written for release-1.0.3-hotfix has no such key, so the
+# choice is asked for here rather than made for the user.
+[ -n "$(cfg_value "${EAT_CONFIG}" deploy_guardrails)" ] \
+    || err "${EAT_CONFIG} does not set deploy_guardrails, so ${EAT_TAG} would deploy its Qwen3Guard guardrail, which has not run on a k3d-gpu cluster; set deploy_guardrails=off (as the shipped agentic-config.cfg does) or deploy_guardrails=on"
+# Settings with which ${EAT_TAG} puts a second copy of what a k3d-gpu cluster already
+# runs next to it, or needs what a k3d node lacks (core/lib/cluster/deployment/fresh-install.sh):
+# - its NRI balloons policy on yes (:247). prompt_for_input turns an absent key on for
+#   compute_platform c (parse-user-prompts.sh:55-66). The stack path calls it (:39); so
+#   does brownfield.sh model mode, after which deploy-inference-models.yml gives vLLM
+#   EAT's balloon (vllm-balloon-tp<N>) in place of k3d-gpu's performance balloon.
+# - intel-device-plugins' gpu_plugin from its main branch, unpinned, on xpu (:219,
+#   playbooks/deploy-intel-gpu-plugin.yml:12-14).
+# - Kata Containers, which needs /dev/kvm on the node (playbooks/deploy-kata-containers.yml).
+# - rack-scale mode, which builds the cluster from rack-profile.yaml: netplan, BGP and the
+#   NVIDIA GPU operator (:195-210).
+case "$(cfg_value "${EAT_CONFIG}" deploy_nri_balloon_policy)" in
+    off|no) ;;
+    *) err "${EAT_CONFIG}: deploy_nri_balloon_policy must be off: ${EAT_TAG} deploys its own NRI balloons policy when it is on or absent, beside k3d-gpu's, which must remain the only one, and in model mode it moves vLLM to a balloon type k3d-gpu's policy does not define" ;;
+esac
+case "$(cfg_value "${EAT_CONFIG}" compute_platform)" in
+    x|xpu) err "compute_platform=xpu: ${EAT_TAG} then applies intel-device-plugins' gpu_plugin from its main branch, unpinned, beside the GPU plugin k3d-gpu bakes; for vLLM on an Intel GPU run K3D_GPU_AGENT_BACKEND=vllm k3d-gpu agent up" ;;
+esac
+case "$(cfg_value "${EAT_CONFIG}" deploy_kata_containers)" in
+    on|yes) err "deploy_kata_containers=on: Kata needs /dev/kvm on the node, and a k3d node is a container without it; set deploy_kata_containers=off" ;;
+esac
+case "$(cfg_value "${EAT_CONFIG}" rack_scale_mode)" in
+    on|yes) err "rack_scale_mode=on: ${EAT_TAG} then builds a cluster from rack-profile.yaml (netplan, BGP, the NVIDIA GPU operator), and a k3d-gpu cluster is brownfield; set rack_scale_mode=off" ;;
 esac
 # The KV cache from the fit of EAT_FIT_MODEL, unless EAT_VLLM_KV_GIB is set.
 if [ -z "${EAT_VLLM_KV_GIB:-}" ] && [ -n "${EAT_FIT_MODEL:-}" ]; then

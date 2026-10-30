@@ -1,0 +1,50 @@
+# bench/wildct/nfprobe.sh "$(cat runs/IMAGE)" on wildct at 2026-10-29T20:00Z, after smoke3, under live.lock: a diagnostic,
+# run from this PR's branch before it merged. Two ad-hoc forms ran first: at 19:50:30Z with the node image's iptables
+# wrapper, which picked iptables-legacy (this kernel serves no legacy table: every rule failed on the table), and at
+# 19:50:59Z with iptables-nft, which gave the lines below plus `nfacct` missing (kube-proxy's optional metrics; not
+# checked by nfprobe.sh). kernel.modprobe empty throughout; /proc/modules identical before and after each run; no
+# probe container left. Exit 1.
+FAIL ipset hash:ip :: ipset v7.16: Kernel error received: set type not supported
+FAIL ipset hash:net :: ipset v7.16: Kernel error received: set type not supported
+FAIL ipset hash:ip,port :: ipset v7.16: Kernel error received: set type not supported
+FAIL ipset hash:ip,port,ip :: ipset v7.16: Kernel error received: set type not supported
+FAIL ipset hash:ip,port,net :: ipset v7.16: Kernel error received: set type not supported
+FAIL iptables-nft filter comment :: Warning: Extension comment revision 0 not supported, missing kernel module?
+FAIL iptables-nft filter statistic :: Warning: Extension statistic revision 0 not supported, missing kernel module?
+ok iptables-nft filter recent
+ok iptables-nft filter conntrack
+ok iptables-nft filter addrtype
+ok iptables-nft filter mark
+ok iptables-nft filter MARK
+FAIL iptables-nft filter REJECT :: Warning: Extension REJECT revision 0 not supported, missing kernel module?
+ok iptables-nft filter tcp
+ok iptables-nft filter udp
+FAIL iptables-nft filter multiport :: Warning: Extension multiport revision 0 not supported, missing kernel module?
+FAIL iptables-nft filter limit :: Warning: Extension limit revision 0 not supported, missing kernel module?
+FAIL iptables-nft filter NFLOG :: Warning: Extension NFLOG revision 0 not supported, missing kernel module?
+FAIL iptables-nft filter physdev :: Warning: Extension physdev revision 0 not supported, missing kernel module?
+FAIL iptables-nft filter pkttype :: Warning: Extension pkttype revision 0 not supported, missing kernel module?
+ok iptables-nft nat MASQUERADE
+FAIL iptables-nft nat comment :: Warning: Extension comment revision 0 not supported, missing kernel module?
+FAIL ip6tables-nft filter comment :: Warning: Extension comment revision 0 not supported, missing kernel module?
+FAIL ip6tables-nft filter statistic :: Warning: Extension statistic revision 0 not supported, missing kernel module?
+ok ip6tables-nft filter recent
+ok ip6tables-nft filter conntrack
+ok ip6tables-nft filter addrtype
+ok ip6tables-nft filter mark
+ok ip6tables-nft filter MARK
+FAIL ip6tables-nft filter REJECT :: Warning: Extension REJECT revision 0 not supported, missing kernel module?
+ok ip6tables-nft filter tcp
+ok ip6tables-nft filter udp
+FAIL ip6tables-nft filter multiport :: Warning: Extension multiport revision 0 not supported, missing kernel module?
+FAIL ip6tables-nft filter limit :: Warning: Extension limit revision 0 not supported, missing kernel module?
+FAIL ip6tables-nft filter NFLOG :: Warning: Extension NFLOG revision 0 not supported, missing kernel module?
+FAIL ip6tables-nft filter physdev :: Warning: Extension physdev revision 0 not supported, missing kernel module?
+FAIL ip6tables-nft filter pkttype :: Warning: Extension pkttype revision 0 not supported, missing kernel module?
+ok ip6tables-nft nat MASQUERADE
+FAIL ip6tables-nft nat comment :: Warning: Extension comment revision 0 not supported, missing kernel module?
+ok iptables-nft nat DNAT
+ok iptables-nft nat SNAT
+ok ip6tables-nft nat DNAT
+iptables: iptables v1.8.11 (nf_tables)
+NFPROBE missing: NFLOG REJECT comment hash:ip hash:ip,port hash:ip,port,ip hash:ip,port,net hash:net limit multiport physdev pkttype statistic

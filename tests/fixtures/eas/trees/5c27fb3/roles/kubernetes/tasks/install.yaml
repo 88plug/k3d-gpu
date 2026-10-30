@@ -1,0 +1,219 @@
+---
+# =============================================================================
+# Kubernetes Install — Main orchestration
+# =============================================================================
+# Execution phases (determined by caller flags):
+#
+#   _kubespray_skip_cluster_yml=true  → post-kubespray fast path (kubeconfig + validation)
+#   otherwise                         → prep phase: prereqs + kubespray prep → end_role
+#
+# The role never runs cluster.yml itself. es_auto_installer.sh runs kubespray
+# directly from bash between the two passes so the operator gets live output.
+#
+# Deployment modes:
+#
+#   default              Kubespray provisions the cluster using env inventory.
+#                        SSH is needed when inventory hosts are not localhost.
+#   existing_kubernetes  BYO cluster — skip provisioning entirely.
+#                        Set existing_kubernetes: /path/to/kubeconfig in global_config.yaml.
+# =============================================================================
+
+# ─── Mode detection ──────────────────────────────────────────────────────────
+
+- name: "kubernetes | BYO cluster — skip provisioning"
+  ansible.builtin.meta: end_role
+  when: existing_kubernetes | default('') | trim | length > 0
+
+- name: "kubernetes | Detect SSH requirement from inventory"
+  ansible.builtin.set_fact:
+    _k8s_needs_ssh: >-
+      {{
+        (groups['kube_control_plane'] | default([]) + groups['kube_node'] | default([]))
+        | unique
+        | reject('equalto', 'localhost')
+        | list
+        | length > 0
+      }}
+
+- name: "kubernetes | Compute execution phase"
+  ansible.builtin.set_fact:
+    _k8s_phase: >-
+      {{ 'post-kubespray' if (_kubespray_skip_cluster_yml | default(false) | bool)
+         else 'prep' }}
+
+- name: "kubernetes | ━━━ BEGIN ━━━"
+  ansible.builtin.debug:
+    msg: "needs_ssh={{ _k8s_needs_ssh }} | phase={{ _k8s_phase | trim }}"
+
+# =====================================================================
+# PRE-FLIGHT: SSH connectivity check for remote nodes
+# =====================================================================
+
+- name: "kubernetes | SSH pre-flight"
+  when:
+    - _k8s_needs_ssh | bool
+    - _k8s_phase | trim != 'post-kubespray'
+  block:
+    - name: "kubernetes | SSH pre-flight | Ping all cluster nodes"
+      ansible.builtin.ping:
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['kube_control_plane'] | default([]) | union(groups['kube_node'] | default([])) | unique }}"
+      loop_control:
+        label: "{{ item }}"
+
+    - name: "kubernetes | SSH pre-flight | Check internet on cluster nodes"
+      ansible.builtin.uri:
+        url: https://github.com
+        method: GET
+        timeout: 10
+        status_code: [200, 301, 302]
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['kube_control_plane'] | default([]) | union(groups['kube_node'] | default([])) | unique }}"
+      loop_control:
+        label: "{{ item }}"
+      environment:
+        http_proxy: "{{ http_proxy | default('') }}"
+        https_proxy: "{{ https_proxy | default('') }}"
+        no_proxy: "{{ no_proxy | default('') }}"
+      failed_when: false
+      register: _inet_results
+
+    - name: "kubernetes | SSH pre-flight | Report nodes without internet"
+      ansible.builtin.debug:
+        msg: "WARNING: {{ item.item }} cannot reach https://github.com — check proxy settings"
+      loop: "{{ _inet_results.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: item.status | default(0) not in [200, 301, 302]
+
+# =====================================================================
+# PHASE: post-kubespray — kubeconfig + validation only
+# =====================================================================
+
+- name: "kubernetes | Post-kubespray"
+  when: _k8s_phase | trim == 'post-kubespray'
+  block:
+    # kubectl and helm are operator prerequisites (installed by
+    # './es_auto_installer.sh configure'), verified in ensure_deps before any
+    # playbook runs. The role does not provision host tooling.
+    - name: "kubernetes | Setup kubeconfig"
+      ansible.builtin.include_tasks: setup_kubeconfig.yaml
+
+    - name: "kubernetes | Post-install validation"
+      ansible.builtin.include_tasks: post_install.yaml
+
+- name: "kubernetes | End role (post-kubespray)"
+  when: _k8s_phase | trim == 'post-kubespray'
+  meta: end_role
+
+# =====================================================================
+# PHASE: prep-only / standalone — check existing, prereqs, kubespray
+# =====================================================================
+
+# --- Kubeconfig preflight: validate the resolved path is readable ---
+- name: "kubernetes | Preflight | Stat kubeconfig"
+  ansible.builtin.stat:
+    path: "{{ kubernetes_kubeconfig }}"
+  register: _kube_cfg_stat
+
+- name: "kubernetes | Preflight | Validate kubeconfig"
+  when: _kube_cfg_stat.stat.exists
+  block:
+    - name: "kubernetes | Preflight | Assert readable"
+      ansible.builtin.assert:
+        that: _kube_cfg_stat.stat.readable
+        fail_msg: >-
+          Kubeconfig at {{ kubernetes_kubeconfig }} exists but is not readable.
+          Fix file permissions (chmod 600) or re-run 'init' to seed a fresh env.
+
+    - name: "kubernetes | Preflight | Parse kubeconfig"
+      ansible.builtin.command: kubectl config view --raw
+      environment:
+        KUBECONFIG: "{{ kubernetes_kubeconfig }}"
+      changed_when: false
+      failed_when: false
+      register: _kube_cfg_parse
+
+    - name: "kubernetes | Preflight | Warn if malformed"
+      when: _kube_cfg_parse.rc != 0
+      ansible.builtin.fail:
+        msg: >-
+          Kubeconfig at {{ kubernetes_kubeconfig }} is malformed.
+          {{ _kube_cfg_parse.stderr | default('') }}
+          Delete it and re-run or fix the YAML.
+
+# --- Existing cluster check ---
+- name: "kubernetes | Check for existing cluster"
+  ansible.builtin.command: kubectl cluster-info --request-timeout=5s
+  environment:
+    KUBECONFIG: "{{ kubernetes_kubeconfig }}"
+  register: _k8s_existing
+  changed_when: false
+  failed_when: false
+
+- name: "kubernetes | Verify existing cluster version"
+  when: _k8s_existing.rc == 0
+  block:
+    - name: "kubernetes | Get server version"
+      ansible.builtin.command: kubectl version -o json
+      environment:
+        KUBECONFIG: "{{ kubernetes_kubeconfig }}"
+      register: _k8s_version_json
+      changed_when: false
+
+    - name: "kubernetes | Parse server version"
+      ansible.builtin.set_fact:
+        _k8s_server_version: "{{ (_k8s_version_json.stdout | from_json).serverVersion.gitVersion }}"
+        _k8s_server_minor: "{{ ((_k8s_version_json.stdout | from_json).serverVersion.minor | regex_replace('[^0-9]', '')) | int }}"
+
+    - name: "kubernetes | Display detected version"
+      ansible.builtin.debug:
+        msg: "Existing cluster: {{ _k8s_server_version }}"
+
+    - name: "kubernetes | Check minimum version"
+      ansible.builtin.assert:
+        that:
+          - _k8s_server_minor | int >= kubernetes_minimum_minor_version | int
+        fail_msg: "Cluster {{ _k8s_server_version }} < v1.{{ kubernetes_minimum_minor_version }} minimum"
+        success_msg: "Kubernetes {{ _k8s_server_version }} OK"
+
+- name: "kubernetes | Existing cluster — skip install"
+  when:
+    - _k8s_existing.rc == 0
+    - kubernetes_skip_if_exists
+  ansible.builtin.debug:
+    msg: "Kubernetes cluster already running. Skipping."
+
+# --- Install via Kubespray ---
+- name: "kubernetes | Install via Kubespray"
+  when: _k8s_existing.rc != 0 or not kubernetes_skip_if_exists
+  block:
+
+    # ── Prerequisites ──
+    - name: "kubernetes | Prerequisites (local node)"
+      ansible.builtin.include_tasks: precheck.yaml
+      when: not (_k8s_needs_ssh | bool)
+
+    - name: "kubernetes | Prerequisites (bastion packages for remote nodes)"
+      when: _k8s_needs_ssh | bool
+      become: true
+      ansible.builtin.package:
+        name: [git, curl, tar, python3-pip, python3-venv]
+        state: present
+
+    # ── Kubespray prep ──
+    - name: "kubernetes | Kubespray preparation"
+      ansible.builtin.include_tasks: install_kubespray.yaml
+
+    # ── Always end here after prep ──
+    # es_auto_installer.sh runs kubespray cluster.yml directly from bash
+    # so the operator gets live streaming output. Ansible-in-ansible
+    # swallows all progress. After kubespray completes, the installer
+    # re-invokes this role with _kubespray_skip_cluster_yml=true to run
+    # post-kubespray (kubeconfig + validation).
+    - name: "kubernetes | Set prep-only flag"
+      ansible.builtin.set_fact:
+        _component_prep_only: true
+
+    - name: "kubernetes | End role (prep complete — kubespray runs from caller)"
+      meta: end_role

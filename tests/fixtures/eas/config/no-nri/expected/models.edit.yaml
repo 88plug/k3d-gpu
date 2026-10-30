@@ -1,0 +1,5 @@
+# k3d-gpu eas-config: edits to env/k3d-gpu/models.yaml, the file model-manager reads
+# (extra vars do not reach it); defaults merge, models match an entry by name
+defaults:
+  require_amx: false
+models: []

@@ -6,7 +6,7 @@
 # Needs: kubectl, helm 3.8+ (OCI charts), an Intel GPU on the xe or i915 driver.
 set -euo pipefail
 
-CERT_MANAGER_VERSION=v1.21.2   # supports Kubernetes 1.33-1.36
+CERT_MANAGER_VERSION=v1.21.3   # supports Kubernetes 1.33-1.36
 KSERVE_VERSION=v0.21.0
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SYSROOT="${K3D_GPU_SYSROOT:-}"
@@ -44,7 +44,9 @@ helm upgrade --install kserve-resources oci://ghcr.io/kserve/charts/kserve-resou
     --version "${KSERVE_VERSION}" --namespace kserve \
     --values "${HERE}/kserve-values.yaml" --wait --timeout 10m
 
+# known-issue-begin: kserve-4592
 kubectl apply --server-side -f "${HERE}/openvino-runtime.yaml"
+# known-issue-end: kserve-4592
 
 sed -e "s/supplementalGroups: \[\]/supplementalGroups: [${render_gid}]/" \
     -e "s|gpu.intel.com/i915:|gpu.intel.com/${driver}:|" "${HERE}/qwen3-isvc.yaml" \
