@@ -59,7 +59,12 @@
 #            - no Ready envoy proxy for eg-gateway; no model pod at all
 #            - an istio-system pod not Ready names istio_platform
 #            - a second NRI resource policy or a second NFD worker
-#            - a running pod whose readiness probe has not passed says so
+#            - a running pod whose readiness probe has not passed says so; a pod
+#              being deleted says Terminating
+#            - an Evicted pod its ReplicaSet replaced is not graded (nor counted as a
+#              model); a Failed pod nothing replaces names its reason
+#            - no istio-cni-node or ztunnel DaemonSet: Istio ambient's data plane is
+#              missing
 #            - input that is not a kubectl List exits 2
 # Needs bash, git, python3 (with PyYAML, for the config section's shape checks only).
 
@@ -1385,6 +1390,41 @@ case("a running model whose readiness probe has not passed yet says so",
      with_(pod("llm-inference", "qwen2-5-coder-7b-kserve-9d8e-zzzzz", ready=False),
            drop=("qwen2-5-coder-7b-kserve-9d8e-a1b2c",)),
      1, r"readiness", r"re-run")
+
+
+def evicted(p):
+    # What kubelet leaves behind when it evicts a pod: phase Failed, reason Evicted. The
+    # pod stays until it is deleted; a ReplicaSet starts a replacement at once.
+    p["status"] = {"phase": "Failed", "reason": "Evicted",
+                   "message": "The node was low on resource: memory.",
+                   "containerStatuses": [{"name": "main", "ready": False, "state": {"terminated": {"exitCode": 137}}}]}
+    return p
+
+
+def terminating(p):
+    p["metadata"]["deletionTimestamp"] = "2026-10-29T21:00:00Z"
+    return p
+
+
+case("an Evicted pod its ReplicaSet replaced is not graded",
+     with_(evicted(pod("llm-inference", "qwen2-5-coder-7b-kserve-9d8e-old00", owner="ReplicaSet")),
+           evicted(pod("litellm", "litellm-5f6d-old00", owner="ReplicaSet"))),
+     0, r"stack ready", absent=(r"old00",))
+case("an Evicted pod alone is no model",
+     with_(evicted(pod("llm-inference", "qwen2-5-coder-7b-kserve-9d8e-old00", owner="ReplicaSet")),
+           drop=("qwen2-5-coder-7b-kserve-9d8e-a1b2c",)),
+     1, r"no model pod in llm-inference")
+case("a Failed pod no ReplicaSet replaces names its reason",
+     with_(evicted(pod("agent-sandbox-system", "python-pool-zzzzz")), drop=("python-pool-abcde",)),
+     1, r"agent-sandbox-system/python-pool-zzzzz", r"Failed: Evicted: The node was low on resource: memory")
+case("a pod being deleted says Terminating, not that its readiness probe has not passed",
+     with_(terminating(pod("llm-inference", "qwen2-5-coder-7b-kserve-9d8e-old00", ready=False, owner="ReplicaSet"))),
+     1, r"qwen2-5-coder-7b-kserve-9d8e-old00.*Terminating", absent=(r"readiness",))
+case("no ztunnel DaemonSet: Istio ambient's data plane is missing",
+     with_(drop=("ztunnel", "ztunnel-fghij")), 1, r"istio-system/ztunnel: no DaemonSet", r"ambient")
+case("no istio-cni-node DaemonSet: Istio ambient's data plane is missing",
+     with_(drop=("istio-cni-node", "istio-cni-node-abcde")), 1, r"istio-system/istio-cni-node: no DaemonSet",
+     r"ambient")
 for name, text in (("not JSON", "nope"), ("not a List", json.dumps({"kind": "Pod"}))):
     p = subprocess.run([READY], input=text, capture_output=True, text=True)
     print(("ok   " if p.returncode == 2 else "FAIL ") + "input %s exits 2 (rc=%s)" % (name, p.returncode))

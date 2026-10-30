@@ -175,10 +175,15 @@ exec "${REAL_JQ}" "\$@"
 EOF
 chmod +x "${BIN}/kubectl" "${BIN}/curl" "${BIN}/jq"
 
-# The pods and DaemonSets eas mode reads first: a ready stack (eg-gateway's envoy proxy and
-# a model, both Ready), and the same with the guard Pending on EI's AMXBF16 nodeAffinity.
+# The pods and DaemonSets eas mode reads first: a ready stack (Istio ambient's two
+# DaemonSets, eg-gateway's envoy proxy and a model, all Ready), and the same with the guard
+# Pending on EI's AMXBF16 nodeAffinity.
 cat > "${WORK}/ready.json" <<'EOF'
 {"apiVersion": "v1", "kind": "List", "items": [
+ {"kind": "DaemonSet", "metadata": {"namespace": "istio-system", "name": "istio-cni-node"},
+   "status": {"desiredNumberScheduled": 1, "numberReady": 1}},
+ {"kind": "DaemonSet", "metadata": {"namespace": "istio-system", "name": "ztunnel"},
+   "status": {"desiredNumberScheduled": 1, "numberReady": 1}},
  {"kind": "Pod", "metadata": {"namespace": "envoy-gateway-system", "name": "envoy-eg-1",
    "labels": {"gateway.envoyproxy.io/owning-gateway-name": "eg-gateway"}}, "spec": {"containers": [{"name": "envoy"}]},
    "status": {"phase": "Running", "containerStatuses": [{"name": "envoy", "ready": true}]}},
