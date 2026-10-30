@@ -44,7 +44,8 @@
 #            - no secret value in an argument list, a log, choices.txt or a state file
 #            - refusals stop before any change
 #            - down clears AIGatewayRoute finalizers before teardown platform --force
-#            - status prints the layer, pins, overlay, EAS status, gateway, pods not Ready
+#            - status prints the layer, pins, overlay, EAS status, gateway, pods not Ready,
+#              and eas-ready.py's report with the cause of each stack pod not Ready
 #            - sandbox up refuses when EAS's sandbox-router-deployment exists
 #            - the bastion pins what pins.json's bastion profile names
 #   ready    integrations/eas/eas-ready.py, the stack check `k3d-gpu eas check` runs
@@ -742,7 +743,7 @@ section_cli() {
     # The integration dir: the real files, eas-config.py included (the facts this section
     # gathers must be what it reads), with overlay.py replaced by a recorder (the overlay
     # section tests it on real EAS trees).
-    cp "${EAS_DIR}"/eas.sh "${EAS_DIR}"/eas-config.py "${EAS_DIR}"/pins.json "${EAS_DIR}"/overlay.json \
+    cp "${EAS_DIR}"/eas.sh "${EAS_DIR}"/eas-config.py "${EAS_DIR}"/eas-ready.py "${EAS_DIR}"/pins.json "${EAS_DIR}"/overlay.json \
        "${EAS_DIR}"/bastion.Dockerfile "${EAS_DIR}"/requirements.lock "${EAS_DIR}"/images.yaml "${K}/eas/"
     cat > "${K}/eas/overlay.py" <<'EOF'
 import os, sys
@@ -800,6 +801,7 @@ case "$*" in
         echo deployment.apps/sandbox-router-deployment ;;
     *"-n envoy-gateway-system get svc -l gateway.envoyproxy.io/owning-gateway-name=eg-gateway"*) echo 172.18.0.2 ;;
     *"get pods -A -o json"*) cat "${F}/pods.json" ;;
+    *"get pods,daemonsets -A -o json"*) cat "${F}/stack.json" ;;
     *" patch "*|*" apply "*|*" delete "*) ;;
     *) echo "kubectl stub: unexpected: $*" >&2; exit 1 ;;
 esac
@@ -895,6 +897,15 @@ EOF
  {"metadata": {"namespace": "litellm", "name": "litellm-0"}, "status": {"phase": "Running", "containerStatuses": [{"ready": true}]}},
  {"metadata": {"namespace": "llm-inference", "name": "vllm-qwen-0"}, "status": {"phase": "Pending", "containerStatuses": [{"ready": false, "state": {"waiting": {"reason": "ContainerCreating"}}}]}},
  {"metadata": {"namespace": "kube-system", "name": "helm-install-x"}, "status": {"phase": "Succeeded"}}]}
+EOF
+    # The stack as eas-ready.py reads it: the guard Pending on EI's AMXBF16 node affinity.
+    cat > "${S}/fx/stack.json" <<'EOF'
+{"apiVersion": "v1", "kind": "List", "items": [
+ {"kind": "Pod", "metadata": {"namespace": "llm-inference", "name": "qwen3guard-kserve-0"},
+  "spec": {"containers": [{"name": "main"}], "affinity": {"nodeAffinity": {"requiredDuringSchedulingIgnoredDuringExecution":
+    {"nodeSelectorTerms": [{"matchExpressions": [{"key": "feature.node.kubernetes.io/cpu-cpuid.AMXBF16", "operator": "In", "values": ["true"]}]}]}}}},
+  "status": {"phase": "Pending", "conditions": [{"type": "PodScheduled", "status": "False",
+    "message": "0/1 nodes are available: 1 node(s) didn't match Pod's node affinity/selector."}]}}]}
 EOF
     echo "apiVersion: v1 # easc" > "${S}/kubeconfig-src"
     mkdir -p "${S}/k3d-gpu-state"
@@ -1147,6 +1158,8 @@ print(sorted(f), f["nri_socket"], f["containerd_cni_bin_dirs"], f["agent_sandbox
     cli_has   "cli: status: a pod not Ready" "${out}" "llm-inference/vllm-qwen-0: ContainerCreating"
     cli_lacks "cli: status: a Ready pod is not listed" "${out}" "litellm/litellm-0"
     cli_lacks "cli: status: a finished pod is not listed" "${out}" "helm-install-x"
+    cli_has   "cli: status: the stack check names the guard's cause" "${out}" "qwen3guard-kserve-0"
+    cli_has   "cli: status: ... and require_amx" "${out}" "defaults.require_amx is true"
 
     # ---- check ---------------------------------------------------------------------------------------
     : > "${LOG}"
