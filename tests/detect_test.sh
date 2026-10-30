@@ -4551,6 +4551,13 @@ fi
 # readyReplicas), STUB_SANDBOX_PODS (running sandbox pods) and STUB_SANDBOX_CPUS
 # (the Cpus_allowed_list a sandbox pod reports). A call whose arguments match the
 # ERE in STUB_FAIL prints nothing and exits 1.
+# The installed agent-sandbox: STUB_CONTROLLER_IMAGE is the controller Deployment's
+# image (empty: no Deployment), STUB_CONTROLLER_LABEL its app.kubernetes.io/managed-by
+# label and STUB_CONTROLLER_HELM its meta.helm.sh/release-name annotation. The four
+# CRDs exist unless STUB_NO_CRDS is set; each serves STUB_CRD_SERVED (default v1beta1)
+# and carries STUB_CRD_LABEL and STUB_CRD_HELM. STUB_FOREIGN lists sandbox objects
+# cluster-wide as "Kind namespace/name" entries split by ';', STUB_SYSTEM_PODS the pods
+# in agent-sandbox-system other than the controller's.
 SSTUB="${WORK}/sbin"
 mkdir -p "${SSTUB}"
 cat > "${SSTUB}/kubectl" <<'EOF'
@@ -4562,6 +4569,16 @@ if [ -n "${STUB_FAIL:-}" ] && echo "$*" | grep -Eq -- "${STUB_FAIL}"; then
     exit 1
 fi
 case "$*" in
+    *"get deployment agent-sandbox-controller"*)
+        [ -z "${STUB_CONTROLLER_IMAGE:-}" ] \
+            || printf '%s|%s|%s' "${STUB_CONTROLLER_IMAGE}" "${STUB_CONTROLLER_LABEL:-}" "${STUB_CONTROLLER_HELM:-}" ;;
+    *"get crd "*)
+        [ -n "${STUB_NO_CRDS:-}" ] || for c in sandboxes.agents.x-k8s.io sandboxclaims.extensions.agents.x-k8s.io \
+                sandboxtemplates.extensions.agents.x-k8s.io sandboxwarmpools.extensions.agents.x-k8s.io; do
+            printf '%s|%s|%s|%s\n' "${c}" "${STUB_CRD_SERVED-v1beta1}" "${STUB_CRD_LABEL:-}" "${STUB_CRD_HELM:-}"
+        done ;;
+    *" -A -o "*) [ -z "${STUB_FOREIGN:-}" ] || printf '%s\n' "${STUB_FOREIGN}" | tr ';' '\n' ;;
+    *"get pods -l app!=agent-sandbox-controller"*) for p in ${STUB_SYSTEM_PODS:-}; do echo "pod/${p}"; done ;;
     *"get nodes -l"*) for n in ${STUB_HYBRID_NODES:-}; do echo "node/${n}"; done ;;
     *"get sandboxwarmpool "*) printf %s "${STUB_POOL_READY-1}" ;;
     *"get pods -l k3d-gpu.io/cores=efficient"*) for p in ${STUB_SANDBOX_PODS:-}; do echo "${p}"; done ;;
@@ -4574,14 +4591,15 @@ SHARE="$(cd "$(dirname "$0")/.." && pwd)/share"
 
 # sandbox_says <name> <root> <want rc: 0|fail> <ERE> <action> [negate] [env assignments...]:
 # output of `k3d-gpu sandbox <action>` must match <ERE>, or must not after "negate".
-# The kubectl call log is in ${WORK}/kubectl.log.
+# <action> is split on spaces ("up --adopt"). The kubectl call log is in ${WORK}/kubectl.log.
 sandbox_says() {
-    local name=$1 root=$2 want_rc=$3 re=$4 action=$5 negate="" out rc hit=0
+    local name=$1 root=$2 want_rc=$3 re=$4 action=$5 negate="" out rc hit=0 acts=()
     shift 5
     if [ "${1:-}" = negate ]; then negate=1; shift; fi
+    read -ra acts <<< "${action}"
     : > "${WORK}/kubectl.log"
     out=$(env K3D_GPU_SYSROOT="${root}" K3D_GPU_SHARE="${SHARE}" STUB_LOG="${WORK}/kubectl.log" \
-        PATH="${SSTUB}:${PATH}" "$@" bash "${K3D_GPU}" sandbox "${action}" 2>&1)
+        PATH="${SSTUB}:${PATH}" "$@" bash "${K3D_GPU}" sandbox ${acts[@]+"${acts[@]}"} 2>&1)
     rc=$?
     grep -E -- "${re}" <<< "${out}" >/dev/null && hit=1
     [ -z "${negate}" ] || hit=$((1 - hit))
@@ -4674,6 +4692,152 @@ sandbox_says "sandbox down removes the profile, then agent-sandbox" "${r}" 0 'Re
 log_order "sandbox down deletes the profile before the CRDs" \
     'delete -f .*/agent-sandbox-k3d\.yml --ignore-not-found' 'delete -f .*/agent-sandbox\.yml --ignore-not-found'
 sandbox_says "sandbox with no action prints usage and fails" "${r}" fail 'usage: k3d-gpu sandbox up\|down\|status' ""
+
+# Ownership. The controller is k3d-gpu's when it runs the image pinned in
+# share/agent-sandbox.yml or carries app.kubernetes.io/managed-by=k3d-gpu; another
+# installer's (Intel's EAT installs v0.5.0 into agent-sandbox-system) is left alone.
+PINNED=$(sed -n 's/^ *image: \(.*\/agent-sandbox-controller[:@].*\)$/\1/p' "${SHARE}/agent-sandbox.yml")
+THEIRS=registry.k8s.io/agent-sandbox/agent-sandbox-controller:v0.5.0
+UP_OK=(STUB_SANDBOX_PODS=p1 STUB_SANDBOX_CPUS=16)
+# first_calls <name> <ERE>...: the first kubectl calls match these, one each, in order.
+first_calls() {
+    local name=$1 i=1 re
+    shift
+    for re in "$@"; do
+        if ! sed -n "${i}p" "${WORK}/kubectl.log" | grep -Eq -- "${re}"; then
+            FAILS=$((FAILS + 1)); echo "FAIL ${name} (call ${i} is not /${re}/)"
+            sed 's/^/  | /' "${WORK}/kubectl.log"
+            return
+        fi
+        i=$((i + 1))
+    done
+    PASS=$((PASS + 1)); echo "ok   ${name}"
+}
+[ -n "${PINNED}" ] || { FAILS=$((FAILS + 1)); echo "FAIL the controller image is readable from share/agent-sandbox.yml"; }
+
+sandbox_says "sandbox up on a fresh cluster installs agent-sandbox" "${r}" 0 'Installing agent-sandbox' up "${UP_OK[@]}"
+first_calls "sandbox up on a fresh cluster adds two reads (controller, CRDs) before today's apply" \
+    '^-n agent-sandbox-system get deployment agent-sandbox-controller --ignore-not-found -o jsonpath=' \
+    '^get crd sandboxes\.agents\.x-k8s\.io .* --ignore-not-found -o jsonpath=' \
+    'apply -f .*/agent-sandbox\.yml$'
+log_order "sandbox up labels what it installed once the controller is rolled out" \
+    'rollout status deployment/agent-sandbox-controller' \
+    'label --overwrite deployment/agent-sandbox-controller namespace/agent-sandbox-system crd/sandboxes\.agents\.x-k8s\.io .* app\.kubernetes\.io/managed-by=k3d-gpu$' \
+    'apply -f .*/agent-sandbox-k3d\.yml$'
+sandbox_says "sandbox up re-applies its own controller (pinned image)" "${r}" 0 'Installing agent-sandbox' up "${UP_OK[@]}" \
+    STUB_CONTROLLER_IMAGE="${PINNED}"
+log_order "sandbox up on its own controller re-applies the manifest and the profile" \
+    'apply -f .*/agent-sandbox\.yml$' 'apply -f .*/agent-sandbox-k3d\.yml$'
+sandbox_says "sandbox up upgrades a controller labelled managed-by=k3d-gpu" "${r}" 0 'Installing agent-sandbox' up "${UP_OK[@]}" \
+    STUB_CONTROLLER_IMAGE=registry.k8s.io/agent-sandbox/agent-sandbox-controller:v1.0.7 STUB_CONTROLLER_LABEL=k3d-gpu
+log_order "sandbox up on a labelled older controller applies the manifest" 'apply -f .*/agent-sandbox\.yml$'
+# k3d-gpu releases before the label installed v1.0.7 with no managed-by label.
+V107=registry.k8s.io/agent-sandbox/agent-sandbox-controller:v1.0.7@sha256:f254384c24605436ce35d7077427559e24bda8f5691cff5a54a4c2e030d81083
+sandbox_says "sandbox up upgrades the unlabelled v1.0.7 controller an earlier k3d-gpu installed" "${r}" 0 'Installing agent-sandbox' up "${UP_OK[@]}" \
+    STUB_CONTROLLER_IMAGE="${V107}"
+log_order "sandbox up on k3d-gpu's unlabelled v1.0.7 applies the manifest, then labels it" \
+    'apply -f .*/agent-sandbox\.yml$' 'label --overwrite deployment/agent-sandbox-controller'
+sandbox_says "sandbox up treats v1.0.7 by tag alone as another installer's" "${r}" fail 'not k3d-gpu' up \
+    STUB_CONTROLLER_IMAGE=registry.k8s.io/agent-sandbox/agent-sandbox-controller:v1.0.7
+sandbox_says "sandbox up refuses another installer's controller and names its image" "${r}" fail \
+    "agent-sandbox-controller runs ${THEIRS}" up "${UP_OK[@]}" STUB_CONTROLLER_IMAGE="${THEIRS}"
+no_call "sandbox up applies no controller manifest over another installer's" 'apply -f .*/agent-sandbox\.yml$'
+no_call "sandbox up applies no profile over another installer's controller" 'apply -f .*/agent-sandbox-k3d\.yml$'
+no_call "sandbox up labels nothing it did not install" 'label --overwrite'
+sandbox_says "sandbox up offers --adopt for another installer's controller" "${r}" fail \
+    "k3d-gpu sandbox up --adopt" up STUB_CONTROLLER_IMAGE="${THEIRS}"
+sandbox_says "sandbox up treats a Helm release as another installer's, even on the pinned image" "${r}" fail \
+    'managed-by Helm, Helm release agent-sandbox' up STUB_CONTROLLER_IMAGE="${PINNED}" STUB_CONTROLLER_LABEL=Helm STUB_CONTROLLER_HELM=agent-sandbox
+no_call "sandbox up applies nothing over a Helm release" 'apply -f'
+sandbox_says "sandbox up stops when it cannot read the controller" "${r}" fail 'could not read' up \
+    STUB_FAIL='get deployment agent-sandbox-controller'
+no_call "sandbox up applies nothing when it cannot read the controller" 'apply -f'
+sandbox_says "sandbox up stops when it cannot read the CRDs" "${r}" fail 'could not read the agent-sandbox CRDs' up \
+    STUB_FAIL='get crd '
+no_call "sandbox up applies nothing when it cannot read the CRDs" 'apply -f'
+# CRDs another installer marked, with no controller (a Helm release whose controller is
+# gone): installing over them would relabel them k3d-gpu's.
+sandbox_says "sandbox up refuses CRDs from a Helm release and names them" "${r}" fail \
+    "CRD sandboxes\.agents\.x-k8s\.io is another installer's \(managed-by Helm, Helm release agent-sandbox\)" up \
+    STUB_CRD_LABEL=Helm STUB_CRD_HELM=agent-sandbox
+no_call "sandbox up applies nothing over another installer's CRDs" 'apply -f'
+no_call "sandbox up labels no CRDs another installer marked" 'label --overwrite'
+sandbox_says "sandbox up refuses CRDs labelled managed-by another installer" "${r}" fail \
+    "is another installer's \(managed-by agentic-ai-stack\)" up STUB_CRD_LABEL=agentic-ai-stack
+sandbox_says "sandbox up re-applies CRDs labelled managed-by=k3d-gpu" "${r}" 0 'Installing agent-sandbox' up "${UP_OK[@]}" \
+    STUB_CONTROLLER_IMAGE="${PINNED}" STUB_CONTROLLER_LABEL=k3d-gpu STUB_CRD_LABEL=k3d-gpu
+sandbox_says "sandbox up --adopt leaves Helm's CRDs to Helm" "${r}" 0 'adopting' "up --adopt" "${UP_OK[@]}" \
+    STUB_CONTROLLER_IMAGE="${THEIRS}" STUB_CRD_LABEL=Helm STUB_CRD_HELM=agent-sandbox
+no_call "sandbox up --adopt applies no CRDs over Helm's" 'apply -f .*/agent-sandbox\.yml$'
+
+sandbox_says "sandbox up --adopt keeps another installer's controller" "${r}" 0 "adopting .*${THEIRS}" "up --adopt" "${UP_OK[@]}" \
+    STUB_CONTROLLER_IMAGE="${THEIRS}"
+log_order "sandbox up --adopt checks the CRDs, waits for them and the controller, then applies the profile" \
+    'get deployment agent-sandbox-controller' \
+    'get crd .*sandboxtemplates\.extensions\.agents\.x-k8s\.io.*sandboxwarmpools\.extensions\.agents\.x-k8s\.io' \
+    'wait --for=condition=Established' \
+    'rollout status deployment/agent-sandbox-controller' \
+    'apply -f .*/agent-sandbox-k3d\.yml$' \
+    'get sandboxwarmpool python-ecores'
+no_call "sandbox up --adopt applies no controller manifest" 'apply -f .*/agent-sandbox\.yml$'
+no_call "sandbox up --adopt labels nothing" 'label --overwrite'
+sandbox_says "sandbox up --adopt fails when the CRDs do not serve v1beta1" "${r}" fail \
+    'sandboxtemplates\.extensions\.agents\.x-k8s\.io does not serve extensions\.agents\.x-k8s\.io/v1beta1 \(served: v1alpha1\)' \
+    "up --adopt" STUB_CONTROLLER_IMAGE="${THEIRS}" STUB_CRD_SERVED=v1alpha1
+no_call "sandbox up --adopt applies no profile on CRDs without v1beta1" 'apply -f'
+sandbox_says "sandbox up --adopt fails when the CRDs are missing" "${r}" fail 'does not serve .*\(served: none\)' \
+    "up --adopt" STUB_CONTROLLER_IMAGE="${THEIRS}" STUB_NO_CRDS=1
+no_call "sandbox up --adopt applies no profile without CRDs" 'apply -f'
+sandbox_says "sandbox up --adopt with no controller fails and installs nothing" "${r}" fail 'no agent-sandbox controller to adopt' "up --adopt"
+no_call "sandbox up --adopt with no controller applies nothing" 'apply -f'
+sandbox_says "sandbox up --adopt on its own controller applies only the profile" "${r}" 0 'adopting' "up --adopt" "${UP_OK[@]}" \
+    STUB_CONTROLLER_IMAGE="${PINNED}"
+no_call "sandbox up --adopt on its own controller applies no manifest" 'apply -f .*/agent-sandbox\.yml$'
+log_order "sandbox up --adopt on its own controller applies the profile" 'apply -f .*/agent-sandbox-k3d\.yml$'
+sandbox_says "sandbox down --adopt is a usage error" "${r}" fail "--adopt goes with 'sandbox up'" "down --adopt"
+no_call "sandbox down --adopt deletes nothing" 'delete'
+sandbox_says "sandbox status --adopt is a usage error" "${r}" fail "--adopt goes with 'sandbox up'" "status --adopt"
+sandbox_says "sandbox up with an unknown option fails" "${r}" fail 'unknown sandbox option: --bogus' "up --bogus"
+sandbox_says "sandbox usage names --adopt" "${r}" fail 'up --adopt: keep another installer' ""
+if bash "${K3D_GPU}" help 2>&1 | grep -E '^  sandbox up \[--adopt\]\|down\|status$' >/dev/null; then
+    PASS=$((PASS + 1)); echo "ok   help lists sandbox up [--adopt]"
+else
+    FAILS=$((FAILS + 1)); echo "FAIL help lists sandbox up [--adopt]"
+fi
+
+# down: the profile always goes; the namespace, CRDs and controller only when k3d-gpu
+# owns the controller and nothing else lives on them.
+sandbox_says "sandbox down on its own controller removes agent-sandbox" "${r}" 0 'Removing agent-sandbox' down \
+    STUB_CONTROLLER_IMAGE="${PINNED}" STUB_FOREIGN='SandboxWarmPool agent-sandbox/python-ecores;Sandbox agent-sandbox/python-ecores-x1'
+log_order "sandbox down on its own controller deletes the profile, then the manifest" \
+    'delete -f .*/agent-sandbox-k3d\.yml --ignore-not-found' 'delete -f .*/agent-sandbox\.yml --ignore-not-found'
+sandbox_says "sandbox down removes the unlabelled v1.0.7 controller an earlier k3d-gpu installed" "${r}" 0 'Removing agent-sandbox' down \
+    STUB_CONTROLLER_IMAGE="${V107}"
+log_order "sandbox down on k3d-gpu's v1.0.7 deletes the manifest" 'delete -f .*/agent-sandbox\.yml --ignore-not-found'
+sandbox_says "sandbox down keeps another installer's controller and names its image" "${r}" 0 \
+    "Kept namespace agent-sandbox-system, the agent-sandbox CRDs and the controller" down STUB_CONTROLLER_IMAGE="${THEIRS}"
+sandbox_says "sandbox down names the other installer's image" "${r}" 0 "controller runs ${THEIRS}" down STUB_CONTROLLER_IMAGE="${THEIRS}"
+log_order "sandbox down still deletes the profile next to another installer's controller" \
+    'delete -f .*/agent-sandbox-k3d\.yml --ignore-not-found'
+no_call "sandbox down deletes no manifest under another installer's controller" 'delete -f .*/agent-sandbox\.yml'
+sandbox_says "sandbox down keeps agent-sandbox while another installer's warm pool uses it" "${r}" 0 \
+    'SandboxWarmPool agent-sandbox-system/python-pool' down \
+    STUB_CONTROLLER_IMAGE="${PINNED}" STUB_FOREIGN='SandboxWarmPool agent-sandbox/python-ecores;SandboxWarmPool agent-sandbox-system/python-pool'
+no_call "sandbox down deletes no manifest under another installer's sandboxes" 'delete -f .*/agent-sandbox\.yml'
+sandbox_says "sandbox down keeps agent-sandbox-system while other pods run in it" "${r}" 0 \
+    'pod/sandbox-router-7d9f in agent-sandbox-system' down STUB_CONTROLLER_IMAGE="${PINNED}" STUB_SYSTEM_PODS=sandbox-router-7d9f
+no_call "sandbox down deletes no namespace other pods run in" 'delete -f .*/agent-sandbox\.yml'
+sandbox_says "sandbox down keeps CRDs from a Helm release" "${r}" 0 'Helm release agent-sandbox' down \
+    STUB_CRD_LABEL=Helm STUB_CRD_HELM=agent-sandbox
+no_call "sandbox down deletes no Helm-owned CRDs" 'delete -f .*/agent-sandbox\.yml'
+sandbox_says "sandbox down stops when it cannot read the controller" "${r}" fail 'could not read' down \
+    STUB_FAIL='get deployment agent-sandbox-controller'
+no_call "sandbox down deletes no manifest when it cannot read the controller" 'delete -f .*/agent-sandbox\.yml'
+sandbox_says "sandbox down stops when it cannot list sandbox objects" "${r}" fail 'could not list' down \
+    STUB_CONTROLLER_IMAGE="${PINNED}" STUB_FAIL=' -A -o '
+no_call "sandbox down deletes no manifest when it cannot list sandbox objects" 'delete -f .*/agent-sandbox\.yml'
+sandbox_says "sandbox down with no CRDs lists no sandbox objects" "${r}" 0 'Removing agent-sandbox' down STUB_NO_CRDS=1
+no_call "sandbox down with no CRDs runs no -A list" ' -A '
 
 # The shipped profile: sandboxes are labelled for E-cores, request CPU (requests size
 # the balloon) and every image is pinned by digest.

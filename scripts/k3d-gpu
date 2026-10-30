@@ -58,9 +58,10 @@
 #   fit     size a model to what this host has free now: placement, context x seqs, engine
 #           memory flags, pod memory limit, or why it cannot fit; --explain prints the arithmetic
 #   audit   posture checks: unauthenticated listeners off loopback, images not in images.lock
-#   sandbox up|down|status
+#   sandbox up [--adopt]|down|status
+#           kubernetes-sigs/agent-sandbox with a warm pool of sandboxes pinned to E-cores;
+#           --adopt keeps another installer's controller and adds only the E-core profile
 #   model-share --image REF --agent-image REF [--replicas N] [--name NAME]
-#           kubernetes-sigs/agent-sandbox with a warm pool of sandboxes pinned to E-cores
 #   tune    run|show|space|env|fingerprint|reset: search the OVMS agent's serving config on
 #           this host; keep a winner only if it beats the default; agent up applies it
 #   capacity    agents per box: closed-loop agent ramp against the cluster's chat endpoint
@@ -286,9 +287,15 @@ Usage: k3d-gpu <command>
             Posture checks of the running cluster: fails on an unauthenticated
             listener off loopback, an image not pinned in images.lock, a runtime
             pull, a key file readable by others, or Open WebUI without sign-in
-  sandbox up|down|status
+  sandbox up [--adopt]|down|status
             Install kubernetes-sigs/agent-sandbox with a warm pool of sandboxes on
             E-cores (k3d-gpu.io/cores=efficient), check where they run, or remove it.
+            up stops when another installer's controller (Intel's Enterprise Agent
+            Toolkit installs v0.5.0 in agent-sandbox-system) or CRDs are installed;
+            up --adopt keeps that controller and adds only the E-core profile (its
+            CRDs must serve v1beta1). down removes the profile, and removes the namespace
+            agent-sandbox-system, the CRDs and the controller only when k3d-gpu
+            installed them and no other installer's sandboxes or pods use them.
             up --remote [URL]: egress only to the endpoint's addresses and port
             (no DNS; on a CDN those addresses also serve its other sites), and
             endpoint in the sandbox's Secret k3d-gpu-llm, which sandbox code can
@@ -6631,13 +6638,111 @@ SANDBOX_CRDS=(
     crd/sandboxclaims.extensions.agents.x-k8s.io
     crd/sandboxwarmpools.extensions.agents.x-k8s.io
 )
+SANDBOX_ADOPT=""   # sandbox up --adopt: use the agent-sandbox controller already installed
+
+# Ownership. Other installers put agent-sandbox in the same namespace (Intel's EAT
+# installs v0.5.0 there, with its own warm pool and router). The controller is k3d-gpu's
+# when its Deployment carries app.kubernetes.io/managed-by=k3d-gpu (`sandbox up` sets it
+# on the Deployment, the Namespace and the CRDs after an install), or when it runs the
+# controller image pinned in ${SANDBOX_MANIFEST} or one an earlier k3d-gpu release
+# installed before the label (SANDBOX_UNLABELLED_IMAGES), and no other installer marked
+# it (another managed-by value, or a Helm release annotation).
+SANDBOX_OWNER_LABEL="app.kubernetes.io/managed-by=k3d-gpu"
+SANDBOX_UNLABELLED_IMAGES=(
+    registry.k8s.io/agent-sandbox/agent-sandbox-controller:v1.0.7@sha256:f254384c24605436ce35d7077427559e24bda8f5691cff5a54a4c2e030d81083
+)
+
+# sandbox_controller: "<images>|<managed-by>|<Helm release>" of the controller
+# Deployment, nothing when there is none. Fails when kubectl cannot read it.
+sandbox_controller() {
+    kubectl -n agent-sandbox-system get deployment agent-sandbox-controller --ignore-not-found \
+        -o jsonpath='{.spec.template.spec.containers[*].image}{"|"}{.metadata.labels.app\.kubernetes\.io/managed-by}{"|"}{.metadata.annotations.meta\.helm\.sh/release-name}'
+}
+
+# sandbox_whose <sandbox_controller line>: absent, ours or foreign.
+sandbox_whose() {
+    local images managed helm
+    [ -n "$1" ] || { echo absent; return; }
+    IFS='|' read -r images managed helm <<< "$1"
+    if [ -n "${helm}" ]; then echo foreign
+    elif [ "${managed}" = k3d-gpu ]; then echo ours
+    elif [ -n "${managed}" ]; then echo foreign
+    elif printf '%s\n' "$(sandbox_pinned_image)" "${SANDBOX_UNLABELLED_IMAGES[@]}" | grep -Fx -- "${images}" >/dev/null; then echo ours
+    else echo foreign
+    fi
+}
+
+# sandbox_pinned_image: the controller image ${SANDBOX_MANIFEST} installs.
+sandbox_pinned_image() {
+    sed -n 's/^[[:space:]]*image:[[:space:]]*\([^[:space:]]*\/agent-sandbox-controller[:@][^[:space:]]*\).*$/\1/p' "${SANDBOX_MANIFEST}" 2>/dev/null | head -1
+}
+
+# sandbox_marks <managed-by> <Helm release>: "managed-by M, Helm release R", the set ones.
+sandbox_marks() {
+    local marks=""
+    [ -z "$1" ] || marks="managed-by $1"
+    [ -z "$2" ] || marks="${marks:+${marks}, }Helm release $2"
+    echo "${marks}"
+}
+
+# sandbox_describe <sandbox_controller line>: "<images> (managed-by M, Helm release R)".
+sandbox_describe() {
+    local images managed helm marks
+    IFS='|' read -r images managed helm <<< "$1"
+    marks=$(sandbox_marks "${managed}" "${helm}")
+    echo "${images:-no image}${marks:+ (${marks})}"
+}
+
+# sandbox_crds: "<name>|<served versions>|<managed-by>|<Helm release>" per installed CRD.
+sandbox_crds() {
+    kubectl get crd "${SANDBOX_CRDS[@]#crd/}" --ignore-not-found \
+        -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.spec.versions[?(@.served==true)].name}{"|"}{.metadata.labels.app\.kubernetes\.io/managed-by}{"|"}{.metadata.annotations.meta\.helm\.sh/release-name}{"\n"}{end}'
+}
+
+# sandbox_foreign_crds <sandbox_crds lines>: "CRD <name> is another installer's (<marks>)"
+# for each CRD with a Helm release or a managed-by other than k3d-gpu.
+sandbox_foreign_crds() {
+    local name managed helm
+    while IFS='|' read -r name _ managed helm; do
+        [ -n "${name}" ] || continue
+        if [ -n "${helm}" ] || { [ -n "${managed}" ] && [ "${managed}" != k3d-gpu ]; }; then
+            echo "CRD ${name} is another installer's ($(sandbox_marks "${managed}" "${helm}"))"
+        fi
+    done <<< "$1"
+}
 
 sandbox_up() {
     require kubectl
-    local f ready="" deadline profile fields base model origin
+    local f ready="" deadline profile fields base model origin ctl whose crds theirs found crd served
     for f in "${SANDBOX_MANIFEST}" "${SANDBOX_PROFILE_MANIFEST}"; do
         [ -f "${f}" ] || err "${f} not found — set K3D_GPU_SHARE, K3D_GPU_SANDBOX or K3D_GPU_SANDBOX_PROFILE"
     done
+    ctl=$(sandbox_controller) || err "could not read deployment agent-sandbox-system/agent-sandbox-controller; nothing applied"
+    whose=$(sandbox_whose "${ctl}")
+    crds=$(sandbox_crds) || err "could not read the agent-sandbox CRDs; nothing applied"
+    theirs=$(sandbox_foreign_crds "${crds}")
+    if [ -n "${SANDBOX_ADOPT}" ]; then
+        [ "${whose}" != absent ] || err "no agent-sandbox controller to adopt in agent-sandbox-system; 'k3d-gpu sandbox up' installs agent-sandbox ${SANDBOX_VERSION}"
+        # The profile is extensions.agents.x-k8s.io/v1beta1.
+        for crd in sandboxtemplates.extensions.agents.x-k8s.io sandboxwarmpools.extensions.agents.x-k8s.io; do
+            served=$(awk -F'|' -v n="${crd}" '$1 == n {print $2}' <<< "${crds}")
+            [[ " ${served} " == *" v1beta1 "* ]] \
+                || err "CRD ${crd} does not serve extensions.agents.x-k8s.io/v1beta1 (served: ${served:-none}); the profile needs it, so nothing applied"
+        done
+    elif [ "${whose}" = foreign ] || [ -n "${theirs}" ]; then
+        # Applying the manifest would replace that installer's controller or CRDs, and
+        # the label would claim them for k3d-gpu.
+        found=""
+        [ "${whose}" != foreign ] || found="agent-sandbox-system/agent-sandbox-controller runs $(sandbox_describe "${ctl}"), not k3d-gpu's ${SANDBOX_VERSION}"
+        if [ -n "${found}" ] && [ -n "${theirs}" ]; then found+=$'\n'; fi
+        found+="${theirs}"
+        [ "${whose}" != absent ] || err "${found}
+another installer put agent-sandbox there, so nothing was applied: remove it with that installer, then run 'k3d-gpu sandbox up'"
+        err "${found}
+another installer put agent-sandbox there, so nothing was applied. Either:
+  k3d-gpu sandbox up --adopt   keep that controller and add only the E-core profile (its CRDs must serve v1beta1)
+  or remove that installer's agent-sandbox with that installer, then run 'k3d-gpu sandbox up'"
+    fi
     if [ -n "${REMOTE}" ]; then
         # Remote: egress is the endpoint's host:port only (no DNS; hostAliases pin
         # the name), and the sandbox reads the endpoint from its own Secret copy.
@@ -6647,11 +6752,20 @@ sandbox_up() {
             || err "could not pin the sandbox egress to ${base}"
         info "remote endpoint ${base} (from ${origin}): sandbox egress is ${base#*://} only, no DNS"
     fi
-    info "Installing agent-sandbox ${SANDBOX_VERSION} (${SANDBOX_MANIFEST})..."
-    kubectl apply -f "${SANDBOX_MANIFEST}"
+    if [ -n "${SANDBOX_ADOPT}" ]; then
+        info "adopting agent-sandbox-system/agent-sandbox-controller ($(sandbox_describe "${ctl}")): no controller manifest applied"
+    else
+        info "Installing agent-sandbox ${SANDBOX_VERSION} (${SANDBOX_MANIFEST})..."
+        kubectl apply -f "${SANDBOX_MANIFEST}"
+    fi
     # The profile's SandboxTemplate and SandboxWarmPool need their CRDs served first.
     kubectl wait --for=condition=Established "${SANDBOX_CRDS[@]}" --timeout=60s
     kubectl -n agent-sandbox-system rollout status deployment/agent-sandbox-controller --timeout=180s
+    if [ -z "${SANDBOX_ADOPT}" ]; then
+        kubectl -n agent-sandbox-system label --overwrite deployment/agent-sandbox-controller \
+            namespace/agent-sandbox-system "${SANDBOX_CRDS[@]}" "${SANDBOX_OWNER_LABEL}" >/dev/null \
+            || warn "could not label agent-sandbox ${SANDBOX_OWNER_LABEL}; k3d-gpu still knows its controller by the pinned image"
+    fi
     # The Secret exists before the warm pool's pods, which read it at start.
     [ -z "${REMOTE}" ] || remote_secret_apply "${SANDBOX_NS}" "${base}" "${model}"
     info "Applying the E-core sandbox profile (${SANDBOX_PROFILE_MANIFEST})..."
@@ -6715,27 +6829,66 @@ sandbox_status() {
     [ "${fail}" -eq 0 ] || err "sandbox pods are not pinned to E-cores, or the endpoint moved"
 }
 
+# Deletes the profile, then the namespace agent-sandbox-system, the CRDs and the
+# controller, unless another installer owns or uses them: deleting a CRD deletes every
+# object of its kind in every namespace.
 sandbox_down() {
     require kubectl
-    info "Removing the sandbox profile and agent-sandbox ${SANDBOX_VERSION}..."
+    local ctl crds kinds="" crd name line objs pods kept=()
+    info "Removing the sandbox profile (${SANDBOX_PROFILE_MANIFEST})..."
     # Profile first, while its CRDs still exist; deleting the CRDs removes every sandbox.
     kubectl delete -f "${SANDBOX_PROFILE_MANIFEST}" --ignore-not-found \
         || warn "profile objects not removed (CRDs already gone?)"
+    ctl=$(sandbox_controller) \
+        || err "could not read deployment agent-sandbox-system/agent-sandbox-controller: kept namespace agent-sandbox-system, the agent-sandbox CRDs and the controller"
+    [ "$(sandbox_whose "${ctl}")" != foreign ] || kept+=("the controller runs $(sandbox_describe "${ctl}"), not k3d-gpu's ${SANDBOX_VERSION}")
+    crds=$(sandbox_crds) || err "could not read the agent-sandbox CRDs: kept namespace agent-sandbox-system, the CRDs and the controller"
+    while IFS='|' read -r name _; do
+        [ -z "${name}" ] || kinds="${kinds:+${kinds},}${name}"
+    done <<< "${crds}"
+    while read -r line; do
+        [ -z "${line}" ] || kept+=("${line}")
+    done <<< "$(sandbox_foreign_crds "${crds}")"
+    if [ -n "${kinds}" ]; then
+        objs=$(kubectl get "${kinds}" -A -o jsonpath='{range .items[*]}{.kind}{" "}{.metadata.namespace}{"/"}{.metadata.name}{"\n"}{end}') \
+            || err "could not list the sandbox objects: kept namespace agent-sandbox-system, the agent-sandbox CRDs and the controller"
+        while read -r crd name; do
+            if [ -n "${name}" ] && [ "${name%%/*}" != "${SANDBOX_NS}" ]; then kept+=("${crd} ${name} uses the CRDs"); fi
+        done <<< "${objs}"
+    fi
+    pods=$(kubectl -n agent-sandbox-system get pods -l 'app!=agent-sandbox-controller' -o name) \
+        || err "could not list the pods in agent-sandbox-system: kept the namespace, the agent-sandbox CRDs and the controller"
+    while read -r name; do
+        [ -z "${name}" ] || kept+=("${name} in agent-sandbox-system is not k3d-gpu's")
+    done <<< "${pods}"
+    if [ "${#kept[@]}" -gt 0 ]; then
+        info "Kept namespace agent-sandbox-system, the agent-sandbox CRDs and the controller:"
+        printf '  %s\n' "${kept[@]}"
+        echo "  remove them with the installer that owns them"
+        return 0
+    fi
+    info "Removing agent-sandbox ${SANDBOX_VERSION}: namespace agent-sandbox-system, the CRDs and the controller (${SANDBOX_MANIFEST})..."
     kubectl delete -f "${SANDBOX_MANIFEST}" --ignore-not-found
 }
 
 cmd_sandbox() {
-    local sub=${1:-}
+    local sub=${1:-} a
     [ $# -eq 0 ] || shift
     remote_parse "$@"
-    [ "${#REMOTE_REST[@]}" -eq 0 ] || err "unknown sandbox option: ${REMOTE_REST[0]}"
+    for a in ${REMOTE_REST[@]+"${REMOTE_REST[@]}"}; do
+        case "${a}" in
+            --adopt) SANDBOX_ADOPT=1 ;;
+            *) err "unknown sandbox option: ${a}" ;;
+        esac
+    done
+    [ -z "${SANDBOX_ADOPT}" ] || [ "${sub}" = up ] || err "--adopt goes with 'sandbox up'"
     [ -z "${REMOTE}" ] || [ "${sub}" = up ] || err "--remote goes with 'sandbox up'"
     [ -n "${REMOTE}" ] || [ "${#REMOTE_ARGS[@]}" -eq 0 ] || err "--model and --api-key-file go with --remote"
     case "${sub}" in
         up)     sandbox_up     ;;
         down)   sandbox_down   ;;
         status) sandbox_status ;;
-        *) err "usage: k3d-gpu sandbox up|down|status (up --remote [URL] [--api-key-file F]: egress only to that endpoint)" ;;
+        *) err "usage: k3d-gpu sandbox up|down|status (up --adopt: keep another installer's agent-sandbox controller, add only the profile; up --remote [URL] [--api-key-file F]: egress only to that endpoint)" ;;
     esac
 }
 
