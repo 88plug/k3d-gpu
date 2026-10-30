@@ -306,10 +306,12 @@ Usage: k3d-gpu <command>
             nothing. Commits come from integrations/eas/pins.json; a ref given here
             is resolved to a commit once and recorded in the state dir
   eas status|down|check [--model NAME]
-            status: EAS's own status, pins, overlay, gateway, pods not Ready. down:
-            teardown platform (the cluster stays). check (agent toolkit): chat, tool
-            call and a sandbox run through EAS's LiteLLM gateway with a short-lived
-            virtual key
+            status: EAS's own status, pins, overlay, gateway, pods not Ready and the
+            cause of each stack pod not Ready. down: teardown platform (the cluster
+            stays). check (agent toolkit): the stack's pods Ready (each one that is
+            not, with its cause), then chat, tool call, the guardrail on an unsafe
+            prompt and a sandbox run through EAS's LiteLLM gateway with a
+            short-lived virtual key
   model-share --image REF --agent-image REF [--replicas N] [--name NAME]
             Print a Deployment whose N agent replicas mount one model OCI image as a
             read-only image volume (pipe to kubectl apply -f -). It warns when this
@@ -6779,7 +6781,7 @@ EAS_GW_SELECTOR="gateway.envoyproxy.io/owning-gateway-name=eg-gateway"
 EAS_DEFAULT_DOMAIN="solutions.ai"   # base_domain_name in EAS configs/defaults/global_config.yaml
 # Environment the bastion gets by name only (docker run -e NAME), never by value.
 EAS_PASS_ENV=(HF_TOKEN HTTP_PROXY HTTPS_PROXY NO_PROXY http_proxy https_proxy no_proxy ES_LOG_LEVEL)
-EAS_FILES=(eas.sh bastion.Dockerfile requirements.lock images.yaml pins.json eas-config.py overlay.py overlay.json)
+EAS_FILES=(eas.sh bastion.Dockerfile requirements.lock images.yaml pins.json eas-config.py eas-ready.py overlay.py overlay.json)
 # Files eas-config.py writes; each `eas up` starts without them.
 EAS_OUTPUTS=(choices.txt k3d-gpu-overrides.yaml global_config.edit.yaml models.edit.yaml
              repos.inference.yaml repos.agent-toolkit.yaml pins.resolved.json layer)
@@ -7126,7 +7128,7 @@ eas_up() {
     fi
     image=$(eas_bastion_image "${dir}")
     eas_run "${dir}" "${state}" "${image}" up "${layer}" -- ${extra[@]+"${extra[@]}"} \
-        || err "es_auto_installer.sh install ${layer} failed (log above, and ${state}/eas/env/${EAS_ENV}/logs)"
+        || err "es_auto_installer.sh install ${layer} failed (log above, and ${state}/eas/env/${EAS_ENV}/logs); 'k3d-gpu eas status' names the cause of each pod not Ready"
     echo "${layer}" > "${state}/layer"
     info "EAS ${layer} is installed on '${CLUSTER}'"
     eas_gateway "${state}"
@@ -7198,6 +7200,10 @@ for p in json.load(sys.stdin)["items"]:
         why = ",".join(w for w in why if w) or ph or "?"
         bad.append("  %s/%s: %s" % (p["metadata"]["namespace"], p["metadata"]["name"], why))
 print("\n".join(bad) if bad else "  none")'
+    # The same report eas check stops on, with the cause of each stack pod not Ready (the
+    # AMX node affinity, Insufficient cpu or memory, the Istio CNI paths); status only shows it.
+    info "Stack readiness (${dir}/eas-ready.py):"
+    kubectl get pods,daemonsets -A -o json | python3 "${dir}/eas-ready.py" 2>&1 | sed 's/^/  /' || true
 }
 
 eas_check() {
@@ -7209,7 +7215,7 @@ eas_check() {
         esac
         shift
     done
-    require kubectl; require curl; require jq
+    require kubectl; require curl; require jq; require python3
     dir=$(eas_dir) || err "integrations/eas not found (set K3D_GPU_EAS_DIR)"
     state=$(eas_state)
     eas_installed "${state}"
