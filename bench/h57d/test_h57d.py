@@ -9,6 +9,7 @@ import random
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -642,6 +643,75 @@ class ReproduceHeader(unittest.TestCase):
                                                       ("Ld-mtp-u", h57d.llamacpp_args(True, pinned=False)))]
         self.assertEqual(lines[i + 1:], want)
         self.assertIn("  llamacpp: " + h57d.LLAMACPP, lines)
+
+
+ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
+FIX = os.path.join(ROOT, "tests", "fixtures", "fit")
+# kubectl stand-in: `k3d-gpu` names --context on every call; a hold's kubeconfig holds only the
+# hold's cluster, so any other context reads "context was not found". apply fails, which stops
+# arm.sh right after the render.
+KUBECTL = r'''#!/usr/bin/env python3
+import os, sys
+a = sys.argv[1:]
+ctx = None
+while a and a[0] == "--context":
+    ctx, a = a[1], a[2:]
+if ctx is not None and ctx != "k3d-" + os.environ["STUB_CLUSTER"]:
+    sys.exit(f"error: context was not found for specified context: {ctx}")
+s = " ".join(a)
+if s == "get nodes -l k3d-gpu.io/hybrid-cpu=true -o name":
+    print("node/k3d-x-server-0")
+elif "allocatable" in s:
+    print("cpu 32")
+elif a[:1] == ["apply"]:
+    sys.exit("apply refused by the test")
+'''
+
+
+@unittest.skipUnless(HAVE_YAML, "PyYAML")
+class OdRendersInTheHoldsCluster(unittest.TestCase):
+    """H57d amendment R2: arm.sh renders Od with K3D_GPU_CLUSTER set to the hold's cluster, so
+    `agent manifest` reads the hold's hybrid node: the P-core label and the 16 P-core CPUs (H57dp's
+    deviation was a render through context k3d-gpu: no label, 1 CPU)."""
+
+    def test_od_render_has_the_pcore_balloon(self):
+        with tempfile.TemporaryDirectory() as d:
+            b = os.path.join(d, "bin")
+            os.makedirs(b)
+            with open(os.path.join(b, "kubectl"), "w") as f:
+                f.write(KUBECTL)
+            os.chmod(os.path.join(b, "kubectl"), 0o755)
+            cache = os.path.join(d, "cache")
+            os.makedirs(cache)
+            for n in os.listdir(os.path.join(FIX, "models")):
+                src = os.path.join(FIX, "models", n)
+                os.symlink(src, os.path.join(cache, f"{n}@main"))
+            sysd = os.path.join(d, "root", "sys", "devices")
+            for name, cpus in (("cpu_core", "0-15"), ("cpu_atom", "16-31")):
+                os.makedirs(os.path.join(sysd, name))
+                with open(os.path.join(sysd, name, "cpus"), "w") as f:
+                    f.write(cpus + "\n")
+            open(os.path.join(d, "kubeconfig"), "w").close()
+            env = {"PATH": b + ":/usr/bin:/bin", "HOME": d, "REPO": ROOT, "CLUSTER": "k3dgpu-d-h57d-1",
+                   "STUB_CLUSTER": "k3dgpu-d-h57d-1", "KUBECONFIG": os.path.join(d, "kubeconfig"),
+                   "DEADLINE": str(int(time.time()) + 5000), "MODE": "perf",
+                   "K3D_GPU_SYSROOT": os.path.join(d, "root"), "K3D_GPU_FIT_CACHE": cache,
+                   "K3D_GPU_FIT_HOST": os.path.join(FIX, "hosts", "desktop-i9-nogpu.json"),
+                   "K3D_GPU_HF_FIXTURES": os.path.join(ROOT, "tests", "fixtures", "hf"),
+                   "XDG_STATE_HOME": os.path.join(d, "state"), "XDG_CACHE_HOME": os.path.join(d, "xdg")}
+            out = os.path.join(d, "Od")
+            r = subprocess.run(["bash", os.path.join(HERE, "arm.sh"), "Od", out], env=env,
+                               capture_output=True, text=True, timeout=300)
+            with open(os.path.join(out, "status.json")) as f:
+                self.assertIn("apply failed", json.load(f)["reason"], r.stdout + r.stderr)
+            with open(os.path.join(out, "agent.err")) as f:
+                err = f.read()
+            with open(os.path.join(out, "deploy.yaml")) as f:
+                docs = [x for x in yaml.safe_load_all(f) if x]
+        dep = [x for x in docs if x["kind"] == "Deployment"][0]
+        tpl = dep["spec"]["template"]
+        self.assertEqual(tpl["metadata"]["labels"].get("k3d-gpu.io/cores"), "performance", err)
+        self.assertEqual(str(tpl["spec"]["containers"][0]["resources"]["requests"]["cpu"]), "16", err)
 
 
 if __name__ == "__main__":
