@@ -27,7 +27,7 @@
 # eas: the requests carry a LiteLLM virtual key minted for this run with the master key
 # (Secret litellm/litellm-master-key) through POST /key/generate, and deleted at exit
 # (POST /key/delete). Keys reach curl as header files and request bodies on its stdin,
-# never on an argument list.
+# and jq through its environment, never on an argument list.
 
 set -euo pipefail
 
@@ -53,7 +53,8 @@ cleanup() {
     [ -z "${pf}" ] || kill "${pf}" 2>/dev/null || true
     # The run's virtual key goes when the check ends, pass or fail.
     if [ -n "${vkey}" ]; then
-        jq -n --arg k "${vkey}" '{keys: [$k]}' | gw_post /key/delete "${master}" >/dev/null \
+        # The key reaches jq through its environment, not its argument list.
+        VKEY="${vkey}" jq -n '{keys: [env.VKEY]}' | gw_post /key/delete "${master}" >/dev/null \
             || echo "WARN: could not delete this run's LiteLLM virtual key ${alias}" >&2
     fi
 }
