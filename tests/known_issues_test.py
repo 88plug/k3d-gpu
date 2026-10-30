@@ -14,6 +14,7 @@ import io
 import json
 import contextlib
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -505,8 +506,7 @@ class RealRepo(unittest.TestCase):
             self.assertEqual(rc, 0, out)
             k = d / "scripts" / "k3d-gpu"
             text = k.read_text()
-            moved = text.replace("K3D_GPU_AMX_TEST_IMAGE:-vllm/vllm-openai-cpu:v0.32.0@",
-                                 "K3D_GPU_AMX_TEST_IMAGE:-vllm/vllm-openai-cpu:v0.24.0@")
+            moved = re.sub(r"(K3D_GPU_AMX_TEST_IMAGE:-vllm/vllm-openai-cpu:)v\d+\.\d+\.\d+@", r"\1v0.24.0@", text)
             self.assertNotEqual(text, moved)
             k.write_text(moved)
             rc, out = run_check(d)

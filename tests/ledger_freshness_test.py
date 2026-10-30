@@ -240,7 +240,8 @@ class RealRepo(unittest.TestCase):
         self.assertEqual(rc2, 0, err2)
         self.assertEqual(before, digest(self.PROTECTED))
         data = json.loads(out)
-        self.assertEqual(data["measured"]["H34"]["openvino/model_server"], "2026.4.1")
+        # The ledger's recorded versions, read by shape: a pin bump substitutes version strings in tests/.
+        self.assertRegex(data["measured"]["H34"]["openvino/model_server"], r"^\d{4}\.\d+(\.\d+)?$")
         self.assertRegex(data["measured"]["H57dm"]["llama.cpp"], r"^b\d+$")
         self.assertIn("| H34 |", md)
         self.assertIn("| H57dm |", md)
