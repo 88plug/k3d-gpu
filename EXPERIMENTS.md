@@ -10140,6 +10140,48 @@ whole stack, Qwen3Guard's 8 included, on a 32-CPU node; helm v3.22.1 with
 instances with this many pods; EAS #71 at teardown; and host memory taken by other
 tenants.
 
+### F3 amendment R1: the locks and the run directory (2026-10-29)
+
+Written 2026-10-29, before any F3 step. Nothing in the F3 pre-registration above is
+edited, and its prediction (0.35) stands. This amendment fixes how the run is held and
+where its files go. It changes no step, ceiling or grade.
+
+- **One F3 row.** A second F3 row was drafted for this run, with other wording and a
+  prior of 0.5. It is not added. The row and section above were committed first, so they
+  are the only F3 pre-registration.
+- **Locks.** The desktop holds (H55, H57dp, H59d) take `~/k3dgpu-bench.lock`, not
+  `<scratchpad>/live.lock`. F3 takes `~/k3dgpu-bench.lock` first, then
+  `<scratchpad>/live.lock`, each with `flock -o -w 36000`, so no child holds a lock
+  descriptor. That is the order H55 uses with `AD_EXTRA_LOCK`, so no wait cycle forms.
+  The 180 min cap counts from the moment both are held.
+- **Node image.** The image step 0 builds gets a local tag, and step 1 names it with
+  `K3D_GPU_IMAGE`. The header records its image ID.
+- **Run directory.** `K3D_GPU_STATE_DIR` is a new directory on disk for this run, so
+  `${STATE_DIR}` above is that directory. `KUBECONFIG` is unset, and every step uses the
+  cluster's own `${STATE_DIR}/kubeconfig-k3dgpu-f3-eas`.
+- **ps samples.** Each 2 s `ps -eo args` sample is appended to one gzip file, and step 7
+  counts through `zcat`. After step 8, the same counts are taken again over the same
+  files plus step 8's log and samples. That second scan is recorded, not graded.
+- **When.** At the time of writing, `k3d-gpu eas` (#260) is not on `origin/main`, so F3
+  waits for it, as the section says. #260's unscored wiring smoke runs first, on cluster
+  `k3dgpu-eas-smoke` inside the same two locks, and is recorded in #260.
+
+### F3 amendment R2: what the secret scan counts (2026-10-29)
+
+Written 2026-10-29, before any F3 step, after #260's second wiring smoke. It changes only
+which values step 7 counts. No step, ceiling or other grade changes, and the prediction
+stands.
+
+- **keycloak-admin-secret: the password key only.** The Secret has two keys, `username`
+  (5 bytes) and `password` (24 bytes). The username is an account name, not a secret. In
+  the smoke, a fixed-string count of it found 717 lines in the step logs, the ps samples
+  and the EAS logs, so counting it would grade any run REFUTED with no secret shown. Step
+  7 counts the `password` key of `keycloak-admin-secret`, records that `username` was not
+  counted, and counts the other values as the section says.
+- **Step 7's own log is not counted.** It is written while the scan runs and names the
+  Secrets only. Every other step log, the ps samples and every file under the EAS state
+  dir's `logs/` are counted as before.
+
 ### H2 run (i9-13900T, 2026-10-16)
 
 ```text
