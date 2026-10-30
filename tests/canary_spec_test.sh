@@ -77,12 +77,12 @@ else ok "a locator matching twice is an error"; fi
 # name@sha256 and to name:tag@sha256. The pins themselves move with every bump, so no
 # test here names their current values.
 tree "${T}/form"
-sed -i -E 's#^(AGENT_OVMS_IMAGE="openvino/model_server)(:[^@"]+)?@#\1@#' "${T}/form/scripts/k3d-gpu"
+sed -i -E 's#^(AGENT_OVMS_IMAGE="[^@":]+)(:[^@"]+)?@#\1@#' "${T}/form/scripts/k3d-gpu"
 ref=$(python3 "${PLAN}" ref ovms-cpu --root "${T}/form")
 tag=$(python3 "${PLAN}" show ovms-cpu --root "${T}/form" | jget tag)
 [[ "${ref}" == openvino/model_server@sha256:* && -z "${tag}" ]] && ok "a locator reads the name@sha256 form, with no tag" \
     || fail "name@sha256 form resolved to '${ref}', tag '${tag}'"
-sed -i -E 's#^(AGENT_OVMS_IMAGE="openvino/model_server)@#\1:9.9.9-gpu@#' "${T}/form/scripts/k3d-gpu"
+sed -i -E 's#^(AGENT_OVMS_IMAGE="[^@":]+)@#\1:9.9.9-gpu@#' "${T}/form/scripts/k3d-gpu"
 ref=$(python3 "${PLAN}" ref ovms-cpu --root "${T}/form")
 [[ "${ref}" == openvino/model_server:9.9.9-gpu@sha256:* ]] && ok "a locator reads the name:tag@sha256 form" \
     || fail "name:tag form resolved to '${ref}'"
