@@ -283,8 +283,9 @@ def model_block(model_id, revision, weights_sha256, weights_bytes, quant):
 def tool_block(version, server_image, k3s=None):
     if not re.match(r"^([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|git-[0-9a-f]{40})$", version or ""):
         raise ProjectionError(f"tool version {version!r} is neither a release (x.y.z) nor git-<sha>")
+    server_image = B.untagged(server_image or "")
     return {"version": version, "k3s": k3s,
-            "server_image": server_image if DIGEST_IMAGE_RE.match(server_image or "")
+            "server_image": server_image if DIGEST_IMAGE_RE.match(server_image)
         and B.public_image(server_image) else None,
             "node_image_digest": None}
 

@@ -440,6 +440,16 @@ class ValidatorTest(unittest.TestCase):
         self.assertEqual(check(reseal(b)).verdict, "reject")
         self.assertEqual(check(reseal(b), trusted=True).verdict, "accept")
 
+    def test_V4_tagged_release_pin_matches_the_digest(self):
+        # A release pins name:tag@sha256:X; a bundle records the image as name@sha256:X.
+        name, digest = AGENT_IMAGE.split("@")
+        tagged = "%s:2026.4.1-gpu@%s" % (name, digest)
+        self.assertEqual(check(self.b, pins={"0.1.19": tagged}).verdict, check(self.b).verdict)
+        self.assertNotIn("V4", rules(check(self.b, pins={"0.1.19": tagged})))
+        self.assertEqual(V.script_pins('AGENT_OVMS_IMAGE="%s"\n' % tagged), {AGENT_IMAGE})
+        self.assertEqual(P.tool_block("0.1.19", tagged)["server_image"], AGENT_IMAGE)
+        self.assertEqual(P.tool_block("0.1.19", AGENT_IMAGE)["server_image"], AGENT_IMAGE)
+
     def test_V5_tampered_claims_are_rejected(self):
         b = copy.deepcopy(self.b)
         b["results"]["capacity"]["agents_per_box"] += 1

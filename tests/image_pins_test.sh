@@ -39,10 +39,14 @@ else fail "images-lock pins on the repo"; sed 's/^/  | /' <<< "${out}"; fi
 
 # scratch: a root holding the images-lock tool and an allow file with one entry.
 scratch() {
-    rm -rf "${WORK}/r"; mkdir -p "${WORK}/r/scripts" "${WORK}/r/share"
+    rm -rf "${WORK}/r"; mkdir -p "${WORK}/r/scripts" "${WORK}/r/share" "${WORK}/r/hack" "${WORK}/r/tests"
     cp "${REPO}/scripts/images-lock" "${WORK}/r/scripts/"
+    cp "${REPO}/hack/pin-classes" "${WORK}/r/hack/"
+    cp "${REPO}/tests/ledger_drift_check.py" "${WORK}/r/tests/"
     cp -r "${REPO}/console" "${WORK}/r/"
     printf 'share/local.yml app/local:dev built on the host, never pulled\n' > "${WORK}/r/images.unpinned"
+    mkdir -p "${WORK}/r/pins"
+    printf 'console/matrix.v1.json historical the measured cells (digest-only records)\n' > "${WORK}/r/pins/classes"
     printf -- '- image: app/local:dev\n' > "${WORK}/r/share/local.yml"
 }
 
@@ -90,8 +94,14 @@ pins_case "name:tag@sha256 references" ok \
     "printf -- '- image: redis:7.4@${D1}\nFROM debian:trixie-slim@${D2}\n' > share/a.yml"
 pins_case "a FROM whose ARG default is pinned" ok \
     "printf 'ARG UBUNTU_IMAGE=\"ubuntu:26.04@${D1}\"\nFROM \${UBUNTU_IMAGE}\n' > Dockerfile"
-pins_case "digest-only references" ok \
+pins_case "a digest-only reference in an ours file" "scripts/run:1: openvino/model_server@${D1} has no tag" \
     "printf 'AGENT_OVMS_IMAGE=\"openvino/model_server@${D1}\"\n' > scripts/run"
+pins_case "a digest-only reference in an eat-stock file" "integrations/eat/run:1: intel/x@${D1} has no tag" \
+    "mkdir -p integrations/eat; printf 'integrations/eat/** eat-stock EAT\n' >> pins/classes; printf 'X_IMAGE=intel/x@${D1}\n' > integrations/eat/run"
+pins_case "a digest-only reference images.unpinned allows" ok \
+    "printf 'AGENT_OVMS_IMAGE=\"openvino/model_server@${D1}\"\n' > scripts/run; printf 'scripts/run openvino/model_server@* a test input\n' >> images.unpinned"
+pins_case "digest-only references in ledger and historical files (records)" ok \
+    "mkdir -p bench/h bench/l; printf 'bench/h/** historical done\nbench/l/** ledger H1 amend=X a row\n' >> pins/classes; printf 'IMG=openvino/model_server@${D1}\n' | tee bench/h/run.sh > bench/l/run.sh"
 pins_case "variables" ok \
     "printf -- '- image: \${AGENT_IMAGE}\n- image: \"@VLLM_IMAGE@\"\n- image: {image}\n' > share/a.yml"
 pins_case "a CRD schema image: key" ok \
@@ -234,6 +244,179 @@ if out=$("${WORK}/r/scripts/images-lock" check --exclude 'x' --root "${WORK}/r" 
     fail "check accepted --exclude"; sed 's/^/  | /' <<< "${out}"
 elif grep -qF -- '--exclude' <<< "${out}"; then ok "--exclude is a repin option only"
 else fail "check --exclude failed for another reason"; sed 's/^/  | /' <<< "${out}"; fi
+
+# ---- repin and drift leave ledger and historical paths (pins/classes) alone ----
+# pyrun <python>: run python with `m` (scratch images-lock) loaded, the registry stubbed
+# by STUB (a dict name:tag -> digest, else D2), and argv[1:] = root, D1, D2.
+pyrun() {
+    python3 - "${WORK}/r" "${D1}" "${D2}" <<EOF
+import importlib.machinery, importlib.util, sys
+root, d1, d2 = sys.argv[1:]
+loader = importlib.machinery.SourceFileLoader("images_lock", root + "/scripts/images-lock")
+spec = importlib.util.spec_from_loader("images_lock", loader)
+m = importlib.util.module_from_spec(spec)
+loader.exec_module(m)
+STUB = {}
+m.registry_digest = lambda name, tag: STUB.get("%s:%s" % (name, tag), d2)
+$1
+EOF
+}
+scratch
+mkdir -p "${WORK}/r/pins" "${WORK}/r/bench/h" "${WORK}/r/bench/l"
+printf 'bench/h/** historical a finished run\nbench/l/** ledger H1 amend=X a row\nhistorical-ref scripts/mixed.sh keep-me\n' >> "${WORK}/r/pins/classes"
+for f in bench/h/run.sh bench/l/run.sh scripts/mixed.sh share/a.yml; do
+    printf -- '- image: alpine:3.22@%s\n' "${D1}" > "${WORK}/r/${f}"
+done
+echo "keep-me" >> "${WORK}/r/scripts/mixed.sh"
+cp -r "${WORK}/r" "${WORK}/before"
+drift_out=$(pyrun 'sys.exit(m.main(["images-lock", "drift", "--root", root]))' 2>&1); rc=$?
+if [ "${rc}" -eq 0 ] && grep -qxF "share/a.yml:1: alpine:3.22 ${D1} -> ${D2}" <<< "${drift_out}" \
+   && ! grep -qE 'bench/|mixed' <<< "${drift_out}" && diff -r -x __pycache__ "${WORK}/before" "${WORK}/r" > /dev/null; then
+    ok "drift lists a moved pin, writes nothing and skips ledger, historical and historical-ref files"
+else fail "drift (exit ${rc})"; sed 's/^/  | /' <<< "${drift_out}"; fi
+repin_out=$(pyrun 'sys.exit(m.main(["images-lock", "repin", "--root", root]))' 2>&1); rc=$?
+if [ "${rc}" -eq 0 ] && [ "$(cat "${WORK}/r/share/a.yml")" = "- image: alpine:3.22@${D2}" ] \
+   && cmp -s "${WORK}/before/bench/h/run.sh" "${WORK}/r/bench/h/run.sh" \
+   && cmp -s "${WORK}/before/bench/l/run.sh" "${WORK}/r/bench/l/run.sh" \
+   && cmp -s "${WORK}/before/scripts/mixed.sh" "${WORK}/r/scripts/mixed.sh"; then
+    ok "repin leaves ledger, historical and historical-ref files untouched and moves the rest"
+else fail "repin touched a ledger or historical file (exit ${rc})"; sed 's/^/  | /' <<< "${repin_out}"; fi
+out=$(pyrun 'sys.exit(m.main(["images-lock", "repin", "--root", root, "bench/l/run.sh"]))' 2>&1)
+if cmp -s "${WORK}/before/bench/l/run.sh" "${WORK}/r/bench/l/run.sh"; then ok "repin FILE skips a ledger file named on the command line"
+else fail "repin FILE rewrote a ledger file"; sed 's/^/  | /' <<< "${out}"; fi
+
+# ---- update --only FILE...: one drifted digest elsewhere does not block a bump ----
+scratch
+printf 'ARG K3S_TAG=v1.37.1-k3s1\nFROM debian:trixie-slim@%s\n' "${D1}" > "${WORK}/r/Dockerfile"
+: > "${WORK}/r/scripts/k3d-gpu"
+printf -- '- image: quay.io/a/a:1@%s\n' "${D1}" > "${WORK}/r/share/a.yml"
+printf -- '- image: quay.io/b/b:1@%s\n' "${D1}" > "${WORK}/r/share/b.yml"
+rm "${WORK}/r/share/local.yml"; : > "${WORK}/r/images.unpinned"
+# update_case NAME WANT_RC GREP [ARGS...]: `update ARGS` in the scratch root. Every
+# registry stub serves D1 except the name:tag refs DRIFT lists (they serve D2);
+# k3s_images is stubbed and prints when it is called. GREP '!re' wants no match.
+update_case() {
+    local name=$1 want=$2 pat=$3 out rc hit
+    shift 3
+    out=$(update_args "$@" 2>&1); rc=$?
+    case "${pat}" in
+        "") hit=0 ;;
+        !*) ! grep -qE -- "${pat#!}" <<< "${out}"; hit=$? ;;
+        *) grep -qE -- "${pat}" <<< "${out}"; hit=$? ;;
+    esac
+    if [ "${rc}" = "${want}" ] && [ "${hit}" = 0 ]; then ok "${name}"
+    else fail "${name} (exit ${rc}, want ${want})"; sed 's/^/  | /' <<< "${out}"; fi
+}
+update_args() {
+    DRIFT="${DRIFT:-}" python3 - "${WORK}/r" "${D1}" "${D2}" "$@" <<'EOF'
+import importlib.machinery, importlib.util, os, sys
+root, d1, d2 = sys.argv[1:4]
+loader = importlib.machinery.SourceFileLoader("images_lock", root + "/scripts/images-lock")
+spec = importlib.util.spec_from_loader("images_lock", loader)
+m = importlib.util.module_from_spec(spec)
+loader.exec_module(m)
+drift = os.environ.get("DRIFT", "").split()
+m.registry_digest = lambda name, tag: d2 if "%s:%s" % (name, tag) in drift else d1
+def k3s(tag):
+    print("k3s-images.txt fetched for " + tag)
+    return ["docker.io/rancher/mirrored-pause:3.6"]
+m.k3s_images = k3s
+sys.exit(m.main(["images-lock", "update", "--root", root] + sys.argv[4:]))
+EOF
+}
+update_case "update writes images.lock (all registries agree)" 0 "k3s-images.txt fetched for v1.37.1-k3s1"
+cp "${WORK}/r/images.lock" "${WORK}/lock.before"
+DRIFT="quay.io/b/b:1" update_case "update without --only fails on a drifted digest anywhere" 2 \
+    "quay.io/b/b:1: the repo pins ${D1} but the registry serves ${D2}"
+DRIFT="quay.io/b/b:1" update_case "update --only share/a.yml ignores the drift in share/b.yml" 0 "" --only share/a.yml
+if cmp -s "${WORK}/lock.before" "${WORK}/r/images.lock"; then ok "update --only keeps the entries of files it does not name"
+else fail "update --only rewrote other entries"; diff "${WORK}/lock.before" "${WORK}/r/images.lock" | sed 's/^/  | /'; fi
+DRIFT="quay.io/b/b:1" DRIFT="quay.io/b/b:1" update_case "update --only does not fetch k3s-images.txt unless the Dockerfile is named" 0 \
+    "!k3s-images.txt fetched" --only share/a.yml
+DRIFT="quay.io/b/b:1" update_case "update --only share/b.yml still validates the file it names" 2 \
+    "quay.io/b/b:1: the repo pins ${D1} but the registry serves ${D2}" --only share/b.yml
+DRIFT="quay.io/b/b:1" update_case "update --only Dockerfile refreshes k3s-images.txt" 0 "k3s-images.txt fetched" --only Dockerfile
+printf -- '- image: quay.io/c/c:1@%s\n' "${D1}" > "${WORK}/r/share/c.yml"
+update_case "update --only resolves a new reference of a named file" 0 "" --only share/c.yml
+if grep -qF '"name": "quay.io/c/c"' "${WORK}/r/images.lock"; then ok "update --only adds the named file's new reference"
+else fail "update --only did not add quay.io/c/c"; fi
+printf -- '- image: quay.io/d/d:1@%s\n' "${D1}" > "${WORK}/r/share/d.yml"
+update_case "update --only refuses a reference images.lock lacks from a file it does not name" 2 \
+    "quay.io/d/d:1 .*share/d.yml.* not in images.lock" --only share/c.yml
+rm "${WORK}/r/share/d.yml"
+printf -- '- image: quay.io/a/a:1@%s\n' "${D2}" > "${WORK}/r/share/a.yml"
+update_case "update --only refuses a digest images.lock does not hold, from a file it does not name" 2 \
+    "quay.io/a/a:1 .*share/a.yml.* pins ${D2}, images.lock has ${D1}" --only share/c.yml
+printf -- '- image: quay.io/a/a:1@%s\n' "${D1}" > "${WORK}/r/share/a.yml"
+printf -- '- image: quay.io/d/d:1@%s\n' "${D1}" > "${WORK}/r/share/d.yml"
+sed -i 's/v1.37.1-k3s1/v1.37.2-k3s1/' "${WORK}/r/Dockerfile"
+update_case "update --only refuses a moved K3S_TAG unless the Dockerfile is named" 2 "K3S_TAG" --only share/d.yml
+
+# ---- http(): 429 and 5xx retried, Retry-After honoured (capped), other statuses not ----
+if out=$(python3 - "${REPO}" 2>&1 <<'EOF'
+import http.server, importlib.machinery, importlib.util, sys, threading, urllib.error, urllib.request
+loader = importlib.machinery.SourceFileLoader("images_lock", sys.argv[1] + "/scripts/images-lock")
+spec = importlib.util.spec_from_loader("images_lock", loader)
+m = importlib.util.module_from_spec(spec)
+loader.exec_module(m)
+PLAN, SLEPT = [], []
+class H(http.server.BaseHTTPRequestHandler):
+    def do_HEAD(self):
+        code, retry = PLAN.pop(0) if PLAN else (200, None)
+        self.send_response(code)
+        if retry is not None:
+            self.send_header("Retry-After", retry)
+        if code == 200:
+            self.send_header("Docker-Content-Digest", "sha256:" + "3" * 64)
+        self.end_headers()
+    def log_message(self, *a):
+        pass
+srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+threading.Thread(target=srv.serve_forever, daemon=True).start()
+url = "http://127.0.0.1:%d/v2/x/y/manifests/1" % srv.server_port
+m.time.sleep = SLEPT.append
+def get():
+    with m.http(urllib.request.Request(url, method="HEAD")) as r:
+        return r.headers["Docker-Content-Digest"]
+def case(plan, slept, ok=True):
+    PLAN[:] = plan
+    SLEPT.clear()
+    try:
+        got = get()
+    except urllib.error.HTTPError as e:
+        got = e.code
+    assert (got == "sha256:" + "3" * 64) == ok, (plan, got)
+    assert SLEPT == slept, (plan, SLEPT, slept)
+    return got
+case([(429, "7")], [7])
+case([(503, None), (502, None)], [2, 4])
+case([(429, "500")], [120])
+case([(429, "Wed, 21 Oct 2015 07:28:00 GMT")], [0])
+assert case([(429, "1")] * 5, [1, 1, 1, 1], ok=False) == 429
+assert case([(404, None)], [], ok=False) == 404
+print("ok")
+EOF
+); then ok "http() retries 429/5xx up to 5 attempts, honours Retry-After (seconds or date, capped at 120 s), not 404"
+else fail "http() retry"; sed 's/^/  | /' <<< "${out}"; fi
+
+# ---- the repo: pins and repin read the CI tool pins (hack/ci-images.env, hack/ci-tools.env) ----
+if out=$(python3 - "${REPO}" 2>&1 <<'EOF'
+import importlib.machinery, importlib.util, sys
+root = sys.argv[1]
+loader = importlib.machinery.SourceFileLoader("images_lock", root + "/scripts/images-lock")
+spec = importlib.util.spec_from_loader("images_lock", loader)
+m = importlib.util.module_from_spec(spec)
+loader.exec_module(m)
+files = m.scanned_files(root)
+for f, want in (("hack/ci-images.env", "rhysd/actionlint:"), ("hack/ci-tools.env", "ghcr.io/yannh/kubeconform:")):
+    refs = [r for _, r, _ in m.image_refs(m.read_text(root, f), f)] if f in files else []
+    assert any(r.startswith(want) and m.is_pinned(r) for r in refs), (f, refs)
+    assert not m.frozen(root, f), f
+# pins/classes quotes finished runs' refs (historical-ref): repin must never move them.
+assert "pins/classes" not in files and "images.unpinned" not in files
+EOF
+); then ok "pins and repin read hack/ci-images.env and hack/ci-tools.env (tagged, pinned, never frozen), not pins/classes"
+else fail "images-lock does not scan the CI tool pins"; sed 's/^/  | /' <<< "${out}"; fi
 
 # ---- the repo: no workflow file holds a pin the nightly would have to move ----
 # repin-images runs `repin --exclude '.github/workflows/*'`, so a name:tag@sha256

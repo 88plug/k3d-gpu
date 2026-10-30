@@ -10,8 +10,9 @@ set -euo pipefail
 K3D_GPU="$(cd "$(dirname "$0")/.." && pwd)/scripts/k3d-gpu"
 # Kubernetes version of the k3s node image.
 K8S_VERSION=$(sed -n 's/^ARG K3S_TAG="v\([0-9.]*\)-k3s.*/\1/p' "$(dirname "$0")/../Dockerfile")
-# ghcr.io/yannh/kubeconform:v0.8.0
-KUBECONFORM_IMAGE="ghcr.io/yannh/kubeconform@sha256:faffaf43f95aa6425306e1ab8d6fcad72acb9049158f38e574c085ea1ec0f64e"
+# The pinned kubeconform image, where the CI jobs read it too.
+KUBECONFORM_IMAGE=$(sed -n 's/^KUBECONFORM_IMAGE=//p' "$(dirname "$0")/../hack/ci-tools.env")
+: "${KUBECONFORM_IMAGE:?hack/ci-tools.env has no KUBECONFORM_IMAGE}"
 
 WORK=$(mktemp -d)
 # A measured autoquant pick on this dev box (EXPERIMENTS.md H27) must not leak into goldens.

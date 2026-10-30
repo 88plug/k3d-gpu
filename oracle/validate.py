@@ -218,8 +218,8 @@ AGENT_IMAGE_RE = re.compile(
 
 
 def script_pins(text):
-    """Every server image a k3d-gpu script pins by digest."""
-    return {a or b for a, b in AGENT_IMAGE_RE.findall(text or "")}
+    """Every server image a k3d-gpu script pins by digest, as name@sha256:..."""
+    return {B.untagged(a or b) for a, b in AGENT_IMAGE_RE.findall(text or "")}
 
 
 def release_pin(version, repo=REPO):
@@ -237,7 +237,7 @@ def release_pin(version, repo=REPO):
 def as_pin_set(pin):
     if pin is None:
         return None
-    return {pin} if isinstance(pin, str) else set(pin)
+    return {B.untagged(p) for p in ([pin] if isinstance(pin, str) else pin)}
 
 
 def check_release(b, res, trusted, pins, repo):

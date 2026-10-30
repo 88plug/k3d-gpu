@@ -203,7 +203,7 @@ pins() { python3 -c 'import json,sys; p=json.load(sys.stdin)["release"]["pins"];
 ovms_pin=$(run facts --json 2>/dev/null | pins)
 vllm_pin=$(K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_AGENT_IMAGE=example/vllm@sha256:0 run facts --json 2>/dev/null | pins)
 over_pin=$(K3D_GPU_AGENT_IMAGE=example/ovms@sha256:1 run facts --json 2>/dev/null | pins)
-if [[ "${ovms_pin}" == "openvino/model_server@sha256:"*" ghcr.io/ggml-org/llama.cpp@sha256:"* ]] \
+if [[ "${ovms_pin}" == "openvino/model_server:"*"@sha256:"*" ghcr.io/ggml-org/llama.cpp:"*"@sha256:"* ]] \
    && [ "${vllm_pin}" = "${ovms_pin}" ] && [ "${over_pin}" = "example/ovms@sha256:1 ${ovms_pin#* }" ]; then
     ok "facts pins: OVMS and llama.cpp digests; a vLLM backend leaves the OVMS pin alone"
 else

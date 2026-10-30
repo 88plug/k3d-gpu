@@ -5959,6 +5959,16 @@ amx_probe() {
 # Image refs are pasted into the pod overrides JSON, so only accept reference characters.
 valid_image() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._/:@+-]*$ ]]; }
 
+# image_id REF: name@sha256:<digest> for a REF that carries a digest, its tag dropped
+# (the digest is the image), else REF. Cache keys (tune, autoquant) use it, so a tag
+# written next to a pinned digest does not invalidate them.
+image_id() {
+    local name=${1%@*}
+    [[ "$1" == *@sha256:* ]] || { printf '%s\n' "$1"; return; }
+    [[ "${name##*/}" != *:* ]] || name=${name%:*}
+    printf '%s@%s\n' "${name}" "${1##*@}"
+}
+
 cmd_test() {
     valid_image "${TEST_IMAGE}" || err "K3D_GPU_TEST_IMAGE '${TEST_IMAGE}' is not a valid image reference"
     valid_image "${DEVICE_TEST_IMAGE}" || err "K3D_GPU_DEVICE_TEST_IMAGE '${DEVICE_TEST_IMAGE}' is not a valid image reference"
@@ -7547,7 +7557,7 @@ AGENT_SEL=""    # "<device> <resource>", set by agent_select
 # llama.cpp server on Vulkan, the engine plan() may pick for a GPU cell other
 # than OVMS: ghcr.io/ggml-org/llama.cpp:server-vulkan-b11960, the multi-arch
 # index built from release v0.8.0 (tag b11960, commit 8642541b255bfb5dc39cd351a178be09013a55d6).
-LLAMA_VULKAN_IMAGE="${K3D_GPU_LLAMA_VULKAN_IMAGE:-ghcr.io/ggml-org/llama.cpp@sha256:c9aba1a673382ad356a72fb63e6cd73e8c021797e904b6c099bfe130217df62e}"
+LLAMA_VULKAN_IMAGE="${K3D_GPU_LLAMA_VULKAN_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-vulkan-b11960@sha256:c9aba1a673382ad356a72fb63e6cd73e8c021797e904b6c099bfe130217df62e}"
 # The llama.cpp agent backend: release v0.8.0 (tag b11960, commit
 # 8642541b255bfb5dc39cd351a178be09013a55d6), the latest release on 2026-10-28; its image
 # tags are server-intel-b11960 (SYCL, Level Zero and compute-runtime 26.18 inside) for an
@@ -7559,7 +7569,7 @@ LLAMA_FULL_IMAGE="${K3D_GPU_LLAMA_FULL_IMAGE:-ghcr.io/ggml-org/llama.cpp:full-b1
 AGENT_STORAGE="${K3D_GPU_AGENT_STORAGE:-20Gi}"
 AGENT_TIMEOUT="${K3D_GPU_AGENT_TIMEOUT:-1800}" # seconds: first run downloads the model
 # openvino/model_server:2026.4.1-gpu (CPU, GPU and NPU plugins, compute-runtime inside).
-AGENT_OVMS_IMAGE="openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58"
+AGENT_OVMS_IMAGE="openvino/model_server:2026.4.1-gpu@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58"
 
 # Image, model, parsers and API of AGENT_BACKEND (on a Gaudi when AGENT_HPU is set).
 agent_config() {
@@ -7572,13 +7582,13 @@ agent_config() {
                 # (PyTorch 2.13.0), the release of the baked gaudi-device-plugin. Tag
                 # 1.24.2-481 of vault.habana.ai/gaudi-docker/1.24.2/ubuntu24.04/habanalabs/
                 # vllm-0.30.0-ptupstream-2.13.0, pulled anonymously.
-                AGENT_DEFAULT_IMAGE="vault.habana.ai/gaudi-docker/1.24.2/ubuntu24.04/habanalabs/vllm-0.30.0-ptupstream-2.13.0@sha256:5d064465d751a73a729e7ecdc32c0ba5de0df1d305debb60a3d9a85b4fd3a967"
+                AGENT_DEFAULT_IMAGE="vault.habana.ai/gaudi-docker/1.24.2/ubuntu24.04/habanalabs/vllm-0.30.0-ptupstream-2.13.0:1.24.2-481@sha256:5d064465d751a73a729e7ecdc32c0ba5de0df1d305debb60a3d9a85b4fd3a967"
             elif [ "${AGENT_BACKEND}" = vllm ]; then
                 # vllm/vllm-openai-xpu:v0.32.0 (Level Zero 1.32 and compute-runtime 26.27 inside).
-                AGENT_DEFAULT_IMAGE="vllm/vllm-openai-xpu@sha256:20509fabe50dda62c09c0786d1a6effa299d3dbdddcc49331b93e65144652a8c"
+                AGENT_DEFAULT_IMAGE="vllm/vllm-openai-xpu:v0.32.0@sha256:20509fabe50dda62c09c0786d1a6effa299d3dbdddcc49331b93e65144652a8c"
             else
                 # intel/llm-scaler-vllm:1.5 = 0.26.0-b2 (vLLM 0.26 baseline, compute-runtime 26.14).
-                AGENT_DEFAULT_IMAGE="intel/llm-scaler-vllm@sha256:52218ad85513ab6686d4c090c83c2bd8c5b02423c63aa4dabd41837fe641fe3b"
+                AGENT_DEFAULT_IMAGE="intel/llm-scaler-vllm:1.5@sha256:52218ad85513ab6686d4c090c83c2bd8c5b02423c63aa4dabd41837fe641fe3b"
             fi
             # Qwen3-4B is 8 GB in float16/bfloat16: it fits a 12 GB Arc B580 with room
             # for the KV cache.
@@ -8840,7 +8850,7 @@ AGENT_VLM_DEFAULT_MODEL="OpenVINO/Qwen3-VL-4B-Instruct-int4-ov"
 AGENT_VLM_NPU_MODEL="OpenVINO/Phi-3.5-vision-instruct-fp16-ov"
 AGENT_STT_MODEL="${K3D_GPU_AGENT_STT_MODEL:-OpenVINO/whisper-large-v3-turbo-fp16-ov}"
 # intel/dlstreamer:2026.2.0-ubuntu24 (GStreamer va plugin, OpenVINO GPU/NPU runtimes inside).
-AGENT_VIDEO_IMAGE="${K3D_GPU_AGENT_VIDEO_IMAGE:-intel/dlstreamer@sha256:3848efe52c047cf6b5961eb070deaf9eca53bd5328f0d819fbb68ad56c65fb19}"
+AGENT_VIDEO_IMAGE="${K3D_GPU_AGENT_VIDEO_IMAGE:-intel/dlstreamer:2026.2.0-ubuntu24@sha256:3848efe52c047cf6b5961eb070deaf9eca53bd5328f0d819fbb68ad56c65fb19}"
 # Open Model Zoo person-vehicle-bike-detection-2004 FP16 IR and the DL Streamer
 # sample clip, pinned by URL and checksum.
 AGENT_VIDEO_MODEL_URL="https://storage.openvinotoolkit.org/repositories/open_model_zoo/2023.0/models_bin/1/person-vehicle-bike-detection-2004/FP16/person-vehicle-bike-detection-2004"
@@ -9815,7 +9825,7 @@ tune_fingerprint_inputs() {
     echo "intel_gpu=${INTEL_DRIVERS[*]+${INTEL_DRIVERS[*]}}"
     echo "npu=${NPU_IDS[*]+${NPU_IDS[*]}}"
     echo "kernel=$(kernel_release | cut -d. -f1-2)"
-    echo "agent_image=${K3D_GPU_AGENT_IMAGE:-${AGENT_OVMS_IMAGE}}"
+    echo "agent_image=${K3D_GPU_AGENT_IMAGE:-$(image_id "${AGENT_OVMS_IMAGE}")}"
     echo "agent_model=${TUNE_MODEL}"
 }
 
@@ -11515,11 +11525,11 @@ autoquant_run() {
     [ -f "${dir}/autoquant.py" ] || return 1
     command -v python3 >/dev/null 2>&1 || return 1
     if [ -n "${facts}" ]; then
-        python3 "${dir}/autoquant.py" "$@" --cache "$(autoquant_cache)" --runtime "${AGENT_OVMS_IMAGE}" < "${facts}"
+        python3 "${dir}/autoquant.py" "$@" --cache "$(autoquant_cache)" --runtime "$(image_id "${AGENT_OVMS_IMAGE}")" < "${facts}"
     else
         mapfile -t host_args < <(autoquant_host_args)
         facts_json "${dir}" | python3 "${dir}/autoquant.py" "$@" --cache "$(autoquant_cache)" \
-            --runtime "${AGENT_OVMS_IMAGE}" ${host_args[@]+"${host_args[@]}"}
+            --runtime "$(image_id "${AGENT_OVMS_IMAGE}")" ${host_args[@]+"${host_args[@]}"}
     fi
 }
 
