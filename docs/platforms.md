@@ -369,7 +369,8 @@ B70 runs land:
   renders one NUMA-sized `BalloonsPolicy` per node (`node.<name>`). #21 still installs
   it only on `deploy_nri_balloon_policy == "yes"` (`fresh-install.sh` line 247), so
   `eat-up.sh`'s `off` keeps it away, and `eat-up.sh` stops on any other value, an
-  absent key included (`brownfield.sh model`'s `prompt_for_input` turns that on).
+  absent key included (`prompt_for_input`, which the stack path and `brownfield.sh model`
+  both call, turns that on).
 - Expected gap: the `hostPath` libraries resolve inside the k3d node container, not
   on the host. The node image would have to carry compatible Level Zero and OpenCL
   user space at those paths, or the pod would mount empty or mismatched libraries.

@@ -350,8 +350,9 @@ guard_case "set, then emptied: last wins" refuse 'deploy_guardrails=off' 'deploy
 #     case starts from the shipped config without the key's line; the key is read as
 #     read_config_file reads it (on -> yes, off -> no, last assignment wins).
 #     - deploy_nri_balloon_policy: fresh-install.sh:247 deploys EAT's NRI balloons policy
-#       on yes, and brownfield.sh model mode's prompt_for_input turns an absent key on for
-#       compute_platform c (parse-user-prompts.sh:55-66): only off or no pass.
+#       on yes. prompt_for_input turns an absent key on for compute_platform c
+#       (parse-user-prompts.sh:55-66), and both the stack path (fresh-install.sh:39) and
+#       brownfield.sh model mode call it: only off or no pass.
 #     - compute_platform x or xpu: fresh-install.sh:219 applies intel-device-plugins'
 #       gpu_plugin from its main branch (deploy-intel-gpu-plugin.yml:12-14).
 #     - deploy_kata_containers on or yes: Kata needs /dev/kvm (deploy-kata-containers.yml).
@@ -374,7 +375,7 @@ key_case() {
     fi
 }
 NRI_REFUSED="deploy_nri_balloon_policy must be off"
-key_case "absent (model mode turns it on)" refuse "${NRI_REFUSED}" deploy_nri_balloon_policy
+key_case "absent (prompt_for_input turns it on)" refuse "${NRI_REFUSED}" deploy_nri_balloon_policy
 key_case "on" refuse "${NRI_REFUSED}" deploy_nri_balloon_policy 'deploy_nri_balloon_policy=on'
 key_case "yes" refuse "${NRI_REFUSED}" deploy_nri_balloon_policy 'deploy_nri_balloon_policy=yes'
 key_case "empty" refuse "${NRI_REFUSED}" deploy_nri_balloon_policy 'deploy_nri_balloon_policy='
@@ -383,6 +384,12 @@ key_case "off then on, last wins" refuse "${NRI_REFUSED}" deploy_nri_balloon_pol
 key_case "off" pass "" deploy_nri_balloon_policy 'deploy_nri_balloon_policy=off'
 key_case "no" pass "" deploy_nri_balloon_policy 'deploy_nri_balloon_policy=no'
 key_case "spaces and quotes" pass "" deploy_nri_balloon_policy ' deploy_nri_balloon_policy = "off" '
+cfg="${WORK}/nri-absent.cfg"
+grep -v '^deploy_nri_balloon_policy=' "${EAT}/agentic-config.cfg" > "${cfg}"
+out=$(EAT_CONFIG="${cfg}" EAT_KUBECONFIG=/nonexistent "${EAT}/eat-up.sh" 2>&1) || true
+if grep -qF 'deploys its own NRI balloons policy when it is on or absent' <<< "${out}"; then
+    ok "eat-up: the balloons refusal says an absent key deploys EAT's policy on the stack path too"
+else fail "eat-up: the balloons refusal ties an absent key to model mode only: ${out}"; fi
 XPU_REFUSED="compute_platform=xpu"
 key_case "xpu" refuse "${XPU_REFUSED}" compute_platform 'compute_platform=xpu'
 key_case "x" refuse "${XPU_REFUSED}" compute_platform 'compute_platform=x'

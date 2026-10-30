@@ -257,9 +257,12 @@ except where an item says otherwise, and item 11 is new there. In
     above. `release-1.1.0` reworks the role (`install_nri.yaml` is gone; it
     renders one `BalloonsPolicy` per node) and still runs it only on
     `deploy_nri_balloon_policy=yes` (fresh-install.sh:247), which stays off.
-    `brownfield.sh model` calls `prompt_for_input`, which turns an absent key on
-    for `compute_platform` c (parse-user-prompts.sh:55-66), so `eat-up.sh` stops
-    before touching the cluster on any value but `off` or `no`, absent included.
+    `prompt_for_input` turns an absent key on for `compute_platform` c
+    (parse-user-prompts.sh:55-66). The stack path calls it (fresh-install.sh:39),
+    so an absent key deploys EAT's policy there. `brownfield.sh model` calls it too,
+    and `deploy-inference-models.yml` then sets vLLM's `cpu_balloon_annotation` to
+    EAT's `vllm-balloon-tp<N>` over k3d-gpu's `performance`. `eat-up.sh` stops before
+    touching the cluster on any value but `off` or `no`, absent included.
 11. **The guardrail ignores the config on the brownfield path** (new in
     `release-1.1.0`). `deploy-agentic-stack.sh:195` sets
     `DEPLOY_GUARDRAILS="${DEPLOY_GUARDRAILS:-on}"` when it is sourced, and
