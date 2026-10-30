@@ -47,6 +47,19 @@
 #            - status prints the layer, pins, overlay, EAS status, gateway, pods not Ready
 #            - sandbox up refuses when EAS's sandbox-router-deployment exists
 #            - the bastion pins what pins.json's bastion profile names
+#   ready    integrations/eas/eas-ready.py, the stack check `k3d-gpu eas check` runs
+#            before its first request, on synthetic `kubectl get pods,daemonsets -A -o json`
+#            lists:
+#            - a ready stack passes; a Job's pods and pods outside the stack's
+#              namespaces are not graded
+#            - a model or guard pod Pending on the AMXBF16 nodeAffinity names require_amx
+#            - Pending on Insufficient cpu or memory names the resource and the requests
+#            - a DaemonSet that schedules no pod (envoy on k3s) names its nodeSelector
+#            - no Ready envoy proxy for eg-gateway; no model pod at all
+#            - an istio-system pod not Ready names istio_platform
+#            - a second NRI resource policy or a second NFD worker
+#            - a running pod whose readiness probe has not passed says so
+#            - input that is not a kubectl List exits 2
 # Needs bash, git, python3 (with PyYAML, for the config section's shape checks only).
 
 set -uo pipefail
@@ -1218,7 +1231,167 @@ PY
     else fail "cli: known-issues.json shape"; fi
 }
 
-SECTIONS=(overlay config cli)
+section_ready() {
+    local line out rc
+    # The driver builds each list, runs eas-ready.py on it and prints ok/FAIL lines,
+    # then "done": a driver that stops early fails the section.
+    out=$(python3 - "${ROOT}/integrations/eas/eas-ready.py" 2>&1 <<'PY'
+import copy, json, re, subprocess, sys
+
+READY = sys.argv[1]
+AMX = "feature.node.kubernetes.io/cpu-cpuid.AMXBF16"
+
+
+def pod(ns, name, ready=True, phase="Running", labels=None, owner=None, scheduled=None,
+        waiting=None, affinity_amx=False, requests=None, node_selector=None):
+    p = {"kind": "Pod", "metadata": {"namespace": ns, "name": name, "labels": labels or {}},
+         "spec": {"containers": [{"name": "main", "resources": {"requests": requests or {}}}]},
+         "status": {"phase": phase, "conditions": []}}
+    if owner:
+        p["metadata"]["ownerReferences"] = [{"kind": owner, "name": name.rsplit("-", 1)[0]}]
+    if node_selector:
+        p["spec"]["nodeSelector"] = node_selector
+    if affinity_amx:
+        # EI 3e8a244 model_manager/core/renderer.py:90-95, as the pod gets it.
+        p["spec"]["affinity"] = {"nodeAffinity": {"requiredDuringSchedulingIgnoredDuringExecution": {
+            "nodeSelectorTerms": [{"matchExpressions": [{"key": AMX, "operator": "In", "values": ["true"]}]}]}}}
+    if scheduled:
+        p["status"]["phase"] = "Pending"
+        p["status"]["conditions"].append({"type": "PodScheduled", "status": "False", "reason": "Unschedulable",
+                                          "message": scheduled})
+        return p
+    p["status"]["conditions"].append({"type": "PodScheduled", "status": "True"})
+    p["status"]["conditions"].append({"type": "Ready", "status": "True" if ready else "False"})
+    cs = {"name": "main", "ready": ready, "state": {"running": {}}}
+    if waiting:
+        cs["state"] = {"waiting": {"reason": waiting[0], "message": waiting[1]}}
+        p["status"]["phase"] = "Pending" if waiting[0] == "ContainerCreating" else phase
+    p["status"]["containerStatuses"] = [cs]
+    return p
+
+
+def ds(ns, name, desired=1, ready=None, node_selector=None):
+    d = {"kind": "DaemonSet", "metadata": {"namespace": ns, "name": name},
+         "spec": {"template": {"spec": {"nodeSelector": node_selector or {}}}},
+         "status": {"desiredNumberScheduled": desired, "numberReady": desired if ready is None else ready}}
+    return d
+
+
+EG = {"gateway.envoyproxy.io/owning-gateway-name": "eg-gateway"}
+BASE = [
+    ds("istio-system", "istio-cni-node"), ds("istio-system", "ztunnel"),
+    pod("istio-system", "istio-cni-node-abcde"), pod("istio-system", "ztunnel-fghij"),
+    pod("istio-system", "istiod-7d9f-xk2lp"),
+    ds("envoy-gateway-system", "envoy-default-eg-gateway-1a2b3c"),
+    pod("envoy-gateway-system", "envoy-default-eg-gateway-1a2b3c-q7wz9", labels=EG),
+    pod("envoy-gateway-system", "envoy-gateway-6b8c-p2m4n"),
+    pod("litellm", "litellm-5f6d-r8t2k"),
+    pod("llm-inference", "qwen3guard-kserve-7c4b-h5j6k", affinity_amx=False),
+    pod("llm-inference", "qwen2-5-coder-7b-kserve-9d8e-a1b2c"),
+    pod("llm-inference", "qwen2-5-coder-7b-download-x9y8z", phase="Failed", ready=False, owner="Job"),
+    pod("agent-sandbox-system", "agent-sandbox-controller-0"),
+    pod("agent-sandbox-system", "python-pool-abcde"),
+    ds("kube-system", "nri-resource-policy-balloons"),
+    ds("node-feature-discovery", "nfd-worker"),
+    pod("monitoring", "unrelated-crashloop-1", ready=False, waiting=("CrashLoopBackOff", "back-off")),
+]
+
+
+def run(items):
+    doc = {"apiVersion": "v1", "kind": "List", "items": items}
+    p = subprocess.run([READY], input=json.dumps(doc), capture_output=True, text=True)
+    return p.returncode, p.stdout + p.stderr
+
+
+def case(name, items, want_rc, *patterns, absent=()):
+    rc, out = run(items)
+    bad = [pat for pat in patterns if not re.search(pat, out)] + [pat for pat in absent if re.search(pat, out)]
+    if rc == want_rc and not bad:
+        print("ok   " + name)
+    else:
+        print("FAIL %s (rc=%s, want %s, unmatched %s)" % (name, rc, want_rc, bad))
+        for line in out.splitlines():
+            print(line)
+
+
+def with_(*changes, drop=()):
+    items = [i for i in copy.deepcopy(BASE) if i["metadata"]["name"] not in drop]
+    return items + list(changes)
+
+
+case("a ready stack passes; a Job's failed pod and a pod in another namespace are not graded",
+     BASE, 0, r"stack ready", absent=(r"download", r"unrelated"))
+case("the guard Pending on the AMX nodeAffinity names require_amx and the guard",
+     with_(pod("llm-inference", "qwen3guard-kserve-7c4b-zzzzz", affinity_amx=True,
+               scheduled="0/1 nodes are available: 1 node(s) didn't match Pod's node affinity/selector. "
+                         "preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling."),
+           drop=("qwen3guard-kserve-7c4b-h5j6k",)),
+     1, r"llm-inference/qwen3guard-kserve-7c4b-zzzzz", r"require_amx", re.escape(AMX), r"guardrail",
+     r"fail-closed")
+case("a model Pending on the AMX nodeAffinity names require_amx, not the guard",
+     with_(pod("llm-inference", "qwen2-5-coder-7b-kserve-9d8e-zzzzz", affinity_amx=True,
+               scheduled="0/1 nodes are available: 1 node(s) didn't match Pod's node affinity/selector."),
+           drop=("qwen2-5-coder-7b-kserve-9d8e-a1b2c",)),
+     1, r"qwen2-5-coder-7b-kserve-9d8e-zzzzz", r"require_amx", absent=(r"fail-closed",))
+case("Pending on Insufficient memory names memory and the pod's requests",
+     with_(pod("llm-inference", "qwen2-5-coder-7b-kserve-9d8e-zzzzz", requests={"cpu": "16", "memory": "64Gi"},
+               scheduled="0/1 nodes are available: 1 Insufficient memory."),
+           drop=("qwen2-5-coder-7b-kserve-9d8e-a1b2c",)),
+     1, r"Insufficient memory", r"memory 64Gi", r"--model", absent=(r"require_amx",))
+case("Pending on Insufficient cpu names cpu",
+     with_(pod("llm-inference", "qwen3guard-kserve-7c4b-zzzzz", requests={"cpu": "8", "memory": "16Gi"},
+               scheduled="0/1 nodes are available: 1 Insufficient cpu."),
+           drop=("qwen3guard-kserve-7c4b-h5j6k",)),
+     1, r"Insufficient cpu", r"cpu 8", r"guardrail")
+case("a DaemonSet that schedules no pod names its nodeSelector",
+     with_(ds("envoy-gateway-system", "envoy-default-eg-gateway-1a2b3c", desired=0,
+              node_selector={"node-role.kubernetes.io/control-plane": ""}),
+           drop=("envoy-default-eg-gateway-1a2b3c", "envoy-default-eg-gateway-1a2b3c-q7wz9")),
+     1, r"envoy-gateway-system/envoy-default-eg-gateway-1a2b3c", r"no pod",
+     r"node-role\.kubernetes\.io/control-plane", r"0006", r"no Ready envoy proxy")
+case("no Ready envoy proxy pod for eg-gateway",
+     with_(drop=("envoy-default-eg-gateway-1a2b3c-q7wz9",)), 1, r"no Ready envoy proxy.*eg-gateway")
+case("no model pod in llm-inference names the empty autodeploy list",
+     with_(drop=("qwen3guard-kserve-7c4b-h5j6k", "qwen2-5-coder-7b-kserve-9d8e-a1b2c")),
+     1, r"no model pod in llm-inference", r"llm_services_autodeploy_models")
+case("the guard alone is no model",
+     with_(drop=("qwen2-5-coder-7b-kserve-9d8e-a1b2c",)), 1, r"no model pod in llm-inference")
+case("an istio-cni pod in CrashLoopBackOff names istio_platform",
+     with_(pod("istio-system", "istio-cni-node-zzzzz", ready=False,
+               waiting=("CrashLoopBackOff", "failed to find plugin istio-cni")),
+           drop=("istio-cni-node-abcde",)),
+     1, r"istio-system/istio-cni-node-zzzzz", r"CrashLoopBackOff", r"failed to find plugin", r"istio_platform")
+case("a DaemonSet with fewer pods Ready than desired is reported",
+     with_(ds("istio-system", "ztunnel", desired=1, ready=0), drop=("ztunnel",)),
+     1, r"istio-system/ztunnel: 0/1 Ready")
+case("a second NRI resource policy",
+     with_(ds("kube-system", "nri-resource-policy-balloons-eas")), 1, r"2 NRI resource polic", r"best-effort")
+case("a second NFD worker",
+     with_(ds("node-feature-discovery", "node-feature-discovery-worker")), 1, r"2 NFD worker", r"nfd_enabled")
+case("a running model whose readiness probe has not passed yet says so",
+     with_(pod("llm-inference", "qwen2-5-coder-7b-kserve-9d8e-zzzzz", ready=False),
+           drop=("qwen2-5-coder-7b-kserve-9d8e-a1b2c",)),
+     1, r"readiness", r"re-run")
+for name, text in (("not JSON", "nope"), ("not a List", json.dumps({"kind": "Pod"}))):
+    p = subprocess.run([READY], input=text, capture_output=True, text=True)
+    print(("ok   " if p.returncode == 2 else "FAIL ") + "input %s exits 2 (rc=%s)" % (name, p.returncode))
+print("done")
+PY
+)
+    rc=$?
+    while IFS= read -r line; do
+        case "${line}" in
+            "ok   "*) ok "ready: ${line#ok   }" ;;
+            "FAIL "*) fail "ready: ${line#FAIL }" ;;
+            done) ;;
+            *) echo "  | ${line}" ;;
+        esac
+    done <<< "${out}"
+    if [ "${rc}" -eq 0 ] && [ "$(tail -n1 <<< "${out}")" = "done" ]; then ok "ready: the driver ran every case"
+    else fail "ready: the driver stopped early (rc=${rc})"; fi
+}
+
+SECTIONS=(overlay config cli ready)
 [ "$#" -gt 0 ] && SECTIONS=("$@")
 for s in "${SECTIONS[@]}"; do
     if declare -F "section_${s}" > /dev/null; then

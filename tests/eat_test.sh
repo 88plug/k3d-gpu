@@ -54,6 +54,7 @@ case "$*" in
     *"-n envoy-gateway-system get svc -l gateway.envoyproxy.io/owning-gateway-name=eg-gateway"*"loadBalancer.ingress[0].ip"*)
         [ -n "${STUB_NO_LB:-}" ] || echo 172.20.0.9 ;;
     *"-n litellm get secret litellm-master-key"*"master_key"*) printf 'sk-master-stub' | base64 ;;
+    *"get pods,daemonsets -A -o json"*) echo "ready list" >> "${STUB_LOG}"; cat "${STUB_READY}" ;;
     *"get pods -o name"*) printf 'pod/sandbox-router-1\npod/python-pool-abcde\n' ;;
     *"get secret sandbox-router-auth"*) printf 'tok' | base64 ;;
     *port-forward*) exec sleep 60 ;;
@@ -68,7 +69,7 @@ and the sandbox router. Logs every argv and the bearer token each request carrie
 import json, os, shlex, subprocess, sys
 
 args = sys.argv[1:]
-body, url, resolve, auth = None, None, None, None
+body, url, resolve, auth, wfmt, code = None, None, None, None, None, 200
 with open(os.environ["STUB_LOG"], "a") as f:
     f.write("argv %s\n" % json.dumps(args))
 i = 0
@@ -85,6 +86,8 @@ while i < len(args):
             if line.lower().startswith("authorization: bearer "):
                 auth = line.split(" ", 2)[2]
         i += 2; continue
+    if a == "-w":
+        wfmt = args[i + 1]; i += 2; continue
     if a in ("-o", "--max-time"):
         i += 2; continue
     if not a.startswith("-"):
@@ -92,6 +95,12 @@ while i < len(args):
     i += 1
 with open(os.environ["STUB_LOG"], "a") as f:
     f.write("auth %s %s\n" % (url.split("/", 3)[-1] if url else "-", auth))
+# Replies are held until the end: with -f (--fail) curl prints nothing and exits 22 on
+# an HTTP status of 400 or more; with -w the status follows the body.
+fflag = any(a.startswith("-") and not a.startswith("--") and "f" in a[1:] for a in args)
+emitted = []
+def print(*a, **k):
+    emitted.append(" ".join(str(x) for x in a) + k.get("end", "\n"))
 
 def msg(content=None, tool_calls=None, finish="stop"):
     m = {"role": "assistant", "content": content}
@@ -108,6 +117,11 @@ if url.endswith("/key/generate"):
 elif url.endswith("/key/delete"):
     with open(os.environ["STUB_LOG"], "a") as f:
         f.write("keydel %s\n" % json.dumps(json.loads(body)["keys"]))
+elif url.endswith("/v2/guardrails/list"):
+    # EI 3e8a244 docs/customize/guardrails.md "Verify Registration": one content_safety entry.
+    g = [] if os.environ.get("STUB_NO_GUARDRAIL") else [{"guardrail_name": "content_safety",
+         "litellm_params": {"guardrail": "custom_code", "mode": "pre_call"}}]
+    print(json.dumps({"guardrails": g}))
 elif url.endswith("/v1/models"):
     print(json.dumps({"data": [{"id": i} for i in os.environ.get("STUB_MODELS", "").split(",") if i]}))
 elif url.endswith("/v1/chat/completions"):
@@ -118,7 +132,19 @@ elif url.endswith("/v1/chat/completions"):
         f.write(f"request max_tokens={req.get('max_tokens')} temperature={req.get('temperature')}\n")
         f.write(f"model {req.get('model')}\n")
     prompt = req["messages"][-1]["content"]
-    if req.get("tools"):
+    guard = os.environ.get("STUB_GUARD", "block")
+    # LiteLLM answers a blocked request with HTTP 500 and the reason in error.message
+    # (EI 3e8a244 docs/customize/guardrails.md; the block() texts of qwen3guard_gen.py.j2).
+    blocked = "Custom code guardrail execution failed: Blocked by the content-safety guardrail: "
+    if guard == "down":
+        code = 500
+        print(json.dumps({"error": {"message": blocked + "the guard model backend is unreachable (Connection refused).",
+                                    "code": "500"}}))
+    elif "hack into a system" in prompt and guard == "block":
+        code = 500
+        print(json.dumps({"error": {"message": blocked + "unsafe content (categories: Non-violent Illegal Acts).",
+                                    "code": "500"}}))
+    elif req.get("tools"):
         if os.environ.get("STUB_NO_TOOL"):
             msg("It is sunny.")
         else:
@@ -134,6 +160,11 @@ elif url.endswith("/execute"):
     p = subprocess.run(argv, capture_output=True, text=True)
     print(json.dumps({"stdout": p.stdout, "stderr": p.stderr, "exit_code": p.returncode}))
 # anything else (the router readiness probe) succeeds with no output
+if fflag and code >= 400:
+    sys.exit(22)
+sys.stdout.write("".join(emitted))
+if wfmt:
+    sys.stdout.write("\n%d" % code)
 EOF
 # jq: the real one, with each argv logged (a key must not reach any argument list).
 REAL_JQ=$(command -v jq)
@@ -144,6 +175,30 @@ exec "${REAL_JQ}" "\$@"
 EOF
 chmod +x "${BIN}/kubectl" "${BIN}/curl" "${BIN}/jq"
 
+# The pods and DaemonSets eas mode reads first: a ready stack (eg-gateway's envoy proxy and
+# a model, both Ready), and the same with the guard Pending on EI's AMXBF16 nodeAffinity.
+cat > "${WORK}/ready.json" <<'EOF'
+{"apiVersion": "v1", "kind": "List", "items": [
+ {"kind": "Pod", "metadata": {"namespace": "envoy-gateway-system", "name": "envoy-eg-1",
+   "labels": {"gateway.envoyproxy.io/owning-gateway-name": "eg-gateway"}}, "spec": {"containers": [{"name": "envoy"}]},
+   "status": {"phase": "Running", "containerStatuses": [{"name": "envoy", "ready": true}]}},
+ {"kind": "Pod", "metadata": {"namespace": "llm-inference", "name": "qwen2-5-coder-7b-kserve-1"},
+   "spec": {"containers": [{"name": "main"}]},
+   "status": {"phase": "Running", "containerStatuses": [{"name": "main", "ready": true}]}}
+]}
+EOF
+python3 - "${WORK}/ready.json" "${WORK}/ready-amx.json" <<'EOF'
+import json, sys
+doc = json.load(open(sys.argv[1]))
+doc["items"].append({"kind": "Pod", "metadata": {"namespace": "llm-inference", "name": "qwen3guard-kserve-x"},
+    "spec": {"containers": [{"name": "main"}], "affinity": {"nodeAffinity": {
+        "requiredDuringSchedulingIgnoredDuringExecution": {"nodeSelectorTerms": [{"matchExpressions": [
+            {"key": "feature.node.kubernetes.io/cpu-cpuid.AMXBF16", "operator": "In", "values": ["true"]}]}]}}}},
+    "status": {"phase": "Pending", "conditions": [{"type": "PodScheduled", "status": "False",
+        "message": "0/1 nodes are available: 1 node(s) didn't match Pod's node affinity/selector."}]}})
+json.dump(doc, open(sys.argv[2], "w"))
+EOF
+
 # check_says <name> <want rc: 0|fail> <ERE on the output> [env assignments...]
 check_says() {
     local name=$1 want=$2 re=$3 out rc
@@ -151,7 +206,7 @@ check_says() {
     : > "${WORK}/log"
     out=$(env PATH="${BIN}:${PATH}" EAT_WORK="${WORK}/eat-work" EAT_KUBECONFIG="${WORK}/kubeconfig" \
         STUB_LOG="${WORK}/log" STUB_ROUTER=shlex STUB_CODE='print(sum(i**2 for i in range(1, 11)))' \
-        "$@" bash "${EAT}/eat-check.sh" 2>&1) && rc=0 || rc=$?
+        STUB_READY="${WORK}/ready.json" "$@" bash "${EAT}/eat-check.sh" 2>&1) && rc=0 || rc=$?
     out+=$'\n'$(cat "${WORK}/log")
     if { { [ "${want}" = 0 ] && [ "${rc}" -eq 0 ]; } || { [ "${want}" = fail ] && [ "${rc}" -ne 0 ]; }; } \
        && grep -Eq -- "${re}" <<< "${out}"; then
@@ -229,6 +284,34 @@ check_says "eas mode: no LoadBalancer IP stops the check" fail 'no LoadBalancer 
 check_says "eas mode: no key from /key/generate stops the check" fail 'without a key' EAT_MODE=eas STUB_NO_KEY=1
 check_says "eas mode refuses a domain with shell characters" fail 'must be a domain name' EAT_MODE=eas 'EAT_EAS_DOMAIN=x;id'
 check_says "an unknown EAT_MODE is refused" fail 'EAT_MODE must be eat or eas' EAT_MODE=other
+
+# 2c. eas mode, before any request: integrations/eas/eas-ready.py on the cluster's pods and
+#     DaemonSets (its own cases are in tests/eas_test.sh ready). Then the guard: EI's own
+#     unsafe example must come back blocked by the content-safety guardrail.
+check_says "eas mode: the stack check runs first" 0 'stack ready: 2 pods Ready' EAT_MODE=eas STUB_MODELS="${EAS_MODELS}"
+check_says "eat mode: no stack check" 0 'EAT check passed \(eat\)'
+if grep -q '^ready list' "${WORK}/log"; then fail "eat mode: the EAS stack check ran"; else ok "eat mode: the EAS stack check did not run"; fi
+check_says "eas mode: a guard Pending on the AMX affinity stops the check and names require_amx" fail \
+    'qwen3guard-kserve-x.*require_amx' EAT_MODE=eas STUB_MODELS="${EAS_MODELS}" STUB_READY="${WORK}/ready-amx.json"
+if grep -q '^keygen' "${WORK}/log"; then fail "eas mode: a key was minted for a stack that is not ready"
+else ok "eas mode: no key is minted for a stack that is not ready"; fi
+check_says "eas mode: the guard blocks EI's unsafe example" 0 \
+    'blocked: .*Blocked by the content-safety guardrail: unsafe content' EAT_MODE=eas STUB_MODELS="${EAS_MODELS}"
+check_says "eas mode: the unsafe example goes with the virtual key" 0 'auth v1/chat/completions sk-virtual-stub$' \
+    EAT_MODE=eas STUB_MODELS="${EAS_MODELS}"
+check_says "eas mode: a guard that lets the unsafe example through fails the check" fail \
+    'let EI.s unsafe example through' EAT_MODE=eas STUB_MODELS="${EAS_MODELS}" STUB_GUARD=allow
+check_says "eas mode: a fail-closed guard whose model is down fails the chat and says why" fail \
+    'guard model backend is unreachable' EAT_MODE=eas STUB_MODELS="${EAS_MODELS}" STUB_GUARD=down
+check_says "eas mode: no content_safety guardrail registered skips the guard step" 0 \
+    'no content_safety guardrail.*skipped' EAT_MODE=eas STUB_MODELS="${EAS_MODELS}" STUB_NO_GUARDRAIL=1 STUB_GUARD=allow
+check_says "eas mode: the guardrail list is read with the master key" 0 'auth v2/guardrails/list sk-master-stub$' \
+    EAT_MODE=eas STUB_MODELS="${EAS_MODELS}"
+if grep '^argv ' "${WORK}/log" | grep -Eq 'sk-master-stub|sk-virtual-stub'; then
+    fail "eas mode guard step: a key reached curl's argv"
+else
+    ok "eas mode guard step: no key in any curl argv"
+fi
 
 # 4. eat-remote.sh: a remote endpoint as a LiteLLM model. The key reaches the
 #    cluster only as the Secret on kubectl's stdin, the gateway gets it as a
