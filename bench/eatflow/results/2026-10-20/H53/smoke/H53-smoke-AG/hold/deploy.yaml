@@ -1,0 +1,98 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: k3d-gpu-agent
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ovms
+  namespace: k3d-gpu-agent
+  labels:
+    app: ovms
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ovms
+  template:
+    metadata:
+      labels:
+        app: ovms
+      annotations:
+        k3d-gpu.io/agent-device: GPU
+        k3d-gpu.io/agent-fit: gpu 6x32768
+    spec:
+      securityContext:
+        runAsUser: 5000
+        runAsGroup: 5000
+        fsGroup: 5000
+        supplementalGroups:
+        - 990
+      nodeSelector:
+        gpu.intel.com/xmx: 'true'
+      initContainers:
+      - name: pull
+        image: openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58
+        imagePullPolicy: IfNotPresent
+        args:
+        - --pull
+        - --source_model=OpenVINO/Qwen3.8-27B-int4-ov
+        - --model_repository_path=/models
+        - --model_name=qwen3.8-27b
+        - --task=text_generation
+        - --target_device=GPU
+        - --tool_parser=qwen3coder
+        - --max_num_seqs=6
+        - --cache_size=12
+        volumeMounts:
+        - name: models
+          mountPath: /models
+      containers:
+      - name: ovms
+        image: openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58
+        imagePullPolicy: IfNotPresent
+        args:
+        - --rest_port=8000
+        - --model_path=/models/OpenVINO/Qwen3.8-27B-int4-ov
+        - --model_name=qwen3.8-27b
+        - --cache_dir=/models/.ov_cache
+        - --log_level=INFO
+        ports:
+        - name: http
+          containerPort: 8000
+        readinessProbe:
+          httpGet:
+            path: /v2/health/ready
+            port: http
+          periodSeconds: 5
+        resources:
+          requests:
+            cpu: '2'
+            memory: 19Gi
+          limits:
+            memory: 19Gi
+            gpu.intel.com/xe: 1
+        volumeMounts:
+        - name: models
+          mountPath: /models
+      volumes:
+      - name: models
+        hostPath:
+          path: /var/apb-models
+          type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ovms
+  namespace: k3d-gpu-agent
+spec:
+  selector:
+    app: ovms
+  ports:
+  - name: http
+    port: 8000
+    targetPort: http
