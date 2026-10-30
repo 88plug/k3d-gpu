@@ -66,6 +66,28 @@ esac
 # choice is asked for here rather than made for the user.
 [ -n "$(cfg_value "${EAT_CONFIG}" deploy_guardrails)" ] \
     || err "${EAT_CONFIG} does not set deploy_guardrails, so ${EAT_TAG} would deploy its Qwen3Guard guardrail, which has not run on a k3d-gpu cluster; set deploy_guardrails=off (as the shipped agentic-config.cfg does) or deploy_guardrails=on"
+# Settings with which ${EAT_TAG} puts a second copy of what a k3d-gpu cluster already
+# runs next to it, or needs what a k3d node lacks (core/lib/cluster/deployment/fresh-install.sh):
+# - its NRI balloons policy on yes (:247). brownfield.sh model mode's prompt_for_input
+#   turns an absent key on for compute_platform c (parse-user-prompts.sh:55-66).
+# - intel-device-plugins' gpu_plugin from its main branch, unpinned, on xpu (:219,
+#   playbooks/deploy-intel-gpu-plugin.yml:12-14).
+# - Kata Containers, which needs /dev/kvm on the node (playbooks/deploy-kata-containers.yml).
+# - rack-scale mode, which builds the cluster from rack-profile.yaml: netplan, BGP and the
+#   NVIDIA GPU operator (:195-210).
+case "$(cfg_value "${EAT_CONFIG}" deploy_nri_balloon_policy)" in
+    off|no) ;;
+    *) err "${EAT_CONFIG}: deploy_nri_balloon_policy must be off: ${EAT_TAG} deploys its own NRI balloons policy when it is on, and in model mode when it is absent, beside k3d-gpu's, which must remain the only one" ;;
+esac
+case "$(cfg_value "${EAT_CONFIG}" compute_platform)" in
+    x|xpu) err "compute_platform=xpu: ${EAT_TAG} then applies intel-device-plugins' gpu_plugin from its main branch, unpinned, beside the GPU plugin k3d-gpu bakes; for vLLM on an Intel GPU run K3D_GPU_AGENT_BACKEND=vllm k3d-gpu agent up" ;;
+esac
+case "$(cfg_value "${EAT_CONFIG}" deploy_kata_containers)" in
+    on|yes) err "deploy_kata_containers=on: Kata needs /dev/kvm on the node, and a k3d node is a container without it; set deploy_kata_containers=off" ;;
+esac
+case "$(cfg_value "${EAT_CONFIG}" rack_scale_mode)" in
+    on|yes) err "rack_scale_mode=on: ${EAT_TAG} then builds a cluster from rack-profile.yaml (netplan, BGP, the NVIDIA GPU operator), and a k3d-gpu cluster is brownfield; set rack_scale_mode=off" ;;
+esac
 # The KV cache from the fit of EAT_FIT_MODEL, unless EAT_VLLM_KV_GIB is set.
 if [ -z "${EAT_VLLM_KV_GIB:-}" ] && [ -n "${EAT_FIT_MODEL:-}" ]; then
     command -v k3d-gpu >/dev/null 2>&1 || err "EAT_FIT_MODEL needs k3d-gpu on PATH (or set EAT_VLLM_KV_GIB)"
