@@ -64,7 +64,7 @@ its `env/k3d-gpu/` and `ext/`, `facts.json`, `pins.resolved.json`, `eas-config.p
 | File | Role |
 |------|------|
 | `eas.sh` | the in-bastion driver (`up`, `overlay-check`, `down`, `status`) |
-| `bastion.Dockerfile` | Ubuntu 24.04 (the EAT bastion's digest), kubectl v1.37.2, helm v3.22.1, yq v4.54.1 by sha256, the installer's venv at `/opt/eas-venv`, kubernetes.core 6.3.0 by sha256: `pins.json`'s bastion profile |
+| `bastion.Dockerfile` | Ubuntu 24.04 (the EAT bastion's digest), kubectl v1.37.2, helm v3.22.1, yq v4.54.1, jq-1.8.2 by sha256, the installer's venv at `/opt/eas-venv`, kubernetes.core 6.3.0 by sha256: `pins.json`'s bastion profile |
 | `requirements.in`, `requirements.lock`, `lock.sh` | EAS `requirements.txt` at the pinned commit, and its hash-locked resolution for the bastion's Python 3.12 |
 | `images.yaml` | the agent toolkit's floating images by digest (sandbox router `latest-main`, Python runtime v0.5.0) |
 | `known-issues.json` | upstream issues this path works around, one flat row each |

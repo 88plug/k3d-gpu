@@ -1286,12 +1286,12 @@ PY
     else
         ok "cli: every pin in requirements.lock carries hashes"
     fi
-    if grep -E '^ARG [A-Z_]*_(SHA256|VERSION)=' "${EAS_DIR}/bastion.Dockerfile" | grep -Eqv '=(v?[0-9.]+|[0-9a-f]{64})$'; then
+    if grep -E '^ARG [A-Z_]*_(SHA256|VERSION)=' "${EAS_DIR}/bastion.Dockerfile" | grep -Eqv '=((v|jq-)?[0-9.]+|[0-9a-f]{64})$'; then
         fail "cli: bastion.Dockerfile has a version or sha256 ARG that is not exact"
     else
         ok "cli: bastion.Dockerfile pins every download by version and sha256"
     fi
-    cli_eq "cli: every bastion download is checked" "$(grep -c 'sha256sum -c -' "${EAS_DIR}/bastion.Dockerfile")" 4
+    cli_eq "cli: every bastion download (kubectl, helm, yq, jq, kubernetes.core) is checked" "$(grep -c 'sha256sum -c -' "${EAS_DIR}/bastion.Dockerfile")" 5
     while read -r mode _ _ path; do
         if [ "${mode}" = 100755 ]; then ok "cli: executable in git: ${path}"; else fail "cli: not executable in git (${mode}): ${path}"; fi
     done < <(git -C "${ROOT}" ls-files -s -- 'integrations/eas/*.sh')
