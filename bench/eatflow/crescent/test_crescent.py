@@ -55,6 +55,34 @@ class ServingSlotTest(unittest.TestCase):
             shutil.rmtree(tmp)
 
 
+class ServingVmTest(unittest.TestCase):
+    """H62 (EXPERIMENTS.md "H62 pre-registration"): the two KVM guests are this campaign's arms.
+    SERVING_VMS names their containers; their CPU is recorded as vm_cpu and kept out of the
+    serving covariate. Without it, every row reads as before."""
+
+    CPU = {"qwen38-a-hr": 1.25, "qwen38-b-hr": 1.0, "h62-vm-a": 3.5, "h62-vm-b": 2.0}
+
+    def test_vms_split_out_of_the_serving_covariate(self):
+        serving_cpu, vm_cpu = serving.split_vms(self.CPU, ("h62-vm-a", "h62-vm-b"))
+        self.assertEqual(serving_cpu, {"qwen38-a-hr": 1.25, "qwen38-b-hr": 1.0})
+        self.assertEqual(vm_cpu, {"h62-vm-a": 3.5, "h62-vm-b": 2.0})
+
+    def test_without_vms_nothing_moves(self):
+        self.assertEqual(serving.split_vms(self.CPU, ()), (self.CPU, {}))
+        self.assertEqual(serving.vms_from(""), ())
+        self.assertEqual(serving.vms_from("h62-vm-a, h62-vm-b,"), ("h62-vm-a", "h62-vm-b"))
+
+    def test_a_vm_missing_from_the_reading_is_not_invented(self):
+        serving_cpu, vm_cpu = serving.split_vms({"qwen38-a-hr": 1.0}, ("h62-vm-a",))
+        self.assertEqual((serving_cpu, vm_cpu), ({"qwen38-a-hr": 1.0}, {}))
+
+    def test_the_guests_are_not_this_campaigns_by_name(self):
+        # Another row's hold counts the guests as foreign serving load: their names carry no
+        # k3dgpu prefix, and hold.sh's cleanup (k3dgpu-e-*, k3dgpu-a-*) never removes them.
+        for name in ("h62-vm-a", "h62-vm-b"):
+            self.assertFalse(serving.is_mine(name), name)
+
+
 class LockwaitTest(unittest.TestCase):
     def run_log(self, text, waits=()):
         import lockwait

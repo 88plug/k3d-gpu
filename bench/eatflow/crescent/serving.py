@@ -7,7 +7,12 @@ than its idle `sleep infinity`. Read-only; stops on SIGTERM.
 Slot mode (H56, SERVING_SLOT=i with SERVING_CPUS = the slice): only slot i's containers
 are this hold's, so a sibling hold's cluster and load count as foreign; each row also
 carries own_busy_pct / other_busy_pct (/proc/stat over the slice and the rest of the
-online CPUs) and own_mhz (mean scaling_cur_freq over the slice)."""
+online CPUs) and own_mhz (mean scaling_cur_freq over the slice).
+
+VM mode (H62, SERVING_VMS = comma-separated container names): those containers run this
+campaign's KVM guests, so each row records their CPU-s/s as vm_cpu and leaves them out of cpu
+and serving_cpu. Their names carry no k3dgpu prefix, so another row's hold counts them as
+foreign serving load."""
 import json
 import os
 import signal
@@ -40,6 +45,19 @@ def _slot():
 
 
 SLOT = _slot()
+
+
+def vms_from(value):
+    """SERVING_VMS: the container names of this campaign's guests (H62), or ()."""
+    return tuple(v.strip() for v in value.split(",") if v.strip())
+
+
+def split_vms(cpu, vms):
+    """(serving cpu, vm cpu): the readings of the containers named in vms move to the second."""
+    return ({n: v for n, v in cpu.items() if n not in vms}, {n: v for n, v in cpu.items() if n in vms})
+
+
+VMS = vms_from(os.environ.get("SERVING_VMS", ""))
 stop = False
 
 
@@ -113,8 +131,11 @@ def main(out):
                    for n in cs if cur.get(n) is not None and prev.get(n) is not None}
             with open("/proc/loadavg") as la:
                 load1 = float(la.read().split()[0])
+            cpu, vm_cpu = split_vms(cpu, VMS)
             row = {"ts": round(t1, 3), "seconds": round(t1 - t0, 3), "load1": load1, "cpu": cpu,
                    "serving_cpu": round(sum(cpu.values()), 3), "aiperf_procs": aiperf()}
+            if VMS:
+                row["vm_cpu"] = vm_cpu
             if SLOT is not None:
                 st1 = load._read("/proc/stat")
                 row.update(slot=SLOT, **slot_fields(st, st1, own))

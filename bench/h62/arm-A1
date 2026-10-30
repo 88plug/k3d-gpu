@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# arm-A1: bench/h62/arm.sh for arm A1, as one word (live.sh's LIVE_REMOTE_A).
+exec "$(dirname "$0")/arm.sh" A1 "$@"
