@@ -1,0 +1,4 @@
+gpu-hold-1 renderD128 0000:12:00.0
+gpu-hold-2 renderD130 0000:7c:00.0
+gpu-hold-3 renderD129 0000:48:00.0
+gpu-hold-4 renderD131 0000:96:00.0

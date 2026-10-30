@@ -1,0 +1,69 @@
+lock-taken 2026-10-29T21:44:37Z
+6d5cab69b902d2d4b83d95af218c1ea069d0d9fc
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Error while downloading from https://huggingface.co/Qwen/Qwen3.8-27B/resolve/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/model-00002-of-00018.safetensors: peer closed connection without sending complete message body (received 1344965215 bytes, expected 3043080328)
+Trying to resume download...
+[32m✓ Downloaded[0m
+  path: /home/devcloud/k3dgpu-bench/models/Qwen3.8-27B
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[32m✓ Downloaded[0m
+  path: /home/devcloud/k3dgpu-bench/models/Qwen3.8-27B-int4-ov
+ok  size 1570 .gitattributes
+ok  size 11544 LICENSE
+ok  size 65012 README.md
+ok  size 8952 chat_template.jinja
+ok  size 4312 config.json
+ok  size 238 crc32.txt
+ok  size 202 generation_config.json
+ok  size 3353259 merges.txt
+ok  ba0ce20aae489ad196733da5064bcdf159a1fe84f53336648196e1ebb7751b1c model-00001-of-00018.safetensors
+ok  06a148c01bfbe3faa14a5f184a7ff29a706f7ae1c8b2705d2058e26d17a001fb model-00002-of-00018.safetensors
+ok  2e1bf62cbcd406eaa64b60d10353e1f0ef4039d0976e56f05cabe953454f9968 model-00003-of-00018.safetensors
+ok  511e34063187882659753c4d93f3859f93c019fd438d8813071921c81d9a3f1a model-00004-of-00018.safetensors
+ok  635cb53446dc74f219740fc59e18b774f877b803b9722e289ca62575a6efa701 model-00005-of-00018.safetensors
+ok  0bc5214fac607f0e6cc92eec3789d4b8559410ef9fce66621ba8158e8410dae0 model-00006-of-00018.safetensors
+ok  80b0c49033e9a0d5762562aa12f4acdb7f54da586f3d0110f28c48d91cf07892 model-00007-of-00018.safetensors
+ok  7192c5b66185d3592927daabee1cc19e6f6e0ce75988ee20e824b624765fda79 model-00008-of-00018.safetensors
+ok  af3c48cc37af44f3db6ae0579baf019180d48d9c527caa0a1f03ff85813a56d8 model-00009-of-00018.safetensors
+ok  163490a76f3bea3a40855b7efc04ce6d27afaf1a34f0bbde495b9491f76457c9 model-00010-of-00018.safetensors
+ok  5f3ae1b948aeee39da77aec558e8236cd65fe4d7cb7686a76bb007acc563c6d8 model-00011-of-00018.safetensors
+ok  a3de1c7114677a8f5ac5c4892c90e8238ea5c1e2038c80e757dfc87c3902ca55 model-00012-of-00018.safetensors
+ok  06ab79a41f74c9c5cb734816feb0c7fc364104b227165ee7391231e1155aa02a model-00013-of-00018.safetensors
+ok  4138ed94603065ba884bbcadedb04d7718bb40117e85e6f5c6fc5b9c05b7a85b model-00014-of-00018.safetensors
+ok  69224e27b9de4e7dbf6fc936c6eaae08447bda3b80a6c31a871ab451173afd22 model-00015-of-00018.safetensors
+ok  73cb9a1089fb6155cb648609478d6633be8a5c7d9ca5a05bc8925ce8a553cefe model-00016-of-00018.safetensors
+ok  beb51f01056142ac4984bd800507b0dd0fd18de57f8e9ef6ea41d1a3598983a8 model-00017-of-00018.safetensors
+ok  1d3479509e21494658f9b64d317f5ea8e55c4025d28c702d6c4d0b356ce8ea06 model-00018-of-00018.safetensors
+ok  size 112216 model.safetensors.index.json
+ok  size 390 preprocessor_config.json
+ok  0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3 tokenizer.json
+ok  size 17928 tokenizer_config.json
+ok  size 385 video_preprocessor_config.json
+ok  size 6722759 vocab.json
+ok  size 1570 .gitattributes
+ok  size 8321 README.md
+ok  size 8952 chat_template.jinja
+ok  size 3679 config.json
+ok  size 213 generation_config.json
+ok  size 1790 openvino_config.json
+ok  48fc2c6a7a1056994982911eb9695826acef933c3d742364c56d16317a0b2a79 openvino_detokenizer.bin
+ok  size 16771 openvino_detokenizer.xml
+ok  95aac72ac7286707c5e0fd9b120ea7f22c93f3ae17e7f1263442587d1d887d50 openvino_language_model.bin
+ok  size 9736672 openvino_language_model.xml
+ok  bc8ef47f252ad5a72be11e48ba6a23da50a67d1cef03396a7d902ca9aa1d5bc8 openvino_mtp_model.bin
+ok  size 210992 openvino_mtp_model.xml
+ok  e2099d0d83dcdfb00c378b51b50a52d28116aee71eb4f81cef0fe19ae37a085f openvino_text_embeddings_model.bin
+ok  size 5920 openvino_text_embeddings_model.xml
+ok  ca1ff37f580b558f0119b57824240adc92624d6d2ef6dd96ca2a24f4f1368c05 openvino_tokenizer.bin
+ok  size 35358 openvino_tokenizer.xml
+ok  3792b6946c1f475aaac5d6f3960c7b912f612104e4f39ad68643b707370ed8e7 openvino_vision_embeddings_merger_model.bin
+ok  size 1330718 openvino_vision_embeddings_merger_model.xml
+ok  5a8661b052abd07563d0f7148934d1fb77d5a842647151304287beb5dcee5541 openvino_vision_embeddings_model.bin
+ok  size 8610 openvino_vision_embeddings_model.xml
+ok  82ccc97be0351cd82ebe1717fd7fa9adf72a44982a7ced8e8a845d869325d9e5 openvino_vision_embeddings_pos_model.bin
+ok  size 5887 openvino_vision_embeddings_pos_model.xml
+ok  size 390 preprocessor_config.json
+ok  size 1300 processor_config.json
+ok  87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4 tokenizer.json
+ok  size 1098 tokenizer_config.json
+rc=0 2026-10-29T21:55:52Z

@@ -1,0 +1,301 @@
+---
+# Source: vllm/templates/secret.yaml
+# Copyright (C) 2025-2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vllm-qwen38-27b-xpu-secret
+  labels:
+    app:
+    helm.sh/chart: vllm-0-latest
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/instance: vllm-qwen38-27b-xpu
+    app.kubernetes.io/version: "0.5"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+---
+# Source: vllm/templates/configmap.yaml
+# Copyright (C) 2025-2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vllm-qwen38-27b-xpu-config
+  labels:
+    helm.sh/chart: vllm-0-latest
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/instance: vllm-qwen38-27b-xpu
+    app.kubernetes.io/version: "0.5"
+    app.kubernetes.io/managed-by: Helm
+data:
+  http_proxy: ""
+  https_proxy: ""
+  no_proxy: ""
+  TORCHINDUCTOR_CACHE_DIR: "/tmp"
+  NUMBA_CACHE_DIR: "/tmp"
+  HF_HOME: "/data"
+  OUTLINES_CACHE_DIR: "/tmp/.cache/outlines"
+  VLLM_NO_USAGE_STATS: "1"
+  DO_NOT_TRACK: "1"
+  CCL_ALLREDUCE: "ring"
+  CCL_PROCESS_LAUNCHER: "none"
+  CCL_WORKER_AFFINITY: ""
+  CCL_WORKER_OFFLOAD: "0"
+  CCL_ZE_IPC_EXCHANGE: "pidfd"
+  DO_NOT_TRACK: "1"
+  HF_ENDPOINT: "https://huggingface.co"
+  HF_HUB_DISABLE_XET: "1"
+  HF_HUB_ENABLE_HF_TRANSFER: "0"
+  HOME: "/tmp"
+  LOGNAME: "vllm"
+  ONEAPI_DEVICE_SELECTOR: "level_zero:*"
+  SYCL_CACHE_PERSISTENT: "1"
+  TORCH_LLM_ALLREDUCE: "1"
+  TRITON_CACHE_DIR: "/tmp/.triton"
+  TRITON_HOME: "/tmp/.triton"
+  USER: "vllm"
+  VLLM_ALLOW_LONG_MAX_MODEL_LEN: "1"
+  VLLM_ATTENTION_BACKEND: "TORCH_SDPA"
+  VLLM_NO_USAGE_STATS: "1"
+  VLLM_TARGET_DEVICE: "xpu"
+  VLLM_USE_V1: "1"
+  VLLM_WORKER_MULTIPROC_METHOD: "spawn"
+  XDG_CACHE_HOME: "/tmp/.cache"
+  ZES_ENABLE_SYSMAN: "1"
+  ZE_ENABLE_PCI_ID_DEVICE_ORDER: "1"
+  ZE_FLAT_DEVICE_HIERARCHY: "FLAT"
+---
+# Source: vllm/templates/pvc.yaml
+# Copyright (C) 2025-2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vllm-qwen38-27b-xpu-pvc
+  namespace: default
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 250Gi # Adjust this according to model storage size
+---
+# Source: vllm/templates/service.yaml
+# Copyright (C) 2025-2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-qwen38-27b-xpu-service
+  labels:
+    helm.sh/chart: vllm-0-latest
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/instance: vllm-qwen38-27b-xpu
+    app.kubernetes.io/version: "0.5"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 8000
+      protocol: TCP
+      name: vllm
+  selector:
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/instance: vllm-qwen38-27b-xpu
+---
+# Source: vllm/templates/deployment.yaml
+# Copyright (C) 2025-2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-qwen38-27b-xpu
+  labels:
+    helm.sh/chart: vllm-0-latest
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/instance: vllm-qwen38-27b-xpu
+    app.kubernetes.io/version: "0.5"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vllm
+      app.kubernetes.io/instance: vllm-qwen38-27b-xpu
+  template:
+    metadata:
+      annotations:
+      labels:
+        app.kubernetes.io/name: vllm
+        app.kubernetes.io/instance: vllm-qwen38-27b-xpu
+    spec:
+      #
+      # serviceAccountName: default
+      securityContext:
+        fsGroup: 1001
+        supplementalGroups:
+        - 990
+        - 44
+      containers:
+        - name: vllm
+          envFrom:
+            - configMapRef:
+                name: vllm-qwen38-27b-xpu-config
+            - secretRef:
+                name: vllm-qwen38-27b-xpu-secret
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              add:
+              - SYS_NICE
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: false
+            runAsUser: 0
+            seccompProfile:
+              type: RuntimeDefault
+          image: "vllm/vllm-openai-xpu:v0.28.0@sha256:4756b66a077627133cee653b551f6f5eaa1b9a981b5eea13edd33fcd3b0d3ca3"
+          imagePullPolicy: IfNotPresent
+          command:
+            - bash
+            - -c
+            - source /opt/intel/oneapi/setvars.sh --force && export LD_LIBRARY_PATH=/host-gpu-libs:${LD_LIBRARY_PATH}
+              && python3 -m vllm.entrypoints.openai.api_server "$@"
+            - --
+          # command:
+          #   - /bin/bash
+          #   - -c
+          #   - |
+          #     python3 -m vllm.entrypoints.openai.api_server --dtype float16  --model Qwen/Qwen3.6-27B --port 8000 --tensor-parallel-size 4 --block-size 64 --max-model-len 32768 --disable-log-requests
+          args:
+            - "--host"
+            - "0.0.0.0"
+            - "--dtype"
+            - "float16"
+            - "--block-size"
+            - "64"
+            - "--gpu-memory-utilization"
+            - "0.9"
+            - "--enforce-eager"
+            - "--no-enable-prefix-caching"
+            - "--trust-remote-code"
+            - "--disable-sliding-window"
+            - "--enable-auto-tool-choice"
+            - "--tool-call-parser"
+            - "qwen3_xml"
+            - "--tensor-parallel-size"
+            - "4"
+            - "--model"
+            - "Qwen/Qwen3.6-27B"
+            - --served-model-name
+            - "Qwen/Qwen3.6-27B"
+            - "--port"
+            - "8000"
+          volumeMounts:
+            - mountPath: /data
+              name: model-volume
+            - mountPath: /dev/shm
+              name: shm
+            - mountPath: /tmp
+              name: tmp
+            - mountPath: /root/.cache/vllm
+              name: vllm-cache
+            - mountPath: /host-gpu-libs
+              name: host-gpu-libs
+              readOnly: true
+            - mountPath: /usr/lib/x86_64-linux-gnu/libze_intel_gpu.so.1
+              name: host-gpu-libs
+              readOnly: true
+              subPath: libze_intel_gpu.so.1
+            - mountPath: /usr/lib/x86_64-linux-gnu/libze_loader.so.1
+              name: host-gpu-libs
+              readOnly: true
+              subPath: libze_loader.so.1
+            - mountPath: /etc/OpenCL/vendors
+              name: host-opencl-vendors
+              readOnly: true
+            - mountPath: /usr/lib/x86_64-linux-gnu/intel-opencl
+              name: host-intel-opencl
+              readOnly: true
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 98
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 120
+            periodSeconds: 30
+          resources:
+            limits:
+              "gpu.intel.com/xe": "4"
+            
+      volumes:
+        - name: model-volume
+          persistentVolumeClaim:
+            claimName: vllm-qwen38-27b-xpu-pvc
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+        - name: tmp
+          emptyDir: {}
+        - name: vllm-cache
+          emptyDir: {}
+        - hostPath:
+            path: /usr/lib/x86_64-linux-gnu
+            type: Directory
+          name: host-gpu-libs
+        - hostPath:
+            path: /etc/OpenCL/vendors
+            type: Directory
+          name: host-opencl-vendors
+        - hostPath:
+            path: /usr/lib/x86_64-linux-gnu/intel-opencl
+            type: Directory
+          name: host-intel-opencl
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: ei-inference-eligible
+                operator: In
+                values:
+                - "true"
+
+---
+# Source: vllm/templates/apisixroutes.yaml
+# Copyright (C) 2025-2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+---
+# Source: vllm/templates/chat-template-configmap.yaml
+# Copyright (C) 2025-2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+
+---
+# Source: vllm/templates/ingress.yaml
+# Copyright (C) 2025-2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+# Please edit the object below. Lines beginning with a '#' will be ignored,
+# and an empty file will abort the edit. If an error occurs while saving this file will be
+# reopened with the relevant failures.
+---
+# Source: vllm/templates/ingress_eks.yaml
+# Copyright (C) 2025-2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+---
+# Source: vllm/templates/route.yaml
+# Copyright (C) 2025-2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+
+---
+# Source: vllm/templates/servicemonitor.yaml
+# Copyright (C) 2025-2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0

@@ -43,6 +43,7 @@
 #                   solo: ARM = H53, one arm (LIVE_SOLO) per hold on the Arc Pro B70s (bench/eatflow/solo.py);
 #                   pairs: ARM = H47, H49, H47b, H49b, H50 or H50o, both arms live in cluster k3dgpu-e-<arm>, one hold
 #                   of interleaved pairs into LIVE_PAIRS_DIR (LIVE_HOLD = this hold's number);
+#                   ARM = H62: both servers in KVM guests, driven by LIVE_REMOTE_A and LIVE_REMOTE_B (bench/h62);
 #                   code: H43 (amendment W1), the coding agent on C12 with `k3d-gpu sandbox up`, one
 #                   block per level in LIVE_CODE_LEVELS (default "typical heavy heavy typical") into
 #                   LIVE_CODE_DIR/h43-<arm>-<level> (shared by an arm's holds, so a level's halves resume);
@@ -170,6 +171,7 @@ t0=$(date +%s)
 el() { echo $(( $(date +%s) - t0 )); }
 stamp() { echo "== $1 $(date +%T) (+$(el)s)" | tee -a "${OUT}/live.log"; }
 pids=()
+REMOTE=()   # H62: the remote arms' control scripts (their port-forwards stop with the hold)
 # DevUI bearer token for this hold only (the agent and the harness read DEVUI_AUTH_TOKEN).
 DEVUI_AUTH_TOKEN=$(python3 -c "import secrets; print(secrets.token_hex(16))")
 export DEVUI_AUTH_TOKEN
@@ -180,6 +182,7 @@ cleanup() {
     for p in "${pids[@]}"; do kill "${p}" 2>/dev/null; done
     [ -f "${OUT}/mcp.pid" ] && kill "$(cat "${OUT}/mcp.pid")" 2>/dev/null
     for f in "${OUT}"/agent-*.pid; do [ -f "${f}" ] && kill "$(cat "${f}")" 2>/dev/null; done
+    for r in "${REMOTE[@]}"; do "${r}" unforward >/dev/null 2>&1; done
     docker rm -f "${PFX}-litellm" "${PFX}-litellm-a" "${PFX}-litellm-b" "${PFX}-${lc}-srv" "${PFX}-rapl" \
         "${PFX}-redis" >/dev/null 2>&1
     k3d cluster delete "${K3D_GPU_CLUSTER}" >/dev/null 2>&1
@@ -280,6 +283,19 @@ stage() {  # stage <local dir> <path under /var/apb-models> <uid>
         docker exec "${n}" chown -R "$3:$3" /var/apb-models
     done
 }
+# stage_path <local dir> <path under /var/apb-models> <uid>: copy into every node, chown that
+# path only. Top level, so the solo (H53) and pairs paths both have it (H53 amendment R1).
+stage_path() {
+    local n
+    for n in $(nodes); do
+        docker exec "${n}" mkdir -p "/var/apb-models/$2" /var/apb-models/.ov_cache
+        docker cp -L "${M}/$1/." "${n}:/var/apb-models/$2/"
+        docker exec "${n}" rm -rf "/var/apb-models/$2/.cache" "/var/apb-models/$2/.git"
+        docker exec "${n}" chown -R "$3:$3" "/var/apb-models/$2"
+        docker exec "${n}" chown 5000:5000 /var/apb-models/.ov_cache
+        docker exec "${n}" chmod 1777 /var/apb-models
+    done
+}
 # cpusets: H56's cpuset.txt, "<role> <name> <cpus>" lines that crescent/h56.py checks.
 cpusets() {
     local n c
@@ -316,6 +332,8 @@ if [ "${MODE}" = solo ]; then
     # AG (k3d-gpu's auto device and draft: OVMS on one card) or B2 (EAT PR #21's vLLM XPU path,
     # its xpu-qwen36-27b profile on these weights, LIVE_B2_TP cards). LIVE_GPU_FREE: the PCI
     # addresses of the cards the hold may use; every other card is held by a placeholder pod.
+    # LIVE_PAIRS_GUARD: the task-start guard, s (unset: agentbench solo's own; a wiring smoke
+    # sets it past the hold, so only the warm-up runs; H53 amendment R1).
     PD=${LIVE_PAIRS_DIR:?} HOLD=${LIVE_HOLD:?} SOLO=${LIVE_SOLO:?LIVE_SOLO is AG or B2}
     read -r FAMILY RULE <<< "$(python3 "${HERE}/pairs.py" design "${ARM}")"
     [ "${ARM}" = H53 ] && [ "${RULE:-}" = L3 ] || { echo "solo: ARM must be H53 (a rule-L3 row)"; exit 2; }
@@ -428,7 +446,8 @@ if [ "${MODE}" = solo ]; then
     ${AB} solo --hyp "${ARM}" --hold "${HOLD}" --arm "${SOLO}" --out "${PD}" --deadline "${deadline}" --tasks B24 \
         --agent http://127.0.0.1:8090 --upstream "http://127.0.0.1:${P_LLM}" --proxy-port "${P_PROXY}" \
         --restart "${OUT}/agent.sh" --pod "${cg}" --mcp-url "http://127.0.0.1:${P_MCP}/mcp" --reset "${OUT}/reset-mcp.sh" \
-        --sampling "${SAMPLING}" --baseline "${PD}/baseline-hold${HOLD}.jsonl" --level "${LEVEL}" 2>&1 | tee -a "${OUT}/live.log"
+        --sampling "${SAMPLING}" --baseline "${PD}/baseline-hold${HOLD}.jsonl" --level "${LEVEL}" \
+        ${LIVE_PAIRS_GUARD:+--guard-s "${LIVE_PAIRS_GUARD}"} 2>&1 | tee -a "${OUT}/live.log"
     stamp finished
     exit 0
 fi
@@ -449,6 +468,7 @@ if [ "${MODE}" = pairs ]; then
     # What to deploy: the family's arms, or the row's own B arm (H50o: B3).
     DESIGN=${FAMILY}
     [ "${ARM}" = H50o ] && DESIGN=H50o
+    [ "${ARM}" = H62 ] && DESIGN=H62
     [ "${ARM}" = H50 ] && KV_GIB=${LIVE_EAT_KV_GIB:-40}   # EAT's shipped KV cache (40 GiB)
     mkdir -p "${PD}"
     PD=$(cd "${PD}" && pwd)
@@ -456,23 +476,57 @@ if [ "${MODE}" = pairs ]; then
         H47) A=A1 B=A4 ;;
         H49) A=A1 B=B1; export K3D_GPU_NODE_LABELS=ei-infra-eligible=true,ei-inference-eligible=true ;;
         H50o) A=A1 B=B3 ;;
+        H62) A=A1 B=B5 ;;
     esac
+    if [ "${DESIGN}" = H62 ]; then
+        # H62 ("H62 pre-registration"): each server runs in its own KVM guest on this host
+        # (bench/h62); nothing is deployed here. LIVE_REMOTE_A and LIVE_REMOTE_B name each arm's
+        # control script (bench/h62/arm.sh <arm>): restart its serving pod, record it, forward
+        # its Service to a host port and name its pod cgroup for the idle-arm check. From the
+        # LiteLLM gateways on, the hold is H50's. The local arms below run unchanged in the else
+        # branch.
+        RA=${LIVE_REMOTE_A:?H62 needs LIVE_REMOTE_A} RB=${LIVE_REMOTE_B:?H62 needs LIVE_REMOTE_B}
+        REMOTE=("${RA}" "${RB}")
+        stamp "restart both servers"
+        left=$(( CAP - $(el) - 900 ))     # ready with at least 900 s of the hold left
+        "${RA}" restart "${left}" > "${OUT}/restart-a.log" 2>&1 &
+        ra=$!
+        "${RB}" restart "${left}" > "${OUT}/restart-b.log" 2>&1 &
+        rb=$!
+        wait "${ra}"; xa=$?
+        wait "${rb}"; xb=$?
+        if [ "${xa}" != 0 ] || [ "${xb}" != 0 ]; then
+            "${RA}" logs "${OUT}/remote-a" > /dev/null 2>&1
+            "${RB}" logs "${OUT}/remote-b" > /dev/null 2>&1
+            if [ "${xa}" = 3 ] || [ "${xb}" = 3 ]; then
+                echo "NOT DELIVERABLE: not ready with 900 s of the hold left (restart A ${xa}, B ${xb})" | tee -a "${OUT}/live.log"
+                exit 3
+            fi
+            echo "restart failed (A ${xa}, B ${xb})" | tee -a "${OUT}/live.log"
+            exit 1
+        fi
+        stamp ready
+        "${RA}" records "${OUT}/remote-a" > "${OUT}/records-a.log" 2>&1 || { echo "A records failed"; exit 1; }
+        "${RB}" records "${OUT}/remote-b" > "${OUT}/records-b.log" 2>&1 || { echo "B records failed"; exit 1; }
+        "${RA}" forward >> "${OUT}/live.log" 2>&1 || { echo "A forward failed"; exit 1; }
+        "${RB}" forward >> "${OUT}/live.log" 2>&1 || { echo "B forward failed"; exit 1; }
+        P_SRV=$("${RA}" port) BPORT=$("${RB}" port) API_B=/v1
+        cg_a=$("${RA}" cgroup) || { echo "no cgroup for the A pod"; exit 1; }
+        cg_b=$("${RB}" cgroup) || { echo "no cgroup for the B pod"; exit 1; }
+        echo "pod cgroups: ${A} ${cg_a}; ${B} ${cg_b}" | tee -a "${OUT}/live.log"
+        python3 "${HERE}/pairs.py" usage "${cg_a}" "${cg_b}" >> "${OUT}/live.log" 2>&1 || { echo "pod cpu.stat unreadable"; exit 1; }
+        wait_http "http://127.0.0.1:${P_SRV}/v1/models" 120 || { echo "A server not answering"; exit 3; }
+        curl -fsS "http://127.0.0.1:${P_SRV}/v1/models" > "${OUT}/models-a.json"
+        wait_http "http://127.0.0.1:${BPORT}${API_B}/models" 300 || { echo "B server not answering"; exit 3; }
+        curl -fsS "http://127.0.0.1:${BPORT}${API_B}/models" > "${OUT}/models-b.json"
+        SERVED_A=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['data'][0]['id'])" "${OUT}/models-a.json")
+        SERVED_B=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['data'][0]['id'])" "${OUT}/models-b.json")
+    else
     # The B arm's server (every design but H47's one pod): namespace, Deployment, Service,
     # service port and OpenAI path.
     B_NS=default B_DEP=${B_REL} B_SVC=${B_REL}-service B_SPORT=80 B_API=/v1
     [ "${DESIGN}" = H50o ] && B_DEP=ovms-model-server B_SVC=ovms-model-server B_SPORT=8080 B_API=/v3
     DRAFT_DIR=OpenVINO-Qwen3-0.6B-int4-ov     # where OVMS --pull puts the draft, inside the target dir
-    stage_path() {  # stage_path <local dir> <path under /var/apb-models> <uid>: chown that path only
-        local n
-        for n in $(nodes); do
-            docker exec "${n}" mkdir -p "/var/apb-models/$2" /var/apb-models/.ov_cache
-            docker cp -L "${M}/$1/." "${n}:/var/apb-models/$2/"
-            docker exec "${n}" rm -rf "/var/apb-models/$2/.cache" "/var/apb-models/$2/.git"
-            docker exec "${n}" chown -R "$3:$3" "/var/apb-models/$2"
-            docker exec "${n}" chown 5000:5000 /var/apb-models/.ov_cache
-            docker exec "${n}" chmod 1777 /var/apb-models
-        done
-    }
     cluster_up
     stage_path "${TGT_DIR}" "${TGT}" 5000
     [ "${A_DRAFT}" = off ] || stage_path Qwen3-0.6B-int4-ov "${TGT}/${DRAFT_DIR}" 5000
@@ -589,6 +643,7 @@ if [ "${MODE}" = pairs ]; then
         wait_http "http://127.0.0.1:${BPORT}${API_B}/models" 300 || { echo "B server not answering"; exit 3; }
         curl -fsS "http://127.0.0.1:${BPORT}${API_B}/models" > "${OUT}/models-b.json"
         SERVED_B=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['data'][0]['id'])" "${OUT}/models-b.json")
+    fi
     fi
     litellm() {  # litellm x served port llm_port api_path
         printf 'model_list:\n  - model_name: %s\n    litellm_params:\n      model: openai/%s\n      api_base: http://127.0.0.1:%s%s\n      api_key: not-needed\n      timeout: 600\n' \

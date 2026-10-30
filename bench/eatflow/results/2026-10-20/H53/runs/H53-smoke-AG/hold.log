@@ -1,0 +1,41 @@
+== arm H53 start 00:15:14 (+0s)
+Unable to find image 'python:3.14.8-slim@sha256:fbecd461fc72d21b2143c6eaba25143738079154a6d0ea3da3aec724f50eed4a' locally
+docker.io/library/python@sha256:fbecd461fc72d21b2143c6eaba25143738079154a6d0ea3da3aec724f50eed4a: Pulling from library/python
+82a60621211f: Pulling fs layer
+f2be67225471: Pulling fs layer
+77be27415a1b: Pulling fs layer
+ac7730f4ce1f: Pulling fs layer
+ac7730f4ce1f: Download complete
+82a60621211f: Download complete
+77be27415a1b: Download complete
+c30c368ebede: Download complete
+f2be67225471: Download complete
+c3878e211f92: Download complete
+f2be67225471: Pull complete
+77be27415a1b: Pull complete
+ac7730f4ce1f: Pull complete
+82a60621211f: Pull complete
+Digest: sha256:fbecd461fc72d21b2143c6eaba25143738079154a6d0ea3da3aec724f50eed4a
+Status: Downloaded newer image for python@sha256:fbecd461fc72d21b2143c6eaba25143738079154a6d0ea3da3aec724f50eed4a
+== k3d-gpu up 00:15:16 (+2s)
+== wait-ready 00:18:24 (+190s)
+Waiting for deployment "ovms" rollout to finish: 0 of 1 updated replicas are available...
+deployment "ovms" successfully rolled out
+== ready 00:19:15 (+241s)
+ovms renderD130 0000:7c:00.0
+curl: (7) Failed to connect to 127.0.0.1 port 18640 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18640 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18640 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18640 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18640 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18640 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8090 after 0 ms: Could not connect to server
+== load typical 00:19:31 (+257s)
+== baseline typical 00:19:32 (+258s)
+== solo hold 1 (AG), deadline +2250s 00:19:52 (+278s)
+agentbench: AG: agent http://127.0.0.1:8090, proxy 127.0.0.1:18620 -> http://127.0.0.1:18640, pod cgroup /sys/fs/cgroup/system.slice/docker-0f3ecc5db6fc6a5011721ffe8eb1db36d348e0df866e428c31ae3e2c103f8c88.scope/kubepods/burstable/podaae2b796-aecd-4431-88ac-d979d4e06784
+agentbench: task 21: 1966 s left < 99999 s, hold ends
+agentbench: solo hold 1 (AG): 0 complete attempt(s)
+== finished 00:19:58 (+284s)
+== cleanup 00:19:58 (+284s)
+== done 00:20:00 (+286s)

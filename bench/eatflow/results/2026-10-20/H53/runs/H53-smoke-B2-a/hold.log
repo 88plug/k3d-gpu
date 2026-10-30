@@ -1,0 +1,7 @@
+== arm H53 start 00:20:14 (+0s)
+== k3d-gpu up 00:20:15 (+1s)
+== wait-ready 00:23:06 (+172s)
+Waiting for deployment "vllm-qwen38-27b-xpu" rollout to finish: 0 of 1 updated replicas are available...
+== cleanup 00:25:19 (+305s)
+== done 00:25:22 (+308s)
+Terminated                 "$@"

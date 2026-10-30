@@ -1,0 +1,15 @@
+2026-10-30T00:20:14Z
+ 00:20:14 up 44 days,  1:34, 10 users,  load average: 7.92, 4.03, 3.03
+%CPU     PID USER     COMMAND
+15.8  872705 65532    epp
+ 4.0 1565186 devcloud bash
+ 2.6    3911 nobody   node_exporter
+ 1.2    3934 root     python3
+ 1.0    2651 root     dockerd
+ 1.0    3892 10001    loki
+ 0.6    3941 472      grafana
+ 0.6    3936 nobody   prometheus
+ 0.6    3914 root     alloy
+ 0.5    3882 10001    tempo
+aiperf_procs: 0
+/dev/nvme0n1p1  3637102748 1098583812 2538502552      31% /

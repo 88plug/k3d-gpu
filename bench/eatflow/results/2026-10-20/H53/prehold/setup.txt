@@ -1,0 +1,16 @@
+lock-taken 2026-10-30T00:13:39Z
+1f39488be7695dc0d1848347bf1c91f04025bc55
+k3d: OK
+kubectl: OK
+helm.tgz: OK
+uv.tgz: OK
+k3d version v5.9.0
+k3s version v1.35.5-k3s1 (default)
+Client Version: v1.37.2
+v4.3.1+gc0d08d0
+uv 0.13.6 (x86_64-unknown-linux-gnu)
+rc=0 2026-10-30T00:13:42Z
+06d8f25bc3a971c4eb29e0ff08429b180402db0f4dec838c9eac427e296800a0  k3d
+c04487523e7aa7d1493f7808174c899db93d7a9cf57531420cd76b9bd415f8f4  kubectl
+b66cb19f2b31f9d427632ea6c4b4a1ff89b74ecaeaee323cd166da41a7af53bd  helm
+23803452c0fbe125033054cd9ff245f1d649fb65b4b73f68429f4abda432436d  uv

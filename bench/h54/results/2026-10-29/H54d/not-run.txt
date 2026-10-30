@@ -1,0 +1,26 @@
+H54d: re-checked, still not run, no hold used (2026-10-29 PDT, 2026-10-30T00:55Z).
+Verdict unchanged: INCONCLUSIVE (not run). Supersedes reason 3 of 2026-10-21/H54d/not-run.txt
+(H54q has since run, 2026-10-29, 3 holds). Reasons 1 and 2 stand.
+
+1. A* is undefined. H54a is closed (3 of 3 holds spent, R3's carry used). Its rule picks the
+   fastest arm among those with GSM8K >= B1g's score - 5/50. B1g has no score, so score-a chose
+   none. H54q's 200-item reference R is not part of H54a's rule.
+2. B1g stays EAT 0d3438d's vLLM CPU v0.24.0 (amendment E1: "H54a and H54d keep B1g at v0.24.0;
+   both are closed"). Note N2: the stall is vllm-project/vllm#45844, absent from v0.24.0; all three
+   v0.24.0 Gemma engines on crescent stalled within their first 690-1,540 decode steps. Under
+   H50's procedure that trips the idle-arm check and quiesce wait, and a warm-up stall stops the
+   hold before any pair.
+3. New: an amendment defining A* and moving B off v0.24.0 would now be written after the H50 run
+   on the same flow (E1's B1, vLLM CPU v0.28.0: 21/24 within budget; A1 19/24; REFUTED), i.e.
+   with the moved B's outcome measured, and after H54a's decode rates and H54q's scores. It would
+   not be a pre-registration, so none is written.
+4. New: amendment Q1 moved 2 of H54d's 3 holds to H54q. H54 campaign holds used: 9 of 10
+   (H54a 3, H54q 3, H54b 2, H54c 1). H54d holds the last one.
+5. Runner: `bench/eatflow/pairs.py design H54d` -> "H54d: not a pairs hypothesis"; live.sh
+   pairs mode deploys A1 (OVMS) as arm A in every design.
+
+Checked on crescent at 2026-10-30T00:48-00:50Z (read only): no H54d entry in any campaign.log or
+holds.log; ~/k3dgpu-gemma/results/H54d holds only the 2026-10-21 not-run.txt; bench lock free
+(inode not in /proc/locks), no k3d cluster, / at 31%. No container, image, file or lock was
+touched. Serving pairs not stopped; one front-door chat check through :8100 at 00:50:15Z
+returned "OK" four times, sglang:num_requests_total rose on :30000 (7 -> 8) and :30001 (5 -> 8).
