@@ -70,7 +70,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H51 | (Model, arms and sampling superseded by [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20): Gemma 4 26B-A4B QAT.) Graded agents per box on the Xeon 6741P: H45's ramp, gates and scoring (B15-RO, typical load, 300 s steps, pooled p95 turn <= 10 s, success >= the arm's N=1 success - 10 points, errors <= 1%, >= 60 window requests), extended to N=16, for A1 and B1. | Superseded by [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20), which restates the predictions; as first written: Written 2026-10-20, before any measurement. A1 in [1, 8] (0.5). B1 in [0, 4] (0.5). B1 <= A1 (0.55). | H45's `apb` runner and scorer (`apb-score --hyp H51`, ramp 1, 2, 4, 8, 16), one fresh cluster per hold, at most 4 holds of at most 40 min. A prediction holds when the arm's bracket lies inside its range and is refuted when it lies outside; B1 <= A1 is decided only on matched load. REFUTED when any prediction is refuted, SUPPORTED when all three hold, else INCONCLUSIVE. Runs only if H50's holds end within their cap. Model and predictions from [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20). B1 as H50, from [amendment E1](#crescent-amendment-e1-eat-stock-is-release-110-for-h50-h50o-and-h51-2026-10-29); node image, deploy commit and order per [amendment E2](#crescent-amendment-e2-pins-deploy-commits-order-and-the-restore-check-for-the-pending-crescent-rows-2026-10-29); deploy commit, M1's ranges in the scorer, one hold per arm and the wiring smokes per [H51 amendment S1](#h51-amendment-s1-deploy-commit-scorer-ranges-ramp-per-hold-and-wiring-smokes-2026-10-29). Result ([H51 run](#h51-run-xeon-6741p-2026-10-29)): one hold per arm, 2 of the 4 permitted, none VOID. Both arms failed N=1. A1: 65 window requests, turn p95 10.41 s against the 10 s SLO, success 30/32. B1: 58 window requests (under 60), p95 11.52 s, success 27/29. Agents per box A1 0, outside its predicted [1, 4], so REFUTED. B1's 0 lies inside [0, 4], and B1 <= A1 holds on matched load (0 <= 0). | REFUTED |
 | H52 | A plain `k3d-gpu up` (no flags, the auto-adapt default) on the Xeon 6741P host as found detects and enables every engine actually present and advertises each usable one to the scheduler, with nothing missing and nothing phantom; engines present but not configured on the host are named, not advertised. | Written 2026-10-20 from an inventory read from sysfs, lspci and CPUID, not from k3d-gpu. 4 x Arc Pro B70 (xe) as `gpu.intel.com/xe: 4`; AMX TILE, BF16, INT8, FP16 and 14 AVX-512/VNNI labels; no hybrid, NUMA, NVIDIA, Gaudi or NPU objects; DSA, IAA and QAT named as present but unconfigured (0.4: `up` may not name them). | The table in [H50-H52 pre-registration](#h50-h52-pre-registration-the-xeon-6741p-2026-10-20): `k3d-gpu doctor`, `K3D_GPU_CLUSTER=k3dgpu-h52 k3d-gpu up`, `kubectl get node -o json`, `k3d-gpu test`, and one enumeration pod per B70. SUPPORTED: every row matches. REFUTED: any row does not. Run 2026-10-20 ([H52 run](#h52-run-xeon-6741p-2026-10-20)): the four B70s (`gpu.intel.com/xe: 4`, `xmx=true`), AMX (TILE, BF16, INT8, FP16) and all 14 AVX-512/VNNI labels detected and reached pods, nothing phantom; but no media engine label on `xe`, and `up` does not name the unconfigured DSA, IAA and QAT (`doctor` does). | REFUTED |
 | H52b | After `k3d-gpu host-setup --apply` configures the host's DSA, IAA and QAT (the fix that adds that path, merged first), a plain `k3d-gpu up` also advertises them, and each one reaches a pod; the host is then restored exactly. | Written 2026-10-20, before the fix exists. DSA, IAA and QAT allocatable > 0, each at the count host-setup reports configuring; their test pods see `/dev/dsa`, `/dev/iax`, `/dev/vfio` (0.6). The other rows read as H52's expected table, media labels included ([amendment D1](#h52-amendment-d1-the-fixes-and-h52b-2026-10-20)). | Runs after H52, once the host-setup fix is merged; same procedure plus `host-setup --apply` before `up` and its printed revert after. SUPPORTED: the three engines advertised and reached, the H52 rows unchanged, and the host inventory read back equal to the one taken before. REFUTED: any of these fails. The host-setup command (`--apply --with-kernel-wqs`), the plan read first, the counts, the plain `up`'s node image and the revert per [amendment D2](#h52-amendment-d2-h52bs-host-setup-step-on-crescent-2026-10-29); the runner and deploy commit per [amendment D3](#h52-amendment-d3-h52bs-runner-and-deploy-commit-2026-10-29). Result ([H52b run](#h52b-run-xeon-6741p-2026-10-29)): one hold at k3d-gpu 0.1.79; the plan passed D2's gate (8 commands) and applied. DSA advertised 3 of the 3 configured work queues and its pod saw `/dev/dsa`; IAA got no work queue and no resource (as D2 item 4 disclosed); QAT got 48 VFs, but its plugin crash-looped and advertised none; `gpu.intel.com/xe` read 2, not 4: the serving pairs hold about half the VRAM of all four cards, and `up`'s busy-card filter (half the VRAM) left out the two just over half (16.1, 16.2 GiB) and kept the two just under it (15.4, 15.5 GiB), which the pairs also hold, so two enumeration pods ran, not four. Media labels (`vcs` 2, `vecs` 2), AMX, the 14 AVX-512/VNNI labels, CPU 96 and no other vendor read as expected. The third inventory equals the first. Three clauses fail, so REFUTED. | REFUTED |
-| H53 | Inside EAT's banking flow on the Arc Pro B70s with Qwen3.8-27B (thinking off), k3d-gpu's own GPU choice AG (OVMS int4 on one card, `agent manifest`, auto device) delivers far more B24 tasks within the 120 s turn budget than B2, "EAT PR #21 nearest profile (Qwen3.6-27B) on Qwen3.8 weights, fp16" (vLLM XPU v0.28.0, TP 4). A stack-vs-stack claim. | Written 2026-10-20, before any H53 measurement. AG >= 0.70 (0.6); B2 boots by ladder rung (b) (0.6); B2 >= 0.50 (0.5); block mean AG - B2 in [-0.15, +0.30] (0.5). INCONCLUSIVE (0.6), REFUTED (0.3), SUPPORTED (0.1). | Solo holds in the order AG, B2, B2, AG, AG, B2 (up to 8), blocks = hold pairs (2k-1, 2k), block-level inference: mean of per-block d over >= 3 counted blocks, t-interval. SUPPORTED: lower bound >= +30 points and AG >= 0.6, L3 gates passed. REFUTED: upper bound < +30 points. Else INCONCLUSIVE. `bench/eatflow/crescent/solo-hold.sh N ARM`, `agentbench solo-report --hyp H53 --arm-a AG --arm-b B2`. See [H53 pre-registration](#h53-pre-registration-eats-banking-flow-on-arc-pro-b70-2026-10-20). | PENDING |
+| H53 | Inside EAT's banking flow on the Arc Pro B70s with Qwen3.8-27B (thinking off), k3d-gpu's own GPU choice AG (OVMS int4 on one card, `agent manifest`, auto device) delivers far more B24 tasks within the 120 s turn budget than B2, "EAT PR #21 nearest profile (Qwen3.6-27B) on Qwen3.8 weights, fp16" (vLLM XPU v0.28.0, TP 4). A stack-vs-stack claim. | Written 2026-10-20, before any H53 measurement. AG >= 0.70 (0.6); B2 boots by ladder rung (b) (0.6); B2 >= 0.50 (0.5); block mean AG - B2 in [-0.15, +0.30] (0.5). INCONCLUSIVE (0.6), REFUTED (0.3), SUPPORTED (0.1). | Solo holds in the order AG, B2, B2, AG, AG, B2 (up to 8), blocks = hold pairs (2k-1, 2k), block-level inference: mean of per-block d over >= 3 counted blocks, t-interval. SUPPORTED: lower bound >= +30 points and AG >= 0.6, L3 gates passed. REFUTED: upper bound < +30 points. Else INCONCLUSIVE. `bench/eatflow/crescent/solo-hold.sh N ARM`, `agentbench solo-report --hyp H53 --arm-a AG --arm-b B2`. See [H53 pre-registration](#h53-pre-registration-eats-banking-flow-on-arc-pro-b70-2026-10-20). Node image, deploy commit, order and the restore check per [amendment E2](#crescent-amendment-e2-pins-deploy-commits-order-and-the-restore-check-for-the-pending-crescent-rows-2026-10-29); the solo runner fix, setup, the wiring smokes, the window and its futility stop per [H53 amendment R1](#h53-amendment-r1-the-solo-runner-fix-setup-wiring-smokes-and-the-gpu-window-2026-10-30); tools per [amendment E4](#crescent-amendment-e4-kubectl-v1372-helm-v431-and-uv-0136-in-the-crescent-workspace-2026-10-29). | PENDING |
 | H54a | On the Xeon 6741P, Gemma 4 26B-A4B (QAT weights) single-stream: the best optimized CPU arm, chosen by the pre-registered source and speed rule, decodes at N=1 at least 3x faster than EAT stock B1g (vLLM CPU v0.24.0 bf16, `xeon-values.yaml`'s Gemma entry on the QAT bf16 weights), with a 50-item quality spot-check no more than 10 points below B1g's. A microbench, not an agent claim. | Written 2026-10-20, before any H54 measurement. N=1 median decode tok/s: B1g in [4, 15] (0.6); Lg (llama.cpp CPU, Google QAT Q4_0) in [25, 70] (0.6); A1g (k3d-gpu auto, OVMS CPU, QAT-matched IR) in [15, 60] (0.5), A1g/A1o in [0.85, 1.02] (0.6); Vq (vLLM CPU v0.32.0 bf16) in [6, 18] (0.5), Vq-mtp/Vq in [1.4, 2.5] (0.5); Lg-mtp/Lg in [1.2, 2.2] (0.4); Sg (SGLang CPU AMX) deliverable (0.6). The chosen arm is Lg or Lg-mtp (0.55). B3g not deliverable (0.8). SUPPORTED (0.65), INCONCLUSIVE (0.25), REFUTED (0.1). Not gated: TTFT on a 1,000-token prompt, aggregate tok/s at N=4 and 16 (A1g N=16/N=1 <= 1.5, 0.5), J/token. | [H54 pre-registration](#h54-pre-registration-gemma-4-26b-a4b-qat-and-qwen38-microbenches-on-crescent-2026-10-20): `bench/llm_load.py` per arm (N=1: 8 requests, N=4: 16, N=16: 32, 256 tokens, greedy, `ignore_eos`), `bench/energy.sh` RAPL per phase, GSM8K items 0-49 graded by exact match, one arm serving at a time, at most 3 holds of at most 40 min. Statistic: ratio of the chosen arm's median N=1 decode to B1g's, 95% bootstrap CI over requests. SUPPORTED: CI lower bound >= 3.0 and the quality gate passed. REFUTED: CI upper bound < 3.0, or every arm with a point ratio >= 3.0 fails the quality gate. Otherwise INCONCLUSIVE (also: B1g not deliverable, or a void phase not re-run). Run 2026-10-21, 3 holds ([H54a run](#h54a-run-xeon-6741p-2026-10-21)): stock B1g stalled in both its holds (vLLM v0.24.0 `EngineDeadError` mid-decode, cause open; no scored phase, 0/50 GSM8K, all errored), so `h54.py score-a` has no base and no chosen arm. Measured: Lg 48.74, Lg-mtp 54.52, A1g 23.25, A1o 21.73 tok/s N=1 median, GSM8K 50, 50, 49, 49 of 50; each scored phase exists only under amendment R4 (its own foreign CPU 4.4-4.8 CPU-s/s). Vq, Vq-mtp, Vi, Sg, B3g not run (cap). Descriptive, not scored: Lg-mtp over B1g's 2 hold-2 rates 3.02 ~~(CI 2.90-3.06)~~ (descriptive only: n=2 base rates from an engine that died minutes later, no CI; correction 2026-10-28, [H54a run](#h54a-run-xeon-6741p-2026-10-21)). | INCONCLUSIVE |
 | H54q | QAT matters at int4 on this model: on GSM8K items 0-199, the QAT-matched OpenVINO IR OVQ (INT4_SYM, group 32, built from Google's QAT bf16 weights) is non-inferior to the bf16 QAT reference R within 5 points, and the published base-model IR OVB (`OpenVINO/gemma-4-26b-a4b-it-int4-ov`; ~~INT4_ASYM group 128~~ AWQ INT4 asymmetric group 64, router layers unquantized, per its `openvino_config.json`: [note N1](#h54-note-n1-what-ovb-is-2026-10-21)) scores below OVQ. | Written 2026-10-20, before any measurement. R accuracy in [0.85, 0.96] (0.6). OVQ - R in [-0.03, +0.02] (0.6). GGUF Q4_0 (Lg) - R in [-0.03, +0.02] (0.6). OVB - R in [-0.07, 0] (0.5). The OVB < OVQ part resolves on 200 items (0.2). INCONCLUSIVE (0.65), SUPPORTED (0.2), REFUTED (0.15). | As H54a's quality protocol on items 0-199 of `openai/gsm8k` `main` test @ `740312ad`; items 0-49 come from H54a's runs of the same arm configs; ~~at most 1 hold of at most 40 min for the rest~~ the rest in at most 3 holds of at most 40 min, R answering all 200 items because H54a never ran its config ([amendment Q1](#h54-amendment-q1-h54qs-reference-arm-hold-cap-and-order-2026-10-29)). Paired bootstrap 95% CI over items (10,000 resamples, seed 1). SUPPORTED: CI lower bound of OVQ - R >= -0.05 and CI upper bound of OVB - OVQ < 0. REFUTED: CI upper bound of OVQ - R < -0.05, or CI lower bound of OVB - OVQ > 0. Otherwise INCONCLUSIVE. | PENDING |
 | H54b | On Arc Pro B70 with Qwen3.8-27B single-stream: the best optimized arm on ONE card (k3d-gpu auto OVMS int4, Intel's llm-scaler vLLM, or llama.cpp SYCL, with and without each one's documented MTP) decodes at N=1 at least 2x faster than EAT #21's XPU path B2q on TWO cards (vLLM XPU v0.28.0, the `xpu-qwen36-27b` profile's flags on the Qwen3.8-27B weights, TP 2). | Written 2026-10-20, before any measurement. N=1 median decode tok/s: X1q (OVMS GPU int4) in [15, 28] (0.5), X1q-mtp/X1q in [1.3, 2.2] (0.4); Sq (llm-scaler 1.5, online FP8, TP 1) deliverable (0.5), in [10, 18]; Sq-mtp/Sq in [1.4, 2.3] (0.5); Lsq (llama.cpp SYCL, Intel Q4_K_M) in [12, 24] (0.5); B2q deliverable at TP 2 (0.4), in [5, 12] (0.5). Chosen/B2q >= 2 (0.6). Cards free for a window (0.5). INCONCLUSIVE (0.6), SUPPORTED (0.3), REFUTED (0.1). | H54a's protocol on the B70s, cards only when `~/k3dgpu-bench/gpu-state.txt` lists them free; at most 2 holds of at most 40 min. Same statistic and quality gate (against B2q, or the official-weights arm Sq when B2q is not deliverable, for the gate only). SUPPORTED: CI lower bound of chosen one-card arm / B2q >= 2.0 and the gate passed. REFUTED: CI upper bound < 2.0. Otherwise INCONCLUSIVE (also: B2q not deliverable, or no free card before the campaign ends). Gemma 4 QAT on one B70 (X1g, X1o, B2g, Sgg) is described if hold time remains, never gated. Run 2026-10-21, 2 holds ([H54b and H54c run](#h54b-and-h54c-run-arc-pro-b70-2026-10-21)): INCONCLUSIVE, not delivered as pre-registered: the pinned "one card" pods saw all 4 cards. B2q, Sq, Sq-mtp (Qwen bf16, 80.6 GB with its guard) and Rq were not deliverable (disk); X1q and X1q-mtp failed on two `h54b.sh` runner bugs before any engine started; Lsq ran, but its pod listed every render node and llama.cpp split the model over all four B70s, two of them serving the live `qwen38-a-hr`, so no one-card arm exists. Lsq-mtp was not run: its GGUF carries the MTP (`nextn`) tensors, but G1's runner has no such arm; nor were the described-only Gemma arms. `score.py`: "no gate reference (B2q and Sq missing)". Descriptive only, a 4-card run and not a one-card or B70 result: Lsq 27.3 tok/s N=1 median, GSM8K 48/50. | INCONCLUSIVE |
@@ -4321,6 +4321,119 @@ interval), REFUTED (0.3), SUPPORTED (0.1).
 **Order of work.** The H53 window opens after H50's holds: both pairs stopped, the B2 boot-ladder
 smoke, then holds 1-6 (and 7-8 if needed), then serving restored and verified. The window is
 at most eight 40-min holds with both pairs stopped; `gpu-state.txt` says so throughout.
+
+### H53 amendment R1: the solo runner fix, setup, wiring smokes and the GPU window (2026-10-30)
+
+Recorded 2026-10-30 (UTC; 2026-10-29 in California), before any H53 hold or smoke. Mechanics
+only. No hypothesis, arm, model, sampling, prediction, statistic, gate, threshold, seed or order
+changes, and no cap rises. Like E1 to E4, it is pre-registered by its push time.
+
+State on crescent at 00:01Z: the only H53 record is `results/H53/prehold/fetch.log` (item 8).
+`runs/campaign.log` and `runs/holds.log` have no H53 entry, no H53 process, cluster or lock
+exists, the bench lock is free and both SGLang pairs serve.
+
+Disclosed: it is written with H50's, H50o's, H51's and H52b's results known. None of them runs
+on a B70 or serves Qwen3.8-27B.
+
+1. **Deploy commit.** E2 item 2 runs each hold from `origin/main` at or after E2's merge, and E4
+   item 2 runs E4's setup from a commit at or after E4's merge. H53 runs from one pushed commit on
+   branch `claude/h53-run`: `origin/main` `74ff63ef` (k3d-gpu 0.1.80, after E4's merge in
+   `012b4e95`) plus this amendment, item 2's fix, item 3's guard, item 5's futility helper and the
+   window script of item 5. It is checked out clean and detached at `~/k3dgpu-bench/k3d-gpu-h53`,
+   so a redeploy of the shared checkout cannot move H53's runner between holds. Its commit goes
+   into every hold's `commit.txt` and the run section. AG is `agent manifest` at this commit.
+2. **The fix: `stage_path` was undefined on the solo path.** Since #157, `live.sh` defined
+   `stage_path` only inside its pairs branch, and the solo branch runs before it. AG's
+   `stage_path "${TGT_DIR}" "${TGT}" 5000` would have failed with "command not found". `live.sh`
+   runs without `-e`, so it would have gone on and deployed OVMS over an empty hostPath, and
+   hold 1 would have ended NOT DELIVERABLE because of the harness, not the arm. The function now
+   sits at top level, unchanged. The pairs path calls the same function. B2 mounts its weights
+   read-only (`LIVE_MOUNT_B=1`) and never called it. Regression test:
+   `H53Test.test_stage_path_is_defined_before_the_solo_path_calls_it` in
+   `bench/eatflow/test_pairs.py`. It fails on `74ff63ef`.
+3. **A guard for the smokes.** `live.sh`'s solo branch passes `LIVE_PAIRS_GUARD`, when set, as
+   `agentbench solo --guard-s`. The scored holds leave it unset (`solo-hold.sh` does not set it),
+   so their guard stays agentbench's own. A smoke sets 99999 s: no task starts, and only the
+   unscored warm-up runs.
+4. **Wiring smokes, inside the window, before hold 1.** No H53 arm has run on k3d. The
+   pre-registration's B2 boot-ladder smoke runs, and so does one for AG. Each is
+   `prehold.sh smoke <ARM> [RUNGS]`: `hold.sh H53-smoke-<name> 2400` running `live.sh H53` with
+   `solo-hold.sh`'s environment, except `LIVE_PAIRS_GUARD=99999`, `LIVE_HOLD` 1 for AG and 2 for
+   B2, and output under `~/k3dgpu-bench/smoke/H53/<name>/`. Each is discarded, disclosed in the
+   run section, and is not one of the eight holds.
+   - AG smoke (`H53-smoke-AG`). Pass: OVMS is ready on the GPU (`--target_device=GPU` in
+     `agent.yaml`), its pod holds exactly one free card (`live.sh`'s own check), and the warm-up
+     answers. If it fails for a reason the harness or k3d causes, no hold runs until a further
+     dated amendment fixes it. If OVMS itself does not load or answer, nothing changes, and
+     hold 1 runs as registered.
+   - B2 boot ladder (`H53-smoke-B2-a`, then one smoke per further rung, named by its letters,
+     such as `-b` or `-bd`). This is the pre-registration's ladder as written. Rung (a) is stock
+     with item 1's mounts dropped. A rung's smoke runs only when the boot before it fails with
+     that rung's error, and every rung taken is kept for every B2 hold (`LIVE_B2_LADDER`, the
+     `RUNGS` argument of `holds`). Pass: the server is ready, its pod holds the four free cards,
+     and the warm-up answers. If B2 does not answer after (d), H53 is INCONCLUSIVE (not
+     deliverable), no hold runs, and the failure is the finding.
+   - Early stop. A smoke may stop once its server is ready and the warm-up has answered, or once
+     its server has failed at least twice with the same error. Before stopping it,
+     `prehold.sh podlog <name>` saves the pods, events and server logs (current and previous).
+     Then a TERM goes to that smoke's `hold.sh`, whose cleanup deletes the cluster.
+5. **The window** (`bench/eatflow/results/2026-10-20/H53/prehold/prehold.sh`), in this order:
+   `setup` (item 7), `verify` (item 8) and `frontdoor pre` before the window; `stop`; the smokes;
+   `holds 1 6 RUNGS`; `start`.
+   - `stop` saves `docker inspect` of both pairs into `prehold/` first. Then it runs
+     `gpu-serving.sh stop` for `qwen38-a-hr` and `qwen38-b-hr` (`docker stop`, never `rm`; it
+     refuses while aiperf runs).
+   - Before every smoke and hold, the window must be open, both pairs must be stopped, and every
+     card must hold under 2 GiB of VRAM (Prometheus `xe_vram_used_bytes`, polled for up to
+     2 min). Else the step does not run. The serving pairs hold about 16 GiB of each card.
+   - `holds FIRST LAST RUNGS` runs the scored holds in order through `solo-hold.sh N ARM`, with
+     `LIVE_GPU_FREE` set to all four cards. After hold 6, holds 7 and 8 run only when `agentbench
+     solo-report` (on a copy of the solo directory) counts fewer than three blocks. This is the
+     pre-registered rule. Then it restores serving.
+   - A hold that does not exit 0 counts as used, and `holds` stops there with the window open.
+     The hold's records are read before the next hold. A failure the harness or k3d causes takes a
+     further dated amendment before any further hold. A failure of the arm itself (it does not
+     load, does not answer, or stops answering) is that arm's result, and the holds go on in
+     order from the next one.
+   - Futility stop. After every hold, `solo.alive_blocks` lists the blocks (1 to 4) that can
+     still count: a block is out when one of its holds has run with fewer than 8 complete
+     attempts, or when both have run and it has fewer than 8 complete pairs. When fewer than
+     three remain, no further hold runs and serving is restored. The verdict is then INCONCLUSIVE
+     by the pre-registered rule (fewer than three blocks count), whatever later holds would show.
+     The rule reads only block counts, never d or a success rate, and it shortens the outage of
+     the serving pairs. Tests: `AliveBlocksTest` in `bench/eatflow/test_solo.py`.
+   - `start` (and the end of `holds`) runs `gpu-serving.sh start` for both pairs. That waits for
+     `/health`, `/v1/models` and a 16-token chat at each pair's own port. It then compares each
+     pair's image, command, env, devices, mounts and ports with the saved inspect, and runs E2
+     item 7's front-door check through `:8100`. The front-door check gates nothing.
+   - A deadman runs from `stop`. If no window step is alive and none has run for 45 min, it
+     takes the bench lock and restores both pairs, so a dead session cannot leave serving down.
+     It stays one window (E2 item 4): smokes and holds 1-8 run with both pairs stopped, and
+     serving comes back after the last.
+6. **Placement records.** `live.sh` already stops a hold whose pod holds a card outside
+   `LIVE_GPU_FREE` or the wrong number of cards. For every hold, the window script also saves,
+   from Prometheus, each card's VRAM and engine use over the hold (`hold<n>/xe-prom.json`). These
+   are reported and gate nothing.
+7. **Tools (crescent amendment E4).** E4 merged before this push, and H53 is one of its rows. So
+   `prehold.sh setup` runs `bench/eatflow/crescent/setup.sh` once from H53's checkout, under the
+   bench lock, before the first smoke. Its output, the checksum lines and the four versions, goes
+   to `prehold/setup.txt`. Every smoke and hold then runs on k3d v5.9.0, kubectl v1.37.2, helm
+   v4.3.1 and uv 0.13.6 in `~/k3dgpu-bench/bin`. E4's render check found B2's staged objects
+   byte-identical under helm v4.1.1 and v4.3.1. setup.sh also re-extracts `eat-pr21` from
+   `c86c42b`, the tree it already holds, and re-checks the banking venv's packages.
+8. **Models.** `models.sh qwen38` ran under the bench lock from 21:44Z to 21:55Z on 2026-10-29,
+   from the main-tracking checkout at `6d5cab69`, before this amendment existed. `models.sh` and
+   `listing.sh` are unchanged from `6d5cab69` to the deploy commit. It downloaded both models at
+   their pinned revisions, checked every LFS file against the Hub's sha256 (58 files, all `ok`,
+   rc 0) and wrote B2's listing, which `live.sh` checks at every B2 hold. Its log is
+   `prehold/fetch.log`, the record `prehold.sh fetch` writes. It measures nothing. Before the
+   window, `prehold.sh verify` checks both models against the Hub again, and B2's listing against
+   setup's (`prehold/verify.txt`).
+9. **Records.** The results come back under the pre-registration's date,
+   `bench/eatflow/results/2026-10-20/H53/`. `solo-hold.sh` writes `pairs/` and `hold<n>/`, and
+   `hold.sh` writes `runs/H53-hold<n>-<ARM>/`. The run also keeps `prehold/`, `window/` and
+   `smoke/<name>/`. The score is `agentbench solo-report bench/eatflow/results/2026-10-20/H53/pairs
+   --hyp H53 --arm-a AG --arm-b B2`, at the deploy commit.
 
 ### H54 pre-registration: Gemma 4 26B-A4B QAT and Qwen3.8 microbenches on crescent (2026-10-20)
 

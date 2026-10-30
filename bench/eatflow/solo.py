@@ -126,6 +126,32 @@ MIN_BLOCK_PAIRS = 8         # a block with fewer complete pairs is reported, not
 MIN_BLOCKS = 3
 
 
+MAX_BLOCKS = 4              # holds 7 and 8 are the last block (no hold runs after eight)
+
+
+def alive_blocks(solo_rows, ran, min_pairs=MIN_BLOCK_PAIRS, max_blocks=MAX_BLOCKS):
+    """H53 amendment R1's futility rule: the blocks (1..max_blocks) that can still count, given
+    solo.jsonl's rows and `ran`, the hold numbers that have run (a hold that delivered nothing has
+    run but has no rows). A block is out when a hold of it has run with fewer than min_pairs
+    complete attempts (its complete pairs can be no more), or when both of its holds have run and
+    it has fewer than min_pairs complete pairs. It reads only which blocks may count, never d."""
+    status = {(r["hold"], r["j"]): r["status"] for r in solo_rows}
+    done = {}
+    for (h, _), s in status.items():
+        done[h] = done.get(h, 0) + (s == "complete")
+    alive = []
+    for k in range(1, max_blocks + 1):
+        h1, h2 = 2 * k - 1, 2 * k
+        if any(h in ran and done.get(h, 0) < min_pairs for h in (h1, h2)):
+            continue
+        if h1 in ran and h2 in ran:
+            js = {j for (h, j) in status if h == h1}
+            if sum(status.get((h1, j)) == "complete" and status.get((h2, j)) == "complete" for j in js) < min_pairs:
+                continue
+        alive.append(k)
+    return alive
+
+
 def block_verdict(res, a, b, threshold=0.30, min_rate=0.6):
     """The H53 verdict from pairs.analyze's result over block pairs (key 1000 * k + j). Per block
     k: d_k = mean over its matched pairs of ok(a) - ok(b). Over the n blocks with at least
