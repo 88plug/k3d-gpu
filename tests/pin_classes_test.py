@@ -245,6 +245,47 @@ class RealRepo(unittest.TestCase):
                 want = "arm" if "PENDING" in [self.ledger[r] for r in ln.rows] else "historical"
                 self.assertEqual(cli("effective", path)[1].strip(), want)
 
+    # A runner one row wrote and another row's runner runs or imports: (path, the row that
+    # reuses it, the reusing file, the text in it that names the path). The path's line
+    # must list the reusing row, or the path turns historical when its own rows finish
+    # while the reusing row is still PENDING, and that row's amendments are refused.
+    SHARED_RUNNERS = (
+        ("bench/h57d/hold.sh", "H57wa", "bench/wildct/row.sh", "bench/h57d/hold.sh"),
+        ("bench/h57d/convert.sh", "H57wm", "bench/wildct/row.sh", "bench/h57d/convert.sh"),
+        ("bench/h57d/h57d.py", "H59", "bench/h59/h59.py", "import h57d"),
+        ("bench/h54/h54.py", "H59", "bench/h59/h59.py", "import h54"),
+        ("bench/h54/h54.py", "H60", "bench/flashnext/h60.sh", '"${H54}/h54.py" void'),
+        ("bench/h54/gsm8k-test-0-199.jsonl", "H60", "bench/flashnext/h60.sh", "gsm8k-test-0-199.jsonl"),
+        ("bench/prefill-guard/cpufreq.sh", "H55", "bench/admission/run.sh", "bench/prefill-guard/cpufreq.sh"),
+        ("bench/prefill-guard/prompt.txt", "H55", "bench/admission/run.sh", "bench/prefill-guard/prompt.txt"),
+        ("bench/eatflow/crescent/serving.py", "H7x", "bench/xhost/hold.sh", "bench/eatflow/crescent/serving.py"),
+        ("bench/xhost/fetch_models.py", "H57wb", "bench/wildct/setup-models.sh", "bench/xhost/fetch_models.py"),
+        ("bench/load/load.py", "H53", "bench/eatflow/crescent/hold.sh", "load/load.py"),
+        ("bench/load/load.py", "H7x", "bench/xhost/hold.sh", "bench/load/load.py"),
+        ("bench/load/load.py", "H59w", "bench/wildct/hold.sh", "load.py"),
+    )
+
+    def test_shared_runners_list_the_rows_that_reuse_them(self):
+        for path, row, user, needle in self.SHARED_RUNNERS:
+            with self.subTest(path=path, row=row):
+                self.assertIn(needle, (ROOT / user).read_text(), "%s no longer names %s" % (user, path))
+                self.assertIn(row, pc.match(self.lines, user).rows)
+                ln = pc.match(self.lines, path)
+                self.assertEqual(ln.kind, "ledger")
+                self.assertIn(row, ln.rows)
+
+    def test_a_reused_runner_stays_an_arm_while_its_reuser_is_pending(self):
+        # The H57d runner's own rows have verdicts; wildct's H57w rows still run it.
+        for path, row, _, _ in self.SHARED_RUNNERS:
+            if self.ledger.get(row) == "PENDING":
+                with self.subTest(path=path, row=row):
+                    self.assertEqual(self.eff(path), "arm")
+        # A finished run's records inside that runner tree stay historical.
+        for path in ("bench/h57d/results/2026-10-21/verdict.json", "bench/h57d/results/2026-10-29/verdict.json"):
+            with self.subTest(path=path):
+                self.assertTrue((ROOT / path).is_file(), path)
+                self.assertEqual(self.eff(path), "historical")
+
     def test_a_verdict_landing_flips_a_real_line_with_no_reclassification(self):
         # The real pins/classes against a copy of today's ledger: a line with a PENDING row
         # resolves to arm, and to historical once that row's verdict lands.
