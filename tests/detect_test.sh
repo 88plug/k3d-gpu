@@ -4563,8 +4563,9 @@ mkdir -p "${SSTUB}"
 cat > "${SSTUB}/kubectl" <<'EOF'
 #!/bin/sh
 while [ "${1:-}" = --context ]; do shift 2; done
-echo "$*" >> "${STUB_LOG}"
-if [ -n "${STUB_FAIL:-}" ] && echo "$*" | grep -Eq -- "${STUB_FAIL}"; then
+# printf, not echo: dash's echo (/bin/sh on Ubuntu) turns a jsonpath's \n into a line break.
+printf '%s\n' "$*" >> "${STUB_LOG}"
+if [ -n "${STUB_FAIL:-}" ] && printf '%s\n' "$*" | grep -Eq -- "${STUB_FAIL}"; then
     echo "error: stub failure" >&2
     exit 1
 fi
@@ -4728,17 +4729,19 @@ sandbox_says "sandbox up re-applies its own controller (pinned image)" "${r}" 0 
     STUB_CONTROLLER_IMAGE="${PINNED}"
 log_order "sandbox up on its own controller re-applies the manifest and the profile" \
     'apply -f .*/agent-sandbox\.yml$' 'apply -f .*/agent-sandbox-k3d\.yml$'
-sandbox_says "sandbox up upgrades a controller labelled managed-by=k3d-gpu" "${r}" 0 'Installing agent-sandbox' up "${UP_OK[@]}" \
-    STUB_CONTROLLER_IMAGE=registry.k8s.io/agent-sandbox/agent-sandbox-controller:v1.0.7 STUB_CONTROLLER_LABEL=k3d-gpu
-log_order "sandbox up on a labelled older controller applies the manifest" 'apply -f .*/agent-sandbox\.yml$'
-# k3d-gpu releases before the label installed v1.0.7 with no managed-by label.
+# k3d-gpu releases before the label installed v1.0.7 with no managed-by label. V107_TAG
+# is the same tag with no digest, a controller that only the label can make k3d-gpu's.
 V107=registry.k8s.io/agent-sandbox/agent-sandbox-controller:v1.0.7@sha256:f254384c24605436ce35d7077427559e24bda8f5691cff5a54a4c2e030d81083
+V107_TAG=${V107%@*}
+sandbox_says "sandbox up upgrades a controller labelled managed-by=k3d-gpu" "${r}" 0 'Installing agent-sandbox' up "${UP_OK[@]}" \
+    STUB_CONTROLLER_IMAGE="${V107_TAG}" STUB_CONTROLLER_LABEL=k3d-gpu
+log_order "sandbox up on a labelled older controller applies the manifest" 'apply -f .*/agent-sandbox\.yml$'
 sandbox_says "sandbox up upgrades the unlabelled v1.0.7 controller an earlier k3d-gpu installed" "${r}" 0 'Installing agent-sandbox' up "${UP_OK[@]}" \
     STUB_CONTROLLER_IMAGE="${V107}"
 log_order "sandbox up on k3d-gpu's unlabelled v1.0.7 applies the manifest, then labels it" \
     'apply -f .*/agent-sandbox\.yml$' 'label --overwrite deployment/agent-sandbox-controller'
 sandbox_says "sandbox up treats v1.0.7 by tag alone as another installer's" "${r}" fail 'not k3d-gpu' up \
-    STUB_CONTROLLER_IMAGE=registry.k8s.io/agent-sandbox/agent-sandbox-controller:v1.0.7
+    STUB_CONTROLLER_IMAGE="${V107_TAG}"
 sandbox_says "sandbox up refuses another installer's controller and names its image" "${r}" fail \
     "agent-sandbox-controller runs ${THEIRS}" up "${UP_OK[@]}" STUB_CONTROLLER_IMAGE="${THEIRS}"
 no_call "sandbox up applies no controller manifest over another installer's" 'apply -f .*/agent-sandbox\.yml$'
