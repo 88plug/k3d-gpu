@@ -467,7 +467,8 @@ class VerifyScriptTest(unittest.TestCase):
 
 
 class TriggerTest(unittest.TestCase):
-    """The re-run trigger: EAS v1.2.0 (GA) tagged, or an EAT 2.x release tagged."""
+    """The re-run trigger: an EAS release at v1.2.0 or later (no release candidate) tagged, or an
+    EAT release at 2.0.0 or later tagged."""
 
     EAS = ("1d5686e75f8ec0b1edac206e9ca4db7ddde32250\trefs/tags/v1.2.0-rc.1\n"
            "5c27fb39a95eecec41aa4e29a1188984e9c726f3\trefs/tags/v1.2.0-rc.1^{}\n"
@@ -484,6 +485,18 @@ class TriggerTest(unittest.TestCase):
         self.assertEqual(h62.trigger(self.EAS + "e\trefs/tags/v1.2.0-rc.2\n", self.EAT)["eas"], [])
         for tag in ("release-2.0.0", "v2.0.0", "release-2.1.0"):
             self.assertEqual(h62.trigger(self.EAS, self.EAT + f"f\trefs/tags/{tag}\n")["eat"], [tag], tag)
+
+    def test_a_later_ga_fires_too(self):
+        # Full support may ship under a later number than v1.2.x or 2.x; it still fires.
+        for tag in ("v1.3.0", "v2.0.0", "v1.10.0"):
+            self.assertEqual(h62.trigger(self.EAS + f"e\trefs/tags/{tag}\n", self.EAT)["eas"], [tag], tag)
+        for tag in ("v1.3.0-rc.1", "v1.1.1", "v1.0.0", "v2.0.0-beta"):
+            self.assertEqual(h62.trigger(self.EAS + f"e\trefs/tags/{tag}\n", self.EAT)["eas"], [], tag)
+        # EAT tags its hotfix releases release-X.Y.Z-hotfix (release-1.0.3-hotfix).
+        for tag in ("release-3.0.0", "release-2.0.1-hotfix", "v3.1.0"):
+            self.assertEqual(h62.trigger(self.EAS, self.EAT + f"f\trefs/tags/{tag}\n")["eat"], [tag], tag)
+        for tag in ("release-1.2.0", "release-2.0.0-rc1", "release-0.5.0"):
+            self.assertEqual(h62.trigger(self.EAS, self.EAT + f"f\trefs/tags/{tag}\n")["eat"], [], tag)
 
     def test_cli(self):
         tmp = tempfile.mkdtemp()
@@ -507,14 +520,33 @@ class CampaignMathTest(unittest.TestCase):
         self.assertEqual(h62.pairs_left(tmp), 14)
         self.assertEqual(run("pairs-left", tmp).stdout, "14\n")
 
+    H50 = {"within_budget_success": {"A1": {"k": 19, "n": 24, "rate": 19 / 24}, "B1": {"k": 21, "n": 24, "rate": 0.875}},
+           "attempt_median_s": {"A1": 8.0, "B1": 12.0}}
+    H62 = {"within_budget_success": {"A1": {"k": 20, "n": 24, "rate": 20 / 24}, "B5": {"k": 18, "n": 24, "rate": 0.75}},
+           "attempt_median_s": {"A1": 9.2, "B5": 15.0}}
+
     def test_vmtax_is_a_description(self):
-        h50 = {"within_budget_success": {"A1": {"k": 19, "n": 24, "rate": 19 / 24}}, "attempt_median_s": {"A1": 8.0}}
-        h62r = {"within_budget_success": {"A1": {"k": 20, "n": 24, "rate": 20 / 24}}, "attempt_median_s": {"A1": 9.2}}
-        t = h62.vmtax(h50, h62r)
+        t = h62.vmtax(self.H50, self.H62)
         self.assertEqual(t["a1_host"], {"success": "19/24", "attempt_median_s": 8.0})
         self.assertEqual(t["a1_guest"], {"success": "20/24", "attempt_median_s": 9.2})
         self.assertAlmostEqual(t["attempt_median_guest_over_host"], 1.15)
         self.assertEqual(t["gated"], False)
+
+    def test_vmtax_describes_the_vllm_side_too(self):
+        # B5 in its guest against H50's B1 on the host: the same vLLM CPU v0.28.0 image and QAT
+        # weights under another deployment, so the guest and the deployment are read together.
+        t = h62.vmtax(self.H50, self.H62)
+        self.assertEqual(t["b1_host"], {"success": "21/24", "attempt_median_s": 12.0})
+        self.assertEqual(t["b5_guest"], {"success": "18/24", "attempt_median_s": 15.0})
+        self.assertAlmostEqual(t["b_attempt_median_guest_over_host"], 1.25)
+        self.assertIn("deployment", t["b_note"])
+        self.assertEqual(t["gated"], False)
+
+    def test_vmtax_without_a_b5_reading(self):
+        h62r = {"within_budget_success": {"A1": {"k": 20, "n": 24}}, "attempt_median_s": {"A1": 9.2}}
+        t = h62.vmtax(self.H50, h62r)
+        self.assertEqual(t["b5_guest"], None)
+        self.assertEqual(t["b_attempt_median_guest_over_host"], None)
 
 
 def stub(path, body):

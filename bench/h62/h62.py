@@ -30,7 +30,8 @@ file runs on the host and in either guest.
   h62.py trigger EAS_TAGS EAT_TAGS      the re-run trigger, from two `git ls-remote --tags` outputs
   h62.py pairs-left PAIRS_DIR           B24 pairs still to run
   h62.py vmtax H50_ANALYSIS H62_ANALYSIS
-                                        A1 on the host (H50) and in its guest (H62), described
+                                        A1 on the host (H50) and in its guest (H62), and H50's B1
+                                        on the host against B5 in its guest, described
 """
 import difflib
 import json
@@ -406,11 +407,19 @@ def _tags(ls_remote):
     return {m.group(1) for m in re.finditer(r"refs/tags/([^\s^]+)(?:\^\{\})?\s*$", ls_remote, re.M)}
 
 
+def _release(tag, pattern, at_least):
+    m = re.fullmatch(pattern, tag)
+    return bool(m) and tuple(int(x) for x in m.groups()) >= at_least
+
+
 def trigger(eas_ls_remote, eat_ls_remote):
-    """The re-run trigger: an EAS v1.2.x release tag (not a release candidate), or an EAT 2.x
-    release tag (EAT tags its releases release-X.Y.Z; a vX.Y.Z tag counts too)."""
-    eas = sorted(t for t in _tags(eas_ls_remote) if re.fullmatch(r"v1\.2\.\d+", t))
-    eat = sorted(t for t in _tags(eat_ls_remote) if re.fullmatch(r"(release-|v)?2\.\d+\.\d+", t))
+    """The re-run trigger: an EAS release tag at v1.2.0 or later (vX.Y.Z, not a release
+    candidate), or an EAT release tag at 2.0.0 or later (EAT tags its releases release-X.Y.Z and
+    its hotfixes release-X.Y.Z-hotfix; a vX.Y.Z tag counts too). Full support may ship under a
+    later number than v1.2.x or 2.x, so any later release fires."""
+    eas = sorted(t for t in _tags(eas_ls_remote) if _release(t, r"v(\d+)\.(\d+)\.(\d+)", (1, 2, 0)))
+    eat = sorted(t for t in _tags(eat_ls_remote)
+                 if _release(t, r"(?:release-|v)?(\d+)\.(\d+)\.(\d+)(?:-hotfix)?", (2, 0, 0)))
     return {"eas": eas, "eat": eat}
 
 
@@ -422,15 +431,26 @@ def pairs_left(pairs_dir, total=TASKS):
 
 
 def vmtax(h50, h62):
-    """A1 on the host (H50's analysis) against A1 in its guest (H62's): described, never gated."""
-    def arm(a):
-        s = a["within_budget_success"]["A1"]
-        return {"success": f"{s['k']}/{s['n']}", "attempt_median_s": a["attempt_median_s"]["A1"]}
-    host, guest = arm(h50), arm(h62)
-    r = None
-    if host["attempt_median_s"] and guest["attempt_median_s"]:
-        r = round(guest["attempt_median_s"] / host["attempt_median_s"], 3)
-    return {"a1_host": host, "a1_guest": guest, "attempt_median_guest_over_host": r, "gated": False}
+    """Described, never gated. A1 on the host (H50's analysis) against A1 in its guest (H62's):
+    the same stack, so the guest alone. And H50's B1 on the host against B5 in its guest: the same
+    vLLM CPU v0.28.0 image and QAT weights under another deployment, so the guest and the
+    deployment together; it shows whether the guest costs vLLM's arm more than OVMS's."""
+    def arm(a, name):
+        s = (a.get("within_budget_success") or {}).get(name)
+        if not s:
+            return None
+        return {"success": f"{s['k']}/{s['n']}", "attempt_median_s": (a.get("attempt_median_s") or {}).get(name)}
+
+    def ratio(host, guest):
+        if host and guest and host["attempt_median_s"] and guest["attempt_median_s"]:
+            return round(guest["attempt_median_s"] / host["attempt_median_s"], 3)
+        return None
+    a_host, a_guest, b_host, b_guest = arm(h50, "A1"), arm(h62, "A1"), arm(h50, "B1"), arm(h62, "B5")
+    return {"a1_host": a_host, "a1_guest": a_guest, "attempt_median_guest_over_host": ratio(a_host, a_guest),
+            "b1_host": b_host, "b5_guest": b_guest, "b_attempt_median_guest_over_host": ratio(b_host, b_guest),
+            "b_note": "B1 (EAT release-1.1.0's chart) and B5 (EAS's KServe deployment) share the vLLM image and "
+                      "weights, not the deployment: the guest and the deployment are read together",
+            "gated": False}
 
 
 def _load(path):
