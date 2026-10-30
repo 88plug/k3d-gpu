@@ -307,9 +307,10 @@ Usage: k3d-gpu <command>
             is resolved to a commit once and recorded in the state dir
   eas status|down|check [--model NAME]
             status: EAS's own status, pins, overlay, gateway, pods not Ready. down:
-            teardown platform (the cluster stays). check (agent toolkit): chat, tool
-            call and a sandbox run through EAS's LiteLLM gateway with a short-lived
-            virtual key
+            teardown platform (the cluster stays). check (agent toolkit): the stack's
+            pods Ready (each one that is not, with its cause), then chat, tool call,
+            the guardrail on an unsafe prompt and a sandbox run through EAS's LiteLLM
+            gateway with a short-lived virtual key
   model-share --image REF --agent-image REF [--replicas N] [--name NAME]
             Print a Deployment whose N agent replicas mount one model OCI image as a
             read-only image volume (pipe to kubectl apply -f -). It warns when this
@@ -7209,7 +7210,7 @@ eas_check() {
         esac
         shift
     done
-    require kubectl; require curl; require jq
+    require kubectl; require curl; require jq; require python3
     dir=$(eas_dir) || err "integrations/eas not found (set K3D_GPU_EAS_DIR)"
     state=$(eas_state)
     eas_installed "${state}"

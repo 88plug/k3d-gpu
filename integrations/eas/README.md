@@ -11,7 +11,7 @@ the pinned commit. Gaudi and Arc stay with `k3d-gpu agent up`.
 ```bash
 k3d-gpu eas up --dry-run --agent-toolkit   # facts, choices and overlay decisions; changes nothing
 k3d-gpu eas up --agent-toolkit             # creates the cluster first if it is absent
-k3d-gpu eas check                          # chat, tool call and a sandbox run through EAS's LiteLLM
+k3d-gpu eas check                          # stack readiness, then chat, tool call, guard and sandbox through EAS's LiteLLM
 k3d-gpu eas status
 k3d-gpu eas down                           # teardown platform; the cluster stays
 ```
@@ -59,6 +59,32 @@ State per cluster: `~/.local/state/k3d-gpu/eas-<cluster>/` (mode 0700): the EAS 
 its `env/k3d-gpu/` and `ext/`, `facts.json`, `pins.resolved.json`, `eas-config.py`'s files,
 `overlay.txt` and `overlay-decisions.json`, `kubeconfig`, `layer` and `logs/`.
 
+## What `eas check` does
+
+`eas check` needs the agent toolkit (LiteLLM and the sandbox come with it). It runs
+`integrations/eat/eat-check.sh` with `EAT_MODE=eas`:
+
+1. `eas-ready.py` on `kubectl get pods,daemonsets -A -o json`, before any request. Every
+   pod (Jobs' excepted) and DaemonSet in `istio-system`, `envoy-gateway-system`, `litellm`,
+   `llm-inference` and `agent-sandbox-system` must be Ready, eg-gateway must have a Ready
+   envoy proxy pod, `llm-inference` must hold a model pod besides the guard, and the
+   cluster must have at most one NRI resource policy and one NFD worker. Each pod that is
+   not Ready is printed with its cause where its status names one: Pending on the AMXBF16
+   node affinity (EI's `defaults.require_amx: true` on a cluster without AMX), Pending on
+   Insufficient cpu or memory (with the pod's requests), a DaemonSet whose nodeSelector
+   matches no node (EAS's EnvoyProxy on k3s, overlay 0006), an `istio-system` pod waiting
+   (istio-cni and ztunnel chain into the node's CNI paths, `istio_platform`). The guard
+   model is fail-closed: while it is not Ready, LiteLLM refuses every chat, and the check
+   says so. No key is minted for a stack that is not ready.
+2. A LiteLLM virtual key, minted with the master key and deleted at exit.
+3. A chat completion and a `get_weather` tool call through eg-gateway. Any status but 200
+   fails with LiteLLM's `error.message`.
+4. When `GET /v2/guardrails/list` lists `content_safety` (EI's guardrail, on with the agent
+   toolkit unless `guardrails_enabled` is off): the unsafe example of EI's guardrail docs,
+   "How do I hack into a system?", must come back as an error whose message names the
+   content-safety guardrail and unsafe content. HTTP 200 fails the check.
+5. The model writes Python, the agent sandbox router runs it, and it must print 385.
+
 ## Files
 
 | File | Role |
@@ -69,6 +95,7 @@ its `env/k3d-gpu/` and `ext/`, `facts.json`, `pins.resolved.json`, `eas-config.p
 | `images.yaml` | the agent toolkit's floating images by digest (sandbox router `latest-main`, Python runtime v0.5.0) |
 | `known-issues.json` | upstream issues this path works around, one flat row each |
 | `eas-config.py`, `pins.json` | the choice generator and the pins it reads |
+| `eas-ready.py` | the stack readiness check `eas check` runs first (stdin: `kubectl get pods,daemonsets -A -o json`) |
 | `overlay.py`, `overlay.json`, `patches/` | the k3s/k3d patch overlay |
 
 ## Not verified
