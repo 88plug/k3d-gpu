@@ -5,10 +5,13 @@ runs (through eat-check.sh EAT_MODE=eas) before it sends its first request.
   kubectl get pods,daemonsets -A -o json | eas-ready.py
 
 Reads the List on stdin and grades the namespaces a chat through LiteLLM and a sandbox
-run depend on. Every pod there (a Job's excepted: model downloads finish and stay
-behind) must be Ready, and every DaemonSet there must schedule a pod and have all of
-them Ready. Then: at least one Ready envoy proxy pod for eg-gateway, at least one
-model pod, at most one NRI resource policy and at most one NFD worker cluster-wide.
+run depend on. Every pod there must be Ready, except a Job's (model downloads finish
+and stay behind) and a Failed one under a ReplicaSet (kubelet keeps an Evicted pod
+until it is deleted; the ReplicaSet runs its replacement, which is graded). Every
+DaemonSet there must schedule a pod and have all of them Ready, and Istio ambient's
+istio-cni-node and ztunnel must exist. Then: at least one Ready envoy proxy pod for
+eg-gateway, at least one model pod, at most one NRI resource policy and at most one
+NFD worker cluster-wide.
 
 Each problem prints with its cause where the pod status names one:
   - Pending on the AMXBF16 nodeAffinity: EI's models.yaml defaults.require_amx is true
@@ -16,6 +19,7 @@ Each problem prints with its cause where the pod status names one:
   - Pending on Insufficient cpu or memory: the pod's requests do not fit
   - a DaemonSet that schedules no pod: its nodeSelector matches no node
   - a pod in istio-system not Ready: istio-cni and ztunnel need the node's CNI paths
+  - a pod being deleted: Terminating; a Failed pod: its status reason and message
 The guard model is fail-closed (EI roles/litellm/templates/qwen3guard_gen.py.j2):
 while it is not Ready, LiteLLM refuses every chat request.
 
@@ -39,6 +43,22 @@ STACK = {
 }
 EG_LABEL = "gateway.envoyproxy.io/owning-gateway-name"
 GUARD_PREFIX = "qwen3guard"  # EI litellm role default guardrail_model
+# Istio ambient's data plane: EAS 97f6157 charts/istio (profile ambient, subcharts cni and
+# ztunnel); EAT enrols agent-sandbox-system in ambient.
+AMBIENT = ("istio-cni-node", "ztunnel")
+
+
+def owned_by(obj, kind):
+    return any(o.get("kind") == kind for o in obj["metadata"].get("ownerReferences") or [])
+
+
+def graded(pod):
+    """False for a pod that says nothing about the stack now: one that Succeeded, a Job's,
+    and a Failed one under a ReplicaSet, which has already started its replacement."""
+    phase = (pod.get("status") or {}).get("phase")
+    if phase == "Succeeded" or owned_by(pod, "Job"):
+        return False
+    return not (phase == "Failed" and owned_by(pod, "ReplicaSet"))
 
 
 def required_affinity_keys(spec):
@@ -72,8 +92,10 @@ def is_ready(pod):
 
 def cause(pod):
     """(state, cause) for a pod that is not Ready."""
-    ns, name = pod["metadata"]["namespace"], pod["metadata"]["name"]
+    ns = pod["metadata"]["namespace"]
     spec, st = pod.get("spec") or {}, pod.get("status") or {}
+    if pod["metadata"].get("deletionTimestamp"):
+        return ("Terminating", "a rollout or a deletion is under way: re-run when it is done")
     sched = condition(st, "PodScheduled")
     if sched.get("status") == "False":
         msg = sched.get("message") or sched.get("reason") or "unschedulable"
@@ -99,6 +121,8 @@ def cause(pod):
                 return (state, "istio-cni and ztunnel chain into the node's CNI paths, which istio_platform "
                         "picks (k3d: /bin, k3s: /var/lib/rancher/k3s/data/cni); see choices.txt and overlay 0002")
             return (state, "")
+    if st.get("phase") == "Failed":
+        return (": ".join(x for x in ("Failed", st.get("reason"), st.get("message")) if x), "")
     if st.get("phase") == "Running":
         return ("Running, readiness probe not passed yet", "a model loads for minutes: wait and re-run")
     return (st.get("phase") or "unknown phase", "")
@@ -108,14 +132,12 @@ def check(items):
     problems = []
     pods = [i for i in items if i.get("kind") == "Pod"]
     sets = [i for i in items if i.get("kind") == "DaemonSet"]
-    graded = 0
+    count = 0
     for p in pods:
         ns, name = p["metadata"]["namespace"], p["metadata"]["name"]
-        if ns not in STACK or (p.get("status") or {}).get("phase") == "Succeeded":
+        if ns not in STACK or not graded(p):
             continue
-        if any(o.get("kind") == "Job" for o in p["metadata"].get("ownerReferences") or []):
-            continue
-        graded += 1
+        count += 1
         if is_ready(p):
             continue
         state, why = cause(p)
@@ -123,6 +145,10 @@ def check(items):
             why = ("the guardrail model; it is fail-closed, so LiteLLM refuses every chat while it is not "
                    "Ready" + (". " + why if why else ""))
         problems.append(f"{ns}/{name} ({STACK[ns]}): {state}" + (f" -> {why}" if why else ""))
+    for name in AMBIENT:
+        if not any(d["metadata"]["namespace"] == "istio-system" and d["metadata"]["name"] == name for d in sets):
+            problems.append(f"istio-system/{name}: no DaemonSet -> Istio ambient's data plane is missing (EAS "
+                            "installs istio-cni-node and ztunnel with charts/istio's ambient profile)")
     for d in sets:
         ns, name = d["metadata"]["namespace"], d["metadata"]["name"]
         if ns not in STACK:
@@ -142,8 +168,7 @@ def check(items):
         problems.append("envoy-gateway-system: no Ready envoy proxy pod for eg-gateway -> the gateway has no "
                         "data plane, so nothing reaches LiteLLM")
     models = [p for p in pods if p["metadata"]["namespace"] == "llm-inference"
-              and not p["metadata"]["name"].startswith(GUARD_PREFIX)
-              and not any(o.get("kind") == "Job" for o in p["metadata"].get("ownerReferences") or [])]
+              and not p["metadata"]["name"].startswith(GUARD_PREFIX) and graded(p)]
     if not models:
         problems.append("no model pod in llm-inference -> llm_services_autodeploy_models may be [] (k3d-gpu fit "
                         "found no model that fits; see choices.txt), or the install stopped before model-manager")
@@ -157,7 +182,7 @@ def check(items):
     if len(nfd) > 1:
         problems.append(f"{len(nfd)} NFD workers ({', '.join(nfd)}) -> nfd_enabled must be false beside "
                         "k3d-gpu's NFD")
-    return graded, problems
+    return count, problems
 
 
 def main():
@@ -169,13 +194,13 @@ def main():
     if not isinstance(doc, dict) or doc.get("kind") != "List" or not isinstance(doc.get("items"), list):
         print("eas-ready: stdin is not a kubectl List (kubectl get pods,daemonsets -A -o json)", file=sys.stderr)
         return 2
-    graded, problems = check(doc["items"])
+    count, problems = check(doc["items"])
     if problems:
         print(f"stack not ready ({len(problems)}):")
         for line in problems:
             print("  " + line)
         return 1
-    print(f"stack ready: {graded} pods Ready in {', '.join(STACK)}")
+    print(f"stack ready: {count} pods Ready in {', '.join(STACK)}")
     return 0
 
 

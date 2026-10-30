@@ -65,9 +65,11 @@ its `env/k3d-gpu/` and `ext/`, `facts.json`, `pins.resolved.json`, `eas-config.p
 `integrations/eat/eat-check.sh` with `EAT_MODE=eas`:
 
 1. `eas-ready.py` on `kubectl get pods,daemonsets -A -o json`, before any request. Every
-   pod (Jobs' excepted) and DaemonSet in `istio-system`, `envoy-gateway-system`, `litellm`,
-   `llm-inference` and `agent-sandbox-system` must be Ready, eg-gateway must have a Ready
-   envoy proxy pod, `llm-inference` must hold a model pod besides the guard, and the
+   pod and DaemonSet in `istio-system`, `envoy-gateway-system`, `litellm`, `llm-inference`
+   and `agent-sandbox-system` must be Ready. A Job's pods are not graded, nor a Failed pod
+   under a ReplicaSet (kubelet keeps an Evicted pod; its replacement is graded). Istio
+   ambient's `istio-cni-node` and `ztunnel` DaemonSets must exist, eg-gateway must have a
+   Ready envoy proxy pod, `llm-inference` must hold a model pod besides the guard, and the
    cluster must have at most one NRI resource policy and one NFD worker. Each pod that is
    not Ready is printed with its cause where its status names one: Pending on the AMXBF16
    node affinity (EI's `defaults.require_amx: true` on a cluster without AMX), Pending on
