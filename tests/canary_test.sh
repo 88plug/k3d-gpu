@@ -277,5 +277,49 @@ run_case cached llama-cpu CANARY_MODELS="${T}/fresh" HF_ENDPOINT="http://127.0.0
     STUB_SERVER="python3 ${STUB} --port {port} --text '${GOLD}' --build-info b11960-8642541b2"
 expect cached verdict pass
 
+# run_surface <label> <engine> [VAR=value...]: canary/run.sh --surface <engine>, as run_case.
+run_surface() {
+    local label=$1 id=$2
+    shift 2
+    rm -rf "${T}/state" "${T}/out"
+    mkdir -p "${T}/state"
+    env "$@" CANARY_OUT_DIR="${T}/out" "${ROOT}/canary/run.sh" --surface "${id}" > "${T}/${label}.log" 2>&1
+    RC=$?
+    RESULT=${T}/out/${id}.json
+    [ -f "${RESULT}" ] || { fail "${label}: no ${id}.json (run.sh rc=${RC}); log:"; sed 's/^/    /' "${T}/${label}.log" | tail -20; return 1; }
+}
+
+# 16. sglang: bench/h54's --tp is argparse's abbreviation of --tp-size, the only option
+# it begins; once a second option begins with it, argparse calls it ambiguous.
+SGLANG_HELP=${FIX}/help/sglang-0.5.22-xeon-help.txt
+run_surface sglang sglang-xeon STUB_HELP="${SGLANG_HELP}" STUB_SITE="${FIX}/sglang-0.5.22"
+expect sglang verdict pass
+expect sglang kind surface
+grep -q -- "--tp is argparse's abbreviation of --tp-size" <(field detail) && ok "sglang: detail names the abbreviation" \
+    || fail "sglang: detail is '$(field detail)'"
+grep -q 'version 0.5.22' <(field detail) && ok "sglang: version 0.5.22 from sglang/_version.py" || fail "sglang: detail is '$(field detail)'"
+{ cat "${SGLANG_HELP}"; echo "  --tp-rank TP_RANK     a new option"; } > "${T}/sglang-help-ambiguous.txt"
+run_surface sglang-ambiguous sglang-xeon STUB_HELP="${T}/sglang-help-ambiguous.txt" STUB_SITE="${FIX}/sglang-0.5.22"
+expect sglang-ambiguous verdict fail
+grep -q -- '--tp (bench/h54/h54.py:sglang_args)' <(field detail) && ok "sglang-ambiguous: detail names --tp" \
+    || fail "sglang-ambiguous: detail is '$(field detail)'"
+
+# 17. llm-scaler: its vLLM reports the setuptools-scm version of v0.26.0 with patches
+# (0.26.1.dev0+g568afb3a1.d<date>), which the 0.26.0 the tree derives matches; a build
+# commits after a tag does not.
+scaler_site() { # scaler_site <version>: the v0.32.0 tree, reporting <version>
+    rm -rf "${T}/scaler-site"
+    cp -r "${FIX}/vllm-0.32.0" "${T}/scaler-site"
+    sed -i "s/^Version: .*/Version: $1/" "${T}/scaler-site/vllm-0.32.0+cpu.dist-info/METADATA"
+}
+scaler_site 0.26.1.dev0+g568afb3a1.d20260907.xpu
+run_surface scaler llm-scaler STUB_HELP="${VLLM_HELP}" STUB_SITE="${T}/scaler-site"
+expect scaler verdict pass
+scaler_site 0.26.1.dev4+g1a2b3c4d.d20260907.xpu
+run_surface scaler-ahead llm-scaler STUB_HELP="${VLLM_HELP}" STUB_SITE="${T}/scaler-site"
+expect scaler-ahead verdict fail
+grep -q 'console/plan.py says 0.26.0' <(field detail) && ok "scaler-ahead: detail names console/plan.py" \
+    || fail "scaler-ahead: detail is '$(field detail)'"
+
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

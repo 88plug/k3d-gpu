@@ -22,3 +22,9 @@ them, nothing imports them.
 | `vllm-0.32.0-cpu-serve-help-all.txt` | `vllm/vllm-openai-cpu:v0.32.0` `vllm serve --help=all` |
 | `llama-server-b11960-help.txt` | `ghcr.io/ggml-org/llama.cpp:server-b11960` `llama-server --help` (commit 8642541b255bfb5dc39cd351a178be09013a55d6) |
 | `ovms-2026.4.1-help.txt` | `openvino/model_server:2026.4.1-gpu` `ovms --help` |
+| `sglang-0.5.22-xeon-help.txt` | `lmsysorg/sglang:v0.5.22-xeon` `python3 -m sglang.launch_server --help` (stdout and stderr, its deprecation warning included) |
+
+`sglang-0.5.22/` is the part of the `lmsysorg/sglang:v0.5.22-xeon` image's site-packages
+that the surface check reads for the version: `sglang/_version.py` verbatim, an empty
+`sglang/__init__.py`, and the three header lines of `sglang_cpu-0.5.22.dist-info/METADATA`
+(the distribution is `sglang-cpu`, so the version comes from `_version.py`).

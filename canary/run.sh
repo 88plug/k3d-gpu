@@ -113,7 +113,8 @@ fi
 eval "${cfg}"
 export E_KIND E_REF
 if [ -z "${surface_only}" ] && [ "${E_KIND}" != runtime ]; then finish fail "${ID} is a ${E_KIND} engine: canary/run.sh --surface ${ID}"; fi
-say "${E_KIND} ${E_REF}; cpu flags: ${R_CPU:-none}"
+cpu_model=$(sed -n 's/^model name[[:space:]]*: //p' "${CANARY_CPUINFO:-/proc/cpuinfo}" | head -1)
+say "${E_KIND} ${E_REF}; cpu: ${cpu_model:-unknown}, $(grep -c '^processor' "${CANARY_CPUINFO:-/proc/cpuinfo}") CPUs, flags ${R_CPU:-none}"
 
 # (3) the model at its pinned revision
 if [ -z "${surface_only}" ]; then

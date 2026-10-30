@@ -220,6 +220,16 @@ class Help(unittest.TestCase):
         self.assertEqual([m["name"] for m in surface.missing([{"source": "t", "kind": "flag", "name": "--max-num-seqs"}],
                                                               helped, set(), driver="ovms")], ["--max-num-seqs"])
 
+    def test_sglang_help(self):
+        helped = surface.help_flags(read(os.path.join(FIX, "help", "sglang-0.5.22-xeon-help.txt")))
+        for f in ("--model-path", "--tp-size", "--tensor-parallel-size", "--attention-backend", "--device",
+                  "--max-total-tokens", "--served-model-name", "--host", "--port"):
+            self.assertIn(f, helped, f)
+        self.assertNotIn("--tp", helped)
+        # bench/h54's --tp is argparse's abbreviation of --tp-size, the one option it begins
+        self.assertEqual(surface.missing(flags_sh("sglang"), helped, set(), driver="sglang"), [])
+        self.assertEqual(surface.abbreviations(flags_sh("sglang"), helped, driver="sglang"), {"--tp": "--tp-size"})
+
     def test_help_line_shapes(self):
         text = ("usage: x [-h] [--a A]\n\noptions:\n  -h, --help            show\n"
                 "  --enable-x, --no-enable-x\n  --size SIZE, -s SIZE  the size, see\n"
@@ -234,6 +244,43 @@ def static_envs():
     return surface.static_package(VLLM, "vllm")["envs"]
 
 
+class Abbreviation(unittest.TestCase):
+    """sglang's parser is a plain argparse.ArgumentParser (allow_abbrev): a long option
+    may be shortened to any prefix that begins exactly one option string. In the
+    v0.5.22-xeon image `--tp 1` parses to tp_size 1 and `--t 1` is "ambiguous option"."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.helped = surface.help_flags(read(os.path.join(FIX, "help", "sglang-0.5.22-xeon-help.txt")))
+
+    def names(self, *names, driver="sglang", flags=None):
+        want = [{"source": "t", "kind": "flag", "name": n} for n in names]
+        return [m["name"] for m in surface.missing(want, self.helped if flags is None else flags, set(), driver=driver)]
+
+    def test_unique_prefix_is_that_option(self):
+        self.assertEqual(self.names("--tp", "--attention-back"), [])
+
+    def test_ambiguous_prefix_fails(self):
+        self.assertEqual(self.names("--t"), ["--t"])
+
+    def test_prefix_of_no_option_fails(self):
+        self.assertEqual(self.names("--tpx", "--tp-sizes"), ["--tpx", "--tp-sizes"])
+
+    def test_single_dash_names_are_matched_exactly(self):
+        # k3d-gpu emits no single-dash sglang flag; only long prefixes are expanded
+        self.assertEqual(self.names("-", "-x", flags={"-xy", "--a", "--b"}), ["-", "-x"])
+
+    def test_a_new_option_with_the_prefix_makes_it_ambiguous(self):
+        self.assertEqual(self.names("--tp", flags=self.helped | {"--tp-rank"}), ["--tp"])
+
+    def test_vllm_takes_exact_names_only(self):
+        # the launcher spells vLLM flags out; a prefix match there would hide a rename
+        found = surface.static_package(VLLM, "vllm")["flags"]
+        self.assertEqual(self.names("--served-model", driver="vllm", flags=found), ["--served-model"])
+        self.assertEqual(surface.abbreviations([{"source": "t", "kind": "flag", "name": "--served-model"}], found,
+                                               driver="vllm"), {})
+
+
 class Facts(unittest.TestCase):
     def test_release_segment(self):
         self.assertEqual(surface.release("0.32.0+cpu"), "0.32.0")
@@ -241,6 +288,23 @@ class Facts(unittest.TestCase):
         self.assertEqual(surface.release("v1.35.0"), "1.35.0")
         self.assertEqual(surface.release("1.35.0.20260722-29947505341~ubuntu24.04"), "1.35.0")
         self.assertIsNone(surface.release("nightly"))
+
+    def test_setuptools_scm_build_of_a_tag_with_changes(self):
+        # setuptools-scm (guess-next-dev, node-and-date): a tree at tag X.Y.Z with
+        # uncommitted changes is X.Y.(Z+1).dev0+g<commit>.d<date>. intel/llm-scaler-vllm
+        # 1.5 reports 0.26.1.dev0+g568afb3a1.d20260907.xpu: vLLM v0.26.0's commit 568afb3a1
+        # with Intel's patches applied, so its release is 0.26.0.
+        self.assertEqual(surface.release("0.26.1.dev0+g568afb3a1.d20260907.xpu"), "0.26.0")
+        self.assertEqual(surface.release("1.10.dev0+g0123abc.d20260101"), "1.9")
+        # commits after the tag, or no scm node: not the tag
+        self.assertEqual(surface.release("0.26.1.dev3+g568afb3a1.d20260907"), "0.26.1")
+        self.assertEqual(surface.release("0.26.1.dev0"), "0.26.1")
+        # a next version ending in 0 came from a scheme other than guess-next-dev's
+        # last-segment bump: its tag is unknown, and an unknown release matches nothing
+        self.assertIsNone(surface.release("0.26.0.dev0+g568afb3a1.d20260907"))
+        derived = [{"file": "console/plan.py", "of": "package", "value": "0.26.0"}]
+        self.assertEqual(surface.derived_mismatch(derived, {"package": "0.26.1.dev0+g568afb3a1.d20260907.xpu"}), [])
+        self.assertEqual(len(surface.derived_mismatch(derived, {"package": "0.26.1.dev2+g1a2b3c4.d20260907"})), 1)
 
     def test_firmware_build_date(self):
         self.assertEqual(surface.fw_date(b"\x00junk 20260630*MTL_CLIENT_SILICON-release"), "20260630")

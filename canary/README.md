@@ -30,6 +30,20 @@ secrets.
 | `node.sh` | The node canary. |
 | `goldens/<id>.json` | `{prompt, regex, exact, recorded_with}` for each runtime engine. |
 
+## How names and versions compare
+
+- A flag matches exactly; for vLLM, `--a_b` and `--a-b` are one flag.
+- sglang's parser is argparse with abbreviations allowed, and `bench/h54` passes `--tp`.
+  So for sglang, a long flag also matches when it begins exactly one option (`--tp` is
+  `--tp-size`). Once a second option begins with it, argparse calls it ambiguous, and so
+  does the canary. vLLM flags never match by prefix, so a renamed flag cannot hide behind
+  a longer one.
+- A derived constant matches the image's version by release (`0.32.0` = `0.32.0+cpu`).
+  A setuptools-scm build of a tag with patches applied, `X.Y.(Z+1).dev0+g<commit>.d<date>`,
+  is release `X.Y.Z`: intel/llm-scaler-vllm 1.5 reports `0.26.1.dev0+g568afb3a1.d20260907.xpu`,
+  which is vLLM v0.26.0's commit with Intel's patches. A build commits after a tag
+  (`.dev1` and up) matches nothing.
+
 ## Which engines run
 
 `schedule` runs every engine.
@@ -70,7 +84,10 @@ non-informational engine is green.
 
 `exact` is the completion text the hosted runner produced with temperature 0, top_k 1 and
 seed 0. Take it from the `detail` (`text '...'`) of a green run, and write it with the
-image, model and CPU it was recorded on. A `null` `exact` means nothing is recorded yet.
+image, model and CPU it was recorded on (the job log's `cpu:` line names the CPU). A `null`
+`exact` means nothing is recorded yet. The vLLM goldens come from an AVX2-only runner; a
+runner with AVX-512 runs other kernels and may produce other text. That clears `exact`,
+which sends the bump to review, but it is never red.
 
 ## Adding an engine
 

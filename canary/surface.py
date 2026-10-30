@@ -27,7 +27,8 @@ Drivers (engines.toml surface.driver):
                  `firmware`, the build date inside that firmware file
   gst            gst-inspect-1.0 per element: it must exist and have each property;
                  elements named in `device_only` (prefixes) register only on a device
-  sglang         python3 -m sglang.launch_server --help, and the package version
+  sglang         python3 -m sglang.launch_server --help, and the package version; a long
+                 flag may be argparse's abbreviation of exactly one option (ABBREV_DRIVERS)
 A help or parse that fails, or yields no flags, is unparseable: red, never skipped.
 
 Python 3.8+ standard library only (the `inside` mode runs on the image's Python).
@@ -210,9 +211,26 @@ def find_site(pkg, paths):
 
 def release(v):
     """The X.Y[.Z] a version string starts with (v1.35.0, 0.32.0+cpu, 0.26.0b2,
-    1.35.0.20260722-1~ubuntu24.04), or None."""
-    m = re.match(r"v?(\d+\.\d+(?:\.\d+)?)", (v or "").strip())
-    return m.group(1) if m else None
+    1.35.0.20260722-1~ubuntu24.04), or None.
+
+    A setuptools-scm build of a tag with uncommitted changes is the tag's release.
+    Its default scheme (guess-next-dev, local node-and-date) names a tree at tag
+    X.Y.Z that has changes X.Y.(Z+1).dev0+g<commit>[.d<date>]: dev0 is no commit
+    after the tag, and the last segment is bumped. intel/llm-scaler-vllm 1.5's
+    0.26.1.dev0+g568afb3a1.d20260907.xpu is vLLM v0.26.0 (commit 568afb3a1) with
+    patches applied. A next version whose last segment is 0 has an unknown tag: None."""
+    v = (v or "").strip()
+    m = re.match(r"v?(\d+\.\d+(?:\.\d+)?)", v)
+    if not m:
+        return None
+    scm = re.fullmatch(r"v?(\d+(?:\.\d+)+)\.dev0\+g[0-9a-f]{7,40}(?:\.[A-Za-z0-9]+)*", v)
+    if scm:
+        parts = scm.group(1).split(".")
+        if int(parts[-1]) == 0:
+            return None
+        parts[-1] = str(int(parts[-1]) - 1)
+        return ".".join(parts)
+    return m.group(1)
 
 
 def fw_date(data):
@@ -236,8 +254,40 @@ def norm_flag(name, driver):
     return name
 
 
+# Drivers whose parser is argparse with allow_abbrev (its default), where k3d-gpu
+# emits an abbreviation: bench/h54's sglang `--tp 1` is --tp-size (sglang's own docs
+# write `--tp 2`). vLLM's parser allows them too, but the launcher spells every vLLM
+# flag out, and an exact match catches a rename that a prefix match would hide.
+ABBREV_DRIVERS = {"sglang"}
+
+
+def abbreviation(name, have):
+    """The option string argparse expands a long option prefix to: the one option
+    string that begins with it (Python 3.12's argparse; two or more is "ambiguous
+    option"), else None. Single-dash names are matched exactly. `have` is what the help
+    lists, so an option hidden from help (argparse.SUPPRESS) cannot make it ambiguous."""
+    if not name.startswith("--") or len(name) < 3:
+        return None
+    hits = [h for h in have if h.startswith(name)]
+    return hits[0] if len(hits) == 1 else None
+
+
+def abbreviations(want, flags, driver):
+    """{name: option} for each wanted flag present only as an abbreviation."""
+    if driver not in ABBREV_DRIVERS:
+        return {}
+    have = {norm_flag(f, driver) for f in flags}
+    out = {}
+    for w in want:
+        n = norm_flag(w["name"], driver)
+        if w["kind"] == "flag" and n not in have and abbreviation(n, have):
+            out[w["name"]] = abbreviation(n, have)
+    return out
+
+
 def missing(want, flags, envs, driver, lenient_no=False):
     have = {norm_flag(f, driver) for f in flags}
+    short = abbreviations(want, flags, driver)
     out = []
     for w in want:
         if w["kind"] == "env":
@@ -245,7 +295,7 @@ def missing(want, flags, envs, driver, lenient_no=False):
                 out.append(w)
             continue
         n = norm_flag(w["name"], driver)
-        if n in have or (lenient_no and n.startswith("--no-") and "--" + n[5:] in have):
+        if n in have or w["name"] in short or (lenient_no and n.startswith("--no-") and "--" + n[5:] in have):
             continue
         out.append(w)
     return out
@@ -357,6 +407,7 @@ def check(doc, canary):
     except Unparseable as e:
         return {"verdict": "unparseable", "detail": "surface: %s" % e, "method": method, "version": None, "missing": []}
     lost = missing(want, flags, envs, driver, lenient_no=lenient)
+    notes += ["%s is argparse's abbreviation of %s" % kv for kv in sorted(abbreviations(want, flags, driver).items())]
     bad = derived_mismatch(doc.get("derived", []), facts)
     problems = []
     if lost:

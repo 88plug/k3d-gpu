@@ -292,5 +292,12 @@ assert "name: canary-result" in src
 assert not re.search(r"\b(v?\d+\.\d+\.\d+)\b", re.sub(r"#.*", "", src)), "a version literal in the workflow"
 PY
 
+# The workflow runs the canary's scripts directly, so each must be executable.
+scripts=$(grep -oE '(^|[[:space:]])canary/[A-Za-z0-9_.-]+\.(sh|py)' "${ROOT}/.github/workflows/canary.yml" | tr -d ' ' | sort -u)
+[ -n "${scripts}" ] || fail "canary.yml runs no canary/ script"
+for s in ${scripts}; do
+    [ -x "${ROOT}/${s}" ] && ok "canary.yml runs ${s}: executable" || fail "canary.yml runs ${s}, which is not executable"
+done
+
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]
